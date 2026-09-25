@@ -28,24 +28,36 @@ import re
 import sys
 
 RUTAS_AMAZON = re.compile(
-    r'^/(cortex|scorecard|dnr|whc|apoyo|diarios|transporter-ids|route-demand|mery)(/|$)'
+    r'^/(cortex|scorecard|dnr|whc|apoyo|diarios|transporter-ids|route-demand|mery|asociados)(/|$)'
     r'|^/(api/)?tools/plantilla'
     r'|^/metrics/(upload-routeplan|routeplan|routeplan-available|upload-report'
     r'|driver-history|reports|upload-daily|daily-week)(/|$)'
     r'|^/portal/(mis-numeros|mis-ayudas)$')
 
 NOMBRES_AMAZON = re.compile(
-    r'^_*(cortex|dnr|scorecard|whc|apoyo|dsc|debrief|diarios|transporter|route_?demand'
+    r'^_*(cortex|cx|dnr|scorecard|whc|apoyo|dsc|debrief|diarios|transporter|route_?demand'
     r'|routeplan|dcr|captura_viva|congelar|nomen|geo_rescate|predn|pre_dnr|amazon'
-    r'|edge_?os|edgeos|mis_numeros|mis_ayudas|mery)', re.I)
+    r'|edge_?os|edgeos|mis_numeros|mis_ayudas|mery|asoc|plantilla|sc_|sls|official_sc'
+    r'|bucle_(congelar|apoyo|dnr|captura)|drivers_sin_transporter|drivers_telefonos'
+    r'|procesar_(respuestas|predns)|ayudas|cierre_entrega|cuenta_paquetes'
+    r'|consolidar_direcciones|conductores_rendimiento)', re.I)
 # Algunos van en mayúsculas o a mitad del nombre (`_PROMPT_CORTEX`,
 # `revisar_dcr_diario`): se mira también si la palabra aparece entera.
 PALABRAS_AMAZON = re.compile(
-    r'(^|_)(cortex|dnr|scorecard|whc|dsc|dcr|predn|amazon|edgeos)(_|$)', re.I)
+    r'(^|_)(cortex|cx|dnr|scorecard|whc|dsc|dcr|predn|amazon|edgeos|routeplan)(_|$)', re.I)
 
-# Nombres que CASAN con los patrones pero no son de Amazon. Se dejan fuera de
-# las semillas a propósito; el cierre decidirá si se quedan huérfanos.
-NO_SEMILLA = set()
+# Nombres que CASAN con los patrones pero NO son de Amazon: se quedan.
+#  · `plantilla` cubre tres cosas y solo la de TURNO es de Amazon (se llena de
+#    Cortex y exporta el Excel de reparto). Las de WhatsApp, taller y empleo son
+#    genéricas y se quedan.
+#  · `_sc_*` casa `_sc_...` de scorecard, pero también hay `_scoring_*` propio.
+NO_SEMILLA = {
+    'whatsapp_crear_plantillas', 'taller_plantilla_set', '_seg_plantillas',
+    'onb_plantillas', '_onb_plantilla', '_invita_plantilla',
+    'empleo_invitados_plantilla', '_gemini_client_plantilla',
+    # Solo da la fecha de hoy en Madrid; lo usan las candidaturas de empleo.
+    '_apoyo_hoy',
+}
 
 
 def ruta_de(nodo):
@@ -88,6 +100,19 @@ def principal(ruta, escribir):
     quitar = set()
     motivo = {}
     for i, n in enumerate(nodos):
+        # NOTAS DE SECCIÓN SUELTAS. El código usa cadenas `"""..."""` a nivel de
+        # módulo como cabeceras entre funciones. No definen ni nombran nada, así
+        # que el cierre nunca las toca: al quitar las funciones de Amazon se
+        # quedaban huérfanas, contando cosas que ya no existen. Se van si hablan
+        # de Amazon.
+        if (isinstance(n, ast.Expr) and isinstance(n.value, ast.Constant)
+                and isinstance(n.value.value, str)
+                and re.search(r'\b(amazon|cortex|dnr|pre-?dnr|whc|dsc|scorecard'
+                              r'|asociados|debrief|portal del dsp)\b',
+                              n.value.value, re.I)):
+            quitar.add(i)
+            motivo[i] = 'nota de sección'
+            continue
         r = ruta_de(n)
         if r and RUTAS_AMAZON.search(r):
             quitar.add(i)
