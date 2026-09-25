@@ -1,0 +1,496 @@
+  1306-1348   _dedupe_cortex_stations                       nombre _dedupe_cortex_stations
+  9160-9260   _telefonos_desde_cortex                       nombre _telefonos_desde_cortex
+  9262-9266   drivers_telefonos_desde_cortex                nombre drivers_telefonos_desde_cortex
+ 19901-19923  _APOYO_CAJONES_PENDIENTES                     nombre _APOYO_CAJONES_PENDIENTES
+ 19925-19928  _apoyo_hoy                                    nombre _apoyo_hoy
+ 19930-19936  _apoyo_codigos_backup                         nombre _apoyo_codigos_backup
+ 19938-19948  _apoyo_minutos_desde                          nombre _apoyo_minutos_desde
+ 19950-19984  _apoyo_telefono                               nombre _apoyo_telefono
+ 19986-20005  _apoyo_fundir_gente                           nombre _apoyo_fundir_gente
+ 20007-20042  _apoyo_gente_cortex                           nombre _apoyo_gente_cortex
+ 20044-20065  _apoyo_marcar_repetidos                       nombre _apoyo_marcar_repetidos
+ 20067-20130  _apoyo_personas                               nombre _apoyo_personas
+ 20132-20209  _apoyo_paradas_pendientes                     nombre _apoyo_paradas_pendientes
+ 20211-20223  _apoyo_vivo_hoy                               nombre _apoyo_vivo_hoy
+ 20225-20235  _apoyo_todas_hechas                           nombre _apoyo_todas_hechas
+ 20237-20267  _apoyo_promover_cola                          nombre _apoyo_promover_cola
+ 20269-20312  _apoyo_cierre_dia                             nombre _apoyo_cierre_dia
+ 20339-20359  _APOYO_POSICION_MAX_MIN                       nombre _APOYO_POSICION_MAX_MIN
+ 20361-20369  _apoyo_estados_en_calle                       nombre _apoyo_estados_en_calle
+ 20371-20389  _apoyo_posicion_de                            nombre _apoyo_posicion_de
+ 20391-20479  _apoyo_posicion                               nombre _apoyo_posicion
+ 20505-20516  _portal_quien_es                              huérfano de portal_mis_ayudas, portal_mis_numeros
+ 20518-20610  portal_mis_numeros                            ruta /portal/mis-numeros
+ 20612-20661  _apoyo_hechas_de                              nombre _apoyo_hechas_de
+ 20892-20932  _ayudas_reparte                               huérfano de portal_mis_ayudas
+ 21192-21245  portal_mis_ayudas                             ruta /portal/mis-ayudas
+ 21247-21327  apoyo_situacion                               ruta /apoyo/situacion
+ 21329-21341  apoyo_paradas                                 ruta /apoyo/paradas
+ 21343-21345  _apoyo_url                                    nombre _apoyo_url
+ 21347-21378  _apoyo_textos                                 nombre _apoyo_textos
+ 21380-21388  _apoyo_guardar_paradas                        nombre _apoyo_guardar_paradas
+ 21390-21403  _apoyo_publico                                nombre _apoyo_publico
+ 21405-21407  _apoyo_con_enlaces                            nombre _apoyo_con_enlaces
+ 21409-21416  apoyo_lista                                   ruta /apoyo
+ 21418-21489  apoyo_crear                                   ruta /apoyo
+ 21491-21564  apoyo_cambiar                                 ruta /apoyo/{apoyo_id}
+ 21566-21582  _apoyo_por_token                              nombre _apoyo_por_token
+ 21584-21603  _apoyo_marcar_entregadas                      nombre _apoyo_marcar_entregadas
+ 21605-21610  _apoyo_publico_con_posicion                   nombre _apoyo_publico_con_posicion
+ 21612-21617  apoyo_publico                                 ruta /apoyo/t/{token}
+ 21619-21649  apoyo_publico_parada                          ruta /apoyo/t/{token}/parada/{stop_id}
+ 27443-27450  get_mery_stickers                             ruta /mery/stickers
+ 27452-27470  set_mery_sticker                              ruta /mery/stickers
+ 28607-28710  transporter_ids_sin_ficha                     ruta /transporter-ids/sin-ficha
+ 29056-29145  transporter_id_crear_ficha                    ruta /transporter-ids/{tid}/crear-ficha
+ 29147-29231  transporter_id_propuestas                     ruta /transporter-ids/propuestas
+ 29233-29261  transporter_id_confirmar                      ruta /transporter-ids/confirmar
+ 31209-31251  _DSP_ANALYST_PROMPT                           huérfano de _analyze_report_with_gemini
+ 31253-31286  _extract_report_text                          huérfano de _parse_official_scorecard, import_scorecard, scorecard_upload
+ 31288-31325  _analyze_report_with_gemini                   huérfano de upload_amazon_report
+ 31327-31506  _parse_routes_excel                           huérfano de upload_amazon_report
+ 31508-31614  upload_route_plan                             ruta /metrics/upload-routeplan
+ 31616-31627  get_route_plan                                ruta /metrics/routeplan
+ 31629-31636  routeplan_available                           ruta /metrics/routeplan-available
+ 31638-31730  upload_amazon_report                          ruta /metrics/upload-report
+ 31732-31758  driver_route_history                          ruta /metrics/driver-history/{transporter_id}
+ 31760-31767  list_amazon_reports                           ruta /metrics/reports
+ 31769-31779  delete_all_reports                            ruta /metrics/reports/all
+ 31781-31787  delete_amazon_report                          ruta /metrics/reports/{report_id}
+ 33105-33132  _DIARIO_TITULO                                huérfano de _parsea_diario
+ 33132-33133  _DIARIO_CENTRO                                huérfano de _parsea_diario
+ 33133-33134  _DNR_TITULO                                   nombre _DNR_TITULO
+ 33137-33141  _dia_celda                                    huérfano de _dia_num, _parsea_diario, _parsea_diario_html
+ 33143-33151  _dia_num                                      huérfano de _parsea_diario, _parsea_diario_html
+ 33153-33172  _dia_euros                                    huérfano de _parsea_diario, _parsea_diario_html, diarios_por_conductor
+ 33174-33176  _dia_menos                                    huérfano de _parsea_diario, _parsea_diario_html
+ 33178-33183  _dia_semana                                   huérfano de diarios_por_conductor, pegar_diario
+ 33186-33211  _DIA_FILA                                     huérfano de _dia_tablas_html
+ 33211-33212  _DIA_CELDA                                    huérfano de _dia_tablas_html
+ 33212-33213  _DIA_TABLA                                    huérfano de _dia_tablas_html
+ 33213-33214  _DIA_H                                        huérfano de _parsea_diario_html
+ 33216-33219  _dia_texto_html                               huérfano de _dia_tablas_html, _parsea_diario_html
+ 33221-33233  _dia_tablas_html                              huérfano de _parsea_diario_html
+ 33235-33351  _parsea_diario_html                           huérfano de pegar_diario
+ 33353-33455  _parsea_diario                                huérfano de pegar_diario
+ 33457-33566  pegar_diario                                  ruta /diarios/pegar
+ 33568-33628  subir_diarios                                 ruta /diarios/subir
+ 33630-33843  diarios_por_conductor                         ruta /diarios/conductores
+ 33845-33870  _dia_parece_nombre                            huérfano de vincular_transporter_ids
+ 33872-33966  asignar_id_conductor                          ruta /diarios/id-conductor
+ 33968-34095  vincular_transporter_ids                      ruta /diarios/ids
+ 34097-34201  _dia_vincula                                  huérfano de vincular_transporter_ids
+ 34773-34791  get_route_demand                              ruta /route-demand
+ 34793-34862  set_route_demand                              ruta /route-demand
+ 35286-35293  _TIER_SCORE                                   huérfano de _tier_to_score
+ 35295-35301  _tier_to_score                                huérfano de _guardar_standings
+ 35303-35319  _SCORECARD_EXTRACT_PROMPT                     nombre _SCORECARD_EXTRACT_PROMPT
+ 35321-35350  _extract_scorecard_standings                  nombre _extract_scorecard_standings
+ 35352-35382  import_scorecard                              ruta /scorecard/import
+ 35384-35431  _guardar_standings                            huérfano de import_scorecard, scorecard_upload
+ 35433-35442  delete_scorecard_week                         ruta /scorecard/week
+ 35444-35488  scorecard_standings                           ruta /scorecard/standings
+ 35492-35560  _parse_daily_report                           huérfano de scorecard_upload, upload_daily_report
+ 35562-35578  upload_daily_report                           ruta /metrics/upload-daily
+ 35581-35589  _DEFAULT_TARGETS                              huérfano de cortex_calidad, get_scorecard_targets, set_scorecard_targets
+ 35591-35594  _TARGETS_FANTASTIC                            huérfano de cortex_calidad
+ 35596-35609  get_scorecard_targets                         ruta /scorecard/targets
+ 35611-35624  set_scorecard_targets                         ruta /scorecard/targets
+ 35626-35644  _sun_sat_week                                 huérfano de _latest_week_with_data, _semana_a_seguir, whc_semana
+ 35646-35654  scorecard_week_range                          ruta /scorecard/week-range
+ 35656-35694  daily_week                                    ruta /metrics/daily-week
+ 35703-35717  _SC_METRICS                                   huérfano de _sc_hoy_construir, calibrate_thresholds, scorecard_predict
+ 35719-35726  _SC_SEED_WEIGHTS                              huérfano de _sc_weights
+ 35728-35745  _SC_SEED_THR                                  huérfano de _sc_thresholds, import_official_scorecard, scorecard_set_thresholds
+ 35745-35746  _TIER_ORDER                                   huérfano de scorecard_full
+ 35748-35749  _SC_ANCHOR_SUN                                huérfano de _sun_to_week_num, _week_num_to_sun
+ 35748-35750  _SC_ANCHOR_WEEK                               huérfano de _sun_to_week_num, _week_num_to_sun
+ 35752-35755  _week_num_to_sun                              huérfano de _latest_week_with_data
+ 35757-35761  _sun_to_week_num                              huérfano de _sc_hoy_arrastrados, scorecard_full, scorecard_hoy
+ 35763-35776  _sc_tier                                      huérfano de _sc_hoy_construir, scorecard_en_vivo, scorecard_predict
+ 35778-35793  _interp                                       huérfano de _metric_subscore
+ 35795-35812  _metric_subscore                              huérfano de _overall_score, _sc_hoy_construir
+ 35814-35829  _overall_score                                huérfano de _sc_hoy_construir, scorecard_full, scorecard_predict
+ 35831-35832  _OVERALL_TIER_BANDS                           huérfano de _score_to_tier, scorecard_predict
+ 35834-35841  _score_to_tier                                huérfano de scorecard_full, scorecard_predict
+ 35843-35858  _sc_next_target                               huérfano de _sc_hoy_construir, scorecard_full, scorecard_predict
+ 35861-35892  _SLS_FILAS                                    huérfano de _parse_sls_bands
+ 35893-35899  _SC_GREAT_FIJO                                huérfano de _bandas_desde_sls
+ 35900-35906  _SC_MID_Q                                     huérfano de _bandas_desde_sls
+ 35908-35964  _parse_sls_bands                              huérfano de scorecard_upload
+ 35966-35980  _bandas_desde_sls                             huérfano de _parse_sls_bands, _sls_publicado
+ 35983-36008  _SC_SLS_PUBLICADOS                            huérfano de _sls_publicado
+ 36010-36018  _sls_publicado                                huérfano de _sc_thresholds
+ 36020-36042  _store_sls_bands                              huérfano de scorecard_upload
+ 36044-36099  _sc_thresholds                                huérfano de cortex_calidad, scorecard_hoy, scorecard_umbrales
+ 36101-36121  _sc_tier_cert                                 huérfano de scorecard_full, scorecard_predict
+ 36123-36142  _latest_week_with_data                        huérfano de _semana_a_seguir
+ 36144-36161  _semana_a_seguir                              huérfano de scorecard_daily_trend, scorecard_full
+ 36163-36312  scorecard_full                                ruta /scorecard/full
+ 36314-36335  _sc_retraso_oficial                           huérfano de scorecard_full
+ 36337-36357  scorecard_set_value                           ruta /scorecard/full
+ 36359-36373  scorecard_set_thresholds                      ruta /scorecard/thresholds
+ 36375-36394  scorecard_reset_thresholds                    ruta /scorecard/thresholds
+ 36396-36422  scorecard_umbrales                            ruta /scorecard/umbrales
+ 36425-36446  _SC_PDF_CORTE_COL                             huérfano de _sc_pdf_metricas_pagina2
+ 36446-36447  _SC_PDF_TOL_LINEA                             huérfano de _sc_pdf_lineas
+ 36449-36472  _SC_PDF_ETIQ                                  huérfano de _SC_PDF_ETIQ_TOK, _parse_scorecard_pdf_determinista
+ 36472-36477  _SC_PDF_SECC                                  huérfano de _SC_PDF_SECC_TOK
+ 36478-36481  _SC_PDF_ETIQ_TOK                              huérfano de _sc_pdf_metricas_pagina2
+ 36478-36482  _SC_PDF_SECC_TOK                              huérfano de _sc_pdf_metricas_pagina2
+ 36483-36484  _SC_PDF_CORTO_A_CLAVE                         huérfano de _parse_scorecard_pdf_determinista
+ 36486-36500  _sc_pdf_lineas                                huérfano de _sc_pdf_metricas_pagina2
+ 36502-36509  _sc_pdf_busca_etiqueta                        huérfano de _sc_pdf_metricas_pagina2
+ 36511-36524  _sc_pdf_normaliza                             huérfano de _parse_scorecard_pdf_determinista
+ 36526-36555  _sc_pdf_metricas_pagina2                      huérfano de _parse_scorecard_pdf_determinista
+ 36557-36620  _parse_scorecard_pdf_determinista             nombre _parse_scorecard_pdf_determinista
+ 36622-36687  _OFFICIAL_SC_PROMPT                           huérfano de _parse_official_scorecard
+ 36689-36719  _parse_official_scorecard                     nombre _parse_official_scorecard
+ 36721-36773  import_official_scorecard                     ruta /scorecard/import-official
+ 36775-36779  list_official_scorecards                      ruta /scorecard/official
+ 36782-36788  _MESES_ES                                     huérfano de _es_date
+ 36846-36856  _es_date                                      huérfano de _parse_ratios
+ 36858-36868  _num                                          huérfano de _parse_ratios, _parse_resumen_semanal
+ 36871-36886  _RATIO_ROWS                                   huérfano de _parse_ratios, _parse_resumen_semanal
+ 36888-36921  _parse_ratios                                 huérfano de scorecard_upload
+ 36923-36958  _parse_resumen_semanal                        huérfano de scorecard_upload
+ 36960-36978  _parse_contact_compliance                     huérfano de scorecard_upload
+ 36980-36987  _store_weekly_metric                          huérfano de scorecard_upload
+ 36989-37167  scorecard_upload                              ruta /scorecard/upload
+ 37169-37193  scorecard_reset                               ruta /scorecard/reset
+ 37195-37209  scorecard_estimacion                          ruta /scorecard/estimacion
+ 37278-37282  _sc_dcr                                       nombre _sc_dcr
+ 37284-37349  _cx_dias_reparto                              huérfano de _sc_hoy_recoger, cortex_calidad, scorecard_en_vivo
+ 37351-37361  _sc_fallos_de_mas                             huérfano de scorecard_en_vivo
+ 37363-37460  scorecard_en_vivo                             ruta /scorecard/en-vivo
+ 37488-37498  _SC_HOY_CAL                                   huérfano de _sc_hoy_calibrar, _sc_hoy_construir
+ 37488-37499  _SC_HOY_MARGEN                                huérfano de _sc_hoy_construir
+ 37499-37500  _SC_HOY_MIN_ENTREGADOS_DSC                    nombre _SC_HOY_MIN_ENTREGADOS_DSC
+ 37500-37501  _SC_HOY_DIAS_DSC                              nombre _SC_HOY_DIAS_DSC
+ 37503-37514  _sc_fmt                                       huérfano de _sc_hoy_construir
+ 37517-37522  _SC_DCR_AMAZON_MAS                            nombre _SC_DCR_AMAZON_MAS
+ 37524-37532  _sc_hoy_tier                                  huérfano de _sc_hoy_construir
+ 37534-37540  _sc_hoy_calibrar                              huérfano de _sc_hoy_construir
+ 37542-37757  _sc_hoy_construir                             huérfano de scorecard_hoy
+ 37759-37834  _sc_hoy_recoger                               huérfano de scorecard_hoy
+ 37836-37863  _sc_hoy_arrastrados                           huérfano de scorecard_hoy
+ 37865-37896  scorecard_hoy                                 ruta /scorecard/hoy
+ 37899-37921  DCR_CAIDA_MIN                                 nombre DCR_CAIDA_MIN
+ 37921-37922  DCR_FALLOS_MIN                                nombre DCR_FALLOS_MIN
+ 37922-37923  DCR_DIAS_REF                                  nombre DCR_DIAS_REF
+ 37955-37956  CX_SNAP_DIAS                                  huérfano de congelar_dias_cortex
+ 37958-37971  _cx_foto_dia                                  huérfano de _congelar_dia
+ 37973-38002  _snap_mejora                                  huérfano de _congelar_dia
+ 38004-38037  _congelar_dia                                 nombre _congelar_dia
+ 38039-38089  congelar_dias_cortex                          nombre congelar_dias_cortex
+ 39389-39390  _WHC_API_COL                                  nombre _WHC_API_COL
+ 39392-39402  _hm_desde_medianoche                          huérfano de _whc_clasificar
+ 39404-39407  _sat_de                                       huérfano de whc_semana
+ 39409-39418  _iso_a_ms                                     huérfano de whc_semana
+ 39420-39427  _dia_de_ms                                    huérfano de whc_semana
+ 39429-39434  _whc_num                                      nombre _whc_num
+ 39436-39460  _whc_reservas                                 nombre _whc_reservas
+ 39462-39552  _whc_clasificar                               nombre _whc_clasificar
+ 39554-39574  _whc_reservas_de_bloques                      nombre _whc_reservas_de_bloques
+ 39576-39618  _horarios_conductores                         huérfano de cortex_ingest_informe
+ 39620-39642  _forma_de                                     huérfano de cortex_ingest_informe
+ 39644-39645  _DNR_COL                                      nombre _DNR_COL
+ 39645-39646  _DNR_CORREO                                   nombre _DNR_CORREO
+ 39647-39651  _DNR_CAMPOS                                   nombre _DNR_CAMPOS
+ 39653-39663  _dnr_opciones                                 nombre _dnr_opciones
+ 39665-39666  _DNR_FILA                                     nombre _DNR_FILA
+ 39666-39667  _DNR_EPOCH                                    nombre _DNR_EPOCH
+ 39668-39669  _DNR_PLAZO_MS                                 nombre _DNR_PLAZO_MS
+ 39668-39670  _DNR_CELDA                                    nombre _DNR_CELDA
+ 39670-39671  _DNR_INPUT                                    nombre _DNR_INPUT
+ 39671-39672  _DNR_TAGS                                     nombre _DNR_TAGS
+ 39674-39714  _dnr_inv_parsear                              nombre _dnr_inv_parsear
+ 39717-39759  _DNR_DEL_ESCANEO                              nombre _DNR_DEL_ESCANEO
+ 39762-39778  _DNR_ESCANEO_EN_CRISTIANO                     nombre _DNR_ESCANEO_EN_CRISTIANO
+ 39780-39788  _dnr_marcaste                                 nombre _dnr_marcaste
+ 39790-39818  _dnr_sugerencia                               nombre _dnr_sugerencia
+ 39820-39834  _dnr_codigo                                   nombre _dnr_codigo
+ 39836-39849  _dnr_correo                                   nombre _dnr_correo
+ 39851-39861  _dnr_metros                                   nombre _dnr_metros
+ 39863-39880  _dnr_pregunta                                 nombre _dnr_pregunta
+ 39882-39962  _dnr_contexto                                 nombre _dnr_contexto
+ 39986-40010  _DNR_LO_QUE_DIJO                              nombre _DNR_LO_QUE_DIJO
+ 40012-40027  _dnr_opciones_conductor                       nombre _dnr_opciones_conductor
+ 40029-40035  _dnr_traducir                                 nombre _dnr_traducir
+ 40037-40059  _dnr_por_token                                nombre _dnr_por_token
+ 40061-40084  _dnr_enlace                                   nombre _dnr_enlace
+ 40086-40114  dnr_preguntar                                 ruta /dnr/investigaciones/preguntar
+ 40116-40128  _dnr_ctx_prueba                               nombre _dnr_ctx_prueba
+ 40130-40178  dnr_probar                                    ruta /dnr/investigaciones/probar
+ 40180-40216  dnr_publico                                   ruta /dnr/p/{token}
+ 40218-40250  dnr_publico_responder                         ruta /dnr/p/{token}
+ 40252-40292  _dnr_naves                                    nombre _dnr_naves
+ 40294-40312  dnr_contar_pendientes                         ruta /dnr/investigaciones/pendientes
+ 40314-40382  dnr_investigaciones                           ruta /dnr/investigaciones
+ 40384-40455  dnr_responder                                 ruta /dnr/investigaciones/responder
+ 40457-40461  dnr_enviar                                    ruta /dnr/investigaciones/enviar
+ 40463-40534  _dnr_enviar_lote                              nombre _dnr_enviar_lote
+ 40536-40548  dnr_marcar_enviada                            ruta /dnr/investigaciones/enviada
+ 40573-40574  _PREDN_REINTENTO_MIN                          nombre _PREDN_REINTENTO_MIN
+ 40574-40575  _PREDN_INTENTOS                               nombre _PREDN_INTENTOS
+ 40575-40576  _DNR_AUTO_CADA_MIN                            nombre _DNR_AUTO_CADA_MIN
+ 40576-40578  _USUARIO_AUTO                                 huérfano de procesar_respuestas_a_amazon
+ 40580-40587  _predn_nave_activa                            nombre _predn_nave_activa
+ 40589-40603  _predn_destino                                nombre _predn_destino
+ 40605-40617  _predn_parametros                             nombre _predn_parametros
+ 40619-40635  _dnr_valida_opcion                            nombre _dnr_valida_opcion
+ 40637-40699  procesar_predns_automaticas                   huérfano de _bucle_dnr_auto
+ 40701-40755  procesar_respuestas_a_amazon                  nombre procesar_respuestas_a_amazon
+ 40757-40776  _bucle_dnr_auto                               nombre _bucle_dnr_auto
+ 40803-40807  _USUARIO_INGESTA                              huérfano de cortex_ingest_informe
+ 40809-40813  _INFORME_TIPOS                                huérfano de cortex_informes_auto, cortex_ingest_informe
+ 40869-40873  _ASOC_HECHO                                   huérfano de _asoc_falta
+ 40965-40967  _ASOC_HECHA                                   huérfano de _asoc_tarea_hecha
+ 40969-40971  _asoc_tarea_hecha                             huérfano de _asoc_detalle
+ 40973-41019  _asoc_detalle                                 huérfano de _asoc_guardar
+ 41021-41023  _asoc_falta                                   huérfano de _asoc_persona
+ 41025-41072  _asoc_persona                                 huérfano de _asoc_guardar
+ 41074-41123  _asoc_guardar                                 huérfano de cortex_ingest_informe
+ 41282-41310  cortex_seguimiento                            ruta /cortex/seguimiento
+ 41312-41349  cortex_naves                                  ruta /cortex/naves
+ 41351-41625  cortex_ingest_informe                         ruta /cortex/ingest-informe
+ 41627-41638  cortex_informes_auto                          ruta /cortex/informes-auto
+ 41766-41778  cortex_captura_viva                           ruta /cortex/captura-viva
+ 41805-41816  disparar_congelar_dia                         ruta /cortex/congelar-dia
+ 41818-41836  dias_congelados                               ruta /cortex/dias-congelados
+ 41838-41914  revisar_dcr_diario                            nombre revisar_dcr_diario
+ 41916-41920  disparar_revision_dcr                         ruta /scorecard/revisar-dia
+ 41922-41982  scorecard_daily_trend                         ruta /scorecard/daily-trend
+ 41984-42023  scorecard_sources                             ruta /scorecard/sources
+ 42025-42061  scorecard_delete_source                       ruta /scorecard/source
+ 42063-42076  _store_resumen_semanal                        huérfano de scorecard_upload
+ 42078-42091  _store_ratios                                 huérfano de scorecard_upload
+ 42093-42116  _ratios_week_values                           huérfano de scorecard_full, scorecard_predict
+ 42118-42123  ratios_raw                                    ruta /scorecard/ratios-raw
+ 42125-42243  scorecard_predict                             ruta /scorecard/predict
+ 42246-42253  _XLSX_THR_MAP                                 huérfano de _upload_umbrales
+ 42255-42340  calibrate_thresholds                          ruta /scorecard/calibrate-thresholds
+ 42342-42394  _upload_umbrales                              huérfano de import_thresholds, scorecard_upload
+ 42396-42401  import_thresholds                             ruta /scorecard/import-thresholds
+ 42404-42411  _XLSX_WT_MAP                                  huérfano de _upload_pesos
+ 42413-42464  _upload_pesos                                 huérfano de import_weights, scorecard_upload
+ 42466-42471  import_weights                                ruta /scorecard/import-weights
+ 42473-42483  _sc_weights                                   huérfano de scorecard_full, scorecard_hoy, scorecard_predict
+ 42486-42519  _PROMPT_CORTEX                                nombre _PROMPT_CORTEX
+ 42520-42550  _PROMPT_PLATAFORMA                            huérfano de plantilla_extraer
+ 42584-42588  _mime_type                                    huérfano de _gemini_extract
+ 42590-42607  _calc_horas                                   huérfano de _plantilla_validar_filas, plantilla_extraer
+ 42610-42612  _OLA_MINUTOS                                  huérfano de _normalizar_hora_cortex
+ 42614-42638  _normalizar_hora_cortex                       nombre _normalizar_hora_cortex
+ 42640-42793  _build_plantilla_excel                        huérfano de plantilla_excel
+ 42804-42807  _name_tokens                                  huérfano de _match_score
+ 42809-42832  _match_score                                  huérfano de _plantilla_validar_filas, plantilla_extraer
+ 42842-42883  _gemini_json_call                             huérfano de _gemini_extract, _gemini_extract_text
+ 42885-42889  _gemini_extract                               huérfano de plantilla_extraer
+ 42891-42896  _gemini_extract_text                          huérfano de plantilla_extraer
+ 42899-43033  plantilla_extraer                             ruta /api/tools/plantilla-extraer
+ 43036-43037  _HORA_RE                                      huérfano de _plantilla_validar_filas
+ 43039-43148  _plantilla_validar_filas                      huérfano de plantilla_validar
+ 43150-43183  plantilla_validar                             ruta /api/tools/plantilla-validar
+ 43185-43248  plantilla_excel                               ruta /api/tools/plantilla-excel
+ 43251-43256  _plantilla_shared_payload                     huérfano de crear_plantilla_compartida, guardar_plantilla_compartida, leer_plantilla_compartida
+ 43258-43274  crear_plantilla_compartida                    ruta /api/tools/plantilla-compartida
+ 43276-43285  leer_plantilla_compartida                     ruta /api/tools/plantilla-compartida/{draft_id}
+ 43287-43297  plantilla_compartida_activa                   ruta /api/tools/plantilla-compartida
+ 43299-43313  cerrar_plantilla_compartida                   ruta /api/tools/plantilla-compartida/{draft_id}
+ 43315-43343  guardar_plantilla_compartida                  ruta /api/tools/plantilla-compartida/{draft_id}
+ 43346-43349  _PLANTILLA_CELDAS                             huérfano de plantilla_compartida_anadir_fila, plantilla_compartida_celda
+ 43351-43469  _plantilla_filas_desde_cortex                 nombre _plantilla_filas_desde_cortex
+ 43472-43476  _PLANTILLA_FURGO_NO_SALE                      huérfano de _furgos_por_conductor, _plantilla_filas_desde_cortex
+ 43478-43495  _furgos_por_conductor                         huérfano de _plantilla_filas_desde_cortex
+ 43497-43522  _plantilla_elegir_furgo                       huérfano de _plantilla_filas_desde_cortex
+ 43524-43568  _plantilla_emparejar_pares                    huérfano de _plantilla_filas_desde_cortex
+ 43570-43588  _plantilla_quitar_furgos_repetidas            huérfano de _plantilla_filas_desde_cortex
+ 43590-43637  plantilla_compartida_celda                    ruta /tools/plantilla-compartida/{draft_id}/celda
+ 43640-43662  _PLANTILLA_MARCAS                             huérfano de plantilla_compartida_marca
+ 43640-43663  _PLANTILLA_HORAS                              huérfano de plantilla_compartida_horas
+ 43663-43664  _PLANTILLA_META                               huérfano de plantilla_compartida_meta
+ 43664-43665  _PLANTILLA_MAX_FILAS                          huérfano de plantilla_compartida_anadir_fila
+ 43667-43675  _plantilla_doc                                huérfano de plantilla_compartida_anadir_fila, plantilla_compartida_marca, plantilla_compartida_quitar_fila
+ 43677-43688  _plantilla_tocada                             huérfano de plantilla_compartida_horas, plantilla_compartida_meta, plantilla_compartida_quitar_fila
+ 43690-43715  plantilla_compartida_marca                    ruta /tools/plantilla-compartida/{draft_id}/marca
+ 43717-43725  plantilla_compartida_anadir_fila              ruta /tools/plantilla-compartida/{draft_id}/fila
+ 43727-43744  plantilla_compartida_quitar_fila              ruta /tools/plantilla-compartida/{draft_id}/fila/{fila}
+ 43746-43756  plantilla_compartida_meta                     ruta /tools/plantilla-compartida/{draft_id}/meta
+ 43758-43777  plantilla_compartida_horas                    ruta /tools/plantilla-compartida/{draft_id}/horas
+ 44006-44047  _CORTEX_STATES                                nombre _CORTEX_STATES
+ 44048-44059  _CORTEX_STATE_TEXT                            nombre _CORTEX_STATE_TEXT
+ 44059-44062  _CORTEX_ORDER                                 nombre _CORTEX_ORDER
+ 44064-44091  _cortex_canon_state                           nombre _cortex_canon_state
+ 44093-44119  _cx_estado_vigente                            huérfano de _cortex_apply_observation, _cx_debrief_reparto, cortex_debrief_marcar
+ 44121-44133  _cortex_parse_dt                              nombre _cortex_parse_dt
+ 44135-44160  _cortex_ingest_org                            nombre _cortex_ingest_org
+ 44162-44242  _cortex_evaluate                              nombre _cortex_evaluate
+ 44244-44266  _cortex_addr_str                              nombre _cortex_addr_str
+ 44268-44277  _cortex_evento_doc                            nombre _cortex_evento_doc
+ 44279-44305  _cortex_guardar_direccion                     nombre _cortex_guardar_direccion
+ 44307-44319  _cortex_direcciones_de                        nombre _cortex_direcciones_de
+ 44321-44607  _cortex_apply_observation                     nombre _cortex_apply_observation
+ 44714-44721  _clave_ficha_en                               huérfano de _apoyo_personas, _dnr_contexto, _plantilla_filas_desde_cortex
+ 44723-44757  _cx_nombres_resumen                           huérfano de _cx_nombres, cortex_emparejar, diarios_por_conductor
+ 44759-44804  _cx_nombres                                   huérfano de cortex_calidad, cortex_debrief, cortex_dsc
+ 44807-44852  _nombres_veredicto                            huérfano de _amazon_nombres, _ids_veredictos, asignar_id_conductor
+ 44854-44906  _amazon_nombres                               nombre _amazon_nombres
+ 44908-44959  _ids_veredictos                               huérfano de diarios_por_conductor, transporter_ids_verificar
+ 44961-44964  _ids_confirmados                              huérfano de diarios_por_conductor, transporter_ids_verificar
+ 44966-44981  _ids_proponer                                 huérfano de diarios_por_conductor, transporter_ids_verificar
+ 44983-45034  transporter_ids_verificar                     ruta /transporter-ids/verificar
+ 45036-45060  transporter_id_confirmar_par                  ruta /transporter-ids/confirmar-par
+ 45063-45066  _CX_MINIMO_RANKING                            huérfano de _cx_impacto
+ 45063-45067  _CX_MUESTRA_FIABLE                            huérfano de _cx_impacto
+ 45069-45091  _cx_impacto                                   huérfano de cortex_calidad
+ 45094-45122  _DSC_EN_MANO                                  nombre _DSC_EN_MANO
+ 45122-45124  _DSC_SEGURO                                   nombre _DSC_SEGURO
+ 45125-45129  _DSC_RIESGO                                   nombre _DSC_RIESGO
+ 45130-45140  _DSC_ETIQUETA                                 nombre _DSC_ETIQUETA
+ 45142-45156  _DSC_CAUSA                                    nombre _DSC_CAUSA
+ 45156-45163  _DSC_ACCION                                   nombre _DSC_ACCION
+ 45164-45165  _DSC_MINIMO                                   nombre _DSC_MINIMO
+ 45165-45166  _DSC_MUESTRA_FIABLE                           nombre _DSC_MUESTRA_FIABLE
+ 45168-45184  _dsc_base                                     nombre _dsc_base
+ 45208-45219  _DIR_ACCIONABLE                               huérfano de direcciones_problema
+ 45219-45220  _DIR_MIN_FALLOS                               huérfano de direcciones_problema
+ 45220-45221  COLECCION_DIR_NOTAS                           huérfano de direcciones_problema, guardar_nota_direccion
+ 45243-45292  _dir_sugerencia                               huérfano de direcciones_problema
+ 45386-45390  disparar_consolidar_direcciones               ruta /cortex/direcciones-problema/consolidar
+ 45392-45499  direcciones_problema                          ruta /cortex/direcciones-problema
+ 45501-45524  guardar_nota_direccion                        ruta /cortex/direcciones-problema/nota
+ 45526-45697  cortex_dsc                                    ruta /cortex/dsc
+ 45699-45712  _parecido                                     huérfano de cortex_emparejar
+ 45714-45793  cortex_emparejar                              ruta /cortex/emparejar
+ 45801-45806  _WHC_LIMITE_PROPIO                            nombre _WHC_LIMITE_PROPIO
+ 45801-45807  _WHC_SUELO_AMAZON_OBSERVADO                   nombre _WHC_SUELO_AMAZON_OBSERVADO
+ 45809-45810  _WHC_MARGEN_AVISO_PROPIO                      nombre _WHC_MARGEN_AVISO_PROPIO
+ 45812-45813  _WHC_MARGEN_AVISO                             nombre _WHC_MARGEN_AVISO
+ 45815-45817  _WHC_BLOQUE_RIESGO                            nombre _WHC_BLOQUE_RIESGO
+ 45818-45822  _WHC_BLOQUE_LIMITE                            nombre _WHC_BLOQUE_LIMITE
+ 45823-45826  _WHC_BLOQUE_IMPLICITO                         nombre _WHC_BLOQUE_IMPLICITO
+ 45827-45839  _WHC_BLOQUE_MAX_CREIBLE                       nombre _WHC_BLOQUE_MAX_CREIBLE
+ 45840-45843  _WHC_BLOQUES_SEMANA                           nombre _WHC_BLOQUES_SEMANA
+ 45840-45844  _WHC_DIAS                                     nombre _WHC_DIAS
+ 45846-45870  _whc_dias_del_plan                            nombre _whc_dias_del_plan
+ 45872-45893  _WHC_TIER_OBSERVADO                           nombre _WHC_TIER_OBSERVADO
+ 45895-45903  _whc_tier                                     nombre _whc_tier
+ 45905-45922  _whc_minutos                                  nombre _whc_minutos
+ 45924-45929  _whc_dur                                      nombre _whc_dur
+ 45932-45934  _WHC_TIPOS                                    nombre _WHC_TIPOS
+ 45936-45940  _whc_linea_de_dia                             nombre _whc_linea_de_dia
+ 45942-45978  _whc_centro_del_texto                         nombre _whc_centro_del_texto
+ 45980-46011  _whc_semana_del_plan                          nombre _whc_semana_del_plan
+ 46013-46114  _whc_parsear                                  nombre _whc_parsear
+ 46116-46164  _whc_ritmo                                    nombre _whc_ritmo
+ 46166-46258  _whc_evaluar                                  nombre _whc_evaluar
+ 46260-46358  whc_semana                                    ruta /whc/semana
+ 46360-46429  whc_estado                                    ruta /whc/estado
+ 46432-46448  _WHC_CAIDA_MIN_ANTERIOR                       nombre _WHC_CAIDA_MIN_ANTERIOR
+ 46450-46455  _whc_debe_pisar                               nombre _whc_debe_pisar
+ 46457-46697  whc_analizar                                  ruta /whc/analizar
+ 46699-46888  cortex_calidad                                ruta /cortex/calidad
+ 46890-46917  cortex_simular                                ruta /cortex/simular
+ 46927-46938  _PORTAL_FALLOS                                huérfano de cortex_portales
+ 46938-46939  _PORTAL_NO_RECOGIDOS                          huérfano de cortex_portales
+ 46949-46952  _celda_centro                                 huérfano de cortex_portal_geo, cortex_portal_geodir, cortex_portal_nota
+ 46954-46988  _fusionar_celdas                              huérfano de cortex_portales
+ 46990-47002  _stage_celda                                  huérfano de cortex_direcciones_hoy, cortex_missing_hoy, cortex_portales
+ 47004-47102  cortex_portales                               ruta /cortex/portales
+ 47104-47137  cortex_portal_nota                            ruta /cortex/portales
+ 47140-47144  _GEO_PRECISIONES                              huérfano de cortex_portal_geo, cortex_portal_geodir
+ 47146-47207  cortex_portal_geo                             ruta /cortex/portales/geo
+ 47209-47330  cortex_portal_geodir                          ruta /cortex/portales/geodir
+ 47332-47421  cortex_geocode                                ruta /cortex/geocode
+ 47434-47464  _CATASTRO                                     huérfano de _geo_catastro
+ 47464-47465  _OVERPASS                                     huérfano de _geo_overpass, _inv_osm
+ 47465-47466  _UA_GEO                                       huérfano de cortex_geo_inverso, cortex_geo_rescate
+ 47468-47487  _PROV_POR_CP                                  huérfano de _geo_catastro
+ 47489-47501  _RE_TIPO_VIA                                  huérfano de _geo_via_limpia
+ 47511-47534  _geo_via_limpia                               huérfano de _geo_catastro, _geo_overpass
+ 47536-47540  _geo_parecido                                 huérfano de _geo_catastro, _geo_overpass
+ 47542-47544  _xml_tag                                      huérfano de _geo_catastro, _inv_catastro
+ 47566-47684  _geo_catastro                                 huérfano de cortex_geo_rescate
+ 47686-47743  _geo_overpass                                 huérfano de cortex_geo_rescate
+ 47746-47766  _APPLE_TOKEN                                  huérfano de _apple_maps_token, _geo_apple
+ 47768-47771  _apple_maps_configurado                       huérfano de _geo_apple
+ 47773-47795  _apple_maps_token                             huérfano de _geo_apple
+ 47797-47836  _apple_geo_parse                              huérfano de _geo_apple
+ 47838-47860  _geo_apple                                    huérfano de cortex_geo_rescate
+ 47862-47957  cortex_geo_rescate                            ruta /cortex/geo/rescate
+ 48025-48026  _DIR_URL                                      huérfano de _dir_limpia
+ 48025-48027  _DIR_CIF                                      huérfano de _dir_limpia
+ 48027-48028  _DIR_EMPRESA                                  huérfano de _dir_limpia
+ 48028-48029  _DIR_CP_INLINE                                huérfano de _dir_despieza
+ 48029-48030  _DIR_TEL                                      huérfano de _dir_limpia
+ 48032-48040  _DIR_PISO                                     huérfano de _dir_limpia
+ 48042-48044  _DIR_NUM                                      huérfano de _dir_limpia
+ 48042-48045  _DIR_RANGO                                    huérfano de _dir_limpia
+ 48047-48067  _dir_limpia                                   huérfano de _dir_despieza
+ 48069-48128  _dir_despieza                                 huérfano de cortex_geo_parse
+ 48130-48159  _dir_variantes                                huérfano de cortex_geo_parse
+ 48189-48202  cortex_geo_parse                              ruta /cortex/geo/parse
+ 48204-48205  _CAT_COORD                                    huérfano de _inv_catastro
+ 48207-48212  _RE_SIGLA_VIA                                 huérfano de _nucleo_via
+ 48214-48226  _nucleo_via                                   huérfano de _mismo_nombre, cortex_geo_inverso
+ 48228-48239  _mismo_nombre                                 huérfano de cortex_geo_inverso
+ 48241-48279  _inv_catastro                                 huérfano de cortex_geo_inverso
+ 48281-48298  _inv_cartociudad                              huérfano de cortex_geo_inverso
+ 48300-48354  _inv_osm                                      huérfano de cortex_geo_inverso
+ 48356-48516  cortex_geo_inverso                            ruta /cortex/geo/inverso
+ 48540-48541  CX_CANCELADO                                  huérfano de _cx_debrief_reparto
+ 48543-48547  CX_CTX_CANCELADO                              huérfano de _cx_debrief_reparto
+ 48548-48550  CX_CTX_REPROGRAMADO                           huérfano de _cx_debrief_reparto
+ 48551-48554  CX_CTX_CLIENTE                                huérfano de _cx_debrief_reparto
+ 48555-48556  CX_CTX_PERDIDO                                huérfano de _cx_debrief_reparto
+ 48557-48580  CX_AMBIGUO                                    huérfano de _cx_debrief_reparto
+ 48582-48586  CX_HUECO_MIN                                  huérfano de _cx_debrief_reparto
+ 48588-48599  _cx_minutos                                   huérfano de _cx_debrief_reparto, cortex_debrief
+ 48601-48701  _cx_debrief_reparto                           huérfano de cortex_debrief
+ 48703-48716  _cx_contexto                                  huérfano de _cx_debrief_reparto, _cx_motivo_legible
+ 48718-48757  _cx_motivo_legible                            huérfano de _cx_debrief_reparto
+ 48759-49007  cortex_debrief                                ruta /cortex/debrief
+ 49009-49012  DebriefMarca                                  nombre DebriefMarca
+ 49014-49069  cortex_debrief_marcar                         ruta /cortex/debrief/{tba}
+ 49071-49153  cortex_missing_hoy                            ruta /cortex/missing-hoy
+ 49155-49280  cortex_direcciones_hoy                        ruta /cortex/direcciones-hoy
+ 49282-49343  cortex_portales_mi_ruta                       ruta /cortex/portales/mi-ruta
+ 49345-49346  CORTEX_LLAVES                                 nombre CORTEX_LLAVES
+ 49346-49347  _LLAVE_CACHE                                  huérfano de _llave_viva, cortex_llave_reactivar, cortex_llave_revocar
+ 49347-49348  _LLAVE_TTL                                    huérfano de _llave_viva
+ 49350-49372  _llave_viva                                   huérfano de cortex_ingest, cortex_ingest_informe
+ 49374-49457  cortex_ingest_token                           ruta /cortex/ingest-token
+ 49459-49480  cortex_direcciones_reconstruir                ruta /cortex/direcciones/reconstruir
+ 49482-49534  cortex_llaves                                 ruta /cortex/llaves
+ 49536-49553  cortex_llaves_antiguas_revocar                ruta /cortex/llaves/antiguas/revocar
+ 49555-49568  cortex_llave_revocar                          ruta /cortex/llaves/{jti}/revocar
+ 49570-49581  cortex_llave_reactivar                        ruta /cortex/llaves/{jti}/reactivar
+ 49583-49792  cortex_ingest                                 ruta /cortex/ingest
+ 49794-49863  cortex_diagnostico                            ruta /cortex/diagnostico
+ 49865-49875  _cortex_day_query                             nombre _cortex_day_query
+ 49877-49906  _cortex_centro_match                          nombre _cortex_centro_match
+ 49908-49922  _cortex_scope                                 nombre _cortex_scope
+ 49941-49942  _CENTRO_KM_MAX                                huérfano de _centro_por_coordenada
+ 49942-49943  _CENTRO_MARGEN                                huérfano de _centro_por_coordenada
+ 49964-49980  _centro_por_coordenada                        huérfano de _centro_de_estacion
+ 49982-50009  _centro_de_estacion                           huérfano de cortex_stations_auto
+ 50011-50046  cortex_stations_auto                          ruta /cortex/stations/auto
+ 50048-50144  cortex_stations                               ruta /cortex/stations
+ 50146-50197  cortex_assign_station                         ruta /cortex/stations
+ 50199-50247  cortex_days                                   ruta /cortex/days
+ 50249-50312  cortex_overview                               ruta /cortex/overview
+ 50314-50318  _cx_ultima_captura                            huérfano de cortex_dsc, cortex_overview, cortex_routes
+ 50320-50342  _cx_ruta_cajon                                huérfano de _apoyo_paradas_pendientes, apoyo_situacion, portal_mis_numeros
+ 50344-50428  cortex_routes                                 ruta /cortex/routes
+ 50430-50472  cortex_packages                               ruta /cortex/packages
+ 50474-50487  _cortex_clean_timeline                        nombre _cortex_clean_timeline
+ 50489-50512  cortex_package_detail                         ruta /cortex/package/{tba}
+ 50514-50535  cortex_alerts                                 ruta /cortex/alerts
+ 50537-50546  cortex_heatmap                                ruta /cortex/heatmap
+ 50548-50585  cortex_seed_demo                              ruta /cortex/seed-demo
+ 50587-50595  cortex_clear_demo                             ruta /cortex/clear-demo
+ 50699-50721  cortex_reset                                  ruta /cortex/reset
+ 51213-51225  whc_plan_get                                  ruta /whc/plan
+ 51227-51233  whc_plan_delete                               ruta /whc/plan
+ 55767-55772  _preasig_pares_del_dia                        huérfano de _plantilla_filas_desde_cortex

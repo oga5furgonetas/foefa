@@ -1,0 +1,18 @@
+__pycache__/
+*.pyc
+.env
+node_modules/
+uploads/
+.wrangler/
+
+# Build del frontend: se regenera con `npm run build` antes de cada deploy.
+# NO versionarlo evita conflictos masivos al trabajar desde varios ordenadores.
+frontend-v2/dist/
+frontend-v2/dist-staging/
+frontend-v2/dist-lab/
+mobile.zip
+
+# Entorno de Python local para correr los tests del backend (pytest).
+# Son ~200 MB y dependen del sistema operativo: jamas al repositorio.
+backend/.venv/
+.venv/

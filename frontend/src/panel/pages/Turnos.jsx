@@ -1,0 +1,2440 @@
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useOutletContext } from 'react-router-dom'
+import {
+  Loader2, CalendarClock, Users, ChevronLeft, ChevronRight, Save, Zap,
+  Upload, Check, X, Settings2, AlertTriangle, Inbox, ClipboardPaste, Ban, Trash2,
+  Brush, Undo2, Search, Eraser, Rows3, CopyPlus, UserMinus, Download,
+  ChevronDown, History, Lock,
+} from 'lucide-react'
+import {
+  getShifts, getShiftCoverage, getDrivers, saveShiftsBulk, setShiftSettings,
+  generateShiftsAuto, getRouteDemand, setRouteDemand, getShiftRequests,
+  resolveShiftRequest, importShifts, getCodigosCuadrante, setCodigosCuadrante,
+  importShiftsPegado, getShiftBlocks, createShiftBlock, deleteShiftBlock,
+  setAliasNombres, updateDriver, exportarCuadrante,
+} from '../api'
+import { useT } from '../../i18n'
+import { lista } from '../../lib/lista'
+import { canSee } from '../auth'
+import { isoLocal, hoyLocal, horaLocal, diaMesLocal } from '../../lib/fecha'
+
+/* Cuantos dias se pueden pintar de una vez. 92 es un trimestre: por encima
+   son miles de celdas y la pantalla se arrastra sin que nadie lo necesite. */
+const TOPE_DIAS = 92
+
+/* ── EL CÓDIGO, NO EL TIPO ─────────────────────────────────────────────────
+   La app entiende tres tipos (trabaja / libre / extra) y con eso decide
+   cobertura, peticiones y lo que ve el conductor. Pero el cuadrante que sale
+   de Amazon tiene DOCE códigos, y siete de ellos caen en "libre": V, COMP,
+   N/D, N/P, SUSP, N/T y N/T APROB significan cosas muy distintas.
+
+   Pintar sólo el tipo convertía el cuadrante en una pared de dos letras que no
+   se parecía a la hoja de la que había salido. Por eso la rejilla trabaja con
+   el CÓDIGO: `grid['id|fecha']` guarda 'BKP', 'V', 'N/D'… y el tipo se deduce
+   de él al guardar. */
+
+/* CINCO COLORES PARA DIECISÉIS CÓDIGOS, y es a propósito.
+
+   Con un color por código la rejilla era un arcoíris donde no se distinguía
+   nada. Todas las guías serias de color categórico —Okabe-Ito, la paleta de
+   IBM, las recomendaciones de accesibilidad— dicen lo mismo: NO PASAR DE SEIS.
+   A partir de ahí los colores dejan de diferenciarse a tamaño pequeño, y una
+   celda de cuadrante mide 22 px.
+
+   Así que el COLOR dice de qué familia es el día —se lee de lejos, de un
+   vistazo— y el TEXTO DEL CÓDIGO, que siempre está dentro de la celda, dice
+   cuál es exactamente. Dos canales: el que funciona en diagonal desde el otro
+   lado de la mesa, y el que funciona cuando te acercas.
+
+   El nombre de la familia lo manda el servidor; aquí sólo se traduce a clases. */
+const COLORES = {
+  ruta:     'bg-emerald-500/20 text-emerald-200 border-emerald-500/40',
+  apoyo:    'bg-teal-500/[0.12] text-teal-300 border-teal-500/30',
+  libre:    'bg-dark-800/70 text-dark-400 border-dark-700/70',
+  previsto: 'bg-sky-500/15 text-sky-300 border-sky-500/35',
+  // Rosa, y sólo para el día concedido. Es el sexto color y ahí se para: por
+  // encima de seis dejan de diferenciarse a 22 px, que es lo que mide la
+  // celda. Se gasta uno entero en esto porque es la única casilla del
+  // cuadrante que NO se puede tocar sin hablar con la persona.
+  aprobado: 'bg-pink-500/25 text-pink-200 border-pink-400/50',
+  aviso:    'bg-red-500/15 text-red-300 border-red-500/35',
+}
+/* El mismo color, pero plano y sin borde: para los cuadraditos de la leyenda y
+   de la paleta, donde no hay rejilla que acompañe. */
+const FAMILIA_NOMBRE = {
+  ruta: 'Sale a ruta', apoyo: 'Trabaja sin ruta', libre: 'Día libre',
+  previsto: 'Ausencia prevista', aprobado: 'Concedido (no se toca)',
+  aviso: 'Ausencia no prevista',
+}
+
+/* Lo que se usa si el servidor no contesta. La rejilla NO puede quedarse en
+   blanco por eso: sería peor que el problema. */
+/* `ruta` NO es lo mismo que `tipo: 'trabaja'`. BKP y Site trabajan —cobran,
+   están en la nave— pero no sacan furgoneta, y el ride along va de
+   acompañante en la de otro. Contarlos hacía que la fila de cobertura dijera
+   39 cuando a la calle salían 36, que es justo el número que se compara con
+   lo que pide Amazon. */
+const COD_DEF = {
+  '1':         { tipo: 'trabaja', etiqueta: 'Trabaja',        color: 'ruta',     ruta: true },
+  'BKP':       { tipo: 'trabaja', etiqueta: 'Backup',         color: 'apoyo',    ruta: false },
+  'S':         { tipo: 'trabaja', etiqueta: 'Site (oficina)', color: 'apoyo',    ruta: false },
+  'RIDE':      { tipo: 'trabaja', etiqueta: 'Ride along',     color: 'apoyo',    ruta: false },
+  'EXTRA':     { tipo: 'extra',   etiqueta: 'Extra',          color: 'apoyo',    ruta: true },
+  'N/T':       { tipo: 'libre',   etiqueta: 'No trabaja',     color: 'libre',    ruta: false },
+  'L':         { tipo: 'libre',   etiqueta: 'Libre',          color: 'libre',    ruta: false },
+  'V':         { tipo: 'libre',   etiqueta: 'Vacaciones',     color: 'previsto', ruta: false },
+  'COMP':      { tipo: 'libre',   etiqueta: 'Compensa',       color: 'previsto', ruta: false },
+  'N/T APROB': { tipo: 'libre',   etiqueta: 'Libre aprobado', color: 'aprobado', ruta: false },
+  'N/D':       { tipo: 'libre',   etiqueta: 'No disponible',  color: 'aviso',    ruta: false },
+  'N/P':       { tipo: 'libre',   etiqueta: 'No presentado',  color: 'aviso',    ruta: false },
+  'SUSP':      { tipo: 'libre',   etiqueta: 'Suspendido',     color: 'aviso',    ruta: false },
+}
+
+/* En la CELDA no caben nueve caracteres. Se acorta sólo ahí: en la paleta y en
+   la leyenda va el código entero, porque abreviado salían dos botones 'N/T'
+   —'N/T' y 'N/T APROB'— y no había manera de saber cuál era cuál. En la celda
+   no hay confusión posible: el aprobado lleva anillo verde y el tooltip dice
+   cuál es. */
+const ABREV = { 'N/T APROB': 'N/T', EXTRA: 'EX', 'RIDE ALONG': 'RIDE' }
+const corto = (c) => ABREV[c] || c
+
+/* Turnos guardados ANTES de que se empezara a guardar el código: sólo tienen
+   tipo. Se les pone el código más probable para que se puedan ver y pintar,
+   en vez de dejarlos en blanco. */
+const TIPO_A_COD = { trabaja: '1', libre: 'N/T', extra: 'EXTRA' }
+
+/* Ordenar por nombre SIN que las mayúsculas y las tildes manden.
+
+   Las fichas están escritas de todas las maneras: 'BERNARDO PUENTE', 'belen
+   fernandez lariño', 'Borja Salvado Varela'. Un `sort()` normal compara por
+   código de carácter, así que todas las minúsculas caían detrás de todas las
+   mayúsculas y la lista parecía cualquier cosa menos alfabética. `localeCompare`
+   con sensitivity 'base' iguala mayúsculas y tildes, que es como lo ordenaría
+   una persona. */
+/* El fondo de una columna. Hoy manda sobre el fin de semana: si el sabado es
+   hoy, lo que hace falta saber es que es hoy.
+
+   Se devuelve UNA sola clase de fondo y no dos encadenadas a proposito: con
+   `bg-x bg-y` en la misma celda gana la que Tailwind haya puesto despues en la
+   hoja generada, que no se controla desde aqui y cambia entre compilaciones. */
+const fondoCol = (esHoy, esFinde) =>
+  esHoy ? 'bg-amber-400/[0.055]' : esFinde ? 'bg-dark-800/40' : ''
+
+/* Los atajos de rango. Existen porque el 90% de las veces se quiere una de
+   estas cuatro cosas, y porque escribir dos fechas para ver la semana que
+   viene es más trabajo del que ahorra. Pero NINGUNO es obligatorio: las dos
+   fechas se pueden escribir a mano y llegar hasta donde haga falta. */
+const ATAJOS = [
+  { k: 'semana', lbl: 'Semana', titulo: 'La semana de Amazon en curso: de domingo a sábado' },
+  { k: 'dos', lbl: '2 semanas', titulo: 'Las dos semanas de Amazon en curso' },
+  { k: 'mes', lbl: 'Este mes', titulo: 'Del día 1 al último del mes, entero' },
+  { k: 'siguiente', lbl: 'Mes que viene', titulo: 'El mes siguiente entero: para los días que ya se piden con antelación' },
+]
+
+/* ── CALENDARIO DE DÍAS CONCEDIDOS ────────────────────────────────────────
+   Para saber qué días hay ya dados había que entrar en el historial, filtrar y
+   leer una lista — y eso no contesta la pregunta que se hace de verdad, que es
+   "el puente de octubre, ¿cuánta gente tengo fuera?". Una lista ordenada por
+   fecha obliga a ir sumando de cabeza; un mes de un vistazo, no.
+
+   Se pintan las tres cosas a la vez porque las tres condicionan la respuesta:
+   lo aprobado (verde), lo que está pendiente de contestar (ámbar, porque puede
+   convertirse en gente fuera) y los días cerrados (rojo). Verlas por separado
+   es lo que obligaba a cruzarlas a mano.
+
+   LA CLAVE DEL DÍA SE COMPONE A MANO, nunca por `toISOString()`: en UTC+2 la
+   medianoche local cae en el día anterior y el calendario pintaría todo un día
+   desplazado, en silencio (gotcha 11 — pasó ya con las ITV). */
+const claveDia = (d) =>
+  `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+
+/* ── ELEGIR UN RANGO SIN SABERSE LAS FECHAS ───────────────────────────────
+   Dani: "déjame abrir ahí un calendario, que no me sé los días".
+
+   Un `<input type="date">` da por hecho que sabes la fecha: para cerrar "el
+   puente de diciembre" hay que ir a mirar un calendario en otro sitio, contar,
+   y volver a escribirlo. Aquí se pulsa el primer día y el último, y ya está.
+
+   Y enseña quién tiene día concedido en cada casilla, que es el dato que hace
+   falta justo en ese momento: cerrar una semana en la que ya le diste el día a
+   tres personas no es lo mismo que cerrarla vacía, y con dos pantallas
+   separadas eso no se ve hasta que alguien se queja. */
+function SelectorRango({ desde, hasta, onElegir, ocupados }) {
+  const hoyRef = new Date()
+  const [mes, setMes] = useState(() => {
+    const d = desde ? new Date(`${desde}T12:00:00`) : hoyRef
+    return new Date(d.getFullYear(), d.getMonth(), 1)
+  })
+
+  const primero = new Date(mes.getFullYear(), mes.getMonth(), 1)
+  const huecos = (primero.getDay() + 6) % 7
+  const diasMes = new Date(mes.getFullYear(), mes.getMonth() + 1, 0).getDate()
+  const celdas = [...Array(huecos).fill(null),
+                  ...Array.from({ length: diasMes }, (_, i) => i + 1)]
+  const hoyK = claveDia(hoyRef)
+
+  /* Un solo clic elige el inicio y borra el fin; el siguiente cierra el rango.
+     Si el segundo es anterior al primero se le da la vuelta en vez de dar un
+     error: es obvio lo que quería y el backend lo rechazaría con un mensaje
+     que no ayuda a nadie. */
+  const pulsar = (k) => {
+    if (!desde || (desde && hasta)) return onElegir({ desde: k, hasta: '' })
+    return k < desde ? onElegir({ desde: k, hasta: desde }) : onElegir({ desde, hasta: k })
+  }
+
+  return (
+    <div className="rounded-lg border border-dark-700 bg-dark-950 p-2.5">
+      <div className="mb-2 flex items-center gap-1">
+        <button type="button" onClick={() => setMes(new Date(mes.getFullYear(), mes.getMonth() - 1, 1))}
+          className="btn-ghost p-1" aria-label="Mes anterior"><ChevronLeft size={14} /></button>
+        <span className="min-w-[8rem] text-center text-[12.5px] font-semibold capitalize text-dark-200">
+          {mes.toLocaleDateString('es-ES', { month: 'long', year: 'numeric' })}
+        </span>
+        <button type="button" onClick={() => setMes(new Date(mes.getFullYear(), mes.getMonth() + 1, 1))}
+          className="btn-ghost p-1" aria-label="Mes siguiente"><ChevronRight size={14} /></button>
+        {(desde || hasta) && (
+          <button type="button" onClick={() => onElegir({ desde: '', hasta: '' })}
+            className="ml-auto text-[11.5px] text-dark-500 hover:text-dark-300">Quitar</button>
+        )}
+      </div>
+      <div className="grid grid-cols-7 gap-0.5">
+        {['L', 'M', 'X', 'J', 'V', 'S', 'D'].map((d, i) => (
+          <div key={i} className="pb-0.5 text-center text-[10px] font-semibold text-dark-500">{d}</div>
+        ))}
+        {celdas.map((n, i) => {
+          if (n === null) return <div key={`h${i}`} />
+          const k = claveDia(new Date(mes.getFullYear(), mes.getMonth(), n))
+          const dentro = desde && hasta && k >= desde && k <= hasta
+          const punta = k === desde || k === hasta
+          const gente = ocupados?.[k] || 0
+          return (
+            <button key={k} type="button" onClick={() => pulsar(k)}
+              title={gente ? `${gente} con día concedido` : undefined}
+              className={`relative h-8 rounded text-[12px] font-semibold tabular-nums transition-colors ${
+                punta ? 'bg-red-500 text-white'
+                  : dentro ? 'bg-red-500/25 text-red-100'
+                    : k === hoyK ? 'text-brand-300 ring-1 ring-brand-500/40'
+                      : 'text-dark-300 hover:bg-dark-800'}`}>
+              {n}
+              {gente > 0 && (
+                <i className={`absolute bottom-0.5 left-1/2 h-1 w-1 -translate-x-1/2 rounded-full ${
+                  punta || dentro ? 'bg-white/80' : 'bg-emerald-400'}`} />
+              )}
+            </button>
+          )
+        })}
+      </div>
+      <p className="mt-1.5 text-[11px] leading-tight text-dark-500">
+        {!desde ? 'Pulsa el primer día que quieres cerrar.'
+          : !hasta ? 'Ahora el último.'
+            : `Del ${desde.split('-').reverse().join('/')} al ${hasta.split('-').reverse().join('/')}`}
+        <span className="ml-2 inline-flex items-center gap-1">
+          <i className="h-1 w-1 rounded-full bg-emerald-400" /> ya tiene alguien día
+        </span>
+      </p>
+    </div>
+  )
+}
+
+function CalendarioDiasLibres({ center }) {
+  const hoyRef = new Date()
+  const [mes, setMes] = useState(new Date(hoyRef.getFullYear(), hoyRef.getMonth(), 1))
+  const [filas, setFilas] = useState(null)
+  const [bloqueos, setBloqueos] = useState([])
+  const [abierto, setAbierto] = useState(null)
+  const [personaSel, setPersonaSel] = useState(null)
+  const [err, setErr] = useState('')
+
+  /* ── SE CARGA UN AÑO DE GOLPE, NO MES A MES ─────────────────────────────
+     Son 67 días concedidos en total: cabe entero y de sobra. Pedirlo por mes
+     obligaba a una llamada por cada flecha, y sobre todo dejaba a medias lo que
+     de verdad se quiere saber al pulsar a una persona: TODOS sus días, no solo
+     los del mes que se está mirando. */
+  const ventanaDesde = claveDia(new Date(hoyRef.getFullYear(), hoyRef.getMonth() - 3, 1))
+  const ventanaHasta = claveDia(new Date(hoyRef.getFullYear(), hoyRef.getMonth() + 10, 0))
+
+  useEffect(() => {
+    setFilas(null); setErr('')
+    // `r.data.requests`, igual que el resto de la pantalla: el endpoint devuelve
+    // un objeto. Leyendo `r.data` a secas, `lista()` lo convierte en [] y el mes
+    // saldría vacío sin un solo error — que es peor que un fallo.
+    getShiftRequests(center, 'aprobado,pendiente',
+                     { desde: ventanaDesde, hasta: ventanaHasta, limit: 2000 })
+      .then((r) => setFilas(lista(r.data?.requests)))
+      .catch(() => setErr('No se pudieron cargar los días.'))
+    // `r.data.bloqueos`, no `r.data`: el endpoint devuelve un objeto. Leyendo
+    // mal, la lista sale vacía y los días cerrados no se pintarían — sin fallar.
+    getShiftBlocks(center).then((r) => setBloqueos(lista(r.data?.bloqueos))).catch(() => {})
+  }, [center, ventanaDesde, ventanaHasta])
+
+  const porDia = useMemo(() => {
+    const m = {}
+    for (const f of (filas || [])) {
+      const k = String(f.date || '').slice(0, 10)
+      if (!k) continue
+      ;(m[k] ||= []).push(f)
+    }
+    // Aprobados primero dentro de cada día: es lo que ya es un hecho.
+    for (const k of Object.keys(m)) {
+      m[k].sort((a, b) => (a.status === b.status ? 0 : a.status === 'aprobado' ? -1 : 1))
+    }
+    return m
+  }, [filas])
+
+  const hoyK = claveDia(hoyRef)
+
+  const cerrado = (k) => bloqueos.find((b) => b.desde <= k && k <= b.hasta && !b.driver_id)
+
+  /* Quién ha pedido días, con los suyos de HOY EN ADELANTE.
+     Solo futuro a propósito: un día que ya pasó no se puede dar ni quitar, y
+     mezclarlo con los que quedan hace que la cuenta de "cuántos días lleva"
+     signifique dos cosas a la vez. Quien no tenga ninguno pendiente por venir
+     no sale en la lista — no hay nada que mirar en él.
+
+     Se ordena por quien más tiene: es la pregunta que se hace al abrir esto
+     ("¿a quién le estoy dando más días?"), y en orden alfabético habría que
+     leerla entera para contestarla. */
+  const personas = useMemo(() => {
+    const m = new Map()
+    for (const f of (filas || [])) {
+      const id = f.driver_id || f.driver_name
+      const k = String(f.date || '').slice(0, 10)
+      if (!id || !k || k < hoyK) continue
+      const p = m.get(id) || { id, nombre: f.driver_name, dias: [], pendientes: 0 }
+      p.dias.push({ k, status: f.status, motivo: f.motivo_label || f.type })
+      if (f.status === 'pendiente') p.pendientes += 1
+      m.set(id, p)
+    }
+    for (const p of m.values()) p.dias.sort((a, b) => a.k.localeCompare(b.k))
+    return [...m.values()].sort((a, b) => (b.dias.length - a.dias.length)
+      || String(a.nombre).localeCompare(String(b.nombre), 'es', { sensitivity: 'base' }))
+  }, [filas, hoyK])
+
+  const suyos = useMemo(() => {
+    if (!personaSel) return null
+    const p = personas.find((x) => x.id === personaSel)
+    return p ? new Set(p.dias.map((d) => d.k)) : null
+  }, [personaSel, personas])
+
+  // Rejilla de lunes a domingo, con los huecos del mes anterior en blanco.
+  const primero = new Date(mes.getFullYear(), mes.getMonth(), 1)
+  const huecos = (primero.getDay() + 6) % 7          // 0 = lunes
+  const diasMes = new Date(mes.getFullYear(), mes.getMonth() + 1, 0).getDate()
+  const celdas = [...Array(huecos).fill(null),
+                  ...Array.from({ length: diasMes }, (_, i) => i + 1)]
+
+  const nombreMes = mes.toLocaleDateString('es-ES', { month: 'long', year: 'numeric' })
+  const totalMes = Object.entries(porDia)
+    .reduce((n, [, v]) => n + v.filter((x) => x.status === 'aprobado').length, 0)
+
+  return (
+    <div className="card p-4">
+      <div className="mb-3 flex flex-wrap items-center gap-2">
+        <button onClick={() => setMes(new Date(mes.getFullYear(), mes.getMonth() - 1, 1))}
+          className="btn-ghost p-1.5" aria-label="Mes anterior"><ChevronLeft size={16} /></button>
+        <h3 className="min-w-[9rem] text-center text-sm font-bold capitalize text-dark-100">{nombreMes}</h3>
+        <button onClick={() => setMes(new Date(mes.getFullYear(), mes.getMonth() + 1, 1))}
+          className="btn-ghost p-1.5" aria-label="Mes siguiente"><ChevronRight size={16} /></button>
+        <button onClick={() => setMes(new Date(hoyRef.getFullYear(), hoyRef.getMonth(), 1))}
+          className="btn-ghost px-2.5 py-1 text-xs">Hoy</button>
+        <span className="ml-auto text-[12.5px] text-dark-400">
+          {totalMes} día{totalMes === 1 ? '' : 's'} concedido{totalMes === 1 ? '' : 's'} este mes
+        </span>
+      </div>
+
+      <div className="mb-2 flex flex-wrap gap-3 text-[11.5px] text-dark-500">
+        <span className="flex items-center gap-1.5"><i className="h-2.5 w-2.5 rounded-full bg-emerald-400" /> concedido</span>
+        <span className="flex items-center gap-1.5"><i className="h-2.5 w-2.5 rounded-full bg-amber-400" /> sin contestar</span>
+        <span className="flex items-center gap-1.5"><i className="h-2.5 w-2.5 rounded-full bg-red-500" /> día cerrado</span>
+      </div>
+
+      {err && <p className="mb-2 text-sm text-red-300">{err}</p>}
+      {!filas ? (
+        <div className="flex items-center gap-2 py-8 text-dark-400"><Loader2 className="animate-spin" size={16} /> …</div>
+      ) : (
+        <>
+          <div className="grid grid-cols-7 gap-1">
+            {['L', 'M', 'X', 'J', 'V', 'S', 'D'].map((d, i) => (
+              <div key={i} className="pb-1 text-center text-[11px] font-semibold text-dark-500">{d}</div>
+            ))}
+            {celdas.map((n, i) => {
+              if (n === null) return <div key={`h${i}`} />
+              const k = claveDia(new Date(mes.getFullYear(), mes.getMonth(), n))
+              const dia = porDia[k] || []
+              const apro = dia.filter((x) => x.status === 'aprobado')
+              const pend = dia.filter((x) => x.status === 'pendiente')
+              const bloq = cerrado(k)
+              /* Con una persona elegida, sus días se marcan y el resto se
+                 apaga. Apagar y no esconder: si los demás desaparecieran no se
+                 vería que ese día ya hay otros tres fuera, que es justo lo que
+                 hay que tener en cuenta antes de dar o quitar un día. */
+              const esSuyo = suyos?.has(k)
+              const apagado = suyos && !esSuyo
+              return (
+                <button key={k} onClick={() => setAbierto(abierto === k ? null : k)}
+                  className={`min-h-[62px] rounded-lg border p-1.5 text-left transition-colors ${
+                    esSuyo ? 'border-brand-400 bg-brand-500/20 ring-1 ring-brand-400/50'
+                      : abierto === k ? 'border-brand-500 bg-brand-500/10'
+                        : bloq ? 'border-red-500/40 bg-red-500/[0.07]'
+                          : apro.length ? 'border-emerald-500/30 bg-emerald-500/[0.07] hover:border-emerald-500/60'
+                            : 'border-dark-800 hover:border-dark-700'
+                  } ${apagado ? 'opacity-35' : ''}`}>
+                  <span className={`text-[12px] font-bold tabular-nums ${
+                    k === hoyK ? 'text-brand-300' : 'text-dark-300'}`}>{n}</span>
+                  {/* CON ALGUIEN MARCADO, SOLO SE LEE LO SUYO. Los nombres de
+                      los demás se quitan: si lo que estás mirando es "los días
+                      de este", el resto es ruido que hay que descartar con la
+                      vista casilla por casilla. Las casillas siguen ahí y con su
+                      color, así que se sigue viendo que ese día hay más gente
+                      fuera — lo que desaparece son los nombres, no el hecho. */}
+                  {suyos ? (
+                    esSuyo && (
+                      <span className="mt-0.5 block truncate text-[10.5px] font-semibold leading-tight text-brand-200">
+                        {(dia.find((x) => (x.driver_id || x.driver_name) === personaSel)?.status) === 'pendiente'
+                          ? 'sin contestar' : 'día suyo'}
+                      </span>
+                    )
+                  ) : (
+                    <>
+                      {/* El primer nombre se ve sin pulsar: en la mayoría de los
+                          días hay una sola persona, y obligar a un clic para
+                          leer un nombre es lo que hacía que no se mirase. */}
+                      {apro.slice(0, 2).map((x) => (
+                        <span key={x.id} className="mt-0.5 block truncate text-[10.5px] leading-tight text-emerald-300">
+                          {String(x.driver_name || '').split(' ')[0]}
+                        </span>
+                      ))}
+                      {apro.length > 2 && (
+                        <span className="block text-[10.5px] text-emerald-400/80">+{apro.length - 2} más</span>
+                      )}
+                      {pend.length > 0 && (
+                        <span className="mt-0.5 block text-[10.5px] leading-tight text-amber-300">
+                          {pend.length} sin contestar
+                        </span>
+                      )}
+                      {bloq && !apro.length && !pend.length && (
+                        <span className="mt-0.5 block truncate text-[10.5px] leading-tight text-red-300">cerrado</span>
+                      )}
+                    </>
+                  )}
+                </button>
+              )
+            })}
+          </div>
+
+          {/* ── QUIÉN HA PEDIDO DÍAS ────────────────────────────────────────
+              Pulsando a alguien se le marcan TODOS sus días en el calendario,
+              también los de otros meses — por eso se carga un año entero de una
+              vez en lugar de mes a mes. Contesta la pregunta que no contestaba
+              ninguna pantalla: "este, ¿cuántos días lleva pedidos y cuándo?". */}
+          {personas.length > 0 && (
+            <div className="mt-4 border-t border-dark-800 pt-3">
+              <div className="mb-2 flex flex-wrap items-baseline gap-2">
+                <h4 className="text-[13px] font-bold text-dark-100">Quién ha pedido días</h4>
+                <span className="text-[12px] text-dark-500">
+                  {personas.length} persona{personas.length === 1 ? '' : 's'} con días por
+                  delante · pulsa para ver los suyos
+                </span>
+                {personaSel && (
+                  <button onClick={() => setPersonaSel(null)}
+                    className="ml-auto text-[12px] font-semibold text-brand-300 hover:text-brand-200">
+                    Ver a todos
+                  </button>
+                )}
+              </div>
+              <div className="flex flex-wrap gap-1.5">
+                {personas.map((p) => {
+                  const sel = personaSel === p.id
+                  return (
+                    <button key={p.id}
+                      onClick={() => {
+                        setPersonaSel(sel ? null : p.id)
+                        setAbierto(null)
+                        // Saltar a su primer día: si todos caen en octubre y
+                        // estás mirando septiembre, marcarlos no se ve.
+                        if (!sel && p.dias.length) {
+                          const d = new Date(`${p.dias[0].k}T12:00:00`)
+                          setMes(new Date(d.getFullYear(), d.getMonth(), 1))
+                        }
+                      }}
+                      className={`flex items-center gap-1.5 rounded-lg border px-2.5 py-1.5 text-[12.5px] transition-colors ${
+                        sel ? 'border-brand-400 bg-brand-500/20 text-brand-200'
+                          : 'border-dark-700 bg-dark-900 text-dark-300 hover:border-dark-600 hover:text-dark-100'}`}>
+                      <span className="font-semibold">{p.nombre}</span>
+                      <span className="tabular-nums text-dark-500">{p.dias.length}</span>
+                      {p.pendientes > 0 && (
+                        <span className="rounded-full bg-amber-500/20 px-1.5 text-[10.5px] font-bold text-amber-300">
+                          {p.pendientes} sin contestar
+                        </span>
+                      )}
+                    </button>
+                  )
+                })}
+              </div>
+              {personaSel && (() => {
+                const p = personas.find((x) => x.id === personaSel)
+                if (!p) return null
+                return (
+                  <div className="mt-2.5 rounded-lg border border-brand-500/30 bg-brand-500/[0.07] p-3">
+                    <p className="mb-1.5 text-[13px] font-bold text-dark-100">
+                      {p.nombre} · {p.dias.length} día{p.dias.length === 1 ? '' : 's'}
+                      <span className="ml-1.5 font-normal text-dark-500">de hoy en adelante</span>
+                    </p>
+                    <div className="flex flex-wrap gap-1.5">
+                      {p.dias.map((d) => (
+                        <span key={d.k}
+                          className={`rounded px-1.5 py-0.5 text-[11.5px] tabular-nums ${
+                            d.status === 'aprobado' ? 'bg-emerald-500/15 text-emerald-300'
+                              : 'bg-amber-500/15 text-amber-300'}`}
+                          title={`${d.motivo || ''}${d.status === 'pendiente' ? ' · sin contestar' : ''}`}>
+                          {d.k.split('-').reverse().slice(0, 2).join('/')}
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                )
+              })()}
+            </div>
+          )}
+
+          {abierto && (
+            <div className="mt-3 rounded-lg border border-dark-700 bg-dark-900/60 p-3">
+              <p className="mb-2 text-[13px] font-bold text-dark-100">{abierto}</p>
+              {cerrado(abierto) && (
+                <p className="mb-2 rounded border border-red-500/30 bg-red-500/10 px-2 py-1 text-[12.5px] text-red-300">
+                  Día cerrado: {cerrado(abierto).motivo}
+                </p>
+              )}
+              {(porDia[abierto] || []).length === 0 ? (
+                <p className="text-[13px] text-dark-500">Nadie tiene día ese día.</p>
+              ) : (
+                <div className="space-y-1">
+                  {(porDia[abierto] || []).map((x) => (
+                    <div key={x.id} className="flex flex-wrap items-center gap-2 text-[13px]">
+                      <span className={`h-2 w-2 rounded-full ${x.status === 'aprobado' ? 'bg-emerald-400' : 'bg-amber-400'}`} />
+                      <span className="font-semibold text-dark-100">{x.driver_name}</span>
+                      <span className="text-dark-500">{x.motivo_label || x.type}</span>
+                      {x.status === 'pendiente' && <span className="text-amber-300">sin contestar</span>}
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+        </>
+      )}
+    </div>
+  )
+}
+
+function atajo(k, ref = new Date()) {
+  const y = ref.getFullYear()
+  const m = ref.getMonth()
+  if (k === 'mes') {
+    return { desde: isoLocal(new Date(y, m, 1)), hasta: isoLocal(new Date(y, m + 1, 0)) }
+  }
+  if (k === 'siguiente') {
+    return { desde: isoLocal(new Date(y, m + 1, 1)), hasta: isoLocal(new Date(y, m + 2, 0)) }
+  }
+  const d = domingoDe(ref)
+  const largo = k === 'dos' ? 13 : 6
+  return {
+    desde: isoLocal(d),
+    hasta: isoLocal(new Date(d.getFullYear(), d.getMonth(), d.getDate() + largo)),
+  }
+}
+
+const porNombre = (a, b) =>
+  (a?.name || '').localeCompare(b?.name || '', 'es', { sensitivity: 'base' })
+
+/* ¿Empieza semana? Marca el corte en la rejilla: en 31 columnas seguidas no
+   hay forma de saber dónde empieza una semana sin una línea.
+
+   DOMINGO, no lunes. La semana de Amazon va de domingo a sábado, y es la que
+   manda para todo lo que se cuadra con ellos. Cortando en lunes, la línea caía
+   en medio de cada semana de Amazon y las cuentas de la semana no cuadraban
+   con las suyas. */
+const empiezaSemana = (iso) => new Date(iso + 'T12:00:00').getDay() === 0
+
+/* Domingo de la semana de una fecha. */
+function domingoDe(d) {
+  const x = new Date(d)
+  x.setHours(12, 0, 0, 0)
+  x.setDate(x.getDate() - x.getDay())
+  return x
+}
+function sumaDias(iso, n) {
+  const d = new Date(iso + 'T12:00:00')
+  d.setDate(d.getDate() + n)
+  return isoLocal(d)
+}
+
+/* ── EL CUADRANTE, ESCONDIDO ───────────────────────────────────────────────
+   Dani, 28-08-2026: "el apartado del cuadrante por ahora escondelo, no me
+   gusta mucho la integracion; ponme que solo apruebe y deniegue los dias de
+   los conductores".
+
+   Escondido y NO borrado, a proposito. Es codigo que funciona —rejilla,
+   pincel, generacion automatica, importacion de Excel y de texto pegado,
+   bloqueos, cobertura— y borrarlo para volver a escribirlo dentro de un mes
+   seria tirar semanas de trabajo y todos los fallos ya cazados con el
+   (gotchas 20, 21, 22 y 23 salieron justo de aqui). Con la bandera a `true`
+   vuelve entero y sin tocar nada mas.
+
+   Lo que queda en pantalla es lo unico que se pidio: aprobar y denegar dias,
+   y el historial para consultarlos. */
+const MOSTRAR_CUADRANTE = false
+
+export default function Turnos() {
+  const { center, centers } = useOutletContext()
+  const { t, lang } = useT()
+  const noCenter = center === 'Todos'
+
+  /* EL RANGO LO ELIGE QUIEN MIRA.
+
+     Antes era un ancla y un ancho fijo de catorce dias: la pantalla decidia
+     que se podia ver y que no. Con eso el final de mes quedaba siempre
+     partido, y si alguien pedia dias de septiembre no habia manera de llegar
+     hasta alli sin ir saltando de quincena en quincena. Un cuadrante tiene que
+     poder mirarse por donde haga falta. */
+  const [rango, setRango] = useState(() => {
+    const d = domingoDe(new Date())
+    return { desde: isoLocal(d), hasta: isoLocal(new Date(d.getFullYear(), d.getMonth(), d.getDate() + 13)) }
+  })
+  const [drivers, setDrivers] = useState(null)
+  const [grid, setGrid] = useState({})          // 'driverId|fecha' -> tipo
+  const [sucio, setSucio] = useState(false)     // hay cambios sin guardar
+  /* TRES numeros por dia, y son cosas distintas:
+       · maximas  — el techo comprometido con Amazon: lo que habria que poder
+                    cubrir si lo pidieran todo. Se rellena con antelacion.
+       · demanda  — las rutas que piden ESE dia. Llega mucho mas tarde.
+       · cobertura— la gente que estas poniendo. Sale de la rejilla, no se
+                    escribe.
+     Mirar solo la cobertura no dice nada: 39 personas es mucho o poco segun
+     lo que pidan, y quedarse corto respecto al maximo es lo que hace que
+     Amazon no te ofrezca rutas la proxima vez. */
+  const [demanda, setDemanda] = useState({})    // fecha -> rutas que piden (string)
+  const [maximas, setMaximas] = useState({})    // fecha -> techo comprometido (string)
+  const [min, setMin] = useState(0)
+  const [solicitudes, setSolicitudes] = useState([])
+  const [err, setErr] = useState('')
+  const [aviso, setAviso] = useState('')
+  const [cargando, setCargando] = useState(true)
+  const [ocupado, setOcupado] = useState('')    // '' | 'guardar' | 'auto' | 'importar'
+  const ficheroRef = useRef(null)
+  const [previa, setPrevia] = useState(null)    // resumen del Excel antes de guardar
+  /* Nombre del cuadrante → id del conductor, mientras se emparejan a mano en la
+     vista previa. Al guardarlos quedan para siempre y el mes que viene entran
+     solos. */
+  const [emparejando, setEmparejando] = useState({})
+  const [pegado, setPegado] = useState('')      // el cuadrante copiado de Sheets
+  const [verPegar, setVerPegar] = useState(false)
+  const [bloqueos, setBloqueos] = useState([])
+  const [verBloqueos, setVerBloqueos] = useState(false)
+  const [vistaDias, setVistaDias] = useState('peticiones')  // peticiones | calendario | bloqueos
+  const [nuevoBloqueo, setNuevoBloqueo] = useState({ desde: '', hasta: '', motivo: '', driver_id: '' })
+
+  /* ── LA REJILLA ─────────────────────────────────────────────────────────
+     `pincel` es el modo de trabajo. Con un pincel elegido, tocar una celda la
+     pone de ese tipo y arrastrar pinta seguido — que es como se rellena un mes
+     entero sin morir a clics. Sin pincel se mantiene el comportamiento de
+     antes (cada clic pasa al siguiente tipo), para quien ya estaba
+     acostumbrado. */
+  const [codigos, setCodigos] = useState(COD_DEF)
+  const [pincel, setPincel] = useState('1')
+  const pintando = useRef(false)
+  const [busca, setBusca] = useState('')
+  /* 'cuadrante' = sólo quien tiene algún turno puesto en lo que se está viendo.
+     Es el modo por defecto porque el problema real no es que falte gente: es
+     que SOBRA. En OGA5 hay 71 fichas activas y en el cuadrante de agosto
+     estaban 61 — las otras 10 son bajas que nadie marcó, y en la rejilla
+     ocupaban diez filas vacías que no se podían distinguir de un olvido. */
+  const [quien, setQuien] = useState('cuadrante')   // 'cuadrante' | 'todos'
+  const [denso, setDenso] = useState(false)
+  const [confirmarBaja, setConfirmarBaja] = useState(null)  // conductor a sacar
+  /* Plegar la rejilla. Con 61 filas y 31 columnas, mirar cuatro peticiones
+     obliga a bajar toda la pantalla; plegada, lo de abajo queda a la vista. */
+  const [verRejilla, setVerRejilla] = useState(true)
+  const [verHistorial, setVerHistorial] = useState(false)
+  const [historialDias, setHistorialDias] = useState(null)
+  const [filtroHist, setFiltroHist] = useState(
+    { estado: 'aprobado', desde: '', hasta: '', q: '' })
+  const [cargandoHist, setCargandoHist] = useState(false)
+  const [aprobados, setAprobados] = useState(new Set())  // 'did|fecha' con día libre CONCEDIDO
+
+  /* Cuántas personas tienen ya día concedido en cada fecha. Lo usa el selector
+     de rango de los días cerrados: cerrar una semana en la que ya le diste el
+     día a tres personas no es lo mismo que cerrarla vacía, y con las dos cosas
+     en pantallas distintas eso no se ve hasta que alguien se queja. */
+  const diasConGente = useMemo(() => {
+    const m = {}
+    for (const k of aprobados) {
+      const f = String(k).split('|')[1]
+      if (f) m[f] = (m[f] || 0) + 1
+    }
+    return m
+  }, [aprobados])
+  const historial = useRef([])                            // para deshacer
+  const [puedeDeshacer, setPuedeDeshacer] = useState(false)
+  const gridOriginal = useRef({})                         // lo que había al cargar
+  /* La hora entre paréntesis de la celda ("V (05:43)"). No se pinta —no cabe—
+     pero se enseña al pasar por encima y se conserva al guardar: al conductor
+     le importa más esa hora que el código. */
+  const horas = useRef({})
+  const tablaRef = useRef(null)
+  // El mes NO sale del fichero: la plantilla de Amazon arrastra en la cabecera
+  // el texto del mes anterior ("Desde: 01-06-2026" en un fichero de agosto).
+  const [mesImport, setMesImport] = useState(() => hoyLocal().slice(0, 7))
+
+  /* Ver las peticiones lo puede hacer cualquiera del centro; decidirlas no.
+     Quién puede se configura por usuario en Usuarios → permisos, porque cada
+     empresa reparte esto de una manera. El servidor lo comprueba también: un
+     botón escondido no protege nada. */
+  const puedeAprobar = canSee('aprobar-dias')
+
+  /* Quincena o mes completo. El mes entero cabe: la columna del nombre se
+     queda fija y los días se desplazan en horizontal. */
+  const dias = useMemo(() => {
+    const a = new Date(rango.desde + 'T12:00:00')
+    const b = new Date(rango.hasta + 'T12:00:00')
+    if (isNaN(a) || isNaN(b)) return [isoLocal(new Date())]
+    // Al reves se arregla solo en vez de dar error: si escribes la fecha de fin
+    // antes que la de inicio, lo que querias era ese rango.
+    const [ini, fin] = a <= b ? [a, b] : [b, a]
+    const n = Math.round((fin - ini) / 86400000) + 1
+    // Tope de 92 dias (un trimestre). Pintar mas son miles de celdas y la
+    // pantalla se arrastra; y nadie cuadra un cuadrante de medio ano de una vez.
+    return Array.from({ length: Math.min(n, TOPE_DIAS) },
+      (_, i) => isoLocal(new Date(ini.getFullYear(), ini.getMonth(), ini.getDate() + i)))
+  }, [rango])
+  /* El rango que se PIDE al servidor sale de los días que se van a pintar, no
+     de `desde`. En "mes completo" `dias` empieza el día 1 aunque la quincena
+     empiece el 3: pidiendo desde el 3 los días 1 y 2 salían vacíos teniendo
+     turnos guardados, y la cobertura de esos dos días marcaba 0. */
+  /* Hoy, para marcar su columna. Se calcula una vez: recalcularlo en cada
+     pintada no cambia nada y la fecha no se mueve mientras miras la pantalla. */
+  const hoy = useMemo(() => isoLocal(new Date()), [])
+
+  const primerDia = dias[0]
+  const hasta = dias[dias.length - 1]
+
+  /* Se PIDE el mes entero aunque sólo se pinten catorce días.
+
+     Porque "quién está en el cuadrante" es una pregunta del mes, no de la
+     quincena: alguien que sólo trabaja del 1 al 10 aparecería como "sobra" si
+     estás mirando del 17 al 30, y eso es justo el falso positivo que hace que
+     no te puedas fiar del aviso. Son 61 × 31 documentos, unos 1.900: nada. */
+  const mesDesde = useMemo(() => primerDia.slice(0, 8) + '01', [primerDia])
+  const mesHasta = useMemo(() => {
+    const d = new Date(hasta + 'T12:00:00')
+    return isoLocal(new Date(d.getFullYear(), d.getMonth() + 1, 0))
+  }, [hasta])
+
+  /* Mueve el bloque entero, sin cambiar de tamaño. */
+  const mueveRango = (n) => setRango({
+    desde: sumaDias(dias[0], n),
+    hasta: sumaDias(dias[dias.length - 1], n),
+  })
+
+  const cargar = useCallback(async () => {
+    if (noCenter) return
+    setCargando(true); setErr(''); setAviso('')
+    try {
+      const [rd, rs, rc, rdem, rreq, rapr, rcod] = await Promise.all([
+        getDrivers(center),
+        getShifts(center, mesDesde, mesHasta),
+        getShiftCoverage(center, primerDia, hasta),
+        getRouteDemand(center, primerDia, hasta),
+        getShiftRequests(center, 'pendiente'),
+        // Los días YA CONCEDIDOS. Sin esto, la rejilla te deja poner a trabajar
+        // a alguien el día que le aprobaste libre y no dice nada — el peor
+        // fallo posible aquí, porque se descubre el día que no aparece.
+        getShiftRequests(center, 'aprobado'),
+        // Los códigos y sus colores. Si esto falla se sigue con COD_DEF: la
+        // rejilla no se queda en blanco por no poder leer una tabla de colores.
+        getCodigosCuadrante().catch(() => null),
+      ])
+      const info = rcod?.data?.info
+      setCodigos(info && Object.keys(info).length ? info : COD_DEF)
+      // Alfabético. La lista venía en el orden en que están en la base de
+      // datos, que no es ninguno, y con 71 fichas eso hace imposible buscar a
+      // nadie con la vista.
+      setDrivers(lista(rd.data).filter((d) => d.active !== false).sort(porNombre))
+      const g = {}
+      for (const s of lista(rs.data?.shifts)) {
+        g[`${s.driver_id}|${s.date}`] = s.cod || TIPO_A_COD[s.type] || 'N/T'
+      }
+      horas.current = {}
+      for (const s of lista(rs.data?.shifts)) {
+        if (s.hora) horas.current[`${s.driver_id}|${s.date}`] = s.hora
+      }
+      setGrid(g); setSucio(false)
+      gridOriginal.current = { ...g }
+      historial.current = []; setPuedeDeshacer(false)
+      setAprobados(new Set(
+        lista(rapr.data?.requests)
+          .filter((r) => r.type === 'libre')
+          .map((r) => `${r.driver_id}|${r.date}`)))
+      setMin(rc.data?.min || 0)
+      const dm = {}
+      const mx = {}
+      for (const [f, v] of Object.entries(rdem.data?.demand || {})) {
+        if (v?.objetivo != null) dm[f] = String(v.objetivo)
+        if (v?.maximo != null) mx[f] = String(v.maximo)
+      }
+      setDemanda(dm)
+      setMaximas(mx)
+      setSolicitudes(lista(rreq.data?.requests))
+    } catch {
+      setErr(t('turns.error'))
+    } finally {
+      setCargando(false)
+    }
+  }, [center, primerDia, hasta, mesDesde, mesHasta, noCenter])
+
+  useEffect(() => { cargar() }, [cargar])
+
+  /* Avisa antes de perder cambios del cuadrante al cerrar la pestaña. */
+  useEffect(() => {
+    if (!sucio) return
+    const h = (e) => { e.preventDefault(); e.returnValue = '' }
+    window.addEventListener('beforeunload', h)
+    return () => window.removeEventListener('beforeunload', h)
+  }, [sucio])
+
+  /* Los que se ven ahora mismo. Con 85 conductores, buscar por nombre no es un
+     lujo: es la diferencia entre encontrar a alguien y rendirse. */
+  /* La paleta: un botón por significado, no por código. 'T' y 'X' quieren
+     decir lo mismo que '1', y 'RA' lo mismo que 'RIDE'; poner los cuatro sólo
+     alarga la fila y hace dudar de cuál pulsar. Se queda el primero de cada
+     etiqueta, que es el que se usa de verdad en la hoja. */
+  const paleta = useMemo(() => {
+    const vistas = new Set()
+    const out = []
+    for (const [cod, ui] of Object.entries(codigos)) {
+      if (vistas.has(ui.etiqueta)) continue
+      vistas.add(ui.etiqueta)
+      out.push({ cod, ui })
+    }
+    return out
+  }, [codigos])
+
+  /* Quién tiene algo puesto en lo que se está viendo. */
+  const enCuadrante = useMemo(() => {
+    const s = new Set()
+    for (const k of Object.keys(grid)) s.add(k.split('|')[0])
+    return s
+  }, [grid])
+
+  const visibles = useMemo(() => {
+    const q = busca.trim().toLowerCase()
+    let ds = drivers || []
+    if (quien === 'cuadrante') ds = ds.filter((d) => enCuadrante.has(d.id))
+    if (q) ds = ds.filter((d) => (d.name || '').toLowerCase().includes(q))
+    return ds
+  }, [drivers, busca, quien, enCuadrante])
+
+  /* Los que están en la ficha pero no en el cuadrante. Se cuentan aunque estén
+     escondidos: si no, esconderlos sería taparlos. */
+  const sobran = useMemo(
+    () => (drivers || []).filter((d) => !enCuadrante.has(d.id)),
+    [drivers, enCuadrante])
+
+  /* Saca a alguien del cuadrante de verdad: le marca la ficha como no activa.
+     Es lo mismo que hacer la baja en Conductores, pero desde donde se nota el
+     problema — que es aquí, viendo su fila vacía mes tras mes. */
+  const darDeBaja = async (d) => {
+    setConfirmarBaja(null); setErr(''); setAviso('')
+    try {
+      await updateDriver(d.id, { active: false })
+      setDrivers((ds) => (ds || []).filter((x) => x.id !== d.id))
+      setAviso(`${d.name} ya no sale en el cuadrante. Sigue en Conductores, dado de baja.`)
+    } catch (e) {
+      setErr(e?.response?.data?.detail || 'No se pudo dar de baja.')
+    }
+  }
+
+  /* CHOQUES: alguien puesto a trabajar un día que se le CONCEDIÓ libre.
+     Es el fallo que más caro sale, porque no se descubre al hacerlo — se
+     descubre el día que esa persona no aparece. Se marca la celda y se cuenta
+     arriba; no se corrige solo, porque a veces se hace a propósito y hablado. */
+  /* Del código al tipo. Un código que ya no esté en la tabla (porque se
+     borró en la pantalla de códigos) no puede tumbar la rejilla: cae en
+     'libre', que es lo que menos daño hace. */
+  const tipoDe = useCallback(
+    (cod) => (codigos[cod] || COD_DEF[cod] || {}).tipo || 'libre', [codigos])
+  const uiDe = useCallback(
+    (cod) => codigos[cod] || COD_DEF[cod] || { tipo: 'libre', etiqueta: cod, color: 'libre' },
+    [codigos])
+  /* ¿Ese código saca furgoneta a la calle? Es lo único que cuenta para
+     comparar con lo que pide Amazon. */
+  const esRuta = useCallback((cod) => {
+    if (!cod) return false
+    const ui = codigos[cod] || COD_DEF[cod]
+    if (ui && 'ruta' in ui) return !!ui.ruta
+    // Código añadido a mano y sin bandera: cuenta si es de trabajar.
+    return ['trabaja', 'extra'].includes((ui || {}).tipo)
+  }, [codigos])
+
+  /* Cuánta gente sale a ruta cada día. Va DEBAJO de `tipoDe` a propósito: un
+     useMemo se ejecuta al pintar, y si se declara antes revienta al usarlo. */
+  const cobertura = useMemo(() => {
+    const c = {}
+    for (const [k, v] of Object.entries(grid)) {
+      if (!esRuta(v)) continue
+      const f = k.split('|')[1]
+      c[f] = (c[f] || 0) + 1
+    }
+    return c
+  }, [grid, esRuta])   // se indexa por fecha, así que sobra filtrar
+
+  const choques = useMemo(() => {
+    // Sólo los días que se ven. El aviso de arriba dice "están marcados en rojo
+    // en la rejilla": contar uno que cae fuera de la vista lo convertiría en
+    // mentira, y en un aviso que no se puede resolver.
+    const enVista = new Set(dias)
+    const s = new Set()
+    for (const [k, v] of Object.entries(grid)) {
+      if (!enVista.has(k.split('|')[1])) continue
+      const tp = tipoDe(v)
+      if ((tp === 'trabaja' || tp === 'extra') && aprobados.has(k)) s.add(k)
+    }
+    return s
+  }, [grid, aprobados, tipoDe, dias])
+
+  /* Días de trabajo de cada uno en lo que se está viendo. Sin esto no hay forma
+     de ver de un vistazo que a uno le has puesto 14 y a otro 3. */
+  const totales = useMemo(() => {
+    const m = {}
+    for (const d of (drivers || [])) {
+      let n = 0
+      for (const f of dias) {
+        const tp = tipoDe(grid[`${d.id}|${f}`])
+        if (tp === 'trabaja' || tp === 'extra') n += 1
+      }
+      m[d.id] = n
+    }
+    return m
+  }, [drivers, dias, grid, tipoDe])
+
+  /* Cuántas celdas han cambiado respecto a lo cargado. "Sin guardar" a secas no
+     dice si has tocado una casilla o doscientas. */
+  const nCambios = useMemo(() => {
+    const o = gridOriginal.current || {}
+    const claves = new Set([...Object.keys(o), ...Object.keys(grid)])
+    let n = 0
+    for (const k of claves) if ((o[k] || '') !== (grid[k] || '')) n += 1
+    return n
+  }, [grid, sucio])
+
+  const descartar = () => {
+    setGrid({ ...gridOriginal.current })
+    historial.current = []; setPuedeDeshacer(false)
+    setSucio(false)
+  }
+
+  /* Guarda el estado ANTES de tocar nada, para poder deshacer. Se limita a 30
+     pasos: más no hace falta y ocuparía memoria con 85 conductores × 31 días. */
+  const recordar = () => {
+    historial.current.push(grid)
+    if (historial.current.length > 30) historial.current.shift()
+    setPuedeDeshacer(true)
+  }
+
+  const deshacer = () => {
+    const previo = historial.current.pop()
+    if (!previo) return
+    setGrid(previo)
+    setPuedeDeshacer(historial.current.length > 0)
+    setSucio(true)
+  }
+
+  /* Una celda. El pincel es un código; con la goma (pincel = null) se vacía,
+     que es distinto de poner "libre": vacío es "no hay nada puesto ese día". */
+  const aplicar = (did, fecha, conHistorial = true) => {
+    const k = `${did}|${fecha}`
+    /* Día concedido y sin permiso para tocarlo: no se pinta. El servidor lo
+       rechaza igualmente, pero dejar que se pinte y avisar sólo al guardar
+       significa perder todo el rato que hayas estado editando encima. */
+    if (aprobados.has(k) && !puedeAprobar) {
+      setErr('Ese día está aprobado. Sólo quien puede aprobar días puede quitarlo.')
+      return
+    }
+    if (conHistorial) recordar()
+    setGrid((g) => {
+      if (!pincel) { const n = { ...g }; delete n[k]; return n }
+      return { ...g, [k]: pincel }
+    })
+    setSucio(true)
+  }
+
+  /* Teclado. Con 12 códigos, ir al ratón a la paleta cada vez que cambias de
+     código es la mitad del trabajo; las teclas 1..9 y 0 eligen pincel y la
+     tecla . coge la goma. No se activa mientras se escribe en un campo. */
+  useEffect(() => {
+    const teclas = (e) => {
+      const el = e.target
+      if (el && /^(INPUT|TEXTAREA|SELECT)$/.test(el.tagName)) return
+      if (e.ctrlKey || e.metaKey || e.altKey) return
+      const orden = Object.keys(codigos)
+      if (e.key === '.' || e.key === 'Delete') { setPincel(null); return }
+      const i = e.key === '0' ? 9 : '123456789'.indexOf(e.key)
+      if (i >= 0 && orden[i]) setPincel(orden[i])
+    }
+    window.addEventListener('keydown', teclas)
+    return () => window.removeEventListener('keydown', teclas)
+  }, [codigos])
+
+  /* La cruz: al pasar por una celda se marcan su fila y su columna enteras.
+     En 31 columnas es lo único que evita leer el día equivocado.
+
+     Se hace tocando el DOM a mano y NO con estado de React a propósito: con 85
+     conductores × 31 días son 2.600 celdas, y volver a pintarlas en cada
+     movimiento del ratón deja la pantalla pegajosa. */
+  const cruz = useCallback((td) => {
+    const tb = tablaRef.current
+    if (!tb) return
+    tb.querySelectorAll('.xr').forEach((x) => x.classList.remove('xr'))
+    if (!td) return
+    const col = td.dataset.col
+    if (col == null) return
+    tb.querySelectorAll(`[data-col="${col}"]`).forEach((x) => x.classList.add('xr'))
+    td.closest('tr')?.querySelectorAll('td').forEach((x) => x.classList.add('xr'))
+  }, [])
+
+  /* Arrastrar para pintar. El mouseup se escucha en la ventana entera: si se
+     suelta el ratón fuera de la tabla, hay que dejar de pintar igualmente —
+     si no, se sigue pintando al volver a entrar sin tener el botón pulsado. */
+  useEffect(() => {
+    const soltar = () => { pintando.current = false }
+    window.addEventListener('mouseup', soltar)
+    window.addEventListener('mouseleave', soltar)
+    return () => {
+      window.removeEventListener('mouseup', soltar)
+      window.removeEventListener('mouseleave', soltar)
+    }
+  }, [])
+
+  /* Un día entero para todos los que se ven. Respeta el filtro de búsqueda a
+     propósito: si has filtrado por "ETT", rellenas sólo a los ETT. */
+  const columnaEntera = (fecha) => {
+    if (!pincel) return
+    recordar()
+    setGrid((g) => {
+      const n = { ...g }
+      for (const d of visibles) {
+        if (pincel) n[`${d.id}|${fecha}`] = pincel
+        else delete n[`${d.id}|${fecha}`]
+      }
+      return n
+    })
+    setSucio(true)
+  }
+
+  /* COPIAR LA SEMANA ANTERIOR. Es la herramienta que más se usa en cualquier
+     programa de cuadrantes serio (When I Work, Homebase): un cuadrante real
+     cambia poco de una semana a la siguiente, así que se copia y se retocan
+     cuatro celdas, en vez de rellenar 61 × 7 a mano.
+
+     Copia sobre lo que se ve: si has filtrado por un nombre, sólo mueve el
+     suyo. Y no toca los días que ya tienen algo puesto salvo que se pida. */
+  const copiarSemanaAnterior = (pisar) => {
+    recordar()
+    setGrid((g) => {
+      const n = { ...g }
+      for (const d of visibles) {
+        for (const f of dias) {
+          const k = `${d.id}|${f}`
+          if (!pisar && n[k]) continue
+          const previo = g[`${d.id}|${sumaDias(f, -7)}`]
+          if (previo) n[k] = previo
+          else if (pisar) delete n[k]
+        }
+      }
+      return n
+    })
+    setSucio(true)
+  }
+
+  /* REPETIR UN PATRÓN. 'Trabaja 5, libra 2' y variantes: se elige el patrón y
+     se estampa desde el primer día que se ve hasta el último, para todos los
+     que se ven. Es como se montan los cuadrantes rotativos a mano en Excel,
+     sólo que sin arrastrar la fórmula. */
+  const aplicarPatron = (trabaja, libra) => {
+    if (!pincel) return
+    recordar()
+    const libreCod = codigos['N/T'] ? 'N/T' : 'L'
+    setGrid((g) => {
+      const n = { ...g }
+      visibles.forEach((d, iDriver) => {
+        // Cada persona empieza el ciclo un día más tarde que la anterior. Sin
+        // esto, un patrón 5/2 pone a TODOS a librar los mismos dos días y el
+        // cuadrante se queda sin nadie ese fin de semana.
+        let paso = iDriver % (trabaja + libra)
+        for (const f of dias) {
+          n[`${d.id}|${f}`] = paso < trabaja ? pincel : libreCod
+          paso = (paso + 1) % (trabaja + libra)
+        }
+      })
+      return n
+    })
+    setSucio(true)
+  }
+
+  /* Pinta una fila entera (todo lo que se ve de un conductor) de una vez. */
+  const filaEntera = (did, cod) => {
+    recordar()
+    setGrid((g) => {
+      const n = { ...g }
+      for (const f of dias) n[`${did}|${f}`] = cod
+      return n
+    })
+    setSucio(true)
+  }
+
+  const guardar = async () => {
+    setOcupado('guardar'); setErr(''); setAviso('')
+    try {
+      const items = []
+      for (const d of drivers || []) {
+        for (const f of dias) {
+          const k = `${d.id}|${f}`
+          const cod = grid[k]
+          if (!cod) continue
+          const it = { driver_id: d.id, driver_name: d.name, center, date: f,
+                       type: tipoDe(cod), cod }
+          if (horas.current[k]) it.hora = horas.current[k]
+          items.push(it)
+        }
+      }
+      const r = await saveShiftsBulk(items)
+      setSucio(false)
+      const n = r.data?.n_bloqueados || 0
+      if (n > 0) {
+        // El servidor ha rechazado celdas de días aprobados. Se dice cuáles y
+        // se recarga: dejar en pantalla lo que NO se ha guardado sería peor
+        // que el propio intento, porque pareceria que quedo hecho.
+        const q = (r.data?.bloqueados || [])
+          .slice(0, 4).map((b) => `${b.driver_name} el ${fmtNum(b.date)}`).join(' · ')
+        setErr(`${n} ${n === 1 ? 'día no se ha guardado' : 'días no se han guardado'}: `
+          + `están aprobados y no tienes permiso para quitarlos. ${q}`
+          + `${n > 4 ? ` y ${n - 4} más` : ''}`)
+        await cargar()
+      } else {
+        setAviso(t('turns.saved').replace('{n}', r.data?.saved ?? items.length))
+      }
+    } catch {
+      setErr(t('turns.save.err'))
+    } finally { setOcupado('') }
+  }
+
+  /* Descargar el cuadrante en .xlsx.
+
+     Se pide como blob y se dispara el <a> a mano porque el endpoint exige el
+     token: un enlace normal no manda la cabecera y se comería un 401 sin decir
+     por qué. Y se avisa si hay cambios sin guardar, porque el fichero sale de
+     la BASE DE DATOS, no de lo que se ve en pantalla — bajarse una hoja sin lo
+     que acabas de pintar y no enterarte sería el peor final posible. */
+  const descargar = async () => {
+    if (sucio && !window.confirm(
+      'Tienes cambios sin guardar. El Excel sale de lo guardado, así que no los llevará. ¿Descargar de todas formas?')) return
+    setOcupado('descargar'); setErr('')
+    try {
+      const r = await exportarCuadrante(center, primerDia, hasta)
+      const url = URL.createObjectURL(r.data)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = `cuadrante-${center}-${primerDia}-a-${hasta}.xlsx`
+      document.body.appendChild(a); a.click(); a.remove()
+      // Sin esto el blob se queda en memoria hasta recargar la página.
+      setTimeout(() => URL.revokeObjectURL(url), 1000)
+    } catch (e) {
+      setErr(e?.response?.data?.detail || 'No se pudo generar el Excel.')
+    } finally { setOcupado('') }
+  }
+
+  /* Se mandan los dos numeros SIEMPRE, aunque solo hayas tocado uno. Si se
+     mandara solo el editado, el otro llegaria vacio al servidor y se borraria:
+     rellenar las maximas del mes y perderlas al escribir la primera demanda. */
+  /* El historial. Se pide aparte y sólo cuando se abre: son hasta tres mil
+     filas y no tienen por qué viajar con cada carga del cuadrante. */
+  const cargarHistorial = useCallback(async (f = filtroHist) => {
+    setCargandoHist(true); setErr('')
+    try {
+      const r = await getShiftRequests(center, f.estado || undefined, {
+        ...(f.desde ? { desde: f.desde } : {}),
+        ...(f.hasta ? { hasta: f.hasta } : {}),
+        ...(f.q.trim() ? { q: f.q.trim() } : {}),
+      })
+      setHistorialDias(lista(r.data?.requests))
+    } catch (e) {
+      setErr(e?.response?.data?.detail || 'No se pudo cargar el historial.')
+    } finally { setCargandoHist(false) }
+  }, [center, filtroHist])
+
+  /* Se espera un poco antes de buscar: el filtro cambia con cada tecla del
+     buscador, y sin esto escribir "Estela" son seis consultas seguidas. */
+  useEffect(() => {
+    if (!verHistorial) return undefined
+    const id = setTimeout(() => cargarHistorial(), 300)
+    return () => clearTimeout(id)
+  }, [verHistorial, cargarHistorial])
+
+  const guardarDemanda = async (dm = demanda, mx = maximas) => {
+    const items = dias.map((f) => ({
+      date: f,
+      objetivo: dm[f] === '' || dm[f] == null ? null : dm[f],
+      maximo: mx[f] === '' || mx[f] == null ? null : mx[f],
+    }))
+    try { await setRouteDemand(center, items) } catch { setErr(t('turns.demand.err')) }
+  }
+
+  /* Copia el primer maximo que encuentre a los dias que esten en blanco. Las
+     maximas suelen ser el mismo numero casi todo el mes, y escribirlo treinta
+     y una veces a mano es exactamente el tipo de cosa por la que se sigue
+     usando la hoja de calculo. */
+  const rellenarMaximas = () => {
+    const base = dias.map((f) => maximas[f]).find((v) => v != null && v !== '')
+    if (!base) { setErr('Escribe primero un máximo en un día y luego pulsa rellenar.'); return }
+    const mx = { ...maximas }
+    for (const f of dias) if (mx[f] == null || mx[f] === '') mx[f] = base
+    setMaximas(mx)
+    guardarDemanda(demanda, mx)
+  }
+
+  const generar = async () => {
+    setOcupado('auto'); setErr(''); setAviso('')
+    try {
+      await guardarDemanda()                    // el generador lee la demanda de la BD
+      const r = await generateShiftsAuto(center, primerDia, hasta)
+      const g = {}
+      for (const f of dias) for (const d of drivers || []) g[`${d.id}|${f}`] = 'N/T'
+      for (const a of lista(r.data?.assignments)) {
+        g[`${a.driver_id}|${a.date}`] = TIPO_A_COD[a.type] || 'N/T'
+      }
+      setGrid(g); setSucio(true)
+      setAviso(r.data?.resumen || t('turns.auto.ok'))
+    } catch (e) {
+      setErr(e?.response?.data?.detail || t('turns.auto.err'))
+    } finally { setOcupado('') }
+  }
+
+  const guardarMin = async (n) => {
+    setMin(n)
+    try { await setShiftSettings(center, n) } catch { setErr(t('turns.min.err')) }
+  }
+
+  /* Importar el cuadrante en dos pasos: primero se enseña lo que va a hacer y
+     sólo se guarda al confirmar. Con 61 conductores y 31 días son casi 1.900
+     turnos: escribirlos sin que nadie los haya mirado es demasiado. */
+  /* PEGAR EL CUADRANTE. Es mas fiable que el Excel porque lo que se ve es lo
+     que entra: no depende de donde este la fila de dias ni la columna del
+     nombre en el fichero original. Mismos dos pasos — se enseña lo que va a
+     hacer y solo se guarda al confirmar. */
+  const previsualizarPegado = async () => {
+    if (!pegado.trim()) { setErr('Pega el cuadrante primero'); return }
+    setOcupado('importar'); setErr(''); setAviso(''); setPrevia(null)
+    try {
+      const r = await importShiftsPegado({ center, mes: mesImport, texto: pegado })
+      setPrevia({ ...r.data, pegado: true })
+    } catch (e2) {
+      setErr(e2?.response?.data?.detail || 'No se pudo leer lo pegado.')
+    } finally { setOcupado('') }
+  }
+
+  const confirmarPegado = async () => {
+    setOcupado('importar'); setErr('')
+    try {
+      const r = await importShiftsPegado({ center, mes: mesImport, texto: pegado, confirmar: true })
+      setPrevia(null); setPegado('')
+      setAviso(t('turns.import.ok').replace('{n}', r.data?.saved ?? 0))
+      await cargar()
+    } catch (e2) {
+      setErr(e2?.response?.data?.detail || 'No se pudo guardar.')
+    } finally { setOcupado('') }
+  }
+
+  const cargarBloqueos = useCallback(async () => {
+    try {
+      const r = await getShiftBlocks(center)
+      setBloqueos(lista(r.data?.bloqueos))
+    } catch { setBloqueos([]) }
+  }, [center])
+  useEffect(() => { cargarBloqueos() }, [cargarBloqueos])
+
+  // Fuera del JSX a proposito: un salto de linea escapado dentro del
+  // marcado es justo lo que se cuela mal al generar este fichero.
+  const lineasPegadas = pegado.trim()
+    ? pegado.trim().split(String.fromCharCode(10)).length : 0
+
+  const crearBloqueo = async () => {
+    const b = nuevoBloqueo
+    if (!b.desde || !b.hasta || b.motivo.trim().length < 4) {
+      setErr('Pon las dos fechas y el motivo: lo lee el conductor.')
+      return
+    }
+    setOcupado('bloqueo'); setErr('')
+    try {
+      await createShiftBlock({ center, desde: b.desde, hasta: b.hasta,
+        motivo: b.motivo.trim(), driver_id: b.driver_id || undefined })
+      setNuevoBloqueo({ desde: '', hasta: '', motivo: '', driver_id: '' })
+      setAviso('Bloqueo creado. Los conductores ya no pueden pedir esos días.')
+      await cargarBloqueos()
+    } catch (e2) {
+      setErr(e2?.response?.data?.detail || 'No se pudo crear el bloqueo.')
+    } finally { setOcupado('') }
+  }
+
+  const quitarBloqueo = async (id) => {
+    try { await deleteShiftBlock(id); await cargarBloqueos() }
+    catch (e2) { setErr(e2?.response?.data?.detail || 'No se pudo quitar.') }
+  }
+
+  /* Guarda los emparejamientos hechos a mano y vuelve a leer lo mismo, para
+     que la previa se actualice con esos nombres ya reconocidos. */
+  const guardarEmparejados = async () => {
+    const mapa = Object.fromEntries(Object.entries(emparejando).filter(([, v]) => v))
+    if (!Object.keys(mapa).length) return
+    setOcupado('importar'); setErr('')
+    try {
+      await setAliasNombres(mapa)
+      setEmparejando({})
+      if (previa?.pegado) await previsualizarPegado()
+      else setAviso('Emparejados. Vuelve a subir el Excel para que entren.')
+    } catch (e2) {
+      setErr(e2?.response?.data?.detail || 'No se pudieron guardar los emparejamientos.')
+    } finally { setOcupado('') }
+  }
+
+  const subirExcel = async (e) => {
+    const f = e.target.files?.[0]
+    e.target.value = ''
+    if (!f) return
+    setOcupado('importar'); setErr(''); setAviso(''); setPrevia(null)
+    try {
+      const r = await importShifts(f, center, mesImport, false)
+      setPrevia({ ...r.data, fichero: f })
+    } catch (e2) {
+      setErr(e2?.response?.data?.detail || t('turns.import.err'))
+    } finally { setOcupado('') }
+  }
+
+  const confirmarImport = async () => {
+    if (!previa?.fichero) return
+    setOcupado('importar'); setErr('')
+    try {
+      const r = await importShifts(previa.fichero, center, mesImport, true)
+      setPrevia(null)
+      setAviso(t('turns.import.ok').replace('{n}', r.data?.saved ?? 0))
+      await cargar()
+    } catch (e2) {
+      setErr(e2?.response?.data?.detail || t('turns.import.err'))
+    } finally { setOcupado('') }
+  }
+
+  /* Traducir un código del Excel que la app no conocía. Se guarda para
+     siempre, así que sólo hay que hacerlo la primera vez. */
+  const traducir = async (cod, tipo) => {
+    try {
+      const actual = (await getCodigosCuadrante()).data?.codigos || {}
+      const r = await setCodigosCuadrante({ ...actual, [cod]: tipo })
+      setPrevia((p) => p && ({
+        ...p,
+        codigos_desconocidos: Object.fromEntries(
+          Object.entries(p.codigos_desconocidos || {}).filter(([k]) => k !== cod)),
+        codigos_traducidos: { ...(p.codigos_traducidos || {}), [cod]: tipo },
+      }))
+      return r
+    } catch (e2) { setErr(e2?.response?.data?.detail || 'No se pudo guardar el código') }
+  }
+
+  /* Aprobar es un clic. RECHAZAR pide motivo, y sin él no se manda.
+     Un "no" a secas deja al conductor preguntando por WhatsApp por qué, que es
+     justo el sitio del que se le quiere sacar. El motivo lo lee él tal cual. */
+  const resolver = async (grupo, accion) => {
+    let motivo = ''
+    if (accion === 'rechazar') {
+      motivo = (window.prompt(
+        `¿Por qué no puede ser?\n\nLo va a leer ${grupo.driver_name} tal cual, así que dilo claro.`,
+        '') || '').trim()
+      if (motivo.length < 3) return          // cancelado o vacío: no se hace nada
+    }
+    setErr('')
+    try {
+      for (const id of grupo.ids) await resolveShiftRequest(id, accion, motivo)
+      setSolicitudes((s) => s.filter((x) => !grupo.ids.includes(x.id)))
+      await cargar()
+    } catch (e) {
+      setErr(e?.response?.data?.detail || t('turns.req.err'))
+    }
+  }
+
+  /* Las peticiones llegan de una en una por día, pero el conductor las pidió
+     de golpe. Se agrupan por `grupo` para verlas como las mandó: "Razavi, 3
+     días", y no tres filas sueltas que se aprueban por separado sin querer. */
+  const grupos = useMemo(() => {
+    const m = new Map()
+    for (const s of solicitudes) {
+      const k = s.grupo || s.id
+      if (!m.has(k)) m.set(k, { key: k, driver_name: s.driver_name, type: s.type,
+        motivo_label: s.motivo_label, note: s.note, created_at: s.created_at,
+        fechas: [], ids: [] })
+      const g = m.get(k)
+      g.fechas.push(s.date); g.ids.push(s.id)
+    }
+    /* Una peticion cuyo dia YA PASO y sigue sin contestar es una persona que se
+       quedo sin respuesta: o vino a trabajar sin saberlo, o no vino sin
+       permiso. Se marca y se pone la primera, porque enterrada entre las demas
+       no la ve nadie — habia una asi en produccion el 22-08-2026. */
+    const hoyIso = hoyLocal()
+    for (const g of m.values()) {
+      g.fechas.sort()
+      g.caducada = g.fechas[0] < hoyIso
+    }
+    return [...m.values()].sort((a, b) => (
+      (a.caducada === b.caducada)
+        ? String(a.created_at).localeCompare(String(b.created_at))
+        : (a.caducada ? -1 : 1)))
+  }, [solicitudes])
+
+  if (noCenter) {
+    return (
+      <div>
+        <h1 className="mb-4 rise font-display text-[clamp(26px,3vw,36px)] font-semibold leading-none tracking-[-0.03em] text-dark-50">{t('turns.title')}</h1>
+        <div className="card flex flex-col items-center gap-3 p-10 text-center">
+          <CalendarClock size={30} className="text-brand-400" />
+          <p className="text-dark-200">{t('turns.pick.center')}</p>
+          <p className="text-sm text-dark-500">{t('turns.available')} {centers?.join(' · ') || '—'}</p>
+        </div>
+      </div>
+    )
+  }
+
+  const fmtDia = (f) => new Date(f + 'T12:00:00').toLocaleDateString(lang, { weekday: 'short' })
+  const fmtNum = (f) => new Date(f + 'T12:00:00').toLocaleDateString(lang, { day: '2-digit', month: '2-digit' })
+  const finde = (f) => [0, 6].includes(new Date(f + 'T12:00:00').getDay())
+
+  return (
+    <div className="flex flex-col gap-4">
+      {/* Cabecera: centro + navegación de quincena */}
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <h1 className="flex items-center gap-2 rise font-display text-[clamp(26px,3vw,36px)] font-semibold leading-none tracking-[-0.03em] text-dark-50">
+          <CalendarClock size={20} /> {t('turns.title')} · {center}
+        </h1>
+        {/* ── TRES COSAS DISTINTAS, TRES SITIOS ──────────────────────────────
+            Contestar peticiones, ver qué días hay ya dados y cerrar fechas son
+            tareas separadas y se hacen en momentos distintos. Estaban las tres
+            revueltas en la misma pantalla —y las dos últimas, dentro del
+            cuadrante escondido, sin forma de llegar. */}
+        <div className="flex gap-1 rounded-lg bg-dark-900 p-1 ring-1 ring-dark-700">
+          {[['peticiones', `Peticiones${grupos.length ? ` · ${grupos.length}` : ''}`],
+            ['calendario', 'Calendario'],
+            ['bloqueos', 'Días cerrados']].map(([k, lbl]) => (
+            <button key={k} onClick={() => setVistaDias(k)}
+              className={`rounded-md px-3 py-1.5 text-xs font-semibold transition-colors ${
+                vistaDias === k ? 'bg-brand-500/20 text-brand-300' : 'text-dark-400 hover:text-dark-200'}`}>
+              {lbl}
+            </button>
+          ))}
+        </div>
+      {/* la navegacion por quincenas */}
+      {MOSTRAR_CUADRANTE && (<>
+        <div className="flex flex-wrap items-center gap-1.5">
+          {/* Las flechas mueven el bloque ENTERO tantos días como tenga. Así
+              el salto siempre encaja con lo que estás mirando: si ves dos
+              semanas avanzas dos, si ves un mes avanzas un mes. */}
+          <button className="btn-ghost p-2" onClick={() => mueveRango(-dias.length)} aria-label={t('turns.prev')}>
+            <ChevronLeft size={16} />
+          </button>
+          <input type="date" value={rango.desde} max="2100-12-31"
+            onChange={(e) => e.target.value && setRango((r) => ({ ...r, desde: e.target.value }))}
+            className="rounded-lg border border-dark-700 bg-dark-950 px-2 py-1 text-[12.5px] font-semibold text-dark-100" />
+          <span className="text-dark-500">→</span>
+          <input type="date" value={rango.hasta} max="2100-12-31"
+            onChange={(e) => e.target.value && setRango((r) => ({ ...r, hasta: e.target.value }))}
+            className="rounded-lg border border-dark-700 bg-dark-950 px-2 py-1 text-[12.5px] font-semibold text-dark-100" />
+          <button className="btn-ghost p-2" onClick={() => mueveRango(dias.length)} aria-label={t('turns.next')}>
+            <ChevronRight size={16} />
+          </button>
+          <span className="ml-1 hidden text-[11px] text-dark-500 sm:inline">
+            {dias.length} {dias.length === 1 ? 'día' : 'días'}
+          </span>
+          {/* Si el rango pedido no cabe entero se dice. Recortar en silencio
+              haría creer que se está viendo todo, y se cuadraría de menos. */}
+          {dias.length >= TOPE_DIAS && hasta !== rango.hasta && rango.hasta > hasta && (
+            <span className="rounded bg-amber-500/15 px-2 py-1 text-[11px] font-semibold text-amber-300"
+              title={`De una vez se pintan como mucho ${TOPE_DIAS} días. Se ve hasta el ${fmtNum(hasta)}.`}>
+              recortado al {fmtNum(hasta)}
+            </span>
+          )}
+          <span className="mx-1 hidden h-5 w-px bg-dark-800 sm:block" />
+          {ATAJOS.map(({ k, lbl, titulo }) => (
+            <button key={k} onClick={() => setRango(atajo(k))} title={titulo}
+              className="btn-ghost px-2.5 py-1.5 text-xs">
+              {lbl}
+            </button>
+          ))}
+        </div>
+      </>)}
+      </div>
+
+      {/* la barra de acciones del cuadrante */}
+      {MOSTRAR_CUADRANTE && (<>
+      {/* Barra de acciones */}
+      <div className="flex flex-wrap items-center gap-2">
+        <button className="btn-primary flex items-center gap-2" onClick={generar} disabled={!!ocupado || !drivers?.length}>
+          {ocupado === 'auto' ? <Loader2 size={15} className="animate-spin" /> : <Zap size={15} />}
+          {t('turns.auto')}
+        </button>
+        {/* El mes va PEGADO al botón de importar, no escondido en ajustes: es
+            la decisión que hay que tomar justo antes de subir el fichero. */}
+        <div className="flex items-center gap-1.5 rounded-lg border border-dark-700 bg-dark-900 pl-2.5">
+          <span className="text-[11px] text-dark-500">Mes</span>
+          <input type="month" value={mesImport} onChange={(e) => setMesImport(e.target.value)}
+            className="bg-transparent py-1.5 text-[12.5px] text-dark-100 outline-none" />
+          <button className="btn-ghost flex items-center gap-1.5 rounded-l-none"
+            onClick={() => ficheroRef.current?.click()} disabled={!!ocupado || !mesImport}>
+            {ocupado === 'importar' ? <Loader2 size={15} className="animate-spin" /> : <Upload size={15} />}
+            {t('turns.import')}
+          </button>
+        </div>
+        <input ref={ficheroRef} type="file" accept=".xlsx,.xls" className="hidden" onChange={subirExcel} />
+        <button className="btn-ghost flex items-center gap-1.5"
+          onClick={() => { setVerPegar((v) => !v); setPrevia(null) }} disabled={!!ocupado}>
+          <ClipboardPaste size={15} /> Pegar desde Sheets
+        </button>
+        <button className="btn-ghost flex items-center gap-1.5"
+          onClick={() => setVerBloqueos((v) => !v)}>
+          <Ban size={15} /> Bloquear días
+          {bloqueos.length > 0 && (
+            <span className="rounded-full bg-red-500/20 px-1.5 text-[10px] font-bold text-red-300">{bloqueos.length}</span>
+          )}
+        </button>
+        <label className="flex items-center gap-2 text-xs text-dark-400">
+          <Settings2 size={14} /> {t('turns.min.label')}
+          <input
+            type="number" min="0" value={min}
+            onChange={(e) => guardarMin(Math.max(0, Number(e.target.value) || 0))}
+            className="w-16 rounded-lg border border-dark-700 bg-dark-900 px-2 py-1 text-center text-sm text-dark-100"
+          />
+        </label>
+        <div className="flex-1" />
+        {sucio && <span className="text-xs font-semibold text-amber-400">{t('turns.unsaved')}</span>}
+        <button onClick={descargar} disabled={!!ocupado}
+          title="Baja el cuadrante en Excel: la rejilla con sus colores y, en otra hoja, una fila por persona y día para filtrar o mandar"
+          className="flex items-center gap-2 rounded-lg border border-dark-700 px-3 py-2 text-sm font-semibold text-dark-300 transition hover:text-dark-100 disabled:opacity-40">
+          {ocupado === 'descargar' ? <Loader2 size={15} className="animate-spin" /> : <Download size={15} />}
+          Descargar Excel
+        </button>
+        <button className="btn-primary flex items-center gap-2" onClick={guardar} disabled={!!ocupado || !sucio}>
+          {ocupado === 'guardar' ? <Loader2 size={15} className="animate-spin" /> : <Save size={15} />}
+          {t('turns.save')}
+        </button>
+      </div>
+      </>)}
+
+      {err && <p className="rounded-lg border border-red-500/30 bg-red-500/10 px-3 py-2 text-sm text-red-300">{err}</p>}
+      {aviso && <p className="rounded-lg border border-emerald-500/30 bg-emerald-500/10 px-3 py-2 text-sm text-emerald-300">{aviso}</p>}
+
+      {MOSTRAR_CUADRANTE && !cargando && drivers?.length > 0 && (
+        <div className="flex flex-wrap items-center gap-x-3 gap-y-2 rounded-xl border border-dark-800 bg-dark-900/60 px-3 py-2.5">
+          <div className="flex items-center gap-1.5">
+            <Brush size={15} className="text-dark-500" />
+            <span className="text-[11px] font-semibold uppercase tracking-wider text-dark-500">Pincel</span>
+          </div>
+          <div className="flex flex-wrap gap-1">
+            {paleta.map(({ cod, ui }, i) => (
+              <button key={cod} onClick={() => setPincel(cod)}
+                title={`${ui.etiqueta} — ${ui.tipo}${i < 10 ? ` · tecla ${i === 9 ? 0 : i + 1}` : ''}`}
+                className={`h-7 min-w-[2.4rem] rounded-lg border px-1.5 text-[11px] font-bold transition ${
+                  pincel === cod ? COLORES[ui.color] + ' ring-2 ring-brand-500/70' : 'border-dark-700 text-dark-500 hover:text-dark-200'}`}>
+                {cod}
+              </button>
+            ))}
+            <button onClick={() => setPincel(null)} title="Goma: vacía la celda (tecla .)"
+              className={`flex h-7 items-center gap-1 rounded-lg border px-2 text-[11px] font-semibold transition ${
+                pincel === null ? 'border-brand-500/60 bg-brand-500/15 text-brand-300' : 'border-dark-700 text-dark-500 hover:text-dark-200'}`}>
+              <Eraser size={12} /> Vaciar
+            </button>
+          </div>
+
+          <span className="hidden text-[11.5px] text-dark-500 xl:inline">
+            Arrastra para pintar seguido · teclas 1–9 cambian de código
+          </span>
+
+          {nCambios > 0 && (
+            <span className="ml-auto flex items-center gap-2 rounded-lg bg-amber-500/10 px-2.5 py-1.5 text-[12px] font-semibold text-amber-300">
+              {nCambios} sin guardar
+              <button onClick={descartar} className="text-[11px] font-normal text-amber-200/70 underline underline-offset-2 hover:text-amber-100">
+                descartar
+              </button>
+            </span>
+          )}
+        </div>
+      )}
+
+      {/* ── SEGUNDA FILA: montar el cuadrante ────────────────────────────────
+          Separada de la paleta a propósito. Arriba se elige QUÉ se pinta;
+          aquí, SOBRE QUIÉN y CÓMO. Mezclarlo todo en una barra era la mitad
+          de la sensación de lío. */}
+      {MOSTRAR_CUADRANTE && !cargando && drivers?.length > 0 && (
+        <div className="flex flex-wrap items-center gap-x-2.5 gap-y-2 rounded-xl border border-dark-800 bg-dark-900/60 px-3 py-2.5">
+          <div className="flex overflow-hidden rounded-lg border border-dark-700">
+            {[['cuadrante', `Del cuadrante (${(drivers || []).length - sobran.length})`],
+              ['todos', `Todos (${(drivers || []).length})`]].map(([k, lbl]) => (
+              <button key={k} onClick={() => setQuien(k)}
+                className={`px-2.5 py-1.5 text-[12px] font-semibold transition ${
+                  quien === k ? 'bg-brand-500/20 text-brand-200' : 'text-dark-500 hover:text-dark-200'}`}>
+                {lbl}
+              </button>
+            ))}
+          </div>
+
+          <div className="relative">
+            <Search size={13} className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-dark-500" />
+            <input value={busca} onChange={(e) => setBusca(e.target.value)}
+              placeholder="Buscar conductor"
+              className="w-40 rounded-lg border border-dark-700 bg-dark-950 py-1.5 pl-7 pr-2 text-[12.5px] text-dark-100 outline-none placeholder:text-dark-500 focus:border-brand-500/60" />
+          </div>
+
+          <button onClick={() => setDenso((v) => !v)} title="Filas más juntas: caben más personas de una vez"
+            className={`flex items-center gap-1.5 rounded-lg border px-2.5 py-1.5 text-[12px] font-semibold transition ${
+              denso ? 'border-brand-500/50 bg-brand-500/15 text-brand-300' : 'border-dark-700 text-dark-400 hover:text-dark-200'}`}>
+            <Rows3 size={14} /> {denso ? 'Compacto' : 'Cómodo'}
+          </button>
+
+          <span className="mx-1 hidden h-5 w-px bg-dark-700 sm:block" />
+
+          <button onClick={() => copiarSemanaAnterior(false)}
+            title="Trae lo de la semana de antes a los días que estén vacíos. Lo ya puesto no se toca."
+            className="flex items-center gap-1.5 rounded-lg border border-dark-700 px-2.5 py-1.5 text-[12px] font-semibold text-dark-400 transition hover:text-dark-100">
+            <CopyPlus size={14} /> Copiar semana anterior
+          </button>
+
+          <div className="flex items-center gap-1 rounded-lg border border-dark-700 px-2 py-1">
+            <span className="text-[11px] font-semibold uppercase tracking-wider text-dark-500">Patrón</span>
+            {[[5, 2], [6, 1], [4, 3]].map(([tr, li]) => (
+              <button key={`${tr}/${li}`} onClick={() => aplicarPatron(tr, li)} disabled={!pincel}
+                title={`Trabaja ${tr} y libra ${li}, seguido, a todos los que se ven. Cada persona arranca un día después que la anterior para que no libren todos a la vez. Se puede deshacer.`}
+                className="rounded px-1.5 py-0.5 text-[12px] font-bold text-dark-400 transition hover:bg-brand-500/15 hover:text-brand-200 disabled:opacity-30">
+                {tr}/{li}
+              </button>
+            ))}
+          </div>
+
+          <button onClick={deshacer} disabled={!puedeDeshacer}
+            className="ml-auto flex items-center gap-1.5 rounded-lg border border-dark-700 px-2.5 py-1.5 text-[12px] font-semibold text-dark-400 transition hover:text-dark-100 disabled:opacity-30">
+            <Undo2 size={14} /> Deshacer
+          </button>
+        </div>
+      )}
+
+      {/* Gente con ficha activa que no aparece en el cuadrante. Es la queja
+          real: 'hay gente que no está en la empresa'. No se puede adivinar
+          quién es baja, pero sí se puede señalar y dar el botón. */}
+      {MOSTRAR_CUADRANTE && !cargando && quien === 'cuadrante' && sobran.length > 0 && (
+        <div className="rounded-xl border border-dark-800 bg-dark-900/40 px-3.5 py-2.5">
+          <p className="text-[12.5px] text-dark-400">
+            <b className="text-dark-200">{sobran.length}</b> {sobran.length === 1 ? 'persona tiene' : 'personas tienen'} ficha
+            activa pero ni un día puesto en el mes.
+            {sobran.length === 1 ? ' Está escondida.' : ' Están escondidas.'}
+            {' '}
+            <button onClick={() => setQuien('todos')} className="underline underline-offset-2 hover:text-dark-100">
+              {sobran.length === 1 ? 'Verla' : 'Verlas'}
+            </button>
+            {sobran.length === 1 ? ' y darle de baja si ya no está.' : ' y darles de baja si ya no están.'}
+          </p>
+          <p className="mt-1 text-[11.5px] leading-relaxed text-dark-500">
+            {sobran.slice(0, 8).map((d) => d.name).join(' · ')}
+            {sobran.length > 8 ? ` y ${sobran.length - 8} más` : ''}
+          </p>
+        </div>
+      )}
+
+      {MOSTRAR_CUADRANTE && confirmarBaja && (
+        <div className="flex flex-wrap items-center gap-3 rounded-xl border border-red-500/40 bg-red-500/[0.08] px-3.5 py-3">
+          <AlertTriangle size={16} className="shrink-0 text-red-400" />
+          <p className="flex-1 text-[13px] text-red-100">
+            ¿Dar de baja a <b>{confirmarBaja.name}</b>? Desaparece del cuadrante y de la
+            asignación diaria. Su historial se queda: no se borra nada.
+          </p>
+          <button onClick={() => darDeBaja(confirmarBaja)}
+            className="rounded-lg bg-red-500/20 px-3 py-1.5 text-[12px] font-semibold text-red-200 hover:bg-red-500/30">
+            Sí, dar de baja
+          </button>
+          <button onClick={() => setConfirmarBaja(null)}
+            className="rounded-lg px-3 py-1.5 text-[12px] font-semibold text-dark-400 hover:text-dark-100">
+            Cancelar
+          </button>
+        </div>
+      )}
+
+      {MOSTRAR_CUADRANTE && choques.size > 0 && (
+        <div className="flex items-start gap-2.5 rounded-xl border border-red-500/40 bg-red-500/[0.08] px-3.5 py-3">
+          <AlertTriangle size={16} className="mt-0.5 shrink-0 text-red-400" />
+          <div>
+            <p className="text-[13px] font-semibold text-red-200">
+              {choques.size} {choques.size === 1 ? 'día puesto a trabajar' : 'días puestos a trabajar'} a quien le aprobaste libre
+            </p>
+            <p className="mt-0.5 text-[12px] leading-relaxed text-red-200/70">
+              Están marcados en rojo en la rejilla. No se corrigen solos: a veces se hace a
+              propósito y hablado con la persona. Pero conviene mirarlos antes de guardar.
+            </p>
+          </div>
+        </div>
+      )}
+
+      {MOSTRAR_CUADRANTE && !cargando && drivers?.length > 0 && (
+        <div className="flex flex-wrap items-center gap-2">
+          <button onClick={() => setVerRejilla((v) => !v)}
+            className="flex items-center gap-1.5 rounded-lg border border-dark-800 bg-dark-900/60 px-3 py-1.5 text-[12.5px] font-semibold text-dark-300 transition hover:text-dark-100">
+            {verRejilla ? <ChevronDown size={15} /> : <ChevronRight size={15} />}
+            {verRejilla ? 'Ocultar el cuadrante' : `Ver el cuadrante (${visibles.length})`}
+          </button>
+          <button onClick={() => setVerHistorial((v) => !v)}
+            className={`flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-[12.5px] font-semibold transition ${
+              verHistorial ? 'border-brand-500/50 bg-brand-500/15 text-brand-300'
+                : 'border-dark-800 bg-dark-900/60 text-dark-300 hover:text-dark-100'}`}>
+            <History size={15} /> Historial de días
+          </button>
+        </div>
+      )}
+
+      {/* la rejilla del cuadrante */}
+      {MOSTRAR_CUADRANTE && (<>
+      {cargando ? (
+        <div className="flex items-center gap-2 text-dark-400"><Loader2 className="animate-spin" size={18} /> {t('ui.loading')}</div>
+      ) : !drivers?.length ? (
+        <div className="card flex flex-col items-center gap-3 p-10 text-center">
+          <Users size={28} className="text-dark-500" />
+          <p className="text-dark-300">{t('turns.no.drivers')}</p>
+        </div>
+      ) : !verRejilla ? null : (
+        <div className="card overflow-x-auto">
+          <table ref={tablaRef} onMouseLeave={() => cruz(null)}
+            className="w-full border-collapse text-sm">
+            <thead>
+              <tr>
+                <th className="sticky left-0 z-10 bg-dark-900 px-3 py-2 text-left text-xs font-semibold uppercase text-dark-500">
+                  {t('turns.driver')}
+                </th>
+                {dias.map((f, ci) => (
+                  <th key={f} data-col={ci}
+                    className={`border-r border-dark-800/70 px-1 py-2 text-center ${fondoCol(f === hoy, finde(f))} ${
+                      f === hoy ? 'border-x border-x-amber-400/35'
+                        : empiezaSemana(f) ? 'border-l border-l-dark-600' : ''}`}>
+                    <button onClick={() => columnaEntera(f)}
+                      title={pincel ? `Poner ${uiDe(pincel).etiqueta} a todos este día` : 'Vaciar este día a todos'}
+                      className="rounded px-1 py-0.5 transition hover:bg-brand-500/15">
+                      <div className={`text-[10px] uppercase ${f === hoy ? 'font-bold text-amber-400/90' : 'text-dark-500'}`}>
+                        {f === hoy ? 'hoy' : fmtDia(f)}
+                      </div>
+                      <div className={`text-[11px] font-semibold ${f === hoy ? 'text-amber-200' : 'text-dark-300'}`}>
+                        {fmtNum(f)}
+                      </div>
+                    </button>
+                  </th>
+                ))}
+              </tr>
+              {/* MÁXIMAS: el techo comprometido con Amazon. Va la primera porque es
+                  la que se rellena antes y la que no cambia. */}
+              <tr>
+                <th className="sticky left-0 z-10 border-r border-dark-700 bg-dark-900 px-3 py-1 text-left text-[11px] font-medium text-dark-500">
+                  <span className="flex items-center gap-1.5">
+                    Máximas
+                    <button onClick={rellenarMaximas} title="Copia el primer máximo que haya escrito a todos los días que estén en blanco"
+                      className="rounded border border-dark-700 px-1 text-[9px] font-bold text-dark-500 hover:text-dark-200">
+                      rellenar
+                    </button>
+                  </span>
+                </th>
+                {dias.map((f, ci) => (
+                  <td key={f} data-col={ci}
+                    className={`border-r border-dark-800/70 px-1 py-1 text-center ${fondoCol(f === hoy, finde(f))} ${
+                      f === hoy ? 'border-x border-x-amber-400/35' : empiezaSemana(f) ? 'border-l border-l-dark-600' : ''}`}>
+                    <input
+                      type="number" min="0" value={maximas[f] ?? ''} placeholder="—"
+                      onChange={(e) => setMaximas((m) => ({ ...m, [f]: e.target.value }))}
+                      onBlur={() => guardarDemanda()}
+                      title="Rutas que podrían pedirnos ese día"
+                      className="w-10 rounded border border-amber-500/25 bg-amber-500/[0.06] px-1 py-0.5 text-center text-[11px] font-semibold text-amber-200/90 placeholder:font-normal placeholder:text-dark-700"
+                    />
+                  </td>
+                ))}
+              </tr>
+              {/* PIDEN: las rutas de ese día. Es lo que usa el generador. */}
+              <tr>
+                <th className="sticky left-0 z-10 border-r border-dark-700 bg-dark-900 px-3 py-1 text-left text-[11px] font-medium text-dark-500">
+                  Piden
+                </th>
+                {dias.map((f, ci) => (
+                  <td key={f} data-col={ci}
+                    className={`border-r border-dark-800/70 px-1 py-1 text-center ${fondoCol(f === hoy, finde(f))} ${
+                      f === hoy ? 'border-x border-x-amber-400/35' : empiezaSemana(f) ? 'border-l border-l-dark-600' : ''}`}>
+                    <input
+                      type="number" min="0" value={demanda[f] ?? ''} placeholder="—"
+                      onChange={(e) => setDemanda((d) => ({ ...d, [f]: e.target.value }))}
+                      onBlur={() => guardarDemanda()}
+                      title="Rutas que Amazon pide ese día"
+                      className="w-10 rounded border border-dark-700/70 bg-dark-900 px-1 py-0.5 text-center text-[11px] text-dark-200 placeholder:text-dark-700"
+                    />
+                  </td>
+                ))}
+              </tr>
+              {/* PONEMOS: sale de la rejilla. El color compara con las otras dos. */}
+              <tr className="border-b border-dark-700">
+                <th className="sticky left-0 z-10 border-r border-dark-700 bg-dark-900 px-3 py-1 text-left text-[11px] font-medium text-dark-500">
+                  <span title="Los que sacan furgoneta. BKP, Site y ride along trabajan, pero no cuentan como ruta.">
+                    A ruta
+                  </span>
+                </th>
+                {dias.map((f, ci) => {
+                  const n = cobertura[f] || 0
+                  const piden = Number(demanda[f]) || 0
+                  const max = Number(maximas[f]) || 0
+                  // Rojo: no llegas a lo que piden hoy — eso es una ruta sin
+                  // cubrir. Ámbar: llegas a lo de hoy pero no al techo, así que
+                  // si Amazon pide más no lo puedes coger. Verde: cubierto.
+                  const corto = (piden > 0 && n < piden) || (min > 0 && n < min)
+
+                  /* La diferencia se mide contra LO QUE PIDEN, y sólo contra el
+                     máximo mientras todavía no han pedido nada.
+
+                     El máximo es el techo que podrían pedirte; en cuanto te
+                     dicen el número del día, ese techo ya no manda. Si piden 41
+                     y pones 43 te SOBRAN 2, no te faltan 3 para llegar a 46:
+                     los 46 ya no van a venir ese día. Medirlo contra el máximo
+                     hacía que un día de sobra apareciera como un día corto. */
+                  const contra = piden > 0 ? piden : max
+                  const dif = contra > 0 ? n - contra : 0
+                  return (
+                    <td key={f} data-col={ci}
+                      className={`border-r border-dark-800/70 px-1 py-1 text-center ${fondoCol(f === hoy, finde(f))} ${
+                        f === hoy ? 'border-x border-x-amber-400/35' : empiezaSemana(f) ? 'border-l border-l-dark-600' : ''}`}>
+                      <span className="flex items-baseline justify-center gap-0.5"
+                        title={`${n} ${n === 1 ? 'persona sale' : 'personas salen'} a ruta (BKP, Site y ride along no cuentan)${
+                          piden > 0 ? ` · piden ${piden}` : ''}${max > 0 ? ` · máximo ${max}` : ''}${
+                          dif < 0 ? ` — FALTAN ${-dif}${piden > 0 ? '' : ' para el máximo'}`
+                            : dif > 0 ? ` — sobran ${dif}` : ''}`}>
+                        <span className={`text-[12px] font-bold tabular-nums ${
+                          corto ? 'text-red-400' : 'text-emerald-300'}`}>{n}</span>
+                        {dif !== 0 && (
+                          <span className={`text-[9px] font-medium tabular-nums ${
+                            dif < 0 ? 'text-amber-500/70' : 'text-emerald-500/60'}`}>
+                            {dif > 0 ? '+' : '−'}{Math.abs(dif)}
+                          </span>
+                        )}
+                      </span>
+                    </td>
+                  )
+                })}
+              </tr>
+            </thead>
+            <tbody>
+              {visibles.map((d, iFila) => (
+                <tr key={d.id}
+                  /* Filas alternas. En una tabla de 31 columnas es lo que evita
+                     leer el día de la fila de al lado — y es la única mejora de
+                     legibilidad en tablas densas que sale medida en los
+                     estudios de usabilidad, no por gusto. */
+                  className={`group ${iFila % 2 ? 'bg-dark-800/[0.18]' : ''}`}>
+                  <td className={`sticky left-0 z-10 flex items-center gap-2 border-r border-dark-700 px-3 ${
+                    iFila % 2 ? 'bg-dark-800/40' : 'bg-dark-900'} ${denso ? 'py-0.5' : 'py-1.5'}`}>
+                    <span className={`shrink-0 rounded px-1.5 text-[10px] font-bold tabular-nums ${
+                      (totales[d.id] ?? 0) === 0 ? 'bg-dark-800 text-dark-500' : 'bg-dark-800 text-dark-300'}`}
+                      title="Días trabajados en lo que estás viendo (incluye BKP y Site: son días de trabajo aunque no saquen ruta)">
+                      {totales[d.id] ?? 0}
+                    </span>
+                    <span className={`max-w-[11rem] truncate text-[13px] ${
+                      enCuadrante.has(d.id) ? 'text-dark-200' : 'text-dark-500 italic'}`} title={d.name}>
+                      {d.name}
+                    </span>
+                    <span className="ml-auto hidden shrink-0 items-center gap-1 group-hover:flex">
+                      <button onClick={() => filaEntera(d.id, pincel)}
+                        title={pincel
+                          ? `Poner ${uiDe(pincel).etiqueta} a ${d.name} en todos los días que se ven`
+                          : 'Elige un código arriba para rellenar la fila'}
+                        disabled={!pincel}
+                        className="rounded border border-dark-700 px-1 text-[9px] font-bold text-dark-500 hover:text-dark-200 disabled:opacity-30">
+                        rellenar
+                      </button>
+                      {!enCuadrante.has(d.id) && (
+                        <button onClick={() => setConfirmarBaja(d)} title={`Dar de baja a ${d.name}`}
+                          className="rounded border border-dark-700 p-0.5 text-dark-500 hover:border-red-500/50 hover:text-red-300">
+                          <UserMinus size={11} />
+                        </button>
+                      )}
+                    </span>
+                  </td>
+                  {dias.map((f, ci) => {
+                    const k = `${d.id}|${f}`
+                    const cod = grid[k]
+                    const ui = cod ? uiDe(cod) : null
+                    const choca = choques.has(k)          // trabaja un día que tiene concedido
+                    const concedido = aprobados.has(k)    // día libre aprobado
+                    const hora = horas.current[k]
+                    return (
+                      <td key={f} data-col={ci}
+                        className={`border-r border-dark-800/70 px-0.5 text-center ${
+                          denso ? 'py-0' : 'py-0.5'} ${fondoCol(f === hoy, finde(f))} ${
+                          f === hoy ? 'border-x border-x-amber-400/35' : empiezaSemana(f) ? 'border-l border-l-dark-600' : ''}`}
+                        onMouseEnter={(e) => cruz(e.currentTarget)}>
+                        <button
+                          onMouseDown={(e) => {
+                            // Sólo el botón izquierdo: con el derecho se abre el
+                            // menú del navegador y quedaría pintando sin querer.
+                            if (e.button !== 0) return
+                            e.preventDefault()
+                            pintando.current = true
+                            aplicar(d.id, f)
+                          }}
+                          onMouseEnter={() => {
+                            // Al arrastrar no se apila un paso de deshacer por
+                            // celda: se deshace la pincelada entera, que es lo
+                            // que espera quien la ha dado.
+                            if (pintando.current) aplicar(d.id, f, false)
+                          }}
+                          title={`${d.name} · ${fmtNum(f)} · ${ui ? ui.etiqueta : 'sin poner'}${
+                            hora ? ` · entra a las ${hora}` : ''}${
+                            choca ? ' — OJO: tiene este día APROBADO libre'
+                              : (concedido
+                                ? (puedeAprobar ? ' — concedido: sólo tú puedes quitarlo'
+                                  : ' — concedido: no se puede cambiar sin permiso')
+                                : '')}`}
+                          className={`w-[2.15rem] select-none rounded-[3px] border text-[10px] font-bold leading-none transition hover:brightness-125 ${
+                            denso ? 'h-[1.15rem]' : 'h-6'} ${
+                            choca ? 'border-red-500 bg-red-500/25 text-red-100 ring-1 ring-red-500/70'
+                              : !ui ? 'border-dashed border-dark-800 text-dark-700 hover:border-dark-600'
+                                : COLORES[ui.color] + (concedido ? ' ring-1 ring-pink-400/70' : '')}`}
+                        >
+                          {ui ? corto(cod) : '·'}
+                        </button>
+                        {concedido && !choca && (
+                          // Marca de esquina: la celda ya va con anillo verde,
+                          // pero el anillo dice "aprobado" y esto dice "y no lo
+                          // puedes tocar", que no es lo mismo.
+                          <Lock size={7} className={`pointer-events-none -mt-[1.35rem] ml-[1.5rem] block ${
+                            puedeAprobar ? 'text-pink-300/50' : 'text-pink-200/90'}`} />
+                        )}
+                      </td>
+                    )
+                  })}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+      </>)}
+
+      {/* (La leyenda vieja estaba aqui, entre la tabla y los paneles. Se quito
+          el 22-08-2026: duplicaba la de abajo y decia 'pulsa una celda para
+          cambiar el turno', que dejo de ser verdad en cuanto hubo pincel. Una
+          leyenda que miente es peor que ninguna.) */}
+
+      {/* ── Lo que va a hacer el Excel, ANTES de escribirlo ─────────────────
+          Con 61 conductores y 31 días son casi 1.900 turnos. Escribirlos sin
+          que nadie los mire es demasiado, y deshacerlo después no es trivial. */}
+      {/* ── HISTORIAL DE DIAS ────────────────────────────────────────────
+          Vive aparte de la bandeja de pendientes a proposito: la bandeja es
+          para decidir y se vacia; esto es para consultar y no se vacia nunca.
+          Mezclarlas hacia que lo ya decidido tapara lo que falta por decidir. */}
+      {vistaDias === 'peticiones' && verHistorial && (
+        <div className="card p-4">
+          <div className="mb-3 flex flex-wrap items-center gap-2">
+            <History size={16} className="text-brand-400" />
+            <h3 className="text-sm font-bold text-dark-100">Historial de días</h3>
+            {historialDias && (
+              <span className="rounded-full bg-dark-800 px-2 py-0.5 text-[11px] font-semibold text-dark-400">
+                {historialDias.length} {historialDias.length === 1 ? 'petición' : 'peticiones'}
+              </span>
+            )}
+            <button onClick={() => setVerHistorial(false)}
+              className="ml-auto text-dark-500 hover:text-dark-200"><X size={16} /></button>
+          </div>
+
+          <div className="mb-3 flex flex-wrap items-end gap-2">
+            <div className="flex overflow-hidden rounded-lg border border-dark-700">
+              {[['aprobado', 'Aprobados'], ['rechazado', 'Rechazados'],
+                ['pendiente', 'Pendientes'], ['', 'Todos']].map(([k, lbl]) => (
+                <button key={k || 'todos'}
+                  onClick={() => setFiltroHist((f) => ({ ...f, estado: k }))}
+                  className={`px-2.5 py-1.5 text-[12px] font-semibold transition ${
+                    filtroHist.estado === k ? 'bg-brand-500/20 text-brand-200'
+                      : 'text-dark-500 hover:text-dark-200'}`}>
+                  {lbl}
+                </button>
+              ))}
+            </div>
+            <label className="flex flex-col gap-0.5 text-[10.5px] uppercase tracking-wider text-dark-500">
+              Desde
+              <input type="date" value={filtroHist.desde}
+                onChange={(e) => setFiltroHist((f) => ({ ...f, desde: e.target.value }))}
+                className="rounded-lg border border-dark-700 bg-dark-950 px-2 py-1 text-[12.5px] text-dark-100" />
+            </label>
+            <label className="flex flex-col gap-0.5 text-[10.5px] uppercase tracking-wider text-dark-500">
+              Hasta
+              <input type="date" value={filtroHist.hasta}
+                onChange={(e) => setFiltroHist((f) => ({ ...f, hasta: e.target.value }))}
+                className="rounded-lg border border-dark-700 bg-dark-950 px-2 py-1 text-[12.5px] text-dark-100" />
+            </label>
+            <div className="relative">
+              <Search size={13} className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-dark-500" />
+              <input value={filtroHist.q} placeholder="Buscar conductor"
+                onChange={(e) => setFiltroHist((f) => ({ ...f, q: e.target.value }))}
+                className="w-44 rounded-lg border border-dark-700 bg-dark-950 py-1.5 pl-7 pr-2 text-[12.5px] text-dark-100 placeholder:text-dark-500" />
+            </div>
+            {(filtroHist.desde || filtroHist.hasta || filtroHist.q) && (
+              <button onClick={() => setFiltroHist({ estado: filtroHist.estado, desde: '', hasta: '', q: '' })}
+                className="py-1.5 text-[12px] text-dark-500 underline underline-offset-2 hover:text-dark-200">
+                limpiar
+              </button>
+            )}
+          </div>
+
+          {cargandoHist ? (
+            <p className="flex items-center gap-2 py-6 text-[13px] text-dark-500">
+              <Loader2 size={15} className="animate-spin" /> Buscando…
+            </p>
+          ) : !historialDias?.length ? (
+            <p className="py-6 text-center text-[13px] text-dark-500">
+              No hay nada con esos filtros.
+            </p>
+          ) : (
+            <div className="max-h-[26rem] overflow-y-auto rounded-lg border border-dark-800">
+              <table className="w-full text-left text-[12.5px]">
+                <thead className="sticky top-0 z-10 bg-dark-900">
+                  <tr className="text-[10.5px] uppercase tracking-wider text-dark-500">
+                    <th className="px-3 py-2 font-semibold">Conductor</th>
+                    <th className="px-2 py-2 font-semibold">Día</th>
+                    <th className="px-2 py-2 font-semibold">Pide</th>
+                    <th className="px-2 py-2 font-semibold">Motivo</th>
+                    <th className="px-2 py-2 font-semibold">Estado</th>
+                    <th className="px-3 py-2 font-semibold">Quién y cuándo</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {historialDias.map((r, i) => (
+                    <tr key={r.id || i} className={`border-t border-dark-800/70 ${i % 2 ? 'bg-dark-800/[0.15]' : ''}`}>
+                      <td className="max-w-[12rem] truncate px-3 py-1.5 text-dark-200" title={r.driver_name}>
+                        {r.driver_name}
+                      </td>
+                      <td className="whitespace-nowrap px-2 py-1.5 tabular-nums text-dark-300">{fmtNum(r.date)}</td>
+                      <td className="px-2 py-1.5 text-dark-400">
+                        {r.type === 'libre' ? 'Día libre' : 'Extra'}
+                      </td>
+                      <td className="max-w-[14rem] truncate px-2 py-1.5 text-dark-500"
+                        title={[r.motivo_label || r.motivo, r.note].filter(Boolean).join(' — ')}>
+                        {[r.motivo_label || r.motivo, r.note].filter(Boolean).join(' — ') || '—'}
+                      </td>
+                      <td className="px-2 py-1.5">
+                        <span className={`rounded-full px-2 py-0.5 text-[11px] font-semibold ${
+                          r.status === 'aprobado' ? 'bg-emerald-500/15 text-emerald-300'
+                            : r.status === 'rechazado' ? 'bg-red-500/15 text-red-300'
+                              : 'bg-amber-500/15 text-amber-300'}`}>
+                          {r.status}
+                        </span>
+                        {/* Un rechazo sin motivo a la vista obliga a preguntar
+                            por WhatsApp, que es de lo que se huia. */}
+                        {r.status === 'rechazado' && r.motivo_respuesta && (
+                          <span className="ml-1.5 text-[11px] text-red-300/70" title={r.motivo_respuesta}>
+                            «{r.motivo_respuesta.slice(0, 28)}{r.motivo_respuesta.length > 28 ? '…' : ''}»
+                          </span>
+                        )}
+                      </td>
+                      <td className="whitespace-nowrap px-3 py-1.5 text-[11.5px] text-dark-500">
+                        {r.resolved_by || '—'}
+                        {r.resolved_at && (
+                          <span className="ml-1 text-dark-500">· {r.resolved_at.slice(8, 10)}/{r.resolved_at.slice(5, 7)}</span>
+                        )}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+      )}
+
+      {MOSTRAR_CUADRANTE && verPegar && (
+        <div className="card p-4">
+          <div className="mb-2 flex items-center gap-2">
+            <ClipboardPaste size={16} className="text-brand-400" />
+            <h3 className="text-sm font-bold text-dark-100">Pegar el cuadrante desde Sheets</h3>
+          </div>
+          <p className="mb-2 text-[12.5px] leading-relaxed text-dark-400">
+            Selecciona en tu hoja el bloque con <b>la fila de días de la semana</b> y las filas de
+            conductores, cópialo y pégalo aquí. La primera columna es el nombre; las siguientes,
+            los días 1, 2, 3… del mes que hayas elegido arriba.
+          </p>
+          <p className="mb-2 text-[11.5px] text-dark-500">
+            Si pegas la fila de días (LUN, MAR…), se comprueba que el bloque empieza donde debe.
+            Un mes a medias vale: se guarda lo que haya.
+          </p>
+          <textarea rows={7} value={pegado} onChange={(e) => setPegado(e.target.value)}
+            placeholder="Pega aquí el bloque copiado de tu hoja de cálculo"
+            className="w-full resize-y rounded-lg border border-dark-700 bg-dark-950 p-2.5 font-mono text-[11.5px] text-dark-100 outline-none focus:border-brand-500/60" />
+          <div className="mt-2 flex items-center gap-2">
+            <button className="btn-primary flex items-center gap-1.5"
+              onClick={previsualizarPegado} disabled={!!ocupado || !pegado.trim() || !mesImport}>
+              {ocupado === 'importar' ? <Loader2 size={15} className="animate-spin" /> : <Check size={15} />}
+              Ver qué va a entrar
+            </button>
+            <button className="btn-ghost" onClick={() => { setPegado(''); setPrevia(null) }}>Limpiar</button>
+            <span className="text-[11.5px] text-dark-500">{lineasPegadas} líneas pegadas</span>
+          </div>
+        </div>
+      )}
+
+      {(vistaDias === 'bloqueos' || (MOSTRAR_CUADRANTE && verBloqueos)) && (
+        <div className="card p-4">
+          <div className="mb-2 flex items-center gap-2">
+            <Ban size={16} className="text-red-400" />
+            <h3 className="text-sm font-bold text-dark-100">Días que no se pueden pedir</h3>
+          </div>
+          <p className="mb-3 text-[12.5px] leading-relaxed text-dark-400">
+            El conductor los ve cerrados en su calendario, con el motivo, y no puede ni marcarlos.
+            <b> No toca lo ya pedido</b>: las peticiones de antes se siguen contestando a mano.
+          </p>
+
+          {puedeAprobar ? (
+            <div className="flex flex-wrap items-end gap-3 rounded-lg border border-dark-700 bg-dark-900/60 p-3">
+              {/* El calendario ANTES que los campos: es por donde se empieza.
+                  Los dos `input type=date` se quedan al lado porque para una
+                  fecha que ya sabes teclearla es más rápido, y porque son los
+                  que enseñan lo elegido en formato legible. */}
+              <div className="w-[16.5rem]">
+                <span className="mb-1 block text-[11px] text-dark-500">Elige el rango</span>
+                <SelectorRango
+                  desde={nuevoBloqueo.desde} hasta={nuevoBloqueo.hasta}
+                  ocupados={diasConGente}
+                  onElegir={({ desde, hasta }) => setNuevoBloqueo((b) => ({ ...b, desde, hasta }))} />
+              </div>
+              <label className="flex flex-col gap-1 text-[11px] text-dark-500">Desde
+                <input type="date" value={nuevoBloqueo.desde}
+                  onChange={(e) => setNuevoBloqueo((b) => ({ ...b, desde: e.target.value }))}
+                  className="rounded-lg border border-dark-700 bg-dark-950 px-2 py-1.5 text-[12.5px] text-dark-100 outline-none" />
+              </label>
+              <label className="flex flex-col gap-1 text-[11px] text-dark-500">Hasta
+                <input type="date" value={nuevoBloqueo.hasta}
+                  onChange={(e) => setNuevoBloqueo((b) => ({ ...b, hasta: e.target.value }))}
+                  className="rounded-lg border border-dark-700 bg-dark-950 px-2 py-1.5 text-[12.5px] text-dark-100 outline-none" />
+              </label>
+              <label className="flex flex-col gap-1 text-[11px] text-dark-500">A quién
+                <select value={nuevoBloqueo.driver_id}
+                  onChange={(e) => setNuevoBloqueo((b) => ({ ...b, driver_id: e.target.value }))}
+                  className="rounded-lg border border-dark-700 bg-dark-950 px-2 py-1.5 text-[12.5px] text-dark-100 outline-none">
+                  <option value="">A todo el centro</option>
+                  {lista(drivers).map((c) => (
+                    <option key={c.id} value={c.id}>{c.name}</option>
+                  ))}
+                </select>
+              </label>
+              <label className="flex min-w-[14rem] flex-1 flex-col gap-1 text-[11px] text-dark-500">Motivo (lo lee el conductor)
+                <input value={nuevoBloqueo.motivo}
+                  onChange={(e) => setNuevoBloqueo((b) => ({ ...b, motivo: e.target.value }))}
+                  placeholder="Pico de Navidad, no se dan días"
+                  className="rounded-lg border border-dark-700 bg-dark-950 px-2 py-1.5 text-[12.5px] text-dark-100 outline-none placeholder:text-dark-500" />
+              </label>
+              <button className="btn-primary flex items-center gap-1.5" onClick={crearBloqueo}
+                disabled={ocupado === 'bloqueo'}>
+                {ocupado === 'bloqueo' ? <Loader2 size={15} className="animate-spin" /> : <Ban size={15} />}
+                Bloquear
+              </button>
+            </div>
+          ) : (
+            <p className="text-[12.5px] text-dark-500">Solo quien puede aprobar días puede bloquearlos.</p>
+          )}
+
+          <div className="mt-3 divide-y divide-white/[0.04]">
+            {bloqueos.length === 0 ? (
+              <p className="py-3 text-[12.5px] text-dark-500">No hay ningún día bloqueado.</p>
+            ) : bloqueos.map((b) => (
+              <div key={b.id} className="flex flex-wrap items-center gap-x-3 gap-y-1 py-2.5">
+                <span className="font-mono text-[12.5px] text-dark-100">{b.desde} → {b.hasta}</span>
+                <span className={`rounded-full px-2 py-0.5 text-[11px] font-semibold ${
+                  b.driver_id ? 'bg-amber-500/15 text-amber-300' : 'bg-red-500/15 text-red-300'}`}>
+                  {b.driver_name || 'Todo el centro'}
+                </span>
+                <span className="min-w-0 flex-1 truncate text-[12.5px] text-dark-400">{b.motivo}</span>
+                {puedeAprobar && (
+                  <button onClick={() => quitarBloqueo(b.id)}
+                    className="rounded p-1 text-dark-500 hover:text-red-400" title="Quitar">
+                    <Trash2 size={14} />
+                  </button>
+                )}
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {MOSTRAR_CUADRANTE && !cargando && drivers?.length > 0 && (
+        <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5 px-1 text-[11px] text-dark-500">
+          {/* Agrupada por FAMILIA de color, que es como se lee: primero ves de
+              qué color es y luego, si hace falta, qué pone. Una leyenda de
+              dieciséis entradas sueltas no la mira nadie. */}
+          {Object.entries(FAMILIA_NOMBRE).map(([fam, nombre]) => {
+            const suyos = paleta.filter(({ ui }) => ui.color === fam)
+            if (!suyos.length) return null
+            return (
+              <span key={fam} className="flex items-center gap-1.5">
+                <span className={`inline-flex h-4 w-4 rounded border ${COLORES[fam]}`} />
+                <span className="text-dark-400">{nombre}:</span>
+                <span className="text-dark-500">{suyos.map(({ cod }) => cod).join(', ')}</span>
+              </span>
+            )
+          })}
+          <span className="flex items-center gap-1.5">
+            <span className="inline-flex h-4 min-w-[1.6rem] items-center justify-center rounded border border-dashed border-dark-800 px-1 text-[9px] font-bold text-dark-700">·</span>
+            Sin poner
+          </span>
+          <span className="flex items-center gap-1.5">
+            <span className="inline-flex h-4 w-5 items-center justify-center rounded border border-red-500 bg-red-500/25 text-[9px] font-bold text-red-200">!</span>
+            Trabaja un día que tiene concedido
+          </span>
+          <span className="ml-auto text-dark-500">El número junto al nombre son sus días de trabajo aquí</span>
+        </div>
+      )}
+
+      {MOSTRAR_CUADRANTE && previa && (
+        <div className="card border border-brand-500/30 p-4">
+          <h2 className="mb-1 flex items-center gap-2 text-sm font-bold text-dark-100">
+            <Upload size={16} /> Esto es lo que voy a importar
+          </h2>
+          <p className="mb-3 text-xs text-dark-500">Todavía no se ha guardado nada.</p>
+
+          <div className="mb-3 flex flex-wrap gap-x-7 gap-y-2">
+            {[['Mes', previa.mes], ['Conductores', previa.conductores],
+              ['Días', previa.primer_dia
+                ? `${previa.primer_dia.slice(8)}–${previa.ultimo_dia.slice(8)}`
+                : previa.dias],
+              ['Turnos', previa.turnos], ['Trabaja', previa.trabaja],
+              ['Libre', previa.libre]].map(([k, v]) => (
+              <span key={k} className="flex items-baseline gap-1.5">
+                <b className="text-lg font-bold tabular-nums text-dark-50">{v}</b>
+                <span className="text-[12px] text-dark-500">{k}</span>
+              </span>
+            ))}
+          </div>
+
+          {/* NO se listan los nombres en una frase: se ponen en una lista con un
+              desplegable al lado para decir quién es cada uno. Antes salían
+              como texto —y desde que el servidor manda el motivo, salían como
+              "[object Object]"— y encima no se podía hacer nada con ellos.
+              Ahora se emparejan una vez y quedan guardados para siempre. */}
+          {previa.n_sin_conductor > 0 && (
+            <div className="mb-3 rounded-lg border border-amber-500/25 bg-amber-500/[0.06] p-3">
+              <p className="text-[12.5px] font-semibold text-amber-200">
+                {previa.n_sin_conductor} {previa.n_sin_conductor > 1 ? 'nombres' : 'nombre'} sin
+                emparejar {previa.n_sin_conductor > 1 ? 'se quedan' : 'se queda'} fuera
+              </p>
+              <p className="mb-2 mt-1 text-[11.5px] leading-relaxed text-amber-200/70">
+                Dime quién es cada uno y lo recordaré: el mes que viene entrarán solos.
+              </p>
+              <div className="flex flex-col gap-1.5">
+                {(previa.sin_conductor || []).map((s) => {
+                  const nombre = typeof s === 'string' ? s : s.nombre
+                  const motivo = typeof s === 'string' ? '' : s.motivo
+                  return (
+                    <div key={nombre} className="flex flex-wrap items-center gap-2">
+                      <span className="min-w-[13rem] flex-1 truncate text-[12.5px] text-dark-200" title={nombre}>
+                        {nombre}
+                      </span>
+                      {motivo === 'ambiguo' && (
+                        <span className="rounded-full bg-red-500/15 px-2 py-0.5 text-[10.5px] font-semibold text-red-300"
+                          title="Encajan dos fichas: hay que decir cuál, no se adivina">
+                          dos fichas iguales
+                        </span>
+                      )}
+                      <select
+                        value={emparejando[nombre] || ''}
+                        onChange={(e) => setEmparejando((m) => ({ ...m, [nombre]: e.target.value }))}
+                        className="min-w-[12rem] rounded-lg border border-dark-700 bg-dark-950 px-2 py-1 text-[12px] text-dark-100 outline-none">
+                        <option value="">— es…</option>
+                        {(drivers || []).map((d) => (
+                          <option key={d.id} value={d.id}>{d.name}</option>
+                        ))}
+                      </select>
+                    </div>
+                  )
+                })}
+              </div>
+              {Object.values(emparejando).filter(Boolean).length > 0 && (
+                <button onClick={guardarEmparejados} disabled={ocupado === 'importar'}
+                  className="btn-primary mt-2.5 flex items-center gap-1.5">
+                  {ocupado === 'importar' ? <Loader2 size={14} className="animate-spin" /> : <Check size={14} />}
+                  Guardar {Object.values(emparejando).filter(Boolean).length} y volver a leer
+                </button>
+              )}
+            </div>
+          )}
+
+          {previa.n_respetados > 0 && (
+            <div className="mb-3 rounded-lg border border-emerald-500/30 bg-emerald-500/[0.07] px-3 py-2.5">
+              <p className="text-[12.5px] font-semibold text-emerald-200">
+                <Lock size={12} className="mr-1 inline align-[-1px]" />
+                {previa.n_respetados} {previa.n_respetados === 1 ? 'día aprobado se ha respetado' : 'días aprobados se han respetado'}
+              </p>
+              <p className="mt-1 text-[11.5px] leading-relaxed text-emerald-200/70">
+                La hoja de Sheets no sabe nada de los días que aprobaste aquí, así que
+                {previa.n_respetados === 1 ? ' ese día se ha quedado' : ' esos días se han quedado'} como
+                {previa.n_respetados === 1 ? ' estaba' : ' estaban'}: {(previa.respetados || []).slice(0, 6)
+                  .map((r) => `${r.driver_name} el ${fmtNum(r.date)}`).join(' · ')}
+                {previa.n_respetados > 6 ? ` y ${previa.n_respetados - 6} más` : ''}
+              </p>
+            </div>
+          )}
+
+          {previa.aviso_alineacion && (
+            <p className="mb-3 rounded-lg border border-dark-700 bg-dark-900/60 px-3 py-2 text-[11.5px] leading-relaxed text-dark-400">
+              {previa.aviso_alineacion}
+            </p>
+          )}
+
+          {previa.de_baja?.length > 0 && (
+            <p className="mb-3 rounded-lg border border-sky-500/25 bg-sky-500/[0.06] px-3 py-2 text-[11.5px] leading-relaxed text-sky-200/80">
+              <b>{previa.de_baja.length}</b> de estas personas están dadas de baja en la app y aun
+              así salen en el cuadrante: {previa.de_baja.slice(0, 6).join(' · ')}. Sus turnos se
+              guardan igual, pero conviene mirar si siguen o no.
+            </p>
+          )}
+
+          {/* Códigos que la app no conoce. Traducirlos aquí y se recuerda para
+              siempre: un código sin traducir es un día que se quedaría vacío. */}
+          {Object.keys(previa.codigos_desconocidos || {}).length > 0 && (
+            <div className="mb-3 rounded-lg border border-red-500/25 bg-red-500/[0.06] p-3">
+              <p className="mb-2 text-[12.5px] font-semibold text-red-200">
+                No sé qué significan estos códigos. Dímelo y los recordaré siempre:
+              </p>
+              <div className="flex flex-col gap-2">
+                {Object.entries(previa.codigos_desconocidos).map(([cod, n]) => (
+                  <div key={cod} className="flex flex-wrap items-center gap-2">
+                    <code className="rounded bg-dark-800 px-2 py-1 font-mono text-[12.5px] text-dark-100">{cod}</code>
+                    <span className="text-[11.5px] text-dark-500">{n} {n > 1 ? 'veces' : 'vez'}</span>
+                    <div className="flex gap-1.5">
+                      {[['trabaja', 'Trabaja'], ['libre', 'Libre'], ['extra', 'Extra'], ['ignorar', 'Ignorar']].map(([k, lbl]) => (
+                        <button key={k} onClick={() => traducir(cod, k)}
+                          className="rounded-lg border border-dark-700 px-2 py-1 text-[11.5px] text-dark-300 hover:border-brand-500/50 hover:text-brand-300">
+                          {lbl}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                ))}
+              </div>
+              <p className="mt-2 text-[11px] text-dark-500">
+                Después de traducirlos, vuelve a subir el Excel para que entren esos días.
+              </p>
+            </div>
+          )}
+
+          <div className="flex flex-wrap gap-2">
+            {/* La misma previa sirve para el Excel y para lo pegado. Sin este
+                reparto, confirmar un cuadrante pegado llamaba al camino del
+                Excel, que no tiene fichero, y no pasaba NADA: ni guardaba ni
+                daba error. */}
+            <button onClick={previa.pegado ? confirmarPegado : confirmarImport}
+              disabled={ocupado === 'importar' || !previa.turnos}
+              className="btn-primary flex items-center gap-1.5 text-sm disabled:opacity-40">
+              {ocupado === 'importar' ? <Loader2 size={14} className="animate-spin" /> : <Check size={14} />}
+              Guardar {previa.turnos} turnos
+            </button>
+            <button onClick={() => setPrevia(null)} className="btn-ghost text-sm">Cancelar</button>
+          </div>
+        </div>
+      )}
+
+      {/* Solicitudes de los conductores */}
+      {vistaDias === 'peticiones' && (
+      <div className="card p-4">
+        <h2 className="mb-3 flex items-center gap-2 text-sm font-bold text-dark-100">
+          <Inbox size={16} /> {t('turns.requests')}
+          {/* GRUPOS, NO DOCUMENTOS. En la base hay una fila por dia; aqui se ven
+              agrupadas como las mando el conductor ("4 dias, del 16 al 19"), asi
+              que contar `solicitudes` decia 17 donde se veian 7 filas. El aviso
+              del menu cuenta lo mismo, y tiene que seguir siendo lo mismo. */}
+          {grupos.length > 0 && (
+            <span className="rounded-full bg-amber-500/20 px-2 py-0.5 text-[11px] font-bold text-amber-300"
+              title={`${grupos.length} ${grupos.length === 1 ? 'petición' : 'peticiones'} · ${solicitudes.length} ${solicitudes.length === 1 ? 'día' : 'días'} en total`}>
+              {grupos.length}
+            </span>
+          )}
+          {/* El boton del historial vivia en la barra del cuadrante, que ahora
+              esta escondida: sin esto, el historial existia y no habia forma
+              humana de abrirlo. Es el mismo fallo del gotcha 27 —una pantalla
+              a la que no se llega no existe— y por eso se mueve aqui. */}
+          <button onClick={() => setVerHistorial((v) => !v)}
+            className={`ml-auto flex items-center gap-1.5 rounded-lg border px-2.5 py-1 text-[12px] font-semibold transition ${
+              verHistorial ? 'border-brand-500/50 bg-brand-500/15 text-brand-300'
+                : 'border-dark-800 bg-dark-900/60 text-dark-300 hover:text-dark-100'}`}>
+            <History size={14} /> Historial
+          </button>
+        </h2>
+        {solicitudes.length === 0 ? (
+          <p className="text-sm text-dark-500">{t('turns.no.requests')}</p>
+        ) : (
+          <div className="divide-y divide-dark-800">
+            {grupos.map((g) => (
+              <div key={g.key} className={`flex flex-wrap items-start gap-x-3 gap-y-2 py-3 ${
+                g.caducada ? 'rounded-lg bg-red-500/[0.06] px-2' : ''}`}>
+                <div className="min-w-0 flex-1">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span className="text-sm font-semibold text-dark-100">{g.driver_name}</span>
+                    {g.caducada && (
+                      <span className="rounded-full bg-red-500/20 px-2 py-0.5 text-[11px] font-semibold text-red-300">
+                        Sin contestar y el día ya pasó
+                      </span>
+                    )}
+                    <span className={`rounded-full px-2 py-0.5 text-[11px] font-semibold ${g.type === 'libre' ? 'bg-sky-500/15 text-sky-300' : 'bg-amber-500/15 text-amber-300'}`}>
+                      {g.motivo_label || t(g.type === 'libre' ? 'turns.t.libre' : 'turns.t.extra')}
+                    </span>
+                    <span className="font-mono text-[12px] text-brand-300">
+                      {g.fechas.length} día{g.fechas.length > 1 ? 's' : ''}
+                    </span>
+                  </div>
+                  <p className="mt-1 text-[12.5px] text-dark-400">{g.fechas.map(fmtNum).join(' · ')}</p>
+                  {g.note && <p className="mt-1 text-[12.5px] italic text-dark-500">“{g.note}”</p>}
+                  {g.created_at && (
+                    <p className="mt-1 font-mono text-[10.5px] text-dark-500">
+                      pedido el {diaMesLocal(g.created_at)} a las {horaLocal(g.created_at)}
+                    </p>
+                  )}
+                </div>
+                {puedeAprobar ? (
+                  <div className="flex gap-2">
+                    <button onClick={() => resolver(g, 'aprobar')} className="flex items-center gap-1 rounded-lg bg-emerald-500/15 px-2.5 py-1.5 text-xs font-semibold text-emerald-300 hover:bg-emerald-500/25">
+                      <Check size={13} /> {t('turns.approve')}
+                    </button>
+                    <button onClick={() => resolver(g, 'rechazar')} className="flex items-center gap-1 rounded-lg bg-red-500/15 px-2.5 py-1.5 text-xs font-semibold text-red-300 hover:bg-red-500/25">
+                      <X size={13} /> {t('turns.reject')}
+                    </button>
+                  </div>
+                ) : (
+                  /* Quien no puede decidir lo ve igual: enterarse de quién ha
+                     pedido qué es media función, y esconderlo solo genera
+                     preguntas. Lo que no puede es contestar. */
+                  <span className="self-center rounded-lg border border-dark-700 px-2.5 py-1.5 text-[11px] text-dark-500">
+                    Solo lectura
+                  </span>
+                )}
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+      )}
+
+      {vistaDias === 'calendario' && (
+        <CalendarioDiasLibres center={center} />
+      )}
+
+      {MOSTRAR_CUADRANTE && min > 0 && (
+        <p className="flex items-center gap-1.5 text-xs text-dark-500">
+          <AlertTriangle size={12} /> {t('turns.min').replace('{n}', min)}
+        </p>
+      )}
+    </div>
+  )
+}

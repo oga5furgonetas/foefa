@@ -1,0 +1,367 @@
+import { useEffect, useState } from 'react'
+import { ClipboardCheck, CalendarDays, CalendarClock, LogOut, Lock, Ban, BarChart3, LifeBuoy, ShoppingBag, RefreshCw } from 'lucide-react'
+import { getPortalVehicles, getMyShifts, getMiFicha, guardarMiTelefono, tiendaEscaparate, DRIVER_TOKEN_KEY } from '../../services/api'
+import { lista } from '../../lib/lista'
+import { medirSeccion } from '../../lib/analitica'
+import { vigilarVersion } from '../../lib/versionApp'
+import DriverLogin from './DriverLogin'
+import InspectionFlow from './InspectionFlow'
+import InspectionDone from './InspectionDone'
+import MisTurnos from './MisTurnos'
+import MisNumeros from './MisNumeros'
+import MisAyudas from './MisAyudas'
+import MiClave from './MiClave'
+import PedirDias from './PedirDias'
+import Tienda from './Tienda'
+
+const DRIVER_KEY = 'flotadsp_driver'
+
+/* ────────────────────────────────────────────────────────────────────────────
+   PORTAL DEL CONDUCTOR
+   ---------------------------------------------------------------------------
+   Antes esto no existía: al entrar caías directamente en la auditoría, y para
+   ver el cuadrante había un botón escondido dentro. Pedir días no se podía
+   hacer desde ningún sitio, así que se pedía hablando — y de ahí venían los
+   "a mí me dijeron que sí" que nadie podía comprobar.
+
+   La auditoría sigue siendo lo primero y lo más gordo, porque es lo que se
+   hace todos los días antes de salir. Lo demás está debajo, a un toque.
+   ──────────────────────────────────────────────────────────────────────────── */
+
+function Opcion({ icono: Icono, titulo, sub, onClick, principal, bloqueado, pronto, aviso, insignia }) {
+  const off = bloqueado || pronto
+  return (
+    <button
+      onClick={off ? undefined : onClick}
+      disabled={off}
+      className={`relative w-full rounded-2xl border p-4 text-left transition-all ${
+        off
+          ? 'cursor-not-allowed border-dark-800 bg-dark-900/40 opacity-60'
+          : principal
+            ? 'border-brand-400/60 bg-gradient-to-br from-brand-500 to-brand-600 shadow-lg shadow-brand-600/30 active:scale-[.99]'
+            : insignia
+              ? 'border-amber-400/50 bg-amber-500/[.07] active:scale-[.99]'
+              : 'border-dark-700 bg-dark-900 active:scale-[.99]'
+      }`}
+    >
+      {/* Una etiqueta corta arriba a la derecha para lo que hay que mirar hoy.
+          No es un adorno permanente: se quita en cuanto deja de ser noticia, o
+          se convierte en el aviso de siempre que nadie lee. */}
+      {/* `!(aviso > 0)` y no `aviso <= 0`: `aviso` llega sin definir en casi
+          todas las entradas, y `undefined <= 0` es false — la insignia no se
+          habria pintado nunca y no habria fallado nada. */}
+      {insignia && !off && !(aviso > 0) && (
+        <span className="absolute right-3 top-3 rounded-full bg-amber-400/15 px-2 py-0.5 text-[9.5px] font-bold uppercase tracking-wider text-amber-300">
+          {insignia}
+        </span>
+      )}
+      {/* "Pronto" en vez de esconderlo: si la opción no está, la gente pregunta
+          si existe; si está y dice cuándo, no pregunta nadie. */}
+      {pronto && (
+        <span className="absolute right-3 top-3 rounded-full border border-dark-600 px-2 py-0.5 text-[9.5px] font-semibold uppercase tracking-wider text-dark-400">
+          Pronto
+        </span>
+      )}
+      {/* Respuestas sin leer. El aviso al móvil puede no llegar nunca —avisos
+          desactivados, iOS, el móvil apagado—, así que la señal que de verdad
+          se ve es esta, dentro de la app. */}
+      {aviso > 0 && (
+        <span className="absolute right-3 top-3 flex h-5 min-w-5 items-center justify-center rounded-full bg-red-500 px-1.5 text-[11px] font-bold text-white">
+          {aviso}
+        </span>
+      )}
+      <Icono size={22} className={principal && !off ? 'text-white' : 'text-dark-300'} />
+      <span className={`mt-2 block text-[16px] font-bold tracking-[-.01em] ${
+        principal && !off ? 'text-white' : 'text-dark-100'}`}>
+        {titulo}
+      </span>
+      <span className={`mt-0.5 block text-[12.5px] leading-snug ${
+        principal && !off ? 'text-white/80' : 'text-dark-500'}`}>
+        {sub}
+      </span>
+    </button>
+  )
+}
+
+export default function DriverPortal() {
+  const [driver, setDriver] = useState(() => {
+    try {
+      return JSON.parse(localStorage.getItem(DRIVER_KEY)) || null
+    } catch {
+      return null
+    }
+  })
+  const [portal, setPortal] = useState(null)   // {vehicles, puede_auditar, motivo}
+  const [result, setResult] = useState(null)
+  const [sinVer, setSinVer] = useState(0)      // respuestas que aún no ha leído
+  // null = apagada o todavía sin contestar. Con datos: {desde, n} para poder
+  // poner el precio en la entrada del menú, que es lo que hace que se entre.
+  const [tienda, setTienda] = useState(null)
+
+  /* LA TIENDA NO SE VE HASTA QUE SE ENCIENDE, y la decision es del servidor.
+     Se pregunta al escaparate: si contesta `visible: false` no se pinta ni la
+     entrada del menu. Asi el dia que la oficina la abre, aparece sola en el
+     movil de todos sin desplegar nada; y mientras tanto no hay ninguna puerta
+     que alguien pueda encontrar por su cuenta. Un `if` en el cliente seria
+     una cortina: la ruta seguiria ahi. */
+  useEffect(() => {
+    // SIN SESIÓN NO SE PREGUNTA. Esta pantalla también se monta cuando no hay
+    // token —es la que enseña el formulario de entrada—, y una llamada con
+    // sesión obligatoria desde ahí solo puede devolver 401. Fue la que destapó
+    // el bucle de recargas del 07-09-2026.
+    if (!localStorage.getItem(DRIVER_TOKEN_KEY)) return undefined
+    let vivo = true
+    tiendaEscaparate()
+      .then((r) => {
+        if (!vivo) return
+        const ps = (r.data?.prendas || []).map((p) => p.precio).filter((x) => x > 0)
+        setTienda(r.data?.visible ? { desde: ps.length ? Math.min(...ps) : null, n: ps.length } : null)
+      })
+      .catch(() => {})
+    return () => { vivo = false }
+  }, [driver])
+
+  const [vista, setVista] = useState('inicio') // inicio | auditoria | dias | turnos | clave
+  const [faltaTel, setFaltaTel] = useState(false)
+  const [tieneClave, setTieneClave] = useState(true)
+  const [tel, setTel] = useState('')
+  const [telOk, setTelOk] = useState(false)
+  const [guardandoTel, setGuardandoTel] = useState(false)
+  const [errTel, setErrTel] = useState('')
+  const [hayVersionNueva, setHayVersionNueva] = useState(false)
+
+  /* AVISO DE VERSION NUEVA, PERO SIN RECARGAR SOLA. En el panel la pestaña se
+     actualiza sola cuando se queda en segundo plano; aqui NO, y es a proposito:
+     el conductor sube seis fotos y se cambia a WhatsApp mientras suben. Una
+     recarga ahi le corta la subida y pierde la inspeccion, que es peor que
+     enseñarle una version de ayer. */
+  useEffect(() => {
+    const dejar = vigilarVersion(() => setHayVersionNueva(true))
+    return dejar
+  }, [])
+
+  /* CUENTA SUS PANTALLAS EL, que son ocho dentro de una sola URL. Midiendolo
+     por cambio de ruta solo se veia la de entrada, antes de que nadie entrara:
+     todas las visitas salian «sin cuenta» y «se van aqui», y no habia forma de
+     saber hasta donde llegan. */
+  const seccion = !driver ? 'entrada' : (result ? 'hecho' : vista)
+  useEffect(() => { medirSeccion('/conductor/p/' + seccion) }, [seccion])
+
+  /* Si falla, no se pregunta: es mejor no pedir el telefono que ensenar un
+     formulario roto a alguien que solo queria hacer su inspeccion. */
+  useEffect(() => {
+    if (!driver) return
+    getMiFicha().then((r) => {
+      setFaltaTel(!!r.data?.falta_telefono)
+      // Al portal se entra con el correo: casi ninguno tiene contrasena, y a
+      // ese la entrada del menu tiene que decirle CREAR, no cambiar.
+      setTieneClave(r.data?.tiene_clave !== false)
+    }).catch(() => {})
+  }, [driver])
+
+  const guardarTel = async () => {
+    setGuardandoTel(true); setErrTel('')
+    try {
+      await guardarMiTelefono(tel)
+      setTelOk(true); setFaltaTel(false)
+    } catch (e) {
+      setErrTel(e?.response?.data?.detail || 'No se pudo guardar.')
+    } finally { setGuardandoTel(false) }
+  }
+
+  useEffect(() => {
+    if (!driver) return
+    getPortalVehicles()
+      .then((r) => {
+        const d = r.data
+        // La respuesta pasó de lista a objeto (hacía falta poder decir "hoy no
+        // te toca" aparte de "no hay furgonetas"). Se aceptan las dos formas
+        // por si queda algún cliente viejo abierto.
+        setPortal(Array.isArray(d)
+          ? { vehicles: d, puede_auditar: true, motivo: null }
+          : { vehicles: lista(d?.vehicles), puede_auditar: d?.puede_auditar !== false, motivo: d?.motivo || null })
+      })
+      .catch(() => setPortal({ vehicles: [], puede_auditar: true, motivo: null }))
+  }, [driver])
+
+  // Cuántas respuestas tiene sin leer. Se recarga al volver al inicio para que
+  // el aviso desaparezca en cuanto las lee, sin tener que refrescar la página.
+  useEffect(() => {
+    if (!driver || vista !== 'inicio') return
+    getMyShifts()
+      .then((r) => setSinVer(lista(r.data?.sin_ver).length))
+      .catch(() => setSinVer(0))
+  }, [driver, vista])
+
+  const login = (d) => {
+    localStorage.setItem(DRIVER_KEY, JSON.stringify(d))
+    setDriver(d)
+  }
+  const logout = () => {
+    localStorage.removeItem(DRIVER_KEY)
+    localStorage.removeItem(DRIVER_TOKEN_KEY)
+    setDriver(null)
+    setResult(null)
+    setVista('inicio')
+  }
+
+  if (!driver) return <DriverLogin onLogin={login} />
+  if (vista === 'dias') return <PedirDias onBack={() => setVista('inicio')} />
+  if (vista === 'turnos') return <MisTurnos onBack={() => setVista('inicio')} />
+  if (vista === 'clave') return <MiClave onBack={() => setVista('inicio')} />
+  if (vista === 'tienda') return <Tienda onBack={() => setVista('inicio')} />
+  if (vista === 'numeros') return <MisNumeros onBack={() => setVista('inicio')} />
+  if (vista === 'ayudas') return <MisAyudas onBack={() => setVista('inicio')} />
+  if (result) {
+    return <InspectionDone result={result} onNew={() => { setResult(null); setVista('inicio') }} onLogout={logout} />
+  }
+  if (vista === 'auditoria') {
+    return (
+      <InspectionFlow driver={driver} vehicles={portal?.vehicles || []}
+        onComplete={setResult} onLogout={logout} onShifts={() => setVista('turnos')}
+        onBack={() => setVista('inicio')} />
+    )
+  }
+
+  const noLeToca = portal && portal.puede_auditar === false
+  const hoy = new Date().toLocaleDateString('es-ES', { weekday: 'long', day: 'numeric', month: 'long' })
+
+  return (
+    <div className="min-h-screen bg-dark-950 px-4 py-6">
+      <div className="mx-auto max-w-md">
+        <header className="mb-6 flex items-start justify-between gap-3">
+          <div className="min-w-0">
+            <h1 className="font-display text-[24px] font-bold leading-tight tracking-[-.02em] text-dark-50">
+              Hola, {String(driver?.name || '').split(' ')[0] || 'buenas'}
+            </h1>
+            <p className="mt-0.5 text-[12.5px] capitalize text-dark-500">{hoy}</p>
+          </div>
+          <button onClick={logout} className="shrink-0 rounded-lg border border-dark-700 p-2 text-dark-500"
+            aria-label="Salir">
+            <LogOut size={15} />
+          </button>
+        </header>
+
+        {hayVersionNueva && (
+          <button onClick={() => window.location.reload()}
+            className="mb-4 flex w-full items-center gap-2 rounded-xl border border-brand-500/40 bg-brand-500/10 px-3.5 py-2.5 text-left">
+            <RefreshCw size={15} className="shrink-0 text-brand-300" />
+            <span className="text-[12.5px] leading-snug text-brand-200">
+              Hay una versión nueva. Toca aquí para actualizar.
+            </span>
+          </button>
+        )}
+
+        {/* ── EL TELÉFONO, PEDIDO A QUIEN LO SABE ──────────────────────────
+            150 de los 212 conductores no tienen número en su ficha, así que no
+            hay forma de llamar a alguien que se ha quedado tirado a mitad de
+            ruta. Pedirlo desde la oficina lleva meses sin funcionar; aquí lo
+            pide quien entra todos los días, una sola vez y en diez segundos.
+            No bloquea nada: se puede seguir sin darlo. */}
+        {faltaTel && !telOk && (
+          <div className="mb-4 rounded-2xl border border-brand-500/30 bg-brand-500/[0.07] p-4">
+            <p className="text-[14px] font-semibold text-dark-50">¿Cuál es tu teléfono?</p>
+            <p className="mt-0.5 text-[12.5px] leading-snug text-dark-400">
+              Es para poder llamarte si te quedas tirado en ruta. Solo lo ve la oficina.
+            </p>
+            <div className="mt-2.5 flex gap-2">
+              <input
+                type="tel" inputMode="tel" value={tel} onChange={(e) => setTel(e.target.value)}
+                placeholder="600 000 000"
+                className="min-w-0 flex-1 rounded-xl border border-dark-700 bg-dark-900 px-3 py-2.5 text-[15px] text-dark-50 placeholder:text-dark-500 focus:border-brand-500 focus:outline-none" />
+              <button onClick={guardarTel} disabled={guardandoTel || tel.trim().length < 9}
+                className="shrink-0 rounded-xl bg-brand-500 px-4 py-2.5 text-[14px] font-semibold text-white disabled:opacity-40">
+                {guardandoTel ? '…' : 'Guardar'}
+              </button>
+            </div>
+            {errTel && <p className="mt-1.5 text-[12.5px] text-red-300">{errTel}</p>}
+          </div>
+        )}
+        {telOk && (
+          <p className="mb-4 rounded-2xl border border-emerald-500/30 bg-emerald-500/[0.07] px-4 py-3 text-[13.5px] text-emerald-300">
+            Guardado, gracias.
+          </p>
+        )}
+
+        <div className="flex flex-col gap-2.5">
+          <Opcion
+            icono={ClipboardCheck}
+            titulo="Hacer la auditoría"
+            sub={noLeToca ? 'Hoy no sales a ruta' : 'Antes de salir a ruta'}
+            principal
+            bloqueado={noLeToca}
+            onClick={() => setVista('auditoria')}
+          />
+
+          {/* Decirle POR QUÉ no puede. Un botón gris sin explicación acaba en
+              una llamada a la oficina, que es lo que se quiere evitar. */}
+          {noLeToca && (
+            <div className="flex items-start gap-2.5 rounded-xl border border-amber-500/25 bg-amber-500/[0.06] px-3.5 py-3">
+              <Ban size={15} className="mt-0.5 shrink-0 text-amber-400" />
+              <p className="text-[12.5px] leading-relaxed text-amber-200/90">
+                En el cuadrante de hoy no tienes furgoneta asignada, así que no puedes hacer la
+                auditoría. Si crees que es un error, habla con tu coordinador antes de salir.
+              </p>
+            </div>
+          )}
+
+          <Opcion
+            icono={CalendarDays}
+            titulo="Pedir días libres"
+            sub={sinVer > 0
+              ? `Tienes ${sinVer} respuesta${sinVer > 1 ? 's' : ''} sin leer`
+              : 'Marca los días y di para qué'}
+            aviso={sinVer}
+            onClick={() => setVista('dias')}
+          />
+          {/* Se deja a la vista y apagado a propósito: el cuadrante todavía no
+              se publica a los conductores, y una opción que no está genera más
+              preguntas que una que dice cuándo llegará. */}
+          <Opcion
+            icono={CalendarClock}
+            titulo="Mis turnos"
+            sub="Aquí verás qué días trabajas"
+            pronto
+          />
+          {/* Lo suyo. Va DESPUES de la auditoria y los dias libres a
+              proposito: primero lo que tiene que hacer, luego lo que ha hecho. */}
+          <Opcion
+            icono={BarChart3}
+            titulo="Tus estadísticas"
+            sub="Lo que llevas hoy y este mes"
+            onClick={() => setVista('numeros')}
+          />
+          <Opcion
+            icono={LifeBuoy}
+            titulo="Ayudas de este mes"
+            sub="Las paradas que has salvado a un compañero"
+            onClick={() => setVista('ayudas')}
+          />
+          {/* LA ROPA, CON EL PRECIO EN LA PROPIA ENTRADA. Estaba aquí desde el
+              08-09 y no entró casi nadie: decía «La del equipo, con tu nombre»
+              y nada más, así que abrirla era averiguar si costaba 20 € o 200.
+              Con el precio delante la decisión se toma antes de entrar, y el
+              «desde» sale del escaparate —o sea, del precio de verdad—, no de
+              un número escrito aquí que se quedaría viejo (gotcha 54). */}
+          {tienda && (
+            <Opcion
+              icono={ShoppingBag}
+              titulo="Ropa del equipo"
+              sub={tienda.desde
+                ? `Sudadera, cortavientos y gorra desde ${tienda.desde.toFixed(2).replace('.', ',')} €`
+                : 'La del equipo, con tu nombre'}
+              insignia="Nuevo precio"
+              onClick={() => setVista('tienda')}
+            />
+          )}
+          <Opcion
+            icono={Lock}
+            titulo={tieneClave ? 'Cambiar mi contraseña' : 'Crear mi contraseña'}
+            sub={tieneClave ? 'Ponte la que quieras' : 'Ahora entras solo con el correo'}
+            onClick={() => setVista('clave')}
+          />
+        </div>
+      </div>
+    </div>
+  )
+}

@@ -1,0 +1,1140 @@
+import { useEffect, useMemo, useRef, useState, useCallback } from 'react'
+import { useOutletContext } from 'react-router-dom'
+import {
+  Upload, FileSpreadsheet, Loader2, AlertCircle, X, CheckCircle2,
+  Download, RotateCcw, Plus, ChevronDown, ChevronUp, Trash2, FolderOpen,
+  Copy, ClipboardPaste, Car,
+} from 'lucide-react'
+import { getToken } from '../auth'
+import { getPlantillas, downloadPlantilla, deletePlantilla, getVehicles } from '../api'
+import { API_BASE as API } from '../../lib/apiBase'
+import { useT, LANG_LOCALE } from '../../i18n'
+import { lista } from '../../lib/lista'
+
+async function apiFetch(path, opts = {}) {
+  const resp = await fetch(`${API}${path}`, {
+    ...opts,
+    headers: { Authorization: `Bearer ${getToken()}`, ...(opts.headers || {}) },
+  })
+  if (!resp.ok) {
+    let msg = `Error ${resp.status}`
+    try {
+      const j = await resp.json()
+      const d = j.detail
+      if (typeof d === 'string') msg = d
+      else if (Array.isArray(d)) msg = d.map(x => x?.msg || JSON.stringify(x)).join(' · ')
+      else if (d) msg = d.msg || JSON.stringify(d)
+    } catch {}
+    throw new Error(msg)
+  }
+  return resp
+}
+
+/* ── Agrupar plantillas por mes ── */
+function groupByMonth(plantillas, t, locale) {
+  const map = {}
+  for (const p of plantillas) {
+    // date: "dd/mm/yyyy" o "yyyy-mm-dd"
+    let label = t('pg.sinFecha')
+    try {
+      const d = p.date?.includes('/') ? p.date : p.date?.split('-').reverse().join('/')
+      const [, mm, yyyy] = (d || '').split('/')
+      if (mm && yyyy) {
+        const raw = new Date(parseInt(yyyy, 10), parseInt(mm, 10) - 1, 1).toLocaleDateString(locale, { month: 'long', year: 'numeric' })
+        label = raw.charAt(0).toUpperCase() + raw.slice(1)
+      }
+    } catch {}
+    if (!map[label]) map[label] = []
+    map[label].push(p)
+  }
+  return map
+}
+
+/* ── Historial de plantillas ── */
+function Historial({ center }) {
+  const { t, lang } = useT()
+  const locale = LANG_LOCALE[lang] || 'es-ES'
+  const [open,       setOpen]       = useState(false)
+  const [plantillas, setPlantillas] = useState([])
+  const [loading,    setLoading]    = useState(false)
+  const [deleting,   setDeleting]   = useState(null)
+  const noCenter = !center || center === 'Todos'
+
+  const load = useCallback(async () => {
+    if (noCenter) return
+    setLoading(true)
+    try {
+      const res = await getPlantillas(center)
+      setPlantillas(Array.isArray(res.data) ? res.data : [])
+    } catch { setPlantillas([]) }
+    finally { setLoading(false) }
+  }, [center, noCenter])
+
+  useEffect(() => { if (open) load() }, [open, load])
+
+  async function handleDownload(p) {
+    try {
+      const res = await downloadPlantilla(p.id)
+      const url = URL.createObjectURL(res.data)
+      const a   = document.createElement('a')
+      a.href = url; a.download = p.filename || 'plantilla.xlsx'; a.click()
+      URL.revokeObjectURL(url)
+    } catch (e) { alert(`${t('pg.eDescargar')}: ${e.message}`) }
+  }
+
+  async function handleDelete(p) {
+    if (!confirm(`${t('pg.confirmDel')} ${p.date}?`)) return
+    setDeleting(p.id)
+    try { await deletePlantilla(p.id); setPlantillas(ps => ps.filter(x => x.id !== p.id)) }
+    catch (e) { alert(`Error: ${e.message}`) }
+    finally { setDeleting(null) }
+  }
+
+  const grouped = groupByMonth(plantillas, t, locale)
+
+  return (
+    <div className="mb-6 rounded-xl border border-dark-700 bg-dark-900/60">
+      {/* Cabecera */}
+      <button
+        onClick={() => setOpen(v => !v)}
+        className="flex w-full items-center justify-between px-4 py-3 text-left"
+      >
+        <div className="flex items-center gap-2">
+          <FolderOpen size={16} className="text-brand-400" />
+          <span className="text-sm font-semibold text-dark-100">{t('pg.histTitulo')}</span>
+          {!noCenter && (
+            <span className="rounded-full bg-dark-700 px-2 py-0.5 text-[11px] text-dark-200">{center}</span>
+          )}
+        </div>
+        {open ? <ChevronUp size={15} className="text-dark-500" /> : <ChevronDown size={15} className="text-dark-500" />}
+      </button>
+
+      {open && (
+        <div className="border-t border-dark-700 px-4 pb-4 pt-3">
+          {noCenter ? (
+            <p className="text-sm text-dark-500">{t('pg.eligeCentroHist')}</p>
+          ) : loading ? (
+            <div className="flex items-center gap-2 py-4 text-dark-400">
+              <Loader2 size={15} className="animate-spin" /> {t('pg.cargando')}
+            </div>
+          ) : plantillas.length === 0 ? (
+            <p className="py-4 text-center text-sm text-dark-500">
+              {t('pg.sinPlantillas1')} <b>{center}</b>. {t('pg.sinPlantillas2')}
+            </p>
+          ) : (
+            <div className="flex flex-col gap-5">
+              {Object.entries(grouped).map(([month, items]) => (
+                <div key={month}>
+                  <div className="mb-2 text-xs font-semibold uppercase tracking-wider text-dark-400">{month}</div>
+                  <div className="flex flex-col gap-1">
+                    {items.map(p => (
+                      <div key={p.id} className="flex items-center justify-between gap-3 rounded-lg border border-dark-800 bg-dark-900 px-3 py-2 hover:border-dark-700">
+                        <div className="min-w-0">
+                          <span className="text-sm font-medium text-dark-100">{p.date}</span>
+                          <span className="ml-2 text-xs text-dark-500">{t('pg.semana')} {p.week}</span>
+                        </div>
+                        <div className="flex shrink-0 items-center gap-1">
+                          <button
+                            onClick={() => handleDownload(p)}
+                            className="btn-ghost flex items-center gap-1 px-2 py-1 text-xs text-dark-300 hover:text-brand-300"
+                          >
+                            <Download size={13} /> {t('pg.descargar')}
+                          </button>
+                          <button
+                            onClick={() => handleDelete(p)}
+                            disabled={deleting === p.id}
+                            className="btn-ghost p-1.5 text-dark-500 hover:text-red-400 disabled:opacity-40"
+                          >
+                            {deleting === p.id ? <Loader2 size={13} className="animate-spin" /> : <Trash2 size={13} />}
+                          </button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  )
+}
+
+/* ── Componente principal ── */
+export default function PlantillaGenerador() {
+  const { center, centers } = useOutletContext()
+  const { t } = useT()
+
+  const [cortexList, setCortexList] = useState([])
+  const [platList,   setPlatList]   = useState([])
+  const [platText,   setPlatText]   = useState('')  // texto pegado alternativo
+  const [cortexText, setCortexText] = useState('')
+  const [step,    setStep]    = useState('upload')
+  const [loading, setLoading] = useState(false)
+  const [err,     setErr]     = useState('')
+  const [data,    setData]    = useState(null)
+  // Avisos de la validación contra la empresa y contra Cortex (nombre mal
+  // leído, matrícula que no existe, hora imposible). Se recalculan solos al
+  // editar; Dani pidió que la plantilla no saliera nunca con esos errores.
+  const [avisos,  setAvisos]  = useState([])
+  const [conCortex, setConCortex] = useState(false)
+  const [redSet,     setRedSet]     = useState(new Set())
+  const [yellowSet,  setYellowSet]  = useState(new Set())
+  const [pinkSet,    setPinkSet]    = useState(new Set())
+  const [markedSet,  setMarkedSet]  = useState(new Set())
+  const [sharedDraft, setSharedDraft] = useState(null) // { id, revision, updated_by }
+  const celdaTimers = useRef({})        // un temporizador por celda
+  const celdaEnFoco = useRef(null)      // { fila, campo } mientras se escribe
+  const focoTimer = useRef(null)
+  const metaTimer = useRef(null)
+  const [sharedNote, setSharedNote] = useState('')
+  // Tras "Nueva plantilla" NO nos re-unimos al borrador compartido (era el bug:
+  // el auto-join re-enganchaba al borrador viejo y el botón parecía roto).
+  const suppressJoin = useRef(false)
+
+  // Portapapeles de horas: {h_salida, h_llegada, h_bajada} o null
+  const [copiedHours, setCopiedHours] = useState(null)
+
+  const noCenter = !center || center === 'Todos'
+
+  // Columnas "H. llegada a nave" y "H. bajada al yard": cada centro trabaja a su
+  // manera — OGA5 no las usa, así que ahí van ocultas por defecto (conmutable).
+  const [hideNY, setHideNY] = useState(false)
+  useEffect(() => { setHideNY((center || '').toUpperCase() === 'OGA5') }, [center])
+
+  // La ruta que el SERVIDOR tiene en cada fila, que es con lo que se guarda
+  // una celda (ver dentro de `applySharedDraft`).
+  const rutasServidor = useRef([])
+
+  function applySharedDraft(draft) {
+    const s = draft?.state
+    if (!s?.rows) return
+    // La ruta que tiene EL SERVIDOR en cada fila. Es la referencia con la que
+    // se guarda una celda, y no puede salir de lo que hay en pantalla: al
+    // escribir en la celda de la RUTA, lo de pantalla ya es el texto nuevo y el
+    // servidor sigue con el viejo, asi que no casaban y cada tecla devolvia un
+    // 409 «las filas han cambiado». Resultado: la celda de la ruta no se
+    // guardaba NUNCA. 76 veces entre el 02 y el 19-09-2026, casi todas de Mery
+    // llenando la plantilla de la manana.
+    rutasServidor.current = s.rows.map((r) => r?.ruta)
+    // La celda que se está escribiendo AHORA no se toca: su versión del
+    // servidor llega medio segundo tarde y borraría las últimas letras.
+    // Se lee con la forma funcional de `setData` A PROPÓSITO: esta función la
+    // llama un temporizador, y leer `data` de fuera daría el valor de hace dos
+    // segundos — se restauraría una letra vieja, que es peor que no hacer nada.
+    setData(prev => {
+      // No basta con respetar la celda que se esta escribiendo: si se escriben
+      // dos seguidas, la primera puede tener su guardado aun en el aire y la
+      // version del servidor llegaria sin ella, borrandola en pantalla. Se
+      // respetan TODAS las que tengan un guardado pendiente.
+      const pend = Object.keys(celdaTimers.current)
+      const rows = (pend.length && prev?.rows?.length)
+        ? s.rows.map((r, i) => {
+            const mios = {}
+            for (const k of pend) {
+              const [fila, campo] = k.split(':')
+              if (Number(fila) === i && prev.rows[i] && campo in prev.rows[i]) mios[campo] = prev.rows[i][campo]
+            }
+            return Object.keys(mios).length ? { ...r, ...mios } : r
+          })
+        : s.rows
+      return { week: s.week, date: s.date, rows }
+    })
+    setRedSet(new Set(s.red_routes || [])); setYellowSet(new Set(s.yellow_routes || []))
+    setPinkSet(new Set(s.pink_furgos || [])); setMarkedSet(new Set(s.marked_conductors || []))
+    setSharedDraft({ id: draft.id, revision: draft.revision, updated_by: draft.updated_by })
+    setSharedNote(`${t('pg.compartida')} ${draft.updated_by || t('pg.otroUsuario')}`)
+    setStep('preview')
+  }
+
+  // Al abrir el mismo centro en otro equipo se une al borrador reciente.
+  // (Salvo tras "Nueva plantilla": entonces NO nos re-unimos al borrador viejo.)
+  useEffect(() => {
+    if (noCenter || step !== 'upload' || suppressJoin.current) return
+    apiFetch(`/tools/plantilla-compartida?center=${encodeURIComponent(center)}`)
+      .then(r => r.json()).then(d => { if (d?.id) applySharedDraft(d) }).catch(() => {})
+  }, [center, noCenter, step])
+
+  // Cambiar de centro reactiva el auto-join (la supresión era para ESTE centro).
+  useEffect(() => { suppressJoin.current = false }, [center])
+
+  // Actualización visible en los otros dispositivos. Nunca sustituye cambios locales
+  // pendientes: esos se guardan antes por el efecto de abajo.
+  useEffect(() => {
+    if (!sharedDraft?.id) return
+    const id = setInterval(async () => {
+      try {
+        const d = await (await apiFetch(`/tools/plantilla-compartida/${sharedDraft.id}`)).json()
+        if (d.revision > sharedDraft.revision) applySharedDraft(d)
+      } catch {}
+    }, 2500)
+    return () => clearInterval(id)
+  }, [sharedDraft?.id, sharedDraft?.revision])
+
+  /* AQUI YA NO SE GUARDA LA HOJA ENTERA, Y ESE ERA EL FALLO.
+     ─────────────────────────────────────────────────────────────────────
+     Mery, 04-09-2026: «lo de las horas si, lo de hacer cambios las dos a la
+     vez no». El arreglo anterior solo cubrio ESCRIBIR en una celda; marcar una
+     ruta en rojo, una furgo en rosa, un conductor, anadir o quitar una fila o
+     pegar las horas seguian mandando la hoja completa.
+
+     Y el control de version no salvaba nada, por algo que no se ve leyendo el
+     codigo: guardar UNA celda devuelve la revision nueva y este cliente se la
+     queda, pero no recarga los datos. Con la revision al dia y los datos
+     viejos, el siguiente guardado completo pasaba la comprobacion y borraba lo
+     de la otra, con un 200 limpio. Reproducido contra produccion:
+
+       Mery escribe fila 0 -> Judit escribe fila 1 -> Judit marca una ruta en
+       rojo -> la fila 0 vuelve a estar vacia.
+
+     Ahora cada cambio manda SOLO lo que ha cambiado (`mandar`), y las
+     operaciones del servidor son de las que no pueden pisarse. La hoja entera
+     solo se manda al crear el borrador. */
+  const mandar = useCallback(async (ruta, opciones) => {
+    if (!sharedDraft?.id) return null
+    try {
+      const r = await apiFetch(`/tools/plantilla-compartida/${sharedDraft.id}${ruta}`, opciones)
+      if (!r.ok) {
+        // 409: las filas se movieron. Se recarga y se sigue desde ahi.
+        const d = await (await apiFetch(`/tools/plantilla-compartida/${sharedDraft.id}`)).json()
+        if (d?.id) applySharedDraft(d)
+        return null
+      }
+      const saved = await r.json()
+      // La respuesta trae la hoja del servidor: se aplica. Quedarse solo con la
+      // revision dejaba a esta pantalla creyendose al dia con los datos viejos,
+      // y entonces el refresco de 2,5 s (`revision` mayor) no entraba NUNCA.
+      if (saved?.state?.rows) applySharedDraft(saved)
+      else setSharedDraft(p => p && ({ ...p, revision: saved.revision, updated_by: saved.updated_by }))
+      setSharedNote(t('pg.sync'))
+      return saved
+    } catch { setSharedNote(t('pg.conflicto')); return null }
+  }, [sharedDraft?.id, t]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  const json = (cuerpo) => ({
+    method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(cuerpo),
+  })
+
+  // Furgos activas del centro
+  const [furgosDisp, setFurgosDisp] = useState([]) // ['2865NGX', ...]
+  useEffect(() => {
+    if (noCenter) return
+    getVehicles(center)
+      .then(r => {
+        const plates = (lista(r.data))
+          // Fuera las que estan en taller (por su estado) y las que la oficina
+          // ha bloqueado a mano con el candado de su ficha.
+          .filter(v => (v.status === 'active' || v.status === 'activo') && !v.bloqueada)
+          .map(v => (v.license_plate || v.id || '').replace(/\s/g, '').toUpperCase())
+          .filter(Boolean)
+          .sort()
+        setFurgosDisp(plates)
+      })
+      .catch(() => {})
+  }, [center, noCenter])
+
+  // Colores de ola — pastel, uno por wave time distinta
+  const WAVE_PALETTE_CSS = ['#DBEAFE', '#DCFCE7', '#FEF3C7', '#FFE4E6', '#EDE9FE', '#ECFDF5']
+  const waveColorMap = useMemo(() => {
+    if (!data?.rows) return {}
+    const times = [...new Set(data.rows.map(r => (r.h_salida || '').trim()).filter(Boolean))].sort()
+    return Object.fromEntries(times.map((t, i) => [t, WAVE_PALETTE_CSS[i % WAVE_PALETTE_CSS.length]]))
+  }, [data])
+  const refCortex = useRef()
+  const refPlat   = useRef()
+
+  function addFiles(files, setter) {
+    const items = Array.from(files).map(f => ({ file: f, preview: URL.createObjectURL(f) }))
+    setter(prev => [...prev, ...items])
+    setErr('')
+  }
+  function removeFile(idx, setter) { setter(prev => prev.filter((_, i) => i !== idx)) }
+
+  function reset() {
+    // Cierra el borrador compartido para TODOS los dispositivos y evita que el
+    // auto-join nos re-enganche al borrador viejo (era el bug de "Nueva plantilla").
+    suppressJoin.current = true
+    const draftId = sharedDraft?.id
+    if (draftId) apiFetch(`/tools/plantilla-compartida/${draftId}`, { method: 'DELETE' }).catch(() => {})
+    setCortexList([]); setPlatList([]); setPlatText(''); setCortexText('')
+    setStep('upload'); setData(null)
+    setRedSet(new Set()); setYellowSet(new Set()); setPinkSet(new Set()); setMarkedSet(new Set())
+    setCopiedHours(null); setErr('')
+    setSharedDraft(null); setSharedNote('')
+  }
+
+  async function extraer() {
+    if (!platList.length && !platText.trim()) return
+    setLoading(true); setErr('')
+    try {
+      const fd = new FormData()
+      platList.forEach(f => fd.append('plataforma', f.file))
+      cortexList.forEach(f => fd.append('cortex', f.file))
+      if (platText.trim())   fd.append('plataforma_texto', platText.trim())
+      if (cortexText.trim()) fd.append('cortex_texto', cortexText.trim())
+      const resp = await apiFetch('/tools/plantilla-extraer', { method: 'POST', body: fd })
+      const json = await resp.json()
+      setData(json)
+      setRedSet(new Set()); setYellowSet(new Set()); setPinkSet(new Set()); setMarkedSet(new Set())
+      setStep('preview')
+      if (!noCenter) {
+        const shared = await (await apiFetch('/tools/plantilla-compartida', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ center, state: { ...json, red_routes: [], yellow_routes: [], pink_furgos: [], marked_conductors: [] } }),
+        })).json()
+        suppressJoin.current = false // hay borrador nuevo: el auto-join vuelve a la normalidad
+        setSharedDraft({ id: shared.id, revision: shared.revision, updated_by: shared.updated_by })
+        setSharedNote(t('pg.creada'))
+      }
+    } catch (e) { setErr(e?.message || t('pg.eDesconocido')) }
+    setLoading(false)
+  }
+
+  async function descargar() {
+    setLoading(true); setErr('')
+    try {
+      const resp = await apiFetch('/tools/plantilla-excel', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          rows:          data.rows,
+          red_routes:        [...redSet],
+          yellow_routes:     [...yellowSet],
+          pink_furgos:       [...pinkSet],
+          marked_conductors: [...markedSet],
+          week:          data.week,
+          date:          data.date,
+          hide_nave_yard: hideNY,
+          // guardar en historial si hay centro seleccionado
+          save:   !noCenter,
+          center: noCenter ? '' : center,
+        }),
+      })
+      const blob = await resp.blob()
+      const cd   = resp.headers.get('Content-Disposition') || ''
+      const m    = cd.match(/filename="?([^"]+)"?/)
+      const name = m?.[1] || 'plantilla_turno.xlsx'
+      const url  = URL.createObjectURL(blob)
+      const a    = document.createElement('a')
+      a.href = url; a.download = name; a.click()
+      URL.revokeObjectURL(url)
+      setStep('done')
+    } catch (e) { setErr(e?.message || t('pg.eExcel')) }
+    setLoading(false)
+  }
+
+  /* Una marca de color es un conjunto, no una celda: viaja sola con
+     `$addToSet`/`$pull`. Dos personas marcando cosas distintas no pueden
+     pisarse, y marcar dos veces lo mismo tampoco rompe nada. */
+  function toggle(set, setter, key, tipo) {
+    const activo = !set.has(key)
+    setter(prev => { const n = new Set(prev); n.has(key) ? n.delete(key) : n.add(key); return n })
+    if (tipo) mandar('/marca', json({ tipo, valor: key, activo }))
+  }
+
+  /* DOS PERSONAS A LA VEZ EN LA MISMA PLANTILLA (Mery y Judit, 03-09-2026).
+     Antes cada cambio guardaba la HOJA ENTERA: la última en guardar pisaba las
+     celdas de la otra, y el refresco de cada 2,5 s sustituía la hoja completa
+     aunque estuvieras escribiendo. Ahora cada celda viaja sola
+     (`PATCH …/celda`), así que dos personas solo chocan si tocan LA MISMA
+     celda; en todo lo demás los dos cambios conviven. */
+  function guardarCelda(rowIdx, field, value, rutaRef) {
+    if (!sharedDraft?.id) return
+    const clave = `${rowIdx}:${field}`
+    clearTimeout(celdaTimers.current[clave])
+    celdaTimers.current[clave] = setTimeout(async () => {
+      try {
+        const r = await apiFetch(`/tools/plantilla-compartida/${sharedDraft.id}/celda`, {
+          method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ fila: rowIdx, campo: field, valor: value, ruta_ref: rutaRef }),
+        })
+        if (!r.ok) {
+          // Las filas se movieron (alguien añadió o quitó una): se recarga.
+          const d = await (await apiFetch(`/tools/plantilla-compartida/${sharedDraft.id}`)).json()
+          if (d?.id) applySharedDraft(d)
+          return
+        }
+        const saved = await r.json()
+        // Igual que en `mandar`: al guardar una celda tambien llega la hoja de
+        // los demas. La celda que se acaba de escribir esta protegida porque su
+        // temporizador sigue registrado hasta el `finally` de justo debajo.
+        if (saved?.state?.rows) applySharedDraft(saved)
+        else setSharedDraft(p => p && ({ ...p, revision: saved.revision, updated_by: saved.updated_by }))
+        setSharedNote(t('pg.sync'))
+      } catch { setSharedNote(t('pg.conflicto')) }
+      finally { delete celdaTimers.current[clave] }
+    }, 500)
+  }
+
+  function editCell(rowIdx, field, value) {
+    if (field !== '_paste_hours') {
+      guardarCelda(rowIdx, field, value, rutasServidor.current[rowIdx] ?? data?.rows?.[rowIdx]?.ruta)
+      // Mientras se escribe en esta celda, el refresco de los otros equipos no
+      // la toca: su version llega medio segundo tarde y borraria las ultimas
+      // letras. Se suelta sola tres segundos despues de la ultima tecla.
+      celdaEnFoco.current = { fila: rowIdx, campo: field }
+      clearTimeout(focoTimer.current)
+      focoTimer.current = setTimeout(() => { celdaEnFoco.current = null }, 3000)
+    }
+    setData(prev => ({
+      ...prev,
+      rows: prev.rows.map((r, i) => {
+        if (i !== rowIdx) return r
+        if (field === '_paste_hours') return { ...r, h_salida: value.h_salida || r.h_salida, h_llegada: value.h_llegada || r.h_llegada, h_bajada: value.h_bajada || r.h_bajada }
+        return { ...r, [field]: value }
+      })
+    }))
+  }
+  function editMeta(field, value) {
+    setData(prev => ({ ...prev, [field]: value }))
+    clearTimeout(metaTimer.current)
+    metaTimer.current = setTimeout(() => mandar('/meta', json({ [field]: value })), 500)
+  }
+
+  // Validar contra lo que la empresa ya sabe, medio segundo después del
+  // último cambio: cada aviso trae su sugerencia y se aplica con un clic.
+  useEffect(() => {
+    if (step !== 'preview' || !data?.rows) return
+    let vivo = true
+    const t = setTimeout(async () => {
+      try {
+        const resp = await apiFetch('/tools/plantilla-validar', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ rows: data.rows, center: noCenter ? '' : center, date: data.date }),
+        })
+        const j = await resp.json()
+        if (!vivo) return
+        setAvisos(j.avisos || [])
+        setConCortex(!!j.con_cortex)
+      } catch { /* sin validación no se bloquea nada */ }
+    }, 600)
+    return () => { vivo = false; clearTimeout(t) }
+  }, [data?.rows, data?.date, step]) // eslint-disable-line
+  const conAviso = new Set(avisos.map(a => `${a.fila}:${a.campo}`))
+  /* Anadir y quitar filas mueven los INDICES, que es de lo que se fia el
+     guardado por celda. Por eso van al servidor y la version buena vuelve de
+     alli: si las dos anaden una fila, salen las dos; y al quitar se comprueba
+     que la fila sigue siendo la misma (`ruta_ref`) antes de tocarla. */
+  async function addRow() {
+    setData(prev => ({
+      ...prev,
+      rows: [...prev.rows, { ruta: '', conductor: '', movil: '', furgo: '', h_salida: '', h_bajada: '', h_llegada: '', observaciones: '' }],
+    }))
+    await mandar('/fila', { method: 'POST' })   // `mandar` ya aplica lo que vuelve
+  }
+
+  async function removeRow(idx) {
+    const ref = data?.rows?.[idx]?.ruta || ''
+    setData(prev => ({ ...prev, rows: prev.rows.filter((_, i) => i !== idx) }))
+    await mandar(`/fila/${idx}?ruta_ref=${encodeURIComponent(ref)}`, { method: 'DELETE' })
+  }
+
+  function isBlueRow(row) {
+    const h = row.h_llegada || ''
+    const [hh, mm] = h.split(':').map(Number)
+    if (isNaN(hh) || isNaN(mm)) return false
+    return hh > 11 || (hh === 11 && mm >= 50)
+  }
+
+  return (
+    <div className="mx-auto max-w-6xl">
+      <div className="mb-5 flex items-start justify-between">
+        <div>
+          <h1 className="rise font-display text-[clamp(26px,3vw,36px)] font-semibold leading-none tracking-[-0.03em] text-dark-50">
+            {t('pg.titulo')}
+          </h1>
+          <p className="mt-3 text-sm text-dark-400">
+            {t('pg.sub')}
+          </p>
+        </div>
+        {step !== 'upload' && (
+          <button onClick={reset} className="btn-ghost flex items-center gap-1.5 text-xs text-dark-400">
+            <RotateCcw size={13} /> {t('pg.nueva')}
+          </button>
+        )}
+      </div>
+
+      {/* ── Historial ── */}
+      <Historial center={center} />
+
+      {/* ── PASO 1: subir imágenes ── */}
+      {step === 'upload' && (
+        <>
+          {/* Selector de modo */}
+          <div className="mb-5 flex gap-2">
+            <button
+              onClick={() => { setCortexList([]); setCortexText('') }}
+              className={`flex-1 rounded-lg border px-4 py-3 text-left transition ${!(cortexList.length || cortexText.trim()) ? 'border-brand-500 bg-brand-500/10' : 'border-dark-700 bg-dark-900/60 hover:border-dark-600'}`}
+            >
+              <div className="flex items-center gap-2 mb-1">
+                <span className="text-sm font-semibold text-dark-100">{t('pg.soloPlat')}</span>
+                <span className="rounded-full bg-emerald-500/20 px-2 py-0.5 text-[10px] font-semibold text-emerald-400">{t('pg.rapido')}</span>
+              </div>
+              <p className="text-xs text-dark-500">{t('pg.soloPlatDesc')}</p>
+            </button>
+            <button
+              onClick={() => refCortex.current?.click()}
+              className={`flex-1 rounded-lg border px-4 py-3 text-left transition ${(cortexList.length || cortexText.trim()) ? 'border-brand-500 bg-brand-500/10' : 'border-dark-700 bg-dark-900/60 hover:border-dark-600'}`}
+            >
+              <div className="flex items-center gap-2 mb-1">
+                <span className="text-sm font-semibold text-dark-100">Cortex + Plataforma</span>
+                <span className="rounded-full bg-brand-500/20 px-2 py-0.5 text-[10px] font-semibold text-brand-400">{t('pg.completo')}</span>
+              </div>
+              <p className="text-xs text-dark-500">{t('pg.completoDesc')}</p>
+            </button>
+          </div>
+
+          <div className="grid grid-cols-1 gap-6 sm:grid-cols-2">
+            {/* Plataforma — siempre requerida */}
+            <div>
+              <MultiDropZone
+                label={t('pg.dzPlat')}
+                hint={t('pg.dzPlatHint')}
+                items={platList}
+                onAdd={files => addFiles(files, setPlatList)}
+                onRemove={i => removeFile(i, setPlatList)}
+                inputRef={refPlat}
+                required
+              />
+              <PasteBox
+                value={platText} onChange={setPlatText}
+                placeholder="Ej: Rodriguez Arias, Andrea    7906NFX&#10;Gomez Vidal, Luis    0116MBP" />
+            </div>
+            {/* Cortex — opcional */}
+            <div>
+              <MultiDropZone
+                label={t('pg.dzCortex')}
+                hint={t('pg.dzCortexHint')}
+                items={cortexList}
+                onAdd={files => addFiles(files, setCortexList)}
+                onRemove={i => removeFile(i, setCortexList)}
+                inputRef={refCortex}
+                optional
+              />
+              <PasteBox
+                value={cortexText} onChange={setCortexText}
+                placeholder="Ej: CA_A44   ANDREA RODRIGUEZ   10:20&#10;CA_A45   LUIS GOMEZ   10:35" />
+            </div>
+          </div>
+
+          {/* Info según lo que hay aportado (captura o texto) */}
+          {(platList.length > 0 || platText.trim()) && !(cortexList.length || cortexText.trim()) && (
+            <div className="mt-3 flex items-start gap-2 rounded-lg border border-amber-500/20 bg-amber-500/5 px-3 py-2.5 text-xs text-amber-300">
+              <span className="shrink-0 mt-0.5">💡</span>
+              <span>{t('pg.infoSolo')}</span>
+            </div>
+          )}
+          {(platList.length > 0 || platText.trim()) && (cortexList.length || cortexText.trim()) && (
+            <div className="mt-3 flex items-start gap-2 rounded-lg border border-emerald-500/20 bg-emerald-500/5 px-3 py-2.5 text-xs text-emerald-300">
+              <span className="shrink-0 mt-0.5">✓</span>
+              <span>{t('pg.infoCompleto')}</span>
+            </div>
+          )}
+
+          {err && <ErrBanner msg={err} />}
+
+          <div className="mt-5 flex items-center justify-between gap-4">
+            {noCenter && (
+              <p className="text-xs text-amber-400">⚠ {t('pg.avisoCentro')}</p>
+            )}
+            <div className="ml-auto">
+              <button
+                onClick={extraer}
+                disabled={(!platList.length && !platText.trim()) || loading}
+                className="btn-primary flex items-center gap-2 disabled:opacity-40"
+              >
+                {loading
+                  ? <><Loader2 size={16} className="animate-spin" /> {t('pg.analizando')}</>
+                  : <><FileSpreadsheet size={16} /> {(cortexList.length || cortexText.trim()) ? t('pg.extraerCompleto') : t('pg.extraerPlat')}</>}
+              </button>
+            </div>
+          </div>
+        </>
+      )}
+
+      {/* ── PASO 2: tabla editable ── */}
+      {step === 'preview' && data && (
+        <>
+          {sharedNote && (
+            <div className="mb-3 flex items-center gap-2 rounded-lg border border-sky-500/25 bg-sky-500/10 px-3 py-2 text-xs text-sky-200">
+              <span className="h-2 w-2 rounded-full bg-emerald-400 animate-pulse" /> {sharedNote}
+            </div>
+          )}
+          <div className="mb-3 flex flex-wrap items-center gap-3">
+            <div className="flex items-center gap-2">
+              <span className="text-xs text-dark-400">WEEK</span>
+              <input
+                value={data.week}
+                onChange={e => editMeta('week', e.target.value)}
+                className="w-16 rounded border border-dark-600 bg-dark-800 px-2 py-1 text-center text-xs font-bold text-brand-200 focus:outline-none focus:border-brand-500"
+              />
+              <span className="text-xs text-dark-400">{t('pg.fecha')}</span>
+              <input
+                value={data.date}
+                onChange={e => editMeta('date', e.target.value)}
+                className="w-28 rounded border border-dark-600 bg-dark-800 px-2 py-1 text-center text-xs focus:outline-none focus:border-brand-500"
+              />
+            </div>
+            {/* Leyenda de colores */}
+            <div className="flex flex-wrap items-center gap-3 text-[11px] text-dark-400">
+              <span className="flex items-center gap-1.5">
+                <span className="inline-flex gap-0.5">
+                  {['#DBEAFE','#DCFCE7','#FEF3C7'].map((c,i) => (
+                    <span key={i} className="h-3 w-3 rounded-sm border border-gray-300" style={{ background: c }} />
+                  ))}
+                </span>
+                {t('pg.legOla')}
+              </span>
+              <span className="flex items-center gap-1.5">
+                <span className="h-3 w-3 rounded-sm bg-[#FFF2CC] border border-yellow-300" /> {t('pg.legAmarillo')}
+              </span>
+              <span className="flex items-center gap-1.5">
+                <span className="h-3 w-3 rounded-sm bg-red-500 border border-red-400" /> {t('pg.legRojo')}
+              </span>
+              <span className="flex items-center gap-1.5">
+                <span className="h-3 w-3 rounded-sm bg-pink-200 border border-pink-300" /> {t('pg.legRosa')}
+              </span>
+              <span className="flex items-center gap-1.5">
+                <span className="h-3 w-3 rounded-sm bg-[#FCE4D6] border border-orange-200" /> {t('pg.legNaranja')}
+              </span>
+              <label className="ml-auto flex cursor-pointer items-center gap-1.5 text-dark-300">
+                <input type="checkbox" checked={!hideNY} onChange={e => setHideNY(!e.target.checked)}
+                  className="h-3.5 w-3.5 accent-brand-500" />
+                {t('pg.colNY')}
+              </label>
+            </div>
+          </div>
+
+          {/* Portapapeles de horas */}
+          {copiedHours && (
+            <div className="mb-2 flex items-center gap-3 rounded-lg border border-brand-500/30 bg-brand-500/10 px-3 py-2 text-xs">
+              <ClipboardPaste size={13} className="text-brand-400 shrink-0" />
+              <span className="text-brand-300 font-medium">
+                {t('pg.horasCopiadas')} <b>{copiedHours.h_llegada || '—'}</b> {t('pg.llegada')} · <b>{copiedHours.h_bajada || '—'}</b> {t('pg.bajada')} · <b>{copiedHours.h_salida || '—'}</b> wave
+              </span>
+              <button
+                onClick={() => {
+                  setData(prev => ({
+                    ...prev,
+                    rows: prev.rows.map(r => ({
+                      ...r,
+                      h_llegada: copiedHours.h_llegada || r.h_llegada,
+                      h_bajada:  copiedHours.h_bajada  || r.h_bajada,
+                      h_salida:  copiedHours.h_salida  || r.h_salida,
+                    }))
+                  }))
+                  // Solo las tres horas: lo que haya escrito la otra persona en
+                  // conductor, movil o furgo no se toca.
+                  mandar('/horas', json({
+                    h_llegada: copiedHours.h_llegada || '', h_bajada: copiedHours.h_bajada || '',
+                    h_salida: copiedHours.h_salida || '',
+                  }))
+                }}
+                className="ml-auto rounded bg-brand-500/20 px-2 py-0.5 text-brand-300 hover:bg-brand-500/40 transition font-semibold"
+              >
+                {t('pg.pegarTodos')}
+              </button>
+              <button onClick={() => setCopiedHours(null)} className="text-dark-500 hover:text-dark-200">
+                <X size={13} />
+              </button>
+            </div>
+          )}
+
+          {avisos.length > 0 && (
+            <div className="mb-3 rounded-xl border border-amber-500/30 bg-amber-500/[0.07] p-3">
+              <div className="mb-1.5 flex items-center gap-2 text-[13px] font-semibold text-amber-200">
+                <AlertCircle size={14} /> {avisos.length} {t('pg.avisos.titulo')}
+                {conCortex && <span className="text-[11px] font-normal text-amber-300/70">· {t('pg.avisos.cortex')}</span>}
+              </div>
+              <ul className="space-y-1">
+                {avisos.slice(0, 30).map((a, k) => (
+                  <li key={k} className="flex flex-wrap items-center gap-2 text-[12px] text-dark-200">
+                    <span className="cifra rounded bg-black/30 px-1.5 py-0.5 text-[11px] text-dark-400">fila {a.fila + 1}</span>
+                    <span className="text-dark-400">{a.campo}</span>
+                    <span>{a.texto}</span>
+                    {a.sugerencia && (
+                      <button onClick={() => editCell(a.fila, a.campo, a.sugerencia)}
+                        className="rounded-md border border-amber-400/40 px-2 py-0.5 text-[11.5px] font-semibold text-amber-200 hover:bg-amber-500/15">
+                        {t('pg.avisos.aplicar')} «{a.sugerencia}»
+                      </button>
+                    )}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+          {avisos.length === 0 && data.rows.length > 0 && (
+            <p className="mb-3 flex items-center gap-1.5 text-[12px] text-emerald-300"><CheckCircle2 size={13} /> {t('pg.avisos.ok')}</p>
+          )}
+          <div className="overflow-x-auto rounded-xl border border-dark-700">
+            <table className="w-full text-xs">
+              <thead>
+                <tr className="bg-[#FFD966] text-black">
+                  {['RUTA','CONDUCTOR','MOVIL','FURGO',...(hideNY ? [] : ['H. LLEGADA A NAVE','H. BAJADA AL YARD']),'H. WAVE','OBSERVACIONES','','',''].map((h, i) => (
+                    <th key={i} className="border border-[#BFBFBF] px-2 py-1.5 text-center font-bold whitespace-nowrap">{h}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {data.rows.map((row, i) => {
+                  const rowKey    = row.ruta || row.conductor || String(i)
+                  const isRed     = redSet.has(rowKey)
+                  const isYellow  = !isRed && yellowSet.has(rowKey)
+                  const isPink    = pinkSet.has(row.furgo)
+                  const isMarked  = markedSet.has(row.conductor)
+
+                  // Color de fila base
+                  const rowBg  = isRed ? 'bg-red-600' : isYellow ? 'bg-[#FFF2CC]' : 'bg-white'
+                  const textCl = isRed ? 'text-white' : 'text-gray-900'
+
+                  // Color de las celdas de hora según la ola (h_salida)
+                  const waveColor = (!isRed && !isYellow && row.h_salida)
+                    ? (waveColorMap[row.h_salida.trim()] || null)
+                    : null
+
+                  return (
+                    <tr key={i} className={`border-t border-[#BFBFBF] ${rowBg}`}>
+                      {/* RUTA */}
+                      <td className="border border-[#BFBFBF] px-1 py-0.5">
+                        <EditCell value={row.ruta} onChange={v => editCell(i, 'ruta', v)} extraCls={`text-center font-bold ${textCl}`} />
+                      </td>
+
+                      {/* CONDUCTOR — marcador a la izquierda */}
+                      <td className={`border border-[#BFBFBF] px-1 py-0.5 ${isMarked && !isRed ? 'bg-[#FCE4D6]' : ''}`}>
+                        <div className="flex items-center gap-1">
+                          <button
+                            onClick={() => toggle(markedSet, setMarkedSet, row.conductor, 'marked_conductors')}
+                            title={t('pg.tMarcar')}
+                            className={`h-3.5 w-3.5 shrink-0 rounded-sm border transition ${
+                              isMarked
+                                ? 'bg-orange-300 border-orange-500'
+                                : 'border-gray-300 hover:border-orange-400'
+                            }`}
+                          />
+                          <EditCell
+                            value={row.conductor}
+                            onChange={v => editCell(i, 'conductor', v)}
+                            extraCls={`min-w-[140px] ${isMarked && !isRed ? 'text-orange-900 font-semibold' : textCl} ${conAviso.has(`${i}:conductor`) ? 'ring-2 ring-amber-500 rounded' : ''}`}
+                          />
+                        </div>
+                      </td>
+
+                      {/* MOVIL */}
+                      <td className="border border-[#BFBFBF] px-1 py-0.5">
+                        <EditCell value={row.movil} onChange={v => editCell(i, 'movil', v)} extraCls={`text-center ${textCl}`} />
+                      </td>
+
+                      {/* FURGO — desplegable con furgos activas + rosa */}
+                      <td
+                        className={`border border-[#BFBFBF] px-1 py-0.5 ${isPink && !isRed ? 'bg-pink-200' : ''}`}
+                      >
+                        <FurgoCell
+                          value={row.furgo}
+                          onChange={v => editCell(i, 'furgo', v)}
+                          isPink={isPink && !isRed}
+                          isRed={isRed}
+                          furgosDisp={furgosDisp}
+                          usedFurgos={data.rows.filter((_, ri) => ri !== i).map(r => (r.furgo || '').toUpperCase()).filter(Boolean)}
+                          onTogglePink={() => row.furgo && toggle(pinkSet, setPinkSet, row.furgo, 'pink_furgos')}
+                          textCl={textCl}
+                        />
+                      </td>
+
+                      {!hideNY && (<>
+                        {/* H. LLEGADA A NAVE — color de ola */}
+                        <td className="border border-[#BFBFBF] px-1 py-0.5" style={waveColor ? { background: waveColor } : {}}>
+                          <EditCell value={row.h_llegada} onChange={v => editCell(i, 'h_llegada', v)} extraCls={`text-center font-mono ${textCl}`} />
+                        </td>
+
+                        {/* H. BAJADA AL YARD — color de ola */}
+                        <td className="border border-[#BFBFBF] px-1 py-0.5" style={waveColor ? { background: waveColor } : {}}>
+                          <EditCell value={row.h_bajada} onChange={v => editCell(i, 'h_bajada', v)} extraCls={`text-center font-mono ${textCl}`} />
+                        </td>
+                      </>)}
+
+                      {/* H. WAVE — color de ola */}
+                      <td className="border border-[#BFBFBF] px-1 py-0.5" style={waveColor ? { background: waveColor } : {}}>
+                        <EditCell value={row.h_salida} onChange={v => editCell(i, 'h_salida', v)} extraCls={`text-center font-mono ${textCl} ${conAviso.has(`${i}:h_salida`) ? 'ring-2 ring-amber-500 rounded' : ''}`} />
+                      </td>
+
+                      {/* OBSERVACIONES */}
+                      <td className="border border-[#BFBFBF] px-1 py-0.5">
+                        <EditCell value={row.observaciones} onChange={v => editCell(i, 'observaciones', v)} extraCls={`min-w-[100px] ${textCl}`} />
+                      </td>
+
+                      {/* Toggles amarillo + rojo */}
+                      <td className="border border-[#BFBFBF] px-1 py-0.5">
+                        <div className="flex items-center justify-center gap-1">
+                          <button
+                            onClick={() => toggle(yellowSet, setYellowSet, rowKey, 'yellow_routes')}
+                            title={t('pg.tAmarilla')}
+                            className={`h-3.5 w-3.5 rounded-sm border transition ${isYellow ? 'bg-yellow-300 border-yellow-500' : 'border-gray-300 hover:border-yellow-400'}`}
+                          />
+                          <button
+                            onClick={() => toggle(redSet, setRedSet, rowKey, 'red_routes')}
+                            title={t('pg.tRoja')}
+                            className={`h-3.5 w-3.5 rounded-sm border transition ${isRed ? 'bg-red-500 border-red-300' : 'border-gray-300 hover:border-red-400'}`}
+                          />
+                        </div>
+                      </td>
+
+                      {/* Copiar / Pegar horas */}
+                      <td className="border border-[#BFBFBF] px-1 py-0.5 text-center">
+                        <div className="flex items-center justify-center gap-0.5">
+                          <button
+                            onClick={() => setCopiedHours({ h_salida: row.h_salida, h_llegada: row.h_llegada, h_bajada: row.h_bajada })}
+                            title={t('pg.tCopiar')}
+                            className="rounded p-0.5 text-gray-400 hover:text-blue-500 transition"
+                          >
+                            <Copy size={11} />
+                          </button>
+                          {copiedHours && (
+                            <button
+                              onClick={() => editCell(i, '_paste_hours', copiedHours)}
+                              title={t('pg.tPegar')}
+                              className="rounded p-0.5 text-gray-400 hover:text-brand-500 transition"
+                            >
+                              <ClipboardPaste size={11} />
+                            </button>
+                          )}
+                        </div>
+                      </td>
+
+                      {/* Eliminar */}
+                      <td className="border border-[#BFBFBF] px-1 py-0.5 text-center">
+                        <button onClick={() => removeRow(i)} className="text-gray-400 hover:text-red-500 transition">
+                          <X size={12} />
+                        </button>
+                      </td>
+                    </tr>
+                  )
+                })}
+              </tbody>
+            </table>
+          </div>
+
+          <div className="mt-2">
+            <button onClick={addRow} className="btn-ghost flex items-center gap-1.5 text-xs text-dark-400 hover:text-brand-300">
+              <Plus size={13} /> {t('pg.addFila')}
+            </button>
+          </div>
+
+          {err && <ErrBanner msg={err} />}
+
+          <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
+            <div className="flex flex-wrap gap-4 text-xs text-dark-500">
+              {redSet.size > 0 && (
+                <span><span className="font-semibold text-red-400">{redSet.size} {t('pg.enRojo')}</span> {[...redSet].join(', ')}</span>
+              )}
+              {yellowSet.size > 0 && (
+                <span><span className="font-semibold text-yellow-400">{yellowSet.size} {t('pg.enAmarillo')}</span> {[...yellowSet].join(', ')}</span>
+              )}
+              {pinkSet.size > 0 && (
+                <span><span className="font-semibold text-pink-400">{pinkSet.size} {t('pg.furgoRosa')}</span> {[...pinkSet].join(', ')}</span>
+              )}
+              {redSet.size === 0 && yellowSet.size === 0 && pinkSet.size === 0 && (
+                <span>{t('pg.sinMarcas')} — {data.rows.length} {t('pg.conductores')}</span>
+              )}
+            </div>
+            <div className="flex items-center gap-2">
+              {noCenter && <span className="text-xs text-amber-400">⚠ {t('pg.sinCentro')}</span>}
+              <button
+                onClick={descargar}
+                disabled={loading}
+                className="btn-primary flex items-center gap-2 disabled:opacity-40"
+              >
+                {loading
+                  ? <><Loader2 size={16} className="animate-spin" /> {t('pg.generando')}</>
+                  : <><Download size={16} /> {!noCenter ? t('pg.descargarGuardar') : t('pg.descargar')}</>}
+              </button>
+            </div>
+          </div>
+        </>
+      )}
+
+      {/* ── PASO 3: descargado ── */}
+      {step === 'done' && (
+        <div className="flex flex-col items-center gap-4 rounded-xl border border-emerald-500/30 bg-emerald-500/10 p-12 text-center">
+          <CheckCircle2 size={36} className="text-emerald-400" />
+          <p className="text-lg font-semibold text-emerald-300">{!noCenter ? t('pg.descargadaGuardada') : t('pg.descargada')}</p>
+          {!noCenter && (
+            <p className="text-sm text-dark-400">{t('pg.disponibleEn')} <b className="text-dark-200">{center}</b>.</p>
+          )}
+          <button onClick={reset} className="btn-primary mt-2 flex items-center gap-2">
+            <RotateCcw size={15} /> {t('pg.otra')}
+          </button>
+        </div>
+      )}
+    </div>
+  )
+}
+
+function FurgoCell({ value, onChange, isPink, isRed, furgosDisp, usedFurgos, onTogglePink, textCl }) {
+  const { t } = useT()
+  const [open, setOpen] = useState(false)
+  const ref = useRef()
+
+  useEffect(() => {
+    if (!open) return
+    function handler(e) { if (ref.current && !ref.current.contains(e.target)) setOpen(false) }
+    // Con el dedo, `mousedown` no siempre llega: `pointerdown` vale para los dos.
+    document.addEventListener('pointerdown', handler)
+    return () => document.removeEventListener('pointerdown', handler)
+  }, [open])
+
+  const used = new Set(usedFurgos)
+  const available = furgosDisp.filter(f => !used.has(f))
+  const occupied  = furgosDisp.filter(f =>  used.has(f))
+
+  return (
+    <div ref={ref} className="relative flex items-center gap-0.5">
+      <input
+        value={value || ''}
+        onChange={e => onChange(e.target.value)}
+        className={`w-20 rounded bg-transparent px-1 py-0.5 font-mono text-center focus:outline-none focus:bg-yellow-50 focus:ring-1 focus:ring-yellow-400/60 transition ${isPink ? 'text-pink-900' : textCl}`}
+      />
+      <div className="flex shrink-0 items-center gap-0.5">
+        {furgosDisp.length > 0 && (
+          <button
+            onClick={() => setOpen(v => !v)}
+            title={t('pg.tVerFurgos')}
+            className={`rounded p-0.5 transition ${open ? 'text-brand-400' : 'text-gray-300 hover:text-brand-400'}`}
+          >
+            <Car size={11} />
+          </button>
+        )}
+        <button
+          onClick={onTogglePink}
+          title={t('pg.tRosa')}
+          className={`h-3 w-3 rounded-sm border transition ${isPink ? 'bg-pink-300 border-pink-500' : 'border-gray-300 hover:border-pink-400'}`}
+        />
+      </div>
+
+      {open && (
+        <div className="absolute left-0 top-full z-50 mt-1 w-52 rounded-lg border border-dark-600 bg-dark-900 shadow-xl text-xs overflow-hidden"
+          style={{ minWidth: 200 }}>
+          {available.length > 0 && (
+            <>
+              <div className="px-2 py-1 text-[10px] font-semibold uppercase tracking-wider text-emerald-400 bg-dark-800">
+                {t('pg.disponibles')} ({available.length})
+              </div>
+              {available.map(f => (
+                <button key={f} onClick={() => { onChange(f); setOpen(false) }}
+                  className="flex w-full items-center gap-2 px-3 py-1.5 text-left font-mono text-dark-100 hover:bg-emerald-500/10 hover:text-emerald-300 transition">
+                  <span className="h-1.5 w-1.5 rounded-full bg-emerald-400 shrink-0" /> {f}
+                </button>
+              ))}
+            </>
+          )}
+          {occupied.length > 0 && (
+            <>
+              <div className="px-2 py-1 text-[10px] font-semibold uppercase tracking-wider text-amber-200 bg-dark-800 border-t border-dark-700">
+                {t('pg.yaAsignadas')} ({occupied.length})
+              </div>
+              {occupied.map(f => (
+                <button key={f} onClick={() => { onChange(f); setOpen(false) }}
+                  className="flex w-full items-center gap-2 px-3 py-1.5 text-left font-mono text-dark-500 hover:bg-amber-500/10 hover:text-amber-300 transition">
+                  <span className="h-1.5 w-1.5 rounded-full bg-amber-400 shrink-0" /> {f}
+                </button>
+              ))}
+            </>
+          )}
+          {furgosDisp.length === 0 && (
+            <div className="px-3 py-2 text-dark-500">{t('pg.sinFurgos')}</div>
+          )}
+        </div>
+      )}
+    </div>
+  )
+}
+
+function EditCell({ value, onChange, extraCls, onClick }) {
+  return (
+    <input
+      value={value || ''}
+      onChange={e => onChange(e.target.value)}
+      onClick={onClick}
+      className={[
+        'w-full rounded bg-transparent px-1 py-0.5 focus:outline-none focus:bg-yellow-50 focus:ring-1 focus:ring-yellow-400/60 transition',
+        extraCls || '',
+      ].join(' ')}
+    />
+  )
+}
+
+function ErrBanner({ msg }) {
+  return (
+    <div className="mt-4 flex items-start gap-2 rounded-lg bg-red-500/10 px-4 py-3 text-sm text-red-300">
+      <AlertCircle size={15} className="mt-0.5 shrink-0" /> {msg}
+    </div>
+  )
+}
+
+function PasteBox({ value, onChange, placeholder }) {
+  const { t } = useT()
+  const [open, setOpen] = useState(false)
+  if (!open && !value) {
+    return (
+      <button type="button" onClick={() => setOpen(true)}
+        className="mt-2 text-xs font-medium text-brand-400 hover:text-brand-300">
+        {t('pg.pegaTexto')}
+      </button>
+    )
+  }
+  return (
+    <div className="mt-2">
+      <textarea
+        value={value}
+        onChange={e => onChange(e.target.value)}
+        placeholder={placeholder}
+        rows={5}
+        className="w-full rounded-lg border border-dark-700 bg-dark-900/60 px-3 py-2 text-xs text-dark-100 placeholder-dark-600 outline-none focus:border-brand-500 font-mono"
+      />
+      <div className="mt-1 flex items-center justify-between text-[11px] text-dark-500">
+        <span>{t('pg.pegaHint')}</span>
+        {value && <button type="button" onClick={() => onChange('')} className="text-dark-400 hover:text-red-400">{t('pg.borrar')}</button>}
+      </div>
+    </div>
+  )
+}
+
+function MultiDropZone({ label, hint, items, onAdd, onRemove, inputRef, optional, required }) {
+  const { t } = useT()
+  const [over, setOver] = useState(false)
+  return (
+    <div className="flex flex-col gap-2">
+      <div className="flex items-center gap-2">
+        <p className="text-sm font-semibold text-dark-200">{label}</p>
+        {required && <span className="rounded-full bg-brand-500/20 px-1.5 py-0.5 text-[10px] font-semibold text-brand-400">{t('pg.requerido')}</span>}
+        {optional && <span className="rounded-full bg-dark-700 px-1.5 py-0.5 text-[10px] text-dark-200">{t('pg.opcional')}</span>}
+      </div>
+      {items.length > 0 && (
+        <div className="flex flex-wrap gap-2">
+          {items.map((it, i) => (
+            <div key={i} className="relative h-20 w-20 flex-shrink-0">
+              <img src={it.preview} alt="" className="h-20 w-20 rounded-lg object-cover border border-dark-600" />
+              <button onClick={() => onRemove(i)} className="absolute -right-1.5 -top-1.5 rounded-full bg-dark-700 p-0.5 text-dark-300 hover:text-white border border-dark-600">
+                <X size={11} />
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
+      <div
+        onDragOver={e => { e.preventDefault(); setOver(true) }}
+        onDragLeave={() => setOver(false)}
+        onDrop={e => { e.preventDefault(); setOver(false); onAdd(e.dataTransfer.files) }}
+        onClick={() => inputRef.current?.click()}
+        className={`flex h-20 cursor-pointer flex-col items-center justify-center rounded-xl border-2 border-dashed transition ${over ? 'border-brand-400 bg-brand-500/10' : 'border-dark-600 bg-dark-900 hover:border-brand-500/50'}`}
+      >
+        <div className="flex items-center gap-2 text-dark-500">
+          <Upload size={18} />
+          <span className="text-xs">{items.length > 0 ? t('pg.masCapturas') : t('pg.arrastra')}</span>
+        </div>
+        {items.length === 0 && <span className="mt-1 text-[10px] text-dark-500 text-center px-4">{hint}</span>}
+        <input ref={inputRef} type="file" accept="image/*" multiple className="hidden" onChange={e => onAdd(e.target.files)} />
+      </div>
+    </div>
+  )
+}

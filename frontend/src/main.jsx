@@ -1,0 +1,444 @@
+import React, { Suspense, lazy, useEffect } from 'react'
+import ReactDOM from 'react-dom/client'
+import { BrowserRouter, Navigate, Route, Routes, useLocation } from 'react-router-dom'
+/* Tipografía self-hosted (la CSP bloquea Google Fonts). Vite las sirve desde
+   el propio dominio.
+
+   ARCHIVO para el texto y IBM PLEX MONO para las cifras. Antes eran Inter y
+   Space Grotesk, que es exactamente el par que viene por defecto en medio
+   sector y por eso la app se parecía a cualquier otra. Archivo es una
+   grotesque con carácter propio que aguanta los tamaños pequeños de una
+   tabla densa.
+
+   Plex Mono no es decorativo: sus cifras son TABULARES, así que en una
+   columna de 129 matrículas o de importes todo alinea en vertical. Con una
+   fuente de ancho variable, '1234 ABC' y '1111 BBB' ocupan distinto y la
+   columna baila; hay que leerla dígito a dígito. */
+import '@fontsource-variable/archivo'
+import '@fontsource/ibm-plex-mono/400.css'
+import '@fontsource/ibm-plex-mono/500.css'
+import '@fontsource/ibm-plex-mono/600.css'
+import { medirVista } from './lib/analitica'
+
+/* Señal de vida para /arranque.js. Ese vigilante espera 10 s y, si esta marca
+   no aparece, da por hecho que el bundle llegó envenenado (pantalla en blanco)
+   y repara la caché antes de recargar. Tiene que ponerse lo ANTES posible:
+   cualquier cosa que falle más abajo ya no es un problema de carga del asset,
+   y para eso está el ErrorBoundary. */
+window.__flotaArrancada = true
+
+/* Tema del panel ANTES del primer render: sin destello oscuro→claro.
+   Solo miraba 'light', y al pasar el defecto a 'hibrido' eso significaba que
+   quien no hubiera elegido nunca tema —o sea, todo el mundo la primera vez—
+   veía el panel en negro y luego saltaba a claro de golpe. */
+{
+  // Misma migracion que PanelLayout: sin la marca de eleccion a mano, el
+  // valor guardado es basura que escribio el codigo viejo, no una preferencia.
+  const guardado = localStorage.getItem('panel_theme_elegido')
+    ? (localStorage.getItem('panel_theme') || 'hibrido')
+    : 'hibrido'
+  if (guardado === 'light' || guardado === 'hibrido') {
+    document.documentElement.setAttribute('data-panel-theme', guardado)
+  }
+}
+import './index.css'
+import { ToastProvider } from './lib/toast'
+import { LangProvider } from './i18n'
+import { API_BASE } from './lib/apiBase'
+import { isStaleChunkError } from './lib/chunkError'
+import Landing from './pages/Landing'
+import CookieBanner from './legal/CookieBanner'
+
+/* ── Auto-recuperación tras deploy: si una pestaña abierta pide un chunk viejo
+   (invalidado por un despliegue), Vite emite vite:preloadError. Recargamos UNA
+   vez para coger la versión nueva — sin pantalla rota y sin alertas de ruido. ── */
+/* TRES INTENTOS ESCALONADOS, NO UNO. Visto en vivo el 02-09-2026: navegando
+   durante un despliegue, el edge sirvió HTML bajo un .js, la app se curó UNA
+   vez, el chunk seguía sin propagarse y el segundo fallo cayó dentro de la
+   ventana anti-bucle: pantalla de error y botón manual para el usuario. La
+   ventana de un despliegue dura más de un minuto, así que se intenta hasta
+   tres veces en diez minutos, esperando un poco más cada vez para dar tiempo
+   al edge. Reparar ANTES de recargar, siempre: una recarga a secas vuelve a
+   servir el fichero podrido desde la caché larga de los assets (2026-08-04). */
+function intentarCuracion() {
+  const k = 'chunk_curacion'
+  let est = { t: 0, n: 0 }
+  try { est = JSON.parse(sessionStorage.getItem(k) || '{}') || {} } catch { /* sin estado */ }
+  const ahora = Date.now()
+  if (!est.t || ahora - est.t > 10 * 60_000) est = { t: ahora, n: 0 }
+  if ((est.n || 0) >= 3) return false
+  est.n = (est.n || 0) + 1
+  try { sessionStorage.setItem(k, JSON.stringify(est)) } catch { /* sin estado */ }
+  const espera = (est.n - 1) * 2500
+  setTimeout(() => repairAssetCache().finally(() => window.location.reload()), espera)
+  return true
+}
+
+window.addEventListener('vite:preloadError', (e) => {
+  e.preventDefault()
+  if (!intentarCuracion()) {
+    reportError('chunk sin curar tras tres intentos: ' + String(e?.payload?.message || ''), '')
+  }
+})
+
+/* ── Monitorización: errores JS → backend → Telegram (máx 5/sesión, dedupe) ── */
+// Ruido que NO merece alerta: chunks viejos tras deploy, cortes de red del móvil,
+// errores opacos de extensiones/scripts externos, ResizeObserver…
+const _NOISE = [
+  'dynamically imported module', 'Importing a module script failed', 'ChunkLoadError',
+  'Failed to fetch', 'NetworkError', 'Load failed', 'network error',
+  'Script error', 'ResizeObserver loop',
+  // Navegadores viejos sin 'wasm-unsafe-eval' en CSP: el 3D degrada solo, no es accionable.
+  'WebAssembly.instantiate', 'WebAssembly.compile',
+]
+const _reported = new Set()
+function reportError(message, stack) {
+  try {
+    const msg = String(message || '').slice(0, 500)
+    if (!msg || _reported.size >= 5 || _reported.has(msg)) return
+    if (_NOISE.some((n) => msg.includes(n))) return
+    _reported.add(msg)
+    fetch(`${API_BASE}/client-error`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ message: msg, stack: String(stack || '').slice(0, 800), url: window.location.href }),
+    }).catch(() => {})
+  } catch { /* reportar nunca debe romper la app */ }
+}
+window.addEventListener('error', (e) => reportError(e.message, e.error?.stack))
+window.addEventListener('unhandledrejection', (e) => reportError(e.reason?.message || String(e.reason), e.reason?.stack))
+
+/* Un error de render no debe dejar la pantalla en blanco */
+// ¿Es el fallo típico de "chunk viejo tras un deploy"? Vive en lib/chunkError.js
+// con los mensajes reales de cada navegador (Safari lo dice distinto que Chrome
+// y por eso los iPhone no se curaban solos): así se puede probar fuera de React.
+
+/* Reparación del caché HTTP: re-descarga cada asset del build saltándose el
+   caché del navegador y lo re-almacena. Cura el caso "asset envenenado" (una
+   carrera de deploy dejó cacheado un JS corrupto bajo su URL con hash): una
+   recarga normal NO lo arregla porque los assets tienen caché larga. */
+async function repairAssetCache() {
+  try {
+    const html = await (await fetch('/index.html', { cache: 'reload' })).text()
+    // OJO: la hoja de estilos principal SOLO aparece en el <link> del
+    // index.html, nunca dentro del JS. Mirando solo el JS, esta función no
+    // reparaba el CSS principal — justo el asset que se envenenó el
+    // 2026-08-06 y dejó flotadsp.com en HTML crudo, sin un solo estilo.
+    const enHtml = [...html.matchAll(/assets\/[A-Za-z0-9/_.-]+\.(?:js|css)/g)].map((m) => m[0])
+    const indexJs = (html.match(/assets\/[^"]*index-[A-Za-z0-9_-]+\.js/) || [])[0]
+    let enJs = []
+    if (indexJs) {
+      const js = await (await fetch('/' + indexJs, { cache: 'reload' })).text()
+      enJs = [...js.matchAll(/assets\/[A-Za-z0-9/_.-]+\.(?:js|css)/g)].map((m) => m[0])
+    }
+    const paths = [...new Set([...enHtml, ...enJs])]
+    await Promise.allSettled(paths.map((p) => fetch('/' + p, { cache: 'reload' })))
+  } catch { /* sin red: la recarga normal hará lo que pueda */ }
+}
+
+/* Tercera defensa: el CSS envenenado es SILENCIOSO.
+   No lanza vite:preloadError y no rompe React — la app monta perfecta y se ve
+   en HTML crudo, como un documento de 1995. Ni el ErrorBoundary ni el
+   manejador de preload se enteran, así que hace falta mirarlo a propósito. */
+function cssCargado() {
+  let reglas = 0
+  for (const hoja of document.styleSheets) {
+    // Una hoja de otro origen no se puede leer: se da por buena y no se toca.
+    try { reglas += hoja.cssRules?.length || 0 } catch { return true }
+    if (reglas > 20) return true
+  }
+  return false
+}
+
+if (import.meta.env.PROD) {
+  window.addEventListener('load', () => {
+    // Margen para que el navegador registre las hojas tras el load.
+    setTimeout(() => {
+      // El umbral es deliberadamente absurdo: el build real trae miles de
+      // reglas (el CSS pesa 111 KB). Menos de 20 no es "poco CSS", es que no
+      // hay CSS. Así no se recarga a nadie por error.
+      if (cssCargado()) return
+      // Una sola reparación por minuto: sin este freno, un fallo permanente
+      // (red caída) metería la pestaña en un bucle infinito de recargas.
+      const ultimo = Number(sessionStorage.getItem('css_reparado') || 0)
+      if (Date.now() - ultimo < 60_000) return
+      sessionStorage.setItem('css_reparado', String(Date.now()))
+      repairAssetCache().finally(() => window.location.reload())
+    }, 400)
+  })
+}
+
+class ErrorBoundary extends React.Component {
+  constructor(props) { super(props); this.state = { broken: false, detail: '' } }
+  static getDerivedStateFromError(error) {
+    // Guardamos el mensaje REAL: un error escondido es un bug que nadie arregla.
+    return { broken: true, detail: String(error?.message || error || '').slice(0, 300) }
+  }
+  componentDidCatch(error, info) {
+    // Auto-curación: si el fallo es un chunk desactualizado, recarga UNA vez
+    // (trae el index nuevo con los nombres de chunk correctos) sin molestar.
+    // Repetible cada 60 s (no una vez por sesión): tras cada deploy la pestaña
+    // puede envenenarse otra vez y debe poder curarse otra vez.
+    // Misma politica escalonada que vite:preloadError (tres intentos en diez
+    // minutos); solo cuando ya no queda intento se enseña la pantalla de error.
+    if (isStaleChunkError(error?.message) && intentarCuracion()) return
+    reportError(error?.message, (error?.stack || '') + (info?.componentStack || ''))
+  }
+  render() {
+    if (!this.state.broken) return this.props.children
+    return (
+      <div style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 14, background: '#0b0d10', color: '#eef1f6', fontFamily: 'Archivo Variable,Archivo,system-ui,sans-serif', padding: 24, textAlign: 'center' }}>
+        <div style={{ fontSize: 34 }}>⚠️</div>
+        <h1 style={{ margin: 0, fontSize: 19, fontWeight: 800 }}>Algo ha ido mal</h1>
+        <p style={{ margin: 0, color: '#8b94a3', fontSize: 14 }}>El error se ha reportado automáticamente. Pulsa el botón: repara y recarga.</p>
+        {this.state.detail && (
+          <code style={{ maxWidth: 520, padding: '9px 12px', borderRadius: 8, background: '#131315', border: '1px solid #333338', color: '#b0b0b8', fontSize: 11.5, fontFamily: 'ui-monospace,monospace', wordBreak: 'break-word', lineHeight: 1.5 }}>
+            {this.state.detail}
+          </code>
+        )}
+        <div style={{ display: 'flex', gap: 10, marginTop: 8 }}>
+          <button onClick={() => repairAssetCache().finally(() => window.location.reload())} style={{ padding: '11px 22px', border: 'none', borderRadius: 10, background: 'linear-gradient(135deg,#fb923c,#ea6800)', color: '#fff', fontWeight: 800, fontSize: 14, cursor: 'pointer' }}>
+            Reparar y recargar
+          </button>
+          <button
+            onClick={() => {
+              const txt = `FlotaDSP error\n${window.location.href}\n${new Date().toISOString()}\n\n${this.state.detail}`
+              navigator.clipboard?.writeText(txt).catch(() => {})
+            }}
+            style={{ padding: '11px 18px', borderRadius: 10, border: '1px solid #333338', background: 'transparent', color: '#b0b0b8', fontWeight: 700, fontSize: 13, cursor: 'pointer' }}
+          >
+            Copiar detalle
+          </button>
+        </div>
+      </div>
+    )
+  }
+}
+
+// Tras 15 s sanos, se rearma la auto-curación (los tres intentos) para el próximo deploy.
+setTimeout(() => { try { sessionStorage.removeItem('chunk_curacion') } catch { /* privado */ } }, 15000)
+
+/* Code-splitting: la landing carga al instante; el resto de rutas se descargan
+   solo cuando se visitan (panel, portal conductor, legal…). */
+const Login = lazy(() => import('./pages/Login'))
+const ResetPassword = lazy(() => import('./pages/ResetPassword'))
+const Registro = lazy(() => import('./pages/Registro'))
+const Planes = lazy(() => import('./pages/Planes'))
+const DriverPortal = lazy(() => import('./pages/driver/DriverPortal'))
+const PanelLogin = lazy(() => import('./panel/PanelLogin'))
+const PanelLayout = lazy(() => import('./panel/PanelLayout'))
+const PanelDashboard = lazy(() => import('./panel/pages/Dashboard'))
+const PanelMiDia = lazy(() => import('./panel/pages/MiDia'))
+const PanelVehiculos = lazy(() => import('./panel/pages/Vehiculos'))
+const PanelVencimientos = lazy(() => import('./panel/pages/Vencimientos'))
+const PanelRevision = lazy(() => import('./panel/pages/RevisionRapida'))
+const PanelNegocio = lazy(() => import('./panel/pages/Negocio'))
+const PanelGastos = lazy(() => import('./panel/pages/Gastos'))
+const PanelAnalitica = lazy(() => import('./panel/pages/Analitica'))
+const PanelPerfil = lazy(() => import('./panel/pages/Perfil'))
+const PanelInspecciones = lazy(() => import('./panel/pages/Inspecciones'))
+const PanelConductores = lazy(() => import('./panel/pages/Conductores'))
+const PanelAvisosITV = lazy(() => import('./panel/pages/AvisosITV'))
+const PanelRenting = lazy(() => import('./panel/pages/Renting'))
+const PanelTalleres = lazy(() => import('./panel/pages/Talleres'))
+const PanelAparcamiento = lazy(() => import('./panel/pages/Aparcamiento'))
+const PanelCasasAlquiler = lazy(() => import('./panel/pages/CasasAlquiler'))
+const PanelScorecard = lazy(() => import('./panel/pages/Scorecard'))
+const PanelInformes = lazy(() => import('./panel/pages/Informes'))
+const PanelIncorporaciones = lazy(() => import('./panel/pages/Incorporaciones'))
+const PanelOrdenes = lazy(() => import('./panel/pages/OrdenesTrabajo'))
+const PanelDebrief = lazy(() => import('./panel/pages/Debrief'))
+const PortalTaller = lazy(() => import('./pages/PortalTaller'))
+const PortalTallerLista = lazy(() => import('./pages/PortalTallerLista'))
+const PortalApoyo = lazy(() => import('./pages/PortalApoyo'))
+const PortalDnr = lazy(() => import('./pages/PortalDnr'))
+const PanelConfiguracion = lazy(() => import('./panel/pages/Configuracion'))
+const PanelTienda = lazy(() => import('./panel/pages/Tienda'))
+const PanelTurnos = lazy(() => import('./panel/pages/Turnos'))
+const PanelUsuarios = lazy(() => import('./panel/pages/Usuarios'))
+const PanelIAPeritaje = lazy(() => import('./panel/pages/IAPeritaje'))
+const PanelOrigenDanos = lazy(() => import('./panel/pages/OrigenDanos'))
+const PanelMetricas = lazy(() => import('./panel/pages/Metricas'))
+const PanelImportaciones = lazy(() => import('./panel/pages/Importaciones'))
+const PanelActividad = lazy(() => import('./panel/pages/Actividad'))
+const PanelPortalConductor = lazy(() => import('./panel/pages/PortalConductor'))
+const PanelAsignacion = lazy(() => import('./panel/pages/Asignacion'))
+const PanelChecklistOp = lazy(() => import('./panel/pages/ChecklistOperativo'))
+const PanelChat = lazy(() => import('./panel/pages/Chat'))
+const PanelPlantilla = lazy(() => import('./panel/pages/PlantillaGenerador'))
+const PanelBandeja = lazy(() => import('./panel/pages/Bandeja'))
+const PanelIncidencias = lazy(() => import('./panel/pages/Incidencias'))
+const PanelContactos = lazy(() => import('./panel/pages/Contactos'))
+const PanelConversaciones = lazy(() => import('./panel/pages/Conversaciones'))
+const PanelPaquetes = lazy(() => import('./panel/pages/PackageIntel'))
+const PanelApoyo = lazy(() => import('./panel/pages/ApoyoRuta'))
+const PanelEmpleo = lazy(() => import('./panel/pages/Empleo'))
+const EmpleoPublica = lazy(() => import('./pages/Empleo'))
+const Ofertas = lazy(() => import('./pages/Ofertas'))
+const EmpleoPrioridad = lazy(() => import('./pages/EmpleoPrioridad'))
+const TiendaPublica = lazy(() => import('./pages/TiendaPublica'))
+const PanelDSC = lazy(() => import('./panel/pages/DSC'))
+const PanelRendimiento = lazy(() => import('./panel/pages/Rendimiento'))
+const PanelCorreo = lazy(() => import('./panel/pages/Correo'))
+/* FlotaDSP 2.0 — la aplicación entera reorganizada, sólo en el laboratorio.
+   Sustituye a los doce prototipos sueltos que había aquí: eran experimentos,
+   no un producto. Vive en /lab y no toca ni una pantalla de las de siempre.
+
+   OJO con los nombres de fichero: la lógica va en `fases.js` y el componente en
+   `App2.jsx`. En Windows el sistema de ficheros no distingue mayúsculas, así
+   que un `app2.js` junto a `App2.jsx` haría que el import resolviera al de
+   lógica —sin export default— y React revienta con "Cannot convert object to
+   primitive value". Ya ha pasado dos veces en este laboratorio. */
+const LabMarco = lazy(() => import('./panel/lab/exp/Marco'))
+const LabSuelto = lazy(() => import('./panel/lab/exp/Marco').then((m) => ({ default: m.MarcoSuelto })))
+const Privacidad = lazy(() => import('./legal/Privacidad'))
+const Terminos = lazy(() => import('./legal/Terminos'))
+const CookiesPage = lazy(() => import('./legal/Cookies'))
+const AvisoLegal = lazy(() => import('./legal/AvisoLegal'))
+const Contacto = lazy(() => import('./legal/Contacto'))
+const Seguridad = lazy(() => import('./legal/Seguridad'))
+const PeritajeTecnico = lazy(() => import('./pages/PeritajeTecnico'))
+const Verify = lazy(() => import('./pages/Verify'))
+const NotFound = lazy(() => import('./pages/NotFound'))
+
+/* Toda la app vive en /panel. /app es un alias legado que redirige al panel nuevo. */
+function AppRedirect() {
+  window.location.replace('/panel')
+  return null
+}
+
+/* Fallback mínimo mientras se descarga el chunk de la ruta (mismo fondo oscuro de la app) */
+function RouteLoader() {
+  return (
+    <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#0a0b0f' }}>
+      <div style={{ width: 28, height: 28, border: '3px solid rgba(255,255,255,.1)', borderTopColor: '#f97316', borderRadius: '50%', animation: 'spin .8s linear infinite' }} />
+      <style>{'@keyframes spin{to{transform:rotate(360deg)}}'}</style>
+    </div>
+  )
+}
+
+/* Cuenta cada pantalla por la que pasa una visita. Va DENTRO del router para
+   enterarse de los cambios de ruta de la propia app, que no recargan la pagina
+   y son la mayoria: medir solo en el arranque diria que todo el mundo ve una
+   sola pantalla. */
+function Medidor() {
+  const { pathname } = useLocation()
+  useEffect(() => { medirVista(pathname) }, [pathname])
+  return null
+}
+
+ReactDOM.createRoot(document.getElementById('root')).render(
+  <React.StrictMode>
+    <ErrorBoundary>
+    <LangProvider>
+      <ToastProvider>
+        <BrowserRouter>
+          <Medidor />
+          <CookieBanner />
+          <Suspense fallback={<RouteLoader />}>
+            <Routes>
+              <Route path="/" element={<Landing />} />
+              <Route path="/login" element={<Login />} />
+              <Route path="/reset-password" element={<ResetPassword />} />
+              <Route path="/registro" element={<Registro />} />
+              <Route path="/planes" element={<Planes />} />
+              <Route path="/privacidad" element={<Privacidad />} />
+              <Route path="/terminos" element={<Terminos />} />
+              <Route path="/cookies" element={<CookiesPage />} />
+              <Route path="/aviso-legal" element={<AvisoLegal />} />
+              <Route path="/contacto" element={<Contacto />} />
+              <Route path="/security" element={<Seguridad />} />
+              <Route path="/seguridad" element={<Seguridad />} />
+              <Route path="/peritaje-tecnico" element={<PeritajeTecnico />} />
+              <Route path="/verify" element={<Verify />} />
+              <Route path="/verify/:hash" element={<Verify />} />
+              <Route path="/app" element={<AppRedirect />} />
+              <Route path="/taller/t/:token" element={<PortalTallerLista />} />
+              <Route path="/apoyo/t/:token" element={<PortalApoyo />} />
+              {/* La pagina del conductor: «donde dejaste este paquete». Sin
+                  sesion, se abre desde un WhatsApp. */}
+              <Route path="/dnr/t/:token" element={<PortalDnr />} />
+              <Route path="/empleo" element={<Ofertas />} />
+              <Route path="/empleo/:slug/:oferta" element={<EmpleoPublica />} />
+              <Route path="/empleo/prioridad" element={<EmpleoPrioridad />} />
+              <Route path="/t/:token" element={<TiendaPublica />} />
+              <Route path="/taller/:token" element={<PortalTaller />} />
+              <Route path="/conductor" element={<DriverPortal />} />
+              <Route path="/conductor/:slug" element={<DriverPortal />} />
+
+              {/* Panel de administración nuevo (modelo v2). En construcción por módulos.
+                  NO afecta a las rutas actuales ni al login en vivo. */}
+              <Route path="/panel/login" element={<PanelLogin />} />
+              <Route path="/panel" element={<PanelLayout />}>
+                {/* Operacional */}
+                <Route index element={<PanelDashboard />} />
+                <Route path="mi-dia" element={<PanelMiDia />} />
+                <Route path="scorecard" element={<PanelScorecard />} />
+                <Route path="informes" element={<PanelInformes />} />
+            <Route path="incorporaciones" element={<PanelIncorporaciones />} />
+                <Route path="diarios" element={<Navigate to="/panel/informes?t=dnr" replace />} />
+                <Route path="ordenes" element={<PanelOrdenes />} />
+                <Route path="debrief" element={<PanelDebrief />} />
+                <Route path="conductores" element={<PanelConductores />} />
+                <Route path="turnos" element={<PanelTurnos />} />
+                <Route path="asignacion" element={<PanelAsignacion />} />
+                <Route path="checklist-operativo" element={<PanelChecklistOp />} />
+                <Route path="chat" element={<PanelChat />} />
+                <Route path="plantilla" element={<PanelPlantilla />} />
+                <Route path="metricas" element={<PanelMetricas />} />
+                <Route path="actividad" element={<PanelActividad />} />
+                {/* Furgonetas */}
+                <Route path="revision" element={<PanelRevision />} />
+                <Route path="inspecciones" element={<PanelInspecciones />} />
+                <Route path="vehiculos" element={<PanelVehiculos />} />
+                <Route path="vencimientos" element={<PanelVencimientos />} />
+                <Route path="talleres" element={<PanelTalleres />} />
+                <Route path="aparcamiento" element={<PanelAparcamiento />} />
+                <Route path="avisos-itv" element={<PanelAvisosITV />} />
+                <Route path="renting" element={<PanelRenting />} />
+                <Route path="casas-alquiler" element={<PanelCasasAlquiler />} />
+                <Route path="ia-peritaje" element={<PanelIAPeritaje />} />
+                <Route path="origen-danos" element={<PanelOrigenDanos />} />
+                <Route path="importaciones" element={<PanelImportaciones />} />
+                <Route path="configuracion" element={<PanelConfiguracion />} />
+                <Route path="tienda" element={<PanelTienda />} />
+                <Route path="admin" element={<PanelNegocio />} />
+                <Route path="analitica" element={<PanelAnalitica />} />
+                <Route path="gastos" element={<PanelGastos />} />
+                <Route path="usuarios" element={<PanelUsuarios />} />
+                <Route path="perfil" element={<PanelPerfil />} />
+                <Route path="portal-conductor" element={<PanelPortalConductor />} />
+                <Route path="bandeja" element={<PanelBandeja />} />
+                <Route path="incidencias" element={<PanelIncidencias />} />
+                <Route path="contactos" element={<PanelContactos />} />
+                <Route path="conversaciones" element={<PanelConversaciones />} />
+                <Route path="paquetes" element={<PanelPaquetes />} />
+                <Route path="apoyo" element={<PanelApoyo />} />
+                <Route path="empleo" element={<PanelEmpleo />} />
+                <Route path="whc" element={<Navigate to="/panel/informes?t=whc" replace />} />
+                <Route path="dsc" element={<PanelDSC />} />
+                <Route path="rendimiento" element={<PanelRendimiento />} />
+                <Route path="correo" element={<PanelCorreo />} />
+                {/* Experimentos DENTRO del panel: heredan barra lateral,
+                    selector de centro, tema y sesión. Sin entrada en el menú. */}
+                <Route path="lab" element={<LabMarco />} />
+              </Route>
+
+              {/* ── FLOTADSP 2.0 ───────────────────────────────────────────
+                  La aplicación entera, reorganizada por las horas del día en
+                  vez de por módulos. Va FUERA de /panel a propósito:
+                  1) no pasa por el guardián de sesión, así que se abre sin
+                     backend y sin credenciales;
+                  2) queda garantizado por construcción que no puede tocar
+                     datos reales ni por accidente — se alimenta de fixtures. */}
+              <Route path="/lab" element={<LabSuelto />} />
+
+              <Route path="*" element={<NotFound />} />
+            </Routes>
+          </Suspense>
+        </BrowserRouter>
+      </ToastProvider>
+    </LangProvider>
+    </ErrorBoundary>
+  </React.StrictMode>,
+)

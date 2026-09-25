@@ -1,0 +1,1658 @@
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useOutletContext } from 'react-router-dom'
+import {
+  Briefcase, Plus, Copy, Check, Loader2, AlertTriangle, Trash2, X,
+  MessageCircle, IdCard, Link2, Search, Download, FileText,
+  Phone, Mail, Calendar, MapPin, Clock, ExternalLink, Save, History,
+  ChevronRight, ChevronLeft, UserPlus, Send,
+} from 'lucide-react'
+import { useT } from '../../i18n'
+import Pestanas, { usePestana } from '../components/Pestanas'
+import { getAdmin } from '../auth'
+
+/* Sin oferta abierta, cuatro cosas distintas en pestañas en vez de una
+   página de cuatro pantallas de alto. */
+const PESTANAS_EMP = [
+  { id: 'ofertas', label: 'Ofertas' },
+  { id: 'contactar', label: 'Por contactar' },
+  { id: 'etts', label: 'ETTs' },
+  { id: 'join', label: 'JOIN' },
+]
+import {
+  getOfertas, crearOferta, editarOferta,
+  getCandidatos, moverCandidato, contratarCandidato, borrarCandidato,
+  getEtts, crearEtt, editarEtt, borrarEtt, enviarCandidatoAEtt, deshacerEnvioEtt,
+  getInvitados, crearInvitado, marcarInvitadoEscrito, borrarInvitado,
+  guardarPlantillaInvitacion,
+  getJoin, guardarTokenJoin, getOfertasJoin, sincronizarJoin, importarCsvJoin,
+} from '../api'
+
+/* EMPLEO — DE LA OFERTA AL ALTA DEL CONDUCTOR.
+   ══════════════════════════════════════════════════════════════════════════
+   Un tablero de selección de verdad, no una lista con botones:
+
+   · SE ARRASTRA de una columna a otra. Es lo que hace que un tablero sea un
+     tablero; con botones hay que leer seis etiquetas para mover a uno.
+   · LA FICHA SE ABRE AL LADO, no dentro de la tarjeta. Abriendo la tarjeta se
+     descolocaba la columna entera y se perdía de vista el resto.
+   · «SIN TOCAR DESDE HACE N DÍAS» en rojo. Es el único número que evita perder
+     gente: a los tres días sin llamar ya están en otra empresa. Sale del
+     historial, que apunta quién movió a quién y cuándo.
+   · EL EMBUDO ARRIBA con la conversión real: cuántos entran, cuántos se llaman
+     y cuántos acaban de alta. Sin eso no se sabe si el problema es que no llega
+     gente o que no se la llama.
+   · DE DÓNDE VIENE cada uno (indeed, whatsapp…), que ya se guardaba y no se veía.
+
+   El CENTRO de la oferta no es decorativo: decide en qué tablero salen sus
+   candidatos y en qué nave nace la ficha al contratarlos. */
+
+/* Las columnas del tablero, en el orden en que la oficina trabaja (Judith,
+   17-09-2026): se llama, se espera respuesta y si cuadra se pasa a la ETT.
+   «Entrevista» y «Prueba» eran las de antes: solo salen si queda alguien en
+   ellas, para que nadie desaparezca del tablero (gotcha 17). */
+const FASES_TABLERO = ['nuevo', 'llamado', 'ett', 'otra_estacion', 'contratado', 'descartado']
+const FASES_ANTIGUAS = ['entrevista', 'prueba']
+const FASES = [...FASES_TABLERO, ...FASES_ANTIGUAS]
+const ESTACIONES_SUGERIDAS = ['Santiago', 'Vigo', 'A Coruña', 'Ourense', 'Lugo', 'Pontevedra', 'Ferrol']
+
+const FASE = {
+  nuevo: { pill: 'bg-sky-500/10 text-sky-300 ring-sky-500/20', barra: 'bg-sky-500' },
+  llamado: { pill: 'bg-violet-500/10 text-violet-300 ring-violet-500/20', barra: 'bg-violet-500' },
+  ett: { pill: 'bg-amber-500/10 text-amber-300 ring-amber-500/20', barra: 'bg-amber-500' },
+  otra_estacion: { pill: 'bg-cyan-500/10 text-cyan-300 ring-cyan-500/20', barra: 'bg-cyan-500' },
+  entrevista: { pill: 'bg-dark-800 text-dark-300 ring-dark-700', barra: 'bg-dark-600' },
+  prueba: { pill: 'bg-dark-800 text-dark-300 ring-dark-700', barra: 'bg-dark-600' },
+  contratado: { pill: 'bg-emerald-500/10 text-emerald-300 ring-emerald-500/20', barra: 'bg-emerald-500' },
+  descartado: { pill: 'bg-dark-800 text-dark-400 ring-dark-700', barra: 'bg-dark-700' },
+}
+
+const PREGUNTA_NUEVA = () => ({
+  id: Math.random().toString(36).slice(2, 10),
+  texto: '', tipo: 'si_no', opciones: ['Si', 'No'], obligatoria: true, descarta: [],
+})
+
+const OFERTA_VACIA = (centro) => ({
+  titulo: '', centro: centro && centro !== 'Todos' ? centro : '',
+  ciudad: '', jornada: '', salario: '', descripcion: '', requisitos: '',
+  activa: true, preguntas: [],
+})
+
+const clave = (s) => String(s || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().trim()
+const dia = (iso) => (iso ? `${iso.slice(8, 10)}/${iso.slice(5, 7)}` : '—')
+
+/* Días desde el último movimiento. Se mide desde `tocado_en` si alguien lo
+   movió, y si no desde que se apuntó: un candidato que nadie ha tocado lleva
+   esperando desde que llegó, no desde hoy. */
+function diasQuieto(c) {
+  const ref = c.tocado_en || c.creado_en
+  if (!ref) return null
+  const d = Math.floor((Date.now() - new Date(ref).getTime()) / 86400000)
+  return Number.isFinite(d) && d >= 0 ? d : null
+}
+
+/* «Nuevo» es desde tu ÚLTIMA VISITA, no un cronómetro fijo. Con 48h a secas,
+   alguien que lleva días importado seguía luciendo «nuevo» aunque ya lo
+   hubieras mirado y movido a Contactado o Descartado — la ironía que hizo
+   saltar la alarma. Dos condiciones a la vez: `importado_en` (cuándo LLEGÓ a
+   nuestro sistema, no cuándo se apuntó en JOIN) posterior a tu última entrada
+   aquí, Y que siga en la fase inicial — en cuanto alguien lo mueve, deja de
+   ser «sin mirar» aunque el reloj no haya llegado a ningún sitio. */
+function marcaVisita() {
+  const id = getAdmin()?.id || 'anon'
+  return `empleo_visto_${id}`
+}
+function esRecienLlegado(c, ultimaVisita) {
+  if (c.fase && c.fase !== 'nuevo') return false
+  const t = c.importado_en ? new Date(c.importado_en).getTime() : NaN
+  return Number.isFinite(t) && t > ultimaVisita
+}
+
+export default function Empleo() {
+  const { t } = useT()
+  const { center, centers } = useOutletContext()
+  // La marca de «visto hasta aquí» se lee UNA vez al entrar y se escribe ya
+  // mismo con la hora de ahora: la frontera para el PRÓXIMO «nuevo» es este
+  // instante, y mientras dure esta visita todo lo importado antes se ve igual
+  // (recargar la pantalla a media revisión no puede irle borrando candidatos
+  // de la vista sobre la marcha). Sin nada guardado (primera vez de esta
+  // persona) no se marca nada como nuevo — un alta no puede recibir un aluvión
+  // de «nuevo» por candidatos de hace meses.
+  const [ultimaVisita] = useState(() => {
+    try {
+      const guardada = Number(localStorage.getItem(marcaVisita()))
+      localStorage.setItem(marcaVisita(), String(Date.now()))
+      return Number.isFinite(guardada) && guardada > 0 ? guardada : Date.now()
+    } catch { return Date.now() }
+  })
+  const [ofertas, setOfertas] = useState([])
+  const [cargando, setCargando] = useState(true)
+  const [error, setError] = useState('')
+  const [sel, setSel] = useState(null)
+  const [cands, setCands] = useState([])
+  const [editando, setEditando] = useState(null)
+  const [guardando, setGuardando] = useState(false)
+  const [copiado, setCopiado] = useState('')
+  const [ficha, setFicha] = useState(null)
+  const [busca, setBusca] = useState('')
+  const [soloOrigen, setSoloOrigen] = useState('')
+  // Cuántos por página en cada columna, y en cuál está cada una. Object en vez
+  // de un solo número: cada columna se pasea por su propia lista de golpear
+  // "siguiente" en Contactado no puede reiniciar Por contactar.
+  const [porPagina, setPorPagina] = useState(15)
+  const [paginaPorFase, setPaginaPorFase] = useState({})
+  /* QUE SE ARRASTRA, EN UN REF Y NO EN UN ESTADO. `setState` no se aplica
+     hasta el siguiente render, asi que un arrastre corto —o rapido— llegaba al
+     `drop` con el valor todavia vacio y la tarjeta no se movia: el tablero
+     parecia roto sin dar ningun error. Con un ref el valor esta ya en la misma
+     vuelta. Y ademas se escribe el id en el `dataTransfer`, que es lo que hace
+     que el navegador de verdad lo trate como un arrastre. */
+  const arrastraRef = useRef(null)
+  const [encima, setEncima] = useState('')
+  const [tab, setTab] = usePestana(PESTANAS_EMP, 'ofertas')
+
+  const centrosReales = useMemo(
+    () => (centers || []).filter((c) => c && c !== 'Todos'), [centers])
+
+  const cargar = useCallback(async () => {
+    setCargando(true)
+    try {
+      const { data } = await getOfertas({ center })
+      setOfertas(data.ofertas || [])
+      setError('')
+    } catch (e) {
+      setError(e?.response?.data?.detail || t('empleo.errCargar'))
+    } finally { setCargando(false) }
+  }, [center, t])
+
+  useEffect(() => { cargar() }, [cargar])
+
+  const cargarCands = useCallback(async (oferta) => {
+    setSel(oferta); setBusca(''); setSoloOrigen(''); setFicha(null)
+    try {
+      const { data } = await getCandidatos({ oferta: oferta?.id, center })
+      setCands(data.candidatos || [])
+    } catch { setCands([]) }
+  }, [center])
+
+  const copiar = async (texto, cual) => {
+    try { await navigator.clipboard.writeText(texto); setCopiado(cual); setTimeout(() => setCopiado(''), 1800) } catch { /* sin portapapeles */ }
+  }
+
+  const guardar = async () => {
+    const o = editando
+    if (!o.titulo.trim()) { setError(t('empleo.faltaTitulo')); return }
+    if (!o.centro) { setError(t('empleo.faltaCentro')); return }
+    setGuardando(true)
+    try {
+      if (o.id) await editarOferta(o.id, o); else await crearOferta(o)
+      setEditando(null); setError(''); await cargar()
+    } catch (e) {
+      setError(e?.response?.data?.detail || t('empleo.errGuardar'))
+    } finally { setGuardando(false) }
+  }
+
+  const actualizar = (c, datos) => setCands((xs) => xs.map((x) => (x.id === c.id ? { ...x, ...datos } : x)))
+
+  const mover = async (c, fase, extra = {}) => {
+    if (!c || (c.fase === fase && !Object.keys(extra).length)) return
+    // Se pinta ya y se corrige si el servidor dice otra cosa: arrastrar tiene
+    // que responder al instante o no se siente como arrastrar.
+    const antes = c.fase
+    actualizar(c, { fase, ...extra })
+    if (ficha?.id === c.id) setFicha((f) => ({ ...f, fase, ...extra }))
+    // Soltarlo en «otra estación» sin decir cuál: se abre su ficha para
+    // escribirla, que es lo que luego se cuenta.
+    if (fase === 'otra_estacion' && !extra.estacion && !c.estacion) setFicha({ ...c, fase })
+    try {
+      const { data } = await moverCandidato(c.id, { fase, ...extra })
+      actualizar(c, data)
+      if (ficha?.id === c.id) setFicha((f) => ({ ...f, ...data }))
+    } catch (e) {
+      actualizar(c, { fase: antes })
+      setError(e?.response?.data?.detail || t('empleo.errMover'))
+    }
+  }
+
+  const contratar = async (c) => {
+    try {
+      const { data } = await contratarCandidato(c.id)
+      actualizar(c, { fase: 'contratado', driver_id: data.driver_id })
+      setFicha(null)
+      await cargar()
+    } catch (e) { setError(e?.response?.data?.detail || t('empleo.errContratar')) }
+  }
+
+  const borrar = async (c) => {
+    if (!window.confirm(t('empleo.confirmBorrar'))) return
+    try {
+      await borrarCandidato(c.id)
+      setCands((xs) => xs.filter((x) => x.id !== c.id))
+      setFicha(null)
+    } catch (e) { setError(e?.response?.data?.detail || t('empleo.errBorrar')) }
+  }
+
+  /* El telefono escrito a mano. Se recarga la lista SIN cerrar la ficha: el
+     enlace de WhatsApp lo arma el servidor al listar (gotcha 47). */
+  const guardarTelefono = async (c, telefono) => {
+    const { data } = await moverCandidato(c.id, { telefono })
+    actualizar(c, data)
+    try {
+      const r = await getCandidatos({ oferta: sel?.id, center })
+      setCands(r.data.candidatos || [])
+    } catch { /* se queda con lo guardado */ }
+  }
+
+  const guardarNotas = async (c, notas) => {
+    try {
+      const { data } = await moverCandidato(c.id, { notas })
+      actualizar(c, data)
+      return true
+    } catch { setError(t('empleo.errMover')); return false }
+  }
+
+  /* Buscar y filtrar antes de repartir en columnas: filtrando después, el
+     contador de cada columna diría una cosa y la columna enseñaría otra. */
+  const visibles = useMemo(() => {
+    const q = clave(busca)
+    return cands.filter((c) => {
+      if (soloOrigen && (c.origen || 'directo') !== soloOrigen) return false
+      if (!q) return true
+      return clave(`${c.nombre} ${c.telefono} ${c.ciudad} ${c.email} ${c.dni}`).includes(q)
+    })
+  }, [cands, busca, soloOrigen])
+
+  // Buscar o cambiar de filtro vuelve todas las columnas a la página 1: si no,
+  // una búsqueda que deja tres resultados se queda mostrando la página 4 vacía.
+  useEffect(() => { setPaginaPorFase({}) }, [busca, soloOrigen, sel?.id])
+
+  const porFase = useMemo(() => {
+    const m = {}
+    for (const f of FASES) m[f] = visibles.filter((c) => (c.fase || 'nuevo') === f)
+    // Cualquier fase que no conozca este tablero va a «Nuevo» antes que
+    // desaparecer (gotcha 30: los cajones tienen que sumar el total).
+    const raras = visibles.filter((c) => c.fase && !FASES.includes(c.fase))
+    if (raras.length) m.nuevo = [...m.nuevo, ...raras]
+    return m
+  }, [visibles])
+
+  const columnas = useMemo(
+    () => [...FASES_TABLERO, ...FASES_ANTIGUAS.filter((f) => porFase[f].length > 0)], [porFase])
+
+  // Cuántos quieren ir a cada estación: es el conteo que se pasa a las otras naves.
+  const porEstacion = useMemo(() => {
+    const m = {}
+    for (const c of porFase.otra_estacion) {
+      const k = (c.estacion || '').trim() || '¿cuál?'
+      m[k] = (m[k] || 0) + 1
+    }
+    return Object.entries(m).sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0], 'es', { sensitivity: 'base' }))
+  }, [porFase])
+
+  const estacionesConocidas = useMemo(() => {
+    const s = new Set(ESTACIONES_SUGERIDAS)
+    for (const c of cands) if (c.estacion) s.add(c.estacion)
+    return [...s].sort((a, b) => a.localeCompare(b, 'es', { sensitivity: 'base' }))
+  }, [cands])
+
+  const origenes = useMemo(
+    () => [...new Set(cands.map((c) => c.origen || 'directo'))].sort(), [cands])
+
+  /* El embudo. Sin esto no se sabe si el problema es que no llega gente o que
+     no se la llama, que son dos problemas distintos con dos soluciones. */
+  const embudo = useMemo(() => {
+    const n = cands.length
+    const otraEst = cands.filter((c) => c.fase === 'otra_estacion').length
+    const alta = cands.filter((c) => c.fase === 'contratado').length
+    // Cada etapa cuenta a quien la ha ALCANZADO, no solo a quien sigue en ella:
+    // un contratado tambien fue contactado. Un descarte automatico (no cumplia
+    // un requisito) no se llego a contactar.
+    const contactados = cands.filter((c) => (c.fase || 'nuevo') !== 'nuevo'
+      && !(c.fase === 'descartado' && c.descarte_automatico)).length
+    const ettAlcanzado = cands.filter((c) => c.fase === 'ett'
+      || (c.etts || []).length > 0).length
+    const descartados = cands.filter((c) => c.fase === 'descartado').length
+    const olvidados = cands.filter((c) => c.fase === 'nuevo' && (diasQuieto(c) ?? 0) >= 3).length
+    return { n, otraEst, alta, olvidados, contactados, ettAlcanzado, descartados }
+  }, [cands])
+
+  /* Descargar lo que se está viendo. CSV con punto y coma y BOM: es lo que
+     Excel en español abre en columnas de una vez, sin el asistente. */
+  const exportar = () => {
+    const cab = ['Nombre', 'Teléfono', 'Correo', 'DNI', 'Edad', 'Ciudad', 'Carnet desde',
+      'Carnet físico', 'Experiencia', 'Disponibilidad', 'Origen', 'Fase', 'Motivo', 'Notas', 'Día', 'CV']
+    const esc = (v) => `"${String(v ?? '').replace(/"/g, '""')}"`
+    const filas = visibles.map((c) => [
+      c.nombre, c.telefono, c.email, c.dni, c.edad, c.ciudad, c.carnet_desde,
+      // Vacío cuando no consta, no un «no»: el campo existe desde el 09-09-2026.
+      c.carnet_fisico === 'si' ? 'Sí' : c.carnet_fisico === 'no' ? 'No' : '',
+      c.experiencia, c.disponibilidad, c.origen, c.fase, c.motivo_descarte, c.notas,
+      (c.creado_en || '').slice(0, 10), c.cv_url,
+    ].map(esc).join(';'))
+    const csv = '﻿' + [cab.map(esc).join(';'), ...filas].join('\r\n')
+    const a = document.createElement('a')
+    a.href = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8' }))
+    a.download = `candidatos-${(sel?.slug || 'oferta')}.csv`
+    a.click()
+    URL.revokeObjectURL(a.href)
+  }
+
+  return (
+    <div className="space-y-5 p-4 sm:p-6">
+      <div className="flex flex-wrap items-end justify-between gap-3">
+        <div>
+          <h1 className="flex items-center gap-2 rise font-display text-[clamp(26px,3vw,36px)] font-semibold leading-none tracking-[-0.03em] text-dark-50">
+            <Briefcase size={20} className="text-brand-400" /> {t('empleo.titulo')}
+          </h1>
+          <p className="text-sm text-dark-500">{t('empleo.sub')}</p>
+        </div>
+        <button onClick={() => { setEditando(OFERTA_VACIA(center)); setError('') }}
+          className="flex items-center gap-2 rounded-lg bg-brand-500/15 px-3 py-2 text-sm font-semibold text-brand-300 ring-1 ring-brand-500/30 hover:bg-brand-500/25">
+          <Plus size={15} /> {t('empleo.nueva')}
+        </button>
+      </div>
+
+      {error && (
+        <div className="flex items-start gap-2 rounded-xl border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm text-red-300">
+          <AlertTriangle size={16} className="mt-0.5 shrink-0" /> <span className="min-w-0 flex-1">{error}</span>
+          <button onClick={() => setError('')} className="shrink-0 text-red-400/70"><X size={14} /></button>
+        </div>
+      )}
+
+      {editando && (
+        <EditorOferta oferta={editando} setOferta={setEditando} centros={centrosReales}
+          guardando={guardando} onGuardar={guardar} onCerrar={() => setEditando(null)} t={t} />
+      )}
+
+      {!sel && <Pestanas pestanas={PESTANAS_EMP} activa={tab} onElegir={setTab} etiqueta="Secciones de empleo" />}
+
+      {/* «Por contactar» es lo que se hace a diario: su propia pestaña, a un
+          clic, en vez de empujar las ofertas fuera de la vista. */}
+      {!sel && tab === 'contactar' && <PorContactar />}
+
+      {(sel || tab === 'ofertas') && <ListaOfertas ofertas={ofertas} cargando={cargando} sel={sel} t={t}
+        onAbrir={cargarCands} onEditar={(o) => { setEditando({ ...o, preguntas: (o.preguntas || []).map((p) => ({ ...p })) }); setError('') }}
+        onCerrarOferta={(o) => editarOferta(o.id, { activa: !o.activa }).then(cargar)}
+        copiar={copiar} copiado={copiado} />}
+
+      {/* La agenda va aquí y no en Configuración: la usa la misma persona que
+          mueve candidatos, y mandarla a otra pantalla es garantizar que las
+          ETT se queden sin dar de alta. */}
+      {!sel && tab === 'etts' && <AgendaEtts onCambio={() => sel && cargarCands(sel)} />}
+
+      {!sel && tab === 'join' && <ConexionJoin ofertas={ofertas} onHecho={cargar} />}
+
+      {sel && (
+        <div className="card overflow-hidden">
+          <div className="flex flex-wrap items-center gap-2 border-b border-dark-800 px-4 py-3">
+            <div className="text-sm font-semibold text-dark-200">
+              {sel.titulo} <span className="text-dark-500">· {sel.centro}</span>
+            </div>
+            <div className="relative ml-auto">
+              <Search size={13} className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-dark-500" />
+              <input value={busca} onChange={(e) => setBusca(e.target.value)} placeholder={t('empleo.buscar')}
+                className="w-48 rounded-lg border border-dark-700 bg-dark-950 py-1.5 pl-7 pr-2 text-[12px] text-dark-100 outline-none focus:border-brand-500/40" />
+            </div>
+            {origenes.length > 1 && (
+              <select value={soloOrigen} onChange={(e) => setSoloOrigen(e.target.value)}
+                className="rounded-lg border border-dark-700 bg-dark-950 px-2 py-1.5 text-[12px] text-dark-100">
+                <option value="">{t('empleo.todosOrigenes')}</option>
+                {origenes.map((x) => <option key={x} value={x}>{x}</option>)}
+              </select>
+            )}
+            <select value={porPagina} onChange={(e) => { setPorPagina(Number(e.target.value)); setPaginaPorFase({}) }}
+              title={t('empleo.porPagina')}
+              className="rounded-lg border border-dark-700 bg-dark-950 px-2 py-1.5 text-[12px] text-dark-100">
+              {[10, 15, 20].map((n) => <option key={n} value={n}>{n} / {t('empleo.pagina')}</option>)}
+            </select>
+            <button onClick={exportar} disabled={!visibles.length}
+              className="flex items-center gap-1 rounded-lg px-2 py-1.5 text-[12px] text-dark-300 ring-1 ring-dark-700 hover:text-dark-100 disabled:opacity-40">
+              <Download size={13} /> {t('empleo.exportar')}
+            </button>
+            <button onClick={() => { setSel(null); setCands([]); setFicha(null) }} className="text-dark-500 hover:text-dark-200"><X size={16} /></button>
+          </div>
+
+          <Embudo e={embudo} t={t} />
+
+          <div className="grid gap-4 p-4 xl:grid-cols-[1fr_340px]">
+            {/* ── El tablero ─────────────────────────────────────────── */}
+            <div className={`grid gap-2.5 overflow-x-auto md:grid-cols-3 ${columnas.length > 6 ? '2xl:grid-cols-8' : '2xl:grid-cols-6'}`}>
+              {columnas.map((f) => {
+                const total = porFase[f].length
+                const totalPaginas = Math.max(1, Math.ceil(total / porPagina))
+                const pagina = Math.min(paginaPorFase[f] || 1, totalPaginas)
+                const items = porFase[f].slice((pagina - 1) * porPagina, pagina * porPagina)
+                const irA = (p) => setPaginaPorFase((m) => ({ ...m, [f]: p }))
+                return (
+                <div key={f}
+                  onDragOver={(e) => { e.preventDefault(); setEncima(f) }}
+                  onDragLeave={() => setEncima((x) => (x === f ? '' : x))}
+                  onDrop={(e) => {
+                    e.preventDefault(); setEncima('')
+                    const id = e.dataTransfer?.getData('text/plain') || ''
+                    const c = cands.find((x) => x.id === id) || arrastraRef.current
+                    if (c) mover(c, f)
+                    arrastraRef.current = null
+                  }}
+                  className={`min-w-0 rounded-lg p-1 transition ${encima === f ? 'bg-brand-500/10 ring-1 ring-brand-500/40' : ''}`}>
+                  <div className="mb-2 flex items-center justify-between gap-1">
+                    <span className={`inline-flex rounded px-2 py-0.5 text-[10px] font-semibold uppercase ring-1 ${FASE[f].pill}`}>
+                      {t('empleo.fase.' + f)}
+                    </span>
+                    <span className="cifra text-[11px] font-bold text-dark-500">{total}</span>
+                  </div>
+                  <p className={`-mt-1 mb-2 truncate px-0.5 text-[10.5px] ${FASES_ANTIGUAS.includes(f) ? 'text-amber-400/80' : 'text-dark-500'}`}>
+                    {t('empleo.faseAyuda.' + f)}
+                  </p>
+                  {f === 'otra_estacion' && porEstacion.length > 0 && (
+                    <div className="mb-2 flex flex-wrap gap-1">
+                      {porEstacion.map(([k, n]) => (
+                        <span key={k} className={`rounded px-1.5 py-px text-[10px] font-semibold ${k === '¿cuál?' ? 'bg-amber-500/15 text-amber-300' : 'bg-cyan-500/10 text-cyan-300'}`}>
+                          {k} <span className="cifra">{n}</span>
+                        </span>
+                      ))}
+                    </div>
+                  )}
+                  <div className="space-y-2">
+                    {items.map((c) => (
+                      <Tarjeta key={c.id} c={c} t={t} activa={ficha?.id === c.id} ultimaVisita={ultimaVisita}
+                        onAbrir={() => setFicha(c)}
+                        onArrastrar={(e) => {
+                          arrastraRef.current = c
+                          try { e.dataTransfer.setData('text/plain', c.id); e.dataTransfer.effectAllowed = 'move' } catch { /* navegador raro */ }
+                        }}
+                        onSoltar={() => { arrastraRef.current = null }} />
+                    ))}
+                    {total === 0 && (
+                      <p className="rounded-lg border border-dashed border-dark-800 px-2 py-4 text-center text-[11px] text-dark-700">
+                        {encima === f ? t('empleo.suelta') : '—'}
+                      </p>
+                    )}
+                  </div>
+                  {totalPaginas > 1 && (
+                    <div className="mt-2 flex items-center justify-between gap-1 border-t border-dark-800 pt-2">
+                      <button onClick={() => irA(pagina - 1)} disabled={pagina <= 1}
+                        title={t('empleo.paginaAnterior')}
+                        className="flex items-center gap-0.5 rounded-md px-2 py-1 text-[11px] font-medium text-dark-300 ring-1 ring-dark-700 hover:bg-dark-800 hover:text-dark-100 disabled:pointer-events-none disabled:opacity-25">
+                        <ChevronLeft size={13} />
+                      </button>
+                      <span className="cifra text-[11px] font-semibold text-dark-300">
+                        {t('empleo.pagina')} {pagina} {t('empleo.de')} {totalPaginas}
+                      </span>
+                      <button onClick={() => irA(pagina + 1)} disabled={pagina >= totalPaginas}
+                        title={t('empleo.paginaSiguiente')}
+                        className="flex items-center gap-0.5 rounded-md px-2 py-1 text-[11px] font-medium text-dark-300 ring-1 ring-dark-700 hover:bg-dark-800 hover:text-dark-100 disabled:pointer-events-none disabled:opacity-25">
+                        <ChevronRight size={13} />
+                      </button>
+                    </div>
+                  )}
+                </div>
+                )
+              })}
+            </div>
+
+            {/* ── La ficha, al lado ──────────────────────────────────── */}
+            <div className="xl:sticky xl:top-4 xl:self-start">
+              {ficha ? (
+                <FichaCandidato c={cands.find((x) => x.id === ficha.id) || ficha} oferta={sel} t={t}
+                  onCerrar={() => setFicha(null)} onMover={mover} onContratar={contratar}
+                  onBorrar={borrar} onNotas={guardarNotas} onTelefono={guardarTelefono}
+                  estaciones={estacionesConocidas}
+                  onRecargar={() => cargarCands(sel)} />
+              ) : (
+                <div className="rounded-xl border border-dashed border-dark-800 p-6 text-center text-[12.5px] text-dark-500">
+                  {t('empleo.eligeCandidato')}
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
+/* ── El embudo ────────────────────────────────────────────────────────── */
+function Embudo({ e, t }) {
+  if (!e.n) return null
+  const pasos = [
+    { k: 'recibidas', n: e.n, cls: 'text-dark-100' },
+    { k: 'contactados', n: e.contactados, cls: 'text-violet-300' },
+    { k: 'ett', n: e.ettAlcanzado, cls: 'text-amber-300' },
+    { k: 'contratados', n: e.alta, cls: 'text-emerald-300' },
+  ]
+  return (
+    <div className="flex flex-wrap items-center gap-x-5 gap-y-2 border-b border-dark-800 px-4 py-3">
+      {/* Embudo de selección: cuántos alcanzan cada etapa y qué parte de lo
+          recibido es. Dice dónde se pierde la gente. */}
+      <ol className="flex flex-wrap items-center gap-1.5">
+        {pasos.map((p, i) => (
+          <li key={p.k} className="flex items-center gap-1.5">
+            {i > 0 && <ChevronRight size={13} className="text-dark-700" />}
+            <div className="rounded-lg bg-dark-900/70 px-3 py-1.5 ring-1 ring-dark-800">
+              <div className="text-[10px] font-semibold uppercase tracking-wider text-dark-500">{t('empleo.embudo.' + p.k)}</div>
+              <div className="flex items-baseline gap-1.5">
+                <b className={`cifra text-[17px] leading-tight ${p.cls}`}>{p.n}</b>
+                {i > 0 && <span className="cifra text-[11px] text-dark-500">{Math.round((p.n / e.n) * 100)} %</span>}
+              </div>
+            </div>
+          </li>
+        ))}
+      </ol>
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[12px] text-dark-500">
+        {e.otraEst > 0 && <span><b className="cifra text-cyan-300">{e.otraEst}</b> {t('empleo.otraEst')}</span>}
+        <span><b className="cifra text-dark-300">{e.descartados}</b> {t('empleo.embudo.descartados')}</span>
+      </div>
+      {/* El único número que evita perder gente: a los tres días sin llamar ya
+          están en otra empresa. */}
+      {e.olvidados > 0 && (
+        <span className="ml-auto flex items-center gap-1.5 rounded-lg bg-red-500/10 px-2.5 py-1 text-[12px] font-semibold text-red-300 ring-1 ring-red-500/25">
+          <Clock size={12} /> {e.olvidados} {t('empleo.sinLlamar')}
+        </span>
+      )}
+    </div>
+  )
+}
+
+/* ── Una tarjeta del tablero ──────────────────────────────────────────── */
+function Tarjeta({ c, t, activa, ultimaVisita, onAbrir, onArrastrar, onSoltar }) {
+  const quieto = diasQuieto(c)
+  const urge = c.fase === 'nuevo' && (quieto ?? 0) >= 3
+  const nuevo = esRecienLlegado(c, ultimaVisita)
+  return (
+    <button
+      draggable
+      onDragStart={(e) => onArrastrar(e)}
+      onDragEnd={onSoltar}
+      onClick={onAbrir}
+      className={`w-full cursor-grab rounded-lg border bg-dark-900/60 p-2 text-left transition active:cursor-grabbing ${
+        activa ? 'border-brand-500/50 bg-brand-500/5'
+          : nuevo ? 'border-emerald-500/40 hover:border-emerald-500/60'
+          : 'border-dark-800 hover:border-dark-700'}`}>
+      <div className="flex items-center gap-1.5">
+        <div className="min-w-0 flex-1 truncate text-xs font-medium text-dark-100">{c.nombre}</div>
+        {nuevo && (
+          <span className="shrink-0 rounded bg-emerald-500/15 px-1 py-px text-[9px] font-bold uppercase tracking-wide text-emerald-300">
+            {t('empleo.nuevo')}
+          </span>
+        )}
+      </div>
+      <div className="truncate text-[11px] text-dark-500">
+        {[c.ciudad, c.edad ? `${c.edad} a` : '', c.disponibilidad].filter(Boolean).join(' · ') || '—'}
+      </div>
+      <div className="mt-1 flex flex-wrap items-center gap-1 text-[10px]">
+        <span className="rounded bg-dark-800 px-1 py-px text-dark-400">{c.origen}</span>
+        <span className="text-dark-500">{dia(c.creado_en)}</span>
+        {c.cv_url && <FileText size={10} className="text-brand-400" />}
+        {c.fase === 'otra_estacion' && (
+          <span className={`rounded px-1 py-px font-semibold ${c.estacion ? 'bg-cyan-500/10 text-cyan-300' : 'bg-amber-500/15 text-amber-300'}`}>
+            {c.estacion || '¿qué estación?'}
+          </span>
+        )}
+        {c.fase === 'ett' && (c.etts || []).length > 0 && (
+          <span className="truncate rounded bg-amber-500/10 px-1 py-px text-amber-300">{c.etts.map((x) => x.nombre).join(', ')}</span>
+        )}
+        {urge && (
+          <span className="ml-auto rounded bg-red-500/15 px-1 py-px font-semibold text-red-300">
+            {quieto} {t('empleo.dias')}
+          </span>
+        )}
+      </div>
+      {c.descarte_automatico && (
+        <div className="mt-1 truncate rounded bg-amber-500/10 px-1.5 py-1 text-[10px] text-amber-300">
+          {c.motivo_descarte}
+        </div>
+      )}
+    </button>
+  )
+}
+
+/* ── La ficha completa ────────────────────────────────────────────────── */
+function FichaCandidato({ c, oferta, t, onCerrar, onMover, onContratar, onBorrar, onNotas,
+                         onRecargar, onTelefono, estaciones = [] }) {
+  const [tel, setTel] = useState('')
+  const [est, setEst] = useState(c.estacion || '')
+  const [pideEst, setPideEst] = useState(false)
+  const [telErr, setTelErr] = useState('')
+  const [notas, setNotas] = useState(c.notas || '')
+  const [guardando, setGuardando] = useState(false)
+  const idRef = useRef(c.id)
+  useEffect(() => {
+    // Al cambiar de candidato se recarga su nota; si no, se le escribiría la
+    // del anterior encima, que es un dato falso en la ficha de otra persona.
+    if (idRef.current !== c.id) {
+      idRef.current = c.id; setNotas(c.notas || ''); setEst(c.estacion || ''); setPideEst(false)
+    }
+  }, [c.id, c.notas, c.estacion])
+  const pedirEstacion = pideEst || (c.fase === 'otra_estacion' && !c.estacion)
+
+  const hist = [...(c.historial || [])].reverse()
+
+  return (
+    <div className="card overflow-hidden">
+      <div className="flex items-start gap-2 border-b border-dark-800 px-3.5 py-3">
+        <div className="min-w-0 flex-1">
+          <div className="truncate text-[15px] font-bold text-dark-50">{c.nombre}</div>
+          <div className="mt-0.5 flex flex-wrap items-center gap-1.5 text-[11px] text-dark-500">
+            <span className={`rounded px-1.5 py-px font-semibold uppercase ring-1 ${FASE[c.fase || 'nuevo'].pill}`}>
+              {t('empleo.fase.' + (c.fase || 'nuevo'))}
+            </span>
+            <span>{t('empleo.apuntado')} {dia(c.creado_en)}</span>
+            <span className="rounded bg-dark-800 px-1 py-px">{c.origen}</span>
+          </div>
+        </div>
+        <button onClick={onCerrar} className="shrink-0 text-dark-500 hover:text-dark-300"><X size={15} /></button>
+      </div>
+
+      {/* Lo primero, lo que hace falta para llamarle. */}
+      <div className="flex flex-wrap gap-1.5 border-b border-dark-800 px-3.5 py-2.5">
+        {c.telefono && (
+          <a href={`tel:${c.telefono}`} className="flex items-center gap-1.5 rounded-lg bg-dark-800/60 px-2.5 py-1.5 text-[12px] font-medium text-dark-200 hover:bg-dark-800">
+            <Phone size={12} /> {c.telefono}
+            {/* Leído del currículum por la importación de JOIN: se avisa,
+                porque en un CV puede salir el número de otra persona. */}
+            {c.telefono_de === 'cv' && (
+              <span className="rounded bg-amber-500/15 px-1 text-[10px] text-amber-300" title="Leído del currículum: compruébalo al llamar">del CV</span>
+            )}
+          </a>
+        )}
+        {!c.telefono && (
+          <form className="flex items-center gap-1.5"
+            onSubmit={async (e) => {
+              e.preventDefault(); setTelErr('')
+              try { await onTelefono(c, tel); setTel('') } catch (x) {
+                setTelErr(x?.response?.data?.detail || 'No se pudo guardar.')
+              }
+            }}>
+            <input value={tel} onChange={(e) => setTel(e.target.value)} inputMode="tel"
+              placeholder="Sin teléfono: escríbelo"
+              className="w-40 rounded-lg border border-dark-700 bg-dark-950 px-2 py-1.5 text-[12px] text-dark-100 outline-none focus:border-brand-500/40" />
+            <button disabled={!tel.trim()} className="rounded-lg px-2 py-1.5 text-dark-300 ring-1 ring-dark-700 disabled:opacity-40" aria-label="Guardar teléfono">
+              <Save size={12} />
+            </button>
+            {telErr && <span className="text-[11px] text-red-300">{telErr}</span>}
+          </form>
+        )}
+        {c.email && (
+          <a href={`mailto:${c.email}`} className="flex items-center gap-1.5 rounded-lg bg-dark-800/60 px-2.5 py-1.5 text-[12px] font-medium text-dark-200 hover:bg-dark-800">
+            <Mail size={12} /> {c.email}
+          </a>
+        )}
+        {c.wa && (
+          <a href={c.wa} target="_blank" rel="noreferrer"
+            className="flex items-center gap-1.5 rounded-lg bg-emerald-500/10 px-2.5 py-1.5 text-[12px] font-medium text-emerald-300 ring-1 ring-emerald-500/25">
+            <MessageCircle size={12} /> WhatsApp
+          </a>
+        )}
+        {c.cv_url && (
+          <a href={c.cv_url} target="_blank" rel="noreferrer"
+            className="flex items-center gap-1.5 rounded-lg bg-brand-500/10 px-2.5 py-1.5 text-[12px] font-medium text-brand-300 ring-1 ring-brand-500/25">
+            <FileText size={12} /> {t('empleo.verCv')} <ExternalLink size={10} />
+          </a>
+        )}
+      </div>
+
+      <div className="space-y-3 px-3.5 py-3">
+        <Datos c={c} t={t} />
+
+        <EnviarAEtt c={c} onEnviado={onRecargar} />
+
+        {(c.respuestas_join || []).length > 0 && (
+          <div className="space-y-1.5 rounded-lg bg-dark-900/60 p-2.5">
+            <div className="text-[10px] font-semibold uppercase text-dark-500">Respuestas en JOIN</div>
+            {c.respuestas_join.map((r, i) => (
+              <div key={i} className="text-[11.5px]">
+                <div className="text-dark-500">{r.pregunta}</div>
+                <div className="text-dark-200">{r.respuesta || '—'}</div>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {(oferta.preguntas || []).length > 0 && (
+          <div className="space-y-1.5 rounded-lg bg-dark-900/60 p-2.5">
+            {(oferta.preguntas || []).map((p) => {
+              const v = c.respuestas?.[p.id]
+              const txt = Array.isArray(v) ? v.join(', ') : v
+              const fuera = c.descarte_automatico && (c.motivo_descarte || '').includes(p.texto)
+              return (
+                <div key={p.id} className="text-[11.5px]">
+                  <div className="text-dark-500">{p.texto}</div>
+                  <div className={fuera ? 'font-semibold text-amber-300' : 'text-dark-200'}>
+                    {txt || '—'} {fuera && `· ${t('empleo.aptoNo')}`}
+                  </div>
+                </div>
+              )
+            })}
+          </div>
+        )}
+
+        {/* Mover: los seis botones a la vista, porque arrastrar no vale en el
+            móvil y la oficina también abre esto desde una tablet. */}
+        <div>
+          <div className="mb-1.5 text-[11px] font-semibold uppercase tracking-wider text-dark-500">{t('empleo.moverA')}</div>
+          <div className="flex flex-wrap gap-1.5">
+            {FASES_TABLERO.filter((x) => x !== 'contratado').map((x) => (
+              <button key={x} disabled={c.fase === x && x !== 'otra_estacion'}
+                onClick={() => (x === 'otra_estacion' ? setPideEst(true) : onMover(c, x))}
+                className={`rounded-lg px-2 py-1 text-[11.5px] ring-1 ${
+                  c.fase === x ? 'bg-dark-800 text-dark-500 ring-dark-700' : 'text-dark-300 ring-dark-700 hover:text-dark-100'}`}>
+                {t('empleo.fase.' + x)}{x === 'otra_estacion' && c.estacion ? ` · ${c.estacion}` : ''}
+              </button>
+            ))}
+          </div>
+          {pedirEstacion && (
+            <form className="mt-2 flex items-center gap-1.5"
+              onSubmit={(e) => {
+                e.preventDefault()
+                const v = est.trim()
+                if (!v) return
+                onMover(c, 'otra_estacion', { estacion: v }); setPideEst(false)
+              }}>
+              <input value={est} onChange={(e) => setEst(e.target.value)} list="empleo-estaciones" autoFocus
+                placeholder="¿A qué estación quiere ir?"
+                className="min-w-0 flex-1 rounded-lg border border-cyan-500/30 bg-dark-950 px-2.5 py-1 text-[12px] text-dark-100 outline-none focus:border-cyan-400/60" />
+              <datalist id="empleo-estaciones">
+                {estaciones.map((x) => <option key={x} value={x} />)}
+              </datalist>
+              <button type="submit" disabled={!est.trim()}
+                className="rounded-lg bg-cyan-500/15 px-2.5 py-1 text-[11.5px] font-semibold text-cyan-300 ring-1 ring-cyan-500/30 disabled:opacity-40">
+                Guardar
+              </button>
+            </form>
+          )}
+        </div>
+
+        <div>
+          <div className="mb-1.5 text-[11px] font-semibold uppercase tracking-wider text-dark-500">{t('empleo.notas')}</div>
+          <textarea value={notas} onChange={(e) => setNotas(e.target.value)} rows={3}
+            placeholder={t('empleo.notasAyuda')}
+            className="w-full rounded-lg border border-dark-700 bg-dark-950 px-2.5 py-2 text-[12.5px] text-dark-100 outline-none focus:border-brand-500/40" />
+          {notas !== (c.notas || '') && (
+            <button onClick={async () => { setGuardando(true); await onNotas(c, notas); setGuardando(false) }}
+              disabled={guardando}
+              className="mt-1.5 flex items-center gap-1.5 rounded-lg bg-brand-500/15 px-2.5 py-1 text-[11.5px] font-semibold text-brand-300 ring-1 ring-brand-500/30">
+              {guardando ? <Loader2 size={11} className="animate-spin" /> : <Save size={11} />} {t('empleo.guardar')}
+            </button>
+          )}
+        </div>
+
+        {hist.length > 0 && (
+          <div>
+            <div className="mb-1.5 flex items-center gap-1 text-[11px] font-semibold uppercase tracking-wider text-dark-500">
+              <History size={11} /> {t('empleo.historial')}
+            </div>
+            <div className="space-y-1">
+              {hist.slice(0, 6).map((h, i) => (
+                <div key={i} className="flex items-baseline gap-1.5 text-[11px] text-dark-500">
+                  <span className="cifra shrink-0 text-dark-500">{dia(h.en)}</span>
+                  <span className="min-w-0">
+                    {t('empleo.fase.' + (h.a || 'nuevo'))}
+                    {h.por && <span className="text-dark-500"> · {h.por}</span>}
+                  </span>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+      </div>
+
+      <div className="flex items-center gap-2 border-t border-dark-800 px-3.5 py-2.5">
+        {!c.driver_id ? (
+          <button onClick={() => onContratar(c)}
+            className="flex flex-1 items-center justify-center gap-1.5 rounded-lg bg-emerald-500/15 px-3 py-2 text-[12.5px] font-semibold text-emerald-300 ring-1 ring-emerald-500/30 hover:bg-emerald-500/25">
+            <UserPlus size={13} /> {t('empleo.contratar')}
+          </button>
+        ) : (
+          <span className="flex flex-1 items-center justify-center gap-1.5 rounded-lg bg-emerald-500/10 px-3 py-2 text-[12.5px] font-semibold text-emerald-300">
+            <IdCard size={13} /> {t('empleo.tieneFicha')}
+          </span>
+        )}
+        <button onClick={() => onBorrar(c)} aria-label={t('empleo.borrar')} title={t('empleo.borrar')}
+          className="rounded-lg px-2.5 py-2 text-red-300 ring-1 ring-red-500/30 hover:bg-red-500/10">
+          <Trash2 size={13} />
+        </button>
+      </div>
+    </div>
+  )
+}
+
+function Datos({ c, t }) {
+  /* EL CARNET FÍSICO SE PINTA, Y EL «NO» SE VE. Es lo que decide si esta
+     persona puede empezar el lunes o dentro de dos meses, y en una lista gris
+     de cuarenta candidatos un dato así se pierde. En ámbar, no en rojo: no es
+     un descarte —lo decide quien llama—, es un aviso.
+     Los candidatos anteriores al 09-09-2026 no traen el campo y no se pinta
+     nada: un hueco no es un «no», y pintarlo sería acusar a alguien de algo
+     que no dijo (gotcha 33). */
+  const filas = [
+    [Mail, c.email],
+    [IdCard, [c.dni, c.edad ? `${c.edad} ${t('empleo.anos')}` : ''].filter(Boolean).join(' · ')],
+    [MapPin, c.ciudad],
+    [Calendar, [c.carnet_desde && `${t('empleo.carnet')} ${c.carnet_desde}`, c.disponibilidad].filter(Boolean).join(' · ')],
+    [Briefcase, c.experiencia],
+  ].filter(([, v]) => v)
+  const carnet = c.carnet_fisico === 'si' ? t('empleo.carnetSi')
+    : c.carnet_fisico === 'no' ? t('empleo.carnetNo') : ''
+  if (!filas.length && !carnet) return null
+  return (
+    <div className="grid gap-1">
+      {filas.map(([Icon, v], i) => (
+        <div key={i} className="flex items-center gap-1.5 text-[12px] text-dark-300">
+          <Icon size={12} className="shrink-0 text-dark-500" /> <span className="min-w-0 truncate">{v}</span>
+        </div>
+      ))}
+      {carnet && (
+        <div className={`flex items-center gap-1.5 text-[12px] ${
+          c.carnet_fisico === 'no' ? 'font-semibold text-amber-300' : 'text-dark-300'}`}>
+          <IdCard size={12} className={`shrink-0 ${c.carnet_fisico === 'no' ? 'text-amber-400' : 'text-dark-500'}`} />
+          <span className="min-w-0 truncate">{carnet}</span>
+        </div>
+      )}
+    </div>
+  )
+}
+
+/* ── La lista de ofertas ──────────────────────────────────────────────── */
+function ListaOfertas({ ofertas, cargando, sel, t, onAbrir, onEditar, onCerrarOferta, copiar, copiado }) {
+  return (
+    <div className="card overflow-hidden">
+      <div className="border-b border-dark-800 px-4 py-3 text-sm font-semibold text-dark-200">
+        {t('empleo.ofertas')} <span className="text-dark-500">· {ofertas.length}</span>
+      </div>
+      {cargando && <div className="p-6 text-center text-dark-500"><Loader2 className="mx-auto animate-spin" /></div>}
+      {!cargando && ofertas.length === 0 && (
+        <div className="p-6 text-center text-sm text-dark-500">{t('empleo.vacio')}</div>
+      )}
+      <div className="divide-y divide-dark-800">
+        {ofertas.map((o) => (
+          <div key={o.id} className={`px-4 py-3 ${sel?.id === o.id ? 'bg-sky-500/5' : ''}`}>
+            <div className="flex items-center gap-3">
+              <button onClick={() => onAbrir(o)} className="min-w-0 flex-1 text-left">
+                <div className="flex items-center gap-1.5">
+                  <span className="truncate text-sm font-medium text-dark-100">{o.titulo}</span>
+                  {/* El centro va SIEMPRE a la vista: decide en qué nave acaba
+                      esta gente, y confundirlo no da ningún error. */}
+                  <span className="shrink-0 rounded bg-brand-500/15 px-1.5 py-0.5 text-[10px] font-semibold uppercase text-brand-300">{o.centro || '—'}</span>
+                  {!o.activa && <span className="shrink-0 rounded bg-dark-800 px-1.5 py-0.5 text-[10px] font-semibold uppercase text-dark-400">{t('empleo.cerrada')}</span>}
+                </div>
+                <div className="truncate text-xs text-dark-500">
+                  {[o.ciudad, o.jornada, o.salario].filter(Boolean).join(' · ') || '—'}
+                </div>
+              </button>
+              {/* Barra del embudo: se ve de un vistazo dónde se atasca. */}
+              <div className="hidden h-1.5 w-40 shrink-0 overflow-hidden rounded-full bg-dark-800 sm:flex">
+                {FASES.map((f) => {
+                  const n = o.por_fase?.[f] || 0
+                  if (!n || !o.candidatos) return null
+                  return <span key={f} className={FASE[f].barra} style={{ width: `${(n / o.candidatos) * 100}%` }} title={`${t('empleo.fase.' + f)}: ${n}`} />
+                })}
+              </div>
+              <div className="w-[70px] shrink-0 text-right leading-tight">
+                <div className="cifra text-base font-bold text-dark-200">{o.candidatos || 0}</div>
+                <div className="text-[10px] uppercase text-dark-500">{t('empleo.candidatos')}</div>
+              </div>
+            </div>
+
+            {Object.keys(o.por_origen || {}).length > 0 && (
+              <div className="mt-1.5 flex flex-wrap gap-1.5">
+                {Object.entries(o.por_origen).sort((a, b) => b[1] - a[1]).map(([k, n]) => (
+                  <span key={k} className="rounded bg-dark-900 px-1.5 py-0.5 text-[10px] text-dark-400">
+                    {k} · <b className="text-dark-200">{n}</b>
+                  </span>
+                ))}
+              </div>
+            )}
+
+            <div className="mt-2 flex flex-wrap items-center gap-2">
+              <code className="max-w-full truncate rounded bg-dark-900 px-2 py-1 text-[11px] text-dark-400">{o.url}</code>
+              <button onClick={() => copiar(o.url, o.id)}
+                className="flex items-center gap-1 rounded-lg px-2 py-1 text-[11px] text-dark-300 ring-1 ring-dark-700 hover:text-dark-100">
+                {copiado === o.id ? <Check size={12} className="text-emerald-400" /> : <Copy size={12} />}
+                {copiado === o.id ? t('empleo.copiado') : t('empleo.copiar')}
+              </button>
+              <button onClick={() => copiar(o.url_indeed, o.id + 'i')}
+                className="flex items-center gap-1 rounded-lg px-2 py-1 text-[11px] text-dark-300 ring-1 ring-dark-700 hover:text-dark-100">
+                {copiado === o.id + 'i' ? <Check size={12} className="text-emerald-400" /> : <Link2 size={12} />}
+                {t('empleo.paraIndeed')}
+              </button>
+              <a href={o.url} target="_blank" rel="noreferrer"
+                className="rounded-lg px-2 py-1 text-[11px] text-dark-300 ring-1 ring-dark-700 hover:text-dark-100">
+                {t('empleo.verla')}
+              </a>
+              <button onClick={() => onEditar(o)}
+                className="rounded-lg px-2 py-1 text-[11px] text-dark-300 ring-1 ring-dark-700 hover:text-dark-100">{t('empleo.editar')}</button>
+              <button onClick={() => onCerrarOferta(o)}
+                className="rounded-lg px-2 py-1 text-[11px] text-dark-300 ring-1 ring-dark-700 hover:text-dark-100">
+                {o.activa ? t('empleo.cerrar') : t('empleo.reabrir')}
+              </button>
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  )
+}
+
+function EditorOferta({ oferta, setOferta, centros, guardando, onGuardar, onCerrar, t }) {
+  const set = (k, v) => setOferta((o) => ({ ...o, [k]: v }))
+  const setP = (i, k, v) => setOferta((o) => ({
+    ...o, preguntas: o.preguntas.map((p, j) => (j === i ? { ...p, [k]: v } : p)),
+  }))
+
+  const cambiarTipo = (i, tipo) => setOferta((o) => ({
+    ...o,
+    preguntas: o.preguntas.map((p, j) => {
+      if (j !== i) return p
+      // Al cambiar de tipo hay que rehacer opciones Y descartes: si se
+      // quedaran los viejos, el backend rechazaría la oferta entera por un
+      // descarte que ya no está entre las opciones.
+      const opciones = tipo === 'si_no' ? ['Si', 'No'] : (tipo === 'opcion' || tipo === 'varias') ? ['', ''] : []
+      return { ...p, tipo, opciones, descarta: [] }
+    }),
+  }))
+
+  const setOpcion = (i, k, v) => setOferta((o) => ({
+    ...o,
+    preguntas: o.preguntas.map((p, j) => (j === i ? { ...p, opciones: p.opciones.map((x, y) => (y === k ? v : x)) } : p)),
+  }))
+
+  const toggleDescarta = (i, opcion) => setOferta((o) => ({
+    ...o,
+    preguntas: o.preguntas.map((p, j) => {
+      if (j !== i) return p
+      const k = clave(opcion)
+      const hay = (p.descarta || []).some((d) => clave(d) === k)
+      return { ...p, descarta: hay ? p.descarta.filter((d) => clave(d) !== k) : [...(p.descarta || []), opcion] }
+    }),
+  }))
+
+  return (
+    <div className="card space-y-4 p-4">
+      <div className="flex items-center justify-between">
+        <div className="text-sm font-semibold text-dark-200">{oferta.id ? t('empleo.editarOferta') : t('empleo.nuevaOferta')}</div>
+        <button onClick={onCerrar} className="text-dark-500 hover:text-dark-200"><X size={16} /></button>
+      </div>
+
+      <div className="grid gap-3 sm:grid-cols-2">
+        <Campo label={t('empleo.tituloOferta')} value={oferta.titulo} onChange={(v) => set('titulo', v)} placeholder="Conductor de reparto" />
+        <div>
+          <label className="mb-1 block text-xs text-dark-500">{t('empleo.centro')}</label>
+          <select value={oferta.centro || ''} onChange={(e) => set('centro', e.target.value)}
+            className="w-full rounded-lg border border-dark-700 bg-dark-900 px-3 py-2 text-sm text-dark-100">
+            <option value="">{t('empleo.eligeCentro')}</option>
+            {centros.map((c) => <option key={c} value={c}>{c}</option>)}
+          </select>
+          <p className="mt-1 text-[11px] text-dark-500">{t('empleo.centroAyuda')}</p>
+        </div>
+        <Campo label={t('empleo.ciudad')} value={oferta.ciudad} onChange={(v) => set('ciudad', v)} placeholder="Santiago de Compostela" />
+        <Campo label={t('empleo.jornada')} value={oferta.jornada} onChange={(v) => set('jornada', v)} placeholder="Jornada completa" />
+        <Campo label={t('empleo.salario')} value={oferta.salario} onChange={(v) => set('salario', v)} placeholder="Segun convenio" />
+        <Campo label={t('empleo.requisitos')} value={oferta.requisitos} onChange={(v) => set('requisitos', v)} placeholder="Carnet B con 1 ano" />
+      </div>
+      <div>
+        <label className="mb-1 block text-xs text-dark-500">{t('empleo.descripcion')}</label>
+        <textarea value={oferta.descripcion} onChange={(e) => set('descripcion', e.target.value)} rows={3}
+          className="w-full rounded-lg border border-dark-700 bg-dark-900 px-3 py-2 text-sm text-dark-100" />
+      </div>
+
+      <div className="rounded-xl border border-dark-800 p-3">
+        <div className="mb-1 flex items-center justify-between">
+          <div className="text-sm font-semibold text-dark-200">{t('empleo.cuestionario')}</div>
+          <button onClick={() => setOferta((o) => ({ ...o, preguntas: [...(o.preguntas || []), PREGUNTA_NUEVA()] }))}
+            className="flex items-center gap-1 rounded-lg px-2 py-1 text-xs text-dark-300 ring-1 ring-dark-700 hover:text-dark-100">
+            <Plus size={13} /> {t('empleo.anadirPregunta')}
+          </button>
+        </div>
+        <p className="mb-3 text-[11px] text-dark-500">{t('empleo.cuestionarioAyuda')}</p>
+
+        {(oferta.preguntas || []).length === 0 && (
+          <p className="text-xs text-dark-500">{t('empleo.sinPreguntas')}</p>
+        )}
+
+        <div className="space-y-3">
+          {(oferta.preguntas || []).map((p, i) => (
+            <div key={p.id || i} className="rounded-lg border border-dark-800 bg-dark-900/40 p-3">
+              <div className="flex flex-wrap items-center gap-2">
+                <input value={p.texto} onChange={(e) => setP(i, 'texto', e.target.value)}
+                  placeholder={t('empleo.enunciado')}
+                  className="min-w-0 flex-1 rounded-lg border border-dark-700 bg-dark-900 px-3 py-2 text-sm text-dark-100" />
+                <select value={p.tipo} onChange={(e) => cambiarTipo(i, e.target.value)}
+                  className="rounded-lg border border-dark-700 bg-dark-900 px-2 py-2 text-xs text-dark-100">
+                  <option value="si_no">{t('empleo.tipo.si_no')}</option>
+                  <option value="opcion">{t('empleo.tipo.opcion')}</option>
+                  <option value="varias">{t('empleo.tipo.varias')}</option>
+                  <option value="texto">{t('empleo.tipo.texto')}</option>
+                  <option value="numero">{t('empleo.tipo.numero')}</option>
+                </select>
+                <label className="flex items-center gap-1.5 text-xs text-dark-400">
+                  <input type="checkbox" checked={p.obligatoria !== false}
+                    onChange={(e) => setP(i, 'obligatoria', e.target.checked)} />
+                  {t('empleo.obligatoria')}
+                </label>
+                <button onClick={() => setOferta((o) => ({ ...o, preguntas: o.preguntas.filter((_, j) => j !== i) }))}
+                  aria-label={t('empleo.quitarPregunta')} className="rounded p-1 text-red-300 ring-1 ring-red-500/30">
+                  <Trash2 size={13} />
+                </button>
+              </div>
+
+              {(p.tipo === 'si_no' || p.tipo === 'opcion' || p.tipo === 'varias') && (
+                <div className="mt-2 space-y-1.5">
+                  {(p.opciones || []).map((op, k) => (
+                    <div key={k} className="flex flex-wrap items-center gap-2">
+                      <input value={op} disabled={p.tipo === 'si_no'}
+                        onChange={(e) => setOpcion(i, k, e.target.value)}
+                        placeholder={t('empleo.opcion') + ' ' + (k + 1)}
+                        className="min-w-0 flex-1 rounded-lg border border-dark-700 bg-dark-900 px-3 py-1.5 text-sm text-dark-100 disabled:text-dark-400" />
+                      <label className="flex items-center gap-1.5 text-[11px] text-amber-300">
+                        <input type="checkbox"
+                          checked={(p.descarta || []).some((d) => clave(d) === clave(op))}
+                          onChange={() => toggleDescarta(i, op)} />
+                        {t('empleo.descarta')}
+                      </label>
+                      {p.tipo !== 'si_no' && (p.opciones || []).length > 2 && (
+                        <button onClick={() => setOferta((o) => ({
+                          ...o,
+                          preguntas: o.preguntas.map((q, j) => (j === i ? {
+                            ...q,
+                            opciones: q.opciones.filter((_, y) => y !== k),
+                            descarta: (q.descarta || []).filter((d) => clave(d) !== clave(op)),
+                          } : q)),
+                        }))} aria-label={t('empleo.quitarOpcion')} className="rounded p-1 text-dark-400">
+                          <X size={13} />
+                        </button>
+                      )}
+                    </div>
+                  ))}
+                  {p.tipo !== 'si_no' && (p.opciones || []).length < 8 && (
+                    <button onClick={() => setP(i, 'opciones', [...(p.opciones || []), ''])}
+                      className="text-[11px] text-dark-400 hover:text-dark-200">+ {t('empleo.opcion')}</button>
+                  )}
+                </div>
+              )}
+            </div>
+          ))}
+        </div>
+      </div>
+
+      <div className="flex items-center gap-2">
+        <button onClick={onGuardar} disabled={guardando}
+          className="flex items-center gap-2 rounded-lg bg-brand-500/15 px-3 py-2 text-sm font-semibold text-brand-300 ring-1 ring-brand-500/30 disabled:opacity-50">
+          {guardando && <Loader2 size={14} className="animate-spin" />} {t('empleo.guardar')}
+        </button>
+        <button onClick={onCerrar} className="rounded-lg px-3 py-2 text-sm text-dark-300 ring-1 ring-dark-700">{t('empleo.cancelar')}</button>
+      </div>
+    </div>
+  )
+}
+
+function Campo({ label, value, onChange, placeholder }) {
+  return (
+    <div>
+      <label className="mb-1 block text-xs text-dark-500">{label}</label>
+      <input value={value || ''} onChange={(e) => onChange(e.target.value)} placeholder={placeholder}
+        className="w-full rounded-lg border border-dark-700 bg-dark-900 px-3 py-2 text-sm text-dark-100" />
+    </div>
+  )
+}
+
+
+/* ── ENVIAR A UNA ETT ────────────────────────────────────────────────────────
+   Pasar un candidato a Adecco eran siete pasos: copiar el teléfono, abrir
+   WhatsApp, buscar el contacto, escribir el mensaje con el puesto y la
+   disponibilidad, enviarlo, volver aquí y acordarse de apuntar a quién se lo
+   mandaste. Con cuarenta candidatos a la semana eso no se hace entero.
+
+   ABRIR WHATSAPP NO ES HABER ENVIADO, y por eso hay dos pasos. El enlace deja
+   el mensaje escrito, pero quien lo abre puede cerrarlo sin darle a enviar;
+   marcarlo solo por pulsar llenaría la ficha de envíos que no ocurrieron, y
+   eso es peor que no apuntar nada — se deja de llamar a alguien porque «ya
+   está mandado». Lo confirma la persona al volver.
+
+   El enlace lo arma el backend (gotcha 47): a mano sale sin prefijo y abre un
+   número que no existe. */
+function EnviarAEtt({ c, onEnviado }) {
+  const [preguntando, setPreguntando] = useState(null)   // la ETT que se acaba de abrir
+  const [yendo, setYendo] = useState('')
+  const [err, setErr] = useState('')
+  const etts = c.etts_para || []
+
+  const confirmar = async (ett) => {
+    setYendo(ett.id); setErr('')
+    try { await enviarCandidatoAEtt(c.id, ett.id); setPreguntando(null); onEnviado?.() } catch (e) {
+      setErr(e?.response?.data?.detail || 'No se pudo apuntar el envío.')
+    } finally { setYendo('') }
+  }
+
+  const deshacer = async (ett) => {
+    setYendo(ett.id); setErr('')
+    try { await deshacerEnvioEtt(c.id, ett.id); onEnviado?.() } catch (e) {
+      setErr(e?.response?.data?.detail || 'No se pudo deshacer.')
+    } finally { setYendo('') }
+  }
+
+  if (!etts.length) {
+    return (
+      <div className="rounded-lg border border-dashed border-dark-700 p-2.5 text-[11.5px] text-dark-500">
+        No hay ninguna ETT dada de alta. Añádelas arriba, en «ETTs», y aquí saldrá
+        un botón por cada una.
+      </div>
+    )
+  }
+
+  return (
+    <div className="space-y-1.5">
+      <div className="flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wider text-dark-500">
+        <Send size={11} /> Enviar a ETT
+      </div>
+      {etts.map((e) => (
+        <div key={e.id} className="rounded-lg bg-dark-900/60 p-2">
+          <div className="flex flex-wrap items-center gap-2">
+            <b className="text-[12.5px] text-dark-100">{e.nombre}</b>
+            {e.enviado_en ? (
+              <span className="rounded bg-emerald-500/15 px-1.5 py-px text-[11px] font-semibold text-emerald-300">
+                enviado {dia(e.enviado_en)}{e.enviado_por ? ` · ${e.enviado_por}` : ''}
+              </span>
+            ) : (
+              <span className="text-[11px] text-dark-500">sin enviar</span>
+            )}
+            <a href={e.wa} target="_blank" rel="noreferrer"
+              onClick={() => setPreguntando(e.id)}
+              className="ml-auto flex items-center gap-1.5 rounded-lg bg-emerald-500/10 px-2.5 py-1 text-[12px] font-medium text-emerald-300 ring-1 ring-emerald-500/25">
+              <MessageCircle size={12} /> WhatsApp
+            </a>
+          </div>
+          {preguntando === e.id && !e.enviado_en && (
+            <div className="mt-2 flex flex-wrap items-center gap-2 border-t border-dark-800 pt-2">
+              <span className="text-[11.5px] text-dark-300">¿Se lo has enviado?</span>
+              <button onClick={() => confirmar(e)} disabled={yendo === e.id}
+                className="rounded-lg bg-emerald-500/20 px-2.5 py-1 text-[12px] font-semibold text-emerald-200 disabled:opacity-50">
+                {yendo === e.id ? 'Apuntando…' : 'Sí, enviado'}
+              </button>
+              <button onClick={() => setPreguntando(null)}
+                className="rounded-lg border border-dark-700 px-2.5 py-1 text-[12px] text-dark-400">
+                Todavía no
+              </button>
+            </div>
+          )}
+          {e.enviado_en && (
+            <button onClick={() => deshacer(e)} disabled={yendo === e.id}
+              className="mt-1 text-[11px] text-dark-500 hover:text-dark-400">
+              Lo apunté por error
+            </button>
+          )}
+        </div>
+      ))}
+      {err && <p className="text-[11.5px] text-red-400">{err}</p>}
+    </div>
+  )
+}
+
+/* La agenda de ETTs. Existe para que añadir una ETT nueva no sea tocar código:
+   nombre, WhatsApp y —si se quiere— el mensaje que se le manda. */
+/* ── POR CONTACTAR: LA GENTE DE INDEED QUE AÚN NO SE HA APUNTADO ────────────
+   Un nombre, un teléfono y un WhatsApp ya escrito. Antes esto era copiar el
+   texto de una nota, cambiarle el nombre a mano y buscar el contacto en el
+   móvil: con veinte al día se hace a medias y luego nadie sabe a quién se
+   escribió.
+
+   DOS COSAS QUE NO SON OBVIAS:
+   · ABRIR WHATSAPP NO ES HABER ESCRITO. El botón deja el mensaje puesto, pero
+     se puede cerrar sin enviar. Se marca aparte y lo confirma una persona:
+     apuntar envíos que no ocurrieron hace que se deje de escribir a alguien
+     creyendo que ya está hecho.
+   · QUIEN SE APUNTA SE MARCA SOLO. El backend cruza el teléfono con los
+     candidatos, así que la lista dice a quién ya no hay que volver a escribir.
+     Sin eso, esto sería otra libreta más que se queda vieja. */
+function PorContactar() {
+  const [d, setD] = useState(null)
+  const [nuevo, setNuevo] = useState({ nombre: '', telefono: '' })
+  const [err, setErr] = useState('')
+  const [yendo, setYendo] = useState(false)
+  const [verTexto, setVerTexto] = useState(false)
+  const [texto, setTexto] = useState('')
+
+  const cargar = useCallback(() => {
+    getInvitados()
+      .then((r) => { setD(r.data); setTexto((v) => v || r.data.plantilla || '') })
+      .catch(() => setErr('No se ha podido cargar la lista.'))
+  }, [])
+  useEffect(() => { cargar() }, [cargar])
+
+  const anadir = async () => {
+    setYendo(true); setErr('')
+    try {
+      await crearInvitado(nuevo)
+      setNuevo({ nombre: '', telefono: '' })
+      cargar()
+    } catch (e) { setErr(e?.response?.data?.detail || 'No se ha podido guardar.') } finally { setYendo(false) }
+  }
+
+  const guardarTexto = async () => {
+    setYendo(true); setErr('')
+    try { await guardarPlantillaInvitacion(texto); setVerTexto(false); cargar() } catch (e) {
+      setErr(e?.response?.data?.detail || 'No se ha podido guardar el mensaje.')
+    } finally { setYendo(false) }
+  }
+
+  const quitar = async (x) => {
+    if (!window.confirm(`¿Quitar a ${x.nombre} de la lista?`)) return
+    try { await borrarInvitado(x.id); cargar() } catch (e) {
+      setErr(e?.response?.data?.detail || 'No se ha podido quitar.')
+    }
+  }
+
+  const listo = nuevo.nombre.trim().length >= 2 && nuevo.telefono.replace(/\D/g, '').length >= 9
+
+  if (!d) return <div className="card p-4 text-[13px] text-dark-400">Cargando la lista…</div>
+
+  return (
+    <div className="card p-3.5">
+      <div className="mb-1 flex flex-wrap items-center gap-2">
+        <h3 className="text-[14px] font-bold text-dark-100">Por contactar</h3>
+        {d.sin_escribir > 0 && (
+          <span className="rounded-full bg-amber-500/15 px-2 py-0.5 text-[11px] font-semibold text-amber-300">
+            {d.sin_escribir} sin escribir
+          </span>
+        )}
+        {d.apuntados > 0 && (
+          <span className="rounded-full bg-emerald-500/15 px-2 py-0.5 text-[11px] font-semibold text-emerald-300">
+            {d.apuntados} ya se apuntaron
+          </span>
+        )}
+        <button onClick={() => setVerTexto((v) => !v)}
+          className="ml-auto rounded-lg border border-dark-700 px-2 py-1 text-[11.5px] text-dark-400 hover:border-dark-500">
+          {verTexto ? 'Cerrar' : 'Ver el mensaje'}
+        </button>
+      </div>
+      <p className="mb-3 max-w-[75ch] text-[12.5px] text-dark-400">
+        Gente que ves en Indeed y que todavía no se ha apuntado en la web. Guarda el
+        nombre y el número y mándale el mensaje de un toque. Cuando se apunte, aquí
+        se marca solo.
+      </p>
+
+      {verTexto && (
+        <div className="mb-3 rounded-lg border border-dark-800 p-2.5">
+          <textarea rows={9} value={texto} onChange={(e) => setTexto(e.target.value)}
+            className="w-full rounded-lg border border-dark-700 bg-dark-950 px-2.5 py-2 text-[12.5px] leading-relaxed text-dark-100 outline-none focus:border-brand-500/40" />
+          <p className="mt-1 text-[11.5px] text-dark-500">
+            <b className="text-dark-300">{'{nombre}'}</b> se cambia por su nombre de pila y{' '}
+            <b className="text-dark-300">{'{enlace}'}</b> por {d.enlace}. Los dos tienen que estar.
+          </p>
+          <button onClick={guardarTexto} disabled={yendo}
+            className="mt-2 rounded-lg bg-brand-500/15 px-2.5 py-1 text-[11.5px] font-semibold text-brand-300 ring-1 ring-brand-500/30 disabled:opacity-50">
+            Guardar el mensaje
+          </button>
+        </div>
+      )}
+
+      <div className="mb-3 flex flex-wrap items-end gap-2">
+        <div className="min-w-[160px] flex-1">
+          <label className="label">Nombre</label>
+          <input className="input py-1.5 text-[13px]" value={nuevo.nombre} placeholder="Como se llame"
+            onChange={(e) => setNuevo((x) => ({ ...x, nombre: e.target.value }))} />
+        </div>
+        <div className="min-w-[130px]">
+          <label className="label">Teléfono</label>
+          <input className="input py-1.5 text-[13px]" value={nuevo.telefono} placeholder="600 11 22 33"
+            inputMode="tel"
+            onChange={(e) => setNuevo((x) => ({ ...x, telefono: e.target.value }))}
+            onKeyDown={(e) => { if (e.key === 'Enter' && listo) anadir() }} />
+        </div>
+        <button onClick={anadir} disabled={!listo || yendo}
+          className="rounded-lg bg-brand-500/15 px-3 py-2 text-[12.5px] font-semibold text-brand-300 ring-1 ring-brand-500/30 disabled:opacity-40">
+          Añadir
+        </button>
+      </div>
+
+      {err && <p className="mb-2 text-[12.5px] text-red-400">{err}</p>}
+
+      <div className="space-y-1.5">
+        {(d.invitados || []).map((x) => (
+          <div key={x.id} className={`flex flex-wrap items-center gap-2 rounded-lg border p-2.5 ${
+            x.se_apunto ? 'border-emerald-500/25 bg-emerald-500/[.06]' : 'border-dark-800'}`}>
+            <b className="text-[13px] text-dark-100">{x.nombre}</b>
+            <span className="font-mono text-[12px] text-dark-400">{x.telefono}</span>
+            {x.se_apunto && (
+              <span className="rounded bg-emerald-500/15 px-1.5 py-px text-[11px] font-semibold text-emerald-300">
+                ya se apuntó
+              </span>
+            )}
+            {x.escrito_en && !x.se_apunto && (
+              <span className="rounded bg-dark-800 px-1.5 py-px text-[11px] text-dark-400">
+                escrito el {dia(x.escrito_en)}
+              </span>
+            )}
+            <div className="ml-auto flex items-center gap-1.5">
+              {x.wa ? (
+                <a href={x.wa} target="_blank" rel="noopener noreferrer"
+                  className="inline-flex items-center gap-1.5 rounded-lg bg-emerald-500/15 px-2.5 py-1 text-[11.5px] font-semibold text-emerald-300 ring-1 ring-emerald-500/30 hover:bg-emerald-500/25">
+                  <MessageCircle size={12} /> WhatsApp
+                </a>
+              ) : (
+                <span className="text-[11.5px] text-amber-300">sin teléfono</span>
+              )}
+              <button onClick={() => marcarInvitadoEscrito(x.id, !x.escrito_en).then(cargar)}
+                title={x.escrito_en ? 'Marcar como no escrito' : 'Ya le he escrito'}
+                className={`rounded-lg border px-2 py-1 text-[11.5px] ${
+                  x.escrito_en
+                    ? 'border-dark-700 text-dark-400 hover:border-dark-500'
+                    : 'border-brand-500/30 text-brand-300 hover:bg-brand-500/10'}`}>
+                {x.escrito_en ? 'Deshacer' : 'Ya escrito'}
+              </button>
+              <button onClick={() => quitar(x)} aria-label={`Quitar a ${x.nombre}`}
+                className="rounded-lg px-2 py-1 text-red-300 ring-1 ring-red-500/25 hover:bg-red-500/10">
+                <Trash2 size={12} />
+              </button>
+            </div>
+          </div>
+        ))}
+        {!(d.invitados || []).length && (
+          <p className="text-[12.5px] text-dark-500">
+            Todavía no has guardado a nadie. Pon el nombre y el número de arriba.
+          </p>
+        )}
+      </div>
+    </div>
+  )
+}
+
+function AgendaEtts({ onCambio }) {
+  const [d, setD] = useState(null)
+  const [nueva, setNueva] = useState({ nombre: '', telefono: '', contacto: '' })
+  const [editando, setEditando] = useState('')
+  const [plantilla, setPlantilla] = useState('')
+  const [err, setErr] = useState('')
+  const [yendo, setYendo] = useState(false)
+
+  const cargar = useCallback(() => {
+    getEtts().then((r) => setD(r.data)).catch(() => setErr('No se pudo cargar la agenda.'))
+  }, [])
+  useEffect(() => { cargar() }, [cargar])
+
+  const crear = async () => {
+    setYendo(true); setErr('')
+    try {
+      await crearEtt(nueva)
+      setNueva({ nombre: '', telefono: '', contacto: '' }); cargar(); onCambio?.()
+    } catch (e) { setErr(e?.response?.data?.detail || 'No se pudo crear.') } finally { setYendo(false) }
+  }
+
+  const guardarPlantilla = async (e) => {
+    setYendo(true); setErr('')
+    try { await editarEtt(e.id, { plantilla }); setEditando(''); cargar(); onCambio?.() } catch (x) {
+      setErr(x?.response?.data?.detail || 'No se pudo guardar.')
+    } finally { setYendo(false) }
+  }
+
+  const quitar = async (e) => {
+    if (!window.confirm(`¿Quitar ${e.nombre} de la agenda? Los envíos ya apuntados se quedan.`)) return
+    try { await borrarEtt(e.id); cargar(); onCambio?.() } catch (x) {
+      setErr(x?.response?.data?.detail || 'No se pudo quitar.')
+    }
+  }
+
+  if (!d) return <div className="card p-4 text-[13px] text-dark-400">Cargando la agenda…</div>
+
+  return (
+    <div className="card p-3.5">
+      <h3 className="mb-1 text-[14px] font-bold text-dark-100">ETTs</h3>
+      <p className="mb-3 max-w-[70ch] text-[12.5px] text-dark-400">
+        A quién se le pasan los candidatos. Cada una con su WhatsApp y, si quieres, su
+        propio mensaje: en la ficha de cada candidato sale un botón por ETT con el
+        texto ya escrito.
+      </p>
+
+      <div className="space-y-2">
+        {(d.etts || []).map((e) => (
+          <div key={e.id} className="rounded-lg border border-dark-800 p-2.5">
+            <div className="flex flex-wrap items-center gap-2">
+              <b className="text-[13px] text-dark-100">{e.nombre}</b>
+              <span className="font-mono text-[12px] text-dark-400">{e.telefono}</span>
+              {e.contacto && <span className="text-[12px] text-dark-500">{e.contacto}</span>}
+              {e.activa === false && (
+                <span className="rounded bg-dark-800 px-1.5 py-px text-[11px] text-dark-300">inactiva</span>
+              )}
+              <div className="ml-auto flex gap-1.5">
+                <button onClick={() => { setEditando(e.id); setPlantilla(e.plantilla || d.plantilla_defecto) }}
+                  className="rounded-lg border border-dark-700 px-2 py-1 text-[11.5px] text-dark-400 hover:border-dark-500">
+                  Mensaje
+                </button>
+                <button onClick={() => editarEtt(e.id, { activa: e.activa === false }).then(cargar)}
+                  className="rounded-lg border border-dark-700 px-2 py-1 text-[11.5px] text-dark-400 hover:border-dark-500">
+                  {e.activa === false ? 'Activar' : 'Desactivar'}
+                </button>
+                <button onClick={() => quitar(e)}
+                  className="rounded-lg border border-dark-800 px-2 py-1 text-[11.5px] text-dark-500 hover:border-red-500/40 hover:text-red-400">
+                  <Trash2 size={11} />
+                </button>
+              </div>
+            </div>
+            {editando === e.id && (
+              <div className="mt-2 border-t border-dark-800 pt-2">
+                <p className="mb-1 text-[11.5px] text-dark-500">
+                  Se sustituyen solos: <b className="text-dark-300">{'{puesto}'}</b>,{' '}
+                  <b className="text-dark-300">{'{disponibilidad}'}</b>,{' '}
+                  <b className="text-dark-300">{'{ciudad}'}</b>,{' '}
+                  <b className="text-dark-300">{'{candidato}'}</b>,{' '}
+                  <b className="text-dark-300">{'{experiencia}'}</b>. Una línea cuyo dato
+                  salga vacío no se manda.
+                </p>
+                <textarea value={plantilla} onChange={(x) => setPlantilla(x.target.value)}
+                  rows={5} className="input w-full text-[12.5px]" />
+                <div className="mt-1.5 flex gap-1.5">
+                  <button onClick={() => guardarPlantilla(e)} disabled={yendo}
+                    className="rounded-lg bg-brand-500/20 px-2.5 py-1 text-[12px] font-semibold text-brand-200 disabled:opacity-50">
+                    Guardar
+                  </button>
+                  <button onClick={() => setEditando('')}
+                    className="rounded-lg border border-dark-700 px-2.5 py-1 text-[12px] text-dark-400">
+                    Cancelar
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+        ))}
+        {!(d.etts || []).length && (
+          <p className="text-[12.5px] text-dark-500">Todavía no hay ninguna.</p>
+        )}
+      </div>
+
+      <div className="mt-3 flex flex-wrap items-end gap-2 border-t border-dark-800 pt-3">
+        <div>
+          <label className="label">Nombre</label>
+          <input className="input py-1.5 text-[13px]" placeholder="Adecco"
+            value={nueva.nombre} onChange={(e) => setNueva({ ...nueva, nombre: e.target.value })} />
+        </div>
+        <div>
+          <label className="label">WhatsApp</label>
+          <input className="input py-1.5 text-[13px]" placeholder="600 000 000"
+            value={nueva.telefono} onChange={(e) => setNueva({ ...nueva, telefono: e.target.value })} />
+        </div>
+        <div>
+          <label className="label">Persona de contacto</label>
+          <input className="input py-1.5 text-[13px]" placeholder="opcional"
+            value={nueva.contacto} onChange={(e) => setNueva({ ...nueva, contacto: e.target.value })} />
+        </div>
+        <button onClick={crear} disabled={yendo || nueva.nombre.length < 2 || !nueva.telefono}
+          className="rounded-lg bg-brand-500/20 px-3 py-1.5 text-[13px] font-semibold text-brand-200 disabled:opacity-40">
+          Añadir ETT
+        </button>
+      </div>
+      {err && <p className="mt-2 text-[12.5px] text-red-400">{err}</p>}
+    </div>
+  )
+}
+
+
+/* JOIN — LAS CANDIDATURAS QUE ENTRAN POR JOIN.COM, EN ESTE TABLERO.
+   Dos caminos, porque el primero depende de un token que hay que ir a buscar:
+   · CONECTAR: con el token de la API se bajan candidatos y currículums, y del
+     currículum sale el teléfono de quien no lo dejó en el formulario.
+   · SUBIR EL CSV que exporta JOIN: sin token, pero sin CV y solo con los
+     teléfonos que traiga el fichero.
+   Repetir cualquiera de los dos no duplica: la clave es el id de JOIN. */
+function ConexionJoin({ ofertas, onHecho }) {
+  const [d, setD] = useState(null)
+  const [token, setToken] = useState('')
+  const [trabajos, setTrabajos] = useState(null)
+  const [oferta, setOferta] = useState('')
+  const [job, setJob] = useState('')
+  const [err, setErr] = useState('')
+  const [aviso, setAviso] = useState('')
+  const [yendo, setYendo] = useState(false)
+  const ficheroRef = useRef(null)
+
+  const cargar = useCallback(() => getJoin()
+    .then((r) => { setD(r.data); return r.data })
+    .catch(() => { setErr('No se pudo leer la conexión con JOIN.'); return null }), [])
+  useEffect(() => { cargar() }, [cargar])
+
+  // La oferta por defecto: la única activa, si solo hay una.
+  useEffect(() => {
+    if (oferta) return
+    const activas = ofertas.filter((o) => o.activa !== false)
+    if (activas.length === 1) setOferta(activas[0].id)
+  }, [ofertas, oferta])
+
+  useEffect(() => {
+    if (!d?.conectado || trabajos) return
+    getOfertasJoin().then((r) => setTrabajos(r.data.ofertas || []))
+      .catch((e) => { setTrabajos([]); setErr(e?.response?.data?.detail || 'No se pudieron leer las ofertas de JOIN.') })
+  }, [d, trabajos])
+
+  // Mientras trae candidatos, se mira el progreso cada 3 s.
+  const enMarcha = !!d?.sync?.en_marcha
+  useEffect(() => {
+    if (!enMarcha) return undefined
+    const id = setInterval(async () => {
+      const nuevo = await cargar()
+      if (nuevo && !nuevo.sync?.en_marcha) onHecho?.()
+    }, 3000)
+    return () => clearInterval(id)
+  }, [enMarcha, cargar, onHecho])
+
+  const conectar = async () => {
+    setYendo(true); setErr('')
+    try {
+      await guardarTokenJoin(token.trim())
+      setToken(''); setTrabajos(null)
+      await cargar()
+    } catch (e) {
+      setErr(e?.response?.data?.detail || 'No se pudo guardar el token.')
+    } finally { setYendo(false) }
+  }
+
+  const desconectar = async () => {
+    if (!window.confirm('¿Quitar el token de JOIN? Los candidatos ya traídos se quedan.')) return
+    try { await guardarTokenJoin(''); setTrabajos(null); await cargar() } catch { setErr('No se pudo quitar.') }
+  }
+
+  const sincronizar = async () => {
+    if (!oferta) { setErr('Elige a qué oferta van los candidatos.'); return }
+    // "Todas las ofertas de JOIN" con dos o mas puestos reales mezcla naves:
+    // el 17-09-2026, 113 candidatos de Santiago (OGA5) acabaron tambien en la
+    // de A Coruna (DGA1) por sincronizar asi. El backend ya lo rechaza; esto
+    // solo evita el viaje de ida y vuelta para verlo.
+    if (!job && (trabajos || []).length > 1) {
+      setErr('Hay varios puestos en JOIN: elige a cuál de ellos van estos candidatos.')
+      return
+    }
+    setYendo(true); setErr(''); setAviso('')
+    try {
+      await sincronizarJoin({ oferta_id: oferta, job_id: job })
+      await cargar()
+    } catch (e) {
+      setErr(e?.response?.data?.detail || 'No se pudo empezar a traer candidatos.')
+    } finally { setYendo(false) }
+  }
+
+  const subirCsv = async (f) => {
+    if (!f) return
+    if (!oferta) { setErr('Elige primero a qué oferta van los candidatos.'); return }
+    setYendo(true); setErr(''); setAviso('')
+    try {
+      const { data: r } = await importarCsvJoin(f, oferta)
+      setAviso(`${r.nuevo} nuevos, ${r.completado} completados, ${r.igual + r.repetido} ya estaban. `
+        + `${r.sin_telefono} sin teléfono en el fichero: conecta la API para buscarlo en su CV.`)
+      onHecho?.()
+    } catch (e) {
+      setErr(e?.response?.data?.detail || 'No se pudo importar el fichero.')
+    } finally {
+      setYendo(false)
+      if (ficheroRef.current) ficheroRef.current.value = ''
+    }
+  }
+
+  if (!d) return null
+  const s = d.sync || {}
+
+  return (
+    <div className="card p-3.5">
+      <h3 className="mb-1 text-[14px] font-bold text-dark-100">JOIN</h3>
+      <p className="mb-3 max-w-[70ch] text-[12.5px] text-dark-400">
+        Trae a este tablero a quien se apunta en join.com. Con el token se bajan también los
+        currículums y, si alguien no dejó el teléfono, se busca en su CV.
+      </p>
+
+      <div className="mb-3 flex flex-wrap items-center gap-2">
+        <select value={oferta} onChange={(e) => setOferta(e.target.value)}
+          className="max-w-full rounded-lg border border-dark-700 bg-dark-950 px-2 py-1.5 text-[12px] text-dark-100">
+          <option value="">¿A qué oferta van?</option>
+          {ofertas.map((o) => <option key={o.id} value={o.id}>{o.titulo} · {o.centro}</option>)}
+        </select>
+        <input ref={ficheroRef} type="file" accept=".csv,text/csv" className="hidden"
+          onChange={(e) => subirCsv(e.target.files?.[0])} />
+        <button onClick={() => ficheroRef.current?.click()} disabled={yendo}
+          className="flex items-center gap-1 rounded-lg px-2.5 py-1.5 text-[12px] text-dark-300 ring-1 ring-dark-700 hover:text-dark-100 disabled:opacity-40">
+          <FileText size={13} /> Subir CSV de JOIN
+        </button>
+      </div>
+
+      {d.conectado ? (
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="rounded bg-emerald-500/10 px-2 py-1 text-[11px] text-emerald-300 ring-1 ring-emerald-500/25">
+            Conectado · …{d.token_fin}
+          </span>
+          <select value={job} onChange={(e) => setJob(e.target.value)}
+            className="max-w-[260px] rounded-lg border border-dark-700 bg-dark-950 px-2 py-1.5 text-[12px] text-dark-100">
+            <option value="">Todas las ofertas de JOIN</option>
+            {(trabajos || []).map((j) => (
+              <option key={j.id} value={j.id}>{j.titulo}{j.estado && j.estado !== 'online' ? ` (${j.estado})` : ''}</option>
+            ))}
+          </select>
+          <button onClick={sincronizar} disabled={yendo || enMarcha}
+            className="flex items-center gap-1.5 rounded-lg bg-brand-500/15 px-3 py-1.5 text-[12px] font-semibold text-brand-300 ring-1 ring-brand-500/30 hover:bg-brand-500/25 disabled:opacity-40">
+            {enMarcha ? <Loader2 size={13} className="animate-spin" /> : <UserPlus size={13} />}
+            {enMarcha ? `Trayendo… ${s.vistas || 0}` : 'Traer candidatos'}
+          </button>
+          <button onClick={desconectar} className="text-[11px] text-dark-500 hover:text-dark-300">Quitar token</button>
+        </div>
+      ) : (
+        <div className="flex flex-wrap items-center gap-2">
+          <input value={token} onChange={(e) => setToken(e.target.value)} type="password" autoComplete="off"
+            placeholder="Token de la API de JOIN"
+            className="w-64 max-w-full rounded-lg border border-dark-700 bg-dark-950 px-2 py-1.5 text-[12px] text-dark-100 outline-none focus:border-brand-500/40" />
+          <button onClick={conectar} disabled={yendo || !token.trim()}
+            className="flex items-center gap-1.5 rounded-lg bg-brand-500/15 px-3 py-1.5 text-[12px] font-semibold text-brand-300 ring-1 ring-brand-500/30 disabled:opacity-40">
+            <Link2 size={13} /> Conectar
+          </button>
+          <a href="https://join.com/user/api" target="_blank" rel="noreferrer"
+            className="flex items-center gap-1 text-[11px] text-dark-400 hover:text-dark-200">
+            Sacar el token en JOIN <ExternalLink size={10} />
+          </a>
+        </div>
+      )}
+
+      {!enMarcha && s.terminado && (
+        <p className="mt-2 text-[12px] text-dark-400">
+          Última vez ({dia(s.terminado)}): {s.vistas} vistos · {s.nuevo} nuevos · {s.completado} completados
+          · {s.tel_del_cv} teléfonos sacados del CV · {s.sin_telefono} siguen sin teléfono
+          {s.error ? <span className="text-red-300"> · {s.error}</span> : null}
+        </p>
+      )}
+      {aviso && <p className="mt-2 text-[12px] text-emerald-300">{aviso}</p>}
+      {err && <p className="mt-2 text-[12px] text-red-300">{err}</p>}
+    </div>
+  )
+}

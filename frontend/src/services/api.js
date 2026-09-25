@@ -1,0 +1,237 @@
+import axios from 'axios'
+import { API_BASE } from '../lib/apiBase'
+
+export { API_BASE }
+
+export const api = axios.create({
+  baseURL: API_BASE,
+  timeout: 30000,
+})
+
+/* ── DOS SESIONES QUE NO SE PISAN ──────────────────────────────────────────
+   El panel y el portal del conductor viven en el mismo navegador y hasta ahora
+   compartían la misma llave `flotadsp_token`. Consecuencia real, vista en
+   producción: alguien con el panel abierto entraba al portal para probar, el
+   login del conductor pisaba el token del admin, las pestañas del panel
+   empezaban a dar 401 y el interceptor de abajo BORRABA el token —dejando sin
+   sesión también al conductor, que veía "Se requiere autenticación" en mitad
+   de una petición de días.
+
+   La sesión del conductor tiene ahora su propia llave. Se elige por la URL:
+   /conductor es suyo, el resto es del panel. */
+export const DRIVER_TOKEN_KEY = 'flotadsp_driver_token'
+export const enPortalConductor = () =>
+  typeof window !== 'undefined' && window.location.pathname.startsWith('/conductor')
+
+export function tokenActual() {
+  if (enPortalConductor()) {
+    // Se acepta el token viejo como respaldo: quien tenga la sesión abierta de
+    // antes no se queda fuera al desplegar esto.
+    return localStorage.getItem(DRIVER_TOKEN_KEY) || localStorage.getItem('flotadsp_token') || ''
+  }
+  return localStorage.getItem('flotadsp_token') || ''
+}
+
+api.interceptors.request.use((config) => {
+  const token = tokenActual()
+  if (token) config.headers.Authorization = `Bearer ${token}`
+  return config
+})
+
+// Sesión expirada/inválida dentro del panel → limpiar y volver al login.
+// OJO: change-my-password devuelve 401 cuando la contraseña actual es errónea
+// (no es un problema de sesión), por eso se excluye.
+/* `detail` SIEMPRE TEXTO. Hay 186 sitios que pintan
+   `error.response.data.detail` tal cual, y FastAPI no siempre manda texto: un
+   422 por un campo mal formado trae una LISTA de objetos, y React revienta la
+   pantalla entera al intentar pintar un objeto. Se normaliza aquí, una vez:
+   `detail` pasa a ser el mensaje legible y el original queda en `detalle`
+   para quien necesite sus campos (p. ej. `reactivar_id` al dar de alta). */
+export function normalizarDetalle(data) {
+  if (!data || typeof data !== 'object' || data.detail == null || typeof data.detail === 'string') return data
+  const d = data.detail
+  let texto
+  if (Array.isArray(d)) {
+    texto = d.map((x) => {
+      if (typeof x === 'string') return x
+      const campo = Array.isArray(x?.loc) ? x.loc.filter((p) => p !== 'body').join('.') : ''
+      return campo ? `${campo}: ${x?.msg || 'valor no válido'}` : (x?.msg || '')
+    }).filter(Boolean).join(' · ') || 'Algún dato no tiene el formato correcto.'
+  } else {
+    texto = d.mensaje || d.message || d.msg || 'No se ha podido completar la operación.'
+  }
+  return { ...data, detail: texto, detalle: d }
+}
+
+api.interceptors.response.use(
+  (res) => res,
+  (error) => {
+    if (error?.response?.data) error.response.data = normalizarDetalle(error.response.data)
+    const status = error?.response?.status
+    const url = error?.config?.url || ''
+    const path = window.location.pathname
+    if (
+      status === 401 &&
+      path.startsWith('/panel') &&
+      path !== '/panel/login' &&
+      // Nunca desde el portal del conductor: un 401 suyo no puede llevarse por
+      // delante la sesión del panel (ni al revés). Son dos sesiones distintas.
+      !enPortalConductor() &&
+      !url.includes('/auth/change-my-password')
+    ) {
+      localStorage.removeItem('flotadsp_token')
+      localStorage.removeItem('flotadsp_admin')
+      window.location.replace('/panel/login')
+    }
+
+    /* EL PORTAL DEL CONDUCTOR TIENE SU PROPIA SALIDA.
+       Estaba excluido del bloque de arriba para no tocar la sesión del panel, y
+       con eso se quedó SIN NINGÚN tratamiento: cuando a un conductor le
+       caducaba el token, la pantalla le soltaba en crudo "Token inválido:
+       Signature has expired" y ahí se quedaba. Le pasó a Estela el 21-08-2026
+       intentando pedir días libres: el botón no hacía nada y el error no le
+       decía qué hacer.
+
+       Aquí se borra SOLO su llave —la del panel no se toca— y se le devuelve a
+       su pantalla de entrada conservando el slug del DSP, que va en el hash.
+
+       Y SOLO SI TENÍA SESIÓN. Sin esta guarda, un 401 estando ya en la pantalla
+       de entrada hace `location.replace('/conductor')` sobre `/conductor`, que
+       es una RECARGA ENTERA: la app vuelve a montar, vuelve a pedir, vuelve a
+       recibir 401, vuelve a recargar. Bucle infinito, y desde fuera parece que
+       la pantalla «no para de resetearse».
+       Pasó el 07-09-2026, medido en los logs del backend: `/tienda/escaparate`
+       devolviendo 401 CINCO O SEIS VECES POR SEGUNDO sin parar, con el portal
+       recargándose a ese ritmo. Lo destapó una llamada nueva —la de la tienda—
+       que se hacía al montar sin mirar si había sesión, pero la trampa estaba
+       aquí desde antes y cualquier otra llamada futura la habría vuelto a
+       pisar. Sin token no hay a quien expulsar: el 401 es la respuesta
+       correcta y no hay nada que hacer.
+       El propio comentario de arriba ya avisaba de esto: «vuelve a la pantalla
+       de inicio para fallar otra vez: un bucle en vez de un aviso». */
+    const teniaSesion = !!(localStorage.getItem(DRIVER_TOKEN_KEY)
+      || localStorage.getItem('flotadsp_token'))
+    if (status === 401 && enPortalConductor() && teniaSesion
+      && !url.includes('/auth/driver-login')
+      && !url.includes('/auth/driver-lookup')
+      && !url.includes('/auth/change-my-password')) {
+      localStorage.removeItem(DRIVER_TOKEN_KEY)
+      localStorage.removeItem('flotadsp_token')
+      // Y TAMBIÉN su ficha. Sin esto el portal cree que sigue dentro —la ficha
+      // es lo que mira para decidir si enseña el login— y vuelve a la pantalla
+      // de inicio para fallar otra vez: un bucle en vez de un aviso.
+      localStorage.removeItem('flotadsp_driver')
+      // Para que la pantalla de entrada pueda explicarle por qué está ahí.
+      try { sessionStorage.setItem('driver_sesion_caducada', '1') } catch { /* modo privado */ }
+      const slug = (window.location.hash || '')
+      window.location.replace('/conductor' + slug)
+    }
+    return Promise.reject(error)
+  }
+)
+
+/* ── Multi-tenant: el slug del DSP sale de la URL (flotadsp.com/<slug>/conductor) ── */
+export function currentSlug() {
+  // flotadsp.com/conductor/#<slug>  (hash: robusto, sin líos de enrutado servidor)
+  const h = (window.location.hash || '').replace(/^#\/?/, '').trim()
+  if (h && /^[a-z0-9-]+$/i.test(h)) return h
+  // alternativas: ?slug= o /conductor/<slug> por si acaso
+  const m = window.location.pathname.match(/\/conductor\/([a-z0-9-]+)/i)
+  if (m) return m[1]
+  return new URLSearchParams(window.location.search).get('slug') || undefined
+}
+
+/* ── Auth conductor (scoped al DSP por slug) ────────────────────
+   Se pregunta SOLO por el email tecleado. Antes el portal se descargaba la
+   plantilla entera (nombre, email, centro e id de todos los conductores) sin
+   autenticar y buscaba en local: eso filtraba datos personales de toda la
+   empresa y permitía pedir un token con el id de cualquiera. */
+export const driverLookup = (email) =>
+  api.post('/auth/driver-lookup', { email, slug: currentSlug() })
+
+export const getDriverToken = (driverId, email) =>
+  api.post('/auth/driver-token', { driver_id: driverId, email, slug: currentSlug() })
+
+/* Info pública del DSP por su slug (para mostrar su nombre en el portal) */
+export const getOrgBySlug = (slug) => api.get(`/auth/org/${slug}`)
+
+export const getAssignedVehicle = () => api.get('/auth/me/assigned-vehicle')
+
+/* ── Vehículos / inspecciones ─────────────────────────────── */
+export const getPortalVehicles = () => api.get('/vehicles/portal')
+/* Lo que le falta a su propia ficha, y como rellenarlo el mismo. */
+export const getMiFicha = () => api.get('/portal/mi-ficha')
+export const guardarMiTelefono = (telefono) => api.post('/portal/mi-telefono', { telefono })
+
+// Tienda del conductor. La cuenta de la tienda es aparte de la del trabajo:
+// aqui se llama con la sesion del portal, que es la que ya tiene.
+export const tiendaEscaparate = () => api.get('/tienda/escaparate')
+export const tiendaCrearPedido = (lineas, email) => api.post('/tienda/pedido', { lineas, email })
+export const tiendaAnularMiPedido = (id) => api.post(`/tienda/pedido/${id}/anular`)
+export const tiendaMisPedidos = () => api.get('/tienda/mis-pedidos')
+export const tiendaCuenta = () => api.get('/tienda/cuenta')
+export const tiendaVincularCuenta = (email, password) =>
+  api.post('/tienda/cuenta/vincular', { email, password })
+export const tiendaFotoBlob = (id) =>
+  api.get(`/tienda/prendas/${id}/foto`, { responseType: 'blob' })
+export const tiendaPagar = (pedidoId) => api.post(`/tienda/pedido/${pedidoId}/pagar`)
+/* Turnos del propio conductor: su calendario y sus peticiones de día. */
+export const getMyShifts = (desde, hasta) => api.get('/shifts/mine', { params: { desde, hasta } })
+// Lo suyo, para el: sus numeros de Cortex y las ayudas del mes
+export const getMisNumeros = () => api.get('/portal/mis-numeros')
+export const getMisAyudas = () => api.get('/portal/mis-ayudas')
+// Dias que este conductor NO puede pedir, y por que.
+export const getMisBloqueos = () => api.get('/shift-blocks/mios')
+/* Pedir días. Admite las dos formas a propósito:
+     createShiftRequest({ dates:[...], motivo, note })   ← calendario nuevo
+     createShiftRequest('2026-09-23', 'libre', '')       ← pantalla antigua
+   La antigua sigue viva en Mis turnos; cambiar la firma a secas la habría
+   roto en silencio, porque JavaScript no avisa de un argumento de más. */
+export const createShiftRequest = (a, type, note) =>
+  api.post('/shift-requests', (a && typeof a === 'object') ? a : { date: a, type, note })
+export const marcarRespuestasVistas = (body) => api.post('/shift-requests/vistas', body)
+// El conductor se cambia su propia contraseña. Antes tenía que decirle a la
+// oficina cuál quería, o sea contársela a otra persona.
+export const changeMyPassword = (current_password, new_password) =>
+  api.post('/auth/change-my-password', { current_password, new_password })
+
+export const validatePhoto = (vehicleId, expectedZone, file) => {
+  const fd = new FormData()
+  fd.append('vehicle_id', vehicleId)
+  fd.append('expected_zone', expectedZone)
+  fd.append('file', file, 'check.jpg')
+  return api.post('/inspections/validate-photo', fd, {
+    timeout: 40000,
+    headers: { 'Content-Type': undefined },
+  })
+}
+
+export const uploadInspection = (formData) =>
+  api.post('/inspections/upload', formData, {
+    timeout: 90000,
+    headers: { 'Content-Type': undefined },
+  })
+
+// Peritaje firmado: el conductor firma su propia inspección con texto-declaración.
+export const signInspection = (inspectionId, signatureText) =>
+  api.post(`/inspections/${inspectionId}/sign`, { signature_text: signatureText })
+
+/* ── Ofertas patrocinadas del portal conductor (públicas) ── */
+/* Avisos de los portales problematicos de la ruta de hoy de este conductor.
+   Cierra el bucle de la Libreta de portales: lo que alguien aprendio fallando
+   le llega al siguiente ANTES de que vuelva a fallar. */
+export const getMisAvisosPortales = () => api.get('/cortex/portales/mi-ruta')
+export const getDriverOffers = () => api.get('/driver-offers')
+export const clickDriverOffer = (offerId) => api.post(`/driver-offers/${offerId}/click`)
+
+export const readOdometer = (vehicleId, file) => {
+  const fd = new FormData()
+  fd.append('file', file, 'odometro.jpg')
+  return api.post(`/vehicles/${vehicleId}/odometer-photo`, fd, {
+    timeout: 60000,
+    headers: { 'Content-Type': undefined },
+  })
+}
+
+export const updateMileage = (vehicleId, km) =>
+  api.post(`/vehicles/${vehicleId}/mileage`, { km })

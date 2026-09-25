@@ -1,0 +1,1812 @@
+import { useEffect, useMemo, useRef, useState } from 'react'
+import { useOutletContext, useSearchParams } from 'react-router-dom'
+import { useT } from '../../i18n'
+import { lista } from '../../lib/lista'
+import { verTelefono } from '../../lib/telefono'
+import ImportarConductores from '../components/ImportarConductores'
+import ImportarMoviles from '../components/ImportarMoviles'
+import { useEscape } from '../../lib/useEscape'
+import {
+  Loader2, Search, Plus, X, Pencil, Trash2, UserCheck, FileSpreadsheet,
+  Phone, Mail, IdCard, Car, MapPin, FileText, Building2, Save, Camera,
+  Trophy, TrendingUp, TrendingDown, Minus, Flame, BarChart2, ChevronDown, ChevronUp, AlertCircle,
+  Lock, LockOpen, Eye, EyeOff, ShieldCheck, Share2, UserPlus, Smartphone,
+} from 'lucide-react'
+import {
+  getDrivers, createDriver, updateDriver, deleteDriver, uploadDriverPhoto,
+  getDriversScoring, getScoringLeaderboard, getDriverAccounts, setDriverPassword,
+  generarAccesosConductores,
+  deleteDriverAccount,
+  getDriversDuplicados, fusionarConductores, repasarFusiones,
+  getPropuestasTransporterId, confirmarTransporterId, getTransporterIdsSinFicha, telefonosDesdeCortex,
+  crearFichaDeTransporterId, getDriversSinCentro, aplicarCentroConductores,
+  getDriversSinTransporter, aplicarTransporterConductores, } from '../api'
+
+const EMPTY = {
+  name: '', dni: '', phone: '', movil_personal: '', email: '', driver_id: '', transporter_id: '',
+  license_number: '', contrato: '', nivel: '', center: '', alojamiento: '', notas: '',
+}
+
+function initials(n) {
+  return (n || '?').split(' ').filter(Boolean).map(w => w[0]).join('').slice(0, 2).toUpperCase()
+}
+const PALETTE = [
+  'from-violet-500 to-indigo-600', 'from-blue-500 to-cyan-500',
+  'from-emerald-500 to-teal-600', 'from-amber-500 to-orange-500',
+  'from-rose-500 to-pink-600',    'from-sky-400 to-blue-600',
+]
+function avatarGrad(name) {
+  let h = 0; for (const c of name || '') h = (h * 31 + c.charCodeAt(0)) | 0
+  return PALETTE[Math.abs(h) % PALETTE.length]
+}
+
+const NIVEL = { pleno: ['Pleno','bg-emerald-500/15 text-emerald-300'], L1: ['L1','bg-sky-500/15 text-sky-300'], L2: ['L2','bg-amber-500/15 text-amber-300'], L3: ['L3','bg-red-500/15 text-red-300'] }
+const CONTRATO = { empresa: ['Empresa','bg-brand-500/15 text-brand-300'], ett: ['ETT','bg-purple-500/15 text-purple-300'] }
+
+// ── Avatar ────────────────────────────────────────────────────────────────────
+function Avatar({ driver, size = 10 }) {
+  const sz = `h-${size} w-${size}`
+  const txt = size >= 16 ? 'text-2xl' : size >= 12 ? 'text-lg' : 'text-xs'
+  return driver.photo_url
+    ? <img src={driver.photo_url} alt="" className={`${sz} rounded-full object-cover`} />
+    : <div className={`${sz} shrink-0 flex items-center justify-center rounded-full bg-gradient-to-br ${avatarGrad(driver.name)} ${txt} font-bold text-white shadow-md`}>{initials(driver.name)}</div>
+}
+
+// ── Helpers scoring ───────────────────────────────────────────────────────────
+const NOW = new Date()
+const CUR_MONTH = NOW.getMonth() + 1
+const CUR_YEAR  = NOW.getFullYear()
+const MONTHS_ES = ['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic']
+
+// ── Score gauge SVG circular ──────────────────────────────────────────────────
+function ScoreRing({ score, size = 80, stroke = 7 }) {
+  const r = (size - stroke) / 2
+  const circ = 2 * Math.PI * r
+  const pct = score == null ? 0 : Math.min(100, Math.max(0, score)) / 100
+  const dash = circ * pct
+  const color = score == null ? '#374151'
+    : score >= 85 ? '#10b981'
+    : score >= 65 ? '#3b82f6'
+    : score >= 40 ? '#f59e0b'
+    : '#ef4444'
+  return (
+    <svg width={size} height={size} style={{ transform: 'rotate(-90deg)' }}>
+      <circle cx={size/2} cy={size/2} r={r} fill="none" stroke="#1f2937" strokeWidth={stroke} />
+      <circle cx={size/2} cy={size/2} r={r} fill="none" stroke={color} strokeWidth={stroke}
+        strokeDasharray={`${dash} ${circ}`} strokeLinecap="round"
+        style={{ transition: 'stroke-dasharray .6s cubic-bezier(.4,0,.2,1)' }} />
+    </svg>
+  )
+}
+
+function ScoreDisplay({ score, size = 80 }) {
+  const { t } = useT()
+  const label = score == null ? '—'
+    : score >= 85 ? t('drv.score.excellent')
+    : score >= 65 ? t('drv.score.good')
+    : score >= 40 ? t('drv.score.fair')
+    : t('drv.score.improve')
+  const color = score == null ? 'text-dark-500'
+    : score >= 85 ? 'text-emerald-400'
+    : score >= 65 ? 'text-blue-400'
+    : score >= 40 ? 'text-amber-400'
+    : 'text-red-400'
+  const numSize = size >= 100 ? 'text-2xl' : 'text-lg'
+  const lblSize = size >= 100 ? 'text-[10px]' : 'text-[9px]'
+  return (
+    <div className="relative inline-flex items-center justify-center" style={{ width: size, height: size }}>
+      <ScoreRing score={score} size={size} stroke={size >= 100 ? 9 : 7} />
+      <div className="absolute inset-0 flex flex-col items-center justify-center">
+        <span className={`${numSize} font-black tabular-nums leading-none ${color}`}>{score ?? '—'}</span>
+        <span className={`${lblSize} font-medium text-dark-500 leading-tight mt-0.5`}>{label}</span>
+      </div>
+    </div>
+  )
+}
+
+function TrendIcon({ trend, size = 12 }) {
+  if (!trend || trend === 'sin_datos') return null
+  if (trend === 'mejorando')  return <TrendingUp size={size} className="text-emerald-400" />
+  if (trend === 'empeorando') return <TrendingDown size={size} className="text-red-400" />
+  return <Minus size={size} className="text-dark-500" />
+}
+
+function PillarBars({ s }) {
+  const bars = [
+    { label: '📋', v: s.compliance,  max: 30, color: '#38bdf8' },
+    { label: '⏰', v: s.punctuality, max: 15, color: '#a78bfa' },
+    { label: '📸', v: s.evidence,    max: 15, color: '#22d3ee' },
+    { label: '🔍', v: s.honesty,     max: 15, color: '#2dd4bf' },
+    { label: '🛡️', v: s.conservation,max: 25, color: '#34d399' },
+  ]
+  return (
+    <div className="flex gap-1 items-end h-10">
+      {bars.map(b => {
+        const pct = Math.round((b.v / b.max) * 100)
+        return (
+          <div key={b.label} className="flex flex-col items-center gap-0.5 flex-1">
+            <div className="w-full rounded-sm overflow-hidden bg-dark-800" style={{ height: 28 }}>
+              <div className="w-full rounded-sm transition-all duration-500"
+                style={{ height: `${pct}%`, background: b.color, marginTop: `${100-pct}%` }} />
+            </div>
+            <span className="text-[8px] leading-none">{b.label}</span>
+          </div>
+        )
+      })}
+    </div>
+  )
+}
+
+function InspCount({ count }) {
+  const { t } = useT()
+  return <div className="text-[10px] text-dark-500 mt-0.5">{count} {t('drv.inspections')}</div>
+}
+
+// ── Podio top-3 ───────────────────────────────────────────────────────────────
+function PodiumCard({ d, position, size = 90 }) {
+  const HEIGHT = { 1: 'pt-0', 2: 'pt-8', 3: 'pt-16' }
+  const GLOW   = { 1: 'shadow-amber-500/20', 2: 'shadow-slate-400/10', 3: 'shadow-orange-700/10' }
+  const BORDER = { 1: 'border-amber-400/40', 2: 'border-slate-400/30', 3: 'border-orange-700/30' }
+  const MEDAL  = { 1: '🥇', 2: '🥈', 3: '🥉' }
+  const STREAK_COLOR = !d.clean_streak || d.clean_streak < 3 ? 'text-dark-500'
+    : d.clean_streak >= 10 ? 'text-amber-400' : 'text-orange-400'
+  return (
+    <div className={`flex flex-col items-center ${HEIGHT[position]}`}>
+      <div className={`w-full rounded-2xl border ${BORDER[position]} bg-dark-900 p-4 shadow-xl ${GLOW[position]} flex flex-col items-center gap-2`}>
+        <span className="text-3xl">{MEDAL[position]}</span>
+        {/* Avatar initials */}
+        <div className={`h-12 w-12 shrink-0 flex items-center justify-center rounded-full bg-gradient-to-br ${avatarGrad(d.name)} text-sm font-bold text-white shadow-md`}>
+          {(d.name || '?').split(' ').filter(Boolean).map(w => w[0]).join('').slice(0,2).toUpperCase()}
+        </div>
+        <ScoreDisplay score={d.total} size={size} />
+        <div className="text-center">
+          <div className="font-bold text-sm text-white leading-tight truncate max-w-[120px]">{d.name}</div>
+          <InspCount count={d.inspections_count} />
+        </div>
+        <div className="flex items-center gap-2 text-[10px]">
+          <TrendIcon trend={d.trend} size={11} />
+          {d.clean_streak >= 3 && (
+            <span className={`flex items-center gap-0.5 font-bold ${STREAK_COLOR}`}>
+              <Flame size={10} />{d.clean_streak}
+            </span>
+          )}
+        </div>
+        {d.compliance != null && <PillarBars s={d} />}
+      </div>
+    </div>
+  )
+}
+
+// ── Lista completa ────────────────────────────────────────────────────────────
+function DriverRow({ s, rank, showCenter, expanded, onToggle }) {
+  const { t } = useT()
+  const rankColor = rank === 1 ? 'text-amber-400' : rank === 2 ? 'text-slate-400' : rank === 3 ? 'text-orange-600' : 'text-dark-500'
+  const barColor  = (s.total ?? 0) >= 85 ? 'bg-emerald-500' : (s.total ?? 0) >= 65 ? 'bg-brand-500' : (s.total ?? 0) >= 40 ? 'bg-amber-500' : 'bg-red-500'
+  return (
+    <>
+      <tr className="border-b border-dark-800/50 hover:bg-dark-800/30 cursor-pointer transition-colors" onClick={onToggle}>
+        <td className={`py-3 pl-4 w-8 font-bold text-sm tabular-nums ${rankColor}`}>{rank}</td>
+        <td className="py-3 pl-2 pr-4">
+          <div className="flex items-center gap-1.5">
+            <span className="font-semibold text-dark-100 text-sm truncate max-w-[160px]">{s.name}</span>
+            {s.prize_eligible === false && (
+              <span className="shrink-0 rounded-full bg-dark-800 px-1.5 py-0.5 text-[9px] font-semibold text-dark-300" title="No elegible para el premio del mes: pocos días asignados">
+                no elegible
+              </span>
+            )}
+          </div>
+          {showCenter && <div className="text-[10px] text-dark-500">{s.center}</div>}
+        </td>
+        <td className="py-3 px-3">
+          {/* Barra de puntuación + número */}
+          <div className="flex items-center gap-2 min-w-[120px]">
+            <div className="flex-1 h-2 rounded-full bg-dark-800 overflow-hidden">
+              <div className={`h-full rounded-full ${barColor} transition-all duration-500`} style={{ width: `${s.total ?? 0}%` }} />
+            </div>
+            <span className="text-sm font-bold tabular-nums text-dark-200 w-7 text-right">{s.total ?? '—'}</span>
+          </div>
+        </td>
+        <td className="py-3 px-2 text-center">
+          <TrendIcon trend={s.trend} size={13} />
+        </td>
+        <td className="py-3 px-2 text-center">
+          {s.clean_streak >= 3 && (
+            <span className={`flex items-center justify-center gap-0.5 text-xs font-bold ${s.clean_streak >= 10 ? 'text-amber-400' : s.clean_streak >= 5 ? 'text-orange-400' : 'text-dark-500'}`}>
+              <Flame size={11} />{s.clean_streak}
+            </span>
+          )}
+        </td>
+        <td className="py-3 pr-3 text-dark-500 text-right">
+          {expanded ? <ChevronUp size={13} /> : <ChevronDown size={13} />}
+        </td>
+      </tr>
+      {expanded && (
+        <tr className="border-b border-dark-800/50">
+          <td colSpan={6} className="px-4 pb-4 pt-2 bg-dark-900/40">
+            {/* Barras de pilares */}
+            <div className="grid grid-cols-5 gap-2 mb-3">
+              {[
+                { l: '📋 Cumpl.', v: s.compliance,  max: 30, c: 'bg-sky-500' },
+                { l: '⏰ Puntual.', v: s.punctuality,max: 15, c: 'bg-violet-500' },
+                { l: '📸 Evidencia', v: s.evidence, max: 15, c: 'bg-cyan-500' },
+                { l: '🔍 Honest.', v: s.honesty,    max: 15, c: 'bg-teal-500' },
+                { l: '🛡️ Conserv.', v: s.conservation,max: 25, c: 'bg-emerald-500' },
+              ].map(b => (
+                <div key={b.l}>
+                  <div className="flex justify-between text-[9px] text-dark-500 mb-0.5">
+                    <span>{b.l}</span><span className="tabular-nums">{b.v}/{b.max}</span>
+                  </div>
+                  <div className="h-1.5 rounded-full bg-dark-800 overflow-hidden">
+                    <div className={`h-full rounded-full ${b.c}`} style={{ width: `${(b.v/b.max)*100}%` }} />
+                  </div>
+                </div>
+              ))}
+            </div>
+            <div className="flex flex-wrap gap-4 text-[11px] text-dark-500">
+              <span>{s.inspections_count} {t('drv.insp.month')}</span>
+              {s.days_assigned > 0 && <span>{s.days_assigned} {t('drv.days.assigned')}</span>}
+              {s.damage_rate != null && <span>{t('drv.damage.rate')} <b className="text-dark-300">{s.damage_rate.toFixed(2)}</b>{t('drv.per.insp')}</span>}
+              {s.clean_streak > 0 && <span className="text-orange-400 font-semibold flex items-center gap-0.5"><Flame size={10} />{s.clean_streak} {t('drv.clean.streak')}</span>}
+            </div>
+            {s.delta_events?.length > 0 && (
+              <div className="mt-2 flex flex-wrap gap-2">
+                {s.delta_events.map((e, j) => (
+                  <span key={j} className={`rounded px-2 py-0.5 text-[10px] font-semibold ${
+                    e.to_sev === 'critico' ? 'bg-red-500/15 text-red-300' :
+                    e.to_sev === 'grave' ? 'bg-orange-500/15 text-orange-300' :
+                    'bg-amber-500/15 text-amber-300'}`}>
+                    {e.to_sev} · {e.part}
+                  </span>
+                ))}
+              </div>
+            )}
+          </td>
+        </tr>
+      )}
+    </>
+  )
+}
+
+/* ── SALUD DE LAS FICHAS ───────────────────────────────────────────────────
+   Dos tareas de mantenimiento que nadie hace porque no había dónde hacerlas.
+
+   1. FICHAS DUPLICADAS. La importación creaba ficha nueva cuando el nombre
+      venía con un espacio de más o en minúsculas, así que hay gente dada de
+      alta dos veces. No es cosmético: el cuadrante apunta a una ficha y el
+      login del portal resuelve por correo y cae en la otra — el 19-08-2026
+      hubo cinco conductores en ruta viendo «no tienes furgoneta asignada» y
+      por pantalla parecía un fallo de centros.
+
+   2. TRANSPORTER IDs. Son lo que hace que en el debrief salga «sin ficha».
+      Se emparejan solos cruzando lo que sabe Cortex (qué ID hizo la XA_C12)
+      con lo que sabe la asignación (quién llevaba la XA_C12), pero la
+      asignación no guardaba la ruta hasta hoy: empieza a dar resultados con
+      las asignaciones de mañana en adelante, y la pantalla lo dice en vez de
+      parecer que no encuentra a nadie. */
+function SaludFichas({ onCambio }) {
+  const [dups, setDups] = useState(null)
+  const [ids, setIds] = useState(null)
+  const [sinFicha, setSinFicha] = useState(null)
+  const [sinCentro, setSinCentro] = useState(null)
+  const [sinTr, setSinTr] = useState(null)
+  const [ocupado, setOcupado] = useState('')
+  const [err, setErr] = useState('')
+  const [hecho, setHecho] = useState('')
+  const [elegida, setElegida] = useState({})   // email -> id que se conserva
+
+  const cargar = () => {
+    getDriversDuplicados().then((r) => setDups(r.data)).catch(() => setErr('No se pudieron cargar las fichas duplicadas.'))
+    getPropuestasTransporterId().then((r) => setIds(r.data)).catch(() => {})
+    getTransporterIdsSinFicha().then((r) => setSinFicha(r.data)).catch(() => {})
+    getDriversSinCentro().then((r) => setSinCentro(r.data)).catch(() => {})
+    getDriversSinTransporter().then((r) => setSinTr(r.data)).catch(() => {})
+  }
+  useEffect(cargar, [])
+
+  /* El centro NO viaja en la petición a propósito: lo vuelve a calcular el
+     servidor con los paquetes de Cortex (gotcha 38). Si lo mandara el panel,
+     bastaría con cambiarlo aquí para saltarse la regla de «una sola nave». */
+  /* Sin `transporter_id` la persona NO EXISTE para nada que venga de Cortex:
+     sus ayudas, sus paquetes y sus numeros salen a cero sin que falle nada.
+     Medido el 08-09-2026: 75 de 230 fichas vivas no lo tenian y 18 estaban
+     trabajando ese mes. Solo se propone cuando el nombre lleva a UNA persona
+     en Cortex y a UNA ficha; con tocayos no se toca nada. */
+  const ponerTransporters = async () => {
+    setOcupado('tr'); setErr(''); setHecho('')
+    try {
+      const { data } = await aplicarTransporterConductores({})
+      setHecho(data.puestos
+        ? `Emparejadas ${data.puestos} ${data.puestos === 1 ? 'ficha' : 'fichas'} con Cortex.`
+        : (data.motivo || 'No había ninguna con evidencia suficiente.'))
+      cargar(); onCambio?.()
+    } catch (e) {
+      setErr(e?.response?.data?.detail || 'No se pudo emparejar.')
+    } finally { setOcupado('') }
+  }
+
+  const ponerCentros = async () => {
+    setOcupado('centros'); setErr(''); setHecho('')
+    try {
+      const { data } = await aplicarCentroConductores({})
+      setHecho(data.puestos
+        ? `Centro puesto a ${data.puestos} ${data.puestos === 1 ? 'ficha' : 'fichas'}.`
+        : (data.motivo || 'No había ninguna con evidencia suficiente.'))
+      cargar(); onCambio?.()
+    } catch (e) {
+      setErr(e?.response?.data?.detail || 'No se pudo poner el centro.')
+    } finally { setOcupado('') }
+  }
+
+  /* REPASAR LO YA FUSIONADO. Hace falta aunque fusionar este bien: una
+     inspeccion creada DESPUES de la fusion —alguien que entro con la ficha
+     vieja antes de que se le cerrara— vuelve a quedarse colgando de ella. Y
+     hasta hoy la fusion no repuntaba ni los kilometros ni los apoyos: quedaban
+     55 apuntes y 14 inspecciones sueltas. Es idempotente: si no hay nada que
+     mover, no mueve. */
+  const repasar = async () => {
+    setOcupado('repaso'); setErr(''); setHecho('')
+    try {
+      const { data } = await repasarFusiones()
+      const n = Object.values(data.movidos || {}).reduce((a, b) => a + b, 0)
+      setHecho(n
+        ? `Repuntados ${n} documentos que colgaban de fichas ya fusionadas.`
+        : 'Nada que repuntar: no queda nada colgando de una ficha fusionada.')
+      cargar(); onCambio?.()
+    } catch (e) {
+      setErr(e?.response?.data?.detail || 'No se pudo repasar.')
+    } finally { setOcupado('') }
+  }
+
+  const fusionar = async (grupo) => {
+    const conservar = elegida[grupo.email] || grupo.sugerida
+    const absorber = grupo.fichas.filter((f) => f.id !== conservar).map((f) => f.id)
+    setOcupado(grupo.email); setErr('')
+    try {
+      await fusionarConductores({ conservar, absorber })
+      cargar(); onCambio?.()
+    } catch (e) {
+      setErr(e?.response?.data?.detail || 'No se pudo fusionar.')
+    } finally { setOcupado('') }
+  }
+
+  /* Vale para las dos: la propuesta automática y el par elegido a mano en el
+     desplegable. El cerrojo se pone sobre el ID y no sobre el conductor porque
+     la lista de arriba va por ID; si no, al elegir en un desplegable se
+     bloquearía una fila que no es. */
+  const crearFicha = async (x) => {
+    setOcupado(x.transporter_id); setErr(''); setHecho('')
+    try {
+      const { data } = await crearFichaDeTransporterId(x.transporter_id, {
+        nombre: x.nombre_cortex, telefono: x.telefono_cortex, centro: x.centro })
+      setHecho(`Ficha creada: ${data.nombre}${data.centro ? ` · ${data.centro}` : ''}`
+        + (data.aviso ? ` — ${data.aviso}` : ''))
+      cargar(); onCambio?.()
+    } catch (e) {
+      setErr(e?.response?.data?.detail || 'No se ha podido crear la ficha.')
+    } finally { setOcupado('') }
+  }
+
+  const confirmarId = async (p) => {
+    setOcupado(p.transporter_id || p.driver_id); setErr('')
+    try {
+      await confirmarTransporterId({ driver_id: p.driver_id, transporter_id: p.transporter_id })
+      cargar(); onCambio?.()
+    } catch (e) {
+      setErr(e?.response?.data?.detail || 'No se pudo guardar el ID.')
+    } finally { setOcupado('') }
+  }
+
+  if (!dups) return <div className="flex items-center gap-2 text-dark-400"><Loader2 className="animate-spin" size={18} /> …</div>
+
+  return (
+    <div className="space-y-6">
+      {err && <p className="rounded-lg border border-red-500/30 bg-red-500/10 px-3 py-2 text-sm text-red-300">{err}</p>}
+      {hecho && <p className="rounded-lg border border-emerald-500/30 bg-emerald-500/10 px-3 py-2 text-sm text-emerald-300">{hecho}</p>}
+
+      {/* ── Duplicadas ─────────────────────────────────────────────── */}
+      <section>
+        <h2 className="mb-1 text-[15px] font-bold text-dark-100">
+          Fichas duplicadas
+          {dups.total > 0 && <span className="ml-2 rounded-full bg-amber-500/20 px-2 py-0.5 text-[11.5px] font-bold text-amber-300">{dups.fichas_de_mas} de más</span>}
+        </h2>
+        <p className="mb-3 max-w-[70ch] text-[13px] text-dark-400">
+          Se emparejan por <b className="text-dark-200">correo</b>, nunca por nombre: dos
+          tocayos distintos acabarían mezclados y uno auditando la furgoneta del otro.
+          Se conserva la ficha con más historial y la otra se marca fusionada — no se
+          borra, así que se puede deshacer.
+        </p>
+        <button onClick={repasar} disabled={ocupado === 'repaso'}
+          className="mb-3 rounded-lg border border-dark-700 px-3 py-1.5 text-[12.5px] text-dark-300 hover:border-dark-500 disabled:opacity-50">
+          {ocupado === 'repaso' ? 'Repasando…' : 'Repasar las ya fusionadas'}
+        </button>
+        {dups.total === 0 ? (
+          <div className="card p-6 text-center text-[13.5px] text-dark-400">Ninguna. Todas las fichas son de personas distintas.</div>
+        ) : (
+          <div className="space-y-2">
+            {dups.grupos.map((g) => {
+              const conservar = elegida[g.email] || g.sugerida
+              return (
+                <div key={g.email} className="card p-3">
+                  <p className="mb-2 font-mono text-[12px] text-dark-500">{g.email}</p>
+                  <div className="space-y-1">
+                    {g.fichas.map((f) => (
+                      <label key={f.id}
+                        className={`flex cursor-pointer flex-wrap items-center gap-2 rounded-lg border px-3 py-2 text-[13px] ${
+                          f.id === conservar ? 'border-emerald-500/40 bg-emerald-500/[0.07]' : 'border-dark-800 hover:border-dark-700'}`}>
+                        <input type="radio" name={`c-${g.email}`} checked={f.id === conservar}
+                          onChange={() => setElegida((e) => ({ ...e, [g.email]: f.id }))}
+                          className="accent-emerald-500" />
+                        <span className="font-semibold text-dark-100">{f.nombre}</span>
+                        <span className="text-dark-500">
+                          {f.inspecciones} insp · {f.asignaciones} asign · {f.turnos} turnos · {f.peticiones} pet.
+                        </span>
+                        {f.transporter_id && <span className="font-mono text-[11px] text-dark-500">{f.transporter_id}</span>}
+                        {f.id === conservar && <span className="ml-auto text-[12px] font-semibold text-emerald-400">se conserva</span>}
+                      </label>
+                    ))}
+                  </div>
+                  <button onClick={() => fusionar(g)} disabled={ocupado === g.email}
+                    className="mt-2 rounded-lg bg-brand-500/20 px-3 py-1.5 text-[13px] font-semibold text-brand-200 hover:bg-brand-500/30 disabled:opacity-50">
+                    {ocupado === g.email ? 'Fusionando…' : `Fusionar ${g.fichas.length} fichas en una`}
+                  </button>
+                </div>
+              )
+            })}
+          </div>
+        )}
+      </section>
+
+      {/* ── IDS QUE SALEN A RUTA Y NO TIENEN FICHA ──────────────────────
+          Es lo que hace que en el debrief salga "SIN FICHA" y que no se pueda
+          poner nombre a nadie. De cada uno se enseña CON QUÉ reconocerlo: un
+          código como `A20PS9T9WIF7WN` no le dice nada a nadie, pero "hace la
+          XA_C14 casi todos los días" lo identifica en dos segundos.
+
+          Los candidatos son solo los conductores que todavía no tienen ID. Con
+          la lista entera, el primer despiste asigna el ID de uno a otro y a
+          partir de ahí las entregas de una persona se le cuelgan a la otra. */}
+      <section>
+        <h2 className="mb-1 text-[15px] font-bold text-dark-100">
+          Salen a ruta y no tienen ficha
+          {sinFicha?.total > 0 && (
+            <span className="ml-2 rounded-full bg-red-500/20 px-2 py-0.5 text-[11.5px] font-bold text-red-300">
+              {sinFicha.total}
+            </span>
+          )}
+        </h2>
+        {sinFicha && (
+          <p className="mb-3 max-w-[72ch] text-[13px] text-dark-400">
+            {sinFicha.total} IDs han hecho rutas en los últimos {sinFicha.dias} días sin
+            ninguna ficha detrás, frente a {sinFicha.con_ficha} que sí la tienen. Se
+            enseñan sus rutas más repetidas para poder reconocerlos: el código no dice
+            nada, la ruta sí. Ordenados por paquetes — el que más mueve es el que más
+            duele no tener.
+          </p>
+        )}
+        {sinFicha?.total === 0 ? (
+          <div className="card p-6 text-center text-[13.5px] text-dark-400">
+            Ninguno. Todos los que salen a ruta tienen su ficha.
+          </div>
+        ) : (
+          <div className="space-y-1.5">
+            {(sinFicha?.sin_ficha || []).map((x) => (
+              <div key={x.transporter_id} className="card flex flex-wrap items-center gap-2 p-3 text-[13px]">
+                {/* EL NOMBRE LO SABE CORTEX y antes no se enseñaba: solo salía
+                    el código, que no le dice nada a nadie. Si Cortex lo trae,
+                    manda el nombre y el código pasa a segunda línea. */}
+                {x.nombre_cortex ? (
+                  <span className="flex items-center gap-1.5">
+                    <b className="text-[13.5px] text-dark-100">{x.nombre_cortex}</b>
+                    <span className="font-mono text-[11px] text-dark-500">{x.transporter_id}</span>
+                    {/* Cortex da a veces el mismo numero a dos personas (visto el
+                        04-09-2026). Una ficha con el telefono de otro parece
+                        completa y acaba en una llamada a quien no es, asi que se
+                        avisa y el alta de un clic lo deja en blanco. */}
+                    {x.telefono_repetido && (
+                      <span title="Cortex da este telefono a mas de una persona: la ficha se creara sin el"
+                        className="rounded bg-amber-500/15 px-1.5 py-0.5 text-[10px] font-semibold text-amber-300">
+                        teléfono dudoso
+                      </span>
+                    )}
+                  </span>
+                ) : (
+                  <span className="font-mono text-[12.5px] font-semibold text-dark-100">{x.transporter_id}</span>
+                )}
+                <span className="text-dark-400">
+                  {x.ruta_habitual && <b className="text-brand-300">{x.ruta_habitual}</b>}
+                  {x.rutas.length > 1 && <span className="text-dark-500"> · {x.rutas.slice(1).join(', ')}</span>}
+                </span>
+                <span className="tabular-nums text-dark-500">
+                  {x.paquetes.toLocaleString('es-ES')} paquetes · {x.dias} día{x.dias === 1 ? '' : 's'}
+                  {x.ultimo_dia && ` · último ${x.ultimo_dia.slice(8)}/${x.ultimo_dia.slice(5, 7)}`}
+                </span>
+                {/* Crear la ficha de un tirón, con el nombre y el teléfono de
+                    Cortex ya dentro. Solo sale cuando Cortex da el nombre: sin
+                    nombre habría que teclearlo, que es de donde salen las fichas
+                    duplicadas. Y ojo con el orden — primero mirar si ya tiene
+                    ficha y solo enlazarla; por eso el desplegable va al lado. */}
+                {x.nombre_cortex && (
+                  <button
+                    onClick={() => crearFicha(x)}
+                    disabled={ocupado === x.transporter_id}
+                    className="ml-auto flex items-center gap-1.5 rounded-lg bg-emerald-500/15 px-2.5 py-1.5 text-[12.5px] font-semibold text-emerald-300 ring-1 ring-emerald-500/30 hover:bg-emerald-500/25 disabled:opacity-50">
+                    <UserPlus size={13} /> {ocupado === x.transporter_id ? 'Creando…' : 'Crear ficha'}
+                  </button>
+                )}
+                <select
+                  value=""
+                  onChange={(e) => e.target.value && confirmarId({
+                    driver_id: e.target.value, transporter_id: x.transporter_id })}
+                  disabled={ocupado === x.transporter_id}
+                  className={`${x.nombre_cortex ? '' : 'ml-auto '}max-w-[15rem] rounded-lg border border-dark-700 bg-dark-950 px-2 py-1.5 text-[12.5px] text-dark-100 outline-none disabled:opacity-50`}>
+                  <option value="">
+                    {ocupado === x.transporter_id ? 'Guardando…' : '¿Quién es? — elegir'}
+                  </option>
+                  {(sinFicha?.candidatos || []).map((d) => (
+                    <option key={d.id} value={d.id}>
+                      {d.name}{d.center ? ` · ${d.center}` : ''}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            ))}
+          </div>
+        )}
+      </section>
+
+      {/* ── FICHAS QUE NO SALEN EN NINGÚN CENTRO ─────────────────────────
+          El reverso de la lista de arriba: allí hay un ID sin ficha, aquí hay
+          una ficha sin nave. Y no se nota, que es lo peor: la persona SÍ está
+          en el total, así que nadie la echa de menos; simplemente desaparece en
+          cuanto se elige un centro, que es como se trabaja siempre. Medido el
+          05-09-2026: 150 activos y 83+47+16 = 146 por centro.
+          El centro solo se propone cuando Cortex no deja duda —todos sus
+          paquetes en una sola nave—; con dos naves se dice y lo decide una
+          persona, que es la misma regla que `_centro_norm`. */}
+      {!!sinTr?.con_sugerencia && (
+        <section>
+          <h2 className="mb-1 text-[15px] font-bold text-dark-100">
+            Sin emparejar con Cortex
+            <span className="ml-2 rounded-full bg-amber-500/20 px-2 py-0.5 text-[11.5px] font-bold text-amber-300">
+              {sinTr.con_sugerencia}
+            </span>
+          </h2>
+          <p className="mb-3 max-w-[72ch] text-[13px] text-dark-400">
+            Su ficha no tiene el id de transportista, así que para todo lo que viene de
+            Cortex —sus ayudas, sus paquetes, sus números— esa persona no existe y le
+            sale cero sin que falle nada. Estas son las que Cortex reconoce sin ninguna
+            duda: un solo id para ese nombre y una sola ficha con él.
+          </p>
+          <div className="space-y-1.5">
+            {(sinTr.sin_transporter || []).filter((x) => x.sugerencia).map((x) => (
+              <div key={x.id} className="card flex flex-wrap items-center gap-2 p-3 text-[13px]">
+                <b className="text-[13.5px] text-dark-100">{x.name || 'Sin nombre'}</b>
+                {x.center && <span className="text-[12.5px] text-dark-500">{x.center}</span>}
+                <span className="rounded-md bg-brand-500/15 px-2 py-0.5 font-mono text-[12px] font-semibold text-brand-200">
+                  {x.sugerencia}
+                </span>
+                <span className="ml-auto text-[12px] text-dark-500">{x.motivo}</span>
+              </div>
+            ))}
+          </div>
+          <button onClick={ponerTransporters} disabled={ocupado === 'tr'}
+            className="mt-2 rounded-lg bg-brand-500/20 px-3 py-1.5 text-[13px] font-semibold text-brand-200 hover:bg-brand-500/30 disabled:opacity-50">
+            {ocupado === 'tr'
+              ? 'Emparejando…'
+              : `Emparejar ${sinTr.con_sugerencia} ${sinTr.con_sugerencia === 1 ? 'ficha' : 'fichas'} con Cortex`}
+          </button>
+          {sinTr.total > sinTr.con_sugerencia && (
+            <p className="mt-1.5 text-[12px] text-dark-500">
+              Otras {sinTr.total - sinTr.con_sugerencia} se quedan como están: o Cortex no
+              las ha visto, o hay varias fichas con el mismo nombre y elegir mal cuelga las
+              entregas de una persona a otra.
+            </p>
+          )}
+        </section>
+      )}
+
+      {!!sinCentro?.total && (
+        <section>
+          <h2 className="mb-1 text-[15px] font-bold text-dark-100">
+            No salen en ningún centro
+            <span className="ml-2 rounded-full bg-amber-500/20 px-2 py-0.5 text-[11.5px] font-bold text-amber-300">
+              {sinCentro.total}
+            </span>
+          </h2>
+          <p className="mb-3 max-w-[72ch] text-[13px] text-dark-400">
+            Tienen ficha activa y el centro en blanco: cuentan en el total, pero al
+            elegir una nave no aparecen en ninguna pantalla — ni en el cuadrante, ni en
+            la asignación, ni en esta lista. Debajo, lo que dice Cortex de cada uno.
+          </p>
+          <div className="space-y-1.5">
+            {(sinCentro.sin_centro || []).map((x) => (
+              <div key={x.id} className="card flex flex-wrap items-center gap-2 p-3 text-[13px]">
+                <b className="text-[13.5px] text-dark-100">{x.name || 'Sin nombre'}</b>
+                {x.sugerencia ? (
+                  <span className="rounded-md bg-brand-500/15 px-2 py-0.5 text-[12px] font-semibold text-brand-200">
+                    {x.sugerencia}
+                  </span>
+                ) : null}
+                <span className="text-[12.5px] text-dark-500">{x.motivo}</span>
+                {!!x.rutas?.length && (
+                  <span className="font-mono text-[11.5px] text-dark-500">{x.rutas.join(' · ')}</span>
+                )}
+                <span className="ml-auto text-[12px] text-dark-500">
+                  {x.alta ? `alta ${x.alta}` : ''}
+                </span>
+              </div>
+            ))}
+          </div>
+          {sinCentro.con_sugerencia > 0 && (
+            <button onClick={ponerCentros} disabled={ocupado === 'centros'}
+              className="mt-2 rounded-lg bg-brand-500/20 px-3 py-1.5 text-[13px] font-semibold text-brand-200 hover:bg-brand-500/30 disabled:opacity-50">
+              {ocupado === 'centros'
+                ? 'Poniendo…'
+                : `Poner el centro a ${sinCentro.con_sugerencia} ${sinCentro.con_sugerencia === 1 ? 'ficha' : 'fichas'} (lo dice Cortex)`}
+            </button>
+          )}
+        </section>
+      )}
+
+      {/* ── Transporter IDs ────────────────────────────────────────── */}
+      <section>
+        <h2 className="mb-1 text-[15px] font-bold text-dark-100">Emparejado automático</h2>
+        {ids && (
+          <p className="mb-3 max-w-[70ch] text-[13px] text-dark-400">
+            {ids.sin_id} conductores sin ID. Es lo que hace que en el debrief salgan
+            como «sin ficha».{' '}
+            {ids.dias_con_ruta === 0 ? (
+              <b className="text-amber-300">
+                Todavía no hay con qué cruzarlo: la asignación diaria no guardaba la ruta
+                hasta hoy. En cuanto se guarde una asignación con rutas, las propuestas
+                aparecen solas aquí.
+              </b>
+            ) : (
+              <>Se cruzan {ids.dias_con_ruta} días de asignaciones con lo que dice Cortex.
+                Solo se propone cuando el mismo ID sale en {ids.minimo_dias} días distintos
+                y ningún otro compite.</>
+            )}
+          </p>
+        )}
+        {!!ids?.propuestas?.length && (
+          <div className="space-y-1.5">
+            {ids.propuestas.map((p) => (
+              <div key={p.driver_id} className="card flex flex-wrap items-center gap-2 p-3 text-[13px]">
+                <span className="font-semibold text-dark-100">{p.nombre}</span>
+                <span className="font-mono text-[12.5px] text-brand-300">{p.transporter_id}</span>
+                <span className="text-dark-500">coinciden {p.dias} días ({p.prueba.join(', ')})</span>
+                <button onClick={() => confirmarId(p)} disabled={ocupado === p.transporter_id}
+                  className="ml-auto rounded-lg bg-brand-500/20 px-3 py-1 text-[12.5px] font-semibold text-brand-200 hover:bg-brand-500/30 disabled:opacity-50">
+                  {ocupado === p.transporter_id ? 'Guardando…' : 'Es correcto'}
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
+        {!!ids?.ambiguos?.length && (
+          <p className="mt-2 text-[12.5px] text-dark-500">
+            {ids.ambiguos.length} sin proponer porque hay varios IDs compitiendo por la
+            misma persona — normalmente alguien que cambió de ruta a media mañana. Se
+            dejan a mano a propósito: un emparejamiento malo le cuelga a alguien las
+            entregas de otro.
+          </p>
+        )}
+      </section>
+    </div>
+  )
+}
+
+// ── Vista scoring unificada (ranking + lista) ─────────────────────────────────
+function ScoringView({ center }) {
+  const { t } = useT()
+  const [data, setData]   = useState(null)
+  const [lb, setLb]       = useState(null)
+  const [month, setMonth] = useState(CUR_MONTH)
+  const [year, setYear]   = useState(CUR_YEAR)
+  const [expanded, setExpanded] = useState(null)
+  const [centerTab, setCenterTab] = useState(null)   // null = primer centro disponible
+
+  useEffect(() => {
+    setData(null); setLb(null)
+    Promise.all([
+      getDriversScoring(month, year),
+      getScoringLeaderboard(month, year),
+    ]).then(([rd, rl]) => {
+      setData(rd.data)
+      setLb(rl.data)
+    }).catch(() => { setData({ scores: [] }); setLb({ leaderboard: {}, center_stats: {} }) })
+  }, [month, year])
+
+  // Centros disponibles
+  const availableCenters = useMemo(() => {
+    const s = new Set()
+    if (center !== 'Todos') return [center]
+    ;(data?.scores || []).forEach(d => d.center && s.add(d.center))
+    return [...s].sort()
+  }, [data, center])
+
+  const activeCtr = centerTab ?? availableCenters[0] ?? null
+
+  useEffect(() => { setCenterTab(null) }, [center])
+
+  const scores = useMemo(() => {
+    const all = data?.scores || []
+    const filtered = activeCtr ? all.filter(s => s.center === activeCtr) : all
+    return filtered
+  }, [data, activeCtr])
+
+  // Los que optan al premio van PRIMERO en la clasificación: con la misma
+  // nota, alguien con tres días salía #2 por delante de quien trabajó el mes
+  // entero. Dentro de cada grupo se respeta el orden del servidor.
+  const conDatos = scores.filter(s => !s.insufficient)
+  const ranked   = [...conDatos.filter(s => s.prize_eligible !== false),
+                    ...conDatos.filter(s => s.prize_eligible === false)]
+  const unranked = scores.filter(s => s.insufficient)
+  // El PODIO solo admite elegibles para el premio (≥35% de días asignados):
+  // nadie gana el mes con 3 días buenos. La lista completa muestra a todos.
+  const top3     = ranked.filter(s => s.prize_eligible !== false).slice(0, 3)
+  const rest     = ranked.slice(3)
+
+  const stats = lb?.center_stats?.[activeCtr] || {}
+
+  const monthPicker = (
+    <select className="select text-xs py-1 px-2" value={`${year}-${month}`}
+      onChange={e => { const [y,m] = e.target.value.split('-'); setYear(+y); setMonth(+m) }}>
+      {Array.from({ length: 6 }, (_, i) => {
+        const d = new Date(CUR_YEAR, CUR_MONTH - 1 - i, 1)
+        const yy = d.getFullYear(); const mm = d.getMonth() + 1
+        return <option key={i} value={`${yy}-${mm}`}>{MONTHS_ES[d.getMonth()]} {yy}</option>
+      })}
+    </select>
+  )
+
+  // Tarjeta PNG del podio para compartir en el grupo de WhatsApp del equipo.
+  // Marketing orgánico: la marca se pasea por los grupos cada lunes.
+  async function sharePodium() {
+    if (top3.length === 0) return
+    const c = document.createElement('canvas')
+    c.width = 1000; c.height = 1000
+    const x = c.getContext('2d')
+    const g = x.createLinearGradient(0, 0, 0, 1000)
+    g.addColorStop(0, '#0b0d10'); g.addColorStop(1, '#171b22')
+    x.fillStyle = g; x.fillRect(0, 0, 1000, 1000)
+    x.textAlign = 'center'
+    x.font = '900 58px Arial'; x.fillStyle = '#fb923c'
+    x.fillText('🏆 RANKING DEL MES', 500, 120)
+    x.font = '600 32px Arial'; x.fillStyle = '#8b94a3'
+    x.fillText(`${MONTHS_ES[month - 1]} ${year}${activeCtr ? ' · ' + activeCtr : ''}`, 500, 175)
+    const medals = ['🥇', '🥈', '🥉']
+    top3.forEach((d, i) => {
+      const y = 330 + i * 190
+      x.fillStyle = i === 0 ? 'rgba(251,146,60,.10)' : 'rgba(255,255,255,.04)'
+      x.fillRect(80, y - 95, 840, 155)
+      x.textAlign = 'left'
+      x.font = '700 64px Arial'; x.fillText(medals[i], 110, y)
+      x.fillStyle = '#eef1f6'; x.font = '800 46px Arial'
+      x.fillText((d.name || '—').slice(0, 18), 215, y - 12)
+      x.fillStyle = '#8b94a3'; x.font = '600 27px Arial'
+      x.fillText(`${d.inspections_count} inspecciones · 🔥 racha ${d.clean_streak || 0}`, 215, y + 32)
+      x.textAlign = 'right'; x.fillStyle = '#fb923c'; x.font = '900 72px Arial'
+      x.fillText(String(d.total), 895, y + 8)
+      x.textAlign = 'left'
+    })
+    x.textAlign = 'center'; x.fillStyle = '#64748b'; x.font = '600 27px Arial'
+    x.fillText('⚡ flotadsp.com — gestión de flotas DSP con IA', 500, 940)
+
+    const blob = await new Promise((r) => c.toBlob(r, 'image/png'))
+    const file = new File([blob], 'ranking-flotadsp.png', { type: 'image/png' })
+    try {
+      if (navigator.canShare?.({ files: [file] })) {
+        await navigator.share({ files: [file], title: 'Ranking del mes — FlotaDSP' })
+        return
+      }
+    } catch { /* usuario canceló el share: no descargar encima */ return }
+    const u = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = u; a.download = 'ranking-flotadsp.png'; a.click()
+    setTimeout(() => URL.revokeObjectURL(u), 5000)
+  }
+
+  if (!data) return (
+    <div className="flex items-center gap-2 py-16 text-dark-400 justify-center">
+      <Loader2 size={18} className="animate-spin" /> {t('drv.ranking.loading')}
+    </div>
+  )
+
+  return (
+    <div>
+      {/* Header con mes y tabs de centro */}
+      <div className="flex flex-wrap items-center justify-between gap-3 mb-5">
+        <div className="flex items-center gap-2">
+          <Trophy size={18} className="text-amber-400" />
+          <span className="font-bold text-base">{t('drv.ranking.title')}</span>
+          {stats.avg_score != null && (
+            <span className="text-xs text-dark-500 ml-2">{t('drv.ranking.avg')} <span className="text-dark-300 font-semibold">{stats.avg_score}</span></span>
+          )}
+          {data?.prize_min_days != null && (
+            <span className="ml-2 rounded-full border border-amber-500/20 bg-amber-500/10 px-2.5 py-0.5 text-[10px] font-semibold text-amber-400"
+              title="Para optar al premio: al menos el 35% de los días del mes con asignación en el cuadrante. Los daños marcados como falso positivo en Revisión Rápida no penalizan.">
+              🏆 Premio: mín. {data.prize_min_days} días asignados
+            </span>
+          )}
+        </div>
+        <div className="flex items-center gap-2">
+          <button onClick={sharePodium} disabled={top3.length === 0}
+            className="btn-secondary flex items-center gap-1.5 px-2.5 py-1 text-xs disabled:opacity-40"
+            title="Genera una imagen del podio para compartir en WhatsApp">
+            <Share2 size={13} /> Compartir
+          </button>
+          {monthPicker}
+        </div>
+      </div>
+
+      {/* Tabs por centro (si hay varios) */}
+      {availableCenters.length > 1 && (
+        <div className="flex gap-0 border-b border-dark-800 mb-6 overflow-x-auto">
+          {availableCenters.map(c => (
+            <button key={c} onClick={() => { setCenterTab(c); setExpanded(null) }}
+              className={`px-4 py-2 text-xs font-medium whitespace-nowrap border-b-2 -mb-px transition-colors ${
+                activeCtr === c ? 'border-brand-400 text-brand-300' : 'border-transparent text-dark-500 hover:text-dark-300'
+              }`}>{c}</button>
+          ))}
+        </div>
+      )}
+
+      {ranked.length === 0 ? (
+        <div className="py-16 text-center text-dark-500">
+          <Trophy size={40} className="mx-auto mb-3 text-dark-700" />
+          <p className="font-medium">{t('drv.ranking.no.data')} — {MONTHS_ES[month-1]} {year}</p>
+          <p className="text-xs text-dark-500 mt-1">{t('drv.ranking.min.insp')}</p>
+        </div>
+      ) : (
+        <>
+          {/* ── PODIO TOP 3 ── */}
+          {top3.length > 0 && (
+            <div className="mb-8">
+              <div className="grid gap-3"
+                style={{ gridTemplateColumns: top3.length === 3 ? '1fr 1fr 1fr' : top3.length === 2 ? '1fr 1fr' : '1fr' }}>
+                {/* Reordenar: plata-oro-bronce para efecto podio real */}
+                {(() => {
+                  const ordered = top3.length === 3
+                    ? [top3[1], top3[0], top3[2]]   // plata izquierda, oro centro, bronce derecha
+                    : top3
+                  return ordered.map(d => d && (
+                    <PodiumCard key={d.driver_id} d={d} position={d.position} size={top3.length >= 2 ? 100 : 120} />
+                  ))
+                })()}
+              </div>
+            </div>
+          )}
+
+          {/* ── LISTA COMPLETA ── */}
+          <div className="rounded-xl border border-dark-800 overflow-hidden">
+            <div className="bg-dark-900/60 px-4 py-2.5 border-b border-dark-800 flex items-center gap-2">
+              <BarChart2 size={13} className="text-dark-500" />
+              <span className="text-xs font-semibold text-dark-400 uppercase tracking-wider">{t('drv.ranking.full')}</span>
+              <span className="ml-auto text-xs text-dark-500">{ranked.length} clasificados</span>
+            </div>
+            <table className="w-full">
+              <thead>
+                <tr className="border-b border-dark-800 text-[10px] text-dark-500 uppercase tracking-wider">
+                  <th className="py-2 pl-4 text-left w-8">#</th>
+                  <th className="py-2 pl-2 text-left">{t('drv.col.driver')}</th>
+                  <th className="py-2 px-3 text-left">{t('drv.col.score')}</th>
+                  <th className="py-2 px-2 text-center">{t('drv.col.trend')}</th>
+                  <th className="py-2 px-2 text-center">{t('drv.col.streak')}</th>
+                  <th className="py-2 pr-3 w-6" />
+                </tr>
+              </thead>
+              <tbody>
+                {ranked.map((s, i) => (
+                  <DriverRow key={s.driver_id} s={s} rank={i+1} showCenter={center === 'Todos' && !activeCtr}
+                    expanded={expanded === s.driver_id}
+                    onToggle={() => setExpanded(expanded === s.driver_id ? null : s.driver_id)} />
+                ))}
+              </tbody>
+            </table>
+            {unranked.length > 0 && (
+              <div className="border-t border-dark-800 px-4 py-2 text-[11px] text-dark-500 flex items-center gap-1.5">
+                <AlertCircle size={11} /> {unranked.length} {t('drv.col.no.data')}
+              </div>
+            )}
+          </div>
+        </>
+      )}
+    </div>
+  )
+}
+
+// ── Main page ─────────────────────────────────────────────────────────────────
+/* ── TABLA DE CONDUCTORES ───────────────────────────────────────────────────
+   Era una rejilla de fichas de cuatro en cuatro. Con doscientas personas eso
+   son cincuenta filas de tarjetas y, sobre todo, no hay forma de BUSCAR a
+   alguien: el ojo tiene que barrer en zigzag en vez de bajar una columna.
+
+   Ordena por columna, y los nombres con `localeCompare` en español porque
+   están escritos en MAYÚSCULAS, minúsculas y Mixtas: un `sort()` normal manda
+   todas las minúsculas detrás de todas las mayúsculas y la lista parece
+   aleatoria (gotcha 23). */
+/* QUIEN ENTRA AL PORTAL SIN CONTRASEÑA
+   ═══════════════════════════════════════════════════════════════════════════
+   Un conductor SIN cuenta entra solo con su correo: `driver-lookup` le da el
+   token en el sitio. La contraseña es opcional y añade una barrera.
+
+   Ojo con el texto, que estuvo mal media hora: decir «no pueden entrar» era
+   FALSO —entran perfectamente— y en el panel de Dani habria acusado a sus 202
+   conductores de estar bloqueados. Un aviso que miente gasta la confianza en
+   todos los demas.
+
+   Y el boton no es inocuo: al ponerles contraseña DEJAN de poder entrar solo
+   con el correo. Si las claves no se reparten, la nave se queda sin portal a
+   la mañana siguiente. Por eso hay un paso de confirmacion que lo dice con
+   todas las letras, y por eso las claves se pueden bajar en CSV: se ven UNA
+   vez, porque en la base solo queda el hash. */
+function AvisoAccesos({ list, accounts, onHecho }) {
+  const [dando, setDando] = useState(false)
+  const [confirmar, setConfirmar] = useState(false)
+  const [hecho, setHecho] = useState(null)
+  const [error, setError] = useState('')
+
+  // Plegarlo es cosa de quien mira: se recuerda en este navegador y vuelve si
+  // cambia el número (hay gente nueva sin contraseña).
+  const [plegado, setPlegado] = useState(false)
+  const sinAcceso = list.filter((d) => !accounts.includes(d.id))
+  const sinCorreo = sinAcceso.filter((d) => !(d.email || '').trim()).length
+  const conCorreo = sinAcceso.length - sinCorreo
+
+  const claveAviso = `aviso_accesos_${conCorreo}`
+  useEffect(() => {
+    try { setPlegado(localStorage.getItem('aviso_accesos') === claveAviso) } catch { /* sin almacén */ }
+  }, [claveAviso])
+  const plegar = () => {
+    setPlegado(true)
+    try { localStorage.setItem('aviso_accesos', claveAviso) } catch { /* sin almacén */ }
+  }
+
+  const dar = async () => {
+    setDando(true); setError('')
+    try {
+      const r = await generarAccesosConductores()
+      setHecho(r.data)
+      onHecho()
+    } catch (e) {
+      setError(e?.response?.data?.detail || 'No se pudo. Reintenta.')
+    }
+    setDando(false)
+  }
+
+  const bajarCsv = () => {
+    const filas = [['Nombre', 'Centro', 'Correo', 'Contraseña'],
+      ...hecho.accesos.map((a) => [a.nombre, a.centro || '', a.email, a.clave])]
+    const csv = filas.map((f) => f.map((c) => `"${String(c).replace(/"/g, '""')}"`).join(';')).join('\r\n')
+    // BOM: sin el, Excel abre las tildes rotas y parece que el fichero esta mal.
+    const url = URL.createObjectURL(new Blob(['﻿' + csv], { type: 'text/csv;charset=utf-8' }))
+    const a = document.createElement('a')
+    a.href = url; a.download = 'accesos-conductores.csv'; a.click()
+    URL.revokeObjectURL(url)
+  }
+
+  if (hecho) {
+    return (
+      <div className="mb-4 rounded-xl border border-lime-500/30 bg-lime-500/5 p-4">
+        <p className="text-sm font-semibold text-lime-300">
+          {hecho.creadas} {hecho.creadas === 1 ? 'conductor ya tiene' : 'conductores ya tienen'} contraseña
+        </p>
+        <p className="mt-1 text-[12.5px] leading-relaxed text-amber-200">
+          Desde ahora la necesitan para entrar: con el correo solo ya no les vale.
+          Repártelas antes de que lo intenten.
+        </p>
+        <p className="mt-1 text-[12.5px] leading-relaxed text-dark-400">{hecho.aviso}</p>
+        {hecho.sin_email > 0 && (
+          <p className="mt-1 text-[12.5px] text-amber-300">
+            {hecho.sin_email} se han quedado fuera por no tener correo. Ponles uno en su ficha y vuelve a pulsar.
+          </p>
+        )}
+        {hecho.accesos.length > 0 && (
+          <>
+            <button onClick={bajarCsv}
+              className="mt-3 rounded-lg bg-lime-500/15 px-3 py-1.5 text-[12.5px] font-semibold text-lime-300 hover:bg-lime-500/25">
+              Descargar las claves (CSV)
+            </button>
+            <div className="mt-3 max-h-52 overflow-y-auto rounded-lg border border-dark-800">
+              <table className="w-full text-[12px]">
+                <tbody>
+                  {hecho.accesos.map((a) => (
+                    <tr key={a.driver_id} className="border-b border-dark-800/70 last:border-0">
+                      <td className="px-2 py-1 text-dark-300">{a.nombre}</td>
+                      <td className="px-2 py-1 text-dark-500">{a.email}</td>
+                      <td className="cifra px-2 py-1 font-semibold text-lime-300">{a.clave}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </>
+        )}
+      </div>
+    )
+  }
+
+  if (!conCorreo) return null
+
+  if (confirmar) {
+    return (
+      <div className="mb-4 rounded-xl border border-amber-500/40 bg-amber-500/5 p-4">
+        <p className="text-[13px] font-semibold text-amber-200">
+          Antes de seguir: esto cambia cómo entran
+        </p>
+        <ul className="mt-2 space-y-1 text-[12.5px] leading-relaxed text-dark-300">
+          <li>· Ahora esos {conCorreo} entran escribiendo solo su correo.</li>
+          <li>· Al ponerles contraseña, <span className="font-semibold text-amber-200">eso deja de valer</span>: sin su clave no entran.</li>
+          <li>· Las claves se ven una sola vez. Descárgalas y repártelas el mismo día.</li>
+        </ul>
+        <div className="mt-3 flex flex-wrap gap-2">
+          <button onClick={dar} disabled={dando}
+            className="flex items-center gap-1.5 rounded-lg bg-amber-500/20 px-3 py-2 text-[12.5px] font-semibold text-amber-100 hover:bg-amber-500/30 disabled:opacity-50">
+            {dando ? <Loader2 size={13} className="animate-spin" /> : <Lock size={13} />}
+            {dando ? 'Creando…' : 'Lo entiendo, poner contraseña'}
+          </button>
+          <button onClick={() => setConfirmar(false)}
+            className="px-3 py-2 text-[12.5px] text-dark-400 hover:text-dark-200">Dejarlo como está</button>
+        </div>
+        {error && <p className="mt-2 text-[12px] text-red-300">{error}</p>}
+      </div>
+    )
+  }
+
+  // UNA LÍNEA, y se puede plegar. Era un párrafo fijo encima de la lista todos
+  // los días; la explicación larga queda en el «?» y en la confirmación.
+  if (plegado) return null
+  return (
+    <div className="mb-3 flex flex-wrap items-center gap-x-3 gap-y-2 rounded-xl border border-dark-800 bg-dark-900/60 px-3 py-2 text-[12.5px]">
+      <Lock size={13} className="shrink-0 text-dark-500" />
+      <span className="min-w-0 flex-1 text-dark-300">
+        <span className="font-semibold text-dark-200">{conCorreo}</span> {conCorreo === 1 ? 'entra' : 'entran'} al portal solo con su correo
+        {sinCorreo > 0 && <> · <span className="text-amber-300">{sinCorreo} sin correo</span></>}
+        <span className="ml-1.5 cursor-help text-dark-500"
+          title={'Es lo más cómodo, pero cualquiera que sepa su correo entraría por ellos. Con contraseña, sin su clave no entran.'
+            + (sinCorreo > 0 ? ` Los ${sinCorreo} sin correo no pueden entrar de ninguna forma hasta ponérselo en su ficha.` : '')}>(?)</span>
+      </span>
+      <button onClick={() => setConfirmar(true)}
+        className="rounded-lg bg-dark-800 px-2.5 py-1 font-semibold text-dark-200 hover:bg-dark-700">
+        Poner contraseña
+      </button>
+      <button onClick={plegar} aria-label="Ocultar este aviso" className="rounded p-1 text-dark-500 hover:text-dark-300">
+        <X size={13} />
+      </button>
+    </div>
+  )
+}
+
+
+function TablaConductores({ list, accounts, onAbrir, t }) {
+  const [orden, setOrden] = useState({ col: 'name', asc: true })
+
+  const filas = useMemo(() => {
+    const { col, asc } = orden
+    // Recortado: 18 fichas guardan el nombre con espacios delante («  Karim…»)
+    // y salían las primeras de la lista, antes que las de la A.
+    const txt = (d) => String(d?.[col] ?? '').trim()
+    const ms = [...list].sort((a, b) => {
+      const r = txt(a).localeCompare(txt(b), 'es', { sensitivity: 'base', numeric: true })
+      return asc ? r : -r
+    })
+    return ms
+  }, [list, orden])
+
+  const Cab = ({ col, children, alinea = 'text-left' }) => (
+    <th className={`px-2 py-2 ${alinea} text-[10px] font-medium uppercase tracking-wider text-dark-500`}>
+      <button
+        onClick={() => setOrden((o) => ({ col, asc: o.col === col ? !o.asc : true }))}
+        className={`inline-flex items-center gap-1 hover:text-dark-300 ${orden.col === col ? 'text-dark-300' : ''}`}>
+        {children}
+        {orden.col === col && <span className="text-[8px]">{orden.asc ? '▲' : '▼'}</span>}
+      </button>
+    </th>
+  )
+
+  return (
+    <div className="card overflow-hidden">
+      <div className="overflow-x-auto">
+        <table className="w-full min-w-[760px] text-[13px]">
+          <thead className="sticky top-0 z-10 bg-dark-900">
+            <tr className="border-b border-dark-800">
+              <th className="w-8 px-2 py-2"></th>
+              <Cab col="name">Nombre</Cab>
+              <Cab col="center">Centro</Cab>
+              <Cab col="alojamiento">Alojamiento</Cab>
+              <Cab col="phone">Teléfono</Cab>
+              <Cab col="email">Correo</Cab>
+              <Cab col="contrato">Contrato</Cab>
+              <Cab col="nivel">Nivel</Cab>
+              <th className="px-2 py-2 text-center text-[10px] font-medium uppercase tracking-wider text-dark-500">PIN</th>
+            </tr>
+          </thead>
+          <tbody>
+            {filas.map((d) => {
+              const [nl, nc] = NIVEL[d.nivel] || []
+              const [cl, cc] = CONTRATO[d.contrato] || []
+              const hasAcc = accounts.includes(d.id)
+              return (
+                <tr key={d.id} onClick={() => onAbrir(d)}
+                  className="float-row cursor-pointer border-b border-dark-800/50 last:border-0">
+                  <td className="px-2 py-1"><Avatar driver={d} size={7} /></td>
+                  <td className="max-w-[220px] truncate px-2 py-1 font-medium text-dark-100">{String(d.name || '').replace(/\s+/g, ' ').trim()}</td>
+                  <td className="px-2 py-1 text-dark-400">{d.center || '—'}</td>
+                  <td className="max-w-[150px] truncate px-2 py-1 text-dark-500">{d.alojamiento || '—'}</td>
+                  <td className="cifra px-2 py-1 text-dark-400">
+                    {d.phone ? verTelefono(d.phone) : '—'}
+                    {d.phone && d.telefono_por === 'cortex' && <span className="ml-1 text-[10px] font-normal text-dark-500" title={t('drv.telDeCortex')}>Cortex</span>}
+                    {/* Cortex da ese numero a mas de una persona. No se borra
+                        —puede que compartan movil de verdad— pero se avisa aqui,
+                        que es donde se mira justo antes de llamar. */}
+                    {d.telefono_dudoso && (
+                      <span className="ml-1 rounded bg-amber-500/15 px-1 py-px text-[10px] font-semibold text-amber-300"
+                        title="Cortex da este telefono a mas de una persona. Comprueba cual es el suyo y escribelo a mano.">
+                        ?
+                      </span>
+                    )}
+                  </td>
+                  <td className="max-w-[210px] truncate px-2 py-1 text-dark-500">{d.email || '—'}</td>
+                  <td className="whitespace-nowrap px-2 py-1">
+                    {cc ? <span className={`rounded-full px-2 py-0.5 text-[10px] font-semibold ${cc}`}>{cl}</span>
+                        : <span className="text-dark-500">—</span>}
+                  </td>
+                  <td className="whitespace-nowrap px-2 py-1">
+                    {nc ? <span className={`rounded-full px-2 py-0.5 text-[10px] font-semibold ${nc}`}>{nl}</span>
+                        : <span className="text-dark-500">—</span>}
+                  </td>
+                  <td className="px-2 py-1 text-center">
+                    {hasAcc ? <Lock size={11} className="inline text-lime-400" title="Tiene acceso al portal" />
+                            : <span className="text-dark-700">—</span>}
+                  </td>
+                </tr>
+              )
+            })}
+          </tbody>
+        </table>
+      </div>
+      <p className="border-t border-dark-800 px-3 py-1.5 text-[11px] text-dark-500">
+        {filas.length} {filas.length === 1 ? 'conductor' : 'conductores'} · pulsa una fila para abrir la ficha
+      </p>
+    </div>
+  )
+}
+
+
+export default function Conductores() {
+  const { center, centers } = useOutletContext()
+  const { t } = useT()
+  const [drivers, setDrivers] = useState(null)
+  const [accounts, setAccounts] = useState([]) // driver_ids que tienen contraseña
+  const [q, setQ] = useState('')
+  const [modal, setModal] = useState(null)
+  const [verImportar, setVerImportar] = useState(false) // null | { driver: obj|null }
+  const [verMoviles, setVerMoviles] = useState(false)
+  // /panel/conductores?importar=1 abre directamente la importación.
+  const [paramsImp] = useSearchParams()
+  useEffect(() => { if (paramsImp.get('importar')) setVerImportar(true) }, [paramsImp])
+  const [telCortex, setTelCortex] = useState(false)
+  const completarTelefonos = async () => {
+    setTelCortex(true)
+    try {
+      const { data } = await telefonosDesdeCortex()
+      const lineas = [t('drv.telCortexOk').replace('{n}', data.rellenados)]
+      if (data.dudosos?.length) {
+        lineas.push('', `${data.dudosos.length} con un teléfono que Cortex da a más de una persona (no se ha puesto):`)
+        lineas.push(...data.dudosos.slice(0, 12).map((d) => `· ${d.name}: ${d.cortex} — también de ${(d.tambien_de || []).join(', ') || '?'}`))
+      }
+      if (data.distintos?.length) {
+        lineas.push(t('drv.telCortexDistintos').replace('{n}', data.distintos.length))
+        lineas.push(...data.distintos.slice(0, 12).map((d) => `· ${d.name}: ${d.app} / Cortex ${d.cortex}`))
+      }
+      alert(lineas.join(String.fromCharCode(10)))
+      if (data.rellenados) load()
+    } catch (e) { alert(e?.response?.data?.detail || 'No se ha podido') } finally { setTelCortex(false) }
+  }
+  const [tab, setTab] = useState('directorio') // directorio | ranking | scoring
+  const [searchParams, setSearchParams] = useSearchParams()
+
+  // Deep-link desde la paleta de comandos: /panel/conductores?open=<id>
+  useEffect(() => {
+    const openId = searchParams.get('open')
+    if (openId && drivers) {
+      const d = drivers.find((x) => x.id === openId)
+      if (d) setModal({ driver: d })
+      setSearchParams({}, { replace: true })
+    }
+  }, [drivers]) // eslint-disable-line
+
+  async function load() {
+    try {
+      const [rd, ra] = await Promise.all([getDrivers(center), getDriverAccounts()])
+      setDrivers(lista(rd.data))
+      setAccounts((lista(ra.data)).map(a => a.driver_id))
+    } catch {
+      try { const r = await getDrivers(center); setDrivers(lista(r.data)) } catch { setDrivers([]) }
+      setAccounts([])
+    }
+  }
+  useEffect(() => { setDrivers(null); setModal(null); load() }, [center]) // eslint-disable-line
+
+  // Se busca también por Transporter ID y teléfono (es lo que se copia de
+  // Cortex) y sin tildes: «nunez» encuentra a «NÚÑEZ».
+  const list = useMemo(() => {
+    const plano = (v) => String(v || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase()
+    const b = plano(q).trim()
+    return (drivers || [])
+      .filter(d => !b || [d.name, d.email, d.center, d.driver_id, d.transporter_id, d.phone]
+        .some(v => plano(v).includes(b)))
+      .sort((a, b) => (a.name || '').localeCompare(b.name || '', 'es', { sensitivity: 'base' }))
+  }, [drivers, q])
+
+  async function handleSave(id, data) {
+    if (id) {
+      await updateDriver(id, data)
+    } else {
+      try {
+        await createDriver(data)
+      } catch (e) {
+        /* Alguien que vuelve tras una baja: el servidor ofrece su ficha de
+           siempre en vez de crear otra y partir su historial en dos. */
+        const d = e?.response?.data?.detalle
+        if (e?.response?.status !== 409 || !d?.reactivar_id) throw e
+        if (window.confirm(`${d.mensaje}
+
+Aceptar: reactivar su ficha (conserva inspecciones, Transporter ID y turnos).
+Cancelar: es otra persona, crear una ficha nueva.`)) {
+          const { password: _pw, ...resto } = data
+          await updateDriver(d.reactivar_id, { ...resto, active: true })
+        } else {
+          await createDriver(data, { nueva: true })
+        }
+      }
+    }
+    setModal(null); setDrivers(null); load()
+  }
+  async function handleDelete(d) {
+    if (!confirm(`¿Eliminar a ${d.name}?`)) return
+    await deleteDriver(d.id); setModal(null); setDrivers(null); load()
+  }
+
+  const TABS = [
+    { id: 'directorio', label: t('drv.title') },
+    { id: 'ranking',    label: `🏆 ${t('sc.ranking')}` },
+    // Pestaña y no entrada de menú: son dos tareas de mantenimiento de las
+    // fichas que se hacen de vez en cuando, y el menú ya tiene treinta.
+    { id: 'fichas',     label: 'Fichas duplicadas e IDs' },
+  ]
+
+  return (
+    <div>
+      {/* Header */}
+      <header className="rise mb-6">
+        {center && center !== 'Todos' && (
+          <p className="font-mono text-[10px] font-bold uppercase tracking-[0.24em] text-brand-400/80">{center}</p>
+        )}
+        <div className="mt-2 flex flex-wrap items-end justify-between gap-4">
+          <h1 className="font-display text-[clamp(28px,3.4vw,42px)] font-semibold leading-none tracking-[-0.03em] text-dark-50">
+            {t('drv.title')}{drivers && <span className="text-dark-500"> · {(drivers || []).length}</span>}
+          </h1>
+          {tab === 'directorio' && (
+            <div className="flex items-center gap-2.5">
+              <div className="relative">
+                <Search size={15} className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-dark-500" />
+                <input
+                  className="w-56 rounded-xl border border-white/[0.07] bg-white/[0.02] py-2.5 pl-10 pr-3 text-[13.5px] text-dark-50 placeholder:text-dark-500 transition-all duration-300 hover:border-white/[0.12] focus:border-brand-500/50 focus:bg-white/[0.045] focus:outline-none focus:ring-[3px] focus:ring-brand-500/15"
+                  placeholder={t('drv.search')} value={q} onChange={e => setQ(e.target.value)}
+                />
+              </div>
+              {/* Importar va ANTES de «añadir»: quien llega el primer día no
+                  quiere teclear cincuenta fichas, quiere subir su Excel. */}
+              <button onClick={() => setVerImportar((v) => !v)}
+                className="flex items-center gap-1.5 rounded-xl border border-dark-700 px-3.5 py-2.5 text-[13.5px] font-semibold text-dark-300 hover:border-dark-600 hover:text-dark-100">
+                <FileSpreadsheet size={15} /> {t('drv.importar')}
+              </button>
+              <button onClick={() => setVerMoviles((v) => !v)}
+                title="Pon los móviles personales desde la agenda de tu teléfono. Solo se usan para las pre-DNR por WhatsApp."
+                className="flex items-center gap-1.5 rounded-xl border border-dark-700 px-3.5 py-2.5 text-[13.5px] font-semibold text-dark-300 hover:border-dark-600 hover:text-dark-100">
+                <Smartphone size={15} /> Móviles personales
+              </button>
+              <button onClick={completarTelefonos} disabled={telCortex} title={t('drv.telCortexTip')}
+                className="flex items-center gap-1.5 rounded-xl border border-dark-700 px-3.5 py-2.5 text-[13.5px] font-semibold text-dark-300 hover:border-dark-600 hover:text-dark-100 disabled:opacity-50">
+                <Phone size={15} /> {t('drv.telCortex')}
+              </button>
+              <button
+                onClick={() => setModal({ driver: null })}
+                className="group relative flex items-center gap-1.5 overflow-hidden rounded-xl bg-gradient-to-br from-brand-400 to-brand-600 px-4 py-2.5 text-[13.5px] font-semibold text-white shadow-lg shadow-brand-500/25 transition-all duration-300 [text-shadow:0_1px_1px_rgba(0,0,0,0.15)] hover:-translate-y-px hover:shadow-xl hover:shadow-brand-500/30 hover:brightness-110 active:translate-y-0 active:scale-[0.98]"
+              >
+                <span className="pointer-events-none absolute inset-x-0 top-0 h-1/2 bg-gradient-to-b from-white/20 to-transparent" />
+                <Plus size={15} /> {t('drv.add')}
+              </button>
+            </div>
+          )}
+        </div>
+      </header>
+
+      {verImportar && (
+        <div className="card mb-5 p-5">
+          {/* Al terminar solo se recarga la lista: cerrarlo escondia el
+              resultado antes de poder leerlo. */}
+          <ImportarConductores center={center} alTerminar={() => load()} />
+        </div>
+      )}
+
+      {verMoviles && (
+        <div className="card mb-5 p-5">
+          <ImportarMoviles alTerminar={() => load()} />
+        </div>
+      )}
+
+      {/* Tabs */}
+      <div className="flex gap-0 border-b border-dark-800 mb-6">
+        {TABS.map(t => (
+          <button key={t.id} onClick={() => setTab(t.id)}
+            className={`px-4 py-2 text-sm font-medium transition-colors border-b-2 -mb-px ${
+              tab === t.id
+                ? 'border-brand-400 text-brand-300'
+                : 'border-transparent text-dark-500 hover:text-dark-300'
+            }`}>
+            {t.label}
+          </button>
+        ))}
+      </div>
+
+      {/* Directorio */}
+      {tab === 'directorio' && (
+        !drivers
+          ? <div className="flex items-center gap-2 py-16 text-dark-400"><Loader2 size={18} className="animate-spin" /> {t('ui.loading')}</div>
+          : list.length === 0 && q && drivers.length > 0
+            ? <div className="rounded-2xl border border-dashed border-dark-700 py-12 text-center">
+                <p className="font-medium text-dark-300">Nadie coincide con «{q}»</p>
+                <p className="mt-1 text-sm text-dark-500">Se busca por nombre, correo, nave, Transporter ID y teléfono.</p>
+                <button onClick={() => setQ('')} className="btn-ghost mt-4 px-3 py-1.5 text-sm">Borrar búsqueda</button>
+              </div>
+          : list.length === 0
+            ? <div className="flex flex-col items-center justify-center rounded-2xl border border-dashed border-dark-700 px-6 py-20 text-center">
+                <UserCheck size={44} className="mb-4 text-dark-500" />
+                <p className="text-base font-semibold text-dark-100">{t('drv.empty')}{center !== 'Todos' ? ` en ${center}` : ''}</p>
+                <p className="mt-1.5 max-w-md text-sm leading-relaxed text-dark-400">
+                  Trae tu lista de Excel o la de Amazon: se reconoce cada columna, eliges la nave y
+                  cada conductor recibe su acceso al portal para hacer las auditorías desde el móvil.
+                </p>
+                <div className="mt-5 flex flex-wrap items-center justify-center gap-2">
+                  <button onClick={() => setVerImportar(true)} className="btn-primary flex items-center gap-1.5 px-4 py-2 text-sm">
+                    <FileSpreadsheet size={14} /> {t('drv.importar')}
+                  </button>
+                  <button onClick={() => setModal({ driver: null })} className="btn-ghost flex items-center gap-1.5 px-4 py-2 text-sm">
+                    <Plus size={14} /> {t('drv.add')}
+                  </button>
+                </div>
+              </div>
+            : <>
+                <AvisoAccesos list={list} accounts={accounts} onHecho={load} />
+                <TablaConductores list={list} accounts={accounts} onAbrir={(d) => setModal({ driver: d })} t={t} />
+              </>
+      )}
+
+      {/* Ranking + scoring unificado */}
+      {tab === 'ranking' && <ScoringView center={center} />}
+
+      {tab === 'fichas' && <SaludFichas onCambio={load} />}
+
+      {/* Modal */}
+      {modal && (
+        <DriverModal
+          driver={modal.driver}
+          centers={centers}
+          hasAccount={accounts.includes(modal.driver?.id)}
+          onSave={handleSave}
+          onDelete={handleDelete}
+          onClose={() => setModal(null)}
+          onAccountChange={load}
+        />
+      )}
+    </div>
+  )
+}
+
+// ── Modal ─────────────────────────────────────────────────────────────────────
+function DriverModal({ driver, centers, hasAccount, onSave, onDelete, onClose, onAccountChange }) {
+  const { t } = useT()
+  useEscape(onClose)
+  const isNew = !driver
+  const [editing, setEditing] = useState(isNew)
+  const [form, setForm] = useState(driver ? { ...driver } : { ...EMPTY })
+  const [busy, setBusy] = useState(false)
+  const [photoBusy, setPhotoBusy] = useState(false)
+  const [previewUrl, setPreviewUrl] = useState(driver?.photo_url || null)
+  const [err, setErr] = useState('')
+  const photoRef = useRef()
+
+  // Gestión de contraseña
+  const [pwSection, setPwSection] = useState(false)
+  const [pwValue, setPwValue] = useState('')
+  const [pwConfirm, setPwConfirm] = useState('')
+  const [pwShow, setPwShow] = useState(false)
+  const [pwBusy, setPwBusy] = useState(false)
+  const [pwErr, setPwErr] = useState('')
+  const [pwOk, setPwOk] = useState('')
+
+  async function handleSetPassword() {
+    setPwErr(''); setPwOk('')
+    if (pwValue.length < 6) { setPwErr('La contraseña debe tener al menos 6 caracteres.'); return }
+    if (pwValue !== pwConfirm) { setPwErr('Las contraseñas no coinciden.'); return }
+    setPwBusy(true)
+    try {
+      await setDriverPassword(driver.id, pwValue)
+      setPwOk('Contraseña guardada. El conductor debe usarla en su próximo acceso.')
+      setPwValue(''); setPwConfirm('')
+      onAccountChange()
+    } catch (ex) {
+      setPwErr(ex?.response?.data?.detail || 'Error al guardar la contraseña.')
+    }
+    setPwBusy(false)
+  }
+
+  async function handleRemovePassword() {
+    if (!confirm(`¿Quitar la contraseña de ${driver.name}? Volverá a acceder solo con su email.`)) return
+    setPwBusy(true); setPwErr(''); setPwOk('')
+    try {
+      await deleteDriverAccount(driver.id)
+      setPwOk('Contraseña eliminada. El conductor accederá solo con su email.')
+      onAccountChange()
+    } catch (ex) {
+      setPwErr(ex?.response?.data?.detail || 'Error al eliminar la cuenta.')
+    }
+    setPwBusy(false)
+  }
+
+  function set(k, v) { setForm(f => ({ ...f, [k]: v })) }
+  function cancel() { if (isNew) onClose(); else { setForm({ ...driver }); setEditing(false); setErr('') } }
+
+  async function submit(e) {
+    e.preventDefault()
+    if (!form.name?.trim()) { setErr('El nombre es obligatorio.'); return }
+    setBusy(true); setErr('')
+    try { await onSave(driver?.id || null, form) }
+    catch (ex) {
+      setErr(ex?.response?.data?.detail || 'Error al guardar.'); setBusy(false)
+    }
+  }
+
+  async function handlePhoto(e) {
+    const file = e.target.files?.[0]
+    if (!file || !driver?.id) return
+    setPreviewUrl(prev => { if (prev) URL.revokeObjectURL(prev); return URL.createObjectURL(file) })
+    setPhotoBusy(true)
+    try {
+      const r = await uploadDriverPhoto(driver.id, file)
+      setForm(f => ({ ...f, photo_url: r.data.photo_url }))
+    } catch { setErr('Error subiendo la foto.') }
+    finally { setPhotoBusy(false) }
+  }
+
+  const [nl, nc] = NIVEL[driver?.nivel] || []
+  const [cl, cc] = CONTRATO[driver?.contrato] || []
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4" onClick={onClose}>
+      {/* Backdrop */}
+      <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" />
+
+      {/* Panel — mitad de pantalla */}
+      <div
+        className="relative z-10 flex w-full max-w-2xl flex-col rounded-2xl border border-dark-700 bg-dark-900 shadow-2xl shadow-black/50 overflow-hidden"
+        style={{ maxHeight: '85vh' }}
+        onClick={e => e.stopPropagation()}
+      >
+        {/* Header */}
+        <div className="flex items-center justify-between border-b border-dark-800 px-6 py-4">
+          <div className="flex items-center gap-3">
+            {/* Avatar clickable para cambiar foto */}
+            {driver && (
+              <button
+                type="button"
+                onClick={() => photoRef.current?.click()}
+                className="group relative shrink-0"
+                title="Cambiar foto"
+                disabled={photoBusy}
+              >
+                <div className="h-10 w-10 overflow-hidden rounded-full">
+                  {previewUrl
+                    ? <img src={previewUrl} alt="" className="h-full w-full object-cover" />
+                    : <div className={`flex h-full w-full items-center justify-center bg-gradient-to-br ${avatarGrad(driver.name)} text-sm font-bold text-white`}>{initials(driver.name)}</div>}
+                </div>
+                <div className="absolute inset-0 flex items-center justify-center rounded-full bg-black/50 opacity-0 transition-opacity group-hover:opacity-100">
+                  {photoBusy ? <Loader2 size={14} className="animate-spin text-white" /> : <Camera size={14} className="text-white" />}
+                </div>
+              </button>
+            )}
+            <input ref={photoRef} type="file" accept="image/*" className="hidden" onChange={handlePhoto} />
+            <div>
+              <h2 className="font-bold text-dark-50">
+                {isNew ? t('drv.new') : driver.name}
+              </h2>
+              {driver?.center && !editing && (
+                <p className="text-xs text-dark-500 flex items-center gap-1 mt-0.5"><MapPin size={10} />{driver.center}</p>
+              )}
+            </div>
+          </div>
+          <div className="flex items-center gap-2">
+            {!isNew && !editing && (
+              <button
+                onClick={() => setEditing(true)}
+                className="flex items-center gap-1.5 rounded-lg bg-dark-800 px-3 py-1.5 text-xs font-semibold text-dark-200 hover:bg-dark-700 transition-colors"
+              >
+                <Pencil size={12} /> {t('ui.edit')}
+              </button>
+            )}
+            {!isNew && (
+              <button
+                onClick={() => onDelete(driver)}
+                className="rounded-lg bg-red-500/10 p-1.5 text-red-400 hover:bg-red-500/20 transition-colors"
+                title="Eliminar conductor"
+              >
+                <Trash2 size={14} />
+              </button>
+            )}
+            <button onClick={onClose} className="rounded-lg p-1.5 text-dark-400 hover:bg-dark-800 hover:text-dark-200 transition-colors">
+              <X size={16} />
+            </button>
+          </div>
+        </div>
+
+        {/* Body */}
+        <div className="flex-1 overflow-y-auto">
+          {/* ── Vista detalle ── */}
+          {!editing && driver && (
+            <div className="p-6">
+              {/* Tags */}
+              {(cc || nc) && (
+                <div className="flex flex-wrap gap-2 mb-6">
+                  {cc && <span className={`rounded-full px-3 py-1 text-xs font-semibold ${cc}`}>{cl}</span>}
+                  {nc && <span className={`rounded-full px-3 py-1 text-xs font-semibold ${nc}`}>{nl}</span>}
+                </div>
+              )}
+
+              <div className="grid grid-cols-2 gap-x-8 gap-y-5">
+                <Detail icon={IdCard}    label="DNI / NIE"        value={driver.dni} />
+                <Detail icon={Phone}     label="Teléfono"         value={driver.phone} />
+                <Detail icon={Phone}     label="Móvil personal (pre-DNR)" value={driver.movil_personal} />
+                <Detail icon={Mail}      label="Email"            value={driver.email} span={2} />
+                <Detail icon={Car}       label="Nº carnet"        value={driver.license_number} />
+                <Detail icon={FileText}  label="ID Amazon"        value={driver.driver_id} mono />
+                <Detail icon={FileText}  label="Transporter ID"   value={driver.transporter_id} mono />
+                <Detail icon={MapPin}    label="Centro"           value={driver.center} />
+                <Detail icon={Building2} label="Alojamiento"      value={driver.alojamiento} />
+                {driver.notas && (
+                  <div className="col-span-2 rounded-xl bg-dark-800/60 p-4">
+                    <div className="text-[10px] uppercase tracking-widest text-dark-500 mb-1">Notas</div>
+                    <p className="text-sm text-dark-200 whitespace-pre-wrap">{driver.notas}</p>
+                  </div>
+                )}
+              </div>
+
+              {/* ── Acceso con contraseña ── */}
+              {driver.email && (
+                <div className="mt-6 rounded-xl border border-dark-800 overflow-hidden">
+                  <button
+                    onClick={() => { setPwSection(v => !v); setPwErr(''); setPwOk('') }}
+                    className="flex w-full items-center justify-between px-4 py-3 hover:bg-dark-800/40 transition-colors"
+                  >
+                    <div className="flex items-center gap-2">
+                      {hasAccount
+                        ? <ShieldCheck size={15} className="text-emerald-400" />
+                        : <LockOpen size={15} className="text-dark-500" />}
+                      <span className="text-sm font-semibold text-dark-200">Acceso con contraseña</span>
+                      <span className={`rounded-full px-2 py-0.5 text-[10px] font-bold ${hasAccount ? 'bg-emerald-500/15 text-emerald-400' : 'bg-dark-800 text-dark-300'}`}>
+                        {hasAccount ? 'Activado' : 'Sin contraseña'}
+                      </span>
+                    </div>
+                    <span className="text-xs text-dark-500">{pwSection ? '▲' : '▼'}</span>
+                  </button>
+
+                  {pwSection && (
+                    <div className="border-t border-dark-800 px-4 py-4 space-y-3 bg-dark-950/40">
+                      <p className="text-xs text-dark-500">
+                        {hasAccount
+                          ? 'El conductor debe introducir su email y contraseña para acceder al portal. Puedes cambiarla o eliminarla aquí.'
+                          : 'Sin contraseña, el conductor accede solo con su email. Activa una contraseña para mayor seguridad.'}
+                      </p>
+
+                      {hasAccount && (
+                        <button
+                          onClick={handleRemovePassword}
+                          disabled={pwBusy}
+                          className="flex items-center gap-1.5 rounded-lg bg-red-500/10 px-3 py-1.5 text-xs font-semibold text-red-400 hover:bg-red-500/20 transition-colors disabled:opacity-50"
+                        >
+                          <LockOpen size={12} /> Quitar contraseña
+                        </button>
+                      )}
+
+                      <div>
+                        <Label>{hasAccount ? 'Nueva contraseña' : 'Establecer contraseña'}</Label>
+                        <div className="relative">
+                          <input
+                            type={pwShow ? 'text' : 'password'}
+                            className="input w-full pr-10"
+                            value={pwValue}
+                            onChange={e => setPwValue(e.target.value)}
+                            placeholder="Mínimo 6 caracteres"
+                            autoComplete="new-password"
+                          />
+                          <button type="button" onClick={() => setPwShow(v => !v)}
+                            className="absolute right-3 top-1/2 -translate-y-1/2 text-dark-500 hover:text-dark-300">
+                            {pwShow ? <EyeOff size={14} /> : <Eye size={14} />}
+                          </button>
+                        </div>
+                      </div>
+
+                      <div>
+                        <Label>Confirmar contraseña</Label>
+                        <input
+                          type={pwShow ? 'text' : 'password'}
+                          className="input w-full"
+                          value={pwConfirm}
+                          onChange={e => setPwConfirm(e.target.value)}
+                          placeholder="Repite la contraseña"
+                          autoComplete="new-password"
+                        />
+                      </div>
+
+                      {pwErr && <p className="text-xs text-red-400">{pwErr}</p>}
+                      {pwOk  && <p className="text-xs text-emerald-400">{pwOk}</p>}
+
+                      <button
+                        onClick={handleSetPassword}
+                        disabled={pwBusy || !pwValue || !pwConfirm}
+                        className="flex items-center gap-1.5 rounded-lg bg-brand-600 px-4 py-2 text-xs font-bold text-brand-tinta hover:bg-brand-600 disabled:opacity-50 transition-colors"
+                      >
+                        {pwBusy ? <Loader2 size={12} className="animate-spin" /> : <Lock size={12} />}
+                        {hasAccount ? 'Cambiar contraseña' : 'Guardar contraseña'}
+                      </button>
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* ── Formulario ── */}
+          {editing && (
+            <form id="driver-form" onSubmit={submit} className="p-6">
+              {err && <p className="mb-4 rounded-xl bg-red-500/10 px-4 py-3 text-sm text-red-400">{err}</p>}
+
+              <div className="grid grid-cols-2 gap-4">
+                <div className="col-span-2">
+                  <Label>Nombre completo *</Label>
+                  <input className="input w-full" value={form.name} onChange={e => set('name', e.target.value)} placeholder="Nombre Apellido" autoFocus />
+                </div>
+
+                <div>
+                  <Label>Centro</Label>
+                  <select className="select w-full" value={form.center || ''} onChange={e => set('center', e.target.value)}>
+                    <option value="">— Sin asignar —</option>
+                    {centers.map(c => <option key={c} value={c}>{c}</option>)}
+                  </select>
+                </div>
+
+                <div>
+                  <Label>Alojamiento</Label>
+                  <input className="input w-full" value={form.alojamiento || ''} onChange={e => set('alojamiento', e.target.value)} placeholder="Nombre del alojamiento" />
+                </div>
+
+                <div>
+                  <Label>Tipo de contrato</Label>
+                  <select className="select w-full" value={form.contrato || ''} onChange={e => set('contrato', e.target.value)}>
+                    <option value="">—</option>
+                    <option value="empresa">Empresa</option>
+                    <option value="ett">ETT</option>
+                  </select>
+                </div>
+
+                <div>
+                  <Label>Nivel</Label>
+                  <select className="select w-full" value={form.nivel || ''} onChange={e => set('nivel', e.target.value)}>
+                    <option value="">—</option>
+                    <option value="pleno">Pleno</option>
+                    <option value="L1">L1</option>
+                    <option value="L2">L2</option>
+                    <option value="L3">L3</option>
+                  </select>
+                </div>
+
+                <div>
+                  <Label>DNI / NIE</Label>
+                  <input className="input w-full" value={form.dni || ''} onChange={e => set('dni', e.target.value)} placeholder="12345678A o X1234567A" />
+                </div>
+
+                <div>
+                  <Label>Teléfono</Label>
+                  <input className="input w-full" value={form.phone || ''} onChange={e => set('phone', e.target.value)} placeholder="+34 600 000 000" />
+                </div>
+
+                {/* SOLO para las pre-DNR. El teléfono de arriba puede ser el de la
+                    ruta, y el que da Cortex cambia cada día: un enlace con los
+                    datos de un paquete no puede salir a un número que quizá es de
+                    otra persona. Sin este, no se le avisa por WhatsApp. */}
+                <div>
+                  <Label>Móvil personal <span className="font-normal text-dark-500">(solo pre-DNR)</span></Label>
+                  <input className="input w-full" value={form.movil_personal || ''} onChange={e => set('movil_personal', e.target.value)} placeholder="+34 600 000 000" />
+                  <p className="mt-1 text-[11px] leading-snug text-dark-500">
+                    Aquí le llega el WhatsApp con la pre-DNR. Si lo dejas vacío no se le avisa.
+                  </p>
+                </div>
+
+                <div className="col-span-2">
+                  <Label>Email</Label>
+                  <input className="input w-full" type="email" value={form.email || ''} onChange={e => set('email', e.target.value)} placeholder="conductor@email.com" />
+                </div>
+
+                <div>
+                  <Label>Nº carnet conducir</Label>
+                  <input className="input w-full" value={form.license_number || ''} onChange={e => set('license_number', e.target.value)} />
+                </div>
+
+                <div>
+                  <Label>ID Amazon</Label>
+                  <input className="input w-full font-mono" value={form.driver_id || ''} onChange={e => set('driver_id', e.target.value)} placeholder="AMZN-XXXX" />
+                </div>
+
+                {/* El código con el que vienen firmados los DNR en los reportes
+                    de Cortex. Es OTRO distinto del ID de Amazon de arriba, y
+                    hasta ahora solo se podía tocar desde la pantalla de DNR:
+                    aquí es donde la gente lo va a buscar. */}
+                <div>
+                  <Label>Transporter ID (Cortex)</Label>
+                  <input className="input w-full font-mono uppercase" value={form.transporter_id || ''}
+                    onChange={e => set('transporter_id', e.target.value.toUpperCase())}
+                    placeholder="A2H4XH0AEQTVZY" />
+                  <p className="mt-1 text-[11px] text-dark-500">
+                    Con esto se le asignan sus DNR. Si se lo pones a otra persona, se le quita a esta.
+                  </p>
+                </div>
+
+                <div className="col-span-2">
+                  <Label>Notas internas</Label>
+                  <textarea className="input w-full resize-none" rows={3} value={form.notas || ''} onChange={e => set('notas', e.target.value)} placeholder="Observaciones, preferencias, información adicional…" />
+                </div>
+              </div>
+            </form>
+          )}
+        </div>
+
+        {/* Footer */}
+        {editing && (
+          <div className="flex items-center justify-between border-t border-dark-800 px-6 py-4">
+            <button type="button" onClick={cancel} className="rounded-lg bg-dark-800 px-4 py-2 text-sm font-semibold text-dark-300 hover:bg-dark-700 transition-colors">
+              {t('ui.cancel')}
+            </button>
+            <button
+              type="submit"
+              form="driver-form"
+              disabled={busy}
+              className="flex items-center gap-2 rounded-lg bg-brand-600 px-5 py-2 text-sm font-semibold text-brand-tinta shadow-lg shadow-brand-500/25 hover:bg-brand-600 disabled:opacity-50 transition-colors"
+            >
+              {busy ? <Loader2 size={14} className="animate-spin" /> : <Save size={14} />}
+              {busy ? t('ui.saving') : t('ui.save')}
+            </button>
+          </div>
+        )}
+      </div>
+    </div>
+  )
+}
+
+function Detail({ icon: Icon, label, value, span = 1, mono }) {
+  if (!value) return null
+  return (
+    <div className={span === 2 ? 'col-span-2' : ''}>
+      <div className="text-[10px] uppercase tracking-widest text-dark-500 mb-1">{label}</div>
+      <div className={`flex items-center gap-2 ${mono ? 'font-mono text-sm text-dark-300' : 'text-sm font-medium text-dark-100'}`}>
+        <Icon size={13} className="shrink-0 text-dark-500" />
+        {value}
+      </div>
+    </div>
+  )
+}
+
+function Label({ children }) {
+  return <label className="mb-1.5 block text-xs font-medium text-dark-400">{children}</label>
+}

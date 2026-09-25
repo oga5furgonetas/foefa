@@ -1,0 +1,116 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  frontend:
+    name: Frontend (build + checkers)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: frontend-v2/package-lock.json
+      - name: Instalar dependencias
+        working-directory: frontend-v2
+        run: npm ci
+      - name: ESLint (errores de React, hooks, variables inexistentes)
+        working-directory: frontend-v2
+        run: npm run lint
+      - name: Build de producción
+        working-directory: frontend-v2
+        run: npm run build
+      - name: Instalar navegador para las pruebas
+        working-directory: frontend-v2
+        run: npx playwright install --with-deps chromium
+      - name: Pruebas E2E (humo de 44 pantallas + barrido de botones, escritorio y movil)
+        working-directory: frontend-v2
+        run: npm run e2e
+      - name: Checker i18n (claves faltantes/duplicadas)
+        run: node scripts/check-i18n.mjs
+      - name: Checker rutas backend (duplicados)
+        run: node scripts/check-routes.mjs
+      - name: Checker rutas sin consumidor (huerfanas)
+        run: node scripts/check-huerfanas.mjs
+      - name: Checker permisos (pantallas que nadie puede conceder)
+        run: node scripts/check-permisos.mjs
+      - name: Checker tema (el hibrido tiene que seguir al modo dia)
+        run: node scripts/check-tema.mjs
+      - name: Checker ayuda (pantallas que no se explican)
+        run: node scripts/check-ayuda.mjs
+      - name: Checker contraste (texto que no se lee)
+        run: node scripts/check-contraste.mjs
+      - name: Checker tema mezclado (componente oscuro en pantalla clara)
+        run: node scripts/check-tema-mezclado.mjs
+      - name: useEffect que devuelve algo (revienta AL SALIR de la pantalla)
+        run: node scripts/check-efectos.mjs
+      - name: Chunk roto reconocido en todos los navegadores (si no, el usuario no se cura)
+        run: node scripts/check-chunk-error.mjs
+      - name: Checker extension (mensajes que se pierden entre los tres saltos)
+        run: node scripts/check-extension.mjs
+      - name: Cola de la extension (no pierde paquetes y no escribe de mas)
+        run: node scripts/check-cola-extension.mjs
+      - name: Interceptor (captura lo mismo y no abre lo que no ha cambiado)
+        run: node scripts/check-interceptor-ahorro.mjs
+      - name: Todas las naves desde una pestana (y cada cosa con su nave)
+        run: node scripts/check-naves-barrido.mjs
+      - name: Asociados (cada cuenta llega, sin perder a nadie ni repetir)
+        run: node scripts/check-asociados.mjs
+      - name: Mensajes de error (siempre texto, nunca un objeto que tumbe la pantalla)
+        run: node scripts/check-detalle-error.mjs
+      - name: Informes del portal (la direccion de cada dia se deduce bien)
+        run: node scripts/check-informes-portal.mjs
+      - name: Envio de una candidatura (se reintenta, y reintentarlo es seguro)
+        run: node scripts/check-envio-candidatura.mjs
+      - name: Modulos por empresa (el menu y el catalogo cuadran)
+        run: node scripts/check-modulos.mjs
+      - name: Aviso de version nueva (no salta sin version nueva ni encadena recargas)
+        run: node scripts/check-version-app.mjs
+      - name: Checker patrones (codigo que repite un bug ya conocido)
+        run: node scripts/check-patrones.mjs
+
+  backend:
+    name: Backend (sintaxis + contratos + tests de API)
+    runs-on: ubuntu-latest
+    services:
+      mongo:
+        image: mongo:7
+        ports:
+          - 27017:27017
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: pip
+          cache-dependency-path: backend/requirements.txt
+      - name: Sintaxis (py_compile)
+        run: python -m py_compile backend/server.py backend/ai_learning.py backend/damage_segmentation.py
+      - name: Contratos modelo↔frontend (campos que se descartarían en silencio)
+        run: python scripts/check_contracts.py
+      - name: ObjectId en la respuesta (500 solo la primera vez, luego funciona)
+        run: python scripts/check_objectid.py
+      - name: Multi-tenant (endpoint sin sesión que escribiría en la empresa que no es)
+        run: python scripts/check_tenant.py
+      - name: Multiempresa (un centro de la principal decidiendo por los demas)
+        run: python scripts/check_multiempresa.py
+      - name: Borrado masivo (vaciar una coleccion sin super-admin, confirmacion y rastro)
+        run: python scripts/check_borrado.py
+      - name: Unicos (except DuplicateKeyError sin indice unico detras)
+        run: python scripts/check_unicos.py
+      - name: Cuerpos (leer el cuerpo de una peticion sin sus ayudantes = 500)
+        run: python scripts/check_cuerpos.py
+      - name: Instalar dependencias
+        run: pip install -r backend/requirements.txt pytest pytest-asyncio
+      - name: Tests de API contra Mongo real (persistencia, auth, demo read-only)
+        env:
+          SECRET_KEY: test-secret-key-only-for-tests
+          MONGO_URL: mongodb://localhost:27017
+          DB_NAME: test_flotadsp
+          GLOBAL_DB_NAME: test_flotadsp_global
+        run: pytest backend/tests -q

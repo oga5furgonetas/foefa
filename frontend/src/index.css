@@ -1,0 +1,601 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* ── Tema del PANEL: rampa neutra por variables ───────────────────────────────
+   Modo noche (por defecto): carbón cálido. Modo día: la rampa se invierte
+   (dark-950 pasa a papel claro, dark-50 a tinta) y toda la app se retematiza
+   sola. Los ajustes que la inversión no cubre (vidrio blanco, hairlines
+   white/xx, semánticos pastel) van en el bloque [data-panel-theme='light']. */
+/* `--dk-500` es el gris de "texto secundario" y estuvo en 3,9:1 sobre la
+   tarjeta en LOS TRES TEMAS — por debajo del 4,5:1 de la WCAG AA. No se veia
+   pantalla por pantalla porque afecta a las 30 por igual: lo destapo
+   `scripts/check-contraste.mjs` midiendo, y son siete de sus diecinueve
+   hallazgos de una sola vez. Si alguien lo aclara "porque queda mejor", el
+   checker lo caza. */
+:root {
+  /* Rampa con el TINTE AZUL del logo (#040710 es su fondo, un carbon azulado,
+     no un negro neutro). Se mantiene el brillo de cada escalon y solo se
+     desplaza el tono: asi la marca y el producto parecen la misma cosa sin
+     tocar un solo contraste. `check-contraste.mjs` lo verifica en los 3 temas. */
+  --dk-50: 243 246 250;
+  --dk-100: 228 233 240;
+  --dk-200: 204 211 221;
+  --dk-300: 173 182 195;
+  --dk-400: 140 150 165;
+  --dk-500: 125 134 149;
+  --dk-600: 72 81 95;
+  --dk-700: 48 56 67;
+  --dk-800: 31 38 49;
+  --dk-900: 16 22 32;
+  --dk-950: 6 10 20;
+  /* Tinta del boton de marca. FIJA a proposito: si saliera de la rampa `dark`
+     se invertiria en modo dia y quedaria texto claro sobre cian claro. */
+  --brand-tinta: 4 22 26;
+}
+html[data-panel-theme='light'] {
+  /* Papel FRIO, no calido. El beige de antes peleaba con el cian del logo:
+     dos temperaturas distintas en la misma pantalla. */
+  --dk-50: 15 19 26;    /* tinta */
+  --dk-100: 31 37 47;
+  --dk-200: 45 52 63;
+  --dk-300: 60 68 81;
+  --dk-400: 92 101 116;
+  /* Oscurecido tras tenir la rampa de azul: en 106 116 131 se quedaba en
+     4,40:1 sobre `bg-dark-900/40`, justo por debajo del 4,5:1 de la AA.
+     Lo cazo `check-contraste.mjs`, no el ojo — es el gris de texto
+     secundario y afecta a las 30 pantallas por igual. */
+  --dk-500: 96 106 121;
+  --dk-600: 124 134 149;
+  --dk-700: 208 212 219; /* bordes */
+  --dk-800: 231 235 241; /* rellenos suaves */
+  --dk-900: 250 252 254; /* superficies */
+  --dk-950: 243 246 250; /* papel frio */
+  color-scheme: light;
+}
+
+/* Modo día: el mismo lenguaje plano, con la rampa invertida. Aquí también
+   se fueron los degradados y las sombras largas: lo que sobra en el modo
+   noche sobra igual de día. */
+html[data-panel-theme='light'] .atmosphere {
+  background: rgb(var(--dk-950));
+}
+html[data-panel-theme='light'] .rail {
+  background: rgba(255, 255, 255, 0.72);
+  border-color: rgba(20, 20, 30, 0.10);
+}
+html[data-panel-theme='light'] .glass {
+  background: rgba(255, 255, 255, 0.65);
+  border-color: rgba(20, 20, 30, 0.08);
+}
+html[data-panel-theme='light'] .float-row:hover {
+  background-color: rgba(20, 20, 30, 0.05);
+}
+html[data-panel-theme='light'] .nav-item:hover { background: rgba(20, 20, 30, 0.05); }
+html[data-panel-theme='light'] .nav-ghead:hover { background: rgba(20, 20, 30, 0.05); }
+html[data-panel-theme='light'] .nav-item-active,
+html[data-panel-theme='light'] .nav-item-active:hover { background: rgba(20, 20, 30, 0.07); }
+html[data-panel-theme='light'] .shimmer {
+  background: linear-gradient(100deg, rgba(228, 227, 223, 0.9) 40%, rgba(206, 205, 200, 0.6) 50%, rgba(228, 227, 223, 0.9) 60%);
+  background-size: 200% 100%;
+}
+html[data-panel-theme='light'] * { scrollbar-color: rgba(120, 120, 130, 0.45) transparent; }
+html[data-panel-theme='light'] ::-webkit-scrollbar-thumb { background: rgba(120, 120, 130, 0.4); border-radius: 8px; border: 2px solid transparent; background-clip: content-box; }
+
+/* Hairlines y vidrio "white/xx" del sistema titanio → tinta suave en modo día.
+   Los selectores exigen que la clase empiece en límite de palabra para NO
+   pisar variantes hover:/focus: (esas conservan su valor). */
+html[data-panel-theme='light'] [class^='border-white/'],
+html[data-panel-theme='light'] [class*=' border-white/'] { border-color: rgba(20, 20, 30, 0.1); }
+html[data-panel-theme='light'] [class^='divide-white/'] > :not([hidden]) ~ :not([hidden]),
+html[data-panel-theme='light'] [class*=' divide-white/'] > :not([hidden]) ~ :not([hidden]) { border-color: rgba(20, 20, 30, 0.08); }
+html[data-panel-theme='light'] [class^='bg-white/'],
+html[data-panel-theme='light'] [class*=' bg-white/'] { background-color: rgba(20, 20, 30, 0.03); }
+
+/* Semánticos pastel (300/400) → tonos tinta legibles sobre papel */
+html[data-panel-theme='light'] .text-emerald-300, html[data-panel-theme='light'] .text-emerald-400 { color: #065f46; }
+html[data-panel-theme='light'] .text-amber-300, html[data-panel-theme='light'] .text-amber-400 { color: #92400e; }
+html[data-panel-theme='light'] .text-red-300, html[data-panel-theme='light'] .text-red-400 { color: #991b1b; }
+html[data-panel-theme='light'] .text-orange-300, html[data-panel-theme='light'] .text-orange-400 { color: #c2410c; }
+html[data-panel-theme='light'] .text-sky-300, html[data-panel-theme='light'] .text-sky-400 { color: #0369a1; }
+html[data-panel-theme='light'] .text-violet-300, html[data-panel-theme='light'] .text-violet-400 { color: #6d28d9; }
+html[data-panel-theme='light'] .text-purple-200, html[data-panel-theme='light'] .text-purple-300 { color: #4c1d95; }
+html[data-panel-theme='light'] .text-zinc-300 { color: #3f3f46; }
+html[data-panel-theme='light'] .text-brand-300 { color: #066975; }
+html[data-panel-theme='light'] .text-brand-400 { color: #097485; }
+html[data-panel-theme='light'] .text-brand-400\/80 { color: #097485; }
+html[data-panel-theme='light'] .text-amber-400\/90,
+html[data-panel-theme='light'] .text-amber-300\/90 { color: #92400e; }
+html[data-panel-theme='light'] .text-emerald-400\/90 { color: #065f46; }
+html[data-panel-theme='light'] .text-red-400\/90 { color: #991b1b; }
+html[data-panel-theme='light'] .text-amber-600 { color: #92400e; }
+html[data-panel-theme='light'] .text-emerald-600 { color: #065f46; }
+html[data-panel-theme='light'] .text-amber-200 { color: #92400e; }
+html[data-panel-theme='light'] .text-emerald-200 { color: #065f46; }
+html[data-panel-theme='light'] .text-red-200 { color: #991b1b; }
+html[data-panel-theme='light'] .text-brand-200 { color: #075965; }
+
+/* Texto "slate" heredado (pensado para fondo oscuro) → tinta en modo día */
+html[data-panel-theme='light'] .text-slate-100, html[data-panel-theme='light'] .text-slate-200 { color: #27272d; }
+html[data-panel-theme='light'] .text-slate-300 { color: #33333c; }
+html[data-panel-theme='light'] .text-slate-400 { color: #4b4b55; }
+html[data-panel-theme='light'] .text-slate-500 { color: #5d5d68; }
+html[data-panel-theme='light'] .text-slate-600 { color: #73737e; }
+
+/* Blanco sobre superficies que en modo día son claras → tinta.
+   (Los botones de marca no llevan estas combinaciones y siguen en blanco.) */
+html[data-panel-theme='light'] .bg-dark-600.text-white,
+html[data-panel-theme='light'] .bg-dark-700.text-white,
+html[data-panel-theme='light'] .bg-dark-800.text-white,
+html[data-panel-theme='light'] .bg-dark-900.text-white { color: rgb(var(--dk-50)); }
+html[data-panel-theme='light'] [class*='hover:text-white']:hover { color: rgb(var(--dk-50)); }
+
+/* ── Tema claro/oscuro de la LANDING pública (solo .ld-root) ──────────────── */
+/* En la barra de la landing no caben cinco elementos en un telefono: el boton
+   principal se salia de la pantalla y "Acceder" partia en dos lineas. */
+@media (max-width: 700px) { .ld-solo-ancho { display: none !important; } }
+
+/* Rejilla bento de la landing: seis columnas en escritorio, dos en movil.
+   Con seis en un telefono cada pieza quedaria en una tira ilegible. */
+.ld-bento { grid-template-columns: repeat(6, 1fr); }
+@media (max-width: 760px) {
+  .ld-bento { grid-template-columns: repeat(2, 1fr); }
+  .ld-bento > * { grid-column: span 2 !important; }
+}
+
+.ld-root {
+  --ld-bg: #080a0e;
+  --ld-surface: #0e1116;
+  --ld-surface2: #13161b;
+  --ld-text: #eef1f6;
+  --ld-muted: #94a3b8;
+  --ld-dim: #64748b;
+  --ld-border: rgba(255, 255, 255, 0.08);
+  --ld-border-strong: rgba(255, 255, 255, 0.12);
+  --ld-fill: rgba(255, 255, 255, 0.05);
+  --ld-nav: rgba(8, 10, 14, 0.85);
+  background: var(--ld-bg);
+  color: var(--ld-text);
+}
+.ld-root[data-theme='light'] {
+  --ld-bg: #f5f8fc;
+  --ld-surface: #ffffff;
+  --ld-surface2: #eef2f8;
+  --ld-text: #0f172a;
+  --ld-muted: #475569;
+  --ld-dim: #64748b;
+  --ld-border: rgba(15, 23, 42, 0.1);
+  --ld-border-strong: rgba(15, 23, 42, 0.16);
+  --ld-fill: rgba(15, 23, 42, 0.04);
+  --ld-nav: rgba(255, 255, 255, 0.85);
+}
+
+@layer base {
+  /* FONDO PLANO. Antes llevaba dos degradados radiales de marca fijos detrás
+     del contenido. Eran bonitos y no decían nada: color que no significa
+     nada le quita fuerza al color que sí significa algo, que aquí son los
+     niveles del scorecard y las alertas. */
+  body {
+    @apply bg-dark-950 text-dark-50 font-sans antialiased;
+    font-size: 14px;
+    letter-spacing: -0.005em;
+    /* Prevent iOS bounce scroll on body */
+    overscroll-behavior: none;
+  }
+
+  /* Los titulares NO cambian de fuente: se distinguen por tamaño y peso.
+     Cambiar de familia para el titular era la mitad del ruido tipográfico. */
+  h1, h2, h3 {
+    font-weight: 600;
+    letter-spacing: -0.022em;
+  }
+
+  /* TODA CIFRA ALINEA EN COLUMNA, ESCRIBA QUIEN ESCRIBA LA PANTALLA.
+     Y ahora de verdad: esta regla decía `th, td, .tabular`, y además la clase
+     `tabular-nums` estaba puesta A MANO en 238 sitios del código. Aun así, el
+     21-09-2026, midiendo el DOM de once pantallas de producción, **66 de 270
+     cifras seguían con dígitos de ancho variable** — el 24 %. Concentradas
+     justo donde más se comparan: 26 en el panel de inicio y 26 en Paquetes.
+     Es la prueba de que ponerlo a mano no cierra el problema: siempre se
+     escapa la pantalla nueva, y quien la escribe no se acuerda.
+     `font-variant-numeric` se hereda, así que ponerlo en `main` lo arregla
+     todo de una vez y las pantallas futuras nacen bien.
+     MEDIDO ANTES DE APLICARLO, inyectando la regla en producción sin tocarla:
+     cero elementos desbordan su caja en 11 pantallas × escritorio y móvil. Los
+     dígitos tabulares son un poco más anchos y ese era el único riesgo. */
+  main { font-variant-numeric: tabular-nums; }
+  th, td, .tabular { font-variant-numeric: tabular-nums; }
+
+  ::selection {
+    background: rgba(20, 231, 216, 0.28);
+    color: rgb(var(--dk-50));
+  }
+
+  /* Scrollbars finos y discretos (webkit + firefox) */
+  * {
+    scrollbar-width: thin;
+    scrollbar-color: rgba(92, 101, 120, 0.45) transparent;
+  }
+  ::-webkit-scrollbar { width: 9px; height: 9px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb {
+    background: rgba(92, 101, 120, 0.4);
+    border-radius: 8px;
+    border: 2px solid transparent;
+    background-clip: content-box;
+  }
+  ::-webkit-scrollbar-thumb:hover { background-color: rgba(136, 146, 164, 0.55); }
+
+  /* Prevent iOS Safari auto-zoom on input focus (requires font-size >= 16px) */
+  @media (max-width: 768px) {
+    input, select, textarea {
+      font-size: 16px !important;
+    }
+  }
+
+  /* Remove tap highlight on mobile */
+  * {
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  /* Accesibilidad: foco visible solo con teclado (no al hacer clic) */
+  :focus-visible {
+    @apply outline-none ring-2 ring-brand-500/60;
+  }
+
+  /* Accesibilidad: respetar la preferencia de menos movimiento del SO */
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after {
+      animation-duration: 0.01ms !important;
+      transition-duration: 0.01ms !important;
+    }
+  }
+}
+
+@layer components {
+  /* El foco se marca con UN anillo y nada mas. Antes llevaba anillo + dos
+     sombras naranjas superpuestas: tres cosas para decir lo mismo. */
+  .input {
+    @apply w-full rounded-md border border-dark-700 bg-dark-800/80 px-3 py-2 text-sm text-dark-50
+           placeholder:text-dark-500 transition-colors duration-100
+           hover:border-dark-600 focus:border-brand-500 focus:outline-none
+           focus:ring-1 focus:ring-brand-500/40;
+  }
+  .select {
+    @apply input appearance-none;
+  }
+  .label {
+    @apply mb-1 block text-xs font-semibold uppercase tracking-wider text-dark-400;
+  }
+  /* SIN GRADIENTE, SIN SOMBRA DE COLOR, SIN ELEVARSE AL PASAR EL RATON.
+     El degradado y la sombra naranja daban volumen de landing page; en una
+     herramienta que se usa ocho horas, el boton solo tiene que verse pulsable
+     y distinguirse del secundario, y eso lo hace el color de fondo solo.
+     El movimiento al pasar por encima estorbaba al recorrer listas largas:
+     con 129 furgonetas o 200 conductores, cada fila saltando es ruido. */
+  /* Cian del logo con TINTA OSCURA. En blanco daria 1,7:1 y no se leeria. */
+  .btn-primary {
+    @apply rounded-md bg-brand-400 px-4 py-2 text-sm font-semibold
+           transition-colors duration-100
+           hover:bg-brand-300 active:bg-brand-500
+           disabled:cursor-not-allowed disabled:opacity-45;
+    color: rgb(var(--brand-tinta));
+  }
+  .btn-secondary {
+    @apply rounded-md border border-dark-700 bg-dark-800 px-4 py-2 text-sm font-medium
+           text-dark-200 transition-colors duration-100
+           hover:border-dark-600 hover:bg-dark-700
+           disabled:opacity-45;
+  }
+  /* ── LO QUE SE PUEDE PULSAR CON UN DEDO ────────────────────────────────
+     Medido el 20-09-2026 barriendo las 28 pantallas del panel a 375 px: no hay
+     ni un desborde horizontal ni un texto cortado, pero SI decenas de
+     controles de 15 a 22 px de alto — las cabeceras que ordenan una tabla, los
+     enlaces dentro de una frase («ver cuales», «Ver dia a dia»), algun icono de
+     14x14. La WCAG 2.2 pide 24x24 px como minimo (criterio 2.5.8), y con menos
+     no es que se falle el toque de vez en cuando: es que se pulsa la fila de al
+     lado.
+
+     La cura NO es agrandarlos: a 44 px la tabla de 126 furgonetas dejaria de
+     caber en una pantalla. Se agranda solo la ZONA QUE RESPONDE, con un
+     pseudo-elemento centrado que no ocupa sitio ni empuja nada. Y solo en
+     pantallas de dedo (`pointer: coarse`): con raton el cursor es de un pixel y
+     esto no hace falta.
+
+     Se comprueba con `elementFromPoint` a 2 px del borde, no mirandolo: a ojo
+     el boton se ve exactamente igual antes y despues (gotcha 48). */
+  @media (pointer: coarse) {
+    main :is(button, a[href], summary, [role='button']) {
+      position: relative;
+    }
+    main :is(button, a[href], summary, [role='button'])::after {
+      content: '';
+      position: absolute;
+      left: 50%;
+      top: 50%;
+      translate: -50% -50%;
+      width: 100%;
+      height: 100%;
+      min-width: 24px;
+      min-height: 24px;
+    }
+  }
+
+  .btn-ghost {
+    @apply rounded-lg text-dark-400 transition-colors duration-200 hover:bg-dark-800 hover:text-dark-200;
+  }
+  /* ── Superficies ──────────────────────────────────────────────────────
+     Un fondo plano y bordes de 1 px. Antes habia tres degradados radiales
+     superpuestos y cristal esmerilado con `backdrop-blur-xl`. Dos motivos
+     para quitarlo: el desenfoque se recalcula en CADA scroll —y aqui se
+     recorren listas de cientos de filas— y una linea separa igual de bien
+     que un desenfoque, tambien en una nave con mala luz. */
+  .atmosphere {
+    background: rgb(var(--dk-950));
+  }
+  /* Raíl de navegación */
+  .rail {
+    @apply rounded-xl border border-dark-800 bg-dark-900/60;
+  }
+  /* Fila de lista: cambia el fondo y ya. Sin moverse ni levantarse. */
+  .float-row {
+    transition: background-color 0.1s ease;
+  }
+  .float-row:hover {
+    background-color: rgb(var(--dk-800) / 0.55);
+  }
+  /* CIFRAS TABULARES en todo lo que sea un numero de verdad: matriculas,
+     importes, metricas, contadores. Es lo que hace que una columna de 129
+     filas se lea en vertical en vez de digito a digito. */
+  .cifra {
+    font-family: 'IBM Plex Mono', ui-monospace, SFMono-Regular, monospace;
+    font-variant-numeric: tabular-nums;
+    letter-spacing: -0.01em;
+  }
+  .float-row:active { transform: translateY(0) scale(0.995); }
+
+  /* Tarjeta silenciosa: un solo tono, borde que susurra, sin sombras teatrales */
+  /* Radio de 12 px en vez de 16: una superficie de datos no necesita
+     esquinas de tarjeta de producto. */
+  .card {
+    @apply rounded-xl border border-dark-800/80 bg-dark-900/70;
+  }
+  .card-hover {
+    @apply card transition-colors duration-200 hover:border-dark-700 hover:bg-dark-900;
+  }
+  .badge-orange {
+    @apply inline-flex items-center rounded-full bg-brand-500/15 px-2.5 py-0.5 text-[11px]
+           font-bold uppercase tracking-wide text-brand-400 ring-1 ring-inset ring-brand-500/20;
+  }
+  .kbd {
+    @apply inline-flex items-center rounded border border-dark-700 bg-dark-800 px-1.5 py-0.5
+           font-mono text-[10px] font-semibold text-dark-400
+           shadow-[inset_0_-1.5px_0_rgba(0,0,0,0.4),inset_0_1px_0_rgba(255,255,255,0.04)];
+  }
+
+  /* Ítems del menú lateral (PanelLayout) */
+  /* Navegación silenciosa: sin desplazamientos, hover apenas perceptible,
+     el activo se distingue por peso tipográfico + acento fino */
+  .nav-item {
+    @apply relative flex items-center gap-2.5 rounded-lg px-2.5 py-[7px] text-[13.5px] text-dark-400
+           transition-colors duration-150 hover:bg-white/[0.04] hover:text-dark-100;
+  }
+  .nav-item-active {
+    @apply bg-white/[0.05] font-medium text-dark-50 hover:bg-white/[0.06] hover:text-dark-50;
+  }
+  /* Barra de acento del ítem activo, entra con una micro-animación */
+  .nav-item-active::before {
+    content: '';
+    position: absolute;
+    left: 0;
+    top: 22%;
+    bottom: 22%;
+    width: 3px;
+    border-radius: 99px;
+    background: linear-gradient(180deg, #fb923c, #ea6800);
+    box-shadow: 0 0 12px rgba(249, 115, 22, 0.5);
+    animation: navbar-in 0.25s cubic-bezier(0.34, 1.56, 0.64, 1) both;
+  }
+  @keyframes navbar-in {
+    from { transform: scaleY(0); opacity: 0; }
+    to   { transform: scaleY(1); opacity: 1; }
+  }
+
+  /* Cabecera de grupo del menú: fila completa clicable, con identidad */
+  .nav-ghead {
+    @apply flex w-full items-center gap-2.5 rounded-xl px-2 py-2 transition-colors duration-150;
+  }
+  .nav-ghead:hover { background: rgba(255, 255, 255, 0.045); }
+
+  /* Superficie translúcida con blur (topbar, overlays) */
+  .glass {
+    @apply border-dark-800/70 bg-dark-900/55 backdrop-blur-xl;
+  }
+}
+
+@layer utilities {
+  /* Luz ambiental que respira: la escena está viva antes de mostrar nada.
+     (prefers-reduced-motion la congela vía la regla global de base.) */
+  .drift { animation: drift 20s ease-in-out infinite alternate; will-change: transform, opacity; }
+  @keyframes drift {
+    from { transform: translate3d(-2%, -1%, 0) scale(1);    opacity: 0.55; }
+    to   { transform: translate3d(3%, 2.5%, 0) scale(1.12); opacity: 0.9; }
+  }
+
+  /* Entrada con muelle: las secciones no cargan, aparecen */
+  .rise { animation: rise 0.6s cubic-bezier(0.22, 1.15, 0.32, 1) both; }
+  @keyframes rise {
+    from { opacity: 0; transform: translateY(16px) scale(0.995); }
+    to   { opacity: 1; transform: none; }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .rise { animation: none; }
+    .float-row, .float-row:hover, .float-row:active { transition: none; transform: none; }
+  }
+
+  /* Entrada de contenido (cambio de ruta, modales): fundido + elevación con curva suave.
+     OJO: sin fill-mode "both" — un transform residual convierte al elemento en
+     containing block y atrapa a los modales position:fixed de dentro. */
+  .animate-fade-in {
+    animation: ffade 0.32s cubic-bezier(0.21, 1.02, 0.55, 1);
+  }
+  @keyframes ffade {
+    from { opacity: 0; transform: translateY(6px) scale(0.998); }
+    to   { opacity: 1; transform: none; }
+  }
+
+  /* Aparición de modales/popovers: pop con rebote sutil (sin fill-mode: ver arriba) */
+  .animate-pop {
+    animation: fpop 0.22s cubic-bezier(0.34, 1.3, 0.64, 1);
+  }
+  @keyframes fpop {
+    from { opacity: 0; transform: translateY(8px) scale(0.97); }
+    to   { opacity: 1; transform: none; }
+  }
+
+  /* Skeletons: barrido de luz en vez de parpadeo */
+  .shimmer {
+    background: linear-gradient(
+      100deg,
+      rgba(34, 38, 49, 0.9) 40%,
+      rgba(68, 76, 94, 0.55) 50%,
+      rgba(34, 38, 49, 0.9) 60%
+    );
+    background-size: 200% 100%;
+    animation: shimmer 1.6s linear infinite;
+  }
+  @keyframes shimmer {
+    from { background-position: 200% 0; }
+    to   { background-position: -200% 0; }
+  }
+
+  /* La cruz del cuadrante: fila y columna de la celda por la que se pasa.
+     Se pone y se quita tocando el DOM a mano (Turnos.jsx), no con estado de
+     React: son 2.600 celdas y repintarlas en cada movimiento del ratón deja
+     la pantalla pegajosa. */
+  .xr { background-color: rgb(var(--dk-800) / 0.75); }
+
+  /* Texto con degradado de marca (cifras hero, titulares destacados) */
+  .text-gradient {
+    @apply bg-gradient-to-br from-brand-400 to-brand-600 bg-clip-text text-transparent;
+  }
+
+  /* Entrada escalonada de hijos directos (listas, grids de KPIs).
+     "backwards" (no "both"): oculta al hijo solo durante su delay y no deja
+     transform residual que atrape modales fixed. */
+  .stagger > * { animation: ffade 0.35s cubic-bezier(0.21, 1.02, 0.55, 1) backwards; }
+  .stagger > *:nth-child(1) { animation-delay: 0.02s; }
+  .stagger > *:nth-child(2) { animation-delay: 0.06s; }
+  .stagger > *:nth-child(3) { animation-delay: 0.1s; }
+  .stagger > *:nth-child(4) { animation-delay: 0.14s; }
+  .stagger > *:nth-child(5) { animation-delay: 0.18s; }
+  .stagger > *:nth-child(6) { animation-delay: 0.22s; }
+  .stagger > *:nth-child(n + 7) { animation-delay: 0.26s; }
+}
+
+
+/* ═══ MODO HIBRIDO: contenido en claro, raíl y cabecera en negro ═══════════
+   Lo que se ve en el cuadre del debrief, para toda la app.
+
+   Funciona sin tocar ninguna clase de ningún componente. La rampa `--dk-*`
+   son variables CSS heredadas y el raíl y la cabecera están FUERA de <main>,
+   así que declarándola clara sobre <main> se retematizan solos los 3.180
+   usos de `dark-*` que hay repartidos por 76 ficheros — y lo de fuera de
+   <main> sigue exactamente igual de negro que estaba.
+
+   Las reglas de compensación de abajo NO están escritas a mano: se derivan
+   del bloque del modo día. `scripts/check-tema.mjs` avisa si alguien toca
+   ese bloque y se olvida de este: sin ese aviso, las dos versiones se
+   separan en silencio y el modo híbrido se queda con colores viejos. */
+html[data-panel-theme='hibrido'] main {
+  --dk-50: 17 17 20;    /* tinta */
+  --dk-100: 34 34 40;
+  --dk-200: 48 48 54;
+  --dk-300: 64 64 72;
+  --dk-400: 96 96 106;
+  --dk-500: 110 110 120;
+  --dk-600: 128 128 138;
+  --dk-700: 210 209 205; /* bordes */
+  --dk-800: 233 232 228; /* rellenos suaves */
+  --dk-900: 251 250 248; /* superficies */
+  --dk-950: 244 243 240; /* papel cálido */
+  color-scheme: light;
+  color: rgb(var(--dk-50));
+  /* Fondo propio: la atmósfera de detrás sigue siendo oscura, así que sin
+     esto el contenido se vería sobre negro.
+
+     EN LONGHAND, Y CON COLOR DE SUELO. `main` es el contenedor que hace
+     scroll: con `background-attachment: local` el degradado se desplaza con
+     el contenido y en una página larga SE ACABA. Debajo no hay nada — la
+     atmósfera es oscura—, así que sin un color de fondo liso el final de
+     cualquier pantalla larga saldría negro con tinta negra encima. Con el
+     atajo `background:` no vale, porque resetea el color a transparente. */
+  background-image:
+    radial-gradient(1100px 560px at 16% -12%, rgba(255, 255, 255, 0.9), transparent 60%),
+    linear-gradient(180deg, #f7f6f3 0%, #f3f2ef 55%, #efeeeb 100%);
+  background-color: #efeeeb;
+  background-attachment: local;
+}
+/* La costura entre el raíl oscuro y el papel: una línea, no una sombra.
+   Sin ella los dos planos se tocan y parece un error de pintado. */
+html[data-panel-theme='hibrido'] main {
+  border-top-left-radius: 14px;
+  box-shadow: inset 1px 1px 0 rgba(255, 255, 255, 0.7);
+}
+
+/* ── Compensaciones del modo día, acotadas a <main> (generadas) ─────────── */
+html[data-panel-theme='hibrido'] main .glass { background: rgba(255, 255, 255, 0.65);
+  border-color: rgba(20, 20, 30, 0.08); }
+html[data-panel-theme='hibrido'] main .float-row:hover { background-color: rgba(20, 20, 30, 0.045);
+  box-shadow: 0 14px 34px -24px rgba(20, 20, 30, 0.35), inset 0 1px 0 rgba(255, 255, 255, 0.6); }
+html[data-panel-theme='hibrido'] main * { scrollbar-color: rgba(120, 120, 130, 0.45) transparent; }
+html[data-panel-theme='hibrido'] main [class^='border-white/'],
+html[data-panel-theme='hibrido'] main [class*=' border-white/'] { border-color: rgba(20, 20, 30, 0.1); }
+html[data-panel-theme='hibrido'] main [class^='divide-white/'] > :not([hidden]) ~ :not([hidden]),
+html[data-panel-theme='hibrido'] main [class*=' divide-white/'] > :not([hidden]) ~ :not([hidden]) { border-color: rgba(20, 20, 30, 0.08); }
+html[data-panel-theme='hibrido'] main [class^='bg-white/'],
+html[data-panel-theme='hibrido'] main [class*=' bg-white/'] { background-color: rgba(20, 20, 30, 0.03); }
+html[data-panel-theme='hibrido'] main .text-emerald-300,
+html[data-panel-theme='hibrido'] main .text-emerald-400 { color: #065f46; }
+html[data-panel-theme='hibrido'] main .text-amber-300,
+html[data-panel-theme='hibrido'] main .text-amber-400 { color: #92400e; }
+html[data-panel-theme='hibrido'] main .text-red-300,
+html[data-panel-theme='hibrido'] main .text-red-400 { color: #991b1b; }
+html[data-panel-theme='hibrido'] main .text-orange-300,
+html[data-panel-theme='hibrido'] main .text-orange-400 { color: #c2410c; }
+html[data-panel-theme='hibrido'] main .text-sky-300,
+html[data-panel-theme='hibrido'] main .text-sky-400 { color: #0369a1; }
+html[data-panel-theme='hibrido'] main .text-violet-300,
+html[data-panel-theme='hibrido'] main .text-violet-400 { color: #6d28d9; }
+html[data-panel-theme='hibrido'] main .text-purple-200,
+html[data-panel-theme='hibrido'] main .text-purple-300 { color: #4c1d95; }
+html[data-panel-theme='hibrido'] main .text-zinc-300 { color: #3f3f46; }
+html[data-panel-theme='hibrido'] main .text-brand-300 { color: #066975; }
+html[data-panel-theme='hibrido'] main .text-brand-400 { color: #097485; }
+html[data-panel-theme='hibrido'] main .text-brand-400\/80 { color: #097485; }
+/* LAS VARIANTES CON OPACIDAD TAMBIEN. Son las que se escapan: el color
+   base tenia su version de dia desde el principio, pero `text-amber-400/90`
+   es OTRA clase para Tailwind y se quedaba con el ambar de noche. Sobre el
+   fondo `bg-amber-500/10` del Scorecard daba **1,43:1** — practicamente
+   invisible. Lo encontro axe, no el ojo. */
+html[data-panel-theme='hibrido'] main .text-amber-400\/90,
+html[data-panel-theme='hibrido'] main .text-amber-300\/90 { color: #92400e; }
+html[data-panel-theme='hibrido'] main .text-emerald-400\/90 { color: #065f46; }
+html[data-panel-theme='hibrido'] main .text-red-400\/90 { color: #991b1b; }
+html[data-panel-theme='hibrido'] main .text-amber-600 { color: #92400e; }
+html[data-panel-theme='hibrido'] main .text-emerald-600 { color: #065f46; }
+html[data-panel-theme='hibrido'] main .text-amber-200 { color: #92400e; }
+html[data-panel-theme='hibrido'] main .text-emerald-200 { color: #065f46; }
+html[data-panel-theme='hibrido'] main .text-red-200 { color: #991b1b; }
+html[data-panel-theme='hibrido'] main .text-brand-200 { color: #075965; }
+html[data-panel-theme='hibrido'] main .text-slate-100,
+html[data-panel-theme='hibrido'] main .text-slate-200 { color: #27272d; }
+html[data-panel-theme='hibrido'] main .text-slate-300 { color: #33333c; }
+html[data-panel-theme='hibrido'] main .text-slate-400 { color: #4b4b55; }
+html[data-panel-theme='hibrido'] main .text-slate-500 { color: #5d5d68; }
+html[data-panel-theme='hibrido'] main .text-slate-600 { color: #73737e; }
+html[data-panel-theme='hibrido'] main .bg-dark-600.text-white,
+html[data-panel-theme='hibrido'] main .bg-dark-700.text-white,
+html[data-panel-theme='hibrido'] main .bg-dark-800.text-white,
+html[data-panel-theme='hibrido'] main .bg-dark-900.text-white { color: rgb(var(--dk-50)); }
+html[data-panel-theme='hibrido'] main [class*='hover:text-white']:hover { color: rgb(var(--dk-50)); }
