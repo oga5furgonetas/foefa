@@ -37,7 +37,7 @@ except Exception:                                                # noqa: BLE001
 # probando /wp-admin— se guarda como «/otra», nunca tal cual.
 PRIMEROS = {
     "login", "registro", "planes", "panel", "conductor", "empleo", "taller",
-    "apoyo", "dnr", "verify", "privacidad", "terminos", "cookies",
+    "verify", "privacidad", "terminos", "cookies",
     "aviso-legal", "contacto", "security", "seguridad", "peritaje-tecnico",
     "reset-password", "app", "lab", "t",
 }
@@ -170,7 +170,7 @@ def area_de(ruta):
         return "empleo"
     if p == "t":
         return "tienda"
-    if p in ("taller", "apoyo", "dnr"):
+    if p == "taller":
         return "enlaces"
     return "otra"
 

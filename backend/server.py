@@ -15952,22 +15952,11 @@ async def whatsapp_estado(_=Depends(require_admin)):
 async def whatsapp_guardar_config(data: dict = Body(...), _=Depends(require_admin)):
     """Enciende o apaga cada aviso. Las credenciales NO se tocan desde aqui."""
     permitido = ("activo", "avisar_itv", "avisar_incidencia", "avisar_resumen",
-                 "avisar_predn", "dnr_auto_amazon",
                  "plantilla_itv", "plantilla_incidencia", "plantilla_resumen")
     doc = {k: data[k] for k in permitido if k in data}
-    for k in ("activo", "avisar_itv", "avisar_incidencia", "avisar_resumen",
-              "avisar_predn", "dnr_auto_amazon"):
+    for k in ("activo", "avisar_itv", "avisar_incidencia", "avisar_resumen"):
         if k in doc:
             doc[k] = bool(doc[k])
-    # UNA NAVE CADA VEZ, con `$set` sobre su propia clave. Mandar el mapa entero
-    # haria que dos personas tocando dos naves a la vez se pisaran: gana la
-    # ultima y la otra casilla se queda como estaba sin ningun error (gotcha 52).
-    pc = data.get("predn_centro")
-    if isinstance(pc, dict):
-        centro = _centro_norm(_texto_cuerpo(pc.get("centro"), 20)) or ""
-        if centro not in {c.upper() for c in await _centros_de_la_empresa()}:
-            raise HTTPException(400, "Esa nave no es de esta empresa")
-        doc["predn_centros.%s" % centro] = bool(pc.get("valor"))
     doc["actualizado_en"] = datetime.now(timezone.utc).isoformat()
     await db[whatsapp.COLECCION_CONFIG].update_one({}, {"$set": doc}, upsert=True)
     return {"ok": True, "config": await whatsapp.config(db)}
@@ -32191,16 +32180,6 @@ async def admin_delete_driver_offer(offer_id: str, _=Depends(require_superadmin)
 # =========================================================================
 
 
-# El Nomenclator va en su propio modulo y se importa con red: si el fichero de
-# datos faltara en la imagen, el geocodificador tiene que seguir funcionando
-# exactamente como antes, no caerse.
-try:
-    import geo_nomenclator as _nomen
-except Exception as _e:  # pragma: no cover
-    _nomen = None
-    logger.warning(f"Nomenclator no disponible: {_e}")
-
-
 def _geo_sin_acentos(s: str) -> str:
     # unicodedata se importa dentro, como el resto de importaciones puntuales
     # de este fichero: no es un modulo global aqui.
@@ -38717,13 +38696,4 @@ async def gastos_buzon_estado(_: dict = Depends(require_superadmin)):
 app.include_router(auth_router)
 app.include_router(api_router)
 
-# ── EDGE OS ────────────────────────────────────────────────────────────────
-# Panel privado propio, en un modulo aparte y AISLADO: no toca `db`/`global_db`
-# ni comparte nada con el resto del backend. Solo se monta si existe el secret
-# EDGE_OS_PASSWORD; sin el, su path devuelve 404. El try/except es a proposito:
-# un fallo suyo NUNCA puede impedir que arranque FlotaDSP.
-try:
-    from edge_os_api import register as _edge_os_register
-    _edge_os_register(app)
-except Exception as _edge_os_err:                                # noqa: BLE001
-    logger.warning("edge_os no cargado: %s", _edge_os_err)
+

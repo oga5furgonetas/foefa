@@ -270,7 +270,7 @@ async def enviar_plantilla(db, telefono: str, plantilla: str,
     """
     destino = normaliza_telefono(telefono)
     # `texto` es lo que la persona lee de verdad: la pantalla de Conversaciones
-    # lo enseña en el hilo, y un hilo que solo dice "pre_dnr" no sirve de nada.
+    # lo enseña en el hilo, y un hilo que solo dice "itv_vencida" no sirve de nada.
     base = {"plantilla": plantilla, "motivo": motivo, "tipo": "plantilla",
             "telefono": destino or str(telefono or "")[:24],
             "texto": render_plantilla(plantilla, parametros)[:1500]}
@@ -558,25 +558,14 @@ async def config(db) -> dict:
     cuando alguien lo decida, no por el hecho de haber pegado un token.
     """
     doc = await db[COLECCION_CONFIG].find_one({}, {"_id": 0}) or {}
-    centros = doc.get("predn_centros")
     return {
         "activo": bool(doc.get("activo", False)),
         "avisar_itv": bool(doc.get("avisar_itv", False)),
         "avisar_incidencia": bool(doc.get("avisar_incidencia", False)),
         "avisar_resumen": bool(doc.get("avisar_resumen", False)),
-        # Las pre-DNR. Dos interruptores generales para poder probar por partes
-        # (primero solo el aviso al conductor, luego tambien la respuesta a
-        # Amazon) y UNA casilla por nave, apagada de entrada: hay naves donde
-        # no interesa automatizar, y un cliente nuevo no debe heredar el
-        # automatismo de otro.
-        "avisar_predn": bool(doc.get("avisar_predn", False)),
-        "dnr_auto_amazon": bool(doc.get("dnr_auto_amazon", False)),
-        "predn_centros": ({str(k): bool(v) for k, v in centros.items()}
-                          if isinstance(centros, dict) else {}),
         "plantilla_itv": doc.get("plantilla_itv") or "itv_vencida",
         "plantilla_incidencia": doc.get("plantilla_incidencia") or "incidencia_critica",
         "plantilla_resumen": doc.get("plantilla_resumen") or "resumen_diario",
-        "plantilla_predn": doc.get("plantilla_predn") or "pre_dnr",
     }
 
 
