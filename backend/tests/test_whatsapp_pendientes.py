@@ -199,7 +199,7 @@ def test_el_estado_cuenta_los_que_esperan_a_mano():
 
 
 def test_la_pantalla_los_ensena():
-    jsx = io.open(RAIZ.parent / "frontend-v2/src/panel/pages/Configuracion.jsx",
+    jsx = io.open(RAIZ.parent / "frontend/src/panel/pages/Configuracion.jsx",
                   encoding="utf-8").read()
     assert "AvisosSinSalir" in jsx
     assert "n={est.pendientes_a_mano || 0}" in jsx

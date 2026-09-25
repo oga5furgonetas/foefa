@@ -30,7 +30,7 @@
 import { pathToFileURL } from 'node:url'
 import { resolve } from 'node:path'
 
-const RUTA = resolve('frontend-v2/src/lib/enviarCandidatura.js')
+const RUTA = resolve('frontend/src/lib/enviarCandidatura.js')
 const { enviarCandidatura, seArreglaSolo, REINTENTOS, TIMEOUT_ENVIO_MS } =
   await import(pathToFileURL(RUTA).href)
 
@@ -114,7 +114,7 @@ const conEstado = (status, detail) => Object.assign(new Error('req failed'), {
 /* ── 8. La página usa esta función y no `http.post` a pelo ─────────────── */
 {
   const { readFileSync } = await import('node:fs')
-  const src = readFileSync('frontend-v2/src/pages/Empleo.jsx', 'utf8')
+  const src = readFileSync('frontend/src/pages/Empleo.jsx', 'utf8')
   ok(src.includes('enviarCandidatura(http,'),
     'Empleo.jsx tiene que enviar por aquí, o los reintentos no existen')
   ok(!/await http\.post\(`\/empleo\/publica/.test(src),

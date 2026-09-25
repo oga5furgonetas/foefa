@@ -13,7 +13,7 @@ import { pathToFileURL } from 'node:url'
 import path from 'node:path'
 
 const RAIZ = path.resolve(path.dirname(new URL(import.meta.url).pathname.replace(/^\/([A-Za-z]:)/, '$1')), '..')
-const mod = await import(pathToFileURL(path.join(RAIZ, 'frontend-v2', 'src', 'lib', 'chunkError.js')).href)
+const mod = await import(pathToFileURL(path.join(RAIZ, 'frontend', 'src', 'lib', 'chunkError.js')).href)
 const { isStaleChunkError } = mod
 
 const RECONOCER = [

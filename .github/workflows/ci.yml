@@ -15,21 +15,21 @@ jobs:
         with:
           node-version: 20
           cache: npm
-          cache-dependency-path: frontend-v2/package-lock.json
+          cache-dependency-path: frontend/package-lock.json
       - name: Instalar dependencias
-        working-directory: frontend-v2
+        working-directory: frontend
         run: npm ci
       - name: ESLint (errores de React, hooks, variables inexistentes)
-        working-directory: frontend-v2
+        working-directory: frontend
         run: npm run lint
       - name: Build de producción
-        working-directory: frontend-v2
+        working-directory: frontend
         run: npm run build
       - name: Instalar navegador para las pruebas
-        working-directory: frontend-v2
+        working-directory: frontend
         run: npx playwright install --with-deps chromium
       - name: Pruebas E2E (humo de 44 pantallas + barrido de botones, escritorio y movil)
-        working-directory: frontend-v2
+        working-directory: frontend
         run: npm run e2e
       - name: Checker i18n (claves faltantes/duplicadas)
         run: node scripts/check-i18n.mjs

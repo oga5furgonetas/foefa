@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useT } from '../../i18n'
 import { lista } from '../../lib/lista'
-import { Loader2, BrainCircuit, RefreshCw, CheckCircle2, AlertTriangle, Clock, Image, Sparkles, X, ChevronLeft, ChevronRight, ThumbsUp, ThumbsDown, Pencil } from 'lucide-react'
+import { Loader2, RefreshCw, CheckCircle2, AlertTriangle, Clock, Image, Sparkles, X, ChevronLeft, ChevronRight, ThumbsUp, ThumbsDown, Pencil } from 'lucide-react'
 import { getHealth, getInspections, reanalyzeFailed, reanalyzeInspection, submitAiFeedback, rebuildFleetDamages, rebuildStatus } from '../api'
 import { isSuperAdmin } from '../auth'
 import BboxEditor from '../components/BboxEditor'

@@ -49,7 +49,7 @@ $ErrorActionPreference = "Stop"
 
 $WEB  = $Web.TrimEnd("/")
 if ($Dist) { $DIST = $Dist }
-else       { $DIST = Join-Path $PSScriptRoot "..\frontend-v2\dist" }
+else       { $DIST = Join-Path $PSScriptRoot "..\frontend\dist" }
 
 if (-not (Test-Path $DIST)) {
     Write-Host "No hay dist/ - compila antes." -ForegroundColor Red

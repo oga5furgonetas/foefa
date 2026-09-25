@@ -3,7 +3,7 @@ import { useOutletContext } from 'react-router-dom'
 import { useT } from '../../i18n'
 import { lista } from '../../lib/lista'
 import { verMatricula } from '../../lib/matricula'
-import { Loader2, Activity, Camera } from 'lucide-react'
+import { Loader2, Camera } from 'lucide-react'
 import { getInspections, getVehicles } from '../api'
 import GuidedEmpty from '../components/GuidedEmpty'
 

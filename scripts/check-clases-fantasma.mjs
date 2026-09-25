@@ -26,8 +26,8 @@ import { readFileSync, readdirSync, statSync } from 'node:fs'
 import { join, relative } from 'node:path'
 
 const RAIZ = process.cwd()
-const CONFIG = join(RAIZ, 'frontend-v2', 'tailwind.config.js')
-const FUENTES = join(RAIZ, 'frontend-v2', 'src')
+const CONFIG = join(RAIZ, 'frontend', 'tailwind.config.js')
+const FUENTES = join(RAIZ, 'frontend', 'src')
 
 /* Las utilidades que aceptan un color. Si mañana se usa otra, el checker la
    ignora y no molesta: prefiero que se escape una a inventar avisos. */

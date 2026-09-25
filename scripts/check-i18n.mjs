@@ -5,7 +5,7 @@ import fs from 'fs'
 import path from 'path'
 import { fileURLToPath } from 'url'
 
-const ROOT = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', 'frontend-v2', 'src')
+const ROOT = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', 'frontend', 'src')
 
 // Prefijos usados dinámicamente: t('sev.' + x). Se validan aparte, no como clave literal.
 const DYNAMIC_PREFIXES = ['sev.', 'empleo.fase.', 'empleo.faseAyuda.', 'empleo.embudo.']

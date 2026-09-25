@@ -8,7 +8,7 @@ se queda partido en dos sin que nada falle ni nadie lo eche en falta.
 
 Paso el 08-09-2026. `drivers_fusionar` movia `inspections`, `shifts`,
 `shift_requests` y los slots de `daily_assignments`, y se dejaba fuera
-`vehicles.mileage_history.driver_id` y los `ficha_id` de `apoyos`. Barriendo
+`vehicles.mileage_history.driver_id`. Barriendo
 produccion en busca de campos con forma de uuid de ficha —no de memoria—
 quedaban **55 apuntes de kilometros y 14 inspecciones** colgando de fichas ya
 absorbidas. Las inspecciones son las que mas duelen: ahi esta el historial de
@@ -54,8 +54,6 @@ SITIOS = [
     ("parking_assignments", "driver_id"),
     ("candidatos", "driver_id"),
     ("driver_accounts", "driver_id"),
-    ("apoyos", "a.ficha_id"),
-    ("apoyos", "de.ficha_id"),
 ]
 
 
@@ -101,25 +99,3 @@ def test_hay_un_repaso_para_lo_que_quedo_atras():
     src = _fuente("drivers_fusiones_repasar")
     assert "merged_into" in src
     assert "_repuntar_conductor" in src
-
-
-def test_crear_ficha_desde_cortex_avisa_si_ya_existe():
-    """Por ahi entro el ultimo duplicado.
-
-    Cesar Garcia Grana tenia ficha desde el 30-08 —inactiva— y el 05-09 se le
-    creo otra desde la pantalla de IDs sin ficha: alli solo se miraba que el
-    transporter no estuviera cogido, y el indice unico del correo no lo frena
-    porque solo cubre las fichas ACTIVAS.
-    """
-    src = _fuente("transporter_id_crear_ficha") if "transporter_id_crear_ficha" in _TEXTO else ""
-    if not src:
-        # El nombre de la funcion puede cambiar: se busca por lo que hace.
-        for n in ast.walk(_ARBOL):
-            if isinstance(n, ast.AsyncFunctionDef):
-                t = chr(10).join(_TEXTO.splitlines()[n.lineno - 1:n.end_lineno])
-                if "Alta desde los IDs sin ficha" in t:
-                    src = t
-                    break
-    assert src, "no se encuentra el alta desde un transporter id"
-    assert "forzar" in src, "tiene que poder decirse que son dos personas distintas"
-    assert "_tr_nombre" in src, "hay que comparar el nombre normalizado con las fichas que ya hay"

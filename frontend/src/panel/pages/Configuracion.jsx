@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom'
 import { useT } from '../../i18n'
 import { Loader2, Plus, Building, Send, CreditCard, Check, Copy, ExternalLink, BellRing, Pencil, Trash2, Clock, MessageCircle } from 'lucide-react'
 import { getOrgCenters, addOrgCenter, getTelegramConfig,
-  getWhatsappEstado, getWhatsappPendientes, marcarWhatsappHecho, setWhatsappConfig, probarWhatsapp, crearPlantillasWhatsapp, probarPreDnr, getOrgBilling, getBillingUso, listarDestinatarios, guardarDestinatario, borrarDestinatario, enviarResumenDiario, getHorariosAvisos, setHorariosAvisos } from '../api'
+  getWhatsappEstado, getWhatsappPendientes, marcarWhatsappHecho, setWhatsappConfig, probarWhatsapp, crearPlantillasWhatsapp, getOrgBilling, getBillingUso, listarDestinatarios, guardarDestinatario, borrarDestinatario, enviarResumenDiario, getHorariosAvisos, setHorariosAvisos } from '../api'
 import { lista } from '../../lib/lista'
 import { getAdmin, isSuperAdmin } from '../auth'
 
@@ -99,8 +99,8 @@ function Horarios() {
    de haber pegado un token. */
 /* LOS AVISOS QUE NO LLEGARON, CON SU SALIDA A MANO.
    Meta tiene el numero en `LIMITED` mientras la empresa no pase la
-   verificacion (error 141010, medido el 20-09-2026), asi que cada ITV vencida
-   y cada pre-DNR se queda sin salir. Aqui estan todos con el texto ya escrito:
+   verificacion (error 141010), asi que cada ITV vencida y cada incidencia
+   grave se queda sin salir. Aqui estan todos con el texto ya escrito:
    un toque abre WhatsApp con el mensaje puesto y otro lo quita de la lista.
    Es la diferencia entre que el conductor se entere o no. */
 function AvisosSinSalir({ n = 0, alCambiar }) {
@@ -169,7 +169,7 @@ function AvisosSinSalir({ n = 0, alCambiar }) {
   )
 }
 
-function WhatsAppCard({ centers = [] }) {
+function WhatsAppCard() {
   const [est, setEst] = useState(null)
   const [tel, setTel] = useState('')
   const [msg, setMsg] = useState(null)
@@ -194,18 +194,6 @@ function WhatsAppCard({ centers = [] }) {
     } finally { setBusy('') }
   }
 
-  /* UNA NAVE CADA VEZ. Se manda solo la que se toca, no el mapa entero: dos
-     personas encendiendo dos naves a la vez no se pisan. */
-  const toggleNave = async (centro, valor) => {
-    setBusy('nave-' + centro); setMsg(null)
-    try {
-      const r = await setWhatsappConfig({ predn_centro: { centro, valor } })
-      setEst((e) => ({ ...e, config: r.data.config }))
-    } catch (e) {
-      setMsg({ mal: true, txt: e?.response?.data?.detail || 'No se pudo guardar.' })
-    } finally { setBusy('') }
-  }
-
   const probar = async () => {
     setBusy('prueba'); setMsg(null)
     try {
@@ -224,26 +212,6 @@ function WhatsAppCard({ centers = [] }) {
       cargar()
     } catch (e) {
       setMsg({ mal: true, txt: e?.response?.data?.detail || 'No se pudo enviar.' })
-    } finally { setBusy('') }
-  }
-
-  /* Una pre-DNR FALSA a tu movil: el aviso y la pagina reales, y nunca llega a
-     Amazon ni sale en las listas (lo garantiza el servidor). El enlace se
-     enseña aunque el WhatsApp no salga, para poder probar la pagina sola. */
-  const probarPre = async () => {
-    setBusy('prueba-predn'); setMsg(null)
-    try {
-      const r = await probarPreDnr({ telefono: tel })
-      setMsg(r.data?.ok
-        ? { txt: 'Enviada. Ábrela en el móvil y contesta como si fueras el conductor.', url: r.data.url }
-        : { mal: true, txt: `El WhatsApp no salió (${r.data?.error || 'sin detalle'}), pero la página sí se puede probar:`, url: r.data?.url, hacer: r.data?.que_hacer })
-      if (r.data?.ok && r.data?.entrega?.entregado === false) {
-        setMsg({ mal: true, url: r.data.url, hacer: r.data.entrega.que_hacer,
-                 txt: `Meta lo aceptó y luego NO lo entregó (${r.data.entrega.motivo || 'sin motivo'}). La página sí se puede probar:` })
-      }
-      cargar()
-    } catch (e) {
-      setMsg({ mal: true, txt: e?.response?.data?.detail || 'No se pudo crear la prueba.' })
     } finally { setBusy('') }
   }
 
@@ -392,45 +360,6 @@ function WhatsAppCard({ centers = [] }) {
             ))}
           </div>
 
-          {/* LAS PRE-DNR (Informes de Amazon → Investigaciones). Es lo único que
-              se le manda a un conductor. Apagado de entrada y por nave: hay
-              naves donde no interesa automatizar, y un cliente nuevo no debe
-              heredar el automatismo de otro. Las dos casillas de arriba se
-              pueden encender por separado para probar primero solo el aviso. */}
-          <div className="space-y-1.5 border-t border-dark-800 pt-3">
-            <p className="text-xs font-semibold text-dark-400">Pre-DNR de los conductores</p>
-            {[['avisar_predn', 'Avisar por WhatsApp al conductor cuando salga una pre-DNR (a su móvil personal)'],
-              ['dnr_auto_amazon', 'Cuando conteste por el enlace, mandar su respuesta a Amazon sola']].map(([k, txt]) => (
-              <label key={k} className={`flex items-start gap-2 text-[13px] ${
-                !c.activo ? 'text-dark-500' : 'text-dark-300'}`}>
-                <input type="checkbox" checked={!!c[k]} disabled={busy === k || !c.activo}
-                  onChange={(e) => toggle(k, e.target.checked)} className="mt-0.5 accent-emerald-500" />
-                {txt}
-              </label>
-            ))}
-            <div className="pt-1">
-              <p className="mb-1 text-[12px] text-dark-400">
-                Automatizar en estas naves <span className="text-dark-500">(las que no marques no se tocan)</span>
-              </p>
-              <div className="flex flex-wrap gap-x-4 gap-y-1">
-                {(centers || []).map((n) => (
-                  <label key={n} className={`flex items-center gap-1.5 text-[13px] ${
-                    !c.activo ? 'text-dark-500' : 'text-dark-300'}`}>
-                    <input type="checkbox" className="accent-emerald-500"
-                      checked={!!(c.predn_centros || {})[String(n).toUpperCase()]}
-                      disabled={busy === 'nave-' + n || !c.activo}
-                      onChange={(e) => toggleNave(n, e.target.checked)} />
-                    {n}
-                  </label>
-                ))}
-              </div>
-            </div>
-            <p className="text-[11.5px] leading-snug text-dark-500">
-              «No me acuerdo» no se manda a Amazon: lo ve la oficina. Y a quien no
-              tenga móvil personal en su ficha no se le avisa.
-            </p>
-          </div>
-
           {/* Probar ANTES de encenderlo para conductores reales: una plantilla
               mal montada se envía igual y llega con los huecos en blanco a
               doscientas personas. */}
@@ -442,21 +371,10 @@ function WhatsAppCard({ centers = [] }) {
               className="btn-ghost text-[13px] disabled:opacity-40">
               {busy === 'prueba' ? 'Enviando…' : 'Mandar una de prueba'}
             </button>
-            <button onClick={probarPre} disabled={busy === 'prueba-predn' || tel.trim().length < 9}
-              className="btn-ghost text-[13px] disabled:opacity-40">
-              {busy === 'prueba-predn' ? 'Creando…' : 'Probar la pre-DNR en mi móvil'}
-            </button>
           </div>
-          <p className="text-[11.5px] leading-snug text-dark-500">
-            «Probar la pre-DNR» crea una falsa y te manda el aviso de verdad con su enlace.
-            Nunca se manda a Amazon ni sale en las listas, contestes lo que contestes.
-          </p>
           {msg && (
             <p className={`text-[12.5px] ${msg.mal ? 'text-red-300' : 'text-emerald-300'}`}>
               {msg.txt}
-              {msg.url && (
-                <> <a href={msg.url} target="_blank" rel="noreferrer" className="underline">abrir la página</a></>
-              )}
               {/* El codigo de Meta es exacto y no dice que hacer: «(#132001)
                   Template name does not exist» no se parece a «todavia la
                   estan revisando». La frase la manda el backend. */}
@@ -730,7 +648,7 @@ export default function Configuracion() {
                 {busy ? <Loader2 size={15} className="animate-spin" /> : <Plus size={15} />} {t('cfg.add')}
               </button>
             </div>
-            <p className="mt-2 text-xs text-dark-500">Cada centro tiene sus conductores, vehículos y baremos de scorecard propios.</p>
+            <p className="mt-2 text-xs text-dark-500">Cada sede tiene sus propios conductores, vehículos, turnos y avisos.</p>
           </>
         )}
       </div>
@@ -749,7 +667,7 @@ export default function Configuracion() {
         <p className="mt-2 text-xs text-dark-500">Recibe alertas de daños graves, ITV y coberturas directamente en Telegram.</p>
       </div>
 
-      <WhatsAppCard centers={centers || []} />
+      <WhatsAppCard />
 
       <Destinatarios centers={centers || []} />
 

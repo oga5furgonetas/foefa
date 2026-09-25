@@ -53,6 +53,6 @@ def test_nadie_empareja_ya_por_posicion():
     assert "ref_photo_urls[:2]" not in _TEXTO
     assert "_referencias_por_vista" in _fuente("reanalyze_inspection") \
         if "def reanalyze_inspection" in _TEXTO else True
-    web = io.open(Path(__file__).resolve().parents[2] / "frontend-v2" / "src" / "panel" / "pages"
+    web = io.open(Path(__file__).resolve().parents[2] / "frontend" / "src" / "panel" / "pages"
                   / "RevisionRapida.jsx", encoding="utf-8").read()
     assert "reference_photos?.[0]" not in web and "refs[0]" not in web

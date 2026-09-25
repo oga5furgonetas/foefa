@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Sparkles, Send, Loader2, X, Check, Car, UserPlus, ClipboardList, ArrowRight, FileText, Paperclip, UserX, Wrench, AlertTriangle, Pencil, UserCog, Hammer } from 'lucide-react'
-import { getIaTareas, marcarIaTareasVistas, getAiHistorial, enviarMensajeIA, ejecutarAccionIA, subirFichasTecnicasIA, confirmarFichasTecnicasIA } from './api'
+import { Sparkles, Send, Loader2, X, Check, Car, UserPlus, FileText, Paperclip, UserX, Wrench, AlertTriangle, Pencil, UserCog, Hammer } from 'lucide-react'
+import { getAiHistorial, enviarMensajeIA, ejecutarAccionIA, subirFichasTecnicasIA, confirmarFichasTecnicasIA } from './api'
 import { getAdmin } from './auth'
 
 /* FLOTADSP AI — burbuja de ayuda flotante, abajo a la derecha, como los
@@ -9,7 +9,7 @@ import { getAdmin } from './auth'
    siempre, ocupa poco cerrada, y se abre un poco al tocarla. Pedido así
    explícitamente el 17-09-2026, en vez de una pantalla propia en el menú.
 
-   Contesta "cómo se hace X" y "cómo va mi WHC/DNR/Empleo" con datos EN VIVO
+   Contesta "cómo se hace X" y "cómo va mi flota o Empleo" con datos EN VIVO
    del centro elegido (nunca inventados), y puede PROPONER crear un vehículo
    o un conductor — nunca lo hace sola: hace falta un clic de confirmación,
    que pasa por las mismas comprobaciones que el formulario normal. */
@@ -17,10 +17,6 @@ import { getAdmin } from './auth'
 const ETIQUETA_ACCION = {
   crear_vehiculo: { icon: Car, titulo: 'Crear vehículo' },
   crear_conductor: { icon: UserPlus, titulo: 'Crear conductor' },
-  generar_plantilla: { icon: ClipboardList, titulo: 'Generar plantilla con Cortex' },
-  programar_plantilla: { icon: ClipboardList, titulo: 'Programar la plantilla: se monta sola cuando salgan las rutas' },
-  preasignar_furgonetas: { icon: Car, titulo: 'Guardar las furgonetas de ese día' },
-  cancelar_tarea: { icon: X, titulo: 'Cancelar lo programado' },
   asignar_conductor: { icon: UserPlus, titulo: 'Asignar conductor a furgoneta' },
   desasignar_conductor: { icon: UserX, titulo: 'Quitar conductor de furgoneta' },
   cambiar_estado_vehiculo: { icon: Wrench, titulo: 'Cambiar estado de furgoneta' },
@@ -48,44 +44,11 @@ const TONO_CLS = {
   neutro: 'bg-dark-800 text-dark-300',
 }
 
-/* «2026-09-22» -> «22/09/2026»: el día que se muestra es el que entendió la IA y
-   el que va a comprobar el servidor, así que se enseña tal cual para que la
-   persona vea si «mañana» ha caído donde toca antes de confirmar. */
-const fechaEs = (d) => (/^\d{4}-\d{2}-\d{2}$/.test(d || '') ? `${d.slice(8, 10)}/${d.slice(5, 7)}/${d.slice(0, 4)}` : d)
-
 function DetalleAccion({ a }) {
   const c = a.campos || {}
-  if (a.tipo === 'generar_plantilla') {
-    return <div>{c.dia ? `Plantilla del ${fechaEs(c.dia)}` : 'Plantilla de hoy'}: ruta y conductor de cada uno, tal como los tiene Cortex capturados.</div>
-  }
-  if (a.tipo === 'programar_plantilla' || a.tipo === 'preasignar_furgonetas') {
-    const pares = Array.isArray(c.pares) ? c.pares : []
-    return (
-      <>
-        <div>Día: <span className="text-dark-200">{fechaEs(c.dia) || 'sin indicar'}</span></div>
-        {pares.length > 0 && (
-          <div>Furgonetas ({pares.length}): <span className="text-dark-200">
-            {pares.slice(0, 12).map((p) => `${p.conductor_nombre} → ${p.matricula}`).join(' · ')}
-            {pares.length > 12 ? ` y ${pares.length - 12} más` : ''}</span></div>
-        )}
-        {a.tipo === 'programar_plantilla' && (
-          <div>La monta el servidor en cuanto Cortex publique las rutas y te avisa aquí y por notificación.</div>
-        )}
-      </>
-    )
-  }
-  if (a.tipo === 'cancelar_tarea') return <div>{c.dia ? `La programada para el ${fechaEs(c.dia)}.` : 'Todo lo programado de este centro.'}</div>
   return Object.entries(c).filter(([, v]) => v).map(([k, v]) => (
     <div key={k}>{CAMPO_LABEL[k] || k}: <span className="text-dark-200">{k === 'estado' ? (ESTADO_VEHICULO_TXT[v] || v) : k === 'severidad' ? (SEVERIDAD_TXT[v] || v) : v}</span></div>
   ))
-}
-
-function textoPreasig(p) {
-  if (!p) return ''
-  const g = (p.guardadas || []).length
-  const f = (p.fallidas || []).map((x) => `${x.matricula}: ${x.motivo}`).join(' · ')
-  return `${g} furgoneta${g === 1 ? '' : 's'} guardada${g === 1 ? '' : 's'}` +
-    (f ? `. No he podido con: ${f}` : '') + ((p.avisos || []).length ? `. ${p.avisos.join(' ')}` : '')
 }
 
 function textoCambios(cambios) {
@@ -102,12 +65,6 @@ function mensajeResultado(r) {
     case 'editar_vehiculo': return `${r.vehicle_plate} actualizada — ${textoCambios(r.cambios)}.`
     case 'editar_conductor': return `${r.driver_name} actualizado — ${textoCambios(r.cambios)}.`
     case 'crear_orden_taller': return `Orden ${r.numero || ''} abierta: ${r.vehicle_plate} va a ${r.taller_nombre}.`
-    case 'programar_plantilla': return (r.ya_existia
-      ? `Ya estaba programada la plantilla del ${fechaEs(r.dia)}.`
-      : `Programada la plantilla del ${fechaEs(r.dia)}: la monto sola en cuanto Cortex publique las rutas.`)
-      + (r.preasignacion ? ` ${textoPreasig(r.preasignacion)}.` : '')
-    case 'preasignar_furgonetas': return `Para el ${fechaEs(r.dia)}: ${textoPreasig(r)}. Se aplican al montar la plantilla de ese día.`
-    case 'cancelar_tarea': return `Cancelada${r.canceladas === 1 ? '' : 's'} ${r.canceladas} tarea${r.canceladas === 1 ? '' : 's'} programada${r.canceladas === 1 ? '' : 's'}.`
     default: return `Creado${r.license_plate ? `: ${r.license_plate}` : r.name ? `: ${r.name}` : ''}`
   }
 }
@@ -209,35 +166,6 @@ export default function AsistenteBurbuja({ center, centers }) {
   const fileInputRef = useRef(null)
   const sinCentro = !center || center === 'Todos'
 
-  /* LO QUE LA IA HA DEJADO PROGRAMADO Y LO QUE YA HA HECHO. La tarea la ejecuta
-     el servidor, no esta conversacion, asi que el resultado tiene que llegar
-     aunque nadie tenga el chat abierto: se pregunta cada minuto y, si hay algo
-     que nadie ha visto, el boton lleva un punto. Es el mismo aviso para
-     cualquiera de la nave (`visto_por` es por persona). */
-  const [tareas, setTareas] = useState({ tareas: [], sin_ver: 0 })
-  useEffect(() => {
-    if (sinCentro) { setTareas({ tareas: [], sin_ver: 0 }); return undefined }
-    let vivo = true
-    const mirar = () => {
-      if (!vivo || document.hidden) return
-      getIaTareas(center).then((r) => { if (vivo) setTareas(r.data || { tareas: [], sin_ver: 0 }) }).catch(() => {})
-    }
-    mirar()
-    const id = setInterval(mirar, 60000)
-    document.addEventListener('visibilitychange', mirar)
-    return () => { vivo = false; clearInterval(id); document.removeEventListener('visibilitychange', mirar) }
-  }, [center, sinCentro])
-  useEffect(() => {
-    if (!abierto || sinCentro || !tareas.sin_ver) return undefined
-    // Al abrirlo se dan por vistas, pero tras un momento: si se cierra al
-    // instante no se ha llegado a leer nada.
-    const t = setTimeout(() => {
-      marcarIaTareasVistas(center).then(() => setTareas((x) => ({
-        ...x, sin_ver: 0, tareas: x.tareas.map((y) => ({ ...y, sin_ver: false })) }))).catch(() => {})
-    }, 2500)
-    return () => clearTimeout(t)
-  }, [abierto, sinCentro, center, tareas.sin_ver])
-
   useEffect(() => {
     if (!abierto || sinCentro || cargado) return
     getAiHistorial(center)
@@ -250,7 +178,7 @@ export default function AsistenteBurbuja({ center, centers }) {
   }, [abierto, center, sinCentro, cargado])
 
   // Cambiar de centro reinicia la conversación mostrada: no tiene sentido
-  // seguir leyendo el WHC de OGA5 con DGA1 ya seleccionado.
+  // seguir leyendo los datos de una sede con otra ya seleccionada.
   useEffect(() => { setMsgs([]); setCargado(false) }, [center])
 
   useEffect(() => { if (abierto) bottomRef.current?.scrollIntoView({ behavior: 'smooth' }) }, [msgs, enviando, abierto])
@@ -346,23 +274,6 @@ export default function AsistenteBurbuja({ center, centers }) {
             <button onClick={() => setAbierto(false)} className="text-dark-500 hover:text-dark-200"><X size={16} /></button>
           </div>
 
-          {!sinCentro && tareas.tareas.length > 0 && (
-            <div className="space-y-1 border-b border-dark-800 bg-dark-900/60 px-3 py-2">
-              {tareas.tareas.slice(0, 4).map((x) => (
-                <div key={x.id} className={`flex items-start gap-1.5 text-[11px] leading-snug ${
-                  x.estado === 'pendiente' ? 'text-amber-300' : x.estado === 'hecha' ? 'text-emerald-300' : 'text-dark-400'}`}>
-                  <span className="mt-[3px] h-1.5 w-1.5 shrink-0 rounded-full bg-current" />
-                  <span>
-                    {x.estado === 'pendiente'
-                      ? `Programada la plantilla del ${fechaEs(x.dia)}: espero a que Cortex publique las rutas.`
-                      : x.aviso || `Plantilla del ${fechaEs(x.dia)}: ${x.estado}.`}
-                    {x.sin_ver && <b className="ml-1 text-brand-300">nuevo</b>}
-                  </span>
-                </div>
-              ))}
-            </div>
-          )}
-
           {sinCentro ? (
             <div className="flex flex-1 flex-col items-center justify-center gap-2 p-6 text-center">
               <Sparkles size={22} className="text-brand-400" />
@@ -374,7 +285,7 @@ export default function AsistenteBurbuja({ center, centers }) {
               <div className="flex-1 overflow-y-auto p-2.5">
                 {msgs.length === 0 ? (
                   <div className="flex h-full flex-col items-center justify-center gap-1 px-4 text-center">
-                    <p className="text-[12.5px] text-dark-400">Pregúntame cómo se hace algo, cómo va el WHC de alguien, las DNR abiertas, las inspecciones de una furgoneta, "dame las furgonetas de Bansacar" o "qué furgoneta lleva Juan". Pídeme que cree, edite o asigne un vehículo o conductor, que abra un parte o mande una furgoneta a un taller, que monte la plantilla de hoy con Cortex, o sube fichas técnicas con el clip o pegando la captura (Ctrl+V) directamente aquí.</p>
+                    <p className="text-[12.5px] text-dark-400">Pregúntame cómo se hace algo, qué ITV caducan este mes, las inspecciones de una furgoneta, "dame las furgonetas de renting" o "qué furgoneta lleva Juan". Pídeme que cree, edite o asigne un vehículo o conductor, que abra un parte o mande una furgoneta a un taller, o sube fichas técnicas con el clip o pegando la captura (Ctrl+V) directamente aquí.</p>
                   </div>
                 ) : (
                   <div className="space-y-2">
@@ -416,19 +327,7 @@ export default function AsistenteBurbuja({ center, centers }) {
                                 </div>
                               </div>
                             )}
-                            {m.resultado && m.resultado.draft_id ? (
-                              <div className="mt-1.5 space-y-1.5 rounded-lg bg-emerald-500/10 px-2 py-1.5 text-[11px] text-emerald-300">
-                                <div>
-                                  ✅ {m.resultado.ya_existia
-                                    ? `Añadidas ${m.resultado.anadidas} ruta${m.resultado.anadidas === 1 ? '' : 's'} nueva${m.resultado.anadidas === 1 ? '' : 's'} a la plantilla que ya estaba abierta.`
-                                    : `Plantilla creada con ${m.resultado.filas_cortex} ruta${m.resultado.filas_cortex === 1 ? '' : 's'} de Cortex.`}
-                                </div>
-                                <button onClick={() => navigate('/panel/plantilla')}
-                                  className="flex items-center gap-1 font-semibold text-emerald-200 hover:text-emerald-100">
-                                  Abrir la plantilla <ArrowRight size={11} />
-                                </button>
-                              </div>
-                            ) : m.resultado && (
+                            {m.resultado && (
                               <div className="mt-1.5 rounded-lg bg-emerald-500/10 px-2 py-1 text-[11px] text-emerald-300">
                                 ✅ {mensajeResultado(m.resultado)}
                               </div>
@@ -486,10 +385,6 @@ export default function AsistenteBurbuja({ center, centers }) {
         className={`relative flex h-12 w-12 items-center justify-center rounded-full shadow-2xl transition ${
           abierto ? 'bg-dark-800 text-dark-200' : 'bg-brand-500 text-dark-950 hover:bg-brand-400'}`}>
         {abierto ? <X size={20} /> : <Sparkles size={20} />}
-        {!abierto && tareas.sin_ver > 0 && (
-          <span className="absolute -right-0.5 -top-0.5 h-3.5 w-3.5 rounded-full border-2 border-dark-950 bg-emerald-400"
-            title="La IA ha terminado algo que dejaste programado" />
-        )}
       </button>
     </div>
   )

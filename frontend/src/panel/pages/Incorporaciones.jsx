@@ -1,23 +1,20 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useOutletContext } from 'react-router-dom'
 import {
-  Loader2, Search, UserPlus, ClipboardPaste, Send, Check, MessageSquare,
-  AlertTriangle, X, Archive, Clock, Pencil, Inbox, Hourglass, Eye, CheckCircle2,
-  AtSign, Copy, EyeOff, GraduationCap, FileQuestion, Table2, List, Download,
-  CalendarClock, Flame, ShieldCheck, ChevronDown, ChevronRight, SkipForward, Zap,
-  MoreHorizontal,
-  GraduationCap as Birrete,
+  Loader2, Search, UserPlus, ClipboardPaste, Send, Check, MessageSquare, AlertTriangle, X,
+  Archive, Pencil, Inbox, Hourglass, Eye, CheckCircle2, AtSign, Copy, EyeOff, GraduationCap,
+  FileQuestion, Table2, List, Download, SkipForward, MoreHorizontal,
 } from 'lucide-react'
 import {
   getIncorporaciones, altaIncorporacion, importarIncorporaciones, editarIncorporacion,
   mensajeIncorporacion, marcarAvisoIncorporacion, guardarPlantillaIncorporaciones,
-  exportarIncorporaciones, getAsociados,
+  exportarIncorporaciones,
 } from '../api'
 
 /* ── INCORPORACIONES — a quién le falta algo, y decírselo en un clic ─────────
    ═══════════════════════════════════════════════════════════════════════════
-   Una persona que empieza en Amazon no puede subirse a una furgoneta hasta que
-   no tiene todos los papeles. La foto del carnet borrosa, el alta en la
+   Una persona que empieza no puede subirse a un vehículo hasta que no tiene
+   todos los papeles. La foto del carnet borrosa, el alta en la
    Seguridad Social que no llegó, la formación sin hacer. Hoy eso vive en una
    pestaña de otro sistema que el centro solo puede CONSULTAR, y avisar a cada
    uno es abrir WhatsApp, buscar el número, acordarse de qué le faltaba y
@@ -26,7 +23,7 @@ import {
 
    Aquí son tres clics: se marca qué le falta, se ve el mensaje, se envía.
 
-   LAS CONTRASEÑAS. El listado trae la del correo y la del Rabbit de cada
+   LAS CONTRASEÑAS. El listado de la agencia puede traer la del correo de cada
    persona. Se guardan porque la oficina entra con ellas a revisar el
    expediente, pero se enseñan OCULTAS (hay que pulsar para verlas) y nunca
    salen de esta pantalla: ni en el WhatsApp ni en el CSV. Lo vigila
@@ -40,13 +37,13 @@ import {
    Y ABRIR WHATSAPP NO ES HABER ENVIADO: eso lo confirma quien lo manda. Si se
    marcara solo, quedaría gente dada por avisada a la que no le llegó nada. */
 
-/* ── EL EMBUDO: LOS CINCO PASOS DEL PROCESO ────────────────────────────────
+/* ── EL EMBUDO: LOS PASOS DEL PROCESO ──────────────────────────────────────
    En que punto esta cada persona, del primero al ultimo. El servidor calcula
    el camino (`p.camino`) y dice cual es el SIGUIENTE paso de cada uno; esto
    solo los agrupa y les pone nombre y color.
 
-   Es la estructura de la pantalla. Antes habia tres bloques sueltos —formacion,
-   urgencias, cuentas de Amazon— cada uno con su propio boton, y la lista de
+   Es la estructura de la pantalla. Antes habia bloques sueltos —formacion,
+   urgencias— cada uno con su propio boton, y la lista de
    abajo repetia a la misma gente: para saber por donde empezar habia que leerlo
    todo. Ahora se pincha un paso y abajo sale SOLO esa gente. */
 const EMBUDO = [
@@ -54,10 +51,6 @@ const EMBUDO = [
     borde: 'border-amber-500/40', fondo: 'bg-amber-500/[0.08]', accion: true },
   { id: 'acceso', titulo: 'Mandar la formación', tono: 'text-brand-300',
     borde: 'border-brand-500/40', fondo: 'bg-brand-500/[0.08]', accion: true },
-  { id: 'cuenta', titulo: 'Esperando a Amazon', tono: 'text-sky-300',
-    borde: 'border-sky-500/40', fondo: 'bg-sky-500/[0.08]' },
-  { id: 'dentro', titulo: 'Acabando en Amazon', tono: 'text-violet-300',
-    borde: 'border-violet-500/40', fondo: 'bg-violet-500/[0.08]' },
   { id: 'listo', titulo: 'Listos para entrar', tono: 'text-emerald-400',
     borde: 'border-emerald-500/40', fondo: 'bg-emerald-500/[0.08]' },
   { id: 'fuera', titulo: 'Ya no están', tono: 'text-dark-400',
@@ -109,12 +102,6 @@ export default function Incorporaciones() {
   const [vista, setVista] = useState('lista')      // 'lista' | 'tabla'
   const [bajando, setBajando] = useState(false)
 
-  const [cuentas, setCuentas] = useState(null)
-  const [verCuentas, setVerCuentas] = useState(true)
-  // Por defecto, SOLO la gente que está entrando. Amazon devuelve también a los
-  // que llevan meses dentro y a los que ya se fueron, y con eso la lista deja
-  // de mirarse.
-  const [todasLasCuentas, setTodasLasCuentas] = useState(false)
   const [masOpciones, setMasOpciones] = useState(false)
   /* Arranca en «esperando papeles», que es donde hay trabajo. Sin paso elegido
      la lista enseñaba un conjunto (17) y el embudo otro (15): dos números para
@@ -127,18 +114,6 @@ export default function Incorporaciones() {
       .catch((e) => setErr(e?.response?.data?.detail || 'No se ha podido cargar.'))
   }, [center])
   useEffect(() => { cargar() }, [cargar])
-
-  /* LAS CUENTAS DE AMAZON, APARTE Y SIN TUMBAR LA PANTALLA.
-     Vienen de la pantalla de Asociados del portal y todavia pueden no haber
-     llegado nunca. Si esta llamada falla, Incorporaciones tiene que seguir
-     funcionando igual: es informacion que suma, no de la que depende. */
-  useEffect(() => {
-    let vivo = true
-    getAsociados(center, todasLasCuentas)
-      .then((r) => { if (vivo) setCuentas(r.data) })
-      .catch(() => { if (vivo) setCuentas({ cuentas: [], error: true }) })
-    return () => { vivo = false }
-  }, [center, todasLasCuentas])
 
   const personas = useMemo(() => {
     const t = q.trim().toLowerCase()
@@ -179,14 +154,12 @@ export default function Incorporaciones() {
      mezclarlo con el resto es lo que hacia que la lista pareciera mas larga de
      lo que es. */
   const grupos = useMemo(() => {
-    const g = { papeles: [], acceso: [], cuenta: [], dentro: [], listo: [], fuera: [] }
+    const g = { papeles: [], acceso: [], listo: [], fuera: [] }
     for (const p of personas) {
       const c = p.camino
       if (!c) { g.papeles.push(p); continue }
       if (c.fuera) g.fuera.push(p)
       else if (!c.siguiente) g.listo.push(p)
-      else if (c.siguiente === 'dentro') g.dentro.push(p)
-      else if (c.siguiente === 'cuenta') g.cuenta.push(p)
       else if (c.siguiente === 'acceso') g.acceso.push(p)
       else g.papeles.push(p)
     }
@@ -446,12 +419,12 @@ export default function Incorporaciones() {
       )}
 
       {/* ── EL EMBUDO ──────────────────────────────────────────────────────
-          Los cinco pasos del proceso, con cuánta gente hay parada en cada uno.
+          Los pasos del proceso, con cuánta gente hay parada en cada uno.
           Es la estructura de la pantalla: se pincha un paso y abajo sale SOLO
           esa gente, con la acción que toca. Antes había tres bloques sueltos
-          —formación, urgencias, cuentas— cada uno con su propio botón; nadie
+          —formación, urgencias— cada uno con su propio botón; nadie
           sabía por dónde empezar. */}
-      <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-6">
+      <div className="grid grid-cols-2 gap-2 lg:grid-cols-4">
         {EMBUDO.map((e) => {
           const n = (grupos[e.id] || []).length
           const activo = paso === e.id
@@ -486,8 +459,8 @@ export default function Incorporaciones() {
       )}
 
       {/* EL CHECK GLOBAL: «enséñame todos los del carnet» en un clic. Solo en
-          el paso de papeles y cuando no hay ninguno elegido: en «esperando a
-          Amazon» no hay papeles de por medio y esa fila era ruido. */}
+          el paso de papeles y cuando no hay ninguno elegido: en los otros
+          pasos no hay papeles de por medio y esa fila era ruido. */}
       <div className={`flex flex-wrap items-center gap-1.5 ${
         (paso && paso !== 'papeles') ? 'hidden' : ''}`}>
         <button onClick={() => setMotivo('')}
@@ -640,8 +613,8 @@ function Ficha({ p, motivosCat, nombres, abierta, onAbrir, onGuardar, onMensaje 
     <div className="card p-3">
       {/* LA FILA: DOS LÍNEAS Y TRES COLUMNAS.
           Antes era todo etiquetas de colores en una fila que se partía sola —
-          nombre, ETT, teléfono, lo que falta, el punto, los días, la cuenta de
-          Amazon y «nadie le ha escrito»— ocho cosas del mismo peso. Con todo
+          nombre, ETT, teléfono, lo que falta, el punto, los días y «nadie le
+          ha escrito»— siete cosas del mismo peso. Con todo
           igual de importante no destaca nada y hay que leerlo entero.
 
           Ahora: quién (izquierda, lo primero que se busca), qué le falta
@@ -682,21 +655,9 @@ function Ficha({ p, motivosCat, nombres, abierta, onAbrir, onGuardar, onMensaje 
           </span>
         </span>
 
-        {/* LO QUE LE FALTA, una sola cosa y la que manda: lo que Amazon pide
-            gana a lo que dice la ETT, porque es lo que de verdad tiene parada
-            la cuenta. */}
+        {/* LO QUE LE FALTA, una sola cosa: la que manda. */}
         <span className="hidden min-w-0 shrink-0 items-center gap-1.5 sm:flex sm:max-w-[45%]">
-          {p.cuenta && !p.cuenta.completa ? (
-            <span title={`Amazon pide: ${p.cuenta.faltan.join(', ')}`}
-              className="truncate rounded-full bg-brand-500/15 px-2 py-0.5 text-[11.5px] text-brand-200">
-              Amazon: {p.cuenta.faltan.slice(0, 2).join(', ')}
-              {p.cuenta.faltan.length > 2 && ` +${p.cuenta.faltan.length - 2}`}
-            </span>
-          ) : p.cuenta?.completa ? (
-            <span className="inline-flex items-center gap-1 rounded-full bg-emerald-500/15 px-2 py-0.5 text-[11.5px] text-emerald-300">
-              <ShieldCheck size={11} /> cuenta lista
-            </span>
-          ) : p.falta_texto ? (
+          {p.falta_texto ? (
             <span title={p.falta_texto}
               className="truncate rounded-full bg-amber-500/15 px-2 py-0.5 text-[11.5px] text-amber-300">
               {p.falta_texto}
@@ -736,14 +697,13 @@ function Ficha({ p, motivosCat, nombres, abierta, onAbrir, onGuardar, onMensaje 
 
       {abierta && (
         <div className="mt-3 space-y-3 border-t border-dark-800 pt-3">
-          {/* EL CAMINO. Cinco pasos desde que la ETT lo cuelga hasta que se
-              sube a una furgoneta, cada uno con su fecha — y ninguno dado por
+          {/* EL CAMINO. Los pasos desde que se le da de alta hasta que puede
+              empezar, cada uno con su fecha — y ninguno dado por
               hecho sin un dato que lo demuestre. Debajo, en una línea, qué toca
               AHORA con esta persona: es lo único que hace falta leer. */}
           {p.camino && (
             <div className="mb-2 space-y-1.5 rounded-lg border border-white/[0.06] bg-white/[0.02] px-2.5 py-2">
               <div className="flex flex-wrap items-center gap-1">
-                <span className="mr-1 w-[52px] shrink-0 text-[10.5px] uppercase tracking-wide text-dark-500">ETT</span>
                 {p.camino.ett.map((x, i) => (
                   <span key={x.id} className="flex items-center gap-1">
                     {i > 0 && <span className="text-dark-700">→</span>}
@@ -754,28 +714,6 @@ function Ficha({ p, motivosCat, nombres, abierta, onAbrir, onGuardar, onMensaje 
                     </span>
                   </span>
                 ))}
-              </div>
-              <div className="flex flex-wrap items-center gap-1.5">
-                <span className="mr-1 w-[52px] shrink-0 text-[10.5px] uppercase tracking-wide text-dark-500">Amazon</span>
-                {!p.camino.amazon.vista ? (
-                  /* «No la hemos visto» y NUNCA «no la tiene»: Lois la tenía, y
-                     decir lo contrario fue decir algo falso sobre una persona. */
-                  <span className="text-[11.5px] text-dark-500">su cuenta no la hemos visto todavía</span>
-                ) : (
-                  <>
-                    <span className={`cifra rounded-full px-2 py-0.5 text-[11px] font-semibold ${
-                      p.camino.amazon.completa ? 'bg-emerald-500/15 text-emerald-300'
-                        : 'bg-sky-500/15 text-sky-300'}`}>
-                      {p.camino.amazon.hechas} de {p.camino.amazon.total}
-                    </span>
-                    {p.camino.amazon.naves?.length > 0 && (
-                      <span className="text-[11px] text-dark-500">{p.camino.amazon.naves.join('/')}</span>
-                    )}
-                    {(p.camino.amazon.pendientes || []).slice(0, 4).map((x) => (
-                      <span key={x} className="rounded-full bg-red-500/15 px-2 py-0.5 text-[11px] text-red-300">{x}</span>
-                    ))}
-                  </>
-                )}
               </div>
               <p className={`pt-0.5 text-[12px] ${p.camino.siguiente || p.camino.fuera ? 'text-amber-200' : 'text-emerald-300'}`}>
                 {p.camino.siguiente || p.camino.fuera ? '→ ' : '✓ '}{p.camino.que_toca}

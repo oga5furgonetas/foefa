@@ -9,7 +9,7 @@ import path from 'path'
 import { fileURLToPath } from 'url'
 
 const RAIZ = path.join(path.dirname(fileURLToPath(import.meta.url)), '..')
-const layout = fs.readFileSync(path.join(RAIZ, 'frontend-v2/src/panel/PanelLayout.jsx'), 'utf8')
+const layout = fs.readFileSync(path.join(RAIZ, 'frontend/src/panel/PanelLayout.jsx'), 'utf8')
 const server = fs.readFileSync(path.join(RAIZ, 'backend/server.py'), 'utf8')
 
 // Solo las lineas VIVAS del menu (las comentadas no cuentan).

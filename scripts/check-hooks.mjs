@@ -116,7 +116,7 @@ function recorrer(dir) {
     else if (/\.jsx?$/.test(e.name)) revisar(p)
   }
 }
-recorrer(path.join(RAIZ, 'frontend-v2', 'src'))
+recorrer(path.join(RAIZ, 'frontend', 'src'))
 
 if (problemas.length) {
   console.error(`\n[check-hooks] ${problemas.length} componente(s) con hooks mal puestos:\n`)

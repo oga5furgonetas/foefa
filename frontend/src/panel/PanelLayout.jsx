@@ -1,17 +1,15 @@
 import { useEffect, useRef, useState } from 'react'
 import { NavLink, Navigate, Outlet, useNavigate, useLocation } from 'react-router-dom'
 import {
-  LayoutDashboard, Trophy, Users, CalendarClock, CalendarCheck, BarChart3, Activity,
-  CheckCircle2, ClipboardList, ClipboardCheck, Truck, Wrench, Hammer, BellRing, KeyRound,
-  Building2, BrainCircuit, FileUp, Settings, Shield, LogOut, Zap, Inbox,
-  ChevronRight, ChevronDown, ExternalLink, FileSpreadsheet, AlertTriangle, BookUser, Search, Sun, Moon, Contrast,
-  PackageX, FileBarChart,
-  PackageSearch, PackageCheck, MapPin, Timer, MapPinned, Gauge, Mail, UserCircle2, Languages, ShieldAlert, LifeBuoy, Menu, CircleHelp,
-  Briefcase, Store, UserCheck, ImagePlus, Loader2, Bell, BellOff, MessageCircle, MessagesSquare,
-  Euro,
+  LayoutDashboard, Users, CalendarClock, CalendarCheck, Activity, CheckCircle2, ClipboardList,
+  ClipboardCheck, Truck, Wrench, Hammer, BellRing, KeyRound, Building2, BrainCircuit, FileUp,
+  Settings, Shield, LogOut, Zap, Inbox, ChevronRight, ChevronDown, AlertTriangle, BookUser,
+  Search, Sun, Moon, Contrast, MapPin, Mail, UserCircle2, Languages, ShieldAlert, Menu,
+  CircleHelp, Briefcase, Store, UserCheck, ImagePlus, Loader2, Bell, BellOff, MessageCircle,
+  MessagesSquare, Euro,
 } from 'lucide-react'
 import { getAdmin, isAuthed, isSuperAdmin, isCenterManager, logout, canSee, decodeToken, getVisibleCenters, SIEMPRE_VISIBLES, guardarAccesoFresco, esPlataforma, actualizarMiFoto } from './auth'
-import { getMe, contarPeticionesPendientes, contarCandidatosNuevos, contarDnrPendientes, contarConversacionesSinLeer, subirFotoAdmin } from './api'
+import { getMe, contarPeticionesPendientes, contarCandidatosNuevos, contarConversacionesSinLeer, subirFotoAdmin } from './api'
 import { pushSupported, isPushEnabled, enablePush, disablePush } from '../lib/push'
 import TrialBanner from './TrialBanner'
 import CommandPalette from './CommandPalette'
@@ -28,10 +26,8 @@ const keyOf = (to) => (to === '/panel' ? 'dashboard' : to.split('/').pop())
 
 // Qué feature del plan requiere cada ruta (undefined = siempre visible)
 const ROUTE_FEATURE = {
-  scorecard: 'scorecard',
   chat: 'chat',
   asignacion: 'assignments',
-  plantilla: 'assignments',
   'ia-peritaje': 'forensics',
   importaciones: 'export',
 }
@@ -49,21 +45,17 @@ const AVISOS = {
   // Candidaturas que nadie ha mirado todavia. Dejan de contar en cuanto se les
   // cambia la fase, que es lo que se pidio: el numero es «gente por mirar».
   '/panel/empleo': ({ candidatosNuevos }) => candidatosNuevos,
-  // Investigaciones DNR abiertas y a tiempo (ni contestadas ni caducadas):
-  // lo que Amazon sigue esperando que se le diga donde se entrego.
-  '/panel/informes': ({ dnrPend }) => dnrPend,
   // Mensajes privados sin leer.
   '/panel/chat': ({ chatSinLeer }) => chatSinLeer,
   // WhatsApp: mensajes de conductores y talleres que nadie ha abierto.
   '/panel/conversaciones': ({ wsSinLeer }) => wsSinLeer,
 }
 
-/* SIETE GRUPOS DE SEIS COMO MUCHO, EN VEZ DE CINCO DE NUEVE (21-09-2026).
-   Con 33 entradas abiertas el menú no cabía en pantalla y para llegar a
-   «Contactos» o a «Configuración» había que desplazarse. Se agrupa por lo que
-   la persona VA A HACER —repartir, gestionar gente, mirar cómo va, cuidar la
-   flota, ir al taller— y no por departamento: «Operación diaria» y «Equipo»
-   eran cajones de 7 y 10 cosas sin relación entre sí.
+/* SEIS GRUPOS, POR LO QUE LA PERSONA VA A HACER, NO POR DEPARTAMENTO.
+   «Flota» es mirar los vehículos; «Taller» es arreglarlos —la incidencia y la
+   orden van juntas porque una lleva a la otra—; «Operación» es quién sale hoy
+   y con qué; «Equipo» es la gente. Con los grupos por departamento había
+   cajones de diez cosas sin relación entre sí, y el menú no cabía en pantalla.
    Solo hay UN grupo abierto (el de la pantalla donde estás) y «Hoy» siempre,
    porque ahí vive el chat y sus no leídos. */
 const GRUPO_FIJO = 'nav.g.today'
@@ -72,45 +64,35 @@ const NAV_DEF = [
   { g: 'nav.g.today', gIcon: Sun, iconCls: 'text-amber-400', iconBg: 'bg-amber-500/10', items: [
     { to: '/panel', labelKey: 'nav.dashboard', icon: LayoutDashboard, end: true },
     { to: '/panel/mi-dia', labelKey: 'nav.miDia', icon: Sun },
-    { to: '/panel/actividad', labelKey: 'nav.activity', icon: Activity },
     { to: '/panel/chat', labelKey: 'nav.chat', icon: MessageCircle },
-  ]},
-  { g: 'nav.g.reparto', gIcon: Zap, iconCls: 'text-sky-400', iconBg: 'bg-sky-500/10', items: [
-    { to: '/panel/paquetes', labelKey: 'nav.pkgintel', icon: PackageSearch },
-    { to: '/panel/apoyo', labelKey: 'nav.apoyo', icon: LifeBuoy },
-    { to: '/panel/debrief', labelKey: 'nav.debrief', icon: PackageCheck },
-    { to: '/panel/asignacion', labelKey: 'nav.assign', icon: ClipboardCheck },
-    { to: '/panel/plantilla', labelKey: 'nav.template', icon: FileSpreadsheet },
-    { to: '/panel/checklist-operativo', labelKey: 'nav.checklist', icon: CheckCircle2 },
-  ]},
-  { g: 'nav.g.personas', gIcon: Users, iconCls: 'text-violet-400', iconBg: 'bg-violet-500/10', items: [
-    { to: '/panel/conductores', labelKey: 'nav.drivers', icon: Users },
-    { to: '/panel/turnos', labelKey: 'nav.shifts', icon: CalendarCheck },
-    { to: '/panel/empleo', labelKey: 'nav.empleo', icon: Briefcase },
-    { to: '/panel/incorporaciones', labelKey: 'nav.incorporaciones', icon: UserCheck },
-    { to: '/panel/contactos', labelKey: 'nav.contacts', icon: BookUser },
-    { to: '/panel/conversaciones', labelKey: 'nav.conversaciones', icon: MessagesSquare },
-  ]},
-  { g: 'nav.g.rendimiento', gIcon: Trophy, iconCls: 'text-rose-400', iconBg: 'bg-rose-500/10', items: [
-    { to: '/panel/scorecard', labelKey: 'nav.scorecard', icon: Trophy },
-    { to: '/panel/informes', labelKey: 'nav.informes', icon: FileBarChart },
-    { to: '/panel/dsc', labelKey: 'nav.dsc', icon: MapPinned },
-    { to: '/panel/rendimiento', labelKey: 'nav.rendimiento', icon: Gauge },
-    { to: '/panel/origen-danos', labelKey: 'nav.origen', icon: ShieldAlert },
   ]},
   { g: 'nav.g.fleet', gIcon: Truck, iconCls: 'text-emerald-400', iconBg: 'bg-emerald-500/10', items: [
     { to: '/panel/vehiculos', labelKey: 'nav.vehicles', icon: Truck },
-    { to: '/panel/revision', labelKey: 'nav.revision', icon: CheckCircle2 },
     { to: '/panel/inspecciones', labelKey: 'nav.inspections', icon: ClipboardList },
-    { to: '/panel/incidencias', labelKey: 'nav.incidents', icon: AlertTriangle },
+    { to: '/panel/revision', labelKey: 'nav.revision', icon: CheckCircle2 },
+    { to: '/panel/origen-danos', labelKey: 'nav.origen', icon: ShieldAlert },
     { to: '/panel/vencimientos', labelKey: 'nav.grp.expiry', icon: CalendarClock },
     { to: '/panel/aparcamiento', labelKey: 'nav.parking', icon: MapPin },
   ]},
   { g: 'nav.g.taller', gIcon: Wrench, iconCls: 'text-orange-400', iconBg: 'bg-orange-500/10', items: [
-    { to: '/panel/talleres', labelKey: 'nav.workshops', icon: Wrench },
+    { to: '/panel/incidencias', labelKey: 'nav.incidents', icon: AlertTriangle },
     { to: '/panel/ordenes', labelKey: 'nav.ordenes', icon: Hammer },
+    { to: '/panel/talleres', labelKey: 'nav.workshops', icon: Wrench },
+  ]},
+  { g: 'nav.g.reparto', gIcon: Zap, iconCls: 'text-sky-400', iconBg: 'bg-sky-500/10', items: [
+    { to: '/panel/asignacion', labelKey: 'nav.assign', icon: ClipboardCheck },
+    { to: '/panel/turnos', labelKey: 'nav.shifts', icon: CalendarCheck },
+    { to: '/panel/checklist-operativo', labelKey: 'nav.checklist', icon: CheckCircle2 },
+  ]},
+  { g: 'nav.g.personas', gIcon: Users, iconCls: 'text-violet-400', iconBg: 'bg-violet-500/10', items: [
+    { to: '/panel/conductores', labelKey: 'nav.drivers', icon: Users },
+    { to: '/panel/incorporaciones', labelKey: 'nav.incorporaciones', icon: UserCheck },
+    { to: '/panel/empleo', labelKey: 'nav.empleo', icon: Briefcase },
+    { to: '/panel/contactos', labelKey: 'nav.contacts', icon: BookUser },
+    { to: '/panel/conversaciones', labelKey: 'nav.conversaciones', icon: MessagesSquare },
   ]},
   { g: 'nav.g.system', gIcon: Settings, iconCls: 'text-dark-300', iconBg: 'bg-white/[0.07]', items: [
+    { to: '/panel/actividad', labelKey: 'nav.activity', icon: Activity },
     { to: '/panel/importaciones', labelKey: 'nav.imports', icon: FileUp },
     { to: '/panel/ia-peritaje', labelKey: 'nav.ai', icon: BrainCircuit },
     { to: '/panel/tienda', labelKey: 'nav.tienda', icon: Store },
@@ -445,7 +427,6 @@ export default function PanelLayout() {
      que alguien deje de mirar. */
   const [peticionesPend, setPeticionesPend] = useState(0)
   const [candidatosNuevos, setCandidatosNuevos] = useState(0)
-  const [dnrPend, setDnrPend] = useState(0)
   const [chatSinLeer, setChatSinLeer] = useState(0)
   const [wsSinLeer, setWsSinLeer] = useState(0)
   useEffect(() => {
@@ -460,9 +441,6 @@ export default function PanelLayout() {
       // ultimo numero bueno. Un cero falso hace que se deje de mirar.
       contarCandidatosNuevos(center)
         .then((r) => { if (vivo) setCandidatosNuevos(r.data?.nuevos || 0) })
-        .catch(() => {})
-      contarDnrPendientes(center)
-        .then((r) => { if (vivo) setDnrPend(r.data?.pendientes || 0) })
         .catch(() => {})
       // Solo quien ve la pantalla: sin el permiso el servidor da 403 y seria
       // ruido cada dos minutos. Y con el mismo criterio que los demas: si
@@ -555,8 +533,6 @@ export default function PanelLayout() {
     // para todo el que tenga permisos definidos —el permiso no existe en
     // ninguna lista— y la entrada desaparecía del menú sin ningún error.
     if (k === 'ordenes') return canSee('talleres')
-    // Informes junta DNR y WHC: basta con tener uno de los dos permisos.
-    if (k === 'informes') return canSee('diarios') || canSee('whc')
     if (!SIEMPRE_VISIBLES.has(k) && !canSee(k)) return false
     const feat = ROUTE_FEATURE[k]
     if (feat && limits && limits[feat] === false) return false
@@ -568,7 +544,7 @@ export default function PanelLayout() {
       ...it, label: t(it.labelKey),
       // El aviso se cuelga aqui, del sitio donde ya se traduce el menu, para
       // que cualquier entrada futura solo tenga que anadir su clave a AVISOS.
-      aviso: AVISOS[it.to] ? AVISOS[it.to]({ peticionesPend, candidatosNuevos, dnrPend, chatSinLeer, wsSinLeer }) : 0,
+      aviso: AVISOS[it.to] ? AVISOS[it.to]({ peticionesPend, candidatosNuevos, chatSinLeer, wsSinLeer }) : 0,
     })) }))
     .filter((g) => g.items.length > 0)
   const flatItems = groups.flatMap((g) => g.items)
@@ -584,7 +560,6 @@ export default function PanelLayout() {
     if (SIEMPRE_VISIBLES.has(k)) return true
     if (k === 'vencimientos') return EXPIRY_KEYS.some((ek) => canSee(ek))
     if (k === 'ordenes') return canSee('talleres')
-    if (k === 'informes') return canSee('diarios') || canSee('whc')
     if (k === 'admin' || k === 'bandeja' || k === 'analitica' || k === 'gastos') return sa
     if (k === 'tienda' && !esPlataforma()) return false
     if (k === 'usuarios') return sa || cm

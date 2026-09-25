@@ -19,8 +19,8 @@
 
 import { readFileSync } from 'node:fs'
 
-const LAYOUT = 'frontend-v2/src/panel/PanelLayout.jsx'
-const AYUDA = 'frontend-v2/src/panel/ayudaFichas.js'
+const LAYOUT = 'frontend/src/panel/PanelLayout.jsx'
+const AYUDA = 'frontend/src/panel/ayudaFichas.js'
 
 const lee = (p) => readFileSync(new URL(`../${p}`, import.meta.url), 'utf8')
 const layout = lee(LAYOUT)

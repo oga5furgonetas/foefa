@@ -40,7 +40,7 @@ if (Test-Path $fija) {
   Write-Host "    (sin carpeta fija en ${fija} - se salta)"
 }
 
-Set-Location (Join-Path $raiz "frontend-v2")
+Set-Location (Join-Path $raiz "frontend")
 
 # NINGUN HOOK DETRAS DE UN RETURN. `vite build` compila igual y la pantalla se
 # cae entera en el navegador con el error 310 de React — paso el 16-09-2026 con

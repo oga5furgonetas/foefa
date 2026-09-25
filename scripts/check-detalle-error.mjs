@@ -10,7 +10,7 @@ import fs from 'fs'
 import path from 'path'
 import { fileURLToPath } from 'url'
 
-const ROOT = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', 'frontend-v2', 'src')
+const ROOT = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', 'frontend', 'src')
 const src = fs.readFileSync(path.join(ROOT, 'services', 'api.js'), 'utf8')
 const ini = src.indexOf('export function normalizarDetalle')
 if (ini < 0) { console.error('FALTA normalizarDetalle en services/api.js'); process.exit(1) }

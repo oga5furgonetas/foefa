@@ -1,16 +1,15 @@
 import { useEffect, useRef, useState } from 'react'
 import { useNavigate, useLocation } from 'react-router-dom'
-import { MessageSquare, CheckSquare, X, AlertTriangle, UserPlus, Truck, Fuel } from 'lucide-react'
-import { getChat, getChecklist, contarDnrPendientes, contarCandidatosNuevos, getAlerts } from './api'
+import { MessageSquare, CheckSquare, X, UserPlus, Truck, Fuel } from 'lucide-react'
+import { getChat, getChecklist, contarCandidatosNuevos, getAlerts } from './api'
 import { getAdmin } from './auth'
 import { hoyLocal } from '../lib/fecha'
 
-const ICONOS = { chat: MessageSquare, task: CheckSquare, dnr: AlertTriangle, candidato: UserPlus, combustible: Fuel }
+const ICONOS = { chat: MessageSquare, task: CheckSquare, candidato: UserPlus, combustible: Fuel }
 
 /* ── Avisos EN VIVO dentro del panel (PC) ─────────────────────────────────────
    Con la app abierta en cualquier página: si alguien escribe en el chat de tu
-   centro, añade una tarea al checklist, entra un DNR sin contestar, un
-   candidato nuevo o una furgoneta queda por debajo de medio depósito, se
+   centro, añade una tarea al checklist, entra un candidato nuevo o una furgoneta queda por debajo de medio depósito, se
    apunta como una FURGONETA abajo a la derecha, JUNTO a la burbuja de
    FlotaDSP AI, con el contador encima, como el badge de notificaciones de un
    móvil. Se toca para desplegar la lista HACIA ARRIBA, se vuelve a tocar para
@@ -116,28 +115,6 @@ export default function LiveNotifier({ center, centers }) {
             })
           }
           localStorage.setItem(k, JSON.stringify(ids))
-        } catch { /* siguiente tick */ }
-
-        // ── DNR: ¿han entrado investigaciones nuevas sin contestar? ──
-        // Solo el NUMERO (endpoint aparte, ligero a proposito: la lista trae el
-        // contexto de Cortex de cada una). Se avisa solo si SUBE respecto al
-        // ultimo visto — bajar (se contesto una) no es una novedad que avisar.
-        try {
-          const r = await contarDnrPendientes(c)
-          const n = r.data?.pendientes || 0
-          const k = `ln_dnr_${c}`
-          const antes = localStorage.getItem(k)
-          const antesN = antes === null ? null : Number(antes)
-          if (antesN !== null && n > antesN && !pathRef.current.startsWith('/panel/informes')) {
-            const nuevas = n - antesN
-            addNote({
-              key: `dnr-${c}-${n}`, icon: 'dnr',
-              title: `DNR sin contestar · ${c}`,
-              body: `${nuevas} investigación${nuevas === 1 ? '' : 'es'} nueva${nuevas === 1 ? '' : 's'} de Amazon esperando respuesta (${n} en total).`,
-              to: '/panel/informes',
-            })
-          }
-          localStorage.setItem(k, String(n))
         } catch { /* siguiente tick */ }
 
         // ── CANDIDATOS: ¿ha entrado gente nueva a Empleo sin mirar? ──

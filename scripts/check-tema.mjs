@@ -25,7 +25,7 @@
 
 import { readFileSync } from 'node:fs'
 
-const CSS = 'frontend-v2/src/index.css'
+const CSS = 'frontend/src/index.css'
 const css = readFileSync(new URL(`../${CSS}`, import.meta.url), 'utf8')
 
 /* Las reglas del CROMO son las que el híbrido NO debe copiar: son

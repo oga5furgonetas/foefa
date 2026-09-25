@@ -31,7 +31,7 @@ import { join, dirname, relative } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 const RAIZ = join(dirname(fileURLToPath(import.meta.url)), '..')
-const SRC = join(RAIZ, 'frontend-v2', 'src')
+const SRC = join(RAIZ, 'frontend', 'src')
 
 function ficheros(dir) {
   const out = []

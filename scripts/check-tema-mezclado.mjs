@@ -23,8 +23,8 @@ import { join, dirname, basename } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 const RAIZ = join(dirname(fileURLToPath(import.meta.url)), '..')
-const PAGS = join(RAIZ, 'frontend-v2', 'src', 'panel', 'pages')
-const COMPS = join(RAIZ, 'frontend-v2', 'src', 'panel', 'components')
+const PAGS = join(RAIZ, 'frontend', 'src', 'panel', 'pages')
+const COMPS = join(RAIZ, 'frontend', 'src', 'panel', 'components')
 
 /* Pantallas que van en claro. Se listan a mano y no se detectan solas: que
    una pantalla vaya en claro es una DECISIÓN, y si se adivinara por las

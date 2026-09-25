@@ -25,7 +25,7 @@ $ErrorActionPreference = "Stop"
 [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
 
 $RAIZ  = (Resolve-Path (Join-Path $PSScriptRoot "..")).Path
-$FRONT = Join-Path $RAIZ "frontend-v2"
+$FRONT = Join-Path $RAIZ "frontend"
 $DIST  = Join-Path $FRONT "dist-staging"
 $WEB   = "https://staging.flotadsp-v2.pages.dev"
 $API   = "https://flotadsp-backend-staging.fly.dev/api"

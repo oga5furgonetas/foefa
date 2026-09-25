@@ -26,7 +26,7 @@ import { readFileSync, readdirSync, statSync } from 'node:fs'
 import { join, dirname } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
-const RAIZ = join(dirname(fileURLToPath(import.meta.url)), '..', 'frontend-v2', 'src')
+const RAIZ = join(dirname(fileURLToPath(import.meta.url)), '..', 'frontend', 'src')
 const problemas = []
 
 function ficheros(dir, out = []) {

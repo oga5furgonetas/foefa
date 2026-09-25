@@ -28,9 +28,9 @@
 
 import { readFileSync } from 'node:fs'
 
-const LAYOUT = 'frontend-v2/src/panel/PanelLayout.jsx'
-const USUARIOS = 'frontend-v2/src/panel/pages/Usuarios.jsx'
-const AUTH = 'frontend-v2/src/panel/auth.js'
+const LAYOUT = 'frontend/src/panel/PanelLayout.jsx'
+const USUARIOS = 'frontend/src/panel/pages/Usuarios.jsx'
+const AUTH = 'frontend/src/panel/auth.js'
 
 const lee = (p) => readFileSync(new URL(`../${p}`, import.meta.url), 'utf8')
 

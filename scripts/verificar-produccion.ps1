@@ -21,7 +21,7 @@ $ErrorActionPreference = "Stop"
 
 $WEB      = "https://flotadsp.com/"
 $BACKEND  = "https://flotadsp-backend.fly.dev"
-$DIST     = Join-Path $PSScriptRoot "..\frontend-v2\dist\index.html"
+$DIST     = Join-Path $PSScriptRoot "..\frontend\dist\index.html"
 $fallos   = @()
 
 function Get-HashLocal {
@@ -59,7 +59,7 @@ try {
 if (-not $SoloBackend) {
     $local = Get-HashLocal
     if ($null -eq $local) {
-        Write-Host "==> Frontend: no hay frontend-v2\dist\index.html compilado, no hay nada que comparar (se salta)"
+        Write-Host "==> Frontend: no hay frontend\dist\index.html compilado, no hay nada que comparar (se salta)"
     } else {
         Write-Host "==> Frontend: dist local sirve $local"
         $limite   = (Get-Date).AddSeconds($Esperar)
@@ -80,7 +80,7 @@ flotadsp.com sigue sirviendo un bundle VIEJO.
        servido en produccion: $remoto
        Casi seguro que el deploy se fue a Preview: es el gotcha 16, falta --branch main.
        Repitelo asi:
-         cd frontend-v2
+         cd frontend
          npx wrangler pages deploy dist --project-name flotadsp-v2 --branch main --commit-dirty=true
 "@
         } else {

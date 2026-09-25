@@ -354,22 +354,14 @@ class Driver(BaseModel):
     phone: Optional[str] = None
     telefono_por: Optional[str] = None   # quien lo puso: oficina | portal
     telefono_en: Optional[str] = None
-    # Cortex da ese numero a mas de una persona: no se borra —puede que sea
-    # correcto y compartan movil— pero se avisa (04-09-2026: 15 fichas asi).
-    telefono_dudoso: Optional[bool] = None
-    # El movil PERSONAL de la persona, escrito por la oficina. Solo lo usa el
-    # aviso de las pre-DNR: el numero que da Cortex es el del dia (el movil de la
-    # ruta) y el de la ficha puede ser cualquiera, asi que un enlace con datos de
-    # un paquete no se manda a ninguno de los dos.
+    # El movil PERSONAL de la persona, escrito por la oficina. El `phone` de la
+    # ficha puede ser el de empresa, que cambia de mano; cuando un WhatsApp
+    # entra desde este numero se reconoce a la persona igual (`_wa_personas`).
     movil_personal: Optional[str] = None
     email: Optional[str] = None
     license_number: Optional[str] = None
     login: Optional[str] = None        # login del conductor
     driver_id: Optional[str] = None    # identificador externo (nº de empleado)
-    # Transporter ID de Cortex (el de los reportes diarios). NO es lo mismo
-    # que `driver_id`: aquel es el numero interno de Amazon que aparece en la
-    # ficha, este es el codigo con el que vienen firmados los DNR.
-    transporter_id: Optional[str] = None
     # None = no se ha decidido; se trata como SI. False lo apaga para esa persona.
     whatsapp_opt_in: Optional[bool] = None
     photo_url: Optional[str] = None    # foto de perfil (R2)
@@ -9765,7 +9757,7 @@ async def create_driver(data: DriverCreate, nueva: bool = False,
                 {"email": {"$regex": "^%s$" % re.escape(email), "$options": "i"},
                  "active": False, "status": {"$nin": ["deleted", "fusionada"]},
                  "merged_into": {"$exists": False}},
-                {"_id": 0, "id": 1, "name": 1, "transporter_id": 1})
+                {"_id": 0, "id": 1, "name": 1})
             if baja:
                 raise HTTPException(409, {
                     "mensaje": "%s ya tiene una ficha dada de baja con este correo. "
@@ -9929,7 +9921,6 @@ async def drivers_duplicados(_=Depends(require_admin)):
             filas.append({
                 "id": i, "nombre": d.get("name"), "center": d.get("center"),
                 "creada": str(d.get("created_at") or "")[:10],
-                "transporter_id": d.get("transporter_id"),
                 "telefono": d.get("phone") or d.get("telefono"),
                 "inspecciones": insp.get(i, 0), "turnos": turnos.get(i, 0),
                 "peticiones": pets.get(i, 0), "asignaciones": asig.get(i, 0),
@@ -9972,8 +9963,9 @@ _IMP_COLS = {
     "phone": ("telefono", "teléfono", "movil", "móvil", "tlf", "phone", "contacto"),
     "email": ("email", "correo", "correo electronico", "correo electrónico",
               "e-mail", "mail"),
-    "driver_id": ("driver id", "id amazon", "amazon id", "id conductor",
-                  "transporter", "transporter id"),
+    "driver_id": ("driver id", "id conductor", "id empleado", "nº empleado",
+                  "n empleado", "numero empleado", "número empleado",
+                  "codigo empleado", "código empleado"),
     "center": ("centro", "estacion", "estación", "nave", "station", "site"),
     "license_number": ("carnet", "licencia", "permiso", "license"),
     "contrato": ("contrato", "tipo contrato", "empresa/ett", "modalidad"),
@@ -10352,13 +10344,13 @@ async def drivers_fusionar(data: dict = Body(...), user: dict = Depends(require_
 
     movidos = await _repuntar_conductor(absorber, conservar, buena.get("name") or "")
 
-    # Lo que le falte a la buena se lo queda de las otras: telefono, transporter
-    # id, foto... Nunca al reves — la buena manda.
+    # Lo que le falte a la buena se lo queda de las otras: telefono, foto,
+    # DNI... Nunca al reves — la buena manda.
     def _vacio(v):
         return v is None or (isinstance(v, str) and not v.strip())
 
     relleno = {}
-    for campo in ("transporter_id", "phone", "telefono", "photo_url", "dni", "center"):
+    for campo in ("phone", "telefono", "photo_url", "dni", "center", "driver_id"):
         if not _vacio(buena.get(campo)):
             continue                      # la buena ya lo tiene: manda ella
         for o in otras:
@@ -10394,15 +10386,10 @@ async def update_driver(driver_id: str, data: dict, _=Depends(require_admin)):
         # Campos del formulario del panel (antes se filtraban y el guardado
         # fallaba en silencio): contrato/nivel/zona + ficha extendida.
         "contrato","nivel","zona","driver_id","alojamiento","notas","login",
-        "transporter_id",
         # Poder apagar el WhatsApp de UNA persona sin apagarlo para todos.
         # Sin esto en la whitelist, el campo se descartaria en silencio al
         # guardar y la casilla del panel no haria nada (gotcha 1).
         "whatsapp_opt_in",
-        # Se pone solo cuando Cortex da ese numero a dos personas; la oficina lo
-        # quita al poner el bueno. Sin esto en la whitelist, quitarlo desde el
-        # panel no haria nada y el aviso se quedaria puesto para siempre.
-        "telefono_dudoso",
         # Ver `Driver.movil_personal`. Sin esto aqui se descartaria en silencio
         # al guardar y la casilla del panel no haria nada (gotcha 1).
         "movil_personal",
@@ -10414,25 +10401,12 @@ async def update_driver(driver_id: str, data: dict, _=Depends(require_admin)):
     if isinstance(data.get("name"), str):
         data["name"] = re.sub(r"\s+", " ", data["name"]).strip()
 
-    # EL TRANSPORTER ID NO ES UN CAMPO DE TEXTO CUALQUIERA.
-    # Es la llave con la que se reparten los DNR, asi que:
-    #  · se guarda en MAYUSCULAS (en los reportes viene asi y la busqueda es
-    #    exacta: 'a2h4...' en minusculas no encontraria nada y el conductor
-    #    apareceria a cero teniendo defectos),
-    #  · se valida el formato, para que un dedazo no cree un id fantasma,
-    #  · y se quita de cualquier otra ficha. Si dos personas tuvieran el mismo,
-    #    el nombre que saliera en el contador dependeria del orden en que Mongo
-    #    los tuviera guardados: los DNR de uno apareceriean bajo el otro.
     quitar = {}
-    # El Transporter ID era el identificador de otra plataforma: en este producto
-    # no existe, y si llega en el cuerpo se ignora en vez de guardarse.
-    data.pop("transporter_id", None)
 
-    # Un telefono escrito a mano manda: la marca de «dudoso» era sobre el que
-    # habiamos puesto nosotros desde Cortex, no sobre este.
+    # Quien puso el telefono: la oficina, el propio conductor desde su portal o
+    # la candidatura de empleo. Sirve para saber de quien fiarse si no coinciden.
     if "phone" in data and str(data.get("phone") or "").strip():
         data["telefono_por"] = "oficina"
-        data["telefono_dudoso"] = False
 
     # EL MOVIL PERSONAL SE GUARDA YA MONTADO (+34...). Un numero mal escrito no
     # da error al enviar: Meta contesta 200 y el mensaje no llega a nadie. Se
@@ -14666,9 +14640,9 @@ _IA_SALA_MINUTOS = 60
 # flota entera», que es exactamente lo que no puede hacer: la sala es de las
 # personas y ella solo entra si la llaman.
 _IA_LLAMADA = re.compile(
-    r"(?:(?:^|\s)@flota(?:dsp)?(?:\s+ai)?\b)"      # @flota / @flotadsp ai
-    r"|(?:^\s*flota(?:dsp)?(?:\s+ai)?\s*[,:])"     # «flota, ...» al empezar
-    r"|(?:\bflotadsp\s+ai\b)",                     # su nombre completo
+    r"(?:(?:^|\s)@flot(?:a|ia)(?:\s+ai)?\b)"      # @flota / @flotia / @flotia ai
+    r"|(?:^\s*flot(?:a|ia)(?:\s+ai)?\s*[,:])"     # «flota, ...» / «flotia: ...» al empezar
+    r"|(?:\bflotia\s+ai\b)",                      # su nombre completo
     re.I)
 
 
@@ -19464,32 +19438,10 @@ async def _ot_url_taller(orden_id: str) -> str:
     return "%s/taller/%s" % (_PORTAL_BASE_FRONT.rstrip("/"), e["token"])
 
 
-def _apoyo_hoy() -> str:
+def _hoy_madrid() -> str:
+    """La fecha de hoy (AAAA-MM-DD) en la hora de la empresa, no la del servidor."""
     from zoneinfo import ZoneInfo
     return datetime.now(ZoneInfo("Europe/Madrid")).strftime("%Y-%m-%d")
-
-
-# ── LO SUYO, PARA EL: NUMEROS Y AYUDAS ──────────────────────────────────────
-# Dos pantallas del portal del conductor. La idea es devolverle a quien hace el
-# trabajo lo que la empresa ya sabe de el, y contar las veces que ha sacado de
-# un apuro a un companero.
-#
-# LAS REGLAS, QUE AQUI IMPORTAN MAS QUE EN NINGUN SITIO. Esto lo lee la persona
-# de la que habla, asi que un numero inflado se nota y quema la pantalla entera:
-#   · Nada de rankings entre companeros. La unica comparacion es contra el
-#     CENTRO, calculada con la misma funcion que usa la oficina
-#     (`_cx_dias_reparto`, que respeta las fotos congeladas del gotcha 39).
-#   · Los dias cerrados NO llevan porcentaje. `cortex_packages.state` es el
-#     estado de AHORA: un paquete devuelto el viernes y re-repartido el lunes
-#     figura hoy como entregado el viernes, asi que un DCR de un dia pasado
-#     saldria mejor de lo que fue. Eso es una mentira a favor del conductor,
-#     que es justo la peor. Se ensena lo que NO se degrada hacia abajo
-#     —cuantos paquetes entrego cada dia— y se dice de cuando es el dato.
-#   · Hoy si lleva porcentaje: es en vivo y no ha dado tiempo a erosionarse.
-#   · Un apoyo ANULADO no cuenta. Y una parada solo suma cuando el que fue a
-#     ayudar la marca como hecha: es el, diciendo que la hizo.
-#   · Sin `transporter_id` no se inventa nada: se dice que falta emparejar la
-#     ficha, que es un trabajo de la oficina y no culpa suya.
 
 
 # ---------------------------------------------------------------------------
@@ -19607,9 +19559,8 @@ async def admin_correo_enviar(body: dict = Body(...), user: dict = Depends(requi
 # El anuncio (Indeed, un grupo de WhatsApp, donde sea) apunta a la pagina
 # publica de la oferta; quien se apunta rellena el formulario y, al marcarlo
 # «contratado», se crea la ficha del conductor con lo que el mismo escribio.
-# Ese ultimo paso es el que de verdad vale: hoy el alta la teclea alguien a
-# mano y por eso hay 17 personas con la ficha duplicada, 33 sin telefono y 26
-# sin transporter_id (medido el 04-09-2026).
+# Ese ultimo paso es el que de verdad vale: si el alta la teclea alguien a
+# mano salen fichas duplicadas y sin telefono.
 #
 # Reglas que aqui no son negociables:
 #  · la pagina publica NO lleva sesion, asi que fija la empresa a mano con
@@ -20070,7 +20021,7 @@ async def empleo_apuntarse(slug: str, oferta_slug: str, request: Request):
     if not datos.get("consiento"):
         raise HTTPException(400, "Hay que aceptar que guardemos tus datos para el proceso")
 
-    hoy = _apoyo_hoy()
+    hoy = _hoy_madrid()
     cuantos = await db.candidatos.count_documents(
         {"oferta_id": o["id"], "creado_en": {"$regex": "^%s" % re.escape(hoy)}})
     if cuantos >= _EMPLEO_MAX_POR_OFERTA_DIA:
@@ -20689,11 +20640,10 @@ async def empleo_candidato_quitar_ett(cand_id: str, ett_id: str,
     return {"ok": True}
 
 
-# Quien firma el primer WhatsApp a un candidato, por empresa. El nombre
-# comercial no esta guardado en ninguna parte (la organizacion se llama
-# «FlotaDSP»), y firmar «Winiw» en otra empresa seria mentir en su nombre
-# (gotcha 43): sin firma, el mensaje sale igual pero sin presentarse.
-_EMPLEO_FIRMA_POR_BD = {"flotadsp": "Dani, de Winiw"}
+# Quien firma el primer WhatsApp a un candidato, por empresa. Vacio por
+# defecto: firmar con el nombre de otra empresa seria mentir en su nombre
+# (gotcha 43), y sin firma el mensaje sale igual pero sin presentarse.
+_EMPLEO_FIRMA_POR_BD: dict = {}
 
 
 def _empleo_nombre_pila(nombre) -> str:
@@ -20842,7 +20792,7 @@ async def empleo_contratar(cand_id: str, user: dict = Depends(require_admin)):
          "$push": {"historial": {"en": datetime.now(timezone.utc).isoformat(),
                                  "por": user.get("name") or user.get("username") or "",
                                  "de": c.get("fase") or "nuevo", "a": "contratado"}}})
-    return {"ok": True, "driver_id": d.id, "nombre": d.name, "falta_transporter_id": True}
+    return {"ok": True, "driver_id": d.id, "nombre": d.name}
 
 
 @api_router.delete("/empleo/candidatos/{cand_id}")
@@ -24444,6 +24394,110 @@ async def stats_dashboard(center: Optional[str] = None, user: dict = Depends(req
         "weekly_activity": dict(daily),
     }
 
+
+# Orden de gravedad de una inspección, de peor a mejor. Lo que no está en la
+# lista (vacío, un valor raro) va al final: no se inventa una gravedad.
+_GRAVEDAD_ORDEN = {"critico": 0, "grave": 1, "moderado": 2, "leve": 3, "sin_danos": 4}
+
+
+@api_router.get("/stats/hoy")
+async def stats_hoy(center: Optional[str] = None, user: dict = Depends(require_admin)):
+    """El día de la flota, para la portada: quién sale, qué se ha revisado y qué
+    ha pasado.
+
+    Todo sale de datos propios —el cuadrante del día, las inspecciones, el
+    checklist de turno y las incidencias—, así que funciona igual para
+    cualquier empresa con vehículos. Nada se estima: si una parte no tiene
+    datos (no hay cuadrante, no hay checklist), va vacía y la pantalla no la
+    pinta, en vez de enseñar un «0 de 0» que parece un problema.
+
+    Las inspecciones y las incidencias no guardan la sede (gotcha 6): se acotan
+    por los vehículos, igual que /stats/dashboard, para que las dos cifras de la
+    misma pantalla hablen de la misma flota.
+    """
+    dia = _hoy_madrid()
+    fc = _filtro_centro(user, center)          # valida permisos
+    fv = await _filtro_por_vehiculos(user, center)
+
+    # ── Salidas: el cuadrante del día ──
+    cuadrantes = await db.daily_assignments.find(
+        {**fc, "date": dia}, {"_id": 0, "center": 1, "slots": 1}).to_list(100)
+    slots = [(c.get("center") or "", s) for c in cuadrantes
+             for s in (c.get("slots") or []) if isinstance(s, dict) and s.get("vehicle_id")]
+    vids = list({s["vehicle_id"] for _, s in slots})
+    revision = {}
+    if vids:
+        async for i in db.inspections.find(
+                {"deleted": {"$ne": True}, "vehicle_id": {"$in": vids},
+                 "created_at": {"$regex": f"^{dia}"}},
+                {"_id": 0, "vehicle_id": 1, "analysis.severity": 1}):
+            sev = str((i.get("analysis") or {}).get("severity") or "").lower() or None
+            prev = revision.get(i["vehicle_id"], "sin_revisar")
+            # Si la furgoneta tiene dos inspecciones hoy, manda la PEOR.
+            if prev == "sin_revisar" or _GRAVEDAD_ORDEN.get(sev, 9) < _GRAVEDAD_ORDEN.get(prev, 9):
+                revision[i["vehicle_id"]] = sev
+    lista = []
+    for centro, s in slots:
+        rev = s["vehicle_id"] in revision
+        lista.append({
+            "vehicle_id": s["vehicle_id"],
+            "matricula": s.get("vehicle_plate") or "—",
+            "conductor": s.get("driver_name") or None,
+            "ruta": s.get("route") or None,
+            "center": centro,
+            "revisada": rev,
+            "gravedad": revision.get(s["vehicle_id"]) if rev else None,
+        })
+    # Lo que hay que mirar primero: las que salen sin revisar, luego las que
+    # vuelven con el peor daño. Por matrícula, lo urgente quedaría en cualquier sitio.
+    lista.sort(key=lambda x: (x["revisada"], _GRAVEDAD_ORDEN.get(x["gravedad"], 9), x["matricula"]))
+
+    # ── Revisión: vehículos distintos inspeccionados hoy, sin contar el taller ──
+    ids_flota = await db.vehicles.distinct(
+        "id", {**fc, "status": {"$nin": ["deleted", "baja", "taller"]}})
+    hechas = 0
+    if ids_flota:
+        hechas = len(await db.inspections.distinct(
+            "vehicle_id", {"deleted": {"$ne": True}, "vehicle_id": {"$in": ids_flota},
+                           "created_at": {"$regex": f"^{dia}"}}))
+
+    # ── Checklist de turno, sumado por turno en las sedes que se ven ──
+    if center and center != "Todos":
+        sedes = [center]
+    else:
+        sedes = [c for c in await _centros_de_la_empresa() if _user_can_see_center(user, c)]
+    checklist = []
+    for turno in ("manana", "tarde"):
+        tot = hec = 0
+        for sede in sedes:
+            r = await _resumen_turno(sede, dia, turno)
+            if r:
+                tot += r["total"]
+                hec += r["hechas"]
+        if tot:
+            checklist.append({"turno": turno, "hechas": hec, "total": tot})
+
+    # ── Golpes nuevos y incidencias de hoy ──
+    golpes = []
+    for sede in sedes:
+        golpes.extend(await _danos_nuevos_hoy(sede, dia))
+    qi = {**fv, "created_at": {"$regex": f"^{dia}"}}
+    incidencias = {
+        "nuevas": await db.incidents.count_documents(qi),
+        "graves": await db.incidents.count_documents(
+            {**qi, "severity": {"$in": list(_INCIDENCIA_GRAVE)}}),
+    }
+
+    return {
+        "dia": dia,
+        "salidas": {"total": len(lista), "revisadas": sum(1 for x in lista if x["revisada"]),
+                    "lista": lista[:60]},
+        "revision": {"hechas": hechas, "flota": len(ids_flota)},
+        "checklist": checklist,
+        "golpes": {"n": len(golpes), "lista": golpes[:20]},
+        "incidencias": incidencias,
+    }
+
 # =========================
 # ASIGNACION CONDUCTOR <-> VEHICULO
 # =========================
@@ -24656,13 +24710,8 @@ async def upsert_daily_assignment(request: Request, user: dict = Depends(require
             "vehicle_plate": s.get("vehicle_plate", ""),
             "driver_id": s.get("driver_id", "") or "",
             "driver_name": s.get("driver_name", "") or "",
-            # LA RUTA, QUE SE ESTABA TIRANDO. El importador del cuadrante YA la
-            # lee del texto pegado y la lleva hasta el slot; aqui se descartaba,
-            # y con ella el unico puente que enlaza a una persona con una ruta.
-            # Sin ese puente no se puede emparejar el Transporter ID solo:
-            # Cortex sabe que ID hizo la XA_C12 y nosotros sabiamos quien la
-            # llevaba, pero no habia donde juntarlo. Guardarla no cuesta nada y
-            # a partir de manana el emparejamiento se hace sin que nadie teclee.
+            # La ruta, zona o servicio del día (opcional). El importador del
+            # cuadrante la lee del texto pegado; sin guardarla aquí se perdía.
             "route": str(s.get("route") or "").strip().upper()[:24],
         })
 
@@ -31104,7 +31153,8 @@ def _onb_parsear(texto: str) -> list:
         mreg = re.search(r"Registrado\s+(\d{2})/(\d{2})/(\d{4})", trozo, re.I)
         registrado = ("%s-%s-%s" % (mreg.group(3), mreg.group(2), mreg.group(1))
                       if mreg else "")
-        centro = re.search(r"\b(?:AMZL\s+)?([A-Z]{3}\d)\b", trozo)
+        # El codigo de la sede («MAD2», «BCN1»), si el listado lo trae.
+        centro = re.search(r"\b([A-Z]{2,4}\d{1,2})\b", trozo.upper())
         # Lo que le falta: la linea de debajo de «Doc. faltante(s)». «Completo»
         # significa que no falta nada, y eso NO es un motivo para escribirle.
         falta = ""
@@ -31123,9 +31173,8 @@ def _onb_parsear(texto: str) -> list:
         # —es la unica forma de ver en que punto esta el expediente de alguien—.
         # Va SOLO en el endpoint de admin y NUNCA en el mensaje que se le manda
         # a la persona: `_onb_mensaje` no la toca, y hay un caso que lo vigila.
-        mcorreo = re.search(r"Email\s+winiw\s*\n\s*([^\s@]+@[^\s]+)", trozo, re.I)
+        mcorreo = re.search(r"Email(?:\s+\w+)?\s*\n\s*([^\s@]+@[^\s@]+\.[^\s@]+)", trozo, re.I)
         mclave = re.search(r"Contrase\u00f1a\s+Email\s*\n\s*(\S+)", trozo, re.I)
-        mrabbit = re.search(r"Contrase\u00f1a\s+Rabbit\s*\n\s*(\S+)", trozo, re.I)
         mform = re.search(r"C\u00f3digo\s+Test\s+Formaci\u00f3n\s*\n\s*(\S+)", trozo, re.I)
         codigo = (mform.group(1) if mform else "").strip("\u2014\u2013-. ")
         # EL DIA DE LA FORMACION. Sin el, la pantalla no podia decir que a
@@ -31143,13 +31192,12 @@ def _onb_parsear(texto: str) -> list:
             "dni": (dni.group(1).upper() if dni else "")[:12],
             "idper": (idper.group(1) if idper else "")[:8],
             "ett": m.group("ett").upper(),
-            "centro": (centro.group(1).upper() if centro else ""),
+            "centro": (centro.group(1) if centro else ""),
             "falta_texto": falta,
             "estado": estado,
             "registrado": registrado,
             "email": (mcorreo.group(1) if mcorreo else "")[:80],
             "clave_email": (mclave.group(1) if mclave else "")[:60],
-            "clave_rabbit": (mrabbit.group(1) if mrabbit else "")[:60],
             "codigo_formacion": codigo[:40],
             "fecha_formacion": fecha_formacion,
             "papeles_por": (mcomp.group(1).upper() if mcomp else ""),
@@ -31260,7 +31308,7 @@ def _onb_parsear_tabla(texto: str) -> dict:
 # borraria el codigo de formacion y el correo que ya teniamos. `falta_texto`
 # NO esta aqui: vacio si significa algo («Completo»).
 _ONB_NO_PISAR_CON_VACIO = ("telefono", "dni", "idper", "centro", "registrado", "email",
-                           "clave_email", "clave_rabbit", "codigo_formacion",
+                           "clave_email", "codigo_formacion",
                            "fecha_formacion", "papeles_por", "papeles_en")
 
 
@@ -31420,20 +31468,17 @@ def _onb_espera(p: dict) -> dict:
 
 # ── EL CAMINO COMPLETO, PASO A PASO ─────────────────────────────────────────
 #
-# Los cinco pasos por los que pasa una persona desde que la ETT la cuelga hasta
-# que puede subirse a una furgoneta. Cada uno se da por hecho SOLO cuando hay un
-# dato que lo demuestra — no cuando "deberia" estarlo:
+# Los pasos por los que pasa una persona desde que se le da de alta hasta que
+# puede empezar. Cada uno se da por hecho SOLO cuando hay un dato que lo
+# demuestra — no cuando "deberia" estarlo:
 #
-#   1 apuntado   la ETT la colgo en winiw.              (fecha «Registrado»)
-#   2 papeles    Coordinacion los dio por completos.    (tiene codigo de formacion)
-#   3 acceso     le mandamos la app y su usuario.       (lo marca quien lo manda)
-#   4 cuenta     Amazon le creo la cuenta.              (aparece en Asociados)
-#   5 dentro     los trece modulos completos.           (13/13 en Asociados)
+#   1 apuntado   se le dio de alta (la agencia o la oficina).  (fecha «Registrado»)
+#   2 papeles    sus papeles se dieron por completos.          (tiene codigo de formacion)
+#   3 acceso     se le mando el acceso a la formacion.         (lo marca quien lo manda)
 #
-# NADA SE DEDUCE HACIA ATRAS. Que este en el paso 4 no marca el 3 como hecho: si
-# nadie le mando el acceso, ese paso NO esta dado aunque haya llegado igual por
-# otro lado. Lo contrario seria dar por enviado un mensaje que nadie envio, y
-# sobre eso Dani decide a quien llama.
+# NADA SE DEDUCE HACIA ATRAS: un paso posterior no marca el anterior como hecho.
+# Lo contrario seria dar por enviado un mensaje que nadie envio, y sobre eso la
+# oficina decide a quien llama.
 _ONB_PASOS = (
     ("apuntado", "Dado de alta"),
     ("papeles", "Papeles completos"),
@@ -31734,8 +31779,7 @@ async def onb_editar(pid: str, body: dict = Body(...), _=Depends(require_admin))
         if len(t) < 9:
             raise HTTPException(400, "El tel\u00e9fono no parece v\u00e1lido")
         cambios["telefono"] = t
-    for k, tope in (("email", 80), ("clave_email", 60), ("clave_rabbit", 60),
-                    ("codigo_formacion", 40)):
+    for k, tope in (("email", 80), ("clave_email", 60), ("codigo_formacion", 40)):
         if k in body:
             cambios[k] = _texto_cuerpo(body.get(k), tope)
     if "triaje" in body:
@@ -34586,9 +34630,8 @@ async def tienda_crear_pedido(body: dict = Body(...), user: dict = Depends(requi
             total += l["importe"]
 
     ficha = await db.drivers.find_one({"id": did}, {"_id": 0, "name": 1, "center": 1})
-    # EL CORREO DEL PEDIDO NO PUEDE SER EL DE LA FICHA. En la ficha esta el
-    # del trabajo -123 de 140 son @winiw.es-, y a ese buzon el conductor NO
-    # tiene acceso: el justificante de una compra suya, pagada con su dinero,
+    # EL CORREO DEL PEDIDO NO PUEDE SER EL DE LA FICHA. En la ficha suele estar
+    # el del trabajo, y a ese buzon el conductor NO tiene acceso: el justificante de una compra suya, pagada con su dinero,
     # acabaria en un correo de la empresa que el no puede abrir. Se usa el que
     # escriba, y si no el de su cuenta de la tienda, que se puso el mismo.
     # Si no hay ninguno se deja vacio A PROPOSITO: la pantalla de Stripe pide

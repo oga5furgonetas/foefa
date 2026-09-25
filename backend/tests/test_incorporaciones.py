@@ -202,26 +202,6 @@ def test_sin_nada_marcado_no_es_lo_mismo_que_completo():
 
 # ── LOS CANDIDATOS QUE ENTRAN SOLOS ─────────────────────────────────────────
 
-def test_lo_que_entra_solo_lo_lee_EL_MISMO_lector_probado():
-    """La extension manda el MISMO texto que se pegaba a mano.
-
-    Es lo que hace segura esta puerta: no hay un lector nuevo del DOM que pueda
-    equivocarse: entra por `_onb_parsear`, que esta escrito contra el listado
-    real y probado con las 26 fichas de verdad. Escribir un lector del HTML
-    seria inventarse una estructura no vista, que es el fallo que costo veinte
-    versiones con las direcciones de Cortex (gotcha 64).
-    """
-    src = _fuente("cortex_ingest_informe")
-    assert 'elif tipo == "candidatos":' in src
-    i = src.index('elif tipo == "candidatos":')
-    trozo = src[i:i + 1800]
-    assert "_onb_parsear(texto)" in trozo, "se ha escrito otro lector"
-    # Se guarda por la funcion comun, que es la que usa la clave estable.
-    assert "_onb_guardar_listado(filas" in trozo, "la extension guarda por su cuenta"
-    assert "_onb_clave(p)" in _fuente("_onb_guardar_listado"), (
-        "sin clave estable se duplican las fichas")
-
-
 def test_lo_que_entra_solo_no_pisa_lo_que_marca_la_oficina():
     """El listado no sabe nada de los estados que se marcan a mano. Si los
     pisara, cada vez que entrara el listado se borraria el trabajo del dia."""
@@ -340,16 +320,10 @@ def test_quien_no_esta_en_el_ultimo_listado_no_entra_en_las_tandas():
     assert "delete_many" not in src and "delete_one" not in src
 
 
-# ── LOS DOS CARRILES ────────────────────────────────────────────────────────
+# ── EL CAMINO ───────────────────────────────────────────────────────────────
 #
-# El proceso NO es una fila. El 16-09-2026 la pantalla decia de Lois Barreiro
-# «Coordinacion aun no ha dado sus papeles por completos» —cierto— mientras su
-# cuenta de Amazon ya estaba al 11/14. Las dos cosas a la vez. En fila, la
-# segunda no se veia.
-#
-# Y peor: de otros decia «Amazon aun no le ha creado la cuenta», que es una
-# afirmacion que no podemos hacer. Lo unico cierto es que no la hemos visto —
-# y con Lois era literalmente falsa, porque la tenia.
+# Tres pasos —alta, papeles, acceso a la formacion— y ninguno se da por hecho
+# sin un dato que lo demuestre.
 
 def _camino():
     import ast as _ast
@@ -357,45 +331,42 @@ def _camino():
     from pathlib import Path as _P
     txt = _io.open(_P(__file__).resolve().parent.parent / "server.py", encoding="utf-8-sig").read()
     arb = _ast.parse(txt)
-    amb = {}
+    from datetime import date, datetime, timezone
+    amb = {"datetime": datetime, "timezone": timezone, "date_cls": date}
     for n in arb.body:
-        if isinstance(n, _ast.FunctionDef) and n.name == "_onb_camino":
+        if isinstance(n, _ast.FunctionDef) and n.name in ("_onb_camino", "_onb_dias",
+                                                          "_onb_cuando_formacion"):
             exec(compile(_ast.fix_missing_locations(_ast.Module(body=[n], type_ignores=[])),  # noqa: S102
                          "<server>", "exec"), amb)
     return amb["_onb_camino"]
 
 
-def test_sin_cuenta_vista_no_se_dice_que_no_la_tiene():
-    """Lo unico cierto es que no la hemos visto. Con Lois, decir que no la
-    tenia era FALSO: la tenia al 11/14, en otra Service Area."""
+def test_sin_papeles_lo_que_toca_es_completarlos():
     r = _camino()({"registrado": "2026-09-15"}, None)
-    assert "no la hemos visto" in r["que_toca"]
-    assert r["amazon"]["vista"] is False
+    assert r["siguiente"] == "papeles"
+    assert "papeles" in r["que_toca"]
+    assert r["dados"] == 1 and r["total"] == 3
 
 
-def test_los_dos_carriles_se_cuentan_a_la_vez():
-    """El caso de Lois: papeles sin cerrar Y cuenta al 11/14."""
-    r = _camino()({"registrado": "2026-09-15"},
-                  {"hechas": 11, "total": 14, "completa": False,
-                   "toca_a": ["la persona"], "pendientes": [{"que": "La sesión de formación"}]})
-    assert "papeles" in r["que_toca"], r["que_toca"]
-    assert "la persona" in r["que_toca"], "no dice que en Amazon le toca a el"
-    assert r["amazon"]["vista"] is True and r["amazon"]["hechas"] == 11
-
-
-def test_cuando_todo_lo_de_amazon_es_de_amazon_lo_dice():
-    """Si lo que falta no depende de nadie nuestro, no hay a quien llamar."""
+def test_con_papeles_y_sin_acceso_toca_mandarlo():
     r = _camino()({"registrado": "2026-09-15", "codigo_formacion": "A",
-                   "visto_en": "2026-09-16T10:00:00", "ultimo_aviso": "2026-09-16T11:00:00"},
-                  {"hechas": 13, "total": 14, "completa": False, "toca_a": ["Amazon"],
-                   "pendientes": [{"que": "Global Check"}]})
-    assert r["que_toca"] == "En Amazon le toca a Amazon"
+                   "visto_en": "2026-09-16T10:00:00"}, None)
+    assert r["siguiente"] == "acceso"
+    assert "acceso" in r["que_toca"]
+
+
+def test_un_paso_posterior_no_marca_el_anterior():
+    """Que se le haya escrito no da los papeles por completos."""
+    r = _camino()({"registrado": "2026-09-15", "ultimo_aviso": "2026-09-16T11:00:00"}, None)
+    papeles = [x for x in r["ett"] if x["id"] == "papeles"][0]
+    acceso = [x for x in r["ett"] if x["id"] == "acceso"][0]
+    assert papeles["hecho"] is False and acceso["hecho"] is False
 
 
 def test_listo_solo_cuando_no_falta_nada_de_nada():
     r = _camino()({"registrado": "2026-09-15", "codigo_formacion": "A",
                    "visto_en": "2026-09-16T10:00:00", "ultimo_aviso": "2026-09-16T11:00:00"},
-                  {"hechas": 14, "total": 14, "completa": True, "toca_a": []})
+                  None)
     assert r["que_toca"] == "Listo para empezar" and r["siguiente"] is None
 
 
@@ -403,7 +374,7 @@ def test_quien_ya_no_esta_en_formacion_no_tiene_siguiente_paso():
     """«Mandale el acceso» de alguien que ya termino y esta en ruta es mandar a
     Dani a hacer algo que no toca. Paso el 16-09-2026 con Victor."""
     r = _camino()({"registrado": "2026-09-04", "codigo_formacion": "ABC",
-                   "visto_en": "2026-09-10T10:00:00"}, None, False)
+                   "visto_en": "2026-09-10T10:00:00"}, False)
     assert r["siguiente"] is None and r["fuera"] is True
     assert "formaci" in r["que_toca"]
 
@@ -411,7 +382,7 @@ def test_quien_ya_no_esta_en_formacion_no_tiene_siguiente_paso():
 def test_no_estar_en_el_listado_sin_codigo_no_significa_nada():
     """El listado que se pega es el de «En incorporacion», no el de todos.
     Tratar toda ausencia como «ya no esta» dio por idas a DIECISEIS personas."""
-    r = _camino()({"registrado": "2026-09-04"}, None, False)
+    r = _camino()({"registrado": "2026-09-04"}, False)
     assert not r.get("fuera")
 
 
@@ -463,9 +434,8 @@ def test_un_hueco_del_listado_no_borra_un_dato_bueno():
         assert k in campos, k
     # «Completo» deja falta_texto vacio y ESO si hay que guardarlo.
     assert "falta_texto" not in campos
-    # Y las dos puertas (pegar a mano y la extension) pasan por el mismo sitio.
+    # Pegar a mano pasa por la funcion comun, la de la clave estable.
     assert "_onb_guardar_listado" in _fuente("onb_importar")
-    assert "_onb_guardar_listado(filas" in _TEXTO.split("elif tipo == \"candidatos\":")[1][:1500]
 
 
 def test_dice_cuanto_hace_que_tocaba_la_formacion():

@@ -3,12 +3,12 @@ import { useOutletContext } from 'react-router-dom'
 import { useT } from '../../i18n'
 import { lista } from '../../lib/lista'
 import {
-  Wrench, MapPin, Phone, Globe, BadgeCheck, Loader2, Navigation,
-  AlertTriangle, Search, Filter, Star, Clock, ChevronDown, X,
-  ExternalLink, PhoneCall, Zap, Car, RefreshCw, Info, Link2, Copy, Check, Plus, Pencil,
+  Wrench, MapPin, Phone, Globe, BadgeCheck, Loader2, Navigation, AlertTriangle, Search, Filter,
+  Star, Clock, ChevronDown, X, ExternalLink, PhoneCall, Zap, Car, Info, Link2, Copy, Check, Plus,
+  Pencil,
 } from 'lucide-react'
 import TallerForm from '../components/TallerForm'
-import { getWorkshopsNearby, getWorkshops, getVehicles, getCentrosGeo, enlaceTaller } from '../api'
+import { getWorkshopsNearby, getVehicles, getCentrosGeo, enlaceTaller } from '../api'
 
 const CATEGORIES = [
   { id: 'chapa',          label: 'Chapa'       },

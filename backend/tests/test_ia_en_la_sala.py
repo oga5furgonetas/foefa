@@ -40,7 +40,6 @@ def _cuerpo(nombre):
 def _llamada():
     """La funcion REAL que decide si la llaman (gotcha 40: nada de copias)."""
     amb = {"re": re}
-    exec(_cuerpo("_normalize_name"), amb)                        # noqa: S102
     for n in _ARBOL.body:
         if isinstance(n, ast.Assign) and getattr(n.targets[0], "id", "") == "_IA_LLAMADA":
             exec(ast.get_source_segment(FUENTE, n), amb)         # noqa: S102
@@ -54,15 +53,17 @@ def test_contesta_cuando_la_llaman_por_su_nombre():
     for texto in ("@flota quienes son los peores conductores",
                   "flota, ensenale a Mery sus peores conductores",
                   "Flota: cuantas ITV caducan este mes",
-                  "@flotadsp ai dame el WHC",
-                  "oye @flota mira el DCR de hoy"):
+                  "@flotia ai dame las ITV del mes",
+                  "flotia: cuantos daños hay abiertos",
+                  "oye @flota mira los daños de hoy"):
         assert llaman(texto), "no reconoce que la llaman: %r" % texto
 
 
 def test_no_se_mete_en_una_conversacion_que_no_va_con_ella():
     llaman, _ = _llamada()
     for texto in ("mañana repasamos la flota entera",
-                  "la flotilla de DGA1 esta parada",
+                  "la flotilla de la sede norte esta parada",
+                  "flotilla, mañana hay revision",
                   "¿alguien sabe si vino el de la ITV?",
                   "hoy salen 42 rutas"):
         assert not llaman(texto), "se mete donde no la llaman: %r" % texto
@@ -73,7 +74,8 @@ def test_se_le_quita_el_nombre_antes_de_preguntarle():
     dentro, el modelo contesta a su propio nombre."""
     _, limpiar = _llamada()
     assert limpiar("@flota quienes son los peores conductores") == "quienes son los peores conductores"
-    assert limpiar("flota, dame el WHC") == "dame el WHC"
+    assert limpiar("flota, dame las ITV") == "dame las ITV"
+    assert limpiar("@flotia ai cuantas furgonetas hay") == "cuantas furgonetas hay"
 
 
 def test_el_mensaje_de_la_persona_se_guarda_antes_de_llamar_a_la_ia():
@@ -115,26 +117,6 @@ def test_todos_los_casos():
     assert fallos == 0, "%d fallos" % fallos
 
 
-
-
-def test_a_la_ia_le_llegan_los_peores_y_no_solo_los_mejores():
-    """EL FALSO POSITIVO MAS CARO DE ESTA TANDA. Se le pregunto «quienes son
-    los 3 peores conductores por DCR» y contesto que «todos tienen un DCR
-    perfecto del 100 %». Con los datos reales delante: 117 conductores en el
-    ranking, el peor al 90,77 % con 18 fallos.
-
-    No mentia el modelo: la consulta le mandaba solo `filas[:15]` -la lista
-    ordenada de MAYOR a menor DCR, o sea los quince MEJORES- y con eso delante
-    la unica conclusion posible era que todo el mundo va perfecto. Una
-    respuesta que dice que todo esta bien cuando no lo esta es peor que no
-    contestar: cierra la pregunta.
-    """
-    bloque = FUENTE.split('if tipo == "rendimiento":')[1].split('return {"resumen_texto"')[0]
-    assert "filas[:15]" not in bloque, "vuelve a mandarse solo el top: los peores no llegan"
-    assert "LOS PEORES" in bloque and "LOS MEJORES" in bloque, (
-        "los dos extremos tienen que ir etiquetados, o el modelo no sabe cual es cual")
-    assert "filas[-8:]" in bloque, "no se mandan los ultimos del ranking"
-    assert "mediana" in bloque, "sin la mediana no se sabe si el ranking es bueno o malo"
 
 
 def test_tambien_contesta_en_un_privado():
@@ -180,7 +162,7 @@ def test_una_respuesta_sin_un_solo_dato_no_vale():
                  "Los peores son los que acumulan mas incidencias.", None), (
         "una tautologia sin cifras tiene que detectarse")
     assert not hueca("quien es su peor conductor",
-                     "El peor es MAXIMILIANO con 90,77% y 18 fallos.", None)
+                     "El peor es MAXIMILIANO con 7 incidencias y 3 golpes.", None)
     assert not hueca("quien es su peor conductor", "Aqui los tienes.",
                      {"titulo": "x", "filas": []}), "con tarjeta si hay datos"
     assert not hueca("gracias, buen trabajo", "De nada.", None), (
@@ -353,12 +335,12 @@ def test_se_nego_a_lo_que_SI_puede_y_se_le_saca_el_dato():
     las 74 respuestas guardadas: de doce negativas, estas tres eran mentira."""
     fn, _ = _si_puede()
     casos = [
-        ("quienes peligran",
-         "No puedo darte los nombres exactos de quienes se pasan o se acercan al limite desde aqui.",
-         "whc"),
-        ("pero tienes el apartado rendimiento para obtenerlo",
-         "No tengo acceso a metricas individuales de rendimiento en este centro.",
-         "rendimiento"),
+        ("que furgonetas tienen la ITV caducada",
+         "No puedo darte ese listado desde aqui.",
+         "vehiculos"),
+        ("cuantas inspecciones se hicieron ayer",
+         "No tengo acceso a ese dato en este centro.",
+         "inspecciones"),
         ("si te paso 20 fichas tecnicas puedes analizarlas?",
          "No puedo procesar fichas tecnicas masivas. Tendras que subirlas una a una.",
          "vehiculos"),
@@ -372,9 +354,9 @@ def test_lo_que_de_verdad_NO_puede_se_queda_como_esta():
     (43ed7ec). Esta guarda no puede deshacer aquello."""
     fn, _ = _si_puede()
     casos = [
-        ("dejalo programado y tu montas las rutas de manana cuando salgan en cortex",
+        ("dejalo programado y tu montas el cuadrante de manana",
          "Eso no es posible: no tengo procesos de fondo."),
-        ("genera la plantilla de dga1 manana cuando salgan en cortex",
+        ("genera el informe de la sede norte manana cuando salgan los turnos",
          "No puedo dejar nada programado para manana."),
         ("puedes mandarle tu el whatsapp cada dia?",
          "No puedo, eso lo tienes que hacer tu."),
@@ -386,13 +368,13 @@ def test_lo_que_de_verdad_NO_puede_se_queda_como_esta():
 def test_una_negativa_CON_datos_no_es_una_negativa():
     """Si ha dado la tarjeta, ha contestado: el «no puedo» sera un matiz."""
     fn, _ = _si_puede()
-    tarjeta = {"titulo": "WHC", "filas": [{"etiqueta": "Se pasan", "valor": "1"}]}
-    assert fn("quienes peligran", "No puedo darte mas detalle que esto.", tarjeta) == ""
+    tarjeta = {"titulo": "ITV", "filas": [{"etiqueta": "Caducadas", "valor": "1"}]}
+    assert fn("que furgonetas tienen la ITV caducada", "No puedo darte mas detalle que esto.", tarjeta) == ""
 
 
 def test_una_respuesta_normal_no_dispara_nada():
     fn, _ = _si_puede()
-    assert fn("quienes peligran", "Se pasan Gabriel Miragaya y Judyt Lopez.", None) == ""
+    assert fn("que furgonetas tienen la ITV caducada", "Caducada la 1234-ABC y la 5678-DEF.", None) == ""
     assert fn("", "", None) == ""
 
 

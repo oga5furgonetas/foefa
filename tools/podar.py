@@ -60,7 +60,7 @@ NO_SEMILLA = {
     'onb_plantillas', '_onb_plantilla', '_invita_plantilla',
     'empleo_invitados_plantilla', '_gemini_client_plantilla',
     # Solo da la fecha de hoy en Madrid; lo usan las candidaturas de empleo.
-    '_apoyo_hoy',
+    '_hoy_madrid',
 }
 
 

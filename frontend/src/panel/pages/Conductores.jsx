@@ -7,10 +7,10 @@ import ImportarConductores from '../components/ImportarConductores'
 import ImportarMoviles from '../components/ImportarMoviles'
 import { useEscape } from '../../lib/useEscape'
 import {
-  Loader2, Search, Plus, X, Pencil, Trash2, UserCheck, FileSpreadsheet,
-  Phone, Mail, IdCard, Car, MapPin, FileText, Building2, Save, Camera,
-  Trophy, TrendingUp, TrendingDown, Minus, Flame, BarChart2, ChevronDown, ChevronUp, AlertCircle,
-  Lock, LockOpen, Eye, EyeOff, ShieldCheck, Share2, UserPlus, Smartphone,
+  Loader2, Search, Plus, X, Pencil, Trash2, UserCheck, FileSpreadsheet, Phone, Mail, IdCard, Car,
+  MapPin, FileText, Building2, Save, Camera, Trophy, TrendingUp, TrendingDown, Minus, Flame,
+  BarChart2, ChevronDown, ChevronUp, AlertCircle, Lock, LockOpen, Eye, EyeOff, ShieldCheck,
+  Share2, Smartphone,
 } from 'lucide-react'
 import {
   getDrivers, createDriver, updateDriver, deleteDriver, uploadDriverPhoto,
@@ -18,12 +18,10 @@ import {
   generarAccesosConductores,
   deleteDriverAccount,
   getDriversDuplicados, fusionarConductores, repasarFusiones,
-  getPropuestasTransporterId, confirmarTransporterId, getTransporterIdsSinFicha, telefonosDesdeCortex,
-  crearFichaDeTransporterId, getDriversSinCentro, aplicarCentroConductores,
-  getDriversSinTransporter, aplicarTransporterConductores, } from '../api'
+} from '../api'
 
 const EMPTY = {
-  name: '', dni: '', phone: '', movil_personal: '', email: '', driver_id: '', transporter_id: '',
+  name: '', dni: '', phone: '', movil_personal: '', email: '', driver_id: '',
   license_number: '', contrato: '', nivel: '', center: '', alojamiento: '', notas: '',
 }
 
@@ -267,28 +265,13 @@ function DriverRow({ s, rank, showCenter, expanded, onToggle }) {
   )
 }
 
-/* ── SALUD DE LAS FICHAS ───────────────────────────────────────────────────
-   Dos tareas de mantenimiento que nadie hace porque no había dónde hacerlas.
-
-   1. FICHAS DUPLICADAS. La importación creaba ficha nueva cuando el nombre
-      venía con un espacio de más o en minúsculas, así que hay gente dada de
-      alta dos veces. No es cosmético: el cuadrante apunta a una ficha y el
-      login del portal resuelve por correo y cae en la otra — el 19-08-2026
-      hubo cinco conductores en ruta viendo «no tienes furgoneta asignada» y
-      por pantalla parecía un fallo de centros.
-
-   2. TRANSPORTER IDs. Son lo que hace que en el debrief salga «sin ficha».
-      Se emparejan solos cruzando lo que sabe Cortex (qué ID hizo la XA_C12)
-      con lo que sabe la asignación (quién llevaba la XA_C12), pero la
-      asignación no guardaba la ruta hasta hoy: empieza a dar resultados con
-      las asignaciones de mañana en adelante, y la pantalla lo dice en vez de
-      parecer que no encuentra a nadie. */
+/* ── FICHAS DUPLICADAS ─────────────────────────────────────────────────────
+   Una importación con el nombre escrito distinto (un espacio de más, en
+   minúsculas) da de alta a la misma persona dos veces. No es cosmético: el
+   cuadrante apunta a una ficha y el acceso al portal resuelve por correo y cae
+   en la otra, y el conductor ve «no tienes vehículo asignado» teniéndolo. */
 function SaludFichas({ onCambio }) {
   const [dups, setDups] = useState(null)
-  const [ids, setIds] = useState(null)
-  const [sinFicha, setSinFicha] = useState(null)
-  const [sinCentro, setSinCentro] = useState(null)
-  const [sinTr, setSinTr] = useState(null)
   const [ocupado, setOcupado] = useState('')
   const [err, setErr] = useState('')
   const [hecho, setHecho] = useState('')
@@ -296,46 +279,8 @@ function SaludFichas({ onCambio }) {
 
   const cargar = () => {
     getDriversDuplicados().then((r) => setDups(r.data)).catch(() => setErr('No se pudieron cargar las fichas duplicadas.'))
-    getPropuestasTransporterId().then((r) => setIds(r.data)).catch(() => {})
-    getTransporterIdsSinFicha().then((r) => setSinFicha(r.data)).catch(() => {})
-    getDriversSinCentro().then((r) => setSinCentro(r.data)).catch(() => {})
-    getDriversSinTransporter().then((r) => setSinTr(r.data)).catch(() => {})
   }
   useEffect(cargar, [])
-
-  /* El centro NO viaja en la petición a propósito: lo vuelve a calcular el
-     servidor con los paquetes de Cortex (gotcha 38). Si lo mandara el panel,
-     bastaría con cambiarlo aquí para saltarse la regla de «una sola nave». */
-  /* Sin `transporter_id` la persona NO EXISTE para nada que venga de Cortex:
-     sus ayudas, sus paquetes y sus numeros salen a cero sin que falle nada.
-     Medido el 08-09-2026: 75 de 230 fichas vivas no lo tenian y 18 estaban
-     trabajando ese mes. Solo se propone cuando el nombre lleva a UNA persona
-     en Cortex y a UNA ficha; con tocayos no se toca nada. */
-  const ponerTransporters = async () => {
-    setOcupado('tr'); setErr(''); setHecho('')
-    try {
-      const { data } = await aplicarTransporterConductores({})
-      setHecho(data.puestos
-        ? `Emparejadas ${data.puestos} ${data.puestos === 1 ? 'ficha' : 'fichas'} con Cortex.`
-        : (data.motivo || 'No había ninguna con evidencia suficiente.'))
-      cargar(); onCambio?.()
-    } catch (e) {
-      setErr(e?.response?.data?.detail || 'No se pudo emparejar.')
-    } finally { setOcupado('') }
-  }
-
-  const ponerCentros = async () => {
-    setOcupado('centros'); setErr(''); setHecho('')
-    try {
-      const { data } = await aplicarCentroConductores({})
-      setHecho(data.puestos
-        ? `Centro puesto a ${data.puestos} ${data.puestos === 1 ? 'ficha' : 'fichas'}.`
-        : (data.motivo || 'No había ninguna con evidencia suficiente.'))
-      cargar(); onCambio?.()
-    } catch (e) {
-      setErr(e?.response?.data?.detail || 'No se pudo poner el centro.')
-    } finally { setOcupado('') }
-  }
 
   /* REPASAR LO YA FUSIONADO. Hace falta aunque fusionar este bien: una
      inspeccion creada DESPUES de la fusion —alguien que entro con la ficha
@@ -366,33 +311,6 @@ function SaludFichas({ onCambio }) {
       cargar(); onCambio?.()
     } catch (e) {
       setErr(e?.response?.data?.detail || 'No se pudo fusionar.')
-    } finally { setOcupado('') }
-  }
-
-  /* Vale para las dos: la propuesta automática y el par elegido a mano en el
-     desplegable. El cerrojo se pone sobre el ID y no sobre el conductor porque
-     la lista de arriba va por ID; si no, al elegir en un desplegable se
-     bloquearía una fila que no es. */
-  const crearFicha = async (x) => {
-    setOcupado(x.transporter_id); setErr(''); setHecho('')
-    try {
-      const { data } = await crearFichaDeTransporterId(x.transporter_id, {
-        nombre: x.nombre_cortex, telefono: x.telefono_cortex, centro: x.centro })
-      setHecho(`Ficha creada: ${data.nombre}${data.centro ? ` · ${data.centro}` : ''}`
-        + (data.aviso ? ` — ${data.aviso}` : ''))
-      cargar(); onCambio?.()
-    } catch (e) {
-      setErr(e?.response?.data?.detail || 'No se ha podido crear la ficha.')
-    } finally { setOcupado('') }
-  }
-
-  const confirmarId = async (p) => {
-    setOcupado(p.transporter_id || p.driver_id); setErr('')
-    try {
-      await confirmarTransporterId({ driver_id: p.driver_id, transporter_id: p.transporter_id })
-      cargar(); onCambio?.()
-    } catch (e) {
-      setErr(e?.response?.data?.detail || 'No se pudo guardar el ID.')
     } finally { setOcupado('') }
   }
 
@@ -440,7 +358,6 @@ function SaludFichas({ onCambio }) {
                         <span className="text-dark-500">
                           {f.inspecciones} insp · {f.asignaciones} asign · {f.turnos} turnos · {f.peticiones} pet.
                         </span>
-                        {f.transporter_id && <span className="font-mono text-[11px] text-dark-500">{f.transporter_id}</span>}
                         {f.id === conservar && <span className="ml-auto text-[12px] font-semibold text-emerald-400">se conserva</span>}
                       </label>
                     ))}
@@ -453,243 +370,6 @@ function SaludFichas({ onCambio }) {
               )
             })}
           </div>
-        )}
-      </section>
-
-      {/* ── IDS QUE SALEN A RUTA Y NO TIENEN FICHA ──────────────────────
-          Es lo que hace que en el debrief salga "SIN FICHA" y que no se pueda
-          poner nombre a nadie. De cada uno se enseña CON QUÉ reconocerlo: un
-          código como `A20PS9T9WIF7WN` no le dice nada a nadie, pero "hace la
-          XA_C14 casi todos los días" lo identifica en dos segundos.
-
-          Los candidatos son solo los conductores que todavía no tienen ID. Con
-          la lista entera, el primer despiste asigna el ID de uno a otro y a
-          partir de ahí las entregas de una persona se le cuelgan a la otra. */}
-      <section>
-        <h2 className="mb-1 text-[15px] font-bold text-dark-100">
-          Salen a ruta y no tienen ficha
-          {sinFicha?.total > 0 && (
-            <span className="ml-2 rounded-full bg-red-500/20 px-2 py-0.5 text-[11.5px] font-bold text-red-300">
-              {sinFicha.total}
-            </span>
-          )}
-        </h2>
-        {sinFicha && (
-          <p className="mb-3 max-w-[72ch] text-[13px] text-dark-400">
-            {sinFicha.total} IDs han hecho rutas en los últimos {sinFicha.dias} días sin
-            ninguna ficha detrás, frente a {sinFicha.con_ficha} que sí la tienen. Se
-            enseñan sus rutas más repetidas para poder reconocerlos: el código no dice
-            nada, la ruta sí. Ordenados por paquetes — el que más mueve es el que más
-            duele no tener.
-          </p>
-        )}
-        {sinFicha?.total === 0 ? (
-          <div className="card p-6 text-center text-[13.5px] text-dark-400">
-            Ninguno. Todos los que salen a ruta tienen su ficha.
-          </div>
-        ) : (
-          <div className="space-y-1.5">
-            {(sinFicha?.sin_ficha || []).map((x) => (
-              <div key={x.transporter_id} className="card flex flex-wrap items-center gap-2 p-3 text-[13px]">
-                {/* EL NOMBRE LO SABE CORTEX y antes no se enseñaba: solo salía
-                    el código, que no le dice nada a nadie. Si Cortex lo trae,
-                    manda el nombre y el código pasa a segunda línea. */}
-                {x.nombre_cortex ? (
-                  <span className="flex items-center gap-1.5">
-                    <b className="text-[13.5px] text-dark-100">{x.nombre_cortex}</b>
-                    <span className="font-mono text-[11px] text-dark-500">{x.transporter_id}</span>
-                    {/* Cortex da a veces el mismo numero a dos personas (visto el
-                        04-09-2026). Una ficha con el telefono de otro parece
-                        completa y acaba en una llamada a quien no es, asi que se
-                        avisa y el alta de un clic lo deja en blanco. */}
-                    {x.telefono_repetido && (
-                      <span title="Cortex da este telefono a mas de una persona: la ficha se creara sin el"
-                        className="rounded bg-amber-500/15 px-1.5 py-0.5 text-[10px] font-semibold text-amber-300">
-                        teléfono dudoso
-                      </span>
-                    )}
-                  </span>
-                ) : (
-                  <span className="font-mono text-[12.5px] font-semibold text-dark-100">{x.transporter_id}</span>
-                )}
-                <span className="text-dark-400">
-                  {x.ruta_habitual && <b className="text-brand-300">{x.ruta_habitual}</b>}
-                  {x.rutas.length > 1 && <span className="text-dark-500"> · {x.rutas.slice(1).join(', ')}</span>}
-                </span>
-                <span className="tabular-nums text-dark-500">
-                  {x.paquetes.toLocaleString('es-ES')} paquetes · {x.dias} día{x.dias === 1 ? '' : 's'}
-                  {x.ultimo_dia && ` · último ${x.ultimo_dia.slice(8)}/${x.ultimo_dia.slice(5, 7)}`}
-                </span>
-                {/* Crear la ficha de un tirón, con el nombre y el teléfono de
-                    Cortex ya dentro. Solo sale cuando Cortex da el nombre: sin
-                    nombre habría que teclearlo, que es de donde salen las fichas
-                    duplicadas. Y ojo con el orden — primero mirar si ya tiene
-                    ficha y solo enlazarla; por eso el desplegable va al lado. */}
-                {x.nombre_cortex && (
-                  <button
-                    onClick={() => crearFicha(x)}
-                    disabled={ocupado === x.transporter_id}
-                    className="ml-auto flex items-center gap-1.5 rounded-lg bg-emerald-500/15 px-2.5 py-1.5 text-[12.5px] font-semibold text-emerald-300 ring-1 ring-emerald-500/30 hover:bg-emerald-500/25 disabled:opacity-50">
-                    <UserPlus size={13} /> {ocupado === x.transporter_id ? 'Creando…' : 'Crear ficha'}
-                  </button>
-                )}
-                <select
-                  value=""
-                  onChange={(e) => e.target.value && confirmarId({
-                    driver_id: e.target.value, transporter_id: x.transporter_id })}
-                  disabled={ocupado === x.transporter_id}
-                  className={`${x.nombre_cortex ? '' : 'ml-auto '}max-w-[15rem] rounded-lg border border-dark-700 bg-dark-950 px-2 py-1.5 text-[12.5px] text-dark-100 outline-none disabled:opacity-50`}>
-                  <option value="">
-                    {ocupado === x.transporter_id ? 'Guardando…' : '¿Quién es? — elegir'}
-                  </option>
-                  {(sinFicha?.candidatos || []).map((d) => (
-                    <option key={d.id} value={d.id}>
-                      {d.name}{d.center ? ` · ${d.center}` : ''}
-                    </option>
-                  ))}
-                </select>
-              </div>
-            ))}
-          </div>
-        )}
-      </section>
-
-      {/* ── FICHAS QUE NO SALEN EN NINGÚN CENTRO ─────────────────────────
-          El reverso de la lista de arriba: allí hay un ID sin ficha, aquí hay
-          una ficha sin nave. Y no se nota, que es lo peor: la persona SÍ está
-          en el total, así que nadie la echa de menos; simplemente desaparece en
-          cuanto se elige un centro, que es como se trabaja siempre. Medido el
-          05-09-2026: 150 activos y 83+47+16 = 146 por centro.
-          El centro solo se propone cuando Cortex no deja duda —todos sus
-          paquetes en una sola nave—; con dos naves se dice y lo decide una
-          persona, que es la misma regla que `_centro_norm`. */}
-      {!!sinTr?.con_sugerencia && (
-        <section>
-          <h2 className="mb-1 text-[15px] font-bold text-dark-100">
-            Sin emparejar con Cortex
-            <span className="ml-2 rounded-full bg-amber-500/20 px-2 py-0.5 text-[11.5px] font-bold text-amber-300">
-              {sinTr.con_sugerencia}
-            </span>
-          </h2>
-          <p className="mb-3 max-w-[72ch] text-[13px] text-dark-400">
-            Su ficha no tiene el id de transportista, así que para todo lo que viene de
-            Cortex —sus ayudas, sus paquetes, sus números— esa persona no existe y le
-            sale cero sin que falle nada. Estas son las que Cortex reconoce sin ninguna
-            duda: un solo id para ese nombre y una sola ficha con él.
-          </p>
-          <div className="space-y-1.5">
-            {(sinTr.sin_transporter || []).filter((x) => x.sugerencia).map((x) => (
-              <div key={x.id} className="card flex flex-wrap items-center gap-2 p-3 text-[13px]">
-                <b className="text-[13.5px] text-dark-100">{x.name || 'Sin nombre'}</b>
-                {x.center && <span className="text-[12.5px] text-dark-500">{x.center}</span>}
-                <span className="rounded-md bg-brand-500/15 px-2 py-0.5 font-mono text-[12px] font-semibold text-brand-200">
-                  {x.sugerencia}
-                </span>
-                <span className="ml-auto text-[12px] text-dark-500">{x.motivo}</span>
-              </div>
-            ))}
-          </div>
-          <button onClick={ponerTransporters} disabled={ocupado === 'tr'}
-            className="mt-2 rounded-lg bg-brand-500/20 px-3 py-1.5 text-[13px] font-semibold text-brand-200 hover:bg-brand-500/30 disabled:opacity-50">
-            {ocupado === 'tr'
-              ? 'Emparejando…'
-              : `Emparejar ${sinTr.con_sugerencia} ${sinTr.con_sugerencia === 1 ? 'ficha' : 'fichas'} con Cortex`}
-          </button>
-          {sinTr.total > sinTr.con_sugerencia && (
-            <p className="mt-1.5 text-[12px] text-dark-500">
-              Otras {sinTr.total - sinTr.con_sugerencia} se quedan como están: o Cortex no
-              las ha visto, o hay varias fichas con el mismo nombre y elegir mal cuelga las
-              entregas de una persona a otra.
-            </p>
-          )}
-        </section>
-      )}
-
-      {!!sinCentro?.total && (
-        <section>
-          <h2 className="mb-1 text-[15px] font-bold text-dark-100">
-            No salen en ningún centro
-            <span className="ml-2 rounded-full bg-amber-500/20 px-2 py-0.5 text-[11.5px] font-bold text-amber-300">
-              {sinCentro.total}
-            </span>
-          </h2>
-          <p className="mb-3 max-w-[72ch] text-[13px] text-dark-400">
-            Tienen ficha activa y el centro en blanco: cuentan en el total, pero al
-            elegir una nave no aparecen en ninguna pantalla — ni en el cuadrante, ni en
-            la asignación, ni en esta lista. Debajo, lo que dice Cortex de cada uno.
-          </p>
-          <div className="space-y-1.5">
-            {(sinCentro.sin_centro || []).map((x) => (
-              <div key={x.id} className="card flex flex-wrap items-center gap-2 p-3 text-[13px]">
-                <b className="text-[13.5px] text-dark-100">{x.name || 'Sin nombre'}</b>
-                {x.sugerencia ? (
-                  <span className="rounded-md bg-brand-500/15 px-2 py-0.5 text-[12px] font-semibold text-brand-200">
-                    {x.sugerencia}
-                  </span>
-                ) : null}
-                <span className="text-[12.5px] text-dark-500">{x.motivo}</span>
-                {!!x.rutas?.length && (
-                  <span className="font-mono text-[11.5px] text-dark-500">{x.rutas.join(' · ')}</span>
-                )}
-                <span className="ml-auto text-[12px] text-dark-500">
-                  {x.alta ? `alta ${x.alta}` : ''}
-                </span>
-              </div>
-            ))}
-          </div>
-          {sinCentro.con_sugerencia > 0 && (
-            <button onClick={ponerCentros} disabled={ocupado === 'centros'}
-              className="mt-2 rounded-lg bg-brand-500/20 px-3 py-1.5 text-[13px] font-semibold text-brand-200 hover:bg-brand-500/30 disabled:opacity-50">
-              {ocupado === 'centros'
-                ? 'Poniendo…'
-                : `Poner el centro a ${sinCentro.con_sugerencia} ${sinCentro.con_sugerencia === 1 ? 'ficha' : 'fichas'} (lo dice Cortex)`}
-            </button>
-          )}
-        </section>
-      )}
-
-      {/* ── Transporter IDs ────────────────────────────────────────── */}
-      <section>
-        <h2 className="mb-1 text-[15px] font-bold text-dark-100">Emparejado automático</h2>
-        {ids && (
-          <p className="mb-3 max-w-[70ch] text-[13px] text-dark-400">
-            {ids.sin_id} conductores sin ID. Es lo que hace que en el debrief salgan
-            como «sin ficha».{' '}
-            {ids.dias_con_ruta === 0 ? (
-              <b className="text-amber-300">
-                Todavía no hay con qué cruzarlo: la asignación diaria no guardaba la ruta
-                hasta hoy. En cuanto se guarde una asignación con rutas, las propuestas
-                aparecen solas aquí.
-              </b>
-            ) : (
-              <>Se cruzan {ids.dias_con_ruta} días de asignaciones con lo que dice Cortex.
-                Solo se propone cuando el mismo ID sale en {ids.minimo_dias} días distintos
-                y ningún otro compite.</>
-            )}
-          </p>
-        )}
-        {!!ids?.propuestas?.length && (
-          <div className="space-y-1.5">
-            {ids.propuestas.map((p) => (
-              <div key={p.driver_id} className="card flex flex-wrap items-center gap-2 p-3 text-[13px]">
-                <span className="font-semibold text-dark-100">{p.nombre}</span>
-                <span className="font-mono text-[12.5px] text-brand-300">{p.transporter_id}</span>
-                <span className="text-dark-500">coinciden {p.dias} días ({p.prueba.join(', ')})</span>
-                <button onClick={() => confirmarId(p)} disabled={ocupado === p.transporter_id}
-                  className="ml-auto rounded-lg bg-brand-500/20 px-3 py-1 text-[12.5px] font-semibold text-brand-200 hover:bg-brand-500/30 disabled:opacity-50">
-                  {ocupado === p.transporter_id ? 'Guardando…' : 'Es correcto'}
-                </button>
-              </div>
-            ))}
-          </div>
-        )}
-        {!!ids?.ambiguos?.length && (
-          <p className="mt-2 text-[12.5px] text-dark-500">
-            {ids.ambiguos.length} sin proponer porque hay varios IDs compitiendo por la
-            misma persona — normalmente alguien que cambió de ruta a media mañana. Se
-            dejan a mano a propósito: un emparejamiento malo le cuelga a alguien las
-            entregas de otro.
-          </p>
         )}
       </section>
     </div>
@@ -1136,16 +816,6 @@ function TablaConductores({ list, accounts, onAbrir, t }) {
                   <td className="max-w-[150px] truncate px-2 py-1 text-dark-500">{d.alojamiento || '—'}</td>
                   <td className="cifra px-2 py-1 text-dark-400">
                     {d.phone ? verTelefono(d.phone) : '—'}
-                    {d.phone && d.telefono_por === 'cortex' && <span className="ml-1 text-[10px] font-normal text-dark-500" title={t('drv.telDeCortex')}>Cortex</span>}
-                    {/* Cortex da ese numero a mas de una persona. No se borra
-                        —puede que compartan movil de verdad— pero se avisa aqui,
-                        que es donde se mira justo antes de llamar. */}
-                    {d.telefono_dudoso && (
-                      <span className="ml-1 rounded bg-amber-500/15 px-1 py-px text-[10px] font-semibold text-amber-300"
-                        title="Cortex da este telefono a mas de una persona. Comprueba cual es el suyo y escribelo a mano.">
-                        ?
-                      </span>
-                    )}
                   </td>
                   <td className="max-w-[210px] truncate px-2 py-1 text-dark-500">{d.email || '—'}</td>
                   <td className="whitespace-nowrap px-2 py-1">
@@ -1186,24 +856,6 @@ export default function Conductores() {
   // /panel/conductores?importar=1 abre directamente la importación.
   const [paramsImp] = useSearchParams()
   useEffect(() => { if (paramsImp.get('importar')) setVerImportar(true) }, [paramsImp])
-  const [telCortex, setTelCortex] = useState(false)
-  const completarTelefonos = async () => {
-    setTelCortex(true)
-    try {
-      const { data } = await telefonosDesdeCortex()
-      const lineas = [t('drv.telCortexOk').replace('{n}', data.rellenados)]
-      if (data.dudosos?.length) {
-        lineas.push('', `${data.dudosos.length} con un teléfono que Cortex da a más de una persona (no se ha puesto):`)
-        lineas.push(...data.dudosos.slice(0, 12).map((d) => `· ${d.name}: ${d.cortex} — también de ${(d.tambien_de || []).join(', ') || '?'}`))
-      }
-      if (data.distintos?.length) {
-        lineas.push(t('drv.telCortexDistintos').replace('{n}', data.distintos.length))
-        lineas.push(...data.distintos.slice(0, 12).map((d) => `· ${d.name}: ${d.app} / Cortex ${d.cortex}`))
-      }
-      alert(lineas.join(String.fromCharCode(10)))
-      if (data.rellenados) load()
-    } catch (e) { alert(e?.response?.data?.detail || 'No se ha podido') } finally { setTelCortex(false) }
-  }
   const [tab, setTab] = useState('directorio') // directorio | ranking | scoring
   const [searchParams, setSearchParams] = useSearchParams()
 
@@ -1229,13 +881,13 @@ export default function Conductores() {
   }
   useEffect(() => { setDrivers(null); setModal(null); load() }, [center]) // eslint-disable-line
 
-  // Se busca también por Transporter ID y teléfono (es lo que se copia de
-  // Cortex) y sin tildes: «nunez» encuentra a «NÚÑEZ».
+  // Se busca también por nº de empleado y teléfono, y sin tildes: «nunez»
+  // encuentra a «NÚÑEZ».
   const list = useMemo(() => {
     const plano = (v) => String(v || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase()
     const b = plano(q).trim()
     return (drivers || [])
-      .filter(d => !b || [d.name, d.email, d.center, d.driver_id, d.transporter_id, d.phone]
+      .filter(d => !b || [d.name, d.email, d.center, d.driver_id, d.phone, d.movil_personal]
         .some(v => plano(v).includes(b)))
       .sort((a, b) => (a.name || '').localeCompare(b.name || '', 'es', { sensitivity: 'base' }))
   }, [drivers, q])
@@ -1253,7 +905,7 @@ export default function Conductores() {
         if (e?.response?.status !== 409 || !d?.reactivar_id) throw e
         if (window.confirm(`${d.mensaje}
 
-Aceptar: reactivar su ficha (conserva inspecciones, Transporter ID y turnos).
+Aceptar: reactivar su ficha (conserva inspecciones, turnos e historial).
 Cancelar: es otra persona, crear una ficha nueva.`)) {
           const { password: _pw, ...resto } = data
           await updateDriver(d.reactivar_id, { ...resto, active: true })
@@ -1272,9 +924,9 @@ Cancelar: es otra persona, crear una ficha nueva.`)) {
   const TABS = [
     { id: 'directorio', label: t('drv.title') },
     { id: 'ranking',    label: `🏆 ${t('sc.ranking')}` },
-    // Pestaña y no entrada de menú: son dos tareas de mantenimiento de las
-    // fichas que se hacen de vez en cuando, y el menú ya tiene treinta.
-    { id: 'fichas',     label: 'Fichas duplicadas e IDs' },
+    // Pestaña y no entrada de menú: es mantenimiento que se hace de vez en
+    // cuando, no una tarea del día.
+    { id: 'fichas',     label: 'Fichas duplicadas' },
   ]
 
   return (
@@ -1304,13 +956,9 @@ Cancelar: es otra persona, crear una ficha nueva.`)) {
                 <FileSpreadsheet size={15} /> {t('drv.importar')}
               </button>
               <button onClick={() => setVerMoviles((v) => !v)}
-                title="Pon los móviles personales desde la agenda de tu teléfono. Solo se usan para las pre-DNR por WhatsApp."
+                title="Pon los móviles personales desde la agenda de tu teléfono: los WhatsApp personales van a ese número."
                 className="flex items-center gap-1.5 rounded-xl border border-dark-700 px-3.5 py-2.5 text-[13.5px] font-semibold text-dark-300 hover:border-dark-600 hover:text-dark-100">
                 <Smartphone size={15} /> Móviles personales
-              </button>
-              <button onClick={completarTelefonos} disabled={telCortex} title={t('drv.telCortexTip')}
-                className="flex items-center gap-1.5 rounded-xl border border-dark-700 px-3.5 py-2.5 text-[13.5px] font-semibold text-dark-300 hover:border-dark-600 hover:text-dark-100 disabled:opacity-50">
-                <Phone size={15} /> {t('drv.telCortex')}
               </button>
               <button
                 onClick={() => setModal({ driver: null })}
@@ -1359,7 +1007,7 @@ Cancelar: es otra persona, crear una ficha nueva.`)) {
           : list.length === 0 && q && drivers.length > 0
             ? <div className="rounded-2xl border border-dashed border-dark-700 py-12 text-center">
                 <p className="font-medium text-dark-300">Nadie coincide con «{q}»</p>
-                <p className="mt-1 text-sm text-dark-500">Se busca por nombre, correo, nave, Transporter ID y teléfono.</p>
+                <p className="mt-1 text-sm text-dark-500">Se busca por nombre, correo, sede, nº de empleado y teléfono.</p>
                 <button onClick={() => setQ('')} className="btn-ghost mt-4 px-3 py-1.5 text-sm">Borrar búsqueda</button>
               </div>
           : list.length === 0
@@ -1367,7 +1015,7 @@ Cancelar: es otra persona, crear una ficha nueva.`)) {
                 <UserCheck size={44} className="mb-4 text-dark-500" />
                 <p className="text-base font-semibold text-dark-100">{t('drv.empty')}{center !== 'Todos' ? ` en ${center}` : ''}</p>
                 <p className="mt-1.5 max-w-md text-sm leading-relaxed text-dark-400">
-                  Trae tu lista de Excel o la de Amazon: se reconoce cada columna, eliges la nave y
+                  Trae tu lista de Excel: se reconoce cada columna, eliges la sede y
                   cada conductor recibe su acceso al portal para hacer las auditorías desde el móvil.
                 </p>
                 <div className="mt-5 flex flex-wrap items-center justify-center gap-2">
@@ -1568,11 +1216,10 @@ function DriverModal({ driver, centers, hasAccount, onSave, onDelete, onClose, o
               <div className="grid grid-cols-2 gap-x-8 gap-y-5">
                 <Detail icon={IdCard}    label="DNI / NIE"        value={driver.dni} />
                 <Detail icon={Phone}     label="Teléfono"         value={driver.phone} />
-                <Detail icon={Phone}     label="Móvil personal (pre-DNR)" value={driver.movil_personal} />
+                <Detail icon={Phone}     label="Móvil personal"   value={driver.movil_personal} />
                 <Detail icon={Mail}      label="Email"            value={driver.email} span={2} />
                 <Detail icon={Car}       label="Nº carnet"        value={driver.license_number} />
-                <Detail icon={FileText}  label="ID Amazon"        value={driver.driver_id} mono />
-                <Detail icon={FileText}  label="Transporter ID"   value={driver.transporter_id} mono />
+                <Detail icon={FileText}  label="Nº de empleado"   value={driver.driver_id} mono />
                 <Detail icon={MapPin}    label="Centro"           value={driver.center} />
                 <Detail icon={Building2} label="Alojamiento"      value={driver.alojamiento} />
                 {driver.notas && (
@@ -1722,15 +1369,14 @@ function DriverModal({ driver, centers, hasAccount, onSave, onDelete, onClose, o
                   <input className="input w-full" value={form.phone || ''} onChange={e => set('phone', e.target.value)} placeholder="+34 600 000 000" />
                 </div>
 
-                {/* SOLO para las pre-DNR. El teléfono de arriba puede ser el de la
-                    ruta, y el que da Cortex cambia cada día: un enlace con los
-                    datos de un paquete no puede salir a un número que quizá es de
-                    otra persona. Sin este, no se le avisa por WhatsApp. */}
+                {/* El teléfono de arriba puede ser el de empresa, que cambia de
+                    mano. Este es el suyo: si escribe por WhatsApp desde aquí, se
+                    le reconoce igual. */}
                 <div>
-                  <Label>Móvil personal <span className="font-normal text-dark-500">(solo pre-DNR)</span></Label>
+                  <Label>Móvil personal</Label>
                   <input className="input w-full" value={form.movil_personal || ''} onChange={e => set('movil_personal', e.target.value)} placeholder="+34 600 000 000" />
                   <p className="mt-1 text-[11px] leading-snug text-dark-500">
-                    Aquí le llega el WhatsApp con la pre-DNR. Si lo dejas vacío no se le avisa.
+                    Si es distinto del de empresa. Sirve para reconocerle cuando escribe por WhatsApp.
                   </p>
                 </div>
 
@@ -1745,23 +1391,10 @@ function DriverModal({ driver, centers, hasAccount, onSave, onDelete, onClose, o
                 </div>
 
                 <div>
-                  <Label>ID Amazon</Label>
-                  <input className="input w-full font-mono" value={form.driver_id || ''} onChange={e => set('driver_id', e.target.value)} placeholder="AMZN-XXXX" />
+                  <Label>Nº de empleado</Label>
+                  <input className="input w-full font-mono" value={form.driver_id || ''} onChange={e => set('driver_id', e.target.value)} placeholder="Opcional" />
                 </div>
 
-                {/* El código con el que vienen firmados los DNR en los reportes
-                    de Cortex. Es OTRO distinto del ID de Amazon de arriba, y
-                    hasta ahora solo se podía tocar desde la pantalla de DNR:
-                    aquí es donde la gente lo va a buscar. */}
-                <div>
-                  <Label>Transporter ID (Cortex)</Label>
-                  <input className="input w-full font-mono uppercase" value={form.transporter_id || ''}
-                    onChange={e => set('transporter_id', e.target.value.toUpperCase())}
-                    placeholder="A2H4XH0AEQTVZY" />
-                  <p className="mt-1 text-[11px] text-dark-500">
-                    Con esto se le asignan sus DNR. Si se lo pones a otra persona, se le quita a esta.
-                  </p>
-                </div>
 
                 <div className="col-span-2">
                   <Label>Notas internas</Label>

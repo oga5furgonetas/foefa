@@ -49,7 +49,7 @@ function servir(cuerpo, ct = 'application/json') {
   }
 }
 
-const { vigilarVersion, recargarCuandoNadieMira } = await import(pathToFileURL(path.join(RAIZ, 'frontend-v2', 'src', 'lib', 'versionApp.js')).href)
+const { vigilarVersion, recargarCuandoNadieMira } = await import(pathToFileURL(path.join(RAIZ, 'frontend', 'src', 'lib', 'versionApp.js')).href)
 
 async function una(cuerpo, ct) {
   servir(cuerpo, ct); urls = []

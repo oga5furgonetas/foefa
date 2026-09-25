@@ -1,6 +1,6 @@
 import React, { Suspense, lazy, useEffect } from 'react'
 import ReactDOM from 'react-dom/client'
-import { BrowserRouter, Navigate, Route, Routes, useLocation } from 'react-router-dom'
+import { BrowserRouter, Route, Routes, useLocation } from 'react-router-dom'
 /* Tipografía self-hosted (la CSP bloquea Google Fonts). Vite las sirve desde
    el propio dominio.
 
@@ -243,54 +243,32 @@ const PanelRenting = lazy(() => import('./panel/pages/Renting'))
 const PanelTalleres = lazy(() => import('./panel/pages/Talleres'))
 const PanelAparcamiento = lazy(() => import('./panel/pages/Aparcamiento'))
 const PanelCasasAlquiler = lazy(() => import('./panel/pages/CasasAlquiler'))
-const PanelScorecard = lazy(() => import('./panel/pages/Scorecard'))
-const PanelInformes = lazy(() => import('./panel/pages/Informes'))
 const PanelIncorporaciones = lazy(() => import('./panel/pages/Incorporaciones'))
 const PanelOrdenes = lazy(() => import('./panel/pages/OrdenesTrabajo'))
-const PanelDebrief = lazy(() => import('./panel/pages/Debrief'))
 const PortalTaller = lazy(() => import('./pages/PortalTaller'))
 const PortalTallerLista = lazy(() => import('./pages/PortalTallerLista'))
-const PortalApoyo = lazy(() => import('./pages/PortalApoyo'))
-const PortalDnr = lazy(() => import('./pages/PortalDnr'))
 const PanelConfiguracion = lazy(() => import('./panel/pages/Configuracion'))
 const PanelTienda = lazy(() => import('./panel/pages/Tienda'))
 const PanelTurnos = lazy(() => import('./panel/pages/Turnos'))
 const PanelUsuarios = lazy(() => import('./panel/pages/Usuarios'))
 const PanelIAPeritaje = lazy(() => import('./panel/pages/IAPeritaje'))
 const PanelOrigenDanos = lazy(() => import('./panel/pages/OrigenDanos'))
-const PanelMetricas = lazy(() => import('./panel/pages/Metricas'))
 const PanelImportaciones = lazy(() => import('./panel/pages/Importaciones'))
 const PanelActividad = lazy(() => import('./panel/pages/Actividad'))
 const PanelPortalConductor = lazy(() => import('./panel/pages/PortalConductor'))
 const PanelAsignacion = lazy(() => import('./panel/pages/Asignacion'))
 const PanelChecklistOp = lazy(() => import('./panel/pages/ChecklistOperativo'))
 const PanelChat = lazy(() => import('./panel/pages/Chat'))
-const PanelPlantilla = lazy(() => import('./panel/pages/PlantillaGenerador'))
 const PanelBandeja = lazy(() => import('./panel/pages/Bandeja'))
 const PanelIncidencias = lazy(() => import('./panel/pages/Incidencias'))
 const PanelContactos = lazy(() => import('./panel/pages/Contactos'))
 const PanelConversaciones = lazy(() => import('./panel/pages/Conversaciones'))
-const PanelPaquetes = lazy(() => import('./panel/pages/PackageIntel'))
-const PanelApoyo = lazy(() => import('./panel/pages/ApoyoRuta'))
 const PanelEmpleo = lazy(() => import('./panel/pages/Empleo'))
 const EmpleoPublica = lazy(() => import('./pages/Empleo'))
 const Ofertas = lazy(() => import('./pages/Ofertas'))
 const EmpleoPrioridad = lazy(() => import('./pages/EmpleoPrioridad'))
 const TiendaPublica = lazy(() => import('./pages/TiendaPublica'))
-const PanelDSC = lazy(() => import('./panel/pages/DSC'))
-const PanelRendimiento = lazy(() => import('./panel/pages/Rendimiento'))
 const PanelCorreo = lazy(() => import('./panel/pages/Correo'))
-/* FlotaDSP 2.0 — la aplicación entera reorganizada, sólo en el laboratorio.
-   Sustituye a los doce prototipos sueltos que había aquí: eran experimentos,
-   no un producto. Vive en /lab y no toca ni una pantalla de las de siempre.
-
-   OJO con los nombres de fichero: la lógica va en `fases.js` y el componente en
-   `App2.jsx`. En Windows el sistema de ficheros no distingue mayúsculas, así
-   que un `app2.js` junto a `App2.jsx` haría que el import resolviera al de
-   lógica —sin export default— y React revienta con "Cannot convert object to
-   primitive value". Ya ha pasado dos veces en este laboratorio. */
-const LabMarco = lazy(() => import('./panel/lab/exp/Marco'))
-const LabSuelto = lazy(() => import('./panel/lab/exp/Marco').then((m) => ({ default: m.MarcoSuelto })))
 const Privacidad = lazy(() => import('./legal/Privacidad'))
 const Terminos = lazy(() => import('./legal/Terminos'))
 const CookiesPage = lazy(() => import('./legal/Cookies'))
@@ -354,10 +332,6 @@ ReactDOM.createRoot(document.getElementById('root')).render(
               <Route path="/verify/:hash" element={<Verify />} />
               <Route path="/app" element={<AppRedirect />} />
               <Route path="/taller/t/:token" element={<PortalTallerLista />} />
-              <Route path="/apoyo/t/:token" element={<PortalApoyo />} />
-              {/* La pagina del conductor: «donde dejaste este paquete». Sin
-                  sesion, se abre desde un WhatsApp. */}
-              <Route path="/dnr/t/:token" element={<PortalDnr />} />
               <Route path="/empleo" element={<Ofertas />} />
               <Route path="/empleo/:slug/:oferta" element={<EmpleoPublica />} />
               <Route path="/empleo/prioridad" element={<EmpleoPrioridad />} />
@@ -373,19 +347,13 @@ ReactDOM.createRoot(document.getElementById('root')).render(
                 {/* Operacional */}
                 <Route index element={<PanelDashboard />} />
                 <Route path="mi-dia" element={<PanelMiDia />} />
-                <Route path="scorecard" element={<PanelScorecard />} />
-                <Route path="informes" element={<PanelInformes />} />
             <Route path="incorporaciones" element={<PanelIncorporaciones />} />
-                <Route path="diarios" element={<Navigate to="/panel/informes?t=dnr" replace />} />
                 <Route path="ordenes" element={<PanelOrdenes />} />
-                <Route path="debrief" element={<PanelDebrief />} />
                 <Route path="conductores" element={<PanelConductores />} />
                 <Route path="turnos" element={<PanelTurnos />} />
                 <Route path="asignacion" element={<PanelAsignacion />} />
                 <Route path="checklist-operativo" element={<PanelChecklistOp />} />
                 <Route path="chat" element={<PanelChat />} />
-                <Route path="plantilla" element={<PanelPlantilla />} />
-                <Route path="metricas" element={<PanelMetricas />} />
                 <Route path="actividad" element={<PanelActividad />} />
                 {/* Furgonetas */}
                 <Route path="revision" element={<PanelRevision />} />
@@ -412,26 +380,9 @@ ReactDOM.createRoot(document.getElementById('root')).render(
                 <Route path="incidencias" element={<PanelIncidencias />} />
                 <Route path="contactos" element={<PanelContactos />} />
                 <Route path="conversaciones" element={<PanelConversaciones />} />
-                <Route path="paquetes" element={<PanelPaquetes />} />
-                <Route path="apoyo" element={<PanelApoyo />} />
                 <Route path="empleo" element={<PanelEmpleo />} />
-                <Route path="whc" element={<Navigate to="/panel/informes?t=whc" replace />} />
-                <Route path="dsc" element={<PanelDSC />} />
-                <Route path="rendimiento" element={<PanelRendimiento />} />
                 <Route path="correo" element={<PanelCorreo />} />
-                {/* Experimentos DENTRO del panel: heredan barra lateral,
-                    selector de centro, tema y sesión. Sin entrada en el menú. */}
-                <Route path="lab" element={<LabMarco />} />
               </Route>
-
-              {/* ── FLOTADSP 2.0 ───────────────────────────────────────────
-                  La aplicación entera, reorganizada por las horas del día en
-                  vez de por módulos. Va FUERA de /panel a propósito:
-                  1) no pasa por el guardián de sesión, así que se abre sin
-                     backend y sin credenciales;
-                  2) queda garantizado por construcción que no puede tocar
-                     datos reales ni por accidente — se alimenta de fixtures. */}
-              <Route path="/lab" element={<LabSuelto />} />
 
               <Route path="*" element={<NotFound />} />
             </Routes>

@@ -26,8 +26,6 @@ export const deleteChatMessage = (center, messageId) => api.delete(`/chat/${cent
 export const getAiHistorial = (center) => api.get('/ai/asistente/historial', { params: { center } })
 export const enviarMensajeIA = (mensaje, center) => api.post('/ai/asistente', { mensaje, center })
 export const ejecutarAccionIA = (tipo, campos, center) => api.post('/ai/asistente/ejecutar', { tipo, campos, center })
-export const getIaTareas = (center) => api.get('/ai/asistente/tareas', { params: { center } })
-export const marcarIaTareasVistas = (center) => api.post('/ai/asistente/tareas/vistas', { center })
 export const subirFichasTecnicasIA = (files, center) => {
   const fd = new FormData()
   fd.append('center', center)
@@ -54,6 +52,7 @@ export const chatToChecklist = (center, messageId, body = {}) =>
 /* ── Dashboard ── */
 export const getDashboardStats = (center) => api.get('/stats/dashboard', { params: centerParam(center) })
 export const getDamageCosts = (center) => api.get('/stats/damage-costs', { params: centerParam(center) })
+export const getStatsHoy = (center) => api.get('/stats/hoy', { params: centerParam(center) })
 export const getAttention = () => api.get('/stats/attention')
 
 /* ── Vehículos / Flota ── */
@@ -95,13 +94,7 @@ export const getDriversScoring = (month, year) => api.get('/scoring/drivers', { 
 export const getScoringLeaderboard = (month, year) => api.get('/scoring/leaderboard', { params: { ...(month ? { month } : {}), ...(year ? { year } : {}) } })
 export const createDriver = (data, params) => api.post('/drivers', data, { params })
 export const updateDriver = (id, data) => api.patch(`/drivers/${id}`, data)
-export const telefonosDesdeCortex = () => api.post('/drivers/telefonos-desde-cortex')
 // Apoyo en ruta: quien le quita paradas a quien, con mapa por WhatsApp
-export const getApoyoSituacion = (params) => api.get('/apoyo/situacion', { params })
-export const getApoyoParadas = (params) => api.get('/apoyo/paradas', { params })
-export const getApoyos = (params) => api.get('/apoyo', { params })
-export const crearApoyo = (body) => api.post('/apoyo', body)
-export const cambiarApoyo = (id, body) => api.patch(`/apoyo/${id}`, body)
 /* Empleo: ofertas, cuestionario y candidatos. La oferta va SIEMPRE atada a un
    centro y el candidato hereda el suyo, para que no se mezclen las naves. */
 export const getOfertas = (params) => api.get('/empleo/ofertas', { params })
@@ -144,8 +137,6 @@ export const getIncorporaciones = (center) => api.get('/incorporaciones/personas
 // Las cuentas de Amazon y QUE le falta a cada una, de la pantalla de Asociados.
 // Por defecto solo las cuentas de la gente que esta entrando (la del listado
 // de la ETT). `todas` las trae todas, para buscar a alguien que no este.
-export const getAsociados = (center, todas) =>
-  api.get('/asociados', { params: { ...centerParam(center), ...(todas ? { todas: true } : {}) } })
 export const altaIncorporacion = (body) => api.post('/incorporaciones/personas', body)
 export const importarIncorporaciones = (body) => api.post('/incorporaciones/personas/importar', body)
 export const editarIncorporacion = (id, body) => api.patch(`/incorporaciones/personas/${id}`, body)
@@ -167,34 +158,18 @@ export const uploadDriverPhoto = (id, file) => { const fd = new FormData(); fd.a
 
 /* ── Cuentas de conductor (acceso con contraseña) ── */
 /* Salud de las fichas: duplicadas por correo y Transporter IDs que faltan. */
-export const getRendimientoConductores = (params) =>
-  api.get('/conductores/rendimiento', { params })
 export const getDriversDuplicados = () => api.get('/drivers/duplicados')
 export const fusionarConductores = (body) => api.post('/drivers/fusionar', body)
 export const repasarFusiones = () => api.post('/drivers/fusiones/repasar')
-export const getPropuestasTransporterId = () => api.get('/transporter-ids/propuestas')
 /* Los IDs que salen a ruta y no tienen ficha, con sus rutas para reconocerlos. */
 /* Alta de un tiron del que conduce un id, con el nombre que da Cortex: sin
    teclear el nombre no hay fichas duplicadas por un espacio de mas. */
-export const crearFichaDeTransporterId = (tid, body) =>
-  api.post(`/transporter-ids/${encodeURIComponent(tid)}/crear-ficha`, body || {})
-export const getTransporterIdsSinFicha = (dias) =>
-  api.get('/transporter-ids/sin-ficha', { params: dias ? { dias } : {} })
-export const confirmarTransporterId = (body) => api.post('/transporter-ids/confirmar', body)
 /* Fichas activas sin centro: salen en el total y en ningun centro, o sea que
    con un centro elegido —como se trabaja siempre— no las ve nadie. */
 /* Solo el numero de candidaturas sin mirar, para el aviso del menu: la lista
    devuelve hasta 500 candidatos con DNI y telefono y esto se pide cada 2 min. */
 export const contarCandidatosNuevos = (center) =>
   api.get('/empleo/candidatos/nuevos', { params: centerParam(center) })
-export const getDriversSinCentro = (dias) =>
-  api.get('/drivers/sin-centro', { params: dias ? { dias } : {} })
-export const aplicarCentroConductores = (body) =>
-  api.post('/drivers/sin-centro/aplicar', body || {})
-export const getDriversSinTransporter = (dias) =>
-  api.get('/drivers/sin-transporter', { params: dias ? { dias } : {} })
-export const aplicarTransporterConductores = (body) =>
-  api.post('/drivers/sin-transporter/aplicar', body || {})
 export const getDriverAccounts = () => api.get('/auth/driver-accounts')
 export const setDriverPassword = (driverId, password) => api.post('/auth/set-driver-password', { driver_id: driverId, password })
 /* Da acceso al portal a todos los que aun no lo tienen. Devuelve las claves
@@ -282,29 +257,8 @@ export const resolveIncident = (id) => api.put(`/incidents/${id}/resolve`)
 export const reopenIncident = (id) => api.put(`/incidents/${id}/reopen`)
 
 /* ── Scorecard (baremos y subida POR CENTRO) ── */
-export const getScorecardTargets = (center) => api.get('/scorecard/targets', { params: { center } })
-export const setScorecardTargets = (body) => api.post('/scorecard/targets', body)
-export const getScorecardStandings = (center) => api.get('/scorecard/standings', { params: { center } })
-export const getScorecardSources = (center, week) => api.get('/scorecard/sources', { params: { center, ...(week ? { week } : {}) } })
-export const getScorecardFull = (center, week) => api.get('/scorecard/full', { params: { center, ...(week ? { week } : {}) } })
-export const setScorecardValue = (body) => api.post('/scorecard/full', body)   // {center, week, key, value}
-export const getScorecardPredict = (center, week) => api.get('/scorecard/predict', { params: { center, ...(week ? { week } : {}) } })
-export const getScorecardDailyTrend = (center, week) => api.get('/scorecard/daily-trend', { params: { center, ...(week ? { week } : {}) } })
-export const setScorecardThreshold = (body) => api.post('/scorecard/thresholds', body) // {center?, key, fantastic, great, fair}
-export const calibrateScorecardThresholds = (center) => api.post('/scorecard/calibrate-thresholds', { center })
-export const resetScorecardThresholds = (center) => api.delete('/scorecard/thresholds', { params: { center } })
 // De dónde salen los umbrales de esta nave: si el DSP no ha subido ninguna
 // scorecard suya, los tiers son orientativos y hay que decírselo.
-export const getScorecardUmbrales = (center, week) => api.get('/scorecard/umbrales', { params: { center, ...(week ? { week } : {}) } })
-export const toggleScorecardEstimacion = (body) => api.post('/scorecard/estimacion', body) // {center, week, on}
-export const resetScorecardWeek = (body) => api.post('/scorecard/reset', body) // {center, week?}
-export const deleteScorecardSource = (center, kind, ref, week) => api.delete('/scorecard/source', { params: { center, kind, ref, ...(week ? { week } : {}) } })
-export const uploadScorecard = (file, center) => {
-  const fd = new FormData()
-  fd.append('file', file, file.name)
-  if (center && center !== 'Todos') fd.append('center', center)
-  return api.post('/scorecard/upload', fd, { timeout: 120000, headers: { 'Content-Type': undefined } })
-}
 
 /* ── Org / Config ── */
 export const getOrgCenters = () => api.get('/org/centers')
@@ -318,7 +272,6 @@ export const getWhatsappPendientes = () => api.get('/whatsapp/pendientes')
 export const marcarWhatsappHecho = (ids) => api.post('/whatsapp/pendientes/hecho', { ids })
 export const setWhatsappConfig = (body) => api.post('/whatsapp/config', body)
 export const probarWhatsapp = (body) => api.post('/whatsapp/prueba', body)
-export const probarPreDnr = (body) => api.post('/dnr/investigaciones/probar', body)
 // Conversaciones: lo que escriben y lo que se les manda. `no-leidas` alimenta el menu.
 export const getConversaciones = (q) =>
   api.get('/whatsapp/conversaciones', { params: q ? { q } : {} })
@@ -349,21 +302,6 @@ export const rebuildFleetDamages = () => api.post('/inspections/rebuild-fleet-da
 export const rebuildStatus = () => api.get('/inspections/rebuild-status')
 export const reanalyzeInspection = (id) => api.post(`/inspections/${id}/reanalyze?silent=true`, {}, { timeout: 120000 })
 export const submitAiFeedback = (body) => api.post('/ai-feedback', body)
-export const getMetricsReports = (center) => api.get('/metrics/reports', { params: centerParam(center) })
-/* Informes de Amazon: subida (plan de rutas de la mañana, report, daily de
-   Cortex) y el acumulado semanal que sale de ellos. */
-const _subir = (ruta, file, extra = {}) => {
-  const fd = new FormData()
-  fd.append('file', file)
-  for (const [k, v] of Object.entries(extra)) fd.append(k, v)
-  return api.post(ruta, fd, { timeout: 180000, headers: { 'Content-Type': undefined } })
-}
-export const uploadRoutePlan = (file, center) => _subir('/metrics/upload-routeplan', file, { center })
-export const uploadAmazonReport = (file, center) => _subir('/metrics/upload-report', file, { center })
-export const uploadDailyReport = (file) => _subir('/metrics/upload-daily', file)
-export const getDailyWeek = (center, desde, hasta) => api.get('/metrics/daily-week', { params: { center, desde, hasta } })
-export const getRoutePlanAvailable = (center) => api.get('/metrics/routeplan-available', { params: { center } })
-export const getDriverRouteHistory = (tid) => api.get(`/metrics/driver-history/${encodeURIComponent(tid)}`)
 export const importVehicles = (file, center, crear, eleccion) => {
   const fd = new FormData()
   fd.append('file', file, file.name)
@@ -427,13 +365,6 @@ export function importShifts(file, center, mes, confirmar) {
 /* ── Reportes diarios de Cortex (DNR, RTS, POD, CC) ── */
 /* Sube los .html tal cual se descargan de Cortex. Multipart porque son
    ficheros de verdad; con `confirmar` en falso solo se enseña lo que entraría. */
-export const subirDiarios = (files, center, confirmar) => {
-  const fd = new FormData()
-  for (const f of files) fd.append('files', f)
-  if (center && center !== 'Todos') fd.append('center', center)
-  if (confirmar) fd.append('confirmar', '1')
-  return api.post('/diarios/subir', fd, { timeout: 180000 })
-}
 /* ── Órdenes de trabajo ── */
 // Alta rapida desde el formulario de la orden: el taller nuevo aparece
 // cuando hace falta, que es justo cuando descubres que no estaba.
@@ -466,19 +397,11 @@ export const dispararSeguimientoTalleres = () => api.post('/work-orders/seguimie
    lo que ya ha pasado. */
 /* Revisa el ultimo dia cerrado y avisa si se sale de lo normal. Sale solo con
    el resumen del dia; esto es para no esperar. */
-export const revisarDiaScorecard = () => api.post('/scorecard/revisar-dia')
 /* Las direcciones que fallan una y otra vez. El fallo se ve paquete a paquete
    y asi no se repite nunca: lo que se repite es la direccion. */
-export const getDireccionesProblema = (dias, center) =>
-  api.get('/cortex/direcciones-problema', { params: { ...(dias ? { dias } : {}), ...centerParam(center) } })
-export const guardarNotaDireccion = (body) => api.post('/cortex/direcciones-problema/nota', body)
 /* Guarda el recuento por direccion ANTES de que el TTL de Cortex borre los
    paquetes: sin esto el analisis empieza de cero cada dos meses. Corre solo
    cada tarde; esto es para no esperar. */
-export const consolidarDirecciones = () => api.post('/cortex/direcciones-problema/consolidar')
-export const getScorecardHoy = (center) => api.get('/scorecard/hoy', { params: { center } })
-export const getScorecardEnVivo = (center, semanas) =>
-  api.get('/scorecard/en-vivo', { params: { ...centerParam(center), ...(semanas ? { semanas } : {}) } })
 /* Matriculas dadas de alta dos veces. El dano no es el duplicado: es que el
    historial se parte entre las dos fichas y ninguna es cierta. */
 /* Todo lo que le ha pasado a una furgoneta en una sola linea de tiempo: cada
@@ -517,15 +440,6 @@ export const editarOrden = (id, body) => api.patch(`/work-orders/${id}`, body)
 export const enlaceOrden = (id, dias) =>
   api.post(`/work-orders/${id}/enlace`, null, { params: dias ? { dias } : {} })
 
-export const pegarDiario = (body) => api.post('/diarios/pegar', body)
-export const diariosPorConductor = (center, desde, hasta) =>
-  api.get('/diarios/conductores', { params: { center, desde, hasta } })
-export const asignarIdConductor = (body) => api.post('/diarios/id-conductor', body)
-export const verificarTransporterIds = (center, todo = false) =>
-  api.get('/transporter-ids/verificar', { params: { center, todo: todo ? 'true' : undefined } })
-export const confirmarParTransporter = (body) => api.post('/transporter-ids/confirmar-par', body)
-export const vincularTransporterIds = (body) => api.post('/diarios/ids', body)
-
 export const exportarCuadrante = (center, desde, hasta) =>
   api.get('/shifts/export', { params: { center, desde, hasta }, responseType: 'blob' })
 
@@ -533,9 +447,6 @@ export const getCodigosCuadrante = () => api.get('/shifts/codigos')
 export const setCodigosCuadrante = (codigos) => api.put('/shifts/codigos', { codigos })
 
 /* ── Historial de plantillas ── */
-export const getPlantillas = (center) => api.get('/plantillas', { params: centerParam(center) })
-export const downloadPlantilla = (id) => api.get(`/plantillas/${id}/download`, { responseType: 'blob' })
-export const deletePlantilla = (id) => api.delete(`/plantillas/${id}`)
 
 /* ── Asignación diaria (qué conductor lleva qué furgo) ── */
 export const getDailyAssignment = (center, date) => api.get('/assignments/daily', { params: { center, date } })
@@ -623,8 +534,6 @@ export const setMyEmail = (email) => api.post('/auth/my-email', { email })
 export const forgotPassword = (email) => api.post('/auth/forgot-password', { email })
 
 /* ── Package Intelligence Center (Cortex) ── */
-export const cortexOverview = (day, center) => api.get('/cortex/overview', { params: { day, center } })
-export const cortexPackages = (params) => api.get('/cortex/packages', { params })
 
 // Tienda de ropa y material (preparacion del negocio, vive en Perfil).
 export const tiendaPreparacion = () => api.get('/tienda/preparacion')
@@ -661,94 +570,53 @@ export const tiendaBorrarFoto = (id) => api.delete(`/tienda/prendas/${id}/foto`)
 // lo lleva y se pinta como blob.
 export const tiendaFotoBlob = (id) =>
   api.get(`/tienda/prendas/${id}/foto`, { responseType: 'blob' })
-export const cortexRoutes = (day, center) => api.get('/cortex/routes', { params: { day, center } })
-export const cortexPackage = (tba) => api.get(`/cortex/package/${tba}`)
-export const cortexAlerts = (day, center) => api.get('/cortex/alerts', { params: { day, center } })
-export const cortexHeatmap = (day, center) => api.get('/cortex/heatmap', { params: { day, center } })
-export const cortexDays = (center) => api.get('/cortex/days', { params: { center } })
 // Que hay en una coordenada. Para los paquetes en los que Cortex manda el punto
 // pero no el texto de la direccion: sin esto la pantalla se rendia teniendo un
 // dato en la mano.
-export const getGeoInverso = (lat, lng) => api.get('/cortex/geo/inverso', { params: { lat, lng } })
-export const cortexStations = () => api.get('/cortex/stations')
-export const cortexAssignStation = (service_area_id, center) => api.post('/cortex/stations', { service_area_id, center })
 // Reparto automático por geografía. Sin `aplicar` solo propone: se puede mirar
 // antes de que toque nada.
-export const cortexStationsAuto = (aplicar = false) => api.post(`/cortex/stations/auto?aplicar=${aplicar ? 'true' : 'false'}`)
 /* La llave es UNA POR CENTRO y la misma para todo el equipo: quien la pida
    para OGA5 recibe siempre la misma cadena (backend, gotcha 66). */
-export const cortexIngestToken = (nombre, centro) =>
-  api.get('/cortex/ingest-token', { params: { nombre, ...(centro && centro !== 'Todos' ? { centro } : {}) } })
 /* Las llaves de la extension: que equipos escriben y como apagar el que sobre.
    Antes la llave era un JWT de un año sin rastro y no se podia revocar. */
-export const cortexLlaves = () => api.get('/cortex/llaves')
 /* Rellena el catalogo de direcciones con lo que ya esta guardado en los
    paquetes: no hay que esperar a que vuelvan a pasar. */
-export const cortexReconstruirDirecciones = () => api.post('/cortex/direcciones/reconstruir')
-export const cortexRevocarLlave = (jti) => api.post(`/cortex/llaves/${jti}/revocar`)
-export const cortexReactivarLlave = (jti) => api.post(`/cortex/llaves/${jti}/reactivar`)
 /* Las de antes de las llaves por nave, de una vez. */
-export const cortexRevocarLlavesAntiguas = () => api.post('/cortex/llaves/antiguas/revocar')
-export const cortexSeedDemo = () => api.post('/cortex/seed-demo')
-export const cortexClearDemo = () => api.post('/cortex/clear-demo')
-export const cortexReset = (body) => api.post('/cortex/reset', body) // {confirmar: 'BORRAR'}, solo super-admin
 
 /* Calidad de entrega en vivo: el scorecard calculado desde Cortex, sin subir
    nada y sin esperar al viernes de Amazon. */
-export const cortexCalidad = (params) => api.get('/cortex/calidad', { params })
-export const cortexDsc = (params) => api.get('/cortex/dsc', { params })
-export const cortexSimular = (params) => api.get('/cortex/simular', { params })
 /* Libreta de portales: direcciones que fallan una y otra vez. */
-export const cortexPortales = (params) => api.get('/cortex/portales', { params })
-export const cortexPortalNota = (body) => api.post('/cortex/portales', body)
-export const cortexPortalGeo = (body) => api.post('/cortex/portales/geo', body)
 /* Dónde está DE VERDAD la dirección, buscada por texto en varios geocodificadores
    a la vez. Guarda sólo lo confirmado por dos familias de fuentes distintas. */
-export const cortexPortalGeodir = (body) => api.post('/cortex/portales/geodir', body)
 /* Los "no puedo encontrar la dirección" de HOY, uno a uno y en vivo. */
-export const cortexDireccionesHoy = (params) => api.get('/cortex/direcciones-hoy', { params })
 /* Los MISSING de hoy, con el conductor ya resuelto. Pestaña propia: un paquete
    perdido se atiende llamando a alguien, no buscando en un mapa. */
-export const cortexMissingHoy = (params) => api.get('/cortex/missing-hoy', { params })
-export const cortexDiagnostico = () => api.get('/cortex/diagnostico')
 /* IDs de Amazon que reparten sin ficha de conductor, con sugerencia de a quien
    corresponden. La asignacion reutiliza updateDriver: driver_id ya esta en la
    whitelist del PATCH. */
-export const cortexEmparejar = () => api.get('/cortex/emparejar')
 
 /* WHC: horas de trabajo. Se pega el plan del portal y devuelve el margen que le
    queda a cada conductor antes del limite semanal. */
-export const whcAnalizar = (body) => api.post('/whc/analizar', body)
 // El plan pegado se guarda por (centro, semana) para no tener que repegarlo.
-export const getWhcPlan = (center) => api.get('/whc/plan', { params: { center } })
 /* Que nave tiene plan de esta semana y cual no. Sin esto, una nave sin plan
    se ve igual que una pantalla rota: un hueco no dice si falta el dato o si
    no hay nada que contar. */
-export const getWhcEstado = () => api.get('/whc/estado')
 /* Las horas de la semana con el dato de AMAZON: nada estimado, umbrales
    suyos y la proyección es lo que cada uno tiene puesto. Si devuelve
    `hay: false` todavía no ha entrado y la pantalla sigue con el pegado. */
-export const getWhcSemana = (center) => api.get('/whc/semana', { params: { center } })
-export const deleteWhcPlan = (center) => api.delete('/whc/plan', { params: { center } })
 
 /* Investigaciones de DNR: Amazon pregunta donde se entrego un paquete que el
    cliente dice no haber recibido. `responder` PREPARA el correo (no lo manda) y
    `marcarDnrEnviada` lo confirma despues, cuando ya se le ha dado a enviar:
    abrir el correo no es haberlo enviado. */
-export const getDnrInvestigaciones = (center) => api.get('/dnr/investigaciones', { params: centerParam(center) })
 /* Solo el numero, para el aviso del menu y del notificador en vivo: pedir la
    lista completa (con el contexto de Cortex de cada una) cada dos minutos
    desde todas las pantallas sería tirar trabajo para acabar mirando `.length`. */
-export const contarDnrPendientes = (center) => api.get('/dnr/investigaciones/pendientes', { params: centerParam(center) })
-export const responderDnr = (body) => api.post('/dnr/investigaciones/responder', body)
 /* Lo manda el servidor. `responder` solo PREPARA (abre tu correo); esto lo
    envía de verdad, que es lo único que funciona con más de 3 paquetes: el
    `mailto` pasa de 2.000 caracteres y Windows lo corta. */
-export const enviarDnr = (body) => api.post('/dnr/investigaciones/enviar', body)
-export const marcarDnrEnviada = (body) => api.post('/dnr/investigaciones/enviada', body)
 /* Crea (o reutiliza) el enlace que se le manda al conductor y devuelve el
    WhatsApp ya escrito. El texto y el `wa.me` los arma el backend. */
-export const preguntarConductorDnr = (body) => api.post('/dnr/investigaciones/preguntar', body)
 
 // ── Aparcamiento: plano por centro + trazabilidad diaria ──
 export const parkingLayout = (center) => api.get('/parking/layout', { params: { center } })
@@ -763,15 +631,12 @@ export const parkingZoneImage = (formData) => api.post('/parking/zone-image', fo
 /* Cuadre del debrief. `center` se manda crudo, como el resto del panel: el
    backend filtra por regex porque el centro esta guardado de cuatro formas
    distintas (gotcha 6). */
-export const getDebrief = (params) => api.get('/cortex/debrief', { params })
 /* Daños abiertos que aun no han ido al taller. */
 export const getDanosPendientes = (params) =>
   api.get('/work-orders/danos-pendientes', { params })
 /* Las furgonetas que no estan trabajando, con los dias que llevan paradas. */
 export const getFurgonetasParadas = (center) =>
   api.get('/work-orders/paradas', { params: centerParam(center) })
-export const marcarDebrief = (tba, body, day) =>
-  api.post(`/cortex/debrief/${encodeURIComponent(tba)}`, body, { params: { day } })
 export const getCheckerCentros = () => api.get('/checkers/centros')
 export const corregirCentros = () => api.post('/checkers/centros/corregir')
 export const prepararOrden = (vehicleId) =>

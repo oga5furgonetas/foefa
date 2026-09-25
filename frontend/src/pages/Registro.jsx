@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+
 import { API_BASE } from '../services/api'
 import { medirAccion } from '../lib/analitica'
 import { saveSession } from '../panel/auth'

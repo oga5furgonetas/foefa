@@ -25,7 +25,7 @@ import re
 
 AQUI = os.path.dirname(__file__)
 SERVER = os.path.join(AQUI, "..", "server.py")
-TIENDA = glob.glob(os.path.join(AQUI, "..", "..", "frontend-v2", "public", "t", "*"))
+TIENDA = glob.glob(os.path.join(AQUI, "..", "..", "frontend", "public", "t", "*"))
 
 
 def _servidor() -> str:

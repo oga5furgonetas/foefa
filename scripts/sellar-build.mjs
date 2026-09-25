@@ -19,7 +19,7 @@ import fs from 'node:fs'
 import path from 'node:path'
 
 const RAIZ = path.join(path.dirname(new URL(import.meta.url).pathname.slice(1)), '..')
-const DIST = path.join(RAIZ, 'frontend-v2', 'dist')
+const DIST = path.join(RAIZ, 'frontend', 'dist')
 const html = fs.readFileSync(path.join(DIST, 'index.html'), 'utf8')
 
 /* El bundle de entrada: el `<script type="module" src="...">` del index. Es lo

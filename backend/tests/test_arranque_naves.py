@@ -1,13 +1,10 @@
 # -*- coding: utf-8 -*-
-"""Una nave nueva —o una empresa nueva— tiene que poder arrancar sin que nada
-este escrito para las naves de Dani.
+"""Una sede nueva —o una empresa nueva— tiene que poder arrancar sin que nada
+este escrito para las sedes de otra empresa.
 
 Medido el 16-09-2026 entrando como una empresa recien creada:
-  · la guia daba la empresa por «completa» con 1 furgoneta, 1 conductor y 1
-    inspeccion, sin mirar Cortex; y en la empresa de Dani, con la guia completa,
-    DGA1 llevaba 20 dias sin paquetes y DGA2 36;
-  · dar de alta una alquiladora exigia «OGA5/DGA1/DGA2»;
-  · la ubicacion de las naves le devolvia OGA5, DGA1 y DGA2 como si fueran suyas.
+  · dar de alta una alquiladora exigia las sedes de otra empresa escritas a mano;
+  · la ubicacion de las sedes le devolvia las de otra empresa como si fueran suyas.
 """
 import ast
 import io
@@ -36,22 +33,18 @@ def test_la_guia_no_se_da_por_completa_con_una_nave_sin_cortex():
     assert '"completo": hechos == len(obligatorios) and naves_ok' in c
 
 
-def test_cortex_es_obligatorio_por_nave_y_lo_recomendado_no_bloquea():
+def test_lo_obligatorio_es_tener_flota_gente_y_uso_y_lo_recomendado_no_bloquea():
+    """Una sede funciona cuando tiene vehiculos, conductores y una inspeccion
+    reciente —la prueba de que se USA, no solo de que se dio de alta—. Talleres
+    y cuadrante ayudan, pero no pueden dejar la guia abierta para siempre."""
     c = _funcion("_arranque_naves")
-    assert 'cortex = {"id": "cortex"' in c, "sin Cortex la mitad de la app esta vacia"
-    for opcional in ("objetivos", "talleres", "turnos"):
-        assert '{"id": "%s"' % opcional in c
-        linea = [l for l in c.split("\n") if '{"id": "%s"' % opcional in l][0]
+    for obligatorio in ("vehiculos", "conductores", "inspeccion"):
+        linea = [l for l in c.splitlines() if '{"id": "%s"' % obligatorio in l][0]
+        assert '"opcional"' not in linea, "%s tiene que ser obligatorio" % obligatorio
+    for opcional in ("talleres", "turnos"):
+        linea = [l for l in c.splitlines() if '{"id": "%s"' % opcional in l][0]
         assert '"opcional": True' in linea, "%s no puede dejar la guia abierta" % opcional
     assert 'if not x.get("opcional")' in c
-
-
-def test_los_objetivos_son_los_de_su_propia_scorecard():
-    """La misma regla que `_sc_thresholds`: solo es fiable lo que sale de la
-    scorecard de ESA nave (tipo sls). Otra regla diria «listo» donde la pantalla
-    de scorecard dice «estos umbrales no son de tu nave»."""
-    c = _funcion("_arranque_naves")
-    assert '{"center": c, "tipo": "sls"}' in c
 
 
 def test_el_centro_sucio_no_deja_a_una_nave_sin_datos():

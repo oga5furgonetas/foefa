@@ -3,9 +3,8 @@ import { useT, LANGS } from '../i18n'
 import { API_BASE } from '../lib/apiBase'
 import { saveSession } from '../panel/auth'
 import {
-  Zap, Shield, Bell, Trophy, Clock, CheckCircle, ChevronRight,
-  Camera, Truck, Users, BarChart3, Star, ArrowRight, Globe, Lock,
-  Sun, Moon, MessageSquare, Sparkles, AlertTriangle, Target, Ruler, Cpu,
+  Zap, Shield, Bell, Trophy, Clock, CheckCircle, Camera, Truck, Users, BarChart3, Star,
+  ArrowRight, Globe, Lock, Sun, Moon, MessageSquare, Sparkles, AlertTriangle, Target, Ruler, Cpu,
 } from 'lucide-react'
 import Landing3DShowcase from './Landing3DShowcase'
 import ProductoReal from './ProductoReal'

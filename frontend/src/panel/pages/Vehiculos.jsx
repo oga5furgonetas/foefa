@@ -13,13 +13,10 @@ import { useOrden } from '../../lib/orden'
 import ThOrden from '../components/ThOrden'
 import QRCode from 'qrcode'
 import {
-  Loader2, Search, Truck, X, Save, Download, QrCode,
-  MapPin, Gauge, Calendar, Package, Shield, ChevronRight,
-  User, Camera, ZoomIn, Pencil, Check, Maximize2, ArrowLeft,
-  Fuel, Palette, Hash, Building2, Clock, AlertTriangle, Wrench,
-  Droplets, CircleDot, Disc, FileText, Trash2, Upload, ExternalLink,
-  FileCheck, FileBadge, FileImage, File, Plus, Box,
-  Lock, LockOpen,
+  Loader2, Search, Truck, X, Download, QrCode, MapPin, Gauge, Calendar, Package, Shield,
+  ChevronRight, User, Camera, ZoomIn, Pencil, Check, Maximize2, Fuel, Palette, Hash, Building2,
+  Clock, AlertTriangle, Wrench, Droplets, CircleDot, Disc, FileText, Trash2, Upload, ExternalLink,
+  FileCheck, FileBadge, FileImage, File, Plus, Box, Lock, LockOpen,
 } from 'lucide-react'
 import {
   getVehicles, getLastInspections, getVehicleDriver, getVehicleInspections, updateVehicle, deleteVehicle, createIncident, getIncidents,

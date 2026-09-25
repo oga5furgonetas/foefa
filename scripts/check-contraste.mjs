@@ -38,9 +38,9 @@ import { readFileSync, readdirSync, statSync } from 'node:fs'
 import { join } from 'node:path'
 
 const RAIZ = new URL('../', import.meta.url).pathname.replace(/^\/([A-Za-z]:)/, '$1')
-const CSS_SRC = join(RAIZ, 'frontend-v2/src/index.css')
-const DIST = join(RAIZ, 'frontend-v2/dist/assets/v2')
-const PANEL = join(RAIZ, 'frontend-v2/src/panel')
+const CSS_SRC = join(RAIZ, 'frontend/src/index.css')
+const DIST = join(RAIZ, 'frontend/dist/assets/v2')
+const PANEL = join(RAIZ, 'frontend/src/panel')
 
 /* ── 1. La rampa de cada tema ─────────────────────────────────────────────── */
 const css = readFileSync(CSS_SRC, 'utf8')
@@ -71,8 +71,8 @@ for (const [k, v] of Object.entries(RAMPAS)) {
 /* ── 2. Qué color es cada clase, según el CSS ya compilado ────────────────── */
 const distCss = readdirSync(DIST).filter((f) => /^index-.*\.css$/.test(f))
 if (!distCss.length) {
-  console.error('check-contraste: no hay CSS compilado en frontend-v2/dist.')
-  console.error('Ejecuta `npm run build` en frontend-v2 antes de este checker.')
+  console.error('check-contraste: no hay CSS compilado en frontend/dist.')
+  console.error('Ejecuta `npm run build` en frontend antes de este checker.')
   process.exit(1)
 }
 const compilado = readFileSync(join(DIST, distCss[0]), 'utf8')

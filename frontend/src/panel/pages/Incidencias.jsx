@@ -3,8 +3,8 @@ import { useOutletContext } from 'react-router-dom'
 import { verMatricula } from '../../lib/matricula'
 import { useT } from '../../i18n'
 import {
-  AlertTriangle, Check, CheckCircle2, ChevronDown, ChevronUp,
-  Clock, Edit2, Loader2, Plus, RefreshCw, Trash2, Truck, X,
+  AlertTriangle, CheckCircle2, ChevronDown, ChevronUp, Clock, Edit2, Loader2, Plus, RefreshCw,
+  Trash2, Truck, X,
 } from 'lucide-react'
 import { getIncidents, createIncident, updateIncident, deleteIncident, resolveIncident, reopenIncident, getVehicles } from '../api'
 

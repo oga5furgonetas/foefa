@@ -59,7 +59,7 @@ const REVISADOS = new Map([
   ['scripts/conciliar_diarios.py:division-sin-guard',
    'Dentro de `if v:`. Y es un script de analisis que se lanza a mano, no codigo servido.'],
   // ── ESTADOS DE CORTEX EN EL CLIENTE ───────────────────────────────────
-  ['frontend-v2/src/panel/pages/PackageIntel.jsx:estado-cortex-en-el-cliente',
+  ['frontend/src/panel/pages/PackageIntel.jsx:estado-cortex-en-el-cliente',
    'Mirado el 04-09-2026. No clasifica: son los botones de filtro y el valor viaja ' +
    'tal cual al backend como `?state=`, una igualdad exacta, con el propio estado ' +
    'escrito en la etiqueta del boton. Lo que el gotcha 28/40 prohibe es REPARTIR EN ' +
@@ -68,20 +68,20 @@ const REVISADOS = new Map([
    'tiene que dar el backend.'],
   // ── FECHAS POR ISO ────────────────────────────────────────────────────
   // Los ocho revisados el 31-08-2026. Ninguno pinta un dato de nadie:
-  ['frontend-v2/src/panel/pages/Scorecard.jsx:toisostring-fecha-local',
+  ['frontend/src/panel/pages/Scorecard.jsx:toisostring-fecha-local',
    '`addDays` construye la fecha con `T12:00:00Z` y avanza con `setUTCDate`: todo en UTC ' +
    'y a mediodia A PROPOSITO, asi que el ISO es exactamente lo correcto y el cambio de ' +
    'hora de marzo y octubre no puede mover el dia. Cambiarlo a hora local seria empeorarlo.'],
-  ['frontend-v2/e2e/api-simulada.js:toisostring-fecha-local',
+  ['frontend/e2e/api-simulada.js:toisostring-fecha-local',
    'Fixtures de los tests de navegador: fabrican fechas de mentira para una API simulada. ' +
    'No hay dato de nadie detras.'],
-  ['frontend-v2/src/panel/lab/apiLab.js:toisostring-fecha-local',
+  ['frontend/src/panel/lab/apiLab.js:toisostring-fecha-local',
    'Laboratorio: datos inventados para probar pantallas. No sale a produccion.'],
-  ['frontend-v2/src/panel/lab/app2/datosPlus.js:toisostring-fecha-local',
+  ['frontend/src/panel/lab/app2/datosPlus.js:toisostring-fecha-local',
    'Laboratorio: la flota de mentira con la que se prueban las pantallas nuevas.'],
-  ['frontend-v2/src/panel/lab/datos.js:toisostring-fecha-local',
+  ['frontend/src/panel/lab/datos.js:toisostring-fecha-local',
    'Laboratorio: generador de datos de ejemplo.'],
-  ['frontend-v2/src/panel/lab/v2/amazon.js:toisostring-fecha-local',
+  ['frontend/src/panel/lab/v2/amazon.js:toisostring-fecha-local',
    'Laboratorio: semanas de scorecard simuladas para maquetar.'],
   ['scripts/eval_danos.py:division-sin-guard',
    'Script de evaluacion que se lanza a mano contra un lote de inspecciones ya elegido: ' +
@@ -184,7 +184,7 @@ const PATRONES = [
     gotcha: 47,
     // Solo en el frontend: `enlace_wa` del backend SI construye la URL, y es el
     // unico sitio donde debe hacerse — ahi vive la regla del prefijo.
-    soloEn: /^frontend-v2\//,
+    soloEn: /^frontend\//,
     re: /https:\/\/wa\.me\//g,
     que: 'Enlace de WhatsApp construido a mano en el frontend',
     porque: 'Sin el prefijo del pais abre un numero que no existe. Usa el campo `wa` que devuelve el backend',
@@ -194,7 +194,7 @@ const PATRONES = [
     gotcha: 28,
     // Solo el frontend: el backend SI tiene que nombrarlos, ahi viven las listas
     // canonicas (`_CX_OK`, `_CX_REINTENTABLE`...) y `_cx_ruta_cajon`.
-    soloEn: /^frontend-v2\/src\//,
+    soloEn: /^frontend\/src\//,
     re: /'(ATTEMPTED|PICKED_UP|NOT_DELIVERED|BACK_TO_ORIGIN|PENDING_PICKUP|YOU_ARE_NEXT|UNCOLLECTED|NOT_READY|TR_CANCELLED|CUSTOMER_UNAVAILABLE|ADDRESS_NOT_FOUND)'/g,
     que: 'Estado de Cortex escrito a mano en el frontend',
     porque: 'Las listas canonicas viven en el backend y cambian: una copia en el cliente se queda vieja SIN AVISAR (gotcha 28/40). Que el backend mande el cajon o una bandera ya calculada',
@@ -205,7 +205,7 @@ const PATRONES = [
     // Solo el portal del conductor: es donde la pantalla de ENTRADA vive en la
     // misma ruta a la que se redirige al expulsar, y por eso un replace ahi es
     // una recarga. En el panel el login tiene ruta propia (/panel/login).
-    soloEn: /^frontend-v2\/src\/(services|pages\/driver)\//,
+    soloEn: /^frontend\/src\/(services|pages\/driver)\//,
     // Una redireccion a /conductor sin que se compruebe antes que HABIA sesion.
     re: /location\.replace\(\s*['"`]\/conductor/g,
     salvoSi: /teniaSesion/,
@@ -218,7 +218,7 @@ const PATRONES = [
     // Solo el frontend: cortar el ISO del servidor enseña la hora de UTC. Pasó
     // en once pantallas a la vez (17-09-2026): Actividad decía 20:00 de una
     // inspección hecha a las 22:00. El laboratorio (datos de maqueta) no.
-    soloEn: /^frontend-v2\/src\/(?!panel\/lab\/)/,
+    soloEn: /^frontend\/src\/(?!panel\/lab\/)/,
     re: /\.slice\(\s*11\s*,\s*16\s*\)|\.slice\(\s*0\s*,\s*16\s*\)\s*\.replace\(\s*['"]T['"]|\.replace\(\s*['"]T['"]\s*,\s*['"] ['"]\s*\)\s*\.slice\(\s*0\s*,\s*16/g,
     que: 'Hora sacada cortando el texto ISO',
     porque: 'Enseña la hora de UTC (dos horas menos en verano). Usa horaLocal / fechaHoraLocal de lib/fecha',

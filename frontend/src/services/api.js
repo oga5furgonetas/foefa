@@ -178,8 +178,6 @@ export const tiendaPagar = (pedidoId) => api.post(`/tienda/pedido/${pedidoId}/pa
 /* Turnos del propio conductor: su calendario y sus peticiones de día. */
 export const getMyShifts = (desde, hasta) => api.get('/shifts/mine', { params: { desde, hasta } })
 // Lo suyo, para el: sus numeros de Cortex y las ayudas del mes
-export const getMisNumeros = () => api.get('/portal/mis-numeros')
-export const getMisAyudas = () => api.get('/portal/mis-ayudas')
 // Dias que este conductor NO puede pedir, y por que.
 export const getMisBloqueos = () => api.get('/shift-blocks/mios')
 /* Pedir días. Admite las dos formas a propósito:
@@ -220,7 +218,6 @@ export const signInspection = (inspectionId, signatureText) =>
 /* Avisos de los portales problematicos de la ruta de hoy de este conductor.
    Cierra el bucle de la Libreta de portales: lo que alguien aprendio fallando
    le llega al siguiente ANTES de que vuelva a fallar. */
-export const getMisAvisosPortales = () => api.get('/cortex/portales/mi-ruta')
 export const getDriverOffers = () => api.get('/driver-offers')
 export const clickDriverOffer = (offerId) => api.post(`/driver-offers/${offerId}/click`)
 

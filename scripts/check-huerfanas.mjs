@@ -68,7 +68,7 @@ const SIN_UI_A_PROPOSITO = new Set([
   'POST /tienda/cuenta/entrar',
   'POST /tienda/cuenta/avisos',
   // ── LAS LLAMA CLOUDFLARE, NO EL NAVEGADOR ─────────────────────────────
-  // Estas dos las consume `frontend-v2/functions/`, que corre en el borde de
+  // Estas dos las consume `frontend/functions/`, que corre en el borde de
   // Cloudflare y mete los datos DENTRO del HTML antes de servirlo. No pueden
   // llamarse desde `api.js`: si el dato lo pintara React, Google a veces lo
   // veria y a veces no, y en Google for Jobs no verlo es no existir.
@@ -267,7 +267,7 @@ function recorrer(dir) {
 // `flotadsp_app/lib`, una carpeta que no existe: sus 23 rutas (`/drivers/ranking`,
 // `/inspections/vehicle/…`, `/alerts/maintenance`…) no contaban como consumidas
 // y una de ellas se podia haber borrado por "huerfana" dejando la app sin datos.
-for (const sub of ['frontend-v2/src', 'frontend/src', 'mobile/lib', 'scripts', 'backend/tests']) {
+for (const sub of ['frontend/src', 'frontend/src', 'mobile/lib', 'scripts', 'backend/tests']) {
   recorrer(path.join(RAIZ, ...sub.split('/')))
 }
 
@@ -278,7 +278,7 @@ for (const sub of ['frontend-v2/src', 'frontend/src', 'mobile/lib', 'scripts', '
    cual hablan" y la ruta para asignarlos existia, pero ningun boton la
    llamaba. Asi que las lineas de api.js cuyo nombre no aparece en ningun otro
    fichero se quitan antes de buscar. */
-const apiJs = path.join(RAIZ, 'frontend-v2', 'src', 'panel', 'api.js')
+const apiJs = path.join(RAIZ, 'frontend', 'src', 'panel', 'api.js')
 let apiTexto = ''
 try { apiTexto = fs.readFileSync(apiJs, 'utf8') } catch { /* sin api.js no hay nada que podar */ }
 if (apiTexto) {

@@ -1,5 +1,5 @@
 import { lazy, Suspense, useState } from 'react'
-import { CalendarClock, Loader2 } from 'lucide-react'
+import { Loader2 } from 'lucide-react'
 import { useT } from '../../i18n'
 import { canSee } from '../auth'
 
