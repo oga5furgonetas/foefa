@@ -474,27 +474,13 @@ PLANTILLAS_BASE = [
         "category": "UTILITY",
         "components": [{
             "type": "BODY",
-            "text": ("Resumen del día en {{1}}: se entregaron {{2}} paquetes, "
-                     "se registraron {{3}} golpes nuevos en las furgonetas, "
-                     "y el checklist se completó en {{4}} de los vehículos."),
-            "example": {"body_text": [["OGA5 28/08", "3.412", "2", "38 de 41"]]},
-        }],
-    },
-    {
-        # La pre-DNR que Amazon abre sobre un paquete. Solo lleva dia y ruta, NO
-        # la direccion: el aviso viaja por WhatsApp y la direccion de un cliente
-        # de Amazon se ve detras del enlace, con su token, no en el texto.
-        "name": "pre_dnr",
-        "language": "es",
-        "category": "UTILITY",
-        "components": [{
-            "type": "BODY",
-            "text": ("Hola {{1}}. Amazon nos pregunta por un paquete que entregaste "
-                     "el {{2}} (ruta {{3}}). Contéstalo con este enlace, son unos "
-                     "segundos:\n\n{{4}}\n\nEs importante que lo contestes a tiempo: "
-                     "si no se contesta puede afectar a tu bono. Gracias."),
-            "example": {"body_text": [["Carlos", "17/09", "XA_C18",
-                                       "https://flotadsp.com/dnr/t/abc123"]]},
+            # Termina en texto fijo a propósito: Meta rechaza las plantillas con
+            # una variable al principio o al final.
+            "text": ("Resumen del día en {{1}}: {{2}} vehículos revisados, "
+                     "{{3}} golpes nuevos en la flota y checklist {{4}}. "
+                     "Tienes el detalle en el panel."),
+            "example": {"body_text": [["Sede Norte 28/08", "38 de 41", "2",
+                                       "mañana 20/21 · tarde 18/20"]]},
         }],
     },
 ]

@@ -1418,45 +1418,13 @@ async def _ensure_tenant_indexes(db_name: str):
     # Bloqueos de dias: se consultan en CADA peticion del conductor.
     await _idx(tdb.shift_blocks, [("hasta", 1), ("desde", 1)])
     await _idx(tdb.shift_blocks, "driver_id")
-    # ── Cortex: son las colecciones que mas crecen con diferencia ──────────
-    # Medido en produccion: cortex_packages 90.876 docs / 68 MB y
-    # cortex_events 133.528 docs / 30 MB SIN NINGUN INDICE.
-    # Estos son los campos por los que filtra de verdad _cortex_scope().
-    # 'tba' y 'updated_at' ya los auto-creo Atlas (con sufijo _autocreated):
-    # volver a pedirlos daba error 85 y abortaba el resto.
-    await _idx(tdb.cortex_packages, [("service_day", -1)])
-    # La frescura de la captura se pregunta en cada carga del panel: sin indice
-    # es un recorrido de 350.000 paquetes (0,45 s medidos el 16-09-2026).
-    await _idx(tdb.cortex_packages, [("seen_at", -1)])
-    # Compuesto para la calidad por conductor: sin el, cada consulta del
-    # scorecard en vivo recorre los ~100.000 paquetes del mes enteros.
-    await _idx(tdb.cortex_packages, [("driver_id", 1), ("service_day", -1)])
-    await _idx(tdb.cortex_packages, [("service_day", -1), ("state", 1)])
     # El nombre del conductor se resuelve por estos dos: ambos van con $in.
     await _idx(tdb.drivers, "driver_id")
-    await _idx(tdb.route_history, "transporter_id")
-    # Diarios de Cortex. `tracking_id` unico: pegar dos veces el mismo reporte
-    # tiene que ACTUALIZAR la fila (la columna DSC se rellena tarde), no
-    # duplicarla; sin el indice se acumularian copias con distinto DSC y el
-    # recuento de defectos saldria multiplicado.
-    await _idx(tdb.dnr_rows, "tracking_id", unique=True)
-    await _idx(tdb.dnr_rows, [("center", 1), ("fecha_concesion", 1)])
-    await _idx(tdb.dnr_rows, "transporter_id")
-    await _idx(tdb.daily_reports, [("center", 1), ("fecha", 1), ("transporter_id", 1)])
-    await _idx(tdb.daily_reports, [("center", 1), ("fecha_dnr", 1)])
     # Ordenes de trabajo
     await _idx(tdb.ordenes_trabajo, "id", unique=True)
     await _idx(tdb.ordenes_trabajo, [("center", 1), ("estado", 1), ("creada_en", -1)])
     await _idx(tdb.ordenes_trabajo, [("vehicle_id", 1), ("creada_en", -1)])
     await _idx(tdb.ordenes_trabajo, [("workshop_id", 1), ("creada_en", -1)])
-    # Las otras tres tablas del diario. La clave es (tracking, fecha del
-    # reporte): 763 trackings de RTS salen en mas de un dia, asi que el tracking
-    # solo perderia filas.
-    for _col in (tdb.rts_rows, tdb.pod_rows, tdb.cc_rows):
-        await _idx(_col, [("tracking_id", 1), ("fecha_reporte", 1)], unique=True)
-        await _idx(_col, [("center", 1), ("fecha_reporte", -1)])
-        await _idx(_col, "transporter_id")
-    await _idx(tdb.drivers, "transporter_id")
     # Errores de navegador: se consultan por fecha y se purgan solos a los 30
     # dias. Un buzon de errores que crece sin techo acaba siendo otro problema.
     await _idx(tdb.client_errors, [("ts", -1)])
@@ -1465,20 +1433,6 @@ async def _ensure_tenant_indexes(db_name: str):
                                              name="ts_ttl")
     except Exception:
         pass
-    await _idx(tdb.portales, "celda")
-    await _idx(tdb.cortex_packages, "center")
-    await _idx(tdb.cortex_packages, "service_area_id")
-    await _idx(tdb.cortex_packages, "state")
-    # OJO: primero se limpian los duplicados y LUEGO se pone el índice único.
-    # Al revés, la creación falla (ya hay duplicados) y todo se queda igual.
-    await _dedupe_cortex_stations(tdb)
-    await _idx_unico(tdb.cortex_stations, "service_area_id")
-    # Las investigaciones de DNR entran por `upsert` y el mismo fichero se manda
-    # varias veces al dia, tambien desde dos pestanas a la vez: sin el UNICO,
-    # dos upserts que no encuentran documento insertan los dos y el paquete sale
-    # repetido en la pantalla (gotchas 9 y 46). Quien decide que es unico es la
-    # base, no un `if`.
-    await _idx_unico(tdb[_DNR_COL], "tracking_id")
     # Meta reenvia un webhook si no le contestamos a tiempo: el mismo mensaje
     # puede llegar dos veces, y sin el unico saldria repetido en el hilo.
     await _idx_unico(tdb[whatsapp.COLECCION_MENSAJES], "wamid")
@@ -1503,28 +1457,14 @@ async def _ensure_tenant_indexes(db_name: str):
             partialFilterExpression={"status": "open"}, name="uniq_veh_panel_open")
     except Exception as e:                                       # noqa: BLE001
         logger.warning("indice unico del ledger: %s", e)
-    await _idx(tdb.cortex_day_snapshots, "service_day")
-    await _idx(tdb.cortex_day_snapshots, "center")
-    # cortex_events es un registro que SOLO se escribe (0 lecturas en todo el
-    # codigo). Se le pone caducidad de 90 dias para que no crezca sin fin en un
-    # Atlas de 512 MB: conserva la traza reciente y libera el resto solo.
     try:
-        await _idx(tdb.cortex_events, "expira_en", expireAfterSeconds=0)
-        # cortex_packages crecia SIN LIMITE mientras su coleccion hermana ya
-        # caducaba. Medido: 3.309 docs/dia, 812 bytes/doc = 77 MB/mes con UN
-        # cliente. Un Atlas de 512 MB se llena en 2,8 meses; con tres DSP, en
-        # menos de uno. Misma retencion que los eventos: 90 dias.
-        await _idx(tdb.cortex_packages, "expira_en", expireAfterSeconds=0)
-        # El diagnostico de esquema es una foto, no un historico: caduca a 30
-        # dias y son unos pocos documentos (uno por tipo, con upsert).
-        await _idx(tdb.cortex_diagnostico, "expira_en", expireAfterSeconds=0)
         # El registro de WhatsApp caduca solo a los 90 dias: es operacion, no
         # historico, y una coleccion de avisos sin techo crece hasta que alguien
         # la descubre. Y se consulta por fecha desde el panel.
         await _idx(tdb.whatsapp_envios, "expira_en", expireAfterSeconds=0)
         await _idx(tdb.whatsapp_envios, [("at", -1)])
     except Exception as _e:
-        logger.warning(f"Indice TTL de cortex: {_e}")
+        logger.warning(f"Indice TTL de WhatsApp: {_e}")
     await _idx(tdb.inspections, "id")
     await _idx(tdb.inspections, "vehicle_id")
     await _idx(tdb.inspections, [("created_at", -1)])
@@ -1553,13 +1493,6 @@ async def _ensure_tenant_indexes(db_name: str):
     await _idx(tdb.shifts, [("driver_id", 1), ("date", 1)], unique=True, name="turno_unico")
     await _idx(tdb.shifts, [("center", 1), ("date", 1)])
     # Apoyo en ruta (un conductor le quita paradas a otro, con mapa por WhatsApp).
-    await _idx(tdb.apoyos, "id", unique=True, name="apoyo_id_unico")
-    await _idx(tdb.apoyos, [("dia", 1), ("center", 1)])
-    # Un apoyo ABIERTO por pareja y dia, dicho por la base: dos clics a la vez en
-    # «Crear apoyo» no pueden dejar dos (gotcha 46). El find_one previo solo
-    # sirve para dar un mensaje bonito; el que manda es este unico parcial.
-    await _idx(tdb.apoyos, [("dia", 1), ("de.driver_id", 1), ("a.driver_id", 1)], unique=True,
-               partialFilterExpression={"fase": "enviado"}, name="apoyo_pareja_abierta")
     await _idx(tdb.ai_feedback, [("created_at", -1)])
     await _idx(tdb.ai_feedback, [("damage.part", 1)])
     await _idx(tdb.ai_feedback, [("damage.location_hint", 1)])
@@ -1623,10 +1556,6 @@ async def _ensure_tenant_indexes(db_name: str):
     await _idx(tdb.workshops, "center")
     await _idx(tdb.workshops, "convenios")
     await _idx(tdb.workshops, "categories")
-    await _idx(tdb.plantillas_diarias, "id")
-    await _idx(tdb.plantillas_diarias, [("center", 1), ("uploaded_at", -1)])
-    await _idx(tdb.plantillas_compartidas, "id", unique=True)
-    await _idx(tdb.plantillas_compartidas, [("center", 1), ("updated_at", -1)])
     # Citas de taller del calendario de flota. El único PARCIAL es la regla de
     # negocio en sí: una furgoneta no puede tener dos citas ABIERTAS del mismo
     # tipo. Sin él, dos clics a la vez dejarían dos citas y el calendario
@@ -13730,24 +13659,67 @@ async def _danos_nuevos_hoy(center: str, dia: str) -> list:
     return sorted(out, key=lambda x: (x["matricula"], x["parte"]))
 
 
+async def _vehiculos_de_sede(center: str, excluir=("deleted", "baja")) -> list:
+    """Los ids de los vehículos de una sede.
+
+    `inspections` e `incidents` NO guardan la sede (gotcha 6): se acotan por los
+    vehículos de la sede, que es lo que hace el resto del panel.
+    """
+    return await db.vehicles.distinct(
+        "id", {"center": {"$regex": re.escape(center), "$options": "i"},
+               "status": {"$nin": list(excluir)}})
+
+
+async def _inspecciones_del_dia(center: str, dia: str) -> dict:
+    """Cuántos vehículos de la sede se han inspeccionado hoy, de cuántos.
+
+    Se cuentan VEHÍCULOS distintos, no inspecciones: dos revisiones de la misma
+    furgoneta el mismo día son una furgoneta revisada, y contarlas dos veces
+    daría un «42 de 41» que nadie se cree.
+
+    Los que están en el taller no cuentan en el total: no se pueden revisar, y
+    meterlos en el denominador haría parecer que se ha dejado trabajo sin hacer.
+    """
+    ids = await _vehiculos_de_sede(center, ("deleted", "baja", "taller"))
+    if not ids:
+        return {"hechas": 0, "flota": 0}
+    revisados = await db.inspections.distinct(
+        "vehicle_id", {"deleted": {"$ne": True}, "vehicle_id": {"$in": ids},
+                       "created_at": {"$regex": f"^{dia}"}})
+    return {"hechas": len(revisados), "flota": len(ids)}
+
+
+# Lo que cuenta como «grave» en una incidencia. Los canónicos son los del
+# validador (`leve`, `moderado`, `grave`, `critico`); se aceptan también las
+# variantes que se han visto escritas en datos viejos, para no contar de menos.
+_INCIDENCIA_GRAVE = ("grave", "critico", "crítico", "critica", "crítica", "critical")
+
+
+async def _incidencias_flota_dia(center: str, dia: str) -> dict:
+    """Incidencias de flota abiertas HOY en la sede, y cuántas son graves."""
+    ids = await _vehiculos_de_sede(center)
+    if not ids:
+        return {"nuevas": 0, "graves": 0}
+    q = {"vehicle_id": {"$in": ids}, "created_at": {"$regex": f"^{dia}"}}
+    return {"nuevas": await db.incidents.count_documents(q),
+            "graves": await db.incidents.count_documents(
+                {**q, "severity": {"$in": list(_INCIDENCIA_GRAVE)}})}
+
+
 async def resumen_dia_centro(center: str, dia: str) -> dict:
     """El día de un centro en cinco datos, listos para una plantilla.
 
-    Es el resumen corto que pidieron las responsables de centro: entrega,
-    checklist y golpes nuevos. Nada más — la versión larga ya existe y va al
-    grupo a las 22:00.
+    Es el resumen corto de cada sede: vehículos revisados, checklist, golpes
+    nuevos e incidencias. Nada más — la versión larga ya existe y va al grupo a
+    las 22:00.
 
     Ninguno de los cinco campos puede quedar vacío: WhatsApp rechaza el envío
     si un parámetro de plantilla va en blanco, así que donde no hay dato se
     dice que no lo hay ("sin datos", "ninguno") en vez de mandar "".
     """
-    ent = await _cierre_entrega(center, dia)
-    if ent and ent.get("dcr") is not None:
-        entrega = f"{str(ent['dcr']).replace('.', ',')} % ({ent.get('entregados', 0)} de {ent.get('despachados', 0)})"
-        if not ent.get("cerrado"):
-            entrega += f" · {ent.get('en_vuelo', 0)} aún en ruta"
-    else:
-        entrega = "sin datos de reparto"
+    ins = await _inspecciones_del_dia(center, dia)
+    inspecciones = (f"{ins['hechas']} de {ins['flota']}" if ins["flota"]
+                    else "sin vehículos activos")
 
     turnos = []
     partes = []
@@ -13766,13 +13738,13 @@ async def resumen_dia_centro(center: str, dia: str) -> dict:
     danos = await _danos_nuevos_hoy(center, dia)
     placas = sorted({d["matricula"] for d in danos})
     golpes = f"{len(danos)} · {', '.join(placas[:6])}" if danos else "ninguno"
-    inc = await _cx_incidencias_dia(center, dia) if ent else {"lost": 0, "missing": 0, "sin_direccion": 0}
+    inc = await _incidencias_flota_dia(center, dia)
 
     d, m, y = dia[8:10], dia[5:7], dia[0:4]
     return {"center": center, "fecha": f"{d}/{m}/{y}",
-            "entrega": entrega, "checklist": checklist, "golpes": golpes,
+            "inspecciones": inspecciones, "checklist": checklist, "golpes": golpes,
             "placas": placas, "danos": danos, "turnos": turnos,
-            "incidencias": inc, "dcr": (ent or {}).get("dcr")}
+            "incidencias": inc}
 
 
 def _texto_resumen_largo(r: dict) -> str:
@@ -13785,16 +13757,13 @@ def _texto_resumen_largo(r: dict) -> str:
     """
     L = [f"📋 <b>{r['center']} — {r['fecha']}</b>", ""]
 
-    L.append(f"📦 <b>Entrega:</b> {r['entrega']}")
+    L.append(f"🚐 <b>Revisados:</b> {r['inspecciones']}")
     inc = r.get("incidencias") or {}
-    problemas = []
-    if inc.get("sin_direccion"):
-        problemas.append(f"{inc['sin_direccion']} sin encontrar la dirección")
-    if inc.get("missing"):
-        problemas.append(f"{inc['missing']} no estaban en la furgoneta")
-    if inc.get("lost"):
-        problemas.append(f"{inc['lost']} extraviados")
-    L.append("   ⚠️ " + " · ".join(problemas) if problemas else "   Sin incidencias de paquetes")
+    if inc.get("nuevas"):
+        graves = f" ({inc['graves']} graves)" if inc.get("graves") else ""
+        L.append(f"   ⚠️ {inc['nuevas']} incidencias nuevas{graves}")
+    else:
+        L.append("   Sin incidencias nuevas")
 
     L.append("")
     danos = r.get("danos") or []
@@ -13869,20 +13838,15 @@ def _html_resumen(r: dict) -> str:
              f'{esc(r["fecha"])}</div>')
     P.append(f'<h1 style="margin:4px 0 20px;font-size:26px;font-weight:700">{esc(r["center"])}</h1>')
 
-    # Entrega
+    # Vehículos revisados
     P.append(f'<div style="background:{L};border-radius:10px;padding:16px;margin-bottom:14px">')
-    P.append(f'<div style="font-size:12px;color:{S};margin-bottom:4px">ENTREGA</div>')
-    P.append(f'<div style="font-size:19px;font-weight:600">{esc(r["entrega"])}</div>')
+    P.append(f'<div style="font-size:12px;color:{S};margin-bottom:4px">VEHÍCULOS REVISADOS</div>')
+    P.append(f'<div style="font-size:19px;font-weight:600">{esc(r["inspecciones"])}</div>')
     inc = r.get("incidencias") or {}
-    prob = []
-    if inc.get("sin_direccion"):
-        prob.append(f'{inc["sin_direccion"]} sin encontrar la dirección')
-    if inc.get("missing"):
-        prob.append(f'{inc["missing"]} no estaban en la furgoneta')
-    if inc.get("lost"):
-        prob.append(f'{inc["lost"]} extraviados')
-    if prob:
-        P.append(f'<div style="margin-top:8px;color:#fbbf24;font-size:14px">⚠️ {esc(" · ".join(prob))}</div>')
+    if inc.get("nuevas"):
+        graves = f' ({inc["graves"]} graves)' if inc.get("graves") else ""
+        P.append(f'<div style="margin-top:8px;color:#fbbf24;font-size:14px">'
+                 f'⚠️ {esc(str(inc["nuevas"]) + " incidencias nuevas" + graves)}</div>')
     P.append('</div>')
 
     # Golpes
@@ -13973,7 +13937,7 @@ async def enviar_resumen_diario(dia: Optional[str] = None, solo_id: Optional[str
         # Correo: la vía que no depende de nadie. Sin plantillas que aprobar,
         # sin restricciones de cuenta de Meta y sin coste por mensaje.
         html = _html_resumen(r)
-        asunto = f"{r['center']} — {r['fecha']} · entrega {r['entrega'].split(' (')[0]}"
+        asunto = f"{r['center']} — {r['fecha']} · {r['inspecciones']} revisados"
         correos = []
         for d in quienes:
             if not d.get("email"):
@@ -14007,7 +13971,7 @@ async def enviar_resumen_diario(dia: Optional[str] = None, solo_id: Optional[str
                 rw = await whatsapp.enviar_plantilla(
                     db, tel, cfgw["plantilla_resumen"],
                     [f"{r['center']} {r['fecha']}",
-                     str(r.get("entrega") or "").split(" (")[0],
+                     str(r.get("inspecciones") or "—"),
                      _n_golpes,
                      str(r.get("checklist") or "—")],
                     motivo="resumen_diario")
@@ -14310,17 +14274,6 @@ async def start_itv_whatsapp_scheduler():
     # Configuracion que parece que funciona y apaga el sistema en silencio.
     # Con su propio bucle, la franja que se configura es la que manda de verdad.
     asyncio.create_task(_bucle_seguimiento())
-    # La revision del DCR sale con el resumen del dia, cuando la jornada ya ha
-    # cerrado. Antes, media flota sigue en la calle y todo parece un desastre.
-    asyncio.create_task(_bucle_aviso("dcr_diario", "resumen_diario", revisar_dcr_diario))
-    # Consolidar las direcciones ANTES de que el TTL de Cortex borre los
-    # paquetes. Va con el cierre de la tarde, cuando el dia ya no se mueve.
-    asyncio.create_task(_bucle_aviso("dirs_consolidar", "turno_tarde", consolidar_direcciones))
-    # Congelar el dia de Cortex NO va con los avisos: aquellos disparan una vez
-    # a una hora fija, y aqui hacen falta varias pasadas por la tarde-noche
-    # porque cada centro cierra a su hora y el dato se borra solo al dia
-    # siguiente (medido: a los 3 dias se ha perdido el 97 % de las devoluciones).
-    asyncio.create_task(_bucle_congelar())
     # La IA cierra sola lo que puede decidir; a la persona le queda la duda.
     asyncio.create_task(_bucle_autorrevision())
     # El disco no avisa: un Atlas M0 lleno deja de aceptar escrituras de golpe.
@@ -14330,16 +14283,6 @@ async def start_itv_whatsapp_scheduler():
     # Y que avise si algun bucle se ha muerto. Un latido que hay que ir a mirar
     # no lo mira nadie.
     asyncio.create_task(_bucle_aviso("bucles_vivos", "resumen_diario", avisar_bucles_muertos))
-    # A medianoche cierra los apoyos que quedaron abiertos, para que no se
-    # acumulen ni cuenten como en marcha al dia siguiente.
-    asyncio.create_task(_bucle_apoyo_cierre())
-    # Y que avise si la captura de Cortex se ha parado. Es lo unico que no
-    # corre en nuestros servidores —vive en un navegador— y por eso es lo unico
-    # que puede morirse sin que nada falle aqui.
-    asyncio.create_task(_bucle_captura_viva())
-    # Las pre-DNR: avisar al conductor y mandar a Amazon lo que conteste. Empieza
-    # apagado y cada nave se enciende a mano desde Configuracion.
-    asyncio.create_task(_bucle_dnr_auto())
 
 
 @api_router.post("/whatsapp/avisar-itv")
@@ -16778,10 +16721,8 @@ async def send_daily_inspection_summary():
 
             pct = round(len(done) / total * 100) if total else 0
 
-            # ── 1 · ENTREGA ─────────────────────────────────────────────────
-            ent = await _cierre_entrega(center, today)
 
-            # ── 2 · DAÑOS NUEVOS DE HOY, con quién conducía ─────────────────
+            # ── 1 · DAÑOS NUEVOS DE HOY, con quién conducía ─────────────────
             # Se cruza por el cuadrante: el conductor que llevaba ESA furgoneta
             # hoy. Si el hueco no dice quién, no se pone un nombre a dedo.
             cond_por_veh = {s["vehicle_id"]: (s.get("driver_name") or "")
@@ -16802,22 +16743,6 @@ async def send_daily_inspection_summary():
             cabecera = "✅" if not missing else "⚠️"
             lines = [f"{cabecera} <b>CIERRE DEL DÍA — {center}</b>", f"📅 {fecha_str}", ""]
 
-            # ENTREGA
-            if ent and ent.get("dcr") is not None:
-                if ent["cerrado"]:
-                    lines.append(f"📦 <b>DCR {ent['dcr']}%</b> — {ent['entregados']}/{ent['despachados']} entregados")
-                else:
-                    # Jornada sin cerrar: dar el DCR como definitivo sería mentir,
-                    # porque los paquetes en vuelo aún pueden entregarse.
-                    lines.append(f"📦 Jornada sin cerrar ({ent['en_vuelo']} paquetes aún en vuelo)")
-                    lines.append(f"   Provisional: {ent['dcr']}% — {ent['entregados']}/{ent['despachados']}")
-                if ent.get("fallos"):
-                    lines.append(f"   ❌ {ent['fallos']} fallos · ↩️ {ent['rts']} RTS")
-                if ent.get("nodesp"):
-                    lines.append(f"   ⏸ {ent['nodesp']} no despachados (fuera del DCR)")
-            else:
-                lines.append("📦 Sin datos de Cortex hoy")
-            lines.append("")
 
             # AUDITORÍAS
             if not missing:
@@ -31922,92 +31847,56 @@ def _onb_cuando_formacion(p: dict) -> str:
     return ": la tiene el %s" % dm
 
 
-def _onb_camino(p: dict, cuenta: dict, en_el_listado=None) -> dict:
-    """En que punto esta, en DOS CARRILES que van en paralelo.
+def _onb_camino(p: dict, en_el_listado=None) -> dict:
+    """En qué punto está cada persona que entra: lo que está hecho y lo que toca.
 
-    NO ES UNA FILA, y creerlo dio un dato falso sobre una persona. El 16-09-2026
-    la pantalla decia de Lois Barreiro «Coordinacion aun no ha dado sus papeles
-    por completos» — cierto— pero ademas su cuenta de Amazon ya estaba al 11/14.
-    Las dos cosas a la vez. Poniendolas en fila, la segunda no se veia.
+    Tres pasos, en orden: la agencia o el alta la cuelga, se completan sus
+    papeles y se le manda el acceso a la formación.
 
-      · EL CARRIL DE LA ETT   lo colgaron -> papeles completos -> acceso enviado
-      · EL CARRIL DE AMAZON   su cuenta, con sus tareas repartidas entre Amazon,
-                              nosotros y la propia persona
-
-    Y LO QUE NO SE SABE SE DICE ASI. Sin cuenta vista no se afirma que no la
-    tenga: lo unico cierto es que no la hemos visto. Justo lo que paso con Lois,
-    que la tenia y se estaba descartando por su nave.
+    LO QUE NO SE SABE SE DICE ASÍ. Un paso sin dato que lo demuestre no se da
+    por hecho: se dice lo que falta, no se supone que ya está.
     """
     fuera = bool(en_el_listado is False and p.get("codigo_formacion"))
 
-    ett = []
+    pasos = []
     if p.get("registrado"):
-        ett.append({"id": "apuntado", "que": "Lo colgó la ETT",
-                    "hecho": True, "cuando": p["registrado"]})
+        pasos.append({"id": "apuntado", "que": "Dado de alta",
+                      "hecho": True, "cuando": p["registrado"]})
     else:
-        ett.append({"id": "apuntado", "que": "Lo colgó la ETT", "hecho": False})
-    ett.append({"id": "papeles", "que": "Papeles completos",
-                "hecho": bool(p.get("codigo_formacion")),
-                "cuando": (p.get("visto_en") or "")[:10] if p.get("codigo_formacion") else None})
+        pasos.append({"id": "apuntado", "que": "Dado de alta", "hecho": False})
+    pasos.append({"id": "papeles", "que": "Papeles completos",
+                  "hecho": bool(p.get("codigo_formacion")),
+                  "cuando": (p.get("visto_en") or "")[:10] if p.get("codigo_formacion") else None})
     acceso = bool(p.get("ultimo_aviso") and p.get("codigo_formacion"))
-    ett.append({"id": "acceso", "que": "Acceso a la formación enviado",
-                "hecho": acceso,
-                "cuando": (p.get("ultimo_aviso") or "")[:10] if acceso else None})
+    pasos.append({"id": "acceso", "que": "Acceso a la formación enviado",
+                  "hecho": acceso,
+                  "cuando": (p.get("ultimo_aviso") or "")[:10] if acceso else None})
 
-    # ── El carril de Amazon ────────────────────────────────────────────────
-    amazon = {"vista": bool(cuenta)}
-    if cuenta:
-        amazon.update({
-            # `hechas` (tareas de la ficha) si se ha leido el detalle; si no,
-            # `hechos` (modulos). Luisaly salia con «null de 14» teniendo 11.
-            "hechas": (cuenta.get("hechas") if cuenta.get("hechas") is not None
-                       else cuenta.get("hechos")),
-            "total": cuenta.get("total"),
-            "pendientes": [x.get("que") for x in (cuenta.get("pendientes") or [])][:8],
-            "toca_a": cuenta.get("toca_a") or [],
-            "estado": cuenta.get("estado") or "",
-            "naves": cuenta.get("naves") or [],
-            "completa": bool(cuenta.get("completa")),
-        })
-
-    # ── QUE TOCA AHORA ─────────────────────────────────────────────────────
-    # Lo de los dos carriles a la vez, no lo primero de una lista. Y siempre
-    # dicho como lo que es: lo que sabemos, no lo que suponemos.
     pendiente = []
     if fuera:
         que_toca = "Ya no está en formación: la terminó o se fue"
     else:
         if not p.get("codigo_formacion"):
-            pendiente.append("Coordinación tiene que dar sus papeles por completos")
+            pendiente.append("Faltan sus papeles por completar")
         elif not acceso:
             pendiente.append("Mándale el acceso a la formación" + _onb_cuando_formacion(p))
-        if not cuenta:
-            pendiente.append("Su cuenta de Amazon no la hemos visto todavía")
-        elif not cuenta.get("completa"):
-            quien = cuenta.get("toca_a") or []
-            if quien:
-                pendiente.append("En Amazon le toca a %s" % " y ".join(quien))
-            else:
-                pendiente.append("Le quedan tareas en Amazon")
         que_toca = " · ".join(pendiente) if pendiente else "Listo para empezar"
 
     return {
-        "ett": ett,
-        "amazon": amazon,
-        # Dias desde el dia de formacion SIN haber mandado el acceso (None si
-        # no aplica). Es lo que ordena la tanda: primero a quien mas se le paso.
+        # `ett` se mantiene como nombre del campo: es lo que lee la pantalla.
+        "ett": pasos,
+        # Días desde el día de formación SIN haber mandado el acceso (None si no
+        # aplica). Es lo que ordena la tanda: primero a quien más se le pasó.
         "formacion_atrasada": (_onb_dias(p.get("fecha_formacion"))
                                if (p.get("codigo_formacion") and not acceso
                                    and p.get("fecha_formacion")) else None),
-        "dados": sum(1 for x in ett if x["hecho"]) + (1 if cuenta else 0),
-        "total": len(ett) + 1,
+        "dados": sum(1 for x in pasos if x["hecho"]),
+        "total": len(pasos),
         "fuera": fuera,
         "que_toca": que_toca,
-        # El primer carril que pide algo, para agrupar en el embudo.
         "siguiente": None if fuera or not pendiente else (
             "papeles" if not p.get("codigo_formacion")
             else "acceso" if not acceso
-            else "cuenta" if not cuenta
             else "dentro"),
     }
 
@@ -32082,9 +31971,6 @@ async def onb_listar(center: Optional[str] = None, _=Depends(require_admin)):
     # POR QUIEN LLEVA MAS ESPERANDO. Ordenar por fecha de alta ponia arriba al
     # ultimo que llego, que es justo el que menos urge.
     filas = await db[_ONB_COL].find(q, {"_id": 0}).to_list(500)
-    # LAS CUENTAS DE AMAZON, PEDIDAS UNA VEZ. Buscarlas persona a persona serian
-    # veintiseis viajes a la base para lo mismo.
-    indice_cuentas = await _asoc_por_persona()
     _u = await db.app_meta.find_one({"_id": "incorporaciones_ultimo_listado"}) or {}
     ultimo = str(_u.get("en") or "")
     # El enlace de WhatsApp de cada uno, ya montado por el servidor. Vacio
@@ -32106,41 +31992,7 @@ async def onb_listar(center: Optional[str] = None, _=Depends(require_admin)):
         f["en_el_listado"] = (None if not ultimo
                               else str(f.get("visto_en") or "") >= ultimo)
         f["etapa"] = _onb_etapa(f, f["en_el_listado"])
-        # SU CUENTA DE AMAZON, SI LA TENEMOS. Va ANTES del camino, que la
-        # necesita para saber si Amazon ya le creo la cuenta. Esto es lo que
-        # convierte la lista en algo accionable: no «a este le falta el carnet segun la ETT», sino
-        # «a este Amazon le esta pidiendo el Global Check». Y si NO tiene
-        # cuenta, eso tambien se dice: significa que el onboarding ni siquiera
-        # ha empezado, que es peor que ir lento.
-        # `cuenta_amz` y no `cuenta`: en este mismo bucle ya habia una variable
-        # llamada `cuenta` —el diccionario que cuenta los motivos— y llamar
-        # igual a esto la pisaba. Con una persona sin cuenta valia None y la
-        # linea de abajo reventaba con «NoneType has no attribute get»: un 500
-        # en la pantalla de Incorporaciones entera. Paso el 15-09-2026.
-        cuenta_amz = _asoc_de(f, indice_cuentas)
-        if cuenta_amz:
-            f["cuenta"] = {
-                # El detalle de la ficha, si ya se ha leido: las veinte tareas,
-                # cuantas van y a quien le toca mover. Es la diferencia entre
-                # «le falta algo» y «le falta la sesion de formacion».
-                "pendientes": [x.get("que") for x in (cuenta_amz.get("pendientes") or [])][:8],
-                "toca_a": cuenta_amz.get("toca_a") or [],
-                "tareas_hechas": cuenta_amz.get("hechas"),
-                "tareas_total": cuenta_amz.get("total"),
-                "cualificaciones": cuenta_amz.get("cualificaciones") or [],
-                "nombre": cuenta_amz.get("nombre"),
-                "paso": cuenta_amz.get("paso"),
-                "estado": cuenta_amz.get("estado"),
-                "hechos": cuenta_amz.get("hechos"),
-                "total": cuenta_amz.get("total"),
-                "completa": cuenta_amz.get("completa"),
-                "faltan": [x.get("que") for x in (cuenta_amz.get("faltan") or [])][:6],
-                "cruce": cuenta_amz.get("cruce"),
-            }
-        # EL CAMINO, con la cuenta ya resuelta. Aqui y no antes: sin la cuenta
-        # no se puede saber si Amazon se la ha creado, y adivinarlo seria dar un
-        # paso por hecho sin dato que lo demuestre.
-        f["camino"] = _onb_camino(f, cuenta_amz, f["en_el_listado"])
+        f["camino"] = _onb_camino(f, f["en_el_listado"])
         f["sugerido"] = _onb_motivo_de_falta(f.get("falta_texto"))
         fases[f["fase"]] = fases.get(f["fase"], 0) + 1
         cols[f["columna"]] = cols.get(f["columna"], 0) + 1
@@ -36922,23 +36774,6 @@ async def _ai_asistente_contexto(user: dict, center: str) -> str:
     aparte que pudiera no cuadrar con lo que el usuario ve al abrirla."""
     piezas = []
     try:
-        w = await whc_semana(center, user)
-        if w.get("hay"):
-            r = w["resumen"]
-            piezas.append(
-                f"WHC de {center} (actualizado {w.get('actualizado', '?')}): {r['total']} conductores con "
-                f"horas esta semana, {r['pasan_proyectando']} van a pasarse del límite semanal proyectando lo "
-                f"que tienen puesto, {r['acercandose']} se acercan, {r['ya_pasados']} ya se han pasado.")
-        else:
-            piezas.append(f"WHC de {center}: {w.get('porque') or 'todavía no hay datos de esta nave'}.")
-    except Exception as e:                                        # noqa: BLE001
-        logger.debug(f"[IA asistente] contexto WHC: {e}")
-    try:
-        d = await dnr_contar_pendientes(center, user)
-        piezas.append(f"Investigaciones DNR de Amazon sin contestar en {center}: {d.get('pendientes', 0)}.")
-    except Exception as e:                                        # noqa: BLE001
-        logger.debug(f"[IA asistente] contexto DNR: {e}")
-    try:
         c = await empleo_contar_nuevos(center, user)
         piezas.append(f"Candidaturas nuevas sin mirar en Empleo de {center}: {c.get('nuevos', 0)}.")
     except Exception as e:                                        # noqa: BLE001
@@ -36946,8 +36781,8 @@ async def _ai_asistente_contexto(user: dict, center: str) -> str:
     return "\n".join(piezas) or "Sin datos en vivo disponibles ahora mismo para este centro."
 
 
-_IA_CONSULTA_TIPOS = ("vehiculos", "conductores", "whc", "dnr", "inspecciones",
-                      "rendimiento", "gastos", "tareas")
+_IA_CONSULTA_TIPOS = ("vehiculos", "conductores", "inspecciones",
+                      "gastos", "tareas")
 
 
 async def _ai_ejecutar_consulta(user: dict, center: str, consulta: dict) -> dict:
@@ -37082,60 +36917,6 @@ async def _ai_ejecutar_consulta(user: dict, center: str, consulta: dict) -> dict
                           + (f", tel {c['phone']}" if c.get('phone') else ""))
         return {"resumen_texto": "\n".join(lineas), "documentos": None, "n": len(conductores)}
 
-    if tipo == "whc":
-        w = await whc_semana(center, user)
-        if not w.get("hay"):
-            return {"resumen_texto": f"WHC de {center}: {w.get('porque') or 'todavía no hay datos de esta nave'}.",
-                    "documentos": None, "n": 0}
-        conductores = w.get("conductores") or []
-        nombre = _texto_cuerpo(filtros_in.get("nombre"), 60)
-        if nombre:
-            palabras = _norm_name_words(nombre)
-            conductores = [c for c in conductores if palabras and palabras <= _norm_name_words(c.get("nombre"))]
-
-        def _hm(mins):
-            mins = mins or 0
-            return f"{mins // 60}h{mins % 60:02d}"
-
-        limite = (w.get("limites") or {}).get("semanal_duro")
-        lineas = [f"{len(conductores)} conductores encajan (semana {w.get('semana')}"
-                  + (f", límite semanal {_hm(limite)}" if limite else "") + ")."]
-        for c in conductores[:40]:
-            aviso = ("YA SE HA PASADO" if c.get("supera_semanal") else
-                    "se va a pasar" if c.get("proyeccion_pasa") else
-                    "se acerca al límite" if c.get("acercandose") else "va bien")
-            lineas.append(f"- {c.get('nombre')}: trabajado {_hm(c.get('trabajado'))}, "
-                          f"proyección {_hm(c.get('proyeccion'))} — {aviso}")
-        return {"resumen_texto": "\n".join(lineas), "documentos": None, "n": len(conductores)}
-
-    if tipo == "dnr":
-        d = await dnr_investigaciones(center=center, _=user)
-        filas = d.get("investigaciones") or []
-        lineas = [f"{len(filas)} investigaciones DNR ABIERTAS AHORA en {center} "
-                  f"({d.get('vivas', 0)} a tiempo, {d.get('caducadas', 0)} caducadas). "
-                  f"Esta es la lista REAL y accionable — para \"quién tiene más DNR\" usa el "
-                  f"ranking de abajo (si lo hay), no el campo DNR de la consulta rendimiento, "
-                  f"que es otra cosa (30 días acumulados, aunque ya estén cerrados)."]
-        # Ranking por conductor de las abiertas AHORA: mucho mas util que el
-        # historico de 30 dias para "quien tiene mas DNR" — es lo que hay que
-        # contestar de verdad, no un acumulado que incluye casos ya resueltos.
-        por_conductor: dict = {}
-        for f in filas:
-            nom = (f.get("cortex") or {}).get("conductor")
-            if nom:
-                por_conductor[nom] = por_conductor.get(nom, 0) + 1
-        if por_conductor:
-            ranking = sorted(por_conductor.items(), key=lambda kv: (-kv[1], kv[0]))
-            lineas.append("Abiertas ahora por conductor (solo las que se sabe quién conducía):")
-            for nom, n in ranking[:15]:
-                lineas.append(f"- {nom}: {n} abierta{'s' if n != 1 else ''}")
-        for f in filas[:40]:
-            ctx = f.get("cortex") or {}
-            lineas.append(f"- {f.get('tracking_id')}: vence {f.get('vence') or 'sin plazo'}"
-                          + (f", conductor {ctx['conductor']}" if ctx.get("conductor") else "")
-                          + (", CADUCADA" if f.get("caducada") else ""))
-        return {"resumen_texto": "\n".join(lineas), "documentos": None, "n": len(filas)}
-
     if tipo == "inspecciones":
         matricula = _texto_cuerpo(filtros_in.get("matricula"), 20)
         vehicle_id = None
@@ -37217,51 +36998,6 @@ async def _ai_ejecutar_consulta(user: dict, center: str, consulta: dict) -> dict
                           "desglose no cuadra en vez de dar un numero.")
         return {"resumen_texto": chr(10).join(lineas), "documentos": None,
                 "n": datos["total_apuntados"], "hoy": hoy_g}
-
-    if tipo == "rendimiento":
-        hoy = _dia_negocio()
-        desde = (datetime.now(timezone.utc) - timedelta(days=30)).strftime("%Y-%m-%d")
-        datos = await conductores_rendimiento(desde=desde, hasta=hoy, center=center, _=user)
-        # Minimo de entregas para entrar en el ranking (misma regla que
-        # _CX_MINIMO_RANKING de /cortex/dsc): con poco volumen un fallo de mas
-        # mueve la tasa muchisimo y señala a alguien por ruido, no por dato.
-        filas = [f for f in (datos.get("filas") or []) if (f.get("entregas") or 0) >= 40]
-        # Desempate deterministico (gotcha 62): nunca solo el cociente.
-        filas.sort(key=lambda f: (-(f.get("dcr") or 0), -(f.get("entregas") or 0), f.get("transporter") or ""))
-        lineas = [f"Ranking por DCR de los últimos 30 días en {center} "
-                  f"(mínimo 40 entregas para entrar, para no señalar a alguien por poco volumen). "
-                  f"OJO: el 'DNR' de esta lista es el conteo del informe diario de Amazon acumulado "
-                  f"en 30 días (aunque ya estén resueltos) — NO es lo mismo que 'investigaciones DNR "
-                  f"abiertas ahora' de la consulta dnr, que es un número mucho más pequeño y solo las "
-                  f"pendientes de contestar. Si te preguntan por los dos, acláralo, no los mezcles."]
-        if not filas:
-            lineas.append("Nadie llega a ese mínimo en este periodo todavía.")
-
-        def _linea(f):
-            return (f"- {f.get('nombre') or f.get('transporter')}: DCR {f.get('dcr')}%, "
-                    f"{f.get('entregas')} entregas, {f.get('fallos')} fallos"
-                    + (f", {f.get('dnr')} DNR (30 dias, informe diario)" if f.get('dnr') else ""))
-
-        # LOS DOS EXTREMOS, Y DICIENDO CUAL ES CUAL. Antes se mandaban solo los
-        # quince PRIMEROS -los mejores- y por eso a «quienes son los peores
-        # conductores» el modelo contestaba «todos tienen un DCR perfecto del
-        # 100 %»: con esa lista delante era la unica conclusion posible.
-        # Comprobado contra produccion el 19-09-2026: de 117 conductores en el
-        # ranking, el peor iba al 90,77 % con 18 fallos. Una respuesta que dice
-        # que todo esta perfecto cuando no lo esta es peor que no contestar.
-        if filas:
-            orden = sorted((f.get("dcr") or 0) for f in filas)
-            lineas.append("Son %d conductores; la mediana esta en DCR %s%%."
-                          % (len(filas), orden[len(orden) // 2]))
-        if len(filas) <= 16:
-            lineas += [_linea(f) for f in filas]
-        else:
-            lineas.append("LOS MEJORES (DCR mas alto):")
-            lineas += [_linea(f) for f in filas[:8]]
-            lineas.append("LOS PEORES (DCR mas bajo, que es lo que se pregunta cuando "
-                          "se pide «los peores» o «quien va peor»):")
-            lineas += [_linea(f) for f in reversed(filas[-8:])]
-        return {"resumen_texto": chr(10).join(lineas), "documentos": None, "n": len(filas)}
 
     if tipo == "tareas":
         # Lo que hay programado y las furgonetas ya dichas para los próximos días:
