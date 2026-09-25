@@ -232,18 +232,16 @@ api_router = APIRouter(prefix="/api")
 async def _registro_escrituras(request: Request, call_next):
     """Toda peticion que ESCRIBE queda apuntada: quien, que, cuando, cuanto tardo.
 
-    Fly guarda cien lineas de log. El 01-09-2026 desaparecieron dos meses de
-    Cortex con un clic y no hubo forma de saber quien ni cuando: se fecho por
-    el tamaño de las copias de R2. Esto lo evita para siempre y cuesta un
-    insert asincrono por escritura, en `global_db.audit_requests`, 30 dias.
-    Nunca guarda cuerpos ni cabeceras: solo metodo, ruta, codigo, milisegundos
-    y quien firmaba el token. La ingesta de Cortex se salta: son miles al dia
-    y ya deja su propio rastro.
+    El registro de la plataforma guarda cien líneas. Una vez desaparecieron dos
+    meses de datos con un clic y no hubo forma de saber quién ni cuándo: se fechó
+    por el tamaño de las copias. Esto lo evita para siempre y cuesta un insert
+    asíncrono por escritura, en `global_db.audit_requests`, 30 días. Nunca
+    guarda cuerpos ni cabeceras: solo método, ruta, código, milisegundos y quién
+    firmaba el token.
     """
     inicio = time.time()
     response = await call_next(request)
     if request.method in ("POST", "PUT", "PATCH", "DELETE") \
-            and not request.url.path.startswith("/api/cortex/ingest") \
             and not request.url.path.startswith("/api/analitica/"):
         try:
             quien: dict = {}
@@ -354,7 +352,7 @@ class Driver(BaseModel):
     name: str
     dni: Optional[str] = None
     phone: Optional[str] = None
-    telefono_por: Optional[str] = None   # quien lo puso: oficina | portal | cortex
+    telefono_por: Optional[str] = None   # quien lo puso: oficina | portal
     telefono_en: Optional[str] = None
     # Cortex da ese numero a mas de una persona: no se borra —puede que sea
     # correcto y compartan movil— pero se avisa (04-09-2026: 15 fichas asi).
@@ -367,7 +365,7 @@ class Driver(BaseModel):
     email: Optional[str] = None
     license_number: Optional[str] = None
     login: Optional[str] = None        # login del conductor
-    driver_id: Optional[str] = None    # ID de Amazon
+    driver_id: Optional[str] = None    # identificador externo (nº de empleado)
     # Transporter ID de Cortex (el de los reportes diarios). NO es lo mismo
     # que `driver_id`: aquel es el numero interno de Amazon que aparece en la
     # ficha, este es el codigo con el que vienen firmados los DNR.
@@ -394,7 +392,7 @@ class DriverCreate(BaseModel):
     license_number: Optional[str] = None
     center: Optional[str] = None
     password: Optional[str] = None
-    driver_id: Optional[str] = None    # ID de Amazon
+    driver_id: Optional[str] = None    # identificador externo (nº de empleado)
     contrato: Optional[str] = None
     nivel: Optional[str] = None
     zona: Optional[str] = None
@@ -899,8 +897,7 @@ async def get_current_user(
         # así el visitante puede probar el tracker de paquetes de verdad.
         # El aparcamiento tambien se puede tocar en demo: BD aislada, y deja que
         # el visitante pruebe de verdad el plano (asignar, reportar, confirmar).
-        _demo_ok = ("/assistant/ask", "/cortex/seed-demo", "/cortex/clear-demo",
-                    "/parking/assign", "/parking/report", "/parking/resolve")
+        _demo_ok = ("/assistant/ask", "/parking/assign", "/parking/report", "/parking/resolve")
         if not any(request.url.path.endswith(p) for p in _demo_ok):
             raise HTTPException(status_code=403, detail="Modo demo: solo lectura. Crea tu cuenta gratis para editar.")
     # AÍSLA: fija la BD de la organización del token para TODA esta petición.
@@ -1119,13 +1116,9 @@ MODULOS_PANEL = [
     {"clave": "dashboard", "nombre": "Inicio", "grupo": "Hoy", "que": "Resumen del dia"},
     {"clave": "mi-dia", "nombre": "Mi dia", "grupo": "Hoy", "que": "Tareas del responsable"},
     {"clave": "actividad", "nombre": "Actividad", "grupo": "Hoy", "que": "Lo ultimo que ha pasado"},
-    {"clave": "paquetes", "nombre": "Paquetes IA", "grupo": "Operacion diaria", "que": "Cortex en vivo (necesita la extension)"},
-    {"clave": "apoyo", "nombre": "Apoyo en ruta", "grupo": "Operacion diaria", "que": "Pasar paradas entre conductores"},
-    {"clave": "debrief", "nombre": "Debrief", "grupo": "Operacion diaria", "que": "Cierre de rutas"},
     {"clave": "asignacion", "nombre": "Asignacion", "grupo": "Operacion diaria", "que": "Que furgoneta lleva cada conductor"},
     {"clave": "turnos", "nombre": "Turnos", "grupo": "Operacion diaria", "que": "Cuadrante y peticiones de dias"},
     {"clave": "checklist-operativo", "nombre": "Checklist", "grupo": "Operacion diaria", "que": "Tareas de apertura y cierre"},
-    {"clave": "plantilla", "nombre": "Plantilla diaria", "grupo": "Operacion diaria", "que": "Hoja de salida compartida"},
     {"clave": "vehiculos", "nombre": "Vehiculos", "grupo": "Flota", "que": "Fichas de las furgonetas"},
     {"clave": "revision", "nombre": "Revision rapida", "grupo": "Flota", "que": "Validar los daños que ve la IA"},
     {"clave": "inspecciones", "nombre": "Inspecciones", "grupo": "Flota", "que": "Fotos de cada dia"},
@@ -1139,10 +1132,6 @@ MODULOS_PANEL = [
     {"clave": "conductores", "nombre": "Conductores", "grupo": "Equipo", "que": "Fichas y accesos al portal"},
     {"clave": "empleo", "nombre": "Empleo", "grupo": "Equipo", "que": "Ofertas y candidatos"},
     {"clave": "incorporaciones", "nombre": "Incorporaciones", "grupo": "Equipo", "que": "Altas de gente nueva"},
-    {"clave": "scorecard", "nombre": "Scorecard", "grupo": "Equipo", "que": "Nota de Amazon"},
-    {"clave": "informes", "nombre": "Informes", "grupo": "Equipo", "que": "DNR diarios y horas WHC"},
-    {"clave": "dsc", "nombre": "DSC", "grupo": "Equipo", "que": "Entregas dudosas por conductor"},
-    {"clave": "rendimiento", "nombre": "Rendimiento", "grupo": "Equipo", "que": "Ritmo de cada conductor"},
     {"clave": "contactos", "nombre": "Contactos", "grupo": "Equipo", "que": "Agenda de telefonos"},
     {"clave": "conversaciones", "nombre": "Conversaciones", "grupo": "Equipo", "que": "WhatsApp con conductores y talleres"},
     {"clave": "origen-danos", "nombre": "Origen de daños", "grupo": "Sistema", "que": "Quien causa los golpes"},
@@ -2312,7 +2301,7 @@ async def refresh_workshops_v2():
 
 GEMINI_SYSTEM_PROMPT = """Eres el sistema de peritaje visual más preciso del mundo para flotas de reparto de última milla.
 Combinas 20 años de experiencia forense automotriz con visión computacional de nivel médico.
-Tus informes se usan en disputas legales reales entre conductores y empresas DSP (Amazon Logistics, DHL, SEUR).
+Tus informes se usan en disputas legales reales entre conductores y empresas con flota (reparto, alquiler, transporte, servicios).
 Un error tuyo cuesta dinero y reputación. La precisión de tus coordenadas de bounding box tiene consecuencias económicas directas.
 
 === PASO 1: IDENTIFICAR EL VEHÍCULO ===
@@ -5028,22 +5017,22 @@ async def billing_planes():
         "operacion": {
             "incluye": [
                 "Inspecciones con foto y análisis de daños por IA",
-                "Histórico de daños por furgoneta",
+                "Histórico de daños por vehículo",
                 "Reparaciones: taller, coste real y cierre",
                 "Avisos de mantenimiento e ITV",
                 "Portal del conductor",
-                "Chat del centro",
+                "Chat del equipo",
             ],
-            "no_incluye": ["Scorecard de Amazon", "Asignación diaria y turnos",
-                           "Métricas de Amazon", "Informe pericial firmado",
-                           "Exportar datos", "Varios centros"],
+            "no_incluye": ["Asignación diaria y turnos",
+                           "Atribución de daños por conductor",
+                           "Informe pericial firmado", "Exportar datos", "Varias sedes"],
         },
         "completo": {
             "incluye": [
-                "Todo lo de Operación, sin límite de centros",
-                "Scorecard de Amazon con objetivos y umbrales",
-                "Asignación diaria y cuadrante de turnos",
-                "Métricas de Amazon y ritmo real por conductor",
+                "Todo lo de Operación, sin límite de sedes",
+                "Asignación diaria y cuadrante de turnos con generador automático",
+                "Atribución de daños por conductor",
+                "Disponibilidad de flota: si llegas al trabajo de mañana",
                 "Informe pericial firmado y cadena de custodia",
                 "Exportar datos",
             ],
@@ -6307,10 +6296,6 @@ async def _seed_demo_data():
                                       ("Retrovisor roto", "grave")])
     ])
     logger.info("Demo: datos sintéticos creados en dsp_demo")
-
-
-
-
 
 
 _DEMO_CERROJO = asyncio.Lock()
@@ -10439,22 +10424,9 @@ async def update_driver(driver_id: str, data: dict, _=Depends(require_admin)):
     #    el nombre que saliera en el contador dependeria del orden en que Mongo
     #    los tuviera guardados: los DNR de uno apareceriean bajo el otro.
     quitar = {}
-    if "transporter_id" in data:
-        tid = str(data["transporter_id"] or "").strip().upper()
-        if not tid:
-            data.pop("transporter_id")
-            quitar["transporter_id"] = ""
-        elif not _DIA_TID.match(tid):
-            raise HTTPException(400, "Ese no parece un Transporter ID de Cortex "
-                                     "(empieza por A, sin espacios)")
-        else:
-            data["transporter_id"] = tid
-            await db.drivers.update_many(
-                {"transporter_id": tid, "id": {"$ne": driver_id}},
-                {"$unset": {"transporter_id": ""}})
-            # Y si estaba como etiqueta suelta, sobra: manda la ficha.
-            await db.app_meta.update_one({"_id": "transporter_alias"},
-                                         {"$unset": {f"mapa.{tid}": ""}})
+    # El Transporter ID era el identificador de otra plataforma: en este producto
+    # no existe, y si llega en el cuerpo se ignora en vez de guardarse.
+    data.pop("transporter_id", None)
 
     # Un telefono escrito a mano manda: la marca de «dudoso» era sobre el que
     # habiamos puesto nosotros desde Cortex, no sobre este.
@@ -13052,19 +13024,17 @@ async def verify_hash_public(content_hash: str, request: Request):
 # Permisos: el admin ve solo los centros de su allowed_centers (o todos si no esta seteado).
 
 _DEFAULT_CHECKLIST_ITEMS_MANANA = [
-    "Confirmar asignaciones conductor-furgoneta",
-    "Validar plantilla con Cortex",
+    "Confirmar asignaciones conductor-vehículo",
+    "Revisar vehículos con daños o avisos abiertos",
     "Briefing de mañana completado",
-    "Verificar combustible flota",
-    "Comprobar estado de móviles entregados",
-    "Confirmar rutas cargadas en sistema",
+    "Verificar combustible de la flota",
+    "Comprobar la documentación de los vehículos que salen",
 ]
 
 _DEFAULT_CHECKLIST_ITEMS_TARDE = [
-    "Recepción de furgonetas del turno de mañana",
-    "Revisión de paquetes dañados / incidencias del día",
-    "Confirmar asignaciones conductor-furgoneta (tarde)",
-    "Validar plantilla Cortex turno tarde",
+    "Recepción de vehículos del turno de mañana",
+    "Revisión de incidencias del día",
+    "Confirmar asignaciones conductor-vehículo (tarde)",
     "Briefing de tarde completado",
     "Cierre y documentación de turno",
 ]
@@ -16540,18 +16510,9 @@ async def send_daily_inspection_summary():
     """Cierre nocturno por centro a las 22:00.
 
     Antes era solo el recuento de auditorías. Ahora es el cierre del día:
-      · Entrega — DCR real de Cortex, con el motor de calidad en vivo.
       · Auditorías — quién la hizo y quién no (lo de siempre).
       · Daños nuevos de hoy, con quién conducía.
       · Recordatorios para mañana: ITV, mantenimiento vencido, rueda ausente.
-
-    Lo que NO lleva, y es a propósito: descontar del DCR las anulaciones hechas
-    en la propia nave antes de salir. Cortex no tiene estado de anulación, así
-    que detectarlas exige comparar la dirección de la parada con la dirección
-    de la estación, y esas direcciones NO están guardadas en ninguna parte
-    (`cortex_stations` solo mapea serviceAreaId → centro). Con las direcciones
-    a ojo, el mensaje de cada noche estaría regalando o quitando décimas de DCR
-    sin que nadie pudiera comprobarlo. Se queda fuera hasta que existan.
 
     Cuándo se dispara no cambia: sigue habiendo un mensaje por centro con
     cuadrante, y sin cuadrante no se manda nada.
@@ -20858,9 +20819,7 @@ async def empleo_contratar(cand_id: str, user: dict = Depends(require_admin)):
     """Crea la ficha del conductor con lo que escribio el propio candidato.
 
     Es el motivo de todo el modulo: el alta a mano es de donde salen las fichas
-    duplicadas y los telefonos que faltan. El `transporter_id` sigue sin poder
-    rellenarse solo —lo da Amazon— pero queda pendiente y a la vista, no en
-    blanco y olvidado.
+    duplicadas y los teléfonos que faltan.
     """
     c = await db.candidatos.find_one({"id": cand_id}, {"_id": 0})
     if not c:
@@ -21778,7 +21737,7 @@ async def partner_crear_token(data: dict = Body(...), user: dict = Depends(requi
     """Crea una llave de solo lectura para un tercero. Se enseña UNA vez."""
     nombre = str(data.get("partner") or "").strip()
     if not nombre:
-        raise HTTPException(400, "Dile de quién es la llave (por ejemplo, «Amazon Logistics»)")
+        raise HTTPException(400, "Dile de quién es la llave (por ejemplo, «Cliente Norte»)")
     scopes = [s for s in (_lista_cuerpo(data.get("scopes")) or ["flota"])
               if s in PARTNER_SCOPES] or ["flota"]
     dias = _entero(data.get("dias"), "dias", defecto=PARTNER_DIAS_DEF, minimo=1, maximo=1095)
@@ -23477,7 +23436,7 @@ async def mark_all_alerts_read(_=Depends(require_admin)):
 # =========================
 
 def _load_workbook_reparado(content):
-    """Repara un .xlsx con styles.xml corrupto (típico del Excel de Amazon Fleet)
+    """Repara un .xlsx con styles.xml corrupto (típico de las exportaciones de gestores de flota)
     y lo recarga. Reemplaza la hoja de estilos por una mínima válida."""
     import io as _io, zipfile, openpyxl
     src = _io.BytesIO(content)
@@ -23893,7 +23852,7 @@ async def import_vehicles(
     Sin ellos se comporta como antes, pero el filtro por centro compara el
     CODIGO y no el texto.
 
-    `crear`: el Excel de Amazon trae las furgonetas de toda la region, asi que
+    `crear`: el Excel de un gestor de flota trae los vehículos de toda la región, así que
     por defecto solo se ACTUALIZAN las que ya tienes; una empresa que sube SU
     flota marca crear para darlas de alta.
     """
@@ -24762,7 +24721,7 @@ async def import_roster_text(
     user: dict = Depends(require_admin),
 ):
     await _require_plan_feature(user, "assignments")
-    """Importa el roster pegado desde la plataforma de Amazon, EN CUALQUIER FORMATO.
+    """Importa la asignación del día pegada de donde sea, EN CUALQUIER FORMATO.
 
     Estrategia en cascada:
       1. Gemini estructura el texto crudo en pares matricula->conductor (entiende
@@ -24968,7 +24927,7 @@ async def import_roster_image(
     center: str = Form(...),
     user: dict = Depends(require_admin),
 ):
-    """Lee una captura del roster de Amazon con Gemini Vision, extrae los pares
+    """Lee una captura de la asignación del día con Gemini Vision, extrae los pares
     matrícula↔conductor y los cruza con la BD para rellenar el cuadrante."""
     await _require_plan_feature(user, "assignments")
     if not date:
@@ -25007,13 +24966,13 @@ async def import_roster_image(
             client = genai_sdk.Client(api_key=gemini_key)
 
         prompt = (
-            "Esta es una captura de un roster diario de reparto de Amazon. "
+            "Esta es una captura de la asignación diaria de vehículos de una flota. "
             "Extrae TODAS las filas que tengan una matrícula de furgoneta y un nombre de conductor. "
-            "Las matrículas españolas son 4 números + 3 letras (ej: '9883 NFX'). "
-            "Los nombres vienen como 'Apellidos, Nombre' (ej: 'Botana Vilar, Victor Manuel'). "
+            "Las matrículas españolas son 4 números + 3 letras (ej: '1234 ABC'). "
+            "Los nombres pueden venir como 'Apellidos, Nombre' (ej: 'García López, Ana'). "
             "Ignora filas con 'SIN ASIGN' o sin matrícula. "
             "Devuelve SOLO un JSON array, sin texto adicional, con este formato exacto: "
-            '[{"plate":"9883 NFX","driver":"Botana Vilar, Victor Manuel"}, ...]'
+            '[{"plate":"1234 ABC","driver":"García López, Ana"}, ...]'
         )
         # Detectar tipo MIME real para aceptar JPEG y PNG
         _img_mime = "image/png" if img_bytes[:4] == b'\x89PNG' else "image/jpeg"
@@ -25131,14 +25090,14 @@ async def fleet_report_pdf(center: Optional[str] = None, user: dict = Depends(re
 
     EL CENTRO NO ES OPCIONAL DE VERDAD. Este informe existia desde hacia meses
     y no lo llamaba NINGUNA pantalla, asi que nadie habia notado que contaba
-    la flota entera de la empresa: en una DSP con tres naves, el numero que
-    sales a enseñar mezcla las tres y no cuadra con nada de lo que Amazon mide,
-    que va siempre por estacion. Un informe que no cuadra se cae en la primera
-    pregunta, y es peor que no llevar informe.
+    la flota entera de la empresa: con tres sedes, el número que sales a enseñar
+    mezcla las tres y no cuadra con nada de lo que el cliente mide por sede. Un
+    informe que no cuadra se cae en la primera pregunta, y es peor que no llevar
+    informe.
 
-    Sin `center` sigue saliendo el total —que es lo que quiere el dueño de la
-    DSP para su propia foto—, pero el PDF lo DICE en la cabecera, para que
-    nadie lo enseñe creyendo que es de una nave.
+    Sin `center` sigue saliendo el total —que es lo que quiere el dueño para su
+    propia foto—, pero el PDF lo DICE en la cabecera, para que nadie lo enseñe
+    creyendo que es de una sede.
     """
     filtro_centro = _filtro_centro(user, center) or {}
     vq = dict(filtro_centro)
@@ -28513,113 +28472,6 @@ async def delete_rental(rental_id: str, _=Depends(require_admin)):
     return {"success": True}
 
 
-@api_router.post("/drivers/import-ids")
-async def import_driver_ids(data: dict, _=Depends(require_admin)):
-    """Importa Amazon Transporter IDs en masa desde un export de Cortex (pegado).
-    La IA extrae pares (nombre, transporter_id) de cualquier formato y los cruza
-    con los conductores de la BD por nombre (insensible a acentos)."""
-    raw_text = _texto_cuerpo(data.get("text"))[:30000]
-    if not raw_text.strip():
-        raise HTTPException(status_code=400, detail="Pega el contenido del export de Cortex")
-
-    TID_RE = re.compile(r"\bA[A-Z0-9]{8,16}\b")
-
-    # 1) Parseo con Gemini (entiende cualquier formato)
-    pairs = []
-    try:
-        from google import genai as genai_sdk
-        from google.genai import types as genai_types
-        use_vertex = os.environ.get("USE_VERTEX_AI", "").lower() in ("1", "true", "yes")
-        if use_vertex:
-            from google.oauth2 import service_account
-            import json as _json, base64 as _b64
-            sa = os.environ.get("GCP_SERVICE_ACCOUNT_JSON", "").strip()
-            if sa and not sa.startswith("{"):
-                sa = _b64.b64decode(sa).decode("utf-8")
-            creds = service_account.Credentials.from_service_account_info(
-                _json.loads(sa), scopes=["https://www.googleapis.com/auth/cloud-platform"]) if sa else None
-            client = genai_sdk.Client(vertexai=True, project=os.environ.get("GCP_PROJECT", ""),
-                                      location=os.environ.get("GCP_LOCATION", "us-central1"), credentials=creds)
-        else:
-            client = genai_sdk.Client(api_key=os.environ.get("GEMINI_API_KEY", ""))
-        prompt = (
-            "Este texto es un export de Amazon Cortex/Scorecard con conductores (DAs). "
-            "Extrae TODAS las parejas de nombre del conductor y su Transporter ID "
-            "(el ID empieza por 'A' y tiene letras y numeros, ej: A1W24EJAOPQ5F0). "
-            "Responde SOLO JSON sin markdown: "
-            '{"pairs":[{"name":"nombre tal cual","transporter_id":"AXXXX"}]}\n\nTEXTO:\n' + raw_text
-        )
-        cfg = genai_types.GenerateContentConfig(temperature=0.0, response_mime_type="application/json")
-        loop = asyncio.get_running_loop()
-        async with _gemini_sem:
-            resp = await asyncio.wait_for(
-                loop.run_in_executor(_executor, lambda: client.models.generate_content(
-                    model=os.environ.get("GEMINI_MODEL", "gemini-2.5-flash"), contents=[prompt], config=cfg)),
-                timeout=40.0)
-        gd = json.loads(_strip_markdown_json(resp.text or "{}"))
-        for p in gd.get("pairs", []):
-            tid = (p.get("transporter_id") or "").strip().upper()
-            nm = (p.get("name") or "").strip()
-            if nm and TID_RE.match(tid):
-                pairs.append({"name": nm, "tid": tid})
-    except Exception as _e:
-        logger.warning(f"Import IDs: Gemini fallo ({_e}), usando deteccion por lineas")
-        pairs = []
-
-    # 2) Respaldo: detectar por linea (un ID + el texto restante = nombre)
-    if not pairs:
-        for line in raw_text.splitlines():
-            m = TID_RE.search(line.upper())
-            if not m:
-                continue
-            tid = m.group(0)
-            name = re.sub(TID_RE, "", line, flags=re.I)
-            name = re.sub(r"[\t,;|]+", " ", name).strip()
-            if len(name) > 3:
-                pairs.append({"name": name, "tid": tid})
-
-    if not pairs:
-        raise HTTPException(status_code=400, detail="No se encontraron pares nombre + Transporter ID en el texto.")
-
-    # 3) Cruce con la BD por nombre (insensible a acentos)
-    import unicodedata as _ud
-
-    def _fold(s):
-        s = _ud.normalize("NFD", (s or "").lower())
-        return "".join(c for c in s if _ud.category(c) != "Mn")
-
-    def _words(s):
-        return set(w for w in re.sub(r"[^a-z ]", " ", _fold(s)).split() if len(w) > 1)
-
-    drivers = await db.drivers.find({"status": {"$ne": "deleted"}}, {"_id": 0, "id": 1, "name": 1}).to_list(1000)
-    driver_words = [(d, _words(d.get("name", ""))) for d in drivers]
-
-    matched, ambiguous, unmatched = 0, [], []
-    for p in pairs:
-        pw = _words(p["name"])
-        scored = []
-        for d, dw in driver_words:
-            inter = pw & dw
-            if inter:
-                scored.append((sum(2 if len(w) >= 5 else 1 for w in inter), d))
-        scored.sort(key=lambda x: -x[0])
-        best = scored[0] if scored else None
-        second = scored[1] if len(scored) > 1 else None
-        ok = best and (best[0] >= 3 or (best[0] >= 2 and (not second or second[0] < best[0])))
-        if ok and second and second[0] == best[0]:
-            ok = False
-            ambiguous.append(p["name"])
-        if ok:
-            await db.drivers.update_one({"id": best[1]["id"]}, {"$set": {"driver_id": p["tid"]}})
-            matched += 1
-        elif p["name"] not in ambiguous:
-            unmatched.append(p["name"])
-
-    logger.info(f"Import IDs Cortex: {matched}/{len(pairs)} asignados")
-    return {"success": True, "total": len(pairs), "matched": matched,
-            "ambiguous": ambiguous[:20], "unmatched": unmatched[:20]}
-
-
 # =========================
 # CUADRANTE DE TURNOS (shifts) + solicitudes de días
 #   shifts:        {center, driver_id, driver_name, date "YYYY-MM-DD", type,
@@ -30442,7 +30294,7 @@ async def set_codigos_cuadrante(data: dict = Body(...), _=Depends(require_admin)
 async def import_shifts(file: UploadFile = File(...), center: str = Form(...),
                         mes: str = Form(...), confirmar: str = Form(default=""),
                         user: dict = Depends(require_admin)):
-    """Importa el cuadrante mensual de Amazon (hoja MENSUAL).
+    """Importa el cuadrante mensual de turnos (hoja MENSUAL).
 
     ── POR QUÉ NO SE FÍA DEL FICHERO ────────────────────────────────────────
     El Excel real trae dos cosas que, tomadas al pie de la letra, meten un
@@ -30511,7 +30363,7 @@ async def import_shifts(file: UploadFile = File(...), center: str = Form(...),
     if len(cols_dia) < 28:
         raise HTTPException(400,
             "No encontré la fila de días de la semana encima de la cabecera. "
-            "Comprueba que es la hoja MENSUAL del cuadrante de Amazon.")
+            "Comprueba que es la hoja MENSUAL del cuadrante de turnos.")
 
     dias_mes = calendar.monthrange(anio, mesn)[1]
     if len(cols_dia) > dias_mes:
@@ -31073,36 +30925,34 @@ _ONB_ESTADO_NOMBRE = {
 }
 
 _ONB_SALUDO = "Hola {nombre}, \u00bfqu\u00e9 tal?"
-_ONB_CUERPO = ("Disculpa, hemos tenido un problema con tu incorporaci\u00f3n en Amazon "
+_ONB_CUERPO = ("Disculpa, estamos teniendo un retraso con tu incorporaci\u00f3n "
                "y por eso est\u00e1 tardando.")
 _ONB_CIERRE = "Cualquier duda me dices. \u00a1Gracias!"
 
 
-# ── EL MENSAJE PARA EMPEZAR LA FORMACION ────────────────────────────────────
+# ── EL MENSAJE PARA EMPEZAR LA FORMACIÓN ───────────────────────────────
 #
-# Cuando alguien pasa a «En incorporacion», Amazon le genera un usuario para la
-# formacion —el «Codigo Test Formacion» del listado de la ETT— y la contraseña
-# es la misma para todos. Hasta ahora eso se copiaba a mano ficha por ficha.
+# Cuando alguien pasa a «En incorporación» se le manda su acceso a la formación:
+# su usuario sale de la ficha (`codigo_formacion`) y lo demás —qué app, su
+# enlace y una contraseña común si la hay— es de CADA EMPRESA y se configura en
+# la plantilla. Nada de eso viene escrito de fábrica: sería el de otra empresa.
 #
-# La contraseña va en el texto A PROPOSITO: es la misma para todo el mundo y la
-# da la propia empresa, no es la de nadie. El USUARIO si es de cada persona y
-# sale de su ficha: por eso a quien no tenga codigo NO se le manda nada, en vez
-# de mandarle un mensaje con un hueco vacio.
-_ONB_FORMACION_CONTRASENA = "welcome"
-# La app de la formacion y su enlace de Play Store. Aqui y no dentro del
-# texto: el dia que cambie, se cambia en un sitio.
-_ONB_FORMACION_APP = "Amiigo"
-_ONB_FORMACION_ENLACE = (
-    "https://play.google.com/store/apps/details?id=com.disprz.amiigo&hl=es_419")
-_ONB_FORMACION = (
-    "Ya tienes lista la formación de Amazon, que es el último paso."
-    "\n\nDescárgate la app {app} en Play Store:\n{enlace}"
-    "\n\nY entra con estos datos:\n"
-    "Usuario: {codigo}\n"
-    "Contraseña: {clave}\n\n"
-    "Cuanto antes la termines, antes puedes empezar a trabajar. "
-    "Cualquier duda me preguntas y te ayudo."
-)
+# A quien no tenga usuario NO se le manda nada, en vez de un mensaje con el
+# hueco vacío que no le deja entrar.
+def _onb_texto_formacion(codigo: str, app: str = "", enlace: str = "", clave: str = "") -> str:
+    """El texto de la formación. Solo lleva las líneas de lo que está configurado."""
+    partes = ["Ya tienes lista la formación, que es el último paso."]
+    if app and enlace:
+        partes.append("Descárgate la app %s:\n%s" % (app, enlace))
+    elif enlace:
+        partes.append("Entra aquí:\n%s" % enlace)
+    datos = "Usuario: %s" % codigo
+    if clave:
+        datos += "\nContraseña: %s" % clave
+    partes.append("Y entra con estos datos:\n" + datos)
+    partes.append("Cuanto antes la termines, antes puedes empezar a trabajar. "
+                  "Cualquier duda me preguntas y te ayudo.")
+    return "\n\n".join(partes)
 
 
 async def _onb_plantilla() -> dict:
@@ -31116,7 +30966,11 @@ async def _onb_plantilla() -> dict:
     return {"saludo": doc.get("saludo") or _ONB_SALUDO,
             "cuerpo": doc.get("cuerpo") or _ONB_CUERPO,
             "cierre": doc.get("cierre") or _ONB_CIERRE,
-            "motivos": motivos}
+            "motivos": motivos,
+            # La formación de ESTA empresa. Vacío de fábrica, a propósito.
+            "formacion_app": str(doc.get("formacion_app") or "")[:60],
+            "formacion_enlace": str(doc.get("formacion_enlace") or "")[:300],
+            "formacion_clave": str(doc.get("formacion_clave") or "")[:60]}
 
 
 def _onb_nombre_corto(nombre: str) -> str:
@@ -31184,8 +31038,9 @@ def _onb_mensaje_formacion(persona: dict, plantilla: dict) -> str:
         return ""
     return " ".join(x for x in [
         plantilla["saludo"].replace("{nombre}", _onb_nombre_corto(persona.get("nombre"))),
-        _ONB_FORMACION.format(codigo=codigo, clave=_ONB_FORMACION_CONTRASENA,
-                              app=_ONB_FORMACION_APP, enlace=_ONB_FORMACION_ENLACE),
+        _onb_texto_formacion(codigo, plantilla.get("formacion_app", ""),
+                             plantilla.get("formacion_enlace", ""),
+                             plantilla.get("formacion_clave", "")),
     ] if x and x.strip())
 
 
@@ -31591,10 +31446,9 @@ def _onb_espera(p: dict) -> dict:
 # otro lado. Lo contrario seria dar por enviado un mensaje que nadie envio, y
 # sobre eso Dani decide a quien llama.
 _ONB_PASOS = (
-    ("apuntado", "Lo colgo la ETT"),
+    ("apuntado", "Dado de alta"),
     ("papeles", "Papeles completos"),
     ("acceso", "Acceso a la formacion enviado"),
-    ("cuenta", "Cuenta creada en Amazon"),
     ("dentro", "Formacion terminada"),
 )
 
@@ -32335,10 +32189,6 @@ async def admin_delete_driver_offer(offer_id: str, _=Depends(require_superadmin)
 # WHC — WORKING HOURS COMPLIANCE
 # Ver docs/WHC.md: que se puede afirmar de estos datos y que no.
 # =========================================================================
-
-
-
-
 
 
 # El Nomenclator va en su propio modulo y se importa con red: si el fichero de
@@ -36366,8 +36216,7 @@ para confirmar las que casen sin dudas. NUNCA digas que no puedes procesarlas
 o que hay que subirlas una a una — SÍ hay una forma de hacerlo de golpe, y es
 esa.
 Conductores: ficha de cada persona. Para varios de golpe, «Importar Excel»
-(vale cualquier columna que tenga el nombre). El Transporter ID reparte los
-DNR: si está mal puesto, los fallos van a otra persona. Puedes listar
+(vale cualquier columna que tenga el nombre). Puedes listar
 conductores activos/inactivos, buscar por nombre, o editar su teléfono,
 correo, DNI o dirección — «cámbiale el teléfono a Juan Pérez por el
 600111222».
@@ -36386,47 +36235,19 @@ el parte sale con daños y taller ya puestos, se manda por WhatsApp con un
 enlace público (sin registro), y la app pregunta sola cada pocos días.
 Puedes abrir la orden tú por el chat — "manda la 1234ABC a Chapisteria
 Riazor por el golpe del lateral" — buscando el taller por su nombre.
-Asignación diaria: qué furgoneta lleva cada conductor hoy; asígnalo antes de
-que salgan las rutas. Puedes hacerlo tú por el chat: "que Juan Pérez lleve la
+Asignación diaria: qué vehículo lleva cada conductor hoy; asígnalo antes de
+que salgan. Puedes hacerlo tú por el chat: "que Juan Pérez lleve la
 1234ABC" propone asignar esa furgoneta a ese conductor (busca a los dos por
 lo que ya tienen en la ficha, sin adivinar si hay dudas), y "quítale la
 furgoneta a Juan" la desasigna. También puedes marcar una furgoneta como
 "en taller" o "activa otra vez" — "la 1234ABC ha entrado en taller".
 Turnos (cuadrante): quién trabaja qué día. Se pinta con el pincel de código;
 los días aprobados salen en rosa y no se mueven sin permiso.
-Plantilla de turno: la plantilla de personal, generada desde Turnos —cierra
-el cuadrante antes de descargarla. Si te piden "hazme la plantilla de hoy" o
-"móntala con Cortex", TÚ PUEDES: rellenas ruta y conductor con lo que Cortex
-ya ha capturado hoy, y furgo/teléfono si la Asignación diaria de hoy ya está
-rellena. La hora de salida nunca la sabes tú —Cortex no la da— y se queda en
-blanco para que la oficina la ponga, igual que hace hoy a mano.
-WHC (cumplimiento de horas): quién se acerca o se pasa del límite semanal de
-Amazon (54h30 fijas, no las cambia cada nave). Entra solo desde la extensión;
-avisa antes del viernes, que es cuando ya no se puede arreglar. Puedes
-preguntar por una persona en concreto — "cómo va el WHC de Juan" — y te digo
-lo trabajado, la proyección y si va bien, se acerca o ya se ha pasado. Y SÍ
-puedes dar los NOMBRES de quiénes se pasan o se acercan aunque ya hayas dado
-el número total antes — solo tienes que pedir la consulta "whc" otra vez sin
-filtro de nombre.
-Informes de Amazon (DNR y diarios): los Daily Report de Cortex, con qué no
-se entregó. El bloque de DNR es de DOS DÍAS ANTES y la columna de defectos se
-rellena tarde: un día recién bajado sale mejor de lo que acabará quedando.
-Puedes pedir la lista de investigaciones DNR abiertas y sus plazos.
-Rendimiento: quién reparte mejor o peor, por DCR real de los últimos 30 días
-(con un mínimo de entregas, para no señalar a alguien por un fallo suelto en
-poco volumen). "Quién es el mejor conductor", "ranking de repartidores" — lo
-puedes contestar con datos reales, nunca digas que no tienes esa métrica.
-Dónde se entrega (DSC): direcciones que fallan al entregar — la métrica que
-más le cuesta a un DSP. Corregir una dirección la arregla para siempre.
 Empleo: ofertas con enlace público. Al crear una oferta, EL CENTRO que
 elijas decide en qué tablero salen sus candidatos y en qué nave nace la
 ficha al contratar. JOIN se conecta con un token propio (join.com/user/api);
 si hay más de un puesto en JOIN hay que elegir a cuál corresponde, o mezcla
 naves.
-Apoyo en ruta: cuando alguien va tarde, quitarle paradas y dárselas a otro
-conductor por WhatsApp con el mapa. El backup del día sale marcado primero.
-Scorecard: sube el PDF que manda Amazon cada miércoles para ver el tier y
-qué métrica hay que atacar.
 Vencimientos: ITV, seguro y permisos que caducan; lo que está en rojo ya
 venció.
 Importaciones: subir ficheros de furgonetas/conductores/datos externos, con
@@ -36996,10 +36817,6 @@ _IA_NO_PUEDE_DE_VERDAD = re.compile(
 # Que consulta contesta cada clase de pregunta. La lista sale del codigo —de
 # `_IA_CONSULTA_TIPOS`— y no de lo que yo recuerde que existe (gotcha 40).
 _IA_LO_QUE_SI_PUEDE = [
-    ("whc", r"\bwhc\b|\bhoras?\b|se\s+pasan?|peligran|l[i\u00ed]mite\s+de\s+horas|\b55\s*h"),
-    ("rendimiento", r"rendimiento|\bdcr\b|peor(?:es)?\s+conductor|mejor(?:es)?\s+conductor|"
-                    r"ranking|qui[e\u00e9]n\s+rinde|qui[e\u00e9]nes\s+rinden"),
-    ("dnr", r"\bdnr\b|investigaci[o\u00f3]n|investigaciones"),
     ("inspecciones", r"inspecci[o\u00f3]n|inspecciones"),
     ("vehiculos", r"furgonet|veh[i\u00ed]culo|matr[i\u00ed]cula|\bitv\b|renting|seguro|"
                   r"ficha\s+t[e\u00e9]cnica|fichas\s+t[e\u00e9]cnicas"),
@@ -37857,7 +37674,7 @@ def _gasto_quien_es(texto: str, aprendidos: dict = None) -> dict:
 
 
 def _gasto_es_ingreso(texto: str) -> bool:
-    """¿Es dinero que ENTRA? Lo que cobras de Amazon no es un gasto."""
+    """¿Es dinero que ENTRA? Lo que cobras de tus clientes no es un gasto."""
     n = _gasto_norm(texto)
     return any(p.strip() in n for p in _GASTO_INGRESOS)
 

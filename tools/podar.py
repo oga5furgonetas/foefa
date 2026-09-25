@@ -29,7 +29,7 @@ import sys
 
 RUTAS_AMAZON = re.compile(
     r'^/(cortex|scorecard|dnr|whc|apoyo|diarios|transporter-ids|mery|asociados)(/|$)'
-    r'|^/(api/)?tools/plantilla|^/plantillas(/|$)|^/drivers/sin-centro'
+    r'|^/(api/)?tools/plantilla|^/plantillas(/|$)|^/drivers/sin-centro|^/drivers/import-ids$'
     r'|^/metrics/(upload-routeplan|routeplan|routeplan-available|upload-report'
     r'|driver-history|reports|upload-daily|daily-week)(/|$)'
     r'|^/portal/(mis-numeros|mis-ayudas)$')
