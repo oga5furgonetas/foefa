@@ -4,6 +4,7 @@ import axios from 'axios'
 import { Wrench, ChevronRight, AlertTriangle, Loader2, Euro, CalendarClock } from 'lucide-react'
 import { API_BASE } from '../lib/apiBase'
 import { normalizarDetalle } from '../services/api'
+import { MARCA } from '../marca'
 
 /* LA PUERTA DE UN TALLER — un solo enlace, para siempre.
    ═══════════════════════════════════════════════════════════════════════
@@ -70,7 +71,7 @@ export default function PortalTallerLista() {
     <div className="min-h-screen bg-[#F8FAFC] pb-24 text-slate-900">
       <header className="border-b border-slate-200 bg-white px-4 pb-5 pt-6">
         <div className="mx-auto max-w-lg">
-          <p className="text-[11.5px] font-semibold uppercase tracking-[0.16em] text-blue-600">FlotaDSP · vuestro enlace</p>
+          <p className="text-[11.5px] font-semibold uppercase tracking-[0.16em] text-blue-600">{MARCA.nombre} · vuestro enlace</p>
           <h1 className="mt-1 text-[26px] font-extrabold leading-tight tracking-tight">{datos.taller || 'Taller'}</h1>
           <p className="mt-1 text-[14px] text-slate-500">
             {datos.total === 0 ? 'Ahora mismo no tenéis ninguna furgoneta nuestra.'

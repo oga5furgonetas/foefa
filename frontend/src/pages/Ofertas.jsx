@@ -5,6 +5,7 @@ import {
 } from 'lucide-react'
 import { API_BASE } from '../lib/apiBase'
 import RopaCartel from './RopaCartel'
+import { MARCA } from '../marca'
 
 /* LAS OFERTAS ABIERTAS — la página a la que llega quien busca trabajo.
    ══════════════════════════════════════════════════════════════════════════
@@ -49,7 +50,7 @@ export default function Ofertas() {
     <div className="min-h-screen bg-slate-50">
       <div className="mx-auto max-w-3xl px-5 py-10">
         <a href="/" className="mb-8 inline-flex items-center gap-2 text-[13px] font-semibold text-slate-500 hover:text-slate-800">
-          ← FlotaDSP
+          ← {MARCA.nombre}
         </a>
 
         <div className="mb-2 flex items-center gap-2.5">

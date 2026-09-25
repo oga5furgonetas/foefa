@@ -1,46 +1,55 @@
-/* El sitemap, con las ofertas de empleo metidas EN CADA PETICIÓN.
+/* El sitemap, montado EN CADA PETICIÓN con el dominio desde el que se pide.
  *
- * Es la parte que se retroalimenta sola: publicas una oferta y entra en el
- * sitemap; la desactivas y sale. Sin tocar un fichero, sin desplegar y sin que
- * nadie tenga que acordarse — que es exactamente como se quedan viejas las
- * listas escritas a mano.
+ * Las páginas fijas se escriben aquí con el origen de la petición: así el mismo
+ * despliegue sirve para cualquier dominio sin un fichero con la dirección
+ * escrita a mano. Y las ofertas de empleo entran solas: publicas una y entra;
+ * la desactivas y sale.
  *
- * Las páginas fijas siguen viniendo del `sitemap.xml` estático de `public/`:
- * esas no cambian y no hay razón para generarlas.
- *
- * Si el backend no contesta se sirve el sitemap estático tal cual. Un sitemap
- * a medias es mucho peor que uno corto: Google se queda con lo que le des.
+ * Si el backend no contesta se sirven solo las fijas. Un sitemap a medias es
+ * mucho peor que uno corto: Google se queda con lo que le des.
  */
 
-const API = 'https://flotadsp-backend.fly.dev/api'
+/* La API sale de la variable API_URL del proyecto (Cloudflare Pages →
+   Settings → Environment variables). Sin ella, la del mismo dominio. */
+const apiDe = (env, url) => (env && env.API_URL ? env.API_URL : new URL('/api', url).href).replace(/\/+$/, '')
 
 const xml = (s) => String(s || '')
   .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
 
+const FIJAS = [
+  ['/', '1.0'], ['/planes', '0.9'], ['/registro', '0.8'], ['/peritaje-tecnico', '0.7'],
+  ['/contacto', '0.6'], ['/security', '0.5'], ['/empleo', '0.6'],
+  ['/privacidad', '0.2'], ['/terminos', '0.2'], ['/cookies', '0.2'], ['/aviso-legal', '0.2'],
+]
+
 export async function onRequestGet(context) {
   const { env, request } = context
-  const url = new URL(request.url)
+  const origen = new URL(request.url).origin
 
-  const base = await env.ASSETS.fetch(new URL('/sitemap.xml', url))
-  let texto = await base.text()
+  const filas = FIJAS.map(([ruta, prioridad]) =>
+    `  <url><loc>${xml(origen + ruta)}</loc><priority>${prioridad}</priority></url>`)
 
   try {
-    const r = await fetch(`${API}/empleo/seo/sitemap`, { headers: { accept: 'application/json' } })
+    const r = await fetch(`${apiDe(env, request.url)}/empleo/seo/sitemap`, { headers: { accept: 'application/json' } })
     if (r.ok) {
       const { ofertas } = await r.json()
-      const filas = (ofertas || []).map((o) => {
+      for (const o of ofertas || []) {
         const lastmod = /^\d{4}-\d{2}-\d{2}$/.test(o.lastmod || '')
           ? `<lastmod>${o.lastmod}</lastmod>` : ''
         // Prioridad alta: son las páginas que queremos que Google recorra a
         // menudo, porque caducan.
-        return `  <url><loc>${xml(o.url)}</loc>${lastmod}<changefreq>daily</changefreq><priority>0.9</priority></url>`
-      }).join('\n')
-      if (filas) texto = texto.replace('</urlset>', `${filas}\n</urlset>`)
+        filas.push(`  <url><loc>${xml(o.url)}</loc>${lastmod}<changefreq>daily</changefreq><priority>0.9</priority></url>`)
+      }
     }
   } catch {
-    /* se sirve el estático */
+    /* se sirven solo las fijas */
   }
 
+  const texto = `<?xml version="1.0" encoding="UTF-8"?>
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+${filas.join('\n')}
+</urlset>
+`
   return new Response(texto, {
     headers: {
       'content-type': 'application/xml; charset=utf-8',

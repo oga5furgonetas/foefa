@@ -51,20 +51,8 @@ jobs:
         run: node scripts/check-efectos.mjs
       - name: Chunk roto reconocido en todos los navegadores (si no, el usuario no se cura)
         run: node scripts/check-chunk-error.mjs
-      - name: Checker extension (mensajes que se pierden entre los tres saltos)
-        run: node scripts/check-extension.mjs
-      - name: Cola de la extension (no pierde paquetes y no escribe de mas)
-        run: node scripts/check-cola-extension.mjs
-      - name: Interceptor (captura lo mismo y no abre lo que no ha cambiado)
-        run: node scripts/check-interceptor-ahorro.mjs
-      - name: Todas las naves desde una pestana (y cada cosa con su nave)
-        run: node scripts/check-naves-barrido.mjs
-      - name: Asociados (cada cuenta llega, sin perder a nadie ni repetir)
-        run: node scripts/check-asociados.mjs
       - name: Mensajes de error (siempre texto, nunca un objeto que tumbe la pantalla)
         run: node scripts/check-detalle-error.mjs
-      - name: Informes del portal (la direccion de cada dia se deduce bien)
-        run: node scripts/check-informes-portal.mjs
       - name: Envio de una candidatura (se reintenta, y reintentarlo es seguro)
         run: node scripts/check-envio-candidatura.mjs
       - name: Modulos por empresa (el menu y el catalogo cuadran)
@@ -73,6 +61,18 @@ jobs:
         run: node scripts/check-version-app.mjs
       - name: Checker patrones (codigo que repite un bug ya conocido)
         run: node scripts/check-patrones.mjs
+      - name: Lo importado existe (nombre o fichero borrado que alguien sigue importando)
+        run: node scripts/check-existe.mjs
+      - name: Ficheros huerfanos (codigo al que no llega nadie desde la entrada)
+        run: node scripts/check-huerfanos.mjs
+      - name: Todo lo usado esta importado
+        run: node scripts/check-importados.mjs
+      - name: Clases de Tailwind que no existen (se pintan sin estilo, sin error)
+        run: node scripts/check-clases-fantasma.mjs
+      - name: Hooks detras de un return (revienta al cambiar de estado)
+        run: node scripts/check-hooks.mjs
+      - name: Tests que nunca se ejecutan
+        run: node scripts/check-tests-huerfanos.mjs
 
   backend:
     name: Backend (sintaxis + contratos + tests de API)
@@ -105,12 +105,14 @@ jobs:
         run: python scripts/check_unicos.py
       - name: Cuerpos (leer el cuerpo de una peticion sin sus ayudantes = 500)
         run: python scripts/check_cuerpos.py
+      - name: Rutas tapadas (una ruta que otra declarada antes no deja llegar)
+        run: python scripts/check_rutas_tapadas.py
       - name: Instalar dependencias
         run: pip install -r backend/requirements.txt pytest pytest-asyncio
       - name: Tests de API contra Mongo real (persistencia, auth, demo read-only)
         env:
           SECRET_KEY: test-secret-key-only-for-tests
           MONGO_URL: mongodb://localhost:27017
-          DB_NAME: test_flotadsp
-          GLOBAL_DB_NAME: test_flotadsp_global
+          DB_NAME: test_flotia
+          GLOBAL_DB_NAME: test_flotia_global
         run: pytest backend/tests -q

@@ -4,5 +4,3 @@ Disallow: /panel
 Disallow: /conductor
 Disallow: /login
 Disallow: /reset-password
-
-Sitemap: https://flotadsp.com/sitemap.xml

@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { Sparkles, Send, Loader2, X, Check, Car, UserPlus, FileText, Paperclip, UserX, Wrench, AlertTriangle, Pencil, UserCog, Hammer } from 'lucide-react'
 import { getAiHistorial, enviarMensajeIA, ejecutarAccionIA, subirFichasTecnicasIA, confirmarFichasTecnicasIA } from './api'
 import { getAdmin } from './auth'
+import { MARCA } from '../marca'
 
 /* FLOTADSP AI — burbuja de ayuda flotante, abajo a la derecha, como los
    widgets de soporte de cualquier web grande (Intercom, Drift...): se ve
@@ -268,7 +269,7 @@ export default function AsistenteBurbuja({ center, centers }) {
           <div className="flex items-center justify-between border-b border-dark-800 bg-dark-900/80 px-3.5 py-3">
             <div className="flex items-center gap-2">
               <Sparkles size={16} className="text-brand-400" />
-              <div className="text-[13px] font-bold text-dark-100">FlotaDSP AI</div>
+              <div className="text-[13px] font-bold text-dark-100">{MARCA.ia}</div>
               {!sinCentro && <span className="cifra text-[11px] text-dark-500">· {center}</span>}
             </div>
             <button onClick={() => setAbierto(false)} className="text-dark-500 hover:text-dark-200"><X size={16} /></button>
@@ -295,7 +296,7 @@ export default function AsistenteBurbuja({ center, centers }) {
                       return (
                         <div key={i} className={`flex items-end gap-1.5 ${mia ? 'justify-end' : 'justify-start'}`}>
                           {!mia && (
-                            <img src="/logo-fd-sinlema.png" alt="FlotaDSP AI"
+                            <img src="/favicon.svg" alt={MARCA.ia}
                               className="h-6 w-6 shrink-0 rounded-full bg-dark-800 object-contain p-0.5" />
                           )}
                           <div className={`max-w-[88%] rounded-xl px-3 py-2 text-[12.5px] ${mia ? 'bg-brand-500/20 text-brand-200' : 'bg-dark-800 text-dark-100'}`}>
@@ -381,7 +382,7 @@ export default function AsistenteBurbuja({ center, centers }) {
       )}
 
       <button onClick={() => setAbierto((a) => !a)}
-        title="FlotaDSP AI"
+        title={MARCA.ia}
         className={`relative flex h-12 w-12 items-center justify-center rounded-full shadow-2xl transition ${
           abierto ? 'bg-dark-800 text-dark-200' : 'bg-brand-500 text-dark-950 hover:bg-brand-400'}`}>
         {abierto ? <X size={20} /> : <Sparkles size={20} />}

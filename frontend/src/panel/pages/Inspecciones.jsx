@@ -10,6 +10,7 @@ import {
 } from 'lucide-react'
 import GuidedEmpty from '../components/GuidedEmpty'
 import { getInspections, getInspection, getCoberturaInspecciones, getVehicles, getDrivers, getVehicleInspections, fetchAuthedBlob, getForensicStatus, signInspectionAdmin, recheckFraud, getSuggestedWorkshops, updateDamage } from '../api'
+import { MARCA } from '../../marca'
 
 const SEV_CLS = {
   leve: 'bg-amber-500/20 text-amber-300', moderado: 'bg-orange-500/20 text-orange-300',
@@ -377,7 +378,7 @@ function ForensicSignBlock({ inspId, onPdf, fmt }) {
   async function sign() {
     setSigning(true); setErr('')
     try {
-      const r = await signInspectionAdmin(inspId, 'Firmado por administrador desde panel FlotaDSP.')
+      const r = await signInspectionAdmin(inspId, `Firmado por administrador desde el panel de ${MARCA.nombre}.`)
       setStatus({ signed: true, hash: r.data.hash, signed_by_name: r.data.signed_by_name, signed_at: r.data.signed_at })
     } catch (e) {
       setErr(e?.response?.data?.detail || 'No se pudo firmar.')

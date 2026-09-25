@@ -465,7 +465,7 @@ PLANTILLAS_BASE = [
             "text": ("Hola, ¿cómo va la {{1}}? Lleva {{2}} días sin novedades. "
                      "Con un toque aquí nos decís el estado y así no os llamamos: {{3}}. "
                      "Gracias."),
-            "example": {"body_text": [["1234 ABC", "5", "https://flotadsp.com/taller/abc123"]]},
+            "example": {"body_text": [["1234 ABC", "5", "https://ejemplo.com/taller/abc123"]]},
         }],
     },
     {

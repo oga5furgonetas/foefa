@@ -29,6 +29,7 @@ import {
   fijarBolsas,
 } from '../api'
 import { getAdmin } from '../auth'
+import { MARCA } from '../../marca'
 
 const NIVEL_TXT = { 10: 'Reserva', 25: '¼', 50: '½', 75: '¾', 100: 'Lleno' }
 
@@ -582,7 +583,7 @@ function VehicleDetail({ vehicle: initVehicle, onClose, onSaved }) {
   @media print { body { margin: 10mm; } }
 </style></head><body>
   <h1>Parte de disputa — Historial del vehículo</h1>
-  <div class="sub">Generado por FlotaDSP · ${esc(new Date().toLocaleString('es-ES'))}${admin?.name ? ` · ${esc(admin.name)}` : ''}</div>
+  <div class="sub">Generado por ${esc(MARCA.nombre)} · ${esc(new Date().toLocaleString('es-ES'))}${admin?.name ? ` · ${esc(admin.name)}` : ''}</div>
   <div class="plate">${esc(vehicle.license_plate || '—')}</div>
   <div class="sub">${esc([vehicle.brand, vehicle.model, vehicle.year].filter(Boolean).join(' '))}</div>
   <div class="meta">
@@ -596,7 +597,7 @@ function VehicleDetail({ vehicle: initVehicle, onClose, onSaved }) {
   <h2>Cronología registrada</h2>
   <table>${rows}</table>
   ${evidence ? `<h2>Evidencia fotográfica</h2>${evidence}` : ''}
-  <div class="foot">Documento generado automáticamente a partir de registros con marca de tiempo de FlotaDSP
+  <div class="foot">Documento generado automáticamente a partir de registros con marca de tiempo de ${esc(MARCA.nombre)}
   (inspecciones fotográficas, incidencias y reparaciones). Las inspecciones individuales disponen además de
   informe forense firmado descargable desde la plataforma.</div>
   <script>window.onload = () => setTimeout(() => window.print(), 400)</script>
@@ -622,7 +623,7 @@ function VehicleDetail({ vehicle: initVehicle, onClose, onSaved }) {
 
     // Logo
     ctx.font = 'bold 12px system-ui'; ctx.fillStyle = '#3b82f6'
-    ctx.fillText('FlotaDSP', 24, 30)
+    ctx.fillText(MARCA.nombre, 24, 30)
     ctx.font = '11px system-ui'; ctx.fillStyle = '#334155'
     ctx.fillText('Sistema de gestión de flotas', 24, 46)
 
@@ -655,7 +656,7 @@ function VehicleDetail({ vehicle: initVehicle, onClose, onSaved }) {
 
     // Footer
     ctx.font = '10px system-ui'; ctx.fillStyle = '#1e293b'
-    ctx.fillText(`Generado por FlotaDSP · ${new Date().toLocaleDateString('es')}`, 24, 360)
+    ctx.fillText(`Generado por ${MARCA.nombre} · ${new Date().toLocaleDateString('es')}`, 24, 360)
 
     const finalize = (c) => {
       const a = document.createElement('a')

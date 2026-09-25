@@ -11,23 +11,23 @@ import { simularApi, entrarComoAdmin } from './api-simulada.js'
    pantallas (divisiones por cero, listas indefinidas, `.map` de un undefined). */
 
 const PANEL = [
-  ['mi-dia', 'Mi día'], ['', 'Dashboard'], ['vehiculos', 'Vehículos'],
-  ['conductores', 'Conductores'], ['inspecciones', 'Inspecciones'],
-  ['revision', 'Revisión rápida'], ['incidencias', 'Incidencias'],
-  ['aparcamiento', 'Aparcamiento'], ['asignacion', 'Asignación'],
-  ['checklist-operativo', 'Checklist'], ['plantilla', 'Plantilla de turno'],
-  ['chat', 'Chat'], ['turnos', 'Turnos'], ['scorecard', 'Scorecard'],
-  ['paquetes', 'Paquetes IA'], ['metricas', 'Métricas'],
-  ['actividad', 'Actividad'], ['vencimientos', 'Vencimientos'],
+  ['', 'Dashboard'], ['mi-dia', 'Mi día'], ['chat', 'Chat'],
+  ['vehiculos', 'Vehículos'], ['inspecciones', 'Inspecciones'],
+  ['revision', 'Revisión rápida'], ['origen-danos', 'Origen de daños'],
+  ['vencimientos', 'Vencimientos'], ['aparcamiento', 'Aparcamiento'],
+  ['incidencias', 'Incidencias'], ['ordenes', 'Órdenes de taller'],
+  ['talleres', 'Talleres'], ['asignacion', 'Asignación'],
+  ['turnos', 'Turnos'], ['checklist-operativo', 'Checklist'],
+  ['conductores', 'Conductores'], ['incorporaciones', 'Incorporaciones'],
+  ['empleo', 'Empleo'], ['contactos', 'Contactos'],
+  ['conversaciones', 'Conversaciones'], ['actividad', 'Actividad'],
+  ['importaciones', 'Importaciones'], ['ia-peritaje', 'IA Peritaje'],
+  ['tienda', 'Tienda'], ['configuracion', 'Configuración'],
   ['avisos-itv', 'Avisos ITV'], ['renting', 'Renting'],
-  ['casas-alquiler', 'Casas de alquiler'], ['talleres', 'Talleres'],
-  ['contactos', 'Contactos'], ['importaciones', 'Importaciones'],
-  ['ia-peritaje', 'IA Peritaje'], ['configuracion', 'Configuración'],
-  ['usuarios', 'Usuarios'], ['perfil', 'Perfil'],
-  // Faltaban las dos, y por eso el "t is not a function" de DSC llevaba
-  // meses en produccion sin que ninguna prueba dijera nada.
-  ['dsc', 'Donde se entrega'], ['whc', 'Horas WHC'],
-  ['portal-conductor', 'Portal conductor'], ['bandeja', 'Bandeja'],
+  ['casas-alquiler', 'Casas de alquiler'], ['usuarios', 'Usuarios'],
+  ['perfil', 'Perfil'], ['portal-conductor', 'Portal conductor'],
+  ['bandeja', 'Bandeja'], ['correo', 'Correo'], ['gastos', 'Gastos'],
+  ['analitica', 'Analítica'], ['admin', 'Administración'],
 ]
 
 const PUBLICAS = [

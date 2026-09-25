@@ -1,6 +1,7 @@
 import { Link } from 'react-router-dom'
 import { ShieldCheck, FileLock2, Fingerprint, AlertTriangle, Check, ArrowRight } from 'lucide-react'
 import { LANGS, useT } from '../i18n'
+import { MARCA } from '../marca'
 
 // Landing dedicada del feature estrella (Pro + AI Forensics).
 // Lenguaje: "evidencia técnica con cadena de custodia". NUNCA "admisible en juicio".
@@ -13,7 +14,7 @@ export default function PeritajeTecnico() {
         <div className="mx-auto flex max-w-6xl items-center justify-between px-5 py-3">
           <Link to="/" className="flex items-center gap-2">
             <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-gradient-to-br from-orange-400 to-orange-600 text-white font-bold">⚡</div>
-            <b>FlotaDSP</b>
+            <b>{MARCA.nombre}</b>
           </Link>
           <div className="flex items-center gap-3">
             <Link to="/planes" className="text-sm text-dark-300 hover:text-dark-100">Precios</Link>
@@ -124,7 +125,7 @@ export default function PeritajeTecnico() {
             <AlertTriangle size={16} /> Honestidad por delante
           </div>
           <p className="text-sm leading-relaxed text-dark-300">
-            <b>FlotaDSP no es asesoría jurídica.</b> El peritaje técnico que generamos es evidencia documental con cadena de custodia — tu abogado decide su uso ante terceros (Amazon, conductores, aseguradoras, juzgados). Lo que sí garantizamos: análisis técnico reproducible, no manipulable, generado en el momento del incidente.
+            <b>{MARCA.nombre} no es asesoría jurídica.</b> El peritaje técnico que generamos es evidencia documental con cadena de custodia — tu abogado decide su uso ante terceros (Amazon, conductores, aseguradoras, juzgados). Lo que sí garantizamos: análisis técnico reproducible, no manipulable, generado en el momento del incidente.
           </p>
           <p className="mt-3 text-sm leading-relaxed text-dark-300">
             <b>Acceso anticipado:</b> algunas piezas del peritaje firmado se entregan asistidas por nuestro equipo durante las primeras semanas de tu cuenta, mientras finalizamos la automatización. Tu peritaje siempre llega; el proceso solo es más artesanal al principio.
@@ -142,7 +143,7 @@ export default function PeritajeTecnico() {
       </section>
 
       <footer className="border-t border-dark-800 py-6 text-center text-xs text-dark-500">
-        © {new Date().getFullYear()} FlotaDSP · <Link to="/privacidad" className="hover:text-dark-300">Privacidad</Link> · <Link to="/terminos" className="hover:text-dark-300">Términos</Link> · <Link to="/contacto" className="hover:text-dark-300">Contacto</Link>
+        © {new Date().getFullYear()} {MARCA.nombre} · <Link to="/privacidad" className="hover:text-dark-300">Privacidad</Link> · <Link to="/terminos" className="hover:text-dark-300">Términos</Link> · <Link to="/contacto" className="hover:text-dark-300">Contacto</Link>
       </footer>
     </div>
   )

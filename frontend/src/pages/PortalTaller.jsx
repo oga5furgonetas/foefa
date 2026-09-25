@@ -7,6 +7,7 @@ import {
 } from 'lucide-react'
 import { API_BASE } from '../lib/apiBase'
 import { normalizarDetalle } from '../services/api'
+import { MARCA } from '../marca'
 
 /* PORTAL DEL TALLER — sin usuario y sin contraseña, y de UNO EN UNO.
    ═══════════════════════════════════════════════════════════════════════
@@ -576,7 +577,7 @@ export default function PortalTaller() {
         )}
 
         <p className="pb-2 pt-1 text-center text-[12.5px] text-slate-400">
-          FlotaDSP · esta página es sólo para esta furgoneta
+          {MARCA.nombre} · esta página es sólo para este vehículo
         </p>
       </main>
 

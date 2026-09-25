@@ -7,8 +7,6 @@ import { getOrgCenters, addOrgCenter, getTelegramConfig,
 import { lista } from '../../lib/lista'
 import { getAdmin, isSuperAdmin } from '../auth'
 
-const PORTAL_BASE = 'https://flotadsp.com'
-
 function CopyRow({ label, url }) {
   const { t } = useT()
   const [copied, setCopied] = useState(false)
@@ -265,7 +263,7 @@ function WhatsAppCard() {
             servidor —nunca aquí— con este comando:
           </p>
           <pre className="overflow-x-auto rounded-lg border border-dark-800 bg-dark-950 p-3 text-[11.5px] leading-relaxed text-dark-300">
-{`fly secrets set -a flotadsp-backend \\
+{`fly secrets set -a <tu-app-del-backend> \\
   WHATSAPP_ACCESS_TOKEN=... \\
   WHATSAPP_PHONE_NUMBER_ID=... \\
   WHATSAPP_BUSINESS_ACCOUNT_ID=... \\
@@ -615,7 +613,7 @@ export default function Configuracion() {
     try {
       const r = await addOrgCenter(name)
       setCenters(r.data?.centers || [])
-      const a = getAdmin(); if (a) { a.centers = r.data?.centers || []; localStorage.setItem('flotadsp_admin', JSON.stringify(a)) }
+      const a = getAdmin(); if (a) { a.centers = r.data?.centers || []; localStorage.setItem('flotia_admin', JSON.stringify(a)) }
       setNuevo(''); setMsg({ ok: true, t: `Centro ${name} añadido.` })
     } catch (e) {
       setMsg({ ok: false, t: e?.response?.data?.detail || 'No se pudo añadir el centro.' })

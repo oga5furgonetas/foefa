@@ -4,6 +4,7 @@ import { driverLookup, DRIVER_TOKEN_KEY, currentSlug } from '../../services/api'
 import { api } from '../../services/api'
 import { useToast } from '../../lib/toast'
 import { useT } from '../../i18n'
+import { MARCA } from '../../marca'
 
 export default function DriverLogin({ onLogin }) {
   const toast = useToast()
@@ -108,7 +109,7 @@ export default function DriverLogin({ onLogin }) {
             </svg>
           </div>
           <h1 className="text-2xl font-black tracking-tight text-dark-50">{t('dr.portal')}</h1>
-          <p className="mt-1 text-sm text-dark-400">{orgName || 'FlotaDSP'}</p>
+          <p className="mt-1 text-sm text-dark-400">{orgName || MARCA.nombre}</p>
           {displayCenter && (
             <span className="mt-2 inline-flex items-center gap-1.5 rounded-full bg-brand-500/15 px-3 py-1 text-xs font-bold uppercase tracking-wider text-brand-400">
               {t('dr.estacion')} {displayCenter}

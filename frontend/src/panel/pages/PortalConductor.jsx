@@ -3,8 +3,9 @@ import { useOutletContext } from 'react-router-dom'
 import { useT } from '../../i18n'
 import { Shield, Copy, Check, ExternalLink, Info, Link2, QrCode } from 'lucide-react'
 import { getAdmin } from '../auth'
+import { origen } from '../../marca'
 
-const PORTAL_BASE = 'https://flotadsp.com'
+const PORTAL_BASE = origen()
 
 // Renderiza texto con <b>...</b> sin dangerouslySetInnerHTML
 function BoldText({ str, className }) {

@@ -28,7 +28,8 @@ _TEXTO = io.open(SERVER, encoding="utf-8-sig").read()
 
 
 def _cargar(*nombres):
-    amb = {"os": os, "re": re, "datetime": datetime, "timezone": timezone,
+    amb = {"os": os, "re": re, "datetime": datetime, "timezone": timezone, "MARCA": "Flotia",
+           "_EMAIL_FROM_DEFECTO": "Flotia <no-reply@localhost>",
            "_EMAIL_CUOTA_DIA": {}}
     arbol = ast.parse(_TEXTO)
     for n in arbol.body:
@@ -102,10 +103,11 @@ def test_el_remitente_se_parte_en_nombre_y_direccion():
     la cadena entera en el campo del correo, Brevo devuelve 400 y no sale
     nada."""
     amb = _amb()
-    os.environ["EMAIL_FROM"] = "FlotaDSP <hola@flotadsp.com>"
-    assert amb["_email_remitente"]() == ("FlotaDSP", "hola@flotadsp.com")
-    os.environ["EMAIL_FROM"] = "contacto@flotadsp.com"
-    assert amb["_email_remitente"]() == ("FlotaDSP", "contacto@flotadsp.com")
+    os.environ["EMAIL_FROM"] = "Transportes Ruiz <hola@ruiz.es>"
+    assert amb["_email_remitente"]() == ("Transportes Ruiz", "hola@ruiz.es")
+    # Sin nombre, firma la marca del producto.
+    os.environ["EMAIL_FROM"] = "contacto@ruiz.es"
+    assert amb["_email_remitente"]() == ("Flotia", "contacto@ruiz.es")
 
 
 def main():

@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import { ShieldCheck, ShieldAlert, Search, Loader2, AlertTriangle } from 'lucide-react'
 import { API_BASE } from '../services/api'
+import { MARCA } from '../marca'
 
 // Página pública SIN auth para verificar un peritaje técnico por hash.
 // El backend devuelve solo info mínima no sensible (matrícula enmascarada, fecha, firmante).
@@ -47,7 +48,7 @@ export default function Verify() {
         <div className="mx-auto flex max-w-3xl items-center justify-between px-5 py-3">
           <Link to="/" className="flex items-center gap-2">
             <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-gradient-to-br from-orange-400 to-orange-600 text-white font-bold">⚡</div>
-            <b className="text-sm">FlotaDSP</b>
+            <b className="text-sm">{MARCA.nombre}</b>
           </Link>
           <Link to="/peritaje-tecnico" className="text-xs text-dark-400 hover:text-dark-200">¿Qué es esto?</Link>
         </div>
@@ -83,7 +84,7 @@ export default function Verify() {
               <ShieldCheck size={32} className="text-emerald-400" />
               <div>
                 <div className="text-xl font-bold text-emerald-200">Peritaje auténtico</div>
-                <div className="text-xs text-dark-400">Hash registrado en la cadena de custodia de FlotaDSP.</div>
+                <div className="text-xs text-dark-400">Hash registrado en la cadena de custodia de {MARCA.nombre}.</div>
               </div>
             </div>
             <dl className="grid grid-cols-2 gap-4 text-sm">
@@ -110,13 +111,13 @@ export default function Verify() {
               <ShieldAlert size={28} className="text-amber-400" />
               <div className="text-lg font-bold text-amber-200">Hash no encontrado</div>
             </div>
-            <p className="text-sm text-dark-300">{data.error || 'Este hash no corresponde a ningún peritaje firmado en FlotaDSP.'}</p>
+            <p className="text-sm text-dark-300">{data.error || `Este hash no corresponde a ningún peritaje firmado en ${MARCA.nombre}.`}</p>
           </div>
         )}
       </main>
 
       <footer className="border-t border-dark-800 py-6 text-center text-xs text-dark-500">
-        © {new Date().getFullYear()} FlotaDSP · <Link to="/privacidad" className="hover:text-dark-300">Privacidad</Link> · <Link to="/terminos" className="hover:text-dark-300">Términos</Link>
+        © {new Date().getFullYear()} {MARCA.nombre} · <Link to="/privacidad" className="hover:text-dark-300">Privacidad</Link> · <Link to="/terminos" className="hover:text-dark-300">Términos</Link>
       </footer>
     </div>
   )

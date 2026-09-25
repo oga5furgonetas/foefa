@@ -22,12 +22,9 @@ const MODULES = [
     ['dashboard', 'Dashboard'], ['mi-dia', 'Mi día'], ['actividad', 'Actividad'],
   ]},
   { g: 'Operación diaria', items: [
-    ['paquetes', 'Paquetes IA'], ['apoyo', 'Apoyo en ruta'],
-    ['empleo', 'Empleo · candidatos'], ['incorporaciones', 'Incorporaciones'],
     ['asignacion', 'Asignación diaria'], ['turnos', 'Días libres'],
     ['aprobar-dias', 'Aprobar días libres'],
-    ['checklist-operativo', 'Checklist turno'],
-    ['plantilla', 'Plantilla turno'], ['chat', 'Chat interno'],
+    ['checklist-operativo', 'Checklist turno'], ['chat', 'Chat interno'],
   ]},
   { g: 'Flota', items: [
     ['vehiculos', 'Vehículos'], ['revision', 'Revisión rápida'],
@@ -37,15 +34,9 @@ const MODULES = [
     ['casas-alquiler', 'Vencimientos · Casas'], ['importaciones', 'Importaciones'],
   ]},
   { g: 'Equipo', items: [
-    ['conductores', 'Conductores'], ['scorecard', 'Scorecard'],
-    ['whc', 'Horas · WHC'], ['dsc', 'Dónde se entrega'], ['contactos', 'Contactos'],
+    ['conductores', 'Conductores'], ['incorporaciones', 'Incorporaciones'],
+    ['empleo', 'Empleo · candidatos'], ['contactos', 'Contactos'],
     ['conversaciones', 'Conversaciones WhatsApp'],
-    ['rendimiento', 'Rendimiento'],
-    // Faltaba desde que se creo la pantalla: sin casilla, `canSee('diarios')`
-    // era false para cualquiera con permisos definidos y la entrada del menu
-    // desaparecia sin decir nada. Mery tenia las 27 casillas marcadas y aun
-    // asi no la veia. Lo detecta ahora `scripts/check-permisos.mjs`.
-    ['diarios', 'DNR · Diarios'], ['debrief', 'Cuadre del debrief'],
   ]},
   { g: 'Sistema', items: [
     ['origen-danos', 'Origen de daños'], ['ia-peritaje', 'IA Peritaje'], ['configuracion', 'Configuración'],

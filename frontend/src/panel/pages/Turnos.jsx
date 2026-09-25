@@ -24,8 +24,8 @@ const TOPE_DIAS = 92
 
 /* ── EL CÓDIGO, NO EL TIPO ─────────────────────────────────────────────────
    La app entiende tres tipos (trabaja / libre / extra) y con eso decide
-   cobertura, peticiones y lo que ve el conductor. Pero el cuadrante que sale
-   de Amazon tiene DOCE códigos, y siete de ellos caen en "libre": V, COMP,
+   cobertura, peticiones y lo que ve el conductor. Pero un cuadrante de verdad
+   tiene DOCE códigos, y siete de ellos caen en "libre": V, COMP,
    N/D, N/P, SUSP, N/T y N/T APROB significan cosas muy distintas.
 
    Pintar sólo el tipo convertía el cuadrante en una pared de dos letras que no
@@ -69,16 +69,16 @@ const FAMILIA_NOMBRE = {
 
 /* Lo que se usa si el servidor no contesta. La rejilla NO puede quedarse en
    blanco por eso: sería peor que el problema. */
-/* `ruta` NO es lo mismo que `tipo: 'trabaja'`. BKP y Site trabajan —cobran,
-   están en la nave— pero no sacan furgoneta, y el ride along va de
-   acompañante en la de otro. Contarlos hacía que la fila de cobertura dijera
-   39 cuando a la calle salían 36, que es justo el número que se compara con
-   lo que pide Amazon. */
+/* `ruta` NO es lo mismo que `tipo: 'trabaja'`. La reserva y la oficina
+   trabajan —cobran, están en la sede— pero no sacan vehículo, y el acompañante
+   va en el de otro. Contarlos hacía que la fila de cobertura dijera 39 cuando
+   a la calle salían 36, que es justo el número que se compara con lo que te
+   piden. */
 const COD_DEF = {
   '1':         { tipo: 'trabaja', etiqueta: 'Trabaja',        color: 'ruta',     ruta: true },
-  'BKP':       { tipo: 'trabaja', etiqueta: 'Backup',         color: 'apoyo',    ruta: false },
-  'S':         { tipo: 'trabaja', etiqueta: 'Site (oficina)', color: 'apoyo',    ruta: false },
-  'RIDE':      { tipo: 'trabaja', etiqueta: 'Ride along',     color: 'apoyo',    ruta: false },
+  'BKP':       { tipo: 'trabaja', etiqueta: 'Reserva',        color: 'apoyo',    ruta: false },
+  'S':         { tipo: 'trabaja', etiqueta: 'Oficina',        color: 'apoyo',    ruta: false },
+  'RIDE':      { tipo: 'trabaja', etiqueta: 'Acompañante',    color: 'apoyo',    ruta: false },
   'EXTRA':     { tipo: 'extra',   etiqueta: 'Extra',          color: 'apoyo',    ruta: true },
   'N/T':       { tipo: 'libre',   etiqueta: 'No trabaja',     color: 'libre',    ruta: false },
   'L':         { tipo: 'libre',   etiqueta: 'Libre',          color: 'libre',    ruta: false },
@@ -125,8 +125,8 @@ const fondoCol = (esHoy, esFinde) =>
    viene es más trabajo del que ahorra. Pero NINGUNO es obligatorio: las dos
    fechas se pueden escribir a mano y llegar hasta donde haga falta. */
 const ATAJOS = [
-  { k: 'semana', lbl: 'Semana', titulo: 'La semana de Amazon en curso: de domingo a sábado' },
-  { k: 'dos', lbl: '2 semanas', titulo: 'Las dos semanas de Amazon en curso' },
+  { k: 'semana', lbl: 'Semana', titulo: 'Esta semana, de lunes a domingo' },
+  { k: 'dos', lbl: '2 semanas', titulo: 'Esta semana y la siguiente' },
   { k: 'mes', lbl: 'Este mes', titulo: 'Del día 1 al último del mes, entero' },
   { k: 'siguiente', lbl: 'Mes que viene', titulo: 'El mes siguiente entero: para los días que ya se piden con antelación' },
 ]
@@ -536,7 +536,7 @@ function atajo(k, ref = new Date()) {
   if (k === 'siguiente') {
     return { desde: isoLocal(new Date(y, m + 1, 1)), hasta: isoLocal(new Date(y, m + 2, 0)) }
   }
-  const d = domingoDe(ref)
+  const d = lunesDe(ref)
   const largo = k === 'dos' ? 13 : 6
   return {
     desde: isoLocal(d),
@@ -548,19 +548,16 @@ const porNombre = (a, b) =>
   (a?.name || '').localeCompare(b?.name || '', 'es', { sensitivity: 'base' })
 
 /* ¿Empieza semana? Marca el corte en la rejilla: en 31 columnas seguidas no
-   hay forma de saber dónde empieza una semana sin una línea.
+   hay forma de saber dónde empieza una semana sin una línea. La semana va de
+   lunes a domingo, la del calendario laboral. */
+const empiezaSemana = (iso) => new Date(iso + 'T12:00:00').getDay() === 1
 
-   DOMINGO, no lunes. La semana de Amazon va de domingo a sábado, y es la que
-   manda para todo lo que se cuadra con ellos. Cortando en lunes, la línea caía
-   en medio de cada semana de Amazon y las cuentas de la semana no cuadraban
-   con las suyas. */
-const empiezaSemana = (iso) => new Date(iso + 'T12:00:00').getDay() === 0
-
-/* Domingo de la semana de una fecha. */
-function domingoDe(d) {
+/* Lunes de la semana de una fecha. `getDay()` da 0 el domingo: el domingo es
+   el ÚLTIMO día de su semana, no el primero de la siguiente. */
+function lunesDe(d) {
   const x = new Date(d)
   x.setHours(12, 0, 0, 0)
-  x.setDate(x.getDate() - x.getDay())
+  x.setDate(x.getDate() - ((x.getDay() + 6) % 7))
   return x
 }
 function sumaDias(iso, n) {
@@ -598,21 +595,21 @@ export default function Turnos() {
      hasta alli sin ir saltando de quincena en quincena. Un cuadrante tiene que
      poder mirarse por donde haga falta. */
   const [rango, setRango] = useState(() => {
-    const d = domingoDe(new Date())
+    const d = lunesDe(new Date())
     return { desde: isoLocal(d), hasta: isoLocal(new Date(d.getFullYear(), d.getMonth(), d.getDate() + 13)) }
   })
   const [drivers, setDrivers] = useState(null)
   const [grid, setGrid] = useState({})          // 'driverId|fecha' -> tipo
   const [sucio, setSucio] = useState(false)     // hay cambios sin guardar
   /* TRES numeros por dia, y son cosas distintas:
-       · maximas  — el techo comprometido con Amazon: lo que habria que poder
-                    cubrir si lo pidieran todo. Se rellena con antelacion.
+       · maximas  — el techo comprometido con el cliente: lo que habria que
+                    poder cubrir si lo pidieran todo. Se rellena con antelacion.
        · demanda  — las rutas que piden ESE dia. Llega mucho mas tarde.
        · cobertura— la gente que estas poniendo. Sale de la rejilla, no se
                     escribe.
      Mirar solo la cobertura no dice nada: 39 personas es mucho o poco segun
-     lo que pidan, y quedarse corto respecto al maximo es lo que hace que
-     Amazon no te ofrezca rutas la proxima vez. */
+     lo que pidan, y quedarse corto respecto al maximo es lo que hace que el
+     cliente no te ofrezca rutas la proxima vez. */
   const [demanda, setDemanda] = useState({})    // fecha -> rutas que piden (string)
   const [maximas, setMaximas] = useState({})    // fecha -> techo comprometido (string)
   const [min, setMin] = useState(0)
@@ -682,7 +679,7 @@ export default function Turnos() {
      le importa más esa hora que el código. */
   const horas = useRef({})
   const tablaRef = useRef(null)
-  // El mes NO sale del fichero: la plantilla de Amazon arrastra en la cabecera
+  // El mes NO sale del fichero: hay plantillas que arrastran en la cabecera
   // el texto del mes anterior ("Desde: 01-06-2026" en un fichero de agosto).
   const [mesImport, setMesImport] = useState(() => hoyLocal().slice(0, 7))
 
@@ -867,7 +864,7 @@ export default function Turnos() {
     (cod) => codigos[cod] || COD_DEF[cod] || { tipo: 'libre', etiqueta: cod, color: 'libre' },
     [codigos])
   /* ¿Ese código saca furgoneta a la calle? Es lo único que cuenta para
-     comparar con lo que pide Amazon. */
+     comparar con lo que te piden. */
   const esRuta = useCallback((cod) => {
     if (!cod) return false
     const ui = codigos[cod] || COD_DEF[cod]
@@ -1736,7 +1733,7 @@ export default function Turnos() {
                   </th>
                 ))}
               </tr>
-              {/* MÁXIMAS: el techo comprometido con Amazon. Va la primera porque es
+              {/* MÁXIMAS: el techo comprometido con el cliente. Va la primera porque es
                   la que se rellena antes y la que no cambia. */}
               <tr>
                 <th className="sticky left-0 z-10 border-r border-dark-700 bg-dark-900 px-3 py-1 text-left text-[11px] font-medium text-dark-500">
@@ -1775,7 +1772,7 @@ export default function Turnos() {
                       type="number" min="0" value={demanda[f] ?? ''} placeholder="—"
                       onChange={(e) => setDemanda((d) => ({ ...d, [f]: e.target.value }))}
                       onBlur={() => guardarDemanda()}
-                      title="Rutas que Amazon pide ese día"
+                      title="Rutas que te piden ese día"
                       className="w-10 rounded border border-dark-700/70 bg-dark-900 px-1 py-0.5 text-center text-[11px] text-dark-200 placeholder:text-dark-700"
                     />
                   </td>
@@ -1784,7 +1781,7 @@ export default function Turnos() {
               {/* PONEMOS: sale de la rejilla. El color compara con las otras dos. */}
               <tr className="border-b border-dark-700">
                 <th className="sticky left-0 z-10 border-r border-dark-700 bg-dark-900 px-3 py-1 text-left text-[11px] font-medium text-dark-500">
-                  <span title="Los que sacan furgoneta. BKP, Site y ride along trabajan, pero no cuentan como ruta.">
+                  <span title="Los que sacan furgoneta. Reserva, oficina y acompañante trabajan, pero no cuentan como ruta.">
                     A ruta
                   </span>
                 </th>
@@ -1794,7 +1791,7 @@ export default function Turnos() {
                   const max = Number(maximas[f]) || 0
                   // Rojo: no llegas a lo que piden hoy — eso es una ruta sin
                   // cubrir. Ámbar: llegas a lo de hoy pero no al techo, así que
-                  // si Amazon pide más no lo puedes coger. Verde: cubierto.
+                  // si te piden más no lo puedes coger. Verde: cubierto.
                   const corto = (piden > 0 && n < piden) || (min > 0 && n < min)
 
                   /* La diferencia se mide contra LO QUE PIDEN, y sólo contra el
@@ -1812,7 +1809,7 @@ export default function Turnos() {
                       className={`border-r border-dark-800/70 px-1 py-1 text-center ${fondoCol(f === hoy, finde(f))} ${
                         f === hoy ? 'border-x border-x-amber-400/35' : empiezaSemana(f) ? 'border-l border-l-dark-600' : ''}`}>
                       <span className="flex items-baseline justify-center gap-0.5"
-                        title={`${n} ${n === 1 ? 'persona sale' : 'personas salen'} a ruta (BKP, Site y ride along no cuentan)${
+                        title={`${n} ${n === 1 ? 'persona sale' : 'personas salen'} a ruta (reserva, oficina y acompañante no cuentan)${
                           piden > 0 ? ` · piden ${piden}` : ''}${max > 0 ? ` · máximo ${max}` : ''}${
                           dif < 0 ? ` — FALTAN ${-dif}${piden > 0 ? '' : ' para el máximo'}`
                             : dif > 0 ? ` — sobran ${dif}` : ''}`}>
@@ -1842,7 +1839,7 @@ export default function Turnos() {
                     iFila % 2 ? 'bg-dark-800/40' : 'bg-dark-900'} ${denso ? 'py-0.5' : 'py-1.5'}`}>
                     <span className={`shrink-0 rounded px-1.5 text-[10px] font-bold tabular-nums ${
                       (totales[d.id] ?? 0) === 0 ? 'bg-dark-800 text-dark-500' : 'bg-dark-800 text-dark-300'}`}
-                      title="Días trabajados en lo que estás viendo (incluye BKP y Site: son días de trabajo aunque no saquen ruta)">
+                      title="Días trabajados en lo que estás viendo (incluye reserva y oficina: son días de trabajo aunque no saquen ruta)">
                       {totales[d.id] ?? 0}
                     </span>
                     <span className={`max-w-[11rem] truncate text-[13px] ${

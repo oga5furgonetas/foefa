@@ -69,9 +69,9 @@ export function patronDe(ruta) {
    firmado. Sin token es una visita anónima y punto. */
 function token() {
   try {
-    const t = localStorage.getItem('flotadsp_token')
+    const t = localStorage.getItem('flotia_token')
     if (t) return t
-    const d = JSON.parse(localStorage.getItem('flotadsp_driver') || 'null')
+    const d = JSON.parse(localStorage.getItem('flotia_driver') || 'null')
     if (d && d.access_token) return d.access_token
   } catch (_) { /* almacén bloqueado: se manda sin token */ }
   return null

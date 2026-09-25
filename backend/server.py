@@ -121,6 +121,26 @@ def _is_perday_429(err_str: str) -> bool:
 
 PUBLIC_BASE_URL = os.environ.get("PUBLIC_BASE_URL", "").rstrip("/")
 
+# ── LA MARCA Y LAS DIRECCIONES, EN UN SOLO SITIO ─────────────────────────────
+# El producto se vende a cualquier empresa: ni el nombre ni el dominio pueden ir
+# escritos en los correos, los PDF o las respuestas. Todo sale de aqui, y aqui
+# de las variables de entorno. Los valores por defecto son neutros a proposito:
+# un correo que dice «localhost» se nota en la primera prueba; uno que dice el
+# dominio de otra empresa, no.
+MARCA = os.environ.get("MARCA_NOMBRE", "Flotia").strip() or "Flotia"
+MARCA_IA = "%s IA" % MARCA
+# Donde vive el panel (la web). Con el se montan los enlaces de los correos, del
+# portal del conductor, del taller y de empleo.
+_PORTAL_BASE_FRONT = os.environ.get("PUBLIC_BASE_URL_FRONT", "http://localhost:5173").rstrip("/")
+_DOMINIO_FRONT = re.sub(r"^https?://", "", _PORTAL_BASE_FRONT)
+# Donde vive esta API vista desde fuera (para los webhooks que se dan de alta
+# en servicios externos). Si no se dice, la misma que PUBLIC_BASE_URL.
+_BACKEND_BASE = (os.environ.get("PUBLIC_BASE_URL_BACKEND", "") or PUBLIC_BASE_URL
+                 or "http://localhost:8000").rstrip("/")
+# El buzon al que se puede escribir. Vacio = no se enseña ninguno.
+CORREO_CONTACTO = os.environ.get("CORREO_CONTACTO", "").strip()
+_EMAIL_FROM_DEFECTO = "%s <%s>" % (MARCA, CORREO_CONTACTO or "no-reply@localhost")
+
 # AI Detection microservice (YOLO11 + SAM2)
 # Set AI_SERVICE_URL=http://ai-service:8001 when GPU microservice is running.
 # If not set, /annotated falls back to location_hint mapping (deterministic, free).
@@ -128,7 +148,7 @@ AI_SERVICE_URL = os.environ.get("AI_SERVICE_URL", "").rstrip("/")
 
 # Cloudflare R2
 R2_ENDPOINT    = os.environ.get("R2_ENDPOINT", "")       # https://<account>.r2.cloudflarestorage.com
-R2_BUCKET      = os.environ.get("R2_BUCKET", "flotadsp-uploads")
+R2_BUCKET      = os.environ.get("R2_BUCKET", "flotia-uploads")
 R2_ACCESS_KEY  = os.environ.get("R2_ACCESS_KEY", "")
 R2_SECRET_KEY  = os.environ.get("R2_SECRET_KEY", "")
 R2_PUBLIC_URL  = os.environ.get("R2_PUBLIC_URL", "").rstrip("/")  # https://cdn.tu-dominio.com
@@ -190,8 +210,8 @@ client = AsyncIOMotorClient(mongo_url)
 # (fijada por petición desde el token). Sin contexto → BD por defecto = comportamiento
 # idéntico al de siempre (no rompe nada). Login/usuarios/organizaciones viven en `global_db`.
 import contextvars
-_DEFAULT_DB_NAME = os.environ.get("DB_NAME", "flotadsp")
-_GLOBAL_DB_NAME = os.environ.get("GLOBAL_DB_NAME", "flotadsp_global")
+_DEFAULT_DB_NAME = os.environ.get("DB_NAME", "flotia")
+_GLOBAL_DB_NAME = os.environ.get("GLOBAL_DB_NAME", "flotia_global")
 _current_db_name = contextvars.ContextVar("current_db_name", default=_DEFAULT_DB_NAME)
 
 global_db = client[_GLOBAL_DB_NAME]  # organizaciones, usuarios, suscripciones (compartida)
@@ -224,7 +244,7 @@ db = _TenantDBProxy()
 # FASTAPI
 # =========================
 
-app = FastAPI(title="FlotaDSP API", version="5.3.4")
+app = FastAPI(title="%s API" % MARCA, version="6.0.0")
 api_router = APIRouter(prefix="/api")
 
 
@@ -634,10 +654,10 @@ class RegisterRequest(BaseModel):
 # una hoja de calculo. Y ya no hay topes de flota: se cobra por furgoneta, asi
 # que crecer no se castiga, se factura.
 _LIM_OPERACION = {"max_vehicles": -1, "max_drivers": -1, "max_centers": 1,
-                  "ai": True, "scorecard": False, "chat": True, "forensics": False,
+                  "ai": True, "chat": True, "forensics": False,
                   "maintenance": True, "assignments": False, "export": False}
 _LIM_COMPLETO = {"max_vehicles": -1, "max_drivers": -1, "max_centers": -1,
-                 "ai": True, "scorecard": True, "chat": True, "forensics": True,
+                 "ai": True, "chat": True, "forensics": True,
                  "maintenance": True, "assignments": True, "export": True}
 
 PLAN_LIMITS = {
@@ -648,8 +668,8 @@ PLAN_LIMITS = {
     "basico":     _LIM_OPERACION,
     "pro":        _LIM_COMPLETO,
     "flota":      _LIM_COMPLETO,
-    "enterprise": {"max_vehicles": -1,  "max_drivers": -1,  "max_centers": -1, "ai": True,  "scorecard": True,  "chat": True,  "forensics": True,  "maintenance": True,  "assignments": True,  "export": True},
-    "owner":      {"max_vehicles": -1,  "max_drivers": -1,  "max_centers": -1, "ai": True,  "scorecard": True,  "chat": True,  "forensics": True,  "maintenance": True,  "assignments": True,  "export": True},
+    "enterprise": {"max_vehicles": -1,  "max_drivers": -1,  "max_centers": -1, "ai": True,  "chat": True,  "forensics": True,  "maintenance": True,  "assignments": True,  "export": True},
+    "owner":      {"max_vehicles": -1,  "max_drivers": -1,  "max_centers": -1, "ai": True,  "chat": True,  "forensics": True,  "maintenance": True,  "assignments": True,  "export": True},
 }
 PLAN_DEFAULT = PLAN_LIMITS["pro"]  # trial sin plan elegido → acceso Pro para evaluación
 
@@ -1092,8 +1112,9 @@ async def get_org(org_id):
 
 
 # Módulos OCULTOS por tipo de cuenta (para los candados del frontend).
-# El dueño (tú) lo ve todo; los DSP comerciales NO ven IA Peritaje ni Scorecard.
-HIDDEN_MODULES_DSP = ["ia-peritaje", "scorecard", "turnos"]
+# El dueño lo ve todo; un cliente no ve IA Peritaje ni el cuadrante hasta que
+# se le activen.
+HIDDEN_MODULES_CLIENTE = ["ia-peritaje", "turnos"]
 
 
 # ── MODULOS QUE VE CADA EMPRESA ───────────────────────────────────────────────
@@ -1161,7 +1182,7 @@ def _modulos_modo(org) -> str:
 def org_hidden_modules(org):
     if not org or org.get("account_type") == "owner":
         return []
-    return org.get("hidden_modules") or HIDDEN_MODULES_DSP
+    return org.get("hidden_modules") or HIDDEN_MODULES_CLIENTE
 
 
 async def ensure_owner_org():
@@ -1169,7 +1190,7 @@ async def ensure_owner_org():
     if not o:
         await global_db.organizations.insert_one({
             "id": OWNER_ORG_ID,
-            "name": os.environ.get("ADMIN_NAME", "FlotaDSP"),
+            "name": os.environ.get("ADMIN_NAME", f"{MARCA}"),
             "account_type": "owner",
             "db_name": _DEFAULT_DB_NAME,
             "slug": "admin",
@@ -1579,7 +1600,7 @@ async def create_indexes():
             try:
                 await _ensure_tenant_indexes(org["db_name"])
             except Exception as _ie:
-                logger.warning(f"Error creando índices para DSP {org.get('db_name')}: {_ie}")
+                logger.warning(f"Error creando índices para la empresa {org.get('db_name')}: {_ie}")
         logger.info("Índices MongoDB creados/verificados correctamente")
     except Exception as e:
         logger.warning(f"Error creando índices: {e}")
@@ -4240,7 +4261,7 @@ def _annotate_photo_sync(img_bytes: bytes, damage_list: list) -> bytes:
     # 5. WATERMARK
     # ══════════════════════════════════════════════════════════════
     nd = len(damages_px)
-    wm = f"⬡ FlotaDSP AI  {nd} daño{'s' if nd != 1 else ''}"
+    wm = f"⬡ {MARCA_IA}  {nd} daño{'s' if nd != 1 else ''}"
     bb_wm = dr.textbbox((0, 0), wm, font=font_wm)
     wm_w  = bb_wm[2] - bb_wm[0]
     dr.rectangle([W - wm_w - 14, 4, W - 4, 4 + (bb_wm[3]-bb_wm[1]) + 8],
@@ -4639,7 +4660,7 @@ async def register_dsp(data: RegisterRequest, request: Request):
     if len(data.password or "") < 8:
         raise HTTPException(status_code=400, detail="La contraseña debe tener al menos 8 caracteres")
     if not org_name:
-        raise HTTPException(status_code=400, detail="Indica el nombre de tu empresa/DSP")
+        raise HTTPException(status_code=400, detail="Indica el nombre de tu empresa")
     if await global_db.admin_users.find_one({"username": username}):
         raise HTTPException(status_code=409, detail="Ese usuario ya existe, elige otro")
 
@@ -4679,12 +4700,12 @@ async def register_dsp(data: RegisterRequest, request: Request):
         "email": org.get("email"),
         "created_at": datetime.now(timezone.utc).isoformat(),
     })
-    logger.info("Nuevo DSP registrado: %s (org=%s)", username, org_id)
+    logger.info("Nueva empresa registrada: %s (org=%s)", username, org_id)
     # Crear índices en la BD recién creada del DSP
     try:
         await _ensure_tenant_indexes(org["db_name"])
     except Exception as _ie:
-        logger.warning(f"Error creando índices para nuevo DSP {org_id}: {_ie}")
+        logger.warning(f"Error creando índices para la empresa nueva {org_id}: {_ie}")
     # Enviar email de bienvenida con Resend (no bloqueante)
     recipient = org.get("email")
     resend_key = os.environ.get("RESEND_API_KEY", "")
@@ -4696,14 +4717,14 @@ async def register_dsp(data: RegisterRequest, request: Request):
                 "https://api.resend.com/emails",
                 headers={"Authorization": f"Bearer {resend_key}", "Content-Type": "application/json"},
                 json={
-                    "from": "FlotaDSP <hola@flotadsp.com>",
+                    "from": os.environ.get("EMAIL_FROM", _EMAIL_FROM_DEFECTO),
                     "to": [recipient],
-                    "subject": f"¡Bienvenido a FlotaDSP! Tu prueba gratuita de 14 días ya está activa",
+                    "subject": f"¡Bienvenido a {MARCA}! Tu prueba gratuita de 14 días ya está activa",
                     "html": f"""
 <div style="font-family:Inter,sans-serif;max-width:520px;margin:0 auto;background:#0b0d10;color:#eef1f6;border-radius:16px;overflow:hidden">
   <div style="background:linear-gradient(135deg,#0ea5e9,#0369a1);padding:32px 28px;text-align:center">
     <div style="font-size:32px;margin-bottom:8px">⚡</div>
-    <h1 style="margin:0;font-size:24px;font-weight:900;color:#fff">¡Bienvenido a FlotaDSP!</h1>
+    <h1 style="margin:0;font-size:24px;font-weight:900;color:#fff">¡Bienvenido a {MARCA}!</h1>
     <p style="margin:8px 0 0;color:rgba(255,255,255,.8);font-size:14px">Tu prueba gratuita de 14 días ya está activa</p>
   </div>
   <div style="padding:28px">
@@ -4716,16 +4737,16 @@ async def register_dsp(data: RegisterRequest, request: Request):
       <div style="font-size:14px;color:#cbd3e0;margin-bottom:6px">🔐 Usuario: <b style="color:#eef1f6">{username}</b></div>
       <div style="font-size:14px;color:#cbd3e0">📦 Plan: <b style="color:#0ea5e9">{plan_label}</b> · Prueba gratuita 14 días</div>
     </div>
-    <a href="https://flotadsp.com/panel" style="display:block;text-align:center;background:linear-gradient(135deg,#0ea5e9,#0369a1);color:#fff;text-decoration:none;padding:14px 24px;border-radius:10px;font-weight:800;font-size:15px;margin-bottom:24px">
+    <a href="{_PORTAL_BASE_FRONT}/panel" style="display:block;text-align:center;background:linear-gradient(135deg,#0ea5e9,#0369a1);color:#fff;text-decoration:none;padding:14px 24px;border-radius:10px;font-weight:800;font-size:15px;margin-bottom:24px">
       Entrar al panel →
     </a>
     <p style="margin:0;color:#64748b;font-size:12px;text-align:center;line-height:1.6">
-      Si tienes alguna pregunta, escríbenos a <a href="mailto:hola@flotadsp.com" style="color:#0ea5e9">hola@flotadsp.com</a><br>
+      Si tienes alguna pregunta, escríbenos a <a href="mailto:{CORREO_CONTACTO}" style="color:#0ea5e9">{CORREO_CONTACTO}</a><br>
       Al finalizar la prueba, se cobra el plan elegido salvo cancelación.
     </p>
     <p style="margin:12px 0 0;color:#475569;font-size:11px;text-align:center;line-height:1.5">
-      🇬🇧 Welcome to FlotaDSP! Your 14-day free trial is active — no card required.
-      Log in at flotadsp.com/panel with the username above. Questions? hola@flotadsp.com
+      🇬🇧 Welcome to {MARCA}! Your 14-day free trial is active — no card required.
+      Log in at {_DOMINIO_FRONT}/panel with the username above. Questions? {CORREO_CONTACTO}
     </p>
   </div>
 </div>""",
@@ -5112,7 +5133,7 @@ async def _cobros_del_mes(mes: str, crear: bool = True):
             "org_id": o.get("id"), "org_nombre": o.get("name"),
             "email": o.get("email"), "plan": plan,
             "vehiculos": vehiculos, "precio_unitario": por_veh,
-            "concepto": f"FlotaDSP · {tarifa.get('nombre', plan)} · {vehiculos} furgonetas · {mes}",
+            "concepto": f"{MARCA} · {tarifa.get('nombre', plan)} · {vehiculos} furgonetas · {mes}",
             "base": base, "iva_pct": iva_pct, "iva": iva, "total": round(base + iva, 2),
             "estado": "en_prueba" if o.get("status") == "trial" else "pendiente",
             "creado_en": datetime.now(timezone.utc).isoformat(),
@@ -5419,11 +5440,11 @@ async def lemonsqueezy_webhook(request: Request):
             campos["vehiculos_pagados"] = pagadas
             campos["vehiculos_pagados_at"] = datetime.now(timezone.utc).isoformat()
         await global_db.organizations.update_one({"id": org_id}, {"$set": campos})
-        logger.info("LS pago OK → DSP %s activo (%s, %s furgonetas)", org_id, plan, pagadas)
+        logger.info("LS pago OK → empresa %s activa (%s, %s vehiculos)", org_id, plan, pagadas)
     elif event in ("subscription_cancelled", "subscription_expired", "subscription_paused"):
         await global_db.organizations.update_one(
             {"id": org_id}, {"$set": {"status": "suspended", "ls_status": status}})
-        logger.info("LS → DSP %s suspendido (%s)", org_id, event)
+        logger.info("LS → empresa %s suspendida (%s)", org_id, event)
     return {"ok": True}
 
 
@@ -5562,7 +5583,7 @@ async def capture_lead(data: dict = Body(...), request: Request = None):
     # promete algo que no se cumple.
     try:
         lineas = [
-            "Nuevo mensaje en flotadsp.com",
+            f"Nuevo mensaje en {_DOMINIO_FRONT}",
             f"De: {name or '(sin nombre)'} <{email}>",
             f"Empresa: {company or '-'}",
             "",
@@ -5649,7 +5670,7 @@ async def admin_update_org(data: dict = Body(...), _: dict = Depends(require_sup
         raise HTTPException(status_code=400, detail="id requerido")
     org = await get_org(org_id)
     if not org or org.get("account_type") != "dsp":
-        raise HTTPException(status_code=404, detail="DSP no encontrado")
+        raise HTTPException(status_code=404, detail="Empresa no encontrada")
     patch = {}
     if data.get("status") in ("trial", "active", "suspended", "canceled"):
         patch["status"] = data["status"]
@@ -5693,7 +5714,7 @@ async def admin_org_stats(org_id: str, _: dict = Depends(require_superadmin)):
     """Uso real de un DSP (cuántas furgonetas/conductores/inspecciones tiene)."""
     org = await get_org(org_id)
     if not org:
-        raise HTTPException(status_code=404, detail="DSP no encontrado")
+        raise HTTPException(status_code=404, detail="Empresa no encontrada")
     set_current_org_db(_tenant_db_name(org))
     return {
         "vehiculos": await db.vehicles.count_documents({}),
@@ -5884,12 +5905,12 @@ async def admin_impersonate(data: dict = Body(...), user: dict = Depends(require
     """Genera un token para ENTRAR COMO un DSP (ver su panel y datos). Solo super-admin."""
     org = await get_org(data.get("id"))
     if not org or org.get("account_type") != "dsp":
-        raise HTTPException(status_code=404, detail="DSP no encontrado")
+        raise HTTPException(status_code=404, detail="Empresa no encontrada")
     token = create_token(user["sub"], "admin", org.get("name", ""),
                          org_id=org["id"], db_name=_tenant_db_name(org),
                          account_type="dsp", centers=org.get("centers"),
                          suplantado=True)
-    logger.info("Super-admin entra como DSP %s", org.get("slug"))
+    logger.info("Super-admin entra como la empresa %s", org.get("slug"))
     await _audit(user, "impersonate", {"org_id": org["id"], "org": org.get("slug")})
     return {"token": token, "slug": org.get("slug"), "name": org.get("name"),
             "hidden_modules": org_hidden_modules(org), "centers": org.get("centers")}
@@ -5900,14 +5921,14 @@ async def admin_delete_org(org_id: str, user: dict = Depends(require_superadmin)
     """Elimina un DSP por completo: su BD, sus usuarios y la organización. Irreversible."""
     org = await get_org(org_id)
     if not org or org.get("account_type") != "dsp":
-        raise HTTPException(status_code=404, detail="DSP no encontrado")
+        raise HTTPException(status_code=404, detail="Empresa no encontrada")
     try:
         await client.drop_database(_tenant_db_name(org))
     except Exception as e:
         logger.warning("drop_database falló: %s", e)
     await global_db.admin_users.delete_many({"org_id": org_id})
     await global_db.organizations.delete_one({"id": org_id})
-    logger.info("DSP eliminado: %s", org.get("slug"))
+    logger.info("Empresa eliminada: %s", org.get("slug"))
     await _audit(user, "org_delete", {"org_id": org_id, "org": org.get("slug")})
     return {"ok": True}
 
@@ -6016,11 +6037,11 @@ def _email_sin_cuota_hoy() -> bool:
 def _email_remitente() -> tuple:
     """EMAIL_FROM viene como `FlotaDSP <hola@flotadsp.com>`; Brevo quiere el
     nombre y la direccion por separado."""
-    bruto = os.environ.get("EMAIL_FROM", "FlotaDSP <hola@flotadsp.com>")
+    bruto = os.environ.get("EMAIL_FROM", _EMAIL_FROM_DEFECTO)
     m = re.match(r"^\s*(.*?)\s*<([^>]+)>\s*$", bruto)
     if m:
-        return (m.group(1) or "FlotaDSP"), m.group(2)
-    return "FlotaDSP", bruto.strip()
+        return (m.group(1) or MARCA), m.group(2)
+    return MARCA, bruto.strip()
 
 
 async def _resend_enviar(cli, to: str, subject: str, html: str,
@@ -6030,7 +6051,7 @@ async def _resend_enviar(cli, to: str, subject: str, html: str,
         headers={"Authorization": f"Bearer {os.environ.get('RESEND_API_KEY', '')}",
                  "Content-Type": "application/json"},
         json={k: v for k, v in {
-            "from": os.environ.get("EMAIL_FROM", "FlotaDSP <hola@flotadsp.com>"),
+            "from": os.environ.get("EMAIL_FROM", _EMAIL_FROM_DEFECTO),
             "to": [to], "subject": subject, "html": html,
             # RESPONDER-A ES LO QUE HACE QUE LA RESPUESTA LLEGUE. El correo
             # sale de contacto@flotadsp.com, asi que sin esto la contestacion
@@ -6133,7 +6154,7 @@ async def forgot_password(data: dict, request: Request):
   <div style="padding:28px">
     <p style="margin:0 0 16px;color:#cbd3e0;font-size:15px">Hola <b>{user.get('name','')}</b>,</p>
     <p style="margin:0 0 20px;color:#8b94a3;font-size:14px;line-height:1.6">
-      Hemos recibido una solicitud para restablecer tu contraseña de FlotaDSP.
+      Hemos recibido una solicitud para restablecer tu contraseña de {MARCA}.
       El enlace caduca en 1 hora.
     </p>
     <a href="{link}" style="display:block;text-align:center;background:linear-gradient(135deg,#0ea5e9,#0369a1);color:#fff;text-decoration:none;padding:14px 24px;border-radius:10px;font-weight:800;font-size:15px;margin-bottom:20px">
@@ -6143,13 +6164,13 @@ async def forgot_password(data: dict, request: Request):
       Si no has pedido este cambio, ignora este email: tu contraseña seguirá siendo la misma.
     </p>
     <p style="margin:12px 0 0;color:#475569;font-size:11px;text-align:center;line-height:1.5">
-      🇬🇧 Reset your FlotaDSP password with the button above — the link expires in 1 hour.
+      🇬🇧 Reset your {MARCA} password with the button above — the link expires in 1 hour.
       If you didn't request this, just ignore this email.
     </p>
   </div>
 </div>"""
         try:
-            sent = await _enviar_email(email, "Restablece tu contraseña de FlotaDSP", html)
+            sent = await _enviar_email(email, f"Restablece tu contraseña de {MARCA}", html)
             if not sent:
                 logger.warning("forgot-password: RESEND_API_KEY no configurada, email no enviado")
         except Exception as _fe:
@@ -6230,7 +6251,7 @@ async def _seed_demo_data():
     drivers = [{
         "id": f"demo-d{i}", "name": n, "center": "MADRID", "active": True,
         "contrato": "empresa" if i % 3 else "ett", "nivel": ["pleno", "L1", "L2"][i % 3],
-        "email": f"demo{i}@flotadsp.com", "created_at": now.isoformat(),
+        "email": f"demo{i}@{_DOMINIO_FRONT}", "created_at": now.isoformat(),
     } for i, n in enumerate(names)]
     await ddb.drivers.insert_many(drivers)
 
@@ -6346,7 +6367,7 @@ async def demo_login(request: Request):
     org = await global_db.organizations.find_one({"id": _DEMO_ORG_ID})
     if not org:
         await global_db.organizations.insert_one({
-            "id": _DEMO_ORG_ID, "name": "Demo FlotaDSP", "account_type": "dsp",
+            "id": _DEMO_ORG_ID, "name": f"Demo {MARCA}", "account_type": "dsp",
             "slug": "demo", "db_name": _DEMO_DB, "status": "active", "plan": "pro",
             "centers": ["MADRID"], "max_centers": 1,
             "created_at": datetime.now(timezone.utc).isoformat(),
@@ -6355,11 +6376,11 @@ async def demo_login(request: Request):
         await _demo_refrescar()
     except Exception as _se:
         logger.warning(f"Demo seed: {_se}")
-    token = create_token("demo-user", "admin", "Demo FlotaDSP",
+    token = create_token("demo-user", "admin", f"Demo {MARCA}",
                          org_id=_DEMO_ORG_ID, db_name=_DEMO_DB, account_type="dsp",
                          centers=["MADRID"], demo=True)
     logger.info(f"Demo login desde {_rl_key_ip(request)}")
-    return {"access_token": token, "role": "admin", "name": "Demo FlotaDSP",
+    return {"access_token": token, "role": "admin", "name": f"Demo {MARCA}",
             "id": "demo-user", "account_type": "dsp", "slug": "demo",
             "centers": ["MADRID"], "demo": True}
 
@@ -6438,7 +6459,7 @@ async def assistant_ask(data: dict, user: dict = Depends(require_admin)):
     }
 
     prompt = (
-        "Eres el asistente de FlotaDSP para el gestor de una flota de furgonetas DSP.\n"
+        f"Eres el asistente de {MARCA} para el gestor de una flota de furgonetas DSP.\n"
         "Responde a la pregunta usando EXCLUSIVAMENTE los datos JSON adjuntos. "
         "Si el dato no está, di claramente que no tienes esa información. "
         "Sé conciso y directo (máx. ~120 palabras), en el idioma de la pregunta, "
@@ -7168,7 +7189,7 @@ async def delete_driver_account(driver_id: str, _admin: dict = Depends(require_a
 
 @api_router.get("/")
 async def root():
-    return {"message": "FlotaDSP API funcionando", "version": "5.3.4"}
+    return {"message": "%s API funcionando" % MARCA, "version": "6.0.0"}
 
 
 # =========================
@@ -11678,7 +11699,7 @@ async def ai_dataset_export(_=Depends(require_admin)):
     for a in annotations:
         by_verdict[a["verdict"]] = by_verdict.get(a["verdict"], 0) + 1
     return {
-        "format": "flotadsp-coco-v1",
+        "format": "flota-coco-v1",
         "coords": "0-1000, box_2d=[ymin,xmin,ymax,xmax], polygon=[[y,x],...]",
         "counts": {"images": len(images), "annotations": len(annotations), "by_verdict": by_verdict},
         "images": list(images.values()),
@@ -12259,7 +12280,6 @@ async def get_forensic_status(inspection_id: str, _=Depends(require_any_auth)):
 
 # --- Generación del PDF forense (reportlab + qrcode) ---
 
-_PORTAL_BASE_FRONT = os.environ.get("PUBLIC_BASE_URL_FRONT", "https://flotadsp.com").rstrip("/")
 
 
 def _mask_plate(plate: str) -> str:
@@ -12543,7 +12563,7 @@ def _build_forensic_pdf(insp: dict, sig: dict, vehicle: dict, driver_name: str,
     doc = SimpleDocTemplate(buf, pagesize=A4, rightMargin=15*mm, leftMargin=15*mm,
                             topMargin=15*mm, bottomMargin=15*mm,
                             title=f"Peritaje técnico {insp.get('id','')[:8]}",
-                            author="FlotaDSP")
+                            author=f"{MARCA}")
     styles = getSampleStyleSheet()
     h1 = ParagraphStyle("H1", parent=styles["Heading1"], fontSize=18, textColor=colors.HexColor("#0b1220"))
     h2 = ParagraphStyle("H2", parent=styles["Heading2"], fontSize=12, textColor=colors.HexColor("#0ea5e9"),
@@ -12557,7 +12577,7 @@ def _build_forensic_pdf(insp: dict, sig: dict, vehicle: dict, driver_name: str,
 
     # Cabecera
     story.append(Paragraph("Peritaje técnico de inspección", h1))
-    story.append(Paragraph("Cadena de custodia con hash inmutable · FlotaDSP", small))
+    story.append(Paragraph(f"Cadena de custodia con hash inmutable · {MARCA}", small))
     story.append(Spacer(1, 5*mm))
 
     # Bloque datos
@@ -12743,7 +12763,7 @@ def _build_forensic_pdf(insp: dict, sig: dict, vehicle: dict, driver_name: str,
     story.append(Spacer(1, 8*mm))
     story.append(Paragraph(
         "<b>Aviso:</b> este documento es evidencia técnica con cadena de custodia hash, NO una firma "
-        "electrónica avanzada conforme al reglamento eIDAS. FlotaDSP no presta servicios de asesoría "
+        f"electrónica avanzada conforme al reglamento eIDAS. {MARCA} no presta servicios de asesoría "
         "jurídica. La validez probatoria del documento dependerá de la valoración que haga el "
         "destinatario o, en su caso, la autoridad competente.", small))
 
@@ -12766,7 +12786,7 @@ def _build_damage_report_pdf(insp: dict, vehicle: dict, driver_name: str,
     buf = _io.BytesIO()
     doc = SimpleDocTemplate(buf, pagesize=A4, topMargin=16 * mm, bottomMargin=14 * mm,
                             leftMargin=16 * mm, rightMargin=16 * mm,
-                            title="Parte de daño — FlotaDSP")
+                            title=f"Parte de daño — {MARCA}")
     ss = getSampleStyleSheet()
     h1 = ParagraphStyle("h1", parent=ss["Title"], fontSize=17, spaceAfter=2)
     small = ParagraphStyle("small", parent=ss["Normal"], fontSize=8.5, textColor=colors.grey)
@@ -12776,7 +12796,7 @@ def _build_damage_report_pdf(insp: dict, vehicle: dict, driver_name: str,
     fecha = (insp.get("created_at") or "")[:16].replace("T", " ")
     story = [
         Paragraph("PARTE DE DAÑO DE VEHÍCULO", h1),
-        Paragraph("Documento generado por FlotaDSP — registro fotográfico con sello temporal", small),
+        Paragraph(f"Documento generado por {MARCA} — registro fotográfico con sello temporal", small),
         Spacer(1, 6 * mm),
     ]
 
@@ -12827,7 +12847,7 @@ def _build_damage_report_pdf(insp: dict, vehicle: dict, driver_name: str,
                  "Las fotos originales se conservan sin alteración en el sistema.")
     story.append(Paragraph(
         f"{integrity} Inspección {insp.get('id', '')} · Generado el "
-        f"{datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M UTC')} · flotadsp.com", small))
+        f"{datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M UTC')} · {_DOMINIO_FRONT}", small))
 
     doc.build(story)
     return buf.getvalue()
@@ -13723,11 +13743,11 @@ def _html_resumen(r: dict) -> str:
                          f'✗ {esc(it.get("text"))} — sin hacer</div>')
         P.append('</div>')
 
-    P.append(f'<a href="https://flotadsp.com/panel" style="display:inline-block;margin-top:6px;'
+    P.append(f'<a href="{_PORTAL_BASE_FRONT}/panel" style="display:inline-block;margin-top:6px;'
              f'background:#ea6800;color:#fff;text-decoration:none;padding:11px 20px;'
              f'border-radius:9px;font-weight:600;font-size:14px">Abrir el panel</a>')
     P.append(f'<div style="margin-top:18px;font-size:12px;color:{S}">'
-             f'Resumen automático de FlotaDSP. Si no quieres seguir recibiéndolo, '
+             f'Resumen automático de {MARCA}. Si no quieres seguir recibiéndolo, '
              f'dilo y se quita en Configuración.</div>')
     P.append('</div>')
     return "".join(P)
@@ -14192,7 +14212,7 @@ async def _chat_room_can_access(user: dict, center: str) -> bool:
 # =========================
 VAPID_PRIVATE_KEY = os.environ.get("VAPID_PRIVATE_KEY", "")
 VAPID_PUBLIC_KEY = os.environ.get("VAPID_PUBLIC_KEY", "")
-VAPID_SUBJECT = os.environ.get("VAPID_SUBJECT", "mailto:hola@flotadsp.com")
+VAPID_SUBJECT = os.environ.get("VAPID_SUBJECT", "mailto:" + (CORREO_CONTACTO or "no-reply@localhost"))
 _push_enabled = bool(VAPID_PRIVATE_KEY and VAPID_PUBLIC_KEY)
 if _push_enabled:
     try:
@@ -14628,8 +14648,8 @@ async def chat_get(center: str, since: Optional[str] = None,
 #     la llame en una hora, se va sola — estar siempre no significa nada.
 #   · SI FALLA, LO DICE. Un asistente mudo parece que se ha ido; y peor todavia,
 #     el mensaje de la persona ya esta guardado y quedaria sin respuesta.
-_IA_SALA_ID = "flotadsp-ai"
-_IA_SALA_NOMBRE = "FlotaDSP AI"
+_IA_SALA_ID = "asistente-ia"
+_IA_SALA_NOMBRE = MARCA_IA
 _IA_SALA_FOTO = "/logo-fd-sinlema.png"
 _IA_SALA_MINUTOS = 60
 
@@ -15200,15 +15220,13 @@ async def security_headers(request: Request, call_next):
     return response
 
 
-# CORS: por defecto SOLO los dominios oficiales de FlotaDSP (lista blanca).
-# En desarrollo se puede ampliar con CORS_ORIGINS="https://flotadsp.com,http://localhost:5175,..."
+# CORS: por defecto SOLO la web del propio panel (PUBLIC_BASE_URL_FRONT) y el
+# servidor de desarrollo. Para mas dominios: CORS_ORIGINS="https://a.com,https://b.com"
 # Para abrir a todo (NO recomendado en producción): CORS_ORIGINS="*"
 _DEFAULT_CORS = ",".join([
-    "https://flotadsp.com",
-    "https://www.flotadsp.com",
-    "https://app.flotadsp.com",
-    "https://flotadsp-v2.pages.dev",
-    "https://test.flotadsp-v2.pages.dev",
+    _PORTAL_BASE_FRONT,
+    "http://localhost:5173",
+    "http://localhost:4173",
 ])
 cors_origins_raw = os.environ.get("CORS_ORIGINS", _DEFAULT_CORS)
 cors_origins = [o.strip() for o in cors_origins_raw.split(",") if o.strip()]
@@ -15220,9 +15238,10 @@ logger.info(f"CORS allow_origins={cors_origins} credentials={use_credentials}")
 app.add_middleware(
     CORSMiddleware,
     allow_origins=cors_origins,
-    # Cualquier preview deploy de Cloudflare Pages del proyecto flotadsp-v2
-    # (<hash>.flotadsp-v2.pages.dev) y el dev server local de Vite (verificación).
-    allow_origin_regex=r"https://([a-z0-9-]+\.)?flotadsp-v2\.pages\.dev|http://localhost:517[0-9]",
+    # Vistas previas del hosting (p. ej. «<rama>.<proyecto>.pages.dev»): se dan
+    # por entorno, no escritas aqui. Localhost siempre, para desarrollar.
+    allow_origin_regex=(os.environ.get("CORS_ORIGIN_REGEX", "").strip() + "|" if os.environ.get("CORS_ORIGIN_REGEX", "").strip() else "")
+    + r"http://localhost:517[0-9]",
     allow_credentials=use_credentials,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -15238,7 +15257,7 @@ app.mount("/uploads", StaticFiles(directory=str(UPLOAD_DIR)), name="uploads")
 
 @app.get("/")
 async def home():
-    return {"status": "FlotaDSP backend running", "version": "5.3.4"}
+    return {"status": "%s backend running" % MARCA, "version": "6.0.0"}
 
 
 @app.on_event("shutdown")
@@ -15918,7 +15937,7 @@ async def whatsapp_estado(_=Depends(require_admin)):
             "pendientes_a_mano": pendientes,
             "que_hacer_entrega": whatsapp.QUE_HACER_ENTREGA.get(_peor),
             "ultimos": ultimos,
-            "webhook_url": "https://flotadsp-backend.fly.dev/api/webhooks/whatsapp",
+            "webhook_url": _BACKEND_BASE + "/api/webhooks/whatsapp",
             "plantillas": await whatsapp.plantillas()}
 
 
@@ -16047,7 +16066,7 @@ async def test_telegram(_=Depends(require_admin)):
             if not chat_id.strip():
                 continue
             url = f"https://api.telegram.org/bot{token}/sendMessage"
-            payload = {"chat_id": chat_id, "text": "✅ FlotaDSP — Test de conexión exitoso", "parse_mode": "HTML"}
+            payload = {"chat_id": chat_id, "text": f"✅ {MARCA} — Test de conexión exitoso", "parse_mode": "HTML"}
             try:
                 async with session.post(url, json=payload, timeout=_aiohttp.ClientTimeout(total=10)) as resp:
                     data = await resp.json()
@@ -16668,7 +16687,7 @@ async def backup_database_to_r2() -> dict:
                     "error": f"Copia sospechosa: {tam} bytes para {total_docs} documentos"}
 
         stamp = datetime.now(timezone.utc).strftime("%Y-%m-%d_%H%M")
-        key = f"backups/flotadsp_{stamp}.jsonl.gz"
+        key = f"backups/{MARCA.lower()}_{stamp}.jsonl.gz"
         loop = asyncio.get_running_loop()
 
         def _subir():
@@ -16928,7 +16947,7 @@ async def send_weekly_email_digest():
 <div style="font-family:Inter,sans-serif;max-width:520px;margin:0 auto;background:#0b0d10;color:#eef1f6;border-radius:16px;overflow:hidden">
   <div style="background:linear-gradient(135deg,#0ea5e9,#0369a1);padding:26px 28px;text-align:center">
     <div style="font-size:26px;margin-bottom:6px">⚡</div>
-    <h1 style="margin:0;font-size:20px;font-weight:900;color:#fff">Tu semana en FlotaDSP</h1>
+    <h1 style="margin:0;font-size:20px;font-weight:900;color:#fff">Tu semana en {MARCA}</h1>
     <p style="margin:6px 0 0;color:rgba(255,255,255,.8);font-size:13px">{org.get('name','')}</p>
   </div>
   <div style="padding:26px 28px">
@@ -16950,17 +16969,17 @@ async def send_weekly_email_digest():
       <div style="font-size:11px;color:#64748b;font-weight:700;text-transform:uppercase;letter-spacing:.06em;margin-bottom:10px">ITV próximas (30 días)</div>
       {itv_html}
     </div>
-    <a href="https://flotadsp.com/panel" style="display:block;text-align:center;background:linear-gradient(135deg,#0ea5e9,#0369a1);color:#fff;text-decoration:none;padding:13px 24px;border-radius:10px;font-weight:800;font-size:14px">
+    <a href="{_PORTAL_BASE_FRONT}/panel" style="display:block;text-align:center;background:linear-gradient(135deg,#0ea5e9,#0369a1);color:#fff;text-decoration:none;padding:13px 24px;border-radius:10px;font-weight:800;font-size:14px">
       Abrir el panel →
     </a>
     <p style="margin:12px 0 0;color:#475569;font-size:11px;text-align:center;line-height:1.5">
-      🇬🇧 Your week in FlotaDSP: inspections, new damage and upcoming MOT dates above. Open the panel for details.
+      🇬🇧 Your week in {MARCA}: inspections, new damage and upcoming MOT dates above. Open the panel for details.
     </p>
   </div>
 </div>"""
             ok = await _enviar_email(
                 org["email"],
-                f"Tu semana en FlotaDSP: {n_insp} inspecciones, {n_damages} con daños nuevos",
+                f"Tu semana en {MARCA}: {n_insp} inspecciones, {n_damages} con daños nuevos",
                 html,
             )
             if ok:
@@ -20242,7 +20261,7 @@ Y el enlace de WhatsApp lo arma SIEMPRE el backend con `enlace_wa` (gotcha 47).
 _INVITA_COL = "empleo_invitados"
 _INVITA_MESES_GUARDA = 6
 _INVITA_MAX = 500
-_INVITA_ENLACE = "https://flotadsp.com/empleo"
+_INVITA_ENLACE = f"{_PORTAL_BASE_FRONT}/empleo"
 # El texto que escribio Dani, con los saltos de linea puestos y el enlace en su
 # propia linea: dentro de un parrafo WhatsApp lo enlaza igual, pero se toca
 # peor y se lee peor, y esto lo abre alguien en el movil.
@@ -21620,7 +21639,7 @@ async def taller_export(desde: str = "", hasta: str = "", center: str = "",
            "ordenes_taller"]
     out = io.StringIO()
     w = csv.writer(out, delimiter=";")
-    w.writerow(["FlotaDSP · informe de flota y taller", "v" + EXPORT_VERSION])
+    w.writerow([f"{MARCA} · informe de flota y taller", "v" + EXPORT_VERSION])
     w.writerow(["Periodo", "%s a %s" % (d_desde, d_hasta), "Centro", centro or "todos"])
     w.writerow(["Inspecciones", n_insp, "Con fotografia",
                 "%s%%" % _pct(n_foto, n_insp), "Con conductor",
@@ -21637,7 +21656,7 @@ async def taller_export(desde: str = "", hasta: str = "", center: str = "",
         content=out.getvalue().encode("utf-8-sig"),      # BOM: Excel y las tildes
         media_type="text/csv; charset=utf-8",
         headers={"Content-Disposition":
-                 'attachment; filename="flotadsp_%s_%s_%s.csv"'
+                 f'attachment; filename="{MARCA.lower()}_%s_%s_%s.csv"'
                  % (centro or "todos", d_desde, d_hasta)})
 
 
@@ -21668,7 +21687,7 @@ PARTNER_DIAS_DEF = 365
 
 
 def _partner_hash(tok: str) -> str:
-    return hashlib.sha256(("flotadsp-partner:" + str(tok or "")).encode()).hexdigest()
+    return hashlib.sha256(("partner:" + str(tok or "")).encode()).hexdigest()
 
 
 @api_router.post("/partner/tokens")
@@ -21705,8 +21724,8 @@ async def partner_crear_token(data: dict = Body(...), user: dict = Depends(requi
         "aviso": "Cópiala ahora: no se puede volver a ver. Si se pierde, se revoca y se hace otra.",
         "id": doc["id"], "partner": nombre, "scopes": scopes,
         "expira_en": doc["expira_en"],
-        "como_se_usa": "curl -H 'X-FlotaDSP-Key: <token>' %s/api/partner/v1/flota"
-                       % os.environ.get("PUBLIC_BASE_URL", "https://flotadsp-backend.fly.dev"),
+        "como_se_usa": "curl -H 'X-Partner-Key: <token>' %s/api/partner/v1/flota"
+                       % os.environ.get("PUBLIC_BASE_URL", f"{_BACKEND_BASE}"),
     }
 
 
@@ -21753,10 +21772,10 @@ async def _partner_auth(request: Request, scope: str) -> dict:
     segundo cliente, la llave de un DSP leería los datos de otro. El `db_name`
     va DENTRO de la llave y se fija aquí a mano.
     """
-    tok = (request.headers.get("X-FlotaDSP-Key")
-           or request.headers.get("x-flotadsp-key") or "").strip()
+    tok = (request.headers.get("X-Partner-Key")
+           or request.headers.get("x-partner-key") or "").strip()
     if not tok:
-        raise HTTPException(401, "Falta la cabecera X-FlotaDSP-Key")
+        raise HTTPException(401, "Falta la cabecera X-Partner-Key")
     doc = await global_db[PARTNER_COL].find_one({"token_hash": _partner_hash(tok)})
     if not doc or doc.get("revocado"):
         # Mismo mensaje para una llave que no existe y una revocada: distinguirlas
@@ -21925,7 +21944,7 @@ async def taller_plantilla_set(clave: str, data: dict = Body(...),
                  "taller_nombre": "Talleres Muñiz",
                  "problema": "golpe en la puerta corredera derecha",
                  "fecha_entrega_estimada": "2026-09-05"},
-                "https://flotadsp.com/taller/ejemplo", 5)),
+                f"{_PORTAL_BASE_FRONT}/taller/ejemplo", 5)),
             "creada": bool(r.upserted_id)}
 
 
@@ -22984,7 +23003,7 @@ async def _taller_ubicar(address, city) -> Optional[tuple]:
     import httpx as _httpx
     try:
         async with _httpx.AsyncClient(timeout=8, headers={
-                "User-Agent": "FlotaDSP/1.0 (talleres; contacto@flotadsp.com)",
+                "User-Agent": f"{MARCA}/1.0 (talleres; {CORREO_CONTACTO})",
                 "Accept-Language": "es"}) as c:
             r = await _geo_pide(c, "https://nominatim.openstreetmap.org/search",
                                 params={"q": consulta, "format": "json", "limit": 1,
@@ -25171,7 +25190,7 @@ async def fleet_report_pdf(center: Optional[str] = None, user: dict = Depends(re
     doc = SimpleDocTemplate(buf, pagesize=A4, rightMargin=2*cm, leftMargin=2*cm, topMargin=2*cm, bottomMargin=2*cm)
     styles = getSampleStyleSheet()
     story = []
-    story.append(Paragraph("<b>FlotaDSP - Informe de Estado de Flota</b>", styles["Title"]))
+    story.append(Paragraph(f"<b>{MARCA} - Informe de Estado de Flota</b>", styles["Title"]))
     # De QUE es el informe, en la propia hoja. Un PDF que solo pone una
     # fecha se acaba enseñando como si fuera de la nave de la que se habla.
     _ambito = ("Centro: %s" % center) if center and center != "Todos" else (
@@ -26918,7 +26937,7 @@ async def _cargar_foto_bytes(foto):
         return None
     try:
         if foto.startswith("http"):
-            async with _aio.ClientSession(headers={"User-Agent":"FlotaDSP/1.0"}) as ss:
+            async with _aio.ClientSession(headers={"User-Agent":f"{MARCA}/1.0"}) as ss:
                 async with ss.get(foto, timeout=_aio.ClientTimeout(total=15)) as r:
                     if r.status == 200:
                         return await r.read()
@@ -27720,7 +27739,7 @@ async def inspection_pdf(inspection_id: str, boxes: int = 0, _=Depends(require_a
         except Exception as _pe:                                 # noqa: BLE001
             return None, f"err:{str(_pe)[:40]}"
 
-    async with _aio.ClientSession(headers={"User-Agent": "FlotaDSP-PDF/1.0"}) as _sess:
+    async with _aio.ClientSession(headers={"User-Agent": f"{MARCA}-PDF/1.0"}) as _sess:
         _resultados = await asyncio.gather(*[_una_foto(_sess, p) for p in raw_photos])
     photo_bytes = [b for b, _ in _resultados if b]
     _diag = [d for _, d in _resultados]
@@ -27745,7 +27764,7 @@ async def inspection_pdf(inspection_id: str, boxes: int = 0, _=Depends(require_a
     c.roundRect(15*mm, H-22*mm, 10*mm, 10*mm, 2*mm, fill=1, stroke=0)
     c.setFillColor(colors.white)
     c.setFont("Helvetica-Bold", 16)
-    c.drawString(28*mm, H-18*mm, "FlotaDSP")
+    c.drawString(28*mm, H-18*mm, f"{MARCA}")
     c.setFont("Helvetica", 9)
     c.setFillColor(colors.HexColor("#9aa0aa"))
     c.drawRightString(W-15*mm, H-16*mm, "Informe de peritaje IA")
@@ -27910,7 +27929,7 @@ async def inspection_pdf(inspection_id: str, boxes: int = 0, _=Depends(require_a
     # --- Pie ---
     c.setFillColor(colors.HexColor("#aaaaaa"))
     c.setFont("Helvetica", 7)
-    c.drawCentredString(W/2, 12*mm, "Generado por FlotaDSP - Peritaje IA - Documento orientativo")
+    c.drawCentredString(W/2, 12*mm, f"Generado por {MARCA} - Peritaje IA - Documento orientativo")
 
     c.showPage()
     c.save()
@@ -29607,11 +29626,11 @@ async def exportar_cuadrante(center: str, desde: str, hasta: str,
             cod, hora = fila["dias"].get(f, ("", ""))
             cel = ws.cell(row=r, column=3 + j, value=cod)
             cel.alignment = centro
-            # Linea mas marcada donde empieza la semana. La semana de Amazon va
-            # de DOMINGO a sabado: cortando en lunes, la raya cae en medio de
-            # cada una de sus semanas y las cuentas no cuadran con las suyas.
+            # Linea mas marcada donde empieza la semana: el LUNES, igual que la
+            # rejilla de la pantalla (si no, el Excel y la pantalla cortan en
+            # sitios distintos y las cuentas de la semana no cuadran).
             cel.border = (Border(left=medio, right=fino, top=fino, bottom=fino)
-                          if datetime.strptime(f, "%Y-%m-%d").weekday() == 6 else borde)
+                          if datetime.strptime(f, "%Y-%m-%d").weekday() == 0 else borde)
             if cod:
                 etiqueta, fam = info(cod)
                 bg, fg = COLOR_FAMILIA_XLSX.get(fam, COLOR_FAMILIA_XLSX["libre"])
@@ -29621,7 +29640,7 @@ async def exportar_cuadrante(center: str, desde: str, hasta: str,
                 # comentario, que se ve al pasar por encima y no ensucia
                 # la rejilla.
                 if hora:
-                    cel.comment = Comment(f"{etiqueta} - entra a las {hora}", "FlotaDSP")
+                    cel.comment = Comment(f"{etiqueta} - entra a las {hora}", f"{MARCA}")
 
     # Las tres cifras del dia, juntas y en el mismo orden que en la hoja de la
     # que sale esto. Solas no dicen nada: 39 personas es mucho o poco segun lo
@@ -32065,12 +32084,12 @@ async def founder_reserve(data: FounderReserve, request: Request):
 # Oferta por defecto del portal conductor mientras no haya patrocinadores:
 # bucle de crecimiento (el conductor recomienda FlotaDSP a su jefe).
 _DEFAULT_DRIVER_OFFER = {
-    "id": "ref-flotadsp",
+    "id": f"ref-{MARCA.lower()}",
     "emoji": "🎁",
     "title": "¿Conoces otro DSP que sufra con las furgonetas?",
-    "description": "Recomiéndale FlotaDSP: inspecciones con IA en 30 segundos, como las tuyas.",
+    "description": f"Recomiéndale {MARCA}: inspecciones con IA en 30 segundos, como las tuyas.",
     "cta": "Ver cómo funciona",
-    "url": "https://flotadsp.com/?utm_source=driver-portal&utm_medium=referral",
+    "url": f"{_PORTAL_BASE_FRONT}/?utm_source=driver-portal&utm_medium=referral",
 }
 
 
@@ -33031,7 +33050,7 @@ _TIENDA_PASOS = [
      "coste": "Consulta a gestoría"},
     {"id": "pasarela", "fase": "cobrar",
      "titulo": "Pasarela de pago para producto FÍSICO",
-     "porque": "La que ya tienes NO vale: Lemon Squeezy es solo para producto digital. Si cobras la ropa por ahí te arriesgas a que te cierren la cuenta, y de paso te quedas sin cobrar las suscripciones de FlotaDSP.",
+     "porque": f"La que ya tienes NO vale: Lemon Squeezy es solo para producto digital. Si cobras la ropa por ahí te arriesgas a que te cierren la cuenta, y de paso te quedas sin cobrar las suscripciones de {MARCA}.",
      "como": "Stripe aparte para el producto físico, o que el checkout lo ponga el proveedor y tú te lleves la comisión.",
      "coste": "1,5-2,9% por cobro"},
     {"id": "serie_facturas", "fase": "cobrar",
@@ -33053,7 +33072,7 @@ _TIENDA_PASOS = [
      "como": "Se dispara al pasar un candidato a contratado, con la talla ya en su ficha. 2 camisetas + 1 sudadera + 1 gorra: coste 34,15 €, PVP al DSP 65 €.",
      "coste": "Se cobra al DSP"},
     {"id": "canal_otros_dsp", "fase": "canales",
-     "titulo": "Los otros DSP que usen FlotaDSP",
+     "titulo": f"Los otros DSP que usen {MARCA}",
      "porque": "Es lo que multiplica: el mismo mecanismo por cada empresa que entre. Y es argumento de venta de la propia app, no solo un ingreso aparte.",
      "como": "Cuando haya un segundo DSP en la app, se le ofrece su propia tienda con su logo.",
      "coste": "0 €"},
@@ -33092,7 +33111,7 @@ async def require_plataforma(user: dict = Depends(require_admin)) -> dict:
     puerta. El escaparate del conductor NO pasa por aqui.
     """
     if not (user.get("sa") or user.get("account_type") == "owner"):
-        raise HTTPException(403, "Esta pantalla es de FlotaDSP, no de tu flota.")
+        raise HTTPException(403, f"Esta pantalla es de {MARCA}, no de tu flota.")
     return user
 
 
@@ -33251,8 +33270,8 @@ _PRENDA_COLORES = [
 _PRENDA_TINTAS = [
     {"id": "blanco", "nombre": "Blanco", "hex": "#F5F7F8"},
     {"id": "negro", "nombre": "Negro", "hex": "#16191C"},
-    {"id": "cian", "nombre": "Cian FlotaDSP", "hex": "#14E7D8"},
-    {"id": "azul", "nombre": "Azul FlotaDSP", "hex": "#0AACD3"},
+    {"id": "cian", "nombre": "Cian", "hex": "#14E7D8"},
+    {"id": "azul", "nombre": "Azul", "hex": "#0AACD3"},
     # TONAL: bordado del mismo color que la prenda, un tono por encima. No
     # lleva hex porque no es un color fijo — sale de la prenda, y por eso lo
     # calcula el lienzo. Es la que mas se lleva en prenda de calle: se ve de
@@ -33743,7 +33762,7 @@ def _prenda_interpreta(texto: str) -> dict:
             cm = limite
         estampaciones.append({
             "posicion": pos, "tinta": tinta_id, "cm": max(2, cm),
-            "texto": "flotadsp" if pos == "espalda" else "FDs",
+            "texto": f"{MARCA.lower()}" if pos == "espalda" else "FDs",
             "usa_logo": True,
             "con_nombre": pos == "espalda" and ("nombre" in t or "su nombre" in t),
         })
@@ -34129,7 +34148,7 @@ def _empleo_jsonld(o: dict, org: dict, url: str) -> dict:
     except Exception:                                            # noqa: BLE001
         caduca = (datetime.now(timezone.utc) + timedelta(days=_SEO_DIAS_VIGENCIA)).isoformat()
 
-    empresa = (org or {}).get("name") or (org or {}).get("nombre") or "FlotaDSP"
+    empresa = (org or {}).get("name") or (org or {}).get("nombre") or f"{MARCA}"
     ld = {
         "@context": "https://schema.org/",
         "@type": "JobPosting",
@@ -34231,7 +34250,7 @@ async def empleo_seo_oferta(slug: str, oferta_slug: str):
         # El <title> SI lleva ciudad y empresa: eso es para la persona que lo
         # ve en la lista de resultados, no para el dato estructurado.
         "titulo": ("%s%s | %s" % (titulo, (" en " + ciudad) if ciudad else "",
-                                  (org or {}).get("name") or "FlotaDSP"))[:120],
+                                  (org or {}).get("name") or f"{MARCA}"))[:120],
         "descripcion": desc or titulo,
         "url": url,
         "jsonld": _empleo_jsonld(o, org or {}, url),
@@ -35564,7 +35583,7 @@ async def empleo_suscripcion_checkout(body: dict = Body(...), request: Request =
         ("line_items[0][price_data][unit_amount]", "299"),
         ("line_items[0][price_data][recurring][interval]", "month"),
         ("line_items[0][price_data][product_data][name]",
-         "Notificaciones prioritarias de empleo FlotaDSP"),
+         f"Notificaciones prioritarias de empleo {MARCA}"),
     ]
     if perfil:
         datos += [("metadata[perfil]", perfil), ("subscription_data[metadata][perfil]", perfil)]
@@ -35669,8 +35688,8 @@ async def _avisar_suscriptores_empleo(oferta: dict) -> None:
 
 
 def _candidatos_email_pie() -> str:
-    return """
-      <p style="color:#888;font-size:12px">FlotaDSP — has recibido esto porque dejaste
+    return f"""
+      <p style="color:#888;font-size:12px">{MARCA} — has recibido esto porque dejaste
       tu candidatura con nosotros. Si no quieres más correos como este, responde
       a este mensaje y te quitamos de la lista.</p>"""
 
@@ -35849,7 +35868,7 @@ async def candidatos_campana_bienvenida(body: dict = Body(...), user: dict = Dep
             # fijo sin saber si le quedan 10 minutos o 3 horas y media.
             url_tienda = f"{enlace_tienda}?cupon={cupon['id']}&exp={_url_quote(cupon['expira_en'])}"
             if await _enviar_email(
-                    d["email"], "Un regalo por tu candidatura con FlotaDSP",
+                    d["email"], f"Un regalo por tu candidatura con {MARCA}",
                     _candidatos_campana_html_cupon(nombre, url_tienda, cupon["expira_en"]),
                     responder_a=os.environ.get("EMAIL_FROM_RESPUESTA", "")):
                 algo = True
@@ -36217,8 +36236,8 @@ _IA_VEHICULO_EDITABLE = {"brand", "model", "color", "year", "mileage", "notes", 
                          "fuel_type", "itv_date", "insurance_expiry", "renting_end_date", "provider"}
 _IA_CONDUCTOR_EDITABLE = {"phone", "email", "dni", "license_number", "address", "notes"}
 
-_IA_ASISTENTE_MANUAL = """
-=== MANUAL BREVE DE FLOTADSP (para explicar "cómo se hace X") ===
+_IA_ASISTENTE_MANUAL = f"""
+=== MANUAL BREVE DE {MARCA.upper()} (para explicar "cómo se hace X") ===
 Vehículos: ficha de cada furgoneta (estado, papeles, daños, gemelo 3D). Busca
 por matrícula. Documentación tiene seguro/ITV/renting. Las de baja no salen
 en listados normales. Puedes listar furgonetas por proveedor de renting
@@ -36589,7 +36608,7 @@ def _ai_asistente_prompt(center: str, contexto: str, dueno: bool = False) -> str
     furgoneta". Es SOLO lo apuntado en la pantalla de Gastos: si el total
     parece bajo, dilo («esto es lo apuntado, no la contabilidad»).
 """ if dueno else "")
-    return f"""Eres FLOTADSP AI, el asistente del panel de FlotaDSP para el centro {center}.
+    return f"""Eres {MARCA.upper()} IA, el asistente del panel de {MARCA} para el centro {center}.
 
 QUIÉN TE HABLA: alguien de la oficina de esta nave, no un desarrollador. Puede
 ser nuevo en la herramienta.
@@ -37458,9 +37477,9 @@ def _gasto_norm(texto) -> str:
 _GASTO_CATALOGO = [
     # ── Lo que hace funcionar a FlotaDSP ────────────────────────────────────
     (["fly io", "flyio"], "Fly.io", "software",
-     "El servidor donde corre FlotaDSP (el backend). Se paga por máquina encendida y por tráfico."),
+     f"El servidor donde corre {MARCA} (el backend). Se paga por máquina encendida y por tráfico."),
     (["cloudflare"], "Cloudflare", "software",
-     "Sirve flotadsp.com, guarda las fotos y los documentos (R2) y lleva el dominio."),
+     f"Sirve {_DOMINIO_FRONT}, guarda las fotos y los documentos (R2) y lleva el dominio."),
     (["mongodb", "atlas mongo", "mongo atlas"], "MongoDB Atlas", "software",
      "La base de datos: fichas, paquetes, inspecciones, cuadrantes... todo lo que ves en el panel."),
     (["brevo", "sendinblue"], "Brevo", "software",
@@ -37473,14 +37492,14 @@ _GASTO_CATALOGO = [
      "La IA que mira las fotos y detecta los daños de las furgonetas."),
     (["google workspace", "google gsuite"], "Google Workspace", "software",
      "El correo de empresa y el Drive."),
-    (["github"], "GitHub", "software", "Donde vive el código de FlotaDSP."),
+    (["github"], "GitHub", "software", f"Donde vive el código de {MARCA}."),
     (["meta platforms", "whatsapp business", "facebook"], "Meta (WhatsApp Business)", "software",
      "Los WhatsApp que manda la app a conductores y talleres. Meta cobra por conversación."),
     (["twilio"], "Twilio", "software", "SMS y WhatsApp por API."),
     (["stripe"], "Stripe", "servicios",
      "La pasarela de pago de la tienda y de las suscripciones. Cobra una comisión por cada venta."),
     (["lemon squeezy", "lemonsqueezy"], "Lemon Squeezy", "servicios",
-     "La pasarela de las suscripciones de FlotaDSP."),
+     f"La pasarela de las suscripciones de {MARCA}."),
     (["apple developer", "apple distribution", "itunes"], "Apple Developer", "software",
      "La cuenta para publicar la app en el iPhone. Se paga una vez al año."),
     (["google play", "google payment"], "Google Play", "software",

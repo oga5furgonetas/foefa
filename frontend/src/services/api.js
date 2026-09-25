@@ -10,7 +10,7 @@ export const api = axios.create({
 
 /* ── DOS SESIONES QUE NO SE PISAN ──────────────────────────────────────────
    El panel y el portal del conductor viven en el mismo navegador y hasta ahora
-   compartían la misma llave `flotadsp_token`. Consecuencia real, vista en
+   compartían la misma llave `flotia_token`. Consecuencia real, vista en
    producción: alguien con el panel abierto entraba al portal para probar, el
    login del conductor pisaba el token del admin, las pestañas del panel
    empezaban a dar 401 y el interceptor de abajo BORRABA el token —dejando sin
@@ -19,7 +19,7 @@ export const api = axios.create({
 
    La sesión del conductor tiene ahora su propia llave. Se elige por la URL:
    /conductor es suyo, el resto es del panel. */
-export const DRIVER_TOKEN_KEY = 'flotadsp_driver_token'
+export const DRIVER_TOKEN_KEY = 'flotia_driver_token'
 export const enPortalConductor = () =>
   typeof window !== 'undefined' && window.location.pathname.startsWith('/conductor')
 
@@ -27,9 +27,9 @@ export function tokenActual() {
   if (enPortalConductor()) {
     // Se acepta el token viejo como respaldo: quien tenga la sesión abierta de
     // antes no se queda fuera al desplegar esto.
-    return localStorage.getItem(DRIVER_TOKEN_KEY) || localStorage.getItem('flotadsp_token') || ''
+    return localStorage.getItem(DRIVER_TOKEN_KEY) || localStorage.getItem('flotia_token') || ''
   }
-  return localStorage.getItem('flotadsp_token') || ''
+  return localStorage.getItem('flotia_token') || ''
 }
 
 api.interceptors.request.use((config) => {
@@ -79,8 +79,8 @@ api.interceptors.response.use(
       !enPortalConductor() &&
       !url.includes('/auth/change-my-password')
     ) {
-      localStorage.removeItem('flotadsp_token')
-      localStorage.removeItem('flotadsp_admin')
+      localStorage.removeItem('flotia_token')
+      localStorage.removeItem('flotia_admin')
       window.location.replace('/panel/login')
     }
 
@@ -110,17 +110,17 @@ api.interceptors.response.use(
        El propio comentario de arriba ya avisaba de esto: «vuelve a la pantalla
        de inicio para fallar otra vez: un bucle en vez de un aviso». */
     const teniaSesion = !!(localStorage.getItem(DRIVER_TOKEN_KEY)
-      || localStorage.getItem('flotadsp_token'))
+      || localStorage.getItem('flotia_token'))
     if (status === 401 && enPortalConductor() && teniaSesion
       && !url.includes('/auth/driver-login')
       && !url.includes('/auth/driver-lookup')
       && !url.includes('/auth/change-my-password')) {
       localStorage.removeItem(DRIVER_TOKEN_KEY)
-      localStorage.removeItem('flotadsp_token')
+      localStorage.removeItem('flotia_token')
       // Y TAMBIÉN su ficha. Sin esto el portal cree que sigue dentro —la ficha
       // es lo que mira para decidir si enseña el login— y vuelve a la pantalla
       // de inicio para fallar otra vez: un bucle en vez de un aviso.
-      localStorage.removeItem('flotadsp_driver')
+      localStorage.removeItem('flotia_driver')
       // Para que la pantalla de entrada pueda explicarle por qué está ahí.
       try { sessionStorage.setItem('driver_sesion_caducada', '1') } catch { /* modo privado */ }
       const slug = (window.location.hash || '')

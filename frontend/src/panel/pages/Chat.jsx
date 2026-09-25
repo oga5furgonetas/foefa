@@ -5,6 +5,7 @@ import { Loader2, Send, MessageSquare, CheckSquare, Trash2, Users, Paperclip, Fi
 import { getChat, postChat, chatToChecklist, deleteChatMessage,
          getMensajesGente, getMensajesCon, postMensaje, postMensajeArchivo, chatIaEstado } from '../api'
 import { getAdmin, isSuperAdmin } from '../auth'
+import { MARCA } from '../../marca'
 
 const POLL_MS = 7000
 const POLL_GENTE_MS = 20000
@@ -59,7 +60,7 @@ export default function Chat() {
   const [text, setText] = useState('')
   const [err, setErr] = useState('')
   const [gente, setGente] = useState([])
-  const [ia, setIa] = useState(null)              // FlotaDSP AI en la sala
+  const [ia, setIa] = useState(null)              // el asistente IA en la sala
   const [esperandoIA, setEsperandoIA] = useState(false)
   // null = la sala del centro; con id = conversacion privada con esa persona.
   const [conId, setConId] = useState(null)
@@ -260,9 +261,9 @@ export default function Chat() {
       </button>
       {!conId && (
         <div className="flex items-center gap-2.5 border-b border-dark-800 px-3 py-2">
-          <img src="/logo-fd-sinlema.png" alt="" className="h-7 w-7 shrink-0 rounded-full bg-dark-800 object-contain p-0.5" />
+          <img src="/favicon.svg" alt="" className="h-7 w-7 shrink-0 rounded-full" />
           <span className="min-w-0 flex-1">
-            <span className="block truncate text-[13px] text-dark-100">FlotaDSP AI</span>
+            <span className="block truncate text-[13px] text-dark-100">{MARCA.ia}</span>
             <span className="block text-[10px] text-dark-500">
               {ia?.dentro ? 'en la conversación' : 'escribe @flota para llamarla'}
             </span>
@@ -413,10 +414,10 @@ export default function Chat() {
               })}
               {esperandoIA && (
                 <div className="flex items-end gap-2">
-                  <img src="/logo-fd-sinlema.png" alt="" className="h-6 w-6 shrink-0 rounded-full bg-dark-800 object-contain p-0.5" />
+                  <img src="/favicon.svg" alt="" className="h-6 w-6 shrink-0 rounded-full" />
                   <div className="rounded-2xl bg-dark-800 px-3.5 py-2 text-sm text-dark-400">
                     <Loader2 size={13} className="mr-1.5 inline animate-spin" />
-                    FlotaDSP AI está mirándolo…
+                    {MARCA.ia} está mirándolo…
                   </div>
                 </div>
               )}
@@ -440,7 +441,7 @@ export default function Chat() {
           )}
           <input value={text} onChange={(e) => setText(e.target.value)}
             placeholder={con ? `Escribe a ${con.nombre}… (o @flota)`
-              : '@flota para preguntarle a FlotaDSP AI…'}
+              : `@flotia para preguntarle a ${MARCA.ia}…`}
             className="input flex-1" maxLength={2000} disabled={salaBloqueada} />
           <button disabled={!text.trim() || sending || salaBloqueada}
             className="btn-primary flex items-center gap-2 disabled:opacity-50">

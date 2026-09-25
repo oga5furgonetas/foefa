@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { ArrowRight, Loader2 } from 'lucide-react'
 import { API_BASE } from '../services/api'
 import { saveSession, isAuthed, getToken, logout } from './auth'
+import { MARCA } from '../marca'
 
 /* Campo hecho a medida: etiqueta en microtipografía mono que se ilumina al
    enfocar, el vidrio del input se aclara, el anillo de foco emerge sin brusquedad. */
@@ -109,7 +110,7 @@ export default function PanelLogin() {
           {/* Versión sin el lema: "Gestión de flotas con IA" ya lo cuenta el
               texto de al lado, y repetirlo dos veces queda redundante. */}
           <img
-            src="/logo-fd-sinlema.png" alt="FlotaDSP"
+            src="/favicon.svg" alt={MARCA.nombre}
             className="rise h-20 w-auto rounded-xl" style={{ animationDelay: '40ms' }}
           />
 
@@ -128,7 +129,7 @@ export default function PanelLogin() {
               <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-60" />
               <span className="relative inline-flex h-1.5 w-1.5 rounded-full bg-emerald-400" />
             </span>
-            <span className="font-mono uppercase tracking-[0.18em]">Sistema operativo · flotadsp.com</span>
+            <span className="font-mono uppercase tracking-[0.18em]">{MARCA.lema}</span>
           </div>
         </div>
 
@@ -137,9 +138,9 @@ export default function PanelLogin() {
           <div className="rail p-7 sm:p-9">
             {/* Marca compacta (visible sobre todo en móvil, sin columna editorial) */}
             <div className="mb-8 flex items-center gap-2.5 lg:hidden">
-              <img src="/logo-fd-marca.png" alt="" width="32" height="32"
+              <img src="/favicon.svg" alt="" width="32" height="32"
                 className="h-8 w-8 shrink-0 rounded-lg object-cover" />
-              <span className="font-display text-[15px] font-semibold tracking-tight">FlotaDSP</span>
+              <span className="font-display text-[15px] font-semibold tracking-tight">{MARCA.nombre}</span>
             </div>
 
             {!forgot ? (
@@ -217,7 +218,7 @@ export default function PanelLogin() {
           </div>
 
           <p className="mt-6 text-center font-mono text-[10px] uppercase tracking-[0.18em] text-dark-500">
-            FlotaDSP · {year}
+            {MARCA.nombre} · {year}
           </p>
         </div>
       </div>

@@ -48,6 +48,7 @@ import { API_BASE } from './lib/apiBase'
 import { isStaleChunkError } from './lib/chunkError'
 import Landing from './pages/Landing'
 import CookieBanner from './legal/CookieBanner'
+import { MARCA } from './marca'
 
 /* ── Auto-recuperación tras deploy: si una pestaña abierta pide un chunk viejo
    (invalidado por un despliegue), Vite emite vite:preloadError. Recargamos UNA
@@ -202,7 +203,7 @@ class ErrorBoundary extends React.Component {
           </button>
           <button
             onClick={() => {
-              const txt = `FlotaDSP error\n${window.location.href}\n${new Date().toISOString()}\n\n${this.state.detail}`
+              const txt = `${MARCA.nombre} error\n${window.location.href}\n${new Date().toISOString()}\n\n${this.state.detail}`
               navigator.clipboard?.writeText(txt).catch(() => {})
             }}
             style={{ padding: '11px 18px', borderRadius: 10, border: '1px solid #333338', background: 'transparent', color: '#b0b0b8', fontWeight: 700, fontSize: 13, cursor: 'pointer' }}

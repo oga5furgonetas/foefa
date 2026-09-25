@@ -15,7 +15,9 @@
  * son llamadas de gente a un puesto que no existe.
  */
 
-const API = 'https://flotadsp-backend.fly.dev/api'
+/* La API sale de la variable API_URL del proyecto (Cloudflare Pages →
+   Settings → Environment variables). Sin ella, la del mismo dominio. */
+const apiDe = (env, url) => (env && env.API_URL ? env.API_URL : new URL('/api', url).href).replace(/\/+$/, '')
 
 /* En un atributo HTML no basta con escapar las comillas: un `<` abre etiqueta.
    La descripción la escribe un admin, pero acaba dentro del HTML de una página
@@ -38,7 +40,7 @@ export async function onRequestGet(context) {
   let cabeza = ''
   try {
     const r = await fetch(
-      `${API}/empleo/seo/${encodeURIComponent(params.slug)}/${encodeURIComponent(params.oferta)}`,
+      `${apiDe(env, request.url)}/empleo/seo/${encodeURIComponent(params.slug)}/${encodeURIComponent(params.oferta)}`,
       { headers: { accept: 'application/json' } },
     )
     if (r.ok) {
@@ -64,8 +66,8 @@ export async function onRequestGet(context) {
 
   if (cabeza) {
     /* Se quitan las etiquetas GENÉRICAS del index antes de meter las nuestras.
-       No es limpieza: el `<link rel="canonical" href="https://flotadsp.com/">`
-       de la plantilla le dice a Google que esta página es en realidad la
+       No es limpieza: un `<link rel="canonical">` de la portada en la
+       plantilla le dice a Google que esta página es en realidad la
        portada, así que la oferta NO se indexaría — el canonical manda sobre
        todo lo demás. Y con dos `description` distintas elige Google, que
        normalmente elige la que no toca.

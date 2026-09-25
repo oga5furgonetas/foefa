@@ -2,6 +2,11 @@ name: Uptime
 
 # Vigila producción cada hora. Si falla, GitHub envía email al dueño del repo
 # (notificación por defecto de workflow fallido). Lanzable a mano desde Actions.
+#
+# Las direcciones salen de las variables del repositorio (Settings → Secrets and
+# variables → Actions → Variables): BACKEND_URL y FRONTEND_URL. Mientras no
+# estén puestas, el trabajo no se ejecuta: no hay producción que vigilar, y un
+# aviso rojo cada hora por algo que no existe enseña a ignorar los avisos.
 on:
   schedule:
     - cron: '7 * * * *'
@@ -9,16 +14,18 @@ on:
 
 jobs:
   health:
+    if: ${{ vars.BACKEND_URL != '' }}
     runs-on: ubuntu-latest
     steps:
       - name: Backend /api/health
         run: |
-          resp=$(curl -sS --max-time 20 https://flotadsp-backend.fly.dev/api/health)
+          resp=$(curl -sS --max-time 20 "${{ vars.BACKEND_URL }}/api/health")
           echo "$resp"
           echo "$resp" | grep -q '"status":"ok"' || { echo "::error::Backend caído o degradado"; exit 1; }
           echo "$resp" | grep -q '"mongo_connected":true' || { echo "::error::MongoDB desconectado"; exit 1; }
-      - name: Frontend flotadsp.com
+      - name: Frontend
+        if: ${{ vars.FRONTEND_URL != '' }}
         run: |
-          code=$(curl -s -o /dev/null -w "%{http_code}" --max-time 20 https://flotadsp.com)
+          code=$(curl -s -o /dev/null -w "%{http_code}" --max-time 20 "${{ vars.FRONTEND_URL }}")
           echo "HTTP $code"
-          [ "$code" = "200" ] || { echo "::error::flotadsp.com devuelve $code"; exit 1; }
+          [ "$code" = "200" ] || { echo "::error::${{ vars.FRONTEND_URL }} devuelve $code"; exit 1; }

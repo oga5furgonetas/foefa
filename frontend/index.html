@@ -3,43 +3,35 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
-    <meta name="theme-color" content="#0a0b0f" />
+    <meta name="theme-color" content="#070a0e" />
 
     <!-- PWA: iOS -->
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
-    <meta name="apple-mobile-web-app-title" content="FlotaDSP" />
+    <meta name="apple-mobile-web-app-title" content="Flotia" />
     <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
 
     <!-- PWA: Android / General -->
     <link rel="manifest" href="/manifest.json" />
 
-    <!-- favicon.svg NUNCA existió: al no haber fichero, _redirects devolvía
-         index.html con HTTP 200 y el navegador se quedaba sin icono en
-         silencio. Ahora es un PNG real con el monograma FD. -->
+    <!-- El SVG es la fuente del logo; el PNG queda para los navegadores que no
+         lo leen. Los dos salen de scripts/generar-iconos.mjs. -->
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <link rel="icon" type="image/png" href="/favicon.png" />
-    <link rel="preconnect" href="https://flotadsp-backend.fly.dev" />
 
-    <!-- Google Ads (AW-18388111082). El arranque va en /gtag-init.js y no en
-         línea: un script inline exigiría 'unsafe-inline' en la CSP. -->
-    <script async src="https://www.googletagmanager.com/gtag/js?id=AW-18388111082"></script>
-    <script src="/gtag-init.js"></script>
-
-    <!-- SEO -->
-    <title>FlotaDSP — Gestión de flotas para Amazon DSP con IA</title>
-    <meta name="description" content="Inspecciones con foto e IA de daños, alertas de ITV, scorecard, asignación diaria y control de aparcamiento. El panel de operaciones hecho para Delivery Service Partners de Amazon." />
-    <link rel="canonical" href="https://flotadsp.com/" />
+    <!-- SEO. Sin canonical ni og:url escritos: el dominio es el de cada
+         despliegue, y una URL de otro dominio aquí le diría a Google que esta
+         página es otra. -->
+    <title>Flotia — Gestión de flotas con IA</title>
+    <meta name="description" content="Inspecciones con foto e IA de daños, taller y órdenes de reparación, vencimientos, cuadrante y equipo. El panel de operaciones para empresas con vehículos." />
     <meta property="og:type" content="website" />
-    <meta property="og:site_name" content="FlotaDSP" />
-    <meta property="og:title" content="FlotaDSP — Gestión de flotas para Amazon DSP con IA" />
-    <meta property="og:description" content="Inspecciones con foto e IA de daños, alertas de ITV, scorecard y operaciones diarias en un solo panel. Hecho para DSPs de Amazon." />
-    <meta property="og:url" content="https://flotadsp.com/" />
-    <!-- La imagen que sale al pegar el enlace en WhatsApp o LinkedIn. Antes era
-         van.jpg: una furgoneta real de la flota, que no es la marca. -->
-    <meta property="og:image" content="https://flotadsp.com/og-flotadsp.png" />
+    <meta property="og:site_name" content="Flotia" />
+    <meta property="og:title" content="Flotia — Gestión de flotas con IA" />
+    <meta property="og:description" content="Inspecciones con foto e IA de daños, taller, vencimientos y el día de tu flota en un solo panel." />
+    <meta property="og:image" content="/og.png" />
     <meta property="og:image:width" content="1200" />
     <meta property="og:image:height" content="630" />
-    <meta property="og:image:alt" content="FlotaDSP" />
+    <meta property="og:image:alt" content="Flotia — Gestión de flotas con IA" />
     <meta property="og:locale" content="es_ES" />
     <meta name="twitter:card" content="summary_large_image" />
   </head>

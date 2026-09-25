@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from 'react'
 import { Mail, Send, Inbox, Loader2, CheckCircle2, XCircle } from 'lucide-react'
 import { getCorreoEstado, enviarCorreo } from '../api'
 import { fechaHoraLocal } from '../../lib/fecha'
+import { MARCA } from '../../marca'
 
 /* EL CORREO DE LA EMPRESA — escribir desde contacto@flotadsp.com.
    ══════════════════════════════════════════════════════════════════════════
@@ -196,7 +197,7 @@ export default function Correo() {
         <div className="card p-4 text-[13px] leading-relaxed text-dark-300">
           <p className="mb-2 font-semibold text-dark-100">Los recibidos todavía no llegan aquí.</p>
           <p className="mb-2 text-dark-400">
-            Ahora mismo <b className="text-dark-200">contacto@flotadsp.com</b> se reenvía
+            Ahora mismo <b className="text-dark-200">{MARCA.correo || 'el buzón de contacto'}</b> se reenvía
             automáticamente a tu Gmail, así que lo que entra está allí y esta aplicación no
             tiene copia. Preferimos decirlo a enseñarte una bandeja vacía que parezca que
             no ha escrito nadie.

@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
 import { HelpCircle, X, ChevronRight, Clock, AlertTriangle, Sparkles } from 'lucide-react'
 import { AYUDA, PRIMEROS_PASOS } from './ayudaFichas'
+import { MARCA } from '../marca'
 
 /* LA AYUDA, DONDE SE NECESITA
    ═══════════════════════════════════════════════════════════════════════
@@ -146,7 +147,7 @@ export function PrimerosPasos({ puedeVer, idUsuario }) {
         <div className="flex items-start gap-3 border-b border-slate-200 px-6 py-5">
           <Sparkles size={20} className="mt-0.5 shrink-0 text-amber-500" />
           <div>
-            <h2 className="text-[19px] font-bold leading-tight">Bienvenido a FlotaDSP</h2>
+            <h2 className="text-[19px] font-bold leading-tight">Bienvenido a {MARCA.nombre}</h2>
             <p className="mt-1 text-[14px] text-slate-500">
               Hay muchas pantallas, pero el día se hace con estas cuatro.
             </p>

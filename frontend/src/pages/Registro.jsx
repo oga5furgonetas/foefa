@@ -5,6 +5,7 @@ import { medirAccion } from '../lib/analitica'
 import { saveSession } from '../panel/auth'
 import { useT, LANGS } from '../i18n'
 import { Check, Zap } from 'lucide-react'
+import { MARCA, dominio } from '../marca'
 
 function slugify(s) {
   return (s || '').toLowerCase().trim()
@@ -61,7 +62,7 @@ function PlanPicker({ onSelect, furgonetas }) {
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 40 }}>
           <a href="/" style={{ display: 'flex', alignItems: 'center', gap: 8, textDecoration: 'none', color: '#eef1f6' }}>
             <div style={{ width: 30, height: 30, borderRadius: 8, background: 'linear-gradient(135deg,#fb923c,#ea6800)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><Zap size={15} color="white" /></div>
-            <b style={{ fontSize: 15 }}>FlotaDSP</b>
+            <b style={{ fontSize: 15 }}>{MARCA.nombre}</b>
           </a>
           <select value={lang} onChange={(e) => setLang(e.target.value)} style={sel}>
             {Object.entries(LANGS).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
@@ -319,7 +320,7 @@ export default function Registro() {
 
         <label style={lbl}>{t('reg.url')}</label>
         <div style={{ display: 'flex', alignItems: 'center', border: '1px solid rgba(255,255,255,.12)', borderRadius: 10, background: '#0e1116', overflow: 'hidden' }}>
-          <span style={{ padding: '11px 2px 11px 12px', color: '#8b94a3', fontSize: 13, whiteSpace: 'nowrap' }}>flotadsp.com/</span>
+          <span style={{ padding: '11px 2px 11px 12px', color: '#8b94a3', fontSize: 13, whiteSpace: 'nowrap' }}>{dominio()}/</span>
           <input style={{ ...inp, border: 'none', paddingLeft: 2 }} value={slug}
             onChange={(e) => { setTouched(true); setSlug(slugify(e.target.value)) }} placeholder="transportes-perez" />
         </div>

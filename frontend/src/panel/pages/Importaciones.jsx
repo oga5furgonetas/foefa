@@ -4,7 +4,7 @@ import Pestanas, { usePestana } from '../components/Pestanas'
 import { useT } from '../../i18n'
 import {
   Loader2, Truck, Check, AlertTriangle, RotateCcw, ArrowRight, Users, CalendarDays,
-  PackageSearch, Trophy, CircleDashed, ClipboardPaste, Download, Columns3,
+  CircleDashed, ClipboardPaste, Download, Columns3,
 } from 'lucide-react'
 import { importVehicles, previsualizarVehiculos, getOnboarding } from '../api'
 import EleccionCentros, { seleccionInicial, resumenSeleccion, eleccionParaEnviar } from '../components/EleccionCentros'
@@ -24,8 +24,6 @@ const PESTANAS = [
   { id: 'furgonetas', label: 'Furgonetas', icono: Truck, paso: 'vehiculos' },
   { id: 'conductores', label: 'Conductores', icono: Users, paso: 'conductores' },
   { id: 'turnos', label: 'Turnos', icono: CalendarDays, nave: 'turnos' },
-  { id: 'cortex', label: 'Cortex', icono: PackageSearch, nave: 'cortex' },
-  { id: 'scorecard', label: 'Scorecard', icono: Trophy, nave: 'objetivos' },
 ]
 
 function ImportarFlota({ center, alTerminar }) {
@@ -103,7 +101,7 @@ function ImportarFlota({ center, alTerminar }) {
         <>
           <SubirFichero onFile={(f) => leer(f)} ocupado={busy === 'leyendo'}
             titulo="Arrastra el Excel de tus furgonetas"
-            pie="el tuyo, el de la gestoría o el de Amazon" />
+            pie="el tuyo, el de la gestoría o el del renting" />
           <div className="flex flex-wrap items-center justify-center gap-2 text-[12.5px]">
             <button onClick={() => setPegando(true)}
               className="inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-dark-300 ring-1 ring-dark-700 hover:text-dark-100">
@@ -268,16 +266,8 @@ export default function Importaciones() {
         {tab === 'furgonetas' && <ImportarFlota center={center} alTerminar={cargarEstado} />}
         {tab === 'conductores' && <ImportarConductores center={center} alTerminar={cargarEstado} />}
         {tab === 'turnos' && (
-          <Atajo titulo="Cuadrante mensual" detalle="El Excel de Amazon (hoja MENSUAL), un centro y un mes cada vez."
+          <Atajo titulo="Cuadrante mensual" detalle="Tu Excel de turnos (una fila por persona, una columna por día), una sede y un mes cada vez."
             to="/panel/turnos" cta="Subir en Turnos" naves={navesDe('turnos')} />
-        )}
-        {tab === 'cortex' && (
-          <Atajo titulo="Paquetes y rutas en vivo" detalle="La extensión de Chrome lee Cortex y trae cada nave sola."
-            to="/panel/paquetes" cta="Instalar la extensión" naves={navesDe('cortex')} />
-        )}
-        {tab === 'scorecard' && (
-          <Atajo titulo="Scorecard de Amazon" detalle="Sube un PDF oficial por nave y los objetivos pasan a ser los tuyos."
-            to="/panel/scorecard" cta="Subir scorecard" naves={navesDe('objetivos')} />
         )}
       </section>
     </div>

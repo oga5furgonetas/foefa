@@ -51,16 +51,6 @@ export const AYUDA = {
   },
 
   // ── Operación diaria ───────────────────────────────────────────────────
-  paquetes: {
-    que: 'Los paquetes de Cortex, investigables uno a uno: dónde está cada uno y qué le pasó.',
-    pasos: [
-      'La primera vez: descarga la extensión desde esta pantalla, descomprímela y cárgala en Chrome desde chrome://extensions con el «Modo de desarrollador» activado.',
-      'Pega en ella el token que sale aquí abajo. Es el de tu empresa y solo el tuyo: con el de otra, los datos se mezclarían.',
-      'Luego entra en Cortex como siempre. Los datos llegan en unos minutos, sin hacer nada más.',
-      'Busca por TBA cuando alguien reclame un paquete concreto.',
-    ],
-    ojo: 'La carpeta que descomprimes NO se puede borrar ni mover: Chrome carga la extensión desde ahí. Y solo se ve lo que la extensión haya capturado — si nadie tuvo Cortex abierto, de esas horas no hay nada.',
-  },
   empleo: {
     que: 'Tus ofertas de trabajo con su enlace publico, el cuestionario que quieras y quien se apunta. Al contratar se crea la ficha del conductor sola.',
     pasos: [
@@ -72,26 +62,6 @@ export const AYUDA = {
       'Al darle a Contratar se crea la ficha del conductor con sus datos. El Transporter ID hay que ponerlo a mano: lo da Amazon.',
     ],
     ojo: 'Lo que descarta NO lo ve el candidato: si supiera que respuesta le deja fuera, contestaria eso. Y los datos se borran solos a los 12 meses; si alguien pide que los quites antes, la papelera de su tarjeta lo hace de verdad.',
-  },
-  apoyo: {
-    que: 'Cuando alguien va tarde: elegir qué paradas le quita otro conductor y mandárselo por WhatsApp con el mapa. Queda registrado.',
-    pasos: [
-      'A la izquierda salen los que aún tienen paradas sin entregar, el que más arriba. Toca uno.',
-      'En el mapa (o en la lista) marca las paradas que se le quitan. «Últimas 10» marca el final de su ruta, que es lo normal.',
-      'Elige quién va: el backup del día sale el primero con una estrella. Si alguien sale en gris es que no tiene teléfono en su ficha.',
-      'Crea el apoyo y pulsa los dos botones de WhatsApp: uno para el que va (mapa y lista de SUS paradas, con «Ir» a cada una) y otro para el que recibe la ayuda.',
-      'Si cambia algo, edítalo con el lápiz: el enlace que ya mandaste enseña la versión nueva solo.',
-    ],
-    ojo: 'Las paradas salen de Cortex tal como está AHORA: arriba pone hace cuántos minutos se bajó. Lo que ya se entregó entre medias se descarta solo y te lo dice. Una parada sin coordenadas no se puede pintar en el mapa: llama.',
-  },
-  debrief: {
-    que: 'Qué trae cada conductor de vuelta en la furgoneta, para comprobarlo con él delante.',
-    pasos: [
-      'Abre el conductor que llega y mira las cuatro listas de arriba.',
-      'Marca "Lo trae" según te lo va dando. Lo que quede sin marcar es lo que se pierde.',
-      'Al final, el resumen dice si has recogido todo o falta algo.',
-    ],
-    ojo: 'Lo que pone "sigue en la furgoneta" NO es un problema si el día no ha terminado: es reparto normal. Los cuatro cajones de arriba sí valen ya.',
   },
   asignacion: {
     que: 'Qué furgoneta lleva cada conductor hoy.',
@@ -112,10 +82,6 @@ export const AYUDA = {
   'checklist-operativo': {
     que: 'La lista de comprobación del turno, para que no se olvide nada al abrir o cerrar.',
     pasos: ['Ábrela al empezar el turno y ve marcando. Queda registrado quién y cuándo.'],
-  },
-  plantilla: {
-    que: 'Genera la plantilla de personal a partir del cuadrante.',
-    pasos: ['Elige la semana y descarga. Sale de lo que haya en Turnos, así que cierra el cuadrante antes.'],
   },
   chat: {
     que: 'Mensajes internos entre la oficina y el equipo.',
@@ -218,29 +184,11 @@ export const AYUDA = {
     ],
     ojo: 'Importar da de alta lo que falta y nunca pisa una ficha que ya existe. Si alguien aparece con el historial corto, comprueba si tiene otra ficha con el mismo correo.',
   },
-  scorecard: {
-    que: 'El scorecard semanal de Amazon: en qué tier estás y qué métrica te baja.',
-    pasos: [
-      'Sube el PDF que manda Amazon cada miércoles.',
-      'La app saca las métricas y las compara con los umbrales de Fantastic.',
-      'Lo que salga en rojo es lo que hay que atacar esa semana.',
-    ],
-    ojo: 'Sin subir el PDF no hay scorecard: la app no lo puede descargar sola.',
-  },
   /* Las dos pantallas viven ahora bajo una sola entrada, con pestañas: la
      ficha de la entrada tiene que hablar de las dos, porque es la que se abre
      con el «?» desde cualquiera de ellas. Las de `diarios` y `whc` se quedan:
      siguen siendo dos permisos distintos y quien tenga uno solo ve su
      pestaña. */
-  informes: {
-    que: 'Los dos informes que Amazon publica de tu nave: los DNR del día a día y las horas trabajadas.',
-    pasos: [
-      'Elige arriba la pestaña: «DNR y diarios» para saber qué no llegó, «Horas · WHC» para ver quién se acerca al límite.',
-      'No hay que pegar ni subir nada: la extensión se los baja sola del portal cada pocas horas.',
-      'Si algún día falta un informe, se puede seguir pegando a mano como antes.',
-    ],
-    ojo: 'El bloque de DNR de un reporte es de DOS DÍAS ANTES, y la columna DSC se rellena tarde: un día recién bajado sale con menos defectos de los que acabará teniendo. Por eso se vuelven a pedir los días anteriores.',
-  },
   incorporaciones: {
     que: 'Quién está entrando, qué papel le falta y el WhatsApp escrito para pedírselo.',
     pasos: [
@@ -249,38 +197,6 @@ export const AYUDA = {
       'Marca lo que falte y abre el WhatsApp; luego «ya se lo he enviado» para que quede constancia.',
     ],
     ojo: 'Las contraseñas del listado NO se guardan en el pegado — la cuenta de onboarding sí, para poder entrar a revisarla. Y una persona sin nada marcado está SIN REVISAR, no completa: por eso empieza en «Pendiente de revisar» hasta que alguien dice qué le falta.',
-  },
-  diarios: {
-    que: 'Los Daily Report de Cortex: DNR, devoluciones, POD y cumplimiento de llamada.',
-    pasos: [
-      'Arrastra los .html tal cual se bajan de Cortex, hasta 120 de golpe.',
-      'La app los cruza con el historial y los reparte por conductor.',
-    ],
-    ojo: 'El bloque de DNR de un reporte es de DOS DÍAS ANTES, y la columna DSC se rellena tarde. Por eso conviene volver a subir un reporte viejo pasados unos días.',
-  },
-  whc: {
-    que: 'Horas trabajadas y quién se ha pasado, antes de que lo diga Amazon.',
-    pasos: [
-      'Pega el cuadrante de la semana tal cual y pulsa analizar.',
-      'Mira quién va justo de horas y avísale antes del viernes, que es cuando ya no se puede arreglar.',
-    ],
-    ojo: 'El límite son 54 h 30 min semanales y no se puede cambiar: lo fija Amazon, no cada nave. Si cada empresa pusiera el suyo, dos DSP con la misma plantilla saldrían con resultados distintos y el dato dejaría de servir para comparar.',
-  },
-  dsc: {
-    que: 'Dónde se deja cada paquete. Es la métrica que más le cuesta a un DSP.',
-    pasos: [
-      'Revisa las direcciones que salen marcadas y corrige el punto si sabes cuál es.',
-      'Una dirección corregida deja de fallar para siempre.',
-    ],
-    ojo: 'En 17 scorecards reales de OGA5, DSC salió como área de foco en 14 y fue la número 1 en 12. Es la pantalla con más recorrido de todas.',
-  },
-  rendimiento: {
-    que: 'Cómo va cada conductor: lo que entrega, lo que reintenta, a quién ayuda y lo que le apunta Amazon.',
-    pasos: [
-      'Elige el periodo -hoy, siete días, treinta o el que quieras- y ordena por la columna que te interese.',
-      'Pulsa en una cabecera para ordenar por ella; la tabla no vuelve a pedir nada.',
-    ],
-    ojo: 'Las columnas se llenan de DOS sitios y no van al mismo ritmo. Ayudas, reintentos y DCR salen de Cortex y están al día; contacto, POD, RTS y DNR salen del reporte diario, que se sube a mano y llega con días de retraso. Arriba pone hasta qué día llega cada uno: un cero en contacto puede ser que no haya fallado o que aún no haya reporte de ese día.',
   },
   contactos: {
     que: 'La agenda: talleres, proveedores, Amazon y quien haga falta.',
@@ -373,7 +289,7 @@ export const AYUDA = {
    ve el paso del taller y no se queda con la duda. */
 export const PRIMEROS_PASOS = [
   { clave: 'dashboard', cuando: 'Al llegar', texto: 'Mira qué está parado o necesita a alguien.' },
-  { clave: 'asignacion', cuando: 'Antes de las rutas', texto: 'Comprueba que cada conductor tiene furgoneta.' },
-  { clave: 'debrief', cuando: 'Cuando vuelven', texto: 'Cuadra lo que trae cada uno antes de que se vaya.' },
+  { clave: 'asignacion', cuando: 'Antes de salir', texto: 'Comprueba que cada conductor tiene vehículo.' },
+  { clave: 'checklist-operativo', cuando: 'Al cerrar el turno', texto: 'Marca lo hecho: el resumen del día sale de aquí.' },
   { clave: 'revision', cuando: 'Diez minutos sueltos', texto: 'Valida daños: es lo único que hace mejorar a la IA.' },
 ]

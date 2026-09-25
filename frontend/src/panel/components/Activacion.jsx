@@ -54,29 +54,22 @@ function Paso({ icon: Icon, n, titulo, hint, hecho, resumen, cta, to, cta2, to2,
   )
 }
 
-/* ── Cada nave, por separado ───────────────────────────────────────────────
+/* ── Cada sede, por separado ───────────────────────────────────────────────
    La guia daba la empresa por lista con una furgoneta, un conductor y una
-   auditoria EN TOTAL. El 16-09-2026, con la guia «completa», DGA1 llevaba 20
-   dias sin un paquete de Cortex y DGA2 36, y nada lo decia. Cada nave enseña
-   lo que tiene medido con sus datos (el backend lo cuenta) y, si le falta
-   algo, la accion concreta con su enlace. Lo recomendado se ve, pero no deja
-   la guia abierta. */
+   auditoria EN TOTAL, aunque una de sus sedes no tuviera nada. Cada sede
+   enseña lo que tiene medido con sus datos (el backend lo cuenta) y, si le
+   falta algo, la accion concreta con su enlace. Lo recomendado se ve, pero no
+   deja la guia abierta.
+
+   OJO: cada paso que devuelve el backend TIENE que estar aqui. Los que no
+   estan se filtran, y un paso obligatorio filtrado deja la sede «sin
+   terminar» sin decir que le falta (paso con la inspeccion, 25-09-2026). */
 const PASO_NAVE = {
   vehiculos:   { tit: 'ob.n.vehiculos',   falta: 'ob.n.falta.vehiculos',   to: '/panel/importaciones?t=furgonetas' },
   conductores: { tit: 'ob.n.conductores', falta: 'ob.n.falta.conductores', to: '/panel/importaciones?t=conductores' },
-  cortex:      { tit: 'ob.n.cortex',      falta: 'ob.n.cortex.instalar',   to: '/panel/paquetes' },
-  objetivos:   { tit: 'ob.n.objetivos',   falta: 'ob.n.falta.objetivos',   to: '/panel/scorecard?t=subir' },
+  inspeccion:  { tit: 'ob.n.inspeccion',  falta: 'ob.n.falta.inspeccion',  to: '/panel/conductores' },
   talleres:    { tit: 'ob.n.talleres',    falta: 'ob.n.falta.talleres',    to: '/panel/talleres' },
   turnos:      { tit: 'ob.n.turnos',      falta: 'ob.n.falta.turnos',      to: '/panel/turnos' },
-}
-
-// '2026-08-27' -> '27-08'. Troceando el texto: por fecha local se corre un dia (gotcha 11).
-const diaCorto = (d) => (typeof d === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(d) ? `${d.slice(8, 10)}-${d.slice(5, 7)}` : '')
-
-function mensajeCortex(paso, t) {
-  if (!paso.extension) return t('ob.n.cortex.instalar')
-  if (!paso.area) return t('ob.n.cortex.abrir')
-  return t('ob.n.cortex.esperando').replace('{dia}', diaCorto(paso.ultimo_dia) || '—')
 }
 
 function Nave({ nave, t, basicosArriba }) {
@@ -101,14 +94,14 @@ function Nave({ nave, t, basicosArriba }) {
                     : 'bg-amber-500/10 text-amber-200'}`}>
               {p.hecho ? <Check size={11} /> : <X size={11} />}
               {t(PASO_NAVE[p.id].tit)}
-              {p.hecho && p.n > 0 && p.id !== 'objetivos' && <span className="tabular-nums opacity-70">{p.n}</span>}
+              {p.hecho && p.n > 0 && <span className="tabular-nums opacity-70">{p.n}</span>}
             </span>
           ))}
         </div>
       </div>
       {pendiente && (
         <p className="mt-2 text-[12px] leading-relaxed text-dark-300">
-          {pendiente.id === 'cortex' ? mensajeCortex(pendiente, t) : t(PASO_NAVE[pendiente.id].falta)}{' '}
+          {t(PASO_NAVE[pendiente.id].falta)}{' '}
           <Link to={PASO_NAVE[pendiente.id].to} className="inline-flex items-center gap-1 font-semibold text-brand-300 hover:text-brand-200">
             {t('ob.n.ir')} <ArrowRight size={11} />
           </Link>

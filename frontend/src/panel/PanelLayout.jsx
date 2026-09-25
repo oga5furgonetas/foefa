@@ -21,6 +21,7 @@ import EquipoEnLinea from './components/EquipoEnLinea'
 import { useT, LANGS } from '../i18n'
 import { usePlan } from '../lib/usePlan'
 import { vigilarVersion, recargarCuandoNadieMira } from '../lib/versionApp'
+import { MARCA } from '../marca'
 
 const keyOf = (to) => (to === '/panel' ? 'dashboard' : to.split('/').pop())
 
@@ -588,13 +589,13 @@ export default function PanelLayout() {
        { to: '/panel/bandeja', label: t('nav.inbox'), icon: Inbox }]
     : paletteBase
 
-  const impersonating = !!localStorage.getItem('flotadsp_token_super')
+  const impersonating = !!localStorage.getItem('flotia_token_super')
   function backToSuper() {
-    const superTok = localStorage.getItem('flotadsp_token_super')
+    const superTok = localStorage.getItem('flotia_token_super')
     if (superTok) {
-      localStorage.setItem('flotadsp_token', superTok)
-      localStorage.removeItem('flotadsp_token_super')
-      localStorage.removeItem('flotadsp_admin')
+      localStorage.setItem('flotia_token', superTok)
+      localStorage.removeItem('flotia_token_super')
+      localStorage.removeItem('flotia_admin')
     }
     window.location.href = '/panel/admin'
   }
@@ -607,10 +608,10 @@ export default function PanelLayout() {
         <div className="flex items-center gap-2.5 px-5 pb-3 pt-5">
           {/* El monograma FD de la marca, en vez del rayo genérico. */}
           <img
-            src="/logo-fd-marca.png" alt="" width="28" height="28"
+            src="/favicon.svg" alt="" width="28" height="28"
             className="h-7 w-7 shrink-0 rounded-lg object-cover"
           />
-          <b className="font-display text-[15px] font-semibold tracking-tight">FlotaDSP</b>
+          <b className="font-display text-[15px] font-semibold tracking-tight">{MARCA.nombre}</b>
         </div>
 
         <nav className="flex-1 space-y-0.5 overflow-y-auto px-3 py-1">

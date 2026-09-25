@@ -29,7 +29,10 @@ def _cargar():
     for n in _ARBOL.body:
         if isinstance(n, ast.Assign) and getattr(n.targets[0], "id", "") in (
                 "_INVITA_PLANTILLA", "_INVITA_ENLACE"):
-            amb[n.targets[0].id] = ast.literal_eval(n.value)
+            # El enlace se monta con la direccion de la web (una f-string):
+            # se evalua con una de prueba en vez de leerlo como literal.
+            amb[n.targets[0].id] = eval(compile(ast.Expression(n.value), "<s>", "eval"),  # noqa: S307
+                                        {"_PORTAL_BASE_FRONT": "https://ejemplo.com"})
     for n in _ARBOL.body:
         if isinstance(n, ast.FunctionDef) and n.name == "_invita_mensaje":
             exec(compile(ast.fix_missing_locations(ast.Module(body=[n], type_ignores=[])),  # noqa: S102

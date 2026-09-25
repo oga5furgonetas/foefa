@@ -236,8 +236,8 @@ export async function entrarComoAdmin(page, { superAdmin = false, centros = ['OG
   const exp = Math.floor(Date.now() / 1000) + 3600
   await page.addInitScript(
     ({ token, centros, superAdmin }) => {
-      localStorage.setItem('flotadsp_token', token)
-      localStorage.setItem('flotadsp_admin', JSON.stringify({
+      localStorage.setItem('flotia_token', token)
+      localStorage.setItem('flotia_admin', JSON.stringify({
         id: 'a1', name: 'Admin Test', role: 'admin',
         centers: centros, super_admin: superAdmin,
       }))

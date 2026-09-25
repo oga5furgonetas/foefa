@@ -1,7 +1,7 @@
 // Auth del panel de administración (modelo nuevo).
 // Reusa el mismo storage que ya usa la app para convivir durante la migración.
-const TOKEN_KEY = 'flotadsp_token'
-const ADMIN_KEY = 'flotadsp_admin'
+const TOKEN_KEY = 'flotia_token'
+const ADMIN_KEY = 'flotia_admin'
 
 /* Lo ultimo que el SERVIDOR ha dicho sobre el acceso de este usuario.
 
@@ -14,7 +14,7 @@ const ADMIN_KEY = 'flotadsp_admin'
    token en curso: asi un blob del usuario anterior en el mismo ordenador no
    puede colarse. Y solo se escribe con una respuesta completa del servidor,
    nunca a medias — que fue lo que rompio el localStorage la otra vez. */
-const ACCESO_KEY = 'flotadsp_acceso'
+const ACCESO_KEY = 'flotia_acceso'
 
 function accesoFresco() {
   try {
@@ -132,7 +132,7 @@ export function getPermissions() {
    con la misma tolerancia que el backend (`_user_can_see_center`): en BD los
    centros están sucios ('OGA5', 'oga5 ', 'AMZL OGA5 SANTIAGO XPT'), así que
    comparar con `includes` exacto dejaba la lista VACÍA y el panel se quedaba
-   con un único botón "Todos" — que para chat, checklist y scorecard significa
+   con un único botón "Todos" — que para chat y checklist significa
    literalmente pedir el centro llamado "Todos" y no ver nada. */
 const _norm = (s) => String(s || '').trim().toUpperCase()
 
@@ -166,7 +166,7 @@ export function getVisibleCenters() {
    La pantalla de Usuarios también saca de aquí las etiquetas "·siempre", así que
    lo que se le promete al que reparte permisos es exactamente lo que ocurre. */
 export const SIEMPRE_VISIBLES = new Set([
-  'asignacion', 'checklist-operativo', 'chat', 'plantilla', 'aparcamiento',
+  'asignacion', 'checklist-operativo', 'chat', 'aparcamiento',
 ])
 
 // ¿Puede ver este módulo? Super-admin ve todo. Sin permisos definidos = ve todo

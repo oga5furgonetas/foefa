@@ -19,6 +19,7 @@ import {
 } from '../api'
 import { API_BASE } from '../../services/api'
 import { hoyLocal } from '../../lib/fecha'
+import { dominio } from '../../marca'
 
 // ST labels are now translated inside the component via t()
 
@@ -773,9 +774,9 @@ export default function Negocio() {
     try {
       const r = await impersonateOrg(o.id)
       if (r.data?.token) {
-        localStorage.setItem('flotadsp_token_super', localStorage.getItem('flotadsp_token'))
-        localStorage.setItem('flotadsp_token', r.data.token)
-        localStorage.setItem('flotadsp_admin', JSON.stringify({ name: o.name, role: 'admin', account_type: 'dsp', slug: r.data.slug, centers: o.centers || [], impersonating: true }))
+        localStorage.setItem('flotia_token_super', localStorage.getItem('flotia_token'))
+        localStorage.setItem('flotia_token', r.data.token)
+        localStorage.setItem('flotia_admin', JSON.stringify({ name: o.name, role: 'admin', account_type: 'dsp', slug: r.data.slug, centers: o.centers || [], impersonating: true }))
         nav('/panel'); window.location.reload()
       }
     } catch { setMsg(t('neg.impersonate.err')) } finally { setBusy('') }
@@ -930,7 +931,7 @@ export default function Negocio() {
       </h2>
       {!founders ? null : founders.length === 0 ? (
         <div className="card p-6 text-center text-sm text-dark-400">
-          Aún no hay reservas. La oferta está viva en <a href="https://flotadsp.com/planes" target="_blank" rel="noreferrer" className="text-brand-400 hover:underline">flotadsp.com/planes</a> — compártela con DSPs que conozcas.
+          Aún no hay reservas. La oferta está viva en <a href="/planes" target="_blank" rel="noreferrer" className="text-brand-400 hover:underline">{dominio()}/planes</a> — compártela con empresas que conozcas.
         </div>
       ) : (
         <div className="card divide-y divide-dark-800">

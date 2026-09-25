@@ -3,6 +3,7 @@ import { LANGS, useT } from '../i18n'
 import { Check, Zap, ArrowRight } from 'lucide-react'
 import { API_BASE } from '../lib/apiBase'
 import { medirAccion } from '../lib/analitica'
+import { MARCA } from '../marca'
 
 /* Tarifa POR FURGONETA. Un DSP sabe lo que le cuesta cada furgoneta al mes;
    "8 € por furgoneta" lo compara solo con lo que le cuesta un golpe. Estos
@@ -193,7 +194,7 @@ export default function Planes() {
             <div style={{ width: 32, height: 32, borderRadius: 9, background: 'linear-gradient(135deg,#fb923c,#ea6800)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
               <Zap size={17} color="white" />
             </div>
-            <b style={{ fontSize: 16 }}>FlotaDSP</b>
+            <b style={{ fontSize: 16 }}>{MARCA.nombre}</b>
           </a>
           <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
             <select value={lang} onChange={(e) => setLang(e.target.value)} style={{ background: '#13161b', color: '#e7ebf2', border: '1px solid rgba(255,255,255,.12)', borderRadius: 9, padding: '6px 10px', fontSize: 13 }}>

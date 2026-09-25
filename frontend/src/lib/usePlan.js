@@ -3,7 +3,7 @@ import { api } from '../services/api'
 
 const DEFAULT_LIMITS = {
   max_vehicles: -1, max_drivers: -1, max_centers: -1,
-  ai: true, scorecard: true, chat: true, forensics: true,
+  ai: true, chat: true, forensics: true,
   maintenance: true, assignments: true, export: true,
 }
 

@@ -19,6 +19,7 @@ import {
   deleteDriverAccount,
   getDriversDuplicados, fusionarConductores, repasarFusiones,
 } from '../api'
+import { MARCA } from '../../marca'
 
 const EMPTY = {
   name: '', dni: '', phone: '', movil_personal: '', email: '', driver_id: '',
@@ -471,19 +472,19 @@ function ScoringView({ center }) {
       x.textAlign = 'left'
     })
     x.textAlign = 'center'; x.fillStyle = '#64748b'; x.font = '600 27px Arial'
-    x.fillText('⚡ flotadsp.com — gestión de flotas DSP con IA', 500, 940)
+    x.fillText(`${MARCA.nombre} · ${MARCA.lema}`, 500, 940)
 
     const blob = await new Promise((r) => c.toBlob(r, 'image/png'))
-    const file = new File([blob], 'ranking-flotadsp.png', { type: 'image/png' })
+    const file = new File([blob], `ranking-${MARCA.nombre.toLowerCase()}.png`, { type: 'image/png' })
     try {
       if (navigator.canShare?.({ files: [file] })) {
-        await navigator.share({ files: [file], title: 'Ranking del mes — FlotaDSP' })
+        await navigator.share({ files: [file], title: `Ranking del mes — ${MARCA.nombre}` })
         return
       }
     } catch { /* usuario canceló el share: no descargar encima */ return }
     const u = URL.createObjectURL(blob)
     const a = document.createElement('a')
-    a.href = u; a.download = 'ranking-flotadsp.png'; a.click()
+    a.href = u; a.download = `ranking-${MARCA.nombre.toLowerCase()}.png`; a.click()
     setTimeout(() => URL.revokeObjectURL(u), 5000)
   }
 

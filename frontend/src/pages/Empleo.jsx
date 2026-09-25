@@ -10,6 +10,7 @@ import { enviarCandidatura } from '../lib/enviarCandidatura'
 import { medirAccion } from '../lib/analitica'
 import RopaCartel from './RopaCartel'
 import { normalizarDetalle } from '../services/api'
+import { MARCA } from '../marca'
 
 /* LA PÁGINA DONDE SE APUNTA LA GENTE — sin login y desde el móvil.
    ══════════════════════════════════════════════════════════════════════════
@@ -471,7 +472,7 @@ export default function Empleo() {
       </form>
 
       <p className="mt-6 text-center text-[12px] text-slate-400">
-        Gestionado con FlotaDSP
+        Gestionado con {MARCA.nombre}
       </p>
     </Marco>
   )

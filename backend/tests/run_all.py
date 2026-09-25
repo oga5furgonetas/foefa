@@ -40,8 +40,8 @@ sys.path.insert(0, str(AQUI.parent))
 # maneras segun el ordenador es justo lo que hace que un runner deje de creerse.
 os.environ.setdefault("SECRET_KEY", "test-secret-key-only-for-tests")
 os.environ.setdefault("MONGO_URL", "mongodb://localhost:27017")
-os.environ.setdefault("DB_NAME", "test_flotadsp")
-os.environ.setdefault("GLOBAL_DB_NAME", "test_flotadsp_global")
+os.environ.setdefault("DB_NAME", "test_flotia")
+os.environ.setdefault("GLOBAL_DB_NAME", "test_flotia_global")
 os.environ.setdefault("ADMIN_USERNAME", "")
 os.environ.setdefault("ADMIN_PASSWORD", "")
 

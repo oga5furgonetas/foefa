@@ -1,15 +1,17 @@
+import { MARCA, origen } from '../marca'
 // === DATOS DEL RESPONSABLE ===
-// FlotaDSP es un servicio prestado sin sociedad mercantil constituida.
-// Cuando se constituya empresa, rellena cif, address y registry.
+// Los rellena la empresa que presta el servicio. Mientras estén vacíos, las
+// páginas legales lo DICEN en vez de inventar un CIF o una dirección: un aviso
+// legal con datos falsos es peor que uno incompleto.
 export const COMPANY = {
-  legalName: 'FlotaDSP',
-  brand: 'FlotaDSP',
+  legalName: MARCA.nombre,   // razón social cuando se constituya la sociedad
+  brand: MARCA.nombre,
   cif: '',           // rellenar cuando se constituya la sociedad
   address: '',       // rellenar cuando haya sede
   registry: '',
-  contactEmail: 'contacto@flotadsp.com',
-  privacyEmail: 'contacto@flotadsp.com',
-  website: 'https://flotadsp.com',
+  contactEmail: MARCA.correo,
+  privacyEmail: MARCA.correo,
+  website: origen(),
   jurisdiction: 'España',
   governingLaw: 'legislación española',
   effectiveDate: '2026-06-20',

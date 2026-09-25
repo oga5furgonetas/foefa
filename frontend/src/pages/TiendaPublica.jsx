@@ -4,6 +4,7 @@ import axios from 'axios'
 import { Loader2, ShoppingBag, Tag, CheckCircle2, AlertTriangle, Minus, Plus } from 'lucide-react'
 import { API_BASE } from '../lib/apiBase'
 import { normalizarDetalle } from '../services/api'
+import { MARCA } from '../marca'
 
 /* LA TIENDA PUBLICA, sin cuenta ni sesion — el enlace fijo que se manda por
    WhatsApp o email (mismo patron que /taller/t/:token). Una prenda cada vez,
@@ -91,7 +92,7 @@ export default function TiendaPublica() {
       <div className="mx-auto max-w-md">
         <div className="mb-5 flex items-center gap-2">
           <ShoppingBag size={22} className="text-slate-900" />
-          <h1 className="text-lg font-bold text-slate-900">Tienda FlotaDSP</h1>
+          <h1 className="text-lg font-bold text-slate-900">Tienda {MARCA.nombre}</h1>
         </div>
         {cupon && (
           <div className="mb-4 flex items-center gap-2 rounded-lg bg-emerald-50 px-3 py-2 text-sm text-emerald-700 ring-1 ring-emerald-200">
