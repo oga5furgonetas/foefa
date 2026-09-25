@@ -1511,12 +1511,6 @@ async def _ensure_tenant_indexes(db_name: str):
     )
     await _idx(tdb.ai_chat_msgs, [("user_id", 1), ("center", 1), ("creado_en", 1)])
     await _idx(tdb.ai_fichas_lotes, "id", unique=True)
-    # FlotaDSP AI: las furgonetas dichas por el chat para un dia (una lista por
-    # centro y dia) y las tareas que deja programadas. Los dos unicos son la
-    # forma de que dos clics a la vez no dejen dos documentos (gotcha 46).
-    await _idx(tdb.ia_preasignaciones, [("center", 1), ("dia", 1)], unique=True, name="preasig_unica")
-    await _idx(tdb.ia_tareas, [("center", 1), ("dia", 1), ("tipo", 1)], unique=True,
-               partialFilterExpression={"estado": "pendiente"}, name="tarea_pendiente_unica")
     await _idx(tdb.incidents, "vehicle_id")
     await _idx(tdb.incidents, "status")
     await _idx(tdb.forensic_signatures, [("inspection_id", 1), ("revision", 1)], unique=True)
@@ -5847,13 +5841,14 @@ async def admin_salud(_: dict = Depends(require_superadmin)):
     pct = round(total_mb / LIMITE_ATLAS_MB * 100, 1)
 
     # Crecimiento medido, no estimado: se pesa lo que ha entrado en los últimos
-    # 30 días en la colección que más crece, y de ahí salen los meses que quedan.
+    # 30 días en la colección que más crece —las inspecciones, que llevan el
+    # análisis de cada foto— y de ahí salen los meses que quedan.
     crece_mb_mes = None
     meses_restantes = None
     try:
         hace30 = (datetime.now(timezone.utc) - timedelta(days=30)).strftime("%Y-%m-%d")
-        recientes = await db.cortex_packages.count_documents({"service_day": {"$gte": hace30}})
-        cs = await db.command("collStats", "cortex_packages", scale=1)
+        recientes = await db.inspections.count_documents({"created_at": {"$gte": hace30}})
+        cs = await db.command("collStats", "inspections", scale=1)
         total_docs = int(cs.get("count") or 0)
         if total_docs:
             bytes_doc = float(cs.get("size") or 0) / total_docs
@@ -6314,89 +6309,8 @@ async def _seed_demo_data():
     logger.info("Demo: datos sintéticos creados en dsp_demo")
 
 
-# ── LA DEMO, VIVA ────────────────────────────────────────────────────────────
-# La demo se sembraba UNA vez y se quedaba congelada: el 17-09-2026 enseñaba
-# «25 % de los paquetes del 20 de julio» (4 paquetes), cero inspecciones en la
-# semana y las ITV caducadas. Es lo primero que ve un cliente que pulsa «Probar
-# la demo». Cada dia que alguien entra se regenera con fechas de HOY y un
-# reparto creible (DCR ~98,6 %). Solo toca la BD aislada de la demo.
-_DEMO_RUTAS = 8
-_DEMO_PAQ_RUTA = 110
-_DEMO_DIAS = 8
-_DEMO_FALLOS = ("BACK_TO_ORIGIN", "NOT_DELIVERED", "CUSTOMER_UNAVAILABLE")
-# Donde se deja cada paquete entregado (para la pantalla DSC). Una ruta deja
-# bastante mas sin nadie delante, que es lo que esa pantalla sirve para ver.
-_DEMO_LUGARES = (("DELIVERED_TO_HOUSEHOLD_MEMBER", 46), ("DELIVERED_TO_STORE", 30),
-                 ("DELIVERED_TO_RECEPTIONIST", 6), ("DELIVERED_TO_LOCKER", 5),
-                 ("DELIVERED_TO_SAFE_LOCATION", 3), ("DELIVERED_TO_NEIGHBOR", 2),
-                 ("DELIVERED_TO_GARDEN", 1), ("DELIVERED_TO_MAIL_SLOT", 1))
-# Por que vuelve un paquete (pantalla DSC, «paquetes que vuelven»).
-_DEMO_MOTIVOS = (("CUSTOMER_UNAVAILABLE", 40), ("BUSINESS_CLOSED", 20), ("ADDRESS_NOT_FOUND", 15),
-                 ("INACCESSIBLE_DELIVERY_LOCATION", 10), ("OBJECT_MISSING", 5), ("NONE", 10))
-_DEMO_CALLES = ("Calle de Alcalá", "Gran Vía", "Calle de Atocha", "Paseo de la Castellana",
-                "Calle de Bravo Murillo", "Calle de Toledo", "Calle de Serrano", "Calle de O'Donnell")
 
 
-def _demo_paquetes(hoy: str, hora: int) -> tuple:
-    """(paquetes, fotos) sinteticos de los ultimos dias. Deterministas por dia."""
-    import random as _r
-    base = datetime.strptime(hoy, "%Y-%m-%d")
-    paquetes, fotos = [], []
-    for atras in range(_DEMO_DIAS - 1, -1, -1):
-        dia = (base - timedelta(days=atras)).strftime("%Y-%m-%d")
-        rnd = _r.Random(dia)
-        # Hoy la jornada va por donde vaya el reloj; los dias pasados, cerrados.
-        avance = 1.0 if atras else max(0.0, min(0.97, (hora - 9) / 9))
-        if atras == 0 and avance == 0:
-            continue
-        estados = {}
-        for ruta in range(_DEMO_RUTAS):
-            tid = f"DEMOTID{ruta}"
-            for n in range(_DEMO_PAQ_RUTA - rnd.randint(0, 25)):
-                u = rnd.random()
-                if atras == 0 and u > avance:
-                    estado = "LOADED" if u > avance + 0.02 else "ATTEMPTED"
-                elif u < 0.014:
-                    estado = rnd.choice(_DEMO_FALLOS)
-                elif u < 0.018:
-                    estado = "UNCOLLECTED"
-                else:
-                    estado = "DELIVERED"
-                estados[estado] = estados.get(estado, 0) + 1
-                extra = {}
-                if estado == "DELIVERED":
-                    lugares = [x for x, _ in _DEMO_LUGARES]
-                    pesos = [w * (4 if ruta == 6 and x in ("DELIVERED_TO_GARDEN", "DELIVERED_TO_NEIGHBOR",
-                                                           "DELIVERED_TO_SAFE_LOCATION") else 1)
-                             for x, w in _DEMO_LUGARES]
-                    extra["timeline"] = [{"state": "DELIVERED",
-                                          "context": rnd.choices(lugares, pesos)[0]}]
-                elif estado in _DEMO_FALLOS or estado == "ATTEMPTED":
-                    motivo = rnd.choices([m for m, _ in _DEMO_MOTIVOS], [w for _, w in _DEMO_MOTIVOS])[0]
-                    hora_intento = f"{dia}T{rnd.randint(9, 17):02d}:{rnd.randint(0, 59):02d}:00+00:00"
-                    extra["timeline"] = [{"state": "ATTEMPTED", "context": motivo, "at": hora_intento}]
-                    if estado != "ATTEMPTED":
-                        extra["timeline"].append({"state": "BACK_TO_ORIGIN", "context": motivo,
-                                                  "at": hora_intento})
-                paquetes.append({
-                    **extra,
-                    "tba": f"TBADEMO{dia.replace('-', '')}{ruta}{n:03d}",
-                    "service_day": dia, "state": estado, "center": "MADRID",
-                    "route_code": f"XA_C{ruta + 1}", "driver_id": tid,
-                    "stop_id": str(n + 1),
-                    "stop_address": f"{_DEMO_CALLES[(ruta + n) % len(_DEMO_CALLES)]} {1 + (n * 7) % 180}, Madrid",
-                    "lat": round(40.40 + rnd.random() * 0.06, 6),
-                    "lng": round(-3.73 + rnd.random() * 0.08, 6),
-                })
-        if atras:
-            # La foto del cierre vio un par de fallos que luego se re-repartieron,
-            # como pasa de verdad (gotcha 39).
-            foto = dict(estados)
-            foto["BACK_TO_ORIGIN"] = foto.get("BACK_TO_ORIGIN", 0) + 2
-            foto["DELIVERED"] = foto.get("DELIVERED", 0) - 2
-            fotos.append({"service_day": dia, "center": "MADRID", "cerrado": True,
-                          "fotos": 6, "por_estado": foto})
-    return paquetes, fotos
 
 
 _DEMO_CERROJO = asyncio.Lock()
@@ -6423,30 +6337,14 @@ async def _demo_regenerar():
     marca = await ddb.app_meta.find_one({"_id": "demo_dia"}) or {}
     if marca.get("clave") == clave and await ddb.vehicles.count_documents({}) > 0:
         return
-    for col in ("vehicles", "drivers", "inspections", "daily_assignments", "incidents",
-                "cortex_day_snapshots"):
+    for col in ("vehicles", "drivers", "inspections", "daily_assignments", "incidents"):
         await ddb[col].delete_many({})
-    await ddb.cortex_packages.delete_many({"tba": {"$regex": "^TBADEMO"}})
     await ddb.shifts.delete_many({"center": "MADRID"})
     await _seed_demo_data()
-
-    # Cada conductor con su ID de Amazon: asi los paquetes salen con nombre.
     drivers = await ddb.drivers.find({}, {"_id": 0, "id": 1, "name": 1}).sort("id", 1).to_list(50)
-    for i, d in enumerate(drivers[:_DEMO_RUTAS]):
-        await ddb.drivers.update_one({"id": d["id"]}, {"$set": {"transporter_id": f"DEMOTID{i}"}})
-
-    paquetes, fotos = _demo_paquetes(hoy, hora)
     ahora = datetime.now(timezone.utc).isoformat()
-    nombres = {f"DEMOTID{i}": d["name"] for i, d in enumerate(drivers[:_DEMO_RUTAS])}
-    for pq in paquetes:
-        pq.update({"id": str(uuid.uuid4()), "updated_at": ahora, "seen_at": ahora,
-                   "first_seen": ahora, "driver_name": nombres.get(pq["driver_id"], "")})
-    if paquetes:
-        await ddb.cortex_packages.insert_many(paquetes, ordered=False)
-    if fotos:
-        await ddb.cortex_day_snapshots.insert_many(fotos, ordered=False)
 
-    # Cuadrante de la semana y umbrales publicados de la nave de ejemplo.
+    # El cuadrante de la semana, para que Turnos no salga vacío.
     base = datetime.strptime(hoy, "%Y-%m-%d")
     turnos = []
     for atras in range(-3, 4):
@@ -6458,12 +6356,8 @@ async def _demo_regenerar():
                            "cod": "L" if libre else "1"})
     if turnos:
         await ddb.shifts.insert_many(turnos, ordered=False)
-    await ddb.scorecard_thresholds.update_one(
-        {"center": "MADRID", "tipo": "sls"},
-        {"$set": {"desde_semana": 1, "bands": {"dcr": {"fantastic": 98.5, "great": 98.0, "fair": 97.0}}}},
-        upsert=True)
     await ddb.app_meta.update_one({"_id": "demo_dia"}, {"$set": {"dia": hoy, "clave": clave, "at": ahora}}, upsert=True)
-    logger.info("Demo: datos regenerados para %s (%d paquetes)", hoy, len(paquetes))
+    logger.info("Demo: datos regenerados para %s", hoy)
 
 
 @auth_router.post("/demo-login")
@@ -8636,7 +8530,9 @@ async def _est_hallazgos() -> dict:
 # descubre las colecciones solo, asi que cubre tambien las que todavia no
 # existen, y deja el aviso donde se ve.
 
-_CENTRO_SALTAR = {"cortex_packages", "cortex_events", "cortex_stations"}
+# Colecciones que no se revisan. Ninguna hoy: las que había eran las de la
+# captura de Cortex, que ya no existen en este producto.
+_CENTRO_SALTAR: set = set()
 
 
 async def _centros_hallazgos() -> dict:
@@ -9984,7 +9880,7 @@ async def _centros_conocidos() -> set:
     y un numero que aparezcan por casualidad en un texto libre.
     """
     fuera = set()
-    for col in ("drivers", "cortex_stations", "workshops"):
+    for col in ("drivers", "workshops"):
         for v in await db[col].distinct("center"):
             t = str(v or "").strip().upper()
             if t and _CENTRO_RE.fullmatch(t):
@@ -10380,8 +10276,6 @@ _DONDE_EL_CONDUCTOR = (
     ("parking_assignments", "driver_id"),
     ("candidatos", "driver_id"),
     ("driver_accounts", "driver_id"),
-    ("apoyos", "a.ficha_id"),
-    ("apoyos", "de.ficha_id"),
 )
 
 
@@ -18307,53 +18201,59 @@ async def danos_atribucion(center: str = "", dias: int = 120, solo_alta: bool = 
             "truncado": truncado}
 
 
-# ── ¿CUBRO LAS RUTAS DE MAÑANA? ─────────────────────────────────────────────
-# La cadena del producto es VEHICULO -> TALLER -> DISPONIBILIDAD -> RUTA, y el
-# eslabon que faltaba es el ultimo. Hoy la app sabe que una furgoneta esta rota
-# y sabe cuantas rutas manda Amazon, pero nadie junta las dos cosas — y esa
-# union es la unica pregunta que se hace un DSP por la mañana.
+# ── ¿DA LA FLOTA PARA EL TRABAJO DE MAÑANA? ────────────────────────────────────────
+# La cadena del producto es VEHÍCULO -> TALLER -> DISPONIBILIDAD -> TRABAJO, y
+# el eslabón que faltaba es el último. La app sabe qué vehículo está roto y
+# sabe cuántos salen cada día, pero nadie junta las dos cosas — y esa unión es
+# la pregunta que se hace cualquier jefe de flota por la mañana.
 #
-# Un inspector de vehiculos dice "esta furgoneta tiene un golpe". Esto dice
-# "el martes te quedas sin cubrir dos rutas". No es la misma frase ni el mismo
+# Un inspector de vehículos dice "esta furgoneta tiene un golpe". Esto dice
+# "el martes te faltan dos vehículos". No es la misma frase ni el mismo
 # producto.
 #
-# Todo sale de datos que ya estan: el estado de la flota, las ordenes de taller
-# con su fecha de vuelta, la ITV, los daños graves y las rutas que Amazon dio
-# los ultimos dias. Nada de esto hay que teclearlo.
+# Todo sale de datos que ya están: el estado de la flota, las órdenes de taller
+# con su fecha de vuelta, la ITV, los daños graves y cuántos vehículos se han
+# usado de verdad los últimos días. Nada de esto hay que teclearlo.
 
 DISPO_DIAS_DEMANDA = 21      # cuantos dias atras se mira para saber el pico
 DISPO_ITV_AVISO = 30         # dias de antelacion con los que preocupa una ITV
-DISPO_MARGEN_MIN = 2         # por debajo de esto, un imprevisto deja una ruta sin cubrir
+DISPO_MARGEN_MIN = 2         # por debajo de esto, un imprevisto deja un servicio sin vehículo
 
 
 async def _dispo_demanda(centro: str) -> dict:
-    """Cuantas rutas nos ha dado Amazon: pico, media y ultimo dia.
+    """Cuántos vehículos se han usado cada día: pico, media y último día.
 
-    Se mide de Cortex, que es lo que Amazon nos mandó de verdad, y no de lo que
-    hayamos planificado nosotros: la pregunta es si aguantamos LO QUE VENGA.
+    Se mide de la ASIGNACIÓN DIARIA —qué vehículo salió con quién—, que es lo que
+    la flota ha tenido que cubrir de verdad, y no de lo que se haya planificado:
+    la pregunta es si con los operativos de hoy se aguanta un día como el peor de
+    las últimas semanas.
+
+    Se cuentan vehículos DISTINTOS por día: si hay dos documentos del mismo día
+    y sede (dos turnos), la misma furgoneta en los dos cuenta una vez.
     """
     desde = (datetime.now(timezone.utc)
              - timedelta(days=DISPO_DIAS_DEMANDA)).strftime("%Y-%m-%d")
-    q: dict = {"service_day": {"$gte": desde}}
+    q: dict = {"date": {"$gte": desde}}
     if centro:
         q["center"] = {"$regex": re.escape(centro), "$options": "i"}
-    cur = db.cortex_packages.aggregate([
-        {"$match": q},
-        {"$group": {"_id": {"d": "$service_day", "r": "$route_code"}}},
-        {"$group": {"_id": "$_id.d", "rutas": {"$sum": 1}}},
-        {"$sort": {"_id": -1}}])
-    dias = [(r["_id"], r["rutas"]) async for r in cur]
+    por_dia: dict = {}
+    async for a in db.daily_assignments.find(q, {"_id": 0, "date": 1, "slots": 1}):
+        usados = {sl.get("vehicle_id") for sl in (a.get("slots") or [])
+                  if isinstance(sl, dict) and sl.get("vehicle_id")}
+        if usados and a.get("date"):
+            por_dia.setdefault(a["date"], set()).update(usados)
+    dias = sorted(((d, len(v)) for d, v in por_dia.items()), reverse=True)
     if not dias:
         return {"pico": None, "media": None, "dias": 0}
     ns = [n for _, n in dias]
-    return {"pico": max(ns), "media": round(sum(ns) / max(len(ns), 1), 1), "dias": len(ns),
-            "ultimo": {"dia": dias[0][0], "rutas": dias[0][1]},
-            "serie": [{"dia": d, "rutas": n} for d, n in dias[:14]]}
+    return {"pico": max(ns), "media": round(sum(ns) / len(ns), 1), "dias": len(ns),
+            "ultimo": {"dia": dias[0][0], "vehiculos": dias[0][1]},
+            "serie": [{"dia": d, "vehiculos": n} for d, n in dias[:14]]}
 
 
 @api_router.get("/fleet/disponibilidad")
 async def fleet_disponibilidad(center: str = "", _=Depends(require_admin)):
-    """Si la flota da para las rutas, y qué la puede dejar corta."""
+    """Si la flota da para el trabajo, y qué la puede dejar corta."""
     centro = ""
     if center and center not in ("Todos", "todos"):
         centro = _centro_norm(center, await _centros_conocidos())
@@ -18491,7 +18391,7 @@ async def fleet_disponibilidad(center: str = "", _=Depends(require_admin)):
     n_op = len(operativas)
     pico = demanda.get("pico")
     margen_pico = (n_op - pico) if pico is not None else None
-    # Peor caso realista: el pico de rutas Y las de ITV vencida fuera. No se
+    # Peor caso realista: el día de más uso Y las de ITV vencida fuera. No se
     # suman los daños graves porque esos siguen circulando: contarlos como bajas
     # daria un numero alarmista que nadie se creeria a la segunda vez.
     n_riesgo = len(itv_vencida)
@@ -18507,9 +18407,9 @@ async def fleet_disponibilidad(center: str = "", _=Depends(require_admin)):
             "ajustado": margen_ajustado,
             "suficiente": (margen_ajustado is not None and margen_ajustado >= DISPO_MARGEN_MIN),
             "minimo": DISPO_MARGEN_MIN,
-            "explica": ("%d operativas contra el pico de %d rutas de los últimos %d días"
+            "explica": ("%d operativos contra un pico de %d vehículos en uso en los últimos %d días"
                         % (n_op, pico, demanda.get("dias") or 0)) if pico is not None
-                       else "Sin datos de rutas todavía",
+                       else "Todavía no hay asignaciones para saber cuántos se usan",
         },
         "riesgos": sorted(riesgos, key=lambda r: 0 if r["gravedad"] == "alta" else 1),
         "vuelven": vuelven,
@@ -26676,167 +26576,6 @@ _KM_MAXIMO_CREIBLE = int(os.environ.get("KM_MAXIMO_CREIBLE") or 1_000_000)
 _KM_SALTO_ABSURDO = int(os.environ.get("KM_SALTO_ABSURDO") or 300_000)
 
 
-# ── CONDUCTORES SIN CENTRO ────────────────────────────────────────────────
-#
-# El reverso exacto del bloque de arriba: alli hay un id que sale a ruta y no
-# tiene ficha; aqui hay una ficha que no dice a que nave pertenece, y eso la
-# borra de TODAS las pantallas en cuanto alguien elige un centro — que es como
-# se trabaja el 100% del tiempo.
-#
-# Medido en produccion el 05-09-2026 barriendo los filtros: `GET /drivers` daba
-# 150 activos y la suma por centro 83+47+16 = **146**. Los cuatro que faltaban
-# tienen `center: ""`. Salen en el total, no salen en ningun centro, y no falla
-# nada: es el gotcha 30 con personas dentro. Uno de ellos —MARCOS ESPANTOSO
-# SANDE— llevaba **469 paquetes** repartidos en OGA5.
-#
-# `/checkers/centros` no los ve a proposito: unifica variantes SUCIAS de un
-# centro escrito ('oga5', 'OGA5 '), y vacio no es una variante, es que no esta.
-# Decia «0 hallazgos» con estas cuatro personas invisibles.
-
-_SIN_CENTRO_MIN_PAQUETES = 20   # por debajo, la evidencia no da para afirmar
-
-
-async def _drivers_sin_centro(dias: int = 60) -> dict:
-    """Fichas activas sin centro, con lo que Cortex sabe de cada una.
-
-    La sugerencia sale de los paquetes que esa persona ha repartido: si TODOS
-    caen en una sola nave, esa es su nave. Es la misma regla que `_centro_norm`
-    —no adivina—: con dos centros o con cuatro paquetes sueltos no se propone
-    nada y lo decide una persona.
-    """
-    dias = max(1, min(dias, 180))
-    desde = (datetime.now(timezone.utc) - timedelta(days=dias)).strftime("%Y-%m-%d")
-    conocidos = await _centros_conocidos()
-
-    fichas = []
-    async for d in db.drivers.find(
-            {"active": {"$ne": False}, "merged_into": {"$exists": False}},
-            {"_id": 0, "id": 1, "name": 1, "email": 1, "phone": 1,
-             "center": 1, "transporter_id": 1, "driver_id": 1, "created_at": 1}):
-        if str(d.get("center") or "").strip():
-            continue
-        fichas.append(d)
-
-    salida = []
-    for d in fichas:
-        # Los DOS campos, por lo mismo que en `sin-ficha`: el id se guardaba en
-        # uno o en otro segun el dia del alta.
-        tids = [t for t in ((d.get("transporter_id") or "").strip(),
-                            (d.get("driver_id") or "").strip()) if t]
-        centros: dict = {}
-        rutas: dict = {}
-        dias_vistos = set()
-        total = 0
-        if tids:
-            async for r in db.cortex_packages.aggregate([
-                {"$match": {"driver_id": {"$in": tids}, "service_day": {"$gte": desde}}},
-                {"$group": {"_id": {"c": "$center", "d": "$service_day", "r": "$route_code"},
-                            "n": {"$sum": 1}}},
-            ]):
-                k = r["_id"]
-                n = r.get("n", 0)
-                total += n
-                c = _centro_norm(k.get("c"), conocidos)
-                if c:
-                    centros[c] = centros.get(c, 0) + n
-                if k.get("d"):
-                    dias_vistos.add(k["d"])
-                ruta = str(k.get("r") or "").strip()
-                if ruta:
-                    rutas[ruta] = rutas.get(ruta, 0) + n
-
-        # UNA sola nave y suficientes paquetes: se puede afirmar. Con dos, no.
-        sugerencia = None
-        if len(centros) == 1 and total >= _SIN_CENTRO_MIN_PAQUETES:
-            sugerencia = next(iter(centros))
-            motivo = "%d paquetes en %s, todos en la misma nave" % (total, sugerencia)
-        elif len(centros) > 1:
-            motivo = "reparte en %s: lo tiene que decir una persona" % (
-                ", ".join("%s (%d)" % (c, n) for c, n in
-                          sorted(centros.items(), key=lambda x: -x[1])))
-        elif total:
-            motivo = "solo %d paquetes: poca evidencia para afirmar nada" % total
-        else:
-            motivo = ("sin Transporter ID" if not tids
-                      else "su ID no ha repartido nada en %d dias" % dias)
-
-        salida.append({
-            "id": d.get("id"), "name": d.get("name") or "",
-            "email": d.get("email") or "", "phone": d.get("phone") or "",
-            "transporter_id": tids[0] if tids else "",
-            "alta": str(d.get("created_at") or "")[:10],
-            "paquetes": total, "dias": len(dias_vistos),
-            "ultimo_dia": max(dias_vistos) if dias_vistos else None,
-            "centros_cortex": [{"centro": c, "paquetes": n}
-                               for c, n in sorted(centros.items(), key=lambda x: -x[1])],
-            "rutas": [r for r, _ in sorted(rutas.items(), key=lambda x: -x[1])[:3]],
-            "sugerencia": sugerencia, "motivo": motivo,
-        })
-    # Primero los que mas mueven: una persona invisible que reparte a diario
-    # duele mucho mas que una ficha que nadie llego a terminar.
-    salida.sort(key=lambda x: (-x["paquetes"], str(x["name"]).upper()))
-    return {"sin_centro": salida, "total": len(salida),
-            "con_sugerencia": sum(1 for x in salida if x["sugerencia"]),
-            "dias": dias, "centros": sorted(conocidos)}
-
-
-@api_router.get("/drivers/sin-centro")
-async def drivers_sin_centro(dias: int = 60, _=Depends(require_admin)):
-    """Fichas activas que no salen en ningun centro. Solo mira, no toca nada."""
-    return await _drivers_sin_centro(dias)
-
-
-@api_router.post("/drivers/sin-centro/aplicar")
-async def drivers_sin_centro_aplicar(body: dict = Body(default={}),
-                                     admin: dict = Depends(require_admin)):
-    """Pone el centro SOLO a los que Cortex deja sin ninguna duda.
-
-    Gotcha 38: la sugerencia se vuelve a calcular AQUI. Si viniera en el cuerpo,
-    bastaria con mandar el centro que a uno le apeteciera para saltarse la regla
-    de «una sola nave». Del cuerpo solo se admite a QUIENES aplicar.
-    """
-    _quienes = body.get("conductores")
-    solo = set(str(x) for x in _quienes if x) if isinstance(_quienes, list) else set()
-    dias = _entero(body.get("dias"), "dias", defecto=60, minimo=1, maximo=180)
-    antes = await _drivers_sin_centro(dias)
-    aplicables = [x for x in antes["sin_centro"]
-                  if x["sugerencia"] and (not solo or x["id"] in solo)]
-    if not aplicables:
-        return {"puestos": 0, "verificado": True,
-                "motivo": "Ninguno tiene evidencia suficiente: lo decide una persona.",
-                "pendientes": antes["total"]}
-
-    quien = admin.get("name") or admin.get("username") or "oficina"
-    ahora = datetime.now(timezone.utc).isoformat()
-    # Reversible: se guarda que ficha se toco y con que evidencia, para poder
-    # deshacerlo sin depender de la memoria de nadie.
-    await db.app_meta.update_one(
-        {"_id": "respaldo_centro_conductores"},
-        {"$set": {"at": ahora, "por": quien,
-                  "cambios": [{"id": x["id"], "name": x["name"], "de": "",
-                               "a": x["sugerencia"], "motivo": x["motivo"]}
-                              for x in aplicables]}},
-        upsert=True)
-
-    puestos = 0
-    for x in aplicables:
-        # Condicionado a que SIGA vacio: entre el calculo y la escritura puede
-        # haberlo puesto una persona a mano, y su valor manda sobre el nuestro.
-        r = await db.drivers.update_one(
-            {"id": x["id"], "$or": [{"center": ""}, {"center": None},
-                                    {"center": {"$exists": False}}]},
-            {"$set": {"center": x["sugerencia"], "centro_por": "cortex",
-                      "centro_puesto_en": ahora}})
-        puestos += r.modified_count
-
-    # Verificable (quinta condicion del gotcha 38): se vuelve a mirar.
-    despues = await _drivers_sin_centro(dias)
-    return {"puestos": puestos, "pendientes": despues["total"],
-            "verificado": despues["con_sugerencia"] == 0,
-            "quedan_por_decidir": [{"name": x["name"], "motivo": x["motivo"]}
-                                   for x in despues["sin_centro"]]}
-
-
 @api_router.get("/alerts/itv")
 async def get_itv_alerts(center: Optional[str] = None, user: dict = Depends(require_admin)):
     """Furgonetas con la ITV caducada, a punto, o SIN FECHA NINGUNA.
@@ -30925,11 +30664,99 @@ _NIVEL_BUDGET = {"L1": 3, "L2": 4, "L3": 5, "pleno": 5}
 _NOVATOS = {"L1", "L2", "L3"}
 
 
+@api_router.get("/route-demand")
+async def get_route_demand(center: str, desde: str, hasta: str,
+                           user: dict = Depends(require_admin)):
+    """Cuánta gente hace falta cada día. Es de lo que cuelga el cuadrante entero.
+
+    NO SE PUEDE QUITAR SIN ROMPER TURNOS. La pantalla pide cinco cosas a la vez y
+    un 404 en esta tumba la carga completa: «No se pudo cargar la cobertura» y ni
+    un conductor en pantalla. Pasó en la app de la que sale esta, en un centro con
+    61 conductores, y no se vio porque la pantalla no estaba en el menú.
+    """
+    if not _user_can_see_center(user, center):
+        raise HTTPException(403, "No tienes acceso a ese centro")
+    docs = await db.route_demand.find(
+        {"center": center, "date": {"$gte": desde, "$lte": hasta}}, {"_id": 0}).to_list(400)
+    return {"demand": {d["date"]: {"objetivo": d.get("objetivo"), "maximo": d.get("maximo")}
+                       for d in docs}}
+
+
+@api_router.post("/route-demand")
+async def set_route_demand(data: dict = Body(...), user: dict = Depends(require_admin)):
+    """Guarda cuánta gente hace falta cada día. `null` borra ese dato.
+
+    Son DOS números independientes y no se pueden tratar como uno:
+
+      · `maximo`   — el techo: lo que habría que poder cubrir en el peor caso.
+                     Se rellena con antelación, cuando aún no se sabe el día.
+      · `objetivo` — las personas que hacen falta ESE día. Llega más tarde.
+
+    Cada uno se guarda o se quita por su cuenta, y el día solo se borra cuando no
+    queda ninguno de los dos: rellenar los máximos del mes y verlos desaparecer
+    al dejar vacío el objetivo era exactamente el orden en que se usa.
+
+    Se borra en vez de guardar un cero porque no son lo mismo: cero es un día sin
+    trabajo, y «no lo sé todavía» es un día sin rellenar. El generador exige que
+    haya objetivo, así que confundirlos haría un cuadrante vacío creyendo que ese
+    día no se trabaja.
+    """
+    center = _texto_cuerpo(data.get("center"))
+    if not center:
+        raise HTTPException(400, "Falta el centro")
+    if not _user_can_see_center(user, center):
+        raise HTTPException(403, "No tienes acceso a ese centro")
+
+    def _numero(crudo, fecha, que):
+        if crudo in (None, ""):
+            return None
+        try:
+            n = int(str(crudo).strip())
+        except ValueError:
+            raise HTTPException(400, f"{que} del {fecha} tiene que ser un número")
+        if not 0 <= n <= 999:
+            raise HTTPException(400, f"{que} del {fecha} está fuera de rango")
+        return n
+
+    ops, borrar = [], []
+    for it in _lista_cuerpo(data.get("items")):
+        if not isinstance(it, dict):
+            continue
+        fecha = str(it.get("date") or "")[:10]
+        if not re.fullmatch(r"\d{4}-\d{2}-\d{2}", fecha):
+            continue
+        objetivo = _numero(it.get("objetivo"), fecha, "Las personas necesarias")
+        maximo = _numero(it.get("maximo"), fecha, "El máximo")
+        if objetivo is None and maximo is None:
+            borrar.append(fecha)
+            continue
+        doc = {"center": center, "date": fecha,
+               "updated_at": datetime.now(timezone.utc).isoformat(),
+               "updated_by": user.get("name")}
+        quitar = {}
+        for clave, valor in (("objetivo", objetivo), ("maximo", maximo)):
+            if valor is None:
+                quitar[clave] = ""
+            else:
+                doc[clave] = valor
+        cambio = {"$set": doc}
+        if quitar:
+            cambio["$unset"] = quitar
+        ops.append(UpdateOne({"center": center, "date": fecha}, cambio, upsert=True))
+
+    if ops:
+        await db.route_demand.bulk_write(ops)
+    if borrar:
+        await db.route_demand.delete_many({"center": center, "date": {"$in": borrar}})
+    return {"ok": True, "guardados": len(ops), "borrados": len(borrar)}
+
+
 @api_router.post("/shifts/generate-auto")
 async def generate_schedule_auto(data: dict = Body(...), _=Depends(require_admin)):
     """Genera el cuadrante con un ALGORITMO DETERMINISTA (sin IA): instantáneo,
-    gratis y siempre consistente. Cubre la demanda de Amazon por eficiencia real,
-    respeta empresa(L-V)/ETT y protege a los novatos. No guarda: devuelve propuesta."""
+    gratis y siempre consistente. Cubre la gente que hace falta cada día,
+    respeta plantilla (L-V) / ETT, protege a los novatos y reparte los días con
+    justicia. No guarda: devuelve una propuesta."""
     center = _texto_cuerpo(data.get("center"), 30)
     desde = data.get("desde")
     hasta = data.get("hasta")
@@ -30951,43 +30778,7 @@ async def generate_schedule_auto(data: dict = Body(...), _=Depends(require_admin
     demand = {d["date"]: d for d in dem_docs}
     if not any(demand.get(dd, {}).get("objetivo") for dd in days):
         raise HTTPException(status_code=400,
-            detail="Falta la demanda de Amazon: pon las rutas objetivo de cada día antes de generar.")
-
-    # ritmo real (paradas/hora) por transporter_id
-    tids = [d.get("driver_id") for d in drivers if d.get("driver_id")]
-    pace = {}
-    if tids:
-        cur = db.route_history.find(
-            {"transporter_id": {"$in": [t.upper() for t in tids]}},
-            {"_id": 0, "transporter_id": 1, "date": 1, "rate": 1})
-        tmp = {}
-        async for s in cur:
-            if s.get("rate"):
-                tmp.setdefault(s.get("transporter_id"), {})[s.get("date")] = s["rate"]
-        for t, byday in tmp.items():
-            vals = list(byday.values())
-            if vals:
-                pace[t] = sum(vals) / len(vals)
-
-    # scorecard (media tier_score 1-6) por driver_id
-    sc = {}
-    sc_cur = db.driver_scorecard.find(
-        {"$or": [{"driver_id": {"$in": [d["id"] for d in drivers]}},
-                 {"transporter_id": {"$in": [t.upper() for t in tids]}}]},
-        {"_id": 0, "driver_id": 1, "transporter_id": 1, "tier_score": 1, "imported_at": 1},
-    ).sort("imported_at", -1)
-    tid_to_id = {(d.get("driver_id") or "").upper(): d["id"] for d in drivers if d.get("driver_id")}
-    tmp_sc = {}
-    async for s in sc_cur:
-        did = s.get("driver_id") or tid_to_id.get((s.get("transporter_id") or "").upper())
-        if not did:
-            continue
-        e = tmp_sc.setdefault(did, [])
-        if len(e) < 4 and isinstance(s.get("tier_score"), (int, float)):
-            e.append(s["tier_score"])
-    for did, vals in tmp_sc.items():
-        if vals:
-            sc[did] = sum(vals) / len(vals)
+            detail="Falta cuánta gente hace falta: pon las personas necesarias de cada día antes de generar.")
 
     # días ya trabajados últimas 2 semanas (para no recargar siempre a los mismos)
     d14 = (datetime.strptime(desde, "%Y-%m-%d") - timedelta(days=14)).strftime("%Y-%m-%d")
@@ -30997,20 +30788,6 @@ async def generate_schedule_auto(data: dict = Body(...), _=Depends(require_admin
          "type": {"$in": ["trabaja", "extra"]}}, {"_id": 0, "driver_id": 1})
     async for s in cur2:
         worked[s["driver_id"]] = worked.get(s["driver_id"], 0) + 1
-
-    # eficiencia por conductor: scorecard (1-6) + ritmo como desempate
-    pace_vals = [v for v in pace.values() if v]
-    pmax = max(pace_vals) if pace_vals else 1.0
-
-    def eff(d):
-        did = d["id"]
-        base = sc.get(did)
-        if base is None:
-            base = 3.5  # sin datos = medio (no se infravalora)
-        tid = (d.get("driver_id") or "").upper()
-        pv = pace.get(tid)
-        pn = (pv / pmax) if (pv and pmax) else 0.0
-        return base + 0.3 * pn
 
     # agrupar en semanas (lunes inicia semana) para el cupo de ~5 días
     weeks, cur = [], []
@@ -31046,7 +30823,11 @@ async def generate_schedule_auto(data: dict = Body(...), _=Depends(require_admin
                 under = assigned[d["id"]] < budget
                 is_nov = nivel in _NOVATOS
                 grp = 0 if (is_nov and under) else (1 if under else 2)  # novatos protegidos primero
-                return (grp, -eff(d), assigned[d["id"]], worked.get(d["id"], 0), d.get("name", ""))
+                # REPARTO JUSTO: primero los novatos que aún tienen cupo; luego
+                # quien menos lleva esta semana y quien menos trabajó las dos
+                # anteriores. El nombre solo desempata, para que el resultado
+                # sea siempre el mismo con los mismos datos.
+                return (grp, assigned[d["id"]], worked.get(d["id"], 0), d.get("name", ""))
 
             elig.sort(key=sortkey)
             picked = elig[:need]
@@ -31064,25 +30845,15 @@ async def generate_schedule_auto(data: dict = Body(...), _=Depends(require_admin
         if a["type"] in ("trabaja", "extra"):
             cov[a["date"]] = cov.get(a["date"], 0) + 1
 
-    con_sc = len(sc)
-    resumen = (f"Cuadrante automático por eficiencia real "
-               f"({con_sc} con scorecard, {len(pace)} con ritmo). "
-               f"Empresa solo L-V, novatos protegidos con carga progresiva.")
+    resumen = ("Cuadrante automático con reparto justo de días. "
+               "Plantilla solo de lunes a viernes, novatos protegidos con carga progresiva.")
     if faltas:
         resumen += " ⚠️ Días sin cubrir el objetivo: " + ", ".join(faltas[:12])
     else:
         resumen += " Todos los días cubren el objetivo."
 
     return {"success": True, "assignments": assignments, "resumen": resumen,
-            "coverage": cov, "con_datos_ritmo": len(pace), "con_scorecard": con_sc,
-            "faltas": len(faltas)}
-
-
-# =========================
-# SCORECARD COMPLETA EN VIVO — métricas reales de Amazon (Seguridad + Calidad)
-#   Tiers calculados con umbrales sembrados de tu scorecard (editables y que se
-#   afinan con cada scorecard que subas). Valores: manual + auto (daily).
-# =========================
+            "coverage": cov, "faltas": len(faltas)}
 
 
 def _csv_filas(content: bytes) -> list:
@@ -32352,58 +32123,6 @@ def _is_transient_gemini(err_str: str) -> bool:
                                 "high demand", "deadline", "timeout", "internal"))
 
 
-@api_router.get("/plantillas")
-async def list_plantillas(center: str = None, admin=Depends(require_admin)):
-    allowed = admin.get("allowed_centers") or []
-    query: dict = {}
-    if center and center != "Todos":
-        if allowed and center not in allowed:
-            raise HTTPException(403, "Sin acceso a este centro")
-        query["center"] = center
-    elif allowed:
-        query["center"] = {"$in": allowed}
-    docs = await db.plantillas_diarias.find(query).sort("uploaded_at", -1).to_list(500)
-    for d in docs:
-        d.pop("_id", None)
-    return docs
-
-
-@api_router.get("/plantillas/{plantilla_id}/download")
-async def download_plantilla(plantilla_id: str, _=Depends(require_admin)):
-    doc = await db.plantillas_diarias.find_one({"id": plantilla_id})
-    if not doc:
-        raise HTTPException(404, "Plantilla no encontrada")
-    r2 = get_r2()
-    if not r2:
-        raise HTTPException(503, "R2 no disponible")
-    try:
-        obj = r2.get_object(Bucket=R2_BUCKET, Key=doc["r2_key"])
-        content = obj["Body"].read()
-    except Exception as e:
-        raise HTTPException(500, f"Error al recuperar el archivo: {e}")
-    import io
-    return StreamingResponse(
-        io.BytesIO(content),
-        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-        headers={"Content-Disposition": f"attachment; filename=\"{doc['filename']}\""},
-    )
-
-
-@api_router.delete("/plantillas/{plantilla_id}")
-async def delete_plantilla(plantilla_id: str, _=Depends(require_admin)):
-    doc = await db.plantillas_diarias.find_one({"id": plantilla_id})
-    if not doc:
-        raise HTTPException(404, "Plantilla no encontrada")
-    try:
-        r2 = get_r2()
-        if r2:
-            r2.delete_object(Bucket=R2_BUCKET, Key=doc["r2_key"])
-    except Exception as _e:
-        logger.warning(f"delete_plantilla R2 error: {_e}")
-    await db.plantillas_diarias.delete_one({"id": plantilla_id})
-    return {"success": True}
-
-
 # =========================
 # MONETIZACIÓN — reservas de plaza fundador (página de planes) y ofertas
 # patrocinadas del portal conductor. Ambas viven en global_db (negocio de la
@@ -32618,20 +32337,8 @@ async def admin_delete_driver_offer(offer_id: str, _=Depends(require_superadmin)
 # =========================================================================
 
 
-# Rejilla de agrupacion de portales. 0,0004 grados de latitud son ~44 m y
-# 0,0005 de longitud ~40 m a la latitud de Galicia. Suficiente para que el
-# mismo portal caiga siempre en la misma celda pese a la deriva del GPS, y
-# bastante fino para no mezclar dos edificios distintos de la misma calle.
-_PORTAL_LAT = 0.0004
-_PORTAL_LNG = 0.0005
 
 
-def _celda(lat, lng):
-    """Coordenada -> identificador estable de celda. None si no es un numero."""
-    try:
-        return "%d:%d" % (round(float(lat) / _PORTAL_LAT), round(float(lng) / _PORTAL_LNG))
-    except (TypeError, ValueError):
-        return None
 
 
 # El Nomenclator va en su propio modulo y se importa con red: si el fichero de
@@ -33058,7 +32765,7 @@ async def parking_layout_save(body: dict = Body(...), _=Depends(require_admin)):
 
 @api_router.get("/onboarding")
 async def onboarding_status(user: dict = Depends(require_any_auth)):
-    """Que le falta a este DSP para sacarle partido al producto.
+    """Qué le falta a esta empresa para sacarle partido al producto.
 
     Cuenta barata (count_documents con filtro indexado). Una sola peticion
     para toda la guia: no queremos 4 llamadas en el primer render del panel.
@@ -33067,7 +32774,7 @@ async def onboarding_status(user: dict = Depends(require_any_auth)):
     conductores = await db.drivers.count_documents({"active": {"$ne": False}})
     inspecciones = await db.inspections.count_documents({"deleted": {"$ne": True}})
     # "Equipo": mas de un usuario admin en la organizacion (opcional pero
-    # es la senal de que el DSP ya no lo lleva una sola persona).
+    # es la señal de que la empresa ya no lo lleva una sola persona).
     equipo = 0
     try:
         org_id = user.get("org_id")
@@ -33084,13 +32791,9 @@ async def onboarding_status(user: dict = Depends(require_any_auth)):
     ]
     obligatorios = [x for x in pasos if not x.get("opcional")]
     hechos = sum(1 for x in obligatorios if x["hecho"])
-    # CADA NAVE, POR SEPARADO. La guia daba la empresa por «completa» con una
-    # furgoneta, un conductor y una inspeccion en total. No miraba ni la
-    # extension de Cortex —de la que viven Paquetes IA, el DCR en vivo, Apoyo en
-    # ruta y las investigaciones de DNR— ni que cada nave tuviera lo suyo.
-    # Medido el 16-09-2026 en la empresa de Dani, con la guia ya «completa»:
-    # DGA1 llevaba 20 dias sin un paquete de Cortex y DGA2, 36. Una nave nueva
-    # habria estado igual sin que nada lo dijera.
+    # CADA SEDE, POR SEPARADO. Con una furgoneta, un conductor y una inspección
+    # EN TOTAL la guía daba la empresa por «completa», aunque una sede entera
+    # llevara semanas sin usarse. Cada sede tiene que tener lo suyo.
     naves = []
     try:
         naves = await _arranque_naves(await _centros_de_la_empresa())
@@ -33106,75 +32809,39 @@ async def onboarding_status(user: dict = Depends(require_any_auth)):
     }
 
 
-# Lo que tarda de verdad es «¿cuando fue el ultimo dato de esta nave?» (~0,6 s
-# por nave sin indice compuesto), y solo hace falta para las que llevan dias sin
-# nada. Se guarda 15 min por empresa y nave: la guia se pide en cada visita al
-# panel y ese dato no cambia de un minuto a otro.
-_ARRANQUE_ULTIMO: dict = {}
-
-
-async def _arranque_ultimo_dia(centro: str):
-    clave = (_current_db_name.get(), centro)
-    hit = _ARRANQUE_ULTIMO.get(clave)
-    if hit and time.time() - hit[0] < 900:
-        return hit[1]
-    d = await db.cortex_packages.find_one(
-        {"center": centro}, {"_id": 0, "service_day": 1}, sort=[("service_day", -1)])
-    dia = (d or {}).get("service_day")
-    _ARRANQUE_ULTIMO[clave] = (time.time(), dia)
-    return dia
-
-
 async def _arranque_naves(centros: list) -> list:
-    """Que tiene cada nave para trabajar, medido con sus datos y no con marcas.
+    """Qué tiene cada sede para trabajar, medido con sus datos y no con marcas.
 
-    Obligatorio (sin esto la nave no funciona): furgonetas, conductores y
-    Cortex llegando. Recomendado (funciona, pero peor): objetivos de SU propia
-    scorecard —los de otra nave dan falsos positivos, gotcha del 30-08—,
-    talleres y cuadrante. Un paso recomendado nunca deja la guia abierta.
+    Obligatorio (sin esto la sede no funciona): vehículos, conductores y una
+    inspección en los últimos 30 días — que es la prueba de que se está USANDO,
+    no solo de que se dio de alta. Recomendado (funciona, pero peor): talleres y
+    cuadrante. Un paso recomendado nunca deja la guía abierta.
     """
     if not centros:
         return []
-    hace3 = (datetime.now(timezone.utc) - timedelta(days=3)).isoformat()
-    hace30 = (datetime.now(timezone.utc) - timedelta(days=30)).strftime("%Y-%m-%d")
-    recientes: dict = {}
-    async for r in db.cortex_packages.aggregate([
-            {"$match": {"seen_at": {"$gte": hace3}}},
-            {"$group": {"_id": "$center", "n": {"$sum": 1}}}]):
-        if r.get("_id"):
-            recientes[str(r["_id"]).strip().upper()] = r["n"]
-    # Si la extension no ha mandado NADA de ninguna nave, no esta instalada: el
-    # consejo es instalarla, no «abre esta nave en Cortex».
-    extension = bool(recientes)
+    hace30 = (datetime.now(timezone.utc) - timedelta(days=30))
+    hace30_iso, hace30_dia = hace30.isoformat(), hace30.strftime("%Y-%m-%d")
     salida = []
     for c in centros:
         rx = {"$regex": re.escape(c), "$options": "i"}   # centro sucio: gotcha 6
-        furgos = await db.vehicles.count_documents(
-            {"center": rx, "status": {"$nin": ["deleted", "baja"]}})
+        ids = await db.vehicles.distinct(
+            "id", {"center": rx, "status": {"$nin": ["deleted", "baja"]}})
         gente = await db.drivers.count_documents({"center": rx, "active": {"$ne": False}})
-        paquetes = recientes.get(c, 0)
-        cortex = {"id": "cortex", "hecho": paquetes > 0, "n": paquetes}
-        if not paquetes:
-            cortex["ultimo_dia"] = await _arranque_ultimo_dia(c)
-            cortex["extension"] = extension
-            # Si ya se sabe que area de Amazon es, la extension la barre sola
-            # (desde la 2.92) y no hay que pedirle a nadie que la abra; si no,
-            # hay que abrirla UNA vez en Cortex para que se aprenda.
-            cortex["area"] = bool(await db.cortex_stations.count_documents(
-                {"center": c, "service_area_id": {"$type": "string"}}))
-        objetivos = await db.scorecard_thresholds.count_documents({"center": c, "tipo": "sls"})
-        # Un taller dado de alta desde «Talleres» no lleva nave (sirve a todas
-        # las de la zona): contando solo los de la nave, una empresa nueva no
+        # `inspections` no guarda la sede (gotcha 6): se acota por sus vehículos.
+        inspecciones = (await db.inspections.count_documents(
+            {"deleted": {"$ne": True}, "vehicle_id": {"$in": ids},
+             "created_at": {"$gte": hace30_iso}}) if ids else 0)
+        # Un taller dado de alta desde «Talleres» no lleva sede (sirve a todas
+        # las de la zona): contando solo los de la sede, una empresa nueva no
         # completaba nunca este paso. Los dados de baja no cuentan.
         talleres = await db.workshops.count_documents({
             "active": {"$ne": False},
             "$or": [{"center": rx}, {"center": {"$in": [None, ""]}}, {"center": {"$exists": False}}]})
-        turnos = await db.shifts.count_documents({"center": rx, "date": {"$gte": hace30}})
+        turnos = await db.shifts.count_documents({"center": rx, "date": {"$gte": hace30_dia}})
         pasos = [
-            {"id": "vehiculos", "hecho": furgos > 0, "n": furgos},
+            {"id": "vehiculos", "hecho": bool(ids), "n": len(ids)},
             {"id": "conductores", "hecho": gente > 0, "n": gente},
-            cortex,
-            {"id": "objetivos", "hecho": objetivos > 0, "n": objetivos, "opcional": True},
+            {"id": "inspeccion", "hecho": inspecciones > 0, "n": inspecciones},
             {"id": "talleres", "hecho": talleres > 0, "n": talleres, "opcional": True},
             {"id": "turnos", "hecho": turnos > 0, "n": turnos, "opcional": True},
         ]
@@ -36663,11 +36330,10 @@ async def tienda_ver_foto(prenda_id: str, user: dict = Depends(require_any_auth)
 #     cumple la primera a propósito).
 
 _IA_ASISTENTE_COL = "ai_chat_msgs"
-_IA_ASISTENTE_ACCIONES = ("crear_vehiculo", "crear_conductor", "generar_plantilla",
+_IA_ASISTENTE_ACCIONES = ("crear_vehiculo", "crear_conductor",
                           "asignar_conductor", "desasignar_conductor", "cambiar_estado_vehiculo",
                           "crear_incidencia", "editar_vehiculo", "editar_conductor",
-                          "crear_orden_taller", "programar_plantilla", "preasignar_furgonetas",
-                          "cancelar_tarea")
+                          "crear_orden_taller")
 
 # Campos que la IA puede tocar en una edición por chat — un subconjunto A
 # PROPÓSITO de la whitelist completa del PATCH normal (gotcha 1): lo que
@@ -36781,8 +36447,7 @@ async def _ai_asistente_contexto(user: dict, center: str) -> str:
     return "\n".join(piezas) or "Sin datos en vivo disponibles ahora mismo para este centro."
 
 
-_IA_CONSULTA_TIPOS = ("vehiculos", "conductores", "inspecciones",
-                      "gastos", "tareas")
+_IA_CONSULTA_TIPOS = ("vehiculos", "conductores", "inspecciones", "gastos")
 
 
 async def _ai_ejecutar_consulta(user: dict, center: str, consulta: dict) -> dict:
@@ -36999,37 +36664,6 @@ async def _ai_ejecutar_consulta(user: dict, center: str, consulta: dict) -> dict
         return {"resumen_texto": chr(10).join(lineas), "documentos": None,
                 "n": datos["total_apuntados"], "hoy": hoy_g}
 
-    if tipo == "tareas":
-        # Lo que hay programado y las furgonetas ya dichas para los próximos días:
-        # sin esto la IA no podría contestar «¿está programada la de mañana?» ni
-        # cancelar nada con conocimiento (y lo inventaría).
-        if not center or center == "Todos":
-            return {"resumen_texto": "Elige un centro para ver sus tareas programadas.", "documentos": None, "n": 0}
-        desde = (datetime.now(timezone.utc) - timedelta(days=3)).isoformat()
-        docs = await db[_IA_TAREAS_COL].find(
-            {"center": center, "$or": [{"estado": {"$in": ["pendiente", "ejecutando"]}},
-                                       {"cerrada_en": {"$gte": desde}}]},
-            {"_id": 0}, sort=[("dia", 1)], limit=20).to_list(20)
-        preas = await db[_IA_PREASIG_COL].find(
-            {"center": center, "dia": {"$gte": _dia_negocio()}}, {"_id": 0, "dia": 1, "pares": 1},
-            sort=[("dia", 1)], limit=10).to_list(10)
-        lineas = [f"Hoy es {_dia_negocio()}. Tareas de FlotaDSP AI en {center} (últimos 3 días y pendientes):"]
-        for t in docs:
-            res = t.get("resultado") if isinstance(t.get("resultado"), dict) else {}
-            extra = (f" — {res.get('filas_cortex')} rutas, {res.get('con_furgo')} con furgoneta"
-                     if t.get("estado") == "hecha" else "")
-            lineas.append(f"- montar la plantilla del {t.get('dia')}: {t.get('estado')}{extra}")
-        if not docs:
-            lineas.append("- (ninguna)")
-        lineas.append("Furgonetas dichas por el chat para los próximos días:")
-        for p in preas:
-            pares = _ia_pares_limpiar(p.get("pares"))
-            lineas.append(f"- {p.get('dia')}: {len(pares)} parejas — " +
-                          "; ".join(f"{x['conductor_nombre']} → {x['matricula']}" for x in pares[:40]))
-        if not preas:
-            lineas.append("- (ninguna)")
-        return {"resumen_texto": "\n".join(lineas), "documentos": None, "n": len(docs)}
-
     return {"resumen_texto": "Consulta no reconocida.", "documentos": None, "n": 0}
 
 
@@ -37118,16 +36752,12 @@ QUIÉN TE HABLA: alguien de la oficina de esta nave, no un desarrollador. Puede
 ser nuevo en la herramienta.
 
 TIENES MUCHAS MÁS FUNCIONES DE LAS QUE PARECE A PRIMERA VISTA — lee todo este
-documento antes de decir que no puedes algo. Cuatro respuestas EQUIVOCADAS ya
+documento antes de decir que no puedes algo. Dos respuestas EQUIVOCADAS ya
 dadas por error, para que no se repitan:
-  · "no tengo acceso a código ni puedo generar configuraciones" a quien pide
-    la plantilla de hoy → MAL. SÍ puedes: es la acción "generar_plantilla".
   · "no puedo procesar fichas técnicas masivas, súbelas una a una" → MAL. SÍ
     puedes: el icono del clip admite varias de golpe.
-  · "no puedo darte los nombres de quién se pasa del WHC" → MAL. SÍ puedes:
-    pide la consulta "whc" otra vez, sin filtro, y trae la lista con nombres.
-  · "no tengo datos de rendimiento" → MAL. SÍ tienes: la consulta
-    "rendimiento" da el ranking real por DCR.
+  · "no puedo decirte qué furgonetas tienen la ITV vencida" → MAL. SÍ puedes:
+    la consulta "vehiculos" trae la ITV de cada una y marca las pasadas.
 Antes de decir "no puedo", repasa las acciones y consultas de más abajo.
 
 REGLAS QUE NO PUEDES SALTARTE:
@@ -37136,27 +36766,14 @@ REGLAS QUE NO PUEDES SALTARTE:
 - No sabes nada de código ni puedes cambiar nada "importante" DEL NEGOCIO
   (permisos de usuarios, precios del plan, configuración de la cuenta) —
   eso lo dices y ya está, no lo intentes. OJO: esto NO incluye nada de la
-  lista de abajo (generar la plantilla, crear/editar/asignar furgonetas y
-  conductores, abrir incidencias o mandar a un taller). Esas SON funciones
+  lista de abajo (crear/editar/asignar furgonetas y conductores, abrir
+  incidencias o mandar a un taller). Esas SON funciones
   tuyas normales, no "código" ni "configuración" — nunca uses esta regla
   como excusa para negarte a alguna de ellas.
 - Solo puedes PROPONER estas acciones — nunca las ejecutas tú: propones y una
   persona confirma con un clic.
     · crear_vehiculo — hace falta al menos la matrícula.
     · crear_conductor — hace falta al menos el nombre.
-    · generar_plantilla — la plantilla de turno desde Cortex. Sin campos es la
-      de HOY; con "dia" ("AAAA-MM-DD", de ayer a 7 días vista) monta la de ese
-      día SI Cortex ya tiene rutas capturadas para él.
-    · programar_plantilla — dejar PROGRAMADA la plantilla de otro día ("mañana",
-      "el sábado") para que el servidor la monte SOLO en cuanto Cortex publique
-      las rutas. Campos: "dia" ("AAAA-MM-DD") y, si la persona te da las
-      furgonetas de ese día, "pares": lista de {{"conductor_nombre": "...",
-      "matricula": "..."}} (una pareja por conductor, tal como las escriba).
-    · preasignar_furgonetas — guardar las furgonetas que la oficina dice para
-      un día SIN programar nada todavía. Campos: "dia" y "pares" (igual que
-      arriba). Cuando se monte la plantilla de ese día, a quien coincida por
-      nombre con lo que da Cortex se le pone su furgoneta.
-    · cancelar_tarea — cancelar lo que dejaste programado. Campo opcional "dia".
     · asignar_conductor — poner un conductor en una furgoneta. Campos:
       "matricula" y "conductor_nombre" (tal como lo escriba la persona, el
       servidor lo busca en las fichas — nunca inventes un nombre completo si
@@ -37189,31 +36806,6 @@ REGLAS QUE NO PUEDES SALTARTE:
   acción todavía. Si el servidor no encuentra o encuentra más de una
   furgoneta/conductor con lo que le has pasado, te lo dirá él — tú solo pasa
   lo que ha escrito la persona, no adivines matrículas ni nombres completos.
-- Si te piden la plantilla/plan de rutas de HOY ("hazme la plantilla",
-  "móntala con Cortex", "genera el reparto de hoy"), propón SIEMPRE
-  "generar_plantilla" con "campos": {{}} (no necesita ningún dato tuyo: lo saca
-  el servidor de Cortex). No inventes filas ni nombres en la respuesta — di
-  solo que vas a montarla con lo que Cortex tenga capturado hoy.
-- LA PLANTILLA DE OTRO DÍA. Cortex no publica las rutas de mañana hasta que
-  las tiene, así que "generar_plantilla" para un día futuro solo funciona si ya
-  están capturadas. Si piden la de "mañana" o de otro día:
-    · si no dicen nada más, propón "programar_plantilla" con ese "dia": el
-      SERVIDOR (no tú) la monta solo en cuanto salgan las rutas, y avisa por
-      el panel de la nave y por notificación a quien lo pidió. Puedes decirlo:
-      es verdad y se cumple. Lo que NO puedes es prometer una hora concreta:
-      depende de cuándo publique Cortex.
-    · si te pegan las furgonetas de ese día ("Juan Pérez 1234ABC..."), sácalas
-      en "pares" — conductor y matrícula tal como los escriban, sin inventar
-      ninguno — y propón "programar_plantilla" con ellas (o "preasignar_furgonetas"
-      si solo quieren guardarlas). Si falta el día, pregúntalo.
-  El día lo conviertes tú de "mañana"/"el sábado" a "AAAA-MM-DD" con la fecha de
-  hoy de los datos en vivo; el servidor lo comprueba y rechaza lo absurdo.
-- Preasignar SIN que te den las parejas: no adivines ninguna. Si no te dicen QUÉ
-  matrícula va con QUÉ conductor, pregúntalo; o diles que, si la ficha del
-  conductor ya lleva una furgoneta fija, la plantilla se la pone sola cuando
-  es UNA (con dos no elige: lo deja anotado para que lo decidan ellos).
-- Tras programar, la consulta "tareas" te dice qué hay pendiente y qué se montó
-  ya: úsala para "¿está programada la de mañana?" — no lo supongas.
 - Si te piden algo que ninguna acción ni consulta de esta lista permite, no
   inventes que lo haces: dilo, y rellena "peticion_no_soportada" con UNA frase
   de lo que pedían, para que quien mantiene la app vea qué se echa en falta.
@@ -37222,22 +36814,22 @@ REGLAS QUE NO PUEDES SALTARTE:
 - Si preguntan en general "qué sabes hacer" o "qué es lo mejor que puedes
   hacer", NO des una lista corta de tres cosas: cuentas de verdad TODO lo
   que hay aquí — crear/editar/asignar vehículos y conductores, mandar a
-  taller, abrir incidencias, generar la plantilla, leer varias fichas
-  técnicas de golpe, y consultar furgonetas/conductores/WHC/DNR/
-  inspecciones/rendimiento con nombres y cifras reales. Es mucho: dilo.
+  taller, abrir incidencias, leer varias fichas técnicas de golpe, y
+  consultar furgonetas (con sus ITV, seguros y renting), conductores,
+  inspecciones y gastos con nombres y cifras reales. Es mucho: dilo.
 - Los datos en vivo de abajo son la ÚNICA verdad sobre el estado de este
   centro ahora mismo — nunca inventes un número que no esté ahí.
 - Si te preguntan algo que NO esté LITERALMENTE en los datos en vivo de abajo
-  — sobre FURGONETAS, CONDUCTORES, WHC de alguien en concreto o CON NOMBRES,
-  investigaciones DNR abiertas, inspecciones de una furgoneta o quién rinde
-  mejor/peor — NO te lo inventes y NO digas que no puedes: pide una consulta.
+  — sobre FURGONETAS, CONDUCTORES, sus fechas de ITV o seguro, las
+  inspecciones de una furgoneta o los gastos — NO te lo inventes y NO digas
+  que no puedes: pide una consulta.
   IMPORTANTE — los datos en vivo de abajo son solo un RESUMEN AGREGADO del
   centro (totales, cuántos). Que ya tengas el total NO significa que eso sea
   todo lo que puedes dar: si te piden el DETALLE o LOS NOMBRES de quienes
-  forman ese total (p.ej. "¿quiénes se van a pasar del WHC?", habiendo ya
-  dicho "1 conductor va a pasarse"), PIDES la consulta igualmente — te trae
-  la lista con nombre de cada uno. Responde ÚNICAMENTE con:
-  {{"consulta_pedida": {{"tipo": "vehiculos" | "conductores" | "whc" | "dnr" | "inspecciones" | "rendimiento" | "gastos" | "tareas",
+  forman ese total (p.ej. "¿cuáles son?", habiendo ya dicho "3 furgonetas
+  tienen la ITV vencida"), PIDES la consulta igualmente — te trae la lista
+  con la matrícula de cada una. Responde ÚNICAMENTE con:
+  {{"consulta_pedida": {{"tipo": "vehiculos" | "conductores" | "inspecciones" | "gastos",
                         "filtros": {{"provider": "...", "status": "...", "brand": "...", "model": "...", "matricula": "...", "conductor_nombre": "...", "nombre": "...", "active": true, "vence": "itv" | "seguro" | "renting", "antes_de": "AAAA-MM-DD"}},
                         "doc_tipo": "ficha_tecnica" | "seguro" | "itv" | "contrato" | null}}}}
   Todos los filtros son opcionales, pon solo los que pidan.
@@ -37255,32 +36847,8 @@ REGLAS QUE NO PUEDES SALTARTE:
       resultado, y no llames "pendientes de ITV" a la lista entera de la
       flota: si el resultado no trae fechas, di que no están guardadas.
     · conductores: "active" (true/false) y "nombre".
-    · whc: "nombre" del conductor si preguntan por uno en concreto; SIN
-      filtro trae a TODOS con su nombre y su aviso — úsalo para "quiénes
-      se pasan/se acercan", nunca digas que no tienes nombres sin haberlo
-      pedido antes.
-    · dnr: sin filtros — siempre da las abiertas del centro, y trae también
-      un ranking por conductor de esas mismas abiertas (cuando se sabe quién
-      conducía). USA ESTE ranking para "¿quién tiene más DNR?" — es la
-      respuesta por defecto salvo que pidan explícitamente "el histórico" o
-      "de los últimos 30 días".
     · inspecciones: "matricula" para las de una furgoneta; sin ella, las
-      últimas de todo el centro.
-    · rendimiento: sin filtros — ranking real por DCR de los últimos 30
-      días (con mínimo de entregas, para no señalar a alguien por un
-      fallo suelto). Úsalo para "quién es el mejor/peor conductor", "quién
-      rinde mejor", "ranking de repartidores". El "DNR" que trae esta lista
-      es OTRO NÚMERO distinto al de la consulta "dnr": aquí es el acumulado
-      de 30 días del informe diario (aunque ya estén cerrados), y en "dnr"
-      son solo las investigaciones ABIERTAS ahora mismo — casi siempre un
-      número mucho más bajo. Si preguntan "quién tiene más DNR" sin más
-      contexto, usa "dnr" (investigaciones reales, con seguimiento); usa el
-      de "rendimiento" solo si piden explícitamente el histórico de 30 días
-      o si ya estás mostrando esa tabla. Nunca los mezcles en la misma
-      respuesta sin decir de cuál hablas.{extra_gastos}
-    · tareas: sin filtros — lo que hay programado en este centro (pendiente,
-      hecho, caducado) y las parejas de furgonetas guardadas para los próximos
-      días.
+      últimas de todo el centro.{extra_gastos}
   Después de pedir la consulta te llegará el resultado real y ahí sí
   contestas con el JSON normal — nunca pidas dos consultas seguidas.
 DATOS EN VIVO DE {center}:
@@ -37290,17 +36858,17 @@ DATOS EN VIVO DE {center}:
 
 REGLA OBLIGATORIA SOBRE "tarjeta" (no es opcional, léela dos veces):
 Si tu "respuesta" menciona AUNQUE SEA UN SOLO NÚMERO de los datos en vivo de
-arriba (WHC, DNR, candidatos...), "tarjeta" NO PUEDE quedarse en null: tiene
+arriba (vehículos, ITV, candidatos...), "tarjeta" NO PUEDE quedarse en null: tiene
 que llevar ese mismo número, o varios, en filas cortas — la persona lo va a
 LEER de un vistazo en una tarjeta, no buscarlo dentro de una frase. Solo se
 deja "tarjeta" en null cuando la respuesta NO lleva ningún número (un "cómo
 se hace X", una charla, un "no lo sé"). Ejemplo de cuándo SÍ:
-  pregunta: "¿cómo va mi WHC?"
-  respuesta: "En OGA5 van bien las horas, con una persona a vigilar."
-  tarjeta: {{"titulo": "WHC de OGA5", "filas": [
-    {{"etiqueta": "Conductores con horas", "valor": "97", "tono": "neutro"}},
-    {{"etiqueta": "Van a pasarse", "valor": "1", "tono": "alerta"}},
-    {{"etiqueta": "Se acercan", "valor": "13", "tono": "aviso"}}]}}
+  pregunta: "¿cómo va la flota?"
+  respuesta: "La flota va bien: hay una furgoneta en taller y dos ITV cerca."
+  tarjeta: {{"titulo": "Flota de Sede Norte", "filas": [
+    {{"etiqueta": "Vehículos activos", "valor": "41", "tono": "neutro"}},
+    {{"etiqueta": "En taller", "valor": "1", "tono": "aviso"}},
+    {{"etiqueta": "ITV vencida", "valor": "0", "tono": "ok"}}]}}
 tono: "ok" (verde, va bien) | "aviso" (ámbar, vigilar) | "alerta" (rojo, ya
 es un problema) | "neutro" (gris, un dato sin más).
 
@@ -37311,17 +36879,12 @@ que necesites pedir una consulta (arriba), en cuyo caso respondes SOLO con
   "respuesta": "tu respuesta en español, para leer en un chat — breve si ya va tarjeta detrás",
   "tarjeta": null o {{"titulo": "...", "filas": [{{"etiqueta": "...", "valor": "...", "tono": "..."}}]}},
   "accion_propuesta": null o {{
-    "tipo": "crear_vehiculo" | "crear_conductor" | "generar_plantilla" |
+    "tipo": "crear_vehiculo" | "crear_conductor" |
             "asignar_conductor" | "desasignar_conductor" | "cambiar_estado_vehiculo" |
             "crear_incidencia" | "editar_vehiculo" | "editar_conductor" |
-            "crear_orden_taller" | "programar_plantilla" | "preasignar_furgonetas" |
-            "cancelar_tarea",
+            "crear_orden_taller",
     "campos": {{"license_plate": "...", "brand": "...", "model": "...", "color": "...", "vin": "..."}}
     // para conductor: {{"name": "...", "phone": "...", "email": "...", "dni": "..."}}
-    // para generar_plantilla: {{}} (hoy) o {{"dia": "AAAA-MM-DD"}}
-    // para programar_plantilla: {{"dia": "AAAA-MM-DD", "pares": [{{"conductor_nombre": "...", "matricula": "..."}}]}} ("pares" solo si te los dan)
-    // para preasignar_furgonetas: {{"dia": "AAAA-MM-DD", "pares": [{{"conductor_nombre": "...", "matricula": "..."}}]}}
-    // para cancelar_tarea: {{}} o {{"dia": "AAAA-MM-DD"}}
     // para asignar_conductor: {{"matricula": "...", "conductor_nombre": "..."}}
     // para desasignar_conductor: {{"matricula": "..."}}
     // para cambiar_estado_vehiculo: {{"matricula": "...", "estado": "taller" | "active" | "baja"}}
@@ -37673,367 +37236,6 @@ async def ai_asistente_historial(center: str, user: dict = Depends(require_admin
     return {"mensajes": msgs}
 
 
-# ── PLANTILLA DE OTRO DIA, PREASIGNACION Y TAREAS PROGRAMADAS ───────────────
-# Pedido el 18-09-2026: «genera la plantilla de DGA1 mañana cuando salgan las
-# rutas en Cortex, y ponle a cada uno la furgoneta que le tocaría», y después,
-# aclarando el caso: «si yo te pego en el chat las furgonetas asignadas para
-# mañana, cuando montes la plantilla con los conductores de Cortex, a quien
-# coincida ponle esa». Y: «cada día puede ser diferente» y sirve para cualquier
-# dispatcher del centro, no solo para quien lo pidió.
-#
-# Tres piezas, y la razón de cada una:
-#   · la PREASIGNACION son parejas conductor-furgoneta que se guardan POR
-#     CENTRO Y DIA (`ia_preasignaciones`). Se cruzan con Cortex por NOMBRE en el
-#     momento de montar la plantilla, no antes, porque hasta que Cortex publica
-#     las rutas no se sabe quién sale ese día. El día lo decide lo que escriba la
-#     persona en el chat; nada se arrastra de un día al siguiente;
-#   · la TAREA PROGRAMADA (`ia_tareas`) la ejecuta un bucle del backend, no la IA:
-#     la IA solo existe mientras alguien le escribe, el servidor está siempre.
-#     Por eso «prográmala» SI se puede cumplir, y por eso la tarea vive en la
-#     base y no en la conversación;
-#   · el aviso de que ya está hecha va por el panel del propio centro (cualquier
-#     dispatcher lo ve) y, si hay suscripción, por push a quien la pidió.
-_IA_PREASIG_COL = "ia_preasignaciones"
-_IA_TAREAS_COL = "ia_tareas"
-_IA_PARES_MAX = 80
-_IA_TAREA_DIAS_ADELANTE = 7
-_IA_TAREA_ESTABLE_MIN = 15       # las rutas tienen que llevar tanto tiempo sin cambiar de número
-_IA_TAREA_LIMITE_HORA = 10       # a partir de esta hora del propio día se monta con lo que haya
-_IA_TAREAS_CADA_S = 300
-_IA_TAREA_ERRORES_MAX = 6
-_IA_TAREA_CERRADAS = ("hecha", "caducada", "fallida")
-
-
-def _ia_dia_valido(dia, atras: int = 0, adelante: int = _IA_TAREA_DIAS_ADELANTE) -> str:
-    """El día (AAAA-MM-DD) que ha entendido la IA, comprobado por el servidor.
-
-    La IA convierte «mañana» o «el sábado» en una fecha; equivocarse ahí monta la
-    plantilla de otro día sin que nada avise. Por eso el rango es corto —hasta
-    `adelante` días— y una fecha absurda es un 400, no un dato guardado.
-    """
-    dia = _texto_cuerpo(dia, 10)
-    if not re.match(r"^\d{4}-\d{2}-\d{2}$", dia):
-        raise HTTPException(400, "La fecha tiene que ir como AAAA-MM-DD")
-    try:
-        d = datetime.strptime(dia, "%Y-%m-%d").date()
-    except ValueError:
-        raise HTTPException(400, "Esa fecha no existe")
-    hoy = datetime.strptime(_dia_negocio(), "%Y-%m-%d").date()
-    if d < hoy - timedelta(days=atras) or d > hoy + timedelta(days=adelante):
-        raise HTTPException(400, "Solo puedo trabajar con fechas de hoy a %d días vista." % adelante
-                            if atras == 0 else "Esa fecha queda demasiado lejos de hoy.")
-    return dia
-
-
-def _ia_pares_limpiar(pares) -> list:
-    """Parejas {conductor_nombre, matricula} saneadas: nunca nos fiamos de lo que
-    escriba un LLM en un campo (gotcha 38). Sin las dos cosas, se descarta."""
-    fuera = []
-    if not isinstance(pares, list):
-        return fuera
-    for p in pares[:_IA_PARES_MAX]:
-        if not isinstance(p, dict):
-            continue
-        nombre = re.sub(r"\s+", " ", _texto_cuerpo(p.get("conductor_nombre"), 80)).strip()
-        matricula = _matricula_norm(_texto_cuerpo(p.get("matricula"), 20))
-        if nombre and matricula:
-            fuera.append({"conductor_nombre": nombre, "matricula": matricula})
-    return fuera
-
-
-def _ia_pares_clave(par: dict) -> str:
-    return " ".join(sorted(_norm_name_words(par.get("conductor_nombre"))))
-
-
-def _ia_pares_fundir(existentes: list, nuevos: list) -> list:
-    """Lo nuevo manda: quien vuelve a aparecer (mismo nombre o misma matrícula)
-    sustituye a su pareja anterior, el resto se conserva. Así mandar la lista en
-    dos mensajes no borra el primero, y corregir una pareja tampoco la duplica."""
-    n_nom = {_ia_pares_clave(p) for p in nuevos}
-    n_mat = {p["matricula"] for p in nuevos}
-    conservados = [p for p in existentes or []
-                   if _ia_pares_clave(p) not in n_nom and p["matricula"] not in n_mat]
-    return conservados + list(nuevos)
-
-
-async def _ia_preasig_guardar(user: dict, center: str, dia: str, pares_in) -> dict:
-    """Guarda las parejas conductor-furgoneta de ESE día para ESE centro.
-
-    La furgoneta SÍ se comprueba contra la flota (una matrícula mal tecleada
-    pondría en la plantilla una furgo que no existe); el conductor NO se busca
-    en las fichas, porque quien salga mañana lo dice Cortex y no tiene por qué
-    tener ficha — se cruza por nombre al montar la plantilla. Las que no se
-    reconocen se devuelven con su motivo y no se guardan: la persona lo ve al
-    momento y lo corrige, en vez de descubrirlo a las 7:00 con la furgo en blanco.
-    """
-    pares = _ia_pares_limpiar(pares_in)
-    if not pares:
-        raise HTTPException(400, "Faltan las parejas: conductor y matrícula de cada furgoneta.")
-    fc = _filtro_centro(user, center)
-    vehiculos = await db.vehicles.find(
-        {"status": {"$nin": ["deleted", "baja"]}, **fc},
-        {"_id": 0, "id": 1, "license_plate": 1, "status": 1}).to_list(1000)
-    por_matricula: dict = {}
-    for v in vehiculos:
-        por_matricula.setdefault(_matricula_norm(v.get("license_plate")), []).append(v)
-
-    guardadas, fallidas, avisos = [], [], []
-    vistas_mat, vistas_nom = set(), set()
-    for p in pares:
-        clave = _ia_pares_clave(p)
-        cands = por_matricula.get(p["matricula"]) or []
-        motivo = ""
-        if not clave:
-            motivo = "No se entiende el nombre del conductor."
-        elif p["matricula"] in vistas_mat:
-            motivo = "Esa matrícula sale dos veces en tu lista."
-        elif clave in vistas_nom:
-            motivo = "Ese conductor sale dos veces en tu lista."
-        elif not cands:
-            motivo = "No encuentro la furgoneta %s en %s." % (p["matricula"], center)
-        elif len(cands) > 1:
-            motivo = "Hay más de una furgoneta con la matrícula %s: revísalas a mano." % p["matricula"]
-        if motivo:
-            fallidas.append({**p, "motivo": motivo})
-            continue
-        vistas_mat.add(p["matricula"])
-        vistas_nom.add(clave)
-        guardadas.append(p)
-        if cands[0].get("status") == "taller":
-            avisos.append("La %s figura EN TALLER: no se pondrá en la plantilla mientras siga así." % p["matricula"])
-    if not guardadas:
-        raise HTTPException(400, "No he podido guardar ninguna pareja. " + " ".join(
-            "%s: %s" % (f["matricula"], f["motivo"]) for f in fallidas[:3]))
-
-    ahora = datetime.now(timezone.utc).isoformat()
-    doc = await db[_IA_PREASIG_COL].find_one({"center": center, "dia": dia}, {"_id": 0, "pares": 1})
-    fundidos = _ia_pares_fundir(_ia_pares_limpiar((doc or {}).get("pares")), guardadas)
-    cambio = {"$set": {"pares": fundidos, "updated_at": ahora,
-                       "updated_by": user.get("name") or "FlotaDSP AI"},
-              "$setOnInsert": {"id": str(uuid.uuid4()), "created_at": ahora}}
-    try:
-        await db[_IA_PREASIG_COL].update_one({"center": center, "dia": dia}, cambio, upsert=True)
-    except DuplicateKeyError:
-        # Dos guardados a la vez: el otro ya creó el documento, este solo lo actualiza.
-        await db[_IA_PREASIG_COL].update_one({"center": center, "dia": dia}, cambio)
-    return {"dia": dia, "guardadas": guardadas, "fallidas": fallidas, "avisos": avisos,
-            "total_dia": len(fundidos)}
-
-
-async def _ia_tarea_programar(user: dict, center: str, dia: str) -> dict:
-    """Deja programada «montar la plantilla de `dia` cuando salgan las rutas»."""
-    ahora = datetime.now(timezone.utc).isoformat()
-    doc = {"id": str(uuid.uuid4()), "tipo": "generar_plantilla", "center": center, "dia": dia,
-           "estado": "pendiente", "creado_por": user.get("sub") or user.get("id"),
-           "creado_por_nombre": user.get("name") or "", "creado_en": ahora,
-           "ultimo_n": None, "estable_desde": None, "errores": 0, "visto_por": []}
-    try:
-        await db[_IA_TAREAS_COL].insert_one(dict(doc))
-    except DuplicateKeyError:
-        ya = await db[_IA_TAREAS_COL].find_one(
-            {"center": center, "dia": dia, "tipo": "generar_plantilla", "estado": "pendiente"},
-            {"_id": 0, "id": 1})
-        return {"tarea_id": (ya or {}).get("id"), "ya_existia": True}
-    return {"tarea_id": doc["id"], "ya_existia": False}
-
-
-async def _ia_tarea_cerrar(t: dict, estado: str, resultado: dict, ahora_utc: datetime) -> None:
-    await db[_IA_TAREAS_COL].update_one(
-        {"id": t["id"]},
-        {"$set": {"estado": estado, "resultado": resultado, "cerrada_en": ahora_utc.isoformat()}})
-
-
-def _ia_tarea_aviso_texto(t: dict, resultado: dict, estado: str) -> str:
-    fecha = _plantilla_fecha_es(t["dia"])
-    if estado == "hecha":
-        n = resultado.get("filas_cortex") or 0
-        f = resultado.get("con_furgo") or 0
-        return "Plantilla de %s del %s montada: %d rutas, %d con furgoneta." % (t["center"], fecha, n, f)
-    if estado == "caducada":
-        return ("No han salido rutas de Cortex para %s el %s, así que no he montado la plantilla. "
-                "Comprueba que la extensión de Cortex está abierta." % (t["center"], fecha))
-    return "No he podido montar la plantilla de %s del %s." % (t["center"], fecha)
-
-
-async def _ia_tarea_procesar(t: dict, ahora_utc: datetime) -> str:
-    """Un paso de una tarea pendiente. Devuelve qué pasó, para el latido y los tests."""
-    from zoneinfo import ZoneInfo
-    ahora = ahora_utc.astimezone(ZoneInfo("Europe/Madrid"))
-    hoy = ahora.strftime("%Y-%m-%d")
-    center, dia = t["center"], t["dia"]
-    col = db[_IA_TAREAS_COL]
-    if hoy > dia:
-        res = {"motivo": "cortex_sin_rutas"}
-        await _ia_tarea_cerrar(t, "caducada", res, ahora_utc)
-        return "caducada"
-
-    filas = await _plantilla_filas_desde_cortex(center, dia)
-    n = len(filas)
-    if n == 0:
-        return "esperando"
-
-    # Las rutas de Cortex van saliendo por goteo. Montar la plantilla con las
-    # tres primeras dejaría a la oficina con una hoja a medias que hay que
-    # completar a mano, así que se espera a que el número de rutas lleve un rato
-    # sin moverse —o a que ya sea tarde— para hacerlo UNA vez y bien.
-    estable = False
-    if t.get("ultimo_n") != n:
-        await col.update_one({"id": t["id"]}, {"$set": {"ultimo_n": n, "estable_desde": ahora_utc.isoformat()}})
-    else:
-        try:
-            desde = datetime.fromisoformat(t.get("estable_desde"))
-            estable = (ahora_utc - desde).total_seconds() / 60 >= _IA_TAREA_ESTABLE_MIN
-        except (TypeError, ValueError):
-            estable = False
-    forzar = hoy == dia and ahora.hour >= _IA_TAREA_LIMITE_HORA
-    if not (estable or forzar):
-        return "esperando"
-
-    # Solo un proceso monta la plantilla aunque haya dos máquinas o dos vueltas.
-    r = await col.update_one({"id": t["id"], "estado": "pendiente"},
-                             {"$set": {"estado": "ejecutando", "iniciada_en": ahora_utc.isoformat()}})
-    if not r.modified_count:
-        return "otro_proceso"
-    try:
-        res = await _plantilla_generar_borrador(
-            center, dia, "FlotaDSP AI (programada por %s)" % (t.get("creado_por_nombre") or "la oficina"))
-        if res.get("vacia"):
-            await col.update_one({"id": t["id"]}, {"$set": {"estado": "pendiente"}})
-            return "esperando"
-    except Exception as e:                                        # noqa: BLE001
-        errores = int(t.get("errores") or 0) + 1
-        if errores >= _IA_TAREA_ERRORES_MAX:
-            await _ia_tarea_cerrar(t, "fallida", {"error": str(e)[:200]}, ahora_utc)
-            return "fallida"
-        await col.update_one({"id": t["id"]}, {"$set": {"estado": "pendiente", "ultimo_error": str(e)[:200]},
-                                               "$inc": {"errores": 1}})
-        raise
-    await _ia_tarea_cerrar(t, "hecha", res, ahora_utc)
-    try:
-        await send_web_push_to_users([t.get("creado_por")], "FlotaDSP AI",
-                                     _ia_tarea_aviso_texto(t, res, "hecha"), "/panel/plantilla")
-    except Exception as e:                                        # noqa: BLE001
-        logger.debug("aviso push de tarea: %s", e)
-    return "hecha"
-
-
-async def _ia_tareas_pasada() -> dict:
-    """Recorre las empresas y da un paso a cada tarea pendiente.
-
-    Multi-tenant a mano (cron sin sesión, gotcha 26): fija la BD de cada empresa
-    antes de tocar `db` y la restaura al acabar. Una empresa que falle no tumba
-    a las demás.
-    """
-    orgs = await global_db.organizations.find(
-        {"status": {"$in": ["active", "trial"]}},
-        {"_id": 0, "id": 1, "slug": 1, "db_name": 1, "account_type": 1}).to_list(500)
-    if not orgs:
-        orgs = [None]                        # instalación de un solo tenant
-    ahora = datetime.now(timezone.utc)
-    vistas = hechas = 0
-    anterior = _current_db_name.get()
-    try:
-        for o in orgs:
-            set_current_org_db(_tenant_db_name(o))
-            try:
-                # Una tarea que se quedó «ejecutando» porque el proceso murió a
-                # mitad vuelve a la cola pasados diez minutos.
-                colgada = (ahora - timedelta(minutes=10)).isoformat()
-                try:
-                    await db[_IA_TAREAS_COL].update_many(
-                        {"estado": "ejecutando", "iniciada_en": {"$lt": colgada}},
-                        {"$set": {"estado": "pendiente"}})
-                except DuplicateKeyError:
-                    pass
-                pendientes = await db[_IA_TAREAS_COL].find(
-                    {"estado": "pendiente"}, {"_id": 0}).to_list(50)
-                for t in pendientes:
-                    vistas += 1
-                    try:
-                        if await _ia_tarea_procesar(t, ahora) == "hecha":
-                            hechas += 1
-                    except Exception as e:                        # noqa: BLE001
-                        logger.error("tarea IA %s: %s", t.get("id"), e)
-            except Exception as e:                                # noqa: BLE001
-                logger.error("tareas IA %s: %s", _tenant_db_name(o), e)
-    finally:
-        set_current_org_db(anterior)
-    return {"pendientes": vistas, "hechas": hechas}
-
-
-async def _bucle_ia_tareas():
-    """Cada pocos minutos mira las tareas que la IA dejó programadas.
-
-    Deja latido en CADA pasada, tenga o no trabajo (gotcha 39): un bucle muerto
-    y uno sin nada que hacer escriben lo mismo, y aquí la duda es «la plantilla
-    de mañana no se va a montar».
-    """
-    await asyncio.sleep(45)
-    while True:
-        try:
-            res = await _ia_tareas_pasada()
-            await _latido("ia_tareas", cada_min=_IA_TAREAS_CADA_S // 60, **res)
-        except Exception as e:                                    # noqa: BLE001
-            logger.error("Bucle de tareas de la IA: %s", e)
-            await _latido("ia_tareas", cada_min=_IA_TAREAS_CADA_S // 60, error=str(e)[:200])
-        await asyncio.sleep(_IA_TAREAS_CADA_S)
-
-
-@app.on_event("startup")
-async def start_ia_tareas():
-    asyncio.create_task(_bucle_ia_tareas())
-
-
-def _ia_tarea_publica(t: dict, uid) -> dict:
-    """Lo que el panel ve de una tarea: lista blanca de campos, sin ids internos."""
-    estado = "pendiente" if t.get("estado") == "ejecutando" else t.get("estado")
-    res = t.get("resultado") if isinstance(t.get("resultado"), dict) else {}
-    return {"id": t.get("id"), "tipo": t.get("tipo"), "dia": t.get("dia"), "estado": estado,
-            "creado_por": t.get("creado_por_nombre") or "", "cerrada_en": t.get("cerrada_en"),
-            "resultado": {k: res.get(k) for k in ("filas_cortex", "con_furgo", "anadidas", "ya_existia",
-                                                   "pares_total", "pares_sin_usar", "motivo") if k in res},
-            "aviso": _ia_tarea_aviso_texto({"dia": t.get("dia"), "center": t.get("center")}, res, estado)
-            if estado in _IA_TAREA_CERRADAS else "",
-            "sin_ver": estado in _IA_TAREA_CERRADAS and uid not in (t.get("visto_por") or [])}
-
-
-@api_router.get("/ai/asistente/tareas")
-async def ai_asistente_tareas(center: str, user: dict = Depends(require_admin)):
-    """Tareas programadas del centro (las ve cualquier dispatcher de la nave) y
-    las parejas de furgonetas guardadas para los próximos días."""
-    center = _texto_cuerpo(center, 20)
-    if not center or center == "Todos" or not _user_can_see_center(user, center):
-        raise HTTPException(403, "No tienes acceso a ese centro")
-    uid = user.get("sub") or user.get("id")
-    desde = (datetime.now(timezone.utc) - timedelta(days=3)).isoformat()
-    docs = await db[_IA_TAREAS_COL].find(
-        {"center": center, "$or": [{"estado": {"$in": ["pendiente", "ejecutando"]}},
-                                   {"cerrada_en": {"$gte": desde}}]},
-        {"_id": 0}, sort=[("creado_en", -1)], limit=20).to_list(20)
-    tareas = [_ia_tarea_publica(t, uid) for t in docs if t.get("estado") != "cancelada"]
-    preas = await db[_IA_PREASIG_COL].find(
-        {"center": center, "dia": {"$gte": _dia_negocio()}}, {"_id": 0, "dia": 1, "pares": 1},
-        sort=[("dia", 1)], limit=10).to_list(10)
-    return {"tareas": tareas, "sin_ver": sum(1 for t in tareas if t["sin_ver"]),
-            "preasignaciones": [{"dia": p["dia"], "pares": len(p.get("pares") or [])} for p in preas]}
-
-
-class _IAAsistenteTareasVistas(BaseModel):
-    center: str
-
-
-@api_router.post("/ai/asistente/tareas/vistas")
-async def ai_asistente_tareas_vistas(data: _IAAsistenteTareasVistas, user: dict = Depends(require_admin)):
-    center = _texto_cuerpo(data.center, 20)
-    if not center or center == "Todos" or not _user_can_see_center(user, center):
-        raise HTTPException(403, "No tienes acceso a ese centro")
-    uid = user.get("sub") or user.get("id")
-    await db[_IA_TAREAS_COL].update_many(
-        {"center": center, "estado": {"$in": list(_IA_TAREA_CERRADAS)}, "visto_por": {"$ne": uid}},
-        {"$addToSet": {"visto_por": uid}})
-    return {"ok": True}
-
-
 class _IAAsistenteAccion(BaseModel):
     tipo: str
     campos: dict
@@ -38063,43 +37265,6 @@ async def ai_asistente_ejecutar(data: _IAAsistenteAccion, user: dict = Depends(r
             raise HTTPException(400, f"Faltan datos del vehículo: {e.errors()[0].get('msg', 'revisa los campos')}")
         creado = await create_vehicle(vehiculo, user)
         return {"ok": True, "tipo": data.tipo, "creado": creado.model_dump()}
-
-    if data.tipo == "generar_plantilla":
-        hoy = _dia_negocio()
-        dia = _ia_dia_valido(campos.get("dia") or hoy, atras=1)
-        res = await _plantilla_generar_borrador(center, dia, user.get("name") or "FlotaDSP AI")
-        if res.get("vacia"):
-            if dia == hoy:
-                raise HTTPException(
-                    400, "Cortex todavía no tiene ninguna ruta capturada hoy para este "
-                         "centro. Abre Cortex con la extensión activa y prueba de nuevo "
-                         "en unos minutos, o móntala a mano en Turnos.")
-            raise HTTPException(
-                400, "Cortex todavía no tiene rutas capturadas para el %s en este centro. "
-                     "Puedes dejármela programada y la monto sola en cuanto salgan." % _plantilla_fecha_es(dia))
-        return {"ok": True, "tipo": data.tipo, **res}
-
-    if data.tipo == "programar_plantilla":
-        dia = _ia_dia_valido(campos.get("dia"))
-        preas = await _ia_preasig_guardar(user, center, dia, campos["pares"]) if campos.get("pares") else None
-        tarea = await _ia_tarea_programar(user, center, dia)
-        return {"ok": True, "tipo": data.tipo, "dia": dia, **tarea, "preasignacion": preas}
-
-    if data.tipo == "preasignar_furgonetas":
-        dia = _ia_dia_valido(campos.get("dia"))
-        res = await _ia_preasig_guardar(user, center, dia, campos.get("pares"))
-        return {"ok": True, "tipo": data.tipo, **res}
-
-    if data.tipo == "cancelar_tarea":
-        filtro = {"center": center, "estado": "pendiente"}
-        if campos.get("dia"):
-            filtro["dia"] = _ia_dia_valido(campos.get("dia"), atras=1)
-        r = await db[_IA_TAREAS_COL].update_many(
-            filtro, {"$set": {"estado": "cancelada", "cerrada_en": datetime.now(timezone.utc).isoformat(),
-                              "cancelada_por": user.get("name") or ""}})
-        if not r.modified_count:
-            raise HTTPException(404, "No hay ninguna tarea programada pendiente que cancelar.")
-        return {"ok": True, "tipo": data.tipo, "canceladas": r.modified_count}
 
     if data.tipo == "asignar_conductor":
         vehiculo = await _ai_resolver_vehiculo(user, center, campos.get("matricula") or "")

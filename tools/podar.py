@@ -28,19 +28,23 @@ import re
 import sys
 
 RUTAS_AMAZON = re.compile(
-    r'^/(cortex|scorecard|dnr|whc|apoyo|diarios|transporter-ids|route-demand|mery|asociados)(/|$)'
-    r'|^/(api/)?tools/plantilla'
+    r'^/(cortex|scorecard|dnr|whc|apoyo|diarios|transporter-ids|mery|asociados)(/|$)'
+    r'|^/(api/)?tools/plantilla|^/plantillas(/|$)|^/drivers/sin-centro'
     r'|^/metrics/(upload-routeplan|routeplan|routeplan-available|upload-report'
     r'|driver-history|reports|upload-daily|daily-week)(/|$)'
     r'|^/portal/(mis-numeros|mis-ayudas)$')
 
 NOMBRES_AMAZON = re.compile(
-    r'^_*(cortex|cx|dnr|scorecard|whc|apoyo|dsc|debrief|diarios|transporter|route_?demand'
+    r'^_*(cortex|cx|dnr|scorecard|whc|apoyo|dsc|debrief|diarios|transporter'
     r'|routeplan|dcr|captura_viva|congelar|nomen|geo_rescate|predn|pre_dnr|amazon'
     r'|edge_?os|edgeos|mis_numeros|mis_ayudas|mery|asoc|plantilla|sc_|sls|official_sc'
     r'|bucle_(congelar|apoyo|dnr|captura)|drivers_sin_transporter|drivers_telefonos'
     r'|procesar_(respuestas|predns)|ayudas|cierre_entrega|cuenta_paquetes'
-    r'|consolidar_direcciones|conductores_rendimiento)', re.I)
+    r'|consolidar_direcciones|conductores_rendimiento'
+    # Las «tareas programadas» y «preasignaciones» de la IA solo existian para
+    # montar la plantilla de turno con las rutas de Cortex.
+    r'|ia_tarea|ia_preasig|ia_pares|bucle_ia_tareas|start_ia_tareas|ai_asistente_tareas'
+    r'|drivers_sin_centro|sin_centro_min)', re.I)
 # Algunos van en mayúsculas o a mitad del nombre (`_PROMPT_CORTEX`,
 # `revisar_dcr_diario`): se mira también si la palabra aparece entera.
 PALABRAS_AMAZON = re.compile(
