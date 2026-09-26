@@ -446,6 +446,23 @@ export const exportarCuadrante = (center, desde, hasta) =>
 export const getCodigosCuadrante = () => api.get('/shifts/codigos')
 export const setCodigosCuadrante = (codigos) => api.put('/shifts/codigos', { codigos })
 
+/* ── DNR diaria: los Daily Report de Amazon, subidos a mano ── */
+export const subirDiarios = (files, center, confirmar) => {
+  const fd = new FormData()
+  for (const f of files) fd.append('files', f)
+  if (center && center !== 'Todos') fd.append('center', center)
+  if (confirmar) fd.append('confirmar', '1')
+  return api.post('/diarios/subir', fd, { timeout: 180000 })
+}
+export const pegarDiario = (body) => api.post('/diarios/pegar', body)
+export const diariosPorConductor = (center, desde, hasta) =>
+  api.get('/diarios/conductores', { params: { center, desde, hasta } })
+export const asignarIdConductor = (body) => api.post('/diarios/id-conductor', body)
+export const verificarTransporterIds = (center, todo = false) =>
+  api.get('/transporter-ids/verificar', { params: { center, todo: todo ? 'true' : undefined } })
+export const confirmarParTransporter = (body) => api.post('/transporter-ids/confirmar-par', body)
+export const vincularTransporterIds = (body) => api.post('/diarios/ids', body)
+
 /* ── Plantilla del día (la hoja de salida) y su historial ── */
 export const getPlantillas = (center) => api.get('/plantillas', { params: centerParam(center) })
 export const downloadPlantilla = (id) => api.get(`/plantillas/${id}/download`, { responseType: 'blob' })

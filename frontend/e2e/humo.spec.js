@@ -17,7 +17,7 @@ const PANEL = [
   ['vencimientos', 'Vencimientos'], ['aparcamiento', 'Aparcamiento'],
   ['incidencias', 'Incidencias'], ['ordenes', 'Órdenes de taller'],
   ['talleres', 'Talleres'], ['asignacion', 'Asignación'],
-  ['plantilla', 'Plantilla del día'],
+  ['plantilla', 'Plantilla del día'], ['diarios', 'DNR diaria'],
   ['turnos', 'Turnos'], ['checklist-operativo', 'Checklist'],
   ['conductores', 'Conductores'], ['incorporaciones', 'Incorporaciones'],
   ['empleo', 'Empleo'], ['contactos', 'Contactos'],

@@ -70,6 +70,15 @@ export const AYUDA = {
       'Una furgoneta en el taller no debería asignarse: mira Órdenes de taller si dudas.',
     ],
   },
+  diarios: {
+    que: 'Los paquetes que el cliente dice que no recibió (DNR), por conductor y en euros, a partir del Daily Report de Amazon.',
+    pasos: [
+      'Descarga el Daily Report (.html) de cada día desde el portal de Amazon y súbelo con «Subir Daily Report». Se pueden subir varios a la vez.',
+      'Sin fichero, copia las tablas de la pantalla del portal y usa «Pegar».',
+      'Cada DNR se cuelga de la persona por su Transporter ID. Si sale un código en vez de un nombre, ponle la persona desde «Transporter IDs».',
+    ],
+    ojo: 'Amazon rellena la columna DSC (si el DNR puntúa) 2-4 días tarde. Vuelve a subir el mismo reporte unos días después: actualiza sin duplicar.',
+  },
   plantilla: {
     que: 'La hoja de salida del día: ruta, conductor, móvil, vehículo y horas, en Excel.',
     pasos: [

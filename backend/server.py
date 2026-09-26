@@ -1133,6 +1133,7 @@ MODULOS_PANEL = [
     {"clave": "turnos", "nombre": "Turnos", "grupo": "Operacion diaria", "que": "Cuadrante y peticiones de dias"},
     {"clave": "checklist-operativo", "nombre": "Checklist", "grupo": "Operacion diaria", "que": "Tareas de apertura y cierre"},
     {"clave": "plantilla", "nombre": "Plantilla diaria", "grupo": "Operacion diaria", "que": "Hoja de salida compartida"},
+    {"clave": "diarios", "nombre": "DNR diaria", "grupo": "Operacion diaria", "que": "Paquetes no recibidos: subir los Daily Report de Amazon"},
     {"clave": "vehiculos", "nombre": "Vehiculos", "grupo": "Flota", "que": "Fichas de las furgonetas"},
     {"clave": "revision", "nombre": "Revision rapida", "grupo": "Flota", "que": "Validar los daños que ve la IA"},
     {"clave": "inspecciones", "nombre": "Inspecciones", "grupo": "Flota", "que": "Fotos de cada dia"},
@@ -1412,6 +1413,21 @@ async def _ensure_tenant_indexes(db_name: str):
     await _idx(tdb.shift_blocks, "driver_id")
     # El nombre del conductor se resuelve por estos dos: ambos van con $in.
     await _idx(tdb.drivers, "driver_id")
+    # DNR diaria. `tracking_id` unico: subir dos veces el mismo reporte tiene
+    # que ACTUALIZAR la fila (la columna DSC se rellena tarde), no duplicarla.
+    await _idx(tdb.dnr_rows, "tracking_id", unique=True)
+    await _idx(tdb.dnr_rows, [("center", 1), ("fecha_concesion", 1)])
+    await _idx(tdb.dnr_rows, "transporter_id")
+    await _idx(tdb.daily_reports, [("center", 1), ("fecha", 1), ("transporter_id", 1)])
+    await _idx(tdb.daily_reports, [("center", 1), ("fecha_dnr", 1)])
+    # Las otras tres tablas del diario. La clave es (tracking, fecha del
+    # reporte): 763 trackings de RTS salen en mas de un dia, asi que el tracking
+    # solo perderia filas.
+    for _col in (tdb.rts_rows, tdb.pod_rows, tdb.cc_rows):
+        await _idx(_col, [("tracking_id", 1), ("fecha_reporte", 1)], unique=True)
+        await _idx(_col, [("center", 1), ("fecha_reporte", -1)])
+        await _idx(_col, "transporter_id")
+    await _idx(tdb.drivers, "transporter_id")
     # Ordenes de trabajo
     await _idx(tdb.ordenes_trabajo, "id", unique=True)
     await _idx(tdb.ordenes_trabajo, [("center", 1), ("estado", 1), ("creada_en", -1)])
@@ -33091,6 +33107,1325 @@ async def delete_plantilla(plantilla_id: str, admin: dict = Depends(require_admi
             logger.warning(f"delete_plantilla R2: {_e}")
     await db.plantillas_diarias.delete_one({"id": plantilla_id})
     return {"success": True}
+
+
+# =========================
+# DNR DIARIA — los Daily Report de Amazon (DNR, RTS, POD y CC por conductor).
+#
+# Para las empresas que reparten para Amazon (la flota de Dani). En FlotaDSP
+# los informes llegaban solos con la extensión de Cortex; aquí se SUBEN A MANO:
+# el .html tal cual se descarga del portal (trae las cinco tablas) o pegando
+# las tablas. Amazon rellena la columna DSC dos o cuatro días tarde, así que
+# el mismo reporte se vuelve a subir y actualiza sin duplicar (tracking_id
+# único). Los DNR se cuelgan de cada persona por su Transporter ID, que vive en
+# la ficha del conductor (`transporter_id`, o `driver_id` en fichas antiguas).
+#
+# Es un módulo de la lista `MODULOS_PANEL` que NO va en el estándar: una
+# empresa que no reparte para Amazon no lo ve salvo que se le active.
+# =========================
+
+_DIARIO_TITULO = re.compile(
+    r"Daily\s+Report\s+(\d{4}-\d{2}-\d{2})", re.I)
+
+_DIARIO_CENTRO = re.compile(r"\bES\s+TDSL\s+([A-Z0-9]{3,6})\b", re.I)
+
+_DNR_TITULO = re.compile(r"^\s*DNR\s*\((\d{4}-\d{2}-\d{2})\)\s*$", re.I | re.M)
+
+def _dia_celda(v):
+    """'None', '-' y vacio son lo mismo: no hay dato."""
+    s = str(v or "").strip()
+    return "" if s.lower() in ("none", "-", "n/a", "") else s
+
+def _dia_num(v):
+    s = _dia_celda(v)
+    if not s:
+        return 0
+    try:
+        return int(float(s.replace(",", ".")))
+    except ValueError:
+        return 0
+
+def _dia_euros(v) -> float:
+    """'€130.57' -> 130.57. Devuelve 0.0 si no hay numero.
+
+    Se acepta coma y punto porque Cortex ha cambiado de formato antes y un
+    valor mal leido aqui no da error: da una cifra de dinero equivocada, que
+    es peor. Con las dos separaciones ('1.234,56') manda la ultima: es la
+    decimal en los dos convenios.
+    """
+    s = re.sub(r"[^0-9.,-]", "", str(v or "").strip())
+    if not s:
+        return 0.0
+    if "," in s and "." in s:
+        s = s.replace(",", "") if s.rfind(".") > s.rfind(",") else s.replace(".", "").replace(",", ".")
+    elif "," in s:
+        s = s.replace(",", ".")
+    try:
+        return round(float(s), 2)
+    except ValueError:
+        return 0.0
+
+def _dia_menos(iso: str, n: int) -> str:
+    return (datetime.strptime(iso, "%Y-%m-%d") - timedelta(days=n)).strftime("%Y-%m-%d")
+
+def _dia_semana(iso: str) -> str:
+    """Etiqueta de la semana de Amazon (domingo a sabado) de una fecha."""
+    d = datetime.strptime(iso, "%Y-%m-%d")
+    dom = d - timedelta(days=(d.weekday() + 1) % 7)
+    return dom.strftime("%Y-%m-%d")
+
+_DIA_FILA = re.compile(r"<tr.*?</tr>", re.S | re.I)
+
+_DIA_CELDA = re.compile(r"<t[dh][^>]*>(.*?)</t[dh]>", re.S | re.I)
+
+_DIA_TABLA = re.compile(r"<table.*?</table>", re.S | re.I)
+
+_DIA_H = re.compile(r"<h([12])[^>]*>(.*?)</h\1>", re.S | re.I)
+
+def _dia_texto_html(s: str) -> str:
+    import html as _html
+    return _html.unescape(re.sub(r"\s+", " ", re.sub(r"<[^>]+>", " ", s or ""))).strip()
+
+def _dia_tablas_html(texto: str):
+    """Devuelve (cabecera_en_minusculas, filas) por cada tabla del documento."""
+    for tb in _DIA_TABLA.findall(texto):
+        filas = _DIA_FILA.findall(tb)
+        if not filas:
+            continue
+        celdas = [[_dia_texto_html(c) for c in _DIA_CELDA.findall(f)] for f in filas]
+        cab, datos = celdas[0], celdas[1:]
+        # El boton de descarga no es una cabecera: la de verdad va debajo.
+        if len(cab) <= 1 and datos:
+            cab, datos = datos[0], datos[1:]
+        yield [c.lower() for c in cab], [d for d in datos if any(d)]
+
+def _parsea_diario_html(texto: str) -> dict:
+    """Lee un Daily Report descargado de Cortex (.html). Las cinco tablas."""
+    titulo = ""
+    fecha_dnr = None
+    for nivel, cuerpo in _DIA_H.findall(texto):
+        txt = _dia_texto_html(cuerpo)
+        if nivel == "1" and not titulo:
+            titulo = txt
+        md = re.match(r"DNR\s*\((\d{4}-\d{2}-\d{2})\)", txt, re.I)
+        if md:
+            fecha_dnr = md.group(1)
+
+    m = re.search(r"(\d{4}-\d{2}-\d{2})", titulo)
+    fecha_rep = m.group(1) if m else None
+    mc = re.search(r"\bES\s+TDSL\s+([A-Z0-9]{3,6})\b", titulo, re.I)
+    centro = mc.group(1).upper() if mc else None
+    if not fecha_dnr and fecha_rep:
+        fecha_dnr = _dia_menos(fecha_rep, 2)
+
+    out = {"centro": centro, "fecha_reporte": fecha_rep, "fecha_dnr": fecha_dnr,
+           "resumen": [], "dnr": [], "rts": [], "pod": [], "cc": [], "avisos": []}
+    sin_dsc = False
+
+    for cab, filas in _dia_tablas_html(texto):
+        tiene = set(cab)
+
+        def col(f, *nombres):
+            for n in nombres:
+                if n in cab:
+                    i = cab.index(n)
+                    if i < len(f):
+                        return f[i]
+            return ""
+
+        def par(f):
+            """(transporter_id, tracking_id) si los dos son validos."""
+            tid = col(f, "transporter id").upper()
+            tr = _dia_celda(col(f, "tracking id")).upper()
+            return (tid, tr) if (_DIA_TID.match(tid) and tr) else (None, None)
+
+        if {"transporter id", "rts", "dnr"} <= tiene:
+            for f in filas:
+                tid = col(f, "transporter id").upper()
+                if _DIA_TID.match(tid):
+                    out["resumen"].append({
+                        "transporter_id": tid, "rts": _dia_num(col(f, "rts")),
+                        "dnr": _dia_num(col(f, "dnr")),
+                        "pod_fails": _dia_num(col(f, "pod fails")),
+                        "cc_fails": _dia_num(col(f, "cc fails"))})
+
+        elif "delivery date" in tiene and "delivery scan" in tiene:
+            if "dsc" not in tiene:
+                sin_dsc = True
+            for f in filas:
+                tid, tr = par(f)
+                if not tid:
+                    continue
+                dsc = _dia_celda(col(f, "dsc")).upper()
+                fila = {"tracking_id": tr, "transporter_id": tid,
+                        "fecha_entrega": _dia_celda(col(f, "delivery date")),
+                        "dsc": dsc if dsc in ("Y", "N") else "",
+                        "scan": _dia_celda(col(f, "delivery scan")),
+                        "phr": _dia_celda(col(f, "phr")),
+                        "mas_25m": _dia_celda(col(f, "delivered \u2265 25m", "delivered >= 25m")),
+                        "simultaneas": _dia_celda(col(f, "simultaneous deliveries")),
+                        "contacto": _dia_celda(col(f, "contact compliance")),
+                        "excepcion": _dia_celda(col(f, "delivery exception")),
+                        "valor": _dia_celda(col(f, "value")),
+                        "valor_eur": _dia_euros(col(f, "value")),
+                        "cp": _dia_celda(col(f, "postal code"))}
+                # El '1' de los reportes de mayo NO se traduce a 'Y'. Es lo mas
+                # probable, pero no esta demostrado (docs/REPORTES_DIARIOS.md) y
+                # convertirlo inventaria defectos que nadie ha confirmado.
+                if dsc and dsc not in ("Y", "N"):
+                    fila["dsc_crudo"] = dsc
+                out["dnr"].append(fila)
+
+        elif "rts reason" in tiene:
+            for f in filas:
+                tid, tr = par(f)
+                if tid:
+                    out["rts"].append({"tracking_id": tr, "transporter_id": tid,
+                                       "motivo": _dia_celda(col(f, "rts reason")),
+                                       "cp": _dia_celda(col(f, "postal code")),
+                                       "lejos_100m": _dia_celda(
+                                           col(f, "scanned \u2265 100m away", "scanned >= 100m away"))})
+
+        elif "pod audit" in tiene:
+            for f in filas:
+                tid, tr = par(f)
+                if tid:
+                    out["pod"].append({"tracking_id": tr, "transporter_id": tid,
+                                       "motivo": _dia_celda(col(f, "delivery/attempt reason")),
+                                       "fallo": _dia_celda(col(f, "pod audit"))})
+
+        elif "cc type" in tiene or "call duration (seconds)" in tiene:
+            for f in filas:
+                tid, tr = par(f)
+                if tid:
+                    out["cc"].append({"tracking_id": tr, "transporter_id": tid,
+                                      "motivo": _dia_celda(col(f, "delivery/attempt reason")),
+                                      "tipo": _dia_celda(col(f, "cc type")),
+                                      "segundos": _dia_num(col(f, "call duration (seconds)"))})
+
+    if not out["resumen"] and not out["dnr"]:
+        raise HTTPException(400, "Ese HTML no parece un Daily Report de Cortex: "
+                                 "no encuentro ni la tabla resumen ni la de DNR.")
+    # Igual que en el pegado: un bloque entero sin una sola 'Y' casi nunca es un
+    # dia perfecto, es Amazon que todavia no ha clasificado.
+    out["sin_clasificar"] = bool(out["dnr"]) and all(r["dsc"] != "Y" for r in out["dnr"])
+    if sin_dsc and out["dnr"]:
+        out["avisos"].append(
+            f"Este reporte es de antes del 13-05-2026 y no trae la columna DSC. "
+            f"Sus {len(out['dnr'])} DNR se guardan SIN CLASIFICAR: existen, pero "
+            f"no se puede saber cuáles puntúan.")
+    return out
+
+def _parsea_diario(texto: str) -> dict:
+    """Despieza lo pegado de Cortex. Devuelve {centro, fecha, resumen, dnr, ...}.
+
+    Se aceptan las dos tablas juntas o por separado, y en cualquier orden, que
+    es como salen al copiarlas de la pantalla de Cortex.
+    """
+    texto = (texto or "").replace("\r\n", "\n").replace("\r", "\n")
+    filas = [l.split("\t") for l in texto.split("\n")]
+
+    fecha_rep = None
+    m = _DIARIO_TITULO.search(texto)
+    if m:
+        fecha_rep = m.group(1)
+    centro = None
+    mc = _DIARIO_CENTRO.search(texto)
+    if mc:
+        centro = mc.group(1).upper()
+
+    # La fecha del bloque DNR viene en su propio titulo, "DNR (2026-08-18)".
+    # Si no esta, se deduce del desfase de dos dias.
+    md = _DNR_TITULO.search(texto)
+    fecha_dnr = md.group(1) if md else (_dia_menos(fecha_rep, 2) if fecha_rep else None)
+
+    resumen, dnr, avisos = [], [], []
+    modo, cols = None, []
+    for fila in filas:
+        limpia = [c.strip() for c in fila]
+        cab = [c.lower() for c in limpia]
+        # ¿Es una cabecera?
+        if "transporter id" in cab and "rts" in cab and "dnr" in cab:
+            modo, cols = "resumen", cab
+            continue
+        if "tracking id" in cab and "transporter id" in cab:
+            modo, cols = "dnr", cab
+            continue
+        if not any(limpia):
+            continue
+        if modo is None:
+            continue
+
+        def col(*nombres):
+            for n in nombres:
+                if n in cols:
+                    i = cols.index(n)
+                    if i < len(limpia):
+                        return limpia[i]
+            return ""
+
+        if modo == "resumen":
+            tid = col("transporter id").upper()
+            if not _DIA_TID.match(tid):
+                continue
+            resumen.append({
+                "transporter_id": tid,
+                "rts": _dia_num(col("rts")),
+                "dnr": _dia_num(col("dnr")),
+                "pod_fails": _dia_num(col("pod fails", "pod")),
+                "cc_fails": _dia_num(col("cc fails", "cc")),
+            })
+        else:
+            tid = col("transporter id").upper()
+            tracking = _dia_celda(col("tracking id")).upper()
+            if not (_DIA_TID.match(tid) and tracking):
+                continue
+            dsc = _dia_celda(col("dsc")).upper()
+            dnr.append({
+                "tracking_id": tracking,
+                "transporter_id": tid,
+                "fecha_entrega": _dia_celda(col("delivery date")),
+                "dsc": dsc if dsc in ("Y", "N") else "",
+                "scan": _dia_celda(col("delivery scan")),
+                "phr": _dia_celda(col("phr")),
+                "mas_25m": _dia_celda(col("delivered ≥ 25m", "delivered >= 25m")),
+                "simultaneas": _dia_celda(col("simultaneous deliveries")),
+                "contacto": _dia_celda(col("contact compliance")),
+                "excepcion": _dia_celda(col("delivery exception")),
+                "valor": _dia_celda(col("value")),
+                "valor_eur": _dia_euros(col("value")),
+                "cp": _dia_celda(col("postal code")),
+            })
+
+    if not resumen and not dnr:
+        raise HTTPException(400, "No he reconocido ninguna tabla. Copia la tabla "
+                                 "entera de Cortex, con su fila de cabecera.")
+    if dnr and not fecha_dnr:
+        raise HTTPException(400, "No sé de qué día es el bloque DNR. Copia también "
+                                 "el título ('DNR (2026-08-18)') o el del reporte.")
+
+    # Un bloque entero a 'N' casi nunca es un dia sin defectos: es Amazon que
+    # todavia no ha clasificado. Se avisa y se marca, no se cuenta como cero.
+    clasificados = [r for r in dnr if r["dsc"] in ("Y", "N")]
+    sin_clasificar = bool(dnr) and all(r["dsc"] != "Y" for r in clasificados)
+    if sin_clasificar and fecha_rep and fecha_dnr:
+        avisos.append(
+            f"Las {len(dnr)} filas del {fecha_dnr} vienen con DSC = N. Amazon suele "
+            f"tardar 2-4 días más en clasificarlas, así que probablemente todavía no "
+            f"están. Se guardan marcadas como SIN CLASIFICAR y no cuentan como "
+            f"defectos: vuelve a bajar el reporte dentro de unos días y pégalo otra vez.")
+
+    return {"centro": centro, "fecha_reporte": fecha_rep, "fecha_dnr": fecha_dnr,
+            "resumen": resumen, "dnr": dnr, "sin_clasificar": sin_clasificar,
+            "avisos": avisos}
+
+@api_router.post("/diarios/pegar")
+async def pegar_diario(data: dict = Body(...), user: dict = Depends(require_admin)):
+    """Ingesta el Daily Report pegado de Cortex. body: {texto, center?, confirmar?}"""
+    crudo = _texto_cuerpo(data.get("texto"), 400_000)
+    # Un fichero .html entero o un pegado normal: se decide por lo que hay.
+    # El pegado sigue funcionando exactamente igual que antes.
+    es_html = "<table" in crudo.lower() or "<h1" in crudo.lower()
+    p = _parsea_diario_html(crudo) if es_html else _parsea_diario(crudo)
+    # EL CENTRO DEL FICHERO MANDA sobre el que este seleccionado en pantalla.
+    #
+    # El titulo dice "ES TDSL OGA5 Daily Report ...": es el propio documento
+    # quien declara de que centro es, y eso es mas fiable que el selector. Al
+    # reves —el selector mandando— subir el reporte de DGA1 estando en OGA5 lo
+    # guardaba entero como OGA5, en silencio, y esos DNR se le colgaban a la
+    # gente equivocada. El selector solo se usa cuando el fichero no lo dice
+    # (por ejemplo en un pegado suelto sin titulo).
+    center = (p.get("centro") or data.get("center") or "").strip()
+    if not center:
+        raise HTTPException(400, "No sé de qué centro es. Elige el centro arriba.")
+    if not _user_can_see_center(user, center):
+        raise HTTPException(403, "No tienes acceso a ese centro")
+
+    resumen = {
+        "center": center, "fecha_reporte": p["fecha_reporte"], "fecha_dnr": p["fecha_dnr"],
+        "semana": _dia_semana(p["fecha_dnr"]) if p["fecha_dnr"] else None,
+        "conductores": len(p["resumen"]), "filas_dnr": len(p["dnr"]),
+        "filas_rts": len(p.get("rts") or []), "filas_pod": len(p.get("pod") or []),
+        "filas_cc": len(p.get("cc") or []),
+        "sin_clasificar": p.get("sin_clasificar", False), "avisos": list(p["avisos"]),
+    }
+
+    # EL CRUCE. La columna DNR del resumen tiene que cuadrar con las filas del
+    # detalle, conductor a conductor. Es la unica forma de saber que lo pegado
+    # esta completo: si falta media tabla, aqui se ve.
+    del_resumen = {r["transporter_id"]: r["dnr"] for r in p["resumen"] if r["dnr"]}
+    del_detalle = {}
+    for r in p["dnr"]:
+        del_detalle[r["transporter_id"]] = del_detalle.get(r["transporter_id"], 0) + 1
+    descuadres = []
+    if p["resumen"] and p["dnr"]:
+        for tid in sorted(set(del_resumen) | set(del_detalle)):
+            a, b = del_resumen.get(tid, 0), del_detalle.get(tid, 0)
+            if a != b:
+                descuadres.append({"transporter_id": tid, "dice_el_resumen": a,
+                                   "filas_de_detalle": b})
+    resumen["descuadres"] = descuadres
+    resumen["dnr_resumen"] = sum(del_resumen.values())
+    resumen["dnr_detalle"] = sum(del_detalle.values())
+
+    if not data.get("confirmar"):
+        return resumen
+
+    guardados_res = guardados_dnr = subidos = 0
+    if p["resumen"] and p["fecha_reporte"]:
+        ops = [UpdateOne(
+            {"center": center, "fecha": p["fecha_reporte"], "transporter_id": r["transporter_id"]},
+            {"$set": {**r, "center": center, "fecha": p["fecha_reporte"],
+                      "fecha_dnr": p["fecha_dnr"],
+                      "actualizado": datetime.now(timezone.utc).isoformat()}},
+            upsert=True) for r in p["resumen"]]
+        if ops:
+            await db.daily_reports.bulk_write(ops)
+            guardados_res = len(ops)
+
+    for r in p["dnr"]:
+        doc = {**r, "center": center, "fecha_concesion": p["fecha_dnr"],
+               "semana": _dia_semana(p["fecha_dnr"]),
+               "actualizado": datetime.now(timezone.utc).isoformat()}
+        previo = await db.dnr_rows.find_one({"tracking_id": r["tracking_id"]}, {"_id": 0, "dsc": 1})
+        # UNA FILA NUNCA BAJA DE 'Y' A 'N'. Volver a pegar un reporte viejo
+        # —que trae la columna sin clasificar— borraria defectos ya conocidos.
+        if previo and previo.get("dsc") == "Y" and doc["dsc"] != "Y":
+            doc["dsc"] = "Y"
+        else:
+            if previo and previo.get("dsc") != doc["dsc"] and doc["dsc"] == "Y":
+                subidos += 1
+        await db.dnr_rows.update_one({"tracking_id": r["tracking_id"]},
+                                     {"$set": doc}, upsert=True)
+        guardados_dnr += 1
+
+    # ── LAS OTRAS TRES TABLAS ───────────────────────────────────────────
+    # RTS, POD y Contact Compliance NO llevan fecha propia en el reporte, asi
+    # que se guardan con la del REPORTE y el campo se llama asi para que nadie
+    # lo confunda con la fecha del hecho: no sabemos cuando ocurrio, sabemos en
+    # que reporte salio.
+    #
+    # La clave es (tracking, fecha del reporte) y NO el tracking solo: medido
+    # sobre 92 reportes, 763 trackings de RTS aparecen en mas de un dia. Con el
+    # tracking como clave unica se perderian esas 763 filas en silencio.
+    otras = 0
+    for clave, coleccion in (("rts", db.rts_rows), ("pod", db.pod_rows), ("cc", db.cc_rows)):
+        filas = p.get(clave) or []
+        if not filas or not p["fecha_reporte"]:
+            continue
+        ops = [UpdateOne(
+            {"tracking_id": f["tracking_id"], "fecha_reporte": p["fecha_reporte"]},
+            {"$set": {**f, "center": center, "fecha_reporte": p["fecha_reporte"],
+                      "actualizado": datetime.now(timezone.utc).isoformat()}},
+            upsert=True) for f in filas]
+        for i in range(0, len(ops), 500):
+            await coleccion.bulk_write(ops[i:i + 500])
+        otras += len(ops)
+
+    resumen.update({"guardado": True, "resumen_guardados": guardados_res,
+                    "dnr_guardados": guardados_dnr, "clasificados_ahora": subidos,
+                    "otras_guardadas": otras})
+    logger.info("Diario pegado: %s reporte=%s dnr=%s (%s filas, %s recien clasificadas)",
+                center, p["fecha_reporte"], p["fecha_dnr"], guardados_dnr, subidos)
+    return resumen
+
+@api_router.post("/diarios/subir")
+async def subir_diarios(files: List[UploadFile] = File(...),
+                        center: Optional[str] = Form(default=None),
+                        confirmar: str = Form(default=""),
+                        user: dict = Depends(require_admin)):
+    """Sube uno o varios Daily Report .html tal cual se descargan de Cortex.
+
+    Es la via buena y el pegado se queda como respaldo. Copiando de la pantalla
+    se pierden TRES de las cinco tablas —RTS con su motivo, los fallos de foto y
+    los de contacto— porque solo se selecciona lo que se ve, y ademas depende de
+    como el navegador convierta esa seleccion a texto. El fichero las trae todas
+    y siempre igual.
+
+    Se aceptan varios de una vez: son 92 dias de historico y subirlos de uno en
+    uno no lo hace nadie.
+    """
+    if not files:
+        raise HTTPException(400, "No has adjuntado ningún fichero")
+    if len(files) > 120:
+        raise HTTPException(400, "Como mucho 120 ficheros de una vez")
+
+    hecho = str(confirmar).lower() in ("1", "true", "si", "sí", "yes")
+    resultados, total = [], {"dnr": 0, "otras": 0, "resumen": 0, "reportes": 0}
+    for f in files:
+        nombre = (f.filename or "sin nombre")[:120]
+        try:
+            crudo = (await f.read())[:8_000_000].decode("utf-8", errors="replace")
+        except Exception as e:
+            resultados.append({"fichero": nombre, "error": f"no se pudo leer: {e}"})
+            continue
+        try:
+            r = await pegar_diario({"texto": crudo, "center": center,
+                                    "confirmar": hecho}, user)
+        except HTTPException as e:
+            resultados.append({"fichero": nombre, "error": e.detail})
+            continue
+        resultados.append({
+            "fichero": nombre, "centro": r.get("center"),
+            "fecha_reporte": r.get("fecha_reporte"), "fecha_dnr": r.get("fecha_dnr"),
+            "dnr": r.get("filas_dnr"), "rts": r.get("filas_rts"),
+            "pod": r.get("filas_pod"), "cc": r.get("filas_cc"),
+            "conductores": r.get("conductores"),
+            "descuadres": len(r.get("descuadres") or []),
+            "avisos": r.get("avisos") or [],
+            "guardado": bool(r.get("guardado"))})
+        total["reportes"] += 1
+        total["dnr"] += r.get("dnr_guardados") or r.get("filas_dnr") or 0
+        total["otras"] += r.get("otras_guardadas") or 0
+        total["resumen"] += r.get("resumen_guardados") or r.get("conductores") or 0
+
+    fechas = sorted({x.get("fecha_dnr") for x in resultados if x.get("fecha_dnr")})
+    con_error = [x for x in resultados if x.get("error")]
+    logger.info("Diarios subidos: %d ficheros, %d con error, guardado=%s",
+                len(files), len(con_error), hecho)
+    return {"guardado": hecho, "ficheros": len(files), "resultados": resultados,
+            "totales": total, "con_error": len(con_error),
+            # Para que la pantalla pueda saltar a donde estan los datos en vez
+            # de dejar al usuario mirando una semana vacia.
+            "primer_dia": fechas[0] if fechas else None,
+            "ultimo_dia": fechas[-1] if fechas else None}
+
+@api_router.get("/diarios/conductores")
+async def diarios_por_conductor(center: str, desde: str, hasta: str,
+                                user: dict = Depends(require_admin)):
+    """Cuenta DNRs por conductor en un rango, con su nombre si se conoce el ID.
+
+    `desde`/`hasta` van por FECHA DE CONCESION, que es la que usa la scorecard.
+    """
+    if not _user_can_see_center(user, center):
+        raise HTTPException(403, "No tienes acceso a ese centro")
+    _date_range(desde, hasta)      # valida el formato y el rango
+
+    filas = await db.dnr_rows.find(
+        {"center": center, "fecha_concesion": {"$gte": desde, "$lte": hasta}},
+        {"_id": 0}).to_list(20000)
+    reportes = await db.daily_reports.find(
+        {"center": center, "fecha_dnr": {"$gte": desde, "$lte": hasta}},
+        {"_id": 0}).to_list(5000)
+
+    nombres = {}
+    # Las de baja primero para que una activa con el mismo id la pise: si dos
+    # fichas comparten id, manda la que sigue trabajando.
+    async for d in db.drivers.find(
+            {"transporter_id": {"$nin": [None, ""]}},
+            {"_id": 0, "name": 1, "transporter_id": 1, "id": 1, "active": 1}).sort("active", 1):
+        nombres[(d.get("transporter_id") or "").upper()] = {
+            "name": d["name"], "id": d["id"], "de_baja": d.get("active") is False}
+    # El mismo ID vive tambien en `driver_id` («ID Amazon»): 32 fichas lo tienen
+    # SOLO ahi (ver _cx_nombres). Sin esto salian como un codigo sin nombre.
+    async for d in db.drivers.find(
+            {"driver_id": {"$nin": [None, ""]}},
+            {"_id": 0, "name": 1, "driver_id": 1, "id": 1, "active": 1}).sort("active", 1):
+        clave = str(d.get("driver_id") or "").strip().upper()
+        if clave and clave not in nombres:
+            nombres[clave] = {"name": d["name"], "id": d["id"], "de_baja": d.get("active") is False}
+    # Etiquetas sueltas: gente sin ficha de conductor (oficina, o que se fue).
+    doc_alias = await db.app_meta.find_one({"_id": "transporter_alias"}) or {}
+    for tid, nm in (doc_alias.get("mapa") or {}).items():
+        nombres.setdefault(tid.upper(), {"name": nm, "id": None, "sin_ficha": True})
+    # Los ids que ninguna ficha reclama: el nombre se saca del historial de
+    # rutas, que trae las dos cosas. Mejor un nombre viejo que un codigo.
+    #
+    # Y AQUI SE MIRA SI ESA PERSONA TIENE FICHA. Antes se daba por hecho que no
+    # y se pintaba "sin ficha", que era FALSO: Nicolas Rey Jimenez y Angel
+    # Manuel Seoane Grille tienen ficha activa en DGA1: lo que faltaba era el
+    # enlace, no la persona. Etiquetar mal un dato es peor que no etiquetarlo,
+    # porque manda a dar de alta a alguien que ya esta.
+    faltan = {f["transporter_id"] for f in filas} - set(nombres)
+    if faltan:
+        por_clave = {}
+        async for d in db.drivers.find({}, {"_id": 0, "id": 1, "name": 1, "active": 1}):
+            por_clave.setdefault(_clave_nombre(d.get("name")), []).append(d)
+        async for r in db.route_history.find(
+                {"transporter_id": {"$in": sorted(faltan)}},
+                {"_id": 0, "transporter_id": 1, "driver_name": 1}):
+            tid = (r.get("transporter_id") or "").upper()
+            nm = (r.get("driver_name") or "").strip()
+            if not (tid and nm) or tid in nombres:
+                continue
+            fichas = por_clave.get(_clave_nombre(nm), [])
+            nombres[tid] = {"name": nm, "id": None, "solo_historial": True,
+                            "ficha_sin_vincular": len(fichas) == 1,
+                            "ficha_id": fichas[0]["id"] if len(fichas) == 1 else None}
+        # Lo que el historial no sabe, lo sabe el resumen diario de Cortex, que
+        # trae nombre y transporterId de cada persona que reparte.
+        for tid, nm in (await _cx_nombres_resumen({x for x in faltan if x not in nombres}, 120)).items():
+            fichas = por_clave.get(_clave_nombre(nm), [])
+            nombres[tid] = {"name": nm, "id": None, "solo_historial": True,
+                            "ficha_sin_vincular": len(fichas) == 1,
+                            "ficha_id": fichas[0]["id"] if len(fichas) == 1 else None}
+
+    por_tid = {}
+    for f in filas:
+        tid = f["transporter_id"]
+        e = por_tid.setdefault(tid, {"transporter_id": tid, "dnr_total": 0, "defectos": 0,
+                                     "limpias": 0, "sin_clasificar": 0,
+                                     "euros": 0.0, "euros_defectos": 0.0, "detalle": []})
+        e["dnr_total"] += 1
+        # Las filas guardadas antes de que se guardara el numero solo tienen el
+        # texto ('€10.74'). Se lee de ahi en vez de dar cero: un cero en una
+        # cifra de dinero no se distingue de "ese dia no hubo nada".
+        eur = f.get("valor_eur")
+        if eur is None:
+            eur = _dia_euros(f.get("valor"))
+        e["euros"] += eur
+        if f.get("dsc") == "Y":
+            e["defectos"] += 1
+            e["euros_defectos"] += eur
+        elif f.get("dsc") == "N":
+            e["limpias"] += 1
+        else:
+            e["sin_clasificar"] += 1
+        e["detalle"].append({**{k: f.get(k) for k in
+                                ("tracking_id", "fecha_concesion", "fecha_entrega", "dsc",
+                                 "scan", "valor", "cp")},
+                             "valor_eur": eur})
+    for r in reportes:
+        e = por_tid.setdefault(r["transporter_id"], {
+            "transporter_id": r["transporter_id"], "dnr_total": 0, "defectos": 0,
+            "limpias": 0, "sin_clasificar": 0, "euros": 0.0, "euros_defectos": 0.0,
+            "detalle": []})
+        e["rts"] = e.get("rts", 0) + (r.get("rts") or 0)
+        e["pod_fails"] = e.get("pod_fails", 0) + (r.get("pod_fails") or 0)
+        e["cc_fails"] = e.get("cc_fails", 0) + (r.get("cc_fails") or 0)
+
+    # LO QUE AMAZON DICE de cada ID cuyo nombre sale de una FICHA. Sin esto un ID
+    # mal puesto no se distingue de uno bueno: el nombre aparece igual de seguro y
+    # los defectos de una persona se le cuelgan a otra (19-09-2026).
+    verif: dict = {}
+    con_ficha = {tid for tid in por_tid if (nombres.get(tid) or {}).get("id")}
+    if con_ficha:
+        amazon = await _amazon_nombres(con_ficha)
+        vs = _ids_veredictos(
+            [{"id": nombres[tid]["id"], "name": nombres[tid]["name"], "transporter_id": tid}
+             for tid in con_ficha], amazon, await _ids_confirmados())
+        verif = {v["transporter_id"]: v for v in vs}
+        if any(v["estado"] == "no_coincide" for v in vs):
+            _ids_proponer(vs, await db.drivers.find(
+                {"status": {"$nin": ["deleted", "fusionada"]}, "merged_into": {"$exists": False}},
+                {"_id": 0, "id": 1, "name": 1, "center": 1, "active": 1,
+                 "transporter_id": 1, "driver_id": 1}).to_list(3000))
+
+    salida = []
+    for tid, e in por_tid.items():
+        n = nombres.get(tid)
+        v = verif.get(tid)
+        if v:
+            e["verif"] = v["estado"]
+            if v["estado"] in ("no_coincide", "parecido", "discrepan"):
+                e["amazon_nombre"] = v["amazon_nombre"]
+            if v.get("propuesta"):
+                e["propuesta"] = v["propuesta"]
+        e["driver_name"] = n["name"] if n else ""
+        e["driver_id"] = (n or {}).get("id")
+        e["solo_historial"] = bool((n or {}).get("solo_historial"))
+        e["de_baja"] = bool((n or {}).get("de_baja"))
+        e["sin_ficha"] = bool((n or {}).get("sin_ficha"))
+        # Tiene ficha, pero el id no esta puesto en ella. Es un enlace que
+        # falta, no una persona que falta.
+        e["ficha_sin_vincular"] = bool((n or {}).get("ficha_sin_vincular"))
+        e["detalle"].sort(key=lambda x: x.get("fecha_concesion") or "")
+        e["euros"] = round(e["euros"], 2)
+        e["euros_defectos"] = round(e["euros_defectos"], 2)
+        salida.append(e)
+    # Se ordena por DINERO de los defectos, no por numero de DNRs. Cuatro
+    # paquetes de 10 euros y uno de 130 no son el mismo problema, y el que hay
+    # que mirar primero es el segundo.
+    salida.sort(key=lambda x: (-x["euros_defectos"], -x["defectos"], -x["dnr_total"],
+                               x["driver_name"] or x["transporter_id"]))
+
+    # RTS, POD y CC del rango, contados por conductor. Van por fecha del
+    # REPORTE (esas tablas no traen fecha propia), asi que se piden con el mismo
+    # rango pero por ese campo. Es una aproximacion honesta y esta dicho en la
+    # pantalla; inventar una fecha de hecho que el reporte no da seria peor.
+    for coleccion, clave in ((db.rts_rows, "rts_filas"), (db.pod_rows, "pod_filas"),
+                             (db.cc_rows, "cc_filas")):
+        async for g in coleccion.aggregate([
+                {"$match": {"center": center, "fecha_reporte": {"$gte": desde, "$lte": hasta}}},
+                {"$group": {"_id": "$transporter_id", "n": {"$sum": 1}}}]):
+            tid = g.get("_id")
+            if not tid:
+                continue
+            e = por_tid.setdefault(tid, {"transporter_id": tid, "dnr_total": 0,
+                                         "defectos": 0, "limpias": 0, "sin_clasificar": 0,
+                                         "euros": 0.0, "euros_defectos": 0.0, "detalle": []})
+            e[clave] = g["n"]
+
+    dias = sorted({r["fecha_dnr"] for r in reportes if r.get("fecha_dnr")})
+
+    # DONDE HAY DATOS, mires donde mires.
+    #
+    # La pantalla arranca en la semana en curso y el desfase de Amazon es de dos
+    # dias, asi que por diseno casi nunca cae dentro lo que se acaba de subir:
+    # se guardaban 14 filas del dia 19 y la vista estaba en el 23-29. Guardaba
+    # bien y ensenaba una ventana vacia, sin decir nada. Con este par de fechas
+    # la pantalla puede colocarse sola donde hay algo que ver.
+    extremos = await db.dnr_rows.aggregate([
+        {"$match": {"center": center}},
+        {"$group": {"_id": None, "min": {"$min": "$fecha_concesion"},
+                    "max": {"$max": "$fecha_concesion"}}}]).to_list(1)
+    disponible = ({"primer_dia": extremos[0].get("min"), "ultimo_dia": extremos[0].get("max")}
+                  if extremos else {"primer_dia": None, "ultimo_dia": None})
+
+    return {
+        "conductores": salida,
+        "totales": {
+            "dnr_total": sum(e["dnr_total"] for e in salida),
+            "defectos": sum(e["defectos"] for e in salida),
+            "limpias": sum(e["limpias"] for e in salida),
+            "sin_clasificar": sum(e["sin_clasificar"] for e in salida),
+            "euros": round(sum(e["euros"] for e in salida), 2),
+            "euros_defectos": round(sum(e["euros_defectos"] for e in salida), 2),
+        },
+        # Por semana de Amazon (domingo a sabado), que es como se factura y como
+        # se mira la scorecard. Un rango a caballo de dos semanas mezclaria dos
+        # cosas que se deciden por separado.
+        "por_semana": [
+            {"semana": s,
+             "dnr": sum(1 for f in filas if _dia_semana(f["fecha_concesion"]) == s),
+             "defectos": sum(1 for f in filas
+                             if _dia_semana(f["fecha_concesion"]) == s and f.get("dsc") == "Y"),
+             "euros_defectos": round(sum(
+                 (f.get("valor_eur") if f.get("valor_eur") is not None else _dia_euros(f.get("valor")))
+                 for f in filas
+                 if _dia_semana(f["fecha_concesion"]) == s and f.get("dsc") == "Y"), 2)}
+            for s in sorted({_dia_semana(f["fecha_concesion"]) for f in filas})
+        ],
+        "dias_con_datos": dias,
+        "sin_nombre": sorted({e["transporter_id"] for e in salida if not e["driver_name"]}),
+        # Los que tienen ficha esperando a que se les ponga el id. Se cuenta
+        # para poder ofrecer el arreglo en vez de solo señalar el problema.
+        "vinculables": sum(1 for e in salida if e.get("ficha_sin_vincular")),
+        "disponible": disponible,
+    }
+
+def _dia_parece_nombre(s: str) -> bool:
+    """¿Esto es el nombre de una persona, o una fila de datos con un ID dentro?
+
+    Sin esta comprobacion, cada fila del detalle de DNR —que lleva su
+    Transporter ID en medio— pasaba por una pareja valida y se guardaba como
+    "nombre" un churro de cuarenta campos.
+
+    Se pide lo minimo que cumple cualquier nombre y no cumple ninguna fila de
+    datos: solo letras y separadores, entre dos y seis palabras, y nada de
+    cifras (los codigos postales, los importes y las fechas caen aqui).
+    """
+    s = (s or "").strip()
+    if not (4 <= len(s) <= 60):
+        return False
+    if re.search(r"\d", s):
+        return False
+    # Se parte SOLO por espacios y puntos. El apostrofo y el guion van DENTRO
+    # de la palabra: partiendo por ellos, "O'Donnell" daba un trozo de una sola
+    # letra y el nombre entero se rechazaba.
+    palabras = [p for p in re.split(r"[\s.]+", s) if p]
+    if not (2 <= len(palabras) <= 6):
+        return False
+    LETRA = "A-Za-zÁÉÍÓÚÜÑÀÂÊÔÇáéíóúüñàâêôç"
+    return all(re.fullmatch(f"[{LETRA}]+(?:['’-][{LETRA}]+)*", p) and len(p) >= 2
+               for p in palabras)
+
+@api_router.post("/diarios/id-conductor")
+async def asignar_id_conductor(data: dict = Body(...), user: dict = Depends(require_admin)):
+    """Pone un Transporter ID en la ficha de un conductor. body: {transporter_id, driver_id}
+
+    Es la salida cuando no hay lista que pegar ni historial del que sacarlo:
+    los ids se ven en la tabla, se elige la persona de un desplegable y ya.
+    Sin emparejar nombres, sin formatos y sin adivinar nada — se elige la ficha
+    a dedo, que es la unica forma que no puede equivocarse.
+
+    `driver_id` vacio QUITA el id de quien lo tuviera: hace falta para arreglar
+    uno mal puesto sin tener que ir a la ficha.
+
+    LO QUE SE AÑADIO EL 19-09-2026, cuando se colgo el ID de Alberto Brion
+    Pineiro a Alberto Vazquez Arias desde el desplegable y no hubo forma de
+    deshacerlo:
+      · el ID vive en DOS campos de la ficha (gotcha 79) y «quitar» solo vaciaba
+        `transporter_id`: si estaba en `driver_id` se contestaba «ok, quitado de
+        0» y todo seguia igual. Ahora se quita de los dos;
+      · si Amazon dice que ese ID es OTRA persona, no se asigna en silencio: 409
+        con lo que dice Amazon. Quien sepa que es correcto lo repite con
+        `forzar: true`, que es una decision consciente;
+      · cada cambio guarda como estaba antes (`transporter_id_cambios`).
+    """
+    tid = str(data.get("transporter_id") or "").strip().upper()
+    if not _DIA_TID.match(tid):
+        raise HTTPException(400, "Ese no parece un Transporter ID")
+    did = str(data.get("driver_id") or "").strip()
+    forzar = data.get("forzar") is True
+    quien = user.get("name") or user.get("sub") or "oficina"
+
+    async def _antes(excepto=None):
+        """Que fichas tienen ese ID y en que campo, para poder deshacerlo."""
+        filtro = {"$or": [{"transporter_id": tid}, {"driver_id": tid}]}
+        if excepto:
+            filtro["id"] = {"$ne": excepto}
+        return [{"ficha_id": f["id"], "ficha": f.get("name"),
+                 "campos": [c for c in ("transporter_id", "driver_id")
+                            if str(f.get(c) or "").strip().upper() == tid]}
+                async for f in db.drivers.find(
+                    filtro, {"_id": 0, "id": 1, "name": 1, "transporter_id": 1, "driver_id": 1})]
+
+    async def _quitar(fichas):
+        for x in fichas:
+            await db.drivers.update_one({"id": x["ficha_id"]},
+                                        {"$unset": {c: "" for c in x["campos"]}})
+
+    async def _apunte(antes, despues):
+        try:
+            await db.transporter_id_cambios.insert_one({
+                "en": datetime.now(timezone.utc).isoformat(), "por": quien,
+                "transporter_id": tid, "antes": antes, "despues": despues})
+        except Exception as e:                                   # noqa: BLE001
+            logger.warning("No se pudo apuntar el cambio de %s: %s", tid, e)
+
+    if not did:
+        antes = await _antes()
+        await _quitar(antes)
+        await _apunte(antes, None)
+        return {"ok": True, "quitado_de": len(antes),
+                "quitado_a": [x["ficha"] for x in antes]}
+
+    drv = await db.drivers.find_one({"id": did}, {"_id": 0, "id": 1, "name": 1, "center": 1,
+                                                  "transporter_id": 1, "driver_id": 1})
+    if not drv:
+        raise HTTPException(404, "Ese conductor no existe")
+    if not _user_can_see_center(user, drv.get("center") or ""):
+        raise HTTPException(403, "Ese conductor es de otro centro")
+
+    if not forzar:
+        am = (await _amazon_nombres({tid})).get(tid)
+        if (am and (am["roster"] or am["votos"] >= 2) and not am["discrepan"]
+                and _nombres_veredicto(drv["name"], am["nombre"]) == "no"):
+            raise HTTPException(
+                409, "Amazon dice que %s es «%s», no «%s»." % (tid, am["nombre"], drv["name"]))
+        propio = [str(drv.get(c) or "").strip().upper() for c in ("transporter_id", "driver_id")]
+        otro = next((p for p in propio if p and p != tid and _DIA_TID.match(p)), "")
+        if otro:
+            raise HTTPException(
+                409, "«%s» ya tiene otro ID de Amazon (%s). Con este tendria dos." % (
+                    drv["name"], otro))
+
+    # Un id no puede estar en dos fichas: se quita de donde estuviera antes.
+    # Si no, la busqueda por transporter_id devolveria dos y el nombre que
+    # saliera dependeria del orden en que Mongo los tuviera guardados.
+    antes = await _antes(excepto=did)
+    await _quitar(antes)
+    await db.drivers.update_one({"id": did}, {"$set": {"transporter_id": tid}})
+    await _apunte(antes, {"ficha_id": did, "ficha": drv["name"]})
+    # Y si el id estaba puesto como etiqueta suelta, sobra: manda la ficha.
+    await db.app_meta.update_one({"_id": "transporter_alias"},
+                                 {"$unset": {f"mapa.{tid}": ""}})
+    logger.info("Transporter ID %s asignado a %s (%s)", tid, drv["name"], quien)
+    return {"ok": True, "driver_name": drv["name"], "transporter_id": tid,
+            "quitado_a": [x["ficha"] for x in antes]}
+
+@api_router.post("/diarios/ids")
+async def vincular_transporter_ids(data: dict = Body(...), user: dict = Depends(require_admin)):
+    """Vincula Transporter IDs pegando una lista 'NOMBRE<tab>ID'.
+
+    Sin esto el contador de DNRs muestra codigos como 'A2H4XH0AEQTVZY' en vez
+    de personas, que es igual de util que no tenerlo.
+
+    Se empareja con `_empareja_conductor`, el mismo del cuadrante, porque los
+    nombres NO coinciden letra a letra con las fichas y nunca lo van a hacer:
+    'ALEX FANDINO OTERO' esta como 'ALEX FANDINO' en la app, 'IAGO OTERO
+    BARREIRO' esta guardado como 'IAGO BARREIRO OTERO' —apellidos al reves— y
+    'PABLO FRANCISCO BIRICHINAG' va sin la ultima 'a'. Comparando letra a letra
+    se caen 15 de 69.
+
+    Y SE COMPRUEBA CONTRA EL HISTORIAL DE RUTAS, que trae el id y el nombre
+    juntos en cada snapshot y viene de Amazon, no de una hoja escrita a mano.
+    Si la lista pegada dice una cosa y el historial otra, NO se elige: se avisa.
+    Un id mal puesto le cuelga los defectos de uno a otro, y eso no se descubre
+    nunca porque el numero siempre parece razonable.
+    """
+    # SIN PEGAR NADA: los pares salen del historial de rutas.
+    #
+    # Cada snapshot de ruta trae el Transporter ID y el nombre juntos, y viene
+    # de Amazon. Son 73 parejas que ya estaban en la base de datos sin que nadie
+    # las usara, mientras las 86 fichas de DGA1 seguian sin un solo ID y sus
+    # DNR salian como codigo. Pedir una lista escrita a mano para un dato que
+    # ya se tiene, y encima de mejor fuente, no tiene sentido.
+    # EL CENTRO ACOTA. Estando en DGA1 no tiene sentido proponer las parejas de
+    # OGA5: son gente de otro centro y sus DNR se cuentan aparte. Antes se
+    # recorria el historial entero y salian nombres de todas partes.
+    centro = _texto_cuerpo(data.get("center"))
+    if centro and centro.lower() != "todos" and not _user_can_see_center(user, centro):
+        raise HTTPException(403, "No tienes acceso a ese centro")
+    filtro_centro = {}
+    if centro and centro.lower() != "todos":
+        filtro_centro = {"center": {"$regex": re.escape(centro), "$options": "i"}}
+
+    if data.get("desde_historial"):
+        cuenta = {}
+        async for r in db.route_history.find(filtro_centro, {"_id": 0, "transporter_id": 1, "driver_name": 1}):
+            tid = (r.get("transporter_id") or "").upper()
+            nm = (r.get("driver_name") or "").strip()
+            if tid and nm:
+                cuenta.setdefault(tid, {})[nm] = cuenta.setdefault(tid, {}).get(nm, 0) + 1
+        # Si un id aparece con dos nombres distintos, manda el que mas veces
+        # sale: un snapshot suelto puede llevar el nombre del que le cubrio.
+        texto = chr(10).join(
+            f"{max(nombres.items(), key=lambda x: x[1])[0]}\t{tid}"
+            for tid, nombres in cuenta.items())
+    else:
+        texto = str(data.get("texto") or "")
+
+    # ¿Esto es un Daily Report en vez de una lista de IDs? Se mira ANTES de
+    # intentar leerlo. Cada fila de DNR trae un Transporter ID y un monton de
+    # texto detras, asi que sin esta guarda el lector se lo tragaba y contestaba
+    # "4 parejas leidas", con la fila entera puesta como si fuera el nombre de
+    # una persona. Un mensaje equivocado es peor que un error: manda a buscar el
+    # fallo donde no esta.
+    bajo = texto.lower()
+    if ("tracking id" in bajo and "delivery" in bajo) or "daily report" in bajo:
+        raise HTTPException(400,
+            "Eso es un Daily Report, no una lista de IDs. Pegalo en el boton "
+            "«Pegar Daily Report». Aqui va una persona por linea: el nombre, "
+            "un tabulador y su Transporter ID.")
+
+    # SE LEE POR TROZOS, NO POR LINEAS.
+    #
+    # Leer linea a linea daba por hecho un formato —un nombre, un tabulador, un
+    # id— que no es el unico que sale al copiar de sitios distintos. La lista de
+    # DGA1 venia separada por barras y con VARIAS personas en la misma linea, y
+    # el lector la rechazaba entera diciendo "no traian ningun ID", con un
+    # churro de sesenta caracteres como ejemplo. El dato estaba bien; el que no
+    # sabia leerlo era yo.
+    #
+    # Ahora se parte por CUALQUIER separador —barra, tabulador, punto y coma,
+    # coma, salto de linea o dos espacios— y se recorre la lista de trozos: cada
+    # vez que aparece un id, su nombre es lo que venia justo antes. Da igual si
+    # hay uno por linea, cinco por linea o todo seguido.
+    trozos = [c.strip() for c in re.split(r"[|\t;,\n\r]|\s{2,}", texto) if c.strip()]
+    es_id = [bool(_DIA_TID.match(c.upper())) for c in trozos]
+
+    # ── DOS COLUMNAS: todos los nombres y DESPUES todos los ids ────────────
+    # Sale asi al copiar dos columnas de una hoja que no estan pegadas. Leido
+    # "cada id va con lo de antes" se juntarian dos personas en un nombre y se
+    # emparejaria mal, que es peor que no leerlo. Se detecta el caso exacto
+    # —ningun id antes del ultimo nombre y misma cantidad de cada— y se
+    # empareja POR ORDEN, diciendo que se ha hecho asi para que se pueda mirar.
+    nombres_sueltos = [c for c, e in zip(trozos, es_id) if not e]
+    ids_sueltos = [c.upper() for c, e in zip(trozos, es_id) if e]
+    formato = "seguidos"
+    if (ids_sueltos and nombres_sueltos
+            and len(ids_sueltos) == len(nombres_sueltos)
+            and all(_dia_parece_nombre(n) for n in nombres_sueltos)
+            and (not any(es_id[:len(nombres_sueltos)]))
+            and all(es_id[len(nombres_sueltos):])):
+        return await _dia_vincula(
+            [{"nombre": n, "tid": i} for n, i in zip(nombres_sueltos, ids_sueltos)],
+            [], [], "dos columnas emparejadas por orden", data, user)
+
+    pares, mal, no_parecen = [], [], []
+    pendiente = []
+    for c in trozos:
+        if _DIA_TID.match(c.upper()):
+            nombre = " ".join(pendiente).strip()
+            if _dia_parece_nombre(nombre):
+                pares.append({"nombre": nombre, "tid": c.upper()})
+            elif nombre:
+                no_parecen.append(nombre[:60])
+            else:
+                mal.append(c.upper())        # un id suelto, sin nombre delante
+            pendiente = []
+        else:
+            pendiente.append(c)
+    # Lo que quede al final no llego a tener id.
+    resto = " ".join(pendiente).strip()
+    if resto:
+        mal.append(resto[:60])
+    if not pares:
+        detalle = "No he encontrado ninguna pareja nombre + ID."
+        if no_parecen:
+            detalle += (f" Hay {len(no_parecen)} lineas con un ID pero lo de al lado "
+                        f"no parece el nombre de una persona, por ejemplo: "
+                        f"«{no_parecen[0]}».")
+        detalle += (" Pega una persona por linea: el nombre, un tabulador y el ID.")
+        raise HTTPException(400, detalle)
+
+    return await _dia_vincula(pares, mal, no_parecen, formato, data, user)
+
+async def _dia_vincula(pares, mal, no_parecen, formato, data, user):
+    """Empareja los pares ya leidos con las fichas y, si se confirma, los guarda."""
+    centro = _texto_cuerpo(data.get("center"))
+    filtro_centro = {}
+    if centro and centro.lower() != "todos":
+        filtro_centro = {"center": {"$regex": re.escape(centro), "$options": "i"}}
+
+    # Dos personas con el MISMO id es imposible, y hay que verlo antes de escribir.
+    vistos, repetidos = {}, []
+    for p in pares:
+        anterior = vistos.get(p["tid"])
+        if anterior and _clave_nombre(anterior) != _clave_nombre(p["nombre"]):
+            repetidos.append({"transporter_id": p["tid"],
+                              "nombres": [anterior, p["nombre"]]})
+        vistos[p["tid"]] = p["nombre"]
+
+    hist = {}
+    async for r in db.route_history.find({}, {"_id": 0, "transporter_id": 1, "driver_name": 1}):
+        tid = (r.get("transporter_id") or "").upper()
+        nm = (r.get("driver_name") or "").strip()
+        if tid and nm:
+            hist.setdefault(tid, set()).add(nm)
+
+    # TODAS las fichas, tambien las de baja. Un DNR de hace tres semanas es de
+    # quien lo hizo, aunque esa persona ya no trabaje aqui: dejarlo como codigo
+    # porque se fue seria perder el dato justo cuando se va a mirar hacia atras.
+    # Las activas van primero para que, ante dos fichas con el mismo nombre,
+    # `_empareja_conductor` se quede con la que sigue trabajando.
+    todas = await db.drivers.find(
+        dict(filtro_centro),
+        {"_id": 0, "id": 1, "name": 1, "transporter_id": 1, "center": 1, "active": 1}
+    ).to_list(3000)
+    drivers = ([d for d in todas if d.get("active") is not False]
+               + [d for d in todas if d.get("active") is False])
+    alias = await _alias_cuadrante()
+
+    vinculan, sin_ficha, ambiguos, conflictos, discrepan = [], [], [], [], []
+    iguales = 0
+    for p in pares:
+        drv, motivo = _empareja_conductor(p["nombre"], drivers, alias)
+        # El historial de Amazon, como segunda opinion.
+        if p["tid"] in hist:
+            del_hist = {_clave_nombre(x) for x in hist[p["tid"]]}
+            propios = {_clave_nombre(p["nombre"])}
+            if drv:
+                propios.add(_clave_nombre(drv["name"]))
+            if not (propios & del_hist):
+                discrepan.append({"transporter_id": p["tid"], "tu_lista": p["nombre"],
+                                  "el_historial": sorted(hist[p["tid"]])[0]})
+        if not drv:
+            (ambiguos if motivo == "ambiguo" else sin_ficha).append(
+                {"nombre": p["nombre"], "transporter_id": p["tid"], "motivo": motivo})
+            continue
+        actual = (drv.get("transporter_id") or "").upper()
+        if actual == p["tid"]:
+            iguales += 1
+            continue
+        if actual:
+            conflictos.append({"nombre": drv["name"], "tenia": actual,
+                               "quieres": p["tid"]})
+            continue
+        vinculan.append({"nombre": drv["name"], "escrito": p["nombre"],
+                         "transporter_id": p["tid"], "driver_id": drv["id"],
+                         "como": motivo, "de_baja": drv.get("active") is False})
+
+    # Ids que ya salen en los reportes y que esta lista NO cubre: son los que
+    # seguirian apareciendo como codigo en vez de como persona.
+    en_reportes = set(await db.dnr_rows.distinct("transporter_id"))
+    en_reportes |= set(await db.daily_reports.distinct("transporter_id"))
+    ya_en_fichas = {(d.get("transporter_id") or "").upper() for d in drivers}
+    sin_cubrir = sorted(en_reportes - set(vistos) - ya_en_fichas)
+
+    salida = {
+        "centro": centro or "todos", "formato": formato,
+        "pares_leidos": len(pares), "sin_id": mal[:30],
+        "no_parecen_nombre": no_parecen[:10], "n_no_parecen": len(no_parecen),
+        "vinculan": vinculan, "n_vinculan": len(vinculan), "ya_estaban": iguales,
+        "sin_ficha": sin_ficha, "ambiguos": ambiguos,
+        "conflictos": conflictos, "repetidos": repetidos, "discrepan": discrepan,
+        "sin_cubrir": [{"transporter_id": x, "historial": sorted(hist.get(x, []))[:1]}
+                       for x in sin_cubrir],
+    }
+    if not data.get("confirmar"):
+        return salida
+
+    for v in vinculan:
+        await db.drivers.update_one({"id": v["driver_id"]},
+                                    {"$set": {"transporter_id": v["transporter_id"]}})
+
+    # Los que no tienen ficha ninguna —gente de oficina, o que se fue antes de
+    # que existiera la app— se guardan como simple etiqueta id -> nombre. No se
+    # les crea una ficha de conductor falsa por eso: no lo son, y saldrian en el
+    # cuadrante y en la asignacion. Pero su nombre se enseña, que es de lo que
+    # se trata: un DNR de hace tres semanas sigue siendo de alguien.
+    if sin_ficha:
+        etiquetas = {s["transporter_id"]: s["nombre"] for s in sin_ficha}
+        await db.app_meta.update_one(
+            {"_id": "transporter_alias"},
+            {"$set": {f"mapa.{k}": v for k, v in etiquetas.items()}},
+            upsert=True)
+        salida["etiquetados"] = len(etiquetas)
+    salida["guardado"] = True
+    logger.info("Transporter IDs vinculados: %d de %d pares", len(vinculan), len(pares))
+    return salida
+
+_WHC_API_COL = "whc_api"
+
+async def _cx_nombres_resumen(ids: set, dias: int = 60) -> dict:
+    """transporterId -> nombre, tal como lo da Cortex en el resumen del dia.
+
+    El NOMBRE si es de la persona (el telefono no: gotcha 66). Se queda con el
+    del dia mas reciente. Medido el 17-09-2026: de 25 IDs sin ficha y sin
+    historico, 18 tenian nombre aqui y la pantalla los enseñaba como codigos.
+    """
+    faltan = set(ids or ())
+    fuera: dict = {}
+    if not faltan:
+        return fuera
+    # El roster de Programacion trae ID y nombre de TODO el que tiene turno esta
+    # semana, y es lo mas directo que da Amazon: se mira primero.
+    async for d in db[_WHC_API_COL].find(
+            {}, {"_id": 0, "conductores.transporter_id": 1, "conductores.nombre": 1}
+    ).sort("week", -1).limit(9):
+        for g in d.get("conductores") or []:
+            tid = (g.get("transporter_id") or "").strip()
+            nombre = re.sub(r"\s+", " ", str(g.get("nombre") or "")).strip()
+            if tid in faltan and nombre and tid not in fuera:
+                fuera[tid] = nombre
+    if len(fuera) == len(faltan):
+        return fuera
+    desde = (datetime.now(timezone.utc) - timedelta(days=dias)).strftime("%Y-%m-%d")
+    async for d in db.cortex_resumen.find({"dia": {"$gte": desde}},
+                                          {"_id": 0, "gente": 1}).sort("dia", -1):
+        for g in d.get("gente") or []:
+            tid = (g.get("transporterId") or "").strip()
+            nombre = re.sub(r"\s+", " ", str(g.get("nombre") or "")).strip()
+            if tid in faltan and nombre and tid not in fuera:
+                fuera[tid] = nombre
+        if len(fuera) == len(faltan):
+            break
+    return fuera
+
+def _nombres_veredicto(a: str, b: str):
+    """¿Son el mismo nombre? "si" | "parcial" | "no" | None (no se puede saber).
+
+    Se comparan las PALABRAS (el orden de apellidos cambia de un sitio a otro y
+    unos ponen el segundo apellido y otros no) y cada palabra admite una errata:
+    'Birichinag' y 'Birichinaga' son la misma. `None` cuando alguno de los dos
+    tiene menos de dos palabras: con una sola no hay forma de afirmar nada.
+
+      · "si"      todas las palabras del nombre mas corto estan en el otro;
+      · "parcial" difieren en UNA palabra (un apellido distinto);
+      · "no"      comparten una palabra o ninguna. Compartir un nombre de pila
+                  (ALBERTO, JOSE MANUEL) no hace a dos personas la misma.
+    """
+    import difflib
+    pa, pb = _palabras_nombre(a), _palabras_nombre(b)
+    if len(pa) < 2 or len(pb) < 2:
+        return None
+
+    def _esta(x, conjunto):
+        return any(x == y or (len(x) > 3 and len(y) > 3
+                              and difflib.SequenceMatcher(None, x, y).ratio() >= 0.85)
+                   for y in conjunto)
+    comunes = sum(1 for x in pa if _esta(x, pb))
+    corto = min(len(pa), len(pb))
+    if comunes >= corto:
+        return "si"
+    if comunes >= 2 and comunes >= corto - 1:
+        return "parcial"
+    return "no"
+
+async def _amazon_nombres(ids: set, dias: int = 90) -> dict:
+    """transporterId -> lo que Amazon dice que es, votado entre sus fuentes.
+
+    Devuelve `{tid: {"nombre", "votos", "roster", "discrepan"}}`. El nombre es el
+    mas votado; `roster` dice si viene del roster de Programacion (la fuente
+    mas directa: cuenta triple); `discrepan` es True si otra fuente da OTRA
+    persona con al menos dos votos — entonces no se afirma nada.
+    """
+    ids = {str(i).strip().upper() for i in (ids or ()) if i}
+    if not ids:
+        return {}
+    votos: dict = {}
+    roster: set = set()
+
+    def _voto(tid, nombre, peso=1, del_roster=False):
+        tid = str(tid or "").strip().upper()
+        nombre = re.sub(r"\s+", " ", str(nombre or "")).strip()
+        if tid not in ids or not nombre:
+            return
+        e = votos.setdefault(tid, {}).setdefault(_clave_nombre(nombre), [0, nombre])
+        e[0] += peso
+        if del_roster:
+            roster.add(tid)
+
+    # 1) El roster de Programacion: ID y nombre, de Amazon, de esta semana.
+    async for d in db[_WHC_API_COL].find(
+            {}, {"_id": 0, "conductores.transporter_id": 1, "conductores.nombre": 1}
+    ).sort("week", -1).limit(9):
+        for g in d.get("conductores") or []:
+            _voto(g.get("transporter_id"), g.get("nombre"), 3, True)
+    # 2) El resumen diario de Cortex: un voto por dia visto.
+    desde = (datetime.now(timezone.utc) - timedelta(days=dias)).strftime("%Y-%m-%d")
+    async for d in db.cortex_resumen.find({"dia": {"$gte": desde}}, {"_id": 0, "gente": 1}):
+        for g in d.get("gente") or []:
+            _voto(g.get("transporterId"), g.get("nombre"))
+    # 3) El historial de rutas: par (id, nombre) tal cual lo da Amazon.
+    async for r in db.route_history.aggregate([
+            {"$match": {"transporter_id": {"$in": sorted(ids)},
+                        "driver_name": {"$nin": [None, ""]}}},
+            {"$group": {"_id": {"t": "$transporter_id", "n": "$driver_name"},
+                        "c": {"$sum": 1}}}]):
+        _voto(r["_id"].get("t"), r["_id"].get("n"), min(int(r.get("c") or 1), 3))
+
+    fuera = {}
+    for tid, nombres in votos.items():
+        orden = sorted(nombres.values(), key=lambda x: (-x[0], x[1]))
+        top = orden[0]
+        # Otra PERSONA con peso propio: no es una errata del mismo nombre.
+        otra = any(n[0] >= 2 and _nombres_veredicto(top[1], n[1]) == "no" for n in orden[1:])
+        fuera[tid] = {"nombre": top[1], "votos": top[0], "roster": tid in roster,
+                      "discrepan": otra}
+    return fuera
+
+def _ids_veredictos(fichas: list, amazon: dict, confirmados: dict) -> list:
+    """Cada (ficha, ID) contra el nombre que Amazon da a ese ID.
+
+    estado:
+      · confirmado   una persona dijo «esta bien» para ESA pareja
+      · coincide     el nombre de la ficha es el de Amazon
+      · parecido     difieren en un apellido: revisar, sin alarma
+      · no_coincide  son personas distintas. Solo se dice con evidencia firme:
+                     el roster, o al menos dos votos y ninguna fuente discrepando
+      · discrepan    las fuentes de Amazon no se ponen de acuerdo entre si
+      · sin_dato     Amazon no da nombre para ese ID, o es demasiado corto para
+                     comparar. NO es un «esta bien»
+    Y `ids_distintos` cuando la misma ficha tiene dos IDs de Amazon diferentes
+    (`driver_id` y `transporter_id`): uno de los dos esta mal.
+    """
+    fuera = []
+    for f in fichas:
+        ids = []
+        for campo in ("transporter_id", "driver_id"):
+            v = str(f.get(campo) or "").strip().upper()
+            if v and _DIA_TID.match(v) and v not in [i for i, _ in ids]:
+                ids.append((v, campo))
+        for tid, campo in ids:
+            a = amazon.get(tid)
+            if confirmados.get(tid) == f.get("id"):
+                estado, v = "confirmado", None
+            elif not a:
+                estado, v = "sin_dato", None
+            else:
+                v = _nombres_veredicto(f.get("name"), a["nombre"])
+                firme = a["roster"] or a["votos"] >= 2
+                if v == "si":
+                    estado = "coincide"
+                elif v is None:
+                    estado = "sin_dato"
+                elif a["discrepan"]:
+                    estado = "discrepan"
+                elif v == "parcial":
+                    estado = "parecido"
+                else:
+                    estado = "no_coincide" if firme else "sin_dato"
+            fuera.append({
+                "ficha_id": f.get("id"), "ficha": f.get("name") or "",
+                "centro": f.get("center") or "", "de_baja": f.get("active") is False,
+                "transporter_id": tid, "campo": campo, "estado": estado,
+                "amazon_nombre": (a or {}).get("nombre") or "",
+                "amazon_votos": (a or {}).get("votos") or 0,
+                "amazon_roster": bool((a or {}).get("roster")),
+                "ids_distintos": len(ids) > 1,
+                "otro_id": next((i for i, _ in ids if i != tid), "")})
+    return fuera
+
+async def _ids_confirmados() -> dict:
+    d = await db.app_meta.find_one({"_id": "transporter_ids_confirmados"}) or {}
+    return dict(d.get("mapa") or {})
+
+def _ids_proponer(items: list, todas: list) -> None:
+    """A cada `no_coincide` le pone la ficha de la persona que Amazon dice, si el
+    nombre lleva a UNA sola. Con dos tocayos no se propone nada."""
+    for it in items:
+        if it["estado"] != "no_coincide":
+            continue
+        cand, motivo = _empareja_conductor(it["amazon_nombre"],
+                                           [x for x in todas if x.get("id") != it["ficha_id"]], {})
+        if cand and motivo in ("exacto", "palabras"):
+            tiene = [str(cand.get(c) or "").strip().upper() for c in ("transporter_id", "driver_id")]
+            it["propuesta"] = {"ficha_id": cand["id"], "nombre": cand.get("name") or "",
+                               "centro": cand.get("center") or "",
+                               # Si esa ficha ya tiene OTRO ID, moverselo seria
+                               # crear dos: se dice y no se propone sin mirar.
+                               "ya_tiene_otro_id": any(t and t != it["transporter_id"] for t in tiene)}
+
+@api_router.get("/transporter-ids/verificar")
+async def transporter_ids_verificar(center: Optional[str] = None, todo: bool = False,
+                                    user: dict = Depends(require_admin)):
+    """Las fichas con Transporter ID contrastadas con lo que dice Amazon.
+
+    Solo MIRA. Devuelve lo que no cuadra —y, con `todo`, tambien lo que si— para
+    que una persona decida: quitar el ID de esa ficha, moverlo a la persona que
+    es, o confirmar que esta bien (y no vuelve a salir).
+    """
+    filtro = {"status": {"$nin": ["deleted", "fusionada"]},
+              "merged_into": {"$exists": False}, **_filtro_centro(user, center)}
+    fichas = await db.drivers.find(
+        filtro, {"_id": 0, "id": 1, "name": 1, "center": 1, "active": 1,
+                 "transporter_id": 1, "driver_id": 1}).to_list(3000)
+    con_id = [f for f in fichas
+              if any(_DIA_TID.match(str(f.get(c) or "").strip().upper())
+                     for c in ("transporter_id", "driver_id"))]
+    ids = {str(f.get(c) or "").strip().upper() for f in con_id
+           for c in ("transporter_id", "driver_id")}
+    ids = {i for i in ids if _DIA_TID.match(i)}
+    amazon = await _amazon_nombres(ids)
+    items = _ids_veredictos(con_id, amazon, await _ids_confirmados())
+
+    # A quien es de verdad, si su nombre lleva a UNA sola ficha (misma regla que
+    # el resto: no se adivina con dos tocayos).
+    if any(it["estado"] == "no_coincide" for it in items):
+        _ids_proponer(items, await db.drivers.find(
+            {"status": {"$nin": ["deleted", "fusionada"]}, "merged_into": {"$exists": False}},
+            {"_id": 0, "id": 1, "name": 1, "center": 1, "active": 1,
+             "transporter_id": 1, "driver_id": 1}).to_list(3000))
+
+    cuenta: dict = {}
+    for it in items:
+        cuenta[it["estado"]] = cuenta.get(it["estado"], 0) + 1
+    orden = {"no_coincide": 0, "discrepan": 1, "parecido": 2, "sin_dato": 3,
+             "confirmado": 4, "coincide": 5}
+    items.sort(key=lambda x: (orden.get(x["estado"], 9), not x["ids_distintos"],
+                              x["ficha"].upper()))
+    revisar = [x for x in items if x["estado"] in ("no_coincide", "discrepan", "parecido")
+               or x["ids_distintos"]]
+    return {
+        "fichas_con_id": len(con_id), "ids": len(ids),
+        "resumen": {"coinciden": cuenta.get("coincide", 0) + cuenta.get("confirmado", 0),
+                    "no_coinciden": cuenta.get("no_coincide", 0),
+                    "parecidos": cuenta.get("parecido", 0),
+                    "discrepan": cuenta.get("discrepan", 0),
+                    "sin_dato": cuenta.get("sin_dato", 0),
+                    "ids_distintos": sum(1 for x in items if x["ids_distintos"]
+                                         and x["campo"] == "transporter_id")},
+        "items": items if todo else revisar,
+    }
+
+@api_router.post("/transporter-ids/confirmar-par")
+async def transporter_id_confirmar_par(data: dict = Body(...), user: dict = Depends(require_admin)):
+    """«Esta pareja esta bien»: el nombre de Amazon no se parece al de la ficha
+    pero es la misma persona (un apodo, un apellido de casada). Deja de salir.
+
+    Se comprueba que la ficha tenga de verdad ese ID: confirmar una pareja que no
+    existe dejaria pasar despues la equivocacion buena.
+    """
+    tid = _texto_cuerpo(data.get("transporter_id")).upper()
+    fid = _texto_cuerpo(data.get("ficha_id"))
+    if not _DIA_TID.match(tid) or not fid:
+        raise HTTPException(400, "Faltan el Transporter ID o la ficha")
+    f = await db.drivers.find_one(
+        {"id": fid, "$or": [{"transporter_id": tid}, {"driver_id": tid}]},
+        {"_id": 0, "id": 1, "name": 1, "center": 1})
+    if not f:
+        raise HTTPException(404, "Esa ficha no tiene ese ID")
+    if not _user_can_see_center(user, f.get("center") or ""):
+        raise HTTPException(403, "Esa ficha es de otro centro")
+    await db.app_meta.update_one(
+        {"_id": "transporter_ids_confirmados"},
+        {"$set": {"mapa.%s" % tid: fid, "por": user.get("name") or user.get("sub") or "oficina",
+                  "en": datetime.now(timezone.utc).isoformat()}}, upsert=True)
+    return {"ok": True, "transporter_id": tid, "ficha": f.get("name")}
 
 
 # =========================

@@ -25,6 +25,7 @@ const MODULES = [
     ['asignacion', 'Asignación diaria'], ['turnos', 'Días libres'],
     ['aprobar-dias', 'Aprobar días libres'],
     ['checklist-operativo', 'Checklist turno'], ['plantilla', 'Plantilla del día'],
+    ['diarios', 'DNR diaria'],
     ['chat', 'Chat interno'],
   ]},
   { g: 'Flota', items: [

@@ -6,7 +6,7 @@ import {
   Settings, Shield, LogOut, Zap, Inbox, ChevronRight, ChevronDown, AlertTriangle, BookUser,
   Search, Sun, Moon, Contrast, MapPin, Mail, UserCircle2, Languages, ShieldAlert, Menu,
   CircleHelp, Briefcase, Store, UserCheck, ImagePlus, Loader2, Bell, BellOff, MessageCircle,
-  MessagesSquare, Euro, FileSpreadsheet,
+  MessagesSquare, Euro, FileSpreadsheet, PackageX,
 } from 'lucide-react'
 import { getAdmin, isAuthed, isSuperAdmin, isCenterManager, logout, canSee, decodeToken, getVisibleCenters, SIEMPRE_VISIBLES, guardarAccesoFresco, esPlataforma, actualizarMiFoto } from './auth'
 import { getMe, contarPeticionesPendientes, contarCandidatosNuevos, contarConversacionesSinLeer, subirFotoAdmin } from './api'
@@ -84,6 +84,7 @@ const NAV_DEF = [
   { g: 'nav.g.reparto', gIcon: Zap, iconCls: 'text-sky-400', iconBg: 'bg-sky-500/10', items: [
     { to: '/panel/asignacion', labelKey: 'nav.assign', icon: ClipboardCheck },
     { to: '/panel/plantilla', labelKey: 'nav.template', icon: FileSpreadsheet },
+    { to: '/panel/diarios', labelKey: 'nav.dnr', icon: PackageX },
     { to: '/panel/turnos', labelKey: 'nav.shifts', icon: CalendarCheck },
     { to: '/panel/checklist-operativo', labelKey: 'nav.checklist', icon: CheckCircle2 },
   ]},

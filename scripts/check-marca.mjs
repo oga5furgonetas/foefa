@@ -29,6 +29,18 @@ const PERMITIDO = [
   // cambiarlo obligaria a migrar datos sin ganar nada.
   ['panel/pages/Negocio.jsx', "account_type: 'dsp'", 'valor interno del tipo de cuenta'],
   ['panel/pages/Negocio.jsx', '${x.dsp}', 'campo del backend con el nombre de la empresa'],
+  // La DNR diaria es el modulo para quien reparte PARA Amazon (lo pidio Dani el
+  // 26-09-2026 para su flota). No va en el estandar: una empresa que no reparte
+  // para Amazon no lo ve salvo que se le active. Nombrar Amazon es su tema.
+  ['panel/pages/Diarios.jsx', '*', 'modulo de DNR de Amazon, solo para quien lo tiene activado'],
+  ['panel/components/AvisoIdAmazon.jsx', '*', 'parte de la DNR diaria'],
+  ['panel/pages/Usuarios.jsx', "['diarios', 'dnr diaria']", 'casilla de permiso de la DNR diaria'],
+  ['panel/ayudaFichas.js', '(dnr), por conductor', 'ficha de ayuda de la DNR diaria'],
+  ['panel/ayudaFichas.js', 'descarga el daily report (.html)', 'ficha de ayuda de la DNR diaria'],
+  ['panel/ayudaFichas.js', 'cada dnr se cuelga', 'ficha de ayuda de la DNR diaria'],
+  ['panel/ayudaFichas.js', 'amazon rellena la columna dsc', 'ficha de ayuda de la DNR diaria'],
+  ['panel/PanelLayout.jsx', "'nav.dnr'", 'entrada de menu de la DNR diaria'],
+  ['i18n.jsx', "'nav.dnr'", 'nombre del menu de la DNR diaria'],
 ]
 
 function ficheros(dir, out = []) {
@@ -55,7 +67,7 @@ for (const f of ficheros(SRC)) {
   lineas.forEach((l, i) => {
     const m = l.match(PATRON)
     if (!m) return
-    if (PERMITIDO.some(([fi, trozo]) => rel === fi && l.toLowerCase().includes(trozo))) return
+    if (PERMITIDO.some(([fi, trozo]) => rel === fi && (trozo === '*' || l.toLowerCase().includes(trozo)))) return
     hallados.push(`${rel}:${i + 1}  ${l.trim().slice(0, 150)}`)
   })
 }
