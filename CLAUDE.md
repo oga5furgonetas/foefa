@@ -17,7 +17,9 @@ otra infraestructura.
 **Nunca se despliega sobre FlotaDSP.** Los scripts de despliegue leen el
 destino de `despliegue.local.json` (fuera de git; ejemplo en
 `despliegue.ejemplo.json`) o de variables `FLOTA_*`, y `scripts/destino.ps1`
-se niega si el destino contiene «flotadsp». `backend/fly.toml` apunta a
+se niega si el destino es infraestructura de FlotaDSP (el proyecto de Pages
+`flotadsp-v2` o una app de Fly `flotadsp-*`). El DOMINIO flotadsp.com sí es de
+Flota desde el 26-09-2026 (lo pidió Dani). `backend/fly.toml` apunta a
 `flota-backend`; `deploy-backend.ps1` para si alguien lo cambia a una app de
 FlotaDSP. No hay ningún secreto escrito en el código: todo va por entorno.
 

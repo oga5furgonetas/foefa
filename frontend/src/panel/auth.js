@@ -166,7 +166,7 @@ export function getVisibleCenters() {
    La pantalla de Usuarios también saca de aquí las etiquetas "·siempre", así que
    lo que se le promete al que reparte permisos es exactamente lo que ocurre. */
 export const SIEMPRE_VISIBLES = new Set([
-  'asignacion', 'checklist-operativo', 'chat', 'aparcamiento',
+  'asignacion', 'checklist-operativo', 'chat', 'plantilla', 'aparcamiento',
 ])
 
 // ¿Puede ver este módulo? Super-admin ve todo. Sin permisos definidos = ve todo

@@ -1132,6 +1132,7 @@ MODULOS_PANEL = [
     {"clave": "asignacion", "nombre": "Asignacion", "grupo": "Operacion diaria", "que": "Que furgoneta lleva cada conductor"},
     {"clave": "turnos", "nombre": "Turnos", "grupo": "Operacion diaria", "que": "Cuadrante y peticiones de dias"},
     {"clave": "checklist-operativo", "nombre": "Checklist", "grupo": "Operacion diaria", "que": "Tareas de apertura y cierre"},
+    {"clave": "plantilla", "nombre": "Plantilla diaria", "grupo": "Operacion diaria", "que": "Hoja de salida compartida"},
     {"clave": "vehiculos", "nombre": "Vehiculos", "grupo": "Flota", "que": "Fichas de las furgonetas"},
     {"clave": "revision", "nombre": "Revision rapida", "grupo": "Flota", "que": "Validar los daños que ve la IA"},
     {"clave": "inspecciones", "nombre": "Inspecciones", "grupo": "Flota", "que": "Fotos de cada dia"},
@@ -1541,6 +1542,10 @@ async def _ensure_tenant_indexes(db_name: str):
     await _idx(tdb.workshops, "center")
     await _idx(tdb.workshops, "convenios")
     await _idx(tdb.workshops, "categories")
+    await _idx(tdb.plantillas_diarias, "id")
+    await _idx(tdb.plantillas_diarias, [("center", 1), ("uploaded_at", -1)])
+    await _idx(tdb.plantillas_compartidas, "id", unique=True)
+    await _idx(tdb.plantillas_compartidas, [("center", 1), ("updated_at", -1)])
     # Citas de taller del calendario de flota. El único PARCIAL es la regla de
     # negocio en sí: una furgoneta no puede tener dos citas ABIERTAS del mismo
     # tipo. Sin él, dos clics a la vez dejarían dos citas y el calendario
@@ -32029,6 +32034,1052 @@ def _is_transient_gemini(err_str: str) -> bool:
     e = err_str.lower()
     return any(k in e for k in ("503", "500", "unavailable", "overloaded",
                                 "high demand", "deadline", "timeout", "internal"))
+
+
+# =========================
+# PLANTILLA DIARIA — la hoja de salida del día (ruta, conductor, móvil,
+# vehículo y horas) que la oficina monta cada mañana y comparte con el equipo.
+#
+# Se monta de tres maneras, todas sin teclear fila a fila:
+#   · pegando (o subiendo una captura de) la lista de quién lleva qué vehículo,
+#     y si se quiere la de rutas con su hora: la IA las cruza por nombre;
+#   · desde la Asignación del día que ya esté hecha en la app;
+#   · a mano, fila a fila.
+# Si la IA no responde, el texto pegado se lee igual por columnas: pegar tiene
+# que funcionar siempre, que es lo que se usa a las siete de la mañana.
+#
+# Viene de FlotaDSP, donde se usaba a diario con dos personas editando la
+# misma hoja a la vez; de ahí el guardado celda a celda (ver
+# `plantilla_compartida_celda`). Se le quitó la lectura de Cortex (Amazon).
+# =========================
+
+_PROMPT_VEHICULOS = """
+Eres un extractor de datos. Recibes una captura de pantalla o un texto copiado
+de una lista en la que cada fila es un conductor y el vehículo que lleva hoy.
+
+Los nombres pueden venir como "Apellido(s), Nombre" (con coma) o como
+"Nombre Apellido(s)". Devuélvelos SIEMPRE como "NOMBRE APELLIDO(S)" en
+MAYÚSCULAS: si hay coma, invierte el orden.
+Ejemplo: "Rodriguez Arias, Andrea" -> "ANDREA RODRIGUEZ ARIAS"
+
+La matrícula es el código del vehículo (p. ej. 7906NFX, 7906 NFX, 0116 MBP).
+No la confundas con códigos de contrato, turno o empresa (ETT11, T2, TURNO A...).
+Si en la fila aparece el número o código del móvil que lleva el conductor,
+ponlo en "movil"; si no, déjalo vacío.
+
+Devuelve ÚNICAMENTE un JSON válido, sin texto adicional, sin markdown:
+{
+  "asignaciones": [
+    {"conductor": "<NOMBRE APELLIDO(S)>", "furgo": "<matrícula sin espacios>", "movil": "<o vacío>"}
+  ]
+}
+
+REGLAS:
+1. Extrae ÚNICAMENTE lo que puedas leer con claridad.
+2. Invierte siempre "Apellido, Nombre" -> "NOMBRE APELLIDO".
+3. No dupliques conductores. Extrae TODOS los visibles.
+"""
+
+_PROMPT_RUTAS = """
+Eres un extractor de datos. Recibes una captura de pantalla o un texto copiado
+con las rutas, zonas o servicios del día: cada fila tiene un código de ruta,
+el conductor que la hace y su hora de salida.
+
+Devuelve ÚNICAMENTE un JSON válido, sin texto adicional, sin markdown:
+{
+  "fecha": "<DD/MM/YYYY si aparece en la imagen o el texto, o null>",
+  "rutas": [
+    {"ruta": "<código tal como aparece>", "conductor": "<NOMBRE APELLIDO(S) en MAYÚSCULAS>",
+     "h_salida": "<HH:MM o null>"}
+  ]
+}
+
+REGLAS:
+1. Extrae ÚNICAMENTE lo que puedas leer con claridad. null si no está claro.
+2. Si una ruta tiene VARIOS conductores, coge SOLO EL PRIMERO.
+3. Si un nombre viene como "Apellido, Nombre", inviértelo: "NOMBRE APELLIDO".
+4. No dupliques rutas. Ordena por código de ruta.
+5. HORA DE SALIDA: cada ruta tiene SU PROPIA hora, en su misma fila. Léela
+   fila por fila y NO copies la misma hora a todas. Si una ruta no muestra su
+   hora con claridad, pon null en ESA ruta (mejor vacío que inventado).
+"""
+
+
+def _mime_type(data: bytes) -> str:
+    if data[:4] == b"\x89PNG":
+        return "image/png"
+    if data[:4] == b"RIFF" and data[8:12] == b"WEBP":
+        return "image/webp"
+    return "image/jpeg"
+
+
+def _hora_hhmm(hora) -> str:
+    """Una hora escrita de cualquier forma razonable, como HH:MM; si no es hora, vacío."""
+    if not hora:
+        return ""
+    from datetime import datetime as _dt
+    txt = str(hora).strip().lower().replace("h", ":").rstrip(":")
+    for fmt in ("%H:%M", "%H.%M", "%I:%M %p", "%I:%M%p", "%H"):
+        try:
+            return _dt.strptime(txt, fmt).strftime("%H:%M")
+        except ValueError:
+            continue
+    return ""
+
+
+def _redondear_hora(hora, minutos: int = 0) -> str:
+    """La hora bajada al tramo de `minutos` (0 = tal cual).
+
+    Para las empresas que salen por tandas fijas (a en punto, y 20 y menos 20):
+    la lista de rutas suele enseñar la hora unos minutos DESPUÉS de la tanda, y
+    bajar al tramo corrige cualquier desfase entre 0 y `minutos`. En FlotaDSP,
+    con tandas de 20, 8 de 18 filas de una plantilla real salían con horas que
+    no existían (11:50) y se corregían a mano. `test_plantilla_hora.py`.
+    """
+    h = _hora_hhmm(hora)
+    if not h or not minutos or minutos <= 0 or minutos > 60:
+        return h
+    hh, mm = int(h[:2]), int(h[3:])
+    return "%02d:%02d" % (hh, (mm // minutos) * minutos)
+
+
+def _calc_horas(h_salida) -> tuple:
+    """(llegada, carga) a partir de la salida: 30 y 10 minutos antes."""
+    h = _hora_hhmm(h_salida)
+    if not h:
+        return "", ""
+    from datetime import datetime as _dt, timedelta as _td
+    t = _dt.strptime(h, "%H:%M")
+    return (t - _td(minutes=30)).strftime("%H:%M"), (t - _td(minutes=10)).strftime("%H:%M")
+
+
+def _build_plantilla_excel(rows: list, red_routes: set, pink_furgos: set, week_num, fecha_str: str,
+                           yellow_routes: set = None, marked_conductors: set = None,
+                           hide_nave_yard: bool = False) -> bytes:
+    import openpyxl
+    from openpyxl.styles import PatternFill, Font, Alignment, Border, Side
+    from openpyxl.utils import get_column_letter
+    import io
+
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    ws.title = "Plantilla del día"
+
+    C_TITLE_BG = "F2F2F2"
+    C_HEADER_BG = "FFD966"
+    C_WHITE = "FFFFFF"
+    C_RED_BG, C_RED_FG = "FF0000", "FFFFFF"
+    C_PINK = "F4CCCC"
+    C_BORDER = "BFBFBF"
+    C_YELLOW = "FFF2CC"
+    C_MARK, C_MARK_FG = "FCE4D6", "7B3F00"
+    # Un pastel por hora de salida distinta, para ver las tandas de un vistazo.
+    WAVE_PALETTE = ["BDD7EE", "C6EFCE", "FFEB9C", "FCE4D6", "E2EFDA", "EAD1DC"]
+
+    def fill(hex_color):
+        return PatternFill("solid", fgColor=hex_color)
+
+    def brd():
+        s = Side(style="thin", color=C_BORDER)
+        return Border(left=s, right=s, top=s, bottom=s)
+
+    ca = Alignment(horizontal="center", vertical="center")
+    la = Alignment(horizontal="left", vertical="center")
+
+    col_defs = [("RUTA", 13), ("CONDUCTOR", 34), ("MÓVIL", 9), ("VEHÍCULO", 12)]
+    if not hide_nave_yard:
+        col_defs += [("H. LLEGADA", 12), ("H. CARGA", 12)]
+    col_defs += [("H. SALIDA", 11), ("OBSERVACIONES", 32)]
+    ncols = len(col_defs)
+
+    left_end = 4 if not hide_nave_yard else 3
+    ws.merge_cells(start_row=1, start_column=1, end_row=1, end_column=left_end)
+    ws.merge_cells(start_row=1, start_column=left_end + 1, end_row=1, end_column=ncols)
+    for cell, val, align in [
+        (ws.cell(row=1, column=1), f"SEMANA {week_num}", la),
+        (ws.cell(row=1, column=left_end + 1), fecha_str, ca),
+    ]:
+        cell.value = val
+        cell.fill = fill(C_TITLE_BG)
+        cell.font = Font(bold=True, color="000000", size=11)
+        cell.alignment = align
+        cell.border = brd()
+    ws.row_dimensions[1].height = 22
+    for i, (h, w) in enumerate(col_defs, start=1):
+        cell = ws.cell(row=2, column=i, value=h)
+        cell.fill = fill(C_HEADER_BG)
+        cell.font = Font(bold=True, color="000000", size=9)
+        cell.alignment = ca
+        cell.border = brd()
+        ws.column_dimensions[get_column_letter(i)].width = w
+    ws.row_dimensions[2].height = 21
+
+    _yellow_routes = {r.upper() for r in (yellow_routes or [])}
+    _marked_conductors = {c.upper() for c in (marked_conductors or [])}
+    _pink = {f.upper() for f in pink_furgos}
+    _wave_times = sorted({(row.get("h_salida") or "").strip() for row in rows if (row.get("h_salida") or "").strip()})
+    _wave_color = {wt: WAVE_PALETTE[i % len(WAVE_PALETTE)] for i, wt in enumerate(_wave_times)}
+
+    for idx, row in enumerate(rows):
+        r = idx + 3
+        ruta = str(row.get("ruta") or "")
+        conductor = str(row.get("conductor") or "")
+        movil = str(row.get("movil") or "")
+        furgo = str(row.get("furgo") or "")
+        h_llegada = str(row.get("h_llegada") or "")
+        h_bajada = str(row.get("h_bajada") or "")
+        h_wave = str(row.get("h_salida") or row.get("h_wave") or "")
+        obs = str(row.get("observaciones") or "")
+
+        row_key = ruta.upper() if ruta.strip() else conductor.upper()
+        is_red = row_key in red_routes
+        is_yellow = row_key in _yellow_routes
+        if is_red:
+            row_bg, row_fg = C_RED_BG, C_RED_FG
+        elif is_yellow:
+            row_bg, row_fg = C_YELLOW, "000000"
+        else:
+            row_bg, row_fg = C_WHITE, "000000"
+
+        is_pink_furgo = furgo.upper() in _pink
+        is_marked_cond = conductor.upper() in _marked_conductors
+        wave_time_color = _wave_color.get(h_wave.strip()) if h_wave else None
+
+        if hide_nave_yard:
+            cells_vals = [ruta, conductor, movil, furgo, h_wave, obs]
+            wave_cols = (5,)
+        else:
+            cells_vals = [ruta, conductor, movil, furgo, h_llegada, h_bajada, h_wave, obs]
+            wave_cols = (5, 6, 7)
+        obs_col = len(cells_vals)
+        for ci, val in enumerate(cells_vals, start=1):
+            cell = ws.cell(row=r, column=ci, value=val)
+            if ci == 4 and is_pink_furgo and not is_red:
+                cell.fill = fill(C_PINK)
+                cell.font = Font(color="000000", size=9)
+            elif ci == 2 and is_marked_cond and not is_red:
+                cell.fill = fill(C_MARK)
+                cell.font = Font(color=C_MARK_FG, size=9, bold=True)
+            elif ci in wave_cols and wave_time_color and not is_red and not is_yellow:
+                cell.fill = fill(wave_time_color)
+                cell.font = Font(color="000000", size=9)
+            else:
+                cell.fill = fill(row_bg)
+                cell.font = Font(color=row_fg, size=9, bold=(ci == 1))
+            cell.alignment = ca if ci not in (2, obs_col) else la
+            cell.border = brd()
+        ws.row_dimensions[r].height = 16
+
+    ws.freeze_panes = "A3"
+    buf = io.BytesIO()
+    wb.save(buf)
+    return buf.getvalue()
+
+
+def _normalize_name(name: str) -> str:
+    """Mayúsculas, sin tildes, sin puntuación ni puntos suspensivos."""
+    import unicodedata
+    s = unicodedata.normalize("NFD", (name or "").upper())
+    s = "".join(c for c in s if unicodedata.category(c) != "Mn")
+    return re.sub(r"[^A-Z0-9 ]", " ", s)
+
+
+def _name_tokens(name: str) -> list:
+    """Palabras de 3 letras o más, las largas primero."""
+    return sorted([w for w in _normalize_name(name).split() if len(w) >= 3], key=len, reverse=True)
+
+
+def _match_score(name_a: str, name_b: str) -> float:
+    """Parecido entre dos nombres: palabra igual = 1, prefijo de 4+ letras = 0,8.
+    Aguanta nombres cortados con '...' porque `_normalize_name` quita los puntos."""
+    tokens_a = _name_tokens(name_a)
+    tokens_b = _name_tokens(name_b)
+    score = 0.0
+    used_b = set()
+    for ta in tokens_a:
+        for i, tb in enumerate(tokens_b):
+            if i in used_b:
+                continue
+            if ta == tb:
+                score += 1.0
+                used_b.add(i)
+                break
+            short, long_ = (ta, tb) if len(ta) <= len(tb) else (tb, ta)
+            if len(short) >= 4 and long_.startswith(short):
+                score += 0.8
+                used_b.add(i)
+                break
+    return score
+
+
+async def _gemini_json_call(client, model_name: str, contents: list) -> dict:
+    """Llamada a Gemini que devuelve JSON, resistente a cuota y saturación:
+    con la cuota DIARIA de un modelo agotada lo veta y pasa al siguiente, y con
+    saturación (503/500) pasa al siguiente al instante."""
+    from google.genai import types as genai_types
+    try:
+        cfg = genai_types.GenerateContentConfig(
+            temperature=0.0,
+            thinking_config=genai_types.ThinkingConfig(thinking_budget=0))
+    except Exception:
+        cfg = genai_types.GenerateContentConfig(temperature=0.0)
+    chain = [model_name, "gemini-2.5-flash-lite", "gemini-flash-latest", "gemini-flash-lite-latest"]
+    seen, models = set(), []
+    for m in chain:
+        if m and m not in seen:
+            seen.add(m)
+            models.append(m)
+    last_err = None
+    for attempt in range(2):
+        for m in models:
+            if _is_daily_exhausted(m):
+                continue
+            try:
+                resp = await asyncio.wait_for(
+                    asyncio.to_thread(lambda mm=m: client.models.generate_content(
+                        model=mm, contents=contents, config=cfg)),
+                    timeout=45)
+                return json.loads(_strip_markdown_json((resp.text or "").strip()))
+            except json.JSONDecodeError:
+                raise
+            except Exception as e:
+                last_err = e
+                es = str(e)
+                if "429" in es and _is_perday_429(es):
+                    _mark_daily_exhausted(m)
+                continue
+        if attempt == 0:
+            await asyncio.sleep(2)
+    raise last_err or RuntimeError("Gemini no disponible ahora mismo (saturación/cuota)")
+
+
+async def _gemini_extract(client, model_name: str, prompt: str, img_bytes: bytes) -> dict:
+    from google.genai import types as genai_types
+    part = genai_types.Part.from_bytes(data=img_bytes, mime_type=_mime_type(img_bytes))
+    return await _gemini_json_call(client, model_name, [prompt, part])
+
+
+async def _gemini_extract_text(client, model_name: str, prompt: str, text: str) -> dict:
+    """Igual que `_gemini_extract` pero desde TEXTO pegado en vez de captura."""
+    full = (prompt + "\n\n=== EN VEZ DE UNA IMAGEN, ANALIZA ESTE TEXTO PEGADO "
+            "(mismas reglas y mismo JSON de salida) ===\n" + (text or "").strip()[:20000])
+    return await _gemini_json_call(client, model_name, [full])
+
+
+_PLACA_RE = re.compile(r"\b(\d{4})\s*-?\s*([A-Z]{3})\b", re.I)
+_HORA_EN_TEXTO_RE = re.compile(r"\b([01]?\d|2[0-3])[:.h]([0-5]\d)\b", re.I)
+_RUTA_EN_TEXTO_RE = re.compile(r"^(?=.*\d)[A-Z0-9][A-Z0-9_\-/]{1,15}$")
+
+
+def _nombre_de_texto(nombre: str) -> str:
+    """'Apellido, Nombre' -> 'NOMBRE APELLIDO'; el resto, en mayúsculas."""
+    n = " ".join((nombre or "").replace(" ", " ").split())
+    if "," in n:
+        ape, _, nom = n.partition(",")
+        n = "%s %s" % (nom.strip(), ape.strip())
+    return n.strip().upper()
+
+
+def _plantilla_texto_sin_ia(texto: str) -> list:
+    """Lee el texto pegado por columnas, SIN IA: el respaldo para cuando la IA
+    no contesta (cuota, saturación). Una fila por línea que traiga un nombre.
+
+    No adivina posiciones: en cada línea saca lo que PARECE matrícula y lo que
+    parece hora, y de lo que queda, el código de ruta (lleva números) y el
+    trozo con más letras como nombre. Vale con columnas separadas por
+    tabuladores, por varios espacios o por un solo espacio.
+    Devuelve [{"ruta", "conductor", "furgo", "h_salida"}]. `test_plantilla_texto.py`.
+    """
+    filas = []
+    vistos = set()
+    for linea in (texto or "").splitlines():
+        resto = linea.replace(" ", " ").strip()
+        if not resto:
+            continue
+        furgo, hora = "", ""
+        m = _PLACA_RE.search(resto)
+        if m:
+            furgo = (m.group(1) + m.group(2)).upper()
+            resto = resto[:m.start()] + "  " + resto[m.end():]
+        mh = _HORA_EN_TEXTO_RE.search(resto)
+        if mh:
+            hora = "%02d:%s" % (int(mh.group(1)), mh.group(2))
+            resto = resto[:mh.start()] + "  " + resto[mh.end():]
+        ruta, nombre, mejor = "", "", 0
+        for c in (x.strip() for x in re.split(r"\t|\s{2,}|;|\|", resto)):
+            partes = c.split()
+            # El código de ruta pegado al nombre con un solo espacio: «R12 ANA RUIZ».
+            if not ruta and partes and _RUTA_EN_TEXTO_RE.match(partes[0].upper()) and not partes[0].isdigit():
+                ruta = partes[0].upper()
+                c = " ".join(partes[1:])
+            letras = len(re.sub(r"[^A-Za-zÁÉÍÓÚÜÑáéíóúüñ]", "", c))
+            if letras >= 5 and letras > mejor and not re.search(r"\d", c):
+                nombre, mejor = c, letras
+        nombre = _nombre_de_texto(nombre)
+        if not nombre or nombre in vistos or "SIN ASIGN" in nombre:
+            continue
+        vistos.add(nombre)
+        filas.append({"ruta": ruta, "conductor": nombre, "furgo": furgo, "h_salida": hora})
+    return filas
+
+
+def _semana_y_fecha(dia_iso: str = "") -> tuple:
+    """(semana ISO, 'dd/mm/aaaa') de un día 'aaaa-mm-dd'; sin día, hoy en España."""
+    from datetime import date as _date
+    try:
+        d = _date.fromisoformat((dia_iso or _hoy_madrid())[:10])
+    except ValueError:
+        d = _date.fromisoformat(_hoy_madrid())
+    return d.isocalendar()[1], d.strftime("%d/%m/%Y")
+
+
+@api_router.post("/tools/plantilla-extraer")
+async def plantilla_extraer(request: Request, admin: dict = Depends(require_admin)):
+    """Lee las dos listas (capturas y/o texto pegado) y devuelve las filas.
+
+    `vehiculos`/`vehiculos_texto`: quién lleva qué vehículo (obligatorio).
+    `rutas`/`rutas_texto`: ruta, conductor y hora de salida (opcional). Si
+    hay rutas, se cruzan con los vehículos por nombre; si no, sale una fila
+    por conductor con la ruta y las horas por rellenar.
+    `redondeo`: minutos del tramo de salida (0 = la hora tal cual).
+    """
+    await _require_plan_feature(admin, "assignments")
+    # Lectura en crudo del multipart: imágenes y/o texto en cualquier mezcla.
+    form = await request.form()
+
+    async def _read_files(*campos):
+        out = []
+        for campo in campos:
+            for f in form.getlist(campo)[:10]:
+                if hasattr(f, "read"):
+                    b = await f.read()
+                    if b:
+                        if len(b) > 12 * 1024 * 1024:
+                            raise HTTPException(413, "Una de las capturas pesa demasiado (máx. 12 MB).")
+                        out.append(b)
+        return out
+
+    # `plataforma`/`cortex` son los nombres de FlotaDSP: una pestaña abierta
+    # desde antes del cambio sigue mandándolos.
+    veh_imgs = await _read_files("vehiculos", "plataforma")
+    rut_imgs = await _read_files("rutas", "cortex")
+    veh_txt = str(form.get("vehiculos_texto") or form.get("plataforma_texto") or "").strip()[:20000]
+    rut_txt = str(form.get("rutas_texto") or form.get("cortex_texto") or "").strip()[:20000]
+    try:
+        redondeo = max(0, min(60, int(str(form.get("redondeo") or "0"))))
+    except ValueError:
+        redondeo = 0
+
+    if not veh_imgs and not veh_txt:
+        raise HTTPException(400, "Falta la lista de vehículos: sube una captura o pega el texto.")
+
+    # Orden fijo: rutas (capturas y luego texto) y vehículos (capturas y luego
+    # texto). Así el texto de cada lista es siempre el ÚLTIMO de su grupo.
+    n_rutas = len(rut_imgs) + (1 if rut_txt else 0)
+    n_total = n_rutas + len(veh_imgs) + (1 if veh_txt else 0)
+    try:
+        client = _gemini_client_plantilla()
+        model_name = os.environ.get("GEMINI_MODEL", "gemini-2.5-flash")
+        tareas = [_gemini_extract(client, model_name, _PROMPT_RUTAS, b) for b in rut_imgs]
+        if rut_txt:
+            tareas.append(_gemini_extract_text(client, model_name, _PROMPT_RUTAS, rut_txt))
+        tareas += [_gemini_extract(client, model_name, _PROMPT_VEHICULOS, b) for b in veh_imgs]
+        if veh_txt:
+            tareas.append(_gemini_extract_text(client, model_name, _PROMPT_VEHICULOS, veh_txt))
+        # return_exceptions: que un fallo en UNA fuente no tumbe todo el proceso.
+        todos = await asyncio.gather(*tareas, return_exceptions=True)
+    except Exception as e:                                        # noqa: BLE001
+        # Sin IA configurada (o su cliente no arranca): el texto se lee igual.
+        logger.warning(f"plantilla_extraer: IA no disponible: {e}")
+        todos = [e] * n_total
+    limpios = []
+    for r in todos:
+        if isinstance(r, BaseException):
+            logger.warning(f"plantilla_extraer: una fuente falló: {r}")
+            limpios.append(None)
+        else:
+            limpios.append(r if isinstance(r, dict) else {})
+    rut_results = limpios[:n_rutas]
+    veh_results = limpios[n_rutas:]
+
+    # El TEXTO que la IA no pudo leer (o del que no sacó nada) se lee por columnas.
+    sin_ia = False
+    if rut_txt and not (rut_results[-1] or {}).get("rutas"):
+        rut_results[-1] = {"rutas": _plantilla_texto_sin_ia(rut_txt)}
+        sin_ia = True
+    if veh_txt and not (veh_results[-1] or {}).get("asignaciones"):
+        veh_results[-1] = {"asignaciones": _plantilla_texto_sin_ia(veh_txt)}
+        sin_ia = True
+    if all(r is None for r in veh_results):
+        raise HTTPException(503, "La IA no está disponible ahora mismo y las capturas no se pueden "
+                                 "leer sin ella. Pega el texto de la lista o prueba en un minuto.")
+
+    week_num, fecha_str = _semana_y_fecha()
+    rutas_map: dict = {}
+    for cd in rut_results:
+        if not cd:
+            continue
+        f = str(cd.get("fecha") or cd.get("date") or "").strip()
+        if re.match(r"^\d{2}/\d{2}/\d{4}$", f):
+            fecha_str = f
+            week_num, _ = _semana_y_fecha("%s-%s-%s" % (f[6:], f[3:5], f[:2]))
+        for r in cd.get("rutas") or []:
+            if not isinstance(r, dict):
+                continue
+            key = str(r.get("ruta") or "").strip().upper()
+            if key and key not in rutas_map:
+                rutas_map[key] = r
+
+    asignaciones: list = []
+    vistos: set = set()
+    for pd in veh_results:
+        for a in (pd or {}).get("asignaciones") or []:
+            if not isinstance(a, dict):
+                continue
+            nombre = _normalize_name(str(a.get("conductor") or "")).strip()
+            if nombre and nombre not in vistos:
+                vistos.add(nombre)
+                asignaciones.append(a)
+
+    def _fila(ruta, conductor, movil, furgo, h_salida):
+        h_llegada, h_bajada = _calc_horas(h_salida)
+        return {"ruta": ruta, "conductor": conductor, "movil": movil,
+                "furgo": str(furgo or "").replace(" ", "").upper(),
+                "h_salida": h_salida, "h_bajada": h_bajada, "h_llegada": h_llegada,
+                "observaciones": ""}
+
+    rows_out = []
+    if rutas_map:
+        # Rutas + vehículos: se cruzan por el nombre del conductor.
+        usados = set()
+        for ruta_key in sorted(rutas_map):
+            rr = rutas_map[ruta_key]
+            conductor = str(rr.get("conductor") or "").strip()
+            h_salida = _redondear_hora(rr.get("h_salida"), redondeo)
+            furgo, movil = "", ""
+            best_score, best_i = 0.0, None
+            for i, asig in enumerate(asignaciones):
+                sc = _match_score(conductor, str(asig.get("conductor") or ""))
+                if sc > best_score:
+                    best_score, best_i = sc, i
+            if best_i is not None and best_score >= 0.8:
+                best = asignaciones[best_i]
+                usados.add(best_i)
+                furgo = best.get("furgo") or ""
+                movil = str(best.get("movil") or "")
+                # El nombre COMPLETO suele venir de la lista de vehículos (la de
+                # rutas lo corta): se queda el más largo.
+                nombre_v = str(best.get("conductor") or "").strip()
+                if nombre_v and len(nombre_v) >= len(conductor.replace(".", "").strip()):
+                    conductor = nombre_v
+            rows_out.append(_fila(ruta_key, conductor, movil, furgo, h_salida))
+        # Quien tiene vehículo y no sale en ninguna ruta también va en la hoja:
+        # perderlo en silencio es peor que una fila sin ruta.
+        for i, asig in enumerate(asignaciones):
+            if i not in usados:
+                rows_out.append(_fila("", str(asig.get("conductor") or ""), str(asig.get("movil") or ""),
+                                      asig.get("furgo"), ""))
+    else:
+        for asig in asignaciones:
+            rows_out.append(_fila(str(asig.get("ruta") or "").upper(), str(asig.get("conductor") or ""),
+                                  str(asig.get("movil") or ""), asig.get("furgo"),
+                                  _redondear_hora(asig.get("h_salida"), redondeo)))
+
+    return {"week": week_num, "date": fecha_str, "rows": rows_out, "sin_ia": sin_ia}
+
+
+@api_router.get("/tools/plantilla-desde-asignacion")
+async def plantilla_desde_asignacion(center: str, date: Optional[str] = None,
+                                     admin: dict = Depends(require_admin)):
+    """Las filas de la plantilla a partir de la Asignación del día (quién lleva
+    qué vehículo y en qué ruta), si ya está hecha en la app. Sin IA."""
+    await _require_plan_feature(admin, "assignments")
+    fc = _filtro_centro(admin, center)
+    dia = _texto_cuerpo(date, 10) or _hoy_madrid()
+    doc = await db.daily_assignments.find_one({"date": dia, **fc}, {"_id": 0, "slots": 1})
+    week_num, fecha_str = _semana_y_fecha(dia)
+    filas = []
+    for s in (doc or {}).get("slots") or []:
+        if not isinstance(s, dict) or not (s.get("driver_name") or "").strip():
+            continue
+        filas.append({"ruta": str(s.get("route") or ""), "conductor": str(s.get("driver_name") or "").upper(),
+                      "movil": "", "furgo": _matricula_norm(s.get("vehicle_plate")),
+                      "h_salida": "", "h_bajada": "", "h_llegada": "", "observaciones": ""})
+    filas.sort(key=lambda f: (f["ruta"] == "", f["ruta"], f["conductor"]))
+    return {"week": week_num, "date": fecha_str, "rows": filas, "hay_asignacion": bool(doc)}
+
+
+_HORA_RE = re.compile(r"^([01]?\d|2[0-3]):[0-5]\d$")
+
+
+def _plantilla_validar_filas(rows: list, conductores: list, matriculas: dict, asignados: dict) -> list:
+    """Que cada fila de la plantilla cuadre con lo que la empresa YA sabe.
+
+    La plantilla sale de leer capturas o texto con la IA, y de vez en cuando se
+    cuela una hora imposible, un nombre mal leído o una matrícula que no
+    existe. Eso se CAZA antes de que salga la hoja, comparando con:
+      · los conductores de la empresa (nombre normalizado y por palabras),
+      · los vehículos de la flota (matrícula normalizada),
+      · la Asignación del día, si está hecha: {conductor: matrícula}.
+    Devuelve avisos con sugerencia; no cambia nada solo. Pura, sin base de
+    datos: `test_plantilla_validar.py`.
+    """
+    avisos = []
+    vistos_c: dict = {}
+    vistos_f: dict = {}
+    nombres_norm = [(c.get("name") or "", _normalize_name(c.get("name") or "").strip())
+                    for c in conductores if c.get("name")]
+    for i, r in enumerate(rows or []):
+        if not isinstance(r, dict):
+            continue
+        conductor = str(r.get("conductor") or "").strip()
+        ruta = str(r.get("ruta") or "").strip()
+        furgo = _matricula_norm(r.get("furgo"))
+        h_salida = str(r.get("h_salida") or "").strip()
+
+        # 1. El nombre existe en la empresa (o se parece a uno).
+        if conductor:
+            n = _normalize_name(conductor).strip()
+            if not any(n == nn for _, nn in nombres_norm):
+                mejor, mejor_sc = None, 0.0
+                for original, _ in nombres_norm:
+                    sc = _match_score(conductor, original)
+                    if sc > mejor_sc:
+                        mejor, mejor_sc = original, sc
+                if mejor and mejor_sc >= 0.8:
+                    if _normalize_name(mejor).strip() != n:
+                        avisos.append({"fila": i, "campo": "conductor", "tipo": "nombre_parecido",
+                                       "texto": "En la empresa figura como %s" % mejor,
+                                       "sugerencia": mejor})
+                elif nombres_norm:
+                    avisos.append({"fila": i, "campo": "conductor", "tipo": "nombre_desconocido",
+                                   "texto": "No hay ningún conductor con ese nombre", "sugerencia": None})
+            if n in vistos_c:
+                avisos.append({"fila": i, "campo": "conductor", "tipo": "repetido",
+                               "texto": "Ya está en la fila %d" % (vistos_c[n] + 1), "sugerencia": None})
+            else:
+                vistos_c[n] = i
+            # 2. La Asignación del día dice otro vehículo para esta persona.
+            if asignados:
+                mejor_p, mejor_sc = None, 0.0
+                for nombre_a, placa in asignados.items():
+                    sc = _match_score(conductor, nombre_a)
+                    if sc > mejor_sc:
+                        mejor_p, mejor_sc = placa, sc
+                if mejor_p and mejor_sc >= 0.8 and _matricula_norm(mejor_p) != furgo:
+                    avisos.append({"fila": i, "campo": "furgo", "tipo": "asignacion",
+                                   "texto": "En la asignación del día lleva la %s" % mejor_p,
+                                   "sugerencia": _matricula_norm(mejor_p)})
+        # 3. La matrícula existe en la flota (o se parece a una).
+        if furgo:
+            if matriculas and furgo not in matriculas:
+                import difflib
+                cerca = difflib.get_close_matches(furgo, list(matriculas), n=1, cutoff=0.75)
+                avisos.append({"fila": i, "campo": "furgo", "tipo": "matricula_desconocida",
+                               "texto": "Esa matrícula no está en la flota",
+                               "sugerencia": matriculas[cerca[0]] if cerca else None})
+            if furgo in vistos_f:
+                avisos.append({"fila": i, "campo": "furgo", "tipo": "repetido",
+                               "texto": "Ya va en la fila %d" % (vistos_f[furgo] + 1), "sugerencia": None})
+            else:
+                vistos_f[furgo] = i
+        # 4. Horas: con forma de hora, y llegada y carga antes de la salida.
+        if h_salida:
+            if not _HORA_RE.match(h_salida):
+                avisos.append({"fila": i, "campo": "h_salida", "tipo": "hora_invalida",
+                               "texto": "La hora no tiene forma de hora (HH:MM)", "sugerencia": None})
+            else:
+                # Solo lo IMPOSIBLE: llegada y carga van antes de la salida, a
+                # menos de hora y media, y la llegada antes que la carga. Cada
+                # empresa usa sus márgenes (-30/-10, -40/-20...): avisar de eso
+                # en cada fila sería un aviso que grita en falso y deja de leerse.
+                llegada_std, bajada_std = _calc_horas(h_salida)
+
+                def _min(v):
+                    return int(v.split(":")[0]) * 60 + int(v.split(":")[1])
+                sm = _min(h_salida)
+                lleg = str(r.get("h_llegada") or "").strip()
+                baj = str(r.get("h_bajada") or "").strip()
+                for campo, val, esperado in (("h_llegada", lleg, llegada_std), ("h_bajada", baj, bajada_std)):
+                    if val and _HORA_RE.match(val):
+                        vm = _min(val)
+                        if vm >= sm or sm - vm > 90:
+                            avisos.append({"fila": i, "campo": campo, "tipo": "hora_incoherente",
+                                           "texto": "Tiene que ser antes de la salida (%s) y a menos de hora y media" % h_salida,
+                                           "sugerencia": esperado})
+                if lleg and baj and _HORA_RE.match(lleg) and _HORA_RE.match(baj) and _min(lleg) >= _min(baj):
+                    avisos.append({"fila": i, "campo": "h_llegada", "tipo": "hora_incoherente",
+                                   "texto": "La llegada va después de la carga",
+                                   "sugerencia": llegada_std})
+        elif ruta:
+            avisos.append({"fila": i, "campo": "h_salida", "tipo": "hora_falta",
+                           "texto": "La ruta no tiene hora de salida", "sugerencia": None})
+    return avisos
+
+
+@api_router.post("/tools/plantilla-validar")
+async def plantilla_validar(data: dict = Body(...), user: dict = Depends(require_admin)):
+    """Avisos de la plantilla contra la empresa y la Asignación del día, con sugerencia."""
+    rows = _lista_cuerpo(data.get("rows"), 400)
+    center = _texto_cuerpo(data.get("center"), 30)
+    fecha = _texto_cuerpo(data.get("date"), 12)
+    dia = fecha
+    m = re.match(r"^(\d{2})/(\d{2})/(\d{4})$", fecha)
+    if m:
+        dia = "%s-%s-%s" % (m.group(3), m.group(2), m.group(1))
+    fc = _filtro_centro(user, center) if center and center != "Todos" else {}
+    conductores = await db.drivers.find(
+        {"active": {"$ne": False}, **fc}, {"_id": 0, "name": 1}).to_list(3000)
+    matriculas = {}
+    async for v in db.vehicles.find({"status": {"$nin": ["deleted", "baja"]}, **fc},
+                                    {"_id": 0, "license_plate": 1}):
+        n = _matricula_norm(v.get("license_plate"))
+        if n:
+            matriculas[n] = v.get("license_plate")
+    asignados: dict = {}
+    if center and center != "Todos" and re.match(r"^\d{4}-\d{2}-\d{2}$", dia or ""):
+        doc = await db.daily_assignments.find_one({"date": dia, **fc}, {"_id": 0, "slots": 1})
+        for s in (doc or {}).get("slots") or []:
+            if isinstance(s, dict) and (s.get("driver_name") or "").strip() and s.get("vehicle_plate"):
+                asignados[str(s["driver_name"]).strip()] = str(s["vehicle_plate"])
+    avisos = _plantilla_validar_filas(rows, conductores, matriculas, asignados)
+    return {"avisos": avisos, "con_asignacion": bool(asignados), "dia": dia,
+            "resumen": {"filas": len(rows), "con_aviso": len({a["fila"] for a in avisos})}}
+
+
+@api_router.post("/tools/plantilla-excel")
+async def plantilla_excel(body: dict = Body(...), admin: dict = Depends(require_admin)):
+    """El Excel de la plantilla y, con `save` y un centro, su copia en el historial."""
+    await _require_plan_feature(admin, "assignments")
+    import io
+    # Todo esto llega de un cliente: un campo con el tipo cambiado no puede
+    # acabar en «Error interno». `str(x)` porque no todo trae `.upper()`.
+    rows = [f for f in (_dict_cuerpo(x) for x in _lista_cuerpo(body.get("rows"), 400)) if f]
+    red_routes = {str(r).upper() for r in _lista_cuerpo(body.get("red_routes"))}
+    pink_furgos = {str(f).upper() for f in _lista_cuerpo(body.get("pink_furgos"))}
+    yellow_routes = {str(r).upper() for r in _lista_cuerpo(body.get("yellow_routes"))}
+    marked_conductors = {str(c).upper() for c in _lista_cuerpo(body.get("marked_conductors"))}
+    semana_hoy, fecha_hoy = _semana_y_fecha()
+    week_num = _texto_cuerpo(body.get("week"), 10) or semana_hoy
+    fecha_str = _texto_cuerpo(body.get("date"), 12) or fecha_hoy
+    center = _texto_cuerpo(body.get("center"), 30)
+    if center and center != "Todos":
+        _filtro_centro(admin, center)          # 403 si no puede ver ese centro
+
+    hide_nave_yard = bool(body.get("hide_nave_yard"))
+    xlsx = _build_plantilla_excel(rows, red_routes, pink_furgos, week_num, fecha_str,
+                                  yellow_routes, marked_conductors, hide_nave_yard)
+    safe_fecha = re.sub(r"[^a-zA-Z0-9_\-]", "-", fecha_str)
+    safe_week = re.sub(r"[^a-zA-Z0-9_\-]", "-", str(week_num))
+    filename = f"plantilla_s{safe_week}_{safe_fecha}.xlsx"
+
+    if body.get("save") and center and center != "Todos":
+        try:
+            meta = {"id": str(uuid.uuid4()), "center": center, "date": fecha_str,
+                    "week": str(week_num), "filename": filename,
+                    "uploaded_at": datetime.now(timezone.utc).isoformat(),
+                    "by": admin.get("name") or admin.get("username") or ""}
+            r2 = get_r2()
+            if r2:
+                r2_key = f"plantillas/{center}/{meta['id']}_{filename}"
+                r2.put_object(Bucket=R2_BUCKET, Key=r2_key, Body=xlsx,
+                              ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+                meta["r2_key"] = r2_key
+            else:
+                # Sin almacenamiento de ficheros configurado, la hoja va en la
+                # base: pesa unos pocos KB y así el historial funciona siempre.
+                meta["xlsx"] = xlsx
+            await db.plantillas_diarias.insert_one(meta)
+        except Exception as _e:
+            logger.warning(f"plantilla_excel: no se pudo guardar historial: {_e}")
+
+    return StreamingResponse(
+        io.BytesIO(xlsx),
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": f"attachment; filename=\"{filename}\""},
+    )
+
+
+def _plantilla_shared_payload(doc: dict) -> dict:
+    """Respuesta pública, sin el ObjectId interno de Mongo."""
+    return {k: doc.get(k) for k in ("id", "center", "state", "revision", "updated_at", "updated_by")}
+
+
+@api_router.post("/tools/plantilla-compartida")
+async def crear_plantilla_compartida(body: dict = Body(...), admin: dict = Depends(require_admin)):
+    center = _texto_cuerpo(body.get("center"), 30)
+    if not center or center == "Todos":
+        raise HTTPException(400, "Selecciona un centro antes de compartir una plantilla.")
+    _filtro_centro(admin, center)
+    state = _dict_cuerpo(body.get("state"))
+    if not isinstance(state.get("rows"), list) or len(state["rows"]) > _PLANTILLA_MAX_FILAS:
+        raise HTTPException(400, "Borrador de plantilla inválido.")
+    state["rows"] = [{c: str((f or {}).get(c) or "")[:300] for c in _PLANTILLA_CELDAS}
+                     for f in state["rows"] if isinstance(f, dict)]
+    for k in _PLANTILLA_MARCAS:
+        state[k] = [str(x)[:120] for x in _lista_cuerpo(state.get(k), 400)]
+    for k in _PLANTILLA_META:
+        state[k] = str(state.get(k) or "")[:40]
+    now = datetime.now(timezone.utc).isoformat()
+    doc = {"id": str(uuid.uuid4()), "center": center, "state": state,
+           "revision": 1, "updated_at": now, "updated_by": admin.get("name") or "Usuario"}
+    await db.plantillas_compartidas.insert_one(doc)
+    return _plantilla_shared_payload(doc)
+
+
+@api_router.get("/tools/plantilla-compartida/{draft_id}")
+async def leer_plantilla_compartida(draft_id: str, admin: dict = Depends(require_admin)):
+    return _plantilla_shared_payload(await _plantilla_doc(draft_id, admin))
+
+
+@api_router.get("/tools/plantilla-compartida")
+async def plantilla_compartida_activa(center: str, admin: dict = Depends(require_admin)):
+    """El último borrador reciente del centro, para que otro equipo se una."""
+    _filtro_centro(admin, center)
+    cutoff = (datetime.now(timezone.utc) - timedelta(hours=18)).isoformat()
+    doc = await db.plantillas_compartidas.find_one(
+        {"center": center, "updated_at": {"$gte": cutoff}}, {"_id": 0}, sort=[("updated_at", -1)])
+    return _plantilla_shared_payload(doc) if doc else {"id": None}
+
+
+@api_router.delete("/tools/plantilla-compartida/{draft_id}")
+async def cerrar_plantilla_compartida(draft_id: str, admin: dict = Depends(require_admin)):
+    """Cierra el borrador compartido del centro («Nueva plantilla») para TODOS
+    los dispositivos. Sin esto, el auto-unirse volvía a enganchar el borrador
+    viejo y el botón de empezar otra parecía no funcionar."""
+    doc = await db.plantillas_compartidas.find_one({"id": draft_id}, {"_id": 0})
+    if not doc:
+        return {"ok": True}
+    _filtro_centro(admin, doc.get("center"))
+    await db.plantillas_compartidas.delete_many({"center": doc["center"]})
+    return {"ok": True}
+
+
+@api_router.put("/tools/plantilla-compartida/{draft_id}")
+async def guardar_plantilla_compartida(draft_id: str, body: dict = Body(...),
+                                       admin: dict = Depends(require_admin)):
+    """LA HOJA ENTERA NO SE GUARDA NUNCA, ni con la revisión al día.
+
+    Era la puerta por la que una persona borraba el trabajo de la otra:
+    guardar UNA celda devuelve la revisión nueva y el cliente se la queda sin
+    recargar los datos, así que su siguiente guardado completo pasaba la
+    comprobación y pisaba lo de la otra con un 200 limpio (FlotaDSP,
+    04-09-2026). Se deja la ruta con un 409 para que una pestaña antigua
+    recargue en vez de pisar. Cada cambio va por su operación: `/celda`,
+    `/marca`, `/fila`, `/meta` y `/horas`.
+    """
+    doc = await db.plantillas_compartidas.find_one({"id": draft_id}, {"_id": 0})
+    if not doc:
+        raise HTTPException(404, "La plantilla compartida ya no existe.")
+    permitidos = admin.get("allowed_centers") or []
+    if permitidos and doc.get("center") not in permitidos:
+        raise HTTPException(403, "Sin acceso a este centro")
+    raise HTTPException(409, detail={
+        "message": "Recarga la página (F5): esta pantalla es de una versión anterior.",
+        "draft": _plantilla_shared_payload(doc)})
+
+
+_PLANTILLA_CELDAS = ("ruta", "conductor", "movil", "furgo",
+                     "h_salida", "h_bajada", "h_llegada", "observaciones")
+_PLANTILLA_MARCAS = ("red_routes", "yellow_routes", "pink_furgos", "marked_conductors")
+_PLANTILLA_HORAS = ("h_salida", "h_bajada", "h_llegada")
+_PLANTILLA_META = ("week", "date")
+_PLANTILLA_MAX_FILAS = 300
+
+
+async def _plantilla_doc(draft_id: str, admin: dict) -> dict:
+    doc = await db.plantillas_compartidas.find_one({"id": draft_id}, {"_id": 0})
+    if not doc:
+        raise HTTPException(404, "Esa plantilla ya no existe")
+    permitidos = admin.get("allowed_centers") or []
+    if permitidos and doc.get("center") not in permitidos:
+        raise HTTPException(403, "Sin acceso a este centro")
+    return doc
+
+
+async def _plantilla_tocada(draft_id: str, cambios: dict, admin: dict, extra: dict = None) -> dict:
+    """Aplica un cambio pequeño y devuelve la plantilla ya guardada."""
+    orden = {"$set": {**cambios,
+                      "updated_at": datetime.now(timezone.utc).isoformat(),
+                      "updated_by": admin.get("name") or "Usuario"},
+             "$inc": {"revision": 1}}
+    if extra:
+        orden.update(extra)
+    await db.plantillas_compartidas.update_one({"id": draft_id}, orden)
+    doc = await db.plantillas_compartidas.find_one({"id": draft_id}, {"_id": 0})
+    return _plantilla_shared_payload(doc or {})
+
+
+@api_router.patch("/tools/plantilla-compartida/{draft_id}/celda")
+async def plantilla_compartida_celda(draft_id: str, body: dict = Body(...), admin: dict = Depends(require_admin)):
+    """Cambia UNA celda de la plantilla compartida.
+
+    Guardando celda a celda, dos personas solo pueden chocar si tocan LA MISMA
+    celda; en cualquier otro caso los dos cambios conviven. Aquí NO se
+    comprueba la revisión a propósito (en una celda el último cambio es el
+    bueno), pero sí que la fila siga siendo la misma (`ruta_ref`): si alguien
+    añadió o quitó filas los índices bailan y el cambio caería en la fila
+    equivocada, y eso sí sería un dato falso.
+    """
+    doc0 = await _plantilla_doc(draft_id, admin)
+    fila = body.get("fila")
+    campo = body.get("campo")
+    if not isinstance(fila, int) or isinstance(fila, bool) or fila < 0 or campo not in _PLANTILLA_CELDAS:
+        raise HTTPException(400, "Fila o campo no válidos")
+    valor = str(body.get("valor") or "")[:300]
+    ruta_ref = body.get("ruta_ref")
+    filtro: dict = {"id": draft_id, "state.rows.%d" % fila: {"$exists": True}}
+    if isinstance(ruta_ref, str):
+        filtro["state.rows.%d.ruta" % fila] = ruta_ref
+    ahora = datetime.now(timezone.utc).isoformat()
+    r = await db.plantillas_compartidas.update_one(
+        filtro,
+        {"$set": {"state.rows.%d.%s" % (fila, campo): valor,
+                  "updated_at": ahora, "updated_by": admin.get("name") or "Usuario"},
+         "$inc": {"revision": 1}})
+    if not r.matched_count:
+        doc = await db.plantillas_compartidas.find_one({"id": draft_id}, {"_id": 0}) or doc0
+        # ESCRIBIR EN LA CELDA DE LA RUTA CAMBIA LA PROPIA REFERENCIA. Si la
+        # fila ya tiene el valor que se pedía poner, el cambio está hecho: un
+        # 409 aquí manda recargar por algo que ya está bien y borraba lo que
+        # se estaba escribiendo.
+        _filas = (doc.get("state") or {}).get("rows") or []
+        if campo == "ruta" and fila < len(_filas) and (_filas[fila] or {}).get("ruta") == valor:
+            return _plantilla_shared_payload(doc)
+        raise HTTPException(409, detail={"message": "Las filas han cambiado, se recarga la plantilla.",
+                                         "draft": _plantilla_shared_payload(doc)})
+    doc = await db.plantillas_compartidas.find_one({"id": draft_id}, {"_id": 0})
+    return _plantilla_shared_payload(doc or {})
+
+
+@api_router.patch("/tools/plantilla-compartida/{draft_id}/marca")
+async def plantilla_compartida_marca(draft_id: str, body: dict = Body(...),
+                                     admin: dict = Depends(require_admin)):
+    """Pone o quita UNA marca de color con `$addToSet`/`$pull`, nunca la lista
+    entera: dos personas marcando cosas distintas no pueden pisarse."""
+    await _plantilla_doc(draft_id, admin)
+    tipo = str(body.get("tipo") or "")
+    if tipo not in _PLANTILLA_MARCAS:
+        raise HTTPException(400, "Marca desconocida")
+    valor = str(body.get("valor") or "").strip()[:120]
+    if not valor:
+        raise HTTPException(400, "Falta qué marcar")
+    campo = "state.%s" % tipo
+    ahora = datetime.now(timezone.utc).isoformat()
+    op = "$addToSet" if body.get("activo") else "$pull"
+    await db.plantillas_compartidas.update_one(
+        {"id": draft_id},
+        {op: {campo: valor},
+         "$set": {"updated_at": ahora, "updated_by": admin.get("name") or "Usuario"},
+         "$inc": {"revision": 1}})
+    doc = await db.plantillas_compartidas.find_one({"id": draft_id}, {"_id": 0})
+    return _plantilla_shared_payload(doc or {})
+
+
+@api_router.post("/tools/plantilla-compartida/{draft_id}/fila")
+async def plantilla_compartida_anadir_fila(draft_id: str, admin: dict = Depends(require_admin)):
+    """Añade una fila vacía al final. Con `$push`: si las dos añaden, salen dos."""
+    doc = await _plantilla_doc(draft_id, admin)
+    if len((doc.get("state") or {}).get("rows") or []) >= _PLANTILLA_MAX_FILAS:
+        raise HTTPException(400, "Esta plantilla ya tiene demasiadas filas")
+    vacia = {c: "" for c in _PLANTILLA_CELDAS}
+    return await _plantilla_tocada(draft_id, {}, admin, {"$push": {"state.rows": vacia}})
+
+
+@api_router.delete("/tools/plantilla-compartida/{draft_id}/fila/{fila}")
+async def plantilla_compartida_quitar_fila(draft_id: str, fila: int, ruta_ref: str = "",
+                                           admin: dict = Depends(require_admin)):
+    """Quita una fila comprobando antes que sigue siendo LA MISMA (`ruta_ref`):
+    si la otra persona añadió o quitó filas, se borraría la equivocada."""
+    doc = await _plantilla_doc(draft_id, admin)
+    filas = list((doc.get("state") or {}).get("rows") or [])
+    if fila < 0 or fila >= len(filas):
+        raise HTTPException(409, "Esa fila ya no existe")
+    if ruta_ref and str(filas[fila].get("ruta") or "") != ruta_ref:
+        raise HTTPException(409, "Las filas han cambiado, se recarga la plantilla")
+    del filas[fila]
+    return await _plantilla_tocada(draft_id, {"state.rows": filas}, admin)
+
+
+@api_router.patch("/tools/plantilla-compartida/{draft_id}/meta")
+async def plantilla_compartida_meta(draft_id: str, body: dict = Body(...),
+                                    admin: dict = Depends(require_admin)):
+    """La semana y la fecha de la cabecera, cada una por su lado."""
+    await _plantilla_doc(draft_id, admin)
+    cambios = {"state.%s" % k: str(body.get(k) or "")[:40] for k in _PLANTILLA_META if k in body}
+    if not cambios:
+        raise HTTPException(400, "Nada que cambiar")
+    return await _plantilla_tocada(draft_id, cambios, admin)
+
+
+@api_router.patch("/tools/plantilla-compartida/{draft_id}/horas")
+async def plantilla_compartida_horas(draft_id: str, body: dict = Body(...),
+                                     admin: dict = Depends(require_admin)):
+    """Pega las mismas horas en TODAS las filas y solo escribe las tres horas:
+    lo que la otra persona haya puesto en el resto de columnas se queda."""
+    doc = await _plantilla_doc(draft_id, admin)
+    filas = (doc.get("state") or {}).get("rows") or []
+    horas = {h: str(body.get(h) or "")[:20] for h in _PLANTILLA_HORAS if body.get(h)}
+    if not horas:
+        raise HTTPException(400, "No hay horas que pegar")
+    cambios = {}
+    for i in range(len(filas)):
+        for h, v in horas.items():
+            cambios["state.rows.%d.%s" % (i, h)] = v
+    return await _plantilla_tocada(draft_id, cambios, admin)
+
+
+@api_router.get("/plantillas")
+async def list_plantillas(center: str = None, admin: dict = Depends(require_admin)):
+    """El historial de plantillas descargadas, lo último primero."""
+    query: dict = _filtro_centro(admin, center) if center and center != "Todos" else {}
+    if not query:
+        permitidos = admin.get("allowed_centers") or []
+        if permitidos:
+            query["center"] = {"$in": permitidos}
+    return await db.plantillas_diarias.find(query, {"_id": 0, "xlsx": 0}).sort(
+        "uploaded_at", -1).to_list(500)
+
+
+@api_router.get("/plantillas/{plantilla_id}/download")
+async def download_plantilla(plantilla_id: str, admin: dict = Depends(require_admin)):
+    import io
+    doc = await db.plantillas_diarias.find_one({"id": plantilla_id}, {"_id": 0})
+    if not doc:
+        raise HTTPException(404, "Plantilla no encontrada")
+    _filtro_centro(admin, doc.get("center"))
+    content = doc.get("xlsx")
+    if not content:
+        r2 = get_r2()
+        if not r2 or not doc.get("r2_key"):
+            raise HTTPException(503, "El archivo de esta plantilla no está disponible")
+        try:
+            content = r2.get_object(Bucket=R2_BUCKET, Key=doc["r2_key"])["Body"].read()
+        except Exception as e:
+            logger.warning(f"download_plantilla: {e}")
+            raise HTTPException(502, "No se pudo recuperar el archivo de la plantilla")
+    return StreamingResponse(
+        io.BytesIO(bytes(content)),
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": f"attachment; filename=\"{doc.get('filename') or 'plantilla.xlsx'}\""},
+    )
+
+
+@api_router.delete("/plantillas/{plantilla_id}")
+async def delete_plantilla(plantilla_id: str, admin: dict = Depends(require_admin)):
+    doc = await db.plantillas_diarias.find_one({"id": plantilla_id}, {"_id": 0, "xlsx": 0})
+    if not doc:
+        raise HTTPException(404, "Plantilla no encontrada")
+    _filtro_centro(admin, doc.get("center"))
+    if doc.get("r2_key"):
+        try:
+            r2 = get_r2()
+            if r2:
+                r2.delete_object(Bucket=R2_BUCKET, Key=doc["r2_key"])
+        except Exception as _e:
+            logger.warning(f"delete_plantilla R2: {_e}")
+    await db.plantillas_diarias.delete_one({"id": plantilla_id})
+    return {"success": True}
 
 
 # =========================

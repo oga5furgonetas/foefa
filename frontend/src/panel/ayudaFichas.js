@@ -70,6 +70,16 @@ export const AYUDA = {
       'Una furgoneta en el taller no debería asignarse: mira Órdenes de taller si dudas.',
     ],
   },
+  plantilla: {
+    que: 'La hoja de salida del día: ruta, conductor, móvil, vehículo y horas, en Excel.',
+    pasos: [
+      'Pega la lista de quién lleva qué vehículo (o sube una captura). Si tienes la de rutas con su hora, pégala al lado y se cruzan por nombre.',
+      'Si la Asignación del día ya está hecha, «Usar la asignación» monta la hoja sin pegar nada.',
+      'Revisa los avisos: nombres, matrículas y horas que no cuadran con la empresa, con la corrección a un clic.',
+      'Marca colores (no vino, incidencia, vehículo especial) y descarga. Se guarda en el historial del centro.',
+    ],
+    ojo: 'Varias personas pueden editar la misma hoja a la vez: cada celda se guarda sola y los cambios de los demás aparecen en 2-3 segundos.',
+  },
   turnos: {
     que: 'El cuadrante: quién trabaja qué día, con los códigos y las horas.',
     pasos: [

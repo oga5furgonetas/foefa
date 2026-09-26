@@ -446,7 +446,12 @@ export const exportarCuadrante = (center, desde, hasta) =>
 export const getCodigosCuadrante = () => api.get('/shifts/codigos')
 export const setCodigosCuadrante = (codigos) => api.put('/shifts/codigos', { codigos })
 
-/* ── Historial de plantillas ── */
+/* ── Plantilla del día (la hoja de salida) y su historial ── */
+export const getPlantillas = (center) => api.get('/plantillas', { params: centerParam(center) })
+export const downloadPlantilla = (id) => api.get(`/plantillas/${id}/download`, { responseType: 'blob' })
+export const deletePlantilla = (id) => api.delete(`/plantillas/${id}`)
+export const plantillaDesdeAsignacion = (center, date) =>
+  api.get('/tools/plantilla-desde-asignacion', { params: { center, ...(date ? { date } : {}) } })
 
 /* ── Asignación diaria (qué conductor lleva qué furgo) ── */
 export const getDailyAssignment = (center, date) => api.get('/assignments/daily', { params: { center, date } })

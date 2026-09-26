@@ -259,6 +259,7 @@ const PanelActividad = lazy(() => import('./panel/pages/Actividad'))
 const PanelPortalConductor = lazy(() => import('./panel/pages/PortalConductor'))
 const PanelAsignacion = lazy(() => import('./panel/pages/Asignacion'))
 const PanelChecklistOp = lazy(() => import('./panel/pages/ChecklistOperativo'))
+const PanelPlantilla = lazy(() => import('./panel/pages/PlantillaGenerador'))
 const PanelChat = lazy(() => import('./panel/pages/Chat'))
 const PanelBandeja = lazy(() => import('./panel/pages/Bandeja'))
 const PanelIncidencias = lazy(() => import('./panel/pages/Incidencias'))
@@ -354,6 +355,7 @@ ReactDOM.createRoot(document.getElementById('root')).render(
                 <Route path="turnos" element={<PanelTurnos />} />
                 <Route path="asignacion" element={<PanelAsignacion />} />
                 <Route path="checklist-operativo" element={<PanelChecklistOp />} />
+                <Route path="plantilla" element={<PanelPlantilla />} />
                 <Route path="chat" element={<PanelChat />} />
                 <Route path="actividad" element={<PanelActividad />} />
                 {/* Furgonetas */}
