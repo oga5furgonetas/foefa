@@ -419,7 +419,7 @@ export default function OrdenesTrabajo() {
       a.href = url
       // hoyLocal y no toISOString: entre medianoche y las 2 de la mañana el
       // fichero saldría fechado el día anterior (gotcha 11).
-      a.download = `flotia_${center || 'todos'}_${hoyLocal()}.csv`
+      a.download = `flota_${center || 'todos'}_${hoyLocal()}.csv`
       a.click()
       URL.revokeObjectURL(url)
     } catch (e) {
@@ -438,7 +438,7 @@ export default function OrdenesTrabajo() {
       const url = URL.createObjectURL(new Blob([r.data], { type: 'application/pdf' }))
       const a = document.createElement('a')
       a.href = url
-      a.download = `flotia_${center || 'todos'}_${hoyLocal()}.pdf`
+      a.download = `flota_${center || 'todos'}_${hoyLocal()}.pdf`
       a.click()
       URL.revokeObjectURL(url)
     } catch (e) {

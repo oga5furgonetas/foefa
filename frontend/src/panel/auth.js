@@ -1,7 +1,7 @@
 // Auth del panel de administración (modelo nuevo).
 // Reusa el mismo storage que ya usa la app para convivir durante la migración.
-const TOKEN_KEY = 'flotia_token'
-const ADMIN_KEY = 'flotia_admin'
+const TOKEN_KEY = 'flota_token'
+const ADMIN_KEY = 'flota_admin'
 
 /* Lo ultimo que el SERVIDOR ha dicho sobre el acceso de este usuario.
 
@@ -14,7 +14,7 @@ const ADMIN_KEY = 'flotia_admin'
    token en curso: asi un blob del usuario anterior en el mismo ordenador no
    puede colarse. Y solo se escribe con una respuesta completa del servidor,
    nunca a medias — que fue lo que rompio el localStorage la otra vez. */
-const ACCESO_KEY = 'flotia_acceso'
+const ACCESO_KEY = 'flota_acceso'
 
 function accesoFresco() {
   try {

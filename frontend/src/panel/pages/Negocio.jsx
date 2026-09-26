@@ -774,9 +774,9 @@ export default function Negocio() {
     try {
       const r = await impersonateOrg(o.id)
       if (r.data?.token) {
-        localStorage.setItem('flotia_token_super', localStorage.getItem('flotia_token'))
-        localStorage.setItem('flotia_token', r.data.token)
-        localStorage.setItem('flotia_admin', JSON.stringify({ name: o.name, role: 'admin', account_type: 'dsp', slug: r.data.slug, centers: o.centers || [], impersonating: true }))
+        localStorage.setItem('flota_token_super', localStorage.getItem('flota_token'))
+        localStorage.setItem('flota_token', r.data.token)
+        localStorage.setItem('flota_admin', JSON.stringify({ name: o.name, role: 'admin', account_type: 'dsp', slug: r.data.slug, centers: o.centers || [], impersonating: true }))
         nav('/panel'); window.location.reload()
       }
     } catch { setMsg(t('neg.impersonate.err')) } finally { setBusy('') }

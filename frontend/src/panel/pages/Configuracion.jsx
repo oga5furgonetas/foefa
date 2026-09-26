@@ -613,7 +613,7 @@ export default function Configuracion() {
     try {
       const r = await addOrgCenter(name)
       setCenters(r.data?.centers || [])
-      const a = getAdmin(); if (a) { a.centers = r.data?.centers || []; localStorage.setItem('flotia_admin', JSON.stringify(a)) }
+      const a = getAdmin(); if (a) { a.centers = r.data?.centers || []; localStorage.setItem('flota_admin', JSON.stringify(a)) }
       setNuevo(''); setMsg({ ok: true, t: `Centro ${name} añadido.` })
     } catch (e) {
       setMsg({ ok: false, t: e?.response?.data?.detail || 'No se pudo añadir el centro.' })

@@ -53,8 +53,8 @@ def test_contesta_cuando_la_llaman_por_su_nombre():
     for texto in ("@flota quienes son los peores conductores",
                   "flota, ensenale a Mery sus peores conductores",
                   "Flota: cuantas ITV caducan este mes",
-                  "@flotia ai dame las ITV del mes",
-                  "flotia: cuantos daños hay abiertos",
+                  "@flota ai dame las ITV del mes",
+                  "flota: cuantos daños hay abiertos",
                   "oye @flota mira los daños de hoy"):
         assert llaman(texto), "no reconoce que la llaman: %r" % texto
 
@@ -75,7 +75,7 @@ def test_se_le_quita_el_nombre_antes_de_preguntarle():
     _, limpiar = _llamada()
     assert limpiar("@flota quienes son los peores conductores") == "quienes son los peores conductores"
     assert limpiar("flota, dame las ITV") == "dame las ITV"
-    assert limpiar("@flotia ai cuantas furgonetas hay") == "cuantas furgonetas hay"
+    assert limpiar("@flota ai cuantas furgonetas hay") == "cuantas furgonetas hay"
 
 
 def test_el_mensaje_de_la_persona_se_guarda_antes_de_llamar_a_la_ia():

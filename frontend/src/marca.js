@@ -11,11 +11,11 @@
    dominio propio de cada cliente, sin compilar otra vez. */
 
 export const MARCA = {
-  nombre: 'Flotia',
+  nombre: 'Flota',
   // Lo que acompaña al nombre en la pestaña del navegador y al compartir.
   lema: 'Gestión de flotas con IA',
-  // Cómo se llama al asistente dentro de la app («@flotia, …»).
-  ia: 'Flotia IA',
+  // Cómo se llama al asistente dentro de la app («@flota, …»).
+  ia: 'Flota IA',
   // Correo de contacto. Vacío hasta tener dominio propio: las pantallas que lo
   // necesitan enseñan el formulario de contacto en su lugar.
   correo: '',

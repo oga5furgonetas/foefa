@@ -12,7 +12,7 @@ import MiClave from './MiClave'
 import PedirDias from './PedirDias'
 import Tienda from './Tienda'
 
-const DRIVER_KEY = 'flotia_driver'
+const DRIVER_KEY = 'flota_driver'
 
 /* ────────────────────────────────────────────────────────────────────────────
    PORTAL DEL CONDUCTOR

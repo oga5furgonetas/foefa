@@ -1,6 +1,6 @@
 {
-  "name": "Flotia",
-  "short_name": "Flotia",
+  "name": "Flota",
+  "short_name": "Flota",
   "description": "Gestión de flotas con IA: inspecciones, taller, vencimientos y equipo",
   "start_url": "/conductor",
   "display": "standalone",

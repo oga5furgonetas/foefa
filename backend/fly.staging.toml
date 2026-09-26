@@ -1,18 +1,18 @@
 # STAGING — copia funcional de producción que cuesta ~0 €:
 #   · min_machines_running = 0 → la máquina se APAGA sola sin tráfico y arranca
 #     al primer request (tarda ~2-3 s ese primer golpe; para probar, perfecto).
-#   · BD staging_flotia / staging_flotia_global en el MISMO Atlas.
+#   · BD staging_flota / staging_flota_global en el MISMO Atlas.
 #   · Sin volumen (los uploads de staging son efímeros; lo real va a R2).
 #   · Sin Telegram, sin Gemini y sin webhook de pagos: staging no avisa,
 #     no gasta cuota y no puede tocar dinero (el webhook responde 503).
 # Deploy:  cd backend && fly deploy -c fly.staging.toml --strategy immediate
-app = "flotia-backend-staging"
+app = "flota-backend-staging"
 primary_region = "cdg"
 
 [build]
 
 [env]
-  DB_NAME = "staging_flotia"
+  DB_NAME = "staging_flota"
   GEMINI_MODEL = "gemini-1.5-flash"
   PUBLIC_BASE_URL = "https://flotia-backend-staging.fly.dev"
   JWT_EXPIRE_HOURS = "72"

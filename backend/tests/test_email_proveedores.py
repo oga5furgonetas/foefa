@@ -28,8 +28,8 @@ _TEXTO = io.open(SERVER, encoding="utf-8-sig").read()
 
 
 def _cargar(*nombres):
-    amb = {"os": os, "re": re, "datetime": datetime, "timezone": timezone, "MARCA": "Flotia",
-           "_EMAIL_FROM_DEFECTO": "Flotia <no-reply@localhost>",
+    amb = {"os": os, "re": re, "datetime": datetime, "timezone": timezone, "MARCA": "Flota",
+           "_EMAIL_FROM_DEFECTO": "Flota <no-reply@localhost>",
            "_EMAIL_CUOTA_DIA": {}}
     arbol = ast.parse(_TEXTO)
     for n in arbol.body:
@@ -107,7 +107,7 @@ def test_el_remitente_se_parte_en_nombre_y_direccion():
     assert amb["_email_remitente"]() == ("Transportes Ruiz", "hola@ruiz.es")
     # Sin nombre, firma la marca del producto.
     os.environ["EMAIL_FROM"] = "contacto@ruiz.es"
-    assert amb["_email_remitente"]() == ("Flotia", "contacto@ruiz.es")
+    assert amb["_email_remitente"]() == ("Flota", "contacto@ruiz.es")
 
 
 def main():

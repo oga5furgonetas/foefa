@@ -1,4 +1,4 @@
-# Flotia — gestión de flotas con IA
+# Flota — gestión de flotas con IA
 
 Producto para **cualquier empresa con vehículos** (reparto, logística, alquiler,
 servicios técnicos, obra…): inspecciones con foto y detección de daños por IA,
@@ -16,9 +16,9 @@ otra infraestructura.
 
 **Nunca se despliega sobre FlotaDSP.** Los scripts de despliegue leen el
 destino de `despliegue.local.json` (fuera de git; ejemplo en
-`despliegue.ejemplo.json`) o de variables `FLOTIA_*`, y `scripts/destino.ps1`
+`despliegue.ejemplo.json`) o de variables `FLOTA_*`, y `scripts/destino.ps1`
 se niega si el destino contiene «flotadsp». `backend/fly.toml` apunta a
-`flotia-backend`; `deploy-backend.ps1` para si alguien lo cambia a una app de
+`flota-backend`; `deploy-backend.ps1` para si alguien lo cambia a una app de
 FlotaDSP. No hay ningún secreto escrito en el código: todo va por entorno.
 
 ## Estructura
@@ -49,7 +49,7 @@ del dominio donde se sirve la app (`origen()`), nunca escritos.
 
 ```
 cd backend && pip install -r requirements.txt
-SECRET_KEY=... MONGO_URL=mongodb://localhost:27017 DB_NAME=flotia uvicorn server:app --port 8000
+SECRET_KEY=... MONGO_URL=mongodb://localhost:27017 DB_NAME=flota uvicorn server:app --port 8000
 cd frontend && npm install && npm run dev      # proxy /api -> localhost:8000
 ```
 

@@ -26,7 +26,7 @@ const { chromium } = require('@playwright/test')
 
 const svg = readFileSync(join(PUB, 'favicon.svg'), 'utf8')
 const fuente = pathToFileURL(join(FRONT, 'node_modules/@fontsource-variable/archivo/files/archivo-latin-wght-normal.woff2')).href
-const nombre = (readFileSync(join(FRONT, 'src/marca.js'), 'utf8').match(/nombre:\s*'([^']+)'/) || [])[1] || 'Flotia'
+const nombre = (readFileSync(join(FRONT, 'src/marca.js'), 'utf8').match(/nombre:\s*'([^']+)'/) || [])[1] || 'Flota'
 const lema = (readFileSync(join(FRONT, 'src/marca.js'), 'utf8').match(/lema:\s*'([^']+)'/) || [])[1] || ''
 
 const icono = (lado, margen = 0) => `<!doctype html><html><body style="margin:0;background:transparent">

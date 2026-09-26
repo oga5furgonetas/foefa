@@ -18,7 +18,7 @@ falla si alguna no contesta 200. Tarda segundos y es lo único que distingue
 «desplegado» de «funcionando».
 
 Uso:  python scripts/humo.py https://tu-api.fly.dev
-      (o con FLOTIA_BACKEND en el entorno). La clave de firma va SIEMPRE en
+      (o con FLOTA_BACKEND en el entorno). La clave de firma va SIEMPRE en
       SECRET_KEY: sin ella no se ejecuta.
 """
 import base64
@@ -31,12 +31,12 @@ import sys
 import urllib.error
 import urllib.request
 
-BASE = (sys.argv[1] if len(sys.argv) > 1 else os.environ.get("FLOTIA_BACKEND", "")).rstrip("/")
+BASE = (sys.argv[1] if len(sys.argv) > 1 else os.environ.get("FLOTA_BACKEND", "")).rstrip("/")
 # LA CLAVE NO VA ESCRITA AQUI. Una clave de firma en el codigo deja fabricar
 # sesiones de administrador a cualquiera que lea el repositorio.
 SECRETO = os.environ.get("SECRET_KEY", "")
 if not BASE or not SECRETO:
-    sys.exit("humo: falta la direccion del backend (argumento o FLOTIA_BACKEND) "
+    sys.exit("humo: falta la direccion del backend (argumento o FLOTA_BACKEND) "
              "o SECRET_KEY en el entorno")
 
 # Las pantallas que Dani abre todos los dias. Si una de estas se cae, se nota en

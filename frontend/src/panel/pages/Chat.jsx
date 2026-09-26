@@ -441,7 +441,7 @@ export default function Chat() {
           )}
           <input value={text} onChange={(e) => setText(e.target.value)}
             placeholder={con ? `Escribe a ${con.nombre}… (o @flota)`
-              : `@flotia para preguntarle a ${MARCA.ia}…`}
+              : `@flota para preguntarle a ${MARCA.ia}…`}
             className="input flex-1" maxLength={2000} disabled={salaBloqueada} />
           <button disabled={!text.trim() || sending || salaBloqueada}
             className="btn-primary flex items-center gap-2 disabled:opacity-50">

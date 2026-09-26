@@ -14,8 +14,8 @@
 #     "backend": "https://<tu-api>",
 #     "staging_web": "https://staging.<proyecto>.pages.dev",
 #     "staging_api": "https://<tu-api-staging>/api" }
-# Variables equivalentes: FLOTIA_PAGES, FLOTIA_WEB, FLOTIA_BACKEND,
-# FLOTIA_STAGING_WEB, FLOTIA_STAGING_API.
+# Variables equivalentes: FLOTA_PAGES, FLOTA_WEB, FLOTA_BACKEND,
+# FLOTA_STAGING_WEB, FLOTA_STAGING_API.
 #
 #   . (Join-Path $PSScriptRoot "destino.ps1")
 #   $d = Get-Destino -Requiere pages, web, backend
@@ -24,11 +24,11 @@ function Get-Destino {
     param([string[]]$Requiere = @())
 
     $d = @{
-        pages       = $env:FLOTIA_PAGES
-        web         = $env:FLOTIA_WEB
-        backend     = $env:FLOTIA_BACKEND
-        staging_web = $env:FLOTIA_STAGING_WEB
-        staging_api = $env:FLOTIA_STAGING_API
+        pages       = $env:FLOTA_PAGES
+        web         = $env:FLOTA_WEB
+        backend     = $env:FLOTA_BACKEND
+        staging_web = $env:FLOTA_STAGING_WEB
+        staging_api = $env:FLOTA_STAGING_API
     }
     $fichero = Join-Path $PSScriptRoot "..\despliegue.local.json"
     if (Test-Path $fichero) {
@@ -47,7 +47,7 @@ function Get-Destino {
     $faltan = @($Requiere | Where-Object { -not $d[$_] })
     if ($faltan.Count -gt 0) {
         throw ("Falta el destino: " + ($faltan -join ", ") +
-               ". Ponlo en despliegue.local.json (copia despliegue.ejemplo.json) o en variables FLOTIA_*.")
+               ". Ponlo en despliegue.local.json (copia despliegue.ejemplo.json) o en variables FLOTA_*.")
     }
     return $d
 }

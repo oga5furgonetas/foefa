@@ -589,13 +589,13 @@ export default function PanelLayout() {
        { to: '/panel/bandeja', label: t('nav.inbox'), icon: Inbox }]
     : paletteBase
 
-  const impersonating = !!localStorage.getItem('flotia_token_super')
+  const impersonating = !!localStorage.getItem('flota_token_super')
   function backToSuper() {
-    const superTok = localStorage.getItem('flotia_token_super')
+    const superTok = localStorage.getItem('flota_token_super')
     if (superTok) {
-      localStorage.setItem('flotia_token', superTok)
-      localStorage.removeItem('flotia_token_super')
-      localStorage.removeItem('flotia_admin')
+      localStorage.setItem('flota_token', superTok)
+      localStorage.removeItem('flota_token_super')
+      localStorage.removeItem('flota_admin')
     }
     window.location.href = '/panel/admin'
   }

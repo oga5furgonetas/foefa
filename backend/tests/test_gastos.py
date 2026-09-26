@@ -48,7 +48,7 @@ def _cargar():
                     trozos.append(n)
                     break
     ambito = {"re": re, "unicodedata": unicodedata, "datetime": datetime,
-              "timezone": timezone, "timedelta": timedelta, "MARCA": "Flotia",
+              "timezone": timezone, "timedelta": timedelta, "MARCA": "Flota",
               "_DOMINIO_FRONT": "ejemplo.com", "_PORTAL_BASE_FRONT": "https://ejemplo.com"}
     mod = ast.Module(body=trozos, type_ignores=[])
     exec(compile(ast.fix_missing_locations(mod), "<server>", "exec"), ambito)  # noqa: S102

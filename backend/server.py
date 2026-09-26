@@ -127,7 +127,7 @@ PUBLIC_BASE_URL = os.environ.get("PUBLIC_BASE_URL", "").rstrip("/")
 # de las variables de entorno. Los valores por defecto son neutros a proposito:
 # un correo que dice «localhost» se nota en la primera prueba; uno que dice el
 # dominio de otra empresa, no.
-MARCA = os.environ.get("MARCA_NOMBRE", "Flotia").strip() or "Flotia"
+MARCA = os.environ.get("MARCA_NOMBRE", "Flota").strip() or "Flota"
 MARCA_IA = "%s IA" % MARCA
 # Donde vive el panel (la web). Con el se montan los enlaces de los correos, del
 # portal del conductor, del taller y de empleo.
@@ -148,7 +148,7 @@ AI_SERVICE_URL = os.environ.get("AI_SERVICE_URL", "").rstrip("/")
 
 # Cloudflare R2
 R2_ENDPOINT    = os.environ.get("R2_ENDPOINT", "")       # https://<account>.r2.cloudflarestorage.com
-R2_BUCKET      = os.environ.get("R2_BUCKET", "flotia-uploads")
+R2_BUCKET      = os.environ.get("R2_BUCKET", "flota-uploads")
 R2_ACCESS_KEY  = os.environ.get("R2_ACCESS_KEY", "")
 R2_SECRET_KEY  = os.environ.get("R2_SECRET_KEY", "")
 R2_PUBLIC_URL  = os.environ.get("R2_PUBLIC_URL", "").rstrip("/")  # https://cdn.tu-dominio.com
@@ -210,8 +210,8 @@ client = AsyncIOMotorClient(mongo_url)
 # (fijada por petición desde el token). Sin contexto → BD por defecto = comportamiento
 # idéntico al de siempre (no rompe nada). Login/usuarios/organizaciones viven en `global_db`.
 import contextvars
-_DEFAULT_DB_NAME = os.environ.get("DB_NAME", "flotia")
-_GLOBAL_DB_NAME = os.environ.get("GLOBAL_DB_NAME", "flotia_global")
+_DEFAULT_DB_NAME = os.environ.get("DB_NAME", "flota")
+_GLOBAL_DB_NAME = os.environ.get("GLOBAL_DB_NAME", "flota_global")
 _current_db_name = contextvars.ContextVar("current_db_name", default=_DEFAULT_DB_NAME)
 
 global_db = client[_GLOBAL_DB_NAME]  # organizaciones, usuarios, suscripciones (compartida)
@@ -14647,9 +14647,9 @@ _IA_SALA_MINUTOS = 60
 # flota entera», que es exactamente lo que no puede hacer: la sala es de las
 # personas y ella solo entra si la llaman.
 _IA_LLAMADA = re.compile(
-    r"(?:(?:^|\s)@flot(?:a|ia)(?:\s+ai)?\b)"      # @flota / @flotia / @flotia ai
-    r"|(?:^\s*flot(?:a|ia)(?:\s+ai)?\s*[,:])"     # «flota, ...» / «flotia: ...» al empezar
-    r"|(?:\bflotia\s+ai\b)",                      # su nombre completo
+    r"(?:(?:^|\s)@flot(?:a|ia)(?:\s+ai)?\b)"      # @flota / @flota ai (y @flotia, el nombre de antes)
+    r"|(?:^\s*flot(?:a|ia)(?:\s+ai)?\s*[,:])"     # «flota, ...» / «flota: ...» al empezar
+    r"|(?:\bflota\s+ai\b)",                      # su nombre completo
     re.I)
 
 

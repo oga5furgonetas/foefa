@@ -28,7 +28,7 @@ try {
   # La salida entera va a un fichero y solo se enseña lo que dice algo: `fly`
   # escupe sesenta lineas de capas de Docker que no aportan nada. Si falla, ahi
   # esta el registro completo para mirarlo.
-  $log = Join-Path $env:TEMP "flotia-fly-deploy.log"
+  $log = Join-Path $env:TEMP "flota-fly-deploy.log"
   fly deploy --strategy immediate *>&1 | Out-File -FilePath $log -Encoding utf8
   $codigo = $LASTEXITCODE
   $ErrorActionPreference = $anterior

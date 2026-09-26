@@ -115,6 +115,6 @@ jobs:
         env:
           SECRET_KEY: test-secret-key-only-for-tests
           MONGO_URL: mongodb://localhost:27017
-          DB_NAME: test_flotia
-          GLOBAL_DB_NAME: test_flotia_global
+          DB_NAME: test_flota
+          GLOBAL_DB_NAME: test_flota_global
         run: pytest backend/tests -q
