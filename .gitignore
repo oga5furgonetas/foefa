@@ -1,4 +1,5 @@
 __pycache__/
+.pytest_cache/
 *.pyc
 .env
 node_modules/
@@ -7,9 +8,12 @@ uploads/
 
 # Build del frontend: se regenera con `npm run build` antes de cada deploy.
 # NO versionarlo evita conflictos masivos al trabajar desde varios ordenadores.
-frontend-v2/dist/
-frontend-v2/dist-staging/
-frontend-v2/dist-lab/
+frontend/dist/
+frontend/dist-staging/
+frontend/dist-lab/
+# Lo que dejan las pruebas de Playwright al fallar (trazas, capturas).
+frontend/test-results/
+frontend/playwright-report/
 mobile.zip
 
 # Entorno de Python local para correr los tests del backend (pytest).
