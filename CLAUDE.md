@@ -1,5 +1,9 @@
 # Flota — gestión de flotas con IA
 
+> **Sesión nueva: lee primero `docs/ESTADO.md`** (qué está hecho, qué falta,
+> credenciales, cómo desplegar y reglas). Al acabar, actualízalo y `git push`.
+> Una sola sesión a la vez sobre este repo.
+
 Producto para **cualquier empresa con vehículos** (reparto, logística, alquiler,
 servicios técnicos, obra…): inspecciones con foto y detección de daños por IA,
 taller y órdenes de reparación, vencimientos (ITV, seguro, renting), operación
