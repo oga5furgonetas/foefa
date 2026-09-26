@@ -32679,6 +32679,58 @@ def _plantilla_texto_sin_ia(texto: str) -> list:
     return filas
 
 
+_NO_ES_PERSONA = frozenset("""
+PARADA PARADAS ENTREGA ENTREGAS PROMEDIO CIERRE SESION APLICACION TOTAL TOTALES RUTA RUTAS CONDUCTOR
+CONDUCTORES VEHICULO VEHICULOS MATRICULA SALIDA LLEGADA HORA HORAS ESTADO SERVICIO STANDARD PARCEL LARGE
+SMALL VAN ROUTE ROUTES DRIVER DRIVERS STOPS PACKAGES DELIVERIES PENDIENTE PENDIENTES COMPLETADA COMPLETADO
+ASIGNAR ASIGNADO ASIGNADA OBSERVACIONES NURSERY LEVEL WAVE ONDA TURNO CONTRATO EMPRESA MOVIL
+""".split())
+
+
+def _parece_persona(texto: str) -> bool:
+    """¿Esta línea puede ser el nombre de alguien? De 2 a 6 palabras, solo
+    letras, y ninguna de las que salen en las pantallas de rutas («paradas»,
+    «entregas», «cierre de sesión»…). Sin esto, «115/115 entregas» acababa en
+    la hoja como un conductor llamado ENTREGAS."""
+    t = " ".join((texto or "").replace("\xa0", " ").split())
+    if not t or re.search(r"[\d:|/@()]", t):
+        return False
+    palabras = _normalize_name(t).split()
+    if not 2 <= len(palabras) <= 6:
+        return False
+    return not any(p in _NO_ES_PERSONA for p in palabras)
+
+
+def _es_cabecera_ruta(linea: str) -> bool:
+    """Una línea que es SOLO un código de ruta («CA_A22»): abre un bloque."""
+    w = (linea or "").strip().upper()
+    return bool(w) and " " not in w and bool(_RUTA_EN_TEXTO_RE.match(w)) and not w.isdigit() \
+        and not re.fullmatch(r"\d+/\d+|\d+[HM]", w) and not _HORA_EN_TEXTO_RE.fullmatch(w) \
+        and not _PLACA_RE.fullmatch(w) and not _CONTRATO_RE.match(w) \
+        and not (len(w) >= 10 and re.fullmatch(r"[A-Z0-9]+", w))
+
+
+def _casar_linea(tokens_linea: list, suyos: list) -> tuple:
+    """(puntos, palabras casadas) de un nombre del plantel en una línea. Cada
+    palabra de la línea vale para UNA sola del nombre: con un conjunto, el
+    «ARIAS» de «DAVID GARCIA ARIAS» casaba dos veces con «KEVIN FERNEY ARIAS
+    ARIAS» y le daba a David la ficha (y la furgoneta) de Kevin."""
+    libres = list(tokens_linea)
+    total, n = 0.0, 0
+    for t in suyos:
+        exacta = next((x for x in libres if x == t), None)
+        if exacta is not None:
+            libres.remove(exacta)
+            total, n = total + 1.0, n + 1
+            continue
+        # Cortado en pantalla («RODRIGUEZ AR…»): basta un prefijo de 4 letras o más.
+        corta = next((x for x in libres if len(x) >= 4 and t.startswith(x)), None)
+        if corta is not None:
+            libres.remove(corta)
+            total, n = total + 0.8, n + 1
+    return total, n
+
+
 def _plantilla_por_plantel(texto: str, plantel: list, preferidos=frozenset()) -> dict:
     """Encuentra en el texto pegado a los conductores DE LA EMPRESA, sin IA.
 
@@ -32690,25 +32742,24 @@ def _plantilla_por_plantel(texto: str, plantel: list, preferidos=frozenset()) ->
     Da igual el orden de las palabras y el formato.
 
       · Una persona casa en una línea con 2 o más palabras de su nombre (de 3
-        letras o más; cortada en pantalla, basta un prefijo de 4 letras).
+        letras o más; cortada en pantalla, basta un prefijo de 4 letras), y
+        cada palabra de la línea cuenta una sola vez (`_casar_linea`).
       · Si dos personas encajan igual de bien en la misma línea (dos hermanos
         «RODRIGUEZ ARIAS» sin el nombre de pila), no se elige: va a `dudosos`.
         Con `preferidos` (los del centro), a igualdad gana el del centro.
       · La ruta y la hora se toman de la misma línea o, si vienen en otras, de
         la distancia al nombre que se repite en la mayoría (el formato de una
-        celda por línea). Un ID de conductor largo (A2S2HK9FC8JOUX) no es ruta.
+        celda por línea). Un ID de conductor largo (A2S2HK9FC8JOUX), un
+        recuento («115/115») o una duración («7h») no son ruta; y fuera de la
+        línea del nombre, solo vale como hora una línea que es SOLO una hora
+        (no «Cierre de sesión: 19:09»).
 
     plantel: [(id, nombre)]. Devuelve {"filas": [{"ruta", "conductor",
     "h_salida", "furgo", "driver_id", "linea"}], "dudosos": [texto]}. Pura:
     `test_plantilla_plantel.py`.
     """
     lineas = [(l or "").replace("\xa0", " ") for l in (texto or "").splitlines()]
-    toks = [set(_normalize_name(l).split()) for l in lineas]
-
-    def casa(t, ts):
-        if t in ts:
-            return 1.0
-        return 0.8 if any(len(x) >= 4 and t.startswith(x) for x in ts) else 0.0
+    toks = [_normalize_name(l).split() for l in lineas]
 
     candidatos: dict = {}
     for did, nombre in plantel:
@@ -32718,10 +32769,9 @@ def _plantilla_por_plantel(texto: str, plantel: list, preferidos=frozenset()) ->
         for i, ts in enumerate(toks):
             if not ts:
                 continue
-            puntos = [casa(t, ts) for t in suyos]
-            n = sum(1 for p in puntos if p > 0)
+            puntos, n = _casar_linea(ts, suyos)
             if n >= 2:
-                candidatos.setdefault(i, []).append((sum(puntos), n / len(suyos), did in preferidos, did, nombre))
+                candidatos.setdefault(i, []).append((puntos, n / len(suyos), did in preferidos, did, nombre))
     elegidos: dict = {}
     dudosos = []
     for i in sorted(candidatos):
@@ -32738,13 +32788,17 @@ def _plantilla_por_plantel(texto: str, plantel: list, preferidos=frozenset()) ->
         for w in re.split(r"[\s;|,]+", lineas[j].strip()):
             w = w.strip().upper()
             if (w and _RUTA_EN_TEXTO_RE.match(w) and not w.isdigit() and not _CONTRATO_RE.match(w)
+                    and not re.fullmatch(r"\d+/\d+|\d+[HM]", w)
                     and not _PLACA_RE.fullmatch(w) and not _HORA_EN_TEXTO_RE.fullmatch(w)
                     and not (len(w) >= 10 and re.fullmatch(r"[A-Z0-9]+", w))):
                 out.append(w)
         return out
 
     def hora_en(j):
-        m = _HORA_EN_TEXTO_RE.search(lineas[j])
+        if j in de_nombre:
+            m = _HORA_EN_TEXTO_RE.search(lineas[j])
+        else:
+            m = _HORA_EN_TEXTO_RE.fullmatch(lineas[j].strip())
         return "%02d:%s" % (int(m.group(1)), m.group(2)) if m else ""
 
     def placa_en(j):
@@ -32780,33 +32834,88 @@ def _plantilla_por_plantel(texto: str, plantel: list, preferidos=frozenset()) ->
     return {"filas": filas, "dudosos": dudosos}
 
 
-def _plantilla_leer_texto(texto: str, del_centro: list, todos: list) -> Optional[dict]:
-    """El texto pegado, leído con el plantel (ver `_plantilla_por_plantel`).
+def _plantilla_por_bloques(texto: str, plantel: list, preferidos=frozenset()) -> Optional[dict]:
+    """La lista de rutas cuando cada ruta es un BLOQUE (así sale al copiar la
+    pantalla de progreso de rutas, medido con la de Dani el 27-09-2026):
 
-    Toda la empresa a la vez (alguien de otro centro puede venir a echar una
-    mano), con preferencia por los del centro cuando dos encajan igual: de una
-    sola pasada, para que la ruta y la hora se sitúen con el patrón de TODOS
-    (en dos pasadas, el de otro centro se quedaba solo y cogía la hora del de
-    al lado). Y al final, lo que el lector
-    por columnas saca y NO es de nadie del plantel, pero solo si trae ruta,
-    hora o matrícula en su línea: una persona nueva aún sin ficha no se pierde,
-    y el tipo de servicio o una cabecera no se cuelan como conductor.
+        CA_A22                         ← abre el bloque
+        7h 27m                         ← duración: no es ni ruta ni hora
+        10:10                          ← la hora de salida: una línea SOLO con hora
+        ISRAEL DAVID SANCHEZ CORTES    ← el conductor: el PRIMER nombre del bloque
+        Cierre de sesión en la aplicación: 19:09   ← no es la salida
+        Allan Zarate Largo             ← segundo nombre: el apoyo, no la ruta
+        76/76 paradas · 115/115 entregas
+
+    Solo el primer nombre de cada bloque es de esa ruta; los siguientes son
+    apoyos o rescates y no van en la hoja (la misma regla que la IA: «si una
+    ruta tiene varios conductores, coge solo el primero»). Si el nombre no es
+    de nadie del plantel, sale igual, tal cual, para que se vea y se corrija:
+    ahí no hay duda de que es el conductor, porque lo dice el bloque.
+    None si no hay al menos dos cabeceras de ruta: entonces no es este formato.
+    """
+    lineas = [(l or "").replace("\xa0", " ") for l in (texto or "").splitlines()]
+    cabeceras = [i for i, l in enumerate(lineas) if _es_cabecera_ruta(l)]
+    if len(cabeceras) < 2:
+        return None
+    filas, dudosos = [], []
+    for k, i in enumerate(cabeceras):
+        fin = cabeceras[k + 1] if k + 1 < len(cabeceras) else len(lineas)
+        hora = ""
+        for l in lineas[i + 1:fin]:
+            m = _HORA_EN_TEXTO_RE.fullmatch(l.strip())
+            if m:
+                hora = "%02d:%s" % (int(m.group(1)), m.group(2))
+                break
+        for j in range(i + 1, fin):
+            if not _parece_persona(lineas[j]):
+                continue
+            r = _plantilla_por_plantel(lineas[j], plantel, preferidos)
+            if r["filas"]:
+                f = r["filas"][0]
+                conductor, did = f["conductor"], f["driver_id"]
+            else:
+                conductor, did = _nombre_de_texto(lineas[j]), None
+                if r["dudosos"]:
+                    dudosos.append(" ".join(lineas[j].split())[:80])
+            filas.append({"ruta": lineas[i].strip().upper(), "conductor": conductor, "h_salida": hora,
+                          "furgo": "", "driver_id": did, "linea": j})
+            break
+    return {"filas": filas, "dudosos": dudosos}
+
+
+def _plantilla_leer_texto(texto: str, del_centro: list, todos: list) -> Optional[dict]:
+    """El texto pegado, leído con el plantel.
+
+    Si es la lista en bloques (una cabecera de ruta por bloque), se lee por
+    bloques (`_plantilla_por_bloques`). Si no, se busca a la gente en todo el
+    texto (`_plantilla_por_plantel`), toda la empresa a la vez (alguien de
+    otro centro puede venir a echar una mano) y con preferencia por los del
+    centro cuando dos encajan igual: de una sola pasada, para que la ruta y la
+    hora se sitúen con el patrón de TODOS (en dos pasadas, el de otro centro
+    se quedaba solo y cogía la hora del de al lado). Y al final, lo que el
+    lector por columnas saca y NO es de nadie del plantel, pero solo si tiene
+    pinta de persona (`_parece_persona`) y trae ruta, hora o matrícula en su
+    línea: una persona nueva aún sin ficha no se pierde, y «PARADAS»,
+    «ENTREGAS» o una cabecera no se cuelan como conductor.
     None si no aparece nadie del plantel: entonces lee la IA como antes.
     """
-    r = _plantilla_por_plantel(texto, todos, frozenset(i for i, _ in del_centro))
+    preferidos = frozenset(i for i, _ in del_centro)
+    b = _plantilla_por_bloques(texto, todos, preferidos)
+    if b and any(f["driver_id"] for f in b["filas"]):
+        return b
+    r = _plantilla_por_plantel(texto, todos, preferidos)
     filas = list(r["filas"])
     if not filas:
         return None
-    dudosos = r["dudosos"]
     nombres = [n for _, n in todos]
     for f in _plantilla_texto_sin_ia(texto):
-        if not (f.get("ruta") or f.get("h_salida") or f.get("furgo")):
+        if not (f.get("ruta") or f.get("h_salida") or f.get("furgo")) or not _parece_persona(f["conductor"]):
             continue
         if any(_match_score(f["conductor"], n) >= 1.6 for n in nombres):
             continue
         filas.append({**f, "driver_id": None, "linea": 10 ** 6})
     filas.sort(key=lambda f: f["linea"])
-    return {"filas": filas, "dudosos": dudosos}
+    return {"filas": filas, "dudosos": r["dudosos"]}
 
 
 async def _plantilla_plantel(admin: dict, center: str) -> Tuple[list, list]:
@@ -33078,12 +33187,15 @@ def _plantilla_validar_filas(rows: list, conductores: list, matriculas: dict, as
         if conductor:
             n = _normalize_name(conductor).strip()
             if not any(n == nn for _, nn in nombres_norm):
-                mejor, mejor_sc = None, 0.0
-                for original, _ in nombres_norm:
-                    sc = _match_score(conductor, original)
-                    if sc > mejor_sc:
-                        mejor, mejor_sc = original, sc
-                if mejor and mejor_sc >= 0.8:
+                # Solo se sugiere con un parecido CLARO (2 palabras o más) y
+                # sin empate: con una sola palabra en común («ARIAS») se
+                # proponía a otra persona y un clic le cambiaba el nombre.
+                puntos = sorted(((_match_score(conductor, original), original)
+                                 for original, _ in nombres_norm), reverse=True)
+                mejor, mejor_sc = (puntos[0][1], puntos[0][0]) if puntos else (None, 0.0)
+                if len(puntos) > 1 and puntos[1][0] == mejor_sc:
+                    mejor = None
+                if mejor and mejor_sc >= 1.6:
                     if _normalize_name(mejor).strip() != n:
                         avisos.append({"fila": i, "campo": "conductor", "tipo": "nombre_parecido",
                                        "texto": "En la empresa figura como %s" % mejor,
@@ -33165,8 +33277,12 @@ async def plantilla_validar(data: dict = Body(...), user: dict = Depends(require
     if m:
         dia = "%s-%s-%s" % (m.group(3), m.group(2), m.group(1))
     fc = _filtro_centro(user, center) if center and center != "Todos" else {}
+    # Toda la empresa, no solo el centro: alguien que viene de otro centro a
+    # echar una mano existe, y marcarlo como «no hay nadie con ese nombre»
+    # hacía sugerir a otra persona con un apellido en común.
     conductores = await db.drivers.find(
-        {"active": {"$ne": False}, **fc}, {"_id": 0, "name": 1}).to_list(3000)
+        {"active": {"$ne": False}, "status": {"$nin": ["deleted", "fusionada"]},
+         "merged_into": {"$exists": False}}, {"_id": 0, "name": 1}).to_list(5000)
     matriculas = {}
     async for v in db.vehicles.find({"status": {"$nin": ["deleted", "baja"]}, **fc},
                                     {"_id": 0, "license_plate": 1}):
@@ -42041,7 +42157,10 @@ async def plantilla_furgos(data: dict = Body(...), admin: dict = Depends(require
                                "hora": _afin_hhmm(c.get("hora")), "hora_tapa": _afin_hhmm(c.get("hora_tapa"))})
     mover = [{**m, "furgo": placa.get(m["furgo"], m["furgo"]), "antes_de": _afin_hhmm(m["antes_de"])}
              for m in res["mover"]]
-    return {"propuestas": propuestas, "mover": mover, "sin_furgo": res["sin_furgo"],
+    # Cuántos de la hoja tienen ya furgoneta fija: con 0, «no había ninguna
+    # que poner» no dice qué hacer; la pantalla manda a aplicar el reparto.
+    con_fija = sum(1 for f in filas if f.conductor and (D["fijas"].get(f.conductor) or _af.Fija()).principal)
+    return {"propuestas": propuestas, "mover": mover, "sin_furgo": res["sin_furgo"], "con_fija": con_fija,
             "sin_nombre": sin_nombre, "opciones": opciones, "conflictos": conflictos,
             "fila_actualizada": doc.get("actualizado_en") if carriles else None,
             "metodo": res["metodo"], "cuidado_activo": D["cuidado_activo"]}

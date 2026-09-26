@@ -67,6 +67,15 @@ def test_nombre_mal_leido_se_sugiere():
     assert avisos[0]["sugerencia"] == "JUAN FRANCISCO VIÑALS PRIMO"
 
 
+def test_una_sola_palabra_en_comun_no_sugiere_a_otra_persona():
+    """«KEVIN FERNEY ARIAS» comparte «ARIAS» con otra ficha: antes proponía
+    cambiarle el nombre por el de esa otra persona."""
+    conductores = CONDUCTORES + [{"name": "ANDREA RODRIGUEZ ARIAS"}]
+    fila = {"ruta": "", "conductor": "KEVIN FERNEY ARIAS", "furgo": "", "h_salida": ""}
+    avisos = validar([fila], conductores, MATRICULAS, {})
+    assert _tipos(avisos) == ["nombre_desconocido"] and avisos[0]["sugerencia"] is None
+
+
 def test_nombre_desconocido():
     fila = {"ruta": "", "conductor": "PERSONA QUE NO EXISTE", "furgo": "", "h_salida": ""}
     assert _tipos(validar([fila], CONDUCTORES, MATRICULAS, {})) == ["nombre_desconocido"]

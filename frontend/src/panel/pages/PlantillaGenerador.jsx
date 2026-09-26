@@ -544,7 +544,7 @@ export default function PlantillaGenerador() {
       }
       setAutoPuestas(prev => ({ ...prev, ...nuevas }))
       setFurgosIA(j)
-      setPonerNota(n ? `${n} ${t('pg.ff.puestas')}` : t('pg.ff.ningunaNueva'))
+      setPonerNota(n ? `${n} ${t('pg.ff.puestas')}` : (j.con_fija === 0 ? t('pg.ff.sinFijas') : t('pg.ff.ningunaNueva')))
     } catch (e) {
       setPonerNota(e?.response?.data?.detail || 'No se pudo calcular')
     } finally { setPoniendo(false) }
