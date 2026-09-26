@@ -179,3 +179,28 @@ def test_freno_de_perdidas(tmp_path, monkeypatch):
     esc.aviso = avisos.append
     (o,) = esc.vuelta(AHORA).oportunidades
     assert o.importe == 0 and o.avisos[0].startswith("FRENO") and avisos == []
+
+
+def test_el_estado_de_cada_fuente_para_la_pantalla(tmp_path):
+    """Cuándo leyó, cuánto cupo le queda y si falló: sin esto, una pantalla sin
+    chollos no dice si es que no hay o que no está leyendo."""
+    import httpx
+    esc, f, reg = _escaner(tmp_path, [])
+    lectura_buena = f.leer
+
+    def con_cupo(d):
+        l = lectura_buena(d)
+        l.cupo_restante = 431
+        return l
+    f.leer = con_cupo
+    esc.vuelta(AHORA)
+    est = esc.estado["falsa"]
+    assert est["ultima"] == AHORA.isoformat() and est["cupo_restante"] == 431 and est["error"] is None
+    assert est["cuotas"] == 4 and est["partidos"] == 1 and est["cada_min"] == 360   # 100/día, 25 por vuelta
+
+    def cae(d):
+        raise httpx.ConnectError("sin red")
+    f.leer = cae
+    esc._ultima.clear()
+    esc.vuelta(AHORA + timedelta(hours=7))
+    assert "sin red" in esc.estado["falsa"]["error"]

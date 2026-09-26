@@ -46,6 +46,40 @@ const hace = (iso) => {
   return h < 48 ? `hace ${h} h` : `hace ${Math.round(h / 24)} días`
 }
 
+/* Las fuentes de cuotas, con su estado. Una pantalla sin chollos tiene que
+   decir si es que no los hay o que no está leyendo nada (sin clave, apagado,
+   o la última lectura falló). */
+const FUENTES = [['the_odds_api', 'The Odds API', 'créditos este mes'], ['api_football', 'API-Football', 'llamadas hoy']]
+const cadaCuanto = (min) => (min < 120 ? `${min} min` : `${Math.round(min / 60)} h`)
+
+function Fuentes({ est }) {
+  const det = Object.fromEntries(lista(est.fuentes_detalle).map((f) => [f.nombre, f]))
+  return (
+    <div className="flex flex-wrap gap-2">
+      {FUENTES.map(([k, nombre, unidad]) => {
+        const d = det[k]
+        let color = 'bg-dark-600'
+        let texto = 'esperando su primera lectura'
+        if (!est.claves?.[k]) { color = 'bg-amber-400'; texto = 'sin clave' }
+        else if (!est.escaneando) { texto = 'clave puesta · buscador apagado' }
+        else if (d?.error) { color = 'bg-red-400'; texto = `la última lectura falló: ${d.error}` }
+        else if (d?.ultima) {
+          color = 'bg-emerald-400'
+          texto = `leída ${hace(d.ultima)} · ${d.partidos ?? 0} partidos` +
+            (d.cupo_restante != null ? ` · quedan ${d.cupo_restante} ${unidad}` : '') +
+            (d.cada_min ? ` · lee cada ${cadaCuanto(d.cada_min)}` : '')
+        }
+        return (
+          <span key={k} className="flex items-center gap-1.5 rounded-full bg-white/[0.04] px-2.5 py-1 text-[12px] text-dark-300">
+            <span className={`h-2 w-2 shrink-0 rounded-full ${color}`} />
+            <b className="font-semibold text-dark-100">{nombre}</b> {texto}
+          </span>
+        )
+      })}
+    </div>
+  )
+}
+
 const PESTANAS = [
   ['seguras', 'Seguras'], ['valor', 'Valor'], ['vivo', 'En vivo'],
   ['apuestas', 'Mis apuestas'], ['aprende', 'Aprendizaje'],
@@ -53,7 +87,7 @@ const PESTANAS = [
 
 function Chip({ children, tono }) {
   const color = {
-    valor: 'bg-sky-500/15 text-sky-300', vivo: 'bg-rose-500/15 text-rose-300',
+    valor: 'bg-sky-500/15 text-sky-300', vivo: 'bg-red-500/15 text-red-300',
     segura: 'bg-emerald-500/15 text-emerald-300', mejor: 'bg-brand-500/20 text-brand-200',
     fallo: 'bg-amber-500/15 text-amber-300',
   }[tono]
@@ -285,7 +319,7 @@ function MisApuestas({ apuestas, alCambiar }) {
                             ))}
                           </div>
                         )
-                        : <span className={a.resultado === 'ganada' ? 'text-emerald-300' : a.resultado === 'perdida' ? 'text-rose-300' : 'text-dark-400'}>
+                        : <span className={a.resultado === 'ganada' ? 'text-emerald-300' : a.resultado === 'perdida' ? 'text-red-300' : 'text-dark-400'}>
                             {a.resultado}
                           </span>}
                     </td>
@@ -300,7 +334,7 @@ function MisApuestas({ apuestas, alCambiar }) {
 }
 
 const ESTADO_SEG = {
-  apagado: ['text-rose-300', 'Apagado: no bate el cierre'],
+  apagado: ['text-red-300', 'Apagado: no bate el cierre'],
   'de confianza': ['text-emerald-300', 'De confianza'],
   aprendiendo: ['text-dark-400', 'Aprendiendo'],
   neutro: ['text-dark-400', 'Sin decidir'],
@@ -408,7 +442,7 @@ export default function Valor() {
         <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
           <h1 className="font-display text-[19px] font-semibold tracking-tight text-dark-50">Valor</h1>
           <div className="flex flex-wrap gap-x-4 gap-y-1 text-[12.5px] text-dark-400">
-            <span>Beneficio <b className={`tabular-nums ${b.beneficio >= 0 ? 'text-emerald-300' : 'text-rose-300'}`}>{eur(b.beneficio)}</b></span>
+            <span>Beneficio <b className={`tabular-nums ${b.beneficio >= 0 ? 'text-emerald-300' : 'text-red-300'}`}>{eur(b.beneficio)}</b></span>
             <span>Esperado <b className="tabular-nums text-dark-100">{eur(b.beneficio_esperado)}</b></span>
             <span>CLV <b className="tabular-nums text-dark-100">{b.clv_medio == null ? '—' : pct(b.clv_medio)}</b></span>
             <span>Pendientes <b className="tabular-nums text-dark-100">{b.pendientes ?? 0}</b></span>
@@ -418,10 +452,11 @@ export default function Valor() {
         <div className="flex items-center gap-1.5 text-[12px] text-dark-500">
           <Radio size={13} className={est.escaneando ? 'text-emerald-400' : 'text-dark-600'} />
           {est.escaneando
-            ? <>Buscando en {lista(est.fuentes).join(', ') || 'ninguna fuente (faltan las claves)'}{est.ultima_vuelta ? ` · última lectura ${hace(est.ultima_vuelta)}` : ' · aún sin leer'}</>
+            ? <>Buscador en marcha{est.ultima_vuelta ? ` · última lectura ${hace(est.ultima_vuelta)}` : ' · aún sin leer'}</>
             : 'El buscador está apagado: solo se ve lo que ya había y lo que apuntes a mano.'}
           {est.ultimo_error ? <span className="text-amber-300"> · la última vuelta falló ({est.ultimo_error})</span> : null}
         </div>
+        <Fuentes est={est} />
         {est.frenado && (
           <Aviso>Freno: hoy llevas {eur(-est.resultado_hoy)} perdidos (tope {eur(est.freno_dia)}). No metas más hasta mañana.</Aviso>
         )}

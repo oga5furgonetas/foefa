@@ -80,6 +80,10 @@ class Escaner:
         self.freno_dia = float(os.environ.get("VALOR_FRENO_DIA", "0.06")) * banca
         self._ultima: Dict[str, datetime] = {}
         self._avisadas: Dict[tuple, tuple] = {}
+        # Lo que la pantalla enseña de cada fuente: cuándo leyó, qué le queda de
+        # cupo y si la última falló. Sin esto, un buscador sin datos no dice si
+        # es que no hay chollos o que no está leyendo nada.
+        self.estado: Dict[str, dict] = {}
         self.reg.db.execute("CREATE TABLE IF NOT EXISTS uso (fuente TEXT, ts TEXT, coste INTEGER)")
 
     def _por_defecto(self) -> Dict[Fuente, Presupuesto]:
@@ -117,20 +121,27 @@ class Escaner:
         lectura = Lectura()
         leidas = []
         for f, p in self.fuentes.items():
+            est = self.estado.setdefault(f.nombre, {})
+            est["cada_min"] = round(p.intervalo().total_seconds() / 60)
             if not self._toca(f, p, ahora):
                 continue
             try:
                 l = f.leer(self.deportes.get(f.nombre, []))
             except SinClave as e:
                 log.warning("%s", e)
+                est["error"] = "falta la clave"
                 continue
             except (httpx.HTTPError, PermissionError) as e:
                 # Una llamada fallida también gasta cupo (y reintentar en bucle lo
                 # fundiría): cuenta y espera a su siguiente turno.
                 log.error("%s ha fallado: %s", f.nombre, e)
                 self._apunta(f, p, ahora)
+                est.update(ultima=ahora.isoformat(), error=str(e)[:160])
                 continue
             self._apunta(f, p, ahora)
+            est.update(ultima=ahora.isoformat(), error=None, cuotas=len(l.cuotas), partidos=len(l.eventos))
+            if l.cupo_restante is not None:
+                est["cupo_restante"] = l.cupo_restante
             lectura.eventos += l.eventos
             lectura.cuotas += l.cuotas
             lectura.avisos += l.avisos

@@ -42191,7 +42191,7 @@ VALOR_DB = os.environ.get("VALOR_DB", "").strip() or str(PRIVADO_DIR / "valor.db
 # en una por aquí. El escáner tiene su propia conexión (SQLite cruza las dos).
 _VALOR_LOCK = _threading.Lock()
 _VALOR_REG = None
-_VALOR_ESTADO = {"escaneando": False, "fuentes": [], "ultima_vuelta": None, "ultimo_error": None}
+_VALOR_ESTADO = {"escaneando": False, "fuentes": [], "fuentes_detalle": [], "ultima_vuelta": None, "ultimo_error": None}
 _VALOR_DUENO_TTL = 60.0
 _VALOR_DUENO_CACHE: dict = {}
 
@@ -42272,7 +42272,10 @@ async def valor_estado(_: dict = Depends(require_valor)):
     hoy = await _valor(lambda r: r.resultado_de_hoy())
     banca = _valor_banca()
     freno = float(os.environ.get("VALOR_FRENO_DIA", "0.06")) * banca
-    return {**_VALOR_ESTADO, "banca": banca, "resultado_hoy": round(hoy, 2),
+    # Qué claves de fuentes hay puestas: sí o no, nunca el valor.
+    claves = {"the_odds_api": bool(os.environ.get("ODDS_API_KEY", "").strip()),
+              "api_football": bool(os.environ.get("APISPORTS_KEY", "").strip())}
+    return {**_VALOR_ESTADO, "claves": claves, "banca": banca, "resultado_hoy": round(hoy, 2),
             "freno_dia": round(freno, 2), "frenado": -hoy >= freno > 0,
             "cuota_minima": float(os.environ.get("VALOR_CUOTA_MINIMA", "1.70")),
             "prob_minima": float(os.environ.get("VALOR_PROB_MINIMA", "0.60"))}
@@ -42398,6 +42401,7 @@ def _valor_bucle():
         except Exception as e:                               # noqa: BLE001
             logger.exception("Valor: vuelta fallida")
             _VALOR_ESTADO["ultimo_error"] = type(e).__name__
+        _VALOR_ESTADO["fuentes_detalle"] = [{"nombre": n, **d} for n, d in esc.estado.items()]
         time.sleep(30)
 
 
