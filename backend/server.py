@@ -1195,7 +1195,10 @@ async def ensure_owner_org():
             "db_name": _DEFAULT_DB_NAME,
             "slug": "admin",
             "status": "active",
-            "centers": ["OGA5", "DGA1", "DGA2"],
+            # Sin sedes: las da de alta quien administra (Configuración ->
+            # Centros). Aquí iban escritas las de otro producto y toda
+            # instalación nueva nacía con ellas.
+            "centers": [],
             "max_centers": 999,
             "created_at": datetime.now(timezone.utc).isoformat(),
         })
@@ -1204,8 +1207,7 @@ async def ensure_owner_org():
         patch = {}
         if not o.get("slug"):
             patch["slug"] = "admin"
-        if not o.get("centers"):
-            patch["centers"] = ["OGA5", "DGA1", "DGA2"]
+        if not o.get("max_centers"):
             patch["max_centers"] = 999
         if patch:
             await global_db.organizations.update_one({"id": OWNER_ORG_ID}, {"$set": patch})
@@ -2216,9 +2218,18 @@ def _provider_network_for(provider: str) -> Optional[dict]:
     return None
 
 
+# EL DIRECTORIO DE EJEMPLO SOLO SE SIEMBRA SI SE PIDE. Son talleres y
+# alquiladoras reales de una zona concreta (Galicia): útiles para quien opera
+# ahí y ruido para cualquier otra empresa, que se encontraba cuarenta talleres
+# ajenos el primer día. Con SEMBRAR_DIRECTORIO_EJEMPLO=1 vuelve a sembrarse.
+_SEMBRAR_DIRECTORIO = os.environ.get("SEMBRAR_DIRECTORIO_EJEMPLO", "").strip().lower() in ("1", "true", "si", "sí")
+
+
 @app.on_event("startup")
 async def seed_workshops():
     """Siembra los talleres ancla en el primer arranque. Idempotente."""
+    if not _SEMBRAR_DIRECTORIO:
+        return
     try:
         existing = await db.workshops.count_documents({})
         if existing > 0:
@@ -2245,6 +2256,8 @@ async def refresh_workshops_v2():
 
     Marca un flag de versión en una colección de metadatos para no re-ejecutar en
     cada arranque innecesariamente, pero aunque corra varias veces es seguro."""
+    if not _SEMBRAR_DIRECTORIO:
+        return
     try:
         meta = await db.app_meta.find_one({"_id": "workshops_seed_version"})
         if meta and meta.get("version", 0) >= 4:
@@ -28368,6 +28381,8 @@ _SEED_RENTALS = [
 @app.on_event("startup")
 async def seed_rental_companies():
     """Siembra y actualiza el directorio de empresas de alquiler (upsert por nombre)."""
+    if not _SEMBRAR_DIRECTORIO:
+        return
     try:
         for r in _SEED_RENTALS:
             existing = await db.rental_companies.find_one({"name": r["name"]})

@@ -15,7 +15,6 @@ primary_region = "cdg"
   DB_NAME = "staging_flota"
   PUBLIC_BASE_URL = "https://flota-backend-staging.fly.dev"
   JWT_EXPIRE_HOURS = "72"
-  ADMIN_NAME = "Admin Staging"
 
 [http_service]
   internal_port = 8080
