@@ -190,7 +190,14 @@ Motor puro en `backend/afinidad.py` (léelo: explica el porqué), 27 pruebas en
 4. Investigaciones de DNR y portal `/dnr/t/` de FlotaDSP: no recuperados
    (están en el commit raíz `cfed72b` si Dani los pide).
 5. Capturas para la portada (`ProductoReal.jsx` se oculta si no hay imágenes).
-6. **Valor**: claves de las APIs de cuotas y banca real (ver arriba).
+6. **Valor**: faltan las claves y la banca. Fuentes gratis comprobadas el
+   27-09: The Odds API (500 créditos/mes, Pinnacle y Betfair en «eu»),
+   API-Football (100/día), OddsPapi (250/mes, una petición por partido);
+   Odds-API.io ya no da claves gratis. Cuando Dani deje
+   `C:\Users\Usuario\.flota-odds.txt` (ODDS_API_KEY=, APISPORTS_KEY=,
+   VALOR_BANCA=): meterlas en Fly sin imprimirlas, UNA llamada real a cada
+   API contra `valor/fuentes/*.py` (corregir con su test), y VALOR_ESCANEAR=1.
+   La pantalla ya enseña el estado de cada fuente (sin clave / leída hace…).
 7. **Privacidad pendiente** («que nadie tenga acceso a nuestra data»):
    - Los ficheros de R2 (fotos, DNI y documentos de conductores, CV) se abren
      con el enlace, sin sesión (r2.dev público). Los nombres no se adivinan
