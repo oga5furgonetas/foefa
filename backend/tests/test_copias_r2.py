@@ -23,7 +23,7 @@ def _cuerpo(nombre):
 
 def test_la_rotacion_solo_mira_las_copias_propias():
     c = _cuerpo("backup_database_to_r2")
-    assert 'key = f"backups/{MARCA.lower()}_{stamp}.jsonl.gz"' in c
+    assert 'key = f"backups/{MARCA.lower()}_{stamp}_' in c
     assert 'Prefix=f"backups/{MARCA.lower()}_"' in c, "la rotación vuelve a mirar todas las copias"
     assert 'Prefix="backups/")' not in c
 

@@ -16672,6 +16672,81 @@ async def send_daily_inspection_summary():
         logger.error(f"Error en resumen diario: {e}", exc_info=True)
 
 
+# ── COPIAS DE SEGURIDAD CIFRADAS ─────────────────────────────────────────────
+# El almacenamiento de ficheros es PÚBLICO por enlace (las fotos se sirven así),
+# y las copias iban en claro con nombre predecible
+# (`backups/flotadsp_AAAA-MM-DD_0201.jsonl.gz`): la base ENTERA —datos
+# personales, hashes de contraseñas, claves de integraciones— se podía bajar
+# sin contraseña adivinando la fecha. Comprobado el 26-09-2026 (HTTP 200 de
+# 112 MB) y retiradas. Ahora cada copia va cifrada con AES-256-GCM (clave en el
+# secreto COPIAS_CLAVE, 32 bytes en base64) y con un sufijo aleatorio en el
+# nombre. SIN CLAVE NO SE SUBE NINGUNA COPIA: una copia legible en un sitio
+# público es peor que no tener copia. Se descifra con
+# `backend/scripts/descifrar_copia.py`. Test: test_copias_cifradas.
+_COPIA_MAGIA = b"FLOTACOPIA1\n"
+_COPIA_TROZO = 4 * 1024 * 1024
+
+
+def _clave_copias() -> Optional[bytes]:
+    import base64 as _b64
+    txt = os.environ.get("COPIAS_CLAVE", "").strip()
+    if not txt:
+        return None
+    try:
+        clave = _b64.b64decode(txt)
+    except Exception:                                             # noqa: BLE001
+        return None
+    return clave if len(clave) == 32 else None
+
+
+def _cifrar_fichero(origen: str, destino: str, clave: bytes) -> None:
+    """AES-256-GCM por trozos de 4 MB: la memoria no crece con la copia. Cada
+    trozo lleva su nonce y, como dato asociado, su número y si es el último:
+    así no se pueden reordenar ni cortar trozos sin que falle el descifrado."""
+    import struct
+    from cryptography.hazmat.primitives.ciphers.aead import AESGCM
+    aes = AESGCM(clave)
+    with open(origen, "rb") as fi, open(destino, "wb") as fo:
+        fo.write(_COPIA_MAGIA)
+        idx = 0
+        actual = fi.read(_COPIA_TROZO)
+        while True:
+            siguiente = fi.read(_COPIA_TROZO)
+            ultimo = not siguiente
+            nonce = os.urandom(12)
+            cif = aes.encrypt(nonce, actual, struct.pack(">IB", idx, 1 if ultimo else 0))
+            fo.write(nonce + struct.pack(">I", len(cif)) + cif)
+            if ultimo:
+                break
+            actual, idx = siguiente, idx + 1
+
+
+def _descifrar_fichero(origen: str, destino: str, clave: bytes) -> None:
+    import struct
+    from cryptography.hazmat.primitives.ciphers.aead import AESGCM
+    aes = AESGCM(clave)
+    total = os.path.getsize(origen)
+    with open(origen, "rb") as fi, open(destino, "wb") as fo:
+        if fi.read(len(_COPIA_MAGIA)) != _COPIA_MAGIA:
+            raise ValueError("No es una copia cifrada de Flota")
+        idx = 0
+        while fi.tell() < total:
+            cab = fi.read(16)
+            if len(cab) < 16:
+                raise ValueError("Copia cortada")
+            nonce, n = cab[:12], struct.unpack(">I", cab[12:])[0]
+            cif = fi.read(n)
+            if len(cif) != n:
+                raise ValueError("Copia cortada")
+            # Si el último trozo que queda no es el que se cifró como último
+            # (copia cortada o con trozos añadidos), el descifrado falla.
+            ultimo = fi.tell() == total
+            fo.write(aes.decrypt(nonce, cif, struct.pack(">IB", idx, 1 if ultimo else 0)))
+            idx += 1
+        if idx == 0:
+            raise ValueError("Copia vacía")
+
+
 async def backup_database_to_r2() -> dict:
     """Copia TODAS las bases (global + cada inquilino) a un JSONL.gz en R2.
 
@@ -16689,8 +16764,13 @@ async def backup_database_to_r2() -> dict:
     r2 = get_r2()
     if not r2:
         return {"success": False, "error": "R2 no configurado"}
+    clave = _clave_copias()
+    if not clave:
+        return {"success": False, "error": "Sin COPIAS_CLAVE: no se sube una copia legible "
+                                           "a un almacenamiento público por enlace"}
 
     ruta = None
+    ruta_cif = None
     try:
         bases = [n for n in await client.list_database_names()
                  if n not in ("admin", "local", "config", "sample_mflix")]
@@ -16727,13 +16807,20 @@ async def backup_database_to_r2() -> dict:
                     "error": f"Copia sospechosa: {tam} bytes para {total_docs} documentos"}
 
         stamp = datetime.now(timezone.utc).strftime("%Y-%m-%d_%H%M")
-        key = f"backups/{MARCA.lower()}_{stamp}.jsonl.gz"
+        # El sufijo aleatorio va DESPUÉS de la fecha: la rotación ordena por
+        # nombre y sigue quedándose con las 14 más recientes.
+        import secrets as _secrets
+        key = f"backups/{MARCA.lower()}_{stamp}_{_secrets.token_hex(16)}.jsonl.gz.cifrada"
         loop = asyncio.get_running_loop()
+        fd2, ruta_cif = tempfile.mkstemp(suffix=".cifrada")
+        os.close(fd2)
+        await loop.run_in_executor(_executor, _cifrar_fichero, ruta, ruta_cif, clave)
+        tam = os.path.getsize(ruta_cif)
 
         def _subir():
-            with open(ruta, "rb") as fh:
+            with open(ruta_cif, "rb") as fh:
                 r2.put_object(Bucket=R2_BUCKET, Key=key, Body=fh,
-                              ContentType="application/gzip")
+                              ContentType="application/octet-stream")
             # Releer el tamano en R2: si lo subido no coincide con lo escrito,
             # la copia no vale. Es justo el fallo que dejo un fichero de 0 MB
             # pasando por bueno durante ocho dias.
@@ -16771,11 +16858,12 @@ async def backup_database_to_r2() -> dict:
         logger.error(f"Backup FALLO: {e}", exc_info=True)
         return {"success": False, "error": str(e)}
     finally:
-        if ruta:
-            try:
-                os.remove(ruta)
-            except OSError:
-                pass
+        for _r in (ruta, ruta_cif):
+            if _r:
+                try:
+                    os.remove(_r)
+                except OSError:
+                    pass
 
 
 @api_router.post("/admin/backup-now")
