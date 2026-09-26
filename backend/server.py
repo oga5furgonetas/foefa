@@ -32679,6 +32679,152 @@ def _plantilla_texto_sin_ia(texto: str) -> list:
     return filas
 
 
+def _plantilla_por_plantel(texto: str, plantel: list, preferidos=frozenset()) -> dict:
+    """Encuentra en el texto pegado a los conductores DE LA EMPRESA, sin IA.
+
+    Leer por columnas adivina qué trozo es el nombre, y eso falla con lo que
+    se copia de las pantallas de rutas: a veces cada celda sale en su propia
+    línea, los nombres vienen «Apellidos, Nombre», sin tildes o cortados, y
+    hay columnas de texto (el tipo de servicio) con más letras que el nombre.
+    Aquí se hace al revés: se busca en el texto a cada persona del plantel.
+    Da igual el orden de las palabras y el formato.
+
+      · Una persona casa en una línea con 2 o más palabras de su nombre (de 3
+        letras o más; cortada en pantalla, basta un prefijo de 4 letras).
+      · Si dos personas encajan igual de bien en la misma línea (dos hermanos
+        «RODRIGUEZ ARIAS» sin el nombre de pila), no se elige: va a `dudosos`.
+        Con `preferidos` (los del centro), a igualdad gana el del centro.
+      · La ruta y la hora se toman de la misma línea o, si vienen en otras, de
+        la distancia al nombre que se repite en la mayoría (el formato de una
+        celda por línea). Un ID de conductor largo (A2S2HK9FC8JOUX) no es ruta.
+
+    plantel: [(id, nombre)]. Devuelve {"filas": [{"ruta", "conductor",
+    "h_salida", "furgo", "driver_id", "linea"}], "dudosos": [texto]}. Pura:
+    `test_plantilla_plantel.py`.
+    """
+    lineas = [(l or "").replace("\xa0", " ") for l in (texto or "").splitlines()]
+    toks = [set(_normalize_name(l).split()) for l in lineas]
+
+    def casa(t, ts):
+        if t in ts:
+            return 1.0
+        return 0.8 if any(len(x) >= 4 and t.startswith(x) for x in ts) else 0.0
+
+    candidatos: dict = {}
+    for did, nombre in plantel:
+        suyos = _name_tokens(nombre)
+        if len(suyos) < 2:
+            continue
+        for i, ts in enumerate(toks):
+            if not ts:
+                continue
+            puntos = [casa(t, ts) for t in suyos]
+            n = sum(1 for p in puntos if p > 0)
+            if n >= 2:
+                candidatos.setdefault(i, []).append((sum(puntos), n / len(suyos), did in preferidos, did, nombre))
+    elegidos: dict = {}
+    dudosos = []
+    for i in sorted(candidatos):
+        cs = sorted(candidatos[i], key=lambda x: (-x[0], -x[1], not x[2]))
+        if len(cs) > 1 and cs[1][:3] == cs[0][:3] and cs[1][3] != cs[0][3]:
+            dudosos.append(" ".join(lineas[i].split())[:80])
+            continue
+        if cs[0][3] not in elegidos:
+            elegidos[cs[0][3]] = (i, cs[0][4])
+    de_nombre = {i for i, _ in elegidos.values()}
+
+    def rutas_en(j):
+        out = []
+        for w in re.split(r"[\s;|,]+", lineas[j].strip()):
+            w = w.strip().upper()
+            if (w and _RUTA_EN_TEXTO_RE.match(w) and not w.isdigit() and not _CONTRATO_RE.match(w)
+                    and not _PLACA_RE.fullmatch(w) and not _HORA_EN_TEXTO_RE.fullmatch(w)
+                    and not (len(w) >= 10 and re.fullmatch(r"[A-Z0-9]+", w))):
+                out.append(w)
+        return out
+
+    def hora_en(j):
+        m = _HORA_EN_TEXTO_RE.search(lineas[j])
+        return "%02d:%s" % (int(m.group(1)), m.group(2)) if m else ""
+
+    def placa_en(j):
+        m = _PLACA_RE.search(lineas[j])
+        return (m.group(1) + m.group(2)).upper() if m else ""
+
+    def distancia(sacar):
+        """La posición (respecto al nombre) donde está el dato en la mayoría."""
+        cuenta: dict = {}
+        for i, _ in elegidos.values():
+            for d in (0, -1, 1, -2, 2, -3, 3, 4, 5, 6):
+                j = i + d
+                if 0 <= j < len(lineas) and (d == 0 or j not in de_nombre) and sacar(j):
+                    cuenta[d] = cuenta.get(d, 0) + 1
+        if not cuenta:
+            return None
+        d = max(cuenta, key=lambda k: (cuenta[k], k == 0, -abs(k)))
+        return d if cuenta[d] >= max(1, (len(elegidos) + 1) // 2) else None
+
+    d_ruta, d_hora, d_placa = distancia(rutas_en), distancia(hora_en), distancia(placa_en)
+    filas = []
+    for did, (i, nombre) in sorted(elegidos.items(), key=lambda x: x[1][0]):
+        ruta = hora = placa = ""
+        if d_ruta is not None and 0 <= i + d_ruta < len(lineas):
+            r = rutas_en(i + d_ruta)
+            ruta = r[0] if r else ""
+        if d_hora is not None and 0 <= i + d_hora < len(lineas):
+            hora = hora_en(i + d_hora)
+        if d_placa is not None and 0 <= i + d_placa < len(lineas):
+            placa = placa_en(i + d_placa)
+        filas.append({"ruta": ruta, "conductor": " ".join(nombre.upper().split()), "h_salida": hora,
+                      "furgo": placa, "driver_id": did, "linea": i})
+    return {"filas": filas, "dudosos": dudosos}
+
+
+def _plantilla_leer_texto(texto: str, del_centro: list, todos: list) -> Optional[dict]:
+    """El texto pegado, leído con el plantel (ver `_plantilla_por_plantel`).
+
+    Toda la empresa a la vez (alguien de otro centro puede venir a echar una
+    mano), con preferencia por los del centro cuando dos encajan igual: de una
+    sola pasada, para que la ruta y la hora se sitúen con el patrón de TODOS
+    (en dos pasadas, el de otro centro se quedaba solo y cogía la hora del de
+    al lado). Y al final, lo que el lector
+    por columnas saca y NO es de nadie del plantel, pero solo si trae ruta,
+    hora o matrícula en su línea: una persona nueva aún sin ficha no se pierde,
+    y el tipo de servicio o una cabecera no se cuelan como conductor.
+    None si no aparece nadie del plantel: entonces lee la IA como antes.
+    """
+    r = _plantilla_por_plantel(texto, todos, frozenset(i for i, _ in del_centro))
+    filas = list(r["filas"])
+    if not filas:
+        return None
+    dudosos = r["dudosos"]
+    nombres = [n for _, n in todos]
+    for f in _plantilla_texto_sin_ia(texto):
+        if not (f.get("ruta") or f.get("h_salida") or f.get("furgo")):
+            continue
+        if any(_match_score(f["conductor"], n) >= 1.6 for n in nombres):
+            continue
+        filas.append({**f, "driver_id": None, "linea": 10 ** 6})
+    filas.sort(key=lambda f: f["linea"])
+    return {"filas": filas, "dudosos": dudosos}
+
+
+async def _plantilla_plantel(admin: dict, center: str) -> Tuple[list, list]:
+    """([(id, nombre)] del centro, [(id, nombre)] de toda la empresa): los activos."""
+    todos = []
+    async for d in db.drivers.find({"status": {"$nin": ["deleted", "fusionada"]}, "active": {"$ne": False},
+                                    "merged_into": {"$exists": False}},
+                                   {"_id": 0, "id": 1, "name": 1, "center": 1}):
+        if d.get("id") and str(d.get("name") or "").strip():
+            todos.append(d)
+    del_centro = []
+    if center and center.lower() not in ("todos", "all"):
+        _filtro_centro(admin, center)                 # 403 si no es de sus centros
+        del_centro = [(d["id"], d["name"]) for d in todos
+                      if re.search(re.escape(center), str(d.get("center") or ""), re.I)]
+    return del_centro, [(d["id"], d["name"]) for d in todos]
+
+
 def _semana_y_fecha(dia_iso: str = "") -> tuple:
     """(semana ISO, 'dd/mm/aaaa') de un día 'aaaa-mm-dd'; sin día, hoy en España."""
     from datetime import date as _date
@@ -32726,22 +32872,34 @@ async def plantilla_extraer(request: Request, admin: dict = Depends(require_admi
     except ValueError:
         redondeo = 0
 
-    if not veh_imgs and not veh_txt:
-        raise HTTPException(400, "Falta la lista de vehículos: sube una captura o pega el texto.")
+    # Con furgonetas fijas basta la lista de rutas: la furgoneta la pone el
+    # sistema. Hace falta al menos UNA de las dos listas.
+    if not (veh_imgs or veh_txt or rut_imgs or rut_txt):
+        raise HTTPException(400, "Pega o sube la lista de rutas del día o la de quién lleva qué vehículo.")
+
+    # El TEXTO pegado se lee primero buscando a la gente de la empresa, sin IA
+    # (`_plantilla_leer_texto`). Si aparece alguien, esa lectura manda y el
+    # texto no se manda a la IA: es más fiable con lo que se copia de las
+    # pantallas de rutas y no saca de aquí la lista del día.
+    del_centro, todos_pl = await _plantilla_plantel(admin, str(form.get("center") or "").strip())
+    rut_local = _plantilla_leer_texto(rut_txt, del_centro, todos_pl) if rut_txt else None
+    veh_local = _plantilla_leer_texto(veh_txt, del_centro, todos_pl) if veh_txt else None
+    rut_txt_ia = "" if rut_local else rut_txt
+    veh_txt_ia = "" if veh_local else veh_txt
 
     # Orden fijo: rutas (capturas y luego texto) y vehículos (capturas y luego
     # texto). Así el texto de cada lista es siempre el ÚLTIMO de su grupo.
-    n_rutas = len(rut_imgs) + (1 if rut_txt else 0)
-    n_total = n_rutas + len(veh_imgs) + (1 if veh_txt else 0)
+    n_rutas = len(rut_imgs) + (1 if rut_txt_ia else 0)
+    n_total = n_rutas + len(veh_imgs) + (1 if veh_txt_ia else 0)
     try:
-        client = _gemini_client_plantilla()
+        client = _gemini_client_plantilla() if n_total else None
         model_name = _modelo_ia()
         tareas = [_gemini_extract(client, model_name, _PROMPT_RUTAS, b) for b in rut_imgs]
-        if rut_txt:
-            tareas.append(_gemini_extract_text(client, model_name, _PROMPT_RUTAS, rut_txt))
+        if rut_txt_ia:
+            tareas.append(_gemini_extract_text(client, model_name, _PROMPT_RUTAS, rut_txt_ia))
         tareas += [_gemini_extract(client, model_name, _PROMPT_VEHICULOS, b) for b in veh_imgs]
-        if veh_txt:
-            tareas.append(_gemini_extract_text(client, model_name, _PROMPT_VEHICULOS, veh_txt))
+        if veh_txt_ia:
+            tareas.append(_gemini_extract_text(client, model_name, _PROMPT_VEHICULOS, veh_txt_ia))
         # return_exceptions: que un fallo en UNA fuente no tumbe todo el proceso.
         todos = await asyncio.gather(*tareas, return_exceptions=True)
     except Exception as e:                                        # noqa: BLE001
@@ -32760,18 +32918,24 @@ async def plantilla_extraer(request: Request, admin: dict = Depends(require_admi
 
     # El TEXTO que la IA no pudo leer (o del que no sacó nada) se lee por columnas.
     sin_ia = False
-    if rut_txt and not (rut_results[-1] or {}).get("rutas"):
-        rut_results[-1] = {"rutas": _plantilla_texto_sin_ia(rut_txt)}
+    if rut_txt_ia and not (rut_results[-1] or {}).get("rutas"):
+        rut_results[-1] = {"rutas": _plantilla_texto_sin_ia(rut_txt_ia)}
         sin_ia = True
-    if veh_txt and not (veh_results[-1] or {}).get("asignaciones"):
-        veh_results[-1] = {"asignaciones": _plantilla_texto_sin_ia(veh_txt)}
+    if veh_txt_ia and not (veh_results[-1] or {}).get("asignaciones"):
+        veh_results[-1] = {"asignaciones": _plantilla_texto_sin_ia(veh_txt_ia)}
         sin_ia = True
-    if all(r is None for r in veh_results):
+    if rut_local:
+        rut_results.append({"rutas": rut_local["filas"]})
+    if veh_local:
+        veh_results.append({"asignaciones": [{"conductor": f["conductor"], "furgo": f.get("furgo") or "",
+                                              "movil": ""} for f in veh_local["filas"]]})
+    if all(r is None for r in rut_results + veh_results):
         raise HTTPException(503, "La IA no está disponible ahora mismo y las capturas no se pueden "
                                  "leer sin ella. Pega el texto de la lista o prueba en un minuto.")
 
     week_num, fecha_str = _semana_y_fecha()
     rutas_map: dict = {}
+    rutas_sin_codigo: list = []
     for cd in rut_results:
         if not cd:
             continue
@@ -32785,6 +32949,8 @@ async def plantilla_extraer(request: Request, admin: dict = Depends(require_admi
             key = str(r.get("ruta") or "").strip().upper()
             if key and key not in rutas_map:
                 rutas_map[key] = r
+            elif not key and str(r.get("conductor") or "").strip():
+                rutas_sin_codigo.append(r)
 
     asignaciones: list = []
     vistos: set = set()
@@ -32805,12 +32971,17 @@ async def plantilla_extraer(request: Request, admin: dict = Depends(require_admi
                 "observaciones": ""}
 
     rows_out = []
-    if rutas_map:
+    if rutas_map or rutas_sin_codigo:
         # Rutas + vehículos: se cruzan por el nombre del conductor.
         usados = set()
-        for ruta_key in sorted(rutas_map):
-            rr = rutas_map[ruta_key]
+        vistos_r = set()
+        orden = [(k, rutas_map[k]) for k in sorted(rutas_map)] + [("", r) for r in rutas_sin_codigo]
+        for ruta_key, rr in orden:
             conductor = str(rr.get("conductor") or "").strip()
+            nn = _normalize_name(conductor).strip()
+            if not ruta_key and (not nn or nn in vistos_r):
+                continue
+            vistos_r.add(nn)
             h_salida = _redondear_hora(rr.get("h_salida"), redondeo)
             furgo, movil = "", ""
             best_score, best_i = 0.0, None
@@ -32841,7 +33012,17 @@ async def plantilla_extraer(request: Request, admin: dict = Depends(require_admi
                                   str(asig.get("movil") or ""), asig.get("furgo"),
                                   _redondear_hora(asig.get("h_salida"), redondeo)))
 
-    return {"week": week_num, "date": fecha_str, "rows": rows_out, "sin_ia": sin_ia}
+    # El nombre, tal como está en su ficha: así la plantilla casa luego con su
+    # furgoneta fija y el Excel sale con el nombre bueno, no con el de la
+    # pantalla (al revés, sin tildes o cortado). Solo si no hay duda.
+    nombre_de = {i: n for i, n in todos_pl}
+    for f in rows_out:
+        cid = _afin_casar(f["conductor"], del_centro) or _afin_casar(f["conductor"], todos_pl)
+        if cid and nombre_de.get(cid):
+            f["conductor"] = " ".join(nombre_de[cid].upper().split())
+    dudosos = sorted(set((rut_local or {}).get("dudosos", []) + (veh_local or {}).get("dudosos", [])))
+    return {"week": week_num, "date": fecha_str, "rows": rows_out, "sin_ia": sin_ia,
+            "por_plantel": bool(rut_local or veh_local), "dudosos": dudosos[:30]}
 
 
 @api_router.get("/tools/plantilla-desde-asignacion")

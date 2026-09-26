@@ -386,10 +386,13 @@ export default function PlantillaGenerador() {
   const hayVeh = vehList.length > 0 || vehText.trim().length > 0
 
   async function extraer() {
-    if (!hayVeh) return
+    if (!hayVeh && !hayRutas) return
     setLoading(true); setErr(''); setAviso('')
     try {
       const fd = new FormData()
+      // El centro: con él se reconoce a SU gente en lo pegado (backend
+      // `_plantilla_leer_texto`), aunque los nombres vengan al revés o cortados.
+      if (!noCenter) fd.append('center', center)
       vehList.forEach(f => fd.append('vehiculos', f.file))
       rutasList.forEach(f => fd.append('rutas', f.file))
       if (vehText.trim()) fd.append('vehiculos_texto', vehText.trim())
@@ -397,8 +400,11 @@ export default function PlantillaGenerador() {
       fd.append('redondeo', String(tramo))
       const resp = await apiFetch('/tools/plantilla-extraer', { method: 'POST', body: fd })
       const j = await resp.json()
+      if (!resp.ok) { setErr(j?.detail || t('pg.eDesconocido')); setLoading(false); return }
       if (j.sin_ia) setAviso(t('pg.sinIA'))
+      if (lista(j.dudosos).length) setAviso(`${t('pg.dudosos')} ${lista(j.dudosos).join(' · ')}`)
       if (!j.rows?.length) { setErr(t('pg.nadaLeido')); setLoading(false); return }
+      autoPoner.current = true
       await empezar(j)
     } catch (e) { setErr(e?.message || t('pg.eDesconocido')) }
     setLoading(false)
@@ -410,6 +416,7 @@ export default function PlantillaGenerador() {
     try {
       const r = await plantillaDesdeAsignacion(center)
       if (!r.data?.rows?.length) { setErr(t('pg.sinAsig')); setLoading(false); return }
+      autoPoner.current = true
       await empezar(r.data)
     } catch (e) { setErr(e?.response?.data?.detail || e?.message || t('pg.eDesconocido')) }
     setLoading(false)
@@ -532,7 +539,7 @@ export default function PlantillaGenerador() {
       for (const p of lista(j.propuestas)) {
         if (!p.aplicar || (data.rows[p.fila]?.furgo || '').trim()) continue
         editCell(p.fila, 'furgo', p.furgo)
-        nuevas[p.fila] = { tipo: p.tipo, motivos: lista(p.motivos) }
+        nuevas[p.fila] = { tipo: p.tipo, motivos: lista(p.motivos), puntos: p.puntos }
         n++
       }
       setAutoPuestas(prev => ({ ...prev, ...nuevas }))
@@ -547,6 +554,18 @@ export default function PlantillaGenerador() {
     editCell(i, 'furgo', v)
     setAutoPuestas(prev => { if (!(i in prev)) return prev; const n = { ...prev }; delete n[i]; return n })
   }
+
+  /* Al montar la hoja (pegando la lista o desde la asignación), las furgonetas
+     se ponen solas: es lo que se quiere el 100 % de las mañanas y ahorra un
+     clic. Una vez, y cuando el borrador compartido ya existe, porque cada
+     celda se guarda en él. */
+  const autoPoner = useRef(false)
+  useEffect(() => {
+    if (!autoPoner.current || step !== 'preview' || !sharedDraft?.id || noCenter) return
+    if (!(data?.rows || []).some(r => (r.conductor || '').trim() && !(r.furgo || '').trim())) { autoPoner.current = false; return }
+    autoPoner.current = false
+    ponerFurgonetas(false)
+  }, [sharedDraft?.id, step]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // Las sugerencias del desplegable y los avisos de la fila, al día tras cada cambio.
   useEffect(() => {
@@ -656,12 +675,12 @@ export default function PlantillaGenerador() {
             <div>
               <MultiDropZone
                 label={t('pg.dzPlat')}
-                hint={t('pg.dzPlatHint')}
+                hint={t('pg.dzPlatHintFijas')}
                 items={vehList}
                 onAdd={files => addFiles(files, setVehList)}
                 onRemove={i => removeFile(i, setVehList)}
                 inputRef={refVeh}
-                required
+                optional
               />
               <PasteBox value={vehText} onChange={setVehText} abierto
                 placeholder={'Rodriguez Arias, Andrea\t7906NFX\nLuis Gómez Vidal\t0116 MBP'} />
@@ -676,7 +695,7 @@ export default function PlantillaGenerador() {
                 inputRef={refRutas}
                 optional
               />
-              <PasteBox value={rutasText} onChange={setRutasText}
+              <PasteBox value={rutasText} onChange={setRutasText} abierto
                 placeholder={'R12\tANDREA RODRIGUEZ\t10:20\nR13\tLUIS GOMEZ\t10:40'} />
             </div>
           </div>
@@ -689,10 +708,10 @@ export default function PlantillaGenerador() {
             </select>
           </div>
 
-          {hayVeh && (
+          {(hayVeh || hayRutas) && (
             <div className={`mt-3 flex items-start gap-2 rounded-lg border px-3 py-2.5 text-xs ${hayRutas ? 'border-emerald-500/20 bg-emerald-500/5 text-emerald-300' : 'border-amber-500/20 bg-amber-500/5 text-amber-300'}`}>
               <Info size={13} className="mt-0.5 shrink-0" />
-              <span>{hayRutas ? t('pg.infoCompleto') : t('pg.infoSolo')}</span>
+              <span>{hayRutas ? (hayVeh ? t('pg.infoCompleto') : t('pg.infoSoloRutas')) : t('pg.infoSolo')}</span>
             </div>
           )}
 
@@ -701,10 +720,10 @@ export default function PlantillaGenerador() {
           <div className="mt-5 flex flex-wrap items-center justify-between gap-4">
             {noCenter && <p className="text-xs text-amber-400">{t('pg.avisoCentro')}</p>}
             <div className="ml-auto">
-              <button onClick={extraer} disabled={!hayVeh || loading} className="btn-primary flex items-center gap-2 disabled:opacity-40">
+              <button onClick={extraer} disabled={(!hayVeh && !hayRutas) || loading} className="btn-primary flex items-center gap-2 disabled:opacity-40">
                 {loading
                   ? <><Loader2 size={16} className="animate-spin" /> {t('pg.analizando')}</>
-                  : <><FileSpreadsheet size={16} /> {hayRutas ? t('pg.extraerCompleto') : t('pg.extraerPlat')}</>}
+                  : <><FileSpreadsheet size={16} /> {hayRutas && hayVeh ? t('pg.extraerCompleto') : t('pg.extraerPlat')}</>}
               </button>
             </div>
           </div>
@@ -715,7 +734,7 @@ export default function PlantillaGenerador() {
       {step === 'preview' && data && (
         <>
           {sharedNote && (
-            <div className="mb-3 flex items-center gap-2 rounded-lg border border-sky-500/25 bg-sky-500/10 px-3 py-2 text-xs text-sky-200">
+            <div className="mb-3 flex items-center gap-2 rounded-lg border border-sky-500/25 bg-sky-500/10 px-3 py-2 text-xs text-sky-300">
               <span className="h-2 w-2 animate-pulse rounded-full bg-emerald-400" /> {sharedNote}
             </div>
           )}
@@ -988,7 +1007,7 @@ function AvisosFurgos({ info, nota, filas }) {
   if (!nota && !sinNombre.length && !mover.length && !conflictos.length && !vieja) return null
   return (
     <div className="mb-3 space-y-2 rounded-xl border border-sky-500/25 bg-sky-500/[0.06] p-3 text-[12.5px] text-dark-200">
-      {nota && <div className="flex items-center gap-1.5 font-semibold text-sky-200"><Wand2 size={13} /> {nota}</div>}
+      {nota && <div className="flex items-center gap-1.5 font-semibold text-sky-300"><Wand2 size={13} /> {nota}</div>}
       {sinNombre.length > 0 && (
         <div>{t('pg.ff.sinNombre')} <span className="text-dark-100">{sinNombre.map(i => filas[i]?.conductor).filter(Boolean).join(' · ')}</span></div>
       )}
@@ -1045,7 +1064,7 @@ function FurgoCell({ value, onChange, isPink, furgosDisp, usedFurgos, onTogglePi
   return (
     <div ref={ref} className="relative flex items-center gap-0.5">
       {auto && (
-        <span title={`${t(TIPO_KEY[auto.tipo] || TIPO_KEY.libre)}${auto.motivos?.length ? ': ' + auto.motivos.join(' · ') : ''}`}
+        <span title={`${t(TIPO_KEY[auto.tipo] || TIPO_KEY.libre)}${auto.puntos != null ? ` · ${Math.round(auto.puntos)} ${t('pg.ff.pts')}` : ''}${auto.motivos?.length ? ': ' + auto.motivos.join(' · ') : ''}`}
           className={`h-1.5 w-1.5 shrink-0 rounded-full ${COLOR_AUTO[auto.tipo] || 'bg-gray-300'}`} />
       )}
       <input value={value || ''} onChange={e => onChange(e.target.value)} aria-label={t('pg.col.furgo')}
@@ -1071,7 +1090,10 @@ function FurgoCell({ value, onChange, isPink, furgosDisp, usedFurgos, onTogglePi
               {paraEste.map(o => (
                 <button key={`p${o.furgo}`} onClick={() => { onChange(o.furgo); setOpen(false) }}
                   className="flex w-full flex-col px-3 py-1.5 text-left transition hover:bg-brand-500/10">
-                  <span className="font-mono text-dark-100">{o.furgo}</span>
+                  <span className="flex items-center justify-between gap-2">
+                    <span className="font-mono text-dark-100">{o.furgo}</span>
+                    {o.puntos != null && <span className="text-[10px] tabular-nums text-brand-300">{Math.round(o.puntos)} {t('pg.ff.pts')}</span>}
+                  </span>
                   {o.motivo && <span className="text-[10.5px] leading-snug text-dark-400">{o.motivo}</span>}
                 </button>
               ))}

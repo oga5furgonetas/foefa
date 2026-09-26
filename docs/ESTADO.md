@@ -147,6 +147,26 @@ Motor puro en `backend/afinidad.py` (léelo: explica el porqué), 27 pruebas en
   «Poner furgonetas» no rellena nada (comprobado).
 - Falta: casilla de «vetadas» en la pantalla (el servidor ya las admite).
 
+## Qué se hizo el 27-09-2026 (madrugada): pantalla de furgonetas y pegar la lista de rutas
+
+- **«Furgonetas fijas» rediseñada** para los jefes de centro: guía de 3 pasos
+  (se oculta), progreso «X de Y conductores con furgoneta», conductores como
+  frases con la matrícula dibujada como placa, editor desplegable con
+  interruptores explicados y la nota 1-10 en botones, furgonetas en tarjetas,
+  «¿A quién se la doy?» y el reparto automático en ventanas, y la fila de
+  aparcamiento dibujada como el patio. Puntos visibles en la plantilla.
+- **Pegar la lista del día tal cual** (lo que se copia de la pantalla de
+  rutas): `_plantilla_por_plantel` busca en el texto a los conductores DE LA
+  EMPRESA (orden, tildes y nombres cortados dan igual; dos que encajan igual
+  → `dudosos`, no se adivina), y la ruta y la hora salen de su línea o del
+  patrón que se repite (una celda por línea). El nombre queda como en su
+  ficha. Si el texto se reconoce así, **no se manda a la IA**. La lista de
+  vehículos ya NO es obligatoria y, al montar la hoja, «Poner furgonetas» se
+  ejecuta solo. Pruebas: `test_plantilla_plantel.py`, `test_plantilla_montar_plantel.py`.
+- Sin muestra real de esa pantalla: probado con formatos plausibles (columnas,
+  una celda por línea). Si con la lista real algo no casa, pedir a Dani un
+  trozo pegado y añadirlo como prueba.
+
 ## Pendiente (por prioridad)
 
 0. **URGENTE — aviso de Amazon del 24-09**: leer la sección 0 de

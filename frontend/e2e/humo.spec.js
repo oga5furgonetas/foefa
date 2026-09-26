@@ -210,12 +210,18 @@ test.describe('Furgonetas fijas', () => {
     await page.goto('/panel/plantilla', { waitUntil: 'domcontentloaded' })
     await page.getByRole('button', { name: 'Furgonetas fijas' }).click()
     await expect(page.getByText('Ana López')).toBeVisible({ timeout: 15000 })
-    await expect(page.locator('#ff-r-c1')).toHaveValue('8')
-    await expect(page.getByText(/ha llevado la 5678DEF 4 de sus últimos 6 días/)).toBeVisible()
-    await expect(page.getByText(/todavía NO cuentan en el reparto/)).toBeVisible()
-    await page.getByRole('button', { name: 'Fila de aparcamiento' }).click()
+    await expect(page.getByText('1 de 2 conductores con furgoneta')).toBeVisible()
+    await expect(page.getByText('Nota 8/10')).toBeVisible()
+    await expect(page.getByText(/Lleva la .* 4 de sus últimos 6 días/)).toBeVisible()
+    await expect(page.getByRole('button', { name: 'Asignársela' })).toBeVisible()
+    await expect(page.getByText(/Los golpes se muestran solo como dato/)).toBeVisible()
+    // Al abrir a Ana, su nota (8) sale marcada y cada interruptor dice lo que hace.
+    await page.getByRole('button', { name: /Editar/ }).first().click()
+    await expect(page.locator('#ff-r-c1 button[aria-pressed="true"]')).toHaveText('8')
+    await expect(page.getByText('Tiene preferencia si la comparte')).toBeVisible()
+    await page.getByRole('tab', { name: /Fila de aparcamiento/ }).click()
     await expect(page.getByText('Fila 1')).toBeVisible()
-    await expect(page.getByText(/Sin apuntar en ninguna fila/)).toContainText('5678DEF')   // la que queda sin apuntar
+    await expect(page.getByText(/Sin apuntar en ninguna fila/).locator('..')).toContainText('5678 DEF')   // la que queda sin apuntar
     expect(fallos, fallos.join(' | ')).toHaveLength(0)
   })
 })
