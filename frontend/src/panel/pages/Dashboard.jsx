@@ -382,13 +382,13 @@ export default function Dashboard() {
   const decisiones = [
     { n: itvVencidas.length, label: t(itvVencidas.length === 1 ? 'ops.itv.expired.1' : 'ops.itv.expired'), why: t('ops.why.itv'),
       to: '/panel/vencimientos', tono: 'red' },
-    { n: sinRevisar, label: t('ops.sinrevisar'), why: t('ops.why.sinrevisar'),
+    { n: sinRevisar, label: t(sinRevisar === 1 ? 'ops.sinrevisar.1' : 'ops.sinrevisar'), why: t('ops.why.sinrevisar'),
       to: '/panel/asignacion', tono: 'amber' },
     { n: itvProximas.length, label: t('ops.itv.soon'), why: t('ops.why.itv.soon'),
       to: '/panel/vencimientos', tono: 'amber' },
     { n: itvSinFecha.length, label: t('ops.itv.nodate'), why: t('ops.why.itv.nodate'),
       to: '/panel/vencimientos', tono: 'dark' },
-    { n: cola, label: t('ops.validate'), why: t('ops.why.validate'),
+    { n: cola, label: t(cola === 1 ? 'ops.validate.1' : 'ops.validate'), why: t('ops.why.validate'),
       to: '/panel/revision', tono: 'amber' },
     { n: data.open_incidents || 0, label: t(data.open_incidents === 1 ? 'ops.incidents.1' : 'ops.incidents'), why: t('ops.why.incidents'),
       to: '/panel/incidencias', tono: 'dark' },
@@ -444,7 +444,7 @@ export default function Dashboard() {
             <><b className="font-semibold text-dark-50"><Count v={hoy.revision.hechas} /> {t('ops.of')} {hoy.revision.flota}</b>{' '}
               {t('hoy.brief.rev')}
               {sinRevisar > 0 && (
-                <> · <b className="font-semibold text-amber-300"><Count v={sinRevisar} /></b> {t('hoy.sinrevisar')}</>
+                <> · <b className="font-semibold text-amber-300"><Count v={sinRevisar} /></b> {t(sinRevisar === 1 ? 'hoy.sinrevisar.1' : 'hoy.sinrevisar')}</>
               )}.
             </>
           ) : fleet === 0
