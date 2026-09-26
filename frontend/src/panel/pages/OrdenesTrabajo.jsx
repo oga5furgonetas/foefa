@@ -733,7 +733,7 @@ export default function OrdenesTrabajo() {
           <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1 border-b border-dark-800/60 px-4 py-3">
             <h2 className="text-[15px] font-bold">Informe de flota</h2>
             <span className="text-[12.5px] text-dark-400">
-              {informe.informe.desde} a {informe.informe.hasta} · para entregar a Amazon
+              {informe.informe.desde} a {informe.informe.hasta} · para entregar a tu cliente o a tu aseguradora
             </span>
             {/* Dos formatos porque son para dos cosas distintas: el CSV lo
                 abre Amazon y lo cruza con lo suyo; el PDF es el que se imprime
@@ -781,7 +781,7 @@ export default function OrdenesTrabajo() {
             <button onClick={() => setVerLlaves((v) => !v)}
               className="flex w-full items-center gap-2 text-left">
               <Key size={15} className="text-dark-400" />
-              <span className="text-[13.5px] font-semibold">Dar acceso directo a Amazon</span>
+              <span className="text-[13.5px] font-semibold">Dar acceso directo a tu cliente</span>
               <span className="text-[12.5px] text-dark-400">para que lo saquen ellos, sin pedírtelo</span>
               <span className="ml-auto text-[12.5px] text-dark-500">{verLlaves ? 'ocultar' : 'ver'}</span>
             </button>

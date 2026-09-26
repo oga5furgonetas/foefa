@@ -9,6 +9,11 @@
 # alguna no contesta, se dice en rojo y el script sale con error.
 $ErrorActionPreference = 'Stop'
 $raiz = Split-Path $PSScriptRoot -Parent
+. (Join-Path $PSScriptRoot "destino.ps1")
+$d = Get-Destino -Requiere backend
+# `fly deploy` sube a la app que diga fly.toml, sin preguntar: se mira antes.
+$toml = Get-Content (Join-Path $raiz "backend\fly.toml") -Raw
+if ($toml -match '(?m)^app\s*=\s*"[^"]*flotadsp') { throw "backend/fly.toml apunta a una app de FlotaDSP. Cambia `app =` por la tuya." }
 
 Write-Host "==> Desplegando el backend..."
 Push-Location (Join-Path $raiz "backend")
@@ -23,7 +28,7 @@ try {
   # La salida entera va a un fichero y solo se enseña lo que dice algo: `fly`
   # escupe sesenta lineas de capas de Docker que no aportan nada. Si falla, ahi
   # esta el registro completo para mirarlo.
-  $log = Join-Path $env:TEMP "flotadsp-fly-deploy.log"
+  $log = Join-Path $env:TEMP "flotia-fly-deploy.log"
   fly deploy --strategy immediate *>&1 | Out-File -FilePath $log -Encoding utf8
   $codigo = $LASTEXITCODE
   $ErrorActionPreference = $anterior
@@ -36,7 +41,7 @@ Write-Host ""
 Write-Host "==> Comprobando que las pantallas siguen contestando..."
 $py = "C:\Users\Usuario\AppData\Local\Programs\Python\Python312\python.exe"
 if (-not (Test-Path $py)) { $py = "python" }
-& $py (Join-Path $PSScriptRoot "humo.py")
+& $py (Join-Path $PSScriptRoot "humo.py") $d.backend
 if ($LASTEXITCODE -ne 0) {
   Write-Host ""
   Write-Host "PRODUCCION ESTA ROTA. Arreglalo y vuelve a desplegar." -ForegroundColor Red

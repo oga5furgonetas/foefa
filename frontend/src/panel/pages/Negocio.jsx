@@ -719,7 +719,7 @@ export default function Negocio() {
       alert(d.length
         ? 'Desfases entre lo pagado y lo real:\n\n' + d.map((x) =>
             `${x.dsp}: paga ${x.pagadas} · tiene ${x.en_flota} (${x.diferencia > 0 ? '+' : ''}${x.diferencia})`).join('\n')
-        : 'Todo cuadra: nadie tiene más ni menos furgonetas de las que paga.\n\n(Los DSP sin cantidad medida en su suscripción no se comparan.)')
+        : 'Todo cuadra: nadie tiene más ni menos vehículos de los que paga.\n\n(Las empresas sin cantidad medida en su suscripción no se comparan.)')
     } catch (e) {
       alert(e?.response?.data?.detail || 'No se pudo revisar')
     } finally { setRevisando(false) }
@@ -837,7 +837,7 @@ export default function Negocio() {
               mirarlo ahora, que es cuando se factura. */}
           <button onClick={revisarFacturacion} disabled={revisando}
             className="btn-ghost flex items-center gap-1.5 text-sm text-dark-400 hover:text-brand-300"
-            title="Compara las furgonetas pagadas con las que hay en flota, en todos los DSP">
+            title="Compara los vehículos pagados con los que hay en flota, en todas las empresas">
             {revisando ? <Loader2 size={14} className="animate-spin" /> : <Coins size={14} />} Revisar furgonetas facturadas
           </button>
           <a href="https://app.lemonsqueezy.com" target="_blank" rel="noreferrer" className="btn-secondary flex items-center gap-1.5 text-sm">{t('neg.billing.panel')} <ExternalLink size={14} /></a>
@@ -974,7 +974,7 @@ export default function Negocio() {
             </div>
             <div className="flex-1">
               <label className="label">Título *</label>
-              <input className="input" required maxLength={120} placeholder="Neumáticos -20% para conductores DSP" value={offerForm.title} onChange={e => setOfferForm(f => ({ ...f, title: e.target.value }))} />
+              <input className="input" required maxLength={120} placeholder="Neumáticos -20% para tus conductores" value={offerForm.title} onChange={e => setOfferForm(f => ({ ...f, title: e.target.value }))} />
             </div>
           </div>
           <div>

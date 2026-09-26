@@ -1259,43 +1259,30 @@ async def seed_initial_admin():
         })
         logger.info(f"Admin inicial '{username}' creado (primer arranque)")
 
-    # ── Admin fijo: Mery ── (idempotente)
-    # Contraseña inicial: variable de entorno MERY_PASSWORD (obligatoria en producción).
-    mery_password = os.environ.get("MERY_PASSWORD", "")
-    mery_existing = await global_db.admin_users.find_one({"username": "Mery"})
-    if not mery_existing:
-        if not mery_password:
-            logger.warning("MERY_PASSWORD no configurada — admin 'Mery' NO creado. Configura: fly secrets set MERY_PASSWORD=<contraseña>")
-        else:
+    # ── Super-admin del producto ── (idempotente)
+    # Es quien ve el panel de negocio (clientes, cobros) y puede entrar en
+    # cualquier empresa. Sale del entorno: SUPERADMIN_USERNAME y
+    # SUPERADMIN_PASSWORD. Sin ellas no se crea ninguno — nunca una cuenta con
+    # nombre de persona escrita en el codigo, que es lo que habia antes.
+    sa_usuario = os.environ.get("SUPERADMIN_USERNAME", "").strip()
+    sa_password = os.environ.get("SUPERADMIN_PASSWORD", "")
+    if sa_usuario and sa_password:
+        sa = await global_db.admin_users.find_one({"username": sa_usuario})
+        if not sa:
             await global_db.admin_users.insert_one({
-                "id": str(uuid.uuid4()), "username": "Mery",
-                "hashed_password": hash_password(mery_password), "name": "Mery",
-                "role": "admin", "theme": "pastel", "org_id": OWNER_ORG_ID,
-                "created_at": datetime.now(timezone.utc).isoformat(),
-            })
-            logger.info("Admin 'Mery' creado")
-    elif not mery_existing.get("theme"):
-        await global_db.admin_users.update_one(
-            {"username": "Mery"}, {"$set": {"theme": "pastel"}})
-
-    # ── Super-admin: dani (dueño del negocio, ÚNICO con panel super-admin) ── (idempotente)
-    # Contraseña inicial: variable de entorno DANI_PASSWORD (obligatoria en producción).
-    dani_password = os.environ.get("DANI_PASSWORD", "")
-    dani = await global_db.admin_users.find_one({"username": "dani"})
-    if not dani:
-        if not dani_password:
-            logger.warning("DANI_PASSWORD no configurada — super-admin 'dani' NO creado. Configura: fly secrets set DANI_PASSWORD=<contraseña>")
-        else:
-            await global_db.admin_users.insert_one({
-                "id": str(uuid.uuid4()), "username": "dani",
-                "hashed_password": hash_password(dani_password), "name": "Dani",
+                "id": str(uuid.uuid4()), "username": sa_usuario,
+                "hashed_password": hash_password(sa_password),
+                "name": os.environ.get("SUPERADMIN_NAME", sa_usuario),
                 "role": "admin", "org_id": OWNER_ORG_ID, "super_admin": True,
                 "created_at": datetime.now(timezone.utc).isoformat(),
             })
-            logger.info("Super-admin 'dani' creado")
-    elif not dani.get("super_admin"):
-        await global_db.admin_users.update_one(
-            {"username": "dani"}, {"$set": {"super_admin": True}})
+            logger.info("Super-admin '%s' creado", sa_usuario)
+        elif not sa.get("super_admin"):
+            await global_db.admin_users.update_one(
+                {"username": sa_usuario}, {"$set": {"super_admin": True}})
+    else:
+        logger.warning("Sin SUPERADMIN_USERNAME/SUPERADMIN_PASSWORD: no hay super-admin "
+                       "(el panel de negocio no lo vera nadie).")
 
     # Informar si R2 está configurado
     r2 = get_r2()
@@ -6459,7 +6446,7 @@ async def assistant_ask(data: dict, user: dict = Depends(require_admin)):
     }
 
     prompt = (
-        f"Eres el asistente de {MARCA} para el gestor de una flota de furgonetas DSP.\n"
+        f"Eres el asistente de {MARCA} para el gestor de una flota de vehículos.\n"
         "Responde a la pregunta usando EXCLUSIVAMENTE los datos JSON adjuntos. "
         "Si el dato no está, di claramente que no tienes esa información. "
         "Sé conciso y directo (máx. ~120 palabras), en el idioma de la pregunta, "
@@ -10559,8 +10546,8 @@ async def upload_inspection_photos(
                 if dc not in vc and vc[:4] not in dc:
                     raise HTTPException(
                         status_code=403,
-                        detail=("Esta furgoneta es de otro centro y hoy no te la han asignado. "
-                                "Si estás cubriendo en otra nave, pide que te la asignen en el "
+                        detail=("Este vehículo es de otra sede y hoy no te lo han asignado. "
+                                "Si estás cubriendo en otra sede, pide que te la asignen en el "
                                 "cuadrante de hoy y vuelve a enviarla."),
                     )
 
@@ -21243,7 +21230,7 @@ async def empleo_join_sincronizar(body: dict = Body(...), _=Depends(require_admi
         if n_puestos > 1:
             raise HTTPException(
                 400, "Hay varios puestos en JOIN: elige a cuál de ellos van estos candidatos, "
-                     "\"Todas las ofertas\" mezclaría naves.")
+                     "\"Todas las ofertas\" mezclaría sedes.")
     # UNA A LA VEZ POR EMPRESA, y lo decide la base: dos clics seguidos no
     # pueden lanzar dos descargas de los mismos cien CV. Una que lleve mas de
     # media hora «en marcha» se da por muerta (reinicio del servidor).
@@ -28468,7 +28455,7 @@ async def create_rental(data: dict, _=Depends(require_admin)):
     naves = await _centros_de_la_empresa()
     if not name or center not in naves:
         raise HTTPException(status_code=400, detail="Nombre y centro (%s) requeridos"
-                            % "/".join(naves or ["tu nave"]))
+                            % "/".join(naves or ["tu sede"]))
     doc = {
         "id": str(uuid.uuid4()),
         "name": name, "center": center,
@@ -31747,7 +31734,7 @@ async def onb_importar(body: dict = Body(...), user: dict = Depends(require_admi
         raise HTTPException(400, (
             "No he reconocido ninguna ficha. Pega el listado de la ETT tal cual, o una "
             "tabla de Excel con cabecera: una columna Nombre y otra con Teléfono o DNI "
-            "(y si quieres Email, Nave, Código formación, Fecha formación)."
+            "(y si quieres Email, Sede, Código formación, Fecha formación)."
             + (" Hay %d filas sin teléfono ni DNI: sin eso no se puede saber quién es quién."
                % sin_clave if sin_clave else "")))
     res = await _onb_guardar_listado(filas, user.get("name") or "")
@@ -31916,7 +31903,7 @@ async def onb_export(center: Optional[str] = None, _=Depends(require_admin)):
     pl = await _onb_plantilla()
     docs = list(pl["motivos"].keys())
 
-    cab = ["Nombre", "Telefono", "DNI", "IDPER", "ETT", "Nave",
+    cab = ["Nombre", "Telefono", "DNI", "IDPER", "ETT", "Sede",
            "En que punto esta"] + [pl["motivos"][d]["titulo"] for d in docs] + [
            "Lo que dice la ETT", "Nota", "Ultimo aviso", "Cuenta"]
 
@@ -32086,8 +32073,8 @@ async def founder_reserve(data: FounderReserve, request: Request):
 _DEFAULT_DRIVER_OFFER = {
     "id": f"ref-{MARCA.lower()}",
     "emoji": "🎁",
-    "title": "¿Conoces otro DSP que sufra con las furgonetas?",
-    "description": f"Recomiéndale {MARCA}: inspecciones con IA en 30 segundos, como las tuyas.",
+    "title": "¿Conoces otra empresa que sufra con sus vehículos?",
+    "description": f"Recomiéndale {MARCA}: revisiones con IA desde el móvil, como las tuyas.",
     "cta": "Ver cómo funciona",
     "url": f"{_PORTAL_BASE_FRONT}/?utm_source=driver-portal&utm_medium=referral",
 }
@@ -33044,7 +33031,7 @@ _TIENDA_PASOS = [
     {"id": "regimen_iva", "fase": "cobrar",
      "titulo": "Decidir el régimen de IVA",
      "porque": "Vender a tus conductores es venta a particulares, o sea comercio minorista, y eso normalmente cae en recargo de equivalencia: no liquidas IVA pero tu proveedor te carga un recargo. Vender a otros DSP es B2B y funciona distinto. Elegir mal cambia todos los márgenes de esta pantalla.",
-     "como": "Llévale a tu gestoría las dos vías de venta —a tus conductores y a otros DSP— y que te diga el régimen. No es una decisión para tomarla solo.",
+     "como": "Llévale a tu gestoría las dos vías de venta —a tus conductores y a otras empresas— y que te diga el régimen. No es una decisión para tomarla solo.",
      "enlace": {"texto": "Epígrafes del IAE explicados",
                 "url": "https://www.infoautonomos.com/fiscalidad/los-epigrafes-iae/"},
      "coste": "Consulta a gestoría"},
@@ -33069,12 +33056,12 @@ _TIENDA_PASOS = [
     {"id": "canal_kit_alta", "fase": "canales",
      "titulo": "Kit de alta, lo paga la empresa",
      "porque": "Aquí está el ingreso recurrente, y no depende de que a nadie le apetezca comprar: cada persona nueva necesita ropa, y eso pasa todos los meses. Lo decide quien tiene presupuesto, no el repartidor.",
-     "como": "Se dispara al pasar un candidato a contratado, con la talla ya en su ficha. 2 camisetas + 1 sudadera + 1 gorra: coste 34,15 €, PVP al DSP 65 €.",
-     "coste": "Se cobra al DSP"},
+     "como": "Se dispara al pasar un candidato a contratado, con la talla ya en su ficha. 2 camisetas + 1 sudadera + 1 gorra: coste 34,15 €, PVP a la empresa 65 €.",
+     "coste": "Se cobra a la empresa"},
     {"id": "canal_otros_dsp", "fase": "canales",
-     "titulo": f"Los otros DSP que usen {MARCA}",
+     "titulo": f"Las otras empresas que usen {MARCA}",
      "porque": "Es lo que multiplica: el mismo mecanismo por cada empresa que entre. Y es argumento de venta de la propia app, no solo un ingreso aparte.",
-     "como": "Cuando haya un segundo DSP en la app, se le ofrece su propia tienda con su logo.",
+     "como": "Cuando haya una segunda empresa en la app, se le ofrece su propia tienda con su logo.",
      "coste": "0 €"},
     {"id": "canal_afiliacion", "fase": "canales",
      "titulo": "Lo genérico, por afiliación",
@@ -36238,7 +36225,7 @@ _IA_CONDUCTOR_EDITABLE = {"phone", "email", "dni", "license_number", "address", 
 
 _IA_ASISTENTE_MANUAL = f"""
 === MANUAL BREVE DE {MARCA.upper()} (para explicar "cómo se hace X") ===
-Vehículos: ficha de cada furgoneta (estado, papeles, daños, gemelo 3D). Busca
+Vehículos: ficha de cada vehículo (estado, papeles, daños, gemelo 3D). Busca
 por matrícula. Documentación tiene seguro/ITV/renting. Las de baja no salen
 en listados normales. Puedes listar furgonetas por proveedor de renting
 (Bansacar, Kinto, Ayvens...), marca, modelo o matrícula, y decir cuáles
@@ -36610,7 +36597,7 @@ def _ai_asistente_prompt(center: str, contexto: str, dueno: bool = False) -> str
 """ if dueno else "")
     return f"""Eres {MARCA.upper()} IA, el asistente del panel de {MARCA} para el centro {center}.
 
-QUIÉN TE HABLA: alguien de la oficina de esta nave, no un desarrollador. Puede
+QUIÉN TE HABLA: alguien de la oficina de esta sede, no un desarrollador. Puede
 ser nuevo en la herramienta.
 
 TIENES MUCHAS MÁS FUNCIONES DE LAS QUE PARECE A PRIMERA VISTA — lee todo este
@@ -36623,8 +36610,8 @@ dadas por error, para que no se repitan:
 Antes de decir "no puedo", repasa las acciones y consultas de más abajo.
 
 REGLAS QUE NO PUEDES SALTARTE:
-- Solo hablas del centro {center}. Si preguntan por otra nave, di que tú solo
-  ves la suya y que cambien de centro arriba para verla.
+- Solo hablas del centro {center}. Si preguntan por otra sede, di que tú solo
+  ves la suya y que cambien de sede arriba para verla.
 - No sabes nada de código ni puedes cambiar nada "importante" DEL NEGOCIO
   (permisos de usuarios, precios del plan, configuración de la cuenta) —
   eso lo dices y ya está, no lo intentes. OJO: esto NO incluye nada de la

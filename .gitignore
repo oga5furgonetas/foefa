@@ -16,3 +16,6 @@ mobile.zip
 # Son ~200 MB y dependen del sistema operativo: jamas al repositorio.
 backend/.venv/
 .venv/
+
+# El destino real de los despliegues (ver scripts/destino.ps1)
+despliegue.local.json

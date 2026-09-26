@@ -1,0 +1,69 @@
+#!/usr/bin/env node
+/**
+ * Texto VISIBLE que nombra otra plataforma o la marca escrita a mano.
+ *
+ * El producto se vende a cualquier empresa con flota. Un «Pegar roster de
+ * Amazon» o un «FlotaDSP» escrito a mano en una pantalla es lo primero que ve
+ * un cliente que no es de reparto, y le dice que el producto no es para él.
+ * La marca sale de `src/marca.js`; aquí no puede aparecer escrita.
+ *
+ * Mira el código SIN comentarios (los comentarios son notas de historia y
+ * pueden nombrar lo que haga falta). Las excepciones van en PERMITIDO con su
+ * motivo.
+ *
+ * Uso: node scripts/check-marca.mjs   (sale con 1 si encuentra algo)
+ */
+import { readFileSync, readdirSync, statSync } from 'node:fs'
+import { join, relative } from 'node:path'
+
+const RAIZ = process.cwd()
+const SRC = join(RAIZ, 'frontend', 'src')
+const PATRON = /flotadsp|\bamazon\b|\bcortex\b|\bdsps?\b|\bdnr\b|scorecard|\bwiniw\b|transporter id/i
+
+/* Menciones legítimas: [fichero, trozo de la línea, por qué]. */
+const PERMITIDO = [
+  ['panel/pages/Gastos.jsx', 'amazon', 'compras en Amazon como proveedor de material: es un comercio, no la plataforma'],
+  ['panel/pages/Tienda.jsx', 'amazon', 'comparativa de precios de la tienda con Amazon como comercio'],
+  // «dsp» es el VALOR interno del tipo de cuenta de un cliente (account_type) y
+  // el nombre de un campo que manda el backend. Nadie lo lee en pantalla;
+  // cambiarlo obligaria a migrar datos sin ganar nada.
+  ['panel/pages/Negocio.jsx', "account_type: 'dsp'", 'valor interno del tipo de cuenta'],
+  ['panel/pages/Negocio.jsx', '${x.dsp}', 'campo del backend con el nombre de la empresa'],
+]
+
+function ficheros(dir, out = []) {
+  for (const n of readdirSync(dir)) {
+    const p = join(dir, n)
+    if (statSync(p).isDirectory()) ficheros(p, out)
+    else if (/\.(jsx?|mjs)$/.test(n)) out.push(p)
+  }
+  return out
+}
+
+function sinComentarios(t) {
+  return t
+    .replace(/\/\*[\s\S]*?\*\//g, (m) => m.replace(/[^\n]/g, ' '))
+    .replace(/\{\s*\/\*[\s\S]*?\*\/\s*\}/g, (m) => m.replace(/[^\n]/g, ' '))
+    .replace(/(^|[^:"'`\\])\/\/[^\n]*/g, (m, a) => a + ' '.repeat(m.length - a.length))
+}
+
+const hallados = []
+for (const f of ficheros(SRC)) {
+  if (f.endsWith('marca.js')) continue
+  const rel = relative(SRC, f).replace(/\\/g, '/')
+  const lineas = sinComentarios(readFileSync(f, 'utf8')).split('\n')
+  lineas.forEach((l, i) => {
+    const m = l.match(PATRON)
+    if (!m) return
+    if (PERMITIDO.some(([fi, trozo]) => rel === fi && l.toLowerCase().includes(trozo))) return
+    hallados.push(`${rel}:${i + 1}  ${l.trim().slice(0, 150)}`)
+  })
+}
+
+if (!hallados.length) {
+  console.log('check-marca: ningún texto visible nombra otra plataforma ni la marca a mano')
+  process.exit(0)
+}
+console.error(`check-marca: ${hallados.length} línea(s)\n`)
+for (const h of hallados) console.error('  ' + h)
+process.exit(1)

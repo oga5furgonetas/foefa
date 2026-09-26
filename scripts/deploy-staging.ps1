@@ -1,5 +1,5 @@
 # -----------------------------------------------------------------
-# FlotaDSP - Despliega el frontend a STAGING y CALIENTA su edge.
+# Despliega el frontend a STAGING y CALIENTA su edge.
 #
 # POR QUE EXISTE
 # =================================================================
@@ -27,8 +27,10 @@ $ErrorActionPreference = "Stop"
 $RAIZ  = (Resolve-Path (Join-Path $PSScriptRoot "..")).Path
 $FRONT = Join-Path $RAIZ "frontend"
 $DIST  = Join-Path $FRONT "dist-staging"
-$WEB   = "https://staging.flotadsp-v2.pages.dev"
-$API   = "https://flotadsp-backend-staging.fly.dev/api"
+. (Join-Path $PSScriptRoot "destino.ps1")
+$d     = Get-Destino -Requiere pages, staging_web, staging_api
+$WEB   = $d.staging_web
+$API   = $d.staging_api
 
 Write-Host "==> Compilando contra el backend de staging"
 Push-Location $FRONT
@@ -41,7 +43,7 @@ try {
     Remove-Item Env:\VITE_API_URL -ErrorAction SilentlyContinue
 
     Write-Host "==> Desplegando a la rama staging"
-    & npx wrangler pages deploy dist-staging --project-name flotadsp-v2 --branch staging --commit-dirty=true
+    & npx wrangler pages deploy dist-staging --project-name $d.pages --branch staging --commit-dirty=true
     if ($LASTEXITCODE -ne 0) { throw "wrangler ha fallado" }
 } finally {
     Pop-Location

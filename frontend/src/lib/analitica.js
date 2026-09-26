@@ -45,8 +45,6 @@ const PATRONES = [
   [/^\/t\/[^/]+$/, '/t/:token'],
   [/^\/taller\/t\/[^/]+$/, '/taller/t/:token'],
   [/^\/taller\/[^/]+$/, '/taller/:token'],
-  [/^\/apoyo\/t\/[^/]+$/, '/apoyo/t/:token'],
-  [/^\/dnr\/[^/]+$/, '/dnr/:token'],
   [/^\/empleo\/[^/]+\/[^/]+$/, '/empleo/:slug/:oferta'],
   [/^\/empleo\/[^/]+$/, '/empleo/:slug'],
   // El portal mide sus pantallas como `/conductor/p/<seccion>`; una segunda

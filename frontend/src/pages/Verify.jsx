@@ -47,7 +47,7 @@ export default function Verify() {
       <nav className="border-b border-dark-800">
         <div className="mx-auto flex max-w-3xl items-center justify-between px-5 py-3">
           <Link to="/" className="flex items-center gap-2">
-            <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-gradient-to-br from-orange-400 to-orange-600 text-white font-bold">⚡</div>
+            <img src="/favicon.svg" alt="" width="28" height="28" className="rounded-lg" />
             <b className="text-sm">{MARCA.nombre}</b>
           </Link>
           <Link to="/peritaje-tecnico" className="text-xs text-dark-400 hover:text-dark-200">¿Qué es esto?</Link>

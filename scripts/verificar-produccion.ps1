@@ -1,9 +1,9 @@
 # -----------------------------------------------------------------
-# FlotaDSP - Comprueba que PRODUCCION sirve lo que acabas de compilar
+# Comprueba que PRODUCCION sirve lo que acabas de compilar
 #
 # Existe por el gotcha 16: si te dejas "--branch main" en el deploy de
 # Cloudflare Pages, wrangler dice "Success" y te da una URL que funciona,
-# pero flotadsp.com NO cambia. Ningun error, ninguna pista. Este script
+# pero la web NO cambia. Ningun error, ninguna pista. Este script
 # es el que grita.
 #
 #   .\scripts\verificar-produccion.ps1              # comprueba y ya
@@ -19,8 +19,10 @@ param(
 $ErrorActionPreference = "Stop"
 [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
 
-$WEB      = "https://flotadsp.com/"
-$BACKEND  = "https://flotadsp-backend.fly.dev"
+. (Join-Path $PSScriptRoot "destino.ps1")
+$d        = Get-Destino -Requiere web, backend
+$WEB      = $d.web + "/"
+$BACKEND  = $d.backend
 $DIST     = Join-Path $PSScriptRoot "..\frontend\dist\index.html"
 $fallos   = @()
 
@@ -55,7 +57,7 @@ try {
     $fallos += "el backend no responde: $($_.Exception.Message)"
 }
 
-# ---------- 2. flotadsp.com sirve el bundle que hay en dist/ ----------
+# ---------- 2. la web sirve el bundle que hay en dist/ ----------
 if (-not $SoloBackend) {
     $local = Get-HashLocal
     if ($null -eq $local) {
@@ -69,19 +71,19 @@ if (-not $SoloBackend) {
             Start-Sleep -Seconds 5
             $remoto = Get-HashProduccion
             $intentos++
-            Write-Host "    esperando a que flotadsp.com cambie... (intento $intentos, ahora sirve $remoto)"
+            Write-Host "    esperando a que la web cambie... (intento $intentos, ahora sirve $remoto)"
         }
         if ($null -eq $remoto) {
-            $fallos += "no se ha podido leer el bundle que sirve flotadsp.com"
+            $fallos += "no se ha podido leer el bundle que sirve la web"
         } elseif ($remoto -ne $local) {
             $fallos += @"
-flotadsp.com sigue sirviendo un bundle VIEJO.
+La web sigue sirviendo un bundle VIEJO.
        compilado en local : $local
        servido en produccion: $remoto
        Casi seguro que el deploy se fue a Preview: es el gotcha 16, falta --branch main.
        Repitelo asi:
          cd frontend
-         npx wrangler pages deploy dist --project-name flotadsp-v2 --branch main --commit-dirty=true
+         npx wrangler pages deploy dist --project-name <tu-proyecto> --branch main --commit-dirty=true
 "@
         } else {
             Write-Host "    ok - produccion sirve exactamente el bundle local"

@@ -59,7 +59,7 @@ export const AYUDA = {
       'Si marcas una respuesta como «descarta», quien la elija se aparta solo y sale en la columna Descartado con el motivo. Se puede deshacer moviendolo de columna.',
       'Copia el enlace y pegalo en Indeed como URL de candidatura, o mandalo por WhatsApp. El de Indeed lleva `?de=indeed` para saber que anuncio trae gente.',
       'Cuando alguien se apunta, sale en Nuevo. Abre la tarjeta para ver sus respuestas y escribirle por WhatsApp.',
-      'Al darle a Contratar se crea la ficha del conductor con sus datos. El Transporter ID hay que ponerlo a mano: lo da Amazon.',
+      'Al darle a Contratar se crea la ficha del conductor con sus datos, y ya puede entrar a su portal.',
     ],
     ojo: 'Lo que descarta NO lo ve el candidato: si supiera que respuesta le deja fuera, contestaria eso. Y los datos se borran solos a los 12 meses; si alguien pide que los quites antes, la papelera de su tarjeta lo hace de verdad.',
   },
@@ -173,11 +173,10 @@ export const AYUDA = {
 
   // ── Equipo ─────────────────────────────────────────────────────────────
   conductores: {
-    que: 'La ficha de cada persona: contacto, centro, Transporter ID e historial.',
+    que: 'La ficha de cada persona: contacto, sede, nº de empleado e historial.',
     pasos: [
       'Si empiezas: pulsa «Importar Excel» y sube la hoja que ya tengas. No hace falta ningún formato nuestro — vale con que haya una columna de nombre.',
       'Antes de guardar se enseña lo que se ha entendido: compruébalo ahí, no después.',
-      'El Transporter ID es la llave con la que se reparten los DNR: si está mal, los fallos van a otra persona.',
       'Para entrar al portal no hay que hacer nada más: el conductor escribe su correo y ya está. '
         + 'Si prefieres que además haga falta contraseña, se la pones desde el aviso de arriba — pero entonces '
         + 'con el correo solo ya no les vale, así que hay que repartirlas el mismo día.',
@@ -199,11 +198,11 @@ export const AYUDA = {
     ojo: 'Las contraseñas del listado NO se guardan en el pegado — la cuenta de onboarding sí, para poder entrar a revisarla. Y una persona sin nada marcado está SIN REVISAR, no completa: por eso empieza en «Pendiente de revisar» hasta que alguien dice qué le falta.',
   },
   contactos: {
-    que: 'La agenda: talleres, proveedores, Amazon y quien haga falta.',
+    que: 'La agenda: talleres, proveedores, clientes y quien haga falta.',
     pasos: ['Busca por nombre o por lo que hace.'],
   },
   conversaciones: {
-    que: 'Lo que escriben por WhatsApp los conductores y talleres, y lo que la app les manda (avisos y pre-DNR).',
+    que: 'Lo que escriben por WhatsApp los conductores y talleres, y lo que la app les manda (avisos de ITV, incidencias y resúmenes).',
     pasos: [
       'Elige una persona a la izquierda: ves el hilo entero por hora, con las marcas de entregado y leído.',
       'Si te ha escrito en las últimas 24 h puedes contestarle aquí mismo.',

@@ -1,9 +1,9 @@
 # -----------------------------------------------------------------
-# FlotaDSP - Despliega el FRONTEND a PRODUCCION (flotadsp.com)
+# Despliega el FRONTEND a PRODUCCION (el destino sale de destino.ps1)
 #
 # Usa esto en vez del comando a mano. Motivo: "--branch main" no es
 # opcional (gotcha 16) y aqui va cosido, no se puede olvidar. Ademas
-# comprueba al final que flotadsp.com sirve de verdad lo compilado,
+# comprueba al final que la web sirve de verdad lo compilado,
 # y falla a gritos si no.
 #
 #   .\scripts\deploy-frontend.ps1
@@ -11,34 +11,11 @@
 $ErrorActionPreference = "Stop"
 
 $raiz = Join-Path $PSScriptRoot ".."
+. (Join-Path $PSScriptRoot "destino.ps1")
+$d = Get-Destino -Requiere pages, web, backend
 
-# La extension que descargan los clientes se reempaqueta SIEMPRE antes de
-# compilar. Un ZIP generado a mano se queda viejo y nadie se entera hasta que
-# un cliente reporta un fallo que ya estaba arreglado hace tres versiones.
-Write-Host "==> Empaquetando la extension de Cortex..."
-# Con la ruta COMPLETA: en esta maquina `node` a secas resuelve a un stub de
-# system32 que no imprime nada y no devuelve codigo de salida, asi que el
-# empaquetado fallaba en silencio y tumbaba el despliegue entero.
 $nodeExe = Join-Path $env:ProgramFiles "nodejs\node.exe"
 if (-not (Test-Path $nodeExe)) { $nodeExe = "node" }
-& $nodeExe (Join-Path $PSScriptRoot "empaquetar-extension.mjs")
-if ($LASTEXITCODE -ne 0) { throw "no se pudo empaquetar la extension" }
-
-# ── Y LA CARPETA FIJA, LA QUE CHROME TIENE CARGADA ──────────────────────────
-# Dani se instalo la extension a mano cinco veces en una noche y acabo con
-# cincuenta y tantas carpetas «FlotaDSP-Cortex (35)» en Descargas. Cargada
-# descomprimida desde UNA carpeta fija, aqui se deja la version nueva y la
-# propia extension se recarga sola (ver `mirarSiHayVersionNueva`).
-# Si la carpeta no existe, no pasa nada: es que en esta maquina no se usa.
-$fija = Join-Path $env:USERPROFILE "Cortex-FlotaDSP"
-if (Test-Path $fija) {
-  $origen = Join-Path $raiz "cortex-extension"
-  Copy-Item (Join-Path $origen "*") $fija -Recurse -Force
-  $v = (Get-Content (Join-Path $fija "manifest.json") -Raw | ConvertFrom-Json).version
-  Write-Host "    ok - carpeta fija actualizada a $v ($fija)"
-} else {
-  Write-Host "    (sin carpeta fija en ${fija} - se salta)"
-}
 
 Set-Location (Join-Path $raiz "frontend")
 
@@ -60,7 +37,7 @@ if ($LASTEXITCODE -ne 0) { throw "la compilacion ha fallado, no se despliega nad
 if ($LASTEXITCODE -ne 0) { throw "no se pudo sellar la compilacion" }
 
 Write-Host "==> Subiendo a Cloudflare Pages, rama main (produccion)..."
-npx wrangler pages deploy dist --project-name flotadsp-v2 --branch main --commit-dirty=true
+npx wrangler pages deploy dist --project-name $d.pages --branch main --commit-dirty=true
 if ($LASTEXITCODE -ne 0) { throw "wrangler ha fallado al desplegar" }
 
 Write-Host ""
@@ -82,12 +59,12 @@ Write-Host ""
 Write-Host "==> Comprobando que las pantallas devuelven datos..."
 $py = "C:\Users\Usuario\AppData\Local\Programs\Python\Python312\python.exe"
 if (-not (Test-Path $py)) { $py = "python" }
-& $py (Join-Path $PSScriptRoot "humo.py")
+& $py (Join-Path $PSScriptRoot "humo.py") $d.backend
 if ($LASTEXITCODE -ne 0) {
   Write-Host "AVISO: el frontend esta subido pero alguna pantalla no trae datos." -ForegroundColor Yellow
 }
 
 Write-Host ""
-& (Join-Path $PSScriptRoot "calentar-edge.ps1")
+& (Join-Path $PSScriptRoot "calentar-edge.ps1") -Web $d.web
 
 exit $verif

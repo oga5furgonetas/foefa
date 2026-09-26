@@ -16,7 +16,7 @@ export default function Seguridad() {
 
       <h2>1. Aislamiento por cliente (multi-tenant)</h2>
       <ul>
-        <li>Cada organización tiene su <strong>base de datos física separada</strong>. Los datos de un DSP no conviven en las mismas tablas que los de otro.</li>
+        <li>Cada organización tiene su <strong>base de datos física separada</strong>. Los datos de una empresa no conviven en las mismas tablas que los de otra.</li>
         <li>El aislamiento se comprueba con un <strong>test automático en cada cambio de código</strong>: si una organización pudiera ver un vehículo de otra, la integración continua bloquea el despliegue.</li>
       </ul>
 

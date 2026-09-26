@@ -40,7 +40,7 @@ export default function Login() {
         </select>
       </div>
       <div style={card}>
-        <div style={{ fontSize: 30, textAlign: 'center', marginBottom: 6 }}>⚡</div>
+        <img src="/favicon.svg" alt="" width="40" height="40" style={{ display: 'block', margin: '0 auto 10px', borderRadius: 10 }} />
         <h2 style={{ margin: '0 0 20px', textAlign: 'center', fontSize: 20 }}>{t('login.title')}</h2>
         <label style={lbl}>{t('login.user')}</label>
         <input style={inp} value={user} onChange={(e) => setUser(e.target.value)} autoComplete="username" />

@@ -20,23 +20,20 @@ const PLANS = [
   {
     key: 'operacion', name: 'Operación', color: '#64748b',
     porVehiculo: 5, minimo: 20, popular: false,
-    who: 'Un centro',
+    who: 'Una sede',
     feats: ['Inspecciones con foto y análisis de daños por IA',
-            'Histórico de daños por furgoneta',
+            'Histórico de daños por vehículo',
             'Reparaciones: taller, coste real y cierre',
             'Avisos de mantenimiento e ITV',
-            'Portal del conductor', 'Chat del centro'],
-    no: ['Scorecard de Amazon', 'Asignación diaria y turnos', 'Métricas de Amazon',
-         'Informe pericial firmado', 'Varios centros'],
+            'Portal del conductor', 'Chat de la sede'],
+    no: ['Asignación diaria y turnos', 'Informe pericial firmado', 'Exportar datos', 'Varias sedes'],
   },
   {
     key: 'completo', name: 'Completo', color: '#fb923c',
     porVehiculo: 8, minimo: 20, popular: true,
-    who: 'Varios centros',
-    feats: ['Todo lo de Operación, sin límite de centros',
-            'Scorecard de Amazon con objetivos y umbrales',
+    who: 'Varias sedes',
+    feats: ['Todo lo de Operación, sin límite de sedes',
             'Asignación diaria y cuadrante de turnos',
-            'Métricas de Amazon y ritmo real por conductor',
             'Informe pericial firmado y cadena de custodia',
             'Exportar datos'],
     no: [],
@@ -123,7 +120,7 @@ function PlanPicker({ onSelect, furgonetas }) {
                 {/* El precio es por furgoneta: sin esta línea, «200 €/mes» parecía
                     una cuota fija y chocaba con el «desde 5 €» de la portada. */}
                 <div style={{ fontSize: 11.5, color: '#64748b', marginBottom: 10 }}>
-                  {p.porVehiculo}€ por furgoneta · con {Math.max(furgonetas, p.minimo)} furgonetas
+                  {p.porVehiculo}€ por vehículo · con {Math.max(furgonetas, p.minimo)} vehículos
                   {furgonetas < p.minimo && ` (mínimo ${p.minimo})`}
                 </div>
 
@@ -271,7 +268,7 @@ export default function Registro() {
           {/* El primer paso de verdad es traer lo que ya tiene: se le lleva
               directo, y el panel queda a un clic. */}
           <button style={{ ...btn, marginTop: 0 }} onClick={() => { window.location.href = '/panel/importaciones' }}>
-            Traer mis furgonetas y conductores →
+            Traer mis vehículos y conductores →
           </button>
           <button onClick={() => { window.location.href = '/panel' }}
             style={{ marginTop: 10, background: 'none', border: 'none', color: '#8b94a3', fontSize: 13, cursor: 'pointer' }}>
@@ -328,7 +325,7 @@ export default function Registro() {
 
         {/* Con varias naves se escriben todas: el plan de una sola se queda
             con la primera. Sin esto la segunda nave no se podía dar de alta. */}
-        <label style={lbl}>{selectedPlan === 'operacion' ? t('reg.center') : 'Tus centros / estaciones'}</label>
+        <label style={lbl}>{selectedPlan === 'operacion' ? t('reg.center') : 'Tus sedes'}</label>
         <input style={inp} value={center} onChange={(e) => setCenter(e.target.value)}
           placeholder={selectedPlan === 'operacion' ? 'OGA5' : 'OGA5, DGA1, DGA2'} />
         {selectedPlan !== 'operacion' && <div style={hint}>Sepáralos con comas. Podrás añadir más después.</div>}

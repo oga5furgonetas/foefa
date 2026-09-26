@@ -99,7 +99,7 @@ export default function ImportarMoviles({ alTerminar }) {
             </ul>
           )}
           <p className="mt-2 text-[12.5px] text-emerald-300/80">
-            Solo se usan para las pre-DNR por WhatsApp. El teléfono de la ficha (el de la ruta) no se ha tocado.
+            Sirven para reconocerles cuando escriben por WhatsApp. El teléfono de la ficha no se ha tocado.
           </p>
         </div>
       )}

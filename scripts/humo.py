@@ -5,8 +5,8 @@ Por qué existe
 ──────────────
 El 15-09-2026 desplegué un 500 en `/incorporaciones/personas` —la pantalla que
 Dani estaba usando— y no me enteré hasta que la probé a mano un rato después.
-Una variable local pisó a otra del mismo bucle y, con una persona sin cuenta de
-Amazon, reventaba.
+Una variable local pisó a otra del mismo bucle y, con una persona sin un dato
+opcional, reventaba.
 
 Los 24 checkers no lo vieron porque LEEN el código, y los tests tampoco porque
 son de AST: ninguno EJECUTA el endpoint. `fly deploy` tampoco comprueba nada
@@ -17,8 +17,9 @@ Esto llama de verdad a las pantallas principales con un token de mantenimiento y
 falla si alguna no contesta 200. Tarda segundos y es lo único que distingue
 «desplegado» de «funcionando».
 
-Uso:  python scripts/humo.py            (contra produccion)
-      python scripts/humo.py http://localhost:8000
+Uso:  python scripts/humo.py https://tu-api.fly.dev
+      (o con FLOTIA_BACKEND en el entorno). La clave de firma va SIEMPRE en
+      SECRET_KEY: sin ella no se ejecuta.
 """
 import base64
 import datetime
@@ -30,8 +31,13 @@ import sys
 import urllib.error
 import urllib.request
 
-BASE = (sys.argv[1] if len(sys.argv) > 1 else "https://flotadsp-backend.fly.dev").rstrip("/")
-SECRETO = os.environ.get("SECRET_KEY") or "<REDACTADO>"
+BASE = (sys.argv[1] if len(sys.argv) > 1 else os.environ.get("FLOTIA_BACKEND", "")).rstrip("/")
+# LA CLAVE NO VA ESCRITA AQUI. Una clave de firma en el codigo deja fabricar
+# sesiones de administrador a cualquiera que lea el repositorio.
+SECRETO = os.environ.get("SECRET_KEY", "")
+if not BASE or not SECRETO:
+    sys.exit("humo: falta la direccion del backend (argumento o FLOTIA_BACKEND) "
+             "o SECRET_KEY en el entorno")
 
 # Las pantallas que Dani abre todos los dias. Si una de estas se cae, se nota en
 # el trabajo de alguien esa misma manana.

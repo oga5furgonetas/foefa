@@ -12,34 +12,31 @@ const PLANES_FALLBACK = [
   {
     clave: 'operacion',
     nombre: 'Operación',
-    para: 'Un centro',
+    para: 'Una sede',
     por_vehiculo: 5,
     minimo_vehiculos: 20,
     color: '#64748b',
     incluye: [
       'Inspecciones con foto y análisis de daños por IA',
-      'Histórico de daños por furgoneta',
+      'Histórico de daños por vehículo',
       'Reparaciones: taller, coste real y cierre',
       'Avisos de mantenimiento e ITV',
       'Portal del conductor',
-      'Chat del centro',
+      'Chat de la sede',
     ],
-    no_incluye: ['Scorecard de Amazon', 'Asignación diaria y turnos', 'Métricas de Amazon',
-                 'Informe pericial firmado', 'Exportar datos', 'Varios centros'],
+    no_incluye: ['Asignación diaria y turnos', 'Informe pericial firmado', 'Exportar datos', 'Varias sedes'],
   },
   {
     clave: 'completo',
     nombre: 'Completo',
-    para: 'Varios centros',
+    para: 'Varias sedes',
     por_vehiculo: 8,
     minimo_vehiculos: 20,
     recomendado: true,
     color: '#fb923c',
     incluye: [
-      'Todo lo de Operación, sin límite de centros',
-      'Scorecard de Amazon con objetivos y umbrales',
+      'Todo lo de Operación, sin límite de sedes',
       'Asignación diaria y cuadrante de turnos',
-      'Métricas de Amazon y ritmo real por conductor',
       'Informe pericial firmado y cadena de custodia',
       'Exportar datos',
     ],
@@ -48,7 +45,7 @@ const PLANES_FALLBACK = [
   {
     clave: 'holding',
     nombre: 'Holding',
-    para: 'Cinco estaciones o más',
+    para: 'Cinco sedes o más',
     por_vehiculo: 0,
     minimo_vehiculos: 0,
     color: '#a78bfa',
@@ -63,7 +60,7 @@ const precioMes = (p, furgonetas) =>
   p.por_vehiculo ? p.por_vehiculo * Math.max(Number(furgonetas) || 0, p.minimo_vehiculos) : 0
 
 const ENTERPRISE = {
-  feats: ['Todo lo de Flota', 'Múltiples DSPs consolidados', 'SSO / SAML', 'Onboarding asistido', 'SLA personalizado', 'Integración API'],
+  feats: ['Todo lo de Completo', 'Varias sociedades consolidadas', 'Alta asistida', 'Soporte a medida', 'Integración por API'],
 }
 
 /* Pagando un año se pagan 10 meses: dos salen gratis. Antes esto era una
@@ -119,11 +116,11 @@ function FounderOffer() {
             ⭐ Oferta fundador {slots ? `· quedan ${slots.left} de ${slots.total} plazas` : '· plazas limitadas'}
           </div>
           <h2 style={{ margin: '0 0 8px', fontSize: 24, fontWeight: 900, lineHeight: 1.2 }}>
-            El plan Completo a <span style={{ color: '#fbbf24' }}>5€ por furgoneta, para siempre</span>
+            El plan Completo a <span style={{ color: '#fbbf24' }}>5€ por vehículo, para siempre</span>
           </h2>
           <p style={{ margin: 0, color: '#94a3b8', fontSize: 14, lineHeight: 1.6, maxWidth: 520 }}>
-            Scorecard, turnos, métricas de Amazon e informe pericial — todo el plan Completo (8€/furgoneta) al precio del de Operación,
-            <b style={{ color: '#cbd3e0' }}> bloqueado de por vida</b> mientras seas cliente. Solo para los primeros DSPs.
+            Cuadrante, varias sedes, informe pericial y exportación — todo el plan Completo (8€/vehículo) al precio del de Operación,
+            <b style={{ color: '#cbd3e0' }}> bloqueado de por vida</b> mientras seas cliente. Solo para las primeras empresas.
             Reservar es gratis y sin compromiso: te llamamos y lo activamos juntos.
           </p>
         </div>
@@ -141,7 +138,7 @@ function FounderOffer() {
               <input style={inputS} type="email" placeholder="Email *" value={form.email} onChange={e => setForm(f => ({ ...f, email: e.target.value }))} required />
               <div style={{ display: 'flex', gap: 8 }}>
                 <input style={inputS} placeholder="Teléfono" value={form.phone} onChange={e => setForm(f => ({ ...f, phone: e.target.value }))} />
-                <input style={inputS} placeholder="Nº furgonetas" value={form.fleet_size} onChange={e => setForm(f => ({ ...f, fleet_size: e.target.value }))} />
+                <input style={inputS} placeholder="Nº de vehículos" value={form.fleet_size} onChange={e => setForm(f => ({ ...f, fleet_size: e.target.value }))} />
               </div>
               {err && <div style={{ fontSize: 12, color: '#f87171' }}>{err}</div>}
               <button type="submit" disabled={busy} style={{ background: 'linear-gradient(135deg,#fbbf24,#f59e0b)', border: 'none', borderRadius: 11, padding: '12px 0', fontSize: 14, fontWeight: 900, color: '#0b0d10', cursor: 'pointer', opacity: busy ? .6 : 1 }}>
@@ -253,7 +250,7 @@ export default function Planes() {
         <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 28 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 14, flexWrap: 'wrap', justifyContent: 'center', background: '#13161b', border: '1px solid rgba(255,255,255,.1)', borderRadius: 16, padding: '14px 22px' }}>
             <label htmlFor="flota" style={{ fontSize: 14, color: '#cbd5e1', fontWeight: 600 }}>
-              ¿Cuántas furgonetas tienes?
+              ¿Cuántos vehículos tienes?
             </label>
             <input
               id="flota"
@@ -308,7 +305,7 @@ export default function Planes() {
                         <span style={{ color: '#8b94a3', fontSize: 14 }}>/mes</span>
                       </div>
                       <div style={{ fontSize: 12, color: '#8b94a3', marginTop: 4 }}>
-                        {p.por_vehiculo}€ por furgoneta y mes
+                        {p.por_vehiculo}€ por vehículo y mes
                         {minimo && <span style={{ color: '#64748b' }}> · mínimo {p.minimo_vehiculos}</span>}
                       </div>
                       {billing === 'annual' && (
@@ -384,8 +381,8 @@ export default function Planes() {
         <div style={{ background: '#13161b', border: '1px solid rgba(255,255,255,.08)', borderRadius: 20, padding: '28px 32px', display: 'flex', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'space-between', gap: 24 }}>
           <div>
             <div style={{ fontSize: 12, fontWeight: 700, color: '#f59e0b', textTransform: 'uppercase', letterSpacing: '.08em', marginBottom: 6 }}>Enterprise</div>
-            <h3 style={{ margin: '0 0 8px', fontSize: 22, fontWeight: 900 }}>Holdings de DSPs · 5+ estaciones</h3>
-            <p style={{ color: '#8b94a3', fontSize: 14, margin: 0 }}>Precio a medida · SLA garantizado · onboarding asistido</p>
+            <h3 style={{ margin: '0 0 8px', fontSize: 22, fontWeight: 900 }}>Grupos de empresas · 5+ sedes</h3>
+            <p style={{ color: '#8b94a3', fontSize: 14, margin: 0 }}>Precio a medida · alta asistida</p>
             <ul style={{ listStyle: 'none', padding: 0, margin: '12px 0 0', display: 'flex', flexWrap: 'wrap', gap: '6px 20px' }}>
               {ENTERPRISE.feats.map((f) => (
                 <li key={f} style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, color: '#94a3b8' }}>

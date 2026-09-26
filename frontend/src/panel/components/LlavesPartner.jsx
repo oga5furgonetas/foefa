@@ -22,7 +22,7 @@ export default function LlavesPartner() {
   const [accesos, setAccesos] = useState(null)
   const [cargando, setCargando] = useState(true)
   const [creando, setCreando] = useState(false)
-  const [nombre, setNombre] = useState('Amazon Logistics')
+  const [nombre, setNombre] = useState('')
   const [nueva, setNueva] = useState(null)
   const [copiado, setCopiado] = useState(false)
   const [msg, setMsg] = useState(null)
@@ -61,7 +61,7 @@ export default function LlavesPartner() {
 
   if (cargando) {
     return (
-      <div className="flex items-center gap-2 py-8 text-[13px] text-slate-500">
+      <div className="flex items-center gap-2 py-8 text-[13px] text-dark-400">
         <Loader2 size={14} className="animate-spin" /> Cargando accesos…
       </div>
     )
@@ -72,55 +72,55 @@ export default function LlavesPartner() {
       {/* La llave recién creada. Se enseña UNA vez: a partir de aquí en la base
           solo queda su huella, así que si se pierde hay que hacer otra. */}
       {nueva && (
-        <div className="rounded-lg border border-emerald-200 bg-emerald-50 p-3">
-          <p className="mb-2 text-[13px] font-semibold text-emerald-900">
+        <div className="rounded-lg border border-emerald-500/30 bg-emerald-500/[0.07] p-3">
+          <p className="mb-2 text-[13px] font-semibold text-emerald-200">
             Llave para {nueva.partner}. Cópiala ahora: no se puede volver a ver.
           </p>
           <div className="flex gap-2">
             <input readOnly value={nueva.token}
-              className="min-w-0 flex-1 rounded-lg border border-emerald-300 bg-white px-2.5 py-2 font-mono text-[12px] text-slate-700" />
+              className="min-w-0 flex-1 rounded-lg border border-emerald-500/30 bg-dark-900 px-2.5 py-2 font-mono text-[12px] text-dark-200" />
             <button onClick={() => copiar(nueva.token)}
-              className="rounded-lg border border-emerald-300 bg-white px-3 text-emerald-700 hover:bg-emerald-100">
+              className="rounded-lg border border-emerald-500/30 bg-dark-900 px-3 text-emerald-300 hover:bg-emerald-500/15">
               {copiado ? <Check size={15} /> : <Copy size={15} />}
             </button>
           </div>
-          <p className="mt-2 font-mono text-[11.5px] leading-relaxed text-emerald-800">
+          <p className="mt-2 font-mono text-[11.5px] leading-relaxed text-emerald-300">
             {nueva.como_se_usa}
           </p>
           <button onClick={() => setNueva(null)}
-            className="mt-2 text-[12px] text-emerald-700 hover:underline">Ya la he copiado</button>
+            className="mt-2 text-[12px] text-emerald-300 hover:underline">Ya la he copiado</button>
         </div>
       )}
 
-      {msg && <p className={`text-[12.5px] ${msg.mal ? 'text-red-600' : 'text-emerald-700'}`}>{msg.txt}</p>}
+      {msg && <p className={`text-[12.5px] ${msg.mal ? 'text-red-300' : 'text-emerald-300'}`}>{msg.txt}</p>}
 
       <div className="flex flex-wrap items-center gap-2">
         <input value={nombre} onChange={(e) => setNombre(e.target.value)}
-          placeholder="Amazon Logistics"
-          className="min-w-0 flex-1 rounded-lg border border-slate-300 px-2.5 py-2 text-[13px]" />
+          placeholder="Nombre del cliente o de su sistema"
+          className="min-w-0 flex-1 rounded-lg border border-dark-700 px-2.5 py-2 text-[13px]" />
         <button onClick={crear} disabled={creando}
-          className="flex items-center gap-1.5 rounded-lg bg-slate-800 px-3 py-2 text-[13px] font-semibold text-white hover:bg-slate-900 disabled:opacity-50">
+          className="flex items-center gap-1.5 rounded-lg bg-dark-100 px-3 py-2 text-[13px] font-semibold text-dark-950 hover:bg-dark-50 disabled:opacity-50">
           <Key size={14} /> {creando ? 'Creando…' : 'Dar acceso'}
         </button>
       </div>
 
       {llaves?.length ? (
-        <div className="overflow-hidden rounded-lg border border-slate-200">
+        <div className="overflow-hidden rounded-lg border border-dark-800">
           {llaves.map((l) => (
-            <div key={l.id} className="flex flex-wrap items-center gap-2 border-b border-slate-100 px-3 py-2.5 last:border-b-0">
+            <div key={l.id} className="flex flex-wrap items-center gap-2 border-b border-dark-800/60 px-3 py-2.5 last:border-b-0">
               <span className="text-[13.5px] font-semibold">{l.partner}</span>
               <span className={`rounded px-1.5 py-0.5 text-[11px] font-semibold ${
-                l.activa ? 'bg-emerald-100 text-emerald-800' : 'bg-slate-100 text-slate-600'}`}>
+                l.activa ? 'bg-emerald-500/15 text-emerald-300' : 'bg-dark-800 text-dark-300'}`}>
                 {l.activa ? 'activa' : l.revocado ? 'cortada' : 'caducada'}
               </span>
-              <span className="text-[12.5px] text-slate-500">
+              <span className="text-[12.5px] text-dark-400">
                 <span className="tabular-nums">{l.accesos}</span> consultas
                 {l.ultimo_uso && <> · última el {String(l.ultimo_uso).slice(0, 10)}</>}
               </span>
-              <span className="text-[12.5px] text-slate-400">caduca {String(l.expira_en).slice(0, 10)}</span>
+              <span className="text-[12.5px] text-dark-500">caduca {String(l.expira_en).slice(0, 10)}</span>
               {l.activa && (
                 <button onClick={() => revocar(l.id)}
-                  className="ml-auto flex items-center gap-1 rounded-lg border border-slate-300 px-2 py-1 text-[12px] text-slate-600 hover:bg-red-50 hover:text-red-700">
+                  className="ml-auto flex items-center gap-1 rounded-lg border border-dark-700 px-2 py-1 text-[12px] text-dark-300 hover:bg-red-500/10 hover:text-red-300">
                   <Trash2 size={13} /> Cortar
                 </button>
               )}
@@ -128,7 +128,7 @@ export default function LlavesPartner() {
           ))}
         </div>
       ) : (
-        <p className="py-4 text-[13px] text-slate-500">
+        <p className="py-4 text-[13px] text-dark-400">
           Todavía no le has dado acceso a nadie.
         </p>
       )}
@@ -137,24 +137,24 @@ export default function LlavesPartner() {
           les abres tus datos, tienes que poder ver qué consultan. */}
       {!!accesos?.length && (
         <div>
-          <div className="mb-1.5 flex items-center gap-1.5 text-[12.5px] font-semibold text-slate-600">
+          <div className="mb-1.5 flex items-center gap-1.5 text-[12.5px] font-semibold text-dark-300">
             <Eye size={14} /> Lo que han consultado
           </div>
-          <div className="overflow-hidden rounded-lg border border-slate-200">
+          <div className="overflow-hidden rounded-lg border border-dark-800">
             {accesos.slice(0, 6).map((a, i) => (
-              <div key={`${a.at}-${i}`} className="flex flex-wrap items-baseline gap-2 border-b border-slate-100 px-3 py-2 text-[12.5px] last:border-b-0">
-                <span className="font-mono tabular-nums text-slate-400">
+              <div key={`${a.at}-${i}`} className="flex flex-wrap items-baseline gap-2 border-b border-dark-800/60 px-3 py-2 text-[12.5px] last:border-b-0">
+                <span className="font-mono tabular-nums text-dark-500">
                   {fechaHoraLocal(a.at)}
                 </span>
-                <span className="font-semibold text-slate-700">{a.partner}</span>
-                <span className="text-slate-500">consultó {a.recurso}</span>
+                <span className="font-semibold text-dark-200">{a.partner}</span>
+                <span className="text-dark-400">consultó {a.recurso}</span>
               </div>
             ))}
           </div>
         </div>
       )}
 
-      <p className="text-[12px] leading-relaxed text-slate-500">
+      <p className="text-[12px] leading-relaxed text-dark-400">
         La llave es de solo lectura y no lleva ningún dato personal: ni nombres de
         conductores, ni teléfonos, ni quién conducía cuándo. Se guarda cifrada, así
         que si se pierde hay que cortarla y hacer otra.

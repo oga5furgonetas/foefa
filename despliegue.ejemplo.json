@@ -1,0 +1,7 @@
+{
+  "pages": "nombre-del-proyecto-en-cloudflare-pages",
+  "web": "https://tu-dominio.com",
+  "backend": "https://tu-api.fly.dev",
+  "staging_web": "https://staging.nombre-del-proyecto.pages.dev",
+  "staging_api": "https://tu-api-staging.fly.dev/api"
+}

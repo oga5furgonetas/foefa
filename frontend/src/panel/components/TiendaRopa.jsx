@@ -91,7 +91,7 @@ export default function TiendaRopa({ sinCabecera = false } = {}) {
         <Shirt size={16} /> Tienda de ropa y material
       </div>
       <p className="text-sm text-dark-400">
-        Lo que hace falta para venderle ropa a tus conductores y a otros DSP, por dónde vas
+        Lo que hace falta para venderle ropa a tus conductores y a otras empresas, por dónde vas
         y de dónde puede salir el dinero.
       </p>
       </>}

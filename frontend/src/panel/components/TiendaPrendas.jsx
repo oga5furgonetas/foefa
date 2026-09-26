@@ -5,6 +5,7 @@ import {
   tiendaInterpretar, tiendaFicha, tiendaLogos, tiendaSubirLogo, tiendaBorrarLogo,
   tiendaSubirFoto, tiendaBorrarFoto, tiendaFotoBlob,
 } from '../api'
+import { MARCA } from '../../marca'
 
 /* ────────────────────────────────────────────────────────────────────────────
    EL TALLER DE PRENDAS — crear tu propia ropa y verla antes de encargarla
@@ -476,7 +477,7 @@ function Editor({ prenda, datos, logos, onCerrar, onGuardado }) {
       (p) => !f.estampaciones.some((e) => e.posicion === p.id))
     if (!libres.length) return
     setF((x) => ({ ...x, estampaciones: [...x.estampaciones,
-      { posicion: libres[0].id, tinta: 'blanco', cm: libres[0].id === 'pecho' ? 8 : 22, texto: 'flotadsp', con_nombre: false }] }))
+      { posicion: libres[0].id, tinta: 'blanco', cm: libres[0].id === 'pecho' ? 8 : 22, texto: MARCA.nombre.toLowerCase(), con_nombre: false }] }))
   }
 
   const guardar = async () => {
@@ -523,7 +524,7 @@ function Editor({ prenda, datos, logos, onCerrar, onGuardado }) {
             <div className="rounded-xl border border-brand-500/25 bg-brand-500/[0.06] p-3">
               <label className="label mb-1.5">Dime como la quieres</label>
               <textarea rows={2} className="input resize-none text-[13px]"
-                placeholder="sudadera negra con el logo pequeno en cian en el pecho, flotadsp grande y el nombre detras, y franja en la manga"
+                placeholder="sudadera negra con el logo pequeno en cian en el pecho, la marca grande y el nombre detras, y franja en la manga"
                 value={pedido} onChange={(e) => setPedido(e.target.value)} />
               <div className="mt-2 flex items-center gap-2">
                 <button type="button" onClick={dibujar} disabled={leyendo || pedido.trim().length < 3}

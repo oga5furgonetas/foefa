@@ -1,14 +1,18 @@
-app = "flotadsp-backend"
+# El nombre de TU app en Fly (fly apps create <nombre>). Nunca el de otro
+# producto: `fly deploy` sube a la que diga esta linea, sin preguntar.
+app = "flotia-backend"
 primary_region = "cdg"
 
 [build]
 
 [env]
-  DB_NAME = "flotadsp"
+  DB_NAME = "flotia"
   # CORS_ORIGINS eliminado a propósito: el código aplica lista blanca segura por defecto.
-  # Para ampliar dominios sin tocar código: flyctl secrets set CORS_ORIGINS="https://flotadsp.com,https://otro.com,..."
+  # Para ampliar dominios sin tocar código: flyctl secrets set CORS_ORIGINS="https://tu-dominio.com,..."
   GEMINI_MODEL = "gemini-1.5-flash"
-  PUBLIC_BASE_URL = "https://flotadsp-backend.fly.dev"
+  PUBLIC_BASE_URL = "https://flotia-backend.fly.dev"
+  # La web del panel (enlaces de correos, portal, taller, empleo):
+  # PUBLIC_BASE_URL_FRONT = "https://tu-dominio.com"
   JWT_EXPIRE_HOURS = "72"
   ADMIN_NAME = "Administrador"
   # ⚠️ Todos los secretos van con: fly secrets set CLAVE=valor
@@ -16,7 +20,7 @@ primary_region = "cdg"
   # R2_ENDPOINT, R2_BUCKET, R2_ACCESS_KEY, R2_SECRET_KEY, R2_PUBLIC_URL
 
 [mounts]
-  source = "flotadsp_uploads"
+  source = "flotia_uploads"
   destination = "/app/uploads"
 
 [http_service]

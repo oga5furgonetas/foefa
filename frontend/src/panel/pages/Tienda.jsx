@@ -18,7 +18,7 @@ export default function Tienda() {
       <div>
         <h1 className="rise font-display text-[clamp(26px,3vw,36px)] font-semibold leading-none tracking-[-0.03em] text-dark-50">Tienda</h1>
         <p className="mt-2 text-sm text-dark-400">
-          La ropa que le vendes a tu gente y a otros DSP: qué falta para poder
+          La ropa que le vendes a tu gente y a otras empresas: qué falta para poder
           venderla, tus prendas y los pedidos de cada tanda.
         </p>
       </div>
