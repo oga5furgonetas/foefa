@@ -11,6 +11,55 @@ riesgo; está aquí para no dar falsos positivos).
 
 ---
 
+## 0. EL CONTEXTO: el aviso de Amazon del 24-09-2026 (léelo primero)
+
+El 24-09 Rubén Córdoba (Winiw Delivery S.L., la DSP) pasó a Dani lo que pedía
+Amazon tras detectar la extensión y un repositorio público:
+1. Desactivar la extensión de Chrome que interceptaba datos del portal Cortex
+   («eliminar únicamente el repositorio público no detendrá el flujo de datos»).
+2. Rotar la clave de Google Geocoding expuesta en el historial de git (commit 2f0bb46).
+3. Revisar los registros de acceso de MongoDB Atlas y Fly.io para saber qué
+   datos de Amazon se recopilaron y almacenaron fuera.
+4. **Inventario de todos los datos derivados de Amazon en infraestructura de
+   terceros (Atlas, R2, registros de Gemini…) y confirmar su eliminación.**
+
+Dani contestó que ya estaba todo borrado y que la extensión «no extraía
+ninguna información personal de ningún cliente». Lo que se comprobó después
+(25-09 y 26-09), con cifras en `inventario_amazon.py` de la sesión c3af8cab:
+- El 24-09 entre 10:30 y 10:36 la extensión **seguía enviando** desde algún
+  Chrome de las naves (log de Fly). Hay que desinstalarla en los PC de OGA5,
+  DGA1 y DGA2.
+- La extensión SÍ guardaba datos personales: **44.174 direcciones de entrega
+  de clientes** con coordenadas, y nombre, teléfono y GPS de conductores.
+- **La base de FlotaDSP en el Atlas de Winiw NO está borrada**: sigue con
+  48.653 documentos de la extensión y 39.391 de informes del portal.
+- **El 26-09, al pedir Dani «recupera todo, traspasa todo», se COPIÓ todo eso
+  a Flota** (Atlas de Flota: los mismos 48.653 + 39.935 de informes), a su PC
+  (`Documents\copia-flotadsp-2026-09-26`, 1,44 GB, en claro) y a una copia
+  cifrada en R2. Es lo contrario de lo que pidió Amazon y hay que corregirlo.
+- La **DNR diaria** (recuperada el 26-09 a petición de Dani) guarda los Daily
+  Report del portal de Amazon en Flota: el punto 4 de Amazon habla de «datos
+  derivados de Amazon en infraestructura de terceros». El 26-09 a las 16:38 se
+  subieron informes de OGA5 en producción (91 DNR, 295 resúmenes, 632 RTS).
+- En Flota: 0 rutas para la extensión, 0 claves de Google en todo el historial
+  de git, repositorios no públicos (comprobado).
+
+**Plan propuesto, pendiente del sí de Dani (nada de esto se ha hecho):**
+A. Borrar de Flota las 15 colecciones de la extensión (+ `cortex_llaves`).
+B. Lo mismo en el Atlas de Winiw (es de Winiw: confirmarlo con Rubén).
+C. Informes del portal y DNR diaria: desactivarla y borrar sus datos hasta
+   tener permiso por escrito de Winiw/Amazon (o mantener si lo dan).
+D. Borrar la copia cifrada de R2 y rehacerla limpia; limpiar o borrar la
+   copia del PC.
+E. Plantilla: que la lista de rutas no pase por la IA (si se pega de Cortex,
+   iría a Google).
+F. Dani: desinstalar la extensión en las naves, borrar la clave de Geocoding
+   en Google Cloud, y corregir ante Rubén lo de «no había datos personales» y
+   «ya está borrado».
+G. Después: dossier con evidencias para Rubén (inventario antes/después).
+
+---
+
 ## 1. Lo grave que se encontró y ya está arreglado
 
 ### 1.1 La base de datos entera se podía descargar sin contraseña — ARREGLADO

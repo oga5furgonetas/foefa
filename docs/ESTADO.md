@@ -90,6 +90,11 @@ eslint, build, `pytest backend/tests` (506 en verde el 26-09) y humo de Playwrig
 
 ## Pendiente (por prioridad)
 
+0. **URGENTE — aviso de Amazon del 24-09**: leer la sección 0 de
+   `docs/REVISION_LEGAL.md`. Amazon pidió inventario y borrado de todos los
+   datos sacados de Amazon; el 26-09 se copiaron a Flota, al PC y a R2. Hay un
+   plan A-G pendiente del sí de Dani. No usar ni ampliar datos de Amazon
+   (DNR diaria incluida) hasta que Dani decida.
 1. **Revisión legal** hecha el 26-09: `docs/REVISION_LEGAL.md`. Lo grave está
    arreglado (copias de la base descargables, plantillas adivinables, CV que no
    se borraban). Quedan puntos **DECIDE DANI** (datos de Amazon en la base, 143
