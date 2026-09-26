@@ -16740,11 +16740,15 @@ async def backup_database_to_r2() -> dict:
             return {"success": False,
                     "error": f"Subida incompleta: {subido} de {tam} bytes"}
 
-        # Rotacion: conservar las 14 mas recientes.
+        # Rotacion: conservar las 14 mas recientes DE ESTE PRODUCTO. Con el
+        # prefijo «backups/» a secas se ordenaban juntas las de otro producto
+        # en el mismo almacenamiento: `flotadsp_…` va por delante de `flota_…`,
+        # asi que las 14 viejas de FlotaDSP se quedaban para siempre y cada
+        # copia nueva de Flota se borraba nada mas subirse (26-09-2026).
         borrados = 0
         try:
             listing = await loop.run_in_executor(_executor, lambda: r2.list_objects_v2(
-                Bucket=R2_BUCKET, Prefix="backups/"))
+                Bucket=R2_BUCKET, Prefix=f"backups/{MARCA.lower()}_"))
             keys = sorted([o["Key"] for o in listing.get("Contents", [])], reverse=True)
             for old_key in keys[14:]:
                 await loop.run_in_executor(_executor, lambda k=old_key: r2.delete_object(
