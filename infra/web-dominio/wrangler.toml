@@ -1,0 +1,10 @@
+# flotadsp.com -> web de Flota. Ver worker.js para el porqué.
+# Desplegar:  cd infra/web-dominio && npx wrangler deploy
+name = "flota-dominio"
+main = "worker.js"
+compatibility_date = "2026-09-01"
+workers_dev = false
+routes = [
+  { pattern = "flotadsp.com", custom_domain = true },
+  { pattern = "www.flotadsp.com", custom_domain = true },
+]

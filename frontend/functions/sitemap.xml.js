@@ -22,9 +22,16 @@ const FIJAS = [
   ['/privacidad', '0.2'], ['/terminos', '0.2'], ['/cookies', '0.2'], ['/aviso-legal', '0.2'],
 ]
 
+/* El dominio de verdad. flotadsp.com llega por un Worker que reenvía a Pages
+   (infra/web-dominio) y avisa con X-Forwarded-Host; sin él, la petición. */
+const origenDe = (request) => {
+  const h = request.headers.get('x-forwarded-host')
+  return h && /^[a-z0-9.-]+$/i.test(h) ? `https://${h}` : new URL(request.url).origin
+}
+
 export async function onRequestGet(context) {
   const { env, request } = context
-  const origen = new URL(request.url).origin
+  const origen = origenDe(request)
 
   const filas = FIJAS.map(([ruta, prioridad]) =>
     `  <url><loc>${xml(origen + ruta)}</loc><priority>${prioridad}</priority></url>`)

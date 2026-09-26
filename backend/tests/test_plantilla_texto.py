@@ -20,10 +20,10 @@ RUTA = os.path.join(RAIZ, "server.py")
 def _cargar():
     arbol = ast.parse(io.open(RUTA, encoding="utf-8-sig").read())
     funciones = {"_plantilla_texto_sin_ia", "_nombre_de_texto"}
-    constantes = {"_PLACA_RE", "_HORA_EN_TEXTO_RE", "_RUTA_EN_TEXTO_RE"}
+    constantes = {"_PLACA_RE", "_HORA_EN_TEXTO_RE", "_RUTA_EN_TEXTO_RE", "_CONTRATO_RE"}
     cuerpo = [n for n in arbol.body if isinstance(n, ast.Assign) and getattr(n.targets[0], "id", "") in constantes]
     cuerpo += [n for n in arbol.body if isinstance(n, ast.FunctionDef) and n.name in funciones]
-    assert len(cuerpo) == 5, "faltan piezas en server.py"
+    assert len(cuerpo) == 6, "faltan piezas en server.py"
     ns = {}
     exec("import re", ns)
     exec(compile(ast.fix_missing_locations(ast.Module(body=cuerpo, type_ignores=[])), "<server>", "exec"), ns)
@@ -65,6 +65,21 @@ def test_cabeceras_vacios_y_repetidos_fuera():
     nombres = [f["conductor"] for f in leer(texto)]
     assert nombres.count("ANA RUIZ") == 1, nombres
     assert "SIN ASIGNAR" not in nombres, nombres
+
+
+def test_el_contrato_no_es_una_ruta():
+    """Visto con la IA caída (26-09-2026): la lista de vehículos trae el
+    contrato de ETT en una columna y salía como ruta en las tres filas."""
+    filas = leer("Rodriguez Arias, Andrea    7906NFX   ETT11\n"
+                 "Gomez Vidal, Luis    0116 MBP   ETT20\n"
+                 "Martinez Pena, Sara    4455NKC   ETT11\n")
+    assert [f["ruta"] for f in filas] == ["", "", ""], filas
+    assert [f["furgo"] for f in filas] == ["7906NFX", "0116MBP", "4455NKC"], filas
+
+
+def test_un_codigo_repetido_no_es_una_ruta():
+    filas = leer("T2\tAna Ruiz\t1111AAA\nT2\tLuis Gil\t2222BBB\nR9\tEva Sanz\t3333CCC\n")
+    assert [f["ruta"] for f in filas] == ["", "", "R9"], filas
 
 
 def test_sin_nombre_no_hay_fila():

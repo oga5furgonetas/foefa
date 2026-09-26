@@ -32369,6 +32369,9 @@ async def _gemini_extract_text(client, model_name: str, prompt: str, text: str) 
 _PLACA_RE = re.compile(r"\b(\d{4})\s*-?\s*([A-Z]{3})\b", re.I)
 _HORA_EN_TEXTO_RE = re.compile(r"\b([01]?\d|2[0-3])[:.h]([0-5]\d)\b", re.I)
 _RUTA_EN_TEXTO_RE = re.compile(r"^(?=.*\d)[A-Z0-9][A-Z0-9_\-/]{1,15}$")
+# Códigos de contrato de ETT (ETT11, ETT20...): van en las listas de vehículos
+# y tienen pinta de ruta, pero no lo son.
+_CONTRATO_RE = re.compile(r"^ETT\d*$")
 
 
 def _nombre_de_texto(nombre: str) -> str:
@@ -32420,6 +32423,14 @@ def _plantilla_texto_sin_ia(texto: str) -> list:
             continue
         vistos.add(nombre)
         filas.append({"ruta": ruta, "conductor": nombre, "furgo": furgo, "h_salida": hora})
+    # Una ruta es de UNA persona al día: un código que se repite en varias
+    # filas es otra cosa (el contrato ETT11, el turno, la empresa) y dejarlo
+    # como ruta sería un dato falso en la hoja.
+    from collections import Counter as _Counter
+    veces = _Counter(f["ruta"] for f in filas if f["ruta"])
+    for f in filas:
+        if veces.get(f["ruta"], 0) > 1 or _CONTRATO_RE.match(f["ruta"]):
+            f["ruta"] = ""
     return filas
 
 
