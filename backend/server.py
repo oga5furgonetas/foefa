@@ -110,6 +110,23 @@ async def _cargar_veto_gemini():
         logger.warning(f"No se pudo recuperar el veto de Gemini: {e}")
 
 
+# ── EL MODELO DE IA, EN UN SOLO SITIO ────────────────────────────────────────
+# Google retira modelos: el 26-09-2026 `gemini-2.5-flash` dejó de darse a
+# cuentas nuevas (404 «no longer available to new users, use gemini-3.8-flash»)
+# y estaba escrito a mano en quince sitios, así que una clave nueva dejaba sin
+# IA a la app entera. Sale de aquí y `GEMINI_MODEL` lo cambia sin tocar código.
+# Lo aprendido de las revisiones (`ai_feedback`) no depende del modelo: se
+# sigue usando igual al cambiarlo.
+_MODELO_IA_DEFECTO = "gemini-3.8-flash"
+# Respaldo si el principal da cuota o saturación. Los alias *-latest los
+# mantiene Google apuntando a la versión vigente.
+_MODELOS_RESPALDO = ["gemini-flash-latest", "gemini-3.5-flash-lite", "gemini-flash-lite-latest"]
+
+
+def _modelo_ia() -> str:
+    return os.environ.get("GEMINI_MODEL", "").strip() or _MODELO_IA_DEFECTO
+
+
 def _is_daily_exhausted(model: str) -> bool:
     return time.time() - _gemini_daily_exhausted.get(model, 0) < _GEMINI_EXHAUST_TTL
 
@@ -3270,7 +3287,7 @@ async def analyze_images_with_gemini(
         from google import genai as genai_sdk
         from google.genai import types as genai_types
 
-        model_name = os.environ.get("GEMINI_MODEL", "gemini-2.5-flash")
+        model_name = _modelo_ia()
 
         # MODO VERTEX AI: si esta configurado el proyecto, usar cuenta de servicio
         # (evita el problema de las API keys formato AQ. que no funcionan con generateContent)
@@ -3397,7 +3414,7 @@ async def analyze_images_with_gemini(
         # Modelos de fallback si el principal da 429. Los alias *-latest los
         # mantiene Google apuntando a la versión vigente (los 1.5 murieron en
         # 2026 devolviendo 404 y dejaban todo "sin análisis").
-        fallback_models = ["gemini-2.5-flash", "gemini-flash-latest", "gemini-flash-lite-latest", "gemini-2.5-flash-lite"]
+        fallback_models = [_modelo_ia()] + _MODELOS_RESPALDO
         models_to_try = [model_name] + [m for m in fallback_models if m != model_name]
 
         response = None
@@ -6490,7 +6507,7 @@ async def assistant_ask(data: dict, user: dict = Depends(require_admin)):
     try:
         from google.genai import types as genai_types
         client_g = _gemini_client_plantilla()
-        model_name = os.environ.get("GEMINI_MODEL", "gemini-2.5-flash")
+        model_name = _modelo_ia()
         # thinking_budget=0: la pregunta es factual sobre datos adjuntos, no hace
         # falta razonamiento largo — respuesta en segundos en vez de decenas.
         try:
@@ -11287,7 +11304,7 @@ async def identify_vehicle_model(vehicle_id: str, _admin: dict = Depends(require
     try:
         from google.genai import types as genai_types
         client = _gemini_client_plantilla()
-        model_name = os.environ.get("GEMINI_MODEL", "gemini-2.5-flash")
+        model_name = _modelo_ia()
         contents = [prompt] + [genai_types.Part.from_bytes(data=b, mime_type="image/jpeg") for b in imgs]
         cfg = genai_types.GenerateContentConfig(
             response_mime_type="application/json",
@@ -11553,7 +11570,7 @@ async def damage_feedback(inspection_id: str, data: dict, user: dict = Depends(g
         "corrected_box": data.get("corrected_box"),   # [ymin,xmin,ymax,xmax] 0-1000 dibujada por el humano
         "reviewed_by": user.get("name", "?"),
         "created_at": datetime.now(timezone.utc).isoformat(),
-        "model_version": "gemini-2.5-flash",
+        "model_version": _modelo_ia(),
     }
     # Upsert: si re-valida el mismo daño, se actualiza el veredicto. Dos
     # veredictos A LA VEZ sobre el mismo daño chocan en el indice
@@ -11681,7 +11698,7 @@ async def missed_damage(inspection_id: str, data: dict, user: dict = Depends(get
         "verdict": "missed",               # la IA NO lo vio — falso negativo
         "reviewed_by": user.get("name", "?"),
         "created_at": datetime.now(timezone.utc).isoformat(),
-        "model_version": "gemini-2.5-flash",
+        "model_version": _modelo_ia(),
     }
     await db.ai_feedback.insert_one(sample)
     total = await db.ai_feedback.count_documents({})
@@ -11800,8 +11817,7 @@ async def start_analysis_recovery():
         # Primero recuperar el veto: sin esto, cada despliegue olvidaba que el
         # cupo estaba agotado y reencolaba trabajo para quemarlo de nuevo.
         await _cargar_veto_gemini()
-        _cadena = ["gemini-2.5-flash", "gemini-flash-latest",
-                   "gemini-flash-lite-latest", "gemini-2.5-flash-lite"]
+        _cadena = [_modelo_ia()] + _MODELOS_RESPALDO
         if all(_is_daily_exhausted(m) for m in _cadena):
             logger.info("Arranque: cupo diario de Gemini agotado, no se reencolan reintentos")
         else:
@@ -11818,8 +11834,7 @@ async def start_analysis_recovery():
 
     async def _recovery_loop():
         await asyncio.sleep(60)  # dejar arrancar el servidor con calma
-        _chain = ["gemini-2.5-flash", "gemini-flash-latest",
-                  "gemini-flash-lite-latest", "gemini-2.5-flash-lite"]
+        _chain = [_modelo_ia()] + _MODELOS_RESPALDO
         while True:
             try:
                 # Toda la cadena con el día agotado (free tier): reintentar solo
@@ -11853,7 +11868,7 @@ async def start_analysis_recovery():
 
                 # Reconstrucción de flota: MÁXIMO 3 furgonetas por ciclo (~10 min)
                 # y solo si el modelo base tiene cuota. Así no ahoga las operaciones.
-                if not _is_daily_exhausted("gemini-2.5-flash"):
+                if not _is_daily_exhausted(_modelo_ia()):
                     rebuild_stuck = await db.inspections.find({
                         "rebuild_pass": {"$exists": True}, "inventory_done": {"$ne": True},
                         "analysis_status": "pending", "auto_retries": {"$not": {"$gte": 3}},
@@ -15206,7 +15221,7 @@ async def health():
         "version": "5.3.4",
         "gemini_configured": bool(os.environ.get("GEMINI_API_KEY")) or os.environ.get("USE_VERTEX_AI","").lower() in ("1","true","yes"),
         "gemini_mode": "vertex_ai" if os.environ.get("USE_VERTEX_AI","").lower() in ("1","true","yes") else "ai_studio",
-        "gemini_model": os.environ.get("GEMINI_MODEL", "gemini-2.5-flash"),
+        "gemini_model": _modelo_ia(),
         # El asistente usa OTRO modelo a proposito (la cuota gratuita de Google
         # es por modelo). Sin esta linea, /api/health decia uno y las llamadas
         # iban a otro: un dato que no sale del codigo que corre engaña, y por
@@ -24863,7 +24878,7 @@ async def import_roster_text(
                 loop.run_in_executor(
                     _executor,
                     lambda: client.models.generate_content(
-                        model=os.environ.get("GEMINI_MODEL", "gemini-2.5-flash"),
+                        model=_modelo_ia(),
                         contents=[prompt], config=gen_config
                     )
                 ),
@@ -25021,7 +25036,7 @@ async def import_roster_image(
     try:
         from google import genai as genai_sdk
         from google.genai import types as genai_types
-        model_name = os.environ.get("GEMINI_MODEL", "gemini-2.5-flash")
+        model_name = _modelo_ia()
         if use_vertex:
             vertex_project = os.environ.get("GCP_PROJECT", "")
             vertex_location = os.environ.get("GCP_LOCATION", "us-central1")
@@ -25549,7 +25564,7 @@ async def validate_inspection_photo(
                 loop.run_in_executor(
                     _executor,
                     lambda: client.models.generate_content(
-                        model=os.environ.get("GEMINI_MODEL", "gemini-2.5-flash"),
+                        model=_modelo_ia(),
                         contents=contents, config=gen_config
                     )
                 ),
@@ -25878,7 +25893,7 @@ async def _odo_leer_foto(img_bytes: bytes, intentos: int = 2):
                 loop.run_in_executor(
                     _executor,
                     lambda: client.models.generate_content(
-                        model=os.environ.get("GEMINI_MODEL", "gemini-2.5-flash"),
+                        model=_modelo_ia(),
                         contents=contents, config=gen_config)),
                 timeout=45.0)
         return json.loads(_strip_markdown_json(resp.text or ""))
@@ -27274,7 +27289,7 @@ async def _detectar_cajas_danos(img_bytes):
         from google import genai as genai_sdk
         from google.genai import types as genai_types
         use_vertex = os.environ.get("USE_VERTEX_AI","").lower() in ("1","true","yes")
-        model_name = os.environ.get("GEMINI_MODEL","gemini-2.5-flash")
+        model_name = _modelo_ia()
         if use_vertex:
             from google.oauth2 import service_account
             import json as _json, base64 as _b64c
@@ -32339,7 +32354,7 @@ async def _gemini_json_call(client, model_name: str, contents: list) -> dict:
             thinking_config=genai_types.ThinkingConfig(thinking_budget=0))
     except Exception:
         cfg = genai_types.GenerateContentConfig(temperature=0.0)
-    chain = [model_name, "gemini-2.5-flash-lite", "gemini-flash-latest", "gemini-flash-lite-latest"]
+    chain = [model_name] + _MODELOS_RESPALDO
     seen, models = set(), []
     for m in chain:
         if m and m not in seen:
@@ -32506,7 +32521,7 @@ async def plantilla_extraer(request: Request, admin: dict = Depends(require_admi
     n_total = n_rutas + len(veh_imgs) + (1 if veh_txt else 0)
     try:
         client = _gemini_client_plantilla()
-        model_name = os.environ.get("GEMINI_MODEL", "gemini-2.5-flash")
+        model_name = _modelo_ia()
         tareas = [_gemini_extract(client, model_name, _PROMPT_RUTAS, b) for b in rut_imgs]
         if rut_txt:
             tareas.append(_gemini_extract_text(client, model_name, _PROMPT_RUTAS, rut_txt))

@@ -332,7 +332,7 @@ async def save_feedback(
     corrected_box: Optional[list],
     corrected_polygon: Optional[list],
     reviewed_by: str,
-    model_version: str = "gemini-2.5-flash",
+    model_version: str = "gemini-3.8-flash",
 ):
     """Guarda feedback humano en ai_feedback con soporte para polígono corregido."""
     doc = {
