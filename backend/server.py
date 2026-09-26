@@ -20946,13 +20946,77 @@ async def empleo_contratar(cand_id: str, user: dict = Depends(require_admin)):
     return {"ok": True, "driver_id": d.id, "nombre": d.name}
 
 
+def _clave_cv(url) -> str:
+    """La clave en R2 del CV guardado en `cv_url` ('' si no es un CV nuestro)."""
+    u = str(url or "")
+    base = os.environ.get("R2_PUBLIC_URL", "").rstrip("/")
+    if base and u.startswith(base + "/"):
+        u = u[len(base) + 1:]
+    return u if (u.startswith("cv/") and ".." not in u and "://" not in u) else ""
+
+
+async def _borrar_cv_de(doc: dict) -> bool:
+    """Borra del almacenamiento el fichero del CV de un candidato.
+
+    EL CV SE QUEDABA PARA SIEMPRE (26-09-2026): la papelera y la caducidad a
+    los 12 meses borraban la ficha, pero el PDF seguía en el almacenamiento,
+    que es público por enlace. «Tus datos se borran» solo era verdad a medias
+    (RGPD, art. 5.1.e y 17)."""
+    k = _clave_cv((doc or {}).get("cv_url"))
+    r2 = get_r2()
+    if not (k and r2):
+        return False
+    try:
+        await asyncio.get_running_loop().run_in_executor(
+            _executor, lambda: r2.delete_object(Bucket=R2_BUCKET, Key=k))
+        return True
+    except Exception as e:                                       # noqa: BLE001
+        logger.warning("No se pudo borrar el CV %s: %s", k, e)
+        return False
+
+
 @api_router.delete("/empleo/candidatos/{cand_id}")
 async def empleo_borrar_candidato(cand_id: str, user: dict = Depends(require_admin)):
-    """Borrado a mano: alguien pide que quitemos sus datos y hay que poder."""
-    r = await db.candidatos.delete_one({"id": cand_id})
-    if not r.deleted_count:
+    """Borrado a mano: alguien pide que quitemos sus datos y hay que poder.
+    Se borra también el fichero del CV, no solo la ficha."""
+    c = await db.candidatos.find_one({"id": cand_id}, {"_id": 0, "id": 1, "cv_url": 1})
+    if not c:
         raise HTTPException(404, "Ese candidato no existe")
-    return {"ok": True}
+    cv_borrado = await _borrar_cv_de(c)
+    await db.candidatos.delete_one({"id": cand_id})
+    return {"ok": True, "cv_borrado": cv_borrado}
+
+
+async def _purgar_candidatos_que_caducan() -> int:
+    """Un día ANTES de que el TTL de Mongo borre a un candidato (12 meses), se
+    borran su CV del almacenamiento y su ficha. Si esperásemos al TTL, la ficha
+    desaparecería sola y el CV quedaría suelto sin nadie que supiera de él."""
+    limite = datetime.now(timezone.utc) + timedelta(days=1)
+    orgs = await global_db.organizations.find(
+        {}, {"_id": 0, "id": 1, "db_name": 1, "account_type": 1}).to_list(5000)
+    n = 0
+    for o in orgs:
+        tdb = client[_tenant_db_name(o)]
+        async for c in tdb.candidatos.find({"expira_en": {"$lt": limite}}, {"_id": 0, "id": 1, "cv_url": 1}):
+            await _borrar_cv_de(c)
+            await tdb.candidatos.delete_one({"id": c["id"]})
+            n += 1
+    if n:
+        logger.info("Candidatos caducados: %d borrados con su CV", n)
+    return n
+
+
+@app.on_event("startup")
+async def _arrancar_purga_candidatos():
+    async def _bucle():
+        await asyncio.sleep(300)
+        while True:
+            try:
+                await _purgar_candidatos_que_caducan()
+            except Exception as e:                               # noqa: BLE001
+                logger.warning("Purga de candidatos: %s", e)
+            await asyncio.sleep(6 * 3600)
+    asyncio.create_task(_bucle())
 
 
 # ── JOIN (join.com): LAS CANDIDATURAS QUE LLEGAN POR FUERA ──────────────────
