@@ -1,2 +1,4 @@
 test-results/
 playwright-report/
+# Mapas de fuente de cada build: se guardan aquí y NO se publican (vite.config.js).
+mapas/

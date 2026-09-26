@@ -6,7 +6,7 @@ import {
   Settings, Shield, LogOut, Zap, Inbox, ChevronRight, ChevronDown, AlertTriangle, BookUser,
   Search, Sun, Moon, Contrast, MapPin, Mail, UserCircle2, Languages, ShieldAlert, Menu,
   CircleHelp, Briefcase, Store, UserCheck, ImagePlus, Loader2, Bell, BellOff, MessageCircle,
-  MessagesSquare, Euro, FileSpreadsheet, PackageX,
+  MessagesSquare, Euro, FileSpreadsheet, PackageX, TrendingUp,
 } from 'lucide-react'
 import { getAdmin, isAuthed, isSuperAdmin, isCenterManager, logout, canSee, decodeToken, getVisibleCenters, SIEMPRE_VISIBLES, guardarAccesoFresco, esPlataforma, actualizarMiFoto } from './auth'
 import { getMe, contarPeticionesPendientes, contarCandidatosNuevos, contarConversacionesSinLeer, subirFotoAdmin } from './api'
@@ -564,7 +564,7 @@ export default function PanelLayout() {
     if (SIEMPRE_VISIBLES.has(k)) return true
     if (k === 'vencimientos') return EXPIRY_KEYS.some((ek) => canSee(ek))
     if (k === 'ordenes') return canSee('talleres')
-    if (k === 'admin' || k === 'bandeja' || k === 'analitica' || k === 'gastos') return sa
+    if (k === 'admin' || k === 'bandeja' || k === 'analitica' || k === 'gastos' || k === 'valor') return sa
     if (k === 'tienda' && !esPlataforma()) return false
     if (k === 'usuarios') return sa || cm
     return canSee(k)
@@ -714,6 +714,14 @@ export default function PanelLayout() {
               className={({ isActive }) => `nav-item ${isActive ? 'nav-item-active' : ''}`}
             >
               <Euro size={16} /> Gastos
+            </NavLink>
+          )}
+          {showAdmin && (
+            <NavLink
+              to="/panel/valor"
+              className={({ isActive }) => `nav-item ${isActive ? 'nav-item-active' : ''}`}
+            >
+              <TrendingUp size={16} /> Valor
             </NavLink>
           )}
           {showAdmin && (

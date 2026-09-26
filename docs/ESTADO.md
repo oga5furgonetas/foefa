@@ -5,7 +5,7 @@
 > haz commit y `git push`. Una sola sesión trabajando a la vez: antes de
 > empezar, `git pull` y comprueba que nadie ha dejado nada a medias aquí.
 
-Última actualización: **26-09-2026** (sesión `c3af8cab`, Claude Opus 5.5).
+Última actualización: **26-09-2026, noche** (sesión `c3af8cab`, Claude Opus 5.5).
 
 ## Qué es y dónde está
 
@@ -56,7 +56,7 @@ npx wrangler pages deploy dist --project-name flota --branch main --commit-dirty
 ```
 
 Antes de desplegar, lo de CLAUDE.md («Antes de dar algo por bueno»): checks,
-eslint, build, `pytest backend/tests` (506 en verde el 26-09) y humo de Playwright.
+eslint, build, `pytest backend/tests` (585 en verde el 26-09 por la noche) y humo de Playwright.
 **Si algo se pone rojo, no se despliega.**
 
 ## Reglas de Dani (siempre)
@@ -88,6 +88,40 @@ eslint, build, `pytest backend/tests` (506 en verde el 26-09) y humo de Playwrig
    escritorio y móvil): arreglados el historial de daños (500) y el ranking
    (7 s → 0,18 s); textos «nave/station» → «centro».
 
+## Qué se hizo el 26-09-2026 (tarde): Valor y «todo en privado»
+
+1. **Valor** (`/panel/valor`): el buscador de apuestas de Dani (venía en
+   `valor.zip`, 63 tests). Motor en `backend/valor/` (su README explica el
+   método), API `/api/valor/*`, página `frontend/src/panel/pages/Valor.jsx`.
+   **SOLO Dani**: menú lateral y del móvil solo con `isSuperAdmin()`, la ruta
+   echa al resto (`routeAllowed`), y el servidor exige `require_valor`, más
+   estricto que `require_superadmin`: marca `sa` en el token + que no sea demo,
+   mantenimiento ni suplantación + que en la base ese usuario sea el de
+   `SUPERADMIN_USERNAME` con `super_admin`. No sale en la paleta ⌘K, ni en
+   sitemap, robots, portada o ayuda. Comprobado en producción: Dani 200; otro
+   admin, otro admin con `sa` forjado y la demo, 403. Tests:
+   `backend/tests/test_valor_*.py` y `e2e/humo.spec.js` («Valor, solo super-admin»).
+   - Base: SQLite en el volumen de Fly, `/app/uploads/privado/valor.db`. NO en
+     Mongo. `/uploads` es público, así que la subclase `_UploadsSinPrivado`
+     se niega a servir `PRIVADO_DIR` (probado con `./`, `..`, `//`).
+   - Escáner: hilo que arranca SOLO con `VALOR_ESCANEAR=1`; avisos por
+     `VALOR_TELEGRAM_TOKEN`/`VALOR_TELEGRAM_CHAT` (nunca el Telegram de la flota).
+   - **Falta (lo tiene que dar Dani)**: `ODDS_API_KEY` (y `APISPORTS_KEY` si la
+     tiene) y su banca real `VALOR_BANCA` (hoy 1000 por defecto). Con las
+     claves: hacer UNA llamada real a cada API, comparar con
+     `valor/fuentes/*.py`, corregir con su test, y entonces `VALOR_ESCANEAR=1`.
+     La clave vieja de The Odds API estaba solo en la app de FlotaDSP (apagada):
+     no se ha tocado.
+   - Arreglado al integrar: `/aprendizaje` daba 500 con un segmento de UN aviso
+     (margen infinito no cabe en JSON).
+2. **La lista de rutas de la API ya no es pública**: `/docs`, `/redoc` y
+   `/openapi.json` respondían 200 a cualquiera. Ahora 404; en local se
+   encienden con `API_DOCS=1`.
+3. **Los mapas de fuente ya no se publican**: cada `.js` de la web llevaba su
+   `.map` (el código fuente entero, con comentarios) descargable. Ahora
+   `sourcemap: 'hidden'` y el plugin `mapasFuera()` de `vite.config.js` los
+   mueve a `frontend/mapas/<fecha>/` (fuera de git) en cada build.
+
 ## Pendiente (por prioridad)
 
 0. **URGENTE — aviso de Amazon del 24-09**: leer la sección 0 de
@@ -111,11 +145,31 @@ eslint, build, `pytest backend/tests` (506 en verde el 26-09) y humo de Playwrig
 4. Investigaciones de DNR y portal `/dnr/t/` de FlotaDSP: no recuperados
    (están en el commit raíz `cfed72b` si Dani los pide).
 5. Capturas para la portada (`ProductoReal.jsx` se oculta si no hay imágenes).
+6. **Valor**: claves de las APIs de cuotas y banca real (ver arriba).
+7. **Privacidad pendiente** («que nadie tenga acceso a nuestra data»):
+   - Los ficheros de R2 (fotos, DNI y documentos de conductores, CV) se abren
+     con el enlace, sin sesión (r2.dev público). Los nombres no se adivinan
+     (uuid + 8 hex, medido el 26-09), pero un enlace reenviado vale para
+     siempre. Arreglo: enlaces firmados que caducan desde la API, y que Dani
+     apague el acceso público del bucket (cuenta de Winiw, no la suya).
+   - El R2 y el Atlas viejo son de la cuenta de **Winiw**: Winiw tiene acceso
+     a esos datos. Llevarlos a cuentas de Dani.
+   - Los despliegues ANTIGUOS de Pages siguen en sus URLs propias
+     (`<hash>.flota-2fg.pages.dev`) con sus `.map`. No se han borrado.
+8. **EN CURSO**: afinidad conductor↔furgoneta para la plantilla diaria (por
+   centro, sin repetir furgonetas, huecos para los que no tienen, desplegable
+   con las libres) y el aparcamiento EN FILA de OGA5 (las de atrás no salen
+   hasta que salgan las de delante). Pedido por Dani el 26-09 por la noche.
 
 ## Trampas conocidas
 
 - FastAPI de esta versión registra las rutas al arrancar: para listarlas,
-  pedir `/openapi.json` al servidor en marcha, no `server.app.routes`.
+  pedir `/openapi.json` al servidor en marcha (en LOCAL y con `API_DOCS=1`;
+  en producción está cerrado a propósito), no `server.app.routes`.
+- Las pruebas de Playwright corren contra `dist` (`vite preview`): si se toca
+  el código, recompilar antes, o la prueba mira la versión vieja.
+- El usuario de Atlas no puede `dropDatabase`: las bases de prueba se vacían
+  colección a colección.
 - La demo es de solo lectura (403 al escribir). Para probar escrituras:
   backend local contra bases `prueba_*` del clúster (ver cómo en la sesión
   c3af8cab: `api_prueba.py` con token de mantenimiento `maintenance-claude`).

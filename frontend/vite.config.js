@@ -1,7 +1,36 @@
 import { defineConfig, loadEnv } from 'vite'
 import react from '@vitejs/plugin-react'
-import { readFileSync, writeFileSync, existsSync } from 'node:fs'
-import { join } from 'node:path'
+import { readFileSync, writeFileSync, existsSync, readdirSync, mkdirSync, renameSync } from 'node:fs'
+import { join, relative, dirname, resolve } from 'node:path'
+
+/* LOS MAPAS DE FUENTE NO SE PUBLICAN.
+   Hasta el 26-09-2026 cada `.js` servido llevaba su `.map` al lado, y el `.map`
+   ES el código fuente entero, comentarios incluidos: nombres de personas,
+   incidencias, notas internas. Cualquiera lo bajaba sin sesión (HTTP 200).
+   Se siguen generando —la fuente tiene que poder recuperarse para leer un
+   error—, pero sin referencia en el `.js` (`sourcemap: 'hidden'`) y FUERA de
+   la carpeta que se sube: en `frontend/mapas/<fecha>/`, que no va a git. */
+function mapasFuera() {
+  let salida = ''
+  return {
+    name: 'mapas-fuera',
+    apply: 'build',
+    configResolved(c) { salida = resolve(c.root, c.build.outDir) },
+    closeBundle() {
+      if (!salida || !existsSync(salida)) return
+      const destino = join(process.cwd(), 'mapas', new Date().toISOString().replace(/[:.]/g, '-'))
+      const recorre = (dir) => readdirSync(dir, { withFileTypes: true }).flatMap((e) =>
+        e.isDirectory() ? recorre(join(dir, e.name)) : e.name.endsWith('.map') ? [join(dir, e.name)] : [])
+      const mapas = recorre(salida)
+      for (const f of mapas) {
+        const a = join(destino, relative(salida, f))
+        mkdirSync(dirname(a), { recursive: true })
+        renameSync(f, a)
+      }
+      if (mapas.length) console.log(`[mapas-fuera] ${mapas.length} mapas guardados fuera de la web, en ${relative(process.cwd(), destino)}`)
+    },
+  }
+}
 
 /* LA CSP CONOCE AL BACKEND SIN ESCRIBIRLO A MANO.
    `public/_headers` lleva `__BACKEND_ORIGIN__` en el `connect-src`. Al terminar
@@ -27,13 +56,14 @@ export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd(), '')
   return {
   base: '/',
-  plugins: [react(), cspConBackend(env.VITE_API_URL)],
+  plugins: [react(), cspConBackend(env.VITE_API_URL), mapasFuera()],
   server: {
     // En desarrollo la API va por el mismo origen: sin CORS y sin configurar nada.
     proxy: { '/api': { target: env.API_DEV_URL || 'http://localhost:8000', changeOrigin: true } },
   },
   build: {
-    sourcemap: true, // nunca más un bundle sin fuente recuperable
+    // Nunca más un bundle sin fuente recuperable, pero sin publicarla: ver mapasFuera().
+    sourcemap: 'hidden',
     rollupOptions: {
       output: {
         // Subcarpeta versionada: el edge de Cloudflare llegó a cachear el HTML

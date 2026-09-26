@@ -261,7 +261,14 @@ db = _TenantDBProxy()
 # FASTAPI
 # =========================
 
-app = FastAPI(title="%s API" % MARCA, version="6.0.0")
+# La lista de rutas (/docs, /redoc, /openapi.json) NO se publica. Hasta el
+# 26-09-2026 respondía a cualquiera sin sesión: un mapa de toda la API, las
+# pantallas privadas incluidas. En local se enciende con API_DOCS=1.
+_API_DOCS = os.environ.get("API_DOCS") == "1"
+app = FastAPI(title="%s API" % MARCA, version="6.0.0",
+              docs_url="/docs" if _API_DOCS else None,
+              redoc_url="/redoc" if _API_DOCS else None,
+              openapi_url="/openapi.json" if _API_DOCS else None)
 api_router = APIRouter(prefix="/api")
 
 
@@ -15291,8 +15298,32 @@ app.add_middleware(
 # NOTA: app.include_router() se llama al FINAL del archivo, despues de definir
 # TODOS los endpoints, para que las rutas anadidas se registren correctamente.
 
+# Lo que NUNCA se sirve por /uploads aunque viva en el mismo volumen (la base
+# de Valor, por ejemplo). /uploads es público: sin esto, un fichero guardado en
+# /app/uploads se baja con el enlace, sin sesión.
+PRIVADO_DIR = UPLOAD_DIR / "privado"
+PRIVADO_DIR.mkdir(exist_ok=True)
+
+
+class _UploadsSinPrivado(StaticFiles):
+    """StaticFiles que se niega a servir nada de PRIVADO_DIR.
+
+    Se compara la ruta REAL ya resuelta, no el texto de la URL: así da igual
+    cómo se escriba («/uploads/./privado/…», «//privado», un enlace simbólico).
+    """
+
+    def lookup_path(self, path):
+        full_path, stat_result = super().lookup_path(path)
+        if full_path:
+            real = os.path.realpath(full_path)
+            privado = os.path.realpath(str(PRIVADO_DIR))
+            if real == privado or real.startswith(privado + os.sep):
+                return "", None
+        return full_path, stat_result
+
+
 # Montar uploads locales DESPUÉS del middleware (solo fallback sin R2)
-app.mount("/uploads", StaticFiles(directory=str(UPLOAD_DIR)), name="uploads")
+app.mount("/uploads", _UploadsSinPrivado(directory=str(UPLOAD_DIR)), name="uploads")
 
 
 @app.get("/")
@@ -41339,6 +41370,240 @@ async def gastos_buzon_estado(_: dict = Depends(require_superadmin)):
     pendientes = await db.gastos.count_documents({"origen": "correo", "revisar": True})
     return {"buzon": b, "por_revisar": pendientes,
             "proveedores": sorted(set(_GASTO_DOMINIOS.values()))}
+
+
+# =========================
+# VALOR — apuestas con ventaja. PRIVADO: solo Dani.
+# =========================
+# El motor vive en backend/valor/ (su README explica el método). Aquí solo la
+# puerta y el escáner. Nada de esto toca los datos de la flota:
+#   · la base es un SQLite en el volumen de Fly, dentro de PRIVADO_DIR, que
+#     /uploads se niega a servir (ver _UploadsSinPrivado). No va a Mongo, así
+#     que tampoco viaja en las copias de la base ni la ve ninguna empresa;
+#   · cada endpoint pasa por require_valor, más estricto que require_superadmin;
+#   · el escáner solo arranca con VALOR_ESCANEAR=1, y avisa por su propio
+#     Telegram (VALOR_TELEGRAM_*), nunca por el grupo de la flota.
+import threading as _threading  # noqa: E402
+
+VALOR_DB = os.environ.get("VALOR_DB", "").strip() or str(PRIVADO_DIR / "valor.db")
+# La conexión de SQLite no admite dos hilos a la vez: las peticiones van de una
+# en una por aquí. El escáner tiene su propia conexión (SQLite cruza las dos).
+_VALOR_LOCK = _threading.Lock()
+_VALOR_REG = None
+_VALOR_ESTADO = {"escaneando": False, "fuentes": [], "ultima_vuelta": None, "ultimo_error": None}
+_VALOR_DUENO_TTL = 60.0
+_VALOR_DUENO_CACHE: dict = {}
+
+
+def _valor_banca() -> float:
+    try:
+        return float(os.environ.get("VALOR_BANCA", "1000"))
+    except ValueError:
+        return 1000.0
+
+
+async def _valor_es_el_dueno(uid: str) -> bool:
+    """¿Es este usuario, AHORA en la base, el super-admin de SUPERADMIN_USERNAME?
+
+    Sin SUPERADMIN_USERNAME no entra nadie: una puerta sin dueño se cierra.
+    """
+    esperado = os.environ.get("SUPERADMIN_USERNAME", "").strip()
+    if not uid or not esperado:
+        return False
+    ahora = time.time()
+    hit = _VALOR_DUENO_CACHE.get(uid)
+    if hit and hit[0] > ahora:
+        return hit[1]
+    u = await global_db.admin_users.find_one(
+        {"id": uid}, {"_id": 0, "username": 1, "super_admin": 1, "disabled": 1})
+    ok = (bool(u) and bool(u.get("super_admin")) and not u.get("disabled")
+          and u.get("username") == esperado)
+    if len(_VALOR_DUENO_CACHE) > 100:
+        _VALOR_DUENO_CACHE.clear()
+    _VALOR_DUENO_CACHE[uid] = (ahora + _VALOR_DUENO_TTL, ok)
+    return ok
+
+
+async def require_valor(user: dict = Depends(require_superadmin)) -> dict:
+    """Valor es SOLO de Dani. Hacen falta las tres cosas a la vez:
+      · la marca de super-admin en el token (require_superadmin, como Gastos);
+      · una sesión de persona: ni la demo, ni el token de mantenimiento, ni
+        mirando la cuenta de una empresa (ese token lleva TU id, sin la marca);
+      · y que en la base, ahora, ese usuario sea el de SUPERADMIN_USERNAME.
+    Si algún día otra cuenta acabara con la marca de super-admin, vería Gastos
+    y el panel de negocio; esto no. Mismo 403 en todos los casos: la respuesta
+    no dice cuál de las tres ha fallado."""
+    if (user.get("demo") or user.get("imp") or user.get("role") != "admin"
+            or user.get("sub") == "maintenance-claude"
+            or not await _valor_es_el_dueno(str(user.get("sub") or ""))):
+        raise HTTPException(status_code=403, detail="Acceso solo para el super-admin")
+    return user
+
+
+def _valor_registro():
+    global _VALOR_REG
+    if _VALOR_REG is None:
+        from valor.registro import Registro
+        Path(VALOR_DB).parent.mkdir(parents=True, exist_ok=True)
+        _VALOR_REG = Registro(VALOR_DB)
+        # WAL: el escáner escribe mientras la pantalla lee, sin bloquearse.
+        _VALOR_REG.db.execute("PRAGMA journal_mode=WAL")
+    return _VALOR_REG
+
+
+async def _valor(fn):
+    """fn(registro) fuera del bucle de eventos (SQLite es de disco) y de uno en uno."""
+    def hacer():
+        with _VALOR_LOCK:
+            return fn(_valor_registro())
+    return await asyncio.get_running_loop().run_in_executor(None, hacer)
+
+
+def _valor_finito(x):
+    """JSON no admite infinito: un segmento con UN solo aviso tiene margen
+    infinito y tumbaba /aprendizaje con un 500 (json.dumps(allow_nan=False))."""
+    return x if isinstance(x, (int, float)) and x == x and abs(x) != float("inf") else None
+
+
+@api_router.get("/valor/estado")
+async def valor_estado(_: dict = Depends(require_valor)):
+    """Si el escáner está leyendo, de dónde, y las reglas con las que filtra."""
+    hoy = await _valor(lambda r: r.resultado_de_hoy())
+    banca = _valor_banca()
+    freno = float(os.environ.get("VALOR_FRENO_DIA", "0.06")) * banca
+    return {**_VALOR_ESTADO, "banca": banca, "resultado_hoy": round(hoy, 2),
+            "freno_dia": round(freno, 2), "frenado": -hoy >= freno > 0,
+            "cuota_minima": float(os.environ.get("VALOR_CUOTA_MINIMA", "1.70")),
+            "prob_minima": float(os.environ.get("VALOR_PROB_MINIMA", "0.60"))}
+
+
+@api_router.get("/valor/oportunidades")
+async def valor_oportunidades(vivo: bool = False, _: dict = Depends(require_valor)):
+    # En vivo solo vale lo visto en el último minuto; en prepartido, 20.
+    items = await _valor(lambda r: r.vigentes(vivo, 1 if vivo else 20))
+    return {"banca": _valor_banca(), "items": items}
+
+
+@api_router.get("/valor/seguras")
+async def valor_seguras(_: dict = Depends(require_valor)):
+    return {"items": await _valor(lambda r: r.seguras_vigentes(5))}
+
+
+@api_router.get("/valor/apuestas")
+async def valor_apuestas(_: dict = Depends(require_valor)):
+    return await _valor(lambda r: {"items": r.apuestas(), "balance": r.balance()})
+
+
+@api_router.post("/valor/apuestas")
+async def valor_apostar(data: dict = Body(...), _: dict = Depends(require_valor)):
+    """«La he metido»: la cuota y el importe reales pueden no ser los sugeridos."""
+    try:
+        op_id = int(str(data.get("oportunidad_id")))
+    except (TypeError, ValueError):
+        raise HTTPException(status_code=400, detail="Falta la apuesta")
+    cuota = (None if data.get("cuota") in (None, "")
+             else _decimal(data.get("cuota"), "La cuota", minimo=1.01, maximo=1000))
+    importe = (None if data.get("importe") in (None, "")
+               else _decimal(data.get("importe"), "El importe", minimo=0.01, maximo=1_000_000))
+
+    def apuntar(r):
+        try:
+            return r.apuesta_desde_oportunidad(op_id, cuota, importe)
+        except KeyError:
+            return None
+    nuevo = await _valor(apuntar)
+    if nuevo is None:
+        raise HTTPException(status_code=404, detail="Esa apuesta ya no está")
+    return {"id": nuevo}
+
+
+@api_router.post("/valor/apuestas/manual")
+async def valor_apostar_a_mano(data: dict = Body(...), _: dict = Depends(require_valor)):
+    """Una apuesta que no vino de un aviso: «100 € a Sevilla gana, Bet365, 1,85»."""
+    descripcion = _texto_cuerpo(data.get("descripcion"), 200)
+    casa = _texto_cuerpo(data.get("casa"), 40)
+    if not descripcion or not casa:
+        raise HTTPException(status_code=400, detail="Pon qué has apostado y en qué casa")
+    cuota = _decimal(data.get("cuota"), "La cuota", minimo=1.01, maximo=1000)
+    importe = _decimal(data.get("importe"), "El importe", minimo=0.01, maximo=1_000_000)
+    return {"id": await _valor(lambda r: r.apuesta_manual(descripcion, casa, cuota, importe))}
+
+
+@api_router.post("/valor/apuestas/{apuesta_id}/resultado")
+async def valor_resultado(apuesta_id: int, data: dict = Body(...), _: dict = Depends(require_valor)):
+    resultado = _texto_cuerpo(data.get("resultado"), 20)
+    if resultado not in ("ganada", "perdida", "nula", "pendiente"):
+        raise HTTPException(status_code=400, detail="Resultado: ganada, perdida, nula o pendiente")
+
+    def liquidar(r):
+        if r.db.execute("SELECT 1 FROM apuestas WHERE id=?", (apuesta_id,)).fetchone() is None:
+            return False
+        r.liquida(apuesta_id, resultado)
+        return True
+    if not await _valor(liquidar):
+        raise HTTPException(status_code=404, detail="Esa apuesta no existe")
+    return {"ok": True}
+
+
+@api_router.get("/valor/aprendizaje")
+async def valor_aprendizaje(_: dict = Depends(require_valor)):
+    from valor import aprendizaje as _aprende
+
+    def leer(r):
+        segs = []
+        for s in _aprende.segmentos(r):
+            d = s.dict()
+            d["clv_medio"], d["margen"] = _valor_finito(d["clv_medio"]), _valor_finito(d["margen"])
+            segs.append(d)
+        return segs
+    return {"minimo": _aprende.MINIMO, "segmentos": await _valor(leer)}
+
+
+def _valor_aviso():
+    """Avisos al móvil por un bot PROPIO de Valor. Sin las dos variables, nada."""
+    token = os.environ.get("VALOR_TELEGRAM_TOKEN", "").strip()
+    chat = os.environ.get("VALOR_TELEGRAM_CHAT", "").strip()
+    if not (token and chat):
+        return None
+    import httpx as _httpx
+    cli = _httpx.Client(timeout=10)
+
+    def enviar(texto: str) -> None:
+        cli.post(f"https://api.telegram.org/bot{token}/sendMessage",
+                 json={"chat_id": chat, "text": texto}).raise_for_status()
+    return enviar
+
+
+def _valor_bucle():
+    """El escáner, en su hilo. Una vuelta que falla (una API que cambia su
+    respuesta, la red) se apunta y el bucle sigue: si se cayera el hilo, la
+    pantalla se quedaría vacía sin que nadie supiera por qué."""
+    from valor.escaner import Escaner
+    from valor.registro import Registro
+    try:
+        Path(VALOR_DB).parent.mkdir(parents=True, exist_ok=True)
+        esc = Escaner(Registro(VALOR_DB), _valor_banca(), aviso=_valor_aviso())
+    except Exception as e:                                   # noqa: BLE001
+        logger.exception("Valor: el escáner no ha podido arrancar")
+        _VALOR_ESTADO["ultimo_error"] = "no ha arrancado: %s" % type(e).__name__
+        return
+    _VALOR_ESTADO.update(escaneando=True, fuentes=[f.nombre for f in esc.fuentes])
+    logger.info("Valor: escáner en marcha con %s", ", ".join(_VALOR_ESTADO["fuentes"]) or "NINGUNA fuente")
+    while True:
+        try:
+            if esc.vuelta() is not None:
+                _VALOR_ESTADO["ultima_vuelta"] = datetime.now(timezone.utc).isoformat()
+                _VALOR_ESTADO["ultimo_error"] = None
+        except Exception as e:                               # noqa: BLE001
+            logger.exception("Valor: vuelta fallida")
+            _VALOR_ESTADO["ultimo_error"] = type(e).__name__
+        time.sleep(30)
+
+
+@app.on_event("startup")
+async def _valor_arranca_escaner():
+    if os.environ.get("VALOR_ESCANEAR") == "1":
+        _threading.Thread(target=_valor_bucle, name="valor-escaner", daemon=True).start()
 
 
 app.include_router(auth_router)

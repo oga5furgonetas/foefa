@@ -502,6 +502,17 @@ export const importarGastos = (body) => api.post('/gastos/importar', body)
 export const ensenarProveedor = (body) => api.post('/gastos/proveedor', body)
 export const gastosDesdeTaller = () => api.post('/gastos/taller')
 export const getGastosBuzon = () => api.get('/gastos/buzon')
+
+// Valor: SOLO Dani. El backend lo exige con `require_valor` (más estricto que
+// super-admin); esto solo es la puerta.
+export const getValorEstado = () => api.get('/valor/estado')
+export const getValorOportunidades = (vivo) => api.get('/valor/oportunidades', { params: vivo ? { vivo: true } : {} })
+export const getValorSeguras = () => api.get('/valor/seguras')
+export const getValorApuestas = () => api.get('/valor/apuestas')
+export const apuntarApuestaValor = (body) => api.post('/valor/apuestas', body)
+export const apuntarApuestaValorAMano = (body) => api.post('/valor/apuestas/manual', body)
+export const liquidarApuestaValor = (id, resultado) => api.post(`/valor/apuestas/${id}/resultado`, { resultado })
+export const getValorAprendizaje = () => api.get('/valor/aprendizaje')
 export const getAdminOrgs = () => api.get('/admin/orgs')
 export const updateOrg = (body) => api.post('/admin/org', body) // {id, status?, plan?, extend_trial_days?, add_center?, max_centers?, modulos?}
 export const getAdminModulos = () => api.get('/admin/modulos')

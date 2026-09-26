@@ -1,6 +1,6 @@
 import { useEffect } from 'react'
 import { NavLink } from 'react-router-dom'
-import { X, Shield, Users } from 'lucide-react'
+import { X, Shield, Users, TrendingUp } from 'lucide-react'
 
 /* EL MENÚ DEL MÓVIL — el mismo de escritorio, no una tira de pastillas.
    ═══════════════════════════════════════════════════════════════════════
@@ -91,6 +91,11 @@ export default function MenuMovil({ abierto, cerrar, groups, showAdmin, cm, t, a
               {showAdmin && (
                 <NavLink to="/panel/admin" onClick={cerrar} className={fila}>
                   <Shield size={17} className="shrink-0 text-dark-400" /> {t('nav.business')}
+                </NavLink>
+              )}
+              {showAdmin && (
+                <NavLink to="/panel/valor" onClick={cerrar} className={fila}>
+                  <TrendingUp size={17} className="shrink-0 text-dark-400" /> Valor
                 </NavLink>
               )}
               <NavLink to="/panel/usuarios" onClick={cerrar} className={fila}>

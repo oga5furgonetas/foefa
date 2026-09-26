@@ -127,6 +127,53 @@ test.describe('Páginas públicas', () => {
   }
 })
 
+/* VALOR es SOLO del super-admin. Quien no lo es no la ve en el menú (ni en el
+   de escritorio ni en el del móvil) y, si escribe la dirección, se le echa.
+   El servidor además contesta 403: eso lo prueba backend/tests/test_valor_acceso.py. */
+test.describe('Valor, solo super-admin', () => {
+  const OPORTUNIDAD = {
+    id: 7, evento_id: 'e1', mercado: '1x2', linea: null, seleccion: 'local', casa: 'bet365',
+    cuota: 2.3, prob_justa: 0.46, ev: 0.058, importe: 40, en_vivo: 0, fallo: 'casa lenta',
+    motivos: ['CASA LENTA: pinnacle ha bajado esta cuota de 2.30 a 2.10 en 25 min.'], avisos: [],
+    local: 'Betis', visitante: 'Sevilla', liga: 'LaLiga', inicio: '2030-01-01T19:00:00+00:00',
+  }
+
+  test('quien no es super-admin no la ve y la ruta le echa', async ({ page }) => {
+    const fallos = vigilar(page)
+    await entrarComoAdmin(page)
+    await simularApi(page, 'vacio')
+    await page.goto('/panel/vehiculos', { waitUntil: 'domcontentloaded' })
+    await expect.poll(() => tieneContenido(page), { timeout: 15000 }).toBe(true)
+    await expect(page.locator('a[href="/panel/valor"]')).toHaveCount(0)
+
+    await page.goto('/panel/valor', { waitUntil: 'domcontentloaded' })
+    await expect.poll(() => new URL(page.url()).pathname, { timeout: 15000 }).not.toBe('/panel/valor')
+    await expect(page.getByText('Métele')).toHaveCount(0)
+    expect(fallos, fallos.join(' | ')).toHaveLength(0)
+  })
+
+  test('el super-admin la ve, la abre y lee la orden', async ({ page }) => {
+    const fallos = vigilar(page)
+    await entrarComoAdmin(page, { superAdmin: true })
+    await simularApi(page, 'vacio')
+    await page.route('**/api/valor/oportunidades**', (route) => route.fulfill({
+      status: 200, contentType: 'application/json',
+      body: JSON.stringify({ banca: 1000, items: new URL(route.request().url()).searchParams.get('vivo') ? [] : [OPORTUNIDAD] }),
+    }))
+    await page.goto('/panel/vehiculos', { waitUntil: 'domcontentloaded' })
+    await expect.poll(() => tieneContenido(page), { timeout: 15000 }).toBe(true)
+    const entrada = page.locator('a[href="/panel/valor"]').first()
+    await expect(entrada).toBeAttached()
+
+    await page.goto('/panel/valor', { waitUntil: 'domcontentloaded' })
+    await expect(page.getByText(/Métele\s*40 €\s*a que gana Betis en/)).toBeVisible({ timeout: 15000 })
+    await expect(page.getByText('LA MEJOR AHORA')).toBeVisible()
+    await expect(page.getByText('CASA LENTA', { exact: true })).toBeVisible()
+    expect(new URL(page.url()).pathname).toBe('/panel/valor')
+    expect(fallos, fallos.join(' | ')).toHaveLength(0)
+  })
+})
+
 test.describe('Con datos', () => {
   test('el panel pinta una flota con contenido', async ({ page }) => {
     const fallos = vigilar(page)
