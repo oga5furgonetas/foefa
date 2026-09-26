@@ -13,8 +13,7 @@ primary_region = "cdg"
 
 [env]
   DB_NAME = "staging_flota"
-  GEMINI_MODEL = "gemini-1.5-flash"
-  PUBLIC_BASE_URL = "https://flotia-backend-staging.fly.dev"
+  PUBLIC_BASE_URL = "https://flota-backend-staging.fly.dev"
   JWT_EXPIRE_HOURS = "72"
   ADMIN_NAME = "Admin Staging"
 

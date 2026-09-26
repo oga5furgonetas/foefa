@@ -9,8 +9,7 @@ primary_region = "cdg"
   DB_NAME = "flota"
   # CORS_ORIGINS eliminado a propósito: el código aplica lista blanca segura por defecto.
   # Para ampliar dominios sin tocar código: flyctl secrets set CORS_ORIGINS="https://tu-dominio.com,..."
-  GEMINI_MODEL = "gemini-1.5-flash"
-  PUBLIC_BASE_URL = "https://flotia-backend.fly.dev"
+  PUBLIC_BASE_URL = "https://flota-backend.fly.dev"
   # La web del panel (enlaces de correos, portal, taller, empleo):
   # PUBLIC_BASE_URL_FRONT = "https://tu-dominio.com"
   JWT_EXPIRE_HOURS = "72"
