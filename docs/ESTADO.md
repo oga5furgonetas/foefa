@@ -81,14 +81,21 @@ eslint, build, `pytest backend/tests` (506 en verde el 26-09) y humo de Playwrig
 3. **DNR diaria** (/panel/diarios, permiso `diarios`): Daily Report subido a mano.
 4. **flotadsp.com** sirve Flota (Worker). **IA** con clave nueva y modelo actual.
 5. **Fotos** recuperadas (R2 de winiw) y R2 conectado; primera copia de la base en R2.
+7. **Copias de seguridad cifradas** (AES-256-GCM; clave en
+   `C:\Users\Usuario\.flota-copias-clave.txt` y secreto `COPIAS_CLAVE` en Fly);
+   `backend/scripts/descifrar_copia.py` las abre. Nunca se sube una en claro.
 6. **Pasada con datos reales** (193 GET, 238 mutaciones, 37 pantallas en
    escritorio y móvil): arreglados el historial de daños (500) y el ranking
    (7 s → 0,18 s); textos «nave/station» → «centro».
 
 ## Pendiente (por prioridad)
 
-1. **Revisión legal** en curso: ver `docs/REVISION_LEGAL.md` (si existe, es la
-   última versión; sus acciones marcadas «decide Dani» NO se hacen sin él).
+1. **Revisión legal** hecha el 26-09: `docs/REVISION_LEGAL.md`. Lo grave está
+   arreglado (copias de la base descargables, plantillas adivinables, CV que no
+   se borraban). Quedan puntos **DECIDE DANI** (datos de Amazon en la base, 143
+   CV sueltos, aviso legal, contrato de encargo, política, informar a
+   conductores): NO se hacen sin su sí. Pregunta abierta a Dani: qué pasó
+   «hace 2 días» (24-09) que no quiere que se repita; no está en las notas.
 2. **Atlas se suspende el 01-10-2026** (la organización tiene facturas sin
    pagar y Dani no quiere pagar). `cluster1` parece estar en esa misma
    organización: hace falta una organización NUEVA gratis, clúster M0, copiar
