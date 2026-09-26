@@ -278,7 +278,7 @@ export default function AsistenteBurbuja({ center, centers }) {
           {sinCentro ? (
             <div className="flex flex-1 flex-col items-center justify-center gap-2 p-6 text-center">
               <Sparkles size={22} className="text-brand-400" />
-              <p className="text-[12.5px] text-dark-300">Elige un centro arriba para hablar con el asistente de esa nave.</p>
+              <p className="text-[12.5px] text-dark-300">Elige un centro arriba para hablar con el asistente de ese centro.</p>
               <p className="text-[11px] text-dark-500">Disponibles: {centers?.join(' · ') || '—'}</p>
             </div>
           ) : (

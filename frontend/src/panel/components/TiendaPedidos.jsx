@@ -168,7 +168,7 @@ export default function TiendaPedidos() {
             <Euro size={12} className="mr-1 inline" /> Ventas cobradas
           </span>
           <span className="text-[11.5px] text-dark-500">
-            {cobrado.pedidos || 0} pedidos · {ventas.de_la_nave || 0} de la nave ·{' '}
+            {cobrado.pedidos || 0} pedidos · {ventas.de_la_nave || 0} del centro ·{' '}
             {ventas.de_fuera || 0} de fuera
           </span>
         </div>

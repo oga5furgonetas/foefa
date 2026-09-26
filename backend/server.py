@@ -2828,7 +2828,11 @@ async def _get_vehicle_ledger(vehicle_id: str, exclude_inspection_id: str = None
                 e["rank"], e["severity"] = rank, _norm_sev(d.get("severity"))
     if panels:
         try:
-            await db.vehicle_damage_ledger.insert_many(list(panels.values()))
+            # COPIAS, no los mismos dicts: insert_many les mete el `_id`
+            # (ObjectId) y estos se devuelven tal cual a la pantalla. La primera
+            # vez que se abria el historial de daños de una furgoneta sin
+            # registro daba «Error interno» (visto con los datos reales, 26-09).
+            await db.vehicle_damage_ledger.insert_many([dict(p) for p in panels.values()])
         except Exception as _be:
             logger.debug(f"ledger backfill {vehicle_id}: {_be}")
     return list(panels.values())
@@ -15218,7 +15222,7 @@ async def health():
 
     return {
         "status": "ok",
-        "version": "5.3.4",
+        "version": app.version,
         "gemini_configured": bool(os.environ.get("GEMINI_API_KEY")) or os.environ.get("USE_VERTEX_AI","").lower() in ("1","true","yes"),
         "gemini_mode": "vertex_ai" if os.environ.get("USE_VERTEX_AI","").lower() in ("1","true","yes") else "ai_studio",
         "gemini_model": _modelo_ia(),
@@ -24689,15 +24693,27 @@ async def driver_score(driver_id: str, _=Depends(require_admin)):
 
 
 @api_router.get("/drivers/ranking")
-async def drivers_ranking(_=Depends(require_admin)):
-    """Ranking de conductores por puntuacion."""
-    drivers = await db.drivers.find({"active": {"$ne": False}}, {"_id": 0}).to_list(200)
+async def drivers_ranking(center: Optional[str] = None, user: dict = Depends(require_admin)):
+    """Ranking de conductores por puntuacion: menos daños en sus inspecciones, mas arriba.
+
+    Una sola agregacion para todos. Antes era una consulta por conductor (7 s
+    con los 271 de la flota real, 26-09-2026) y no miraba los centros del
+    usuario: un encargado de un centro veia la puntuacion de todos.
+    """
+    drivers = await db.drivers.find({"active": {"$ne": False}, **_filtro_centro(user, center)},
+                                    {"_id": 0, "id": 1, "name": 1, "center": 1}).to_list(200)
+    cuentas: dict = {}
+    async for g in db.inspections.aggregate([
+            {"$match": {"deleted": {"$ne": True}, "driver_id": {"$in": [d["id"] for d in drivers if d.get("id")]}}},
+            {"$project": {"driver_id": 1, "sev": {"$ifNull": ["$analysis.severity", None]}}},
+            {"$group": {"_id": "$driver_id", "total": {"$sum": 1},
+                        "con_danos": {"$sum": {"$cond": [{"$in": ["$sev", ["sin_danos", "sin_analisis", None]]}, 0, 1]}},
+                        "graves": {"$sum": {"$cond": [{"$in": ["$sev", ["grave", "critico"]]}, 1, 0]}}}}]):
+        cuentas[g["_id"]] = g
     ranking = []
     for d in drivers:
-        inspections = await db.inspections.find({"deleted": {"$ne": True}, "driver_id": d["id"]}, {"_id": 0, "analysis.severity": 1}).to_list(500)
-        total = len(inspections)
-        con_danos = sum(1 for i in inspections if (i.get("analysis") or {}).get("severity") not in ["sin_danos", "sin_analisis", None])
-        graves = sum(1 for i in inspections if (i.get("analysis") or {}).get("severity") in ["grave", "critico"])
+        c = cuentas.get(d.get("id")) or {}
+        total, con_danos, graves = c.get("total", 0), c.get("con_danos", 0), c.get("graves", 0)
         score = 100
         if total > 0:
             score -= int((con_danos / total) * 30) + int((graves / total) * 40)

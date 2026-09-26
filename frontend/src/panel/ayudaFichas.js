@@ -54,7 +54,7 @@ export const AYUDA = {
   empleo: {
     que: 'Tus ofertas de trabajo con su enlace publico, el cuestionario que quieras y quien se apunta. Al contratar se crea la ficha del conductor sola.',
     pasos: [
-      'Crea la oferta y ELIGE EL CENTRO: eso decide en que tablero salen sus candidatos y en que nave nace la ficha al contratar.',
+      'Crea la oferta y ELIGE EL CENTRO: eso decide en que tablero salen sus candidatos y en qué centro nace la ficha al contratar.',
       'Anade las preguntas que quieras: si/no, elegir una, marcar varias, texto o un numero.',
       'Si marcas una respuesta como «descarta», quien la elija se aparta solo y sale en la columna Descartado con el motivo. Se puede deshacer moviendolo de columna.',
       'Copia el enlace y pegalo en Indeed como URL de candidatura, o mandalo por WhatsApp. El de Indeed lleva `?de=indeed` para saber que anuncio trae gente.',
@@ -160,7 +160,7 @@ export const AYUDA = {
     ojo: 'El enlace es público: quien lo tenga entra. No lleva datos del conductor, solo la furgoneta y el problema. Y pon la fecha de salida cuando el taller la diga: sin ella no se puede prever con qué flota cuentas la semana que viene.',
   },
   aparcamiento: {
-    que: 'Dónde está aparcada cada furgoneta en la nave.',
+    que: 'Dónde está aparcada cada furgoneta en el centro.',
     pasos: ['Marca la plaza al aparcar para que el siguiente turno la encuentre.'],
     estado: 'Poco usada: 11 registros y el último hace más de un mes.',
   },

@@ -156,7 +156,7 @@ export default function Tienda({ onBack }) {
             </p>
           )}
           <p className="mx-auto mt-4 max-w-[17rem] text-[12.5px] leading-relaxed text-dark-500">
-            Te escribimos para el pago y te avisamos en cuanto llegue a la nave.
+            Te escribimos para el pago y te avisamos en cuanto llegue a tu centro.
           </p>
         </div>
         <MisPedidos pedidos={[hecho, ...pedidos]} pasarela={datos?.pasarela} onCambio={cargar} />
