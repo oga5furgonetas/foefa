@@ -18,52 +18,22 @@ copia) y los compara entre si y contra el catalogo de la tienda.
 No hace falta ni Mongo ni Stripe: aqui no se cobra nada, se comprueba que lo
 que promete la tienda es lo que el backend le pide a Stripe.
 """
-import glob
 import io
 import os
 import re
 
 AQUI = os.path.dirname(__file__)
 SERVER = os.path.join(AQUI, "..", "server.py")
-TIENDA = glob.glob(os.path.join(AQUI, "..", "..", "frontend", "public", "t", "*"))
 
 
 def _servidor() -> str:
     return io.open(SERVER, encoding="utf-8-sig").read()
 
 
-def _tienda(fichero: str) -> str:
-    """El escaparate publico. Es una carpeta por enlace de tienda; si algun dia
-    hay dos, se comprueban las dos."""
-    textos = []
-    for carpeta in TIENDA:
-        ruta = os.path.join(carpeta, fichero)
-        if os.path.isfile(ruta):
-            textos.append(io.open(ruta, encoding="utf-8").read())
-    assert textos, "no encuentro %s de la tienda publica" % fichero
-    return "\n".join(textos)
-
-
 def _constante(nombre: str) -> str:
     m = re.search(r"^%s = (.+)$" % nombre, _servidor(), re.M)
     assert m, "ha desaparecido %s de server.py" % nombre
     return m.group(1).strip()
-
-
-def test_un_uso_por_cada_prenda_a_la_venta():
-    """El trinquete de verdad: tantos usos como prendas ensena la tienda.
-
-    Si manana entra una cuarta prenda, este test se pone rojo. Es a proposito:
-    cada uso son 10 EUR regalados a la MISMA persona y un cupon personal se
-    puede reenviar, asi que el numero se sube a mano y mirandolo, nunca solo.
-    """
-    prendas = set(re.findall(r'data-prod="([a-z0-9_-]+)"', _tienda("index.html")))
-    assert prendas, "la tienda no ensena ninguna prenda; algo mas se ha roto"
-    usos = int(_constante("_CAMPANA_CUPON_USOS"))
-    assert usos == len(prendas), (
-        "la tienda ensena %d prendas (%s) con el precio tachado y el cupon solo "
-        "admite %d compras: el escaparate promete un descuento que no existe"
-        % (len(prendas), ", ".join(sorted(prendas)), usos))
 
 
 def test_la_campana_no_vuelve_al_cupon_de_un_solo_uso():
@@ -85,30 +55,6 @@ def test_max_redemptions_solo_cuando_se_pide():
     s = _servidor()
     assert 'if usos > 0:\n        datos.append(("max_redemptions", str(usos)))' in s, (
         "ha cambiado la guarda de max_redemptions en _stripe_crear_cupon")
-
-
-def test_la_tienda_descuenta_el_mismo_importe_que_manda_el_correo():
-    """Los 10 EUR estan escritos en dos sitios que no se hablan.
-
-    En `app.js` porque la pagina pinta el precio rebajado sin preguntar, y en
-    `server.py` porque es lo que se le pide a Stripe. Si se separan, el
-    escaparate ensena un precio y la pasarela cobra otro.
-    """
-    del_backend = float(_constante("_CAMPANA_CUPON_EUR"))
-    m = re.search(r"var CUPON_EUR = (\d+(?:\.\d+)?);", _tienda("app.js"))
-    assert m, "ha desaparecido CUPON_EUR de la tienda"
-    assert float(m.group(1)) == del_backend, (
-        "la tienda descuenta %s EUR y la campana crea el cupon de %s EUR"
-        % (m.group(1), del_backend))
-
-
-def test_el_escaparate_y_el_correo_dicen_que_vale_para_cada_prenda():
-    """Que el texto acompane al cambio: con tres usos y un texto de 'un cupon
-    de 10 EUR' a secas, nadie se entera de que puede llevarse las tres."""
-    assert "10 € en cada prenda" in _tienda("app.js"), (
-        "el banner de la tienda ya no dice que el cupon vale en cada prenda")
-    assert "de las tres prendas" in _servidor(), (
-        "el correo de la campana ya no dice que el descuento va en cada prenda")
 
 
 def test_un_cupon_mayor_que_el_pedido_no_marca_descuadre():

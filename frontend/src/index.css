@@ -154,6 +154,18 @@ html[data-panel-theme='light'] [class*='hover:text-white']:hover { color: rgb(va
   --ld-border-strong: rgba(255, 255, 255, 0.12);
   --ld-fill: rgba(255, 255, 255, 0.05);
   --ld-nav: rgba(8, 10, 14, 0.85);
+  /* Tonos de TEXTO con significado. El cian y el ámbar de la marca se leen
+     bien sobre oscuro, pero sobre blanco se quedan en ~2:1 y no pasan el
+     4,5:1 de la WCAG: en claro van en su versión oscura. */
+  --ld-accent: #14e7d8;
+  --ld-warn: #fbbf24;
+  --ld-ok: #34d399;
+  --ld-mid: #fb923c;
+  /* El degradado del titular: el cian de marca en oscuro; en claro, su
+     versión oscura (el cian claro sobre blanco no llega al 3:1 de un texto
+     grande). */
+  --ld-grad-a: #14e7d8;
+  --ld-grad-b: #0aacd3;
   background: var(--ld-bg);
   color: var(--ld-text);
 }
@@ -168,6 +180,12 @@ html[data-panel-theme='light'] [class*='hover:text-white']:hover { color: rgb(va
   --ld-border-strong: rgba(15, 23, 42, 0.16);
   --ld-fill: rgba(15, 23, 42, 0.04);
   --ld-nav: rgba(255, 255, 255, 0.85);
+  --ld-accent: #0b7285;
+  --ld-warn: #b45309;
+  --ld-ok: #047857;
+  --ld-mid: #c2410c;
+  --ld-grad-a: #0b7c8a;
+  --ld-grad-b: #0a5f86;
 }
 
 @layer base {

@@ -24,11 +24,11 @@ import { simularApi, entrarComoAdmin } from './api-simulada.js'
 const DESTINO = path.join(process.cwd(), 'public', 'capturas')
 
 const PANTALLAS = [
-  { ruta: 'scorecard', archivo: 'scorecard.png', espera: 'Calidad de entrega en vivo' },
   { ruta: '', archivo: 'dashboard.png' },
   { ruta: 'vehiculos', archivo: 'flota.png' },
   { ruta: 'revision', archivo: 'revision-ia.png' },
-  { ruta: 'paquetes', archivo: 'paquetes.png' },
+  { ruta: 'ordenes', archivo: 'taller.png' },
+  { ruta: 'vencimientos', archivo: 'vencimientos.png' },
 ]
 
 test.describe('capturas para la landing', () => {

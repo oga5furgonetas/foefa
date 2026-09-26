@@ -42,7 +42,7 @@ _NOMBRES_FUNC = ("_boc_normaliza", "_boc_busca", "_boc_todas", "_boc_ultimo_en",
 
 def _cargar():
     arbol = ast.parse(io.open(SERVER, encoding="utf-8-sig").read())
-    ambito = {"re": re, "_texto_cuerpo": lambda v, n=None: str(v or "").strip()[:n or 300]}
+    ambito = {"re": re, "MARCA": "Flotia", "_texto_cuerpo": lambda v, n=None: str(v or "").strip()[:n or 300]}
     for n in arbol.body:
         if isinstance(n, ast.Assign) and getattr(n.targets[0], "id", "") in _NOMBRES_CONST:
             ambito[n.targets[0].id] = ast.literal_eval(n.value)

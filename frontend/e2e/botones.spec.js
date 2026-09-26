@@ -17,10 +17,10 @@ import { simularApi, entrarComoAdmin } from './api-simulada.js'
 
 const PAGINAS = [
   'vehiculos', 'conductores', 'inspecciones', 'revision', 'incidencias',
-  'aparcamiento', 'asignacion', 'checklist-operativo', 'plantilla', 'chat',
-  'scorecard', 'paquetes', 'talleres', 'contactos', 'importaciones',
-  'ia-peritaje', 'configuracion', 'usuarios', 'perfil', 'bandeja',
-  'mi-dia', 'metricas', 'actividad', 'vencimientos', 'turnos',
+  'aparcamiento', 'asignacion', 'checklist-operativo', 'chat', 'ordenes',
+  'talleres', 'contactos', 'importaciones', 'origen-danos', 'incorporaciones',
+  'ia-peritaje', 'configuracion', 'usuarios', 'perfil', 'bandeja', 'empleo',
+  'mi-dia', 'actividad', 'vencimientos', 'turnos', 'conversaciones',
 ]
 
 /* Textos que NO se pulsan: sacarían del flujo o son irreversibles. */

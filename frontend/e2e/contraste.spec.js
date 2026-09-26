@@ -38,14 +38,14 @@ const AXE = fs.readFileSync(
 
 // Las pantallas donde más texto secundario hay. No están todas a propósito:
 // esto corre en cada CI y tiene que tardar poco.
-/* `ordenes`, `debrief` y `turnos` entraron el 21-09-2026 y no por casualidad:
-   eran las tres que NO respetaban el tema. Las dos primeras pintaban su
+/* `ordenes` y `turnos` entraron el 21-09-2026 y no por casualidad: eran
+   de las que NO respetaban el tema. Ordenes pintaba su
    contenedor raíz con un `bg-[#F2F4F7]` escrito a pelo, así que en modo Noche
    salían enteras en blanco con el texto claro encima; la tercera tenía la
    cebra de filas en negro fijo, que de día es una fila negra sobre papel. Un
    color literal no cambia con el tema, y por eso hay que mirarlas aquí. */
-const PANTALLAS = ['', 'scorecard', 'vehiculos', 'paquetes', 'vencimientos',
-  'conductores', 'ordenes', 'debrief', 'turnos']
+const PANTALLAS = ['', 'vehiculos', 'vencimientos', 'incidencias',
+  'conductores', 'ordenes', 'asignacion', 'turnos']
 const TEMAS = ['hibrido', 'dark', 'light']
 
 test.describe('contraste real en los tres temas', () => {

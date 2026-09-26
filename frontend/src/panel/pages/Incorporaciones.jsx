@@ -87,6 +87,26 @@ const TONO = {
    verdad: falta -> se lo he pedido -> en revisión -> correcto -> nada. */
 const SIGUIENTE = { '': 'falta', falta: 'pedido', pedido: 'revision', revision: 'ok', ok: '' }
 
+/* LO QUE LLEGA, CON LA FORMA QUE LA PANTALLA ESPERA. Todo lo de abajo lee
+   `d.plantilla.motivos` y `d.personas` sin comprobar: una respuesta a medias
+   (un proxy que devuelve `{}`, un error que llega como 200) tumbaba la
+   pantalla entera con «Cannot read properties of undefined». Se completa aquí
+   UNA vez en vez de poner `?.` en cuarenta sitios. */
+function normaliza(data) {
+  const d = data && typeof data === 'object' ? data : {}
+  const pl = d.plantilla && typeof d.plantilla === 'object' ? d.plantilla : {}
+  return {
+    ...d,
+    personas: Array.isArray(d.personas) ? d.personas : [],
+    plantilla: { ...pl, motivos: pl.motivos && typeof pl.motivos === 'object' ? pl.motivos : {} },
+    estado_nombre: d.estado_nombre || {},
+    estados: Array.isArray(d.estados) ? d.estados : [],
+    por_motivo: d.por_motivo || {},
+    por_fase: d.por_fase || {},
+    por_columna: d.por_columna || {},
+  }
+}
+
 export default function Incorporaciones() {
   const { center } = useOutletContext() || {}
   const [d, setD] = useState(null)
@@ -110,7 +130,7 @@ export default function Incorporaciones() {
 
   const cargar = useCallback(() => {
     getIncorporaciones(center)
-      .then((r) => { setD(r.data); setErr('') })
+      .then((r) => { setD(normaliza(r.data)); setErr('') })
       .catch((e) => setErr(e?.response?.data?.detail || 'No se ha podido cargar.'))
   }, [center])
   useEffect(() => { cargar() }, [cargar])
