@@ -174,6 +174,52 @@ test.describe('Valor, solo super-admin', () => {
   })
 })
 
+/* FURGONETAS FIJAS (pestaña de la Plantilla del día): la tabla de conductores
+   con su principal, la nota de responsabilidad y la fila de aparcamiento. */
+test.describe('Furgonetas fijas', () => {
+  const AFINIDAD = {
+    center: 'NORTE',
+    cuidado_activo: false, cuidado_motivo: 'solo 1 golpes seguros en la segunda mitad',
+    resumen: { conductores: 2, con_principal: 1, sin_auto: 0, operativas: 2, sugerencias: 1 },
+    conductores: [
+      { id: 'c1', nombre: 'Ana López', center: 'NORTE', dias_30: 12, ultima: '1234ABC',
+        fija: { principal: 'v1', secundaria: null, titular: true, sin_auto: false, vetadas: [], responsabilidad: 8 },
+        cuidado: { dias: 40, seguros: 0, posibles: 1 }, sugerencia: null },
+      { id: 'c2', nombre: 'Luis Pérez', center: 'NORTE', dias_30: 9, ultima: '5678DEF',
+        fija: { principal: null, secundaria: null, titular: false, sin_auto: false, vetadas: [], responsabilidad: null },
+        cuidado: { dias: 30, seguros: 0, posibles: 0 },
+        sugerencia: { furgo: 'v2', matricula: '5678DEF', veces: 4, de: 6 } },
+    ],
+    furgos: [
+      { id: 'v1', matricula: '1234ABC', estado: 'active', bloqueada: false, operativa: true, trato: 'nueva', valor: 1,
+        valor_por: 'nueva', danos_abiertos: 0, principal_de: ['c1'], secundaria_de: [], titular: 'c1' },
+      { id: 'v2', matricula: '5678DEF', estado: 'taller', bloqueada: false, operativa: false, trato: '', valor: 0.4,
+        valor_por: '', danos_abiertos: 2, principal_de: [], secundaria_de: [], titular: null },
+    ],
+  }
+
+  test('la pestaña enseña conductores, nota, sugerencia y la fila', async ({ page }) => {
+    const fallos = vigilar(page)
+    await entrarComoAdmin(page)
+    await simularApi(page, 'vacio')
+    await page.route(/\/api\/afinidad\?/, (route) => route.fulfill({
+      status: 200, contentType: 'application/json', body: JSON.stringify(AFINIDAD) }))
+    await page.route(/\/api\/afinidad\/fila/, (route) => route.fulfill({
+      status: 200, contentType: 'application/json',
+      body: JSON.stringify({ center: 'NORTE', filas: [['1234ABC']], actualizado_en: new Date().toISOString() }) }))
+    await page.goto('/panel/plantilla', { waitUntil: 'domcontentloaded' })
+    await page.getByRole('button', { name: 'Furgonetas fijas' }).click()
+    await expect(page.getByText('Ana López')).toBeVisible({ timeout: 15000 })
+    await expect(page.locator('#ff-r-c1')).toHaveValue('8')
+    await expect(page.getByText(/ha llevado la 5678DEF 4 de sus últimos 6 días/)).toBeVisible()
+    await expect(page.getByText(/todavía NO cuentan en el reparto/)).toBeVisible()
+    await page.getByRole('button', { name: 'Fila de aparcamiento' }).click()
+    await expect(page.getByText('Fila 1')).toBeVisible()
+    await expect(page.getByText(/Sin apuntar en ninguna fila/)).toContainText('5678DEF')   // la que queda sin apuntar
+    expect(fallos, fallos.join(' | ')).toHaveLength(0)
+  })
+})
+
 test.describe('Con datos', () => {
   test('el panel pinta una flota con contenido', async ({ page }) => {
     const fallos = vigilar(page)

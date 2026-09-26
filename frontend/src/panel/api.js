@@ -470,6 +470,17 @@ export const deletePlantilla = (id) => api.delete(`/plantillas/${id}`)
 export const plantillaDesdeAsignacion = (center, date) =>
   api.get('/tools/plantilla-desde-asignacion', { params: { center, ...(date ? { date } : {}) } })
 
+/* ── Furgonetas fijas: quién lleva qué furgoneta (backend/afinidad.py) ── */
+export const getAfinidad = (center) => api.get('/afinidad', { params: { center } })
+export const guardarFijaConductor = (driverId, body) => api.put(`/afinidad/conductor/${driverId}`, body)
+export const guardarTratoFurgo = (vehicleId, trato) => api.put(`/afinidad/furgo/${vehicleId}`, { trato })
+export const getPropuestaFijas = (center) => api.get('/afinidad/propuesta', { params: { center } })
+export const aplicarPropuestaFijas = (cambios) => api.post('/afinidad/propuesta/aplicar', { cambios })
+export const getAQuien = (center, furgo) => api.get('/afinidad/a-quien', { params: { center, furgo } })
+export const getFilaAparcamiento = (center) => api.get('/afinidad/fila', { params: { center } })
+export const guardarFilaAparcamiento = (center, filas) => api.put('/afinidad/fila', { center, filas })
+export const plantillaFurgos = (body) => api.post('/tools/plantilla-furgos', body)
+
 /* ── Asignación diaria (qué conductor lleva qué furgo) ── */
 export const getDailyAssignment = (center, date) => api.get('/assignments/daily', { params: { center, date } })
 export const putDailyAssignment = (body) => api.put('/assignments/daily', body) // {center, date, slots:[{vehicle_id,vehicle_plate,driver_id,driver_name}]}

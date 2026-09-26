@@ -1585,6 +1585,9 @@ async def _ensure_tenant_indexes(db_name: str):
     await _idx(tdb.plantillas_diarias, "id")
     await _idx(tdb.plantillas_diarias, [("center", 1), ("uploaded_at", -1)])
     await _idx(tdb.plantillas_compartidas, "id", unique=True)
+    await _idx(tdb.furgo_fijas, "driver_id", unique=True)
+    await _idx(tdb.furgo_fijas, "principal")
+    await _idx(tdb.furgo_fila, "center", unique=True)
     await _idx(tdb.plantillas_compartidas, [("center", 1), ("updated_at", -1)])
     # Citas de taller del calendario de flota. El único PARCIAL es la regla de
     # negocio en sí: una furgoneta no puede tener dos citas ABIERTAS del mismo
@@ -9775,6 +9778,10 @@ async def update_vehicle(vehicle_id: str, data: dict, _=Depends(require_admin)):
             await _auto_incident_on_workshop(vehicle_id, (prev or {}).get("status"), data.get("status"))
         except Exception as _ai:
             logger.warning(f"Auto-incidencia taller: {_ai}")
+        try:
+            await _afin_vuelta_taller(vehicle_id, (prev or {}).get("status"), data.get("status"))
+        except Exception as _vt:                                 # noqa: BLE001
+            logger.warning(f"Vuelta de taller: {_vt}")
     return {"success": True}
 
 
@@ -23588,6 +23595,10 @@ async def put_vehicle(vehicle_id: str, data: dict, _=Depends(require_admin)):
             await _auto_incident_on_workshop(vehicle_id, (prev or {}).get("status"), data.get("status"))
         except Exception as _ai:
             logger.warning(f"Auto-incidencia taller: {_ai}")
+        try:
+            await _afin_vuelta_taller(vehicle_id, (prev or {}).get("status"), data.get("status"))
+        except Exception as _vt:                                 # noqa: BLE001
+            logger.warning(f"Vuelta de taller: {_vt}")
     return {"success": True}
 
 
@@ -41370,6 +41381,496 @@ async def gastos_buzon_estado(_: dict = Depends(require_superadmin)):
     pendientes = await db.gastos.count_documents({"origen": "correo", "revisar": True})
     return {"buzon": b, "por_revisar": pendientes,
             "proveedores": sorted(set(_GASTO_DOMINIOS.values()))}
+
+
+# =========================
+# FURGONETAS FIJAS — quién lleva qué furgoneta, y el reparto de la plantilla
+# =========================
+# El motor (puntuación, reparto óptimo, fila de OGA5, cuidado) es puro y vive
+# en `afinidad.py`, con su porqué. Aquí solo se juntan los datos del centro y
+# se exponen. Lo usa la Plantilla del día: la pestaña «Furgonetas fijas» y el
+# botón «Poner furgonetas». Lo que un jefe pone a mano manda siempre.
+import afinidad as _af  # noqa: E402
+from collections import defaultdict  # noqa: E402
+
+_AFIN_COL = "furgo_fijas"          # una ficha por conductor: principal, secundaria…
+_AFIN_FILA_COL = "furgo_fila"      # cómo están aparcadas ahora, por centro
+_AFIN_CUIDADO_TTL = 3600
+_AFIN_CUIDADO_CACHE: dict = {}
+
+
+def _afin_centro(center: Optional[str]) -> str:
+    c = _texto_cuerpo(center, 30)
+    if not c or c.lower() in ("todos", "all"):
+        raise HTTPException(400, "Elige un centro: las furgonetas fijas van por centro")
+    return c
+
+
+def _afin_casar(nombre: str, conductores: list) -> Optional[str]:
+    """El id del conductor de ese nombre, SOLO si no hay duda.
+
+    Más estricto que el aviso de la plantilla (que se conforma con 0,8): aquí
+    un nombre mal casado le pone a alguien la furgoneta de otro. Vale el
+    nombre completo exacto, o dos o más palabras con UN único candidato mejor.
+    Medido con las plantillas reales el 26-09-2026: casa 157 de 167; los 10
+    restantes se quedan marcados en vez de adivinados.
+    """
+    n = _normalize_name(nombre or "").strip()
+    if not n:
+        return None
+    exactos = [cid for cid, nom in conductores if _normalize_name(nom or "").strip() == n]
+    if len(exactos) == 1:
+        return exactos[0]
+    if len(exactos) > 1:
+        return None                                   # tocayos: que lo elija una persona
+    punt = sorted(((_match_score(nombre, nom or ""), cid) for cid, nom in conductores), reverse=True)
+    if punt and punt[0][0] >= 1.6 and (len(punt) == 1 or punt[1][0] < punt[0][0]):
+        return punt[0][1]
+    return None
+
+
+async def _afin_datos(admin: dict, center: str) -> dict:
+    """Todo lo que hace falta para puntuar en un centro, de una vez."""
+    fc = _filtro_centro(admin, center)
+    hoy = datetime.strptime(_hoy_madrid(), "%Y-%m-%d").date()
+    furgos = await db.vehicles.find(
+        {**fc, "status": {"$nin": ["deleted", "baja"]}},
+        {"_id": 0, "id": 1, "license_plate": 1, "status": 1, "bloqueada": 1, "center": 1,
+         "trato": 1, "trato_desde": 1, "vuelta_taller_en": 1}).to_list(3000)
+    vids = [v["id"] for v in furgos]
+    # Conductores: todos los activos (para casar nombres que vienen de otro
+    # centro) y, aparte, los de ESTE centro o que han llevado sus furgonetas.
+    fusion, todos = {}, []
+    async for d in db.drivers.find({}, {"_id": 0, "id": 1, "name": 1, "center": 1, "status": 1,
+                                        "active": 1, "merged_into": 1}):
+        if d.get("status") == "fusionada" or d.get("merged_into"):
+            if d.get("merged_into"):
+                fusion[d["id"]] = d["merged_into"]
+            continue
+        if d.get("active") is False or d.get("status") == "deleted":
+            continue
+        todos.append(d)
+    desde = (datetime.now(timezone.utc) - timedelta(days=_af.VENTANA_HIST)).isoformat()
+    pares = []
+    # Primero lo que PASÓ (quien inspecciona una furgoneta es quien la saca) y
+    # después lo planeado (la asignación del día): para un mismo día manda lo primero.
+    async for i in db.inspections.find(
+            {"vehicle_id": {"$in": vids}, "created_at": {"$gte": desde}, "deleted": {"$ne": True},
+             "driver_id": {"$exists": True}},
+            {"_id": 0, "vehicle_id": 1, "driver_id": 1, "created_at": 1}):
+        if i.get("driver_id"):
+            pares.append((str(i.get("created_at"))[:10], fusion.get(i["driver_id"], i["driver_id"]), i["vehicle_id"]))
+    async for d in db.daily_assignments.find({**fc, "date": {"$gte": desde[:10]}},
+                                             {"_id": 0, "date": 1, "slots": 1}):
+        for s in d.get("slots") or []:
+            if isinstance(s, dict) and s.get("vehicle_id") and s.get("driver_id"):
+                pares.append((d.get("date"), fusion.get(s["driver_id"], s["driver_id"]), s["vehicle_id"]))
+    hist = _af.historial(pares, hoy)
+    recientes = {c for c, ds in hist.dias.items() if ds and (hoy - ds[0][0]).days <= 30}
+    del_centro = [d for d in todos
+                  if re.search(re.escape(center), str(d.get("center") or ""), re.I) or d["id"] in recientes]
+    ids_centro = [d["id"] for d in del_centro]
+    fijas = {}
+    async for f in db[_AFIN_COL].find({"driver_id": {"$in": ids_centro}}, {"_id": 0}):
+        fijas[f["driver_id"]] = _af.Fija(
+            principal=f.get("principal") or None, secundaria=f.get("secundaria") or None,
+            titular=bool(f.get("titular")), sin_auto=bool(f.get("sin_auto")),
+            vetadas=tuple(f.get("vetadas") or ()),
+            responsabilidad=f.get("responsabilidad") if isinstance(f.get("responsabilidad"), int) else None)
+    abiertos: dict = {}
+    async for x in db.vehicle_damage_ledger.aggregate([
+            {"$match": {"vehicle_id": {"$in": vids}, "status": "open"}},
+            {"$group": {"_id": "$vehicle_id", "n": {"$sum": 1}}}]):
+        abiertos[x["_id"]] = x["n"]
+    valor, valor_por = {}, {}
+    for v in furgos:
+        valor[v["id"]], valor_por[v["id"]] = _af.valor_furgo(
+            v.get("trato"), v.get("trato_desde"), v.get("vuelta_taller_en"), abiertos.get(v["id"], 0), hoy)
+    cu, activo, motivo = await _afin_cuidado(center, vids, fusion)
+    return {"hoy": hoy, "furgos": furgos, "todos": todos, "del_centro": del_centro, "hist": hist,
+            "fijas": fijas, "valor": valor, "valor_por": valor_por, "abiertos": abiertos,
+            "cuidado": cu, "cuidado_activo": activo, "cuidado_motivo": motivo,
+            "ctx": _af.Contexto(fijas=fijas, hist=hist, cuidado=cu, cuidado_activo=activo, valor=valor)}
+
+
+async def _afin_cuidado(center: str, vids: list, fusion: dict):
+    """Hechos de golpes por conductor (180 días) y si predicen, con cache de 1 h.
+
+    Sale de la MISMA atribución que la pantalla de Origen de daños
+    (`danos_atribucion`), con sus reglas duras: «seguro» es solo certeza alta
+    (una persona, un día, las dos fotos, no leve); «posible» es estar en la
+    ventana, repartido entre los que la llevaron.
+    """
+    clave = (_current_db_name.get(), center.lower())
+    hit = _AFIN_CUIDADO_CACHE.get(clave)
+    if hit and hit[0] > time.time():
+        return hit[1]
+    seguros, posibles, eventos = defaultdict(float), defaultdict(float), []
+    try:
+        r = await danos_atribucion(center=center, dias=180, solo_alta=False, _=None)
+    except Exception as e:                                   # noqa: BLE001
+        logger.warning("afinidad: atribución de golpes no disponible: %s", e)
+        r = {}
+    for d in r.get("danos") or []:
+        w = _af.PESO_GOLPE.get(str(d.get("severity") or ""), 0.0)
+        cs = [fusion.get(c.get("id"), c.get("id")) for c in d.get("conductores") or [] if c.get("id")]
+        if not w or not cs:
+            continue
+        if d.get("certeza") == "alta" and len(cs) == 1:
+            seguros[cs[0]] += w
+            eventos.append((d.get("aparecio") or "", cs[0], w))
+        elif d.get("certeza") == "media":
+            for c in cs:
+                posibles[c] += w / len(cs)
+    dias = defaultdict(set)
+    desde = (datetime.now(timezone.utc) - timedelta(days=180)).isoformat()
+    async for i in db.inspections.find(
+            {"vehicle_id": {"$in": vids}, "created_at": {"$gte": desde}, "deleted": {"$ne": True},
+             "driver_id": {"$exists": True}}, {"_id": 0, "driver_id": 1, "created_at": 1}):
+        if i.get("driver_id"):
+            dias[fusion.get(i["driver_id"], i["driver_id"])].add(str(i.get("created_at"))[:10])
+    cu = _af.cuidado({c: len(s) for c, s in dias.items()}, dict(seguros), dict(posibles))
+    activo, motivo = _af.cuidado_predice(eventos, {c: sorted(s) for c, s in dias.items()})
+    val = (cu, activo, motivo)
+    if len(_AFIN_CUIDADO_CACHE) > 200:
+        _AFIN_CUIDADO_CACHE.clear()
+    _AFIN_CUIDADO_CACHE[clave] = (time.time() + _AFIN_CUIDADO_TTL, val)
+    return val
+
+
+def _afin_operativa(v: dict) -> bool:
+    return v.get("status") in ("active", "activo") and not v.get("bloqueada")
+
+
+def _afin_fija_dict(f: Optional["_af.Fija"]) -> dict:
+    f = f or _af.Fija()
+    return {"principal": f.principal, "secundaria": f.secundaria, "titular": f.titular,
+            "sin_auto": f.sin_auto, "vetadas": list(f.vetadas), "responsabilidad": f.responsabilidad}
+
+
+@api_router.get("/afinidad")
+async def afinidad_estado(center: str, admin: dict = Depends(require_admin)):
+    """Conductores y furgonetas del centro: fijas, historial, hechos de golpes y sugerencias."""
+    await _require_plan_feature(admin, "assignments")
+    center = _afin_centro(center)
+    D = await _afin_datos(admin, center)
+    hist, fijas, hoy = D["hist"], D["fijas"], D["hoy"]
+    placa = {v["id"]: v.get("license_plate") or v["id"] for v in D["furgos"]}
+    operativas = {v["id"] for v in D["furgos"] if _afin_operativa(v)}
+    sug = {s["conductor"]: s for s in _af.sugerir_fijas([d["id"] for d in D["del_centro"]], D["ctx"], operativas)}
+    conductores = []
+    for d in D["del_centro"]:
+        cid = d["id"]
+        ds = hist.dias.get(cid) or []
+        cu = D["cuidado"].get(cid) or _af.Cuidado()
+        s = sug.get(cid)
+        conductores.append({
+            "id": cid, "nombre": d.get("name") or "", "center": d.get("center") or "",
+            "fija": _afin_fija_dict(fijas.get(cid)),
+            "dias_30": sum(1 for f, _ in ds if (hoy - f).days <= 30),
+            "ultima": placa.get(ds[0][1]) if ds else None,
+            "cuidado": {"dias": cu.dias, "seguros": cu.seguros, "posibles": cu.posibles},
+            "sugerencia": ({"furgo": s["furgo"], "matricula": placa.get(s["furgo"], s["furgo"]),
+                            "veces": s["veces"], "de": s["de"]} if s else None),
+        })
+    conductores.sort(key=lambda x: (-x["dias_30"], x["nombre"]))
+    duenos, secs = defaultdict(list), defaultdict(list)
+    for cid, f in fijas.items():
+        if f.principal:
+            duenos[f.principal].append(cid)
+        if f.secundaria:
+            secs[f.secundaria].append(cid)
+    furgos = []
+    for v in sorted(D["furgos"], key=lambda x: x.get("license_plate") or ""):
+        tit = next((c for c in duenos[v["id"]] if fijas[c].titular), None)
+        furgos.append({
+            "id": v["id"], "matricula": placa[v["id"]], "estado": v.get("status"),
+            "bloqueada": bool(v.get("bloqueada")), "operativa": _afin_operativa(v),
+            "trato": v.get("trato") or "", "valor": D["valor"][v["id"]], "valor_por": D["valor_por"][v["id"]],
+            "danos_abiertos": D["abiertos"].get(v["id"], 0),
+            "principal_de": duenos[v["id"]], "secundaria_de": secs[v["id"]], "titular": tit,
+        })
+    return {"center": center, "conductores": conductores, "furgos": furgos,
+            "cuidado_activo": D["cuidado_activo"], "cuidado_motivo": D["cuidado_motivo"],
+            "resumen": {"conductores": len(conductores),
+                        "con_principal": sum(1 for c in conductores if c["fija"]["principal"]),
+                        "sin_auto": sum(1 for c in conductores if c["fija"]["sin_auto"]),
+                        "operativas": len(operativas), "sugerencias": len(sug)}}
+
+
+async def _afin_guardar(admin: dict, driver_id: str, cambios: dict) -> dict:
+    """Guarda la ficha de un conductor comprobando centro y furgonetas."""
+    drv = await db.drivers.find_one({"id": driver_id}, {"_id": 0, "id": 1, "center": 1, "name": 1})
+    if not drv:
+        raise HTTPException(404, "Conductor no encontrado")
+    if drv.get("center"):
+        _filtro_centro(admin, drv["center"])          # 403 si no es de sus centros
+    actual = await db[_AFIN_COL].find_one({"driver_id": driver_id}, {"_id": 0}) or {}
+    nuevo = {k: actual.get(k) for k in ("principal", "secundaria", "titular", "sin_auto", "vetadas",
+                                          "responsabilidad")}
+    for k in ("principal", "secundaria"):
+        if k in cambios:
+            nuevo[k] = _texto_cuerpo(cambios.get(k), 60) or None
+    for k in ("titular", "sin_auto"):
+        if k in cambios:
+            nuevo[k] = bool(cambios.get(k))
+    if "responsabilidad" in cambios:
+        # La nota de la oficina, de 1 a 10; vacío la quita.
+        r = cambios.get("responsabilidad")
+        if r in (None, ""):
+            nuevo["responsabilidad"] = None
+        else:
+            try:
+                nuevo["responsabilidad"] = int(str(r))
+            except (TypeError, ValueError):
+                raise HTTPException(400, "La responsabilidad es una nota del 1 al 10")
+            if not 1 <= nuevo["responsabilidad"] <= 10:
+                raise HTTPException(400, "La responsabilidad es una nota del 1 al 10")
+    if "vetadas" in cambios:
+        nuevo["vetadas"] = [_texto_cuerpo(x, 60) for x in _lista_cuerpo(cambios.get("vetadas")) if _texto_cuerpo(x, 60)][:30]
+    usadas = [x for x in (nuevo.get("principal"), nuevo.get("secundaria")) if x] + list(nuevo.get("vetadas") or [])
+    if usadas:
+        existen = {v["id"] async for v in db.vehicles.find(
+            {"id": {"$in": usadas}, "status": {"$nin": ["deleted", "baja"]}}, {"_id": 0, "id": 1})}
+        faltan = [x for x in usadas if x not in existen]
+        if faltan:
+            raise HTTPException(400, "Esa furgoneta no existe o está de baja")
+    if nuevo.get("principal") and nuevo.get("principal") == nuevo.get("secundaria"):
+        raise HTTPException(400, "La principal y la secundaria no pueden ser la misma")
+    if nuevo.get("principal") and nuevo["principal"] in (nuevo.get("vetadas") or []):
+        raise HTTPException(400, "No puede ser su principal y estar vetada a la vez")
+    if not nuevo.get("principal"):
+        nuevo["titular"] = False
+    ahora = datetime.now(timezone.utc).isoformat()
+    quien = (admin or {}).get("name") or ""
+    await db[_AFIN_COL].update_one(
+        {"driver_id": driver_id},
+        {"$set": {**nuevo, "driver_id": driver_id, "center": drv.get("center") or "",
+                  "actualizado_en": ahora, "actualizado_por": quien},
+         "$push": {"historial": {"$each": [{**{k: nuevo.get(k) for k in ("principal", "secundaria", "titular", "sin_auto",
+                                                                          "responsabilidad")},
+                                            "en": ahora, "por": quien}], "$slice": -50}}},
+        upsert=True)
+    # Un solo titular por furgoneta: si este lo es, los demás que la comparten dejan de serlo.
+    if nuevo.get("titular") and nuevo.get("principal"):
+        await db[_AFIN_COL].update_many(
+            {"principal": nuevo["principal"], "driver_id": {"$ne": driver_id}, "titular": True},
+            {"$set": {"titular": False, "actualizado_en": ahora}})
+    return nuevo
+
+
+@api_router.put("/afinidad/conductor/{driver_id}")
+async def afinidad_guardar(driver_id: str, data: dict = Body(...), admin: dict = Depends(require_admin)):
+    """Principal, secundaria, titular, «sin furgoneta fija» y vetadas de un conductor."""
+    await _require_plan_feature(admin, "assignments")
+    return {"ok": True, "fija": await _afin_guardar(admin, driver_id, data)}
+
+
+@api_router.put("/afinidad/furgo/{vehicle_id}")
+async def afinidad_trato(vehicle_id: str, data: dict = Body(...), admin: dict = Depends(require_admin)):
+    """Marca una furgoneta como nueva o recién reparada (o lo quita)."""
+    await _require_plan_feature(admin, "assignments")
+    v = await db.vehicles.find_one({"id": vehicle_id}, {"_id": 0, "center": 1})
+    if not v:
+        raise HTTPException(404, "Vehículo no encontrado")
+    if v.get("center"):
+        _filtro_centro(admin, v["center"])
+    trato = _texto_cuerpo(data.get("trato"), 20)
+    if trato not in ("", "nueva", "reparada"):
+        raise HTTPException(400, "Trato: nueva, reparada o nada")
+    if trato:
+        await db.vehicles.update_one({"id": vehicle_id}, {"$set": {"trato": trato, "trato_desde": _hoy_madrid()}})
+    else:
+        await db.vehicles.update_one({"id": vehicle_id}, {"$unset": {"trato": "", "trato_desde": ""}})
+    return {"ok": True}
+
+
+@api_router.get("/afinidad/propuesta")
+async def afinidad_propuesta(center: str, admin: dict = Depends(require_admin)):
+    """El reparto inicial: principal y secundaria para quien aún no tiene, del historial."""
+    await _require_plan_feature(admin, "assignments")
+    center = _afin_centro(center)
+    D = await _afin_datos(admin, center)
+    hoy = D["hoy"]
+    trab = {c: {f.isoformat() for f, _ in ds if (hoy - f).days <= 56} for c, ds in D["hist"].dias.items()}
+    operativas = [v["id"] for v in D["furgos"] if _afin_operativa(v)]
+    ids = [d["id"] for d in D["del_centro"]]
+    p = _af.propuesta_inicial(ids, operativas, D["hist"], trab, D["fijas"])
+    placa = {v["id"]: v.get("license_plate") or v["id"] for v in D["furgos"]}
+    nombre = {d["id"]: d.get("name") or "" for d in D["del_centro"]}
+    out = [{"conductor": c, "nombre": nombre.get(c, ""), "principal": x["principal"],
+            "principal_matricula": placa.get(x["principal"]), "secundaria": x["secundaria"],
+            "secundaria_matricula": placa.get(x["secundaria"]) if x["secundaria"] else None,
+            "titular": x["titular"], "motivo": x["motivo"],
+            "comparte_con": [nombre.get(o, o) for o in x["comparte_con"]],
+            "dias_8_semanas": len(trab.get(c) or ())}
+           for c, x in p.items()]
+    out.sort(key=lambda x: -x["dias_8_semanas"])
+    sin = [nombre[c] for c in ids if c not in p and not (D["fijas"].get(c) or _af.Fija()).principal
+           and len(trab.get(c) or ()) >= 3]
+    return {"center": center, "propuestas": out, "sin_hueco": sin}
+
+
+@api_router.post("/afinidad/propuesta/aplicar")
+async def afinidad_propuesta_aplicar(data: dict = Body(...), admin: dict = Depends(require_admin)):
+    """Aplica las filas de la propuesta que el jefe ha dejado marcadas."""
+    await _require_plan_feature(admin, "assignments")
+    n = 0
+    for x in _lista_cuerpo(data.get("cambios"))[:400]:
+        if not isinstance(x, dict) or not _texto_cuerpo(x.get("conductor"), 60):
+            continue
+        await _afin_guardar(admin, _texto_cuerpo(x.get("conductor"), 60), {
+            "principal": x.get("principal"), "secundaria": x.get("secundaria"), "titular": x.get("titular")})
+        n += 1
+    return {"ok": True, "aplicadas": n}
+
+
+@api_router.get("/afinidad/a-quien")
+async def afinidad_a_quien(center: str, furgo: str, admin: dict = Depends(require_admin)):
+    """Furgoneta nueva o recién arreglada: a quién, con los hechos de cada uno."""
+    await _require_plan_feature(admin, "assignments")
+    center = _afin_centro(center)
+    D = await _afin_datos(admin, center)
+    nombres = {d["id"]: d.get("name") or "" for d in D["del_centro"]}
+    lista = _af.a_quien(_texto_cuerpo(furgo, 60), [d["id"] for d in D["del_centro"]], D["ctx"], nombres)
+    return {"candidatos": lista[:15], "cuidado_activo": D["cuidado_activo"],
+            "cuidado_motivo": D["cuidado_motivo"]}
+
+
+def _afin_placas_a_ids(filas: list, furgos: list) -> Tuple[list, list]:
+    """[[matrícula]] -> [[id]] con las del centro. Devuelve (carriles, desconocidas)."""
+    por_placa = {_matricula_norm(v.get("license_plate")): v["id"] for v in furgos if v.get("license_plate")}
+    carriles, malas, vistas = [], [], set()
+    for car in filas:
+        ids = []
+        for p in car:
+            k = _matricula_norm(p)
+            if not k:
+                continue
+            if k not in por_placa:
+                malas.append(k)
+            elif por_placa[k] not in vistas:
+                vistas.add(por_placa[k])
+                ids.append(por_placa[k])
+        carriles.append(ids)
+    return carriles, malas
+
+
+@api_router.get("/afinidad/fila")
+async def afinidad_fila(center: str, admin: dict = Depends(require_admin)):
+    """Cómo están aparcadas ahora (de delante a atrás, fila por fila)."""
+    await _require_plan_feature(admin, "assignments")
+    center = _afin_centro(center)
+    _filtro_centro(admin, center)
+    doc = await db[_AFIN_FILA_COL].find_one({"center": center}, {"_id": 0}) or {}
+    return {"center": center, "filas": doc.get("filas") or [], "actualizado_en": doc.get("actualizado_en"),
+            "actualizado_por": doc.get("actualizado_por")}
+
+
+@api_router.put("/afinidad/fila")
+async def afinidad_fila_guardar(data: dict = Body(...), admin: dict = Depends(require_admin)):
+    await _require_plan_feature(admin, "assignments")
+    center = _afin_centro(data.get("center"))
+    fc = _filtro_centro(admin, center)
+    filas = [[_matricula_norm(p) for p in _lista_cuerpo(car) if _matricula_norm(p)][:60]
+             for car in _lista_cuerpo(data.get("filas"))[:20]]
+    furgos = await db.vehicles.find({**fc, "status": {"$nin": ["deleted", "baja"]}},
+                                    {"_id": 0, "id": 1, "license_plate": 1}).to_list(3000)
+    _, malas = _afin_placas_a_ids(filas, furgos)
+    if malas:
+        raise HTTPException(400, "No son de este centro: %s" % ", ".join(sorted(set(malas))[:8]))
+    todas = [p for car in filas for p in car]
+    repes = sorted({p for p in todas if todas.count(p) > 1})
+    if repes:
+        raise HTTPException(400, "Repetidas: %s" % ", ".join(repes[:8]))
+    ahora = datetime.now(timezone.utc).isoformat()
+    await db[_AFIN_FILA_COL].update_one(
+        {"center": center},
+        {"$set": {"center": center, "filas": filas, "actualizado_en": ahora,
+                  "actualizado_por": (admin or {}).get("name") or ""}}, upsert=True)
+    return {"ok": True, "filas": filas, "actualizado_en": ahora}
+
+
+def _afin_hhmm(m: Optional[int]) -> str:
+    return "" if m is None else "%02d:%02d" % (m // 60, m % 60)
+
+
+@api_router.post("/tools/plantilla-furgos")
+async def plantilla_furgos(data: dict = Body(...), admin: dict = Depends(require_admin)):
+    """«Poner furgonetas»: propone la furgoneta de cada fila de la plantilla.
+
+    No cambia nada: devuelve la propuesta y la pantalla la aplica. Solo marca
+    `aplicar` en la principal o la secundaria (o en todo con `completar`); a
+    los «sin furgoneta fija» nunca. Con la fila de aparcamiento del centro
+    guardada, respeta el orden de salida y dice qué hay que mover.
+    """
+    await _require_plan_feature(admin, "assignments")
+    center = _afin_centro(data.get("center"))
+    D = await _afin_datos(admin, center)
+    placa = {v["id"]: v.get("license_plate") or v["id"] for v in D["furgos"]}
+    por_placa = {_matricula_norm(p): vid for vid, p in placa.items()}
+    candidatos = [(d["id"], d.get("name") or "") for d in D["todos"]]
+    del_centro = [(d["id"], d.get("name") or "") for d in D["del_centro"]]
+    nombre_ficha = {d["id"]: d.get("name") or "" for d in D["todos"]}
+    filas, sin_nombre = [], []
+    for i, r in enumerate(_lista_cuerpo(data.get("rows"))[:300]):
+        if not isinstance(r, dict):
+            continue
+        nom = _texto_cuerpo(r.get("conductor"), 120)
+        cid = (_afin_casar(nom, del_centro) or _afin_casar(nom, candidatos)) if nom else None
+        if nom and not cid:
+            sin_nombre.append(i)
+        furgo_txt = _matricula_norm(r.get("furgo"))
+        filas.append(_af.Fila(i, cid, por_placa.get(furgo_txt) if furgo_txt else None,
+                              _af.hora_min(r.get("h_salida"))))
+        if furgo_txt and furgo_txt not in por_placa:
+            # Una matrícula que no es del centro: la fila está servida a mano igualmente.
+            filas[-1].furgo = "txt:" + furgo_txt
+    operativas = [v["id"] for v in D["furgos"] if _afin_operativa(v)]
+    no_oper = [v["id"] for v in D["furgos"] if not _afin_operativa(v)]
+    doc = await db[_AFIN_FILA_COL].find_one({"center": center}, {"_id": 0, "filas": 1, "actualizado_en": 1}) or {}
+    carriles, _ = _afin_placas_a_ids(doc.get("filas") or [], D["furgos"])
+    carriles = [c for c in carriles if c]
+    res = _af.repartir(filas, operativas, D["ctx"], completar=bool(data.get("completar")),
+                       filas_aparcamiento=carriles or None, no_operativas=no_oper)
+    propuestas = [{"fila": p.fila, "furgo": placa.get(p.furgo, p.furgo), "tipo": p.tipo,
+                   "aplicar": p.aplicar, "puntos": p.puntos, "motivos": p.motivos,
+                   "conductor": nombre_ficha.get(next((f.conductor for f in filas if f.i == p.fila), ""), "")}
+                  for p in res["propuestas"]]
+    # Para el desplegable: las mejores libres de cada conductor, con su motivo.
+    ocupadas = {f.furgo for f in filas if f.furgo}
+    opciones = {}
+    for f in filas:
+        if not f.conductor:
+            continue
+        top = []
+        for v in operativas:
+            if v in ocupadas:
+                continue
+            s, por = _af.puntos(f.conductor, v, D["ctx"])
+            if s > 0 and s != float("inf"):
+                top.append((s, v, por))
+        top.sort(key=lambda x: -x[0])
+        opciones[str(f.i)] = [{"furgo": placa[v], "puntos": round(s, 1), "motivo": (por or [""])[0]}
+                              for s, v, por in top[:8]]
+    conflictos = []
+    if carriles:
+        for c in _af.conflictos_fila([f for f in filas if f.furgo and not str(f.furgo).startswith("txt:")], carriles):
+            conflictos.append({**c, "tapa": placa.get(c["tapa"], c["tapa"]), "a": placa.get(c["a"], c["a"]),
+                               "hora": _afin_hhmm(c.get("hora")), "hora_tapa": _afin_hhmm(c.get("hora_tapa"))})
+    mover = [{**m, "furgo": placa.get(m["furgo"], m["furgo"]), "antes_de": _afin_hhmm(m["antes_de"])}
+             for m in res["mover"]]
+    return {"propuestas": propuestas, "mover": mover, "sin_furgo": res["sin_furgo"],
+            "sin_nombre": sin_nombre, "opciones": opciones, "conflictos": conflictos,
+            "fila_actualizada": doc.get("actualizado_en") if carriles else None,
+            "metodo": res["metodo"], "cuidado_activo": D["cuidado_activo"]}
+
+
+async def _afin_vuelta_taller(vehicle_id: str, prev_status, new_status):
+    """De taller a activa: se apunta el día, y durante 30 días cuenta como
+    «recién salida del taller» (furgoneta que cuidar)."""
+    if prev_status == "taller" and new_status in ("active", "activo"):
+        await db.vehicles.update_one({"id": vehicle_id}, {"$set": {"vuelta_taller_en": _hoy_madrid()}})
 
 
 # =========================

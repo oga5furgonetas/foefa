@@ -56,7 +56,7 @@ npx wrangler pages deploy dist --project-name flota --branch main --commit-dirty
 ```
 
 Antes de desplegar, lo de CLAUDE.md («Antes de dar algo por bueno»): checks,
-eslint, build, `pytest backend/tests` (585 en verde el 26-09 por la noche) y humo de Playwright.
+eslint, build, `pytest backend/tests` (612 en verde el 26-09 por la noche) y humo de Playwright.
 **Si algo se pone rojo, no se despliega.**
 
 ## Reglas de Dani (siempre)
@@ -122,6 +122,31 @@ eslint, build, `pytest backend/tests` (585 en verde el 26-09 por la noche) y hum
    `sourcemap: 'hidden'` y el plugin `mapasFuera()` de `vite.config.js` los
    mueve a `frontend/mapas/<fecha>/` (fuera de git) en cada build.
 
+## Qué se hizo el 26-09-2026 (noche): furgonetas fijas
+
+**Plantilla del día → pestaña «Furgonetas fijas» + botón «Poner furgonetas».**
+Motor puro en `backend/afinidad.py` (léelo: explica el porqué), 27 pruebas en
+`backend/tests/test_afinidad.py`; endpoints `/api/afinidad*` y
+`/api/tools/plantilla-furgos` en server.py; UI en
+`frontend/src/panel/components/FurgonetasFijas.jsx` y `PlantillaGenerador.jsx`.
+- Medido con datos reales: hoy casi nadie repite furgoneta (OGA5 29 %, DGA1
+  17 %), así que la afinidad se FIJA (principal/secundaria/titular, colección
+  `furgo_fijas`) y el historial solo propone, ordena y sugiere.
+- Puntos: principal 100 (+15 titular), secundaria 60, historial 0-30 (media
+  vida 21 d), continuidad 5, nota de responsabilidad 1-10 de la oficina (±20
+  × valor de la furgoneta), golpes igual pero SOLO si `cuidado_predice` lo
+  demuestra (hoy no: 17 golpes seguros en 4 meses). Solo se rellena sola la
+  principal o la secundaria; «Completar» pone también las libres; «sin fija»
+  nunca. Reparto óptimo (húngaro; con fila, programa entero HiGHS de scipy).
+- Fila de OGA5 (`furgo_fila`, por centro): la de delante sale antes o a la vez;
+  mover una cuesta 250 puntos (dos principales). Avisa de qué mover y de qué
+  tapa a cuál. Casado de nombres estricto (157/167 en plantillas reales).
+- Nuevo en requirements: `scipy==1.14.1`.
+- **Nada aplicado aún en producción**: cada centro tiene que pulsar «Proponer
+  reparto inicial» y aplicar (OGA5 propone 76, DGA1 52). Hasta entonces
+  «Poner furgonetas» no rellena nada (comprobado).
+- Falta: casilla de «vetadas» en la pantalla (el servidor ya las admite).
+
 ## Pendiente (por prioridad)
 
 0. **URGENTE — aviso de Amazon del 24-09**: leer la sección 0 de
@@ -156,10 +181,9 @@ eslint, build, `pytest backend/tests` (585 en verde el 26-09 por la noche) y hum
      a esos datos. Llevarlos a cuentas de Dani.
    - Los despliegues ANTIGUOS de Pages siguen en sus URLs propias
      (`<hash>.flota-2fg.pages.dev`) con sus `.map`. No se han borrado.
-8. **EN CURSO**: afinidad conductor↔furgoneta para la plantilla diaria (por
-   centro, sin repetir furgonetas, huecos para los que no tienen, desplegable
-   con las libres) y el aparcamiento EN FILA de OGA5 (las de atrás no salen
-   hasta que salgan las de delante). Pedido por Dani el 26-09 por la noche.
+8. **Furgonetas fijas** (hecho, ver arriba): que cada centro aplique el
+   reparto inicial y ponga notas; en OGA5, apuntar la fila cada día. Falta la
+   casilla de vetadas en la pantalla.
 
 ## Trampas conocidas
 

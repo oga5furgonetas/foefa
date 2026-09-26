@@ -3,10 +3,11 @@ import { useOutletContext } from 'react-router-dom'
 import {
   Upload, FileSpreadsheet, Loader2, AlertCircle, X, CheckCircle2,
   Download, RotateCcw, Plus, ChevronDown, ChevronUp, Trash2, FolderOpen,
-  Copy, ClipboardPaste, Car, Info, ClipboardCheck,
+  Copy, ClipboardPaste, Car, Info, ClipboardCheck, Wand2, AlertTriangle,
 } from 'lucide-react'
 import { getToken } from '../auth'
-import { getPlantillas, downloadPlantilla, deletePlantilla, getVehicles, plantillaDesdeAsignacion } from '../api'
+import { getPlantillas, downloadPlantilla, deletePlantilla, getVehicles, plantillaDesdeAsignacion, plantillaFurgos } from '../api'
+import FurgonetasFijas from '../components/FurgonetasFijas'
 import { API_BASE as API } from '../../lib/apiBase'
 import { useT, LANG_LOCALE } from '../../i18n'
 import { lista } from '../../lib/lista'
@@ -206,6 +207,16 @@ export default function PlantillaGenerador() {
   const suppressJoin = useRef(false)
 
   const [copiedHours, setCopiedHours] = useState(null)
+  // Pestaña: la plantilla del día, o quién lleva qué furgoneta (se recuerda).
+  const [vista, setVista] = useState(() => leerPref('plantilla.vista', 'plantilla'))
+  function cambiarVista(v) { setVista(v); guardarPref('plantilla.vista', v) }
+  // «Poner furgonetas»: lo que propuso el servidor (backend/afinidad.py). Las
+  // marcas de «puesta sola» son de esta pantalla: a quien edita a la vez le
+  // llega la matrícula, no la marca.
+  const [furgosIA, setFurgosIA] = useState(null)      // { opciones, conflictos, mover, sin_nombre, ... }
+  const [autoPuestas, setAutoPuestas] = useState({})  // fila -> { tipo, motivos }
+  const [poniendo, setPoniendo] = useState(false)
+  const [ponerNota, setPonerNota] = useState('')
   const noCenter = !center || center === 'Todos'
 
   // Cada centro trabaja a su manera: el tramo de salida y si usa las columnas
@@ -495,6 +506,58 @@ export default function PlantillaGenerador() {
       }
     }
   }
+  // Lo único que le importa al reparto de furgonetas: quién, cuál y a qué hora sale.
+  const firmaFurgos = useMemo(() => (data?.rows || [])
+    .map(r => `${r.conductor || ''}|${r.furgo || ''}|${r.h_salida || ''}`).join('\n'), [data?.rows])
+
+  async function pedirFurgos(completar) {
+    const r = await plantillaFurgos({
+      center, completar,
+      rows: (data?.rows || []).map(r => ({ conductor: r.conductor, furgo: r.furgo, h_salida: r.h_salida })),
+    })
+    return r.data || {}
+  }
+
+  /* «Poner furgonetas»: solo se rellenan las celdas VACÍAS y solo con lo que
+     el servidor marca para aplicar (principal o secundaria; con «Completar»,
+     también las libres). Se escribe celda a celda como una persona, así que
+     quien edita a la vez lo ve igual. */
+  async function ponerFurgonetas(completar) {
+    if (noCenter || !data?.rows) return
+    setPoniendo(true); setPonerNota('')
+    try {
+      const j = await pedirFurgos(completar)
+      const nuevas = {}
+      let n = 0
+      for (const p of lista(j.propuestas)) {
+        if (!p.aplicar || (data.rows[p.fila]?.furgo || '').trim()) continue
+        editCell(p.fila, 'furgo', p.furgo)
+        nuevas[p.fila] = { tipo: p.tipo, motivos: lista(p.motivos) }
+        n++
+      }
+      setAutoPuestas(prev => ({ ...prev, ...nuevas }))
+      setFurgosIA(j)
+      setPonerNota(n ? `${n} ${t('pg.ff.puestas')}` : t('pg.ff.ningunaNueva'))
+    } catch (e) {
+      setPonerNota(e?.response?.data?.detail || 'No se pudo calcular')
+    } finally { setPoniendo(false) }
+  }
+
+  function editFurgo(i, v) {
+    editCell(i, 'furgo', v)
+    setAutoPuestas(prev => { if (!(i in prev)) return prev; const n = { ...prev }; delete n[i]; return n })
+  }
+
+  // Las sugerencias del desplegable y los avisos de la fila, al día tras cada cambio.
+  useEffect(() => {
+    if (step !== 'preview' || noCenter || !data?.rows?.length) return
+    let vivo = true
+    const tm = setTimeout(() => {
+      pedirFurgos(false).then(j => { if (vivo) setFurgosIA(j) }).catch(() => {})
+    }, 1500)
+    return () => { vivo = false; clearTimeout(tm) }
+  }, [firmaFurgos, step, center]) // eslint-disable-line react-hooks/exhaustive-deps
+
   function editMeta(field, value) {
     setData(prev => ({ ...prev, [field]: value }))
     clearTimeout(metaTimer.current)
@@ -524,6 +587,7 @@ export default function PlantillaGenerador() {
   /* Añadir y quitar filas mueven los ÍNDICES, de los que se fía el guardado
      por celda: van al servidor y la versión buena vuelve de allí. */
   async function addRow() {
+    setAutoPuestas({})
     setData(prev => ({
       ...prev,
       rows: [...prev.rows, { ruta: '', conductor: '', movil: '', furgo: '', h_salida: '', h_bajada: '', h_llegada: '', observaciones: '' }],
@@ -532,6 +596,7 @@ export default function PlantillaGenerador() {
   }
 
   async function removeRow(idx) {
+    setAutoPuestas({})
     const ref = rutasServidor.current[idx] ?? data?.rows?.[idx]?.ruta ?? ''
     setData(prev => ({ ...prev, rows: prev.rows.filter((_, i) => i !== idx) }))
     await mandar(`/fila/${idx}?ruta_ref=${encodeURIComponent(ref || '')}`, { method: 'DELETE' })
@@ -556,6 +621,16 @@ export default function PlantillaGenerador() {
         )}
       </div>
 
+      <nav className="mb-4 flex gap-1 overflow-x-auto border-b border-dark-800">
+        {[['plantilla', 'pg.tab.plantilla', FileSpreadsheet], ['fijas', 'pg.tab.fijas', Car]].map(([k, key, Icon]) => (
+          <button key={k} type="button" onClick={() => cambiarVista(k)}
+            className={`-mb-px flex items-center gap-1.5 whitespace-nowrap border-b-2 px-3 py-2 text-[13px] transition-colors ${
+              vista === k ? 'border-brand-400 font-semibold text-dark-50' : 'border-transparent text-dark-400 hover:text-dark-200'}`}>
+            <Icon size={13} /> {t(key)}
+          </button>
+        ))}
+      </nav>
+      {vista === 'fijas' ? <FurgonetasFijas center={center} /> : (<>
       <Historial center={center} />
 
       {/* ── PASO 1: traer los datos ── */}
@@ -658,6 +733,16 @@ export default function PlantillaGenerador() {
               <input id="pg-fecha" value={data.date ?? ''} onChange={e => editMeta('date', e.target.value)}
                 className="w-28 rounded border border-dark-600 bg-dark-800 px-2 py-1 text-center text-xs focus:border-brand-500 focus:outline-none" />
             </div>
+            <div className="flex items-center gap-1.5">
+              <button type="button" onClick={() => ponerFurgonetas(false)} disabled={poniendo || noCenter} title={t('pg.ff.ponerTip')}
+                className="btn-primary flex items-center gap-1.5 px-3 py-1 text-xs disabled:opacity-40">
+                {poniendo ? <Loader2 size={12} className="animate-spin" /> : <Wand2 size={12} />} {t('pg.ff.poner')}
+              </button>
+              <button type="button" onClick={() => ponerFurgonetas(true)} disabled={poniendo || noCenter} title={t('pg.ff.completarTip')}
+                className="btn-ghost px-2 py-1 text-xs text-dark-300 disabled:opacity-40">
+                {t('pg.ff.completar')}
+              </button>
+            </div>
             <div className="flex flex-wrap items-center gap-3 text-[11px] text-dark-400">
               <span className="flex items-center gap-1.5">
                 <span className="inline-flex gap-0.5">
@@ -737,6 +822,7 @@ export default function PlantillaGenerador() {
           {avisos.length === 0 && data.rows.length > 0 && (
             <p className="mb-3 flex items-center gap-1.5 text-[12px] text-emerald-300"><CheckCircle2 size={13} /> {t('pg.avisos.ok')}</p>
           )}
+          <AvisosFurgos info={furgosIA} nota={ponerNota} filas={data.rows} />
           <div className="overflow-x-auto rounded-xl border border-dark-700">
             <table className="w-full text-xs">
               <thead>
@@ -778,7 +864,9 @@ export default function PlantillaGenerador() {
                       <td className={`border border-[#BFBFBF] px-1 py-0.5 ${isPink && !isRed ? 'bg-pink-200' : ''} ${anillo('furgo')}`}>
                         <FurgoCell
                           value={row.furgo}
-                          onChange={v => editCell(i, 'furgo', v)}
+                          onChange={v => editFurgo(i, v)}
+                          opciones={lista(furgosIA?.opciones?.[String(i)])}
+                          auto={autoPuestas[i]}
                           isPink={isPink && !isRed}
                           furgosDisp={furgosDisp}
                           usedFurgos={data.rows.filter((_, ri) => ri !== i).map(r => (r.furgo || '').toUpperCase()).filter(Boolean)}
@@ -884,11 +972,57 @@ export default function PlantillaGenerador() {
           </div>
         </div>
       )}
+      </>)}
     </div>
   )
 }
 
-function FurgoCell({ value, onChange, isPink, furgosDisp, usedFurgos, onTogglePink, textCl }) {
+/* Lo que dijo «Poner furgonetas»: cuántas puso, qué nombres no reconoce y, con
+   la fila de aparcamiento apuntada, qué furgoneta tapa a cuál y qué hay que mover. */
+function AvisosFurgos({ info, nota, filas }) {
+  const { t } = useT()
+  const sinNombre = lista(info?.sin_nombre)
+  const mover = lista(info?.mover)
+  const conflictos = lista(info?.conflictos)
+  const vieja = !!info?.fila_actualizada && (Date.now() - new Date(info.fila_actualizada).getTime()) > 20 * 3600 * 1000
+  if (!nota && !sinNombre.length && !mover.length && !conflictos.length && !vieja) return null
+  return (
+    <div className="mb-3 space-y-2 rounded-xl border border-sky-500/25 bg-sky-500/[0.06] p-3 text-[12.5px] text-dark-200">
+      {nota && <div className="flex items-center gap-1.5 font-semibold text-sky-200"><Wand2 size={13} /> {nota}</div>}
+      {sinNombre.length > 0 && (
+        <div>{t('pg.ff.sinNombre')} <span className="text-dark-100">{sinNombre.map(i => filas[i]?.conductor).filter(Boolean).join(' · ')}</span></div>
+      )}
+      {vieja && <div className="text-amber-200">{t('pg.ff.filaVieja')}</div>}
+      {mover.map((m, k) => (
+        <div key={`m${k}`} className="flex items-center gap-1.5 text-amber-200">
+          <AlertTriangle size={13} /> {t('pg.ff.mover')} <b className="font-mono">{m.furgo}</b> {t('pg.ff.antesDe')} {m.antes_de}
+        </div>
+      ))}
+      {conflictos.length > 0 && (
+        <div>
+          <div className="mb-1 flex items-center gap-1.5 font-semibold text-amber-200"><AlertTriangle size={13} /> {t('pg.ff.conflictos')}</div>
+          <ul className="space-y-0.5">
+            {conflictos.slice(0, 20).map((c, k) => (
+              <li key={k}>
+                {t('ff.filaN')} {c.fila + 1}: <b className="font-mono">{c.tapa}</b>{' '}
+                {c.motivo === 'no_sale' ? t('pg.ff.noSale') : t('pg.ff.saleDespues').replace('{h}', c.hora_tapa)}{' '}
+                {t('pg.ff.tapaA')} <b className="font-mono">{c.a}</b> {t('pg.ff.queSale')} {c.hora}
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+    </div>
+  )
+}
+
+const COLOR_AUTO = { principal: 'bg-brand-400', secundaria: 'bg-sky-400', historial: 'bg-gray-400', libre: 'bg-gray-300' }
+const TIPO_KEY = {
+  principal: 'pg.ff.tipo.principal', secundaria: 'pg.ff.tipo.secundaria',
+  historial: 'pg.ff.tipo.historial', libre: 'pg.ff.tipo.libre',
+}
+
+function FurgoCell({ value, onChange, isPink, furgosDisp, usedFurgos, onTogglePink, textCl, opciones = [], auto }) {
   const { t } = useT()
   const [open, setOpen] = useState(false)
   const ref = useRef()
@@ -904,9 +1038,16 @@ function FurgoCell({ value, onChange, isPink, furgosDisp, usedFurgos, onTogglePi
   const used = new Set(usedFurgos)
   const available = furgosDisp.filter(f => !used.has(f))
   const occupied = furgosDisp.filter(f => used.has(f))
+  // Las mejores para ESTE conductor (principal, secundaria, las que más ha
+  // llevado), con el porqué; solo las que siguen libres.
+  const paraEste = opciones.filter(o => o?.furgo && !used.has(String(o.furgo).toUpperCase()) && furgosDisp.includes(String(o.furgo).toUpperCase()))
 
   return (
     <div ref={ref} className="relative flex items-center gap-0.5">
+      {auto && (
+        <span title={`${t(TIPO_KEY[auto.tipo] || TIPO_KEY.libre)}${auto.motivos?.length ? ': ' + auto.motivos.join(' · ') : ''}`}
+          className={`h-1.5 w-1.5 shrink-0 rounded-full ${COLOR_AUTO[auto.tipo] || 'bg-gray-300'}`} />
+      )}
       <input value={value || ''} onChange={e => onChange(e.target.value)} aria-label={t('pg.col.furgo')}
         className={`w-20 rounded bg-transparent px-1 py-0.5 text-center font-mono transition focus:bg-yellow-50 focus:outline-none focus:ring-1 focus:ring-yellow-400/60 ${isPink ? 'text-pink-900' : textCl}`} />
       <div className="flex shrink-0 items-center gap-0.5">
@@ -921,7 +1062,21 @@ function FurgoCell({ value, onChange, isPink, furgosDisp, usedFurgos, onTogglePi
       </div>
 
       {open && (
-        <div className="absolute left-0 top-full z-50 mt-1 max-h-72 w-52 overflow-y-auto rounded-lg border border-dark-600 bg-dark-900 text-xs shadow-xl">
+        <div className="absolute left-0 top-full z-50 mt-1 max-h-72 w-60 overflow-y-auto rounded-lg border border-dark-600 bg-dark-900 text-xs shadow-xl">
+          {paraEste.length > 0 && (
+            <>
+              <div className="bg-dark-800 px-2 py-1 text-[10px] font-semibold uppercase tracking-wider text-brand-300">
+                {t('pg.ff.paraEste')}
+              </div>
+              {paraEste.map(o => (
+                <button key={`p${o.furgo}`} onClick={() => { onChange(o.furgo); setOpen(false) }}
+                  className="flex w-full flex-col px-3 py-1.5 text-left transition hover:bg-brand-500/10">
+                  <span className="font-mono text-dark-100">{o.furgo}</span>
+                  {o.motivo && <span className="text-[10.5px] leading-snug text-dark-400">{o.motivo}</span>}
+                </button>
+              ))}
+            </>
+          )}
           {available.length > 0 && (
             <>
               <div className="bg-dark-800 px-2 py-1 text-[10px] font-semibold uppercase tracking-wider text-emerald-400">
