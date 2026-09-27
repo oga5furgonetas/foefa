@@ -3,6 +3,7 @@ import { detectAttribution } from '../../src/text/attribution';
 import { extractDates, parseFeedDate } from '../../src/text/dates';
 import { extractEntities, findPlaces } from '../../src/text/entities';
 import { nonNewsReason } from '../../src/text/nonnews';
+import { storySimilarity } from '../../src/pipeline/cluster';
 import { detectLanguage } from '../../src/text/langdetect';
 import { detectModality } from '../../src/text/modality';
 import { slugify } from '../../src/text/normalize';
@@ -182,5 +183,18 @@ describe('piezas que no son noticia (casos reales del 27-09-2026)', () => {
     expect(nonNewsReason('Opinion poll shows Labour ahead', 'https://www.bbc.com/news/uk-politics-1')).toBeNull();
     expect(nonNewsReason('Opinión: la amnistía y sus límites', 'https://x.test/espana/1')).not.toBeNull();
     expect(nonNewsReason('Trump lehnt Irans Vorschlag zur Öffnung der Straße von Hormus ab', 'https://www.tagesschau.de/ausland/iran-100.html')).toBeNull();
+  });
+});
+
+describe('agrupador: mismo hecho con una cifra y el lugar, pero no por el lugar solo', () => {
+  const cand = (text: string, places: string[]) => ({ id: 1, centroid: termVector(text, 'es'), entityNames: [], countryCode: 'ZA', lastItemAt: new Date('2026-09-27T10:00:00Z'), placeKeys: new Set(places), minhashes: [], isDemo: false });
+  const piece = (text: string, places: string[]) => ({ vec: termVector(text, 'es'), entities: [], places, minhash: null, at: new Date('2026-09-27T11:00:00Z') });
+  it('«Veintisiete muertos en dos tiroteos en Sudáfrica» se une a «dos tiroteos… dejan 27 muertos»', () => {
+    const sim = storySimilarity(piece('Veintisiete muertos en dos tiroteos en Sudáfrica. 27 personas murieron en dos tiroteos en Sudáfrica.', ['country:ZA']), cand('Sudáfrica: dos tiroteos en menos de cinco horas dejan 27 muertos y múltiples heridos', ['country:ZA']));
+    expect(sim).toBeGreaterThanOrEqual(0.42);
+  });
+  it('dos hechos distintos en el mismo país, sin cifras ni palabras en común, no se unen', () => {
+    const sim = storySimilarity(piece('El cantante marroquí condenado en apelación a diez años de prisión en Marruecos', ['country:MA']), cand('Un año después del movimiento de la generación Z, cientos de detenidos en Marruecos', ['country:MA']));
+    expect(sim).toBeLessThan(0.42);
   });
 });

@@ -236,10 +236,21 @@ Motor puro en `backend/afinidad.py` (léelo: explica el porqué), 27 pruebas en
   `.github/workflows/histor.yml` (solo se dispara con cambios en `histor/`).
 - Probado: 111 pruebas del núcleo, 2 del worker, 47 E2E, `next build` e
   imágenes Docker. Los checkers de Flota siguen pasando.
-- **Sin desplegar**: no hay cuenta de hosting ni dominio para Histor. Nunca
-  desplegarlo en `flota-backend`, `flota`, `flotadsp-*` ni en Pages de Flota.
-- La red de este entorno bloquea los feeds reales (BBC, BOE, USGS…): las fuentes
-  hay que validarlas al desplegar con `npm run sources:check`.
+- **27-09-2026 (tarde, PC de Dani, worktree `Downloads\histor_work`)**: probado con
+  fuentes reales (35/41 correctas) y con el pipeline publicando noticias reales en
+  los 6 idiomas; corregidos los fallos de verificación y redacción que salieron
+  (detalle en `histor/PROJECT_STATUS.md`). Nueva política: 2 fuentes
+  independientes para publicar; una sola nunca sale como «verificada».
+- **Despliegue preparado, sin ejecutar**: `histor/infra/fly/desplegar.sh` crea
+  `histor-db` (PostgreSQL propio con volumen y copias diarias), `histor-worker` e
+  `histor-web` en la cuenta NUEVA de Fly (región `fra`; Madrid ya no existe en
+  Fly). Solo acepta apps `histor-*`. Secretos generados en
+  `C:\Users\Usuario\.histor-secretos-prod.env` y acceso al panel en
+  `C:\Users\Usuario\.histor-admin.txt` (NUNCA imprimir). Falta: autorizar el
+  despliegue, el 2FA de Dani, datos legales (LSSI), dominio e integraciones.
+- Nunca desplegarlo en `flota-backend`, `flota`, `flotadsp-*` ni en Pages de Flota.
+- Postgres 16 portátil para pruebas locales en `C:\Users\Usuario\pg16`
+  (usuario y clave `histor`, solo 127.0.0.1): `pg16\pgsql\bin\pg_ctl -D pg16\data start`.
 
 ## Pendiente (por prioridad)
 
@@ -282,9 +293,10 @@ Motor puro en `backend/afinidad.py` (léelo: explica el porqué), 27 pruebas en
 8. **Furgonetas fijas** (hecho, ver arriba): que cada centro aplique el
    reparto inicial y ponga notas; en OGA5, apuntar la fila cada día. Falta la
    casilla de vetadas en la pantalla.
-9. **Histor** (producto aparte, `histor/`): falta alojamiento propio, dominio,
-   datos legales del titular y claves (Stripe, correo, IA, push). Lista completa
-   en `histor/PROJECT_STATUS.md` → «Bloqueos».
+9. **Histor** (producto aparte, `histor/`): listo para desplegar con
+   `histor/infra/fly/desplegar.sh` (falta autorizarlo). Después: 2FA del panel,
+   datos legales del titular, dominio y claves (Stripe, correo, IA). Lista
+   completa en `histor/PROJECT_STATUS.md` → «Bloqueos».
 
 ## Trampas conocidas
 

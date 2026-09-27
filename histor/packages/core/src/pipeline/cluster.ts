@@ -49,8 +49,11 @@ export function storySimilarity(
   const nums = sharedNumberTerms(item.vec, c.centroid);
   const crossLingual = nums >= 2 && placeScore > 0 ? 0.25 + 0.1 * Math.min(3, nums) : 0;
   // Sin ninguna entidad compartida (más allá del lugar) solo se agrupa con mucho parecido léxico o con ese ancla.
-  if (!sharedEnts.length && cos < 0.55 && !crossLingual) return Math.min(0.3, cos) * timeFactor;
-  return Math.max(0.5 * cos + 0.35 * Math.min(1, entScore) + 0.15 * placeScore, crossLingual + 0.15 * placeScore) * timeFactor;
+  // Una cifra compartida (≥ 10, no años) en el mismo lugar ayuda, pero solo junto con parecido
+  // léxico: «Veintisiete muertos en dos tiroteos en Sudáfrica» / «…dos tiroteos… dejan 27 muertos».
+  const numPlace = nums >= 1 && placeScore > 0 ? 0.15 : 0;
+  if (!sharedEnts.length && cos < 0.55 && !crossLingual && !numPlace) return Math.min(0.3, cos) * timeFactor;
+  return Math.max(0.5 * cos + 0.35 * Math.min(1, entScore) + 0.15 * placeScore + numPlace, crossLingual + 0.15 * placeScore) * timeFactor;
 }
 
 /** IDF sobre los centroides candidatos: las palabras que salen en todas las historias pesan poco. */

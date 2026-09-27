@@ -49,7 +49,7 @@ export function compressClaim(text: string, maxWords = 22, opts: { commaCut?: bo
       if (intro && !head.includes(', ')) continue;
       // Tampoco si termina en una palabra que pide complemento: «…, warnen aber davor»,
       // ni dentro de una oración de relativo («Le jeune coureur, qui est déjà monté sur le podium»).
-      if (DANGLING.test(head) || OPEN_RELATIVE.test(head)) continue;
+      if (DANGLING.test(head) || OPEN_RELATIVE.test(head) || OPEN_SUBORDINATE.test(head)) continue;
       if (words(head).length >= 8) return clean(head);
     }
   }
@@ -58,6 +58,12 @@ export function compressClaim(text: string, maxWords = 22, opts: { commaCut?: bo
 
 /** Lo último es una oración de relativo abierta tras coma: falta el predicado principal. */
 const OPEN_RELATIVE = /,\s(qui|que|which|who|whom|whose|der|die|das|welche|welcher|welches|che|cui|quien|quienes|cuyo|cuya|cuyos|cuyas|donde|onde|où|dont)\s[^,]*$/i;
+
+/**
+ * «…that while X, Y»: la oración que abre «that» no tiene verbo hasta después de la coma
+ * («Iranian officials that while they were aware…, they had not received…»).
+ */
+const OPEN_SUBORDINATE = /\b(that|que|dass|che)\s+(while|although|though|because|when|if|since|mientras|aunque|porque|cuando|si|obwohl|weil|wenn|während|bien que|parce que|quand|lorsque|mentre|perché|quando|se|embora|enquanto)\b[^,]*$/i;
 
 /** Final que deja la frase colgando (preposición, conjunción o adverbio que anuncia lo que sigue). */
 const DANGLING =

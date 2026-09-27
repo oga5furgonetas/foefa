@@ -267,3 +267,24 @@ describe('más casos reales del 27-09-2026 (Le Monde, franceinfo, RTP, El Mundo,
     expect(compressClaim(s, 16) ?? '').not.toMatch(/contre-la-montre$/);
   });
 });
+
+describe('última tanda real (27-09-2026, noche)', () => {
+  it('no deja la subordinada de «that while…» sin su verbo', () => {
+    const s = "Iranian officials that while they were aware of Trump's comments on rejecting the new proposal, they had not received a formal message rejecting the plan";
+    expect(compressClaim(s, 22) ?? '').not.toMatch(/proposal$/);
+  });
+
+  it('la entradilla no sale de «Datos clave» ni de una frase que depende de la anterior', () => {
+    const tag = source('Nachrichten Eins', 'reputable_media', { countryCode: 'DE' });
+    const zdf = source('Nachrichten Zwei', 'reputable_media', { countryCode: 'DE', ownershipGroup: 'zwei' });
+    const items = [
+      item(tag, 'Trump lehnt Irans Vorschlag zur Öffnung der Straße von Hormus ab', 'Iran unterbreitete den USA am Rande der UN-Generalversammlung einen Vorschlag zur Öffnung der Straße von Hormus. Den lehnte US-Präsident Trump nun ab.', { minutesAgo: 60 }),
+      item(zdf, 'Trump lehnt Vorschlag Irans zu Hormus ab', 'US-Präsident Trump lehnt den Vorschlag Irans zur Öffnung der Straße von Hormus ab. Den lehnte US-Präsident Trump nun ab.', { minutesAgo: 50 }),
+    ];
+    const analysis = run(items, [tag, zdf]);
+    const fs = buildFactSheet(analysis, items, new Map([tag, zdf].map((s) => [s.id, s])), { language: 'de' });
+    const d = writeDeterministic(fs, {})!;
+    expect(d.summary).not.toMatch(/^Den /);
+    expect(d.summary).not.toMatch(/^[\p{L} ]+: \d/u);
+  });
+});

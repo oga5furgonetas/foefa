@@ -9,17 +9,22 @@
 
 ## Resumen
 
-El producto está **construido y funcionando en local** de punta a punta: la
-ingesta, la verificación, la redacción, los controles, la publicación en
-6 idiomas, la web pública, el panel, las cuentas, los pagos (a falta de claves), las
-newsletters, las alertas, la medición y el worker 24/7. Todo está probado con
-tests automáticos y con el escenario DEMO pasando por el pipeline real. Las
-imágenes Docker se construyen y arrancan.
+El producto está **construido y probado con fuentes reales** (27-09-2026, en el
+PC de Dani): 35 de 41 fuentes leen bien y el pipeline publica noticias reales
+en los 6 idiomas, cada una con al menos 2 fuentes independientes y el recuadro
+«Cómo verificamos esta noticia». La ingesta, la verificación, la redacción, los
+controles, la web, el panel, las cuentas, los pagos (a falta de claves), las
+newsletters, las alertas, la medición y el worker 24/7 están probados.
 
-**No está desplegado en Internet** porque no hay cuenta de alojamiento para
-este producto (y no se debe usar la infraestructura de Flota/FlotaDSP de este
-repositorio). Las fuentes reales no se han podido leer desde el entorno de
-desarrollo porque su política de red las bloquea.
+**Despliegue: preparado, pendiente de ejecutar.** `infra/fly/desplegar.sh` lo hace
+todo en un paso (apps propias `histor-db`, `histor-worker`, `histor-web` en la
+cuenta nueva de Fly de Dani, región `fra`; nunca las de Flota). Los secretos de
+producción ya están generados en `~/.histor-secretos-prod.env` (fuera de git) y la
+contraseña del panel en `~/.histor-admin.txt`. Falta la autorización para crear
+las apps (el despliegue a producción quedó bloqueado por los permisos de la
+sesión) y, después, que Dani active el 2FA al entrar en `/admin`.
+
+**No anunciar todavía:** faltan los datos legales del titular (LSSI).
 
 ## Nombre
 
@@ -50,7 +55,7 @@ obligatoria (datos, búsqueda por idioma, cola de trabajos). Detalle en
 | 2. Base de datos + backend | ✅ 59 tablas, índices, FTS por idioma, 2 migraciones, API v1 documentada (`docs/API.md`) |
 | 3. Frontend + diseño | ✅ portada geolocalizada, noticia con «Cómo verificamos», secciones, país/región/ciudad, tema, autor, fuente, historia, listas, búsqueda, cuenta, suscripción, newsletters, aviso de error, páginas legales; modo oscuro; móvil |
 | 4. CMS / panel | ✅ resumen, historias con cadena de evidencia, corregir/retirar/bloquear/re-verificar, revisión, fuentes, umbrales y pesos, precios, secciones e idiomas, usuarios, experimentos, operación y auditoría; RBAC + 2FA + lista de IPs |
-| 5. Ingesta | ✅ conectores RSS, Atom, JSON Feed, GeoJSON, News Sitemap, metadatos HTML y APIs de Reddit, X, YouTube, Bluesky y Mastodon; robots.txt, reserva TDM, GET condicional, anti-SSRF con IP resuelta, ~40 fuentes reales configuradas (**sin validar en red**, ver bloqueos) |
+| 5. Ingesta | ✅ conectores RSS, Atom, JSON Feed, GeoJSON, News Sitemap, metadatos HTML y APIs de Reddit, X, YouTube, Bluesky y Mastodon; robots.txt, reserva TDM, GET condicional, anti-SSRF con IP resuelta, Content-Signal `ai-input=no`, juego de caracteres declarado, filtro de lo que no es noticia; 41 fuentes con feed, **35 validadas en red** (27-09-2026) |
 | 6. Verificación | ✅ determinista y explicable; 18 casos adversarios + calibración |
 | 7. Redacción con guardarraíles | ✅ redactor determinista en 6 idiomas, IA opcional intercambiable, validador frase a frase, 11 controles |
 | 8. Multidioma + geolocalización | ✅ es, en, de, fr, it, pt (nl, ja, ko, ar, hi preparados); rutas localizadas; edición por país |
@@ -58,51 +63,65 @@ obligatoria (datos, búsqueda por idioma, cola de trabajos). Detalle en
 | 10. Cuentas + suscripciones | ✅ registro, 2FA, Google/Apple (OIDC), RGPD (exportar/borrar), Stripe Checkout/portal/webhooks, 14 mercados con precios propios |
 | 11. Analítica + recomendación | ✅ medición propia con consentimiento, «Para ti» anti-burbuja, A/B de titulares por lectura real |
 | 12. Observabilidad | ✅ logs JSON con redacción, Prometheus, Sentry opcional, salud de web y worker, pipeline_runs |
-| 13. Testing | ✅ 111 pruebas del núcleo + 2 del worker + 47 E2E (escritorio y móvil) |
-| 14. Producción | 🟡 Docker (web y worker) probado; plantillas de Fly; CI de GitHub; copias de seguridad. **Falta desplegar** (sin cuenta de hosting) |
+| 13. Testing | ✅ 151 pruebas del núcleo + 2 del worker + 47 E2E (escritorio y móvil) |
+| 14. Producción | 🟡 Docker probado; `infra/fly/desplegar.sh` (base propia en Fly con copias diarias, worker y web); secretos generados. **Falta ejecutar el despliegue** (autorización) |
 
 ## Cómo arrancarlo
 
 Ver `README.md` (local en 5 minutos, sin claves) y `docs/OPERATIONS.md`
 (producción, copias, rotación de secretos, guías de incidencias).
 
-## Resultados de las pruebas (27-09-2026)
+## Resultados de las pruebas (27-09-2026, Windows del propietario)
 
 | Suite | Resultado |
 |---|---|
-| Tipos (núcleo, web, worker) | ✅ sin errores |
-| ESLint (web) | ✅ sin avisos |
-| Núcleo: unitarias, adversarias, calibración, integración con Postgres | ✅ 111/111 |
-| Worker (candado del pipeline, distribución) | ✅ 2/2 |
+| Tipos (núcleo, web, worker) y ESLint (web) | ✅ sin errores ni avisos |
+| Núcleo: unitarias, adversarias, calibración, integración con Postgres 16 | ✅ 151/151 |
+| Worker | ✅ 2/2 |
 | E2E Playwright contra `next start` (escritorio + móvil) | ✅ 47/47 |
-| `next build` de producción | ✅ |
-| Imágenes Docker web y worker (construidas y arrancadas contra Postgres) | ✅ |
+| `next build` y bundle del worker | ✅ |
 | `scripts/check-secrets.mjs` | ✅ sin secretos |
-| Checkers de Flota del repositorio (`check-existe`, `huerfanos`, `marca`, `i18n`, `permisos`, `modulos`) | ✅ intactos |
+| `sources:check` con red real | ✅ 35/41 (ver `docs/SOURCES.md`) |
+| Pipeline con fuentes reales, sin DEMO, 20+ min | ✅ publica en es, en, de, fr, it y pt, todo con ≥ 2 fuentes |
 
-Fallos reales encontrados al probar y ya corregidos (con prueba de regresión):
-el separador de frases cortaba en los ordinales alemanes («1. Januar») y dejaba
-titulares a medias; una historia actualizada que ya estaba confirmada seguía
-«en desarrollo»; el recuadro de verificación daba por confirmada una cifra ya
-superada (41 % → 43 %); el subtítulo decía «4 fuentes» y nombraba 3; el
-mantenimiento diario fallaba al pasar fechas en SQL crudo.
+Fallos encontrados con fuentes reales y corregidos (cada uno con su prueba):
+
+- **Verificación:** una afirmación se daba por confirmada por otra fuente que
+  solo compartía protagonistas («negocia comprar terrenos» ≠ «estudia abrir un
+  campus»); entre idiomas bastaba compartir el lugar («Green flood alert in
+  Ukraine» salió verificada con 3 fuentes sobre Lavrov); el agrupador juntaba
+  historias por un topónimo (el filtro comparaba «ukraine» con «UA»).
+- **Política editorial:** 2 fuentes independientes para publicar y ninguna
+  fuente sola como «verificada» (antes la portada alemana era el feed de DER
+  SPIEGEL, con opinión y viñetas); BOE, GDACS, GOV.UK, BCE, Fed y NASA solo
+  corroboran. Ajustable en el panel → Umbrales.
+- **Redacción:** BOE en ISO-8859-1 («Resoluci�n»); enlaces HTML que metían
+  espacios («three - day») y párrafos pegados; frases cortadas (subordinada
+  sola, «…, warnen aber davor», relativo abierto); titulares con «Live:»,
+  «EN DIRECT,» u horas de directo; plantilla de terremotos («registró a las 26
+  de septiembre»); entradilla igual al titular; «1 fuentes».
+- **Fuentes:** DW (es, pt-BR) y Corriere corregidas; ONU, El País, Il Post y OMS
+  en pausa (robots.txt, 403 o feed abandonado); `Content-Signal: ai-input=no`
+  respetado (esas historias nunca pasan por la IA).
+- **Pruebas en Windows:** la base E2E no se recreaba (psql ignoraba los `-c`).
 
 ## Bloqueos (externos: solo los puede resolver el propietario)
 
-1. **Red del entorno de desarrollo.** La política de red rechaza los dominios de
-   las fuentes (p. ej. `earthquake.usgs.gov`, `feeds.bbci.co.uk`, `www.boe.es`,
-   `www.tagesschau.de`), Wikimedia, Stripe y WHOIS/RDAP. Para leer fuentes reales
-   aquí habría que ampliar el acceso de red del entorno (Network access en su
-   configuración). En producción no aplica: validar con `npm run sources:check`.
-2. **Alojamiento y dominio.** Sin cuenta de hosting ni dominio registrado para
-   Histor. Candidatos: `histor.news`, `histor.media`, `readhistor.com`.
-   Plantillas listas en `infra/fly/` y `docker-compose.yml`.
-3. **Credenciales** (todas opcionales; sin ellas cada integración se desactiva
-   de forma explícita): Stripe + webhook, proveedor de IA, Resend, VAPID,
-   Google/Apple, Reddit/X/YouTube, Bluesky/Mastodon, Sentry, S3. Ver `.env.example`.
-4. **Datos legales** del titular (razón social, domicilio, NIF, registro,
-   responsable editorial, DPO): aparecen como `[PENDIENTE: …]`. Los textos
-   legales son una base cuidada que debe revisar un abogado en cada país.
+1. **Autorizar el despliegue.** Todo está listo: `cd histor && FLY_API_TOKEN=… infra/fly/desplegar.sh`
+   (token de la cuenta nueva de Fly). Coste: ~10–12 USD/mes (tres máquinas de 512 MB
+   en `fra` + volumen de 3 GB). Tras desplegar, entrar en `/admin` con los datos de
+   `~/.histor-admin.txt` y **activar el 2FA** (obligatorio en producción).
+2. **Datos legales** del titular (nombre/razón social, NIF, domicilio, correo de
+   contacto y de privacidad; registro solo si es sociedad): hoy salen como
+   `[PENDIENTE: …]`. Obligatorio (LSSI) antes de anunciar la web. Se añaden como
+   `LEGAL_*`, `CONTACT_EMAIL` y `DPO_EMAIL` en `~/.histor-secretos-prod.env` y se
+   relanza el script.
+3. **Dominio.** `histor.news` (25,20 USD/año) y `histor.media` (35,20 USD/año) estaban
+   libres el 27-09-2026. Hay que comprarlo (Cloudflare Registrar) y apuntarlo con
+   `fly certs add <dominio> -a histor-web`; después, `PUBLIC_BASE_URL` con él.
+4. **Integraciones** (todas opcionales; sin ellas se desactivan de forma explícita):
+   Stripe + webhook, Resend (correo), IA (proveedor, clave y tope), Google/Apple,
+   Sentry, S3/R2 para copias fuera de Fly. VAPID ya está generado.
 
 ## Pendiente (no bloqueado)
 
@@ -113,10 +132,10 @@ mantenimiento diario fallaba al pasar fechas en SQL crudo.
 - Idiomas preparados (nl, ja, ko, ar, hi): faltan diccionario, rutas y frases.
 - Búsqueda: pasar a OpenSearch/Meilisearch si el volumen lo pide.
 
-## Próximas acciones al desplegar
+## Próximas acciones tras desplegar
 
-1. Crear Postgres gestionado, secretos y las dos apps (web y worker) con nombres propios.
-2. `seed`, `create-admin`, activar 2FA, `sources:check --update`, `INGEST_ENABLED=1`.
-3. Rellenar datos legales; configurar Stripe (y su webhook), Resend y VAPID.
-4. Vigilar las primeras 48 h desde el panel (Resumen, Revisión, Operación) y
-   ajustar umbrales si hace falta.
+1. Activar el 2FA del panel y vigilar las primeras 48 h (Resumen, Revisión, Operación).
+2. Rellenar los datos legales y, con dominio, cambiar `PUBLIC_BASE_URL`.
+3. Copia fuera de Fly: bucket S3/R2 propio de Histor (no el de Flota) para `infra/backup.sh`.
+4. Afinar umbrales con datos reales (el primer arranque procesa ~2.000 piezas: la
+   cola tarda unos 30 min en vaciarse).

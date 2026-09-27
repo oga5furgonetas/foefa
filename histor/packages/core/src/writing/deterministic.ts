@@ -60,7 +60,10 @@ export function writeDeterministic(fs: FactSheet, opts: WriteOptions = {}): Draf
   // Titular: el titular de fuente mejor respaldado, comprimido; si no hay,
   // la afirmación principal. Entrada: la mejor frase del cuerpo, más completa.
   const pool = developing ? [...fs.confirmed, ...fs.attributed] : fs.confirmed;
-  const bodyFirst = [...pool.filter((c) => !c.isHeadline), ...pool.filter((c) => c.isHeadline)];
+  // Para abrir, primero las frases que se entienden solas: «Den lehnte Trump nun ab» o
+  // «Mas os maiores escritórios…» dependen de la frase anterior de su fuente.
+  const byOrder = [...pool.filter((c) => !c.isHeadline), ...pool.filter((c) => c.isHeadline)];
+  const bodyFirst = [...byOrder.filter((c) => selfContained(c.text)), ...byOrder.filter((c) => !selfContained(c.text))];
   let headlineClaim: FactClaim | null = null;
   for (const c of bodyFirst) {
     const compressed = compressClaim(c.text, maxWords);
@@ -208,9 +211,8 @@ export function writeDeterministic(fs: FactSheet, opts: WriteOptions = {}): Draf
   // La entradilla no repite el titular: si coinciden, se usa la siguiente frase con respaldo.
   const norm = (x: string) => x.toLowerCase().replace(/[^\p{L}\p{N}]+/gu, ' ').trim();
   if (norm(summary) === norm(headline)) {
-    const next = body
-      .flatMap((b) => (b.type === 'p' ? [b] : b.type === 'list' ? b.items : []))
-      .find((x) => x.claimIds.length > 0 && norm(x.text) !== norm(headline));
+    // Solo párrafos: una línea de «Datos clave» («Fallecidos: 10 (según DW)») no es una entradilla.
+    const next = body.find((b): b is Extract<ArticleBlock, { type: 'p' }> => b.type === 'p' && b.claimIds.length > 0 && norm(b.text) !== norm(headline) && selfContained(b.text));
     if (next) summary = next.text;
   }
 
@@ -235,6 +237,11 @@ export function claimRef(c: FactClaim): number {
   if (c.dbId) return c.dbId;
   const [item, idx] = c.key.split(':').map(Number);
   return -(item * 1000 + idx + 1);
+}
+
+/** ¿Se entiende sin la frase anterior? No si empieza por un anafórico o un conector. */
+function selfContained(text: string): boolean {
+  return !/^(den|dem|dies|esto|eso|ello|cela|ceci|ciò|isso|isto|but|pero|mas|aber|mais|ma|however|sin embargo|doch|allerdings|cependant|tuttavia|porém|contudo|además|también|also|auch|aussi|anche|também|and|y|und|et|e|so|así|asimismo)\b/i.test(text.trim());
 }
 
 function stripPeriod(s: string): string {
