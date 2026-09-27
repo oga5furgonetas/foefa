@@ -299,11 +299,19 @@ async def test_buscar_ahora(cliente, entorno, monkeypatch):
 async def test_tus_reglas(cliente, entorno):
     h = _cab("dani")
     r = (await cliente.get("/api/valor/reglas", headers=h)).json()
-    assert r["elegidas"] is False and r["actuales"]["cuota_minima"] == 1.70 and len(r["simulacion"]) == 9
+    assert r["elegidas"] is False and r["actuales"]["cuota_minima"] == 1.70 and len(r["simulacion"]) == 12
+    assert r["actuales"]["cuota_suelo"] == 1.50                 # la de siempre: de 1,50 a 1,69 con +5 %
     r = await cliente.post("/api/valor/reglas", headers=h, json={"prob_minima": "0,55", "cuota_minima": 1.6})
-    assert r.status_code == 200 and r.json()["actuales"] == {"prob_minima": 0.55, "cuota_minima": 1.6}
+    assert r.status_code == 200 and r.json()["actuales"] == {"prob_minima": 0.55, "cuota_minima": 1.6,
+                                                            "cuota_suelo": 1.6}
+    # «Desde 1,55 y punto» (lo que pidió Dani): suelo = mínima.
+    r = await cliente.post("/api/valor/reglas", headers=h, json={"prob_minima": 0.6, "cuota_minima": 1.55,
+                                                                 "cuota_suelo": 1.55})
+    assert r.json()["actuales"] == {"prob_minima": 0.6, "cuota_minima": 1.55, "cuota_suelo": 1.55}
+    assert (await cliente.post("/api/valor/reglas", headers=h, json={
+        "prob_minima": 0.6, "cuota_minima": 1.55, "cuota_suelo": 1.70})).status_code == 400
     e = (await cliente.get("/api/valor/estado", headers=h)).json()
-    assert e["prob_minima"] == 0.55 and e["cuota_minima"] == 1.6
+    assert e["prob_minima"] == 0.6 and e["cuota_minima"] == 1.55 and e["cuota_suelo"] == 1.55
     for malo in ({"prob_minima": 0.1, "cuota_minima": 1.7}, {"prob_minima": 0.6, "cuota_minima": 9},
                  {"prob_minima": "x", "cuota_minima": 1.7}):
         assert (await cliente.post("/api/valor/reglas", headers=h, json=malo)).status_code == 400

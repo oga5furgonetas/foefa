@@ -174,8 +174,8 @@ test.describe('Valor, solo super-admin', () => {
     await page.route('**/api/valor/reglas', (route) => route.fulfill({
       status: 200, contentType: 'application/json',
       body: JSON.stringify({ actuales: { prob_minima: 0.6, cuota_minima: 1.7 }, por_defecto: { prob_minima: 0.6, cuota_minima: 1.7 },
-        elegidas: false, horas: 24, simulacion: [0.6, 0.55, 0.5].flatMap((p) => [1.7, 1.6, 1.5].map((c) => ({
-          prob_minima: p, cuota_minima: c, senales: Math.round((0.65 - p) * 100 + (1.75 - c) * 10) }))) }),
+        elegidas: false, horas: 24, simulacion: [0.6, 0.55, 0.5].flatMap((p, i) => [[1.7, 1.5], [1.6, 1.6], [1.55, 1.55], [1.5, 1.5]]
+          .map(([c, su], j) => ({ prob_minima: p, cuota_minima: c, cuota_suelo: su, senales: 10 * i + j + 1 }))) }),
     }))
     await page.route('**/api/valor/casi', (route) => route.fulfill({
       status: 200, contentType: 'application/json',
@@ -199,6 +199,7 @@ test.describe('Valor, solo super-admin', () => {
     await expect(casi.getByText(/Rice \+14,5 de hándicap/)).toBeVisible()
     await expect(casi.getByRole('button')).toHaveCount(0)
     await expect(page.getByText('DESTACADA')).toBeVisible()
+    await expect(page.getByText('50/50 · 46 %').first()).toBeVisible()          // prob. 0,46: se dice claro
     await expect(page.getByText(/VÁLIDA · \d+ min más/)).toBeVisible()
     await expect(page.getByText('CASA LENTA', { exact: true }).first()).toBeVisible()
     await expect(page.getByText('datos hace 2 min').first()).toBeVisible()
@@ -226,11 +227,11 @@ test.describe('Valor, solo super-admin', () => {
     await expect(page.getByText('Tus reglas', { exact: true })).toBeVisible()
     await expect(page.getByText('(la tuya)')).toBeVisible()
     await expect(page.getByRole('button', { name: 'Usar estas' })).toBeDisabled()
-    // Con los datos de arriba: 60 % y 1,70 → 6; 50 % y 1,70 → 16.
-    await expect(page.getByRole('button', { name: '6', exact: true })).toHaveAttribute('aria-pressed', 'true')
-    await page.getByRole('button', { name: '16', exact: true }).click()
-    await expect(page.getByRole('button', { name: '16', exact: true })).toHaveAttribute('aria-pressed', 'true')
-    await expect(page.getByRole('button', { name: '6', exact: true })).toHaveAttribute('aria-pressed', 'false')
+    // Con los datos de arriba: 60 % y «desde 1,70*» → 1; 60 % y «desde 1,55» → 3.
+    await expect(page.getByRole('button', { name: '1', exact: true })).toHaveAttribute('aria-pressed', 'true')
+    await page.getByRole('button', { name: '3', exact: true }).click()
+    await expect(page.getByRole('button', { name: '3', exact: true })).toHaveAttribute('aria-pressed', 'true')
+    await expect(page.getByRole('button', { name: '1', exact: true })).toHaveAttribute('aria-pressed', 'false')
     await expect(page.getByRole('button', { name: 'Usar estas' })).toBeEnabled()
     expect(new URL(page.url()).pathname).toBe('/panel/valor')
     expect(fallos, fallos.join(' | ')).toHaveLength(0)

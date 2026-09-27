@@ -454,3 +454,23 @@ def test_buscar_ahora_lee_gamdom(tmp_path, monkeypatch):
     esc.vuelta(AHORA)                                   # la que toca: la primera
     esc.vuelta(AHORA + timedelta(minutes=5), forzar=True)
     assert leidas == ["codere.es", "gamdom"]
+
+
+
+def test_desde_155_y_punto(tmp_path, monkeypatch):
+    """Dani, 27-09: «de cuota mínimo 1,55 en adelante, y que sea muy probable».
+    Con suelo 1,55: una de 1,58 con +3 % y 64 % sale; una de 1,52 no, aunque
+    tenga +5 % (antes pasaba por la excepción de 1,50-1,69)."""
+    monkeypatch.setenv("VALOR_PROB_MINIMA", "0.60")
+    reg = Registro(str(tmp_path / "v.db"))
+    reg.pon_ajuste("reglas", {"prob_minima": 0.60, "cuota_minima": 1.55, "cuota_suelo": 1.55})
+    esc = Escaner(reg, 6000, fuentes={})
+    # Pinnacle: visitante ~65 % (justa ~1,53); la casa le paga 1,58 → +3 %.
+    _fuente_fija(esc, (6.50, 4.80, 1.50), 1.58)
+    (o,) = esc.vuelta(AHORA).oportunidades
+    assert o.cuota == 1.58 and o.prob_justa >= 0.60 and 0.02 <= o.ev < 0.05
+    esc2 = Escaner(Registro(str(tmp_path / "b.db")), 6000, fuentes={})
+    esc2.reg.pon_ajuste("reglas", {"prob_minima": 0.60, "cuota_minima": 1.55, "cuota_suelo": 1.55})
+    _fuente_fija(esc2, (8.00, 5.50, 1.42), 1.52)
+    r = esc2.vuelta(AHORA)
+    assert r.oportunidades == [] and r.descartes["cuota fuera de rango"] == 1

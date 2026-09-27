@@ -331,12 +331,17 @@ class Registro:
             "  GROUP BY evento_id, mercado, IFNULL(linea, -999), seleccion, casa) p ON p.id=o.id",
             (desde,)).fetchall()
         out = []
-        for prob_minima, cuota_minima in combinaciones:
+        for combi in combinaciones:
+            # (acierto, cuota mínima) o (acierto, cuota mínima, suelo): por debajo
+            # del suelo nada; entre el suelo y la mínima, solo con +5 %.
+            prob_minima, cuota_minima = combi[0], combi[1]
+            su = combi[2] if len(combi) > 2 else suelo
             n = sum(1 for f in filas
                     if ev_minimo <= f["ev"] <= ev_maximo and f["prob_justa"] >= prob_minima - 1e-9
-                    and suelo <= f["cuota"] <= cuota_maxima
-                    and (f["cuota"] >= cuota_minima or f["ev"] >= ev_excepcion))
-            out.append({"prob_minima": prob_minima, "cuota_minima": cuota_minima, "senales": n})
+                    and su - 1e-9 <= f["cuota"] <= cuota_maxima
+                    and (f["cuota"] >= cuota_minima - 1e-9 or f["ev"] >= ev_excepcion))
+            out.append({"prob_minima": prob_minima, "cuota_minima": cuota_minima, "cuota_suelo": su,
+                        "senales": n})
         return out
 
     def casas_apostables(self) -> Optional[List[str]]:

@@ -372,6 +372,10 @@ class Escaner:
         # Y con qué reglas: las que elija Dani en la pantalla, si ha elegido.
         suyas = self.reg.reglas()
         cambios = {k: float(suyas[k]) for k in ("prob_minima", "cuota_minima") if k in suyas}
+        if "cuota_suelo" in suyas:
+            # «Desde 1,55 y punto»: nada por debajo; entre el suelo y la mínima,
+            # solo con +5 % (si suelo = mínima, no hay tramo intermedio).
+            cambios["cuota_minima_excepcion"] = float(suyas["cuota_suelo"])
         pre = replace(self.prepartido, apostables=apostables, **cambios)
         viv = replace(self.vivo, apostables=apostables, **cambios)
         r = detectar(eventos, lectura.cuotas, self.banca, ahora, pre, viv,

@@ -279,6 +279,12 @@ Dani no se creía el 0. Estudio con datos reales (scratchpad de la sesión):
 - Rotación de OddsPapi: Gamdom 4 de cada 6 lecturas, y «Buscar ahora» siempre
   Gamdom (`ODDSPAPI_CASA_BUSCAR`): las dos apuestas del 27-09 y las 12 «casi»
   buenas eran de Gamdom; PokerStars trae líneas cruzadas y Codere paga −11 %.
+- 27-09 tarde, Dani: «cuota mínimo 1,55 en adelante y que sea muy probable».
+  Reglas puestas en producción: sale ≥60 %, cuota ≥1,55 sin excepción por
+  debajo (`cuota_suelo`), ventaja ≥+2 % (por debajo es ruido del cálculo de la
+  justa). Cada tarjeta dice MUY PROBABLE (≥65 %), PROBABLE (≥58 %) o 50/50.
+- Plantilla del día: las rutas salían ordenadas como TEXTO (CA_A10… CA_A19,
+  CA_A2, CA_A20). Ahora por número (`_orden_natural` en `plantilla_extraer`).
 - Push: la app tiene web push pero en producción no hay claves VAPID; avisos
   al móvil de Valor pendientes de que Dani diga cómo (Telegram propio o push).
 - Gotcha: para elegir torneos NO fiarse del nombre de la liga en `eventos`:

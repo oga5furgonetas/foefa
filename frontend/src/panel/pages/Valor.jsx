@@ -351,6 +351,13 @@ function PorQue({ o, abierto }) {
   )
 }
 
+/* Lo probable que es, dicho claro (y sin prometer: 6 de cada 10 también
+   significa que 4 se pierden). */
+function Probable({ p }) {
+  const [tono, txt] = p >= 0.65 ? ['valida', 'MUY PROBABLE'] : p >= 0.58 ? ['valor', 'PROBABLE'] : ['gris', '50/50']
+  return <Chip tono={tono} title={`Sale ${Math.round(p * 10)} de cada 10 veces (${Math.round(p * 100)} %)`}>{txt} · {Math.round(p * 100)} %</Chip>
+}
+
 function TarjetaValor({ o, destacada, frenado, ahora, alApuntar }) {
   const [modal, setModal] = useState(null)
   const vivo = !!o.en_vivo
@@ -368,6 +375,7 @@ function TarjetaValor({ o, destacada, frenado, ahora, alApuntar }) {
         {valida
           ? <Chip tono="valida">VÁLIDA{quedan != null ? ` · ${quedan < 1 ? 'menos de 1 min' : `${quedan} min más`}` : ''}</Chip>
           : <Chip tono="caducada">{estado === 'cambiada' ? 'CUOTA CAMBIADA' : 'CADUCADA'}</Chip>}
+        <Probable p={o.prob_justa} />
         {vivo && <Chip tono="vivo">EN VIVO</Chip>}
         {o.fallo && o.fallo !== 'valor' && <Chip tono="fallo">{String(o.fallo).toUpperCase()}</Chip>}
       </div>
@@ -896,7 +904,9 @@ function TusCasas() {
    de dinero y freno. La decisión es de Dani: por defecto, las suyas. */
 const PROBS = [[0.6, '60 %', 'pierdes unas 4 de cada 10'], [0.55, '55 %', 'pierdes unas 4-5 de cada 10'],
   [0.5, '50 %', 'pierdes 1 de cada 2: más rachas malas']]
-const CUOTAS = [1.7, 1.6, 1.5]
+// [cuota mínima, suelo, rótulo]. La de siempre: desde 1,70 y, de 1,50 a 1,69,
+// solo con +5 %. Las otras, «desde X y punto».
+const CUOTAS = [[1.7, 1.5, '1,70*'], [1.6, 1.6, '1,60'], [1.55, 1.55, '1,55'], [1.5, 1.5, '1,50']]
 const igual = (a, b) => Math.abs(Number(a) - Number(b)) < 1e-6
 
 function TusReglas({ alCambiar }) {
@@ -913,9 +923,12 @@ function TusReglas({ alCambiar }) {
 
   if (!datos) return <div className="card flex justify-center p-6 text-dark-400"><Loader2 className="animate-spin" /></div>
   if (datos.error) return <div className="card p-4 text-[12.5px] text-dark-400">No se pudieron cargar tus reglas.</div>
-  const cuenta = (p, c) => lista(datos.simulacion).find((x) => igual(x.prob_minima, p) && igual(x.cuota_minima, c))?.senales ?? 0
+  const cuenta = (p, c, su) => lista(datos.simulacion).find((x) => igual(x.prob_minima, p) && igual(x.cuota_minima, c)
+    && igual(x.cuota_suelo ?? 1.5, su))?.senales ?? 0
   const def = datos.por_defecto || {}
-  const cambiado = sel && (!igual(sel.prob_minima, datos.actuales.prob_minima) || !igual(sel.cuota_minima, datos.actuales.cuota_minima))
+  const act = datos.actuales || {}
+  const cambiado = sel && (!igual(sel.prob_minima, act.prob_minima) || !igual(sel.cuota_minima, act.cuota_minima)
+    || !igual(sel.cuota_suelo ?? 1.5, act.cuota_suelo ?? 1.5))
 
   async function guardar(body) {
     setGuardando(true)
@@ -944,7 +957,7 @@ function TusReglas({ alCambiar }) {
           <thead>
             <tr className="text-left text-[11px] uppercase tracking-wider text-dark-500">
               <th className="py-1.5 pr-2">Sale al menos</th>
-              {CUOTAS.map((c) => <th key={c} className="px-1 py-1.5 text-center">Cuota ≥ {cuota(c)}</th>)}
+              {CUOTAS.map(([c, , txt]) => <th key={c} className="px-1 py-1.5 text-center">Desde {txt}</th>)}
             </tr>
           </thead>
           <tbody>
@@ -954,14 +967,14 @@ function TusReglas({ alCambiar }) {
                   <div className="text-dark-100">{txt}{igual(p, def.prob_minima) && <span className="text-dark-500"> (la tuya)</span>}</div>
                   <div className="text-[11px] text-dark-500">{riesgo}</div>
                 </td>
-                {CUOTAS.map((c) => {
-                  const on = sel && igual(sel.prob_minima, p) && igual(sel.cuota_minima, c)
+                {CUOTAS.map(([c, su]) => {
+                  const on = sel && igual(sel.prob_minima, p) && igual(sel.cuota_minima, c) && igual(sel.cuota_suelo ?? 1.5, su)
                   return (
                     <td key={c} className="px-1 py-1.5 text-center">
-                      <button type="button" aria-pressed={on} onClick={() => setSel({ prob_minima: p, cuota_minima: c })}
+                      <button type="button" aria-pressed={on} onClick={() => setSel({ prob_minima: p, cuota_minima: c, cuota_suelo: su })}
                               className={`w-full rounded-lg border px-2 py-1.5 tabular-nums transition-colors ${on
                                 ? 'border-brand-400/70 bg-brand-500/15 font-semibold text-dark-50' : 'border-dark-700 text-dark-300 hover:text-dark-100'}`}>
-                        {cuenta(p, c)}
+                        {cuenta(p, c, su)}
                       </button>
                     </td>
                   )
@@ -971,6 +984,7 @@ function TusReglas({ alCambiar }) {
           </tbody>
         </table>
       </div>
+      <p className="mt-1.5 text-[11px] text-dark-500">* Desde 1,70, y de 1,50 a 1,69 solo con +5 % de ventaja (la regla de siempre).</p>
       <div className="mt-3 flex flex-wrap items-center gap-3">
         <button type="button" disabled={!cambiado || guardando} onClick={() => guardar(sel)}
                 className="btn-primary flex items-center gap-1.5 px-4 py-2 text-[13px]">
@@ -1131,7 +1145,9 @@ export default function Valor() {
       {pestana === 'datos' && <Datos est={est} alCambiar={carga} />}
       {pestana === 'valor' && est.prob_minima != null && (
         <div className="flex flex-wrap items-center gap-x-2 text-[12px] text-dark-500">
-          Tus reglas: sale al menos el {pctSin(est.prob_minima)} · cuota desde {cuota(est.cuota_minima)} · ventaja desde +2 %
+          Tus reglas: sale al menos el {pctSin(est.prob_minima)} · cuota desde {cuota(Math.min(est.cuota_minima, est.cuota_suelo ?? est.cuota_minima))}
+          {est.cuota_suelo != null && est.cuota_suelo < est.cuota_minima - 1e-6 && <> (hasta {cuota(est.cuota_minima)}, solo con +5 %)</>}
+          {' '}· ventaja desde +2 %
           <button type="button" onClick={() => setPestana('datos')} className="text-brand-300 underline">Cambiar</button>
         </div>
       )}

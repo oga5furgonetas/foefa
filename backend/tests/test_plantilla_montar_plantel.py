@@ -110,3 +110,24 @@ async def test_solo_nombres_sin_ruta_tambien_salen(cliente, entorno):
 async def test_sin_ninguna_lista_400(cliente, entorno):
     r = await cliente.post("/api/tools/plantilla-extraer", headers=_cab(), data={"center": "OGA5"})
     assert r.status_code == 400
+
+
+
+async def test_las_rutas_van_por_numero_no_por_texto(cliente, entorno):
+    """27-09: la hoja salía CA_A10, CA_A11... CA_A19, CA_A2, CA_A20: ordenadas
+    como texto. Tienen que ir 2, 10, 20."""
+    texto = "\n".join([
+        "CA_A10", "Rodriguez Arias, Andrea", "10:25",
+        "CA_A2", "Gomez Vidal, Luis", "10:45",
+        "CA_A20", "Martinez Pena, Sara", "11:05",
+    ])
+    r = await cliente.post("/api/tools/plantilla-extraer", headers=_cab(),
+                           data={"rutas_texto": texto, "center": "OGA5"})
+    assert r.status_code == 200, r.text
+    assert [f["ruta"] for f in r.json()["rows"]] == ["CA_A2", "CA_A10", "CA_A20"]
+
+
+def test_orden_natural():
+    rutas = ["CA_A20", "CA_A2", "CX10", "CA_A10", "CA_B1", "CA_A1", "CX9", "CA_A100"]
+    assert sorted(rutas, key=server._orden_natural) == [
+        "CA_A1", "CA_A2", "CA_A10", "CA_A20", "CA_A100", "CA_B1", "CX9", "CX10"]

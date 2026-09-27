@@ -32887,6 +32887,12 @@ def _plantilla_por_bloques(texto: str, plantel: list, preferidos=frozenset()) ->
     return {"filas": filas, "dudosos": dudosos}
 
 
+def _orden_natural(texto: str) -> list:
+    """Clave para ordenar «CA_A2» antes que «CA_A10»: los números como números.
+    Ordenadas como texto, la hoja salía CA_A10… CA_A19, CA_A2, CA_A20 (27-09)."""
+    return [(0, int(t), "") if t.isdigit() else (1, 0, t) for t in re.findall(r"\d+|\D+", str(texto or ""))]
+
+
 def _plantilla_leer_texto(texto: str, del_centro: list, todos: list) -> Optional[dict]:
     """El texto pegado, leído con el plantel.
 
@@ -33088,7 +33094,8 @@ async def plantilla_extraer(request: Request, admin: dict = Depends(require_admi
         # Rutas + vehículos: se cruzan por el nombre del conductor.
         usados = set()
         vistos_r = set()
-        orden = [(k, rutas_map[k]) for k in sorted(rutas_map)] + [("", r) for r in rutas_sin_codigo]
+        orden = [(k, rutas_map[k]) for k in sorted(rutas_map, key=_orden_natural)] + \
+            [("", r) for r in rutas_sin_codigo]
         for ruta_key, rr in orden:
             conductor = str(rr.get("conductor") or "").strip()
             nn = _normalize_name(conductor).strip()
@@ -42315,9 +42322,12 @@ async def valor_historial(op_id: int, _: dict = Depends(require_valor)):
 
 _VALOR_REGLAS_POR_DEFECTO = lambda: {  # noqa: E731
     "prob_minima": float(os.environ.get("VALOR_PROB_MINIMA", "0.60")),
-    "cuota_minima": float(os.environ.get("VALOR_CUOTA_MINIMA", "1.70"))}
+    "cuota_minima": float(os.environ.get("VALOR_CUOTA_MINIMA", "1.70")),
+    "cuota_suelo": float(os.environ.get("VALOR_CUOTA_MINIMA_VALOR", "1.50"))}
 _VALOR_PROBS = (0.60, 0.55, 0.50)
-_VALOR_CUOTAS = (1.70, 1.60, 1.50)
+# (cuota mínima, suelo). La de siempre: desde 1,70, y de 1,50 a 1,69 solo con
+# +5 %. Las otras, «desde X y punto» (lo que pidió Dani el 27-09: desde 1,55).
+_VALOR_CUOTAS = ((1.70, 1.50), (1.60, 1.60), (1.55, 1.55), (1.50, 1.50))
 
 
 @api_router.get("/valor/reglas")
@@ -42326,7 +42336,7 @@ async def valor_reglas(_: dict = Depends(require_valor)):
     habrían salido en las últimas 24 h con cada combinación, con lo leído de
     verdad. El resto de filtros (+2 % de ventaja, datos frescos, referencia,
     desvío, escalera, topes de dinero) no se tocan desde aquí."""
-    combis = [(p, c) for p in _VALOR_PROBS for c in _VALOR_CUOTAS]
+    combis = [(p, c, su) for p in _VALOR_PROBS for c, su in _VALOR_CUOTAS]
 
     def leer(r):
         return r.reglas(), r.simula_reglas(combis, 24)
@@ -42342,7 +42352,10 @@ async def valor_pon_reglas(data: dict = Body(...), _: dict = Depends(require_val
         return {"actuales": _VALOR_REGLAS_POR_DEFECTO()}
     prob = _decimal(data.get("prob_minima"), "El acierto mínimo", minimo=0.40, maximo=0.80)
     cuota = _decimal(data.get("cuota_minima"), "La cuota mínima", minimo=1.30, maximo=3.00)
-    valor = {"prob_minima": round(prob, 4), "cuota_minima": round(cuota, 2)}
+    suelo = _decimal(data.get("cuota_suelo"), "La cuota más baja", defecto=cuota, minimo=1.30, maximo=3.00)
+    if suelo > cuota:
+        raise HTTPException(status_code=400, detail="La cuota más baja no puede pasar de la mínima")
+    valor = {"prob_minima": round(prob, 4), "cuota_minima": round(cuota, 2), "cuota_suelo": round(suelo, 2)}
     await _valor(lambda r: r.pon_ajuste("reglas", valor))
     return {"actuales": valor}
 
