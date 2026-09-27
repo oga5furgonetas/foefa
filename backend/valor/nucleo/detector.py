@@ -22,7 +22,14 @@ CONTRA LOS FALSOS POSITIVOS, que en esto son la norma y no la excepción:
   · un hándicap cuya escalera no cuadra (la casa paga MÁS por el +4,5 que por
     el +3,5, lo que es imposible) es un dato cruzado de la fuente, no un
     chollo: va a sospechosas. Pasó el 27-09-2026 con PokerStars y Codere en la
-    NFL (daban «+6 %» que no existía).
+    NFL (daban «+6 %» que no existía);
+  · si la casa da los dos lados y, quitándole su margen, ve una probabilidad a
+    más de 6 puntos de la de Pinnacle, no hablan de la misma apuesta (lados
+    cambiados, otra línea, otro periodo): sospechosa. Medido el 27-09 con 1.745
+    comparaciones reales de las casas de Dani: la mitad se separa menos de 1,1
+    puntos y 99 de cada 100 menos de 4,7; por encima de 6, con ventaja, solo las
+    dos líneas cruzadas de PokerStars en la NFL (7,3 y 7,4). El Dolphins +13,5
+    de Gamdom, bueno, se separa 3,4.
 """
 from __future__ import annotations
 
@@ -63,6 +70,7 @@ class ReglasDetector:
     margen_max_referencia: float = 0.08
     referencias_minimas: int = 1
     desacuerdo_max: float = 0.03        # diferencia de prob. entre referencias
+    desvio_max: float = 0.06            # casa (sin su margen) frente a la referencia
     stake: ReglasStake = ReglasStake()
     # Casas donde se puede apostar. None = todas. Una cuota buena en una web
     # francesa o sueca no sirve de nada desde España: sigue contando como
@@ -111,31 +119,49 @@ def _ultimas(cuotas: Iterable[Cuota]) -> Dict[Tuple, Dict[str, Dict[str, Cuota]]
 TOLERANCIA_ESCALERA = 0.01
 
 
+# Solo el hándicap. En los totales, que una línea contradiga a otra es una de
+# las tres razones de valor de Valor («INCOHERENCIA INTERNA», puntos_flacos.py)
+# y no hay ningún caso real de escalera de totales rota por un dato cruzado.
+ESCALONADOS = ("handicap",)
+
+
 def _escaleras(ultimas) -> Dict[Tuple, Dict[float, Dict[str, float]]]:
-    """{(evento, casa): {línea: {selección: cuota}}} de los hándicaps."""
+    """{(evento, casa, mercado): {línea: {selección: cuota}}} de hándicaps y totales."""
     out: Dict[Tuple, Dict[float, Dict[str, float]]] = defaultdict(dict)
     for (evento_id, mercado, linea), casas in ultimas.items():
-        if mercado != "handicap" or linea is None:
+        if mercado not in ESCALONADOS or linea is None:
             continue
         for casa, fila in casas.items():
-            out[(evento_id, casa)][linea] = {s: c.cuota for s, c in fila.items()}
+            out[(evento_id, casa, mercado)][linea] = {s: c.cuota for s, c in fila.items()}
     return out
 
 
-def escalera_rota(escalera: Dict[float, Dict[str, float]], linea: float) -> Optional[str]:
-    """La línea es la del LOCAL: con más puntos a su favor, su cuota no puede
-    SUBIR y la del visitante no puede BAJAR. Si esta línea contradice a otra
-    línea de la misma casa, en cualquiera de los dos lados, no es fiable."""
+# Con la línea más alta, cómo tiene que moverse la cuota de cada selección:
+# −1 no puede subir, +1 no puede bajar. La línea es la del LOCAL: con más
+# puntos a su favor, lo suyo es más fácil y paga menos.
+SENTIDO = {"handicap": {"local": -1, "visitante": 1}}
+
+
+def escalera_rota(escalera: Dict[float, Dict[str, float]], linea: float,
+                  mercado: str = "handicap") -> Optional[str]:
+    """Si esta línea contradice a otra línea de la misma casa, en cualquiera de
+    sus lados, no es fiable: una de las dos está mal y no se sabe cuál. Visto el
+    27-09 en OddsPapi: PokerStars pagaba 1,80 al Bears +3,5 y 1,91 al +4,5."""
+    if linea not in escalera:
+        return None
     for otra in escalera:
         if otra == linea:
             continue
         baja, alta = sorted((linea, otra))
-        for sel in ("local", "visitante"):
+        for sel, sentido in SENTIDO.get(mercado, {}).items():
             c_baja, c_alta = escalera[baja].get(sel), escalera[alta].get(sel)
             if c_baja is None or c_alta is None:
                 continue
-            if (sel == "local" and c_alta > c_baja + TOLERANCIA_ESCALERA) or                     (sel == "visitante" and c_alta + TOLERANCIA_ESCALERA < c_baja):
-                return (f"La escalera de hándicap de esta casa no cuadra: al {sel} le paga {c_baja:.2f} con "
+            sube_de_mas = sentido < 0 and c_alta > c_baja + TOLERANCIA_ESCALERA
+            baja_de_mas = sentido > 0 and c_alta + TOLERANCIA_ESCALERA < c_baja
+            if sube_de_mas or baja_de_mas:
+                cual = "de hándicap" if mercado == "handicap" else "de totales"
+                return (f"La escalera {cual} de esta casa no cuadra: a «{sel}» le paga {c_baja:.2f} con "
                         f"{baja:+g} y {c_alta:.2f} con {alta:+g}, y eso es imposible. Casi seguro es un dato "
                         f"cruzado de la fuente, no un chollo.")
     return None
@@ -230,6 +256,10 @@ def detectar(eventos: Dict[str, Evento], cuotas: Iterable[Cuota], banca: float,
                 p = min(metodo_p.values())
                 cuota_ef = _efectiva(c, reglas)
                 ev = p * cuota_ef - 1.0
+                desvio = None
+                if all(s in fila for s in sels):
+                    inv = [1.0 / fila[s].cuota for s in sels]
+                    desvio = abs(inv[i] / sum(inv) - p)
 
                 def nueva(c=c, p=p, ev=ev, metodo_p=metodo_p, sel=sel, casa=casa, edad=edad):
                     return Oportunidad(
@@ -244,6 +274,16 @@ def detectar(eventos: Dict[str, Evento], cuotas: Iterable[Cuota], banca: float,
                                and _edad(f[sel].ts, ahora) <= reglas.edad_max_casa},
                         fuente=c.fuente, edad_max=min(reglas.edad_max_casa, reglas.edad_max_referencia))
 
+                if desvio is not None and desvio > reglas.desvio_max:
+                    descartes["la casa y la referencia no hablan de la misma apuesta"] += 1
+                    if ev > 0:
+                        o_sosp = nueva()
+                        o_sosp.avisos.append(
+                            f"{casa} ve esta selección con un {inv[i] / sum(inv):.0%} de probabilidad y la "
+                            f"referencia con un {p:.0%}: tanta diferencia no es una casa lenta, es otro "
+                            f"mercado con el mismo nombre (lados cambiados, otra línea u otro periodo).")
+                        sospechosas.append(o_sosp)
+                    continue
                 # Mismo orden de reglas que siempre; lo que se queda fuera por
                 # POCO (con ventaja positiva) se guarda aparte, con el porqué.
                 no = None
@@ -264,7 +304,8 @@ def detectar(eventos: Dict[str, Evento], cuotas: Iterable[Cuota], banca: float,
                           f"por debajo de {reglas.cuota_minima:.2f} pides {reglas.ev_excepcion:+.0%}.")
                 if no is not None:
                     if 0 < ev <= reglas.ev_sospechoso and not (
-                            mercado == "handicap" and escalera_rota(escaleras.get((evento_id, casa), {}), linea)):
+                            mercado in ESCALONADOS
+                            and escalera_rota(escaleras.get((evento_id, casa, mercado), {}), linea, mercado)):
                         o_casi = nueva()
                         o_casi.avisos.append(no)
                         casi.append(o_casi)
@@ -288,11 +329,12 @@ def detectar(eventos: Dict[str, Evento], cuotas: Iterable[Cuota], banca: float,
                         "a mano antes de nada.")
                     sospechosas.append(op)
                     continue
-                if mercado == "handicap":
-                    rota = escalera_rota(escaleras.get((evento_id, casa), {}), linea)
+                if mercado in ESCALONADOS:
+                    rota = escalera_rota(escaleras.get((evento_id, casa, mercado), {}), linea, mercado)
                     if rota:
                         op.avisos.append(rota)
-                        descartes["hándicap con la escalera rota"] += 1
+                        descartes["hándicap con la escalera rota" if mercado == "handicap"
+                                  else "totales con la escalera rota"] += 1
                         sospechosas.append(op)
                         continue
                 if ev_obj.en_vivo:

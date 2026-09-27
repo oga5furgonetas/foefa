@@ -460,12 +460,19 @@ class Registro:
             "SELECT o.*, e.local, e.visitante, e.liga, e.deporte, e.inicio FROM oportunidades o "
             "JOIN eventos e ON e.id=o.evento_id WHERE o.sospechosa=2 AND o.detectada>=? AND e.inicio>? "
             "ORDER BY o.id DESC", (_iso(ahora - timedelta(hours=horas)), _iso(ahora))).fetchall()
+        # Solo lo de la ÚLTIMA lectura de cada fuente: cada lectura sustituye a la
+        # anterior (lo que ya no sale, o sale ahora como sospechoso, se va solo).
+        ultima: Dict[str, str] = {}
+        if self.db.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name='uso'").fetchone():
+            ultima = {x[0]: x[1] for x in self.db.execute("SELECT fuente, MAX(ts) FROM uso GROUP BY fuente")}
         vistas, out = set(), []
         for f in filas:
             clave = (f["evento_id"], f["mercado"], f["linea"], f["seleccion"], f["casa"])
             if clave in vistas:
                 continue
             vistas.add(clave)
+            if f["fuente"] in ultima and f["detectada"] < ultima[f["fuente"]]:
+                continue
             out.append(dict(f, motivos=json.loads(f["motivos"]), avisos=json.loads(f["avisos"]),
                             detalle=json.loads(f["detalle"] or "{}")))
         out.sort(key=lambda x: -x["ev"])

@@ -263,6 +263,14 @@ Dani no se creía el 0. Estudio con datos reales (scratchpad de la sesión):
 - Gotcha: esas 6 lecturas de la mañana gastaron el tope DIARIO de OddsPapi
   (8), así que ni «Buscar ahora» leía sus casas hasta el día siguiente. Ahora
   «Buscar ahora» se salta el tope del día (no el del mes ni lo que diga la API).
+- Filtro de desvío (`desvio_max`, 6 puntos): si la casa da los dos lados y,
+  sin su margen, ve la selección a más de 6 puntos de Pinnacle, es otro mercado
+  con el mismo número (lados cambiados): sospechosa, ni apuesta ni «casi».
+  Medido con 1.745 comparaciones reales de sus casas: mediana 1,1, p99 4,7;
+  por encima de 6 con ventaja solo las líneas cruzadas de PokerStars (7,3-7,4).
+  OJO al medir: un script que no compruebe el deporte de cada mercado mezcla
+  mercados de otros deportes y da desvíos falsos de 10-34 puntos (me pasó).
+- «Lo más cerca» enseña solo lo de la última lectura de cada fuente.
 - Gotcha: para elegir torneos NO fiarse del nombre de la liga en `eventos`:
   API-Football guarda «Premier League» o «Ligue 1» de Egipto o Argelia con el
   mismo nombre. Si el calendario conoce el torneo, manda el calendario.

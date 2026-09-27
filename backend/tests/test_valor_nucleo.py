@@ -195,8 +195,9 @@ def test_escalera_de_handicap_rota_va_a_sospechosas():
          Cuota("nfl", "pinnacle", "handicap", 3.5, "local", 1.862, t), Cuota("nfl", "pinnacle", "handicap", 3.5, "visitante", 2.05, t),
          Cuota("nfl", "pokerstars.es", "handicap", 3.5, "local", 1.80, t),
          Cuota("nfl", "pokerstars.es", "handicap", 3.5, "visitante", 1.91, t),
-         Cuota("nfl", "pokerstars.es", "handicap", 4.5, "local", 1.91, t),
-         Cuota("nfl", "pokerstars.es", "handicap", 4.5, "visitante", 1.80, t)]
+         Cuota("nfl", "pokerstars.es", "handicap", 4.5, "local", 1.91, t)]
+    # (Sin el otro lado del +4,5: si lo tuviera, lo pararía antes el desvío frente
+    # a Pinnacle; aquí se prueba la escalera sola.)
     r = detectar({"nfl": ev}, c, 1000, ahora, replace(PREPARTIDO, prob_minima=0.0))
     assert r.oportunidades == []
     (s,) = r.sospechosas
@@ -207,3 +208,28 @@ def test_escalera_de_handicap_rota_va_a_sospechosas():
     assert escalera_rota(gamdom, 13.5) is None
     # Y la del visitante al revés: con más línea del local, la suya no puede bajar.
     assert escalera_rota({2.5: {"visitante": 1.85}, 3.5: {"visitante": 1.70}}, 3.5)
+
+
+
+def test_casa_que_no_habla_de_la_misma_apuesta_va_a_sospechosas():
+    """Números REALES del 27-09. PokerStars, Bears +4,5: 1,91 / 1,80 (sin margen,
+    49 %) contra Pinnacle 1,74 / 2,20 (56 %): 7 puntos, dato cruzado aunque su
+    «+6,6 %» no pase del 20 %. Gamdom, Dolphins +13,5: 1,70 / 2,22 (57 %) contra
+    Pinnacle 1,602 / 2,41 (60 %): 3,5 puntos, apuesta buena."""
+    from dataclasses import replace
+    ahora = datetime(2026, 9, 27, 12, 0, tzinfo=timezone.utc)
+    t = ahora - timedelta(seconds=20)
+    ev1 = Evento("b", "americanfootball", "NFL", "Chicago Bears", "Philadelphia Eagles", ahora + timedelta(hours=5))
+    ev2 = Evento("d", "americanfootball", "NFL", "Miami Dolphins", "Kansas City Chiefs", ahora + timedelta(hours=5))
+    c = [Cuota("b", "pinnacle", "handicap", 4.5, "local", 1.74, t), Cuota("b", "pinnacle", "handicap", 4.5, "visitante", 2.20, t),
+         Cuota("b", "pokerstars.es", "handicap", 4.5, "local", 1.91, t),
+         Cuota("b", "pokerstars.es", "handicap", 4.5, "visitante", 1.80, t),
+         Cuota("d", "pinnacle", "handicap", 13.5, "local", 1.602, t), Cuota("d", "pinnacle", "handicap", 13.5, "visitante", 2.41, t),
+         Cuota("d", "gamdom", "handicap", 13.5, "local", 1.70, t), Cuota("d", "gamdom", "handicap", 13.5, "visitante", 2.22, t)]
+    reglas = replace(PREPARTIDO, prob_minima=0.0)
+    r = detectar({"b": ev1, "d": ev2}, c, 1000, ahora, reglas)
+    assert [(o.casa, o.linea) for o in r.oportunidades] == [("gamdom", 13.5)]
+    (s,) = r.sospechosas
+    assert (s.casa, s.linea, s.seleccion) == ("pokerstars.es", 4.5, "local") and "otro mercado" in s.avisos[-1]
+    assert r.casi == [] and r.descartes["la casa y la referencia no hablan de la misma apuesta"] == 2
+

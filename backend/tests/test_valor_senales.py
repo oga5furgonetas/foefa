@@ -202,12 +202,12 @@ def test_lo_que_se_queda_cerca_se_guarda_aparte_y_no_se_recomienda(tmp_path):
     cuotas = [Cuota("e9", "pinnacle", "handicap", -14.5, "local", 2.30, t, "oddspapi"),
               Cuota("e9", "pinnacle", "handicap", -14.5, "visitante", 1.64, t, "oddspapi"),
               Cuota("e9", "gamdom", "handicap", -14.5, "visitante", 1.75, t, "oddspapi"),
-              Cuota("e9", "gamdom", "handicap", -14.5, "local", 1.90, t, "oddspapi")]
+              Cuota("e9", "gamdom", "handicap", -14.5, "local", 2.05, t, "oddspapi")]
     reg.guarda_lectura([ev], cuotas)
     reglas = replace(PREPARTIDO, prob_minima=0.60, cuota_minima=1.70, apostables=("gamdom",))
     r = detectar({"e9": ev}, cuotas, 1000, AHORA, reglas)
     assert r.oportunidades == [] and r.sospechosas == []
-    (c,) = r.casi                                   # el local a 1,90 no tiene ventaja: no sale
+    (c,) = r.casi                                   # el local a 2,05 no tiene ventaja: no sale
     assert (c.casa, c.seleccion, c.cuota) == ("gamdom", "visitante", 1.75) and c.ev > 0
     assert c.avisos[0].startswith("Sale el 5") and "mínimo es el 60" in c.avisos[0]
     reg.guarda_oportunidades(r.casi, casi=True)
@@ -227,3 +227,21 @@ def test_sin_ventaja_o_con_la_escalera_rota_no_es_casi(tmp_path):
     r = detectar({"e8": ev}, c, 1000, AHORA, replace(PREPARTIDO, prob_minima=0.60))
     # El +4,5 a 1,91 sale el 56 % y tendría «+6,6 %», pero su escalera no cuadra.
     assert r.casi == [] and r.oportunidades == []
+
+
+
+def test_lo_mas_cerca_es_solo_lo_de_la_ultima_lectura(tmp_path):
+    """Cada lectura sustituye a la anterior: lo que ya no sale (o sale ahora
+    como sospechoso) no se queda horas en pantalla."""
+    reg = Registro(str(tmp_path / "v.db"))
+    reg.db.execute("CREATE TABLE IF NOT EXISTS uso (fuente TEXT, ts TEXT, coste INTEGER, error TEXT)")
+    reg.guarda_lectura([EV1], [])
+    _, op = _senal(reg)
+    op.fuente = "oddspapi"
+    reg.db.execute("INSERT INTO uso VALUES ('oddspapi', ?, 2, NULL)", ((AHORA - timedelta(minutes=5)).isoformat(),))
+    reg.guarda_oportunidades([op], casi=True)
+    assert len(reg.casi_recientes()) == 1
+    # Una lectura nueva de esa fuente, en la que ya no sale:
+    reg.db.execute("INSERT INTO uso VALUES ('oddspapi', ?, 2, NULL)",
+                   ((datetime.now(timezone.utc) + timedelta(seconds=5)).isoformat(),))
+    assert reg.casi_recientes() == []
