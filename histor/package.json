@@ -1,0 +1,34 @@
+{
+  "name": "histor",
+  "private": true,
+  "version": "0.1.0",
+  "description": "Histor — periódico digital global, multidioma y verificado por diseño",
+  "workspaces": [
+    "packages/*",
+    "apps/*"
+  ],
+  "engines": {
+    "node": ">=20.18"
+  },
+  "scripts": {
+    "dev": "npm run dev -w @histor/web",
+    "build": "npm run build -w @histor/web && npm run build -w @histor/worker",
+    "start": "npm run start -w @histor/web",
+    "worker": "npm run start -w @histor/worker",
+    "typecheck": "npm run typecheck --workspaces --if-present",
+    "lint": "npm run lint --workspaces --if-present",
+    "test": "npm run test -w @histor/core && npm run test -w @histor/web && npm run test -w @histor/worker",
+    "test:unit": "npm run test:unit -w @histor/core",
+    "test:e2e": "npm run e2e -w @histor/web",
+    "db:generate": "npm run db:generate -w @histor/core",
+    "db:migrate": "npm run db:migrate -w @histor/core",
+    "db:seed": "npm run cli -w @histor/worker -- seed",
+    "demo:seed": "npm run cli -w @histor/worker -- demo:seed",
+    "demo:purge": "npm run cli -w @histor/worker -- demo:purge",
+    "sources:check": "npm run cli -w @histor/worker -- sources:check",
+    "check:secrets": "node scripts/check-secrets.mjs"
+  },
+  "devDependencies": {
+    "drizzle-orm": "^0.45.3"
+  }
+}

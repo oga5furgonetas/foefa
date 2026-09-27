@@ -1,0 +1,10 @@
+import { closeDb, getDb } from '../src/db/client';
+import { runMigrations } from '../src/db/migrate';
+import { seedReference } from '../src/db/seed';
+import { sql } from 'drizzle-orm';
+import { seedDemo } from '../src/demo/seed';
+const db = getDb();
+await db.execute(sql`DROP SCHEMA IF EXISTS public CASCADE`); await db.execute(sql`DROP SCHEMA IF EXISTS drizzle CASCADE`); await db.execute(sql`CREATE SCHEMA public`);
+await runMigrations(); await seedReference(db);
+console.log(await seedDemo(db, { now: new Date('2026-09-27T12:00:00Z'), phase: 1 }));
+await closeDb();

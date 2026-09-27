@@ -1,0 +1,25 @@
+{
+  "name": "@histor/worker",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "tsx watch src/index.ts",
+    "start": "node dist/index.js",
+    "build": "esbuild src/index.ts src/cli.ts --bundle --platform=node --target=node20 --format=esm --outdir=dist --packages=external --sourcemap",
+    "cli": "tsx src/cli.ts",
+    "fixtures": "tsx src/fixtures/server.ts",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@histor/core": "0.1.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.15.0",
+    "esbuild": "^0.25.9",
+    "tsx": "^4.20.3",
+    "typescript": "^5.9.2",
+    "vitest": "^3.2.4"
+  }
+}
