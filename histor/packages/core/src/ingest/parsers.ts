@@ -46,8 +46,23 @@ function text(v: unknown): string {
   return '';
 }
 
+/**
+ * Titular sin la etiqueta de directo del medio («Live:», «En directo:», «Liveticker:»…):
+ * es formato de su web, no parte del hecho, y estorba para agrupar y redactar.
+ */
+function cleanTitle(s: string): string {
+  return clean(s).replace(LIVE_PREFIX, '').trim();
+}
+
+const LIVE_PREFIX = /^(live(?:blog|ticker| updates?)?|en directo|en vivo|directo|en direct|direct|live-ticker|ticker|diretta|in diretta|ao vivo|minuto a minuto)\s*[:|–—-]\s*/i;
+
 function clean(s: string): string {
-  return decodeEntities(htmlToText(s)).replace(/\s+/g, ' ').trim();
+  // Cada párrafo acaba en frase: «…governments</p><p>Two giant…» no puede quedar «governments Two giant».
+  const lines = decodeEntities(htmlToText(s))
+    .split(/\n+/)
+    .map((l) => l.replace(/\s+/g, ' ').trim())
+    .filter(Boolean);
+  return lines.map((l, i) => (i < lines.length - 1 && !/[.!?…:;»"”)]$/.test(l) ? `${l}.` : l)).join(' ');
 }
 
 export function detectFormat(body: string, contentType: string | null): 'rss' | 'atom' | 'rdf' | 'jsonfeed' | 'geojson' | 'sitemap' | 'html' | 'unknown' {
@@ -94,7 +109,7 @@ export function parseRss(body: string): ParsedItem[] {
   return items
     .map((it): ParsedItem | null => {
       const link = text(it.link) || text(it.guid);
-      const title = clean(text(it.title));
+      const title = cleanTitle(text(it.title));
       if (!link || !title) return null;
       const content = text(it['content:encoded']);
       const desc = text(it.description);
@@ -125,7 +140,7 @@ export function parseAtom(body: string, baseUrl?: string): ParsedItem[] {
       const alt = links.find((l) => !l['@_rel'] || l['@_rel'] === 'alternate') ?? links[0];
       let href = alt?.['@_href'] ?? '';
       if (href && baseUrl && !/^https?:/.test(href)) href = new URL(href, baseUrl).toString();
-      const title = clean(text(e.title));
+      const title = cleanTitle(text(e.title));
       if (!href || !title) return null;
       const content = text(e.content);
       return {
@@ -149,7 +164,7 @@ export function parseJsonFeed(body: string): ParsedItem[] {
   return (doc.items ?? [])
     .map((it): ParsedItem | null => {
       const url = it.url ?? it.external_url;
-      const title = it.title ? clean(String(it.title)) : '';
+      const title = it.title ? cleanTitle(String(it.title)) : '';
       if (!url || !title) return null;
       const content = it.content_text ?? (it.content_html ? htmlToText(it.content_html) : '');
       return {
@@ -255,7 +270,7 @@ export function parseHtmlMeta(html: string, url: string): ParsedItem | null {
   return {
     guid: url,
     url: meta('og:url') || url,
-    title: clean(title),
+    title: cleanTitle(title),
     summary: desc ? truncate(clean(desc), 600) : null,
     contentText: null,
     author: typeof ld?.author === 'object' ? (ld.author.name ?? null) : (meta('author') || null),

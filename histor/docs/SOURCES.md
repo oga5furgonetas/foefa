@@ -43,15 +43,15 @@ y nunca republica artículos. El texto de las fuentes se borra a los 30 días.
 | The Guardian | Medio | GB | en | rss | activa |
 | NPR | Medio | US | en | rss | activa |
 | DW | Medio | DE | en | rss | activa |
-| DW (Deutsch) | Medio | DE | de | rss | activa |
-| DW (Español) | Medio | DE | es | rss | activa |
+| DW (alemán) | Medio | DE | de | rss | activa |
+| DW (español) | Medio | DE | es | rss | activa |
 | DW Brasil | Medio | DE | pt | rss | activa |
 | tagesschau | Medio | DE | de | rss | activa |
 | ZDFheute | Medio | DE | de | rss | activa |
 | DER SPIEGEL | Medio | DE | de | rss | activa |
 | France 24 | Medio | FR | fr | rss | activa |
-| France 24 (English) | Medio | FR | en | rss | activa |
-| France 24 (Español) | Medio | FR | es | rss | activa |
+| France 24 (inglés) | Medio | FR | en | rss | activa |
+| France 24 (español) | Medio | FR | es | rss | activa |
 | RFI | Medio | FR | fr | rss | activa |
 | franceinfo | Medio | FR | fr | rss | activa |
 | Le Monde | Medio | FR | fr | rss | activa |

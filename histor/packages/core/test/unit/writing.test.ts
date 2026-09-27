@@ -10,6 +10,8 @@ import type { ArticleBlock } from '../../src/db/schema';
 import { claimRef, writeDeterministic } from '../../src/writing/deterministic';
 import type { Draft } from '../../src/writing/draft';
 import { buildFactSheet } from '../../src/writing/factsheet';
+import { parseRss } from '../../src/ingest/parsers';
+import { compressClaim } from '../../src/writing/compress';
 import { longestCommonRun, runQualityChecks } from '../../src/writing/quality';
 import { validateDraft } from '../../src/writing/validate';
 import { item, NOW, run, source } from './helpers';
@@ -185,5 +187,42 @@ describe('plantilla de terremotos (dato estructurado de una fuente oficial)', ()
     expect(lead('it')).toMatch(/^USGS ha registrato il \d+ settembre/);
     expect(lead('pt')).toMatch(/^USGS registrou em \d+ de setembro/);
     for (const l of ['es', 'en', 'de', 'fr', 'it', 'pt']) expect(lead(l)).not.toMatch(/\b(a las|at|um|à|alle|às) \d+ (de )?[a-zé]+/i);
+  });
+});
+
+describe('fuentes reales: frases cortadas o pegadas (visto el 27-09-2026 con The Guardian)', () => {
+  it('una subordinada inicial no se publica sola: se queda la oración principal', () => {
+    const s = 'While in Washington DC for a three-day summit with Donald Trump, Chinese president Xi Jinping announced that the pandas would arrive in Atlanta in the coming days';
+    const out = compressClaim(s, 22)!;
+    expect(out).toBe('Chinese president Xi Jinping announced that the pandas would arrive in Atlanta in the coming days');
+    expect(compressClaim('Mientras se celebraba la cumbre de tres días en Washington con el presidente, el líder chino anunció que los osos panda llegarían a Atlanta en pocos días', 22)).toBe('El líder chino anunció que los osos panda llegarían a Atlanta en pocos días');
+    // Si la principal tampoco cabe, la afirmación no se usa: nunca se publica la subordinada sola.
+    expect(compressClaim('Mientras se celebraba la cumbre de tres días en Washington con el presidente, el líder chino anunció que los osos panda llegarían a Atlanta en los próximos días tras un largo viaje en avión de carga', 22)).toBeNull();
+  });
+
+  it('los enlaces no meten espacios ni los párrafos se pegan', () => {
+    const html = '<p>Pandas departed Chengdu as part of agreement between Chinese and US governments</p><p>Two giant pandas departed <a href="https://x.test/china">China</a> for <a href="https://x.test/atlanta">Atlanta</a>, Georgia. While in Washington DC for a <a href="https://x.test/1">three</a>-<a href="https://x.test/2">day</a> summit.</p>';
+    const rss = `<?xml version="1.0"?><rss version="2.0"><channel><item><title>Pandas</title><link>https://x.test/p</link><description><![CDATA[${html}]]></description></item></channel></rss>`;
+    const [it] = parseRss(rss);
+    expect(it.summary).toContain('US governments. Two giant pandas');
+    expect(it.summary).toContain('Atlanta, Georgia');
+    expect(it.summary).toContain('three-day summit');
+  });
+});
+
+describe('titulares reales mal cortados o con etiquetas (27-09-2026)', () => {
+  it('no corta dejando la frase colgando («…, warnen aber davor»)', () => {
+    const t = 'Wirtschaftsforscher sehen Aufschwung in Deutschland, warnen aber davor, die Zahlen als Beginn eines neuen Wirtschaftsbooms zu verstehen';
+    const out = compressClaim(t, 16);
+    expect(out ?? '').not.toMatch(/davor$/);
+  });
+
+  it('quita la etiqueta de directo del titular del medio', () => {
+    const rss = (title: string) => `<?xml version="1.0"?><rss version="2.0"><channel><item><title>${title}</title><link>https://x.test/a</link></item></channel></rss>`;
+    expect(parseRss(rss('Live: Pope Leo XIV urges Church to face failings'))[0].title).toBe('Pope Leo XIV urges Church to face failings');
+    expect(parseRss(rss('En directo: León XIV insta a la Iglesia a reconocer sus errores'))[0].title).toBe('León XIV insta a la Iglesia a reconocer sus errores');
+    expect(parseRss(rss('Liveticker: Bundestag stimmt ab'))[0].title).toBe('Bundestag stimmt ab');
+    // «Live» como palabra del titular no se toca.
+    expect(parseRss(rss('Live Aid veterans reunite in London'))[0].title).toBe('Live Aid veterans reunite in London');
   });
 });

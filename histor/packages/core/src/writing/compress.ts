@@ -25,19 +25,40 @@ export function compressClaim(text: string, maxWords = 22): string | null {
     if (m && m.index != null) {
       const head = s.slice(0, m.index).trim();
       const n = words(head).length;
-      if (n >= 8 && n <= maxWords) return clean(head);
+      if (n >= 8 && n <= maxWords && !DANGLING.test(head)) return clean(head);
     }
+  }
+  // Empieza por una subordinada («While in Washington…, Xi announced…»): lo que va delante
+  // de la coma no tiene verbo principal; se queda la oración principal, si cabe.
+  const intro = INTRO.test(s);
+  if (intro) {
+    const comma = s.indexOf(', ');
+    const main = comma > 0 ? s.slice(comma + 2).trim() : '';
+    const n = words(main).length;
+    if (n >= 8 && n <= maxWords) return clean(main);
   }
   // Última coma antes del límite, si deja una oración con sentido (≥ 8 palabras).
   const ws = s.split(' ');
   for (let i = Math.min(ws.length, maxWords) - 1; i >= 8; i--) {
     if (/,$/.test(ws[i - 1]) || /,$/.test(ws[i])) {
       const head = ws.slice(0, i).join(' ').replace(/,$/, '');
+      // Con subordinada inicial, quedarse solo con ella deja una idea a medias.
+      if (intro && !head.includes(', ')) continue;
+      // Tampoco si termina en una palabra que pide complemento: «…, warnen aber davor».
+      if (DANGLING.test(head)) continue;
       if (words(head).length >= 8) return clean(head);
     }
   }
   return null;
 }
+
+/** Final que deja la frase colgando (preposición, conjunción o adverbio que anuncia lo que sigue). */
+const DANGLING =
+  /(?:^|\s)(davor|darauf|dafür|dazu|daran|damit|darüber|davon|dagegen|dass|zu|um|und|aber|oder|that|to|of|for|with|from|and|but|or|than|que|de|a|para|con|y|pero|o|sin|à|pour|et|mais|avec|che|di|per|e|ma|con|mas|com|em|ao)$/i;
+
+/** Subordinada o complemento inicial que no se sostiene sola hasta la primera coma. */
+const INTRO =
+  /^(while|when|after|before|although|though|as|because|if|since|despite|during|following|once|unless|until|mientras|cuando|tras|después de|antes de|aunque|si|durante|pese a|a pesar de|ya que|porque|während|als|nachdem|bevor|obwohl|wenn|weil|seit|trotz|pendant|lorsque|quand|après|avant|bien que|malgré|comme|puisque|mentre|quando|dopo|prima di|sebbene|benché|se|nonostante|poiché|enquanto|após|embora|apesar de)\b/i;
 
 function clean(s: string): string {
   const out = s.replace(/[,;:\s]+$/, '').trim();

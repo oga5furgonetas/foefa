@@ -50,6 +50,8 @@ export function htmlToText(html: string): string {
       .replace(/<style[\s\S]*?<\/style>/gi, ' ')
       .replace(/<br\s*\/?>/gi, '\n')
       .replace(/<\/(p|div|li|h[1-6]|blockquote)>/gi, '\n')
+      // Etiquetas de línea (enlaces, énfasis…) sin espacio: «<a>three</a>-<a>day</a>» es «three-day», no «three - day».
+      .replace(/<\/?(a|abbr|b|bdi|bdo|cite|code|data|dfn|em|font|i|kbd|mark|q|s|samp|small|span|strong|sub|sup|time|u|var)\b[^>]*>/gi, '')
       .replace(/<[^>]+>/g, ' '),
   )
     .replace(/[ \t\f\v ]+/g, ' ')
