@@ -20,7 +20,7 @@ import { logger, reportError } from '@histor/core/observability/index';
 import { maintenance, runPipelineOnce, type TickStats } from '@histor/core/pipeline/run';
 import { publishQueuedPosts, queueSocialPosts } from '@histor/core/social/index';
 
-const PIPELINE_LOCK = 724_001; // clave del candado consultivo de Postgres
+export const PIPELINE_LOCK = 724_001; // clave del candado consultivo de Postgres
 const workerId = `${os.hostname()}:${process.pid}`;
 const intervalSec = Math.max(15, Number(process.env.PIPELINE_INTERVAL_SEC) || 60);
 const db = getDb();
@@ -68,7 +68,7 @@ export async function pipelineTick(): Promise<TickStats | null> {
   });
 }
 
-const handlers = {
+export const handlers = {
   'distribute:story': async (p: Record<string, unknown>) => {
     const storyId = Number(p.storyId);
     const social = await queueSocialPosts(db, storyId);
