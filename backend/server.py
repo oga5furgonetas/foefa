@@ -319,6 +319,10 @@ logging.basicConfig(
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
 )
 logger = logging.getLogger(__name__)
+# httpx apunta en INFO cada petición con la URL ENTERA. Hay APIs que llevan la
+# clave en la URL (The Odds API, OddsPapi: ?apiKey=…; Telegram: /bot<token>/):
+# en INFO acabarían escritas en los logs de Fly. Sus fallos sí se ven (WARNING).
+logging.getLogger("httpx").setLevel(logging.WARNING)
 
 # =========================
 # MODELS
@@ -42268,24 +42272,69 @@ def _valor_finito(x):
 
 @api_router.get("/valor/estado")
 async def valor_estado(_: dict = Depends(require_valor)):
-    """Si el escáner está leyendo, de dónde, y las reglas con las que filtra."""
-    hoy = await _valor(lambda r: r.resultado_de_hoy())
+    """Si el escáner está leyendo, de dónde, las reglas con las que filtra, lo
+    que hay en juego (exposición) y lo que ha gastado y dado cada fuente."""
     banca = _valor_banca()
+
+    def leer(r):
+        return r.resultado_de_hoy(), r.exposicion(banca), r.uso_por_fuente(30)
+    hoy, expo, uso = await _valor(leer)
     freno = float(os.environ.get("VALOR_FRENO_DIA", "0.06")) * banca
     # Qué claves de fuentes hay puestas: sí o no, nunca el valor.
     claves = {"the_odds_api": bool(os.environ.get("ODDS_API_KEY", "").strip()),
+              "oddspapi": bool(os.environ.get("ODDSPAPI_KEY", "").strip()),
               "api_football": bool(os.environ.get("APISPORTS_KEY", "").strip())}
     return {**_VALOR_ESTADO, "claves": claves, "banca": banca, "resultado_hoy": round(hoy, 2),
             "freno_dia": round(freno, 2), "frenado": -hoy >= freno > 0,
+            "freno_usado": round(max(0.0, -hoy) / freno, 4) if freno > 0 else None,
+            "exposicion": expo, "uso": uso,
             "cuota_minima": float(os.environ.get("VALOR_CUOTA_MINIMA", "1.70")),
             "prob_minima": float(os.environ.get("VALOR_PROB_MINIMA", "0.60"))}
 
 
 @api_router.get("/valor/oportunidades")
 async def valor_oportunidades(vivo: bool = False, _: dict = Depends(require_valor)):
-    # En vivo solo vale lo visto en el último minuto; en prepartido, 20.
-    items = await _valor(lambda r: r.vigentes(vivo, 1 if vivo else 20))
-    return {"banca": _valor_banca(), "items": items}
+    """Las señales de la última hora (en vivo, del último minuto), cada una
+    con su estado: VÁLIDA, CADUCADA o CAMBIADA. Las que ya no valen siguen a
+    la vista, marcadas, en vez de desaparecer sin más."""
+    banca = _valor_banca()
+    items = await _valor(lambda r: r.vigentes(vivo, 1 if vivo else 60, banca=banca))
+    return {"banca": banca, "ahora": datetime.now(timezone.utc).isoformat(), "items": items}
+
+
+@api_router.get("/valor/oportunidades/{op_id}/historial")
+async def valor_historial(op_id: int, _: dict = Depends(require_valor)):
+    """Las cuotas LEÍDAS de esa selección (su casa y las referencias). Nada inventado."""
+    h = await _valor(lambda r: r.historial_senal(op_id))
+    if h is None:
+        raise HTTPException(status_code=404, detail="Esa señal no existe")
+    return h
+
+
+@api_router.get("/valor/casas")
+async def valor_casas(_: dict = Depends(require_valor)):
+    """Dónde apuestas y qué casas ha visto el buscador esta semana."""
+    from valor.registro import CASAS_DANI, CASAS_ESPANA
+
+    def leer(r):
+        return {"apostables": r.casas_apostables(), "vistas": r.casas_vistas(7),
+                "sugeridas": sorted(set(CASAS_ESPANA) | set(CASAS_DANI)),
+                "elegidas": r.ajuste("casas_apostables", None) is not None}
+    return await _valor(leer)
+
+
+@api_router.post("/valor/casas")
+async def valor_pon_casas(data: dict = Body(...), _: dict = Depends(require_valor)):
+    """Las casas donde se te pueden recomendar apuestas. «*» = todas."""
+    bruto = data.get("casas")
+    if bruto == "*":
+        valor = "*"
+    else:
+        valor = sorted({_texto_cuerpo(x, 40).lower() for x in _lista_cuerpo(bruto, 60) if _texto_cuerpo(x, 40)})
+        if not valor:
+            raise HTTPException(status_code=400, detail="Elige al menos una casa (o todas)")
+    await _valor(lambda r: r.pon_ajuste("casas_apostables", valor))
+    return {"apostables": None if valor == "*" else valor}
 
 
 @api_router.get("/valor/seguras")
@@ -42309,15 +42358,25 @@ async def valor_apostar(data: dict = Body(...), _: dict = Depends(require_valor)
              else _decimal(data.get("cuota"), "La cuota", minimo=1.01, maximo=1000))
     importe = (None if data.get("importe") in (None, "")
                else _decimal(data.get("importe"), "El importe", minimo=0.01, maximo=1_000_000))
+    limitada = data.get("limitada") is True
+    aun_caducada = data.get("aun_caducada") is True
+    from valor.registro import SenalCaducada
 
     def apuntar(r):
         try:
-            return r.apuesta_desde_oportunidad(op_id, cuota, importe)
+            return r.apuesta_desde_oportunidad(op_id, cuota, importe, limitada=limitada,
+                                               aun_caducada=aun_caducada)
         except KeyError:
             return None
+        except SenalCaducada as e:
+            return e
     nuevo = await _valor(apuntar)
     if nuevo is None:
         raise HTTPException(status_code=404, detail="Esa apuesta ya no está")
+    if isinstance(nuevo, SenalCaducada):
+        # 409: la señal existe pero ya no vale. Se puede apuntar igualmente
+        # confirmándolo (aun_caducada), y queda marcada como fuera de plazo.
+        raise HTTPException(status_code=409, detail=str(nuevo) or "Esa señal ya no vale")
     return {"id": nuevo}
 
 
@@ -42359,8 +42418,9 @@ async def valor_aprendizaje(_: dict = Depends(require_valor)):
             d = s.dict()
             d["clv_medio"], d["margen"] = _valor_finito(d["clv_medio"]), _valor_finito(d["margen"])
             segs.append(d)
-        return segs
-    return {"minimo": _aprende.MINIMO, "segmentos": await _valor(leer)}
+        return segs, _aprende.resumen(r), _aprende.limitaciones(r)
+    segs, resumen, limites = await _valor(leer)
+    return {"minimo": _aprende.MINIMO, "segmentos": segs, "resumen": resumen, "limitaciones": limites}
 
 
 def _valor_aviso():

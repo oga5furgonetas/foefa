@@ -131,11 +131,22 @@ test.describe('Páginas públicas', () => {
    de escritorio ni en el del móvil) y, si escribe la dirección, se le echa.
    El servidor además contesta 403: eso lo prueba backend/tests/test_valor_acceso.py. */
 test.describe('Valor, solo super-admin', () => {
+  const hace = (min) => new Date(Date.now() - min * 60000).toISOString()
   const OPORTUNIDAD = {
-    id: 7, evento_id: 'e1', mercado: '1x2', linea: null, seleccion: 'local', casa: 'bet365',
-    cuota: 2.3, prob_justa: 0.46, ev: 0.058, importe: 40, en_vivo: 0, fallo: 'casa lenta',
+    id: 7, evento_id: 'e1', mercado: '1x2', linea: null, seleccion: 'local', casa: 'gamdom',
+    cuota: 2.3, prob_justa: 0.46, ev: 0.058, importe: 40, importe_max: 40, ya_apostado: 0, en_vivo: 0,
+    fallo: 'casa lenta', fuente: 'oddspapi',
     motivos: ['CASA LENTA: pinnacle ha bajado esta cuota de 2.30 a 2.10 en 25 min.'], avisos: [],
     local: 'Betis', visitante: 'Sevilla', liga: 'LaLiga', inicio: '2030-01-01T19:00:00+00:00',
+    estado: 'valida', motivo: '', detectada: hace(2), ts_cuota: hace(2), ts_referencia: hace(2),
+    valida_hasta: new Date(Date.now() + 8 * 60000).toISOString(),
+    detalle: { referencias: { pinnacle: 2.1 }, otras: { 'codere.es': 2.05 },
+               por_metodo: { proporcional: 0.47, shin: 0.46 } },
+  }
+  const CADUCADA = {
+    ...OPORTUNIDAD, id: 8, casa: 'codere.es', local: 'Getafe', visitante: 'Osasuna', estado: 'caducada',
+    motivo: 'Sus cuotas tienen más de 10 min: ya no se sabe si siguen ahí.', ts_cuota: hace(30),
+    valida_hasta: hace(20),
   }
 
   test('quien no es super-admin no la ve y la ruta le echa', async ({ page }) => {
@@ -158,7 +169,7 @@ test.describe('Valor, solo super-admin', () => {
     await simularApi(page, 'vacio')
     await page.route('**/api/valor/oportunidades**', (route) => route.fulfill({
       status: 200, contentType: 'application/json',
-      body: JSON.stringify({ banca: 1000, items: new URL(route.request().url()).searchParams.get('vivo') ? [] : [OPORTUNIDAD] }),
+      body: JSON.stringify({ banca: 1000, items: new URL(route.request().url()).searchParams.get('vivo') ? [] : [OPORTUNIDAD, CADUCADA] }),
     }))
     await page.goto('/panel/vehiculos', { waitUntil: 'domcontentloaded' })
     await expect.poll(() => tieneContenido(page), { timeout: 15000 }).toBe(true)
@@ -167,8 +178,30 @@ test.describe('Valor, solo super-admin', () => {
 
     await page.goto('/panel/valor', { waitUntil: 'domcontentloaded' })
     await expect(page.getByText(/Métele\s*40 €\s*a que gana Betis en/)).toBeVisible({ timeout: 15000 })
-    await expect(page.getByText('LA MEJOR AHORA')).toBeVisible()
-    await expect(page.getByText('CASA LENTA', { exact: true })).toBeVisible()
+    await expect(page.getByText('DESTACADA')).toBeVisible()
+    await expect(page.getByText(/VÁLIDA · \d+ min más/)).toBeVisible()
+    await expect(page.getByText('CASA LENTA', { exact: true }).first()).toBeVisible()
+    await expect(page.getByText('datos hace 2 min').first()).toBeVisible()
+    // La caducada sigue a la vista, marcada, sin «Métele» ni botón.
+    await expect(page.getByText('CADUCADA', { exact: true })).toBeVisible()
+    await expect(page.getByText(/No apostar\./)).toBeVisible()
+    const tarjetaCaducada = page.locator('article', { hasText: 'Getafe' })
+    await expect(tarjetaCaducada.getByText(/Métele/)).toHaveCount(0)
+    await expect(tarjetaCaducada.getByRole('button', { name: 'La he metido' })).toHaveCount(0)
+    // «La he metido»: la ventana trae la cuota y el importe detectados.
+    await page.getByRole('button', { name: 'La he metido' }).click()
+    const dialogo = page.getByRole('dialog', { name: 'Apuntar la apuesta' })
+    await expect(dialogo).toBeVisible()
+    await expect(dialogo.locator('input').first()).toHaveValue('2,30')
+    await expect(dialogo.locator('input').nth(1)).toHaveValue('40')
+    await dialogo.locator('input').first().fill('2,10')
+    await expect(dialogo.getByText(/ya no hay ventaja/)).toBeVisible()
+    await page.keyboard.press('Escape')
+    await expect(dialogo).toHaveCount(0)
+    for (const pest of ['Mis apuestas', 'Aprendizaje', 'Datos']) {
+      await page.getByRole('button', { name: new RegExp(`^${pest}`) }).click()
+    }
+    await expect(page.getByText('Tus casas')).toBeVisible()
     expect(new URL(page.url()).pathname).toBe('/panel/valor')
     expect(fallos, fallos.join(' | ')).toHaveLength(0)
   })

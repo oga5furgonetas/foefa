@@ -70,3 +70,11 @@ class Oportunidad:
     motivos: List[str] = field(default_factory=list)   # por qué sí
     avisos: List[str] = field(default_factory=list)    # qué mirar antes de apostar
     fallo: str = "valor"         # el punto flaco de la casa (puntos_flacos.py)
+    # Para auditarla después con los datos de entonces: de cuándo eran las
+    # cuotas, las referencias y lo que pagaban las demás casas en ese momento.
+    ts_cuota: Optional[datetime] = None
+    ts_referencia: Optional[datetime] = None
+    ref_cuotas: Dict[str, float] = field(default_factory=dict)
+    otras: Dict[str, float] = field(default_factory=dict)
+    fuente: str = ""
+    edad_max: float = 600.0      # segundos que vale (10 min prepartido, 8 s en vivo)

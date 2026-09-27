@@ -29,10 +29,11 @@ pytestmark = pytest.mark.asyncio(loop_scope="session")
 DANI = "dani-el-dueno"
 LEER = ["/api/valor/estado", "/api/valor/oportunidades", "/api/valor/oportunidades?vivo=true",
         "/api/valor/seguras", "/api/valor/apuestas",
-        "/api/valor/aprendizaje"]
+        "/api/valor/aprendizaje", "/api/valor/casas", "/api/valor/oportunidades/1/historial"]
 ESCRIBIR = [("/api/valor/apuestas", {"oportunidad_id": 1}),
             ("/api/valor/apuestas/manual", {"descripcion": "x", "casa": "y", "cuota": 2, "importe": 5}),
-            ("/api/valor/apuestas/1/resultado", {"resultado": "ganada"})]
+            ("/api/valor/apuestas/1/resultado", {"resultado": "ganada"}),
+            ("/api/valor/casas", {"casas": "*"})]
 
 
 class _Coleccion:
@@ -92,6 +93,7 @@ def entorno(tmp_path, monkeypatch):
     # Filtros abiertos como en las pruebas originales: la apuesta de ejemplo sale el 46 %.
     monkeypatch.setenv("VALOR_PROB_MINIMA", "0")
     monkeypatch.setenv("VALOR_SEGURAS", "1")
+    monkeypatch.setenv("VALOR_CASAS", "*")          # estas pruebas no van de casas
     monkeypatch.setenv("SUPERADMIN_USERNAME", DANI)
     monkeypatch.setattr(server, "global_db", _BaseFalsa(list(USUARIOS.values())))
     monkeypatch.setattr(server, "VALOR_DB", str(tmp_path / "privado" / "valor.db"))
@@ -200,6 +202,44 @@ async def test_dani_entra_y_funciona(cliente, entorno):
                  {"descripcion": ["x"], "casa": {"a": 1}, "cuota": True, "importe": None}):
         assert (await cliente.post("/api/valor/apuestas/manual", headers=h, json=malo)).status_code == 400
     assert (await cliente.get("/api/valor/aprendizaje", headers=h)).json()["minimo"] == 30
+
+
+async def test_senal_caducada_da_409_y_se_puede_apuntar_confirmandolo(cliente, entorno):
+    h = _cab("dani")
+    reg = Registro(server.VALOR_DB)
+    viejo = (datetime.now(timezone.utc) - timedelta(minutes=20)).isoformat()
+    # 20 minutos después, sin que el buscador haya vuelto a leer.
+    reg.db.execute("UPDATE oportunidades SET ts_cuota=?", (viejo,))
+    reg.db.execute("UPDATE cuotas SET ts=?", (viejo,))
+    reg.db.commit()
+    reg.db.close()
+    items = (await cliente.get("/api/valor/oportunidades", headers=h)).json()["items"]
+    op = next(o for o in items if o["casa"] == "bet365")
+    assert op["estado"] == "caducada" and "10 min" in op["motivo"]
+    r = await cliente.post("/api/valor/apuestas", headers=h, json={"oportunidad_id": op["id"], "importe": "10"})
+    assert r.status_code == 409 and "10 min" in r.json()["detail"]
+    r = await cliente.post("/api/valor/apuestas", headers=h,
+                           json={"oportunidad_id": op["id"], "importe": "10", "aun_caducada": True})
+    assert r.status_code == 200
+    a = (await cliente.get("/api/valor/apuestas", headers=h)).json()["items"][0]
+    assert a["fuera_de_plazo"] == 1 and a["cuota_senal"] == op["cuota"]
+
+
+async def test_tus_casas_y_el_estado_con_exposicion(cliente, entorno):
+    h = _cab("dani")
+    r = await cliente.post("/api/valor/casas", headers=h, json={"casas": ["Bet365.es", "codere.es", "bet365.es"]})
+    assert r.status_code == 200 and r.json()["apostables"] == ["bet365.es", "codere.es"]
+    assert (await cliente.post("/api/valor/casas", headers=h, json={"casas": []})).status_code == 400
+    assert (await cliente.post("/api/valor/casas", headers=h, json={"casas": {"x": 1}})).status_code == 400
+    c = (await cliente.get("/api/valor/casas", headers=h)).json()
+    assert c["apostables"] == ["bet365.es", "codere.es"] and c["elegidas"] is True
+    assert {v["casa"] for v in c["vistas"]} >= {"pinnacle", "bet365"}
+    e = (await cliente.get("/api/valor/estado", headers=h)).json()
+    assert e["exposicion"] == {"total": 0, "pct": 0.0, "tope_evento": 0.04, "partidos": []}
+    assert set(e["claves"]) == {"the_odds_api", "oddspapi", "api_football"}
+    h1 = (await cliente.get("/api/valor/oportunidades/1/historial", headers=h)).json()
+    assert h1["lecturas"] and all(set(x) == {"ts", "casa", "cuota", "referencia"} for x in h1["lecturas"])
+    assert (await cliente.get("/api/valor/oportunidades/99999/historial", headers=h)).status_code == 404
 
 
 async def test_aprendizaje_con_un_solo_aviso_no_da_500(cliente, entorno):

@@ -7,8 +7,12 @@ que pedir también los partidos del día y cruzarlos por el id del partido.
 En vivo tiene su propio endpoint (/odds/live) con otro formato; no se usa
 hasta verificarlo contra la API real.
 
-FORMATO: según la documentación pública de la v3. No verificado aún contra la
-API real desde aquí (red bloqueada).
+FORMATO: comprobado contra la API real el 27-09-2026. El plan gratis NO deja
+pedir por liga y temporada actual («Free plans do not have access to this
+season»): solo por fecha, y el día trae unas 40 páginas de todas las ligas.
+Sus cuotas prepartido se actualizan cada pocas horas (las del 27-09 tenían
+~3 h): casi nunca pasan el filtro de 10 minutos. Sirven de contraste, no de
+fuente principal.
 """
 from __future__ import annotations
 
@@ -17,7 +21,7 @@ from datetime import date, datetime, timezone
 from typing import Dict, List, Optional
 
 from ..nucleo.modelo import Cuota, Evento
-from .base import Fuente, Lectura, ts
+from .base import Fuente, Lectura, comprueba, ts
 from .nombres import Cruce, id_evento
 
 BASE = "https://v3.football.api-sports.io"
@@ -27,7 +31,9 @@ BASE = "https://v3.football.api-sports.io"
 # como referencia.
 CASAS = {"pinnacle": "pinnacle", "bet365": "bet365", "bwin": "bwin", "william hill": "williamhill",
          "unibet": "unibet", "marathonbet": "marathonbet", "1xbet": "onexbet", "betfair": "betfair_sb",
-         "888sport": "sport888", "betway": "betway", "10bet": "tenbet", "betsson": "betsson"}
+         "888sport": "sport888", "betway": "betway", "10bet": "tenbet", "betsson": "betsson",
+         # Vistas en la respuesta real del 27-09-2026.
+         "betano": "betano", "betvictor": "betvictor", "sbo": "sbobet"}
 
 _OU = re.compile(r"^(Over|Under)\s+([0-9.]+)$")
 _AH = re.compile(r"^(Home|Away)\s+([+-]?[0-9.]+)$")
@@ -43,7 +49,8 @@ class ApiFootball(Fuente):
 
     def _get(self, ruta: str, **params) -> dict:
         r = self.cliente.get(BASE + ruta, params=params, headers={"x-apisports-key": self.clave})
-        r.raise_for_status()
+        self._llamadas = getattr(self, "_llamadas", 0) + 1
+        comprueba(r, self.nombre)
         self._restante = r.headers.get("x-ratelimit-requests-remaining")
         datos = r.json()
         if datos.get("errors"):
@@ -52,6 +59,7 @@ class ApiFootball(Fuente):
 
     def leer(self, deportes: List[str], dia: Optional[date] = None) -> Lectura:
         self.exige_clave()
+        self._llamadas = 0
         dia = dia or datetime.now(timezone.utc).date()
         partidos = self._get("/fixtures", date=dia.isoformat())["response"]
         cuotas, pagina = [], 1
@@ -63,6 +71,7 @@ class ApiFootball(Fuente):
                 break
             pagina += 1
         out = self.traducir(partidos, cuotas)
+        out.coste, out.detalle = self._llamadas, f"{dia:%d/%m}, {pagina} de {total} páginas"
         if getattr(self, "_restante", None) is not None:
             out.cupo_restante = int(self._restante)
         return out

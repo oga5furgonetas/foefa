@@ -110,3 +110,52 @@ def test_the_odds_api_lee_cupo_de_la_cabecera():
     cli = httpx.Client(transport=httpx.MockTransport(responde))
     lec = TheOddsApi(clave="x", cliente=cli).leer(["soccer_spain_la_liga"])
     assert lec.cupo_restante == 12 and lec.avisos
+
+
+def test_the_odds_api_apunta_lo_gastado_y_el_calendario_es_gratis():
+    """Comprobado contra la API real el 27-09: /odds de una liga con h2h+totals
+    gasta 2 (x-requests-last); /events, 0."""
+    pedidas = []
+
+    def responde(req):
+        pedidas.append(req.url.path)
+        if req.url.path.endswith("/events"):
+            return httpx.Response(200, json=[{"commence_time": "2026-10-09T19:00:00Z"}],
+                                  headers={"x-requests-last": "0"})
+        return httpx.Response(200, json=ODDS_API, headers={"x-requests-remaining": "496",
+                                                           "x-requests-last": "2"})
+    f = TheOddsApi(clave="x", cliente=httpx.Client(transport=httpx.MockTransport(responde)),
+                   regiones="eu", mercados="h2h,totals")
+    cal = f.proximos(["soccer_spain_la_liga"])
+    assert cal == {"soccer_spain_la_liga": [datetime(2026, 10, 9, 19, 0, tzinfo=timezone.utc)]}
+    lec = f.leer(["soccer_spain_la_liga", "soccer_epl"])
+    assert lec.coste == 4 and lec.cupo_restante == 496
+    assert pedidas[0].endswith("/soccer_spain_la_liga/events")
+
+
+def test_the_odds_api_error_sin_url_ni_clave():
+    cli = httpx.Client(transport=httpx.MockTransport(lambda req: httpx.Response(500)))
+    with pytest.raises(httpx.HTTPError) as e:
+        TheOddsApi(clave="CLAVE-SECRETA", cliente=cli).leer(["soccer_epl"])
+    assert "CLAVE-SECRETA" not in str(e.value) and "500" in str(e.value)
+
+
+def test_api_football_casas_de_la_respuesta_real():
+    """Betano, BetVictor y SBO salieron en la respuesta real del 27-09-2026."""
+    cuotas = [dict(AF_CUOTAS[0], bookmakers=[
+        {"id": 32, "name": n, "bets": [{"id": 1, "name": "Match Winner", "values": [
+            {"value": "Home", "odd": "2.28"}, {"value": "Draw", "odd": "3.30"}, {"value": "Away", "odd": "3.40"}]}]}
+        for n in ("Betano", "BetVictor", "SBO")])]
+    lec = ApiFootball(clave="x", cruce=Cruce()).traducir(AF_PARTIDOS, cuotas)
+    assert {c.casa for c in lec.cuotas} == {"betano", "betvictor", "sbobet"}
+
+
+def test_api_football_cuenta_sus_llamadas():
+    def responde(req):
+        if req.url.path.endswith("/fixtures"):
+            return httpx.Response(200, json={"response": AF_PARTIDOS, "errors": []})
+        return httpx.Response(200, json={"response": AF_CUOTAS, "paging": {"current": 1, "total": 1},
+                                         "errors": []}, headers={"x-ratelimit-requests-remaining": "88"})
+    f = ApiFootball(clave="x", cliente=httpx.Client(transport=httpx.MockTransport(responde)))
+    lec = f.leer([])
+    assert lec.coste == 2 and lec.cupo_restante == 88 and "1 de 1" in lec.detalle

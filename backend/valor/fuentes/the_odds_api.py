@@ -7,9 +7,14 @@ con Pinnacle y Betfair como referencia (región «eu») y casas blandas europeas
 
 Los partidos ya empezados vienen en la misma respuesta: se marcan en vivo.
 
-FORMATO: el de la documentación pública de la v4 (lista de eventos con
-bookmakers → markets → outcomes). No verificado aún contra la API real desde
-aquí (red bloqueada): el test usa una respuesta escrita según esa documentación.
+FORMATO: comprobado contra la API real el 27-09-2026 (LaLiga, región «eu»:
+20 partidos, 18 casas con Pinnacle y el exchange de Betfair). Cada liga con
+h2h+totals gasta 2 créditos (cabecera x-requests-last). Las casas de la región
+«eu» son las webs de Francia, Alemania, Suecia, Países Bajos, Italia...
+ninguna española: aquí sirve sobre todo de referencia.
+
+/events (el calendario, sin cuotas) NO gasta créditos: el escáner lo usa para
+saber qué ligas tienen partido pronto y leer solo esas.
 """
 from __future__ import annotations
 
@@ -17,10 +22,11 @@ from datetime import datetime, timezone
 from typing import Dict, List, Optional
 
 from ..nucleo.modelo import Cuota, Evento
-from .base import Fuente, Lectura, log, ts
+from .base import Fuente, Lectura, comprueba, log, ts
 from .nombres import Cruce, id_evento
 
 URL = "https://api.the-odds-api.com/v4/sports/{deporte}/odds"
+URL_EVENTOS = "https://api.the-odds-api.com/v4/sports/{deporte}/events"
 
 # Nuestro deporte según la clave de la API.
 def deporte_de(clave: str) -> str:
@@ -43,19 +49,35 @@ class TheOddsApi(Fuente):
         self.regiones, self.mercados = regiones, mercados
         self.cruce = cruce or Cruce()
 
+    def proximos(self, deportes: List[str]) -> Dict[str, List[datetime]]:
+        """{liga: [inicios]} de los partidos que vienen. Gratis (no gasta créditos)."""
+        self.exige_clave()
+        out: Dict[str, List[datetime]] = {}
+        for d in deportes:
+            r = self.cliente.get(URL_EVENTOS.format(deporte=d),
+                                 params={"apiKey": self.clave, "dateFormat": "iso"})
+            if r.status_code == 401:
+                raise PermissionError("the_odds_api: clave no válida o cupo agotado")
+            comprueba(r, self.nombre)
+            out[d] = [ts(e["commence_time"]) for e in r.json() if e.get("commence_time")]
+        return out
+
     def leer(self, deportes: List[str]) -> Lectura:
         self.exige_clave()
-        out = Lectura()
+        out = Lectura(coste=0, detalle=", ".join(deportes))
         for d in deportes:
             r = self.cliente.get(URL.format(deporte=d), params={
                 "apiKey": self.clave, "regions": self.regiones, "markets": self.mercados,
                 "oddsFormat": "decimal", "dateFormat": "iso"})
             if r.status_code == 401:
                 raise PermissionError("the_odds_api: clave no válida o cupo agotado")
-            r.raise_for_status()
+            comprueba(r, self.nombre)
             restante = r.headers.get("x-requests-remaining")
             if restante is not None:
                 out.cupo_restante = int(float(restante))
+            gastado = r.headers.get("x-requests-last")
+            out.coste += (int(float(gastado)) if gastado is not None
+                          else len(self.mercados.split(",")) * len(self.regiones.split(",")))
             parcial = self.traducir(d, r.json())
             out.eventos += parcial.eventos
             out.cuotas += parcial.cuotas

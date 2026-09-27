@@ -60,6 +60,10 @@ class ReglasDetector:
     referencias_minimas: int = 1
     desacuerdo_max: float = 0.03        # diferencia de prob. entre referencias
     stake: ReglasStake = ReglasStake()
+    # Casas donde se puede apostar. None = todas. Una cuota buena en una web
+    # francesa o sueca no sirve de nada desde España: sigue contando como
+    # «otras casas» para comparar, pero no se recomienda.
+    apostables: Optional[Tuple[str, ...]] = None
 
 
 PREPARTIDO = ReglasDetector()
@@ -98,7 +102,11 @@ def _ultimas(cuotas: Iterable[Cuota]) -> Dict[Tuple, Dict[str, Dict[str, Cuota]]
 def detectar(eventos: Dict[str, Evento], cuotas: Iterable[Cuota], banca: float,
              ahora: Optional[datetime] = None,
              prepartido: ReglasDetector = PREPARTIDO,
-             vivo: ReglasDetector = EN_VIVO) -> Resultado:
+             vivo: ReglasDetector = EN_VIVO,
+             expuesto: Optional[Dict[str, float]] = None) -> Resultado:
+    """`expuesto`: {evento_id: euros} ya apostados y sin liquidar. El tope por
+    partido (4 %) cuenta con ellos: si ya llevas 30 € en el Betis–Sevilla, una
+    apuesta nueva en ese partido solo puede llenar lo que queda."""
     ahora = ahora or datetime.now(timezone.utc)
     descartes: Dict[str, int] = defaultdict(int)
     candidatas: List[Oportunidad] = []
@@ -154,6 +162,9 @@ def detectar(eventos: Dict[str, Evento], cuotas: Iterable[Cuota], banca: float,
         for casa, fila in casas.items():
             if casa in reglas.afiladas and casa not in reglas.comisiones:
                 continue            # Pinnacle es la vara de medir, no donde se apuesta
+            if reglas.apostables is not None and casa not in reglas.apostables:
+                descartes["casa donde no apuestas"] += 1
+                continue
             # Un exchange puede ser referencia y sitio donde apostar, pero nunca
             # se mide contra sí mismo: se usa el resto de referencias.
             otras = {r: v for r, v in refs.items() if r != casa}
@@ -191,7 +202,13 @@ def detectar(eventos: Dict[str, Evento], cuotas: Iterable[Cuota], banca: float,
                     evento=ev_obj, mercado=mercado, linea=linea, seleccion=sel,
                     casa=casa, cuota=c.cuota, prob_justa=p, cuota_justa=1.0 / p, ev=ev,
                     importe=0.0, referencia=sorted(otras), por_metodo=metodo_p,
-                    edad_segundos=edad)
+                    edad_segundos=edad, ts_cuota=c.ts,
+                    ts_referencia=min(casas[r][s].ts for r in otras for s in sels),
+                    ref_cuotas={r: casas[r][sel].cuota for r in otras},
+                    otras={k: f[sel].cuota for k, f in casas.items()
+                           if k != casa and k not in reglas.afiladas and sel in f
+                           and _edad(f[sel].ts, ahora) <= reglas.edad_max_casa},
+                    fuente=c.fuente, edad_max=min(reglas.edad_max_casa, reglas.edad_max_referencia))
                 op.motivos.append(
                     f"Cuota justa {1 / p:.2f} (prob. {p:.1%}, método más prudente de "
                     f"{len(metodo_p)}; referencia: {refs_txt}).")
@@ -216,7 +233,7 @@ def detectar(eventos: Dict[str, Evento], cuotas: Iterable[Cuota], banca: float,
 
     # ── 3. Cuánto, de más valor a menos, con tope por evento ───────────────
     candidatas.sort(key=lambda o: o.ev, reverse=True)
-    expuesto: Dict[str, float] = defaultdict(float)
+    expuesto = defaultdict(float, expuesto or {})
     finales: List[Oportunidad] = []
     for op in candidatas:
         reglas = vivo if op.evento.en_vivo else prepartido

@@ -167,6 +167,55 @@ Motor puro en `backend/afinidad.py` (léelo: explica el porqué), 27 pruebas en
   una celda por línea). Si con la lista real algo no casa, pedir a Dani un
   trozo pegado y añadirlo como prueba.
 
+## Qué se hizo el 27-09-2026 (noche): Valor con tres fuentes y señales auditables
+
+- **Tres fuentes, comprobadas contra las APIs reales** (JSON en crudo en el
+  scratchpad de esa sesión, nada en git):
+  - The Odds API: 2 créditos por liga con h2h+totals (`x-requests-last`);
+    `/events` es GRATIS y hace de calendario. Sus casas «eu» son webs de
+    FR/DE/SE/NL/IT: ninguna española → sirve de referencia.
+  - **OddsPapi** (nuevo, `valor/fuentes/oddspapi.py`): trae las webs .es.
+    UNA casa por petición (con dos, 400), todas las ligas en la misma;
+    equipos por número (`/participants`, 550 KB, en disco junto a valor.db,
+    se renueva cada semana); 429 si dos peticiones van a menos de ~1 s →
+    pausa de 1,2 s y un reintento. Hándicap = línea del local (comprobado).
+    Hora de la cuota = hora de la lectura (OddsPapi da cuándo CAMBIÓ, no
+    cuándo lo miró); en vivo no se usa.
+  - API-Football: el plan gratis NO deja pedir por liga/temporada actual;
+    solo por fecha, y sus cuotas tienen ~3 h: casi nunca pasan los 10 min.
+- **Casas de Dani** (lo dijo el 27-09): Codere (codere.es), BetStars
+  (pokerstars.es) y Gamdom; Casino Barcelona no la trae ninguna fuente. Solo
+  se recomienda en ellas (`CASAS_DANI`; cambiable en Datos → Tus casas, o
+  `VALOR_CASAS`, «*» = todas). Lo que da OddsPapi de cada una en LaLiga:
+  Gamdom todo; Codere goles y hándicap pero NO el 1X2; PokerStars ES solo
+  «marcan los dos» y resultado exacto, que Pinnacle no da (sin referencia).
+  Rotación por defecto `ODDSPAPI_CASAS=gamdom,codere.es,gamdom,pokerstars.es`.
+- **El cupo, donde hay partido** (`escaner.py`): ritmo rápido con partido a
+  menos de 3 h (The Odds API 40 min, OddsPapi y API-Football 60), ×3 a menos
+  de 24 h, casi nada si no hay; tope de 3 veces la parte diaria en un día (en
+  una hora si el cupo es diario); se apunta lo gastado DE VERDAD; The Odds API
+  lee solo las ligas con partido en 24 h. La última lectura antes del inicio
+  es el cierre del CLV: así queda mejor medido.
+- **Revisión de ChatGPT (P0 y P1)**: cada señal guarda de cuándo son sus
+  cuotas, contra qué referencia se midió, las demás casas y los métodos;
+  estado VÁLIDA / CADUCADA / CUOTA CAMBIADA (`Registro.estado_senal`), sin
+  quitarlas en silencio; «La he metido» con ventana precargada, ventaja
+  recalculada con la cuota real, casilla «no me dejó meter lo que quería», y
+  una caducada da 409 salvo que se confirme (queda «fuera de plazo»). La
+  apuesta NO pisa la señal (`cuota_senal`, `importe_senal`). El 4 % por
+  partido cuenta lo ya apostado (`expuesto` en `detectar`). Freno visible
+  («RECOMENDACIONES PAUSADAS»). Historial real de cada señal. Aprendizaje con
+  CLV medio, mediano, % que bate el cierre, gráficas (acumulado y semanal) y
+  MUESTRA INSUFICIENTE por debajo de 30. Pestaña Datos: salud de cada fuente
+  (última y próxima lectura, gastado, lo que dice la API que queda o «no lo
+  dice», señales por crédito) y Tus casas.
+- **Seguridad**: httpx escribía cada URL (con `?apiKey=`) en los logs en INFO:
+  ahora WARNING en todo el servidor; los errores de las fuentes se guardan sin
+  la URL ni la clave (`limpia`, `comprueba`).
+- Con los datos reales del 27-09 (LaLiga a dos semanas): **0 oportunidades**,
+  y 0 con ventaja positiva aun sin filtros. Es lo esperable lejos del partido;
+  no se ha tocado ningún filtro para que salgan.
+
 ## Pendiente (por prioridad)
 
 0. **URGENTE — aviso de Amazon del 24-09**: leer la sección 0 de
@@ -190,14 +239,11 @@ Motor puro en `backend/afinidad.py` (léelo: explica el porqué), 27 pruebas en
 4. Investigaciones de DNR y portal `/dnr/t/` de FlotaDSP: no recuperados
    (están en el commit raíz `cfed72b` si Dani los pide).
 5. Capturas para la portada (`ProductoReal.jsx` se oculta si no hay imágenes).
-6. **Valor**: faltan las claves y la banca. Fuentes gratis comprobadas el
-   27-09: The Odds API (500 créditos/mes, Pinnacle y Betfair en «eu»),
-   API-Football (100/día), OddsPapi (250/mes, una petición por partido);
-   Odds-API.io ya no da claves gratis. Cuando Dani deje
-   `C:\Users\Usuario\.flota-odds.txt` (ODDS_API_KEY=, APISPORTS_KEY=,
-   VALOR_BANCA=): meterlas en Fly sin imprimirlas, UNA llamada real a cada
-   API contra `valor/fuentes/*.py` (corregir con su test), y VALOR_ESCANEAR=1.
-   La pantalla ya enseña el estado de cada fuente (sin clave / leída hace…).
+6. **Valor**: falta la banca real de Dani (`VALOR_BANCA`, hoy 1000). Las tres
+   claves están en Fly (desde `C:\Users\Usuario\.flota-odds.txt`, sin
+   imprimirlas) y el escáner encendido (`VALOR_ESCANEAR=1`). Sin probar aún:
+   avisos al móvil (`VALOR_TELEGRAM_*` sin poner) y cómo salen las cuotas de
+   Codere/PokerStars cerca del partido (lejos, faltan mercados).
 7. **Privacidad pendiente** («que nadie tenga acceso a nuestra data»):
    - Los ficheros de R2 (fotos, DNI y documentos de conductores, CV) se abren
      con el enlace, sin sesión (r2.dev público). Los nombres no se adivinan

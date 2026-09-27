@@ -16,6 +16,8 @@ def _modo_antiguo(monkeypatch):
     # Estas pruebas usan una apuesta del 46 % y una segura: se abren los filtros.
     monkeypatch.setenv("VALOR_PROB_MINIMA", "0")
     monkeypatch.setenv("VALOR_SEGURAS", "1")
+    # Estas pruebas no van de en qué casas se apuesta: todas valen.
+    monkeypatch.setenv("VALOR_CASAS", "*")
 
 
 class Falsa(Fuente):
@@ -204,3 +206,97 @@ def test_el_estado_de_cada_fuente_para_la_pantalla(tmp_path):
     esc._ultima.clear()
     esc.vuelta(AHORA + timedelta(hours=7))
     assert "sin red" in esc.estado["falsa"]["error"]
+
+
+# ── El cupo, donde hay partido ────────────────────────────────────────────
+from valor.fuentes.the_odds_api import TheOddsApi  # noqa: E402
+
+
+def test_espera_segun_lo_que_falta_para_el_partido():
+    p = Presupuesto("x", 500, timedelta(days=30), 2, rapido=timedelta(minutes=40))
+    assert p.espera(timedelta(hours=2)) == timedelta(minutes=40)
+    assert p.espera(timedelta(hours=10)) == timedelta(minutes=120)
+    assert p.espera(timedelta(days=3)) == max(p.intervalo(), timedelta(minutes=480))
+    assert p.espera(None) == p.intervalo()                  # sin calendario: el cupo repartido
+    # Sin ritmo rápido, como siempre.
+    assert Presupuesto("x", 100, timedelta(days=1), 25).espera(timedelta(hours=1)) == timedelta(hours=6)
+
+
+def test_tope_de_rafaga():
+    # 500 al mes: un día puede gastar hasta 3 veces su parte (50), no el mes entero.
+    assert Presupuesto("x", 500, timedelta(days=30), 2).tope_rafaga() == (timedelta(days=1), 50.0)
+    # 100 al día: una hora, hasta 3 veces su parte (12,5); nunca menos que una lectura.
+    assert Presupuesto("x", 100, timedelta(days=1), 25).tope_rafaga() == (timedelta(hours=1), 25.0)
+
+
+class CalendarioFalso(TheOddsApi):
+    """The Odds API de mentira: /events dice qué ligas juegan pronto."""
+
+    def __init__(self, cruce, calendario):
+        self.clave, self.cruce, self.calendario, self.leidas = "x", cruce, calendario, []
+
+    def proximos(self, deportes):
+        return {d: self.calendario.get(d, []) for d in deportes}
+
+    def leer(self, deportes):
+        self.leidas.append(list(deportes))
+        return Lectura(coste=2 * len(deportes), detalle=", ".join(deportes))
+
+
+def _con_calendario(tmp_path, calendario):
+    reg = Registro(str(tmp_path / "v.db"))
+    esc = Escaner(reg, 1000, fuentes={})
+    f = CalendarioFalso(esc.cruce, calendario)
+    esc.deportes = {"the_odds_api": ["liga_a", "liga_b", "liga_c"]}
+    esc.fuentes = {f: Presupuesto("the_odds_api", 500, timedelta(days=30), 6, rapido=timedelta(minutes=40))}
+    return esc, f, reg
+
+
+def test_the_odds_api_solo_lee_las_ligas_con_partido_y_apunta_lo_gastado(tmp_path):
+    esc, f, reg = _con_calendario(tmp_path, {"liga_a": [AHORA + timedelta(hours=2)],
+                                             "liga_b": [AHORA + timedelta(days=5)], "liga_c": []})
+    esc.vuelta(AHORA)
+    assert f.leidas == [["liga_a"]]
+    assert reg.db.execute("SELECT SUM(coste) FROM uso").fetchone()[0] == 2     # lo gastado de verdad
+    est = esc.estado["the_odds_api"]
+    assert est["cada_min"] == 40 and est["leido"] == "liga_a" and est["gastado"] == 2
+    assert est["proxima"] == (AHORA + timedelta(minutes=40)).isoformat()
+    # A los 20 min aún no toca: no se pide dos veces lo mismo.
+    esc.vuelta(AHORA + timedelta(minutes=20))
+    assert len(f.leidas) == 1
+    esc.vuelta(AHORA + timedelta(minutes=41))
+    assert len(f.leidas) == 2
+
+
+def test_sin_partido_en_24_horas_no_gasta_nada(tmp_path):
+    esc, f, reg = _con_calendario(tmp_path, {"liga_a": [AHORA + timedelta(days=4)]})
+    assert esc.vuelta(AHORA) is None and f.leidas == []
+    assert esc.estado["the_odds_api"]["sin_partido"] is True
+
+
+def test_un_dia_no_se_come_el_mes(tmp_path):
+    # Un partido cada hora en las tres ligas: siempre toca el ritmo rápido.
+    cada_hora = [AHORA + timedelta(hours=1 + k) for k in range(24)]
+    esc, f, reg = _con_calendario(tmp_path, {"liga_a": cada_hora, "liga_b": cada_hora, "liga_c": cada_hora})
+    for i in range(20):
+        esc.vuelta(AHORA + timedelta(minutes=41 * i))
+    # 6 créditos por vuelta y 50 al día como mucho: 8 lecturas, no 20.
+    assert len(f.leidas) == 8
+    assert reg.db.execute("SELECT SUM(coste) FROM uso").fetchone()[0] == 48
+
+
+def test_lo_que_dice_la_api_que_queda_manda(tmp_path):
+    esc, f, reg = _con_calendario(tmp_path, {"liga_a": [AHORA + timedelta(hours=2)]})
+    esc.estado["the_odds_api"] = {"cupo_restante": 1}
+    assert esc.vuelta(AHORA) is None and f.leidas == []
+
+
+def test_el_error_de_una_fuente_se_guarda_sin_la_clave(tmp_path):
+    esc, f, reg = _escaner(tmp_path, [])
+
+    def cae(d):
+        import httpx
+        raise httpx.HTTPError("Client error '401' for url 'https://x.io/v4/odds?apiKey=SECRETO123&a=1'")
+    f.leer = cae
+    esc.vuelta(AHORA)
+    assert "SECRETO123" not in esc.estado["falsa"]["error"]
