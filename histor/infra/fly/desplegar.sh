@@ -56,10 +56,17 @@ lines "${COMMON[@]}" | fly secrets import -a "$WEB_APP" --stage >/dev/null
 { lines "${COMMON[@]}" ADMIN_EMAIL ADMIN_PASSWORD; echo 'INGEST_ENABLED=1'; } | fly secrets import -a "$WORKER_APP" --stage >/dev/null
 echo "✓ cargados (sin mostrarlos)"
 
+# `fly ssh console` en Windows termina con «The handle is invalid» aunque el comando haya
+# funcionado: se juzga por lo que responde el servidor, nunca por el código de salida.
+sshc() { fly ssh console -a "$1" -C "$2" 2>&1 | grep -v 'The handle is invalid' || true; }
+need() { printf '%s\n' "$1"; grep -q -- "$2" <<<"$1" || { echo "✕ no aparece «$2»"; exit 1; }; }
+
 step "Base de datos ($DB_APP)"
-(cd infra/fly/db && fly deploy . --config ../db.toml --dockerfile Dockerfile -a "$DB_APP" --ha=false --remote-only --yes)
+if [ "${HISTOR_SKIP_DB:-}" = 1 ]; then echo "(no se redespliega: HISTOR_SKIP_DB=1)"; else
+  (cd infra/fly/db && fly deploy . --config ../db.toml --dockerfile Dockerfile -a "$DB_APP" --ha=false --remote-only --yes)
+fi
 for i in $(seq 1 30); do
-  if fly ssh console -a "$DB_APP" -C "pg_isready -U histor -d histor" >/dev/null 2>&1; then echo "✓ PostgreSQL listo"; break; fi
+  if sshc "$DB_APP" "pg_isready -U histor -d histor" | grep -q "accepting connections"; then echo "✓ PostgreSQL listo"; break; fi
   [ "$i" = 30 ] && { echo "✕ PostgreSQL no responde"; exit 1; }
   sleep 5
 done
@@ -71,21 +78,22 @@ step "Web ($WEB_APP)"
 fly deploy . --config infra/fly/web.toml --dockerfile Dockerfile --build-target web -a "$WEB_APP" --ha=false --remote-only --yes
 
 step "Datos de referencia, administrador y fuentes"
-cli() { fly ssh console -a "$WORKER_APP" -C "node apps/worker/dist/cli.js $*"; }
-cli seed
+cli() { sshc "$WORKER_APP" "node apps/worker/dist/cli.js $*"; }
+need "$(cli seed)" "✓ referencia"
 if [ -n "${ADMIN_PASSWORD:-}" ]; then
-  cli create-admin
+  need "$(cli create-admin)" "✓ admin"
   fly secrets unset ADMIN_PASSWORD -a "$WORKER_APP" >/dev/null && echo "✓ ADMIN_PASSWORD borrada de los secretos"
 fi
-cli sources:check --update || true # las que fallan quedan en pausa (código 2)
-cli check:env || true
+cli sources:check --update | tail -3 # las que fallan quedan en pausa
+cli check:env
 
 step "Comprobaciones"
-curl -fsS "$PUBLIC_BASE_URL/api/health" && echo
+curl -sS -m 30 "$PUBLIC_BASE_URL/api/health" || true
+echo
 for p in /es /en /robots.txt /sitemap.xml /news-sitemap.xml; do
-  printf '%-18s %s\n' "$p" "$(curl -s -o /dev/null -w '%{http_code}' "$PUBLIC_BASE_URL$p")"
+  printf '%-18s %s\n' "$p" "$(curl -s -m 30 -o /dev/null -w '%{http_code}' "$PUBLIC_BASE_URL$p")"
 done
-if curl -fsS "$PUBLIC_BASE_URL/robots.txt" | grep -qx 'Disallow: /'; then echo "✕ robots.txt bloquea todo (¿DEMO_MODE?)"; else echo "✓ robots.txt permite indexar"; fi
-fly ssh console -a "$WORKER_APP" -C "node -e \"fetch('http://127.0.0.1:8081/health').then(r=>r.text()).then(t=>console.log(t))\""
+if curl -s -m 30 "$PUBLIC_BASE_URL/robots.txt" | grep -qx 'Disallow: /'; then echo "✕ robots.txt bloquea todo (¿DEMO_MODE?)"; else echo "✓ robots.txt no bloquea la indexación"; fi
+sshc "$WORKER_APP" "node -e \"fetch('http://127.0.0.1:8081/health').then(r=>r.text()).then(t=>console.log(t))\""
 echo
 echo "Listo: $PUBLIC_BASE_URL  ·  panel: $PUBLIC_BASE_URL/admin (activa el 2FA al entrar)"

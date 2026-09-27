@@ -16,13 +16,16 @@ en los 6 idiomas, cada una con al menos 2 fuentes independientes y el recuadro
 controles, la web, el panel, las cuentas, los pagos (a falta de claves), las
 newsletters, las alertas, la medición y el worker 24/7 están probados.
 
-**Despliegue: preparado, pendiente de ejecutar.** `infra/fly/desplegar.sh` lo hace
-todo en un paso (apps propias `histor-db`, `histor-worker`, `histor-web` en la
-cuenta nueva de Fly de Dani, región `fra`; nunca las de Flota). Los secretos de
-producción ya están generados en `~/.histor-secretos-prod.env` (fuera de git) y la
-contraseña del panel en `~/.histor-admin.txt`. Falta la autorización para crear
-las apps (el despliegue a producción quedó bloqueado por los permisos de la
-sesión) y, después, que Dani active el 2FA al entrar en `/admin`.
+**En producción desde el 27-09-2026:** https://histor-web.fly.dev (panel en
+`/admin`). Apps propias en la cuenta nueva de Fly de Dani, región `fra` (nunca las
+de Flota): `histor-db` (PostgreSQL 16 con volumen de 3 GB, instantáneas diarias
+14 días y `pg_dump` diario a las 03:17 UTC en `/data/backups`), `histor-worker`
+(ingesta real encendida) e `histor-web`. Coste ~10–12 USD/mes. Redesplegar:
+`infra/fly/desplegar.sh` (con `HISTOR_SKIP_DB=1` para no tocar la base). Secretos
+en `~/.histor-secretos-prod.env` y acceso al panel en `~/.histor-admin.txt` (fuera
+de git; `ADMIN_PASSWORD` ya no está en Fly). **Falta que Dani active el 2FA** al
+entrar en `/admin`. Fuentes en producción: 34/41 (Corriere responde 403 a las IP
+de centros de datos; en local sí leía).
 
 **No anunciar todavía:** faltan los datos legales del titular (LSSI).
 
@@ -109,10 +112,9 @@ Fallos encontrados con fuentes reales y corregidos (cada uno con su prueba):
 
 ## Bloqueos (externos: solo los puede resolver el propietario)
 
-1. **Autorizar el despliegue.** Todo está listo: `cd histor && FLY_API_TOKEN=… infra/fly/desplegar.sh`
-   (token de la cuenta nueva de Fly). Coste: ~10–12 USD/mes (tres máquinas de 512 MB
-   en `fra` + volumen de 3 GB). Tras desplegar, entrar en `/admin` con los datos de
-   `~/.histor-admin.txt` y **activar el 2FA** (obligatorio en producción).
+1. **Activar el 2FA del panel.** Entrar en https://histor-web.fly.dev/admin con los
+   datos de `~/.histor-admin.txt` y escanear el código con una app de autenticación
+   (obligatorio en producción; solo lo puede hacer Dani).
 2. **Datos legales** del titular (nombre/razón social, NIF, domicilio, correo de
    contacto y de privacidad; registro solo si es sociedad): hoy salen como
    `[PENDIENTE: …]`. Obligatorio (LSSI) antes de anunciar la web. Se añaden como
