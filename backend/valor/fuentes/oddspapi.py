@@ -69,6 +69,9 @@ UN_DIA = 24 * 3600
 # (visto en la API real el 27-09-2026). Se espera entre una y otra, y si aun así
 # llega un 429, se reintenta UNA vez tras lo que pida.
 PAUSA = 1.2
+# Y como mucho 5 torneos por petición («Please provide a maximum of 5 tournament
+# IDs», también visto en la API real el 27-09): con más, se parten en tandas.
+TORNEOS_POR_PETICION = 5
 
 
 class OddsPapi(Fuente):
@@ -147,15 +150,22 @@ class OddsPapi(Fuente):
         return self.casas[self.vueltas_previas % len(self.casas)]
 
     def _cuotas_de(self, casa: str) -> List[dict]:
-        r = self._get("/odds-by-tournaments", bookmaker=casa,
-                      tournamentIds=",".join(str(t) for t in self.torneos))
-        if r.status_code in (401, 403):
-            raise PermissionError("oddspapi: clave no válida o cupo agotado")
-        comprueba(r, self.nombre)
-        datos = r.json()
-        if not isinstance(datos, list):
-            raise ValueError("oddspapi: la respuesta de cuotas no es una lista")
+        datos: List[dict] = []
+        for i in range(0, len(self.torneos), TORNEOS_POR_PETICION):
+            tanda = self.torneos[i:i + TORNEOS_POR_PETICION]
+            r = self._get("/odds-by-tournaments", bookmaker=casa, tournamentIds=",".join(str(t) for t in tanda))
+            if r.status_code in (401, 403):
+                raise PermissionError("oddspapi: clave no válida o cupo agotado")
+            comprueba(r, self.nombre)
+            parte = r.json()
+            if not isinstance(parte, list):
+                raise ValueError("oddspapi: la respuesta de cuotas no es una lista")
+            datos += parte
         return datos
+
+    def peticiones_por_lectura(self) -> int:
+        tandas = -(-len(self.torneos) // TORNEOS_POR_PETICION)
+        return tandas * (1 if self.casas == [REFERENCIA] else 2)
 
     def leer(self, deportes: List[str]) -> Lectura:
         self.exige_clave()
@@ -226,8 +236,9 @@ class OddsPapi(Fuente):
 
 
 def de_entorno(cruce: Cruce, cache: Optional[str]) -> OddsPapi:
-    # Todas van en la MISMA petición: añadir torneos no gasta más cupo.
-    torneos = [int(x) for x in os.environ.get("ODDSPAPI_TORNEOS", "8,54,17,7,679,34480,23755").split(",")
+    # Hasta 5 torneos van en la MISMA petición; el sexto ya cuesta otra por casa.
+    # Por defecto, 5: LaLiga, Segunda, Premier, Champions y Nations League.
+    torneos = [int(x) for x in os.environ.get("ODDSPAPI_TORNEOS", "8,54,17,7,23755").split(",")
                if x.strip().isdigit()]
     # Las casas de Dani (27-09-2026): Codere, BetStars (PokerStars) y Gamdom.
     # Casino Barcelona no lo trae ninguna fuente. Lo que trae OddsPapi de cada

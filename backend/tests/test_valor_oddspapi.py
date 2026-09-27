@@ -207,3 +207,31 @@ def test_espera_entre_peticiones_y_reintenta_un_429(tmp_path, monkeypatch):
     lec = f.leer([])
     assert pedidas == ["pinnacle", "codere.es", "codere.es", None]      # el 429 se reintenta una vez
     assert lec.coste == 4 and len(dormido) >= 3 and all(0 < d <= 10 for d in dormido)
+
+
+def test_como_mucho_5_torneos_por_peticion(tmp_path):
+    """La API real contesta 400 con más de 5: «Please provide a maximum of 5
+    tournament IDs». Con 7 torneos, dos tandas por casa."""
+    tandas = []
+
+    def manejar(req):
+        if req.url.path.endswith("/participants"):
+            return httpx.Response(200, json=EQUIPOS)
+        ids = req.url.params["tournamentIds"].split(",")
+        if len(ids) > 5:
+            return httpx.Response(400, json={"error": {"code": "INVALID_PARAMETER"}})
+        tandas.append((req.url.params["bookmaker"], len(ids)))
+        return httpx.Response(200, json=[PINNACLE] if req.url.params["bookmaker"] == "pinnacle" else [BET365])
+    f = OddsPapi(clave=CLAVE, cliente=httpx.Client(transport=httpx.MockTransport(manejar)),
+                 torneos=[8, 54, 17, 7, 679, 34480, 23755], casas=["bet365.es"], cache=str(tmp_path / "c.json"))
+    lec = f.leer([])
+    assert tandas == [("pinnacle", 5), ("pinnacle", 2), ("bet365.es", 5), ("bet365.es", 2)]
+    assert f.peticiones_por_lectura() == 4 and lec.coste == 5          # + la lista de equipos
+    assert OddsPapi(clave=CLAVE, torneos=[8, 54, 17, 7, 23755]).peticiones_por_lectura() == 2
+
+
+def test_por_defecto_caben_en_una_peticion(monkeypatch):
+    from valor.fuentes.oddspapi import de_entorno
+    monkeypatch.delenv("ODDSPAPI_TORNEOS", raising=False)
+    f = de_entorno(Cruce(), None)
+    assert len(f.torneos) <= 5 and f.peticiones_por_lectura() == 2

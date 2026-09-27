@@ -149,9 +149,10 @@ class Escaner:
             cache = (os.path.join(os.path.dirname(os.path.abspath(ruta)), "oddspapi_equipos.json")
                      if ruta and ruta != ":memory:" else None)
             f = oddspapi_de_entorno(self.cruce, cache)
-            # Dos peticiones por lectura: Pinnacle y una casa española.
+            # Pinnacle y una casa por lectura, por cada tanda de 5 torneos.
             out[f] = Presupuesto(f.nombre, int(os.environ.get("ODDSPAPI_CUPO", "250")),
-                                 timedelta(days=30), 2, rapido=minutos("ODDSPAPI_CADA_MIN", "60"))
+                                 timedelta(days=30), f.peticiones_por_lectura(),
+                                 rapido=minutos("ODDSPAPI_CADA_MIN", "60"))
         if os.environ.get("APISPORTS_KEY"):
             f = ApiFootball(cruce=self.cruce)
             out[f] = Presupuesto(f.nombre, int(os.environ.get("APISPORTS_CUPO", "100")),
@@ -243,6 +244,11 @@ class Escaner:
             espera = p.espera(falta)
             ult = self._ultima_de(f)
             trozo, tope = p.tope_rafaga()
+            # Tras un reinicio el estado (en memoria) está vacío, pero el registro
+            # sabe cuándo leyó: sin esto la pantalla decía «esperando su primera
+            # lectura» de una fuente que había leído hacía minutos (27-09).
+            if ult is not None and not est.get("ultima"):
+                est["ultima"] = ult.isoformat()
             est.update(
                 cada_min=round(espera.total_seconds() / 60),
                 proxima=((ult + espera) if ult else ahora).isoformat() if coste > 0 else None,

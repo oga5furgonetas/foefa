@@ -300,3 +300,15 @@ def test_el_error_de_una_fuente_se_guarda_sin_la_clave(tmp_path):
     f.leer = cae
     esc.vuelta(AHORA)
     assert "SECRETO123" not in esc.estado["falsa"]["error"]
+
+
+def test_tras_reiniciar_sabe_cuando_leyo(tmp_path):
+    """27-09: tras un despliegue la pantalla decía «esperando su primera
+    lectura» de fuentes que habían leído hacía minutos."""
+    esc, f, reg = _escaner(tmp_path, [])
+    esc.vuelta(AHORA)
+    nuevo = Escaner(reg, 1000, fuentes={})               # el mismo registro, memoria vacía
+    nuevo.fuentes = {f: Presupuesto("falsa", 100, timedelta(days=1), 25)}
+    assert nuevo.vuelta(AHORA + timedelta(minutes=5)) is None       # aún no le toca leer
+    assert nuevo.estado["falsa"]["ultima"] == AHORA.isoformat()
+    assert nuevo.estado["falsa"]["gastado"] == 25
