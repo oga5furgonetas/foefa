@@ -209,7 +209,7 @@ def test_lo_que_se_queda_cerca_se_guarda_aparte_y_no_se_recomienda(tmp_path):
     assert r.oportunidades == [] and r.sospechosas == []
     (c,) = r.casi                                   # el local a 2,05 no tiene ventaja: no sale
     assert (c.casa, c.seleccion, c.cuota) == ("gamdom", "visitante", 1.75) and c.ev > 0
-    assert c.avisos[0].startswith("Sale el 5") and "mínimo es el 60" in c.avisos[0]
+    assert c.avisos[0].startswith("Sale el 5") and "." in c.avisos[0].split("%")[0] and "mínimo es el 60" in c.avisos[0]
     reg.guarda_oportunidades(r.casi, casi=True)
     assert reg.vigentes(False, 60) == []            # no aparece como apuesta
     (x,) = reg.casi_recientes()

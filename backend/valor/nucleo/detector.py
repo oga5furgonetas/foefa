@@ -295,7 +295,8 @@ def detectar(eventos: Dict[str, Evento], cuotas: Iterable[Cuota], banca: float,
                         continue            # tapados larguísimos: ni «casi»
                 elif p < reglas.prob_minima:
                     descartes["poca probabilidad de acertar"] += 1
-                    no = f"Sale el {p:.0%} de las veces; tu mínimo es el {reglas.prob_minima:.0%}."
+                    # Con un decimal: «sale el 60 %, tu mínimo es el 60 %» (59,8 redondeado) no se entiende.
+                    no = f"Sale el {p:.1%} de las veces; tu mínimo es el {reglas.prob_minima:.0%}."
                 elif ev < reglas.ev_minimo:
                     no = f"Ventaja {ev:+.1%}; tu mínimo es {reglas.ev_minimo:+.0%}."
                 elif baja and ev < reglas.ev_excepcion:
