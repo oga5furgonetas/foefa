@@ -6,7 +6,7 @@ import { t } from '@histor/core/i18n/dictionaries';
 import { href } from '@histor/core/i18n/routes';
 import { LEGAL_PAGES } from '@histor/core/legal/pages';
 import { legalVars } from '@histor/core/legal/vars';
-import { getStoryTimeline, listPublicSources, recentCorrections, searchArticles } from '@histor/core/services/content';
+import { getStoryTimeline, listPublicSources, recentCorrections, searchArticles, transparencyStats } from '@histor/core/services/content';
 import { getSourceTypeWeights } from '@histor/core/services/settings';
 import { StoryCard } from '@/components/Cards';
 import { ReadTracker } from '@/components/client/ReadTracker';
@@ -208,5 +208,41 @@ export async function StoryPage({ lang, d, slug, tz }: { lang: string; d: Dict; 
         </>
       )}
     </section>
+  );
+}
+
+/** «Cómo funciona» con las cifras reales: lo que se descarta y se corrige también se cuenta. */
+export async function HowItWorksPage({ lang, d }: { lang: string; d: Dict }) {
+  const page = LEGAL_PAGES.howItWorks?.[lang] ?? LEGAL_PAGES.howItWorks!.en;
+  const s = await transparencyStats(db(), 30);
+  const T = d.transparency;
+  const rows: [string, number][] = [
+    [T.analysed, s.analysed],
+    [T.published, s.published],
+    [T.rejected, s.rejected],
+    [T.held, s.held],
+    [T.updates, s.updates],
+    [T.corrections, s.corrections],
+    [T.retractions, s.retractions],
+    [T.sources, s.activeSources],
+  ];
+  return (
+    <TextPageView page={page} vars={legalVars(lang)}>
+      <section aria-labelledby="stats-h" className="verify" style={{ marginTop: 32 }}>
+        <h2 id="stats-h">{t(T.title, { n: s.days })}</h2>
+        <table className="table">
+          <tbody>
+            {rows.map(([label, value]) => (
+              <tr key={label}>
+                <td>{label}</td>
+                <td className="tnum" style={{ textAlign: 'right', fontWeight: 600 }}>
+                  {value.toLocaleString(lang)}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </section>
+    </TextPageView>
   );
 }

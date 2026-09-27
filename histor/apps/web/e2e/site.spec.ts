@@ -122,3 +122,10 @@ test('SEO: robots en DEMO bloquea todo; sitemaps, RSS y manifest válidos', asyn
   const og = await request.get(`${BASE}/api/og?lang=es`);
   expect(og.headers()['content-type']).toBe('image/png');
 });
+
+test('«Cómo funciona» muestra las cifras de transparencia (incluido lo descartado)', async ({ page }) => {
+  await page.goto('/es/como-funciona');
+  const box = page.locator('#stats-h').locator('..');
+  await expect(box).toContainText('Histor en cifras');
+  await expect(box).toContainText('Descartadas');
+});

@@ -21,7 +21,7 @@ import { FollowButton } from '@/components/client/Forms';
 import { experimentUnit, withHeadlineTests } from '@/lib/experiments';
 import { currentGeo, currentUser, db } from '@/lib/server';
 import { ArticleView } from '@/views/ArticleView';
-import { CorrectionsPage, SearchPage, SourcesDirectory, StoryPage } from '@/views/InfoPages';
+import { CorrectionsPage, HowItWorksPage, SearchPage, SourcesDirectory, StoryPage } from '@/views/InfoPages';
 import { ListingView, PAGE_SIZE } from '@/views/ListingView';
 import { AccountPage, LoginPage, NewslettersPage, RegisterPage, ReportPage, ResetPage, SavedPage, SubscribePage } from '@/views/ReaderPages';
 import { TextPageView } from '@/views/TextPageView';
@@ -453,6 +453,8 @@ export default async function Page({ params, searchParams }: { params: Params; s
           return <SourcesDirectory lang={lang} d={d} />;
         case 'corrections':
           return <CorrectionsPage lang={lang} d={d} tz={tz} />;
+        case 'howItWorks':
+          return <HowItWorksPage lang={lang} d={d} />;
         default: {
           const legal = LEGAL_PAGES[m.page]?.[lang] ?? LEGAL_PAGES[m.page]?.en;
           if (!legal) notFound();

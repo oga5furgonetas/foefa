@@ -90,7 +90,7 @@ npm run sources:check -- --only=bbc-world
 
 Tipos de conector: `rss`, `atom`, `jsonfeed`, `geojson` (USGS), `sitemap`
 (Google News sitemap), `html` (metadatos `og:`/`article:` de páginas públicas),
-`reddit` y `x` (API oficial, con credenciales).
+`reddit`, `x`, `youtube`, `bluesky` y `mastodon` (API oficiales, con credenciales; como pistas).
 
 ## Fuentes DEMO
 

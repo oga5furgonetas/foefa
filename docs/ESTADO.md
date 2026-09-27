@@ -5,7 +5,7 @@
 > haz commit y `git push`. Una sola sesión trabajando a la vez: antes de
 > empezar, `git pull` y comprueba que nadie ha dejado nada a medias aquí.
 
-Última actualización: **26-09-2026, noche** (sesión `c3af8cab`, Claude Opus 5.5).
+Última actualización: **27-09-2026** (sesión `01GowFUP`, rama `claude/sleepy-johnson-sc4hsa`: periódico Histor en `histor/`).
 
 ## Qué es y dónde está
 
@@ -224,6 +224,23 @@ Motor puro en `backend/afinidad.py` (léelo: explica el porqué), 27 pruebas en
   y 0 con ventaja positiva aun sin filtros. Es lo esperable lejos del partido;
   no se ha tocado ningún filtro para que salgan.
 
+## Qué se hizo el 27-09-2026: Histor, periódico verificado (carpeta `histor/`)
+
+- **Producto aparte, no es Flota**: periódico digital multidioma y automatizado
+  que solo publica como hecho lo verificado. Vive entero en `histor/`
+  (monorepo TypeScript: `packages/core`, `apps/web` Next.js, `apps/worker`).
+  No toca `frontend/`, `backend/` ni la infraestructura de Flota/FlotaDSP.
+- Estado, pruebas y bloqueos: **`histor/PROJECT_STATUS.md`**. Arranque local:
+  `histor/README.md`. Operación y despliegue: `histor/docs/OPERATIONS.md`.
+- Base de datos propia: PostgreSQL (no el Atlas de Flota). CI propio:
+  `.github/workflows/histor.yml` (solo se dispara con cambios en `histor/`).
+- Probado: 111 pruebas del núcleo, 2 del worker, 47 E2E, `next build` e
+  imágenes Docker. Los checkers de Flota siguen pasando.
+- **Sin desplegar**: no hay cuenta de hosting ni dominio para Histor. Nunca
+  desplegarlo en `flota-backend`, `flota`, `flotadsp-*` ni en Pages de Flota.
+- La red de este entorno bloquea los feeds reales (BBC, BOE, USGS…): las fuentes
+  hay que validarlas al desplegar con `npm run sources:check`.
+
 ## Pendiente (por prioridad)
 
 0. **URGENTE — aviso de Amazon del 24-09**: leer la sección 0 de
@@ -265,6 +282,9 @@ Motor puro en `backend/afinidad.py` (léelo: explica el porqué), 27 pruebas en
 8. **Furgonetas fijas** (hecho, ver arriba): que cada centro aplique el
    reparto inicial y ponga notas; en OGA5, apuntar la fila cada día. Falta la
    casilla de vetadas en la pantalla.
+9. **Histor** (producto aparte, `histor/`): falta alojamiento propio, dominio,
+   datos legales del titular y claves (Stripe, correo, IA, push). Lista completa
+   en `histor/PROJECT_STATUS.md` → «Bloqueos».
 
 ## Trampas conocidas
 

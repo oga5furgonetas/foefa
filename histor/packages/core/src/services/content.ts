@@ -398,3 +398,30 @@ export async function recentCorrections(db: Db, lang: string, limit = 50) {
 }
 
 export { lt };
+
+/** Cifras públicas de transparencia (lo que se descarta también cuenta). */
+export async function transparencyStats(db: Db, days = 30) {
+  const since = new Date(Date.now() - days * 86400000);
+  const demo = demoMode();
+  const [st] = await db
+    .select({
+      analysed: sql<number>`count(*)`,
+      published: sql<number>`count(*) FILTER (WHERE ${stories.state} IN ('PUBLISHED','UPDATED','RETRACTED'))`,
+      rejected: sql<number>`count(*) FILTER (WHERE ${stories.state} = 'REJECTED')`,
+      held: sql<number>`count(*) FILTER (WHERE ${stories.state} IN ('HELD','INVESTIGATING','UNVERIFIED','PARTIALLY_VERIFIED'))`,
+    })
+    .from(stories)
+    .where(and(eq(stories.isDemo, demo), gte(stories.firstSeenAt, since)));
+  const [co] = await db
+    .select({
+      corrections: sql<number>`count(*) FILTER (WHERE ${corrections.kind} IN ('correction','clarification'))`,
+      updates: sql<number>`count(*) FILTER (WHERE ${corrections.kind} = 'update')`,
+      retractions: sql<number>`count(*) FILTER (WHERE ${corrections.kind} = 'retraction')`,
+    })
+    .from(corrections)
+    .innerJoin(articles, eq(articles.id, corrections.articleId))
+    .where(and(eq(articles.isDemo, demo), gte(corrections.createdAt, since)));
+  const [so] = await db.select({ n: sql<number>`count(*)` }).from(sources).where(and(eq(sources.isDemo, demo), eq(sources.status, 'active')));
+  const n = (x: unknown) => Number(x ?? 0);
+  return { days, analysed: n(st?.analysed), published: n(st?.published), rejected: n(st?.rejected), held: n(st?.held), corrections: n(co?.corrections), updates: n(co?.updates), retractions: n(co?.retractions), activeSources: n(so?.n) };
+}
