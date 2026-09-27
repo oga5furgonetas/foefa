@@ -63,7 +63,7 @@ obligatoria (datos, búsqueda por idioma, cola de trabajos). Detalle en
 | 10. Cuentas + suscripciones | ✅ registro, 2FA, Google/Apple (OIDC), RGPD (exportar/borrar), Stripe Checkout/portal/webhooks, 14 mercados con precios propios |
 | 11. Analítica + recomendación | ✅ medición propia con consentimiento, «Para ti» anti-burbuja, A/B de titulares por lectura real |
 | 12. Observabilidad | ✅ logs JSON con redacción, Prometheus, Sentry opcional, salud de web y worker, pipeline_runs |
-| 13. Testing | ✅ 151 pruebas del núcleo + 2 del worker + 47 E2E (escritorio y móvil) |
+| 13. Testing | ✅ 160 pruebas del núcleo + 2 del worker + 47 E2E (escritorio y móvil) |
 | 14. Producción | 🟡 Docker probado; `infra/fly/desplegar.sh` (base propia en Fly con copias diarias, worker y web); secretos generados. **Falta ejecutar el despliegue** (autorización) |
 
 ## Cómo arrancarlo
@@ -76,7 +76,7 @@ Ver `README.md` (local en 5 minutos, sin claves) y `docs/OPERATIONS.md`
 | Suite | Resultado |
 |---|---|
 | Tipos (núcleo, web, worker) y ESLint (web) | ✅ sin errores ni avisos |
-| Núcleo: unitarias, adversarias, calibración, integración con Postgres 16 | ✅ 151/151 |
+| Núcleo: unitarias, adversarias, calibración, integración con Postgres 16 | ✅ 160/160 |
 | Worker | ✅ 2/2 |
 | E2E Playwright contra `next start` (escritorio + móvil) | ✅ 47/47 |
 | `next build` y bundle del worker | ✅ |
@@ -90,7 +90,9 @@ Fallos encontrados con fuentes reales y corregidos (cada uno con su prueba):
   solo compartía protagonistas («negocia comprar terrenos» ≠ «estudia abrir un
   campus»); entre idiomas bastaba compartir el lugar («Green flood alert in
   Ukraine» salió verificada con 3 fuentes sobre Lavrov); el agrupador juntaba
-  historias por un topónimo (el filtro comparaba «ukraine» con «UA»).
+  historias por un topónimo (el filtro comparaba «ukraine» con «UA») y por
+  países que faltaban en el diccionario («Arabia Saudita», «Faixa de Gaza» se
+  tomaban por personas; añadidos 52 países y territorios).
 - **Política editorial:** 2 fuentes independientes para publicar y ninguna
   fuente sola como «verificada» (antes la portada alemana era el feed de DER
   SPIEGEL, con opinión y viñetas); BOE, GDACS, GOV.UK, BCE, Fed y NASA solo
