@@ -10,7 +10,7 @@ import type { ArticleBlock } from '../../src/db/schema';
 import { claimRef, writeDeterministic } from '../../src/writing/deterministic';
 import type { Draft } from '../../src/writing/draft';
 import { buildFactSheet } from '../../src/writing/factsheet';
-import { parseRss } from '../../src/ingest/parsers';
+import { extractArticleText, parseRss } from '../../src/ingest/parsers';
 import { compressClaim } from '../../src/writing/compress';
 import { longestCommonRun, runQualityChecks } from '../../src/writing/quality';
 import { validateDraft } from '../../src/writing/validate';
@@ -324,5 +324,32 @@ describe('más etiquetas de formato en titulares (27-09-2026)', () => {
     expect(parseRss(rss('Watch: mass Madrid protests over eviction and housing crisis'))[0].title).toBe('Mass Madrid protests over eviction and housing crisis');
     expect(parseRss(rss('Protests erupt as Netanyahu gives UN speech - The Latest'))[0].title).toBe('Protests erupt as Netanyahu gives UN speech');
     expect(parseRss(rss('Rescate en el Mediterráneo (en directo)'))[0].title).toBe('Rescate en el Mediterráneo');
+  });
+});
+
+describe('coletilla de atribución solo tras coma', () => {
+  it('«ganó su segundo maratón» no se corta en «segundo» (que en portugués es «según»)', () => {
+    const s = 'El etíope Guye Adola ganó su segundo maratón de Berlín mejorando en dos minutos su mejor marca personal';
+    expect(compressClaim(s, 22)).toBe(s);
+    expect(compressClaim('La policía detuvo a cinco hombres cerca de la base aérea de Fairford, según la Policía Metropolitana', 22)).toBe('La policía detuvo a cinco hombres cerca de la base aérea de Fairford');
+  });
+});
+
+describe('texto completo de la noticia en su página', () => {
+  const long = 'El etíope Guye Adola ganó su segundo maratón de Berlín mejorando en dos minutos su mejor marca personal. '.repeat(4);
+  it('usa el articleBody que declara el medio', () => {
+    const html = `<html><head><script type="application/ld+json">${JSON.stringify({ '@type': 'NewsArticle', headline: 'x', articleBody: long })}</script></head><body></body></html>`;
+    expect(extractArticleText(html).text).toMatch(/^El etíope Guye Adola/);
+  });
+  it('si no, los párrafos de <article>, sin avisos de cookies ni «lee también»', () => {
+    const p = (t: string) => `<p>${t}</p>`;
+    const html = `<article>${p('Su compatriota Tigst Assefa ganó por tercera vez la edición femenina, pero se le escapó el récord mundial por pocos segundos.')}${p('Lee también: los diez maratones más rápidos de la historia y dónde se corrieron')}${p('La carrera reunió a 56.000 corredores de más de cien países en las calles de Berlín este domingo por la mañana.')}${p('Aceptamos cookies para mejorar tu experiencia de navegación en este sitio web y otras cosas')}${p('Adola cruzó la meta con una ventaja de casi un minuto sobre el segundo clasificado, según la organización de la prueba.')}</article>`;
+    const out = extractArticleText(html).text!;
+    expect(out).toContain('56.000 corredores');
+    expect(out).not.toMatch(/Lee también|cookies/);
+  });
+  it('no lee una página que se declara de pago (no se salta muros)', () => {
+    const html = `<script type="application/ld+json">${JSON.stringify({ '@type': 'NewsArticle', isAccessibleForFree: false, articleBody: long })}</script>`;
+    expect(extractArticleText(html)).toEqual({ text: null, reason: 'de pago' });
   });
 });

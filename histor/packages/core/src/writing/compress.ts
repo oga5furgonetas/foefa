@@ -7,8 +7,10 @@
  */
 import { words } from '../text/tokenize';
 
+// Con coma delante obligatoria: sin ella, «ganó su segundo maratón» se cortaba en «segundo»
+// (que en portugués es «según») y quedaba «El etíope Guye Adola ganó su» (27-09-2026).
 const ATTRIBUTION_TAIL =
-  /[,;]?\s*(según|de acuerdo con|informó|ha informado|informa|confirmó|ha confirmado|explicó|señaló|indicó|dijo|according to|said|reported|reports|confirmed|laut|berichtete|teilte .* mit|selon|a indiqué|a annoncé|secondo|ha riferito|segundo|informou|disse)\b[^.;]*$/i;
+  /[,;]\s*(según|de acuerdo con|informó|ha informado|informa|confirmó|ha confirmado|explicó|señaló|indicó|dijo|according to|said|reported|reports|confirmed|laut|berichtete|teilte .* mit|selon|a indiqué|a annoncé|secondo|ha riferito|segundo|informou|disse)\b[^.;]*$/i;
 
 export function compressClaim(text: string, maxWords = 22, opts: { commaCut?: boolean } = {}): string | null {
   let s = text.replace(/\s+/g, ' ').trim().replace(/[.。]+$/, '');

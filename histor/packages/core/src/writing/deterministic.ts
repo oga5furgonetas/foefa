@@ -98,23 +98,35 @@ export function writeDeterministic(fs: FactSheet, opts: WriteOptions = {}): Draf
   // ── Lo que se sabe (reparto entre fuentes) ──
   const used = new Set<string>(leadClaim ? [leadClaim.key] : []);
   const perSource = new Map<string, number>();
-  const known: { text: string; claimIds: number[] }[] = [];
-  const knownPool = developing ? [...fs.confirmed, ...fs.attributed] : fs.confirmed;
+  const known: { text: string; claimIds: number[]; plain: boolean }[] = [];
+  // También en las verificadas: primero lo confirmado (como hecho) y después los detalles que
+  // da cada fuente, siempre atribuidos («…, según The Guardian»). Sin ellos, una noticia
+  // verificada se quedaba en una o dos frases aunque hubiera leído los artículos completos.
+  // Los titulares de las demás fuentes repiten lo mismo con otras palabras: fuera del cuerpo.
+  // El hecho del titular elegido sí va en el cuerpo (el titular debe reflejar el texto).
+  const bodyClaims = [...fs.confirmed, ...fs.attributed].filter((c) => !c.isHeadline);
+  const headFirst = headlineClaim && headlineClaim.key !== leadClaim?.key ? [headlineClaim] : [];
+  const knownPool = [...headFirst, ...(bodyClaims.length >= 2 ? bodyClaims : [...fs.confirmed, ...fs.attributed])];
   for (const c of knownPool) {
-    if (known.length >= 5) break;
+    if (known.length >= 10) break;
     if (used.has(c.key) || nearDuplicate(c, [...used].map((k) => fs.claims.find((x) => x.key === k)!).filter(Boolean))) continue;
     const src = c.attribution[0] ?? '';
-    if ((perSource.get(src) ?? 0) >= 2) continue;
+    if ((perSource.get(src) ?? 0) >= 3) continue;
     const compressed = compressClaim(c.text, maxWords);
-    if (!compressed) continue;
+    // Frases que dependen de la anterior de su fuente («Mas os maiores escritórios…»): fuera.
+    if (!compressed || !selfContained(compressed)) continue;
     used.add(c.key);
     perSource.set(src, (perSource.get(src) ?? 0) + 1);
-    const text = c.status === 'supported' && !developing ? `${compressed}.` : P.according(compressed, listJoin(lang, c.attribution.slice(0, 2)));
-    known.push({ text, claimIds: [claimRef(c)] });
+    const plain = c.status === 'supported' && !developing;
+    const text = plain ? `${compressed}.` : P.according(compressed, listJoin(lang, c.attribution.slice(0, 2)));
+    known.push({ text, claimIds: [claimRef(c)], plain });
   }
-  if (known.length) {
-    body.push({ type: 'h2', text: P.headings.known });
-    body.push({ type: 'list', items: known });
+  // Texto corrido, no una lista: hasta dos hechos por párrafo, como en un periódico, sin mezclar
+  // en el mismo párrafo lo confirmado con lo atribuido (cada frase debe poder comprobarse sola).
+  for (let i = 0; i < known.length; ) {
+    const pair = known[i + 1] && known[i + 1].plain === known[i].plain ? known.slice(i, i + 2) : [known[i]];
+    body.push({ type: 'p', text: pair.map((k) => k.text).join(' '), claimIds: pair.flatMap((k) => k.claimIds) });
+    i += pair.length;
   }
 
   // ── Datos clave (estructurados, redacción propia) ──

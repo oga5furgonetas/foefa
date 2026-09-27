@@ -10,6 +10,7 @@ import type { PoliteFetcher } from '../ingest/fetcher';
 import { enqueue } from '../jobs/queue';
 import { getEditorialSettings } from '../services/settings';
 import { clusterItems } from './cluster';
+import { enrichStoryItems } from './enrich';
 import { ingestDueSources } from './ingest';
 import { normalizeNewItems } from './normalize';
 import { publishStory } from './publish';
@@ -32,6 +33,7 @@ export type TickStats = {
   ingested: number;
   normalized: number;
   clustered: number;
+  enriched?: number;
   verified: number;
   published: number;
   updated: number;
@@ -51,6 +53,11 @@ export async function runPipelineOnce(db: Db, opts: { fetcher?: PoliteFetcher; n
   stats.normalized = norm.normalized;
   const cl = await stage(db, 'cluster', () => clusterItems(db, settings, { now }));
   stats.clustered = cl.attached + cl.created;
+  // Texto completo de las fuentes de las historias candidatas (solo con red real).
+  if (opts.ingest !== false && !opts.onlyDemo) {
+    const en = await stage(db, 'enrich', () => enrichStoryItems(db, { fetcher: opts.fetcher, now }));
+    stats.enriched = en.enriched;
+  }
   const verified = await stage(db, 'verify', async () => {
     const list = await verifyDueStories(db, settings, { now });
     return Object.assign(list, { count: list.length });

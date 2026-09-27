@@ -272,6 +272,35 @@ export function parseNewsSitemap(body: string): ParsedItem[] {
 }
 
 /** Metadatos de una página (comunicados de prensa): Open Graph + JSON-LD. Sin copiar el cuerpo. */
+const BOILERPLATE = /(cookie|suscr[ií]b|newsletter|bolet[ií]n|lee también|leer más|read more|sign up|subscribe|abonn|abonnez|abbonati|assine|©|todos los derechos|all rights reserved|publicidad|advertisement|anzeige|síguenos|follow us|comparte|share this)/i;
+
+/**
+ * Texto de la noticia en su página, para contrastar hechos (nunca para republicar: se
+ * guarda 30 días y ningún texto publicado puede copiar más de unas pocas palabras seguidas).
+ * Primero el `articleBody` que el propio medio declara en su JSON-LD; si no, los párrafos
+ * de <article>. Si la página se declara de pago (`isAccessibleForFree: false`), no se lee:
+ * Histor no se salta muros de pago, ni siquiera con lo que el medio deja para buscadores.
+ */
+export function extractArticleText(html: string): { text: string | null; reason?: string } {
+  if (/"isAccessibleForFree"\s*:\s*("?false"?|"False")/i.test(html)) return { text: null, reason: 'de pago' };
+  for (const m of html.matchAll(/<script[^>]+type=["']application\/ld\+json["'][^>]*>([\s\S]*?)<\/script>/gi)) {
+    try {
+      const parsed = JSON.parse(m[1]);
+      const list: any[] = Array.isArray(parsed) ? parsed : parsed['@graph'] ?? [parsed];
+      const art = list.find((x) => /Article|NewsArticle|Report/.test(String(x?.['@type'])) && typeof x.articleBody === 'string');
+      if (art && art.articleBody.length > 300) return { text: truncate(clean(art.articleBody), MAX_TEXT) };
+    } catch {
+      /* JSON-LD roto: se ignora */
+    }
+  }
+  const scope = html.match(/<article[\s\S]*?<\/article>/i)?.[0] ?? html.match(/<main[\s\S]*?<\/main>/i)?.[0] ?? html;
+  const paras = [...scope.matchAll(/<p\b[^>]*>([\s\S]*?)<\/p>/gi)]
+    .map((m) => clean(m[1]))
+    .filter((p) => p.length >= 60 && !BOILERPLATE.test(p));
+  const text = paras.join('\n');
+  return text.length > 300 ? { text: truncate(text, MAX_TEXT) } : { text: null, reason: 'sin cuerpo legible' };
+}
+
 export function parseHtmlMeta(html: string, url: string): ParsedItem | null {
   const meta = (name: string) => {
     const re = new RegExp(`<meta[^>]+(?:property|name)=["']${name}["'][^>]*content=["']([^"']*)["']|<meta[^>]+content=["']([^"']*)["'][^>]*(?:property|name)=["']${name}["']`, 'i');
