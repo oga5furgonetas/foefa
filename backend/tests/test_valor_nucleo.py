@@ -179,3 +179,31 @@ def test_lineas_con_devolucion_no_se_usan():
            _c("bet365", "mas", 2.15, mercado="totales", linea=2.0)]
     r = detectar({"e1": _evento()}, ref, 1000, AHORA)
     assert r.oportunidades == [] and r.descartes["línea con devolución"] == 1
+
+
+
+def test_escalera_de_handicap_rota_va_a_sospechosas():
+    """PokerStars, Bears–Eagles (27-09-2026): pagaba 1,80 al Bears +3,5 y 1,91 al
+    +4,5. Con más puntos a favor la cuota no puede subir: dato cruzado, no un
+    «+6,6 %». La de Gamdom, que baja como debe, sí vale."""
+    from dataclasses import replace
+    from valor.nucleo.detector import escalera_rota
+    ahora = datetime(2026, 9, 27, 12, 0, tzinfo=timezone.utc)
+    ev = Evento("nfl", "americanfootball", "NFL", "Chicago Bears", "Philadelphia Eagles", ahora + timedelta(hours=5))
+    t = ahora - timedelta(seconds=20)
+    c = [Cuota("nfl", "pinnacle", "handicap", 4.5, "local", 1.74, t), Cuota("nfl", "pinnacle", "handicap", 4.5, "visitante", 2.20, t),
+         Cuota("nfl", "pinnacle", "handicap", 3.5, "local", 1.862, t), Cuota("nfl", "pinnacle", "handicap", 3.5, "visitante", 2.05, t),
+         Cuota("nfl", "pokerstars.es", "handicap", 3.5, "local", 1.80, t),
+         Cuota("nfl", "pokerstars.es", "handicap", 3.5, "visitante", 1.91, t),
+         Cuota("nfl", "pokerstars.es", "handicap", 4.5, "local", 1.91, t),
+         Cuota("nfl", "pokerstars.es", "handicap", 4.5, "visitante", 1.80, t)]
+    r = detectar({"nfl": ev}, c, 1000, ahora, replace(PREPARTIDO, prob_minima=0.0))
+    assert r.oportunidades == []
+    (s,) = r.sospechosas
+    assert (s.casa, s.linea, s.seleccion) == ("pokerstars.es", 4.5, "local")
+    assert "escalera" in s.avisos[-1] and r.descartes["hándicap con la escalera rota"] == 1
+    # La de Gamdom en el Dolphins–Chiefs: de +9,5 a +14 la cuota del local baja.
+    gamdom = {9.5: {"local": 2.12}, 11.5: {"local": 1.84}, 13.5: {"local": 1.70}, 14.5: {"local": 1.61}}
+    assert escalera_rota(gamdom, 13.5) is None
+    # Y la del visitante al revés: con más línea del local, la suya no puede bajar.
+    assert escalera_rota({2.5: {"visitante": 1.85}, 3.5: {"visitante": 1.70}}, 3.5)

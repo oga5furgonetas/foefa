@@ -52,8 +52,9 @@ function seleccion(mercado, linea, sel, local, visitante) {
   if (sel === 'visitante') t = ` que gana ${visitante}`
   if (mercado === 'totales') t += ` ${String(linea).replace('.', ',')}`
   if (mercado === 'handicap') {
+    // «Dolphins +13,5» no es «que gana Dolphins»: puede perder por 13 y se cobra.
     const l = sel === 'local' ? linea : -linea
-    t += ` (${l > 0 ? '+' : ''}${String(l).replace('.', ',')})`
+    return ` ${sel === 'local' ? local : visitante} ${l > 0 ? '+' : ''}${String(l).replace('.', ',')} de hándicap`
   }
   return t
 }

@@ -61,7 +61,7 @@ BET365 = _fixture("bet365.es", ((3.05, 3.10, 2.45), (1.95, 1.80), (2.70, 1.45)))
 
 def _fuente(**k):
     f = OddsPapi(clave=CLAVE, cruce=Cruce(), **k)
-    f.equipos = dict(EQUIPOS)
+    f.equipos = {10: dict(EQUIPOS)}
     return f
 
 
@@ -136,7 +136,7 @@ def test_leer_una_casa_por_peticion_rota_y_guarda_los_equipos(tmp_path):
     assert [r.url.params["bookmaker"] for r in cuotas] == ["pinnacle", "bet365.es"]
     assert {r.url.params["tournamentIds"] for r in cuotas} == {"8,17,7"}
     # La primera vez pide también los equipos (1 petición más) y los guarda.
-    assert lec.coste == 3 and cache.exists() and lec.detalle == "pinnacle + bet365.es"
+    assert lec.coste == 3 and cache.exists() and lec.detalle.startswith("pinnacle + bet365.es · LaLiga")
     assert {c.casa for c in lec.cuotas} == {"pinnacle", "bet365.es"}
 
     pedidas.clear()
@@ -170,19 +170,19 @@ def test_la_cache_rota_no_tumba_la_fuente(tmp_path):
     cache = tmp_path / "c.json"
     cache.write_text("{no es json", encoding="utf-8")
     f = OddsPapi(clave=CLAVE, cache=str(cache))
-    assert f.equipos == {} and f._equipos_de == 0.0
+    assert f.equipos == {} and f._equipos_de == {}
 
 
 def test_renueva_los_equipos_como_mucho_una_vez_al_dia(tmp_path):
     pedidas = []
     f = OddsPapi(clave=CLAVE, cliente=_cliente(pedidas))
-    f.equipos, f._equipos_de = {"2830": "Malaga CF"}, datetime.now(timezone.utc).timestamp() - 3600
+    f.equipos, f._equipos_de = {10: {"2830": "Malaga CF"}}, {10: datetime.now(timezone.utc).timestamp() - 3600}
     f._llamadas = 0
     f._asegura_equipos([PINNACLE])            # falta un equipo, pero la lista es de hace 1 h
     assert f._llamadas == 0
-    f._equipos_de -= timedelta(days=1).total_seconds()
+    f._equipos_de[10] -= timedelta(days=1).total_seconds()
     f._asegura_equipos([PINNACLE])            # de hace más de un día: ahora sí
-    assert f._llamadas == 1 and f.equipos["2814"] == "Espanyol Barcelona"
+    assert f._llamadas == 1 and f.equipos[10]["2814"] == "Espanyol Barcelona"
 
 
 def test_espera_entre_peticiones_y_reintenta_un_429(tmp_path, monkeypatch):
@@ -230,8 +230,89 @@ def test_como_mucho_5_torneos_por_peticion(tmp_path):
     assert OddsPapi(clave=CLAVE, torneos=[8, 54, 17, 7, 23755]).peticiones_por_lectura() == 2
 
 
-def test_por_defecto_caben_en_una_peticion(monkeypatch):
+def test_por_defecto_todos_los_deportes_y_5_por_lectura(monkeypatch):
     from valor.fuentes.oddspapi import de_entorno
     monkeypatch.delenv("ODDSPAPI_TORNEOS", raising=False)
     f = de_entorno(Cruce(), None)
-    assert len(f.torneos) <= 5 and f.peticiones_por_lectura() == 2
+    # Candidatos de todos los deportes; el escáner lee los 5 que juegan antes.
+    assert {8, 54, 31, 27653, 109, 132, 234} <= set(f.torneos)
+    assert f.peticiones_por_lectura(5) == 2 and f.peticiones_por_lectura(1) == 2
+
+
+def test_la_cache_del_primer_dia_se_sigue_leyendo(tmp_path):
+    """El 27-09 la caché solo tenía fútbol, con otro formato."""
+    import json as _json
+    cache = tmp_path / "c.json"
+    cache.write_text(_json.dumps({"de": 123.0, "equipos": {"2830": "Malaga CF"}}), encoding="utf-8")
+    f = OddsPapi(clave=CLAVE, cache=str(cache))
+    assert f.equipos == {10: {"2830": "Malaga CF"}} and f._equipos_de == {10: 123.0}
+
+
+# Un partido de la NFL con la forma real (Dolphins–Chiefs del 27-09-2026, precios
+# de Pinnacle de aquella lectura). Mercados: ganador con prórroga (141), total
+# 44,5 (1464), hándicap +13,5 del local (el id sale del catálogo real) y un
+# «ganador del primer cuarto» (142140), que NO se usa.
+def _nfl(casa, ganador, total, hcp):
+    from valor.fuentes.oddspapi import MERCADOS
+    mid = next(m for m, v in MERCADOS.items() if v[0] == 14 and v[1] == "handicap" and v[2] == 13.5)
+    ids = sorted(MERCADOS[mid][3])
+    return {
+        "fixtureId": "idNFL1", "participant1Id": 501, "participant2Id": 502, "sportId": 14, "tournamentId": 31,
+        "startTime": "2026-10-09T23:00:00.000Z", "bookmakerOdds": {casa: {
+            "bookmakerIsActive": True, "suspended": False, "markets": {
+                "141": {"marketActive": True, "outcomes": {"141": _jugador(ganador[0]), "142": _jugador(ganador[1])}},
+                "1464": {"marketActive": True, "outcomes": {"1464": _jugador(total[0]), "1465": _jugador(total[1])}},
+                str(mid): {"marketActive": True, "outcomes": {
+                    str(ids[0] if MERCADOS[mid][3][ids[0]] == "local" else ids[1]): _jugador(hcp[0]),
+                    str(ids[1] if MERCADOS[mid][3][ids[0]] == "local" else ids[0]): _jugador(hcp[1])}},
+                "142140": {"marketActive": True, "outcomes": {"142140": _jugador(1.9), "142141": _jugador(1.9)}},
+            }}}}
+
+
+def test_la_nfl_con_sus_mercados_y_sus_equipos():
+    f = OddsPapi(clave=CLAVE, cruce=Cruce())
+    f.equipos = {14: {"501": "Miami Dolphins", "502": "Kansas City Chiefs"}}
+    lec = f.traducir([_nfl("pinnacle", (6.29, 1.137), (1.95, 1.87), (1.602, 2.41)),
+                      _nfl("gamdom", (5.60, 1.13), (1.90, 1.90), (1.70, 2.10))], AHORA)
+    (e,) = lec.eventos
+    assert (e.deporte, e.liga, e.local) == ("americanfootball", "NFL", "Miami Dolphins")
+    por = {(c.casa, c.mercado, c.linea, c.seleccion): c.cuota for c in lec.cuotas}
+    assert por[("pinnacle", "ganador", None, "local")] == 6.29
+    assert por[("pinnacle", "totales", 44.5, "mas")] == 1.95
+    assert por[("gamdom", "handicap", 13.5, "local")] == 1.70
+    assert len(lec.cuotas) == 12                   # 3 mercados × 2 lados × 2 casas: el cuarto, fuera
+    reglas = replace(PREPARTIDO, prob_minima=0.60, cuota_minima=1.70, cuota_minima_excepcion=1.50,
+                     ev_excepcion=0.05, apostables=("gamdom",))
+    r = detectar({e.id: e for e in lec.eventos}, lec.cuotas, 1000, AHORA, reglas)
+    (o,) = r.oportunidades
+    assert (o.mercado, o.linea, o.seleccion, o.cuota) == ("handicap", 13.5, "local", 1.70)
+    assert 0.02 <= o.ev < 0.025 and o.prob_justa >= 0.60 and o.importe == 7
+
+
+def test_un_mercado_de_otro_deporte_no_se_cuela():
+    """El 101 es el 1X2 del FÚTBOL: dentro de un partido de la NFL no significa eso."""
+    fx = _nfl("pinnacle", (6.29, 1.137), (1.95, 1.87), (1.602, 2.41))
+    fx["bookmakerOdds"]["pinnacle"]["markets"]["101"] = {"marketActive": True, "outcomes": {
+        "101": _jugador(2.0), "102": _jugador(3.0), "103": _jugador(4.0)}}
+    f = OddsPapi(clave=CLAVE, cruce=Cruce())
+    f.equipos = {14: {"501": "Miami Dolphins", "502": "Kansas City Chiefs"}}
+    assert not [c for c in f.traducir([fx], AHORA).cuotas if c.mercado == "1x2"]
+
+
+def test_pide_los_equipos_de_cada_deporte(tmp_path):
+    pedidos = []
+
+    def manejar(req):
+        if req.url.path.endswith("/participants"):
+            pedidos.append(req.url.params["sportId"])
+            return httpx.Response(200, json={"501": "Miami Dolphins", "502": "Kansas City Chiefs"}
+                                  if req.url.params["sportId"] == "14" else EQUIPOS)
+        return httpx.Response(200, json=[_nfl(req.url.params["bookmaker"], (6.29, 1.137), (1.95, 1.87),
+                                               (1.602, 2.41)), PINNACLE])
+    f = OddsPapi(clave=CLAVE, cliente=httpx.Client(transport=httpx.MockTransport(manejar)),
+                 casas=["gamdom"], cache=str(tmp_path / "c.json"))
+    lec = f.leer(["31", "8"])
+    assert sorted(pedidos) == ["10", "14"] and {e.deporte for e in lec.eventos} == {"futbol", "americanfootball"}
+    assert "NFL, LaLiga" in lec.detalle
+    g = OddsPapi(clave=CLAVE, cache=str(tmp_path / "c.json"))
+    assert g.equipos[14]["501"] == "Miami Dolphins" and "2830" in g.equipos[10]

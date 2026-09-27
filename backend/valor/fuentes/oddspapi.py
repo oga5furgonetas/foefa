@@ -1,4 +1,4 @@
-"""OddsPapi (oddspapi.io), v4. La que trae las casas ESPAÑOLAS.
+"""OddsPapi (oddspapi.io), v4. La que trae las casas de Dani.
 
 The Odds API da, en la región «eu», las webs de Francia, Alemania, Suecia...
 y ninguna .es; API-Football da Bet365 o Bwin sin decir de qué país. OddsPapi
@@ -7,15 +7,26 @@ justo el hueco que tenían las otras dos: las cuotas de las webs donde de
 verdad se puede apostar desde España.
 
 Gratis: 250 peticiones al mes y UNA casa por petición (con dos contesta 400:
-«provide exactly one bookmaker»), pero todas las ligas en la misma. Así que
-cada lectura son dos peticiones: Pinnacle (la referencia) y UNA casa española,
-que va rotando de lectura en lectura (ODDSPAPI_CASAS).
+«provide exactly one bookmaker»), y como mucho 5 torneos por petición (con
+más, 400: «maximum of 5 tournament IDs»). Así que cada lectura son dos
+peticiones: Pinnacle (la referencia) y UNA casa de Dani, que va rotando de
+lectura en lectura (ODDSPAPI_CASAS), con los 5 torneos que el escáner elige
+(los que juegan antes).
 
-FORMATO: comprobado contra la API real el 27-09-2026 (LaLiga con Pinnacle:
-20 partidos, 39 mercados). Los equipos vienen por número: su nombre sale de
-/participants (20.000 equipos, 550 KB), que se guarda en disco y se renueva
-cada semana, o antes si aparece un equipo que no está. Los números de mercado
-y de resultado salen de /markets (fútbol, partido entero) y están abajo.
+TODOS LOS DEPORTES. El 27-09-2026, con el parón de selecciones, el único valor
+real en las casas de Dani estaba en la NFL. Aquí van fútbol, fútbol americano
+(NFL, NCAA), béisbol (MLB), baloncesto (NBA, WNBA, Euroliga), hockey (NHL),
+tenis y MMA. Los mercados salen de `oddspapi_mercados.json`, generado del
+catálogo REAL de /markets: de cada deporte UN periodo (fútbol, los 90 min; el
+resto, el partido con prórroga), nunca cuartos, mitades ni jugadores. Así el
+mismo número de mercado es siempre el mismo mercado en todas las casas.
+
+FORMATO: comprobado contra la API real el 27-09-2026. Los equipos vienen por
+número: su nombre sale de /participants DE CADA DEPORTE (el de fútbol, 20.000
+equipos y 550 KB), que se guarda en disco y se renueva cada semana, o antes si
+aparece un equipo que no está. En el hándicap la línea es la del LOCAL
+(comprobado en fútbol: el −0,5 del local paga lo que su 1X2; y en la NFL: la
+escalera de Pinnacle del Dolphins–Chiefs cuadra con su ganador).
 
 LA HORA DE CADA CUOTA. OddsPapi da cuándo CAMBIÓ cada precio («changedAt»),
 no cuándo lo comprobó: un precio de dentro de dos semanas que no se ha movido
@@ -42,26 +53,41 @@ log = logging.getLogger("valor.fuentes")
 BASE = "https://api.oddspapi.io/v4"
 REFERENCIA = "pinnacle"
 
-# Torneo de OddsPapi → nombre. Los que no estén salen como «torneo N».
-TORNEOS = {8: "LaLiga", 17: "Premier League", 7: "UEFA Champions League", 679: "UEFA Europa League",
-           34480: "UEFA Conference League", 23: "Serie A", 35: "Bundesliga", 34: "Ligue 1",
-           54: "LaLiga 2", 329: "Copa del Rey", 238: "Liga Portugal", 37: "Eredivisie",
-           23755: "UEFA Nations League"}
+# Deporte de OddsPapi → el nuestro (el mismo nombre que da The Odds API, para
+# que un partido leído por las dos fuentes se cruce).
+DEPORTES = {10: "futbol", 11: "baloncesto", 12: "tenis", 13: "baseball", 14: "americanfootball",
+            15: "icehockey", 20: "mma"}
 
-# Mercado → (nuestro mercado, línea, {resultado de OddsPapi: nuestra selección}).
-# De /markets, fútbol, «fulltime», sin apuestas a jugadores. Solo líneas x,5 en
-# goles y hándicap: las enteras y las de cuarto devuelven dinero y el detector
-# no las usa. En el hándicap la línea es la del LOCAL (comprobado: el −0,5 del
-# local paga lo mismo que su victoria en el 1X2).
-MERCADOS: Dict[int, Tuple[str, Optional[float], Dict[int, str]]] = {
-    101: ("1x2", None, {101: "local", 102: "empate", 103: "visitante"}),
-    104: ("ambos_marcan", None, {104: "si", 105: "no"}),
+# Torneo → (deporte, nombre, su clave en The Odds API para el calendario gratis).
+# Los números, de /tournaments de la API real (27-09-2026).
+TORNEOS: Dict[int, Tuple[int, str, Optional[str]]] = {
+    8: (10, "LaLiga", "soccer_spain_la_liga"),
+    54: (10, "LaLiga 2", "soccer_spain_segunda_division"),
+    17: (10, "Premier League", "soccer_epl"),
+    7: (10, "UEFA Champions League", "soccer_uefa_champs_league"),
+    679: (10, "UEFA Europa League", "soccer_uefa_europa_league"),
+    34480: (10, "UEFA Conference League", "soccer_uefa_europa_conference_league"),
+    23755: (10, "UEFA Nations League", "soccer_uefa_nations_league"),
+    23: (10, "Serie A", "soccer_italy_serie_a"),
+    35: (10, "Bundesliga", "soccer_germany_bundesliga"),
+    34: (10, "Ligue 1", "soccer_france_ligue_one"),
+    242: (10, "MLS", "soccer_usa_mls"),
+    27464: (10, "Liga MX", "soccer_mexico_ligamx"),
+    31: (14, "NFL", "americanfootball_nfl"),
+    27653: (14, "NCAA", "americanfootball_ncaaf"),
+    109: (13, "MLB", "baseball_mlb"),
+    132: (11, "NBA", "basketball_nba"),
+    486: (11, "WNBA", "basketball_wnba"),
+    138: (11, "Euroliga", "basketball_euroleague"),
+    234: (15, "NHL", "icehockey_nhl"),
+    957: (15, "NHL pretemporada", "icehockey_nhl_preseason"),
 }
-for _id, _linea in ((106, 0.5), (108, 1.5), (1010, 2.5), (1012, 3.5), (1014, 4.5), (1016, 5.5)):
-    MERCADOS[_id] = ("totales", _linea, {_id: "mas", _id + 1: "menos"})
-for _id, _linea in ((1044, -3.5), (1052, -2.5), (1060, -1.5), (1068, -0.5),
-                    (1076, 0.5), (1084, 1.5), (1092, 2.5), (10100, 3.5)):
-    MERCADOS[_id] = ("handicap", _linea, {_id: "local", _id + 1: "visitante"})
+
+# {mercado: (deporte, nuestro mercado, línea, {resultado: nuestra selección})}
+MERCADOS: Dict[int, Tuple[int, str, Optional[float], Dict[int, str]]] = {
+    int(mid): (sid, mercado, linea, {int(o): s for o, s in sels.items()})
+    for mid, (sid, mercado, linea, sels) in json.loads(
+        Path(__file__).with_name("oddspapi_mercados.json").read_text(encoding="utf-8")).items()}
 
 UNA_SEMANA = 7 * 24 * 3600
 UN_DIA = 24 * 3600
@@ -85,8 +111,9 @@ class OddsPapi(Fuente):
         self.casas = casas or ["bet365.es"]
         self.cruce = cruce or Cruce()
         self.cache = Path(cache) if cache else None
-        self.equipos: Dict[str, str] = {}
-        self._equipos_de = 0.0
+        # Por deporte: {deporte: {id: nombre}} y {deporte: cuándo se pidió}.
+        self.equipos: Dict[int, Dict[str, str]] = {}
+        self._equipos_de: Dict[int, float] = {}
         # Cuántas lecturas lleva: decide a qué casa le toca (el escáner lo pone
         # desde su registro, así la rotación no vuelve a empezar al reiniciar).
         self.vueltas_previas = 0
@@ -117,42 +144,54 @@ class OddsPapi(Fuente):
             return
         try:
             d = json.loads(self.cache.read_text(encoding="utf-8"))
-            self.equipos, self._equipos_de = dict(d["equipos"]), float(d["de"])
-        except (OSError, ValueError, KeyError, TypeError):
-            self.equipos, self._equipos_de = {}, 0.0
+            if isinstance(d.get("de"), (int, float)):
+                # Formato del primer día: solo fútbol.
+                self.equipos, self._equipos_de = {10: dict(d["equipos"])}, {10: float(d["de"])}
+            else:
+                self.equipos = {int(s): dict(v) for s, v in d["equipos"].items()}
+                self._equipos_de = {int(s): float(v) for s, v in d["de"].items()}
+        except (OSError, ValueError, KeyError, TypeError, AttributeError):
+            self.equipos, self._equipos_de = {}, {}
 
-    def _pide_equipos(self) -> None:
-        r = self._get("/participants", sportId=10)
+    def _pide_equipos(self, deporte: int) -> None:
+        r = self._get("/participants", sportId=deporte)
         comprueba(r, self.nombre)
         datos = r.json()
         if not isinstance(datos, dict):
             raise ValueError("oddspapi: /participants no devolvió la lista de equipos")
-        self.equipos, self._equipos_de = {str(k): str(v) for k, v in datos.items()}, time.time()
+        self.equipos[deporte] = {str(k): str(v) for k, v in datos.items()}
+        self._equipos_de[deporte] = time.time()
         if self.cache:
             try:
                 self.cache.parent.mkdir(parents=True, exist_ok=True)
-                self.cache.write_text(json.dumps({"de": self._equipos_de, "equipos": self.equipos},
-                                                 ensure_ascii=False), encoding="utf-8")
+                self.cache.write_text(json.dumps(
+                    {"de": {str(s): v for s, v in self._equipos_de.items()},
+                     "equipos": {str(s): v for s, v in self.equipos.items()}}, ensure_ascii=False), encoding="utf-8")
             except OSError as e:
                 log.warning("oddspapi: no se pudo guardar la lista de equipos: %s", e)
 
+    def _nombre(self, deporte, id_) -> Optional[str]:
+        return self.equipos.get(deporte, {}).get(str(id_))
+
     def _asegura_equipos(self, fixtures: List[dict]) -> None:
-        edad = time.time() - self._equipos_de
-        faltan = any(str(f.get(k)) not in self.equipos
-                     for f in fixtures for k in ("participant1Id", "participant2Id"))
-        # Una semana de vida; si falta un equipo, se pide antes, pero no más de
-        # una vez al día (un equipo que OddsPapi no tenga no puede fundir el cupo).
-        if edad > UNA_SEMANA or (faltan and edad > UN_DIA):
-            self._pide_equipos()
+        for deporte in sorted({f.get("sportId") for f in fixtures if f.get("sportId") in DEPORTES}):
+            edad = time.time() - self._equipos_de.get(deporte, 0.0)
+            faltan = any(self._nombre(deporte, f.get(k)) is None
+                         for f in fixtures if f.get("sportId") == deporte
+                         for k in ("participant1Id", "participant2Id"))
+            # Una semana de vida; si falta un equipo, se pide antes, pero no más
+            # de una vez al día (un equipo que OddsPapi no tenga no funde el cupo).
+            if edad > UNA_SEMANA or (faltan and edad > UN_DIA):
+                self._pide_equipos(deporte)
 
     # ── las cuotas ─────────────────────────────────────────────────────────
     def casa_del_turno(self) -> str:
         return self.casas[self.vueltas_previas % len(self.casas)]
 
-    def _cuotas_de(self, casa: str) -> List[dict]:
+    def _cuotas_de(self, casa: str, torneos: List[int]) -> List[dict]:
         datos: List[dict] = []
-        for i in range(0, len(self.torneos), TORNEOS_POR_PETICION):
-            tanda = self.torneos[i:i + TORNEOS_POR_PETICION]
+        for i in range(0, len(torneos), TORNEOS_POR_PETICION):
+            tanda = torneos[i:i + TORNEOS_POR_PETICION]
             r = self._get("/odds-by-tournaments", bookmaker=casa, tournamentIds=",".join(str(t) for t in tanda))
             if r.status_code in (401, 403):
                 raise PermissionError("oddspapi: clave no válida o cupo agotado")
@@ -163,21 +202,26 @@ class OddsPapi(Fuente):
             datos += parte
         return datos
 
-    def peticiones_por_lectura(self) -> int:
-        tandas = -(-len(self.torneos) // TORNEOS_POR_PETICION)
+    def peticiones_por_lectura(self, torneos: Optional[int] = None) -> int:
+        n = len(self.torneos) if torneos is None else torneos
+        tandas = -(-n // TORNEOS_POR_PETICION)
         return tandas * (1 if self.casas == [REFERENCIA] else 2)
 
     def leer(self, deportes: List[str]) -> Lectura:
+        """`deportes`: los torneos que elige el escáner (los que juegan antes).
+        Vacío: los suyos por defecto."""
         self.exige_clave()
         self._llamadas = 0
+        torneos = [int(x) for x in deportes if str(x).isdigit()] if deportes else list(self.torneos)
         ahora = datetime.now(timezone.utc)
         casa = self.casa_del_turno()
-        fixtures = self._cuotas_de(REFERENCIA)
+        fixtures = self._cuotas_de(REFERENCIA, torneos)
         if casa != REFERENCIA:
-            fixtures += self._cuotas_de(casa)
+            fixtures += self._cuotas_de(casa, torneos)
         self._asegura_equipos(fixtures)
         out = self.traducir(fixtures, ahora)
-        out.coste, out.detalle = self._llamadas, f"{REFERENCIA} + {casa}"
+        nombres = ", ".join(TORNEOS.get(t, (0, f"torneo {t}", None))[1] for t in torneos)
+        out.coste, out.detalle = self._llamadas, f"{REFERENCIA} + {casa} · {nombres}"
         return out
 
     def traducir(self, fixtures: List[dict], ahora: Optional[datetime] = None) -> Lectura:
@@ -187,39 +231,40 @@ class OddsPapi(Fuente):
         sin_nombre = 0
         for f in fixtures:
             fid = str(f.get("fixtureId"))
-            if f.get("sportId") not in (None, 10):
+            sid = f.get("sportId", 10)
+            if sid not in DEPORTES:
                 continue
             e = vistos.get(fid)
             if e is None:
-                local = self.equipos.get(str(f.get("participant1Id")))
-                visit = self.equipos.get(str(f.get("participant2Id")))
+                local = self._nombre(sid, f.get("participant1Id"))
+                visit = self._nombre(sid, f.get("participant2Id"))
                 if not (local and visit and f.get("startTime")):
                     sin_nombre += 1
                     continue
                 inicio = ts(f["startTime"])
                 if inicio <= ahora:
                     continue            # en vivo no: ver arriba
+                torneo = TORNEOS.get(f.get("tournamentId"))
                 e = self.cruce.registra(Evento(
-                    id_evento("futbol", local, visit, inicio), "futbol",
-                    TORNEOS.get(f.get("tournamentId"), f"torneo {f.get('tournamentId')}"),
-                    local, visit, inicio))
+                    id_evento(DEPORTES[sid], local, visit, inicio), DEPORTES[sid],
+                    torneo[1] if torneo else f"torneo {f.get('tournamentId')}", local, visit, inicio))
                 vistos[fid] = e
                 out.eventos.append(e)
             for casa, b in (f.get("bookmakerOdds") or {}).items():
                 if not b.get("bookmakerIsActive", True) or b.get("suspended"):
                     continue
                 for mid, m in (b.get("markets") or {}).items():
-                    out.cuotas += list(self._mercado(e, casa, mid, m, ahora))
+                    out.cuotas += list(self._mercado(e, sid, casa, mid, m, ahora))
         if sin_nombre:
             out.avisos.append(f"oddspapi: {sin_nombre} partidos sin nombre de equipo: no se usan")
         return out
 
-    def _mercado(self, e: Evento, casa: str, mid, m: dict, ahora: datetime):
+    def _mercado(self, e: Evento, sid: int, casa: str, mid, m: dict, ahora: datetime):
         try:
-            mercado, linea, resultados = MERCADOS[int(mid)]
+            deporte, mercado, linea, resultados = MERCADOS[int(mid)]
         except (KeyError, ValueError):
             return
-        if not m.get("marketActive", True):
+        if deporte != sid or not m.get("marketActive", True):
             return
         for oid, o in (m.get("outcomes") or {}).items():
             try:
@@ -236,16 +281,15 @@ class OddsPapi(Fuente):
 
 
 def de_entorno(cruce: Cruce, cache: Optional[str]) -> OddsPapi:
-    # Hasta 5 torneos van en la MISMA petición; el sexto ya cuesta otra por casa.
-    # Por defecto, 5: LaLiga, Segunda, Premier, Champions y Nations League.
-    torneos = [int(x) for x in os.environ.get("ODDSPAPI_TORNEOS", "8,54,17,7,23755").split(",")
+    # Candidatos: todos los de TORNEOS (o los de ODDSPAPI_TORNEOS). El escáner
+    # lee en cada vuelta los 5 que juegan antes (5 caben en una petición).
+    torneos = [int(x) for x in os.environ.get("ODDSPAPI_TORNEOS", ",".join(map(str, TORNEOS))).split(",")
                if x.strip().isdigit()]
     # Las casas de Dani (27-09-2026): Codere, BetStars (PokerStars) y Gamdom.
     # Casino Barcelona no lo trae ninguna fuente. Lo que trae OddsPapi de cada
-    # una en LaLiga (llamada real del 27-09): Gamdom, todo (1X2, goles,
-    # hándicap); Codere, goles y hándicap pero no el 1X2; PokerStars ES, solo
-    # «marcan los dos» y resultado exacto, que Pinnacle no da (sin referencia).
-    # Por eso Gamdom va una lectura sí y otra no, y las otras dos se turnan.
+    # una (llamadas reales del 27-09): Gamdom, todo; Codere, sin el 1X2 del
+    # fútbol; PokerStars ES, poco, y en la NFL con líneas de hándicap cruzadas
+    # (las filtra el detector). Por eso Gamdom va una lectura sí y otra no.
     casas = [x.strip() for x in os.environ.get(
         "ODDSPAPI_CASAS", "gamdom,codere.es,gamdom,pokerstars.es").split(",") if x.strip()]
     return OddsPapi(torneos=torneos, casas=casas, cruce=cruce, cache=cache)

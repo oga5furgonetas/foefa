@@ -18,7 +18,11 @@ CONTRA LOS FALSOS POSITIVOS, que en esto son la norma y no la excepción:
     cuota de hace dos minutos en vivo ya no existe;
   · un EV enorme casi nunca es un chollo, es un dato mal cruzado (otra línea,
     otro partido, un jugador retirado): se aparta como sospechoso;
-  · tapados muy largos fuera: es donde quitar el margen se equivoca más.
+  · tapados muy largos fuera: es donde quitar el margen se equivoca más;
+  · un hándicap cuya escalera no cuadra (la casa paga MÁS por el +4,5 que por
+    el +3,5, lo que es imposible) es un dato cruzado de la fuente, no un
+    chollo: va a sospechosas. Pasó el 27-09-2026 con PokerStars y Codere en la
+    NFL (daban «+6 %» que no existía).
 """
 from __future__ import annotations
 
@@ -99,6 +103,39 @@ def _ultimas(cuotas: Iterable[Cuota]) -> Dict[Tuple, Dict[str, Dict[str, Cuota]]
     return out
 
 
+TOLERANCIA_ESCALERA = 0.01
+
+
+def _escaleras(ultimas) -> Dict[Tuple, Dict[float, Dict[str, float]]]:
+    """{(evento, casa): {línea: {selección: cuota}}} de los hándicaps."""
+    out: Dict[Tuple, Dict[float, Dict[str, float]]] = defaultdict(dict)
+    for (evento_id, mercado, linea), casas in ultimas.items():
+        if mercado != "handicap" or linea is None:
+            continue
+        for casa, fila in casas.items():
+            out[(evento_id, casa)][linea] = {s: c.cuota for s, c in fila.items()}
+    return out
+
+
+def escalera_rota(escalera: Dict[float, Dict[str, float]], linea: float) -> Optional[str]:
+    """La línea es la del LOCAL: con más puntos a su favor, su cuota no puede
+    SUBIR y la del visitante no puede BAJAR. Si esta línea contradice a otra
+    línea de la misma casa, en cualquiera de los dos lados, no es fiable."""
+    for otra in escalera:
+        if otra == linea:
+            continue
+        baja, alta = sorted((linea, otra))
+        for sel in ("local", "visitante"):
+            c_baja, c_alta = escalera[baja].get(sel), escalera[alta].get(sel)
+            if c_baja is None or c_alta is None:
+                continue
+            if (sel == "local" and c_alta > c_baja + TOLERANCIA_ESCALERA) or                     (sel == "visitante" and c_alta + TOLERANCIA_ESCALERA < c_baja):
+                return (f"La escalera de hándicap de esta casa no cuadra: al {sel} le paga {c_baja:.2f} con "
+                        f"{baja:+g} y {c_alta:.2f} con {alta:+g}, y eso es imposible. Casi seguro es un dato "
+                        f"cruzado de la fuente, no un chollo.")
+    return None
+
+
 def detectar(eventos: Dict[str, Evento], cuotas: Iterable[Cuota], banca: float,
              ahora: Optional[datetime] = None,
              prepartido: ReglasDetector = PREPARTIDO,
@@ -112,7 +149,9 @@ def detectar(eventos: Dict[str, Evento], cuotas: Iterable[Cuota], banca: float,
     candidatas: List[Oportunidad] = []
     sospechosas: List[Oportunidad] = []
 
-    for (evento_id, mercado, linea), casas in _ultimas(cuotas).items():
+    ultimas = _ultimas(cuotas)
+    escaleras = _escaleras(ultimas)
+    for (evento_id, mercado, linea), casas in ultimas.items():
         ev_obj = eventos.get(evento_id)
         if ev_obj is None:
             descartes["evento desconocido"] += 1
@@ -225,6 +264,13 @@ def detectar(eventos: Dict[str, Evento], cuotas: Iterable[Cuota], banca: float,
                         "a mano antes de nada.")
                     sospechosas.append(op)
                     continue
+                if mercado == "handicap":
+                    rota = escalera_rota(escaleras.get((evento_id, casa), {}), linea)
+                    if rota:
+                        op.avisos.append(rota)
+                        descartes["hándicap con la escalera rota"] += 1
+                        sospechosas.append(op)
+                        continue
                 if ev_obj.en_vivo:
                     op.avisos.append(
                         f"En vivo: la cuota tiene {edad:.0f} s. Si al ir a apostar ha "

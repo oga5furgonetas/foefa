@@ -38,6 +38,7 @@ import httpx
 from .fuentes.api_football import ApiFootball
 from .fuentes.base import Fuente, Lectura, SinClave, limpia
 from .fuentes.nombres import Cruce
+from .fuentes.oddspapi import TORNEOS as OP_TORNEOS, TORNEOS_POR_PETICION, OddsPapi
 from .fuentes.oddspapi import de_entorno as oddspapi_de_entorno
 from .fuentes.the_odds_api import TheOddsApi
 from .nucleo.detector import EN_VIVO, PREPARTIDO, Resultado, detectar
@@ -149,10 +150,16 @@ class Escaner:
             cache = (os.path.join(os.path.dirname(os.path.abspath(ruta)), "oddspapi_equipos.json")
                      if ruta and ruta != ":memory:" else None)
             f = oddspapi_de_entorno(self.cruce, cache)
-            # Pinnacle y una casa por lectura, por cada tanda de 5 torneos.
+            # Pinnacle y una casa por lectura, con los (hasta) 5 torneos que
+            # juegan antes: una tanda, dos peticiones. Con todos los deportes
+            # casi siempre hay partido en 3 h, así que el ritmo rápido sería el
+            # de siempre y el cupo se iría en 10 días: cada 3 h como mucho y un
+            # día no gasta más de 1,2 veces su parte (~4 lecturas al día).
             out[f] = Presupuesto(f.nombre, int(os.environ.get("ODDSPAPI_CUPO", "250")),
-                                 timedelta(days=30), f.peticiones_por_lectura(),
-                                 rapido=minutos("ODDSPAPI_CADA_MIN", "60"))
+                                 timedelta(days=30), f.peticiones_por_lectura(min(len(f.torneos),
+                                                                                  TORNEOS_POR_PETICION)),
+                                 rapido=minutos("ODDSPAPI_CADA_MIN", "180"),
+                                 rafaga=float(os.environ.get("ODDSPAPI_RAFAGA", "1.2")))
         if os.environ.get("APISPORTS_KEY"):
             f = ApiFootball(cruce=self.cruce)
             out[f] = Presupuesto(f.nombre, int(os.environ.get("APISPORTS_CUPO", "100")),
@@ -163,19 +170,29 @@ class Escaner:
     def _refresca_calendario(self, ahora: datetime) -> None:
         if self._calendario_de and ahora - self._calendario_de < timedelta(minutes=30):
             return
+        # Además de sus ligas, las de los torneos de OddsPapi: su calendario
+        # también sale de aquí, gratis.
+        claves = list(self.deportes.get("the_odds_api", []))
+        for g in self.fuentes:
+            if isinstance(g, OddsPapi):
+                claves += [OP_TORNEOS[t][2] for t in g.torneos if t in OP_TORNEOS and OP_TORNEOS[t][2]]
+        claves = list(dict.fromkeys(claves))
         for f in self.fuentes:
             if isinstance(f, TheOddsApi) and f.clave:
                 try:
-                    self._calendario = f.proximos(self.deportes.get(f.nombre, []))
+                    self._calendario = f.proximos(claves)
                 except (httpx.HTTPError, PermissionError, ValueError, KeyError) as e:
                     log.warning("Calendario de the_odds_api: %s", limpia(e))
                 self._calendario_de = ahora
                 return
 
-    def _inicios(self, ahora: datetime) -> List[datetime]:
-        """Los partidos que vienen: el calendario gratis y los ya leídos."""
-        fechas = [t for ts in self._calendario.values() for t in ts if t > ahora]
-        for fila in self.reg.db.execute("SELECT inicio FROM eventos WHERE inicio > ? AND inicio < ?",
+    def _inicios(self, ahora: datetime, solo_futbol: bool = False) -> List[datetime]:
+        """Los partidos que vienen: el calendario gratis y los ya leídos.
+        `solo_futbol`: para API-Football, que solo lee fútbol (la NFL no le toca)."""
+        fechas = [t for k, ts in self._calendario.items() for t in ts
+                  if t > ahora and (not solo_futbol or k.startswith("soccer_"))]
+        filtro = " AND deporte='futbol'" if solo_futbol else ""
+        for fila in self.reg.db.execute("SELECT inicio FROM eventos WHERE inicio > ? AND inicio < ?" + filtro,
                                         (ahora.isoformat(), (ahora + timedelta(days=14)).isoformat())):
             try:
                 fechas.append(datetime.fromisoformat(fila[0]))
@@ -196,8 +213,35 @@ class Escaner:
         if isinstance(f, TheOddsApi) and self._calendario:
             ts = [t for l in ligas for t in self._calendario.get(l, []) if t > ahora]
         else:
-            ts = self._inicios(ahora)
+            ts = self._inicios(ahora, solo_futbol=isinstance(f, ApiFootball))
         return (min(ts) - ahora) if ts else None
+
+    def _torneos_oddspapi(self, f: "OddsPapi", ahora: datetime) -> "tuple[List[str], Optional[timedelta]]":
+        """Los (hasta) 5 torneos de OddsPapi que juegan antes, en las próximas
+        24 h, y cuánto falta para el primero. Lo que juega cada torneo sale del
+        calendario gratis de The Odds API y de los partidos ya leídos. Sin
+        ningún dato de calendario, los 5 primeros de la lista."""
+        proximo: Dict[int, datetime] = {}
+        for t in f.torneos:
+            clave = OP_TORNEOS.get(t, (0, "", None))[2]
+            for x in self._calendario.get(clave, []) if clave else []:
+                if x > ahora and (t not in proximo or x < proximo[t]):
+                    proximo[t] = x
+        nombres = {OP_TORNEOS[t][1]: t for t in f.torneos if t in OP_TORNEOS}
+        for fila in self.reg.db.execute(
+                "SELECT liga, MIN(inicio) FROM eventos WHERE inicio > ? GROUP BY liga", (ahora.isoformat(),)):
+            t = nombres.get(fila[0])
+            try:
+                x = datetime.fromisoformat(fila[1])
+            except (TypeError, ValueError):
+                continue
+            if t is not None and (t not in proximo or x < proximo[t]):
+                proximo[t] = x
+        if not proximo:
+            return [str(t) for t in f.torneos[:TORNEOS_POR_PETICION]], None
+        pronto = sorted((x, t) for t, x in proximo.items() if x <= ahora + timedelta(hours=24))
+        elegidos = [str(t) for _, t in pronto[:TORNEOS_POR_PETICION]]
+        return elegidos, (min(proximo.values()) - ahora)
 
     def _usado(self, f: Fuente, desde: datetime) -> float:
         return self.reg.db.execute("SELECT COALESCE(SUM(coste),0) FROM uso WHERE fuente=? AND ts>=?",
@@ -235,12 +279,16 @@ class Escaner:
         self._olvida_pasados(ahora)
         for f, p in self.fuentes.items():
             est = self.estado.setdefault(f.nombre, {})
-            ligas = self._ligas(f, ahora)
+            if isinstance(f, OddsPapi):
+                ligas, falta = self._torneos_oddspapi(f, ahora)
+                coste = f.peticiones_por_lectura(len(ligas)) if ligas else 0
+            else:
+                ligas = self._ligas(f, ahora)
+                falta = self._falta(f, ligas, ahora)
             if isinstance(f, TheOddsApi):
                 coste = len(ligas) * max(1, p.coste_vuelta // max(1, len(self.deportes.get(f.nombre, [])) or 1))
-            else:
+            elif not isinstance(f, OddsPapi):
                 coste = p.coste_vuelta
-            falta = self._falta(f, ligas, ahora)
             espera = p.espera(falta)
             ult = self._ultima_de(f)
             trozo, tope = p.tope_rafaga()

@@ -224,6 +224,30 @@ Motor puro en `backend/afinidad.py` (léelo: explica el porqué), 27 pruebas en
   y 0 con ventaja positiva aun sin filtros. Es lo esperable lejos del partido;
   no se ha tocado ningún filtro para que salgan.
 
+### 27-09 (mañana): todos los deportes
+
+Dani no se creía el 0. Estudio con datos reales (scratchpad de la sesión):
+- The Odds API, 28 deportes y 24 casas europeas: de 3.967 cuotas de
+  prepartido, 17 con ventaja ≥2 % y ninguna favorita ≥1,70. (Un primer
+  análisis daba «valor» en hockey y balonmano: era mezclar el 1X2 de 60 min con
+  el ganador con prórroga. El escáner ya los separaba: «1x2» y «ganador».)
+- OddsPapi con las casas de Dani, 15 competiciones de 5 deportes: 8.012 cuotas.
+  Gamdom paga de mediana un 8,3 % menos de lo justo, Codere un 11,1 %,
+  PokerStars un 8,4 %. UNA cumplía todas las reglas: Dolphins +13,5 en Gamdom
+  a 1,70 (justa 1,66, +2,1 %, 60 %), NFL. Los «+6 %» de PokerStars y Codere en
+  la NFL eran líneas de hándicap cruzadas en la fuente (pagaban más al +4,5
+  que al +3,5).
+- Hecho: OddsPapi lee TODOS los deportes (`TORNEOS` en `oddspapi.py`: fútbol,
+  NFL, NCAA, MLB, NBA, WNBA, Euroliga, NHL; tenis y MMA solo ganador). Mercados
+  de `oddspapi_mercados.json`, generado del catálogo REAL (un periodo por
+  deporte; nunca cuartos ni jugadores). Equipos por deporte. En cada lectura,
+  los 5 torneos que juegan antes en 24 h (calendario gratis de The Odds API +
+  partidos leídos). El detector manda a sospechosas un hándicap cuya escalera
+  no cuadra (`escalera_rota`). Ritmo: cada 3 h como mucho y 1,2 veces la parte
+  diaria (~4 lecturas al día), `ODDSPAPI_CUPO=200` (unas 35 peticiones del
+  estudio se gastaron desde el PC y el servidor no las cuenta).
+- Límites reales de OddsPapi: 1 casa y 5 torneos por petición, 429 a <1 s.
+
 ## Pendiente (por prioridad)
 
 0. **URGENTE — aviso de Amazon del 24-09**: leer la sección 0 de

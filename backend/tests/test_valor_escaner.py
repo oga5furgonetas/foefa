@@ -312,3 +312,55 @@ def test_tras_reiniciar_sabe_cuando_leyo(tmp_path):
     assert nuevo.vuelta(AHORA + timedelta(minutes=5)) is None       # aún no le toca leer
     assert nuevo.estado["falsa"]["ultima"] == AHORA.isoformat()
     assert nuevo.estado["falsa"]["gastado"] == 25
+
+
+
+def test_oddspapi_lee_los_5_torneos_que_juegan_antes(tmp_path):
+    from valor.fuentes.oddspapi import OddsPapi
+    reg = Registro(str(tmp_path / "v.db"))
+    esc = Escaner(reg, 1000, fuentes={})
+    f = OddsPapi(clave="x", cruce=esc.cruce, torneos=[8, 54, 17, 7, 23755, 31, 27653, 109, 132])
+    h = lambda horas: AHORA + timedelta(hours=horas)
+    esc._calendario = {"americanfootball_nfl": [h(5)], "baseball_mlb": [h(1), h(3)],
+                       "soccer_spain_segunda_division": [h(2)], "americanfootball_ncaaf": [h(8)],
+                       "soccer_uefa_nations_league": [h(20)], "soccer_spain_la_liga": [h(30)],
+                       "basketball_nba": [h(26)]}
+    elegidos, falta = esc._torneos_oddspapi(f, AHORA)
+    # Por hora de inicio, solo los de las próximas 24 h, como mucho 5.
+    assert elegidos == ["109", "54", "31", "27653", "23755"] and falta == timedelta(hours=1)
+    # Nada en 24 h: no se lee (no gasta), pero se sabe cuánto falta.
+    esc._calendario = {"soccer_spain_la_liga": [h(30)]}
+    assert esc._torneos_oddspapi(f, AHORA) == ([], timedelta(hours=30))
+    # Sin calendario ni partidos leídos: los 5 primeros de la lista.
+    esc._calendario = {}
+    assert esc._torneos_oddspapi(f, AHORA) == (["8", "54", "17", "7", "23755"], None)
+
+
+def test_oddspapi_sin_partido_no_gasta(tmp_path):
+    from valor.fuentes.oddspapi import OddsPapi
+    reg = Registro(str(tmp_path / "v.db"))
+    esc = Escaner(reg, 1000, fuentes={})
+
+    class Contada(OddsPapi):
+        def leer(self, deportes):
+            raise AssertionError("no tenía que leer")
+    f = Contada(clave="x", cruce=esc.cruce, torneos=[8])
+    esc.fuentes = {f: Presupuesto("oddspapi", 250, timedelta(days=30), 2, rapido=timedelta(minutes=60))}
+    esc._calendario, esc._calendario_de = {"soccer_spain_la_liga": [AHORA + timedelta(days=3)]}, AHORA
+    assert esc.vuelta(AHORA) is None and esc.estado["oddspapi"]["sin_partido"] is True
+
+
+
+def test_oddspapi_reparte_el_cupo_en_el_mes(tmp_path, monkeypatch):
+    """Con todos los deportes siempre hay partido: sin freno, 250 al mes se
+    irían en 10 días. Cada 3 h como mucho y ~10 peticiones al día."""
+    monkeypatch.setenv("ODDSPAPI_KEY", "x")
+    monkeypatch.delenv("ODDS_API_KEY", raising=False)
+    monkeypatch.delenv("APISPORTS_KEY", raising=False)
+    monkeypatch.delenv("ODDSPAPI_CADA_MIN", raising=False)
+    monkeypatch.delenv("ODDSPAPI_RAFAGA", raising=False)
+    esc = Escaner(Registro(str(tmp_path / "v.db")), 1000)
+    (p,) = esc.fuentes.values()
+    assert p.coste_vuelta == 2 and p.espera(timedelta(hours=1)) == timedelta(hours=3)
+    trozo, tope = p.tope_rafaga()
+    assert trozo == timedelta(days=1) and tope == 10.0            # 1,2 × 250/30
