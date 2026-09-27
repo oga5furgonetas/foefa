@@ -112,7 +112,7 @@ button, input, select, textarea { font: inherit; color: inherit; }
 .btn:hover { text-decoration: none; background: var(--paper-2); }
 .btn-solid { background: var(--ink); color: var(--paper); }
 .btn-solid:hover { background: var(--ink-2); }
-.btn-accent { background: var(--accent); border-color: var(--accent); color: #fff; }
+.btn-accent { background: var(--accent); border-color: var(--accent); color: var(--paper); }
 .btn-small { padding: 6px 10px; font-size: 13px; }
 .btn[disabled] { opacity: 0.5; cursor: not-allowed; }
 
@@ -127,7 +127,7 @@ button, input, select, textarea { font: inherit; color: inherit; }
 
 /* ── Etiquetas ── */
 .badge { display: inline-flex; align-items: center; gap: 5px; font-family: var(--sans); font-size: 11px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; padding: 3px 7px; border-radius: 2px; line-height: 1.2; vertical-align: middle; }
-.badge-breaking { background: var(--accent); color: #fff; }
+.badge-breaking { background: var(--accent); color: var(--paper); }
 .badge-developing { background: var(--developing-soft); color: var(--developing); }
 .badge-verified { background: var(--verified-soft); color: var(--verified); }
 .badge-retracted { background: var(--ink); color: var(--paper); }

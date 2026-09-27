@@ -30,6 +30,36 @@ export function isHttpUrl(s: string | null | undefined): boolean {
   }
 }
 
+/** ¿Es una IP de red interna, de bucle local, enlace local o CGNAT? (IPv4 e IPv6). */
+export function isPrivateIp(ip: string): boolean {
+  const a = ip.toLowerCase().replace(/^\[|\]$/g, '');
+  const v4 = a.startsWith('::ffff:') ? a.slice(7) : a;
+  if (/^\d+\.\d+\.\d+\.\d+$/.test(v4)) {
+    const [x, y] = v4.split('.').map(Number);
+    return x === 0 || x === 10 || x === 127 || (x === 169 && y === 254) || (x === 172 && y >= 16 && y <= 31) || (x === 192 && y === 168) || (x === 100 && y >= 64 && y <= 127) || x >= 224;
+  }
+  return a === '::' || a === '::1' || /^f[cd]/.test(a) || /^fe[89ab]/.test(a);
+}
+
+/**
+ * Comprueba en qué IP resuelve de verdad un nombre (evita que un dominio
+ * público apunte a la red interna). Si no resuelve, no se permite.
+ */
+export async function resolvesToPublic(hostname: string, lookup: (h: string) => Promise<{ address: string }[]> = defaultLookup): Promise<boolean> {
+  if (!isPublicHost(hostname)) return false;
+  try {
+    const addrs = await lookup(hostname);
+    return addrs.length > 0 && addrs.every((x) => !isPrivateIp(x.address));
+  } catch {
+    return false;
+  }
+}
+
+async function defaultLookup(h: string) {
+  const dns = await import('node:dns/promises');
+  return dns.lookup(h, { all: true });
+}
+
 /** Evita que un feed nos haga pedir a la red interna (SSRF). */
 export function isPublicHost(hostname: string): boolean {
   const h = hostname.toLowerCase();

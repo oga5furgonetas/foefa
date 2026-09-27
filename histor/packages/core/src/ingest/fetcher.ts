@@ -10,7 +10,7 @@
  */
 import { env } from '../env';
 import { isAllowed, parseRobots, type RobotsRules } from './robots';
-import { isPublicHost } from './url';
+import { isPublicHost, resolvesToPublic } from './url';
 
 export type FetchResult = {
   url: string;
@@ -34,6 +34,11 @@ export type FetcherOptions = {
   maxBytes?: number;
   /** Solo para tests y fixtures locales. */
   allowPrivateHosts?: boolean;
+  /**
+   * Comprobar la IP resuelta y cada redirección (anti-SSRF). Por defecto, sí
+   * cuando se usa la red real (sin fetchImpl inyectado).
+   */
+  checkResolvedIp?: boolean;
   respectRobots?: boolean;
 };
 
@@ -52,6 +57,26 @@ export class PoliteFetcher {
     this.fetchImpl = opts.fetchImpl ?? fetch;
   }
 
+  /**
+   * fetch con protección anti-SSRF: con la red real, cada salto (incluidas las
+   * redirecciones, hasta 5) debe resolver a una IP pública.
+   */
+  private async safeFetch(url: string, init: { headers: Record<string, string>; signal: AbortSignal }): Promise<{ res: Response } | { blocked: string }> {
+    const checkIp = !this.opts.allowPrivateHosts && (this.opts.checkResolvedIp ?? !this.opts.fetchImpl);
+    if (!checkIp) return { res: await this.fetchImpl(url, { ...init, redirect: 'follow' }) };
+    let target = url;
+    for (let hop = 0; hop <= 5; hop++) {
+      const t = new URL(target);
+      if (!['http:', 'https:'].includes(t.protocol)) return { blocked: 'redirección no permitida' };
+      if (!(await resolvesToPublic(t.hostname))) return { blocked: 'destino en red interna o sin resolver' };
+      const res = await this.fetchImpl(target, { ...init, redirect: 'manual' });
+      const loc = res.status >= 300 && res.status < 400 ? res.headers.get('location') : null;
+      if (!loc) return { res };
+      target = new URL(loc, target).href;
+    }
+    return { blocked: 'demasiadas redirecciones' };
+  }
+
   private async pace(host: string, crawlDelaySec: number | null) {
     const min = Math.max(this.opts.minHostIntervalMs ?? 1000, (crawlDelaySec ?? 0) * 1000);
     const last = this.lastHit.get(host) ?? 0;
@@ -66,11 +91,9 @@ export class PoliteFetcher {
     if (cached && Date.now() - cached.at < 24 * 3600_000) return cached.rules;
     let rules: RobotsRules = { allow: [], disallow: [], crawlDelay: null };
     try {
-      const res = await this.fetchImpl(`${key}/robots.txt`, {
-        headers: { 'user-agent': userAgent() },
-        signal: AbortSignal.timeout(10_000),
-        redirect: 'follow',
-      });
+      const fetched = await this.safeFetch(`${key}/robots.txt`, { headers: { 'user-agent': userAgent() }, signal: AbortSignal.timeout(10_000) });
+      if ('blocked' in fetched) throw new Error(fetched.blocked);
+      const res = fetched.res;
       if (res.ok) rules = parseRobots(await res.text());
       // 401/403 en robots.txt = no permitido (criterio conservador).
       else if (res.status === 401 || res.status === 403) rules = { allow: [], disallow: ['/'], crawlDelay: null };
@@ -114,7 +137,9 @@ export class PoliteFetcher {
     };
     if (cond.etag) headers['if-none-match'] = cond.etag;
     if (cond.lastModified) headers['if-modified-since'] = cond.lastModified;
-    const res = await this.fetchImpl(url, { headers, redirect: 'follow', signal: AbortSignal.timeout(this.opts.timeoutMs ?? 20_000) });
+    const fetched = await this.safeFetch(url, { headers, signal: AbortSignal.timeout(this.opts.timeoutMs ?? 20_000) });
+    if ('blocked' in fetched) return { ...base, status: 0, ok: false, body: fetched.blocked, durationMs: Date.now() - started };
+    const res = fetched.res;
     const tdm = res.headers.get('tdm-reservation');
     const common = {
       ...base,

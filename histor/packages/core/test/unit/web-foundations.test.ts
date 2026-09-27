@@ -179,3 +179,30 @@ describe('experimentos, alertas y redes', () => {
     expect(t.length).toBeLessThanOrEqual(280);
   });
 });
+
+describe('anti-SSRF del rastreador', () => {
+  it('detecta IPs internas (IPv4, IPv6, mapeadas, CGNAT)', async () => {
+    const { isPrivateIp, resolvesToPublic } = await import('../../src/ingest/url');
+    for (const ip of ['10.0.0.1', '127.0.0.1', '169.254.169.254', '172.20.1.1', '192.168.1.1', '100.64.0.1', '::1', 'fd00::1', 'fe80::1', '::ffff:10.0.0.1']) expect(isPrivateIp(ip), ip).toBe(true);
+    for (const ip of ['8.8.8.8', '151.101.1.1', '2a04:4e42::1']) expect(isPrivateIp(ip), ip).toBe(false);
+    expect(await resolvesToPublic('noticias.example', async () => [{ address: '10.1.2.3' }])).toBe(false);
+    expect(await resolvesToPublic('noticias.example', async () => [{ address: '93.184.216.34' }])).toBe(true);
+    expect(await resolvesToPublic('noticias.example', async () => { throw new Error('NXDOMAIN'); })).toBe(false);
+  });
+  it('no sigue una redirección hacia la red interna', async () => {
+    const { PoliteFetcher } = await import('../../src/ingest/fetcher');
+    const calls: string[] = [];
+    const f = new PoliteFetcher({
+      respectRobots: false,
+      minHostIntervalMs: 0,
+      checkResolvedIp: true,
+      fetchImpl: (async (u: string) => {
+        calls.push(u);
+        return new Response(null, { status: 302, headers: { location: 'http://169.254.169.254/latest/meta-data/' } });
+      }) as unknown as typeof fetch,
+    });
+    const r = await f.get('https://1.1.1.1/feed.xml');
+    expect(r.ok).toBe(false);
+    expect(calls).toEqual(['https://1.1.1.1/feed.xml']);
+  });
+});
