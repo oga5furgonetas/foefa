@@ -27,6 +27,8 @@ def _sin_pausas(monkeypatch):
     """La pausa entre peticiones (la API real da 429 si van seguidas) aquí sobra."""
     import valor.fuentes.oddspapi as mod
     monkeypatch.setattr(mod, "PAUSA", 0.0)
+    # Descubrir torneos de tenis/esports tiene sus propias pruebas; aquí no.
+    monkeypatch.setattr(mod, "DESCUBRIR", {})
 
 
 def _jugador(precio, activo=True, limite=500.0):
@@ -48,7 +50,8 @@ def _fixture(casa, precios, suspendida=False, inicio="2026-10-09T19:00:00.000Z",
                     "101": _jugador(unox2[0]), "102": _jugador(unox2[1]), "103": _jugador(unox2[2])}},
                 "1010": {"marketActive": True, "outcomes": {"1010": _jugador(tot[0]), "1011": _jugador(tot[1])}},
                 "1068": {"marketActive": True, "outcomes": {"1068": _jugador(ah[0]), "1069": _jugador(ah[1])}},
-                # Línea de cuarto (3,25) y mercado de la primera parte: no se usan.
+                # Línea de cuarto (3,25): no se usa. La primera parte (10208) sí,
+                # como mercado APARTE («1x2_1p»), nunca mezclado con el partido.
                 "10176": {"marketActive": True, "outcomes": {"10176": _jugador(2.9), "10177": _jugador(1.4)}},
                 "10208": {"marketActive": True, "outcomes": {"10208": _jugador(3.5)}},
             }}},
@@ -78,8 +81,10 @@ def test_traduce_mercados_equipos_y_limites():
     assert por[("pinnacle", "handicap", -0.5, "local")].cuota == 2.66
     assert por[("pinnacle", "handicap", -0.5, "visitante")].cuota == 1.492
     assert por[("bet365.es", "1x2", None, "local")].limite == 500.0
-    # Ni la línea de cuarto ni la primera parte: 7 cuotas por casa.
-    assert len(lec.cuotas) == 14
+    # 7 del partido + 1 de la primera parte por casa; la línea de cuarto, fuera.
+    assert len(lec.cuotas) == 16
+    assert por[("pinnacle", "1x2_1p", None, "local")].cuota == 3.5
+    assert not [c for c in lec.cuotas if c.linea == 3.25]
     assert all(c.fuente == "oddspapi" and c.ts == AHORA for c in lec.cuotas)
 
 
@@ -91,7 +96,8 @@ def test_no_usa_lo_suspendido_lo_inactivo_ni_lo_empezado():
     lec = f.traducir([PINNACLE, apagada], AHORA)
     b = [c for c in lec.cuotas if c.casa == "bet365.es"]
     assert {(c.mercado, c.seleccion) for c in b} == {("1x2", "empate"), ("1x2", "visitante"),
-                                                    ("handicap", "local"), ("handicap", "visitante")}
+                                                    ("handicap", "local"), ("handicap", "visitante"),
+                                                    ("1x2_1p", "local")}
     assert not [c for c in _fuente().traducir([_fixture("bet365.es", ((2, 3, 4), (2, 2), (2, 2)),
                                                         suspendida=True)], AHORA).cuotas]
     # Empezado: con una foto cada hora no se puede cumplir la regla de 8 s en vivo.
@@ -316,3 +322,42 @@ def test_pide_los_equipos_de_cada_deporte(tmp_path):
     assert "NFL, LaLiga" in lec.detalle
     g = OddsPapi(clave=CLAVE, cache=str(tmp_path / "c.json"))
     assert g.equipos[14]["501"] == "Miami Dolphins" and "2830" in g.equipos[10]
+
+
+
+def test_descubre_tenis_y_esports_una_vez_por_semana(tmp_path, monkeypatch):
+    import valor.fuentes.oddspapi as mod
+    monkeypatch.setattr(mod, "DESCUBRIR", {12: ("ATP", "WTA"), 17: None})
+    pedidas = []
+
+    def manejar(req):
+        pedidas.append(req.url.path)
+        if req.url.path.endswith("/tournaments"):
+            if req.url.params["sportId"] == "12":
+                return httpx.Response(200, json=[
+                    {"tournamentId": 14133, "categoryName": "ATP", "tournamentName": "ATP Chengdu",
+                     "upcomingFixtures": 3, "liveFixtures": 1, "futureFixtures": 20},
+                    {"tournamentId": 903768, "categoryName": "ITF Men", "tournamentName": "Pula",
+                     "upcomingFixtures": 13, "liveFixtures": 0, "futureFixtures": 6},       # ITF: fuera
+                    {"tournamentId": 99, "categoryName": "WTA", "tournamentName": "WTA sin partidos",
+                     "upcomingFixtures": 0, "liveFixtures": 0, "futureFixtures": 0}])      # sin partidos: fuera
+            return httpx.Response(200, json=[{"tournamentId": 555, "categoryName": "International",
+                                              "tournamentName": "BLAST Premier", "upcomingFixtures": 4,
+                                              "liveFixtures": 0, "futureFixtures": 10}])
+        if req.url.path.endswith("/participants"):
+            return httpx.Response(200, json=EQUIPOS)
+        return httpx.Response(200, json=[PINNACLE])
+    cache = tmp_path / "oddspapi_equipos.json"
+    f = OddsPapi(clave=CLAVE, cliente=httpx.Client(transport=httpx.MockTransport(manejar)),
+                 casas=["gamdom"], cache=str(cache))
+    f.leer(["8"])
+    assert set(f.descubiertos) == {14133, 555}
+    assert f.descubiertos[14133] == {"deporte": 12, "nombre": "ATP Chengdu", "pronto": 4, "futuros": 20}
+    assert f.nombre_torneo(555) == "BLAST Premier" and f.nombre_torneo(8) == "LaLiga"
+    assert pedidas.count("/v4/tournaments") == 2
+    # Otra lectura (u otro arranque) en la misma semana: no se vuelve a pedir.
+    pedidas.clear()
+    g = OddsPapi(clave=CLAVE, cliente=httpx.Client(transport=httpx.MockTransport(manejar)),
+                 casas=["gamdom"], cache=str(cache))
+    g.leer(["8"])
+    assert "/v4/tournaments" not in pedidas and set(g.descubiertos) == {14133, 555}

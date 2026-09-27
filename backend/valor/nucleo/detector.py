@@ -125,11 +125,16 @@ TOLERANCIA_ESCALERA = 0.01
 ESCALONADOS = ("handicap",)
 
 
+def _escalonado(mercado: str) -> bool:
+    """Todos los hándicaps (del partido, de la 1ª parte, de juegos, de córners...)."""
+    return str(mercado).split("_")[0] in ESCALONADOS
+
+
 def _escaleras(ultimas) -> Dict[Tuple, Dict[float, Dict[str, float]]]:
     """{(evento, casa, mercado): {línea: {selección: cuota}}} de hándicaps y totales."""
     out: Dict[Tuple, Dict[float, Dict[str, float]]] = defaultdict(dict)
     for (evento_id, mercado, linea), casas in ultimas.items():
-        if mercado not in ESCALONADOS or linea is None:
+        if not _escalonado(mercado) or linea is None:
             continue
         for casa, fila in casas.items():
             out[(evento_id, casa, mercado)][linea] = {s: c.cuota for s, c in fila.items()}
@@ -305,8 +310,8 @@ def detectar(eventos: Dict[str, Evento], cuotas: Iterable[Cuota], banca: float,
                           f"por debajo de {reglas.cuota_minima:.2f} pides {reglas.ev_excepcion:+.0%}.")
                 if no is not None:
                     if 0 < ev <= reglas.ev_sospechoso and not (
-                            mercado in ESCALONADOS
-                            and escalera_rota(escaleras.get((evento_id, casa, mercado), {}), linea, mercado)):
+                            _escalonado(mercado)
+                            and escalera_rota(escaleras.get((evento_id, casa, mercado), {}), linea, "handicap")):
                         o_casi = nueva()
                         o_casi.avisos.append(no)
                         casi.append(o_casi)
@@ -330,8 +335,8 @@ def detectar(eventos: Dict[str, Evento], cuotas: Iterable[Cuota], banca: float,
                         "a mano antes de nada.")
                     sospechosas.append(op)
                     continue
-                if mercado in ESCALONADOS:
-                    rota = escalera_rota(escaleras.get((evento_id, casa, mercado), {}), linea, mercado)
+                if _escalonado(mercado):
+                    rota = escalera_rota(escaleras.get((evento_id, casa, mercado), {}), linea, "handicap")
                     if rota:
                         op.avisos.append(rota)
                         descartes["hándicap con la escalera rota" if mercado == "handicap"

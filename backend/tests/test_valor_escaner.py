@@ -474,3 +474,25 @@ def test_desde_155_y_punto(tmp_path, monkeypatch):
     _fuente_fija(esc2, (8.00, 5.50, 1.42), 1.52)
     r = esc2.vuelta(AHORA)
     assert r.oportunidades == [] and r.descartes["cuota fuera de rango"] == 1
+
+
+
+def test_oddspapi_turna_los_deportes(tmp_path):
+    """Una lectura sí y otra no, lo que juega antes (NFL...); la otra, por
+    turnos, el resto: tenis y esports descubiertos, ligas sin calendario.
+    «Buscar ahora», las dos tandas a la vez."""
+    from valor.fuentes.oddspapi import OddsPapi
+    reg = Registro(str(tmp_path / "v.db"))
+    esc = Escaner(reg, 1000, fuentes={})
+    f = OddsPapi(clave="x", cruce=esc.cruce, torneos=[31, 109, 264, 141])
+    f.descubiertos = {14133: {"deporte": 12, "nombre": "ATP Chengdu", "pronto": 4, "futuros": 20},
+                      555: {"deporte": 17, "nombre": "BLAST", "pronto": 9, "futuros": 10},
+                      777: {"deporte": 18, "nombre": "LoL sin partidos pronto", "pronto": 0, "futuros": 5}}
+    esc._calendario = {"americanfootball_nfl": [AHORA + timedelta(hours=3)], "baseball_mlb": [AHORA + timedelta(hours=5)]}
+    assert esc._torneos_oddspapi(f, AHORA, vuelta_n=0) == (["31", "109"], timedelta(hours=3))
+    # La siguiente: el resto (esports con más partidos primero, tenis, ACB y Eurocup sin calendario).
+    assert esc._torneos_oddspapi(f, AHORA, vuelta_n=1)[0] == ["555", "14133", "264", "141"]
+    assert esc._torneos_oddspapi(f, AHORA, vuelta_n=2)[0] == ["31", "109"]
+    # «Buscar ahora»: las dos.
+    assert esc._torneos_oddspapi(f, AHORA, forzar=True, vuelta_n=0)[0] == ["31", "109", "555", "14133", "264", "141"]
+    assert f.peticiones_por_lectura(6) == 4

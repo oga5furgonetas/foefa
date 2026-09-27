@@ -56,7 +56,8 @@ REFERENCIA = "pinnacle"
 # Deporte de OddsPapi → el nuestro (el mismo nombre que da The Odds API, para
 # que un partido leído por las dos fuentes se cruce).
 DEPORTES = {10: "futbol", 11: "baloncesto", 12: "tenis", 13: "baseball", 14: "americanfootball",
-            15: "icehockey", 20: "mma"}
+            15: "icehockey", 20: "mma", 16: "esports_dota", 17: "esports_cs", 18: "esports_lol",
+            61: "esports_valorant"}
 
 # Torneo → (deporte, nombre, su clave en The Odds API para el calendario gratis).
 # Los números, de /tournaments de la API real (27-09-2026).
@@ -81,6 +82,18 @@ TORNEOS: Dict[int, Tuple[int, str, Optional[str]]] = {
     138: (11, "Euroliga", "basketball_euroleague"),
     234: (15, "NHL", "icehockey_nhl"),
     957: (15, "NHL pretemporada", "icehockey_nhl_preseason"),
+    264: (11, "Liga ACB", None),
+    141: (11, "Eurocup", None),
+    2382: (11, "NBA pretemporada", "basketball_nba_preseason"),
+}
+
+# Tenis y esports: sus torneos cambian cada semana y no caben en una lista fija.
+# Se descubren (una petición por deporte, una vez por semana) con /tournaments y
+# se quedan los de estas categorías que tengan partidos. Tenis: lo que Pinnacle
+# cubre bien (fuera ITF, UTR y las simulaciones). Esports: todos.
+DESCUBRIR: Dict[int, Optional[Tuple[str, ...]]] = {
+    12: ("ATP", "WTA", "WTA 125K", "Challenger"),
+    17: None, 18: None, 16: None, 61: None,
 }
 
 # {mercado: (deporte, nuestro mercado, línea, {resultado: nuestra selección})}
@@ -117,9 +130,13 @@ class OddsPapi(Fuente):
         # Cuántas lecturas lleva: decide a qué casa le toca (el escáner lo pone
         # desde su registro, así la rotación no vuelve a empezar al reiniciar).
         self.vueltas_previas = 0
+        # {torneo: {"deporte", "nombre", "pronto", "futuros"}} de tenis y esports.
+        self.descubiertos: Dict[int, dict] = {}
+        self._descubiertos_de = 0.0
         self._ultima_peticion = 0.0
         self._dormir = time.sleep
         self._carga_cache()
+        self.carga_descubiertos()
 
     def _get(self, ruta: str, **params):
         for intento in (1, 2):
@@ -152,6 +169,57 @@ class OddsPapi(Fuente):
                 self._equipos_de = {int(s): float(v) for s, v in d["de"].items()}
         except (OSError, ValueError, KeyError, TypeError, AttributeError):
             self.equipos, self._equipos_de = {}, {}
+
+    # ── tenis y esports: qué torneos hay esta semana ───────────────────────
+    def _cache_torneos(self) -> Optional[Path]:
+        return self.cache.with_name("oddspapi_torneos.json") if self.cache else None
+
+    def carga_descubiertos(self) -> None:
+        ruta = self._cache_torneos()
+        if not ruta or not ruta.exists():
+            return
+        try:
+            d = json.loads(ruta.read_text(encoding="utf-8"))
+            self.descubiertos = {int(k): dict(v) for k, v in d["torneos"].items()}
+            self._descubiertos_de = float(d["de"])
+        except (OSError, ValueError, KeyError, TypeError, AttributeError):
+            self.descubiertos, self._descubiertos_de = {}, 0.0
+
+    def descubre_si_toca(self) -> None:
+        """Una vez por semana: los torneos de tenis y esports con partidos."""
+        if time.time() - self._descubiertos_de < UNA_SEMANA:
+            return
+        nuevos: Dict[int, dict] = {}
+        for deporte, categorias in DESCUBRIR.items():
+            r = self._get("/tournaments", sportId=deporte)
+            if r.status_code != 200:
+                continue                  # uno que falle no deja sin los demás
+            datos = r.json()
+            for t in datos if isinstance(datos, list) else []:
+                pronto = int(t.get("upcomingFixtures") or 0) + int(t.get("liveFixtures") or 0)
+                futuros = int(t.get("futureFixtures") or 0)
+                if not (pronto or futuros) or not t.get("tournamentId"):
+                    continue
+                if categorias is not None and t.get("categoryName") not in categorias:
+                    continue
+                nuevos[int(t["tournamentId"])] = {
+                    "deporte": deporte, "nombre": str(t.get("tournamentName") or "")[:80],
+                    "pronto": pronto, "futuros": futuros}
+        self.descubiertos, self._descubiertos_de = nuevos, time.time()
+        ruta = self._cache_torneos()
+        if ruta:
+            try:
+                ruta.parent.mkdir(parents=True, exist_ok=True)
+                ruta.write_text(json.dumps({"de": self._descubiertos_de,
+                                            "torneos": {str(k): v for k, v in nuevos.items()}},
+                                           ensure_ascii=False), encoding="utf-8")
+            except OSError as e:
+                log.warning("oddspapi: no se pudo guardar la lista de torneos: %s", e)
+
+    def nombre_torneo(self, t: int) -> str:
+        if t in TORNEOS:
+            return TORNEOS[t][1]
+        return (self.descubiertos.get(t) or {}).get("nombre") or f"torneo {t}"
 
     def _pide_equipos(self, deporte: int) -> None:
         r = self._get("/participants", sportId=deporte)
@@ -212,6 +280,7 @@ class OddsPapi(Fuente):
         Vacío: los suyos por defecto."""
         self.exige_clave()
         self._llamadas = 0
+        self.descubre_si_toca()
         torneos = [int(x) for x in deportes if str(x).isdigit()] if deportes else list(self.torneos)
         ahora = datetime.now(timezone.utc)
         casa = self.casa_del_turno()
@@ -220,7 +289,7 @@ class OddsPapi(Fuente):
             fixtures += self._cuotas_de(casa, torneos)
         self._asegura_equipos(fixtures)
         out = self.traducir(fixtures, ahora)
-        nombres = ", ".join(TORNEOS.get(t, (0, f"torneo {t}", None))[1] for t in torneos)
+        nombres = ", ".join(self.nombre_torneo(t) for t in torneos)
         out.coste, out.detalle = self._llamadas, f"{REFERENCIA} + {casa} · {nombres}"
         return out
 
@@ -244,10 +313,9 @@ class OddsPapi(Fuente):
                 inicio = ts(f["startTime"])
                 if inicio <= ahora:
                     continue            # en vivo no: ver arriba
-                torneo = TORNEOS.get(f.get("tournamentId"))
                 e = self.cruce.registra(Evento(
                     id_evento(DEPORTES[sid], local, visit, inicio), DEPORTES[sid],
-                    torneo[1] if torneo else f"torneo {f.get('tournamentId')}", local, visit, inicio))
+                    self.nombre_torneo(f.get("tournamentId")), local, visit, inicio))
                 vistos[fid] = e
                 out.eventos.append(e)
             for casa, b in (f.get("bookmakerOdds") or {}).items():

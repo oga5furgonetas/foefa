@@ -44,20 +44,35 @@ const hace = (iso, ahora = Date.now()) => {
   return h < 48 ? `hace ${h} h` : `hace ${Math.round(h / 24)} días`
 }
 
-// Se lee detrás de «Métele 20 € a…»: «a que gana Betis», «al empate», «a más de 2.5».
-const SEL = { empate: 'l empate', mas: ' más de', menos: ' menos de',
-              si: ' que marcan los dos', no: ' que no marcan los dos' }
+// Se lee detrás de «Métele 20 € a…»: «a que gana Betis», «al empate», «a más de 2,5»,
+// «a Dolphins +13,5 de hándicap», «a que Sinner gana más de 12,5 juegos en el 1er set».
+// El mercado lleva el periodo en su nombre («totales_1p»): cada uno es un
+// mercado distinto y así se dice.
+const PERIODO = {
+  '1p': ' en la 1ª parte', '2p': ' en la 2ª parte', '1c': ' en el 1er cuarto',
+  '5e': ' en las 5 primeras entradas', rt: ' en el tiempo reglamentario', '1pe': ' en el 1er periodo',
+  '1s': ' en el 1er set', m1: ' en el mapa 1',
+}
+const COSA = { corners: ' córners', tarjetas: ' tarjetas', juegos: ' juegos' }
+const coma = (x) => String(x).replace('.', ',')
 function seleccion(mercado, linea, sel, local, visitante) {
-  let t = SEL[sel] || ` ${sel}`
-  if (sel === 'local') t = ` que gana ${local}`
-  if (sel === 'visitante') t = ` que gana ${visitante}`
-  if (mercado === 'totales') t += ` ${String(linea).replace('.', ',')}`
-  if (mercado === 'handicap') {
+  const partes = String(mercado || '').split('_')
+  const periodo = PERIODO[partes[partes.length - 1]] ? PERIODO[partes.pop()] : ''
+  const [base, apellido] = partes
+  const equipo = sel === 'local' ? local : visitante
+  if (base === 'handicap') {
     // «Dolphins +13,5» no es «que gana Dolphins»: puede perder por 13 y se cobra.
     const l = sel === 'local' ? linea : -linea
-    return ` ${sel === 'local' ? local : visitante} ${l > 0 ? '+' : ''}${String(l).replace('.', ',')} de hándicap`
+    return ` ${equipo} ${l > 0 ? '+' : ''}${coma(l)}${COSA[apellido] || ''} de hándicap${periodo}`
   }
-  return t
+  if (base === '1x2' || base === 'ganador') return (sel === 'empate' ? 'l empate' : ` que gana ${equipo}`) + periodo
+  if (base === 'ambos') return sel === 'si' ? ' que marcan los dos' : ' que no marcan los dos'
+  if (sel !== 'mas' && sel !== 'menos') return ` ${sel}`
+  const mm = sel === 'mas' ? 'más' : 'menos'
+  const de = apellido === 'local' ? local : apellido === 'visitante' ? visitante : null
+  if (de && base === 'juegos') return ` que ${de} gana ${mm} de ${coma(linea)} juegos${periodo}`
+  if (de) return ` que ${de} marca ${mm} de ${coma(linea)}${periodo}`
+  return ` ${mm} de ${coma(linea)}${COSA[base] || ''}${periodo}`
 }
 
 /* El reloj de la pantalla: las señales caducan solas mientras se miran. */

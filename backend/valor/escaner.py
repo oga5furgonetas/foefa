@@ -223,7 +223,36 @@ class Escaner:
             ts = self._inicios(ahora, solo_futbol=isinstance(f, ApiFootball))
         return (min(ts) - ahora) if ts else None
 
-    def _torneos_oddspapi(self, f: "OddsPapi", ahora: datetime) -> "tuple[List[str], Optional[timedelta]]":
+    def _torneos_oddspapi(self, f: "OddsPapi", ahora: datetime, forzar: bool = False,
+                          vuelta_n: int = 0) -> "tuple[List[str], Optional[timedelta]]":
+        """Qué torneos lee OddsPapi en esta lectura (hasta 5 por petición).
+
+        Una lectura sí y otra no, los 5 que juegan antes (del calendario); la
+        otra, una tanda del resto por turnos (tenis y esports descubiertos, las
+        ligas sin calendario, lo que no cupo): así en un día pasan todos los
+        deportes. «Buscar ahora» lee las dos tandas a la vez."""
+        pronto, falta = self._torneos_pronto(f, ahora)
+        elegidos = set(pronto)
+        resto = [t for t in pronto[TORNEOS_POR_PETICION:]]
+        descubiertos = sorted(((d.get("pronto") or 0, t) for t, d in f.descubiertos.items() if d.get("pronto")),
+                              reverse=True)
+        resto += [str(t) for _, t in descubiertos if str(t) not in elegidos]
+        resto += [str(t) for t in f.torneos
+                  if t in OP_TORNEOS and not OP_TORNEOS[t][2] and str(t) not in elegidos and str(t) not in resto]
+        tandas = [resto[i:i + TORNEOS_POR_PETICION] for i in range(0, len(resto), TORNEOS_POR_PETICION)]
+        primera = pronto[:TORNEOS_POR_PETICION]
+        otra = tandas[(vuelta_n // 2) % len(tandas)] if tandas else []
+        if forzar:
+            leer = primera + otra
+        elif primera and (vuelta_n % 2 == 0 or not otra):
+            leer = primera
+        else:
+            leer = otra or primera
+        if falta is None and otra and leer == otra:
+            falta = timedelta(hours=1)        # tenis/esports con partidos: ritmo de «hay partido»
+        return leer, falta
+
+    def _torneos_pronto(self, f: "OddsPapi", ahora: datetime) -> "tuple[List[str], Optional[timedelta]]":
         """Los (hasta) 5 torneos de OddsPapi que juegan antes, en las próximas
         24 h, y cuánto falta para el primero. Lo que juega cada torneo sale del
         calendario gratis de The Odds API y de los partidos ya leídos. Sin
@@ -252,8 +281,7 @@ class Escaner:
         if not proximo:
             return [str(t) for t in f.torneos[:TORNEOS_POR_PETICION]], None
         pronto = sorted((x, t) for t, x in proximo.items() if x <= ahora + timedelta(hours=24))
-        elegidos = [str(t) for _, t in pronto[:TORNEOS_POR_PETICION]]
-        return elegidos, (min(proximo.values()) - ahora)
+        return [str(t) for _, t in pronto], (min(proximo.values()) - ahora)
 
     def _usado(self, f: Fuente, desde: datetime) -> float:
         return self.reg.db.execute("SELECT COALESCE(SUM(coste),0) FROM uso WHERE fuente=? AND ts>=?",
@@ -297,7 +325,8 @@ class Escaner:
         for f, p in self.fuentes.items():
             est = self.estado.setdefault(f.nombre, {})
             if isinstance(f, OddsPapi):
-                ligas, falta = self._torneos_oddspapi(f, ahora)
+                n_previas = self.reg.db.execute("SELECT COUNT(*) FROM uso WHERE fuente=?", (f.nombre,)).fetchone()[0]
+                ligas, falta = self._torneos_oddspapi(f, ahora, forzar=forzar, vuelta_n=n_previas)
                 coste = f.peticiones_por_lectura(len(ligas)) if ligas else 0
             else:
                 ligas = self._ligas(f, ahora)

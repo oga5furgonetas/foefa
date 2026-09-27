@@ -283,6 +283,25 @@ Dani no se creía el 0. Estudio con datos reales (scratchpad de la sesión):
   Reglas puestas en producción: sale ≥60 %, cuota ≥1,55 sin excepción por
   debajo (`cuota_suelo`), ventaja ≥+2 % (por debajo es ruido del cálculo de la
   justa). Cada tarjeta dice MUY PROBABLE (≥65 %), PROBABLE (≥58 %) o 50/50.
+- Más variedad (Dani: «no hay fútbol, baloncesto, tenis, esports?»):
+  · Mercados: de 681 a 2.340 en `oddspapi_mercados.json` (`genera_mercados.py`
+    del catálogo real): primera/segunda parte, cuartos, 5 entradas, tiempo
+    reglamentario, goles de cada equipo, córners, tarjetas, juegos y sets de
+    tenis, mapas de esports. Cada (deporte, periodo, tipo) tiene su NOMBRE
+    («totales_1p» ≠ «totales»), así que nunca se comparan entre sí; los
+    resultados salen de la primera palabra (`_Resultados`). No gasta más: todo
+    venía ya en la misma respuesta. Con los datos del 27-09: 13.033 cuotas de
+    sus casas en vez de 4.983.
+  · Deportes: tenis (ATP, WTA, WTA 125K, Challenger) y esports (CS, LoL, Dota,
+    Valorant) se DESCUBREN una vez por semana (`descubre_si_toca`,
+    `oddspapi_torneos.json` en el volumen); más ACB, Eurocup y NBA pretemporada.
+  · Turnos: una lectura sí y otra no, los 5 que juegan antes; la otra, una
+    tanda del resto por turnos. «Buscar ahora» lee las dos (4 peticiones).
+  · Los filtros de datos (desvío, escalera en todos los hándicaps) valen para
+    los mercados nuevos: con los datos del 27-09 pararon un hándicap de
+    córners y un total de equipo de Gamdom.
+  · Precios de OddsPapi: su web solo tiene una calculadora (casas, deportes,
+    peticiones); no hay cifras publicadas que citar.
 - Plantilla del día: las rutas salían ordenadas como TEXTO (CA_A10… CA_A19,
   CA_A2, CA_A20). Ahora por número (`_orden_natural` en `plantilla_extraer`).
 - Push: la app tiene web push pero en producción no hay claves VAPID; avisos

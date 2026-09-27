@@ -43,13 +43,38 @@ class Cuota:
 
 # Qué resultados forman cada mercado completo. Sin TODOS los resultados no se
 # puede quitar el margen, así que un mercado a medias no se usa.
-RESULTADOS: Dict[str, Tuple[str, ...]] = {
+class _Resultados(dict):
+    """Los resultados de cada mercado. Además de los de la lista, los mercados
+    con periodo o con apellido («totales_1p», «handicap_juegos», «corners»,
+    «totales_local»...) salen de su primera palabra: son el MISMO tipo de
+    apuesta sobre otra cosa, y siguen siendo mercados distintos entre sí
+    (distinto nombre = nunca se comparan)."""
+
+    POR_BASE = {"1x2": ("local", "empate", "visitante"), "ganador": ("local", "visitante"),
+                "handicap": ("local", "visitante"), "ambos": ("si", "no"),
+                "totales": ("mas", "menos"), "juegos": ("mas", "menos"), "corners": ("mas", "menos"),
+                "tarjetas": ("mas", "menos")}
+
+    def __missing__(self, mercado):
+        v = self.POR_BASE.get(str(mercado).split("_")[0])
+        if v is None:
+            raise KeyError(mercado)
+        return v
+
+    def get(self, mercado, defecto=None):
+        try:
+            return self[mercado]
+        except KeyError:
+            return defecto
+
+
+RESULTADOS: Dict[str, Tuple[str, ...]] = _Resultados({
     "1x2": ("local", "empate", "visitante"),
     "ganador": ("local", "visitante"),          # sin empate: tenis, baloncesto con prórroga
     "totales": ("mas", "menos"),
     "handicap": ("local", "visitante"),         # asiático, sin empate posible
     "ambos_marcan": ("si", "no"),
-}
+})
 
 
 @dataclass
