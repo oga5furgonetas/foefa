@@ -174,15 +174,32 @@ export function writeDeterministic(fs: FactSheet, opts: WriteOptions = {}): Draf
 
   if (developing) body.push({ type: 'p', text: bp(P.willUpdate), claimIds: [] });
 
+  const uniq = <T extends { text: string }>(xs: T[]): T[] => {
+    const seen = new Set<string>();
+    return xs.filter((x) => {
+      const k = x.text.toLowerCase().replace(/[\s.,;:]+/g, ' ').trim();
+      if (seen.has(k)) return false;
+      seen.add(k);
+      return true;
+    });
+  };
   const verification: VerificationBox = {
-    confirmed: fs.confirmed.slice(0, 6).map((c) => ({ text: compressClaim(c.text, 30) ?? truncate(c.text, 200), by: c.attribution })),
-    attributed: fs.attributed.slice(0, 6).map((c) => ({ text: compressClaim(c.text, 30) ?? truncate(c.text, 200), by: c.attribution })),
-    unconfirmed: fs.unconfirmed.slice(0, 6).map((c) => ({ text: compressClaim(c.text, 30) ?? truncate(c.text, 200), by: c.attribution })),
+    confirmed: uniq(fs.confirmed.slice(0, 6).map((c) => ({ text: compressClaim(c.text, 30) ?? truncate(c.text, 200), by: c.attribution }))),
+    attributed: uniq(fs.attributed.slice(0, 6).map((c) => ({ text: compressClaim(c.text, 30) ?? truncate(c.text, 200), by: c.attribution }))),
+    unconfirmed: uniq(fs.unconfirmed.slice(0, 6).map((c) => ({ text: compressClaim(c.text, 30) ?? truncate(c.text, 200), by: c.attribution }))),
+    superseded: uniq(fs.superseded.slice(0, 3).map((c) => ({ text: compressClaim(c.text, 30) ?? truncate(c.text, 200), by: c.attribution }))),
     contradictions: fs.discrepancies.map((d) => ({ text: P.discrepancy(P.fieldNames[d.field] ?? d.field, d.parts.map((p) => `${p.source}: ${formatValue(p.value, nf)}`).join('; ')) })),
     method: P.method(fs.independentCredible, fs.hasPrimary),
   };
 
-  const subheadline = developing ? P.developingNote : confirmers.length ? P.confirmedBy(confirmers.length, listJoin(lang, confirmers.slice(0, 3))) : null;
+  // El número y los nombres cuadran siempre: si hay más de cuatro, se dice «entre ellas».
+  const subheadline = developing
+    ? P.developingNote
+    : confirmers.length > 4
+      ? P.confirmedByMany(confirmers.length, listJoin(lang, confirmers.slice(0, 3)))
+      : confirmers.length
+        ? P.confirmedBy(confirmers.length, listJoin(lang, confirmers))
+        : null;
   if (subheadline) boilerplate.push(subheadline);
   const timeline = fs.timeline.map((e) => ({ at: e.at.toISOString(), text: `${P.timelineItem(e.source)}` }));
 

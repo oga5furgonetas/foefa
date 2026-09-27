@@ -139,6 +139,8 @@ export type StoryAnalysis = {
   momentumBreakdown: MomentumBreakdown;
   decision: Decision;
   nextState: StoryState;
+  /** La evidencia alcanza el nivel de «verificada» (umbral + fuentes independientes + hecho principal respaldado). */
+  verifiedLevel: boolean;
   reasons: string[];
   probableOriginalItemId: number | null;
   eventTime: Date | null;

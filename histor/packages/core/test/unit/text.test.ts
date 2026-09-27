@@ -34,6 +34,11 @@ describe('frases', () => {
     const s = sentences('El Sr. García llegó a las 3.5 horas. Después habló con la Dra. López. ¿Y ahora qué?');
     expect(s).toHaveLength(3);
   });
+  it('no corta en ordinales («1. Januar», «19. Jahrhundert») pero sí tras una cifra final', () => {
+    expect(sentences('Die Stadtwerke senken zum 1. Januar 2027 den Strompreis um 8 Prozent. Das teilte das Unternehmen mit.')).toHaveLength(2);
+    expect(sentences('Im 19. Jahrhundert wuchs die Stadt stark. Heute leben dort 2 Millionen Menschen.')).toHaveLength(2);
+    expect(sentences('El equipo ganó por 3. El entrenador lo celebró.')).toHaveLength(2);
+  });
 });
 
 describe('fechas', () => {

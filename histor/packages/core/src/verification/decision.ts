@@ -30,9 +30,19 @@ export type DecisionInput = {
   hasSupportedHeadline: boolean;
 };
 
-export type DecisionOutput = { decision: Decision; nextState: StoryState; reasons: string[]; isBreaking: boolean; needsReview: string | null };
+export type DecisionOutput = { decision: Decision; nextState: StoryState; reasons: string[]; isBreaking: boolean; needsReview: string | null; verifiedLevel?: boolean };
 
-export function decide(i: DecisionInput): DecisionOutput {
+export function decide(i: DecisionInput): DecisionOutput & { verifiedLevel: boolean } {
+  const out = decideInner(i);
+  const s = i.settings;
+  const credible = i.groups.filter((g) => g.credible);
+  const primarySelf = s.primaryOfficialSelfSufficient && credible.some((g) => g.bestType === 'primary_official');
+  const enough = credible.length >= s.minIndependentVerified || primarySelf;
+  const criticalOpen = i.contradictions.some((c) => c.severity === 'critical');
+  return { ...out, verifiedLevel: i.confidence >= s.verifiedMin && enough && i.hasSupportedHeadline && !criticalOpen };
+}
+
+function decideInner(i: DecisionInput): DecisionOutput {
   const s = i.settings;
   const reasons: string[] = [];
   const credible = i.groups.filter((g) => g.credible);

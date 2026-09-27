@@ -142,6 +142,19 @@ export async function listArticles(db: Db, o: ListOpts): Promise<ArticleCard[]> 
   return rows.map(toCard);
 }
 
+/** Tarjetas por id, en el orden pedido (guardadas, historial, recomendaciones). */
+export async function cardsByIds(db: Db, ids: number[]): Promise<ArticleCard[]> {
+  if (!ids.length) return [];
+  const rows = await db
+    .select(cardColumns)
+    .from(articles)
+    .innerJoin(stories, eq(stories.id, articles.storyId))
+    .leftJoin(media, eq(media.id, articles.imageId))
+    .where(and(visible(), inArray(articles.id, ids)));
+  const byId = new Map(rows.map((r) => [r.id, toCard(r)]));
+  return ids.map((i) => byId.get(i)).filter((c): c is ArticleCard => !!c);
+}
+
 export type HomeData = {
   top: ArticleCard | null;
   breaking: ArticleCard[];
@@ -162,7 +175,9 @@ const HOME_SECTIONS = ['technology', 'economy', 'politics', 'science', 'health',
  */
 export async function getHome(db: Db, geo: { lang: string; countryCode: string | null; regionCode: string | null; cityKey: string | null }): Promise<HomeData> {
   const since = new Date(Date.now() - 7 * 86400000);
-  const top = (await listArticles(db, { lang: geo.lang, since, orderBy: 'importance', limit: 1 }))[0] ?? null;
+  // Abre la portada lo más importante YA confirmado; lo «en desarrollo» solo si no hay nada más.
+  const topCandidates = await listArticles(db, { lang: geo.lang, since, orderBy: 'importance', limit: 6 });
+  const top = topCandidates.find((a) => !a.isDeveloping) ?? topCandidates[0] ?? null;
   const exclude = top ? [top.id] : [];
   const breaking = await listArticles(db, { lang: geo.lang, breaking: true, since: new Date(Date.now() - 12 * 3600000), limit: 5, excludeIds: exclude });
   const latest = await listArticles(db, { lang: geo.lang, limit: 12, excludeIds: exclude });

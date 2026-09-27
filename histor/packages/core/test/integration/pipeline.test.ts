@@ -3,7 +3,7 @@
  * normalización → agrupación → verificación → redacción → controles →
  * publicación → actualización. Comprueba que cada escenario acaba donde debe.
  */
-import { and, eq, inArray } from 'drizzle-orm';
+import { and, desc, eq, inArray } from 'drizzle-orm';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import type { Db } from '../../src/db/client';
 import { articles, articleVersions, contradictions, corrections, qualityReports, sources, stories, verifications } from '../../src/db/schema';
@@ -143,6 +143,41 @@ describe('pipeline DEMO de extremo a extremo', () => {
     const notes = await db.select().from(corrections).where(eq(corrections.articleId, after.id));
     expect(notes.some((n) => n.kind === 'update')).toBe(true);
     expect(JSON.stringify(after.body)).toMatch(/43/);
+    // La cifra anterior no se presenta como hecho actual: queda como «dato superado».
+    const box = after.verification;
+    expect(box.confirmed.some((c) => /\b41\b/.test(c.text))).toBe(false);
+    expect((box.superseded ?? []).some((c) => /\b41\b/.test(c.text))).toBe(true);
+    // Sin afirmaciones repetidas en el recuadro.
+    const texts = box.confirmed.map((c) => c.text.toLowerCase());
+    expect(new Set(texts).size).toBe(texts.length);
+    // Si ya alcanza el nivel de verificada, deja de estar «en desarrollo» (y la historia también).
+    const st = (await db.select().from(stories).where(eq(stories.id, s.id)))[0];
+    const [v] = await db.select().from(verifications).where(eq(verifications.storyId, s.id)).orderBy(desc(verifications.runAt)).limit(1);
+    if (v.evidenceConfidence >= 0.75 && st.independentSourceCount >= 2) {
+      expect(after.isDeveloping).toBe(false);
+      expect(st.isDeveloping).toBe(false);
+    }
+  });
+
+  it('los titulares son frases completas (no empiezan a mitad de frase)', async () => {
+    const all = await db.select().from(articles).where(eq(articles.status, 'published'));
+    const months = /^(januar|februar|märz|april|mai|juni|juli|august|september|oktober|november|dezember|enero|january|janvier|gennaio|janeiro)\b/i;
+    for (const a of all) {
+      expect(a.headline, a.headline).not.toMatch(months);
+      expect(a.headline, a.headline).toMatch(/^[\p{Lu}\p{N}«"“¿¡]/u);
+    }
+  });
+
+  it('el subtítulo nombra tantas fuentes como dice (o «entre ellas»)', async () => {
+    const all = await db.select().from(articles).where(eq(articles.status, 'published'));
+    for (const a of all) {
+      const m = a.subheadline?.match(/(\d+) (?:fuentes|independent|unabhängigen|sources|fonti|fontes)/);
+      if (!m) continue;
+      const n = Number(m[1]);
+      const listed = a.subheadline!.split(/:|,(?= )| y | and | und | et | e /).length - 1;
+      if (/entre ellas|including|darunter|dont|tra cui|entre elas/.test(a.subheadline!)) expect(n).toBeGreaterThan(4);
+      else expect(listed).toBe(n);
+    }
   });
 
   it('demo:purge elimina todo lo DEMO sin tocar la referencia', async () => {

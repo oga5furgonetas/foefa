@@ -82,6 +82,8 @@ const schema = z.object({
   LEGAL_EDITOR_IN_CHARGE: z.string().optional(),
   DPO_EMAIL: z.string().optional(),
   ADMIN_IP_ALLOWLIST: z.string().optional(),
+  /** '1' obliga a editores y administradores a usar 2FA (por defecto: sí en producción). */
+  ADMIN_REQUIRE_2FA: z.enum(['0', '1']).optional(),
 });
 
 export type Env = z.infer<typeof schema>;
@@ -100,6 +102,31 @@ export function resetEnvCache(): void {
 
 export function isProduction(): boolean {
   return env().NODE_ENV === 'production';
+}
+
+export function adminRequires2fa(e: Env = env()): boolean {
+  return e.ADMIN_REQUIRE_2FA ? e.ADMIN_REQUIRE_2FA === '1' : e.NODE_ENV === 'production';
+}
+
+/** ¿La IP puede entrar al panel? Lista separada por comas de IPs o rangos IPv4 CIDR. Vacía = sin restricción. */
+export function adminIpAllowed(ip: string | null, e: Env = env()): boolean {
+  const list = (e.ADMIN_IP_ALLOWLIST ?? '').split(',').map((s) => s.trim()).filter(Boolean);
+  if (!list.length) return true;
+  if (!ip) return false;
+  const v4 = (s: string) => {
+    const p = s.split('.').map(Number);
+    return p.length === 4 && p.every((x) => Number.isInteger(x) && x >= 0 && x <= 255) ? ((p[0] << 24) | (p[1] << 16) | (p[2] << 8) | p[3]) >>> 0 : null;
+  };
+  const addr = v4(ip);
+  return list.some((entry) => {
+    if (!entry.includes('/')) return entry === ip;
+    const [base, bitsRaw] = entry.split('/');
+    const b = v4(base);
+    const bits = Number(bitsRaw);
+    if (b === null || addr === null || !(bits >= 0 && bits <= 32)) return false;
+    const mask = bits === 0 ? 0 : (~0 << (32 - bits)) >>> 0;
+    return (addr & mask) === (b & mask);
+  });
 }
 
 /** Comprueba lo imprescindible para producción y devuelve la lista de problemas. */

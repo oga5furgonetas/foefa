@@ -8,6 +8,7 @@ import { z, type ZodTypeAny } from 'zod';
 import { checkCsrf, checkOrigin, CSRF_COOKIE, CSRF_HEADER } from '@histor/core/auth/csrf';
 import { getSessionUser, SESSION_COOKIE, type SessionUser } from '@histor/core/auth/users';
 import { can, type Permission } from '@histor/core/domain';
+import { adminIpAllowed, adminRequires2fa } from '@histor/core/env';
 import { ipHash } from '@histor/core/security/crypto';
 import { rateLimit, type Limit } from '@histor/core/security/ratelimit';
 import { reportError } from '@histor/core/observability/index';
@@ -55,6 +56,8 @@ export async function requireUser(req: NextRequest): Promise<SessionUser> {
 export async function requirePermission(req: NextRequest, p: Permission): Promise<SessionUser> {
   const u = await requireUser(req);
   if (!can(u.role, p)) throw new ApiError(403, 'forbidden');
+  if (!adminIpAllowed(clientIp(req))) throw new ApiError(403, 'ip_not_allowed');
+  if (adminRequires2fa() && !u.totpEnabled) throw new ApiError(403, 'mfa_setup_required');
   if (u.totpEnabled && !u.mfaPassed) throw new ApiError(403, 'mfa_required');
   return u;
 }

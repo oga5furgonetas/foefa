@@ -9,7 +9,7 @@
  */
 import { and, eq, sql } from 'drizzle-orm';
 import type { Db } from '../db/client';
-import { analyticsEvents, articles, experiments } from '../db/schema';
+import { analyticsEvents, articles, articleVersions, experiments } from '../db/schema';
 import { fnv1a } from '../text/normalize';
 import { extractNumbers } from '../text/numbers';
 import { audit } from '../services/audit';
@@ -119,4 +119,68 @@ export function probabilityBest(arms: { successes: number; trials: number }[], d
     wins[bi]++;
   }
   return wins.map((w) => Math.round((w / draws) * 1000) / 1000);
+}
+
+export type HeadlineAssignment = { exp: string; variant: string; headline: string };
+
+/**
+ * Experimentos de titular en marcha para unos artículos, asignados a un
+ * lector (identificador anónimo con consentimiento de medición). Sin
+ * identificador no hay experimento: se muestra el titular original.
+ */
+export async function headlineAssignments(db: Db, articleIds: number[], unitId: string | null): Promise<Map<number, HeadlineAssignment>> {
+  const out = new Map<number, HeadlineAssignment>();
+  if (!unitId || !articleIds.length) return out;
+  const rows = await db
+    .select()
+    .from(experiments)
+    .where(and(eq(experiments.kind, 'headline'), eq(experiments.status, 'running'), sql`${experiments.articleId} IN (${sql.join(articleIds.map((i) => sql`${i}`), sql`, `)})`));
+  for (const e of rows) {
+    if (!e.articleId) continue;
+    const v = assignVariant(e.key, unitId, e.variants);
+    out.set(e.articleId, { exp: e.key, variant: v.key, headline: String(v.payload.headline ?? '') });
+  }
+  return out;
+}
+
+/** Aplica las variantes a tarjetas (devuelve copias; no toca el original). */
+export function applyHeadlines<T extends { id: number; headline: string }>(cards: T[], assigned: Map<number, HeadlineAssignment>): (T & { exp?: { key: string; variant: string } })[] {
+  return cards.map((c) => {
+    const a = assigned.get(c.id);
+    return a && a.headline ? { ...c, headline: a.headline, exp: { key: a.exp, variant: a.variant } } : c;
+  });
+}
+
+const HEADLINE_NOTE: Record<string, string> = {
+  es: 'Titular ajustado para reflejar mejor el contenido (el texto no cambia).',
+  en: 'Headline adjusted to better reflect the story (the text is unchanged).',
+  de: 'Überschrift angepasst, um den Inhalt besser wiederzugeben (der Text bleibt unverändert).',
+  fr: 'Titre ajusté pour mieux refléter le contenu (le texte est inchangé).',
+  it: 'Titolo modificato per riflettere meglio il contenuto (il testo non cambia).',
+  pt: 'Título ajustado para refletir melhor o conteúdo (o texto não muda).',
+};
+
+/**
+ * Termina un experimento. Si gana una variante distinta del control, el
+ * titular del artículo cambia con versión nueva y nota pública (nunca en silencio).
+ */
+export async function stopExperiment(db: Db, actor: { id: string; role: string }, experimentId: number, winner?: string | null): Promise<void> {
+  const [exp] = await db.select().from(experiments).where(eq(experiments.id, experimentId)).limit(1);
+  if (!exp) throw new Error('experimento no encontrado');
+  const v = winner ? exp.variants.find((x) => x.key === winner) : undefined;
+  if (winner && !v) throw new Error('variante no válida');
+  await db.update(experiments).set({ status: winner ? 'completed' : 'stopped', winner: winner ?? null, endedAt: new Date() }).where(eq(experiments.id, experimentId));
+  if (v && v.key !== 'control' && exp.articleId) {
+    const [a] = await db.select().from(articles).where(eq(articles.id, exp.articleId)).limit(1);
+    const headline = String(v.payload.headline ?? '');
+    if (a && headline && headline !== a.headline) {
+      const problems = validateHeadlineVariant(headline, a);
+      if (problems.length) throw new Error(`el titular ganador ya no pasa los controles: ${problems.join('; ')}`);
+      const version = a.version + 1;
+      const note = HEADLINE_NOTE[a.language] ?? HEADLINE_NOTE.en;
+      await db.update(articles).set({ headline, version, updatedAt: new Date() }).where(eq(articles.id, a.id));
+      await db.insert(articleVersions).values({ articleId: a.id, version, kind: 'edit', headline, body: a.body, verification: a.verification, changeSummary: note, changedBy: `user:${actor.id}` });
+    }
+  }
+  await audit(db, { actor: `user:${actor.id}`, action: 'experiment.stop', targetType: 'experiment', targetId: experimentId, detail: { winner } });
 }

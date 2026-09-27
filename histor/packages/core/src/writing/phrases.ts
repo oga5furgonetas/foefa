@@ -8,6 +8,8 @@ export type Phrases = {
   according: (claim: string, sources: string) => string;
   reports: (sources: string, claim: string) => string;
   confirmedBy: (n: number, list: string) => string;
+  /** Cuando hay más fuentes de las que se nombran. */
+  confirmedByMany: (n: number, list: string) => string;
   singleSource: (source: string) => string;
   developingNote: string;
   willUpdate: string;
@@ -41,6 +43,7 @@ export const PHRASES: Record<string, Phrases> = {
     according: (c, s) => `${c}, según ${s}.`,
     reports: (s, c) => `${s} informa de que ${c}`,
     confirmedBy: (n, l) => (n === 1 ? `Lo confirma ${l}.` : `Lo confirman ${n} fuentes independientes: ${l}.`),
+    confirmedByMany: (n, l) => `Lo confirman ${n} fuentes independientes, entre ellas ${l}.`,
     singleSource: (s) => `Por ahora, solo ${s} lo ha publicado; Histor no ha podido confirmarlo de forma independiente.`,
     developingNote: 'Información en desarrollo. Cada dato se atribuye a la fuente que lo publica.',
     willUpdate: 'Histor seguirá actualizando esta información.',
@@ -66,6 +69,7 @@ export const PHRASES: Record<string, Phrases> = {
     according: (c, s) => `${c}, according to ${s}.`,
     reports: (s, c) => `${s} reports that ${c}`,
     confirmedBy: (n, l) => (n === 1 ? `Confirmed by ${l}.` : `Confirmed by ${n} independent sources: ${l}.`),
+    confirmedByMany: (n, l) => `Confirmed by ${n} independent sources, including ${l}.`,
     singleSource: (s) => `So far only ${s} has reported this; Histor has not been able to confirm it independently.`,
     developingNote: 'This is a developing story. Each detail is attributed to the source that reported it.',
     willUpdate: 'Histor will keep updating this story.',
@@ -91,6 +95,7 @@ export const PHRASES: Record<string, Phrases> = {
     according: (c, s) => `${c}, berichtet ${s}.`,
     reports: (s, c) => `${s} berichtet: ${c}`,
     confirmedBy: (n, l) => (n === 1 ? `Bestätigt von ${l}.` : `Bestätigt von ${n} unabhängigen Quellen: ${l}.`),
+    confirmedByMany: (n, l) => `Bestätigt von ${n} unabhängigen Quellen, darunter ${l}.`,
     singleSource: (s) => `Bislang hat nur ${s} darüber berichtet; Histor konnte es nicht unabhängig bestätigen.`,
     developingNote: 'Die Lage entwickelt sich. Jede Angabe wird der Quelle zugeordnet, die sie veröffentlicht hat.',
     willUpdate: 'Histor aktualisiert diesen Bericht fortlaufend.',
@@ -116,6 +121,7 @@ export const PHRASES: Record<string, Phrases> = {
     according: (c, s) => `${c}, selon ${s}.`,
     reports: (s, c) => `${s} rapporte que ${c}`,
     confirmedBy: (n, l) => (n === 1 ? `Confirmé par ${l}.` : `Confirmé par ${n} sources indépendantes : ${l}.`),
+    confirmedByMany: (n, l) => `Confirmé par ${n} sources indépendantes, dont ${l}.`,
     singleSource: (s) => `Pour l'instant, seul ${s} l'a publié ; Histor n'a pas pu le confirmer de façon indépendante.`,
     developingNote: "Information en cours d'actualisation. Chaque élément est attribué à la source qui l'a publié.",
     willUpdate: 'Histor continuera de mettre à jour cette information.',
@@ -141,6 +147,7 @@ export const PHRASES: Record<string, Phrases> = {
     according: (c, s) => `${c}, secondo ${s}.`,
     reports: (s, c) => `${s} riferisce che ${c}`,
     confirmedBy: (n, l) => (n === 1 ? `Lo conferma ${l}.` : `Lo confermano ${n} fonti indipendenti: ${l}.`),
+    confirmedByMany: (n, l) => `Lo confermano ${n} fonti indipendenti, tra cui ${l}.`,
     singleSource: (s) => `Finora solo ${s} ha dato la notizia; Histor non ha potuto confermarla in modo indipendente.`,
     developingNote: 'Notizia in aggiornamento. Ogni dato è attribuito alla fonte che lo ha pubblicato.',
     willUpdate: 'Histor continuerà ad aggiornare questa notizia.',
@@ -166,6 +173,7 @@ export const PHRASES: Record<string, Phrases> = {
     according: (c, s) => `${c}, segundo ${s}.`,
     reports: (s, c) => `${s} informa que ${c}`,
     confirmedBy: (n, l) => (n === 1 ? `Confirmado por ${l}.` : `Confirmado por ${n} fontes independentes: ${l}.`),
+    confirmedByMany: (n, l) => `Confirmado por ${n} fontes independentes, entre elas ${l}.`,
     singleSource: (s) => `Até agora, apenas ${s} publicou a informação; o Histor não conseguiu confirmá-la de forma independente.`,
     developingNote: 'Informação em atualização. Cada dado é atribuído à fonte que o publicou.',
     willUpdate: 'O Histor continuará atualizando esta informação.',

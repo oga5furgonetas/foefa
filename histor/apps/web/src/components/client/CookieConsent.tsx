@@ -2,7 +2,7 @@
 import { useEffect, useState } from 'react';
 import { consentOf, setCookie } from './api';
 
-type Labels = { title: string; text: string; acceptAll: string; rejectAll: string; customize: string; save: string; categories: Record<string, [string, string]> };
+type Labels = { title: string; text: string; acceptAll: string; rejectAll: string; customize: string; save: string; categories: Record<string, readonly string[]> };
 const OPTIONAL = ['preferences', 'analytics', 'personalization', 'marketing'] as const;
 const CONSENT_VERSION = '1';
 
@@ -26,8 +26,9 @@ export function CookieConsent({ labels, policyHref }: { labels: Labels; policyHr
   const save = (set: Set<string>) => {
     setCookie('histor_consent', [...set].join(','), 365);
     setCookie('histor_consent_v', CONSENT_VERSION, 365);
-    if (set.has('analytics') && !document.cookie.includes('histor_aid=')) setCookie('histor_aid', crypto.randomUUID(), 395);
-    if (!set.has('analytics')) setCookie('histor_aid', '', 0);
+    const needsId = set.has('analytics') || set.has('personalization');
+    if (needsId && !document.cookie.includes('histor_aid=')) setCookie('histor_aid', crypto.randomUUID(), 395);
+    if (!needsId) setCookie('histor_aid', '', 0);
     setOpen(false);
     window.dispatchEvent(new Event('histor:consent-changed'));
   };

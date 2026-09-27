@@ -196,6 +196,7 @@ export function analyseStory(input: EngineInput): StoryAnalysis {
     momentumBreakdown: mBreakdown,
     decision: d.decision,
     nextState: d.nextState,
+    verifiedLevel: d.verifiedLevel,
     reasons: [...satireNotes, ...temporal.reasons, ...d.reasons, ...(d.needsReview ? [`revisión: ${d.needsReview}`] : [])],
     probableOriginalItemId: probable,
     eventTime: temporal.eventTime,

@@ -50,7 +50,9 @@ export async function recordEvents(db: Db, events: IncomingEvent[], ctx: EventCo
     .filter((e) => (ANALYTICS_EVENT_TYPES as readonly string[]).includes(e.type))
     .map((e) => ({ ...e, type: e.type as AnalyticsEventType }));
   if (!valid.length) return 0;
-  const aid = ctx.consentAnalytics ? anonId(ctx.anonCookie) : null;
+  // Identificador anónimo: para medir (consentimiento de medición) y/o para personalizar (consentimiento de personalización).
+  const pid = ctx.consentAnalytics || ctx.consentPersonalization ? anonId(ctx.anonCookie) : null;
+  const aid = ctx.consentAnalytics ? pid : null;
   const articleIds = [...new Set(valid.map((e) => e.articleId).filter((x): x is number => typeof x === 'number'))];
   const storyOf = new Map<number, number>();
   if (articleIds.length) {
@@ -93,8 +95,8 @@ export async function recordEvents(db: Db, events: IncomingEvent[], ctx: EventCo
     }
   }
   // Perfil de intereses (personalización consentida).
-  if (ctx.consentPersonalization && (ctx.userId || aid)) {
-    const key = ctx.userId ? `u:${ctx.userId}` : `a:${aid}`;
+  if (ctx.consentPersonalization && (ctx.userId || pid)) {
+    const key = ctx.userId ? `u:${ctx.userId}` : `a:${pid}`;
     for (const e of valid) if (e.articleId && storyOf.has(e.articleId)) await updateInterestProfile(db, key, e.articleId, e.type, e.value ?? null);
   }
   return valid.length;

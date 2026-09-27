@@ -7,6 +7,8 @@
 import type { ArticleSourceRef } from '../db/schema';
 import type { ClaimStatus } from '../domain';
 import type { ExtractedNumber } from '../text/numbers';
+import { contentTokens } from '../text/tokenize';
+import { jaccard } from '../text/similarity';
 import { sourceOriginName } from '../verification/independence';
 import type { StoryAnalysis, VClaim, VItem, VSource } from '../verification/types';
 
@@ -33,6 +35,8 @@ export type FactSheet = {
   confirmed: FactClaim[];
   attributed: FactClaim[];
   unconfirmed: FactClaim[];
+  /** Afirmaciones con una cifra que ya ha cambiado (balance que evoluciona): no se presentan como hecho actual. */
+  superseded: FactClaim[];
   predictions: FactClaim[];
   quotes: FactClaim[];
   figures: Figure[];
@@ -110,13 +114,19 @@ export function buildFactSheet(
   const lang = opts.language;
   const inLang = (c: FactClaim) => c.language === lang;
   const usable = (c: FactClaim) => !['questioned', 'denied'].includes(c.modality);
-  const confirmed = claims.filter((c) => inLang(c) && usable(c) && c.status === 'supported' && !c.quote && c.kind !== 'prediction' && c.kind !== 'allegation');
+  // Cifras que evolucionan (balances): vale el dato más reciente; lo anterior queda como «dato superado».
+  const figures = buildFigures(claims, analysis, itemById);
+  const latest = new Map(figures.filter((f) => f.evolving).map((f) => [f.unit, f.value]));
+  const isSuperseded = (c: FactClaim) => c.numbers.some((n) => n.unit && latest.has(n.unit) && Math.abs(n.value - latest.get(n.unit)!) > 1e-9);
+  const current = (c: FactClaim) => !isSuperseded(c);
+  const confirmed = claims.filter((c) => inLang(c) && usable(c) && current(c) && c.status === 'supported' && !c.quote && c.kind !== 'prediction' && c.kind !== 'allegation');
   const attributed = claims.filter(
-    (c) => inLang(c) && usable(c) && c.status === 'partially_supported' && !c.quote && c.kind !== 'prediction' && c.kind !== 'allegation',
+    (c) => inLang(c) && usable(c) && current(c) && c.status === 'partially_supported' && !c.quote && c.kind !== 'prediction' && c.kind !== 'allegation',
   );
   const unconfirmed = claims.filter(
-    (c) => inLang(c) && (c.status === 'unsupported' || c.kind === 'allegation') && c.supporters.some((s) => isCredibleType(s.sourceType)) && !c.quote,
+    (c) => inLang(c) && current(c) && (c.status === 'unsupported' || c.kind === 'allegation') && c.supporters.some((s) => isCredibleType(s.sourceType)) && !c.quote,
   );
+  const superseded = claims.filter((c) => inLang(c) && usable(c) && isSuperseded(c) && ['supported', 'partially_supported'].includes(c.status) && !c.quote);
   const predictions = claims.filter((c) => inLang(c) && c.kind === 'prediction' && c.status !== 'contradicted' && c.supporters.some((s) => isCredibleType(s.sourceType)));
   const quotes = claims.filter((c) => inLang(c) && c.quote && c.quote.speaker && (c.status === 'supported' || c.status === 'partially_supported'));
 
@@ -152,14 +162,15 @@ export function buildFactSheet(
   return {
     storyId: opts.storyId ?? null,
     language: lang,
-    verified: analysis.nextState === 'VERIFIED' || analysis.decision === 'publish',
+    verified: analysis.decision === 'publish' || (analysis.decision === 'update' && analysis.verifiedLevel),
     claims,
-    confirmed: rank(confirmed),
-    attributed: rank(attributed),
-    unconfirmed: rank(unconfirmed),
-    predictions: rank(predictions),
+    confirmed: distinct(rank(confirmed)),
+    attributed: distinct(rank(attributed)),
+    unconfirmed: distinct(rank(unconfirmed)),
+    superseded: distinct(rank(superseded)),
+    predictions: distinct(rank(predictions)),
     quotes: rank(quotes),
-    figures: buildFigures(claims, analysis, itemById),
+    figures,
     discrepancies: buildDiscrepancies(analysis, claims, itemById, sources),
     sources: sourcesList,
     independentCredible: credible.length,
@@ -187,6 +198,21 @@ function rank(list: FactClaim[]): FactClaim[] {
       Number(a.isHeadline) - Number(b.isHeadline) || // preferimos frases del cuerpo a titulares ajenos
       b.numbers.length + b.entities.length - (a.numbers.length + a.entities.length),
   );
+}
+
+/**
+ * Quita afirmaciones casi iguales (la misma frase en el titular y en la
+ * entradilla, o dos medios con la misma redacción): se queda la mejor situada.
+ */
+export function distinct(list: FactClaim[], threshold = 0.6): FactClaim[] {
+  const kept: { c: FactClaim; t: Set<string> }[] = [];
+  for (const c of list) {
+    const t = new Set(contentTokens(c.text, c.language));
+    const nums = c.numbers.map((n) => `${n.unit}:${n.value}`).sort().join('|');
+    const dup = kept.some((k) => jaccard(k.t, t) >= threshold && k.c.numbers.map((n) => `${n.unit}:${n.value}`).sort().join('|') === nums);
+    if (!dup) kept.push({ c, t });
+  }
+  return kept.map((k) => k.c);
 }
 
 function buildFigures(claims: FactClaim[], analysis: StoryAnalysis, itemById: Map<number, VItem>): Figure[] {

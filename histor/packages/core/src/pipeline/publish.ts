@@ -198,7 +198,7 @@ export async function publishStory(db: Db, v: VerifiedStory, settings: Editorial
       .set({
         state: wasPublished ? 'UPDATED' : 'PUBLISHED',
         publishedAt: story.publishedAt ?? now,
-        isDeveloping: analysis.decision === 'publish_developing' || (wasPublished && story.isDeveloping && analysis.nextState !== 'VERIFIED' && analysis.decision !== 'update'),
+        isDeveloping: analysis.decision === 'publish_developing' || (analysis.decision === 'update' && !analysis.verifiedLevel),
         updatedAt: now,
       })
       .where(eq(stories.id, story.id));

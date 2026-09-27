@@ -61,7 +61,23 @@ const ABBREVIATIONS = new Set(
   ].map((a) => a.toLowerCase()),
 );
 
-/** Divide un texto en frases, respetando abreviaturas, iniciales y decimales. */
+/**
+ * Palabras que tras «N.» indican un ordinal (alemán sobre todo: «1. Januar»,
+ * «19. Jahrhundert», «3. Liga»), no el final de una frase.
+ */
+const ORDINAL_FOLLOWERS = new Set(
+  [
+    'januar', 'februar', 'marz', 'april', 'mai', 'juni', 'juli', 'august', 'september', 'oktober', 'november', 'dezember',
+    'january', 'february', 'march', 'may', 'june', 'july', 'october', 'december',
+    'enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio', 'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre',
+    'janvier', 'fevrier', 'mars', 'avril', 'juin', 'juillet', 'aout', 'septembre', 'octobre', 'novembre', 'decembre',
+    'gennaio', 'febbraio', 'aprile', 'maggio', 'giugno', 'luglio', 'agosto', 'settembre', 'ottobre', 'dicembre',
+    'janeiro', 'fevereiro', 'marco', 'maio', 'junho', 'julho', 'setembro', 'outubro', 'novembro', 'dezembro',
+    'jahrhundert', 'jahrhunderts', 'weltkrieg', 'weltkriegs', 'mal', 'platz', 'liga', 'bundesliga', 'runde', 'spieltag', 'stock', 'etage', 'klasse', 'quartal', 'halbjahr', 'lebensjahr', 'jahrestag',
+  ].map((w) => w.toLowerCase()),
+);
+
+/** Divide un texto en frases, respetando abreviaturas, iniciales, decimales y ordinales. */
 export function sentences(text: string): string[] {
   const out: string[] = [];
   const clean = text.replace(/\s+/g, ' ').trim();
@@ -80,6 +96,10 @@ export function sentences(text: string): string[] {
       const before = clean.slice(start, i).split(' ').pop() ?? '';
       const w = before.replace(/^[("'“«]+/, '').toLowerCase();
       if (ABBREVIATIONS.has(w) || /^\p{L}$/u.test(w) || /^(\p{L}\.)+\p{L}$/u.test(w)) continue;
+      if (/^\d{1,3}$/.test(w)) {
+        const nextWord = fold(clean.slice(j + 1).split(' ')[0] ?? '').replace(/[^a-z]/g, '');
+        if (ORDINAL_FOLLOWERS.has(nextWord)) continue;
+      }
     }
     const s = clean.slice(start, j).trim();
     if (s) out.push(s);

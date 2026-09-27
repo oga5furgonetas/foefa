@@ -513,6 +513,8 @@ export type VerificationBox = {
   confirmed: { text: string; by: string[] }[];
   attributed: { text: string; by: string[] }[];
   unconfirmed: { text: string; by: string[] }[];
+  /** Cifras ya superadas por datos más recientes (se muestran como historia, no como hecho actual). */
+  superseded?: { text: string; by: string[] }[];
   contradictions: { text: string }[];
   method: string;
 };
