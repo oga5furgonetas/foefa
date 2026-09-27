@@ -410,6 +410,11 @@ class Driver(BaseModel):
     license_number: Optional[str] = None
     login: Optional[str] = None        # login del conductor
     driver_id: Optional[str] = None    # identificador externo (nº de empleado)
+    # El ID con el que la persona sale en los informes de reparto (DNR diaria,
+    # horas). Se escribe A MANO en la ficha: no sale de ninguna extension. Sin
+    # estar aqui, `response_model` lo quitaba de la respuesta y 24 fichas de
+    # Dani parecian no tener ID teniendolo (27-09-2026).
+    transporter_id: Optional[str] = None
     # None = no se ha decidido; se trata como SI. False lo apaga para esa persona.
     whatsapp_opt_in: Optional[bool] = None
     photo_url: Optional[str] = None    # foto de perfil (R2)
@@ -433,6 +438,7 @@ class DriverCreate(BaseModel):
     center: Optional[str] = None
     password: Optional[str] = None
     driver_id: Optional[str] = None    # identificador externo (nº de empleado)
+    transporter_id: Optional[str] = None   # ID de reparto (ver Driver)
     contrato: Optional[str] = None
     nivel: Optional[str] = None
     zona: Optional[str] = None
@@ -9793,11 +9799,77 @@ async def update_vehicle(vehicle_id: str, data: dict, _=Depends(require_admin)):
 # DRIVERS — solo admin
 # =========================
 
+_FICHA_VIVA = {"active": {"$ne": False}, "status": {"$nin": ["deleted", "fusionada"]},
+               "merged_into": {"$exists": False}}
+
+
+def _tid_de_ficha(valor):
+    """El ID de reparto tal como se guarda: mayusculas y sin espacios. None si
+    viene vacio; 400 si no tiene la forma (la DNR diaria no lo reconoceria y la
+    ficha pareceria enlazada sin estarlo)."""
+    t = re.sub(r"\s+", "", str(valor or "")).upper()
+    if not t:
+        return None
+    if not _DIA_TID.match(t):
+        raise HTTPException(400, "Ese ID de reparto no tiene la forma de siempre: empieza "
+                                 "por A y lleva de 9 a 17 letras y numeros (A2S2HK9FC8JOUX).")
+    return t
+
+
+async def _tid_en_otra_ficha(tid: str, excepto: str = None):
+    """La ficha viva que ya tiene ese ID (en cualquiera de sus dos campos,
+    gotcha 79). Un ID en dos fichas cuelga los informes de una persona a otra."""
+    if not tid:
+        return None
+    filtro = {**_FICHA_VIVA, "$or": [{"transporter_id": tid}, {"driver_id": tid}]}
+    if excepto:
+        filtro["id"] = {"$ne": excepto}
+    return await db.drivers.find_one(filtro, {"_id": 0, "id": 1, "name": 1, "center": 1})
+
+
+async def _centro_sin_eleccion(user: dict) -> str:
+    """El centro de una ficha nueva cuando no hay nada que elegir: el unico que
+    puede ver quien la da de alta, o el unico de la empresa. Con varios, vacio:
+    no se adivina (la ficha sale igual en la lista, marcada «sin centro»)."""
+    permitidos = [str(p).strip() for p in (user.get("allowed_centers") or []) if str(p).strip()]
+    if not (user.get("sa") or user.get("account_type") == "owner") and permitidos:
+        return permitidos[0] if len(permitidos) == 1 else ""
+    try:
+        org = await global_db.organizations.find_one(
+            {"db_name": _current_db_name.get()}, {"_id": 0, "centers": 1})
+        if not org and _current_db_name.get() == _DEFAULT_DB_NAME:
+            org = await global_db.organizations.find_one(
+                {"account_type": "owner"}, {"_id": 0, "centers": 1})
+        cs = [str(c).strip() for c in ((org or {}).get("centers") or []) if str(c).strip()]
+        return cs[0] if len(cs) == 1 else ""
+    except Exception:                                            # noqa: BLE001
+        return ""
+
+
+def _ya_tiene_ficha(otra: dict, que: str) -> dict:
+    """El 409 de «ya existe» con la ficha a la que ir: sin `abrir_id` la oficina
+    se quedaba en un callejon —la ficha no salia en su lista (estaba sin centro)
+    y el alta tampoco la dejaba crear— y lo contaba como «no se guarda»."""
+    centro = (otra.get("center") or "").strip()
+    return {
+        "mensaje": "%s ya tiene ficha (%s)%s." % (
+            otra.get("name") or "Esa persona", que,
+            ", centro %s" % centro if centro else ", sin centro asignado"),
+        "abrir_id": otra["id"], "nombre": otra.get("name") or "", "centro": centro,
+    }
+
+
 @api_router.post("/drivers", response_model=Driver)
 async def create_driver(data: DriverCreate, nueva: bool = False,
                         admin: dict = Depends(require_admin)):
     driver_data = data.model_dump()
     password = driver_data.pop("password", None)
+    if not str(driver_data.get("center") or "").strip():
+        driver_data["center"] = await _centro_sin_eleccion(admin) or None
+    driver_data["transporter_id"] = _tid_de_ficha(driver_data.get("transporter_id"))
+    otra = await _tid_en_otra_ficha(driver_data["transporter_id"])
+    if otra:
+        raise HTTPException(409, _ya_tiene_ficha(otra, "ID de reparto %s" % driver_data["transporter_id"]))
 
     if isinstance(driver_data.get("name"), str):
         driver_data["name"] = re.sub(r"\s+", " ", driver_data["name"]).strip()
@@ -9822,11 +9894,9 @@ async def create_driver(data: DriverCreate, nueva: bool = False,
     if email:
         otra = await db.drivers.find_one(
             {"email": {"$regex": "^%s$" % re.escape(email), "$options": "i"},
-             "active": {"$ne": False}}, {"_id": 0, "id": 1, "name": 1})
+             "active": {"$ne": False}}, {"_id": 0, "id": 1, "name": 1, "center": 1})
         if otra:
-            raise HTTPException(
-                409, "Ya hay un conductor activo con el correo %s (%s). Edita esa "
-                     "ficha o cambia el correo." % (email, otra.get("name") or otra.get("id")))
+            raise HTTPException(409, _ya_tiene_ficha(otra, "correo %s" % email))
         # UNA PERSONA QUE VUELVE TRAS UNA BAJA RECUPERA SU FICHA. Crear otra
         # partia su historial en dos: el 09-09-2026 se dio de alta a David
         # Freire con ficha nueva mientras la suya —con su Transporter ID y
@@ -10453,7 +10523,17 @@ async def drivers_fusionar(data: dict = Body(...), user: dict = Depends(require_
 @api_router.get("/drivers", response_model=List[Driver])
 async def get_drivers(center: Optional[str] = None, user: dict = Depends(require_admin)):
     query = {"active": {"$ne": False}}
-    query.update(_filtro_centro(user, center))
+    # LAS FICHAS SIN CENTRO SALEN EN TODOS LOS CENTROS. Filtrando solo por el
+    # centro, una ficha dada de alta con «Todos» elegido no salia en ninguna
+    # lista: la oficina la creaba otra vez y se encontraba «ya hay un conductor
+    # activo con ese correo». El 27-09-2026 eran 8 fichas activas sin centro, 5
+    # de ellas creadas ese mismo dia. Es la misma regla que los talleres
+    # (gotcha 43): lo de un centro Y lo que no tiene ninguno. El panel las marca
+    # «sin centro» para que se les ponga uno.
+    filtro = _filtro_centro(user, center)
+    if filtro:
+        query["$or"] = [filtro, {"center": {"$in": [None, ""]}},
+                        {"center": {"$regex": r"^\s*$"}}]
     drivers = await db.drivers.find(query, {"_id": 0}).to_list(1000)
     return drivers
 
@@ -10474,6 +10554,8 @@ async def update_driver(driver_id: str, data: dict, _=Depends(require_admin)):
         # Ver `Driver.movil_personal`. Sin esto aqui se descartaria en silencio
         # al guardar y la casilla del panel no haria nada (gotcha 1).
         "movil_personal",
+        # El ID de reparto, escrito a mano en la ficha (ver `Driver`).
+        "transporter_id",
     }
     data = {k: v for k, v in data.items() if k in _DRIVER_ALLOWED}
     # El nombre sin espacios de mas: 18 fichas activas los tenian (« Karim…») y
@@ -10504,6 +10586,25 @@ async def update_driver(driver_id: str, data: dict, _=Depends(require_admin)):
                 raise HTTPException(400, "Ese no parece un movil. Escribelo con 9 cifras "
                                          "(o con el prefijo del pais).")
             data["movil_personal"] = "+" + e164
+
+    if "transporter_id" in data:
+        # El formulario manda la ficha entera: si el ID no ha cambiado no se
+        # revalida, o una ficha vieja con un ID raro no se podria guardar por
+        # tocarle el telefono.
+        actual = await db.drivers.find_one({"id": driver_id}, {"_id": 0, "transporter_id": 1}) or {}
+        _plano = lambda v: re.sub(r"\s+", "", str(v or "")).upper()  # noqa: E731
+        if _plano(data.get("transporter_id")) == _plano(actual.get("transporter_id")):
+            data.pop("transporter_id")
+    if "transporter_id" in data:
+        tid = _tid_de_ficha(data.get("transporter_id"))
+        if not tid:
+            data.pop("transporter_id")
+            quitar["transporter_id"] = ""
+        else:
+            otra = await _tid_en_otra_ficha(tid, excepto=driver_id)
+            if otra:
+                raise HTTPException(409, _ya_tiene_ficha(otra, "ID de reparto %s" % tid))
+            data["transporter_id"] = tid
 
     cambio = {}
     if data:

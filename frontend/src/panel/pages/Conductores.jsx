@@ -6,6 +6,7 @@ import { verTelefono } from '../../lib/telefono'
 import ImportarConductores from '../components/ImportarConductores'
 import ImportarMoviles from '../components/ImportarMoviles'
 import { useEscape } from '../../lib/useEscape'
+import { usePlan } from '../../lib/usePlan'
 import {
   Loader2, Search, Plus, X, Pencil, Trash2, UserCheck, FileSpreadsheet, Phone, Mail, IdCard, Car,
   MapPin, FileText, Building2, Save, Camera, Trophy, TrendingUp, TrendingDown, Minus, Flame,
@@ -22,9 +23,13 @@ import {
 import { MARCA } from '../../marca'
 
 const EMPTY = {
-  name: '', dni: '', phone: '', movil_personal: '', email: '', driver_id: '',
+  name: '', dni: '', phone: '', movil_personal: '', email: '', driver_id: '', transporter_id: '',
   license_number: '', contrato: '', nivel: '', center: '', alojamiento: '', notas: '',
 }
+
+// Sin centro, la ficha sale en la lista de TODOS los centros (así nadie la
+// pierde de vista) y marcada, para que se le ponga el suyo.
+const sinCentro = (d) => !String(d?.center || '').trim()
 
 function initials(n) {
   return (n || '?').split(' ').filter(Boolean).map(w => w[0]).join('').slice(0, 2).toUpperCase()
@@ -813,7 +818,11 @@ function TablaConductores({ list, accounts, onAbrir, t }) {
                   className="float-row cursor-pointer border-b border-dark-800/50 last:border-0">
                   <td className="px-2 py-1"><Avatar driver={d} size={7} /></td>
                   <td className="max-w-[220px] truncate px-2 py-1 font-medium text-dark-100">{String(d.name || '').replace(/\s+/g, ' ').trim()}</td>
-                  <td className="px-2 py-1 text-dark-400">{d.center || '—'}</td>
+                  <td className="px-2 py-1 text-dark-400">
+                    {sinCentro(d)
+                      ? <span className="rounded-full bg-amber-500/15 px-2 py-0.5 text-[10px] font-semibold text-amber-300">sin centro</span>
+                      : d.center}
+                  </td>
                   <td className="max-w-[150px] truncate px-2 py-1 text-dark-500">{d.alojamiento || '—'}</td>
                   <td className="cifra px-2 py-1 text-dark-400">
                     {d.phone ? verTelefono(d.phone) : '—'}
@@ -888,10 +897,24 @@ export default function Conductores() {
     const plano = (v) => String(v || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase()
     const b = plano(q).trim()
     return (drivers || [])
-      .filter(d => !b || [d.name, d.email, d.center, d.driver_id, d.phone, d.movil_personal]
+      .filter(d => !b || [d.name, d.email, d.center, d.driver_id, d.transporter_id, d.phone, d.movil_personal]
         .some(v => plano(v).includes(b)))
       .sort((a, b) => (a.name || '').localeCompare(b.name || '', 'es', { sensitivity: 'base' }))
   }, [drivers, q])
+
+  /* «Ya tiene ficha»: se abre esa ficha. Puede no estar en la lista que se ve
+     (otro centro): se busca entre todas las que puede ver quien da de alta. */
+  async function abrirExistente(d) {
+    let ficha = (drivers || []).find((x) => x.id === d.abrir_id)
+    if (!ficha) {
+      try { ficha = lista((await getDrivers('Todos')).data).find((x) => x.id === d.abrir_id) } catch { /* abajo */ }
+    }
+    if (!ficha) {
+      window.alert(`${d.mensaje}\n\nNo tienes acceso a ese centro: pide a quien lo lleve que la edite.`)
+      return
+    }
+    setModal({ driver: ficha })
+  }
 
   async function handleSave(id, data) {
     if (id) {
@@ -900,9 +923,20 @@ export default function Conductores() {
       try {
         await createDriver(data)
       } catch (e) {
+        const d = e?.response?.data?.detalle
+        /* Ya tiene ficha ACTIVA (mismo correo o mismo ID de reparto). Antes
+           solo salía el aviso y la ficha no aparecía en la lista si estaba sin
+           centro: parecía que no se podía guardar. Ahora se va a ella. */
+        if (e?.response?.status === 409 && d?.abrir_id) {
+          if (window.confirm(`${d.mensaje}\n\nAceptar: abrir su ficha para revisarla o completarla.`)) {
+            await abrirExistente(d)
+            setDrivers(null); load()
+            return
+          }
+          throw e
+        }
         /* Alguien que vuelve tras una baja: el servidor ofrece su ficha de
            siempre en vez de crear otra y partir su historial en dos. */
-        const d = e?.response?.data?.detalle
         if (e?.response?.status !== 409 || !d?.reactivar_id) throw e
         if (window.confirm(`${d.mensaje}
 
@@ -1030,6 +1064,15 @@ Cancelar: es otra persona, crear una ficha nueva.`)) {
               </div>
             : <>
                 <AvisoAccesos list={list} accounts={accounts} onHecho={load} />
+                {centers.length > 1 && list.some(sinCentro) && (
+                  <div className="mb-3 flex flex-wrap items-center gap-x-2 gap-y-1 rounded-xl border border-amber-500/25 bg-amber-500/[0.06] px-3 py-2 text-[12.5px] text-amber-200">
+                    <AlertCircle size={13} className="shrink-0" />
+                    <span>
+                      <b>{list.filter(sinCentro).length}</b> {list.filter(sinCentro).length === 1 ? 'ficha no tiene' : 'fichas no tienen'} centro:
+                      salen en todos los centros hasta que se les ponga el suyo. Ábrelas y elige su centro.
+                    </span>
+                  </div>
+                )}
                 <TablaConductores list={list} accounts={accounts} onAbrir={(d) => setModal({ driver: d })} t={t} />
               </>
       )}
@@ -1044,6 +1087,7 @@ Cancelar: es otra persona, crear una ficha nueva.`)) {
         <DriverModal
           driver={modal.driver}
           centers={centers}
+          centroInicial={center && center !== 'Todos' ? center : (centers.length === 1 ? centers[0] : '')}
           hasAccount={accounts.includes(modal.driver?.id)}
           onSave={handleSave}
           onDelete={handleDelete}
@@ -1056,12 +1100,18 @@ Cancelar: es otra persona, crear una ficha nueva.`)) {
 }
 
 // ── Modal ─────────────────────────────────────────────────────────────────────
-function DriverModal({ driver, centers, hasAccount, onSave, onDelete, onClose, onAccountChange }) {
+function DriverModal({ driver, centers, centroInicial = '', hasAccount, onSave, onDelete, onClose, onAccountChange }) {
   const { t } = useT()
   useEscape(onClose)
+  const { modulos } = usePlan()
   const isNew = !driver
   const [editing, setEditing] = useState(isNew)
-  const [form, setForm] = useState(driver ? { ...driver } : { ...EMPTY })
+  const [form, setForm] = useState(driver ? { ...driver } : { ...EMPTY, center: centroInicial })
+  // El ID de reparto solo tiene sentido para quien usa la DNR diaria o las
+  // horas; a una empresa que no los tiene no se le enseña un campo que no usa.
+  // Si la ficha ya lo trae, se ve siempre.
+  const conIdReparto = !Array.isArray(modulos) || modulos.includes('diarios') || modulos.includes('horas')
+    || !!driver?.transporter_id
   const [busy, setBusy] = useState(false)
   const [photoBusy, setPhotoBusy] = useState(false)
   const [previewUrl, setPreviewUrl] = useState(driver?.photo_url || null)
@@ -1221,6 +1271,7 @@ function DriverModal({ driver, centers, hasAccount, onSave, onDelete, onClose, o
                 <Detail icon={Mail}      label="Email"            value={driver.email} span={2} />
                 <Detail icon={Car}       label="Nº carnet"        value={driver.license_number} />
                 <Detail icon={FileText}  label="Nº de empleado"   value={driver.driver_id} mono />
+                <Detail icon={IdCard}    label="ID de reparto"    value={driver.transporter_id} mono />
                 <Detail icon={MapPin}    label="Centro"           value={driver.center} />
                 <Detail icon={Building2} label="Alojamiento"      value={driver.alojamiento} />
                 {driver.notas && (
@@ -1333,6 +1384,11 @@ function DriverModal({ driver, centers, hasAccount, onSave, onDelete, onClose, o
                     <option value="">— Sin asignar —</option>
                     {centers.map(c => <option key={c} value={c}>{c}</option>)}
                   </select>
+                  {!form.center && centers.length > 1 && (
+                    <p className="mt-1 text-[11px] leading-snug text-amber-300">
+                      Sin centro sale en la lista de todos los centros, marcada. Mejor elige el suyo.
+                    </p>
+                  )}
                 </div>
 
                 <div>
@@ -1395,6 +1451,18 @@ function DriverModal({ driver, centers, hasAccount, onSave, onDelete, onClose, o
                   <Label>Nº de empleado</Label>
                   <input className="input w-full font-mono" value={form.driver_id || ''} onChange={e => set('driver_id', e.target.value)} placeholder="Opcional" />
                 </div>
+
+                {conIdReparto && (
+                  <div>
+                    <Label>ID de reparto</Label>
+                    <input className="input w-full font-mono uppercase" value={form.transporter_id || ''}
+                      onChange={e => set('transporter_id', e.target.value.replace(/\s+/g, '').toUpperCase())}
+                      placeholder="A2S2HK9FC8JOUX" />
+                    <p className="mt-1 text-[11px] leading-snug text-dark-500">
+                      El de los informes diarios y las horas. Se escribe a mano.
+                    </p>
+                  </div>
+                )}
 
 
                 <div className="col-span-2">
