@@ -51,8 +51,14 @@ function text(v: unknown): string {
  * es formato de su web, no parte del hecho, y estorba para agrupar y redactar.
  */
 function cleanTitle(s: string): string {
-  return clean(s).replace(LIVE_PREFIX, '').replace(TIME_PREFIX, '').trim();
+  const t = clean(s).replace(LIVE_PREFIX, '').replace(TIME_PREFIX, '').replace(MEDIA_PREFIX, '').replace(LIVE_SUFFIX, '').trim();
+  return t.charAt(0).toUpperCase() + t.slice(1);
 }
+
+/** Formato del medio, no parte del hecho: «Watch: …», «Vídeo | …», «FOTOS: …». */
+const MEDIA_PREFIX = /^(watch|video|vídeo|vidéo|audio|listen|escucha|fotos|photos|en vídeo|en imágenes|im video)\s*[:|–—-]\s*/i;
+/** «… - The Latest», «… | Live», «… (en directo)» al final del titular. */
+const LIVE_SUFFIX = /\s*(?:[-–—|]\s*(?:the latest|live|live updates|en directo|en vivo|en direct|liveticker)|\((?:live|en directo|en vivo|en direct)\))\s*$/i;
 
 const LIVE_PREFIX = /^(live(?:blog|ticker| updates?)?|en directo|en vivo|directo|en direct|direct|live-ticker|ticker|diretta|in diretta|ao vivo|minuto a minuto)\s*[:|,–—-]\s*/i;
 /** Hora de una entrada de directo al principio del titular: «16h Papa…», «14:05 …», «14.30 Uhr …». */

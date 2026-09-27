@@ -24,7 +24,7 @@ de Flota): `histor-db` (PostgreSQL 16 con volumen de 3 GB, instantáneas diarias
 `infra/fly/desplegar.sh` (con `HISTOR_SKIP_DB=1` para no tocar la base). Secretos
 en `~/.histor-secretos-prod.env` y acceso al panel en `~/.histor-admin.txt` (fuera
 de git; `ADMIN_PASSWORD` ya no está en Fly). **Falta que Dani active el 2FA** al
-entrar en `/admin`. Fuentes en producción: 34/41 (Corriere responde 403 a las IP
+entrar en `/admin`. Fuentes en producción: 72/79 (ampliadas el 27-09 con 38 medios más en los 6 idiomas; Corriere responde 403 a las IP
 de centros de datos; en local sí leía).
 
 **Datos legales del titular** (persona física) cargados el 27-09-2026 como secretos
@@ -127,9 +127,14 @@ Fallos encontrados con fuentes reales y corregidos (cada uno con su prueba):
 
 ## Pendiente (no bloqueado)
 
-- Imágenes con licencia: integración con Wikimedia Commons y banco propio (el
-  modelo `media` con licencia, autor y rótulos «ilustrativa»/«IA» ya existe; hoy
-  las noticias sin foto con licencia se presentan tipográficamente).
+- **Traducción con IA** (`AI_PROVIDER_TRANSLATION` + clave + `AI_MONTHLY_BUDGET_USD`): sin ella
+  cada noticia solo sale en el idioma de sus fuentes, por eso la portada en español
+  tiene poco. Con ella, cada historia verificada sale en los 6 idiomas.
+
+- Imágenes: desde el 27-09-2026, imagen ilustrativa del LUGAR de la noticia desde
+  Wikimedia Commons (solo licencias libres, nunca personas; `media/wikimedia.ts`,
+  `cli images:backfill`). Las historias solo de país no tienen (la imagen del país
+  en Wikipedia es la bandera). Falta un banco propio o de agencia.
 - `/.well-known/security.txt` con el contacto definitivo.
 - Idiomas preparados (nl, ja, ko, ar, hi): faltan diccionario, rutas y frases.
 - Búsqueda: pasar a OpenSearch/Meilisearch si el volumen lo pide.

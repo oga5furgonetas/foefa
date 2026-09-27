@@ -317,3 +317,12 @@ describe('terremoto verificado con fuentes en otro idioma', () => {
     expect(d.verification.confirmed[0].text).toMatch(/Terremoto de magnitud 5,6/);
   });
 });
+
+describe('más etiquetas de formato en titulares (27-09-2026)', () => {
+  const rss = (title: string) => `<?xml version="1.0"?><rss version="2.0"><channel><item><title>${title}</title><link>https://x.test/a</link></item></channel></rss>`;
+  it('quita «Watch:» y «- The Latest»', () => {
+    expect(parseRss(rss('Watch: mass Madrid protests over eviction and housing crisis'))[0].title).toBe('Mass Madrid protests over eviction and housing crisis');
+    expect(parseRss(rss('Protests erupt as Netanyahu gives UN speech - The Latest'))[0].title).toBe('Protests erupt as Netanyahu gives UN speech');
+    expect(parseRss(rss('Rescate en el Mediterráneo (en directo)'))[0].title).toBe('Rescate en el Mediterráneo');
+  });
+});

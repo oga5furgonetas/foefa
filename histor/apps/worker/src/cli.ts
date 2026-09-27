@@ -9,11 +9,15 @@
  *   run-once                una vuelta del pipeline
  *   newsletter:send         envía las newsletters cuya hora ha llegado
  *   check:env               lista lo que falta para producción
+ *   images:backfill         pone imagen ilustrativa (Wikimedia Commons) a lo publicado que no tenga
  */
+import { and, eq, isNull } from 'drizzle-orm';
 import { ensureAdmin } from '@histor/core/auth/users';
 import { SOURCE_SEEDS } from '@histor/core/config/sources';
 import { closeDb, getDb } from '@histor/core/db/client';
+import { articles } from '@histor/core/db/schema';
 import { runMigrations } from '@histor/core/db/migrate';
+import { attachStoryImage } from '@histor/core/media/wikimedia';
 import { seedReference } from '@histor/core/db/seed';
 import { purgeDemo, seedDemo } from '@histor/core/demo/seed';
 import { env, productionProblems } from '@histor/core/env';
@@ -77,8 +81,18 @@ async function main(): Promise<number> {
     }
     case 'sources:check':
       return sourcesCheck();
+    case 'images:backfill': {
+      const ids = await getDb().selectDistinct({ id: articles.storyId }).from(articles).where(and(eq(articles.status, 'published'), isNull(articles.imageId), eq(articles.isDemo, false)));
+      const tally: Record<string, number> = {};
+      for (const { id } of ids) {
+        const r = await attachStoryImage(getDb(), id).catch(() => 'error');
+        tally[r] = (tally[r] ?? 0) + 1;
+      }
+      console.log(`✓ imágenes: ${ids.length} historias revisadas`, tally);
+      return 0;
+    }
     default:
-      console.log('Uso: cli <migrate|seed|create-admin|demo:seed|demo:purge|sources:check|run-once|newsletter:send|check:env>');
+      console.log('Uso: cli <migrate|seed|create-admin|demo:seed|demo:purge|sources:check|images:backfill|run-once|newsletter:send|check:env>');
       return cmd ? 1 : 0;
   }
 }

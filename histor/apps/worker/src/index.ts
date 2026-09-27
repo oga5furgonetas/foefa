@@ -16,6 +16,7 @@ import { env, isProduction, productionProblems } from '@histor/core/env';
 import { enqueue, releaseStale, work } from '@histor/core/jobs/queue';
 import { sendDueNewsletters } from '@histor/core/newsletter/index';
 import { dispatchStoryAlerts } from '@histor/core/notify/index';
+import { attachStoryImage } from '@histor/core/media/wikimedia';
 import { logger, reportError } from '@histor/core/observability/index';
 import { maintenance, runPipelineOnce, type TickStats } from '@histor/core/pipeline/run';
 import { publishQueuedPosts, queueSocialPosts } from '@histor/core/social/index';
@@ -71,9 +72,11 @@ export async function pipelineTick(): Promise<TickStats | null> {
 export const handlers = {
   'distribute:story': async (p: Record<string, unknown>) => {
     const storyId = Number(p.storyId);
+    // Imagen ilustrativa con licencia libre (Wikimedia Commons), si la historia aún no tiene.
+    const image = await attachStoryImage(db, storyId).catch((e) => `error: ${(e as Error).message}`);
     const social = await queueSocialPosts(db, storyId);
     const alerts = await dispatchStoryAlerts(db, storyId);
-    logger.info({ storyId, social, alerts }, 'distribución');
+    logger.info({ storyId, image, social, alerts }, 'distribución');
   },
   'pipeline:tick': async () => {
     await pipelineTick();
