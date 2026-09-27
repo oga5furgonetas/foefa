@@ -47,6 +47,8 @@ export function writeDeterministic(fs: FactSheet, opts: WriteOptions = {}): Draf
     const place = q.placeName ? P.near(q.placeName) : '';
     const mag = nf.format(q.magnitude);
     headline = P.earthquake.headline(mag, place).trim();
+    // Sin verificar (una sola fuente), también el titular va atribuido: «…, según USGS».
+    if (developing) headline = stripPeriod(P.according(headline, q.agency));
     const lead = P.earthquake.lead(capitalize(q.agency), timeFmt.format(q.time), mag, place, q.depthKm == null ? '—' : nf.format(q.depthKm));
     body.push({ type: 'p', text: lead, claimIds: [] });
     boilerplate.push(lead);

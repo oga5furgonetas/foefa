@@ -97,6 +97,8 @@ const ORG_HINTS =
 const PERSON_TITLES =
   /\b(sr|sra|don|dona|doña|mr|mrs|ms|dr|dra|prof|presidente|presidenta|president|ministro|ministra|minister|ministerin|kanzler|kanzlerin|alcalde|alcaldesa|mayor|burgermeister|burgermeisterin|maire|sindaco|prefeito|prefeita|rey|king|konig|roi|re|rei|papa|pope|senador|senator|senatore|diputado|diputada|abgeordnete|depute|deputato|deputado|juez|jueza|judge|richter|juge|giudice|juiz|entrenador|coach|trainer|entraineur|allenatore|tecnico|portavoz|spokesperson|spokesman|spokeswoman|sprecher|sprecherin|porte-parole|portavoce|porta-voz|ceo|consejero delegado|director|directora)\.?\s*$/i;
 
+const COMPASS = /^(N|S|E|W|NE|NW|SE|SW|NNE|ENE|ESE|SSE|SSW|WSW|WNW|NNW)$/;
+
 const SENTENCE_START_STOP = new Set(
   Object.values(STOPWORDS)
     .flatMap((s) => [...s])
@@ -147,6 +149,16 @@ export function extractEntities(text: string, lang?: string | null): ExtractedEn
       continue;
     }
     if (prevPunct && seq.length > 1 && SENTENCE_START_STOP.has(fold(seq[0]))) seq.shift();
+    // Rumbo de brújula de los partes sísmicos («35 km NNE of Demo Point»): no es parte del nombre.
+    while (seq.length && COMPASS.test(seq[0])) {
+      seq.shift();
+      if (seq.length && CONNECTORS.has(seq[0].toLowerCase())) seq.shift();
+    }
+    if (!seq.length) {
+      prevPunct = false;
+      i = j;
+      continue;
+    }
     const name = seq.join(' ').replace(/[.’']+$/, '');
     if (name.length > 1) {
       const before = tokens.slice(Math.max(0, i - 3), i).join(' ');

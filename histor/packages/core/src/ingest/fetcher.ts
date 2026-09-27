@@ -3,13 +3,14 @@
  * - se identifica (User-Agent con URL de contacto);
  * - respeta robots.txt y Crawl-delay; un intervalo mínimo por host;
  * - GET condicional (ETag / Last-Modified) para no descargar lo mismo;
- * - lee la reserva de minería de textos (cabecera `tdm-reservation`, TDMRep):
- *   si el editor se reserva el derecho, solo se guardan metadatos;
+ * - lee la reserva de minería de textos (cabecera `tdm-reservation`, TDMRep) y
+ *   `Content-Signal: ai-input=no` de robots.txt: si el editor se reserva el
+ *   derecho, solo se guardan metadatos y la historia nunca pasa por la IA;
  * - límite de tamaño y de tiempo; nunca pide a redes internas.
  * NO evade muros de pago, CAPTCHAs ni bloqueos: si el sitio dice que no, es que no.
  */
 import { env } from '../env';
-import { isAllowed, parseRobots, type RobotsRules } from './robots';
+import { aiInputReserved, isAllowed, parseRobots, type RobotsRules } from './robots';
 import { isPublicHost, resolvesToPublic } from './url';
 
 export type FetchResult = {
@@ -89,14 +90,14 @@ export class PoliteFetcher {
     const key = `${u.protocol}//${u.host}`;
     const cached = this.robots.get(key);
     if (cached && Date.now() - cached.at < 24 * 3600_000) return cached.rules;
-    let rules: RobotsRules = { allow: [], disallow: [], crawlDelay: null };
+    let rules: RobotsRules = { allow: [], disallow: [], crawlDelay: null, contentSignals: {} };
     try {
       const fetched = await this.safeFetch(`${key}/robots.txt`, { headers: { 'user-agent': userAgent() }, signal: AbortSignal.timeout(10_000) });
       if ('blocked' in fetched) throw new Error(fetched.blocked);
       const res = fetched.res;
       if (res.ok) rules = parseRobots(await res.text());
       // 401/403 en robots.txt = no permitido (criterio conservador).
-      else if (res.status === 401 || res.status === 403) rules = { allow: [], disallow: ['/'], crawlDelay: null };
+      else if (res.status === 401 || res.status === 403) rules = { allow: [], disallow: ['/'], crawlDelay: null, contentSignals: {} };
     } catch {
       /* sin robots.txt accesible: se permite (RFC 9309 §2.3.1.3 para 4xx) */
     }
@@ -122,9 +123,11 @@ export class PoliteFetcher {
       return { ...base, status: 0, ok: false, body: 'URL no permitida' };
     }
     let crawlDelay: number | null = null;
+    let aiReserved = false;
     if (this.opts.respectRobots !== false) {
       const rules = await this.robotsFor(u);
       crawlDelay = rules.crawlDelay;
+      aiReserved = aiInputReserved(rules);
       if (!isAllowed(rules, u.pathname + u.search)) {
         return { ...base, status: 0, ok: false, body: 'bloqueado por robots.txt', blockedByRobots: true, durationMs: Date.now() - started };
       }
@@ -147,17 +150,18 @@ export class PoliteFetcher {
       contentType: res.headers.get('content-type'),
       etag: res.headers.get('etag'),
       lastModified: res.headers.get('last-modified'),
-      tdmReserved: tdm === '1',
+      tdmReserved: tdm === '1' || aiReserved,
     };
     if (res.status === 304) return { ...common, ok: true, notModified: true, body: '', durationMs: Date.now() - started };
     const max = this.opts.maxBytes ?? 5_000_000;
-    const buf = await readLimited(res, max);
-    return { ...common, ok: res.ok, body: buf, bytes: Buffer.byteLength(buf), durationMs: Date.now() - started };
+    const raw = await readLimited(res, max);
+    const body = decodeBody(raw, common.contentType);
+    return { ...common, ok: res.ok, body, bytes: raw.byteLength, durationMs: Date.now() - started };
   }
 }
 
-async function readLimited(res: Response, max: number): Promise<string> {
-  if (!res.body) return '';
+async function readLimited(res: Response, max: number): Promise<Uint8Array> {
+  if (!res.body) return new Uint8Array();
   const reader = res.body.getReader();
   const chunks: Uint8Array[] = [];
   let total = 0;
@@ -171,5 +175,27 @@ async function readLimited(res: Response, max: number): Promise<string> {
     }
     chunks.push(value);
   }
-  return new TextDecoder('utf-8').decode(Buffer.concat(chunks));
+  return Buffer.concat(chunks);
+}
+
+/**
+ * Decodifica el cuerpo con el juego de caracteres que declara la respuesta
+ * (cabecera Content-Type, declaración XML o <meta charset>). Muchos feeds
+ * oficiales siguen en ISO-8859-1 (el BOE, por ejemplo): leídos como UTF-8
+ * salen «Resoluci�n» en vez de «Resolución».
+ */
+export function decodeBody(bytes: Uint8Array, contentType: string | null): string {
+  const fromHeader = /charset\s*=\s*["']?([\w.:-]+)/i.exec(contentType ?? '')?.[1];
+  const head = Buffer.from(bytes.subarray(0, 1024)).toString('latin1');
+  const fromXml = /^\s*<\?xml[^>]*\sencoding\s*=\s*["']([\w.:-]+)["']/i.exec(head)?.[1];
+  const fromMeta = /<meta[^>]+charset\s*=\s*["']?([\w.:-]+)/i.exec(head)?.[1];
+  for (const label of [fromHeader, fromXml, fromMeta]) {
+    if (!label) continue;
+    try {
+      return new TextDecoder(label.toLowerCase()).decode(bytes);
+    } catch {
+      /* etiqueta desconocida: se prueba la siguiente */
+    }
+  }
+  return new TextDecoder('utf-8').decode(bytes);
 }

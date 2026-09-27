@@ -19,6 +19,9 @@ import { sentences } from '../text/tokenize';
 import { claimRef } from './deterministic';
 import type { Draft } from './draft';
 import type { FactClaim, FactSheet } from './factsheet';
+import { PHRASES } from './phrases';
+
+const UNCONFIRMED_SUFFIXES = new Set(Object.values(PHRASES).map((p) => p.unconfirmedSuffix.trim()));
 
 export type ValidationIssue = { check: 'citation' | 'number' | 'date' | 'entity' | 'quote' | 'status' | 'prediction' | 'headline'; text: string; detail: string };
 
@@ -64,7 +67,11 @@ export function validateDraft(draft: Draft, fs: FactSheet, extraAllowedNames: st
       issues.push({ check: 'citation', text: u.text, detail: 'frase sin afirmaciones que la respalden' });
       continue;
     }
-    for (const s of u.section === 'quote' ? [u.text] : sentences(u.text)) checkSentence(s, cited, u, issues, fs, allowedNames, sourceTexts);
+    for (const s of u.section === 'quote' ? [u.text] : sentences(u.text)) {
+      // «No se ha podido confirmar de forma independiente.»: aclaración de Histor, no un hecho que atribuir.
+      if (UNCONFIRMED_SUFFIXES.has(s.trim())) continue;
+      checkSentence(s, cited, u, issues, fs, allowedNames, sourceTexts);
+    }
   }
 
   // Titular: cifras y nombres respaldados; si no está verificado, atribuido.

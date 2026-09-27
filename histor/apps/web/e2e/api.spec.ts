@@ -4,10 +4,11 @@ import { BASE } from '../playwright.config';
 test('API pública de lectura', async ({ request }) => {
   const list = await request.get(`${BASE}/api/v1/articles?lang=en&limit=5`);
   expect(list.ok()).toBe(true);
-  const items = (await list.json()).items as { url: string; isDemo: boolean }[];
+  const items = (await list.json()).items as { url: string; isDemo: boolean; isDeveloping: boolean }[];
   expect(items.length).toBeGreaterThan(0);
   expect(items.every((i) => i.isDemo)).toBe(true); // en DEMO solo se sirve lo DEMO
-  const [, lang, , , , slug] = items[0].url.split('/');
+  // Una verificada (las «en desarrollo» no tienen nada confirmado todavía).
+  const [, lang, , , , slug] = (items.find((i) => !i.isDeveloping) ?? items[0]).url.split('/');
   const one = await request.get(`${BASE}/api/v1/articles/${lang}/${slug}`);
   const body = await one.json();
   expect(body.article.verification.confirmed.length).toBeGreaterThan(0);

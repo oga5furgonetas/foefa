@@ -26,6 +26,7 @@ export function toVItem(r: RawItemRow): VItem {
     imagePhash: meta.phash ?? null,
     places: meta.places ?? [],
     structured: meta.structured ?? null,
+    reserved: r.tdmReserved,
   };
 }
 
@@ -49,6 +50,7 @@ export async function loadSources(db: Db, ids: number[]): Promise<Map<number, VS
         countryCode: s.countryCode,
         reliability: { alpha: r?.alpha ?? 6, beta: r?.beta ?? 3 },
         homepageUrl: s.homepageUrl,
+        corroborateOnly: (s.config as { corroborateOnly?: boolean } | null)?.corroborateOnly === true,
       },
     ]),
   );

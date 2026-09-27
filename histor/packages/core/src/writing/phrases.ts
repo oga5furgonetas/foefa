@@ -59,7 +59,7 @@ export const PHRASES: Record<string, Phrases> = {
     quoteIntro: (s) => `${s} declaró:`,
     earthquake: {
       headline: (m, p) => `Terremoto de magnitud ${m} ${p}`,
-      lead: (a, t, m, p, d) => `${a} registró a las ${t} un terremoto de magnitud ${m} ${p}, a una profundidad de ${d} km.`,
+      lead: (a, t, m, p, d) => `${a} registró el ${t} un terremoto de magnitud ${m} ${p}, a una profundidad de ${d} km.`,
       tsunami: 'El organismo emitió un indicador de posible tsunami.',
     },
     near: (p) => `cerca de ${p}`,
@@ -85,7 +85,7 @@ export const PHRASES: Record<string, Phrases> = {
     quoteIntro: (s) => `${s} said:`,
     earthquake: {
       headline: (m, p) => `Magnitude ${m} earthquake ${p}`,
-      lead: (a, t, m, p, d) => `${a} recorded a magnitude ${m} earthquake ${p} at ${t}, at a depth of ${d} km.`,
+      lead: (a, t, m, p, d) => `${a} recorded a magnitude ${m} earthquake ${p} on ${t}, at a depth of ${d} km.`,
       tsunami: 'The agency flagged a possible tsunami.',
     },
     near: (p) => `near ${p}`,
@@ -111,7 +111,7 @@ export const PHRASES: Record<string, Phrases> = {
     quoteIntro: (s) => `${s} sagte:`,
     earthquake: {
       headline: (m, p) => `Erdbeben der Stärke ${m} ${p}`,
-      lead: (a, t, m, p, d) => `${a} registrierte um ${t} ein Erdbeben der Stärke ${m} ${p} in ${d} km Tiefe.`,
+      lead: (a, t, m, p, d) => `${a} registrierte am ${t} ein Erdbeben der Stärke ${m} ${p} in ${d} km Tiefe.`,
       tsunami: 'Die Behörde gab einen möglichen Tsunami-Hinweis aus.',
     },
     near: (p) => `nahe ${p}`,
@@ -137,7 +137,7 @@ export const PHRASES: Record<string, Phrases> = {
     quoteIntro: (s) => `${s} a déclaré :`,
     earthquake: {
       headline: (m, p) => `Séisme de magnitude ${m} ${p}`,
-      lead: (a, t, m, p, d) => `${a} a enregistré à ${t} un séisme de magnitude ${m} ${p}, à ${d} km de profondeur.`,
+      lead: (a, t, m, p, d) => `${a} a enregistré le ${t} un séisme de magnitude ${m} ${p}, à ${d} km de profondeur.`,
       tsunami: "L'organisme a signalé un possible tsunami.",
     },
     near: (p) => `près de ${p}`,
@@ -163,7 +163,7 @@ export const PHRASES: Record<string, Phrases> = {
     quoteIntro: (s) => `${s} ha dichiarato:`,
     earthquake: {
       headline: (m, p) => `Terremoto di magnitudo ${m} ${p}`,
-      lead: (a, t, m, p, d) => `${a} ha registrato alle ${t} un terremoto di magnitudo ${m} ${p}, a una profondità di ${d} km.`,
+      lead: (a, t, m, p, d) => `${a} ha registrato il ${t} un terremoto di magnitudo ${m} ${p}, a una profondità di ${d} km.`,
       tsunami: "L'ente ha segnalato un possibile tsunami.",
     },
     near: (p) => `vicino a ${p}`,
@@ -189,7 +189,7 @@ export const PHRASES: Record<string, Phrases> = {
     quoteIntro: (s) => `${s} declarou:`,
     earthquake: {
       headline: (m, p) => `Terremoto de magnitude ${m} ${p}`,
-      lead: (a, t, m, p, d) => `${a} registrou às ${t} um terremoto de magnitude ${m} ${p}, a ${d} km de profundidade.`,
+      lead: (a, t, m, p, d) => `${a} registrou em ${t} um terremoto de magnitude ${m} ${p}, a ${d} km de profundidade.`,
       tsunami: 'O órgão emitiu um alerta de possível tsunami.',
     },
     near: (p) => `perto de ${p}`,

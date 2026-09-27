@@ -39,8 +39,8 @@
 fly apps create <tu-app-web> && fly apps create <tu-app-worker>     # nombres propios
 fly secrets set -a <tu-app-web> DATABASE_URL=… SESSION_SECRETS=… DATA_ENCRYPTION_KEY=… ANALYTICS_SALT=… PUBLIC_BASE_URL=https://…
 fly secrets set -a <tu-app-worker> (los mismos) INGEST_ENABLED=1
-fly deploy -c infra/fly/web.toml -a <tu-app-web>
-fly deploy -c infra/fly/worker.toml -a <tu-app-worker>
+fly deploy . -c infra/fly/web.toml --dockerfile Dockerfile --build-target web -a <tu-app-web>        # desde histor/
+fly deploy . -c infra/fly/worker.toml --dockerfile Dockerfile --build-target worker -a <tu-app-worker>
 ```
 
 ### Con Docker Compose (un servidor)

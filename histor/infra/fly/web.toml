@@ -1,9 +1,9 @@
 # Plantilla de Fly.io para la web. Antes de desplegar:
 #   1) Cambia `app` por un nombre propio (NUNCA una app de otro producto).
 #   2) fly secrets set DATABASE_URL=… SESSION_SECRETS=… DATA_ENCRYPTION_KEY=… ANALYTICS_SALT=… PUBLIC_BASE_URL=https://…
-#   3) fly deploy --config infra/fly/web.toml --dockerfile Dockerfile --build-target web
+#   3) desde histor/:  fly deploy . --config infra/fly/web.toml --dockerfile Dockerfile --build-target web
 app = "histor-web"
-primary_region = "mad"
+primary_region = "fra"  # Madrid (mad) ya no existe en Fly; Fráncfort tiene Postgres gestionado
 
 [build]
   dockerfile = "../../Dockerfile"

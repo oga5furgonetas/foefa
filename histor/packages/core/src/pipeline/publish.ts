@@ -21,7 +21,7 @@ import { minhash } from '../text/similarity';
 import { writeDeterministic } from '../writing/deterministic';
 import { bodyText, type Draft } from '../writing/draft';
 import { buildFactSheet, type FactSheet } from '../writing/factsheet';
-import { translateDraft, writeWithLlm } from '../writing/llm';
+import { aiMayUse, translateDraft, writeWithLlm } from '../writing/llm';
 import { notesFor } from '../writing/notes';
 import { PHRASES } from '../writing/phrases';
 import { runQualityChecks, type QualityReport } from '../writing/quality';
@@ -65,12 +65,13 @@ export async function publishStory(db: Db, v: VerifiedStory, settings: Editorial
   const langs = settings.publishLanguages.filter((l) => (ACTIVE_LANGUAGES as string[]).includes(l));
   const drafts = new Map<string, { draft: Draft; fs: FactSheet; report: QualityReport }>();
   const failed: Record<string, QualityReport> = {};
+  const aiAllowed = aiMayUse(v.items);
 
   for (const lang of langs) {
     const fs = buildFactSheet(analysis, v.items, v.sources, { language: lang, storyId: story.id, claimDbIds: v.keyToId });
     const writeOpts = { countryCode: edition && edition.defaultLanguage === lang ? edition.code : null, timeZone: edition?.timezone };
     const candidates: Draft[] = [];
-    if (providerFor('writing')) {
+    if (aiAllowed && providerFor('writing')) {
       const ai = await writeWithLlm(db, fs, { ...writeOpts, storyId: story.id });
       if (ai) candidates.push(ai);
     }
@@ -100,7 +101,7 @@ export async function publishStory(db: Db, v: VerifiedStory, settings: Editorial
   }
 
   // Idiomas sin material propio: adaptación por IA de un borrador ya validado.
-  if (providerFor('translation') && drafts.size) {
+  if (aiAllowed && providerFor('translation') && drafts.size) {
     const [srcLang, best] = [...drafts.entries()].sort((a, b) => b[1].fs.confirmed.length - a[1].fs.confirmed.length)[0];
     for (const lang of langs.filter((l) => !drafts.has(l))) {
       const tr = await translateDraft(db, best.draft, lang, { storyId: story.id });

@@ -59,13 +59,11 @@ describe('pipeline DEMO de extremo a extremo', () => {
     expect(versions[0].kind).toBe('publish');
   });
 
-  it('fuente única (con una copia en un blog): se publica solo "en desarrollo" y atribuida', async () => {
+  it('fuente única (con una copia en un blog): no se publica, espera a otra fuente independiente', async () => {
     const s = (await storyByHint('autobús en Vigo'))!;
     expect(s).toBeDefined();
-    const arts = await articlesOf(s.id);
-    expect(arts).toHaveLength(1);
-    expect(arts[0].isDeveloping).toBe(true);
-    expect(arts[0].headline).toMatch(/según Diario Demo/);
+    expect(['UNVERIFIED', 'INVESTIGATING', 'HELD']).toContain(s.state);
+    expect(await articlesOf(s.id)).toHaveLength(0);
   });
 
   it('sátira: rechazada, sin artículo', async () => {
@@ -88,12 +86,12 @@ describe('pipeline DEMO de extremo a extremo', () => {
     expect(await articlesOf(s.id)).toHaveLength(0);
   });
 
-  it('fuente primaria oficial con su propia decisión: publicada', async () => {
+  it('decisión de una fuente primaria oficial, recogida por un medio independiente: publicada', async () => {
     const s = (await storyByHint('bibliotecas públicas'))!;
     expect(['PUBLISHED', 'UPDATED']).toContain(s.state);
   });
 
-  it('terremoto de fuente sísmica oficial: publicado con plantilla en los 6 idiomas', async () => {
+  it('terremoto de fuente sísmica oficial (y una agencia): publicado con plantilla en los 6 idiomas', async () => {
     const s = (await storyByHint('Demo Point'))!;
     const arts = await articlesOf(s.id);
     expect(arts.map((a) => a.language).sort()).toEqual(['de', 'en', 'es', 'fr', 'it', 'pt']);

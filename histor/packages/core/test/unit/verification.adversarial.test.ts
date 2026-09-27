@@ -5,6 +5,7 @@
  * para la prueba y NO se publican nunca.
  */
 import { describe, expect, it } from 'vitest';
+import { DEFAULT_EDITORIAL_SETTINGS } from '../../src/config/settings';
 import { item, NOW, run, source } from './helpers';
 
 const DAY = 86400000;
@@ -28,7 +29,7 @@ describe('casos que se deben publicar', () => {
     expect(a.confidence).toBeGreaterThanOrEqual(0.75);
   });
 
-  it('fuente primaria oficial con dato propio (organismo sísmico) → publicable', () => {
+  it('fuente primaria oficial con dato propio (organismo sísmico), sola: no se publica por defecto y nunca como «verificada»', () => {
     const ign = source('Instituto Sísmico Oficial', 'primary_official', { homepageUrl: 'https://sismos.example.gob.es' });
     const items = [
       item(ign, 'Terremoto de magnitud 4,1 en Murcia', 'El Instituto Sísmico Oficial ha registrado un terremoto de magnitud 4,1 con epicentro en Murcia a las 10:12 hora local, a 12 km de profundidad.', {
@@ -36,8 +37,64 @@ describe('casos que se deben publicar', () => {
         structured: { magnitude: 4.1, depthKm: 12 },
       }),
     ];
-    const a = run(items, [ign]);
-    expect(a.decision).toBe('publish');
+    // Por defecto, una sola fuente (aunque sea la oficial que produce el dato) no se publica:
+    // espera a que la recoja otra fuente independiente.
+    const alone = run(items, [ign]);
+    expect(alone.decision).toBe('hold');
+    // El motivo dice lo que falta (otra fuente), no que la confianza sea baja.
+    expect(alone.reasons.join(' ')).toContain('se necesitan 2 para publicar');
+    expect(alone.reasons.join(' ')).not.toContain('insuficiente');
+    // Con el umbral a 1 (panel) sale «en desarrollo» y atribuida, nunca como verificada.
+    const one = run(items, [ign], { settings: { ...DEFAULT_EDITORIAL_SETTINGS, minIndependentDeveloping: 1 } });
+    expect(one.decision).toBe('publish_developing');
+    expect(one.nextState).not.toBe('VERIFIED');
+    // Si además el editor activa que la fuente primaria basta, vuelve a verificarse sola.
+    const selfSufficient = run(items, [ign], { settings: { ...DEFAULT_EDITORIAL_SETTINGS, minIndependentDeveloping: 1, primaryOfficialSelfSufficient: true } });
+    expect(selfSufficient.decision).toBe('publish');
+  });
+});
+
+describe('respaldo: mismos protagonistas no es lo mismo afirmado', () => {
+  // Visto el 27-09-2026: «negocia comprar terrenos para un nuevo campus» salía confirmada
+  // por una radio que solo decía «estudia abrir un nuevo campus» (misma universidad y ciudad).
+  it('una afirmación solo se confirma si la otra fuente dice lo mismo de ellos', () => {
+    const diario = source('Diario Uno', 'reputable_media');
+    const radio = source('Radio Dos', 'reputable_media');
+    const items = [
+      item(diario, 'La Universidad de Ejemplo negocia comprar terrenos para un nuevo campus', 'La Universidad de Ejemplo negocia la compra de unos terrenos de 40.000 metros cuadrados para levantar un nuevo campus, según fuentes de la universidad.', { minutesAgo: 60 }),
+      item(radio, 'La Universidad de Ejemplo estudia abrir un nuevo campus', 'La Universidad de Ejemplo estudia abrir un nuevo campus en la ciudad para ampliar sus instalaciones, según ha podido saber esta emisora.', { minutesAgo: 50 }),
+    ];
+    const a = run(items, [diario, radio]);
+    const statusOf = (re: RegExp) => a.assessments.find((x) => re.test(a.claims.find((c) => c.key === x.claimKey)!.text))?.status;
+    expect(statusOf(/^La Universidad de Ejemplo negocia comprar terrenos/)).not.toBe('supported');
+    // Lo que sí dicen las dos queda confirmado.
+    expect(statusOf(/^La Universidad de Ejemplo estudia abrir un nuevo campus$/)).toBe('supported');
+  });
+});
+
+describe('boletines oficiales y alertas automáticas (solo corroboran)', () => {
+  // Visto con fuentes reales el 27-09-2026: el BOE publica ~380 disposiciones al día y
+  // cada una acababa en portada («Resolución de 23 de septiembre de 2026, de la Secretaría…»).
+  const boe = () =>
+    source('Boletín Oficial del Estado', 'primary_official', { homepageUrl: 'https://www.boe.es', corroborateOnly: true });
+
+  it('una disposición del BOE sola no se publica', () => {
+    const b = boe();
+    const items = [item(b, 'Resolución de 23 de septiembre de 2026, de la Secretaría General Técnica', 'Resolución de 23 de septiembre de 2026, de la Secretaría General Técnica, por la que se publica el Convenio de colaboración.', { minutesAgo: 30 })];
+    const a = run(items, [b]);
+    expect(['hold', 'reject']).toContain(a.decision);
+    expect(a.reasons.join(' ')).toContain('solo hay boletines oficiales o alertas automáticas');
+  });
+
+  it('el BOE sí corrobora lo que publica otro medio independiente', () => {
+    const b = boe();
+    const agencia = source('Agencia Uno', 'wire_agency');
+    const items = [
+      item(b, 'Real Decreto por el que se aprueba la subida del salario mínimo a 1.250 euros', 'El Real Decreto fija el salario mínimo interprofesional en 1.250 euros mensuales en 14 pagas a partir del 1 de octubre.', { minutesAgo: 120 }),
+      item(agencia, 'El Gobierno sube el salario mínimo a 1.250 euros', 'El salario mínimo interprofesional sube a 1.250 euros mensuales en 14 pagas desde el 1 de octubre, según el Real Decreto publicado hoy en el BOE.', { minutesAgo: 60 }),
+    ];
+    const a = run(items, [b, agencia]);
+    expect(['publish', 'publish_developing']).toContain(a.decision);
   });
 });
 

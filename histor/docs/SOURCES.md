@@ -8,7 +8,10 @@ y nunca republica artículos. El texto de las fuentes se borra a los 30 días.
 ## Reglas de rastreo
 
 - Respeta `robots.txt` (con 401/403 se considera prohibido) y `Crawl-delay`.
-- Respeta la reserva de minería de textos (`tdm-reservation: 1`): se guarda solo el titular y el enlace.
+- Respeta la reserva de minería de textos (`tdm-reservation: 1`) y `Content-Signal: ai-input=no`
+  de `robots.txt`: se guarda solo el titular, el resumen y el enlace, y la historia **nunca pasa por la IA**
+  (se redacta con plantillas). Hoy lo declara Corriere della Sera.
+- Lee el juego de caracteres que declara cada feed (cabecera, declaración XML o `<meta>`): el BOE va en ISO-8859-1.
 - GET condicional (`ETag` / `If-Modified-Since`) y como máximo una petición por segundo y dominio.
 - User-Agent `HistorBot/0.1 (+URL de contacto)`.
 - No se saltan muros de pago, no se inician sesiones, no se usan servicios de terceros para extraer contenido.
@@ -76,10 +79,28 @@ npm run sources:check -- --update     # guarda el resultado y pone en pausa las 
 npm run sources:check -- --only=bbc-world
 ```
 
-> Desde el entorno de desarrollo donde se construyó Histor la política de red
-> bloqueaba estos dominios, así que las URL se han tomado de la documentación
-> pública de cada medio y **deben validarse con `sources:check` al desplegar**.
-> El pipeline completo está probado de punta a punta con el escenario DEMO.
+`sources:check` también da por fallida una fuente cuya pieza más nueva tiene más
+de 30 días (feed abandonado); al volver a funcionar, `--update` la reactiva solo
+si la había pausado él (las pausas del panel no se tocan).
+
+### Resultado con red real (27-09-2026): 35 de 41 correctas
+
+| Fuente | Estado | Motivo |
+|---|---|---|
+| Noticias ONU (en, es, fr) | en pausa | su `robots.txt` solo deja leer los feeds a Feedfetcher-Google (`Disallow: */news/` para el resto) |
+| El País | en pausa | `feeds.elpais.com/robots.txt` responde 403 a todos: se trata como «no permitido» |
+| Il Post | en pausa | responde 403 a HistorBot; no se fuerza con otro User-Agent |
+| OMS (WHO) | en pausa | su feed dejó de actualizarse en febrero de 2026 (se reactiva sola si vuelve) |
+
+Corregidas: DW en español (`rss-sp-all`), DW Brasil (`rss-br-top`; `rss-br-all` da 500) y
+Corriere (`/feed-hp/homepage-restyle-2025.xml`, el único de portada que su `robots.txt` permite;
+el antiguo se quedó en 2024).
+
+### Fuentes que solo corroboran (`config.corroborateOnly`)
+
+BOE, GDACS, GOV.UK, BCE, Reserva Federal y NASA publican cientos de piezas al día
+(disposiciones, alertas verdes, notas de prensa). Sirven de prueba cuando otra fuente
+independiente cuenta lo mismo, pero no originan noticia por sí solas.
 
 ## Añadir una fuente
 

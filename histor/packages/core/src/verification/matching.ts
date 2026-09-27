@@ -88,6 +88,9 @@ export function matchEvidence(
     const own = profiles.get(c.itemId);
     if (!own) continue;
     const cVec = termVector(c.text, c.language);
+    // Lo que se AFIRMA (sin nombres, lugares ni cifras): «negocia comprar terrenos» ≠ «estudia abrir».
+    const nameTerms = new Set(Object.keys(termVector([...extractEntities(c.text, c.language).map((e) => e.name), ...findPlaces(c.text).map((x) => x.name)].join(' '), c.language)));
+    const cPred = predicateOf(cVec, nameTerms);
     const cQuoteKey = c.quote ? quoteKey(c.quote.text) : null;
     for (const p of profiles.values()) {
       if (p.item.id === c.itemId) continue;
@@ -95,6 +98,7 @@ export function matchEvidence(
       const sameLang = !!p.language && p.language === c.language;
       // Similitud léxica: mejor frase de la otra pieza (solo mismo idioma).
       let lexSim = 0;
+      let predSim = 0;
       let bestSentence: string | null = null;
       if (sameLang) {
         for (const s of p.sentences) {
@@ -103,6 +107,7 @@ export function matchEvidence(
             lexSim = sim;
             bestSentence = s.text;
           }
+          predSim = Math.max(predSim, coverage(cPred, s.vec));
         }
       }
       const entCov = c.entities.length ? c.entities.filter((e) => entityMatches(e, p.entityKeys)).length / c.entities.length : null;
@@ -228,6 +233,9 @@ export function matchEvidence(
         score = anchor ? 0.6 * (entCov ?? 0.3) + 0.25 * (numRatio ?? 0.4) + 0.15 * (placeAgree ?? 0.4) : 0;
       }
       if (numRatio === 0 && unitNums.length) score *= 0.6; // no confirma las cifras
+      // Compartir protagonistas y lugar no basta: sin cifras que coincidan, la otra pieza
+      // tiene que decir lo mismo de ellos. Si no, solo «menciona» (queda atribuida, no confirmada).
+      if (sameLang && !c.quote && !numAgree && Object.keys(cPred).length >= 2 && predSim < PREDICATE_MIN) score = Math.min(score, 0.45);
       const relation = score >= 0.5 ? 'supports' : score >= 0.3 ? 'mentions' : null;
       if (relation) {
         evidence.push(
@@ -280,6 +288,25 @@ function addContradiction(list: VContradiction[], seen: Set<string>, c: VContrad
   if (seen.has(k)) return;
   seen.add(k);
   list.push(c);
+}
+
+/**
+ * Parte mínima de lo que afirma una frase (sus palabras de contenido, sin nombres ni
+ * cifras) que tiene que aparecer en una frase de otra pieza para RESPALDARLA cuando no
+ * comparten cifras. «negocia comprar terrenos para un nuevo campus» frente a «estudia
+ * abrir un nuevo campus»: 2 de 5 → solo la menciona.
+ */
+const PREDICATE_MIN = 0.5;
+
+function coverage(claimPred: TermVector, sentence: TermVector): number {
+  const terms = Object.keys(claimPred);
+  return terms.length ? terms.filter((t) => t in sentence).length / terms.length : 0;
+}
+
+function predicateOf(v: TermVector, names: Set<string>): TermVector {
+  const out: TermVector = {};
+  for (const [t, n] of Object.entries(v)) if (!names.has(t) && !t.startsWith('#') && !/^\d/.test(t)) out[t] = n;
+  return out;
 }
 
 function round(x: number): number {

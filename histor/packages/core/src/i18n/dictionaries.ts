@@ -14,7 +14,7 @@ const es = {
   },
   label: {
     breaking: 'Última hora', developing: 'En desarrollo', verified: 'Verificada', updated: 'Actualizada', updatedAt: 'Actualizado a las {time}', publishedAt: 'Publicado el {date}',
-    retracted: 'Retirada', correction: 'Corrección', clarification: 'Aclaración', update: 'Actualización', demo: 'DEMO', readingTime: '{n} min de lectura', sources: '{n} fuentes', by: 'Por',
+    retracted: 'Retirada', correction: 'Corrección', clarification: 'Aclaración', update: 'Actualización', demo: 'DEMO', readingTime: '{n} min de lectura', sources: '{n} fuentes', sourceOne: '1 fuente', by: 'Por',
     premium: 'Premium', live: 'En directo', underReview: 'En revisión',
   },
   demoBanner: 'MODO DEMO — Estas noticias son ficticias y sirven solo para mostrar cómo funciona Histor. No son noticias reales.',
@@ -85,7 +85,7 @@ const en: Dict = {
   },
   label: {
     breaking: 'Breaking', developing: 'Developing', verified: 'Verified', updated: 'Updated', updatedAt: 'Updated at {time}', publishedAt: 'Published {date}',
-    retracted: 'Retracted', correction: 'Correction', clarification: 'Clarification', update: 'Update', demo: 'DEMO', readingTime: '{n} min read', sources: '{n} sources', by: 'By',
+    retracted: 'Retracted', correction: 'Correction', clarification: 'Clarification', update: 'Update', demo: 'DEMO', readingTime: '{n} min read', sources: '{n} sources', sourceOne: '1 source', by: 'By',
     premium: 'Premium', live: 'Live', underReview: 'Under review',
   },
   demoBanner: 'DEMO MODE — These stories are fictional and only show how Histor works. They are not real news.',
@@ -154,7 +154,7 @@ const de: Dict = {
   },
   label: {
     breaking: 'Eilmeldung', developing: 'Lage entwickelt sich', verified: 'Geprüft', updated: 'Aktualisiert', updatedAt: 'Aktualisiert um {time}', publishedAt: 'Veröffentlicht am {date}',
-    retracted: 'Zurückgezogen', correction: 'Korrektur', clarification: 'Klarstellung', update: 'Aktualisierung', demo: 'DEMO', readingTime: '{n} Min. Lesezeit', sources: '{n} Quellen', by: 'Von',
+    retracted: 'Zurückgezogen', correction: 'Korrektur', clarification: 'Klarstellung', update: 'Aktualisierung', demo: 'DEMO', readingTime: '{n} Min. Lesezeit', sources: '{n} Quellen', sourceOne: '1 Quelle', by: 'Von',
     premium: 'Premium', live: 'Live', underReview: 'Wird geprüft',
   },
   demoBanner: 'DEMO-MODUS — Diese Meldungen sind erfunden und zeigen nur, wie Histor funktioniert. Es sind keine echten Nachrichten.',
@@ -223,7 +223,7 @@ const fr: Dict = {
   },
   label: {
     breaking: 'Alerte', developing: "En cours d'actualisation", verified: 'Vérifié', updated: 'Mis à jour', updatedAt: 'Mis à jour à {time}', publishedAt: 'Publié le {date}',
-    retracted: 'Retiré', correction: 'Correction', clarification: 'Précision', update: 'Mise à jour', demo: 'DÉMO', readingTime: '{n} min de lecture', sources: '{n} sources', by: 'Par',
+    retracted: 'Retiré', correction: 'Correction', clarification: 'Précision', update: 'Mise à jour', demo: 'DÉMO', readingTime: '{n} min de lecture', sources: '{n} sources', sourceOne: '1 source', by: 'Par',
     premium: 'Premium', live: 'En direct', underReview: 'En vérification',
   },
   demoBanner: 'MODE DÉMO — Ces articles sont fictifs et servent uniquement à montrer le fonctionnement de Histor. Ce ne sont pas de vraies informations.',
@@ -292,7 +292,7 @@ const it: Dict = {
   },
   label: {
     breaking: 'Ultima ora', developing: 'In aggiornamento', verified: 'Verificata', updated: 'Aggiornata', updatedAt: 'Aggiornato alle {time}', publishedAt: 'Pubblicato il {date}',
-    retracted: 'Ritirata', correction: 'Correzione', clarification: 'Precisazione', update: 'Aggiornamento', demo: 'DEMO', readingTime: '{n} min di lettura', sources: '{n} fonti', by: 'Di',
+    retracted: 'Ritirata', correction: 'Correzione', clarification: 'Precisazione', update: 'Aggiornamento', demo: 'DEMO', readingTime: '{n} min di lettura', sources: '{n} fonti', sourceOne: '1 fonte', by: 'Di',
     premium: 'Premium', live: 'In diretta', underReview: 'In revisione',
   },
   demoBanner: 'MODALITÀ DEMO — Queste notizie sono inventate e servono solo a mostrare come funziona Histor. Non sono notizie reali.',
@@ -361,7 +361,7 @@ const pt: Dict = {
   },
   label: {
     breaking: 'Urgente', developing: 'Em atualização', verified: 'Checada', updated: 'Atualizada', updatedAt: 'Atualizado às {time}', publishedAt: 'Publicado em {date}',
-    retracted: 'Retirada', correction: 'Correção', clarification: 'Esclarecimento', update: 'Atualização', demo: 'DEMO', readingTime: '{n} min de leitura', sources: '{n} fontes', by: 'Por',
+    retracted: 'Retirada', correction: 'Correção', clarification: 'Esclarecimento', update: 'Atualização', demo: 'DEMO', readingTime: '{n} min de leitura', sources: '{n} fontes', sourceOne: '1 fonte', by: 'Por',
     premium: 'Premium', live: 'Ao vivo', underReview: 'Em revisão',
   },
   demoBanner: 'MODO DEMO — Estas notícias são fictícias e servem apenas para mostrar como o Histor funciona. Não são notícias reais.',

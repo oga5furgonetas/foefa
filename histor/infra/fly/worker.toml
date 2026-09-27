@@ -1,9 +1,9 @@
 # Plantilla de Fly.io para el worker (sin HTTP público; salud interna en :8081).
-#   fly deploy --config infra/fly/worker.toml
+#   desde histor/:  fly deploy . --config infra/fly/worker.toml --dockerfile Dockerfile --build-target worker
 # Usa los mismos secretos que la web (DATABASE_URL, SESSION_SECRETS, DATA_ENCRYPTION_KEY, ANALYTICS_SALT,
 # PUBLIC_BASE_URL) y además INGEST_ENABLED=1 cuando quieras leer fuentes reales.
 app = "histor-worker"
-primary_region = "mad"
+primary_region = "fra"  # Madrid (mad) ya no existe en Fly; Fráncfort tiene Postgres gestionado
 
 [build]
   dockerfile = "../../Dockerfile"

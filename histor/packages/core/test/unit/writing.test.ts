@@ -65,7 +65,9 @@ describe('redactor determinista', () => {
   it('en una historia "en desarrollo" todo va atribuido', () => {
     const d1 = source('Diario Norte', 'reputable_media');
     const items = [item(d1, 'La empresa Ejemplo cerrará su planta de Zaragoza', 'La empresa Ejemplo cerrará su planta de Zaragoza en 2027 y despedirá a 300 trabajadores, según ha podido saber este diario.', { minutesAgo: 30 })];
-    const analysis = run(items, [d1]);
+    // Por defecto una sola fuente no se publica; el redactor se prueba con el umbral a 1 (ajustable en el panel).
+    expect(run(items, [d1]).decision).toBe('hold');
+    const analysis = run(items, [d1], { settings: { ...DEFAULT_EDITORIAL_SETTINGS, minIndependentDeveloping: 1 } });
     expect(analysis.decision).toBe('publish_developing');
     const fs = buildFactSheet(analysis, items, new Map([[d1.id, d1]]), { language: 'es' });
     const d = writeDeterministic(fs, { countryCode: 'ES' })!;
@@ -153,5 +155,35 @@ describe('control de alucinaciones (texto manipulado, como el de una IA que se i
 describe('utilidades legales', () => {
   it('mide el tramo literal más largo', () => {
     expect(longestCommonRun('uno dos tres cuatro cinco', 'cero uno dos tres cuatro seis')).toBe(4);
+  });
+});
+
+describe('plantilla de terremotos (dato estructurado de una fuente oficial)', () => {
+  // Visto con datos reales el 27-09-2026: «USGS registró a las 26 de septiembre a las 11:01…».
+  function quake(lang: string) {
+    const usgs = source('USGS Earthquake Hazards Program', 'primary_official', { slug: 'usgs-earthquakes', homepageUrl: 'https://earthquake.usgs.gov', countryCode: 'US' });
+    const it = item(usgs, 'M 5.1 - 12 km NNE of Tadine, New Caledonia', 'M 5.1 - 12 km NNE of Tadine, New Caledonia', {
+      minutesAgo: 40,
+      structured: { type: 'earthquake', magnitude: 5.1, depthKm: 10, place: '12 km NNE of Tadine, New Caledonia', time: new Date(NOW.getTime() - 40 * 60000).toISOString(), tsunami: false },
+    });
+    const analysis = run([it], [usgs]);
+    const fs = buildFactSheet(analysis, [it], new Map([[usgs.id, usgs]]), { language: lang });
+    return writeDeterministic(fs, { timeZone: 'UTC' })!;
+  }
+
+  it('una sola fuente: el titular también va atribuido', () => {
+    expect(quake('es').headline).toBe('Terremoto de magnitud 5,1 cerca de Tadine, New Caledonia, según USGS');
+    expect(quake('en').headline).toMatch(/, according to USGS$/);
+  });
+
+  it('la fecha lleva la preposición de cada idioma, no «a las 26 de septiembre»', () => {
+    const lead = (lang: string) => (quake(lang).body[0] as { text: string }).text;
+    expect(lead('es')).toMatch(/^USGS registró el \d+ de septiembre/);
+    expect(lead('en')).toMatch(/^USGS recorded a magnitude 5\.1 earthquake near Tadine, New Caledonia on /);
+    expect(lead('de')).toMatch(/^USGS registrierte am \d+\. September/);
+    expect(lead('fr')).toMatch(/^USGS a enregistré le \d+ septembre/);
+    expect(lead('it')).toMatch(/^USGS ha registrato il \d+ settembre/);
+    expect(lead('pt')).toMatch(/^USGS registrou em \d+ de setembro/);
+    for (const l of ['es', 'en', 'de', 'fr', 'it', 'pt']) expect(lead(l)).not.toMatch(/\b(a las|at|um|à|alle|às) \d+ (de )?[a-zé]+/i);
   });
 });

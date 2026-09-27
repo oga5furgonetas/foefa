@@ -45,7 +45,11 @@ distribución Beta (aciertos / contradicciones) que se actualiza con el tiempo.
    afirmado, atribuido, con reservas, predicción, negado o pregunta.
 4. **Evidencia:** para cada afirmación se buscan en las demás fuentes pruebas que
    la respaldan, la mencionan o la contradicen (entidades, cifras compatibles,
-   lugares, fechas, cita literal y mismo autor).
+   lugares, fechas, cita literal y mismo autor). Compartir protagonistas y lugar
+   no basta: si no coinciden cifras, la otra pieza tiene que contener al menos la
+   mitad de lo que se afirma (sus palabras de contenido, sin nombres ni cifras);
+   si no, solo la «menciona» y la afirmación queda atribuida, no confirmada
+   («negocia comprar terrenos» no se confirma con «estudia abrir un campus»).
 5. **Contradicciones:**
 
    | Tipo | Gravedad |
@@ -78,7 +82,8 @@ distribución Beta (aciertos / contradicciones) que se actualiza con el tiempo.
     ```
 
     Topes duros: sátira → 0; solo pistas → ≤ 0,20; ninguna fuente creíble → ≤ 0,30;
-    una sola creíble (salvo la fuente oficial primaria que produce el dato) → ≤ 0,60.
+    una sola creíble → ≤ 0,60 (la excepción para la fuente oficial primaria que
+    produce el dato existe como ajuste del panel, **desactivada** por defecto).
 
 11. **Impulso** (NEWS MOMENTUM, 0–1): ritmo de piezas nuevas, fuentes distintas,
     idiomas y países, lectura. **Es independiente de la confianza**: una historia
@@ -89,8 +94,10 @@ distribución Beta (aciertos / contradicciones) que se actualiza con el tiempo.
 
     | Condición | Resultado |
     |---|---|
-    | confianza ≥ 0,75 **y** ≥ 2 fuentes independientes creíbles (o fuente oficial primaria con dato propio) **y** hecho principal respaldado | publicar como **verificada** |
-    | confianza ≥ 0,50 y ≥ 1 fuente creíble | publicar **en desarrollo**, todo atribuido («según X…») |
+    | confianza ≥ 0,75 **y** ≥ 2 fuentes independientes creíbles **y** hecho principal respaldado | publicar como **verificada** |
+    | confianza ≥ 0,50 y ≥ 2 fuentes independientes creíbles | publicar **en desarrollo**, todo atribuido («según X…») |
+    | una sola fuente independiente | no se publica: espera a que otra la recoja (el agrupador las une) |
+    | solo boletines oficiales y alertas automáticas (`corroborateOnly`: BOE, GDACS, GOV.UK, BCE, Fed, NASA) | no se publica: sirven para corroborar, no originan noticia |
     | contradicción crítica | retener y abrir tarea de revisión |
     | solo pistas | investigar; si es viral, tarea «viral sin verificar» |
     | sátira, noticia antigua reciclada, sin avances en 36 h | descartar |

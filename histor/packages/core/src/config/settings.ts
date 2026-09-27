@@ -12,10 +12,20 @@ export const editorialSettingsSchema = z.object({
   developingMin: z.number().min(0.3).max(0.95).default(0.5),
   /** Grupos independientes creíbles mínimos para VERIFIED. */
   minIndependentVerified: z.number().int().min(1).max(10).default(2),
-  /** Grupos independientes creíbles mínimos para "en desarrollo". */
-  minIndependentDeveloping: z.number().int().min(1).max(5).default(1),
-  /** Una fuente primaria oficial basta para verificar SUS PROPIOS datos. */
-  primaryOfficialSelfSufficient: z.boolean().default(true),
+  /**
+   * Grupos independientes creíbles mínimos para publicar, aunque sea "en desarrollo".
+   * 2 por defecto (27-09-2026, con fuentes reales): con 1, la portada alemana era el
+   * feed de DER SPIEGEL con «, berichtet DER SPIEGEL» pegado a su titular, incluidos
+   * comentarios de opinión y viñetas. Con 2, una historia espera a que otra fuente
+   * independiente la recoja (el agrupador las une en minutos).
+   */
+  minIndependentDeveloping: z.number().int().min(1).max(5).default(2),
+  /**
+   * Una fuente primaria oficial basta para verificar SUS PROPIOS datos.
+   * Desactivado por defecto: nada de una sola fuente se presenta como verificado
+   * (como mucho, «en desarrollo» y atribuido: «según el BOE…»).
+   */
+  primaryOfficialSelfSufficient: z.boolean().default(false),
   /** Por debajo de esto, una noticia publicada se retira si hay desmentido creíble. */
   retractBelow: z.number().min(0).max(0.5).default(0.25),
   /** Días a partir de los cuales una información se considera antigua. */

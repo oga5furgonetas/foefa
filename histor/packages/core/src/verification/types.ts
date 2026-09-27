@@ -14,6 +14,12 @@ export type VSource = {
   /** Posterior Beta de acierto histórico. */
   reliability: { alpha: number; beta: number };
   homepageUrl: string;
+  /**
+   * Solo corrobora: boletines oficiales y alertas automáticas (BOE, GDACS, GOV.UK…)
+   * publican cientos de piezas al día; sirven de prueba, pero una historia que solo
+   * tiene fuentes así no se publica hasta que otra fuente independiente la recoge.
+   */
+  corroborateOnly?: boolean;
 };
 
 export type VPlace = { kind: 'country' | 'region' | 'city'; countryCode: string; regionCode: string | null; cityKey: string | null; name: string };
@@ -36,6 +42,8 @@ export type VItem = {
   places: VPlace[];
   /** Datos estructurados (API oficial): magnitud, profundidad… */
   structured?: Record<string, unknown> | null;
+  /** El editor se reserva el uso (TDM o `ai-input=no`): la historia no pasa por la IA. */
+  reserved?: boolean;
 };
 
 export type VClaim = {

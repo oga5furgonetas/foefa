@@ -10,12 +10,10 @@
  *   newsletter:send         envía las newsletters cuya hora ha llegado
  *   check:env               lista lo que falta para producción
  */
-import { eq } from 'drizzle-orm';
 import { ensureAdmin } from '@histor/core/auth/users';
 import { SOURCE_SEEDS } from '@histor/core/config/sources';
 import { closeDb, getDb } from '@histor/core/db/client';
 import { runMigrations } from '@histor/core/db/migrate';
-import { sources } from '@histor/core/db/schema';
 import { seedReference } from '@histor/core/db/seed';
 import { purgeDemo, seedDemo } from '@histor/core/demo/seed';
 import { env, productionProblems } from '@histor/core/env';
@@ -23,6 +21,7 @@ import { runConnector } from '@histor/core/ingest/connectors';
 import { PoliteFetcher } from '@histor/core/ingest/fetcher';
 import { sendDueNewsletters } from '@histor/core/newsletter/index';
 import { runPipelineOnce } from '@histor/core/pipeline/run';
+import { evaluateSourceCheck, recordSourceCheck } from '@histor/core/services/sources';
 
 const [cmd, ...args] = process.argv.slice(2);
 const flag = (name: string) => args.find((a) => a === `--${name}` || a.startsWith(`--${name}=`));
@@ -100,18 +99,12 @@ async function sourcesCheck(): Promise<number> {
       tdmReserved: false,
       durationMs: 0,
     }));
-    const ok = !r.error && r.items.length > 0;
+    const { ok, error, newest } = evaluateSourceCheck(s.connector, r);
     if (!ok) bad++;
-    const newest = r.items.map((i) => i.publishedAt).filter(Boolean).sort().pop();
     console.log(
-      `${ok ? '✓' : '✕'} ${s.slug.padEnd(28)} HTTP ${String(r.status).padEnd(4)} piezas ${String(r.items.length).padStart(3)}  ${r.tdmReserved ? 'TDM-reservada ' : ''}${newest ? `última ${new Date(newest).toISOString().slice(0, 16)}` : ''} ${r.error ? `— ${r.error}` : ''}`,
+      `${ok ? '✓' : '✕'} ${s.slug.padEnd(28)} HTTP ${String(r.status).padEnd(4)} piezas ${String(r.items.length).padStart(3)}  ${r.tdmReserved ? 'reservada ' : ''}${newest ? `última ${newest.toISOString().slice(0, 16)}` : ''} ${error ? `— ${error}` : ''}`,
     );
-    if (update) {
-      await getDb()
-        .update(sources)
-        .set({ robotsAllowed: !(r.error ?? '').includes('robots'), tdmReserved: r.tdmReserved, verifiedAt: ok ? new Date() : undefined, status: ok ? undefined : 'paused', blockedReason: ok ? null : `sources:check: ${r.error ?? 'sin piezas'}`.slice(0, 300) })
-        .where(eq(sources.slug, s.slug));
-    }
+    if (update) await recordSourceCheck(getDb(), s.slug, { ok, error, tdmReserved: r.tdmReserved });
   }
   console.log(`\n${list.length - bad}/${list.length} fuentes correctas.${update ? ' Estado actualizado en la base de datos (las que fallan quedan en pausa).' : ' Usa --update para guardar el resultado.'}`);
   return bad ? 2 : 0;

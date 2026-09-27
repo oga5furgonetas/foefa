@@ -16,6 +16,15 @@ import { claimRef, writeDeterministic, type WriteOptions } from './deterministic
 import type { Draft } from './draft';
 import type { FactSheet } from './factsheet';
 
+/**
+ * ¿Puede esta historia pasar por la IA? No, si alguna de sus piezas viene de un
+ * editor que se reserva ese uso (TDM o `Content-Signal: ai-input=no`): entonces
+ * se redacta y se adapta solo con el redactor determinista.
+ */
+export function aiMayUse(items: { reserved?: boolean }[]): boolean {
+  return !items.some((i) => i.reserved);
+}
+
 const WRITER_SYSTEM = `You are the writing desk of Histor, a news outlet whose first rule is: never publish unverified information as fact.
 You receive a FACT SHEET: numbered claims, each with a verification status and the sources that support it.
 Write an original news article in the requested language, in the neutral, precise house style of a quality newspaper.

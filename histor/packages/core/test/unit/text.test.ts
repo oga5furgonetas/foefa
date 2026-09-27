@@ -135,6 +135,12 @@ describe('entidades y lugares', () => {
     expect(e.find((x) => x.name === 'Ana Pérez')?.type).toBe('person');
     expect(e.find((x) => x.name.startsWith('Organización Mundial'))?.type).toBe('organization');
   });
+  it('el rumbo de los partes sísmicos no forma parte del nombre («NNE of Tadine» → «Tadine»)', () => {
+    const names = extractEntities('M 5.1 - 12 km NNE of Tadine, New Caledonia', 'en').map((x) => x.name);
+    expect(names).toContain('Tadine');
+    expect(names.some((n) => /NNE/.test(n))).toBe(false);
+    expect(extractEntities('A quake struck 35 km north-northeast of Demo Point.', 'en').map((x) => x.name)).toContain('Demo Point');
+  });
 });
 
 describe('similitud', () => {

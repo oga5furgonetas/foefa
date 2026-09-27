@@ -172,6 +172,7 @@ export function analyseStory(input: EngineInput): StoryAnalysis {
     published: !!input.published,
     publishedConfidence: input.publishedConfidence ?? null,
     hasSupportedHeadline: headlineSupported,
+    onlyCorroborating: groups.some((g) => g.credible) && !groups.some((g) => g.credible && g.sourceIds.some((id) => !sources.get(id)?.corroborateOnly)),
   });
 
   const probable = groups.length

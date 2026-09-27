@@ -28,6 +28,8 @@ export type DecisionInput = {
   /** Confianza con la que se publicó (para detectar caídas). */
   publishedConfidence: number | null;
   hasSupportedHeadline: boolean;
+  /** Todas las fuentes creíbles son de las que solo corroboran (ver VSource.corroborateOnly). */
+  onlyCorroborating?: boolean;
 };
 
 export type DecisionOutput = { decision: Decision; nextState: StoryState; reasons: string[]; isBreaking: boolean; needsReview: string | null; verifiedLevel?: boolean };
@@ -115,11 +117,12 @@ function decideInner(i: DecisionInput): DecisionOutput {
 
   // ── Publicación ──
   const enoughForVerified = credible.length >= s.minIndependentVerified || primarySelf;
-  if (i.confidence >= s.verifiedMin && enoughForVerified && i.hasSupportedHeadline) {
+  if (i.onlyCorroborating) {
+    reasons.push('solo hay boletines oficiales o alertas automáticas: sirven para corroborar, no originan noticia; se espera a otra fuente independiente');
+  } else if (i.confidence >= s.verifiedMin && enoughForVerified && i.hasSupportedHeadline) {
     reasons.push(`confianza ${i.confidence.toFixed(2)} ≥ ${s.verifiedMin} con ${credible.length} fuente(s) independiente(s) creíble(s)`);
     return { decision: 'publish', nextState: 'VERIFIED', reasons, isBreaking: breaking(i), needsReview: null };
-  }
-  if (i.confidence >= s.developingMin && credible.length >= s.minIndependentDeveloping) {
+  } else if (i.confidence >= s.developingMin && credible.length >= s.minIndependentDeveloping) {
     reasons.push(
       `confianza ${i.confidence.toFixed(2)} suficiente para informar "en desarrollo", con cada afirmación atribuida a su fuente`,
     );
@@ -127,7 +130,13 @@ function decideInner(i: DecisionInput): DecisionOutput {
   }
 
   // ── Seguir investigando o descartar ──
-  reasons.push(`confianza ${i.confidence.toFixed(2)} insuficiente (mínimo ${s.developingMin} para informar)`);
+  if (i.onlyCorroborating) {
+    /* motivo ya anotado */
+  } else if (i.confidence >= s.developingMin && credible.length < s.minIndependentDeveloping) {
+    reasons.push(`solo ${credible.length} fuente(s) independiente(s) creíble(s); se necesitan ${s.minIndependentDeveloping} para publicar`);
+  } else {
+    reasons.push(`confianza ${i.confidence.toFixed(2)} insuficiente (mínimo ${s.developingMin} para informar)`);
+  }
   const majorConflict = i.contradictions.some((c) => c.severity === 'major') && credible.length >= 2;
   if (i.ageHours > s.investigationTtlHours && i.hoursSinceLastItem > 6) {
     reasons.push(`sin avances en ${Math.round(i.ageHours)} h: se descarta`);

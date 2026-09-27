@@ -60,6 +60,8 @@ export const DEMO_SOURCES: DemoSource[] = [
     prior: [11, 3],
     items: [
       { id: 'feria', title: 'Madrid acoge la Feria Demo de Tecnología con 120 expositores', text: 'Un total de 120 expositores participan en la Feria Demo de Tecnología, que se celebra en Madrid hasta el domingo. Los organizadores de la Feria Demo esperan 30.000 visitantes.', minutesAgo: 120 },
+      // Dos medios independientes que no coinciden en los detalles: se publica «en desarrollo», todo atribuido.
+      { id: 'campus', title: 'La Universidad Demo de Salamanca negocia comprar terrenos para un nuevo campus', text: 'La Universidad Demo de Salamanca negocia la compra de unos terrenos de 40.000 metros cuadrados para levantar un nuevo campus, según fuentes de la propia Universidad Demo consultadas por este diario.', minutesAgo: 55 },
       { id: 'bus', title: 'El Consorcio Demo de Transporte creará una nueva línea de autobús en Vigo', text: 'El Consorcio Demo de Transporte creará una nueva línea de autobús en Vigo que unirá el centro con el hospital, según ha podido saber este diario. La línea tendrá 18 paradas.', minutesAgo: 60 },
       { id: 'maraton', title: 'Récord de participación en el Maratón Demo de Valencia: 25.000 corredores', text: 'El Maratón Demo de Valencia reunió este domingo a 25.000 corredores, según la organización de la prueba, que recorrió el centro de Valencia.', minutesAgo: 94 },
       { id: 'embalses-1', title: 'Los embalses de la Cuenca Demo, al 41 %', text: 'La Confederación Demo del Tajo informó de que los embalses de la Cuenca Demo del Tajo están al 41 % de su capacidad, según su último parte semanal publicado en Madrid.', minutesAgo: 400, phase: 1 },
@@ -74,7 +76,12 @@ export const DEMO_SOURCES: DemoSource[] = [
     languages: ['es'],
     ownershipGroup: 'grupo-demo-dos',
     prior: [11, 3],
-    items: [{ id: 'feria', title: 'Arranca en Madrid la Feria Demo de Tecnología', text: 'La Feria Demo de Tecnología ha arrancado en Madrid con 120 expositores de 14 países, según ha confirmado la organización de la Feria Demo.', minutesAgo: 100 }],
+    items: [
+      { id: 'feria', title: 'Arranca en Madrid la Feria Demo de Tecnología', text: 'La Feria Demo de Tecnología ha arrancado en Madrid con 120 expositores de 14 países, según ha confirmado la organización de la Feria Demo.', minutesAgo: 100 },
+      { id: 'campus', title: 'La Universidad Demo de Salamanca prepara su expansión', text: 'La Universidad Demo de Salamanca prepara su expansión fuera del casco histórico, según ha podido saber esta emisora. La Universidad Demo no ha querido hacer comentarios.', minutesAgo: 50 },
+      // Segunda fuente independiente de la decisión del Ministerio Demo (con una sola, no se publica).
+      { id: 'bibliotecas', title: 'Las bibliotecas públicas abrirán los domingos desde noviembre', text: 'Un total de 52 bibliotecas públicas abrirán los domingos a partir del 1 de noviembre de 2026, tal y como ha confirmado a esta emisora el Ministerio Demo de Cultura, que amplía así su horario.', minutesAgo: 65 },
+    ],
   }),
   src({
     slug: 'demo-ministerio',
@@ -132,6 +139,8 @@ export const DEMO_SOURCES: DemoSource[] = [
     items: [
       { id: 'bikes', title: 'Chicago Demo council approves 40 miles of new bike lanes', text: 'The Chicago Demo City Council approved on Tuesday a plan to build 40 miles of protected bike lanes in Chicago over the next three years, council officials said.', minutesAgo: 130 },
       { id: 'fair-en', title: 'Demo Technology Fair opens in Madrid with 120 exhibitors', text: 'The Demo Technology Fair opened in Madrid on Tuesday with 120 exhibitors from 14 countries, organisers of the Demo Technology Fair said.', minutesAgo: 110 },
+      // Segunda fuente del terremoto de la agencia sísmica (con una sola, no se publica).
+      { id: 'quake-wire', title: 'Magnitude 5.6 earthquake strikes near Demo Point', text: 'A magnitude 5.6 earthquake struck 35 km north-northeast of Demo Point on Tuesday at a depth of 10.2 km, the Demo Seismic Service said. There were no immediate reports of damage.', minutesAgo: 15 },
     ],
   }),
   src({

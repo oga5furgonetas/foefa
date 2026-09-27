@@ -21,7 +21,7 @@ function Meta({ a, lang, d }: P) {
       <time dateTime={new Date(a.updatedAt).toISOString()} className="tnum">
         {fmtRelative(a.updatedAt, lang)}
       </time>
-      {a.sourcesCount > 0 && <span>· {t(d.label.sources, { n: a.sourcesCount })}</span>}
+      {a.sourcesCount > 0 && <span>· {a.sourcesCount === 1 ? d.label.sourceOne : t(d.label.sources, { n: a.sourcesCount })}</span>}
     </div>
   );
 }
