@@ -247,6 +247,9 @@ Dani no se creía el 0. Estudio con datos reales (scratchpad de la sesión):
   diaria (~4 lecturas al día), `ODDSPAPI_CUPO=200` (unas 35 peticiones del
   estudio se gastaron desde el PC y el servidor no las cuenta).
 - Límites reales de OddsPapi: 1 casa y 5 torneos por petición, 429 a <1 s.
+- Gotcha: para elegir torneos NO fiarse del nombre de la liga en `eventos`:
+  API-Football guarda «Premier League» o «Ligue 1» de Egipto o Argelia con el
+  mismo nombre. Si el calendario conoce el torneo, manda el calendario.
 
 ## Pendiente (por prioridad)
 

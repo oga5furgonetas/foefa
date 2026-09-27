@@ -227,7 +227,12 @@ class Escaner:
             for x in self._calendario.get(clave, []) if clave else []:
                 if x > ahora and (t not in proximo or x < proximo[t]):
                     proximo[t] = x
-        nombres = {OP_TORNEOS[t][1]: t for t in f.torneos if t in OP_TORNEOS}
+        # Los ya leídos, solo para los torneos que el calendario NO conoce: por
+        # nombre no son fiables. API-Football guarda «Premier League» y «Ligue 1»
+        # de Egipto o Argelia igual que las de Inglaterra y Francia (visto en
+        # producción el 27-09: elegía la Premier en pleno parón).
+        nombres = {OP_TORNEOS[t][1]: t for t in f.torneos
+                   if t in OP_TORNEOS and OP_TORNEOS[t][2] not in self._calendario}
         for fila in self.reg.db.execute(
                 "SELECT liga, MIN(inicio) FROM eventos WHERE inicio > ? GROUP BY liga", (ahora.isoformat(),)):
             t = nombres.get(fila[0])

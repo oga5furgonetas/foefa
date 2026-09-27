@@ -364,3 +364,20 @@ def test_oddspapi_reparte_el_cupo_en_el_mes(tmp_path, monkeypatch):
     assert p.coste_vuelta == 2 and p.espera(timedelta(hours=1)) == timedelta(hours=3)
     trozo, tope = p.tope_rafaga()
     assert trozo == timedelta(days=1) and tope == 10.0            # 1,2 × 250/30
+
+
+
+def test_oddspapi_no_se_fia_del_nombre_si_hay_calendario(tmp_path):
+    """Producción, 27-09: API-Football había guardado la «Premier League» de
+    Egipto para hoy, y OddsPapi elegía la inglesa, que no jugaba hasta el 10-10."""
+    from valor.fuentes.oddspapi import OddsPapi
+    reg = Registro(str(tmp_path / "v.db"))
+    reg.guarda_lectura([Evento("egipto", "futbol", "Premier League", "Al Ahly", "Zamalek",
+                               AHORA + timedelta(hours=2))], [])
+    esc = Escaner(reg, 1000, fuentes={})
+    f = OddsPapi(clave="x", cruce=esc.cruce, torneos=[17, 31])
+    esc._calendario = {"soccer_epl": [AHORA + timedelta(days=13)], "americanfootball_nfl": [AHORA + timedelta(hours=5)]}
+    assert esc._torneos_oddspapi(f, AHORA)[0] == ["31"]
+    # Sin calendario para ese torneo, lo leído sí cuenta.
+    esc._calendario = {"americanfootball_nfl": [AHORA + timedelta(hours=5)]}
+    assert esc._torneos_oddspapi(f, AHORA)[0] == ["17", "31"]
