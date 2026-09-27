@@ -34,6 +34,11 @@ const PERMITIDO = [
   // para Amazon no lo ve salvo que se le active. Nombrar Amazon es su tema.
   ['panel/pages/Diarios.jsx', '*', 'modulo de DNR de Amazon, solo para quien lo tiene activado'],
   ['panel/components/AvisoIdAmazon.jsx', '*', 'parte de la DNR diaria'],
+  // Horas (WHC), el mismo caso: lo pidio Dani el 27-09-2026 para su flota y no
+  // va en el estandar. Se pega el plan del portal de Amazon.
+  ['panel/pages/Horas.jsx', '*', 'modulo de horas (WHC) de Amazon, solo para quien lo tiene activado'],
+  ['panel/ayudaFichas.js', 'portal de amazon abre la programaci', 'ficha de ayuda de Horas'],
+  ['panel/ayudaFichas.js', 'tu whc de amazon exacto', 'ficha de ayuda de Horas'],
   ['panel/pages/Usuarios.jsx', "['diarios', 'dnr diaria']", 'casilla de permiso de la DNR diaria'],
   ['panel/ayudaFichas.js', '(dnr), por conductor', 'ficha de ayuda de la DNR diaria'],
   ['panel/ayudaFichas.js', 'descarga el daily report (.html)', 'ficha de ayuda de la DNR diaria'],

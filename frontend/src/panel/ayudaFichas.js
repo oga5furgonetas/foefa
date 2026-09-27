@@ -79,6 +79,15 @@ export const AYUDA = {
     ],
     ojo: 'Amazon rellena la columna DSC (si el DNR puntúa) 2-4 días tarde. Vuelve a subir el mismo reporte unos días después: actualiza sin duplicar.',
   },
+  horas: {
+    que: 'Cuántas horas lleva cada conductor esta semana y quién se va a pasar de 54 h 30 min antes de que pase.',
+    pasos: [
+      'En el portal de Amazon abre la programación de la semana del centro, selecciona todo (Ctrl+A), copia y pégalo aquí.',
+      'Se guarda por centro y semana: al volver a entrar ya está. Pega uno nuevo cuando quieras ponerlo al día.',
+      'Si ya tienes la hoja de excepciones de la scorecard, escribe cuántas hay y sale tu WHC de Amazon exacto.',
+    ],
+    ojo: '«Pasado» es solo lo de jornadas cerradas. Quien está en ruta y se pasaría al acabar sale como «se pasa hoy si acaba»: a ese todavía se le puede cortar el día.',
+  },
   plantilla: {
     que: 'La hoja de salida del día: ruta, conductor, móvil, vehículo y horas, en Excel.',
     pasos: [

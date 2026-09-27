@@ -1168,6 +1168,7 @@ MODULOS_PANEL = [
     {"clave": "checklist-operativo", "nombre": "Checklist", "grupo": "Operacion diaria", "que": "Tareas de apertura y cierre"},
     {"clave": "plantilla", "nombre": "Plantilla diaria", "grupo": "Operacion diaria", "que": "Hoja de salida compartida"},
     {"clave": "diarios", "nombre": "DNR diaria", "grupo": "Operacion diaria", "que": "Paquetes no recibidos: subir los Daily Report de Amazon"},
+    {"clave": "horas", "nombre": "Horas (WHC)", "grupo": "Operacion diaria", "que": "Horas de la semana por conductor: pegar el plan del portal de Amazon"},
     {"clave": "vehiculos", "nombre": "Vehiculos", "grupo": "Flota", "que": "Fichas de las furgonetas"},
     {"clave": "revision", "nombre": "Revision rapida", "grupo": "Flota", "que": "Validar los daños que ve la IA"},
     {"clave": "inspecciones", "nombre": "Inspecciones", "grupo": "Flota", "que": "Fotos de cada dia"},
@@ -35277,6 +35278,847 @@ async def admin_delete_driver_offer(offer_id: str, _=Depends(require_superadmin)
 # =========================================================================
 # WHC — WORKING HOURS COMPLIANCE
 # Ver docs/WHC.md: que se puede afirmar de estos datos y que no.
+# =========================================================================
+
+# En Flota el plan de la semana entra PEGADO a mano desde el portal (copiar y
+# pegar la programacion de la semana): no hay extension que lo lea sola. Es la
+# parte de «pegar el plan» de FlotaDSP, sin la lectura automatica (`whc_api`).
+# Modulo `horas` de MODULOS_PANEL, fuera del estandar: solo lo ve quien lo
+# tiene activado.
+
+
+def _whc_domingo(dia_iso: str) -> str:
+    """El domingo (AAAA-MM-DD) de la semana de ese dia: va de domingo a sabado."""
+    d = date_cls.fromisoformat(str(dia_iso)[:10])
+    return (d - timedelta(days=(d.weekday() + 1) % 7)).isoformat()
+
+
+# OJO: las 55 h de ciclo 1 son el limite CONTRACTUAL/LEGAL del DSP, NO el
+# umbral de WHC de Amazon. Comprobado con la Semana 31 de OGA5: XAQUIN
+# RIVADULLA trabajo 56h 30m y su fila del scorecard dice "Weekly Limit
+# Exceeded = NO". El umbral de Amazon es MAYOR de 56h 30m y no lo publica.
+# Marcar 56h30m como incumplimiento de Amazon seria un falso positivo.
+_WHC_LIMITE_PROPIO = 55 * 60          # el tuyo, editable en pantalla
+_WHC_SUELO_AMAZON_OBSERVADO = 56 * 60 + 30   # visto cumpliendo, luego el real es mayor
+
+# Cuando queda menos de esto para TU limite, se avisa.
+_WHC_MARGEN_AVISO_PROPIO = 3 * 60
+
+# Aviso cuando queda menos de esto para el limite.
+_WHC_MARGEN_AVISO = 3 * 60
+
+# Duracion de bloque a partir de la cual se marca RIESGO diario (nunca
+# incumplimiento). 10 h es la referencia de una ruta estandar mas dos horas.
+_WHC_BLOQUE_RIESGO = 10 * 60
+# Límite duro de jornada de la DSP: un bloque de 11 h o más se cuenta como
+# incumplimiento propio. Es TU norma, no la de Amazon — Amazon ha dejado pasar
+# bloques de 11 h 44 m sin excepción. Por eso alimenta el "WHC propio" y NO el
+# porcentaje que publicará Amazon, que se calcula con sus excepciones.
+_WHC_BLOQUE_LIMITE = 11 * 60
+# Duracion implicita de un bloque sin hora de fin. Medida en el propio plan:
+# 8 h 59 m – 9 h 14 m, una ruta estandar. Solo se usa para reconstruir el total
+# de un conductor cuyo pegado no trajo la linea de horas, y queda marcado.
+_WHC_BLOQUE_IMPLICITO = 9 * 60
+# Por encima de esto un bloque NO es una jornada: es aritmetica que no ha
+# cuadrado. Medido el 15-09-2026 en el plan real de OGA5 de la semana 38: diez
+# conductores salian con bloques de 17, 18 y 18h30 y la pantalla avisaba de que
+# se habian pasado de las once horas. Ninguno era cierto. David Sierra Ferro,
+# por ejemplo: el portal da 28h48 en la semana, el lector le encuentra UN bloque
+# de 10h18 y otro «en curso» sin hora de fin, y el resto de la semana entera
+# —18h30— se le metia a ese bloque. Faltaban filas por leer (las que el plan
+# escribe sin horas, tipo «11:30»), y el hueco se tapaba con el unico sitio
+# donde cabia.
+#
+# Catorce horas es generoso a proposito: una jornada larguisima con esperas
+# sigue siendo creible; dieciocho ya no lo es para nadie.
+_WHC_BLOQUE_MAX_CREIBLE = 14 * 60
+# Ritmo: la semana son 6 bloques de ~9 h. A mitad de semana lo que importa no es
+# el total (todavia bajo) sino si vas por encima de lo que te tocaria a estas
+# alturas: el miercoles llevas 4 dias, o sea 4 bloques y 36 h como maximo.
+_WHC_BLOQUES_SEMANA = 6
+_WHC_DIAS = ["dom", "lun", "mar", "mié", "mie", "jue", "vie", "sáb", "sab"]
+
+
+def _whc_dias_del_plan(texto: str):
+    """Días que trae la cabecera del pegado ("dom., ago. 02"). Devuelve cuántos
+    de esos días YA HAN PASADO (incluido hoy). Si no hay cabecera, se cae al día
+    de la semana de hoy, contando el domingo como día 1."""
+    from datetime import date
+    meses = {"ene": 1, "feb": 2, "mar": 3, "abr": 4, "may": 5, "jun": 6,
+             "jul": 7, "ago": 8, "sep": 9, "oct": 10, "nov": 11, "dic": 12}
+    hoy = datetime.now(timezone.utc).date()
+    fechas = []
+    for l in (texto or "").split("\n"):
+        m = re.match(r"^\s*(%s)\.?,?\s+([a-zé]{3})\.?\s+(\d{1,2})\s*$"
+                     % "|".join(_WHC_DIAS), l.strip(), re.I)
+        if m:
+            mes = meses.get(m.group(2)[:3].lower())
+            if mes:
+                try:
+                    fechas.append(date(hoy.year, mes, int(m.group(3))))
+                except ValueError:
+                    pass
+    if fechas:
+        pasados = sum(1 for f in sorted(set(fechas)) if f <= hoy)
+        return max(1, min(pasados or len(fechas), 7)), True
+    # Sin cabecera: domingo = 1 … sábado = 7
+    return ((hoy.weekday() + 1) % 7) + 1, False
+
+# ── Cortes de tier del WHC ────────────────────────────────────────────────
+# Medidos sobre 17 scorecards REALES de OGA5 (semanas 12 a 31 de 2026), no
+# publicados por Amazon. En las 17 semanas la formula
+# (conductores - excepciones) / conductores reproduce al decimal el
+# porcentaje impreso, incluido el caso extremo de la S28: 12 excepciones de
+# 65 conductores = 81,5 %, y el PDF pone 81,5 %.
+#
+#   100 %            -> Fantastic   11 semanas, TODAS con 0 excepciones
+#   97,1 % .. 98,2 % -> Great        5 semanas, con 1 o 2 excepciones
+#   81,5 %           -> Poor         1 semana, con 12 excepciones
+#
+# Entre 98,2 y 100, y entre 81,5 y 97,1, NO hay ni un solo dato observado.
+# Devolver un tier ahi seria inventarselo: se devuelve None y la pantalla
+# dice que no se sabe. Preferimos "no lo se" a un tier falso.
+#
+# El hallazgo que de verdad importa para un DSP: en 17 semanas no hay ni una
+# sola con Fantastic y alguna excepcion. UNA excepcion te quita el Fantastic.
+_WHC_TIER_OBSERVADO = (
+    (100.0, 100.0, "Fantastic"),
+    (97.1, 98.2, "Great"),
+    (81.5, 81.5, "Poor"),
+)
+
+
+def _whc_tier(pct):
+    """Tier del WHC solo si los scorecards reales lo respaldan; si no, None."""
+    if pct is None:
+        return None
+    for lo, hi, tier in _WHC_TIER_OBSERVADO:
+        if lo - 0.05 <= pct <= hi + 0.05:
+            return tier
+    return None
+
+
+def _whc_minutos(txt: str):
+    """'11:34am' / '11 AM' / '12:30' -> minutos desde medianoche. None si no cuela."""
+    t = (txt or "").strip().lower().replace(" ", "").replace(".", "")
+    m = re.match(r"^(\d{1,2}):(\d{2})(am|pm)?$", t) or re.match(r"^(\d{1,2})(am|pm)$", t)
+    if not m:
+        return None
+    g = m.groups()
+    h = int(g[0])
+    mi = int(g[1]) if len(g) > 2 and g[1] and g[1].isdigit() else 0
+    ap = g[-1]
+    if ap == "pm" and h != 12:
+        h += 12
+    if ap == "am" and h == 12:
+        h = 0
+    if h > 23 or mi > 59:
+        return None
+    return h * 60 + mi
+
+
+def _whc_dur(txt: str) -> int:
+    """'53h 34m' -> minutos."""
+    h = re.search(r"(\d+)\s*h", txt or "")
+    m = re.search(r"(\d+)\s*m", txt or "")
+    return (int(h.group(1)) if h else 0) * 60 + (int(m.group(1)) if m else 0)
+
+
+# Tipos de bloque que el portal escribe debajo de la hora.
+_WHC_TIPOS = ("standard parcel", "nursery route", "dsp initiated work",
+              "cycle 1", "cycle 2", "sameday", "multi-use")
+
+
+def _whc_linea_de_dia(l: str) -> bool:
+    """Una linea de cabecera de dia («dom., sep. 13»)."""
+    return bool(re.match(r"^\s*(%s)\.?,?\s+[a-z\u00e9]{3}\.?\s+\d{1,2}\s*$"
+                         % "|".join(_WHC_DIAS), (l or "").strip(), re.I))
+
+
+async def _whc_centro_del_texto(texto: str) -> str:
+    """La nave del plan. Solo mira la CABECERA, y vacio si no esta clara.
+
+    POR QUE SOLO LA CABECERA. El codigo de nave aparece tambien DENTRO de la
+    tabla, una vez por bloque de trabajo: es donde se hace ese bloque, no de
+    quien es el plan. Probado con el plan real de DGA1 —9.838 caracteres—:
+    buscando en todo el texto sale «OGA5» nueve veces y «DGA1» ninguna, porque
+    sus conductores hicieron bloques en OGA5 esa semana. Archivar ese plan en
+    OGA5 pondria las horas de la gente de una nave en el cuadro de la otra, y
+    eso no se nota hasta que alguien se pasa de horas y nadie le avisa.
+
+    La cabecera es lo que va antes del primer dia («Editar asignacion de ruta ·
+    OGA5 · Ir a esta semana · Semana 38…»). Si el pegado empieza mas abajo —como
+    el de DGA1, que arranca en «Buscar asociados»— no hay cabecera y se devuelve
+    vacio: que lo diga quien lo pega.
+    """
+    lineas = (texto or "").split("\n")
+    corte = next((k for k, l in enumerate(lineas) if _whc_linea_de_dia(l)), 0)
+    if not corte:
+        return ""
+    cabecera = "\n".join(lineas[:corte]).upper()
+    candidatos = set()
+    try:
+        org = await global_db.organizations.find_one(
+            {"db_name": _current_db_name.get()}, {"_id": 0, "centers": 1})
+        if not org and _current_db_name.get() == _DEFAULT_DB_NAME:
+            org = await global_db.organizations.find_one(
+                {"account_type": "owner"}, {"_id": 0, "centers": 1})
+        candidatos = {str(c).strip().upper() for c in ((org or {}).get("centers") or [])
+                      if str(c).strip()}
+    except Exception:                                            # noqa: BLE001
+        candidatos = set()
+    if not candidatos:
+        candidatos = {c for c in await _centros_conocidos() if c}
+    vistos = {c for c in candidatos if re.search(r"\b%s\b" % re.escape(c), cabecera)}
+    return vistos.pop() if len(vistos) == 1 else ""
+
+
+def _whc_semana_del_plan(texto: str) -> str:
+    """El domingo de la semana que trae el plan. Vacio si no lo dice.
+
+    SALE DEL PLAN, NO DEL RELOJ. Se guardaba con la semana de hoy, asi que pegar
+    el plan de la semana pasada lo archivaba como el de esta y pisaba el bueno.
+    Paso de verdad: el documento «DGA1 semana 2026-09-13» es el del 06 segun su
+    propia cabecera, pegado el dia 14.
+    """
+    from datetime import date, timedelta
+    meses = {"ene": 1, "feb": 2, "mar": 3, "abr": 4, "may": 5, "jun": 6,
+             "jul": 7, "ago": 8, "sep": 9, "oct": 10, "nov": 11, "dic": 12}
+    hoy = datetime.now(timezone.utc).date()
+    for l in (texto or "").split("\n"):
+        m = re.match(r"^\s*(%s)\.?,?\s+([a-z\u00e9]{3})\.?\s+(\d{1,2})\s*$"
+                     % "|".join(_WHC_DIAS), l.strip(), re.I)
+        if not m:
+            continue
+        mes = meses.get(m.group(2)[:3].lower())
+        if not mes:
+            continue
+        for anio in (hoy.year, hoy.year - 1, hoy.year + 1):
+            try:
+                f = date(anio, mes, int(m.group(3)))
+            except ValueError:
+                continue
+            # El plan es de hace poco: con eso se resuelve el cambio de ano sin
+            # adivinar (un plan de diciembre pegado en enero).
+            if abs((f - hoy).days) <= 200:
+                # El primer dia que trae es el domingo de esa semana.
+                return (f - timedelta(days=(f.weekday() + 1) % 7)).isoformat()
+    return ""
+
+
+def _whc_parsear(texto: str) -> list:
+    """Convierte el pegado del plan semanal en conductores con sus bloques.
+
+    Formato del portal (validado con 61 conductores de la Semana 31):
+        NOMBRE
+        Estandar
+        53h 34m / 54h 45m        <- trabajado / planificado
+        10:35am - 9:05pm
+        Standard Parcel
+        11 AM                    <- bloque SIN hora de fin (si le sigue un tipo)
+        Standard Parcel
+        ...
+
+    Reglas deducidas y comprobadas:
+      · 'HH:MMam - HH:MMpm' + tipo -> bloque con horas conocidas
+      · hora suelta + tipo         -> bloque REAL cuya hora de fin no aparece.
+        Su duracion implicita medida es 8h59m-9h14m: una ruta estandar.
+      · hora suelta sin tipo       -> dia vacio, no cuenta
+    """
+    lineas = [l.strip() for l in (texto or "").replace("\r", "").split("\n")]
+    out, actual = [], None
+    i = 0
+    while i < len(lineas):
+        l = lineas[i]
+        if not l:
+            i += 1
+            continue
+        # "53h 34m / 54h 45m"  ·  "45h 54m / ⚠ 45h"  ·  "9h 15m / 9h"  ·  "/"
+        #
+        # OJO: el portal mete un ICONO DE AVISO entre la barra y el limite
+        # cuando el conductor va justo ("45h 54m / ⚠ 45h"). El regex anterior
+        # exigia que tras la barra viniera ya el numero, asi que esas lineas NO
+        # casaban: el total se quedaba en 0, el conductor salia con "0h 00m" con
+        # sus bloques a la vista y ademas se caia del denominador del WHC.
+        # Por eso se toleran caracteres no numericos a ambos lados de la barra.
+        mt = re.match(r"^\D*?(\d+\s*h(?:\s*\d+\s*m)?)\s*/\s*\D*?(\d+\s*h(?:\s*\d+\s*m)?)\s*$", l)
+        if mt and actual:
+            actual["trabajado"] = _whc_dur(mt.group(1))
+            actual["planificado"] = _whc_dur(mt.group(2))
+            actual["trabajado_origen"] = "portal"
+            i += 1
+            continue
+        # Solo el trabajado, sin limite detras: "45h 54m /"
+        ms = re.match(r"^\D*?(\d+\s*h(?:\s*\d+\s*m)?)\s*/\s*$", l)
+        if ms and actual:
+            actual["trabajado"] = _whc_dur(ms.group(1))
+            actual["trabajado_origen"] = "portal"
+            i += 1
+            continue
+        # Rango con horas: "10:35am - 9:05pm"
+        mr = re.match(r"^(\d{1,2}:\d{2}\s*[ap]m?)\s*[-–]\s*(\d{1,2}:\d{2}\s*[ap]m?)$", l, re.I)
+        if mr and actual:
+            a, z = _whc_minutos(mr.group(1)), _whc_minutos(mr.group(2))
+            if a is not None and z is not None:
+                if z < a:
+                    z += 1440
+                tipo = lineas[i + 1] if i + 1 < len(lineas) else ""
+                actual["bloques"].append({"inicio": mr.group(1), "fin": mr.group(2),
+                                          "minutos": z - a, "tipo": tipo[:40], "estimado": False})
+            i += 1
+            continue
+        # "10:45am - en curso": el conductor ESTA TRABAJANDO AHORA MISMO. Es un
+        # bloque real sin hora de fin todavia. Tirarlo era el motivo de que el
+        # total del portal no cuadrase con la suma de bloques: la diferencia
+        # medida en el pegado real era de +8 h 58 m, exactamente una ruta.
+        mc = re.match(r"^(\d{1,2}:\d{2}\s*[ap]m?)\s*[-–]\s*en\s+curso$", l, re.I)
+        if mc and actual:
+            tipo = lineas[i + 1] if i + 1 < len(lineas) else ""
+            actual["bloques"].append({"inicio": mc.group(1), "fin": None,
+                                      "minutos": None, "tipo": tipo[:40],
+                                      "estimado": True, "en_curso": True})
+            i += 1
+            continue
+        # Hora suelta: bloque sin fin SOLO si la linea siguiente es un tipo
+        if actual and _whc_minutos(l) is not None:
+            sig = (lineas[i + 1] if i + 1 < len(lineas) else "").lower()
+            if any(t in sig for t in _WHC_TIPOS):
+                actual["bloques"].append({"inicio": l, "fin": None, "minutos": None,
+                                          "tipo": lineas[i + 1][:40], "estimado": True})
+            i += 1
+            continue
+        # Ruido conocido del pegado. El codigo de la nave donde se trabajo el
+        # bloque va en su propia linea (en un plan de DGA1 aparece OGA5). Solo se
+        # conocian las tres naves de Dani: con cualquier otra —DIC1, una nave
+        # nueva, otra empresa— esa linea se leia como una PERSONA nueva. Medido
+        # el 16-09-2026 sobre los 15 planes guardados: en 13 salia un conductor
+        # fantasma con el nombre de la nave. Un nombre de persona nunca es letras
+        # pegadas a un numero, asi que se reconoce por la FORMA, no por la lista.
+        if (l.lower() in ("estandar", "estándar", "standard") or l.startswith("```")
+                or re.fullmatch(r"[A-Z]{2,5}[0-9]{1,2}", l)):
+            i += 1
+            continue
+        if any(t in l.lower() for t in _WHC_TIPOS):
+            i += 1
+            continue
+        # Cualquier otra cosa con letras es un nombre nuevo
+        if re.search(r"[A-Za-zÁÉÍÓÚÑáéíóúñ]{3}", l) and not re.match(r"^\d", l):
+            actual = {"nombre": l[:80], "trabajado": 0, "planificado": 0, "bloques": []}
+            out.append(actual)
+        i += 1
+    return [c for c in out if c["trabajado"] or c["bloques"]]
+
+
+def _whc_ritmo(c: dict, dia: int, limite_min: int) -> dict:
+    """¿Va demasiado rápido para lo que llevamos de semana?
+
+    A mitad de semana el total todavía es bajo y no dice nada. Lo que avisa es
+    el RITMO: la semana son 6 bloques de ~9 h, así que el miércoles (día 4) lo
+    máximo razonable son 4 bloques = 36 h. Con 37 h ese día, acabar por debajo
+    del límite exige recortar en los que quedan.
+    """
+    bloques_ref = min(dia, _WHC_BLOQUES_SEMANA)
+    horas_ref = bloques_ref * _WHC_BLOQUE_IMPLICITO
+    exceso = c["trabajado"] - horas_ref
+    # CUANTOS BLOQUES LLEVA DE VERDAD. `len(bloques)` es lo que el lector ha
+    # sabido reconocer, y el plan escribe filas que no parecen un horario —
+    # «11:30», «11 AM»— que tambien son bloques. Contar de menos ahi hace que la
+    # proyeccion le sume jornadas que ya ha hecho.
+    #
+    # Medido el 15-09-2026, David Sierra Ferro: el portal da 28h48 trabajadas y
+    # el lector le encontraba 2 bloques, asi que le proyectaba 4 jornadas mas
+    # (36 h) -> **64h48**, y salia «en peligro». Con 28h48 ya lleva unas tres
+    # jornadas, le quedan tres, y el numero honesto es ~55h48.
+    #
+    # Las horas SI son fiables (las da el portal), asi que se usan para poner un
+    # suelo al recuento: nunca menos bloques de los que explican esas horas.
+    bloques_hechos = max(len(c["bloques"]),
+                         round(c["trabajado"] / _WHC_BLOQUE_IMPLICITO)) if c["trabajado"] \
+        else len(c["bloques"])
+    restantes = max(0, min(_WHC_BLOQUES_SEMANA - bloques_hechos, 7 - dia))
+    proyeccion = c["trabajado"] + restantes * _WHC_BLOQUE_IMPLICITO
+    if limite_min and c["trabajado"] > limite_min:
+        estado = "pasado"
+    elif limite_min and proyeccion > limite_min:
+        estado = "peligro"
+    elif exceso > 0:
+        estado = "peligro"
+    elif exceso > -60:
+        estado = "justo"
+    else:
+        estado = "ok"
+    return {"dia_semana": dia, "bloques_ref": bloques_ref, "horas_ref": horas_ref,
+            "exceso_ritmo": exceso, "bloques_restantes": restantes,
+            # Lo que el lector vio y lo que de verdad lleva: si no coinciden, la
+            # pantalla puede decir que la proyeccion es aproximada en vez de
+            # darla como un numero exacto.
+            "bloques_hechos": bloques_hechos,
+            "bloques_leidos": len(c["bloques"]),
+            "proyeccion": proyeccion,
+            "proyeccion_pasa": bool(limite_min and proyeccion > limite_min),
+            "estado_ritmo": estado}
+
+
+def _whc_evaluar(conductores: list, limite_min: int, bloque_limite: int = None,
+                 dia: int = None) -> list:
+    """Añade a cada conductor su margen semanal y el riesgo diario.
+
+    OJO con la separacion: `supera_semanal` es un HECHO (el total trabajado lo
+    da el propio portal). `riesgo_diario` es un AVISO, no un incumplimiento —
+    ver el docstring del modulo para el porque.
+    """
+    out = []
+    for c in conductores:
+        con_hora = [b["minutos"] for b in c["bloques"] if b["minutos"] is not None]
+        sin_hora = sum(1 for b in c["bloques"] if b["minutos"] is None)
+        # Cuadre: si la suma de bloques con hora no explica el total, la
+        # diferencia son los bloques sin hora de fin. Se reparte entre ellos
+        # para poder estimarlos, y se marca como estimado.
+        resto = c["trabajado"] - sum(con_hora)
+        est = int(resto / sin_hora) if sin_hora and resto > 0 else 0
+        # SI EL REPARTO DA UN BLOQUE IMPOSIBLE, ES QUE FALTAN FILAS POR LEER.
+        # Entonces no se reparte: se dice que no cuadra. Un numero inventado que
+        # ademas dispara una alarma es lo peor de los dos mundos — manda a
+        # hablar con alguien que no ha hecho nada malo, y la proxima vez ya
+        # nadie se cree la pantalla.
+        reparto_imposible = est > _WHC_BLOQUE_MAX_CREIBLE
+        origen = c.get("trabajado_origen") or ("portal" if c["trabajado"] else None)
+        if not c["trabajado"] and c["bloques"]:
+            # Red de seguridad: el portal no dio el total pero SI hay bloques.
+            # Dejarlo en 0 seria lo peor de todo — el conductor apareceria como
+            # que no ha trabajado, con sus bloques a la vista, y encima se caeria
+            # del denominador del WHC. Se reconstruye desde los bloques y se
+            # marca el origen para que la pantalla no lo presente como dato del
+            # portal. Los bloques sin hora de fin valen la duracion implicita
+            # medida en el propio plan (una ruta estandar, ~9 h).
+            est = _WHC_BLOQUE_IMPLICITO
+            origen = "bloques"
+        for b in c["bloques"]:
+            if b["minutos"] is None and not reparto_imposible:
+                b["minutos"] = est
+        if origen == "bloques":
+            c["trabajado"] = sum(b["minutos"] or 0 for b in c["bloques"])
+
+        blim = bloque_limite or _WHC_BLOQUE_LIMITE
+        # SOLO BLOQUES MEDIDOS. Un bloque estimado es una deduccion nuestra a
+        # partir del total de la semana; decir que alguien «se paso de las once
+        # horas» apoyandose en eso es acusar con un numero que nos hemos hecho
+        # nosotros. El total semanal SI vale —lo da el portal— y por eso
+        # `supera_semanal` se queda como esta.
+        largos = [b for b in c["bloques"]
+                  if (b["minutos"] or 0) >= _WHC_BLOQUE_RIESGO and not b.get("estimado")]
+        pasados = [b for b in c["bloques"]
+                   if (b["minutos"] or 0) >= blim and not b.get("estimado")]
+        margen = (limite_min - c["trabajado"]) if limite_min else None
+        # «YA PASADO» SOLO CON LO CERRADO. El total del portal cuenta tambien el
+        # bloque EN CURSO (por eso no cuadraba con la suma de bloques cerrados:
+        # faltaba una ruta entera). Quien va a media jornada salia «pasado» por
+        # horas que todavia no ha hecho: es el fallo del gotcha 81 de FlotaDSP
+        # por la otra puerta. Lo que depende del bloque de hoy se dice aparte
+        # (`pasara_hoy`): todavia se le puede cortar el dia.
+        en_curso = [b for b in c["bloques"] if b.get("en_curso")]
+        en_curso_min = sum(b["minutos"] or 0 for b in en_curso)
+        cerrado = c["trabajado"] - en_curso_min
+        # Si no se sabe cuanto vale el bloque en curso (el reparto no cuadra),
+        # no se afirma nada de quien lo tiene.
+        incierto = bool(en_curso) and reparto_imposible
+        supera = bool(limite_min and not incierto and cerrado > limite_min)
+        pasara_hoy = bool(limite_min and not supera and en_curso and c["trabajado"] > limite_min)
+        out.append({
+            **c,
+            "dias_trabajados": len(c["bloques"]),
+            "margen_semanal": margen,
+            # OJO con el nombre: es TU limite, no el de Amazon. Amazon no marco
+            # excepcion semanal a quien hizo 56h30m.
+            "supera_semanal": supera,
+            "pasara_hoy": pasara_hoy,
+            "cerrado": cerrado,
+            # "portal" = el total lo da Amazon. "bloques" = lo hemos reconstruido
+            # porque el pegado no traia el total; la pantalla debe decirlo.
+            "trabajado_origen": origen,
+            # Tiene un bloque "en curso": esta trabajando AHORA. Es justo lo que
+            # hay que saber de alguien que ya se ha pasado o esta al borde.
+            "trabajando_ahora": any(b.get("en_curso") for b in c["bloques"]),
+            **_whc_ritmo_sin_acusar(c, dia, limite_min, supera),
+            "al_limite": bool(limite_min and 0 <= (margen or 0) <= _WHC_MARGEN_AVISO_PROPIO),
+            "riesgo_diario": [{"inicio": b["inicio"], "fin": b["fin"],
+                               "minutos": b["minutos"], "estimado": b["estimado"]}
+                              for b in largos],
+            # Bloques que se pasan de TU limite de jornada (11 h por defecto).
+            "bloques_pasados": [{"inicio": b["inicio"], "fin": b["fin"],
+                                 "minutos": b["minutos"], "estimado": b["estimado"]}
+                                for b in pasados],
+            # Incumplimiento segun TUS normas: pasarse de la semana o de la
+            # jornada. Esto NO es la excepcion de Amazon, que se calcula sobre lo
+            # fichado y sale en su hoja de excepciones.
+            "incumple_propio": bool(supera or pasados),
+            # OJO: antes esto salia True SIEMPRE que hubiera un bloque sin
+            # hora, porque el reparto acababa de forzar que la suma cuadrara.
+            # La comprobacion se anulaba justo en el caso que venia a detectar.
+            "cuadra": (not reparto_imposible
+                       and abs(c["trabajado"]
+                               - sum(b["minutos"] or 0 for b in c["bloques"])) <= 10),
+            # Hay horas de la semana que no sabemos en que dia van: el plan trae
+            # filas sin horario. Se dice, en vez de inventarse el reparto.
+            "horas_sin_ubicar": (max(0, resto) if reparto_imposible else 0),
+        })
+    orden = {True: 0, False: 1}
+    out.sort(key=lambda c: (orden[c["incumple_propio"]], orden[c["supera_semanal"]],
+                            -(c["trabajado"] or 0)))
+    return out
+
+
+def _whc_ritmo_sin_acusar(c: dict, dia, limite_min: int, supera: bool) -> dict:
+    """`_whc_ritmo`, pero «pasado» solo si lo cerrado ya pasa (ver arriba): con
+    el bloque de hoy dentro es «peligro», que es lo que es."""
+    if not dia:
+        return {}
+    r = _whc_ritmo(c, dia, limite_min)
+    if r["estado_ritmo"] == "pasado" and not supera:
+        r["estado_ritmo"] = "peligro"
+    return r
+
+
+
+@api_router.get("/whc/estado")
+async def whc_estado(_=Depends(require_admin)):
+    """Que centro tiene plan de esta semana y cual no.
+
+    La pantalla es por centro: si el elegido no tiene plan no sale nada, y un
+    hueco no dice si falta el dato o si no hay nada que contar (gotcha 33 de
+    FlotaDSP). Esto lo dice. En Flota el plan solo entra PEGADO: no hay
+    extension que lo traiga sola.
+    """
+    sun = _whc_domingo(_dia_negocio())
+    naves = []
+    try:
+        org = await global_db.organizations.find_one(
+            {"db_name": _current_db_name.get()}, {"_id": 0, "centers": 1})
+        if not org and _current_db_name.get() == _DEFAULT_DB_NAME:
+            org = await global_db.organizations.find_one(
+                {"account_type": "owner"}, {"_id": 0, "centers": 1})
+        naves = [str(c).strip().upper() for c in ((org or {}).get("centers") or [])
+                 if str(c).strip()]
+    except Exception:                                            # noqa: BLE001
+        naves = []
+    if not naves:
+        naves = sorted(c for c in await _centros_conocidos() if c)
+    fuera = []
+    for nave in naves:
+        ult = await db.whc_planes.find_one({"center": nave}, {"_id": 0, "texto": 0},
+                                           sort=[("week", -1)])
+        fuera.append({
+            "centro": nave,
+            "semana": (ult or {}).get("week"),
+            "actualizado": (ult or {}).get("updated_at"),
+            "conductores": (ult or {}).get("n_conductores"),
+            "al_dia": bool(ult and ult.get("week") == sun),
+            "semanas_atras": (
+                None if not ult or not ult.get("week")
+                else max(0, (date_cls.fromisoformat(sun)
+                             - date_cls.fromisoformat(ult["week"])).days // 7)),
+        })
+    faltan = [x["centro"] for x in fuera if not x["al_dia"]]
+    return {
+        "semana_en_curso": sun,
+        "naves": fuera,
+        "faltan": faltan,
+        "como_se_arregla": (
+            "Falta el plan de esta semana de %s. En el portal, abre la programacion de "
+            "la semana de ese centro, selecciona todo (Ctrl+A), copia (Ctrl+C) y pegalo "
+            "aqui con ese centro elegido." % " y ".join(faltan)) if faltan else "",
+    }
+
+
+# ── UN PEGADO PEQUEÑO NO PUEDE BORRAR UN PLAN BUENO ─────────────────────────
+# El 23-09-2026 (FlotaDSP) el plan de OGA5, de 68 conductores, quedo
+# sustituido por uno de UN conductor: la ficha de una persona y la plantilla de
+# la nave tienen la misma cabecera de dias, asi que el lector no puede
+# distinguirlas por la forma. Pegando a mano pasa igual si se copia la pagina
+# equivocada, y la pantalla decia «100 %, Fantastic — 1 de 1 conductores» como
+# si fuera la nave entera.
+#
+# La defensa no es adivinar mejor: es no pisar SIN MIRAR. Si ya habia un plan
+# de esta semana con conductores de sobra, uno mucho mas pequeño no lo
+# sustituye — se guarda solo cuando trae al menos la mitad. Sin plan anterior,
+# o con pocos (una nave que de verdad tiene 3 conductores), se guarda siempre:
+# no hay nada que proteger.
+_WHC_CAIDA_MIN_ANTERIOR = 5
+
+
+def _whc_debe_pisar(anterior_n, nuevo_n: int) -> bool:
+    """Si el pegado nuevo sustituye al que ya habia guardado para esta semana."""
+    if not anterior_n or anterior_n < _WHC_CAIDA_MIN_ANTERIOR:
+        return True
+    return nuevo_n >= max(3, anterior_n // 2)
+
+
+@api_router.post("/whc/analizar")
+async def whc_analizar(data: dict = Body(...), _=Depends(require_admin)):
+    """Analiza el plan semanal pegado del portal y devuelve el estado de WHC."""
+    texto = _texto_cuerpo(data.get("texto"), 400_000)
+    if len(texto.strip()) < 40:
+        raise HTTPException(400, "Pega el plan de la semana desde el portal")
+    limite = _WHC_LIMITE_PROPIO
+    if data.get("limite_horas"):
+        limite = int(_decimal(data["limite_horas"], "limite_horas", minimo=0, maximo=100) * 60)
+    # Excepciones que Amazon ya reporto esta semana (de la hoja "Drivers With
+    # Working Hour Exceptions").
+    #
+    # DISTINGUIR «CERO PORQUE LO SABEMOS» DE «CERO PORQUE NADIE LO HA DICHO».
+    # Antes se asumia 0 cuando no venian, y el WHC salia al **100 % Fantastic**.
+    # Con el plan pegado a mano eso era medio aceptable —quien lo pega mira la
+    # hoja—, pero desde que el plan entra SOLO desde la extension nadie manda las
+    # excepciones nunca: la pantalla decia «100 %, Fantastic» todas las semanas,
+    # pasara lo que pasara. Un numero inventado que ademas tranquiliza es peor
+    # que no tener numero (gotcha 33), y en esta metrica UNA excepcion te quita
+    # el Fantastic.
+    #
+    # El plan NO las trae: comprobado sobre el de OGA5 de la semana 38, 13.660
+    # caracteres, ni una sola mencion. Vienen de otra hoja del portal.
+    #
+    # Asi que: si la clave no viene, el porcentaje de Amazon se devuelve como
+    # desconocido. Lo que SI se puede calcular del plan —quien se pasa de tu
+    # limite, quien lleva un bloque de once horas, a que ritmo va— se sigue
+    # calculando y es lo util del dia a dia.
+    excepciones_conocidas = "excepciones" in data and data.get("excepciones") is not None
+    try:
+        excepciones = _entero(data.get("excepciones"), "excepciones", defecto=0, minimo=0)
+    except (TypeError, ValueError):
+        excepciones = 0
+        excepciones_conocidas = False
+
+    bloque_limite = _WHC_BLOQUE_LIMITE
+    if data.get("limite_bloque_horas"):
+        bloque_limite = int(_decimal(data["limite_bloque_horas"], "limite_bloque_horas",
+                                     minimo=0, maximo=24) * 60)
+
+    dia, dia_del_plan = _whc_dias_del_plan(texto)
+
+    conductores = _whc_parsear(texto)
+    if not conductores:
+        raise HTTPException(400, "No se ha reconocido ningún conductor en ese texto")
+    ev = _whc_evaluar(conductores, limite, bloque_limite, dia)
+
+    # El plan se guarda para no tener que volver a pegarlo cada vez. Se guarda
+    # por (centro, semana): una semana nueva no pisa la anterior.
+    center = _texto_cuerpo(data.get("center")).upper().strip()
+    # «TODOS» NO ES UNA NAVE. El selector del panel manda la palabra cuando esta
+    # en «Todos», y aqui se guardaba tal cual: el 13-09-2026 quedo un plan de
+    # horas archivado bajo un centro llamado TODOS, o sea invisible para todas
+    # las pantallas, que filtran por una nave de verdad. Es el gotcha 12 al
+    # reves —escribiendo en vez de leyendo— y no da ningun error.
+    if center in ("TODOS", "TODAS", "ALL", "TODOS LOS CENTROS"):
+        center = ""
+    # Si quien lo manda no dice la nave, se saca de la cabecera del propio plan.
+    deducido = ""
+    if not center:
+        deducido = await _whc_centro_del_texto(texto)
+        center = deducido
+    guardado = False
+    aviso_guardado = None
+    if center and data.get("guardar") is not False:
+        # La semana la dice el PLAN. Con la de hoy, pegar el de la semana
+        # pasada pisaba el de esta (paso el 14-09-2026).
+        sun = _whc_semana_del_plan(texto)
+        if not sun:
+            sun = _whc_domingo(_dia_negocio())
+        n_nuevo = len(conductores)
+        anterior = await db.whc_planes.find_one(
+            {"center": center, "week": sun}, {"_id": 0, "n_conductores": 1})
+        n_anterior = (anterior or {}).get("n_conductores")
+        if _whc_debe_pisar(n_anterior, n_nuevo):
+            await db.whc_planes.update_one(
+                {"center": center, "week": sun},
+                {"$set": {"center": center, "week": sun, "texto": texto[:400000],
+                          "n_conductores": n_nuevo,
+                          "limite_horas": round(limite / 60, 2),
+                          "limite_bloque_horas": round(bloque_limite / 60, 2),
+                          "excepciones": excepciones,
+                          "updated_at": datetime.now(timezone.utc).isoformat()}},
+                upsert=True)
+            guardado = True
+        else:
+            aviso_guardado = (
+                "Este pegado trae %d conductor(es) y el plan guardado de esta semana tenía "
+                "%d: parece la ficha de una sola persona, no la nave entera, así que no se "
+                "ha sustituido. Si el cambio es real (gente de baja, nave nueva…), borra el "
+                "plan y pégalo de nuevo." % (n_nuevo, n_anterior))
+
+    # ── WHC: el porcentaje que Amazon publica, calculado igual que ellos ──
+    # El scorecard lo define textualmente: "The metric is calculated as % of
+    # drivers complying with working hour limits". El denominador son los
+    # conductores CON ACTIVIDAD esa semana (los que tienen horas en el plan).
+    # Validado: S31 de OGA5, 69 conductores con horas y 2 excepciones ->
+    # 67/69 = 97,101 %, que es el 97,1 % impreso en el PDF.
+    con_actividad = sum(1 for c in ev if c["trabajado"] > 0)
+    whc = None
+    if con_actividad and not excepciones_conocidas:
+        # Lo unico honesto: el denominador SI lo sabemos, el numerador no.
+        whc = {
+            "conductores_con_actividad": con_actividad,
+            "excepciones": None,
+            "excepciones_conocidas": False,
+            "porcentaje": None,
+            "tier": None,
+            "coste_por_excepcion": round(100 / con_actividad, 2),
+            "porque": ("Falta la hoja de excepciones de Amazon («Drivers With Working "
+                       "Hour Exceptions»). Sin ella no se puede saber el WHC real: "
+                       "el plan no las trae. Cada excepcion cuesta %s puntos."
+                       % round(100 / con_actividad, 2)),
+        }
+    elif con_actividad:
+        cumplen = max(0, con_actividad - excepciones)
+        pct = round(cumplen / con_actividad * 100, 1)
+        whc = {
+            "conductores_con_actividad": con_actividad,
+            "excepciones": excepciones,
+            "excepciones_conocidas": True,
+            "porcentaje": pct,
+            # None cuando el porcentaje cae en una zona sin ningun scorecard
+            # observado: no nos inventamos el tier.
+            "tier": _whc_tier(pct),
+            "tier_si_una_mas": _whc_tier(round(max(0, cumplen - 1) / con_actividad * 100, 1)),
+            # Lo que de verdad hay que saber: cuanto cuesta UNA sola excepcion.
+            # Con 69 conductores son 1,45 puntos, y basta una para dejar de
+            # estar al 100 %. El WHC es practicamente todo o nada.
+            "coste_por_excepcion": round(100 / con_actividad, 2),
+            "porcentaje_si_una_mas": round(max(0, cumplen - 1) / con_actividad * 100, 1),
+        }
+
+    # ── WHC PROPIO: el cumplimiento segun TUS normas ──────────────────────────
+    # Amazon publica su WHC con SUS excepciones, que no se saben hasta el martes.
+    # Esto es otra cosa y va aparte: el % de conductores que cumplen las normas
+    # de la DSP (no pasar del limite semanal ni de la jornada). Sirve para actuar
+    # HOY, mientras el numero de Amazon todavia no existe.
+    whc_propio = None
+    if con_actividad:
+        activos = [c for c in ev if c["trabajado"] > 0]
+        incumplen = [c for c in activos if c["incumple_propio"]]
+        por_semanal = [c for c in incumplen if c["supera_semanal"]]
+        por_bloque = [c for c in incumplen if c["bloques_pasados"]]
+        whc_propio = {
+            "conductores": len(activos),
+            "incumplen": len(incumplen),
+            "por_semanal": len(por_semanal),
+            "por_bloque": len(por_bloque),
+            "por_ambos": sum(1 for c in incumplen
+                             if c["supera_semanal"] and c["bloques_pasados"]),
+            # Sin conductores en el cuadrante esto era un 500. Le pasa a toda
+            # empresa el primer dia, que es justo cuando peor sienta.
+            "porcentaje": (round((len(activos) - len(incumplen)) / len(activos) * 100, 1)
+                           if activos else None),
+            "limite_semanal_min": limite,
+            "limite_bloque_min": bloque_limite,
+            "trabajando_ahora": sum(1 for c in incumplen if c["trabajando_ahora"]),
+            "quien": [{"nombre": c.get("nombre"), "trabajado": c["trabajado"],
+                       "supera_semanal": c["supera_semanal"],
+                       "trabajando_ahora": c["trabajando_ahora"],
+                       "bloques_pasados": len(c["bloques_pasados"]),
+                       "peor_bloque": max((b["minutos"] or 0)
+                                          for b in c["bloques_pasados"]) if c["bloques_pasados"] else None}
+                      for c in incumplen],
+        }
+
+    # ── RITMO DE LA SEMANA ────────────────────────────────────────────────────
+    # Lo que sirve un miércoles: quién va por encima del ritmo, no quién ya se
+    # pasó (todavía no se ha pasado nadie).
+    en_ritmo = [c for c in ev if c["trabajado"] > 0]
+    ritmo = {
+        "dia_semana": dia,
+        "dia_leido_del_plan": dia_del_plan,
+        "bloques_ref": min(dia, _WHC_BLOQUES_SEMANA),
+        "horas_ref_min": min(dia, _WHC_BLOQUES_SEMANA) * _WHC_BLOQUE_IMPLICITO,
+        "pasados": sum(1 for c in en_ritmo if c.get("estado_ritmo") == "pasado"),
+        "peligro": sum(1 for c in en_ritmo if c.get("estado_ritmo") == "peligro"),
+        "justos": sum(1 for c in en_ritmo if c.get("estado_ritmo") == "justo"),
+        "en_ruta_ahora": sum(1 for c in en_ritmo if c["trabajando_ahora"]),
+        # Los que hay que mirar HOY: van mal de ritmo, ordenados por exceso, y
+        # marcando quién sigue en ruta ahora mismo (a ése aún se le puede cortar).
+        "avisos": sorted(
+            [{"nombre": c.get("nombre"), "trabajado": c["trabajado"],
+              "estado": c.get("estado_ritmo"), "exceso": c.get("exceso_ritmo"),
+              "proyeccion": c.get("proyeccion"),
+              "proyeccion_pasa": c.get("proyeccion_pasa"),
+              "bloques": len(c["bloques"]),
+              # Los dos: lo que el lector vio y lo que de verdad lleva. Si no
+              # coinciden, el plan traia filas sin horario y la proyeccion es
+              # aproximada — la pantalla lo marca con una «~» en vez de dar un
+              # numero exacto que no lo es.
+              "bloques_leidos": c.get("bloques_leidos"),
+              "bloques_hechos": c.get("bloques_hechos"),
+              "bloques_restantes": c.get("bloques_restantes"),
+              "trabajando_ahora": c["trabajando_ahora"]}
+             for c in en_ritmo if c.get("estado_ritmo") in ("pasado", "peligro", "justo")],
+            key=lambda x: (-(x["trabajando_ahora"]), -(x["exceso"] or 0)))[:25],
+    }
+
+    return {
+        "semana": _texto_cuerpo(data.get("semana"))[:40],
+        # SE DICE SI SE HA GUARDADO Y EN QUE NAVE. Un plan que se analiza, se
+        # enseña bien y no se guarda parece que ha ido perfecto — y es como el
+        # WHC se quedo un mes entero sin actualizarse sin que nadie lo notara.
+        "centro": center or None,
+        "centro_deducido": deducido or None,
+        "semana_del_plan": _whc_semana_del_plan(texto) or None,
+        "guardado": guardado,
+        # Por que no se ha guardado, cuando no es simplemente que faltara la nave.
+        "aviso_guardado": aviso_guardado,
+        "whc": whc,
+        "whc_propio": whc_propio,
+        "ritmo": ritmo,
+        "limite_min": limite,
+        "limite_bloque_min": bloque_limite,
+        "limite_es_propio": True,
+        "suelo_amazon_observado_min": _WHC_SUELO_AMAZON_OBSERVADO,
+        "conductores": ev,
+        "resumen": {
+            "total": len(ev),
+            "superan": sum(1 for c in ev if c["supera_semanal"]),
+            "pasaran_hoy": sum(1 for c in ev if c.get("pasara_hoy")),
+            "bloque_pasado": sum(1 for c in ev if c["bloques_pasados"]),
+            "incumplen_propio": sum(1 for c in ev if c["incumple_propio"]),
+            "al_limite": sum(1 for c in ev if c["al_limite"]),
+            "con_riesgo_diario": sum(1 for c in ev if c["riesgo_diario"]),
+            "no_cuadran": sum(1 for c in ev if not c["cuadra"]),
+        },
+        # Que la pantalla pueda explicar por que no afirma nada de lo diario.
+        "aviso_diario": ("El límite semanal de aquí es EL TUYO, no el de Amazon: "
+                         "en la semana 31 un conductor hizo 56 h 30 m y Amazon "
+                         "NO marcó excepción semanal, así que su umbral es mayor. "
+                         "Y los bloques largos son un aviso de riesgo, no un "
+                         "incumplimiento: en semanas con CERO excepciones hay "
+                         "bloques de 11 h 44 m, y sin embargo uno de 10 h 05 m sí "
+                         "generó excepción. La excepción se calcula sobre lo "
+                         "FICHADO, que no está en el plan."),
+    }
+
+
+@api_router.get("/whc/plan")
+async def whc_plan_get(center: str, _=Depends(require_admin)):
+    """El plan pegado de la semana en curso, para no tener que volver a pegarlo.
+
+    Se guarda por (centro, semana): al cambiar de semana no se arrastra el plan
+    de la anterior, que seria el peor error posible — ver horas viejas creyendo
+    que son las de esta semana.
+    """
+    sun = _whc_domingo(_dia_negocio())
+    doc = await db.whc_planes.find_one(
+        {"center": (center or "").upper(), "week": sun}, {"_id": 0})
+    return {"hay": bool(doc), "semana": sun, **(doc or {})}
+
+
+@api_router.delete("/whc/plan")
+async def whc_plan_delete(center: str, _=Depends(require_admin)):
+    """Borra el plan guardado de la semana en curso de ese centro."""
+    sun = _whc_domingo(_dia_negocio())
+    r = await db.whc_planes.delete_many({"center": (center or "").upper(), "week": sun})
+    return {"ok": True, "borrados": r.deleted_count, "semana": sun}
+
+
+
+# =========================================================================
+# GEOCODIFICACION
 # =========================================================================
 
 

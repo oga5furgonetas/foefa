@@ -17,7 +17,7 @@ const PANEL = [
   ['vencimientos', 'Vencimientos'], ['aparcamiento', 'Aparcamiento'],
   ['incidencias', 'Incidencias'], ['ordenes', 'Órdenes de taller'],
   ['talleres', 'Talleres'], ['asignacion', 'Asignación'],
-  ['plantilla', 'Plantilla del día'], ['diarios', 'DNR diaria'],
+  ['plantilla', 'Plantilla del día'], ['diarios', 'DNR diaria'], ['horas', 'Horas · WHC'],
   ['turnos', 'Turnos'], ['checklist-operativo', 'Checklist'],
   ['conductores', 'Conductores'], ['incorporaciones', 'Incorporaciones'],
   ['empleo', 'Empleo'], ['contactos', 'Contactos'],
@@ -286,6 +286,86 @@ test.describe('Furgonetas fijas', () => {
     await page.getByRole('tab', { name: /Fila de aparcamiento/ }).click()
     await expect(page.getByText('Fila 1')).toBeVisible()
     await expect(page.getByText(/Sin apuntar en ninguna fila/).locator('..')).toContainText('5678 DEF')   // la que queda sin apuntar
+    expect(fallos, fallos.join(' | ')).toHaveLength(0)
+  })
+})
+
+/* HORAS (WHC): el plan guardado se analiza solo al entrar y «pasado» es solo
+   lo cerrado; quien está en ruta sale como «se pasa hoy si acaba». */
+test.describe('Horas · WHC', () => {
+  const conductor = (nombre, trabajado, extra) => ({
+    nombre, trabajado, planificado: 0, bloques: [], dias_trabajados: 5, margen_semanal: 3270 - trabajado,
+    supera_semanal: false, pasara_hoy: false, cerrado: trabajado, al_limite: false, trabajando_ahora: false,
+    riesgo_diario: [], bloques_pasados: [], incumple_propio: false, cuadra: true, trabajado_origen: 'portal', ...extra,
+  })
+  const ANALISIS = {
+    centro: 'NORTE', semana_del_plan: '2026-09-27', guardado: true, aviso_guardado: null,
+    whc: { conductores_con_actividad: 3, excepciones: null, excepciones_conocidas: false, porcentaje: null,
+      tier: null, coste_por_excepcion: 33.33 },
+    whc_propio: { conductores: 3, incumplen: 1, por_semanal: 1, por_bloque: 0, porcentaje: 66.7,
+      limite_semanal_min: 3270, limite_bloque_min: 660, quien: [] },
+    ritmo: { dia_semana: 6, dia_leido_del_plan: true, bloques_ref: 6, horas_ref_min: 3240, pasados: 1, peligro: 1,
+      justos: 0, en_ruta_ahora: 1, avisos: [
+        { nombre: 'ANA PÉREZ', trabajado: 3540, estado: 'peligro', exceso: 300, proyeccion: 3540,
+          proyeccion_pasa: true, bloques: 6, bloques_leidos: 6, bloques_hechos: 6, bloques_restantes: 0, trabajando_ahora: true },
+      ] },
+    conductores: [
+      conductor('ANA PÉREZ', 3540, { pasara_hoy: true, cerrado: 3000, trabajando_ahora: true }),
+      conductor('LUIS GÓMEZ', 3420, { supera_semanal: true, incumple_propio: true }),
+      conductor('SARA VIDAL', 1620, {}),
+    ],
+    resumen: { total: 3, superan: 1, pasaran_hoy: 1, bloque_pasado: 0, incumplen_propio: 1, al_limite: 0,
+      con_riesgo_diario: 0, no_cuadran: 0 },
+    aviso_diario: 'Los bloques largos son un aviso de riesgo, no un incumplimiento.',
+  }
+
+  test('con el plan guardado dice cómo vamos sin pegar nada', async ({ page }) => {
+    const fallos = vigilar(page)
+    await entrarComoAdmin(page)
+    await simularApi(page, 'vacio')
+    const json = (body) => (route) => route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(body) })
+    await page.route(/\/api\/whc\/estado/, json({ semana_en_curso: '2026-09-27', faltan: [], como_se_arregla: '',
+      naves: [{ centro: 'NORTE', semana: '2026-09-27', al_dia: true, conductores: 3, semanas_atras: 0 }] }))
+    await page.route(/\/api\/whc\/plan/, json({ hay: true, semana: '2026-09-27', texto: 'ANA PÉREZ\n59h 00m / 60h\n'.repeat(4),
+      excepciones: null, updated_at: new Date().toISOString() }))
+    await page.route(/\/api\/whc\/analizar/, json(ANALISIS))
+    await page.goto('/panel/horas', { waitUntil: 'domcontentloaded' })
+    await expect(page.getByText(/Cómo vamos · NORTE/)).toBeVisible({ timeout: 15000 })
+    await expect(page.getByText('1 ya pasados (horas cerradas)')).toBeVisible()
+    await expect(page.getByText('1 se pasan hoy si acaban la ruta')).toBeVisible()
+    await expect(page.getByText('Se pasa hoy si acaba')).toBeVisible()
+    await expect(page.getByText('WHC de Amazon: todavía no se sabe.')).toBeVisible()
+    await expect(page.getByText('al día · 3 conductores')).toBeVisible()
+    // El plan guardado no obliga a volver a pegar: la caja no está.
+    await expect(page.locator('#horas-plan')).toHaveCount(0)
+    await page.getByRole('button', { name: 'Pegar uno nuevo' }).click()
+    await expect(page.locator('#horas-plan')).toBeVisible()
+    expect(fallos, fallos.join(' | ')).toHaveLength(0)
+  })
+})
+
+/* FICHAS SIN CENTRO: salen en la lista marcadas, y el alta nace en el centro
+   que se está mirando (27-09-2026: «no se pueden crear fichas»). */
+test.describe('Conductores sin centro', () => {
+  test('la ficha sin centro se ve y el alta nace en el centro elegido', async ({ page }) => {
+    const fallos = vigilar(page)
+    await entrarComoAdmin(page, { centros: ['NORTE', 'SUR'] })
+    await simularApi(page, 'vacio')
+    await page.route(/\/api\/drivers(\?|$)/, (route) => route.fulfill({ status: 200, contentType: 'application/json',
+      body: JSON.stringify([
+        { id: 'd1', name: 'Estela Alen Lage', email: 'estela@ejemplo.es', center: '', active: true },
+        { id: 'd2', name: 'Ana Pérez', center: 'NORTE', active: true, transporter_id: 'A2S2HK9FC8JOUX' },
+      ]) }))
+    await page.goto('/panel/conductores', { waitUntil: 'domcontentloaded' })
+    await expect(page.getByText('Estela Alen Lage')).toBeVisible({ timeout: 15000 })
+    await expect(page.getByText('sin centro', { exact: true })).toBeVisible()
+    await expect(page.getByText(/ficha no tiene centro/)).toBeVisible()
+    // La ficha de Ana enseña su ID de reparto.
+    await page.getByText('Ana Pérez').click()
+    await expect(page.getByText('A2S2HK9FC8JOUX')).toBeVisible()
+    await page.keyboard.press('Escape')
+    await page.getByRole('button', { name: 'Añadir conductor' }).first().click()
+    await expect(page.locator('#driver-form select').first()).toHaveValue('NORTE')
     expect(fallos, fallos.join(' | ')).toHaveLength(0)
   })
 })

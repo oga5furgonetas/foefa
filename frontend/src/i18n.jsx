@@ -1347,6 +1347,7 @@ const DICT = {
   'dr.eFirmar':       { es: "No se pudo firmar. Puedes continuar y firmar después desde tu administrador.", en: "Could not sign. You can continue and sign later through your administrator.", fr: "Signature impossible. Vous pouvez continuer et signer plus tard via votre administrateur.", de: "Unterschrift fehlgeschlagen. Du kannst später über deinen Administrator unterschreiben.", it: "Impossibile firmare. Puoi continuare e firmare dopo tramite l'amministratore.", pt: "Não foi possível assinar. Podes continuar e assinar depois pelo teu administrador." },
   'dr.ver':           { es: "Ver", en: "View", fr: "Voir", de: "Ansehen", it: "Vedi", pt: "Ver" },
   // ── Plantilla del día ──
+  'nav.horas': { es: 'Horas · WHC', en: 'Hours · WHC', fr: 'Heures · WHC', de: 'Stunden · WHC', it: 'Ore · WHC', pt: 'Horas · WHC' },
   'nav.dnr': { es: 'DNR diaria', en: 'Daily DNR', fr: 'DNR du jour', de: 'DNR täglich', it: 'DNR giornaliero', pt: 'DNR diário' },
   'pg.sinFecha': { es: "Sin fecha", en: "No date", fr: "Sans date", de: "Ohne Datum", it: "Senza data", pt: "Sem data" },
   'pg.histTitulo': { es: "Historial de plantillas", en: "Roster history", fr: "Historique des feuilles", de: "Plan-Verlauf", it: "Storico piani", pt: "Histórico de escalas" },

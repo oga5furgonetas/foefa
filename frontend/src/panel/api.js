@@ -648,13 +648,14 @@ export const tiendaFotoBlob = (id) =>
 
 /* WHC: horas de trabajo. Se pega el plan del portal y devuelve el margen que le
    queda a cada conductor antes del limite semanal. */
+export const whcAnalizar = (body) => api.post('/whc/analizar', body)
 // El plan pegado se guarda por (centro, semana) para no tener que repegarlo.
+export const getWhcPlan = (center) => api.get('/whc/plan', { params: { center } })
+export const deleteWhcPlan = (center) => api.delete('/whc/plan', { params: { center } })
 /* Que nave tiene plan de esta semana y cual no. Sin esto, una nave sin plan
    se ve igual que una pantalla rota: un hueco no dice si falta el dato o si
    no hay nada que contar. */
-/* Las horas de la semana con el dato de AMAZON: nada estimado, umbrales
-   suyos y la proyección es lo que cada uno tiene puesto. Si devuelve
-   `hay: false` todavía no ha entrado y la pantalla sigue con el pegado. */
+export const getWhcEstado = () => api.get('/whc/estado')
 
 /* Investigaciones de DNR: Amazon pregunta donde se entrego un paquete que el
    cliente dice no haber recibido. `responder` PREPARA el correo (no lo manda) y

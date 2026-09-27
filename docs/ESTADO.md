@@ -310,6 +310,34 @@ Dani no se creía el 0. Estudio con datos reales (scratchpad de la sesión):
   API-Football guarda «Premier League» o «Ligue 1» de Egipto o Argelia con el
   mismo nombre. Si el calendario conoce el torneo, manda el calendario.
 
+## Qué se hizo el 27-09-2026 (tarde): fichas que «no se guardaban», ID y horas
+
+- **Fichas de conductor.** No era que no se guardaran: la ficha se creaba SIN
+  centro (alta con «Todos» elegido) y `GET /drivers?center=X` solo devolvía
+  las de ese centro, así que no salía en ninguna lista; al repetir el alta,
+  409 «ya hay un conductor activo con ese correo». Caso real: Estela Alen Lage
+  (ahora en DGA2). Arreglo: la lista devuelve también las fichas sin centro
+  (marcadas «sin centro», aviso encima de la tabla); el alta nace en el centro
+  que se está mirando y el servidor pone el único centro posible si no viene
+  (con varios, no adivina); el 409 trae `abrir_id` y el panel abre esa ficha.
+  Quedan 2 sin centro: Angel Vazquez Reendo y José Ángel Calvo Gesto.
+- **ID de reparto** (`transporter_id`) vuelve a la ficha: lo quitaba el
+  `response_model` (127 fichas lo tienen). Se escribe a mano, validado con
+  `_DIA_TID`, sin repetirse entre fichas vivas (mira también `driver_id`), y
+  sin revalidar si no cambia (una ficha vieja con un ID raro se puede seguir
+  editando). Solo se enseña con los módulos `diarios`/`horas` o si ya lo trae.
+- **Horas · WHC** (/panel/horas, módulo y permiso `horas`, fuera del estándar):
+  la parte de PEGAR el plan de FlotaDSP, sin la lectura automática (`whc_api`).
+  Se guarda por (centro, semana) en `whc_planes`; `/whc/estado` dice qué
+  centro está al día. Cambio sobre FlotaDSP: «Pasado» solo con lo CERRADO; el
+  total del portal cuenta el bloque en curso, así que quien va en ruta sale
+  aparte como «se pasa hoy si acaba» (`pasara_hoy`). Con el plan de DGA1 del
+  13-09 eran 6 «pasados» falsos. Los usuarios con permisos a medida necesitan
+  la casilla «Horas · WHC» en Usuarios para verla.
+- Tests: `test_fichas_conductor.py` (10), `test_whc_en_curso.py` (6) y los
+  cuatro `test_whc_*` recuperados del commit raíz (sin el de la extensión);
+  e2e «Horas · WHC» y «Conductores sin centro».
+
 ## Pendiente (por prioridad)
 
 0. **URGENTE — aviso de Amazon del 24-09**: leer la sección 0 de

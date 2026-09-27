@@ -14,7 +14,10 @@ Nació el 25-09-2026 como copia depurada de FlotaDSP (producto de Dani para
 repartidores de Amazon). De aquella se quitó TODO lo de Amazon: extensión de
 Cortex, paquetes, scorecard, DNR/pre-DNR, WHC, DSC, debrief, rutas, Transporter
 ID, métricas y sus tests. **No es FlotaDSP**: otra marca, otra base de datos,
-otra infraestructura.
+otra infraestructura. Para la flota de Dani han vuelto, como módulos FUERA del
+estándar y metiendo los datos a mano (nunca con la extensión): plantilla del
+día, DNR diaria (`diarios`), horas/WHC pegando el plan (`horas`) y el ID de
+reparto en la ficha (`transporter_id`).
 
 ## Regla que no se rompe
 
