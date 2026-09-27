@@ -21,6 +21,7 @@
     "@anthropic-ai/sdk": "^0.128.0",
     "drizzle-orm": "^0.45.3",
     "fast-xml-parser": "^5.2.5",
+    "ioredis": "^5.11.1",
     "pino": "^9.7.0",
     "postgres": "^3.4.7",
     "sharp": "^0.34.3",
