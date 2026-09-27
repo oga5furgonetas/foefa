@@ -1,0 +1,32 @@
+# Plantilla de Fly.io para la web. Antes de desplegar:
+#   1) Cambia `app` por un nombre propio (NUNCA una app de otro producto).
+#   2) fly secrets set DATABASE_URL=… SESSION_SECRETS=… DATA_ENCRYPTION_KEY=… ANALYTICS_SALT=… PUBLIC_BASE_URL=https://…
+#   3) fly deploy --config infra/fly/web.toml --dockerfile Dockerfile --build-target web
+app = "histor-web"
+primary_region = "mad"
+
+[build]
+  dockerfile = "../../Dockerfile"
+  build-target = "web"
+
+[env]
+  NODE_ENV = "production"
+  HISTOR_SERVICE = "web"
+
+[http_service]
+  internal_port = 3000
+  force_https = true
+  auto_stop_machines = "suspend"
+  auto_start_machines = true
+  min_machines_running = 1
+
+  [[http_service.checks]]
+    grace_period = "20s"
+    interval = "30s"
+    method = "GET"
+    path = "/api/health"
+    timeout = "5s"
+
+[[vm]]
+  size = "shared-cpu-1x"
+  memory = "512mb"

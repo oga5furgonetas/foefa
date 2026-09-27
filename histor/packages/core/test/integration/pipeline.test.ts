@@ -3,10 +3,11 @@
  * normalización → agrupación → verificación → redacción → controles →
  * publicación → actualización. Comprueba que cada escenario acaba donde debe.
  */
-import { and, desc, eq, inArray } from 'drizzle-orm';
+import { and, desc, eq, inArray, isNotNull } from 'drizzle-orm';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import type { Db } from '../../src/db/client';
-import { articles, articleVersions, contradictions, corrections, qualityReports, sources, stories, verifications } from '../../src/db/schema';
+import { articles, articleVersions, contradictions, corrections, qualityReports, rawItems, sources, stories, verifications } from '../../src/db/schema';
+import { maintenance } from '../../src/pipeline/run';
 import { purgeDemo, seedDemo } from '../../src/demo/seed';
 import { done, freshDb } from './db';
 
@@ -178,6 +179,13 @@ describe('pipeline DEMO de extremo a extremo', () => {
       if (/entre ellas|including|darunter|dont|tra cui|entre elas/.test(a.subheadline!)) expect(n).toBeGreaterThan(4);
       else expect(listed).toBe(n);
     }
+  });
+
+  it('mantenimiento: poda el texto de las fuentes a los 30 días (se guardó solo para contrastar)', async () => {
+    const r = await maintenance(db, new Date(Date.now() + 40 * 86400000));
+    expect(r.prunedTexts).toBeGreaterThan(0);
+    const left = await db.select({ id: rawItems.id }).from(rawItems).where(isNotNull(rawItems.contentText));
+    expect(left).toHaveLength(0);
   });
 
   it('demo:purge elimina todo lo DEMO sin tocar la referencia', async () => {

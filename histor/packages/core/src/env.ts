@@ -67,12 +67,11 @@ const schema = z.object({
   SENTRY_DSN: z.string().optional(),
   METRICS_TOKEN: z.string().optional(),
   LOG_LEVEL: z.string().default('info'),
-  // Almacenamiento S3 compatible (imágenes propias, copias)
+  // Almacenamiento S3 compatible (copias de seguridad: infra/backup.sh)
   S3_ENDPOINT: z.string().optional(),
   S3_BUCKET: z.string().optional(),
   S3_ACCESS_KEY_ID: z.string().optional(),
   S3_SECRET_ACCESS_KEY: z.string().optional(),
-  S3_PUBLIC_URL: z.string().optional(),
   // Datos legales del titular (placeholders visibles si faltan)
   LEGAL_ENTITY_NAME: z.string().optional(),
   LEGAL_ADDRESS: z.string().optional(),

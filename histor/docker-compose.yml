@@ -1,0 +1,46 @@
+# Histor en local o en un servidor propio:
+#   cp .env.example .env   (rellena al menos SESSION_SECRETS, DATA_ENCRYPTION_KEY, ANALYTICS_SALT)
+#   docker compose up -d --build
+#   docker compose run --rm worker node apps/worker/dist/cli.js seed
+#   docker compose run --rm worker node apps/worker/dist/cli.js create-admin
+# DEMO: DEMO_MODE=1 en .env y `... cli.js demo:seed`.
+services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: histor
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-histor}
+      POSTGRES_DB: histor
+    volumes: [pgdata:/var/lib/postgresql/data]
+    ports: ['127.0.0.1:5432:5432']
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U histor']
+      interval: 5s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    profiles: [redis]
+
+  web:
+    build: { context: ., target: web }
+    env_file: .env
+    environment:
+      DATABASE_URL: postgres://histor:${POSTGRES_PASSWORD:-histor}@db:5432/histor
+    ports: ['3000:3000']
+    depends_on:
+      db: { condition: service_healthy }
+      worker: { condition: service_started }
+    restart: unless-stopped
+
+  worker:
+    build: { context: ., target: worker }
+    env_file: .env
+    environment:
+      DATABASE_URL: postgres://histor:${POSTGRES_PASSWORD:-histor}@db:5432/histor
+    depends_on:
+      db: { condition: service_healthy }
+    restart: unless-stopped
+
+volumes:
+  pgdata:

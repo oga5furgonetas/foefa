@@ -1,0 +1,28 @@
+# Plantilla de Fly.io para el worker (sin HTTP público; salud interna en :8081).
+#   fly deploy --config infra/fly/worker.toml
+# Usa los mismos secretos que la web (DATABASE_URL, SESSION_SECRETS, DATA_ENCRYPTION_KEY, ANALYTICS_SALT,
+# PUBLIC_BASE_URL) y además INGEST_ENABLED=1 cuando quieras leer fuentes reales.
+app = "histor-worker"
+primary_region = "mad"
+
+[build]
+  dockerfile = "../../Dockerfile"
+  build-target = "worker"
+
+[env]
+  NODE_ENV = "production"
+  HISTOR_SERVICE = "worker"
+  PIPELINE_INTERVAL_SEC = "60"
+
+[[vm]]
+  size = "shared-cpu-1x"
+  memory = "512mb"
+
+[checks]
+  [checks.worker]
+    type = "http"
+    port = 8081
+    path = "/health"
+    interval = "60s"
+    timeout = "5s"
+    grace_period = "60s"

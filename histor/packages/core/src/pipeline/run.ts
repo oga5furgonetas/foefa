@@ -3,7 +3,7 @@
  * FUENTES → DISCOVERY → NORMALIZE → CLUSTER → VERIFY → EDITORIAL → QUALITY → PUBLISH → (MONITOR vía next_check_at)
  * Cada etapa deja su registro en pipeline_runs (para el panel y las métricas).
  */
-import { eq, lt, sql } from 'drizzle-orm';
+import { and, eq, inArray, isNotNull, lt } from 'drizzle-orm';
 import type { Db } from '../db/client';
 import { analyticsEvents, jobs, pipelineRuns, rawItems } from '../db/schema';
 import type { PoliteFetcher } from '../ingest/fetcher';
@@ -84,12 +84,12 @@ export async function maintenance(db: Db, now = new Date()): Promise<{ prunedTex
   const t = await db
     .update(rawItems)
     .set({ contentText: null })
-    .where(sql`${rawItems.contentText} IS NOT NULL AND ${rawItems.fetchedAt} < ${new Date(now.getTime() - 30 * 86400000)}`)
+    .where(and(isNotNull(rawItems.contentText), lt(rawItems.fetchedAt, new Date(now.getTime() - 30 * 86400000))))
     .returning({ id: rawItems.id });
   const e = await db.delete(analyticsEvents).where(lt(analyticsEvents.ts, new Date(now.getTime() - 400 * 86400000))).returning({ id: analyticsEvents.id });
   const j = await db
     .delete(jobs)
-    .where(sql`${jobs.status} IN ('done','failed') AND ${jobs.createdAt} < ${new Date(now.getTime() - 14 * 86400000)}`)
+    .where(and(inArray(jobs.status, ['done', 'failed']), lt(jobs.createdAt, new Date(now.getTime() - 14 * 86400000))))
     .returning({ id: jobs.id });
   return { prunedTexts: t.length, prunedEvents: e.length, prunedJobs: j.length };
 }
