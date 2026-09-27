@@ -260,6 +260,9 @@ Dani no se creía el 0. Estudio con datos reales (scratchpad de la sesión):
   apostar desde ahí y no cuenta para el aprendizaje.
 - Gotcha: el tope de ráfaga daba 49,999999 en vez de 50 (coma flotante) y
   bloqueaba una lectura; ahora se redondea.
+- Gotcha: esas 6 lecturas de la mañana gastaron el tope DIARIO de OddsPapi
+  (8), así que ni «Buscar ahora» leía sus casas hasta el día siguiente. Ahora
+  «Buscar ahora» se salta el tope del día (no el del mes ni lo que diga la API).
 - Gotcha: para elegir torneos NO fiarse del nombre de la liga en `eventos`:
   API-Football guarda «Premier League» o «Ligue 1» de Egipto o Argelia con el
   mismo nombre. Si el calendario conoce el torneo, manda el calendario.

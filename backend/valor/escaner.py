@@ -268,7 +268,11 @@ class Escaner:
 
     def _toca(self, f: Fuente, p: Presupuesto, ahora: datetime,
               coste: Optional[int] = None, falta: Optional[timedelta] = None, forzar: bool = False) -> bool:
-        """`forzar` («Buscar ahora»): sin esperar su turno, pero sin pasarse del cupo."""
+        """`forzar` («Buscar ahora», una vez cada 10 min como mucho): sin esperar
+        su turno ni el tope del día, pero NUNCA por encima del cupo del periodo
+        (el mes) ni de lo que diga la API que queda. El 27-09 seis lecturas de
+        la mañana gastaron el tope del día de OddsPapi y, sin esto, las casas de
+        Dani no se habrían vuelto a leer hasta el día siguiente."""
         coste = p.coste_vuelta if coste is None else coste
         if coste <= 0:
             return False
@@ -278,7 +282,7 @@ class Escaner:
         if self._usado(f, ahora - p.periodo) + coste > p.llamadas:
             return False
         trozo, tope = p.tope_rafaga()
-        if self._usado(f, ahora - trozo) + coste > tope:
+        if not forzar and self._usado(f, ahora - trozo) + coste > tope:
             return False
         # Lo que dice la propia API que queda manda sobre nuestra cuenta.
         cupo = self.estado.get(f.nombre, {}).get("cupo_restante")

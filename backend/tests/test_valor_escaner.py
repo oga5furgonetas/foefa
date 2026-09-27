@@ -392,8 +392,15 @@ def test_buscar_ahora_no_espera_su_turno_pero_respeta_el_cupo(tmp_path):
     assert esc.vuelta(AHORA + timedelta(minutes=10)) is None               # no le toca
     assert esc.vuelta(AHORA + timedelta(minutes=10), forzar=True) is not None
     assert f.lecturas == 2
-    # Ni forzando se pasa del tope de la hora (75 > 50).
-    assert esc.vuelta(AHORA + timedelta(minutes=20), forzar=True) is None and f.lecturas == 2
+    # Sola, ya no leería: el tope de la hora (50) está gastado...
+    assert esc.vuelta(AHORA + timedelta(minutes=20)) is None
+    # ...pero pedida a mano, sí: el tope del día/hora no frena «Buscar ahora».
+    assert esc.vuelta(AHORA + timedelta(minutes=20), forzar=True) is not None and f.lecturas == 3
+    # El del periodo, en cambio, nunca: 16 lecturas de 25 = 400.
+    for i in range(13):
+        esc.vuelta(AHORA + timedelta(minutes=30 + i), forzar=True)
+    assert f.lecturas == 16
+    assert esc.vuelta(AHORA + timedelta(minutes=50), forzar=True) is None and f.lecturas == 16
 
 
 def test_el_error_de_una_fuente_queda_guardado_tras_reiniciar(tmp_path):
