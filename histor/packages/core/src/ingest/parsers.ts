@@ -51,10 +51,29 @@ function text(v: unknown): string {
  * es formato de su web, no parte del hecho, y estorba para agrupar y redactar.
  */
 function cleanTitle(s: string): string {
-  return clean(s).replace(LIVE_PREFIX, '').trim();
+  return clean(s).replace(LIVE_PREFIX, '').replace(TIME_PREFIX, '').trim();
 }
 
-const LIVE_PREFIX = /^(live(?:blog|ticker| updates?)?|en directo|en vivo|directo|en direct|direct|live-ticker|ticker|diretta|in diretta|ao vivo|minuto a minuto)\s*[:|–—-]\s*/i;
+const LIVE_PREFIX = /^(live(?:blog|ticker| updates?)?|en directo|en vivo|directo|en direct|direct|live-ticker|ticker|diretta|in diretta|ao vivo|minuto a minuto)\s*[:|,–—-]\s*/i;
+/** Hora de una entrada de directo al principio del titular: «16h Papa…», «14:05 …», «14.30 Uhr …». */
+const TIME_PREFIX = /^\d{1,2}(?:h\d{0,2}|[:.]\d{2}(?:\s?Uhr)?|\s?Uhr)\s+/i;
+
+/** Coletilla de enlace al final del resumen del feed: «… Leer», «Read more», «Weiterlesen»… */
+const READ_MORE = /\s*(?:\[?(?:…|\.\.\.)\]?\s*)?(?:leer(?: más)?|seguir leyendo|read more|continue reading|weiterlesen|mehr lesen|lire la suite|leggi(?: tutto)?|continua a leggere|leia mais|saiba mais|ler mais)\.?\s*$/i;
+
+/**
+ * Resumen del feed limpio y cortado en frontera de frase: muchos feeds lo truncan
+ * («…el subdelegado del Gobierno en Sevilla, Francisco Toscano…») y esa frase
+ * a medias acababa como afirmación.
+ */
+function summaryText(s: string, max = 600): string {
+  const t = clean(s).replace(READ_MORE, '').trim();
+  const truncated = t.length > max || /(…|\.\.\.)\s*$/.test(t);
+  if (!truncated) return t;
+  const head = t.slice(0, max);
+  const cut = Math.max(head.lastIndexOf('. '), head.lastIndexOf('! '), head.lastIndexOf('? '));
+  return cut > 40 ? head.slice(0, cut + 1) : truncate(t, max);
+}
 
 function clean(s: string): string {
   // Cada párrafo acaba en frase: «…governments</p><p>Two giant…» no puede quedar «governments Two giant».
@@ -118,7 +137,7 @@ export function parseRss(body: string): ParsedItem[] {
         guid: text(it.guid) || null,
         url: link.trim(),
         title,
-        summary: desc ? truncate(clean(desc), 600) : null,
+        summary: desc ? summaryText(desc) : null,
         contentText: content ? truncate(clean(content), MAX_TEXT) : null,
         author: clean(text(it['dc:creator'] ?? it.author)) || null,
         publishedAt: parseFeedDate(text(it.pubDate ?? it['dc:date'])),
@@ -147,7 +166,7 @@ export function parseAtom(body: string, baseUrl?: string): ParsedItem[] {
         guid: text(e.id) || null,
         url: href,
         title,
-        summary: text(e.summary) ? truncate(clean(text(e.summary)), 600) : null,
+        summary: text(e.summary) ? summaryText(text(e.summary)) : null,
         contentText: content ? truncate(clean(content), MAX_TEXT) : null,
         author: clean(text(e.author?.name)) || null,
         publishedAt: parseFeedDate(text(e.published) || text(e.updated)),
@@ -171,7 +190,7 @@ export function parseJsonFeed(body: string): ParsedItem[] {
         guid: it.id != null ? String(it.id) : null,
         url,
         title,
-        summary: it.summary ? truncate(clean(it.summary), 600) : null,
+        summary: it.summary ? summaryText(it.summary) : null,
         contentText: content ? truncate(clean(content), MAX_TEXT) : null,
         author: it.authors?.[0]?.name ?? it.author?.name ?? null,
         publishedAt: parseFeedDate(it.date_published ?? it.date_modified),
@@ -271,7 +290,7 @@ export function parseHtmlMeta(html: string, url: string): ParsedItem | null {
     guid: url,
     url: meta('og:url') || url,
     title: cleanTitle(title),
-    summary: desc ? truncate(clean(desc), 600) : null,
+    summary: desc ? summaryText(desc) : null,
     contentText: null,
     author: typeof ld?.author === 'object' ? (ld.author.name ?? null) : (meta('author') || null),
     publishedAt: parseFeedDate(ld?.datePublished ?? meta('article:published_time')),

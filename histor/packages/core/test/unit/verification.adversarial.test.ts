@@ -72,6 +72,24 @@ describe('respaldo: mismos protagonistas no es lo mismo afirmado', () => {
   });
 });
 
+describe('entre idiomas, compartir solo el lugar no es respaldo', () => {
+  // Visto el 27-09-2026: «Green flood alert in Ukraine» salió verificada con 3 fuentes que hablaban de Lavrov.
+  it('una alerta de inundación en Ucrania no la confirman noticias sobre Lavrov y Ucrania', () => {
+    const f24 = source('France Vingt', 'reputable_media', { countryCode: 'FR' });
+    const rfi = source('Radio Monde', 'reputable_media', { countryCode: 'FR', ownershipGroup: 'autre' });
+    const alert = source('Alertas Globales', 'official', { countryCode: null });
+    const items = [
+      item(f24, "La Russie accuse l'Europe de s'opposer aux projets de paix en Ukraine", "Le chef de la diplomatie russe, Sergueï Lavrov, a accusé samedi l'Europe de s'opposer systématiquement aux projets de paix en Ukraine.", { minutesAgo: 120 }),
+      item(rfi, "La Russie accuse l'Europe de «tout faire» contre les plans de paix en Ukraine", "Sergueï Lavrov a accusé samedi l'Europe de s'opposer aux projets de paix en Ukraine, à rebours selon lui de la position des Etats-Unis.", { minutesAgo: 100 }),
+      item(alert, 'Green flood alert in Ukraine', 'A flood started in Ukraine and lasted two days, the alert system reported.', { minutesAgo: 90 }),
+    ];
+    const a = run(items, [f24, rfi, alert]);
+    const flood = a.claims.filter((c) => /flood/i.test(c.text)).map((c) => a.assessments.find((x) => x.claimKey === c.key)!.status);
+    expect(flood.length).toBeGreaterThan(0);
+    expect(flood).not.toContain('supported');
+  });
+});
+
 describe('boletines oficiales y alertas automáticas (solo corroboran)', () => {
   // Visto con fuentes reales el 27-09-2026: el BOE publica ~380 disposiciones al día y
   // cada una acababa en portada («Resolución de 23 de septiembre de 2026, de la Secretaría…»).

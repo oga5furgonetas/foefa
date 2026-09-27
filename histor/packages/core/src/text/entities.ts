@@ -109,7 +109,8 @@ const SENTENCE_START_STOP = new Set(
 export function extractEntities(text: string, lang?: string | null): ExtractedEntity[] {
   const counts = new Map<string, ExtractedEntity>();
   const places = new Set(findPlaces(text).map((p) => fold(p.name)));
-  const tokens = text.match(/[\p{L}][\p{L}\p{N}'’.\-&]*|[.!?;:,«»“”"()]/gu) ?? [];
+  // El salto de línea (titular / resumen) también corta: si no, «…en Ukraine\nLe chef…» da «Ukraine Le».
+  const tokens = text.match(/[\p{L}][\p{L}\p{N}'’.\-&]*|[.!?;:,«»“”"()\n]/gu) ?? [];
   let i = 0;
   let prevPunct = true;
   while (i < tokens.length) {
@@ -117,7 +118,7 @@ export function extractEntities(text: string, lang?: string | null): ExtractedEn
     const isCap = /^\p{Lu}/u.test(tok) && tok.length > 1;
     const isAcronym = /^\p{Lu}{2,6}$/u.test(tok);
     if (!isCap) {
-      prevPunct = /^[.!?;:«“"(]$/.test(tok);
+      prevPunct = /^[.!?;:«“"(\n]$/.test(tok);
       i++;
       continue;
     }

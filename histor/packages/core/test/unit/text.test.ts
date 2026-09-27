@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { detectAttribution } from '../../src/text/attribution';
 import { extractDates, parseFeedDate } from '../../src/text/dates';
 import { extractEntities, findPlaces } from '../../src/text/entities';
+import { nonNewsReason } from '../../src/text/nonnews';
 import { detectLanguage } from '../../src/text/langdetect';
 import { detectModality } from '../../src/text/modality';
 import { slugify } from '../../src/text/normalize';
@@ -156,5 +157,30 @@ describe('similitud', () => {
     const b = termVector('Un sismo de magnitud 6,2 daña viviendas antiguas en el sur', 'es');
     const c = termVector('El Ayuntamiento aprueba los presupuestos municipales', 'es');
     expect(cosine(a, b)).toBeGreaterThan(cosine(a, c));
+  });
+});
+
+describe('entidades con titular y resumen en líneas distintas', () => {
+  it('el salto de línea corta la entidad («Ukraine\nLe chef» no es «Ukraine Le»)', () => {
+    const names = extractEntities("La Russie accuse l'Europe de s'opposer aux projets de paix en Ukraine\nLe chef de la diplomatie russe, Sergueï Lavrov, a accusé samedi l'Europe", 'fr').map((e) => e.name);
+    expect(names).not.toContain('Ukraine Le');
+    expect(names).toContain('Sergueï Lavrov');
+  });
+});
+
+describe('piezas que no son noticia (casos reales del 27-09-2026)', () => {
+  it('descarta opinión, viñetas, galerías, resúmenes y pódcast', () => {
+    expect(nonNewsReason('AfD-Wahlsiege: Viele von uns sind besorgt – aber darin liegt auch eine Chance - Kommentar', 'https://www.spiegel.de/politik/deutschland/afd-a-1')).not.toBeNull();
+    expect(nonNewsReason('Cartoons der Woche von Thomas Plaßmann, Klaus Stuttmann', 'https://www.spiegel.de/kultur/cartoons-a-2')).not.toBeNull();
+    expect(nonNewsReason('The week in pictures: Trump hosts Xi', 'https://www.france24.com/en/americas/20260927-the-week-in-pictures')).not.toBeNull();
+    expect(nonNewsReason('Germany news: VW to step up cost-cutting program', 'https://www.dw.com/en/germany-news-vw/live-79365190')).not.toBeNull();
+    expect(nonNewsReason('Espaço para queda dos juros vai se esgotando', 'https://www1.folha.uol.com.br/opiniao/2026/09/espaco.shtml')).not.toBeNull();
+    expect(nonNewsReason('La democrazia è viva', 'https://www.ansa.it/sito/podcast/la_scelta/2026/09/25/x.html')).not.toBeNull();
+  });
+  it('deja pasar las noticias, también las de blogs de la redacción', () => {
+    expect(nonNewsReason('Missão nipo-europeia se prepara para chegada a Mercúrio', 'https://www1.folha.uol.com.br/blogs/mensageiro-sideral/2026/09/missao.shtml')).toBeNull();
+    expect(nonNewsReason('Opinion poll shows Labour ahead', 'https://www.bbc.com/news/uk-politics-1')).toBeNull();
+    expect(nonNewsReason('Opinión: la amnistía y sus límites', 'https://x.test/espana/1')).not.toBeNull();
+    expect(nonNewsReason('Trump lehnt Irans Vorschlag zur Öffnung der Straße von Hormus ab', 'https://www.tagesschau.de/ausland/iran-100.html')).toBeNull();
   });
 });

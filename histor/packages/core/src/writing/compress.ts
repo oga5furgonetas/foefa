@@ -10,7 +10,7 @@ import { words } from '../text/tokenize';
 const ATTRIBUTION_TAIL =
   /[,;]?\s*(según|de acuerdo con|informó|ha informado|informa|confirmó|ha confirmado|explicó|señaló|indicó|dijo|according to|said|reported|reports|confirmed|laut|berichtete|teilte .* mit|selon|a indiqué|a annoncé|secondo|ha riferito|segundo|informou|disse)\b[^.;]*$/i;
 
-export function compressClaim(text: string, maxWords = 22): string | null {
+export function compressClaim(text: string, maxWords = 22, opts: { commaCut?: boolean } = {}): string | null {
   let s = text.replace(/\s+/g, ' ').trim().replace(/[.。]+$/, '');
   // Paréntesis explicativos
   s = s.replace(/\s*\([^)]{0,80}\)/g, '');
@@ -28,6 +28,9 @@ export function compressClaim(text: string, maxWords = 22): string | null {
       if (n >= 8 && n <= maxWords && !DANGLING.test(head)) return clean(head);
     }
   }
+  // Titulares: nada de cortar por comas («Au Maroc, un an après le mouvement de la gen Z»
+  // era el principio de un titular de Le Monde). Si no cabe entero, se usa otra afirmación.
+  if (opts.commaCut === false) return null;
   // Empieza por una subordinada («While in Washington…, Xi announced…»): lo que va delante
   // de la coma no tiene verbo principal; se queda la oración principal, si cabe.
   const intro = INTRO.test(s);
@@ -44,13 +47,17 @@ export function compressClaim(text: string, maxWords = 22): string | null {
       const head = ws.slice(0, i).join(' ').replace(/,$/, '');
       // Con subordinada inicial, quedarse solo con ella deja una idea a medias.
       if (intro && !head.includes(', ')) continue;
-      // Tampoco si termina en una palabra que pide complemento: «…, warnen aber davor».
-      if (DANGLING.test(head)) continue;
+      // Tampoco si termina en una palabra que pide complemento: «…, warnen aber davor»,
+      // ni dentro de una oración de relativo («Le jeune coureur, qui est déjà monté sur le podium»).
+      if (DANGLING.test(head) || OPEN_RELATIVE.test(head)) continue;
       if (words(head).length >= 8) return clean(head);
     }
   }
   return null;
 }
+
+/** Lo último es una oración de relativo abierta tras coma: falta el predicado principal. */
+const OPEN_RELATIVE = /,\s(qui|que|which|who|whom|whose|der|die|das|welche|welcher|welches|che|cui|quien|quienes|cuyo|cuya|cuyos|cuyas|donde|onde|où|dont)\s[^,]*$/i;
 
 /** Final que deja la frase colgando (preposición, conjunción o adverbio que anuncia lo que sigue). */
 const DANGLING =

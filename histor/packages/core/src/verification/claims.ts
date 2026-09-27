@@ -41,6 +41,8 @@ export function extractClaims(item: VItem): VClaim[] {
     const clean = text.replace(/\s+/g, ' ').trim();
     const wc = words(clean).length;
     if (wc < 4 || wc > 70) return;
+    // Frase truncada por el feed («…Francisco Toscano…») o que anuncia lo que sigue («declaró:»): no afirma nada completo.
+    if (/(…|\.\.\.|:)$/.test(clean)) return;
     const norm = clean.toLowerCase();
     if (seen.has(norm)) return;
     const ents = extractEntities(clean, lang).filter((e) => e.type !== 'other' || e.name.split(' ').length > 1);

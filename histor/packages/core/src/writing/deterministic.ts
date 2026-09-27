@@ -74,7 +74,7 @@ export function writeDeterministic(fs: FactSheet, opts: WriteOptions = {}): Draf
   if (!headline) {
     const candidates = [...pool.filter((c) => c.isHeadline && c.key !== leadClaim?.key), ...(leadClaim ? [leadClaim] : [])];
     for (const c of candidates) {
-      const short = compressClaim(c.text, 16);
+      const short = compressClaim(c.text, 16, { commaCut: false });
       if (!short) continue;
       const h = developing ? stripPeriod(P.according(short, listJoin(lang, c.attribution.slice(0, 2)))) : short;
       if (h.length <= 120) {
@@ -204,6 +204,15 @@ export function writeDeterministic(fs: FactSheet, opts: WriteOptions = {}): Draf
         : null;
   if (subheadline) boilerplate.push(subheadline);
   const timeline = fs.timeline.map((e) => ({ at: e.at.toISOString(), text: `${P.timelineItem(e.source)}` }));
+
+  // La entradilla no repite el titular: si coinciden, se usa la siguiente frase con respaldo.
+  const norm = (x: string) => x.toLowerCase().replace(/[^\p{L}\p{N}]+/gu, ' ').trim();
+  if (norm(summary) === norm(headline)) {
+    const next = body
+      .flatMap((b) => (b.type === 'p' ? [b] : b.type === 'list' ? b.items : []))
+      .find((x) => x.claimIds.length > 0 && norm(x.text) !== norm(headline));
+    if (next) summary = next.text;
+  }
 
   return {
     language: lang,

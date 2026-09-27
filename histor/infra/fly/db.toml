@@ -1,0 +1,23 @@
+# PostgreSQL de Histor en Fly (una máquina + volumen, solo red privada).
+#   desde histor/infra/fly/db:  fly deploy . --config ../db.toml
+# Secretos: POSTGRES_PASSWORD. Conexión desde web y worker:
+#   postgres://histor:<contraseña>@histor-db.internal:5432/histor
+# Copias: instantáneas diarias del volumen (retención 14 días) + pg_dump diario en /data/backups.
+app = "histor-db"
+primary_region = "fra"
+
+[build]
+  dockerfile = "db/Dockerfile"
+
+[env]
+  POSTGRES_USER = "histor"
+  POSTGRES_DB = "histor"
+  BACKUP_KEEP_DAYS = "14"
+
+[[mounts]]
+  source = "histor_pgdata"
+  destination = "/data"
+
+[[vm]]
+  size = "shared-cpu-1x"
+  memory = "512mb"

@@ -111,7 +111,9 @@ export async function clusterItems(db: Db, settings: EditorialSettings, opts: { 
     }
     const full = [it.title, it.summary, it.contentText].filter(Boolean).join(' ');
     const vec = termVector(full, it.language ?? undefined);
-    const ents = it.entities.filter((e) => e.type !== 'other' || e.name.includes(' ')).map((e) => entityKey(e.name));
+    // Sin topónimos: compartir «Ucrania» o «Marruecos» no hace que dos hechos sean el mismo
+    // (el lugar ya cuenta aparte, con su peso). Visto el 27-09-2026: Lavrov + una alerta de inundación.
+    const ents = it.entities.filter((e) => e.type !== 'place' && (e.type !== 'other' || e.name.includes(' '))).map((e) => entityKey(e.name));
     const places = (((it.meta as { places?: VPlace[] })?.places ?? []) as VPlace[]).map(placeKey);
     const at = it.publishedAt ?? it.fetchedAt;
     let best: { c: Candidate; sim: number } | null = null;

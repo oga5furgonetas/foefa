@@ -33,7 +33,20 @@
 8. **Integraciones opcionales:** Stripe (y su webhook), Resend, VAPID, Google/Apple,
    IA, Sentry, `METRICS_TOKEN`.
 
-### Con Fly.io
+### Con Fly.io, en un paso (recomendado)
+
+`infra/fly/desplegar.sh` (desde `histor/`) crea o reutiliza las tres apps propias
+(`histor-db` con PostgreSQL y volumen de 3 GB con instantáneas diarias de 14 días,
+`histor-worker` y `histor-web`, región `fra`), carga los secretos de
+`~/.histor-secretos-prod.env` sin mostrarlos, despliega, ejecuta `seed`,
+`create-admin` (y borra `ADMIN_PASSWORD`), `sources:check --update` y `check:env`,
+y comprueba salud, portadas, robots y sitemaps. Se niega a tocar apps que no se
+llamen `histor-*`. Coste orientativo: ~10–12 USD/mes (tres máquinas de 512 MB).
+
+La base propia hace además un `pg_dump` diario a las 03:17 UTC en `/data/backups`
+(14 días). Descargar una copia: `fly ssh sftp get -a histor-db /data/backups/<archivo>.dump`.
+
+### Con Fly.io, a mano
 
 ```bash
 fly apps create <tu-app-web> && fly apps create <tu-app-worker>     # nombres propios

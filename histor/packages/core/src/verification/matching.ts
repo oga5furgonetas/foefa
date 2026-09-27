@@ -91,6 +91,9 @@ export function matchEvidence(
     // Lo que se AFIRMA (sin nombres, lugares ni cifras): «negocia comprar terrenos» ≠ «estudia abrir».
     const nameTerms = new Set(Object.keys(termVector([...extractEntities(c.text, c.language).map((e) => e.name), ...findPlaces(c.text).map((x) => x.name)].join(' '), c.language)));
     const cPred = predicateOf(cVec, nameTerms);
+    // Protagonistas que no son lugares: entre idiomas, compartir solo «Ucrania» no respalda nada.
+    const placeEnts = new Set(findPlaces(c.text).map((x) => entityKey(x.name)));
+    const coreEnts = c.entities.filter((e) => !placeEnts.has(e));
     const cQuoteKey = c.quote ? quoteKey(c.quote.text) : null;
     for (const p of profiles.values()) {
       if (p.item.id === c.itemId) continue;
@@ -229,8 +232,12 @@ export function matchEvidence(
         if (entCov === 0 && (numRatio ?? 0) === 0) score *= 0.5;
       } else {
         // Entre idiomas: entidades, cifras y lugares son lo que viaja.
-        const anchor = (entCov ?? 0) > 0 || (numRatio ?? 0) > 0;
-        score = anchor ? 0.6 * (entCov ?? 0.3) + 0.25 * (numRatio ?? 0.4) + 0.15 * (placeAgree ?? 0.4) : 0;
+        let coreCov = coreEnts.length ? coreEnts.filter((e) => entityMatches(e, p.entityKeys)).length / coreEnts.length : null;
+        // La misma cifra en el mismo lugar ancla el hecho aunque el nombre cambie de idioma
+        // («120 exhibitors in Madrid» / «120 expositores en Madrid»); el lugar solo, no.
+        if ((numRatio ?? 0) > 0 && (placeAgree ?? 0) > 0) coreCov = Math.max(coreCov ?? 0, 0.5);
+        const anchor = (coreCov ?? 0) > 0 || (numRatio ?? 0) > 0;
+        score = anchor ? 0.6 * (coreCov ?? 0.3) + 0.25 * (numRatio ?? 0.4) + 0.15 * (placeAgree ?? 0.4) : 0;
       }
       if (numRatio === 0 && unitNums.length) score *= 0.6; // no confirma las cifras
       // Compartir protagonistas y lugar no basta: sin cifras que coincidan, la otra pieza

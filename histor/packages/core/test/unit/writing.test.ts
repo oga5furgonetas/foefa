@@ -160,6 +160,15 @@ describe('utilidades legales', () => {
   });
 });
 
+describe('entradilla distinta del titular', () => {
+  it('si la primera frase repite el titular, la entradilla usa la siguiente', () => {
+    const { fs } = granadaStory();
+    const d = writeDeterministic(fs, { countryCode: 'ES' })!;
+    const n = (x: string) => x.toLowerCase().replace(/[^\p{L}\p{N}]+/gu, ' ').trim();
+    expect(n(d.summary)).not.toBe(n(d.headline));
+  });
+});
+
 describe('plantilla de terremotos (dato estructurado de una fuente oficial)', () => {
   // Visto con datos reales el 27-09-2026: «USGS registró a las 26 de septiembre a las 11:01…».
   function quake(lang: string) {
@@ -224,5 +233,37 @@ describe('titulares reales mal cortados o con etiquetas (27-09-2026)', () => {
     expect(parseRss(rss('Liveticker: Bundestag stimmt ab'))[0].title).toBe('Bundestag stimmt ab');
     // «Live» como palabra del titular no se toca.
     expect(parseRss(rss('Live Aid veterans reunite in London'))[0].title).toBe('Live Aid veterans reunite in London');
+  });
+});
+
+describe('más casos reales del 27-09-2026 (Le Monde, franceinfo, RTP, El Mundo, Europa Press)', () => {
+  const rss = (title: string, desc = '') => `<?xml version="1.0"?><rss version="2.0"><channel><item><title>${title}</title><link>https://x.test/a</link><description><![CDATA[${desc}]]></description></item></channel></rss>`;
+
+  it('quita «EN DIRECT,» y la hora de las entradas de directo', () => {
+    expect(parseRss(rss('EN DIRECT, Mondiaux de cyclisme : les coureurs entrent dans Montréal'))[0].title).toBe('Mondiaux de cyclisme : les coureurs entrent dans Montréal');
+    expect(parseRss(rss('16h Papa fala de eutanásia numa visita a doentes em França'))[0].title).toBe('Papa fala de eutanásia numa visita a doentes em França');
+    expect(parseRss(rss('14.30 Uhr Bundestag stimmt ab'))[0].title).toBe('Bundestag stimmt ab');
+    // Un número que forma parte del titular no se toca.
+    expect(parseRss(rss('5 claves para entender la cumbre'))[0].title).toBe('5 claves para entender la cumbre');
+  });
+
+  it('el resumen pierde el «Leer» final y la frase que el feed dejó a medias', () => {
+    expect(parseRss(rss('Detenido tras matar a su pareja', 'El agresor, de 56 años, se entrega tras la intervención de la Guardia Civil Leer'))[0].summary).toBe('El agresor, de 56 años, se entrega tras la intervención de la Guardia Civil');
+    const cut = parseRss(rss('Detenido el atrincherado', 'La Guardia Civil ha detenido este domingo al hombre de 56 años. Al respecto, el subdelegado del Gobierno en Sevilla, Francisco Toscano…'))[0].summary;
+    expect(cut).toBe('La Guardia Civil ha detenido este domingo al hombre de 56 años.');
+  });
+
+  it('una frase truncada o que anuncia lo que sigue no es una afirmación', () => {
+    const s = source('Agencia Uno', 'wire_agency');
+    const it = item(s, 'La Guardia Civil detiene al hombre atrincherado en La Campana', 'La Guardia Civil ha detenido al hombre de 56 años atrincherado en La Campana. Al respecto, el subdelegado del Gobierno en Sevilla, Francisco Toscano… El alcalde declaró:');
+    const texts = run([it], [s]).claims.map((c) => c.text);
+    expect(texts.some((t) => /Toscano/.test(t))).toBe(false);
+    expect(texts.some((t) => /declaró:$/.test(t))).toBe(false);
+  });
+
+  it('en titulares no se corta por comas; en el cuerpo, nunca dentro de una oración de relativo', () => {
+    expect(compressClaim('Au Maroc, un an après le mouvement de la « gen Z », des centaines de détenus et une chape de plomb sur le pays', 16, { commaCut: false })).toBeNull();
+    const s = 'Le jeune coureur français, qui est déjà monté sur le podium du contre-la-montre, rêve de titre mondial sur la course en ligne dimanche, à 20 ans seulement';
+    expect(compressClaim(s, 16) ?? '').not.toMatch(/contre-la-montre$/);
   });
 });

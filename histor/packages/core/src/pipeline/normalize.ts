@@ -10,6 +10,7 @@ import { detectAttribution } from '../text/attribution';
 import { extractDates } from '../text/dates';
 import { extractEntities, findPlaces, type PlaceMatch } from '../text/entities';
 import { detectLanguage } from '../text/langdetect';
+import { nonNewsReason } from '../text/nonnews';
 import { minhash } from '../text/similarity';
 import type { VPlace } from '../verification/types';
 import { classify } from './classify';
@@ -64,6 +65,12 @@ export async function normalizeNewItems(db: Db, opts: { limit?: number } = {}): 
     const full = [r.title, r.summary, r.contentText].filter(Boolean).join('\n');
     if (!src || r.title.trim().length < 8) {
       await db.update(rawItems).set({ status: 'discarded', discardReason: 'sin título útil' }).where(eq(rawItems.id, r.id));
+      discarded++;
+      continue;
+    }
+    const notNews = nonNewsReason(r.title, r.url);
+    if (notNews) {
+      await db.update(rawItems).set({ status: 'discarded', discardReason: notNews }).where(eq(rawItems.id, r.id));
       discarded++;
       continue;
     }
