@@ -496,3 +496,17 @@ def test_oddspapi_turna_los_deportes(tmp_path):
     # «Buscar ahora»: las dos.
     assert esc._torneos_oddspapi(f, AHORA, forzar=True, vuelta_n=0)[0] == ["31", "109", "555", "14133", "264", "141"]
     assert f.peticiones_por_lectura(6) == 4
+
+
+
+def test_de_tenis_y_esports_solo_los_mas_activos(tmp_path):
+    from valor.fuentes.oddspapi import OddsPapi
+    esc = Escaner(Registro(str(tmp_path / "v.db")), 1000, fuentes={})
+    f = OddsPapi(clave="x", cruce=esc.cruce, torneos=[31])
+    f.descubiertos = {1000 + i: {"deporte": 12, "nombre": f"T{i}", "pronto": i, "futuros": 5} for i in range(1, 41)}
+    esc._calendario = {"americanfootball_nfl": [AHORA + timedelta(hours=3)]}
+    vistos = set()
+    for n in range(1, 20, 2):
+        vistos |= set(esc._torneos_oddspapi(f, AHORA, vuelta_n=n)[0])
+    # Los 15 con más partidos (del 40 al 26), y ninguno más.
+    assert vistos == {str(1000 + i) for i in range(26, 41)}

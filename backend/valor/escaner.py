@@ -223,6 +223,8 @@ class Escaner:
             ts = self._inicios(ahora, solo_futbol=isinstance(f, ApiFootball))
         return (min(ts) - ahora) if ts else None
 
+    DESCUBIERTOS_EN_TURNO = 15
+
     def _torneos_oddspapi(self, f: "OddsPapi", ahora: datetime, forzar: bool = False,
                           vuelta_n: int = 0) -> "tuple[List[str], Optional[timedelta]]":
         """Qué torneos lee OddsPapi en esta lectura (hasta 5 por petición).
@@ -236,7 +238,9 @@ class Escaner:
         resto = [t for t in pronto[TORNEOS_POR_PETICION:]]
         descubiertos = sorted(((d.get("pronto") or 0, t) for t, d in f.descubiertos.items() if d.get("pronto")),
                               reverse=True)
-        resto += [str(t) for _, t in descubiertos if str(t) not in elegidos]
+        # De tenis y esports, los 15 con más partidos pronto (3 tandas): con los
+        # 65 del 27-09, la vuelta entera por turnos habría tardado días.
+        resto += [str(t) for _, t in descubiertos if str(t) not in elegidos][:self.DESCUBIERTOS_EN_TURNO]
         resto += [str(t) for t in f.torneos
                   if t in OP_TORNEOS and not OP_TORNEOS[t][2] and str(t) not in elegidos and str(t) not in resto]
         tandas = [resto[i:i + TORNEOS_POR_PETICION] for i in range(0, len(resto), TORNEOS_POR_PETICION)]
