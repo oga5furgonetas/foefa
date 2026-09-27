@@ -289,7 +289,8 @@ def de_entorno(cruce: Cruce, cache: Optional[str]) -> OddsPapi:
     # Casino Barcelona no lo trae ninguna fuente. Lo que trae OddsPapi de cada
     # una (llamadas reales del 27-09): Gamdom, todo; Codere, sin el 1X2 del
     # fútbol; PokerStars ES, poco, y en la NFL con líneas de hándicap cruzadas
-    # (las filtra el detector). Por eso Gamdom va una lectura sí y otra no.
+    # (las filtra el detector). Las dos apuestas buenas del 27-09 y las 12
+    # «casi» de verdad fueron de Gamdom: va 4 de cada 6 lecturas.
     casas = [x.strip() for x in os.environ.get(
-        "ODDSPAPI_CASAS", "gamdom,codere.es,gamdom,pokerstars.es").split(",") if x.strip()]
+        "ODDSPAPI_CASAS", "gamdom,gamdom,codere.es,gamdom,gamdom,pokerstars.es").split(",") if x.strip()]
     return OddsPapi(torneos=torneos, casas=casas, cruce=cruce, cache=cache)

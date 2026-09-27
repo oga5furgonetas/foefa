@@ -271,6 +271,16 @@ Dani no se creía el 0. Estudio con datos reales (scratchpad de la sesión):
   OJO al medir: un script que no compruebe el deporte de cada mercado mezcla
   mercados de otros deportes y da desvíos falsos de 10-34 puntos (me pasó).
 - «Lo más cerca» enseña solo lo de la última lectura de cada fuente.
+- «Tus reglas» (Datos): Dani elige acierto mínimo (60/55/50 %) y cuota mínima
+  (1,70/1,60/1,50), con cuántas apuestas habrían salido en 24 h con lo leído
+  (recomendadas + «casi», un mínimo). Se guardan en `ajustes.reglas`; el
+  escáner las aplica en cada vuelta. Por defecto, las suyas (60 %, 1,70). El
+  resto de filtros (+2 %, datos, desvío, escalera, topes, freno) no se tocan.
+- Rotación de OddsPapi: Gamdom 4 de cada 6 lecturas, y «Buscar ahora» siempre
+  Gamdom (`ODDSPAPI_CASA_BUSCAR`): las dos apuestas del 27-09 y las 12 «casi»
+  buenas eran de Gamdom; PokerStars trae líneas cruzadas y Codere paga −11 %.
+- Push: la app tiene web push pero en producción no hay claves VAPID; avisos
+  al móvil de Valor pendientes de que Dani diga cómo (Telegram propio o push).
 - Gotcha: para elegir torneos NO fiarse del nombre de la liga en `eventos`:
   API-Football guarda «Premier League» o «Ligue 1» de Egipto o Argelia con el
   mismo nombre. Si el calendario conoce el torneo, manda el calendario.

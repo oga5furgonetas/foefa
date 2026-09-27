@@ -416,3 +416,41 @@ def test_el_error_de_una_fuente_queda_guardado_tras_reiniciar(tmp_path):
     nuevo.vuelta(AHORA + timedelta(minutes=5))
     assert "MemoryError" in nuevo.estado["falsa"]["error"]
     assert reg.db.execute("SELECT error FROM uso").fetchone()[0].startswith("MemoryError")
+
+
+
+def test_las_reglas_de_la_pantalla_mandan(tmp_path, monkeypatch):
+    """Por defecto, solo lo que sale 6 de cada 10 (60 %). Si Dani elige 50 %,
+    la de 55 % pasa a ser apuesta; el resto de filtros no cambia."""
+    monkeypatch.setenv("VALOR_PROB_MINIMA", "0.60")
+    reg = Registro(str(tmp_path / "v.db"))
+    esc = Escaner(reg, 6000, fuentes={})
+    # Pinnacle da al visitante ~55 %; Bet365 le paga 1,95 (EV ≈ +7 %).
+    _fuente_fija(esc, (4.20, 3.90, 1.75), 1.95)
+    r = esc.vuelta(AHORA)
+    assert r.oportunidades == [] and r.descartes["poca probabilidad de acertar"] == 1
+    assert len(r.casi) == 1
+    reg.pon_ajuste("reglas", {"prob_minima": 0.50, "cuota_minima": 1.70})
+    esc2 = Escaner(reg, 6000, fuentes={})
+    _fuente_fija(esc2, (4.20, 3.90, 1.75), 1.95)
+    (o,) = esc2.vuelta(AHORA + timedelta(minutes=5)).oportunidades
+    assert o.cuota == 1.95 and 0.50 <= o.prob_justa < 0.60
+
+
+def test_buscar_ahora_lee_gamdom(tmp_path, monkeypatch):
+    from valor.fuentes.oddspapi import OddsPapi
+    monkeypatch.delenv("ODDSPAPI_CASA_BUSCAR", raising=False)
+    reg = Registro(str(tmp_path / "v.db"))
+    esc = Escaner(reg, 1000, fuentes={})
+    leidas = []
+
+    class Espia(OddsPapi):
+        def leer(self, deportes):
+            leidas.append(self.casa_del_turno())
+            return Lectura(coste=2)
+    f = Espia(clave="x", cruce=esc.cruce, torneos=[31], casas=["codere.es", "pokerstars.es", "gamdom"])
+    esc.fuentes = {f: Presupuesto("oddspapi", 250, timedelta(days=30), 2, rapido=timedelta(minutes=60))}
+    esc._calendario, esc._calendario_de = {"americanfootball_nfl": [AHORA + timedelta(hours=2)]}, AHORA
+    esc.vuelta(AHORA)                                   # la que toca: la primera
+    esc.vuelta(AHORA + timedelta(minutes=5), forzar=True)
+    assert leidas == ["codere.es", "gamdom"]

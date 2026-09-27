@@ -245,3 +245,23 @@ def test_lo_mas_cerca_es_solo_lo_de_la_ultima_lectura(tmp_path):
     reg.db.execute("INSERT INTO uso VALUES ('oddspapi', ?, 2, NULL)",
                    ((datetime.now(timezone.utc) + timedelta(seconds=5)).isoformat(),))
     assert reg.casi_recientes() == []
+
+
+
+def test_simular_reglas_con_lo_leido(tmp_path):
+    """Cuántas habrían salido con otras reglas: con las recomendadas y las «casi»
+    de verdad, una vez cada una, sin tocar los demás filtros."""
+    reg = Registro(str(tmp_path / "v.db"))
+    reg.guarda_lectura([EV1], [])
+
+    def op(sel, cuota, p, ev, casi):
+        from valor.nucleo.modelo import Oportunidad
+        o = Oportunidad(EV1, "1x2", None, sel, "gamdom", cuota, p, 1 / p, ev, 0, ["pinnacle"], {}, 5)
+        reg.guarda_oportunidades([o], casi=casi)
+    op("local", 1.80, 0.61, 0.098, False)       # pasa con todo
+    op("empate", 1.95, 0.55, 0.07, True)        # solo con 55 % o menos
+    op("visitante", 2.10, 0.50, 0.05, True)     # solo con 50 %
+    op("local", 1.80, 0.61, 0.098, True)        # la misma que la primera (no cuenta dos veces)
+    sim = {(x["prob_minima"], x["cuota_minima"]): x["senales"] for x in reg.simula_reglas(
+        [(0.60, 1.70), (0.55, 1.70), (0.50, 1.70)])}
+    assert sim == {(0.60, 1.70): 1, (0.55, 1.70): 2, (0.50, 1.70): 3}

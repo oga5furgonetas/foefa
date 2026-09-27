@@ -171,6 +171,12 @@ test.describe('Valor, solo super-admin', () => {
       status: 200, contentType: 'application/json',
       body: JSON.stringify({ banca: 1000, items: new URL(route.request().url()).searchParams.get('vivo') ? [] : [OPORTUNIDAD, CADUCADA] }),
     }))
+    await page.route('**/api/valor/reglas', (route) => route.fulfill({
+      status: 200, contentType: 'application/json',
+      body: JSON.stringify({ actuales: { prob_minima: 0.6, cuota_minima: 1.7 }, por_defecto: { prob_minima: 0.6, cuota_minima: 1.7 },
+        elegidas: false, horas: 24, simulacion: [0.6, 0.55, 0.5].flatMap((p) => [1.7, 1.6, 1.5].map((c) => ({
+          prob_minima: p, cuota_minima: c, senales: Math.round((0.65 - p) * 100 + (1.75 - c) * 10) }))) }),
+    }))
     await page.route('**/api/valor/casi', (route) => route.fulfill({
       status: 200, contentType: 'application/json',
       body: JSON.stringify({ items: [{ ...OPORTUNIDAD, id: 9, casa: 'gamdom', local: 'Fresno State', visitante: 'Rice',
@@ -216,6 +222,16 @@ test.describe('Valor, solo super-admin', () => {
       await page.getByRole('button', { name: new RegExp(`^${pest}`) }).click()
     }
     await expect(page.getByText('Tus casas')).toBeVisible()
+    // Tus reglas: 3 × 3 con lo que habría salido, y la tuya marcada.
+    await expect(page.getByText('Tus reglas', { exact: true })).toBeVisible()
+    await expect(page.getByText('(la tuya)')).toBeVisible()
+    await expect(page.getByRole('button', { name: 'Usar estas' })).toBeDisabled()
+    // Con los datos de arriba: 60 % y 1,70 → 6; 50 % y 1,70 → 16.
+    await expect(page.getByRole('button', { name: '6', exact: true })).toHaveAttribute('aria-pressed', 'true')
+    await page.getByRole('button', { name: '16', exact: true }).click()
+    await expect(page.getByRole('button', { name: '16', exact: true })).toHaveAttribute('aria-pressed', 'true')
+    await expect(page.getByRole('button', { name: '6', exact: true })).toHaveAttribute('aria-pressed', 'false')
+    await expect(page.getByRole('button', { name: 'Usar estas' })).toBeEnabled()
     expect(new URL(page.url()).pathname).toBe('/panel/valor')
     expect(fallos, fallos.join(' | ')).toHaveLength(0)
   })

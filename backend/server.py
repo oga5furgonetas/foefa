@@ -42291,8 +42291,7 @@ async def valor_estado(_: dict = Depends(require_valor)):
             "freno_dia": round(freno, 2), "frenado": -hoy >= freno > 0,
             "freno_usado": round(max(0.0, -hoy) / freno, 4) if freno > 0 else None,
             "exposicion": expo, "uso": uso,
-            "cuota_minima": float(os.environ.get("VALOR_CUOTA_MINIMA", "1.70")),
-            "prob_minima": float(os.environ.get("VALOR_PROB_MINIMA", "0.60"))}
+            **_VALOR_REGLAS_POR_DEFECTO(), **(await _valor(lambda r: r.reglas()))}
 
 
 @api_router.get("/valor/oportunidades")
@@ -42312,6 +42311,40 @@ async def valor_historial(op_id: int, _: dict = Depends(require_valor)):
     if h is None:
         raise HTTPException(status_code=404, detail="Esa señal no existe")
     return h
+
+
+_VALOR_REGLAS_POR_DEFECTO = lambda: {  # noqa: E731
+    "prob_minima": float(os.environ.get("VALOR_PROB_MINIMA", "0.60")),
+    "cuota_minima": float(os.environ.get("VALOR_CUOTA_MINIMA", "1.70"))}
+_VALOR_PROBS = (0.60, 0.55, 0.50)
+_VALOR_CUOTAS = (1.70, 1.60, 1.50)
+
+
+@api_router.get("/valor/reglas")
+async def valor_reglas(_: dict = Depends(require_valor)):
+    """Las reglas que se usan (acierto y cuota mínimos) y cuántas apuestas
+    habrían salido en las últimas 24 h con cada combinación, con lo leído de
+    verdad. El resto de filtros (+2 % de ventaja, datos frescos, referencia,
+    desvío, escalera, topes de dinero) no se tocan desde aquí."""
+    combis = [(p, c) for p in _VALOR_PROBS for c in _VALOR_CUOTAS]
+
+    def leer(r):
+        return r.reglas(), r.simula_reglas(combis, 24)
+    suyas, sim = await _valor(leer)
+    return {"actuales": {**_VALOR_REGLAS_POR_DEFECTO(), **suyas}, "por_defecto": _VALOR_REGLAS_POR_DEFECTO(),
+            "elegidas": bool(suyas), "simulacion": sim, "horas": 24}
+
+
+@api_router.post("/valor/reglas")
+async def valor_pon_reglas(data: dict = Body(...), _: dict = Depends(require_valor)):
+    if data.get("por_defecto") is True:
+        await _valor(lambda r: r.pon_ajuste("reglas", {}))
+        return {"actuales": _VALOR_REGLAS_POR_DEFECTO()}
+    prob = _decimal(data.get("prob_minima"), "El acierto mínimo", minimo=0.40, maximo=0.80)
+    cuota = _decimal(data.get("cuota_minima"), "La cuota mínima", minimo=1.30, maximo=3.00)
+    valor = {"prob_minima": round(prob, 4), "cuota_minima": round(cuota, 2)}
+    await _valor(lambda r: r.pon_ajuste("reglas", valor))
+    return {"actuales": valor}
 
 
 @api_router.get("/valor/casi")

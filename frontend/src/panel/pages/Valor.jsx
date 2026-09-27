@@ -5,6 +5,7 @@ import {
   getValorEstado, getValorOportunidades, getValorSeguras, getValorApuestas,
   apuntarApuestaValor, apuntarApuestaValorAMano, liquidarApuestaValor, getValorAprendizaje,
   getValorHistorial, getValorCasas, guardarValorCasas, getValorCasi, buscarValorAhora,
+  getValorReglas, guardarValorReglas,
 } from '../api'
 import { useToast } from '../../lib/toast'
 
@@ -889,9 +890,107 @@ function TusCasas() {
   )
 }
 
-function Datos({ est }) {
+/* Tus reglas: el acierto y la cuota mínimos, con lo que HABRÍAN dado en las
+   últimas 24 h con lo leído de verdad (un mínimo). Lo demás no se toca desde
+   aquí: ventaja mínima +2 %, datos frescos, referencia, desvío, escalera, topes
+   de dinero y freno. La decisión es de Dani: por defecto, las suyas. */
+const PROBS = [[0.6, '60 %', 'pierdes unas 4 de cada 10'], [0.55, '55 %', 'pierdes unas 4-5 de cada 10'],
+  [0.5, '50 %', 'pierdes 1 de cada 2: más rachas malas']]
+const CUOTAS = [1.7, 1.6, 1.5]
+const igual = (a, b) => Math.abs(Number(a) - Number(b)) < 1e-6
+
+function TusReglas({ alCambiar }) {
+  const toast = useToast()
+  const [datos, setDatos] = useState(null)
+  const [sel, setSel] = useState(null)
+  const [guardando, setGuardando] = useState(false)
+
+  const cargar = useCallback(() => getValorReglas().then((r) => {
+    setDatos(r.data)
+    setSel(r.data.actuales)
+  }).catch(() => setDatos({ error: true })), [])
+  useEffect(() => { cargar() }, [cargar])
+
+  if (!datos) return <div className="card flex justify-center p-6 text-dark-400"><Loader2 className="animate-spin" /></div>
+  if (datos.error) return <div className="card p-4 text-[12.5px] text-dark-400">No se pudieron cargar tus reglas.</div>
+  const cuenta = (p, c) => lista(datos.simulacion).find((x) => igual(x.prob_minima, p) && igual(x.cuota_minima, c))?.senales ?? 0
+  const def = datos.por_defecto || {}
+  const cambiado = sel && (!igual(sel.prob_minima, datos.actuales.prob_minima) || !igual(sel.cuota_minima, datos.actuales.cuota_minima))
+
+  async function guardar(body) {
+    setGuardando(true)
+    try {
+      await guardarValorReglas(body)
+      toast.success('Guardado: se aplica desde la próxima búsqueda')
+      await cargar()
+      alCambiar()
+    } catch (err) {
+      toast.error(err?.response?.data?.detail || 'No se pudo guardar')
+    } finally {
+      setGuardando(false)
+    }
+  }
+
+  return (
+    <section className="card p-4">
+      <h2 className="text-[13px] font-semibold text-dark-100">Tus reglas</h2>
+      <p className="mt-0.5 text-[12px] leading-snug text-dark-400">
+        Cuántas apuestas habrían salido en las últimas {datos.horas ?? 24} h con cada combinación, con lo leído de verdad
+        (como mínimo). Lo demás no cambia: ventaja mínima +2 %, datos frescos, referencia, filtros de datos
+        cruzados, topes de dinero y freno.
+      </p>
+      <div className="mt-3 overflow-x-auto">
+        <table className="w-full text-[12.5px]">
+          <thead>
+            <tr className="text-left text-[11px] uppercase tracking-wider text-dark-500">
+              <th className="py-1.5 pr-2">Sale al menos</th>
+              {CUOTAS.map((c) => <th key={c} className="px-1 py-1.5 text-center">Cuota ≥ {cuota(c)}</th>)}
+            </tr>
+          </thead>
+          <tbody>
+            {PROBS.map(([p, txt, riesgo]) => (
+              <tr key={p} className="border-t border-dark-800/70">
+                <td className="py-1.5 pr-2">
+                  <div className="text-dark-100">{txt}{igual(p, def.prob_minima) && <span className="text-dark-500"> (la tuya)</span>}</div>
+                  <div className="text-[11px] text-dark-500">{riesgo}</div>
+                </td>
+                {CUOTAS.map((c) => {
+                  const on = sel && igual(sel.prob_minima, p) && igual(sel.cuota_minima, c)
+                  return (
+                    <td key={c} className="px-1 py-1.5 text-center">
+                      <button type="button" aria-pressed={on} onClick={() => setSel({ prob_minima: p, cuota_minima: c })}
+                              className={`w-full rounded-lg border px-2 py-1.5 tabular-nums transition-colors ${on
+                                ? 'border-brand-400/70 bg-brand-500/15 font-semibold text-dark-50' : 'border-dark-700 text-dark-300 hover:text-dark-100'}`}>
+                        {cuenta(p, c)}
+                      </button>
+                    </td>
+                  )
+                })}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+      <div className="mt-3 flex flex-wrap items-center gap-3">
+        <button type="button" disabled={!cambiado || guardando} onClick={() => guardar(sel)}
+                className="btn-primary flex items-center gap-1.5 px-4 py-2 text-[13px]">
+          {guardando && <Loader2 size={14} className="animate-spin" />} Usar estas
+        </button>
+        {datos.elegidas && (
+          <button type="button" disabled={guardando} onClick={() => guardar({ por_defecto: true })}
+                  className="text-[12.5px] text-dark-400 underline hover:text-dark-200">
+            Volver a las mías ({pctSin(def.prob_minima || 0.6)}, {cuota(def.cuota_minima || 1.7)})
+          </button>
+        )}
+      </div>
+    </section>
+  )
+}
+
+function Datos({ est, alCambiar }) {
   return (
     <div className="space-y-3">
+      <TusReglas alCambiar={alCambiar} />
       <SaludFuentes est={est} />
       <TusCasas />
       <p className="text-[11.5px] leading-relaxed text-dark-500">
@@ -1029,7 +1128,13 @@ export default function Valor() {
       {pestana === 'aprende' && (aprende
         ? <Aprendizaje datos={aprende} />
         : <div className="flex justify-center p-10 text-dark-400"><Loader2 className="animate-spin" /></div>)}
-      {pestana === 'datos' && <Datos est={est} />}
+      {pestana === 'datos' && <Datos est={est} alCambiar={carga} />}
+      {pestana === 'valor' && est.prob_minima != null && (
+        <div className="flex flex-wrap items-center gap-x-2 text-[12px] text-dark-500">
+          Tus reglas: sale al menos el {pctSin(est.prob_minima)} · cuota desde {cuota(est.cuota_minima)} · ventaja desde +2 %
+          <button type="button" onClick={() => setPestana('datos')} className="text-brand-300 underline">Cambiar</button>
+        </div>
+      )}
       {(pestana === 'valor' || pestana === 'vivo' || pestana === 'seguras') && (
         datos[pestana].length === 0
           ? <div className="card p-10 text-center text-[13px] text-dark-400">{VACIO[pestana]}</div>

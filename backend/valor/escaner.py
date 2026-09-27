@@ -330,6 +330,11 @@ class Escaner:
             if hasattr(f, "vueltas_previas"):
                 f.vueltas_previas = self.reg.db.execute(
                     "SELECT COUNT(*) FROM uso WHERE fuente=?", (f.nombre,)).fetchone()[0]
+                # «Buscar ahora» lee la casa que más da (el 27-09 las dos apuestas
+                # y las 12 «casi» buenas eran de Gamdom), no la que toque.
+                preferida = os.environ.get("ODDSPAPI_CASA_BUSCAR", "gamdom")
+                if forzar and preferida in getattr(f, "casas", []):
+                    f.vueltas_previas = f.casas.index(preferida)
             try:
                 l = f.leer(ligas)
             except SinClave as e:
@@ -364,8 +369,11 @@ class Escaner:
         # Dónde apuestas lo decides tú desde la pantalla (Datos → Tus casas).
         apostables = self.reg.casas_apostables()
         apostables = tuple(apostables) if apostables is not None else None
-        pre = replace(self.prepartido, apostables=apostables)
-        viv = replace(self.vivo, apostables=apostables)
+        # Y con qué reglas: las que elija Dani en la pantalla, si ha elegido.
+        suyas = self.reg.reglas()
+        cambios = {k: float(suyas[k]) for k in ("prob_minima", "cuota_minima") if k in suyas}
+        pre = replace(self.prepartido, apostables=apostables, **cambios)
+        viv = replace(self.vivo, apostables=apostables, **cambios)
         r = detectar(eventos, lectura.cuotas, self.banca, ahora, pre, viv,
                      expuesto=self.reg.expuesto_por_evento())
         # Primero el porqué (qué punto flaco tiene la casa) y después lo

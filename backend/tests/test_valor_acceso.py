@@ -30,12 +30,13 @@ DANI = "dani-el-dueno"
 LEER = ["/api/valor/estado", "/api/valor/oportunidades", "/api/valor/oportunidades?vivo=true",
         "/api/valor/seguras", "/api/valor/apuestas",
         "/api/valor/aprendizaje", "/api/valor/casas", "/api/valor/oportunidades/1/historial",
-        "/api/valor/casi"]
+        "/api/valor/casi", "/api/valor/reglas"]
 ESCRIBIR = [("/api/valor/apuestas", {"oportunidad_id": 1}),
             ("/api/valor/apuestas/manual", {"descripcion": "x", "casa": "y", "cuota": 2, "importe": 5}),
             ("/api/valor/apuestas/1/resultado", {"resultado": "ganada"}),
             ("/api/valor/casas", {"casas": "*"}),
-            ("/api/valor/buscar", {})]
+            ("/api/valor/buscar", {}),
+            ("/api/valor/reglas", {"prob_minima": 0.5, "cuota_minima": 1.7})]
 
 
 class _Coleccion:
@@ -292,3 +293,20 @@ async def test_buscar_ahora(cliente, entorno, monkeypatch):
     r = await cliente.post("/api/valor/buscar", headers=h, json={})
     assert r.status_code == 429 and "espera" in r.json()["detail"]
     assert (await cliente.get("/api/valor/casi", headers=h)).json() == {"items": []}
+
+
+
+async def test_tus_reglas(cliente, entorno):
+    h = _cab("dani")
+    r = (await cliente.get("/api/valor/reglas", headers=h)).json()
+    assert r["elegidas"] is False and r["actuales"]["cuota_minima"] == 1.70 and len(r["simulacion"]) == 9
+    r = await cliente.post("/api/valor/reglas", headers=h, json={"prob_minima": "0,55", "cuota_minima": 1.6})
+    assert r.status_code == 200 and r.json()["actuales"] == {"prob_minima": 0.55, "cuota_minima": 1.6}
+    e = (await cliente.get("/api/valor/estado", headers=h)).json()
+    assert e["prob_minima"] == 0.55 and e["cuota_minima"] == 1.6
+    for malo in ({"prob_minima": 0.1, "cuota_minima": 1.7}, {"prob_minima": 0.6, "cuota_minima": 9},
+                 {"prob_minima": "x", "cuota_minima": 1.7}):
+        assert (await cliente.post("/api/valor/reglas", headers=h, json=malo)).status_code == 400
+    r = await cliente.post("/api/valor/reglas", headers=h, json={"por_defecto": True})
+    assert r.status_code == 200
+    assert (await cliente.get("/api/valor/reglas", headers=h)).json()["elegidas"] is False

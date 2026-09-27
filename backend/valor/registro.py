@@ -311,6 +311,34 @@ class Registro:
             db.execute("INSERT INTO ajustes VALUES (?,?) ON CONFLICT(clave) DO UPDATE SET valor=excluded.valor",
                        (clave, json.dumps(valor, ensure_ascii=False)))
 
+    def reglas(self) -> dict:
+        """Las que elija Dani en la pantalla (acierto mínimo y cuota mínima).
+        Vacío: las de siempre (las del entorno: 60 % y 1,70)."""
+        v = self.ajuste("reglas", None)
+        return dict(v) if isinstance(v, dict) else {}
+
+    def simula_reglas(self, combinaciones, horas: float = 24, ev_minimo: float = 0.02,
+                      ev_maximo: float = 0.20, suelo: float = 1.50, ev_excepcion: float = 0.05,
+                      cuota_maxima: float = 8.0) -> List[dict]:
+        """Cuántas apuestas habrían salido en las últimas horas con otras reglas,
+        con lo que se LEYÓ de verdad: las recomendadas y las «casi» (que ya
+        pasaron todos los filtros de datos: referencia, edad, desvío, escalera).
+        Es un mínimo: de cada lectura se guardan las 15 «casi» de más ventaja."""
+        desde = _iso(datetime.now(timezone.utc) - timedelta(hours=horas))
+        filas = self.db.execute(
+            "SELECT o.cuota, o.prob_justa, o.ev FROM oportunidades o JOIN ("
+            "  SELECT MIN(id) AS id FROM oportunidades WHERE sospechosa IN (0, 2) AND detectada>=?"
+            "  GROUP BY evento_id, mercado, IFNULL(linea, -999), seleccion, casa) p ON p.id=o.id",
+            (desde,)).fetchall()
+        out = []
+        for prob_minima, cuota_minima in combinaciones:
+            n = sum(1 for f in filas
+                    if ev_minimo <= f["ev"] <= ev_maximo and f["prob_justa"] >= prob_minima - 1e-9
+                    and suelo <= f["cuota"] <= cuota_maxima
+                    and (f["cuota"] >= cuota_minima or f["ev"] >= ev_excepcion))
+            out.append({"prob_minima": prob_minima, "cuota_minima": cuota_minima, "senales": n})
+        return out
+
     def casas_apostables(self) -> Optional[List[str]]:
         """Dónde se puede apostar. None = en todas (sin filtro). Manda lo que
         elijas en la pantalla; si no has elegido, VALOR_CASAS («*» = todas);
