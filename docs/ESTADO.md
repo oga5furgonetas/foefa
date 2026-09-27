@@ -247,8 +247,8 @@ Motor puro en `backend/afinidad.py` (léelo: explica el porqué), 27 pruebas en
   no existe en Fly). Redesplegar: `histor/infra/fly/desplegar.sh` (con
   `HISTOR_SKIP_DB=1`); solo acepta apps `histor-*`. Secretos en
   `C:\Users\Usuario\.histor-secretos-prod.env` y acceso al panel en
-  `C:\Users\Usuario\.histor-admin.txt` (NUNCA imprimir). Falta: el 2FA de Dani,
-  datos legales (LSSI; no anunciar hasta tenerlos), dominio e integraciones.
+  `C:\Users\Usuario\.histor-admin.txt` (NUNCA imprimir). Datos legales (persona física)
+  ya cargados como secretos. Falta: el 2FA de Dani, dominio e integraciones.
   Trampa: en Windows `fly ssh console -C` acaba con «The handle is invalid» aunque
   funcione (juzgar por la salida).
 - Nunca desplegarlo en `flota-backend`, `flota`, `flotadsp-*` ni en Pages de Flota.
@@ -297,7 +297,7 @@ Motor puro en `backend/afinidad.py` (léelo: explica el porqué), 27 pruebas en
    reparto inicial y ponga notas; en OGA5, apuntar la fila cada día. Falta la
    casilla de vetadas en la pantalla.
 9. **Histor** (producto aparte, `histor/`): en producción en
-   https://histor-web.fly.dev. Falta: 2FA del panel, datos legales del titular,
+   https://histor-web.fly.dev. Falta: 2FA del panel,
    dominio y claves (Stripe, correo, IA). Lista completa en
    `histor/PROJECT_STATUS.md` → «Bloqueos».
 

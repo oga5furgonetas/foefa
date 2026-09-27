@@ -27,7 +27,10 @@ de git; `ADMIN_PASSWORD` ya no está en Fly). **Falta que Dani active el 2FA** a
 entrar en `/admin`. Fuentes en producción: 34/41 (Corriere responde 403 a las IP
 de centros de datos; en local sí leía).
 
-**No anunciar todavía:** faltan los datos legales del titular (LSSI).
+**Datos legales del titular** (persona física) cargados el 27-09-2026 como secretos
+`LEGAL_*`, `CONTACT_EMAIL` y `DPO_EMAIL` (no están en el repositorio): el aviso legal
+ya no muestra `[PENDIENTE]` en ningún idioma. Recomendable que un abogado revise los
+textos legales antes de crecer.
 
 ## Nombre
 
@@ -115,15 +118,10 @@ Fallos encontrados con fuentes reales y corregidos (cada uno con su prueba):
 1. **Activar el 2FA del panel.** Entrar en https://histor-web.fly.dev/admin con los
    datos de `~/.histor-admin.txt` y escanear el código con una app de autenticación
    (obligatorio en producción; solo lo puede hacer Dani).
-2. **Datos legales** del titular (nombre/razón social, NIF, domicilio, correo de
-   contacto y de privacidad; registro solo si es sociedad): hoy salen como
-   `[PENDIENTE: …]`. Obligatorio (LSSI) antes de anunciar la web. Se añaden como
-   `LEGAL_*`, `CONTACT_EMAIL` y `DPO_EMAIL` en `~/.histor-secretos-prod.env` y se
-   relanza el script.
-3. **Dominio.** `histor.news` (25,20 USD/año) y `histor.media` (35,20 USD/año) estaban
+2. **Dominio.** `histor.news` (25,20 USD/año) y `histor.media` (35,20 USD/año) estaban
    libres el 27-09-2026. Hay que comprarlo (Cloudflare Registrar) y apuntarlo con
    `fly certs add <dominio> -a histor-web`; después, `PUBLIC_BASE_URL` con él.
-4. **Integraciones** (todas opcionales; sin ellas se desactivan de forma explícita):
+3. **Integraciones** (todas opcionales; sin ellas se desactivan de forma explícita):
    Stripe + webhook, Resend (correo), IA (proveedor, clave y tope), Google/Apple,
    Sentry, S3/R2 para copias fuera de Fly. VAPID ya está generado.
 
