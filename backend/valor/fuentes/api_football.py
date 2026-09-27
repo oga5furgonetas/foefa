@@ -25,6 +25,7 @@ from .base import Fuente, Lectura, comprueba, ts
 from .nombres import Cruce, id_evento
 
 BASE = "https://v3.football.api-sports.io"
+PAGINAS_MAX = 3
 
 # Nombre de la casa en esta API → nuestra clave. «Betfair» aquí NO se toma por
 # el exchange: no está claro que lo sea, y confundirlo metería una casa blanda
@@ -67,7 +68,10 @@ class ApiFootball(Fuente):
             d = self._get("/odds", date=dia.isoformat(), page=pagina)
             cuotas += d["response"]
             total = (d.get("paging") or {}).get("total", 1)
-            if pagina >= total or pagina >= 5:      # tope: 5 páginas para no fundir el cupo
+            # El plan gratis no deja pasar de la página 3 (visto en producción el
+            # 27-09: «Free plans are limited to a maximum value of 3 for the Page
+            # parameter»), y pedir la 4 tiraba también las tres ya leídas.
+            if pagina >= total or pagina >= PAGINAS_MAX:
                 break
             pagina += 1
         out = self.traducir(partidos, cuotas)

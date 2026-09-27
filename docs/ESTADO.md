@@ -183,6 +183,14 @@ Motor puro en `backend/afinidad.py` (léelo: explica el porqué), 27 pruebas en
     cuándo lo miró); en vivo no se usa.
   - API-Football: el plan gratis NO deja pedir por liga/temporada actual;
     solo por fecha, y sus cuotas tienen ~3 h: casi nunca pasan los 10 min.
+    Y no deja pasar de la página 3 (visto en producción: la 4 daba error y
+    tiraba las tres leídas) → tope de 3 páginas, 4 llamadas por lectura.
+- **Ligas**: del 27-09 al 09-10-2026 las grandes paraban por las selecciones
+  (comprobado con el calendario gratis de The Odds API). Por defecto se leen
+  LaLiga, Segunda, Premier, Champions, Europa League, Conference y la Nations
+  League (`VALOR_LIGAS`; en OddsPapi `ODDSPAPI_TORNEOS=8,54,17,7,679,34480,23755`,
+  todas en la misma petición). Una liga de The Odds API solo gasta si tiene
+  partido en 24 h.
 - **Casas de Dani** (lo dijo el 27-09): Codere (codere.es), BetStars
   (pokerstars.es) y Gamdom; Casino Barcelona no la trae ninguna fuente. Solo
   se recomienda en ellas (`CASAS_DANI`; cambiable en Datos → Tus casas, o

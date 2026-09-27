@@ -126,8 +126,14 @@ class Escaner:
 
     def _por_defecto(self) -> Dict[Fuente, Presupuesto]:
         out: Dict[Fuente, Presupuesto] = {}
+        # Las grandes paran por las selecciones (del 27-09 al 09-10-2026 no había
+        # ni LaLiga, ni Premier, ni Champions): con Segunda, la Nations League y
+        # las otras copas europeas siempre hay algo que leer. Una liga solo gasta
+        # si tiene partido en 24 h.
         ligas = [x for x in os.environ.get(
-            "VALOR_LIGAS", "soccer_spain_la_liga,soccer_epl,soccer_uefa_champs_league").split(",") if x]
+            "VALOR_LIGAS", "soccer_spain_la_liga,soccer_spain_segunda_division,soccer_epl,"
+            "soccer_uefa_champs_league,soccer_uefa_europa_league,soccer_uefa_europa_conference_league,"
+            "soccer_uefa_nations_league").split(",") if x]
         mercados = os.environ.get("VALOR_MERCADOS", "h2h,totals")
         regiones = os.environ.get("VALOR_REGIONES", "eu")
         def minutos(var, defecto):
@@ -149,7 +155,7 @@ class Escaner:
         if os.environ.get("APISPORTS_KEY"):
             f = ApiFootball(cruce=self.cruce)
             out[f] = Presupuesto(f.nombre, int(os.environ.get("APISPORTS_CUPO", "100")),
-                                 timedelta(days=1), 6, rapido=minutos("APISPORTS_CADA_MIN", "60"))
+                                 timedelta(days=1), 4, rapido=minutos("APISPORTS_CADA_MIN", "60"))
         return out
 
     # ── cuándo hay partido ────────────────────────────────────────────────

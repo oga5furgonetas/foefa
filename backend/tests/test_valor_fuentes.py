@@ -159,3 +159,22 @@ def test_api_football_cuenta_sus_llamadas():
     f = ApiFootball(clave="x", cliente=httpx.Client(transport=httpx.MockTransport(responde)))
     lec = f.leer([])
     assert lec.coste == 2 and lec.cupo_restante == 88 and "1 de 1" in lec.detalle
+
+
+def test_api_football_no_pasa_de_la_pagina_3():
+    """Producción, 27-09: el plan gratis contesta error a partir de la página 4,
+    y ese error tiraba también las tres páginas ya leídas."""
+    paginas = []
+
+    def responde(req):
+        if req.url.path.endswith("/fixtures"):
+            return httpx.Response(200, json={"response": AF_PARTIDOS, "errors": []})
+        n = int(req.url.params["page"])
+        paginas.append(n)
+        if n > 3:
+            return httpx.Response(200, json={"response": [], "errors": {
+                "plan": "Free plans are limited to a maximum value of 3 for the Page parameter"}})
+        return httpx.Response(200, json={"response": AF_CUOTAS, "paging": {"current": n, "total": 43},
+                                         "errors": []})
+    lec = ApiFootball(clave="x", cliente=httpx.Client(transport=httpx.MockTransport(responde))).leer([])
+    assert paginas == [1, 2, 3] and lec.coste == 4 and lec.cuotas and "3 de 43" in lec.detalle

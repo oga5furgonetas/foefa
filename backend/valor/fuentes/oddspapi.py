@@ -45,7 +45,8 @@ REFERENCIA = "pinnacle"
 # Torneo de OddsPapi → nombre. Los que no estén salen como «torneo N».
 TORNEOS = {8: "LaLiga", 17: "Premier League", 7: "UEFA Champions League", 679: "UEFA Europa League",
            34480: "UEFA Conference League", 23: "Serie A", 35: "Bundesliga", 34: "Ligue 1",
-           54: "LaLiga 2", 329: "Copa del Rey", 238: "Liga Portugal", 37: "Eredivisie"}
+           54: "LaLiga 2", 329: "Copa del Rey", 238: "Liga Portugal", 37: "Eredivisie",
+           23755: "UEFA Nations League"}
 
 # Mercado → (nuestro mercado, línea, {resultado de OddsPapi: nuestra selección}).
 # De /markets, fútbol, «fulltime», sin apuestas a jugadores. Solo líneas x,5 en
@@ -225,7 +226,9 @@ class OddsPapi(Fuente):
 
 
 def de_entorno(cruce: Cruce, cache: Optional[str]) -> OddsPapi:
-    torneos = [int(x) for x in os.environ.get("ODDSPAPI_TORNEOS", "8,17,7").split(",") if x.strip().isdigit()]
+    # Todas van en la MISMA petición: añadir torneos no gasta más cupo.
+    torneos = [int(x) for x in os.environ.get("ODDSPAPI_TORNEOS", "8,54,17,7,679,34480,23755").split(",")
+               if x.strip().isdigit()]
     # Las casas de Dani (27-09-2026): Codere, BetStars (PokerStars) y Gamdom.
     # Casino Barcelona no lo trae ninguna fuente. Lo que trae OddsPapi de cada
     # una en LaLiga (llamada real del 27-09): Gamdom, todo (1X2, goles,
