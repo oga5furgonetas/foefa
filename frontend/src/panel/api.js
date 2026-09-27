@@ -527,6 +527,8 @@ export const getValorAprendizaje = () => api.get('/valor/aprendizaje')
 export const getValorHistorial = (id) => api.get(`/valor/oportunidades/${id}/historial`)
 export const getValorCasas = () => api.get('/valor/casas')
 export const guardarValorCasas = (casas) => api.post('/valor/casas', { casas })
+export const getValorCasi = () => api.get('/valor/casi')
+export const buscarValorAhora = () => api.post('/valor/buscar', {})
 export const getAdminOrgs = () => api.get('/admin/orgs')
 export const updateOrg = (body) => api.post('/admin/org', body) // {id, status?, plan?, extend_trial_days?, add_center?, max_centers?, modulos?}
 export const getAdminModulos = () => api.get('/admin/modulos')

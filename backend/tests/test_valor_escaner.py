@@ -381,3 +381,31 @@ def test_oddspapi_no_se_fia_del_nombre_si_hay_calendario(tmp_path):
     # Sin calendario para ese torneo, lo leído sí cuenta.
     esc._calendario = {"americanfootball_nfl": [AHORA + timedelta(hours=5)]}
     assert esc._torneos_oddspapi(f, AHORA)[0] == ["17", "31"]
+
+
+
+def test_buscar_ahora_no_espera_su_turno_pero_respeta_el_cupo(tmp_path):
+    esc, f, reg = _escaner(tmp_path, [])
+    # 400 al día, 25 por vuelta: una cada 90 min, y 50 como mucho en una hora.
+    esc.fuentes = {f: Presupuesto("falsa", 400, timedelta(days=1), 25)}
+    esc.vuelta(AHORA)
+    assert esc.vuelta(AHORA + timedelta(minutes=10)) is None               # no le toca
+    assert esc.vuelta(AHORA + timedelta(minutes=10), forzar=True) is not None
+    assert f.lecturas == 2
+    # Ni forzando se pasa del tope de la hora (75 > 50).
+    assert esc.vuelta(AHORA + timedelta(minutes=20), forzar=True) is None and f.lecturas == 2
+
+
+def test_el_error_de_una_fuente_queda_guardado_tras_reiniciar(tmp_path):
+    esc, f, reg = _escaner(tmp_path, [])
+
+    def revienta(d):
+        raise MemoryError("sin memoria al leer")    # cualquier cosa, no solo errores de red
+    f.leer = revienta
+    esc.vuelta(AHORA)                                # la vuelta no se cae
+    assert "MemoryError" in esc.estado["falsa"]["error"]
+    nuevo = Escaner(reg, 1000, fuentes={})
+    nuevo.fuentes = {f: Presupuesto("falsa", 100, timedelta(days=1), 25)}
+    nuevo.vuelta(AHORA + timedelta(minutes=5))
+    assert "MemoryError" in nuevo.estado["falsa"]["error"]
+    assert reg.db.execute("SELECT error FROM uso").fetchone()[0].startswith("MemoryError")

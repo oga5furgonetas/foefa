@@ -247,6 +247,19 @@ Dani no se creía el 0. Estudio con datos reales (scratchpad de la sesión):
   diaria (~4 lecturas al día), `ODDSPAPI_CUPO=200` (unas 35 peticiones del
   estudio se gastaron desde el PC y el servidor no las cuenta).
 - Límites reales de OddsPapi: 1 casa y 5 torneos por petición, 429 a <1 s.
+- 27-09 11:30: Dani seguía viendo 0. Hallado: de 05:16 a 10:17 OddsPapi
+  «leyó» 6 veces sin guardar ni una cuota (las de Gamdom eran de las 02:16), y
+  tras el reinicio no quedaba el porqué: el mismo código, lanzado desde el PC
+  contra la API real, sí funciona (no se ha podido reproducir). Arreglado para
+  que no vuelva a quedar oculto: el error de cada lectura se guarda en `uso`
+  (sobrevive a reinicios, se ve en Datos) y cualquier excepción de una fuente
+  se apunta sin tumbar la vuelta. Nuevo: «Buscar ahora» (`POST /valor/buscar`,
+  una vez cada 10 min, respeta el cupo) y «Lo más cerca» (`/valor/casi`,
+  `oportunidades.sospechosa=2`): lo que tiene ventaja en sus casas pero no
+  cumple una regla, con la regla dicha; NO es recomendación, no se puede
+  apostar desde ahí y no cuenta para el aprendizaje.
+- Gotcha: el tope de ráfaga daba 49,999999 en vez de 50 (coma flotante) y
+  bloqueaba una lectura; ahora se redondea.
 - Gotcha: para elegir torneos NO fiarse del nombre de la liga en `eventos`:
   API-Football guarda «Premier League» o «Ligue 1» de Egipto o Argelia con el
   mismo nombre. Si el calendario conoce el torneo, manda el calendario.

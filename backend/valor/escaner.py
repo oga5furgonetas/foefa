@@ -68,7 +68,8 @@ class Presupuesto:
     def tope_rafaga(self) -> "tuple[timedelta, float]":
         trozo = timedelta(days=1) if self.periodo > timedelta(days=1) else timedelta(hours=1)
         parte = self.llamadas * (trozo / self.periodo)
-        return trozo, max(float(self.coste_vuelta), self.rafaga * parte)
+        # Redondeado: 3 × 400 / 24 daba 49,999999 y una lectura de 50 no cabía.
+        return trozo, round(max(float(self.coste_vuelta), self.rafaga * parte), 6)
 
     def espera(self, falta: Optional[timedelta]) -> timedelta:
         """Cuánto esperar entre lecturas según lo que falta para el próximo partido."""
@@ -124,6 +125,12 @@ class Escaner:
         # es que no hay chollos o que no está leyendo nada.
         self.estado: Dict[str, dict] = {}
         self.reg.db.execute("CREATE TABLE IF NOT EXISTS uso (fuente TEXT, ts TEXT, coste INTEGER)")
+        # El error de cada lectura fallida, guardado: el 27-09 OddsPapi «leyó»
+        # seis veces sin guardar nada y, tras un reinicio, no quedaba ni rastro
+        # de por qué.
+        if "error" not in [c[1] for c in self.reg.db.execute("PRAGMA table_info(uso)")]:
+            self.reg.db.execute("ALTER TABLE uso ADD COLUMN error TEXT")
+            self.reg.db.commit()
 
     def _por_defecto(self) -> Dict[Fuente, Presupuesto]:
         out: Dict[Fuente, Presupuesto] = {}
@@ -260,12 +267,13 @@ class Escaner:
         return ult
 
     def _toca(self, f: Fuente, p: Presupuesto, ahora: datetime,
-              coste: Optional[int] = None, falta: Optional[timedelta] = None) -> bool:
+              coste: Optional[int] = None, falta: Optional[timedelta] = None, forzar: bool = False) -> bool:
+        """`forzar` («Buscar ahora»): sin esperar su turno, pero sin pasarse del cupo."""
         coste = p.coste_vuelta if coste is None else coste
         if coste <= 0:
             return False
         ult = self._ultima_de(f)
-        if ult is not None and ahora - ult < p.espera(falta):
+        if not forzar and ult is not None and ahora - ult < p.espera(falta):
             return False
         if self._usado(f, ahora - p.periodo) + coste > p.llamadas:
             return False
@@ -276,7 +284,7 @@ class Escaner:
         cupo = self.estado.get(f.nombre, {}).get("cupo_restante")
         return cupo is None or cupo >= coste
 
-    def vuelta(self, ahora: Optional[datetime] = None) -> Optional[Resultado]:
+    def vuelta(self, ahora: Optional[datetime] = None, forzar: bool = False) -> Optional[Resultado]:
         ahora = ahora or datetime.now(timezone.utc)
         lectura = Lectura()
         leidas = []
@@ -302,6 +310,9 @@ class Escaner:
             # lectura» de una fuente que había leído hacía minutos (27-09).
             if ult is not None and not est.get("ultima"):
                 est["ultima"] = ult.isoformat()
+                fila = self.reg.db.execute("SELECT error FROM uso WHERE fuente=? ORDER BY ts DESC LIMIT 1",
+                                           (f.nombre,)).fetchone()
+                est["error"] = fila[0] if fila else None
             est.update(
                 cada_min=round(espera.total_seconds() / 60),
                 proxima=((ult + espera) if ult else ahora).isoformat() if coste > 0 else None,
@@ -310,7 +321,7 @@ class Escaner:
                 periodo_dias=p.periodo.total_seconds() / 86400,
                 tope_rafaga=round(tope), rafaga_horas=trozo.total_seconds() / 3600,
                 sin_partido=coste <= 0)
-            if not self._toca(f, p, ahora, coste, falta):
+            if not self._toca(f, p, ahora, coste, falta, forzar=forzar):
                 continue
             if hasattr(f, "vueltas_previas"):
                 f.vueltas_previas = self.reg.db.execute(
@@ -321,13 +332,14 @@ class Escaner:
                 log.warning("%s", e)
                 est["error"] = "falta la clave"
                 continue
-            except (httpx.HTTPError, PermissionError, ValueError, KeyError) as e:
+            except Exception as e:                      # noqa: BLE001 - una fuente no tumba la vuelta
                 # Una llamada fallida también gasta cupo (y reintentar en bucle lo
                 # fundiría): cuenta y espera a su siguiente turno. El error va sin
-                # claves: se guarda y se enseña en pantalla.
-                log.error("%s ha fallado: %s", f.nombre, limpia(e))
-                self._apunta(f, p, ahora, coste)
-                est.update(ultima=ahora.isoformat(), error=limpia(e)[:160])
+                # claves: se guarda (sobrevive a un reinicio) y se enseña en pantalla.
+                texto = limpia(f"{type(e).__name__}: {e}")[:200]
+                log.error("%s ha fallado: %s", f.nombre, texto)
+                self._apunta(f, p, ahora, coste, error=texto)
+                est.update(ultima=ahora.isoformat(), error=texto)
                 continue
             gasto = l.coste if l.coste is not None else coste
             self._apunta(f, p, ahora, gasto)
@@ -358,6 +370,7 @@ class Escaner:
             puntos_flacos.analizar(o, lectura.cuotas, self.reg, ahora, self.prepartido.afiladas)
         r.oportunidades = aprendizaje.aplicar(self.reg, r.oportunidades, r.descartes)
         self.reg.guarda_oportunidades(r.sospechosas, sospechosas=True)
+        self.reg.guarda_oportunidades(r.casi[:15], casi=True)
         seguras = (buscar_seguras(eventos, lectura.cuotas, self.total_segura, ahora, self.reglas_seguras)
                    if self.con_seguras else [])
         self.reg.guarda_seguras(seguras)
@@ -381,10 +394,11 @@ class Escaner:
         self._avisar_seguras(seguras)
         return r
 
-    def _apunta(self, f: Fuente, p: Presupuesto, ahora: datetime, coste: Optional[int] = None) -> None:
+    def _apunta(self, f: Fuente, p: Presupuesto, ahora: datetime, coste: Optional[int] = None,
+                error: Optional[str] = None) -> None:
         self._ultima[f.nombre] = ahora
-        self.reg.db.execute("INSERT INTO uso VALUES (?,?,?)",
-                            (f.nombre, ahora.isoformat(), p.coste_vuelta if coste is None else coste))
+        self.reg.db.execute("INSERT INTO uso (fuente, ts, coste, error) VALUES (?,?,?,?)",
+                            (f.nombre, ahora.isoformat(), p.coste_vuelta if coste is None else coste, error))
         self.reg.db.commit()
 
     def _olvida_pasados(self, ahora: datetime) -> None:

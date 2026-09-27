@@ -125,7 +125,11 @@ class Registro:
             f"SELECT ts, cuota FROM cuotas WHERE evento_id=? AND casa=? AND mercado=? AND {fl} "
             f"AND seleccion=? AND ts>=? ORDER BY ts", args).fetchall()]
 
-    def guarda_oportunidades(self, ops: Iterable[Oportunidad], sospechosas: bool = False) -> List[int]:
+    def guarda_oportunidades(self, ops: Iterable[Oportunidad], sospechosas: bool = False,
+                             casi: bool = False) -> List[int]:
+        """`sospechosa`: 0 recomendada, 1 sospechosa, 2 «casi» (no cumple las
+        reglas; se guarda para enseñarla y para medir su CLV, nunca se apuesta)."""
+        tipo = 2 if casi else int(sospechosas)
         ids = []
         with self._tx() as db:
             for o in ops:
@@ -140,7 +144,7 @@ class Registro:
                     (_iso(datetime.now(timezone.utc)), o.evento.id, o.mercado, o.linea, o.seleccion,
                      o.casa, o.cuota, o.prob_justa, o.ev, o.importe, int(o.evento.en_vivo),
                      json.dumps(o.motivos, ensure_ascii=False),
-                     json.dumps(o.avisos, ensure_ascii=False), int(sospechosas), o.fallo,
+                     json.dumps(o.avisos, ensure_ascii=False), tipo, o.fallo,
                      _iso(o.ts_cuota) if o.ts_cuota else None, o.fuente or None,
                      json.dumps(detalle, ensure_ascii=False)))
                 ids.append(cur.lastrowid)
@@ -446,6 +450,26 @@ class Registro:
         return [dict(f) for f in self.db.execute(
             "SELECT a.*, e.local, e.visitante, e.inicio FROM apuestas a "
             "LEFT JOIN eventos e ON e.id=a.evento_id ORDER BY a.id DESC").fetchall()]
+
+    def casi_recientes(self, horas: float = 4, limite: int = 12) -> List[dict]:
+        """Lo que más se acercó en las últimas horas sin cumplir las reglas: la
+        última vez que se vio cada selección y casa, de más ventaja a menos,
+        solo de partidos que aún no han empezado."""
+        ahora = datetime.now(timezone.utc)
+        filas = self.db.execute(
+            "SELECT o.*, e.local, e.visitante, e.liga, e.deporte, e.inicio FROM oportunidades o "
+            "JOIN eventos e ON e.id=o.evento_id WHERE o.sospechosa=2 AND o.detectada>=? AND e.inicio>? "
+            "ORDER BY o.id DESC", (_iso(ahora - timedelta(hours=horas)), _iso(ahora))).fetchall()
+        vistas, out = set(), []
+        for f in filas:
+            clave = (f["evento_id"], f["mercado"], f["linea"], f["seleccion"], f["casa"])
+            if clave in vistas:
+                continue
+            vistas.add(clave)
+            out.append(dict(f, motivos=json.loads(f["motivos"]), avisos=json.loads(f["avisos"]),
+                            detalle=json.loads(f["detalle"] or "{}")))
+        out.sort(key=lambda x: -x["ev"])
+        return out[:limite]
 
     def vigentes(self, en_vivo: bool, minutos: float, banca: Optional[float] = None,
                  tope_evento: float = 0.04) -> List[dict]:

@@ -190,3 +190,40 @@ def test_resumen_mediana_porcentaje_y_semanas(tmp_path):
     assert r["avisos"] == 5 and r["clv_mediana"] == 0.01 and r["pct_bate"] == 0.6
     assert r["clv_medio"] == pytest.approx(0.022) and r["acumulado"][-1]["clv"] == pytest.approx(0.11)
     assert sum(s["n"] for s in r["semanas"]) == 5
+
+
+
+def test_lo_que_se_queda_cerca_se_guarda_aparte_y_no_se_recomienda(tmp_path):
+    """Rice +14,5 en Gamdom (27-09): +2,8 % pero sale el 59 %. No es apuesta con
+    tus reglas; se enseña en «lo más cerca» diciendo por qué, y nada más."""
+    reg = Registro(str(tmp_path / "v.db"))
+    t = AHORA - timedelta(seconds=20)
+    ev = Evento("e9", "americanfootball", "NCAA", "Fresno State", "Rice", AHORA + timedelta(hours=3))
+    cuotas = [Cuota("e9", "pinnacle", "handicap", -14.5, "local", 2.30, t, "oddspapi"),
+              Cuota("e9", "pinnacle", "handicap", -14.5, "visitante", 1.64, t, "oddspapi"),
+              Cuota("e9", "gamdom", "handicap", -14.5, "visitante", 1.75, t, "oddspapi"),
+              Cuota("e9", "gamdom", "handicap", -14.5, "local", 1.90, t, "oddspapi")]
+    reg.guarda_lectura([ev], cuotas)
+    reglas = replace(PREPARTIDO, prob_minima=0.60, cuota_minima=1.70, apostables=("gamdom",))
+    r = detectar({"e9": ev}, cuotas, 1000, AHORA, reglas)
+    assert r.oportunidades == [] and r.sospechosas == []
+    (c,) = r.casi                                   # el local a 1,90 no tiene ventaja: no sale
+    assert (c.casa, c.seleccion, c.cuota) == ("gamdom", "visitante", 1.75) and c.ev > 0
+    assert c.avisos[0].startswith("Sale el 5") and "mínimo es el 60" in c.avisos[0]
+    reg.guarda_oportunidades(r.casi, casi=True)
+    assert reg.vigentes(False, 60) == []            # no aparece como apuesta
+    (x,) = reg.casi_recientes()
+    assert x["casa"] == "gamdom" and x["avisos"][0] == c.avisos[0]
+    assert aprendizaje.segmentos(reg) == [] and aprendizaje.resumen(reg)["avisos"] == 0
+
+
+def test_sin_ventaja_o_con_la_escalera_rota_no_es_casi(tmp_path):
+    t = AHORA - timedelta(seconds=20)
+    ev = Evento("e8", "americanfootball", "NFL", "Chicago Bears", "Philadelphia Eagles", AHORA + timedelta(hours=3))
+    c = [Cuota("e8", "pinnacle", "handicap", 4.5, "local", 1.74, t), Cuota("e8", "pinnacle", "handicap", 4.5, "visitante", 2.20, t),
+         Cuota("e8", "pinnacle", "handicap", 3.5, "local", 1.862, t), Cuota("e8", "pinnacle", "handicap", 3.5, "visitante", 2.05, t),
+         Cuota("e8", "pokerstars.es", "handicap", 3.5, "local", 1.80, t),
+         Cuota("e8", "pokerstars.es", "handicap", 4.5, "local", 1.91, t)]
+    r = detectar({"e8": ev}, c, 1000, AHORA, replace(PREPARTIDO, prob_minima=0.60))
+    # El +4,5 a 1,91 sale el 56 % y tendría «+6,6 %», pero su escalera no cuadra.
+    assert r.casi == [] and r.oportunidades == []

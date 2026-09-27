@@ -29,11 +29,13 @@ pytestmark = pytest.mark.asyncio(loop_scope="session")
 DANI = "dani-el-dueno"
 LEER = ["/api/valor/estado", "/api/valor/oportunidades", "/api/valor/oportunidades?vivo=true",
         "/api/valor/seguras", "/api/valor/apuestas",
-        "/api/valor/aprendizaje", "/api/valor/casas", "/api/valor/oportunidades/1/historial"]
+        "/api/valor/aprendizaje", "/api/valor/casas", "/api/valor/oportunidades/1/historial",
+        "/api/valor/casi"]
 ESCRIBIR = [("/api/valor/apuestas", {"oportunidad_id": 1}),
             ("/api/valor/apuestas/manual", {"descripcion": "x", "casa": "y", "cuota": 2, "importe": 5}),
             ("/api/valor/apuestas/1/resultado", {"resultado": "ganada"}),
-            ("/api/valor/casas", {"casas": "*"})]
+            ("/api/valor/casas", {"casas": "*"}),
+            ("/api/valor/buscar", {})]
 
 
 class _Coleccion:
@@ -275,3 +277,18 @@ async def test_la_base_no_se_baja_por_uploads(cliente, tmp_path):
 async def test_la_lista_de_rutas_no_es_publica(cliente):
     for ruta in ("/openapi.json", "/docs", "/redoc"):
         assert (await cliente.get(ruta)).status_code == 404, ruta
+
+
+
+async def test_buscar_ahora(cliente, entorno, monkeypatch):
+    h = _cab("dani")
+    monkeypatch.setitem(server._VALOR_ESTADO, "escaneando", False)
+    assert (await cliente.post("/api/valor/buscar", headers=h, json={})).status_code == 409
+    monkeypatch.setitem(server._VALOR_ESTADO, "escaneando", True)
+    monkeypatch.setitem(server._VALOR_ESTADO, "busqueda_pedida", None)
+    r = await cliente.post("/api/valor/buscar", headers=h, json={})
+    assert r.status_code == 200 and r.json()["pedida"]
+    # Otra vez enseguida: no (cuida el cupo).
+    r = await cliente.post("/api/valor/buscar", headers=h, json={})
+    assert r.status_code == 429 and "espera" in r.json()["detail"]
+    assert (await cliente.get("/api/valor/casi", headers=h)).json() == {"items": []}

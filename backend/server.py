@@ -42195,7 +42195,10 @@ VALOR_DB = os.environ.get("VALOR_DB", "").strip() or str(PRIVADO_DIR / "valor.db
 # en una por aquí. El escáner tiene su propia conexión (SQLite cruza las dos).
 _VALOR_LOCK = _threading.Lock()
 _VALOR_REG = None
-_VALOR_ESTADO = {"escaneando": False, "fuentes": [], "fuentes_detalle": [], "ultima_vuelta": None, "ultimo_error": None}
+_VALOR_ESTADO = {"escaneando": False, "fuentes": [], "fuentes_detalle": [], "ultima_vuelta": None, "ultimo_error": None,
+                 # «Buscar ahora»: cuándo se pidió y cuándo terminó la búsqueda.
+                 "busqueda_pedida": None, "busqueda_hecha": None}
+_VALOR_BUSCAR_CADA = timedelta(minutes=10)
 _VALOR_DUENO_TTL = 60.0
 _VALOR_DUENO_CACHE: dict = {}
 
@@ -42309,6 +42312,30 @@ async def valor_historial(op_id: int, _: dict = Depends(require_valor)):
     if h is None:
         raise HTTPException(status_code=404, detail="Esa señal no existe")
     return h
+
+
+@api_router.get("/valor/casi")
+async def valor_casi(_: dict = Depends(require_valor)):
+    """Lo que más se acercó sin cumplir las reglas. NO son recomendaciones:
+    cada una dice qué regla no cumple (en `avisos[0]`)."""
+    return {"items": await _valor(lambda r: r.casi_recientes(4, 12))}
+
+
+@api_router.post("/valor/buscar")
+async def valor_buscar(_: dict = Depends(require_valor)):
+    """«Buscar ahora»: el escáner lee en cuanto pueda (segundos), sin esperar
+    su turno pero sin pasarse del cupo. Una vez cada 10 minutos como mucho: con
+    250 peticiones al mes, darle diez veces seguidas se comería un día entero."""
+    if not _VALOR_ESTADO.get("escaneando"):
+        raise HTTPException(status_code=409, detail="El buscador está apagado")
+    ahora = datetime.now(timezone.utc)
+    antes = _VALOR_ESTADO.get("busqueda_pedida")
+    if antes and ahora - datetime.fromisoformat(antes) < _VALOR_BUSCAR_CADA:
+        falta = _VALOR_BUSCAR_CADA - (ahora - datetime.fromisoformat(antes))
+        raise HTTPException(status_code=429, detail="Ya se buscó hace poco: espera %d min" % (
+            max(1, round(falta.total_seconds() / 60))))
+    _VALOR_ESTADO["busqueda_pedida"] = ahora.isoformat()
+    return {"pedida": _VALOR_ESTADO["busqueda_pedida"]}
 
 
 @api_router.get("/valor/casas")
@@ -42454,15 +42481,23 @@ def _valor_bucle():
     _VALOR_ESTADO.update(escaneando=True, fuentes=[f.nombre for f in esc.fuentes])
     logger.info("Valor: escáner en marcha con %s", ", ".join(_VALOR_ESTADO["fuentes"]) or "NINGUNA fuente")
     while True:
+        pedida = _VALOR_ESTADO.get("busqueda_pedida")
+        forzar = bool(pedida) and (_VALOR_ESTADO.get("busqueda_hecha") or "") < pedida
         try:
-            if esc.vuelta() is not None:
+            if esc.vuelta(forzar=forzar) is not None:
                 _VALOR_ESTADO["ultima_vuelta"] = datetime.now(timezone.utc).isoformat()
                 _VALOR_ESTADO["ultimo_error"] = None
         except Exception as e:                               # noqa: BLE001
             logger.exception("Valor: vuelta fallida")
             _VALOR_ESTADO["ultimo_error"] = type(e).__name__
+        if forzar:
+            _VALOR_ESTADO["busqueda_hecha"] = datetime.now(timezone.utc).isoformat()
         _VALOR_ESTADO["fuentes_detalle"] = [{"nombre": n, **d} for n, d in esc.estado.items()]
-        time.sleep(30)
+        # 30 s entre vueltas, pero mirando cada 2 s si han pulsado «Buscar ahora».
+        for _ in range(15):
+            if (_VALOR_ESTADO.get("busqueda_pedida") or "") > (_VALOR_ESTADO.get("busqueda_hecha") or ""):
+                break
+            time.sleep(2)
 
 
 @app.on_event("startup")

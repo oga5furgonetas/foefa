@@ -1,10 +1,10 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
-import { Loader2, Check, X, Radio, History, PauseCircle } from 'lucide-react'
+import { Loader2, Check, X, Radio, History, PauseCircle, Search } from 'lucide-react'
 import {
   getValorEstado, getValorOportunidades, getValorSeguras, getValorApuestas,
   apuntarApuestaValor, apuntarApuestaValorAMano, liquidarApuestaValor, getValorAprendizaje,
-  getValorHistorial, getValorCasas, guardarValorCasas,
+  getValorHistorial, getValorCasas, guardarValorCasas, getValorCasi, buscarValorAhora,
 } from '../api'
 import { useToast } from '../../lib/toast'
 
@@ -437,9 +437,80 @@ function TarjetaSegura({ g }) {
   )
 }
 
+/* «Buscar ahora»: el escáner lee en cuanto puede (segundos), sin esperar su
+   turno pero sin pasarse del cupo; una vez cada 10 minutos como mucho. Se
+   espera a que termine y se recarga todo. */
+function BuscarAhora({ est, alTerminar }) {
+  const toast = useToast()
+  const [buscando, setBuscando] = useState(false)
+
+  async function buscar() {
+    setBuscando(true)
+    try {
+      const { data } = await buscarValorAhora()
+      const hasta = Date.now() + 120000
+      while (Date.now() < hasta) {
+        await new Promise((r) => setTimeout(r, 3000))
+        const e = (await getValorEstado()).data || {}
+        if (e.busqueda_hecha && e.busqueda_hecha >= data.pedida) break
+      }
+      await alTerminar()
+      toast.success('Búsqueda hecha')
+    } catch (err) {
+      toast.error(err?.response?.data?.detail || 'No se pudo buscar')
+    } finally {
+      setBuscando(false)
+    }
+  }
+
+  return (
+    <button type="button" onClick={buscar} disabled={buscando || !est.escaneando}
+            className="btn-secondary flex items-center gap-1.5 px-3 py-1.5 text-[12.5px]">
+      {buscando ? <Loader2 size={14} className="animate-spin" /> : <Search size={14} />}
+      {buscando ? 'Buscando en tus casas…' : 'Buscar ahora'}
+    </button>
+  )
+}
+
+/* Lo que más se acercó: con ventaja, en tus casas y con datos buenos, pero
+   fuera por UNA regla, que se dice. NO es una recomendación (ni botón de
+   apostar): está para que se vea qué hay y dónde se queda. */
+function LoMasCerca({ items, ahora }) {
+  if (!items.length) return null
+  return (
+    <section className="space-y-2">
+      <div>
+        <h2 className="text-[13px] font-semibold text-dark-100">Lo más cerca (no cumple tus reglas)</h2>
+        <p className="mt-0.5 text-[12px] leading-snug text-dark-500">
+          Tienen ventaja, son de tus casas y sus datos son buenos, pero se quedan fuera por la regla que pone en
+          cada una. No son recomendaciones.
+        </p>
+      </div>
+      <ul className="card divide-y divide-dark-800/70">
+        {items.map((o) => (
+          <li key={o.id} className="px-4 py-3 text-[12.5px]">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <span className="text-dark-400">{o.local} – {o.visitante} · {o.liga} · {cuando(o.inicio)}</span>
+              <Chip tono="gris">NO RECOMENDADA</Chip>
+            </div>
+            <div className="mt-1 leading-snug text-dark-100">
+              A{seleccion(o.mercado, o.linea, o.seleccion, o.local, o.visitante)} en <b>{o.casa}</b> a{' '}
+              <b className="tabular-nums">{cuota(o.cuota)}</b>{' '}
+              <span className="text-dark-400">(justa {cuota(1 / o.prob_justa)})</span> · ventaja{' '}
+              <span className="tabular-nums text-emerald-300">{pct(o.ev)}</span> · sale el {Math.round(o.prob_justa * 100)} %
+            </div>
+            <div className="mt-1 text-amber-300">{lista(o.avisos)[0]}</div>
+            <div className="mt-0.5 text-[11.5px] text-dark-500">Datos {hace(o.ts_cuota || o.detectada, ahora)}</div>
+          </li>
+        ))}
+      </ul>
+    </section>
+  )
+}
+
 const VACIO = {
   seguras: 'Ahora mismo no hay ninguna segura. Salen pocas y duran poco.',
-  valor: 'Ahora mismo no hay ninguna apuesta que merezca la pena. Mejor no apostar que meter por meter.',
+  valor: 'Ahora mismo ninguna cumple tus reglas. Mejor no apostar que meter por meter.',
   vivo: 'Nada en vivo ahora mismo.',
 }
 
@@ -863,12 +934,13 @@ export default function Valor() {
 
   const carga = useCallback(async () => {
     try {
-      const [est, v, vv, s, a] = await Promise.all([
+      const [est, v, vv, s, a, c] = await Promise.all([
         getValorEstado(), getValorOportunidades(false), getValorOportunidades(true),
-        getValorSeguras(), getValorApuestas()])
+        getValorSeguras(), getValorApuestas(), getValorCasi().catch(() => ({ data: {} }))])
       setDatos({
         estado: est.data || {}, valor: lista(v.data?.items), vivo: lista(vv.data?.items),
         seguras: lista(s.data?.items), apuestas: lista(a.data?.items), balance: a.data?.balance || {},
+        casi: lista(c.data?.items),
       })
       if (pestanaRef.current === 'aprende') setAprende((await getValorAprendizaje()).data)
       setError('')
@@ -929,12 +1001,15 @@ export default function Valor() {
           </div>
         )}
         {est.frenado && <Freno est={est} />}
-        <div className="flex items-center gap-1.5 text-[12px] text-dark-500">
-          <Radio size={13} className={est.escaneando ? 'text-emerald-400' : 'text-dark-600'} />
-          {est.escaneando
-            ? <>Buscador en marcha{est.ultima_vuelta ? ` · última lectura ${hace(est.ultima_vuelta, ahora)}` : ' · aún sin leer'}</>
-            : 'El buscador está apagado: solo se ve lo que ya había y lo que apuntes a mano.'}
-          {est.ultimo_error ? <span className="text-amber-300"> · la última vuelta falló ({est.ultimo_error})</span> : null}
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <div className="flex items-center gap-1.5 text-[12px] text-dark-500">
+            <Radio size={13} className={est.escaneando ? 'text-emerald-400' : 'text-dark-600'} />
+            {est.escaneando
+              ? <>Buscador en marcha{est.ultima_vuelta ? ` · última lectura ${hace(est.ultima_vuelta, ahora)}` : ' · aún sin leer'}</>
+              : 'El buscador está apagado: solo se ve lo que ya había y lo que apuntes a mano.'}
+            {est.ultimo_error ? <span className="text-amber-300"> · la última vuelta falló ({est.ultimo_error})</span> : null}
+          </div>
+          <BuscarAhora est={est} alTerminar={carga} />
         </div>
         <Fuentes est={est} />
       </header>
@@ -972,6 +1047,7 @@ export default function Valor() {
             </div>
           )
       )}
+      {pestana === 'valor' && <LoMasCerca items={datos.casi} ahora={ahora} />}
       <p className="pb-4 text-[11.5px] leading-snug text-dark-500">
         Cada apuesta sigue pudiendo perderse (4 de cada 10 a cuota 1,65): lo que gana es la suma, a la larga.
       </p>

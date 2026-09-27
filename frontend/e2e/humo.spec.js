@@ -171,6 +171,12 @@ test.describe('Valor, solo super-admin', () => {
       status: 200, contentType: 'application/json',
       body: JSON.stringify({ banca: 1000, items: new URL(route.request().url()).searchParams.get('vivo') ? [] : [OPORTUNIDAD, CADUCADA] }),
     }))
+    await page.route('**/api/valor/casi', (route) => route.fulfill({
+      status: 200, contentType: 'application/json',
+      body: JSON.stringify({ items: [{ ...OPORTUNIDAD, id: 9, casa: 'gamdom', local: 'Fresno State', visitante: 'Rice',
+        mercado: 'handicap', linea: -14.5, seleccion: 'visitante', cuota: 1.75, prob_justa: 0.588, ev: 0.028,
+        avisos: ['Sale el 59 % de las veces; tu mínimo es el 60 %.'] }] }),
+    }))
     await page.goto('/panel/vehiculos', { waitUntil: 'domcontentloaded' })
     await expect.poll(() => tieneContenido(page), { timeout: 15000 }).toBe(true)
     const entrada = page.locator('a[href="/panel/valor"]').first()
@@ -178,6 +184,14 @@ test.describe('Valor, solo super-admin', () => {
 
     await page.goto('/panel/valor', { waitUntil: 'domcontentloaded' })
     await expect(page.getByText(/Métele\s*40 €\s*a que gana Betis en/)).toBeVisible({ timeout: 15000 })
+    await expect(page.getByRole('button', { name: 'Buscar ahora' })).toBeVisible()
+    // «Lo más cerca»: dice por qué no vale y no deja apostarla.
+    await expect(page.getByText('Lo más cerca (no cumple tus reglas)')).toBeVisible()
+    const casi = page.locator('li', { hasText: 'Fresno State' })
+    await expect(casi.getByText('NO RECOMENDADA')).toBeVisible()
+    await expect(casi.getByText('Sale el 59 % de las veces; tu mínimo es el 60 %.')).toBeVisible()
+    await expect(casi.getByText(/Rice \+14,5 de hándicap/)).toBeVisible()
+    await expect(casi.getByRole('button')).toHaveCount(0)
     await expect(page.getByText('DESTACADA')).toBeVisible()
     await expect(page.getByText(/VÁLIDA · \d+ min más/)).toBeVisible()
     await expect(page.getByText('CASA LENTA', { exact: true }).first()).toBeVisible()

@@ -82,6 +82,11 @@ class Resultado:
     oportunidades: List[Oportunidad]
     sospechosas: List[Oportunidad]
     descartes: Dict[str, int]           # por qué se descartó cada cosa, contado
+    # Lo que MÁS se acercó sin cumplir las reglas (con ventaja, en casas donde se
+    # apuesta, con datos buenos). NO son recomendaciones: cada una lleva en
+    # `avisos[0]` la regla que no cumple. Sirven para ver que el buscador lee y
+    # dónde se queda cerca.
+    casi: List[Oportunidad] = field(default_factory=list)
 
 
 def _edad(ts: datetime, ahora: datetime) -> float:
@@ -148,6 +153,7 @@ def detectar(eventos: Dict[str, Evento], cuotas: Iterable[Cuota], banca: float,
     descartes: Dict[str, int] = defaultdict(int)
     candidatas: List[Oportunidad] = []
     sospechosas: List[Oportunidad] = []
+    casi: List[Oportunidad] = []
 
     ultimas = _ultimas(cuotas)
     escaleras = _escaleras(ultimas)
@@ -220,34 +226,52 @@ def detectar(eventos: Dict[str, Evento], cuotas: Iterable[Cuota], banca: float,
                     continue
                 baja = c.cuota < reglas.cuota_minima
                 suelo = reglas.cuota_minima_excepcion or reglas.cuota_minima
-                if not (suelo <= c.cuota <= reglas.cuota_maxima):
-                    descartes["cuota fuera de rango"] += 1
-                    continue
                 metodo_p = {m: ps[i] for m, ps in por_metodo.items()}
                 p = min(metodo_p.values())
-                if p < reglas.prob_minima:
-                    descartes["poca probabilidad de acertar"] += 1
-                    continue
                 cuota_ef = _efectiva(c, reglas)
                 ev = p * cuota_ef - 1.0
-                if ev < reglas.ev_minimo:
-                    continue
-                if baja and ev < reglas.ev_excepcion:
+
+                def nueva(c=c, p=p, ev=ev, metodo_p=metodo_p, sel=sel, casa=casa, edad=edad):
+                    return Oportunidad(
+                        evento=ev_obj, mercado=mercado, linea=linea, seleccion=sel,
+                        casa=casa, cuota=c.cuota, prob_justa=p, cuota_justa=1.0 / p, ev=ev,
+                        importe=0.0, referencia=sorted(otras), por_metodo=metodo_p,
+                        edad_segundos=edad, ts_cuota=c.ts,
+                        ts_referencia=min(casas[r][s].ts for r in otras for s in sels),
+                        ref_cuotas={r: casas[r][sel].cuota for r in otras},
+                        otras={k: f[sel].cuota for k, f in casas.items()
+                               if k != casa and k not in reglas.afiladas and sel in f
+                               and _edad(f[sel].ts, ahora) <= reglas.edad_max_casa},
+                        fuente=c.fuente, edad_max=min(reglas.edad_max_casa, reglas.edad_max_referencia))
+
+                # Mismo orden de reglas que siempre; lo que se queda fuera por
+                # POCO (con ventaja positiva) se guarda aparte, con el porqué.
+                no = None
+                if not (suelo <= c.cuota <= reglas.cuota_maxima):
+                    descartes["cuota fuera de rango"] += 1
+                    if c.cuota < suelo:
+                        no = f"Cuota {c.cuota:.2f}: por debajo de tu mínimo ({suelo:.2f})."
+                    else:
+                        continue            # tapados larguísimos: ni «casi»
+                elif p < reglas.prob_minima:
+                    descartes["poca probabilidad de acertar"] += 1
+                    no = f"Sale el {p:.0%} de las veces; tu mínimo es el {reglas.prob_minima:.0%}."
+                elif ev < reglas.ev_minimo:
+                    no = f"Ventaja {ev:+.1%}; tu mínimo es {reglas.ev_minimo:+.0%}."
+                elif baja and ev < reglas.ev_excepcion:
                     descartes["cuota baja sin valor suficiente"] += 1
+                    no = (f"Cuota {c.cuota:.2f} (menos de {reglas.cuota_minima:.2f}) con ventaja {ev:+.1%}; "
+                          f"por debajo de {reglas.cuota_minima:.2f} pides {reglas.ev_excepcion:+.0%}.")
+                if no is not None:
+                    if 0 < ev <= reglas.ev_sospechoso and not (
+                            mercado == "handicap" and escalera_rota(escaleras.get((evento_id, casa), {}), linea)):
+                        o_casi = nueva()
+                        o_casi.avisos.append(no)
+                        casi.append(o_casi)
                     continue
                 refs_txt = ", ".join(
                     f"{r} {casas[r][sel].cuota:.2f}" for r in sorted(otras))
-                op = Oportunidad(
-                    evento=ev_obj, mercado=mercado, linea=linea, seleccion=sel,
-                    casa=casa, cuota=c.cuota, prob_justa=p, cuota_justa=1.0 / p, ev=ev,
-                    importe=0.0, referencia=sorted(otras), por_metodo=metodo_p,
-                    edad_segundos=edad, ts_cuota=c.ts,
-                    ts_referencia=min(casas[r][s].ts for r in otras for s in sels),
-                    ref_cuotas={r: casas[r][sel].cuota for r in otras},
-                    otras={k: f[sel].cuota for k, f in casas.items()
-                           if k != casa and k not in reglas.afiladas and sel in f
-                           and _edad(f[sel].ts, ahora) <= reglas.edad_max_casa},
-                    fuente=c.fuente, edad_max=min(reglas.edad_max_casa, reglas.edad_max_referencia))
+                op = nueva()
                 op.motivos.append(
                     f"Cuota justa {1 / p:.2f} (prob. {p:.1%}, método más prudente de "
                     f"{len(metodo_p)}; referencia: {refs_txt}).")
@@ -294,7 +318,8 @@ def detectar(eventos: Dict[str, Evento], cuotas: Iterable[Cuota], banca: float,
             f"{reglas.stake.fraccion_kelly:g}, con tope.")
         expuesto[op.evento.id] += eur
         finales.append(op)
-    return Resultado(finales, sospechosas, dict(descartes))
+    casi.sort(key=lambda o: o.ev, reverse=True)
+    return Resultado(finales, sospechosas, dict(descartes), casi)
 
 
 def _media(refs: Dict[str, Dict[str, List[float]]], n: int) -> Dict[str, List[float]]:
