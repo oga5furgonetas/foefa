@@ -288,3 +288,32 @@ describe('última tanda real (27-09-2026, noche)', () => {
     expect(d.summary).not.toMatch(/^[\p{L} ]+: \d/u);
   });
 });
+
+describe('cortes seguros y titulares que se entienden solos (27-09-2026, RTP y DW)', () => {
+  it('no deja sujeto + inciso sin el verbo principal', () => {
+    const s = 'O número de palestinianos mortos na Faixa de Gaza, em consequência da ofensiva militar de Israel, que dura há quase três anos, ultrapassou os 74.000';
+    const out = compressClaim(s, 22);
+    expect(out ?? '').not.toMatch(/Israel$/);
+  });
+  it('corta antes de una oración de relativo final, que sí deja la idea completa', () => {
+    expect(compressClaim('El Gobierno aprobó este martes un plan de vivienda para jóvenes en toda España, que costará 1.200 millones de euros según las primeras estimaciones del ministerio', 18)).toBe('El Gobierno aprobó este martes un plan de vivienda para jóvenes en toda España');
+  });
+});
+
+describe('terremoto verificado con fuentes en otro idioma', () => {
+  it('el recuadro de verificación no queda vacío: muestra el dato y quién lo confirma', () => {
+    const usgs = source('USGS Earthquake Hazards Program', 'primary_official', { slug: 'usgs-earthquakes', homepageUrl: 'https://earthquake.usgs.gov', countryCode: 'US' });
+    const wire = source('Demo Wire US', 'wire_agency', { countryCode: 'US' });
+    const t = new Date(NOW.getTime() - 40 * 60000).toISOString();
+    const items = [
+      item(usgs, 'M 5.6 - 35 km NNE of Demo Point', 'A magnitude 5.6 earthquake was recorded 35 km NNE of Demo Point at a depth of 10.2 km, according to the USGS.', { minutesAgo: 40, structured: { type: 'earthquake', magnitude: 5.6, depthKm: 10.2, place: '35 km NNE of Demo Point', time: t, tsunami: false } }),
+      item(wire, 'Magnitude 5.6 earthquake strikes near Demo Point', 'A magnitude 5.6 earthquake struck 35 km north-northeast of Demo Point at a depth of 10.2 km, the seismic service said.', { minutesAgo: 20 }),
+    ];
+    const analysis = run(items, [usgs, wire]);
+    const fs = buildFactSheet(analysis, items, new Map([usgs, wire].map((s) => [s.id, s])), { language: 'es' });
+    const d = writeDeterministic(fs, { timeZone: 'UTC' })!;
+    expect(d.isDeveloping).toBe(false);
+    expect(d.verification.confirmed.length).toBeGreaterThan(0);
+    expect(d.verification.confirmed[0].text).toMatch(/Terremoto de magnitud 5,6/);
+  });
+});

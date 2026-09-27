@@ -78,7 +78,8 @@ export function writeDeterministic(fs: FactSheet, opts: WriteOptions = {}): Draf
     const candidates = [...pool.filter((c) => c.isHeadline && c.key !== leadClaim?.key), ...(leadClaim ? [leadClaim] : [])];
     for (const c of candidates) {
       const short = compressClaim(c.text, 16, { commaCut: false });
-      if (!short) continue;
+      // Un titular tiene que entenderse solo.
+      if (!short || !selfContained(short)) continue;
       const h = developing ? stripPeriod(P.according(short, listJoin(lang, c.attribution.slice(0, 2)))) : short;
       if (h.length <= 120) {
         headline = h;
@@ -196,6 +197,12 @@ export function writeDeterministic(fs: FactSheet, opts: WriteOptions = {}): Draf
     contradictions: fs.discrepancies.map((d) => ({ text: P.discrepancy(P.fieldNames[d.field] ?? d.field, d.parts.map((p) => `${p.source}: ${formatValue(p.value, nf)}`).join('; ')) })),
     method: P.method(fs.independentCredible, fs.hasPrimary),
   };
+  // Terremoto verificado con fuentes en otro idioma: el recuadro no puede quedar sin nada
+  // confirmado; se muestra el dato estructurado y quién lo confirma.
+  if (fs.earthquake && !developing && !verification.confirmed.length) {
+    const q = fs.earthquake;
+    verification.confirmed = [{ text: P.earthquake.headline(nf.format(q.magnitude), q.placeName ? P.near(q.placeName) : '').trim(), by: fs.sources.map((s) => s.name) }];
+  }
 
   // El número y los nombres cuadran siempre: si hay más de cuatro, se dice «entre ellas».
   const subheadline = developing
@@ -241,8 +248,13 @@ export function claimRef(c: FactClaim): number {
 
 /** ¿Se entiende sin la frase anterior? No si empieza por un anafórico o un conector. */
 function selfContained(text: string): boolean {
-  return !/^(den|dem|dies|esto|eso|ello|cela|ceci|ciò|isso|isto|but|pero|mas|aber|mais|ma|however|sin embargo|doch|allerdings|cependant|tuttavia|porém|contudo|además|también|also|auch|aussi|anche|também|and|y|und|et|e|so|así|asimismo)\b/i.test(text.trim());
+  const t = text.trim();
+  return !/^(den|dem|dies|esto|eso|ello|cela|ceci|ciò|isso|isto|but|pero|mas|aber|mais|ma|however|sin embargo|doch|allerdings|cependant|tuttavia|porém|contudo|además|también|also|auch|aussi|anche|também|and|y|und|et|e|so|así|asimismo)\b/i.test(t) && !ANAPHORIC_NP.test(t);
 }
+
+/** «La medida busca asegurar la zona…»: ¿qué medida? Remite a lo que la fuente dijo antes. */
+const ANAPHORIC_NP =
+  /^((la|esta|dicha) (medida|decisión|iniciativa|operación|propuesta|reforma|norma)|(el|este|dicho) (acuerdo|anuncio|plan|proyecto|cambio|decreto)|(the|this) (move|decision|measure|plan|deal|step|announcement|proposal)|(die|diese) (maßnahme|entscheidung|regelung)|(der|dieser) (schritt|beschluss|plan|vorschlag)|(la|cette) (mesure|décision|réforme)|(ce|le) (projet|plan|texte)|(la|questa) (misura|decisione|riforma)|(il|questo) (provvedimento|piano|decreto)|(a|esta|essa) (medida|decisão|reforma)|(o|este|esse) (acordo|plano|projeto|decreto))\b/i;
 
 function stripPeriod(s: string): string {
   return s.replace(/\.$/, '');

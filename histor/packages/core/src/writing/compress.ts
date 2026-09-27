@@ -18,42 +18,38 @@ export function compressClaim(text: string, maxWords = 22, opts: { commaCut?: bo
   const tail = s.match(ATTRIBUTION_TAIL);
   if (tail && words(s.slice(0, tail.index)).length >= 6) s = s.slice(0, tail.index).trim();
   if (words(s).length <= maxWords) return clean(s);
-  // Cortar en la primera frontera de cláusula que deje una idea completa.
+  // Cortar SOLO en fronteras seguras que dejen una idea completa. Nunca en una coma
+  // cualquiera: «O número de palestinianos mortos na Faixa de Gaza, em consequência da
+  // ofensiva militar de Israel» (27-09-2026) había perdido «ultrapassou os 74.000».
   const boundaries = [/;\s/, /\s—\s/, /\s–\s/, /,\s(que|which|who|where|donde|cuando|lo que|mientras|while|whereas|der|die|das|wobei|qui|où|dont|che|dove|mentre|onde|enquanto)\s/i];
-  for (const b of boundaries) {
+  for (const [bi, b] of boundaries.entries()) {
     const m = s.match(b);
-    if (m && m.index != null) {
-      const head = s.slice(0, m.index).trim();
-      const n = words(head).length;
-      if (n >= 8 && n <= maxWords && !DANGLING.test(head)) return clean(head);
-    }
+    if (!m || m.index == null) continue;
+    const head = s.slice(0, m.index).trim();
+    const rest = s.slice(m.index + m[0].length);
+    // Una oración de relativo que se cierra y sigue («X, que dura tres años, ultrapassou…»)
+    // es un inciso del sujeto: lo de delante no tiene el verbo principal.
+    if (bi === boundaries.length - 1 && rest.includes(', ')) continue;
+    const n = words(head).length;
+    if (n >= 8 && n <= maxWords && complete(head)) return clean(head);
   }
-  // Titulares: nada de cortar por comas («Au Maroc, un an après le mouvement de la gen Z»
-  // era el principio de un titular de Le Monde). Si no cabe entero, se usa otra afirmación.
+  // Titulares: aquí se acaba (nada de quedarse con la oración principal suelta).
   if (opts.commaCut === false) return null;
   // Empieza por una subordinada («While in Washington…, Xi announced…»): lo que va delante
   // de la coma no tiene verbo principal; se queda la oración principal, si cabe.
-  const intro = INTRO.test(s);
-  if (intro) {
+  if (INTRO.test(s)) {
     const comma = s.indexOf(', ');
     const main = comma > 0 ? s.slice(comma + 2).trim() : '';
     const n = words(main).length;
-    if (n >= 8 && n <= maxWords) return clean(main);
+    if (n >= 8 && n <= maxWords && complete(main) && !main.includes(', ')) return clean(main);
   }
-  // Última coma antes del límite, si deja una oración con sentido (≥ 8 palabras).
-  const ws = s.split(' ');
-  for (let i = Math.min(ws.length, maxWords) - 1; i >= 8; i--) {
-    if (/,$/.test(ws[i - 1]) || /,$/.test(ws[i])) {
-      const head = ws.slice(0, i).join(' ').replace(/,$/, '');
-      // Con subordinada inicial, quedarse solo con ella deja una idea a medias.
-      if (intro && !head.includes(', ')) continue;
-      // Tampoco si termina en una palabra que pide complemento: «…, warnen aber davor»,
-      // ni dentro de una oración de relativo («Le jeune coureur, qui est déjà monté sur le podium»).
-      if (DANGLING.test(head) || OPEN_RELATIVE.test(head) || OPEN_SUBORDINATE.test(head)) continue;
-      if (words(head).length >= 8) return clean(head);
-    }
-  }
+  // Si no cabe entera sin cortar a mitad de idea, la afirmación no se usa.
   return null;
+}
+
+/** Sin final colgante, relativo abierto ni «that while…» sin su verbo. */
+function complete(head: string): boolean {
+  return !DANGLING.test(head) && !OPEN_RELATIVE.test(head) && !OPEN_SUBORDINATE.test(head);
 }
 
 /** Lo último es una oración de relativo abierta tras coma: falta el predicado principal. */

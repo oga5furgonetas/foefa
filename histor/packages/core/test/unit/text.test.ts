@@ -3,7 +3,7 @@ import { detectAttribution } from '../../src/text/attribution';
 import { extractDates, parseFeedDate } from '../../src/text/dates';
 import { extractEntities, findPlaces } from '../../src/text/entities';
 import { nonNewsReason } from '../../src/text/nonnews';
-import { storySimilarity } from '../../src/pipeline/cluster';
+import { comparableVector, storySimilarity } from '../../src/pipeline/cluster';
 import { detectLanguage } from '../../src/text/langdetect';
 import { detectModality } from '../../src/text/modality';
 import { slugify } from '../../src/text/normalize';
@@ -195,6 +195,25 @@ describe('agrupador: mismo hecho con una cifra y el lugar, pero no por el lugar 
   });
   it('dos hechos distintos en el mismo país, sin cifras ni palabras en común, no se unen', () => {
     const sim = storySimilarity(piece('El cantante marroquí condenado en apelación a diez años de prisión en Marruecos', ['country:MA']), cand('Un año después del movimiento de la generación Z, cientos de detenidos en Marruecos', ['country:MA']));
+    expect(sim).toBeLessThan(0.42);
+  });
+});
+
+describe('agrupador: los topónimos no cuentan como parecido léxico', () => {
+  it('Arabia Saudí, Gaza o Cisjordania son lugares, no personas que «protagonizan» dos historias', () => {
+    for (const [t, cc] of [['A Arábia Saudita está entre os três países', 'SA'], ['Faixa de Gaza', 'PS'], ['Israel decreta un cierre en Cisjordania', 'PS'], ['As escolas da capital Riade vão funcionar remotamente', 'SA']] as const) {
+      expect(findPlaces(t).some((p) => p.countryCode === cc), t).toBe(true);
+      expect(extractEntities(t).some((e) => e.type === 'person'), t).toBe(false);
+    }
+    // Y un nombre de pila que coincide con un país no se convierte en lugar.
+    expect(extractEntities('Salvador Illa, presidente de la Generalitat').find((e) => e.name === 'Salvador Illa')?.type).toBe('person');
+  });
+
+  it('el cierre de colegios en Riad no se une a las ejecuciones en Arabia Saudí', () => {
+    const riad = 'Escolas de Riade em ensino à distância durante uma semana. As escolas da capital Riade vão funcionar remotamente durante uma semana, após nova onda de ataques dos rebeldes Huthis do Iémen contra a Arábia Saudita.';
+    const exec = "'Descobri pelas redes sociais que ele estava morto': o duplo castigo aos condenados na Arábia Saudita. A Arábia Saudita está entre os três países com o maior número de execuções, aplicadas a estrangeiros em mais de 40% dos casos.";
+    const c = { id: 1, centroid: termVector(exec, 'pt'), entityNames: [], countryCode: 'SA', lastItemAt: new Date('2026-09-27T10:00:00Z'), placeKeys: new Set(['country:SA']), minhashes: [], isDemo: false };
+    const sim = storySimilarity({ vec: comparableVector(riad, 'pt'), entities: [], places: ['country:SA'], minhash: null, at: new Date('2026-09-27T11:00:00Z') }, c);
     expect(sim).toBeLessThan(0.42);
   });
 });

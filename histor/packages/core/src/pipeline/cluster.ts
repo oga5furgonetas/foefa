@@ -11,7 +11,7 @@ import { and, desc, eq, gt, inArray, notInArray, sql } from 'drizzle-orm';
 import type { EditorialSettings } from '../config/settings';
 import type { Db } from '../db/client';
 import { rawItems, stories, storyItems } from '../db/schema';
-import { entityKey } from '../text/entities';
+import { entityKey, findPlaces } from '../text/entities';
 import { slugify } from '../text/normalize';
 import { cosine, mergeVectors, minhashSimilarity, sharedNumberTerms, termVector, type TermVector } from '../text/similarity';
 import { placeKey } from '../verification/claims';
@@ -54,6 +54,16 @@ export function storySimilarity(
   const numPlace = nums >= 1 && placeScore > 0 ? 0.15 : 0;
   if (!sharedEnts.length && cos < 0.55 && !crossLingual && !numPlace) return Math.min(0.3, cos) * timeFactor;
   return Math.max(0.5 * cos + 0.35 * Math.min(1, entScore) + 0.15 * placeScore + numPlace, crossLingual + 0.15 * placeScore) * timeFactor;
+}
+
+/**
+ * Vector para comparar con las historias, sin las palabras de los topónimos: «Arábia
+ * Saudita» pesaba tanto que unía el cierre de colegios en Riad con las ejecuciones en el
+ * país (27-09-2026). El lugar ya cuenta aparte, con su propio peso.
+ */
+export function comparableVector(text: string, lang?: string, vec: TermVector = termVector(text, lang)): TermVector {
+  const placeTerms = new Set(Object.keys(termVector(findPlaces(text).map((p) => p.name).join(' '), lang)));
+  return Object.fromEntries(Object.entries(vec).filter(([t]) => !placeTerms.has(t)));
 }
 
 /** IDF sobre los centroides candidatos: las palabras que salen en todas las historias pesan poco. */
@@ -114,6 +124,7 @@ export async function clusterItems(db: Db, settings: EditorialSettings, opts: { 
     }
     const full = [it.title, it.summary, it.contentText].filter(Boolean).join(' ');
     const vec = termVector(full, it.language ?? undefined);
+    const simVec = comparableVector(full, it.language ?? undefined, vec);
     // Sin topónimos: compartir «Ucrania» o «Marruecos» no hace que dos hechos sean el mismo
     // (el lugar ya cuenta aparte, con su peso). Visto el 27-09-2026: Lavrov + una alerta de inundación.
     const ents = it.entities.filter((e) => e.type !== 'place' && (e.type !== 'other' || e.name.includes(' '))).map((e) => entityKey(e.name));
@@ -123,7 +134,7 @@ export async function clusterItems(db: Db, settings: EditorialSettings, opts: { 
     const idf = idfFrom(candidates.map((c) => c.centroid));
     for (const c of candidates) {
       if (c.isDemo !== it.isDemo) continue; // lo DEMO jamás se mezcla con lo real
-      const sim = storySimilarity({ vec, entities: ents, places, minhash: it.minhash, at }, c, idf);
+      const sim = storySimilarity({ vec: simVec, entities: ents, places, minhash: it.minhash, at }, c, idf);
       if (!best || sim > best.sim) best = { c, sim };
     }
     let storyId: number;
