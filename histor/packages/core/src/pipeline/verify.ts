@@ -28,6 +28,7 @@ import { getSourceTypeWeights } from '../services/settings';
 import { analyseStory } from '../verification/engine';
 import { importanceScore } from '../verification/momentum';
 import type { StoryAnalysis, VPlace } from '../verification/types';
+import { pruneDriftedItems } from './cluster';
 import { loadSources, loadStoryItems, type RawItemRow } from './loaders';
 
 export type VerifyOutcome = { storyId: number; decision: StoryAnalysis['decision']; state: StoryState; confidence: number; momentum: number };
@@ -121,6 +122,8 @@ export function storyConsensus(rows: Pick<RawItemRow, 'categoryId' | 'countryCod
 }
 
 export async function verifyStory(db: Db, st: typeof stories.$inferSelect, settings: EditorialSettings, now: Date): Promise<VerifiedStory> {
+  // Antes de nada, suelta lo que no encaja con el origen de la historia (historias que derivaron).
+  if (!st.lockedByEditor && st.itemCount > 2) await pruneDriftedItems(db, st.id, settings);
   const { items, rows } = await loadStoryItems(db, st.id);
   const consensus = storyConsensus(rows);
   const sources = await loadSources(db, [...new Set(items.map((i) => i.sourceId))]);

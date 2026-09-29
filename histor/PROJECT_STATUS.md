@@ -178,6 +178,18 @@ si algo no tiene respaldo). Grok (xAI) NO sirve gratis: la cuenta de Dani no tie
 
 ## Pendiente (no bloqueado)
 
+- **Historias-tema: arreglado el 30-09-2026.** El agrupador comparaba cada pieza con el
+  centroide acumulado y la historia derivaba (una llegó a 264 piezas sin relación; otra juntaba
+  la acampada de Sol, la Diagonal y el Consejo de Ministros). Ahora cada pieza tiene que
+  parecerse también a las 3 que abrieron la historia (`ANCHORS` en `pipeline/cluster.ts`); se
+  compara con titular, entradilla y arranque del texto (el relleno final de cada medio hacía
+  parecidas piezas sin relación); «cifra + lugar» solo suma con parecido de texto o una entidad
+  compartida, y entre idiomas hace falta una cifra significativa. Las historias ya contaminadas
+  se limpian solas al reverificarse (`pruneDriftedItems`): se sueltan las piezas que no encajan
+  con el origen y vuelven a agruparse. Medido en `histor_live`: 263 de 264 fuera en la peor,
+  ninguna pieza perdida en las buenas (decretos de vivienda, juicio de Lindsay Clancy).
+  Queda: noticias iguales que caen en dos historias hermanas (Maricarmen) — mejor partido que mezclado.
+
 - **Traducción con IA** (`AI_PROVIDER_TRANSLATION` + clave + `AI_MONTHLY_BUDGET_USD`): sin ella
   cada noticia solo sale en el idioma de sus fuentes, por eso la portada en español
   tiene poco. Con ella, cada historia verificada sale en los 6 idiomas.
