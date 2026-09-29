@@ -5,6 +5,7 @@
  * La IP nunca se guarda: solo se leen las cabeceras de país/región/ciudad
  * que añade la CDN (Cloudflare, Vercel, Fastly…) cuando existen.
  */
+import { countryFromIp } from './ipcountry';
 import { CITIES } from '../config/cities';
 import { COUNTRIES, country } from '../config/countries';
 import { ACTIVE_LANGUAGES, DEFAULT_LANGUAGE, isActiveLanguage, type LanguageCode } from '../config/languages';
@@ -38,9 +39,12 @@ export function parseAcceptLanguage(header: string | null | undefined): { lang: 
 
 export function countryFromHeaders(h: HeaderGetter): string | null {
   const raw = h('cf-ipcountry') ?? h('x-vercel-ip-country') ?? h('x-country-code') ?? h('cloudfront-viewer-country') ?? h('fastly-geo-country') ?? null;
-  if (!raw || raw === 'XX' || raw === 'T1') return null;
-  const cc = raw.toUpperCase();
-  return /^[A-Z]{2}$/.test(cc) ? cc : null;
+  if (raw && raw !== 'XX' && raw !== 'T1') {
+    const cc = raw.toUpperCase();
+    if (/^[A-Z]{2}$/.test(cc)) return cc;
+  }
+  // Sin CDN que lo diga (Fly): por la IP del lector, consultada en memoria y nunca guardada.
+  return countryFromIp(h('fly-client-ip') ?? h('x-forwarded-for'));
 }
 
 export function regionFromHeaders(h: HeaderGetter, countryCode: string | null): string | null {

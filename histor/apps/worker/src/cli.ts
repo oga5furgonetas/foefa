@@ -5,7 +5,7 @@
  *   create-admin            crea/promueve el admin (ADMIN_EMAIL + ADMIN_PASSWORD)
  *   demo:seed [--phase=2]   carga el escenario DEMO pasando por el pipeline real
  *   demo:purge              borra todo el contenido DEMO
- *   sources:check [--update] [--only=slug] comprueba las fuentes reales (robots, estado, formato, nº de piezas)
+ *   sources:check [--update] [--only=slug1,slug2] comprueba las fuentes reales (robots, estado, formato, nº de piezas)
  *   run-once                una vuelta del pipeline
  *   newsletter:send         envía las newsletters cuya hora ha llegado
  *   check:env               lista lo que falta para producción
@@ -102,7 +102,8 @@ async function sourcesCheck(): Promise<number> {
   const only = flagValue('only');
   const update = !!flag('update');
   const fetcher = new PoliteFetcher({ minHostIntervalMs: 1500 });
-  const list = SOURCE_SEEDS.filter((s) => (!only || s.slug === only) && s.feedUrl);
+  const wanted = only ? new Set(only.split(',').map((x) => x.trim())) : null;
+  const list = SOURCE_SEEDS.filter((s) => (!wanted || wanted.has(s.slug)) && s.feedUrl);
   let bad = 0;
   console.log(`Comprobando ${list.length} fuentes (respetando robots.txt; 1 petición cada 1,5 s por dominio)…\n`);
   for (const s of list) {

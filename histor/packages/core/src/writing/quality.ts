@@ -43,7 +43,25 @@ const CLICKBAIT = [
 const DEFAMATION_TERMS =
   /\b(asesin[oa]|violador|ladr[oó]n|estafador|corrupt[oa]|terrorista|pederasta|murderer|rapist|thief|fraudster|terrorist|m[öo]rder|vergewaltiger|dieb|betr[üu]ger|meurtrier|violeur|voleur|escroc|assassino|stupratore|ladro|truffatore|estuprador|golpista)\b/i;
 const PRESUMPTION = /(presunt|supuest|alleged|accused|acusad|mutmaßlich|mutmasslich|beschuldigt|présum|presum|accusat|suspeit|investigad|condenad|convicted|verurteilt|condamn|condannat)/i;
-const PII = [/[\w.+-]+@[\w-]+\.[\w.]+/, /(?<!\d)(?:\+?\d{1,3}[\s.-]?)?(?:\(?\d{2,4}\)?[\s.-]?){2,4}\d{3,4}(?!\d)/];
+// Separadores de un teléfono: espacio, punto o guion, nunca un salto de línea (juntaba dos cifras
+// de «Datos clave» en un «teléfono»).
+const PII = [/[\w.+-]+@[\w-]+\.[\w.]+/, /(?<!\d)(?:\+?\d{1,3}[ .\-  ]?)?(?:\(?\d{2,4}\)?[ .\-  ]?){2,4}\d{3,4}(?!\d)/g];
+/** «54 000 000 000 €», «300 000 personnes», «1.250.000 euros»: una cantidad, no un teléfono. */
+const THOUSANDS = /^\d{1,3}(?:[ .,  ]\d{3})+$/;
+
+/** Primer correo o teléfono que parece un dato personal (las cantidades con unidad no cuentan). */
+export function personalDataIn(text: string): { kind: 'correo' | 'teléfono'; match: string } | null {
+  const mail = text.match(PII[0]);
+  if (mail) return { kind: 'correo', match: mail[0] };
+  for (const m of text.matchAll(PII[1])) {
+    const raw = m[0].trim();
+    if (raw.replace(/\D/g, '').length < 9) continue;
+    const end = (m.index ?? 0) + m[0].length;
+    if (THOUSANDS.test(raw) && /^[\s  ]*[\p{L}€$£%]/u.test(text.slice(end, end + 3))) continue;
+    return { kind: 'teléfono', match: raw };
+  }
+  return null;
+}
 
 export function runQualityChecks(ctx: QualityContext): QualityReport {
   const { draft, factSheet: fs, settings } = ctx;
@@ -131,11 +149,9 @@ export function runQualityChecks(ctx: QualityContext): QualityReport {
     const ratio = overlapRatio(nonQuote, s.text);
     if (ratio > maxRatio) legal.push(`el ${Math.round(ratio * 100)} % del texto coincide con una sola fuente (máximo ${Math.round(maxRatio * 100)} %)`);
   }
-  for (const re of PII) {
-    const m = nonQuote.match(re);
-    if (m && !fs.sourceTexts.some((s) => s.text.includes(m[0]) && s.sourceId && fs.sources.some((x) => x.sourceId === s.sourceId && x.isPrimary))) {
-      if (re === PII[0] || m[0].replace(/\D/g, '').length >= 9) legal.push(`posible dato personal (${re === PII[0] ? 'correo' : 'teléfono'})`);
-    }
+  const pii = personalDataIn(nonQuote);
+  if (pii && !fs.sourceTexts.some((s) => s.text.includes(pii.match) && s.sourceId && fs.sources.some((x) => x.sourceId === s.sourceId && x.isPrimary))) {
+    legal.push(`posible dato personal (${pii.kind})`);
   }
   for (const sentence of nonQuote.split(/\n+|(?<=[.!?])\s+/)) {
     if (DEFAMATION_TERMS.test(sentence) && !PRESUMPTION.test(sentence) && !/según|according|laut|selon|secondo|segundo/i.test(sentence)) {

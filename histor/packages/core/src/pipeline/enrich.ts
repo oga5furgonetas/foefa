@@ -14,13 +14,15 @@ import type { Db } from '../db/client';
 import { rawItems, stories, storyItems } from '../db/schema';
 import { PoliteFetcher } from '../ingest/fetcher';
 import { extractArticleText } from '../ingest/parsers';
+import { wireOrigin } from '../text/attribution';
+import { minhash } from '../text/similarity';
 
 export async function enrichStoryItems(db: Db, opts: { fetcher?: PoliteFetcher; now?: Date; limit?: number } = {}): Promise<{ enriched: number; skipped: number }> {
   const now = opts.now ?? new Date();
   const fetcher = opts.fetcher ?? new PoliteFetcher();
   const since = new Date(now.getTime() - 48 * 3600_000);
   const rows = await db
-    .select({ id: rawItems.id, url: rawItems.url, meta: rawItems.meta, storyId: stories.id })
+    .select({ id: rawItems.id, url: rawItems.url, meta: rawItems.meta, storyId: stories.id, title: rawItems.title, summary: rawItems.summary, attributedTo: rawItems.attributedTo })
     .from(rawItems)
     .innerJoin(storyItems, eq(storyItems.itemId, rawItems.id))
     .innerJoin(stories, eq(stories.id, storyItems.storyId))
@@ -57,7 +59,13 @@ export async function enrichStoryItems(db: Db, opts: { fetcher?: PoliteFetcher; 
       status = `error: ${(e as Error).message}`.slice(0, 80);
     }
     const meta = { ...((r.meta as Record<string, unknown>) ?? {}), enrich: status };
-    await db.update(rawItems).set(text ? { contentText: text, meta } : { meta }).where(eq(rawItems.id, r.id));
+    // Con el texto completo se recalcula de quién procede y la huella de copia: «MADRID, 29 (EUROPA
+    // PRESS) -» solo aparece en el artículo, y sin esto la copia de un teletipo contaba como fuente propia.
+    const full = text ? [r.title, r.summary, text].filter(Boolean).join('\n') : '';
+    await db
+      .update(rawItems)
+      .set(text ? { contentText: text, meta, attributedTo: r.attributedTo ?? wireOrigin(text), minhash: minhash(full) } : { meta })
+      .where(eq(rawItems.id, r.id));
     if (text) {
       enriched++;
       touched.add(r.storyId);

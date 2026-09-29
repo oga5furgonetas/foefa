@@ -39,7 +39,7 @@ const ROWS: Row[] = [
   ['AR', 'es', 'ARS', 'America/Argentina/Buenos_Aires', 'south_america', true, ['Argentina', 'Argentina', 'Argentinien', 'Argentine', 'Argentina', 'Argentina'], []],
   ['CO', 'es', 'COP', 'America/Bogota', 'south_america', true, ['Colombia', 'Colombia', 'Kolumbien', 'Colombie', 'Colombia', 'Colômbia'], []],
   ['CL', 'es', 'CLP', 'America/Santiago', 'south_america', true, ['Chile', 'Chile', 'Chile', 'Chili', 'Cile', 'Chile'], []],
-  ['PE', 'es', 'PEN', 'America/Lima', 'south_america', false, ['Perú', 'Peru', 'Peru', 'Pérou', 'Perù', 'Peru'], []],
+  ['PE', 'es', 'PEN', 'America/Lima', 'south_america', true, ['Perú', 'Peru', 'Peru', 'Pérou', 'Perù', 'Peru'], []],
   ['BR', 'pt', 'BRL', 'America/Sao_Paulo', 'south_america', true, ['Brasil', 'Brazil', 'Brasilien', 'Brésil', 'Brasile', 'Brasil'], []],
   ['AT', 'de', 'EUR', 'Europe/Vienna', 'europe', false, ['Austria', 'Austria', 'Österreich', 'Autriche', 'Austria', 'Áustria'], []],
   ['CH', 'de', 'CHF', 'Europe/Zurich', 'europe', false, ['Suiza', 'Switzerland', 'Schweiz', 'Suisse', 'Svizzera', 'Suíça'], []],

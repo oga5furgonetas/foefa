@@ -77,17 +77,46 @@ const NAMED: Record<string, string> = {
   mdash: '—',
   hellip: '…',
   euro: '€',
-  pound: '£',
+  oelig: 'œ',
+  OElig: 'Œ',
+  scaron: 'š',
+  Scaron: 'Š',
+  zcaron: 'ž',
+  Zcaron: 'Ž',
+  bull: '•',
+  trade: '™',
+  prime: '′',
+  Prime: '″',
+  sbquo: '‚',
+  thinsp: ' ',
+  ensp: ' ',
+  emsp: ' ',
+  zwnj: '',
+  zwj: '',
+  lrm: '',
+  rlm: '',
 };
+// Latin-1 completo (U+00A0–U+00FF), en orden: sin ellas salía «S&aacute;nchez» en portada.
+const LATIN1 =
+  'nbsp iexcl cent pound curren yen brvbar sect uml copy ordf laquo not shy reg macr deg plusmn sup2 sup3 acute micro para middot cedil sup1 ordm raquo frac14 frac12 frac34 iquest Agrave Aacute Acirc Atilde Auml Aring AElig Ccedil Egrave Eacute Ecirc Euml Igrave Iacute Icirc Iuml ETH Ntilde Ograve Oacute Ocirc Otilde Ouml times Oslash Ugrave Uacute Ucirc Uuml Yacute THORN szlig agrave aacute acirc atilde auml aring aelig ccedil egrave eacute ecirc euml igrave iacute icirc iuml eth ntilde ograve oacute ocirc otilde ouml divide oslash ugrave uacute ucirc uuml yacute thorn yuml'.split(' ');
+LATIN1.forEach((name, i) => (NAMED[name] ??= String.fromCharCode(0xa0 + i)));
+NAMED.shy = '';
 
-export function decodeEntities(s: string): string {
-  return s.replace(/&(#x[0-9a-f]+|#\d+|[a-z]+);/gi, (m, ent: string) => {
+function decodeOnce(s: string): string {
+  return s.replace(/&(#x[0-9a-f]+|#\d+|[a-z][a-z0-9]*);/gi, (m, ent: string) => {
     if (ent[0] === '#') {
       const code = ent[1] === 'x' || ent[1] === 'X' ? parseInt(ent.slice(2), 16) : parseInt(ent.slice(1), 10);
       return Number.isFinite(code) && code > 0 && code < 0x10ffff ? String.fromCodePoint(code) : m;
     }
-    return NAMED[ent.toLowerCase()] ?? m;
+    // Sensible a mayúsculas (&Aacute; ≠ &aacute;); si no existe así, se prueba en minúsculas (&QUOT;).
+    return NAMED[ent] ?? NAMED[ent.toLowerCase()] ?? m;
   });
+}
+
+export function decodeEntities(s: string): string {
+  const once = decodeOnce(s);
+  // Feeds con doble escapado («&amp;aacute;»): una segunda pasada solo si quedó una entidad conocida.
+  return /&(#x[0-9a-f]+|#\d+|[a-z][a-z0-9]*);/i.test(once) && once !== s ? decodeOnce(once) : once;
 }
 
 /** Recorta a n caracteres sin partir palabras. */

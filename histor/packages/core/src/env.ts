@@ -66,6 +66,10 @@ const schema = z.object({
   // Observabilidad
   SENTRY_DSN: z.string().optional(),
   METRICS_TOKEN: z.string().optional(),
+  // Difusión: IndexNow (Bing y otros buscadores al instante) y verificación de Google Search Console y Bing Webmaster.
+  INDEXNOW_KEY: z.string().regex(/^[a-zA-Z0-9-]{8,128}$/).optional(),
+  GOOGLE_SITE_VERIFICATION: z.string().optional(),
+  BING_SITE_VERIFICATION: z.string().optional(),
   LOG_LEVEL: z.string().default('info'),
   // Almacenamiento S3 compatible (copias de seguridad: infra/backup.sh)
   S3_ENDPOINT: z.string().optional(),

@@ -10,3 +10,5 @@ test-results/
 playwright-report/
 apps/worker/.cache/
 backups/
+# Base de geolocalización por IP (se descarga al construir: scripts/fetch-geoip.mjs)
+/geo/

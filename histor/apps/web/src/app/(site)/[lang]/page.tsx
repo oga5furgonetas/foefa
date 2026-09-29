@@ -129,6 +129,17 @@ export default async function Home({ params }: { params: Promise<{ lang: string 
             </Section>
           )}
 
+          {/* Primero tu país; justo después, el mundo (lo que no es de tu país). */}
+          {home.world.length > 0 && (
+            <Section title={d.home.world} more={href.category(lang, 'world')} moreLabel={d.home.seeAll}>
+              <div className="grid grid-4">
+                {home.world.map((a) => (
+                  <StoryCard key={a.id} a={a} lang={lang} d={d} />
+                ))}
+              </div>
+            </Section>
+          )}
+
           {home.latest.length > 0 && (
           <Section title={d.home.latest} more={href.list(lang, 'latest')} moreLabel={d.home.seeAll}>
             <div className="grid grid-4">
@@ -143,16 +154,6 @@ export default async function Home({ params }: { params: Promise<{ lang: string 
             <Section title={d.home.trending} more={href.list(lang, 'trending')} moreLabel={d.home.seeAll}>
               <div className="grid grid-3">
                 {home.trending.map((a) => (
-                  <StoryCard key={a.id} a={a} lang={lang} d={d} />
-                ))}
-              </div>
-            </Section>
-          )}
-
-          {home.world.length > 0 && (
-            <Section title={d.home.world} more={href.category(lang, 'world')} moreLabel={d.home.seeAll}>
-              <div className="grid grid-4">
-                {home.world.map((a) => (
                   <StoryCard key={a.id} a={a} lang={lang} d={d} />
                 ))}
               </div>

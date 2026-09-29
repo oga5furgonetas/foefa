@@ -48,13 +48,44 @@ function originFromToken(tok: string): string | null {
 }
 
 /**
+ * Quita la firma de agencia del principio de una frase: «MADRID, 29 Sep. (EUROPA PRESS) -»,
+ * «WASHINGTON (AP) —», «Ciudad de México, 29 sep (EFE).-» o, ya sin la agencia, «MADRID, 29 ».
+ * Sin esto la noticia empezaba «MADRID, 29 OpenAI ha decidido…». Es prudente: solo con una
+ * agencia conocida entre paréntesis o con la ciudad en mayúsculas seguida del día.
+ */
+export function stripDateline(text: string): string {
+  const withOrigin = text.match(/^([\p{L}\d\s,.'’-]{0,60})\(([\p{L}][\p{L}\s.-]{1,30})\)\s*\.?\s*[-—–:]\s*/u);
+  if (withOrigin && (originFromToken(withOrigin[2]) || /^\p{Lu}[\p{Lu}\s.'’-]{2,}/u.test(withOrigin[1]))) {
+    const rest = text.slice(withOrigin[0].length);
+    if (rest.length > 20) return rest;
+  }
+  const bare = text.match(/^\p{Lu}[\p{Lu}\s.'’-]{2,40},\s*\d{1,2}(?:\.|\s+\p{L}{3,10}\.?)?\s+(?=\p{Lu})/u);
+  if (bare && text.length - bare[0].length > 20) return text.slice(bare[0].length);
+  return text;
+}
+
+/**
+ * Solo las señales fuertes de que TODA la pieza es de una agencia: la firma del principio
+ * («MADRID, 29 (EUROPA PRESS) -») o el crédito final («(EFE)»). Para el artículo completo:
+ * un «según EFE» en el tercer párrafo atribuye un dato, no la pieza entera.
+ */
+export function wireOrigin(text: string): string | null {
+  const dateline = text.slice(0, 200).match(/^[\p{Lu}\p{L}\d\s,.'’-]{0,60}\(([\p{L}][\p{L}\s.-]{1,30})\)\s*[-—–:.]/u);
+  const o = dateline ? originFromToken(dateline[1]) : null;
+  if (o) return o;
+  const credit = text.slice(-120).match(/[(—–-]\s*([\p{L}][\p{L}\s.-]{1,25})\s*\)?\s*$/u);
+  return credit ? originFromToken(credit[1]) : null;
+}
+
+/**
  * Devuelve el origen citado (canónico si es una agencia conocida, o el
  * nombre tal cual si es otra fuente citada explícitamente), o null.
  */
 export function detectAttribution(text: string): string | null {
   const head = text.slice(0, 600);
-  // Firma de agencia: "MADRID (EFE) —", "(Reuters) -", "BERLIN (dpa) -"
-  const dateline = head.match(/^[\p{Lu}\p{L}\s,.'’-]{0,60}\(([\p{L}][\p{L}\s.-]{1,30})\)\s*[-—–:]/u);
+  // Firma de agencia: "MADRID (EFE) —", "(Reuters) -", "BERLIN (dpa) -" y con fecha:
+  // "MADRID, 29 Sep. (EUROPA PRESS) -", "BERLIN, 29. September (dpa) -".
+  const dateline = head.match(/^[\p{Lu}\p{L}\d\s,.'’-]{0,60}\(([\p{L}][\p{L}\s.-]{1,30})\)\s*[-—–:.]/u);
   if (dateline) {
     const o = originFromToken(dateline[1]);
     if (o) return o;

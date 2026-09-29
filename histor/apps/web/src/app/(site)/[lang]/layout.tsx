@@ -5,6 +5,7 @@ import '@/styles/globals.css';
 import type { Metadata, Viewport } from 'next';
 import { notFound } from 'next/navigation';
 import { isActiveLanguage, languageDef, localeFor } from '@histor/core/config/languages';
+import { env } from '@histor/core/env';
 import { dict } from '@histor/core/i18n/dictionaries';
 import { href } from '@histor/core/i18n/routes';
 import { demoMode } from '@histor/core/services/content';
@@ -38,6 +39,11 @@ export async function generateMetadata({ params }: { params: Promise<{ lang: str
     alternates: { types: { 'application/rss+xml': `/${lang}/rss.xml` } },
     openGraph: { siteName: 'Histor', locale: localeFor(lang).replace('-', '_'), type: 'website' },
     twitter: { card: 'summary_large_image' },
+    // Verificación de Google Search Console y Bing Webmaster Tools (se pegan como secretos).
+    verification: {
+      google: env().GOOGLE_SITE_VERIFICATION,
+      other: env().BING_SITE_VERIFICATION ? { 'msvalidate.01': env().BING_SITE_VERIFICATION! } : undefined,
+    },
     // El modo DEMO no se indexa nunca: su contenido es ficticio.
     robots: demoMode() ? { index: false, follow: false } : { index: true, follow: true, 'max-image-preview': 'large' },
     formatDetection: { telephone: false, address: false, email: false },

@@ -177,7 +177,13 @@ export async function getHome(db: Db, geo: { lang: string; countryCode: string |
   const since = new Date(Date.now() - 7 * 86400000);
   // Abre la portada lo más importante YA confirmado; lo «en desarrollo» solo si no hay nada más.
   const topCandidates = await listArticles(db, { lang: geo.lang, since, orderBy: 'importance', limit: 6 });
-  const top = topCandidates.find((a) => !a.isDeveloping) ?? topCandidates[0] ?? null;
+  let top = topCandidates.find((a) => !a.isDeveloping) ?? topCandidates[0] ?? null;
+  // Como hacen las ediciones nacionales de los grandes diarios: si hay una noticia confirmada
+  // del país del lector con peso suficiente (≥ 60 % de la más importante), abre con ella.
+  if (geo.countryCode) {
+    const [ownTop] = (await listArticles(db, { lang: geo.lang, countryCode: geo.countryCode, since: new Date(Date.now() - 36 * 3600000), orderBy: 'importance', limit: 4 })).filter((a) => !a.isDeveloping);
+    if (ownTop && (!top || ownTop.importance >= 0.6 * top.importance)) top = ownTop;
+  }
   const exclude = top ? [top.id] : [];
   const breaking = await listArticles(db, { lang: geo.lang, breaking: true, since: new Date(Date.now() - 12 * 3600000), limit: 5, excludeIds: exclude });
   const latest = await listArticles(db, { lang: geo.lang, limit: 12, excludeIds: exclude });

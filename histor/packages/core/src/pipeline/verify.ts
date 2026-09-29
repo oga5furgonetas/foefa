@@ -27,8 +27,8 @@ import { openReviewTask } from '../services/audit';
 import { getSourceTypeWeights } from '../services/settings';
 import { analyseStory } from '../verification/engine';
 import { importanceScore } from '../verification/momentum';
-import type { StoryAnalysis } from '../verification/types';
-import { loadSources, loadStoryItems } from './loaders';
+import type { StoryAnalysis, VPlace } from '../verification/types';
+import { loadSources, loadStoryItems, type RawItemRow } from './loaders';
 
 export type VerifyOutcome = { storyId: number; decision: StoryAnalysis['decision']; state: StoryState; confidence: number; momentum: number };
 
@@ -82,15 +82,47 @@ export async function verifyDueStories(db: Db, settings: EditorialSettings, opts
         ? inArray(stories.id, opts.storyIds)
         : and(lte(stories.nextCheckAt, now), notInArray(stories.state, ['RETRACTED', 'BLOCKED'])),
     )
-    .orderBy(stories.nextCheckAt)
+    // Primero lo que puede llegar a publicarse (varias fuentes independientes o varias piezas);
+    // si no, 60 avisos del BOE se llevaban el cupo de cada ciclo y las noticias esperaban.
+    .orderBy(desc(sql`(${stories.independentSourceCount} >= 2)::int * 2 + (${stories.itemCount} >= 2)::int`), stories.nextCheckAt)
     .limit(opts.limit ?? 50);
   const out: VerifiedStory[] = [];
   for (const st of due) out.push(await verifyStory(db, st, settings, now));
   return out;
 }
 
+/**
+ * Sección y país de la historia por consenso de TODAS sus piezas, no por la primera que llegó:
+ * la cena de Trump con Anthropic salía en «Deportes» y la de OpenAI como «Francia» (la abrió
+ * Le Monde) el 29-09-2026. Sección: la de más puntuación sumada (o la más votada si el
+ * vocabulario no decide). País: el lugar citado por más piezas; si nadie cita lugar, el de las
+ * fuentes solo si al menos el 60 % coincide; si no, ninguno (la noticia es de todos).
+ */
+export function storyConsensus(rows: Pick<RawItemRow, 'categoryId' | 'countryCode' | 'meta'>[]): { categoryId: string | null; countryCode: string | null } {
+  const scoreSum = new Map<string, number>();
+  const votes = new Map<string, number>();
+  const placeVotes = new Map<string, number>();
+  const sourceCountry = new Map<string, number>();
+  for (const r of rows) {
+    const meta = (r.meta ?? {}) as { classification?: Record<string, number>; places?: VPlace[] };
+    for (const [k, v] of Object.entries(meta.classification ?? {})) scoreSum.set(k, (scoreSum.get(k) ?? 0) + Number(v || 0));
+    if (r.categoryId) votes.set(r.categoryId, (votes.get(r.categoryId) ?? 0) + 1);
+    const placed = new Set((meta.places ?? []).map((p) => p.countryCode).filter(Boolean));
+    for (const cc of placed) placeVotes.set(cc, (placeVotes.get(cc) ?? 0) + 1);
+    if (!placed.size && r.countryCode) sourceCountry.set(r.countryCode, (sourceCountry.get(r.countryCode) ?? 0) + 1);
+  }
+  const top = (m: Map<string, number>) => [...m.entries()].sort((a, b) => b[1] - a[1])[0] ?? null;
+  const bestScore = top(scoreSum);
+  const categoryId = bestScore && bestScore[1] >= 1.5 ? bestScore[0] : (top(votes)?.[0] ?? null);
+  const place = top(placeVotes);
+  const src = top(sourceCountry);
+  const countryCode = place ? place[0] : src && src[1] / rows.length >= 0.6 ? src[0] : null;
+  return { categoryId, countryCode };
+}
+
 export async function verifyStory(db: Db, st: typeof stories.$inferSelect, settings: EditorialSettings, now: Date): Promise<VerifiedStory> {
   const { items, rows } = await loadStoryItems(db, st.id);
+  const consensus = storyConsensus(rows);
   const sources = await loadSources(db, [...new Set(items.map((i) => i.sourceId))]);
   const weights = await getSourceTypeWeights(db);
 
@@ -219,7 +251,8 @@ export async function verifyStory(db: Db, st: typeof stories.$inferSelect, setti
         isBreaking: analysis.isBreaking,
         isDeveloping: analysis.decision === 'publish_developing' || (st.isDeveloping && finalState !== 'VERIFIED' && analysis.decision !== 'publish'),
         eventTime: analysis.eventTime,
-        countryCode: analysis.primaryPlace?.countryCode ?? st.countryCode,
+        countryCode: analysis.primaryPlace?.countryCode ?? consensus.countryCode,
+        categoryId: st.lockedByEditor ? st.categoryId : (consensus.categoryId ?? st.categoryId),
         nextCheckAt: delay == null ? null : new Date(now.getTime() + delay * 60000),
         updatedAt: now,
         retractedAt: finalState === 'RETRACTED' ? now : st.retractedAt,

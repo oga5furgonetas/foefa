@@ -5,11 +5,13 @@
  * rumor, desmentido) porque de ella depende cómo se puede publicar.
  */
 import type { ClaimKind } from '../domain';
-import { detectAttribution } from '../text/attribution';
+import { detectAttribution, stripDateline } from '../text/attribution';
 import { extractDates } from '../text/dates';
 import { entityKey, extractEntities, findPlaces } from '../text/entities';
 import { detectModality } from '../text/modality';
 import { extractNumbers } from '../text/numbers';
+import { PROMO } from '../text/nonnews';
+import { decodeEntities } from '../text/normalize';
 import { extractQuotes } from '../text/quotes';
 import { sentences, words } from '../text/tokenize';
 import type { VClaim, VItem } from './types';
@@ -38,11 +40,14 @@ export function extractClaims(item: VItem): VClaim[] {
   const seen = new Set<string>();
 
   const add = (text: string, isHeadline: boolean) => {
-    const clean = text.replace(/\s+/g, ' ').trim();
+    // Entidades sueltas («S&aacute;nchez») y firma de agencia («MADRID, 29 (EUROPA PRESS) -») fuera.
+    const clean = stripDateline(decodeEntities(text).replace(/\s+/g, ' ').trim());
     const wc = words(clean).length;
     if (wc < 4 || wc > 70) return;
     // Frase truncada por el feed («…Francisco Toscano…») o que anuncia lo que sigue («declaró:»): no afirma nada completo.
     if (/(…|\.\.\.|:)$/.test(clean)) return;
+    // Publicidad de la web del medio («Suivez toute l'actualité… en téléchargeant l'application RFI»).
+    if (PROMO.test(clean)) return;
     const norm = clean.toLowerCase();
     if (seen.has(norm)) return;
     const ents = extractEntities(clean, lang).filter((e) => e.type !== 'other' || e.name.split(' ').length > 1);

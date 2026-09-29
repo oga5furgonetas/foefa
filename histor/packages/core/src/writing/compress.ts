@@ -9,8 +9,10 @@ import { words } from '../text/tokenize';
 
 // Con coma delante obligatoria: sin ella, «ganó su segundo maratón» se cortaba en «segundo»
 // (que en portugués es «según») y quedaba «El etíope Guye Adola ganó su» (27-09-2026).
+// Y sin otra coma detrás: «…5 % alors que sur la période, selon l'Insee, l'inflation cumulée a
+// atteint plus de 24 %» es un inciso, no la coletilla; se cortaba el dato (29-09-2026).
 const ATTRIBUTION_TAIL =
-  /[,;]\s*(según|de acuerdo con|informó|ha informado|informa|confirmó|ha confirmado|explicó|señaló|indicó|dijo|according to|said|reported|reports|confirmed|laut|berichtete|teilte .* mit|selon|a indiqué|a annoncé|secondo|ha riferito|segundo|informou|disse)\b[^.;]*$/i;
+  /[,;]\s*(según|de acuerdo con|informó|ha informado|informa|confirmó|ha confirmado|explicó|señaló|indicó|dijo|according to|said|reported|reports|confirmed|laut|berichtete|teilte .* mit|selon|a indiqué|a annoncé|secondo|ha riferito|segundo|informou|disse)\b[^.;,]*$/i;
 
 export function compressClaim(text: string, maxWords = 22, opts: { commaCut?: boolean } = {}): string | null {
   let s = text.replace(/\s+/g, ' ').trim().replace(/[.。]+$/, '');
@@ -34,6 +36,14 @@ export function compressClaim(text: string, maxWords = 22, opts: { commaCut?: bo
     if (bi === boundaries.length - 1 && rest.includes(', ')) continue;
     const n = words(head).length;
     if (n >= 8 && n <= maxWords && complete(head)) return clean(head);
+  }
+  // Oración final de finalidad («…ont manifesté en France pour demander plus de moyens…»): sin
+  // ella el hecho sigue siendo cierto (se pierde el «para qué», no el «qué»).
+  const purpose = s.match(/\s(pour|afin de|para|a fin de|com o objetivo de)\s(?=\p{L}+(?:er|ir|re|ar)\b)/u);
+  if (purpose?.index != null) {
+    const head = s.slice(0, purpose.index).trim();
+    const n = words(head).length;
+    if (n >= 6 && n <= maxWords && complete(head) && !head.includes('(')) return clean(head);
   }
   // Titulares: aquí se acaba (nada de quedarse con la oración principal suelta).
   if (opts.commaCut === false) return null;

@@ -6,6 +6,7 @@ import type { ArticleBlock, VerificationBox } from '@histor/core/db/schema';
 import type { Dict } from '@histor/core/i18n/dictionaries';
 import { t } from '@histor/core/i18n/dictionaries';
 import { href } from '@histor/core/i18n/routes';
+import { absoluteUrl } from '@histor/core/seo/index';
 import type { getArticleDetail } from '@histor/core/services/content';
 import { NOTES } from '@histor/core/writing/notes';
 import { Badges } from '@/components/Badges';
@@ -137,9 +138,10 @@ export function ArticleView({ data, lang, d, tz, experiment }: { data: ArticleDe
         <ArticleActions
           articleId={a.id}
           title={headline}
+          url={absoluteUrl(href.article(a.language, publishedAt, a.slug))}
           reportHref={href.page(lang, 'report')}
           loginHref={href.page(lang, 'login')}
-          labels={{ share: d.article.share, save: d.article.save, saved: d.article.saved, copied: d.article.copied, reportError: d.article.reportError }}
+          labels={{ share: d.article.share, copyLink: d.article.copyLink, save: d.article.save, saved: d.article.saved, copied: d.article.copied, reportError: d.article.reportError }}
         />
 
         <div className="article-body" style={retracted ? { opacity: 0.75 } : undefined}>

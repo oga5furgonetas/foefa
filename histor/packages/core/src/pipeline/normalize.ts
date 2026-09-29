@@ -6,7 +6,7 @@ import { eq, inArray } from 'drizzle-orm';
 import { CITIES } from '../config/cities';
 import type { Db } from '../db/client';
 import { categories, cities, rawItems, regions, sources } from '../db/schema';
-import { detectAttribution } from '../text/attribution';
+import { detectAttribution, stripDateline } from '../text/attribution';
 import { extractDates } from '../text/dates';
 import { extractEntities, findPlaces, type PlaceMatch } from '../text/entities';
 import { detectLanguage } from '../text/langdetect';
@@ -62,7 +62,8 @@ export async function normalizeNewItems(db: Db, opts: { limit?: number } = {}): 
   let discarded = 0;
   for (const r of rows) {
     const src = srcById.get(r.sourceId);
-    const full = [r.title, r.summary, r.contentText].filter(Boolean).join('\n');
+    // Sin la firma de agencia: «MADRID, 29 (EUROPA PRESS) -» no hace que la noticia sea de Madrid.
+    const full = [r.title, r.summary, r.contentText].filter((x): x is string => !!x).map(stripDateline).join('\n');
     if (!src || r.title.trim().length < 8) {
       await db.update(rawItems).set({ status: 'discarded', discardReason: 'sin título útil' }).where(eq(rawItems.id, r.id));
       discarded++;

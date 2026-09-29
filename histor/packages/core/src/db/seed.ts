@@ -29,7 +29,7 @@ export async function seedReference(db: Db): Promise<Record<string, number>> {
     await db
       .insert(s.countries)
       .values({ code: c.code, names: c.names, slugs: c.slugs, defaultLanguage: c.defaultLanguage, currency: c.currency, timezone: c.timezone, continent: c.continent, edition: c.edition, sort: i })
-      .onConflictDoUpdate({ target: s.countries.code, set: { names: c.names, slugs: c.slugs, defaultLanguage: c.defaultLanguage, currency: c.currency, timezone: c.timezone, continent: c.continent } });
+      .onConflictDoUpdate({ target: s.countries.code, set: { names: c.names, slugs: c.slugs, defaultLanguage: c.defaultLanguage, currency: c.currency, timezone: c.timezone, continent: c.continent, edition: c.edition } });
   }
   counts.countries = COUNTRIES.length;
 

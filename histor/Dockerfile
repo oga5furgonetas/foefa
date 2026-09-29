@@ -19,6 +19,8 @@ RUN --mount=type=secret,id=npm_ca,required=false \
 FROM deps AS build
 COPY . .
 RUN npm run build -w @histor/web && npm run build -w @histor/worker
+# País del lector por IP (DB-IP Lite, CC BY 4.0). Si la descarga falla, la web deduce el país por el idioma.
+RUN mkdir -p geo && node scripts/fetch-geoip.mjs geo/dbip-country-lite.mmdb
 
 # ── Web (Next.js standalone) ──
 FROM node:${NODE_VERSION} AS web
@@ -27,6 +29,8 @@ ENV NODE_ENV=production PORT=3000 HOSTNAME=0.0.0.0 NEXT_TELEMETRY_DISABLED=1 HIS
 COPY --from=build --chown=node:node /app/apps/web/.next/standalone ./
 COPY --from=build --chown=node:node /app/apps/web/.next/static ./apps/web/.next/static
 COPY --from=build --chown=node:node /app/apps/web/public ./apps/web/public
+COPY --from=build --chown=node:node /app/geo ./geo
+ENV GEOIP_DB_PATH=/app/geo/dbip-country-lite.mmdb
 USER node
 EXPOSE 3000
 HEALTHCHECK --interval=30s --timeout=5s --start-period=20s CMD node -e "fetch('http://127.0.0.1:3000/api/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"

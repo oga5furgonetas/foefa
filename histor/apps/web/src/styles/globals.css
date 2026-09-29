@@ -208,6 +208,9 @@ button, input, select, textarea { font: inherit; color: inherit; }
 .timeline li::before { content: ''; position: absolute; left: -6px; top: 5px; width: 10px; height: 10px; border-radius: 50%; background: var(--paper); border: 2px solid var(--ink); }
 .history summary { cursor: pointer; font-family: var(--sans); font-weight: 600; font-size: 14px; }
 .actions { display: flex; flex-wrap: wrap; gap: 8px; margin: 18px 0; }
+.share-links { display: flex; flex-wrap: wrap; gap: 8px; }
+.share-links a { text-decoration: none; color: inherit; }
+.share-links .share-whatsapp { border-color: #1faa53; }
 
 /* ── Páginas de texto, formularios, tablas ── */
 .page { max-width: 760px; margin: 0 auto; padding: 28px 0 48px; }

@@ -93,6 +93,10 @@ export function Footer({ lang, d }: { lang: string; d: Dict }) {
             {d.footer.automation} <Link href={href.page(lang, 'howItWorks')}>{d.footer.howItWorks} →</Link>
           </p>
           <p className="muted">{t(d.footer.rights, { year: new Date().getFullYear() })}</p>
+          {/* Crédito que exige la licencia CC BY 4.0 de la base de geolocalización por IP. */}
+          <p className="muted" style={{ fontSize: 12 }}>
+            <a href="https://db-ip.com" rel="noopener" target="_blank">IP Geolocation by DB-IP</a>
+          </p>
         </div>
         <div>
           <h3>Histor</h3>

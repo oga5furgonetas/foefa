@@ -17,6 +17,7 @@ import { enqueue, releaseStale, work } from '@histor/core/jobs/queue';
 import { sendDueNewsletters } from '@histor/core/newsletter/index';
 import { dispatchStoryAlerts } from '@histor/core/notify/index';
 import { attachStoryImage } from '@histor/core/media/wikimedia';
+import { pingIndexNow, storyUrls } from '@histor/core/seo/indexnow';
 import { logger, reportError } from '@histor/core/observability/index';
 import { maintenance, runPipelineOnce, type TickStats } from '@histor/core/pipeline/run';
 import { publishQueuedPosts, queueSocialPosts } from '@histor/core/social/index';
@@ -76,7 +77,9 @@ export const handlers = {
     const image = await attachStoryImage(db, storyId).catch((e) => `error: ${(e as Error).message}`);
     const social = await queueSocialPosts(db, storyId);
     const alerts = await dispatchStoryAlerts(db, storyId);
-    logger.info({ storyId, image, social, alerts }, 'distribución');
+    // Aviso inmediato a los buscadores (IndexNow) de la noticia nueva o actualizada.
+    const indexnow = await pingIndexNow(await storyUrls(db, storyId));
+    logger.info({ storyId, image, social, alerts, indexnow }, 'distribución');
   },
   'pipeline:tick': async () => {
     await pipelineTick();
