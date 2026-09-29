@@ -3,10 +3,10 @@ import { useOutletContext } from 'react-router-dom'
 import {
   Upload, FileSpreadsheet, Loader2, AlertCircle, X, CheckCircle2,
   Download, RotateCcw, Plus, ChevronDown, ChevronUp, Trash2, FolderOpen,
-  Copy, ClipboardPaste, Car, Info, ClipboardCheck, Wand2, AlertTriangle,
+  Copy, ClipboardPaste, Car, Info, ClipboardCheck, Wand2, AlertTriangle, Smartphone,
 } from 'lucide-react'
 import { getToken } from '../auth'
-import { getPlantillas, downloadPlantilla, deletePlantilla, getVehicles, plantillaDesdeAsignacion, plantillaFurgos } from '../api'
+import { getPlantillas, downloadPlantilla, deletePlantilla, getVehicles, plantillaDesdeAsignacion, plantillaFurgos, plantillaMoviles } from '../api'
 import FurgonetasFijas from '../components/FurgonetasFijas'
 import { API_BASE as API } from '../../lib/apiBase'
 import { useT, LANG_LOCALE } from '../../i18n'
@@ -219,16 +219,29 @@ export default function PlantillaGenerador() {
   const [ponerNota, setPonerNota] = useState('')
   const noCenter = !center || center === 'Todos'
 
-  // Cada centro trabaja a su manera: el tramo de salida y si usa las columnas
-  // de llegada y carga se recuerdan por centro.
-  const [hideNY, setHideNY] = useState(false)
+  // Cada centro trabaja a su manera: el tramo de salida y QUÉ COLUMNAS usa se
+  // recuerdan por centro. Antes era un solo interruptor para llegada y carga
+  // juntas; Dani (30-09-2026): «poder eliminar si quieres hora llegada, hora
+  // carga, o tener las 3 o solo 2». Quien tenía el interruptor viejo apagado
+  // sigue sin llegada ni carga.
+  const [ocultas, setOcultas] = useState(() => new Set())
   const [tramo, setTramo] = useState(0)
   useEffect(() => {
-    setHideNY(!!leerPref(`plantilla.ocultarLlegada.${center}`, false))
+    const guardadas = leerPref(`plantilla.ocultas.${center}`, null)
+    setOcultas(new Set(Array.isArray(guardadas) ? guardadas
+      : (leerPref(`plantilla.ocultarLlegada.${center}`, false) ? ['h_llegada', 'h_bajada'] : [])))
     setTramo(Number(leerPref(`plantilla.tramo.${center}`, 0)) || 0)
   }, [center])
-  function cambiarHideNY(v) { setHideNY(v); guardarPref(`plantilla.ocultarLlegada.${center}`, v) }
+  const ver = (k) => !ocultas.has(k)
+  function cambiarColumna(k, visible) {
+    const n = new Set(ocultas)
+    if (visible) n.delete(k); else n.add(k)
+    setOcultas(n)
+    guardarPref(`plantilla.ocultas.${center}`, [...n])
+  }
   function cambiarTramo(v) { setTramo(v); guardarPref(`plantilla.tramo.${center}`, v) }
+  // «Poner móviles»: el de la ficha de cada conductor en los móviles vacíos.
+  const [poniendoMov, setPoniendoMov] = useState(false)
 
   // La ruta que el SERVIDOR tiene en cada fila, que es con lo que se guarda una celda.
   const rutasServidor = useRef([])
@@ -245,8 +258,13 @@ export default function PlantillaGenerador() {
     // Las celdas con un guardado pendiente no se tocan: su versión del
     // servidor llega medio segundo tarde y borraría las últimas letras. Forma
     // funcional de `setData` A PROPÓSITO: esto lo llama un temporizador.
+    // Y la celda en la que se está escribiendo AHORA tampoco, aunque su
+    // guardado ya haya vuelto: la versión del servidor puede ser de hace dos
+    // teclas, y al pisarla saltaba el cursor y se perdían letras (30-09-2026:
+    // «al escribir se buguea en las horas»).
     setData(prev => {
       const pend = Object.keys(celdaTimers.current)
+      if (celdaEnFoco.current) pend.push(`${celdaEnFoco.current.fila}:${celdaEnFoco.current.campo}`)
       const rows = (pend.length && prev?.rows?.length)
         ? s.rows.map((r, i) => {
             const mios = {}
@@ -441,7 +459,8 @@ export default function PlantillaGenerador() {
           marked_conductors: [...markedSet],
           week: data.week,
           date: data.date,
-          hide_nave_yard: hideNY,
+          hide_nave_yard: ocultas.has('h_llegada') && ocultas.has('h_bajada'),
+          ocultar: [...ocultas],
           save: !noCenter,
           center: noCenter ? '' : center,
         }),
@@ -470,7 +489,7 @@ export default function PlantillaGenerador() {
     if (!sharedDraft?.id) return
     const clave = `${rowIdx}:${field}`
     clearTimeout(celdaTimers.current[clave])
-    celdaTimers.current[clave] = setTimeout(async () => {
+    const timer = setTimeout(async () => {
       try {
         const r = await apiFetch(`/tools/plantilla-compartida/${sharedDraft.id}/celda`, {
           method: 'PATCH', headers: { 'Content-Type': 'application/json' },
@@ -488,8 +507,15 @@ export default function PlantillaGenerador() {
           const d = await (await apiFetch(`/tools/plantilla-compartida/${sharedDraft.id}`)).json()
           if (d?.id) applySharedDraft(d)
         } catch { setSharedNote(t('pg.conflicto')) }
-      } finally { delete celdaTimers.current[clave] }
+      } finally {
+        // SOLO si no se ha vuelto a escribir en la celda mientras esto viajaba.
+        // Se borraba siempre, y con el guardado de la tecla siguiente todavía
+        // pendiente la celda quedaba sin proteger: el refresco de cada 2,5 s la
+        // pisaba con la versión de hace dos teclas.
+        if (celdaTimers.current[clave] === timer) delete celdaTimers.current[clave]
+      }
     }, 500)
+    celdaTimers.current[clave] = timer
   }
 
   function editCell(rowIdx, field, value) {
@@ -553,6 +579,46 @@ export default function PlantillaGenerador() {
   function editFurgo(i, v) {
     editCell(i, 'furgo', v)
     setAutoPuestas(prev => { if (!(i in prev)) return prev; const n = { ...prev }; delete n[i]; return n })
+  }
+
+  /* «Poner móviles»: como «Poner furgonetas», solo en las celdas VACÍAS y
+     celda a celda (quien edita a la vez lo ve igual). El móvil sale de la
+     ficha de cada conductor; con un nombre dudoso no se pone ninguno. */
+  async function ponerMoviles() {
+    if (noCenter || !data?.rows) return
+    setPoniendoMov(true); setPonerNota('')
+    try {
+      const r = await plantillaMoviles({
+        center, rows: data.rows.map(x => ({ conductor: x.conductor, movil: x.movil })),
+      })
+      const props = lista(r.data?.propuestas)
+      for (const p of props) {
+        if (!(data.rows[p.fila]?.movil || '').trim()) editCell(p.fila, 'movil', p.movil)
+      }
+      const sinMovil = lista(r.data?.sin_movil).length
+      const sinFicha = lista(r.data?.sin_ficha).length
+      setPonerNota(`${props.length} ${t('pg.mov.puestos')}` +
+        (sinMovil ? ` · ${sinMovil} ${t('pg.mov.sinMovil')}` : '') +
+        (sinFicha ? ` · ${sinFicha} ${t('pg.mov.sinFicha')}` : ''))
+    } catch (e) {
+      setPonerNota(e?.response?.data?.detail || t('pg.mov.error'))
+    } finally { setPoniendoMov(false) }
+  }
+
+  /* La hora, bien escrita, al SALIR de la celda (nunca mientras se escribe):
+     «930», «9.30», «9h30» o «9:30» pasan a «09:30». Además del orden, importa
+     para las tandas: «9:30» y «09:30» salían como dos horas de salida
+     distintas, con dos colores. Lo que no es una hora se deja como está (el
+     aviso de la fila ya lo marca). */
+  function normalizarHora(i, campo) {
+    const v = String(data?.rows?.[i]?.[campo] || '').trim()
+    const m = v.match(/^(\d{1,2})(?:[:.h,]?(\d{2}))?$/i)
+    if (!m) return
+    const h = Number(m[1])
+    const min = m[2] === undefined ? 0 : Number(m[2])
+    if (h > 23 || min > 59 || (m[2] === undefined && v.length > 2)) return
+    const bien = `${String(h).padStart(2, '0')}:${String(min).padStart(2, '0')}`
+    if (bien !== v) editCell(i, campo, bien)
   }
 
   /* Al montar la hoja (pegando la lista o desde la asignación), las furgonetas
@@ -621,8 +687,9 @@ export default function PlantillaGenerador() {
     await mandar(`/fila/${idx}?ruta_ref=${encodeURIComponent(ref || '')}`, { method: 'DELETE' })
   }
 
-  const cabeceras = [t('pg.col.ruta'), t('pg.col.conductor'), t('pg.col.movil'), t('pg.col.furgo'),
-    ...(hideNY ? [] : [t('pg.col.llegada'), t('pg.col.carga')]), t('pg.col.salida'), t('pg.col.obs'), '', '', '']
+  const cabeceras = [t('pg.col.ruta'), t('pg.col.conductor'), ...(ver('movil') ? [t('pg.col.movil')] : []),
+    t('pg.col.furgo'), ...(ver('h_llegada') ? [t('pg.col.llegada')] : []), ...(ver('h_bajada') ? [t('pg.col.carga')] : []),
+    ...(ver('h_salida') ? [t('pg.col.salida')] : []), t('pg.col.obs'), '', '', '']
 
   return (
     <div className="mx-auto max-w-6xl">
@@ -761,6 +828,12 @@ export default function PlantillaGenerador() {
                 className="btn-ghost px-2 py-1 text-xs text-dark-300 disabled:opacity-40">
                 {t('pg.ff.completar')}
               </button>
+              {ver('movil') && (
+                <button type="button" onClick={ponerMoviles} disabled={poniendoMov || noCenter} title={t('pg.mov.ponerTip')}
+                  className="flex items-center gap-1.5 rounded-lg border border-dark-600 px-2.5 py-1 text-xs text-dark-200 hover:bg-dark-800 disabled:opacity-40">
+                  {poniendoMov ? <Loader2 size={12} className="animate-spin" /> : <Smartphone size={12} />} {t('pg.mov.poner')}
+                </button>
+              )}
             </div>
             <div className="flex flex-wrap items-center gap-3 text-[11px] text-dark-400">
               <span className="flex items-center gap-1.5">
@@ -775,10 +848,17 @@ export default function PlantillaGenerador() {
               <span className="flex items-center gap-1.5"><span className="h-3 w-3 rounded-sm border border-red-400 bg-red-500" /> {t('pg.legRojo')}</span>
               <span className="flex items-center gap-1.5"><span className="h-3 w-3 rounded-sm border border-pink-300 bg-pink-200" /> {t('pg.legRosa')}</span>
               <span className="flex items-center gap-1.5"><span className="h-3 w-3 rounded-sm border border-orange-200 bg-[#FCE4D6]" /> {t('pg.legNaranja')}</span>
-              <label className="ml-auto flex cursor-pointer items-center gap-1.5 text-dark-300">
-                <input type="checkbox" checked={!hideNY} onChange={e => cambiarHideNY(!e.target.checked)} className="h-3.5 w-3.5 accent-brand-500" />
-                {t('pg.colNY')}
-              </label>
+              <span className="ml-auto flex flex-wrap items-center gap-x-2.5 gap-y-1 text-dark-300">
+                <span className="text-dark-500">{t('pg.columnas')}</span>
+                {[['movil', 'pg.col.movil'], ['h_llegada', 'pg.col.llegada'], ['h_bajada', 'pg.col.carga'], ['h_salida', 'pg.col.salida']]
+                  .map(([k, clave]) => (
+                    <label key={k} className="flex cursor-pointer items-center gap-1">
+                      <input type="checkbox" checked={ver(k)} onChange={e => cambiarColumna(k, e.target.checked)}
+                        className="h-3.5 w-3.5 accent-brand-500" />
+                      {t(clave)}
+                    </label>
+                  ))}
+              </span>
             </div>
           </div>
 
@@ -877,9 +957,11 @@ export default function PlantillaGenerador() {
                             extraCls={`min-w-[140px] ${isMarked && !isRed ? 'font-semibold text-orange-900' : textCl} ${anillo('conductor')}`} />
                         </div>
                       </td>
-                      <td className="border border-[#BFBFBF] px-1 py-0.5">
-                        <EditCell value={row.movil} onChange={v => editCell(i, 'movil', v)} extraCls={`text-center ${textCl}`} label={t('pg.col.movil')} />
-                      </td>
+                      {ver('movil') && (
+                        <td className="border border-[#BFBFBF] px-1 py-0.5">
+                          <EditCell value={row.movil} onChange={v => editCell(i, 'movil', v)} extraCls={`text-center ${textCl}`} label={t('pg.col.movil')} />
+                        </td>
+                      )}
                       <td className={`border border-[#BFBFBF] px-1 py-0.5 ${isPink && !isRed ? 'bg-pink-200' : ''} ${anillo('furgo')}`}>
                         <FurgoCell
                           value={row.furgo}
@@ -893,17 +975,13 @@ export default function PlantillaGenerador() {
                           textCl={textCl}
                         />
                       </td>
-                      {!hideNY && (<>
-                        <td className="border border-[#BFBFBF] px-1 py-0.5" style={waveColor ? { background: waveColor } : {}}>
-                          <EditCell value={row.h_llegada} onChange={v => editCell(i, 'h_llegada', v)} extraCls={`text-center font-mono ${textCl} ${anillo('h_llegada')}`} label={t('pg.col.llegada')} />
-                        </td>
-                        <td className="border border-[#BFBFBF] px-1 py-0.5" style={waveColor ? { background: waveColor } : {}}>
-                          <EditCell value={row.h_bajada} onChange={v => editCell(i, 'h_bajada', v)} extraCls={`text-center font-mono ${textCl} ${anillo('h_bajada')}`} label={t('pg.col.carga')} />
-                        </td>
-                      </>)}
-                      <td className="border border-[#BFBFBF] px-1 py-0.5" style={waveColor ? { background: waveColor } : {}}>
-                        <EditCell value={row.h_salida} onChange={v => editCell(i, 'h_salida', v)} extraCls={`text-center font-mono ${textCl} ${anillo('h_salida')}`} label={t('pg.col.salida')} />
-                      </td>
+                      {[['h_llegada', 'pg.col.llegada'], ['h_bajada', 'pg.col.carga'], ['h_salida', 'pg.col.salida']]
+                        .filter(([k]) => ver(k)).map(([k, clave]) => (
+                          <td key={k} className="border border-[#BFBFBF] px-1 py-0.5" style={waveColor ? { background: waveColor } : {}}>
+                            <EditCell value={row[k]} onChange={v => editCell(i, k, v)} onBlur={() => normalizarHora(i, k)}
+                              extraCls={`text-center font-mono ${textCl} ${anillo(k)}`} label={t(clave)} />
+                          </td>
+                        ))}
                       <td className="border border-[#BFBFBF] px-1 py-0.5">
                         <EditCell value={row.observaciones} onChange={v => editCell(i, 'observaciones', v)} extraCls={`min-w-[100px] ${textCl}`} label={t('pg.col.obs')} />
                       </td>
@@ -1131,9 +1209,9 @@ function FurgoCell({ value, onChange, isPink, furgosDisp, usedFurgos, onTogglePi
   )
 }
 
-function EditCell({ value, onChange, extraCls, label }) {
+function EditCell({ value, onChange, onBlur, extraCls, label }) {
   return (
-    <input value={value || ''} onChange={e => onChange(e.target.value)} aria-label={label}
+    <input value={value || ''} onChange={e => onChange(e.target.value)} onBlur={onBlur} aria-label={label}
       className={[
         'w-full rounded bg-transparent px-1 py-0.5 transition focus:bg-yellow-50 focus:outline-none focus:ring-1 focus:ring-yellow-400/60',
         extraCls || '',

@@ -518,6 +518,8 @@ export const getAQuien = (center, furgo) => api.get('/afinidad/a-quien', { param
 export const getFilaAparcamiento = (center) => api.get('/afinidad/fila', { params: { center } })
 export const guardarFilaAparcamiento = (center, filas) => api.put('/afinidad/fila', { center, filas })
 export const plantillaFurgos = (body) => api.post('/tools/plantilla-furgos', body)
+// «Poner móviles»: el de la ficha de cada conductor, para los móviles vacíos.
+export const plantillaMoviles = (body) => api.post('/tools/plantilla-moviles', body)
 
 /* ── Asignación diaria (qué conductor lleva qué furgo) ── */
 export const getDailyAssignment = (center, date) => api.get('/assignments/daily', { params: { center, date } })

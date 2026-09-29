@@ -32535,9 +32535,19 @@ def _calc_horas(h_salida) -> tuple:
     return (t - _td(minutes=30)).strftime("%H:%M"), (t - _td(minutes=10)).strftime("%H:%M")
 
 
+# Las columnas de la hoja del día, en su orden. Las de `_PLANTILLA_OPCIONALES`
+# las puede esconder cada centro (Dani, 30-09-2026: «poder eliminar si quieres
+# hora llegada, hora carga, o tener las 3 o solo 2»): antes solo se podían
+# quitar llegada y carga a la vez.
+_PLANTILLA_COLS_XLSX = [("ruta", "RUTA", 13), ("conductor", "CONDUCTOR", 34), ("movil", "MÓVIL", 9),
+                        ("furgo", "VEHÍCULO", 12), ("h_llegada", "H. LLEGADA", 12), ("h_bajada", "H. CARGA", 12),
+                        ("h_salida", "H. SALIDA", 11), ("observaciones", "OBSERVACIONES", 32)]
+_PLANTILLA_OPCIONALES = {"movil", "h_llegada", "h_bajada", "h_salida"}
+
+
 def _build_plantilla_excel(rows: list, red_routes: set, pink_furgos: set, week_num, fecha_str: str,
                            yellow_routes: set = None, marked_conductors: set = None,
-                           hide_nave_yard: bool = False) -> bytes:
+                           hide_nave_yard: bool = False, ocultar: set = None) -> bytes:
     import openpyxl
     from openpyxl.styles import PatternFill, Font, Alignment, Border, Side
     from openpyxl.utils import get_column_letter
@@ -32568,13 +32578,17 @@ def _build_plantilla_excel(rows: list, red_routes: set, pink_furgos: set, week_n
     ca = Alignment(horizontal="center", vertical="center")
     la = Alignment(horizontal="left", vertical="center")
 
-    col_defs = [("RUTA", 13), ("CONDUCTOR", 34), ("MÓVIL", 9), ("VEHÍCULO", 12)]
-    if not hide_nave_yard:
-        col_defs += [("H. LLEGADA", 12), ("H. CARGA", 12)]
-    col_defs += [("H. SALIDA", 11), ("OBSERVACIONES", 32)]
+    fuera = {c for c in (ocultar or set()) if c in _PLANTILLA_OPCIONALES}
+    if hide_nave_yard:
+        fuera |= {"h_llegada", "h_bajada"}
+    cols = [c for c in _PLANTILLA_COLS_XLSX if c[0] not in fuera]
+    col_defs = [(titulo, ancho) for _, titulo, ancho in cols]
+    claves = [k for k, _, _ in cols]
     ncols = len(col_defs)
 
-    left_end = 4 if not hide_nave_yard else 3
+    # El título: la semana sobre la mitad izquierda y la fecha sobre la otra
+    # (8 columnas: 4 y 4; sin llegada ni carga: 3 y 3, como siempre).
+    left_end = max(1, ncols // 2)
     ws.merge_cells(start_row=1, start_column=1, end_row=1, end_column=left_end)
     ws.merge_cells(start_row=1, start_column=left_end + 1, end_row=1, end_column=ncols)
     for cell, val, align in [
@@ -32627,28 +32641,23 @@ def _build_plantilla_excel(rows: list, red_routes: set, pink_furgos: set, week_n
         is_marked_cond = conductor.upper() in _marked_conductors
         wave_time_color = _wave_color.get(h_wave.strip()) if h_wave else None
 
-        if hide_nave_yard:
-            cells_vals = [ruta, conductor, movil, furgo, h_wave, obs]
-            wave_cols = (5,)
-        else:
-            cells_vals = [ruta, conductor, movil, furgo, h_llegada, h_bajada, h_wave, obs]
-            wave_cols = (5, 6, 7)
-        obs_col = len(cells_vals)
-        for ci, val in enumerate(cells_vals, start=1):
-            cell = ws.cell(row=r, column=ci, value=val)
-            if ci == 4 and is_pink_furgo and not is_red:
+        valores = {"ruta": ruta, "conductor": conductor, "movil": movil, "furgo": furgo,
+                   "h_llegada": h_llegada, "h_bajada": h_bajada, "h_salida": h_wave, "observaciones": obs}
+        for ci, clave in enumerate(claves, start=1):
+            cell = ws.cell(row=r, column=ci, value=valores[clave])
+            if clave == "furgo" and is_pink_furgo and not is_red:
                 cell.fill = fill(C_PINK)
                 cell.font = Font(color="000000", size=9)
-            elif ci == 2 and is_marked_cond and not is_red:
+            elif clave == "conductor" and is_marked_cond and not is_red:
                 cell.fill = fill(C_MARK)
                 cell.font = Font(color=C_MARK_FG, size=9, bold=True)
-            elif ci in wave_cols and wave_time_color and not is_red and not is_yellow:
+            elif clave in ("h_llegada", "h_bajada", "h_salida") and wave_time_color and not is_red and not is_yellow:
                 cell.fill = fill(wave_time_color)
                 cell.font = Font(color="000000", size=9)
             else:
                 cell.fill = fill(row_bg)
-                cell.font = Font(color=row_fg, size=9, bold=(ci == 1))
-            cell.alignment = ca if ci not in (2, obs_col) else la
+                cell.font = Font(color=row_fg, size=9, bold=(clave == "ruta"))
+            cell.alignment = la if clave in ("conductor", "observaciones") else ca
             cell.border = brd()
         ws.row_dimensions[r].height = 16
 
@@ -33464,8 +33473,9 @@ async def plantilla_excel(body: dict = Body(...), admin: dict = Depends(require_
         _filtro_centro(admin, center)          # 403 si no puede ver ese centro
 
     hide_nave_yard = bool(body.get("hide_nave_yard"))
+    ocultar = {str(c) for c in _lista_cuerpo(body.get("ocultar"), 10)}
     xlsx = _build_plantilla_excel(rows, red_routes, pink_furgos, week_num, fecha_str,
-                                  yellow_routes, marked_conductors, hide_nave_yard)
+                                  yellow_routes, marked_conductors, hide_nave_yard, ocultar)
     safe_fecha = re.sub(r"[^a-zA-Z0-9_\-]", "-", fecha_str)
     safe_week = re.sub(r"[^a-zA-Z0-9_\-]", "-", str(week_num))
     filename = f"plantilla_s{safe_week}_{safe_fecha}.xlsx"
@@ -43149,6 +43159,50 @@ async def plantilla_furgos(data: dict = Body(...), admin: dict = Depends(require
             "sin_nombre": sin_nombre, "opciones": opciones, "conflictos": conflictos,
             "fila_actualizada": doc.get("actualizado_en") if carriles else None,
             "metodo": res["metodo"], "cuidado_activo": D["cuidado_activo"]}
+
+
+def _movil_para_hoja(crudo) -> str:
+    """El teléfono como se escribe en la hoja: los de España sin el +34."""
+    e164 = whatsapp.normaliza_telefono(crudo)
+    if not e164:
+        return ""
+    return e164[2:] if e164.startswith("34") and len(e164) == 11 else "+" + e164
+
+
+@api_router.post("/tools/plantilla-moviles")
+async def plantilla_moviles(data: dict = Body(...), admin: dict = Depends(require_admin)):
+    """«Poner móviles» (Dani, 30-09-2026: «asignador de teléfonos también»): el
+    móvil de la ficha de cada conductor de la hoja, para las celdas de móvil
+    VACÍAS. No cambia nada: propone y la pantalla lo escribe celda a celda, como
+    «Poner furgonetas». Primero el móvil PERSONAL (el de la persona, estable);
+    si no tiene, el teléfono de la ficha. El nombre se casa con el mismo casado
+    estricto de las furgonetas: con dos candidatos, no se pone ninguno."""
+    await _require_plan_feature(admin, "assignments")
+    center = _afin_centro(data.get("center"))
+    fichas = await db.drivers.find(
+        {**_filtro_centro(admin, center), "active": {"$ne": False}, "merged_into": {"$exists": False}},
+        {"_id": 0, "id": 1, "name": 1, "movil_personal": 1, "phone": 1}).to_list(3000)
+    candidatos = [(f["id"], f.get("name") or "") for f in fichas]
+    por_id = {f["id"]: f for f in fichas}
+    propuestas, sin_ficha, sin_movil = [], [], []
+    for i, r in enumerate(_lista_cuerpo(data.get("rows"), 400)):
+        if not isinstance(r, dict) or _texto_cuerpo(r.get("movil"), 40).strip():
+            continue
+        nombre = _texto_cuerpo(r.get("conductor"), 120).strip()
+        if not nombre:
+            continue
+        cid = _afin_casar(nombre, candidatos)
+        if not cid:
+            sin_ficha.append(i)
+            continue
+        f = por_id[cid]
+        tel = _movil_para_hoja(f.get("movil_personal")) or _movil_para_hoja(f.get("phone"))
+        if not tel:
+            sin_movil.append(i)
+            continue
+        propuestas.append({"fila": i, "movil": tel,
+                           "de": "personal" if _movil_para_hoja(f.get("movil_personal")) else "ficha"})
+    return {"propuestas": propuestas, "sin_ficha": sin_ficha, "sin_movil": sin_movil}
 
 
 async def _afin_vuelta_taller(vehicle_id: str, prev_status, new_status):

@@ -202,7 +202,10 @@ test.describe('Valor, solo super-admin', () => {
     await expect(page.getByText('50/50 · 46 %').first()).toBeVisible()          // prob. 0,46: se dice claro
     await expect(page.getByText(/VÁLIDA · \d+ min más/)).toBeVisible()
     await expect(page.getByText('CASA LENTA', { exact: true }).first()).toBeVisible()
-    await expect(page.getByText('datos hace 2 min').first()).toBeVisible()
+    // Entre 2 y 9: los datos de arriba se fechan al CARGAR el fichero, y con la
+    // batería entera esta prueba llega a correr un minuto o más tarde (salía
+    // «hace 3 min» y fallaba en falso; sola pasaba siempre).
+    await expect(page.getByText(/datos hace [2-9] min/).first()).toBeVisible()
     // La caducada sigue a la vista, marcada, sin «Métele» ni botón.
     await expect(page.getByText('CADUCADA', { exact: true })).toBeVisible()
     await expect(page.getByText(/No apostar\./)).toBeVisible()
@@ -340,6 +343,47 @@ test.describe('Horas · WHC', () => {
     await expect(page.locator('#horas-plan')).toHaveCount(0)
     await page.getByRole('button', { name: 'Pegar uno nuevo' }).click()
     await expect(page.locator('#horas-plan')).toBeVisible()
+    expect(fallos, fallos.join(' | ')).toHaveLength(0)
+  })
+})
+
+/* PLANTILLA DEL DÍA (30-09-2026): cada columna de hora se puede quitar por
+   separado, la hora se escribe bien al salir de la celda y «Poner móviles»
+   rellena los vacíos con el de la ficha. */
+test.describe('Plantilla del día · columnas, horas y móviles', () => {
+  const FILA = (conductor, movil = '') => ({ ruta: 'CA_A1', conductor, movil, furgo: '', h_llegada: '', h_bajada: '',
+    h_salida: '', observaciones: '' })
+  const BORRADOR = { id: 'b1', revision: 1, updated_by: 'Admin Test',
+    state: { week: '40', date: '30/09/2026', rows: [FILA('ANA PÉREZ'), FILA('LUIS GÓMEZ')] } }
+  const json = (body) => (route) => route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(body) })
+
+  test('se quitan columnas sueltas, la hora queda bien y se ponen los móviles', async ({ page }) => {
+    const fallos = vigilar(page)
+    await entrarComoAdmin(page)
+    await simularApi(page, 'vacio')
+    let revision = 1
+    await page.route(/\/api\/tools\/plantilla-compartida/, (route) => (route.request().method() === 'PATCH'
+      ? json({ revision: ++revision, updated_by: 'Admin Test' })(route) : json(BORRADOR)(route)))
+    await page.route(/\/api\/tools\/plantilla-moviles/, json({
+      propuestas: [{ fila: 0, movil: '612345678', de: 'personal' }], sin_ficha: [], sin_movil: [1] }))
+    await page.goto('/panel/plantilla', { waitUntil: 'domcontentloaded' })
+    const cabecera = page.locator('thead')
+    await expect(cabecera.getByText('H. llegada')).toBeVisible({ timeout: 15000 })
+    // Llegada fuera, carga y salida se quedan: ya no van juntas.
+    await page.getByRole('checkbox', { name: 'H. llegada' }).uncheck()
+    await expect(cabecera.getByText('H. llegada')).toHaveCount(0)
+    await expect(cabecera.getByText('H. carga')).toBeVisible()
+    await expect(cabecera.getByText('H. salida')).toBeVisible()
+    // «930» pasa a «09:30» al salir de la celda, no mientras se escribe.
+    const salida = page.getByRole('textbox', { name: 'H. salida' }).first()
+    await salida.fill('930')
+    await expect(salida).toHaveValue('930')
+    await salida.press('Tab')
+    await expect(salida).toHaveValue('09:30')
+    // «Poner móviles» rellena el vacío de Ana y dice por qué no el de Luis.
+    await page.getByRole('button', { name: 'Poner móviles' }).click()
+    await expect(page.getByRole('textbox', { name: 'Móvil' }).first()).toHaveValue('612345678')
+    await expect(page.getByText(/1 móviles puestos · 1 sin móvil en su ficha/)).toBeVisible()
     expect(fallos, fallos.join(' | ')).toHaveLength(0)
   })
 })
