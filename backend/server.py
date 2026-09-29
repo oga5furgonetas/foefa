@@ -1148,7 +1148,7 @@ async def get_org(org_id):
 # Módulos OCULTOS por tipo de cuenta (para los candados del frontend).
 # El dueño lo ve todo; un cliente no ve IA Peritaje ni el cuadrante hasta que
 # se le activen.
-HIDDEN_MODULES_CLIENTE = ["ia-peritaje", "turnos"]
+HIDDEN_MODULES_CLIENTE = ["ia-peritaje", "turnos", "cuadrante"]
 
 
 # ── MODULOS QUE VE CADA EMPRESA ───────────────────────────────────────────────
@@ -1164,6 +1164,7 @@ MODULOS_PANEL = [
     {"clave": "mi-dia", "nombre": "Mi dia", "grupo": "Hoy", "que": "Tareas del responsable"},
     {"clave": "actividad", "nombre": "Actividad", "grupo": "Hoy", "que": "Lo ultimo que ha pasado"},
     {"clave": "asignacion", "nombre": "Asignacion", "grupo": "Operacion diaria", "que": "Que furgoneta lleva cada conductor"},
+    {"clave": "cuadrante", "nombre": "Cuadrante", "grupo": "Operacion diaria", "que": "Quien trabaja cada dia, cuadrado a la maxima +2"},
     {"clave": "turnos", "nombre": "Turnos", "grupo": "Operacion diaria", "que": "Cuadrante y peticiones de dias"},
     {"clave": "checklist-operativo", "nombre": "Checklist", "grupo": "Operacion diaria", "que": "Tareas de apertura y cierre"},
     {"clave": "plantilla", "nombre": "Plantilla diaria", "grupo": "Operacion diaria", "que": "Hoja de salida compartida"},
@@ -4724,7 +4725,9 @@ async def register_dsp(data: RegisterRequest, request: Request):
         raise HTTPException(status_code=400, detail="La contraseña debe tener al menos 8 caracteres")
     if not org_name:
         raise HTTPException(status_code=400, detail="Indica el nombre de tu empresa")
-    if await global_db.admin_users.find_one({"username": username}):
+    # Sin distinguir mayúsculas: «mery» y «Mery» no pueden ser dos cuentas
+    # (el login ya no las distingue, ver `_admin_por_usuario`).
+    if await global_db.admin_users.find_one({"username": _usuario_rx(username)}):
         raise HTTPException(status_code=409, detail="Ese usuario ya existe, elige otro")
 
     slug = _slugify(data.slug or org_name)
@@ -6019,6 +6022,29 @@ async def _set_tenant_by_slug(slug):
     return org
 
 
+def _usuario_rx(nombre: str) -> dict:
+    """El nombre de usuario sin distinguir mayúsculas ni espacios alrededor."""
+    return {"$regex": r"^\s*%s\s*$" % re.escape((nombre or "").strip()), "$options": "i"}
+
+
+async def _admin_por_usuario(nombre: str, proyeccion: Optional[dict] = None) -> Optional[dict]:
+    """El usuario del panel por su nombre, SIN distinguir mayúsculas.
+
+    28-09-2026: Mery no podía entrar. Su usuario es «Mery» y ella escribía
+    «mery» (la «mery» en minúscula se borró el 26-09 al limpiar duplicados); el
+    login comparaba exacto, fallaba, y a los 5 intentos la bloqueaba. Primero
+    se busca exacto (lo de siempre); si no está, sin mayúsculas, y SOLO si hay
+    uno: con dos que solo se distinguen por mayúsculas no se elige ninguno."""
+    u = (nombre or "").strip()
+    if not u:
+        return None
+    doc = await global_db.admin_users.find_one({"username": u}, proyeccion)
+    if doc:
+        return doc
+    varios = await global_db.admin_users.find({"username": _usuario_rx(u)}, proyeccion).to_list(3)
+    return varios[0] if len(varios) == 1 else None
+
+
 @auth_router.post("/login", response_model=TokenResponse)
 async def admin_login(data: LoginRequest, request: Request):
     rl_user = f"user:{data.username.lower().strip()}"
@@ -6026,7 +6052,7 @@ async def admin_login(data: LoginRequest, request: Request):
     _rl_check(rl_user)
     _rl_check(rl_ip)
 
-    user = await global_db.admin_users.find_one({"username": data.username}, {"_id": 0})
+    user = await _admin_por_usuario(data.username, {"_id": 0})
     if not user or user.get("disabled") or not verify_password(data.password, user["hashed_password"]):
         await _rl_fail(rl_user, f"admin '{data.username}' (IP {_rl_key_ip(request)})")
         await _rl_fail(rl_ip, f"admin '{data.username}' (IP {_rl_key_ip(request)})")
@@ -6855,9 +6881,9 @@ async def create_admin(
     data: CreateAdminRequest,
     _admin: dict = Depends(require_admin)
 ):
-    existing = await global_db.admin_users.find_one({"username": data.username})
+    existing = await global_db.admin_users.find_one({"username": _usuario_rx(data.username)})
     if existing:
-        raise HTTPException(status_code=409, detail="El usuario ya existe")
+        raise HTTPException(status_code=409, detail="El usuario ya existe (sin contar mayúsculas)")
 
     # center_manager solo puede crear usuarios en sus propios centros
     if not _admin.get("sa") and _is_center_manager(_admin):
@@ -30196,10 +30222,15 @@ CODIGOS_CUADRANTE_INFO = {
     # la mesa. Es el sexto color, y ahi se para: seis es el limite por encima
     # del cual dejan de diferenciarse a tamano de celda.
     "N/T APROB": ("libre", "Libre aprobado", "aprobado", False),
+    # Los dos de la hoja MENSUAL de Dani (29-09-2026): el día concedido lo
+    # escribe «APROBADO» y la baja médica «BAJA». Sin ellos, importar su hoja
+    # los daba por códigos desconocidos.
+    "APROBADO":  ("libre", "Aprobado", "aprobado", False),
     # ── AUSENCIAS QUE NO ESTABAN PREVISTAS ────────────────────────────────
     "N/D":       ("libre", "No disponible", "aviso", False),
     "N/P":       ("libre", "No presentado", "aviso", False),
     "SUSP":      ("libre", "Suspendido", "aviso", False),
+    "BAJA":      ("libre", "Baja", "aviso", False),
 }
 
 CODIGOS_CUADRANTE_DEF = {k: v[0] for k, v in CODIGOS_CUADRANTE_INFO.items()}
@@ -43125,6 +43156,1428 @@ async def _afin_vuelta_taller(vehicle_id: str, prev_status, new_status):
     «recién salida del taller» (furgoneta que cuidar)."""
     if prev_status == "taller" and new_status in ("active", "activo"):
         await db.vehicles.update_one({"id": vehicle_id}, {"$set": {"vuelta_taller_en": _hoy_madrid()}})
+
+
+# =========================
+# CUADRANTE CON MOTOR — la hoja de turnos a +2 de la máxima
+# =========================
+# Dani, 29-09-2026: «sección de cuadrante para corregir los días libres o cosas
+# tontas, y que nosotros quitando gente que se ha ido, de baja o de alta, tú
+# rehagas el cuadrante siempre con estas fórmulas pidiéndonos los inputs». Y un
+# chat para las órdenes especiales, y notas por persona («solo trabaja 4 días»).
+# Pantalla /panel/cuadrante.
+#
+# NO HAY OTRA TABLA DE TURNOS: se leen y escriben los mismos `shifts` que usan
+# Turnos, el portal del conductor y la asignación. El cuadrante solo añade dos
+# marcas por celda:
+#   extra:  true   6º día que puso el motor para llegar al colchón (rosa)
+#   fijada: true   la puso una persona a mano: el motor no la mueve al rehacer
+# y guarda aparte lo que no es un turno:
+#   cuadrante_personas   quién está en el cuadrante de cada centro y cómo
+#                        trabaja: tipo, patrón, alta, baja definitiva, apodos,
+#                        NOTA (texto) y reglas del chat
+#   cuadrante_config     colchón (+2) y si se permiten días extra, por centro
+#   cuadrante_ajustes    órdenes puntuales: «Alex esta semana máx. 4», «el 9 a +3»
+#   cuadrante_propuestas lo que calculó el motor, pendiente de aceptar
+#   cuadrante_cambios    cada cambio aplicado con lo que había antes (deshacer)
+#   cuadrante_chat       la conversación con el asistente
+# El motor (cuadrante_motor.py) y las órdenes (cuadrante_ordenes.py) son puros,
+# con su porqué y sus pruebas. Nada se aplica sin que alguien lo acepte.
+import cuadrante_motor as _cm  # noqa: E402
+import cuadrante_ordenes as _co  # noqa: E402
+
+_CUA_PERSONAS = "cuadrante_personas"
+_CUA_CONFIG = "cuadrante_config"
+_CUA_AJUSTES = "cuadrante_ajustes"
+_CUA_PROPUESTAS = "cuadrante_propuestas"
+_CUA_CAMBIOS = "cuadrante_cambios"
+_CUA_CHAT = "cuadrante_chat"
+_CUA_TIPO_A_COD = {"trabaja": "1", "libre": "N/T", "extra": "EXTRA"}
+# Lo único que deshacer puede tocar: el registro guarda nombres de colección y
+# no se restaura nada fuera de esta lista.
+_CUA_COLS_DESHACER = {"shifts", "route_demand", _CUA_PERSONAS, _CUA_CONFIG, _CUA_AJUSTES}
+
+
+def _cua_centro(center) -> str:
+    c = _texto_cuerpo(center, 30).strip()
+    if not c or c.lower() in ("todos", "all"):
+        raise HTTPException(400, "Elige un centro: el cuadrante va por centro")
+    if not re.match(r"^[A-Za-z0-9_\- ]{1,30}$", c):
+        raise HTTPException(400, "Código de centro inválido")
+    return c
+
+
+def _cua_acceso(user: dict, center: str):
+    if not _user_can_see_center(user, center):
+        raise HTTPException(403, "No tienes acceso a ese centro")
+
+
+def _cua_rx(center: str) -> dict:
+    return {"$regex": re.escape(center), "$options": "i"}
+
+
+def _cua_es_centro(valor, center: str) -> bool:
+    return bool(re.search(re.escape(center), str(valor or ""), re.I))
+
+
+def _cua_fecha(valor, que="La fecha") -> str:
+    s = _texto_cuerpo(valor, 10)
+    try:
+        return date_cls.fromisoformat(s).isoformat()
+    except ValueError:
+        raise HTTPException(400, f"{que} va como AAAA-MM-DD")
+
+
+def _cua_hoy() -> date_cls:
+    return date_cls.fromisoformat(_dia_negocio())
+
+
+def _cua_rango(desde, hasta, tope=92) -> Tuple[str, str]:
+    d, h = _cua_fecha(desde, "La fecha de inicio"), _cua_fecha(hasta, "La fecha de fin")
+    if h < d:
+        raise HTTPException(400, "La fecha de fin es anterior a la de inicio")
+    if (date_cls.fromisoformat(h) - date_cls.fromisoformat(d)).days >= tope:
+        raise HTTPException(400, f"Como mucho {tope} días de una vez")
+    return d, h
+
+
+async def _cua_mapa_codigos() -> dict:
+    doc = await db.app_meta.find_one({"_id": "codigos_cuadrante"}) or {}
+    mapa = dict(CODIGOS_CUADRANTE_DEF)
+    mapa.update({str(k).upper(): v for k, v in (doc.get("mapa") or {}).items()})
+    return mapa
+
+
+def _cua_tipo(cod: str, mapa: dict) -> str:
+    """El tipo que entiende el resto de la app (portal, cobertura). Un código que
+    la tabla manda «ignorar al importar» (RA en la de Dani) sigue siendo aquí un
+    día trabajado: se decide por el motor, no por la tabla."""
+    t = mapa.get(cod) or CODIGOS_CUADRANTE_DEF.get(cod)
+    if t in VALID_SHIFT_TYPE:
+        return t
+    return "trabaja" if cod in _cm.TRABAJO else "libre"
+
+
+def _cua_cod_turno(s: dict) -> str:
+    return _cm._cod((s or {}).get("cod") or _CUA_TIPO_A_COD.get((s or {}).get("type"), ""))
+
+
+class _CuaCambio:
+    """Lo que había antes de un cambio, para poder deshacerlo entero."""
+
+    def __init__(self, center: str, user: dict, que: str):
+        self.center, self.user, self.que = center, user, que
+        self.snaps: list = []
+        self._vistos: set = set()
+
+    def anota(self, col: str, filtro: dict, doc: Optional[dict]):
+        clave = (col, json.dumps(filtro, sort_keys=True))
+        if clave in self._vistos:
+            return
+        self._vistos.add(clave)
+        if doc is not None:
+            doc = {k: v for k, v in doc.items() if k != "_id"}
+        self.snaps.append({"col": col, "filtro": filtro, "doc": doc})
+
+    async def antes(self, col: str, filtro: dict):
+        if (col, json.dumps(filtro, sort_keys=True)) in self._vistos:
+            return
+        self.anota(col, filtro, await db[col].find_one(filtro, {"_id": 0}))
+
+    async def guardar(self) -> Optional[str]:
+        if not self.snaps:
+            return None
+        cid = str(uuid.uuid4())
+        await db[_CUA_CAMBIOS].insert_one({
+            "id": cid, "center": self.center, "en": datetime.now(timezone.utc).isoformat(),
+            "por": (self.user or {}).get("name") or "", "que": self.que,
+            "n": len(self.snaps), "snaps": self.snaps, "deshecho": False})
+        # Se guardan los 30 últimos por centro: deshacer es para el error de
+        # hace un rato, no un historial eterno.
+        viejos = await db[_CUA_CAMBIOS].find({"center": self.center}, {"_id": 0, "id": 1}) \
+            .sort("en", -1).skip(30).to_list(500)
+        if viejos:
+            await db[_CUA_CAMBIOS].delete_many({"id": {"$in": [v["id"] for v in viejos]}})
+        return cid
+
+
+async def _cua_turnos_de(pares) -> dict:
+    """{(driver_id, fecha): turno} de una lista de celdas, en UNA consulta."""
+    pares = list(pares)
+    if not pares:
+        return {}
+    ids = sorted({p[0] for p in pares})
+    fechas = sorted({p[1] for p in pares})
+    quiero = set(pares)
+    out = {}
+    async for s in db.shifts.find({"driver_id": {"$in": ids}, "date": {"$gte": fechas[0], "$lte": fechas[-1]}},
+                                  {"_id": 0}):
+        if (s["driver_id"], s["date"]) in quiero:
+            out[(s["driver_id"], s["date"])] = s
+    return out
+
+
+async def _cua_aprobados(ids, desde: str, hasta: str) -> dict:
+    """Días pedidos por el conductor y ya concedidos: {"did|fecha": tipo}."""
+    out = {}
+    if not ids:
+        return out
+    async for r in db.shift_requests.find(
+            {"status": "aprobado", "driver_id": {"$in": list(ids)}, "date": {"$gte": desde, "$lte": hasta}},
+            {"_id": 0, "driver_id": 1, "date": 1, "type": 1}):
+        out[f"{r['driver_id']}|{r['date']}"] = r.get("type")
+    return out
+
+
+async def _cua_personas(center: str, desde: str, hasta: str) -> list:
+    """Quién está en el cuadrante del centro entre dos fechas y cómo trabaja.
+
+    Está quien tiene algún turno en el centro ese periodo o la semana de antes,
+    y quien se ha añadido a mano; no está quien se fue (`inactivo_desde`) antes
+    de empezar. Las fichas dadas de baja que siguen con turnos TAMBIÉN salen,
+    marcadas: excluirlas hacía desaparecer filas sin avisar (lo aprendió el
+    importador con el cuadrante de agosto)."""
+    ini = (date_cls.fromisoformat(desde) - timedelta(days=7)).isoformat()
+    con_turnos: dict = {}
+    async for s in db.shifts.find({"center": _cua_rx(center), "date": {"$gte": ini, "$lte": hasta}},
+                                  {"_id": 0, "driver_id": 1, "driver_name": 1}):
+        if s.get("driver_id"):
+            con_turnos.setdefault(s["driver_id"], s.get("driver_name") or "")
+    conf = {p["driver_id"]: p for p in await db[_CUA_PERSONAS].find(
+        {"center": center}, {"_id": 0}).to_list(5000)}
+    ids = set(con_turnos) | {k for k, p in conf.items() if p.get("en_cuadrante")}
+    fichas = {d["id"]: d for d in await db.drivers.find(
+        {"id": {"$in": list(ids)}},
+        {"_id": 0, "id": 1, "name": 1, "active": 1, "contrato": 1}).to_list(5000)}
+    out = []
+    for did in ids:
+        p = conf.get(did) or {}
+        if p.get("inactivo_desde") and p["inactivo_desde"] <= desde:
+            continue
+        if p.get("en_cuadrante") is False and did not in con_turnos:
+            continue
+        f = fichas.get(did) or {}
+        nota = p.get("nota") or ""
+        interp = _co.interpretar_nota(nota) if nota else {"reglas": {}, "sin_entender": ""}
+        reglas = dict(interp["reglas"])
+        fijos = sorted({int(x) for x in ((p.get("reglas_fijas") or {}).get("dias_no") or [])})
+        if fijos:
+            reglas["dias_no"] = sorted(set(reglas.get("dias_no") or []) | set(fijos))
+        # Sin tipo elegido, el contrato de la ficha: los de plantilla («empresa»)
+        # van de lunes a viernes, como los nombres en azul de la hoja de Dani.
+        de_ficha = not p.get("tipo") and str(f.get("contrato") or "").lower() == "empresa"
+        tipo = p.get("tipo") or ("empresa" if de_ficha else "normal")
+        out.append({
+            "id": did, "nombre": f.get("name") or con_turnos.get(did) or p.get("nombre") or did,
+            "ficha_activa": bool(f) and f.get("active") is not False, "sin_ficha": not f,
+            "tipo": tipo if tipo in _cm.TIPOS else "normal", "tipo_de_ficha": de_ficha,
+            "patron": p.get("patron") or None,
+            "alta_desde": p.get("alta_desde"), "inactivo_desde": p.get("inactivo_desde"),
+            "apodos": p.get("apodos") or [], "nota": nota, "reglas": reglas,
+            "entendido": _co.describir_reglas(reglas), "sin_entender": interp.get("sin_entender") or "",
+            "reglas_fijas": fijos, "orden": p.get("orden"),
+        })
+    out.sort(key=lambda x: (x["orden"] if isinstance(x.get("orden"), int) else 10 ** 6,
+                            _clave_nombre(x["nombre"])))
+    return out
+
+
+async def _cua_entrada(center: str, desde: str, hasta: str, colchon=None, permitir_extra=None):
+    """Junta lo que necesita el motor. Devuelve (entrada, personas, extras_ahora)."""
+    ini, fin = date_cls.fromisoformat(desde), date_cls.fromisoformat(hasta)
+    personas = await _cua_personas(center, desde, hasta)
+    ids = {p["id"] for p in personas}
+    desde_stats = (ini - timedelta(days=28)).isoformat()
+    desde_hist = (ini - timedelta(days=7)).isoformat()
+    fin_ext = (fin + timedelta(days=6)).isoformat()
+    celdas, bloqueadas, extras_ahora = {}, [], set()
+    extras_prev: dict = {}
+    findes_prev: dict = {}
+    async for s in db.shifts.find({"driver_id": {"$in": list(ids)}, "date": {"$gte": desde_stats, "$lte": fin_ext}},
+                                  {"_id": 0}):
+        did, f = s["driver_id"], s["date"]
+        k = f"{did}|{f}"
+        cod = _cua_cod_turno(s)
+        if f >= desde_hist:
+            if not _cua_es_centro(s.get("center"), center):
+                # Ese día está en otro centro: cuenta para sus días seguidos, no
+                # para las rutas de aquí, y no se toca desde este cuadrante.
+                celdas[k] = "S" if cod in _cm.TRABAJO else ("N/D" if cod in _cm.MOVIBLES else cod)
+                bloqueadas.append(k)
+            else:
+                celdas[k] = cod
+                if s.get("fijada"):
+                    bloqueadas.append(k)
+                if s.get("extra"):
+                    extras_ahora.add(k)
+        if f < desde:
+            if s.get("extra"):
+                extras_prev[did] = extras_prev.get(did, 0) + 1
+            if date_cls.fromisoformat(f).weekday() >= 5 and cod in _cm.TRABAJO:
+                findes_prev[did] = findes_prev.get(did, 0) + 1
+    # Lo concedido a un conductor (pedido desde su portal) no lo mueve nadie.
+    for k in await _cua_aprobados(ids, desde, fin_ext):
+        bloqueadas.append(k)
+    maximas = {}
+    async for d in db.route_demand.find({"center": center, "date": {"$gte": desde, "$lte": hasta}}, {"_id": 0}):
+        if d.get("maximo") is not None:
+            maximas[d["date"]] = int(d["maximo"])
+    cfg = await db[_CUA_CONFIG].find_one({"center": center}, {"_id": 0}) or {}
+    colchon = int(cfg.get("colchon", 2) if colchon is None else colchon)
+    permitir_extra = bool(cfg.get("permitir_extra", True) if permitir_extra is None else permitir_extra)
+    colchon_dia, limites = {}, []
+    async for a in db[_CUA_AJUSTES].find({"center": center}, {"_id": 0}):
+        if a.get("tipo") == "colchon_dia" and desde <= str(a.get("fecha") or "") <= hasta:
+            colchon_dia[a["fecha"]] = int(a["colchon"])
+        elif a.get("tipo") == "limite_semana" and a.get("driver_id") in ids:
+            limites.append({"conductor_id": a["driver_id"], "lunes": a["lunes"], "max_dias": int(a["max_dias"])})
+    conductores = []
+    for p in personas:
+        r = p["reglas"]
+        c = {"id": p["id"], "nombre": p["nombre"], "tipo": p["tipo"]}
+        if p.get("patron"):
+            c["patron"] = p["patron"]
+        for k in ("alta_desde", "inactivo_desde"):
+            if p.get(k):
+                c[k] = p[k]
+        for k in ("dias_no", "dias_semana", "max_seguidos", "sin_extra"):
+            if r.get(k):
+                c[k] = r[k]
+        c["extras_recientes"] = extras_prev.get(p["id"], 0)
+        c["findes_recientes"] = findes_prev.get(p["id"], 0)
+        conductores.append(c)
+    entrada = {"fecha_inicio": desde, "fecha_fin": hasta, "colchon": colchon,
+               "permitir_extra": permitir_extra, "maximas": maximas, "conductores": conductores,
+               "celdas": celdas, "bloqueadas": sorted(set(bloqueadas)), "colchon_por_dia": colchon_dia,
+               "limites_semana": limites, "segundos": 45}
+    return entrada, personas, extras_ahora
+
+
+async def _cua_proponer(center: str, desde: str, hasta: str, user: dict, origen: str = "asistente",
+                        colchon=None, permitir_extra=None) -> dict:
+    """Calcula con el motor y deja la propuesta pendiente. No cambia ni un turno."""
+    entrada, personas, extras_ahora = await _cua_entrada(center, desde, hasta, colchon, permitir_extra)
+    if not entrada["conductores"]:
+        raise HTTPException(400, "No hay nadie en el cuadrante de este centro para esas fechas")
+    try:
+        res = await asyncio.to_thread(_cm.generar_cuadrante, entrada)
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+    except RuntimeError as e:
+        logger.error("Cuadrante: el motor no ha encontrado solución (%s): %s", center, e)
+        raise HTTPException(422, str(e))
+    nombre = {p["id"]: p["nombre"] for p in personas}
+    cambios = []
+    for k, v in res["celdas"].items():
+        antes_extra = k in extras_ahora
+        if v["cambiado"] or v["extra"] != antes_extra:
+            did, fecha = k.split("|")
+            cambios.append({"driver_id": did, "nombre": nombre.get(did, ""), "fecha": fecha,
+                            "antes": v["antes"], "valor": v["valor"], "extra": v["extra"],
+                            "antes_extra": antes_extra})
+    doc = {"id": str(uuid.uuid4()), "center": center, "desde": desde, "hasta": hasta,
+           "creada_en": datetime.now(timezone.utc).isoformat(), "creada_por": (user or {}).get("name") or "",
+           "origen": origen, "estado": "pendiente", "colchon": entrada["colchon"],
+           "permitir_extra": entrada["permitir_extra"], "resumen_dias": res["resumen_dias"],
+           "avisos": res["avisos"], "extras": res["extras"], "deficit": res["deficit"],
+           "faltan_conductores": res["faltan_conductores"], "estado_calculo": res["estado"],
+           "cambios": cambios,
+           "n_cambios": sum(1 for c in cambios if c["valor"] != c["antes"])}
+    # Una sola pendiente por centro: la nueva sustituye a la anterior.
+    await db[_CUA_PROPUESTAS].update_many({"center": center, "estado": "pendiente"},
+                                          {"$set": {"estado": "sustituida"}})
+    await db[_CUA_PROPUESTAS].insert_one(dict(doc))
+    viejas = await db[_CUA_PROPUESTAS].find({"center": center}, {"_id": 0, "id": 1}) \
+        .sort("creada_en", -1).skip(20).to_list(500)
+    if viejas:
+        await db[_CUA_PROPUESTAS].delete_many({"id": {"$in": [v["id"] for v in viejas]}})
+    logger.info("Cuadrante: propuesta %s %s..%s, %d cambios, %d extras, estado %s",
+                center, desde, hasta, doc["n_cambios"], res["extras"], res["estado"])
+    return doc
+
+
+def _cua_centro_de_query(center: Optional[str]) -> str:
+    return _cua_centro(center)
+
+
+@api_router.get("/cuadrante")
+async def cuadrante_ver(center: str, desde: str, hasta: str, user: dict = Depends(require_admin)):
+    """Todo lo que pinta la pantalla del cuadrante, en una llamada."""
+    center = _cua_centro(center)
+    _cua_acceso(user, center)
+    desde, hasta = _cua_rango(desde, hasta)
+    personas = await _cua_personas(center, desde, hasta)
+    ids = [p["id"] for p in personas]
+    desde_hist = (date_cls.fromisoformat(desde) - timedelta(days=7)).isoformat()
+    celdas = {}
+    async for s in db.shifts.find({"driver_id": {"$in": ids}, "date": {"$gte": desde_hist, "$lte": hasta}},
+                                  {"_id": 0}):
+        otro = not _cua_es_centro(s.get("center"), center)
+        celdas[f"{s['driver_id']}|{s['date']}"] = {
+            "cod": _cua_cod_turno(s), "extra": bool(s.get("extra")), "fijada": bool(s.get("fijada")),
+            "hora": s.get("hora") or "", "aprobado": bool(s.get("aprobado_req")),
+            "otro_centro": s.get("center") if otro else None}
+    maximas, objetivos = {}, {}
+    async for d in db.route_demand.find({"center": center, "date": {"$gte": desde, "$lte": hasta}}, {"_id": 0}):
+        if d.get("maximo") is not None:
+            maximas[d["date"]] = d["maximo"]
+        if d.get("objetivo") is not None:
+            objetivos[d["date"]] = d["objetivo"]
+    cfg = await db[_CUA_CONFIG].find_one({"center": center}, {"_id": 0}) or {}
+    ajustes = await db[_CUA_AJUSTES].find({"center": center}, {"_id": 0}).sort("creado_en", -1).to_list(300)
+    prop = await db[_CUA_PROPUESTAS].find_one({"center": center, "estado": "pendiente"}, {"_id": 0},
+                                              sort=[("creada_en", -1)])
+    ult = await db[_CUA_CAMBIOS].find_one({"center": center, "deshecho": {"$ne": True}},
+                                          {"_id": 0, "id": 1, "que": 1, "en": 1, "por": 1, "n": 1},
+                                          sort=[("en", -1)])
+    aprobados = await _cua_aprobados(ids, desde, hasta)
+    return {"center": center, "desde": desde, "hasta": hasta, "hoy": _dia_negocio(),
+            "personas": personas, "celdas": celdas, "maximas": maximas, "objetivos": objetivos,
+            "config": {"colchon": int(cfg.get("colchon", 2)), "permitir_extra": bool(cfg.get("permitir_extra", True))},
+            "ajustes": ajustes, "aprobados": sorted(aprobados), "propuesta": prop, "ultimo_cambio": ult,
+            "tipos": list(_cm.TIPOS)}
+
+
+@api_router.post("/cuadrante/celdas")
+async def cuadrante_celdas(data: dict = Body(...), user: dict = Depends(require_admin)):
+    """Lo que se toca a mano en la rejilla. Queda FIJADO (candado): al rehacer el
+    cuadrante el motor no lo mueve. body: {center, cambios: [{driver_id, fecha,
+    cod}]} — `cod` vacío vacía la celda; `desbloquear: true` quita el candado sin
+    cambiar el código."""
+    center = _cua_centro(data.get("center"))
+    _cua_acceso(user, center)
+    mapa = await _cua_mapa_codigos()
+    pedidos = []
+    for x in _lista_cuerpo(data.get("cambios"), 600):
+        x = _dict_cuerpo(x)
+        did = _texto_cuerpo(x.get("driver_id"), 80)
+        if not did:
+            continue
+        pedidos.append({"driver_id": did, "fecha": _cua_fecha(x.get("fecha") or x.get("date")),
+                        "cod": _cm._cod(_texto_cuerpo(x.get("cod"), 20)),
+                        "desbloquear": bool(x.get("desbloquear"))})
+    if not pedidos:
+        raise HTTPException(400, "No hay ninguna celda que guardar")
+    actuales = await _cua_turnos_de({(p["driver_id"], p["fecha"]) for p in pedidos})
+    ids = sorted({p["driver_id"] for p in pedidos})
+    nombres = {d["id"]: d.get("name") or "" for d in await db.drivers.find(
+        {"id": {"$in": ids}}, {"_id": 0, "id": 1, "name": 1}).to_list(1000)}
+    fechas = sorted(p["fecha"] for p in pedidos)
+    aprobados = await _cua_aprobados(ids, fechas[0], fechas[-1])
+    puede_aprobados = _puede(user, "aprobar-dias")
+    cambio = _CuaCambio(center, user, "Celdas cambiadas a mano (%d)" % len(pedidos))
+    guardadas, bloqueadas = 0, []
+    for p in pedidos:
+        filtro = {"driver_id": p["driver_id"], "date": p["fecha"]}
+        doc = actuales.get((p["driver_id"], p["fecha"]))
+        if doc and not _cua_es_centro(doc.get("center"), center):
+            bloqueadas.append({**p, "motivo": "ese día está en el cuadrante de %s" % doc.get("center")})
+            continue
+        if p["desbloquear"]:
+            if doc and doc.get("fijada"):
+                cambio.anota("shifts", filtro, doc)
+                await db.shifts.update_one(filtro, {"$unset": {"fijada": ""}})
+                guardadas += 1
+            continue
+        cod = p["cod"]
+        tipo = _cua_tipo(cod, mapa) if cod else None
+        aprob = aprobados.get(f"{p['driver_id']}|{p['fecha']}")
+        rompe = ((aprob == "libre" and (not cod or tipo in ("trabaja", "extra")))
+                 or (aprob == "extra" and tipo == "libre"))
+        if rompe and not puede_aprobados:
+            bloqueadas.append({**p, "motivo": "es un día concedido y no tienes permiso para quitarlo"})
+            continue
+        cambio.anota("shifts", filtro, doc)
+        if not cod:
+            await db.shifts.delete_one(filtro)
+        else:
+            campos = {"driver_id": p["driver_id"],
+                      "driver_name": nombres.get(p["driver_id"]) or (doc or {}).get("driver_name") or "",
+                      "center": center, "date": p["fecha"], "type": tipo, "cod": cod,
+                      "fijada": True, "extra": False}
+            cambio_doc = {"$set": campos}
+            if doc and _cua_cod_turno(doc) != cod:
+                cambio_doc["$unset"] = {"hora": ""}
+            await _upsert_turno(filtro, cambio_doc)
+        guardadas += 1
+    await cambio.guardar()
+    return {"ok": True, "guardadas": guardadas, "bloqueadas": bloqueadas}
+
+
+@api_router.put("/cuadrante/maximas")
+async def cuadrante_maximas(data: dict = Body(...), user: dict = Depends(require_admin)):
+    """Las máximas de cada día. body: {center, maximas: {fecha: n | null}}.
+    Solo toca `maximo`: las «rutas que piden» del mismo día se quedan."""
+    center = _cua_centro(data.get("center"))
+    _cua_acceso(user, center)
+    maximas = _dict_cuerpo(data.get("maximas"))
+    if not maximas:
+        raise HTTPException(400, "No hay ninguna máxima que guardar")
+    cambio = _CuaCambio(center, user, "Máximas")
+    ahora = datetime.now(timezone.utc).isoformat()
+    n = 0
+    for fecha, v in list(maximas.items())[:120]:
+        f = _cua_fecha(fecha)
+        filtro = {"center": center, "date": f}
+        await cambio.antes("route_demand", filtro)
+        if v in (None, ""):
+            await db.route_demand.update_one(filtro, {"$unset": {"maximo": ""}})
+            await db.route_demand.delete_one({**filtro, "objetivo": {"$exists": False},
+                                              "maximo": {"$exists": False}})
+        else:
+            try:
+                num = int(str(v).strip())
+            except ValueError:
+                raise HTTPException(400, f"La máxima del {f} tiene que ser un número")
+            if not 0 <= num <= 999:
+                raise HTTPException(400, f"La máxima del {f} está fuera de rango")
+            await db.route_demand.update_one(
+                filtro, {"$set": {"center": center, "date": f, "maximo": num, "updated_at": ahora,
+                                  "updated_by": user.get("name")}}, upsert=True)
+        n += 1
+    await cambio.guardar()
+    return {"ok": True, "guardadas": n}
+
+
+@api_router.put("/cuadrante/config")
+async def cuadrante_config(data: dict = Body(...), user: dict = Depends(require_admin)):
+    """Colchón del centro (+2 por defecto) y si se permiten días extra."""
+    center = _cua_centro(data.get("center"))
+    _cua_acceso(user, center)
+    campos = {}
+    if "colchon" in data:
+        try:
+            c = int(data.get("colchon"))
+        except (TypeError, ValueError):
+            c = -1
+        if not 0 <= c <= 10:
+            raise HTTPException(400, "El colchón va de 0 a 10")
+        campos["colchon"] = c
+    if "permitir_extra" in data:
+        campos["permitir_extra"] = bool(data.get("permitir_extra"))
+    if not campos:
+        raise HTTPException(400, "Nada que cambiar")
+    cambio = _CuaCambio(center, user, "Ajustes del cuadrante")
+    await cambio.antes(_CUA_CONFIG, {"center": center})
+    await db[_CUA_CONFIG].update_one({"center": center}, {"$set": {"center": center, **campos}}, upsert=True)
+    await cambio.guardar()
+    return {"ok": True, **campos}
+
+
+def _cua_lista_dias_semana(v) -> Optional[list]:
+    if v in (None, "", []):
+        return None
+    if not isinstance(v, list):
+        raise HTTPException(400, "El patrón es una lista de días (0 = lunes … 6 = domingo)")
+    dias = sorted({int(x) for x in v if str(x).strip().isdigit() and 0 <= int(x) <= 6})
+    return dias or None
+
+
+async def _cua_guardar_persona(center: str, driver_id: str, campos: dict, user: dict,
+                               cambio: Optional[_CuaCambio] = None):
+    filtro = {"center": center, "driver_id": driver_id}
+    if cambio is not None:
+        await cambio.antes(_CUA_PERSONAS, filtro)
+    await db[_CUA_PERSONAS].update_one(
+        filtro, {"$set": {**filtro, **campos, "actualizado_en": datetime.now(timezone.utc).isoformat(),
+                          "actualizado_por": (user or {}).get("name") or ""}}, upsert=True)
+
+
+@api_router.put("/cuadrante/personas/{driver_id}")
+async def cuadrante_persona(driver_id: str, data: dict = Body(...), user: dict = Depends(require_admin)):
+    """Cómo trabaja una persona en el cuadrante: tipo, patrón, alta, baja, apodos
+    y su NOTA. La nota se interpreta al guardarla y se devuelve lo entendido."""
+    center = _cua_centro(data.get("center"))
+    _cua_acceso(user, center)
+    driver_id = _texto_cuerpo(driver_id, 80)
+    campos: dict = {}
+    if "tipo" in data:
+        t = _texto_cuerpo(data.get("tipo"), 20)
+        if t not in _cm.TIPOS:
+            raise HTTPException(400, "Tipo no válido")
+        campos["tipo"] = t
+    if "patron" in data:
+        campos["patron"] = _cua_lista_dias_semana(data.get("patron"))
+    for k in ("alta_desde", "inactivo_desde"):
+        if k in data:
+            campos[k] = _cua_fecha(data[k]) if data.get(k) else None
+    if "apodos" in data:
+        a = data.get("apodos")
+        if isinstance(a, str):
+            a = a.split(",")
+        campos["apodos"] = [s for s in (" ".join(str(x).split())[:30] for x in _lista_cuerpo(a, 10)) if s]
+    if "nota" in data:
+        campos["nota"] = _texto_cuerpo(data.get("nota"), 500).strip()
+    if "orden" in data:
+        o = data.get("orden")
+        campos["orden"] = int(o) if isinstance(o, (int, float)) and 0 <= o < 10 ** 5 else None
+    if "en_cuadrante" in data:
+        campos["en_cuadrante"] = bool(data.get("en_cuadrante"))
+    if "reglas_fijas" in data:
+        campos["reglas_fijas"] = {"dias_no": _cua_lista_dias_semana(
+            _dict_cuerpo(data.get("reglas_fijas")).get("dias_no")) or []}
+    if not campos:
+        raise HTTPException(400, "Nada que cambiar")
+    cambio = _CuaCambio(center, user, "Persona del cuadrante")
+    await _cua_guardar_persona(center, driver_id, campos, user, cambio)
+    await cambio.guardar()
+    interp = _co.interpretar_nota(campos.get("nota") or "") if "nota" in campos else None
+    return {"ok": True, "nota": interp}
+
+
+@api_router.post("/cuadrante/nota")
+async def cuadrante_nota(data: dict = Body(...), _=Depends(require_admin)):
+    """Cómo se entendería una nota, sin guardar nada: la pantalla lo enseña
+    mientras se escribe."""
+    return _co.interpretar_nota(_texto_cuerpo(data.get("texto"), 500))
+
+
+async def _cua_crear_conductor(center: str, nombre: str) -> dict:
+    """Una ficha mínima para alguien que entra nuevo. Si ya hay una ficha con
+    ese nombre en el centro, se usa esa (no se duplica gente, gotcha 15)."""
+    fichas = await db.drivers.find({"center": _cua_rx(center)},
+                                   {"_id": 0, "id": 1, "name": 1, "active": 1}).to_list(3000)
+    igual = [f for f in fichas if _clave_nombre(f.get("name")) == _clave_nombre(nombre)]
+    if len(igual) == 1:
+        return {**igual[0], "nueva": False}
+    driver = Driver(name=re.sub(r"\s+", " ", nombre).strip(), center=center)
+    await db.drivers.insert_one(serialize_doc(driver.model_dump()))
+    return {"id": driver.id, "name": driver.name, "active": True, "nueva": True}
+
+
+@api_router.post("/cuadrante/personas")
+async def cuadrante_persona_nueva(data: dict = Body(...), user: dict = Depends(require_admin)):
+    """Mete a alguien en el cuadrante: una ficha que ya existe (`driver_id`) o una
+    persona nueva (`nombre`, y se le crea la ficha)."""
+    center = _cua_centro(data.get("center"))
+    _cua_acceso(user, center)
+    did = _texto_cuerpo(data.get("driver_id"), 80)
+    nombre = _texto_cuerpo(data.get("nombre"), 80).strip()
+    if did:
+        f = await db.drivers.find_one({"id": did}, {"_id": 0, "id": 1, "name": 1})
+        if not f:
+            raise HTTPException(404, "Ese conductor no existe")
+        ficha = {**f, "nueva": False}
+    elif len(nombre) >= 3:
+        ficha = await _cua_crear_conductor(center, nombre)
+    else:
+        raise HTTPException(400, "Elige una ficha o escribe el nombre")
+    campos = {"en_cuadrante": True, "inactivo_desde": None}
+    t = _texto_cuerpo(data.get("tipo"), 20)
+    if t:
+        if t not in _cm.TIPOS:
+            raise HTTPException(400, "Tipo no válido")
+        campos["tipo"] = t
+    if data.get("alta_desde"):
+        campos["alta_desde"] = _cua_fecha(data.get("alta_desde"))
+    cambio = _CuaCambio(center, user, "Alta en el cuadrante: %s" % ficha.get("name"))
+    await _cua_guardar_persona(center, ficha["id"], campos, user, cambio)
+    await cambio.guardar()
+    return {"ok": True, "driver_id": ficha["id"], "nombre": ficha.get("name"), "ficha_nueva": ficha["nueva"]}
+
+
+@api_router.get("/cuadrante/fichas")
+async def cuadrante_fichas(center: str, user: dict = Depends(require_admin)):
+    """Las fichas del centro, para elegir a quién meter en el cuadrante."""
+    center = _cua_centro(center)
+    _cua_acceso(user, center)
+    fichas = await db.drivers.find({"center": _cua_rx(center), "active": {"$ne": False}},
+                                   {"_id": 0, "id": 1, "name": 1}).to_list(3000)
+    fichas.sort(key=lambda f: _clave_nombre(f.get("name")))
+    return {"fichas": fichas}
+
+
+@api_router.post("/cuadrante/ajustes")
+async def cuadrante_ajuste(data: dict = Body(...), user: dict = Depends(require_admin)):
+    """Órdenes puntuales: {tipo: limite_semana, driver_id, lunes, max_dias} o
+    {tipo: colchon_dia, fecha, colchon}."""
+    center = _cua_centro(data.get("center"))
+    _cua_acceso(user, center)
+    tipo = _texto_cuerpo(data.get("tipo"), 20)
+    cambio = _CuaCambio(center, user, "Ajuste del cuadrante")
+    doc = {"center": center, "tipo": tipo, "creado_en": datetime.now(timezone.utc).isoformat(),
+           "creado_por": user.get("name") or ""}
+    if tipo == "colchon_dia":
+        f = _cua_fecha(data.get("fecha"))
+        c = int(data.get("colchon")) if str(data.get("colchon", "")).strip().isdigit() else -1
+        if not 0 <= c <= 10:
+            raise HTTPException(400, "El colchón va de 0 a 10")
+        filtro = {"center": center, "tipo": tipo, "fecha": f}
+        await cambio.antes(_CUA_AJUSTES, filtro)
+        await db[_CUA_AJUSTES].update_one(filtro, {"$set": {**doc, "fecha": f, "colchon": c},
+                                                   "$setOnInsert": {"id": str(uuid.uuid4())}}, upsert=True)
+    elif tipo == "limite_semana":
+        did = _texto_cuerpo(data.get("driver_id"), 80)
+        lun = date_cls.fromisoformat(_cua_fecha(data.get("lunes")))
+        lun = (lun - timedelta(days=lun.weekday())).isoformat()
+        n = int(data.get("max_dias")) if str(data.get("max_dias", "")).strip().isdigit() else -1
+        if not did or not 0 <= n <= 6:
+            raise HTTPException(400, "Falta la persona o el número de días (0 a 6)")
+        filtro = {"center": center, "tipo": tipo, "driver_id": did, "lunes": lun}
+        await cambio.antes(_CUA_AJUSTES, filtro)
+        await db[_CUA_AJUSTES].update_one(filtro, {"$set": {**doc, "driver_id": did, "lunes": lun, "max_dias": n},
+                                                   "$setOnInsert": {"id": str(uuid.uuid4())}}, upsert=True)
+    else:
+        raise HTTPException(400, "Tipo de ajuste no válido")
+    await cambio.guardar()
+    return {"ok": True}
+
+
+@api_router.delete("/cuadrante/ajustes/{aid}")
+async def cuadrante_ajuste_borrar(aid: str, user: dict = Depends(require_admin)):
+    a = await db[_CUA_AJUSTES].find_one({"id": aid}, {"_id": 0})
+    if not a:
+        raise HTTPException(404, "Ese ajuste ya no existe")
+    _cua_acceso(user, a["center"])
+    cambio = _CuaCambio(a["center"], user, "Quitar un ajuste")
+    cambio.anota(_CUA_AJUSTES, {"id": aid}, a)
+    await db[_CUA_AJUSTES].delete_one({"id": aid})
+    await cambio.guardar()
+    return {"ok": True}
+
+
+@api_router.post("/cuadrante/proponer")
+async def cuadrante_proponer(data: dict = Body(...), user: dict = Depends(require_admin)):
+    """«Rehacer cuadrante»: el motor calcula y devuelve la PROPUESTA. No guarda
+    ningún turno hasta que se acepte."""
+    center = _cua_centro(data.get("center"))
+    _cua_acceso(user, center)
+    desde, hasta = _cua_rango(data.get("desde"), data.get("hasta"), tope=63)
+    colchon = data.get("colchon")
+    if colchon is not None:
+        try:
+            colchon = int(colchon)
+        except (TypeError, ValueError):
+            raise HTTPException(400, "El colchón tiene que ser un número")
+    pe = data.get("permitir_extra")
+    return await _cua_proponer(center, desde, hasta, user, "asistente", colchon,
+                               None if pe is None else bool(pe))
+
+
+@api_router.post("/cuadrante/propuestas/{pid}/aceptar")
+async def cuadrante_aceptar(pid: str, user: dict = Depends(require_admin)):
+    """Aplica la propuesta. Una celda que alguien cambió mientras tanto NO se
+    pisa: se cuenta y se dice."""
+    from pymongo import DeleteOne
+    p = await db[_CUA_PROPUESTAS].find_one({"id": pid}, {"_id": 0})
+    if not p:
+        raise HTTPException(404, "Esa propuesta ya no existe")
+    center = p["center"]
+    _cua_acceso(user, center)
+    if p.get("estado") != "pendiente":
+        raise HTTPException(409, "Esa propuesta ya no está pendiente: se aceptó, se descartó o hay una más nueva")
+    mapa = await _cua_mapa_codigos()
+    cambios = p.get("cambios") or []
+    actuales = await _cua_turnos_de({(c["driver_id"], c["fecha"]) for c in cambios})
+    ids = sorted({c["driver_id"] for c in cambios})
+    nombres = {d["id"]: d.get("name") or "" for d in await db.drivers.find(
+        {"id": {"$in": ids}}, {"_id": 0, "id": 1, "name": 1}).to_list(5000)}
+    aprobados = await _cua_aprobados(ids, p["desde"], p["hasta"]) if ids else {}
+    cambio = _CuaCambio(center, user, "Aceptar la propuesta del cuadrante (%s a %s)" % (p["desde"], p["hasta"]))
+    ahora = datetime.now(timezone.utc).isoformat()
+    ops, aplicadas, saltadas = [], 0, []
+    for c in cambios:
+        filtro = {"driver_id": c["driver_id"], "date": c["fecha"]}
+        doc = actuales.get((c["driver_id"], c["fecha"]))
+        if (_cua_cod_turno(doc) if doc else "") != c["antes"] or (doc or {}).get("fijada") \
+                or (doc and not _cua_es_centro(doc.get("center"), center)):
+            saltadas.append({"nombre": c.get("nombre"), "fecha": c["fecha"]})
+            continue
+        tipo = _cua_tipo(c["valor"], mapa) if c["valor"] else None
+        if aprobados.get(f"{c['driver_id']}|{c['fecha']}") == "libre" and tipo in ("trabaja", "extra"):
+            saltadas.append({"nombre": c.get("nombre"), "fecha": c["fecha"]})
+            continue
+        cambio.anota("shifts", filtro, doc)
+        if not c["valor"]:
+            ops.append(DeleteOne(filtro))
+        else:
+            campos = {"driver_id": c["driver_id"],
+                      "driver_name": nombres.get(c["driver_id"]) or (doc or {}).get("driver_name") or c.get("nombre") or "",
+                      "center": center, "date": c["fecha"], "type": tipo, "cod": c["valor"],
+                      "extra": bool(c.get("extra")), "motor_en": ahora}
+            op = {"$set": campos}
+            if doc and _cua_cod_turno(doc) != c["valor"]:
+                op["$unset"] = {"hora": ""}
+            ops.append(UpdateOne(filtro, op, upsert=True))
+        aplicadas += 1
+    for i in range(0, len(ops), 500):
+        await _bulk_turnos(ops[i:i + 500])
+    await cambio.guardar()
+    await db[_CUA_PROPUESTAS].update_one({"id": pid}, {"$set": {
+        "estado": "aceptada", "aceptada_en": ahora, "aceptada_por": user.get("name") or "",
+        "aplicadas": aplicadas, "saltadas": len(saltadas)}})
+    await db[_CUA_CONFIG].update_one({"center": center}, {"$setOnInsert": {"seguimiento_desde": _dia_negocio()}},
+                                     upsert=True)
+    await _audit(user, "cuadrante_aceptar", {"center": center, "aplicadas": aplicadas, "saltadas": len(saltadas)})
+    return {"ok": True, "aplicadas": aplicadas, "saltadas": saltadas[:30], "n_saltadas": len(saltadas)}
+
+
+@api_router.post("/cuadrante/propuestas/{pid}/descartar")
+async def cuadrante_descartar(pid: str, user: dict = Depends(require_admin)):
+    p = await db[_CUA_PROPUESTAS].find_one({"id": pid}, {"_id": 0, "center": 1, "estado": 1})
+    if not p:
+        raise HTTPException(404, "Esa propuesta ya no existe")
+    _cua_acceso(user, p["center"])
+    await db[_CUA_PROPUESTAS].update_one({"id": pid, "estado": "pendiente"}, {"$set": {"estado": "descartada"}})
+    return {"ok": True}
+
+
+@api_router.post("/cuadrante/deshacer")
+async def cuadrante_deshacer(data: dict = Body(...), user: dict = Depends(require_admin)):
+    """Deshace el ÚLTIMO cambio del cuadrante de ese centro (el de cualquiera)."""
+    center = _cua_centro(data.get("center"))
+    _cua_acceso(user, center)
+    c = await db[_CUA_CAMBIOS].find_one({"center": center, "deshecho": {"$ne": True}}, {"_id": 0},
+                                        sort=[("en", -1)])
+    if not c:
+        raise HTTPException(404, "No hay nada que deshacer")
+    for s in reversed(c.get("snaps") or []):
+        if s.get("col") not in _CUA_COLS_DESHACER or not isinstance(s.get("filtro"), dict):
+            continue
+        col = db[s["col"]]
+        if s.get("doc") is None:
+            await col.delete_one(s["filtro"])
+        else:
+            await col.replace_one(s["filtro"], s["doc"], upsert=True)
+    await db[_CUA_CAMBIOS].update_one({"id": c["id"]}, {"$set": {
+        "deshecho": True, "deshecho_en": datetime.now(timezone.utc).isoformat(),
+        "deshecho_por": user.get("name") or ""}})
+    await _audit(user, "cuadrante_deshacer", {"center": center, "que": c.get("que")})
+    return {"ok": True, "que": c.get("que"), "n": c.get("n")}
+
+
+# ── EL CHAT DEL CUADRANTE ────────────────────────────────────────────────────
+
+async def _cua_contexto_chat(center: str, desde: str, hasta: str) -> dict:
+    hoy = _cua_hoy()
+    ini = min(hoy - timedelta(days=30), date_cls.fromisoformat(desde)).isoformat()
+    personas = await _cua_personas(center, desde, hasta)
+    ids = [p["id"] for p in personas]
+    celdas, extras = {}, set()
+    async for s in db.shifts.find({"driver_id": {"$in": ids}, "date": {"$gte": ini, "$lte": hasta}}, {"_id": 0}):
+        k = f"{s['driver_id']}|{s['date']}"
+        celdas[k] = _cua_cod_turno(s)
+        if s.get("extra"):
+            extras.add(k)
+    maximas = {}
+    async for d in db.route_demand.find({"center": center, "date": {"$gte": desde, "$lte": hasta}}, {"_id": 0}):
+        if d.get("maximo") is not None:
+            maximas[d["date"]] = d["maximo"]
+    cfg = await db[_CUA_CONFIG].find_one({"center": center}, {"_id": 0}) or {}
+    return {"hoy": hoy, "desde": date_cls.fromisoformat(desde), "hasta": date_cls.fromisoformat(hasta),
+            "personas": personas, "celdas": celdas, "extras": extras, "maximas": maximas,
+            "colchon": int(cfg.get("colchon", 2))}
+
+
+async def _cua_chat_ia(mensaje: str, ctx: dict, center: str, historial: list) -> dict:
+    """Gemini convierte la orden en acciones (solo si el intérprete sin IA no la
+    ha entendido con seguridad). Se le pasan los datos, no se le deja inventar."""
+    hoy = ctx["hoy"]
+    dias = [ctx["desde"] + timedelta(days=i) for i in range((ctx["hasta"] - ctx["desde"]).days + 1)]
+    lineas = []
+    for p in ctx["personas"]:
+        extra = []
+        if p.get("apodos"):
+            extra.append("apodos: " + ", ".join(p["apodos"]))
+        if p["tipo"] != "normal":
+            extra.append("tipo: " + p["tipo"])
+        if p.get("entendido"):
+            extra.append("reglas: " + "; ".join(p["entendido"]))
+        fila = " ".join(ctx["celdas"].get(f"{p['id']}|{d.isoformat()}") or "." for d in dias)
+        lineas.append(f"{p['id']} | {p['nombre']} | {' | '.join(extra)} | {fila}")
+    cab = " ".join(d.strftime("%d/%m") for d in dias)
+    maximas = ", ".join(f"{d.strftime('%d/%m')}: {ctx['maximas'].get(d.isoformat(), '?')}" for d in dias)
+    hist = "\n".join(f"{h.get('rol')}: {h.get('texto')}" for h in historial[-10:])
+    contexto = (f"HOY: {_co.DIAS[hoy.weekday()]} {hoy.isoformat()} (Europe/Madrid)\n"
+                f"CENTRO: {center}\nPERIODO VISIBLE: {ctx['desde'].isoformat()} a {ctx['hasta'].isoformat()}\n"
+                f"COLCHÓN GENERAL: +{ctx['colchon']}\nMÁXIMAS: {maximas}\n\n"
+                f"CONDUCTORES (id | nombre | datos | cuadrante del periodo, días {cab}; "
+                f"1=trabaja, N/T=libra, '.'=vacío):\n" + "\n".join(lineas) +
+                (f"\n\nÚLTIMOS MENSAJES:\n{hist}" if hist else ""))
+    client = _gemini_client_plantilla()
+    r = await _gemini_json_call(client, _modelo_ia(),
+                                [_co.PROMPT_SISTEMA + "\n\n" + contexto +
+                                 "\n\nMENSAJE DEL JEFE DE TRÁFICO:\n" + mensaje])
+    if not isinstance(r, dict):
+        raise ValueError("respuesta sin formato")
+    return {"resumen": str(r.get("resumen") or "")[:500], "acciones": r.get("acciones") or [], "seguro": True}
+
+
+@api_router.get("/cuadrante/chat")
+async def cuadrante_chat_ver(center: str, user: dict = Depends(require_admin)):
+    center = _cua_centro(center)
+    _cua_acceso(user, center)
+    msgs = await db[_CUA_CHAT].find({"center": center}, {"_id": 0}).sort("en", -1).to_list(60)
+    return {"mensajes": list(reversed(msgs))}
+
+
+@api_router.post("/cuadrante/chat")
+async def cuadrante_chat(data: dict = Body(...), user: dict = Depends(require_admin)):
+    """Una orden en lenguaje normal. Devuelve lo que se ha entendido; NO aplica
+    nada hasta que se confirme."""
+    center = _cua_centro(data.get("center"))
+    _cua_acceso(user, center)
+    mensaje = _texto_cuerpo(data.get("mensaje"), 1000).strip()
+    if not mensaje:
+        raise HTTPException(400, "Escribe algo")
+    hoy = _cua_hoy()
+    desde = _cua_fecha(data.get("desde")) if data.get("desde") else (hoy + timedelta(days=1)).isoformat()
+    hasta = _cua_fecha(data.get("hasta")) if data.get("hasta") else (hoy + timedelta(days=14)).isoformat()
+    if hasta < desde:
+        hasta = desde
+    ctx = await _cua_contexto_chat(center, desde, hasta)
+    r = _co.interpretar_mensaje(mensaje, ctx)
+    fuente = "reglas"
+    aviso_ia = ""
+    if not r["seguro"]:
+        historial = await db[_CUA_CHAT].find({"center": center}, {"_id": 0, "rol": 1, "texto": 1}) \
+            .sort("en", -1).to_list(10)
+        try:
+            r = await _cua_chat_ia(mensaje, ctx, center, list(reversed(historial)))
+            fuente = "ia"
+        except Exception as e:                                   # noqa: BLE001
+            logger.warning("Cuadrante chat: la IA no ha contestado: %s", str(e)[:200])
+            aviso_ia = "La IA no está disponible ahora mismo."
+            r = {"resumen": "", "acciones": [{
+                "accion": "preguntar",
+                "texto": ("No lo he entendido y la IA no está disponible ahora mismo. Prueba con frases como: "
+                          "«Juanmi no puede el viernes», «dale libre a Kevin el sábado», «Iago está de baja "
+                          "hasta el 10», «Alex esta semana máximo 4 días», «el viernes 9 ponme +3», "
+                          "«¿quién libra el sábado?»")}]}
+    acciones, malas = _co.validar_acciones(r.get("acciones"), ctx["personas"], hoy)
+    solo_hablar = all(a["accion"] in ("responder", "preguntar") for a in acciones)
+    lineas = [_co.describir(a, ctx["personas"]) for a in acciones if a["accion"] not in ("responder", "preguntar")]
+    texto_resp = next((a["texto"] for a in acciones if a["accion"] in ("responder", "preguntar")), "")
+    ahora = datetime.now(timezone.utc).isoformat()
+    await db[_CUA_CHAT].insert_one({"id": str(uuid.uuid4()), "center": center, "en": ahora, "rol": "usuario",
+                                    "texto": mensaje, "por": user.get("name") or ""})
+    mid = str(uuid.uuid4())
+    doc = {"id": mid, "center": center, "en": ahora, "rol": "asistente", "fuente": fuente,
+           "texto": texto_resp or r.get("resumen") or "", "resumen": r.get("resumen") or "",
+           "acciones": acciones, "lineas": lineas, "malas": malas,
+           "estado": "respondida" if (solo_hablar or not acciones) else "pendiente",
+           "desde": desde, "hasta": hasta, "para": user.get("name") or "", "aviso": aviso_ia}
+    await db[_CUA_CHAT].insert_one(dict(doc))
+    return doc
+
+
+async def _cua_aplicar_acciones(center: str, acciones: list, user: dict, cambio: _CuaCambio) -> list:
+    """Aplica las acciones confirmadas. Devuelve lo hecho, una línea por acción."""
+    mapa = await _cua_mapa_codigos()
+    hechas = []
+    ids = sorted({a["conductor_id"] for a in acciones if a.get("conductor_id")})
+    nombres = {d["id"]: d.get("name") or "" for d in await db.drivers.find(
+        {"id": {"$in": ids}}, {"_id": 0, "id": 1, "name": 1}).to_list(1000)}
+    puede_aprobados = _puede(user, "aprobar-dias")
+
+    def dias(a, b):
+        x, y = date_cls.fromisoformat(a), date_cls.fromisoformat(b)
+        return [(x + timedelta(days=i)).isoformat() for i in range((y - x).days + 1)]
+
+    async def poner(did, fecha, cod, fijada):
+        filtro = {"driver_id": did, "date": fecha}
+        doc = await db.shifts.find_one(filtro, {"_id": 0})
+        if doc and not _cua_es_centro(doc.get("center"), center):
+            return False
+        if doc and doc.get("aprobado_req") and not puede_aprobados:
+            return False
+        cambio.anota("shifts", filtro, doc)
+        campos = {"driver_id": did, "driver_name": nombres.get(did) or (doc or {}).get("driver_name") or "",
+                  "center": center, "date": fecha, "type": _cua_tipo(cod, mapa), "cod": cod, "extra": False}
+        op = {"$set": campos}
+        if fijada:
+            campos["fijada"] = True
+        if doc and _cua_cod_turno(doc) != cod:
+            op["$unset"] = {"hora": ""}
+        await _upsert_turno(filtro, op)
+        return True
+
+    for a in acciones:
+        acc = a["accion"]
+        did = a.get("conductor_id")
+        if acc == "marcar_ausencia":
+            n = 0
+            for f in dias(a["desde"], a["hasta"]):
+                n += await poner(did, f, a["codigo"], fijada=False)
+            hechas.append(f"{nombres.get(did, '')}: {a['codigo']} en {n} días")
+        elif acc == "quitar_ausencia":
+            n = 0
+            for f in dias(a["desde"], a["hasta"]):
+                filtro = {"driver_id": did, "date": f}
+                doc = await db.shifts.find_one(filtro, {"_id": 0})
+                if doc and _cua_cod_turno(doc) in (_co.AUSENCIAS_TODAS - {"N/T APROB"}) \
+                        and _cua_es_centro(doc.get("center"), center) and not doc.get("aprobado_req"):
+                    cambio.anota("shifts", filtro, doc)
+                    await db.shifts.delete_one(filtro)
+                    n += 1
+            hechas.append(f"{nombres.get(did, '')}: {n} ausencias quitadas")
+        elif acc == "vuelve_de_baja":
+            n = 0
+            fin = (date_cls.fromisoformat(a["fecha"]) + timedelta(days=120)).isoformat()
+            async for s in db.shifts.find({"driver_id": did, "date": {"$gte": a["fecha"], "$lte": fin}}, {"_id": 0}):
+                if _cua_cod_turno(s) == "BAJA":
+                    filtro = {"driver_id": did, "date": s["date"]}
+                    cambio.anota("shifts", filtro, s)
+                    await db.shifts.delete_one(filtro)
+                    n += 1
+            p = await db[_CUA_PERSONAS].find_one({"center": center, "driver_id": did}, {"_id": 0}) or {}
+            if p.get("tipo") == "inactivo":
+                await _cua_guardar_persona(center, did, {"tipo": "normal"}, user, cambio)
+            hechas.append(f"{nombres.get(did, '')}: vuelve el {a['fecha']} ({n} días de baja quitados)")
+        elif acc == "baja_definitiva":
+            await _cua_guardar_persona(center, did, {"inactivo_desde": a["desde"]}, user, cambio)
+            hechas.append(f"{nombres.get(did, '')}: fuera del cuadrante desde el {a['desde']}")
+        elif acc == "nuevo_conductor":
+            ficha = await _cua_crear_conductor(center, a["nombre"])
+            campos = {"en_cuadrante": True, "tipo": a.get("tipo") or "normal", "alta_desde": a["alta_desde"],
+                      "inactivo_desde": None}
+            if a.get("patron"):
+                campos["patron"] = a["patron"]
+            await _cua_guardar_persona(center, ficha["id"], campos, user, cambio)
+            hechas.append(f"{ficha.get('name')}: {'ficha nueva, ' if ficha['nueva'] else ''}entra el {a['alta_desde']}")
+        elif acc == "fijar_dia":
+            ok = await poner(did, a["fecha"], a["valor"], fijada=True)
+            hechas.append(f"{nombres.get(did, '')}: {'trabaja' if a['valor'] == '1' else 'libra'} el {a['fecha']}"
+                          + ("" if ok else " (no se ha podido: día concedido o de otro centro)"))
+        elif acc == "limite_semana":
+            filtro = {"center": center, "tipo": "limite_semana", "driver_id": did, "lunes": a["lunes"]}
+            await cambio.antes(_CUA_AJUSTES, filtro)
+            await db[_CUA_AJUSTES].update_one(filtro, {"$set": {**filtro, "max_dias": a["max_dias"],
+                                                                "creado_en": datetime.now(timezone.utc).isoformat(),
+                                                                "creado_por": user.get("name") or ""},
+                                                       "$setOnInsert": {"id": str(uuid.uuid4())}}, upsert=True)
+            hechas.append(f"{nombres.get(did, '')}: como mucho {a['max_dias']} días la semana del {a['lunes']}")
+        elif acc == "colchon_dia":
+            filtro = {"center": center, "tipo": "colchon_dia", "fecha": a["fecha"]}
+            await cambio.antes(_CUA_AJUSTES, filtro)
+            await db[_CUA_AJUSTES].update_one(filtro, {"$set": {**filtro, "colchon": a["colchon"],
+                                                                "creado_en": datetime.now(timezone.utc).isoformat(),
+                                                                "creado_por": user.get("name") or ""},
+                                                       "$setOnInsert": {"id": str(uuid.uuid4())}}, upsert=True)
+            hechas.append(f"+{a['colchon']} el {a['fecha']}")
+        elif acc == "cambiar_colchon":
+            await cambio.antes(_CUA_CONFIG, {"center": center})
+            await db[_CUA_CONFIG].update_one({"center": center}, {"$set": {"center": center, "colchon": a["colchon"]}},
+                                             upsert=True)
+            hechas.append(f"Colchón general: +{a['colchon']}")
+        elif acc == "cambiar_maxima":
+            filtro = {"center": center, "date": a["fecha"]}
+            await cambio.antes("route_demand", filtro)
+            await db.route_demand.update_one(filtro, {"$set": {**filtro, "maximo": a["maxima"],
+                                                               "updated_at": datetime.now(timezone.utc).isoformat(),
+                                                               "updated_by": user.get("name")}}, upsert=True)
+            hechas.append(f"Máxima del {a['fecha']}: {a['maxima']}")
+        elif acc in ("regla_fija", "quitar_regla"):
+            p = await db[_CUA_PERSONAS].find_one({"center": center, "driver_id": did}, {"_id": 0}) or {}
+            actuales = set((p.get("reglas_fijas") or {}).get("dias_no") or [])
+            if acc == "regla_fija":
+                nuevos = sorted(actuales | set(a["dias"]))
+            else:
+                nuevos = sorted(actuales - set(a.get("dias") or actuales))
+            await _cua_guardar_persona(center, did, {"reglas_fijas": {"dias_no": nuevos}}, user, cambio)
+            hechas.append(f"{nombres.get(did, '')}: " + (f"nunca {_co.lista_dias(nuevos)}" if nuevos else "sin regla fija"))
+        elif acc == "nota":
+            p = await db[_CUA_PERSONAS].find_one({"center": center, "driver_id": did}, {"_id": 0}) or {}
+            previa = (p.get("nota") or "").strip()
+            nota = (previa + (" " if previa and previa[-1] in ".!?" else ". " if previa else "") + a["texto"]).strip()[:500]
+            await _cua_guardar_persona(center, did, {"nota": nota}, user, cambio)
+            hechas.append(f"{nombres.get(did, '')}: nota guardada")
+    return hechas
+
+
+@api_router.post("/cuadrante/chat/{mid}/confirmar")
+async def cuadrante_chat_confirmar(mid: str, data: dict = Body(default={}), user: dict = Depends(require_admin)):
+    """Aplica lo entendido (o la parte que se deje marcada) y, si toca, rehace el
+    cuadrante: vuelve la PROPUESTA, que se acepta aparte."""
+    msg = await db[_CUA_CHAT].find_one({"id": mid}, {"_id": 0})
+    if not msg:
+        raise HTTPException(404, "Ese mensaje ya no existe")
+    center = msg["center"]
+    _cua_acceso(user, center)
+    if msg.get("estado") != "pendiente":
+        raise HTTPException(409, "Eso ya se aplicó o se canceló")
+    acciones = msg.get("acciones") or []
+    quitar = {int(i) for i in _lista_cuerpo(data.get("quitar"), 50) if str(i).isdigit()}
+    acciones = [a for i, a in enumerate(acciones) if i not in quitar]
+    ctx_personas = await _cua_personas(center, msg["desde"], msg["hasta"])
+    acciones, malas = _co.validar_acciones(acciones, ctx_personas, _cua_hoy())
+    cambio = _CuaCambio(center, user, "Chat: " + (msg.get("resumen") or "órdenes")[:80])
+    hechas = await _cua_aplicar_acciones(center, [a for a in acciones if a["accion"] != "recalcular"], user, cambio)
+    await cambio.guardar()
+    propuesta, error = None, ""
+    rec = next((a for a in acciones if a["accion"] == "recalcular"), None)
+    if rec:
+        hoy = _cua_hoy()
+        desde = max(rec.get("desde") or msg["desde"], (hoy + timedelta(days=1)).isoformat())
+        hasta = rec.get("hasta") or msg["hasta"]
+        if hasta >= desde:
+            try:
+                propuesta = await _cua_proponer(center, desde, hasta, user, "chat")
+            except HTTPException as e:
+                error = str(e.detail)
+    await db[_CUA_CHAT].update_one({"id": mid}, {"$set": {
+        "estado": "confirmada", "hechas": hechas, "confirmada_por": user.get("name") or "",
+        "propuesta_id": (propuesta or {}).get("id"), "error": error}})
+    return {"ok": True, "hechas": hechas, "malas": malas, "propuesta": propuesta, "error": error}
+
+
+@api_router.post("/cuadrante/chat/{mid}/cancelar")
+async def cuadrante_chat_cancelar(mid: str, user: dict = Depends(require_admin)):
+    msg = await db[_CUA_CHAT].find_one({"id": mid}, {"_id": 0, "center": 1})
+    if not msg:
+        raise HTTPException(404, "Ese mensaje ya no existe")
+    _cua_acceso(user, msg["center"])
+    await db[_CUA_CHAT].update_one({"id": mid, "estado": "pendiente"}, {"$set": {"estado": "cancelada"}})
+    return {"ok": True}
+
+
+# ── EL ESTUDIO: ¿SE QUEDA CORTO EL +2? ───────────────────────────────────────
+
+@api_router.get("/cuadrante/estudio")
+async def cuadrante_estudio(center: str, user: dict = Depends(require_admin)):
+    """Cuántos de los planificados NO salieron cada día (la asignación del día es
+    lo que salió de verdad), por día de la semana.
+
+    SOLO desde que el cuadrante se lleva aquí (`seguimiento_desde`): medido el
+    29-09-2026 con agosto, la última semana daba 6-12 «faltas» al día que no lo
+    eran — el cuadrante cargado se había quedado viejo y el Excel siguió
+    cambiando. Con menos de 3 días medidos de un día de la semana, no se opina."""
+    center = _cua_centro(center)
+    _cua_acceso(user, center)
+    cfg = await db[_CUA_CONFIG].find_one({"center": center}, {"_id": 0}) or {}
+    desde = cfg.get("seguimiento_desde")
+    hoy = _dia_negocio()
+    if not desde:
+        return {"desde": None, "dias": [], "por_dia": [], "colchon": int(cfg.get("colchon", 2)),
+                "mensaje": "Empieza a medir cuando aceptes el primer cuadrante hecho aquí."}
+    asig = {a["date"]: a for a in await db.daily_assignments.find(
+        {"center": _cua_rx(center), "date": {"$gte": desde, "$lt": hoy}}, {"_id": 0}).to_list(400)}
+    plan: dict = {}
+    async for s in db.shifts.find({"center": _cua_rx(center), "date": {"$gte": desde, "$lt": hoy}},
+                                  {"_id": 0, "driver_id": 1, "date": 1, "cod": 1, "type": 1, "driver_name": 1}):
+        if _cua_cod_turno(s) in _cm.RUTA:
+            plan.setdefault(s["date"], {})[s["driver_id"]] = _clave_nombre(s.get("driver_name"))
+    dias, por = [], {}
+    for f, a in sorted(asig.items()):
+        if f not in plan:
+            continue
+        slots = a.get("slots") or []
+        ids = {x.get("driver_id") for x in slots}
+        noms = {_clave_nombre(x.get("driver_name")) for x in slots}
+        no_salen = sum(1 for did, nom in plan[f].items() if did not in ids and nom not in noms)
+        dias.append({"fecha": f, "planificados": len(plan[f]), "salieron": len(slots), "no_salieron": no_salen})
+        por.setdefault(date_cls.fromisoformat(f).weekday(), []).append(no_salen)
+    colchon = int(cfg.get("colchon", 2))
+    por_dia = []
+    for wd in range(7):
+        v = sorted(por.get(wd, []))
+        if not v:
+            continue
+        media = sum(v) / len(v)
+        alto = v[min(len(v) - 1, int(round(0.8 * (len(v) - 1))))]
+        por_dia.append({"dia": _co.DIAS[wd], "muestras": len(v), "media": round(media, 1), "p80": alto,
+                        "sugerido": max(colchon, alto) if len(v) >= 3 else None})
+    return {"desde": desde, "dias": dias[-60:], "por_dia": por_dia, "colchon": colchon}
+
+
+# ── EL EXCEL, CON LA PINTA DE LA HOJA DE DANI ────────────────────────────────
+
+@api_router.get("/cuadrante/exportar")
+async def cuadrante_exportar(center: str, desde: str, hasta: str, user: dict = Depends(require_admin)):
+    """El cuadrante en .xlsx, como la hoja MENSUAL de Dani: el 1 en blanco, el
+    N/T en crema, los domingos en naranja, los días extra en ROSA, y debajo las
+    FÓRMULAS: rutas (cuenta de 1), máxima y diferencia en verde/amarillo/rojo.
+    Un 7º día seguido se pone rojo solo. La fecha de arriba es una fecha de
+    verdad: después del 30 viene el 1 del mes siguiente."""
+    import openpyxl
+    import io as _io
+    from openpyxl.styles import PatternFill, Font, Alignment, Border, Side
+    from openpyxl.utils import get_column_letter
+    from openpyxl.formatting.rule import FormulaRule
+    center = _cua_centro(center)
+    _cua_acceso(user, center)
+    desde, hasta = _cua_rango(desde, hasta)
+    datos = await cuadrante_ver(center, desde, hasta, user)
+    personas = datos["personas"]
+    dias = [(date_cls.fromisoformat(desde) + timedelta(days=i))
+            for i in range((date_cls.fromisoformat(hasta) - date_cls.fromisoformat(desde)).days + 1)]
+    colchon = datos["config"]["colchon"]
+    colchon_dia = {a["fecha"]: a["colchon"] for a in datos["ajustes"] if a.get("tipo") == "colchon_dia"}
+
+    rel = lambda c: PatternFill("solid", fgColor=c)  # noqa: E731
+    F_BLANCO, F_CREMA, F_NARANJA, F_ROSA = rel("FFFFFF"), rel("FFF2CC"), rel("F8CBAD"), rel("FF99CC")
+    F_AZUL, F_VERDE, F_AMARILLO, F_ROJO = rel("00B0F0"), rel("92D050"), rel("FFFF00"), rel("FF0000")
+    F_GRIS, F_CUENTA = rel("D9D9D9"), rel("BDD7EE")
+    FAM = {"previsto": rel("DDEBF7"), "aprobado": rel("E2EFDA"), "aviso": rel("F4B084"), "apoyo": rel("D9E1F2")}
+    fino = Side(style="thin", color="A6A6A6")
+    borde = Border(left=fino, right=fino, top=fino, bottom=fino)
+    centro = Alignment(horizontal="center", vertical="center")
+
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    ws.title = "MENSUAL"
+    ws["A1"] = f"CUADRANTE {center} — del {dias[0]:%d-%m-%Y} al {dias[-1]:%d-%m-%Y}"
+    ws["A1"].font = Font(bold=True, size=13)
+    ws["A2"] = (f"Objetivo: máxima +{colchon}. En ROSA, el día extra (6º día de la semana): "
+                "si ese día sobra gente, cámbialo por N/T.")
+    ws["A2"].font = Font(size=9, color="595959")
+    F0, C0 = 4, 3        # fila de fechas, primera columna de días
+    ws.cell(F0 - 1, 1, "Nº").font = Font(bold=True, size=9)
+    ws.cell(F0, 1, "Nº").font = Font(bold=True, size=9)
+    ws.cell(F0, 2, "NOMBRE").font = Font(bold=True, size=9)
+    for j, d in enumerate(dias):
+        col = C0 + j
+        c = ws.cell(F0, col)
+        # La primera fecha es una fecha; las demás, la de la izquierda + 1.
+        c.value = f"=DATE({d.year},{d.month},{d.day})" if j == 0 else f"={get_column_letter(col - 1)}{F0}+1"
+        c.number_format = "d"
+        c.alignment = centro
+        c.font = Font(bold=True, size=9)
+        s = ws.cell(F0 - 1, col, f'=MID("LMXJVSD",WEEKDAY({get_column_letter(col)}{F0},2),1)')
+        s.alignment = centro
+        s.font = Font(size=8, color="595959")
+        if d.weekday() == 6:
+            c.fill = F_NARANJA
+            s.fill = F_NARANJA
+        if d.day == 1 and j > 0:
+            ws.cell(F0 - 2, col, f"◄ {MESES_ES[d.month].upper()}").font = Font(bold=True, size=8, color="C00000")
+    col_fin = C0 + len(dias) - 1
+    col_tot = col_fin + 1
+    ws.cell(F0, col_tot, "Días").font = Font(bold=True, size=9)
+    ws.cell(F0, col_tot + 1, "Extra").font = Font(bold=True, size=9)
+    ws.cell(F0, col_tot + 2, "Nota").font = Font(bold=True, size=9)
+
+    celdas = datos["celdas"]
+    for i, p in enumerate(personas):
+        r = F0 + 1 + i
+        ws.cell(r, 1, i + 1).font = Font(size=8, color="7F7F7F")
+        cn = ws.cell(r, 2, p["nombre"])
+        cn.font = Font(size=9, bold=p["tipo"] != "normal")
+        if p["tipo"] == "empresa":
+            cn.fill = F_AZUL
+        elif p["tipo"] == "finde":
+            cn.fill = F_VERDE
+        elif p.get("inactivo_desde") or p["tipo"] == "inactivo":
+            cn.fill = F_AMARILLO
+        cn.border = borde
+        for j, d in enumerate(dias):
+            k = f"{p['id']}|{d.isoformat()}"
+            info = celdas.get(k) or {}
+            cod = info.get("cod") or ""
+            c = ws.cell(r, C0 + j, 1 if cod == "1" else (cod or None))
+            c.alignment = centro
+            c.border = borde
+            c.font = Font(size=9, bold=cod == "1")
+            if info.get("extra"):
+                c.fill = F_ROSA
+            elif cod == "1":
+                c.fill = F_BLANCO
+            elif cod in ("N/T", "L"):
+                c.fill = F_CREMA
+            elif cod:
+                fam = (CODIGOS_CUADRANTE_INFO.get(cod) or (None, None, "libre"))[2]
+                c.fill = FAM.get(fam, F_GRIS)
+            if d.weekday() == 6 and not info.get("extra") and cod in ("", "1"):
+                c.fill = F_NARANJA if not cod else c.fill
+        rango = f"{get_column_letter(C0)}{r}:{get_column_letter(col_fin)}{r}"
+        ws.cell(r, col_tot, f'=COUNTIF({rango},1)+COUNTIF({rango},"BKP")+COUNTIF({rango},"RA")+COUNTIF({rango},"S")').alignment = centro
+        ws.cell(r, col_tot + 1, sum(1 for d in dias if (celdas.get(f"{p['id']}|{d.isoformat()}") or {}).get("extra"))).alignment = centro
+        nota = "; ".join(p.get("entendido") or []) or p.get("nota") or ""
+        ws.cell(r, col_tot + 2, nota).font = Font(size=8, color="595959")
+    ult = F0 + len(personas)
+    # Un 7º día seguido, en rojo, en cualquier fila (mira los 6 de la izquierda).
+    if len(dias) >= 7:
+        pri = f"{get_column_letter(C0 + 6)}{F0 + 1}"
+        zona = f"{pri}:{get_column_letter(col_fin)}{ult}"
+        ven = f"{get_column_letter(C0)}{F0 + 1}:{get_column_letter(C0 + 6)}{F0 + 1}"
+        formula = (f'COUNTIF({ven},1)+COUNTIF({ven},"BKP")+COUNTIF({ven},"RA")+COUNTIF({ven},"S")>=7')
+        ws.conditional_formatting.add(zona, FormulaRule(formula=[formula], fill=F_ROJO,
+                                                        font=Font(color="FFFFFF", bold=True)))
+    # Las tres filas de abajo, con fórmulas.
+    fr, fm, fd = ult + 2, ult + 3, ult + 4
+    ws.cell(fr, 2, "RUTAS (cuenta de 1)").font = Font(bold=True, size=9)
+    ws.cell(fm, 2, "MÁXIMA").font = Font(bold=True, size=9)
+    ws.cell(fd, 2, f"DIFERENCIA (objetivo +{colchon})").font = Font(bold=True, size=9)
+    for j, d in enumerate(dias):
+        col = C0 + j
+        L = get_column_letter(col)
+        c = ws.cell(fr, col, f"=COUNTIF({L}{F0 + 1}:{L}{ult},1)")
+        c.fill = F_CUENTA
+        c.font = Font(bold=True, size=9)
+        c.alignment = centro
+        mx = datos["maximas"].get(d.isoformat())
+        c = ws.cell(fm, col, mx)
+        c.font = Font(bold=True, size=9)
+        c.alignment = centro
+        c = ws.cell(fd, col, f'=IF({L}{fm}="","",{L}{fr}-{L}{fm})')
+        c.font = Font(bold=True, size=9)
+        c.alignment = centro
+        cz = colchon_dia.get(d.isoformat(), colchon)
+        ref = f"{L}{fd}"
+        ws.conditional_formatting.add(ref, FormulaRule(formula=[f'AND({ref}<>"",{ref}>={cz})'], fill=F_VERDE))
+        ws.conditional_formatting.add(ref, FormulaRule(formula=[f'AND({ref}<>"",{ref}>=0,{ref}<{cz})'], fill=F_AMARILLO))
+        ws.conditional_formatting.add(ref, FormulaRule(formula=[f'AND({ref}<>"",{ref}<0)'], fill=F_ROJO))
+    # Leyenda.
+    fl = fd + 2
+    leyenda = [(F_BLANCO, "1", "Trabaja (sale a ruta)"), (F_CREMA, "N/T", "Libra"),
+               (F_ROSA, "1", "Día EXTRA (6º día): se puede quitar si sobra gente"),
+               (F_NARANJA, "", "Domingo"), (F_AZUL, "Nombre", "Horario fijo (lunes a viernes o su patrón)"),
+               (F_VERDE, "Nombre", "Solo fines de semana"), (F_AMARILLO, "Nombre", "Deja el cuadrante"),
+               (F_ROJO, "", "7º día seguido: no se puede (máximo 6)")]
+    ws.cell(fl, 2, "LEYENDA").font = Font(bold=True, size=9)
+    for k, (fill, cod, txt) in enumerate(leyenda):
+        c = ws.cell(fl + 1 + k, 2, cod or " ")
+        c.fill = fill
+        c.alignment = centro
+        c.border = borde
+        ws.cell(fl + 1 + k, 3, txt).font = Font(size=9)
+    ws.freeze_panes = ws.cell(F0 + 1, C0)
+    ws.column_dimensions["A"].width = 4
+    ws.column_dimensions["B"].width = 30
+    for j in range(len(dias)):
+        ws.column_dimensions[get_column_letter(C0 + j)].width = 4.2
+    ws.column_dimensions[get_column_letter(col_tot + 2)].width = 40
+    ws.sheet_view.zoomScale = 90
+    buf = _io.BytesIO()
+    wb.save(buf)
+    buf.seek(0)
+    nombre = f"cuadrante-{re.sub(r'[^A-Za-z0-9]+', '', center)}-{desde}-a-{hasta}.xlsx"
+    return StreamingResponse(buf, media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                             headers={"Content-Disposition": f'attachment; filename="{nombre}"'})
+
+
+# ── IMPORTAR LA HOJA MENSUAL DE DANI ─────────────────────────────────────────
+import cuadrante_excel as _cx  # noqa: E402
+
+
+@api_router.post("/cuadrante/importar")
+async def cuadrante_importar(file: UploadFile = File(...), center: str = Form(...),
+                             confirmar: str = Form(default=""), crear_fichas: str = Form(default=""),
+                             user: dict = Depends(require_admin)):
+    """Mete en el cuadrante la hoja MENSUAL tal cual (cómo se lee: ver
+    cuadrante_excel.py). Sin `confirmar` solo dice lo que haría.
+
+    Al confirmar: cada celda de cada persona emparejada va a su turno (el rosa,
+    marcado como día extra); el tipo de cada persona sale del color de su nombre
+    (con su patrón y su orden); las máximas, de la fila «MÁXIMAS»; y con
+    `crear_fichas`, una ficha para quien no la tiene (nunca para un nombre que
+    encaja con dos personas: eso se empareja a mano). Lo que un conductor pidió
+    y se le concedió en la app NO se pisa, ni lo fijado a mano en la rejilla, y
+    todo se deshace de una vez con «Deshacer»."""
+    center = _cua_centro(center)
+    _cua_acceso(user, center)
+    contenido = await file.read()
+    if len(contenido) > 15 * 1024 * 1024:
+        raise HTTPException(400, "El fichero es demasiado grande (máximo 15 MB)")
+    try:
+        hoja = await asyncio.to_thread(_cx.leer_mensual, contenido)
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+    # Nunca una ficha fusionada o borrada: medido el 29-09-2026, «CÉSAR GARCÍA
+    # GRAÑAS» casaba exacto con la ficha que se fusionó en otra, y sus turnos
+    # se habrían ido a una ficha muerta. Primero las activas; si no casa ninguna,
+    # las de baja (la persona puede estar trabajando con la ficha sin reactivar).
+    vivas_q = {"merged_into": {"$exists": False}, "status": {"$nin": ["deleted", "fusionada"]}}
+    fichas = await db.drivers.find({"center": _cua_rx(center), **vivas_q},
+                                   {"_id": 0, "id": 1, "name": 1, "active": 1}).to_list(5000)
+    # Las fichas sin centro también: nacieron con «Todos» elegido (27-09-2026).
+    fichas += await db.drivers.find({"$or": [{"center": None}, {"center": ""}, {"center": {"$exists": False}}],
+                                     **vivas_q}, {"_id": 0, "id": 1, "name": 1, "active": 1}).to_list(500)
+    activas = [x for x in fichas if x.get("active") is not False]
+    alias = await _alias_cuadrante()
+    emparejadas, sin_ficha, ambiguos, detalle = [], [], [], []
+    for f in hoja["filas"]:
+        drv, motivo = _empareja_conductor(f["nombre"], activas, alias)
+        if not drv and motivo != "ambiguo":
+            drv, motivo = _empareja_conductor(f["nombre"], fichas, alias)
+        if drv:
+            emparejadas.append((f, drv))
+            if motivo == "palabras" or drv.get("active") is False or f["tipo"] != "normal" \
+                    or f.get("inactivo_desde") or f.get("patron"):
+                detalle.append({"nombre": f["nombre"], "ficha": drv.get("name"), "como": motivo,
+                                "ficha_de_baja": drv.get("active") is False, "tipo": f["tipo"],
+                                "patron": f.get("patron"), "inactivo_desde": f.get("inactivo_desde"),
+                                "nota": f.get("nota_import") or ""})
+        elif motivo == "ambiguo":
+            ambiguos.append(f["nombre"])
+        else:
+            sin_ficha.append(f["nombre"])
+    extras = sum(1 for f in hoja["filas"] for c in f["celdas"].values() if c["extra"])
+    tipos: dict = {}
+    for f in hoja["filas"]:
+        tipos[f["tipo"]] = tipos.get(f["tipo"], 0) + 1
+    resumen = {"hoja": hoja["hoja"], "desde": hoja["fechas"][0], "hasta": hoja["fechas"][-1],
+               "dias": len(hoja["fechas"]), "personas": len(hoja["filas"]), "emparejadas": len(emparejadas),
+               "sin_ficha": sin_ficha, "ambiguos": ambiguos, "detalle": detalle, "tipos": tipos,
+               "extras": extras, "maximas": len(hoja["maximas"]), "codigos": hoja["codigos"],
+               "avisos": hoja["avisos"], "leyenda": hoja["leyenda"], "guardado": False}
+    if not confirmar:
+        return resumen
+    fichas_creadas = []
+    if crear_fichas:
+        for f in hoja["filas"]:
+            if f["nombre"] in sin_ficha:
+                ficha = await _cua_crear_conductor(center, f["nombre"])
+                emparejadas.append((f, ficha))
+                if ficha.get("nueva"):
+                    fichas_creadas.append(ficha["name"])
+    if not emparejadas:
+        raise HTTPException(400, "Ningún nombre de la hoja casa con una ficha: no se ha guardado nada")
+    mapa = await _cua_mapa_codigos()
+    ids = sorted({drv["id"] for _, drv in emparejadas})
+    aprobados = await _cua_aprobados(ids, hoja["fechas"][0], hoja["fechas"][-1])
+    actuales = await _cua_turnos_de({(drv["id"], d) for f, drv in emparejadas for d in f["celdas"]})
+    cambio = _CuaCambio(center, user, "Importar la hoja %s (%s a %s)" % (hoja["hoja"], hoja["fechas"][0],
+                                                                        hoja["fechas"][-1]))
+    ops, respetados, fijadas, guardadas = [], 0, 0, 0
+    for f, drv in emparejadas:
+        for fecha, cel in f["celdas"].items():
+            cod = cel["cod"]
+            tipo = _cua_tipo(cod, mapa)
+            aprob = aprobados.get(f"{drv['id']}|{fecha}")
+            if (aprob == "libre" and tipo in ("trabaja", "extra")) or (aprob == "extra" and tipo == "libre"):
+                respetados += 1
+                continue
+            filtro = {"driver_id": drv["id"], "date": fecha}
+            doc = actuales.get((drv["id"], fecha))
+            if doc and doc.get("fijada") and _cua_cod_turno(doc) != cod:
+                fijadas += 1
+                continue
+            if doc and not _cua_es_centro(doc.get("center"), center):
+                continue
+            cambio.anota("shifts", filtro, doc)
+            campos = {"driver_id": drv["id"], "driver_name": drv.get("name") or f["nombre"], "center": center,
+                      "date": fecha, "type": tipo, "cod": cod, "extra": bool(cel["extra"])}
+            op = {"$set": campos}
+            if cel.get("hora"):
+                campos["hora"] = cel["hora"]
+            else:
+                op["$unset"] = {"hora": ""}
+            ops.append(UpdateOne(filtro, op, upsert=True))
+            guardadas += 1
+    for i in range(0, len(ops), 500):
+        await _bulk_turnos(ops[i:i + 500])
+    for f, drv in emparejadas:
+        campos = {"en_cuadrante": True, "tipo": f["tipo"] if f["tipo"] in _cm.TIPOS else "normal",
+                  "patron": f.get("patron"), "inactivo_desde": f.get("inactivo_desde")}
+        if f.get("orden") is not None:
+            campos["orden"] = f["orden"]
+        await _cua_guardar_persona(center, drv["id"], campos, user, cambio)
+    ahora = datetime.now(timezone.utc).isoformat()
+    for fecha, n in hoja["maximas"].items():
+        filtro = {"center": center, "date": fecha}
+        await cambio.antes("route_demand", filtro)
+        await db.route_demand.update_one(filtro, {"$set": {**filtro, "maximo": n, "updated_at": ahora,
+                                                           "updated_by": user.get("name")}}, upsert=True)
+    await cambio.guardar()
+    await db[_CUA_CONFIG].update_one({"center": center}, {"$setOnInsert": {"seguimiento_desde": _dia_negocio()}},
+                                     upsert=True)
+    await _audit(user, "cuadrante_importar", {"center": center, "celdas": guardadas, "personas": len(emparejadas)})
+    logger.info("Cuadrante importado de Excel: %s %s..%s, %d celdas, %d personas", center,
+                hoja["fechas"][0], hoja["fechas"][-1], guardadas, len(emparejadas))
+    resumen.update(guardado=True, celdas=guardadas, respetados=respetados, fijadas_respetadas=fijadas,
+                   fichas_creadas=fichas_creadas, emparejadas=len(emparejadas))
+    return resumen
 
 
 # =========================

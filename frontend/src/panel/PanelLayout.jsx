@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { NavLink, Navigate, Outlet, useNavigate, useLocation } from 'react-router-dom'
 import {
-  LayoutDashboard, Users, CalendarClock, CalendarCheck, Activity, CheckCircle2, ClipboardList,
+  LayoutDashboard, Users, CalendarClock, CalendarCheck, CalendarRange, Activity, CheckCircle2, ClipboardList,
   ClipboardCheck, Truck, Wrench, Hammer, BellRing, KeyRound, Building2, BrainCircuit, FileUp,
   Settings, Shield, LogOut, Zap, Inbox, ChevronRight, ChevronDown, AlertTriangle, BookUser,
   Search, Sun, Moon, Contrast, MapPin, Mail, UserCircle2, Languages, ShieldAlert, Menu,
@@ -86,6 +86,7 @@ const NAV_DEF = [
     { to: '/panel/plantilla', labelKey: 'nav.template', icon: FileSpreadsheet },
     { to: '/panel/diarios', labelKey: 'nav.dnr', icon: PackageX },
     { to: '/panel/horas', labelKey: 'nav.horas', icon: Clock },
+    { to: '/panel/cuadrante', labelKey: 'nav.cuadrante', icon: CalendarRange },
     { to: '/panel/turnos', labelKey: 'nav.shifts', icon: CalendarCheck },
     { to: '/panel/checklist-operativo', labelKey: 'nav.checklist', icon: CheckCircle2 },
   ]},
@@ -538,6 +539,10 @@ export default function PanelLayout() {
     // para todo el que tenga permisos definidos —el permiso no existe en
     // ninguna lista— y la entrada desaparecía del menú sin ningún error.
     if (k === 'ordenes') return canSee('talleres')
+    // El cuadrante va con Turnos (29-09-2026): quien lleva los días libres de
+    // la gente es quien hace el cuadrante. Sin heredar, nadie con permisos a
+    // medida lo vería hasta marcarle una casilla nueva uno por uno.
+    if (k === 'cuadrante') return canSee('turnos')
     if (!SIEMPRE_VISIBLES.has(k) && !canSee(k)) return false
     const feat = ROUTE_FEATURE[k]
     if (feat && limits && limits[feat] === false) return false
@@ -565,6 +570,7 @@ export default function PanelLayout() {
     if (SIEMPRE_VISIBLES.has(k)) return true
     if (k === 'vencimientos') return EXPIRY_KEYS.some((ek) => canSee(ek))
     if (k === 'ordenes') return canSee('talleres')
+    if (k === 'cuadrante') return canSee('turnos')
     if (k === 'admin' || k === 'bandeja' || k === 'analitica' || k === 'gastos' || k === 'valor') return sa
     if (k === 'tienda' && !esPlataforma()) return false
     if (k === 'usuarios') return sa || cm

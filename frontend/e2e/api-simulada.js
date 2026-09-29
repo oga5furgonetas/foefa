@@ -65,6 +65,16 @@ function respuesta(ruta, escenario) {
                   { id: 'w3', name: 'Carglass Santiago' }],
       total_matched: 3,
     },
+    // El cuadrante con motor, con la forma de server.py. Van ANTES que '/chat':
+    // `ruta.includes('/chat')` casaría con '/cuadrante/chat'.
+    '/cuadrante/chat': { mensajes: [] },
+    '/cuadrante/estudio': { desde: null, dias: [], por_dia: [], colchon: 2 },
+    '/cuadrante/fichas': { fichas: lleno ? [{ id: 'd1', name: 'Ana López' }] : [] },
+    '/cuadrante': {
+      center: 'NORTE', desde: HOY, hasta: dentroDe(13), hoy: HOY, personas: [], celdas: {},
+      maximas: {}, objetivos: {}, config: { colchon: 2, permitir_extra: true }, ajustes: [],
+      aprobados: [], propuesta: null, ultimo_cambio: null, tipos: ['normal', 'empresa', 'finde', 'inactivo'],
+    },
     // Va ANTES que '/vehicles': el emparejador de abajo es `ruta.includes(clave)`
     // y para "/vehicles/faltan" ambas claves casan, así que la más específica
     // tiene que aparecer primero o nunca se alcanza (server.py siempre devuelve

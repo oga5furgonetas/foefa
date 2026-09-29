@@ -98,6 +98,17 @@ export const AYUDA = {
     ],
     ojo: 'Varias personas pueden editar la misma hoja a la vez: cada celda se guarda sola y los cambios de los demás aparecen en 2-3 segundos.',
   },
+  cuadrante: {
+    que: 'Quién trabaja cada día, cuadrado a la máxima +2 con 5 días y 2 libres y nunca 7 seguidos.',
+    pasos: [
+      'Toca una celda para cambiarla (o elige un pincel y ve pintando). Se guarda al momento y queda con candado: al rehacer, el motor no la mueve.',
+      '«Rehacer cuadrante» pide las fechas, las máximas y quién sigue de baja, y enseña una PROPUESTA: borde morado en lo que cambia, rosa en los días extra. Nada se aplica hasta que pulsas Aceptar.',
+      'El asistente entiende órdenes normales: «Juanmi esta semana no puede», «dale libre a Kevin el sábado», «el viernes ponme +3», «¿quién libra el sábado?». Enseña lo que ha entendido y espera a que confirmes.',
+      'Pulsa en un nombre para su nota («solo trabaja 4 días», «días alternos», «nunca los martes»): el motor la aplica siempre, y te dice lo que no sabe aplicar.',
+      'Si un día sobra gente, «Día extra → libre» enseña quién está en rosa para darle el libre con un clic.',
+    ],
+    ojo: 'Vacaciones, bajas, días aprobados y todo lo que no sea 1 o N/T no lo toca nunca el motor. Y cualquier cambio se deshace con «Deshacer último cambio».',
+  },
   turnos: {
     que: 'El cuadrante: quién trabaja qué día, con los códigos y las horas.',
     pasos: [

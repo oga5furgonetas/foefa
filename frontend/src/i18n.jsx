@@ -1348,6 +1348,7 @@ const DICT = {
   'dr.ver':           { es: "Ver", en: "View", fr: "Voir", de: "Ansehen", it: "Vedi", pt: "Ver" },
   // ── Plantilla del día ──
   'nav.horas': { es: 'Horas · WHC', en: 'Hours · WHC', fr: 'Heures · WHC', de: 'Stunden · WHC', it: 'Ore · WHC', pt: 'Horas · WHC' },
+  'nav.cuadrante': { es: 'Cuadrante', en: 'Rota', fr: 'Planning', de: 'Dienstplan', it: 'Turni', pt: 'Escala' },
   'nav.dnr': { es: 'DNR diaria', en: 'Daily DNR', fr: 'DNR du jour', de: 'DNR täglich', it: 'DNR giornaliero', pt: 'DNR diário' },
   'pg.sinFecha': { es: "Sin fecha", en: "No date", fr: "Sans date", de: "Ohne Datum", it: "Senza data", pt: "Sem data" },
   'pg.histTitulo': { es: "Historial de plantillas", en: "Roster history", fr: "Historique des feuilles", de: "Plan-Verlauf", it: "Storico piani", pt: "Histórico de escalas" },

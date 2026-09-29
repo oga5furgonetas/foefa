@@ -18,7 +18,7 @@ const PANEL = [
   ['incidencias', 'Incidencias'], ['ordenes', 'Órdenes de taller'],
   ['talleres', 'Talleres'], ['asignacion', 'Asignación'],
   ['plantilla', 'Plantilla del día'], ['diarios', 'DNR diaria'], ['horas', 'Horas · WHC'],
-  ['turnos', 'Turnos'], ['checklist-operativo', 'Checklist'],
+  ['turnos', 'Turnos'], ['cuadrante', 'Cuadrante'], ['checklist-operativo', 'Checklist'],
   ['conductores', 'Conductores'], ['incorporaciones', 'Incorporaciones'],
   ['empleo', 'Empleo'], ['contactos', 'Contactos'],
   ['conversaciones', 'Conversaciones'], ['actividad', 'Actividad'],
@@ -340,6 +340,97 @@ test.describe('Horas · WHC', () => {
     await expect(page.locator('#horas-plan')).toHaveCount(0)
     await page.getByRole('button', { name: 'Pegar uno nuevo' }).click()
     await expect(page.locator('#horas-plan')).toBeVisible()
+    expect(fallos, fallos.join(' | ')).toHaveLength(0)
+  })
+})
+
+/* CUADRANTE: la hoja como la de Dani (rutas, máxima, diferencia), la propuesta
+   del motor con lo que cambia, y el chat que enseña lo entendido y NO aplica
+   nada hasta confirmar (29-09-2026). */
+test.describe('Cuadrante', () => {
+  const iso = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+  const lunes = (() => { const d = new Date(); d.setHours(12); d.setDate(d.getDate() - ((d.getDay() + 6) % 7)); return d })()
+  const dia = (n) => { const d = new Date(lunes); d.setDate(d.getDate() + n); return iso(d) }
+  const DATOS = () => {
+    const personas = [
+      { id: 'p1', nombre: 'ANA PÉREZ', tipo: 'normal', ficha_activa: true, apodos: [], nota: 'solo trabaja 4 días',
+        reglas: { dias_semana: 4 }, entendido: ['Trabaja 4 días por semana, sin día extra'], sin_entender: '', reglas_fijas: [] },
+      { id: 'p2', nombre: 'LUIS GÓMEZ', tipo: 'empresa', ficha_activa: true, apodos: [], nota: '', reglas: {},
+        entendido: [], sin_entender: '', reglas_fijas: [] },
+      { id: 'p3', nombre: 'SARA VIDAL', tipo: 'normal', ficha_activa: true, apodos: ['sari'], nota: '', reglas: {},
+        entendido: [], sin_entender: '', reglas_fijas: [], inactivo_desde: dia(10) },
+    ]
+    const celdas = {}
+    for (let i = 0; i < 14; i++) {
+      celdas[`p1|${dia(i)}`] = { cod: i % 7 < 4 ? '1' : 'N/T', extra: false, fijada: i === 2 }
+      celdas[`p2|${dia(i)}`] = { cod: i % 7 < 5 ? '1' : 'N/T', extra: false, fijada: false }
+      celdas[`p3|${dia(i)}`] = { cod: i === 3 ? 'V' : '1', extra: i === 5, fijada: false }
+    }
+    const maximas = Object.fromEntries(Array.from({ length: 14 }, (_, i) => [dia(i), 1]))
+    return {
+      center: 'NORTE', desde: dia(0), hasta: dia(13), hoy: dia(1), personas, celdas, maximas, objetivos: {},
+      config: { colchon: 2, permitir_extra: true }, ajustes: [], aprobados: [],
+      propuesta: { id: 'pr1', desde: dia(2), hasta: dia(13), n_cambios: 1, extras: 1, faltan_conductores: 1,
+        resumen_dias: [{ fecha: dia(2), maxima: 1, colchon: 2, objetivo: 3, planificadas: 3, diferencia: 2 }],
+        avisos: ['1 días EXTRA (6º día de la semana) para llegar a +2.'],
+        cambios: [{ driver_id: 'p1', fecha: dia(4), antes: 'N/T', valor: '1', extra: true, antes_extra: false }] },
+      ultimo_cambio: { id: 'c1', que: 'Importar la hoja MENSUAL', en: new Date().toISOString(), por: 'Admin' },
+      tipos: ['normal', 'empresa', 'finde', 'inactivo'],
+    }
+  }
+  const json = (body) => (route) => route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(body) })
+
+  test('pinta la hoja con rutas, máxima y diferencia, y la propuesta del motor', async ({ page }) => {
+    const fallos = vigilar(page)
+    await entrarComoAdmin(page)
+    await simularApi(page, 'vacio')
+    await page.route(/\/api\/cuadrante\?/, json(DATOS()))
+    await page.goto('/panel/cuadrante', { waitUntil: 'domcontentloaded' })
+    await expect(page.getByText('Rutas (cuenta de 1)')).toBeVisible({ timeout: 15000 })
+    await expect(page.getByText('Diferencia (objetivo +2)')).toBeVisible()
+    await expect(page.getByText('Propuesta del motor')).toBeVisible()
+    await expect(page.getByText(/harían falta un conductor más/)).toBeVisible()
+    await expect(page.getByRole('button', { name: /ANA PÉREZ/ })).toBeVisible()
+    await expect(page.getByText(/SE VA/)).toBeVisible()
+    await expect(page.getByRole('button', { name: 'Deshacer último cambio' })).toBeVisible()
+    // Con la propuesta a la vista, tocar una celda no cambia nada: avisa.
+    await page.getByRole('button', { name: 'Ver lo actual' }).click()
+    await expect(page.getByRole('button', { name: 'Ver la propuesta' })).toBeVisible()
+    // La nota de Ana: lo que aplica el motor, en su editor.
+    await page.route(/\/api\/cuadrante\/nota/, json({ reglas: { dias_semana: 4 },
+      entendido: ['Trabaja 4 días por semana, sin día extra'], sin_entender: '' }))
+    await page.getByRole('button', { name: /ANA PÉREZ/ }).click()
+    await expect(page.getByText(/El motor aplicará: Trabaja 4 días/)).toBeVisible()
+    expect(fallos, fallos.join(' | ')).toHaveLength(0)
+  })
+
+  test('el asistente enseña lo entendido y solo aplica al confirmar', async ({ page }) => {
+    const fallos = vigilar(page)
+    await entrarComoAdmin(page)
+    await simularApi(page, 'vacio')
+    await page.setViewportSize({ width: 1500, height: 900 })
+    await page.route(/\/api\/cuadrante\?/, json(DATOS()))
+    let confirmado = false
+    await page.route(/\/api\/cuadrante\/chat\/m1\/confirmar/, (route) => {
+      confirmado = true
+      return json({ ok: true, hechas: ['SARA VIDAL: N/D en 5 días'], malas: [], propuesta: null, error: '' })(route)
+    })
+    await page.route(/\/api\/cuadrante\/chat$/, (route) => (route.request().method() === 'POST'
+      ? json({ id: 'm1', rol: 'asistente', estado: 'pendiente', fuente: 'reglas', resumen: 'Sari no puede.',
+        acciones: [{ accion: 'marcar_ausencia', conductor_id: 'p3', desde: dia(2), hasta: dia(6), codigo: 'N/D' },
+          { accion: 'recalcular' }],
+        lineas: ['SARA VIDAL → N/D (no disponible) del … al …', 'Rehacer el cuadrante'], malas: [] })(route)
+      : json({ mensajes: [] })(route)))
+    await page.goto('/panel/cuadrante', { waitUntil: 'domcontentloaded' })
+    await expect(page.getByText('Rutas (cuenta de 1)')).toBeVisible({ timeout: 15000 })
+    await page.getByRole('button', { name: 'Asistente', exact: true }).click()
+    await page.getByLabel('Mensaje para el asistente del cuadrante').fill('Sari esta semana no puede')
+    await page.getByRole('button', { name: 'Enviar' }).click()
+    await expect(page.getByText('He entendido esto:')).toBeVisible()
+    expect(confirmado).toBe(false)
+    await page.getByRole('button', { name: 'Confirmar' }).click()
+    await expect(page.getByText('✓ SARA VIDAL: N/D en 5 días')).toBeVisible()
+    expect(confirmado).toBe(true)
     expect(fallos, fallos.join(' | ')).toHaveLength(0)
   })
 })

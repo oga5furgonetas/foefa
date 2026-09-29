@@ -338,6 +338,41 @@ export const createShiftBlock = (body) => api.post('/shift-blocks', body)
 export const deleteShiftBlock = (id) => api.delete(`/shift-blocks/${id}`)
 
 export const generateShiftsAuto = (center, desde, hasta) => api.post('/shifts/generate-auto', { center, desde, hasta }, { timeout: 120000 })
+
+/* ── Cuadrante con motor (+2 sobre la máxima) ──
+   Los turnos son los mismos de arriba; esto añade el motor, las personas con
+   su nota, las propuestas que se aceptan aparte, deshacer y el chat. */
+export const getCuadrante = (center, desde, hasta) => api.get('/cuadrante', { params: { center, desde, hasta } })
+export const cuadranteCeldas = (center, cambios) => api.post('/cuadrante/celdas', { center, cambios })
+export const cuadranteMaximas = (center, maximas) => api.put('/cuadrante/maximas', { center, maximas })
+export const cuadranteConfig = (center, body) => api.put('/cuadrante/config', { center, ...body })
+export const cuadrantePersona = (driverId, center, body) =>
+  api.put(`/cuadrante/personas/${driverId}`, { center, ...body })
+export const cuadrantePersonaNueva = (body) => api.post('/cuadrante/personas', body)
+export const cuadranteFichas = (center) => api.get('/cuadrante/fichas', { params: { center } })
+export const cuadranteNota = (texto) => api.post('/cuadrante/nota', { texto })
+export const cuadranteAjuste = (body) => api.post('/cuadrante/ajustes', body)
+export const cuadranteAjusteBorrar = (id) => api.delete(`/cuadrante/ajustes/${id}`)
+export const cuadranteProponer = (body) => api.post('/cuadrante/proponer', body, { timeout: 240000 })
+export const cuadranteAceptar = (id) => api.post(`/cuadrante/propuestas/${id}/aceptar`, {}, { timeout: 120000 })
+export const cuadranteDescartar = (id) => api.post(`/cuadrante/propuestas/${id}/descartar`, {})
+export const cuadranteDeshacer = (center) => api.post('/cuadrante/deshacer', { center }, { timeout: 120000 })
+export const cuadranteChatVer = (center) => api.get('/cuadrante/chat', { params: { center } })
+export const cuadranteChat = (body) => api.post('/cuadrante/chat', body, { timeout: 120000 })
+export const cuadranteChatConfirmar = (id, quitar) =>
+  api.post(`/cuadrante/chat/${id}/confirmar`, { quitar }, { timeout: 240000 })
+export const cuadranteChatCancelar = (id) => api.post(`/cuadrante/chat/${id}/cancelar`, {})
+export const cuadranteEstudio = (center) => api.get('/cuadrante/estudio', { params: { center } })
+export const cuadranteExportar = (center, desde, hasta) =>
+  api.get('/cuadrante/exportar', { params: { center, desde, hasta }, responseType: 'blob', timeout: 120000 })
+export function cuadranteImportar(file, center, confirmar, crearFichas) {
+  const fd = new FormData()
+  fd.append('file', file)
+  fd.append('center', center)
+  if (confirmar) fd.append('confirmar', '1')
+  if (crearFichas) fd.append('crear_fichas', '1')
+  return api.post('/cuadrante/importar', fd, { timeout: 180000, headers: { 'Content-Type': undefined } })
+}
 export const getRouteDemand = (center, desde, hasta) => api.get('/route-demand', { params: { center, desde, hasta } })
 export const setRouteDemand = (center, items) => api.post('/route-demand', { center, items })
 export const getShiftRequests = (center, status, extra = {}) =>
