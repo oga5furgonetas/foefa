@@ -62,10 +62,17 @@ export function writeDeterministic(fs: FactSheet, opts: WriteOptions = {}): Draf
   // Entrada: la frase que mejor cuenta lo mismo que el titular SIN repetirlo. El 29-09-2026 la
   // entrada era «Depuis 2017, … alors que sur la période.» (la primera frase confirmada, sin
   // relación con el titular) y el titular se repetía tal cual como primer párrafo.
-  const pool = developing ? [...fs.confirmed, ...fs.attributed] : fs.confirmed;
+  // Cada frase decide por sí misma: lo confirmado va como hecho; lo demás, con «según X». Una
+  // historia verificada entre idiomas (lo confirman dos medios en inglés) puede no tener nada
+  // confirmado EN ESTE idioma: se escribe atribuido en vez de no publicarse (29-09-2026: 27 de
+  // 38 historias verificadas se quedaban sin borrador en algún idioma).
+  const plainClaim = (c: FactClaim) => !developing && c.status === 'supported';
+  const pool = [...fs.confirmed, ...fs.attributed];
   let headlineClaim: FactClaim | null = null;
   if (!headline) {
-    const candidates = [...pool.filter((c) => c.isHeadline), ...pool.filter((c) => !c.isHeadline)];
+    const conf = pool.filter(plainClaim);
+    const attr = pool.filter((c) => !plainClaim(c));
+    const candidates = [...conf.filter((c) => c.isHeadline), ...conf.filter((c) => !c.isHeadline), ...attr.filter((c) => c.isHeadline), ...attr.filter((c) => !c.isHeadline)];
     // Una frase del cuerpo solo es titular si cuenta lo mismo que el titular de alguna fuente:
     // «En agosto de 2026, la bancada Caribe radicó el proyecto» (¿qué proyecto?) salió de titular.
     const sourceTitles = fs.claims.filter((c) => c.isHeadline).map((c) => keyWords(c.text));
@@ -78,7 +85,7 @@ export function writeDeterministic(fs: FactSheet, opts: WriteOptions = {}): Draf
       const short = compressClaim(c.text, 16, { commaCut: false });
       // Un titular tiene que entenderse solo.
       if (!short || !standsAlone(short)) continue;
-      const h = developing ? stripPeriod(P.according(short, listJoin(lang, c.attribution.slice(0, 2)))) : short;
+      const h = plainClaim(c) ? short : stripPeriod(P.according(short, listJoin(lang, c.attribution.slice(0, 2))));
       if (h.length <= 120 && goodHeadline(h)) {
         headline = h;
         headlineClaim = c;
@@ -96,7 +103,8 @@ export function writeDeterministic(fs: FactSheet, opts: WriteOptions = {}): Draf
     if (!compressed) return;
     const overlap = coverage(hWords, keyWords(compressed));
     if (overlap > 0.85) return; // sería el titular otra vez con otras palabras
-    const score = overlap - i * 0.02; // a igualdad, la mejor respaldada (van por orden)
+    // A igualdad, la mejor respaldada (van por orden) y, antes que nada, lo confirmado.
+    const score = overlap - i * 0.02 + (plainClaim(c) ? 0.2 : 0);
     if (!lead || score > lead.score) lead = { c, text: compressed, score };
   });
   if (!lead && headlineClaim) {
@@ -107,7 +115,7 @@ export function writeDeterministic(fs: FactSheet, opts: WriteOptions = {}): Draf
   if (lead) {
     const { c, text } = lead as { c: FactClaim; text: string };
     leadClaim = c;
-    const leadSentence = developing ? P.according(text, listJoin(lang, c.attribution.slice(0, 3))) : `${text}.`;
+    const leadSentence = plainClaim(c) ? `${text}.` : P.according(text, listJoin(lang, c.attribution.slice(0, 3)));
     body.push({ type: 'p', text: leadSentence, claimIds: [claimRef(c)] });
     if (!summary) summary = leadSentence;
   }
@@ -182,7 +190,8 @@ export function writeDeterministic(fs: FactSheet, opts: WriteOptions = {}): Draf
 
   // ── Citas verificadas ──
   for (const c of fs.quotes.slice(0, 2)) {
-    if (!c.quote?.speaker) continue;
+    // En bloque, solo las citas confirmadas: una cita que da una sola fuente ya va en el texto con su «según».
+    if (!c.quote?.speaker || c.status !== 'supported') continue;
     body.push({ type: 'quote', text: c.quote.text, speaker: c.quote.speaker, claimIds: [claimRef(c)], sourceUrl: c.supporters[0]?.url ?? '' });
   }
 

@@ -147,23 +147,32 @@ fallo con su prueba (`packages/core/test/unit/quality-29-09.test.ts`):
   Facebook, LinkedIn y correo.
 - Pruebas: 190 del núcleo + 2 del worker + 47/47 E2E; build correcto.
 
-**Sin desplegar todavía**: falta que Dani autorice usar el token de Fly del PC (la
-protección automática lo bloquea sin su permiso expreso).
+**Desplegado el 29-09-2026** (con permiso de Dani). Ojo: la mejora del 28-09 («leer la
+noticia completa») NO había llegado a producción; el último despliegue era del 27-09.
+
+**Redacción con IA gratuita (Groq), desde el 29-09-2026:** clave de Dani (cuenta gratuita de
+Groq; el archivo `~/.historapi.txt` y `~/.histor-secretos-prod.env`, fuera de git).
+`openai/gpt-oss-120b` redacta y `openai/gpt-oss-20b` traduce (`OPENAI_BASE_URL` de Groq).
+Plan gratuito: 8.000 tokens/minuto y 200.000/día por modelo → `AI_DAILY_TOKEN_LIMIT=180000`,
+`AI_MIN_IMPORTANCE=0.42`, `AI_REASONING_EFFORT=low`. Unos 2.300 tokens por texto: ~80
+noticias y ~80 traducciones al día; el resto, redactor determinista. Probado con noticias
+reales: 8-10 párrafos, cada dato con su fuente, y todos los controles superados (el texto
+se repara frase a frase con el validador: «según X» si solo faltaba eso; fuera el párrafo
+si algo no tiene respaldo). Grok (xAI) NO sirve gratis: la cuenta de Dani no tiene créditos.
 
 ## Bloqueos (externos: solo los puede resolver el propietario)
 
-1. **Desplegar lo del 29-09**: permiso para usar el token de Fly (`~/.flotia-fly-token.txt`).
-2. **Dominio `histor.es`**: comprado por Dani en Nominalia el 29-09-2026. Falta: `fly certs
-   add histor.es` (y www) en `histor-web`, los registros A/AAAA en el DNS de Nominalia y
-   `PUBLIC_BASE_URL=https://histor.es` (redespliegue).
-3. **Redactor con IA**: sin él, el texto son frases de las fuentes (máx. 22 palabras cada
-   una por el límite de copia) cosidas con «según X»; no se puede escribir como un
-   periodista ni traducir a los 6 idiomas. Hace falta una clave de pago (Gemini de AI
-   Studio con facturación, o Anthropic) y un tope mensual. La de Flota NO: es gratuita y
-   Flota ya se queda sin cuota.
-4. **Activar el 2FA del panel** (obligatorio en producción). Dani dice que no puede entrar
-   en su usuario: revisar los registros de `histor-web` con el token.
-5. **Integraciones** (todas opcionales; sin ellas se desactivan de forma explícita):
+1. **Dominio `histor.es`**: comprado por Dani en Nominalia el 29-09-2026. La protección
+   automática de Claude Code bloquea los cambios de DNS/certificados aunque Dani diga que
+   sí. Falta: `fly certs add histor.es -a histor-web` (y `www.histor.es`); en el DNS de
+   Nominalia, `A @ 66.241.124.153`, `AAAA @ 2a09:8280:1::19e:1d3d:0` y `CNAME www
+   histor-web.fly.dev`; después `PUBLIC_BASE_URL=https://histor.es` y redesplegar.
+2. **Visitas y acceso de Dani al panel**: las consultas a la base de producción también
+   están bloqueadas por la misma protección. Dani dice que no puede entrar en su usuario
+   (el 2FA es obligatorio en producción).
+3. **Grok (xAI)**: Dani pegó en el chat una clave de xAI sin créditos: que la borre en
+   console.x.ai si no la va a usar.
+4. **Integraciones** (todas opcionales; sin ellas se desactivan de forma explícita):
    Stripe + webhook, Resend (correo), Google/Apple, Sentry, S3/R2 para copias fuera de
    Fly, cuentas de Bluesky/Mastodon/X para publicar en redes. VAPID ya está generado.
 

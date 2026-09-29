@@ -258,10 +258,11 @@ Motor puro en `backend/afinidad.py` (léelo: explica el porqué), 27 pruebas en
   entradillas que se entienden solos, copias de teletipo, sección y país por consenso,
   falsos «teléfonos»), 29 fuentes nuevas para las ediciones de México, Colombia, Chile,
   Perú, EE. UU. y Canadá (100/106 en verde), país del lector por IP, IndexNow y botones
-  de compartir. 190 + 2 pruebas y 47/47 E2E. **Sin desplegar**: falta el permiso de Dani
-  para usar el token de Fly. Dani compró **histor.es** (Nominalia) el 29-09: falta el DNS,
-  el certificado en Fly y `PUBLIC_BASE_URL`. Detalle y bloqueos en `histor/PROJECT_STATUS.md`.
-  Base local con fuentes reales: `histor_live`.
+  de compartir. 196 + 2 pruebas y 47/47 E2E. **Desplegado** el 29-09 (99/106 fuentes en
+  producción). **IA gratuita con Groq** (redacta `gpt-oss-120b`, traduce `gpt-oss-20b`, tope
+  diario y reparación frase a frase con el validador). Dani compró **histor.es** (Nominalia):
+  falta el DNS, el certificado en Fly y `PUBLIC_BASE_URL` (la protección automática bloquea
+  esos cambios). Detalle y bloqueos en `histor/PROJECT_STATUS.md`. Base local: `histor_live`.
 
 ## Pendiente (por prioridad)
 

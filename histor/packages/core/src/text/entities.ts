@@ -99,6 +99,11 @@ const PERSON_TITLES =
 
 const COMPASS = /^(N|S|E|W|NE|NW|SE|SW|NNE|ENE|ESE|SSE|SSW|WSW|WNW|NNW)$/;
 
+const CALENDAR = new Set(
+  'january february march april may june july august september october november december monday tuesday wednesday thursday friday saturday sunday januar februar marz juni juli oktober dezember montag dienstag mittwoch donnerstag freitag samstag sonntag'.split(' '),
+);
+const FIRST_NAMES = new Set(['april', 'june', 'august', 'may', 'july']);
+
 const SENTENCE_START_STOP = new Set(
   Object.values(STOPWORDS)
     .flatMap((s) => [...s])
@@ -150,6 +155,11 @@ export function extractEntities(text: string, lang?: string | null): ExtractedEn
       continue;
     }
     if (prevPunct && seq.length > 1 && SENTENCE_START_STOP.has(fold(seq[0]))) seq.shift();
+    // Meses y días con mayúscula (inglés, alemán) no son parte de un nombre: «Alejandra
+    // Monteoliva September» (29-09-2026) era «Alejandra Monteoliva» + «September».
+    // («May» es apellido —Theresa May— y «April», «June» o «August», nombres de pila.)
+    while (seq.length > 1 && CALENDAR.has(fold(seq[seq.length - 1])) && fold(seq[seq.length - 1]) !== 'may') seq.pop();
+    while (seq.length > 1 && CALENDAR.has(fold(seq[0])) && !FIRST_NAMES.has(fold(seq[0]))) seq.shift();
     // Rumbo de brújula de los partes sísmicos («35 km NNE of Demo Point»): no es parte del nombre.
     while (seq.length && COMPASS.test(seq[0])) {
       seq.shift();

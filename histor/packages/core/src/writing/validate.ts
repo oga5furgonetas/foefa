@@ -39,6 +39,9 @@ export function validateDraft(draft: Draft, fs: FactSheet, extraAllowedNames: st
     [...baseNames, ...baseNames.flatMap((n) => extractEntities(n).map((e) => e.name)), ...baseNames.flatMap((n) => n.split(/[()]/).map((x) => x.trim()).filter(Boolean))].map(entityKey),
   );
   const sourceTexts = fs.sourceTexts.map((s) => s.text);
+  // Nombres de medio con cifras («France 24», «20minutos», «Antena 3»): su número no es un dato.
+  const numberedNames = [...new Set(baseNames)].filter((n) => /\d/.test(n)).sort((a, b) => b.length - a.length);
+  const withoutNames = (t: string) => numberedNames.reduce((acc, n) => acc.split(n).join(' '), t);
 
   // Recorrer bloques, sabiendo en qué sección está cada frase.
   const units: Unit[] = [];
@@ -70,13 +73,13 @@ export function validateDraft(draft: Draft, fs: FactSheet, extraAllowedNames: st
     for (const s of u.section === 'quote' ? [u.text] : sentences(u.text)) {
       // «No se ha podido confirmar de forma independiente.»: aclaración de Histor, no un hecho que atribuir.
       if (UNCONFIRMED_SUFFIXES.has(s.trim())) continue;
-      checkSentence(s, cited, u, issues, fs, allowedNames, sourceTexts);
+      checkSentence(s, cited, u, issues, fs, allowedNames, sourceTexts, withoutNames);
     }
   }
 
   // Titular: cifras y nombres respaldados; si no está verificado, atribuido.
   const leadClaims = [...fs.confirmed, ...fs.attributed];
-  const hNums = extractNumbers(draft.headline, draft.language).filter((n) => n.unit || n.value >= 10);
+  const hNums = extractNumbers(withoutNames(draft.headline), draft.language).filter((n) => n.unit || n.value >= 10);
   for (const n of hNums) {
     const ok =
       leadClaims.some((c) => c.numbers.some((m) => numbersAgree(n, m) || (!n.unit && m.value === n.value))) ||
@@ -95,11 +98,11 @@ export function validateDraft(draft: Draft, fs: FactSheet, extraAllowedNames: st
   return { ok: issues.length === 0, issues };
 }
 
-function checkSentence(s: string, cited: FactClaim[], u: Unit, issues: ValidationIssue[], fs: FactSheet, allowedNames: Set<string>, sourceTexts: string[]) {
+function checkSentence(s: string, cited: FactClaim[], u: Unit, issues: ValidationIssue[], fs: FactSheet, allowedNames: Set<string>, sourceTexts: string[], withoutNames: (t: string) => string = (t) => t) {
   const lang = cited[0]?.language;
   // Cifras
   const citedNums = cited.flatMap((c) => c.numbers);
-  for (const n of extractNumbers(s, lang)) {
+  for (const n of extractNumbers(withoutNames(s), lang)) {
     if (!n.unit && n.value < 10) continue; // ordinales y conteos pequeños sin magnitud
     const loose = (u: string | null) => !u || u.startsWith('n:');
     const ok = citedNums.some((m) => numbersAgree(n, m) || ((loose(n.unit) || loose(m.unit)) && Math.abs(m.value - n.value) <= Math.abs(m.value) * 0.001));
@@ -117,7 +120,8 @@ function checkSentence(s: string, cited: FactClaim[], u: Unit, issues: Validatio
   for (const e of extractEntities(s, lang)) {
     if (e.type === 'place' || e.type === 'other') continue;
     const k = entityKey(e.name);
-    if (places.has(k) || allowedNames.has(k)) continue;
+    // «ZDF» es la fuente «ZDFheute»: el nombre corto de un medio citado también vale.
+    if (places.has(k) || allowedNames.has(k) || (k.length >= 3 && [...allowedNames].some((a) => a.startsWith(k)))) continue;
     const last = k.split(' ').pop() ?? '';
     const ok = citedEntities.has(k) || [...citedEntities].some((x) => x.includes(k) || (last.length > 3 && x.split(' ').pop() === last));
     if (!ok) issues.push({ check: 'entity', text: s, detail: `nombre no respaldado: ${e.name}` });

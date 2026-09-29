@@ -11,6 +11,7 @@ import { domesticDesk } from '../../src/pipeline/normalize';
 import { storyConsensus } from '../../src/pipeline/verify';
 import { detectAttribution, stripDateline, wireOrigin } from '../../src/text/attribution';
 import { decodeEntities } from '../../src/text/normalize';
+import { extractEntities } from '../../src/text/entities';
 import { numberOverlap } from '../../src/text/similarity';
 import { nonNewsReason } from '../../src/text/nonnews';
 import { extractClaims } from '../../src/verification/claims';
@@ -215,5 +216,20 @@ describe('pies de foto, anuncios y agrupación entre idiomas (29-09-2026, tarde)
     const b = { ...many(5000), '#737': 1, '#10': 1 };
     expect(numberOverlap(a, b)).toBeLessThan(0.1);
     expect(numberOverlap({ '#27': 1, '#25': 1, terms: 1 }, { '#27': 1, '#25': 1, otros: 2 })).toBe(1);
+  });
+});
+
+describe('validador y nombres (29-09-2026, noche)', () => {
+  it('un mes en inglés no se pega a un nombre propio', () => {
+    const names = extractEntities('Security minister Alejandra Monteoliva September said the plan would start soon.', 'en').map((e) => e.name);
+    expect(names).toContain('Alejandra Monteoliva');
+    expect(names.some((n) => /September/.test(n))).toBe(false);
+  });
+});
+
+describe('nombres que son meses', () => {
+  it('Theresa May, June Carter y August Diehl siguen enteros', () => {
+    const names = extractEntities('Former prime minister Theresa May met June Carter and August Diehl in London on Monday.', 'en').map((e) => e.name);
+    expect(names).toEqual(expect.arrayContaining(['Theresa May', 'June Carter', 'August Diehl']));
   });
 });
