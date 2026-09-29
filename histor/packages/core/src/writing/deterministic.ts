@@ -10,7 +10,9 @@
  * reparten las afirmaciones entre fuentes para no depender de una sola.
  */
 import type { ArticleBlock, VerificationBox } from '../db/schema';
+import { CITIES } from '../config/cities';
 import { country } from '../config/countries';
+import { regionByCode } from '../config/regions';
 import { localeFor } from '../config/languages';
 import { fold, truncate } from '../text/normalize';
 import { compressClaim, lowerFirst } from './compress';
@@ -189,9 +191,14 @@ export function writeDeterministic(fs: FactSheet, opts: WriteOptions = {}): Draf
   }
 
   // ── Citas verificadas ──
-  for (const c of fs.quotes.slice(0, 2)) {
+  const quotedTexts = new Set<string>();
+  for (const c of fs.quotes.slice(0, 4)) {
     // En bloque, solo las citas confirmadas: una cita que da una sola fuente ya va en el texto con su «según».
     if (!c.quote?.speaker || c.status !== 'supported') continue;
+    // La misma cita de dos fuentes salía dos veces (29-09-2026).
+    const qk = c.quote.text.toLowerCase().replace(/[^\p{L}\p{N}]+/gu, ' ').trim();
+    if (quotedTexts.has(qk) || quotedTexts.size >= 2) continue;
+    quotedTexts.add(qk);
     body.push({ type: 'quote', text: c.quote.text, speaker: c.quote.speaker, claimIds: [claimRef(c)], sourceUrl: c.supporters[0]?.url ?? '' });
   }
 
@@ -201,7 +208,7 @@ export function writeDeterministic(fs: FactSheet, opts: WriteOptions = {}): Draf
     body.push({
       type: 'list',
       items: fs.discrepancies.slice(0, 4).map((d) => {
-        const parts = d.parts.map((p) => `${p.source}: ${formatValue(p.value, nf)}`).join('; ');
+        const parts = d.parts.map((p) => `${p.source}: ${formatValue(p.value, nf, lang)}`).join('; ');
         return { text: bp(P.discrepancy(P.fieldNames[d.field] ?? d.field, parts)), claimIds: [] };
       }),
     });
@@ -248,7 +255,7 @@ export function writeDeterministic(fs: FactSheet, opts: WriteOptions = {}): Draf
     attributed: uniq(fs.attributed.slice(0, 6).map((c) => ({ text: compressClaim(c.text, 30) ?? truncate(c.text, 200), by: c.attribution }))),
     unconfirmed: uniq(fs.unconfirmed.slice(0, 6).map((c) => ({ text: compressClaim(c.text, 30) ?? truncate(c.text, 200), by: c.attribution }))),
     superseded: uniq(fs.superseded.slice(0, 3).map((c) => ({ text: compressClaim(c.text, 30) ?? truncate(c.text, 200), by: c.attribution }))),
-    contradictions: fs.discrepancies.map((d) => ({ text: P.discrepancy(P.fieldNames[d.field] ?? d.field, d.parts.map((p) => `${p.source}: ${formatValue(p.value, nf)}`).join('; ')) })),
+    contradictions: fs.discrepancies.map((d) => ({ text: P.discrepancy(P.fieldNames[d.field] ?? d.field, d.parts.map((p) => `${p.source}: ${formatValue(p.value, nf, lang)}`).join('; ')) })),
     method: P.method(fs.independentCredible, fs.hasPrimary),
   };
   // Terremoto verificado con fuentes en otro idioma: el recuadro no puede quedar sin nada
@@ -337,6 +344,11 @@ export function goodHeadline(h: string): boolean {
   if (t.split(/\s+/).length < 5) return false;
   // Empieza por letra o cifra: «, CC BY-NC, according to The Conversation» salió de titular.
   if (!/^[\p{L}\p{N}¿¡]/u.test(t)) return false;
+  // En primera persona es la frase de alguien, no un titular: «Era un piso de 50 metros
+  // cuadrados, con tres perros y yo sin habitación» (29-09-2026).
+  if (/(^|\s)(yo|me siento|nosotros|nosotras|ich|wir|je|nous|noi|nós)(\s|[,.!?]|$)/i.test(t)) return false;
+  // «eu»/«io» (portugués, italiano) solo en minúscula o capitalizado: «EU» es la Unión Europea.
+  if (/(^|\s)(eu|Eu|io|Io)(\s|[,.!?]|$)/.test(t)) return false;
   if (/^["“«'‘„]/.test(t)) return false;
   const count = (re: RegExp) => (t.match(re) ?? []).length;
   if (count(/«/g) !== count(/»/g) || count(/“/g) !== count(/”/g) || count(/"/g) % 2 !== 0) return false;
@@ -387,9 +399,21 @@ function currencyCode(unit: string): string {
   return c === 'PESO' ? 'MXN' : c;
 }
 
-function formatValue(v: string, nf: Intl.NumberFormat): string {
+function formatValue(v: string, nf: Intl.NumberFormat, lang = 'es'): string {
   const n = Number(v);
-  return Number.isFinite(n) && v.trim() !== '' ? nf.format(n) : v;
+  if (Number.isFinite(n) && v.trim() !== '') return nf.format(n);
+  // Lugares: «city:es-madrid» es una clave interna; el lector ve «Madrid» (29-09-2026).
+  const [kind, code] = v.split(':');
+  if (kind === 'city' && code) {
+    const c = CITIES.find((x) => x.key === code);
+    return c ? (c.names[lang] ?? c.names.en ?? code) : code;
+  }
+  if (kind === 'region' && code) {
+    const r = regionByCode(code);
+    return r ? ((r.names as Record<string, string>)[lang] ?? (r.names as Record<string, string>).en ?? code) : code;
+  }
+  if (kind === 'country' && code) return country(code)?.names[lang] ?? code;
+  return v;
 }
 
 function nearDuplicate(c: FactClaim, others: FactClaim[]): boolean {

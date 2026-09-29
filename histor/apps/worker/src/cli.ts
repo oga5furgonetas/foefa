@@ -10,12 +10,13 @@
  *   newsletter:send         envía las newsletters cuya hora ha llegado
  *   check:env               lista lo que falta para producción
  *   images:backfill         pone imagen ilustrativa (Wikimedia Commons) a lo publicado que no tenga
+ *   stories:recheck [--hours=72]  vuelve a verificar y redactar lo publicado en esas horas (tras mejorar el redactor)
  */
-import { and, eq, isNull } from 'drizzle-orm';
+import { and, eq, gte, inArray, isNull } from 'drizzle-orm';
 import { ensureAdmin } from '@histor/core/auth/users';
 import { SOURCE_SEEDS } from '@histor/core/config/sources';
 import { closeDb, getDb } from '@histor/core/db/client';
-import { articles } from '@histor/core/db/schema';
+import { articles, stories } from '@histor/core/db/schema';
 import { runMigrations } from '@histor/core/db/migrate';
 import { attachStoryImage } from '@histor/core/media/wikimedia';
 import { seedReference } from '@histor/core/db/seed';
@@ -81,6 +82,18 @@ async function main(): Promise<number> {
     }
     case 'sources:check':
       return sourcesCheck();
+    case 'stories:recheck': {
+      // Tras mejorar el redactor, lo ya publicado se reescribe en los próximos ciclos del worker
+      // (si no, «S&aacute;nchez» y las entradillas sueltas seguían en portada hasta su revisión).
+      const hours = Number(flagValue('hours') ?? 72);
+      const ids = await getDb()
+        .selectDistinct({ id: articles.storyId })
+        .from(articles)
+        .where(and(eq(articles.status, 'published'), eq(articles.isDemo, false), gte(articles.publishedAt, new Date(Date.now() - hours * 3600_000))));
+      if (ids.length) await getDb().update(stories).set({ nextCheckAt: new Date() }).where(inArray(stories.id, ids.map((x) => x.id)));
+      console.log(`✓ ${ids.length} historias en cola para reverificar y reescribir`);
+      return 0;
+    }
     case 'images:backfill': {
       const ids = await getDb().selectDistinct({ id: articles.storyId }).from(articles).where(and(eq(articles.status, 'published'), isNull(articles.imageId), eq(articles.isDemo, false)));
       const tally: Record<string, number> = {};
@@ -92,7 +105,7 @@ async function main(): Promise<number> {
       return 0;
     }
     default:
-      console.log('Uso: cli <migrate|seed|create-admin|demo:seed|demo:purge|sources:check|images:backfill|run-once|newsletter:send|check:env>');
+      console.log('Uso: cli <migrate|seed|create-admin|demo:seed|demo:purge|sources:check|images:backfill|stories:recheck|run-once|newsletter:send|check:env>');
       return cmd ? 1 : 0;
   }
 }

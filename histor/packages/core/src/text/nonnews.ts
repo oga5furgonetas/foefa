@@ -26,12 +26,16 @@ const GDACS_GREEN = /^green (forest fire|wildfire|flood|drought|earthquake|tropi
 /** Publicidad y contenido patrocinado («¿Fitogénicos para perros? Conéctese al webinar de SEMANA»). */
 const SPONSORED = /\b(webinar|webinario|conéctese al|inscríbase|regístrese|patrocinado|publirreportaje|sponsored|advertorial|partner content|paid post|anzeige|publireportage|contenuto sponsorizzato|conteúdo patrocinado|publi-information)\b/i;
 
+/** Servicios, no noticias: sorteos, horóscopo, pasatiempos («Comprobar Bonoloto: resultados…»). */
+const SERVICE = /(^(comprobar|horóscopo|horoscopo|crucigrama|sudoku|autodefinido)\b|\b(bonoloto|euromillones|la primitiva|el gordo de la primitiva|quiniela|lotería nacional|loteria nacional|cupón de la once|lotto|eurojackpot|powerball|mega millions)\b)/i;
+
 /** Motivo por el que la pieza no es noticia, o null si lo es. */
 export function nonNewsReason(title: string, url: string): string | null {
   const t = title.trim();
   if (TITLE_START.test(t) || TITLE_LABEL.test(t) || TITLE_END.test(t)) return 'no es noticia (opinión, galería, resumen, pódcast o cuestionario)';
   if (GDACS_GREEN.test(t)) return 'no es noticia (alerta automática de nivel verde, impacto bajo)';
   if (SPONSORED.test(t)) return 'no es noticia (publicidad o contenido patrocinado)';
+  if (SERVICE.test(t)) return 'no es noticia (servicio: sorteos, horóscopo o pasatiempos)';
   let path = '';
   try {
     path = new URL(url).pathname;

@@ -49,6 +49,8 @@ export function extractClaims(item: VItem): VClaim[] {
     // Publicidad de la web del medio («Suivez toute l'actualité… en téléchargeant l'application RFI»).
     // Ni pies de foto («…, CC BY-NC»), ni frases que empiezan por un signo suelto.
     if (PROMO.test(clean) || CREDIT_LINE.test(clean) || /^[^\p{L}\p{N}¿¡«"“'‘(]/u.test(clean)) return;
+    // Tuits incrustados y enlaces («…decreto Maricarmen: pic.twitter.com/Y6zh…», «— Name (@user)»).
+    if (/pic\.twitter\.com|https?:\/\/|\bt\.co\/|\(@\w{2,15}\)|\bwww\.\w/i.test(clean)) return;
     const norm = clean.toLowerCase();
     if (seen.has(norm)) return;
     const ents = extractEntities(clean, lang).filter((e) => e.type !== 'other' || e.name.split(' ').length > 1);

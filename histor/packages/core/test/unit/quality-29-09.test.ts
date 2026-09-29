@@ -233,3 +233,18 @@ describe('nombres que son meses', () => {
     expect(names).toEqual(expect.arrayContaining(['Theresa May', 'June Carter', 'August Diehl']));
   });
 });
+
+describe('portada de producción del 29-09-2026 (noche)', () => {
+  it('servicios y frases en primera persona fuera; la UE sigue siendo noticia', () => {
+    expect(nonNewsReason('Comprobar Bonoloto: resultados del domingo 27 de septiembre de 2026', 'https://x.es/a')).toMatch(/servicio/);
+    expect(goodHeadline('Era un piso de 50 metros cuadrados, con tres perros y yo sin habitación')).toBe(false);
+    expect(goodHeadline('EU sanctions Russian oil tankers over Baltic sabotage')).toBe(true);
+    expect(goodHeadline('Eu não sabia de nada, diz o ministro da Saúde')).toBe(false);
+  });
+
+  it('un tuit incrustado no es una afirmación', () => {
+    const src = source('Infobae', 'reputable_media');
+    const claims = extractClaims(item(src, 'El Gobierno aprueba el decreto de vivienda', 'Te explicamos muy rápidamente lo que debe incluir el decreto Maricarmen: pic.twitter.com/Y6zhmlId5k. El Consejo de Ministros aprobó este martes el decreto de vivienda.'));
+    expect(claims.some((c) => /pic\.twitter/.test(c.text))).toBe(false);
+  });
+});
