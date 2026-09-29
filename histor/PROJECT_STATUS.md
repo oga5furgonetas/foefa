@@ -5,7 +5,7 @@
 > verificada como hecho.** Prioridades: veracidad > velocidad > relevancia >
 > crecimiento > monetización.
 
-Última actualización: 27-09-2026.
+Última actualización: 29-09-2026.
 
 ## Resumen
 
@@ -113,17 +113,59 @@ Fallos encontrados con fuentes reales y corregidos (cada uno con su prueba):
   respetado (esas historias nunca pasan por la IA).
 - **Pruebas en Windows:** la base E2E no se recreaba (psql ignoraba los `-c`).
 
+## 29-09-2026: calidad de las noticias, ediciones por país y difusión
+
+Revisada la portada de producción como lectora y corregido todo lo que se veía mal, cada
+fallo con su prueba (`packages/core/test/unit/quality-29-09.test.ts`):
+
+- **Texto:** entidades HTML completas («S&aacute;nchez»); firma de agencia fuera
+  («MADRID, 29 OpenAI…»); titulares de al menos 5 palabras, con comillas emparejadas y
+  que no sean una cita suelta («Alba Carrillo» salía de titular); entradillas que se
+  entienden solas (fuera «Su partido…», «Esta empresa…», «Es que…»); la entrada es la
+  frase que mejor cuenta lo del titular y ya no lo repite; una frase del cuerpo solo es
+  titular si cuenta lo mismo que el titular de alguna fuente; fuera la publicidad de las
+  webs («téléchargez l'application», «À lire aussi»); «Datos clave» solo con cifras que se
+  entienden solas; el inciso «selon l'Insee, …» ya no corta el dato; se puede quitar la
+  finalidad («pour demander…») para que quepa un titular.
+- **Verificación:** la copia de un teletipo (Infobae con el texto de Europa Press) ya no
+  cuenta como otra fuente: la firma con fecha se reconoce y la procedencia y la huella se
+  recalculan al leer el artículo completo.
+- **Sección y país** por consenso de todas las piezas (antes, los de la primera que llegó:
+  Trump + Anthropic en «Deportes», OpenAI como «Francia»); sin lugar citado, las secciones
+  de internacional y las cadenas internacionales no ponen su país.
+- **Falsos bloqueos:** «54 000 000 000 €» se tomaba por un teléfono y paraba la noticia.
+- **Rendimiento:** el verificador atiende primero lo que puede publicarse; las alertas
+  verdes de GDACS (decenas al día) ya no son noticia.
+- **Ediciones por país:** 29 fuentes nuevas comprobadas (México, Colombia, Chile, Perú,
+  EE. UU. nacional, Canadá); CBS y ABC con sus feeds generales; edición de Perú.
+  **100/106 fuentes en verde** (en local). El Universal, Axios y The Globe and Mail no
+  se leen porque su robots.txt no lo permite.
+- **Geolocalización por IP** (DB-IP Lite, CC BY 4.0; en memoria, la IP nunca se guarda):
+  Fly no da el país. La portada abre con lo de tu país si pesa y sigue con el mundo.
+- **Difusión:** IndexNow al publicar (Bing, Yahoo, DuckDuckGo…; clave `INDEXNOW_KEY`
+  generada), metaetiquetas de Search Console y Bing, botones de WhatsApp, Telegram, X,
+  Facebook, LinkedIn y correo.
+- Pruebas: 190 del núcleo + 2 del worker + 47/47 E2E; build correcto.
+
+**Sin desplegar todavía**: falta que Dani autorice usar el token de Fly del PC (la
+protección automática lo bloquea sin su permiso expreso).
+
 ## Bloqueos (externos: solo los puede resolver el propietario)
 
-1. **Activar el 2FA del panel.** Entrar en https://histor-web.fly.dev/admin con los
-   datos de `~/.histor-admin.txt` y escanear el código con una app de autenticación
-   (obligatorio en producción; solo lo puede hacer Dani).
-2. **Dominio.** `histor.news` (25,20 USD/año) y `histor.media` (35,20 USD/año) estaban
-   libres el 27-09-2026. Hay que comprarlo (Cloudflare Registrar) y apuntarlo con
-   `fly certs add <dominio> -a histor-web`; después, `PUBLIC_BASE_URL` con él.
-3. **Integraciones** (todas opcionales; sin ellas se desactivan de forma explícita):
-   Stripe + webhook, Resend (correo), IA (proveedor, clave y tope), Google/Apple,
-   Sentry, S3/R2 para copias fuera de Fly. VAPID ya está generado.
+1. **Desplegar lo del 29-09**: permiso para usar el token de Fly (`~/.flotia-fly-token.txt`).
+2. **Dominio `histor.es`**: comprado por Dani en Nominalia el 29-09-2026. Falta: `fly certs
+   add histor.es` (y www) en `histor-web`, los registros A/AAAA en el DNS de Nominalia y
+   `PUBLIC_BASE_URL=https://histor.es` (redespliegue).
+3. **Redactor con IA**: sin él, el texto son frases de las fuentes (máx. 22 palabras cada
+   una por el límite de copia) cosidas con «según X»; no se puede escribir como un
+   periodista ni traducir a los 6 idiomas. Hace falta una clave de pago (Gemini de AI
+   Studio con facturación, o Anthropic) y un tope mensual. La de Flota NO: es gratuita y
+   Flota ya se queda sin cuota.
+4. **Activar el 2FA del panel** (obligatorio en producción). Dani dice que no puede entrar
+   en su usuario: revisar los registros de `histor-web` con el token.
+5. **Integraciones** (todas opcionales; sin ellas se desactivan de forma explícita):
+   Stripe + webhook, Resend (correo), Google/Apple, Sentry, S3/R2 para copias fuera de
+   Fly, cuentas de Bluesky/Mastodon/X para publicar en redes. VAPID ya está generado.
 
 ## Pendiente (no bloqueado)
 

@@ -254,6 +254,14 @@ Motor puro en `backend/afinidad.py` (léelo: explica el porqué), 27 pruebas en
 - Nunca desplegarlo en `flota-backend`, `flota`, `flotadsp-*` ni en Pages de Flota.
 - Postgres 16 portátil para pruebas locales en `C:\Users\Usuario\pg16`
   (usuario y clave `histor`, solo 127.0.0.1): `pg16\pgsql\bin\pg_ctl -D pg16\data start`.
+- **29-09-2026**: calidad de las noticias (entidades, firmas de agencia, titulares y
+  entradillas que se entienden solos, copias de teletipo, sección y país por consenso,
+  falsos «teléfonos»), 29 fuentes nuevas para las ediciones de México, Colombia, Chile,
+  Perú, EE. UU. y Canadá (100/106 en verde), país del lector por IP, IndexNow y botones
+  de compartir. 190 + 2 pruebas y 47/47 E2E. **Sin desplegar**: falta el permiso de Dani
+  para usar el token de Fly. Dani compró **histor.es** (Nominalia) el 29-09: falta el DNS,
+  el certificado en Fly y `PUBLIC_BASE_URL`. Detalle y bloqueos en `histor/PROJECT_STATUS.md`.
+  Base local con fuentes reales: `histor_live`.
 
 ## Pendiente (por prioridad)
 

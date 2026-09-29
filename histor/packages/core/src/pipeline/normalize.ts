@@ -31,6 +31,21 @@ export async function geoIds(db: Db): Promise<GeoIds> {
   return geoCache.ids;
 }
 
+/** Cadenas internacionales: lo que cuentan sin citar lugar no es «de su país». */
+const INTERNATIONAL_GROUPS = new Set(['deutsche-welle', 'france-medias-monde', 'euronews', 'al-jazeera', 'un-system', 'un-ec-gdacs']);
+
+/**
+ * ¿Es una redacción nacional? Solo entonces, si la pieza no cita ningún lugar, se le supone
+ * el país de la fuente. El 29-09-2026 el vuelo orbital de SpaceX y una detención en Ámsterdam
+ * salían como noticias de «Reino Unido» porque las contaban la BBC y The Independent.
+ */
+export function domesticDesk(src: { slug: string; ownershipGroup: string | null; categoryHint: string | null; feedUrl: string | null }): boolean {
+  if (src.ownershipGroup && INTERNATIONAL_GROUPS.has(src.ownershipGroup)) return false;
+  if (src.ownershipGroup === 'bbc') return src.slug === 'bbc-uk';
+  if (src.categoryHint === 'world') return false;
+  return !/(world|international|internacional|mundo|monde|welt|esteri)/i.test(`${src.slug} ${src.feedUrl ?? ''}`);
+}
+
 /** Desambigua topónimos: prioriza el país de la fuente y, si no, la ciudad más poblada. */
 export function resolvePlaces(matches: PlaceMatch[], sourceCountry: string | null): VPlace[] {
   const byName = new Map<string, PlaceMatch[]>();
@@ -80,7 +95,7 @@ export async function normalizeNewItems(db: Db, opts: { limit?: number } = {}): 
     const places = resolvePlaces(findPlaces(full), src.countryCode);
     const city = places.find((p) => p.kind === 'city');
     const region = places.find((p) => p.kind === 'region');
-    const countryCode = city?.countryCode ?? region?.countryCode ?? places.find((p) => p.kind === 'country')?.countryCode ?? src.countryCode;
+    const countryCode = city?.countryCode ?? region?.countryCode ?? places.find((p) => p.kind === 'country')?.countryCode ?? (domesticDesk(src) ? src.countryCode : null);
     const cls = classify(full, lang, { hint: src.categoryHint, lexicon: lexicon.length ? lexicon : undefined });
     const entities = extractEntities(full)
       .slice(0, 15)

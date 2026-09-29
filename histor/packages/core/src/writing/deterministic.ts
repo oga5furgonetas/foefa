@@ -66,7 +66,15 @@ export function writeDeterministic(fs: FactSheet, opts: WriteOptions = {}): Draf
   let headlineClaim: FactClaim | null = null;
   if (!headline) {
     const candidates = [...pool.filter((c) => c.isHeadline), ...pool.filter((c) => !c.isHeadline)];
+    // Una frase del cuerpo solo es titular si cuenta lo mismo que el titular de alguna fuente:
+    // «En agosto de 2026, la bancada Caribe radicó el proyecto» (¿qué proyecto?) salió de titular.
+    const sourceTitles = fs.claims.filter((c) => c.isHeadline).map((c) => keyWords(c.text));
+    const aboutTheStory = (c: FactClaim) => {
+      const w = keyWords(c.text);
+      return sourceTitles.some((t) => coverage(t, w) >= 0.4);
+    };
     for (const c of candidates) {
+      if (!c.isHeadline && !aboutTheStory(c)) continue;
       const short = compressClaim(c.text, 16, { commaCut: false });
       // Un titular tiene que entenderse solo.
       if (!short || !standsAlone(short)) continue;

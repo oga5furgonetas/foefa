@@ -45,7 +45,8 @@ test('noticia: recuadro de verificación, fuentes, datos estructurados y hreflan
 test('una noticia actualizada muestra la nota y el dato anterior tachado, no como confirmado', async ({ page, request }) => {
   const r = await request.get(`${BASE}/api/v1/articles?lang=es&limit=20`);
   const items = ((await r.json()) as { items: { url: string; headline: string; version: number }[] }).items;
-  const updated = items.find((i) => i.version > 1 && /embalses/i.test(i.headline));
+  // La historia de los embalses de la Cuenca Demo (el titular puede decir «embalses» o «reserva»).
+  const updated = items.find((i) => i.version > 1 && /embalses|reserva de la Cuenca Demo/i.test(i.headline));
   test.skip(!updated, 'el escenario DEMO no tiene la actualización');
   await page.goto(updated!.url);
   await expect(page.getByText('Correcciones y actualizaciones')).toBeVisible();

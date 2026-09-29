@@ -7,6 +7,7 @@
  */
 import { describe, expect, it } from 'vitest';
 import { countryFromHeaders } from '../../src/geo/detect';
+import { domesticDesk } from '../../src/pipeline/normalize';
 import { storyConsensus } from '../../src/pipeline/verify';
 import { detectAttribution, stripDateline, wireOrigin } from '../../src/text/attribution';
 import { decodeEntities } from '../../src/text/normalize';
@@ -179,5 +180,17 @@ describe('alertas verdes de GDACS', () => {
     expect(nonNewsReason('Green earthquake (Magnitude 6.6M, Depth:10km) in Vanuatu 25/09/2026 21:00 UTC', 'https://www.gdacs.org/x')).toMatch(/verde/);
     expect(nonNewsReason('Orange earthquake (Magnitude 7.1M) in Japan', 'https://www.gdacs.org/x')).toBeNull();
     expect(nonNewsReason('Green party wins seats in regional election', 'https://example.org/news/1')).toBeNull();
+  });
+});
+
+describe('redacciones de internacional', () => {
+  it('sin lugar citado, la sección de internacional o una cadena internacional no ponen su país', () => {
+    const s = (slug: string, ownershipGroup: string | null, feedUrl: string, categoryHint: string | null = null) => ({ slug, ownershipGroup, feedUrl, categoryHint });
+    expect(domesticDesk(s('bbc-world', 'bbc', 'https://feeds.bbci.co.uk/news/world/rss.xml', 'world'))).toBe(false);
+    expect(domesticDesk(s('bbc-uk', 'bbc', 'https://feeds.bbci.co.uk/news/uk/rss.xml'))).toBe(true);
+    expect(domesticDesk(s('the-independent', 'independent', 'https://www.independent.co.uk/news/world/rss'))).toBe(false);
+    expect(domesticDesk(s('dw-es', 'deutsche-welle', 'https://rss.dw.com/rdf/rss-sp-all'))).toBe(false);
+    expect(domesticDesk(s('la-tercera', 'grupo-copesa', 'https://www.latercera.com/arc/outboundfeeds/rss/?outputType=xml'))).toBe(true);
+    expect(domesticDesk(s('nyt-us', 'new-york-times', 'https://rss.nytimes.com/services/xml/rss/nyt/US.xml'))).toBe(true);
   });
 });
