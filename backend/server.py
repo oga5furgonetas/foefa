@@ -43345,7 +43345,14 @@ async def _cua_personas(center: str, desde: str, hasta: str) -> list:
             con_turnos.setdefault(s["driver_id"], s.get("driver_name") or "")
     conf = {p["driver_id"]: p for p in await db[_CUA_PERSONAS].find(
         {"center": center}, {"_id": 0}).to_list(5000)}
-    ids = set(con_turnos) | {k for k, p in conf.items() if p.get("en_cuadrante")}
+    explicitos = {k for k, p in conf.items() if p.get("en_cuadrante")}
+    # Con el cuadrante ya montado (hoja importada o gente añadida a mano), está
+    # quien está en él, y NADIE MÁS. Medido el 29-09-2026 en la prueba: Melvin
+    # Espinosa no sale en la hoja, pero tenía un día concedido desde el portal
+    # esa semana, así que entraba por «tener un turno» y el motor le ponía 9
+    # días de trabajo. Solo un centro que aún no ha montado su cuadrante cae en
+    # «quien tenga turnos».
+    ids = explicitos if explicitos else set(con_turnos)
     fichas = {d["id"]: d for d in await db.drivers.find(
         {"id": {"$in": list(ids)}},
         {"_id": 0, "id": 1, "name": 1, "active": 1, "contrato": 1}).to_list(5000)}
@@ -43927,18 +43934,23 @@ async def cuadrante_deshacer(data: dict = Body(...), user: dict = Depends(requir
     """Deshace el ÚLTIMO cambio del cuadrante de ese centro (el de cualquiera)."""
     center = _cua_centro(data.get("center"))
     _cua_acceso(user, center)
+    from pymongo import DeleteOne, ReplaceOne
     c = await db[_CUA_CAMBIOS].find_one({"center": center, "deshecho": {"$ne": True}}, {"_id": 0},
                                         sort=[("en", -1)])
     if not c:
         raise HTTPException(404, "No hay nada que deshacer")
-    for s in reversed(c.get("snaps") or []):
+    # Por lotes y por colección: deshacer una hoja importada son ~2.500 turnos,
+    # y de uno en uno contra Atlas eran minutos. Cada filtro sale una sola vez
+    # en `snaps` (lo garantiza _CuaCambio), así que el orden no cambia nada.
+    por_col: dict = {}
+    for s in c.get("snaps") or []:
         if s.get("col") not in _CUA_COLS_DESHACER or not isinstance(s.get("filtro"), dict):
             continue
-        col = db[s["col"]]
-        if s.get("doc") is None:
-            await col.delete_one(s["filtro"])
-        else:
-            await col.replace_one(s["filtro"], s["doc"], upsert=True)
+        op = DeleteOne(s["filtro"]) if s.get("doc") is None else ReplaceOne(s["filtro"], s["doc"], upsert=True)
+        por_col.setdefault(s["col"], []).append(op)
+    for col, ops in por_col.items():
+        for i in range(0, len(ops), 500):
+            await db[col].bulk_write(ops[i:i + 500], ordered=False)
     await db[_CUA_CAMBIOS].update_one({"id": c["id"]}, {"$set": {
         "deshecho": True, "deshecho_en": datetime.now(timezone.utc).isoformat(),
         "deshecho_por": user.get("name") or ""}})
@@ -44377,8 +44389,10 @@ async def cuadrante_exportar(center: str, desde: str, hasta: str, user: dict = D
             elif cod:
                 fam = (CODIGOS_CUADRANTE_INFO.get(cod) or (None, None, "libre"))[2]
                 c.fill = FAM.get(fam, F_GRIS)
-            if d.weekday() == 6 and not info.get("extra") and cod in ("", "1"):
-                c.fill = F_NARANJA if not cod else c.fill
+            # El domingo, en naranja como en su hoja (el 1 y el N/T también);
+            # el rosa del extra y los códigos con color propio mandan.
+            if d.weekday() == 6 and not info.get("extra") and cod in ("", "1", "N/T", "L"):
+                c.fill = F_NARANJA
         rango = f"{get_column_letter(C0)}{r}:{get_column_letter(col_fin)}{r}"
         ws.cell(r, col_tot, f'=COUNTIF({rango},1)+COUNTIF({rango},"BKP")+COUNTIF({rango},"RA")+COUNTIF({rango},"S")').alignment = centro
         ws.cell(r, col_tot + 1, sum(1 for d in dias if (celdas.get(f"{p['id']}|{d.isoformat()}") or {}).get("extra"))).alignment = centro
@@ -44486,18 +44500,25 @@ async def cuadrante_importar(file: UploadFile = File(...), center: str = Form(..
     activas = [x for x in fichas if x.get("active") is not False]
     alias = await _alias_cuadrante()
     emparejadas, sin_ficha, ambiguos, detalle = [], [], [], []
+    ya_usadas: dict = {}
     for f in hoja["filas"]:
         drv, motivo = _empareja_conductor(f["nombre"], activas, alias)
         if not drv and motivo != "ambiguo":
             drv, motivo = _empareja_conductor(f["nombre"], fichas, alias)
+        if drv and drv["id"] in ya_usadas:
+            # Dos filas de la hoja caen en la MISMA ficha: la segunda pisaría a
+            # la primera en silencio. No se elige: se dice y se deja fuera.
+            ambiguos.append("%s (la misma ficha que %s)" % (f["nombre"], ya_usadas[drv["id"]]))
+            continue
         if drv:
+            ya_usadas[drv["id"]] = f["nombre"]
             emparejadas.append((f, drv))
             if motivo == "palabras" or drv.get("active") is False or f["tipo"] != "normal" \
-                    or f.get("inactivo_desde") or f.get("patron"):
+                    or f.get("inactivo_desde") or f.get("patron") or f.get("alta_desde"):
                 detalle.append({"nombre": f["nombre"], "ficha": drv.get("name"), "como": motivo,
                                 "ficha_de_baja": drv.get("active") is False, "tipo": f["tipo"],
                                 "patron": f.get("patron"), "inactivo_desde": f.get("inactivo_desde"),
-                                "nota": f.get("nota_import") or ""})
+                                "alta_desde": f.get("alta_desde"), "nota": f.get("nota_import") or ""})
         elif motivo == "ambiguo":
             ambiguos.append(f["nombre"])
         else:
@@ -44559,7 +44580,8 @@ async def cuadrante_importar(file: UploadFile = File(...), center: str = Form(..
         await _bulk_turnos(ops[i:i + 500])
     for f, drv in emparejadas:
         campos = {"en_cuadrante": True, "tipo": f["tipo"] if f["tipo"] in _cm.TIPOS else "normal",
-                  "patron": f.get("patron"), "inactivo_desde": f.get("inactivo_desde")}
+                  "patron": f.get("patron"), "inactivo_desde": f.get("inactivo_desde"),
+                  "alta_desde": f.get("alta_desde")}
         if f.get("orden") is not None:
             campos["orden"] = f["orden"]
         await _cua_guardar_persona(center, drv["id"], campos, user, cambio)

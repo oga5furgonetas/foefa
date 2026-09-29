@@ -223,8 +223,22 @@ def leer_mensual(contenido: bytes, hoja: str = "") -> Dict[str, Any]:
 
     # ── Lo que se deduce de cada uno ──
     inicio = fechas[0]
+    trabajo = {"1", "T", "X", "RA", "RIDE", "BKP", "S", "EXTRA"}
     for f in filas:
         cel = f["celdas"]
+        # CUÁNDO EMPIEZA quien entra nuevo. En la hoja, antes de su primer día
+        # hay N/T («no trabaja»), no huecos: Francisco Gil tenía N/T del 24-09
+        # al 05-10 y empezaba el 06-10. Leídos como libres normales, el motor lo
+        # ponía a trabajar el 1, 2, 3 y 4 (lo cazó la revisión de la propuesta).
+        # Se toma como entrada el primer día de trabajo cuando antes solo hay
+        # N/T y, o son 3 o más seguidos, o ese primer día es el de acompañante
+        # (RA: así empiezan los nuevos).
+        primero = next((d for d in fechas if d.isoformat() in cel and cel[d.isoformat()]["cod"] in trabajo), None)
+        if primero and primero > inicio:
+            previos = [cel[d.isoformat()]["cod"] for d in fechas if d < primero and d.isoformat() in cel]
+            empieza_ra = cel[primero.isoformat()]["cod"] in ("RA", "RIDE")
+            if previos and all(x in ("N/T", "L") for x in previos) and (len(previos) >= 3 or empieza_ra):
+                f["alta_desde"] = primero.isoformat()
         if f["tipo"] == "sale":
             f["inactivo_desde"] = _primero_mes_siguiente(inicio).isoformat()
             f["tipo"] = "normal"

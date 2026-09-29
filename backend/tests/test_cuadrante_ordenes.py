@@ -186,10 +186,14 @@ def test_lo_que_no_entiende_lo_dice():
 # ── PREGUNTAS ────────────────────────────────────────────────────────────────
 
 def test_quien_libra_el_sabado():
-    celdas = {"jcl|2026-10-03": "N/T", "kev|2026-10-03": "1", "tao|2026-10-03": "V"}
-    r = co.interpretar_mensaje("¿Quién libra el sábado?", ctx(celdas=celdas))
+    # Libra quien tiene el día libre; el de vacaciones «no está», no «libra»; y
+    # quien ya dejó el cuadrante no cuenta (tenía N/D: salía como que libraba).
+    personas = PERSONAS + [{"id": "ido", "nombre": "PEPE SEVA", "apodos": [], "inactivo_desde": "2026-10-01"}]
+    celdas = {"jcl|2026-10-03": "N/T", "kev|2026-10-03": "1", "tao|2026-10-03": "V", "ido|2026-10-03": "N/D"}
+    r = co.interpretar_mensaje("¿Quién libra el sábado?", ctx(celdas=celdas, personas=personas))
     txt = r["acciones"][0]["texto"]
-    assert "JUAN CARLOS" in txt and "AFILAL" in txt and "Kevin" not in txt
+    assert "libran 1: JUAN CARLOS" in txt and "No están: 1 de vacaciones" in txt
+    assert "AFILAL" not in txt and "Kevin" not in txt and "PEPE" not in txt
 
 
 def test_cuantos_extra_esta_semana():

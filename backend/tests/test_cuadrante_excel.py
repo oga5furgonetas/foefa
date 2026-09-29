@@ -126,6 +126,43 @@ def test_sin_leyenda_usa_los_colores_de_siempre():
     assert f["LUIS GOMEZ"]["tipo"] == "empresa" and f["SARA FINDE"]["tipo"] == "finde"
 
 
+def _con_filas(filas):
+    """Una MENSUAL mínima del 28-09 al 12-10 con las filas que se le den."""
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    ws.title = "MENSUAL"
+    ws["C18"] = "Nombre"
+    for i in range(15):
+        ws.cell(18, 4 + i, dt.datetime(2026, 9, 28) + dt.timedelta(days=i))
+    for k, (nombre, codigos) in enumerate(filas):
+        ws.cell(19 + k, 3, nombre)
+        for i, cod in enumerate(codigos):
+            if cod:
+                ws.cell(19 + k, 4 + i, 1.0 if cod == "1" else cod)
+    buf = io.BytesIO()
+    wb.save(buf)
+    return por_nombre(cx.leer_mensual(buf.getvalue()))
+
+
+def test_quien_empieza_con_varios_n_t_seguidos_entra_el_primer_dia_de_trabajo():
+    # Francisco Gil: N/T hasta el 05-10 y empieza el 06-10. Sin esto, el motor
+    # lo ponía a trabajar del 1 al 4.
+    f = _con_filas([("FRANCISCO GIL", ["N/T"] * 8 + ["1", "1", "1", "N/T", "N/T", "1", "1"])])
+    assert f["FRANCISCO GIL"]["alta_desde"] == "2026-10-06"
+
+
+def test_quien_empieza_con_su_dia_de_acompanante_entra_ese_dia():
+    f = _con_filas([("CAROLINA NUEVA", ["", "N/T", "N/T", "RA", "1", "N/T", "1"] + [""] * 8)])
+    assert f["CAROLINA NUEVA"]["alta_desde"] == "2026-10-01"
+
+
+def test_quien_ya_trabajaba_no_tiene_fecha_de_entrada():
+    f = _con_filas([("ANA DE SIEMPRE", ["1", "1", "N/T", "N/T", "1", "1", "1"] * 2 + ["1"]),
+                    ("LIBRA UNO Y EMPIEZA", ["N/T", "1", "1", "1", "1", "1", "N/T"] + [""] * 8)])
+    assert "alta_desde" not in f["ANA DE SIEMPRE"]
+    assert "alta_desde" not in f["LIBRA UNO Y EMPIEZA"]
+
+
 def test_una_hoja_que_no_es_el_cuadrante_da_un_error_claro():
     wb = openpyxl.Workbook()
     wb.active["A1"] = "Hola"

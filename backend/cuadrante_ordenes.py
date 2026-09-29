@@ -616,6 +616,9 @@ def _dias_rango(f: Dict[str, Any]) -> List[dt.date]:
 
 _RUTA = {"1", "T", "X", "EXTRA"}
 _TRABAJA = {"1", "T", "X", "EXTRA", "BKP", "S", "RA", "RIDE"}
+_LIBRA = {"N/T", "L", "N/T APROB", "APROBADO", "COMP"}
+_FUERA = {"BAJA": "de baja", "V": "de vacaciones", "N/D": "no disponibles", "N/P": "no presentados",
+          "SUSP": "suspendidos"}
 
 
 def _responder(t: str, f: Dict[str, Any], ctx: Dict[str, Any]) -> Dict[str, Any]:
@@ -638,10 +641,23 @@ def _responder(t: str, f: Dict[str, Any], ctx: Dict[str, Any]) -> Dict[str, Any]
             return resp("¿Qué día? Por ejemplo: «¿quién libra el sábado?».")
         partes = []
         for d in dias[:7]:
-            libres = sorted(nombre[p["id"]] for p in personas
-                            if cod(p["id"], d) and cod(p["id"], d) not in _TRABAJA)
-            partes.append(f"El {DIAS[d.weekday()]} {_fmt(d)} libran {len(libres)}: " + ", ".join(libres)
-                          if libres else f"El {DIAS[d.weekday()]} {_fmt(d)} no libra nadie")
+            # «Libra» es el día libre (N/T, aprobado, compensa). Quien está de
+            # baja, de vacaciones o no disponible NO libra: se cuenta aparte. Y
+            # quien ya se fue no cuenta: la primera versión metía entre los que
+            # libraban a los que dejaron el cuadrante el día 1 (tenían N/D).
+            vivos = [p for p in personas if p.get("tipo") != "inactivo"
+                     and not (p.get("inactivo_desde") and p["inactivo_desde"] <= d.isoformat())]
+            libres = sorted(nombre[p["id"]] for p in vivos if cod(p["id"], d) in _LIBRA)
+            fuera: Dict[str, int] = {}
+            for p in vivos:
+                c = cod(p["id"], d)
+                if c in _FUERA:
+                    fuera[_FUERA[c]] = fuera.get(_FUERA[c], 0) + 1
+            txt = (f"El {DIAS[d.weekday()]} {_fmt(d)} libran {len(libres)}: " + ", ".join(libres)
+                   if libres else f"El {DIAS[d.weekday()]} {_fmt(d)} no libra nadie")
+            if fuera:
+                txt += ". No están: " + ", ".join(f"{n} {k}" for k, n in fuera.items())
+            partes.append(txt)
         return resp(". ".join(partes) + ".")
     if re.search(r"quien(?:es)?\s+(?:trabaja|trabajan|sale|salen|va|van|esta|estan)", t):
         if not dias:
