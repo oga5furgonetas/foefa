@@ -5,7 +5,7 @@
 > haz commit y `git push`. Una sola sesión trabajando a la vez: antes de
 > empezar, `git pull` y comprueba que nadie ha dejado nada a medias aquí.
 
-Última actualización: **26-09-2026, noche** (sesión `c3af8cab`, Claude Opus 5.5).
+Última actualización: **30-09-2026, madrugada** (sesión `127edf58`, Claude Opus 5.5).
 
 ## Qué es y dónde está
 
@@ -338,7 +338,52 @@ Dani no se creía el 0. Estudio con datos reales (scratchpad de la sesión):
   cuatro `test_whc_*` recuperados del commit raíz (sin el de la extensión);
   e2e «Horas · WHC» y «Conductores sin centro».
 
+## Qué se hizo el 29/30-09-2026: Cuadrante con motor, Mery y Plantilla
+
+1. **Cuadrante** (`/panel/cuadrante`, módulo `cuadrante`, hereda el permiso de
+   `turnos`; Turnos se queda para aprobar días). Lo pidió Dani tras preparar en
+   claude.ai un `cuadrante_solver.py` y dos prompts con su hoja MENSUAL de
+   septiembre-octubre: máxima +2 cada día, 5+2, nunca 7 seguidos, no tocar
+   APROBADO/N/D/V/BAJA, días extra en rosa.
+   - Motor `backend/cuadrante_motor.py` (léelo: explica qué cambia sobre el
+     solver original y por qué). HiGHS vía scipy, sin dependencias nuevas.
+     Ruta = solo 1/T/X/EXTRA (BKP/RA/S trabajan pero no son ruta). Notas por
+     persona (4 días, alternos, nunca X, sin extra) y reparto justo de extras y
+     findes como DESEMPATE (la cuenta de los 99 < 100 en la cabecera).
+   - Órdenes `backend/cuadrante_ordenes.py`: chat sin IA para lo de cada día,
+     Gemini solo si no se entiende; nada se aplica sin «Confirmar».
+   - Hoja MENSUAL `backend/cuadrante_excel.py`: fechas reales (el 12-10 va en
+     BD tras las columnas de horas ocultas), tipos por el color del NOMBRE
+     leídos de su leyenda (azul fijo, melocotón finde, amarillo se va el día 1),
+     rosa = extra, fecha de entrada de los nuevos (N/T seguidos o RA).
+   - Los turnos son los mismos `shifts` de siempre + `extra`/`fijada`;
+     colecciones nuevas `cuadrante_personas|config|ajustes|propuestas|cambios|chat`.
+   - Pruebas: `test_cuadrante_motor|ordenes|excel.py` (84 con el login). Y una
+     prueba DE PUNTA A PUNTA con la hoja real contra una base `prueba_cuadrante`
+     (backend local con token de mantenimiento propio): cazó 4 falsos
+     positivos que se arreglaron (Melvin entraba sin estar en la hoja, Francisco
+     Gil trabajaba antes de empezar, Alberto casaba con su ficha de baja,
+     «quién libra» contaba bajas). Scripts en el scratchpad de la sesión.
+2. **Login sin mayúsculas** (`_admin_por_usuario`): Mery («Mery») escribía
+   «mery» y se bloqueaba al 5º intento. Y no se crean usuarios que solo cambien
+   en mayúsculas.
+3. **Plantilla del día**: la celda que se escribe ya no la pisa el refresco (se
+   borraba la protección con otro guardado pendiente); la hora se normaliza al
+   salir (930 → 09:30); móvil/llegada/carga/salida se ocultan por separado (y
+   en el Excel); «Poner móviles» desde la ficha (`/tools/plantilla-moviles`).
+
 ## Pendiente (por prioridad)
+
+-1. **Meter la hoja de septiembre-octubre de OGA5 en producción.** No se ha
+   podido desde la sesión: el clasificador de permisos NO deja leer el
+   `SECRET_KEY` de Fly (lectura de secreto de producción), y sin él no hay
+   token de mantenimiento. Dos caminos: que Dani lo haga en la app
+   (Cuadrante → Importar hoja → elegir `Downloads\SEPTIEMBRE Y OCTUBRE.xlsx` →
+   Importar; los 10 dudosos salen ya propuestos y coinciden con lo decidido),
+   o que dé permiso. Después: «Rehacer cuadrante» 01-10 → 12-10 (en la prueba:
+   +2 todos los días, 27 cambios, 20 extras). Ojo: María dos Santos tiene
+   concedidos en la app el 1, 2 y 3-10 y en la hoja trabaja; la app respeta lo
+   concedido (por eso sale 1 menos que la fila 94 esos días).
 
 0. **URGENTE — aviso de Amazon del 24-09**: leer la sección 0 de
    `docs/REVISION_LEGAL.md`. Amazon pidió inventario y borrado de todos los
