@@ -97,7 +97,10 @@ async function main(): Promise<number> {
       let hidden = 0;
       for (const { id } of ids) {
         const its = await getDb().select({ title: rawItems.title, url: rawItems.url }).from(storyItems).innerJoin(rawItems, eq(rawItems.id, storyItems.itemId)).where(eq(storyItems.storyId, id));
-        if (!its.length || !its.every((i) => nonNewsReason(i.title, i.url))) continue;
+        const heads = await getDb().select({ headline: articles.headline }).from(articles).where(and(eq(articles.storyId, id), eq(articles.status, 'published')));
+        // Todas sus piezas, o el propio titular publicado («Comprobar Bonoloto: resultados…»).
+        const notNews = (its.length > 0 && its.every((i) => nonNewsReason(i.title, i.url))) || heads.some((h) => nonNewsReason(h.headline, 'https://histor.invalid/'));
+        if (!notNews) continue;
         await getDb().update(articles).set({ status: 'held' }).where(and(eq(articles.storyId, id), eq(articles.status, 'published')));
         await getDb().update(stories).set({ state: 'REJECTED', nextCheckAt: null }).where(eq(stories.id, id));
         hidden++;
