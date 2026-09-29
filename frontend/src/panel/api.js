@@ -365,12 +365,15 @@ export const cuadranteChatCancelar = (id) => api.post(`/cuadrante/chat/${id}/can
 export const cuadranteEstudio = (center) => api.get('/cuadrante/estudio', { params: { center } })
 export const cuadranteExportar = (center, desde, hasta) =>
   api.get('/cuadrante/exportar', { params: { center, desde, hasta }, responseType: 'blob', timeout: 120000 })
-export function cuadranteImportar(file, center, confirmar, crearFichas) {
+export function cuadranteImportar(file, center, confirmar, crearFichas, emparejar) {
   const fd = new FormData()
   fd.append('file', file)
   fd.append('center', center)
   if (confirmar) fd.append('confirmar', '1')
   if (crearFichas) fd.append('crear_fichas', '1')
+  // {nombre en la hoja: id de ficha | '__nueva__' | '__fuera__'}: lo que se
+  // eligió para los nombres que no casaban solos. Queda guardado como alias.
+  if (emparejar && Object.keys(emparejar).length) fd.append('emparejar', JSON.stringify(emparejar))
   return api.post('/cuadrante/importar', fd, { timeout: 180000, headers: { 'Content-Type': undefined } })
 }
 export const getRouteDemand = (center, desde, hasta) => api.get('/route-demand', { params: { center, desde, hasta } })

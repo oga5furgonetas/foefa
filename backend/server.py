@@ -44464,9 +44464,53 @@ async def cuadrante_exportar(center: str, desde: str, hasta: str, user: dict = D
 import cuadrante_excel as _cx  # noqa: E402
 
 
+_CUA_NUEVA, _CUA_FUERA = "__nueva__", "__fuera__"
+
+
+def _cua_opciones_para(nombre: str, motivo: str, fichas: list, usadas: set) -> tuple:
+    """Con qué fichas podría casar un nombre que no ha casado solo, y cuál se
+    propone. Devuelve (opciones, sugerida | None).
+
+    Medido con la hoja de septiembre-octubre de OGA5: de 68 nombres, 10 no
+    casaban solos. Tres eran la misma persona dada de alta dos veces (Karim,
+    Brais, Marcos: se propone la ficha activa con ID de reparto) y cuatro la
+    misma escrita distinto (RIOS/RIO, Xacobo/Xacobe, un segundo apellido o
+    nombre distinto: `_nombres_veredicto` «si» o «parcial»). Se PROPONE, no se
+    decide: lo confirma quien importa, y queda guardado como alias."""
+    if motivo == "ambiguo":
+        clave = _clave_nombre(nombre)
+        cands = [x for x in fichas if _clave_nombre(x.get("name")) == clave] \
+            or [x for x in fichas if _nombres_veredicto(nombre, x.get("name")) == "si"]
+    else:
+        cands = [x for x in fichas if _nombres_veredicto(nombre, x.get("name")) in ("si", "parcial")]
+    cands = [x for x in cands if x["id"] not in usadas]
+    cands.sort(key=lambda x: (x.get("active") is False, not x.get("transporter_id"), _clave_nombre(x.get("name"))))
+    sugerida = None
+    if cands:
+        activas = [x for x in cands if x.get("active") is not False]
+        si = [x for x in cands if _nombres_veredicto(nombre, x.get("name")) == "si"]
+        si_activas = [x for x in si if x.get("active") is not False]
+        if motivo == "ambiguo":
+            con_tid = [x for x in activas if x.get("transporter_id")]
+            sugerida = (con_tid[0] if len(con_tid) == 1 else (activas or cands)[0])["id"]
+        elif len(si_activas) == 1:
+            sugerida = si_activas[0]["id"]
+        elif len(si) == 1:
+            sugerida = si[0]["id"]
+        elif not si and (len(cands) == 1 or len(activas) == 1):
+            # Parecidas todas, y una sola viva: la otra es una ficha vieja de la
+            # misma persona («BEMJAMIN MOREIRA GOMEZ», de baja, junto a la
+            # activa de Benjamín). Se propone la viva; con dos vivas, se pregunta.
+            sugerida = (cands[0] if len(cands) == 1 else activas[0])["id"]
+    opciones = [{"id": x["id"], "name": x.get("name") or "", "activa": x.get("active") is not False,
+                 "tid": bool(x.get("transporter_id"))} for x in cands[:6]]
+    return opciones, sugerida
+
+
 @api_router.post("/cuadrante/importar")
 async def cuadrante_importar(file: UploadFile = File(...), center: str = Form(...),
                              confirmar: str = Form(default=""), crear_fichas: str = Form(default=""),
+                             emparejar: str = Form(default=""),
                              user: dict = Depends(require_admin)):
     """Mete en el cuadrante la hoja MENSUAL tal cual (cómo se lee: ver
     cuadrante_excel.py). Sin `confirmar` solo dice lo que haría.
@@ -44492,19 +44536,45 @@ async def cuadrante_importar(file: UploadFile = File(...), center: str = Form(..
     # se habrían ido a una ficha muerta. Primero las activas; si no casa ninguna,
     # las de baja (la persona puede estar trabajando con la ficha sin reactivar).
     vivas_q = {"merged_into": {"$exists": False}, "status": {"$nin": ["deleted", "fusionada"]}}
-    fichas = await db.drivers.find({"center": _cua_rx(center), **vivas_q},
-                                   {"_id": 0, "id": 1, "name": 1, "active": 1}).to_list(5000)
+    proy = {"_id": 0, "id": 1, "name": 1, "active": 1, "transporter_id": 1}
+    fichas = await db.drivers.find({"center": _cua_rx(center), **vivas_q}, proy).to_list(5000)
     # Las fichas sin centro también: nacieron con «Todos» elegido (27-09-2026).
     fichas += await db.drivers.find({"$or": [{"center": None}, {"center": ""}, {"center": {"$exists": False}}],
-                                     **vivas_q}, {"_id": 0, "id": 1, "name": 1, "active": 1}).to_list(500)
+                                     **vivas_q}, proy).to_list(500)
     activas = [x for x in fichas if x.get("active") is not False]
+    por_id = {x["id"]: x for x in fichas}
+    # Lo que decidió quien importa para los nombres dudosos: {nombre: id |
+    # «__nueva__» | «__fuera__»}. Los id cuentan como alias desde ya (y se
+    # guardan al confirmar, para que el mes que viene casen solos).
+    elegidos: dict = {}
+    if emparejar:
+        try:
+            crudo = json.loads(emparejar)
+        except ValueError:
+            raise HTTPException(400, "El emparejado no es válido")
+        for k, v in (crudo.items() if isinstance(crudo, dict) else []):
+            v = str(v or "")
+            if v in (_CUA_NUEVA, _CUA_FUERA) or v in por_id:
+                elegidos[" ".join(str(k).split())[:120]] = v
     alias = await _alias_cuadrante()
-    emparejadas, sin_ficha, ambiguos, detalle = [], [], [], []
+    alias_total = {**alias, **{k: v for k, v in elegidos.items() if v in por_id}}
+    emparejadas, sin_ficha, ambiguos, detalle, pendientes = [], [], [], [], []
     ya_usadas: dict = {}
     for f in hoja["filas"]:
-        drv, motivo = _empareja_conductor(f["nombre"], activas, alias)
+        if elegidos.get(f["nombre"]) in (_CUA_NUEVA, _CUA_FUERA):
+            pendientes.append((f, elegidos[f["nombre"]]))
+            continue
+        drv, motivo = _empareja_conductor(f["nombre"], activas, alias_total)
         if not drv and motivo != "ambiguo":
-            drv, motivo = _empareja_conductor(f["nombre"], fichas, alias)
+            # Si hay una ficha ACTIVA que es la misma persona con una errata, no se
+            # casa sola con una de baja aunque esa tenga el nombre exacto: sus
+            # turnos irían a la ficha con la que no entra al portal. Pasó con
+            # Alberto Fernández Barreiro (de baja, exacta) y «alberto fernande
+            # barreiro» (activa). Va a revisar, con la activa propuesta.
+            if any(_nombres_veredicto(f["nombre"], x.get("name")) == "si" for x in activas):
+                drv, motivo = None, "no_encontrado"
+            else:
+                drv, motivo = _empareja_conductor(f["nombre"], fichas, alias_total)
         if drv and drv["id"] in ya_usadas:
             # Dos filas de la hoja caen en la MISMA ficha: la segunda pisaría a
             # la primera en silencio. No se elige: se dice y se deja fuera.
@@ -44519,29 +44589,55 @@ async def cuadrante_importar(file: UploadFile = File(...), center: str = Form(..
                                 "ficha_de_baja": drv.get("active") is False, "tipo": f["tipo"],
                                 "patron": f.get("patron"), "inactivo_desde": f.get("inactivo_desde"),
                                 "alta_desde": f.get("alta_desde"), "nota": f.get("nota_import") or ""})
-        elif motivo == "ambiguo":
-            ambiguos.append(f["nombre"])
         else:
-            sin_ficha.append(f["nombre"])
+            pendientes.append((f, motivo))
+    # Los que no han casado solos: con quién podrían, y cuál se propone.
+    revisar, con_opciones = [], set()
+    for f, motivo in pendientes:
+        if motivo in (_CUA_NUEVA, _CUA_FUERA):
+            continue
+        opciones, sugerida = _cua_opciones_para(f["nombre"], motivo, fichas, set(ya_usadas))
+        if opciones:
+            con_opciones.add(f["nombre"])
+        revisar.append({"nombre": f["nombre"], "motivo": "duplicada" if motivo == "ambiguo" else "parecido",
+                        "opciones": opciones, "sugerida": sugerida})
+        (ambiguos if motivo == "ambiguo" else sin_ficha).append(f["nombre"])
     extras = sum(1 for f in hoja["filas"] for c in f["celdas"].values() if c["extra"])
     tipos: dict = {}
     for f in hoja["filas"]:
         tipos[f["tipo"]] = tipos.get(f["tipo"], 0) + 1
     resumen = {"hoja": hoja["hoja"], "desde": hoja["fechas"][0], "hasta": hoja["fechas"][-1],
                "dias": len(hoja["fechas"]), "personas": len(hoja["filas"]), "emparejadas": len(emparejadas),
-               "sin_ficha": sin_ficha, "ambiguos": ambiguos, "detalle": detalle, "tipos": tipos,
-               "extras": extras, "maximas": len(hoja["maximas"]), "codigos": hoja["codigos"],
+               "sin_ficha": sin_ficha, "ambiguos": ambiguos, "revisar": revisar, "detalle": detalle,
+               "tipos": tipos, "extras": extras, "maximas": len(hoja["maximas"]), "codigos": hoja["codigos"],
                "avisos": hoja["avisos"], "leyenda": hoja["leyenda"], "guardado": False}
     if not confirmar:
         return resumen
-    fichas_creadas = []
-    if crear_fichas:
-        for f in hoja["filas"]:
-            if f["nombre"] in sin_ficha:
-                ficha = await _cua_crear_conductor(center, f["nombre"])
-                emparejadas.append((f, ficha))
-                if ficha.get("nueva"):
-                    fichas_creadas.append(ficha["name"])
+    fichas_creadas, fuera_por_eleccion = [], []
+    for f, motivo in pendientes:
+        # Ficha nueva: si se eligió así, o con «crear fichas» para quien no se
+        # parece a NADIE. A quien se parece a una ficha (o está duplicado) no se
+        # le crea otra sin que lo elija una persona: sería la misma persona dos
+        # veces, que es justo lo que se está intentando no repetir.
+        nueva = motivo == _CUA_NUEVA or (crear_fichas and motivo == "no_encontrado"
+                                          and f["nombre"] not in con_opciones)
+        if motivo == _CUA_FUERA or not nueva:
+            if motivo == _CUA_FUERA:
+                fuera_por_eleccion.append(f["nombre"])
+            continue
+        ficha = await _cua_crear_conductor(center, f["nombre"])
+        if ficha["id"] in ya_usadas:
+            continue
+        ya_usadas[ficha["id"]] = f["nombre"]
+        emparejadas.append((f, ficha))
+        if ficha.get("nueva"):
+            fichas_creadas.append(ficha["name"])
+    ids_elegidos = {k: v for k, v in elegidos.items() if v in por_id}
+    if ids_elegidos:
+        await db.app_meta.update_one(
+            {"_id": _ALIAS_DOC},
+            {"$set": {"mapa": {**alias, **ids_elegidos},
+                      "actualizado_en": datetime.now(timezone.utc).isoformat()}}, upsert=True)
     if not emparejadas:
         raise HTTPException(400, "Ningún nombre de la hoja casa con una ficha: no se ha guardado nada")
     mapa = await _cua_mapa_codigos()
@@ -44598,7 +44694,8 @@ async def cuadrante_importar(file: UploadFile = File(...), center: str = Form(..
     logger.info("Cuadrante importado de Excel: %s %s..%s, %d celdas, %d personas", center,
                 hoja["fechas"][0], hoja["fechas"][-1], guardadas, len(emparejadas))
     resumen.update(guardado=True, celdas=guardadas, respetados=respetados, fijadas_respetadas=fijadas,
-                   fichas_creadas=fichas_creadas, emparejadas=len(emparejadas))
+                   fichas_creadas=fichas_creadas, emparejadas=len(emparejadas),
+                   fuera_por_eleccion=fuera_por_eleccion, alias_guardados=len(ids_elegidos))
     return resumen
 
 

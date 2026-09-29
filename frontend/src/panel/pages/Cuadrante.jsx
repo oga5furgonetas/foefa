@@ -505,10 +505,13 @@ function NuevaPersona({ center, dentro, onCerrar, onGuardado }) {
 }
 
 /* ── IMPORTAR LA HOJA DEL MES ───────────────────────────────────────────── */
+const NUEVA = '__nueva__'
+const FUERA = '__fuera__'
+
 function Importar({ center, onCerrar, onHecho }) {
   const [file, setFile] = useState(null)
   const [previa, setPrevia] = useState(null)
-  const [crear, setCrear] = useState(true)
+  const [elec, setElec] = useState({})
   const [ocupado, setOcupado] = useState(false)
   const [err, setErr] = useState('')
   const leer = async (f) => {
@@ -516,19 +519,31 @@ function Importar({ center, onCerrar, onHecho }) {
     try {
       const r = await cuadranteImportar(f, center, false, false)
       setPrevia(r.data)
+      /* Lo propuesto, ya elegido: la ficha sugerida; a quien no se parece a
+         nadie, ficha nueva; y si hay varias igual de buenas, sin elegir (se
+         tiene que decidir una persona). */
+      const e = {}
+      for (const x of lista(r.data?.revisar)) {
+        e[x.nombre] = x.sugerida || (lista(x.opciones).length ? '' : NUEVA)
+      }
+      setElec(e)
     } catch (e) {
       setErr(e?.response?.data?.detail || 'No se ha podido leer el Excel.')
     } finally { setOcupado(false) }
   }
+  const sinElegir = Object.values(elec).filter((v) => !v).length
   const confirmar = async () => {
     setOcupado(true); setErr('')
     try {
-      const r = await cuadranteImportar(file, center, true, crear)
+      const r = await cuadranteImportar(file, center, true, false, elec)
       onHecho(r.data)
     } catch (e) {
       setErr(e?.response?.data?.detail || 'No se ha podido importar.')
     } finally { setOcupado(false) }
   }
+  const revisar = lista(previa?.revisar)
+  const nombresRevisar = new Set(revisar.map((x) => x.nombre))
+  const otrosAmbiguos = lista(previa?.ambiguos).filter((a) => !nombresRevisar.has(a))
   const TIPO_NOMBRE = { normal: 'normales', empresa: 'horario fijo', finde: 'solo finde', inactivo: 'no entran en rutas' }
   return (
     <Modal titulo="Importar la hoja del mes" onCerrar={onCerrar}>
@@ -551,25 +566,41 @@ function Importar({ center, onCerrar, onHecho }) {
             <p className="text-xs text-dark-400">
               {Object.entries(previa.tipos || {}).map(([k, n]) => `${n} ${TIPO_NOMBRE[k] || k}`).join(' · ')}
             </p>
-            <p className="text-xs text-emerald-300">{previa.emparejadas} casan con su ficha.</p>
-            {lista(previa.sin_ficha).length > 0 && (
-              <div className="text-xs text-amber-300">
-                Sin ficha: {previa.sin_ficha.join(' · ')}
-                <label className="mt-1 flex items-center gap-2 text-dark-300">
-                  <input type="checkbox" checked={crear} onChange={(e) => setCrear(e.target.checked)} />
-                  Crearles la ficha en este centro
-                </label>
+            <p className="text-xs text-emerald-300">{previa.emparejadas} casan solos con su ficha.</p>
+            {revisar.length > 0 && (
+              <div className="space-y-1.5">
+                <p className="text-xs text-amber-300">
+                  {revisar.length} no casan solos. Te propongo con quién (queda guardado para los meses siguientes):
+                </p>
+                {revisar.map((x) => (
+                  <label key={x.nombre} className="flex flex-wrap items-center gap-2 rounded-lg border border-dark-800 px-2.5 py-1.5 text-xs">
+                    <span className="min-w-[12rem] font-semibold text-dark-100">{x.nombre}</span>
+                    <span className="text-dark-500">{x.motivo === 'duplicada' ? 'dos fichas con su nombre' : lista(x.opciones).length ? 'se parece a' : 'no tiene ficha'}</span>
+                    <select value={elec[x.nombre] ?? ''} aria-label={`Ficha de ${x.nombre}`}
+                      onChange={(e) => setElec((m) => ({ ...m, [x.nombre]: e.target.value }))}
+                      className={`ml-auto max-w-[18rem] rounded-lg border bg-dark-900 px-2 py-1 text-xs text-dark-100 ${
+                        elec[x.nombre] ? 'border-dark-700' : 'border-amber-500/60'}`}>
+                      <option value="">— elige —</option>
+                      {lista(x.opciones).map((o) => (
+                        <option key={o.id} value={o.id}>
+                          {o.name}{o.activa ? '' : ' (ficha de baja)'}{o.tid ? ' · con ID' : ''}
+                        </option>
+                      ))}
+                      <option value={NUEVA}>Crear ficha nueva</option>
+                      <option value={FUERA}>No importar</option>
+                    </select>
+                  </label>
+                ))}
               </div>
             )}
-            {lista(previa.ambiguos).length > 0 && (
-              <p className="text-xs text-amber-300">
-                Encajan con dos fichas y no se importan: {previa.ambiguos.join(' · ')}. Fusiona sus fichas en Conductores.
-              </p>
+            {otrosAmbiguos.length > 0 && (
+              <p className="text-xs text-amber-300">No se importan: {otrosAmbiguos.join(' · ')}.</p>
             )}
             {lista(previa.avisos).map((a, i) => <p key={i} className="text-xs text-amber-300">{a}</p>)}
-            <button onClick={confirmar} disabled={ocupado}
+            <button onClick={confirmar} disabled={ocupado || sinElegir > 0}
               className="btn-primary flex items-center gap-2 px-4 py-2 text-sm disabled:opacity-40">
-              {ocupado ? <Loader2 size={15} className="animate-spin" /> : <Upload size={15} />} Importar
+              {ocupado ? <Loader2 size={15} className="animate-spin" /> : <Upload size={15} />}
+              {sinElegir > 0 ? `Elige la ficha de ${sinElegir}` : 'Importar'}
             </button>
             <p className="text-[11px] text-dark-500">Los días concedidos en la app no se pisan. Se puede deshacer entero.</p>
           </div>
