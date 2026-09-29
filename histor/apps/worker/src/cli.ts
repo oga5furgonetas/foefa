@@ -16,7 +16,8 @@ import { and, eq, gte, inArray, isNull } from 'drizzle-orm';
 import { ensureAdmin } from '@histor/core/auth/users';
 import { SOURCE_SEEDS } from '@histor/core/config/sources';
 import { closeDb, getDb } from '@histor/core/db/client';
-import { articles, stories } from '@histor/core/db/schema';
+import { articles, rawItems, stories, storyItems } from '@histor/core/db/schema';
+import { nonNewsReason } from '@histor/core/text/nonnews';
 import { runMigrations } from '@histor/core/db/migrate';
 import { attachStoryImage } from '@histor/core/media/wikimedia';
 import { seedReference } from '@histor/core/db/seed';
@@ -91,7 +92,17 @@ async function main(): Promise<number> {
         .from(articles)
         .where(and(eq(articles.status, 'published'), eq(articles.isDemo, false), gte(articles.publishedAt, new Date(Date.now() - hours * 3600_000))));
       if (ids.length) await getDb().update(stories).set({ nextCheckAt: new Date() }).where(inArray(stories.id, ids.map((x) => x.id)));
-      console.log(`✓ ${ids.length} historias en cola para reverificar y reescribir`);
+      // Lo que con los filtros de hoy no es noticia (sorteos, publicidad, alertas verdes…) sale de
+      // la portada sin «rectificación»: no era un error de hecho, simplemente no es noticia.
+      let hidden = 0;
+      for (const { id } of ids) {
+        const its = await getDb().select({ title: rawItems.title, url: rawItems.url }).from(storyItems).innerJoin(rawItems, eq(rawItems.id, storyItems.itemId)).where(eq(storyItems.storyId, id));
+        if (!its.length || !its.every((i) => nonNewsReason(i.title, i.url))) continue;
+        await getDb().update(articles).set({ status: 'held' }).where(and(eq(articles.storyId, id), eq(articles.status, 'published')));
+        await getDb().update(stories).set({ state: 'REJECTED', nextCheckAt: null }).where(eq(stories.id, id));
+        hidden++;
+      }
+      console.log(`✓ ${ids.length} historias en cola para reverificar y reescribir; ${hidden} retiradas por no ser noticia`);
       return 0;
     }
     case 'images:backfill': {
