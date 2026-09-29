@@ -32,10 +32,39 @@ export function providerFor(task: AiTask): LlmProvider | null {
   const model = rest.join(':');
   let p: LlmProvider | null = null;
   if (name === 'anthropic' && e.ANTHROPIC_API_KEY && model) p = new AnthropicProvider(model, e.ANTHROPIC_API_KEY);
-  else if (name === 'openai' && e.OPENAI_API_KEY && model) p = new OpenAiCompatibleProvider(model, e.OPENAI_API_KEY, e.OPENAI_BASE_URL);
+  else if (name === 'openai' && e.OPENAI_API_KEY && model)
+    p = new OpenAiCompatibleProvider(model, e.OPENAI_API_KEY, e.OPENAI_BASE_URL, fetch, e.AI_REASONING_EFFORT ? { reasoning_effort: e.AI_REASONING_EFFORT } : {});
   else if (name === 'gemini' && e.GEMINI_API_KEY && model) p = new GeminiProvider(model, e.GEMINI_API_KEY);
   cache.set(spec, p);
   return p;
+}
+
+/** Tokens gastados por un modelo en las últimas 24 h (para no pasar del cupo gratuito). */
+export async function dayTokens(db: Db, model: string): Promise<number> {
+  const rows = await db
+    .select({ total: sql<number>`coalesce(sum(${aiUsage.inputTokens} + ${aiUsage.outputTokens}), 0)` })
+    .from(aiUsage)
+    .where(sql`${aiUsage.model} = ${model} AND ${aiUsage.ts} >= now() - interval '24 hours'`);
+  return Number(rows[0]?.total ?? 0);
+}
+
+/** Tras un 429 («demasiadas peticiones»), el modelo descansa lo que diga el proveedor. */
+const cooldownUntil = new Map<string, number>();
+const COOLDOWN_MS = 15 * 60_000;
+
+/**
+ * Cuánto esperar tras un 429. Groq dice «Please try again in 3.21s» cuando es el límite por
+ * minuto (se espera eso) y habla de «per day» cuando se acabó el cupo diario (una hora).
+ */
+export function retryAfterMs(message: string): number {
+  if (/per day|\bRPD\b|\bTPD\b|daily/i.test(message)) return 60 * 60_000;
+  // «m» son minutos solo si no va seguida de «s» («120ms» no son 120 minutos).
+  const m = message.match(/try again in\s+(?:(\d+)m(?!s))?\s*(\d+(?:\.\d+)?)?(ms|s)?/i);
+  if (m && (m[1] || m[2])) {
+    const ms = Number(m[1] ?? 0) * 60_000 + (m[2] ? Number(m[2]) * (m[3] === 'ms' ? 1 : 1000) : 0);
+    return Math.min(Math.max(ms + 1000, 2000), COOLDOWN_MS);
+  }
+  return COOLDOWN_MS;
 }
 
 export async function monthSpendUsd(db: Db): Promise<number> {
@@ -59,6 +88,10 @@ export async function callJson(
   if (!provider) return null;
   const budget = env().AI_MONTHLY_BUDGET_USD;
   if (budget > 0 && (await monthSpendUsd(db)) >= budget) return null;
+  const key = `${provider.name}:${provider.model}`;
+  if ((cooldownUntil.get(key) ?? 0) > Date.now()) return null;
+  const daily = env().AI_DAILY_TOKEN_LIMIT;
+  if (daily > 0 && (await dayTokens(db, provider.model)) >= daily) return null;
   try {
     const res = await provider.generateJson(req);
     await db.insert(aiUsage).values({
@@ -74,6 +107,8 @@ export async function callJson(
     });
     return res.refused ? null : res;
   } catch (err) {
+    const msg = String(err instanceof Error ? err.message : err);
+    if (/\b429\b/.test(msg)) cooldownUntil.set(key, Date.now() + retryAfterMs(msg));
     await db.insert(aiUsage).values({
       task: req.task,
       provider: provider.name,

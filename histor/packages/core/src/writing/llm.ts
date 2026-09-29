@@ -15,6 +15,41 @@ import { truncate } from '../text/normalize';
 import { claimRef, writeDeterministic, type WriteOptions } from './deterministic';
 import type { Draft } from './draft';
 import type { FactSheet } from './factsheet';
+import { listJoin, PHRASES } from './phrases';
+import { validateDraft } from './validate';
+import { sentences } from '../text/tokenize';
+
+/**
+ * Reparación del texto de la IA, frase a frase, con el mismo validador que decide si se publica
+ * (29-09-2026, primeras pruebas con Groq: artículos de 12 párrafos rechazados enteros por dos
+ * frases). Si a una frase solo le falta la atribución, se añade «, según X» con las fuentes
+ * de sus afirmaciones; si tiene un nombre, cifra, fecha o cita sin respaldo, fuera el párrafo.
+ * Nunca se publica una frase que el validador no acepte.
+ */
+export function repairAiParagraphs(blocks: Extract<ArticleBlock, { type: 'p' }>[], fs: FactSheet, base: Draft): Extract<ArticleBlock, { type: 'p' }>[] {
+  const P = PHRASES[fs.language];
+  const byRef = new Map(fs.claims.map((c) => [claimRef(c), c]));
+  const out: Extract<ArticleBlock, { type: 'p' }>[] = [];
+  for (const b of blocks) {
+    const probe = (text: string) => validateDraft({ ...base, headline: base.headline, body: [{ ...b, text }] }, fs).issues.filter((i) => i.check !== 'headline');
+    let text = b.text;
+    let issues = probe(text);
+    if (issues.length && P && issues.every((i) => i.check === 'status' && /atribución/.test(i.detail))) {
+      const who = [...new Set(b.claimIds.flatMap((id) => byRef.get(id)?.attribution ?? []))].slice(0, 2);
+      if (who.length) {
+        const bad = new Set(issues.map((i) => i.text.trim()));
+        // Sin duplicar: si la frase ya nombra a la fuente («El Confidencial…»), no se le añade otra vez.
+        const named = (s: string) => who.some((w) => s.includes(w));
+        text = sentences(text)
+          .map((s) => (bad.has(s.trim()) && !named(s) ? P.according(s.trim().replace(/[.!?]+$/, ''), listJoin(fs.language, who)) : s.trim()))
+          .join(' ');
+        issues = probe(text);
+      }
+    }
+    if (!issues.length) out.push({ ...b, text });
+  }
+  return out;
+}
 
 /**
  * ¿Puede esta historia pasar por la IA? No, si alguna de sus piezas viene de un
@@ -37,6 +72,8 @@ Hard rules:
 - Do not quote anyone verbatim unless the exact words appear in a claim's "quote" field; keep them unchanged and attribute them to that claim's speaker.
 - Write in your own words: never copy more than 10 consecutive words from a claim's text (quotes excepted).
 - If the story is "developing", say so plainly and attribute everything that is not confirmed.
+- When you attribute, name the source exactly as written in the claim's "sources" field ("según El Confidencial", "according to BBC News"). Never use vague attributions such as "according to reports", "sources say", "another outlet", "the newspaper", "the cited sources". Attribute each sentence once, not twice.
+- Open with the most important confirmed fact (who, what, where, when), then context and details, then reactions and what comes next, like a quality newspaper. One idea per paragraph.
 - The headline must accurately represent the article. No clickbait, no exaggeration, no questions, no exclamation marks.
 - Use the target language's journalistic conventions for dates, numbers, institutions and names.`;
 
@@ -102,7 +139,13 @@ export async function writeWithLlm(db: Db, fs: FactSheet, opts: WriteOptions & {
   const out = res.data as WriterOut;
   if (!out.headline || !Array.isArray(out.paragraphs) || !out.paragraphs.length) return null;
   // Texto de la IA + secciones deterministas (datos clave, no confirmado, recuadro de verificación).
-  const aiBlocks: ArticleBlock[] = out.paragraphs.map((p) => ({ type: 'p', text: p.text.trim(), claimIds: p.claim_ids ?? [] }));
+  const aiBlocks = repairAiParagraphs(
+    out.paragraphs.map((p) => ({ type: 'p' as const, text: p.text.trim(), claimIds: p.claim_ids ?? [] })),
+    fs,
+    base,
+  );
+  // Si la reparación deja poco, no merece la pena: mejor el redactor determinista.
+  if (aiBlocks.length < 2) return null;
   const structural = base.body.filter((b, i) => b.type === 'h2' || (i > 0 && b.type !== 'p'));
   return {
     ...base,

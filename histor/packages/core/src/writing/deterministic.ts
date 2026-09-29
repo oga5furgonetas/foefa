@@ -326,6 +326,8 @@ const TIME_AFTER_DEMONSTRATIVE =
 export function goodHeadline(h: string): boolean {
   const t = h.trim();
   if (t.split(/\s+/).length < 5) return false;
+  // Empieza por letra o cifra: «, CC BY-NC, according to The Conversation» salió de titular.
+  if (!/^[\p{L}\p{N}¿¡]/u.test(t)) return false;
   if (/^["“«'‘„]/.test(t)) return false;
   const count = (re: RegExp) => (t.match(re) ?? []).length;
   if (count(/«/g) !== count(/»/g) || count(/“/g) !== count(/”/g) || count(/"/g) % 2 !== 0) return false;

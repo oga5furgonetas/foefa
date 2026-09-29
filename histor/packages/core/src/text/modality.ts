@@ -41,6 +41,10 @@ const ATTRIBUTED = [
   'a declare', 'a dit', 'a affirme', 'selon', 'a annonce', 'a indique', 'rapporte',
   'ha detto', 'ha dichiarato', 'ha affermato', 'secondo', 'ha annunciato', 'riferisce',
   'disse', 'afirmou', 'declarou', 'segundo', 'anunciou', 'informou',
+  // En presente, como escribe la IA: «El Confidencial indica que…», «La Nación señala que…».
+  'indica que', 'senala que', 'explica que', 'afirma que', 'asegura que', 'sostiene que', 'detalla que', 'precisa que', 'apunta que',
+  'notes that', 'noted that', 'writes that', 'wrote that', 'indicates that', 'indicated that',
+  'indique que', 'precise que', 'souligne que', 'indica che', 'sottolinea che', 'afferma che', 'aponta que', 'destaca que', 'schreibt', 'berichtet',
 ];
 
 function has(f: string, list: string[]): string | null {

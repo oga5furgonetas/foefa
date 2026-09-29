@@ -23,11 +23,15 @@ const URL_PATH =
  */
 const GDACS_GREEN = /^green (forest fire|wildfire|flood|drought|earthquake|tropical cyclone|volcan\w*)\b/i;
 
+/** Publicidad y contenido patrocinado («¿Fitogénicos para perros? Conéctese al webinar de SEMANA»). */
+const SPONSORED = /\b(webinar|webinario|conéctese al|inscríbase|regístrese|patrocinado|publirreportaje|sponsored|advertorial|partner content|paid post|anzeige|publireportage|contenuto sponsorizzato|conteúdo patrocinado|publi-information)\b/i;
+
 /** Motivo por el que la pieza no es noticia, o null si lo es. */
 export function nonNewsReason(title: string, url: string): string | null {
   const t = title.trim();
   if (TITLE_START.test(t) || TITLE_LABEL.test(t) || TITLE_END.test(t)) return 'no es noticia (opinión, galería, resumen, pódcast o cuestionario)';
   if (GDACS_GREEN.test(t)) return 'no es noticia (alerta automática de nivel verde, impacto bajo)';
+  if (SPONSORED.test(t)) return 'no es noticia (publicidad o contenido patrocinado)';
   let path = '';
   try {
     path = new URL(url).pathname;
@@ -41,3 +45,6 @@ export function nonNewsReason(title: string, url: string): string | null {
 /** Coletillas de las webs de los medios (apps, boletines, redes, «lee también»). */
 export const PROMO =
   /(téléchargeant l'application|téléchargez l'application|abonnez-vous|inscrivez-vous|suivez-nous|suivez toute l'actualité|descarga(?:r)? (?:la|nuestra) app|suscríbete|síguenos|únete a nuestro canal|recibe (?:las|nuestras) noticias|te puede interesar|lee también|leer más|más información en|download (?:the|our) app|subscribe to|sign up for|follow us|read more|click here|newsletter|jetzt abonnieren|laden sie die app|folgen sie uns|lesen sie auch|scarica l'app|iscriviti|seguici|leggi anche|baixe o app|assine a newsletter|siga-nos|leia também|canal de whatsapp|whatsapp channel|à lire aussi|a lire aussi|lire aussi|ver también|lea también|vea también|leia mais|saiba mais|see also|related:|más noticias|mehr zum thema|auch interessant|potrebbe interessarti|da non perdere)/i;
+
+/** Pies de foto y créditos («…, CC BY-NC», «Getty Images», «Foto: EFE»): no afirman nada. */
+export const CREDIT_LINE = /(\bCC[ -]BY\b|\bGetty Images\b|\bShutterstock\b|\bAFP Photo\b|\bimago images\b|^\s*(foto|fotos|photo|photos|image|imagen|imagem|bild|crédito|credit|crédits?|©)\s*[:|/©])/i;

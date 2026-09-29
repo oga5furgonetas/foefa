@@ -31,6 +31,12 @@ const schema = z.object({
   AI_PROVIDER_EXTRACTION: z.string().optional(),
   AI_PROVIDER_TRANSLATION: z.string().optional(),
   AI_MONTHLY_BUDGET_USD: z.coerce.number().nonnegative().default(0),
+  // Planes gratuitos (Groq, Gemini): tokens por modelo en 24 h (0 = sin tope) y la importancia
+  // mínima (0-1) de una historia para gastar IA en ella; el resto usa el redactor determinista.
+  AI_DAILY_TOKEN_LIMIT: z.coerce.number().nonnegative().default(0),
+  AI_MIN_IMPORTANCE: z.coerce.number().min(0).max(1).default(0),
+  // Modelos con razonamiento (gpt-oss, o-series): «low» gasta muchos menos tokens.
+  AI_REASONING_EFFORT: z.enum(['low', 'medium', 'high']).optional(),
   ANTHROPIC_API_KEY: z.string().optional(),
   OPENAI_API_KEY: z.string().optional(),
   OPENAI_BASE_URL: z.string().optional(),

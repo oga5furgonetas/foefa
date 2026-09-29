@@ -86,6 +86,18 @@ export function sharedNumberTerms(a: TermVector, b: TermVector): number {
   return n;
 }
 
+/**
+ * Parte de las cifras del lado que menos tiene que coinciden con el otro. Con artículos
+ * completos (decenas de cifras) compartir dos es casualidad: un análisis sobre petróleo y un
+ * retraso de Boeing se agruparon así el 29-09-2026. Dos titulares con las mismas 2 cifras: 1.
+ */
+export function numberOverlap(a: TermVector, b: TermVector): number {
+  const na = Object.keys(a).filter((k) => k.startsWith('#')).length;
+  const nb = Object.keys(b).filter((k) => k.startsWith('#')).length;
+  const min = Math.min(na, nb);
+  return min ? sharedNumberTerms(a, b) / min : 0;
+}
+
 export function cosine(a: TermVector, b: TermVector, idf?: (term: string) => number): number {
   let dot = 0;
   let na = 0;

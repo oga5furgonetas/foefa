@@ -13,7 +13,7 @@ import type { Db } from '../db/client';
 import { rawItems, stories, storyItems } from '../db/schema';
 import { entityKey, findPlaces } from '../text/entities';
 import { slugify } from '../text/normalize';
-import { cosine, mergeVectors, minhashSimilarity, sharedNumberTerms, termVector, type TermVector } from '../text/similarity';
+import { cosine, mergeVectors, minhashSimilarity, numberOverlap, sharedNumberTerms, termVector, type TermVector } from '../text/similarity';
 import { placeKey } from '../verification/claims';
 import type { VPlace } from '../verification/types';
 
@@ -47,11 +47,13 @@ export function storySimilarity(
   const timeFactor = hours <= 24 ? 1 : hours <= 48 ? 0.85 : 0.7;
   // Cifras compartidas (≥ 2) + mismo lugar: el mismo hecho contado en otro idioma.
   const nums = sharedNumberTerms(item.vec, c.centroid);
-  const crossLingual = nums >= 2 && placeScore > 0 ? 0.25 + 0.1 * Math.min(3, nums) : 0;
+  // Y que sean buena parte de sus cifras, no 2 de 40 por casualidad en dos artículos largos.
+  const numShare = numberOverlap(item.vec, c.centroid);
+  const crossLingual = nums >= 2 && numShare >= 0.4 && placeScore > 0 ? 0.25 + 0.1 * Math.min(3, nums) : 0;
   // Sin ninguna entidad compartida (más allá del lugar) solo se agrupa con mucho parecido léxico o con ese ancla.
   // Una cifra compartida (≥ 10, no años) en el mismo lugar ayuda, pero solo junto con parecido
   // léxico: «Veintisiete muertos en dos tiroteos en Sudáfrica» / «…dos tiroteos… dejan 27 muertos».
-  const numPlace = nums >= 1 && placeScore > 0 ? 0.15 : 0;
+  const numPlace = nums >= 1 && numShare >= 0.25 && placeScore > 0 ? 0.15 : 0;
   if (!sharedEnts.length && cos < 0.55 && !crossLingual && !numPlace) return Math.min(0.3, cos) * timeFactor;
   return Math.max(0.5 * cos + 0.35 * Math.min(1, entScore) + 0.15 * placeScore + numPlace, crossLingual + 0.15 * placeScore) * timeFactor;
 }

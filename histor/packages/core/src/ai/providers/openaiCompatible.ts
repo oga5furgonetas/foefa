@@ -15,6 +15,8 @@ export class OpenAiCompatibleProvider implements LlmProvider {
     private apiKey: string,
     private baseUrl = 'https://api.openai.com/v1',
     private fetchImpl: typeof fetch = fetch,
+    /** Parámetros extra del proveedor (p. ej. `reasoning_effort` en Groq/OpenAI). */
+    private extraBody: Record<string, unknown> = {},
   ) {}
 
   async generateJson(req: JsonRequest): Promise<JsonResponse> {
@@ -29,6 +31,7 @@ export class OpenAiCompatibleProvider implements LlmProvider {
           { role: 'user', content: req.prompt },
         ],
         response_format: { type: 'json_schema', json_schema: { name: `histor_${req.task}`, schema: req.schema, strict: true } },
+        ...this.extraBody,
       }),
       signal: AbortSignal.timeout(120_000),
     });

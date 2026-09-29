@@ -10,7 +10,7 @@ import { extractDates } from '../text/dates';
 import { entityKey, extractEntities, findPlaces } from '../text/entities';
 import { detectModality } from '../text/modality';
 import { extractNumbers } from '../text/numbers';
-import { PROMO } from '../text/nonnews';
+import { CREDIT_LINE, PROMO } from '../text/nonnews';
 import { decodeEntities } from '../text/normalize';
 import { extractQuotes } from '../text/quotes';
 import { sentences, words } from '../text/tokenize';
@@ -47,7 +47,8 @@ export function extractClaims(item: VItem): VClaim[] {
     // Frase truncada por el feed («…Francisco Toscano…») o que anuncia lo que sigue («declaró:»): no afirma nada completo.
     if (/(…|\.\.\.|:)$/.test(clean)) return;
     // Publicidad de la web del medio («Suivez toute l'actualité… en téléchargeant l'application RFI»).
-    if (PROMO.test(clean)) return;
+    // Ni pies de foto («…, CC BY-NC»), ni frases que empiezan por un signo suelto.
+    if (PROMO.test(clean) || CREDIT_LINE.test(clean) || /^[^\p{L}\p{N}¿¡«"“'‘(]/u.test(clean)) return;
     const norm = clean.toLowerCase();
     if (seen.has(norm)) return;
     const ents = extractEntities(clean, lang).filter((e) => e.type !== 'other' || e.name.split(' ').length > 1);

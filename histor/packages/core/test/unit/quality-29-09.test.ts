@@ -11,6 +11,7 @@ import { domesticDesk } from '../../src/pipeline/normalize';
 import { storyConsensus } from '../../src/pipeline/verify';
 import { detectAttribution, stripDateline, wireOrigin } from '../../src/text/attribution';
 import { decodeEntities } from '../../src/text/normalize';
+import { numberOverlap } from '../../src/text/similarity';
 import { nonNewsReason } from '../../src/text/nonnews';
 import { extractClaims } from '../../src/verification/claims';
 import { compressClaim } from '../../src/writing/compress';
@@ -192,5 +193,27 @@ describe('redacciones de internacional', () => {
     expect(domesticDesk(s('dw-es', 'deutsche-welle', 'https://rss.dw.com/rdf/rss-sp-all'))).toBe(false);
     expect(domesticDesk(s('la-tercera', 'grupo-copesa', 'https://www.latercera.com/arc/outboundfeeds/rss/?outputType=xml'))).toBe(true);
     expect(domesticDesk(s('nyt-us', 'new-york-times', 'https://rss.nytimes.com/services/xml/rss/nyt/US.xml'))).toBe(true);
+  });
+});
+
+describe('pies de foto, anuncios y agrupación entre idiomas (29-09-2026, tarde)', () => {
+  it('un crédito de imagen no es afirmación ni titular', () => {
+    expect(goodHeadline(', CC BY-NC, according to The Conversation')).toBe(false);
+    const tc = source('The Conversation', 'academic');
+    const claims = extractClaims(item(tc, 'The cycle of hate: how Canada and the US entered a cycle of hostility', 'Protesters gather in Ottawa, Getty Images. Photo: John Smith / Reuters. Relations between Canada and the United States deteriorated sharply in 2026.'));
+    expect(claims.some((c) => /Getty|Photo:/i.test(c.text))).toBe(false);
+  });
+
+  it('el contenido patrocinado no es noticia', () => {
+    expect(nonNewsReason('¿Fitogénicos y nutracéuticos para perros y gatos? Conéctese al webinar de SEMANA este 29 de septiembre', 'https://www.semana.com/x')).toMatch(/patrocinado/);
+    expect(nonNewsReason('El Senado aprueba la ley de vivienda', 'https://www.semana.com/y')).toBeNull();
+  });
+
+  it('dos artículos largos que comparten 2 cifras de 30 no son la misma noticia', () => {
+    const many = (base: number) => Object.fromEntries(Array.from({ length: 30 }, (_, i) => [`#${base + i * 7}`, 1]));
+    const a = { ...many(100), '#737': 1, '#10': 1 };
+    const b = { ...many(5000), '#737': 1, '#10': 1 };
+    expect(numberOverlap(a, b)).toBeLessThan(0.1);
+    expect(numberOverlap({ '#27': 1, '#25': 1, terms: 1 }, { '#27': 1, '#25': 1, otros: 2 })).toBe(1);
   });
 });

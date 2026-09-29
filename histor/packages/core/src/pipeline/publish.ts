@@ -9,6 +9,8 @@
 import { and, desc, eq, gte, inArray, ne, sql } from 'drizzle-orm';
 import { providerFor } from '../ai/router';
 import { country } from '../config/countries';
+import { env } from '../env';
+import { importanceScore } from '../verification/momentum';
 import { DESK_BY_CATEGORY } from '../config/editorial';
 import { ACTIVE_LANGUAGES } from '../config/languages';
 import type { EditorialSettings } from '../config/settings';
@@ -65,7 +67,8 @@ export async function publishStory(db: Db, v: VerifiedStory, settings: Editorial
   const langs = settings.publishLanguages.filter((l) => (ACTIVE_LANGUAGES as string[]).includes(l));
   const drafts = new Map<string, { draft: Draft; fs: FactSheet; report: QualityReport }>();
   const failed: Record<string, QualityReport> = {};
-  const aiAllowed = aiMayUse(v.items);
+  // Con un cupo gratuito de IA, se gasta en las historias que más importan (AI_MIN_IMPORTANCE).
+  const aiAllowed = aiMayUse(v.items) && importanceScore(analysis.momentum, analysis.confidence) >= env().AI_MIN_IMPORTANCE;
 
   for (const lang of langs) {
     const fs = buildFactSheet(analysis, v.items, v.sources, { language: lang, storyId: story.id, claimDbIds: v.keyToId });
