@@ -535,6 +535,31 @@ test.describe('Cuadrante', () => {
     expect(fallos, fallos.join(' | ')).toHaveLength(0)
   })
 
+  /* Día concedido en Días libres: sale con candado y el menú no deja cambiarlo
+     de un clic; quien aprueba días le quita el candado (30-09-2026). */
+  test('un día concedido sale con candado y se desbloquea a propósito', async ({ page }) => {
+    const fallos = vigilar(page)
+    await entrarComoAdmin(page)
+    await simularApi(page, 'vacio')
+    const datos = DATOS()
+    datos.propuesta = null
+    datos.celdas[`p2|${dia(5)}`] = { cod: 'N/T APROB', extra: false, fijada: true, aprobado: true }
+    await page.route(/\/api\/cuadrante\?/, json(datos))
+    let pedido = null
+    await page.route(/\/api\/cuadrante\/celdas/, (route) => {
+      pedido = route.request().postDataJSON()
+      return json({ ok: true, guardadas: 1, bloqueadas: [] })(route)
+    })
+    await page.goto('/panel/cuadrante', { waitUntil: 'domcontentloaded' })
+    await expect(page.getByText('Rutas (cuenta de 1)')).toBeVisible({ timeout: 15000 })
+    await page.getByTitle(/LUIS GÓMEZ .*N\/T APROB/).click()
+    await expect(page.getByText(/Día concedido: tiene candado/)).toBeVisible()
+    await expect(page.getByRole('button', { name: 'Vaciar', exact: true })).toHaveCount(0)
+    await page.getByRole('button', { name: 'Quitar candado para cambiarlo' }).click()
+    await expect.poll(() => pedido).toEqual({ center: 'NORTE', cambios: [{ driver_id: 'p2', fecha: dia(5), desbloquear: true }] })
+    expect(fallos, fallos.join(' | ')).toHaveLength(0)
+  })
+
   /* 30-09-2026: con DGA1 elegido arriba, la hoja de OGA5 salió con 67 «no
      tiene ficha» y «Crear ficha nueva» ya elegido. Ahora se avisa, no se deja
      importar ahí y un botón cambia de centro y vuelve a leer la misma hoja. */
@@ -606,6 +631,60 @@ test.describe('Usuarios', () => {
     await cuadrante.click()
     await expect(cuadrante).toHaveAttribute('aria-pressed', 'false')
     await expect(page.getByText('Ve 6 de 29 pantallas del menú.')).toBeVisible()
+    expect(fallos, fallos.join(' | ')).toHaveLength(0)
+  })
+})
+
+/* PORTAL DEL CONDUCTOR · TUS PETICIONES (30-09-2026, Dani: «añádeles cancelar
+   peticiones enviadas o cambiarlas, y que nos salte una notificación»). Lo
+   pendiente se cambia (sigue siendo UNA petición) o se cancela; un aprobado
+   que aún no ha llegado se devuelve. */
+test.describe('Portal del conductor · tus peticiones', () => {
+  const iso = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+  const dia = (n) => { const d = new Date(); d.setHours(12); d.setDate(d.getDate() + n); return iso(d) }
+  const json = (body) => (route) => route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(body) })
+  const PET = (id, n, status, grupo) => ({ id, grupo, date: dia(n), status, type: 'libre', motivo: 'asuntos',
+    motivo_label: 'Asuntos propios', note: 'boda de mi prima', driver_id: 'd1' })
+
+  test('cambiar lo pendiente y devolver un día aprobado', async ({ page }) => {
+    const fallos = vigilar(page)
+    const exp = Math.floor(Date.now() / 1000) + 3600
+    const b64 = (o) => Buffer.from(JSON.stringify(o)).toString('base64').replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '')
+    const token = `${b64({ alg: 'HS256', typ: 'JWT' })}.${b64({ sub: 'd1', role: 'driver', name: 'ANA PÉREZ', exp })}.firma`
+    await page.addInitScript((tk) => {
+      localStorage.setItem('flota_driver_token', tk)
+      localStorage.setItem('flota_driver', JSON.stringify({ id: 'd1', name: 'ANA PÉREZ', center: 'NORTE' }))
+      localStorage.setItem('cookie_consent', '1')
+    }, token)
+    await simularApi(page, 'vacio')
+    const pedidos = []
+    await page.route(/\/api\/shifts\/mine/, json({ shifts: [], sin_ver: [], requests: [
+      PET('p1', 10, 'pendiente', 'g1'), PET('p2', 11, 'pendiente', 'g1'), PET('a1', 15, 'aprobado', 'g2')] }))
+    await page.route(/\/api\/shift-requests\/mias\/cambiar/, (route) => {
+      pedidos.push(['cambiar', route.request().postDataJSON()])
+      return json({ ok: true, dias: [dia(10)], anadidos: [], quitados: [dia(11)] })(route)
+    })
+    await page.route(/\/api\/shift-requests\/mias\/cancelar/, (route) => {
+      pedidos.push(['cancelar', route.request().postDataJSON()])
+      return json({ canceladas: [dia(15)], no: [] })(route)
+    })
+    page.on('dialog', (d) => d.accept())
+    await page.goto('/conductor', { waitUntil: 'domcontentloaded' })
+    await page.getByText('Pedir días libres').first().click()
+    await expect(page.getByText('Tus peticiones')).toBeVisible({ timeout: 15000 })
+    // Devolver el aprobado: la oficina lo sabrá.
+    await page.getByRole('button', { name: 'Ya no lo necesito' }).click()
+    await expect(page.getByText('Cancelado 1 día. La oficina ya lo sabe.')).toBeVisible()
+    expect(pedidos[0]).toEqual(['cancelar', { ids: ['a1'] }])
+    // Cambiar lo pendiente: sus días vuelven al calendario; se quita uno y se guarda.
+    await page.getByRole('button', { name: 'Cambiar', exact: true }).click()
+    await expect(page.getByRole('heading', { name: 'Cambiar tu petición' })).toBeVisible()
+    const d11 = Number(dia(11).slice(8))
+    if (dia(11).slice(5, 7) !== dia(10).slice(5, 7)) await page.getByRole('button', { name: 'Mes siguiente' }).click()
+    await page.getByRole('button', { name: String(d11), exact: true }).click()
+    await page.getByRole('button', { name: 'Guardar cambios' }).click()
+    await expect(page.getByText('Petición cambiada')).toBeVisible()
+    expect(pedidos[1]).toEqual(['cambiar', { grupo: 'g1', dates: [dia(10)], motivo: 'asuntos', note: 'boda de mi prima' }])
     expect(fallos, fallos.join(' | ')).toHaveLength(0)
   })
 })

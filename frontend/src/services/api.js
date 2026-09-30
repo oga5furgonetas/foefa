@@ -188,6 +188,10 @@ export const getMisBloqueos = () => api.get('/shift-blocks/mios')
 export const createShiftRequest = (a, type, note) =>
   api.post('/shift-requests', (a && typeof a === 'object') ? a : { date: a, type, note })
 export const marcarRespuestasVistas = (body) => api.post('/shift-requests/vistas', body)
+// Cancelar días pedidos (pendientes, o aprobados que aún no han llegado) y
+// cambiar una petición que espera respuesta. La oficina recibe un aviso.
+export const cancelarMisPeticiones = (ids) => api.post('/shift-requests/mias/cancelar', { ids })
+export const cambiarMiPeticion = (body) => api.post('/shift-requests/mias/cambiar', body)
 // El conductor se cambia su propia contraseña. Antes tenía que decirle a la
 // oficina cuál quería, o sea contársela a otra persona.
 export const changeMyPassword = (current_password, new_password) =>

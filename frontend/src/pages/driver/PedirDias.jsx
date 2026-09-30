@@ -1,9 +1,12 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import {
   ArrowLeft, ChevronLeft, ChevronRight, Loader2, Check, Send, Clock, X,
-  Bell, BellOff,
+  Bell, BellOff, Pencil, Undo2,
 } from 'lucide-react'
-import { getMyShifts, createShiftRequest, marcarRespuestasVistas, getMisBloqueos } from '../../services/api'
+import {
+  getMyShifts, createShiftRequest, marcarRespuestasVistas, getMisBloqueos,
+  cancelarMisPeticiones, cambiarMiPeticion,
+} from '../../services/api'
 import { lista } from '../../lib/lista'
 import { horaLocal, diaMesLocal } from '../../lib/fecha'
 import { pushSupported, isPushEnabled, enablePush, disablePush } from '../../lib/push'
@@ -156,6 +159,118 @@ function Campana() {
   )
 }
 
+/* ── TUS PETICIONES ──────────────────────────────────────────────────────────
+   Lo que ya pediste, de hoy en adelante, y qué puedes hacer con ello (Dani,
+   30-09-2026: «añádeles cancelar peticiones enviadas o cambiarlas, y que nos
+   salte una notificación»). Lo que espera respuesta se cambia o se cancela;
+   un día ya aprobado que aún no ha llegado se puede devolver. La oficina
+   recibe un aviso de todo, y un aprobado devuelto vuelve al cuadrante como
+   estaba. */
+const ESTADO_TXT = { pendiente: 'esperando respuesta', aprobado: 'aprobado', rechazado: 'rechazado', cancelado: 'cancelado' }
+const ESTADO_CLS = {
+  pendiente: 'bg-sky-500/15 text-sky-300 ring-1 ring-sky-500/50',
+  aprobado: 'bg-emerald-500/20 text-emerald-300 ring-1 ring-emerald-500/60',
+  rechazado: 'bg-red-500/15 text-red-300',
+  cancelado: 'bg-dark-800 text-dark-500 line-through',
+}
+
+function MisPeticiones({ peticiones, hoyIso, editando, onCambiar, onHecho }) {
+  const [ocupado, setOcupado] = useState('')
+  const [err, setErr] = useState('')
+  const grupos = useMemo(() => {
+    const m = new Map()
+    for (const r of peticiones) {
+      const k = r.grupo || r.id
+      if (!m.has(k)) m.set(k, { key: k, grupo: r.grupo || null, motivo: r.motivo, motivo_label: r.motivo_label, note: r.note, dias: [] })
+      m.get(k).dias.push(r)
+    }
+    return [...m.values()]
+      .map((g) => ({ ...g, dias: [...g.dias].sort((a, b) => a.date.localeCompare(b.date)) }))
+      // Solo lo que aún cuenta: algún día de hoy en adelante pendiente o aprobado.
+      .filter((g) => g.dias.some((d) => d.date >= hoyIso && (d.status === 'pendiente' || d.status === 'aprobado')))
+      .sort((a, b) => a.dias[0].date.localeCompare(b.dias[0].date))
+  }, [peticiones, hoyIso])
+  if (!grupos.length) return null
+
+  const cancelar = async (g, cuales, pregunta) => {
+    if (!window.confirm(pregunta)) return
+    setOcupado(g.key); setErr('')
+    try {
+      const r = await cancelarMisPeticiones(cuales.map((d) => d.id))
+      const n = lista(r.data?.canceladas).length
+      onHecho(n
+        ? `${n === 1 ? 'Cancelado 1 día' : `Cancelados ${n} días`}. La oficina ya lo sabe.`
+        : 'No se ha cancelado nada: ya había cambiado. Mira cómo está ahora.')
+    } catch (e) {
+      setErr(e?.response?.data?.detail || 'No se ha podido cancelar. Inténtalo otra vez.')
+    } finally { setOcupado('') }
+  }
+
+  return (
+    <div className="mt-5">
+      <h2 className="text-[11px] font-semibold uppercase tracking-wider text-dark-500">Tus peticiones</h2>
+      <div className="mt-2 flex flex-col gap-2">
+        {grupos.map((g) => {
+          const pend = g.dias.filter((d) => d.status === 'pendiente' && d.date >= hoyIso)
+          const aprob = g.dias.filter((d) => d.status === 'aprobado' && d.date > hoyIso)
+          const esta = editando?.grupo && editando.grupo === g.grupo
+          return (
+            <div key={g.key} className={`rounded-xl border p-3 ${esta ? 'border-brand-500/60 bg-brand-500/[0.07]' : 'border-dark-800 bg-dark-900/60'}`}>
+              <div className="flex flex-wrap gap-1.5">
+                {g.dias.map((d) => (
+                  <span key={d.id} title={ESTADO_TXT[d.status] || d.status}
+                    className={`rounded-md px-1.5 py-0.5 text-[12px] tabular-nums ${ESTADO_CLS[d.status] || 'text-dark-400'}`}>
+                    {d.date.slice(8, 10)}/{d.date.slice(5, 7)}
+                  </span>
+                ))}
+              </div>
+              <p className="mt-1.5 text-[12.5px] text-dark-300">
+                {g.motivo_label || g.motivo}{g.note ? ` · «${g.note}»` : ''}
+              </p>
+              <p className="mt-0.5 text-[11.5px] text-dark-500">
+                {[pend.length ? `${pend.length} esperando respuesta` : '',
+                  aprob.length ? `${aprob.length} aprobado${aprob.length > 1 ? 's' : ''}` : ''].filter(Boolean).join(' · ')}
+              </p>
+              {esta ? (
+                <p className="mt-2 text-[12px] font-semibold text-brand-300">Cambiándola: marca o desmarca días arriba y guarda.</p>
+              ) : (pend.length > 0 || aprob.length > 0) && (
+                <div className="mt-2 flex flex-wrap gap-2">
+                  {pend.length > 0 && g.grupo && (
+                    <button onClick={() => onCambiar(g, pend)} disabled={!!ocupado || !!editando}
+                      className="flex items-center gap-1.5 rounded-lg border border-dark-700 px-2.5 py-1.5 text-[12.5px] font-semibold text-dark-200 disabled:opacity-40">
+                      <Pencil size={13} /> Cambiar
+                    </button>
+                  )}
+                  {pend.length > 0 && (
+                    <button disabled={!!ocupado || !!editando}
+                      onClick={() => cancelar(g, pend, pend.length === 1
+                        ? '¿Cancelar el día que pediste? La oficina lo verá.'
+                        : `¿Cancelar los ${pend.length} días que pediste? La oficina lo verá.`)}
+                      className="flex items-center gap-1.5 rounded-lg border border-dark-700 px-2.5 py-1.5 text-[12.5px] font-semibold text-dark-300 disabled:opacity-40">
+                      {ocupado === g.key ? <Loader2 size={13} className="animate-spin" /> : <X size={13} />}
+                      {aprob.length ? 'Cancelar lo pendiente' : 'Cancelar'}
+                    </button>
+                  )}
+                  {aprob.length > 0 && (
+                    <button disabled={!!ocupado || !!editando}
+                      onClick={() => cancelar(g, aprob, aprob.length === 1
+                        ? '¿Ya no necesitas el día que te aprobaron? Se lo diremos a la oficina y ese día vuelves al cuadrante como estabas.'
+                        : `¿Ya no necesitas los ${aprob.length} días que te aprobaron? Se lo diremos a la oficina y esos días vuelves al cuadrante como estabas.`)}
+                      className="flex items-center gap-1.5 rounded-lg border border-dark-700 px-2.5 py-1.5 text-[12.5px] font-semibold text-dark-300 disabled:opacity-40">
+                      <Undo2 size={13} /> Ya no lo necesito
+                    </button>
+                  )}
+                </div>
+              )}
+            </div>
+          )
+        })}
+      </div>
+      {err && <p className="mt-2 rounded-lg bg-red-500/10 px-3 py-2 text-[13px] text-red-300">{err}</p>}
+    </div>
+  )
+}
+
 export default function PedirDias({ onBack }) {
   const hoyIso = iso(new Date())
   const [ref, setRef] = useState(() => { const d = new Date(); d.setDate(1); return d })
@@ -165,7 +280,9 @@ export default function PedirDias({ onBack }) {
   const [datos, setDatos] = useState(null)      // {turnos:{fecha:tipo}, pendientes:Set, respuestas:[]}
   const [enviando, setEnviando] = useState(false)
   const [err, setErr] = useState('')
-  const [hecho, setHecho] = useState(null)      // {dias:n}
+  const [hecho, setHecho] = useState(null)      // {dias:n, cambio?:true}
+  const [editando, setEditando] = useState(null) // {grupo, fechas}: cambiando una petición pendiente
+  const [avisoOk, setAvisoOk] = useState('')
 
   /* Se piden tres meses de golpe (el anterior, este y los dos siguientes) para
      que cambiar de mes no tenga que esperar a la red cada vez. */
@@ -198,10 +315,10 @@ export default function PedirDias({ onBack }) {
         bloqueos = lista(b.data?.bloqueos)
       } catch { /* sin bloqueos, se sigue */ }
       setDatos({ turnos, pendientes, aprobados, bloqueos,
-                 respuestas: lista(r.data?.sin_ver) })
+                 respuestas: lista(r.data?.sin_ver), peticiones: lista(r.data?.requests) })
     } catch {
       setDatos({ turnos: {}, pendientes: new Set(), aprobados: new Set(),
-                 bloqueos: [], respuestas: [] })
+                 bloqueos: [], respuestas: [], peticiones: [] })
     }
   }, [rango])
   useEffect(() => { cargar() }, [cargar])
@@ -218,6 +335,8 @@ export default function PedirDias({ onBack }) {
 
   const estadoDe = (f) => {
     if (f < hoyIso) return 'pasado'
+    // Cambiando una petición: sus propios días se pueden desmarcar y volver a marcar.
+    if (editando?.fechas?.includes(f)) return 'libre_de_marcar'
     if (datos?.pendientes?.has(f)) return 'pedido'
     // Antes que 'libre' a proposito: al aprobarlo tambien queda como turno
     // libre, y si se mirara primero eso, el dia concedido se veria gris.
@@ -268,13 +387,37 @@ export default function PedirDias({ onBack }) {
     setEnviando(true); setErr('')
     try {
       const dates = [...sel].sort()
-      await createShiftRequest({ dates, motivo, note: nota.trim(), type: 'libre' })
-      setHecho({ dias: dates.length })
+      if (editando) {
+        await cambiarMiPeticion({ grupo: editando.grupo, dates, motivo, note: nota.trim() })
+        setHecho({ dias: dates.length, cambio: true })
+        setEditando(null)
+      } else {
+        await createShiftRequest({ dates, motivo, note: nota.trim(), type: 'libre' })
+        setHecho({ dias: dates.length })
+      }
       setSel(new Set()); setNota('')
       await cargar()
     } catch (e) {
       setErr(e?.response?.data?.detail || 'No se pudo enviar. Inténtalo otra vez.')
     } finally { setEnviando(false) }
+  }
+
+  /* «Cambiar» una petición pendiente: sus días quedan marcados en el
+     calendario, con su motivo y su explicación, y se guarda como la MISMA
+     petición (la oficina ve qué se ha añadido o quitado). */
+  function empezarCambio(g, pend) {
+    const fs = pend.map((d) => d.date).sort()
+    setEditando({ grupo: g.grupo, fechas: fs })
+    setSel(new Set(fs))
+    setMotivo(MOTIVOS.some((m) => m.k === g.motivo) ? g.motivo : 'otro')
+    setNota(g.note || '')
+    setErr(''); setAvisoOk('')
+    const d0 = new Date(`${fs[0]}T12:00:00`)
+    setRef(new Date(d0.getFullYear(), d0.getMonth(), 1))
+    if (typeof window !== 'undefined') window.scrollTo({ top: 0, behavior: 'smooth' })
+  }
+  function dejarComoEstaba() {
+    setEditando(null); setSel(new Set()); setNota(''); setErr('')
   }
 
   async function marcarVistas() {
@@ -290,10 +433,13 @@ export default function PedirDias({ onBack }) {
         <div className="mx-auto max-w-md">
           <div className="rounded-2xl border border-emerald-500/30 bg-emerald-500/[0.07] p-5">
             <Check size={26} className="text-emerald-400" />
-            <h1 className="mt-3 font-display text-[20px] font-bold text-dark-50">Petición enviada</h1>
+            <h1 className="mt-3 font-display text-[20px] font-bold text-dark-50">
+              {hecho.cambio ? 'Petición cambiada' : 'Petición enviada'}
+            </h1>
             <p className="mt-1.5 text-[13.5px] leading-relaxed text-emerald-200/80">
-              Has pedido {hecho.dias} día{hecho.dias > 1 ? 's' : ''}. Cuando la oficina conteste te
-              avisamos aquí mismo, y verás quién ha respondido y por qué.
+              {hecho.cambio
+                ? `Ahora pides ${hecho.dias} día${hecho.dias > 1 ? 's' : ''}. La oficina ya sabe qué has cambiado; cuando conteste te avisamos aquí mismo.`
+                : `Has pedido ${hecho.dias} día${hecho.dias > 1 ? 's' : ''}. Cuando la oficina conteste te avisamos aquí mismo, y verás quién ha respondido y por qué.`}
             </p>
           </div>
           <button onClick={() => setHecho(null)}
@@ -347,10 +493,24 @@ export default function PedirDias({ onBack }) {
           </div>
         )}
 
-        <h1 className="font-display text-[22px] font-bold tracking-[-.02em] text-dark-50">Pedir días libres</h1>
-        <p className="mt-1 text-[13px] text-dark-500">Toca los días que quieras. Puedes pasar de mes.</p>
+        <h1 className="font-display text-[22px] font-bold tracking-[-.02em] text-dark-50">
+          {editando ? 'Cambiar tu petición' : 'Pedir días libres'}
+        </h1>
+        <p className="mt-1 text-[13px] text-dark-500">
+          {editando ? 'Marca o desmarca días y guarda. Para quitarlos todos, cancela la petición.'
+            : 'Toca los días que quieras. Puedes pasar de mes.'}
+        </p>
 
-        <Campana />
+        {!editando && <Campana />}
+
+        {avisoOk && (
+          <p className="mt-4 rounded-lg bg-emerald-500/10 px-3 py-2 text-[13px] text-emerald-300">{avisoOk}</p>
+        )}
+        {datos && (
+          <MisPeticiones peticiones={datos.peticiones || []} hoyIso={hoyIso} editando={editando}
+            onCambiar={empezarCambio}
+            onHecho={async (txt) => { setAvisoOk(txt); await cargar() }} />
+        )}
 
         {/* Calendario */}
         <div className="mt-5 rounded-2xl border border-dark-800 bg-dark-900/60 p-3.5">
@@ -493,13 +653,20 @@ export default function PedirDias({ onBack }) {
 
             <button onClick={enviar} disabled={enviando || !notaOk}
               className="mt-4 flex w-full items-center justify-center gap-2 rounded-xl bg-brand-500 py-3.5 text-[15px] font-bold text-white disabled:opacity-50">
-              {enviando ? <Loader2 size={16} className="animate-spin" /> : <Send size={16} />}
-              Enviar petición
+              {enviando ? <Loader2 size={16} className="animate-spin" /> : editando ? <Check size={16} /> : <Send size={16} />}
+              {editando ? 'Guardar cambios' : 'Enviar petición'}
             </button>
           </>
         )}
 
-        {sel.size === 0 && datos && (
+        {editando && (
+          <button onClick={dejarComoEstaba}
+            className="mt-2 w-full rounded-xl py-3 text-[14px] font-semibold text-dark-400">
+            Dejarla como estaba
+          </button>
+        )}
+
+        {sel.size === 0 && datos && !editando && (
           <p className="mt-5 flex items-center justify-center gap-2 text-[13px] text-dark-500">
             <Clock size={14} /> Marca los días que quieras pedir
           </p>

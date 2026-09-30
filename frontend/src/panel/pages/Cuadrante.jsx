@@ -13,6 +13,7 @@ import {
 } from '../api'
 import { lista } from '../../lib/lista'
 import { isoLocal, hoyLocal } from '../../lib/fecha'
+import { canSee } from '../auth'
 import CuadranteChat from '../components/CuadranteChat'
 
 /* ── EL CUADRANTE CON MOTOR ────────────────────────────────────────────────
@@ -944,6 +945,11 @@ export default function Cuadrante() {
     if (mostrarProp) { setAviso('Estás viendo la propuesta: acéptala, descártala o pulsa «Ver lo actual» para tocar celdas.'); return }
     const c = celda(p.id, f)
     if (c?.otro_centro) { setErr(`Ese día ${p.nombre} está en ${c.otro_centro}.`); return }
+    // Un día concedido con candado no lo pisa el pincel: primero se le quita.
+    if (pincel !== null && c?.aprobado && c?.fijada) {
+      setErr(`El ${fmt(f)} de ${p.nombre} es un día concedido con candado: púlsalo sin pincel para quitárselo.`)
+      return
+    }
     if (pincel !== null) { guardarCeldas([{ driver_id: p.id, fecha: f, cod: pincel }]); return }
     const r = e.currentTarget.getBoundingClientRect()
     setMenu({ p, f, c, x: Math.max(8, Math.min(r.left, window.innerWidth - 260)), y: Math.min(r.bottom + 4, window.innerHeight - 260) })
@@ -1381,8 +1387,25 @@ export default function Cuadrante() {
 
       {menu && (
         <div className="fixed inset-0 z-50" onMouseDown={() => setMenu(null)}>
-          <div className="card absolute w-60 space-y-2 p-2.5" style={{ left: menu.x, top: menu.y }} onMouseDown={(e) => e.stopPropagation()}>
+          <div className="absolute w-60 space-y-2 rounded-xl border border-dark-700 bg-dark-900 p-2.5 shadow-xl shadow-black/30" style={{ left: menu.x, top: menu.y }} onMouseDown={(e) => e.stopPropagation()}>
             <p className="truncate text-[11.5px] text-dark-400">{menu.p.nombre} · {DIA[wd(menu.f)]} {fmt(menu.f)}</p>
+            {/* Día concedido con candado (Dani: «que si lo apruebo aparezca en el
+                cuadrante y bloqueado, aunque yo lo pueda desbloquear»). */}
+            {menu.c?.aprobado && menu.c?.fijada ? (
+              <div className="space-y-2">
+                <p className="flex items-start gap-1.5 text-[12px] leading-snug text-emerald-300">
+                  <Lock size={12} className="mt-0.5 shrink-0" /> Día concedido: tiene candado. Ni el motor ni nadie lo cambia sin quitárselo.
+                </p>
+                {canSee('aprobar-dias') ? (
+                  <button onClick={() => { guardarCeldas([{ driver_id: menu.p.id, fecha: menu.f, desbloquear: true }], 'Candado quitado: ya puedes cambiar ese día.'); setMenu(null) }}
+                    className="flex items-center gap-1 rounded-md border border-dark-700 px-2 py-1 text-[11px] text-dark-200 hover:bg-dark-800">
+                    <Unlock size={11} /> Quitar candado para cambiarlo
+                  </button>
+                ) : (
+                  <p className="text-[11px] text-dark-500">Solo quien aprueba días puede quitarle el candado.</p>
+                )}
+              </div>
+            ) : (<>
             <div className="grid grid-cols-4 gap-1">
               {PALETA.map(([cod, t]) => (
                 <button key={cod} title={t}
@@ -1404,7 +1427,11 @@ export default function Cuadrante() {
                 </button>
               )}
             </div>
+            {menu.c?.aprobado && (
+              <p className="text-[10.5px] text-amber-300">Es un día concedido: si lo cambias, deja de ser el de su petición.</p>
+            )}
             <p className="text-[10.5px] text-dark-500">Lo que pongas queda fijado: el motor no lo moverá.</p>
+            </>)}
           </div>
         </div>
       )}

@@ -29694,6 +29694,10 @@ async def resolve_shift_request(req_id: str, data: dict = Body(...),
         raise HTTPException(status_code=404, detail="Solicitud no encontrada")
     if not _user_can_see_center(admin, req.get("center") or ""):
         raise HTTPException(status_code=403, detail="Esa petición es de otro centro")
+    # La canceló el conductor (quizá con la lista de la oficina sin refrescar):
+    # aprobarla ahora le daría un día que ya ha dicho que no quiere.
+    if req.get("status") == "cancelado":
+        raise HTTPException(status_code=409, detail="El conductor ha cancelado esta petición")
     # Ver las peticiones lo puede hacer cualquiera del centro; DECIDIR no.
     if not _puede(admin, "aprobar-dias"):
         raise HTTPException(status_code=403,
@@ -29729,27 +29733,212 @@ async def resolve_shift_request(req_id: str, data: dict = Body(...),
     except Exception as e:
         logger.debug("Push respuesta petición: %s", e)
     if new_status == "aprobado":
-        # Entra en el cuadrante en el acto, y con el CODIGO que le corresponde.
-        # Sin `cod` la celda caia en el 'N/T' generico y en la rejilla no habia
-        # forma de distinguir "libra porque toca" de "libra porque se lo
-        # aprobaste" — que es justo lo que no se puede confundir, porque lo
-        # segundo no se puede cambiar sin hablar con la persona.
-        cod = "N/T APROB" if req["type"] == "libre" else "EXTRA"
-        await _upsert_turno(
-            {"driver_id": req["driver_id"], "date": req["date"]},
-            {"$set": {"driver_id": req["driver_id"], "driver_name": req.get("driver_name", ""),
-                      "center": req["center"], "date": req["date"], "type": req["type"],
-                      "cod": cod, "aprobado_req": req_id},
-             "$unset": {"hora": ""}},
-        )
+        await _turno_aprobado(req)
     elif req.get("status") == "aprobado":
-        # Se ha desaprobado algo que ya estaba aprobado: la marca del cuadrante
-        # tiene que irse con ello, o la celda seguiria bloqueada para siempre.
-        await db.shifts.update_one(
-            {"driver_id": req["driver_id"], "date": req["date"], "aprobado_req": req_id},
-            {"$unset": {"aprobado_req": ""}},
-        )
+        await _turno_desaprobado(req)
     return {"success": True, "status": new_status}
+
+
+# ── EL CONDUCTOR CANCELA O CAMBIA LO QUE PIDIÓ ───────────────────────────────
+# Dani, 30-09-2026: «a los conductores añádeles cancelar peticiones enviadas o
+# cambiarlas, y que esto nos salte una notificación». Sin esto, un día que ya
+# no hace falta se quedaba pedido (o aprobado) y la oficina se enteraba por
+# WhatsApp, si se enteraba. Cancelar deja rastro (`cancelado`, no se borra) y
+# un aprobado cancelado devuelve el cuadrante a lo que había.
+
+def _fechas_dias(fechas: list) -> str:
+    """«16, 17 y 18/10» para los avisos: corto, que se lee en el móvil."""
+    fs = sorted({str(f)[:10] for f in fechas})
+    if not fs:
+        return ""
+    txt = [f"{f[8:10]}/{f[5:7]}" for f in fs[:6]]
+    resto = f" y {len(fs) - 6} más" if len(fs) > 6 else ""
+    return (", ".join(txt[:-1]) + " y " + txt[-1] if len(txt) > 1 and not resto else ", ".join(txt)) + resto
+
+
+@api_router.post("/shift-requests/mias/cancelar")
+async def cancelar_mis_peticiones(data: dict = Body(...), user: dict = Depends(require_any_auth)):
+    """El conductor cancela días que pidió: los que esperan respuesta (de hoy
+    en adelante) y los ya aprobados que aún no han llegado (de mañana en
+    adelante: el de hoy ya está en marcha). La oficina recibe un aviso."""
+    did = user.get("sub")
+    ids = [str(x) for x in _lista_cuerpo((data or {}).get("ids"), 62) if x]
+    if not ids:
+        raise HTTPException(400, "Elige qué días cancelas")
+    hoy = _dia_negocio()
+    reqs = await db.shift_requests.find({"id": {"$in": ids}, "driver_id": did}, {"_id": 0}).to_list(100)
+    ahora = datetime.now(timezone.utc).isoformat()
+    hechas, no = [], []
+    for r in sorted(reqs, key=lambda x: x.get("date") or ""):
+        estado, fecha = r.get("status"), str(r.get("date") or "")
+        if estado == "pendiente" and fecha >= hoy or estado == "aprobado" and fecha > hoy:
+            res = await db.shift_requests.update_one(
+                {"id": r["id"], "status": estado},
+                {"$set": {"status": "cancelado", "cancelado_at": ahora, "cancelado_por": "conductor",
+                          "estado_antes": estado}})
+            if not res.modified_count:
+                no.append({"date": fecha, "motivo": "ya había cambiado"})
+                continue
+            if estado == "aprobado":
+                await _turno_desaprobado(r)
+            hechas.append(r)
+        else:
+            no.append({"date": fecha, "motivo": "ya ha pasado" if fecha < hoy or (estado == "aprobado" and fecha == hoy)
+                       else "ya estaba contestada"})
+    if hechas:
+        nombre = hechas[0].get("driver_name") or "Un conductor"
+        aprobados = [r["date"] for r in hechas if r.get("status") == "aprobado"]
+        try:
+            await push_center_event(
+                hechas[0].get("center") or "",
+                f"↩️ {nombre} cancela {len(hechas)} día{'s' if len(hechas) > 1 else ''}",
+                _fechas_dias([r["date"] for r in hechas])
+                + (f" · {len(aprobados)} ya estaba{'n' if len(aprobados) > 1 else ''} aprobado{'s' if len(aprobados) > 1 else ''}: "
+                   "vuelve al cuadrante como estaba" if aprobados else ""),
+                "/panel/turnos")
+        except Exception as e:                                   # noqa: BLE001
+            logger.debug("Push cancelación de días: %s", e)
+    return {"canceladas": [r["date"] for r in hechas], "no": no}
+
+
+@api_router.post("/shift-requests/mias/cambiar")
+async def cambiar_mi_peticion(data: dict = Body(...), user: dict = Depends(require_any_auth)):
+    """Cambiar una petición que aún espera respuesta: sus días, el motivo o la
+    explicación. Sigue siendo UNA petición para la oficina (mismo `grupo`): los
+    días que se quitan quedan cancelados, los nuevos entran pendientes y los que
+    siguen se quedan como estaban. Se avisa de lo que ha cambiado."""
+    did = user.get("sub")
+    grupo = _texto_cuerpo((data or {}).get("grupo"), 80)
+    viejas = await db.shift_requests.find({"driver_id": did, "grupo": grupo, "status": "pendiente"},
+                                          {"_id": 0}).to_list(62) if grupo else []
+    if not viejas:
+        raise HTTPException(409, "Esa petición ya no está esperando respuesta: no se puede cambiar")
+    hoy = _dia_negocio()
+    nuevas_f = []
+    for d in _lista_cuerpo((data or {}).get("dates"), 62):
+        s = str(d)[:10]
+        if not re.fullmatch(r"\d{4}-\d{2}-\d{2}", s):
+            raise HTTPException(400, f"Fecha no válida: {d}")
+        if s < hoy:
+            raise HTTPException(400, "No se puede pedir un día que ya ha pasado")
+        if s not in nuevas_f:
+            nuevas_f.append(s)
+    if not nuevas_f:
+        raise HTTPException(400, "Deja al menos un día (o cancela la petición)")
+    if len(nuevas_f) > 31:
+        raise HTTPException(400, "Demasiados días en una sola petición (máx. 31)")
+    motivo = _texto_cuerpo((data or {}).get("motivo")) or viejas[0].get("motivo") or "otro"
+    if motivo not in MOTIVOS_PETICION:
+        raise HTTPException(400, "Motivo no válido")
+    nota = (_texto_cuerpo((data or {}).get("note")) or "").strip()
+    if len(nota) < 4:
+        raise HTTPException(400, "Cuenta un poco de qué va: quien lo aprueba necesita saberlo")
+    antes = {r["date"]: r for r in viejas}
+    quitar = [f for f in antes if f not in nuevas_f]
+    anadir = [f for f in nuevas_f if f not in antes]
+    drv = await db.drivers.find_one({"id": did}, {"_id": 0, "name": 1, "center": 1}) or {}
+    if anadir:
+        choques = await _bloqueos_que_afectan(did, drv.get("center") or "", anadir)
+        if choques:
+            raise HTTPException(409, f"Esos días están bloqueados ({', '.join(choques[0]['dias_afectados'][:5])}): "
+                                     f"{choques[0].get('motivo') or 'sin motivo'}")
+        otras = await db.shift_requests.distinct(
+            "date", {"driver_id": did, "date": {"$in": anadir}, "status": {"$in": ["pendiente", "aprobado"]}})
+        if otras:
+            raise HTTPException(409, f"Ya tienes pedido o aprobado el {_fechas_dias(otras)}")
+    cambia_texto = motivo != viejas[0].get("motivo") or nota[:300] != (viejas[0].get("note") or "")
+    if not quitar and not anadir and not cambia_texto:
+        raise HTTPException(400, "No has cambiado nada")
+    ahora = datetime.now(timezone.utc).isoformat()
+    for f in quitar:
+        await db.shift_requests.update_one(
+            {"id": antes[f]["id"], "status": "pendiente"},
+            {"$set": {"status": "cancelado", "cancelado_at": ahora, "cancelado_por": "conductor",
+                      "estado_antes": "pendiente", "cancelado_en_cambio": True}})
+    if cambia_texto:
+        await db.shift_requests.update_many(
+            {"driver_id": did, "grupo": grupo, "status": "pendiente"},
+            {"$set": {"motivo": motivo, "motivo_label": MOTIVOS_PETICION[motivo], "note": nota[:300],
+                      "cambiado_at": ahora}})
+    if anadir:
+        base = viejas[0]
+        await db.shift_requests.insert_many([{
+            "id": str(uuid.uuid4()), "grupo": grupo, "center": base.get("center"), "driver_id": did,
+            "driver_name": base.get("driver_name", ""), "date": f, "type": base.get("type") or "libre",
+            "status": "pendiente", "motivo": motivo, "motivo_label": MOTIVOS_PETICION[motivo],
+            "note": nota[:300], "created_at": ahora, "resolved_by": None, "resolved_at": None,
+            "cambiado_at": ahora} for f in anadir])
+    partes = []
+    if anadir:
+        partes.append(f"añade {_fechas_dias(anadir)}")
+    if quitar:
+        partes.append(f"quita {_fechas_dias(quitar)}")
+    if cambia_texto:
+        partes.append("cambia la explicación")
+    try:
+        await push_center_event(
+            viejas[0].get("center") or "",
+            f"✏️ {viejas[0].get('driver_name') or 'Un conductor'} cambia su petición",
+            f"Ahora: {_fechas_dias(nuevas_f)} · " + ", ".join(partes), "/panel/turnos")
+    except Exception as e:                                       # noqa: BLE001
+        logger.debug("Push cambio de petición: %s", e)
+    return {"ok": True, "dias": sorted(nuevas_f), "anadidos": anadir, "quitados": quitar}
+
+
+_TURNO_ANTES_CAMPOS = ("cod", "type", "extra", "fijada", "hora", "center")
+
+
+async def _turno_aprobado(req: dict):
+    """El día concedido entra en el cuadrante en el acto, con su CÓDIGO y con
+    CANDADO (Dani, 30-09-2026: «que si lo apruebo aparezca en el cuadrante y
+    bloqueado, aunque yo lo pueda desbloquear»).
+
+    Con el código y no el 'N/T' genérico: en la rejilla hay que distinguir
+    «libra porque toca» de «libra porque se lo aprobaste», que no se cambia
+    sin hablar con la persona. Se guarda lo que había (`antes_aprob`) para
+    devolverlo si se desaprueba: antes la celda se quedaba con «N/T APROB» sin
+    estar aprobada, y un 1 rosa pasaba a «N/T APROB» rosa."""
+    filtro = {"driver_id": req["driver_id"], "date": req["date"]}
+    previo = await db.shifts.find_one(filtro, {"_id": 0})
+    if previo and previo.get("aprobado_req") == req["id"]:
+        antes = previo.get("antes_aprob")               # se vuelve a aprobar: lo de antes sigue siendo lo mismo
+    elif previo:
+        antes = {k: previo[k] for k in _TURNO_ANTES_CAMPOS if k in previo}
+    else:
+        antes = {"vacio": True}
+    cod = "N/T APROB" if req["type"] == "libre" else "EXTRA"
+    cambio = {"$set": {"driver_id": req["driver_id"], "driver_name": req.get("driver_name", ""),
+                       "center": req["center"], "date": req["date"], "type": req["type"],
+                       "cod": cod, "aprobado_req": req["id"], "fijada": True, "extra": False},
+              "$unset": {"hora": ""}}
+    if antes is not None:
+        cambio["$set"]["antes_aprob"] = antes
+    await _upsert_turno(filtro, cambio)
+
+
+async def _turno_desaprobado(req: dict):
+    """Se desaprueba lo que estaba aprobado: la celda vuelve a lo que había
+    antes de aprobarlo. Si alguien la cambió después (ya no lleva la marca de
+    esta petición), no se toca: manda lo último que puso una persona."""
+    filtro = {"driver_id": req["driver_id"], "date": req["date"], "aprobado_req": req["id"]}
+    doc = await db.shifts.find_one(filtro, {"_id": 0})
+    if not doc:
+        return
+    antes = doc.get("antes_aprob")
+    if isinstance(antes, dict) and antes.get("vacio"):
+        await db.shifts.delete_one(filtro)
+        return
+    if isinstance(antes, dict) and antes:
+        quitar = {"aprobado_req": "", "antes_aprob": ""}
+        quitar.update({k: "" for k in ("extra", "fijada", "hora") if k not in antes})
+        await db.shifts.update_one(filtro, {"$set": {k: antes[k] for k in _TURNO_ANTES_CAMPOS if k in antes},
+                                            "$unset": quitar})
+        return
+    # Aprobado antes de que se guardara lo de antes: no se sabe qué había. Se
+    # quita la marca y el candado, y el «APROB», que ya no es verdad: queda un
+    # libre normal que el cuadrante puede volver a cuadrar.
+    await db.shifts.update_one(filtro, {"$set": {"cod": "N/T", "type": "libre"},
+                                        "$unset": {"aprobado_req": "", "fijada": "", "extra": ""}})
 
 
 # ─── IMPORTAR EL CUADRANTE PEGÁNDOLO DESDE SHEETS ────────────────────────────
@@ -44130,9 +44319,19 @@ async def cuadrante_celdas(data: dict = Body(...), user: dict = Depends(require_
             continue
         if p["desbloquear"]:
             if doc and doc.get("fijada"):
+                # El candado de un día CONCEDIDO lo quita quien puede aprobar
+                # días: es el que ha dado la palabra a la persona.
+                if doc.get("aprobado_req") and not puede_aprobados:
+                    bloqueadas.append({**p, "motivo": "es un día concedido: solo quien aprueba días puede quitarle el candado"})
+                    continue
                 cambio.anota("shifts", filtro, doc)
                 await db.shifts.update_one(filtro, {"$unset": {"fijada": ""}})
                 guardadas += 1
+            continue
+        # Un día concedido con candado no se cambia de un clic: primero se le
+        # quita el candado (Dani: «bloqueado, aunque yo lo pueda desbloquear»).
+        if doc and doc.get("aprobado_req") and doc.get("fijada"):
+            bloqueadas.append({**p, "motivo": "es un día concedido con candado: quítale el candado para cambiarlo"})
             continue
         cod = p["cod"]
         tipo = _cua_tipo(cod, mapa) if cod else None
@@ -44153,6 +44352,11 @@ async def cuadrante_celdas(data: dict = Body(...), user: dict = Depends(require_
             cambio_doc = {"$set": campos}
             if doc and _cua_cod_turno(doc) != cod:
                 cambio_doc["$unset"] = {"hora": ""}
+            if doc and doc.get("aprobado_req"):
+                # Un día concedido (ya sin candado) cambiado a mano deja de ser
+                # «el de la petición»: si luego se desaprueba, no se deshace
+                # esto. Deshacer lo devuelve entero (se guardó el documento).
+                cambio_doc.setdefault("$unset", {}).update({"aprobado_req": "", "antes_aprob": ""})
             await _upsert_turno(filtro, cambio_doc)
         guardadas += 1
     await cambio.guardar()

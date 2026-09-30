@@ -1375,9 +1375,11 @@ export default function Turnos() {
       const k = s.grupo || s.id
       if (!m.has(k)) m.set(k, { key: k, driver_name: s.driver_name, type: s.type,
         motivo_label: s.motivo_label, note: s.note, created_at: s.created_at,
-        fechas: [], ids: [] })
+        fechas: [], ids: [], cambiada: false })
       const g = m.get(k)
       g.fechas.push(s.date); g.ids.push(s.id)
+      // El conductor la cambió después de mandarla (días o explicación).
+      if (s.cambiado_at) g.cambiada = true
     }
     /* Una peticion cuyo dia YA PASO y sigue sin contestar es una persona que se
        quedo sin respuesta: o vino a trabajar sin saberlo, o no vino sin
@@ -1953,7 +1955,7 @@ export default function Turnos() {
           <div className="mb-3 flex flex-wrap items-end gap-2">
             <div className="flex overflow-hidden rounded-lg border border-dark-700">
               {[['aprobado', 'Aprobados'], ['rechazado', 'Rechazados'],
-                ['pendiente', 'Pendientes'], ['', 'Todos']].map(([k, lbl]) => (
+                ['pendiente', 'Pendientes'], ['cancelado', 'Cancelados'], ['', 'Todos']].map(([k, lbl]) => (
                 <button key={k || 'todos'}
                   onClick={() => setFiltroHist((f) => ({ ...f, estado: k }))}
                   className={`px-2.5 py-1.5 text-[12px] font-semibold transition ${
@@ -2028,8 +2030,11 @@ export default function Turnos() {
                         <span className={`rounded-full px-2 py-0.5 text-[11px] font-semibold ${
                           r.status === 'aprobado' ? 'bg-emerald-500/15 text-emerald-300'
                             : r.status === 'rechazado' ? 'bg-red-500/15 text-red-300'
-                              : 'bg-amber-500/15 text-amber-300'}`}>
-                          {r.status}
+                              : r.status === 'cancelado' ? 'bg-dark-800 text-dark-400'
+                                : 'bg-amber-500/15 text-amber-300'}`}
+                          title={r.status === 'cancelado' ? `La canceló quien la pidió${r.estado_antes === 'aprobado' ? ' cuando ya estaba aprobada' : ''}` : undefined}>
+                          {r.status === 'cancelado'
+                            ? `cancelada por quien la pidió${r.estado_antes === 'aprobado' ? ' (estaba aprobada)' : ''}` : r.status}
                         </span>
                         {/* Un rechazo sin motivo a la vista obliga a preguntar
                             por WhatsApp, que es de lo que se huia. */}
@@ -2390,6 +2395,12 @@ export default function Turnos() {
                     <span className="font-mono text-[12px] text-brand-300">
                       {g.fechas.length} día{g.fechas.length > 1 ? 's' : ''}
                     </span>
+                    {g.cambiada && (
+                      <span className="rounded-full bg-violet-500/15 px-2 py-0.5 text-[11px] font-semibold text-violet-300"
+                        title="La cambió después de mandarla: los días o la explicación">
+                        Cambiada después de mandarla
+                      </span>
+                    )}
                   </div>
                   <p className="mt-1 text-[12.5px] text-dark-400">{g.fechas.map(fmtNum).join(' · ')}</p>
                   {g.note && <p className="mt-1 text-[12.5px] italic text-dark-500">“{g.note}”</p>}
