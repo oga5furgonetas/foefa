@@ -433,6 +433,22 @@ Dani no se creía el 0. Estudio con datos reales (scratchpad de la sesión):
    - Su «2 días a mayores» al pegar el DIARIO en el MENSUAL: David Pombo y
      David Sierra van en distinto orden en las dos hojas, y «1.EXTRA» es texto
      que su RUTAS (=SUM) no cuenta. La hoja de la app no copia: es el mismo dato.
+7. **Repaso del 30-09 por la tarde** (Dani: «perfecciona todo»):
+   - **La hoja**: filas memorizadas y un solo manejador de ratón (1,5 ms por
+     tecla con 68 personas × 42 días); escribir encima y flecha guarda y mueve
+     como en Excel; un espacio suelto no vacía; se confirma antes de vaciar más
+     de 40 celdas o pegar más de 200; el 7º día seguido en rojo también aquí;
+     semanas separadas, hoy marcado y RUTAS/MÁXIMA/DIFERENCIA fijas abajo. En el
+     móvil la columna «#» se encogía a 21 px y el nombre tapaba 11 px del primer
+     día («/T» en vez de «N/T»): `min-w` en las columnas fijas.
+   - **Móviles**: filas en rejilla; en el móvil, dos líneas por fila (antes el
+     estado y la papelera se salían por la derecha).
+   - **Turnos**: aprobar un grupo con un día que el conductor ya canceló sigue
+     con los demás y lo dice (antes se paraba a la mitad con 409).
+   - **Portal**: cambiar una petición ya no cancela un día pasado sin contestar
+     de la misma petición (salía «quita 28/09» sin tocarlo).
+   - **Modo claro**: el naranja pasa a `#9a3412` (el `#c2410c` daba 4,2:1 sobre
+     su propio fondo tintado y la prueba de contraste fallaba en el CI).
 
 ## Pendiente (por prioridad)
 
@@ -487,6 +503,13 @@ Dani no se creía el 0. Estudio con datos reales (scratchpad de la sesión):
   en producción está cerrado a propósito), no `server.app.routes`.
 - Las pruebas de Playwright corren contra `dist` (`vite preview`): si se toca
   el código, recompilar antes, o la prueba mira la versión vieja.
+- El CI pasa TODAS las pruebas de Playwright en escritorio y en móvil
+  (`npm run e2e`), no solo `humo`: antes de subir, `npx playwright test`.
+- Los `scripts/check-*.mjs` se corren desde la raíz del repo; desde
+  `frontend/` alguno revienta con ENOENT (busca `frontend/tailwind.config.js`).
+- La prueba de rendimiento de la hoja mide el trabajo de cada tecla (mediana),
+  no la espera al fotograma, que con todo en paralelo la hacía fallar a veces.
+  Sin memorizar las filas da ~9,5 ms; el límite es 5.
 - El usuario de Atlas no puede `dropDatabase`: las bases de prueba se vacían
   colección a colección.
 - La demo es de solo lectura (403 al escribir). Para probar escrituras:
