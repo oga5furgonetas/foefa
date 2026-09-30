@@ -61,6 +61,9 @@ export function stripDateline(text: string): string {
   }
   const bare = text.match(/^\p{Lu}[\p{Lu}\s.'’-]{2,40},\s*\d{1,2}(?:\.|\s+\p{L}{3,10}\.?)?\s+(?=\p{Lu})/u);
   if (bare && text.length - bare[0].length > 20) return text.slice(bare[0].length);
+  // Solo la agencia, sin ciudad: «AGI - Todavía no se conoce…», «EFE.- El Gobierno…».
+  const agencyOnly = text.match(/^([\p{L}][\p{L}\s]{1,20}?)\s*\.?\s*[-—–]\s+(?=\p{Lu})/u);
+  if (agencyOnly && originFromToken(agencyOnly[1]) && text.length - agencyOnly[0].length > 20) return text.slice(agencyOnly[0].length);
   return text;
 }
 

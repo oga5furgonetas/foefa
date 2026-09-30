@@ -257,3 +257,11 @@ describe('ladillos en mayúsculas', () => {
     expect(claims.some((c) => /presidente del TC/.test(c.text))).toBe(true);
   });
 });
+
+describe('firma de agencia sin ciudad', () => {
+  it('«AGI - …» y «EFE.- …» se quitan; un guion normal no', () => {
+    expect(stripDateline('AGI - Todavía no se conoce el autor del asesinato de Giulio Regeni.')).toBe('Todavía no se conoce el autor del asesinato de Giulio Regeni.');
+    expect(stripDateline('EFE.- El Gobierno aprobó este martes el decreto de vivienda.')).toBe('El Gobierno aprobó este martes el decreto de vivienda.');
+    expect(stripDateline('Real Madrid - Barcelona terminó con empate a dos en el Bernabéu.')).toBe('Real Madrid - Barcelona terminó con empate a dos en el Bernabéu.');
+  });
+});

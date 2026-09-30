@@ -202,17 +202,9 @@ export function writeDeterministic(fs: FactSheet, opts: WriteOptions = {}): Draf
     body.push({ type: 'quote', text: c.quote.text, speaker: c.quote.speaker, claimIds: [claimRef(c)], sourceUrl: c.supporters[0]?.url ?? '' });
   }
 
-  // ── Discrepancias ──
-  if (fs.discrepancies.length) {
-    body.push({ type: 'h2', text: P.headings.discrepancies });
-    body.push({
-      type: 'list',
-      items: fs.discrepancies.slice(0, 4).map((d) => {
-        const parts = d.parts.map((p) => `${p.source}: ${formatValue(p.value, nf, lang)}`).join('; ');
-        return { text: bp(P.discrepancy(P.fieldNames[d.field] ?? d.field, parts)), claimIds: [] };
-      }),
-    });
-  }
+  // ── Discrepancias ── solo en el recuadro «Cómo verificamos» (plegado), no en el cuerpo:
+  // «Las fuentes no coinciden en los números: Euronews: 17; TGCom24: 10» sin decir 17 qué es
+  // ruido para quien lee la noticia (30-09-2026).
 
   // ── No confirmado ──
   const unconf = fs.unconfirmed.filter((c) => !used.has(c.key)).slice(0, 4);
