@@ -176,6 +176,23 @@ si algo no tiene respaldo). Grok (xAI) NO sirve gratis: la cuenta de Dani no tie
    Stripe + webhook, Resend (correo), Google/Apple, Sentry, S3/R2 para copias fuera de
    Fly, cuentas de Bluesky/Mastodon/X para publicar en redes. VAPID ya está generado.
 
+## 30-09-2026: el worker parado, la portada limpia y la IA que rescata
+
+- **El worker se quedaba parado tras cada despliegue** sin decir nada: la conexión colgada del
+  worker anterior retenía el candado consultivo del ciclo (horas) y el nuevo se saltaba todos los
+  ciclos en silencio (el 30-09, de 07:14 a 08:27 sin publicar). Ahora, al arrancar, libera el
+  candado de conexiones anteriores (solo hay UN worker) y registra si alguna vez está ocupado.
+- **Portada sin ruido**: el recuadro «Cómo verificamos», las fuentes y la cronología van plegados
+  bajo «✓ Ver cómo la verificamos y sus N fuentes»; las «discrepancias» sin contexto ya no salen
+  en el cuerpo.
+- **Retenidas**: los titulares de fuente pueden tener hasta 22 palabras (con 16 se retenían
+  noticias enteras); la IA escribe también sobre un armazón cuando el redactor determinista no
+  puede; se quitan los párrafos de la IA que copian más de 30 palabras seguidas. En local, de 13
+  retenidas por ciclo a 1 (y esa, por el control legal).
+- Fuera notas de prensa de pago (PRNewswire…), sorteos, ladillos en mayúsculas, tuits incrustados.
+- Registros del worker: `fase` (ms por fase) y `retenida` (motivo por historia), para diagnosticar
+  sin leer la base de producción.
+
 ## Pendiente (no bloqueado)
 
 - **Historias-tema: arreglado el 30-09-2026.** El agrupador comparaba cada pieza con el
