@@ -34,6 +34,10 @@ export function ArticleView({ data, lang, d, tz, experiment }: { data: ArticleDe
   const verification = a.verification as VerificationBox;
   const body = a.body as ArticleBlock[];
   const langName = (code: string) => LANGUAGES.find((l) => l.code === code)?.nativeName ?? code;
+  // «En esta noticia»: solo personas y organizaciones que aparecen en ESTE texto. Salían «USA»,
+  // «EUA» y «Stati Uniti» a la vez, y nombres de otra historia (30-09-2026).
+  const articleText = [headline, a.summary, ...body.map((b) => ('text' in b ? b.text : b.type === 'list' ? b.items.map((i) => i.text).join(' ') : ''))].join(' ');
+  const shownEntities = entities.filter((e) => e.type !== 'place' && e.type !== 'other' && articleText.includes(e.name)).slice(0, 8);
 
   return (
     <>
@@ -266,13 +270,13 @@ export function ArticleView({ data, lang, d, tz, experiment }: { data: ArticleDe
           </section>
         )}
 
-        {entities.length > 0 && (
+        {shownEntities.length > 0 && (
           <section aria-labelledby="ent-h">
             <h2 id="ent-h" className="kicker" style={{ fontSize: 14, color: 'var(--ink)' }}>
               {d.article.entities}
             </h2>
             <ul className="tag-list">
-              {entities.map((e) => (
+              {shownEntities.map((e) => (
                 <li key={e.id}>
                   <Link href={href.topic(lang, e.slug)}>{e.name}</Link>
                 </li>

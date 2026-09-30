@@ -11,7 +11,7 @@ import { callJson } from '../ai/router';
 import type { LlmProvider } from '../ai/types';
 import { languageDef } from '../config/languages';
 import { extractNumbers } from '../text/numbers';
-import { truncate } from '../text/normalize';
+import { fold, truncate } from '../text/normalize';
 import { claimRef, writeDeterministic, type WriteOptions } from './deterministic';
 import type { Draft } from './draft';
 import type { FactSheet } from './factsheet';
@@ -83,6 +83,7 @@ Hard rules:
 - If the story is "developing", say so plainly and attribute everything that is not confirmed.
 - When you attribute, name the source exactly as written in the claim's "sources" field ("según El Confidencial", "according to BBC News"). Never use vague attributions such as "according to reports", "sources say", "another outlet", "the newspaper", "the cited sources". Attribute each sentence once, not twice.
 - Open with the most important confirmed fact (who, what, where, when), then context and details, then reactions and what comes next, like a quality newspaper. One idea per paragraph.
+- "summary" is ONE sentence of at most 35 words; "subheadline" at most 20 words; "headline" at most 14 words.
 - The headline must accurately represent the article. No clickbait, no exaggeration, no questions, no exclamation marks.
 - Use the target language's journalistic conventions for dates, numbers, institutions and names.`;
 
@@ -156,7 +157,19 @@ export async function writeWithLlm(db: Db, fs: FactSheet, opts: WriteOptions & {
   );
   // Si la reparación deja poco, no merece la pena: mejor el redactor determinista.
   if (aiBlocks.length < 2) return null;
-  const structural = base.body.filter((b, i) => b.type === 'h2' || (i > 0 && b.type !== 'p'));
+  // Secciones fijas (datos clave, no confirmado, qué puede pasar), sin lo que ya cuenta la IA:
+  // «Qué puede pasar ahora» repetía la primera frase del artículo (30-09-2026).
+  const told = words(aiBlocks.map((b) => b.text).join(' '));
+  const fresh = (t: string) => {
+    const w = [...words(t)];
+    return !w.length || w.filter((x) => told.has(x)).length / w.length < 0.6;
+  };
+  const kept = base.body
+    .filter((b, i) => b.type === 'h2' || (i > 0 && b.type !== 'p'))
+    .map((b) => (b.type === 'list' ? { ...b, items: b.items.filter((it) => fresh(it.text)) } : b))
+    .filter((b) => b.type !== 'list' || b.items.length > 0);
+  // Un apartado que se ha quedado sin contenido, fuera también.
+  const structural = kept.filter((b, i) => b.type !== 'h2' || (kept[i + 1] && kept[i + 1].type !== 'h2'));
   return {
     ...base,
     headline: out.headline.trim(),
@@ -242,4 +255,9 @@ function unflatten(body: ArticleBlock[], texts: string[]): ArticleBlock[] {
     if (b.type === 'list') return { ...b, items: b.items.map((it) => ({ ...it, text: texts[i++] })) };
     return { ...b, text: texts[i++] } as ArticleBlock;
   });
+}
+
+/** Palabras con peso de un texto (más de 4 letras, sin acentos). */
+function words(s: string): Set<string> {
+  return new Set(fold(s).split(/\W+/).filter((w) => w.length > 4));
 }
