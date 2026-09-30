@@ -468,10 +468,16 @@ Dani no se creía el 0. Estudio con datos reales (scratchpad de la sesión):
    conductores): NO se hacen sin su sí. Pregunta abierta a Dani: qué pasó
    «hace 2 días» (24-09) que no quiere que se repita; no está en las notas.
 2. **Atlas se suspende el 01-10-2026** (la organización tiene facturas sin
-   pagar y Dani no quiere pagar). `cluster1` parece estar en esa misma
-   organización: hace falta una organización NUEVA gratis, clúster M0, copiar
-   `flota`, `flota_global`, `dsp_demo`, `edge_os` y cambiar `MONGO_URL` en Fly.
-   Hay copia diaria en R2 (04:00) y la copia local, pero la app se caería.
+   pagar y Dani no quiere pagar). **Comprobado el 30-09 a las 21:00**: el
+   servidor usa `cluster1.r5ruvvc.mongodb.net`, el proyecto donde salió el
+   aviso «suspend 10/01/26» en la captura de Dani del 26-09; la organización
+   nueva no se había creado. Hace falta una organización NUEVA gratis, clúster
+   M0, copiar `flota`, `flota_global`, `dsp_demo`, `edge_os` (110 MB, cabe en un
+   M0) y cambiar `MONGO_URL` en Fly. Copia manual del 30-09 20:59 en R2
+   (`backups/flota_2026-09-30_1859_…`, 156.061 documentos) descifrada y leída
+   entera en el servidor; la clave de `.flota-copias-clave.txt` es la buena
+   (huella ceb876a5). Las copias no llevan `_id`: para mudarse, mejor copiar
+   de base a base (con `_id` e índices) que restaurar la copia.
 3. Correo (Resend/Brevo), WhatsApp (claves `WHATSAPP_*`) y pagos: sin
    configurar. Telegram SÍ funciona (su config venía en los datos).
 4. Investigaciones de DNR y portal `/dnr/t/` de FlotaDSP: no recuperados
