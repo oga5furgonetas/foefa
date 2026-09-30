@@ -410,6 +410,29 @@ Dani no se creía el 0. Estudio con datos reales (scratchpad de la sesión):
      `POST/DELETE /drivers/{id}/traslado` + `_bucle_traslados` (15 min, todas
      las empresas, latido `traslados`, `historial_centros`). Fran Gil, a OGA5
      el 05-10 (programado en producción).
+6. **Noche del 30-09**:
+   - **Plantilla → pestaña Móviles** (`moviles`, `moviles_de`): extensiones del
+     centro (4114, 1117…), a cada conductor SU móvil o PROPIO y uno DE RESERVA;
+     «Pegar la lista de tu hoja» (CONDUCTOR → MÓVIL, la matrícula de al lado se
+     ignora). «Poner móviles» pone el suyo y, si ese día ya lo lleva otro de la
+     hoja, el de reserva (`_mov_repartir`: nunca el mismo móvil a dos). Sin
+     móviles dados de alta en el centro, como antes (el de la ficha).
+   - **Días libres ↔ cuadrante**: aprobar pone la celda con CANDADO y guarda lo
+     de antes (`antes_aprob`); desaprobar lo devuelve. Un día concedido con
+     candado no se cambia en la rejilla; el candado lo quita quien aprueba días.
+   - **Portal del conductor**: «Tus peticiones»: cambiar lo pendiente (sigue
+     siendo UNA petición), cancelarlo, o devolver un aprobado futuro (vuelve el
+     cuadrante como estaba). Aviso a la oficina de cada cosa. No se puede
+     aprobar una petición cancelada (409).
+   - **La hoja** («Abrir como hoja (Excel)» en el Cuadrante, `panel/hoja/`):
+     DIARIO / MENSUAL / DEBER HORAS a pantalla completa, manejo de Excel
+     (useRejilla: selección, teclado, Ctrl+C/V con tabuladores, Ctrl+Z que solo
+     deshace lo suyo: `solo_si`). DIARIO = el mismo turno + apuntes
+     (`cuadrante_diario`); DEBER HORAS (`cuadrante_deber_horas`): su registro
+     traído del Excel en producción (65 filas, 18 pendientes).
+   - Su «2 días a mayores» al pegar el DIARIO en el MENSUAL: David Pombo y
+     David Sierra van en distinto orden en las dos hojas, y «1.EXTRA» es texto
+     que su RUTAS (=SUM) no cuenta. La hoja de la app no copia: es el mismo dato.
 
 ## Pendiente (por prioridad)
 
