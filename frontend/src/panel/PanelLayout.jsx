@@ -539,10 +539,9 @@ export default function PanelLayout() {
     // para todo el que tenga permisos definidos —el permiso no existe en
     // ninguna lista— y la entrada desaparecía del menú sin ningún error.
     if (k === 'ordenes') return canSee('talleres')
-    // El cuadrante va con Turnos (29-09-2026): quien lleva los días libres de
-    // la gente es quien hace el cuadrante. Sin heredar, nadie con permisos a
-    // medida lo vería hasta marcarle una casilla nueva uno por uno.
-    if (k === 'cuadrante') return canSee('turnos')
+    // El cuadrante iba con Turnos (29-09-2026) y desde el 30-09 tiene casilla
+    // propia (Dani: «¿no puedo marcarle cuadrante?»): el servidor se la marcó
+    // una vez a quien tenía Días libres (`migrar_permiso_cuadrante`).
     if (!SIEMPRE_VISIBLES.has(k) && !canSee(k)) return false
     const feat = ROUTE_FEATURE[k]
     if (feat && limits && limits[feat] === false) return false
@@ -570,7 +569,6 @@ export default function PanelLayout() {
     if (SIEMPRE_VISIBLES.has(k)) return true
     if (k === 'vencimientos') return EXPIRY_KEYS.some((ek) => canSee(ek))
     if (k === 'ordenes') return canSee('talleres')
-    if (k === 'cuadrante') return canSee('turnos')
     if (k === 'admin' || k === 'bandeja' || k === 'analitica' || k === 'gastos' || k === 'valor') return sa
     if (k === 'tienda' && !esPlataforma()) return false
     if (k === 'usuarios') return sa || cm

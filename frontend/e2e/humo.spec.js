@@ -516,7 +516,8 @@ test.describe('Cuadrante', () => {
 
 /* USUARIOS: la lista de permisos es la del menú, las pantallas que van con
    otra salen detrás de la suya y la tabla dice quién ve cada una con la MISMA
-   cuenta que el menú (30-09-2026: «ver quién puede ver cada cosa»). */
+   cuenta que el menú (30-09-2026: «ver quién puede ver cada cosa»). Y el
+   Cuadrante con su casilla («¿no puedo marcarle cuadrante?»). */
 test.describe('Usuarios', () => {
   test('quién ve cada pantalla, y editar desde la tabla', async ({ page }) => {
     const fallos = vigilar(page)
@@ -525,22 +526,30 @@ test.describe('Usuarios', () => {
     await page.route(/\/api\/auth\/admins/, (route) => route.fulfill({ status: 200, contentType: 'application/json',
       body: JSON.stringify([
         { id: 'a1', name: 'Dani', username: 'dani', super_admin: true },
-        { id: 'a2', name: 'Mery', username: 'Mery', permissions: ['turnos', 'conductores'], allowed_centers: ['OGA5'], admin_role: 'dispatcher' },
+        { id: 'a2', name: 'Mery', username: 'Mery', permissions: ['cuadrante', 'conductores'], allowed_centers: ['OGA5'], admin_role: 'dispatcher' },
         { id: 'a3', name: 'Luis', username: 'luis', permissions: null },
       ]) }))
     await page.goto('/panel/usuarios', { waitUntil: 'domcontentloaded' })
     await expect(page.getByText('Mery', { exact: true })).toBeVisible({ timeout: 15000 })
-    await expect(page.getByText('ve 8 de 29 pantallas')).toBeVisible()
+    await expect(page.getByText('ve 7 de 29 pantallas')).toBeVisible()
     await page.getByRole('button', { name: 'Quién ve cada pantalla' }).click()
     const fila = (nombre) => page.locator('tr', { has: page.locator('td', { hasText: new RegExp(`^${nombre}$`) }) })
-    // Mery: el Cuadrante sí (va con Días libres), las Órdenes no (no tiene Talleres).
+    // Mery: el Cuadrante sí y los Días libres no (van cada uno por su lado);
+    // las Órdenes, no (van con Talleres, que no tiene).
     await expect(fila('Cuadrante').locator('td').nth(2).getByLabel('la ve')).toBeVisible()
+    await expect(fila('Días libres').locator('td').nth(2).getByLabel('no la ve')).toBeVisible()
     await expect(fila('Órdenes de taller').locator('td').nth(2).getByLabel('no la ve')).toBeVisible()
     await expect(fila('Asignación diaria').locator('td').nth(2)).toHaveText('siempre')
     await expect(fila('Vehículos').locator('td').nth(3).getByLabel('la ve')).toBeVisible()
     await page.getByRole('button', { name: 'Editar' }).first().click()
-    await expect(page.getByText('Ve 8 de 29 pantallas del menú.')).toBeVisible()
-    await expect(page.getByText('· va con Días libres')).toBeVisible()
+    await expect(page.getByText('Ve 7 de 29 pantallas del menú.')).toBeVisible()
+    await expect(page.getByText('· va con Talleres')).toBeVisible()
+    // El Cuadrante se marca y desmarca como cualquier otra.
+    const cuadrante = page.getByRole('button', { name: 'Cuadrante', exact: true })
+    await expect(cuadrante).toHaveAttribute('aria-pressed', 'true')
+    await cuadrante.click()
+    await expect(cuadrante).toHaveAttribute('aria-pressed', 'false')
+    await expect(page.getByText('Ve 6 de 29 pantallas del menú.')).toBeVisible()
     expect(fallos, fallos.join(' | ')).toHaveLength(0)
   })
 })

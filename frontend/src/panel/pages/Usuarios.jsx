@@ -36,6 +36,8 @@ const MODULES = [
   ]},
   { g: 'nav.g.reparto', items: [
     ['asignacion', 'nav.assign'], ['plantilla', 'nav.template'], ['diarios', 'nav.dnr'], ['horas', 'nav.horas'],
+    // Con casilla propia desde el 30-09-2026 (antes iba con Días libres).
+    ['cuadrante', 'nav.cuadrante'],
     ['turnos', 'nav.shifts'], ['aprobar-dias', 'Aprobar días libres'], ['checklist-operativo', 'nav.checklist'],
   ]},
   { g: 'nav.g.personas', items: [
@@ -54,7 +56,6 @@ const MODULES = [
    suya para que se vea quién las tiene sin buscarlo. */
 const VAN_CON = {
   talleres: [['ordenes', 'nav.ordenes']],
-  turnos: [['cuadrante', 'nav.cuadrante']],
 }
 const DE_VENCIMIENTOS = new Set(['avisos-itv', 'renting', 'casas-alquiler'])
 const CAPACIDADES = new Set(['aprobar-dias'])

@@ -23820,6 +23820,29 @@ async def start_traslados():
     asyncio.create_task(_bucle_traslados())
 
 
+@app.on_event("startup")
+async def migrar_permiso_cuadrante():
+    """El Cuadrante tiene casilla propia desde el 30-09-2026 (Dani, en Usuarios:
+    «¿no puedo marcarle cuadrante?»). Hasta entonces iba con Días libres: a quien
+    ya lo veía por tener Días libres se le marca UNA sola vez, para que nadie lo
+    pierda. Después cada casilla va por su lado: si alguien se lo quita a una
+    persona, no vuelve a aparecer en el siguiente despliegue."""
+    marca = "migracion_permiso_cuadrante"
+    try:
+        if await global_db.app_meta.find_one({"_id": marca}):
+            return
+        r = await global_db.admin_users.update_many(
+            {"$and": [{"permissions": "turnos"}, {"permissions": {"$ne": "cuadrante"}}]},
+            {"$addToSet": {"permissions": "cuadrante"}})
+        await global_db.app_meta.insert_one({"_id": marca, "en": datetime.now(timezone.utc).isoformat(),
+                                             "usuarios": r.modified_count})
+        logger.info("Permiso de Cuadrante propio: marcado a %d usuarios que tenían Días libres", r.modified_count)
+    except DuplicateKeyError:
+        pass
+    except Exception as e:                                       # noqa: BLE001
+        logger.error("Migración del permiso de Cuadrante: %s", e)
+
+
 @api_router.post("/drivers/{driver_id}/traslado")
 async def programar_traslado(driver_id: str, data: dict = Body(...), user: dict = Depends(require_admin)):
     """Deja programado que esta ficha pasa a otro centro un día. Si ese día ya

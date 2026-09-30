@@ -401,7 +401,9 @@ Dani no se creía el 0. Estudio con datos reales (scratchpad de la sesión):
    - Domingos: el 1 y el N/T en naranja como en su hoja, franja por toda la
      columna hasta Diferencia (el rosa y los códigos con color propio mandan).
    - **Usuarios**: las casillas con los mismos grupos, orden y nombres que el
-     menú; Cuadrante y Órdenes detrás de la suya («va con…»); «Ve N de 29
+     menú; Órdenes detrás de Talleres («va con…»); el CUADRANTE con casilla
+     propia (Dani: «¿no puedo marcarle cuadrante?»; `migrar_permiso_cuadrante`
+     se lo marcó UNA vez a los 13 que tenían Días libres); «Ve N de 29
      pantallas»; vista «Quién ve cada pantalla» (pantallas × usuarios, la
      misma cuenta que el menú: `veLaPantalla`) con «Editar» por usuario.
    - **Cambio de centro programado**: `traslado` en la ficha +
