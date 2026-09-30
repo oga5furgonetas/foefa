@@ -50,8 +50,18 @@ const ABREV = { 'N/T APROB': 'APR', APROBADO: 'APR', EXTRA: 'EX', RIDE: 'RA', CO
 /* Colores: los de la hoja donde los hay, y pares texto/fondo que se leen en
    los tres temas (el rosa no tiene compensación en el tema claro: por eso el
    texto del día extra es el de la rampa, que sí se invierte). */
-function claseCodigo(cod, extra) {
+/* El domingo, la columna entera en naranja como en su hoja (Dani, 30-09-2026:
+   «márcame los domingos con un color distinto toda la columna»): el 1 y el
+   N/T cambian de color; el rosa del extra y los códigos con color propio
+   mandan, igual que en el Excel que se exporta. */
+const DOMINGO_TRABAJA = 'bg-orange-500/35 text-dark-50'
+const DOMINGO_LIBRA = 'bg-orange-500/[0.18] text-orange-300'
+const COLUMNA_DOMINGO = 'bg-orange-500/[0.12]'
+
+function claseCodigo(cod, extra, domingo = false) {
   if (extra) return 'bg-pink-500/35 text-dark-50 ring-1 ring-pink-400/60'
+  if (domingo && ['1', 'T', 'X'].includes(cod)) return DOMINGO_TRABAJA
+  if (domingo && ['N/T', 'L'].includes(cod)) return DOMINGO_LIBRA
   switch (cod) {
     case '1': case 'T': case 'X': return 'bg-dark-800 text-dark-50'
     case 'N/T': case 'L': return 'bg-amber-200/15 text-amber-200'
@@ -993,8 +1003,11 @@ export default function Cuadrante() {
   const ultimaMax = Object.keys(datos?.maximas || {}).sort().pop()
   const hayExtras = dias.some((f) => porDia[f]?.extras > 0)
 
+  /* Con el chat abierto en pantalla ancha, TODA la página deja su hueco a la
+     derecha: antes solo la tabla, y la cabecera y los botones quedaban debajo
+     del chat. */
   return (
-    <div className="space-y-4">
+    <div className={`space-y-4 ${verChat ? 'xl:pr-[376px]' : ''}`}>
       <header className="flex flex-wrap items-end gap-3">
         <div className="min-w-0">
           <p className="font-mono text-[10px] font-bold uppercase tracking-[0.24em] text-brand-400/80">{center}</p>
@@ -1048,7 +1061,7 @@ export default function Cuadrante() {
         </p>
       )}
 
-      <div className={`flex items-start gap-4 ${verChat ? 'xl:pr-[376px]' : ''}`}>
+      <div className="flex items-start gap-4">
         <div className="min-w-0 flex-1 space-y-4">
           {pestana === 'cuadrante' && (
             <>
@@ -1219,14 +1232,15 @@ export default function Cuadrante() {
                             const septimo = septimos.has(k)
                             return (
                               <td key={f} className={`px-[1px] py-[1px] text-center ${
-                                f === hoy ? 'bg-amber-400/[0.06]' : wd(f) === 6 ? 'bg-orange-500/[0.07]' : ''} ${
+                                wd(f) === 6 ? COLUMNA_DOMINGO : f === hoy ? 'bg-amber-400/[0.06]' : ''} ${
                                 wd(f) === 0 ? 'border-l border-dark-600' : ''}`}>
                                 <button onClick={(e) => pulsarCelda(e, p, f)}
                                   title={`${p.nombre} · ${DIA[wd(f)]} ${fmt(f)} · ${cod || 'sin poner'}${c?.hora ? ` (${c.hora})` : ''}${
                                     c?.extra ? ' · DÍA EXTRA' : ''}${c?.fijada ? ' · fijada a mano' : ''}${c?.otro_centro ? ` · en ${c.otro_centro}` : ''}${
                                     c?.propuesta ? ` · antes: ${c.antes || 'vacío'}` : ''}${septimo ? ' · 7º DÍA SEGUIDO' : ''}`}
                                   className={`relative h-6 w-9 rounded-[3px] text-[10px] font-bold leading-none ${cod
-                                    ? claseCodigo(cod, c?.extra) : 'border border-dashed border-dark-800 text-dark-500'} ${
+                                    ? claseCodigo(cod, c?.extra, wd(f) === 6)
+                                    : `border border-dashed text-dark-500 ${wd(f) === 6 ? 'border-orange-500/40' : 'border-dark-800'}`} ${
                                     c?.otro_centro ? 'opacity-40' : ''} ${c?.propuesta ? 'outline outline-2 outline-violet-400' : ''} ${
                                     septimo ? 'outline outline-2 outline-red-500' : ''}`}>
                                   {cod ? (ABREV[cod] || cod) : '·'}
@@ -1242,7 +1256,7 @@ export default function Cuadrante() {
                       <tr className="border-t-2 border-dark-600">
                         <td className="sticky left-0 z-10 bg-dark-900 px-2 py-1 text-[11px] font-bold text-dark-200">Rutas (cuenta de 1)</td>
                         {dias.map((f) => (
-                          <td key={f} className="px-[1px] py-1 text-center">
+                          <td key={f} className={`px-[1px] py-1 text-center ${wd(f) === 6 ? COLUMNA_DOMINGO : ''}`}>
                             <span className="inline-block w-9 rounded-[3px] bg-sky-500/20 py-0.5 text-[11px] font-bold text-sky-300">{porDia[f]?.rutas}</span>
                           </td>
                         ))}
@@ -1251,7 +1265,7 @@ export default function Cuadrante() {
                       <tr>
                         <td className="sticky left-0 z-10 bg-dark-900 px-2 py-1 text-[11px] font-bold text-dark-200">Máxima</td>
                         {dias.map((f) => (
-                          <td key={f} className="px-[1px] py-0.5 text-center">
+                          <td key={f} className={`px-[1px] py-0.5 text-center ${wd(f) === 6 ? COLUMNA_DOMINGO : ''}`}>
                             <input type="number" min={0} max={999} aria-label={`Máxima del ${fmt(f)}`}
                               value={maxEdit[f] ?? datos?.maximas?.[f] ?? ''}
                               onChange={(e) => setMaxEdit((m) => ({ ...m, [f]: e.target.value }))}
@@ -1269,7 +1283,7 @@ export default function Cuadrante() {
                         {dias.map((f) => {
                           const d = porDia[f] || {}
                           return (
-                            <td key={f} className="px-[1px] py-1 text-center">
+                            <td key={f} className={`px-[1px] py-1 text-center ${wd(f) === 6 ? COLUMNA_DOMINGO : ''}`}>
                               <button onClick={() => d.extras && setDiaExtra(f)} disabled={!d.extras}
                                 title={d.extras ? `${d.extras} días extra: pulsa para dar libres` : `Objetivo +${d.colchon}`}
                                 className={`w-9 rounded-[3px] py-0.5 text-[11px] font-bold ${claseDif(d)} ${d.extras ? 'cursor-pointer ring-1 ring-pink-400/50' : 'cursor-default'}`}>
@@ -1291,7 +1305,7 @@ export default function Cuadrante() {
                   <span key={c} className="flex items-center gap-1.5"><i className={`inline-block h-3 w-5 rounded-sm ${claseCodigo(c)}`} /> {t}</span>
                 ))}
                 <span className="flex items-center gap-1.5"><i className={`inline-block h-3 w-5 rounded-sm ${claseCodigo('1', true)}`} /> Día extra (se puede quitar)</span>
-                <span className="flex items-center gap-1.5"><i className="inline-block h-3 w-5 rounded-sm bg-orange-500/15" /> Domingo</span>
+                <span className="flex items-center gap-1.5"><i className={`inline-block h-3 w-5 rounded-sm ${DOMINGO_TRABAJA}`} /> Domingo</span>
                 <span className="flex items-center gap-1.5"><Lock size={11} /> Fijada a mano</span>
                 <span className="flex items-center gap-1.5"><i className="inline-block h-3 w-5 rounded-sm outline outline-2 outline-violet-400" /> Cambio propuesto</span>
                 <span className="flex items-center gap-1.5"><i className="inline-block h-3 w-5 rounded-sm outline outline-2 outline-red-500" /> 7º día seguido</span>

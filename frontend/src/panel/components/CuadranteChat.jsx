@@ -156,8 +156,10 @@ export default function CuadranteChat({ center, desde, hasta, onAplicado, onCerr
     } catch { /* se ve al recargar */ } finally { setOcupado('') }
   }
 
+  /* Opaco: con `.card` (fondo al 70 %) se leía la tabla de debajo a través de
+     los mensajes (30-09-2026, «se superpone texto por debajo»). */
   return (
-    <aside className="card flex h-full min-h-[420px] flex-col overflow-hidden">
+    <aside className="flex h-full min-h-[420px] flex-col overflow-hidden rounded-xl border border-dark-700 bg-dark-900 shadow-2xl shadow-black/30">
       <header className="flex items-center gap-2 border-b border-dark-800 px-3 py-2.5">
         <MessageSquare size={15} className="text-brand-400" />
         <h2 className="text-sm font-bold text-dark-100">Asistente del cuadrante</h2>
