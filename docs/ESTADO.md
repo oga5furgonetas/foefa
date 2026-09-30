@@ -507,9 +507,10 @@ Dani no se creía el 0. Estudio con datos reales (scratchpad de la sesión):
   (`npm run e2e`), no solo `humo`: antes de subir, `npx playwright test`.
 - Los `scripts/check-*.mjs` se corren desde la raíz del repo; desde
   `frontend/` alguno revienta con ENOENT (busca `frontend/tailwind.config.js`).
-- La prueba de rendimiento de la hoja mide el trabajo de cada tecla (mediana),
-  no la espera al fotograma, que con todo en paralelo la hacía fallar a veces.
-  Sin memorizar las filas da ~9,5 ms; el límite es 5.
+- La prueba de rendimiento de la hoja no exige milisegundos (en el CI, más
+  lento, fallaría sin haberse roto nada) sino una proporción medida a la vez:
+  una tecla / repintar la hoja entera (Ctrl+A). Memorizada, 0,03–0,07; sin
+  memorizar las filas, 0,20; el límite es 0,12 (y 16 ms como tope absoluto).
 - El usuario de Atlas no puede `dropDatabase`: las bases de prueba se vacían
   colección a colección.
 - La demo es de solo lectura (403 al escribir). Para probar escrituras:

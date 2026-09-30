@@ -610,29 +610,44 @@ test.describe('Cuadrante', () => {
     await page.getByRole('dialog', { name: 'Hoja del cuadrante' }).getByLabel('Hasta').fill(dia(41))
     await expect(page.locator('[data-celda="67-41"]')).toBeVisible({ timeout: 15000 })
     await page.locator('[data-celda="0-0"]').click()
-    // Medido DENTRO del navegador (lo de fuera mide sobre todo a Playwright) y
-    // solo el trabajo de cada tecla —pintar lo que cambia, maquetar y llevar la
-    // celda a la vista—, no la espera al fotograma: esa depende de lo cargada
-    // que vaya la máquina y hacía fallar la prueba a veces con todo en paralelo.
-    // La mediana, para que un parón suelto del recolector no cuente.
-    const tiempos = await page.evaluate(async () => {
+    /* Medido DENTRO del navegador (lo de fuera mide sobre todo a Playwright) y
+       solo el trabajo de cada tecla —pintar lo que cambia, maquetar y llevar la
+       celda a la vista—, no la espera al fotograma, que depende de lo cargada
+       que vaya la máquina. Medianas, para que un parón suelto no cuente.
+       Lo que se exige no es un número de milisegundos (en el CI, más lento, un
+       límite fino falla sin que nada se haya roto) sino una PROPORCIÓN medida en
+       la misma página y a la vez: moverse tiene que costar mucho menos que
+       repintar la hoja entera (Ctrl+A cambia todas las filas). Con las filas
+       memorizadas da 0,03 (0,07 con todas las pruebas en paralelo); sin
+       memorizar, cada tecla repinta todo y da 0,20. */
+    const { tecla, todo } = await page.evaluate(async () => {
       const caja = document.querySelector('[aria-label="Hoja MENSUAL"]')
-      const t = []
-      for (let i = 0; i < 50; i++) {
-        await new Promise((r) => requestAnimationFrame(() => r()))
+      const fotograma = () => new Promise((r) => requestAnimationFrame(() => r()))
+      const medir = async (ev) => {
+        await fotograma()
         const t0 = performance.now()
-        caja.dispatchEvent(new KeyboardEvent('keydown', { key: i < 20 ? 'ArrowRight' : 'ArrowDown', bubbles: true }))
+        caja.dispatchEvent(new KeyboardEvent('keydown', { bubbles: true, ...ev }))
         await Promise.resolve() // React pinta lo de la tecla en esta microtarea
         caja.getBoundingClientRect() // y el navegador lo maqueta aquí
-        t.push(performance.now() - t0)
+        return performance.now() - t0
       }
-      return t.sort((a, b) => a - b)
+      const mediana = (t) => t.sort((a, b) => a - b)[Math.floor(t.length / 2)]
+      const teclas = []
+      for (let i = 0; i < 50; i++) teclas.push(await medir({ key: i < 20 ? 'ArrowRight' : 'ArrowDown' }))
+      const enteras = []
+      for (let i = 0; i < 12; i++) {
+        enteras.push(await medir({ key: 'a', ctrlKey: true }))
+        await medir({ key: 'ArrowUp' }) // deshace la selección (esa no se cuenta)
+      }
+      return { tecla: mediana(teclas), todo: mediana(enteras) }
     })
-    await expect(page.locator('[data-celda="30-20"]')).toHaveClass(/outline-brand-400/)
-    const mediana = tiempos[25]
-    console.log(`Cada tecla: ${mediana.toFixed(1)} ms de mediana, ${tiempos[49].toFixed(1)} ms la peor`)
-    // Sin memorizar las filas (cada tecla repinta la hoja entera) da ~9,5 ms.
-    expect(mediana).toBeLessThan(5)
+    console.log(`Cada tecla: ${tecla.toFixed(1)} ms; repintar la hoja entera: ${todo.toFixed(1)} ms (${(tecla / todo).toFixed(2)})`)
+    expect(tecla / todo).toBeLessThan(0.12)
+    expect(tecla).toBeLessThan(16) // y en cualquier caso, dentro de un fotograma
+    // Las teclas de la medida han movido de verdad: Ctrl+A llevó a la última
+    // celda, ↑ a la última persona, e Inicio vuelve a su primer día.
+    await page.keyboard.press('Home')
+    await expect(page.locator('[data-celda="67-0"]')).toHaveClass(/outline-brand-400/)
     expect(fallos, fallos.join(' | ')).toHaveLength(0)
   })
 
