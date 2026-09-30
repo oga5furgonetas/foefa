@@ -32,8 +32,8 @@ class _Meta:
     async def find_one(self, q):
         return self.docs.get(q["_id"])
 
-    async def insert_one(self, doc):
-        self.docs[doc["_id"]] = doc
+    async def update_one(self, q, cambio, upsert=False):
+        self.docs[q["_id"]] = {"_id": q["_id"], **cambio.get("$set", {})}
 
 
 @pytest.fixture

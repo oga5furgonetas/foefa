@@ -1604,6 +1604,11 @@ async def _ensure_tenant_indexes(db_name: str):
     await _idx(tdb.furgo_fijas, "driver_id", unique=True)
     await _idx(tdb.furgo_fijas, "principal")
     await _idx(tdb.furgo_fila, "center", unique=True)
+    # Móviles de empresa: una extensión, una vez por centro (dos clics a la vez
+    # no pueden dejar el mismo móvil dos veces), y una ficha por conductor.
+    await _idx(tdb.moviles, "id", unique=True)
+    await _idx(tdb.moviles, [("center", 1), ("extension", 1)], unique=True)
+    await _idx(tdb.moviles_de, [("driver_id", 1), ("center", 1)], unique=True)
     await _idx(tdb.plantillas_compartidas, [("center", 1), ("updated_at", -1)])
     # Citas de taller del calendario de flota. El único PARCIAL es la regla de
     # negocio en sí: una furgoneta no puede tener dos citas ABIERTAS del mismo
@@ -23834,11 +23839,10 @@ async def migrar_permiso_cuadrante():
         r = await global_db.admin_users.update_many(
             {"$and": [{"permissions": "turnos"}, {"permissions": {"$ne": "cuadrante"}}]},
             {"$addToSet": {"permissions": "cuadrante"}})
-        await global_db.app_meta.insert_one({"_id": marca, "en": datetime.now(timezone.utc).isoformat(),
-                                             "usuarios": r.modified_count})
+        await global_db.app_meta.update_one(
+            {"_id": marca}, {"$set": {"en": datetime.now(timezone.utc).isoformat(), "usuarios": r.modified_count}},
+            upsert=True)
         logger.info("Permiso de Cuadrante propio: marcado a %d usuarios que tenían Días libres", r.modified_count)
-    except DuplicateKeyError:
-        pass
     except Exception as e:                                       # noqa: BLE001
         logger.error("Migración del permiso de Cuadrante: %s", e)
 
@@ -43309,21 +43313,36 @@ def _movil_para_hoja(crudo) -> str:
 
 @api_router.post("/tools/plantilla-moviles")
 async def plantilla_moviles(data: dict = Body(...), admin: dict = Depends(require_admin)):
-    """«Poner móviles» (Dani, 30-09-2026: «asignador de teléfonos también»): el
-    móvil de la ficha de cada conductor de la hoja, para las celdas de móvil
-    VACÍAS. No cambia nada: propone y la pantalla lo escribe celda a celda, como
-    «Poner furgonetas». Primero el móvil PERSONAL (el de la persona, estable);
-    si no tiene, el teléfono de la ficha. El nombre se casa con el mismo casado
-    estricto de las furgonetas: con dos candidatos, no se pone ninguno."""
+    """«Poner móviles»: para las celdas de móvil VACÍAS de la hoja. No cambia
+    nada: propone y la pantalla lo escribe celda a celda, como «Poner
+    furgonetas». El nombre se casa con el casado estricto de las furgonetas:
+    con dos candidatos, no se pone ninguno.
+
+    Con móviles de empresa dados de alta en el centro (pestaña «Móviles»), la
+    EXTENSIÓN del suyo, o «PROPIO»; si ese día ya lo lleva otro de la hoja, el
+    de reserva (`_mov_repartir`). Sin ninguno dado de alta, como antes: el
+    móvil de la ficha (primero el personal, luego el teléfono)."""
     await _require_plan_feature(admin, "assignments")
     center = _afin_centro(data.get("center"))
     fichas = await db.drivers.find(
         {**_filtro_centro(admin, center), "active": {"$ne": False}, "merged_into": {"$exists": False}},
         {"_id": 0, "id": 1, "name": 1, "movil_personal": 1, "phone": 1}).to_list(3000)
+    asign = {a["driver_id"]: a for a in await db[_MOV_DE_COL].find(
+        {"center": _cua_rx(center)}, {"_id": 0}).to_list(3000)}
+    # Quien tiene móvil de este centro aunque su ficha sea de otro (se ha cambiado).
+    ids_fichas = {f["id"] for f in fichas}
+    faltan = [d for d in asign if d not in ids_fichas]
+    if faltan:
+        fichas += await db.drivers.find(
+            {"id": {"$in": faltan}, "active": {"$ne": False}, "merged_into": {"$exists": False}},
+            {"_id": 0, "id": 1, "name": 1, "movil_personal": 1, "phone": 1}).to_list(500)
     candidatos = [(f["id"], f.get("name") or "") for f in fichas]
     por_id = {f["id"]: f for f in fichas}
-    propuestas, sin_ficha, sin_movil = [], [], []
-    for i, r in enumerate(_lista_cuerpo(data.get("rows"), 400)):
+    moviles = await db[_MOV_COL].find({"center": _cua_rx(center)}, {"_id": 0}).to_list(3000)
+    filas = _lista_cuerpo(data.get("rows"), 400)
+    propuestas, sin_ficha, sin_movil, ocupados = [], [], [], []
+    casados = []
+    for i, r in enumerate(filas):
         if not isinstance(r, dict) or _texto_cuerpo(r.get("movil"), 40).strip():
             continue
         nombre = _texto_cuerpo(r.get("conductor"), 120).strip()
@@ -43333,14 +43352,351 @@ async def plantilla_moviles(data: dict = Body(...), admin: dict = Depends(requir
         if not cid:
             sin_ficha.append(i)
             continue
-        f = por_id[cid]
-        tel = _movil_para_hoja(f.get("movil_personal")) or _movil_para_hoja(f.get("phone"))
-        if not tel:
+        casados.append((i, cid))
+    if not moviles:
+        for i, cid in casados:
+            f = por_id[cid]
+            tel = _movil_para_hoja(f.get("movil_personal")) or _movil_para_hoja(f.get("phone"))
+            if not tel:
+                sin_movil.append(i)
+                continue
+            propuestas.append({"fila": i, "movil": tel,
+                               "de": "personal" if _movil_para_hoja(f.get("movil_personal")) else "ficha"})
+        return {"propuestas": propuestas, "sin_ficha": sin_ficha, "sin_movil": sin_movil,
+                "ocupados": ocupados, "registro": False}
+    ext = {m["id"]: m["extension"] for m in moviles if m.get("activo") is not False}
+    pedidos = []
+    for i, cid in casados:
+        a = asign.get(cid) or {}
+        if a.get("principal") == MOV_PROPIO:
+            pedidos.append((i, MOV_PROPIO, None))
+            continue
+        suyo, reserva = ext.get(a.get("principal")), ext.get(a.get("reserva"))
+        if not suyo and not reserva:
             sin_movil.append(i)
             continue
-        propuestas.append({"fila": i, "movil": tel,
-                           "de": "personal" if _movil_para_hoja(f.get("movil_personal")) else "ficha"})
-    return {"propuestas": propuestas, "sin_ficha": sin_ficha, "sin_movil": sin_movil}
+        pedidos.append((i, suyo, reserva))
+    # Lo que ya está escrito en la hoja cuenta como ocupado (a mano manda).
+    en_hoja = {_mov_ext(r.get("movil")) for r in filas if isinstance(r, dict)} - {""}
+    puestos, sin_sitio = _mov_repartir(pedidos, en_hoja)
+    for i, (movil, de) in sorted(puestos.items()):
+        propuestas.append({"fila": i, "movil": movil, "de": de})
+    for i, lista_ in sin_sitio:
+        ocupados.append({"fila": i, "moviles": lista_})
+    return {"propuestas": propuestas, "sin_ficha": sin_ficha, "sin_movil": sin_movil,
+            "ocupados": ocupados, "registro": True}
+
+
+# ── MÓVILES DE EMPRESA ───────────────────────────────────────────────────────
+# Dani, 30-09-2026: «a la hora de hacer la plantilla ábreme otra pestaña aparte
+# de vehículos que sea de móviles: poner las extensiones de todos los móviles
+# que tengo, asignarlos a cada uno y poder ponerle 2 por si uno se lleva otro».
+# En su hoja la columna MÓVIL lleva la EXTENSIÓN del móvil de empresa (4114,
+# 1117…) o «PROPIO», y al lado una tabla CONDUCTOR → MÓVIL. Como las furgonetas
+# fijas: cada conductor tiene SU móvil y uno DE RESERVA; «Poner móviles» pone
+# el suyo y, si ese día ya lo lleva otro de la hoja, el de reserva. Nunca el
+# mismo móvil a dos personas el mismo día.
+_MOV_COL = "moviles"             # los del centro: extensión, número, nota, activo
+_MOV_DE_COL = "moviles_de"       # de quién es cada uno: una ficha por conductor y centro
+MOV_PROPIO = "PROPIO"
+_MOV_PLACA = re.compile(r"^(\d{4}[A-Z]{3}|[A-Z]{1,2}\d{4}[A-Z]{1,2})$")   # 1234ABC y M1234AB
+
+
+def _mov_ext(v) -> str:
+    """La extensión como se escribe en la hoja: solo cifras (de 2 a 12), sin
+    espacios, sin el «+» de un número entero y sin el «.0» que deja Excel al
+    copiar un número (4114.0 → 4114). «PROPIO» se queda como PROPIO. Lo demás
+    no es un móvil: cadena vacía."""
+    s = re.sub(r"[\s\-]+", "", str(v if v is not None else "")).upper().lstrip("+")
+    if s == MOV_PROPIO:
+        return s
+    if re.fullmatch(r"\d+\.0+", s):
+        s = s.split(".")[0]
+    return s if re.fullmatch(r"\d{2,12}", s) else ""
+
+
+def _mov_repartir(pedidos: list, ocupados: set) -> tuple:
+    """Reparte los móviles del día sin repetir ninguno.
+
+    `pedidos`: [(fila, suyo, reserva)] con extensiones (o «PROPIO» como suyo,
+    que no ocupa nada). `ocupados`: lo que ya está escrito en la hoja.
+    Devuelve ({fila: (movil, «suyo»|«reserva»|«propio»)}, [(fila, [los dos])]).
+
+    Primero cada uno el suyo; si dos comparten el mismo, se lo queda quien no
+    tiene un de reserva libre (y a igualdad, el que va antes en la hoja).
+    Después, a quien se quedó sin el suyo, el de reserva si está libre. El
+    suyo de alguien manda sobre el de reserva de otro."""
+    usados = set(ocupados)
+    puestos: dict = {}
+    libre = lambda m: bool(m) and m != MOV_PROPIO and m not in usados  # noqa: E731
+    for fila, suyo, _ in pedidos:
+        if suyo == MOV_PROPIO:
+            puestos[fila] = (MOV_PROPIO, "propio")
+    quieren: dict = {}
+    for fila, suyo, reserva in pedidos:
+        if fila not in puestos and libre(suyo):
+            quieren.setdefault(suyo, []).append((fila, reserva))
+    for movil, quienes in quieren.items():
+        quienes.sort(key=lambda q: (libre(q[1]), q[0]))
+        puestos[quienes[0][0]] = (movil, "suyo")
+        usados.add(movil)
+    sin_sitio = []
+    for fila, suyo, reserva in pedidos:
+        if fila in puestos:
+            continue
+        if libre(reserva):
+            puestos[fila] = (reserva, "reserva")
+            usados.add(reserva)
+        else:
+            sin_sitio.append((fila, [m for m in (suyo, reserva) if m]))
+    return puestos, sin_sitio
+
+
+def _mov_leer_lineas(texto: str) -> list:
+    """La tabla CONDUCTOR → MÓVIL de su hoja, pegada: una persona por línea, el
+    nombre y detrás uno o dos móviles (el suyo y el de reserva) o «PROPIO».
+    Una matrícula al final (la columna FURGO de al lado) se ignora: no es un
+    móvil. Devuelve [{linea, nombre, moviles}] — sin móvil, `moviles` vacío."""
+    salida = []
+    for n, linea in enumerate(str(texto or "").splitlines()[:400], 1):
+        trozos = [t for t in re.split(r"[\t;|]+|\s{2,}|\s+", linea.strip()) if t]
+        if not trozos:
+            continue
+        moviles = []
+        while trozos:
+            t = trozos[-1].upper()
+            if _MOV_PLACA.match(re.sub(r"[\s\-]", "", t)):
+                trozos.pop()
+                continue
+            m = _mov_ext(t)
+            if not m:
+                break
+            moviles.insert(0, m)
+            trozos.pop()
+        nombre = " ".join(trozos).strip(" .,:-")
+        if nombre:
+            salida.append({"linea": n, "nombre": nombre, "moviles": moviles[:2]})
+    return salida
+
+
+async def _mov_acceso(admin: dict, center: str):
+    if not _user_can_see_center(admin, center):
+        raise HTTPException(403, "No tienes acceso a ese centro")
+
+
+async def _mov_del_centro(center: str) -> list:
+    return await db[_MOV_COL].find({"center": _cua_rx(center)}, {"_id": 0}).to_list(3000)
+
+
+@api_router.get("/moviles")
+async def moviles_estado(center: str, admin: dict = Depends(require_admin)):
+    """Los móviles del centro con quién los lleva, y cada conductor con el suyo
+    y el de reserva."""
+    await _require_plan_feature(admin, "assignments")
+    center = _afin_centro(center)
+    await _mov_acceso(admin, center)
+    moviles = sorted(await _mov_del_centro(center), key=lambda m: (len(m.get("extension") or ""), m.get("extension") or ""))
+    conductores = await db.drivers.find(
+        {**_filtro_centro(admin, center), "active": {"$ne": False}, "merged_into": {"$exists": False},
+         "status": {"$nin": ["deleted", "fusionada"]}},
+        {"_id": 0, "id": 1, "name": 1, "center": 1}).to_list(3000)
+    asign = {a["driver_id"]: a for a in await db[_MOV_DE_COL].find(
+        {"center": _cua_rx(center)}, {"_id": 0}).to_list(3000)}
+    faltan = [d for d in asign if d not in {c["id"] for c in conductores}]
+    if faltan:
+        conductores += await db.drivers.find(
+            {"id": {"$in": faltan}, "active": {"$ne": False}, "merged_into": {"$exists": False}},
+            {"_id": 0, "id": 1, "name": 1, "center": 1}).to_list(500)
+    ids = {m["id"] for m in moviles}
+    de: dict = {}
+    salida_c = []
+    for c in sorted(conductores, key=lambda x: _clave_nombre(x.get("name"))):
+        a = asign.get(c["id"]) or {}
+        suyo = a.get("principal") if (a.get("principal") == MOV_PROPIO or a.get("principal") in ids) else None
+        reserva = a.get("reserva") if a.get("reserva") in ids else None
+        if suyo and suyo != MOV_PROPIO:
+            de.setdefault(suyo, []).append({"id": c["id"], "nombre": c.get("name") or "", "como": "suyo"})
+        if reserva:
+            de.setdefault(reserva, []).append({"id": c["id"], "nombre": c.get("name") or "", "como": "reserva"})
+        salida_c.append({"id": c["id"], "nombre": c.get("name") or "", "center": c.get("center") or "",
+                         "suyo": suyo, "reserva": reserva})
+    return {"center": center,
+            "moviles": [{"id": m["id"], "extension": m.get("extension") or "", "numero": m.get("numero") or "",
+                         "nota": m.get("nota") or "", "activo": m.get("activo") is not False,
+                         "de": de.get(m["id"], [])} for m in moviles],
+            "conductores": salida_c}
+
+
+@api_router.post("/moviles")
+async def moviles_anadir(data: dict = Body(...), admin: dict = Depends(require_admin)):
+    """Dar de alta móviles: una o varias extensiones de golpe («4114 1117,
+    4864…» o una lista). Las que ya están no se repiten."""
+    await _require_plan_feature(admin, "assignments")
+    center = _afin_centro((data or {}).get("center"))
+    await _mov_acceso(admin, center)
+    crudo = (data or {}).get("extensiones")
+    trozos = crudo if isinstance(crudo, list) else re.split(r"[\s,;]+", _texto_cuerpo(crudo, 4000))
+    ya = {m.get("extension") for m in await _mov_del_centro(center)}
+    ahora = datetime.now(timezone.utc).isoformat()
+    anadidas, repetidas, malas = [], [], []
+    for t in trozos[:300]:
+        t = str(t or "").strip()
+        if not t:
+            continue
+        e = _mov_ext(t)
+        if not e or e == MOV_PROPIO:
+            malas.append(t[:20])
+            continue
+        if e in ya:
+            repetidas.append(e)
+            continue
+        doc = {"id": str(uuid.uuid4()), "center": center, "extension": e, "numero": "", "nota": "",
+               "activo": True, "creado_en": ahora, "creado_por": admin.get("name") or ""}
+        try:
+            await db[_MOV_COL].insert_one(doc)
+        except DuplicateKeyError:
+            repetidas.append(e)
+            continue
+        ya.add(e)
+        anadidas.append(e)
+    return {"anadidas": anadidas, "repetidas": repetidas, "malas": malas}
+
+
+@api_router.patch("/moviles/{movil_id}")
+async def moviles_editar(movil_id: str, data: dict = Body(...), admin: dict = Depends(require_admin)):
+    """Cambiar la extensión, el número, la nota o darlo de baja (roto, perdido):
+    uno de baja no se pone en la hoja y se pasa al de reserva."""
+    m = await db[_MOV_COL].find_one({"id": movil_id}, {"_id": 0})
+    if not m:
+        raise HTTPException(404, "Ese móvil no existe")
+    await _mov_acceso(admin, m.get("center") or "")
+    data = data or {}
+    cambios = {}
+    if "extension" in data:
+        e = _mov_ext(data.get("extension"))
+        if not e or e == MOV_PROPIO:
+            raise HTTPException(400, "La extensión son cifras (por ejemplo 4114)")
+        if e != m.get("extension") and await db[_MOV_COL].find_one(
+                {"center": m.get("center"), "extension": e, "id": {"$ne": movil_id}}):
+            raise HTTPException(409, f"Ya hay un móvil con la extensión {e}")
+        cambios["extension"] = e
+    if "numero" in data:
+        cambios["numero"] = _texto_cuerpo(data.get("numero"), 30).strip()
+    if "nota" in data:
+        cambios["nota"] = _texto_cuerpo(data.get("nota"), 200).strip()
+    if "activo" in data:
+        cambios["activo"] = bool(data.get("activo"))
+    if not cambios:
+        raise HTTPException(400, "No hay nada que cambiar")
+    try:
+        await db[_MOV_COL].update_one({"id": movil_id}, {"$set": {
+            **cambios, "actualizado_en": datetime.now(timezone.utc).isoformat()}})
+    except DuplicateKeyError:
+        raise HTTPException(409, f"Ya hay un móvil con la extensión {cambios.get('extension')}")
+    return {"ok": True}
+
+
+@api_router.delete("/moviles/{movil_id}")
+async def moviles_borrar(movil_id: str, admin: dict = Depends(require_admin)):
+    """Quitar un móvil del centro. A quien lo tenía se le quita de su ficha
+    (como suyo o de reserva) y se dice a quién."""
+    m = await db[_MOV_COL].find_one({"id": movil_id}, {"_id": 0})
+    if not m:
+        raise HTTPException(404, "Ese móvil no existe")
+    await _mov_acceso(admin, m.get("center") or "")
+    a1 = await db[_MOV_DE_COL].update_many({"principal": movil_id}, {"$set": {"principal": None}})
+    a2 = await db[_MOV_DE_COL].update_many({"reserva": movil_id}, {"$set": {"reserva": None}})
+    await db[_MOV_COL].delete_one({"id": movil_id})
+    await _audit(admin, "movil_borrado", {"center": m.get("center"), "extension": m.get("extension"),
+                                          "quitado_a": a1.modified_count + a2.modified_count})
+    return {"ok": True, "quitado_a": a1.modified_count + a2.modified_count}
+
+
+async def _mov_guardar(center: str, driver_id: str, suyo, reserva, admin: dict) -> dict:
+    """Guarda el suyo y el de reserva de un conductor, comprobados."""
+    ids = {m["id"] for m in await _mov_del_centro(center)}
+    def valida(v, puede_propio):
+        v = str(v or "").strip()
+        if not v:
+            return None
+        if v == MOV_PROPIO and puede_propio:
+            return MOV_PROPIO
+        if v in ids:
+            return v
+        raise HTTPException(400, "Ese móvil no es de este centro")
+    s, r = valida(suyo, True), valida(reserva, False)
+    if r and r == s:
+        raise HTTPException(400, "El de reserva no puede ser el mismo que el suyo")
+    doc = {"driver_id": driver_id, "center": center, "principal": s, "reserva": r,
+           "actualizado_en": datetime.now(timezone.utc).isoformat(), "por": admin.get("name") or ""}
+    await db[_MOV_DE_COL].update_one({"driver_id": driver_id, "center": center}, {"$set": doc}, upsert=True)
+    return {"suyo": s, "reserva": r}
+
+
+@api_router.put("/moviles/conductor/{driver_id}")
+async def moviles_de_conductor(driver_id: str, data: dict = Body(...), admin: dict = Depends(require_admin)):
+    """El suyo («PROPIO» si usa el suyo propio) y el de reserva de un conductor."""
+    await _require_plan_feature(admin, "assignments")
+    center = _afin_centro((data or {}).get("center"))
+    await _mov_acceso(admin, center)
+    if not await db.drivers.find_one({"id": driver_id}, {"_id": 0, "id": 1}):
+        raise HTTPException(404, "Conductor no encontrado")
+    return {"ok": True, **await _mov_guardar(center, driver_id, data.get("suyo"), data.get("reserva"), admin)}
+
+
+@api_router.post("/moviles/pegar")
+async def moviles_pegar(data: dict = Body(...), admin: dict = Depends(require_admin)):
+    """La tabla CONDUCTOR → MÓVIL de su hoja, pegada. Sin `aplicar` solo dice
+    qué ha entendido; con `aplicar`, da de alta las extensiones que falten y
+    pone a cada conductor casado el suyo (y el de reserva si venían dos). Un
+    nombre que no casa sin duda con una ficha no se toca."""
+    await _require_plan_feature(admin, "assignments")
+    center = _afin_centro((data or {}).get("center"))
+    await _mov_acceso(admin, center)
+    lineas = _mov_leer_lineas(_texto_cuerpo((data or {}).get("texto"), 20000))
+    fichas = await db.drivers.find(
+        {**_filtro_centro(admin, center), "active": {"$ne": False}, "merged_into": {"$exists": False},
+         "status": {"$nin": ["deleted", "fusionada"]}},
+        {"_id": 0, "id": 1, "name": 1}).to_list(3000)
+    candidatos = [(f["id"], f.get("name") or "") for f in fichas]
+    nombre_de = {f["id"]: f.get("name") or "" for f in fichas}
+    vistos: dict = {}
+    salida = []
+    for x in lineas:
+        cid = _afin_casar(x["nombre"], candidatos)
+        estado = "ok" if cid and x["moviles"] else ("sin_movil" if cid else "sin_ficha")
+        if cid and cid in vistos:
+            estado = "repetido"
+        if cid:
+            vistos.setdefault(cid, x["linea"])
+        salida.append({**x, "driver_id": cid, "ficha": nombre_de.get(cid, ""), "estado": estado})
+    if not (data or {}).get("aplicar"):
+        return {"lineas": salida}
+    por_ext = {m.get("extension"): m["id"] for m in await _mov_del_centro(center)}
+    ahora = datetime.now(timezone.utc).isoformat()
+    altas, puestos = [], 0
+    for x in salida:
+        if x["estado"] != "ok":
+            continue
+        for e in x["moviles"]:
+            if e != MOV_PROPIO and e not in por_ext:
+                doc = {"id": str(uuid.uuid4()), "center": center, "extension": e, "numero": "", "nota": "",
+                       "activo": True, "creado_en": ahora, "creado_por": admin.get("name") or ""}
+                try:
+                    await db[_MOV_COL].insert_one(doc)
+                    por_ext[e] = doc["id"]
+                    altas.append(e)
+                except DuplicateKeyError:
+                    m = await db[_MOV_COL].find_one({"center": center, "extension": e}, {"_id": 0, "id": 1})
+                    if m:
+                        por_ext[e] = m["id"]
+        suyo = x["moviles"][0]
+        reserva = x["moviles"][1] if len(x["moviles"]) > 1 and x["moviles"][1] != MOV_PROPIO else None
+        await _mov_guardar(center, x["driver_id"], MOV_PROPIO if suyo == MOV_PROPIO else por_ext.get(suyo),
+                           por_ext.get(reserva) if reserva and reserva != suyo else None, admin)
+        puestos += 1
+    await _audit(admin, "moviles_pegados", {"center": center, "puestos": puestos, "altas": len(altas)})
+    return {"lineas": salida, "puestos": puestos, "altas": altas}
 
 
 async def _afin_vuelta_taller(vehicle_id: str, prev_status, new_status):

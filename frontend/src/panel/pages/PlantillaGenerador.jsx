@@ -8,6 +8,7 @@ import {
 import { getToken } from '../auth'
 import { getPlantillas, downloadPlantilla, deletePlantilla, getVehicles, plantillaDesdeAsignacion, plantillaFurgos, plantillaMoviles } from '../api'
 import FurgonetasFijas from '../components/FurgonetasFijas'
+import MovilesEmpresa from '../components/MovilesEmpresa'
 import { API_BASE as API } from '../../lib/apiBase'
 import { useT, LANG_LOCALE } from '../../i18n'
 import { lista } from '../../lib/lista'
@@ -597,8 +598,14 @@ export default function PlantillaGenerador() {
       }
       const sinMovil = lista(r.data?.sin_movil).length
       const sinFicha = lista(r.data?.sin_ficha).length
+      // Con móviles de empresa (pestaña Móviles): cuántos llevan el de reserva y
+      // a quién no se le puede poner ninguno porque los dos ya están en la hoja.
+      const deReserva = props.filter((p) => p.de === 'reserva').length
+      const ocupados = lista(r.data?.ocupados).length
       setPonerNota(`${props.length} ${t('pg.mov.puestos')}` +
-        (sinMovil ? ` · ${sinMovil} ${t('pg.mov.sinMovil')}` : '') +
+        (deReserva ? ` · ${deReserva} ${t('pg.mov.reserva')}` : '') +
+        (sinMovil ? ` · ${sinMovil} ${t(r.data?.registro ? 'pg.mov.sinAsignar' : 'pg.mov.sinMovil')}` : '') +
+        (ocupados ? ` · ${ocupados} ${t('pg.mov.ocupados')}` : '') +
         (sinFicha ? ` · ${sinFicha} ${t('pg.mov.sinFicha')}` : ''))
     } catch (e) {
       setPonerNota(e?.response?.data?.detail || t('pg.mov.error'))
@@ -708,7 +715,8 @@ export default function PlantillaGenerador() {
       </div>
 
       <nav className="mb-4 flex gap-1 overflow-x-auto border-b border-dark-800">
-        {[['plantilla', 'pg.tab.plantilla', FileSpreadsheet], ['fijas', 'pg.tab.fijas', Car]].map(([k, key, Icon]) => (
+        {[['plantilla', 'pg.tab.plantilla', FileSpreadsheet], ['fijas', 'pg.tab.fijas', Car],
+          ['moviles', 'pg.tab.moviles', Smartphone]].map(([k, key, Icon]) => (
           <button key={k} type="button" onClick={() => cambiarVista(k)}
             className={`-mb-px flex items-center gap-1.5 whitespace-nowrap border-b-2 px-3 py-2 text-[13px] transition-colors ${
               vista === k ? 'border-brand-400 font-semibold text-dark-50' : 'border-transparent text-dark-400 hover:text-dark-200'}`}>
@@ -716,7 +724,7 @@ export default function PlantillaGenerador() {
           </button>
         ))}
       </nav>
-      {vista === 'fijas' ? <FurgonetasFijas center={center} /> : (<>
+      {vista === 'fijas' ? <FurgonetasFijas center={center} /> : vista === 'moviles' ? <MovilesEmpresa center={center} /> : (<>
       <Historial center={center} />
 
       {/* ── PASO 1: traer los datos ── */}

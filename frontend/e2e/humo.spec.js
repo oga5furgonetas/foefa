@@ -348,6 +348,62 @@ test.describe('Horas · WHC', () => {
   })
 })
 
+/* MÓVILES DE EMPRESA (30-09-2026): la pestaña de la plantilla da de alta las
+   extensiones, pone a cada uno el suyo y el de reserva, avisa si dos comparten
+   el mismo y entiende la lista pegada de su hoja sin inventarse a nadie. */
+test.describe('Plantilla del día · móviles de empresa', () => {
+  const json = (body) => (route) => route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(body) })
+  test('extensiones, el suyo y el de reserva, y pegar la lista', async ({ page }) => {
+    const fallos = vigilar(page)
+    await entrarComoAdmin(page)
+    await simularApi(page, 'vacio')
+    const estado = {
+      center: 'NORTE',
+      moviles: [{ id: 'm1', extension: '4114', numero: '', nota: '', activo: true, de: [{ id: 'd1', nombre: 'ANA PÉREZ', como: 'suyo' }, { id: 'd2', nombre: 'LUIS GÓMEZ', como: 'suyo' }] },
+        { id: 'm2', extension: '1117', numero: '', nota: '', activo: true, de: [] }],
+      conductores: [{ id: 'd1', nombre: 'ANA PÉREZ', center: 'NORTE', suyo: 'm1', reserva: null },
+        { id: 'd2', nombre: 'LUIS GÓMEZ', center: 'NORTE', suyo: 'm1', reserva: null },
+        { id: 'd3', nombre: 'SARA VIDAL', center: 'NORTE', suyo: null, reserva: null }],
+    }
+    const pedidos = []
+    await page.route(/\/api\/moviles(\?|$)/, (route) => {
+      if (route.request().method() === 'POST') {
+        pedidos.push(['alta', route.request().postDataJSON()])
+        return json({ anadidas: ['4864'], repetidas: ['4114'], malas: [] })(route)
+      }
+      return json(estado)(route)
+    })
+    await page.route(/\/api\/moviles\/conductor\//, (route) => {
+      pedidos.push(['asignar', route.request().postDataJSON()])
+      return json({ ok: true })(route)
+    })
+    await page.route(/\/api\/moviles\/pegar/, json({ lineas: [
+      { linea: 1, nombre: 'SARA VIDAL', moviles: ['1117', '4114'], driver_id: 'd3', ficha: 'SARA VIDAL', estado: 'ok' },
+      { linea: 2, nombre: 'PEPITO', moviles: ['4552'], driver_id: null, ficha: '', estado: 'sin_ficha' }] }))
+    await page.addInitScript(() => localStorage.setItem('plantilla.vista', JSON.stringify('moviles')))
+    await page.goto('/panel/plantilla', { waitUntil: 'domcontentloaded' })
+    await expect(page.getByText('Quién lleva cada uno')).toBeVisible({ timeout: 15000 })
+    // Ana y Luis comparten el 4114: se avisa, no se prohíbe.
+    await expect(page.getByText(/también es de LUIS/)).toBeVisible()
+    // Alta de varias de golpe.
+    await page.getByLabel('Extensiones nuevas').fill('4864 4114')
+    await page.getByRole('button', { name: 'Añadir' }).click()
+    await expect(page.getByText('Añadidos: 4864 · ya estaban: 4114.')).toBeVisible()
+    expect(pedidos[0]).toEqual(['alta', { center: 'NORTE', extensiones: '4864 4114' }])
+    // A Sara, el suyo y el de reserva: se guarda al elegirlo.
+    await page.getByLabel('Su móvil: SARA VIDAL').selectOption('m2')
+    await expect.poll(() => pedidos.length).toBe(2)
+    expect(pedidos[1]).toEqual(['asignar', { center: 'NORTE', suyo: 'm2', reserva: null }])
+    // Pegar: lo que no casa sin duda se dice y no se aplica.
+    await page.getByRole('button', { name: 'Pegar la lista de tu hoja' }).click()
+    await page.getByLabel('Lista de conductores y móviles').fill('SARA VIDAL 1117 4114\nPEPITO 4552')
+    await page.getByRole('button', { name: 'Ver qué entiendo' }).click()
+    await expect(page.getByText('no sé quién es: no se toca')).toBeVisible()
+    await expect(page.getByRole('button', { name: 'Aplicar 1' })).toBeEnabled()
+    expect(fallos, fallos.join(' | ')).toHaveLength(0)
+  })
+})
+
 /* PLANTILLA DEL DÍA (30-09-2026): cada columna de hora se puede quitar por
    separado, la hora se escribe bien al salir de la celda y «Poner móviles»
    rellena los vacíos con el de la ficha. */

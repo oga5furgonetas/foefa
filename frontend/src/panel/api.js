@@ -527,6 +527,15 @@ export const guardarFilaAparcamiento = (center, filas) => api.put('/afinidad/fil
 export const plantillaFurgos = (body) => api.post('/tools/plantilla-furgos', body)
 // «Poner móviles»: el de la ficha de cada conductor, para los móviles vacíos.
 export const plantillaMoviles = (body) => api.post('/tools/plantilla-moviles', body)
+// Móviles de empresa (pestaña «Móviles» de la plantilla): la extensión de cada
+// uno y, por conductor, el suyo y el de reserva.
+export const getMoviles = (center) => api.get('/moviles', { params: { center } })
+export const anadirMoviles = (center, extensiones) => api.post('/moviles', { center, extensiones })
+export const editarMovil = (id, body) => api.patch(`/moviles/${id}`, body)
+export const borrarMovil = (id) => api.delete(`/moviles/${id}`)
+export const guardarMovilesDe = (driverId, center, suyo, reserva) =>
+  api.put(`/moviles/conductor/${driverId}`, { center, suyo: suyo || null, reserva: reserva || null })
+export const pegarMoviles = (center, texto, aplicar) => api.post('/moviles/pegar', { center, texto, aplicar: !!aplicar })
 
 /* ── Asignación diaria (qué conductor lleva qué furgo) ── */
 export const getDailyAssignment = (center, date) => api.get('/assignments/daily', { params: { center, date } })
