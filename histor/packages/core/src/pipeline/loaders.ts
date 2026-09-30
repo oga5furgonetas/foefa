@@ -3,6 +3,7 @@ import { eq, inArray } from 'drizzle-orm';
 import type { Db } from '../db/client';
 import { rawItems, sourceReliability, sources, storyItems } from '../db/schema';
 import type { SourceType } from '../domain';
+import { pressReleaseReason } from '../text/nonnews';
 import type { VItem, VPlace, VSource } from '../verification/types';
 
 export type RawItemRow = typeof rawItems.$inferSelect;
@@ -62,6 +63,7 @@ export async function loadStoryItems(db: Db, storyId: number): Promise<{ items: 
     .from(storyItems)
     .innerJoin(rawItems, eq(rawItems.id, storyItems.itemId))
     .where(eq(storyItems.storyId, storyId));
-  const raw = rows.map((x) => x.r);
+  // Las notas de prensa de pago que entraron antes del filtro no cuentan ni como fuente ni como texto.
+  const raw = rows.map((x) => x.r).filter((r) => !pressReleaseReason(r.summary) && !pressReleaseReason(r.contentText));
   return { items: raw.map(toVItem), rows: raw };
 }

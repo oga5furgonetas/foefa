@@ -84,7 +84,10 @@ export function writeDeterministic(fs: FactSheet, opts: WriteOptions = {}): Draf
     };
     for (const c of candidates) {
       if (!c.isHeadline && !aboutTheStory(c)) continue;
-      const short = compressClaim(c.text, 16, { commaCut: false });
+      // Los titulares de las fuentes suelen tener 17-20 palabras («Los profesores españoles trabajan
+      // dos horas menos a la semana que en la media de la OCDE»): con 16, la noticia se retenía
+      // entera (30-09-2026). El tope real es de 120 caracteres, más abajo.
+      const short = compressClaim(c.text, c.isHeadline ? 22 : 16, { commaCut: false });
       // Un titular tiene que entenderse solo.
       if (!short || !standsAlone(short)) continue;
       const h = plainClaim(c) ? short : stripPeriod(P.according(short, listJoin(lang, c.attribution.slice(0, 2))));

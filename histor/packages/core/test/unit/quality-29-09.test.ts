@@ -13,7 +13,7 @@ import { detectAttribution, stripDateline, wireOrigin } from '../../src/text/att
 import { decodeEntities } from '../../src/text/normalize';
 import { extractEntities } from '../../src/text/entities';
 import { numberOverlap } from '../../src/text/similarity';
-import { nonNewsReason } from '../../src/text/nonnews';
+import { nonNewsReason, pressReleaseReason } from '../../src/text/nonnews';
 import { extractClaims } from '../../src/verification/claims';
 import { compressClaim } from '../../src/writing/compress';
 import { goodHeadline, standsAlone, usableSentence } from '../../src/writing/deterministic';
@@ -263,5 +263,12 @@ describe('firma de agencia sin ciudad', () => {
     expect(stripDateline('AGI - Todavía no se conoce el autor del asesinato de Giulio Regeni.')).toBe('Todavía no se conoce el autor del asesinato de Giulio Regeni.');
     expect(stripDateline('EFE.- El Gobierno aprobó este martes el decreto de vivienda.')).toBe('El Gobierno aprobó este martes el decreto de vivienda.');
     expect(stripDateline('Real Madrid - Barcelona terminó con empate a dos en el Bernabéu.')).toBe('Real Madrid - Barcelona terminó con empate a dos en el Bernabéu.');
+  });
+});
+
+describe('titulares largos y notas de prensa (30-09-2026)', () => {
+  it('una nota de prensa de pago no es noticia', () => {
+    expect(pressReleaseReason('LORETO, Baja California Sur, 29 de septiembre de 2026 /PRNewswire/ -- El turismo de bienestar crece.')).toMatch(/nota de prensa/);
+    expect(pressReleaseReason('El huracán Polo tocó tierra en Baja California Sur.')).toBeNull();
   });
 });

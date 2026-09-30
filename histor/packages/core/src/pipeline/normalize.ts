@@ -10,7 +10,7 @@ import { detectAttribution, stripDateline } from '../text/attribution';
 import { extractDates } from '../text/dates';
 import { extractEntities, findPlaces, type PlaceMatch } from '../text/entities';
 import { detectLanguage } from '../text/langdetect';
-import { nonNewsReason } from '../text/nonnews';
+import { nonNewsReason, pressReleaseReason } from '../text/nonnews';
 import { minhash } from '../text/similarity';
 import type { VPlace } from '../verification/types';
 import { classify } from './classify';
@@ -84,7 +84,7 @@ export async function normalizeNewItems(db: Db, opts: { limit?: number } = {}): 
       discarded++;
       continue;
     }
-    const notNews = nonNewsReason(r.title, r.url);
+    const notNews = nonNewsReason(r.title, r.url) ?? pressReleaseReason(r.summary) ?? pressReleaseReason(r.contentText);
     if (notNews) {
       await db.update(rawItems).set({ status: 'discarded', discardReason: notNews }).where(eq(rawItems.id, r.id));
       discarded++;

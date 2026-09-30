@@ -50,5 +50,16 @@ export function nonNewsReason(title: string, url: string): string | null {
 export const PROMO =
   /(téléchargeant l'application|téléchargez l'application|abonnez-vous|inscrivez-vous|suivez-nous|suivez toute l'actualité|descarga(?:r)? (?:la|nuestra) app|suscríbete|síguenos|únete a nuestro canal|recibe (?:las|nuestras) noticias|te puede interesar|lee también|leer más|más información en|download (?:the|our) app|subscribe to|sign up for|follow us|read more|click here|newsletter|jetzt abonnieren|laden sie die app|folgen sie uns|lesen sie auch|scarica l'app|iscriviti|seguici|leggi anche|baixe o app|assine a newsletter|siga-nos|leia também|canal de whatsapp|whatsapp channel|à lire aussi|a lire aussi|lire aussi|ver también|lea también|vea también|leia mais|saiba mais|see also|related:|más noticias|mehr zum thema|auch interessant|potrebbe interessarti|da non perdere)/i;
 
+/**
+ * Notas de prensa de distribuidoras de pago (PRNewswire, Business Wire, GlobeNewswire…): son
+ * publicidad de empresas con formato de noticia. Contaminaban la historia del huracán Polo con un
+ * festival en Baja California (30-09-2026). Se miran en el texto, no solo en el titular.
+ */
+const PRESS_RELEASE = /\/?\b(PRNewswire|PR Newswire|Business Wire|BusinessWire|GlobeNewswire|Globe Newswire|Accesswire|EIN Presswire|Cision)\b\/?/i;
+
+export function pressReleaseReason(text: string | null | undefined): string | null {
+  return text && PRESS_RELEASE.test(text.slice(0, 600)) ? 'no es noticia (nota de prensa de pago)' : null;
+}
+
 /** Pies de foto y créditos («…, CC BY-NC», «Getty Images», «Foto: EFE»): no afirman nada. */
 export const CREDIT_LINE = /(\bCC[ -]BY\b|\bGetty Images\b|\bShutterstock\b|\bAFP Photo\b|\bimago images\b|^\s*(foto|fotos|photo|photos|image|imagen|imagem|bild|crédito|credit|crédits?|©)\s*[:|/©])/i;
