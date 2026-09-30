@@ -93,8 +93,11 @@ export function writeDeterministic(fs: FactSheet, opts: WriteOptions = {}): Draf
       const short = compressClaim(c.text, c.isHeadline ? 22 : 16, { commaCut: false });
       // Un titular tiene que entenderse solo.
       if (!short || !standsAlone(short)) continue;
-      const h = plainClaim(c) ? short : stripPeriod(P.according(short, listJoin(lang, c.attribution.slice(0, 2))));
-      if (h.length <= 120 && goodHeadline(h)) {
+      // Atribuido: con dos fuentes si cabe; si no, con una («…, según Heraldo»). Con «según X y Y»
+      // muchos titulares pasaban de 120 caracteres y la noticia se retenía entera (30-09-2026).
+      const withSources = (n: number) => stripPeriod(P.according(short, listJoin(lang, c.attribution.slice(0, n))));
+      const h = plainClaim(c) ? short : [withSources(2), withSources(1)].find((x) => x.length <= 120) ?? withSources(1);
+      if (h.length <= 150 && goodHeadline(h)) {
         headline = h;
         headlineClaim = c;
         break;
@@ -115,8 +118,10 @@ export function writeDeterministic(fs: FactSheet, opts: WriteOptions = {}): Draf
     if (!compressed) return;
     const overlap = coverage(hWords, keyWords(compressed));
     if (overlap > 0.85) return; // sería el titular otra vez con otras palabras
-    // A igualdad, la mejor respaldada (van por orden) y, antes que nada, lo confirmado.
-    const score = overlap - i * 0.02 + (plainClaim(c) ? 0.2 : 0);
+    // A igualdad, la mejor respaldada (van por orden) y, antes que nada, lo confirmado. Mejor de
+    // otra pieza que el titular: titular y entrada de la misma fuente eran ya el 71 % del texto y
+    // el control legal retenía la noticia (30-09-2026).
+    const score = overlap - i * 0.02 + (plainClaim(c) ? 0.2 : 0) - (headlineClaim && c.itemId === headlineClaim.itemId ? 0.25 : 0);
     if (!lead || score > lead.score) lead = { c, text: compressed, score };
   });
   if (!lead && headlineClaim && opts.skeleton) lead = { c: headlineClaim, text: truncate(headlineClaim.text, 200), score: 0 };
