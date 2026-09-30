@@ -168,6 +168,10 @@ export async function clusterItems(db: Db, settings: EditorialSettings, opts: { 
   // Piezas actualizadas que ya pertenecían a una historia: se reverifica esa historia.
   const already = await db.select({ itemId: storyItems.itemId, storyId: storyItems.storyId }).from(storyItems).where(inArray(storyItems.itemId, items.map((i) => i.id)));
   const storyOf = new Map(already.map((a) => [a.itemId, a.storyId]));
+  // El IDF, una vez por ciclo (se recalculaba por cada pieza sobre 800 historias: el agrupador
+  // llegó a tardar 4 minutos en producción, 30-09-2026). Las historias nuevas del propio ciclo
+  // no cambian gran cosa el peso de cada palabra.
+  const idf = idfFrom(candidates.map((c) => c.centroid));
   for (const it of items) {
     const prevStory = storyOf.get(it.id);
     if (prevStory) {
@@ -180,7 +184,6 @@ export async function clusterItems(db: Db, settings: EditorialSettings, opts: { 
     const { vec, simVec, ents, places } = feats;
     const at = it.publishedAt ?? it.fetchedAt;
     let best: { c: Candidate; sim: number } | null = null;
-    const idf = idfFrom(candidates.map((c) => c.centroid));
     for (const c of candidates) {
       if (c.isDemo !== it.isDemo) continue; // lo DEMO jamás se mezcla con lo real
       const probe = { vec: simVec, entities: ents, places, minhash: it.minhash, at };

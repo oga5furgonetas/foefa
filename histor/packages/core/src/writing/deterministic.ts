@@ -148,6 +148,23 @@ export function writeDeterministic(fs: FactSheet, opts: WriteOptions = {}): Draf
   // Los titulares de las demás fuentes repiten lo mismo con otras palabras: fuera del cuerpo.
   const bodyClaims = [...fs.confirmed, ...fs.attributed].filter((c) => !c.isHeadline);
   const knownPool = bodyClaims.length >= 2 ? bodyClaims : [...fs.confirmed, ...fs.attributed];
+  // Palabras tomadas de cada pieza (el control legal mide el solapamiento pieza a pieza): ninguna
+  // puede pasar del 45 % del texto. Si no, 24 de 50 historias se retenían por «el 55 % del texto
+  // coincide con una sola fuente» (30-09-2026).
+  const wordsFrom = new Map<number, number>();
+  let totalWords = 0;
+  const countWords = (s: string) => s.split(/\s+/).filter(Boolean).length;
+  // El titular y la entrada también cuentan (el control legal mide todo el texto publicado).
+  const counted: [FactClaim | null, string][] = [
+    [headlineClaim, headline],
+    [leadClaim, body[0] && body[0].type === 'p' ? body[0].text : (leadClaim?.text ?? '')],
+  ];
+  for (const [c, text] of counted) {
+    if (!c) continue;
+    const w = countWords(text);
+    wordsFrom.set(c.itemId, (wordsFrom.get(c.itemId) ?? 0) + w);
+    totalWords += w;
+  }
   for (const c of knownPool) {
     if (known.length >= 10) break;
     if (used.has(c.key) || nearDuplicate(c, [...used].map((k) => fs.claims.find((x) => x.key === k)!).filter(Boolean))) continue;
@@ -157,6 +174,11 @@ export function writeDeterministic(fs: FactSheet, opts: WriteOptions = {}): Draf
     // Frases que dependen de la anterior de su fuente («Mas os maiores escritórios…»), citas
     // con las comillas sin cerrar o frases que se quedan colgando: fuera.
     if (!compressed || !selfContained(compressed) || !usableSentence(compressed)) continue;
+    const w = countWords(compressed);
+    const mine = wordsFrom.get(c.itemId) ?? 0;
+    if (totalWords + w > 40 && (mine + w) / (totalWords + w) > 0.45) continue;
+    wordsFrom.set(c.itemId, mine + w);
+    totalWords += w;
     used.add(c.key);
     perSource.set(src, (perSource.get(src) ?? 0) + 1);
     const plain = c.status === 'supported' && !developing;

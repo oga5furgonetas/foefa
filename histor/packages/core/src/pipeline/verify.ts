@@ -175,11 +175,15 @@ export async function verifyStory(db: Db, st: typeof stories.$inferSelect, setti
   await db.transaction(async (tx) => {
     await tx.delete(claimsT).where(eq(claimsT.storyId, st.id));
     const statusOf = new Map(analysis.assessments.map((a) => [a.claimKey, a]));
-    for (const c of analysis.claims) {
-      const a = statusOf.get(c.key)!;
-      const [row] = await tx
-        .insert(claimsT)
-        .values({
+    // En lotes de 200: una consulta por afirmación eran miles por historia grande (la verificación
+    // llegó a tardar 12 minutos por ciclo, 30-09-2026). Los ids se emparejan por pieza + texto,
+    // que es único dentro de cada pieza, sin depender del orden de RETURNING.
+    const pairKey = (itemId: number, text: string) => `${itemId}\u0000${text}`;
+    const keyByPair = new Map(analysis.claims.map((c) => [pairKey(c.itemId, c.text), c.key]));
+    for (let i = 0; i < analysis.claims.length; i += 200) {
+      const chunk = analysis.claims.slice(i, i + 200).map((c) => {
+        const a = statusOf.get(c.key)!;
+        return {
           storyId: st.id,
           itemId: c.itemId,
           language: c.language,
@@ -195,9 +199,13 @@ export async function verifyStory(db: Db, st: typeof stories.$inferSelect, setti
           status: a.status,
           supportScore: a.supportScore,
           independentSupport: a.supportingGroups.length,
-        })
-        .returning({ id: claimsT.id });
-      keyToId.set(c.key, row.id);
+        };
+      });
+      const rows = await tx.insert(claimsT).values(chunk).returning({ id: claimsT.id, itemId: claimsT.itemId, text: claimsT.text });
+      for (const r of rows) {
+        const key = keyByPair.get(pairKey(Number(r.itemId), r.text));
+        if (key) keyToId.set(key, r.id);
+      }
     }
     const evRows = analysis.evidence
       .filter((e) => keyToId.has(e.claimKey))
