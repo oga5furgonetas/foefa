@@ -445,27 +445,30 @@ def generar_cuadrante(entrada: Dict[str, Any]) -> Dict[str, Any]:
     if permitir_extra:
         estado, final, _ = construir(2, base)
 
-    # ── La marca de día extra, donde ya estaba ───────────────────────────────
-    # Cuál de los seis días de una semana es «el extra» no cambia qué días se
-    # trabaja: es una etiqueta. El cálculo la ponía en el día que dejaba fuera
-    # la fase 1, cualquiera de los seis, y la propuesta salía con cambios que no
-    # lo eran (30-09-2026: 22 de 49 con la hoja de OGA5). Por semana y persona:
-    # tantas marcas como extras ha puesto el cálculo, menos las que ya hay en
-    # días que no mueve (antes del periodo o fijados), y primero en los días que
-    # ya las tenían.
+    # ── La marca de día extra (el rosa) ──────────────────────────────────────
+    # Un día que ya se trabajaba y se sigue trabajando se queda con su marca,
+    # la tenga o no: el rosa de la hoja lo pone quien la hace. El cálculo la
+    # ponía en el día que dejaba fuera su fase 1 y la propuesta salía con
+    # cambios que no lo eran (30-09-2026, hoja de OGA5: 22 de 49). Y la hoja no
+    # sigue la cuenta de lunes a domingo: hay rosas en semanas de 5 días y
+    # semanas de 6 sin rosa. Solo un día NUEVO por encima de los 5 de la semana
+    # sale en rosa, si en esa semana no hay ya tantas marcas como extras.
     marca: Dict[Tuple[str, dt.date], bool] = {}
     for c in conductores:
         cid = c["id"]
         for sem in semanas:
             movibles = [d for d in sem if d in en_plan and fijos[cid, d] is None]
+            for d in movibles:
+                if final[cid, d] == 1 and cur(cid, d) in DE_TRABAJO:
+                    marca[cid, d] = f"{cid}|{d}" in extras_ya
             del_calculo = [d for d in movibles if final[cid, d] == 1 and base[cid, d] == 0]
-            if not del_calculo:
-                continue
-            quietas = sum(1 for d in sem if d not in movibles and final[cid, d] == 1
-                          and f"{cid}|{d}" in extras_ya)
-            ya = [d for d in movibles if final[cid, d] == 1 and f"{cid}|{d}" in extras_ya]
-            for d in (ya + [d for d in del_calculo if d not in ya])[:max(0, len(del_calculo) - quietas)]:
-                marca[cid, d] = True
+            hueco = len(del_calculo) - sum(1 for d in sem if final[cid, d] == 1 and f"{cid}|{d}" in extras_ya)
+            for d in del_calculo:
+                if hueco <= 0:
+                    break
+                if cur(cid, d) not in DE_TRABAJO:
+                    marca[cid, d] = True
+                    hueco -= 1
 
     # ── Salida ───────────────────────────────────────────────────────────────
     out, avisos = {}, []

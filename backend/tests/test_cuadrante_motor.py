@@ -340,6 +340,24 @@ def test_el_extra_de_un_dia_de_antes_del_periodo_ya_cuenta_para_la_semana():
     assert all(not v["cambiado"] and not v["extra"] for v in res["celdas"].values())
 
 
+def test_el_rosa_de_la_hoja_no_sigue_la_semana_y_se_respeta_igual():
+    # Como en la hoja de OGA5: c0 con rosa en una semana de 5 días (Kevin) y c1
+    # 6 días sin rosa (Pablo Otero). Trabajando lo mismo, ni se quita ni se pone.
+    conds, celdas, _ = _semana_con_extras()
+    celdas["c5|" + dia(5)] = "1"          # el sábado trabaja c5 (6 días)...
+    celdas["c0|" + dia(5)] = "N/T"        # ...y libra c0 (5): cada día sigue con 5
+    extras = [f"c0|{dia(4)}"]
+    res = cm.generar_cuadrante(entrada(conds, maxima=3, celdas=celdas, extras=extras))
+    assert all(not v["cambiado"] for v in res["celdas"].values())
+    assert [k for k, v in res["celdas"].items() if v["extra"]] == extras
+
+
+def test_un_dia_nuevo_por_encima_de_cinco_sale_en_rosa():
+    # Nadie tiene nada puesto: los sextos días que pone el motor van en rosa.
+    res = cm.generar_cuadrante(entrada(gente(6), maxima=3, extras=[]))
+    assert res["extras"] == 5
+
+
 def test_una_celda_fijada_con_su_marca_de_extra_la_conserva():
     conds, celdas, extras = _semana_con_extras()
     res = cm.generar_cuadrante(entrada(conds, maxima=3, celdas=celdas, extras=extras, bloqueadas=extras[:2]))
