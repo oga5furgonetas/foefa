@@ -171,6 +171,21 @@ async def test_cambiar_una_peticion_la_mantiene_como_una_y_avisa_de_lo_que_cambi
 
 
 @pytest.mark.asyncio(loop_scope="session")
+async def test_cambiar_no_toca_un_dia_ya_pasado_de_la_misma_peticion(base):
+    # La pantalla solo enseña (y manda) lo de hoy en adelante: un día pasado sin
+    # contestar no puede salir como «quitado» ni cancelarse al cambiar el resto.
+    db = base.db
+    _peticion(db, "viejo", "2026-09-28")
+    _peticion(db, "p1", "2026-10-16")
+    r = await server.cambiar_mi_peticion({"grupo": "g1", "dates": ["2026-10-16", "2026-10-17"],
+                                          "motivo": "asuntos", "note": "otra explicación"}, ANA)
+    assert r["quitados"] == [] and r["anadidos"] == ["2026-10-17"]
+    viejo = next(x for x in db["shift_requests"].docs if x["id"] == "viejo")
+    assert viejo["status"] == "pendiente" and viejo["note"] == "boda de mi prima"
+    assert "quita" not in base.avisos[0][2]
+
+
+@pytest.mark.asyncio(loop_scope="session")
 async def test_cambiar_sin_cambiar_nada_o_ya_contestada_no_hace_nada(base):
     db = base.db
     _peticion(db, "p1", "2026-10-16")

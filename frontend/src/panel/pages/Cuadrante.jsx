@@ -18,7 +18,7 @@ import CuadranteChat from '../components/CuadranteChat'
 import HojaCuadrante from '../hoja/HojaCuadrante'
 import {
   TRABAJO, LETRA, DIA, MES, PALETA, ABREV, DOMINGO_TRABAJA, COLUMNA_DOMINGO, claseCodigo, wd,
-  sumaDias, rangoDias, fmt, lunesDe, signo, claseDif, resumenDias,
+  sumaDias, rangoDias, fmt, lunesDe, signo, claseDif, resumenDias, septimosDe,
 } from '../cuadranteComun'
 
 /* ── EL CUADRANTE CON MOTOR ────────────────────────────────────────────────
@@ -819,19 +819,7 @@ export default function Cuadrante() {
     [dias, personas, celda, datos, colchonDe])
 
   /* El 7º día seguido, contando la semana de antes (viene en los datos). */
-  const septimos = useMemo(() => {
-    const s = new Set()
-    const todos = rangoDias(sumaDias(rango.desde, -7), rango.hasta, 110)
-    for (const p of personas) {
-      let run = 0
-      for (const f of todos) {
-        const c = celda(p.id, f)
-        run = c && TRABAJO.has(c.cod) ? run + 1 : 0
-        if (run > 6 && f >= rango.desde) s.add(`${p.id}|${f}`)
-      }
-    }
-    return s
-  }, [personas, celda, rango])
+  const septimos = useMemo(() => septimosDe(personas, celda, rango.desde, rango.hasta), [personas, celda, rango])
 
   const totales = useMemo(() => {
     const m = {}

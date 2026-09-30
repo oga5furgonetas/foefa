@@ -29813,11 +29813,13 @@ async def cambiar_mi_peticion(data: dict = Body(...), user: dict = Depends(requi
     siguen se quedan como estaban. Se avisa de lo que ha cambiado."""
     did = user.get("sub")
     grupo = _texto_cuerpo((data or {}).get("grupo"), 80)
-    viejas = await db.shift_requests.find({"driver_id": did, "grupo": grupo, "status": "pendiente"},
-                                          {"_id": 0}).to_list(62) if grupo else []
+    hoy = _dia_negocio()
+    # Solo lo que aún puede cambiar: un día ya pasado sin contestar se queda
+    # como está (si no, al cambiar la petición salía «quita 28/09» sin tocarlo).
+    pendientes = {"driver_id": did, "grupo": grupo, "status": "pendiente", "date": {"$gte": hoy}}
+    viejas = await db.shift_requests.find(pendientes, {"_id": 0}).to_list(62) if grupo else []
     if not viejas:
         raise HTTPException(409, "Esa petición ya no está esperando respuesta: no se puede cambiar")
-    hoy = _dia_negocio()
     nuevas_f = []
     for d in _lista_cuerpo((data or {}).get("dates"), 62):
         s = str(d)[:10]
@@ -29861,7 +29863,7 @@ async def cambiar_mi_peticion(data: dict = Body(...), user: dict = Depends(requi
                       "estado_antes": "pendiente", "cancelado_en_cambio": True}})
     if cambia_texto:
         await db.shift_requests.update_many(
-            {"driver_id": did, "grupo": grupo, "status": "pendiente"},
+            pendientes,
             {"$set": {"motivo": motivo, "motivo_label": MOTIVOS_PETICION[motivo], "note": nota[:300],
                       "cambiado_at": ahora}})
     if anadir:
@@ -43759,6 +43761,7 @@ async def moviles_anadir(data: dict = Body(...), admin: dict = Depends(require_a
 async def moviles_editar(movil_id: str, data: dict = Body(...), admin: dict = Depends(require_admin)):
     """Cambiar la extensión, el número, la nota o darlo de baja (roto, perdido):
     uno de baja no se pone en la hoja y se pasa al de reserva."""
+    await _require_plan_feature(admin, "assignments")
     m = await db[_MOV_COL].find_one({"id": movil_id}, {"_id": 0})
     if not m:
         raise HTTPException(404, "Ese móvil no existe")
@@ -43793,6 +43796,7 @@ async def moviles_editar(movil_id: str, data: dict = Body(...), admin: dict = De
 async def moviles_borrar(movil_id: str, admin: dict = Depends(require_admin)):
     """Quitar un móvil del centro. A quien lo tenía se le quita de su ficha
     (como suyo o de reserva) y se dice a quién."""
+    await _require_plan_feature(admin, "assignments")
     m = await db[_MOV_COL].find_one({"id": movil_id}, {"_id": 0})
     if not m:
         raise HTTPException(404, "Ese móvil no existe")

@@ -34,7 +34,11 @@ const PANTALLAS = [
 test.describe('capturas para la landing', () => {
   test.skip(({ browserName }) => browserName !== 'chromium', 'solo chromium')
 
-  test('generar', async ({ page }) => {
+  test('generar', async ({ page }, testInfo) => {
+    // Solo con --update-snapshots, como dice el «Uso». Sin esto, pasar todas
+    // las pruebas (el CI, o antes de desplegar) dejaba las capturas en
+    // public/, y la siguiente compilación las colaba en la portada.
+    test.skip(!['all', 'changed'].includes(testInfo.config.updateSnapshots), 'solo con --update-snapshots')
     test.setTimeout(180_000)
     fs.mkdirSync(DESTINO, { recursive: true })
 

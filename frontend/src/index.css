@@ -96,7 +96,9 @@ html[data-panel-theme='light'] [class*=' bg-white/'] { background-color: rgba(20
 html[data-panel-theme='light'] .text-emerald-300, html[data-panel-theme='light'] .text-emerald-400 { color: #065f46; }
 html[data-panel-theme='light'] .text-amber-300, html[data-panel-theme='light'] .text-amber-400 { color: #92400e; }
 html[data-panel-theme='light'] .text-red-300, html[data-panel-theme='light'] .text-red-400 { color: #991b1b; }
-html[data-panel-theme='light'] .text-orange-300, html[data-panel-theme='light'] .text-orange-400 { color: #c2410c; }
+/* Naranja al 800 como los demás: el 700 (#c2410c) se quedaba en 4,2:1 sobre
+   su propio fondo tintado (la etiqueta «Moderado», la cabecera del domingo). */
+html[data-panel-theme='light'] .text-orange-300, html[data-panel-theme='light'] .text-orange-400 { color: #9a3412; }
 html[data-panel-theme='light'] .text-sky-300, html[data-panel-theme='light'] .text-sky-400 { color: #0369a1; }
 html[data-panel-theme='light'] .text-violet-300, html[data-panel-theme='light'] .text-violet-400 { color: #6d28d9; }
 html[data-panel-theme='light'] .text-purple-200, html[data-panel-theme='light'] .text-purple-300 { color: #4c1d95; }
@@ -580,7 +582,7 @@ html[data-panel-theme='hibrido'] main .text-amber-400 { color: #92400e; }
 html[data-panel-theme='hibrido'] main .text-red-300,
 html[data-panel-theme='hibrido'] main .text-red-400 { color: #991b1b; }
 html[data-panel-theme='hibrido'] main .text-orange-300,
-html[data-panel-theme='hibrido'] main .text-orange-400 { color: #c2410c; }
+html[data-panel-theme='hibrido'] main .text-orange-400 { color: #9a3412; }
 html[data-panel-theme='hibrido'] main .text-sky-300,
 html[data-panel-theme='hibrido'] main .text-sky-400 { color: #0369a1; }
 html[data-panel-theme='hibrido'] main .text-violet-300,

@@ -99,3 +99,21 @@ export function leerCodigo(texto) {
   const cod = _ALIAS_COD[t] || t
   return CODIGOS_HOJA.includes(cod) ? { cod, extra: false } : null
 }
+
+/* El 7º día seguido trabajando (la ley: como mucho 6), contando la semana de
+   antes, que viene en los datos. Lo de otro centro también cuenta: se trabaja
+   igual. Devuelve las celdas «id|fecha» que lo son, dentro de desde..hasta. */
+export function septimosDe(personas, celda, desde, hasta) {
+  const s = new Set()
+  if (!desde || !hasta) return s
+  const todos = rangoDias(sumaDias(desde, -7), hasta, 110)
+  for (const p of personas) {
+    let seguidos = 0
+    for (const f of todos) {
+      const c = celda(p.id, f)
+      seguidos = c && TRABAJO.has(c.cod) ? seguidos + 1 : 0
+      if (seguidos > 6 && f >= desde) s.add(`${p.id}|${f}`)
+    }
+  }
+  return s
+}

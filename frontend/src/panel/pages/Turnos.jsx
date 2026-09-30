@@ -1357,10 +1357,27 @@ export default function Turnos() {
       if (motivo.length < 3) return          // cancelado o vacío: no se hace nada
     }
     setErr('')
+    /* Si quien la pidió canceló algún día con la bandeja ya abierta, ese día
+       contesta 409: se sigue con los demás y se dice cuántos eran. Antes el
+       bucle se paraba a la mitad, con parte aprobada y la bandeja sin
+       refrescar, y al reintentar volvía a chocar con el mismo día. */
+    let cancelados = 0
     try {
-      for (const id of grupo.ids) await resolveShiftRequest(id, accion, motivo)
+      for (const id of grupo.ids) {
+        try {
+          await resolveShiftRequest(id, accion, motivo)
+        } catch (e) {
+          if (e?.response?.status !== 409) throw e
+          cancelados += 1
+        }
+      }
       setSolicitudes((s) => s.filter((x) => !grupo.ids.includes(x.id)))
       await cargar()
+      if (cancelados) {
+        setAviso(cancelados === grupo.ids.length
+          ? `${grupo.driver_name} ya la había cancelado: no se ha tocado nada.`
+          : `${cancelados} de esos días ya los había cancelado ${grupo.driver_name}: esos no se han tocado.`)
+      }
     } catch (e) {
       setErr(e?.response?.data?.detail || t('turns.req.err'))
     }

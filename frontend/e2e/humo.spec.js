@@ -537,6 +537,105 @@ test.describe('Cuadrante', () => {
 
   /* LA HOJA (30-09-2026, Dani: «que si le clicas se expanda y sea un propio
      Excel con su diario, su mensual y lo de deber horas, y se pueda editar»). */
+  test('la hoja se maneja como Excel: flechas al escribir, espacios, copiar y confirmar', async ({ page, context }) => {
+    const fallos = vigilar(page)
+    await context.grantPermissions(['clipboard-read', 'clipboard-write'])
+    await entrarComoAdmin(page)
+    await simularApi(page, 'vacio')
+    const datos = DATOS()
+    datos.propuesta = null
+    // Siete seguidos de ANA desde el lunes: el domingo (7º) sale en rojo.
+    for (let i = 0; i < 7; i++) datos.celdas[`p1|${dia(i)}`] = { cod: '1', extra: false, fijada: false }
+    await page.route(/\/api\/cuadrante\?/, json(datos))
+    const pedidos = []
+    await page.route(/\/api\/cuadrante\/celdas/, (route) => {
+      pedidos.push(route.request().postDataJSON().cambios)
+      return json({ ok: true, guardadas: 1, bloqueadas: [], cambio_id: 'c1' })(route)
+    })
+    await page.addInitScript(() => localStorage.setItem('cuadrante.hoja', 'MENSUAL'))
+    await page.goto('/panel/cuadrante', { waitUntil: 'domcontentloaded' })
+    await expect(page.getByText('Rutas (cuenta de 1)')).toBeVisible({ timeout: 15000 })
+    await page.getByRole('button', { name: 'Abrir como hoja (Excel)' }).click()
+    const hoja = page.getByLabel('Hoja MENSUAL')
+    await expect(hoja).toBeVisible()
+    await expect(page.locator('[data-celda="0-6"]')).toHaveAttribute('title', /7º DÍA SEGUIDO/)
+    // Escribir y flecha a la derecha: guarda y se mueve, como en Excel.
+    await page.locator('[data-celda="1-2"]').click()
+    await page.keyboard.type('v')
+    await page.keyboard.press('ArrowRight')
+    await expect.poll(() => pedidos.length).toBe(1)
+    expect(pedidos[0]).toEqual([{ driver_id: 'p2', fecha: dia(2), cod: 'V', extra: false }])
+    await expect(page.locator('[data-celda="1-3"]')).toHaveClass(/outline-brand-400/)
+    // Un espacio suelto no vacía nada.
+    await page.keyboard.type(' ')
+    await page.keyboard.press('Enter')
+    await page.waitForTimeout(300)
+    expect(pedidos.length).toBe(1)
+    // Ctrl+C copia la selección con tabuladores, lista para pegar en Excel.
+    await page.locator('[data-celda="0-0"]').click()
+    await page.locator('[data-celda="1-1"]').click({ modifiers: ['Shift'] })
+    await page.keyboard.press('Control+c')
+    const copiado = await page.evaluate(() => navigator.clipboard.readText())
+    expect(copiado).toBe('1\t1\n1\t1')
+    // Ctrl+A y Supr: se pregunta antes de vaciar el mes entero. Si se dice que no, nada.
+    let pregunta = ''
+    page.once('dialog', (d) => { pregunta = d.message(); d.dismiss() })
+    await page.keyboard.press('Control+a')
+    await page.keyboard.press('Delete')
+    await expect.poll(() => pregunta).toMatch(/Vas a vaciar \d+ celdas/)
+    await page.waitForTimeout(300)
+    expect(pedidos.length).toBe(1)
+    expect(fallos, fallos.join(' | ')).toHaveLength(0)
+  })
+
+  test('la hoja a tamaño real (68 personas × 42 días) se mueve fluida', async ({ page }) => {
+    const fallos = vigilar(page)
+    await entrarComoAdmin(page)
+    await simularApi(page, 'vacio')
+    const datos = DATOS()
+    datos.propuesta = null
+    datos.personas = Array.from({ length: 68 }, (_, i) => ({ id: `q${i}`, nombre: `PERSONA ${i + 1} DE PRUEBA`, tipo: i % 9 ? 'normal' : 'empresa',
+      ficha_activa: true, apodos: [], nota: '', reglas: {}, entendido: [], sin_entender: '', reglas_fijas: [] }))
+    datos.celdas = {}
+    datos.hasta = dia(41)
+    for (const p of datos.personas) for (let i = -7; i < 42; i++) datos.celdas[`${p.id}|${dia(i)}`] = { cod: (i + Number(p.id.slice(1))) % 7 < 5 ? '1' : 'N/T' }
+    datos.maximas = Object.fromEntries(Array.from({ length: 42 }, (_, i) => [dia(i), 40]))
+    await page.route(/\/api\/cuadrante\?/, json(datos))
+    await page.addInitScript(() => localStorage.setItem('cuadrante.hoja', 'MENSUAL'))
+    await page.goto('/panel/cuadrante', { waitUntil: 'domcontentloaded' })
+    await expect(page.getByText('Rutas (cuenta de 1)')).toBeVisible({ timeout: 15000 })
+    await page.getByRole('button', { name: 'Abrir como hoja (Excel)' }).click()
+    await expect(page.getByLabel('Hoja MENSUAL')).toBeVisible()
+    // Seis semanas, como su hoja de septiembre-octubre.
+    await page.getByRole('dialog', { name: 'Hoja del cuadrante' }).getByLabel('Hasta').fill(dia(41))
+    await expect(page.locator('[data-celda="67-41"]')).toBeVisible({ timeout: 15000 })
+    await page.locator('[data-celda="0-0"]').click()
+    // Medido DENTRO del navegador (lo de fuera mide sobre todo a Playwright) y
+    // solo el trabajo de cada tecla —pintar lo que cambia, maquetar y llevar la
+    // celda a la vista—, no la espera al fotograma: esa depende de lo cargada
+    // que vaya la máquina y hacía fallar la prueba a veces con todo en paralelo.
+    // La mediana, para que un parón suelto del recolector no cuente.
+    const tiempos = await page.evaluate(async () => {
+      const caja = document.querySelector('[aria-label="Hoja MENSUAL"]')
+      const t = []
+      for (let i = 0; i < 50; i++) {
+        await new Promise((r) => requestAnimationFrame(() => r()))
+        const t0 = performance.now()
+        caja.dispatchEvent(new KeyboardEvent('keydown', { key: i < 20 ? 'ArrowRight' : 'ArrowDown', bubbles: true }))
+        await Promise.resolve() // React pinta lo de la tecla en esta microtarea
+        caja.getBoundingClientRect() // y el navegador lo maqueta aquí
+        t.push(performance.now() - t0)
+      }
+      return t.sort((a, b) => a - b)
+    })
+    await expect(page.locator('[data-celda="30-20"]')).toHaveClass(/outline-brand-400/)
+    const mediana = tiempos[25]
+    console.log(`Cada tecla: ${mediana.toFixed(1)} ms de mediana, ${tiempos[49].toFixed(1)} ms la peor`)
+    // Sin memorizar las filas (cada tecla repinta la hoja entera) da ~9,5 ms.
+    expect(mediana).toBeLessThan(5)
+    expect(fallos, fallos.join(' | ')).toHaveLength(0)
+  })
+
   test('la hoja: escribir, pegar de Excel, Ctrl+Z y las tres pestañas', async ({ page }) => {
     const fallos = vigilar(page)
     await entrarComoAdmin(page)
@@ -772,6 +871,38 @@ test.describe('Portal del conductor · tus peticiones', () => {
     await page.getByRole('button', { name: 'Guardar cambios' }).click()
     await expect(page.getByText('Petición cambiada')).toBeVisible()
     expect(pedidos[1]).toEqual(['cambiar', { grupo: 'g1', dates: [dia(10)], motivo: 'asuntos', note: 'boda de mi prima' }])
+    expect(fallos, fallos.join(' | ')).toHaveLength(0)
+  })
+
+  /* La otra punta: la oficina aprueba con la bandeja abierta y, entretanto,
+     quien lo pidió ha cancelado uno de los días. Ese día contesta 409; los
+     demás se aprueban igual y se dice cuántos estaban cancelados (antes se
+     paraba a la mitad y al reintentar volvía a chocar). */
+  test('la oficina aprueba aunque un día ya lo haya cancelado quien lo pidió', async ({ page }) => {
+    const fallos = vigilar(page)
+    await entrarComoAdmin(page)
+    await simularApi(page, 'vacio')
+    let pendientes = [{ ...PET('p1', 10, 'pendiente', 'g1'), driver_name: 'ANA PÉREZ', center: 'NORTE' },
+      { ...PET('p2', 11, 'pendiente', 'g1'), driver_name: 'ANA PÉREZ', center: 'NORTE' }]
+    await page.route(/\/api\/shift-requests\?/, (route) => json({
+      requests: new URL(route.request().url()).searchParams.get('status') === 'pendiente' ? pendientes : [] })(route))
+    const aprobadas = []
+    await page.route(/\/api\/shift-requests\/p\d\/resolve/, (route) => {
+      const id = route.request().url().match(/shift-requests\/(p\d)\//)[1]
+      if (id === 'p2') {
+        return route.fulfill({ status: 409, contentType: 'application/json',
+          body: JSON.stringify({ detail: 'El conductor ha cancelado esta petición' }) })
+      }
+      aprobadas.push(id)
+      pendientes = []
+      return json({ success: true, status: 'aprobado' })(route)
+    })
+    await page.goto('/panel/turnos', { waitUntil: 'domcontentloaded' })
+    await expect(page.getByText('ANA PÉREZ')).toBeVisible({ timeout: 15000 })
+    await page.getByRole('button', { name: 'Aprobar' }).click()
+    await expect(page.getByText('1 de esos días ya los había cancelado ANA PÉREZ: esos no se han tocado.')).toBeVisible()
+    expect(aprobadas).toEqual(['p1'])
+    await expect(page.getByText('ANA PÉREZ', { exact: true })).toHaveCount(0)
     expect(fallos, fallos.join(' | ')).toHaveLength(0)
   })
 })

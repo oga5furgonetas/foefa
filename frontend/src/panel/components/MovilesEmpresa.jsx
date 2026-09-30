@@ -94,40 +94,43 @@ function Pegar({ center, onHecho, onCerrar }) {
   )
 }
 
+/* Filas en rejilla y no en tabla: en escritorio, una línea por móvil o por
+   persona; en el móvil, dos. Con tabla, en el móvil el estado y la papelera
+   se salían por la derecha y el aviso del compartido se estrujaba en una
+   columna de dos palabras de ancho. */
+const REJ_MOVIL = 'grid-cols-[auto_minmax(0,1fr)_auto_auto] items-center gap-x-2 gap-y-1.5 sm:grid-cols-[4.5rem_9.5rem_minmax(8rem,1fr)_minmax(8rem,1fr)_5.5rem_1.25rem]'
+const REJ_PERSONA = 'grid-cols-[minmax(0,1fr)_minmax(0,1fr)_1rem] items-center gap-x-2 gap-y-1 sm:grid-cols-[minmax(0,1fr)_11rem_11rem_1rem]'
+const CABECERA = 'px-3 py-2 text-[10.5px] font-semibold uppercase tracking-wide text-dark-500'
+
 function FilaMovil({ m, onGuardar, onBorrar }) {
   const [numero, setNumero] = useState(m.numero || '')
   const [nota, setNota] = useState(m.nota || '')
   useEffect(() => { setNumero(m.numero || ''); setNota(m.nota || '') }, [m.numero, m.nota])
-  const lleva = lista(m.de)
+  const lleva = lista(m.de).map((x) => `${x.nombre}${x.como === 'reserva' ? ' (reserva)' : ''}`).join(' · ')
+  // En escritorio el orden de las columnas lo ponen los sm:order-*; en el
+  // móvil va arriba la extensión, quién lo lleva y los botones, y debajo los campos.
   return (
-    <tr className="border-t border-dark-800/70">
-      <td className="py-1.5 pl-3 pr-2"><Ext e={m.extension} apagada={!m.activo} /></td>
-      <td className="px-1 py-1">
+    <li className={`grid ${REJ_MOVIL} border-t border-dark-800/70 px-3 py-2 sm:py-1.5`}>
+      <Ext e={m.extension} apagada={!m.activo} />
+      <span className="min-w-0 truncate text-[12px] text-dark-300 sm:order-4" title={lleva || undefined}>
+        {lleva || <span className="text-dark-500">nadie</span>}
+      </span>
+      <button onClick={() => onGuardar(m, { activo: !m.activo })} title={m.activo ? 'Darlo de baja: no se pone en la hoja' : 'Volver a usarlo'}
+        className={`justify-self-start rounded-md px-2 py-0.5 text-[11px] font-semibold sm:order-5 ${m.activo ? 'bg-emerald-500/15 text-emerald-300' : 'bg-dark-800 text-dark-400'}`}>
+        {m.activo ? 'En uso' : 'De baja'}
+      </button>
+      <button onClick={() => onBorrar(m)} aria-label={`Quitar el ${m.extension}`} className="justify-self-end text-dark-500 hover:text-red-300 sm:order-6">
+        <Trash2 size={14} />
+      </button>
+      <div className="col-span-4 grid grid-cols-2 gap-2 sm:contents">
         <input value={numero} onChange={(e) => setNumero(e.target.value)} aria-label={`Número del ${m.extension}`}
           onBlur={() => numero !== (m.numero || '') && onGuardar(m, { numero })} placeholder="número (opcional)"
-          className="input w-36 py-1 text-[12.5px]" />
-      </td>
-      <td className="px-1 py-1">
+          className="input w-full py-1 text-[12.5px] sm:order-2" />
         <input value={nota} onChange={(e) => setNota(e.target.value)} aria-label={`Nota del ${m.extension}`}
           onBlur={() => nota !== (m.nota || '') && onGuardar(m, { nota })} placeholder="nota (pantalla rota…)"
-          className="input w-full min-w-[9rem] py-1 text-[12.5px]" />
-      </td>
-      <td className="px-2 py-1 text-[12px] text-dark-300">
-        {lleva.length ? lleva.map((x) => `${x.nombre}${x.como === 'reserva' ? ' (reserva)' : ''}`).join(' · ')
-          : <span className="text-dark-500">nadie</span>}
-      </td>
-      <td className="px-2 py-1">
-        <button onClick={() => onGuardar(m, { activo: !m.activo })} title={m.activo ? 'Darlo de baja: no se pone en la hoja' : 'Volver a usarlo'}
-          className={`rounded-md px-2 py-0.5 text-[11px] font-semibold ${m.activo ? 'bg-emerald-500/15 text-emerald-300' : 'bg-dark-800 text-dark-400'}`}>
-          {m.activo ? 'En uso' : 'De baja'}
-        </button>
-      </td>
-      <td className="py-1 pl-1 pr-3 text-right">
-        <button onClick={() => onBorrar(m)} aria-label={`Quitar el ${m.extension}`} className="text-dark-500 hover:text-red-300">
-          <Trash2 size={14} />
-        </button>
-      </td>
-    </tr>
+          className="input w-full py-1 text-[12.5px] sm:order-3" />
+      </div>
+    </li>
   )
 }
 
@@ -148,38 +151,45 @@ function FilaConductor({ c, moviles, suyoDe, onCambio, guardando }) {
     }
     return salida
   }
+  // En el móvil, el nombre (y el aviso) en una línea y los dos móviles debajo.
+  const titulo = 'mb-0.5 block text-[10px] font-semibold uppercase tracking-wide text-dark-500 sm:hidden'
   return (
-    <tr className="border-t border-dark-800/70">
-      <td className="py-1.5 pl-3 pr-2 text-[12.5px] font-semibold text-dark-100">
+    <li className={`grid ${REJ_PERSONA} border-t border-dark-800/70 px-3 py-2 sm:py-1.5`}>
+      <div className="col-span-3 min-w-0 text-[12.5px] font-semibold text-dark-100 sm:col-span-1">
         {c.nombre}
         {compartido.length > 0 && (
-          <span className="mt-0.5 flex items-center gap-1 text-[11px] font-normal text-amber-300">
-            <AlertTriangle size={11} /> El {suyoM?.extension} también es de {compartido.map((o) => o.nombre.split(' ')[0]).join(', ')}:
-            si trabajan el mismo día, uno se lleva el de reserva.
+          <span className="mt-0.5 flex items-start gap-1 text-[11px] font-normal text-amber-300">
+            <AlertTriangle size={11} className="mt-[2px] shrink-0" />
+            <span>
+              El {suyoM?.extension} también es de {compartido.map((o) => o.nombre.split(' ')[0]).join(', ')}:
+              si trabajan el mismo día, uno se lleva el de reserva.
+            </span>
           </span>
         )}
-      </td>
-      <td className="px-1 py-1">
+      </div>
+      <div className="min-w-0">
+        <span className={titulo} aria-hidden="true">Su móvil</span>
         <select value={c.suyo || ''} disabled={guardando} aria-label={`Su móvil: ${c.nombre}`}
           onChange={(e) => onCambio(c, e.target.value || null, e.target.value === c.reserva ? null : c.reserva)}
-          className="input w-44 py-1 text-[12.5px]">
+          className="input w-full py-1 text-[12.5px]">
           <option value="">—</option>
           <option value={PROPIO}>Propio (el suyo)</option>
           {opciones(c.suyo).map((m) => <option key={m.id} value={m.id} disabled={!m.activo && m.id !== c.suyo}>{etiqueta(m, c.id)}</option>)}
         </select>
-      </td>
-      <td className="px-1 py-1">
+      </div>
+      <div className="min-w-0">
+        <span className={titulo} aria-hidden="true">De reserva</span>
         <select value={c.reserva || ''} disabled={guardando} aria-label={`De reserva: ${c.nombre}`}
           onChange={(e) => onCambio(c, c.suyo, e.target.value || null)}
-          className="input w-44 py-1 text-[12.5px]">
+          className="input w-full py-1 text-[12.5px]">
           <option value="">—</option>
           {opciones(c.reserva).filter((m) => m.id !== c.suyo).map((m) => (
             <option key={m.id} value={m.id} disabled={!m.activo && m.id !== c.reserva}>{etiqueta(m, c.id)}</option>
           ))}
         </select>
-      </td>
-      <td className="w-6 pr-3">{guardando && <Loader2 size={13} className="animate-spin text-dark-400" />}</td>
-    </tr>
+      </div>
+      <span className="self-end pb-1.5 sm:self-center sm:pb-0">{guardando && <Loader2 size={13} className="animate-spin text-dark-400" />}</span>
+    </li>
   )
 }
 
@@ -285,9 +295,9 @@ export default function MovilesEmpresa({ center }) {
       <section className="card overflow-hidden">
         <div className="flex flex-wrap items-center gap-2 border-b border-dark-800 px-3 py-2.5">
           <h3 className="text-sm font-bold text-dark-100">Los móviles</h3>
-          <form className="ml-auto flex items-center gap-2" onSubmit={(e) => { e.preventDefault(); if (nuevas.trim()) anadir() }}>
+          <form className="flex w-full items-center gap-2 sm:ml-auto sm:w-auto" onSubmit={(e) => { e.preventDefault(); if (nuevas.trim()) anadir() }}>
             <input value={nuevas} onChange={(e) => setNuevas(e.target.value)} aria-label="Extensiones nuevas"
-              placeholder="Extensiones: 4114 1117 4864…" className="input w-64 py-1 text-[12.5px]" />
+              placeholder="Extensiones: 4114 1117 4864…" className="input min-w-0 flex-1 py-1 text-[12.5px] sm:w-64 sm:flex-none" />
             <button type="submit" disabled={anadiendo || !nuevas.trim()}
               className="btn-primary flex items-center gap-1.5 px-3 py-1.5 text-xs disabled:opacity-40">
               {anadiendo ? <Loader2 size={13} className="animate-spin" /> : <Plus size={13} />} Añadir
@@ -300,17 +310,12 @@ export default function MovilesEmpresa({ center }) {
             la lista de tu hoja. Mientras no haya ninguno, «Poner móviles» sigue usando el teléfono de la ficha.
           </p>
         ) : (
-          <div className="overflow-x-auto">
-            <table className="min-w-full">
-              <thead>
-                <tr className="text-left text-[10.5px] font-semibold uppercase tracking-wide text-dark-500">
-                  <th className="py-2 pl-3 pr-2">Extensión</th><th className="px-1">Número</th><th className="px-1">Nota</th>
-                  <th className="px-2">Lo lleva</th><th className="px-2">Estado</th><th />
-                </tr>
-              </thead>
-              <tbody>{moviles.map((m) => <FilaMovil key={m.id} m={m} onGuardar={guardarMovil} onBorrar={quitar} />)}</tbody>
-            </table>
-          </div>
+          <>
+            <div className={`hidden ${REJ_MOVIL} ${CABECERA} sm:grid`} aria-hidden="true">
+              <span>Extensión</span><span>Número</span><span>Nota</span><span>Lo lleva</span><span>Estado</span><span />
+            </div>
+            <ul>{moviles.map((m) => <FilaMovil key={m.id} m={m} onGuardar={guardarMovil} onBorrar={quitar} />)}</ul>
+          </>
         )}
       </section>
 
@@ -329,21 +334,19 @@ export default function MovilesEmpresa({ center }) {
         {moviles.length === 0 && (
           <p className="px-4 pt-3 text-[12.5px] text-amber-300">Añade primero los móviles; «Propio» ya se puede poner.</p>
         )}
-        <div className="overflow-x-auto">
-          <table className="min-w-full">
-            <thead>
-              <tr className="text-left text-[10.5px] font-semibold uppercase tracking-wide text-dark-500">
-                <th className="py-2 pl-3 pr-2">Conductor</th><th className="px-1">Su móvil</th><th className="px-1">De reserva</th><th />
-              </tr>
-            </thead>
-            <tbody>
-              {visibles.map((c) => (
-                <FilaConductor key={c.id} c={c} moviles={moviles} suyoDe={suyoDe} onCambio={cambiar} guardando={!!guardando[c.id]} />
-              ))}
-            </tbody>
-          </table>
-          {visibles.length === 0 && <p className="px-4 py-4 text-[12.5px] text-dark-500">Nadie con ese filtro.</p>}
+        <div className={`hidden ${REJ_PERSONA} ${CABECERA} sm:grid`} aria-hidden="true">
+          <span>Conductor</span><span>Su móvil</span><span>De reserva</span><span />
         </div>
+        <ul>
+          {visibles.map((c) => (
+            <FilaConductor key={c.id} c={c} moviles={moviles} suyoDe={suyoDe} onCambio={cambiar} guardando={!!guardando[c.id]} />
+          ))}
+        </ul>
+        {visibles.length === 0 && (
+          <p className="px-4 py-4 text-[12.5px] text-dark-500">
+            {conductores.length ? 'Nadie con ese filtro.' : `No hay conductores activos en ${center}.`}
+          </p>
+        )}
       </section>
     </div>
   )

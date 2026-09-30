@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react'
 import { Trash2, Search } from 'lucide-react'
 import { useRejilla } from './useRejilla'
+import { soloEspacios, confirmarMucho } from './HojaMensual'
 
 /* DEBER HORAS — su registro de quién hizo horas o días de más y cómo se
    saldó (la tercera hoja de su Excel). Una fila por persona y día; sin nada
@@ -9,9 +10,9 @@ import { useRejilla } from './useRejilla'
    en Excel. */
 
 const COLS = [
-  { k: 'fecha', titulo: 'Fecha', ancho: 'w-28' },
+  { k: 'fecha', titulo: 'Fecha', ancho: 'w-28 min-w-[7rem]' },
   { k: 'persona', titulo: 'Quién', ancho: 'min-w-[14rem]' },
-  { k: 'cuanto', titulo: 'Cuánto', ancho: 'w-28' },
+  { k: 'cuanto', titulo: 'Cuánto', ancho: 'w-28 min-w-[7rem]' },
   { k: 'nota', titulo: 'Nota', ancho: 'min-w-[12rem]' },
   { k: 'saldado', titulo: 'Cómo se saldó', ancho: 'min-w-[13rem]' },
 ]
@@ -72,7 +73,7 @@ export default function HojaDeberHoras({ filas, hoyIso, crear, editar, borrar, d
     const porFila = new Map()
     const malos = []
     for (const { r, c, valor } of valores) {
-      if (r > N || c >= COLS.length) continue
+      if (r > N || c >= COLS.length || soloEspacios(valor)) continue
       const k = COLS[c].k
       let v = String(valor ?? '').trim()
       if (k === 'fecha') {
@@ -116,7 +117,7 @@ export default function HojaDeberHoras({ filas, hoyIso, crear, editar, borrar, d
           if (texto(r, c) !== '') v.push({ r, c, valor: '' })
         }
       }
-      return v.length ? aplicar(v) : null
+      return v.length && confirmarMucho(v.length, 'vaciar') ? aplicar(v) : null
     },
     onPegar: (r0, c0, matriz) => {
       // Pegar filas enteras debajo crea filas nuevas, una por línea.
@@ -168,12 +169,12 @@ export default function HojaDeberHoras({ filas, hoyIso, crear, editar, borrar, d
         <table className="border-separate border-spacing-0 text-[12.5px]">
           <thead>
             <tr>
-              <th className="sticky left-0 top-0 z-20 w-8 border-b border-r border-dark-700 bg-dark-900 px-1 text-[10px] text-dark-500">#</th>
+              <th className="sticky left-0 top-0 z-20 w-8 min-w-[2rem] border-b border-r border-dark-700 bg-dark-900 px-1 text-[10px] text-dark-500">#</th>
               {COLS.map((col) => (
                 <th key={col.k} className={`sticky top-0 z-10 border-b border-r border-dark-700 bg-dark-900 px-2 py-1.5 text-left text-[10px] uppercase tracking-wide text-dark-500 ${col.ancho}`}>{col.titulo}</th>
               ))}
               <th className="sticky top-0 z-10 border-b border-dark-700 bg-dark-900 px-2 text-[10px] uppercase tracking-wide text-dark-500">Estado</th>
-              <th className="sticky top-0 z-10 w-8 border-b border-dark-700 bg-dark-900" />
+              <th className="sticky top-0 z-10 w-8 min-w-[2rem] border-b border-dark-700 bg-dark-900" />
             </tr>
           </thead>
           <tbody>
@@ -182,7 +183,7 @@ export default function HojaDeberHoras({ filas, hoyIso, crear, editar, borrar, d
                 <td className="sticky left-0 z-10 border-b border-r border-dark-800 bg-dark-900 px-1 text-center text-[10px] text-dark-500">{f ? r + 1 : '+'}</td>
                 {COLS.map((col, c) => (
                   <td key={col.k} {...g.propsCelda(r, c)}
-                    className={`relative h-7 cursor-cell select-none border-b border-r border-dark-800 px-0 ${f ? 'text-dark-100' : 'text-dark-500'} ${clase(r, c)}`}>
+                    className={`relative h-7 cursor-cell select-none scroll-ml-8 scroll-mt-9 border-b border-r border-dark-800 px-0 ${f ? 'text-dark-100' : 'text-dark-500'} ${clase(r, c)}`}>
                     <span className="block truncate px-2">
                       {texto(r, c) || (!f && c === 1 ? <span className="italic text-dark-500">escribe aquí para apuntar otra…</span> : '')}
                     </span>

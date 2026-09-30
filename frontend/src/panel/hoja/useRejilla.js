@@ -6,8 +6,10 @@ import { useCallback, useEffect, useRef, useState } from 'react'
    hace que un Excel se maneje rápido, y que aquí funciona igual:
      · clic selecciona; arrastrar o Mayús+clic, un rectángulo;
      · flechas, Tab y Enter mueven (Mayús+flechas amplía la selección);
-     · escribir encima sustituye; Enter o Tab guarda y Esc lo deja como estaba;
-     · F2 o doble clic edita lo que hay; Supr o Retroceso vacía la selección;
+     · escribir encima sustituye; Enter, Tab o una flecha guarda y Esc lo deja
+       como estaba;
+     · F2 o doble clic edita lo que hay (ahí las flechas mueven el cursor
+       dentro del texto, como en Excel); Supr o Retroceso vacía la selección;
      · Ctrl+C copia la selección con tabuladores (se pega tal cual en Excel) y
        Ctrl+V pega un bloque copiado de Excel empezando en la celda activa;
      · Ctrl+Z deshace (cada hoja dice qué es deshacer).
@@ -53,9 +55,10 @@ export function useRejilla({ filas, cols, texto, editable, onGuardar, onBorrar, 
     if (!extender) setAncla(n)
   }
 
-  const empezar = (r, c, valor) => {
+  // modo 'escribir': se empezó tecleando encima; 'editar': con F2 o doble clic.
+  const empezar = (r, c, valor, modo = 'editar') => {
     if (!editable(r, c)) return
-    const e = { r, c, valor: valor ?? String(texto(r, c) ?? '') }
+    const e = { r, c, valor: valor ?? String(texto(r, c) ?? ''), modo }
     edicion.current = e
     setEditando(e)
   }
@@ -87,7 +90,7 @@ export function useRejilla({ filas, cols, texto, editable, onGuardar, onBorrar, 
     if (k === 'End') { ev.preventDefault(); ir(activa.r, cols - 1, ev.shiftKey); return }
     if (k === 'F2') { ev.preventDefault(); empezar(activa.r, activa.c); return }
     if (k === 'Delete' || k === 'Backspace') { ev.preventDefault(); onBorrar?.(rango); return }
-    if (k.length === 1) { ev.preventDefault(); empezar(activa.r, activa.c, k) }
+    if (k.length === 1) { ev.preventDefault(); empezar(activa.r, activa.c, k, 'escribir') }
   }
 
   const onCopy = (ev) => {
@@ -120,21 +123,38 @@ export function useRejilla({ filas, cols, texto, editable, onGuardar, onBorrar, 
   // Al abrir la hoja, el teclado ya va a la rejilla: se puede escribir sin hacer clic.
   useEffect(() => { caja.current?.focus({ preventScroll: true }) }, [])
 
-  const propsCelda = (r, c) => ({
-    'data-celda': `${r}-${c}`,
-    onMouseDown: (ev) => {
-      if (ev.button !== 0) return
-      if (edicion.current && (edicion.current.r !== r || edicion.current.c !== c)) terminar(true)
-      if (edicion.current) return
-      ev.preventDefault() // sin esto, arrastrar seleccionaría el texto de la página
-      caja.current?.focus({ preventScroll: true })
-      setActiva({ r, c })
-      if (!ev.shiftKey) setAncla({ r, c })
-      arrastrando.current = true
-    },
-    onMouseEnter: () => { if (arrastrando.current) setActiva({ r, c }) },
-    onDoubleClick: () => { setActiva({ r, c }); setAncla({ r, c }); empezar(r, c) },
-  })
+  /* El ratón, con UN manejador para toda la rejilla (la celda sale de su
+     `data-celda`): con 68 personas y 42 días eran 2.856 celdas con tres
+     manejadores cada una, recreados en cada tecla. Así las filas que no
+     cambian no se vuelven a pintar y moverse con las flechas va fluido. */
+  const celdaDe = (ev) => {
+    const el = ev.target?.closest?.('[data-celda]')
+    if (!el || !caja.current?.contains(el)) return null
+    const [r, c] = el.dataset.celda.split('-').map(Number)
+    return Number.isInteger(r) && Number.isInteger(c) ? { r, c } : null
+  }
+  const onMouseDown = (ev) => {
+    const x = celdaDe(ev)
+    if (!x || ev.button !== 0) return
+    if (edicion.current && (edicion.current.r !== x.r || edicion.current.c !== x.c)) terminar(true)
+    if (edicion.current) return
+    ev.preventDefault() // sin esto, arrastrar seleccionaría el texto de la página
+    caja.current?.focus({ preventScroll: true })
+    setActiva(x)
+    if (!ev.shiftKey) setAncla(x)
+    arrastrando.current = true
+  }
+  const onMouseOver = (ev) => {
+    if (!arrastrando.current) return
+    const x = celdaDe(ev)
+    if (x) setActiva((a) => (a.r === x.r && a.c === x.c ? a : x))
+  }
+  const onDoubleClick = (ev) => {
+    const x = celdaDe(ev)
+    if (!x) return
+    setActiva(x); setAncla(x); empezar(x.r, x.c)
+  }
+  const propsCelda = (r, c) => ({ 'data-celda': `${r}-${c}` })
 
   const propsEditor = editando ? {
     autoFocus: true,
@@ -145,7 +165,9 @@ export function useRejilla({ filas, cols, texto, editable, onGuardar, onBorrar, 
       setEditando((x) => (x ? { ...x, valor } : x))
     },
     onKeyDown: (e) => {
-      if (e.key === 'Enter') { e.preventDefault(); terminar(true, e.shiftKey ? -1 : 1, 0) }
+      const flecha = { ArrowUp: [-1, 0], ArrowDown: [1, 0], ArrowLeft: [0, -1], ArrowRight: [0, 1] }[e.key]
+      if (flecha && edicion.current?.modo === 'escribir') { e.preventDefault(); terminar(true, flecha[0], flecha[1]) }
+      else if (e.key === 'Enter') { e.preventDefault(); terminar(true, e.shiftKey ? -1 : 1, 0) }
       else if (e.key === 'Tab') { e.preventDefault(); terminar(true, 0, e.shiftKey ? -1 : 1) }
       else if (e.key === 'Escape') { e.preventDefault(); terminar(false) }
       e.stopPropagation()
@@ -154,6 +176,6 @@ export function useRejilla({ filas, cols, texto, editable, onGuardar, onBorrar, 
     onMouseDown: (e) => e.stopPropagation(),
   } : null
 
-  const propsCaja = { ref: caja, tabIndex: 0, onKeyDown, onCopy, onPaste }
+  const propsCaja = { ref: caja, tabIndex: 0, onKeyDown, onCopy, onPaste, onMouseDown, onMouseOver, onDoubleClick }
   return { activa, rango, enSel, editando, propsCaja, propsCelda, propsEditor, ir, caja }
 }
