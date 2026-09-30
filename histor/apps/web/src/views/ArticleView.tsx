@@ -6,6 +6,7 @@ import type { ArticleBlock, VerificationBox } from '@histor/core/db/schema';
 import type { Dict } from '@histor/core/i18n/dictionaries';
 import { t } from '@histor/core/i18n/dictionaries';
 import { href } from '@histor/core/i18n/routes';
+import { findPlaces } from '@histor/core/text/entities';
 import { absoluteUrl } from '@histor/core/seo/index';
 import type { getArticleDetail } from '@histor/core/services/content';
 import { NOTES } from '@histor/core/writing/notes';
@@ -37,7 +38,7 @@ export function ArticleView({ data, lang, d, tz, experiment }: { data: ArticleDe
   // «En esta noticia»: solo personas y organizaciones que aparecen en ESTE texto. Salían «USA»,
   // «EUA» y «Stati Uniti» a la vez, y nombres de otra historia (30-09-2026).
   const articleText = [headline, a.summary, ...body.map((b) => ('text' in b ? b.text : b.type === 'list' ? b.items.map((i) => i.text).join(' ') : ''))].join(' ');
-  const shownEntities = entities.filter((e) => e.type !== 'place' && e.type !== 'other' && articleText.includes(e.name)).slice(0, 8);
+  const shownEntities = entities.filter((e) => e.type !== 'place' && articleText.includes(e.name) && !findPlaces(e.name).length).slice(0, 8);
 
   return (
     <>
