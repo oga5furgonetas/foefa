@@ -1,3 +1,4 @@
+/* global Buffer */
 import { test, expect } from '@playwright/test'
 import { simularApi, entrarComoAdmin } from './api-simulada.js'
 
@@ -475,6 +476,40 @@ test.describe('Cuadrante', () => {
     await page.getByRole('button', { name: 'Confirmar' }).click()
     await expect(page.getByText('✓ SARA VIDAL: N/D en 5 días')).toBeVisible()
     expect(confirmado).toBe(true)
+    expect(fallos, fallos.join(' | ')).toHaveLength(0)
+  })
+
+  /* 30-09-2026: con DGA1 elegido arriba, la hoja de OGA5 salió con 67 «no
+     tiene ficha» y «Crear ficha nueva» ya elegido. Ahora se avisa, no se deja
+     importar ahí y un botón cambia de centro y vuelve a leer la misma hoja. */
+  test('la hoja de otro centro se avisa y se vuelve a leer en el suyo', async ({ page }) => {
+    const fallos = vigilar(page)
+    await entrarComoAdmin(page, { centros: ['NORTE', 'SUR'] })
+    await simularApi(page, 'vacio')
+    await page.route(/\/api\/cuadrante\?/, json(DATOS()))
+    const leidas = []
+    await page.route(/\/api\/cuadrante\/importar/, (route) => {
+      const sur = /name="center"\r\n\r\nSUR\r\n/.test(route.request().postData() || '')
+      leidas.push(sur ? 'SUR' : 'NORTE')
+      return json({ hoja: 'SEP', desde: dia(0), hasta: dia(13), dias: 14, personas: 60, extras: 3, maximas: 14,
+        tipos: { normal: 60 }, emparejadas: sur ? 59 : 1, avisos: [], ambiguos: [], detalle: [], guardado: false,
+        otro_centro: sur ? null : { centro: 'SUR', casan_alli: 58, casan_aqui: 1 },
+        revisar: sur ? [{ nombre: 'CAROLINA CRESPO', motivo: 'parecido', opciones: [], sugerida: null }]
+          : [{ nombre: 'ALBERTO FERNANDEZ', motivo: 'parecido', opciones: [], sugerida: null }] })(route)
+    })
+    await page.goto('/panel/cuadrante', { waitUntil: 'domcontentloaded' })
+    await expect(page.getByText('Rutas (cuenta de 1)')).toBeVisible({ timeout: 15000 })
+    await page.getByRole('button', { name: 'Importar hoja' }).click()
+    await page.getByLabel('Fichero Excel del cuadrante').setInputFiles({ name: 'hoja.xlsx',
+      mimeType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', buffer: Buffer.from('x') })
+    await expect(page.getByText('Esta hoja es de SUR')).toBeVisible()
+    await expect(page.getByRole('button', { name: 'Importar en NORTE' })).toBeDisabled()
+    await expect(page.getByText('ALBERTO FERNANDEZ')).toHaveCount(0)
+    await page.getByRole('button', { name: 'Cambiar a SUR' }).click()
+    await expect(page.getByText('59 casan solos con su ficha.')).toBeVisible()
+    await expect(page.getByText('Esta hoja es de SUR')).toHaveCount(0)
+    await expect(page.getByRole('button', { name: 'Importar y crear 1 ficha nueva' })).toBeEnabled()
+    expect(leidas).toEqual(['NORTE', 'SUR'])
     expect(fallos, fallos.join(' | ')).toHaveLength(0)
   })
 })

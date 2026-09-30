@@ -365,12 +365,15 @@ export const cuadranteChatCancelar = (id) => api.post(`/cuadrante/chat/${id}/can
 export const cuadranteEstudio = (center) => api.get('/cuadrante/estudio', { params: { center } })
 export const cuadranteExportar = (center, desde, hasta) =>
   api.get('/cuadrante/exportar', { params: { center, desde, hasta }, responseType: 'blob', timeout: 120000 })
-export function cuadranteImportar(file, center, confirmar, crearFichas, emparejar) {
+export function cuadranteImportar(file, center, confirmar, crearFichas, emparejar, forzarCentro) {
   const fd = new FormData()
   fd.append('file', file)
   fd.append('center', center)
   if (confirmar) fd.append('confirmar', '1')
   if (crearFichas) fd.append('crear_fichas', '1')
+  // La hoja parece de otro centro y aun así se importa aquí (un centro nuevo
+  // que arranca con gente de otro). Sin esto el servidor dice que no.
+  if (forzarCentro) fd.append('forzar_centro', '1')
   // {nombre en la hoja: id de ficha | '__nueva__' | '__fuera__'}: lo que se
   // eligió para los nombres que no casaban solos. Queda guardado como alias.
   if (emparejar && Object.keys(emparejar).length) fd.append('emparejar', JSON.stringify(emparejar))

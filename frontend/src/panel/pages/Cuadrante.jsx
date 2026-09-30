@@ -508,16 +508,17 @@ function NuevaPersona({ center, dentro, onCerrar, onGuardado }) {
 const NUEVA = '__nueva__'
 const FUERA = '__fuera__'
 
-function Importar({ center, onCerrar, onHecho }) {
+function Importar({ center, centers, setCenter, onCerrar, onHecho }) {
   const [file, setFile] = useState(null)
   const [previa, setPrevia] = useState(null)
   const [elec, setElec] = useState({})
   const [ocupado, setOcupado] = useState(false)
   const [err, setErr] = useState('')
-  const leer = async (f) => {
-    setFile(f); setPrevia(null); setErr(''); setOcupado(true)
+  const [forzar, setForzar] = useState(false)
+  const leer = async (f, centro = center) => {
+    setFile(f); setPrevia(null); setErr(''); setOcupado(true); setForzar(false)
     try {
-      const r = await cuadranteImportar(f, center, false, false)
+      const r = await cuadranteImportar(f, centro, false, false)
       setPrevia(r.data)
       /* Lo propuesto, ya elegido: la ficha sugerida; a quien no se parece a
          nadie, ficha nueva; y si hay varias igual de buenas, sin elegir (se
@@ -531,17 +532,33 @@ function Importar({ center, onCerrar, onHecho }) {
       setErr(e?.response?.data?.detail || 'No se ha podido leer el Excel.')
     } finally { setOcupado(false) }
   }
+  /* Al cambiar de centro arriba (o con el botón del aviso), la misma hoja se
+     vuelve a leer contra el centro nuevo. */
+  const centroLeido = useRef(center)
+  useEffect(() => {
+    if (centroLeido.current === center) return
+    centroLeido.current = center
+    if (file) leer(file, center)
+  }, [center]) // eslint-disable-line react-hooks/exhaustive-deps
   const sinElegir = Object.values(elec).filter((v) => !v).length
+  const nuevas = Object.values(elec).filter((v) => v === NUEVA).length
+  /* La hoja es de otro centro (30-09-2026: con DGA1 elegido, la de OGA5 salió
+     con 67 «no tiene ficha»). Se dice, se ofrece cambiar y no se importa aquí
+     salvo que se marque a propósito. */
+  const oc = previa?.otro_centro
+  const destino = oc ? lista(centers).find((c) => c.toUpperCase() === String(oc.centro).toUpperCase())
+    || lista(centers).find((c) => String(oc.centro).toUpperCase().includes(c.toUpperCase())) : null
+  const bloqueada = Boolean(oc) && !forzar
   const confirmar = async () => {
     setOcupado(true); setErr('')
     try {
-      const r = await cuadranteImportar(file, center, true, false, elec)
+      const r = await cuadranteImportar(file, center, true, false, elec, forzar)
       onHecho(r.data)
     } catch (e) {
       setErr(e?.response?.data?.detail || 'No se ha podido importar.')
     } finally { setOcupado(false) }
   }
-  const revisar = lista(previa?.revisar)
+  const revisar = bloqueada ? [] : lista(previa?.revisar)
   const nombresRevisar = new Set(revisar.map((x) => x.nombre))
   const otrosAmbiguos = lista(previa?.ambiguos).filter((a) => !nombresRevisar.has(a))
   const TIPO_NOMBRE = { normal: 'normales', empresa: 'horario fijo', finde: 'solo finde', inactivo: 'no entran en rutas' }
@@ -566,7 +583,31 @@ function Importar({ center, onCerrar, onHecho }) {
             <p className="text-xs text-dark-400">
               {Object.entries(previa.tipos || {}).map(([k, n]) => `${n} ${TIPO_NOMBRE[k] || k}`).join(' · ')}
             </p>
-            <p className="text-xs text-emerald-300">{previa.emparejadas} casan solos con su ficha.</p>
+            {oc && (
+              <div className="space-y-2 rounded-lg border border-amber-500/50 bg-amber-500/10 p-3 text-xs text-amber-100">
+                <p className="flex items-start gap-2">
+                  <AlertTriangle size={15} className="mt-px flex-none text-amber-300" />
+                  <span>
+                    <b>Esta hoja es de {oc.centro}</b>: {oc.casan_alli} personas tienen allí su ficha
+                    {oc.casan_aqui ? ` y solo ${oc.casan_aqui} en ${center}` : ` y ninguna en ${center}`}.
+                    {' '}Importada aquí saldrían todas como gente nueva, con fichas repetidas.
+                  </span>
+                </p>
+                <div className="flex flex-wrap items-center gap-3">
+                  {destino && setCenter && (
+                    <button onClick={() => setCenter(destino)} disabled={ocupado}
+                      className="btn-primary px-3 py-1.5 text-xs disabled:opacity-40">
+                      Cambiar a {destino}
+                    </button>
+                  )}
+                  <label className="flex items-center gap-1.5 text-dark-300">
+                    <input type="checkbox" checked={forzar} onChange={(e) => setForzar(e.target.checked)} />
+                    Es de {center} de verdad: importar aquí igualmente
+                  </label>
+                </div>
+              </div>
+            )}
+            {!bloqueada && <p className="text-xs text-emerald-300">{previa.emparejadas} casan solos con su ficha.</p>}
             {revisar.length > 0 && (
               <div className="space-y-1.5">
                 <p className="text-xs text-amber-300">
@@ -583,7 +624,7 @@ function Importar({ center, onCerrar, onHecho }) {
                       <option value="">— elige —</option>
                       {lista(x.opciones).map((o) => (
                         <option key={o.id} value={o.id}>
-                          {o.name}{o.activa ? '' : ' (ficha de baja)'}{o.tid ? ' · con ID' : ''}
+                          {o.name}{o.centro ? ` (de ${o.centro})` : ''}{o.activa ? '' : ' (ficha de baja)'}{o.tid ? ' · con ID' : ''}
                         </option>
                       ))}
                       <option value={NUEVA}>Crear ficha nueva</option>
@@ -597,10 +638,12 @@ function Importar({ center, onCerrar, onHecho }) {
               <p className="text-xs text-amber-300">No se importan: {otrosAmbiguos.join(' · ')}.</p>
             )}
             {lista(previa.avisos).map((a, i) => <p key={i} className="text-xs text-amber-300">{a}</p>)}
-            <button onClick={confirmar} disabled={ocupado || sinElegir > 0}
+            <button onClick={confirmar} disabled={ocupado || bloqueada || sinElegir > 0}
               className="btn-primary flex items-center gap-2 px-4 py-2 text-sm disabled:opacity-40">
               {ocupado ? <Loader2 size={15} className="animate-spin" /> : <Upload size={15} />}
-              {sinElegir > 0 ? `Elige la ficha de ${sinElegir}` : 'Importar'}
+              {bloqueada ? `Importar en ${center}`
+                : sinElegir > 0 ? `Elige la ficha de ${sinElegir}`
+                  : nuevas ? `Importar y crear ${nuevas} ${nuevas === 1 ? 'ficha nueva' : 'fichas nuevas'}` : 'Importar'}
             </button>
             <p className="text-[11px] text-dark-500">Los días concedidos en la app no se pisan. Se puede deshacer entero.</p>
           </div>
@@ -745,7 +788,7 @@ function Ajustes({ center, datos, personas, onCambio }) {
 }
 
 export default function Cuadrante() {
-  const { center } = useOutletContext()
+  const { center, centers, setCenter } = useOutletContext()
   const noCenter = !center || center === 'Todos'
   const [rango, setRango] = useState(() => {
     const l = lunesDe(hoyLocal())
@@ -1410,7 +1453,7 @@ export default function Cuadrante() {
           onGuardado={() => { setNueva(false); setAviso('Añadido al cuadrante.'); cargar(true) }} />
       )}
       {importar && (
-        <Importar center={center} onCerrar={() => setImportar(false)}
+        <Importar center={center} centers={centers} setCenter={setCenter} onCerrar={() => setImportar(false)}
           onHecho={(r) => {
             setImportar(false)
             setAviso(`Hoja importada: ${r?.celdas ?? 0} celdas de ${r?.emparejadas ?? 0} personas` +

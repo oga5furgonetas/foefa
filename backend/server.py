@@ -44557,14 +44557,49 @@ def _cua_opciones_para(nombre: str, motivo: str, fichas: list, usadas: set) -> t
             # activa de Benjamín). Se propone la viva; con dos vivas, se pregunta.
             sugerida = (cands[0] if len(cands) == 1 else activas[0])["id"]
     opciones = [{"id": x["id"], "name": x.get("name") or "", "activa": x.get("active") is not False,
-                 "tid": bool(x.get("transporter_id"))} for x in cands[:6]]
+                 "tid": bool(x.get("transporter_id")), "centro": x.get("center") if x.get("_otro_centro") else None}
+                for x in cands[:6]]
+    # De OTRO centro nunca se propone solo: puede ser un tocayo. Se ofrece, y
+    # lo elige quien sabe que esa persona se ha cambiado de centro.
+    if sugerida and next((x for x in cands if x["id"] == sugerida), {}).get("_otro_centro"):
+        sugerida = None
     return opciones, sugerida
+
+
+def _cua_centro_de_la_hoja(nombres: list, todas: list, alias: dict, center: str) -> Optional[dict]:
+    """¿Es la hoja de OTRO centro? Cada nombre se casa con las fichas activas
+    de TODA la empresa y se cuenta dónde tiene cada uno la suya.
+
+    Pasó el 30-09-2026: con DGA1 elegido arriba, la hoja de OGA5 salió con 67
+    de 68 personas «no tiene ficha» y «Crear ficha nueva» ya elegido. Importar
+    habría duplicado 67 personas y puesto a DGA1 las máximas de OGA5. Devuelve
+    None si la hoja es de aquí; si no, {centro, casan_alli, casan_aqui}."""
+    activas = [x for x in todas if x.get("active") is not False]
+    fuera: dict = {}
+    aqui = 0
+    for nombre in nombres:
+        drv, _ = _empareja_conductor(nombre, activas, alias)
+        if not drv:
+            continue
+        c = str(drv.get("center") or "").strip()
+        if not c or _cua_es_centro(c, center):
+            aqui += 1
+        else:
+            fuera[c] = fuera.get(c, 0) + 1
+    if not fuera:
+        return None
+    otro, n = max(fuera.items(), key=lambda kv: kv[1])
+    # Alguno de otro centro es normal (Fran Gil pasa de DGA1 a OGA5); la
+    # mayoría no. Con cinco o más y el doble que los de aquí, la hoja es de allí.
+    if n >= 5 and n > 2 * aqui:
+        return {"centro": otro, "casan_alli": n, "casan_aqui": aqui}
+    return None
 
 
 @api_router.post("/cuadrante/importar")
 async def cuadrante_importar(file: UploadFile = File(...), center: str = Form(...),
                              confirmar: str = Form(default=""), crear_fichas: str = Form(default=""),
-                             emparejar: str = Form(default=""),
+                             emparejar: str = Form(default=""), forzar_centro: str = Form(default=""),
                              user: dict = Depends(require_admin)):
     """Mete en el cuadrante la hoja MENSUAL tal cual (cómo se lee: ver
     cuadrante_excel.py). Sin `confirmar` solo dice lo que haría.
@@ -44590,11 +44625,13 @@ async def cuadrante_importar(file: UploadFile = File(...), center: str = Form(..
     # se habrían ido a una ficha muerta. Primero las activas; si no casa ninguna,
     # las de baja (la persona puede estar trabajando con la ficha sin reactivar).
     vivas_q = {"merged_into": {"$exists": False}, "status": {"$nin": ["deleted", "fusionada"]}}
-    proy = {"_id": 0, "id": 1, "name": 1, "active": 1, "transporter_id": 1}
-    fichas = await db.drivers.find({"center": _cua_rx(center), **vivas_q}, proy).to_list(5000)
-    # Las fichas sin centro también: nacieron con «Todos» elegido (27-09-2026).
-    fichas += await db.drivers.find({"$or": [{"center": None}, {"center": ""}, {"center": {"$exists": False}}],
-                                     **vivas_q}, proy).to_list(500)
+    proy = {"_id": 0, "id": 1, "name": 1, "active": 1, "transporter_id": 1, "center": 1}
+    # Las de TODA la empresa, para saber de qué centro es la hoja y encontrar a
+    # quien se cambia de centro. Se casa con las del centro y las que no tienen
+    # centro (nacieron con «Todos» elegido, 27-09-2026).
+    todas = await db.drivers.find(vivas_q, proy).to_list(20000)
+    todas_por_id = {x["id"]: x for x in todas}
+    fichas = [x for x in todas if not x.get("center") or _cua_es_centro(x.get("center"), center)]
     activas = [x for x in fichas if x.get("active") is not False]
     por_id = {x["id"]: x for x in fichas}
     # Lo que decidió quien importa para los nombres dudosos: {nombre: id |
@@ -44608,10 +44645,22 @@ async def cuadrante_importar(file: UploadFile = File(...), center: str = Form(..
             raise HTTPException(400, "El emparejado no es válido")
         for k, v in (crudo.items() if isinstance(crudo, dict) else []):
             v = str(v or "")
+            if v and v not in (_CUA_NUEVA, _CUA_FUERA) and v not in por_id:
+                # Una ficha de OTRO centro, elegida a propósito: quien se cambia
+                # de centro (Fran Gil pasa de DGA1 a OGA5 el 05-10-2026) sigue
+                # siendo la misma persona, con su historial y su acceso.
+                otra = todas_por_id.get(v)
+                if not otra:
+                    continue
+                fichas.append(otra)
+                por_id[v] = otra
+                if otra.get("active") is not False:
+                    activas.append(otra)
             if v in (_CUA_NUEVA, _CUA_FUERA) or v in por_id:
                 elegidos[" ".join(str(k).split())[:120]] = v
     alias = await _alias_cuadrante()
     alias_total = {**alias, **{k: v for k, v in elegidos.items() if v in por_id}}
+    otro_centro = _cua_centro_de_la_hoja([f["nombre"] for f in hoja["filas"]], todas, alias, center)
     emparejadas, sin_ficha, ambiguos, detalle, pendientes = [], [], [], [], []
     ya_usadas: dict = {}
     for f in hoja["filas"]:
@@ -44645,12 +44694,23 @@ async def cuadrante_importar(file: UploadFile = File(...), center: str = Form(..
                                 "alta_desde": f.get("alta_desde"), "nota": f.get("nota_import") or ""})
         else:
             pendientes.append((f, motivo))
-    # Los que no han casado solos: con quién podrían, y cuál se propone.
+    # Los que no han casado solos: con quién podrían, y cuál se propone. Si en
+    # el centro no hay nadie parecido, se mira en los OTROS centros (solo
+    # nombres que casan del todo): así sale quien se ha cambiado de centro.
     revisar, con_opciones = [], set()
+    otras_fichas = None
     for f, motivo in pendientes:
         if motivo in (_CUA_NUEVA, _CUA_FUERA):
             continue
         opciones, sugerida = _cua_opciones_para(f["nombre"], motivo, fichas, set(ya_usadas))
+        if not opciones:
+            if otras_fichas is None:
+                ids_centro = {x["id"] for x in fichas}
+                otras_fichas = [{**x, "_otro_centro": True} for x in todas
+                                if x["id"] not in ids_centro and x.get("active") is not False]
+            lejos = [x for x in otras_fichas if _nombres_veredicto(f["nombre"], x.get("name")) == "si"]
+            if lejos:
+                opciones, sugerida = _cua_opciones_para(f["nombre"], motivo, lejos, set(ya_usadas))
         if opciones:
             con_opciones.add(f["nombre"])
         revisar.append({"nombre": f["nombre"], "motivo": "duplicada" if motivo == "ambiguo" else "parecido",
@@ -44664,9 +44724,14 @@ async def cuadrante_importar(file: UploadFile = File(...), center: str = Form(..
                "dias": len(hoja["fechas"]), "personas": len(hoja["filas"]), "emparejadas": len(emparejadas),
                "sin_ficha": sin_ficha, "ambiguos": ambiguos, "revisar": revisar, "detalle": detalle,
                "tipos": tipos, "extras": extras, "maximas": len(hoja["maximas"]), "codigos": hoja["codigos"],
-               "avisos": hoja["avisos"], "leyenda": hoja["leyenda"], "guardado": False}
+               "avisos": hoja["avisos"], "leyenda": hoja["leyenda"], "otro_centro": otro_centro, "guardado": False}
     if not confirmar:
         return resumen
+    if otro_centro and not forzar_centro:
+        raise HTTPException(409, "Esta hoja es de %s: %d personas tienen allí su ficha y %d en %s. Elige %s "
+                                 "arriba y vuelve a importarla. No se ha guardado nada."
+                            % (otro_centro["centro"], otro_centro["casan_alli"], otro_centro["casan_aqui"],
+                               center, otro_centro["centro"]))
     fichas_creadas, fuera_por_eleccion = [], []
     for f, motivo in pendientes:
         # Ficha nueva: si se eligió así, o con «crear fichas» para quien no se
@@ -44704,6 +44769,11 @@ async def cuadrante_importar(file: UploadFile = File(...), center: str = Form(..
     for f, drv in emparejadas:
         for fecha, cel in f["celdas"].items():
             cod = cel["cod"]
+            # Antes de empezar aquí, el N/T de la hoja es «todavía no está», no
+            # «libra»: Fran Gil tenía N/T del 24-09 al 04-10 mientras trabajaba
+            # en DGA1, y su portal habría dicho que libraba. No se importa.
+            if f.get("alta_desde") and fecha < f["alta_desde"] and cod in ("N/T", "L"):
+                continue
             tipo = _cua_tipo(cod, mapa)
             aprob = aprobados.get(f"{drv['id']}|{fecha}")
             if (aprob == "libre" and tipo in ("trabaja", "extra")) or (aprob == "extra" and tipo == "libre"):
