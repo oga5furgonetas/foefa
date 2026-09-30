@@ -107,7 +107,10 @@ export async function publishStory(db: Db, v: VerifiedStory, settings: Editorial
   // Idiomas sin material propio: adaptación por IA de un borrador ya validado.
   if (aiAllowed && providerFor('translation') && drafts.size) {
     const [srcLang, best] = [...drafts.entries()].sort((a, b) => b[1].fs.confirmed.length - a[1].fs.confirmed.length)[0];
-    for (const lang of langs.filter((l) => !drafts.has(l))) {
+    // Con un cupo gratuito, las traducciones (5 por noticia) gastaban el doble que redactar: solo a
+    // los idiomas de AI_TRANSLATE_TO (por defecto, todos).
+    const targets = env().AI_TRANSLATE_TO?.split(',').map((x) => x.trim()).filter(Boolean);
+    for (const lang of langs.filter((l) => !drafts.has(l) && (!targets?.length || targets.includes(l)))) {
       const tr = await translateDraft(db, best.draft, lang, { storyId: story.id });
       if (!tr) continue;
       const fs = { ...best.fs, language: lang };

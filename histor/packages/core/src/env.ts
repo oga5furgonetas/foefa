@@ -39,6 +39,8 @@ const schema = z.object({
   AI_REASONING_EFFORT: z.enum(['low', 'medium', 'high']).optional(),
   // Zona horaria en la que el proveedor renueva el cupo diario (Groq y Gemini: medianoche de California).
   AI_QUOTA_RESET_TZ: z.string().default('America/Los_Angeles'),
+  // Idiomas a los que la IA traduce (lista separada por comas; vacío = todos los activos).
+  AI_TRANSLATE_TO: z.string().optional(),
   ANTHROPIC_API_KEY: z.string().optional(),
   OPENAI_API_KEY: z.string().optional(),
   OPENAI_BASE_URL: z.string().optional(),
