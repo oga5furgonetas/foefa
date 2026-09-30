@@ -94,6 +94,10 @@ export const getDriversScoring = (month, year) => api.get('/scoring/drivers', { 
 export const getScoringLeaderboard = (month, year) => api.get('/scoring/leaderboard', { params: { ...(month ? { month } : {}), ...(year ? { year } : {}) } })
 export const createDriver = (data, params) => api.post('/drivers', data, { params })
 export const updateDriver = (id, data) => api.patch(`/drivers/${id}`, data)
+// Cambio de centro programado: la ficha pasa a `centro` el día `desde` (lo
+// aplica el servidor ese día; si ya ha llegado, en el acto).
+export const programarTraslado = (id, centro, desde) => api.post(`/drivers/${id}/traslado`, { centro, desde })
+export const cancelarTraslado = (id) => api.delete(`/drivers/${id}/traslado`)
 // Apoyo en ruta: quien le quita paradas a quien, con mapa por WhatsApp
 /* Empleo: ofertas, cuestionario y candidatos. La oferta va SIEMPRE atada a un
    centro y el candidato hereda el suyo, para que no se mezclen las naves. */

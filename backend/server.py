@@ -425,6 +425,10 @@ class Driver(BaseModel):
     zona: Optional[str] = None         # zona habitual (opcional)
     alojamiento: Optional[str] = None  # alojamiento del conductor
     notas: Optional[str] = None        # observaciones libres
+    # Cambio de centro programado {centro, desde, por, en}: lo aplica
+    # `_bucle_traslados` ese día. Sin estar aquí, `response_model` lo quitaría de
+    # la respuesta y la ficha no diría que se va (lo mismo que `transporter_id`).
+    traslado: Optional[dict] = None
     created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 
 
@@ -23742,6 +23746,117 @@ async def put_driver(driver_id: str, data: dict, _=Depends(require_admin)):
     if result.matched_count == 0:
         raise HTTPException(status_code=404, detail="Conductor no encontrado")
     return {"success": True}
+
+
+# =========================
+# CAMBIO DE CENTRO PROGRAMADO
+# =========================
+# Quien se cambia de centro lo hace un día concreto: Fran Gil pasa de DGA1 a
+# OGA5 el 05-10-2026 (Dani, 30-09: «pásalo a OGA5 el día 5»). Cambiar la ficha
+# antes lo saca de las listas de DGA1 mientras sigue trabajando allí; hacerlo
+# ese día depende de que alguien se acuerde. Se deja programado en la ficha
+# (`traslado`) y un bucle lo aplica cuando llega el día, en todas las empresas,
+# apuntando de dónde venía (`historial_centros`).
+TRASLADOS_CADA_MIN = 15
+
+
+def _traslado_toca(traslado, hoy: str) -> bool:
+    """¿Toca ya este traslado? Sin centro o sin fecha bien escrita, nunca."""
+    if not isinstance(traslado, dict):
+        return False
+    desde = str(traslado.get("desde") or "")
+    return bool(str(traslado.get("centro") or "").strip()) and len(desde) == 10 and desde <= hoy
+
+
+async def aplicar_traslados(hoy: Optional[str] = None) -> list:
+    """Aplica en la empresa actual los traslados cuyo día ya ha llegado."""
+    hoy = hoy or _dia_negocio()
+    hechos = []
+    async for d in db.drivers.find({"traslado": {"$exists": True}},
+                                   {"_id": 0, "id": 1, "name": 1, "center": 1, "traslado": 1}):
+        t = d.get("traslado")
+        if not _traslado_toca(t, hoy):
+            continue
+        nota = {"de": d.get("center") or "", "a": t["centro"], "desde": t["desde"],
+                "aplicado_en": datetime.now(timezone.utc).isoformat(), "programado_por": t.get("por") or ""}
+        # Con el traslado en el filtro: si alguien lo ha cambiado o cancelado
+        # mientras tanto, no se aplica uno que ya no vale.
+        r = await db.drivers.update_one(
+            {"id": d["id"], "traslado.centro": t["centro"], "traslado.desde": t["desde"]},
+            {"$set": {"center": t["centro"]}, "$unset": {"traslado": ""}, "$push": {"historial_centros": nota}})
+        if r.modified_count:
+            hechos.append({"id": d["id"], "nombre": d.get("name") or "", **nota})
+            logger.info("Traslado aplicado: %s de %s a %s (%s)", d.get("name"), nota["de"], nota["a"], t["desde"])
+    return hechos
+
+
+async def _bucle_traslados():
+    """Cada cuarto de hora, en TODAS las empresas (gotcha 26: es un cron). La
+    base por defecto va siempre: es la del dueño, esté o no en la lista."""
+    await asyncio.sleep(90)
+    while True:
+        total = 0
+        try:
+            orgs = await global_db.organizations.find(
+                {"status": {"$in": ["active", "trial"]}},
+                {"_id": 0, "id": 1, "db_name": 1, "account_type": 1}).to_list(500)
+            bases = list(dict.fromkeys([_DEFAULT_DB_NAME] + [_tenant_db_name(o) for o in orgs]))
+            anterior = _current_db_name.get()
+            try:
+                for base in bases:
+                    set_current_org_db(base)
+                    total += len(await aplicar_traslados())
+            finally:
+                set_current_org_db(anterior)
+            await _latido("traslados", aplicados=total, cada_min=TRASLADOS_CADA_MIN, error=None)
+        except Exception as e:                                   # noqa: BLE001
+            logger.error("Bucle de traslados: %s", e)
+            await _latido("traslados", error=str(e)[:200], cada_min=TRASLADOS_CADA_MIN)
+        await asyncio.sleep(TRASLADOS_CADA_MIN * 60)
+
+
+@app.on_event("startup")
+async def start_traslados():
+    asyncio.create_task(_bucle_traslados())
+
+
+@api_router.post("/drivers/{driver_id}/traslado")
+async def programar_traslado(driver_id: str, data: dict = Body(...), user: dict = Depends(require_admin)):
+    """Deja programado que esta ficha pasa a otro centro un día. Si ese día ya
+    ha llegado, se aplica en el acto."""
+    centro = _texto_cuerpo((data or {}).get("centro"), 30).strip().upper()
+    centros = await _centros_de_la_empresa()
+    if not centro or (centros and centro not in centros):
+        raise HTTPException(400, "Elige uno de los centros de la empresa")
+    desde = _cua_fecha((data or {}).get("desde"), "El día del cambio")
+    d = await db.drivers.find_one({"id": driver_id}, {"_id": 0, "id": 1, "name": 1, "center": 1})
+    if not d:
+        raise HTTPException(404, "Conductor no encontrado")
+    for c in (d.get("center"), centro):
+        if c and not _user_can_see_center(user, c):
+            raise HTTPException(403, "No tienes acceso a ese centro")
+    if str(d.get("center") or "").strip().upper() == centro:
+        raise HTTPException(400, f"{d.get('name') or 'Esta ficha'} ya está en {centro}")
+    traslado = {"centro": centro, "desde": desde, "por": user.get("name") or "",
+                "en": datetime.now(timezone.utc).isoformat()}
+    await db.drivers.update_one({"id": driver_id}, {"$set": {"traslado": traslado}})
+    await _audit(user, "traslado_programado", {"driver_id": driver_id, "de": d.get("center"),
+                                               "centro": centro, "desde": desde})
+    hechos = await aplicar_traslados() if desde <= _dia_negocio() else []
+    aplicado = any(h["id"] == driver_id for h in hechos)
+    return {"traslado": None if aplicado else traslado, "aplicado": aplicado}
+
+
+@api_router.delete("/drivers/{driver_id}/traslado")
+async def cancelar_traslado(driver_id: str, user: dict = Depends(require_admin)):
+    d = await db.drivers.find_one({"id": driver_id}, {"_id": 0, "id": 1, "center": 1, "traslado": 1})
+    if not d:
+        raise HTTPException(404, "Conductor no encontrado")
+    if d.get("center") and not _user_can_see_center(user, d["center"]):
+        raise HTTPException(403, "No tienes acceso a ese centro")
+    await db.drivers.update_one({"id": driver_id}, {"$unset": {"traslado": ""}})
+    await _audit(user, "traslado_cancelado", {"driver_id": driver_id, "era": d.get("traslado")})
+    return {"ok": True}
 
 
 # =========================

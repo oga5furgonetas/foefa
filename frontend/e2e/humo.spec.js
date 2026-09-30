@@ -545,6 +545,36 @@ test.describe('Usuarios', () => {
   })
 })
 
+/* CAMBIO DE CENTRO PROGRAMADO (30-09-2026, Fran Gil pasa a OGA5 el día 5):
+   la ficha lo programa, la lista lo enseña y el servidor lo aplica ese día. */
+test.describe('Cambio de centro programado', () => {
+  test('se programa desde la ficha y se ve en la lista', async ({ page }) => {
+    const fallos = vigilar(page)
+    await entrarComoAdmin(page, { centros: ['NORTE', 'SUR'] })
+    await simularApi(page, 'vacio')
+    await page.route(/\/api\/drivers(\?|$)/, (route) => route.fulfill({ status: 200, contentType: 'application/json',
+      body: JSON.stringify([
+        { id: 'd1', name: 'Fran Gil', center: 'NORTE', active: true, traslado: { centro: 'SUR', desde: '2026-10-05', por: 'Dani' } },
+        { id: 'd2', name: 'Ana Pérez', center: 'NORTE', active: true },
+      ]) }))
+    let pedido = null
+    await page.route(/\/api\/drivers\/d2\/traslado/, (route) => {
+      pedido = route.request().postDataJSON()
+      return route.fulfill({ status: 200, contentType: 'application/json',
+        body: JSON.stringify({ aplicado: false, traslado: { ...pedido, por: 'Admin Test' } }) })
+    })
+    await page.goto('/panel/conductores', { waitUntil: 'domcontentloaded' })
+    await expect(page.getByText('→ SUR 05/10')).toBeVisible({ timeout: 15000 })
+    await page.getByText('Ana Pérez').click()
+    await page.getByRole('button', { name: 'Programar…' }).click()
+    await page.getByLabel('Día del cambio').fill('2026-10-05')
+    await page.getByRole('button', { name: 'Programar', exact: true }).click()
+    await expect(page.getByText('Pasa a SUR el 05/10/2026')).toBeVisible()
+    expect(pedido).toEqual({ centro: 'SUR', desde: '2026-10-05' })
+    expect(fallos, fallos.join(' | ')).toHaveLength(0)
+  })
+})
+
 /* FICHAS SIN CENTRO: salen en la lista marcadas, y el alta nace en el centro
    que se está mirando (27-09-2026: «no se pueden crear fichas»). */
 test.describe('Conductores sin centro', () => {

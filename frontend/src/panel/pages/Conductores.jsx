@@ -11,10 +11,10 @@ import {
   Loader2, Search, Plus, X, Pencil, Trash2, UserCheck, FileSpreadsheet, Phone, Mail, IdCard, Car,
   MapPin, FileText, Building2, Save, Camera, Trophy, TrendingUp, TrendingDown, Minus, Flame,
   BarChart2, ChevronDown, ChevronUp, AlertCircle, Lock, LockOpen, Eye, EyeOff, ShieldCheck,
-  Share2, Smartphone,
+  Share2, Smartphone, ArrowRightLeft,
 } from 'lucide-react'
 import {
-  getDrivers, createDriver, updateDriver, deleteDriver, uploadDriverPhoto,
+  getDrivers, createDriver, updateDriver, deleteDriver, uploadDriverPhoto, programarTraslado, cancelarTraslado,
   getDriversScoring, getScoringLeaderboard, getDriverAccounts, setDriverPassword,
   generarAccesosConductores,
   deleteDriverAccount,
@@ -822,6 +822,12 @@ function TablaConductores({ list, accounts, onAbrir, t }) {
                     {sinCentro(d)
                       ? <span className="rounded-full bg-amber-500/15 px-2 py-0.5 text-[10px] font-semibold text-amber-300">sin centro</span>
                       : d.center}
+                    {d.traslado?.centro && (
+                      <span title={`Pasa a ${d.traslado.centro} el ${fechaCorta(d.traslado.desde)}`}
+                        className="ml-1.5 whitespace-nowrap rounded-full bg-sky-500/15 px-2 py-0.5 text-[10px] font-semibold text-sky-300">
+                        → {d.traslado.centro} {fechaCorta(d.traslado.desde).slice(0, 5)}
+                      </span>
+                    )}
                   </td>
                   <td className="max-w-[150px] truncate px-2 py-1 text-dark-500">{d.alojamiento || '—'}</td>
                   <td className="cifra px-2 py-1 text-dark-400">
@@ -1282,6 +1288,8 @@ function DriverModal({ driver, centers, centroInicial = '', hasAccount, onSave, 
                 )}
               </div>
 
+              <CambioCentro driver={driver} centers={centers} onCambio={onAccountChange} />
+
               {/* ── Acceso con contraseña ── */}
               {driver.email && (
                 <div className="mt-6 rounded-xl border border-dark-800 overflow-hidden">
@@ -1492,6 +1500,107 @@ function DriverModal({ driver, centers, centroInicial = '', hasAccount, onSave, 
           </div>
         )}
       </div>
+    </div>
+  )
+}
+
+/* CAMBIO DE CENTRO PROGRAMADO: la ficha pasa a otro centro un día concreto y
+   lo cambia el servidor ese día (Fran Gil, de DGA1 a OGA5 el 05-10-2026). Así
+   sigue en las listas de su centro mientras trabaja allí y nadie tiene que
+   acordarse. Si el día ya ha llegado, se cambia en el acto. */
+const fechaCorta = (iso) => (iso ? iso.split('-').reverse().join('/') : '')
+const mananaIso = () => {
+  const d = new Date()
+  d.setDate(d.getDate() + 1)
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+}
+
+function CambioCentro({ driver, centers, onCambio }) {
+  const [traslado, setTraslado] = useState(driver.traslado || null)
+  const [centroActual, setCentroActual] = useState(driver.center || '')
+  const [abierto, setAbierto] = useState(false)
+  const otros = lista(centers).filter((c) => c && c !== 'Todos' && c.toUpperCase() !== String(centroActual).toUpperCase())
+  const [centro, setCentro] = useState('')
+  const [desde, setDesde] = useState(mananaIso)
+  const [busy, setBusy] = useState(false)
+  const [err, setErr] = useState('')
+  const [aviso, setAviso] = useState('')
+  if (!traslado && !otros.length) return null
+  const elegido = centro || otros[0] || ''
+
+  const programar = async () => {
+    setBusy(true); setErr(''); setAviso('')
+    try {
+      const r = await programarTraslado(driver.id, elegido, desde)
+      if (r.data?.aplicado) {
+        setCentroActual(elegido); setTraslado(null)
+        setAviso(`Cambiado: ya está en ${elegido}.`)
+      } else {
+        setTraslado(r.data?.traslado || { centro: elegido, desde })
+        setAviso('')
+      }
+      setAbierto(false)
+      onCambio?.()
+    } catch (e) {
+      setErr(e?.response?.data?.detail || 'No se ha podido programar.')
+    } finally { setBusy(false) }
+  }
+  const cancelar = async () => {
+    setBusy(true); setErr('')
+    try {
+      await cancelarTraslado(driver.id)
+      setTraslado(null); setAviso('Cambio de centro cancelado.')
+      onCambio?.()
+    } catch (e) {
+      setErr(e?.response?.data?.detail || 'No se ha podido cancelar.')
+    } finally { setBusy(false) }
+  }
+
+  return (
+    <div className="mt-6 rounded-xl border border-dark-800 px-4 py-3">
+      <div className="flex flex-wrap items-center gap-2">
+        <ArrowRightLeft size={15} className="text-sky-300" />
+        <span className="text-sm font-semibold text-dark-200">Cambio de centro</span>
+        {traslado ? (
+          <>
+            <span className="rounded-full bg-sky-500/15 px-2.5 py-0.5 text-xs font-semibold text-sky-300">
+              Pasa a {traslado.centro} el {fechaCorta(traslado.desde)}
+            </span>
+            <button onClick={cancelar} disabled={busy}
+              className="ml-auto text-xs font-semibold text-red-300 hover:text-red-200 disabled:opacity-40">Cancelar</button>
+          </>
+        ) : !abierto && (
+          <button onClick={() => setAbierto(true)}
+            className="ml-auto text-xs font-semibold text-brand-400 hover:text-brand-300">Programar…</button>
+        )}
+      </div>
+      {traslado && (
+        <p className="mt-1 text-xs text-dark-500">
+          Hasta ese día sigue en {centroActual || 'su centro'}; ese día la ficha cambia sola
+          {traslado.por ? ` (lo programó ${traslado.por})` : ''}.
+        </p>
+      )}
+      {!traslado && abierto && (
+        <div className="mt-3 flex flex-wrap items-end gap-2">
+          <label className="flex flex-col gap-1 text-xs text-dark-400">Pasa a
+            <select value={elegido} onChange={(e) => setCentro(e.target.value)} aria-label="Centro al que pasa"
+              className="input py-1.5 text-sm">
+              {otros.map((c) => <option key={c} value={c}>{c}</option>)}
+            </select>
+          </label>
+          <label className="flex flex-col gap-1 text-xs text-dark-400">Desde el día
+            <input type="date" value={desde} onChange={(e) => setDesde(e.target.value)} aria-label="Día del cambio"
+              className="input py-1.5 text-sm" />
+          </label>
+          <button onClick={programar} disabled={busy || !elegido || !desde}
+            className="btn-primary flex items-center gap-1.5 px-3 py-2 text-xs disabled:opacity-40">
+            {busy ? <Loader2 size={13} className="animate-spin" /> : <ArrowRightLeft size={13} />} Programar
+          </button>
+          <button onClick={() => setAbierto(false)} className="px-2 py-2 text-xs text-dark-400 hover:text-dark-200">Cerrar</button>
+        </div>
+      )}
+      {aviso && <p className="mt-2 text-xs text-emerald-300">{aviso}</p>}
+      {err && <p className="mt-2 text-xs text-red-300">{err}</p>}
     </div>
   )
 }
