@@ -100,10 +100,15 @@ function Modal({ titulo, onCerrar, children, ancho = 'max-w-2xl' }) {
     window.addEventListener('keydown', esc)
     return () => window.removeEventListener('keydown', esc)
   }, [onCerrar])
+  /* Opaca y por encima de la burbuja del asistente (z-95). Con `.card` (fondo
+     al 70 %) se veía la página de detrás y el texto quedaba apagado (30-09-2026,
+     captura de Dani importando la hoja). Se queda dentro de <main> para tener
+     los colores del tema Mixto. */
   return (
-    <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-black/60 p-3 sm:p-6"
+    <div className="fixed inset-0 z-[100] flex items-start justify-center overflow-y-auto bg-black/60 p-3 sm:p-6"
       onMouseDown={(e) => { if (e.target === e.currentTarget) onCerrar() }}>
-      <div role="dialog" aria-label={titulo} className={`card w-full ${ancho} p-4 sm:p-5`}>
+      <div role="dialog" aria-modal="true" aria-label={titulo}
+        className={`w-full ${ancho} rounded-xl border border-dark-700 bg-dark-900 p-4 shadow-2xl shadow-black/40 sm:p-5`}>
         <div className="mb-3 flex items-center gap-2">
           <h2 className="text-base font-bold text-dark-50">{titulo}</h2>
           <button onClick={onCerrar} aria-label="Cerrar" className="ml-auto text-dark-500 hover:text-dark-200"><X size={18} /></button>
@@ -584,7 +589,7 @@ function Importar({ center, centers, setCenter, onCerrar, onHecho }) {
               {Object.entries(previa.tipos || {}).map(([k, n]) => `${n} ${TIPO_NOMBRE[k] || k}`).join(' · ')}
             </p>
             {oc && (
-              <div className="space-y-2 rounded-lg border border-amber-500/50 bg-amber-500/10 p-3 text-xs text-amber-100">
+              <div className="space-y-2 rounded-lg border border-amber-500/50 bg-amber-500/10 p-3 text-xs text-amber-300">
                 <p className="flex items-start gap-2">
                   <AlertTriangle size={15} className="mt-px flex-none text-amber-300" />
                   <span>
