@@ -371,19 +371,36 @@ Dani no se creía el 0. Estudio con datos reales (scratchpad de la sesión):
    borraba la protección con otro guardado pendiente); la hora se normaliza al
    salir (930 → 09:30); móvil/llegada/carga/salida se ocultan por separado (y
    en el Excel); «Poner móviles» desde la ficha (`/tools/plantilla-moviles`).
+4. **La hoja de OGA5 YA ESTÁ EN PRODUCCIÓN (30-09).** Importada con token de
+   mantenimiento (Dani dio permiso para leer el `SECRET_KEY`; el fichero se
+   borró al acabar): 68 personas, 2.510 celdas, 29 máximas, fichas nuevas solo
+   Carolina Crespo e Isais Fernández, 5 días concedidos respetados (María dos
+   Santos 1-3/10 y dos de septiembre). Comprobado contra la hoja: los unos de
+   cada día coinciden salvo esos 5. Fran Gil (Francisco Javier Gil Adamuz) usa
+   su ficha de DGA1 y entra en OGA5 el 05-10 (sin sus N/T de antes).
+   - Antes, Dani la probó con **DGA1 elegido arriba**: 67 de 68 salían «no
+     tiene ficha» con «Crear ficha nueva» ya puesto (no llegó a importar;
+     DGA1/DGA2 sin cuadrante). Ahora `_cua_centro_de_la_hoja` casa cada nombre
+     con las fichas de TODA la empresa: si la mayoría está en otro centro, la
+     previa lo dice, ofrece «Cambiar a OGA5» y el servidor da 409 al confirmar
+     salvo `forzar_centro`. La ficha de otro centro se ofrece «(de DGA1)» y
+     nunca se elige sola.
+   - **El rosa no lo toca el motor** (`extras` en la entrada): un día que se
+     sigue trabajando conserva su marca; solo un día NUEVO por encima de 5 sale
+     en rosa. La hoja no cuenta de lunes a domingo (rosas en semanas de 5 días,
+     semanas de 6 sin rosa) y la propuesta salía con 22 «cambios» que solo
+     movían la marca.
+   - Ventanas del cuadrante opacas y en z-[100] (con `.card` se transparentaban).
+   - **Propuesta PENDIENTE** 01→12-10 en OGA5 (no aceptada): +2 todos los días,
+     27 cambios (casi todos para que los nuevos y quien tenía 4 días hagan 5),
+     faltan ~3 conductores. El 01-10 solo entran César García y David Pombo.
 
 ## Pendiente (por prioridad)
 
--1. **Meter la hoja de septiembre-octubre de OGA5 en producción.** No se ha
-   podido desde la sesión: el clasificador de permisos NO deja leer el
-   `SECRET_KEY` de Fly (lectura de secreto de producción), y sin él no hay
-   token de mantenimiento. Dos caminos: que Dani lo haga en la app
-   (Cuadrante → Importar hoja → elegir `Downloads\SEPTIEMBRE Y OCTUBRE.xlsx` →
-   Importar; los 10 dudosos salen ya propuestos y coinciden con lo decidido),
-   o que dé permiso. Después: «Rehacer cuadrante» 01-10 → 12-10 (en la prueba:
-   +2 todos los días, 27 cambios, 20 extras). Ojo: María dos Santos tiene
-   concedidos en la app el 1, 2 y 3-10 y en la hoja trabaja; la app respeta lo
-   concedido (por eso sale 1 menos que la fila 94 esos días).
+-1. **Cuadrante de OGA5, lo que decide Dani**: aceptar o no la propuesta del
+   01→12-10 (en la app, o me lo dice y la acepto); y si la ficha de Fran Gil
+   pasa a OGA5 ya o el 05-10 (hoy sigue en DGA1). Ojo con el Atlas: si la base
+   de Flota está en la org que se suspende el 01-10, se pierde todo esto.
 
 0. **URGENTE — aviso de Amazon del 24-09**: leer la sección 0 de
    `docs/REVISION_LEGAL.md`. Amazon pidió inventario y borrado de todos los
