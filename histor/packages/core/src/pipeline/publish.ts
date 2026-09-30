@@ -7,6 +7,7 @@
  * Nada se borra: cada cambio es una versión nueva con su resumen.
  */
 import { and, desc, eq, gte, inArray, ne, sql } from 'drizzle-orm';
+import { logger } from '../observability/index';
 import { providerFor } from '../ai/router';
 import { country } from '../config/countries';
 import { env } from '../env';
@@ -141,6 +142,8 @@ export async function publishStory(db: Db, v: VerifiedStory, settings: Editorial
       detail: { failed: Object.fromEntries(Object.entries(failed).map(([l, r]) => [l, r.checks.filter((c) => !c.passed)])) , first: firstFail?.checks.filter((c) => !c.passed) },
       dedupeKey: `qc:${story.id}`,
     });
+    // Por qué se retiene, en los registros (sin ellos solo se veía «held: 30» en producción).
+    logger.info({ storyId: story.id, hint: story.headlineHint.slice(0, 80), failed: Object.fromEntries(Object.entries(failed).map(([l, r]) => [l, r.checks.filter((c) => !c.passed).map((c) => `${c.name}: ${c.messages[0]?.slice(0, 120) ?? ''}`)])), sinBorrador: langs.filter((l) => !failed[l] && !drafts.has(l)) }, 'retenida');
     result.held = true;
     return result;
   }

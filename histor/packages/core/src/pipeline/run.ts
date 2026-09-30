@@ -4,6 +4,7 @@
  * Cada etapa deja su registro en pipeline_runs (para el panel y las métricas).
  */
 import { and, eq, inArray, isNotNull, lt } from 'drizzle-orm';
+import { logger } from '../observability/index';
 import type { Db } from '../db/client';
 import { analyticsEvents, jobs, pipelineRuns, rawItems } from '../db/schema';
 import type { PoliteFetcher } from '../ingest/fetcher';
@@ -18,8 +19,11 @@ import { verifyDueStories } from './verify';
 
 export async function stage<T extends object>(db: Db, name: string, fn: () => Promise<T>): Promise<T> {
   const [row] = await db.insert(pipelineRuns).values({ stage: name }).returning({ id: pipelineRuns.id });
+  const t0 = Date.now();
   try {
     const out = await fn();
+    // Cuánto tarda cada fase, en los registros: los ciclos llegaron a durar 20 minutos (30-09-2026).
+    logger.info({ stage: name, ms: Date.now() - t0 }, 'fase');
     const counts = Object.fromEntries(Object.entries(out).filter(([, v]) => typeof v === 'number')) as Record<string, number>;
     await db.update(pipelineRuns).set({ finishedAt: new Date(), ok: true, counts }).where(eq(pipelineRuns.id, row.id));
     return out;
