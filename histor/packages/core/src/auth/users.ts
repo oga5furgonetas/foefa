@@ -224,6 +224,20 @@ export async function resetPassword(db: Db, token: string, newPassword: string):
   return 'ok';
 }
 
+/**
+ * Restablecimiento por el operador (CLI), para cuando no hay correo configurado con el que
+ * enviar el enlace de recuperación: nueva contraseña, cuenta desbloqueada y sesiones cerradas.
+ */
+export async function operatorResetPassword(db: Db, email: string, newPassword: string): Promise<'ok' | 'weak' | 'not_found'> {
+  if (passwordProblems(newPassword).length) return 'weak';
+  const u = await findUserByEmail(db, email);
+  if (!u) return 'not_found';
+  await db.update(users).set({ passwordHash: await hashPassword(newPassword), failedLogins: 0, lockedUntil: null }).where(eq(users.id, u.id));
+  await destroyAllSessions(db, u.id);
+  await audit(db, { actor: 'operator:cli', action: 'user.password_reset', targetType: 'user', targetId: u.id });
+  return 'ok';
+}
+
 export async function enableTotp(db: Db, userId: string, secretB32: string, code: string): Promise<boolean> {
   if (!verifyTotp(secretB32, code)) return false;
   await db.update(users).set({ totpSecret: encrypt(secretB32), totpEnabled: true }).where(eq(users.id, userId));

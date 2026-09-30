@@ -28,7 +28,8 @@ test('admin: 2FA obligatorio en producción, cadena de evidencia y acciones audi
   // Sin 2FA configurado, el panel obliga a activarlo.
   await expect(page.getByRole('heading', { name: 'Acceso restringido' })).toBeVisible();
   await page.getByRole('button', { name: 'Verificación en dos pasos' }).click();
-  const secret = (await page.locator('code').first().textContent())!.trim();
+  // La clave se muestra en grupos de 4 para leerla mejor; las apps (y esta prueba) ignoran los espacios.
+  const secret = (await page.locator('code').first().textContent())!.replace(/\s+/g, '');
   await page.getByLabel('Código de verificación').fill(totp(secret));
   await page.getByRole('button', { name: 'Guardar' }).click();
   await expect(page.getByText('✓ Verificación en dos pasos')).toBeVisible();

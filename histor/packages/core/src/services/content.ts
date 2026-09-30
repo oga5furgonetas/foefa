@@ -110,7 +110,14 @@ export type ListOpts = {
   orderBy?: 'recent' | 'importance' | 'momentum';
   limit?: number;
   offset?: number;
+  /** Sin secciones blandas (famosos, estilo de vida, viajes, cultura, opinión): para lo de arriba de la portada. */
+  hardOnly?: boolean;
+  /** Además, sin deportes (la noticia que abre la portada). */
+  noSports?: boolean;
 };
+
+/** Lo que no es «última hora»: va a sus secciones, abajo, nunca a abrir la portada (30-09-2026, Dani: «no me pongas mierda»). */
+export const SOFT_CATEGORIES = ['entertainment', 'lifestyle', 'travel', 'culture', 'opinion'];
 
 export async function listArticles(db: Db, o: ListOpts): Promise<ArticleCard[]> {
   const conds: (SQL | undefined)[] = [visible(), eq(articles.language, o.lang)];
@@ -121,6 +128,10 @@ export async function listArticles(db: Db, o: ListOpts): Promise<ArticleCard[]> 
   if (o.authorId) conds.push(eq(articles.authorId, o.authorId));
   if (o.since) conds.push(gte(articles.publishedAt, o.since));
   if (o.breaking) conds.push(eq(articles.isBreaking, true));
+  if (o.hardOnly || o.noSports) {
+    const out = [...(o.hardOnly ? SOFT_CATEGORIES : []), ...(o.noSports ? ['sports'] : [])];
+    conds.push(sql`(${articles.categoryId} IS NULL OR ${articles.categoryId} NOT IN (${sql.join(out.map((c) => sql`${c}`), sql`, `)}))`);
+  }
   if (o.excludeIds?.length) conds.push(sql`${articles.id} NOT IN (${sql.join(o.excludeIds.map((i) => sql`${i}`), sql`, `)})`);
   if (o.entityId) conds.push(sql`EXISTS (SELECT 1 FROM article_entities ae WHERE ae.article_id = ${articles.id} AND ae.entity_id = ${o.entityId})`);
   if (o.sourceId) conds.push(sql`${articles.sourcesList} @> ${JSON.stringify([{ sourceId: o.sourceId }])}::jsonb`);
@@ -166,7 +177,8 @@ export type HomeData = {
   sections: { categoryId: string; items: ArticleCard[] }[];
 };
 
-const HOME_SECTIONS = ['technology', 'economy', 'politics', 'science', 'health', 'sports', 'entertainment', 'culture', 'business', 'society', 'weather', 'travel', 'lifestyle'];
+// Primero lo duro; lo blando, al final.
+const HOME_SECTIONS = ['politics', 'economy', 'society', 'technology', 'science', 'health', 'business', 'sports', 'weather', 'culture', 'entertainment', 'lifestyle', 'travel'];
 
 /**
  * Portada: cambia con el país, la región, la hora y lo que está pasando.
@@ -175,20 +187,26 @@ const HOME_SECTIONS = ['technology', 'economy', 'politics', 'science', 'health',
  */
 export async function getHome(db: Db, geo: { lang: string; countryCode: string | null; regionCode: string | null; cityKey: string | null }): Promise<HomeData> {
   const since = new Date(Date.now() - 7 * 86400000);
-  // Abre la portada lo más importante YA confirmado; lo «en desarrollo» solo si no hay nada más.
-  const topCandidates = await listArticles(db, { lang: geo.lang, since, orderBy: 'importance', limit: 6 });
+  // Abre la portada lo más importante YA confirmado de las ÚLTIMAS 24 h (si no hay, 72 h; luego la
+  // semana), solo noticias duras y sin deportes; lo «en desarrollo» solo si no hay nada más.
+  let topCandidates: ArticleCard[] = [];
+  for (const hours of [24, 72, 168]) {
+    topCandidates = await listArticles(db, { lang: geo.lang, since: new Date(Date.now() - hours * 3600000), orderBy: 'importance', limit: 6, hardOnly: true, noSports: true });
+    if (topCandidates.some((a) => !a.isDeveloping)) break;
+  }
+  if (!topCandidates.length) topCandidates = await listArticles(db, { lang: geo.lang, since, orderBy: 'importance', limit: 6 });
   let top = topCandidates.find((a) => !a.isDeveloping) ?? topCandidates[0] ?? null;
   // Como hacen las ediciones nacionales de los grandes diarios: si hay una noticia confirmada
   // del país del lector con peso suficiente (≥ 60 % de la más importante), abre con ella.
   if (geo.countryCode) {
-    const [ownTop] = (await listArticles(db, { lang: geo.lang, countryCode: geo.countryCode, since: new Date(Date.now() - 36 * 3600000), orderBy: 'importance', limit: 4 })).filter((a) => !a.isDeveloping);
+    const [ownTop] = (await listArticles(db, { lang: geo.lang, countryCode: geo.countryCode, since: new Date(Date.now() - 36 * 3600000), orderBy: 'importance', limit: 4, hardOnly: true, noSports: true })).filter((a) => !a.isDeveloping);
     if (ownTop && (!top || ownTop.importance >= 0.6 * top.importance)) top = ownTop;
   }
   const exclude = top ? [top.id] : [];
-  const breaking = await listArticles(db, { lang: geo.lang, breaking: true, since: new Date(Date.now() - 12 * 3600000), limit: 5, excludeIds: exclude });
-  const latest = await listArticles(db, { lang: geo.lang, limit: 12, excludeIds: exclude });
+  const breaking = await listArticles(db, { lang: geo.lang, breaking: true, since: new Date(Date.now() - 12 * 3600000), limit: 5, excludeIds: exclude, hardOnly: true });
+  const latest = await listArticles(db, { lang: geo.lang, limit: 12, excludeIds: exclude, hardOnly: true });
   const trending = await listArticles(db, { lang: geo.lang, since: new Date(Date.now() - 48 * 3600000), orderBy: 'momentum', limit: 6, excludeIds: exclude });
-  const national = geo.countryCode ? await listArticles(db, { lang: geo.lang, countryCode: geo.countryCode, since, orderBy: 'importance', limit: 8, excludeIds: exclude }) : [];
+  const national = geo.countryCode ? await listArticles(db, { lang: geo.lang, countryCode: geo.countryCode, since, orderBy: 'importance', limit: 8, excludeIds: exclude, hardOnly: true }) : [];
   let local: ArticleCard[] = [];
   if (geo.cityKey) {
     const cityId = await cityIdByKey(db, geo.cityKey);
@@ -203,8 +221,8 @@ export async function getHome(db: Db, geo: { lang: string; countryCode: string |
     .from(articles)
     .innerJoin(stories, eq(stories.id, articles.storyId))
     .leftJoin(media, eq(media.id, articles.imageId))
-    .where(and(visible(), eq(articles.language, geo.lang), geo.countryCode ? or(ne(articles.countryCode, geo.countryCode), sql`${articles.countryCode} IS NULL`) : undefined, gte(articles.publishedAt, since)))
-    .orderBy(desc(articles.importance))
+    .where(and(visible(), eq(articles.language, geo.lang), geo.countryCode ? or(ne(articles.countryCode, geo.countryCode), sql`${articles.countryCode} IS NULL`) : undefined, gte(articles.publishedAt, since), sql`(${articles.categoryId} IS NULL OR ${articles.categoryId} NOT IN (${sql.join(SOFT_CATEGORIES.map((c) => sql`${c}`), sql`, `)}))`))
+    .orderBy(desc(sql`${articles.importance} * exp(-extract(epoch from (now() - ${articles.publishedAt})) / 86400.0)`))
     .limit(8);
   const sections: HomeData['sections'] = [];
   for (const categoryId of HOME_SECTIONS) {

@@ -1,5 +1,5 @@
 'use client';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import type { Dict } from '@histor/core/i18n/dictionaries';
 import { api, ApiClientError, setCookie } from './api';
 
@@ -116,10 +116,24 @@ export function PushToggle({ label, vapidKey }: { label: string; vapidKey: strin
   );
 }
 
+/**
+ * Alta del 2FA. Antes solo enseñaba la clave y un enlace «otpauth://» pelado: desde el móvil era
+ * casi imposible y Dani no podía entrar al panel (30-09-2026). Ahora: pasos, botón que abre la app
+ * de autenticación del propio móvil, QR para el ordenador y la clave con botón de copiar.
+ */
 export function TwoFactor({ a, enabled }: { a: A; enabled: boolean }) {
   const [setup, setSetup] = useState<{ secret: string; uri: string } | null>(null);
+  const [qr, setQr] = useState<string | null>(null);
+  const [copied, setCopied] = useState(false);
   const [on, setOn] = useState(enabled);
   const [err, setErr] = useState<string | null>(null);
+  useEffect(() => {
+    if (!setup) return;
+    import('qrcode')
+      .then((m) => m.toDataURL(setup.uri, { margin: 1, width: 220 }))
+      .then(setQr)
+      .catch(() => setQr(null));
+  }, [setup]);
   if (on) return <p className="alert alert-ok">✓ {a.twoFactor}</p>;
   return (
     <div className="form">
@@ -141,12 +155,34 @@ export function TwoFactor({ a, enabled }: { a: A; enabled: boolean }) {
             }
           }}
         >
-          <p style={{ fontSize: 14, margin: 0, wordBreak: 'break-all' }}>
-            <code>{setup.secret}</code>
-          </p>
-          <a href={setup.uri} className="muted" style={{ fontSize: 13 }}>
-            otpauth://
+          <ol className="ui" style={{ fontSize: 15, paddingLeft: 20, margin: 0 }}>
+            {a.twoFactorSteps.map((s, i) => (
+              <li key={i} style={{ marginBottom: 4 }}>
+                {s}
+              </li>
+            ))}
+          </ol>
+          <a href={setup.uri} className="btn btn-solid">
+            {a.twoFactorAdd}
           </a>
+          {/* eslint-disable-next-line @next/next/no-img-element -- QR generado en el navegador (data:), no hay nada que optimizar */}
+          {qr && <img src={qr} alt="QR" width={220} height={220} style={{ background: '#fff', padding: 6, borderRadius: 4 }} />}
+          <p className="muted ui" style={{ fontSize: 13, margin: 0 }}>
+            {a.twoFactorManual}
+          </p>
+          <p style={{ margin: 0, display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+            <code style={{ fontSize: 15, letterSpacing: '0.05em', wordBreak: 'break-all' }}>{setup.secret.replace(/(.{4})/g, '$1 ').trim()}</code>
+            <button
+              type="button"
+              className="btn btn-small"
+              onClick={async () => {
+                await navigator.clipboard.writeText(setup.secret).catch(() => {});
+                setCopied(true);
+              }}
+            >
+              {copied ? `✓ ${a.copiedKey}` : a.copyKey}
+            </button>
+          </p>
           <label>
             {a.totpCode}
             <input name="code" inputMode="numeric" pattern="[0-9]{6}" maxLength={6} required autoComplete="one-time-code" />

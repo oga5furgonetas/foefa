@@ -10,10 +10,11 @@
  *   newsletter:send         envía las newsletters cuya hora ha llegado
  *   check:env               lista lo que falta para producción
  *   images:backfill         pone imagen ilustrativa (Wikimedia Commons) a lo publicado que no tenga
+ *   admin:reset-password    NEW_PASSWORD=… [--email=…] restablece la contraseña (sin correo configurado)
  *   stories:recheck [--hours=72]  vuelve a verificar y redactar lo publicado en esas horas (tras mejorar el redactor)
  */
 import { and, eq, gte, inArray, isNull } from 'drizzle-orm';
-import { ensureAdmin } from '@histor/core/auth/users';
+import { ensureAdmin, operatorResetPassword } from '@histor/core/auth/users';
 import { SOURCE_SEEDS } from '@histor/core/config/sources';
 import { closeDb, getDb } from '@histor/core/db/client';
 import { articles, rawItems, stories, storyItems } from '@histor/core/db/schema';
@@ -75,6 +76,18 @@ async function main(): Promise<number> {
     case 'newsletter:send':
       console.log(await sendDueNewsletters(getDb()));
       return 0;
+    case 'admin:reset-password': {
+      // La contraseña llega por NEW_PASSWORD (no por argumentos: se verían en la lista de procesos).
+      const email = flagValue('email') ?? env().ADMIN_EMAIL;
+      const pw = process.env.NEW_PASSWORD ?? '';
+      if (!email || !pw) {
+        console.error('Uso: NEW_PASSWORD=… cli admin:reset-password [--email=…]');
+        return 1;
+      }
+      const r = await operatorResetPassword(getDb(), email, pw);
+      console.log(r === 'ok' ? '✓ contraseña restablecida y sesiones cerradas' : r === 'weak' ? '✕ contraseña demasiado débil' : '✕ no existe esa cuenta');
+      return r === 'ok' ? 0 : 1;
+    }
     case 'check:env': {
       const p = productionProblems();
       if (!p.length) console.log('✓ configuración mínima de producción correcta');

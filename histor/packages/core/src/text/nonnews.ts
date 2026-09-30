@@ -29,6 +29,14 @@ const SPONSORED = /\b(webinar|webinario|conéctese al|inscríbase|regístrese|pa
 /** Servicios, no noticias: sorteos, horóscopo, pasatiempos («Comprobar Bonoloto: resultados…»). */
 const SERVICE = /(^(comprobar|horóscopo|horoscopo|crucigrama|sudoku|autodefinido)\b|\b(bonoloto|euromillones|la primitiva|el gordo de la primitiva|quiniela|lotería nacional|loteria nacional|cupón de la once|lotto|eurojackpot|powerball|mega millions)\b)/i;
 
+/**
+ * Guías de partidos y directos: «Argentina vs. Bolivia: día, horario, TV y cómo ver online»,
+ * «España vs Croacia EN VIVO: ¿a qué hora juegan y dónde ver…?», «siga el minuto a minuto»,
+ * «Posible alineación de Perú vs. México» (30-09-2026). Son servicio, no noticias.
+ */
+const MATCH_GUIDE =
+  /(\b(dónde ver|donde ver|cómo ver|como ver|dónde y cuándo|a qué hora (juega|juegan|es|empieza|será)|horario y (dónde|cómo)|minuto a minuto|en vivo y en directo|ver (el partido )?(gratis |en )?online|alineaci(ón|ones) (probables?|confirmadas?)|posible alineación|how to watch|where to watch|live stream|wo läuft|im tv und stream|où regarder|dove vedere|onde assistir|como assistir)\b|\bvs\.? [^:]{2,40}(en vivo|en directo|live)\b)/i;
+
 /** Motivo por el que la pieza no es noticia, o null si lo es. */
 export function nonNewsReason(title: string, url: string): string | null {
   const t = title.trim();
@@ -36,6 +44,7 @@ export function nonNewsReason(title: string, url: string): string | null {
   if (GDACS_GREEN.test(t)) return 'no es noticia (alerta automática de nivel verde, impacto bajo)';
   if (SPONSORED.test(t)) return 'no es noticia (publicidad o contenido patrocinado)';
   if (SERVICE.test(t)) return 'no es noticia (servicio: sorteos, horóscopo o pasatiempos)';
+  if (MATCH_GUIDE.test(t)) return 'no es noticia (guía de partido o directo minuto a minuto)';
   let path = '';
   try {
     path = new URL(url).pathname;

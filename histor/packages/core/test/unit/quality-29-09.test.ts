@@ -272,3 +272,15 @@ describe('titulares largos y notas de prensa (30-09-2026)', () => {
     expect(pressReleaseReason('El huracán Polo tocó tierra en Baja California Sur.')).toBeNull();
   });
 });
+
+describe('portada de última hora (30-09-2026)', () => {
+  it('las guías de partidos y los directos no son noticia; el resultado sí', () => {
+    const u = 'https://x.com/a';
+    expect(nonNewsReason('Argentina vs. Bolivia, por un amistoso internacional: día, horario, TV y cómo ver online', u)).toMatch(/partido/);
+    expect(nonNewsReason('España vs Croacia EN VIVO: ¿a qué hora juegan y dónde ver vía TV la final?', u)).toMatch(/partido/);
+    expect(nonNewsReason('Medellín vs. Millonarios - en vivo Liga BetPlay: siga el minuto a minuto del partido', u)).toMatch(/partido/);
+    expect(nonNewsReason('Posible alineación de Perú vs. México por partido amistoso de fecha FIFA', u)).toMatch(/partido/);
+    expect(nonNewsReason('España gana a Croacia (2-1) y se clasifica para la final', u)).toBeNull();
+    expect(nonNewsReason('Cómo verificamos los datos del paro, explicado', u)).toBeNull();
+  });
+});
