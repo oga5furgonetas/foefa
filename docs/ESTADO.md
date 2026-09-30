@@ -394,12 +394,25 @@ Dani no se creía el 0. Estudio con datos reales (scratchpad de la sesión):
    - **Propuesta PENDIENTE** 01→12-10 en OGA5 (no aceptada): +2 todos los días,
      27 cambios (casi todos para que los nuevos y quien tenía 4 días hagan 5),
      faltan ~3 conductores. El 01-10 solo entran César García y David Pombo.
+     Dani (30-09): «No, déjala pendiente».
+5. **Tarde del 30-09**, lo que pidió Dani al verlo:
+   - Asistente del cuadrante opaco (`.card` al 70 % dejaba leer la tabla) y,
+     en pantalla ancha, hueco para TODA la página, no solo la tabla.
+   - Domingos: el 1 y el N/T en naranja como en su hoja, franja por toda la
+     columna hasta Diferencia (el rosa y los códigos con color propio mandan).
+   - **Usuarios**: las casillas con los mismos grupos, orden y nombres que el
+     menú; Cuadrante y Órdenes detrás de la suya («va con…»); «Ve N de 29
+     pantallas»; vista «Quién ve cada pantalla» (pantallas × usuarios, la
+     misma cuenta que el menú: `veLaPantalla`) con «Editar» por usuario.
+   - **Cambio de centro programado**: `traslado` en la ficha +
+     `POST/DELETE /drivers/{id}/traslado` + `_bucle_traslados` (15 min, todas
+     las empresas, latido `traslados`, `historial_centros`). Fran Gil, a OGA5
+     el 05-10 (programado en producción).
 
 ## Pendiente (por prioridad)
 
 -1. **Cuadrante de OGA5, lo que decide Dani**: aceptar o no la propuesta del
-   01→12-10 (en la app, o me lo dice y la acepto); y si la ficha de Fran Gil
-   pasa a OGA5 ya o el 05-10 (hoy sigue en DGA1). Ojo con el Atlas: si la base
+   01→12-10 (en la app, o me lo dice y la acepto). Ojo con el Atlas: si la base
    de Flota está en la org que se suspende el 01-10, se pierde todo esto.
 
 0. **URGENTE — aviso de Amazon del 24-09**: leer la sección 0 de
