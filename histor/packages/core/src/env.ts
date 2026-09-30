@@ -37,6 +37,8 @@ const schema = z.object({
   AI_MIN_IMPORTANCE: z.coerce.number().min(0).max(1).default(0),
   // Modelos con razonamiento (gpt-oss, o-series): «low» gasta muchos menos tokens.
   AI_REASONING_EFFORT: z.enum(['low', 'medium', 'high']).optional(),
+  // Zona horaria en la que el proveedor renueva el cupo diario (Groq y Gemini: medianoche de California).
+  AI_QUOTA_RESET_TZ: z.string().default('America/Los_Angeles'),
   ANTHROPIC_API_KEY: z.string().optional(),
   OPENAI_API_KEY: z.string().optional(),
   OPENAI_BASE_URL: z.string().optional(),

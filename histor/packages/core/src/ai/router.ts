@@ -18,14 +18,32 @@ import type { AiTask, JsonRequest, JsonResponse, LlmProvider } from './types';
 
 const cache = new Map<string, LlmProvider | null>();
 
-export function providerFor(task: AiTask): LlmProvider | null {
+/**
+ * Proveedores de una tarea, en orden. La variable admite una lista separada por comas
+ * («openai:openai/gpt-oss-120b,openai:qwen/qwen3.8-27b»): en los planes gratuitos cada modelo
+ * tiene su propio cupo diario y, cuando se agota uno, se pasa al siguiente.
+ */
+export function providersFor(task: AiTask): LlmProvider[] {
   const e = env();
-  const spec =
+  const specs =
     task === 'writing' || task === 'editing'
       ? e.AI_PROVIDER_WRITING
       : task === 'translation'
         ? (e.AI_PROVIDER_TRANSLATION ?? e.AI_PROVIDER_WRITING)
         : (e.AI_PROVIDER_EXTRACTION ?? e.AI_PROVIDER_WRITING);
+  if (!specs) return [];
+  return specs
+    .split(',')
+    .map((s) => buildProvider(s.trim()))
+    .filter((p): p is LlmProvider => !!p);
+}
+
+export function providerFor(task: AiTask): LlmProvider | null {
+  return providersFor(task)[0] ?? null;
+}
+
+function buildProvider(spec: string): LlmProvider | null {
+  const e = env();
   if (!spec) return null;
   if (cache.has(spec)) return cache.get(spec)!;
   const [name, ...rest] = spec.split(':');
@@ -39,12 +57,17 @@ export function providerFor(task: AiTask): LlmProvider | null {
   return p;
 }
 
-/** Tokens gastados por un modelo en las últimas 24 h (para no pasar del cupo gratuito). */
+/**
+ * Tokens gastados por un modelo desde que su proveedor renovó el cupo diario. Groq y Gemini lo
+ * renuevan a medianoche de California (AI_QUOTA_RESET_TZ). Con una ventana de 24 h, lo gastado
+ * de madrugada seguía bloqueando la IA horas después de la renovación (30-09-2026).
+ */
 export async function dayTokens(db: Db, model: string): Promise<number> {
+  const tz = env().AI_QUOTA_RESET_TZ;
   const rows = await db
     .select({ total: sql<number>`coalesce(sum(${aiUsage.inputTokens} + ${aiUsage.outputTokens}), 0)` })
     .from(aiUsage)
-    .where(sql`${aiUsage.model} = ${model} AND ${aiUsage.ts} >= now() - interval '24 hours'`);
+    .where(sql`${aiUsage.model} = ${model} AND ${aiUsage.ts} >= (date_trunc('day', now() AT TIME ZONE ${tz}) AT TIME ZONE ${tz})`);
   return Number(rows[0]?.total ?? 0);
 }
 
@@ -84,39 +107,42 @@ export async function callJson(
   req: JsonRequest,
   meta: { storyId?: number | null; provider?: LlmProvider | null } = {},
 ): Promise<JsonResponse | null> {
-  const provider = meta.provider === undefined ? providerFor(req.task) : meta.provider;
-  if (!provider) return null;
+  const chain = meta.provider === undefined ? providersFor(req.task) : meta.provider ? [meta.provider] : [];
+  if (!chain.length) return null;
   const budget = env().AI_MONTHLY_BUDGET_USD;
   if (budget > 0 && (await monthSpendUsd(db)) >= budget) return null;
-  const key = `${provider.name}:${provider.model}`;
-  if ((cooldownUntil.get(key) ?? 0) > Date.now()) return null;
   const daily = env().AI_DAILY_TOKEN_LIMIT;
-  if (daily > 0 && (await dayTokens(db, provider.model)) >= daily) return null;
-  try {
-    const res = await provider.generateJson(req);
-    await db.insert(aiUsage).values({
-      task: req.task,
-      provider: res.provider,
-      model: res.model,
-      inputTokens: res.inputTokens,
-      outputTokens: res.outputTokens,
-      costUsd: res.costUsd,
-      storyId: meta.storyId ?? null,
-      ok: !res.refused,
-      error: res.refused ? 'refusal' : null,
-    });
-    return res.refused ? null : res;
-  } catch (err) {
-    const msg = String(err instanceof Error ? err.message : err);
-    if (/\b429\b/.test(msg)) cooldownUntil.set(key, Date.now() + retryAfterMs(msg));
-    await db.insert(aiUsage).values({
-      task: req.task,
-      provider: provider.name,
-      model: provider.model,
-      storyId: meta.storyId ?? null,
-      ok: false,
-      error: String(err instanceof Error ? err.message : err).slice(0, 500),
-    });
-    return null;
+  // En orden: si uno descansa (429), agotó su cupo del día o falla, se prueba el siguiente.
+  for (const provider of chain) {
+    const key = `${provider.name}:${provider.model}`;
+    if ((cooldownUntil.get(key) ?? 0) > Date.now()) continue;
+    if (daily > 0 && (await dayTokens(db, provider.model)) >= daily) continue;
+    try {
+      const res = await provider.generateJson(req);
+      await db.insert(aiUsage).values({
+        task: req.task,
+        provider: res.provider,
+        model: provider.model,
+        inputTokens: res.inputTokens,
+        outputTokens: res.outputTokens,
+        costUsd: res.costUsd,
+        storyId: meta.storyId ?? null,
+        ok: !res.refused,
+        error: res.refused ? 'refusal' : null,
+      });
+      return res.refused ? null : res;
+    } catch (err) {
+      const msg = String(err instanceof Error ? err.message : err);
+      if (/\b429\b/.test(msg)) cooldownUntil.set(key, Date.now() + retryAfterMs(msg));
+      await db.insert(aiUsage).values({
+        task: req.task,
+        provider: provider.name,
+        model: provider.model,
+        storyId: meta.storyId ?? null,
+        ok: false,
+        error: msg.slice(0, 500),
+      });
+    }
   }
+  return null;
 }
