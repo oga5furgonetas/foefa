@@ -192,6 +192,19 @@ si algo no tiene respaldo). Grok (xAI) NO sirve gratis: la cuenta de Dani no tie
 - Fuera notas de prensa de pago (PRNewswire…), sorteos, ladillos en mayúsculas, tuits incrustados.
 - Registros del worker: `fase` (ms por fase) y `retenida` (motivo por historia), para diagnosticar
   sin leer la base de producción.
+- **Ciclos**: IDF una vez por ciclo, afirmaciones en lotes de 200 y como mucho 40 piezas analizadas
+  por historia; `verificación lenta` en los registros si una tarda más de 5 s. Tras desplegar:
+  0 retenidas en 3 ciclos seguidos y verificación de 9 s a 2,5 min (antes, 5–12 min).
+- **IA gratuita que se usa de verdad**: el tope diario contaba las últimas 24 h y Groq renueva a
+  medianoche de California, así que la IA se quedaba parada horas con cupo libre (999/1.000
+  peticiones sin usar). Ahora cuenta desde la renovación (`AI_QUOTA_RESET_TZ`) y encadena modelos:
+  `AI_PROVIDER_WRITING=openai:openai/gpt-oss-120b,openai:qwen/qwen3.8-27b`,
+  `AI_PROVIDER_TRANSLATION=openai:openai/gpt-oss-20b,openai:qwen/qwen3.8-27b`, importancia mínima
+  0,35. Cómo ver el cupo que queda sin tocar la base: la cabecera `x-ratelimit-remaining-requests`
+  de una petición mínima a Groq.
+- Pendiente: algunas verificaciones de historias pequeñas tardan 8–20 s (probable consulta sin
+  índice: huellas de imagen o eventos de lectura); noticias con poco material en un idioma
+  siguen saliendo con un solo párrafo si la IA no las escribe.
 
 ## Pendiente (no bloqueado)
 
