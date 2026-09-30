@@ -41,6 +41,14 @@ const schema = z.object({
   AI_QUOTA_RESET_TZ: z.string().default('America/Los_Angeles'),
   // Idiomas a los que la IA traduce (lista separada por comas; vacío = todos los activos).
   AI_TRANSLATE_TO: z.string().optional(),
+  // Redes: bot y canal de Telegram por idioma («es=@histor_es,en=@histor_en»), importancia mínima
+  // para publicar y ritmo máximo por red.
+  // Anuncios: identificador de Google AdSense («ca-pub-1234…»). Sin él, ni script ni ads.txt.
+  ADSENSE_CLIENT: z.string().regex(/^ca-pub-\d{10,20}$/).optional(),
+  TELEGRAM_BOT_TOKEN: z.string().optional(),
+  TELEGRAM_CHANNELS: z.string().optional(),
+  SOCIAL_MIN_IMPORTANCE: z.coerce.number().min(0).max(1).default(0.3),
+  SOCIAL_MAX_PER_HOUR: z.coerce.number().int().min(1).max(60).default(6),
   ANTHROPIC_API_KEY: z.string().optional(),
   OPENAI_API_KEY: z.string().optional(),
   OPENAI_BASE_URL: z.string().optional(),

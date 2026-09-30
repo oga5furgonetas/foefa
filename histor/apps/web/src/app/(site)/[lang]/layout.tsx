@@ -56,8 +56,16 @@ export default async function SiteLayout({ children, params }: { children: React
   const d = dict(lang);
   const geo = await currentGeo(lang);
   const demo = demoMode();
+  // Anuncios automáticos de Google AdSense (y su mensaje de consentimiento, que se configura en
+  // AdSense → Privacidad y mensajes): solo con ADSENSE_CLIENT y nunca en DEMO.
+  const adsClient = !demo ? env().ADSENSE_CLIENT : undefined;
   return (
     <html lang={localeFor(lang, geo.countryCode)} dir={languageDef(lang).rtl ? 'rtl' : 'ltr'}>
+      {adsClient && (
+        <head>
+          <script async src={`https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=${adsClient}`} crossOrigin="anonymous" />
+        </head>
+      )}
       <body>
         <Header lang={lang} d={d} countryCode={geo.countryCode} tz={geo.timezone} demo={demo} />
         <main id="main" className="wrap">

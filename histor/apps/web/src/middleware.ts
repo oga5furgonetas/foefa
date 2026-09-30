@@ -55,16 +55,28 @@ function strictCsp(nonce: string, dev: boolean): string {
   ].join('; ');
 }
 
+/**
+ * Dominios de Google AdSense (anuncios automáticos y su mensaje de consentimiento, obligatorio en
+ * la UE). Solo se abren si hay ADSENSE_CLIENT: sin anuncios, la CSP sigue igual de estricta.
+ */
+const ADS = {
+  script: 'https://pagead2.googlesyndication.com https://adservice.google.com https://www.googletagservices.com https://tpc.googlesyndication.com https://fundingchoicesmessages.google.com https://*.adtrafficquality.google',
+  frame: 'https://googleads.g.doubleclick.net https://tpc.googlesyndication.com https://www.google.com https://fundingchoicesmessages.google.com https://*.adtrafficquality.google',
+  connect: 'https://pagead2.googlesyndication.com https://*.google.com https://*.doubleclick.net https://fundingchoicesmessages.google.com https://*.adtrafficquality.google',
+};
+
 function publicCsp(dev: boolean): string {
+  const ads = !!process.env.ADSENSE_CLIENT;
   return [
     `default-src 'self'`,
     // Páginas públicas cacheables: sin nonce por petición. No hay HTML de terceros
     // ni contenido de usuarios; React escapa todo el texto y el JSON-LD se serializa escapado.
-    `script-src 'self' 'unsafe-inline'${dev ? " 'unsafe-eval'" : ''}`,
+    `script-src 'self' 'unsafe-inline'${dev ? " 'unsafe-eval'" : ''}${ads ? ` ${ADS.script}` : ''}`,
     `style-src 'self' 'unsafe-inline'`,
     `img-src 'self' data: blob: https:`,
     `font-src 'self' data:`,
-    `connect-src 'self'`,
+    `connect-src 'self'${ads ? ` ${ADS.connect}` : ''}`,
+    ...(ads ? [`frame-src ${ADS.frame}`] : []),
     `frame-ancestors 'none'`,
     `form-action 'self' https://checkout.stripe.com https://accounts.google.com https://appleid.apple.com`,
     `base-uri 'self'`,
