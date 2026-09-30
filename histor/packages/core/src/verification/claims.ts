@@ -13,6 +13,7 @@ import { extractNumbers } from '../text/numbers';
 import { CREDIT_LINE, PROMO } from '../text/nonnews';
 import { decodeEntities } from '../text/normalize';
 import { extractQuotes } from '../text/quotes';
+import { cleanTitle } from '../ingest/parsers';
 import { sentences, words } from '../text/tokenize';
 import type { VClaim, VItem } from './types';
 
@@ -90,7 +91,8 @@ export function extractClaims(item: VItem): VClaim[] {
     });
   };
 
-  add(item.title, true);
+  // El título tal y como se guardó puede traer etiquetas de formato («| VIDEO»): fuera también aquí.
+  add(cleanTitle(item.title), true);
   const body = [item.summary, item.text].filter(Boolean).join(' ');
   for (const s of sentences(body)) {
     if (out.length >= MAX_CLAIMS_PER_ITEM) break;

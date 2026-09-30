@@ -85,8 +85,14 @@ export function writeDeterministic(fs: FactSheet, opts: WriteOptions = {}): Draf
       const w = keyWords(c.text);
       return sourceTitles.some((t) => coverage(t, w) >= 0.4);
     };
+    // El marcador más avanzado que dan las fuentes: un titular con uno anterior es de mitad de
+    // partido («Doblete de Lamine Yamal para el 3-1» cuando el partido acabó 4-1, 30-09-2026).
+    const scores = (s: string) => [...s.matchAll(/(?<![\d.,:/])(\d{1,2})\s?[-–]\s?(\d{1,2})(?![\d.,:/%])/g)].map((m) => Number(m[1]) + Number(m[2]));
+    const lastScore = Math.max(0, ...fs.claims.flatMap((c) => scores(c.text)));
+    const stale = (s: string) => scores(s).some((x) => x < lastScore);
     for (const c of candidates) {
       if (!c.isHeadline && !aboutTheStory(c)) continue;
+      if (stale(c.text)) continue;
       // Los titulares de las fuentes suelen tener 17-20 palabras («Los profesores españoles trabajan
       // dos horas menos a la semana que en la media de la OCDE»): con 16, la noticia se retenía
       // entera (30-09-2026). El tope real es de 120 caracteres, más abajo.
@@ -374,6 +380,9 @@ export function goodHeadline(h: string): boolean {
   if (t.split(/\s+/).length < 5) return false;
   // Empieza por letra o cifra: «, CC BY-NC, according to The Conversation» salió de titular.
   if (!/^[\p{L}\p{N}¿¡]/u.test(t)) return false;
+  // Sin exclamaciones: «¡Está intratable! Doblete de Lamine Yamal…» es tono de la fuente, no de un
+  // periódico serio (30-09-2026).
+  if (/[!¡]/.test(t)) return false;
   // En primera persona es la frase de alguien, no un titular: «Era un piso de 50 metros
   // cuadrados, con tres perros y yo sin habitación» (29-09-2026).
   if (/(^|\s)(yo|me siento|nosotros|nosotras|ich|wir|je|nous|noi|nós)(\s|[,.!?]|$)/i.test(t)) return false;

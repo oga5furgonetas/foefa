@@ -50,10 +50,13 @@ function text(v: unknown): string {
  * Titular sin la etiqueta de directo del medio («Live:», «En directo:», «Liveticker:»…):
  * es formato de su web, no parte del hecho, y estorba para agrupar y redactar.
  */
-function cleanTitle(s: string): string {
-  const t = clean(s).replace(LIVE_PREFIX, '').replace(TIME_PREFIX, '').replace(MEDIA_PREFIX, '').replace(LIVE_SUFFIX, '').trim();
+export function cleanTitle(s: string): string {
+  const t = clean(s).replace(LIVE_PREFIX, '').replace(TIME_PREFIX, '').replace(MEDIA_PREFIX, '').replace(LIVE_SUFFIX, '').replace(MEDIA_SUFFIX, '').trim();
   return t.charAt(0).toUpperCase() + t.slice(1);
 }
+
+/** «… | VIDEO», «… (FOTOS)», «… - EN VÍDEO», «… [Galería]» al final: formato del medio, Histor no tiene ese vídeo (30-09-2026). */
+const MEDIA_SUFFIX = /\s*(?:[|–—-]\s*|\(\s*|\[\s*)(?:en\s+)?(?:video|vídeo|vidéo|videos|vídeos|fotos|photos|foto|galería|galeria|gallery|audio|podcast|watch|infografía|mapa)\s*[)\]]?\s*$/i;
 
 /** Formato del medio, no parte del hecho: «Watch: …», «Vídeo | …», «FOTOS: …». */
 const MEDIA_PREFIX = /^(watch|video|vídeo|vidéo|audio|listen|escucha|fotos|photos|en vídeo|en imágenes|im video)\s*[:|–—-]\s*/i;

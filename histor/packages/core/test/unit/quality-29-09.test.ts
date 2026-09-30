@@ -11,6 +11,7 @@ import { domesticDesk } from '../../src/pipeline/normalize';
 import { storyConsensus } from '../../src/pipeline/verify';
 import { detectAttribution, stripDateline, wireOrigin } from '../../src/text/attribution';
 import { decodeEntities } from '../../src/text/normalize';
+import { cleanTitle } from '../../src/ingest/parsers';
 import { extractEntities } from '../../src/text/entities';
 import { numberOverlap } from '../../src/text/similarity';
 import { nonNewsReason, pressReleaseReason } from '../../src/text/nonnews';
@@ -282,5 +283,14 @@ describe('portada de última hora (30-09-2026)', () => {
     expect(nonNewsReason('Posible alineación de Perú vs. México por partido amistoso de fecha FIFA', u)).toMatch(/partido/);
     expect(nonNewsReason('España gana a Croacia (2-1) y se clasifica para la final', u)).toBeNull();
     expect(nonNewsReason('Cómo verificamos los datos del paro, explicado', u)).toBeNull();
+  });
+});
+
+describe('titulares de partido (30-09-2026, España 4-1 Croacia)', () => {
+  it('fuera la etiqueta «| VIDEO» y las exclamaciones', () => {
+    expect(cleanTitle('¡Está intratable! Doblete de Lamine Yamal para el 3-1 de España vs Croacia | VIDEO')).toBe('¡Está intratable! Doblete de Lamine Yamal para el 3-1 de España vs Croacia');
+    expect(cleanTitle('Así fue el rescate en el puerto de Vigo (FOTOS)')).toBe('Así fue el rescate en el puerto de Vigo');
+    expect(cleanTitle('El Gobierno aprueba el decreto de vivienda - EN VÍDEO')).toBe('El Gobierno aprueba el decreto de vivienda');
+    expect(goodHeadline('¡Está intratable! Doblete de Lamine Yamal para el 3-1 de España vs Croacia')).toBe(false);
   });
 });
