@@ -1609,6 +1609,10 @@ async def _ensure_tenant_indexes(db_name: str):
     await _idx(tdb.moviles, "id", unique=True)
     await _idx(tdb.moviles, [("center", 1), ("extension", 1)], unique=True)
     await _idx(tdb.moviles_de, [("driver_id", 1), ("center", 1)], unique=True)
+    # La hoja del cuadrante: un DIARIO por centro y día; DEBER HORAS por centro.
+    await _idx(tdb.cuadrante_diario, [("center", 1), ("fecha", 1)], unique=True)
+    await _idx(tdb.cuadrante_deber_horas, "id", unique=True)
+    await _idx(tdb.cuadrante_deber_horas, [("center", 1), ("fecha", 1)])
     await _idx(tdb.plantillas_compartidas, [("center", 1), ("updated_at", -1)])
     # Citas de taller del calendario de flota. El único PARCIAL es la regla de
     # negocio en sí: una furgoneta no puede tener dos citas ABIERTAS del mismo
@@ -44299,7 +44303,9 @@ async def cuadrante_celdas(data: dict = Body(...), user: dict = Depends(require_
             continue
         pedidos.append({"driver_id": did, "fecha": _cua_fecha(x.get("fecha") or x.get("date")),
                         "cod": _cm._cod(_texto_cuerpo(x.get("cod"), 20)),
-                        "desbloquear": bool(x.get("desbloquear"))})
+                        "desbloquear": bool(x.get("desbloquear")),
+                        # El rosa: un día de trabajo marcado como EXTRA (en la hoja, «1E»).
+                        "extra": bool(x.get("extra"))})
     if not pedidos:
         raise HTTPException(400, "No hay ninguna celda que guardar")
     actuales = await _cua_turnos_de({(p["driver_id"], p["fecha"]) for p in pedidos})
@@ -44348,7 +44354,7 @@ async def cuadrante_celdas(data: dict = Body(...), user: dict = Depends(require_
             campos = {"driver_id": p["driver_id"],
                       "driver_name": nombres.get(p["driver_id"]) or (doc or {}).get("driver_name") or "",
                       "center": center, "date": p["fecha"], "type": tipo, "cod": cod,
-                      "fijada": True, "extra": False}
+                      "fijada": True, "extra": bool(p["extra"]) and tipo in ("trabaja", "extra")}
             cambio_doc = {"$set": campos}
             if doc and _cua_cod_turno(doc) != cod:
                 cambio_doc["$unset"] = {"hora": ""}
@@ -44359,8 +44365,9 @@ async def cuadrante_celdas(data: dict = Body(...), user: dict = Depends(require_
                 cambio_doc.setdefault("$unset", {}).update({"aprobado_req": "", "antes_aprob": ""})
             await _upsert_turno(filtro, cambio_doc)
         guardadas += 1
-    await cambio.guardar()
-    return {"ok": True, "guardadas": guardadas, "bloqueadas": bloqueadas}
+    # El id del cambio: la hoja (Ctrl+Z) solo deshace lo que ha hecho ella.
+    cambio_id = await cambio.guardar()
+    return {"ok": True, "guardadas": guardadas, "bloqueadas": bloqueadas, "cambio_id": cambio_id}
 
 
 @api_router.put("/cuadrante/maximas")
@@ -44394,8 +44401,8 @@ async def cuadrante_maximas(data: dict = Body(...), user: dict = Depends(require
                 filtro, {"$set": {"center": center, "date": f, "maximo": num, "updated_at": ahora,
                                   "updated_by": user.get("name")}}, upsert=True)
         n += 1
-    await cambio.guardar()
-    return {"ok": True, "guardadas": n}
+    cambio_id = await cambio.guardar()
+    return {"ok": True, "guardadas": n, "cambio_id": cambio_id}
 
 
 @api_router.put("/cuadrante/config")
@@ -44691,6 +44698,12 @@ async def cuadrante_deshacer(data: dict = Body(...), user: dict = Depends(requir
                                         sort=[("en", -1)])
     if not c:
         raise HTTPException(404, "No hay nada que deshacer")
+    # Ctrl+Z en la hoja: solo si lo último es lo que acaba de hacer ella. Si
+    # entre medias ha cambiado algo otra persona, deshacer pisaría lo suyo.
+    solo_si = _texto_cuerpo(data.get("solo_si"), 80)
+    if solo_si and c.get("id") != solo_si:
+        raise HTTPException(409, "Lo último del cuadrante lo ha cambiado otra persona (%s): no se deshace para no "
+                                 "pisarlo. Usa «Deshacer último cambio» si de verdad quieres." % (c.get("por") or "?"))
     # Por lotes y por colección: deshacer una hoja importada son ~2.500 turnos,
     # y de uno en uno contra Atlas eran minutos. Cada filtro sale una sola vez
     # en `snaps` (lo garantiza _CuaCambio), así que el orden no cambia nada.
@@ -45519,6 +45532,188 @@ async def cuadrante_importar(file: UploadFile = File(...), center: str = Form(..
                    fichas_creadas=fichas_creadas, emparejadas=len(emparejadas),
                    fuera_por_eleccion=fuera_por_eleccion, alias_guardados=len(ids_elegidos))
     return resumen
+
+
+# ── LA HOJA: DIARIO Y DEBER HORAS ────────────────────────────────────────────
+# Dani, 30-09-2026: «nosotros usamos un Excel, que es mayor maniobrabilidad…
+# que si le clicas se expanda y sea un propio Excel con su diario, su mensual y
+# lo de deber horas, y se pueda editar». El MENSUAL es la rejilla de siempre
+# (turnos). El DIARIO es el mismo día de esa rejilla —el código de cada uno
+# sale del mismo turno: no se copia y pega, que es lo que le creaba días de
+# más— con sus columnas de apuntes (la wave o quién sustituye, la
+# rosterización, los días libres) y las notas del día. DEBER HORAS es su
+# registro de quién hizo de más y cómo se saldó.
+_CUA_DIARIO = "cuadrante_diario"
+_CUA_DIARIO_CAMPOS = ("nota", "roster", "libres")
+_CUA_DEBER = "cuadrante_deber_horas"
+
+
+@api_router.get("/cuadrante/diario")
+async def cuadrante_diario_ver(center: str, fecha: str, user: dict = Depends(require_admin)):
+    """Los apuntes del día: por persona {nota, roster, libres} y las notas del día."""
+    center = _cua_centro(center)
+    _cua_acceso(user, center)
+    fecha = _cua_fecha(fecha)
+    d = await db[_CUA_DIARIO].find_one({"center": center, "fecha": fecha}, {"_id": 0}) or {}
+    return {"center": center, "fecha": fecha, "filas": d.get("filas") or {}, "notas": d.get("notas") or "",
+            "actualizado_en": d.get("actualizado_en"), "por": d.get("por")}
+
+
+@api_router.put("/cuadrante/diario")
+async def cuadrante_diario_guardar(data: dict = Body(...), user: dict = Depends(require_admin)):
+    """body: {center, fecha, cambios: [{driver_id, campo: nota|roster|libres, valor}], notas?}.
+    Un valor vacío borra ese apunte."""
+    center = _cua_centro(data.get("center"))
+    _cua_acceso(user, center)
+    fecha = _cua_fecha(data.get("fecha"))
+    poner, quitar = {}, {}
+    for x in _lista_cuerpo(data.get("cambios"), 600):
+        x = _dict_cuerpo(x)
+        did, campo = _texto_cuerpo(x.get("driver_id"), 80), _texto_cuerpo(x.get("campo"), 20)
+        # El id va dentro de la ruta del campo: nada de puntos ni dólares.
+        if campo not in _CUA_DIARIO_CAMPOS or not re.fullmatch(r"[A-Za-z0-9_\-]{1,80}", did):
+            continue
+        valor = _texto_cuerpo(x.get("valor"), 300).strip()
+        clave = f"filas.{did}.{campo}"
+        if valor:
+            poner[clave] = valor
+            quitar.pop(clave, None)
+        else:
+            quitar[clave] = ""
+            poner.pop(clave, None)
+    if "notas" in data:
+        poner["notas"] = _texto_cuerpo(data.get("notas"), 4000)
+    if not poner and not quitar:
+        raise HTTPException(400, "No hay nada que guardar")
+    poner.update({"center": center, "fecha": fecha, "actualizado_en": datetime.now(timezone.utc).isoformat(),
+                  "por": user.get("name") or ""})
+    cambio = {"$set": poner}
+    if quitar:
+        cambio["$unset"] = quitar
+    await db[_CUA_DIARIO].update_one({"center": center, "fecha": fecha}, cambio, upsert=True)
+    return {"ok": True}
+
+
+async def _deber_ficha(center: str, persona: str) -> Optional[str]:
+    """La ficha de esa persona SOLO si el nombre es el de una ficha del centro,
+    entero y sin tocayos. «biri» o «PORTILLA» se quedan como texto."""
+    clave = _clave_nombre(persona)
+    if not clave:
+        return None
+    fichas = await db.drivers.find({"center": _cua_rx(center), "merged_into": {"$exists": False},
+                                    "status": {"$nin": ["deleted", "fusionada"]}},
+                                   {"_id": 0, "id": 1, "name": 1}).to_list(3000)
+    iguales = [f["id"] for f in fichas if _clave_nombre(f.get("name")) == clave]
+    return iguales[0] if len(iguales) == 1 else None
+
+
+def _deber_campos(data: dict, parcial: bool) -> dict:
+    """Lo que se puede escribir en una fila de «deber horas», limpio."""
+    out = {}
+    if not parcial or "fecha" in data:
+        f = _texto_cuerpo(data.get("fecha"), 10).strip()
+        out["fecha"] = _cua_fecha(f, "La fecha") if f else ""
+    if not parcial or "persona" in data:
+        out["persona"] = " ".join(_texto_cuerpo(data.get("persona"), 80).split())
+    for campo, tope in (("cuanto", 40), ("nota", 200), ("saldado", 120)):
+        if not parcial or campo in data:
+            out[campo] = " ".join(_texto_cuerpo(data.get(campo), tope).split())
+    return out
+
+
+def _deber_salida(x: dict) -> dict:
+    return {k: x.get(k) for k in ("id", "fecha", "persona", "driver_id", "cuanto", "nota", "saldado",
+                                  "creado_en", "por", "actualizado_en", "origen")}
+
+
+@api_router.get("/cuadrante/deber-horas")
+async def deber_horas_ver(center: str, user: dict = Depends(require_admin)):
+    center = _cua_centro(center)
+    _cua_acceso(user, center)
+    filas = await db[_CUA_DEBER].find({"center": center}, {"_id": 0}).to_list(5000)
+    # Como su hoja: por fecha, y lo que no tiene fecha (lo más viejo) arriba.
+    filas.sort(key=lambda x: (x.get("fecha") or "", x.get("creado_en") or ""))
+    return {"filas": [_deber_salida(x) for x in filas]}
+
+
+@api_router.post("/cuadrante/deber-horas")
+async def deber_horas_anadir(data: dict = Body(...), user: dict = Depends(require_admin)):
+    center = _cua_centro(data.get("center"))
+    _cua_acceso(user, center)
+    campos = _deber_campos(data, parcial=False)
+    if not campos["persona"]:
+        raise HTTPException(400, "Falta quién")
+    ahora = datetime.now(timezone.utc).isoformat()
+    doc = {"id": str(uuid.uuid4()), "center": center, **campos,
+           "driver_id": await _deber_ficha(center, campos["persona"]),
+           "creado_en": ahora, "actualizado_en": ahora, "por": user.get("name") or ""}
+    await db[_CUA_DEBER].insert_one(dict(doc))
+    return _deber_salida(doc)
+
+
+@api_router.patch("/cuadrante/deber-horas/{fila_id}")
+async def deber_horas_editar(fila_id: str, data: dict = Body(...), user: dict = Depends(require_admin)):
+    x = await db[_CUA_DEBER].find_one({"id": fila_id}, {"_id": 0})
+    if not x:
+        raise HTTPException(404, "Esa fila ya no existe")
+    _cua_acceso(user, x.get("center") or "")
+    campos = _deber_campos(data or {}, parcial=True)
+    if "persona" in campos:
+        if not campos["persona"]:
+            raise HTTPException(400, "Falta quién")
+        campos["driver_id"] = await _deber_ficha(x.get("center") or "", campos["persona"])
+    if not campos:
+        raise HTTPException(400, "No hay nada que cambiar")
+    campos["actualizado_en"] = datetime.now(timezone.utc).isoformat()
+    await db[_CUA_DEBER].update_one({"id": fila_id}, {"$set": campos})
+    return _deber_salida({**x, **campos})
+
+
+@api_router.delete("/cuadrante/deber-horas/{fila_id}")
+async def deber_horas_borrar(fila_id: str, user: dict = Depends(require_admin)):
+    x = await db[_CUA_DEBER].find_one({"id": fila_id}, {"_id": 0})
+    if not x:
+        raise HTTPException(404, "Esa fila ya no existe")
+    _cua_acceso(user, x.get("center") or "")
+    await db[_CUA_DEBER].delete_one({"id": fila_id})
+    await _audit(user, "deber_horas_borrada", {"center": x.get("center"), "fila": _deber_salida(x)})
+    return {"ok": True}
+
+
+@api_router.post("/cuadrante/deber-horas/importar")
+async def deber_horas_importar(file: UploadFile = File(...), center: str = Form(...),
+                               confirmar: str = Form(default=""), user: dict = Depends(require_admin)):
+    """La hoja «deber horas» de su Excel. Sin `confirmar` solo dice qué ha
+    leído; con él, mete las filas que no estén ya (misma fecha, persona, nota y
+    cómo se saldó): importar dos veces no duplica nada."""
+    center = _cua_centro(center)
+    _cua_acceso(user, center)
+    contenido = await file.read()
+    if len(contenido) > 15 * 1024 * 1024:
+        raise HTTPException(400, "El fichero es demasiado grande (máximo 15 MB)")
+    try:
+        hoja = await asyncio.to_thread(_cx.leer_deber_horas, contenido)
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+    ya = {(x.get("fecha") or "", _clave_nombre(x.get("persona")), x.get("nota") or "", x.get("saldado") or "")
+          for x in await db[_CUA_DEBER].find({"center": center}, {"_id": 0}).to_list(5000)}
+    nuevas = [f for f in hoja["filas"]
+              if (f["fecha"], _clave_nombre(f["persona"]), f["nota"], f["saldado"]) not in ya]
+    resumen = {"hoja": hoja["hoja"], "leidas": len(hoja["filas"]), "nuevas": len(nuevas),
+               "pendientes": sum(1 for f in nuevas if not f["saldado"]),
+               "sin_fecha": sum(1 for f in nuevas if not f["fecha"]), "muestra": nuevas[:8], "guardado": False}
+    if not confirmar or not nuevas:
+        return resumen
+    ahora = datetime.now(timezone.utc).isoformat()
+    docs = []
+    for f in nuevas:
+        docs.append({"id": str(uuid.uuid4()), "center": center, "fecha": f["fecha"], "persona": f["persona"],
+                     "driver_id": await _deber_ficha(center, f["persona"]), "cuanto": "", "nota": f["nota"],
+                     "saldado": f["saldado"], "creado_en": ahora, "actualizado_en": ahora,
+                     "por": user.get("name") or "", "origen": "excel"})
+    await db[_CUA_DEBER].insert_many(docs)
+    await _audit(user, "deber_horas_importado", {"center": center, "filas": len(docs)})
+    return {**resumen, "guardado": True}
 
 
 # =========================

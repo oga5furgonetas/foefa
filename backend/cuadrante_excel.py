@@ -263,3 +263,52 @@ def leer_mensual(contenido: bytes, hoja: str = "") -> Dict[str, Any]:
     return {"hoja": nombre_hoja, "fechas": [d.isoformat() for d in fechas], "filas": filas,
             "maximas": maximas, "codigos": dict(codigos.most_common()), "avisos": avisos,
             "leyenda": leyenda}
+
+
+# ── «DEBER HORAS» ────────────────────────────────────────────────────────────
+# La tercera hoja de su libro (30-09-2026): un registro de quién hizo horas o
+# días de más y cómo se saldó. Una FECHA (celda con fecha, en azul) abre un
+# bloque; debajo, un nombre por fila (B), a veces algo en C («2 dias
+# 27-28/07», «llaves ribeira») y en D cómo se saldó («fichado 05/09», «reten
+# 24/07»). Sin nada en D, sigue pendiente. Los nombres van como se escribieron
+# («biri», «marcio 3h»): se guardan TAL CUAL; casarlos con una ficha a ojo
+# sería inventarse a quién se le debe.
+
+def _texto_celda(v) -> str:
+    if v is None:
+        return ""
+    if isinstance(v, dt.datetime):
+        v = v.date()
+    if isinstance(v, dt.date):
+        return v.strftime("%d/%m/%Y")
+    if isinstance(v, float) and v.is_integer():
+        v = int(v)
+    return " ".join(str(v).split())
+
+
+def leer_deber_horas(contenido: bytes) -> Dict[str, Any]:
+    """Los bytes del .xlsx -> {hoja, filas: [{fila, fecha, persona, nota, saldado}]}.
+
+    `fecha` es la del último bloque de fecha por encima ('' si la fila va antes
+    de la primera fecha). Lanza ValueError si no hay hoja de «deber horas»."""
+    import openpyxl
+    try:
+        wb = openpyxl.load_workbook(io.BytesIO(contenido), data_only=True)
+    except Exception as e:                                        # noqa: BLE001
+        raise ValueError("No se puede abrir el Excel: %s" % str(e)[:120])
+    ws = next((w for w in wb.worksheets if "DEBER" in _n(w.title)), None)
+    if ws is None:
+        raise ValueError("Ese Excel no tiene la hoja «deber horas»")
+    fecha, filas = "", []
+    for r in range(1, ws.max_row + 1):
+        b = ws.cell(r, 2).value
+        if isinstance(b, (dt.datetime, dt.date)):
+            fecha = (b.date() if isinstance(b, dt.datetime) else b).isoformat()
+            continue
+        persona = _texto_celda(b)
+        if not persona or _n(persona) in ("DIAS", "DIA", "NOMBRE", "FECHA"):
+            continue
+        filas.append({"fila": r, "fecha": fecha, "persona": persona[:80],
+                      "nota": _texto_celda(ws.cell(r, 3).value)[:200],
+                      "saldado": _texto_celda(ws.cell(r, 4).value)[:120]})
+    return {"hoja": ws.title, "filas": filas}

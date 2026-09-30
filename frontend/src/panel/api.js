@@ -360,7 +360,25 @@ export const cuadranteAjusteBorrar = (id) => api.delete(`/cuadrante/ajustes/${id
 export const cuadranteProponer = (body) => api.post('/cuadrante/proponer', body, { timeout: 240000 })
 export const cuadranteAceptar = (id) => api.post(`/cuadrante/propuestas/${id}/aceptar`, {}, { timeout: 120000 })
 export const cuadranteDescartar = (id) => api.post(`/cuadrante/propuestas/${id}/descartar`, {})
-export const cuadranteDeshacer = (center) => api.post('/cuadrante/deshacer', { center }, { timeout: 120000 })
+// `soloSi`: el id del cambio que se quiere deshacer. Si lo último lo hizo otra
+// persona, el servidor dice que no (Ctrl+Z en la hoja no pisa lo de nadie).
+export const cuadranteDeshacer = (center, soloSi) =>
+  api.post('/cuadrante/deshacer', { center, ...(soloSi ? { solo_si: soloSi } : {}) }, { timeout: 120000 })
+// La hoja del cuadrante: los apuntes del DIARIO y el registro de DEBER HORAS.
+export const getDiario = (center, fecha) => api.get('/cuadrante/diario', { params: { center, fecha } })
+export const guardarDiario = (center, fecha, cambios, notas) =>
+  api.put('/cuadrante/diario', { center, fecha, cambios: cambios || [], ...(notas !== undefined ? { notas } : {}) })
+export const getDeberHoras = (center) => api.get('/cuadrante/deber-horas', { params: { center } })
+export const anadirDeberHoras = (body) => api.post('/cuadrante/deber-horas', body)
+export const editarDeberHoras = (id, body) => api.patch(`/cuadrante/deber-horas/${id}`, body)
+export const borrarDeberHoras = (id) => api.delete(`/cuadrante/deber-horas/${id}`)
+export function importarDeberHoras(file, center, confirmar) {
+  const fd = new FormData()
+  fd.append('file', file)
+  fd.append('center', center)
+  if (confirmar) fd.append('confirmar', '1')
+  return api.post('/cuadrante/deber-horas/importar', fd, { timeout: 120000, headers: { 'Content-Type': undefined } })
+}
 export const cuadranteChatVer = (center) => api.get('/cuadrante/chat', { params: { center } })
 export const cuadranteChat = (body) => api.post('/cuadrante/chat', body, { timeout: 120000 })
 export const cuadranteChatConfirmar = (id, quitar) =>

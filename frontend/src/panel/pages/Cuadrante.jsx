@@ -3,7 +3,7 @@ import { useOutletContext } from 'react-router-dom'
 import {
   Loader2, ChevronLeft, ChevronRight, Sparkles, MessageSquare, Undo2, Download, Upload,
   Lock, StickyNote, X, Check, AlertTriangle, Users, SlidersHorizontal, Gift, Eraser, Plus,
-  Brush, CalendarRange, Unlock,
+  Brush, CalendarRange, Unlock, Sheet,
 } from 'lucide-react'
 import {
   getCuadrante, cuadranteCeldas, cuadranteMaximas, cuadranteConfig, cuadrantePersona,
@@ -12,9 +12,14 @@ import {
   cuadranteExportar, cuadranteImportar,
 } from '../api'
 import { lista } from '../../lib/lista'
-import { isoLocal, hoyLocal } from '../../lib/fecha'
+import { hoyLocal } from '../../lib/fecha'
 import { canSee } from '../auth'
 import CuadranteChat from '../components/CuadranteChat'
+import HojaCuadrante from '../hoja/HojaCuadrante'
+import {
+  TRABAJO, LETRA, DIA, MES, PALETA, ABREV, DOMINGO_TRABAJA, COLUMNA_DOMINGO, claseCodigo, wd,
+  sumaDias, rangoDias, fmt, lunesDe, signo, claseDif, resumenDias,
+} from '../cuadranteComun'
 
 /* ── EL CUADRANTE CON MOTOR ────────────────────────────────────────────────
    Dani, 29-09-2026: una sección donde «simplemente corregir los días libres o
@@ -30,71 +35,12 @@ import CuadranteChat from '../components/CuadranteChat'
    lo mueve al rehacer. El motor nunca escribe solo: deja una PROPUESTA (borde
    morado en lo que cambia) que se acepta o se descarta. Y todo se deshace. */
 
-const TRABAJO = new Set(['1', 'T', 'X', 'EXTRA', 'BKP', 'S', 'RA', 'RIDE'])
-const RUTA = new Set(['1', 'T', 'X', 'EXTRA'])
-const LETRA = ['L', 'M', 'X', 'J', 'V', 'S', 'D']
-const DIA = ['lunes', 'martes', 'miércoles', 'jueves', 'viernes', 'sábado', 'domingo']
-const MES = ['ENE', 'FEB', 'MAR', 'ABR', 'MAY', 'JUN', 'JUL', 'AGO', 'SEP', 'OCT', 'NOV', 'DIC']
-const PALETA = [
-  ['1', 'Trabaja'], ['N/T', 'Libra'], ['V', 'Vacaciones'], ['BAJA', 'Baja'],
-  ['N/D', 'No disponible'], ['APROBADO', 'Día aprobado'], ['BKP', 'Reserva'],
-  ['RA', 'Acompañante'], ['S', 'Oficina'], ['N/P', 'No presentado'],
-]
 const TIPOS = [
   ['normal', 'Normal (5 + 2)', 'Trabaja 5 y libra 2 donde haga falta'],
   ['empresa', 'Horario fijo', 'De lunes a viernes, o su patrón'],
   ['finde', 'Solo fin de semana', 'Sábado y domingo'],
   ['inactivo', 'No entra en rutas', 'Oficina, baja larga…'],
 ]
-const ABREV = { 'N/T APROB': 'APR', APROBADO: 'APR', EXTRA: 'EX', RIDE: 'RA', COMP: 'COMP' }
-
-/* Colores: los de la hoja donde los hay, y pares texto/fondo que se leen en
-   los tres temas (el rosa no tiene compensación en el tema claro: por eso el
-   texto del día extra es el de la rampa, que sí se invierte). */
-/* El domingo, la columna entera en naranja como en su hoja (Dani, 30-09-2026:
-   «márcame los domingos con un color distinto toda la columna»): el 1 y el
-   N/T cambian de color; el rosa del extra y los códigos con color propio
-   mandan, igual que en el Excel que se exporta. */
-const DOMINGO_TRABAJA = 'bg-orange-500/35 text-dark-50'
-const DOMINGO_LIBRA = 'bg-orange-500/[0.18] text-orange-300'
-const COLUMNA_DOMINGO = 'bg-orange-500/[0.12]'
-
-function claseCodigo(cod, extra, domingo = false) {
-  if (extra) return 'bg-pink-500/35 text-dark-50 ring-1 ring-pink-400/60'
-  if (domingo && ['1', 'T', 'X'].includes(cod)) return DOMINGO_TRABAJA
-  if (domingo && ['N/T', 'L'].includes(cod)) return DOMINGO_LIBRA
-  switch (cod) {
-    case '1': case 'T': case 'X': return 'bg-dark-800 text-dark-50'
-    case 'N/T': case 'L': return 'bg-amber-200/15 text-amber-200'
-    case 'V': return 'bg-sky-500/20 text-sky-300'
-    case 'BAJA': return 'bg-red-500/20 text-red-300'
-    case 'N/D': case 'N/P': case 'SUSP': return 'bg-orange-500/15 text-orange-300'
-    case 'APROBADO': case 'N/T APROB': return 'bg-emerald-500/20 text-emerald-300'
-    case 'BKP': return 'bg-amber-500/20 text-amber-300'
-    case 'RA': case 'RIDE': return 'bg-violet-500/20 text-violet-300'
-    case 'EXTRA': return 'bg-pink-500/35 text-dark-50'
-    default: return 'bg-dark-800 text-dark-300'
-  }
-}
-
-const wd = (iso) => (new Date(`${iso}T12:00:00`).getDay() + 6) % 7
-function sumaDias(iso, n) {
-  const d = new Date(`${iso}T12:00:00`)
-  d.setDate(d.getDate() + n)
-  return isoLocal(d)
-}
-function rangoDias(a, b, tope = 100) {
-  const out = []
-  let x = a
-  while (a && b && x <= b && out.length < tope) { out.push(x); x = sumaDias(x, 1) }
-  return out
-}
-const fmt = (iso) => (iso ? `${iso.slice(8, 10)}/${iso.slice(5, 7)}` : '')
-const lunesDe = (iso) => sumaDias(iso, -wd(iso))
-const signo = (n) => (n == null ? '—' : n > 0 ? `+${n}` : String(n))
-const claseDif = (d) => (d.dif == null ? 'text-dark-500'
-  : d.dif >= d.colchon ? 'bg-emerald-500/20 text-emerald-300'
-    : d.dif >= 0 ? 'bg-amber-500/20 text-amber-300' : 'bg-red-500/20 text-red-300')
 
 function descargar(blob, nombre) {
   const url = URL.createObjectURL(blob)
@@ -824,6 +770,7 @@ export default function Cuadrante() {
   const [persona, setPersona] = useState(null)
   const [nueva, setNueva] = useState(false)
   const [importar, setImportar] = useState(false)
+  const [hojaAbierta, setHojaAbierta] = useState(false)
   const [ocupado, setOcupado] = useState('')
   const [maxEdit, setMaxEdit] = useState({})
   const pedida = useRef(0)
@@ -868,22 +815,8 @@ export default function Cuadrante() {
     return a ? a.colchon : (datos?.config?.colchon ?? 2)
   }, [datos])
 
-  const porDia = useMemo(() => {
-    const m = {}
-    for (const f of dias) {
-      let rutas = 0
-      let extras = 0
-      for (const p of personas) {
-        const c = celda(p.id, f)
-        if (!c || c.otro_centro) continue
-        if (RUTA.has(c.cod)) rutas += 1
-        if (c.extra) extras += 1
-      }
-      const mx = datos?.maximas?.[f]
-      m[f] = { rutas, extras, maxima: mx ?? null, dif: mx == null ? null : rutas - mx, colchon: colchonDe(f) }
-    }
-    return m
-  }, [dias, personas, celda, datos, colchonDe])
+  const porDia = useMemo(() => resumenDias(dias, personas, celda, datos?.maximas, colchonDe),
+    [dias, personas, celda, datos, colchonDe])
 
   /* El 7º día seguido, contando la semana de antes (viene en los datos). */
   const septimos = useMemo(() => {
@@ -1142,6 +1075,11 @@ export default function Cuadrante() {
                   </button>
                 )}
                 <div className="ml-auto flex flex-wrap items-center gap-2">
+                  {/* El cuadrante en grande, como su Excel: DIARIO, MENSUAL y DEBER HORAS. */}
+                  <button onClick={() => setHojaAbierta(true)}
+                    className="flex items-center gap-1.5 rounded-lg border border-emerald-500/50 bg-emerald-500/10 px-2.5 py-1 text-xs font-semibold text-emerald-300 hover:bg-emerald-500/20">
+                    <Sheet size={13} /> Abrir como hoja (Excel)
+                  </button>
                   {hayExtras && (
                     <button onClick={() => setDiaExtra(dias.find((f) => f > hoy && porDia[f]?.extras) || dias.find((f) => porDia[f]?.extras))}
                       className="flex items-center gap-1.5 rounded-lg border border-pink-400/40 px-2.5 py-1 text-xs text-dark-200 hover:bg-dark-800">
@@ -1498,6 +1436,11 @@ export default function Cuadrante() {
         <NuevaPersona center={center} dentro={dentro} onCerrar={() => setNueva(false)}
           onGuardado={() => { setNueva(false); setAviso('Añadido al cuadrante.'); cargar(true) }} />
       )}
+      {hojaAbierta && (
+        <HojaCuadrante center={center} desde={rango.desde} hasta={rango.hasta}
+          onCerrar={() => { setHojaAbierta(false); cargar(true) }} />
+      )}
+
       {importar && (
         <Importar center={center} centers={centers} setCenter={setCenter} onCerrar={() => setImportar(false)}
           onHecho={(r) => {

@@ -535,6 +535,93 @@ test.describe('Cuadrante', () => {
     expect(fallos, fallos.join(' | ')).toHaveLength(0)
   })
 
+  /* LA HOJA (30-09-2026, Dani: «que si le clicas se expanda y sea un propio
+     Excel con su diario, su mensual y lo de deber horas, y se pueda editar»). */
+  test('la hoja: escribir, pegar de Excel, Ctrl+Z y las tres pestañas', async ({ page }) => {
+    const fallos = vigilar(page)
+    await entrarComoAdmin(page)
+    await simularApi(page, 'vacio')
+    const datos = DATOS()
+    datos.propuesta = null
+    await page.route(/\/api\/cuadrante\?/, json(datos))
+    const pedidos = []
+    let n = 0
+    await page.route(/\/api\/cuadrante\/celdas/, (route) => {
+      pedidos.push(['celdas', route.request().postDataJSON().cambios])
+      return json({ ok: true, guardadas: 1, bloqueadas: [], cambio_id: `c${++n}` })(route)
+    })
+    await page.route(/\/api\/cuadrante\/deshacer/, (route) => {
+      pedidos.push(['deshacer', route.request().postDataJSON()])
+      return json({ ok: true, que: 'Celdas' })(route)
+    })
+    await page.route(/\/api\/cuadrante\/diario/, (route) => {
+      if (route.request().method() === 'PUT') pedidos.push(['diario', route.request().postDataJSON()])
+      return json({ center: 'NORTE', fecha: dia(1), filas: {}, notas: '' })(route)
+    })
+    await page.route(/\/api\/cuadrante\/deber-horas/, (route) => {
+      if (route.request().method() === 'POST') {
+        pedidos.push(['deber', route.request().postDataJSON()])
+        return json({ id: 'f1', ...route.request().postDataJSON() })(route)
+      }
+      return json({ filas: [{ id: 'f0', fecha: '2026-09-05', persona: 'PORTILLA', saldado: '' }] })(route)
+    })
+    await page.addInitScript(() => localStorage.setItem('cuadrante.hoja', 'MENSUAL'))
+    await page.goto('/panel/cuadrante', { waitUntil: 'domcontentloaded' })
+    await expect(page.getByText('Rutas (cuenta de 1)')).toBeVisible({ timeout: 15000 })
+    await page.getByRole('button', { name: 'Abrir como hoja (Excel)' }).click()
+    const hoja = page.getByLabel('Hoja MENSUAL')
+    await expect(hoja).toBeVisible()
+    // Escribir encima: V y Enter. Luego «1e» es un día extra (en rosa).
+    await page.locator('[data-celda="0-5"]').click()
+    await page.keyboard.type('v')
+    await page.keyboard.press('Enter')
+    await expect.poll(() => pedidos.length).toBe(1)
+    expect(pedidos[0]).toEqual(['celdas', [{ driver_id: 'p1', fecha: dia(5), cod: 'V', extra: false }]])
+    await page.locator('[data-celda="1-5"]').click()
+    await page.keyboard.type('1e')
+    await page.keyboard.press('Enter')
+    await expect.poll(() => pedidos.length).toBe(2)
+    expect(pedidos[1][1][0]).toMatchObject({ driver_id: 'p2', cod: '1', extra: true })
+    // Lo que no se entiende no se guarda: se dice.
+    await page.locator('[data-celda="2-5"]').click()
+    await page.keyboard.type('zz')
+    await page.keyboard.press('Enter')
+    await expect(page.getByText(/No se ha cambiado lo que no se entiende: «zz»/)).toBeVisible()
+    expect(pedidos.length).toBe(2)
+    // Pegar un bloque copiado de Excel: un solo guardado con las cuatro celdas.
+    await page.locator('[data-celda="0-7"]').click()
+    await hoja.evaluate((el, txt) => {
+      const dt = new DataTransfer()
+      dt.setData('text/plain', txt)
+      el.dispatchEvent(new ClipboardEvent('paste', { clipboardData: dt, bubbles: true, cancelable: true }))
+    }, 'N/T\tBAJA\n1.EXTRA\tV\n')
+    await expect.poll(() => pedidos.length).toBe(3)
+    expect(pedidos[2][1]).toHaveLength(4)
+    // Ctrl+Z: deshace lo último de ESTA hoja, y solo si sigue siendo lo último.
+    await page.keyboard.press('Control+z')
+    await expect.poll(() => pedidos.length).toBe(4)
+    expect(pedidos[3]).toEqual(['deshacer', { center: 'NORTE', solo_si: 'c3' }])
+    // DIARIO: un apunte en la columna de nota.
+    await page.getByRole('button', { name: 'DIARIO', exact: true }).click()
+    await expect(page.getByLabel('Hoja DIARIO')).toBeVisible()
+    await page.locator('[data-celda="0-1"]').click()
+    await page.keyboard.type('2wave')
+    await page.keyboard.press('Enter')
+    await expect.poll(() => pedidos.length).toBe(5)
+    expect(pedidos[4][1].cambios).toEqual([{ driver_id: 'p1', campo: 'nota', valor: '2wave' }])
+    // DEBER HORAS: escribir en la fila vacía apunta una nueva.
+    await page.getByRole('button', { name: 'DEBER HORAS', exact: true }).click()
+    await expect(page.getByText('Se debe todavía a')).toBeVisible()
+    await page.locator('[data-celda="1-1"]').click()
+    await page.keyboard.type('KARIM')
+    await page.keyboard.press('Enter')
+    await expect.poll(() => pedidos.length).toBe(6)
+    expect(pedidos[5][1]).toMatchObject({ center: 'NORTE', persona: 'KARIM' })
+    await page.getByRole('button', { name: 'Cerrar la hoja' }).click()
+    await expect(hoja).toHaveCount(0)
+    expect(fallos, fallos.join(' | ')).toHaveLength(0)
+  })
+
   /* Día concedido en Días libres: sale con candado y el menú no deja cambiarlo
      de un clic; quien aprueba días le quita el candado (30-09-2026). */
   test('un día concedido sale con candado y se desbloquea a propósito', async ({ page }) => {

@@ -5,164 +5,13 @@
   · «a los conductores añádeles cancelar peticiones enviadas o cambiarlas, y
     que esto nos salte una notificación».
 Contra una base de mentira pequeña, con los flujos del servidor enteros."""
-import re
 from types import SimpleNamespace
 
 import pytest
 from fastapi import HTTPException
 
 import server
-
-_FALTA = object()
-
-
-class _Cursor:
-    def __init__(self, docs):
-        self.docs = docs
-
-    def sort(self, *a, **k):
-        return self
-
-    def skip(self, n):
-        self.docs = self.docs[n:]
-        return self
-
-    def limit(self, n):
-        self.docs = self.docs[:n] if n else self.docs
-        return self
-
-    async def to_list(self, n=None):
-        return list(self.docs if n is None else self.docs[:n])
-
-    def __aiter__(self):
-        self._it = iter(self.docs)
-        return self
-
-    async def __anext__(self):
-        try:
-            return next(self._it)
-        except StopIteration:
-            raise StopAsyncIteration
-
-
-def _casa(d, q):
-    for k, v in (q or {}).items():
-        if k == "$and":
-            if not all(_casa(d, x) for x in v):
-                return False
-            continue
-        if k == "$or":
-            if not any(_casa(d, x) for x in v):
-                return False
-            continue
-        val = d.get(k, _FALTA)
-        if isinstance(v, dict) and v and all(str(x).startswith("$") for x in v):
-            for op, arg in v.items():
-                lista_val = val if isinstance(val, list) else [val]
-                if op == "$in" and not any(x in arg for x in lista_val):
-                    return False
-                if op == "$nin" and any(x in arg for x in lista_val):
-                    return False
-                if op == "$ne" and (val == arg or (isinstance(val, list) and arg in val)):
-                    return False
-                if op == "$exists" and (val is not _FALTA) != bool(arg):
-                    return False
-                if op in ("$gte", "$lte", "$gt", "$lt"):
-                    if val is _FALTA or val is None:
-                        return False
-                    if op == "$gte" and not val >= arg or op == "$lte" and not val <= arg \
-                            or op == "$gt" and not val > arg or op == "$lt" and not val < arg:
-                        return False
-                if op == "$regex" and not re.search(arg, str(val if val is not _FALTA else ""),
-                                                    re.I if "i" in v.get("$options", "") else 0):
-                    return False
-        elif isinstance(val, list) and not isinstance(v, list):
-            if v not in val:
-                return False
-        elif (None if val is _FALTA else val) != v:
-            return False
-    return True
-
-
-class _Col:
-    def __init__(self, docs=None):
-        self.docs = [dict(d) for d in (docs or [])]
-
-    def _aplica(self, d, u, nuevo=False):
-        for k, v in u.get("$set", {}).items():
-            d[k] = v
-        if nuevo:
-            for k, v in u.get("$setOnInsert", {}).items():
-                d[k] = v
-        for k in u.get("$unset", {}):
-            d.pop(k, None)
-        for k, v in u.get("$addToSet", {}).items():
-            d.setdefault(k, [])
-            if v not in d[k]:
-                d[k].append(v)
-        for k, v in u.get("$push", {}).items():
-            d.setdefault(k, []).append(v)
-
-    async def find_one(self, q=None, proyeccion=None, **_):
-        return next((dict(d) for d in self.docs if _casa(d, q)), None)
-
-    def find(self, q=None, proyeccion=None, **_):
-        return _Cursor([dict(d) for d in self.docs if _casa(d, q)])
-
-    async def update_one(self, q, u, upsert=False, **_):
-        for d in self.docs:
-            if _casa(d, q):
-                self._aplica(d, u)
-                return SimpleNamespace(modified_count=1, matched_count=1, upserted_id=None)
-        if upsert:
-            d = {k: v for k, v in q.items() if not k.startswith("$") and not isinstance(v, dict)}
-            self._aplica(d, u, nuevo=True)
-            self.docs.append(d)
-            return SimpleNamespace(modified_count=0, matched_count=0, upserted_id="x")
-        return SimpleNamespace(modified_count=0, matched_count=0, upserted_id=None)
-
-    async def update_many(self, q, u, **_):
-        n = 0
-        for d in self.docs:
-            if _casa(d, q):
-                self._aplica(d, u)
-                n += 1
-        return SimpleNamespace(modified_count=n, matched_count=n)
-
-    async def insert_one(self, doc):
-        self.docs.append(dict(doc))
-        return SimpleNamespace(inserted_id="x")
-
-    async def insert_many(self, docs, **_):
-        self.docs += [dict(d) for d in docs]
-
-    async def delete_one(self, q):
-        for i, d in enumerate(self.docs):
-            if _casa(d, q):
-                del self.docs[i]
-                return SimpleNamespace(deleted_count=1)
-        return SimpleNamespace(deleted_count=0)
-
-    async def delete_many(self, q):
-        antes = len(self.docs)
-        self.docs = [d for d in self.docs if not _casa(d, q)]
-        return SimpleNamespace(deleted_count=antes - len(self.docs))
-
-    async def distinct(self, campo, q=None):
-        return sorted({d.get(campo) for d in self.docs if _casa(d, q) and d.get(campo) is not None})
-
-    async def count_documents(self, q=None):
-        return sum(1 for d in self.docs if _casa(d, q))
-
-
-class _Db(dict):
-    def __getattr__(self, nombre):
-        return self[nombre]
-
-    def __missing__(self, nombre):
-        self[nombre] = _Col()
-        return self[nombre]
-
+from base_de_mentira import Col, Db
 
 HOY = "2026-10-01"
 DANI = {"sub": "a1", "role": "admin", "name": "Dani", "sa": True}
@@ -172,8 +21,8 @@ ANA = {"sub": "d1", "role": "driver", "name": "ANA"}
 
 @pytest.fixture
 def base(monkeypatch):
-    db = _Db()
-    db["drivers"] = _Col([{"id": "d1", "name": "ANA PÉREZ", "center": "OGA5", "active": True}])
+    db = Db()
+    db["drivers"] = Col([{"id": "d1", "name": "ANA PÉREZ", "center": "OGA5", "active": True}])
     avisos = []
 
     async def push_centro(center, titulo, cuerpo, url):
