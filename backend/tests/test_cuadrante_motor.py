@@ -301,6 +301,52 @@ def test_un_cuadrante_que_ya_cumple_no_se_toca():
     assert all(not v["cambiado"] for v in res["celdas"].values())
 
 
+# ── LA MARCA DE DÍA EXTRA SE QUEDA DONDE ESTABA ──────────────────────────────
+# 30-09-2026, con la hoja de OGA5: 22 de los 49 «cambios» de la propuesta eran
+# la marca rosa pasando a otro día de la misma persona, que trabajaba los mismos
+# días («Brandon: el extra del jueves pasa al sábado»). No eran cambios.
+
+def _semana_con_extras():
+    # 6 personas, 5 al día: 1 libra cada día. c0..c4 trabajan 6 días (uno es su
+    # extra, en rosa); c5 trabaja 5.
+    conds = gente(6)
+    celdas, extras = {}, []
+    for i in range(5):
+        for j in range(7):
+            celdas[f"c{i}|{dia(j)}"] = "N/T" if j == i else "1"
+        extras.append(f"c{i}|{dia((i + 3) % 7)}")
+    for j in range(7):
+        celdas[f"c5|{dia(j)}"] = "N/T" if j in (5, 6) else "1"
+    return conds, celdas, extras
+
+
+def test_trabajando_los_mismos_dias_la_marca_de_extra_no_se_mueve():
+    conds, celdas, extras = _semana_con_extras()
+    res = cm.generar_cuadrante(entrada(conds, maxima=3, celdas=celdas, extras=extras))
+    assert all(not v["cambiado"] for v in res["celdas"].values())
+    assert sorted(k for k, v in res["celdas"].items() if v["extra"]) == sorted(extras)
+    assert res["extras"] == 5
+
+
+def test_el_extra_de_un_dia_de_antes_del_periodo_ya_cuenta_para_la_semana():
+    # Del lunes al sábado trabajando, el martes en rosa; se planifica desde el
+    # jueves. El 6º día de la semana ya está marcado: no sale otro en jueves-sábado.
+    celdas = {f"c0|{dia(j)}": "1" for j in range(6)}
+    celdas[f"c0|{dia(6)}"] = "N/T"
+    e = {"fecha_inicio": dia(3), "fecha_fin": dia(6), "colchon": 0,
+         "maximas": {dia(3): 1, dia(4): 1, dia(5): 1, dia(6): 0},
+         "conductores": gente(1), "celdas": celdas, "extras": [f"c0|{dia(1)}"], "segundos": 20}
+    res = cm.generar_cuadrante(e)
+    assert all(not v["cambiado"] and not v["extra"] for v in res["celdas"].values())
+
+
+def test_una_celda_fijada_con_su_marca_de_extra_la_conserva():
+    conds, celdas, extras = _semana_con_extras()
+    res = cm.generar_cuadrante(entrada(conds, maxima=3, celdas=celdas, extras=extras, bloqueadas=extras[:2]))
+    for k in extras[:2]:
+        assert res["celdas"][k]["extra"] and not res["celdas"][k]["cambiado"]
+
+
 def test_faltan_maximas_es_un_error_claro():
     e = entrada(gente(3))
     del e["maximas"][dia(2)]

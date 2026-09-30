@@ -204,6 +204,7 @@ def generar_cuadrante(entrada: Dict[str, Any]) -> Dict[str, Any]:
       "bloqueadas": ["id|AAAA-MM-DD", ...],   # fijadas a mano: no se tocan
       "colchon_por_dia": {"2026-10-09": 3},
       "limites_semana": [{"conductor_id", "lunes", "max_dias"}],
+      "extras": ["id|AAAA-MM-DD", ...],   # las celdas que ya son día extra (rosa)
       "segundos": 60,                   # tope de cálculo por fase
     }
     Devuelve {"estado", "celdas": {"id|fecha": {"valor", "antes", "extra",
@@ -225,6 +226,7 @@ def generar_cuadrante(entrada: Dict[str, Any]) -> Dict[str, Any]:
     conductores = [dict(c) for c in (entrada.get("conductores") or []) if c.get("id")]
     celdas = {k: _cod(v) for k, v in (entrada.get("celdas") or {}).items()}
     bloqueadas = set(entrada.get("bloqueadas") or [])
+    extras_ya = set(entrada.get("extras") or [])
     colchon_dia = {_d(k): int(v) for k, v in (entrada.get("colchon_por_dia") or {}).items()}
     limites = {(str(l["conductor_id"]), _d(l["lunes"])): int(l["max_dias"])
                for l in (entrada.get("limites_semana") or [])}
@@ -443,6 +445,28 @@ def generar_cuadrante(entrada: Dict[str, Any]) -> Dict[str, Any]:
     if permitir_extra:
         estado, final, _ = construir(2, base)
 
+    # ── La marca de día extra, donde ya estaba ───────────────────────────────
+    # Cuál de los seis días de una semana es «el extra» no cambia qué días se
+    # trabaja: es una etiqueta. El cálculo la ponía en el día que dejaba fuera
+    # la fase 1, cualquiera de los seis, y la propuesta salía con cambios que no
+    # lo eran (30-09-2026: 22 de 49 con la hoja de OGA5). Por semana y persona:
+    # tantas marcas como extras ha puesto el cálculo, menos las que ya hay en
+    # días que no mueve (antes del periodo o fijados), y primero en los días que
+    # ya las tenían.
+    marca: Dict[Tuple[str, dt.date], bool] = {}
+    for c in conductores:
+        cid = c["id"]
+        for sem in semanas:
+            movibles = [d for d in sem if d in en_plan and fijos[cid, d] is None]
+            del_calculo = [d for d in movibles if final[cid, d] == 1 and base[cid, d] == 0]
+            if not del_calculo:
+                continue
+            quietas = sum(1 for d in sem if d not in movibles and final[cid, d] == 1
+                          and f"{cid}|{d}" in extras_ya)
+            ya = [d for d in movibles if final[cid, d] == 1 and f"{cid}|{d}" in extras_ya]
+            for d in (ya + [d for d in del_calculo if d not in ya])[:max(0, len(del_calculo) - quietas)]:
+                marca[cid, d] = True
+
     # ── Salida ───────────────────────────────────────────────────────────────
     out, avisos = {}, []
     for c in conductores:
@@ -451,10 +475,12 @@ def generar_cuadrante(entrada: Dict[str, Any]) -> Dict[str, Any]:
             v = cur(cid, d)
             f = fijos[cid, d]
             if f is not None:
-                val, extra = f[2], False
+                # Lo que no mueve el motor conserva su marca mientras no cambie.
+                val = f[2]
+                extra = f"{cid}|{d}" in extras_ya and val == v
             else:
                 val = "1" if final[cid, d] == 1 else LIBRE
-                extra = bool(final[cid, d] == 1 and base[cid, d] == 0)
+                extra = marca.get((cid, d), False)
             out[f"{cid}|{d}"] = {"valor": val, "antes": v, "extra": extra,
                                  "cambiado": val != v}
 

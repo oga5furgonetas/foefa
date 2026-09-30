@@ -43510,7 +43510,7 @@ async def _cua_entrada(center: str, desde: str, hasta: str, colchon=None, permit
     entrada = {"fecha_inicio": desde, "fecha_fin": hasta, "colchon": colchon,
                "permitir_extra": permitir_extra, "maximas": maximas, "conductores": conductores,
                "celdas": celdas, "bloqueadas": sorted(set(bloqueadas)), "colchon_por_dia": colchon_dia,
-               "limites_semana": limites, "segundos": 45}
+               "limites_semana": limites, "extras": sorted(extras_ahora), "segundos": 45}
     return entrada, personas, extras_ahora
 
 
