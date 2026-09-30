@@ -7,6 +7,7 @@
  */
 import { and, desc, eq, gte, inArray, lte, notInArray, or, sql } from 'drizzle-orm';
 import type { EditorialSettings } from '../config/settings';
+import { logger } from '../observability/index';
 import type { Db } from '../db/client';
 import {
   analyticsEvents,
@@ -27,7 +28,7 @@ import { openReviewTask } from '../services/audit';
 import { getSourceTypeWeights } from '../services/settings';
 import { analyseStory } from '../verification/engine';
 import { importanceScore } from '../verification/momentum';
-import type { StoryAnalysis, VPlace } from '../verification/types';
+import type { StoryAnalysis, VItem, VPlace } from '../verification/types';
 import { pruneDriftedItems } from './cluster';
 import { loadSources, loadStoryItems, type RawItemRow } from './loaders';
 
@@ -73,6 +74,14 @@ export function nextCheckDelayMinutes(state: StoryState, ageHours: number): numb
   return ageHours < 6 ? 10 : 30;
 }
 
+const MAX_ANALYSED = 40;
+
+function capItems<T extends { items: VItem[]; rows: RawItemRow[] }>(x: T): T {
+  if (x.items.length <= MAX_ANALYSED) return x;
+  const keep = new Set([...x.rows].sort((a, b) => (b.publishedAt ?? b.fetchedAt).getTime() - (a.publishedAt ?? a.fetchedAt).getTime()).slice(0, MAX_ANALYSED).map((r) => r.id));
+  return { ...x, items: x.items.filter((i) => keep.has(i.id)), rows: x.rows.filter((r) => keep.has(r.id)) };
+}
+
 export async function verifyDueStories(db: Db, settings: EditorialSettings, opts: { limit?: number; now?: Date; storyIds?: number[] } = {}): Promise<VerifiedStory[]> {
   const now = opts.now ?? new Date();
   const due = await db
@@ -88,7 +97,13 @@ export async function verifyDueStories(db: Db, settings: EditorialSettings, opts
     .orderBy(desc(sql`(${stories.independentSourceCount} >= 2)::int * 2 + (${stories.itemCount} >= 2)::int`), stories.nextCheckAt)
     .limit(opts.limit ?? 50);
   const out: VerifiedStory[] = [];
-  for (const st of due) out.push(await verifyStory(db, st, settings, now));
+  for (const st of due) {
+    const t0 = Date.now();
+    const v = await verifyStory(db, st, settings, now);
+    const ms = Date.now() - t0;
+    if (ms > 5000) logger.info({ storyId: st.id, ms, items: v.items.length, hint: st.headlineHint.slice(0, 60) }, 'verificación lenta');
+    out.push(v);
+  }
   return out;
 }
 
@@ -124,7 +139,10 @@ export function storyConsensus(rows: Pick<RawItemRow, 'categoryId' | 'countryCod
 export async function verifyStory(db: Db, st: typeof stories.$inferSelect, settings: EditorialSettings, now: Date): Promise<VerifiedStory> {
   // Antes de nada, suelta lo que no encaja con el origen de la historia (historias que derivaron).
   if (!st.lockedByEditor && st.itemCount > 2) await pruneDriftedItems(db, st.id, settings);
-  const { items, rows } = await loadStoryItems(db, st.id);
+  const loaded = await loadStoryItems(db, st.id);
+  // Como mucho las MAX_ANALYSED piezas más recientes: contrastar afirmaciones es cuadrático y una
+  // historia de 250 piezas tardaba minutos (verificación de 12 minutos por ciclo, 30-09-2026).
+  const { items, rows } = capItems(loaded);
   const consensus = storyConsensus(rows);
   const sources = await loadSources(db, [...new Set(items.map((i) => i.sourceId))]);
   const weights = await getSourceTypeWeights(db);
@@ -258,7 +276,7 @@ export async function verifyStory(db: Db, st: typeof stories.$inferSelect, setti
         momentumBreakdown: analysis.momentumBreakdown as unknown as Record<string, unknown>,
         flags: analysis.flags,
         independentSourceCount: analysis.confidenceBreakdown.independentCredible,
-        itemCount: items.length,
+        itemCount: loaded.items.length,
         isBreaking: analysis.isBreaking,
         isDeveloping: analysis.decision === 'publish_developing' || (st.isDeveloping && finalState !== 'VERIFIED' && analysis.decision !== 'publish'),
         eventTime: analysis.eventTime,
