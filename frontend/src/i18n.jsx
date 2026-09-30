@@ -749,7 +749,6 @@ const DICT = {
   'usr.centers.visible': { es: 'Centros visibles', en: 'Visible centres', fr: 'Centres visibles', de: 'Sichtbare Zentren', it: 'Centri visibili', pt: 'Centros visíveis' },
   'usr.save.perms':   { es: 'Guardar permisos', en: 'Save permissions', fr: 'Enregistrer permissions', de: 'Berechtigungen speichern', it: 'Salva permessi', pt: 'Guardar permissões' },
   'usr.access.all':   { es: 'Acceso a todo (menos Negocio/Usuarios)', en: 'Access to everything (except Business/Users)', fr: 'Accès à tout (sauf Activité/Utilisateurs)', de: 'Zugang zu allem (außer Geschäft/Benutzer)', it: 'Accesso a tutto (tranne Business/Utenti)', pt: 'Acesso a tudo (exceto Negócio/Utilizadores)' },
-  'usr.no.modules':   { es: 'Sin acceso a módulos', en: 'No module access', fr: 'Aucun accès aux modules', de: 'Kein Modulzugang', it: 'Nessun accesso ai moduli', pt: 'Sem acesso a módulos' },
   'usr.you':          { es: 'tú',             en: 'you',          fr: 'vous',          de: 'du',            it: 'tu',            pt: 'tu' },
   'usr.load.error':   { es: 'No se pudieron cargar los usuarios.', en: 'Could not load users.', fr: 'Impossible de charger les utilisateurs.', de: 'Benutzer konnten nicht geladen werden.', it: 'Impossibile caricare gli utenti.', pt: 'Não foi possível carregar os utilizadores.' },
   'usr.created.ok':   { es: 'Usuario {u} creado.', en: 'User {u} created.', fr: 'Utilisateur {u} créé.', de: 'Benutzer {u} erstellt.', it: 'Utente {u} creato.', pt: 'Utilizador {u} criado.' },

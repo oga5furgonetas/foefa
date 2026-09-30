@@ -39,7 +39,7 @@ const PERMITIDO = [
   ['panel/pages/Horas.jsx', '*', 'modulo de horas (WHC) de Amazon, solo para quien lo tiene activado'],
   ['panel/ayudaFichas.js', 'portal de amazon abre la programaci', 'ficha de ayuda de Horas'],
   ['panel/ayudaFichas.js', 'tu whc de amazon exacto', 'ficha de ayuda de Horas'],
-  ['panel/pages/Usuarios.jsx', "['diarios', 'dnr diaria']", 'casilla de permiso de la DNR diaria'],
+  ['panel/pages/Usuarios.jsx', "['diarios', 'nav.dnr']", 'casilla de permiso de la DNR diaria (el nombre del menú)'],
   ['panel/ayudaFichas.js', '(dnr), por conductor', 'ficha de ayuda de la DNR diaria'],
   ['panel/ayudaFichas.js', 'descarga el daily report (.html)', 'ficha de ayuda de la DNR diaria'],
   ['panel/ayudaFichas.js', 'cada dnr se cuelga', 'ficha de ayuda de la DNR diaria'],

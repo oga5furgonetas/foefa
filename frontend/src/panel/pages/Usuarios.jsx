@@ -1,55 +1,94 @@
 import { useEffect, useRef, useState } from 'react'
-import { Loader2, UserPlus, Trash2, Save, ShieldCheck, Mail, KeyRound, ChevronDown, Users as UsersIcon, X, Check, ImagePlus } from 'lucide-react'
+import { Loader2, UserPlus, Trash2, Save, ShieldCheck, Mail, KeyRound, ChevronDown, Users as UsersIcon, X, Check, ImagePlus, CornerDownRight, Lock, Table2, List } from 'lucide-react'
 import { getAdmins, createAdmin, updateAdmin, deleteAdmin, subirFotoAdmin } from '../api'
-import { getAdmin, isSuperAdmin, SIEMPRE_VISIBLES } from '../auth'
+import { getAdmin, isSuperAdmin, SIEMPRE_VISIBLES, esPlataforma } from '../auth'
 import { useT } from '../../i18n'
 import { lista } from '../../lib/lista'
 
 // Catálogo de módulos asignables (la clave = último segmento de la ruta del panel)
-/* Los permisos, en el MISMO orden y con los MISMOS nombres que la barra
-   lateral. Antes esta lista iba por su cuenta y se había quedado atrás: siete
-   pantallas del menú —Paquetes IA, Mi día, Incidencias, Horas·WHC, Dónde se
-   entrega y Contactos— no aparecían aquí, así que no se le podían dar a nadie.
-   No es que estuvieran escondidas: es que la casilla no existía.
+/* Los permisos, con los MISMOS grupos, el MISMO orden y los MISMOS nombres que
+   el menú (`NAV_DEF` en PanelLayout.jsx): la etiqueta es la misma clave de
+   traducción, así que lo que se marca aquí es lo que sale allí. El 30-09-2026
+   esta lista iba en otros grupos y otro orden, y no salían ni el Cuadrante ni
+   las Órdenes de taller («actualízame usuarios para ver quién puede ver cada
+   cosa»). Antes aún, siete pantallas del menú no tenían casilla y no se le
+   podían dar a nadie.
 
    Las que TODO admin ve pase lo que pase (las de la operación diaria) salen de
    `SIEMPRE_VISIBLES`, en auth.js, que es la MISMA lista que usan el menú y el
-   guardián de ruta. Antes se marcaban a mano aquí con un `true` y era una
-   tercera copia que podía irse quedando atrás. Se enseñan igual, en gris: una
-   casilla que no hace nada al pulsarla es peor que no tenerla. */
+   guardián de ruta. Se enseñan igual, con candado: una casilla que no hace
+   nada al pulsarla es peor que no tenerla. `aprobar-dias` no es una pantalla:
+   es poder aprobar o rechazar días libres (lo comprueba el servidor). */
 const MODULES = [
-  { g: 'Hoy', items: [
-    ['dashboard', 'Dashboard'], ['mi-dia', 'Mi día'], ['actividad', 'Actividad'],
+  { g: 'nav.g.today', items: [
+    ['dashboard', 'nav.dashboard'], ['mi-dia', 'nav.miDia'], ['chat', 'nav.chat'],
   ]},
-  { g: 'Operación diaria', items: [
-    ['asignacion', 'Asignación diaria'], ['turnos', 'Días libres'],
-    ['aprobar-dias', 'Aprobar días libres'],
-    ['checklist-operativo', 'Checklist turno'], ['plantilla', 'Plantilla del día'],
-    ['diarios', 'DNR diaria'],
-    ['horas', 'Horas · WHC'],
-    ['chat', 'Chat interno'],
+  { g: 'nav.g.fleet', items: [
+    ['vehiculos', 'nav.vehicles'], ['inspecciones', 'nav.inspections'], ['revision', 'nav.revision'],
+    ['origen-danos', 'nav.origen'],
+    // «Vencimientos» es UNA entrada del menú con tres partes: sale en cuanto
+    // se marca cualquiera de las tres.
+    ['avisos-itv', 'nav.itvalerts'], ['renting', 'nav.renting'], ['casas-alquiler', 'nav.rental'],
+    ['aparcamiento', 'nav.parking'],
   ]},
-  { g: 'Flota', items: [
-    ['vehiculos', 'Vehículos'], ['revision', 'Revisión rápida'],
-    ['inspecciones', 'Inspecciones'], ['incidencias', 'Incidencias'],
-    ['talleres', 'Talleres'], ['aparcamiento', 'Aparcamiento'],
-    ['avisos-itv', 'Vencimientos · ITV'], ['renting', 'Vencimientos · Renting'],
-    ['casas-alquiler', 'Vencimientos · Casas'], ['importaciones', 'Importaciones'],
+  { g: 'nav.g.taller', items: [
+    ['incidencias', 'nav.incidents'], ['talleres', 'nav.workshops'],
   ]},
-  { g: 'Equipo', items: [
-    ['conductores', 'Conductores'], ['incorporaciones', 'Incorporaciones'],
-    ['empleo', 'Empleo · candidatos'], ['contactos', 'Contactos'],
-    ['conversaciones', 'Conversaciones WhatsApp'],
+  { g: 'nav.g.reparto', items: [
+    ['asignacion', 'nav.assign'], ['plantilla', 'nav.template'], ['diarios', 'nav.dnr'], ['horas', 'nav.horas'],
+    ['turnos', 'nav.shifts'], ['aprobar-dias', 'Aprobar días libres'], ['checklist-operativo', 'nav.checklist'],
   ]},
-  { g: 'Sistema', items: [
-    ['origen-danos', 'Origen de daños'], ['ia-peritaje', 'IA Peritaje'], ['configuracion', 'Configuración'],
+  { g: 'nav.g.personas', items: [
+    ['conductores', 'nav.drivers'], ['incorporaciones', 'nav.incorporaciones'], ['empleo', 'nav.empleo'],
+    ['contactos', 'nav.contacts'], ['conversaciones', 'nav.conversaciones'],
+  ]},
+  { g: 'nav.g.system', items: [
+    ['actividad', 'nav.activity'], ['importaciones', 'nav.imports'], ['ia-peritaje', 'nav.ai'],
     // Sin esta casilla la pantalla no la ve NADIE con permisos definidos,
-    // y el menu no dice por que (gotcha 27).
-    ['tienda', 'Ropa del equipo'],
+    // y el menu no dice por que (gotcha 27). Solo existe en la plataforma.
+    ['tienda', 'nav.tienda'], ['configuracion', 'nav.settings'],
   ]},
 ]
+/* Pantallas SIN casilla propia: van con otra, igual que en el menú y en la ruta
+   (`itemVisible` y `routeAllowed` de PanelLayout). Se enseñan detrás de la
+   suya para que se vea quién las tiene sin buscarlo. */
+const VAN_CON = {
+  talleres: [['ordenes', 'nav.ordenes']],
+  turnos: [['cuadrante', 'nav.cuadrante']],
+}
+const DE_VENCIMIENTOS = new Set(['avisos-itv', 'renting', 'casas-alquiler'])
+const CAPACIDADES = new Set(['aprobar-dias'])
 const ALL_KEYS = MODULES.flatMap((g) => g.items.map(([k]) => k))
 const FIJOS = SIEMPRE_VISIBLES
+const hayTienda = () => esPlataforma()
+const gruposVisibles = () => MODULES.map((g) => ({
+  ...g, items: g.items.filter(([k]) => k !== 'tienda' || hayTienda()),
+}))
+
+/* ¿Ve este usuario esta pantalla? La MISMA cuenta que el menú: el super-admin
+   y quien no tiene lista lo ven todo; las fijas, siempre; las que van con otra,
+   si tiene esa. Devuelve 'si' | 'no' | 'siempre'. */
+function veLaPantalla(u, k) {
+  if (u.super_admin || u.account_type === 'owner') return 'si'
+  const perms = Array.isArray(u.permissions) ? u.permissions : null
+  if (!perms) return 'si'
+  if (FIJOS.has(k)) return 'siempre'
+  const padre = Object.keys(VAN_CON).find((p) => VAN_CON[p].some(([h]) => h === k))
+  return perms.includes(padre || k) ? 'si' : 'no'
+}
+
+/* Las pantallas del menú, una vez cada una (Vencimientos cuenta como una), para
+   el «ve N de M». Las capacidades no son pantallas. */
+function cuentaPantallas(perms) {
+  const u = { permissions: perms }
+  const claves = gruposVisibles().flatMap((g) => g.items.map(([k]) => k))
+    .filter((k) => !CAPACIDADES.has(k) && !DE_VENCIMIENTOS.has(k))
+  const derivadas = Object.values(VAN_CON).flat().map(([k]) => k)
+  let ve = [...claves, ...derivadas].filter((k) => veLaPantalla(u, k) !== 'no').length
+  const total = claves.length + derivadas.length + 1
+  if (!Array.isArray(perms) || [...DE_VENCIMIENTOS].some((k) => perms.includes(k))) ve += 1
+  return { ve, total }
+}
 
 /* ── Piezas de UI ── */
 
@@ -88,20 +127,35 @@ function RoleBadge({ u, t }) {
   return <span className="rounded-full bg-dark-700 px-2 py-0.5 text-[10px] font-semibold text-dark-300">Admin</span>
 }
 
-/* Selector de módulos: por grupos, con "todos" por grupo. */
+/* El nombre de una casilla: el del menú, traducido. Las partes de Vencimientos
+   llevan delante «Vencimientos ·», que es donde salen. */
+function nombreDe(t, k, lbl) {
+  const n = t(lbl)
+  return DE_VENCIMIENTOS.has(k) ? `${t('nav.grp.expiry')} · ${n}` : n
+}
+
+/* Selector de pantallas: por grupos como el menú, con "todos" por grupo; las
+   fijas con candado y las que van con otra detrás de la suya. */
 function ModulePicker({ perms, onChange }) {
+  const { t } = useT()
   const set = new Set(perms)
-  const toggle = (k) => onChange(set.has(k) ? perms.filter(p => p !== k) : [...perms, k])
+  const grupos = gruposVisibles()
+  const toggle = (k) => {
+    if (FIJOS.has(k)) return
+    onChange(set.has(k) ? perms.filter(p => p !== k) : [...perms, k])
+  }
   const toggleGroup = (g) => {
-    const keys = g.items.map(([k]) => k)
+    const keys = g.items.map(([k]) => k).filter((k) => !FIJOS.has(k))
     const allOn = keys.every(k => set.has(k))
     onChange(allOn ? perms.filter(p => !keys.includes(p)) : [...new Set([...perms, ...keys])])
   }
+  const { ve, total } = cuentaPantallas(perms)
   return (
     <div className="space-y-2.5">
-      {MODULES.map((g) => {
+      <p className="text-[12px] text-dark-300">Ve <b className="text-dark-100">{ve} de {total}</b> pantallas del menú.</p>
+      {grupos.map((g) => {
         const keys = g.items.map(([k]) => k)
-        const onCount = keys.filter(k => set.has(k)).length
+        const onCount = keys.filter(k => set.has(k) || FIJOS.has(k)).length
         return (
           <div key={g.g}>
             <button type="button" onClick={() => toggleGroup(g)}
@@ -109,23 +163,35 @@ function ModulePicker({ perms, onChange }) {
               <span className={`flex h-3.5 w-3.5 items-center justify-center rounded border ${onCount === keys.length ? 'border-brand-500 bg-brand-600 text-brand-tinta' : 'border-dark-600'}`}>
                 {onCount === keys.length && <Check size={10} />}
               </span>
-              {g.g} <span className="font-normal text-dark-500">{onCount}/{keys.length}</span>
+              {t(g.g)} <span className="font-normal text-dark-500">{onCount}/{keys.length}</span>
             </button>
             <div className="flex flex-wrap gap-1.5">
-              {g.items.map(([k, lbl]) => (
-                <button key={k} type="button" onClick={() => toggle(k)}
-                  title={FIJOS.has(k)
-                    ? 'Esta pantalla la ve todo el mundo aunque la desmarques: es de la operación diaria.'
-                    : undefined}
-                  className={`rounded-lg px-2.5 py-1 text-xs font-medium transition ${
-                    set.has(k) ? 'bg-brand-500/20 text-brand-200 ring-1 ring-brand-500/40'
-                      : 'bg-dark-800 text-dark-300 hover:text-dark-300'}`}>
-                  {lbl}
-                  {/* Se dice que da igual desmarcarla. Callarlo hace que alguien
-                      la quite, crea que la ha quitado, y no sea verdad. */}
-                  {FIJOS.has(k) && <span className="ml-1 text-[9.5px] text-dark-500">·siempre</span>}
-                </button>
-              ))}
+              {g.items.flatMap(([k, lbl]) => {
+                const on = set.has(k) || FIJOS.has(k)
+                const chip = (
+                  <button key={k} type="button" onClick={() => toggle(k)} aria-pressed={on}
+                    title={FIJOS.has(k)
+                      ? 'Esta pantalla la ve todo el mundo aunque no la marques: es de la operación diaria.'
+                      : CAPACIDADES.has(k) ? 'No es una pantalla: poder aprobar o rechazar los días libres que piden.' : undefined}
+                    className={`flex items-center gap-1 rounded-lg px-2.5 py-1 text-xs font-medium transition ${
+                      on ? 'bg-brand-500/20 text-brand-200 ring-1 ring-brand-500/40'
+                        : 'bg-dark-800 text-dark-300 hover:text-dark-100'} ${FIJOS.has(k) ? 'cursor-default' : ''}`}>
+                    {/* Se dice que da igual desmarcarla. Callarlo hace que alguien
+                        la quite, crea que la ha quitado, y no sea verdad. */}
+                    {FIJOS.has(k) && <Lock size={10} className="opacity-70" />}
+                    {nombreDe(t, k, lbl)}
+                    {FIJOS.has(k) && <span className="text-[9.5px] text-dark-500">·siempre</span>}
+                  </button>
+                )
+                const hijas = (VAN_CON[k] || []).map(([h, hl]) => (
+                  <span key={h} title={`Va con ${t(lbl)}: la ve quien tenga esa marcada.`}
+                    className={`flex items-center gap-1 rounded-lg border border-dashed px-2.5 py-1 text-xs ${
+                      on ? 'border-brand-500/40 text-brand-200' : 'border-dark-700 text-dark-500'}`}>
+                    <CornerDownRight size={11} /> {t(hl)} <span className="text-[9.5px] opacity-80">· va con {t(lbl)}</span>
+                  </span>
+                ))
+                return [chip, ...hijas]
+              })}
             </div>
           </div>
         )
@@ -134,6 +200,75 @@ function ModulePicker({ perms, onChange }) {
         <button type="button" onClick={() => onChange(ALL_KEYS)} className="font-semibold text-dark-400 hover:text-dark-200">Marcar todo</button>
         <button type="button" onClick={() => onChange([])} className="font-semibold text-dark-400 hover:text-dark-200">Quitar todo</button>
       </div>
+    </div>
+  )
+}
+
+/* QUIÉN VE CADA PANTALLA: las pantallas en filas, como el menú, y cada usuario
+   en una columna. La misma cuenta que el menú (`veLaPantalla`), así que lo
+   que dice la tabla es lo que cada uno tiene en su barra. */
+function QuienVe({ users, onEditar }) {
+  const { t } = useT()
+  const grupos = gruposVisibles()
+  const marca = (v) => (v === 'si'
+    ? <Check size={14} className="mx-auto text-emerald-300" aria-label="la ve" />
+    : v === 'siempre'
+      ? <span className="text-[10px] text-dark-500" title="La ve todo el mundo">siempre</span>
+      : <span className="text-dark-600" aria-label="no la ve">—</span>)
+  const fila = (k, lbl, hija) => (
+    <tr key={k} className="border-t border-dark-800/70">
+      <td className="sticky left-0 z-10 bg-dark-900 py-1.5 pl-3 pr-2 text-[12.5px] text-dark-200">
+        <span className={`flex items-center gap-1 ${hija ? 'pl-3 text-dark-400' : ''}`}>
+          {hija && <CornerDownRight size={11} />}
+          {hija ? t(lbl) : nombreDe(t, k, lbl)}
+          {CAPACIDADES.has(k) && <span className="text-[10px] text-dark-500">(aprobar)</span>}
+        </span>
+      </td>
+      {users.map((u) => <td key={u.id} className="px-2 py-1.5 text-center">{marca(veLaPantalla(u, k))}</td>)}
+    </tr>
+  )
+  return (
+    <div className="space-y-2">
+      <div className="overflow-x-auto rounded-2xl border border-dark-800 bg-dark-900">
+        <table className="min-w-full border-collapse">
+          <thead>
+            <tr>
+              <th className="sticky left-0 z-20 bg-dark-900 px-3 py-2 text-left text-[11px] font-semibold uppercase tracking-wide text-dark-500">Pantalla</th>
+              {users.map((u) => {
+                const sup = u.super_admin || u.account_type === 'owner'
+                return (
+                  <th key={u.id} className="min-w-[6.5rem] px-2 py-2 text-center align-bottom">
+                    <span className="block truncate text-[12px] font-semibold text-dark-100">{u.name || u.username}</span>
+                    <span className="block truncate text-[10px] font-normal text-dark-500">
+                      {sup ? 'todo' : (u.allowed_centers?.length ? u.allowed_centers.join(' · ') : 'todos los centros')}
+                    </span>
+                    {!sup && (
+                      <button type="button" onClick={() => onEditar(u)}
+                        className="mt-1 rounded-md border border-dark-700 px-2 py-0.5 text-[10.5px] font-semibold text-dark-300 hover:border-dark-500 hover:text-dark-100">
+                        Editar
+                      </button>
+                    )}
+                  </th>
+                )
+              })}
+            </tr>
+          </thead>
+          <tbody>
+            {grupos.map((g) => [
+              <tr key={g.g} className="border-t border-dark-700">
+                <td colSpan={users.length + 1} className="sticky left-0 bg-dark-950/60 px-3 pb-1 pt-2.5 text-[10.5px] font-bold uppercase tracking-wide text-dark-400">
+                  {t(g.g)}
+                </td>
+              </tr>,
+              ...g.items.flatMap(([k, lbl]) => [fila(k, lbl, false), ...(VAN_CON[k] || []).map(([h, hl]) => fila(h, hl, true))]),
+            ])}
+          </tbody>
+        </table>
+      </div>
+      <p className="text-[11.5px] text-dark-500">
+        Negocio, Gastos y Valor: solo el super-admin. Usuarios: el super-admin y los gestores de centro. Cada uno ve
+        además solo sus centros.
+      </p>
     </div>
   )
 }
@@ -196,6 +331,19 @@ export default function Usuarios() {
   const emptyForm = { name: '', username: '', password: '', perms: ALL_KEYS, centers: null, admin_role: null }
   const [form, setForm] = useState(emptyForm)
   const [editing, setEditing] = useState(null) // {id, perms, centers, admin_role, email, newPassword}
+  // «Por usuario» (la lista de siempre) o «Quién ve cada pantalla» (la tabla).
+  const [vista, setVista] = useState('usuarios')
+  const abrirEditor = (u) => setEditing({
+    id: u.id, perms: Array.isArray(u.permissions) ? u.permissions : ALL_KEYS,
+    centers: Array.isArray(u.allowed_centers) ? u.allowed_centers : null,
+    admin_role: u.admin_role ?? null, email: u.email || '', newPassword: '',
+  })
+  // Desde la tabla: a la lista, con ese usuario abierto y a la vista.
+  const editarDesdeTabla = (u) => {
+    abrirEditor(u)
+    setVista('usuarios')
+    setTimeout(() => document.getElementById(`usuario-${u.id}`)?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 50)
+  }
 
   function load() {
     getAdmins().then((r) => setUsers(lista(r.data))).catch(() => setErr(t('usr.load.error')))
@@ -268,9 +416,9 @@ export default function Usuarios() {
 
   const permsSummary = (perms) => {
     if (perms === null) return t('usr.access.all')
-    if (perms.length === 0) return t('usr.no.modules')
-    if (perms.length === ALL_KEYS.length) return t('usr.access.all')
-    return `${perms.length} módulos`
+    const { ve, total } = cuentaPantallas(perms)
+    if (ve >= total) return t('usr.access.all')
+    return `ve ${ve} de ${total} pantallas`
   }
 
   return (
@@ -327,15 +475,30 @@ export default function Usuarios() {
         </div>
       )}
 
+      {/* Dos formas de mirarlo: cada usuario con lo suyo, o cada pantalla con quién la ve. */}
+      {users && users.length > 0 && (
+        <div className="mb-3 flex flex-wrap gap-1.5">
+          {[['usuarios', 'Por usuario', List], ['pantallas', 'Quién ve cada pantalla', Table2]].map(([k, txt, Icono]) => (
+            <button key={k} type="button" onClick={() => setVista(k)} aria-pressed={vista === k}
+              className={`flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-[13px] font-semibold ${vista === k
+                ? 'bg-brand-500/20 text-dark-50' : 'text-dark-400 hover:bg-dark-800 hover:text-dark-200'}`}>
+              <Icono size={14} /> {txt}
+            </button>
+          ))}
+        </div>
+      )}
+
+      {users && vista === 'pantallas' && <QuienVe users={users} onEditar={editarDesdeTabla} />}
+
       {/* Lista de usuarios */}
-      {!users ? <div className="flex items-center gap-2 text-dark-400"><Loader2 className="animate-spin" size={16} /> {t('ui.loading')}</div> : (
+      {!users ? <div className="flex items-center gap-2 text-dark-400"><Loader2 className="animate-spin" size={16} /> {t('ui.loading')}</div> : vista === 'usuarios' && (
         <div className="overflow-hidden rounded-2xl border border-dark-800">
           {users.map((u, i) => {
             const isSuper = u.super_admin || u.account_type === 'owner'
             const perms = Array.isArray(u.permissions) ? u.permissions : null
             const isEd = editing?.id === u.id
             return (
-              <div key={u.id} className={`${i > 0 ? 'border-t border-dark-800' : ''} bg-dark-900/40`}>
+              <div key={u.id} id={`usuario-${u.id}`} className={`${i > 0 ? 'border-t border-dark-800' : ''} scroll-mt-4 bg-dark-900/40`}>
                 {/* Fila */}
                 <div className="flex items-center gap-3 px-4 py-3">
                   <Avatar name={u.name || u.username} photo={u.photo_url}
@@ -356,7 +519,7 @@ export default function Usuarios() {
                   {!isSuper && (
                     <div className="flex shrink-0 items-center gap-1">
                       <button
-                        onClick={() => setEditing(isEd ? null : { id: u.id, perms: perms || ALL_KEYS, centers: Array.isArray(u.allowed_centers) ? u.allowed_centers : null, admin_role: u.admin_role ?? null, email: u.email || '', newPassword: '' })}
+                        onClick={() => (isEd ? setEditing(null) : abrirEditor(u))}
                         className={`flex items-center gap-1 rounded-lg border px-2.5 py-1.5 text-xs font-semibold ${isEd ? 'border-brand-500/50 bg-brand-500/10 text-brand-300' : 'border-dark-700 text-dark-300 hover:border-dark-500'}`}>
                         {t('ui.edit')} <ChevronDown size={12} className={`transition-transform ${isEd ? 'rotate-180' : ''}`} />
                       </button>
