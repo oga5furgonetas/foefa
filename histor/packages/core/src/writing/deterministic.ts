@@ -21,7 +21,10 @@ import type { FactClaim, FactSheet } from './factsheet';
 import { listJoin, PHRASES } from './phrases';
 import { PROMO } from '../text/nonnews';
 
-export type WriteOptions = { maxWords?: number; timeZone?: string; countryCode?: string | null };
+/** `skeleton`: solo para la IA. Si no hay titular ni entrada publicables, se monta igualmente el armazón
+ * (recuadro, fuentes, cronología) con la primera afirmación; la IA pone el titular y el texto, que se
+ * validan frase a frase. El armazón no se publica nunca tal cual. */
+export type WriteOptions = { maxWords?: number; timeZone?: string; countryCode?: string | null; skeleton?: boolean };
 
 export function writeDeterministic(fs: FactSheet, opts: WriteOptions = {}): Draft | null {
   const lang = fs.language;
@@ -98,6 +101,10 @@ export function writeDeterministic(fs: FactSheet, opts: WriteOptions = {}): Draf
       }
     }
   }
+  if (!headline && opts.skeleton && pool[0]) {
+    headline = truncate(pool[0].text, 110);
+    headlineClaim = pool[0];
+  }
   if (!headline) return null;
   const hWords = keyWords(headline);
   // La entradilla sale sola en portada: solo frases que se entienden sin su artículo.
@@ -112,6 +119,7 @@ export function writeDeterministic(fs: FactSheet, opts: WriteOptions = {}): Draf
     const score = overlap - i * 0.02 + (plainClaim(c) ? 0.2 : 0);
     if (!lead || score > lead.score) lead = { c, text: compressed, score };
   });
+  if (!lead && headlineClaim && opts.skeleton) lead = { c: headlineClaim, text: truncate(headlineClaim.text, 200), score: 0 };
   if (!lead && headlineClaim) {
     // Sin otra frase que lo cuente: la del titular, en su versión más completa.
     const full = compressClaim(headlineClaim.text, maxWords);

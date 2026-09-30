@@ -17,6 +17,8 @@ import type { Draft } from './draft';
 import type { FactSheet } from './factsheet';
 import { listJoin, PHRASES } from './phrases';
 import { validateDraft } from './validate';
+import { longestCommonRun } from './quality';
+import { DEFAULT_EDITORIAL_SETTINGS } from '../config/settings';
 import { sentences } from '../text/tokenize';
 
 /**
@@ -46,9 +48,16 @@ export function repairAiParagraphs(blocks: Extract<ArticleBlock, { type: 'p' }>[
         issues = probe(text);
       }
     }
-    if (!issues.length) out.push({ ...b, text });
+    // Ni párrafos que copian de una fuente más palabras seguidas de las permitidas (control legal).
+    if (!issues.length && !copiesSource(text, fs)) out.push({ ...b, text });
   }
   return out;
+}
+
+/** ¿Copia el párrafo (sin sus citas literales) más palabras seguidas de una fuente de las permitidas? */
+function copiesSource(text: string, fs: FactSheet): boolean {
+  const own = text.replace(/[«“"][^»”"]*[»”"]/g, ' ');
+  return fs.sourceTexts.some((s) => longestCommonRun(own, s.text) > DEFAULT_EDITORIAL_SETTINGS.maxVerbatimWords);
 }
 
 /**
@@ -121,7 +130,8 @@ export function factSheetForPrompt(fs: FactSheet): Record<string, unknown> {
 }
 
 export async function writeWithLlm(db: Db, fs: FactSheet, opts: WriteOptions & { provider?: LlmProvider | null; storyId?: number | null } = {}): Promise<Draft | null> {
-  const base = writeDeterministic(fs, opts);
+  // Sin borrador determinista (frases demasiado largas…), la IA escribe sobre el armazón.
+  const base = writeDeterministic(fs, opts) ?? writeDeterministic(fs, { ...opts, skeleton: true });
   if (!base) return null;
   const res = await callJson(
     db,

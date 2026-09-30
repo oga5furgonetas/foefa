@@ -38,12 +38,22 @@ const state = {
   stopping: false,
 };
 
+let lastLockWarning = 0;
+
 async function withLock<T>(key: number, fn: () => Promise<T>): Promise<T | null> {
   // Candado de sesión: se toma y se suelta en la MISMA conexión reservada del pool.
   const conn = await getSql().reserve();
   try {
     const [row] = await conn`SELECT pg_try_advisory_lock(${key}) AS ok`;
-    if (!row?.ok) return null;
+    if (!row?.ok) {
+      // Antes se saltaba el ciclo en silencio: 40 minutos sin publicar y sin una línea en los registros.
+      if (Date.now() - lastLockWarning > 10 * 60_000) {
+        lastLockWarning = Date.now();
+        const holders = await conn`SELECT a.pid, a.state, a.backend_start, a.application_name FROM pg_locks l JOIN pg_stat_activity a ON a.pid = l.pid WHERE l.locktype = 'advisory' AND l.objid = ${key} AND l.granted`;
+        logger.warn({ key, holders }, 'candado ocupado: se salta el ciclo');
+      }
+      return null;
+    }
     try {
       return await fn();
     } finally {
@@ -51,6 +61,27 @@ async function withLock<T>(key: number, fn: () => Promise<T>): Promise<T | null>
     }
   } finally {
     conn.release();
+  }
+}
+
+/**
+ * Al arrancar, libera los candados del ciclo que retenga la conexión de un worker anterior.
+ * Cada despliegue reinicia la máquina de golpe; su conexión a Postgres puede quedar colgada y
+ * seguir reteniendo el candado hasta que la base lo note (horas): el worker nuevo se saltaba
+ * todos los ciclos sin decir nada (30-09-2026). Solo hay UN worker (fly.toml), así que al
+ * arrancar cualquier otro poseedor es un proceso muerto. Si algún día hay varios, revisar esto.
+ */
+async function releaseOrphanLocks() {
+  try {
+    const rows = await getSql()`
+      SELECT l.pid, a.backend_start FROM pg_locks l JOIN pg_stat_activity a ON a.pid = l.pid
+      WHERE l.locktype = 'advisory' AND l.granted AND l.objid IN (${PIPELINE_LOCK}, ${PIPELINE_LOCK + 1}) AND l.pid <> pg_backend_pid()`;
+    for (const r of rows) {
+      await getSql()`SELECT pg_terminate_backend(${r.pid})`;
+      logger.warn({ pid: r.pid, since: r.backend_start }, 'candado de un worker anterior liberado');
+    }
+  } catch (e) {
+    logger.warn({ err: (e as Error).message }, 'no se pudo revisar los candados');
   }
 }
 
@@ -113,6 +144,7 @@ async function main() {
     if (problems.length) logger.warn({ problems }, 'configuración de producción incompleta');
   }
   logger.info({ workerId, intervalSec, demo: env().DEMO_MODE, ingest: env().INGEST_ENABLED }, 'worker arrancado');
+  await releaseOrphanLocks();
 
   const stops = [
     loop('pipeline', intervalSec * 1000, pipelineTick),
