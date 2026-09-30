@@ -182,7 +182,17 @@ export function ArticleView({ data, lang, d, tz, experiment }: { data: ArticleDe
           })}
         </div>
 
-        <VerifyBox v={verification} d={d} confidence={a.evidenceConfidence} independent={story?.independentSourceCount ?? 0} />
+        {/* La gente viene a leer la noticia: la verificación, las fuentes y la cronología están a
+            un clic, plegadas (30-09-2026, «todo este ruido… pon un ver más»). */}
+        <details className="verify-more" id="verificacion">
+          <summary className="ui">
+            <span className="v-ok" aria-hidden>
+              ✓
+            </span>{' '}
+            {t(d.article.seeHowWeVerified, { n: a.sourcesList.length })}
+          </summary>
+
+        <VerifyBox v={verification} d={d} />
 
         <section className="sources" aria-labelledby="sources-h">
           <h2 id="sources-h" className="kicker" style={{ fontSize: 14, color: 'var(--ink)' }}>
@@ -224,6 +234,7 @@ export function ArticleView({ data, lang, d, tz, experiment }: { data: ArticleDe
             </ol>
           </section>
         )}
+        </details>
 
         {(corrections.length > 0 || versions.length > 1) && (
           <section aria-labelledby="corr-h" style={{ margin: '28px 0' }}>
@@ -315,7 +326,7 @@ export function ArticleView({ data, lang, d, tz, experiment }: { data: ArticleDe
 }
 
 /** «Cómo verificamos esta noticia»: qué está confirmado, por quién, qué no y en qué discrepan las fuentes. */
-export function VerifyBox({ v, d, confidence, independent }: { v: VerificationBox; d: Dict; confidence: number; independent: number }) {
+export function VerifyBox({ v, d }: { v: VerificationBox; d: Dict }) {
   return (
     <aside className="verify" aria-labelledby="verify-h">
       <h2 id="verify-h">
@@ -384,10 +395,6 @@ export function VerifyBox({ v, d, confidence, independent }: { v: VerificationBo
       )}
       <p className="by" style={{ marginTop: 12 }}>
         {v.method}
-        <span className="sr-only">
-          {' '}
-          ({Math.round(confidence * 100)} / {independent})
-        </span>
       </p>
     </aside>
   );

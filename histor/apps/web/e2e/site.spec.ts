@@ -28,6 +28,11 @@ test('noticia: recuadro de verificación, fuentes, datos estructurados y hreflan
   await page.goto(url);
   await acceptCookies(page);
   await expect(page.locator('article h1')).toBeVisible();
+  // La verificación, las fuentes y la cronología van plegadas: se ve la noticia, no el andamiaje.
+  const more = page.locator('details.verify-more');
+  await expect(more).not.toHaveAttribute('open', /.*/);
+  await expect(page.locator('.sources ol li').first()).toBeHidden();
+  await more.locator('summary').click();
   const box = page.locator('aside.verify');
   await expect(box).toContainText('Cómo verificamos esta noticia');
   await expect(box).toContainText('Confirmado');

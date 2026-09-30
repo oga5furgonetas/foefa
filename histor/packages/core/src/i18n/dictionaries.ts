@@ -20,7 +20,7 @@ const es = {
   demoBanner: 'MODO DEMO — Estas noticias son ficticias y sirven solo para mostrar cómo funciona Histor. No son noticias reales.',
   article: {
     sources: 'Fuentes', sourcesIntro: 'Esta noticia se ha elaborado a partir de estas fuentes. Enlazamos siempre al original.', primary: 'Fuente primaria',
-    howWeVerified: 'Cómo verificamos esta noticia', confirmed: 'Confirmado', attributed: 'Atribuido (sin confirmación independiente)', unconfirmed: 'Aún sin confirmar', discrepancies: 'Discrepancias entre fuentes', confirmedBy: 'lo confirma: {list}',
+    howWeVerified: 'Cómo verificamos esta noticia', seeHowWeVerified: 'Ver cómo la verificamos y sus {n} fuentes', confirmed: 'Confirmado', attributed: 'Atribuido (sin confirmación independiente)', unconfirmed: 'Aún sin confirmar', discrepancies: 'Discrepancias entre fuentes', confirmedBy: 'lo confirma: {list}',
     related: 'Noticias relacionadas', timeline: 'Cronología', history: 'Historial de cambios', version: 'Versión {n}', viewVersion: 'Ver versión', reportError: 'Informar de un error',
     share: 'Compartir', save: 'Guardar', saved: 'Guardada', copyLink: 'Copiar enlace', copied: 'Enlace copiado', entities: 'En esta noticia', location: 'Lugar', tags: 'Temas', writtenBy: 'Elaborada por {author}',
     automated: 'Texto elaborado con un sistema automatizado a partir de fuentes contrastadas y revisado por controles editoriales.', retractedNotice: 'Esta noticia ha sido retirada', otherLanguages: 'También en', imageCredit: 'Imagen: {credit}', illustrative: 'Imagen ilustrativa, no del acontecimiento', aiImage: 'Imagen generada por IA',
@@ -91,7 +91,7 @@ const en: Dict = {
   demoBanner: 'DEMO MODE — These stories are fictional and only show how Histor works. They are not real news.',
   article: {
     sources: 'Sources', sourcesIntro: 'This story is based on the following sources. We always link to the original.', primary: 'Primary source',
-    howWeVerified: 'How we verified this story', confirmed: 'Confirmed', attributed: 'Attributed (not independently confirmed)', unconfirmed: 'Not yet confirmed', discrepancies: 'Where sources disagree', confirmedBy: 'confirmed by: {list}',
+    howWeVerified: 'How we verified this story', seeHowWeVerified: 'See how we verified it and its {n} sources', confirmed: 'Confirmed', attributed: 'Attributed (not independently confirmed)', unconfirmed: 'Not yet confirmed', discrepancies: 'Where sources disagree', confirmedBy: 'confirmed by: {list}',
     related: 'Related stories', timeline: 'Timeline', history: 'Change history', version: 'Version {n}', viewVersion: 'View version', reportError: 'Report an error',
     share: 'Share', save: 'Save', saved: 'Saved', copyLink: 'Copy link', copied: 'Link copied', entities: 'In this story', location: 'Location', tags: 'Topics', writtenBy: 'Produced by {author}',
     automated: 'Written by an automated system from cross-checked sources and passed through editorial controls.', retractedNotice: 'This story has been retracted', otherLanguages: 'Also in', imageCredit: 'Image: {credit}', illustrative: 'Illustrative image, not of the event', aiImage: 'AI-generated image',
@@ -160,7 +160,7 @@ const de: Dict = {
   demoBanner: 'DEMO-MODUS — Diese Meldungen sind erfunden und zeigen nur, wie Histor funktioniert. Es sind keine echten Nachrichten.',
   article: {
     sources: 'Quellen', sourcesIntro: 'Dieser Bericht beruht auf den folgenden Quellen. Wir verlinken immer auf das Original.', primary: 'Primärquelle',
-    howWeVerified: 'So haben wir diese Meldung geprüft', confirmed: 'Bestätigt', attributed: 'Zugeordnet (nicht unabhängig bestätigt)', unconfirmed: 'Noch nicht bestätigt', discrepancies: 'Widersprüche zwischen Quellen', confirmedBy: 'bestätigt von: {list}',
+    howWeVerified: 'So haben wir diese Meldung geprüft', seeHowWeVerified: 'So haben wir geprüft: {n} Quellen ansehen', confirmed: 'Bestätigt', attributed: 'Zugeordnet (nicht unabhängig bestätigt)', unconfirmed: 'Noch nicht bestätigt', discrepancies: 'Widersprüche zwischen Quellen', confirmedBy: 'bestätigt von: {list}',
     related: 'Verwandte Meldungen', timeline: 'Chronologie', history: 'Änderungsverlauf', version: 'Version {n}', viewVersion: 'Version ansehen', reportError: 'Fehler melden',
     share: 'Teilen', save: 'Merken', saved: 'Gemerkt', copyLink: 'Link kopieren', copied: 'Link kopiert', entities: 'In dieser Meldung', location: 'Ort', tags: 'Themen', writtenBy: 'Erstellt von {author}',
     automated: 'Von einem automatisierten System aus geprüften Quellen erstellt und durch redaktionelle Kontrollen geprüft.', retractedNotice: 'Diese Meldung wurde zurückgezogen', otherLanguages: 'Auch auf', imageCredit: 'Bild: {credit}', illustrative: 'Symbolbild, nicht vom Ereignis', aiImage: 'KI-generiertes Bild',
@@ -229,7 +229,7 @@ const fr: Dict = {
   demoBanner: 'MODE DÉMO — Ces articles sont fictifs et servent uniquement à montrer le fonctionnement de Histor. Ce ne sont pas de vraies informations.',
   article: {
     sources: 'Sources', sourcesIntro: 'Cet article s’appuie sur les sources suivantes. Nous renvoyons toujours vers l’original.', primary: 'Source primaire',
-    howWeVerified: 'Comment nous avons vérifié cette information', confirmed: 'Confirmé', attributed: 'Attribué (non confirmé de façon indépendante)', unconfirmed: 'Pas encore confirmé', discrepancies: 'Divergences entre les sources', confirmedBy: 'confirmé par : {list}',
+    howWeVerified: 'Comment nous avons vérifié cette information', seeHowWeVerified: 'Voir comment nous l’avons vérifiée et ses {n} sources', confirmed: 'Confirmé', attributed: 'Attribué (non confirmé de façon indépendante)', unconfirmed: 'Pas encore confirmé', discrepancies: 'Divergences entre les sources', confirmedBy: 'confirmé par : {list}',
     related: 'À lire aussi', timeline: 'Chronologie', history: 'Historique des modifications', version: 'Version {n}', viewVersion: 'Voir la version', reportError: 'Signaler une erreur',
     share: 'Partager', save: 'Sauvegarder', saved: 'Sauvegardé', copyLink: 'Copier le lien', copied: 'Lien copié', entities: 'Dans cet article', location: 'Lieu', tags: 'Sujets', writtenBy: 'Produit par {author}',
     automated: 'Texte produit par un système automatisé à partir de sources recoupées et soumis à des contrôles éditoriaux.', retractedNotice: 'Cet article a été retiré', otherLanguages: 'Aussi en', imageCredit: 'Image : {credit}', illustrative: "Image d'illustration, pas de l'événement", aiImage: 'Image générée par IA',
@@ -298,7 +298,7 @@ const it: Dict = {
   demoBanner: 'MODALITÀ DEMO — Queste notizie sono inventate e servono solo a mostrare come funziona Histor. Non sono notizie reali.',
   article: {
     sources: 'Fonti', sourcesIntro: 'Questa notizia si basa sulle fonti seguenti. Rimandiamo sempre all’originale.', primary: 'Fonte primaria',
-    howWeVerified: 'Come abbiamo verificato questa notizia', confirmed: 'Confermato', attributed: 'Attribuito (senza conferma indipendente)', unconfirmed: 'Non ancora confermato', discrepancies: 'Discrepanze tra le fonti', confirmedBy: 'lo conferma: {list}',
+    howWeVerified: 'Come abbiamo verificato questa notizia', seeHowWeVerified: 'Come l’abbiamo verificata e le sue {n} fonti', confirmed: 'Confermato', attributed: 'Attribuito (senza conferma indipendente)', unconfirmed: 'Non ancora confermato', discrepancies: 'Discrepanze tra le fonti', confirmedBy: 'lo conferma: {list}',
     related: 'Notizie correlate', timeline: 'Cronologia', history: 'Cronologia delle modifiche', version: 'Versione {n}', viewVersion: 'Vedi versione', reportError: 'Segnala un errore',
     share: 'Condividi', save: 'Salva', saved: 'Salvato', copyLink: 'Copia link', copied: 'Link copiato', entities: 'In questa notizia', location: 'Luogo', tags: 'Argomenti', writtenBy: 'Prodotto da {author}',
     automated: 'Testo prodotto da un sistema automatizzato a partire da fonti verificate e sottoposto a controlli editoriali.', retractedNotice: 'Questa notizia è stata ritirata', otherLanguages: 'Anche in', imageCredit: 'Immagine: {credit}', illustrative: "Immagine illustrativa, non dell'evento", aiImage: "Immagine generata dall'IA",
@@ -367,7 +367,7 @@ const pt: Dict = {
   demoBanner: 'MODO DEMO — Estas notícias são fictícias e servem apenas para mostrar como o Histor funciona. Não são notícias reais.',
   article: {
     sources: 'Fontes', sourcesIntro: 'Esta notícia foi elaborada a partir destas fontes. Sempre linkamos o original.', primary: 'Fonte primária',
-    howWeVerified: 'Como checamos esta notícia', confirmed: 'Confirmado', attributed: 'Atribuído (sem confirmação independente)', unconfirmed: 'Ainda não confirmado', discrepancies: 'Divergências entre fontes', confirmedBy: 'confirmado por: {list}',
+    howWeVerified: 'Como checamos esta notícia', seeHowWeVerified: 'Veja como checamos e as {n} fontes', confirmed: 'Confirmado', attributed: 'Atribuído (sem confirmação independente)', unconfirmed: 'Ainda não confirmado', discrepancies: 'Divergências entre fontes', confirmedBy: 'confirmado por: {list}',
     related: 'Notícias relacionadas', timeline: 'Cronologia', history: 'Histórico de alterações', version: 'Versão {n}', viewVersion: 'Ver versão', reportError: 'Reportar erro',
     share: 'Compartilhar', save: 'Salvar', saved: 'Salvo', copyLink: 'Copiar link', copied: 'Link copiado', entities: 'Nesta notícia', location: 'Local', tags: 'Temas', writtenBy: 'Produzido por {author}',
     automated: 'Texto produzido por um sistema automatizado a partir de fontes checadas e submetido a controles editoriais.', retractedNotice: 'Esta notícia foi retirada', otherLanguages: 'Também em', imageCredit: 'Imagem: {credit}', illustrative: 'Imagem ilustrativa, não do acontecimento', aiImage: 'Imagem gerada por IA',

@@ -248,3 +248,12 @@ describe('portada de producción del 29-09-2026 (noche)', () => {
     expect(claims.some((c) => /pic\.twitter/.test(c.text))).toBe(false);
   });
 });
+
+describe('ladillos en mayúsculas', () => {
+  it('no son afirmaciones; las siglas dentro de una frase normal no molestan', () => {
+    const src = source('Infobae', 'reputable_media');
+    const claims = extractClaims(item(src, 'Conde-Pumpido critica al Supremo por no amnistiar la malversación', 'VE VULNERADO EL DERECHO A LA TUTELA JUDICIAL. El presidente del TC y la ONU coinciden en que el PSOE y ERC negociaron con el CGPJ.'));
+    expect(claims.some((c) => /TUTELA JUDICIAL/.test(c.text))).toBe(false);
+    expect(claims.some((c) => /presidente del TC/.test(c.text))).toBe(true);
+  });
+});

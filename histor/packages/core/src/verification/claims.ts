@@ -51,6 +51,9 @@ export function extractClaims(item: VItem): VClaim[] {
     if (PROMO.test(clean) || CREDIT_LINE.test(clean) || /^[^\p{L}\p{N}¿¡«"“'‘(]/u.test(clean)) return;
     // Tuits incrustados y enlaces («…decreto Maricarmen: pic.twitter.com/Y6zh…», «— Name (@user)»).
     if (/pic\.twitter\.com|https?:\/\/|\bt\.co\/|\(@\w{2,15}\)|\bwww\.\w/i.test(clean)) return;
+    // Ladillos de la web del medio en mayúsculas («VE VULNERADO EL DERECHO A LA TUTELA JUDICIAL»).
+    const letters = clean.replace(/[^\p{L}]/gu, '');
+    if (letters.length > 12 && letters.replace(/[^\p{Lu}]/gu, '').length / letters.length > 0.7) return;
     const norm = clean.toLowerCase();
     if (seen.has(norm)) return;
     const ents = extractEntities(clean, lang).filter((e) => e.type !== 'other' || e.name.split(' ').length > 1);

@@ -189,6 +189,13 @@ button, input, select, textarea { font: inherit; color: inherit; }
 .notice-developing { background: var(--developing-soft); border-color: var(--developing); }
 .notice-review { background: var(--accent-soft); border-color: var(--accent); }
 
+.verify-more { margin: 26px 0; border-top: 1px solid var(--rule); border-bottom: 1px solid var(--rule); }
+.verify-more > summary { cursor: pointer; list-style: none; padding: 12px 2px; font-weight: 600; font-size: 15px; display: flex; gap: 8px; align-items: center; }
+.verify-more > summary::-webkit-details-marker { display: none; }
+.verify-more > summary::after { content: "▾"; margin-left: auto; transition: transform .15s; }
+.verify-more[open] > summary::after { transform: rotate(180deg); }
+.verify-more > summary:hover { color: var(--accent-ink, var(--ink)); text-decoration: underline; }
+.verify-more > .verify { margin-top: 4px; }
 .verify { border: 1px solid var(--rule-strong); background: var(--paper-2); padding: 18px 18px 8px; margin: 30px 0; font-family: var(--sans); font-size: 15px; line-height: 1.5; }
 .verify h2 { font-size: 16px; margin: 0 0 12px; display: flex; gap: 8px; align-items: center; }
 .verify h3 { font-size: 12px; letter-spacing: 0.08em; text-transform: uppercase; margin: 14px 0 6px; }
