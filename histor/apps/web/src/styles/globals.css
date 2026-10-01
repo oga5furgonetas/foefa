@@ -162,7 +162,7 @@ button, input, select, textarea { font: inherit; color: inherit; }
 @media (min-width: 900px) { .front { grid-template-columns: minmax(0, 2.1fr) minmax(0, 1fr); gap: 32px; } }
 .lead-story h1 { font-size: clamp(30px, 4.4vw, 50px); line-height: 1.07; letter-spacing: -0.015em; margin: 8px 0 10px; font-weight: 650; }
 .lead-story .dek { font-size: 20px; color: var(--ink-2); margin: 0 0 10px; }
-.lead-art { aspect-ratio: 16 / 9; background: var(--paper-2); border: 1px solid var(--rule); display: grid; place-items: center; overflow: hidden; margin-bottom: 14px; }
+.lead-art { aspect-ratio: 16 / 9; max-height: 500px; width: 100%; background: var(--paper-2); border: 1px solid var(--rule); display: grid; place-items: center; overflow: hidden; margin-bottom: 14px; }
 .side-list { border-left: 0; }
 @media (min-width: 900px) { .side-list { border-left: 1px solid var(--rule); padding-left: 24px; } }
 .side-list h2 { font-family: var(--sans); font-size: 13px; letter-spacing: 0.08em; text-transform: uppercase; margin: 0 0 8px; display: flex; gap: 8px; align-items: center; }
