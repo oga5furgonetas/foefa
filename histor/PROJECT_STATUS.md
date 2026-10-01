@@ -5,7 +5,7 @@
 > verificada como hecho.** Prioridades: veracidad > velocidad > relevancia >
 > crecimiento > monetización.
 
-Última actualización: 29-09-2026.
+Última actualización: 01-10-2026.
 
 ## Resumen
 
@@ -175,6 +175,16 @@ si algo no tiene respaldo). Grok (xAI) NO sirve gratis: la cuenta de Dani no tie
 4. **Integraciones** (todas opcionales; sin ellas se desactivan de forma explícita):
    Stripe + webhook, Resend (correo), Google/Apple, Sentry, S3/R2 para copias fuera de
    Fly, cuentas de Bluesky/Mastodon/X para publicar en redes. VAPID ya está generado.
+
+## 01-10-2026: histor.es en marcha
+
+**La web está en https://histor.es** (panel: https://histor.es/admin). DNS en Nominalia (A `66.241.124.153`,
+AAAA `2a09:8280:1::19e:1d3d:0`, `www` CNAME a `histor.es`), certificado de Let's Encrypt pedido por Dani en el
+panel de Fly (Claude Code bloquea `fly certs add` y cambiar sus propios permisos), `PUBLIC_BASE_URL=https://histor.es`
+en web y worker, y 301 de `histor-web.fly.dev` a histor.es (`middleware.ts`, salvo `/api/`). Falta el
+certificado de `www.histor.es`. Listo para activar con las claves de Dani: Telegram (`TELEGRAM_BOT_TOKEN`,
+`TELEGRAM_CHANNELS`), AdSense (`ADSENSE_CLIENT`) y Stripe (`STRIPE_SECRET_KEY`; el webhook lo crea Claude).
+Contraseña del panel restablecida el 30-09 con `cli admin:reset-password` (ver `~/.histor-admin.txt`).
 
 ## 30-09-2026: el worker parado, la portada limpia y la IA que rescata
 

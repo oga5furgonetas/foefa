@@ -263,6 +263,7 @@ Motor puro en `backend/afinidad.py` (léelo: explica el porqué), 27 pruebas en
   diario y reparación frase a frase con el validador). Dani compró **histor.es** (Nominalia):
   falta el DNS, el certificado en Fly y `PUBLIC_BASE_URL` (la protección automática bloquea
   esos cambios). Detalle y bloqueos en `histor/PROJECT_STATUS.md`. Base local: `histor_live`.
+- **01-10-2026: Histor ya está en https://histor.es** (301 desde histor-web.fly.dev). Falta el certificado de www.
 
 ## Pendiente (por prioridad)
 
