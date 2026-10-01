@@ -42,7 +42,7 @@ export type FoundImage = {
 };
 
 /** Nombre que buscar en Wikipedia. `place`: topónimo del diccionario (no hace falta comprobar el tema). */
-export type ImageCandidate = { name: string; lang: string; place: boolean; trusted?: boolean };
+export type ImageCandidate = { name: string; lang: string; place: boolean; trusted?: boolean; /** Último recurso (parlamento, capital): se prueba siempre, aunque haya muchos candidatos. */ fallback?: boolean };
 
 type Fetch = typeof fetch;
 const FREE_LICENSE = /^(cc0|public domain|pd\b|cc[ -]by(-sa)?[ -]\d)/i;
@@ -348,7 +348,8 @@ export function imageCandidates(
   if (opts.categoryId === 'politics' && PARLIAMENTS[cc]) push(fallback, { name: PARLIAMENTS[cc], lang: 'en', place: true, trusted: true, rank: 2 });
   if (capitals && opts.categoryId && CAPITALS[cc]) push(fallback, { name: CAPITALS[cc], lang: 'en', place: true, rank: 3 });
   const byRank = (x: Ranked, y: Ranked) => x.rank - y.rank;
-  return [...subjects.sort(byRank), ...places.sort(byRank), ...fromSummary, ...fallback].map(({ name, lang, place, trusted }) => ({ name, lang, place, ...(trusted ? { trusted } : {}) }));
+  const strip = ({ name, lang, place, trusted }: Ranked, last = false): ImageCandidate => ({ name, lang, place, ...(trusted ? { trusted } : {}), ...(last ? { fallback: true } : {}) });
+  return [...[...subjects.sort(byRank), ...places.sort(byRank), ...fromSummary].map((c) => strip(c)), ...fallback.map((c) => strip(c, true))];
 }
 
 /**
@@ -369,7 +370,9 @@ export async function attachStoryImage(db: Db, storyId: number, opts: { fetchImp
   const sensitive = arts.some((a) => SENSITIVE.test(`${a.headline} ${a.summary ?? ''}`));
   const sources = [...new Set(arts.flatMap((a) => a.sourcesList.map((s) => s.name)))];
   const cands = imageCandidates(ordered, { context: storyText, exclude: sources, categoryId: arts[0].categoryId, countryCode: arts[0].countryCode });
-  const found = await findStoryImage(cands.slice(0, 10), { fetchImpl: opts.fetchImpl, storyText, placesOnly: sensitive, variant: storyId });
+  // Con seis idiomas la lista crece: se prueban los 10 primeros y, siempre, el último recurso.
+  const tries = [...cands.filter((c) => !c.fallback).slice(0, 10), ...cands.filter((c) => c.fallback)];
+  const found = await findStoryImage(tries, { fetchImpl: opts.fetchImpl, storyText, placesOnly: sensitive, variant: storyId });
   if (!found) return 'none';
   const caption = Object.fromEntries(arts.map((a) => [a.language, found.titles[a.language] ?? found.title]));
   const [m] = await db
