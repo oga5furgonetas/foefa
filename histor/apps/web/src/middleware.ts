@@ -34,6 +34,16 @@ function cdnCountry(req: NextRequest): string | null {
   return c && /^[A-Z]{2}$/.test(c) && c !== 'XX' ? c : null;
 }
 
+/** Host del dominio canónico si es propio (no *.fly.dev ni localhost); si no, null. */
+function canonicalHost(): string | null {
+  try {
+    const h = new URL(process.env.PUBLIC_BASE_URL ?? '').host.toLowerCase();
+    return h && !h.endsWith('.fly.dev') && !h.startsWith('localhost') && !h.startsWith('127.') ? h : null;
+  } catch {
+    return null;
+  }
+}
+
 function randomToken(bytes = 18): string {
   const a = new Uint8Array(bytes);
   crypto.getRandomValues(a);
@@ -88,6 +98,16 @@ function publicCsp(dev: boolean): string {
 export function middleware(req: NextRequest) {
   const { pathname } = req.nextUrl;
   const dev = process.env.NODE_ENV !== 'production';
+
+  // Dominio propio: quien entre por la dirección técnica (*.fly.dev) va con un 301 al dominio
+  // canónico (PUBLIC_BASE_URL), para que enlaces viejos sigan funcionando y Google concentre todo
+  // en uno. La API y las comprobaciones de salud no se redirigen.
+  const canonical = canonicalHost();
+  const host = (req.headers.get('host') ?? '').toLowerCase();
+  if (canonical && host.endsWith('.fly.dev') && host !== canonical && !pathname.startsWith('/api/')) {
+    const url = new URL(req.nextUrl.pathname + req.nextUrl.search, `https://${canonical}`);
+    return NextResponse.redirect(url, 301);
+  }
 
   if (pathname === '/') {
     const lang = pickLang(req);
