@@ -79,7 +79,7 @@ export async function createCheckoutSession(
   const [u] = await db.select().from(users).where(eq(users.id, user.id)).limit(1);
   let customerId = u?.stripeCustomerId ?? null;
   if (!customerId) {
-    const c = await s.customers.create({ email: user.email, metadata: { userId: user.id } });
+    const c = await s.customers.create({ email: user.email, metadata: { app: STRIPE_APP, userId: user.id } });
     customerId = c.id;
     await db.update(users).set({ stripeCustomerId: customerId }).where(eq(users.id, user.id));
   }
@@ -105,9 +105,10 @@ export async function createCheckoutSession(
           },
     ],
     subscription_data: {
-      metadata: { userId: user.id, planId: String(plan.id), market: plan.market },
+      metadata: { app: STRIPE_APP, userId: user.id, planId: String(plan.id), market: plan.market },
       ...(plan.trialDays > 0 && !hadSubscription ? { trial_period_days: plan.trialDays } : {}),
     },
+    metadata: { app: STRIPE_APP, userId: user.id },
     allow_promotion_codes: true,
     billing_address_collection: 'auto',
     customer_update: { address: 'auto' },
@@ -151,8 +152,18 @@ export async function handleStripeWebhook(db: Db, rawBody: string, signature: st
   }
 }
 
+/**
+ * Marca de Histor en Stripe. La cuenta de Stripe es compartida (la de FlotaDSP, 01-10-2026): el
+ * webhook recibe también sus cobros. Histor solo atiende lo marcado con `app: histor` o lo de sus
+ * propios clientes y suscripciones; lo demás se ignora (respuesta 200, sin guardar nada).
+ */
+export const STRIPE_APP = 'histor';
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
 async function userIdForCustomer(db: Db, customerId: string | null, metadataUserId?: string | null): Promise<string | null> {
-  if (metadataUserId) {
+  // Un id de otra aplicación («12345», «usr_…») no es un usuario de Histor: sin consultar la base
+  // (un id que no es UUID hacía fallar la consulta y Stripe acaba desactivando el webhook).
+  if (metadataUserId && UUID.test(metadataUserId)) {
     const [u] = await db.select({ id: users.id }).from(users).where(eq(users.id, metadataUserId)).limit(1);
     if (u) return u.id;
   }
@@ -165,9 +176,11 @@ async function applyStripeEvent(db: Db, event: Stripe.Event): Promise<boolean> {
   switch (event.type) {
     case 'checkout.session.completed': {
       const cs = event.data.object as Stripe.Checkout.Session;
+      if (cs.metadata?.app !== STRIPE_APP) return false;
       const userId = cs.client_reference_id;
       const customer = typeof cs.customer === 'string' ? cs.customer : cs.customer?.id;
-      if (userId && customer) await db.update(users).set({ stripeCustomerId: customer }).where(eq(users.id, userId));
+      if (!userId || !UUID.test(userId) || !customer) return false;
+      await db.update(users).set({ stripeCustomerId: customer }).where(eq(users.id, userId));
       return true;
     }
     case 'customer.subscription.created':
@@ -177,7 +190,9 @@ async function applyStripeEvent(db: Db, event: Stripe.Event): Promise<boolean> {
     case 'customer.subscription.resumed': {
       const sub = event.data.object as Stripe.Subscription;
       const customer = typeof sub.customer === 'string' ? sub.customer : sub.customer.id;
-      const userId = await userIdForCustomer(db, customer, sub.metadata?.userId);
+      // De otra aplicación de la misma cuenta: fuera (las de Histor llevan app: histor).
+      if (sub.metadata?.app && sub.metadata.app !== STRIPE_APP) return false;
+      const userId = await userIdForCustomer(db, customer, sub.metadata?.app === STRIPE_APP ? sub.metadata.userId : null);
       if (!userId) return false;
       const item = sub.items.data[0];
       const price = item?.price;
@@ -212,6 +227,8 @@ async function applyStripeEvent(db: Db, event: Stripe.Event): Promise<boolean> {
       const subRef = inv.parent?.subscription_details?.subscription;
       const subId = typeof subRef === 'string' ? subRef : (subRef?.id ?? null);
       const [sub] = subId ? await db.select({ id: subscriptions.id }).from(subscriptions).where(eq(subscriptions.providerSubscriptionId, subId)).limit(1) : [];
+      // Facturas de otra aplicación de la misma cuenta (ni cliente ni suscripción de Histor): no se guardan.
+      if (!userId && !sub) return false;
       const currency = inv.currency.toUpperCase();
       const failed = event.type === 'invoice.payment_failed';
       const tax = (inv.total_taxes ?? []).reduce((a, t) => a + (t.amount ?? 0), 0);

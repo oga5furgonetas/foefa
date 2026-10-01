@@ -53,7 +53,7 @@ const subEvent = (id: string, type: string, status: string, extra: Record<string
       customer: 'cus_test_1',
       status,
       currency: 'eur',
-      metadata: { userId, planId: '' },
+      metadata: { app: 'histor', userId, planId: '' },
       cancel_at_period_end: false,
       canceled_at: null,
       trial_end: null,
@@ -113,6 +113,21 @@ describe('webhooks de Stripe', () => {
     const pd = signed(subEvent('evt_3', 'customer.subscription.updated', 'past_due'));
     await handleStripeWebhook(db, pd.payload, pd.sig);
     expect((await premiumStatus(db, userId)).premium).toBe(true); // gracia de 7 días
+  });
+
+  it('cuenta de Stripe compartida: los cobros de otra aplicación se ignoran sin error ni datos guardados', async () => {
+    const foreign = [
+      { id: 'evt_f1', object: 'event', type: 'checkout.session.completed', data: { object: { id: 'cs_f1', object: 'checkout.session', client_reference_id: '12345', customer: 'cus_flota', metadata: {} } } },
+      subEvent('evt_f2', 'customer.subscription.created', 'active', { id: 'sub_flota', customer: 'cus_flota', metadata: { app: 'flotadsp', userId: '42' } }),
+      { id: 'evt_f3', object: 'event', type: 'invoice.paid', data: { object: { id: 'in_flota', object: 'invoice', customer: 'cus_flota', currency: 'eur', amount_due: 1999, amount_paid: 1999, total: 1999, status: 'paid', attempt_count: 1, total_taxes: [], parent: null } } },
+    ];
+    for (const e of foreign) {
+      const { payload, sig } = signed(e);
+      const r = await handleStripeWebhook(db, payload, sig);
+      expect(r.handled, e.type).toBe(false);
+    }
+    expect(await db.select().from(subscriptions).where(eq(subscriptions.providerSubscriptionId, 'sub_flota'))).toHaveLength(0);
+    expect(await db.select().from(invoices).where(eq(invoices.providerInvoiceId, 'in_flota'))).toHaveLength(0);
   });
 
   it('cancelación → sin Premium', async () => {
