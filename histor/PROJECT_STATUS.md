@@ -176,6 +176,19 @@ si algo no tiene respaldo). Grok (xAI) NO sirve gratis: la cuenta de Dani no tie
    Stripe + webhook, Resend (correo), Google/Apple, Sentry, S3/R2 para copias fuera de
    Fly, cuentas de Bluesky/Mastodon/X para publicar en redes. VAPID ya está generado.
 
+## 01-10-2026 (mañana): suscripciones con Stripe
+
+Stripe activo en producción con la cuenta de **FlotaDSP** (lo pidió Dani: «stripe utiliza la de
+flota»). Clave **restringida** `rk_live_…` (`~/.historstripe.txt`, en los secretos de web y worker)
+con solo 7 permisos de escritura: Customers, Products, Prices, Subscriptions, Customer Portal,
+Checkout Sessions y Webhook Endpoints. Webhook `we_1ULfAkAQORbirafoudWyYvqc` →
+`https://histor.es/api/v1/stripe/webhook`, API `2026-08-26.dahlia` (la del SDK), 9 eventos; el de
+FlotaDSP (`flotadsp-backend.fly.dev/api/tienda/stripe/webhook`) no se toca. Como la cuenta es
+compartida, Histor marca lo suyo con `metadata.app = histor` e ignora lo demás (200, sin guardar).
+**Falta**: guardar el portal de clientes en Stripe (Configuración → Billing → Portal de clientes),
+no hay ninguna configuración y «Gestionar mi suscripción» falla sin ella. En el extracto del
+suscriptor aparece «Flotadsp» como comercio hasta que Histor tenga cuenta propia.
+
 ## 01-10-2026 (noche): noticias con cuerpo, fotos y aspecto de periódico
 
 Quejas de Dani: noticias de dos líneas «sin noticia en sí», fuente en el titular, entradilla de
