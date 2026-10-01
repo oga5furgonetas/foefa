@@ -5,7 +5,7 @@
  * Y con medida: solo lo importante, como mucho SOCIAL_MAX_PER_HOUR por red y nada
  * con más de 6 horas en cola (un canal que publica 100 noticias al día se abandona).
  */
-import { and, eq, gte, lt, sql } from 'drizzle-orm';
+import { and, desc, eq, gte, lt, sql } from 'drizzle-orm';
 import type { Db } from '../db/client';
 import { articles, socialPosts } from '../db/schema';
 import { env } from '../env';
@@ -93,12 +93,29 @@ export async function publishQueuedPosts(db: Db, fetchImpl: typeof fetch = fetch
     .update(socialPosts)
     .set({ status: 'skipped', error: 'caducada (más de 6 h en cola)' })
     .where(and(eq(socialPosts.status, 'queued'), lt(socialPosts.createdAt, new Date(Date.now() - 6 * 3600_000))));
-  const queued = await db.select().from(socialPosts).where(eq(socialPosts.status, 'queued')).orderBy(socialPosts.createdAt).limit(20);
+  // Lo más reciente primero (es lo que es noticia) y repartido: como mucho una por red y vuelta, y
+  // con SOCIAL_MIN_INTERVAL_MIN entre una y otra. Seis seguidas de golpe parecen spam (01-10-2026).
+  const queued = await db.select().from(socialPosts).where(eq(socialPosts.status, 'queued')).orderBy(desc(socialPosts.createdAt)).limit(20);
   let posted = 0;
   let failed = 0;
   const max = env().SOCIAL_MAX_PER_HOUR;
+  const gapMs = env().SOCIAL_MIN_INTERVAL_MIN * 60_000;
   const done = new Map<string, number>();
+  const busy = new Set<string>();
   for (const p of queued) {
+    if (busy.has(p.network)) continue;
+    if (gapMs > 0) {
+      const [last] = await db
+        .select({ at: socialPosts.postedAt })
+        .from(socialPosts)
+        .where(and(eq(socialPosts.network, p.network), eq(socialPosts.status, 'posted')))
+        .orderBy(desc(socialPosts.postedAt))
+        .limit(1);
+      if (last?.at && Date.now() - last.at.getTime() < gapMs) {
+        busy.add(p.network);
+        continue;
+      }
+    }
     // Ritmo: como mucho SOCIAL_MAX_PER_HOUR por red; el resto espera a la siguiente vuelta.
     if (!done.has(p.network)) {
       const [c] = await db
@@ -112,6 +129,7 @@ export async function publishQueuedPosts(db: Db, fetchImpl: typeof fetch = fetch
       const id = await post(p.network as Network, p.text, p.url, fetchImpl);
       await db.update(socialPosts).set({ status: 'posted', externalId: id, postedAt: new Date(), error: null }).where(eq(socialPosts.id, p.id));
       done.set(p.network, (done.get(p.network) ?? 0) + 1);
+      if (gapMs > 0) busy.add(p.network);
       posted++;
     } catch (e) {
       await db.update(socialPosts).set({ status: 'failed', error: String((e as Error).message).slice(0, 300) }).where(eq(socialPosts.id, p.id));

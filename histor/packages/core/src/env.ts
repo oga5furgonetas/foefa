@@ -52,6 +52,8 @@ const schema = z.object({
   TELEGRAM_CHANNELS: z.string().optional(),
   SOCIAL_MIN_IMPORTANCE: z.coerce.number().min(0).max(1).default(0.3),
   SOCIAL_MAX_PER_HOUR: z.coerce.number().int().min(1).max(60).default(6),
+  // Minutos mínimos entre dos publicaciones en la misma red (0 = sin espera).
+  SOCIAL_MIN_INTERVAL_MIN: z.coerce.number().min(0).max(240).default(10),
   ANTHROPIC_API_KEY: z.string().optional(),
   OPENAI_API_KEY: z.string().optional(),
   OPENAI_BASE_URL: z.string().optional(),
