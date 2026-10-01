@@ -225,7 +225,8 @@ export function writeDeterministic(fs: FactSheet, opts: WriteOptions = {}): Draf
 
   // ── Datos clave (estructurados, redacción propia) ──
   const figures = fs.figures.filter((f) => SELF_EXPLAINING_UNITS.has(f.unit) && P.units[f.unit]);
-  if (figures.length) {
+  // Con un solo dato, la lista queda pobre («Fallecidos: 116» suelto bajo un párrafo): desde dos.
+  if (figures.length >= 2) {
     body.push({ type: 'h2', text: P.headings.figures });
     body.push({
       type: 'list',
