@@ -185,7 +185,7 @@ Checkout Sessions y Webhook Endpoints. Webhook `we_1ULfAkAQORbirafoudWyYvqc` →
 `https://histor.es/api/v1/stripe/webhook`, API `2026-08-26.dahlia` (la del SDK), 9 eventos; el de
 FlotaDSP (`flotadsp-backend.fly.dev/api/tienda/stripe/webhook`) no se toca. Como la cuenta es
 compartida, Histor marca lo suyo con `metadata.app = histor` e ignora lo demás (200, sin guardar).
-Portal de clientes guardado por Dani (: cancelar, cambiar el pago e
+Portal de clientes guardado por Dani (`bpc_1ULfMWAQORbirafob0iIJwdE`: cancelar, cambiar el pago e
 historial de facturas). En el extracto del
 suscriptor aparece «Flotadsp» como comercio hasta que Histor tenga cuenta propia.
 
