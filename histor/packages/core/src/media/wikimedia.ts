@@ -174,7 +174,8 @@ export async function findStoryImage(candidates: ImageCandidate[], opts: FindOpt
         const placeWords = [...new Set(fold(`${title} ${cand.name}`).split(/[^a-z0-9]+/).filter((w) => w.length >= 5))];
         const photos = list
           .map((x) => x.title.replace(/^[^:]+:/, ''))
-          .filter((n) => /\.(jpe?g|webp)$/i.test(n) && !NOT_A_PHOTO.test(n) && !OLD_ARTWORK.test(n) && placeWords.some((w) => fold(n).includes(w)));
+          // Los edificios elegidos a mano (parlamentos): su página es del edificio, valen todas sus fotos.
+          .filter((n) => /\.(jpe?g|webp)$/i.test(n) && !NOT_A_PHOTO.test(n) && !OLD_ARTWORK.test(n) && (cand.trusted || placeWords.some((w) => fold(n).includes(w))));
         if (photos.length > 1) {
           const start = Math.abs(opts.variant) % photos.length;
           files.push(...[...photos.slice(start), ...photos.slice(0, start)].slice(0, 3));

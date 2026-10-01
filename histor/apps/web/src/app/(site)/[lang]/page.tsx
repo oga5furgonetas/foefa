@@ -43,15 +43,32 @@ export default async function Home({ params }: { params: Promise<{ lang: string 
     raw.world,
     ...raw.sections.map((s) => s.items),
   ]);
-  // Cada noticia aparece una sola vez en la portada (la columna lateral cuenta).
+  // Cada noticia aparece una sola vez en la portada (la columna lateral cuenta), y tampoco dos que
+  // cuentan lo mismo: «El Gobierno aprueba los dos decretos de vivienda…» y «Gobierno aprueba
+  // decretos de vivienda tras protestas…» seguidas en la sección España (01-10-2026).
   const seen = new Set<number>();
-  const take = <T extends { id: number }>(xs: T[], n: number) => {
-    const out = xs.filter((x) => !seen.has(x.id)).slice(0, n);
-    out.forEach((x) => seen.add(x.id));
+  const shownWords: Set<string>[] = [];
+  const words = (h: string) => new Set(h.normalize('NFD').replace(/\p{M}/gu, '').toLowerCase().split(/[^\p{L}\p{N}]+/u).filter((w) => w.length >= 5));
+  const repeats = (h: string) => {
+    const w = words(h);
+    return w.size > 0 && shownWords.some((s) => [...w].filter((x) => s.has(x)).length / Math.min(w.size, s.size || 1) >= 0.6);
+  };
+  const take = <T extends { id: number; headline: string }>(xs: T[], n: number) => {
+    const out: T[] = [];
+    for (const x of xs) {
+      if (out.length >= n) break;
+      if (seen.has(x.id) || repeats(x.headline)) continue;
+      seen.add(x.id);
+      shownWords.push(words(x.headline));
+      out.push(x);
+    }
     return out;
   };
   const lead = top[0] ?? null;
-  if (lead) seen.add(lead.id);
+  if (lead) {
+    seen.add(lead.id);
+    shownWords.push(words(lead.headline));
+  }
   // Cada foto, una vez por página, en el orden en que se pintan los bloques.
   const photos = new Set<string>();
   const once = <T extends { imageUrl: string | null }>(xs: T[]) => onePhotoEach(xs, photos);
