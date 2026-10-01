@@ -10,6 +10,7 @@ import type { ArticleBlock } from '../db/schema';
 import { callJson } from '../ai/router';
 import type { LlmProvider } from '../ai/types';
 import { languageDef } from '../config/languages';
+import { env } from '../env';
 import { extractNumbers } from '../text/numbers';
 import { decodeEntities, fold, truncate } from '../text/normalize';
 import { claimRef, writeDeterministic, type WriteOptions } from './deterministic';
@@ -115,6 +116,18 @@ type WriterOut = { headline: string; subheadline: string; summary: string; seo_d
 const PROMPT_MAX_CLAIMS = 30;
 const PROMPT_MAX_CLAIM_CHARS = 350;
 
+/**
+ * Salida máxima que se pide: con AI_REQUEST_TOKEN_CAP (Groq gratuito: entrada + salida contra
+ * 8.000 por minuto), lo que deja la entrada estimada (≈ 3,2 caracteres por token, más el esquema).
+ * Pedir 8.000 de salida hacía que algunas peticiones no cupieran nunca («Request too large»).
+ */
+export function outputBudget(system: string, prompt: string, want: number): number {
+  const cap = env().AI_REQUEST_TOKEN_CAP;
+  if (!cap) return want;
+  const input = Math.ceil((system.length + prompt.length) / 3.2) + 500;
+  return Math.max(1200, Math.min(want, cap - input));
+}
+
 /** La IA a veces copia entidades HTML del texto de las fuentes («&#x27;superinteligencia&#x27;», 01-10-2026). */
 function decodeDeep(v: unknown): unknown {
   if (typeof v === 'string') return decodeEntities(v);
@@ -149,14 +162,15 @@ export async function writeWithLlm(db: Db, fs: FactSheet, opts: WriteOptions & {
   // Sin borrador determinista (frases demasiado largas…), la IA escribe sobre el armazón.
   const base = writeDeterministic(fs, opts) ?? writeDeterministic(fs, { ...opts, skeleton: true });
   if (!base) return null;
+  const writerPrompt = `Target language: ${languageDef(fs.language).name} (${fs.language}).\nFACT SHEET (JSON):\n${JSON.stringify(factSheetForPrompt(fs))}`;
   const res = await callJson(
     db,
     {
       task: 'writing',
       system: WRITER_SYSTEM,
-      prompt: `Target language: ${languageDef(fs.language).name} (${fs.language}).\nFACT SHEET (JSON):\n${JSON.stringify(factSheetForPrompt(fs))}`,
+      prompt: writerPrompt,
       schema: WRITER_SCHEMA as unknown as Record<string, unknown>,
-      maxTokens: 6000,
+      maxTokens: outputBudget(WRITER_SYSTEM, writerPrompt, 5000),
       effort: 'medium',
     },
     { storyId: opts.storyId ?? fs.storyId, provider: opts.provider },
@@ -220,14 +234,15 @@ const TRANSLATOR_SCHEMA = {
  */
 export async function translateDraft(db: Db, src: Draft, targetLang: string, opts: { provider?: LlmProvider | null; storyId?: number | null } = {}): Promise<Draft | null> {
   const flat = flatten(src.body);
+  const translatorPrompt = `From ${src.language} to ${targetLang} (${languageDef(targetLang).name}).\n${JSON.stringify({ headline: src.headline, subheadline: src.subheadline ?? '', summary: src.summary, blocks: flat.map((f) => f.text) })}`;
   const res = await callJson(
     db,
     {
       task: 'translation',
       system: TRANSLATOR_SYSTEM,
-      prompt: `From ${src.language} to ${targetLang} (${languageDef(targetLang).name}).\n${JSON.stringify({ headline: src.headline, subheadline: src.subheadline ?? '', summary: src.summary, blocks: flat.map((f) => f.text) })}`,
+      prompt: translatorPrompt,
       schema: TRANSLATOR_SCHEMA as unknown as Record<string, unknown>,
-      maxTokens: 8000,
+      maxTokens: outputBudget(TRANSLATOR_SYSTEM, translatorPrompt, 5000),
       effort: 'low',
     },
     { storyId: opts.storyId, provider: opts.provider },

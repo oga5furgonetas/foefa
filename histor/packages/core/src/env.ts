@@ -35,6 +35,9 @@ const schema = z.object({
   // mínima (0-1) de una historia para gastar IA en ella; el resto usa el redactor determinista.
   AI_DAILY_TOKEN_LIMIT: z.coerce.number().nonnegative().default(0),
   AI_MIN_IMPORTANCE: z.coerce.number().min(0).max(1).default(0),
+  // Tope de tokens por petición (entrada + salida máxima). Groq gratuito cuenta las dos contra su
+  // límite por minuto (8.000): con 7800, la salida pedida cabe en lo que deja la entrada. 0 = sin tope.
+  AI_REQUEST_TOKEN_CAP: z.coerce.number().nonnegative().default(0),
   // Modelos con razonamiento (gpt-oss, o-series): «low» gasta muchos menos tokens.
   AI_REASONING_EFFORT: z.enum(['low', 'medium', 'high']).optional(),
   // Zona horaria en la que el proveedor renueva el cupo diario (Groq y Gemini: medianoche de California).

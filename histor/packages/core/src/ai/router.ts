@@ -134,7 +134,9 @@ export async function callJson(
       return res.refused ? null : res;
     } catch (err) {
       const msg = String(err instanceof Error ? err.message : err);
-      if (/\b429\b/.test(msg)) cooldownUntil.set(key, Date.now() + retryAfterMs(msg));
+      // «Request too large»: esta petición no cabe en este modelo, pero el modelo está libre para
+      // otras; no se le castiga (se prueba el siguiente de la cadena).
+      if (/\b429\b/.test(msg) && !/request too large/i.test(msg)) cooldownUntil.set(key, Date.now() + retryAfterMs(msg));
       await db.insert(aiUsage).values({
         task: req.task,
         provider: provider.name,

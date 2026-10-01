@@ -43,3 +43,19 @@ describe('espera tras un 429', () => {
     expect(retryAfterMs('429 Too Many Requests')).toBe(900000);
   });
 });
+
+describe('tamaño de la petición', () => {
+  it('con tope por petición, la salida pedida cabe en lo que deja la entrada', async () => {
+    const { outputBudget } = await import('../../src/writing/llm');
+    const prev = process.env.AI_REQUEST_TOKEN_CAP;
+    const { resetEnvCache } = await import('../../src/env');
+    process.env.AI_REQUEST_TOKEN_CAP = '7800';
+    resetEnvCache();
+    const prompt = 'x'.repeat(12_800); // ≈ 4.000 tokens de entrada
+    expect(outputBudget('sistema', prompt, 5000)).toBeLessThanOrEqual(7800 - 4000);
+    expect(outputBudget('sistema', 'corto', 5000)).toBe(5000);
+    if (prev === undefined) delete process.env.AI_REQUEST_TOKEN_CAP;
+    else process.env.AI_REQUEST_TOKEN_CAP = prev;
+    resetEnvCache();
+  });
+});
