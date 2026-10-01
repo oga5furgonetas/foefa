@@ -80,6 +80,20 @@ function Art({ a, lang, big }: { a: ArticleCard; lang: string; big?: boolean }) 
   );
 }
 
+/**
+ * Cada foto, una vez por página: la del Congreso en cinco noticias de política seguidas parece
+ * un error. Las repeticiones van con la portadilla de su sección. `seen` se comparte entre los
+ * bloques de una misma página, en el orden en que se pintan.
+ */
+export function onePhotoEach<T extends { imageUrl: string | null }>(cards: T[], seen: Set<string> = new Set()): T[] {
+  return cards.map((c) => {
+    if (!c.imageUrl) return c;
+    if (seen.has(c.imageUrl)) return { ...c, imageUrl: null };
+    seen.add(c.imageUrl);
+    return c;
+  });
+}
+
 export function LeadCard({ a, lang, d }: P) {
   return (
     <article className="lead-story" {...expAttrs(a)}>

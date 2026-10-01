@@ -1,7 +1,7 @@
 import Link from 'next/link';
 import type { Dict } from '@histor/core/i18n/dictionaries';
 import { absoluteUrl, breadcrumbJsonLd, collectionPageJsonLd } from '@histor/core/seo/index';
-import { StoryCard, LeadCard } from '@/components/Cards';
+import { StoryCard, LeadCard, onePhotoEach } from '@/components/Cards';
 import { JsonLd } from '@/components/JsonLd';
 import { ExperimentTracker } from '@/components/client/ExperimentTracker';
 import { ReadTracker } from '@/components/client/ReadTracker';
@@ -36,7 +36,9 @@ export function ListingView({
   actions?: React.ReactNode;
   emptyText?: string;
 }) {
-  const [first, ...rest] = items;
+  // Cada foto, una vez por página.
+  const cards = onePhotoEach(items);
+  const [first, ...rest] = cards;
   const hasNext = items.length >= PAGE_SIZE;
   return (
     <>
@@ -64,7 +66,7 @@ export function ListingView({
             </div>
           )}
           <div className="grid grid-3" style={{ marginTop: 26 }}>
-            {(page === 1 ? rest : items).map((a) => (
+            {(page === 1 ? rest : cards).map((a) => (
               <StoryCard key={a.id} a={a} lang={lang} d={d} />
             ))}
           </div>

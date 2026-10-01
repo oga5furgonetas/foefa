@@ -8,7 +8,7 @@ import { href } from '@histor/core/i18n/routes';
 import { getHome } from '@histor/core/services/content';
 import { absoluteUrl, organizationJsonLd, websiteJsonLd, hreflangAlternates } from '@histor/core/seo/index';
 import { ACTIVE_LANGUAGES } from '@histor/core/config/languages';
-import { LeadCard, ListItem, StoryCard } from '@/components/Cards';
+import { LeadCard, ListItem, onePhotoEach, StoryCard } from '@/components/Cards';
 import { JsonLd } from '@/components/JsonLd';
 import { ForYou } from '@/components/client/ForYou';
 import { ReadTracker } from '@/components/client/ReadTracker';
@@ -52,19 +52,23 @@ export default async function Home({ params }: { params: Promise<{ lang: string 
   };
   const lead = top[0] ?? null;
   if (lead) seen.add(lead.id);
-  const second = take(secondary, 3);
+  // Cada foto, una vez por página, en el orden en que se pintan los bloques.
+  const photos = new Set<string>();
+  const once = <T extends { imageUrl: string | null }>(xs: T[]) => onePhotoEach(xs, photos);
+  const leadCard = lead ? once([lead])[0] : null;
+  const second = once(take(secondary, 3));
   const sideItems = take(breaking.length ? breaking : latest, 6);
   const home = {
-    top: lead,
+    top: leadCard,
     breaking,
     side: sideItems,
-    local: take(local, 3),
-    national: take(national, 4),
+    local: once(take(local, 3)),
+    national: once(take(national, 4)),
+    world: once(take(world, 4)),
     latest: take(latest, 8),
-    trending: take(trending, 3),
-    world: take(world, 4),
+    trending: once(take(trending, 3)),
     // Una sección con una sola tarjeta queda coja: desde dos.
-    sections: raw.sections.map((s, i) => ({ ...s, items: take(sectionItems[i], 4) })).filter((s) => s.items.length >= 2),
+    sections: raw.sections.map((s, i) => ({ ...s, items: once(take(sectionItems[i], 4)) })).filter((s) => s.items.length >= 2),
   };
   const edition = country(geo.countryCode);
   const city = geo.cityKey ? CITIES.find((c) => c.key === geo.cityKey) : null;
