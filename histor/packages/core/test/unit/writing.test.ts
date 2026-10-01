@@ -82,6 +82,19 @@ describe('redactor determinista', () => {
     expect(validateDraft(d, fs).issues).toEqual([]);
   });
 
+  it('lo no confirmado se atribuye una vez por párrafo, en su primera frase', () => {
+    const d1 = source('Diario Norte', 'reputable_media');
+    const items = [item(d1, 'La empresa Ejemplo cerrará su planta de Zaragoza', 'La empresa Ejemplo cerrará su planta de Zaragoza en 2027 y despedirá a 300 trabajadores, según ha podido saber este diario.', { minutesAgo: 30 })];
+    const analysis = run(items, [d1], { settings: { ...DEFAULT_EDITORIAL_SETTINGS, minIndependentDeveloping: 1 } });
+    const fs = buildFactSheet(analysis, items, new Map([[d1.id, d1]]), { language: 'es' });
+    const d = writeDeterministic(fs, { countryCode: 'ES' })!;
+    const ids = fs.claims.map(claimRef);
+    const para = (text: string): Draft => ({ ...d, body: [{ type: 'p', text, claimIds: ids }] });
+    const status = (x: Draft) => validateDraft(x, fs).issues.filter((i) => i.check === 'status');
+    expect(status(para('Según Diario Norte, la empresa Ejemplo cerrará su planta de Zaragoza. Despedirá a 300 trabajadores.'))).toEqual([]);
+    expect(status(para('La empresa Ejemplo cerrará su planta de Zaragoza. Según Diario Norte, despedirá a 300 trabajadores.'))).toHaveLength(1);
+  });
+
   it('no escribe nada si no hay material en ese idioma', () => {
     const story = granadaStory();
     const fsDe = buildFactSheet(story.analysis, story.items, new Map(story.sources.map((s) => [s.id, s])), { language: 'de' });

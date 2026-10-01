@@ -170,6 +170,8 @@ export function writeDeterministic(fs: FactSheet, opts: WriteOptions = {}): Draf
   const knownPool = bodyClaims.length >= 2 ? bodyClaims : [...fs.confirmed, ...fs.attributed];
   // Hilo de la noticia: cada frase comparte al menos una palabra con lo ya escrito (titular, entrada
   // y frases anteriores). Si en la historia se coló otra noticia parecida, sus frases no enlazan.
+  // Piezas que ya aportan texto: lo no confirmado y las previsiones solo salen de ellas.
+  const usedItems = new Set<number>([headlineClaim?.itemId, leadClaim?.itemId].filter((x): x is number => x != null));
   const thread = new Set([...hWords, ...(body[0] && body[0].type === 'p' ? keyWords(body[0].text) : [])]);
   // Palabras tomadas de cada TEXTO de fuente (el control legal mide el solapamiento con cada uno):
   // ninguno puede pasar del 45 % del texto. Una nota de agencia que reproducen tres periódicos
@@ -198,6 +200,7 @@ export function writeDeterministic(fs: FactSheet, opts: WriteOptions = {}): Draf
     if (plain && prev?.plain && shares.sameHolder(prev.raw, compressed)) continue;
     shares.add(compressed);
     for (const w of kw) thread.add(w);
+    usedItems.add(c.itemId);
     used.add(c.key);
     perSource.set(src, (perSource.get(src) ?? 0) + 1);
     const text = plain ? `${compressed}.` : P.according(compressed, listJoin(lang, c.attribution.slice(0, 2)));
@@ -259,7 +262,13 @@ export function writeDeterministic(fs: FactSheet, opts: WriteOptions = {}): Draf
   // ruido para quien lee la noticia (30-09-2026).
 
   // ── No confirmado ──
-  const unconf = fs.unconfirmed.filter((c) => !used.has(c.key)).slice(0, 4);
+  // Una pieza colada en la historia que no aporta nada al texto no puede asomar aquí: «Un presunto
+  // ciberataque contra el FBI» salió en la noticia de la IA y Trump (01-10-2026).
+  // También valen las piezas cuyo titular cuenta lo mismo que el nuestro.
+  const titles = new Map<number, Set<string>>();
+  for (const c of fs.claims) if (c.isHeadline) titles.set(c.itemId, keyWords(c.text));
+  const inStory = (itemId: number) => usedItems.has(itemId) || coverage(hWords, titles.get(itemId) ?? new Set()) >= 0.3;
+  const unconf = fs.unconfirmed.filter((c) => !used.has(c.key) && inStory(c.itemId)).slice(0, 4);
   const unconfItems: { text: string; claimIds: number[] }[] = [];
   for (const c of unconf) {
     const compressed = compressClaim(c.text, maxWords);
@@ -273,7 +282,7 @@ export function writeDeterministic(fs: FactSheet, opts: WriteOptions = {}): Draf
 
   // ── Predicciones (siempre atribuidas y en futuro/condicional) ──
   const preds: { text: string; claimIds: number[] }[] = [];
-  for (const c of fs.predictions.slice(0, 3)) {
+  for (const c of fs.predictions.filter((p) => inStory(p.itemId)).slice(0, 3)) {
     const compressed = compressClaim(c.text, maxWords);
     if (!compressed) continue;
     preds.push({ text: P.according(compressed, listJoin(lang, c.attribution.slice(0, 2))), claimIds: [claimRef(c)] });

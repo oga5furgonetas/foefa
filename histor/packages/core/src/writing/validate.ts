@@ -70,10 +70,15 @@ export function validateDraft(draft: Draft, fs: FactSheet, extraAllowedNames: st
       issues.push({ check: 'citation', text: u.text, detail: 'frase sin afirmaciones que la respalden' });
       continue;
     }
+    // Como en un periódico, se atribuye una vez por párrafo: las frases que siguen a «Según X, …»
+    // se apoyan en las mismas afirmaciones (las del párrafo) y no repiten la fuente (01-10-2026:
+    // «según Radio Universidad de Chile» en cada frase).
+    let carried = false;
     for (const s of u.section === 'quote' ? [u.text] : sentences(u.text)) {
       // «No se ha podido confirmar de forma independiente.»: aclaración de Histor, no un hecho que atribuir.
       if (UNCONFIRMED_SUFFIXES.has(s.trim())) continue;
-      checkSentence(s, cited, u, issues, fs, allowedNames, sourceTexts, withoutNames);
+      checkSentence(s, cited, u, issues, fs, allowedNames, sourceTexts, withoutNames, carried);
+      if (hasAttributionMarker(s)) carried = true;
     }
   }
 
@@ -100,7 +105,7 @@ export function validateDraft(draft: Draft, fs: FactSheet, extraAllowedNames: st
   return { ok: issues.length === 0, issues };
 }
 
-function checkSentence(s: string, cited: FactClaim[], u: Unit, issues: ValidationIssue[], fs: FactSheet, allowedNames: Set<string>, sourceTexts: string[], withoutNames: (t: string) => string = (t) => t) {
+function checkSentence(s: string, cited: FactClaim[], u: Unit, issues: ValidationIssue[], fs: FactSheet, allowedNames: Set<string>, sourceTexts: string[], withoutNames: (t: string) => string = (t) => t, carried = false) {
   const lang = cited[0]?.language;
   // Cifras
   const citedNums = cited.flatMap((c) => c.numbers);
@@ -146,7 +151,7 @@ function checkSentence(s: string, cited: FactClaim[], u: Unit, issues: Validatio
     : cited.some((c) => c.status === 'partially_supported')
       ? 'partial'
       : 'supported';
-  if (weakest !== 'supported' && u.section !== 'figures' && !hasAttributionMarker(s)) {
+  if (weakest !== 'supported' && u.section !== 'figures' && !hasAttributionMarker(s) && !carried) {
     issues.push({ check: 'status', text: s, detail: 'afirmación no verificada presentada como hecho (falta atribución)' });
   }
   if (cited.some((c) => c.status === 'contradicted') && u.section !== 'unconfirmed') {

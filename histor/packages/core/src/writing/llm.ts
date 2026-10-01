@@ -11,7 +11,7 @@ import { callJson } from '../ai/router';
 import type { LlmProvider } from '../ai/types';
 import { languageDef } from '../config/languages';
 import { extractNumbers } from '../text/numbers';
-import { fold, truncate } from '../text/normalize';
+import { decodeEntities, fold, truncate } from '../text/normalize';
 import { claimRef, writeDeterministic, type WriteOptions } from './deterministic';
 import type { Draft } from './draft';
 import type { FactSheet } from './factsheet';
@@ -81,7 +81,7 @@ Hard rules:
 - Do not quote anyone verbatim unless the exact words appear in a claim's "quote" field; keep them unchanged and attribute them to that claim's speaker.
 - Write in your own words: never copy more than 10 consecutive words from a claim's text (quotes excepted).
 - If the story is "developing", say so plainly and attribute everything that is not confirmed.
-- When you attribute, name the source exactly as written in the claim's "sources" field ("según El Confidencial", "according to BBC News"). Never use vague attributions such as "according to reports", "sources say", "another outlet", "the newspaper", "the cited sources". Attribute each sentence once, not twice.
+- When you attribute, name the source exactly as written in the claim's "sources" field ("según El Confidencial", "according to BBC News"). Never use vague attributions such as "according to reports", "sources say", "another outlet", "the newspaper", "the cited sources". Attribute once per paragraph, in its first sentence ("Según X, …"); the following sentences of that paragraph rely on the same source and must not repeat it. Group facts from the same source in the same paragraph.
 - Open with the most important confirmed fact (who, what, where, when), then context and details, then reactions and what comes next, like a quality newspaper. One idea per paragraph.
 - "summary" is ONE sentence of at most 35 words; "subheadline" at most 20 words; "headline" at most 14 words.
 - The headline must accurately represent the article. No clickbait, no exaggeration, no questions, no exclamation marks. Never put a source or outlet name in the headline (no "according to X"): attribution belongs in the text; unconfirmed stories are labelled "developing" next to the headline.
@@ -114,6 +114,14 @@ type WriterOut = { headline: string; subheadline: string; summary: string; seo_d
 /** Afirmaciones que se mandan a la IA: las mejor respaldadas primero. Con el cupo gratuito por día, una ficha de 45 afirmaciones gastaba el doble sin dar mejor texto. */
 const PROMPT_MAX_CLAIMS = 30;
 const PROMPT_MAX_CLAIM_CHARS = 350;
+
+/** La IA a veces copia entidades HTML del texto de las fuentes («&#x27;superinteligencia&#x27;», 01-10-2026). */
+function decodeDeep(v: unknown): unknown {
+  if (typeof v === 'string') return decodeEntities(v);
+  if (Array.isArray(v)) return v.map(decodeDeep);
+  if (v && typeof v === 'object') return Object.fromEntries(Object.entries(v).map(([k, x]) => [k, decodeDeep(x)]));
+  return v;
+}
 
 export function factSheetForPrompt(fs: FactSheet): Record<string, unknown> {
   // Las citas y predicciones se guardan su sitio aunque haya muchas afirmaciones.
@@ -154,7 +162,7 @@ export async function writeWithLlm(db: Db, fs: FactSheet, opts: WriteOptions & {
     { storyId: opts.storyId ?? fs.storyId, provider: opts.provider },
   );
   if (!res?.data) return null;
-  const out = res.data as WriterOut;
+  const out = decodeDeep(res.data) as WriterOut;
   if (!out.headline || !Array.isArray(out.paragraphs) || !out.paragraphs.length) return null;
   // Texto de la IA + secciones deterministas (datos clave, no confirmado, recuadro de verificación).
   const aiBlocks = repairAiParagraphs(
@@ -224,7 +232,7 @@ export async function translateDraft(db: Db, src: Draft, targetLang: string, opt
     },
     { storyId: opts.storyId, provider: opts.provider },
   );
-  const out = res?.data as { headline: string; subheadline: string; summary: string; blocks: string[] } | undefined;
+  const out = (res?.data ? decodeDeep(res.data) : undefined) as { headline: string; subheadline: string; summary: string; blocks: string[] } | undefined;
   if (!out || !Array.isArray(out.blocks) || out.blocks.length !== flat.length) return null;
   // Cifras conservadas bloque a bloque.
   for (let i = 0; i < flat.length; i++) {
