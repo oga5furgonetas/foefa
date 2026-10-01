@@ -90,7 +90,17 @@ export async function publishStory(db: Db, v: VerifiedStory, settings: Editorial
   const primaryLang = [...sheets.entries()].sort((a, b) => weight(b[1]) - weight(a[1]))[0]?.[0];
   const primarySig = primaryLang ? topicSignature(sheets.get(primaryLang)!) : new Set<string>();
 
+  // Versiones escritas por la IA sin nada nuevo desde entonces: se quedan como están. Cada
+  // reverificación (cada 30 min al principio) volvía a pedir el texto a la IA y agotaba el cupo
+  // reescribiendo lo mismo (01-10-2026).
+  const upToDate = new Set(
+    existing
+      .filter((a) => a.status === 'published' && a.writer.startsWith('llm') && a.updatedAt.getTime() >= story.lastItemAt.getTime())
+      .map((a) => a.language),
+  );
+
   for (const lang of langs) {
+    if (upToDate.has(lang)) continue;
     const fs = sheets.get(lang)!;
     if (lang !== primaryLang && primarySig.size && fs.confirmed.length + fs.attributed.length > 0) {
       const sig = topicSignature(fs);
@@ -138,7 +148,7 @@ export async function publishStory(db: Db, v: VerifiedStory, settings: Editorial
     // Con un cupo gratuito, las traducciones (5 por noticia) gastaban el doble que redactar: solo a
     // los idiomas de AI_TRANSLATE_TO (por defecto, todos).
     const targets = env().AI_TRANSLATE_TO?.split(',').map((x) => x.trim()).filter(Boolean);
-    for (const lang of langs.filter((l) => !drafts.has(l) && (!targets?.length || targets.includes(l)))) {
+    for (const lang of langs.filter((l) => !drafts.has(l) && !upToDate.has(l) && (!targets?.length || targets.includes(l)))) {
       const tr = await translateDraft(db, best.draft, lang, { storyId: story.id });
       if (!tr) continue;
       const fs = { ...best.fs, language: lang };
