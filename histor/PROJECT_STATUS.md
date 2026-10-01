@@ -176,6 +176,33 @@ si algo no tiene respaldo). Grok (xAI) NO sirve gratis: la cuenta de Dani no tie
    Stripe + webhook, Resend (correo), Google/Apple, Sentry, S3/R2 para copias fuera de
    Fly, cuentas de Bluesky/Mastodon/X para publicar en redes. VAPID ya está generado.
 
+## 01-10-2026 (noche): noticias con cuerpo, fotos y aspecto de periódico
+
+Quejas de Dani: noticias de dos líneas «sin noticia en sí», fuente en el titular, entradilla de
+otra historia, sin fotos, «histor» en minúscula. Medido con noticias reales (`writer-debug.tmp.ts`
+contra `histor_live`): mediana de 42 palabras de texto, 18 de 26 por debajo de 50.
+
+- **La IA no se usaba**: el tope propio `AI_DAILY_TOKEN_LIMIT` (contado desde la medianoche de
+  California) cortaba aunque Groq repone su cupo en ventana móvil. Ahora `AI_DAILY_TOKEN_LIMIT=0`
+  y manda el 429 de Groq («try again in…»). Cadena de redacción con 3 modelos (añadido
+  `gpt-oss-20b`). La IA entra también en las noticias que sin ella quedan cortas (importancia
+  ≥ `AI_MIN_IMPORTANCE` − 0,08). El registro `pipeline` trae `ai: {ok, failed, tokens, error}`.
+- **Redactor sin IA**: frases de hasta 28 palabras (antes 22: casi todas las de agencia se
+  descartaban), cuota por TEXTO de fuente (`SourceShares`, como el control legal), hilo de la
+  noticia (cada frase enlaza con lo escrito), entrada que cuenta lo mismo que el titular.
+- **Titulares sin «según X»**: lo no confirmado lleva la etiqueta «En desarrollo» junto al
+  titular; la atribución va en el texto. Fuera titulares que son una fecha o frases sin sujeto.
+- **CONTENT_DEPTH** (crítico): menos de 50 palabras de texto propio no se publica (`minBodyWords`
+  en los ajustes; la DEMO usa 0). La portada pide 55 palabras de cuerpo y abre con foto.
+- **Fotos** (`media/wikimedia.ts`): foto de archivo del protagonista del titular (persona,
+  equipo, huracán) si su página de Wikipedia habla de lo mismo que la noticia; país → capital
+  solo en política/economía/sociedad; en sucesos nunca una cara; sin logos ni banderas.
+  `images:backfill --hours=72` para lo reciente. Sin foto: portadilla de la sección.
+- **Aspecto**: cabecera «Histor.» en serif de titular, compartir en una fila de iconos, tres
+  destacadas con foto bajo la principal, retratos encuadrados. `www.histor.es` → 301.
+- **País y sección**: voto ponderado por país (titular 3, entradilla 2, cuerpo 1, +1,5 al país
+  de un medio nacional); vuelos y aerolíneas fuera de Viajes, tribunales y siniestros en Sociedad.
+
 ## 01-10-2026: histor.es en marcha
 
 **La web está en https://histor.es** (panel: https://histor.es/admin). DNS en Nominalia (A `66.241.124.153`,

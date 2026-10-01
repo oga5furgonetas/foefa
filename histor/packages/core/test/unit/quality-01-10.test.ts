@@ -136,3 +136,17 @@ describe('foto del protagonista (Wikimedia Commons)', () => {
     expect(c.map((x) => x.name)).toContain('Carlos Fernando Galán');
   });
 });
+
+describe('país de la noticia', () => {
+  it('el titular pesa más que una mención de pasada en el cuerpo', async () => {
+    const { countryVotes } = await import('../../src/pipeline/normalize');
+    const src = { countryCode: 'ES', slug: 'marca', ownershipGroup: null, categoryHint: 'sports', feedUrl: 'https://e.example/rss' };
+    const v = countryVotes(
+      { title: 'Oficial: Fernando Alonso renueva con Aston Martin', summary: 'El piloto seguirá en la Fórmula 1 hasta 2027.', contentText: 'Su próxima carrera será el Gran Premio de Estados Unidos.' },
+      src,
+    );
+    expect(v.ES).toBeGreaterThan(v.US ?? 0);
+    const fr = countryVotes({ title: 'Francia condena a la española Swiftair por el siniestro aéreo de Malí', summary: null, contentText: 'El vuelo despegó de Uagadugú.' }, { ...src, slug: 'infobae-mundo', categoryHint: 'world' });
+    expect(Object.entries(fr).sort((a, b) => b[1] - a[1])[0][0]).toBe('FR');
+  });
+});

@@ -9,7 +9,7 @@
  *   run-once                una vuelta del pipeline
  *   newsletter:send         envía las newsletters cuya hora ha llegado
  *   check:env               lista lo que falta para producción
- *   images:backfill         pone imagen ilustrativa (Wikimedia Commons) a lo publicado que no tenga
+ *   images:backfill [--hours=72]  pone imagen ilustrativa (Wikimedia Commons) a lo publicado que no tenga
  *   admin:reset-password    NEW_PASSWORD=… [--email=…] restablece la contraseña (sin correo configurado)
  *   stories:recheck [--hours=72]  vuelve a verificar y redactar lo publicado en esas horas (tras mejorar el redactor)
  */
@@ -122,7 +122,10 @@ async function main(): Promise<number> {
       return 0;
     }
     case 'images:backfill': {
-      const ids = await getDb().selectDistinct({ id: articles.storyId }).from(articles).where(and(eq(articles.status, 'published'), isNull(articles.imageId), eq(articles.isDemo, false)));
+      // --hours=72: solo lo publicado en las últimas horas (lo que sale en portada).
+      const hours = Number(args.find((a) => a.startsWith('--hours='))?.split('=')[1] ?? 0);
+      const since = hours > 0 ? gte(articles.publishedAt, new Date(Date.now() - hours * 3600000)) : undefined;
+      const ids = await getDb().selectDistinct({ id: articles.storyId }).from(articles).where(and(eq(articles.status, 'published'), isNull(articles.imageId), eq(articles.isDemo, false), since));
       const tally: Record<string, number> = {};
       for (const { id } of ids) {
         const r = await attachStoryImage(getDb(), id).catch(() => 'error');

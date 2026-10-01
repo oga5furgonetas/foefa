@@ -120,9 +120,15 @@ export function storyConsensus(rows: Pick<RawItemRow, 'categoryId' | 'countryCod
   const placeVotes = new Map<string, number>();
   const sourceCountry = new Map<string, number>();
   for (const r of rows) {
-    const meta = (r.meta ?? {}) as { classification?: Record<string, number>; places?: VPlace[] };
+    const meta = (r.meta ?? {}) as { classification?: Record<string, number>; places?: VPlace[]; countryWeights?: Record<string, number> };
     for (const [k, v] of Object.entries(meta.classification ?? {})) scoreSum.set(k, (scoreSum.get(k) ?? 0) + Number(v || 0));
     if (r.categoryId) votes.set(r.categoryId, (votes.get(r.categoryId) ?? 0) + 1);
+    // Votos ponderados (titular > entradilla > cuerpo) si la pieza los tiene; si no (piezas
+    // anteriores al 01-10-2026), un voto por país citado.
+    if (meta.countryWeights && Object.keys(meta.countryWeights).length) {
+      for (const [cc, w] of Object.entries(meta.countryWeights)) placeVotes.set(cc, (placeVotes.get(cc) ?? 0) + Number(w || 0));
+      continue;
+    }
     const placed = new Set((meta.places ?? []).map((p) => p.countryCode).filter(Boolean));
     for (const cc of placed) placeVotes.set(cc, (placeVotes.get(cc) ?? 0) + 1);
     if (!placed.size && r.countryCode) sourceCountry.set(r.countryCode, (sourceCountry.get(r.countryCode) ?? 0) + 1);

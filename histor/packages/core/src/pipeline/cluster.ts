@@ -288,7 +288,7 @@ export async function pruneDriftedItems(db: Db, storyId: number, settings: Edito
     .innerJoin(rawItems, eq(rawItems.id, storyItems.itemId))
     .where(eq(storyItems.storyId, storyId))
     .orderBy(storyItems.joinedAt, storyItems.itemId);
-  if (rows.length <= 2) return { kept: rows.length, dropped: [] };
+  if (rows.length < 2) return { kept: rows.length, dropped: [] };
   const feats = rows.map((x) => ({ id: x.itemId, title: x.r.title, lang: x.r.language, at: x.r.publishedAt ?? x.r.fetchedAt, f: itemFeatures(x.r) }));
   const lastItemAt = new Date(Math.max(...feats.map((x) => x.at.getTime())));
   const anchors: Anchor[] = [anchorOf(feats[0].f)];

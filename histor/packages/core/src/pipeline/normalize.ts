@@ -66,6 +66,31 @@ export function resolvePlaces(matches: PlaceMatch[], sourceCountry: string | nul
   return out;
 }
 
+/**
+ * Votos por país de una pieza: el titular pesa 3, la entradilla 2 y el cuerpo 1 (cada país una
+ * vez por parte), y el país de un medio de sección nacional suma 1,5. Antes, cualquier lugar
+ * del cuerpo pesaba lo mismo: la renovación de Fernando Alonso con Aston Martin salió como
+ * noticia de «Estados Unidos» por una mención al Gran Premio de Austin (01-10-2026).
+ */
+export function countryVotes(
+  r: { title: string; summary: string | null; contentText: string | null },
+  src: { countryCode: string | null; slug: string; ownershipGroup: string | null; categoryHint: string | null; feedUrl: string | null },
+): Record<string, number> {
+  const votes: Record<string, number> = {};
+  const parts: [string | null, number][] = [
+    [r.title, 3],
+    [r.summary, 2],
+    [r.contentText, 1],
+  ];
+  for (const [text, w] of parts) {
+    if (!text) continue;
+    const ccs = new Set(resolvePlaces(findPlaces(stripDateline(text)), src.countryCode).map((p) => p.countryCode));
+    for (const cc of ccs) votes[cc] = (votes[cc] ?? 0) + w;
+  }
+  if (src.countryCode && domesticDesk(src)) votes[src.countryCode] = (votes[src.countryCode] ?? 0) + 1.5;
+  return votes;
+}
+
 export async function normalizeNewItems(db: Db, opts: { limit?: number } = {}): Promise<{ normalized: number; discarded: number }> {
   const rows = await db.select().from(rawItems).where(eq(rawItems.status, 'new')).limit(opts.limit ?? 300);
   if (!rows.length) return { normalized: 0, discarded: 0 };
@@ -93,16 +118,19 @@ export async function normalizeNewItems(db: Db, opts: { limit?: number } = {}): 
     const hint = src.languages.length === 1 ? src.languages[0] : r.language;
     const lang = detectLanguage(full, hint).lang ?? hint ?? null;
     const places = resolvePlaces(findPlaces(full), src.countryCode);
-    const city = places.find((p) => p.kind === 'city');
-    const region = places.find((p) => p.kind === 'region');
-    const countryCode = city?.countryCode ?? region?.countryCode ?? places.find((p) => p.kind === 'country')?.countryCode ?? (domesticDesk(src) ? src.countryCode : null);
+    const countryWeights = countryVotes(r, src);
+    const best = [...Object.entries(countryWeights)].sort((a, b) => b[1] - a[1])[0];
+    const weighted = best && best[1] >= 2 ? best[0] : null;
+    const city = places.find((p) => p.kind === 'city' && (!weighted || p.countryCode === weighted));
+    const region = places.find((p) => p.kind === 'region' && (!weighted || p.countryCode === weighted));
+    const countryCode = weighted ?? city?.countryCode ?? region?.countryCode ?? places.find((p) => p.kind === 'country')?.countryCode ?? (domesticDesk(src) ? src.countryCode : null);
     const cls = classify(full, lang, { hint: src.categoryHint, lexicon: lexicon.length ? lexicon : undefined });
     const entities = extractEntities(full)
       .slice(0, 15)
       .map((e) => ({ name: e.name, type: e.type }));
     const ref = r.publishedAt ?? r.fetchedAt;
     const claimedDay = extractDates(`${r.title} ${r.summary ?? ''}`, ref).find((d) => d.precision === 'day' && Math.abs(Date.parse(d.iso) - ref.getTime()) < 3 * 86400000);
-    const meta = { ...(r.meta ?? {}), places, classification: cls.scores };
+    const meta = { ...(r.meta ?? {}), places, countryWeights, classification: cls.scores };
     await db
       .update(rawItems)
       .set({
