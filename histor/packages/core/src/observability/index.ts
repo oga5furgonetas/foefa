@@ -56,6 +56,23 @@ export async function prometheusMetrics(db: Db): Promise<string> {
   gauge('histor_review_tasks_open', 'Tareas de revisión abiertas', [{ value: tasks?.c ?? 0 }]);
   const [lastRun] = await q<{ age: number }>(sql`SELECT extract(epoch from (now() - max(finished_at)))::float age FROM pipeline_runs WHERE ok = true`);
   gauge('histor_pipeline_last_success_age_seconds', 'Segundos desde la última etapa correcta', [{ value: Math.round(lastRun?.age ?? -1) }]);
+  // Audiencia (solo totales agregados, sin datos personales): para saber si entra gente.
+  const [views] = await q<{ d1: number; d7: number; h1: number }>(sql`
+    SELECT count(*) FILTER (WHERE ts >= now() - interval '1 hour')::int h1,
+           count(*) FILTER (WHERE ts >= now() - interval '24 hours')::int d1,
+           count(*)::int d7
+    FROM analytics_events WHERE type = 'page_view' AND ts >= now() - interval '7 days'`);
+  gauge('histor_page_views', 'Páginas vistas', [
+    { labels: { window: '1h' }, value: views?.h1 ?? 0 },
+    { labels: { window: '24h' }, value: views?.d1 ?? 0 },
+    { labels: { window: '7d' }, value: views?.d7 ?? 0 },
+  ]);
+  const byLang = await q<{ language: string; c: number }>(sql`SELECT coalesce(language, '?') language, count(*)::int c FROM analytics_events WHERE type = 'page_view' AND ts >= now() - interval '24 hours' GROUP BY 1 ORDER BY 2 DESC LIMIT 6`);
+  gauge('histor_page_views_24h_by_language', 'Páginas vistas en 24 h por idioma', byLang.map((r) => ({ labels: { language: r.language }, value: r.c })));
+  const byCountry = await q<{ country: string; c: number }>(sql`SELECT coalesce(country_code, '?') country, count(*)::int c FROM analytics_events WHERE type = 'page_view' AND ts >= now() - interval '24 hours' GROUP BY 1 ORDER BY 2 DESC LIMIT 10`);
+  gauge('histor_page_views_24h_by_country', 'Páginas vistas en 24 h por país (los 10 primeros)', byCountry.map((r) => ({ labels: { country: r.country }, value: r.c })));
+  const top = await q<{ path: string; c: number }>(sql`SELECT coalesce(path, '?') path, count(*)::int c FROM analytics_events WHERE type = 'page_view' AND ts >= now() - interval '24 hours' GROUP BY 1 ORDER BY 2 DESC LIMIT 10`);
+  gauge('histor_top_pages_24h', 'Páginas más vistas en 24 h', top.map((r) => ({ labels: { path: r.path.slice(0, 120) }, value: r.c })));
   const mem = process.memoryUsage();
   gauge('histor_process_rss_bytes', 'Memoria residente', [{ value: mem.rss }]);
   return `${lines.join('\n')}\n`;
