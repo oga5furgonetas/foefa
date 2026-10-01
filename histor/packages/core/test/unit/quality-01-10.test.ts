@@ -163,3 +163,13 @@ describe('foto de una historia con versiones distintas', () => {
     expect(names).toContain('Palace of the Argentine National Congress');
   });
 });
+
+describe('foto de la institución de la que habla la noticia', () => {
+  it('el Senado, el Rey o la Bolsa antes que el Congreso de siempre', () => {
+    const c = (headline: string) => imageCandidates([{ language: 'es', headline, summary: '' }], { categoryId: 'politics', countryCode: 'ES' }).map((x) => x.name);
+    expect(c('El Senado veta la ley de amnistía')).toContain('Palacio del Senado');
+    expect(c('El Rey pide más colaboración a la UE por Ceuta')).toContain('Royal Palace of Madrid');
+    const senado = c('El Senado veta la ley de amnistía');
+    expect(senado.indexOf('Palacio del Senado')).toBeLessThan(senado.indexOf('Palacio de las Cortes'));
+  });
+});

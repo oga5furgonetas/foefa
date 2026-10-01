@@ -251,6 +251,28 @@ const CAPITALS: Record<string, string> = {
   VA: 'Vatican City', SY: 'Damascus', LB: 'Beirut', IQ: 'Baghdad', AF: 'Kabul', PK: 'Islamabad', ZA: 'Pretoria', NG: 'Abuja', KE: 'Nairobi',
 };
 
+/**
+ * La institución de la que habla la noticia, por país (título de la Wikipedia en inglés): el
+ * Gobierno, el Senado, el Rey, el banco central, la bolsa… Da una foto que dice algo y evita que
+ * todas las noticias de política lleven la del Congreso (01-10-2026).
+ */
+const INSTITUTIONS: Record<string, [RegExp, string][]> = {
+  ES: [
+    [/\bsenado\b/i, 'Palacio del Senado'],
+    [/\b(el rey|felipe vi|casa real|la reina)\b/i, 'Royal Palace of Madrid'],
+    [/\b(tribunal supremo|el supremo)\b/i, 'Convent of the Salesas Reales'],
+    [/\bbanco de espa[nñ]a\b/i, 'Bank of Spain Building'],
+    [/\b(ibex|bolsa de madrid)\b/i, 'Madrid Stock Exchange'],
+  ],
+  US: [
+    [/\b(white house|casa blanca|maison blanche|weißen? haus|casa bianca|casa branca)\b/i, 'White House'],
+    [/\b(supreme court|tribunal supremo|corte suprema|cour suprême|obersten? gericht)\b/i, 'United States Supreme Court Building'],
+    [/\b(federal reserve|reserva federal|fed)\b/i, 'Marriner S. Eccles Federal Reserve Board Building'],
+    [/\b(wall street|nasdaq|dow jones|s&p 500)\b/i, 'New York Stock Exchange'],
+    [/\b(pent[aá]gono?|pentagon)\b/i, 'The Pentagon'],
+  ],
+};
+
 /** Secciones en las que la capital ilustra la noticia de un país (gobierno, economía): no en deportes ni cultura. */
 const CAPITAL_SECTIONS = new Set(['politics', 'economy', 'business', 'society', 'world']);
 
@@ -346,6 +368,11 @@ export function imageCandidates(
   // Último recurso, por el país de la noticia: su parlamento (política) o su capital (economía, sociedad).
   const fallback: Ranked[] = [];
   const cc = opts.countryCode ?? '';
+  if (capitals && primary) {
+    const about = `${primary.headline} ${primary.summary ?? ''}`;
+    const inst = (INSTITUTIONS[cc] ?? []).find(([re]) => re.test(about));
+    if (inst) push(fallback, { name: inst[1], lang: 'en', place: true, trusted: true, rank: 1.5 });
+  }
   if (opts.categoryId === 'politics' && PARLIAMENTS[cc]) push(fallback, { name: PARLIAMENTS[cc], lang: 'en', place: true, trusted: true, rank: 2 });
   if (capitals && opts.categoryId && CAPITALS[cc]) push(fallback, { name: CAPITALS[cc], lang: 'en', place: true, rank: 3 });
   const byRank = (x: Ranked, y: Ranked) => x.rank - y.rank;
