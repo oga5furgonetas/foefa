@@ -18,7 +18,7 @@ import type { EditorialSettings } from '../config/settings';
 import type { Db } from '../db/client';
 import { articleEntities, articles, articleVersions, authors, corrections, entities, qualityReports, sources as sourcesT, stories } from '../db/schema';
 import { audit, openReviewTask } from '../services/audit';
-import { entityKey } from '../text/entities';
+import { entityKey, findPlaces } from '../text/entities';
 import { slugify, wordCount } from '../text/normalize';
 import { minhash } from '../text/similarity';
 import { writeDeterministic } from '../writing/deterministic';
@@ -81,8 +81,24 @@ export async function publishStory(db: Db, v: VerifiedStory, settings: Editorial
   const aiAllowed = aiMayUse(v.items) && importance >= env().AI_MIN_IMPORTANCE;
   const aiForShort = aiMayUse(v.items) && importance >= env().AI_MIN_IMPORTANCE - AI_SHORT_MARGIN;
 
+  // Versión principal: la del idioma con más fuentes independientes (y más afirmaciones). Una
+  // versión de otro idioma que no comparte con ella ni lugar, ni nombre, ni cifra cuenta otra
+  // noticia que se coló en la historia («drones en Colombia» con «Groenlandia en la ONU»): no se
+  // publica (01-10-2026: 3 de 54 historias multilingües en la base de pruebas).
+  const sheets = new Map(langs.map((l) => [l, buildFactSheet(analysis, v.items, v.sources, { language: l, storyId: story.id, claimDbIds: v.keyToId })]));
+  const weight = (f: FactSheet) => f.independentCredible * 100 + f.confirmed.length * 2 + f.attributed.length;
+  const primaryLang = [...sheets.entries()].sort((a, b) => weight(b[1]) - weight(a[1]))[0]?.[0];
+  const primarySig = primaryLang ? topicSignature(sheets.get(primaryLang)!) : new Set<string>();
+
   for (const lang of langs) {
-    const fs = buildFactSheet(analysis, v.items, v.sources, { language: lang, storyId: story.id, claimDbIds: v.keyToId });
+    const fs = sheets.get(lang)!;
+    if (lang !== primaryLang && primarySig.size && fs.confirmed.length + fs.attributed.length > 0) {
+      const sig = topicSignature(fs);
+      if (sig.size && ![...sig].some((k) => primarySig.has(k))) {
+        logger.info({ storyId: story.id, lang, primaryLang, hint: story.headlineHint.slice(0, 60) }, 'versión de otra noticia');
+        continue;
+      }
+    }
     const writeOpts = { countryCode: edition && edition.defaultLanguage === lang ? edition.code : null, timeZone: edition?.timezone };
     const candidates: Draft[] = [];
     const det = writeDeterministic(fs, writeOpts);
@@ -318,4 +334,22 @@ export async function latestArticles(db: Db, storyIds: number[]) {
 
 export function editionMinhash(headline: string, summary: string): number[] {
   return minhash(`${headline} ${summary}`);
+}
+
+/**
+ * De qué habla una versión: lugares (resueltos a país y ciudad, así «Estonie» y «Estonia» coinciden),
+ * nombres propios y cifras (≥ 10, sin años) de sus afirmaciones.
+ */
+export function topicSignature(fs: FactSheet): Set<string> {
+  const claims = [...fs.confirmed, ...fs.attributed];
+  const out = new Set<string>();
+  for (const p of findPlaces(claims.map((c) => c.text).join('\n'))) {
+    out.add(`p:${p.countryCode}`);
+    if (p.cityKey) out.add(`c:${p.cityKey}`);
+  }
+  for (const c of claims) {
+    for (const e of c.entities) out.add(`e:${e}`);
+    for (const n of c.numbers) if (n.value >= 10 && !(Number.isInteger(n.value) && n.value >= 1900 && n.value <= 2100)) out.add(`n:${n.value}`);
+  }
+  return out;
 }
