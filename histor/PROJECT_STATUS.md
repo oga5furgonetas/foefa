@@ -202,6 +202,19 @@ contra `histor_live`): mediana de 42 palabras de texto, 18 de 26 por debajo de 5
   destacadas con foto bajo la principal, retratos encuadrados. `www.histor.es` → 301.
 - **País y sección**: voto ponderado por país (titular 3, entradilla 2, cuerpo 1, +1,5 al país
   de un medio nacional); vuelos y aerolíneas fuera de Viajes, tribunales y siniestros en Sociedad.
+- **Más tarde esa noche**: `AI_REQUEST_TOKEN_CAP=7800` (Groq cuenta entrada + salida máxima contra
+  8.000/min; «Request too large» ya no castiga al modelo); ficha para la IA de 30 afirmaciones en
+  JSON compacto; atribución una vez por párrafo (validador e IA); «no confirmado» solo de piezas
+  de la noticia; listas, RSS, API y sitemaps sin noticias de menos de 55 palabras (el enlace sigue);
+  la poda revisa historias de dos piezas; secciones de portada con al menos dos tarjetas; cada foto
+  una vez por página; fotos de lugar variadas (fotos libres de la página cuyo nombre cita el lugar,
+  sin cuadros ni dibujos); parlamento del país para la política sin persona ni lugar; manda la
+  versión principal de la historia (una versión francesa ponía París en una noticia de Argentina);
+  `images:recheck --hours=N`. Descartado: endurecer la puntuación de entidades del agrupador
+  (medido sobre 250 historias, rompía historias buenas).
+- **Pendiente**: historias que mezclan dos noticias del mismo país en idiomas distintos (la foto ya
+  no se equivoca, pero la versión secundaria puede contar otra cosa); medir la IA al día siguiente
+  con el registro `pipeline` (`ai.ok`, `ai.failed`).
 
 ## 01-10-2026: histor.es en marcha
 
