@@ -37,7 +37,7 @@ const es = {
   source: { title: 'Fuente', type: 'Tipo', reliability: 'Historial', country: 'País', articles: 'Noticias en las que aparece', typeNames: { primary_official: 'Fuente oficial primaria', official: 'Institución oficial', wire_agency: 'Agencia de noticias', reputable_media: 'Medio de comunicación', identified_journalist: 'Periodista identificado', academic: 'Fuente académica', company: 'Empresa', witness: 'Testigo', social_media: 'Red social (pista, no evidencia)', ugc: 'Contenido de usuarios', blog: 'Blog', aggregator: 'Agregador', anonymous: 'Anónima', unverifiable: 'No verificable' }, directory: 'Nuestras fuentes', directoryIntro: 'Las fuentes que consulta Histor, cómo las clasificamos y cuánto pesa cada una en la verificación.' },
   author: { desk: 'Mesa de redacción automatizada', notAPerson: 'No es una persona: es una mesa de redacción automatizada de Histor.' },
   footer: {
-    about: 'Histor es un periódico digital que publica solo lo que puede verificar.', automation: 'Usamos automatización con controles editoriales.', howItWorks: 'Cómo funciona', editorialPolicy: 'Política editorial',
+    telegram: 'Síguenos en Telegram', about: 'Histor es un periódico digital que publica solo lo que puede verificar.', automation: 'Usamos automatización con controles editoriales.', howItWorks: 'Cómo funciona', editorialPolicy: 'Política editorial',
     corrections: 'Correcciones', privacy: 'Privacidad', cookies: 'Cookies', terms: 'Términos', subscriptionTerms: 'Condiciones de suscripción', contact: 'Contacto', legalNotice: 'Aviso legal', report: 'Informar de un error', sources: 'Nuestras fuentes', rights: '© {year} Histor', cookieSettings: 'Preferencias de cookies',
   },
   cookies: {
@@ -108,7 +108,7 @@ const en: Dict = {
   source: { title: 'Source', type: 'Type', reliability: 'Track record', country: 'Country', articles: 'Stories citing this source', typeNames: { primary_official: 'Primary official source', official: 'Official institution', wire_agency: 'News agency', reputable_media: 'News outlet', identified_journalist: 'Named journalist', academic: 'Academic source', company: 'Company', witness: 'Witness', social_media: 'Social media (a lead, not evidence)', ugc: 'User-generated content', blog: 'Blog', aggregator: 'Aggregator', anonymous: 'Anonymous', unverifiable: 'Unverifiable' }, directory: 'Our sources', directoryIntro: 'The sources Histor monitors, how we classify them and how much each one counts in verification.' },
   author: { desk: 'Automated news desk', notAPerson: 'Not a person: this is one of Histor’s automated news desks.' },
   footer: {
-    about: 'Histor is a digital newspaper that only publishes what it can verify.', automation: 'We use automation with editorial controls.', howItWorks: 'How it works', editorialPolicy: 'Editorial policy',
+    telegram: 'Follow us on Telegram', about: 'Histor is a digital newspaper that only publishes what it can verify.', automation: 'We use automation with editorial controls.', howItWorks: 'How it works', editorialPolicy: 'Editorial policy',
     corrections: 'Corrections', privacy: 'Privacy', cookies: 'Cookies', terms: 'Terms', subscriptionTerms: 'Subscription terms', contact: 'Contact', legalNotice: 'Legal notice', report: 'Report an error', sources: 'Our sources', rights: '© {year} Histor', cookieSettings: 'Cookie settings',
   },
   cookies: {
@@ -177,7 +177,7 @@ const de: Dict = {
   source: { title: 'Quelle', type: 'Typ', reliability: 'Bilanz', country: 'Land', articles: 'Meldungen mit dieser Quelle', typeNames: { primary_official: 'Amtliche Primärquelle', official: 'Offizielle Stelle', wire_agency: 'Nachrichtenagentur', reputable_media: 'Medium', identified_journalist: 'Namentlich bekannter Journalist', academic: 'Wissenschaftliche Quelle', company: 'Unternehmen', witness: 'Augenzeuge', social_media: 'Soziales Netzwerk (Hinweis, kein Beleg)', ugc: 'Nutzerinhalte', blog: 'Blog', aggregator: 'Aggregator', anonymous: 'Anonym', unverifiable: 'Nicht überprüfbar' }, directory: 'Unsere Quellen', directoryIntro: 'Die Quellen, die Histor auswertet, wie wir sie einstufen und wie stark jede bei der Prüfung zählt.' },
   author: { desk: 'Automatisierte Redaktion', notAPerson: 'Keine Person: eine automatisierte Redaktion von Histor.' },
   footer: {
-    about: 'Histor ist eine digitale Zeitung, die nur veröffentlicht, was sie überprüfen kann.', automation: 'Wir nutzen Automatisierung mit redaktionellen Kontrollen.', howItWorks: 'So arbeiten wir', editorialPolicy: 'Redaktionelle Grundsätze',
+    telegram: 'Folge uns auf Telegram', about: 'Histor ist eine digitale Zeitung, die nur veröffentlicht, was sie überprüfen kann.', automation: 'Wir nutzen Automatisierung mit redaktionellen Kontrollen.', howItWorks: 'So arbeiten wir', editorialPolicy: 'Redaktionelle Grundsätze',
     corrections: 'Korrekturen', privacy: 'Datenschutz', cookies: 'Cookies', terms: 'Nutzungsbedingungen', subscriptionTerms: 'Abo-Bedingungen', contact: 'Kontakt', legalNotice: 'Impressum', report: 'Fehler melden', sources: 'Unsere Quellen', rights: '© {year} Histor', cookieSettings: 'Cookie-Einstellungen',
   },
   cookies: {
@@ -246,7 +246,7 @@ const fr: Dict = {
   source: { title: 'Source', type: 'Type', reliability: 'Historique', country: 'Pays', articles: 'Articles citant cette source', typeNames: { primary_official: 'Source officielle primaire', official: 'Institution officielle', wire_agency: 'Agence de presse', reputable_media: 'Média', identified_journalist: 'Journaliste identifié', academic: 'Source académique', company: 'Entreprise', witness: 'Témoin', social_media: 'Réseau social (piste, pas preuve)', ugc: 'Contenu d’utilisateurs', blog: 'Blog', aggregator: 'Agrégateur', anonymous: 'Anonyme', unverifiable: 'Invérifiable' }, directory: 'Nos sources', directoryIntro: 'Les sources suivies par Histor, leur classement et leur poids dans la vérification.' },
   author: { desk: 'Rédaction automatisée', notAPerson: "Ce n'est pas une personne : c'est un pôle de rédaction automatisé de Histor." },
   footer: {
-    about: 'Histor est un journal numérique qui ne publie que ce qu’il peut vérifier.', automation: 'Nous utilisons l’automatisation avec des contrôles éditoriaux.', howItWorks: 'Comment ça marche', editorialPolicy: 'Charte éditoriale',
+    telegram: 'Suivez-nous sur Telegram', about: 'Histor est un journal numérique qui ne publie que ce qu’il peut vérifier.', automation: 'Nous utilisons l’automatisation avec des contrôles éditoriaux.', howItWorks: 'Comment ça marche', editorialPolicy: 'Charte éditoriale',
     corrections: 'Corrections', privacy: 'Confidentialité', cookies: 'Cookies', terms: 'Conditions', subscriptionTerms: "Conditions d'abonnement", contact: 'Contact', legalNotice: 'Mentions légales', report: 'Signaler une erreur', sources: 'Nos sources', rights: '© {year} Histor', cookieSettings: 'Gestion des cookies',
   },
   cookies: {
@@ -315,7 +315,7 @@ const it: Dict = {
   source: { title: 'Fonte', type: 'Tipo', reliability: 'Affidabilità storica', country: 'Paese', articles: 'Notizie che citano questa fonte', typeNames: { primary_official: 'Fonte ufficiale primaria', official: 'Istituzione ufficiale', wire_agency: 'Agenzia di stampa', reputable_media: 'Testata giornalistica', identified_journalist: 'Giornalista identificato', academic: 'Fonte accademica', company: 'Azienda', witness: 'Testimone', social_media: 'Social network (indizio, non prova)', ugc: 'Contenuti degli utenti', blog: 'Blog', aggregator: 'Aggregatore', anonymous: 'Anonima', unverifiable: 'Non verificabile' }, directory: 'Le nostre fonti', directoryIntro: 'Le fonti che Histor consulta, come le classifichiamo e quanto pesa ciascuna nella verifica.' },
   author: { desk: 'Redazione automatizzata', notAPerson: 'Non è una persona: è un desk redazionale automatizzato di Histor.' },
   footer: {
-    about: 'Histor è un giornale digitale che pubblica solo ciò che può verificare.', automation: "Usiamo l'automazione con controlli editoriali.", howItWorks: 'Come funziona', editorialPolicy: 'Linee guida editoriali',
+    telegram: 'Seguici su Telegram', about: 'Histor è un giornale digitale che pubblica solo ciò che può verificare.', automation: "Usiamo l'automazione con controlli editoriali.", howItWorks: 'Come funziona', editorialPolicy: 'Linee guida editoriali',
     corrections: 'Correzioni', privacy: 'Privacy', cookies: 'Cookie', terms: 'Termini', subscriptionTerms: "Condizioni d'abbonamento", contact: 'Contatti', legalNotice: 'Note legali', report: 'Segnala un errore', sources: 'Le nostre fonti', rights: '© {year} Histor', cookieSettings: 'Preferenze cookie',
   },
   cookies: {
@@ -384,7 +384,7 @@ const pt: Dict = {
   source: { title: 'Fonte', type: 'Tipo', reliability: 'Histórico', country: 'País', articles: 'Notícias que citam esta fonte', typeNames: { primary_official: 'Fonte oficial primária', official: 'Instituição oficial', wire_agency: 'Agência de notícias', reputable_media: 'Veículo de imprensa', identified_journalist: 'Jornalista identificado', academic: 'Fonte acadêmica', company: 'Empresa', witness: 'Testemunha', social_media: 'Rede social (pista, não evidência)', ugc: 'Conteúdo de usuários', blog: 'Blog', aggregator: 'Agregador', anonymous: 'Anônima', unverifiable: 'Não verificável' }, directory: 'Nossas fontes', directoryIntro: 'As fontes que o Histor acompanha, como as classificamos e quanto pesa cada uma na checagem.' },
   author: { desk: 'Redação automatizada', notAPerson: 'Não é uma pessoa: é uma editoria automatizada do Histor.' },
   footer: {
-    about: 'O Histor é um jornal digital que só publica o que consegue checar.', automation: 'Usamos automação com controles editoriais.', howItWorks: 'Como funciona', editorialPolicy: 'Política editorial',
+    telegram: 'Siga-nos no Telegram', about: 'O Histor é um jornal digital que só publica o que consegue checar.', automation: 'Usamos automação com controles editoriais.', howItWorks: 'Como funciona', editorialPolicy: 'Política editorial',
     corrections: 'Correções', privacy: 'Privacidade', cookies: 'Cookies', terms: 'Termos', subscriptionTerms: 'Termos da assinatura', contact: 'Contato', legalNotice: 'Aviso legal', report: 'Reportar erro', sources: 'Nossas fontes', rights: '© {year} Histor', cookieSettings: 'Preferências de cookies',
   },
   cookies: {

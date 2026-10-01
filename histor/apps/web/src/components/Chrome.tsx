@@ -5,6 +5,7 @@ import { LANGUAGES } from '@histor/core/config/languages';
 import type { Dict } from '@histor/core/i18n/dictionaries';
 import { t } from '@histor/core/i18n/dictionaries';
 import { href } from '@histor/core/i18n/routes';
+import { telegramChannel } from '@histor/core/social/index';
 import { fmtToday } from '@/lib/format';
 import { EditionSwitcher } from './client/EditionSwitcher';
 import { CookieSettingsLink } from './client/CookieConsent';
@@ -74,6 +75,9 @@ export function Header({ lang, d, countryCode, tz, demo }: { lang: string; d: Di
 }
 
 export function Footer({ lang, d }: { lang: string; d: Dict }) {
+  // Canal público de Telegram del idioma (TELEGRAM_CHANNELS=«es=@historNoticias»), si lo hay.
+  const channel = telegramChannel(lang);
+  const telegram = channel?.startsWith('@') ? channel.slice(1) : null;
   const P = (w: Parameters<typeof href.page>[1], label: string) => (
     <li>
       <Link href={href.page(lang, w)}>{label}</Link>
@@ -89,6 +93,13 @@ export function Footer({ lang, d }: { lang: string; d: Dict }) {
             </span>
           </Link>
           <p>{d.footer.about}</p>
+          {telegram && (
+            <p>
+              <a href={`https://t.me/${telegram}`} rel="noopener" target="_blank">
+                {d.footer.telegram} →
+              </a>
+            </p>
+          )}
           <p className="muted">
             {d.footer.automation} <Link href={href.page(lang, 'howItWorks')}>{d.footer.howItWorks} →</Link>
           </p>
