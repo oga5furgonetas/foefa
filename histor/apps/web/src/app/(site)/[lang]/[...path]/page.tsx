@@ -12,7 +12,7 @@ import { dict, t, type Dict } from '@histor/core/i18n/dictionaries';
 import { href, resolveRoute, ROUTE_WORDS, type RouteMatch, type RouteWord } from '@histor/core/i18n/routes';
 import { LEGAL_PAGES } from '@histor/core/legal/pages';
 import { legalVars } from '@histor/core/legal/vars';
-import { cityIdByKey, getArticleDetail, getAuthorBySlug, getEntityBySlug, getSourceBySlug, listArticles, regionIdByCode, type ListOpts } from '@histor/core/services/content';
+import { cityIdByKey, demoMode, getArticleDetail, getAuthorBySlug, getEntityBySlug, getSourceBySlug, listArticles, regionIdByCode, type ListOpts } from '@histor/core/services/content';
 import { absoluteUrl, breadcrumbJsonLd, hreflangAlternates, newsArticleJsonLd } from '@histor/core/seo/index';
 import { headlineAssignments } from '@histor/core/experiments/index';
 import { JsonLd } from '@/components/JsonLd';
@@ -87,6 +87,16 @@ function titleFor(m: RouteMatch, lang: string, d: Dict): { title: string; build?
   }
 }
 
+/**
+ * Indexable con foto grande en Google Discover y fragmento completo. Hay que darlo entero: un
+ * `robots: undefined` aquí borraba el de la plantilla y las noticias salían sin
+ * «max-image-preview:large» (01-10-2026), justo lo que Discover pide para enseñar la foto.
+ */
+const indexable = (): Metadata['robots'] =>
+  demoMode()
+    ? { index: false, follow: false }
+    : { index: true, follow: true, 'max-image-preview': 'large', 'max-snippet': -1, 'max-video-preview': -1 };
+
 export async function generateMetadata({ params, searchParams }: { params: Params; searchParams: SP }): Promise<Metadata> {
   const { lang, path } = await params;
   const sp = await searchParams;
@@ -118,7 +128,7 @@ export async function generateMetadata({ params, searchParams }: { params: Param
       },
       twitter: { card: 'summary_large_image', title: a.headline, description: a.seoDescription, images: [data.image?.url ?? og] },
       // Lo retirado sigue visible por transparencia pero no se promociona en buscadores.
-      robots: a.status === 'retracted' || a.isDemo ? { index: false, follow: true } : undefined,
+      robots: a.status === 'retracted' || a.isDemo ? { index: false, follow: true } : indexable(),
       other: { 'article:published_time': pub.toISOString(), 'article:modified_time': a.updatedAt.toISOString() },
     };
   }
@@ -133,7 +143,7 @@ export async function generateMetadata({ params, searchParams }: { params: Param
     if (m.kind === 'story') title = d.article.timeline;
     if (!title) return { title: d.notFound.title, robots: { index: false } };
     const build = (l: string) => (m.kind === 'topic' ? href.topic(l, m.slug) : m.kind === 'author' ? href.author(l, m.slug) : m.kind === 'source' ? href.source(l, m.slug) : href.story(l, m.slug));
-    return { title, alternates: alternatesFor(build, lang), robots: m.kind === 'story' ? { index: false, follow: true } : undefined };
+    return { title, alternates: alternatesFor(build, lang), robots: m.kind === 'story' ? { index: false, follow: true } : indexable() };
   }
   const info = titleFor(m, lang, d);
   if (!info) return { title: d.notFound.title, robots: { index: false } };
@@ -143,7 +153,7 @@ export async function generateMetadata({ params, searchParams }: { params: Param
     title: page > 1 ? `${info.title} · ${page}` : info.title,
     description: legal?.description,
     alternates: info.build ? alternatesFor(info.build, lang) : undefined,
-    robots: noindex ? { index: false, follow: true } : undefined,
+    robots: noindex ? { index: false, follow: true } : indexable(),
   };
 }
 
