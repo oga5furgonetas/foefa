@@ -111,15 +111,21 @@ const WRITER_SCHEMA = {
 
 type WriterOut = { headline: string; subheadline: string; summary: string; seo_description: string; paragraphs: { text: string; claim_ids: number[] }[] };
 
+/** Afirmaciones que se mandan a la IA: las mejor respaldadas primero. Con el cupo gratuito por día, una ficha de 45 afirmaciones gastaba el doble sin dar mejor texto. */
+const PROMPT_MAX_CLAIMS = 30;
+const PROMPT_MAX_CLAIM_CHARS = 350;
+
 export function factSheetForPrompt(fs: FactSheet): Record<string, unknown> {
-  const usable = [...fs.confirmed, ...fs.attributed, ...fs.unconfirmed, ...fs.predictions, ...fs.quotes];
+  // Las citas y predicciones se guardan su sitio aunque haya muchas afirmaciones.
+  const extras = [...fs.predictions.slice(0, 3), ...fs.quotes.slice(0, 4)];
+  const usable = [...[...fs.confirmed, ...fs.attributed, ...fs.unconfirmed].slice(0, PROMPT_MAX_CLAIMS - extras.length), ...extras];
   return {
     language: fs.language,
     status: fs.verified ? 'verified' : 'developing',
     independent_sources: fs.independentCredible,
     claims: usable.map((c) => ({
       id: claimRef(c),
-      text: c.text,
+      text: c.text.length > PROMPT_MAX_CLAIM_CHARS ? `${c.text.slice(0, PROMPT_MAX_CLAIM_CHARS).replace(/\s+\S*$/, '')}…` : c.text,
       status: c.status,
       kind: c.kind,
       sources: c.attribution,
@@ -140,7 +146,7 @@ export async function writeWithLlm(db: Db, fs: FactSheet, opts: WriteOptions & {
     {
       task: 'writing',
       system: WRITER_SYSTEM,
-      prompt: `Target language: ${languageDef(fs.language).name} (${fs.language}).\nFACT SHEET (JSON):\n${JSON.stringify(factSheetForPrompt(fs), null, 1)}`,
+      prompt: `Target language: ${languageDef(fs.language).name} (${fs.language}).\nFACT SHEET (JSON):\n${JSON.stringify(factSheetForPrompt(fs))}`,
       schema: WRITER_SCHEMA as unknown as Record<string, unknown>,
       maxTokens: 6000,
       effort: 'medium',
