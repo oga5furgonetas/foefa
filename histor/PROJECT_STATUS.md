@@ -212,9 +212,14 @@ contra `histor_live`): mediana de 42 palabras de texto, 18 de 26 por debajo de 5
   versión principal de la historia (una versión francesa ponía París en una noticia de Argentina);
   `images:recheck --hours=N`. Descartado: endurecer la puntuación de entidades del agrupador
   (medido sobre 250 historias, rompía historias buenas).
-- **Pendiente**: historias que mezclan dos noticias del mismo país en idiomas distintos (la foto ya
-  no se equivoca, pero la versión secundaria puede contar otra cosa); medir la IA al día siguiente
-  con el registro `pipeline` (`ai.ok`, `ai.failed`).
+- **Al amanecer**: la IA ya no reescribe lo que escribió si no ha llegado ninguna pieza nueva (cada
+  reverificación, cada 30 min, volvía a pedir el texto y agotaba el cupo); no se publica la versión
+  de un idioma que no comparte lugar, nombre ni cifra con la principal (otra noticia colada);
+  portada sin dos titulares que cuentan lo mismo; fotos de la institución de la que habla la
+  noticia (Senado, Palacio Real, Supremo, Banco de España, Bolsa; Casa Blanca, Supremo de EE. UU.,
+  Fed, Wall Street, Pentágono) y el último recurso (parlamento, capital) se prueba siempre.
+- **Pendiente**: medir la IA durante el día con el registro `pipeline` (`ai.ok`, `ai.failed`); más
+  instituciones para otros países; noticias hermanas (varias piezas del mismo asunto en España).
 
 ## 01-10-2026: histor.es en marcha
 
