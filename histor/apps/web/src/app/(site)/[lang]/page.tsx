@@ -63,7 +63,8 @@ export default async function Home({ params }: { params: Promise<{ lang: string 
     latest: take(latest, 8),
     trending: take(trending, 3),
     world: take(world, 4),
-    sections: raw.sections.map((s, i) => ({ ...s, items: take(sectionItems[i], 4) })).filter((s) => s.items.length > 0),
+    // Una sección con una sola tarjeta queda coja: desde dos.
+    sections: raw.sections.map((s, i) => ({ ...s, items: take(sectionItems[i], 4) })).filter((s) => s.items.length >= 2),
   };
   const edition = country(geo.countryCode);
   const city = geo.cityKey ? CITIES.find((c) => c.key === geo.cityKey) : null;
@@ -128,7 +129,7 @@ export default async function Home({ params }: { params: Promise<{ lang: string 
             </Section>
           )}
 
-          {home.national.length > 0 && edition && (
+          {home.national.length >= 2 && edition && (
             <Section title={edition.names[lang] ?? edition.names.en} more={href.country(lang, edition.code)} moreLabel={d.home.seeAll}>
               <div className="grid grid-4">
                 {home.national.map((a) => (
@@ -139,7 +140,7 @@ export default async function Home({ params }: { params: Promise<{ lang: string 
           )}
 
           {/* Primero tu país; justo después, el mundo (lo que no es de tu país). */}
-          {home.world.length > 0 && (
+          {home.world.length >= 2 && (
             <Section title={d.home.world} more={href.category(lang, 'world')} moreLabel={d.home.seeAll}>
               <div className="grid grid-4">
                 {home.world.map((a) => (

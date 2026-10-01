@@ -233,7 +233,7 @@ export async function getHome(db: Db, geo: { lang: string; countryCode: string |
   const breaking = await list({ lang: geo.lang, breaking: true, since: new Date(Date.now() - 12 * 3600000), limit: 5, excludeIds: exclude, hardOnly: true });
   const latest = await list({ lang: geo.lang, limit: 12, excludeIds: exclude, hardOnly: true });
   const trending = await list({ lang: geo.lang, since: new Date(Date.now() - 48 * 3600000), orderBy: 'momentum', limit: 6, excludeIds: exclude });
-  const national = geo.countryCode ? await list({ lang: geo.lang, countryCode: geo.countryCode, since, orderBy: 'importance', limit: 8, excludeIds: exclude, hardOnly: true }) : [];
+  const national = geo.countryCode ? await list({ lang: geo.lang, countryCode: geo.countryCode, since, orderBy: 'importance', limit: 16, excludeIds: exclude, hardOnly: true }) : [];
   let local: ArticleCard[] = [];
   if (geo.cityKey) {
     const cityId = await cityIdByKey(db, geo.cityKey);
@@ -250,10 +250,10 @@ export async function getHome(db: Db, geo: { lang: string; countryCode: string |
     .leftJoin(media, eq(media.id, articles.imageId))
     .where(and(visible(), eq(articles.language, geo.lang), gte(articles.wordCount, minWords), geo.countryCode ? or(ne(articles.countryCode, geo.countryCode), sql`${articles.countryCode} IS NULL`) : undefined, gte(articles.publishedAt, since), sql`(${articles.categoryId} IS NULL OR ${articles.categoryId} NOT IN (${sql.join(SOFT_CATEGORIES.map((c) => sql`${c}`), sql`, `)}))`))
     .orderBy(desc(sql`${articles.importance} * exp(-extract(epoch from (now() - ${articles.publishedAt})) / 86400.0)`))
-    .limit(8);
+    .limit(20);
   const sections: HomeData['sections'] = [];
   for (const categoryId of HOME_SECTIONS) {
-    const items = await list({ lang: geo.lang, categoryId, limit: 4, since: new Date(Date.now() - 14 * 86400000) });
+    const items = await list({ lang: geo.lang, categoryId, limit: 8, since: new Date(Date.now() - 14 * 86400000) });
     if (items.length) sections.push({ categoryId, items });
   }
   return { top, secondary, breaking, latest, trending, national, local, world: worldRows.map(toCard), sections };
