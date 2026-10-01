@@ -80,13 +80,14 @@ const COOLDOWN_MS = 15 * 60_000;
  * minuto (se espera eso) y habla de «per day» cuando se acabó el cupo diario (una hora).
  */
 export function retryAfterMs(message: string): number {
-  if (/per day|\bRPD\b|\bTPD\b|daily/i.test(message)) return 60 * 60_000;
+  const daily = /per day|\bRPD\b|\bTPD\b|daily/i.test(message);
   // «m» son minutos solo si no va seguida de «s» («120ms» no son 120 minutos).
-  const m = message.match(/try again in\s+(?:(\d+)m(?!s))?\s*(\d+(?:\.\d+)?)?(ms|s)?/i);
-  if (m && (m[1] || m[2])) {
-    const ms = Number(m[1] ?? 0) * 60_000 + (m[2] ? Number(m[2]) * (m[3] === 'ms' ? 1 : 1000) : 0);
-    return Math.min(Math.max(ms + 1000, 2000), COOLDOWN_MS);
-  }
+  const m = message.match(/try again in\s+(?:(\d+)h)?\s*(?:(\d+)m(?!s))?\s*(\d+(?:\.\d+)?)?(ms|s)?/i);
+  const parsed = m && (m[1] || m[2] || m[3]) ? Number(m[1] ?? 0) * 3_600_000 + Number(m[2] ?? 0) * 60_000 + (m[3] ? Number(m[3]) * (m[4] === 'ms' ? 1 : 1000) : 0) : null;
+  // El cupo diario de Groq se repone poco a poco (ventana móvil): el «try again in 9m10s» de su
+  // aviso es fiable. Sin plazo, una hora.
+  if (daily) return parsed == null ? 60 * 60_000 : Math.min(Math.max(parsed + 1000, 60_000), 2 * 3_600_000);
+  if (parsed != null) return Math.min(Math.max(parsed + 1000, 2000), COOLDOWN_MS);
   return COOLDOWN_MS;
 }
 

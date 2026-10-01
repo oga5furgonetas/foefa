@@ -34,7 +34,7 @@ export default async function AdminLayout({ children }: { children: React.ReactN
               <span style={{ color: 'var(--paper)' }}>
                 <LogoMark size={22} />
               </span>
-              <strong style={{ fontFamily: 'var(--serif)', fontSize: 22 }}>histor</strong>
+              <strong style={{ fontFamily: 'var(--serif)', fontSize: 22 }}>Histor</strong>
             </Link>
             {demoMode() && <p className="badge badge-demo">MODO DEMO</p>}
             <nav>

@@ -32,8 +32,9 @@ export default async function Home({ params }: { params: Promise<{ lang: string 
   const geo = await currentGeo(lang);
   const raw = await getHome(db(), { lang, countryCode: geo.countryCode, regionCode: geo.regionCode, cityKey: geo.cityKey });
   // Titulares A/B (solo con consentimiento de medición; el ganador lo decide la lectura real).
-  const [top, breaking, latest, trending, national, local, world, ...sectionItems] = await withHeadlineTests([
+  const [top, secondary, breaking, latest, trending, national, local, world, ...sectionItems] = await withHeadlineTests([
     raw.top ? [raw.top] : [],
+    raw.secondary,
     raw.breaking,
     raw.latest,
     raw.trending,
@@ -51,6 +52,7 @@ export default async function Home({ params }: { params: Promise<{ lang: string 
   };
   const lead = top[0] ?? null;
   if (lead) seen.add(lead.id);
+  const second = take(secondary, 3);
   const sideItems = take(breaking.length ? breaking : latest, 6);
   const home = {
     top: lead,
@@ -84,6 +86,13 @@ export default async function Home({ params }: { params: Promise<{ lang: string 
           <div className="front">
             <div>
               <LeadCard a={home.top!} lang={lang} d={d} />
+              {second.length > 0 && (
+                <div className="grid grid-3 lead-row">
+                  {second.map((a) => (
+                    <StoryCard key={a.id} a={a} lang={lang} d={d} compact />
+                  ))}
+                </div>
+              )}
               <div className="trust">
                 <span aria-hidden>✓</span> {d.home.trustLine}{' '}
                 <Link href={href.page(lang, 'howItWorks')}>{d.footer.howItWorks} →</Link>

@@ -10,6 +10,11 @@ export function LogoMark({ size = 28, title }: { size?: number; title?: string }
   );
 }
 
+/** Nombre de cabecera: «Histor», con mayúscula y un punto rojo, como firma (01-10-2026: «histor en minúscula da bastante pena»). */
 export function Wordmark() {
-  return <span className="brand-word">histor</span>;
+  return (
+    <span className="brand-word">
+      Histor<span className="brand-dot">.</span>
+    </span>
+  );
 }

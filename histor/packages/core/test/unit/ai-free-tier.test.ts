@@ -33,11 +33,13 @@ describe('conector compatible con OpenAI (Groq)', () => {
 });
 
 describe('espera tras un 429', () => {
-  it('respeta el «try again in» del límite por minuto y para una hora si se acabó el cupo del día', () => {
+  it('respeta el «try again in» del límite por minuto y también del diario (ventana móvil: se repone poco a poco)', () => {
     expect(retryAfterMs('Rate limit reached ... on tokens per minute (TPM): Limit 8000, Used 6333, Requested 2095. Please try again in 3.21s.')).toBe(4210);
     expect(retryAfterMs('Please try again in 1m30.5s.')).toBe(91500);
     expect(retryAfterMs('Please try again in 120ms')).toBe(2000);
-    expect(retryAfterMs('Rate limit reached ... on tokens per day (TPD): Limit 200000. Please try again in 7m12s')).toBe(3600000);
+    expect(retryAfterMs('Rate limit reached ... on tokens per day (TPD): Limit 200000. Please try again in 7m12s')).toBe(433000);
+    expect(retryAfterMs('Rate limit reached ... on tokens per day (TPD): Limit 200000. Please try again in 20s')).toBe(60000);
+    expect(retryAfterMs('Rate limit reached ... on requests per day (RPD): Limit 1000')).toBe(3600000);
     expect(retryAfterMs('429 Too Many Requests')).toBe(900000);
   });
 });

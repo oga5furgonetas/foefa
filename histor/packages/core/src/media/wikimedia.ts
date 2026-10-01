@@ -143,9 +143,12 @@ export async function findStoryImage(candidates: ImageCandidate[], opts: FindOpt
         // Protagonista: nombre propio de verdad y página que habla de lo mismo que la noticia.
         // Una sola palabra vale si Wikipedia la lleva a un nombre completo que la contiene
         // («Milei» → «Javier Milei»), no a otra cosa («Hombre» → «Ser humano»).
+        // También un nombre artístico o deportivo de una palabra («Raphinha», «Shakira») si su
+        // página es una biografía (fecha de nacimiento entre paréntesis al empezar).
         const one = fold(cand.name).split(/\s+/);
         const target = fold(title).split(/[\s,()]+/).filter(Boolean);
-        if (one.length < 2 && (target.length < 2 || !target.includes(one[0]))) continue;
+        const biography = /^[^(]{0,80}\([^)]*\b(1[89]\d\d|20[0-2]\d)\b/.test(String(page.extract ?? ''));
+        if (one.length < 2 && !biography && (target.length < 2 || !target.includes(one[0]))) continue;
         if (opts.storyText === undefined || topicOverlap(String(page.extract ?? ''), opts.storyText, `${cand.name} ${title}`) < minOverlap) continue;
       }
       if (NOT_A_PHOTO.test(String(page.pageimage))) continue;
@@ -203,51 +206,71 @@ const CAPITALS: Record<string, string> = {
   VA: 'Vatican City', SY: 'Damascus', LB: 'Beirut', IQ: 'Baghdad', AF: 'Kabul', PK: 'Islamabad', ZA: 'Pretoria', NG: 'Abuja', KE: 'Nairobi',
 };
 
+/** Secciones en las que la capital ilustra la noticia de un país (gobierno, economía): no en deportes ni cultura. */
+const CAPITAL_SECTIONS = new Set(['politics', 'economy', 'business', 'society', 'world']);
+
 /**
- * Candidatos de una noticia, en orden: primero los protagonistas del titular (en el orden en
- * que los nombra: el sujeto suele ir delante), luego sus lugares y por último los lugares del
- * resumen. `context` (el texto completo) sirve para completar un apellido suelto con el nombre
- * entero que sale en el texto («Galán» → «Carlos Fernando Galán»); `exclude`, para no buscar
- * las fuentes citadas («según Infobae»).
+ * Candidatos de una noticia, en orden: primero los protagonistas del titular por su posición (el
+ * sujeto suele ir delante), probando ese nombre en todos los idiomas antes de pasar al siguiente
+ * («Trump» antes que «Ormuz»); luego los lugares del titular y, por último, los del resumen que
+ * sean del país de la noticia (una de Boeing no lleva foto de Bagdad). Un país, por su capital,
+ * solo en política, economía o sociedad (una lesión de Raphinha no lleva foto de Brasilia).
+ * `context` (el texto completo) sirve para completar un apellido suelto con el nombre entero que
+ * sale en el texto («Galán» → «Carlos Fernando Galán»); `exclude`, para no buscar las fuentes
+ * citadas («según Infobae»).
  */
 export function imageCandidates(
   arts: { language: string; headline: string; summary: string | null }[],
-  opts: { context?: string; exclude?: string[] } = {},
+  opts: { context?: string; exclude?: string[]; categoryId?: string | null; countryCode?: string | null } = {},
 ): ImageCandidate[] {
-  const subjects: ImageCandidate[] = [];
-  const places: ImageCandidate[] = [];
   const seen = new Set<string>((opts.exclude ?? []).map((s) => fold(s)));
   const full = opts.context ? extractEntities(opts.context).filter((e) => e.type !== 'place' && e.name.split(/\s+/).length >= 2) : [];
-  const push = (list: ImageCandidate[], c: ImageCandidate) => {
+  const capitals = !opts.categoryId || CAPITAL_SECTIONS.has(opts.categoryId);
+  type Ranked = ImageCandidate & { rank: number };
+  const subjects: Ranked[] = [];
+  const places: Ranked[] = [];
+  const push = (list: Ranked[], c: Ranked) => {
     const k = `${c.lang}:${fold(c.name)}`;
     if (seen.has(fold(c.name)) || seen.has(k)) return;
     seen.add(k);
     list.push(c);
   };
-  const pushPlace = (name: string, lang: string) => {
-    const country = findPlaces(name).find((p) => p.kind === 'country');
-    const capital = country && CAPITALS[country.countryCode];
-    if (capital) push(places, { name: capital, lang: 'en', place: true });
-    else push(places, { name, lang, place: true });
+  const placeCandidate = (name: string, lang: string, rank: number): Ranked | null => {
+    const match = findPlaces(name)[0];
+    if (match?.kind === 'country') {
+      const capital = CAPITALS[match.countryCode];
+      return capitals && capital ? { name: capital, lang: 'en', place: true, rank } : null;
+    }
+    return { name, lang, place: true, rank };
   };
-  for (const a of arts) {
-    const head = extractEntities(a.headline, a.language)
-      .map((e) => ({ e, at: a.headline.indexOf(e.name) }))
-      .sort((x, y) => x.at - y.at);
-    for (const { e } of head) {
+  arts.forEach((a, ai) => {
+    const len = Math.max(1, a.headline.length);
+    for (const e of extractEntities(a.headline, a.language)) {
       if (!/^\p{Lu}/u.test(e.name)) continue;
+      // Posición relativa en el titular; a igualdad, el idioma que va antes.
+      const rank = a.headline.indexOf(e.name) / len + ai * 0.001;
       if (e.type === 'place') {
-        pushPlace(e.name, a.language);
+        const p = placeCandidate(e.name, a.language, rank);
+        if (p) push(places, p);
         continue;
       }
       // Apellido suelto: el nombre completo si el texto lo da (y solo hay uno que encaje).
-      const words = e.name.split(/\s+/);
-      const longer = words.length === 1 ? full.filter((f) => fold(f.name).split(/\s+/).includes(fold(e.name))) : [];
-      push(subjects, { name: longer.length === 1 ? longer[0].name : e.name, lang: a.language, place: false });
+      const longer = e.name.split(/\s+/).length === 1 ? full.filter((f) => fold(f.name).split(/\s+/).includes(fold(e.name))) : [];
+      push(subjects, { name: longer.length === 1 ? longer[0].name : e.name, lang: a.language, place: false, rank });
     }
-  }
-  for (const a of arts) for (const e of extractEntities(a.summary ?? '', a.language)) if (e.type === 'place') pushPlace(e.name, a.language);
-  return [...subjects, ...places];
+  });
+  const fromSummary: Ranked[] = [];
+  arts.forEach((a, ai) => {
+    for (const e of extractEntities(a.summary ?? '', a.language)) {
+      if (e.type !== 'place') continue;
+      const cc = findPlaces(e.name)[0]?.countryCode;
+      if (opts.countryCode && cc && cc !== opts.countryCode) continue;
+      const p = placeCandidate(e.name, a.language, 1 + ai * 0.001);
+      if (p) push(fromSummary, p);
+    }
+  });
+  const byRank = (x: Ranked, y: Ranked) => x.rank - y.rank;
+  return [...subjects.sort(byRank), ...places.sort(byRank), ...fromSummary].map(({ name, lang, place }) => ({ name, lang, place }));
 }
 
 /**
@@ -267,7 +290,7 @@ export async function attachStoryImage(db: Db, storyId: number, opts: { fetchImp
   const storyText = arts.map((a) => `${a.headline}\n${a.summary ?? ''}\n${bodyText(a.body)}`).join('\n');
   const sensitive = arts.some((a) => SENSITIVE.test(`${a.headline} ${a.summary ?? ''}`));
   const sources = [...new Set(arts.flatMap((a) => a.sourcesList.map((s) => s.name)))];
-  const cands = imageCandidates(ordered, { context: storyText, exclude: sources });
+  const cands = imageCandidates(ordered, { context: storyText, exclude: sources, categoryId: arts[0].categoryId, countryCode: arts[0].countryCode });
   const found = await findStoryImage(cands.slice(0, 8), { fetchImpl: opts.fetchImpl, storyText, placesOnly: sensitive });
   if (!found) return 'none';
   const caption = Object.fromEntries(arts.map((a) => [a.language, found.titles[a.language] ?? found.title]));

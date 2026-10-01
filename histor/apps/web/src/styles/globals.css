@@ -100,12 +100,16 @@ button, input, select, textarea { font: inherit; color: inherit; }
 .topbar .wrap { display: flex; gap: 12px; align-items: center; justify-content: space-between; min-height: 36px; flex-wrap: wrap; }
 .topbar a { color: var(--ink-2); }
 .topbar .right { display: flex; gap: 14px; align-items: center; flex-wrap: wrap; }
-.masthead { border-bottom: 3px double var(--ink); }
-.masthead .wrap { display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; padding-top: 14px; padding-bottom: 12px; gap: 12px; }
+/* Cabecera de periódico: el nombre en serif de titular, grande, entre filetes (como las cabeceras
+   de los grandes diarios), sin icono de aplicación al lado. */
+.masthead { border-bottom: 4px double var(--ink); }
+.masthead .wrap { display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; padding-top: 18px; padding-bottom: 14px; gap: 12px; }
 .brand { display: inline-flex; align-items: center; gap: 10px; justify-self: center; color: var(--ink); }
 .brand:hover { text-decoration: none; }
-.brand-word { font-family: var(--serif); font-weight: 700; font-size: clamp(34px, 6vw, 52px); letter-spacing: -0.02em; line-height: 1; }
-.brand-tag { font-family: var(--sans); font-size: 11px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--muted); text-align: center; margin-top: 4px; }
+.brand-word { font-family: var(--serif); font-weight: 800; font-variation-settings: 'opsz' 72; font-size: clamp(46px, 8.4vw, 92px); letter-spacing: -0.035em; line-height: 0.9; }
+.brand-word .brand-dot { color: var(--accent); }
+.brand-tag { font-family: var(--sans); font-size: 11px; font-weight: 600; letter-spacing: 0.22em; text-transform: uppercase; color: var(--muted); text-align: center; margin-top: 10px; padding-top: 7px; border-top: 1px solid var(--rule-strong); }
+@media (max-width: 640px) { .masthead .wrap { padding-top: 12px; padding-bottom: 10px; } .brand-tag { letter-spacing: 0.14em; font-size: 10px; } }
 .masthead .left, .masthead .right { font-family: var(--sans); font-size: 13px; }
 .masthead .right { justify-self: end; display: flex; gap: 10px; align-items: center; }
 .btn { display: inline-flex; align-items: center; justify-content: center; gap: 6px; font-family: var(--sans); font-weight: 600; font-size: 14px; padding: 9px 14px; border-radius: 3px; border: 1px solid var(--ink); background: transparent; cursor: pointer; line-height: 1.1; }
@@ -225,10 +229,17 @@ button, input, select, textarea { font: inherit; color: inherit; }
 .timeline li { padding: 0 0 12px 14px; position: relative; }
 .timeline li::before { content: ''; position: absolute; left: -6px; top: 5px; width: 10px; height: 10px; border-radius: 50%; background: var(--paper); border: 2px solid var(--ink); }
 .history summary { cursor: pointer; font-family: var(--sans); font-weight: 600; font-size: 14px; }
-.actions { display: flex; flex-wrap: wrap; gap: 8px; margin: 18px 0; }
-.share-links { display: flex; flex-wrap: wrap; gap: 8px; }
-.share-links a { text-decoration: none; color: inherit; }
-.share-links .share-whatsapp { border-color: #1faa53; }
+.actions { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 10px 16px; margin: 16px 0 22px; }
+.share-links { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+.icon-btn { display: inline-grid; place-items: center; width: 36px; height: 36px; border-radius: 50%; border: 1px solid var(--rule-strong); background: transparent; color: var(--ink-2); cursor: pointer; padding: 0; }
+.icon-btn:hover { text-decoration: none; background: var(--paper-2); color: var(--ink); border-color: var(--ink-2); }
+.icon-btn.share-whatsapp { color: #128c4a; border-color: color-mix(in srgb, #128c4a 45%, var(--rule)); }
+.copied { font-size: 13px; margin-left: 4px; }
+.actions-right { display: flex; align-items: center; gap: 14px; }
+.text-btn { display: inline-flex; align-items: center; gap: 6px; font-size: 14px; font-weight: 600; background: none; border: 0; padding: 6px 0; cursor: pointer; color: var(--ink-2); }
+.text-btn.muted { font-weight: 500; color: var(--muted); }
+.text-btn:hover { text-decoration: underline; }
+.text-btn.is-on { color: var(--verified); }
 
 /* ── Páginas de texto, formularios, tablas ── */
 .page { max-width: 760px; margin: 0 auto; padding: 28px 0 48px; }
@@ -297,3 +308,7 @@ button, input, select, textarea { font: inherit; color: inherit; }
   .nav, .topbar, .consent, .footer, .actions { display: none; }
   body { background: #fff; color: #000; }
 }
+
+/* Fila de destacadas bajo la principal. */
+.lead-row { margin-top: 22px; padding-top: 18px; border-top: 1px solid var(--rule); }
+.lead-row .card .h { font-size: 18px; }

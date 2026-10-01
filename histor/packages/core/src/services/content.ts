@@ -174,6 +174,8 @@ export async function cardsByIds(db: Db, ids: number[]): Promise<ArticleCard[]> 
 
 export type HomeData = {
   top: ArticleCard | null;
+  /** Las siguientes en importancia de las últimas horas, debajo de la principal (con foto si la hay). */
+  secondary: ArticleCard[];
   breaking: ArticleCard[];
   latest: ArticleCard[];
   trending: ArticleCard[];
@@ -222,6 +224,12 @@ export async function getHome(db: Db, geo: { lang: string; countryCode: string |
     if (ownTop && (!top || ownTop.importance >= 0.6 * top.importance)) top = ownTop;
   }
   const exclude = top ? [top.id] : [];
+  // Debajo de la principal, como en los grandes diarios: las tres siguientes de las últimas 24 h,
+  // confirmadas y con foto delante.
+  const secondary = (await list({ lang: geo.lang, since: new Date(Date.now() - 24 * 3600000), orderBy: 'importance', limit: 10, excludeIds: exclude, hardOnly: true }))
+    .filter((a) => !a.isDeveloping)
+    .sort((a, b) => Number(!!b.imageUrl) - Number(!!a.imageUrl))
+    .slice(0, 3);
   const breaking = await list({ lang: geo.lang, breaking: true, since: new Date(Date.now() - 12 * 3600000), limit: 5, excludeIds: exclude, hardOnly: true });
   const latest = await list({ lang: geo.lang, limit: 12, excludeIds: exclude, hardOnly: true });
   const trending = await list({ lang: geo.lang, since: new Date(Date.now() - 48 * 3600000), orderBy: 'momentum', limit: 6, excludeIds: exclude });
@@ -248,7 +256,7 @@ export async function getHome(db: Db, geo: { lang: string; countryCode: string |
     const items = await list({ lang: geo.lang, categoryId, limit: 4, since: new Date(Date.now() - 14 * 86400000) });
     if (items.length) sections.push({ categoryId, items });
   }
-  return { top, breaking, latest, trending, national, local, world: worldRows.map(toCard), sections };
+  return { top, secondary, breaking, latest, trending, national, local, world: worldRows.map(toCard), sections };
 }
 
 export async function cityIdByKey(db: Db, key: string): Promise<number | null> {

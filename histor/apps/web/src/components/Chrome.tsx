@@ -9,7 +9,7 @@ import { fmtToday } from '@/lib/format';
 import { EditionSwitcher } from './client/EditionSwitcher';
 import { CookieSettingsLink } from './client/CookieConsent';
 import { UserMenu } from './client/UserMenu';
-import { LogoMark, Wordmark } from './Logo';
+import { Wordmark } from './Logo';
 
 const NAV_CATEGORIES = ['politics', 'economy', 'world', 'technology', 'science', 'health', 'sports', 'culture', 'entertainment', 'society', 'business', 'weather', 'travel', 'lifestyle'];
 
@@ -40,7 +40,6 @@ export function Header({ lang, d, countryCode, tz, demo }: { lang: string; d: Di
           </div>
           <div style={{ display: 'grid', justifyItems: 'center' }}>
             <Link href={href.home(lang)} className="brand" aria-label="Histor">
-              <LogoMark size={34} />
               <Wordmark />
             </Link>
             <div className="brand-tag">{d.tagline}</div>
@@ -85,8 +84,9 @@ export function Footer({ lang, d }: { lang: string; d: Dict }) {
       <div className="wrap cols">
         <div>
           <Link href={href.home(lang)} className="brand" style={{ justifyContent: 'flex-start' }} aria-label="Histor">
-            <LogoMark size={24} />
-            <span style={{ fontFamily: 'var(--serif)', fontWeight: 700, fontSize: 26 }}>histor</span>
+            <span className="brand-word" style={{ fontSize: 34 }}>
+              Histor<span className="brand-dot">.</span>
+            </span>
           </Link>
           <p>{d.footer.about}</p>
           <p className="muted">

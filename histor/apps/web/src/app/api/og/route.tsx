@@ -38,7 +38,7 @@ export async function GET(req: NextRequest) {
             <div style={{ width: 14, height: 8, background: '#b3261e' }} />
             <div style={{ width: 9, height: 36, background: '#fbfaf7' }} />
           </div>
-          <div style={{ fontSize: 52, fontWeight: 700, color: '#15171c', letterSpacing: -1 }}>histor</div>
+          <div style={{ fontSize: 52, fontWeight: 700, color: '#15171c', letterSpacing: -1 }}>Histor.</div>
           {a?.isDemo && <div style={{ marginLeft: 'auto', fontSize: 26, color: '#6b2fb3', border: '3px solid #6b2fb3', padding: '4px 12px' }}>DEMO</div>}
         </div>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 18 }}>

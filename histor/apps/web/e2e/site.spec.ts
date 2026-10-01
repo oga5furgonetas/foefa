@@ -66,7 +66,10 @@ test('una historia en desarrollo lo dice y atribuye', async ({ page, request }) 
   test.skip(!dev, 'no hay historias en desarrollo');
   await page.goto(dev!.url);
   await expect(page.locator('.notice-developing')).toBeVisible();
-  await expect(page.locator('article h1')).toContainText(/según/);
+  // Sin la fuente en el titular (01-10-2026): la etiqueta «en desarrollo» va con él y el texto atribuye.
+  await expect(page.locator('article h1')).not.toContainText(/según/);
+  await expect(page.locator('article .badge-developing').first()).toBeVisible();
+  await expect(page.locator('.article-body')).toContainText(/según/);
 });
 
 test('secciones, países, ciudades, listas y páginas legales responden', async ({ page }) => {
