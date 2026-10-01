@@ -84,6 +84,8 @@ const schema = z.object({
   // Redes (publicación)
   BLUESKY_HANDLE: z.string().optional(),
   BLUESKY_APP_PASSWORD: z.string().optional(),
+  // DID de la cuenta de Bluesky para usar el dominio como nombre (@histor.es): se sirve en /.well-known/atproto-did.
+  BLUESKY_DID: z.string().regex(/^did:(plc|web):[a-z0-9.:-]+$/i).optional(),
   MASTODON_BASE_URL: z.string().optional(),
   MASTODON_TOKEN: z.string().optional(),
   // Observabilidad
