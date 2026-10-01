@@ -133,7 +133,10 @@ export async function listArticles(db: Db, o: ListOpts): Promise<ArticleCard[]> 
   if (o.authorId) conds.push(eq(articles.authorId, o.authorId));
   if (o.since) conds.push(gte(articles.publishedAt, o.since));
   if (o.breaking) conds.push(eq(articles.isBreaking, true));
-  if (o.minWords) conds.push(gte(articles.wordCount, o.minWords));
+  // Ninguna lista (portada, secciones, RSS, API) enseña noticias de dos líneas publicadas antes
+  // del control de profundidad (01-10-2026); su enlace sigue funcionando. La DEMO, sin mínimo.
+  const minWords = o.minWords ?? (demoMode() ? 0 : HOME_MIN_WORDS);
+  if (minWords) conds.push(gte(articles.wordCount, minWords));
   if (o.hardOnly || o.noSports) {
     const out = [...(o.hardOnly ? SOFT_CATEGORIES : []), ...(o.noSports ? ['sports'] : [])];
     conds.push(sql`(${articles.categoryId} IS NULL OR ${articles.categoryId} NOT IN (${sql.join(out.map((c) => sql`${c}`), sql`, `)}))`);
@@ -410,12 +413,12 @@ export async function publishedCountForEntity(db: Db, entityId: number, lang: st
   return Number(r?.n ?? 0);
 }
 
-/** Entradas de sitemap (solo contenido real y publicado). */
+/** Entradas de sitemap (solo contenido real y publicado, con cuerpo: Google no indexa noticias de dos líneas). */
 export async function sitemapArticles(db: Db, lang: string, page: number, pageSize = 5000) {
   return db
     .select({ id: articles.id, storyId: articles.storyId, slug: articles.slug, publishedAt: articles.publishedAt, updatedAt: articles.updatedAt, language: articles.language })
     .from(articles)
-    .where(and(eq(articles.status, 'published'), eq(articles.isDemo, false), eq(articles.language, lang)))
+    .where(and(eq(articles.status, 'published'), eq(articles.isDemo, false), eq(articles.language, lang), gte(articles.wordCount, HOME_MIN_WORDS)))
     .orderBy(desc(articles.publishedAt))
     .limit(pageSize)
     .offset(page * pageSize);
@@ -425,7 +428,7 @@ export async function newsSitemapArticles(db: Db) {
   return db
     .select({ slug: articles.slug, language: articles.language, headline: articles.headline, publishedAt: articles.publishedAt })
     .from(articles)
-    .where(and(eq(articles.status, 'published'), eq(articles.isDemo, false), gte(articles.publishedAt, new Date(Date.now() - 48 * 3600000))))
+    .where(and(eq(articles.status, 'published'), eq(articles.isDemo, false), gte(articles.wordCount, HOME_MIN_WORDS), gte(articles.publishedAt, new Date(Date.now() - 48 * 3600000))))
     .orderBy(desc(articles.publishedAt))
     .limit(1000);
 }
