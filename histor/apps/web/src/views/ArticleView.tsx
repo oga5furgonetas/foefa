@@ -8,6 +8,7 @@ import { t } from '@histor/core/i18n/dictionaries';
 import { href } from '@histor/core/i18n/routes';
 import { findPlaces } from '@histor/core/text/entities';
 import { absoluteUrl } from '@histor/core/seo/index';
+import { telegramChannel } from '@histor/core/social/index';
 import type { getArticleDetail } from '@histor/core/services/content';
 import { NOTES } from '@histor/core/writing/notes';
 import { Badges } from '@/components/Badges';
@@ -28,6 +29,8 @@ export function ArticleView({ data, lang, d, tz, experiment }: { data: ArticleDe
   const underReview = !retracted && corrections.some((c) => c.note === underReviewNote && c.version === a.version);
   const cat = category(a.categoryId);
   const place = country(a.countryCode);
+  const channel = telegramChannel(lang);
+  const telegram = channel?.startsWith('@') ? channel.slice(1) : null;
   const authorName = author ? ((author.names as Record<string, string>)[lang] ?? (author.names as Record<string, string>).en ?? author.slug) : 'Histor';
   const publishedAt = a.publishedAt ?? a.updatedAt;
   const updated = a.version > 1 && a.updatedAt.getTime() - publishedAt.getTime() > 60_000;
@@ -186,6 +189,13 @@ export function ArticleView({ data, lang, d, tz, experiment }: { data: ArticleDe
             }
           })}
         </div>
+
+        {/* Al acabar de leer, el canal de Telegram del idioma (si lo hay): así vuelve el lector. */}
+        {telegram && (
+          <a className="follow-cta ui" href={`https://t.me/${telegram}`} rel="noopener" target="_blank">
+            <span aria-hidden>✈</span> {d.footer.telegram} <span className="muted">· t.me/{telegram}</span>
+          </a>
+        )}
 
         {/* La gente viene a leer la noticia: la verificación, las fuentes y la cronología están a
             un clic, plegadas (30-09-2026, «todo este ruido… pon un ver más»). */}

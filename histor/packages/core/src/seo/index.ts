@@ -112,7 +112,9 @@ export function newsArticleJsonLd(a: ArticleForSeo) {
     articleSection: a.categoryName ?? undefined,
     keywords: a.keywords.join(', ') || undefined,
     author,
-    publisher: { '@id': absoluteUrl('/#organization') },
+    // El editor completo (nombre y logo): Google solo resuelve el @id dentro de la misma página, y
+    // en una noticia la organización no está; sin nombre ni logo no entra en «Noticias destacadas».
+    publisher: { '@type': 'NewsMediaOrganization', '@id': absoluteUrl('/#organization'), name: BRAND.name, url: absoluteUrl('/'), logo: { '@type': 'ImageObject', url: absoluteUrl('/icon-512.png'), width: 512, height: 512 } },
     image: a.imageUrl ? [a.imageUrl] : [absoluteUrl(`/api/og?lang=${a.language}&slug=${encodeURIComponent(a.slug)}`)],
     isAccessibleForFree: true,
     citation: a.sources.map((s) => ({ '@type': 'CreativeWork', name: s.name, url: s.url })),

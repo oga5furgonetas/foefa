@@ -321,3 +321,8 @@ button, input, select, textarea { font: inherit; color: inherit; }
 /* Fila de destacadas bajo la principal. */
 .lead-row { margin-top: 22px; padding-top: 18px; border-top: 1px solid var(--rule); }
 .lead-row .card .h { font-size: 18px; }
+
+/* Invitación al canal de Telegram al acabar la noticia. */
+.follow-cta { display: flex; align-items: center; gap: 8px; margin: 26px 0 8px; padding: 14px 16px; border: 1px solid var(--rule-strong); border-left: 4px solid #229ed9; border-radius: 3px; font-size: 15px; font-weight: 600; color: var(--ink); background: var(--paper-2); }
+.follow-cta:hover { text-decoration: none; border-color: #229ed9; }
+.follow-cta .muted { font-weight: 400; }
