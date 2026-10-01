@@ -42,7 +42,7 @@ export type FoundImage = {
 };
 
 /** Nombre que buscar en Wikipedia. `place`: topónimo del diccionario (no hace falta comprobar el tema). */
-export type ImageCandidate = { name: string; lang: string; place: boolean };
+export type ImageCandidate = { name: string; lang: string; place: boolean; trusted?: boolean };
 
 type Fetch = typeof fetch;
 const FREE_LICENSE = /^(cc0|public domain|pd\b|cc[ -]by(-sa)?[ -]\d)/i;
@@ -137,9 +137,10 @@ export async function findStoryImage(candidates: ImageCandidate[], opts: FindOpt
       const page = wp?.query?.pages?.[0];
       if (!page || page.missing || !page.pageimage || page.pageprops?.disambiguation !== undefined) continue;
       const isPlace = !!page.coordinates?.length;
-      if (opts.placesOnly && !isPlace) continue;
+      // Los edificios elegidos a mano (parlamentos) valen aunque su página no traiga coordenadas.
+      if (opts.placesOnly && !isPlace && !cand.trusted) continue;
       const title = String(page.title);
-      if (!(cand.place && isPlace)) {
+      if (!cand.trusted && !(cand.place && isPlace)) {
         // Protagonista: nombre propio de verdad y página que habla de lo mismo que la noticia.
         // Una sola palabra vale si Wikipedia la lleva a un nombre completo que la contiene
         // («Milei» → «Javier Milei»), no a otra cosa («Hombre» → «Ser humano»).
@@ -210,6 +211,15 @@ const CAPITALS: Record<string, string> = {
 const CAPITAL_SECTIONS = new Set(['politics', 'economy', 'business', 'society', 'world']);
 
 /**
+ * Último recurso para una noticia de política sin persona ni lugar en el titular («PSOE y Sumar
+ * alcanzan un acuerdo…», 01-10-2026): el parlamento del país (título de la Wikipedia en inglés).
+ */
+const PARLIAMENTS: Record<string, string> = {
+  ES: 'Palacio de las Cortes', US: 'United States Capitol', MX: 'Legislative Palace of San Lázaro', AR: 'Palace of the Argentine National Congress',
+  PE: 'Legislative Palace (Peru)', BR: 'National Congress Palace', GB: 'Palace of Westminster', FR: 'Palais Bourbon', IT: 'Palazzo Montecitorio',
+};
+
+/**
  * Candidatos de una noticia, en orden: primero los protagonistas del titular por su posición (el
  * sujeto suele ir delante), probando ese nombre en todos los idiomas antes de pasar al siguiente
  * («Trump» antes que «Ormuz»); luego los lugares del titular y, por último, los del resumen que
@@ -269,8 +279,13 @@ export function imageCandidates(
       if (p) push(fromSummary, p);
     }
   });
+  // Último recurso, por el país de la noticia: su parlamento (política) o su capital (economía, sociedad).
+  const fallback: Ranked[] = [];
+  const cc = opts.countryCode ?? '';
+  if (opts.categoryId === 'politics' && PARLIAMENTS[cc]) push(fallback, { name: PARLIAMENTS[cc], lang: 'en', place: true, trusted: true, rank: 2 });
+  if (capitals && opts.categoryId && CAPITALS[cc]) push(fallback, { name: CAPITALS[cc], lang: 'en', place: true, rank: 3 });
   const byRank = (x: Ranked, y: Ranked) => x.rank - y.rank;
-  return [...subjects.sort(byRank), ...places.sort(byRank), ...fromSummary].map(({ name, lang, place }) => ({ name, lang, place }));
+  return [...subjects.sort(byRank), ...places.sort(byRank), ...fromSummary, ...fallback].map(({ name, lang, place, trusted }) => ({ name, lang, place, ...(trusted ? { trusted } : {}) }));
 }
 
 /**
@@ -291,7 +306,7 @@ export async function attachStoryImage(db: Db, storyId: number, opts: { fetchImp
   const sensitive = arts.some((a) => SENSITIVE.test(`${a.headline} ${a.summary ?? ''}`));
   const sources = [...new Set(arts.flatMap((a) => a.sourcesList.map((s) => s.name)))];
   const cands = imageCandidates(ordered, { context: storyText, exclude: sources, categoryId: arts[0].categoryId, countryCode: arts[0].countryCode });
-  const found = await findStoryImage(cands.slice(0, 8), { fetchImpl: opts.fetchImpl, storyText, placesOnly: sensitive });
+  const found = await findStoryImage(cands.slice(0, 10), { fetchImpl: opts.fetchImpl, storyText, placesOnly: sensitive });
   if (!found) return 'none';
   const caption = Object.fromEntries(arts.map((a) => [a.language, found.titles[a.language] ?? found.title]));
   const [m] = await db
