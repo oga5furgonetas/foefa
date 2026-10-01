@@ -326,3 +326,8 @@ button, input, select, textarea { font: inherit; color: inherit; }
 .follow-cta { display: flex; align-items: center; gap: 8px; margin: 26px 0 8px; padding: 14px 16px; border: 1px solid var(--rule-strong); border-left: 4px solid #229ed9; border-radius: 3px; font-size: 15px; font-weight: 600; color: var(--ink); background: var(--paper-2); }
 .follow-cta:hover { text-decoration: none; border-color: #229ed9; }
 .follow-cta .muted { font-weight: 400; }
+
+/* Invitación a las alertas de última hora. */
+.alerts-cta { border-left-color: var(--accent); flex-wrap: wrap; }
+.alerts-cta .alerts-text { flex: 1 1 220px; }
+.alerts-close { background: none; border: 0; font-size: 20px; line-height: 1; color: var(--muted); cursor: pointer; padding: 0 4px; }

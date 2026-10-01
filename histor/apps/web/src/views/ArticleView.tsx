@@ -9,11 +9,13 @@ import { href } from '@histor/core/i18n/routes';
 import { findPlaces } from '@histor/core/text/entities';
 import { absoluteUrl } from '@histor/core/seo/index';
 import { telegramChannel } from '@histor/core/social/index';
+import { env } from '@histor/core/env';
 import type { getArticleDetail } from '@histor/core/services/content';
 import { NOTES } from '@histor/core/writing/notes';
 import { Badges } from '@/components/Badges';
 import { StoryCard } from '@/components/Cards';
 import { ArticleActions } from '@/components/client/ArticleActions';
+import { AlertsCta } from '@/components/client/AlertsCta';
 import { ReadTracker } from '@/components/client/ReadTracker';
 import { fmtDateTime, fmtTime } from '@/lib/format';
 
@@ -190,7 +192,8 @@ export function ArticleView({ data, lang, d, tz, experiment }: { data: ArticleDe
           })}
         </div>
 
-        {/* Al acabar de leer, el canal de Telegram del idioma (si lo hay): así vuelve el lector. */}
+        {/* Al acabar de leer: las alertas de última hora y el canal de Telegram (así vuelve el lector). */}
+        <AlertsCta vapidKey={env().VAPID_PUBLIC_KEY ?? null} label={d.account.alerts} pitch={d.account.alertsPitch} enable={d.account.enable} />
         {telegram && (
           <a className="follow-cta ui" href={`https://t.me/${telegram}`} rel="noopener" target="_blank">
             <span aria-hidden>✈</span> {d.footer.telegram} <span className="muted">· t.me/{telegram}</span>
