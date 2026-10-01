@@ -8,7 +8,7 @@ import { describe, expect, it } from 'vitest';
 import { DEFAULT_EDITORIAL_SETTINGS } from '../../src/config/settings';
 import type { ArticleBlock } from '../../src/db/schema';
 import { claimRef, writeDeterministic } from '../../src/writing/deterministic';
-import type { Draft } from '../../src/writing/draft';
+import { bodyText, type Draft } from '../../src/writing/draft';
 import { buildFactSheet } from '../../src/writing/factsheet';
 import { extractArticleText, parseRss } from '../../src/ingest/parsers';
 import { compressClaim } from '../../src/writing/compress';
@@ -44,6 +44,8 @@ function qc(draft: Draft, story = granadaStory()) {
     storyId: 1,
     forbiddenSourceIds: new Set(),
     now: NOW,
+    // Las fichas de prueba son de dos o tres frases: el mínimo de palabras se prueba aparte.
+    minBodyWords: 0,
   });
 }
 
@@ -74,7 +76,9 @@ describe('redactor determinista', () => {
     const fs = buildFactSheet(analysis, items, new Map([[d1.id, d1]]), { language: 'es' });
     const d = writeDeterministic(fs, { countryCode: 'ES' })!;
     expect(d.isDeveloping).toBe(true);
-    expect(d.headline).toMatch(/según Diario Norte/);
+    // Sin la fuente en el titular (01-10-2026): la lleva el texto y la etiqueta «en desarrollo».
+    expect(d.headline).not.toMatch(/según/);
+    expect(bodyText(d.body)).toMatch(/según Diario Norte/);
     expect(validateDraft(d, fs).issues).toEqual([]);
   });
 
@@ -182,9 +186,11 @@ describe('plantilla de terremotos (dato estructurado de una fuente oficial)', ()
     return writeDeterministic(fs, { timeZone: 'UTC' })!;
   }
 
-  it('una sola fuente: el titular también va atribuido', () => {
-    expect(quake('es').headline).toBe('Terremoto de magnitud 5,1 cerca de Tadine, New Caledonia, según USGS');
-    expect(quake('en').headline).toMatch(/, according to USGS$/);
+  it('una sola fuente: la agencia va en la entrada, no en el titular, y la noticia va «en desarrollo»', () => {
+    expect(quake('es').headline).toBe('Terremoto de magnitud 5,1 cerca de Tadine, New Caledonia');
+    expect(quake('en').headline).not.toMatch(/according to/);
+    expect(quake('es').isDeveloping).toBe(true);
+    expect((quake('es').body[0] as { text: string }).text).toMatch(/^USGS/);
   });
 
   it('la fecha lleva la preposición de cada idioma, no «a las 26 de septiembre»', () => {

@@ -34,6 +34,10 @@ const SERVICE = /(^(comprobar|horóscopo|horoscopo|crucigrama|sudoku|autodefinid
  * «España vs Croacia EN VIVO: ¿a qué hora juegan y dónde ver…?», «siga el minuto a minuto»,
  * «Posible alineación de Perú vs. México» (30-09-2026). Son servicio, no noticias.
  */
+/** Un titular que es solo una fecha: «Miércoles 30 septiembre de 2026» (agenda de EFE, 01-10-2026). */
+const DATE_ONLY =
+  /^(lunes|martes|miércoles|jueves|viernes|sábado|domingo|monday|tuesday|wednesday|thursday|friday|saturday|sunday|lundi|mardi|mercredi|jeudi|vendredi|samedi|dimanche|lunedì|martedì|mercoledì|giovedì|venerdì|sabato|domenica|segunda-feira|terça-feira|quarta-feira|quinta-feira|sexta-feira|sábado|montag|dienstag|mittwoch|donnerstag|freitag|samstag|sonntag),?\s+\d{1,2}\.?\s+(de\s+)?\p{L}+(\s+(de\s+)?\d{4})?\s*$/iu;
+
 const MATCH_GUIDE =
   /(\b(dónde ver|donde ver|cómo ver|como ver|dónde y cuándo|a qué hora (juega|juegan|es|empieza|será)|horario y (dónde|cómo)|minuto a minuto|en vivo y en directo|ver (el partido )?(gratis |en )?online|alineaci(ón|ones) (probables?|confirmadas?)|posible alineación|how to watch|where to watch|live stream|wo läuft|im tv und stream|où regarder|dove vedere|onde assistir|como assistir)\b|\bvs\.? [^:]{2,40}(en vivo|en directo|live)\b)/i;
 
@@ -45,6 +49,7 @@ export function nonNewsReason(title: string, url: string): string | null {
   if (SPONSORED.test(t)) return 'no es noticia (publicidad o contenido patrocinado)';
   if (SERVICE.test(t)) return 'no es noticia (servicio: sorteos, horóscopo o pasatiempos)';
   if (MATCH_GUIDE.test(t)) return 'no es noticia (guía de partido o directo minuto a minuto)';
+  if (DATE_ONLY.test(t)) return 'no es noticia (agenda o efemérides del día)';
   let path = '';
   try {
     path = new URL(url).pathname;

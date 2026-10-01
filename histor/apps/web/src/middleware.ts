@@ -99,12 +99,13 @@ export function middleware(req: NextRequest) {
   const { pathname } = req.nextUrl;
   const dev = process.env.NODE_ENV !== 'production';
 
-  // Dominio propio: quien entre por la dirección técnica (*.fly.dev) va con un 301 al dominio
-  // canónico (PUBLIC_BASE_URL), para que enlaces viejos sigan funcionando y Google concentre todo
-  // en uno. La API y las comprobaciones de salud no se redirigen.
+  // Dominio propio: quien entre por la dirección técnica (*.fly.dev) o por www. va con un 301 al
+  // dominio canónico (PUBLIC_BASE_URL), para que enlaces viejos sigan funcionando y Google
+  // concentre todo en uno. La API y las comprobaciones de salud no se redirigen.
   const canonical = canonicalHost();
   const host = (req.headers.get('host') ?? '').toLowerCase();
-  if (canonical && host.endsWith('.fly.dev') && host !== canonical && !pathname.startsWith('/api/')) {
+  const alias = host.endsWith('.fly.dev') || host === `www.${canonical}`;
+  if (canonical && alias && host !== canonical && !pathname.startsWith('/api/')) {
     const url = new URL(req.nextUrl.pathname + req.nextUrl.search, `https://${canonical}`);
     return NextResponse.redirect(url, 301);
   }

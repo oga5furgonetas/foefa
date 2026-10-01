@@ -42,6 +42,8 @@ export const editorialSettingsSchema = z.object({
   maxVerbatimWords: z.number().int().min(8).max(60).default(30),
   /** Proporción máxima del cuerpo que puede coincidir con una sola fuente. */
   maxSourceOverlap: z.number().min(0.1).max(0.9).default(0.5),
+  /** Palabras mínimas de texto propio para publicar (una noticia de dos líneas no se publica). */
+  minBodyWords: z.number().int().min(0).max(400).default(50),
   /** Idiomas en que se publica (si hay material o traductor). */
   publishLanguages: z.array(z.string()).default(['es', 'en', 'de', 'fr', 'it', 'pt']),
   /** Publicación automática activada (si false, todo queda en cola para un editor). */

@@ -27,8 +27,13 @@ import { buildFactSheet, type FactSheet } from '../writing/factsheet';
 import { aiMayUse, translateDraft, writeWithLlm } from '../writing/llm';
 import { notesFor } from '../writing/notes';
 import { PHRASES } from '../writing/phrases';
-import { runQualityChecks, type QualityReport } from '../writing/quality';
+import { ownBodyWords, runQualityChecks, type QualityReport } from '../writing/quality';
 import type { VerifiedStory } from './verify';
+
+/** Por debajo de estas palabras de texto propio, el borrador sin IA se considera corto. */
+const AI_SHORT_WORDS = 90;
+/** Cuánto por debajo de AI_MIN_IMPORTANCE se usa la IA para una noticia que sin ella queda corta. */
+const AI_SHORT_MARGIN = 0.08;
 
 export type PublishResult = { storyId: number; published: string[]; updated: string[]; held: boolean; retracted: boolean; reports: Record<string, QualityReport> };
 
@@ -68,18 +73,24 @@ export async function publishStory(db: Db, v: VerifiedStory, settings: Editorial
   const langs = settings.publishLanguages.filter((l) => (ACTIVE_LANGUAGES as string[]).includes(l));
   const drafts = new Map<string, { draft: Draft; fs: FactSheet; report: QualityReport }>();
   const failed: Record<string, QualityReport> = {};
-  // Con un cupo gratuito de IA, se gasta en las historias que más importan (AI_MIN_IMPORTANCE).
-  const aiAllowed = aiMayUse(v.items) && importanceScore(analysis.momentum, analysis.confidence) >= env().AI_MIN_IMPORTANCE;
+  // Con un cupo gratuito de IA, se gasta en las historias que más importan (AI_MIN_IMPORTANCE) y,
+  // un escalón por debajo, en las que sin IA se quedan cortas: el redactor sin IA solo junta frases
+  // de las fuentes de hasta 28 palabras, y con las de agencia (35-60) la noticia salía de dos líneas
+  // (01-10-2026). Si el texto sin IA ya es largo, no hace falta gastar cupo.
+  const importance = importanceScore(analysis.momentum, analysis.confidence);
+  const aiAllowed = aiMayUse(v.items) && importance >= env().AI_MIN_IMPORTANCE;
+  const aiForShort = aiMayUse(v.items) && importance >= env().AI_MIN_IMPORTANCE - AI_SHORT_MARGIN;
 
   for (const lang of langs) {
     const fs = buildFactSheet(analysis, v.items, v.sources, { language: lang, storyId: story.id, claimDbIds: v.keyToId });
     const writeOpts = { countryCode: edition && edition.defaultLanguage === lang ? edition.code : null, timeZone: edition?.timezone };
     const candidates: Draft[] = [];
-    if (aiAllowed && providerFor('writing')) {
+    const det = writeDeterministic(fs, writeOpts);
+    const short = !det || ownBodyWords(det) < AI_SHORT_WORDS;
+    if ((aiAllowed || (aiForShort && short)) && providerFor('writing')) {
       const ai = await writeWithLlm(db, fs, { ...writeOpts, storyId: story.id });
       if (ai) candidates.push(ai);
     }
-    const det = writeDeterministic(fs, writeOpts);
     if (det) candidates.push(det);
     for (const draft of candidates) {
       const report = runQualityChecks({
@@ -94,6 +105,7 @@ export async function publishStory(db: Db, v: VerifiedStory, settings: Editorial
         storyId: story.id,
         forbiddenSourceIds: forbidden,
         now,
+        minBodyWords: story.isDemo ? 0 : undefined,
       });
       await db.insert(qualityReports).values({ storyId: story.id, language: lang, passed: report.passed, checks: report.checks, writer: draft.writer });
       if (report.passed) {
@@ -126,6 +138,7 @@ export async function publishStory(db: Db, v: VerifiedStory, settings: Editorial
         storyId: story.id,
         forbiddenSourceIds: forbidden,
         now,
+        minBodyWords: story.isDemo ? 0 : undefined,
         isTranslation: true,
       });
       await db.insert(qualityReports).values({ storyId: story.id, language: lang, passed: report.passed, checks: report.checks, writer: `${tr.writer} (desde ${srcLang})` });

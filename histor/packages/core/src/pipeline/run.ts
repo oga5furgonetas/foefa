@@ -3,10 +3,10 @@
  * FUENTES → DISCOVERY → NORMALIZE → CLUSTER → VERIFY → EDITORIAL → QUALITY → PUBLISH → (MONITOR vía next_check_at)
  * Cada etapa deja su registro en pipeline_runs (para el panel y las métricas).
  */
-import { and, eq, inArray, isNotNull, lt } from 'drizzle-orm';
+import { and, eq, gte, inArray, isNotNull, lt, sql } from 'drizzle-orm';
 import { logger } from '../observability/index';
 import type { Db } from '../db/client';
-import { analyticsEvents, jobs, pipelineRuns, rawItems } from '../db/schema';
+import { aiUsage, analyticsEvents, jobs, pipelineRuns, rawItems } from '../db/schema';
 import type { PoliteFetcher } from '../ingest/fetcher';
 import { enqueue } from '../jobs/queue';
 import { getEditorialSettings } from '../services/settings';
@@ -43,6 +43,8 @@ export type TickStats = {
   updated: number;
   held: number;
   retracted: number;
+  /** Llamadas a la IA en este ciclo (correctas / fallidas), tokens gastados y el último error. */
+  ai?: { ok: number; failed: number; tokens: number; error?: string };
 };
 
 export async function runPipelineOnce(db: Db, opts: { fetcher?: PoliteFetcher; now?: Date; ingest?: boolean; onlyDemo?: boolean; ingestLimit?: number } = {}): Promise<TickStats> {
@@ -83,6 +85,18 @@ export async function runPipelineOnce(db: Db, opts: { fetcher?: PoliteFetcher; n
     Object.assign(stats, { published, updated, held, retracted });
     return { published, updated, held, retracted };
   });
+  // Uso de la IA del ciclo, en el registro: la base de producción no se consulta a mano.
+  const [ai] = await db
+    .select({ ok: sql<number>`count(*) filter (where ${aiUsage.ok})`, failed: sql<number>`count(*) filter (where not ${aiUsage.ok})`, tokens: sql<number>`coalesce(sum(${aiUsage.inputTokens} + ${aiUsage.outputTokens}), 0)` })
+    .from(aiUsage)
+    .where(gte(aiUsage.ts, now));
+  if (ai && Number(ai.ok) + Number(ai.failed) > 0) {
+    stats.ai = { ok: Number(ai.ok), failed: Number(ai.failed), tokens: Number(ai.tokens) };
+    if (stats.ai.failed) {
+      const [last] = await db.select({ error: aiUsage.error }).from(aiUsage).where(and(gte(aiUsage.ts, now), eq(aiUsage.ok, false))).orderBy(sql`${aiUsage.ts} desc`).limit(1);
+      if (last?.error) stats.ai.error = last.error.slice(0, 160);
+    }
+  }
   return stats;
 }
 

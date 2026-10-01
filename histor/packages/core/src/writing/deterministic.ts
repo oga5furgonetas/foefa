@@ -16,6 +16,7 @@ import { regionByCode } from '../config/regions';
 import { localeFor } from '../config/languages';
 import { fold, truncate } from '../text/normalize';
 import { compressClaim, lowerFirst } from './compress';
+import { plainWords } from './quality';
 import type { Draft } from './draft';
 import type { FactClaim, FactSheet } from './factsheet';
 import { listJoin, PHRASES } from './phrases';
@@ -24,13 +25,17 @@ import { PROMO } from '../text/nonnews';
 /** `skeleton`: solo para la IA. Si no hay titular ni entrada publicables, se monta igualmente el armazón
  * (recuadro, fuentes, cronología) con la primera afirmación; la IA pone el titular y el texto, que se
  * validan frase a frase. El armazón no se publica nunca tal cual. */
-export type WriteOptions = { maxWords?: number; timeZone?: string; countryCode?: string | null; skeleton?: boolean };
+export type WriteOptions = { maxWords?: number; bodyMaxWords?: number; timeZone?: string; countryCode?: string | null; skeleton?: boolean };
 
 export function writeDeterministic(fs: FactSheet, opts: WriteOptions = {}): Draft | null {
   const lang = fs.language;
   const P = PHRASES[lang];
   if (!P) return null;
   const maxWords = opts.maxWords ?? 22;
+  // Frases del cuerpo: hasta 28 palabras (el tope de copia literal es 30). Con 22, casi todas las
+  // frases de agencia (25-45 palabras) se descartaban y la noticia se quedaba en dos líneas
+  // (01-10-2026: mediana de 42 palabras de texto, 18 de 26 noticias por debajo de 50).
+  const bodyMaxWords = opts.bodyMaxWords ?? 28;
   const locale = localeFor(lang, opts.countryCode ?? null);
   const tz = opts.timeZone ?? (opts.countryCode ? country(opts.countryCode)?.timezone : undefined) ?? 'UTC';
   const nf = new Intl.NumberFormat(locale, { maximumFractionDigits: 2 });
@@ -53,8 +58,8 @@ export function writeDeterministic(fs: FactSheet, opts: WriteOptions = {}): Draf
     const place = q.placeName ? P.near(q.placeName) : '';
     const mag = nf.format(q.magnitude);
     headline = P.earthquake.headline(mag, place).trim();
-    // Sin verificar (una sola fuente), también el titular va atribuido: «…, según USGS».
-    if (developing) headline = stripPeriod(P.according(headline, q.agency));
+    // Sin la agencia en el titular (01-10-2026): la entrada la nombra y, con una sola fuente, la
+    // noticia va «en desarrollo».
     const lead = P.earthquake.lead(capitalize(q.agency), timeFmt.format(q.time), mag, place, q.depthKm == null ? '—' : nf.format(q.depthKm));
     body.push({ type: 'p', text: lead, claimIds: [] });
     boilerplate.push(lead);
@@ -99,10 +104,10 @@ export function writeDeterministic(fs: FactSheet, opts: WriteOptions = {}): Draf
       const short = compressClaim(c.text, c.isHeadline ? 22 : 16, { commaCut: false });
       // Un titular tiene que entenderse solo.
       if (!short || !standsAlone(short)) continue;
-      // Atribuido: con dos fuentes si cabe; si no, con una («…, según Heraldo»). Con «según X y Y»
-      // muchos titulares pasaban de 120 caracteres y la noticia se retenía entera (30-09-2026).
-      const withSources = (n: number) => stripPeriod(P.according(short, listJoin(lang, c.attribution.slice(0, n))));
-      const h = plainClaim(c) ? short : [withSources(2), withSources(1)].find((x) => x.length <= 120) ?? withSources(1);
+      if (!c.isHeadline && !bodyHeadlineOk(short)) continue;
+      // Sin la fuente en el titular («…, según Infobae»): la atribución va en el texto y, si no está
+      // confirmado, la noticia lleva la etiqueta «En desarrollo» junto al titular (01-10-2026).
+      const h = short;
       if (h.length <= 150 && goodHeadline(h)) {
         headline = h;
         headlineClaim = c;
@@ -120,10 +125,14 @@ export function writeDeterministic(fs: FactSheet, opts: WriteOptions = {}): Draf
   const leadOptions = [...pool.filter((c) => !c.isHeadline), ...pool.filter((c) => c.isHeadline && c.key !== headlineClaim?.key)].filter((c) => standsAlone(c.text) && usableSentence(c.text));
   let lead: { c: FactClaim; text: string; score: number } | null = null;
   leadOptions.forEach((c, i) => {
-    const compressed = compressClaim(c.text, maxWords);
+    const compressed = compressClaim(c.text, bodyMaxWords);
     if (!compressed) return;
     const overlap = coverage(hWords, keyWords(compressed));
     if (overlap > 0.85) return; // sería el titular otra vez con otras palabras
+    // Tiene que contar lo mismo que el titular: en la noticia de Swiftair condenada por el accidente
+    // de Malí la entrada era «Los dos aviones de la Fuerza Aérea francesa volaron a unos 50 metros
+    // del aparato de Air France», de otra historia (01-10-2026).
+    if (overlap < 0.2) return;
     // A igualdad, la mejor respaldada (van por orden) y, antes que nada, lo confirmado. Mejor de
     // otra pieza que el titular: titular y entrada de la misma fuente eran ya el 71 % del texto y
     // el control legal retenía la noticia (30-09-2026).
@@ -152,49 +161,47 @@ export function writeDeterministic(fs: FactSheet, opts: WriteOptions = {}): Draf
   // ── Lo que se sabe (reparto entre fuentes) ──
   const used = new Set<string>(leadClaim ? [leadClaim.key] : []);
   const perSource = new Map<string, number>();
-  const known: { text: string; claimIds: number[]; plain: boolean }[] = [];
+  const known: { text: string; raw: string; claimIds: number[]; plain: boolean }[] = [];
   // También en las verificadas: primero lo confirmado (como hecho) y después los detalles que
   // da cada fuente, siempre atribuidos («…, según The Guardian»). Sin ellos, una noticia
   // verificada se quedaba en una o dos frases aunque hubiera leído los artículos completos.
   // Los titulares de las demás fuentes repiten lo mismo con otras palabras: fuera del cuerpo.
   const bodyClaims = [...fs.confirmed, ...fs.attributed].filter((c) => !c.isHeadline);
   const knownPool = bodyClaims.length >= 2 ? bodyClaims : [...fs.confirmed, ...fs.attributed];
-  // Palabras tomadas de cada pieza (el control legal mide el solapamiento pieza a pieza): ninguna
-  // puede pasar del 45 % del texto. Si no, 24 de 50 historias se retenían por «el 55 % del texto
-  // coincide con una sola fuente» (30-09-2026).
-  const wordsFrom = new Map<number, number>();
-  let totalWords = 0;
-  const countWords = (s: string) => s.split(/\s+/).filter(Boolean).length;
+  // Hilo de la noticia: cada frase comparte al menos una palabra con lo ya escrito (titular, entrada
+  // y frases anteriores). Si en la historia se coló otra noticia parecida, sus frases no enlazan.
+  const thread = new Set([...hWords, ...(body[0] && body[0].type === 'p' ? keyWords(body[0].text) : [])]);
+  // Palabras tomadas de cada TEXTO de fuente (el control legal mide el solapamiento con cada uno):
+  // ninguno puede pasar del 45 % del texto. Una nota de agencia que reproducen tres periódicos
+  // está en los tres textos: se cuenta en todos, no solo en la pieza de la que sale la frase (si
+  // no, «el 67 % del texto coincide con una sola fuente», 01-10-2026).
+  const shares = new SourceShares(fs.sourceTexts.map((s) => s.text));
   // El titular y la entrada también cuentan (el control legal mide todo el texto publicado).
-  const counted: [FactClaim | null, string][] = [
-    [headlineClaim, headline],
-    [leadClaim, body[0] && body[0].type === 'p' ? body[0].text : (leadClaim?.text ?? '')],
-  ];
-  for (const [c, text] of counted) {
-    if (!c) continue;
-    const w = countWords(text);
-    wordsFrom.set(c.itemId, (wordsFrom.get(c.itemId) ?? 0) + w);
-    totalWords += w;
-  }
+  shares.add(headline);
+  if (body[0] && body[0].type === 'p') shares.add(body[0].text);
   for (const c of knownPool) {
     if (known.length >= 10) break;
     if (used.has(c.key) || nearDuplicate(c, [...used].map((k) => fs.claims.find((x) => x.key === k)!).filter(Boolean))) continue;
     const src = c.attribution[0] ?? '';
     if ((perSource.get(src) ?? 0) >= 3) continue;
-    const compressed = compressClaim(c.text, maxWords);
+    const compressed = compressClaim(c.text, bodyMaxWords);
     // Frases que dependen de la anterior de su fuente («Mas os maiores escritórios…»), citas
     // con las comillas sin cerrar o frases que se quedan colgando: fuera.
     if (!compressed || !selfContained(compressed) || !usableSentence(compressed)) continue;
-    const w = countWords(compressed);
-    const mine = wordsFrom.get(c.itemId) ?? 0;
-    if (totalWords + w > 40 && (mine + w) / (totalWords + w) > 0.45) continue;
-    wordsFrom.set(c.itemId, mine + w);
-    totalWords += w;
+    if (!shares.fits(compressed)) continue;
+    const kw = keyWords(compressed);
+    if (![...kw].some((w) => thread.has(w))) continue;
+    const plain = c.status === 'supported' && !developing;
+    // Dos frases literales seguidas de la misma fuente forman un tramo copiado de más de 30
+    // palabras si también van seguidas en el original: se espera a que haya otra entre medias.
+    const prev = known[known.length - 1];
+    if (plain && prev?.plain && shares.sameHolder(prev.raw, compressed)) continue;
+    shares.add(compressed);
+    for (const w of kw) thread.add(w);
     used.add(c.key);
     perSource.set(src, (perSource.get(src) ?? 0) + 1);
-    const plain = c.status === 'supported' && !developing;
     const text = plain ? `${compressed}.` : P.according(compressed, listJoin(lang, c.attribution.slice(0, 2)));
-    known.push({ text, claimIds: [claimRef(c)], plain });
+    known.push({ text, raw: compressed, claimIds: [claimRef(c)], plain });
   }
   // Texto corrido, no una lista: hasta dos hechos por párrafo, como en un periódico, sin mezclar
   // en el mismo párrafo lo confirmado con lo atribuido (cada frase debe poder comprobarse sola).
@@ -365,7 +372,7 @@ const CONNECTOR_START =
   /^(es que|de hecho|precisamente|siguiendo esta línea|en este sentido|en esta línea|por su parte|por otro lado|por otra parte|no obstante|ahora bien|a su vez|en declaraciones al medio citado|en declaraciones a este medio|in fact|meanwhile|in addition|moreover|furthermore|by contrast|on the other hand|indeed|still,|inoltre|tuttavia|infatti|intanto|in questo senso|en effet|par ailleurs|toutefois|néanmoins|de plus|dans ce sens|außerdem|zudem|jedoch|indes|dennoch|darüber hinaus|além disso|no entanto|por sua vez|de fato|nesse sentido)\b/i;
 
 const STRICT_ANAPHORA =
-  /^(su|sus|este|esta|estos|estas|ese|esa|esos|esas|dicho|dicha|dichos|dichas|aquel|aquella|él|ella|ellos|ellas|his|her|their|its|this|these|that|those|such|he|she|they|it|sein|seine|seinen|seiner|ihr|ihre|ihren|dieser|diese|dieses|jener|er|sie|son|sa|ses|leur|leurs|ce|cet|cette|ces|elle|ils|elles|lui|suo|sua|suoi|sue|loro|questo|questa|questi|queste|quel|quella|lei|seu|seus|suas|esse|essa|esses|essas|aquele|aquela|ele|ela|eles|elas)\b/i;
+  /^(ambos|ambas|both|beide|beiden|les deux|entrambi|entrambe|os dois|as duas|su|sus|este|esta|estos|estas|ese|esa|esos|esas|dicho|dicha|dichos|dichas|aquel|aquella|él|ella|ellos|ellas|his|her|their|its|this|these|that|those|such|he|she|they|it|sein|seine|seinen|seiner|ihr|ihre|ihren|dieser|diese|dieses|jener|er|sie|son|sa|ses|leur|leurs|ce|cet|cette|ces|elle|ils|elles|lui|suo|sua|suoi|sue|loro|questo|questa|questi|queste|quel|quella|lei|seu|seus|suas|esse|essa|esses|essas|aquele|aquela|ele|ela|eles|elas)\b/i;
 
 const TIME_AFTER_DEMONSTRATIVE =
   /^\S+\s(lunes|martes|miércoles|jueves|viernes|sábado|domingo|fin de semana|año|mes|semana|mañana|tarde|noche|verano|invierno|otoño|primavera|monday|tuesday|wednesday|thursday|friday|saturday|sunday|week|weekend|year|month|morning|afternoon|evening|summer|winter|lundi|mardi|mercredi|jeudi|vendredi|samedi|dimanche|week-end|matin|soir|année|mois|lunedì|martedì|mercoledì|giovedì|venerdì|sabato|domenica|anno|mese|fine settimana|segunda|terça|quarta|quinta|sexta|ano|mês|fim de semana|montag|dienstag|mittwoch|donnerstag|freitag|samstag|sonntag|woche|jahr|monat|wochenende|morgen|abend)\b/i;
@@ -392,7 +399,29 @@ export function goodHeadline(h: string): boolean {
   const count = (re: RegExp) => (t.match(re) ?? []).length;
   if (count(/«/g) !== count(/»/g) || count(/“/g) !== count(/”/g) || count(/"/g) % 2 !== 0) return false;
   if (/[:;,]$/.test(t)) return false;
+  // Una fecha no es un titular: «Miércoles 30 septiembre de 2026, según EFE» (01-10-2026).
+  const content = t
+    .replace(/,?\s+(según|according to|laut|selon|secondo|segundo)\s.*$/i, '')
+    .split(/\s+/)
+    .filter((w) => !DATE_WORD.test(w.replace(/[.,:;]$/, '')));
+  if (content.length < 3) return false;
   return true;
+}
+
+const DATE_WORD =
+  /^(\d+|de|del|of|the|le|la|il|da|do|em|en|am|vom|lunes|martes|miércoles|jueves|viernes|sábado|domingo|enero|febrero|marzo|abril|mayo|junio|julio|agosto|septiembre|setiembre|octubre|noviembre|diciembre|monday|tuesday|wednesday|thursday|friday|saturday|sunday|january|february|march|april|may|june|july|august|september|october|november|december|lundi|mardi|mercredi|jeudi|vendredi|samedi|dimanche|janvier|février|mars|avril|mai|juin|juillet|août|septembre|octobre|novembre|décembre|lunedì|martedì|mercoledì|giovedì|venerdì|sabato|domenica|gennaio|febbraio|aprile|maggio|giugno|luglio|settembre|ottobre|dicembre|segunda-feira|terça-feira|quarta-feira|quinta-feira|sexta-feira|janeiro|fevereiro|março|maio|junho|julho|setembro|outubro|novembro|dezembro|montag|dienstag|mittwoch|donnerstag|freitag|samstag|sonntag|januar|februar|märz|juni|juli|oktober|dezember)$/i;
+
+/**
+ * Una frase del cuerpo que hace de titular tiene que nombrar algo (un nombre propio o una cifra)
+ * y no empezar por cuándo pasó: «Ambos equipos tuvieron que esperar hasta la última semana» o
+ * «Este martes 29 de septiembre se sentaron juntos con Pablo Motos…» no dicen de qué va la
+ * noticia (portada del 01-10-2026). Los titulares de las fuentes no pasan por aquí.
+ */
+export function bodyHeadlineOk(h: string): boolean {
+  const t = h.trim();
+  if (/^(este|esta|el pasado|la pasada|hoy|ayer|anoche|esta mañana|this|last|earlier|today|yesterday|on (monday|tuesday|wednesday|thursday|friday|saturday|sunday)|ce|cette|hier|aujourd'hui|questo|questa|ieri|oggi|stamattina|nesta|neste|ontem|hoje|am|gestern|heute|diesen|dieser)\b/i.test(t)) return false;
+  const rest = t.split(/\s+/).slice(1);
+  return rest.some((w) => /^\p{Lu}/u.test(w) || /\d/.test(w));
 }
 
 /** «La medida busca asegurar la zona…»: ¿qué medida? Remite a lo que la fuente dijo antes. */
@@ -424,10 +453,6 @@ export function usableSentence(s: string): boolean {
 
 /** Cifras que se entienden solas en «Datos clave». «Porcentaje: 5» o «Importe: 54.000 millones» sin decir de qué, no. */
 const SELF_EXPLAINING_UNITS = new Set(['deaths', 'injured', 'missing', 'evacuated', 'arrested', 'magnitude', 'votes', 'seats', 'homes', 'jobs', 'flights', 'vehicles', 'hectares']);
-
-function stripPeriod(s: string): string {
-  return s.replace(/\.$/, '');
-}
 
 function capitalize(s: string): string {
   return s.charAt(0).toUpperCase() + s.slice(1);
@@ -466,3 +491,48 @@ function nearDuplicate(c: FactClaim, others: FactClaim[]): boolean {
 }
 
 export { lowerFirst };
+
+function ngrams(words: string[], n: number): Set<string> {
+  const out = new Set<string>();
+  for (let i = 0; i + n <= words.length; i++) out.add(words.slice(i, i + n).join(' '));
+  return out;
+}
+
+/**
+ * Reparto del texto escrito entre los textos de las fuentes, como lo mide el control legal: una
+ * frase «es» de todos los textos que la contienen (la mitad de sus tetragramas o más).
+ */
+export class SourceShares {
+  private readonly grams: Set<string>[];
+  private readonly tally: number[];
+  private total = 0;
+
+  constructor(texts: string[]) {
+    this.grams = texts.map((t) => ngrams(plainWords(t), 4));
+    this.tally = texts.map(() => 0);
+  }
+
+  holders(s: string): number[] {
+    const g = [...ngrams(plainWords(s), 4)];
+    if (!g.length) return [];
+    return this.grams.flatMap((set, i) => (g.filter((x) => set.has(x)).length / g.length >= 0.5 ? [i] : []));
+  }
+
+  /** ¿Cabe la frase sin que ningún texto de fuente pase de `cap` del total? (Las primeras 40 palabras, libres.) */
+  fits(s: string, cap = 0.45): boolean {
+    const w = plainWords(s).length;
+    if (this.total + w <= 40) return true;
+    return this.holders(s).every((i) => (this.tally[i] + w) / (this.total + w) <= cap);
+  }
+
+  add(s: string): void {
+    const w = plainWords(s).length;
+    for (const i of this.holders(s)) this.tally[i] += w;
+    this.total += w;
+  }
+
+  sameHolder(a: string, b: string): boolean {
+    const ha = new Set(this.holders(a));
+    return this.holders(b).some((i) => ha.has(i));
+  }
+}

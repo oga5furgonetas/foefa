@@ -53,6 +53,8 @@ export type ArticleCard = {
   sourcesCount: number;
   imageUrl: string | null;
   imageAlt: string | null;
+  /** Foto vertical (un retrato): se encuadra por arriba para no cortar la cara. */
+  imagePortrait: boolean;
   importance: number;
   evidenceConfidence: number;
   momentum: number;
@@ -80,6 +82,7 @@ const cardColumns = {
   sourcesCount: sql<number>`jsonb_array_length(${articles.sourcesList})`,
   imageUrl: media.url,
   imageAlt: sql<string | null>`${media.alt} ->> ${articles.language}`,
+  imagePortrait: sql<boolean>`coalesce(${media.height} > ${media.width}, false)`,
   importance: articles.importance,
   evidenceConfidence: articles.evidenceConfidence,
   momentum: stories.momentum,
@@ -114,6 +117,8 @@ export type ListOpts = {
   hardOnly?: boolean;
   /** Además, sin deportes (la noticia que abre la portada). */
   noSports?: boolean;
+  /** Solo artículos con al menos tantas palabras (la portada no enseña noticias de dos líneas). */
+  minWords?: number;
 };
 
 /** Lo que no es «última hora»: va a sus secciones, abajo, nunca a abrir la portada (30-09-2026, Dani: «no me pongas mierda»). */
@@ -128,6 +133,7 @@ export async function listArticles(db: Db, o: ListOpts): Promise<ArticleCard[]> 
   if (o.authorId) conds.push(eq(articles.authorId, o.authorId));
   if (o.since) conds.push(gte(articles.publishedAt, o.since));
   if (o.breaking) conds.push(eq(articles.isBreaking, true));
+  if (o.minWords) conds.push(gte(articles.wordCount, o.minWords));
   if (o.hardOnly || o.noSports) {
     const out = [...(o.hardOnly ? SOFT_CATEGORIES : []), ...(o.noSports ? ['sports'] : [])];
     conds.push(sql`(${articles.categoryId} IS NULL OR ${articles.categoryId} NOT IN (${sql.join(out.map((c) => sql`${c}`), sql`, `)}))`);
@@ -185,48 +191,61 @@ const HOME_SECTIONS = ['politics', 'economy', 'society', 'technology', 'science'
  * Lo principal = lo más importante reciente (importancia = momentum ×
  * confianza, solo entre lo ya verificado); la hora decae la importancia.
  */
+/**
+ * Palabras de cuerpo mínimas para salir en portada (el control de profundidad pide 50 de texto propio). Lo que
+ * se publicó antes del control de profundidad (01-10-2026) con dos líneas no sale en portada.
+ */
+export const HOME_MIN_WORDS = 55;
+
 export async function getHome(db: Db, geo: { lang: string; countryCode: string | null; regionCode: string | null; cityKey: string | null }): Promise<HomeData> {
   const since = new Date(Date.now() - 7 * 86400000);
+  // La DEMO (textos de ejemplo cortos, nunca en producción) no pasa por el mínimo de palabras.
+  const minWords = demoMode() ? 0 : HOME_MIN_WORDS;
+  const list = (o: ListOpts) => listArticles(db, { minWords, ...o });
   // Abre la portada lo más importante YA confirmado de las ÚLTIMAS 24 h (si no hay, 72 h; luego la
   // semana), solo noticias duras y sin deportes; lo «en desarrollo» solo si no hay nada más.
   let topCandidates: ArticleCard[] = [];
   for (const hours of [24, 72, 168]) {
-    topCandidates = await listArticles(db, { lang: geo.lang, since: new Date(Date.now() - hours * 3600000), orderBy: 'importance', limit: 6, hardOnly: true, noSports: true });
+    topCandidates = await list({ lang: geo.lang, since: new Date(Date.now() - hours * 3600000), orderBy: 'importance', limit: 6, hardOnly: true, noSports: true });
     if (topCandidates.some((a) => !a.isDeveloping)) break;
   }
-  if (!topCandidates.length) topCandidates = await listArticles(db, { lang: geo.lang, since, orderBy: 'importance', limit: 6 });
-  let top = topCandidates.find((a) => !a.isDeveloping) ?? topCandidates[0] ?? null;
+  if (!topCandidates.length) topCandidates = await list({ lang: geo.lang, since, orderBy: 'importance', limit: 6 });
+  // Como los grandes diarios, abre con foto: entre las confirmadas, la primera con imagen si pesa al
+  // menos el 75 % de la más importante.
+  const confirmed = topCandidates.filter((a) => !a.isDeveloping);
+  const withPhoto = confirmed.find((a) => a.imageUrl && a.importance >= 0.75 * (confirmed[0]?.importance ?? 0));
+  let top = withPhoto ?? confirmed[0] ?? topCandidates[0] ?? null;
   // Como hacen las ediciones nacionales de los grandes diarios: si hay una noticia confirmada
   // del país del lector con peso suficiente (≥ 60 % de la más importante), abre con ella.
   if (geo.countryCode) {
-    const [ownTop] = (await listArticles(db, { lang: geo.lang, countryCode: geo.countryCode, since: new Date(Date.now() - 36 * 3600000), orderBy: 'importance', limit: 4, hardOnly: true, noSports: true })).filter((a) => !a.isDeveloping);
+    const [ownTop] = (await list({ lang: geo.lang, countryCode: geo.countryCode, since: new Date(Date.now() - 36 * 3600000), orderBy: 'importance', limit: 4, hardOnly: true, noSports: true })).filter((a) => !a.isDeveloping);
     if (ownTop && (!top || ownTop.importance >= 0.6 * top.importance)) top = ownTop;
   }
   const exclude = top ? [top.id] : [];
-  const breaking = await listArticles(db, { lang: geo.lang, breaking: true, since: new Date(Date.now() - 12 * 3600000), limit: 5, excludeIds: exclude, hardOnly: true });
-  const latest = await listArticles(db, { lang: geo.lang, limit: 12, excludeIds: exclude, hardOnly: true });
-  const trending = await listArticles(db, { lang: geo.lang, since: new Date(Date.now() - 48 * 3600000), orderBy: 'momentum', limit: 6, excludeIds: exclude });
-  const national = geo.countryCode ? await listArticles(db, { lang: geo.lang, countryCode: geo.countryCode, since, orderBy: 'importance', limit: 8, excludeIds: exclude, hardOnly: true }) : [];
+  const breaking = await list({ lang: geo.lang, breaking: true, since: new Date(Date.now() - 12 * 3600000), limit: 5, excludeIds: exclude, hardOnly: true });
+  const latest = await list({ lang: geo.lang, limit: 12, excludeIds: exclude, hardOnly: true });
+  const trending = await list({ lang: geo.lang, since: new Date(Date.now() - 48 * 3600000), orderBy: 'momentum', limit: 6, excludeIds: exclude });
+  const national = geo.countryCode ? await list({ lang: geo.lang, countryCode: geo.countryCode, since, orderBy: 'importance', limit: 8, excludeIds: exclude, hardOnly: true }) : [];
   let local: ArticleCard[] = [];
   if (geo.cityKey) {
     const cityId = await cityIdByKey(db, geo.cityKey);
-    if (cityId) local = await listArticles(db, { lang: geo.lang, cityId, limit: 6 });
+    if (cityId) local = await list({ lang: geo.lang, cityId, limit: 6 });
   }
   if (local.length < 3 && geo.regionCode) {
     const [r] = await db.select({ id: regions.id }).from(regions).where(eq(regions.code, geo.regionCode)).limit(1);
-    if (r) local = [...local, ...(await listArticles(db, { lang: geo.lang, regionId: r.id, limit: 6, excludeIds: local.map((x) => x.id) }))];
+    if (r) local = [...local, ...(await list({ lang: geo.lang, regionId: r.id, limit: 6, excludeIds: local.map((x) => x.id) }))];
   }
   const worldRows = await db
     .select(cardColumns)
     .from(articles)
     .innerJoin(stories, eq(stories.id, articles.storyId))
     .leftJoin(media, eq(media.id, articles.imageId))
-    .where(and(visible(), eq(articles.language, geo.lang), geo.countryCode ? or(ne(articles.countryCode, geo.countryCode), sql`${articles.countryCode} IS NULL`) : undefined, gte(articles.publishedAt, since), sql`(${articles.categoryId} IS NULL OR ${articles.categoryId} NOT IN (${sql.join(SOFT_CATEGORIES.map((c) => sql`${c}`), sql`, `)}))`))
+    .where(and(visible(), eq(articles.language, geo.lang), gte(articles.wordCount, minWords), geo.countryCode ? or(ne(articles.countryCode, geo.countryCode), sql`${articles.countryCode} IS NULL`) : undefined, gte(articles.publishedAt, since), sql`(${articles.categoryId} IS NULL OR ${articles.categoryId} NOT IN (${sql.join(SOFT_CATEGORIES.map((c) => sql`${c}`), sql`, `)}))`))
     .orderBy(desc(sql`${articles.importance} * exp(-extract(epoch from (now() - ${articles.publishedAt})) / 86400.0)`))
     .limit(8);
   const sections: HomeData['sections'] = [];
   for (const categoryId of HOME_SECTIONS) {
-    const items = await listArticles(db, { lang: geo.lang, categoryId, limit: 4, since: new Date(Date.now() - 14 * 86400000) });
+    const items = await list({ lang: geo.lang, categoryId, limit: 4, since: new Date(Date.now() - 14 * 86400000) });
     if (items.length) sections.push({ categoryId, items });
   }
   return { top, breaking, latest, trending, national, local, world: worldRows.map(toCard), sections };

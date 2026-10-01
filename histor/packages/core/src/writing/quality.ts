@@ -7,11 +7,22 @@
 import type { EditorialSettings } from '../config/settings';
 import type { StoryFlag, StoryState } from '../domain';
 import { detectLanguage } from '../text/langdetect';
-import { fold, slugify } from '../text/normalize';
+import { fold, slugify, wordCount } from '../text/normalize';
 import { minhash, minhashSimilarity } from '../text/similarity';
 import { draftPlainText, type Draft } from './draft';
 import type { FactSheet } from './factsheet';
 import { validateDraft } from './validate';
+
+/** Palabras de los párrafos de texto propio (sin las coletillas fijas: método, «seguiremos informando»). */
+export function ownBodyWords(draft: Pick<Draft, 'body' | 'boilerplate'>): number {
+  const fixed = new Set(draft.boilerplate.map((s) => s.trim()));
+  return wordCount(
+    draft.body
+      .filter((b): b is Extract<typeof b, { type: 'p' }> => b.type === 'p' && !fixed.has(b.text.trim()))
+      .map((b) => b.text)
+      .join(' '),
+  );
+}
 
 export type CheckResult = { name: string; passed: boolean; critical: boolean; messages: string[] };
 export type QualityReport = { passed: boolean; checks: CheckResult[] };
@@ -32,6 +43,8 @@ export type QualityContext = {
   now: Date;
   /** Adaptación de un borrador ya validado en otro idioma: nombres y citas se validaron en el original. */
   isTranslation?: boolean;
+  /** Mínimo de palabras de texto propio, si no es el de los ajustes (la DEMO, con textos de ejemplo cortos, usa 0). */
+  minBodyWords?: number;
 };
 
 const CLICKBAIT = [
@@ -126,6 +139,13 @@ export function runQualityChecks(ctx: QualityContext): QualityReport {
   if (draft.seoDescription.length < 50) seo.push('descripción SEO corta');
   if (!slugify(draft.headline)) seo.push('no se puede generar un slug');
   add('SEO_CHECK', false, seo);
+
+  // PROFUNDIDAD (crítico): una noticia de una frase no es una noticia (Dani, 01-10-2026: «sin
+  // noticia en sí, como que no tienen sentido»). La ficha de un terremoto es corta a propósito.
+  const ownWords = ownBodyWords(draft);
+  const minWords = ctx.minBodyWords ?? settings.minBodyWords;
+  add('CONTENT_DEPTH', true, fs.earthquake || ownWords >= minWords ? [] : [`texto demasiado corto (${ownWords} palabras; mínimo ${minWords})`]);
+
   // Clickbait: crítico (engaña al lector)
   const bait = CLICKBAIT.filter((re) => re.test(draft.headline)).map((re) => `titular sensacionalista (${re.source})`);
   // El titular debe estar respaldado por el contenido: sus palabras clave aparecen en el cuerpo.
@@ -180,7 +200,8 @@ function stripQuotes(text: string, quotes: string[]): string {
   return out;
 }
 
-function wordsOf(s: string): string[] {
+/** Palabras plegadas, sin signos (como las compara el control de copia literal). */
+export function plainWords(s: string): string[] {
   return fold(s)
     .replace(/[^\p{L}\p{N}\s]/gu, ' ')
     .split(/\s+/)
@@ -189,8 +210,8 @@ function wordsOf(s: string): string[] {
 
 /** Longitud (en palabras) del tramo común más largo entre a y b. */
 export function longestCommonRun(a: string, b: string): number {
-  const A = wordsOf(a);
-  const B = wordsOf(b);
+  const A = plainWords(a);
+  const B = plainWords(b);
   if (!A.length || !B.length) return 0;
   const pos = new Map<string, number[]>();
   B.forEach((w, i) => pos.set(w, [...(pos.get(w) ?? []), i]));
@@ -207,8 +228,8 @@ export function longestCommonRun(a: string, b: string): number {
 
 /** Proporción de trigramas del texto a que aparecen en b. */
 export function overlapRatio(a: string, b: string, n = 6): number {
-  const A = wordsOf(a);
-  const B = wordsOf(b);
+  const A = plainWords(a);
+  const B = plainWords(b);
   if (A.length < n || B.length < n) return 0;
   const set = new Set<string>();
   for (let i = 0; i <= B.length - n; i++) set.add(B.slice(i, i + n).join(' '));

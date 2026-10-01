@@ -170,6 +170,17 @@ button, input, select, textarea { font: inherit; color: inherit; }
 
 /* Tarjeta sin foto: tipográfica, como en el papel (nunca se rellena con imágenes dudosas). */
 .card-text { border-top: 1px solid var(--rule-strong); padding-top: 10px; }
+/* Fotos de las tarjetas: llenan el hueco (sin bandas) y los retratos se encuadran por arriba. */
+.card-art img, .lead-art img { width: 100%; height: 100%; object-fit: cover; }
+.card-art img.portrait, .lead-art img.portrait { object-position: 50% 18%; }
+/* Portadilla de sección para las noticias sin foto con licencia (icono + sección · país). */
+.art-fallback { --h: 220; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 10px; border-color: transparent; color: hsl(var(--h) 45% 93%);
+  background: radial-gradient(120% 90% at 85% 8%, hsl(var(--h) 55% 40% / 0.9) 0%, transparent 62%), linear-gradient(135deg, hsl(var(--h) 42% 27%), hsl(var(--h) 48% 13%)); }
+.art-fallback svg { opacity: 0.92; }
+.art-label { font-family: var(--sans); font-size: 11px; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; opacity: 0.85; padding: 0 12px; text-align: center; }
+.lead-art.art-fallback .art-label { font-size: 13px; }
+/* Foto de la noticia: un retrato vertical no ocupa toda la pantalla. */
+.article figure img { width: 100%; max-height: 540px; object-fit: cover; object-position: 50% 20%; }
 .lead-story:not(:has(.lead-art)) h1 { font-size: clamp(34px, 5vw, 58px); margin-top: 4px; }
 
 /* ── Noticia ── */

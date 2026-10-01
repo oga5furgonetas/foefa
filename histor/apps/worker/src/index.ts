@@ -96,7 +96,7 @@ export async function pipelineTick(): Promise<TickStats | null> {
     state.lastTickAt = new Date();
     state.lastTick = stats;
     state.lastError = null;
-    if (Object.values(stats).some((v) => v > 0)) logger.info({ stats }, 'pipeline');
+    if (Object.values(stats).some((v) => (typeof v === 'number' ? v > 0 : !!v))) logger.info({ stats }, 'pipeline');
     return stats;
   });
 }

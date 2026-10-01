@@ -84,7 +84,8 @@ Hard rules:
 - When you attribute, name the source exactly as written in the claim's "sources" field ("según El Confidencial", "according to BBC News"). Never use vague attributions such as "according to reports", "sources say", "another outlet", "the newspaper", "the cited sources". Attribute each sentence once, not twice.
 - Open with the most important confirmed fact (who, what, where, when), then context and details, then reactions and what comes next, like a quality newspaper. One idea per paragraph.
 - "summary" is ONE sentence of at most 35 words; "subheadline" at most 20 words; "headline" at most 14 words.
-- The headline must accurately represent the article. No clickbait, no exaggeration, no questions, no exclamation marks.
+- The headline must accurately represent the article. No clickbait, no exaggeration, no questions, no exclamation marks. Never put a source or outlet name in the headline (no "according to X"): attribution belongs in the text; unconfirmed stories are labelled "developing" next to the headline.
+- The reader must understand what happened and why: right after the main fact, give the background and causes that the claims provide (what led to it, who is involved, previous events). Never leave a decision, ruling or reaction without saying what it is about.
 - Use the target language's journalistic conventions for dates, numbers, institutions and names.`;
 
 const WRITER_SCHEMA = {

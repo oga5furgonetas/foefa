@@ -77,7 +77,9 @@ export function validateDraft(draft: Draft, fs: FactSheet, extraAllowedNames: st
     }
   }
 
-  // Titular: cifras y nombres respaldados; si no está verificado, atribuido.
+  // Titular: cifras y nombres respaldados; si no está verificado, atribuido o con la etiqueta «En
+  // desarrollo», que va pegada al titular en la portada, en la noticia y en las redes (Dani,
+  // 01-10-2026: «lo de la fuente en el titular no sé a qué viene»; la fuente va en el texto).
   const leadClaims = [...fs.confirmed, ...fs.attributed];
   const hNums = extractNumbers(withoutNames(draft.headline), draft.language).filter((n) => n.unit || n.value >= 10);
   for (const n of hNums) {
@@ -86,7 +88,7 @@ export function validateDraft(draft: Draft, fs: FactSheet, extraAllowedNames: st
       (fs.earthquake && (n.unit === 'magnitude' || !n.unit) && Math.abs(n.value - fs.earthquake.magnitude) < 0.05);
     if (!ok) issues.push({ check: 'headline', text: draft.headline, detail: `cifra no respaldada en el titular: ${n.raw}` });
   }
-  if (!fs.verified && !fs.earthquake && !hasAttributionMarker(draft.headline)) {
+  if (!fs.verified && !fs.earthquake && !draft.isDeveloping && !hasAttributionMarker(draft.headline)) {
     issues.push({ check: 'headline', text: draft.headline, detail: 'titular de una noticia no verificada sin atribución' });
   }
   for (const e of extractEntities(draft.headline, draft.language).filter((x) => x.type === 'person')) {
