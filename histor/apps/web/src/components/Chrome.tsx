@@ -56,6 +56,7 @@ export function Header({ lang, d, countryCode, tz, demo }: { lang: string; d: Di
           <Link href={href.list(lang, 'breaking')} className="hot">
             {d.nav.breaking}
           </Link>
+          <Link href={href.list(lang, 'today')}>{d.nav.today}</Link>
           <Link href={href.list(lang, 'latest')}>{d.nav.latest}</Link>
           {edition && <Link href={href.country(lang, edition.code)}>{edition.names[lang]}</Link>}
           {NAV_CATEGORIES.map((id) => {

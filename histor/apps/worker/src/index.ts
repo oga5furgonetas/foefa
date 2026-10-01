@@ -21,6 +21,7 @@ import { pingIndexNow, storyUrls } from '@histor/core/seo/indexnow';
 import { logger, reportError } from '@histor/core/observability/index';
 import { maintenance, runPipelineOnce, type TickStats } from '@histor/core/pipeline/run';
 import { publishQueuedPosts, queueSocialPosts } from '@histor/core/social/index';
+import { sendDueBriefs } from '@histor/core/social/brief';
 
 export const PIPELINE_LOCK = 724_001; // clave del candado consultivo de Postgres
 const workerId = `${os.hostname()}:${process.pid}`;
@@ -156,6 +157,12 @@ async function main() {
     loop('periodic', 5 * 60_000, async () => {
       await enqueue(db, 'newsletters:send', {}, { uniqueKey: 'newsletters:send' });
       const posts = await publishQueuedPosts(db);
+      // «Las claves del día» a las 8:00 y a las 20:00 en cada canal de Telegram.
+      const briefs = await sendDueBriefs(db).catch((e) => {
+        logger.warn({ err: String((e as Error).message) }, 'resumen del día fallido');
+        return [] as string[];
+      });
+      if (briefs.length) logger.info({ briefs }, 'resumen del día enviado');
       const released = await releaseStale(db, 15);
       if (posts.posted || posts.failed || released) logger.info({ posts, released }, 'periódico');
     }),

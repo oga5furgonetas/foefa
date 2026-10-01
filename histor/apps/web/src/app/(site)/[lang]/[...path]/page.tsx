@@ -16,6 +16,7 @@ import { cityIdByKey, demoMode, getArticleDetail, getAuthorBySlug, getEntityBySl
 import { absoluteUrl, breadcrumbJsonLd, hreflangAlternates, newsArticleJsonLd } from '@histor/core/seo/index';
 import { headlineAssignments } from '@histor/core/experiments/index';
 import { JsonLd } from '@/components/JsonLd';
+import { fmtDate } from '@/lib/format';
 import { ForYou } from '@/components/client/ForYou';
 import { FollowButton } from '@/components/client/Forms';
 import { experimentUnit, withHeadlineTests } from '@/lib/experiments';
@@ -64,6 +65,8 @@ function titleFor(m: RouteMatch, lang: string, d: Dict): { title: string; build?
       return c ? { title: c.names[lang] ?? c.names.en, build: (l) => href.city(l, m.cityKey) } : null;
     }
     case 'list':
+      // «Noticias de hoy, jueves, 1 de octubre de 2026: …»: la fecha en el título es lo que se busca.
+      if (m.list === 'today') return { title: t(d.list.todayTitle, { date: fmtDate(new Date(), lang, 'Europe/Madrid') }), build: (l) => href.list(l, 'today') };
       return { title: d.list[m.list], build: (l) => href.list(l, m.list) };
     case 'search':
       return { title: d.search.title, build: (l) => href.search(l) };
@@ -428,6 +431,12 @@ export default async function Page({ params, searchParams }: { params: Params; s
             <ListingView lang={lang} d={d} title={d.home.topStory} intro={t(d.home.forYouExplain, {})} items={items} page={page} basePath={base} crumbs={[home, { name: d.list.forYou, url: base }]} />
           </>
         );
+      }
+      if (m.list === 'today') {
+        // Lo más importante de las últimas 24 h (portada de «noticias de hoy»): por importancia.
+        const items = await listing({ orderBy: 'importance', since: new Date(Date.now() - 24 * 3600000) });
+        const title = t(d.list.todayTitle, { date: fmtDate(new Date(), lang, tz) });
+        return <ListingView lang={lang} d={d} title={title} intro={d.list.todayIntro} items={items} page={page} basePath={base} crumbs={[home, { name: d.list.today, url: base }]} />;
       }
       const items =
         m.list === 'breaking'

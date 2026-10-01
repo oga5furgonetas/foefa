@@ -21,6 +21,10 @@ export async function GET(_req: Request, ctx: { params: Promise<{ file: string }
   if (file === 'static.xml') {
     const entries = [
       ...everyLang((l) => href.home(l)),
+      // «Noticias de hoy» y la última hora: páginas que cambian a diario y que se buscan.
+      ...everyLang((l) => href.list(l, 'today')),
+      ...everyLang((l) => href.list(l, 'breaking')),
+      ...everyLang((l) => href.list(l, 'latest')),
       ...CATEGORIES.flatMap((c) => everyLang((l) => href.category(l, c.id))),
       ...COUNTRIES.filter((c) => c.edition).flatMap((c) => everyLang((l) => href.country(l, c.code))),
       ...INDEXABLE_PAGES.flatMap((p) => everyLang((l) => href.page(l, p))),

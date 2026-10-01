@@ -10,6 +10,7 @@
  *   newsletter:send         envía las newsletters cuya hora ha llegado
  *   check:env               lista lo que falta para producción
  *   settings:editorial k=v …    cambia ajustes editoriales (p. ej. autoSocial=true), validados y auditados
+ *   social:brief [--slot=am|pm] [--lang=es]  manda ya «Las claves del día» al canal de Telegram
  *   social:requeue [--hours=3]   vuelve a poner en cola lo publicado que ahora sí puede ir a redes
  *   images:recheck [--hours=72]   rehace las fotos de archivo con las reglas actuales
  *   images:backfill [--hours=72]  pone imagen ilustrativa (Wikimedia Commons) a lo publicado que no tenga
@@ -35,6 +36,7 @@ import { evaluateSourceCheck, recordSourceCheck } from '@histor/core/services/so
 import { getEditorialSettings, getSetting, setSetting } from '@histor/core/services/settings';
 import { editorialSettingsSchema } from '@histor/core/config/settings';
 import { requeueSocialPosts } from '@histor/core/social/index';
+import { sendBrief, type BriefSlot } from '@histor/core/social/brief';
 
 const [cmd, ...args] = process.argv.slice(2);
 const flag = (name: string) => args.find((a) => a === `--${name}` || a.startsWith(`--${name}=`));
@@ -153,6 +155,14 @@ async function main(): Promise<number> {
       console.log('✓ ajustes editoriales:', patch);
       return 0;
     }
+    case 'social:brief': {
+      // Manda ya «Las claves del día» (--slot=am|pm, --lang=es) al canal de Telegram de ese idioma.
+      const slot = (args.find((a) => a.startsWith('--slot='))?.split('=')[1] ?? 'pm') as BriefSlot;
+      const lang = args.find((a) => a.startsWith('--lang='))?.split('=')[1] ?? 'es';
+      const n = await sendBrief(getDb(), lang, slot === 'am' ? 'am' : 'pm');
+      console.log(n ? `✓ resumen enviado a ${lang} con ${n} noticias` : `✗ nada que mandar a ${lang} (sin canal o menos de 3 noticias)`);
+      return n ? 0 : 1;
+    }
     case 'social:requeue': {
       // Vuelve a poner en cola lo publicado en esas horas (máximo 6: después ya no es noticia) que
       // hoy cumple las condiciones, p. ej. tras activar autoSocial o configurar una red.
@@ -193,7 +203,7 @@ async function main(): Promise<number> {
       return 0;
     }
     default:
-      console.log('Uso: cli <migrate|seed|create-admin|demo:seed|demo:purge|sources:check|images:backfill|images:recheck|stories:recheck|settings:editorial|social:requeue|run-once|newsletter:send|check:env>');
+      console.log('Uso: cli <migrate|seed|create-admin|demo:seed|demo:purge|sources:check|images:backfill|images:recheck|stories:recheck|settings:editorial|social:requeue|social:brief|run-once|newsletter:send|check:env>');
       return cmd ? 1 : 0;
   }
 }

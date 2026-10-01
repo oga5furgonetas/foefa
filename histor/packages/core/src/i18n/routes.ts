@@ -18,6 +18,7 @@ export const ROUTE_WORDS = {
   breaking: { es: 'ultima-hora', en: 'breaking', de: 'eilmeldungen', fr: 'alertes', it: 'ultima-ora', pt: 'urgente' },
   trending: { es: 'tendencias', en: 'trending', de: 'trends', fr: 'tendances', it: 'tendenze', pt: 'tendencias' },
   forYou: { es: 'para-ti', en: 'for-you', de: 'fuer-dich', fr: 'pour-vous', it: 'per-te', pt: 'para-voce' },
+  today: { es: 'noticias-de-hoy', en: 'news-today', de: 'nachrichten-heute', fr: 'actualites-du-jour', it: 'notizie-di-oggi', pt: 'noticias-de-hoje' },
   local: { es: 'local', en: 'local', de: 'lokal', fr: 'local', it: 'locale', pt: 'local' },
   howItWorks: { es: 'como-funciona', en: 'how-it-works', de: 'so-arbeiten-wir', fr: 'comment-ca-marche', it: 'come-funziona', pt: 'como-funciona' },
   editorialPolicy: { es: 'politica-editorial', en: 'editorial-policy', de: 'redaktionelle-grundsaetze', fr: 'charte-editoriale', it: 'linee-guida-editoriali', pt: 'politica-editorial' },
@@ -73,7 +74,7 @@ export type RouteMatch =
   | { kind: 'author'; slug: string }
   | { kind: 'source'; slug: string }
   | { kind: 'story'; slug: string }
-  | { kind: 'list'; list: 'latest' | 'breaking' | 'trending' | 'forYou' }
+  | { kind: 'list'; list: 'latest' | 'breaking' | 'trending' | 'forYou' | 'today' }
   | { kind: 'search' }
   | { kind: 'page'; page: RouteWord }
   | { kind: 'notFound' };
@@ -95,7 +96,7 @@ export function resolveRoute(lang: string, segments: string[]): RouteMatch {
   }
   if (seg.length === 1) {
     if (a === word(lang, 'search')) return { kind: 'search' };
-    for (const l of ['latest', 'breaking', 'trending', 'forYou'] as const) if (a === word(lang, l)) return { kind: 'list', list: l };
+    for (const l of ['latest', 'breaking', 'trending', 'forYou', 'today'] as const) if (a === word(lang, l)) return { kind: 'list', list: l };
     for (const p of STATIC_PAGES) if (a === word(lang, p)) return { kind: 'page', page: p };
     const cat = categoryBySlug(lang, a);
     if (cat) return { kind: 'category', categoryId: cat.id };
@@ -141,7 +142,7 @@ export const href = {
   author: (lang: string, slug: string) => `/${lang}/${word(lang, 'author')}/${slug}`,
   source: (lang: string, slug: string) => `/${lang}/${word(lang, 'source')}/${slug}`,
   story: (lang: string, slug: string) => `/${lang}/${word(lang, 'story')}/${slug}`,
-  list: (lang: string, l: 'latest' | 'breaking' | 'trending' | 'forYou') => `/${lang}/${word(lang, l)}`,
+  list: (lang: string, l: 'latest' | 'breaking' | 'trending' | 'forYou' | 'today') => `/${lang}/${word(lang, l)}`,
   search: (lang: string, q?: string) => `/${lang}/${word(lang, 'search')}${q ? `?q=${encodeURIComponent(q)}` : ''}`,
   page: (lang: string, p: RouteWord) => `/${lang}/${word(lang, p)}`,
 };
