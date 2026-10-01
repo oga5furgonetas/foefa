@@ -66,6 +66,27 @@ export async function queueSocialPosts(db: Db, storyId: number): Promise<number>
   return n;
 }
 
+/**
+ * Vuelve a poner en cola las publicaciones de las últimas `hours` horas que se saltaron y que hoy sí
+ * cumplen las condiciones (tras activar autoSocial o configurar una red). Devuelve cuántas.
+ */
+export async function requeueSocialPosts(db: Db, hours: number): Promise<number> {
+  const s = await getEditorialSettings(db);
+  const rows = await db
+    .select({ id: socialPosts.id, network: socialPosts.network, a: articles })
+    .from(socialPosts)
+    .innerJoin(articles, eq(articles.id, socialPosts.articleId))
+    .where(and(eq(socialPosts.status, 'skipped'), gte(socialPosts.createdAt, new Date(Date.now() - hours * 3600_000)), eq(articles.status, 'published')));
+  let n = 0;
+  for (const { id, network, a } of rows) {
+    const eligible = s.autoSocial && !a.isDeveloping && !a.isDemo && a.evidenceConfidence >= s.verifiedMin && a.importance >= env().SOCIAL_MIN_IMPORTANCE;
+    if (!eligible || !configured(network as Network, a.language)) continue;
+    await db.update(socialPosts).set({ status: 'queued', error: null }).where(eq(socialPosts.id, id));
+    n++;
+  }
+  return n;
+}
+
 export async function publishQueuedPosts(db: Db, fetchImpl: typeof fetch = fetch): Promise<{ posted: number; failed: number }> {
   // Lo que lleva más de 6 horas esperando ya no es noticia: fuera.
   await db

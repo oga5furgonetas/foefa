@@ -9,6 +9,8 @@
  *   run-once                una vuelta del pipeline
  *   newsletter:send         envía las newsletters cuya hora ha llegado
  *   check:env               lista lo que falta para producción
+ *   settings:editorial k=v …    cambia ajustes editoriales (p. ej. autoSocial=true), validados y auditados
+ *   social:requeue [--hours=3]   vuelve a poner en cola lo publicado que ahora sí puede ir a redes
  *   images:recheck [--hours=72]   rehace las fotos de archivo con las reglas actuales
  *   images:backfill [--hours=72]  pone imagen ilustrativa (Wikimedia Commons) a lo publicado que no tenga
  *   admin:reset-password    NEW_PASSWORD=… [--email=…] restablece la contraseña (sin correo configurado)
@@ -30,6 +32,9 @@ import { PoliteFetcher } from '@histor/core/ingest/fetcher';
 import { sendDueNewsletters } from '@histor/core/newsletter/index';
 import { runPipelineOnce } from '@histor/core/pipeline/run';
 import { evaluateSourceCheck, recordSourceCheck } from '@histor/core/services/sources';
+import { getEditorialSettings, getSetting, setSetting } from '@histor/core/services/settings';
+import { editorialSettingsSchema } from '@histor/core/config/settings';
+import { requeueSocialPosts } from '@histor/core/social/index';
 
 const [cmd, ...args] = process.argv.slice(2);
 const flag = (name: string) => args.find((a) => a === `--${name}` || a.startsWith(`--${name}=`));
@@ -122,6 +127,40 @@ async function main(): Promise<number> {
       console.log(`✓ ${ids.length} historias en cola para reverificar y reescribir; ${hidden} retiradas por no ser noticia`);
       return 0;
     }
+    case 'settings:editorial': {
+      // Ajustes editoriales sin entrar al panel: «settings:editorial autoSocial=true minBodyWords=50».
+      // Se validan con el esquema y quedan en la auditoría.
+      const current = await getEditorialSettings(getDb());
+      const patch: Record<string, unknown> = {};
+      for (const a of args.filter((x) => x.includes('=') && !x.startsWith('--'))) {
+        const [k, ...rest] = a.split('=');
+        const raw = rest.join('=');
+        let v: unknown = raw;
+        try {
+          v = JSON.parse(raw);
+        } catch {
+          /* texto */
+        }
+        patch[k] = v;
+      }
+      const parsed = editorialSettingsSchema.safeParse({ ...current, ...patch });
+      if (!parsed.success) {
+        console.error('✗ ajuste no válido:', parsed.error.issues.map((i) => `${i.path.join('.')}: ${i.message}`).join('; '));
+        return 1;
+      }
+      const stored = await getSetting<Record<string, unknown>>(getDb(), 'editorial', {});
+      await setSetting(getDb(), 'editorial', { ...stored, ...patch }, 'operator:cli');
+      console.log('✓ ajustes editoriales:', patch);
+      return 0;
+    }
+    case 'social:requeue': {
+      // Vuelve a poner en cola lo publicado en esas horas (máximo 6: después ya no es noticia) que
+      // hoy cumple las condiciones, p. ej. tras activar autoSocial o configurar una red.
+      const hours = Math.min(6, Number(args.find((a) => a.startsWith('--hours='))?.split('=')[1] ?? 3));
+      const n = await requeueSocialPosts(getDb(), hours);
+      console.log(`✓ ${n} publicaciones en cola de nuevo`);
+      return 0;
+    }
     case 'images:recheck': {
       // Rehace con las reglas actuales las fotos de archivo (Wikimedia) de lo publicado en esas horas:
       // quita la foto puesta y vuelve a buscar (01-10-2026: una foto de París en una noticia de Argentina).
@@ -154,7 +193,7 @@ async function main(): Promise<number> {
       return 0;
     }
     default:
-      console.log('Uso: cli <migrate|seed|create-admin|demo:seed|demo:purge|sources:check|images:backfill|images:recheck|stories:recheck|run-once|newsletter:send|check:env>');
+      console.log('Uso: cli <migrate|seed|create-admin|demo:seed|demo:purge|sources:check|images:backfill|images:recheck|stories:recheck|settings:editorial|social:requeue|run-once|newsletter:send|check:env>');
       return cmd ? 1 : 0;
   }
 }
