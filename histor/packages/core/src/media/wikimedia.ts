@@ -51,6 +51,8 @@ const PHOTO = /^image\/(jpeg|webp)$/;
 /** Banderas, mapas, logos, escudos, firmas: no son una foto de lo que se habla. */
 const NOT_A_PHOTO = /flag|bandera|drapeau|flagge|bandiera|bandeira|\bmaps?\b|mapa|karte|carte|locator|location|logo|escudo|coat[_ ]of[_ ]arms|wappen|blason|stemma|bras[aã]o|signature|firma|unterschrift|seal|sello|emblem/i;
 const LANGS = ['es', 'en', 'de', 'fr', 'it', 'pt'];
+/** Dibujos, grabados, planos y cuadros antiguos de la página de una ciudad («Dibujo_madrid_1562.JPG»): no son una foto de hoy. */
+const OLD_ARTWORK = /dibujo|drawing|zeichnung|dessin|disegno|desenho|grabado|engraving|stich|gravure|incisione|gravura|plano|plan_|pintura|painting|gem[äa]lde|peinture|dipinto|retrato|portrait|\b1[0-8]\d\d\b|_1[0-8]\d\d|1[0-8]\d\d_/i;
 /**
  * Sucesos, acusaciones, muertes: no se pone la cara de nadie, solo el lugar. Poner la
  * foto de una persona junto a «detenido» o «muere» la asocia a algo que quizá no le toca.
@@ -87,9 +89,16 @@ export function topicOverlap(extract: string, storyText: string, name: string): 
   return n;
 }
 
-async function getJson(fetchImpl: Fetch, url: string): Promise<Record<string, any> | null> {
+async function getJson(fetchImpl: Fetch, url: string, attempt = 0): Promise<Record<string, any> | null> {
   try {
     const res = await fetchImpl(url, { headers: { 'user-agent': userAgent(), accept: 'application/json' }, signal: AbortSignal.timeout(10_000) });
+    // En ráfaga (la carga de fotos de cientos de noticias), Wikimedia pide calma con 429: se espera
+    // lo que diga y se reintenta, en vez de concluir que no hay foto.
+    if ((res.status === 429 || res.status >= 500) && attempt < 2) {
+      const wait = Math.min(10_000, (Number(res.headers.get('retry-after')) || 2) * 1000);
+      await new Promise((r) => setTimeout(r, wait));
+      return getJson(fetchImpl, url, attempt + 1);
+    }
     if (!res.ok) return null;
     return (await res.json()) as Record<string, any>;
   } catch {
@@ -106,6 +115,8 @@ type FindOpts = {
   placesOnly?: boolean;
   /** Mínimo de palabras en común entre la página y la noticia para un protagonista. */
   minOverlap?: number;
+  /** Para lugares: qué foto de la página (por ejemplo, el id de la historia), para no repetir siempre la principal. */
+  variant?: number;
 };
 
 /** Primera imagen válida de la lista de candidatos (en su orden), o null. */
@@ -152,17 +163,49 @@ export async function findStoryImage(candidates: ImageCandidate[], opts: FindOpt
         if (one.length < 2 && !biography && (target.length < 2 || !target.includes(one[0]))) continue;
         if (opts.storyText === undefined || topicOverlap(String(page.extract ?? ''), opts.storyText, `${cand.name} ${title}`) < minOverlap) continue;
       }
-      if (NOT_A_PHOTO.test(String(page.pageimage))) continue;
-      const c = new URLSearchParams({ action: 'query', format: 'json', formatversion: '2', prop: 'imageinfo', iiprop: 'url|size|mime|extmetadata', iiurlwidth: '1280', titles: `File:${page.pageimage}` });
-      const cm = await getJson(fetchImpl, `https://commons.wikimedia.org/w/api.php?${c}`);
-      const file = cm?.query?.pages?.[0];
-      const info = file?.imageinfo?.[0];
-      // Si no está en Commons (imagen local «de uso legítimo»), no vale.
-      if (!file || file.missing || !info) continue;
-      const meta = (info.extmetadata ?? {}) as Record<string, { value?: string }>;
-      const license = stripHtml(meta.LicenseShortName?.value ?? '');
-      if (!FREE_LICENSE.test(license) || NOT_FREE.test(license) || meta.NonFree?.value === 'true') continue;
-      if (!PHOTO.test(info.mime ?? '') || (info.width ?? 0) < minWidth) continue;
+      // Lugares: para no repetir la misma foto de Madrid en diez noticias, se elige (según la
+      // noticia, `variant`) entre las fotos libres de la página; si ninguna vale, la principal.
+      const files: string[] = [];
+      if (isPlace && opts.variant !== undefined) {
+        const iq = new URLSearchParams({ action: 'query', format: 'json', formatversion: '2', prop: 'images', imlimit: '60', titles: title });
+        const list = ((await getJson(fetchImpl, `https://${wiki}.wikipedia.org/w/api.php?${iq}`))?.query?.pages?.[0]?.images ?? []) as { title: string }[];
+        // Solo fotos cuyo nombre cita el lugar («Madrid_-_Gran_Vía.jpg»): en la página de una ciudad
+        // también hay retratos, cuadros y escudos.
+        const placeWords = [...new Set(fold(`${title} ${cand.name}`).split(/[^a-z0-9]+/).filter((w) => w.length >= 5))];
+        const photos = list
+          .map((x) => x.title.replace(/^[^:]+:/, ''))
+          .filter((n) => /\.(jpe?g|webp)$/i.test(n) && !NOT_A_PHOTO.test(n) && !OLD_ARTWORK.test(n) && placeWords.some((w) => fold(n).includes(w)));
+        if (photos.length > 1) {
+          const start = Math.abs(opts.variant) % photos.length;
+          files.push(...[...photos.slice(start), ...photos.slice(0, start)].slice(0, 3));
+        }
+      }
+      if (!NOT_A_PHOTO.test(String(page.pageimage))) files.push(String(page.pageimage));
+      let picked: { name: string; info: Record<string, any>; meta: Record<string, { value?: string }>; license: string } | null = null;
+      for (const name of files) {
+        const c = new URLSearchParams({ action: 'query', format: 'json', formatversion: '2', prop: 'imageinfo', iiprop: 'url|size|mime|extmetadata', iiurlwidth: '1280', titles: `File:${name}` });
+        const cm = await getJson(fetchImpl, `https://commons.wikimedia.org/w/api.php?${c}`);
+        const file = cm?.query?.pages?.[0];
+        const info = file?.imageinfo?.[0];
+        // Si no está en Commons (imagen local «de uso legítimo»), no vale.
+        if (!file || file.missing || !info) continue;
+        const meta = (info.extmetadata ?? {}) as Record<string, { value?: string }>;
+        const license = stripHtml(meta.LicenseShortName?.value ?? '');
+        if (!FREE_LICENSE.test(license) || NOT_FREE.test(license) || meta.NonFree?.value === 'true') continue;
+        // Una foto apaisada (las verticales de un lugar suelen ser detalles: una estatua, una puerta).
+        if (!PHOTO.test(info.mime ?? '') || (info.width ?? 0) < minWidth || (name !== page.pageimage && (info.height ?? 0) > (info.width ?? 0))) continue;
+        if (name !== page.pageimage) {
+          // Las alternativas, solo fotos actuales: nada de cuadros, dibujos, mapas o retratos, ni
+          // imágenes anteriores a 1990 (según las categorías y la fecha de Commons).
+          const cats = stripHtml(meta.Categories?.value ?? '');
+          const year = Number((stripHtml(meta.DateTimeOriginal?.value ?? '').match(/\b(1[5-9]\d\d|20\d\d)\b/) ?? [])[1] ?? 0);
+          if (/paint|drawing|engrav|lithograph|\bmaps?\b|plans?\b|portrait|artwork|museo|museum|pintura|cuadro/i.test(cats) || (year && year < 1990)) continue;
+        }
+        picked = { name, info, meta, license };
+        break;
+      }
+      if (!picked) continue;
+      const { info, meta, license } = picked;
       const author = stripHtml(meta.Artist?.value ?? '') || null;
       const titles: Record<string, string> = { [wiki]: title };
       for (const l of (page.langlinks ?? []) as { lang: string; title: string }[]) if (LANGS.includes(l.lang)) titles[l.lang] = l.title;
@@ -177,7 +220,7 @@ export async function findStoryImage(candidates: ImageCandidate[], opts: FindOpt
         licenseUrl: meta.LicenseUrl?.value ?? null,
         author,
         attribution: `${author ? `${author} / ` : ''}Wikimedia Commons`,
-        sourceUrl: info.descriptionurl ?? `https://commons.wikimedia.org/wiki/File:${encodeURIComponent(page.pageimage)}`,
+        sourceUrl: info.descriptionurl ?? `https://commons.wikimedia.org/wiki/File:${encodeURIComponent(picked.name)}`,
       };
     }
   }
@@ -326,7 +369,7 @@ export async function attachStoryImage(db: Db, storyId: number, opts: { fetchImp
   const sensitive = arts.some((a) => SENSITIVE.test(`${a.headline} ${a.summary ?? ''}`));
   const sources = [...new Set(arts.flatMap((a) => a.sourcesList.map((s) => s.name)))];
   const cands = imageCandidates(ordered, { context: storyText, exclude: sources, categoryId: arts[0].categoryId, countryCode: arts[0].countryCode });
-  const found = await findStoryImage(cands.slice(0, 10), { fetchImpl: opts.fetchImpl, storyText, placesOnly: sensitive });
+  const found = await findStoryImage(cands.slice(0, 10), { fetchImpl: opts.fetchImpl, storyText, placesOnly: sensitive, variant: storyId });
   if (!found) return 'none';
   const caption = Object.fromEntries(arts.map((a) => [a.language, found.titles[a.language] ?? found.title]));
   const [m] = await db
