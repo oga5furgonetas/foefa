@@ -176,6 +176,21 @@ si algo no tiene respaldo). Grok (xAI) NO sirve gratis: la cuenta de Dani no tie
    Stripe + webhook, Resend (correo), Google/Apple, Sentry, S3/R2 para copias fuera de
    Fly, cuentas de Bluesky/Mastodon/X para publicar en redes. VAPID ya está generado.
 
+## 01-10-2026 (mediodía): difusión
+
+- **Telegram** `t.me/historNoticias` (bot @Histornewsbot, administrador del canal): publica solo lo
+  verificado e importante, 1 cada 10 min como mucho (`SOCIAL_MIN_INTERVAL_MIN`). `autoSocial` estaba
+  apagado por defecto: se activó con `cli settings:editorial autoSocial=true` (sin panel).
+- **Google News**: publicación «Histor» creada en Publisher Center (`?publication=CAowvJvODA`),
+  país España, español; propiedad verificada por Search Console.
+- **Bing Webmaster Tools**: histor.es importado desde Search Console con sus 2 sitemaps (solo
+  histor.es; flotadsp.com, que también está en esa cuenta, NO se importó).
+- En la web: alertas de última hora del navegador a la vista al acabar cada noticia (había 0
+  suscriptores), invitación al canal de Telegram, `max-image-preview:large` en noticias y secciones
+  (Discover) y editor completo en el NewsArticle. `/.well-known/atproto-did` listo para Bluesky.
+- **Pendiente de Dani**: cuentas de Bluesky y Mastodon (sus claves activan la publicación
+  automática), AdSense, contraseña del panel y 2FA.
+
 ## 01-10-2026 (mañana): suscripciones con Stripe
 
 Stripe activo en producción con la cuenta de **FlotaDSP** (lo pidió Dani: «stripe utiliza la de
