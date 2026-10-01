@@ -38,7 +38,7 @@ export function Header({ lang, d, countryCode, tz, demo }: { lang: string; d: Di
           <div className="left ui">
             <Link href={href.search(lang)}>{d.nav.search}</Link>
           </div>
-          <div style={{ display: 'grid', justifyItems: 'center' }}>
+          <div className="brand-box">
             <Link href={href.home(lang)} className="brand" aria-label="Histor">
               <Wordmark />
             </Link>

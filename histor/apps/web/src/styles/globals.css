@@ -109,7 +109,16 @@ button, input, select, textarea { font: inherit; color: inherit; }
 .brand-word { font-family: var(--serif); font-weight: 800; font-variation-settings: 'opsz' 72; font-size: clamp(46px, 8.4vw, 92px); letter-spacing: -0.035em; line-height: 0.9; }
 .brand-word .brand-dot { color: var(--accent); }
 .brand-tag { font-family: var(--sans); font-size: 11px; font-weight: 600; letter-spacing: 0.22em; text-transform: uppercase; color: var(--muted); text-align: center; margin-top: 10px; padding-top: 7px; border-top: 1px solid var(--rule-strong); }
-@media (max-width: 640px) { .masthead .wrap { padding-top: 12px; padding-bottom: 10px; } .brand-tag { letter-spacing: 0.14em; font-size: 10px; } }
+.brand-box { display: grid; justify-items: center; }
+/* Móvil: el nombre arriba, a todo lo ancho; buscar y los botones, en una fila debajo. */
+@media (max-width: 640px) {
+  .masthead .wrap { grid-template-columns: 1fr auto; grid-template-areas: "brand brand" "left right"; row-gap: 10px; padding-top: 12px; padding-bottom: 10px; }
+  .brand-box { grid-area: brand; }
+  .masthead .left { grid-area: left; }
+  .masthead .right { grid-area: right; }
+  .brand-word { font-size: 52px; }
+  .brand-tag { letter-spacing: 0.12em; font-size: 10px; white-space: nowrap; }
+}
 .masthead .left, .masthead .right { font-family: var(--sans); font-size: 13px; }
 .masthead .right { justify-self: end; display: flex; gap: 10px; align-items: center; }
 .btn { display: inline-flex; align-items: center; justify-content: center; gap: 6px; font-family: var(--sans); font-weight: 600; font-size: 14px; padding: 9px 14px; border-radius: 3px; border: 1px solid var(--ink); background: transparent; cursor: pointer; line-height: 1.1; }
