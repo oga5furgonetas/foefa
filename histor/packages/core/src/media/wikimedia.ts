@@ -21,7 +21,7 @@ import { and, eq, isNull } from 'drizzle-orm';
 import type { Db } from '../db/client';
 import { articles, media, stories } from '../db/schema';
 import { userAgent } from '../ingest/fetcher';
-import { extractEntities, findPlaces } from '../text/entities';
+import { extractEntities, findPlaces, type PlaceMatch } from '../text/entities';
 import { fold } from '../text/normalize';
 import { STOPWORDS } from '../text/tokenize';
 import { bodyText } from '../writing/draft';
@@ -253,10 +253,29 @@ export function imageCandidates(
     }
     return { name, lang, place: true, rank };
   };
+  // Manda la versión principal (la primera: la de más fuentes). De las demás solo vale lo que también
+  // nombra la principal en su titular o entradilla: en una historia mezclada, la versión francesa
+  // («Javier Milei à Paris») ponía una foto de París a «Justicia argentina elimina límites a la
+  // compra de tierras» (01-10-2026).
+  const primary = arts[0];
+  const primaryText = primary ? fold(`${primary.headline} ${primary.summary ?? ''}`) : '';
+  const placeKey = (p: PlaceMatch) => `${p.kind}:${p.countryCode}:${p.regionCode ?? ''}:${p.cityKey ?? ''}`;
+  const primaryPlaces = new Set(primary ? findPlaces(`${primary.headline} ${primary.summary ?? ''}`).map(placeKey) : []);
+  const backedByPrimary = (name: string, place: boolean) => {
+    if (place) {
+      const m = findPlaces(name)[0];
+      return !!m && primaryPlaces.has(placeKey(m));
+    }
+    return fold(name)
+      .split(/\s+/)
+      .filter((w) => w.length > 2)
+      .every((w) => primaryText.includes(w));
+  };
   arts.forEach((a, ai) => {
     const len = Math.max(1, a.headline.length);
     for (const e of extractEntities(a.headline, a.language)) {
       if (!/^\p{Lu}/u.test(e.name)) continue;
+      if (ai > 0 && !backedByPrimary(e.name, e.type === 'place')) continue;
       // Posición relativa en el titular; a igualdad, el idioma que va antes.
       const rank = a.headline.indexOf(e.name) / len + ai * 0.001;
       if (e.type === 'place') {
@@ -273,6 +292,7 @@ export function imageCandidates(
   arts.forEach((a, ai) => {
     for (const e of extractEntities(a.summary ?? '', a.language)) {
       if (e.type !== 'place') continue;
+      if (ai > 0 && !backedByPrimary(e.name, true)) continue;
       const cc = findPlaces(e.name)[0]?.countryCode;
       if (opts.countryCode && cc && cc !== opts.countryCode) continue;
       const p = placeCandidate(e.name, a.language, 1 + ai * 0.001);
@@ -298,9 +318,9 @@ export async function attachStoryImage(db: Db, storyId: number, opts: { fetchImp
   const arts = await db.select().from(articles).where(and(eq(articles.storyId, storyId), eq(articles.status, 'published')));
   if (!arts.length) return 'skipped';
   if (arts.some((a) => a.imageId)) return 'exists';
-  // Primero los artículos escritos desde las fuentes (no las traducciones); entre ellos, el inglés
-  // (la Wikipedia más completa).
-  const rank = (a: (typeof arts)[number]) => (a.writer.startsWith('llm-translation') ? 2 : 0) + (a.language === 'en' ? 0 : 1);
+  // Primero la versión principal: la escrita desde más fuentes (no una traducción); a igualdad, la
+  // inglesa (la Wikipedia más completa).
+  const rank = (a: (typeof arts)[number]) => (a.writer.startsWith('llm-translation') ? 1000 : 0) - a.sourcesList.length * 2 + (a.language === 'en' ? 0 : 1);
   const ordered = [...arts].sort((a, b) => rank(a) - rank(b));
   const storyText = arts.map((a) => `${a.headline}\n${a.summary ?? ''}\n${bodyText(a.body)}`).join('\n');
   const sensitive = arts.some((a) => SENSITIVE.test(`${a.headline} ${a.summary ?? ''}`));

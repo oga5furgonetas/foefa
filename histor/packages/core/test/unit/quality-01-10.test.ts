@@ -150,3 +150,16 @@ describe('país de la noticia', () => {
     expect(Object.entries(fr).sort((a, b) => b[1] - a[1])[0][0]).toBe('FR');
   });
 });
+
+describe('foto de una historia con versiones distintas', () => {
+  it('manda la versión principal: lo que solo nombra otra versión no da la foto', () => {
+    const c = imageCandidates([
+      { language: 'es', headline: 'Justicia argentina elimina límites a la compra de tierras por parte de extranjeros', summary: 'La Corte Suprema de Argentina elimina restricciones.' },
+      { language: 'fr', headline: 'Javier Milei à Paris : un président VRP au secours d’une économie argentine', summary: 'Le président argentin est à Paris.' },
+    ], { categoryId: 'politics', countryCode: 'AR' });
+    const names = c.map((x) => x.name);
+    expect(names).not.toContain('Paris');
+    expect(names).not.toContain('Javier Milei');
+    expect(names).toContain('Palace of the Argentine National Congress');
+  });
+});

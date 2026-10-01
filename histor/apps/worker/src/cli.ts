@@ -9,6 +9,7 @@
  *   run-once                una vuelta del pipeline
  *   newsletter:send         envía las newsletters cuya hora ha llegado
  *   check:env               lista lo que falta para producción
+ *   images:recheck [--hours=72]   rehace las fotos de archivo con las reglas actuales
  *   images:backfill [--hours=72]  pone imagen ilustrativa (Wikimedia Commons) a lo publicado que no tenga
  *   admin:reset-password    NEW_PASSWORD=… [--email=…] restablece la contraseña (sin correo configurado)
  *   stories:recheck [--hours=72]  vuelve a verificar y redactar lo publicado en esas horas (tras mejorar el redactor)
@@ -17,7 +18,7 @@ import { and, eq, gte, inArray, isNull } from 'drizzle-orm';
 import { ensureAdmin, operatorResetPassword } from '@histor/core/auth/users';
 import { SOURCE_SEEDS } from '@histor/core/config/sources';
 import { closeDb, getDb } from '@histor/core/db/client';
-import { articles, rawItems, stories, storyItems } from '@histor/core/db/schema';
+import { articles, media, rawItems, stories, storyItems } from '@histor/core/db/schema';
 import { nonNewsReason } from '@histor/core/text/nonnews';
 import { runMigrations } from '@histor/core/db/migrate';
 import { attachStoryImage } from '@histor/core/media/wikimedia';
@@ -121,6 +122,24 @@ async function main(): Promise<number> {
       console.log(`✓ ${ids.length} historias en cola para reverificar y reescribir; ${hidden} retiradas por no ser noticia`);
       return 0;
     }
+    case 'images:recheck': {
+      // Rehace con las reglas actuales las fotos de archivo (Wikimedia) de lo publicado en esas horas:
+      // quita la foto puesta y vuelve a buscar (01-10-2026: una foto de París en una noticia de Argentina).
+      const hours = Number(args.find((a) => a.startsWith('--hours='))?.split('=')[1] ?? 72);
+      const rows = await getDb()
+        .selectDistinct({ id: articles.storyId })
+        .from(articles)
+        .innerJoin(media, eq(media.id, articles.imageId))
+        .where(and(eq(articles.status, 'published'), eq(articles.isDemo, false), eq(media.provider, 'wikimedia'), gte(articles.publishedAt, new Date(Date.now() - hours * 3600000))));
+      const tally: Record<string, number> = {};
+      for (const { id } of rows) {
+        await getDb().update(articles).set({ imageId: null }).where(and(eq(articles.storyId, id), inArray(articles.imageId, getDb().select({ id: media.id }).from(media).where(eq(media.provider, 'wikimedia')))));
+        const r = await attachStoryImage(getDb(), id).catch(() => 'error');
+        tally[r] = (tally[r] ?? 0) + 1;
+      }
+      console.log(`✓ fotos rehechas: ${rows.length} historias`, tally);
+      return 0;
+    }
     case 'images:backfill': {
       // --hours=72: solo lo publicado en las últimas horas (lo que sale en portada).
       const hours = Number(args.find((a) => a.startsWith('--hours='))?.split('=')[1] ?? 0);
@@ -135,7 +154,7 @@ async function main(): Promise<number> {
       return 0;
     }
     default:
-      console.log('Uso: cli <migrate|seed|create-admin|demo:seed|demo:purge|sources:check|images:backfill|stories:recheck|run-once|newsletter:send|check:env>');
+      console.log('Uso: cli <migrate|seed|create-admin|demo:seed|demo:purge|sources:check|images:backfill|images:recheck|stories:recheck|run-once|newsletter:send|check:env>');
       return cmd ? 1 : 0;
   }
 }
