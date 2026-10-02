@@ -9,6 +9,7 @@ import type { ArticleBlock } from '../db/schema';
 import { sentences } from '../text/tokenize';
 import type { FactSheet } from './factsheet';
 import { PHRASES } from './phrases';
+import { tidyParagraphs } from './tidy';
 
 /** Agencias que los textos de las fuentes citan aunque no estén entre nuestras fuentes. */
 const AGENCIES = [
@@ -160,9 +161,10 @@ export function cleanStoredArticle(a: StoredText, lang: string, names: string[])
       else changed = true;
     } else body.push(b);
   }
-  // Un apartado que se ha quedado sin contenido, fuera.
-  const tidy = body.filter((b, i) => b.type !== 'h2' || (body[i + 1] && body[i + 1].type !== 'h2'));
-  if (tidy.length !== body.length) changed = true;
+  // Un apartado que se ha quedado sin contenido, fuera; y el texto corrido, sin hechos repetidos
+  // ni párrafos de una frase.
+  const tidy = tidyParagraphs(body.filter((b, i) => b.type !== 'h2' || (body[i + 1] && body[i + 1].type !== 'h2')));
+  if (JSON.stringify(tidy) !== JSON.stringify(body)) changed = true;
   let subheadline = a.subheadline;
   if (subheadline) {
     const many = subheadline.match(OLD_CONFIRMED);

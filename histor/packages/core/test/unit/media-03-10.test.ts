@@ -4,7 +4,7 @@
  */
 import { describe, expect, it } from 'vitest';
 import { cleanStoredArticle, namesMedia, stripMediaAttribution } from '../../src/writing/media';
-import { sameFact } from '../../src/writing/deterministic';
+import { sameFact, tidyParagraphs } from '../../src/writing/tidy';
 import { fitToLimit, requestLimitFrom } from '../../src/ai/router';
 import { nextCheckDelayMinutes } from '../../src/pipeline/verify';
 
@@ -74,6 +74,22 @@ describe('sin contar dos veces lo mismo', () => {
   });
   it('un dato nuevo (una cifra) es información, aunque hable de lo mismo', () => {
     expect(sameFact('The Chicago Demo City Council approved a plan to build 40 miles of protected bike lanes in Chicago.', 'Chicago will add 40 miles of protected bike lanes after the Chicago Demo City Council voted 38 to 12.')).toBe(false);
+  });
+  it('la noticia de Grimaldo: fuera la frase repetida y sin una frase por párrafo', () => {
+    const p = (text: string, id: number) => ({ type: 'p' as const, text, claimIds: [id] });
+    const out = tidyParagraphs([
+      p('Álex Grimaldo ha tenido que abandonar la concentración de España por unas molestias musculares.', 1),
+      p('La lesión muscular también llevó a Grimaldo a abandonar la concentración de España.', 2),
+      p('Luis de la Fuente ha incluido a Fran García como sustituto de Grimaldo, el lateral izquierdo del Atlético de Madrid.', 3),
+      p('El lateral del Atlético no pudo participar este martes en la Nations League contra Croacia.', 4),
+      p('La baja será cubierta por el futbolista de Bolaños de Calatrava, que ya ha jugado en la absoluta a órdenes de Luis de la Fuente.', 5),
+      { type: 'h2' as const, text: 'Datos clave' },
+    ]);
+    expect(out).toHaveLength(3);
+    expect(out[0]).toMatchObject({ claimIds: [1] });
+    expect((out[1] as { text: string }).text).not.toMatch(/lesión muscular también/);
+    expect((out[1] as { claimIds: number[] }).claimIds).toEqual([3, 4, 5]);
+    expect(out[2]).toMatchObject({ type: 'h2' });
   });
   it('dos hechos distintos sobre las mismas personas no se confunden', () => {
     expect(sameFact('Álex Grimaldo ha tenido que abandonar la concentración de España.', 'Luis de la Fuente ha incluido a Fran García como sustituto de Grimaldo, el lateral izquierdo del Atlético de Madrid.')).toBe(false);

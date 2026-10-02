@@ -17,6 +17,7 @@ import { claimRef, writeDeterministic, type WriteOptions } from './deterministic
 import type { Draft } from './draft';
 import type { FactSheet } from './factsheet';
 import { mediaNames, stripMediaAttribution } from './media';
+import { tidyParagraphs } from './tidy';
 import { validateDraft } from './validate';
 import { longestCommonRun } from './quality';
 import { DEFAULT_EDITORIAL_SETTINGS } from '../config/settings';
@@ -174,13 +175,15 @@ export async function writeWithLlm(db: Db, fs: FactSheet, opts: WriteOptions & {
   const out = decodeDeep(res.data) as WriterOut;
   if (!out.headline || !Array.isArray(out.paragraphs) || !out.paragraphs.length) return null;
   // Texto de la IA + secciones deterministas (datos clave, no confirmado, recuadro de verificación).
-  const aiBlocks = repairAiParagraphs(
+  const repaired = repairAiParagraphs(
     out.paragraphs.map((p) => ({ type: 'p' as const, text: p.text.trim(), claimIds: p.claim_ids ?? [] })),
     fs,
     base,
   );
   // Si la reparación deja poco, no merece la pena: mejor el redactor determinista.
-  if (aiBlocks.length < 2) return null;
+  if (repaired.length < 2) return null;
+  // Sin el mismo hecho dos veces ni una frase por párrafo (03-10-2026).
+  const aiBlocks = tidyParagraphs(repaired) as typeof repaired;
   // Secciones fijas (datos clave, no confirmado, qué puede pasar), sin lo que ya cuenta la IA:
   // «Qué puede pasar ahora» repetía la primera frase del artículo (30-09-2026).
   const told = words(aiBlocks.map((b) => b.text).join(' '));

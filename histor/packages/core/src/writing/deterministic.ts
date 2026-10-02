@@ -20,6 +20,7 @@ import { libelRisk, longestCommonRun, plainWords } from './quality';
 import type { Draft } from './draft';
 import type { FactClaim, FactSheet } from './factsheet';
 import { mediaNames, namesMedia, stripMediaAttribution } from './media';
+import { sameFact } from './tidy';
 import { PHRASES } from './phrases';
 import { PROMO } from '../text/nonnews';
 import { DEFAULT_EDITORIAL_SETTINGS } from '../config/settings';
@@ -504,30 +505,7 @@ function nearDuplicate(c: FactClaim, others: FactClaim[]): boolean {
   });
 }
 
-/** Raíces (seis primeras letras) de las palabras con peso: «muscular» y «musculares» son la misma. */
-function stems(s: string): Set<string> {
-  return new Set(fold(s).split(/\W+/).filter((w) => w.length > 4).map((w) => w.slice(0, 6)));
-}
-
-/**
- * ¿Cuenta `b` lo mismo que `a`? Comparten al menos el 60 % de las raíces de la más corta y `b` no
- * trae ninguna cifra nueva («votó 38 a 12», «para 2029»): un dato nuevo es información, aunque
- * hable de lo mismo.
- */
-export function sameFact(a: string, b: string): boolean {
-  const nums = (s: string) => new Set(s.match(/\d+(?:[.,]\d+)?/g) ?? []);
-  const an = nums(a);
-  if ([...nums(b)].some((n) => !an.has(n))) return false;
-  const A = stems(a);
-  const B = stems(b);
-  const small = Math.min(A.size, B.size);
-  if (small < 4) return false;
-  let inter = 0;
-  for (const w of A) if (B.has(w)) inter++;
-  return inter / small >= 0.6;
-}
-
-export { lowerFirst };
+export { lowerFirst, sameFact };
 
 function ngrams(words: string[], n: number): Set<string> {
   const out = new Set<string>();
