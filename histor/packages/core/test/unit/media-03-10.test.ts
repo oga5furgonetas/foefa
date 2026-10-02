@@ -123,3 +123,12 @@ describe('más rápido', () => {
     expect(nextCheckDelayMinutes('PUBLISHED', 3, 3)).toBe(30);
   });
 });
+
+describe('frases que remiten a lo que la fuente contó antes', () => {
+  it('«Tras esa salida…» no se entiende sola; «Desde este lunes…», sí', async () => {
+    const { standsAlone } = await import('../../src/writing/deterministic');
+    expect(standsAlone('Tras esa salida, las tropas regresaron a Irak en 2014.')).toBe(false);
+    expect(standsAlone('Después de ese anuncio, la Bolsa cayó un 3 %.')).toBe(false);
+    expect(standsAlone('Desde este lunes, el metro cierra a las 2.00.')).toBe(true);
+  });
+});

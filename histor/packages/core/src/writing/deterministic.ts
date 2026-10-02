@@ -368,7 +368,7 @@ export function claimRef(c: FactClaim): number {
 /** ¿Se entiende sin la frase anterior? No si empieza por un anafórico o un conector. */
 function selfContained(text: string): boolean {
   const t = text.trim();
-  return !/^(den|dem|dies|esto|eso|ello|cela|ceci|ciò|isso|isto|but|pero|mas|aber|mais|ma|however|sin embargo|doch|allerdings|cependant|tuttavia|porém|contudo|además|también|also|auch|aussi|anche|também|and|y|und|et|e|so|así|asimismo)\b/i.test(t) && !ANAPHORIC_NP.test(t) && !CONNECTOR_START.test(t);
+  return !/^(den|dem|dies|esto|eso|ello|cela|ceci|ciò|isso|isto|but|pero|mas|aber|mais|ma|however|sin embargo|doch|allerdings|cependant|tuttavia|porém|contudo|además|también|also|auch|aussi|anche|também|and|y|und|et|e|so|así|asimismo)\b/i.test(t) && !ANAPHORIC_NP.test(t) && !CONNECTOR_START.test(t) && !afterThat(t);
 }
 
 /**
@@ -380,6 +380,16 @@ function selfContained(text: string): boolean {
 export function standsAlone(text: string): boolean {
   const t = text.trim();
   return selfContained(t) && !(STRICT_ANAPHORA.test(t) && !TIME_AFTER_DEMONSTRATIVE.test(t));
+}
+
+/** «Tras esa salida, las tropas regresaron…»: ¿qué salida? Remite a lo que la fuente contó antes (03-10-2026). */
+const AFTER_THAT =
+  /^(tras|después de|antes de|desde|durante|con|a raíz de|after|before|since|during|following|nach|vor|seit|während|après|avant|depuis|pendant|dopo|prima di|durante|da|após|antes de|desde)\s+(esa|ese|este|esta|aquel|aquella|dicha|dicho|tal|that|this|those|these|such|diese[mnrs]?|dieser|jene[mnrs]?|cette|cet|ce|ces|quell[aoei]|quest[aoei]|essa|esse|esta|este|aquela|aquele)\b/i;
+
+/** «Desde este lunes…» sí se entiende: es una fecha, no algo que la fuente contó antes. */
+function afterThat(t: string): boolean {
+  const m = t.match(AFTER_THAT);
+  return !!m && !TIME_AFTER_DEMONSTRATIVE.test(t.slice(m[1].length).trim());
 }
 
 /** Transiciones que remiten a lo anterior del texto de la fuente. */
