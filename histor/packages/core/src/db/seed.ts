@@ -135,7 +135,9 @@ export async function upsertSource(db: Db, src: SourceSeed, isDemo: boolean): Pr
       isSatire: !!src.isSatire,
       isDemo,
       status: src.status ?? 'active',
-      fetchIntervalMinutes: src.fetchIntervalMinutes ?? 15,
+      // Cada 5 min (03-10-2026, «actualiza todo más rápido»): con peticiones condicionales (ETag),
+      // un feed sin cambios es un 304 vacío. Las fuentes lentas fijan el suyo.
+      fetchIntervalMinutes: src.fetchIntervalMinutes ?? 5,
       config: src.config ?? {},
       categoryHint: src.categoryHint ?? null,
       licenseNotes: src.licenseNotes ?? null,
