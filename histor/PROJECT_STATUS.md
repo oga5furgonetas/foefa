@@ -160,6 +160,31 @@ reales: 8-10 párrafos, cada dato con su fuente, y todos los controles superados
 se repara frase a frase con el validador: «según X» si solo faltaba eso; fuera el párrafo
 si algo no tiene respaldo). Grok (xAI) NO sirve gratis: la cuenta de Dani no tiene créditos.
 
+## 03-10-2026: sin periódicos en el texto y más rápido
+
+- **Regla de Dani**: «deja de poner "según 20 minutos"… no escribas nada sobre otros periódicos».
+  El texto cuenta la noticia como un periódico; los medios van en el recuadro de fuentes y la
+  etiqueta «✓ Verificada» / «En desarrollo» junto al titular (Verificada sale en toda noticia que
+  no está en desarrollo). `writing/media.ts` quita «según X», «informa X», «(EFE)», «en
+  declaraciones a X»… y el validador rechaza (`check: 'media'`) la frase que aún atribuya algo a un
+  medio. Se sigue atribuyendo a personas e instituciones («según la Policía»): no son medios
+  (fuentes `primary_official`, `official`, `company`, `academic`, `witness`). Lo que publica una
+  fuente fiable va sin atribuir; lo que no respalda ninguna fiable solo sale en «Sin confirmar»
+  con su aviso. La IA ya no ve nombres de medio (`said_by` para quien habla en la noticia).
+- Subtítulo: «Verificada con N fuentes independientes» (antes, la lista de medios; esa lista
+  inflaba el texto y salvaba el control legal de las noticias de dos frases: la proporción
+  copiada solo se mide desde 60 palabras; el tramo literal, siempre).
+- **Sin repetir hechos** (`writing/tidy.ts`: `sameFact`, `tidyParagraphs`) y párrafos de hasta
+  tres frases, en el redactor, en la IA y en lo ya publicado: `cli articles:clean-media
+  [--hours=168]` (1.132 noticias limpiadas el 03-10).
+- **Lentitud**: el worker es `shared-cpu-1x` y Fly le quita el 82 % del tiempo de CPU (steal en
+  `/proc/stat`); verificar una historia de 2 piezas tardaba 6-8 s (0,1 s en local). Además se
+  repasaban 33.679 historias paradas cada 10-30 min. Ahora una historia sin piezas nuevas se
+  revisa a los 45 min, luego cada 3 h y tras un día en silencio se deja (una pieza nueva la
+  reabre). El router de IA aprende el tope de cada modelo (qwen3.8-27b: 1.000 tokens de salida
+  por minuto, no da para un artículo) y no repite llamadas que no caben. **Pendiente de Dani**:
+  subir el worker de CPU (cuesta dinero).
+
 ## Bloqueos (externos: solo los puede resolver el propietario)
 
 1. **Dominio `histor.es`**: comprado por Dani en Nominalia el 29-09-2026. La protección
