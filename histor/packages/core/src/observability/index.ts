@@ -71,6 +71,10 @@ export async function prometheusMetrics(db: Db): Promise<string> {
   gauge('histor_page_views_24h_by_language', 'Páginas vistas en 24 h por idioma', byLang.map((r) => ({ labels: { language: r.language }, value: r.c })));
   const byCountry = await q<{ country: string; c: number }>(sql`SELECT coalesce(country_code, '?') country, count(*)::int c FROM analytics_events WHERE type = 'page_view' AND ts >= now() - interval '24 hours' GROUP BY 1 ORDER BY 2 DESC LIMIT 10`);
   gauge('histor_page_views_24h_by_country', 'Páginas vistas en 24 h por país (los 10 primeros)', byCountry.map((r) => ({ labels: { country: r.country }, value: r.c })));
+  const origin = await q<{ origin: string; c: number }>(sql`
+    SELECT coalesce(props->>'src', props->>'ref', 'directo') origin, count(*)::int c FROM analytics_events
+    WHERE type = 'page_view' AND ts >= now() - interval '7 days' GROUP BY 1 ORDER BY 2 DESC LIMIT 12`);
+  gauge('histor_page_views_7d_by_origin', 'Páginas vistas en 7 días por origen (campaña utm_source o sitio que trae la visita)', origin.map((r) => ({ labels: { origin: r.origin }, value: r.c })));
   const top = await q<{ path: string; c: number }>(sql`SELECT coalesce(path, '?') path, count(*)::int c FROM analytics_events WHERE type = 'page_view' AND ts >= now() - interval '24 hours' GROUP BY 1 ORDER BY 2 DESC LIMIT 10`);
   gauge('histor_top_pages_24h', 'Páginas más vistas en 24 h', top.map((r) => ({ labels: { path: r.path.slice(0, 120) }, value: r.c })));
   const mem = process.memoryUsage();

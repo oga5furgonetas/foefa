@@ -17,8 +17,24 @@ export function track(events: Ev[]) {
 export function ReadTracker({ articleId, experiment }: { articleId?: number; experiment?: { key: string; variant: string } }) {
   useEffect(() => {
     const path = location.pathname;
-    const props = experiment ? { exp: experiment.key, variant: experiment.variant } : undefined;
-    track([{ type: 'page_view', articleId, path, props }]);
+    // De dónde viene la visita: la campaña (utm_source, utm_campaign) o el sitio externo que la
+    // trae (solo el dominio: «t.me», «www.google.com»). Para saber si funciona la difusión.
+    const q = new URLSearchParams(location.search);
+    let ref: string | undefined;
+    try {
+      const h = document.referrer ? new URL(document.referrer).host : '';
+      if (h && h !== location.host) ref = h.slice(0, 80);
+    } catch {
+      /* sin referencia */
+    }
+    const src = q.get('utm_source')?.slice(0, 40);
+    const camp = q.get('utm_campaign')?.slice(0, 60);
+    const props = {
+      ...(experiment ? { exp: experiment.key, variant: experiment.variant } : {}),
+      ...(src ? { src, ...(camp ? { camp } : {}) } : {}),
+      ...(ref ? { ref } : {}),
+    };
+    track([{ type: 'page_view', articleId, path, props: Object.keys(props).length ? props : undefined }]);
     if (!articleId) return;
     let maxScroll = 0;
     let active = 0;
