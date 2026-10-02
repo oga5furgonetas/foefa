@@ -167,16 +167,17 @@ describe('pipeline DEMO de extremo a extremo', () => {
     }
   });
 
-  it('el subtítulo nombra tantas fuentes como dice (o «entre ellas»)', async () => {
+  it('ni el subtítulo ni el texto nombran a los medios: van en el recuadro de fuentes (03-10-2026)', async () => {
     const all = await db.select().from(articles).where(eq(articles.status, 'published'));
+    const names = (await db.select({ name: sources.name, type: sources.sourceType }).from(sources)).filter((s) => !['primary_official', 'official'].includes(s.type)).map((s) => s.name);
+    let checked = 0;
     for (const a of all) {
-      const m = a.subheadline?.match(/(\d+) (?:fuentes|independent|unabhängigen|sources|fonti|fontes)/);
-      if (!m) continue;
-      const n = Number(m[1]);
-      const listed = a.subheadline!.split(/:|,(?= )| y | and | und | et | e /).length - 1;
-      if (/entre ellas|including|darunter|dont|tra cui|entre elas/.test(a.subheadline!)) expect(n).toBeGreaterThan(4);
-      else expect(listed).toBe(n);
+      if (a.subheadline) for (const n of names) expect(a.subheadline, a.headline).not.toContain(n);
+      const text = a.body.flatMap((b) => (b.type === 'p' ? [b.text] : b.type === 'list' ? b.items.map((i) => i.text) : [])).join(' ');
+      for (const n of names) for (const w of ['según', 'according to', 'laut', 'selon', 'secondo', 'segundo', 'berichtet']) expect(text, a.headline).not.toContain(`${w} ${n}`);
+      checked++;
     }
+    expect(checked).toBeGreaterThan(0);
   });
 
   it('mantenimiento: poda el texto de las fuentes a los 30 días (se guardó solo para contrastar)', async () => {

@@ -19,7 +19,7 @@ function expAttrs(a: Card) {
 function Meta({ a, lang, d }: P) {
   return (
     <div className="meta">
-      <Badges d={d} a={{ isBreaking: a.isBreaking, isDeveloping: a.isDeveloping, isDemo: a.isDemo, verified: a.evidenceConfidence >= 0.75 }} />
+      <Badges d={d} a={{ isBreaking: a.isBreaking, isDeveloping: a.isDeveloping, isDemo: a.isDemo, verified: !a.isDeveloping }} />
       <time dateTime={new Date(a.updatedAt).toISOString()} className="tnum">
         {fmtRelative(a.updatedAt, lang)}
       </time>

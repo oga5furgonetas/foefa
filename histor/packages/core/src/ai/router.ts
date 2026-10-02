@@ -91,6 +91,37 @@ export function retryAfterMs(message: string): number {
   return COOLDOWN_MS;
 }
 
+/**
+ * Tope por petición de cada modelo, aprendido de su propio aviso: «Request too large for model
+ * `qwen/qwen3.8-27b` … on output tokens per minute (OTPM): Limit 1000, Requested 1639» (solo
+ * salida) o «… (TPM): Limit 6000, Requested 7712» (entrada + salida). Sin él, cada noticia volvía
+ * a probar el modelo que no le cabía: 39 llamadas fallidas por ciclo (02-10-2026). Con él, se
+ * pide menos salida para que quepa o, si ni así hay sitio para un artículo, ni se le llama.
+ */
+export type RequestLimit = { limit: number; output: boolean };
+const requestLimit = new Map<string, RequestLimit>();
+
+export function requestLimitFrom(message: string): RequestLimit | null {
+  const m = message.match(/Limit\s+(\d+)\s*,\s*Requested\s+(\d+)/i);
+  return m ? { limit: Number(m[1]), output: /output tokens|OTPM/i.test(message) } : null;
+}
+
+/** Tokens de entrada aproximados (≈ 3,2 caracteres por token, esquema incluido). */
+export function estimateInputTokens(req: Pick<JsonRequest, 'system' | 'prompt' | 'schema'>): number {
+  return Math.ceil((req.system.length + req.prompt.length + JSON.stringify(req.schema ?? {}).length) / 3.2);
+}
+
+/** Salida mínima que merece la pena: menos no da para un artículo ni para una traducción. */
+const MIN_OUTPUT = 1200;
+
+/** La petición ajustada al tope conocido del modelo, o null si no cabe ni con la salida mínima. */
+export function fitToLimit(req: JsonRequest, known: RequestLimit | undefined): JsonRequest | null {
+  if (!known) return req;
+  const room = known.output ? known.limit : known.limit - estimateInputTokens(req) - 300;
+  if (room < MIN_OUTPUT) return null;
+  return (req.maxTokens ?? 8000) > room ? { ...req, maxTokens: room } : req;
+}
+
 export async function monthSpendUsd(db: Db): Promise<number> {
   const rows = await db
     .select({ total: sql<number>`coalesce(sum(${aiUsage.costUsd}), 0)` })
@@ -118,8 +149,10 @@ export async function callJson(
     const key = `${provider.name}:${provider.model}`;
     if ((cooldownUntil.get(key) ?? 0) > Date.now()) continue;
     if (daily > 0 && (await dayTokens(db, provider.model)) >= daily) continue;
+    const call = fitToLimit(req, requestLimit.get(key));
+    if (!call) continue;
     try {
-      const res = await provider.generateJson(req);
+      const res = await provider.generateJson(call);
       await db.insert(aiUsage).values({
         task: req.task,
         provider: res.provider,
@@ -137,6 +170,8 @@ export async function callJson(
       // «Request too large»: esta petición no cabe en este modelo, pero el modelo está libre para
       // otras; no se le castiga (se prueba el siguiente de la cadena).
       if (/\b429\b/.test(msg) && !/request too large/i.test(msg)) cooldownUntil.set(key, Date.now() + retryAfterMs(msg));
+      const limit = /request too large/i.test(msg) ? requestLimitFrom(msg) : null;
+      if (limit) requestLimit.set(key, limit);
       await db.insert(aiUsage).values({
         task: req.task,
         provider: provider.name,

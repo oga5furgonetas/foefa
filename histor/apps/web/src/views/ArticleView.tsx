@@ -61,7 +61,7 @@ export function ArticleView({ data, lang, d, tz, experiment }: { data: ArticleDe
                 · {place.names[lang] ?? place.names.en}
               </Link>
             )}
-            <Badges d={d} a={{ isBreaking: a.isBreaking, isDeveloping: a.isDeveloping, isDemo: a.isDemo, status: a.status, verified: a.evidenceConfidence >= 0.75 }} />
+            <Badges d={d} a={{ isBreaking: a.isBreaking, isDeveloping: a.isDeveloping, isDemo: a.isDemo, status: a.status, verified: !a.isDeveloping }} />
           </div>
           <h1>{headline}</h1>
           <p className="dek">{a.summary}</p>

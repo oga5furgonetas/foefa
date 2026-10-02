@@ -27,7 +27,7 @@ export async function GET(req: NextRequest) {
         .limit(1)
     : [];
   const headline = a?.headline ?? d.tagline;
-  const label = !a ? 'Histor' : a.status === 'retracted' ? d.label.retracted : a.isDeveloping ? d.label.developing : a.evidenceConfidence >= 0.75 ? `✓ ${d.label.verified}` : '';
+  const label = !a ? 'Histor' : a.status === 'retracted' ? d.label.retracted : a.isDeveloping ? d.label.developing : `✓ ${d.label.verified}`;
   const color = !a ? '#15171c' : a.status === 'retracted' ? '#15171c' : a.isDeveloping ? '#8f5400' : '#0b6b55';
   return new ImageResponse(
     (

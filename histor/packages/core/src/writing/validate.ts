@@ -7,6 +7,7 @@
  *   ¿cada cita literal existe en las fuentes, con el mismo hablante? → si no: FALLO
  *   ¿algo no confirmado se presenta como hecho? → FALLO
  *   ¿una predicción se presenta como hecho?     → FALLO
+ *   ¿atribuye algo a un periódico («según X»)?  → FALLO (los medios van en el recuadro de fuentes)
  * Si falla cualquier cosa: NO PUBLICAR.
  */
 import { extractDates } from '../text/dates';
@@ -17,13 +18,14 @@ import { extractQuotes, quoteAppearsIn, sameSpeaker } from '../text/quotes';
 import { fold as foldText } from '../text/normalize';
 import { sentences } from '../text/tokenize';
 import { claimRef } from './deterministic';
+import { mediaNames, namesMedia } from './media';
 import type { Draft } from './draft';
 import type { FactClaim, FactSheet } from './factsheet';
 import { PHRASES } from './phrases';
 
 const UNCONFIRMED_SUFFIXES = new Set(Object.values(PHRASES).map((p) => p.unconfirmedSuffix.trim()));
 
-export type ValidationIssue = { check: 'citation' | 'number' | 'date' | 'entity' | 'quote' | 'status' | 'prediction' | 'headline'; text: string; detail: string };
+export type ValidationIssue = { check: 'citation' | 'number' | 'date' | 'entity' | 'quote' | 'status' | 'prediction' | 'headline' | 'media'; text: string; detail: string };
 
 export type ValidationResult = { ok: boolean; issues: ValidationIssue[] };
 
@@ -39,6 +41,7 @@ export function validateDraft(draft: Draft, fs: FactSheet, extraAllowedNames: st
     [...baseNames, ...baseNames.flatMap((n) => extractEntities(n).map((e) => e.name)), ...baseNames.flatMap((n) => n.split(/[()]/).map((x) => x.trim()).filter(Boolean))].map(entityKey),
   );
   const sourceTexts = fs.sourceTexts.map((s) => s.text);
+  const media = mediaNames(fs);
   // Nombres de medio con cifras («France 24», «20minutos», «Antena 3»): su número no es un dato.
   const numberedNames = [...new Set(baseNames)].filter((n) => /\d/.test(n)).sort((a, b) => b.length - a.length);
   const withoutNames = (t: string) => numberedNames.reduce((acc, n) => acc.split(n).join(' '), t);
@@ -70,15 +73,14 @@ export function validateDraft(draft: Draft, fs: FactSheet, extraAllowedNames: st
       issues.push({ check: 'citation', text: u.text, detail: 'frase sin afirmaciones que la respalden' });
       continue;
     }
-    // Como en un periódico, se atribuye una vez por párrafo: las frases que siguen a «Según X, …»
-    // se apoyan en las mismas afirmaciones (las del párrafo) y no repiten la fuente (01-10-2026:
-    // «según Radio Universidad de Chile» en cada frase).
-    let carried = false;
+    // Lo que aún no está confirmado lleva su aviso («No se ha podido confirmar de forma
+    // independiente.») en la misma línea: ese aviso vale por la cautela de todo el punto.
+    const flagged = u.section === 'unconfirmed' && sentences(u.text).some((s) => UNCONFIRMED_SUFFIXES.has(s.trim()));
     for (const s of u.section === 'quote' ? [u.text] : sentences(u.text)) {
-      // «No se ha podido confirmar de forma independiente.»: aclaración de Histor, no un hecho que atribuir.
       if (UNCONFIRMED_SUFFIXES.has(s.trim())) continue;
-      checkSentence(s, cited, u, issues, fs, allowedNames, sourceTexts, withoutNames, carried);
-      if (hasAttributionMarker(s)) carried = true;
+      checkSentence(s, cited, u, issues, fs, allowedNames, sourceTexts, withoutNames, flagged);
+      // Sin periódicos en el texto (Dani, 03-10-2026): ni «según 20minutos» ni «informa EFE».
+      if (u.section !== 'quote' && namesMedia(s, media)) issues.push({ check: 'media', text: s, detail: 'atribuye a un medio: los medios van en el recuadro de fuentes, no en el texto' });
     }
   }
 
@@ -93,6 +95,7 @@ export function validateDraft(draft: Draft, fs: FactSheet, extraAllowedNames: st
       (fs.earthquake && (n.unit === 'magnitude' || !n.unit) && Math.abs(n.value - fs.earthquake.magnitude) < 0.05);
     if (!ok) issues.push({ check: 'headline', text: draft.headline, detail: `cifra no respaldada en el titular: ${n.raw}` });
   }
+  if (namesMedia(draft.headline, media)) issues.push({ check: 'media', text: draft.headline, detail: 'el titular nombra a un medio' });
   if (!fs.verified && !fs.earthquake && !draft.isDeveloping && !hasAttributionMarker(draft.headline)) {
     issues.push({ check: 'headline', text: draft.headline, detail: 'titular de una noticia no verificada sin atribución' });
   }
@@ -105,7 +108,7 @@ export function validateDraft(draft: Draft, fs: FactSheet, extraAllowedNames: st
   return { ok: issues.length === 0, issues };
 }
 
-function checkSentence(s: string, cited: FactClaim[], u: Unit, issues: ValidationIssue[], fs: FactSheet, allowedNames: Set<string>, sourceTexts: string[], withoutNames: (t: string) => string = (t) => t, carried = false) {
+function checkSentence(s: string, cited: FactClaim[], u: Unit, issues: ValidationIssue[], fs: FactSheet, allowedNames: Set<string>, sourceTexts: string[], withoutNames: (t: string) => string = (t) => t, flagged = false) {
   const lang = cited[0]?.language;
   // Cifras
   const citedNums = cited.flatMap((c) => c.numbers);
@@ -145,14 +148,15 @@ function checkSentence(s: string, cited: FactClaim[], u: Unit, issues: Validatio
       issues.push({ check: 'quote', text: s, detail: `cita atribuida a ${q.speaker}, pero la fuente la atribuye a ${claimSpeaker}` });
     }
   }
-  // Estado: lo no confirmado debe ir atribuido; nada no confirmado en "lo que se sabe" como hecho.
-  const weakest = cited.some((c) => c.status === 'unsupported' || c.status === 'contradicted')
-    ? 'unsupported'
-    : cited.some((c) => c.status === 'partially_supported')
-      ? 'partial'
-      : 'supported';
-  if (weakest !== 'supported' && u.section !== 'figures' && !hasAttributionMarker(s) && !carried) {
-    issues.push({ check: 'status', text: s, detail: 'afirmación no verificada presentada como hecho (falta atribución)' });
+  // Estado. Lo que publica una fuente fiable se cuenta como en cualquier periódico, sin «según X»:
+  // la etiqueta «Verificada» o «En desarrollo» junto al titular dice cuánto está confirmado, y las
+  // fuentes están en su recuadro (Dani, 03-10-2026). Lo que no respalda ninguna fuente fiable
+  // solo sale con su aviso de «sin confirmar», con cautela («presuntamente») o atribuido a quien
+  // lo dice; una previsión, en «Qué puede pasar» y como previsión.
+  const weak = cited.some((c) => c.status === 'unsupported' || c.status === 'contradicted');
+  const prediction = u.section === 'next' && hasPredictionMarker(s);
+  if (weak && u.section !== 'figures' && !flagged && !prediction && !hasAttributionMarker(s)) {
+    issues.push({ check: 'status', text: s, detail: 'afirmación sin respaldo fiable presentada como hecho (falta cautela)' });
   }
   if (cited.some((c) => c.status === 'contradicted') && u.section !== 'unconfirmed') {
     issues.push({ check: 'status', text: s, detail: 'usa una afirmación contradicha fuera de la sección de no confirmados' });

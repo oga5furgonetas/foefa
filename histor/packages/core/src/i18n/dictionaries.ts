@@ -24,7 +24,7 @@ const es = {
     related: 'Noticias relacionadas', timeline: 'Cronología', history: 'Historial de cambios', version: 'Versión {n}', viewVersion: 'Ver versión', reportError: 'Informar de un error',
     share: 'Compartir', save: 'Guardar', saved: 'Guardada', copyLink: 'Copiar enlace', copied: 'Enlace copiado', entities: 'En esta noticia', location: 'Lugar', tags: 'Temas', writtenBy: 'Elaborada por {author}',
     automated: 'Texto elaborado con un sistema automatizado a partir de fuentes contrastadas y revisado por controles editoriales.', retractedNotice: 'Esta noticia ha sido retirada', otherLanguages: 'También en', imageCredit: 'Imagen: {credit}', illustrative: 'Imagen ilustrativa, no del acontecimiento', aiImage: 'Imagen generada por IA',
-    corrections: 'Correcciones y actualizaciones', noImage: 'Sin fotografía verificada', superseded: 'Datos anteriores (ya actualizados)', developingNotice: 'La información puede cambiar. Lo que aún no está confirmado se atribuye a la fuente que lo publica.',
+    corrections: 'Correcciones y actualizaciones', noImage: 'Sin fotografía verificada', superseded: 'Datos anteriores (ya actualizados)', developingNotice: 'La información puede cambiar: todavía no la confirman dos fuentes independientes. Las fuentes consultadas están al final de la noticia.',
   },
   home: {
     topStory: 'Lo principal', latest: 'Últimas noticias', trending: 'Lo que más crece', local: 'Cerca de ti', world: 'Internacional', forYou: 'Para ti',
@@ -95,7 +95,7 @@ const en: Dict = {
     related: 'Related stories', timeline: 'Timeline', history: 'Change history', version: 'Version {n}', viewVersion: 'View version', reportError: 'Report an error',
     share: 'Share', save: 'Save', saved: 'Saved', copyLink: 'Copy link', copied: 'Link copied', entities: 'In this story', location: 'Location', tags: 'Topics', writtenBy: 'Produced by {author}',
     automated: 'Written by an automated system from cross-checked sources and passed through editorial controls.', retractedNotice: 'This story has been retracted', otherLanguages: 'Also in', imageCredit: 'Image: {credit}', illustrative: 'Illustrative image, not of the event', aiImage: 'AI-generated image',
-    corrections: 'Corrections and updates', noImage: 'No verified photograph', superseded: 'Earlier figures (since updated)', developingNotice: 'Details may change. Anything not yet confirmed is attributed to the source that reported it.',
+    corrections: 'Corrections and updates', noImage: 'No verified photograph', superseded: 'Earlier figures (since updated)', developingNotice: 'Details may change: not yet confirmed by two independent sources. The sources we checked are listed at the end of the story.',
   },
   home: {
     topStory: 'Top story', latest: 'Latest news', trending: 'Gaining momentum', local: 'Near you', world: 'World', forYou: 'For you',
@@ -164,7 +164,7 @@ const de: Dict = {
     related: 'Verwandte Meldungen', timeline: 'Chronologie', history: 'Änderungsverlauf', version: 'Version {n}', viewVersion: 'Version ansehen', reportError: 'Fehler melden',
     share: 'Teilen', save: 'Merken', saved: 'Gemerkt', copyLink: 'Link kopieren', copied: 'Link kopiert', entities: 'In dieser Meldung', location: 'Ort', tags: 'Themen', writtenBy: 'Erstellt von {author}',
     automated: 'Von einem automatisierten System aus geprüften Quellen erstellt und durch redaktionelle Kontrollen geprüft.', retractedNotice: 'Diese Meldung wurde zurückgezogen', otherLanguages: 'Auch auf', imageCredit: 'Bild: {credit}', illustrative: 'Symbolbild, nicht vom Ereignis', aiImage: 'KI-generiertes Bild',
-    corrections: 'Korrekturen und Aktualisierungen', noImage: 'Kein geprüftes Foto', superseded: 'Frühere Angaben (inzwischen aktualisiert)', developingNotice: 'Angaben können sich ändern. Was noch nicht bestätigt ist, wird der Quelle zugeordnet, die es berichtet hat.',
+    corrections: 'Korrekturen und Aktualisierungen', noImage: 'Kein geprüftes Foto', superseded: 'Frühere Angaben (inzwischen aktualisiert)', developingNotice: 'Angaben können sich ändern: noch nicht von zwei unabhängigen Quellen bestätigt. Die geprüften Quellen stehen am Ende des Berichts.',
   },
   home: {
     topStory: 'Das Wichtigste', latest: 'Neueste Meldungen', trending: 'Wachsendes Interesse', local: 'In deiner Nähe', world: 'Ausland', forYou: 'Für dich',
@@ -233,7 +233,7 @@ const fr: Dict = {
     related: 'À lire aussi', timeline: 'Chronologie', history: 'Historique des modifications', version: 'Version {n}', viewVersion: 'Voir la version', reportError: 'Signaler une erreur',
     share: 'Partager', save: 'Sauvegarder', saved: 'Sauvegardé', copyLink: 'Copier le lien', copied: 'Lien copié', entities: 'Dans cet article', location: 'Lieu', tags: 'Sujets', writtenBy: 'Produit par {author}',
     automated: 'Texte produit par un système automatisé à partir de sources recoupées et soumis à des contrôles éditoriaux.', retractedNotice: 'Cet article a été retiré', otherLanguages: 'Aussi en', imageCredit: 'Image : {credit}', illustrative: "Image d'illustration, pas de l'événement", aiImage: 'Image générée par IA',
-    corrections: 'Corrections et mises à jour', noImage: 'Pas de photographie vérifiée', superseded: 'Chiffres antérieurs (mis à jour depuis)', developingNotice: 'Les informations peuvent évoluer. Ce qui n’est pas encore confirmé est attribué à la source qui l’a publié.',
+    corrections: 'Corrections et mises à jour', noImage: 'Pas de photographie vérifiée', superseded: 'Chiffres antérieurs (mis à jour depuis)', developingNotice: 'Les informations peuvent évoluer : pas encore confirmées par deux sources indépendantes. Les sources consultées figurent à la fin de l’article.',
   },
   home: {
     topStory: "L'essentiel", latest: 'Dernières informations', trending: 'En progression', local: 'Près de chez vous', world: 'International', forYou: 'Pour vous',
@@ -302,7 +302,7 @@ const it: Dict = {
     related: 'Notizie correlate', timeline: 'Cronologia', history: 'Cronologia delle modifiche', version: 'Versione {n}', viewVersion: 'Vedi versione', reportError: 'Segnala un errore',
     share: 'Condividi', save: 'Salva', saved: 'Salvato', copyLink: 'Copia link', copied: 'Link copiato', entities: 'In questa notizia', location: 'Luogo', tags: 'Argomenti', writtenBy: 'Prodotto da {author}',
     automated: 'Testo prodotto da un sistema automatizzato a partire da fonti verificate e sottoposto a controlli editoriali.', retractedNotice: 'Questa notizia è stata ritirata', otherLanguages: 'Anche in', imageCredit: 'Immagine: {credit}', illustrative: "Immagine illustrativa, non dell'evento", aiImage: "Immagine generata dall'IA",
-    corrections: 'Correzioni e aggiornamenti', noImage: 'Nessuna fotografia verificata', superseded: 'Dati precedenti (poi aggiornati)', developingNotice: 'Le informazioni possono cambiare. Ciò che non è ancora confermato è attribuito alla fonte che lo ha pubblicato.',
+    corrections: 'Correzioni e aggiornamenti', noImage: 'Nessuna fotografia verificata', superseded: 'Dati precedenti (poi aggiornati)', developingNotice: 'Le informazioni possono cambiare: non ancora confermate da due fonti indipendenti. Le fonti consultate sono in fondo all’articolo.',
   },
   home: {
     topStory: 'In primo piano', latest: 'Ultime notizie', trending: 'In crescita', local: 'Vicino a te', world: 'Esteri', forYou: 'Per te',
@@ -371,7 +371,7 @@ const pt: Dict = {
     related: 'Notícias relacionadas', timeline: 'Cronologia', history: 'Histórico de alterações', version: 'Versão {n}', viewVersion: 'Ver versão', reportError: 'Reportar erro',
     share: 'Compartilhar', save: 'Salvar', saved: 'Salvo', copyLink: 'Copiar link', copied: 'Link copiado', entities: 'Nesta notícia', location: 'Local', tags: 'Temas', writtenBy: 'Produzido por {author}',
     automated: 'Texto produzido por um sistema automatizado a partir de fontes checadas e submetido a controles editoriais.', retractedNotice: 'Esta notícia foi retirada', otherLanguages: 'Também em', imageCredit: 'Imagem: {credit}', illustrative: 'Imagem ilustrativa, não do acontecimento', aiImage: 'Imagem gerada por IA',
-    corrections: 'Correções e atualizações', noImage: 'Sem fotografia verificada', superseded: 'Dados anteriores (já atualizados)', developingNotice: 'As informações podem mudar. O que ainda não foi confirmado é atribuído à fonte que o publicou.',
+    corrections: 'Correções e atualizações', noImage: 'Sem fotografia verificada', superseded: 'Dados anteriores (já atualizados)', developingNotice: 'As informações podem mudar: ainda não confirmadas por duas fontes independentes. As fontes consultadas estão no fim da notícia.',
   },
   home: {
     topStory: 'Destaque', latest: 'Últimas notícias', trending: 'Ganhando força', local: 'Perto de você', world: 'Internacional', forYou: 'Para você',

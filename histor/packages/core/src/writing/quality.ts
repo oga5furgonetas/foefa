@@ -56,6 +56,11 @@ const CLICKBAIT = [
 const DEFAMATION_TERMS =
   /\b(asesin[oa]|violador|ladr[oó]n|estafador|corrupt[oa]|terrorista|pederasta|murderer|rapist|thief|fraudster|terrorist|m[öo]rder|vergewaltiger|dieb|betr[üu]ger|meurtrier|violeur|voleur|escroc|assassino|stupratore|ladro|truffatore|estuprador|golpista)\b/i;
 const PRESUMPTION = /(presunt|supuest|alleged|accused|acusad|mutmaßlich|mutmasslich|beschuldigt|présum|presum|accusat|suspeit|investigad|condenad|convicted|verurteilt|condamn|condannat)/i;
+
+/** ¿Llama a alguien «asesino», «ladrón»… sin presunción ni atribución? (control legal) */
+export function libelRisk(sentence: string): boolean {
+  return DEFAMATION_TERMS.test(sentence) && !PRESUMPTION.test(sentence) && !/según|according|laut|selon|secondo|segundo/i.test(sentence);
+}
 // Separadores de un teléfono: espacio, punto o guion, nunca un salto de línea (juntaba dos cifras
 // de «Datos clave» en un «teléfono»).
 const PII = [/[\w.+-]+@[\w-]+\.[\w.]+/, /(?<!\d)(?:\+?\d{1,3}[ .\-  ]?)?(?:\(?\d{2,4}\)?[ .\-  ]?){2,4}\d{3,4}(?!\d)/g];
@@ -166,7 +171,10 @@ export function runQualityChecks(ctx: QualityContext): QualityReport {
     const maxRatio = official ? Math.max(settings.maxSourceOverlap, 0.85) : settings.maxSourceOverlap;
     const run = longestCommonRun(nonQuote, s.text);
     if (run > maxRun) legal.push(`copia literal de ${run} palabras seguidas de una fuente (máximo ${maxRun})`);
-    const ratio = overlapRatio(nonQuote, s.text);
+    // La proporción solo dice algo en un texto de cierta extensión: en una ficha de dos frases, una
+    // sola frase de la fuente ya es «el 60 %» (el tramo literal sí se mide siempre). Antes la
+    // salvaba el subtítulo con la lista de medios, que ya no se publica (03-10-2026).
+    const ratio = plainWords(nonQuote).length >= 60 ? overlapRatio(nonQuote, s.text) : 0;
     if (ratio > maxRatio) legal.push(`el ${Math.round(ratio * 100)} % del texto coincide con una sola fuente (máximo ${Math.round(maxRatio * 100)} %)`);
   }
   const pii = personalDataIn(nonQuote);
@@ -174,7 +182,7 @@ export function runQualityChecks(ctx: QualityContext): QualityReport {
     legal.push(`posible dato personal (${pii.kind})`);
   }
   for (const sentence of nonQuote.split(/\n+|(?<=[.!?])\s+/)) {
-    if (DEFAMATION_TERMS.test(sentence) && !PRESUMPTION.test(sentence) && !/según|according|laut|selon|secondo|segundo/i.test(sentence)) {
+    if (libelRisk(sentence)) {
       legal.push(`acusación grave sin atribuir ni presunción: «${sentence.slice(0, 100)}»`);
     }
   }

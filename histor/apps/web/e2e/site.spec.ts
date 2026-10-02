@@ -60,16 +60,18 @@ test('una noticia actualizada muestra la nota y el dato anterior tachado, no com
   await expect(box.locator('h3', { hasText: 'Confirmado' }).locator('+ ul')).not.toContainText('41 %');
 });
 
-test('una historia en desarrollo lo dice y atribuye', async ({ page, request }) => {
+test('una historia en desarrollo lo dice, sin nombrar periódicos en el texto', async ({ page, request }) => {
   const r = await request.get(`${BASE}/api/v1/articles?lang=es&limit=20`);
   const dev = ((await r.json()) as { items: { url: string; isDeveloping: boolean }[] }).items.find((i) => i.isDeveloping);
   test.skip(!dev, 'no hay historias en desarrollo');
   await page.goto(dev!.url);
   await expect(page.locator('.notice-developing')).toBeVisible();
-  // Sin la fuente en el titular (01-10-2026): la etiqueta «en desarrollo» va con él y el texto atribuye.
+  // Ni en el titular (01-10-2026) ni en el texto (03-10-2026): la etiqueta «en desarrollo» lo
+  // dice y los medios están en el recuadro de fuentes.
   await expect(page.locator('article h1')).not.toContainText(/según/);
   await expect(page.locator('article .badge-developing').first()).toBeVisible();
-  await expect(page.locator('.article-body')).toContainText(/según/);
+  await expect(page.locator('.article-body')).not.toContainText(/según (Agencia|Diario|Radio|Blog) Demo/);
+  await expect(page.locator('.article-body')).toContainText(/\S/);
 });
 
 test('secciones, países, ciudades, listas y páginas legales responden', async ({ page }) => {

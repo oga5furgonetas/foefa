@@ -62,15 +62,26 @@ export function statePath(from: StoryState, to: StoryState): StoryState[] | null
   return null;
 }
 
-export function nextCheckDelayMinutes(state: StoryState, ageHours: number): number | null {
+/**
+ * Cuándo volver a verificar. Sin piezas nuevas, el resultado no cambia (la verificación solo
+ * depende de las piezas; con el tiempo, el impulso solo baja): se espera cada vez más y, tras un
+ * día en silencio, se deja de mirar. Una pieza nueva la reabre al momento (agrupar pone
+ * nextCheckAt = ahora). Antes, miles de historias de una sola pieza se repasaban cada 10-30
+ * minutos para siempre y la verificación se comía el ciclo (03-10-2026: 50 historias, 3,5
+ * minutos por ciclo; la noticia nueva esperaba detrás).
+ */
+export function nextCheckDelayMinutes(state: StoryState, ageHours: number, quietHours = 0): number | null {
   if (['RETRACTED', 'BLOCKED'].includes(state)) return null;
-  if (state === 'REJECTED') return ageHours < 48 ? 120 : null;
+  if (state === 'REJECTED') return ageHours < 48 && quietHours < 6 ? 120 : null;
   if (state === 'PUBLISHED' || state === 'UPDATED') {
     if (ageHours < 6) return 30;
     if (ageHours < 48) return 120;
     if (ageHours < 168) return 720;
     return null; // historia cerrada; se reabre si llegan piezas nuevas
   }
+  if (quietHours >= 24) return null;
+  if (quietHours >= 6) return 180;
+  if (quietHours >= 1) return 45;
   return ageHours < 6 ? 10 : 30;
 }
 
@@ -192,7 +203,8 @@ export async function verifyStory(db: Db, st: typeof stories.$inferSelect, setti
   const finalState = path ? target : (st.state as StoryState);
   const reasons = path ? analysis.reasons : [...analysis.reasons, `transición ${st.state} → ${target} no permitida; se mantiene`];
   const ageHours = (now.getTime() - st.firstSeenAt.getTime()) / 3600000;
-  const delay = nextCheckDelayMinutes(finalState, ageHours);
+  const lastItemAt = loaded.rows.reduce((m, r) => Math.max(m, (r.fetchedAt ?? st.lastItemAt).getTime()), st.lastItemAt.getTime());
+  const delay = nextCheckDelayMinutes(finalState, ageHours, Math.max(0, (now.getTime() - lastItemAt) / 3600000));
   const importance = importanceScore(analysis.momentum, analysis.confidence);
 
   const keyToId = new Map<string, number>();

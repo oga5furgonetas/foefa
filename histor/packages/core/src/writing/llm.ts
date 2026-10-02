@@ -16,7 +16,7 @@ import { decodeEntities, fold, truncate } from '../text/normalize';
 import { claimRef, writeDeterministic, type WriteOptions } from './deterministic';
 import type { Draft } from './draft';
 import type { FactSheet } from './factsheet';
-import { listJoin, PHRASES } from './phrases';
+import { mediaNames, stripMediaAttribution } from './media';
 import { validateDraft } from './validate';
 import { longestCommonRun } from './quality';
 import { DEFAULT_EDITORIAL_SETTINGS } from '../config/settings';
@@ -25,30 +25,18 @@ import { sentences } from '../text/tokenize';
 /**
  * Reparación del texto de la IA, frase a frase, con el mismo validador que decide si se publica
  * (29-09-2026, primeras pruebas con Groq: artículos de 12 párrafos rechazados enteros por dos
- * frases). Si a una frase solo le falta la atribución, se añade «, según X» con las fuentes
- * de sus afirmaciones; si tiene un nombre, cifra, fecha o cita sin respaldo, fuera el párrafo.
- * Nunca se publica una frase que el validador no acepte.
+ * frases). Si una frase atribuye algo a un periódico («Según 20minutos, …»), se le quita la
+ * atribución (03-10-2026); si tiene un nombre, cifra, fecha o cita sin respaldo, fuera el
+ * párrafo. Nunca se publica una frase que el validador no acepte.
  */
 export function repairAiParagraphs(blocks: Extract<ArticleBlock, { type: 'p' }>[], fs: FactSheet, base: Draft): Extract<ArticleBlock, { type: 'p' }>[] {
-  const P = PHRASES[fs.language];
-  const byRef = new Map(fs.claims.map((c) => [claimRef(c), c]));
+  const media = mediaNames(fs);
   const out: Extract<ArticleBlock, { type: 'p' }>[] = [];
   for (const b of blocks) {
-    const probe = (text: string) => validateDraft({ ...base, headline: base.headline, body: [{ ...b, text }] }, fs).issues.filter((i) => i.check !== 'headline');
-    let text = b.text;
-    let issues = probe(text);
-    if (issues.length && P && issues.every((i) => i.check === 'status' && /atribución/.test(i.detail))) {
-      const who = [...new Set(b.claimIds.flatMap((id) => byRef.get(id)?.attribution ?? []))].slice(0, 2);
-      if (who.length) {
-        const bad = new Set(issues.map((i) => i.text.trim()));
-        // Sin duplicar: si la frase ya nombra a la fuente («El Confidencial…»), no se le añade otra vez.
-        const named = (s: string) => who.some((w) => s.includes(w));
-        text = sentences(text)
-          .map((s) => (bad.has(s.trim()) && !named(s) ? P.according(s.trim().replace(/[.!?]+$/, ''), listJoin(fs.language, who)) : s.trim()))
-          .join(' ');
-        issues = probe(text);
-      }
-    }
+    const text = sentences(b.text)
+      .map((x) => stripMediaAttribution(x.trim(), media))
+      .join(' ');
+    const issues = validateDraft({ ...base, headline: base.headline, body: [{ ...b, text }] }, fs).issues.filter((i) => i.check !== 'headline');
     // Ni párrafos que copian de una fuente más palabras seguidas de las permitidas (control legal).
     if (!issues.length && !copiesSource(text, fs)) out.push({ ...b, text });
   }
@@ -77,15 +65,17 @@ Write an original news article in the requested language, in the neutral, precis
 Hard rules:
 - Use ONLY information contained in the claims. Add no names, numbers, dates, places, causes, motives or context that are not in the claims.
 - Every paragraph must list in "claim_ids" all the claim ids it relies on.
-- Claims with status "supported" may be stated as facts. Claims with status "partially_supported" or "unsupported" must always be attributed to their source ("according to X", "X reported") and never stated as established fact.
-- Claims of kind "prediction" must stay predictions (future or conditional tense, attributed).
+- Claims with status "supported" or "partially_supported" were published by reliable outlets: report them plainly, as a newspaper does. Claims with status "unsupported" are not confirmed: leave them out, or say clearly that they are not yet confirmed ("presuntamente", "todavía sin confirmar"); never present them as established fact.
+- NEVER name a newspaper, news agency, TV or radio station, website or any other media outlet anywhere (headline, subheadline, summary, text). Never write "according to [outlet]", "[outlet] reported", "in statements to [outlet]" or "the newspaper said". The sources are listed next to the article and the "verified"/"developing" label goes next to the headline: write as Histor's own reporting.
+- Attribute statements to the people or institutions who made them when the claim says so (the police said, the minister announced, the club confirmed; field "said_by"), never to the media that published them.
+- Claims of kind "prediction" must stay predictions (future or conditional tense).
 - Do not quote anyone verbatim unless the exact words appear in a claim's "quote" field; keep them unchanged and attribute them to that claim's speaker.
 - Write in your own words: never copy more than 10 consecutive words from a claim's text (quotes excepted).
-- If the story is "developing", say so plainly and attribute everything that is not confirmed.
-- When you attribute, name the source exactly as written in the claim's "sources" field ("según El Confidencial", "according to BBC News"). Never use vague attributions such as "according to reports", "sources say", "another outlet", "the newspaper", "the cited sources". Attribute once per paragraph, in its first sentence ("Según X, …"); the following sentences of that paragraph rely on the same source and must not repeat it. Group facts from the same source in the same paragraph.
-- Open with the most important confirmed fact (who, what, where, when), then context and details, then reactions and what comes next, like a quality newspaper. One idea per paragraph.
+- Never use vague attributions either ("according to reports", "sources say", "media reports").
+- Never tell the same fact twice with different words.
+- Open with the most important confirmed fact (who, what, where, when), then context and details, then reactions and what comes next, like a quality newspaper. Paragraphs of two to four sentences that flow, not one sentence per paragraph.
 - "summary" is ONE sentence of at most 35 words; "subheadline" at most 20 words; "headline" at most 14 words.
-- The headline must accurately represent the article. No clickbait, no exaggeration, no questions, no exclamation marks. Never put a source or outlet name in the headline (no "according to X"): attribution belongs in the text; unconfirmed stories are labelled "developing" next to the headline.
+- The headline must accurately represent the article. No clickbait, no exaggeration, no questions, no exclamation marks. Never put a source or outlet name in the headline (no "according to X"); unconfirmed stories are labelled "developing" next to the headline.
 - The reader must understand what happened and why: right after the main fact, give the background and causes that the claims provide (what led to it, who is involved, previous events). Never leave a decision, ruling or reaction without saying what it is about.
 - Use the target language's journalistic conventions for dates, numbers, institutions and names.`;
 
@@ -115,6 +105,7 @@ type WriterOut = { headline: string; subheadline: string; summary: string; seo_d
 /** Afirmaciones que se mandan a la IA: las mejor respaldadas primero. Con el cupo gratuito por día, una ficha de 45 afirmaciones gastaba el doble sin dar mejor texto. */
 const PROMPT_MAX_CLAIMS = 30;
 const PROMPT_MAX_CLAIM_CHARS = 350;
+const shorten = (t: string) => (t.length > PROMPT_MAX_CLAIM_CHARS ? `${t.slice(0, PROMPT_MAX_CLAIM_CHARS).replace(/\s+\S*$/, '')}…` : t);
 
 /**
  * Salida máxima que se pide: con AI_REQUEST_TOKEN_CAP (Groq gratuito: entrada + salida contra
@@ -137,6 +128,9 @@ function decodeDeep(v: unknown): unknown {
 }
 
 export function factSheetForPrompt(fs: FactSheet): Record<string, unknown> {
+  // Sin nombres de medio (03-10-2026): la IA no puede nombrar lo que no ve. Sí quién lo dice
+  // dentro de la noticia («said_by»: la Policía, el ministro), si no es un medio.
+  const media = mediaNames(fs);
   // Las citas y predicciones se guardan su sitio aunque haya muchas afirmaciones.
   const extras = [...fs.predictions.slice(0, 3), ...fs.quotes.slice(0, 4)];
   const usable = [...[...fs.confirmed, ...fs.attributed, ...fs.unconfirmed].slice(0, PROMPT_MAX_CLAIMS - extras.length), ...extras];
@@ -146,14 +140,15 @@ export function factSheetForPrompt(fs: FactSheet): Record<string, unknown> {
     independent_sources: fs.independentCredible,
     claims: usable.map((c) => ({
       id: claimRef(c),
-      text: c.text.length > PROMPT_MAX_CLAIM_CHARS ? `${c.text.slice(0, PROMPT_MAX_CLAIM_CHARS).replace(/\s+\S*$/, '')}…` : c.text,
+      text: shorten(stripMediaAttribution(c.text, media)),
       status: c.status,
       kind: c.kind,
-      sources: c.attribution,
+      sources: c.supporters.length || 1,
+      said_by: c.attributedTo && !media.includes(c.attributedTo) ? c.attributedTo : undefined,
       quote: c.quote ?? undefined,
     })),
-    key_figures: fs.figures.map((f) => ({ unit: f.unit, value: f.value, approximate: f.approximate, sources: f.sources, evolving: f.evolving })),
-    discrepancies: fs.discrepancies,
+    key_figures: fs.figures.map((f) => ({ unit: f.unit, value: f.value, approximate: f.approximate, evolving: f.evolving })),
+    discrepancies: fs.discrepancies.map((d) => ({ field: d.field, values: d.parts.map((x) => x.value) })),
     event_time: fs.eventTime?.toISOString() ?? null,
   };
 }
@@ -199,12 +194,16 @@ export async function writeWithLlm(db: Db, fs: FactSheet, opts: WriteOptions & {
     .filter((b) => b.type !== 'list' || b.items.length > 0);
   // Un apartado que se ha quedado sin contenido, fuera también.
   const structural = kept.filter((b, i) => b.type !== 'h2' || (kept[i + 1] && kept[i + 1].type !== 'h2'));
+  // Entradilla y descripción, también sin periódicos; el subtítulo es el nuestro («Verificada con
+  // 3 fuentes independientes»), no el de la IA, que solía nombrarlas.
+  const media = mediaNames(fs);
+  const noMedia = (t: string | undefined) => (t ? stripMediaAttribution(t.trim(), media) : '');
   return {
     ...base,
     headline: out.headline.trim(),
-    subheadline: out.subheadline?.trim() || base.subheadline,
-    summary: truncate(out.summary?.trim() || base.summary, 300),
-    seoDescription: truncate(out.seo_description?.trim() || base.seoDescription, 160),
+    subheadline: base.subheadline,
+    summary: truncate(noMedia(out.summary) || base.summary, 300),
+    seoDescription: truncate(noMedia(out.seo_description) || base.seoDescription, 160),
     seoTitle: truncate(out.headline.trim(), 70),
     body: [...aiBlocks, ...structural],
     writer: `llm:${res.provider}/${res.model}`,
@@ -214,7 +213,7 @@ export async function writeWithLlm(db: Db, fs: FactSheet, opts: WriteOptions & {
 const TRANSLATOR_SYSTEM = `You are the international desk of Histor. Adapt a verified news article into another language.
 Rules: keep every fact, number, date, name and attribution exactly; do not add or remove information; keep the same number of blocks in the same order;
 adapt date/number formats and institution names to local conventions; translate quotations faithfully and keep them attributed to the same person;
-keep attributions ("according to X") wherever the original has them. No clickbait.`;
+keep attributions to people and institutions ("the police said") wherever the original has them; never add the name of a newspaper, agency or any other media outlet. No clickbait.`;
 
 const TRANSLATOR_SCHEMA = {
   type: 'object',

@@ -16,11 +16,13 @@ import { regionByCode } from '../config/regions';
 import { localeFor } from '../config/languages';
 import { fold, truncate } from '../text/normalize';
 import { compressClaim, lowerFirst } from './compress';
-import { plainWords } from './quality';
+import { libelRisk, longestCommonRun, plainWords } from './quality';
 import type { Draft } from './draft';
 import type { FactClaim, FactSheet } from './factsheet';
-import { listJoin, PHRASES } from './phrases';
+import { mediaNames, namesMedia, stripMediaAttribution } from './media';
+import { PHRASES } from './phrases';
 import { PROMO } from '../text/nonnews';
+import { DEFAULT_EDITORIAL_SETTINGS } from '../config/settings';
 
 /** `skeleton`: solo para la IA. Si no hay titular ni entrada publicables, se monta igualmente el armazón
  * (recuadro, fuentes, cronología) con la primera afirmación; la IA pone el titular y el texto, que se
@@ -47,6 +49,13 @@ export function writeDeterministic(fs: FactSheet, opts: WriteOptions = {}): Draf
   };
 
   const developing = !fs.verified;
+  // Sin periódicos en el texto (Dani, 03-10-2026): «Según 20minutos, …» en cada párrafo. Se cuenta
+  // como lo cuenta un periódico; quién lo publicó, en el recuadro de fuentes. Si una frase de la
+  // fuente lleva su propia atribución a un medio («…, informa EFE»), se le quita; si no se puede,
+  // o es una acusación sin presunción que ya no va atribuida, la frase no entra.
+  const media = mediaNames(fs);
+  const clean = (t: string | null) => (t ? stripMediaAttribution(t, media).replace(/[.]$/, '') : t);
+  const fit = (t: string) => !namesMedia(t, media) && !libelRisk(t);
   const body: ArticleBlock[] = [];
   let headline: string | null = null;
   let summary = '';
@@ -101,9 +110,9 @@ export function writeDeterministic(fs: FactSheet, opts: WriteOptions = {}): Draf
       // Los titulares de las fuentes suelen tener 17-20 palabras («Los profesores españoles trabajan
       // dos horas menos a la semana que en la media de la OCDE»): con 16, la noticia se retenía
       // entera (30-09-2026). El tope real es de 120 caracteres, más abajo.
-      const short = compressClaim(c.text, c.isHeadline ? 22 : 16, { commaCut: false });
+      const short = clean(compressClaim(c.text, c.isHeadline ? 22 : 16, { commaCut: false }));
       // Un titular tiene que entenderse solo.
-      if (!short || !standsAlone(short)) continue;
+      if (!short || !standsAlone(short) || !fit(short)) continue;
       if (!c.isHeadline && !bodyHeadlineOk(short)) continue;
       // Sin la fuente en el titular («…, según Infobae»): la atribución va en el texto y, si no está
       // confirmado, la noticia lleva la etiqueta «En desarrollo» junto al titular (01-10-2026).
@@ -125,8 +134,8 @@ export function writeDeterministic(fs: FactSheet, opts: WriteOptions = {}): Draf
   const leadOptions = [...pool.filter((c) => !c.isHeadline), ...pool.filter((c) => c.isHeadline && c.key !== headlineClaim?.key)].filter((c) => standsAlone(c.text) && usableSentence(c.text));
   let lead: { c: FactClaim; text: string; score: number } | null = null;
   leadOptions.forEach((c, i) => {
-    const compressed = compressClaim(c.text, bodyMaxWords);
-    if (!compressed) return;
+    const compressed = clean(compressClaim(c.text, bodyMaxWords));
+    if (!compressed || !fit(compressed)) return;
     const overlap = coverage(hWords, keyWords(compressed));
     if (overlap > 0.85) return; // sería el titular otra vez con otras palabras
     // Tiene que contar lo mismo que el titular: en la noticia de Swiftair condenada por el accidente
@@ -142,29 +151,27 @@ export function writeDeterministic(fs: FactSheet, opts: WriteOptions = {}): Draf
   if (!lead && headlineClaim && opts.skeleton) lead = { c: headlineClaim, text: truncate(headlineClaim.text, 200), score: 0 };
   if (!lead && headlineClaim) {
     // Sin otra frase que lo cuente: la del titular, en su versión más completa.
-    const full = compressClaim(headlineClaim.text, maxWords);
-    if (full && usableSentence(full)) lead = { c: headlineClaim, text: full, score: 1 };
+    const full = clean(compressClaim(headlineClaim.text, maxWords));
+    if (full && usableSentence(full) && fit(full)) lead = { c: headlineClaim, text: full, score: 1 };
   }
   if (lead) {
     const { c, text } = lead as { c: FactClaim; text: string };
     leadClaim = c;
-    const leadSentence = plainClaim(c) ? `${text}.` : P.according(text, listJoin(lang, c.attribution.slice(0, 3)));
+    const leadSentence = `${text}.`;
     body.push({ type: 'p', text: leadSentence, claimIds: [claimRef(c)] });
     if (!summary) summary = leadSentence;
   }
   if (!leadClaim && !fs.earthquake) return null;
 
-  // Quién lo confirma (en la entradilla si está verificada; aquí si es de una sola fuente)
   const confirmers = fs.sources.map((s) => s.name);
-  if (developing && confirmers.length === 1) body.push({ type: 'p', text: bp(P.singleSource(confirmers[0])), claimIds: [] });
 
   // ── Lo que se sabe (reparto entre fuentes) ──
   const used = new Set<string>(leadClaim ? [leadClaim.key] : []);
   const perSource = new Map<string, number>();
-  const known: { text: string; raw: string; claimIds: number[]; plain: boolean }[] = [];
-  // También en las verificadas: primero lo confirmado (como hecho) y después los detalles que
-  // da cada fuente, siempre atribuidos («…, según The Guardian»). Sin ellos, una noticia
-  // verificada se quedaba en una o dos frases aunque hubiera leído los artículos completos.
+  const known: { text: string; raw: string; claimIds: number[] }[] = [];
+  // También en las verificadas: primero lo confirmado y después los detalles que da cada fuente.
+  // Sin ellos, una noticia verificada se quedaba en una o dos frases aunque hubiera leído los
+  // artículos completos.
   // Los titulares de las demás fuentes repiten lo mismo con otras palabras: fuera del cuerpo.
   const bodyClaims = [...fs.confirmed, ...fs.attributed].filter((c) => !c.isHeadline);
   const knownPool = bodyClaims.length >= 2 ? bodyClaims : [...fs.confirmed, ...fs.attributed];
@@ -181,46 +188,49 @@ export function writeDeterministic(fs: FactSheet, opts: WriteOptions = {}): Draf
   // El titular y la entrada también cuentan (el control legal mide todo el texto publicado).
   shares.add(headline);
   if (body[0] && body[0].type === 'p') shares.add(body[0].text);
+  // Lo ya escrito, para no contar dos veces lo mismo con otras palabras: «Grimaldo ha tenido que
+  // abandonar la concentración por unas molestias musculares» y, debajo, «la lesión muscular
+  // también llevó a Grimaldo a abandonar la concentración» (03-10-2026).
+  const written: string[] = body.flatMap((b) => (b.type === 'p' ? [b.text] : []));
+  // Sin el «según X» entre frase y frase, dos frases seguidas que también van seguidas en la
+  // fuente forman un tramo copiado más largo de lo permitido: se mide el tramo de verdad.
+  const maxRun = DEFAULT_EDITORIAL_SETTINGS.maxVerbatimWords;
+  const runOk = (a: string | undefined, b: string) => !a || fs.sourceTexts.every((s) => longestCommonRun(`${a} ${b}`, s.text) <= maxRun);
   for (const c of knownPool) {
     if (known.length >= 10) break;
     if (used.has(c.key) || nearDuplicate(c, [...used].map((k) => fs.claims.find((x) => x.key === k)!).filter(Boolean))) continue;
     const src = c.attribution[0] ?? '';
     if ((perSource.get(src) ?? 0) >= 3) continue;
-    const compressed = compressClaim(c.text, bodyMaxWords);
+    const compressed = clean(compressClaim(c.text, bodyMaxWords));
     // Frases que dependen de la anterior de su fuente («Mas os maiores escritórios…»), citas
     // con las comillas sin cerrar o frases que se quedan colgando: fuera.
-    if (!compressed || !selfContained(compressed) || !usableSentence(compressed)) continue;
+    if (!compressed || !selfContained(compressed) || !usableSentence(compressed) || !fit(compressed)) continue;
     if (!shares.fits(compressed)) continue;
+    if (written.some((w) => sameFact(w, compressed))) continue;
     const kw = keyWords(compressed);
     if (![...kw].some((w) => thread.has(w))) continue;
-    const plain = c.status === 'supported' && !developing;
-    // Dos frases literales seguidas de la misma fuente forman un tramo copiado de más de 30
-    // palabras si también van seguidas en el original: se espera a que haya otra entre medias.
-    const prev = known[known.length - 1];
-    if (plain && prev?.plain && shares.sameHolder(prev.raw, compressed)) continue;
+    if (!runOk(known.length ? known[known.length - 1].raw : written[written.length - 1], compressed)) continue;
     shares.add(compressed);
     for (const w of kw) thread.add(w);
     usedItems.add(c.itemId);
     used.add(c.key);
     perSource.set(src, (perSource.get(src) ?? 0) + 1);
-    const text = plain ? `${compressed}.` : P.according(compressed, listJoin(lang, c.attribution.slice(0, 2)));
-    known.push({ text, raw: compressed, claimIds: [claimRef(c)], plain });
+    written.push(compressed);
+    known.push({ text: `${compressed}.`, raw: compressed, claimIds: [claimRef(c)] });
   }
-  // Texto corrido, no una lista: hasta dos hechos por párrafo, como en un periódico, sin mezclar
-  // en el mismo párrafo lo confirmado con lo atribuido (cada frase debe poder comprobarse sola).
+  // Texto corrido, no una lista: hasta tres hechos por párrafo, como en un periódico.
   for (let i = 0; i < known.length; ) {
-    const pair = known[i + 1] && known[i + 1].plain === known[i].plain ? known.slice(i, i + 2) : [known[i]];
-    body.push({ type: 'p', text: pair.map((k) => k.text).join(' '), claimIds: pair.flatMap((k) => k.claimIds) });
-    i += pair.length;
+    const group = known.slice(i, i + (known.length - i === 4 ? 2 : 3));
+    body.push({ type: 'p', text: group.map((k) => k.text).join(' '), claimIds: group.flatMap((k) => k.claimIds) });
+    i += group.length;
   }
   // El titular tiene que estar respaldado por el texto (control HEADLINE_INTEGRITY). Solo si lo
   // escrito no lo cubre, el hecho del titular entra en el cuerpo, justo después de la entrada.
   const bodyWords = keyWords(body.map((b) => ('text' in b ? b.text : '')).join(' '));
   if (headlineClaim && !used.has(headlineClaim.key) && coverage(hWords, bodyWords) < 0.5) {
-    const full = compressClaim(headlineClaim.text, maxWords);
-    if (full) {
-      const plain = headlineClaim.status === 'supported' && !developing;
-      const text = plain ? `${full}.` : P.according(full, listJoin(lang, headlineClaim.attribution.slice(0, 2)));
+    const full = clean(compressClaim(headlineClaim.text, maxWords));
+    if (full && fit(full)) {
+      const text = `${full}.`;
       body.splice(fs.earthquake ? body.length : Math.min(1, body.length), 0, { type: 'p', text, claimIds: [claimRef(headlineClaim)] });
       used.add(headlineClaim.key);
     }
@@ -240,7 +250,7 @@ export function writeDeterministic(fs: FactSheet, opts: WriteOptions = {}): Draf
         const ids = fs.claims
           .filter((c) => c.kind !== 'prediction' && c.modality !== 'hedged' && c.numbers.some((n) => n.unit === f.unit && n.value === f.value) && ['supported', 'partially_supported'].includes(c.status))
           .map(claimRef);
-        return { text: `${label}: ${value} ${P.figureSource(listJoin(lang, f.sources.slice(0, 3)))}`, claimIds: ids };
+        return { text: `${label}: ${value}`, claimIds: ids };
       }),
     });
   }
@@ -271,9 +281,9 @@ export function writeDeterministic(fs: FactSheet, opts: WriteOptions = {}): Draf
   const unconf = fs.unconfirmed.filter((c) => !used.has(c.key) && inStory(c.itemId)).slice(0, 4);
   const unconfItems: { text: string; claimIds: number[] }[] = [];
   for (const c of unconf) {
-    const compressed = compressClaim(c.text, maxWords);
-    if (!compressed) continue;
-    unconfItems.push({ text: `${P.according(compressed, listJoin(lang, c.attribution.slice(0, 2)))} ${P.unconfirmedSuffix}`, claimIds: [claimRef(c)] });
+    const compressed = clean(compressClaim(c.text, maxWords));
+    if (!compressed || !fit(compressed) || written.some((w) => sameFact(w, compressed))) continue;
+    unconfItems.push({ text: `${compressed}. ${P.unconfirmedSuffix}`, claimIds: [claimRef(c)] });
   }
   if (unconfItems.length) {
     body.push({ type: 'h2', text: P.headings.unconfirmed });
@@ -283,9 +293,9 @@ export function writeDeterministic(fs: FactSheet, opts: WriteOptions = {}): Draf
   // ── Predicciones (siempre atribuidas y en futuro/condicional) ──
   const preds: { text: string; claimIds: number[] }[] = [];
   for (const c of fs.predictions.filter((p) => inStory(p.itemId)).slice(0, 3)) {
-    const compressed = compressClaim(c.text, maxWords);
-    if (!compressed) continue;
-    preds.push({ text: P.according(compressed, listJoin(lang, c.attribution.slice(0, 2))), claimIds: [claimRef(c)] });
+    const compressed = clean(compressClaim(c.text, maxWords));
+    if (!compressed || !fit(compressed) || written.some((w) => sameFact(w, compressed))) continue;
+    preds.push({ text: `${compressed}.`, claimIds: [claimRef(c)] });
   }
   if (preds.length) {
     body.push({ type: 'h2', text: P.headings.next });
@@ -318,14 +328,8 @@ export function writeDeterministic(fs: FactSheet, opts: WriteOptions = {}): Draf
     verification.confirmed = [{ text: P.earthquake.headline(nf.format(q.magnitude), q.placeName ? P.near(q.placeName) : '').trim(), by: fs.sources.map((s) => s.name) }];
   }
 
-  // El número y los nombres cuadran siempre: si hay más de cuatro, se dice «entre ellas».
-  const subheadline = developing
-    ? P.developingNote
-    : confirmers.length > 4
-      ? P.confirmedByMany(confirmers.length, listJoin(lang, confirmers.slice(0, 3)))
-      : confirmers.length
-        ? P.confirmedBy(confirmers.length, listJoin(lang, confirmers))
-        : null;
+  // Cuántas fuentes, sin nombrarlas: los medios están en el recuadro de fuentes.
+  const subheadline = developing ? P.developingNote : confirmers.length ? P.confirmedBy(confirmers.length) : null;
   if (subheadline) boilerplate.push(subheadline);
   const timeline = fs.timeline.map((e) => ({ at: e.at.toISOString(), text: `${P.timelineItem(e.source)}` }));
 
@@ -498,6 +502,29 @@ function nearDuplicate(c: FactClaim, others: FactClaim[]): boolean {
     for (const w of a) if (b.has(w)) inter++;
     return inter / Math.max(1, Math.min(a.size, b.size)) > 0.7;
   });
+}
+
+/** Raíces (seis primeras letras) de las palabras con peso: «muscular» y «musculares» son la misma. */
+function stems(s: string): Set<string> {
+  return new Set(fold(s).split(/\W+/).filter((w) => w.length > 4).map((w) => w.slice(0, 6)));
+}
+
+/**
+ * ¿Cuenta `b` lo mismo que `a`? Comparten al menos el 60 % de las raíces de la más corta y `b` no
+ * trae ninguna cifra nueva («votó 38 a 12», «para 2029»): un dato nuevo es información, aunque
+ * hable de lo mismo.
+ */
+export function sameFact(a: string, b: string): boolean {
+  const nums = (s: string) => new Set(s.match(/\d+(?:[.,]\d+)?/g) ?? []);
+  const an = nums(a);
+  if ([...nums(b)].some((n) => !an.has(n))) return false;
+  const A = stems(a);
+  const B = stems(b);
+  const small = Math.min(A.size, B.size);
+  if (small < 4) return false;
+  let inter = 0;
+  for (const w of A) if (B.has(w)) inter++;
+  return inter / small >= 0.6;
 }
 
 export { lowerFirst };
