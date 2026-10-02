@@ -1,0 +1,41 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<style>
+  @font-face { font-family: 'News'; src: url('FONT_SERIF') format('woff2'); font-weight: 200 800; }
+  @font-face { font-family: 'Sans'; src: url('FONT_SANS') format('woff2'); font-weight: 100 900; }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body { width: var(--w); height: var(--h); }
+  body { background: #fbfaf7; color: #15171c; font-family: 'News', Georgia, serif; display: flex; flex-direction: column; padding: var(--pad); }
+  .mast { text-align: center; border-bottom: 6px double #15171c; padding-bottom: calc(var(--u) * 1.2); }
+  .word { font-weight: 800; font-variation-settings: 'opsz' 72; font-size: calc(var(--u) * 7.2); letter-spacing: -0.035em; line-height: 0.9; }
+  .dot { color: #b3261e; }
+  .tag { font-family: 'Sans'; font-weight: 600; font-size: calc(var(--u) * 0.95); letter-spacing: 0.24em; text-transform: uppercase; color: #5d6270; margin-top: calc(var(--u) * 1); }
+  .main { flex: 1; display: flex; flex-direction: column; justify-content: center; gap: calc(var(--u) * 1.4); padding: calc(var(--u) * 1.6) 0; }
+  .kicker { font-family: 'Sans'; font-weight: 700; font-size: calc(var(--u) * 1.05); letter-spacing: 0.12em; text-transform: uppercase; color: #b3261e; }
+  h1 { font-weight: 700; font-variation-settings: 'opsz' 60; font-size: calc(var(--u) * 4.4); line-height: 1.04; letter-spacing: -0.02em; }
+  ul { list-style: none; display: flex; flex-direction: column; gap: calc(var(--u) * 0.8); }
+  li { font-family: 'Sans'; font-size: calc(var(--u) * 1.45); line-height: 1.3; color: #2e323b; display: flex; gap: calc(var(--u) * 0.7); }
+  li b { color: #0b6b55; font-weight: 800; }
+  .cta { background: #15171c; color: #fbfaf7; font-family: 'Sans'; font-weight: 700; font-size: calc(var(--u) * 1.6); padding: calc(var(--u) * 1.1) calc(var(--u) * 1.4); display: flex; justify-content: space-between; align-items: center; border-radius: 6px; }
+  .cta span { color: #ff8a80; }
+</style>
+</head>
+<body>
+  <header class="mast">
+    <div class="word">Histor<span class="dot">.</span></div>
+    <div class="tag">Noticias verificadas, sin atajos</div>
+  </header>
+  <section class="main">
+    <div class="kicker">KICKER</div>
+    <h1>HEADLINE</h1>
+    <ul>
+      <li><b>✓</b> Cada noticia, contrastada con al menos dos fuentes independientes</li>
+      <li><b>✓</b> Sin bulos ni titulares engañosos</li>
+      <li><b>✓</b> Última hora de España y del mundo, gratis</li>
+    </ul>
+  </section>
+  <div class="cta">histor.es <span>Noticias de hoy →</span></div>
+</body>
+</html>
