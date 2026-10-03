@@ -6,22 +6,80 @@ type Labels = { title: string; text: string; acceptAll: string; rejectAll: strin
 const OPTIONAL = ['preferences', 'analytics', 'personalization', 'marketing'] as const;
 const CONSENT_VERSION = '1';
 
-export function CookieConsent({ labels, policyHref }: { labels: Labels; policyHref: string }) {
+type TcData = { gdprApplies?: boolean; eventStatus?: string; purpose?: { consents?: Record<string, boolean> } };
+type TcfWindow = Window & {
+  __tcfapi?: (cmd: string, version: number, cb: (tc: TcData, ok: boolean) => void) => void;
+  googlefc?: { callbackQueue: unknown[]; showRevocationMessage?: () => void };
+};
+
+/**
+ * Con anuncios (AdSense), en el EEE, Reino Unido y Suiza manda el mensaje de consentimiento de
+ * Google (CMP certificada, obligatoria para servir anuncios): el nuestro no sale para no pedir
+ * dos veces, y lo que el lector elige allí (propósitos TCF) se traslada a nuestras categorías.
+ * Fuera de esa zona Google no pregunta y sale el nuestro, como siempre; también si su CMP no
+ * carga (bloqueadores). 03-10-2026.
+ */
+function fromTcf(tc: TcData): Set<string> {
+  const p = tc.purpose?.consents ?? {};
+  const out = new Set<string>();
+  if (!p['1']) return out; // sin «guardar y leer información en el dispositivo», nada
+  out.add('preferences');
+  if (p['8'] || p['9']) out.add('analytics');
+  if (p['5'] || p['6']) out.add('personalization');
+  if (p['3'] || p['4']) out.add('marketing');
+  return out;
+}
+
+export function CookieConsent({ labels, policyHref, ads = false }: { labels: Labels; policyHref: string; ads?: boolean }) {
   const [open, setOpen] = useState(false);
   const [custom, setCustom] = useState(false);
   const [choice, setChoice] = useState<Set<string>>(new Set());
 
   useEffect(() => {
+    const w = window as TcfWindow;
     const has = document.cookie.includes('histor_consent_v=');
-    if (!has) setOpen(true);
     setChoice(consentOf());
+    let googleAsks = false;
+    let timer: ReturnType<typeof setTimeout> | null = null;
+    if (ads) {
+      let tries = 0;
+      const attach = () => {
+        if (!w.__tcfapi) {
+          // Sin CMP de Google al cabo de 4 s (bloqueador de anuncios): el nuestro.
+          if (++tries > 20) {
+            if (!has) setOpen(true);
+            return;
+          }
+          timer = setTimeout(attach, 200);
+          return;
+        }
+        w.__tcfapi('addEventListener', 2, (tc, ok) => {
+          if (!ok) return;
+          if (tc.gdprApplies === false) {
+            if (!has) setOpen(true);
+            return;
+          }
+          googleAsks = true;
+          if (tc.eventStatus === 'useractioncomplete' || tc.eventStatus === 'tcloaded') save(fromTcf(tc));
+        });
+      };
+      attach();
+    } else if (!has) setOpen(true);
     const reopen = () => {
+      // «Configurar cookies» del pie: donde pregunta Google, se reabre su mensaje.
+      if (googleAsks && w.googlefc?.showRevocationMessage) {
+        w.googlefc.callbackQueue.push(w.googlefc.showRevocationMessage);
+        return;
+      }
       setOpen(true);
       setCustom(true);
     };
     window.addEventListener('histor:consent', reopen);
-    return () => window.removeEventListener('histor:consent', reopen);
-  }, []);
+    return () => {
+      if (timer) clearTimeout(timer);
+      window.removeEventListener('histor:consent', reopen);
+    };
+  }, [ads]);
 
   const save = (set: Set<string>) => {
     setCookie('histor_consent', [...set].join(','), 365);

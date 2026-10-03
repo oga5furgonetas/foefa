@@ -72,7 +72,7 @@ export default async function SiteLayout({ children, params }: { children: React
           {children}
         </main>
         <Footer lang={lang} d={d} />
-        <CookieConsent labels={d.cookies} policyHref={href.page(lang, 'cookies')} />
+        <CookieConsent labels={d.cookies} policyHref={href.page(lang, 'cookies')} ads={!!adsClient} />
       </body>
     </html>
   );
