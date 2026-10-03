@@ -133,7 +133,11 @@ function checkSentence(s: string, cited: FactClaim[], u: Unit, issues: Validatio
     // «ZDF» es la fuente «ZDFheute»: el nombre corto de un medio citado también vale.
     if (places.has(k) || allowedNames.has(k) || (k.length >= 3 && [...allowedNames].some((a) => a.startsWith(k)))) continue;
     const last = k.split(' ').pop() ?? '';
-    const ok = citedEntities.has(k) || [...citedEntities].some((x) => x.includes(k) || (last.length > 3 && x.split(' ').pop() === last));
+    const known = (set: Iterable<string>) => [...set].some((x) => x === k || x.includes(k) || (last.length > 3 && x.split(' ').pop() === last));
+    // También si lo nombra otra afirmación confirmada o atribuida de la misma noticia: la IA citaba
+    // «Castellanos Valbuena» sin listar la afirmación con su nombre completo y se perdía el párrafo
+    // (03-10-2026). El nombre sigue saliendo de las fuentes; las cifras siguen exigiendo su afirmación.
+    const ok = citedEntities.has(k) || known(citedEntities) || known([...fs.confirmed, ...fs.attributed].flatMap((c) => c.entities));
     if (!ok) issues.push({ check: 'entity', text: s, detail: `nombre no respaldado: ${e.name}` });
   }
   // Citas literales

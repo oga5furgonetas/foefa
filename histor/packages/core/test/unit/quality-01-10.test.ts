@@ -122,13 +122,12 @@ describe('foto del protagonista (Wikimedia Commons)', () => {
     expect(await findStoryImage([{ name: 'Real Madrid', lang: 'es', place: false }], { fetchImpl: f, storyText: 'El Real Madrid gana en LaLiga con un gol en el último minuto en Madrid.' })).toBeNull();
   });
 
-  it('candidatos: protagonistas del titular primero; un país, por su capital; las fuentes citadas, fuera', () => {
+  it('candidatos: protagonistas del titular primero; ni ciudades ni capitales (03-10-2026); las fuentes citadas, fuera', () => {
     const c = imageCandidates(
       [{ language: 'es', headline: 'Brasil: Lula tilda a Flávio Bolsonaro de mequetrefe, según EFE', summary: 'La campaña en Brasil se endurece.' }],
       { context: 'Luiz Inácio Lula da Silva habló en Brasilia.', exclude: ['EFE'] },
     );
-    expect(c.map((x) => x.name)).toEqual(['Luiz Inácio Lula da Silva', 'Flávio Bolsonaro', 'Brasília']);
-    expect(c.find((x) => x.name === 'Brasília')).toMatchObject({ lang: 'en', place: true });
+    expect(c.map((x) => x.name)).toEqual(['Luiz Inácio Lula da Silva', 'Flávio Bolsonaro']);
   });
 
   it('un apellido suelto se completa con el nombre entero que da el texto', () => {

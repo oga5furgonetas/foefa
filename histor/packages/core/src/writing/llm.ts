@@ -37,9 +37,19 @@ export function repairAiParagraphs(blocks: Extract<ArticleBlock, { type: 'p' }>[
     const text = sentences(b.text)
       .map((x) => stripMediaAttribution(x.trim(), media))
       .join(' ');
-    const issues = validateDraft({ ...base, headline: base.headline, body: [{ ...b, text }] }, fs).issues.filter((i) => i.check !== 'headline');
+    const fails = (t: string) => validateDraft({ ...base, headline: base.headline, body: [{ ...b, text: t }] }, fs).issues.some((i) => i.check !== 'headline') || copiesSource(t, fs);
     // Ni párrafos que copian de una fuente más palabras seguidas de las permitidas (control legal).
-    if (!issues.length && !copiesSource(text, fs)) out.push({ ...b, text });
+    if (!fails(text)) {
+      out.push({ ...b, text });
+      continue;
+    }
+    // Si falla, fuera solo las frases que fallan (03-10-2026: el párrafo entero se perdía por una
+    // frase copiada y la noticia del desahucio de Sol pasaba de 261 palabras a 60).
+    const good = sentences(text)
+      .map((x) => x.trim())
+      .filter((x) => x && !fails(x));
+    const kept = good.join(' ');
+    if (good.length && kept.split(/\s+/).length >= 12 && !fails(kept)) out.push({ ...b, text: kept });
   }
   return out;
 }
@@ -59,7 +69,7 @@ export function aiMayUse(items: { reserved?: boolean }[]): boolean {
   return !items.some((i) => i.reserved);
 }
 
-const WRITER_SYSTEM = `You are the writing desk of Histor, a news outlet whose first rule is: never publish unverified information as fact.
+export const WRITER_SYSTEM = `You are the writing desk of Histor, a news outlet whose first rule is: never publish unverified information as fact.
 You receive a FACT SHEET: numbered claims, each with a verification status and the sources that support it.
 Write an original news article in the requested language, in the neutral, precise house style of a quality newspaper.
 
@@ -78,9 +88,11 @@ Hard rules:
 - "summary" is ONE sentence of at most 35 words; "subheadline" at most 20 words; "headline" at most 14 words.
 - The headline must accurately represent the article. No clickbait, no exaggeration, no questions, no exclamation marks. Never put a source or outlet name in the headline (no "according to X"); unconfirmed stories are labelled "developing" next to the headline.
 - The reader must understand what happened and why: right after the main fact, give the background and causes that the claims provide (what led to it, who is involved, previous events). Never leave a decision, ruling or reaction without saying what it is about.
-- Use the target language's journalistic conventions for dates, numbers, institutions and names.`;
+- Use the target language's journalistic conventions for dates, numbers, institutions and names.
+- Depth: a reader who knows nothing about the subject must finish the article informed. Use every relevant claim, not only the first ones: scorers and minutes in a match, the charges and the facts behind a trial, the figures and the reasons behind a decision, the antecedents of a conflict. Aim for 350-600 words when the claims allow it; never pad or repeat to reach a length.
+- Write every sentence in your own words and structure. Paraphrase; do not reuse the source's sentences with small changes (quotes excepted).`;
 
-const WRITER_SCHEMA = {
+export const WRITER_SCHEMA = {
   type: 'object',
   additionalProperties: false,
   required: ['headline', 'subheadline', 'summary', 'paragraphs', 'seo_description'],
@@ -104,8 +116,8 @@ const WRITER_SCHEMA = {
 type WriterOut = { headline: string; subheadline: string; summary: string; seo_description: string; paragraphs: { text: string; claim_ids: number[] }[] };
 
 /** Afirmaciones que se mandan a la IA: las mejor respaldadas primero. Con el cupo gratuito por día, una ficha de 45 afirmaciones gastaba el doble sin dar mejor texto. */
-const PROMPT_MAX_CLAIMS = 30;
-const PROMPT_MAX_CLAIM_CHARS = 350;
+const PROMPT_MAX_CLAIMS = 40;
+const PROMPT_MAX_CLAIM_CHARS = 300;
 const shorten = (t: string) => (t.length > PROMPT_MAX_CLAIM_CHARS ? `${t.slice(0, PROMPT_MAX_CLAIM_CHARS).replace(/\s+\S*$/, '')}…` : t);
 
 /**

@@ -23,7 +23,12 @@ export function placeKey(p: { kind: string; countryCode: string; regionCode: str
   return `country:${p.countryCode}`;
 }
 
-const MAX_CLAIMS_PER_ITEM = 10;
+/**
+ * 10 → 20 (03-10-2026): con 10 solo entraban las primeras frases de cada pieza y el trasfondo
+ * (qué llevó a esto, antecedentes) suele ir más abajo; las noticias se quedaban en 100-200
+ * palabras con fuentes de 1.000.
+ */
+const MAX_CLAIMS_PER_ITEM = 20;
 
 /** Texto analizable de una pieza (título + entradilla + cuerpo), sin duplicar el título. */
 export function itemFullText(it: Pick<VItem, 'title' | 'summary' | 'text'>): string {

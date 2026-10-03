@@ -383,7 +383,11 @@ export function imageCandidates(
   const byRank = (x: Ranked, y: Ranked) => x.rank - y.rank;
   const strip = ({ name, lang, place, trusted }: Ranked, last = false): ImageCandidate => ({ name, lang, place, ...(trusted ? { trusted } : {}), ...(last ? { fallback: true } : {}) });
   if (opts.categoryId && SUBJECT_SECTIONS.has(opts.categoryId)) return subjects.sort(byRank).map((c) => strip(c));
-  return [...[...subjects.sort(byRank), ...places.sort(byRank), ...fromSummary].map((c) => strip(c)), ...fallback.map((c) => strip(c, true))];
+  // Ni ciudades ni capitales (03-10-2026): la foto de portada de Wikipedia de una ciudad no dice
+  // nada de la noticia y a veces la contradice (la manifestación por la vivienda en Madrid salía
+  // con Madrid nevado en octubre). Solo protagonistas e instituciones concretas (el Congreso en
+  // una votación); si no, la portadilla de la sección. Mejor sin foto que con una que engañe.
+  return [...subjects.sort(byRank).map((c) => strip(c)), ...fallback.filter((c) => c.trusted).map((c) => strip(c, true))];
 }
 
 /**

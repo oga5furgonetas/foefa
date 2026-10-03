@@ -87,6 +87,7 @@ describe('fotos en espectáculos y deportes (03-10-2026)', () => {
     const arts = [{ language: 'es', headline: 'BTS conquistó Bogotá: estos fueron los momentos de su primer concierto en El Campín', summary: 'BTS hizo vibrar Bogotá en su primer concierto.' }];
     const c = imageCandidates(arts, { categoryId: 'entertainment', countryCode: 'CO' });
     expect(c.some((x) => x.place)).toBe(false);
-    expect(imageCandidates(arts, { categoryId: 'society', countryCode: 'CO' }).some((x) => x.place)).toBe(true);
+    // Tampoco en sociedad: la foto de una ciudad no cuenta la noticia (Madrid nevado, 03-10-2026).
+    expect(imageCandidates(arts, { categoryId: 'society', countryCode: 'CO' }).some((x) => x.place)).toBe(false);
   });
 });
