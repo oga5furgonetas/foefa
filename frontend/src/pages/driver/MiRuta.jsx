@@ -5,8 +5,9 @@ import {
 } from 'lucide-react'
 import {
   repMiRuta, repEscanear, repLeerTicket, repNuevoPedido, repEstado, repOrdenar, repJornada, repPosicion,
-  repMiOrden, repMiEditar, repPegarMiLista,
+  repMiOrden, repMiEditar, repPegarMiLista, repTrazado,
 } from '../../services/api'
+import { hoyLocal } from '../../lib/fecha'
 import { lista } from '../../lib/lista'
 import { compressImage } from '../../lib/compressImage'
 import { origen } from '../../marca'
@@ -69,6 +70,30 @@ function navegar(p, nav) {
    se dice en qué zona se deja; al llegar a la parada se sabe dónde buscar. */
 const HUECOS = ['Delante · izq', 'Delante · der', 'Medio · izq', 'Medio · der', 'Detrás · izq', 'Detrás · der']
 
+// Dónde estoy ahora (si el móvil lo dice en 8 s); si no, null y se sale del almacén.
+const posicionAhora = () => new Promise((ok) => {
+  if (!('geolocation' in navigator)) { ok(null); return }
+  navigator.geolocation.getCurrentPosition(
+    (pos) => ok({ lat: pos.coords.latitude, lng: pos.coords.longitude }),
+    () => ok(null), { timeout: 8000, maximumAge: 60000 })
+})
+
+/* Las próximas paradas de golpe en Google Maps: hasta 3 intermedias y la
+   cuarta de destino (más no lo abren todos los móviles). Waze no admite
+   varias paradas, por eso este botón es solo de Google Maps. */
+function enlaceVarias(paradas) {
+  const ps = paradas.filter((p) => p.lat != null).slice(0, 4)
+  if (ps.length < 2) return ''
+  const ll = (p) => `${p.lat},${p.lng}`
+  const dest = ps[ps.length - 1]
+  const medio = ps.slice(0, -1).map(ll).join('|')
+  return `https://www.google.com/maps/dir/?api=1&travelmode=driving&destination=${ll(dest)}&waypoints=${encodeURIComponent(medio)}`
+}
+
+// Misma puerta: mismas coordenadas a ~10 m o, sin ellas, la misma dirección escrita.
+const clavePuerta = (p) => (p.lat != null ? `${Number(p.lat).toFixed(4)},${Number(p.lng).toFixed(4)}` : sinTildes(p.direccion).replace(/\s+/g, ' ').trim())
+const aMin = (hhmm) => { const m = /^(\d{1,2}):(\d{2})$/.exec(hhmm || ''); return m ? Number(m[1]) * 60 + Number(m[2]) : null }
+
 const lee = (k, def) => { try { return localStorage.getItem(k) || def } catch { return def } }
 const guarda = (k, v) => { try { localStorage.setItem(k, v) } catch { /* modo privado: da igual */ } }
 const sinTildes = (s) => String(s || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase()
@@ -101,6 +126,37 @@ export default function MiRuta({ onBack, embebido = false }) {
   const [escuchando, setEscuchando] = useState(false)
   useEffect(() => guarda('ruta_vista', vista), [vista])
   useEffect(() => guarda('ruta_nav', nav), [nav])
+  const [abierta, setAbierta] = useState(null)       // la parada desplegada (además de la siguiente)
+  const [deshacer, setDeshacer] = useState(null)     // {p, estado} recién cerrada, para volver atrás
+  const [trazado, setTrazado] = useState(null)
+  const [yo, setYo] = useState(null)
+  // El reloj de la pantalla, para «vas X min por detrás»: cada minuto basta.
+  const [ahora, setAhora] = useState(() => new Date())
+  useEffect(() => { const id = setInterval(() => setAhora(new Date()), 60000); return () => clearInterval(id) }, [])
+  useEffect(() => {
+    if (!deshacer) return undefined
+    const id = setTimeout(() => setDeshacer(null), 8000)
+    return () => clearTimeout(id)
+  }, [deshacer])
+
+  // El recorrido por las calles, solo con el mapa abierto y cuando cambia el
+  // orden o la lista de lo que queda (no en cada repintado).
+  const firmaRuta = ruta ? lista(ruta.pedidos).filter((p) => !['entregado', 'fallido'].includes(p.estado)).sort(porOrden)
+    .map((p) => `${p.id}:${p.lat ?? ''}`).join('|') : ''
+  useEffect(() => {
+    if (vista !== 'mapa' || !firmaRuta) return undefined
+    let vivo = true
+    ;(async () => {
+      const aqui = await posicionAhora()
+      if (!vivo) return
+      setYo(aqui)
+      try {
+        const { data } = await repTrazado(aqui)
+        if (vivo) setTrazado(data)
+      } catch { if (vivo) setTrazado(null) }
+    })()
+    return () => { vivo = false }
+  }, [vista, firmaRuta])
 
   const cargar = useCallback(() => {
     repMiRuta().then(({ data }) => setRuta(data))
@@ -210,7 +266,13 @@ export default function MiRuta({ onBack, embebido = false }) {
     // Y después, la prueba de entrega (foto y/o nota), que se puede saltar.
     if (estado === 'entregado' && !extra) { setCobro(null); setPrueba({ p, pago: pago || null }); setNotaEntrega(''); return }
     setOcupado(p.id)
-    try { await repEstado(p.id, estado, motivo, { ...(pago || {}), ...(extra || {}) }); setFallo(null); setCobro(null); setPrueba(null); cargar() } catch (e) {
+    try {
+      await repEstado(p.id, estado, motivo, { ...(pago || {}), ...(extra || {}) })
+      setFallo(null); setCobro(null); setPrueba(null); setAbierta(null)
+      setDeshacer({ p, estado })
+      if (navigator.vibrate) navigator.vibrate(estado === 'entregado' ? 60 : [40, 60, 40])
+      cargar()
+    } catch (e) {
       setAviso(e?.response?.data?.detail || 'No se pudo guardar')
     } finally { setOcupado('') }
   }
@@ -237,18 +299,19 @@ export default function MiRuta({ onBack, embebido = false }) {
       () => fin(null), { timeout: 8000, maximumAge: 60000 })
   }
 
-  // Dónde estoy ahora (si el móvil lo dice en 8 s); si no, desde el almacén.
-  const posicion = () => new Promise((ok) => {
-    if (!('geolocation' in navigator)) { ok(null); return }
-    navigator.geolocation.getCurrentPosition(
-      (pos) => ok({ lat: pos.coords.latitude, lng: pos.coords.longitude }),
-      () => ok(null), { timeout: 8000, maximumAge: 60000 })
-  })
+  async function deshacerUltima() {
+    const d = deshacer
+    if (!d) return
+    setDeshacer(null)
+    try { await repEstado(d.p.id, 'pendiente'); setAviso(`Vuelve a tu ruta: ${d.p.cliente || d.p.direccion}`); cargar() } catch (e) {
+      setAviso(e?.response?.data?.detail || 'No se pudo deshacer')
+    }
+  }
 
   async function guardarOrden() {
     setOcupado('orden')
     try {
-      const { data } = await repMiOrden(reordenar, await posicion())
+      const { data } = await repMiOrden(reordenar, await posicionAhora())
       setReordenar(null)
       setAviso(data.ruta?.fin ? `Orden guardado. Con este orden acabas ≈ ${data.ruta.fin}` : 'Orden guardado')
       cargar()
@@ -313,6 +376,12 @@ export default function MiRuta({ onBack, embebido = false }) {
     : pendientes
   const siguiente = pendientes[0]
   const porId = Object.fromEntries(pendientes.map((p) => [p.id, p]))
+  const enPuerta = {}
+  pendientes.forEach((p) => { const k = clavePuerta(p); if (k) enPuerta[k] = (enPuerta[k] || 0) + 1 })
+  // Retraso: solo con hora prevista de HOY y la parada siguiente aún sin hacer.
+  const etaSig = siguiente && ruta.fecha === hoyLocal() ? aMin(siguiente.eta) : null
+  const retraso = etaSig != null ? Math.max(0, ahora.getHours() * 60 + ahora.getMinutes() - etaSig) : 0
+  const cobradoHoy = entregados.reduce((a, p) => a + (Number(p.cobrado_importe) || 0), 0)
 
   return (
     <Marco onBack={onBack} embebido={embebido}>
@@ -333,6 +402,14 @@ export default function MiRuta({ onBack, embebido = false }) {
           className="mb-3 flex w-full items-center justify-center gap-2 rounded-2xl border border-dark-700 bg-dark-900 py-3 text-[14px] font-semibold text-dark-100">
           <Play size={15} /> {ruta.jornada?.terminada ? 'Volver a empezar la jornada' : 'Empezar jornada'}
         </button>
+      )}
+
+      {/* LA CABECERA DEL DÍA: lo primero que se ve. Cuánto llevas, cuánto
+          queda, a qué hora acabas y si vas tarde respecto a lo previsto. */}
+      {total > 0 && (
+        <Cabecera fecha={ruta.fecha} hechos={hechos.length} total={total} entregados={entregados.length}
+          pendientes={pendientes.length} rr={ruta.ruta} retraso={retraso} cobrado={cobradoHoy}
+          fueraHorario={pendientes.filter((p) => p.tarde_min > 0).length} />
       )}
 
       {/* ESCANEAR */}
@@ -382,21 +459,6 @@ export default function MiRuta({ onBack, embebido = false }) {
         </button>
       )}
 
-      {/* EL DÍA DE UN VISTAZO: cuántas van y cuánto falta. */}
-      {total > 0 && (
-        <div className="mt-4 rounded-2xl border border-dark-700 bg-dark-900 px-3.5 py-3" aria-label="Progreso del día">
-          <div className="flex items-baseline justify-between gap-2">
-            <span className="text-[13px] text-dark-300"><b className="text-[18px] text-dark-50">{hechos.length}</b> de {total} paradas</span>
-            <span className="text-[12px] text-dark-400">
-              {entregados.length} {entregados.length === 1 ? 'hecha' : 'hechas'}{hechos.length - entregados.length > 0 && ` · ${hechos.length - entregados.length} sin hacer`}
-            </span>
-          </div>
-          <div className="mt-2 h-2 overflow-hidden rounded-full bg-dark-800">
-            <div className="h-full rounded-full bg-emerald-500 transition-all" style={{ width: `${Math.round((hechos.length / total) * 100)}%` }} />
-          </div>
-        </div>
-      )}
-
       {/* FIN DE LA RUTA: el resumen del día, como al cerrar un bloque. */}
       {total > 0 && pendientes.length === 0 && <Resumen hechos={hechos} ruta={ruta.ruta} />}
 
@@ -418,16 +480,6 @@ export default function MiRuta({ onBack, embebido = false }) {
           </div>
         )}
       </div>
-      {ruta.ruta?.fin && pendientes.length > 0 && !reordenar && (
-        <p className="mb-2 flex flex-wrap items-center gap-x-2 rounded-xl bg-dark-900 px-3 py-2 text-[12.5px] text-dark-300">
-          <Clock size={13} className="text-brand-300" />
-          <span>Acabas ≈ <b className="text-dark-50">{ruta.ruta.fin}</b></span>
-          <span>· {minutosATexto(ruta.ruta.minutos)} · {ruta.ruta.km} km</span>
-          <span className="text-dark-500">· {ruta.ruta.manual ? 'tu orden' : ruta.ruta.fuente === 'linea_recta' ? 'por distancia' : ruta.ruta.trafico ? 'con tráfico típico' : 'sin tráfico'}</span>
-          {ruta.ruta.tarde > 0 && <span className="text-red-300">· {ruta.ruta.tarde} min tarde en alguna franja</span>}
-        </p>
-      )}
-
       {/* CAMBIAR EL ORDEN A MANO: el repartidor conoce la zona mejor que nadie. */}
       {reordenar && (
         <div className="rounded-2xl border border-brand-400/40 bg-dark-900 p-3">
@@ -483,17 +535,28 @@ export default function MiRuta({ onBack, embebido = false }) {
 
       {!reordenar && vista === 'mapa' && pendientes.length > 0 && (
         <div className="mb-3">
-          <Suspense fallback={<div className="flex h-[340px] items-center justify-center rounded-xl border border-dark-700"><Loader2 className="animate-spin text-dark-500" /></div>}>
-            <MapaReparto alto={340} base={ruta.base}
+          <Suspense fallback={<div className="flex h-[420px] items-center justify-center rounded-xl border border-dark-700"><Loader2 className="animate-spin text-dark-500" /></div>}>
+            <MapaReparto alto={420} base={yo ? null : ruta.base} yo={yo} trazado={trazado}
               paradas={lista(ruta.pedidos).map((p, i) => ({
-                lat: p.lat, lng: p.lng, estado: p.estado, orden: p.orden, color: '#0ea5e9',
+                lat: p.lat, lng: p.lng, estado: p.estado, orden: p.orden, color: '#0ea5e9', grande: siguiente?.id === p.id,
                 etiqueta: p.orden ?? i + 1, titulo: p.cliente || p.direccion, sub: p.eta ? `≈ ${p.eta} · ${p.direccion}` : p.direccion,
               }))} />
           </Suspense>
+          <p className="mt-1.5 flex flex-wrap items-center gap-x-2 text-[12px] text-dark-400">
+            {trazado?.fuente === 'carreteras'
+              ? <><span className="inline-block h-1 w-5 rounded bg-sky-600" /> Por las calles: <b className="text-dark-200">{String(trazado.km).replace('.', ',')} km</b> · {minutosATexto(trazado.minutos)} conduciendo (sin contar paradas)</>
+              : trazado ? 'Sin servidor de rutas ahora: rayas rectas entre paradas.' : 'Calculando el recorrido…'}
+          </p>
           {pendientes.some((p) => p.lat == null) && (
-            <p className="mt-1.5 text-[12px] text-amber-200/90">
+            <p className="mt-1 text-[12px] text-amber-200/90">
               {pendientes.filter((p) => p.lat == null).length} sin situar en el mapa todavía (la dirección no se ha encontrado o se está buscando).
             </p>
+          )}
+          {enlaceVarias(pendientes) && (
+            <a href={enlaceVarias(pendientes)} target="_blank" rel="noreferrer"
+              className="mt-2 flex w-full items-center justify-center gap-2 rounded-xl border border-sky-500/50 bg-sky-500/10 py-3 text-[14px] font-bold text-sky-200">
+              <Navigation size={16} /> Las próximas {Math.min(4, pendientes.filter((p) => p.lat != null).length)} paradas en Google Maps
+            </a>
           )}
         </div>
       )}
@@ -514,30 +577,65 @@ export default function MiRuta({ onBack, embebido = false }) {
         </p>
       )}
       {q && visibles.length === 0 && <p className="py-4 text-center text-[13px] text-dark-400">Nada con «{filtro.trim()}» en las paradas pendientes.</p>}
+      {/* LAS PARADAS. La siguiente, entera y destacada; las demás, en una
+          línea (número, cliente, calle, hora) y se despliegan al tocarlas:
+          con 80 paradas, una lista de tarjetas enormes no hay quien la lleve. */}
       {!reordenar && (
-      <div className="flex flex-col gap-2.5">
+      <div className="flex flex-col gap-2">
         {visibles.map((p, i) => {
           const esSiguiente = siguiente && p.id === siguiente.id
+          const juntas = enPuerta[clavePuerta(p)] || 1
+          const etiquetas = (
+            <>
+              {p.prioridad && <span className="rounded bg-amber-500/15 px-1.5 font-bold text-amber-300">URGENTE</span>}
+              {p.tipo === 'recogida' && <span className="rounded bg-violet-500/15 px-1.5 font-bold text-violet-300">RECOGIDA</span>}
+              {p.cobrar > 0 && <span className="rounded bg-emerald-500/15 px-1.5 font-bold text-emerald-300">COBRAR {euros(p.cobrar)}</span>}
+              {p.ventana_desde && <span className="rounded bg-dark-800 px-1.5 text-dark-300">Horario {p.ventana_desde}–{p.ventana_hasta}</span>}
+              {p.tarde_min > 0 && <span className="rounded bg-red-500/15 px-1.5 text-red-300">llega {p.tarde_min} min tarde</span>}
+              {juntas > 1 && <span className="rounded bg-sky-500/15 px-1.5 font-semibold text-sky-300">{juntas} paradas en esta puerta</span>}
+            </>
+          )
+          const hayEtiquetas = p.prioridad || p.tipo === 'recogida' || p.cobrar > 0 || p.ventana_desde || p.tarde_min > 0 || juntas > 1
+          if (!esSiguiente && abierta !== p.id) {
+            return (
+              <div key={p.id} className="flex items-stretch gap-1 rounded-2xl border border-dark-800 bg-dark-900/70">
+                <button onClick={() => setAbierta(p.id)} aria-label={`Ver la parada ${p.orden ?? i + 1}: ${p.cliente || p.direccion}`}
+                  className="flex min-w-0 flex-1 items-center gap-3 px-3 py-2.5 text-left">
+                  <span className="flex h-7 min-w-7 items-center justify-center rounded-full border border-brand-400/50 px-1.5 text-[12.5px] font-bold text-brand-200">{p.orden ?? i + 1}</span>
+                  <span className="min-w-0 flex-1">
+                    <span className="flex items-baseline justify-between gap-2">
+                      <span className="truncate text-[14px] font-semibold text-dark-50">{p.cliente || p.direccion}</span>
+                      {p.eta && <span className={`shrink-0 text-[12.5px] font-semibold ${p.tarde_min ? 'text-red-300' : 'text-dark-300'}`}>{p.eta}</span>}
+                    </span>
+                    {p.cliente && <span className="block truncate text-[12.5px] text-dark-400">{p.direccion}</span>}
+                    {(hayEtiquetas || p.hueco) && (
+                      <span className="mt-1 flex flex-wrap gap-1 text-[10.5px]">
+                        {etiquetas}
+                        {p.hueco && <span className="rounded bg-sky-500/15 px-1.5 text-sky-200">{p.hueco}</span>}
+                      </span>
+                    )}
+                  </span>
+                </button>
+                <a href={navegar(p, nav)} target="_blank" rel="noreferrer" aria-label={`Ir a ${p.cliente || p.direccion}`}
+                  className="flex w-12 shrink-0 items-center justify-center border-l border-dark-800 text-dark-300"><Navigation size={17} /></a>
+              </div>
+            )
+          }
           return (
-          <div key={p.id} className={`rounded-2xl border p-3.5 ${esSiguiente ? 'border-brand-400/70 bg-brand-500/[.07] shadow-lg shadow-brand-900/20' : 'border-dark-700 bg-dark-900'}`}>
-            {esSiguiente && <p className="mb-2 text-[11px] font-bold uppercase tracking-wider text-brand-300">Siguiente parada</p>}
+          <div key={p.id} className={`rounded-2xl border p-3.5 ${esSiguiente ? 'border-brand-400/70 bg-gradient-to-b from-brand-500/[.12] to-dark-900 shadow-lg shadow-black/20' : 'border-dark-600 bg-dark-900'}`}>
+            <div className="mb-2 flex items-center justify-between">
+              <p className={`text-[11px] font-bold uppercase tracking-wider ${esSiguiente ? 'text-brand-300' : 'text-dark-400'}`}>{esSiguiente ? 'Siguiente parada' : `Parada ${p.orden ?? i + 1}`}</p>
+              {!esSiguiente && <button onClick={() => setAbierta(null)} className="text-[12px] font-semibold text-dark-400">Plegar</button>}
+            </div>
             <div className="flex items-start gap-3">
-              <span className="mt-0.5 flex h-7 min-w-7 items-center justify-center rounded-full bg-brand-500 px-1.5 text-[13px] font-bold text-white">{p.orden ?? i + 1}</span>
+              <span className={`mt-0.5 flex items-center justify-center rounded-full bg-brand-500 px-1.5 font-bold text-brand-tinta ${esSiguiente ? 'h-9 min-w-9 text-[15px]' : 'h-7 min-w-7 text-[13px]'}`}>{p.orden ?? i + 1}</span>
               <div className="min-w-0 flex-1">
                 <div className="flex items-start justify-between gap-2">
-                  <p className={`${esSiguiente ? 'text-[17px]' : 'text-[15px]'} font-semibold text-dark-50`}>{p.cliente || 'Cliente'}</p>
-                  {p.eta && <span className={`shrink-0 text-[13px] font-bold ${p.tarde_min ? 'text-red-300' : 'text-brand-200'}`}>≈ {p.eta}</span>}
+                  <p className={`${esSiguiente ? 'text-[18px]' : 'text-[15px]'} font-bold leading-tight text-dark-50`}>{p.cliente || 'Cliente'}</p>
+                  {p.eta && <span className={`shrink-0 rounded-lg px-2 py-0.5 text-[13px] font-bold ${p.tarde_min ? 'bg-red-500/15 text-red-300' : 'bg-brand-500/15 text-brand-200'}`}>≈ {p.eta}</span>}
                 </div>
-                {(p.prioridad || p.ventana_desde || p.tarde_min > 0 || p.tipo === 'recogida' || p.cobrar > 0) && (
-                  <div className="mt-0.5 flex flex-wrap gap-1.5 text-[11px]">
-                    {p.prioridad && <span className="rounded bg-amber-500/15 px-1.5 font-bold text-amber-300">URGENTE</span>}
-                    {p.tipo === 'recogida' && <span className="rounded bg-violet-500/15 px-1.5 font-bold text-violet-300">RECOGIDA</span>}
-                    {p.cobrar > 0 && <span className="rounded bg-emerald-500/15 px-1.5 font-bold text-emerald-300">COBRAR {euros(p.cobrar)}</span>}
-                    {p.ventana_desde && <span className="rounded bg-dark-800 px-1.5 text-dark-300">Horario {p.ventana_desde}–{p.ventana_hasta}</span>}
-                    {p.tarde_min > 0 && <span className="rounded bg-red-500/15 px-1.5 text-red-300">llega {p.tarde_min} min tarde</span>}
-                  </div>
-                )}
-                <p className={`${esSiguiente ? 'text-[14px]' : 'text-[13px]'} leading-snug text-dark-300`}>{p.direccion}</p>
+                {hayEtiquetas && <div className="mt-1 flex flex-wrap gap-1.5 text-[11px]">{etiquetas}</div>}
+                <p className={`${esSiguiente ? 'text-[14.5px]' : 'text-[13px]'} mt-0.5 leading-snug text-dark-200`}>{p.direccion}</p>
                 {p.telefono && <p className="text-[12.5px] text-dark-400">{p.telefono}</p>}
                 {p.contenido && <p className="mt-1 flex items-start gap-1 text-[12.5px] text-dark-400"><Package size={13} className="mt-0.5 shrink-0" /> {p.contenido}</p>}
                 <p className="mt-0.5 text-[11.5px] text-dark-500">
@@ -552,7 +650,7 @@ export default function MiRuta({ onBack, embebido = false }) {
             </div>
             <div className="mt-3 grid grid-cols-3 gap-1.5">
               <a href={navegar(p, nav)} target="_blank" rel="noreferrer"
-                className={`flex flex-col items-center gap-0.5 rounded-xl py-2 text-[11px] ${esSiguiente ? 'bg-brand-500 font-bold text-white' : 'border border-dark-700 text-dark-200'}`}><Navigation size={16} /> Ir</a>
+                className={`flex flex-col items-center gap-0.5 rounded-xl py-2 text-[11px] ${esSiguiente ? 'bg-brand-500 font-bold text-brand-tinta' : 'border border-dark-700 text-dark-200'}`}><Navigation size={16} /> Ir</a>
               {p.telefono
                 ? <a href={`tel:${p.telefono}`} className="flex flex-col items-center gap-0.5 rounded-xl border border-dark-700 py-2 text-[11px] text-dark-200"><Phone size={16} /> Llamar</a>
                 : <span className="flex flex-col items-center gap-0.5 rounded-xl border border-dark-800 py-2 text-[11px] text-dark-600"><Phone size={16} /> Sin teléfono</span>}
@@ -562,9 +660,9 @@ export default function MiRuta({ onBack, embebido = false }) {
                 : <span className="flex flex-col items-center gap-0.5 rounded-xl border border-dark-800 py-2 text-[11px] text-dark-600"><MessageCircle size={16} /> —</span>}
             </div>
             <div className="mt-1.5 grid grid-cols-[1fr_2fr] gap-1.5">
-              <button onClick={() => setFallo(p)} disabled={ocupado === p.id} className="flex items-center justify-center gap-1 rounded-xl border border-red-500/30 py-2.5 text-[13px] text-red-300"><X size={15} /> {p.tipo === 'recogida' ? 'No recogido' : 'No entregado'}</button>
-              <button onClick={() => marcar(p, 'entregado')} disabled={ocupado === p.id} className="flex items-center justify-center gap-1.5 rounded-xl bg-emerald-600 py-2.5 text-[14px] font-semibold text-white">
-                {ocupado === p.id ? <Loader2 size={16} className="animate-spin" /> : <Check size={16} />} {p.tipo === 'recogida' ? 'Recogido' : 'Entregado'}
+              <button onClick={() => setFallo(p)} disabled={ocupado === p.id} className="flex items-center justify-center gap-1 rounded-xl border border-red-500/30 py-3 text-[13px] text-red-300"><X size={15} /> {p.tipo === 'recogida' ? 'No recogido' : 'No entregado'}</button>
+              <button onClick={() => marcar(p, 'entregado')} disabled={ocupado === p.id} className="flex items-center justify-center gap-1.5 rounded-xl bg-emerald-600 py-3 text-[15px] font-bold text-white active:scale-[.99]">
+                {ocupado === p.id ? <Loader2 size={16} className="animate-spin" /> : <Check size={17} />} {p.tipo === 'recogida' ? 'Recogido' : 'Entregado'}
               </button>
             </div>
           </div>
@@ -618,6 +716,21 @@ export default function MiRuta({ onBack, embebido = false }) {
             </button>
           )}
         </Hoja>
+      )}
+
+      {deshacer && (
+        <div className="fixed inset-x-0 bottom-20 z-40 flex justify-center px-4" role="status">
+          <div className="flex w-full max-w-md items-center gap-3 rounded-2xl border border-dark-600 bg-dark-800 px-4 py-3 shadow-2xl">
+            <span className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full ${deshacer.estado === 'entregado' ? 'bg-emerald-600' : 'bg-red-600'} text-white`}>
+              {deshacer.estado === 'entregado' ? <Check size={16} /> : <X size={16} />}
+            </span>
+            <span className="min-w-0 flex-1 text-[13px] leading-tight text-dark-100">
+              <b className="block truncate">{deshacer.estado === 'entregado' ? (deshacer.p.tipo === 'recogida' ? 'Recogido' : 'Entregado') : 'No entregado'} · {deshacer.p.cliente || deshacer.p.direccion}</b>
+              {siguiente && siguiente.id !== deshacer.p.id && <span className="block truncate text-dark-400">Siguiente: {siguiente.cliente || siguiente.direccion}{siguiente.eta ? ` ≈ ${siguiente.eta}` : ''}</span>}
+            </span>
+            <button onClick={deshacerUltima} className="shrink-0 rounded-lg px-2 py-1.5 text-[13px] font-bold text-brand-300">Deshacer</button>
+          </div>
+        </div>
       )}
 
       {escaner && <Escaner onCodigo={buscar} onClose={() => setEscaner(false)} />}
@@ -783,6 +896,60 @@ function Marco({ onBack, children, embebido }) {
         {children}
       </div>
     </div>
+  )
+}
+
+/* LA CABECERA DEL DÍA: anillo de progreso, lo que queda y a qué hora se
+   acaba. «Vas X min por detrás» compara la hora de ahora con la prevista
+   para la parada siguiente; solo sale si de verdad va más de 5 min tarde. */
+function Cabecera({ fecha, hechos, total, entregados, pendientes, rr, retraso, cobrado, fueraHorario }) {
+  const pct = total ? hechos / total : 0
+  const R = 26
+  const L = 2 * Math.PI * R
+  let dia = ''
+  try { dia = new Date(`${fecha}T12:00:00`).toLocaleDateString('es-ES', { weekday: 'long', day: 'numeric', month: 'long' }) } catch { dia = '' }
+  return (
+    <section aria-label="Progreso del día"
+      className="mb-3 overflow-hidden rounded-3xl border border-brand-400/30 bg-gradient-to-br from-brand-500/[.18] via-dark-900 to-dark-900 p-4 shadow-lg shadow-black/20">
+      <div className="flex items-center gap-4">
+        <div className="relative h-[68px] w-[68px] shrink-0">
+          <svg viewBox="0 0 64 64" className="h-full w-full -rotate-90" aria-hidden="true">
+            <circle cx="32" cy="32" r={R} fill="none" strokeWidth="7" className="stroke-dark-700" />
+            <circle cx="32" cy="32" r={R} fill="none" strokeWidth="7" strokeLinecap="round"
+              className="stroke-brand-400 transition-all duration-700" strokeDasharray={L} strokeDashoffset={L * (1 - pct)} />
+          </svg>
+          <span className="absolute inset-0 flex flex-col items-center justify-center leading-none">
+            <b className="text-[17px] text-dark-50">{hechos}</b>
+            <span className="text-[10.5px] text-dark-400">de {total}</span>
+          </span>
+        </div>
+        <div className="min-w-0 flex-1">
+          {dia && <p className="text-[11.5px] font-semibold uppercase tracking-wider text-brand-300">{dia}</p>}
+          <p className="text-[19px] font-bold leading-tight text-dark-50">
+            {pendientes ? `Quedan ${pendientes} parada${pendientes === 1 ? '' : 's'}` : 'Todo hecho'}
+          </p>
+          {pendientes > 0 && rr?.fin && (
+            <p className="mt-0.5 flex flex-wrap items-center gap-x-1.5 text-[12.5px] text-dark-300">
+              <Clock size={12} className="text-brand-300" /> Acabas ≈ <b className="text-dark-50">{rr.fin}</b>
+              {rr.km ? <span>· {String(rr.km).replace('.', ',')} km</span> : null}
+              {rr.minutos ? <span>· {minutosATexto(rr.minutos)}</span> : null}
+            </p>
+          )}
+        </div>
+      </div>
+      <div className="mt-3 flex flex-wrap gap-1.5 text-[11.5px]">
+        <span className="rounded-full bg-emerald-500/15 px-2 py-0.5 font-semibold text-emerald-300">{entregados} hecha{entregados === 1 ? '' : 's'}</span>
+        {hechos - entregados > 0 && <span className="rounded-full bg-red-500/15 px-2 py-0.5 font-semibold text-red-300">{hechos - entregados} sin hacer</span>}
+        {cobrado > 0 && <span className="rounded-full bg-dark-800 px-2 py-0.5 text-dark-200">Cobrado {euros(cobrado)}</span>}
+        {pendientes > 0 && rr?.fin && (
+          <span className="rounded-full bg-dark-800 px-2 py-0.5 text-dark-400">
+            {rr.manual ? 'tu orden' : rr.fuente === 'linea_recta' ? 'por distancia' : rr.trafico ? 'con tráfico típico' : 'sin tráfico'}
+          </span>
+        )}
+        {fueraHorario > 0 && <span className="rounded-full bg-red-500/15 px-2 py-0.5 text-red-300">{fueraHorario} fuera de su horario</span>}
+        {pendientes > 0 && retraso > 5 && <span className="rounded-full bg-amber-500/15 px-2 py-0.5 font-semibold text-amber-300">Vas {minutosATexto(retraso)} por detrás de lo previsto</span>}
+      </div>
+    </section>
   )
 }
 

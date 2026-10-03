@@ -172,3 +172,12 @@ def test_numeros_de_portal_no_son_franjas():
     assert R.ventana_de_nota("Portal 12-14, 3º") == (None, None)
     assert R.ventana_de_nota("Entregar de 10 a 12, portal 2") == (600, 720)
     assert R.ventana_de_nota("solo por la tarde") == (960, 1260)
+
+
+def test_aligera_linea_quita_puntos_pegados_y_guarda_extremos():
+    linea = [[43.0 + i * 0.00001, -8.0] for i in range(1000)]   # ~1,1 m entre puntos
+    fuera = R.aligera_linea(linea, metros=12)
+    assert fuera[0] == linea[0] and fuera[-1] == linea[-1]
+    assert 80 < len(fuera) < 120
+    assert R.aligera_linea(linea[:2]) == linea[:2]
+    assert len(R.aligera_linea([[43 + i * 0.01, -8] for i in range(9000)], tope=500)) == 500

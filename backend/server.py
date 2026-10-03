@@ -46681,6 +46681,48 @@ async def _rep_matriz(puntos: list) -> tuple:
     return s, m, "linea_recta"
 
 
+_REP_TRAZADOS: dict = {}
+
+
+async def _rep_trazado(puntos: list) -> dict:
+    """El camino POR LAS CALLES que une los puntos en ese orden, para pintarlo
+    en el mapa (como la línea azul de un navegador). Se guarda en memoria por
+    puntos: repintar el mapa no vuelve a preguntar. Sin servidor de rutas,
+    los puntos tal cual y la fuente lo dice (el mapa lo pinta discontinuo)."""
+    clave = tuple((round(la, 5), round(lo, 5)) for la, lo in puntos)
+    if clave in _REP_TRAZADOS:
+        return _REP_TRAZADOS[clave]
+    salida = {"linea": [[la, lo] for la, lo in puntos], "fuente": "linea_recta", "km": None, "minutos": None}
+    if 2 <= len(puntos) <= 80:
+        coords = ";".join(f"{lo:.6f},{la:.6f}" for la, lo in puntos)
+        import httpx as _httpx
+        async with _REP_RUTAS_LOCK:
+            espera = 1.1 - (time.time() - _REP_RUTAS_ULTIMA[0])
+            if espera > 0:
+                await asyncio.sleep(espera)
+            try:
+                async with _httpx.AsyncClient(timeout=20, headers={
+                        "User-Agent": f"{MARCA}/1.0 (reparto; {CORREO_CONTACTO})"}) as c:
+                    resp = await c.get(f"{_REP_RUTAS_URL}/route/v1/driving/{coords}",
+                                       params={"overview": "full", "geometries": "geojson", "steps": "false"})
+                    j = resp.json() if resp.status_code == 200 else {}
+            except Exception as e:                           # noqa: BLE001
+                logger.warning(f"reparto: trazado sin respuesta: {type(e).__name__}")
+                j = {}
+            finally:
+                _REP_RUTAS_ULTIMA[0] = time.time()
+        ruta = (j.get("routes") or [None])[0] if j.get("code") == "Ok" else None
+        geo = ((ruta or {}).get("geometry") or {}).get("coordinates")
+        if isinstance(geo, list) and len(geo) >= 2:
+            salida = {"linea": reparto.aligera_linea([[c[1], c[0]] for c in geo if isinstance(c, list) and len(c) == 2]),
+                      "fuente": "carreteras", "km": round((ruta.get("distance") or 0) / 1000, 1),
+                      "minutos": round((ruta.get("duration") or 0) / 60)}
+    if len(_REP_TRAZADOS) > 300:
+        _REP_TRAZADOS.clear()
+    _REP_TRAZADOS[clave] = salida
+    return salida
+
+
 def _rep_ahora_local() -> tuple:
     try:
         from zoneinfo import ZoneInfo
@@ -47231,6 +47273,26 @@ async def reparto_mi_ordenar(data: dict = Body(...), user: dict = Depends(requir
     origen = reparto._punto(_dict_cuerpo(data)) or _rep_base(await _rep_ajustes())
     ruta = await _rep_ordenar(_dia_negocio(), d["id"], origen, salida_min=_rep_ahora_local()[0])
     return {"ordenados": ruta["paradas"], "ruta": ruta}
+
+
+@api_router.post("/reparto/mi-ruta/trazado")
+async def reparto_mi_trazado(data: dict = Body(...), user: dict = Depends(require_any_auth)):
+    """El recorrido por las calles de lo que le QUEDA: desde donde está (si el
+    móvil lo dice) o el almacén, por sus paradas pendientes en su orden. La
+    posición solo se usa para calcular; no se guarda."""
+    d = await _rep_conductor(user)
+    ps = await db.reparto_pedidos.find(
+        {"fecha": _dia_negocio(), "conductor_id": d["id"], "estado": {"$in": ["pendiente", "en_ruta"]}},
+        {"_id": 0, "lat": 1, "lng": 1, "orden": 1}).to_list(500)
+    ps = sorted([p for p in ps if p.get("lat") is not None and p.get("lng") is not None],
+                key=lambda p: p.get("orden") if p.get("orden") is not None else 10 ** 6)
+    puntos = [(p["lat"], p["lng"]) for p in ps]
+    inicio = reparto._punto(_dict_cuerpo(data.get("desde"))) or _rep_base(await _rep_ajustes())
+    if inicio and puntos:
+        puntos = [inicio] + puntos
+    if len(puntos) < 2:
+        return {"linea": [], "fuente": None, "km": None, "minutos": None}
+    return await _rep_trazado(puntos[:80])
 
 
 @api_router.post("/reparto/mi-ruta/orden")

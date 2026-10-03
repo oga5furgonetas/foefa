@@ -546,3 +546,20 @@ def limpia_ticket(d) -> dict:
     except (TypeError, ValueError):
         out["bultos"] = 1
     return out
+
+
+def aligera_linea(linea: list, metros: float = 12.0, tope: int = 4000) -> list:
+    """Quita puntos casi pegados de un trazado (el servidor da uno cada pocos
+    metros): mismo dibujo, mucho menos peso para el móvil. Primero y último
+    se quedan siempre."""
+    if len(linea) <= 2:
+        return linea
+    fuera = [linea[0]]
+    for p in linea[1:-1]:
+        if distancia_km(fuera[-1], p) * 1000 >= metros:
+            fuera.append(p)
+    fuera.append(linea[-1])
+    if len(fuera) > tope:
+        paso = len(fuera) / tope
+        fuera = [fuera[int(i * paso)] for i in range(tope - 1)] + [fuera[-1]]
+    return fuera

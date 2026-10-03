@@ -352,3 +352,41 @@ async def test_quien_reparte_solo_pega_su_lista_y_es_suya(base, monkeypatch):
     assert r["creados"] == 2
     assert {p["conductor_id"] for p in base.db["reparto_pedidos"].docs} == {"a9"}
     assert (await server.reparto_mi_ruta(yo))["puede_pegar"] is True
+
+
+@pytest.mark.asyncio(loop_scope="session")
+async def test_trazado_va_por_lo_pendiente_en_orden_desde_donde_estoy(base, monkeypatch):
+    vistos = []
+
+    async def trazado(puntos):
+        vistos.append(puntos)
+        return {"linea": [list(p) for p in puntos], "fuente": "carreteras", "km": 3.2, "minutos": 9}
+    monkeypatch.setattr(server, "_rep_trazado", trazado)
+    a = await server.reparto_mis_pedidos({"direccion": "Avda Montero Ríos 12"}, ANA)
+    b = await server.reparto_mis_pedidos({"direccion": "Rúa Real 5"}, ANA)
+    c = await server.reparto_mis_pedidos({"direccion": "Calle San Andrés 30"}, ANA)
+    for p, n, la in ((a, 2, 43.1), (b, 1, 43.2), (c, 3, 43.3)):
+        await base.db.reparto_pedidos.update_one({"id": p["id"]}, {"$set": {"orden": n, "lat": la, "lng": -8.4}})
+    await server.reparto_estado(c["id"], {"estado": "entregado"}, ANA)
+    r = await server.reparto_mi_trazado({"desde": {"lat": 43.0, "lng": -8.4}}, ANA)
+    assert r["fuente"] == "carreteras"
+    assert vistos[-1] == [(43.0, -8.4), (43.2, -8.4), (43.1, -8.4)]   # yo, orden 1, orden 2; lo entregado no
+
+
+@pytest.mark.asyncio(loop_scope="session")
+async def test_trazado_sin_servidor_de_rutas_va_en_linea_recta(monkeypatch):
+    import httpx
+
+    class Roto:
+        def __init__(self, *a, **k):
+            pass
+
+        async def __aenter__(self):
+            raise httpx.ConnectError("sin red")
+
+        async def __aexit__(self, *a):
+            return False
+    monkeypatch.setattr(httpx, "AsyncClient", Roto)
+    server._REP_TRAZADOS.clear()
+    r = await server._rep_trazado([(43.0, -8.4), (43.01, -8.41)])
+    assert r["fuente"] == "linea_recta" and r["linea"] == [[43.0, -8.4], [43.01, -8.41]]

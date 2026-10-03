@@ -253,3 +253,4 @@ export const repPosicion = (lat, lng) => api.post('/reparto/posicion', { lat, ln
 export const repMiOrden = (ids, desde) => api.post('/reparto/mi-ruta/orden', { ids, ...(desde ? { desde } : {}) })
 export const repMiEditar = (id, body) => api.post(`/reparto/mis-pedidos/${id}/editar`, body)
 export const repPegarMiLista = (texto, confirmar) => api.post('/reparto/pegar', { texto, confirmar: !!confirmar })
+export const repTrazado = (desde) => api.post('/reparto/mi-ruta/trazado', desde ? { desde } : {})

@@ -1447,13 +1447,18 @@ test('Reparto · la ruta del repartidor: siguiente, furgoneta, Waze, orden a man
     pedidos = pedidos.map((p) => (ids.includes(p.id) ? { ...p, orden: ids.indexOf(p.id) + 1 } : p))
     await r.fulfill({ json: { ordenados: ids.length, ruta: { fin: '11:00', manual: true } } })
   })
+  await page.route(/\/api\/reparto\/mi-ruta\/trazado/, (r) => r.fulfill({ json: {
+    linea: [[43.37, -8.40], [43.365, -8.405], [43.36, -8.41]], fuente: 'carreteras', km: 3.1, minutos: 9 } }))
   await page.route(/\/api\/reparto\/mi-ruta$/, (r) => r.fulfill({ json: {
     activo: true, empresa: 'Súper', fecha: '2026-10-04', ia_tickets: false, jornada: {}, aviso_aceptado: true,
     base: null, ruta: { fin: '10:40', minutos: 40, km: 9.5, trafico: true }, pedidos } }))
   await page.goto('/conductor?vista=ruta', { waitUntil: 'domcontentloaded' })
 
   // Progreso y siguiente parada.
-  await expect(page.getByText('de 3 paradas')).toBeVisible()
+  const cab = page.getByLabel('Progreso del día')
+  await expect(cab.getByText('Quedan 2 paradas')).toBeVisible()
+  await expect(cab.getByText('de 3')).toBeVisible()
+  await expect(cab.getByText('Cobrado 12,00 €')).toBeVisible()
   await expect(page.getByText('Siguiente parada')).toBeVisible()
   const primera = page.locator('div.rounded-2xl', { hasText: 'Siguiente parada' })
   await expect(primera.getByText('Bar Pepe')).toBeVisible()
@@ -1464,7 +1469,10 @@ test('Reparto · la ruta del repartidor: siguiente, furgoneta, Waze, orden a man
   await expect(primera.getByRole('link', { name: 'Ir' })).toHaveAttribute('href', 'https://waze.com/ul?ll=43.37,-8.4&navigate=yes')
 
   // Dónde va en la furgoneta.
-  await page.locator('div.rounded-2xl', { hasText: 'Farmacia Sol' }).getByRole('button', { name: /Dónde va en la furgoneta/ }).click()
+  // Las demás van plegadas: se despliega al tocarla.
+  await expect(page.getByRole('link', { name: 'Ir a Farmacia Sol' })).toBeVisible()
+  await page.getByRole('button', { name: /Ver la parada 2: Farmacia Sol/ }).click()
+  await page.locator('div.rounded-2xl', { hasText: 'Parada 2' }).getByRole('button', { name: /Dónde va en la furgoneta/ }).click()
   await page.getByRole('button', { name: 'Detrás · izq' }).click()
   await expect(page.getByText('En la furgoneta: Detrás · izq')).toBeVisible()
   expect(editados).toEqual([{ hueco: 'Detrás · izq' }])
@@ -1477,10 +1485,29 @@ test('Reparto · la ruta del repartidor: siguiente, furgoneta, Waze, orden a man
   expect(ordenes).toEqual([['p2', 'p1']])
   await expect(page.locator('div.rounded-2xl', { hasText: 'Siguiente parada' }).getByText('Farmacia Sol')).toBeVisible()
 
-  // Mapa.
+  // Mapa con el recorrido por las calles y las próximas paradas en Google Maps.
   await page.getByRole('button', { name: 'Mapa' }).click()
   await expect(page.locator('.leaflet-container')).toBeVisible()
+  await expect(page.getByText('Por las calles:')).toBeVisible()
+  await expect(page.getByText('3,1 km')).toBeVisible()
+  await expect(page.getByRole('link', { name: 'Las próximas 2 paradas en Google Maps' }))
+    .toHaveAttribute('href', /destination=43\.37,-8\.4&waypoints=43\.36%2C-8\.41/)
   await page.getByRole('button', { name: 'Lista' }).click()
+
+  // Entregar enseña «Deshacer», y deshacer la devuelve a pendiente.
+  const estados = []
+  await page.route(/\/api\/reparto\/pedidos\/p2\/estado/, async (r) => {
+    const b = r.request().postDataJSON(); estados.push(b.estado)
+    pedidos = pedidos.map((p) => (p.id === 'p2' ? { ...p, estado: b.estado } : p))
+    await r.fulfill({ json: {} })
+  })
+  await page.getByRole('button', { name: 'Entregado', exact: true }).click()
+  await page.getByRole('button', { name: 'Entregar sin foto' }).click()
+  await expect(page.getByRole('status').getByText('Entregado · Farmacia Sol')).toBeVisible()
+  await expect(page.getByRole('status').getByText('Siguiente: Bar Pepe ≈ 10:05')).toBeVisible()
+  await page.getByRole('button', { name: 'Deshacer' }).click()
+  await expect(page.getByText('Vuelve a tu ruta: Farmacia Sol')).toBeVisible()
+  expect(estados).toEqual(['entregado', 'pendiente'])
 
   // Todo hecho: resumen del día con lo cobrado.
   pedidos = pedidos.map((p) => ({ ...p, estado: p.id === 'p1' ? 'fallido' : 'entregado', motivo: p.id === 'p1' ? 'No había nadie' : undefined }))
