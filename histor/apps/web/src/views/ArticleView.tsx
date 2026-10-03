@@ -13,6 +13,7 @@ import { env } from '@histor/core/env';
 import type { getArticleDetail } from '@histor/core/services/content';
 import { NOTES } from '@histor/core/writing/notes';
 import { Badges } from '@/components/Badges';
+import { HouseAd } from '@/components/HouseAd';
 import { StoryCard } from '@/components/Cards';
 import { ArticleActions } from '@/components/client/ArticleActions';
 import { AlertsCta } from '@/components/client/AlertsCta';
@@ -346,6 +347,8 @@ export function ArticleView({ data, lang, d, tz, experiment }: { data: ArticleDe
           <Link href={`${href.page(lang, 'report')}?article=${a.id}`}>{d.article.reportError}</Link>
         </p>
       </article>
+
+      {!retracted && <HouseAd lang={lang} placement="noticia" />}
 
       {related.length > 0 && (
         <section aria-labelledby="rel-h">

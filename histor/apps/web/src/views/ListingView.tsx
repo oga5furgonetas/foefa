@@ -2,6 +2,7 @@ import Link from 'next/link';
 import type { Dict } from '@histor/core/i18n/dictionaries';
 import { absoluteUrl, breadcrumbJsonLd, collectionPageJsonLd } from '@histor/core/seo/index';
 import { StoryCard, LeadCard, onePhotoEach } from '@/components/Cards';
+import { HouseAd } from '@/components/HouseAd';
 import { JsonLd } from '@/components/JsonLd';
 import { ExperimentTracker } from '@/components/client/ExperimentTracker';
 import { ReadTracker } from '@/components/client/ReadTracker';
@@ -85,6 +86,7 @@ export function ListingView({
               </ol>
             </section>
           )}
+          {keyItems.length > 0 && <HouseAd lang={lang} placement="hoy" />}
           <div className="grid grid-3" style={{ marginTop: 26 }}>
             {(page === 1 ? rest : cards).map((a) => (
               <StoryCard key={a.id} a={a} lang={lang} d={d} />
