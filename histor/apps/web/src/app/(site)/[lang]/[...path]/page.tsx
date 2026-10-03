@@ -438,6 +438,13 @@ export default async function Page({ params, searchParams }: { params: Params; s
         // Es la página a la que llevan los anuncios: abre con una noticia fuerte (con foto, del país
         // de quien la mira si la hay, y no de deportes ni espectáculos). El 03-10-2026 abría con un
         // partido de tenis y 9 de cada 10 visitas del anuncio se iban sin tocar nada.
+        if (page === 1 && geo.countryCode) {
+          // Primero lo del país de quien la mira y lo internacional; lo local de otro país (BTS en
+          // Bogotá, el director de Bomberos de Colombia) baja seis puestos para quien está en España.
+          const local = (a: (typeof items)[number]) => !!a.countryCode && a.countryCode !== geo.countryCode && !['world', 'economy', 'science', 'technology'].includes(a.categoryId ?? '');
+          const ranked = items.map((a, i) => ({ a, k: i + (local(a) ? 6 : 0) })).sort((x, y) => x.k - y.k).map((x) => x.a);
+          items.splice(0, items.length, ...ranked);
+        }
         if (page === 1) {
           const light = new Set(['sports', 'entertainment', 'lifestyle', 'weather']);
           const top = items.slice(0, 10);

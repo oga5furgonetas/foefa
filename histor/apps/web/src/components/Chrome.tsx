@@ -26,9 +26,12 @@ export function Header({ lang, d, countryCode, tz, demo }: { lang: string; d: Di
       {demo && <div className="demo-banner">{d.demoBanner}</div>}
       <div className="topbar">
         <div className="wrap">
-          <span className="tnum" suppressHydrationWarning>
+          <span className="tnum date" suppressHydrationWarning>
             {fmtToday(lang, tz)}
           </span>
+          <Link href={href.search(lang)} className="topbar-search">
+            {d.nav.search}
+          </Link>
           <div className="right">
             <EditionSwitcher lang={lang} current={edition?.code ?? null} editions={editions} languages={langs} labels={{ edition: d.nav.edition, language: d.nav.language }} />
           </div>

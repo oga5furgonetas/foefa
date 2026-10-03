@@ -110,14 +110,17 @@ button, input, select, textarea { font: inherit; color: inherit; }
 .brand-word .brand-dot { color: var(--accent); }
 .brand-tag { font-family: var(--sans); font-size: 11px; font-weight: 600; letter-spacing: 0.22em; text-transform: uppercase; color: var(--muted); text-align: center; margin-top: 10px; padding-top: 7px; border-top: 1px solid var(--rule-strong); }
 .brand-box { display: grid; justify-items: center; }
-/* Móvil: el nombre arriba, a todo lo ancho; buscar y los botones, en una fila debajo. */
+/* Móvil (03-10-2026): el nombre a la izquierda y los botones a la derecha en UNA fila; la fecha y el
+   lema fuera y «Buscar» sube a la barra de arriba. Antes la cabecera se comía un tercio de la
+   pantalla y quien llegaba del anuncio no veía ninguna noticia sin bajar. */
+.topbar-search { display: none; }
 @media (max-width: 640px) {
-  .masthead .wrap { grid-template-columns: 1fr auto; grid-template-areas: "brand brand" "left right"; row-gap: 10px; padding-top: 12px; padding-bottom: 10px; }
-  .brand-box { grid-area: brand; }
-  .masthead .left { grid-area: left; }
+  .masthead .wrap { grid-template-columns: 1fr auto; grid-template-areas: "brand right"; padding-top: 10px; padding-bottom: 8px; }
+  .brand-box { grid-area: brand; justify-items: start; }
+  .masthead .left, .brand-tag, .topbar .date { display: none; }
   .masthead .right { grid-area: right; }
-  .brand-word { font-size: 52px; }
-  .brand-tag { letter-spacing: 0.12em; font-size: 10px; white-space: nowrap; }
+  .brand-word { font-size: 40px; }
+  .topbar-search { display: inline; font-weight: 600; }
 }
 .masthead .left, .masthead .right { font-family: var(--sans); font-size: 13px; }
 .masthead .right { justify-self: end; display: flex; gap: 10px; align-items: center; }
