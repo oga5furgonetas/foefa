@@ -46,6 +46,10 @@ export default function TiendaPublica() {
   const [params] = useSearchParams()
   const cupon = params.get('cupon') || ''
   const pago = params.get('pago')
+  // ?prenda=gorra (o el id): llega de la tarjeta de ESA prenda en un anuncio en
+  // secuencia. Se abre ya elegida y se baja hasta ella: un toque menos entre
+  // el anuncio y el pago.
+  const prendaPedida = (params.get('prenda') || '').toLowerCase()
   const [datos, setDatos] = useState(null)
   const [err, setErr] = useState('')
   const [abierta, setAbierta] = useState(null)     // {prenda, talla, cantidad}
@@ -55,9 +59,17 @@ export default function TiendaPublica() {
 
   useEffect(() => {
     http.get(`/tienda/publico/${token}`)
-      .then((r) => setDatos(r.data))
+      .then((r) => {
+        setDatos(r.data)
+        const p = prendaPedida && (r.data?.prendas || []).find((x) =>
+          x.id === prendaPedida || (x.tipo || '').toLowerCase() === prendaPedida)
+        if (p && p.quedan !== 0) {
+          setAbierta({ prenda: p, talla: p.tallas[0] || '', cantidad: 1 })
+          setTimeout(() => document.getElementById(`prenda-${p.id}`)?.scrollIntoView({ block: 'start' }), 50)
+        }
+      })
       .catch((e) => setErr(e?.response?.data?.detail || 'Ese enlace no es válido'))
-  }, [token])
+  }, [token]) // eslint-disable-line react-hooks/exhaustive-deps -- la prenda pedida, solo al cargar
 
   function precioDe(p, talla) {
     return (p.precio || 0) + ((p.tallas_grandes || []).includes(talla) ? (p.recargo_talla || 0) : 0)
@@ -152,7 +164,7 @@ export default function TiendaPublica() {
             {datos.prendas.map((p) => {
               const activa = abierta?.prenda?.id === p.id
               return (
-                <div key={p.id} className="overflow-hidden rounded-xl border border-slate-200">
+                <div key={p.id} id={`prenda-${p.id}`} className="overflow-hidden rounded-xl border border-slate-200">
                   {p.foto_ver && (
                     <img src={foto(p)} alt={p.nombre} loading="lazy"
                       className="aspect-square w-full bg-slate-50 object-cover" />

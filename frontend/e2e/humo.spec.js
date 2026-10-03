@@ -975,6 +975,25 @@ test.describe('Tienda pública', () => {
     expect(compras).toEqual([{ prenda: 'g1', talla: 'U', cantidad: 1, envio: 'fuera', email: 'ana@correo.es' }])
     expect(fallos, fallos.join(' | ')).toHaveLength(0)
   })
+  /* La tarjeta de UNA prenda en el anuncio en secuencia lleva ?prenda=: se
+     abre ya elegida, sin pasar por el catálogo. */
+  test('?prenda= abre esa prenda directamente', async ({ page }) => {
+    const fallos = vigilar(page)
+    await page.addInitScript(() => localStorage.setItem('cookie_consent', '1'))
+    await simularApi(page, 'vacio')
+    await page.route(/\/api\/tienda\/publico\/tok$/, json({
+      abierta: true, pasarela: 'stripe', nombre: 'FDs', descuento_pct: 0.1, envio_fuera: 15,
+      prendas: [
+        { id: 'g1', nombre: 'Gorra FDs', tipo: 'gorra', tallas: ['U'], precio: 79, recargo_talla: 0, tallas_grandes: [], quedan: 20 },
+        { id: 's1', nombre: 'Sudadera FDs', tipo: 'sudadera', tallas: ['M', 'L'], precio: 129, recargo_talla: 3, tallas_grandes: ['XXL'], quedan: 15 },
+      ] }))
+    await page.goto('/t/tok?prenda=sudadera&utm_source=facebook', { waitUntil: 'domcontentloaded' })
+    await expect(page.getByRole('button', { name: 'Ir a pagar' })).toBeVisible({ timeout: 15000 })
+    // La gorra sigue con su «Comprar»; la sudadera ya está abierta.
+    await expect(page.getByRole('button', { name: 'Comprar' })).toHaveCount(1)
+    await expect(page.getByText('129,00 €', { exact: true })).toBeVisible()
+    expect(fallos, fallos.join(' | ')).toHaveLength(0)
+  })
 })
 
 /* CAMBIO DE CENTRO PROGRAMADO (30-09-2026, Fran Gil pasa a OGA5 el día 5):
