@@ -14,9 +14,11 @@ primary_region = "fra"  # Madrid (mad) ya no existe en Fly; Fráncfort tiene Pos
   HISTOR_SERVICE = "worker"
   PIPELINE_INTERVAL_SEC = "60"
 
+# 4 núcleos compartidos (03-10-2026, sí de Dani, ~9 $/mes): con 1 núcleo Fly le quitaba el 82 %
+# de la CPU y cada vuelta del pipeline tardaba 5-6 min.
 [[vm]]
-  size = "shared-cpu-1x"
-  memory = "512mb"
+  size = "shared-cpu-4x"
+  memory = "1gb"
 
 [checks]
   [checks.worker]
