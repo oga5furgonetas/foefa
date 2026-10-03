@@ -31,7 +31,8 @@ export function interpretaTicket(texto) {
     out.direccion = lineas[iVia].replace(/^(direcci[oó]n|domicilio|dir\.?)\s*[:.-]?\s*/i, '')
     // El piso o la puerta suelen ir en la línea siguiente («2º B», «Bajo»).
     const sig = lineas[iVia + 1] || ''
-    if (/^(\d+\s*[ºª°]|bajo|entlo|piso|puerta|esc\.?|portal)(?=[\s,.]|$)/i.test(sig)) out.direccion += `, ${sig}`
+    // El OCR lee a veces «3º» como «3%» o «3o».
+    if (/^(\d+\s*[ºª°%o]|bajo|entlo|piso|puerta|esc\.?|portal)(?=[\s,.]|$)/i.test(sig)) out.direccion += `, ${sig}`
   }
   // El código postal y la población: en la línea de la dirección o cerca.
   const cerca = iVia >= 0 ? lineas.slice(iVia, iVia + 3) : lineas
