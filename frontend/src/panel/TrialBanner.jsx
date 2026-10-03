@@ -96,7 +96,13 @@ export default function TrialBanner() {
   }
 
   const ctaText = isEnterprise ? `${t('trial.contact')} (${planLabel})` : `${t('trial.goto')} ${planLabel}`
-  const canShowCta = isEnterprise || cfg?.ready
+  // Dentro de la app de Play Store, el botón de pagar solo si la app está en
+  // el programa de ofertas externas de Google (`pago_en_app`): fuera de él,
+  // llevar al pago desde la app va contra la política de Play.
+  const enApp = (() => {
+    try { return sessionStorage.getItem('flota_app') === '1' || /^android-app:\/\//.test(document.referrer) } catch { return false }
+  })()
+  const canShowCta = isEnterprise || (cfg?.ready && (!enApp || cfg?.pago_en_app))
 
   if (required) {
     return (

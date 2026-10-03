@@ -294,6 +294,8 @@ const NotFound = lazy(() => import('./pages/NotFound'))
    uno a lo suyo: el repartidor a su ruta, la oficina al panel, y quien no ha
    entrado nunca a la pantalla de entrar, que ofrece darse de alta. */
 function AppRedirect() {
+  // Marca de «estoy dentro de la app instalada»: la lee el aviso de pago.
+  try { sessionStorage.setItem('flota_app', '1') } catch { /* sin almacenamiento */ }
   let destino = '/login'
   try {
     if (localStorage.getItem('flota_driver_token')) destino = '/conductor?vista=ruta'

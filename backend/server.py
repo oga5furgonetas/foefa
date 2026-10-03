@@ -5491,8 +5491,13 @@ async def billing_config(user: dict = Depends(get_current_user)):
     """URLs de checkout por plan (Básico / Pro / Flota / Enterprise)."""
     # Con Stripe configurado (precios STRIPE_PRICE_*), manda Stripe: la sesión
     # de pago la crea el servidor en /billing/stripe/suscripcion.
+    # Dentro de la app de Play Store solo se puede llevar al pago cuando la app
+    # está apuntada al programa de ofertas externas de Google (cuenta de
+    # EMPRESA + su API de aviso). Hasta entonces, en la app no se enseña el
+    # botón de pagar: la política de Play lo prohíbe y la retirarían.
+    pago_en_app = os.environ.get("PLAY_PAGO_EN_APP", "").strip() == "1"
     if _stripe_suscripciones_listo():
-        return {"provider": "stripe", "ready": True,
+        return {"provider": "stripe", "ready": True, "pago_en_app": pago_en_app,
                 "planes": sorted({k[len("STRIPE_PRICE_"):].replace("_ANNUAL", "").lower()
                                   for k, v in os.environ.items() if k.startswith("STRIPE_PRICE_") and v}),
                 "checkout": {}}

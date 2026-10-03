@@ -1367,3 +1367,16 @@ test('Suscripción · el botón de pagar va a Stripe y la vuelta espera la activ
   expect(pedidos[0]).toMatchObject({ plan: 'autonomo' })
   await expect(page.getByText('Pago recibido, activando tu cuenta…')).toBeVisible()
 })
+
+/* DENTRO DE LA APP DE PLAY STORE no se enseña el botón de pagar mientras la app
+   no esté en el programa de ofertas externas de Google. */
+test('Suscripción · dentro de la app no sale el botón de pagar sin el programa de Google', async ({ page }) => {
+  await entrarComoAdmin(page)
+  await simularApi(page, 'vacio')
+  await page.addInitScript(() => sessionStorage.setItem('flota_app', '1'))
+  await page.route(/\/api\/org\/billing/, (r) => r.fulfill({ json: { status: 'trial', required: false, days_left: 5, plan: 'autonomo', sector: 'autonomo', modulos: ['dashboard', 'reparto', 'configuracion'] } }))
+  await page.route(/\/api\/billing\/config/, (r) => r.fulfill({ json: { provider: 'stripe', ready: true, pago_en_app: false, planes: ['autonomo'], checkout: {} } }))
+  await page.goto('/panel/reparto', { waitUntil: 'domcontentloaded' })
+  await expect(page.getByText(/5 días/)).toBeVisible()
+  await expect(page.getByRole('button', { name: /Pasar a Autónomo/ })).toHaveCount(0)
+})
