@@ -937,7 +937,7 @@ test.describe('Tienda pública', () => {
     await page.addInitScript(() => localStorage.setItem('cookie_consent', '1'))
     await simularApi(page, 'vacio')
     await page.route(/\/api\/tienda\/publico\/tok$/, json({
-      abierta: true, pasarela: 'stripe', nombre: 'FDs', descuento_pct: 0.1,
+      abierta: true, pasarela: 'stripe', nombre: 'FDs', descuento_pct: 0.1, envio_fuera: 15,
       prendas: [
         { id: 'g1', nombre: 'Gorra FDs', tipo: 'gorra', color: 'negro', tallas: ['U'], precio: 79,
           recargo_talla: 0, tallas_grandes: ['XXL'], quedan: 20, foto_ver: 'v1' },
@@ -964,9 +964,15 @@ test.describe('Tienda pública', () => {
     await expect(page.getByText('Ese correo no parece correcto. Revísalo o déjalo en blanco.')).toBeVisible()
     expect(compras).toHaveLength(0)
     await page.getByLabel(/Tu correo/).fill('ana@correo.es')
+    // Envío fuera de España: suma el suplemento que dice el servidor y avisa
+    // de la aduana (el anuncio va a todo el mundo).
+    await expect(page.getByText('79,00 €', { exact: true })).toBeVisible()
+    await page.getByRole('button', { name: /Fuera de España/ }).click()
+    await expect(page.getByText('94,00 €', { exact: true })).toBeVisible()
+    await expect(page.getByText(/la aduana de tu país puede cobrarte/)).toBeVisible()
     await page.getByRole('button', { name: 'Ir a pagar' }).click()
     await expect(page.getByText('¡Pedido hecho!')).toBeVisible()
-    expect(compras).toEqual([{ prenda: 'g1', talla: 'U', cantidad: 1, email: 'ana@correo.es' }])
+    expect(compras).toEqual([{ prenda: 'g1', talla: 'U', cantidad: 1, envio: 'fuera', email: 'ana@correo.es' }])
     expect(fallos, fallos.join(' | ')).toHaveLength(0)
   })
 })

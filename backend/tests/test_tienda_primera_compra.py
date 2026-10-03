@@ -254,3 +254,71 @@ async def test_la_foto_publica_solo_de_lo_que_esta_a_la_venta(base):
 async def test_el_nombre_de_la_tienda_se_guarda_recortado(base):
     conf = await server.tienda_guardar_config({"nombre": "  FDs Galicia  "}, DANI)
     assert conf["nombre"] == "FDs Galicia"
+
+
+# ── EL ENVIO: ESPAÑA O EL RESTO DEL MUNDO (03-10-2026) ───────────────────────
+
+def _paises(pago):
+    return [v[0] for k, v in pago.items() if k.startswith("shipping_address_collection[allowed_countries]")]
+
+
+@pytest.mark.asyncio(loop_scope="session")
+async def test_en_espana_solo_espana_y_sin_suplemento(base):
+    await _compra_fuera(envio="es")
+    pago = base.stripe.pagos[-1]
+    assert _paises(pago) == ["ES"]
+    assert not any(k.startswith("shipping_options") for k in pago)
+    ped = _pedidos(base.db)[-1]
+    assert ped["envio"] == 0.0 and ped["envio_destino"] == "es" and ped["total"] == 79.0
+
+
+@pytest.mark.asyncio(loop_scope="session")
+async def test_fuera_de_espana_todo_el_mundo_con_15_de_envio(base):
+    await _compra_fuera(email="ana@correo.es", envio="fuera")
+    pago = base.stripe.pagos[-1]
+    paises = _paises(pago)
+    assert len(paises) > 200 and {"FR", "PT", "GB", "US", "MX", "AR", "JP"} <= set(paises)
+    # España va en la otra opcion; Rusia, Cuba o Iran no se pueden elegir.
+    assert not {"ES", "RU", "BY", "CU", "IR", "KP", "SY"} & set(paises)
+    assert pago["shipping_options[0][shipping_rate_data][fixed_amount][amount]"] == ["1500"]
+    # El 10 % va sobre la prenda, no sobre el envio: 71,10 + 15.
+    assert pago["line_items[0][price_data][unit_amount]"] == ["7110"]
+    ped = _pedidos(base.db)[-1]
+    assert ped["envio"] == 15.0 and ped["envio_destino"] == "fuera" and ped["total"] == 86.10
+
+
+@pytest.mark.asyncio(loop_scope="session")
+async def test_el_catalogo_dice_el_suplemento(base):
+    assert (await server.tienda_publica("tok"))["envio_fuera"] == 15.0
+
+
+class _Peticion:
+    def __init__(self, crudo, firma):
+        self._crudo = crudo
+        self.headers = {"Stripe-Signature": firma}
+
+    async def body(self):
+        return self._crudo
+
+
+@pytest.mark.asyncio(loop_scope="session")
+async def test_el_pago_de_fuera_cuadra_y_su_correo_ya_no_tiene_primera_compra(base, monkeypatch):
+    """Stripe cobra prenda + envio; el pedido guarda ese mismo total, asi que
+    el aviso de pago lo marca pagado sin descuadre. Y desde ahi ese correo ya
+    ha comprado: la siguiente vez, a precio completo."""
+    import hashlib
+    import hmac
+    import time
+    await _compra_fuera(email="ana@correo.es", envio="fuera")
+    ped = _pedidos(base.db)[-1]
+    monkeypatch.setenv("STRIPE_WEBHOOK_SECRET", "whsec_prueba")
+    ev = {"id": "evt_1", "type": "checkout.session.completed",
+          "data": {"object": {"metadata": {"pedido_id": ped["id"], "db_name": server._DEFAULT_DB_NAME},
+                              "amount_total": 8610, "payment_intent": "pi_1"}}}
+    crudo = json.dumps(ev).encode()
+    ts = int(time.time())
+    firma = hmac.new(b"whsec_prueba", str(ts).encode() + b"." + crudo, hashlib.sha256).hexdigest()
+    r = await server.tienda_stripe_webhook(_Peticion(crudo, f"t={ts},v1={firma}"))
+    assert r == {"ok": True, "pedido": ped["id"]}
+    assert _pedidos(base.db)[-1]["estado"] == "pagado"
+    assert (await _compra_fuera(email="ana@correo.es"))["descuento_pct"] == 0.0

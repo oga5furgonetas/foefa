@@ -15,7 +15,10 @@ import { MARCA } from '../marca'
    03-10-2026, para el anuncio de FDs: el nombre de la marca (no «Tienda» + la
    plataforma), la FOTO de cada prenda —antes era una lista de nombres— y el
    10 % de primera compra, que va por el correo. El correo es OPCIONAL: sin el
-   se compra igual a precio completo y Stripe lo pide en su pantalla. */
+   se compra igual a precio completo y Stripe lo pide en su pantalla.
+   Y el envio: España (incluido) o fuera, con el suplemento que dice el
+   servidor; se elige antes de pagar porque Stripe no cambia el precio del
+   envio segun el pais que se escriba en su pantalla. */
 
 const http = axios.create({ baseURL: API_BASE, timeout: 30000 })
 http.interceptors.response.use((r) => r, (e) => {
@@ -47,6 +50,7 @@ export default function TiendaPublica() {
   const [err, setErr] = useState('')
   const [abierta, setAbierta] = useState(null)     // {prenda, talla, cantidad}
   const [correo, setCorreo] = useState('')
+  const [envio, setEnvio] = useState('es')       // 'es' | 'fuera'
   const [comprando, setComprando] = useState(false)
 
   useEffect(() => {
@@ -66,7 +70,7 @@ export default function TiendaPublica() {
     setComprando(true); setErr('')
     try {
       const { data } = await http.post(`/tienda/publico/${token}/comprar`, {
-        prenda: abierta.prenda.id, talla: abierta.talla, cantidad: abierta.cantidad,
+        prenda: abierta.prenda.id, talla: abierta.talla, cantidad: abierta.cantidad, envio,
         ...(c ? { email: c } : {}),
         ...(cupon ? { cupon } : {}),
       })
@@ -112,6 +116,7 @@ export default function TiendaPublica() {
   const nombre = datos.nombre || `Tienda ${MARCA.nombre}`
   const pct = Math.round((datos.descuento_pct || 0) * 100)
   const foto = (p) => `${API_BASE}/tienda/publico/${token}/foto/${p.id}?v=${p.foto_ver}`
+  const suplemento = envio === 'fuera' ? (datos.envio_fuera || 0) : 0
 
   return (
     <div className="min-h-screen bg-white px-4 py-8">
@@ -120,7 +125,9 @@ export default function TiendaPublica() {
           <ShoppingBag size={22} className="text-slate-900" />
           <div>
             <h1 className="font-display text-2xl font-bold leading-none tracking-tight text-slate-900">{nombre}</h1>
-            <p className="mt-1 text-[11px] font-semibold uppercase tracking-[0.2em] text-slate-400">Edición limitada</p>
+            <p className="mt-1 text-[11px] font-semibold uppercase tracking-[0.2em] text-slate-400">
+              Edición limitada{datos.envio_fuera ? ' · Envíos a todo el mundo' : ''}
+            </p>
           </div>
         </div>
         {cupon ? (
@@ -182,8 +189,26 @@ export default function TiendaPublica() {
                           <span className="cifra w-6 text-center font-semibold text-slate-900">{abierta.cantidad}</span>
                           <button onClick={() => setAbierta((a) => ({ ...a, cantidad: Math.min(5, a.cantidad + 1) }))}
                             aria-label="Una más" className="rounded-lg p-1.5 text-slate-700 ring-1 ring-slate-300"><Plus size={14} /></button>
-                          <span className="ml-auto font-semibold text-slate-900">{eur(precioDe(p, abierta.talla) * abierta.cantidad)}</span>
+                          <span className="ml-auto font-semibold text-slate-900">{eur(precioDe(p, abierta.talla) * abierta.cantidad + suplemento)}</span>
                         </div>
+                        {datos.envio_fuera > 0 && (
+                          <div>
+                            <div className="text-xs font-medium text-slate-600">Envío</div>
+                            <div className="mt-1 grid grid-cols-2 gap-1.5">
+                              {[['es', 'España', 'incluido'], ['fuera', 'Fuera de España', `+${eur(datos.envio_fuera)}`]].map(([k, t, sub]) => (
+                                <button key={k} onClick={() => setEnvio(k)} aria-pressed={envio === k}
+                                  className={`rounded-lg px-2.5 py-1.5 text-left text-sm font-semibold ring-1 ${envio === k ? 'bg-slate-900 text-white ring-slate-900' : 'text-slate-700 ring-slate-300'}`}>
+                                  {t}<span className={`block text-[11px] font-normal ${envio === k ? 'text-slate-300' : 'text-slate-500'}`}>{sub}</span>
+                                </button>
+                              ))}
+                            </div>
+                            {envio === 'fuera' && (
+                              <p className="mt-1 text-[11.5px] text-slate-500">
+                                Fuera de la UE, la aduana de tu país puede cobrarte impuestos al recibirlo.
+                              </p>
+                            )}
+                          </div>
+                        )}
                         <div>
                           <label htmlFor="correo-compra" className="text-xs font-medium text-slate-600">
                             Tu correo {pct > 0 && !cupon ? `(para tu -${pct} % de primera compra y el recibo)` : '(para el recibo)'}

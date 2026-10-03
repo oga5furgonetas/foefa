@@ -39211,6 +39211,34 @@ puerta que hoy revienta y mañana deja pasar (gotcha 59).
 
 _TIENDA_RESERVA_MIN = 60          # lo que se aparta el stock sin pagar
 
+# ENVIO FUERA DE ESPAÑA (Dani, 03-10-2026: el anuncio «a nivel global, para la
+# maxima conversion»). La pantalla de pago solo aceptaba direcciones de España,
+# asi que quien llegara del anuncio desde fuera no podia ni terminar la compra.
+# Ahora quien compra elige ANTES de pagar: España (envio incluido, como
+# siempre) o fuera, con un suplemento fijo por pedido. Se elige antes porque
+# Stripe no deja cambiar el precio del envio segun el pais que se escriba en
+# su pantalla. El suplemento va como gasto de envio en Stripe y el pedido lo
+# guarda en `envio`; el total lo incluye, asi que el webhook cuadra.
+_TIENDA_ENVIO_FUERA = 15.0
+# Todos los paises (ISO 3166-1) menos: España, que va en la otra opcion; los
+# que Stripe no admite en la direccion de envio (AS CX CC CU HM IR KP MH FM NF
+# MP PW SD SY UM VI, segun su documentacion); Rusia y Bielorrusia, a los que el
+# taller no envia; y los territorios sin nadie a quien entregar.
+_TIENDA_PAISES_FUERA = tuple(sorted(set("""
+AD AE AF AG AI AL AM AO AQ AR AS AT AU AW AX AZ BA BB BD BE BF BG BH BI BJ BL
+BM BN BO BQ BR BS BT BV BW BY BZ CA CC CD CF CG CH CI CK CL CM CN CO CR CU CV
+CW CX CY CZ DE DJ DK DM DO DZ EC EE EG EH ER ES ET FI FJ FK FM FO FR GA GB GD
+GE GF GG GH GI GL GM GN GP GQ GR GS GT GU GW GY HK HM HN HR HT HU ID IE IL IM
+IN IO IQ IR IS IT JE JM JO JP KE KG KH KI KM KN KP KR KW KY KZ LA LB LC LI LK
+LR LS LT LU LV LY MA MC MD ME MF MG MH MK ML MM MN MO MP MQ MR MS MT MU MV MW
+MX MY MZ NA NC NE NF NG NI NL NO NP NR NU NZ OM PA PE PF PG PH PK PL PM PN PR
+PS PT PW PY QA RE RO RS RU RW SA SB SC SD SE SG SH SI SJ SK SL SM SN SO SR SS
+ST SV SX SY SZ TC TD TF TG TH TJ TK TL TM TN TO TR TT TV TW TZ UA UG UM US UY
+UZ VA VC VE VG VI VN VU WF WS YE YT ZA ZM ZW
+""".split()) - set("""
+ES AS CX CC CU HM IR KP MH FM NF MP PW SD SY UM VI RU BY AQ BV GS TF IO PN
+""".split())))
+
 
 async def _tienda_por_token(token: str) -> dict:
     """La tienda de un enlace publico. Fija la empresa antes de devolver."""
@@ -39317,6 +39345,9 @@ async def tienda_publica(token: str):
         # que da su correo al comprar, y preguntarlo antes dejaria a cualquiera
         # averiguar si un correo ha comprado aqui.
         "descuento_pct": _TIENDA_DESC_PCT,
+        # El suplemento de envio fuera de España: lo dice el servidor, que es
+        # quien lo cobra, para que la pantalla no enseñe otro numero.
+        "envio_fuera": _TIENDA_ENVIO_FUERA,
         "prendas": [{
             "id": p["id"], "nombre": p.get("nombre"), "tipo": p.get("tipo"),
             "color": p.get("color"), "tallas": p.get("tallas") or [],
@@ -39397,6 +39428,9 @@ async def tienda_publica_comprar(token: str, body: dict = Body(...)):
     # campaña: Stripe admite un descuento por pago y el cupon ya es la
     # bienvenida de esa persona. Se aplica a la linea, como en el portal,
     # porque lo que cobra Stripe son las lineas.
+    # Donde se envia: España (incluido) o fuera, con su suplemento.
+    envio_fuera = _texto_cuerpo(body.get("envio"), 10) == "fuera"
+    envio = _TIENDA_ENVIO_FUERA if envio_fuera else 0.0
     clave_desc = _tienda_desc_clave_correo(correo)
     pct = (_TIENDA_DESC_PCT if not cupon and clave_desc
            and await _tienda_desc_pedir(clave_desc, {"email": correo}) else 0.0)
@@ -39415,7 +39449,10 @@ async def tienda_publica_comprar(token: str, body: dict = Body(...)):
                     "cantidad": uds, "precio": precio,
                     **({"precio_sin_descuento": precio_sin} if pct else {}),
                     "importe": round(precio * uds, 2), "personalizado": ""}],
-        "total": round(precio * uds, 2), "unidades": uds,
+        # El envio fuera de España va aparte de las lineas -no es una prenda- y
+        # dentro del total, que es lo que cobra Stripe y lo que mira el webhook.
+        "envio": envio, "envio_destino": "fuera" if envio_fuera else "es",
+        "total": round(precio * uds + envio, 2), "unidades": uds,
         "descuento_pct": pct,
         "descuento_clave": clave_desc if pct else None,
         "cierre": _tienda_cierre(conf["dia_cierre"]),
@@ -39435,7 +39472,6 @@ async def tienda_publica_comprar(token: str, body: dict = Body(...)):
         ("metadata[ref]", doc["ref"]),
         # Que Stripe pida la direccion: su pantalla ya lo hace bien y nosotros
         # no guardamos una direccion de alguien que al final no paga.
-        ("shipping_address_collection[allowed_countries][0]", "ES"),
         ("phone_number_collection[enabled]", "true"),
         ("line_items[0][quantity]", str(uds)),
         ("line_items[0][price_data][currency]", "eur"),
@@ -39444,6 +39480,18 @@ async def tienda_publica_comprar(token: str, body: dict = Body(...)):
          "%s - talla %s%s" % (p.get("nombre") or "Prenda", talla,
                               " (-%d %% primera compra)" % round(pct * 100) if pct else "")),
     ]
+    # A donde se puede enviar, segun lo que eligio, y el suplemento de fuera.
+    paises = _TIENDA_PAISES_FUERA if envio_fuera else ("ES",)
+    datos += [("shipping_address_collection[allowed_countries][%d]" % i, c)
+              for i, c in enumerate(paises)]
+    if envio_fuera:
+        datos += [
+            ("shipping_options[0][shipping_rate_data][type]", "fixed_amount"),
+            ("shipping_options[0][shipping_rate_data][fixed_amount][amount]",
+             str(int(round(envio * 100)))),
+            ("shipping_options[0][shipping_rate_data][fixed_amount][currency]", "eur"),
+            ("shipping_options[0][shipping_rate_data][display_name]", "Envío internacional"),
+        ]
     # El correo que dio, fijo en la pantalla de pago: el 10 % es de ese correo
     # y el recibo va a ese correo.
     if correo:
