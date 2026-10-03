@@ -278,6 +278,7 @@ const TiendaPublica = lazy(() => import('./pages/TiendaPublica'))
 const PanelCorreo = lazy(() => import('./panel/pages/Correo'))
 const Privacidad = lazy(() => import('./legal/Privacidad'))
 const Terminos = lazy(() => import('./legal/Terminos'))
+const Encargo = lazy(() => import('./legal/Encargo'))
 const CookiesPage = lazy(() => import('./legal/Cookies'))
 const AvisoLegal = lazy(() => import('./legal/AvisoLegal'))
 const Contacto = lazy(() => import('./legal/Contacto'))
@@ -329,6 +330,7 @@ ReactDOM.createRoot(document.getElementById('root')).render(
               <Route path="/planes" element={<Planes />} />
               <Route path="/privacidad" element={<Privacidad />} />
               <Route path="/terminos" element={<Terminos />} />
+              <Route path="/encargo" element={<Encargo />} />
               <Route path="/cookies" element={<CookiesPage />} />
               <Route path="/aviso-legal" element={<AvisoLegal />} />
               <Route path="/contacto" element={<Contacto />} />

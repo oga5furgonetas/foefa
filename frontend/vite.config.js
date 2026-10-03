@@ -1,7 +1,8 @@
 import { defineConfig, loadEnv } from 'vite'
 import react from '@vitejs/plugin-react'
-import { readFileSync, writeFileSync, existsSync, readdirSync, mkdirSync, renameSync } from 'node:fs'
+import { readFileSync, writeFileSync, existsSync, readdirSync, mkdirSync, renameSync, copyFileSync } from 'node:fs'
 import { join, relative, dirname, resolve } from 'node:path'
+import { OCR_RUTA } from './src/lib/ocrRuta.js'
 
 /* LOS MAPAS DE FUENTE NO SE PUBLICAN.
    Hasta el 26-09-2026 cada `.js` servido llevaba su `.map` al lado, y el `.map`
@@ -52,11 +53,41 @@ function cspConBackend(apiUrl) {
   }
 }
 
+/* LECTOR DE TICKETS EN EL PROPIO MÓVIL (03-10-2026).
+   El OCR (tesseract.js) se sirve desde NUESTRO dominio, no desde un CDN: así
+   la foto del ticket no sale del móvil del conductor —ni a Google ni a nadie—
+   y la CSP no tiene que abrirse a terceros. Se copian del node_modules a
+   `dist/ocr/` al compilar; en git no hay binarios. */
+function ocrLocal() {
+  const nm = (p) => join(process.cwd(), 'node_modules', p)
+  const ficheros = [
+    [nm('tesseract.js/dist/worker.min.js'), 'worker.min.js'],
+    [nm('tesseract.js-core/tesseract-core-lstm.wasm.js'), 'tesseract-core-lstm.wasm.js'],
+    [nm('tesseract.js-core/tesseract-core-simd-lstm.wasm.js'), 'tesseract-core-simd-lstm.wasm.js'],
+    [nm('tesseract.js-core/tesseract-core-relaxedsimd-lstm.wasm.js'), 'tesseract-core-relaxedsimd-lstm.wasm.js'],
+    [nm('@tesseract.js-data/spa/4.0.0_best_int/spa.traineddata.gz'), 'spa.traineddata.gz'],
+  ]
+  let salida = ''
+  return {
+    name: 'ocr-local',
+    apply: 'build',
+    configResolved(c) { salida = resolve(c.root, c.build.outDir) },
+    closeBundle() {
+      const dest = join(salida, ...OCR_RUTA.split('/').filter(Boolean))
+      mkdirSync(dest, { recursive: true })
+      for (const [de, a] of ficheros) {
+        if (!existsSync(de)) throw new Error(`[ocr-local] falta ${de}: npm install`)
+        copyFileSync(de, join(dest, a))
+      }
+    },
+  }
+}
+
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd(), '')
   return {
   base: '/',
-  plugins: [react(), cspConBackend(env.VITE_API_URL), mapasFuera()],
+  plugins: [react(), cspConBackend(env.VITE_API_URL), mapasFuera(), ocrLocal()],
   server: {
     // En desarrollo la API va por el mismo origen: sin CORS y sin configurar nada.
     proxy: { '/api': { target: env.API_DEV_URL || 'http://localhost:8000', changeOrigin: true } },

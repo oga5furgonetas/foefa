@@ -24,5 +24,6 @@ export const PROCESSORS = [
   { name: 'MongoDB Atlas', purpose: 'Base de datos', country: 'UE' },
   { name: 'Cloudflare R2', purpose: 'Almacenamiento de imágenes', country: 'EEUU/UE (DPF)' },
   { name: 'Google (Gemini / Vertex AI)', purpose: 'Análisis de imágenes (IA)', country: 'EEUU/UE (DPF)' },
+  { name: 'OpenStreetMap Foundation', purpose: 'Ubicar direcciones de entrega en el mapa (solo la dirección, sin nombre ni teléfono) y teselas del mapa', country: 'Reino Unido (adecuación UE)' },
   { name: 'Lemon Squeezy', purpose: 'Pagos (Merchant of Record), facturación', country: 'EEUU/UE (DPF)' },
 ]

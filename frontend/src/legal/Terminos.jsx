@@ -10,7 +10,7 @@ export default function Terminos() {
       <p>El Servicio es prestado por {COMPANY.legalName}{COMPANY.cif ? ` (CIF ${COMPANY.cif})` : ''}{COMPANY.address ? `, con domicilio en ${COMPANY.address}` : ''}. Contacto: <a href={`mailto:${COMPANY.contactEmail}`}>{COMPANY.contactEmail}</a>.</p>
 
       <h2>2. Objeto del Servicio</h2>
-      <p>{COMPANY.brand} es una plataforma web SaaS para gestionar flotas de furgonetas, conductores e inspecciones, incluyendo el análisis automático de fotografías mediante inteligencia artificial.</p>
+      <p>{COMPANY.brand} es una plataforma web SaaS para gestionar flotas de vehículos, conductores e inspecciones, incluyendo el análisis automático de fotografías mediante inteligencia artificial, y el reparto de pedidos (rutas, escaneo de bultos y seguimiento en jornada).</p>
 
       <h2>3. Cuenta y responsabilidad del cliente</h2>
       <ul>
@@ -46,7 +46,7 @@ export default function Terminos() {
       <p>{COMPANY.brand} podrá suspender o cancelar cuentas que incumplan estos términos, que impaguen suscripciones, o ante actividad fraudulenta. Se notificará por email cuando sea posible.</p>
 
       <h2>10. Protección de datos</h2>
-      <p>El tratamiento de datos personales se rige por la <a href="/privacidad">Política de Privacidad</a>. Si el cliente trata datos personales de sus empleados/conductores a través de {COMPANY.brand}, podrá solicitar un <strong>Acuerdo de Encargo de Tratamiento (DPA)</strong> escribiendo a {COMPANY.privacyEmail}.</p>
+      <p>El tratamiento de datos personales se rige por la <a href="/privacidad">Política de Privacidad</a>. Los datos que el cliente introduce de sus empleados, conductores o clientes los tratamos como <strong>encargado del tratamiento</strong> según el <a href="/encargo">Acuerdo de Encargo del Tratamiento</a>, que forma parte de estos términos y se acepta con ellos.</p>
 
       <h2>11. Ley aplicable y jurisdicción</h2>
       <p>Estos términos se rigen por la {COMPANY.governingLaw}. Las controversias se someterán a los Juzgados y Tribunales de {COMPANY.jurisdiction}, salvo norma imperativa en contrario para consumidores.</p>

@@ -38,21 +38,26 @@ Pantallas: `panel/pages/Reparto.jsx`, `pages/driver/MiRuta.jsx`,
 | Ámbito | Norma | Cómo queda |
 |---|---|---|
 | Datos de los clientes de la empresa (nombre, teléfono, dirección, qué compra) | RGPD art. 4, 6.1.b, 28 | La empresa es la **responsable**; Flota su **encargada**. Nosotros NO los vemos: entrando como la empresa (`imp` en el token) salen tapados (`reparto.tapar`) y no se pueden crear ni tocar pedidos. |
-| Contrato de encargo | RGPD art. 28.3 | **FALTA** y es obligatorio antes de cobrar a nadie: ya estaba pendiente en `REVISION_LEGAL.md` («contrato de encargo art. 28 en términos»). Con este módulo deja de ser opcional. |
+| Contrato de encargo | RGPD art. 28.3 | Publicado el 03-10 en `/encargo` (`legal/Encargo.jsx`), anexo de los términos que se acepta en el alta (casilla del registro). Falta la razón social, CIF y domicilio cuando se constituya la empresa, y un correo de contacto (`MARCA.correo` sigue vacío). |
 | Minimización | RGPD art. 5.1.c | Cada conductor ve solo SUS pedidos; las direcciones van al geocodificador sin nombre ni teléfono. |
 | Plazo de conservación | RGPD art. 5.1.e | Nombre, teléfono, dirección, contenido y coordenadas se borran solos a los N días (por defecto 30, la empresa elige 1-90). Quedan los números. Rastros de ubicación: 30 días. |
 | Ubicación de los conductores | LOPDGDD art. 90, ET art. 20.3 | Solo entre «Empezar jornada» y «Terminar»; la primera vez el conductor lee el aviso (qué se ve, quién, cuánto tiempo) y queda registrado (`reparto_avisos`). Fuera de jornada el servidor rechaza los puntos (409) y no guarda ni el último. La plataforma tampoco ve las ubicaciones. |
-| IA leyendo tickets | RGPD art. 28.4 y 44 | **Bloqueada** hasta tener clave de pago: en el nivel gratuito de Gemini, Google puede usar lo enviado para mejorar sus productos. Se enciende con `REPARTO_IA_PERMITIDA=1` en Fly solo con clave de pago (o Vertex con contrato). La foto nunca se guarda. |
+| Foto del ticket | — | Se lee **en el propio móvil** (tesseract.js servido desde `/ocr/<versión>/` de nuestro dominio, `lib/leerTicket.js`): la foto no sale del teléfono, no hay tercero. El conductor revisa lo leído antes de guardar. |
+| IA leyendo tickets (servidor) | RGPD art. 28.4 y 44 | Alternativa más lista pero **bloqueada** hasta tener clave de pago: en el nivel gratuito de Gemini, Google puede usar lo enviado para mejorar sus productos. Se enciende con `REPARTO_IA_PERMITIDA=1` en Fly solo con clave de pago (o Vertex con contrato). La foto nunca se guarda. |
 | Geocodificación | Norma de uso de Nominatim | 1 petición/s con User-Agent propio. Si el volumen crece (muchas empresas), hay que pasar a un servicio propio o de pago: Nominatim público no admite uso masivo. |
 | Mapa | Norma de uso de teselas de OSM | Válido para poco uso con atribución (puesta). Con muchos clientes, proveedor de teselas propio. La web del panel pide teselas a OSM: mencionarlo en la política de privacidad (IP del usuario). |
 | Sistemas de terceros | Lo que pasó con Amazon (24-09) | Nada se lee de sistemas ajenos: ni de la caja del súper ni de la app de Disgón. Solo lo que la empresa mete, pega o escanea de sus propias cajas. Integrar con su TPV/ERP solo con su autorización y su API. |
 | Marcas | Ley de Marcas | Ni «Amazon» ni nombres de otras apps de rutas en pantalla (`check-marca`). |
 | Llamar al cliente | — | «Llamar» usa el teléfono del conductor, que el cliente verá. Si hace falta ocultarlo, llamadas enmascaradas (no hecho). |
 
+### Hecho el 03-10 (tarde)
+- Contrato de encargo publicado y aceptado en el alta; política de privacidad
+  corregida (decía «no tratamos geolocalización en tiempo real», ya falso) y
+  con el reparto; OpenStreetMap en la lista de subencargados.
+- Foto del ticket leída en el móvil, sin IA externa.
+
 ### Pendiente que decide Dani
-- Contrato de encargo (art. 28) en los términos, con lista de subencargados
-  (Fly, MongoDB Atlas, Cloudflare, Google si se activa la IA, OpenStreetMap).
-- Política de privacidad: añadir el reparto (datos de clientes finales,
-  ubicación en jornada, Nominatim/OSM).
+- Datos de la empresa (razón social, CIF, domicilio) y un correo de contacto
+  público para las páginas legales.
 - Clave de Gemini de pago antes de encender la IA de tickets.
 - Probar con Gadis gratis: activar a mano `status: active` en su organización.

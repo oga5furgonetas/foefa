@@ -15,6 +15,7 @@ export default function LegalLayout({ title, lastUpdate, children }) {
           <div className="flex flex-wrap items-center gap-4 text-xs text-dark-400">
             <Link to="/privacidad" className="hover:text-dark-200">Privacidad</Link>
             <Link to="/terminos" className="hover:text-dark-200">Términos</Link>
+            <Link to="/encargo" className="hover:text-dark-200">Encargo</Link>
             <Link to="/cookies" className="hover:text-dark-200">Cookies</Link>
             <Link to="/aviso-legal" className="hover:text-dark-200">Aviso legal</Link>
             <Link to="/contacto" className="hover:text-dark-200">Contacto</Link>

@@ -19,9 +19,11 @@ export default function Privacidad() {
         <li><strong>Conductores dados de alta por el cliente:</strong> nombre, correo, teléfono, DNI (si lo aporta), centro/estación, fotografía de perfil (opcional).</li>
         <li><strong>Vehículos:</strong> matrícula, marca, modelo, VIN, kilometraje, fechas de ITV y renting, documentos.</li>
         <li><strong>Inspecciones:</strong> fotografías del vehículo, fecha y hora, análisis de la IA (daños detectados), comentarios.</li>
+        <li><strong>Reparto (si la empresa lo usa):</strong> datos de los clientes de la empresa a los que se entrega (nombre, teléfono, dirección y qué lleva el pedido) y la <strong>ubicación del conductor solo durante la jornada</strong> que él mismo empieza y termina en su móvil, tras haber leído un aviso.</li>
         <li><strong>Uso del servicio:</strong> registros técnicos (logs) imprescindibles para la seguridad y el funcionamiento.</li>
       </ul>
-      <p>No recogemos categorías especiales de datos (salud, ideología, etc.). No tratamos datos de geolocalización en tiempo real.</p>
+      <p>No recogemos categorías especiales de datos (salud, ideología, etc.). La ubicación solo existe en el módulo de reparto y solo en jornada: fuera de ella no se guarda ningún punto.</p>
+      <p><strong>Quién decide sobre cada dato.</strong> De los datos de la propia cuenta (la empresa, su titular, la facturación) somos responsables. De los datos que la empresa mete de <em>sus</em> personas —conductores, empleados y, en el reparto, sus clientes— la responsable es la empresa y {COMPANY.brand} es su <strong>encargado del tratamiento</strong>, según el <a href="/encargo">Acuerdo de Encargo del Tratamiento</a>. Si eres conductor o cliente de una de esas empresas, dirígete a ella para ejercer tus derechos; te ayudaremos a atenderlos.</p>
 
       <h2>3. Finalidades y base jurídica</h2>
       <ul>
@@ -36,6 +38,7 @@ export default function Privacidad() {
       <ul>
         <li>Datos de cuenta: durante la vigencia del contrato y hasta 1 año tras la baja, para responder reclamaciones.</li>
         <li>Inspecciones y fotos: durante la vigencia del contrato; el cliente puede solicitar su eliminación en cualquier momento.</li>
+        <li>Reparto: los datos personales de cada pedido se borran solos a los días que fije la empresa (por defecto 30, máximo 90); los recorridos de ubicación, a los 30 días.</li>
         <li>Datos fiscales: 6 años (art. 30 Código de Comercio).</li>
       </ul>
 

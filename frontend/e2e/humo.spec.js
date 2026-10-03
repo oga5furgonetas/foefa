@@ -38,7 +38,7 @@ const PUBLICAS = [
   ['/registro', 'Registro'], ['/contacto', 'Contacto'],
   ['/security', 'Seguridad'], ['/peritaje-tecnico', 'Peritaje'],
   ['/verify', 'Verificador'], ['/privacidad', 'Privacidad'],
-  ['/terminos', 'Términos'], ['/cookies', 'Cookies'],
+  ['/terminos', 'Términos'], ['/encargo', 'Encargo del tratamiento'], ['/cookies', 'Cookies'],
   ['/aviso-legal', 'Aviso legal'], ['/conductor', 'Portal del conductor'],
   // El alta CON plan y flota elegidos: es lo que ve el cliente justo despues
   // de pulsar contratar, y se rompio al cambiar la tarifa (una llamada con la
@@ -1118,4 +1118,32 @@ test.describe('Reparto', () => {
     await expect(page.getByText('Antes de empezar: tu ubicación')).toBeVisible()
     expect(fallos).toEqual([])
   })
+})
+
+/* LA FOTO DEL TICKET SE LEE EN EL MÓVIL (03-10-2026): sin IA de Google, con
+   el OCR servido desde /ocr/. Un ticket de mentira y se comprueba que la
+   dirección, el código postal y el teléfono llegan al formulario. */
+test('Reparto · el ticket se lee en el móvil sin mandarlo a nadie', async ({ page }) => {
+  test.setTimeout(90000)
+  const b64 = (o) => btoa(JSON.stringify(o)).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '')
+  const token = `${b64({ alg: 'HS256' })}.${b64({ sub: 'd1', role: 'driver', name: 'ANA', exp: Math.floor(Date.now() / 1000) + 3600 })}.x`
+  await page.addInitScript((t) => {
+    localStorage.setItem('flota_driver_token', t)
+    localStorage.setItem('flota_driver', JSON.stringify({ id: 'd1', name: 'ANA PÉREZ' }))
+    localStorage.setItem('cookie_consent', '1')
+  }, token)
+  await simularApi(page, 'vacio')
+  const alServidor = []
+  await page.route(/\/api\/reparto\/ticket/, (r) => { alServidor.push(1); r.fulfill({ status: 500, json: {} }) })
+  await page.route(/\/api\/reparto\/mi-ruta/, (r) => r.fulfill({ json: {
+    activo: true, fecha: '2026-10-03', pedidos: [], base: null, ia_tickets: false,
+    jornada: { empezada: null, terminada: null }, aviso_aceptado: true } }))
+  await page.goto('/conductor', { waitUntil: 'domcontentloaded' })
+  await page.getByRole('button', { name: /Mi ruta/ }).click()
+  await page.getByRole('button', { name: /Añadir un pedido sin código/ }).click()
+  await page.locator('input[type=file]').setInputFiles('e2e/fixtures/ticket.png')
+  await expect(page.getByPlaceholder('Dirección completa')).toHaveValue(/Juana de Vega 14/, { timeout: 60000 })
+  await expect(page.getByPlaceholder('Dirección completa')).toHaveValue(/15004/)
+  await expect(page.getByPlaceholder('Teléfono')).toHaveValue('981123456')
+  expect(alServidor).toEqual([])
 })

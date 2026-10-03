@@ -414,7 +414,7 @@ export default function Registro() {
         <label style={{ display: 'flex', alignItems: 'flex-start', gap: 8, marginTop: 16, fontSize: 12, color: '#8b94a3', lineHeight: 1.5, cursor: 'pointer' }}>
           <input type="checkbox" checked={accept} onChange={(e) => setAccept(e.target.checked)} style={{ marginTop: 2 }} />
           <span>
-            Acepto los <a href="/terminos" target="_blank" style={{ color: '#0ea5e9' }}>Términos</a> y la <a href="/privacidad" target="_blank" style={{ color: '#0ea5e9' }}>Política de Privacidad</a>.
+            Acepto los <a href="/terminos" target="_blank" style={{ color: '#0ea5e9' }}>Términos</a>, el <a href="/encargo" target="_blank" style={{ color: '#0ea5e9' }}>Acuerdo de Encargo del Tratamiento</a> y la <a href="/privacidad" target="_blank" style={{ color: '#0ea5e9' }}>Política de Privacidad</a>.
             {' '}Prueba gratuita de 14 días — sin cobro durante la prueba. Al finalizar se cobra el plan {planInfo.name} ({displayPrice}€/mes) salvo cancelación.
           </span>
         </label>

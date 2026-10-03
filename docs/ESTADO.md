@@ -466,7 +466,12 @@ el alta, preguntar qué tipo de empresa es. Con TODO dentro de la ley.
   ubicaciones (entrando como la empresa salen tapados); conductor solo lo suyo;
   ubicación solo en jornada y tras aceptar el aviso; borrado automático;
   IA de tickets **bloqueada** hasta `REPARTO_IA_PERMITIDA=1` con clave de pago.
-- Pruebas: `test_reparto.py` y `test_reparto_api.py` (19), humo «Reparto» (2).
+- Pruebas: `test_reparto.py` y `test_reparto_api.py` (19), humo «Reparto» (3).
+- Por la tarde: contrato de encargo en `/encargo` (se acepta en el alta),
+  privacidad corregida, y la **foto del ticket se lee en el móvil** con
+  tesseract.js servido desde `/ocr/<versión>/` (sin IA externa). OJO: esos
+  ficheros no llevan huella; si se cambian, subir la versión de
+  `src/lib/ocrRuta.js` (se envenenaron dos en el borde al desplegar).
 
 ## Pendiente (por prioridad)
 

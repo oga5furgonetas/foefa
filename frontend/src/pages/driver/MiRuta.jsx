@@ -7,6 +7,7 @@ import {
 } from '../../services/api'
 import { lista } from '../../lib/lista'
 import { compressImage } from '../../lib/compressImage'
+import { leerTicketEnMovil } from '../../lib/leerTicket'
 
 /* ── MI RUTA ────────────────────────────────────────────────────────────────
    Lo que hace el repartidor al cargar: escanea el código de la caja. Si el
@@ -93,8 +94,14 @@ export default function MiRuta({ onBack }) {
     if (!file) return
     setOcupado('ticket')
     try {
-      const blob = await compressImage(file, 1600, 0.8)
-      const { data } = await repLeerTicket(new File([blob], 'ticket.jpg', { type: 'image/jpeg' }))
+      // Con IA en el servidor solo si la empresa la tiene permitida (clave de
+      // pago); si no, se lee EN EL MÓVIL y la foto no sale de aquí.
+      const blob = await compressImage(file, 1600, 0.85)
+      const data = ruta?.ia_tickets
+        ? (await repLeerTicket(new File([blob], 'ticket.jpg', { type: 'image/jpeg' }))).data
+        : await leerTicketEnMovil(blob)
+      const algo = data?.direccion || data?.telefono || data?.cliente
+      if (!algo) setAviso('No he podido leer el ticket. Prueba con más luz y el ticket recto, o escríbelo.')
       setNuevo((n) => ({
         ...n, ...Object.fromEntries(Object.entries(data || {}).filter(([, v]) => v !== '' && v != null)),
         codigo: n?.codigo || data?.codigo || '', de_ticket: true,
@@ -246,14 +253,15 @@ export default function MiRuta({ onBack }) {
 
       {nuevo && (
         <Hoja titulo={nuevo.codigo ? `El código ${nuevo.codigo} no está en la lista` : 'Pedido nuevo'} onClose={() => setNuevo(null)}>
-          {ruta.ia_tickets && (
-            <label className="mb-3 flex w-full cursor-pointer items-center justify-center gap-2 rounded-xl bg-brand-500 py-3 text-[15px] font-bold text-white">
-              {ocupado === 'ticket' ? <Loader2 size={18} className="animate-spin" /> : <Camera size={18} />}
-              {ocupado === 'ticket' ? 'Leyendo el ticket…' : 'Foto del ticket'}
-              <input type="file" accept="image/*" capture="environment" className="hidden"
-                onChange={(e) => leerTicket(e.target.files?.[0])} />
-            </label>
-          )}
+          <label className="mb-1 flex w-full cursor-pointer items-center justify-center gap-2 rounded-xl bg-brand-500 py-3 text-[15px] font-bold text-white">
+            {ocupado === 'ticket' ? <Loader2 size={18} className="animate-spin" /> : <Camera size={18} />}
+            {ocupado === 'ticket' ? 'Leyendo el ticket…' : 'Foto del ticket'}
+            <input type="file" accept="image/*" capture="environment" className="hidden" disabled={ocupado === 'ticket'}
+              onChange={(e) => { leerTicket(e.target.files?.[0]); e.target.value = '' }} />
+          </label>
+          <p className="mb-3 text-center text-[11.5px] text-dark-500">
+            {ruta.ia_tickets ? 'Lo lee la IA y la foto no se guarda.' : 'Se lee en tu móvil: la foto no se envía a ningún sitio. La primera vez tarda un poco.'}
+          </p>
           <div className="flex flex-col gap-2">
             <input className={inp} placeholder="Dirección completa" value={nuevo.direccion} onChange={(e) => setNuevo({ ...nuevo, direccion: e.target.value })} />
             <input className={inp} placeholder="Cliente" value={nuevo.cliente} onChange={(e) => setNuevo({ ...nuevo, cliente: e.target.value })} />
@@ -263,7 +271,7 @@ export default function MiRuta({ onBack }) {
               Bultos <input className={`${inp} w-20`} type="number" min="1" max="99" value={nuevo.bultos} onChange={(e) => setNuevo({ ...nuevo, bultos: e.target.value })} />
             </div>
           </div>
-          {nuevo.de_ticket && <p className="mt-2 text-[12px] text-amber-200/90">Revisa lo que ha leído la IA antes de guardar.</p>}
+          {nuevo.de_ticket && <p className="mt-2 text-[12px] text-amber-200/90">Revisa lo leído del ticket antes de guardar.</p>}
           <button onClick={guardarNuevo} disabled={nuevo.direccion.trim().length < 4 || ocupado === 'guardar'}
             className="mt-3 w-full rounded-xl bg-emerald-600 py-3 text-[15px] font-bold text-white disabled:opacity-40">
             {ocupado === 'guardar' ? 'Guardando…' : 'Añadir a mi ruta'}
