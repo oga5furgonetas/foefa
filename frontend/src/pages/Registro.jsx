@@ -277,7 +277,11 @@ export default function Registro() {
     return <PlanPicker furgonetas={furgonetas} onSelect={(key, billing) => {
       setSelectedPlan(key)
       setBillingMode(billing)
-      window.history.replaceState({}, '', `/registro?sector=${sector}&plan=${key}&billing=${billing}`)
+      // Se conserva lo que traía la URL (utm_source de un anuncio): sin eso el
+      // alta no sabría de qué campaña viene.
+      const q = new URLSearchParams(window.location.search)
+      q.set('sector', sector); q.set('plan', key); q.set('billing', billing)
+      window.history.replaceState({}, '', `/registro?${q}`)
     }} />
   }
 
