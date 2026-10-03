@@ -75,7 +75,7 @@ export default function Empezar() {
         {err && <p className="mt-3 text-center text-[13px] text-red-300">{err}</p>}
 
         <p className="mt-auto pt-8 text-center text-[13px] text-dark-400">
-          ¿Ya tienes cuenta de empresa? <a href="/panel/login" className="font-semibold text-brand-300">Entrar</a>
+          ¿Ya tienes cuenta? <a href="/panel/login" className="font-semibold text-brand-300">Entrar</a>
         </p>
       </div>
     </div>
