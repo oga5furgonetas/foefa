@@ -390,3 +390,49 @@ async def test_trazado_sin_servidor_de_rutas_va_en_linea_recta(monkeypatch):
     server._REP_TRAZADOS.clear()
     r = await server._rep_trazado([(43.0, -8.4), (43.01, -8.41)])
     assert r["fuente"] == "linea_recta" and r["linea"] == [[43.0, -8.4], [43.01, -8.41]]
+
+
+@pytest.mark.asyncio(loop_scope="session")
+async def test_navegar_solo_a_lo_mio_pendiente_y_con_ubicacion(base, monkeypatch):
+    vistos = []
+
+    async def nav(desde, hasta):
+        vistos.append((desde, hasta))
+        return {"fuente": "carreteras", "linea": [list(desde), list(hasta)], "metros": 900, "minutos": 3,
+                "pasos": [{"texto": "Gira a la derecha por Rúa Real", "icono": "derecha", "punto": list(hasta), "calle": "Rúa Real", "metros": 0}]}
+    monkeypatch.setattr(server, "_rep_navegacion", nav)
+    a = await server.reparto_mis_pedidos({"direccion": "Rúa Real 5"}, ANA)
+    await base.db.reparto_pedidos.update_one({"id": a["id"]}, {"$set": {"lat": 43.37, "lng": -8.40}})
+    r = await server.reparto_mi_navegar({"id": a["id"], "desde": {"lat": 43.36, "lng": -8.41}}, ANA)
+    assert r["pasos"][0]["texto"].startswith("Gira") and vistos == [((43.36, -8.41), (43.37, -8.40))]
+    for datos, quien, codigo in (({"id": a["id"]}, ANA, 400),                                   # sin ubicación
+                                 ({"id": a["id"], "desde": {"lat": 43.3, "lng": -8.4}}, LUIS, 403),   # de otro
+                                 ({"id": "nada", "desde": {"lat": 43.3, "lng": -8.4}}, ANA, 404)):
+        with pytest.raises(HTTPException) as e:
+            await server.reparto_mi_navegar(datos, quien)
+        assert e.value.status_code == codigo
+    await server.reparto_estado(a["id"], {"estado": "fallido", "motivo": "No había nadie"}, ANA)
+    with pytest.raises(HTTPException) as e:
+        await server.reparto_mi_navegar({"id": a["id"], "desde": {"lat": 43.3, "lng": -8.4}}, ANA)
+    assert e.value.status_code == 409
+
+
+@pytest.mark.asyncio(loop_scope="session")
+async def test_navegacion_sin_servidor_de_rutas_da_la_direccion_en_recto(monkeypatch):
+    import httpx
+
+    class Roto:
+        def __init__(self, *a, **k):
+            pass
+
+        async def __aenter__(self):
+            raise httpx.ConnectError("sin red")
+
+        async def __aexit__(self, *a):
+            return False
+    monkeypatch.setattr(httpx, "AsyncClient", Roto)
+    server._REP_NAVEGACION.clear()
+    r = await server._rep_navegacion((43.0, -8.4), (43.001, -8.4))
+    assert r["fuente"] == "linea_recta" and r["pasos"][0]["texto"] == "Ve hacia la parada"
+    assert 100 <= r["metros"] <= 120
+    assert server._REP_NAVEGACION == {}   # lo fallido no se guarda: el siguiente intento vuelve a preguntar

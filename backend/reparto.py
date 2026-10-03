@@ -563,3 +563,78 @@ def aligera_linea(linea: list, metros: float = 12.0, tope: int = 4000) -> list:
         paso = len(fuera) / tope
         fuera = [fuera[int(i * paso)] for i in range(tope - 1)] + [fuera[-1]]
     return fuera
+
+
+# ── NAVEGACIÓN DENTRO DE LA APP ──────────────────────────────────────────────
+# El servidor de rutas (OSRM) da cada maniobra como tipo + modificador + calle
+# + número de salida en las rotondas. Aquí se pasa a una frase en español
+# («Gira a la derecha por Rúa Real») y a un icono. La voz la pone el móvil.
+
+_GIROS = {
+    "uturn": ("Da la vuelta", "vuelta"),
+    "sharp right": ("Gira cerrado a la derecha", "derecha"),
+    "right": ("Gira a la derecha", "derecha"),
+    "slight right": ("Ligeramente a la derecha", "ligera-derecha"),
+    "straight": ("Sigue recto", "recto"),
+    "slight left": ("Ligeramente a la izquierda", "ligera-izquierda"),
+    "left": ("Gira a la izquierda", "izquierda"),
+    "sharp left": ("Gira cerrado a la izquierda", "izquierda"),
+}
+_ORDINALES = ["primera", "segunda", "tercera", "cuarta", "quinta", "sexta", "séptima", "octava", "novena", "décima"]
+
+
+def _minuscula(t: str) -> str:
+    return t[:1].lower() + t[1:]
+
+
+def instruccion(tipo: str, modificador: str = "", calle: str = "", salida=None) -> tuple:
+    """(texto, icono) de una maniobra. Sin calle, la frase sin «por …»."""
+    tipo = (tipo or "").strip()
+    mod = (modificador or "").strip()
+    calle = (calle or "").strip()
+    por = f" por {calle}" if calle else ""
+    giro, icono = _GIROS.get(mod, ("Sigue", "recto"))
+    if tipo == "depart":
+        return (f"Sal por {calle}" if calle else "Empieza la ruta"), "recto"
+    if tipo == "arrive":
+        return "Has llegado", "llegada"
+    if tipo in ("roundabout", "rotary"):
+        if isinstance(salida, int) and 1 <= salida <= len(_ORDINALES):
+            return f"En la rotonda, toma la {_ORDINALES[salida - 1]} salida{por}", "rotonda"
+        return f"Entra en la rotonda{por}", "rotonda"
+    if tipo in ("exit roundabout", "exit rotary"):
+        return f"Sal de la rotonda{por}", "rotonda"
+    if tipo == "roundabout turn":
+        return f"En la rotonda, {_minuscula(giro)}{por}", "rotonda"
+    if tipo in ("new name", "continue") and mod in ("straight", ""):
+        return f"Sigue recto{por}", "recto"
+    if tipo == "fork":
+        lado = "a la derecha" if "right" in mod else "a la izquierda" if "left" in mod else "recto"
+        return f"En la bifurcación, mantente {lado}{por}", icono
+    if tipo == "merge":
+        return f"Incorpórate{por}", icono
+    if tipo == "on ramp":
+        return f"Toma la entrada{por}", icono
+    if tipo == "off ramp":
+        return f"Toma la salida{por}", icono
+    if tipo == "end of road":
+        return f"Al final de la calle, {_minuscula(giro)}{por}", icono
+    return f"{giro}{por}", icono
+
+
+def pasos_osrm(ruta: dict) -> list:
+    """Las maniobras de una ruta de OSRM (con steps=true), en orden:
+    [{texto, icono, punto:[lat,lng], calle, metros}]. `metros` es lo que se
+    recorre DESPUÉS de la maniobra hasta la siguiente."""
+    fuera = []
+    for tramo in (ruta or {}).get("legs") or []:
+        for s in tramo.get("steps") or []:
+            m = s.get("maneuver") or {}
+            loc = m.get("location")
+            if not (isinstance(loc, list) and len(loc) == 2):
+                continue
+            calle = (s.get("name") or s.get("ref") or "").strip()
+            texto, icono = instruccion(m.get("type"), m.get("modifier"), calle, m.get("exit"))
+            fuera.append({"texto": texto, "icono": icono, "punto": [loc[1], loc[0]], "calle": calle,
+                          "metros": round(s.get("distance") or 0)})
+    return fuera

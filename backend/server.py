@@ -46723,6 +46723,51 @@ async def _rep_trazado(puntos: list) -> dict:
     return salida
 
 
+_REP_NAVEGACION: dict = {}
+
+
+async def _rep_navegacion(desde: tuple, hasta: tuple) -> dict:
+    """Ruta para GUIAR dentro de la app: el camino por las calles y cada
+    maniobra con su frase en español. El origen se redondea a ~10 m para
+    que dos peticiones desde el mismo sitio no pregunten dos veces."""
+    clave = (round(desde[0], 4), round(desde[1], 4), round(hasta[0], 5), round(hasta[1], 5))
+    if clave in _REP_NAVEGACION:
+        return _REP_NAVEGACION[clave]
+    metros = round(reparto.distancia_km(desde, hasta) * 1000)
+    salida = {"fuente": "linea_recta", "linea": [list(desde), list(hasta)], "metros": metros,
+              "minutos": None, "pasos": [{"texto": "Ve hacia la parada", "icono": "recto", "punto": list(hasta),
+                                          "calle": "", "metros": metros}]}
+    coords = f"{desde[1]:.6f},{desde[0]:.6f};{hasta[1]:.6f},{hasta[0]:.6f}"
+    import httpx as _httpx
+    async with _REP_RUTAS_LOCK:
+        espera = 1.1 - (time.time() - _REP_RUTAS_ULTIMA[0])
+        if espera > 0:
+            await asyncio.sleep(espera)
+        try:
+            async with _httpx.AsyncClient(timeout=15, headers={
+                    "User-Agent": f"{MARCA}/1.0 (reparto; {CORREO_CONTACTO})"}) as c:
+                resp = await c.get(f"{_REP_RUTAS_URL}/route/v1/driving/{coords}",
+                                   params={"overview": "full", "geometries": "geojson", "steps": "true"})
+                j = resp.json() if resp.status_code == 200 else {}
+        except Exception as e:                               # noqa: BLE001
+            logger.warning(f"reparto: navegación sin respuesta: {type(e).__name__}")
+            j = {}
+        finally:
+            _REP_RUTAS_ULTIMA[0] = time.time()
+    ruta = (j.get("routes") or [None])[0] if j.get("code") == "Ok" else None
+    geo = ((ruta or {}).get("geometry") or {}).get("coordinates")
+    pasos = reparto.pasos_osrm(ruta) if ruta else []
+    if isinstance(geo, list) and len(geo) >= 2 and pasos:
+        salida = {"fuente": "carreteras",
+                  "linea": reparto.aligera_linea([[c[1], c[0]] for c in geo if isinstance(c, list) and len(c) == 2], metros=5),
+                  "metros": round(ruta.get("distance") or 0), "minutos": round((ruta.get("duration") or 0) / 60, 1),
+                  "pasos": pasos}
+        if len(_REP_NAVEGACION) > 500:
+            _REP_NAVEGACION.clear()
+        _REP_NAVEGACION[clave] = salida
+    return salida
+
+
 def _rep_ahora_local() -> tuple:
     try:
         from zoneinfo import ZoneInfo
@@ -47293,6 +47338,28 @@ async def reparto_mi_trazado(data: dict = Body(...), user: dict = Depends(requir
     if len(puntos) < 2:
         return {"linea": [], "fuente": None, "km": None, "minutos": None}
     return await _rep_trazado(puntos[:80])
+
+
+@api_router.post("/reparto/mi-ruta/navegar")
+async def reparto_mi_navegar(data: dict = Body(...), user: dict = Depends(require_any_auth)):
+    """Guía giro a giro hasta UNA parada suya y pendiente, desde donde está
+    ahora. La posición se usa para calcular y no se guarda."""
+    d = await _rep_conductor(user)
+    pid = _texto_cuerpo(data.get("id"), 80)
+    p = await db.reparto_pedidos.find_one({"id": pid}, {"_id": 0, "conductor_id": 1, "estado": 1, "lat": 1, "lng": 1})
+    if not p:
+        raise HTTPException(404, "Esa parada ya no existe")
+    if p.get("conductor_id") != d["id"]:
+        raise HTTPException(403, "Esa parada no es tuya")
+    if p.get("estado") not in ("pendiente", "en_ruta"):
+        raise HTTPException(409, "Esa parada ya está cerrada")
+    hasta = reparto._punto(p)
+    if not hasta:
+        raise HTTPException(400, "Esta parada no está situada en el mapa: ábrela con Google Maps")
+    desde = reparto._punto(_dict_cuerpo(data.get("desde")))
+    if not desde:
+        raise HTTPException(400, "Hace falta tu ubicación para guiarte")
+    return await _rep_navegacion(desde, hasta)
 
 
 @api_router.post("/reparto/mi-ruta/orden")

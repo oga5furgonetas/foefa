@@ -1464,6 +1464,9 @@ test('Reparto · la ruta del repartidor: siguiente, furgoneta, Waze, orden a man
   await expect(primera.getByText('Bar Pepe')).toBeVisible()
 
   // Waze en vez de Google Maps, y se recuerda.
+  // Por defecto guía la propia app (botón); con Google Maps o Waze, enlace a su app.
+  await expect(primera.getByRole('button', { name: 'Ir' })).toBeVisible()
+  await page.getByLabel('Navegador').selectOption('google')
   await expect(primera.getByRole('link', { name: 'Ir' })).toHaveAttribute('href', /google\.com\/maps/)
   await page.getByLabel('Navegador').selectOption('waze')
   await expect(primera.getByRole('link', { name: 'Ir' })).toHaveAttribute('href', 'https://waze.com/ul?ll=43.37,-8.4&navigate=yes')
@@ -1517,5 +1520,82 @@ test('Reparto · la ruta del repartidor: siguiente, furgoneta, Waze, orden a man
   await expect(resumen.getByText('Bizum')).toBeVisible()
   await expect(resumen.getByText('12,00 €').first()).toBeVisible()
   await expect(resumen.getByText('Ruta planificada: 9.5 km.')).toBeVisible()
+  expect(fallos).toEqual([])
+})
+
+
+/* LA GUÍA DENTRO DE LA APP: con el móvil moviéndose por las calles, la
+   maniobra en grande, «Has llegado» al llegar, Entregado y a la siguiente. */
+test('Reparto · navegar dentro de la app: maniobras, llegada, entregar y a la siguiente', async ({ page, context }) => {
+  const fallos = vigilar(page)
+  const b64 = (o) => btoa(JSON.stringify(o)).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '')
+  const token = `${b64({ alg: 'HS256' })}.${b64({ sub: 'd1', role: 'driver', name: 'ANA', exp: Math.floor(Date.now() / 1000) + 3600 })}.x`
+  await page.addInitScript((t) => {
+    localStorage.setItem('flota_driver_token', t)
+    localStorage.setItem('flota_driver', JSON.stringify({ id: 'd1', name: 'ANA' }))
+    localStorage.setItem('cookie_consent', '1')
+    localStorage.setItem('guia_voz', '0')
+  }, token)
+  await context.grantPermissions(['geolocation'])
+  await context.setGeolocation({ latitude: 43.3665, longitude: -8.4065 })
+  await simularApi(page, 'vacio')
+  let pedidos = [
+    { id: 'p1', cliente: 'Bar Pepe', direccion: 'Rúa Galera 10', estado: 'pendiente', bultos: 1, orden: 1, lat: 43.3704, lng: -8.4003, hueco: 'Detrás · izq' },
+    { id: 'p2', cliente: 'Farmacia Sol', direccion: 'Rúa Real 5', estado: 'pendiente', bultos: 1, orden: 2, lat: 43.3690, lng: -8.4010 },
+  ]
+  const pedidas = []
+  await page.route(/\/api\/reparto\/mi-ruta\/navegar/, async (r) => {
+    const b = r.request().postDataJSON(); pedidas.push(b.id)
+    await r.fulfill({ json: b.id === 'p1' ? {
+      fuente: 'carreteras', metros: 999, minutos: 4.1,
+      linea: [[43.3665, -8.4065], [43.3675, -8.4074], [43.3679, -8.4066], [43.3713, -8.4006], [43.3704, -8.4003]],
+      pasos: [
+        { texto: 'Sal por Túnel Praza de Lugo', icono: 'recto', punto: [43.3665, -8.4065], metros: 140 },
+        { texto: 'Gira a la derecha por Praza de Pontevedra', icono: 'derecha', punto: [43.3675, -8.4074], metros: 86 },
+        { texto: 'Sigue recto por Rúa San Andrés', icono: 'recto', punto: [43.3679, -8.4066], metros: 620 },
+        { texto: 'Gira a la derecha por Rúa Torreiro', icono: 'derecha', punto: [43.3713, -8.4006], metros: 99 },
+        { texto: 'Has llegado', icono: 'llegada', punto: [43.3704, -8.4003], metros: 0 },
+      ] } : {
+      fuente: 'carreteras', metros: 200, minutos: 1,
+      linea: [[43.3704, -8.4003], [43.3690, -8.4010]],
+      pasos: [{ texto: 'Sal por Rúa Galera', icono: 'recto', punto: [43.3704, -8.4003], metros: 200 },
+        { texto: 'Has llegado', icono: 'llegada', punto: [43.3690, -8.4010], metros: 0 }] } })
+  })
+  await page.route(/\/api\/reparto\/pedidos\/p1\/estado/, async (r) => {
+    pedidos = pedidos.map((p) => (p.id === 'p1' ? { ...p, estado: 'entregado' } : p))
+    await r.fulfill({ json: {} })
+  })
+  await page.route(/\/api\/reparto\/mi-ruta$/, (r) => r.fulfill({ json: {
+    activo: true, empresa: 'Súper', fecha: '2026-10-04', ia_tickets: false, jornada: {}, aviso_aceptado: true,
+    base: null, ruta: { fin: '10:40', minutos: 40, km: 9.5, trafico: true }, pedidos } }))
+  await page.goto('/conductor?vista=ruta', { waitUntil: 'domcontentloaded' })
+  await page.getByRole('button', { name: 'Empezar a navegar' }).click()
+
+  const nav = page.getByRole('dialog', { name: 'Navegación' })
+  await expect(nav.getByTestId('guia-texto')).toHaveText('Gira a la derecha por Praza de Pontevedra')
+  await expect(nav.getByTestId('guia-distancia')).toHaveText(/^1[23]0 m$/)
+  await expect(nav.getByText('Bar Pepe')).toBeVisible()
+  await expect(nav.getByText(/Llegas ≈ \d\d:\d\d/)).toBeVisible()
+  await expect(nav.locator('.leaflet-container')).toBeVisible()
+
+  // Gira y avanza: la siguiente maniobra.
+  await context.setGeolocation({ latitude: 43.3677, longitude: -8.4070 })
+  await expect(nav.getByTestId('guia-texto')).toHaveText('Sigue recto por Rúa San Andrés')
+  await context.setGeolocation({ latitude: 43.3700, longitude: -8.4029 })
+  await expect(nav.getByTestId('guia-texto')).toHaveText('Gira a la derecha por Rúa Torreiro')
+
+  // En la puerta: has llegado, dónde está el paquete, y entregar.
+  await context.setGeolocation({ latitude: 43.37038, longitude: -8.40032 })
+  await expect(nav.getByText('Has llegado')).toBeVisible()
+  await expect(nav.getByText('Búscalo: Detrás · izq')).toBeVisible()
+  await nav.getByRole('button', { name: 'Entregado', exact: true }).click()
+  await page.getByRole('button', { name: 'Entregar sin foto' }).click()
+
+  // Y sola, a la siguiente.
+  await expect(nav.getByText('Farmacia Sol')).toBeVisible()
+  await expect(nav.getByTestId('guia-texto')).toHaveText('Llegas a tu parada')   // solo queda llegar: 200 m en línea
+  expect(pedidas).toEqual(['p1', 'p2'])
+  await nav.getByRole('button', { name: 'Salir de la navegación' }).click()
+  await expect(nav).toHaveCount(0)
   expect(fallos).toEqual([])
 })

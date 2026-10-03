@@ -181,3 +181,29 @@ def test_aligera_linea_quita_puntos_pegados_y_guarda_extremos():
     assert 80 < len(fuera) < 120
     assert R.aligera_linea(linea[:2]) == linea[:2]
     assert len(R.aligera_linea([[43 + i * 0.01, -8] for i in range(9000)], tope=500)) == 500
+
+
+def test_instrucciones_en_espanol():
+    assert R.instruccion("turn", "right", "Rúa Real") == ("Gira a la derecha por Rúa Real", "derecha")
+    assert R.instruccion("turn", "slight left", "") == ("Ligeramente a la izquierda", "ligera-izquierda")
+    assert R.instruccion("roundabout", "right", "Avda Oza", 2) == ("En la rotonda, toma la segunda salida por Avda Oza", "rotonda")
+    assert R.instruccion("roundabout", "", "", None)[0] == "Entra en la rotonda"
+    assert R.instruccion("new name", "straight", "Rúa San Andrés") == ("Sigue recto por Rúa San Andrés", "recto")
+    assert R.instruccion("depart", "", "Túnel") == ("Sal por Túnel", "recto")
+    assert R.instruccion("arrive", "left", "Rúa Galera") == ("Has llegado", "llegada")
+    assert R.instruccion("end of road", "left", "Rúa Nueva")[0] == "Al final de la calle, gira a la izquierda por Rúa Nueva"
+    assert R.instruccion("fork", "slight right", "")[0] == "En la bifurcación, mantente a la derecha"
+    assert R.instruccion("lo que sea", "nada", "")[0] == "Sigue"
+
+
+def test_pasos_de_una_ruta_osrm():
+    ruta = {"legs": [{"steps": [
+        {"maneuver": {"type": "depart", "location": [-8.4065, 43.3665]}, "name": "Túnel Praza de Lugo", "distance": 140.2},
+        {"maneuver": {"type": "turn", "modifier": "right", "location": [-8.4074, 43.3675]}, "name": "Praza de Pontevedra", "distance": 86},
+        {"maneuver": {"type": "arrive", "modifier": "left", "location": [-8.4003, 43.3704]}, "name": "Rúa Galera", "distance": 0},
+        {"maneuver": {"type": "turn"}},   # sin sitio: fuera
+    ]}]}
+    p = R.pasos_osrm(ruta)
+    assert [x["texto"] for x in p] == ["Sal por Túnel Praza de Lugo", "Gira a la derecha por Praza de Pontevedra", "Has llegado"]
+    assert p[1]["punto"] == [43.3675, -8.4074] and p[0]["metros"] == 140
+    assert R.pasos_osrm({}) == [] and R.pasos_osrm(None) == []

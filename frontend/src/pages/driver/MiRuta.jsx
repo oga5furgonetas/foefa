@@ -54,7 +54,9 @@ function minutosATexto(m) {
 const MapaReparto = lazy(() => import('../../panel/components/MapaReparto'))
 
 /* Con qué navega cada uno: Google Maps o Waze. Se recuerda en el móvil. */
-const NAVEGADORES = [['google', 'Google Maps'], ['waze', 'Waze']]
+/* «En la app» guía aquí dentro (Navegacion.jsx); los otros dos abren su app. */
+const NAVEGADORES = [['app', 'Esta app'], ['google', 'Google Maps'], ['waze', 'Waze']]
+const Navegacion = lazy(() => import('./Navegacion'))
 function navegar(p, nav) {
   if (nav === 'waze') {
     return p.lat != null
@@ -118,14 +120,15 @@ export default function MiRuta({ onBack, embebido = false }) {
   const [prueba, setPrueba] = useState(null)
   const [notaEntrega, setNotaEntrega] = useState('')
   const [vista, setVista] = useState(() => lee('ruta_vista', 'lista'))
-  const [nav, setNav] = useState(() => lee('ruta_nav', 'google'))
+  const [nav, setNav] = useState(() => lee('ruta_nav2', 'app'))
   const [filtro, setFiltro] = useState('')
   const [reordenar, setReordenar] = useState(null)   // null | [ids] mientras se cambia a mano
   const [huecoDe, setHuecoDe] = useState(null)       // la parada a la que se le dice dónde va
   const [pegar, setPegar] = useState(null)           // null | {texto, n}
   const [escuchando, setEscuchando] = useState(false)
   useEffect(() => guarda('ruta_vista', vista), [vista])
-  useEffect(() => guarda('ruta_nav', nav), [nav])
+  useEffect(() => guarda('ruta_nav2', nav), [nav])
+  const [guiando, setGuiando] = useState(null)       // id de la parada a la que se guía; null = sin guía
   const [abierta, setAbierta] = useState(null)       // la parada desplegada (además de la siguiente)
   const [deshacer, setDeshacer] = useState(null)     // {p, estado} recién cerrada, para volver atrás
   const [trazado, setTrazado] = useState(null)
@@ -376,6 +379,7 @@ export default function MiRuta({ onBack, embebido = false }) {
     : pendientes
   const siguiente = pendientes[0]
   const porId = Object.fromEntries(pendientes.map((p) => [p.id, p]))
+  const objetivo = guiando ? (porId[guiando]?.lat != null ? porId[guiando] : pendientes.find((p) => p.lat != null) || null) : null
   const enPuerta = {}
   pendientes.forEach((p) => { const k = clavePuerta(p); if (k) enPuerta[k] = (enPuerta[k] || 0) + 1 })
   // Retraso: solo con hora prevista de HOY y la parada siguiente aún sin hacer.
@@ -409,7 +413,8 @@ export default function MiRuta({ onBack, embebido = false }) {
       {total > 0 && (
         <Cabecera fecha={ruta.fecha} hechos={hechos.length} total={total} entregados={entregados.length}
           pendientes={pendientes.length} rr={ruta.ruta} retraso={retraso} cobrado={cobradoHoy}
-          fueraHorario={pendientes.filter((p) => p.tarde_min > 0).length} />
+          fueraHorario={pendientes.filter((p) => p.tarde_min > 0).length}
+          onGuiar={nav === 'app' && pendientes.some((p) => p.lat != null) ? () => setGuiando(pendientes.find((p) => p.lat != null).id) : null} />
       )}
 
       {/* ESCANEAR */}
@@ -616,8 +621,13 @@ export default function MiRuta({ onBack, embebido = false }) {
                     )}
                   </span>
                 </button>
-                <a href={navegar(p, nav)} target="_blank" rel="noreferrer" aria-label={`Ir a ${p.cliente || p.direccion}`}
-                  className="flex w-12 shrink-0 items-center justify-center border-l border-dark-800 text-dark-300"><Navigation size={17} /></a>
+                {nav === 'app' && p.lat != null ? (
+                  <button onClick={() => setGuiando(p.id)} aria-label={`Ir a ${p.cliente || p.direccion}`}
+                    className="flex w-12 shrink-0 items-center justify-center border-l border-dark-800 text-brand-300"><Navigation size={17} /></button>
+                ) : (
+                  <a href={navegar(p, nav === 'app' ? 'google' : nav)} target="_blank" rel="noreferrer" aria-label={`Ir a ${p.cliente || p.direccion}`}
+                    className="flex w-12 shrink-0 items-center justify-center border-l border-dark-800 text-dark-300"><Navigation size={17} /></a>
+                )}
               </div>
             )
           }
@@ -649,8 +659,13 @@ export default function MiRuta({ onBack, embebido = false }) {
               </div>
             </div>
             <div className="mt-3 grid grid-cols-3 gap-1.5">
-              <a href={navegar(p, nav)} target="_blank" rel="noreferrer"
-                className={`flex flex-col items-center gap-0.5 rounded-xl py-2 text-[11px] ${esSiguiente ? 'bg-brand-500 font-bold text-brand-tinta' : 'border border-dark-700 text-dark-200'}`}><Navigation size={16} /> Ir</a>
+              {nav === 'app' && p.lat != null ? (
+                <button onClick={() => setGuiando(p.id)}
+                  className={`flex flex-col items-center gap-0.5 rounded-xl py-2 text-[11px] ${esSiguiente ? 'bg-brand-500 font-bold text-brand-tinta' : 'border border-dark-700 text-dark-200'}`}><Navigation size={16} /> Ir</button>
+              ) : (
+                <a href={navegar(p, nav === 'app' ? 'google' : nav)} target="_blank" rel="noreferrer"
+                  className={`flex flex-col items-center gap-0.5 rounded-xl py-2 text-[11px] ${esSiguiente ? 'bg-brand-500 font-bold text-brand-tinta' : 'border border-dark-700 text-dark-200'}`}><Navigation size={16} /> Ir</a>
+              )}
               {p.telefono
                 ? <a href={`tel:${p.telefono}`} className="flex flex-col items-center gap-0.5 rounded-xl border border-dark-700 py-2 text-[11px] text-dark-200"><Phone size={16} /> Llamar</a>
                 : <span className="flex flex-col items-center gap-0.5 rounded-xl border border-dark-800 py-2 text-[11px] text-dark-600"><Phone size={16} /> Sin teléfono</span>}
@@ -718,8 +733,17 @@ export default function MiRuta({ onBack, embebido = false }) {
         </Hoja>
       )}
 
+      {guiando && (
+        <Suspense fallback={<div className="fixed inset-0 z-[45] flex items-center justify-center bg-dark-950"><Loader2 className="animate-spin text-dark-400" /></div>}>
+          <Navegacion parada={objetivo} numero={objetivo?.orden ?? (objetivo ? pendientes.indexOf(objetivo) + 1 : null)}
+            quedan={pendientes.length} onSalir={() => setGuiando(null)}
+            onEntregar={(p) => marcar(p, 'entregado')} onNoEntregar={(p) => setFallo(p)}
+            enlaceFuera={(p) => navegar(p, 'google')} />
+        </Suspense>
+      )}
+
       {deshacer && (
-        <div className="fixed inset-x-0 bottom-20 z-40 flex justify-center px-4" role="status">
+        <div className="fixed inset-x-0 bottom-20 z-[46] flex justify-center px-4" role="status">
           <div className="flex w-full max-w-md items-center gap-3 rounded-2xl border border-dark-600 bg-dark-800 px-4 py-3 shadow-2xl">
             <span className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full ${deshacer.estado === 'entregado' ? 'bg-emerald-600' : 'bg-red-600'} text-white`}>
               {deshacer.estado === 'entregado' ? <Check size={16} /> : <X size={16} />}
@@ -902,7 +926,7 @@ function Marco({ onBack, children, embebido }) {
 /* LA CABECERA DEL DÍA: anillo de progreso, lo que queda y a qué hora se
    acaba. «Vas X min por detrás» compara la hora de ahora con la prevista
    para la parada siguiente; solo sale si de verdad va más de 5 min tarde. */
-function Cabecera({ fecha, hechos, total, entregados, pendientes, rr, retraso, cobrado, fueraHorario }) {
+function Cabecera({ fecha, hechos, total, entregados, pendientes, rr, retraso, cobrado, fueraHorario, onGuiar }) {
   const pct = total ? hechos / total : 0
   const R = 26
   const L = 2 * Math.PI * R
@@ -949,6 +973,12 @@ function Cabecera({ fecha, hechos, total, entregados, pendientes, rr, retraso, c
         {fueraHorario > 0 && <span className="rounded-full bg-red-500/15 px-2 py-0.5 text-red-300">{fueraHorario} fuera de su horario</span>}
         {pendientes > 0 && retraso > 5 && <span className="rounded-full bg-amber-500/15 px-2 py-0.5 font-semibold text-amber-300">Vas {minutosATexto(retraso)} por detrás de lo previsto</span>}
       </div>
+      {onGuiar && (
+        <button onClick={onGuiar}
+          className="mt-3.5 flex w-full items-center justify-center gap-2 rounded-2xl bg-brand-500 py-3.5 text-[16px] font-bold text-brand-tinta shadow-lg shadow-brand-500/20 active:scale-[.99]">
+          <Navigation size={18} /> Empezar a navegar
+        </button>
+      )}
     </section>
   )
 }
