@@ -85,7 +85,16 @@ export default async function Home({ params }: { params: Promise<{ lang: string 
     }
     return out;
   };
-  const lead = top[0] ?? null;
+  // Abre con foto propia (03-10-2026): sin foto, la portadilla de la sección como primera imagen de
+  // la web se veía pobre. Si la primera no tiene, la siguiente importante que sí, y la otra baja.
+  let lead = top[0] ?? null;
+  if (lead && !lead.imageUrl) {
+    const withPhoto = secondary.slice(0, 4).find((x) => x.imageUrl);
+    if (withPhoto) {
+      secondary.splice(secondary.indexOf(withPhoto), 1, lead);
+      lead = withPhoto;
+    }
+  }
   if (lead) {
     seen.add(lead.id);
     shownWords.push(words(lead.headline));
