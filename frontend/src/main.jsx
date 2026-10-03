@@ -228,6 +228,7 @@ const PruebaReparto = lazy(() => import('./pages/PruebaReparto'))
 const Empezar = lazy(() => import('./pages/Empezar'))
 const RutaApp = lazy(() => import('./pages/RutaApp'))
 const SeguimientoPedido = lazy(() => import('./pages/SeguimientoPedido'))
+const RegaloPagina = lazy(() => import('./pages/RegaloPagina'))
 const Planes = lazy(() => import('./pages/Planes'))
 const DriverPortal = lazy(() => import('./pages/driver/DriverPortal'))
 const PanelLogin = lazy(() => import('./panel/PanelLogin'))
@@ -347,6 +348,7 @@ ReactDOM.createRoot(document.getElementById('root')).render(
               <Route path="/empezar" element={<Empezar />} />
               <Route path="/ruta" element={<RutaApp />} />
               <Route path="/s/:token" element={<SeguimientoPedido />} />
+              <Route path="/regalo/:codigo" element={<RegaloPagina />} />
               <Route path="/planes" element={<Planes />} />
               <Route path="/privacidad" element={<Privacidad />} />
               <Route path="/terminos" element={<Terminos />} />

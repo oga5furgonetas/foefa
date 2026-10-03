@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { enAppPlay } from '../lib/enApp'
 
 import { API_BASE } from '../services/api'
 import { medirAccion } from '../lib/analitica'
@@ -311,6 +312,8 @@ export default function Registro() {
           org_name: org.trim(), username: usuario, password: pass,
           slug: s, center: center.trim(), email: email.trim().toLowerCase(),
           plan: selectedPlan, sector,
+          // Desde la app de Play no se pide tarjeta con Stripe (Google cobra con lo suyo).
+          desde_app: enAppPlay(),
         }),
       })
       const j = await r.json()

@@ -686,6 +686,7 @@ class RegisterRequest(BaseModel):
     center: Optional[str] = None  # código de su primer centro/estación (ej. su station)
     plan: Optional[str] = None   # plan elegido: basico | pro | flota | enterprise
     sector: Optional[str] = None  # paqueteria | supermercado | distribucion | otra
+    desde_app: Optional[bool] = None  # alta desde la app de Play: ahí no se pide tarjeta con Stripe
 
 
 # Límites y features por plan
@@ -963,6 +964,11 @@ async def get_current_user(
                          and "/api/reparto/" in request.url.path)
         if not _demo_reparto and not any(request.url.path.endswith(p) for p in _demo_ok):
             raise HTTPException(status_code=403, detail="Modo demo: solo lectura. Crea tu cuenta gratis para editar.")
+    if (request.method not in ("GET", "HEAD", "OPTIONS") and "/api/reparto/" in request.url.path
+            and not payload.get("demo") and not payload.get("imp") and payload.get("org_id")):
+        motivo = _rep_bloqueo_pago(await get_org(payload.get("org_id")))
+        if motivo:
+            raise HTTPException(status_code=402, detail=motivo)
     # AÍSLA: fija la BD de la organización del token para TODA esta petición.
     # Tokens antiguos sin db_name → BD por defecto (tu data) = sin cambios.
     set_current_org_db(payload.get("db_name"))
@@ -4823,6 +4829,12 @@ async def register_dsp(data: RegisterRequest, request: Request):
         org["sector"] = sector
         if SECTORES_REGISTRO[sector]:
             org["modulos"] = list(SECTORES_REGISTRO[sector])
+    # PRUEBA CON TARJETA (04-10-2026, Dani): quien reparte solo mete la
+    # tarjeta al empezar, hoy 0 €, y el día 7 se cobra si no ha cancelado.
+    # Desde la app de Play no (Google obliga a cobrar con su sistema).
+    if (sector_alta == "autonomo" and not data.desde_app
+            and os.environ.get("PRUEBA_CON_TARJETA", "1").strip() != "0"):
+        org["prueba_con_tarjeta"] = True
     await global_db.organizations.insert_one(dict(org))
     user_id = str(uuid.uuid4())
     await global_db.admin_users.insert_one({
@@ -4907,10 +4919,18 @@ def _org_billing(org):
     plan_key = _raw
     limits = PLAN_LIMITS.get(plan_key, PLAN_DEFAULT)
     status = org.get("status", "trial")
+    if status == "active" and org.get("pago_proveedor") == "regalo":
+        hasta = _fecha_utc(org.get("pagado_hasta"))
+        if hasta and hasta < datetime.now(timezone.utc):
+            return {"status": "vencido", "required": True, "days_left": None, "plan": plan_key or "pro",
+                    "limits": limits, "pagado_hasta": org.get("pagado_hasta")}
+        return {"status": "active", "required": False, "days_left": None, "plan": plan_key or "pro",
+                "limits": limits, "pagado_hasta": org.get("pagado_hasta")}
     if status == "active":
         return {"status": "active", "required": False, "days_left": None, "plan": plan_key or "pro", "limits": limits}
     if status == "trial":
         days = None
+        vencida = False
         te = org.get("trial_ends")
         if te:
             try:
@@ -4919,16 +4939,60 @@ def _org_billing(org):
                 if te_dt.tzinfo is None:
                     te_dt = te_dt.replace(tzinfo=timezone.utc)
                 delta = te_dt - datetime.now(timezone.utc)
+                vencida = delta.total_seconds() < 0
                 # Redondear hacia arriba: si quedan 13d 23h mostramos 14
                 days = max(0, -(-delta.total_seconds() // 86400))  # ceil division
                 days = int(days)
             except Exception:
                 days = None
         trial_limits = PLAN_LIMITS.get(plan_key, PLAN_DEFAULT)
-        return {"status": "trial", "required": (days is not None and days < 0), "days_left": days,
-                "plan": plan_key or "pro", "limits": trial_limits}
+        return {"status": "trial", "required": vencida, "days_left": days,
+                "plan": plan_key or "pro", "limits": trial_limits, "prueba_hasta": te}
     # past_due / canceled / unpaid → bloqueado
     return {"status": status, "required": True, "days_left": None, "plan": plan_key or "basico", "limits": PLAN_LIMITS.get(plan_key, PLAN_LIMITS["basico"])}
+
+
+def _fecha_utc(v) -> Optional[datetime]:
+    try:
+        d = datetime.fromisoformat(str(v or "").replace("Z", "+00:00"))
+    except ValueError:
+        return None
+    return d if d.tzinfo else d.replace(tzinfo=timezone.utc)
+
+
+def _es_repartidor(org) -> bool:
+    return bool(org) and (org.get("plan") == "autonomo" or org.get("sector") == "autonomo")
+
+
+def _regalo_vigente(org) -> bool:
+    hasta = _fecha_utc((org or {}).get("pagado_hasta"))
+    return bool(hasta and hasta > datetime.now(timezone.utc))
+
+
+def _falta_tarjeta(org) -> bool:
+    """Alta con prueba-con-tarjeta que aún no la ha metido (ni tiene regalo).
+    Sin Stripe configurado no se pide nada: no se puede dejar a nadie fuera
+    por un fallo nuestro."""
+    return (bool((org or {}).get("prueba_con_tarjeta")) and org.get("status") == "trial"
+            and not org.get("stripe_subscription") and not _regalo_vigente(org)
+            and _stripe_suscripciones_listo())
+
+
+def _rep_bloqueo_pago(org) -> str:
+    """'' si puede usar la app; si no, el porqué. Solo para el plan Repartidor:
+    las empresas no se bloquean por aquí."""
+    if not _es_repartidor(org) or org.get("account_type") == "owner":
+        return ""
+    b = _org_billing(org)
+    if b.get("required"):
+        if b.get("status") == "trial":
+            return "Tu prueba gratis ha terminado. Suscríbete en «Cuenta» para seguir repartiendo."
+        if b.get("status") == "vencido":
+            return "Tu regalo ha terminado. Suscríbete en «Cuenta» para seguir repartiendo."
+        return "Tu suscripción está pausada: hay un pago pendiente. Revísalo en «Cuenta»."
+    if _falta_tarjeta(org):
+        return "Añade tu tarjeta para empezar los 7 días gratis (hoy no se cobra nada)."
+    return ""
 
 
 @api_router.get("/org/billing")
@@ -4942,6 +5006,18 @@ async def org_billing(user: dict = Depends(get_current_user)):
     b["sector"] = (org or {}).get("sector")
     b["pago_proveedor"] = (org or {}).get("pago_proveedor")
     b["cancela_al_final"] = bool((org or {}).get("cancela_al_final"))
+    o = org or {}
+    b["falta_tarjeta"] = _falta_tarjeta(o) if org else False
+    b["bloqueo"] = _rep_bloqueo_pago(o) if org else ""
+    b["suscrito"] = bool(o.get("stripe_subscription")) and o.get("pago_proveedor") == "stripe" and o.get("status") == "active"
+    for k in ("stripe_status", "stripe_intervalo", "stripe_proximo_cobro", "pagado_hasta", "trial_ends"):
+        b[k] = o.get(k)
+    # Si al suscribirse se cobraría HOY (Stripe pide 48 h de prueba por delante).
+    b["cobro_al_suscribir"] = _stripe_inicio_cobro(o)
+    if _es_repartidor(o):
+        t = PLAN_TARIFAS["autonomo"]
+        b["precios"] = {"mensual": t["mensual"], "anual": t["anual"]}
+        b["regalos"] = {str(m): v / 100 for m, v in _REGALO_PRECIOS.items()}
     return b
 
 
@@ -47657,20 +47733,45 @@ async def stripe_suscripcion(data: dict = Body(default={}), user: dict = Depends
     if org.get("stripe_customer"):
         cuerpo["customer"] = org["stripe_customer"]
         cuerpo.pop("customer_email", None)
-    # Lo que le quede de prueba, lo respeta Stripe: mete la tarjeta ahora y el
-    # primer cobro es al acabar. Stripe exige que el fin de prueba esté al
-    # menos 48 h por delante; si queda menos, se cobra al suscribirse.
-    try:
-        fin = datetime.fromisoformat(str(org.get("trial_ends") or "").replace("Z", "+00:00"))
-        if fin.tzinfo is None:
-            fin = fin.replace(tzinfo=timezone.utc)
-        if org.get("status") == "trial" and (fin - datetime.now(timezone.utc)).total_seconds() > 48 * 3600:
-            cuerpo["subscription_data"]["trial_end"] = int(fin.timestamp())
-    except ValueError:
-        pass
+    # Lo que le quede de prueba (o de un regalo), lo respeta Stripe: mete la
+    # tarjeta ahora y el primer cobro es al acabar. Stripe exige que ese fin
+    # esté al menos 48 h por delante; si queda menos, se cobra al suscribirse.
+    inicio = _stripe_inicio_cobro(org)
+    if inicio:
+        cuerpo["subscription_data"]["trial_end"] = int(_fecha_utc(inicio).timestamp())
     sesion = await _stripe_req("POST", "/checkout/sessions", _stripe_formulario(cuerpo))
     await _audit(user, "stripe_checkout", {"plan": plan, "anual": anual, "cantidad": cantidad})
     return {"url": sesion.get("url"), "id": sesion.get("id")}
+
+
+def _stripe_inicio_cobro(org: dict) -> Optional[str]:
+    """Cuándo sería el primer cobro si se suscribe ahora: al acabar la prueba
+    o el regalo que le queden (ISO), o None = hoy mismo."""
+    candidatos = []
+    if org.get("status") == "trial":
+        candidatos.append(_fecha_utc(org.get("trial_ends")))
+    if _regalo_vigente(org):
+        candidatos.append(_fecha_utc(org.get("pagado_hasta")))
+    fin = max([c for c in candidatos if c], default=None)
+    if fin and (fin - datetime.now(timezone.utc)).total_seconds() > 48 * 3600:
+        return fin.isoformat()
+    return None
+
+
+def _stripe_detalle_sub(sub: dict) -> dict:
+    """Lo que se guarda de una suscripción: estado, mensual/anual y la fecha
+    del próximo cobro (fin de prueba o fin del periodo). Desde 2025 Stripe
+    pone el periodo en cada línea; se mira en los dos sitios."""
+    item = (((sub or {}).get("items") or {}).get("data") or [{}])[0] or {}
+    intervalo = ((item.get("price") or {}).get("recurring") or {}).get("interval")
+    fin_periodo = sub.get("current_period_end") or item.get("current_period_end")
+    proximo = sub.get("trial_end") if sub.get("status") == "trialing" else fin_periodo
+    d = {"stripe_status": sub.get("status")}
+    if intervalo in ("month", "year"):
+        d["stripe_intervalo"] = "anual" if intervalo == "year" else "mensual"
+    if isinstance(proximo, (int, float)) and proximo > 0:
+        d["stripe_proximo_cobro"] = datetime.fromtimestamp(proximo, tz=timezone.utc).isoformat()
+    return d
 
 
 @api_router.post("/billing/stripe/portal")
@@ -47681,9 +47782,187 @@ async def stripe_portal(user: dict = Depends(require_admin)):
     org = await get_org(user.get("org_id"))
     if not org or not org.get("stripe_customer"):
         raise HTTPException(404, "Esta empresa no tiene una suscripción con tarjeta")
+    vuelta = "ruta" if org.get("sector") == "autonomo" else "panel/configuracion"
     s = await _stripe_req("POST", "/billing_portal/sessions", {
-        "customer": org["stripe_customer"], "return_url": f"{_PORTAL_BASE_FRONT}/panel/configuracion"})
+        "customer": org["stripe_customer"], "return_url": f"{_PORTAL_BASE_FRONT}/{vuelta}"})
     return {"url": s.get("url")}
+
+
+@api_router.post("/billing/stripe/cambiar-plan")
+async def stripe_cambiar_plan(data: dict = Body(default={}), user: dict = Depends(require_admin)):
+    """Pasar de mensual a anual (o al revés) sin darse de baja. Stripe prorratea:
+    lo no usado del periodo actual se descuenta; en prueba no se cobra nada
+    hasta que acabe."""
+    if user.get("demo") or user.get("imp"):
+        raise HTTPException(403, "Solo la propia empresa")
+    org = await get_org(user.get("org_id"))
+    if not org or not org.get("stripe_subscription"):
+        raise HTTPException(404, "No tienes una suscripción con tarjeta")
+    anual = bool(_dict_cuerpo(data).get("anual"))
+    plan = _plan_canon(org.get("plan") or "autonomo")
+    price = _stripe_price_id(plan, anual)
+    if not price:
+        raise HTTPException(400, "Ese plan aún no tiene precio en Stripe")
+    sub = await _stripe_req("GET", f"/subscriptions/{org['stripe_subscription']}")
+    item = (((sub.get("items") or {}).get("data")) or [{}])[0]
+    if (item.get("price") or {}).get("id") == price:
+        raise HTTPException(400, "Ya estás en ese plan")
+    if sub.get("status") not in ("active", "trialing"):
+        raise HTTPException(409, "La suscripción no está activa: revísala en «Tarjeta, facturas y cancelar»")
+    nueva = await _stripe_req("POST", f"/subscriptions/{sub['id']}", {
+        "items[0][id]": item.get("id"), "items[0][price]": price,
+        "proration_behavior": "none" if sub.get("status") == "trialing" else "create_prorations",
+        "cancel_at_period_end": "false"})
+    campos = {**_stripe_detalle_sub(nueva), "cancela_al_final": False}
+    await global_db.organizations.update_one({"id": org["id"]}, {"$set": campos})
+    await _audit(user, "stripe_cambio_plan", {"anual": anual})
+    return {"ok": True, **campos}
+
+
+# ── REGALAR LA APP (04-10-2026) ──────────────────────────────────────────────
+# Dani: «regalársela a alguien enviándosela por email o WhatsApp». Se paga con
+# Stripe (pago único), sale un código y un enlace que el comprador manda desde
+# su móvil (nosotros no escribimos a nadie). Quien lo canjea suma esos meses:
+# si ya paga con tarjeta, su próximo cobro se retrasa lo regalado; si no, la
+# cuenta queda pagada hasta esa fecha. Un código, un uso, 12 meses para usarlo.
+_REGALO_PRECIOS = {1: 999, 12: 9900}          # meses -> céntimos
+_REGALO_ALFABETO = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"   # sin 0/O ni 1/I
+
+
+def _codigo_regalo(texto) -> str:
+    return re.sub(r"[^A-Z0-9]", "", str(texto or "").upper())[:16]
+
+
+def _nuevo_codigo_regalo() -> str:
+    import secrets as _secrets
+    return "".join(_secrets.choice(_REGALO_ALFABETO) for _ in range(8))
+
+
+def _sumar_meses(d: datetime, meses: int) -> datetime:
+    import calendar as _cal
+    m = d.month - 1 + meses
+    a, m = d.year + m // 12, m % 12 + 1
+    return d.replace(year=a, month=m, day=min(d.day, _cal.monthrange(a, m)[1]))
+
+
+def _regalo_publico(r: dict) -> dict:
+    ahora = datetime.now(timezone.utc)
+    estado = r.get("estado")
+    if estado == "pagado" and (_fecha_utc(r.get("caduca_en")) or ahora) < ahora:
+        estado = "caducado"
+    return {"id": r.get("id"), "meses": r.get("meses"), "estado": estado,
+            "codigo": r.get("codigo") if r.get("estado") in ("pagado", "canjeado") else None,
+            "creado_en": r.get("creado_en"), "caduca_en": r.get("caduca_en"), "canjeado_en": r.get("canjeado_en")}
+
+
+@api_router.post("/billing/regalos")
+async def regalo_comprar(data: dict = Body(default={}), user: dict = Depends(require_admin)):
+    if user.get("demo") or user.get("imp"):
+        raise HTTPException(403, "Los regalos los compra la propia cuenta")
+    if not _stripe_encendido():
+        raise HTTPException(503, "El pago con tarjeta no está configurado todavía")
+    meses = _entero(_dict_cuerpo(data).get("meses"), "meses", defecto=1, minimo=1, maximo=12)
+    if meses not in _REGALO_PRECIOS:
+        raise HTTPException(400, "Se puede regalar 1 mes o 1 año")
+    org = await get_org(user.get("org_id"))
+    if not org:
+        raise HTTPException(404, "Cuenta no encontrada")
+    ahora = datetime.now(timezone.utc)
+    for _ in range(5):
+        codigo = _nuevo_codigo_regalo()
+        if not await global_db.regalos.find_one({"codigo": codigo}):
+            break
+    rid = uuid.uuid4().hex
+    vuelta = "ruta" if org.get("sector") == "autonomo" else "panel/configuracion"
+    nombre = f"Regalo {MARCA}: {'1 año' if meses == 12 else '1 mes'} del plan Repartidor"
+    sesion = await _stripe_req("POST", "/checkout/sessions", _stripe_formulario({
+        "mode": "payment", "locale": "es",
+        "line_items": [{"quantity": 1, "price_data": {"currency": "eur", "unit_amount": _REGALO_PRECIOS[meses],
+                                                      "product_data": {"name": nombre}}}],
+        "customer_email": org.get("email") or user.get("email") or None,
+        # Sin client_reference_id: el webhook de la tienda (misma cuenta de
+        # Stripe) lo leería como un id de pedido.
+        "success_url": f"{_PORTAL_BASE_FRONT}/{vuelta}?regalo={rid}",
+        "cancel_url": f"{_PORTAL_BASE_FRONT}/{vuelta}?regalo=cancelado",
+        "metadata": {"tipo": "regalo", "regalo_id": rid, "org_id": org["id"]},
+        "payment_intent_data": {"metadata": {"tipo": "regalo", "regalo_id": rid}},
+    }))
+    await global_db.regalos.insert_one({
+        "id": rid, "codigo": codigo, "meses": meses, "importe": _REGALO_PRECIOS[meses] / 100,
+        "estado": "pendiente_pago", "comprador_org": org["id"], "stripe_sesion": sesion.get("id"),
+        "creado_en": ahora.isoformat(), "caduca_en": _sumar_meses(ahora, 12).isoformat()})
+    await _audit(user, "regalo_compra", {"meses": meses})
+    return {"url": sesion.get("url"), "id": rid}
+
+
+@api_router.get("/billing/regalos")
+async def regalo_mios(user: dict = Depends(require_admin)):
+    """Los regalos que ha comprado esta cuenta (no quién los ha canjeado)."""
+    rs = await global_db.regalos.find({"comprador_org": user.get("org_id")}, {"_id": 0}).to_list(200)
+    rs = [x for x in rs if x.get("estado") != "pendiente_pago"
+          or (_fecha_utc(x.get("creado_en")) or datetime.now(timezone.utc)) > datetime.now(timezone.utc) - timedelta(days=1)]
+    rs.sort(key=lambda x: x.get("creado_en") or "", reverse=True)
+    return {"regalos": [_regalo_publico(x) for x in rs]}
+
+
+@api_router.get("/regalo/{codigo}")
+async def regalo_ver(codigo: str):
+    """Público (lo abre quien recibe el enlace): solo si vale y cuánto es.
+    Nada de quién lo regala."""
+    r = await global_db.regalos.find_one({"codigo": _codigo_regalo(codigo)}, {"_id": 0})
+    if not r or r.get("estado") not in ("pagado", "canjeado"):
+        return {"estado": "no_existe"}
+    p = _regalo_publico(r)
+    return {"estado": p["estado"], "meses": p["meses"]}
+
+
+@api_router.post("/billing/regalos/canjear")
+async def regalo_canjear(data: dict = Body(default={}), user: dict = Depends(require_admin)):
+    if user.get("demo") or user.get("imp"):
+        raise HTTPException(403, "El regalo lo canjea la propia cuenta")
+    org = await get_org(user.get("org_id"))
+    if not _es_repartidor(org):
+        raise HTTPException(400, "Este regalo es para el plan Repartidor")
+    codigo = _codigo_regalo(_dict_cuerpo(data).get("codigo"))
+    r = await global_db.regalos.find_one({"codigo": codigo}, {"_id": 0}) if len(codigo) >= 6 else None
+    if not r or r.get("estado") not in ("pagado", "canjeado"):
+        raise HTTPException(404, "Ese código no es válido")
+    if r.get("estado") == "canjeado":
+        raise HTTPException(409, "Ese regalo ya se ha usado")
+    ahora = datetime.now(timezone.utc)
+    if (_fecha_utc(r.get("caduca_en")) or ahora) < ahora:
+        raise HTTPException(410, "Ese regalo ha caducado")
+    # Atómico: dos canjes a la vez del mismo código, solo uno gana.
+    res = await global_db.regalos.update_one({"codigo": codigo, "estado": "pagado"}, {"$set": {
+        "estado": "canjeado", "canjeado_por": org["id"], "canjeado_en": ahora.isoformat()}})
+    if not getattr(res, "modified_count", 0):
+        raise HTTPException(409, "Ese regalo ya se ha usado")
+    meses = int(r.get("meses") or 1)
+    try:
+        sub_id = org.get("stripe_subscription")
+        if sub_id and org.get("status") == "active" and org.get("pago_proveedor") == "stripe" and not org.get("cancela_al_final"):
+            # Ya paga con tarjeta: el próximo cobro se retrasa lo regalado.
+            sub = await _stripe_req("GET", f"/subscriptions/{sub_id}")
+            prox = _fecha_utc(_stripe_detalle_sub(sub).get("stripe_proximo_cobro")) or ahora
+            nuevo = _sumar_meses(max(prox, ahora), meses)
+            sub2 = await _stripe_req("POST", f"/subscriptions/{sub_id}", {
+                "trial_end": int(nuevo.timestamp()), "proration_behavior": "none"})
+            campos = _stripe_detalle_sub(sub2)
+            texto = f"Regalo aplicado: tu próximo cobro pasa al {nuevo.strftime('%d/%m/%Y')}."
+        else:
+            bases = [ahora, _fecha_utc(org.get("pagado_hasta")),
+                     _fecha_utc(org.get("trial_ends")) if org.get("status") == "trial" else None,
+                     _fecha_utc(org.get("stripe_proximo_cobro")) if org.get("status") == "active" else None]
+            nuevo = _sumar_meses(max(b for b in bases if b), meses)
+            campos = {"status": "active", "pago_proveedor": "regalo", "pagado_hasta": nuevo.isoformat()}
+            texto = f"Regalo aplicado: tienes la app pagada hasta el {nuevo.strftime('%d/%m/%Y')}."
+    except HTTPException:
+        await global_db.regalos.update_one({"codigo": codigo}, {"$set": {"estado": "pagado"},
+                                                                "$unset": {"canjeado_por": "", "canjeado_en": ""}})
+        raise
+    await global_db.organizations.update_one({"id": org["id"]}, {"$set": campos})
+    await _audit(user, "regalo_canje", {"meses": meses})
+    return {"ok": True, "mensaje": texto, "hasta": nuevo.isoformat()}
 
 
 def _stripe_estado_org(estado_stripe: str) -> Optional[str]:
@@ -47700,6 +47979,20 @@ async def _stripe_aplicar_evento(ev: dict) -> dict:
     tipo = ev.get("type") or ""
     obj = (ev.get("data") or {}).get("object") or {}
     meta = obj.get("metadata") or {}
+    if tipo == "charge.refunded" and obj.get("payment_intent"):
+        # Regalo devuelto (si en Stripe está activado este aviso): sin canjear,
+        # el código deja de valer. Si ya se canjeó, se queda como está.
+        res = await global_db.regalos.update_one({"stripe_pago": obj["payment_intent"], "estado": "pagado"},
+                                                 {"$set": {"estado": "anulado"}})
+        return {"ok": True, "aplicado": bool(getattr(res, "modified_count", 0))}
+    if tipo == "checkout.session.completed" and obj.get("mode") == "payment" and meta.get("tipo") == "regalo":
+        if obj.get("payment_status") not in (None, "paid"):
+            return {"ok": True, "aplicado": False}
+        res = await global_db.regalos.update_one(
+            {"id": meta.get("regalo_id"), "estado": "pendiente_pago"},
+            {"$set": {"estado": "pagado", "pagado_en": datetime.now(timezone.utc).isoformat(),
+                      "stripe_pago": obj.get("payment_intent")}})
+        return {"ok": True, "aplicado": bool(getattr(res, "modified_count", 0))}
     org = None
     if meta.get("org_id"):
         org = await global_db.organizations.find_one({"id": meta["org_id"]})
@@ -47716,11 +48009,17 @@ async def _stripe_aplicar_evento(ev: dict) -> dict:
                   "stripe_subscription": obj.get("subscription"), "activada_en": ahora}
         if meta.get("plan") in PLAN_TARIFAS:
             campos["plan"] = meta["plan"]
+        if obj.get("subscription"):
+            try:
+                det = _stripe_detalle_sub(await _stripe_req("GET", f"/subscriptions/{obj['subscription']}"))
+                campos.update({k: v for k, v in det.items() if v})
+            except HTTPException:
+                pass   # el detalle llega también con customer.subscription.*
     elif tipo in ("customer.subscription.updated", "customer.subscription.created"):
         nuevo = _stripe_estado_org(obj.get("status") or "")
         if nuevo:
-            campos = {"status": nuevo, "stripe_status": obj.get("status"), "stripe_subscription": obj.get("id"),
-                      "pago_proveedor": "stripe"}
+            campos = {"status": nuevo, "stripe_subscription": obj.get("id"),
+                      "pago_proveedor": "stripe", **_stripe_detalle_sub(obj)}
             if obj.get("cancel_at_period_end"):
                 campos["cancela_al_final"] = True
             elif "cancel_at_period_end" in obj:
@@ -47729,6 +48028,9 @@ async def _stripe_aplicar_evento(ev: dict) -> dict:
         campos = {"status": "suspended", "stripe_status": "canceled", "suspendida_en": ahora}
     elif tipo == "invoice.payment_failed":
         campos = {"stripe_ultimo_fallo": ahora}
+    if campos.get("status") == "suspended" and _regalo_vigente(org):
+        # Tiene meses regalados por delante: se acaba la tarjeta, no la app.
+        campos.update({"status": "active", "pago_proveedor": "regalo"})
     if campos:
         await global_db.organizations.update_one({"id": org["id"]}, {"$set": campos})
         logger.info("Stripe suscripciones: %s -> %s (%s)", tipo, org.get("slug"), campos.get("status", ""))

@@ -1361,8 +1361,8 @@ test('App · quien reparte solo ve su app y no el panel de empresa', async ({ pa
   await page.getByRole('button', { name: 'Ajustes' }).click()
   await expect(page.getByText('Desde dónde sales')).toBeVisible()
   await expect(page.getByText('Zonas', { exact: true })).toHaveCount(0)
-  await page.getByRole('button', { name: 'Cuenta' }).click()
-  await expect(page.getByText(/Prueba gratis: quedan 6 días/)).toBeVisible()
+  await page.getByRole('button', { name: 'Cuenta', exact: true }).click()
+  await expect(page.getByText(/Quedan 6 días: hasta el/)).toBeVisible()
   expect(fallos).toEqual([])
 })
 
@@ -1394,14 +1394,17 @@ test('Suscripción · el botón de pagar va a Stripe y la vuelta espera la activ
   const pedidos = []
   await page.route(/\/api\/billing\/stripe\/suscripcion/, async (r) => {
     pedidos.push(r.request().postDataJSON())
-    await r.fulfill({ json: { url: 'http://localhost:4173/panel?pago=ok', id: 'cs_test' } })
+    await r.fulfill({ json: { url: 'http://localhost:4173/ruta?pago=ok', id: 'cs_test' } })
   })
+  // Quien reparte solo entra al panel y se le lleva a su app; se suscribe desde «Cuenta».
   await page.goto('/panel/reparto', { waitUntil: 'domcontentloaded' })
-  await expect(page.getByText(/5 días/)).toBeVisible()
-  await page.getByRole('button', { name: /Pasar a Repartidor/ }).first().click()
-  await expect(page).toHaveURL(/pago=ok/)
+  await expect(page).toHaveURL(/\/ruta/)
+  await page.getByRole('button', { name: 'Cuenta', exact: true }).click()
+  await expect(page.getByText(/Quedan 5 días/)).toBeVisible()
+  await page.getByRole('button', { name: 'Suscribirme' }).click()
+  await expect(page).toHaveURL(/pago=ok|\/ruta$/)
   expect(pedidos[0]).toMatchObject({ plan: 'autonomo' })
-  await expect(page.getByText('Pago recibido, activando tu cuenta…')).toBeVisible()
+  await expect(page.getByText('Tarjeta añadida. Activando tu cuenta…')).toBeVisible()
 })
 
 /* DENTRO DE LA APP DE PLAY STORE no se enseña el botón de pagar mientras la app
@@ -1413,8 +1416,11 @@ test('Suscripción · dentro de la app no sale el botón de pagar sin el program
   await page.route(/\/api\/org\/billing/, (r) => r.fulfill({ json: { status: 'trial', required: false, days_left: 5, plan: 'autonomo', sector: 'autonomo', modulos: ['dashboard', 'reparto', 'configuracion'] } }))
   await page.route(/\/api\/billing\/config/, (r) => r.fulfill({ json: { provider: 'stripe', ready: true, pago_en_app: false, planes: ['autonomo'], checkout: {} } }))
   await page.goto('/panel/reparto', { waitUntil: 'domcontentloaded' })
-  await expect(page.getByText(/5 días/)).toBeVisible()
-  await expect(page.getByRole('button', { name: /Pasar a Repartidor/ })).toHaveCount(0)
+  await expect(page).toHaveURL(/\/ruta/)
+  await page.getByRole('button', { name: 'Cuenta', exact: true }).click()
+  await expect(page.getByText(/Quedan 5 días/)).toBeVisible()
+  await expect(page.getByRole('button', { name: /Suscribirme|Añadir tarjeta|Comprar regalo/ })).toHaveCount(0)
+  await expect(page.getByLabel('Código de regalo')).toBeVisible()
 })
 
 /* LA APP DE RUTA, COMO CIRCUIT O FLEX (04-10-2026): siguiente parada
@@ -1597,5 +1603,132 @@ test('Reparto · navegar dentro de la app: maniobras, llegada, entregar y a la s
   expect(pedidas).toEqual(['p1', 'p2'])
   await nav.getByRole('button', { name: 'Salir de la navegación' }).click()
   await expect(nav).toHaveCount(0)
+  expect(fallos).toEqual([])
+})
+
+/* ── EL COBRO DE QUIEN REPARTE SOLO (04-10-2026) ─────────────────────────────
+   Prueba con tarjeta (hoy 0 €), muro al acabar, pasar a anual, regalos y la
+   app de Play sin botones de pago. */
+const BILLING_BASE = {
+  plan: 'autonomo', sector: 'autonomo', modulos: ['dashboard', 'reparto', 'configuracion'],
+  precios: { mensual: 9.99, anual: 99 }, regalos: { 1: 9.99, 12: 99 },
+}
+async function entrarRepartidor(page, billing, { enApp = false } = {}) {
+  await entrarComoAdmin(page)
+  await simularApi(page, 'vacio')
+  if (enApp) await page.addInitScript(() => sessionStorage.setItem('flota_app', '1'))
+  await page.route(/\/api\/org\/billing/, (r) => r.fulfill({ json: { ...BILLING_BASE, ...billing } }))
+  await page.route(/\/api\/reparto\/mi-ruta/, (r) => r.fulfill({ json: { activo: true, autonomo: true, fecha: '2026-10-04', pedidos: [], jornada: {}, aviso_aceptado: true } }))
+}
+
+test('Cobro · alta nueva: muro de «7 días gratis» con tarjeta, hoy 0 €, y elegir anual', async ({ page }) => {
+  const fallos = vigilar(page)
+  const fin = new Date(Date.now() + 7 * 86400000).toISOString()
+  await entrarRepartidor(page, { status: 'trial', days_left: 7, trial_ends: fin, falta_tarjeta: true,
+    bloqueo: 'Añade tu tarjeta para empezar los 7 días gratis (hoy no se cobra nada).', cobro_al_suscribir: fin })
+  const pedidos = []
+  await page.route(/\/api\/billing\/stripe\/suscripcion/, async (r) => { pedidos.push(r.request().postDataJSON()); await r.fulfill({ json: { url: '/ruta?pago=cancelado' } }) })
+  await page.goto('/ruta', { waitUntil: 'domcontentloaded' })
+  await expect(page.getByRole('heading', { name: 'Empieza tus 7 días gratis' })).toBeVisible()
+  await expect(page.getByText('Hoy: 0 €')).toBeVisible()
+  await expect(page.getByRole('button', { name: /Cargar paquetes/ })).toHaveCount(0)   // sin tarjeta, la ruta no
+  await page.getByRole('radio', { name: /Anual/ }).click()
+  await expect(page.getByText(/Hoy pagas 0 €\. El .* se cobran 99 € al año/)).toBeVisible()
+  await page.getByRole('button', { name: 'Añadir tarjeta: hoy 0 €' }).click()
+  await expect.poll(() => pedidos.length).toBe(1)
+  expect(pedidos[0]).toEqual({ plan: 'autonomo', anual: true })
+  // El historial y la cuenta siguen abiertos.
+  await page.getByRole('button', { name: 'Cuenta', exact: true }).click()
+  await expect(page.getByText('Añade tu tarjeta para empezar los 7 días gratis. Hoy no se cobra nada.')).toBeVisible()
+  expect(fallos).toEqual([])
+})
+
+test('Cobro · suscrito: pasar al plan anual explica el cobro y lo pide', async ({ page }) => {
+  const fallos = vigilar(page)
+  await entrarRepartidor(page, { status: 'active', suscrito: true, pago_proveedor: 'stripe', stripe_status: 'active',
+    stripe_intervalo: 'mensual', stripe_proximo_cobro: '2026-11-04T10:00:00+00:00' })
+  const cambios = []
+  await page.route(/\/api\/billing\/stripe\/cambiar-plan/, async (r) => { cambios.push(r.request().postDataJSON()); await r.fulfill({ json: { ok: true } }) })
+  await page.goto('/ruta', { waitUntil: 'domcontentloaded' })
+  await page.getByRole('button', { name: 'Cuenta', exact: true }).click()
+  await expect(page.getByText(/Plan mensual: 9,99 €\/mes\. Próximo cobro el 4 de noviembre de 2026\./)).toBeVisible()
+  await page.getByRole('button', { name: /Pasar al plan anual/ }).click()
+  await expect(page.getByText(/Se cobran ahora 99 € menos la parte que no has usado de este mes/)).toBeVisible()
+  await page.getByRole('button', { name: 'Sí, cambiar' }).click()
+  await expect.poll(() => cambios.length).toBe(1)
+  expect(cambios[0]).toEqual({ anual: true })
+  await expect(page.getByRole('button', { name: 'Tarjeta, facturas y cancelar' })).toBeVisible()
+  expect(fallos).toEqual([])
+})
+
+test('Cobro · regalar: comprar un año y mandar el código por WhatsApp o correo', async ({ page }) => {
+  const fallos = vigilar(page)
+  const fin = new Date(Date.now() + 5 * 86400000).toISOString()
+  await entrarRepartidor(page, { status: 'trial', days_left: 5, trial_ends: fin, cobro_al_suscribir: fin })
+  const compras = []
+  await page.route(/\/api\/billing\/regalos$/, async (r) => {
+    if (r.request().method() === 'POST') { compras.push(r.request().postDataJSON()); return r.fulfill({ json: { url: '/ruta?regalo=cancelado' } }) }
+    return r.fulfill({ json: { regalos: [{ id: 'r1', codigo: 'ABCDEFGH', meses: 12, estado: 'pagado' }, { id: 'r2', codigo: 'JKLMNPQR', meses: 1, estado: 'canjeado' }] } })
+  })
+  await page.goto('/ruta', { waitUntil: 'domcontentloaded' })
+  await page.getByRole('button', { name: 'Cuenta', exact: true }).click()
+  await expect(page.getByText('ABCD-EFGH')).toBeVisible()
+  await expect(page.getByText('1 año · Sin usar')).toBeVisible()
+  await expect(page.getByText('1 mes · Usado')).toBeVisible()
+  await expect(page.getByRole('link', { name: 'WhatsApp' })).toHaveAttribute('href', /wa\.me\/\?text=.*%2Fregalo%2FABCDEFGH/)
+  await expect(page.getByRole('link', { name: 'Correo' })).toHaveAttribute('href', /^mailto:\?subject=Te%20regalo%201%20a%C3%B1o/)
+  await page.getByRole('radio', { name: /1 año/ }).click()
+  await page.getByRole('button', { name: 'Comprar regalo' }).click()
+  await expect.poll(() => compras.length).toBe(1)
+  expect(compras[0]).toEqual({ meses: 12 })
+  expect(fallos).toEqual([])
+})
+
+test('Cobro · en la app de Play no hay botones de pago, pero se puede canjear un regalo', async ({ page }) => {
+  const fallos = vigilar(page)
+  await entrarRepartidor(page, { status: 'trial', days_left: 0, required: true, trial_ends: new Date(Date.now() - 86400000).toISOString(),
+    bloqueo: 'Tu prueba gratis ha terminado. Suscríbete en «Cuenta» para seguir repartiendo.' }, { enApp: true })
+  const canjes = []
+  await page.route(/\/api\/billing\/regalos\/canjear/, async (r) => { canjes.push(r.request().postDataJSON()); await r.fulfill({ json: { ok: true, mensaje: 'Regalo aplicado: tienes la app pagada hasta el 04/11/2026.' } }) })
+  await page.goto('/ruta', { waitUntil: 'domcontentloaded' })
+  await expect(page.getByRole('heading', { name: 'Tu prueba ha terminado' })).toBeVisible()
+  await expect(page.getByRole('button', { name: /Suscribirme|Añadir tarjeta|Comprar regalo/ })).toHaveCount(0)
+  await page.getByLabel('Código de regalo').fill('abcd-efgh')
+  await page.getByRole('button', { name: 'Canjear' }).click()
+  await expect.poll(() => canjes.length).toBe(1)
+  expect(canjes[0]).toEqual({ codigo: 'ABCD-EFGH' })
+  await expect(page.getByText('Regalo aplicado: tienes la app pagada hasta el 04/11/2026.')).toBeVisible()
+  expect(fallos).toEqual([])
+})
+
+test('Cobro · el enlace del regalo: qué es, y al entrar se canjea solo', async ({ page }) => {
+  const fallos = vigilar(page)
+  await page.addInitScript(() => localStorage.setItem('cookie_consent', '1'))
+  await simularApi(page, 'vacio')
+  await page.route(/\/api\/regalo\/ABCDEFGH/, (r) => r.fulfill({ json: { estado: 'pagado', meses: 12 } }))
+  await page.route(/\/api\/regalo\/USADO123/, (r) => r.fulfill({ json: { estado: 'canjeado', meses: 1 } }))
+  await page.goto('/regalo/ABCDEFGH', { waitUntil: 'domcontentloaded' })
+  await expect(page.getByRole('heading', { name: /1 año de/ })).toBeVisible()
+  await expect(page.getByText('Sin tarjeta: no se te cobrará nada por este regalo.')).toBeVisible()
+  await page.getByRole('button', { name: 'Crear mi cuenta y activarlo' }).click()
+  await expect(page).toHaveURL(/registro\?sector=autonomo/)
+  expect(await page.evaluate(() => sessionStorage.getItem('regalo_pendiente'))).toBe('ABCDEFGH')
+  await page.goto('/regalo/USADO123', { waitUntil: 'domcontentloaded' })
+  await expect(page.getByText('Este regalo ya se ha usado.')).toBeVisible()
+  expect(fallos).toEqual([])
+})
+
+test('Cobro · con un regalo pendiente, al entrar en la app se canjea antes de mirar el pago', async ({ page }) => {
+  const fallos = vigilar(page)
+  await entrarRepartidor(page, { status: 'active', pago_proveedor: 'regalo', pagado_hasta: '2027-10-11T10:00:00+00:00' })
+  await page.addInitScript(() => sessionStorage.setItem('regalo_pendiente', 'ABCDEFGH'))
+  const canjes = []
+  await page.route(/\/api\/billing\/regalos\/canjear/, async (r) => { canjes.push(r.request().postDataJSON()); await r.fulfill({ json: { ok: true, mensaje: 'Regalo aplicado: tienes la app pagada hasta el 11/10/2027.' } }) })
+  await page.goto('/ruta', { waitUntil: 'domcontentloaded' })
+  await expect.poll(() => canjes.length).toBe(1)
+  expect(canjes[0]).toEqual({ codigo: 'ABCDEFGH' })
+  await expect(page.getByText('Regalo aplicado: tienes la app pagada hasta el 11/10/2027.')).toBeVisible()
+  await page.getByRole('button', { name: 'Cuenta', exact: true }).click()
+  await expect(page.getByText(/Pagado hasta el 11 de octubre de 2027/)).toBeVisible()
   expect(fallos).toEqual([])
 })

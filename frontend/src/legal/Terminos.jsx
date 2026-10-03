@@ -26,8 +26,10 @@ export default function Terminos() {
 
       <h2>5. Suscripción, prueba y pagos</h2>
       <ul>
-        <li>El alta incluye un periodo de prueba gratuito de <strong>14 días</strong>.</li>
-        <li>Los pagos se gestionan a través de <strong>Lemon Squeezy</strong>, que actúa como <strong>Merchant of Record</strong> (emite las facturas con IVA).</li>
+        <li>El alta incluye un periodo de prueba gratuito de <strong>14 días</strong> (<strong>7 días</strong> en el plan Repartidor).</li>
+        <li><strong>Plan Repartidor:</strong> al empezar la prueba desde la web se pide una tarjeta. No se cobra nada durante la prueba; si no la cancelas antes, el primer cobro se hace el día en que termina y después cada mes o cada año, según el plan elegido. Si cancelas antes de esa fecha, no se cobra nada.</li>
+        <li>Los pagos con tarjeta se procesan con <strong>Stripe</strong>; algunos planes de empresa se cobran a través de <strong>Lemon Squeezy</strong>, que actúa como <strong>Merchant of Record</strong> (emite las facturas con IVA).</li>
+        <li><strong>Regalos:</strong> se pagan una sola vez y no se renuevan. El código se puede usar una vez, en los 12 meses siguientes a la compra, y suma su duración a la cuenta que lo canjea; si esa cuenta ya paga con tarjeta, su siguiente cobro se retrasa lo regalado. Mientras no se haya canjeado, puedes pedir su devolución en los 14 días siguientes a la compra escribiendo a {COMPANY.contactEmail}.</li>
         <li>Las suscripciones se <strong>renuevan automáticamente</strong> al final de cada periodo facturable, salvo cancelación previa.</li>
         <li>Puedes <strong>cancelar en cualquier momento</strong> desde el panel o escribiendo a {COMPANY.contactEmail}. La cancelación es efectiva al final del periodo ya pagado; no procede reembolso del periodo en curso salvo error técnico imputable a {COMPANY.brand} o derecho legal de desistimiento aplicable a consumidores (no aplica a clientes empresariales).</li>
         <li>Los precios pueden actualizarse con aviso previo de al menos 30 días.</li>

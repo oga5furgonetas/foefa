@@ -1,14 +1,13 @@
-import { useEffect, useState } from 'react'
-import { Route, History, Settings2, UserCircle2, Loader2, LogOut, CheckCircle2, XCircle, Package, Euro } from 'lucide-react'
+import { useCallback, useEffect, useState } from 'react'
+import { Route, History, Settings2, UserCircle2, Loader2, CheckCircle2, XCircle, Package, Euro } from 'lucide-react'
 import MiRuta from './driver/MiRuta'
 import { Ajustes } from '../panel/pages/Reparto'
-import TrialBanner from '../panel/TrialBanner'
-import { getRepartoPedidos, getRepartoEstadisticas, getOrgBilling, stripePortal } from '../panel/api'
-import { getAdmin, isAuthed, logout } from '../panel/auth'
+import { getRepartoPedidos, getRepartoEstadisticas, getOrgBilling, canjearRegalo } from '../panel/api'
+import { isAuthed } from '../panel/auth'
+import { Cuenta, Muro } from './RutaCuenta'
 import { useToast } from '../lib/toast'
 import { lista } from '../lib/lista'
 import { hoyLocal, fechaEs } from '../lib/fecha'
-import { MARCA } from '../marca'
 
 /* ── LA APP DE QUIEN REPARTE SOLO (04-10-2026) ───────────────────────────────
    No es el panel de una empresa pequeña: es otro producto, como Circuit o
@@ -29,24 +28,73 @@ export default function RutaApp() {
   })
   useEffect(() => { try { sessionStorage.setItem('ruta_tab', tab) } catch { /* nada */ } }, [tab])
 
+  // El estado del pago manda qué se ve: sin pagar (o sin la tarjeta de la
+  // prueba), «Hoy» y «Ajustes» enseñan el muro; historial y cuenta, siempre.
+  const [billing, setBilling] = useState(null)
+  const [regaloNuevo, setRegaloNuevo] = useState(null)
+  const recargar = useCallback(() => getOrgBilling().then(({ data }) => setBilling(data)).catch(() => setBilling({})), [])
+  useEffect(() => {
+    if (!isAuthed()) return
+    const q = new URLSearchParams(window.location.search)
+    const limpiar = () => window.history.replaceState(null, '', '/ruta')
+    // Un regalo pendiente (del enlace /regalo/… o de ?canjear=): se canjea
+    // ANTES de mirar el pago, para no enseñar el muro a quien ya lo tiene.
+    let pendiente = q.get('canjear') || ''
+    try { pendiente = pendiente || sessionStorage.getItem('regalo_pendiente') || '' } catch { /* nada */ }
+    const canje = pendiente
+      ? canjearRegalo(pendiente).then(({ data }) => toast.success(data?.mensaje || 'Regalo aplicado'))
+        .catch((e) => toast.error(e?.response?.data?.detail || 'No se pudo canjear el regalo'))
+        .finally(() => { try { sessionStorage.removeItem('regalo_pendiente') } catch { /* nada */ } })
+      : Promise.resolve()
+    canje.then(recargar)
+    if (q.get('regalo') === 'cancelado') { toast.error('Pago del regalo cancelado'); limpiar() } else if (q.get('regalo')) {
+      setRegaloNuevo(q.get('regalo')); setTab('cuenta'); limpiar()
+    }
+    if (q.get('pago') === 'ok') {
+      // El webhook de Stripe tarda unos segundos: se mira varias veces.
+      let n = 0
+      const t = setInterval(() => { n += 1; recargar(); if (n >= 8) clearInterval(t) }, 3000)
+      toast.success('Tarjeta añadida. Activando tu cuenta…')
+      limpiar()
+      return () => clearInterval(t)
+    }
+    if (q.get('pago') === 'cancelado') limpiar()
+    if (pendiente || q.get('canjear')) limpiar()
+    return undefined
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
+  const bloqueado = !!billing?.bloqueo
+
   if (!isAuthed()) { window.location.replace('/empezar'); return null }
 
   return (
     <div className="flex min-h-screen flex-col bg-dark-950 text-dark-100">
-      <TrialBanner />
+      {billing?.status === 'trial' && !billing.bloqueo && !billing.falta_tarjeta && billing.days_left != null && billing.days_left <= 3 && tab !== 'cuenta' && (
+        <button onClick={() => setTab('cuenta')}
+          className="flex w-full items-center justify-center gap-1.5 bg-amber-500/15 px-4 py-2 text-[13px] font-semibold text-amber-200">
+          Quedan {billing.days_left} día{billing.days_left === 1 ? '' : 's'} de prueba · Ver mi plan
+        </button>
+      )}
       <main className="flex-1 px-4 pb-24 pt-4">
-        {tab === 'hoy' && <MiRuta embebido onBack={() => {}} />}
+        {(tab === 'hoy' || tab === 'ajustes') && bloqueado
+          ? <Muro billing={billing} toast={toast} recargar={recargar} irACuenta={() => setTab('cuenta')} />
+          : <>
+            {tab === 'hoy' && <MiRuta embebido onBack={() => {}} />}
+            {tab === 'ajustes' && <div className="mx-auto max-w-md"><Ajustes conductores={[]} toast={toast} autonomo /></div>}
+          </>}
         {tab === 'historial' && <Historial />}
-        {tab === 'ajustes' && <div className="mx-auto max-w-md"><Ajustes conductores={[]} toast={toast} autonomo /></div>}
-        {tab === 'cuenta' && <Cuenta toast={toast} />}
+        {tab === 'cuenta' && <Cuenta billing={billing} recargar={recargar} toast={toast} resaltarRegalo={regaloNuevo} />}
       </main>
-      <nav className="fixed inset-x-0 bottom-0 z-40 border-t border-dark-800 bg-dark-950/95 backdrop-blur" aria-label="Secciones">
+      <nav className="fixed inset-x-0 bottom-0 z-40 border-t border-dark-800 bg-dark-950/95 pb-[env(safe-area-inset-bottom)] backdrop-blur" aria-label="Secciones">
         <div className="mx-auto grid max-w-md grid-cols-4">
           {PESTANAS.map(([k, t, I]) => (
             <button key={k} onClick={() => setTab(k)}
-              className={`flex flex-col items-center gap-0.5 py-2.5 text-[11px] font-semibold ${tab === k ? 'text-brand-300' : 'text-dark-500'}`}
+              className={`flex flex-col items-center gap-1 pb-2 pt-2 text-[11px] font-semibold transition-colors ${tab === k ? 'text-brand-200' : 'text-dark-500'}`}
               aria-current={tab === k ? 'page' : undefined}>
-              <I size={20} /> {t}
+              {/* La pestaña activa, en una píldora: se ve de un vistazo dónde estás. */}
+              <span className={`flex h-8 w-14 items-center justify-center rounded-full transition-all ${tab === k ? 'bg-brand-500/20' : ''}`}>
+                <I size={20} strokeWidth={tab === k ? 2.4 : 2} />
+              </span>
+              {t}
             </button>
           ))}
         </div>
@@ -123,48 +171,6 @@ function Dia({ datos }) {
           </li>
         ))}
       </ul>
-    </div>
-  )
-}
-
-/* La cuenta: plan, prueba o suscripción, y salir. */
-function Cuenta({ toast }) {
-  const [billing, setBilling] = useState(null)
-  const admin = getAdmin()
-  useEffect(() => { getOrgBilling().then(({ data }) => setBilling(data)).catch(() => setBilling({})) }, [])
-  const estado = billing?.status
-  return (
-    <div className="mx-auto max-w-md">
-      <h1 className="font-display text-[22px] font-bold text-dark-50">Tu cuenta</h1>
-      <div className="mt-4 rounded-2xl border border-dark-700 bg-dark-900 p-4 text-[13.5px]">
-        <p className="text-[15px] font-semibold text-dark-50">{admin?.name || '—'}</p>
-        {!billing ? <Loader2 size={16} className="mt-2 animate-spin text-dark-500" /> : (
-          <p className="mt-1 text-dark-400">
-            Plan <b className="text-dark-200">Repartidor</b>, 9,99 €/mes.{' '}
-            {estado === 'trial' && (billing.days_left != null
-              ? `Prueba gratis: quedan ${billing.days_left} día${billing.days_left === 1 ? '' : 's'}.`
-              : 'En prueba gratis.')}
-            {estado === 'active' && 'Suscripción activa.'}
-            {estado === 'suspended' && 'Suscripción pausada: hay un pago pendiente.'}
-          </p>
-        )}
-        {billing?.pago_proveedor === 'stripe' && billing?.stripe_customer !== null && estado === 'active' && (
-          <button className="mt-3 w-full rounded-xl border border-dark-600 py-2.5 text-[13.5px] font-semibold text-dark-100"
-            onClick={async () => {
-              try { const { data } = await stripePortal(); if (data?.url) window.location.href = data.url } catch (e) {
-                toast.error(e?.response?.data?.detail || 'No se pudo abrir el portal de pagos')
-              }
-            }}>Tarjeta, facturas y cancelar</button>
-        )}
-      </div>
-      <div className="mt-4 rounded-2xl border border-dark-700 bg-dark-900 p-4 text-[12.5px] leading-relaxed text-dark-400">
-        <p>Tus datos y los de tus clientes son tuyos: cada repartidor ve solo lo suyo, la foto de la etiqueta se lee en tu móvil y los datos de los clientes se borran solos a los días que fijes en Ajustes.</p>
-        <p className="mt-2"><a href="/privacidad" className="text-brand-300">Privacidad</a> · <a href="/terminos" className="text-brand-300">Términos</a> · <a href={`mailto:${MARCA.correo}`} className="text-brand-300">{MARCA.correo}</a></p>
-      </div>
-      <button onClick={() => { logout(); window.location.href = '/empezar' }}
-        className="mt-6 inline-flex w-full items-center justify-center gap-2 rounded-xl border border-dark-700 py-3 text-[14px] font-semibold text-dark-300">
-        <LogOut size={15} /> Cerrar sesión
-      </button>
     </div>
   )
 }

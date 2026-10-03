@@ -17,6 +17,7 @@ export async function onRequestGet({ request }) {
     'Disallow: /conductor',
     // Seguimiento de pedidos del cliente: enlaces privados, nunca en un buscador.
     'Disallow: /s/',
+    'Disallow: /regalo/',
     'Disallow: /login',
     'Disallow: /reset-password',
     '',
