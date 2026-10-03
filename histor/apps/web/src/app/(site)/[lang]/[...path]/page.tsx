@@ -435,8 +435,34 @@ export default async function Page({ params, searchParams }: { params: Params; s
       if (m.list === 'today') {
         // Lo más importante de las últimas 24 h (portada de «noticias de hoy»): por importancia.
         const items = await listing({ orderBy: 'importance', since: new Date(Date.now() - 24 * 3600000) });
-        const title = t(d.list.todayTitle, { date: fmtDate(new Date(), lang, tz) });
-        return <ListingView lang={lang} d={d} title={title} intro={d.list.todayIntro} items={items} page={page} basePath={base} crumbs={[home, { name: d.list.today, url: base }]} />;
+        // Es la página a la que llevan los anuncios: abre con una noticia fuerte (con foto, del país
+        // de quien la mira si la hay, y no de deportes ni espectáculos). El 03-10-2026 abría con un
+        // partido de tenis y 9 de cada 10 visitas del anuncio se iban sin tocar nada.
+        if (page === 1) {
+          const light = new Set(['sports', 'entertainment', 'lifestyle', 'weather']);
+          const top = items.slice(0, 10);
+          const score = (a: (typeof items)[number], i: number) => (a.imageUrl ? 3 : 0) + (light.has(a.categoryId ?? '') ? -4 : 0) + (geo.countryCode && a.countryCode === geo.countryCode ? 3 : 0) + Math.min(a.sourcesCount, 5) * 0.3 - i * 0.4;
+          const best = top.map((a, i) => ({ a, s: score(a, i) })).sort((x, y) => y.s - x.s)[0]?.a;
+          if (best && best !== items[0]) {
+            items.splice(items.indexOf(best), 1);
+            items.unshift(best);
+          }
+        }
+        return (
+          <ListingView
+            lang={lang}
+            d={d}
+            kicker={fmtDate(new Date(), lang, tz)}
+            title={d.list.todayShort}
+            intro={d.list.todayIntroShort}
+            items={items}
+            page={page}
+            basePath={base}
+            crumbs={[home, { name: d.list.today, url: base }]}
+            keys={{ label: d.list.todayKeys, n: 5 }}
+            compact
+          />
+        );
       }
       const items =
         m.list === 'breaking'

@@ -22,6 +22,8 @@ export function ListingView({
   aside,
   actions,
   emptyText,
+  keys,
+  compact,
 }: {
   lang: string;
   d: Dict;
@@ -35,23 +37,29 @@ export function ListingView({
   aside?: React.ReactNode;
   actions?: React.ReactNode;
   emptyText?: string;
+  /** Tras la apertura, los N titulares siguientes en lista numerada («Las claves»). */
+  keys?: { label: string; n: number };
+  /** Cabecera corta: en el móvil la primera noticia tiene que verse sin bajar. */
+  compact?: boolean;
 }) {
   // Cada foto, una vez por página.
   const cards = onePhotoEach(items);
-  const [first, ...rest] = cards;
+  const [first, ...others] = cards;
+  const keyItems = page === 1 && keys ? others.slice(0, keys.n) : [];
+  const rest = others.slice(keyItems.length);
   const hasNext = items.length >= PAGE_SIZE;
   return (
     <>
       <JsonLd data={[collectionPageJsonLd(title, absoluteUrl(basePath), items.map((a) => ({ url: absoluteUrl(a.url), name: a.headline }))), breadcrumbJsonLd(crumbs.map((c) => ({ name: c.name, url: absoluteUrl(c.url) })))]} />
       <ReadTracker />
       <ExperimentTracker />
-      <header style={{ margin: '26px 0 8px' }}>
+      <header style={{ margin: compact ? '14px 0 4px' : '26px 0 8px' }}>
         {kicker && <div className="kicker">{kicker}</div>}
         <div style={{ display: 'flex', gap: 12, alignItems: 'baseline', justifyContent: 'space-between', flexWrap: 'wrap' }}>
-          <h1 style={{ fontSize: 'clamp(30px, 5vw, 44px)', margin: '4px 0', lineHeight: 1.1 }}>{title}</h1>
+          <h1 style={{ fontSize: compact ? 'clamp(24px, 4vw, 36px)' : 'clamp(30px, 5vw, 44px)', margin: '4px 0', lineHeight: 1.1 }}>{title}</h1>
           {actions}
         </div>
-        {intro && <div className="muted ui" style={{ fontSize: 15, maxWidth: 760 }}>{intro}</div>}
+        {intro && <div className="muted ui" style={{ fontSize: compact ? 14 : 15, maxWidth: 760 }}>{intro}</div>}
       </header>
       {aside}
       {!items.length ? (
@@ -61,9 +69,21 @@ export function ListingView({
       ) : (
         <>
           {page === 1 && first && (
-            <div style={{ margin: '20px 0 8px', maxWidth: 860 }}>
+            <div style={{ margin: compact ? '12px 0 8px' : '20px 0 8px', maxWidth: 860 }}>
               <LeadCard a={first} lang={lang} d={d} />
             </div>
+          )}
+          {keyItems.length > 0 && (
+            <section className="key-list" aria-label={keys!.label}>
+              <h2 className="kicker">{keys!.label}</h2>
+              <ol>
+                {keyItems.map((a) => (
+                  <li key={a.id}>
+                    <Link href={a.url}>{a.headline}</Link>
+                  </li>
+                ))}
+              </ol>
+            </section>
           )}
           <div className="grid grid-3" style={{ marginTop: 26 }}>
             {(page === 1 ? rest : cards).map((a) => (

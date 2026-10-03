@@ -29,13 +29,17 @@ export function ReadTracker({ articleId, experiment }: { articleId?: number; exp
     }
     const src = q.get('utm_source')?.slice(0, 40);
     const camp = q.get('utm_campaign')?.slice(0, 60);
+    // Número al azar de esta vista (no se guarda en el navegador ni sirve para seguir a nadie):
+    // une la vista con su tiempo y su lectura para saber si quien llega se va al momento (03-10-2026).
+    const pv = Math.random().toString(36).slice(2, 10);
     const props = {
+      pv,
       ...(experiment ? { exp: experiment.key, variant: experiment.variant } : {}),
       ...(src ? { src, ...(camp ? { camp } : {}) } : {}),
       ...(ref ? { ref } : {}),
     };
-    track([{ type: 'page_view', articleId, path, props: Object.keys(props).length ? props : undefined }]);
-    if (!articleId) return;
+    track([{ type: 'page_view', articleId, path, props }]);
+    // Tiempo y lectura también en portada y listados (antes solo en las noticias).
     let maxScroll = 0;
     let active = 0;
     let last = Date.now();
@@ -61,8 +65,8 @@ export function ReadTracker({ articleId, experiment }: { articleId?: number; exp
       if (sent && active < 5) return;
       sent = true;
       track([
-        { type: 'read_progress', articleId, value: Math.round(maxScroll * 100) / 100, props },
-        { type: 'dwell', articleId, value: Math.round(active) },
+        { type: 'read_progress', articleId, path, value: Math.round(maxScroll * 100) / 100, props },
+        { type: 'dwell', articleId, path, value: Math.round(active), props: { pv } },
       ]);
       active = 0;
     };
