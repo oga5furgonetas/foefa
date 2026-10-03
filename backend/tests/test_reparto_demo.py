@@ -86,6 +86,7 @@ def test_cada_sector_nace_con_lo_suyo():
     assert "reparto" in sup and not {"diarios", "horas", "plantilla", "cuadrante", "turnos"} & sup
     # El autónomo, sin equipo.
     assert "conductores" not in S["autonomo"] and "reparto" in S["autonomo"]
+    assert not {"vehiculos", "talleres", "inspecciones"} & set(S["autonomo"])   # solo reparto
     # La mensajería: reparto con escaneo Y turnos, sin lo de Amazon.
     men = set(S["mensajeria"])
     assert {"reparto", "turnos", "cuadrante"} <= men and not {"diarios", "horas"} & men

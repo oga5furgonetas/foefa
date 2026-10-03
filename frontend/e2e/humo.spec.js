@@ -1297,7 +1297,7 @@ test('Sesión · entrar en la demo no te quita tu cuenta', async ({ page }) => {
 test('Alta · la tarjeta de DSP de Amazon y la de autónomo están', async ({ page }) => {
   await page.goto('/registro', { waitUntil: 'domcontentloaded' })
   await expect(page.getByRole('button', { name: /DSP de Amazon/ })).toBeVisible()
-  await expect(page.getByRole('button', { name: /Repartidor autónomo/ })).toBeVisible()
+  await expect(page.getByRole('button', { name: /Repartir yo mismo/ })).toBeVisible()
   await expect(page.getByRole('button', { name: /Mensajería y paquetería/ })).toBeVisible()
   await page.getByRole('button', { name: /DSP de Amazon/ }).click()
   await expect(page).toHaveURL(/sector=dsp_amazon/)
@@ -1329,22 +1329,58 @@ test('Reparto · prueba de entrega con nota y la oficina ve la foto', async ({ p
 })
 
 /* EL AUTÓNOMO NO ELIGE PLAN: 7 días gratis y 9,99 €/mes fijos, sin «sedes». */
-test('Alta · el autónomo va directo a su plan de 9,99 € con 7 días', async ({ page }) => {
+test('Alta · quien reparte solo va directo a su plan: 7 días, 9,99 €, tres campos', async ({ page }) => {
   await page.goto('/registro', { waitUntil: 'domcontentloaded' })
-  await page.getByRole('button', { name: /Repartidor autónomo/ }).click()
+  await page.getByRole('button', { name: /Repartir yo mismo/ }).click()
   await expect(page).toHaveURL(/plan=autonomo/)
   await expect(page.getByText('Plan elegido')).toBeVisible()
   await expect(page.getByText(/9,99 €\/mes, todo incluido · 7 días gratis/)).toBeVisible()
   await expect(page.getByRole('button', { name: 'Cambiar' })).toHaveCount(0)
   await expect(page.getByText('Tus sedes')).toHaveCount(0)
-  await expect(page.getByPlaceholder('Pepe Repartos')).toBeVisible()
+  await expect(page.getByText('La URL de tu empresa')).toHaveCount(0)
+  await expect(page.getByPlaceholder('Pepe')).toBeVisible()
+  await expect(page.getByText('Entrarás con tu correo y esta contraseña.')).toBeVisible()
 })
 
-test('Planes · la tarjeta Autónomo sale con precio fijo', async ({ page }) => {
+/* QUIEN REPARTE SOLO tiene su app (/ruta), no el panel: Hoy, Historial,
+   Ajustes y Cuenta; si entra al panel se le trae aquí. */
+test('App · quien reparte solo ve su app y no el panel de empresa', async ({ page }) => {
+  const fallos = vigilar(page)
+  await entrarComoAdmin(page)
+  await simularApi(page, 'vacio')
+  await page.route(/\/api\/org\/billing/, (r) => r.fulfill({ json: { status: 'trial', days_left: 6, plan: 'autonomo', sector: 'autonomo', modulos: ['dashboard', 'reparto', 'configuracion'] } }))
+  await page.route(/\/api\/reparto\/mi-ruta/, (r) => r.fulfill({ json: { activo: true, autonomo: true, fecha: '2026-10-04', pedidos: [], base: null, ia_tickets: false, jornada: {}, aviso_aceptado: false } }))
+  await page.route(/\/api\/reparto\/estadisticas/, (r) => r.fulfill({ json: { total: 3, entregados: 2, tasa_entrega: 67, por_dia: [{ fecha: '2026-10-03', total: 3, entregados: 2, fallidos: 1 }] } }))
+  await page.goto('/panel', { waitUntil: 'domcontentloaded' })
+  await expect(page).toHaveURL(/\/ruta/)
+  await expect(page.getByRole('button', { name: /Cargar paquetes/ })).toBeVisible()
+  await expect(page.getByText('Vehículos')).toHaveCount(0)
+  await expect(page.getByText('Empezar jornada')).toHaveCount(0)
+  await page.getByRole('button', { name: 'Historial' }).click()
+  await expect(page.getByText(/3 paradas, 2 entregadas/)).toBeVisible()
+  await page.getByRole('button', { name: 'Ajustes' }).click()
+  await expect(page.getByText('Desde dónde sales')).toBeVisible()
+  await expect(page.getByText('Zonas', { exact: true })).toHaveCount(0)
+  await page.getByRole('button', { name: 'Cuenta' }).click()
+  await expect(page.getByText(/Prueba gratis: quedan 6 días/)).toBeVisible()
+  expect(fallos).toEqual([])
+})
+
+/* LA APP ARRANCA EN «EMPEZAR» si no hay sesión; «Repartir yo mismo» lleva al alta. */
+test('App · sin sesión arranca en Empezar y «Repartir yo mismo» lleva al alta', async ({ page }) => {
+  await page.goto('/app', { waitUntil: 'domcontentloaded' })
+  await expect(page).toHaveURL(/\/empezar/)
+  await expect(page.getByRole('heading', { name: '¿Qué vas a hacer?' })).toBeVisible()
+  await page.getByRole('link', { name: /Repartir yo mismo/ }).click()
+  await expect(page).toHaveURL(/registro\?sector=autonomo/)
+  await expect(page.getByText('Plan elegido')).toBeVisible()
+})
+
+test('Planes · la tarjeta Repartidor sale con precio fijo', async ({ page }) => {
   await page.route(/\/api\/billing\/planes/, (r) => r.fulfill({ json: { planes: [
     { clave: 'operacion', nombre: 'Operación', para: 'Un centro', por_vehiculo: 5, minimo_vehiculos: 20 }] } }))
   await page.goto('/planes', { waitUntil: 'domcontentloaded' })
-  await expect(page.getByText('Autónomo', { exact: true })).toBeVisible()
+  await expect(page.getByText('Repartidor', { exact: true })).toBeVisible()
   await expect(page.getByText(/Precio fijo, todo incluido · 7 días gratis/)).toBeVisible()
 })
 
@@ -1362,7 +1398,7 @@ test('Suscripción · el botón de pagar va a Stripe y la vuelta espera la activ
   })
   await page.goto('/panel/reparto', { waitUntil: 'domcontentloaded' })
   await expect(page.getByText(/5 días/)).toBeVisible()
-  await page.getByRole('button', { name: /Autónomo/ }).first().click()
+  await page.getByRole('button', { name: /Pasar a Repartidor/ }).first().click()
   await expect(page).toHaveURL(/pago=ok/)
   expect(pedidos[0]).toMatchObject({ plan: 'autonomo' })
   await expect(page.getByText('Pago recibido, activando tu cuenta…')).toBeVisible()
@@ -1378,5 +1414,5 @@ test('Suscripción · dentro de la app no sale el botón de pagar sin el program
   await page.route(/\/api\/billing\/config/, (r) => r.fulfill({ json: { provider: 'stripe', ready: true, pago_en_app: false, planes: ['autonomo'], checkout: {} } }))
   await page.goto('/panel/reparto', { waitUntil: 'domcontentloaded' })
   await expect(page.getByText(/5 días/)).toBeVisible()
-  await expect(page.getByRole('button', { name: /Pasar a Autónomo/ })).toHaveCount(0)
+  await expect(page.getByRole('button', { name: /Pasar a Repartidor/ })).toHaveCount(0)
 })

@@ -52,7 +52,14 @@ async def test_checkout_del_autonomo_respeta_la_prueba(base):
     assert d["line_items[0][price]"] == "price_anual" and d["line_items[0][quantity]"] == 1
     assert d["metadata[org_id]"] == "o1" and d["metadata[plan]"] == "autonomo"
     assert d["subscription_data[trial_end]"] > time.time() + 48 * 3600   # paga al acabar la prueba
-    assert d["success_url"].endswith("/panel?pago=ok")
+    assert d["success_url"].endswith("/panel?pago=ok")   # sin sector: al panel
+
+
+@pytest.mark.asyncio(loop_scope="session")
+async def test_quien_reparte_solo_vuelve_a_su_app(base):
+    base.g["organizations"].docs[0]["sector"] = "autonomo"
+    await server.stripe_suscripcion({"plan": "autonomo"}, OFICINA)
+    assert base.llamadas[-1][2]["success_url"].endswith("/ruta?pago=ok")
 
 
 @pytest.mark.asyncio(loop_scope="session")

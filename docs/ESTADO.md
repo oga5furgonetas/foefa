@@ -527,6 +527,19 @@ Nada se había borrado (org `owner` sin `modulos`, usuario `dani` sin
   `STRIPE_PRICE_AUTONOMO(_ANNUAL)` y `STRIPE_WEBHOOK_SECRET_SUSCRIPCIONES` en Fly.
   No probado con un pago real (modo live; haría falta una tarjeta de verdad).
 
+- **La app de quien reparte solo (04-10, noche)**: Dani: «no es lógico cobrar
+  300 a una empresa y 10 a un autónomo por lo mismo» → el sector `autonomo`
+  es OTRO producto: `/ruta` (`pages/RutaApp.jsx`: Hoy = MiRuta, Historial,
+  Ajustes, Cuenta), sin panel (PanelLayout le manda a /ruta conservando la
+  query), sin IA ni vehículos (`_LIM_AUTONOMO`, módulos `dashboard, reparto,
+  configuracion`). La app arranca en `/empezar` («Repartir yo mismo» / «Soy
+  repartidor de una empresa» / «Gestiono una empresa» / probar sin cuenta);
+  el alta de «Repartir yo mismo» son tres campos (usuario = correo, URL
+  automática) y acaba en /ruta. «Cargar paquetes» encadena fotos de etiqueta
+  (OCR + código de barras de la misma foto) y «Montar ruta». La palabra
+  «autónomo» ya no sale en pantalla: tarjeta «Repartir yo mismo», plan
+  «Repartidor». Stripe devuelve a /ruta?pago=ok a quien reparte solo.
+
 ## Pendiente (por prioridad)
 
 -2. **Reparto (03-10)**: antes de cobrar a una empresa de reparto, contrato de

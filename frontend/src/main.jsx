@@ -225,6 +225,8 @@ const Login = lazy(() => import('./pages/Login'))
 const ResetPassword = lazy(() => import('./pages/ResetPassword'))
 const Registro = lazy(() => import('./pages/Registro'))
 const PruebaReparto = lazy(() => import('./pages/PruebaReparto'))
+const Empezar = lazy(() => import('./pages/Empezar'))
+const RutaApp = lazy(() => import('./pages/RutaApp'))
 const SeguimientoPedido = lazy(() => import('./pages/SeguimientoPedido'))
 const Planes = lazy(() => import('./pages/Planes'))
 const DriverPortal = lazy(() => import('./pages/driver/DriverPortal'))
@@ -296,7 +298,9 @@ const NotFound = lazy(() => import('./pages/NotFound'))
 function AppRedirect() {
   // Marca de «estoy dentro de la app instalada»: la lee el aviso de pago.
   try { sessionStorage.setItem('flota_app', '1') } catch { /* sin almacenamiento */ }
-  let destino = '/login'
+  // Sin sesión, lo primero es decir qué eres («Repartir yo mismo», de una
+  // empresa, la oficina): la app es sobre todo de quien reparte.
+  let destino = '/empezar'
   try {
     if (localStorage.getItem('flota_driver_token')) destino = '/conductor?vista=ruta'
     else if (localStorage.getItem('flota_token')) destino = '/panel'
@@ -340,6 +344,8 @@ ReactDOM.createRoot(document.getElementById('root')).render(
               <Route path="/reset-password" element={<ResetPassword />} />
               <Route path="/registro" element={<Registro />} />
               <Route path="/prueba-reparto" element={<PruebaReparto />} />
+              <Route path="/empezar" element={<Empezar />} />
+              <Route path="/ruta" element={<RutaApp />} />
               <Route path="/s/:token" element={<SeguimientoPedido />} />
               <Route path="/planes" element={<Planes />} />
               <Route path="/privacidad" element={<Privacidad />} />

@@ -439,7 +439,7 @@ function Ventana({ titulo, onClose, children }) {
 }
 
 /* ── ZONAS Y AJUSTES ─────────────────────────────────────────────────────── */
-function Ajustes({ conductores, toast, autonomo }) {
+export function Ajustes({ conductores, toast, autonomo }) {
   const [a, setA] = useState(null)
   const [guardando, setGuardando] = useState(false)
   useEffect(() => {
@@ -471,14 +471,14 @@ function Ajustes({ conductores, toast, autonomo }) {
     <div className="grid gap-4 lg:grid-cols-[1fr_340px]">
       <div className="space-y-4">
         <section className="rounded-xl border border-dark-700 bg-dark-900 p-4">
-          <h2 className="mb-1 flex items-center gap-1.5 text-[14px] font-bold text-dark-50"><MapPin size={15} /> Almacén o tienda</h2>
-          <p className="mb-2 text-[12px] text-dark-400">De aquí salen las rutas: se ordenan empezando por el punto más cercano a esta dirección.</p>
+          <h2 className="mb-1 flex items-center gap-1.5 text-[14px] font-bold text-dark-50"><MapPin size={15} /> {autonomo ? 'Desde dónde sales' : 'Almacén o tienda'}</h2>
+          <p className="mb-2 text-[12px] text-dark-400">{autonomo ? 'Tu nave, almacén o casa: la ruta se ordena desde aquí (o desde donde estés al pulsar «Montar ruta»).' : 'De aquí salen las rutas: se ordenan empezando por el punto más cercano a esta dirección.'}</p>
           <input className={inp} value={a.base_direccion} onChange={(e) => setA({ ...a, base_direccion: e.target.value })}
             placeholder="Avda. de Montero Ríos 1, 15001 A Coruña" />
           {a.base?.lat != null && <p className="mt-1 text-[11px] text-emerald-300">Ubicado en el mapa ✓</p>}
         </section>
 
-        <section className="rounded-xl border border-dark-700 bg-dark-900 p-4">
+        {!autonomo && <section className="rounded-xl border border-dark-700 bg-dark-900 p-4">
           <h2 className="mb-1 text-[14px] font-bold text-dark-50">Zonas</h2>
           <p className="mb-3 text-[12px] text-dark-400">
             Cada repartidor con su zona. Un pedido cae en una zona por su código postal o por una palabra de la
@@ -502,7 +502,7 @@ function Ajustes({ conductores, toast, autonomo }) {
           <button className={`${btn} mt-2`} onClick={() => setA({ ...a, zonas: [...a.zonas, { nombre: '', conductor_id: '', cps: '', palabras: '' }] })}>
             <Plus size={14} /> Añadir zona
           </button>
-        </section>
+        </section>}
 
         <section className="space-y-3 rounded-xl border border-dark-700 bg-dark-900 p-4">
           <h2 className="text-[14px] font-bold text-dark-50">Cómo se calcula la ruta</h2>
@@ -532,11 +532,11 @@ function Ajustes({ conductores, toast, autonomo }) {
         </section>
 
         <section className="space-y-3 rounded-xl border border-dark-700 bg-dark-900 p-4">
-          <label className="flex items-start gap-2.5 text-[13px] text-dark-200">
+          {!autonomo && <label className="flex items-start gap-2.5 text-[13px] text-dark-200">
             <input type="checkbox" className="mt-1" checked={a.portal !== false} onChange={(e) => setA({ ...a, portal: e.target.checked })} />
             <span><b>«Mi ruta» en el móvil de los conductores</b><br />
               <span className="text-[12px] text-dark-400">Escanean los bultos al cargar, ven su ruta en orden y marcan las entregas.</span></span>
-          </label>
+          </label>}
           <label className={`flex items-start gap-2.5 text-[13px] text-dark-200 ${a.ia_disponible ? '' : 'opacity-60'}`}>
             <input type="checkbox" className="mt-1" disabled={!a.ia_disponible} checked={!!a.ia_tickets && !!a.ia_disponible}
               onChange={(e) => setA({ ...a, ia_tickets: e.target.checked })} />
@@ -566,7 +566,7 @@ function Ajustes({ conductores, toast, autonomo }) {
 
       <div className="space-y-4">
       {!autonomo && <PortalRepartidores />}
-      <aside className="h-fit rounded-xl border border-emerald-500/25 bg-emerald-500/[.05] p-4 text-[12.5px] leading-relaxed text-dark-300">
+      {!autonomo && <aside className="h-fit rounded-xl border border-emerald-500/25 bg-emerald-500/[.05] p-4 text-[12.5px] leading-relaxed text-dark-300">
         <h2 className="mb-2 flex items-center gap-1.5 text-[14px] font-bold text-emerald-200"><ShieldCheck size={15} /> Cómo se protegen los datos</h2>
         <ul className="list-disc space-y-1.5 pl-4">
           <li>Los datos de tus clientes son <b>de tu empresa</b>. La plataforma los guarda por encargo tuyo y no los ve: si soporte entra en tu cuenta, salen tapados.</li>
@@ -576,7 +576,7 @@ function Ajustes({ conductores, toast, autonomo }) {
           <li>Las direcciones se ubican en el mapa con OpenStreetMap, enviando solo la dirección, nunca el nombre ni el teléfono.</li>
           <li>Tu empresa debe informar a sus clientes de que el reparto lo gestiona con esta herramienta (en su política de privacidad), y a sus conductores de la ubicación en jornada.</li>
         </ul>
-      </aside>
+      </aside>}
       </div>
     </div>
   )

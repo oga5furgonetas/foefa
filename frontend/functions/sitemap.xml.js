@@ -19,7 +19,7 @@ const xml = (s) => String(s || '')
 const FIJAS = [
   ['/', '1.0'], ['/planes', '0.9'], ['/registro', '0.8'], ['/peritaje-tecnico', '0.7'],
   ['/contacto', '0.6'], ['/security', '0.5'], ['/empleo', '0.6'],
-  ['/privacidad', '0.2'], ['/terminos', '0.2'], ['/encargo', '0.2'], ['/prueba-reparto', '0.6'], ['/cookies', '0.2'], ['/aviso-legal', '0.2'],
+  ['/privacidad', '0.2'], ['/terminos', '0.2'], ['/encargo', '0.2'], ['/prueba-reparto', '0.6'], ['/empezar', '0.5'], ['/cookies', '0.2'], ['/aviso-legal', '0.2'],
 ]
 
 /* El dominio de verdad. flotadsp.com llega por un Worker que reenvía a Pages

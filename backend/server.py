@@ -702,9 +702,9 @@ _LIM_COMPLETO = {"max_vehicles": -1, "max_drivers": -1, "max_centers": -1,
 
 # El autónomo: él, su furgoneta (dos por si la cambia) y el reparto entero.
 # Precio FIJO al mes, no por vehículo: a una persona el «mínimo 20» no le dice nada.
-_LIM_AUTONOMO = {"max_vehicles": 2, "max_drivers": 1, "max_centers": 1,
-                 "ai": True, "chat": False, "forensics": False,
-                 "maintenance": True, "assignments": False, "export": True}
+_LIM_AUTONOMO = {"max_vehicles": 1, "max_drivers": 1, "max_centers": 1,
+                 "ai": False, "chat": False, "forensics": False,
+                 "maintenance": False, "assignments": False, "export": True}
 
 PLAN_LIMITS = {
     "autonomo":   _LIM_AUTONOMO,
@@ -1237,8 +1237,10 @@ SECTORES_REGISTRO = {
     "otra": None,
     # El autónomo es la oficina y el repartidor a la vez: «Mi ruta» en su
     # propio panel, su furgoneta y su taller. Ni equipo ni turnos.
-    "autonomo": ["dashboard", "reparto", "vehiculos", "inspecciones", "incidencias", "talleres",
-                 "ordenes", "vencimientos", "configuracion"],
+    # Solo reparto: su app (/ruta) no tiene panel de flota. Dani (04-10): «no
+    # es lógico que a una empresa le cobremos 300 y a un autónomo 10 por tener
+    # lo mismo». Lo que le sobra al panel, le sobra al plan.
+    "autonomo": ["dashboard", "reparto", "configuracion"],
 }
 
 
@@ -4841,7 +4843,7 @@ async def register_dsp(data: RegisterRequest, request: Request):
     resend_key = os.environ.get("RESEND_API_KEY", "")
     if recipient and resend_key:
         plan_label = {"basico": "Básico", "pro": "Pro", "flota": "Flota", "operacion": "Operación",
-                      "completo": "Completo", "autonomo": "Autónomo"}.get(org.get("plan") or "", "Pro")
+                      "completo": "Completo", "autonomo": "Repartidor"}.get(org.get("plan") or "", "Pro")
         try:
             import httpx as _httpx
             await _httpx.AsyncClient().post(
@@ -4974,7 +4976,7 @@ def _catalogo_por_defecto():
         "descuento_anual_meses": 2,
         "iva_pct": 21,
         "planes": [
-            {"clave": "autonomo", "nombre": "Autónomo", "para": "Tú y tu furgoneta",
+            {"clave": "autonomo", "nombre": "Repartidor", "para": "Repartes tú mismo",
              "por_vehiculo": 0, "minimo_vehiculos": 0,
              "mensual": PLAN_TARIFAS["autonomo"]["mensual"], "anual": PLAN_TARIFAS["autonomo"]["anual"],
              "dias_prueba": PLAN_TARIFAS["autonomo"]["dias_prueba"], "recomendado": False},
@@ -47346,11 +47348,11 @@ async def demo_reparto_login(request: Request, data: dict = Body(default={})):
         # Cada visitante, su autónomo y su ruta vacía: escanea o fotografía sus
         # propios paquetes sin ver los de nadie. Se borra al día siguiente.
         cid = f"demo-a-{uuid.uuid4().hex[:10]}"
-        await client[_DEMO_REP_DB].drivers.insert_one({"id": cid, "name": "Autónomo (prueba)", "active": True,
+        await client[_DEMO_REP_DB].drivers.insert_one({"id": cid, "name": "Repartidor (prueba)", "active": True,
                                                        "center": "TIENDA", "demo": True})
-        token = create_token(cid, "driver", "Autónomo (prueba)", org_id=_DEMO_REP_ORG_ID, db_name=_DEMO_REP_DB,
+        token = create_token(cid, "driver", "Repartidor (prueba)", org_id=_DEMO_REP_ORG_ID, db_name=_DEMO_REP_DB,
                              account_type="dsp", centers=["TIENDA"], demo=True)
-        return {"access_token": token, "role": "driver", "driver": {"id": cid, "name": "Autónomo (prueba)"},
+        return {"access_token": token, "role": "driver", "driver": {"id": cid, "name": "Repartidor (prueba)"},
                 "autonomo": True}
     if _texto_cuerpo(data.get("rol"), 20) == "conductor":
         n = _entero(data.get("n"), "n", defecto=1, minimo=1, maximo=len(_DEMO_REP_CONDUCTORES))
@@ -47453,8 +47455,9 @@ async def stripe_suscripcion(data: dict = Body(default={}), user: dict = Depends
         "customer_email": org.get("email") or user.get("email") or None,
         "locale": "es",
         "allow_promotion_codes": True,
-        "success_url": f"{_PORTAL_BASE_FRONT}/panel?pago=ok",
-        "cancel_url": f"{_PORTAL_BASE_FRONT}/panel?pago=cancelado",
+        # Quien reparte solo vuelve a su app, no al panel.
+        "success_url": f"{_PORTAL_BASE_FRONT}/{'ruta' if org.get('sector') == 'autonomo' else 'panel'}?pago=ok",
+        "cancel_url": f"{_PORTAL_BASE_FRONT}/{'ruta' if org.get('sector') == 'autonomo' else 'panel'}?pago=cancelado",
         "metadata": {"org_id": org["id"], "plan": plan, "db_name": _tenant_db_name(org)},
         "subscription_data": {"metadata": {"org_id": org["id"], "plan": plan}},
     }

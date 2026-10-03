@@ -11,8 +11,8 @@ import { MARCA } from '../marca'
 const PLANES_FALLBACK = [
   {
     clave: 'autonomo',
-    nombre: 'Autónomo',
-    para: 'Tú y tu furgoneta',
+    nombre: 'Repartidor',
+    para: 'Repartes tú mismo',
     por_vehiculo: 0,
     minimo_vehiculos: 0,
     mensual: 9.99,

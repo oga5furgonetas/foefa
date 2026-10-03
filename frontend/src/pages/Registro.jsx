@@ -20,8 +20,8 @@ const PLANS = [
   {
     // Precio FIJO al mes, no por vehículo: una persona con su furgoneta. Se
     // elige solo al marcar «Repartidor autónomo»; no sale en el selector.
-    key: 'autonomo', name: 'Autónomo', color: '#eab308', mensual: 9.99, minimo: 0, porVehiculo: 0,
-    popular: false, soloSector: 'autonomo', diasPrueba: 7, who: 'Tú y tu furgoneta',
+    key: 'autonomo', name: 'Repartidor', color: '#eab308', mensual: 9.99, minimo: 0, porVehiculo: 0,
+    popular: false, soloSector: 'autonomo', diasPrueba: 7, who: 'Repartes tú mismo',
     feats: ['Escanear paquetes o foto de la etiqueta: dirección y teléfono solos',
             'Ruta ordenada por tiempo, con franjas y hora estimada',
             'Llamar y WhatsApp al cliente desde cada parada',
@@ -65,6 +65,8 @@ const annualSave = (p, furgonetas) => precioMes(p, furgonetas) * (12 - MESES_ANU
    lleva la compra a casa le sobra el cuadrante de una subcontrata de
    paquetería, y le falta el escaneo de tickets y la ruta. */
 const SECTORES = [
+  { key: 'autonomo', icon: User, color: '#eab308', name: 'Repartir yo mismo',
+    sub: 'Tu furgoneta y tus paquetes: los escaneas o fotografías la etiqueta, la ruta se ordena sola, llamas o escribes al cliente desde cada parada y cobras si toca. 7 días gratis.' },
   { key: 'dsp_amazon', icon: Package, color: '#fb923c', name: 'DSP de Amazon',
     sub: 'Plantilla del día, DNR diaria, horas (WHC), cuadrante y turnos, asignación de furgonetas, inspecciones con foto e IA, taller y vencimientos. Todo lo de una DSP, sin extensiones ni nada que toque los sistemas de Amazon.' },
   { key: 'mensajeria', icon: Send, color: '#f472b6', name: 'Mensajería y paquetería',
@@ -73,8 +75,6 @@ const SECTORES = [
     sub: 'El ticket de caja a la ruta: el repartidor escanea, ve la dirección y qué lleva, la ruta se ordena sola y el cliente recibe la hora por WhatsApp.' },
   { key: 'distribucion', icon: Warehouse, color: '#0ea5e9', name: 'Distribución a negocios',
     sub: 'Reparto a talleres, bares u obras: escaneo de bultos por la mañana, zonas por repartidor, ruta ordenada y la oficina viendo por dónde va cada uno.' },
-  { key: 'autonomo', icon: User, color: '#eab308', name: 'Repartidor autónomo',
-    sub: 'Tú solo con tu furgoneta: escaneas o fotografías cada paquete, la ruta se ordena sola y llamas o escribes al cliente desde cada parada.' },
   { key: 'otra', icon: Truck, color: '#a855f7', name: 'Otra flota',
     sub: 'Servicios técnicos, obra, alquiler…: vehículos, conductores, taller y vencimientos.' },
 ]
@@ -87,7 +87,7 @@ function SectorPicker({ onSelect }) {
           <div style={{ width: 30, height: 30, borderRadius: 8, background: 'linear-gradient(135deg,#fb923c,#ea6800)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><Zap size={15} color="white" /></div>
           <b style={{ fontSize: 15 }}>{MARCA.nombre}</b>
         </a>
-        <h1 style={{ fontSize: 'clamp(24px,4vw,34px)', fontWeight: 900, margin: '0 0 8px', textAlign: 'center' }}>¿A qué se dedica tu empresa?</h1>
+        <h1 style={{ fontSize: 'clamp(24px,4vw,34px)', fontWeight: 900, margin: '0 0 8px', textAlign: 'center' }}>¿Qué vas a hacer con {MARCA.nombre}?</h1>
         <p style={{ color: '#8b94a3', fontSize: 15, margin: '0 0 26px', textAlign: 'center' }}>Así te preparamos las pantallas que vas a usar. Podrás añadir o quitar cosas después.</p>
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(280px,1fr))', gap: 12 }}>
           {SECTORES.map((s) => (
@@ -289,14 +289,17 @@ export default function Registro() {
 
   function onOrg(v) { setOrg(v); if (!slugTouched) setSlug(slugify(v)) }
 
+  const soloYo = sector === 'autonomo'
+
   async function submit() {
     setErr('')
-    const s = slugify(slug)
-    if (!org.trim()) return setErr('Indica el nombre de tu empresa.')
+    const s = soloYo ? `${slugify(org) || 'reparto'}-${Math.random().toString(36).slice(2, 6)}` : slugify(slug)
+    const usuario = soloYo ? email.trim().toLowerCase() : user.trim()
+    if (!org.trim()) return setErr(soloYo ? 'Dinos tu nombre.' : 'Indica el nombre de tu empresa.')
     if (s.length < 3) return setErr('La URL de tu empresa debe tener al menos 3 caracteres (a-z, 0-9).')
     if (!email.trim() || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim()))
       return setErr('Introduce un email válido.')
-    if (user.trim().length < 3) return setErr('El usuario debe tener al menos 3 caracteres.')
+    if (usuario.length < 3) return setErr('El usuario debe tener al menos 3 caracteres.')
     if (pass.length < 8) return setErr('La contraseña debe tener al menos 8 caracteres.')
     if (pass !== pass2) return setErr('Las contraseñas no coinciden.')
     if (!accept) return setErr('Debes aceptar los Términos y la Política de Privacidad para continuar.')
@@ -305,7 +308,7 @@ export default function Registro() {
       const r = await fetch(`${API_BASE}/auth/register`, {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          org_name: org.trim(), username: user.trim(), password: pass,
+          org_name: org.trim(), username: usuario, password: pass,
           slug: s, center: center.trim(), email: email.trim().toLowerCase(),
           plan: selectedPlan, sector,
         }),
@@ -337,23 +340,23 @@ export default function Registro() {
             Hemos enviado un email de bienvenida a <b style={{ color: '#0ea5e9' }}>{email}</b>.
           </p>
           <p style={{ color: '#64748b', fontSize: 12, marginBottom: 22 }}>
-            Puedes acceder ahora y verificar tu email después.
+            {soloYo ? 'Ya puedes escanear tus primeros paquetes.' : 'Puedes acceder ahora y verificar tu email después.'}
           </p>
           {/* El primer paso de verdad es traer lo que ya tiene: se le lleva
               directo, y el panel queda a un clic. */}
           {reparte ? (
-            <button style={{ ...btn, marginTop: 0 }} onClick={() => { window.location.href = '/panel/reparto' }}>
-              Preparar el reparto →
+            <button style={{ ...btn, marginTop: 0 }} onClick={() => { window.location.href = soloYo ? '/ruta' : '/panel/reparto' }}>
+              {soloYo ? 'Empezar mi ruta →' : 'Preparar el reparto →'}
             </button>
           ) : (
             <button style={{ ...btn, marginTop: 0 }} onClick={() => { window.location.href = '/panel/importaciones' }}>
               Traer mis vehículos y conductores →
             </button>
           )}
-          <button onClick={() => { window.location.href = '/panel' }}
+          {!soloYo && <button onClick={() => { window.location.href = '/panel' }}
             style={{ marginTop: 10, background: 'none', border: 'none', color: '#8b94a3', fontSize: 13, cursor: 'pointer' }}>
             Ir al panel
-          </button>
+          </button>}
         </div>
       </div>
     )
@@ -394,9 +397,10 @@ export default function Registro() {
           ✓ {diasPrueba} días gratis · sin tarjeta · cancela cuando quieras
         </div>
 
-        <label style={lbl}>{sector === 'autonomo' ? 'Tu nombre o el de tu negocio' : t('reg.company')}</label>
-        <input style={inp} value={org} onChange={(e) => onOrg(e.target.value)} placeholder={sector === 'autonomo' ? 'Pepe Repartos' : 'Transportes Pérez SL'} />
+        <label style={lbl}>{soloYo ? 'Tu nombre' : t('reg.company')}</label>
+        <input style={inp} value={org} onChange={(e) => onOrg(e.target.value)} placeholder={soloYo ? 'Pepe' : 'Transportes Pérez SL'} />
 
+        {!soloYo && <>
         <label style={lbl}>{t('reg.url')}</label>
         <div style={{ display: 'flex', alignItems: 'center', border: '1px solid rgba(255,255,255,.12)', borderRadius: 10, background: '#0e1116', overflow: 'hidden' }}>
           <span style={{ padding: '11px 2px 11px 12px', color: '#8b94a3', fontSize: 13, whiteSpace: 'nowrap' }}>{dominio()}/</span>
@@ -404,6 +408,7 @@ export default function Registro() {
             onChange={(e) => { setTouched(true); setSlug(slugify(e.target.value)) }} placeholder="transportes-perez" />
         </div>
         <div style={hint}>{t('reg.urlhint')}</div>
+        </>}
 
         {/* Con varias naves se escriben todas: el plan de una sola se queda
             con la primera. Sin esto la segunda nave no se podía dar de alta. */}
@@ -417,8 +422,11 @@ export default function Registro() {
         <label style={lbl}>Email de contacto</label>
         <input style={inp} type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="admin@tuempresa.com" autoComplete="email" />
 
+        {!soloYo && <>
         <label style={lbl}>{t('login.user')}</label>
         <input style={inp} value={user} onChange={(e) => setUser(e.target.value)} autoComplete="username" />
+        </>}
+        {soloYo && <div style={hint}>Entrarás con tu correo y esta contraseña.</div>}
 
         <label style={lbl}>{t('login.pass')}</label>
         <input style={inp} type="password" value={pass} onChange={(e) => setPass(e.target.value)} autoComplete="new-password" />

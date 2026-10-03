@@ -79,14 +79,14 @@ export default function PruebaReparto() {
         </p>
 
         <section className="mt-7 rounded-2xl border border-amber-400/40 bg-amber-500/[.06] p-5">
-          <h2 className="flex items-center gap-2 text-[18px] font-bold text-dark-50"><User className="text-amber-300" size={20} /> ¿Eres autónomo?</h2>
+          <h2 className="flex items-center gap-2 text-[18px] font-bold text-dark-50"><User className="text-amber-300" size={20} /> ¿Repartes tú mismo?</h2>
           <p className="mt-1 text-[13px] text-dark-400">
             Tu ruta empieza vacía: escanea tus paquetes o hazle una foto a la etiqueta y la dirección y el teléfono
             entran solos. La ruta se ordena por tiempo y en cada parada tienes llamar y WhatsApp. Lo que metas solo lo ves tú.
           </p>
           <button onClick={() => entrar('autonomo')} disabled={!!ocupado}
             className="mt-4 inline-flex w-full items-center justify-center gap-2 rounded-xl bg-amber-500 py-3 text-[15px] font-bold text-dark-950 disabled:opacity-50 md:w-auto md:px-8">
-            {ocupado === 'autonomo' && <Loader2 size={16} className="animate-spin" />} Probar como autónomo
+            {ocupado === 'autonomo' && <Loader2 size={16} className="animate-spin" />} Probar con mi propia ruta
           </button>
         </section>
 

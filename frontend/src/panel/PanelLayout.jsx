@@ -308,6 +308,10 @@ export default function PanelLayout() {
   const { lang, setLang, t } = useT()
   const { limits, modulos, billing } = usePlan()
   const vz = voces(billing?.sector)
+  // Quien reparte solo no tiene panel de empresa: tiene su app (/ruta).
+  // Con lo que lleve la URL (?pago=ok al volver de Stripe): si se perdiera, no
+  // vería «Pago recibido, activando…».
+  useEffect(() => { if (billing?.sector === 'autonomo') nav('/ruta' + window.location.search, { replace: true }) }, [billing?.sector, nav])
   // ¿Tiene la empresa activada esta pantalla? (Negocio → Clientes → Módulos)
   const moduloOk = (k) => !Array.isArray(modulos) || SIN_MODULO.has(k) || modulos.includes(MODULO_DE[k] || k)
   const [center, setCenter] = useState(() => localStorage.getItem('panel_center') || 'Todos')

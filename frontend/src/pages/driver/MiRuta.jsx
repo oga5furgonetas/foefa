@@ -118,6 +118,20 @@ export default function MiRuta({ onBack, embebido = false }) {
     } catch (e) { setAviso(e?.response?.data?.detail || 'No se pudo buscar') } finally { setOcupado('') }
   }
 
+  /* El código de barras de la etiqueta, de la misma foto: así una foto da
+     el código Y la dirección. Si el móvil no sabe leer códigos, nada. */
+  async function codigoDeFoto(blob) {
+    try {
+      if (!('BarcodeDetector' in window)) return ''
+      const soportados = await window.BarcodeDetector.getSupportedFormats()
+      const quiero = ['code_128', 'ean_13', 'ean_8', 'qr_code', 'code_39', 'itf', 'upc_a', 'upc_e', 'data_matrix', 'codabar'].filter((f) => soportados.includes(f))
+      const det = new window.BarcodeDetector({ formats: quiero })
+      const bmp = await createImageBitmap(blob)
+      const codigos = await det.detect(bmp)
+      return codigos.find((c) => c.rawValue)?.rawValue || ''
+    } catch { return '' }
+  }
+
   async function leerTicket(file) {
     if (!file) return
     setOcupado('ticket')
@@ -125,9 +139,13 @@ export default function MiRuta({ onBack, embebido = false }) {
       // Con IA en el servidor solo si la empresa la tiene permitida (clave de
       // pago); si no, se lee EN EL MÓVIL y la foto no sale de aquí.
       const blob = await compressImage(file, 1600, 0.85)
-      const data = ruta?.ia_tickets
-        ? (await repLeerTicket(new File([blob], 'ticket.jpg', { type: 'image/jpeg' }))).data
-        : await leerTicketEnMovil(blob)
+      const [data, codigoFoto] = await Promise.all([
+        ruta?.ia_tickets
+          ? repLeerTicket(new File([blob], 'ticket.jpg', { type: 'image/jpeg' })).then((r) => r.data)
+          : leerTicketEnMovil(blob),
+        codigoDeFoto(blob),
+      ])
+      if (codigoFoto && !data.codigo) data.codigo = codigoFoto
       const algo = data?.direccion || data?.telefono || data?.cliente
       if (!algo) setAviso('No he podido leer el ticket. Prueba con más luz y el ticket recto, o escríbelo.')
       setNuevo((n) => ({
@@ -138,13 +156,16 @@ export default function MiRuta({ onBack, embebido = false }) {
     } catch (e) { setAviso(e?.response?.data?.detail || 'No se pudo leer el ticket') } finally { setOcupado('') }
   }
 
+  // «Cargar paquetes»: una foto tras otra, y al acabar «Montar ruta».
+  const [carga, setCarga] = useState(null)   // null | {n}
+
   async function guardarNuevo() {
     setOcupado('guardar')
     try {
       await repNuevoPedido(nuevo)
-      setAviso('✓ Añadido a tu ruta')
       setNuevo(null); setCodigo('')
       cargar()
+      if (carga) { setCarga({ n: carga.n + 1 }); setAviso('') } else setAviso('✓ Añadido a tu ruta')
     } catch (e) { setAviso(e?.response?.data?.detail || 'No se pudo guardar') } finally { setOcupado('') }
   }
 
@@ -234,6 +255,12 @@ export default function MiRuta({ onBack, embebido = false }) {
         <button onClick={() => setNuevo({ ...VACIO })} className="mt-2 text-[12.5px] font-semibold text-brand-300">
           + Añadir un pedido sin código
         </button>
+        {ruta.autonomo && (
+          <button onClick={() => setCarga({ n: 0 })}
+            className="mt-2 flex w-full items-center justify-center gap-2 rounded-xl border border-amber-400/50 bg-amber-500/10 py-3 text-[14px] font-bold text-amber-200">
+            <Package size={17} /> Cargar paquetes: uno tras otro
+          </button>
+        )}
       </div>
 
       {aviso && (
@@ -330,6 +357,27 @@ export default function MiRuta({ onBack, embebido = false }) {
       )}
 
       {escaner && <Escaner onCodigo={buscar} onClose={() => setEscaner(false)} />}
+
+      {carga && !nuevo && (
+        <Hoja titulo={carga.n ? `${carga.n} paquete${carga.n > 1 ? 's' : ''} cargado${carga.n > 1 ? 's' : ''}` : 'Cargar paquetes'} onClose={() => setCarga(null)}>
+          <p className="mb-3 text-[13px] text-dark-400">
+            Haz una foto a la etiqueta de cada paquete: se lee el código, la dirección y el teléfono. Al acabar, «Montar ruta».
+          </p>
+          <label className="flex w-full cursor-pointer items-center justify-center gap-2 rounded-xl bg-brand-500 py-4 text-[16px] font-bold text-white">
+            {ocupado === 'ticket' ? <Loader2 size={18} className="animate-spin" /> : <Camera size={18} />}
+            {ocupado === 'ticket' ? 'Leyendo…' : carga.n ? 'Siguiente paquete' : 'Primer paquete'}
+            <input type="file" accept="image/*" capture="environment" className="hidden" disabled={ocupado === 'ticket'}
+              onChange={(e) => { const f = e.target.files?.[0]; e.target.value = ''; if (f) { setNuevo({ ...VACIO }); leerTicket(f) } }} />
+          </label>
+          <button onClick={() => { setNuevo({ ...VACIO }) }} className="mt-2 w-full rounded-xl border border-dark-600 py-3 text-[14px] font-semibold text-dark-100">
+            Escribirlo a mano
+          </button>
+          <button onClick={() => { setCarga(null); if (pendientes.length) ordenar() }} disabled={ocupado === 'ordenar'}
+            className="mt-3 w-full rounded-xl bg-emerald-600 py-3.5 text-[15px] font-bold text-white disabled:opacity-50">
+            {carga.n || pendientes.length ? <><Route size={16} className="mr-1 inline" /> Montar ruta y empezar</> : 'Cerrar'}
+          </button>
+        </Hoja>
+      )}
 
       {nuevo && (
         <Hoja titulo={nuevo.codigo ? `El código ${nuevo.codigo} no está en la lista` : 'Pedido nuevo'} onClose={() => setNuevo(null)}>

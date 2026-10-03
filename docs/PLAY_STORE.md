@@ -18,7 +18,9 @@ una app (PWA), y lo que usan Twitter Lite, Starbucks, etc.
 - **Enlaces**: los de flotadsp.com (portal del conductor, seguimiento de un
   pedido) se abren dentro de la app si está instalada (`autoVerify`).
 - **Arranque**: `/app` lleva a cada uno a lo suyo: repartidor a «Mi ruta»,
-  oficina al panel, nuevo a entrar/darse de alta.
+  oficina al panel, y sin sesión a `/empezar` («Repartir yo mismo», «Soy
+  repartidor de una empresa», «Gestiono una empresa», probar sin cuenta).
+  Quien reparte solo vive en `/ruta`: su app de reparto, sin panel de flota.
 
 Si algún día hace falta algo que la web no puede (escaneo en segundo plano,
 avisos sin Chrome), se cambia por una app nativa; la cuenta, el paquete
