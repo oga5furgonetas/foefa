@@ -126,6 +126,19 @@ export default function TiendaPedidos() {
           </span>
         </label>
 
+        {/* El nombre que ve quien compra desde fuera: la ropa lleva su marca,
+            y quien llega de un anuncio de esa marca y aterriza en «Tienda» +
+            la plataforma cree que se ha equivocado de sitio. */}
+        <div className="mt-3">
+          <label className="label" htmlFor="tienda-nombre">Nombre de la tienda de fuera</label>
+          <input id="tienda-nombre" className="input py-1.5 text-[13px]" maxLength={40}
+            defaultValue={config.nombre || ''} placeholder="Tienda con el nombre de la plataforma"
+            onBlur={(e) => {
+              const v = e.target.value.trim()
+              if (v !== (config.nombre || '')) guardar({ nombre: v })
+            }} />
+        </div>
+
         <div className="mt-3 grid grid-cols-2 gap-2">
           <div>
             <label className="label">Mínimo de prendas</label>
@@ -183,9 +196,10 @@ export default function TiendaPedidos() {
               ({eur(enElAire.importe || 0)}) con sus unidades apartadas. </>
           )}
           {caidos.pedidos > 0 && <>Se han caido {caidos.pedidos}. </>}
-          {desc.plazas > 0 && (
-            <>Descuento de arranque: quedan <b className="text-dark-300">{desc.quedan}</b>{' '}
-              de {desc.plazas} plazas al {Math.round((desc.pct || 0) * 100)} %.</>
+          {desc.pct > 0 && (
+            <>Descuento de primera compra: {Math.round(desc.pct * 100)} % en el primer pedido de cada
+              persona (en el portal, por su ficha; de fuera, por su correo). Lo tienen cogido o
+              gastado <b className="text-dark-300">{desc.usados || 0}</b>.</>
           )}
         </p>
       </div>

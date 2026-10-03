@@ -235,21 +235,34 @@ def test_bajar_el_precio_y_ademas_descontar_es_vender_regalando():
     assert con_desc["queda"] < 1, con_desc["queda"]
 
 
-def test_el_descuento_de_los_primeros_esta_apagado():
-    """Y apagado significa que NO hay plaza para nadie, no que sea del 0%.
+def test_el_descuento_es_el_10_de_primera_compra():
+    """Dani, 03-10-2026: 10 % en el primer pedido de cada persona.
 
-    Sin la guarda en `para_ti`, el movil pintaria «-0 % por ser de los
-    primeros»: promete una rebaja y no descuenta nada, que es peor que callar.
+    Y las dos guardas siguen, cada una en su funcion: con el porcentaje a cero
+    no hay plaza para nadie (si no, el movil pintaria «-0 %», que promete una
+    rebaja y no descuenta nada), y quien ya compro no la coge.
     """
     texto = io.open(SERVER, encoding="utf-8-sig").read()
-    assert "_TIENDA_DESC_PCT = 0.0" in texto, "el descuento vuelve a estar encendido"
-    # Y las dos guardas, cada una en su funcion: leer el fichero entero valdria
-    # para las dos aunque estuvieran en el sitio que no es.
+    assert "_TIENDA_DESC_PCT = 0.10" in texto, "el descuento de primera compra ha cambiado"
     estado = _trozo(texto, "async def _tienda_desc_estado")
     assert "_TIENDA_DESC_PCT > 0" in estado, (
         "con el descuento a cero, `para_ti` tiene que ser False")
+    assert "_tienda_ya_compro" in estado, "a quien ya compro no se le ofrece"
     pedir = _trozo(texto, "async def _tienda_desc_pedir")
     assert "_TIENDA_DESC_PCT <= 0" in pedir, "apagado, no se puede gastar una plaza"
+    assert "_tienda_ya_compro" in pedir, "es la PRIMERA compra: con una pagada no hay"
+
+
+def test_el_10_cabe_con_los_precios_de_lujo():
+    """Con los precios de 03-10-2026 el 10 % no se come el margen.
+
+    Lo contrario de lo que paso el 09-09 con el hoodie a 52,90: aqui, con el
+    descuento puesto, cada prenda sigue dejando mas de 25 EUR limpios.
+    """
+    for nombre, coste, pvp in (("gorra", 18.75, 79.0), ("sudadera", 29.74, 129.0),
+                               ("cortavientos", 22.16, 149.0)):
+        c = CUENTAS({"coste": coste, "pvp": round(pvp * 0.9, 2)})
+        assert c["queda"] > 25, (nombre, c["queda"])
 
 
 def _trozo(texto, cabecera):
@@ -421,15 +434,15 @@ def test_el_escaparate_ya_no_cuenta_la_logistica():
 
 
 # ---------------------------------------------------------------------------
-# EL DESCUENTO DE LOS CINCO PRIMEROS
+# EL DESCUENTO DE PRIMERA COMPRA (antes, «los cinco primeros»)
 # ---------------------------------------------------------------------------
-# 15 % para los cinco primeros conductores. Lo delicado no es el porcentaje:
-# es que sean CINCO de verdad y que la plaza no se pierda cuando un pedido se
-# cae. Los tres agujeros posibles, y estan los tres cubiertos aqui:
+# 10 % en el primer pedido de cada persona (03-10-2026). Lo delicado no es el
+# porcentaje: es que sea UNO por persona y que no se pierda cuando un pedido
+# se cae. Los tres agujeros posibles, y estan los tres cubiertos aqui:
 #
-#  · contar las plazas en Python y decidir despues -tres conductores pulsando
-#    a la vez con cuatro dadas pasarian los tres y saldrian ocho descuentos
-#    (gotcha 46)-, asi que la condicion tiene que viajar DENTRO del filtro;
+#  · comprobar en Python y decidir despues -dos pedidos suyos a la vez se
+#    llevarian los dos el descuento (gotcha 46)-, asi que la condicion tiene
+#    que viajar DENTRO del filtro;
 #  · descontar del total en vez de linea a linea: Stripe cobra las LINEAS, asi
 #    que se veria un total y la tarjeta pediria otro;
 #  · no soltar la plaza al anular: cinco pedidos caidos dejarian la promocion
@@ -460,10 +473,7 @@ def test_la_plaza_se_pide_en_una_sola_operacion():
     """La condicion va en el FILTRO, no en un `if` de Python."""
     src = _fuente("_tienda_desc_pedir")
     assert "update_one" in src
-    assert "$ne" in src, "sin esto, el mismo conductor podria coger dos plazas"
-    assert "$expr" in src and "$lt" in src and "$size" in src, (
-        "el tope de plazas tiene que ir dentro del filtro: contarlo antes y "
-        "decidir despues no protege de dos pedidos a la vez")
+    assert "$ne" in src, "sin esto, la misma persona podria coger dos plazas"
     assert "modified_count" in src, "solo cuenta si la plaza se coge en esta llamada"
 
 
@@ -512,7 +522,7 @@ def test_las_cuentas_del_descuento_cuadran():
     esta apagado (0,0) y lo que se prueba es la MAQUINARIA —que el recargo de
     talla entra antes que la rebaja y que el redondeo cae del mismo lado en el
     movil y en el servidor—, no cuanto vale hoy la constante. Eso lo mira
-    `test_el_descuento_de_los_primeros_esta_apagado`. Atandolo a la constante,
+    `test_el_descuento_es_el_10_de_primera_compra`. Atandolo a la constante,
     encender o apagar la promocion rompia un test que no va de eso.
     """
     pct = 0.15
@@ -532,5 +542,7 @@ def test_las_cuentas_del_descuento_cuadran():
     assert round(grande * (1 - pct), 2) == 53.46
 
 
-def test_cinco_plazas_y_no_mas():
-    assert _constante("_TIENDA_DESC_PRIMEROS") == 5
+def test_sin_tope_de_plazas():
+    """Es la primera compra de CADA persona, no la de las cinco primeras."""
+    assert "_TIENDA_DESC_PRIMEROS" not in _TEXTO, "vuelve a haber un tope de plazas"
+    assert "$size" not in _fuente("_tienda_desc_pedir")

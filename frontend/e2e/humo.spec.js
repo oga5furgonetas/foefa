@@ -922,6 +922,55 @@ test.describe('Portal del conductor · tus peticiones', () => {
   })
 })
 
+/* LA TIENDA PÚBLICA (03-10-2026, el anuncio de FDs): la marca y no «Tienda» +
+   la plataforma, la foto de cada prenda —antes era una lista de nombres—, el
+   10 % de primera compra y el correo, que viaja al comprar. Una prenda sin
+   límite de unidades se puede comprar (salía «Agotado» y «quedan null»). */
+test.describe('Tienda pública', () => {
+  const json = (body) => (route) => route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(body) })
+  const PNG = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==', 'base64')
+
+  test('la marca, las fotos y el 10 %, y el correo viaja al comprar', async ({ page }) => {
+    const fallos = vigilar(page)
+    // El aviso de cookies va fijo abajo y en el móvil tapa el primer «Comprar»:
+    // quien llega de verdad lo cierra antes, como en el resto de pruebas.
+    await page.addInitScript(() => localStorage.setItem('cookie_consent', '1'))
+    await simularApi(page, 'vacio')
+    await page.route(/\/api\/tienda\/publico\/tok$/, json({
+      abierta: true, pasarela: 'stripe', nombre: 'FDs', descuento_pct: 0.1,
+      prendas: [
+        { id: 'g1', nombre: 'Gorra FDs', tipo: 'gorra', color: 'negro', tallas: ['U'], precio: 79,
+          recargo_talla: 0, tallas_grandes: ['XXL'], quedan: 20, foto_ver: 'v1' },
+        { id: 's1', nombre: 'Sudadera FDs', tipo: 'sudadera', color: 'negro', tallas: ['M', 'L'], precio: 129,
+          recargo_talla: 3, tallas_grandes: ['XXL'], quedan: null, foto_ver: null },
+      ] }))
+    await page.route(/\/api\/tienda\/publico\/tok\/foto\/g1/, (route) => route.fulfill({ status: 200, contentType: 'image/png', body: PNG }))
+    const compras = []
+    await page.route(/\/api\/tienda\/publico\/tok\/comprar/, (route) => {
+      compras.push(route.request().postDataJSON())
+      return json({ url: '/t/tok?pago=ok&ref=W-1', ref: 'W-1', descuento_pct: 0.1 })(route)
+    })
+    await page.goto('/t/tok', { waitUntil: 'domcontentloaded' })
+    await expect(page.getByRole('heading', { name: 'FDs' })).toBeVisible({ timeout: 15000 })
+    await expect(page.getByText('-10 % en tu primera compra.')).toBeVisible()
+    await expect(page.getByRole('img', { name: 'Gorra FDs' })).toBeVisible()
+    // Las dos se pueden comprar: la de unidades sin límite no sale agotada.
+    await expect(page.getByRole('button', { name: 'Comprar' })).toHaveCount(2)
+    await expect(page.getByText(/quedan null/)).toHaveCount(0)
+    await page.getByRole('button', { name: 'Comprar' }).first().click()
+    // Un correo mal escrito se dice y no se manda nada.
+    await page.getByLabel(/Tu correo/).fill('ana@')
+    await page.getByRole('button', { name: 'Ir a pagar' }).click()
+    await expect(page.getByText('Ese correo no parece correcto. Revísalo o déjalo en blanco.')).toBeVisible()
+    expect(compras).toHaveLength(0)
+    await page.getByLabel(/Tu correo/).fill('ana@correo.es')
+    await page.getByRole('button', { name: 'Ir a pagar' }).click()
+    await expect(page.getByText('¡Pedido hecho!')).toBeVisible()
+    expect(compras).toEqual([{ prenda: 'g1', talla: 'U', cantidad: 1, email: 'ana@correo.es' }])
+    expect(fallos, fallos.join(' | ')).toHaveLength(0)
+  })
+})
+
 /* CAMBIO DE CENTRO PROGRAMADO (30-09-2026, Fran Gil pasa a OGA5 el día 5):
    la ficha lo programa, la lista lo enseña y el servidor lo aplica ese día. */
 test.describe('Cambio de centro programado', () => {

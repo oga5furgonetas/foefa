@@ -38584,21 +38584,29 @@ _TIENDA_DIA_CIERRE = 4              # 0=lunes ... 4=viernes
 _TIENDA_MAX_UDS_LINEA = 5
 _TIENDA_MAX_LINEAS = 8
 
-# EL DESCUENTO DE ARRANQUE, HOY APAGADO. Es una plaza por persona y por orden
-# de llegada, no un cupon: quien ya tiene la suya no puede coger otra, asi que
-# uno solo no puede quedarse las cinco pidiendo cinco veces.
+# EL DESCUENTO DE PRIMERA COMPRA: un 10 % en el primer pedido de cada persona.
+# Dani, 03-10-2026, al subir la tienda a precios de lujo (gorra 79, sudadera
+# 129, cortavientos 149): «con descuento si es tu primera compra», en todo el
+# pedido. Con estos precios cabe de sobra: la gorra con el 10 % sigue dejando
+# unos 30 EUR limpios (`test_el_10_cabe_con_los_precios_de_lujo`).
 #
-# APAGADO EL 09-09-2026 porque LA BAJADA DE PRECIO SE LO COMIO, y sumar las dos
-# cosas seria vender por debajo del suelo que puso Dani. Las cuentas, con la
-# formula de `_prenda_con_cuentas`: el hoodie paso de 74,90 a 52,90 -un 29 %
-# menos PARA TODOS, no para cinco-, y ahi quedan 6,08 EUR. Aplicandole ademas
-# el 15 % se cobrarian 44,97 y quedarian 0,07: se regalaria la prenda y encima
-# solo a los cinco primeros. Nadie habia cogido plaza todavia (`quien: []` en
-# `tienda_config`, 09-09-2026), asi que no se le quita nada a nadie.
-# La maquinaria se queda entera y probada: subir este numero la enciende.
-_TIENDA_DESC_PCT = 0.0
-_TIENDA_DESC_PRIMEROS = 5
+# Sustituye al de «los cinco primeros» (15 %), apagado el 09-09-2026 porque con
+# el hoodie bajado a 52,90 se comia el margen entero. La maquinaria es la misma:
+# una plaza por persona en `quien`, cogida en UNA operacion (`$ne` en el
+# filtro) y devuelta si el pedido se anula. Lo que cambia: ya no hay tope de
+# plazas, y quien YA tiene una compra pagada no la tiene. Es «tu primera
+# compra», no «la primera vez que usas el descuento».
+#
+# La persona es su ficha en el portal (`did`) y su correo fuera de el
+# («correo:ana@x.es»): quien llega de un anuncio no tiene ficha.
+_TIENDA_DESC_PCT = 0.10
 _TIENDA_DESC_ID = "descuento"
+_TIENDA_PAGADOS = ("pagado", "encargado", "entregado")
+
+
+def _tienda_desc_clave_correo(correo: str) -> str:
+    """La plaza de quien compra desde fuera va por su correo."""
+    return "correo:" + correo if correo else ""
 
 
 async def _tienda_desc_doc() -> dict:
@@ -38616,56 +38624,66 @@ async def _tienda_desc_doc() -> dict:
     return await db[_TCOL_CONFIG].find_one({"_id": _TIENDA_DESC_ID}, {"_id": 0}) or {}
 
 
+async def _tienda_ya_compro(compras: dict) -> bool:
+    """Si esa persona ya tiene una compra PAGADA: entonces su primera ya paso.
+
+    `compras` la identifica en los pedidos: su ficha ({"driver_id": did}) o su
+    correo ({"email": correo}). Lo pendiente o anulado no cuenta: con eso
+    todavia no ha comprado nada.
+    """
+    if not compras or not all(compras.values()):
+        return False
+    return bool(await db[_TCOL_PEDIDOS].find_one(
+        {**compras, "estado": {"$in": list(_TIENDA_PAGADOS)}}, {"_id": 0, "id": 1}))
+
+
 async def _tienda_desc_estado(did: str = "") -> dict:
-    """Cuantas plazas quedan y si la de este conductor ya esta cogida."""
+    """El descuento de primera compra y si a este conductor le toca."""
     quien = (await _tienda_desc_doc()).get("quien") or []
+    gastada = bool(did) and did in quien
     return {
         "pct": _TIENDA_DESC_PCT,
-        "plazas": _TIENDA_DESC_PRIMEROS,
-        "quedan": max(0, _TIENDA_DESC_PRIMEROS - len(quien)),
+        "primera_compra": True,
+        # Cuantas personas lo tienen gastado o cogido: lo que ve la oficina.
+        "usados": len(quien),
         # `para_ti` es lo unico que el movil necesita para pintar el precio.
-        # Quien YA la gasto no vuelve a tenerla: "los cinco primeros" son cinco
-        # pedidos, no cinco personas con el 15 % de por vida.
-        # Con el descuento a cero NO hay plaza para nadie: sin esta guarda el
-        # movil pintaria «-0 % por ser de los primeros», que es peor que no
-        # ofrecer nada — promete algo y no descuenta.
-        "para_ti": (_TIENDA_DESC_PCT > 0 and bool(did) and did not in quien
-                    and len(quien) < _TIENDA_DESC_PRIMEROS),
-        "gastada": bool(did) and did in quien,
+        # Con el descuento a cero NO hay para nadie: sin esta guarda el movil
+        # pintaria «-0 %», que promete algo y no descuenta.
+        "para_ti": (_TIENDA_DESC_PCT > 0 and bool(did) and not gastada
+                    and not await _tienda_ya_compro({"driver_id": did})),
+        "gastada": gastada,
     }
 
 
-async def _tienda_desc_pedir(did: str) -> bool:
-    """Coge una plaza para este conductor. En UNA operacion, no en tres.
+async def _tienda_desc_pedir(clave: str, compras: dict) -> bool:
+    """Coge el descuento para esta persona. En UNA operacion, no en tres.
 
-    Contar en Python y decidir despues no protege de dos pedidos a la vez
-    (gotcha 46): con cuatro plazas dadas, tres conductores pulsando a la vez
-    pasarian los tres y saldrian ocho descuentos. Aqui la condicion viaja
-    DENTRO del filtro, asi que Mongo solo deja pasar a uno.
+    Si ya tiene una compra pagada, no hay: era la primera. Y la plaza se coge
+    con la condicion DENTRO del filtro (`$ne`): dos pedidos suyos a la vez no
+    se llevan los dos el 10 % (gotcha 46), porque solo uno modifica el apunte.
     """
-    if not did or _TIENDA_DESC_PCT <= 0:
+    if not clave or _TIENDA_DESC_PCT <= 0:
+        return False
+    if await _tienda_ya_compro(compras):
         return False
     await _tienda_desc_doc()
     r = await db[_TCOL_CONFIG].update_one(
-        {"_id": _TIENDA_DESC_ID,
-         "quien": {"$ne": did},
-         "$expr": {"$lt": [{"$size": {"$ifNull": ["$quien", []]}}, _TIENDA_DESC_PRIMEROS]}},
-        {"$addToSet": {"quien": did}})
-    # Solo cuenta si la plaza se coge AQUI. Si ya estaba cogida por un pedido
-    # vivo suyo, no hay segunda: la plaza se gasta con el pedido y solo vuelve
-    # si ese pedido se anula.
+        {"_id": _TIENDA_DESC_ID, "quien": {"$ne": clave}},
+        {"$addToSet": {"quien": clave}})
+    # Solo cuenta si se coge AQUI. Si ya estaba cogido por un pedido vivo suyo,
+    # no hay segundo: se gasta con ese pedido y solo vuelve si se anula.
     return r.modified_count == 1
 
 
-async def _tienda_desc_soltar(did: str) -> None:
-    """Devuelve la plaza al anularse el pedido que la uso.
+async def _tienda_desc_soltar(clave: str) -> None:
+    """Devuelve el descuento al anularse el pedido que lo uso.
 
-    Sin esto, cinco pedidos anulados dejarian el descuento agotado para siempre
-    sin haber vendido nada — el mismo agujero que las unidades del drop.
+    Sin esto, quien anula su primer pedido -o deja caducar el pago- lo
+    perderia sin haber comprado nada.
     """
-    if did:
+    if clave:
         await db[_TCOL_CONFIG].update_one({"_id": _TIENDA_DESC_ID},
-                                          {"$pull": {"quien": did}})
+                                          {"$pull": {"quien": clave}})
 
 
 async def _tienda_conf() -> dict:
@@ -38685,6 +38703,11 @@ async def _tienda_conf() -> dict:
         "dia_cierre": int(c.get("dia_cierre") if c.get("dia_cierre") is not None
                           else _TIENDA_DIA_CIERRE),
         "aviso": c.get("aviso") or "",
+        # EL NOMBRE QUE VE QUIEN COMPRA DESDE FUERA. La ropa lleva su marca
+        # (FDs), no la de la plataforma: quien llega de un anuncio de «FDs» y
+        # aterriza en «Tienda Flota» cree que se ha equivocado de sitio.
+        # Vacio = el de siempre («Tienda» + la marca de la plataforma).
+        "nombre": c.get("nombre") or "",
         # Mientras no haya pasarela, el pedido queda a la espera y lo marca la
         # oficina al recibir el pago. El dia que haya Stripe, esto cambia solo.
         # LA PASARELA LA DICE EL ENTORNO, no un campo guardado. Si alguien
@@ -38896,7 +38919,7 @@ async def tienda_crear_pedido(body: dict = Body(...), user: dict = Depends(requi
     # Se aplica LINEA A LINEA y no al total, porque lo que Stripe cobra son las
     # lineas: descontando solo el total, el conductor veria 63,66 y la pantalla
     # de la tarjeta le pediria 74,90.
-    pct = _TIENDA_DESC_PCT if await _tienda_desc_pedir(did) else 0.0
+    pct = _TIENDA_DESC_PCT if await _tienda_desc_pedir(did, {"driver_id": did}) else 0.0
     if pct:
         total = 0.0
         for l in lineas:
@@ -38926,6 +38949,8 @@ async def tienda_crear_pedido(body: dict = Body(...), user: dict = Depends(requi
                   or ((cuenta or {}).get("email") or "")),
         "lineas": lineas, "total": round(total, 2), "unidades": unidades,
         "descuento_pct": pct,
+        # Con que plaza se cogio, para devolverla si el pedido se anula.
+        "descuento_clave": did if pct else None,
         "cierre": _tienda_cierre(conf["dia_cierre"]),
         "estado": "pendiente_pago",
         "creado_en": ahora.isoformat(),
@@ -39100,6 +39125,8 @@ async def tienda_guardar_config(body: dict = Body(...), user: dict = Depends(req
                                         defecto=conf["dia_cierre"], minimo=0, maximo=6)
     if "aviso" in body:
         cambios["aviso"] = _texto_cuerpo(body.get("aviso"), 200)
+    if "nombre" in body:
+        cambios["nombre"] = _texto_cuerpo(body.get("nombre"), 40).strip()
     if not cambios:
         return conf
     cambios["at"] = datetime.now(timezone.utc).isoformat()
@@ -39117,7 +39144,8 @@ async def tienda_marcar_pedido(pedido_id: str, body: dict = Body(...),
         raise HTTPException(400, "Ese estado no existe")
     previo = await db[_TCOL_PEDIDOS].find_one(
         {"id": pedido_id},
-        {"_id": 0, "estado": 1, "lineas": 1, "descuento_pct": 1, "driver_id": 1})
+        {"_id": 0, "estado": 1, "lineas": 1, "descuento_pct": 1, "driver_id": 1,
+         "descuento_clave": 1})
     if not previo:
         raise HTTPException(404, "Ese pedido no existe")
     # ANULAR DEVUELVE LAS UNIDADES AL DROP. Las aparta el pedido al crearse, asi
@@ -39128,10 +39156,10 @@ async def tienda_marcar_pedido(pedido_id: str, body: dict = Body(...),
     if estado == "anulado" and previo.get("estado") != "anulado":
         for l in (previo.get("lineas") or []):
             await _tienda_devolver(l.get("prenda"), int(l.get("cantidad") or 0))
-        # Y la plaza del descuento, por lo mismo: cinco pedidos anulados
-        # dejarian la promocion agotada sin haber vendido nada.
+        # Y la plaza del descuento, por lo mismo: quien anula su primer pedido
+        # no puede quedarse sin el 10 % sin haber comprado nada.
         if previo.get("descuento_pct"):
-            await _tienda_desc_soltar(previo.get("driver_id") or "")
+            await _tienda_desc_soltar(previo.get("descuento_clave") or previo.get("driver_id") or "")
     # Y desanular vuelve a apartarlas, si es que quedan.
     elif previo.get("estado") == "anulado" and estado != "anulado":
         for l in (previo.get("lineas") or []):
@@ -39139,6 +39167,13 @@ async def tienda_marcar_pedido(pedido_id: str, body: dict = Body(...),
                 raise HTTPException(
                     409, "No se puede reactivar: de %s ya no quedan unidades"
                          % (l.get("nombre") or "esa prenda"))
+        # Vuelve con su precio rebajado, asi que vuelve a ocupar su plaza: si
+        # no, esa persona podria llevarse un segundo 10 % en otro pedido.
+        if previo.get("descuento_pct"):
+            clave = previo.get("descuento_clave") or previo.get("driver_id") or ""
+            if clave:
+                await db[_TCOL_CONFIG].update_one({"_id": _TIENDA_DESC_ID},
+                                                  {"$addToSet": {"quien": clave}})
     r = await db[_TCOL_PEDIDOS].update_one(
         {"id": pedido_id},
         {"$set": {"estado": estado,
@@ -39251,13 +39286,20 @@ async def _tienda_soltar_caducadas() -> None:
     limite = (datetime.now(timezone.utc) - timedelta(minutes=_TIENDA_RESERVA_MIN)).isoformat()
     async for p in db[_TCOL_PEDIDOS].find(
             {"estado": "pendiente_pago", "externo": True,
-             "reserva_hasta": {"$lt": limite}}, {"_id": 0, "id": 1, "lineas": 1}):
-        for l in (p.get("lineas") or []):
-            await _tienda_devolver(l.get("prenda"), int(l.get("cantidad") or 0))
-        await db[_TCOL_PEDIDOS].update_one(
+             "reserva_hasta": {"$lt": limite}},
+            {"_id": 0, "id": 1, "lineas": 1, "descuento_pct": 1, "descuento_clave": 1}):
+        # La condicion va en el filtro: si dos visitas sueltan a la vez la misma
+        # reserva, solo la que la anula devuelve las unidades y el descuento.
+        r = await db[_TCOL_PEDIDOS].update_one(
             {"id": p["id"], "estado": "pendiente_pago"},
             {"$set": {"estado": "anulado", "estado_por": "reserva caducada",
                       "estado_at": datetime.now(timezone.utc).isoformat()}})
+        if not r.modified_count:
+            continue
+        for l in (p.get("lineas") or []):
+            await _tienda_devolver(l.get("prenda"), int(l.get("cantidad") or 0))
+        if p.get("descuento_pct"):
+            await _tienda_desc_soltar(p.get("descuento_clave") or "")
 
 
 @api_router.get("/tienda/publico/{token}")
@@ -39270,6 +39312,11 @@ async def tienda_publica(token: str):
     return {
         "abierta": bool(conf["publico"]),
         "pasarela": conf["pasarela"],
+        "nombre": conf["nombre"],
+        # El porcentaje y nada mas: si a ESTA persona le toca no se sabe hasta
+        # que da su correo al comprar, y preguntarlo antes dejaria a cualquiera
+        # averiguar si un correo ha comprado aqui.
+        "descuento_pct": _TIENDA_DESC_PCT,
         "prendas": [{
             "id": p["id"], "nombre": p.get("nombre"), "tipo": p.get("tipo"),
             "color": p.get("color"), "tallas": p.get("tallas") or [],
@@ -39277,8 +39324,38 @@ async def tienda_publica(token: str):
             "recargo_talla": (_tienda_precio(p, "XXL") or 0) - (_tienda_precio(p) or 0),
             "tallas_grandes": list(_TALLAS_GRANDES),
             "quedan": _tienda_quedan(p),
+            # La version de la foto: va en la URL, asi que una nueva no tira
+            # de la cache vieja (mismo criterio que en el portal).
+            "foto_ver": p.get("foto_ver"),
         } for p in prendas],
     }
+
+
+@api_router.get("/tienda/publico/{token}/foto/{prenda_id}")
+async def tienda_publica_foto(token: str, prenda_id: str):
+    """La foto de una prenda A LA VENTA, para quien tiene el enlace.
+
+    Hasta ahora solo la veia quien tenia sesion, asi que la tienda publica
+    -la que se anuncia- enseñaba una lista de nombres sin una sola imagen. La
+    puerta es la misma que la del catalogo: el token del enlace. Y solo de lo
+    publicado: un borrador o una prenda archivada no se enseñan por aqui.
+    """
+    await _tienda_por_token(token)
+    publicada = await db[_PRENDAS_COL].find_one(
+        {"id": _texto_cuerpo(prenda_id, 60), "estado": "publicada", "archivada": {"$ne": True}},
+        {"_id": 0, "id": 1})
+    if not publicada:
+        raise HTTPException(404, "Esa prenda no esta a la venta")
+    f = await db[_TCOL_FOTOS].find_one({"prenda": publicada["id"]}, {"_id": 0})
+    if not f:
+        raise HTTPException(404, "Esa prenda no tiene foto")
+    from fastapi.responses import Response as _Resp
+    return _Resp(
+        content=base64.b64decode(f.get("datos") or ""),
+        media_type=f.get("mime") or "image/jpeg",
+        # Publica y por un año: la URL lleva la version dentro.
+        headers={"cache-control": "public, max-age=31536000, immutable"},
+    )
 
 
 @api_router.post("/tienda/publico/{token}/comprar")
@@ -39301,6 +39378,14 @@ async def tienda_publica_comprar(token: str, body: dict = Body(...)):
         raise HTTPException(400, "Esa talla no existe para %s" % p.get("nombre"))
     uds = _entero(body.get("cantidad"), "la cantidad", defecto=1, minimo=1,
                   maximo=_TIENDA_MAX_UDS_LINEA)
+    # EL CORREO ES OPCIONAL Y SOLO SIRVE PARA DOS COSAS: el 10 % de primera
+    # compra y que el recibo llegue a donde toca. Sin el se compra igual, a
+    # precio completo, y Stripe lo pide en su pantalla como siempre. Si viene,
+    # tiene que ser un correo: uno mal escrito se dice, no se ignora.
+    correo = _texto_cuerpo(body.get("email"), 160).strip()
+    if correo:
+        correo = _tienda_correo(correo)
+    cupon = _texto_cuerpo(body.get("cupon"), 64)
     if not await _tienda_reservar(p["id"], uds):
         quedan = _tienda_quedan(await db[_PRENDAS_COL].find_one(
             {"id": p["id"]}, {"_id": 0, "unidades": 1, "vendidas": 1}) or {})
@@ -39308,6 +39393,16 @@ async def tienda_publica_comprar(token: str, body: dict = Body(...)):
 
     # EL PRECIO SALE DEL CATALOGO, con la talla. Nunca del cuerpo.
     precio = _tienda_precio(p, talla)
+    # EL 10 % DE PRIMERA COMPRA, por el correo. No se suma a un cupon de
+    # campaña: Stripe admite un descuento por pago y el cupon ya es la
+    # bienvenida de esa persona. Se aplica a la linea, como en el portal,
+    # porque lo que cobra Stripe son las lineas.
+    clave_desc = _tienda_desc_clave_correo(correo)
+    pct = (_TIENDA_DESC_PCT if not cupon and clave_desc
+           and await _tienda_desc_pedir(clave_desc, {"email": correo}) else 0.0)
+    precio_sin = precio
+    if pct:
+        precio = round(precio * (1 - pct), 2)
     ahora = datetime.now(timezone.utc)
     doc = {
         "id": str(uuid.uuid4()),
@@ -39315,11 +39410,14 @@ async def tienda_publica_comprar(token: str, body: dict = Body(...)):
         # Sin conductor: es una venta de fuera. `driver_id` vacio es lo que la
         # separa de las de la nave en la pantalla de la oficina.
         "driver_id": "", "externo": True,
-        "driver_nombre": "", "centro": "", "email": "",
+        "driver_nombre": "", "centro": "", "email": correo,
         "lineas": [{"prenda": p["id"], "nombre": p.get("nombre"), "talla": talla,
                     "cantidad": uds, "precio": precio,
+                    **({"precio_sin_descuento": precio_sin} if pct else {}),
                     "importe": round(precio * uds, 2), "personalizado": ""}],
         "total": round(precio * uds, 2), "unidades": uds,
+        "descuento_pct": pct,
+        "descuento_clave": clave_desc if pct else None,
         "cierre": _tienda_cierre(conf["dia_cierre"]),
         "estado": "pendiente_pago",
         "reserva_hasta": (ahora + timedelta(minutes=_TIENDA_RESERVA_MIN)).isoformat(),
@@ -39343,13 +39441,17 @@ async def tienda_publica_comprar(token: str, body: dict = Body(...)):
         ("line_items[0][price_data][currency]", "eur"),
         ("line_items[0][price_data][unit_amount]", str(int(round(precio * 100)))),
         ("line_items[0][price_data][product_data][name]",
-         "%s - talla %s" % (p.get("nombre") or "Prenda", talla)),
+         "%s - talla %s%s" % (p.get("nombre") or "Prenda", talla,
+                              " (-%d %% primera compra)" % round(pct * 100) if pct else "")),
     ]
+    # El correo que dio, fijo en la pantalla de pago: el 10 % es de ese correo
+    # y el recibo va a ese correo.
+    if correo:
+        datos.append(("customer_email", correo))
     # Un cupon de una campaña (ej. bienvenida a candidatos): lo valida STRIPE,
     # no nosotros (redeem_by dentro del propio cupon) — asi no hay que guardar
     # ni comprobar caducidad aqui. Si ya no vale (caducado, mal escrito), se
     # reintenta SIN el: una venta real no se pierde por un cupon viejo.
-    cupon = _texto_cuerpo(body.get("cupon"), 64)
     intento = datos + [("discounts[0][coupon]", cupon)] if cupon else datos
 
     import httpx as _httpx
@@ -39383,10 +39485,14 @@ async def tienda_publica_comprar(token: str, body: dict = Body(...)):
             cupon_aplicado = bool(cupon)
     except Exception as e:
         await _tienda_devolver(p["id"], uds)
+        if pct:
+            await _tienda_desc_soltar(clave_desc)
         logger.error("Stripe checkout publico: %s", e)
         raise HTTPException(502, "No se ha podido abrir el pago. Inténtalo en un minuto.")
     if r.status_code >= 300:
         await _tienda_devolver(p["id"], uds)
+        if pct:
+            await _tienda_desc_soltar(clave_desc)
         logger.error("Stripe checkout publico %s: %s", r.status_code, r.text[:300])
         raise HTTPException(502, "No se ha podido abrir el pago. Inténtalo en un minuto.")
     ses = r.json()
@@ -39404,8 +39510,11 @@ async def tienda_publica_comprar(token: str, body: dict = Body(...)):
         await db[_TCOL_PEDIDOS].insert_one(dict(doc))   # copia (gotcha 42)
     except Exception:
         await _tienda_devolver(p["id"], uds)
+        if pct:
+            await _tienda_desc_soltar(clave_desc)
         raise
-    return {"url": ses.get("url"), "ref": doc["ref"], "cupon_aplicado": cupon_aplicado}
+    return {"url": ses.get("url"), "ref": doc["ref"], "cupon_aplicado": cupon_aplicado,
+            "descuento_pct": pct}
 
 
 # -------------------------------------------------------------------------
@@ -39498,7 +39607,7 @@ async def tienda_anular_mi_pedido(pedido_id: str, user: dict = Depends(require_a
     did = _tienda_driver(user)
     p = await db[_TCOL_PEDIDOS].find_one(
         {"id": pedido_id, "driver_id": did},
-        {"_id": 0, "estado": 1, "lineas": 1, "descuento_pct": 1})
+        {"_id": 0, "estado": 1, "lineas": 1, "descuento_pct": 1, "descuento_clave": 1})
     if not p:
         raise HTTPException(404, "Ese pedido no existe")
     if p.get("estado") != "pendiente_pago":
@@ -39514,7 +39623,7 @@ async def tienda_anular_mi_pedido(pedido_id: str, user: dict = Depends(require_a
     for l in (p.get("lineas") or []):
         await _tienda_devolver(l.get("prenda"), int(l.get("cantidad") or 0))
     if p.get("descuento_pct"):
-        await _tienda_desc_soltar(did)
+        await _tienda_desc_soltar(p.get("descuento_clave") or did)
     return {"ok": True, "estado": "anulado"}
 
 

@@ -2,7 +2,7 @@
 """Una base de datos de mentira, lo justo para probar flujos enteros del
 servidor sin MongoDB: find/find_one/update (con upsert)/insert/delete/distinct
 y los operadores que usan (=, $in, $nin, $ne, $exists, rangos, $and, $or,
-$regex; $set, $unset, $setOnInsert, $addToSet, $push). No es mongomock: si
+$regex; $set, $unset, $setOnInsert, $addToSet, $push, $pull). No es mongomock: si
 una prueba necesita más, se añade aquí y se dice."""
 import re
 from types import SimpleNamespace
@@ -123,6 +123,9 @@ class Col:
                 d[k].append(v)
         for k, v in u.get("$push", {}).items():
             d.setdefault(k, []).append(v)
+        for k, v in u.get("$pull", {}).items():
+            if isinstance(d.get(k), list):
+                d[k] = [x for x in d[k] if x != v]
 
     async def find_one(self, q=None, proyeccion=None, sort=None, **_):
         docs = [d for d in self.docs if _casa(d, q)]

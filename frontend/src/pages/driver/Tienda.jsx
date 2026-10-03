@@ -66,8 +66,8 @@ export default function Tienda({ onBack }) {
   const total = useMemo(
     () => cesta.reduce((s, l) => s + (l.precio || 0) * l.cantidad, 0), [cesta])
 
-  /* EL DESCUENTO DE LOS PRIMEROS. El porcentaje, cuantas plazas quedan y si
-     esta persona tiene derecho vienen del servidor, por lo mismo que el
+  /* EL DESCUENTO DE PRIMERA COMPRA. El porcentaje y si esta persona tiene
+     derecho (su primer pedido) vienen del servidor, por lo mismo que el
      recargo de talla: aqui solo se pinta. Y se aplica LINEA A LINEA, igual
      que en el backend, porque redondear el total entero daria un centimo de
      diferencia con lo que cobra la tarjeta. */
@@ -152,7 +152,7 @@ export default function Tienda({ onBack }) {
               el numero que vale es este y no el que calculo la cesta. */}
           {hecho.descuento_pct > 0 && (
             <p className="mt-1 text-[12.5px] font-semibold text-brand-400">
-              Con el -{Math.round(hecho.descuento_pct * 100)} % de los primeros
+              Con el -{Math.round(hecho.descuento_pct * 100)} % de tu primera compra
             </p>
           )}
           <p className="mx-auto mt-4 max-w-[17rem] text-[12.5px] leading-relaxed text-dark-500">
@@ -168,11 +168,10 @@ export default function Tienda({ onBack }) {
 
   return (
     <Marco onBack={onBack}>
-      {desc.para_ti && desc.quedan > 0 && (
+      {desc.para_ti && desc.pct > 0 && (
         <p className="mb-4 rounded-2xl border border-brand-500/25 bg-brand-500/[0.07] px-4 py-3 text-[12.5px] leading-relaxed text-dark-200">
-          <b className="text-brand-400">-{Math.round(desc.pct * 100)} % por ser de los primeros.</b>{' '}
-          Se aplica solo al primer pedido y quedan{' '}
-          <b className="text-dark-100">{desc.quedan} de {desc.plazas}</b> plazas.
+          <b className="text-brand-400">-{Math.round(desc.pct * 100)} % en tu primera compra.</b>{' '}
+          Se descuenta solo en este primer pedido, en todo lo que lleves.
         </p>
       )}
       {datos.aviso && (
@@ -239,7 +238,7 @@ export default function Tienda({ onBack }) {
                 <span className="tabular-nums">{eur(total)}</span>
               </div>
               <div className="flex items-baseline justify-between text-[13px] text-brand-400">
-                <span>Descuento de los {desc.plazas} primeros</span>
+                <span>Descuento de primera compra</span>
                 <span className="tabular-nums">-{eur(rebaja)}</span>
               </div>
             </div>
