@@ -38,7 +38,7 @@ Pantallas: `panel/pages/Reparto.jsx`, `pages/driver/MiRuta.jsx`,
 | Ámbito | Norma | Cómo queda |
 |---|---|---|
 | Datos de los clientes de la empresa (nombre, teléfono, dirección, qué compra) | RGPD art. 4, 6.1.b, 28 | La empresa es la **responsable**; Flota su **encargada**. Nosotros NO los vemos: entrando como la empresa (`imp` en el token) salen tapados (`reparto.tapar`) y no se pueden crear ni tocar pedidos. |
-| Contrato de encargo | RGPD art. 28.3 | Publicado el 03-10 en `/encargo` (`legal/Encargo.jsx`), anexo de los términos que se acepta en el alta (casilla del registro). Falta la razón social, CIF y domicilio cuando se constituya la empresa, y un correo de contacto (`MARCA.correo` sigue vacío). |
+| Contrato de encargo | RGPD art. 28.3 | Publicado el 03-10 en `/encargo` (`legal/Encargo.jsx`), anexo de los términos que se acepta en el alta (casilla del registro). Falta la razón social, CIF y domicilio cuando se constituya la empresa, (el correo ya está: contacto@flotadsp.com desde el 03-10). |
 | Minimización | RGPD art. 5.1.c | Cada conductor ve solo SUS pedidos; las direcciones van al geocodificador sin nombre ni teléfono. |
 | Plazo de conservación | RGPD art. 5.1.e | Nombre, teléfono, dirección, contenido y coordenadas se borran solos a los N días (por defecto 30, la empresa elige 1-90). Quedan los números. Rastros de ubicación: 30 días. |
 | Ubicación de los conductores | LOPDGDD art. 90, ET art. 20.3 | Solo entre «Empezar jornada» y «Terminar»; la primera vez el conductor lee el aviso (qué se ve, quién, cuánto tiempo) y queda registrado (`reparto_avisos`). Fuera de jornada el servidor rechaza los puntos (409) y no guarda ni el último. La plataforma tampoco ve las ubicaciones. |
@@ -57,7 +57,7 @@ Pantallas: `panel/pages/Reparto.jsx`, `pages/driver/MiRuta.jsx`,
 - Foto del ticket leída en el móvil, sin IA externa.
 
 ### Pendiente que decide Dani
-- Datos de la empresa (razón social, CIF, domicilio) y un correo de contacto
-  público para las páginas legales.
+- Datos de la empresa (razón social, CIF, domicilio) para las páginas legales,
+  cuando se constituya. El correo ya está (contacto@flotadsp.com).
 - Clave de Gemini de pago antes de encender la IA de tickets.
 - Probar con Gadis gratis: activar a mano `status: active` en su organización.

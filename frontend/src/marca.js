@@ -16,9 +16,9 @@ export const MARCA = {
   lema: 'Gestión de flotas con IA',
   // Cómo se llama al asistente dentro de la app («@flota, …»).
   ia: 'Flota IA',
-  // Correo de contacto. Vacío hasta tener dominio propio: las pantallas que lo
-  // necesitan enseñan el formulario de contacto en su lugar.
-  correo: '',
+  // Correo de contacto (03-10-2026, Dani). Cloudflare Email Routing lo
+  // reenvía al Gmail de Dani: el MX de flotadsp.com apunta a Cloudflare.
+  correo: 'contacto@flotadsp.com',
 }
 
 /** La dirección desde la que se sirve la app, sin barra final. */
