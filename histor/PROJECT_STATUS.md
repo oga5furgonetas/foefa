@@ -336,6 +336,13 @@ Contraseña del panel restablecida el 30-09 con `cli admin:reset-password` (ver 
   Wikimedia Commons (solo licencias libres, nunca personas; `media/wikimedia.ts`,
   `cli images:backfill`). Las historias solo de país no tienen (la imagen del país
   en Wikipedia es la bandera). Falta un banco propio o de agencia.
+- **Vídeos de la noticia** (03-10-2026, `media/videos.ts`): el worker lee cada 5 min el RSS
+  público de 16 canales de YouTube de medios y agencias (RTVE, Antena 3, France 24, Euronews,
+  CNN, BBC Mundo, AFP, DW, Reuters, AP, tagesschau, franceinfo, Sky TG24, RTP, CNN Brasil) y
+  empareja cada vídeo con la historia publicada que cuenta lo mismo (≥ 3 raíces en común con un
+  nombre propio, ≥ 50 %). Conservador a propósito: con datos reales, 4 de 97 vídeos y los 4
+  bien. Se inserta con youtube-nocookie y el nombre del canal; nada se descarga. A mano:
+  `cli videos:sync`.
 - `/.well-known/security.txt` con el contacto definitivo.
 - Idiomas preparados (nl, ja, ko, ar, hi): faltan diccionario, rutas y frases.
 - Búsqueda: pasar a OpenSearch/Meilisearch si el volumen lo pide.
