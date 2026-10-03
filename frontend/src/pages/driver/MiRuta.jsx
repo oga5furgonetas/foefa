@@ -186,9 +186,11 @@ export default function MiRuta({ onBack, embebido = false }) {
       try {
         const { data } = await repOrdenar(punto)
         const rr = data.ruta
+        const n = data.ordenados
+        const paradas = `${n} parada${n === 1 ? '' : 's'}`
         setAviso(rr?.fin
-          ? `Ruta ordenada por tiempo: ${data.ordenados} paradas, acabas ≈ ${rr.fin}${rr.fuente === 'linea_recta' ? ' (sin servidor de rutas: calculada por distancia)' : ''}`
-          : `Ruta ordenada: ${data.ordenados} paradas`)
+          ? `Ruta ordenada por tiempo: ${paradas}, acabas ≈ ${rr.fin}${rr.fuente === 'linea_recta' ? ' (sin servidor de rutas: calculada por distancia)' : ''}`
+          : `Ruta ordenada: ${paradas}`)
         cargar()
       } catch (e) {
         setAviso(e?.response?.data?.detail || 'No se pudo ordenar')
