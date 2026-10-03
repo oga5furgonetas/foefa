@@ -1224,6 +1224,7 @@ test('Sector · un súper ve el panel de reparto, no el de paquetería', async (
 /* EL CLIENTE SIGUE SU PEDIDO: estado, hora y paradas antes; nada personal. */
 test('Reparto · la página de seguimiento del cliente', async ({ page }) => {
   const fallos = vigilar(page)
+  await simularApi(page, 'vacio')   // la analítica y la versión también van a la API
   await page.route(/\/api\/seguimiento\//, (r) => r.fulfill({ json: {
     empresa: 'Supermercado de prueba', estado: 'pendiente', eta: '10:42', paradas_antes: 2, franja: ['10:00', '12:00'], tipo: 'entrega' } }))
   await page.goto('/s/abcdefghijklmnopqrstuv', { waitUntil: 'domcontentloaded' })

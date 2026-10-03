@@ -101,14 +101,11 @@ export function decodeToken() {
 const HUELLA_KEY = 'flota_huella'
 // La sesión real guardada mientras se mira una demo (ver `guardarSesionPrevia`).
 const PREVIA_KEY = 'flota_sesion_previa'
-// `panel_center` se queda: el nombre de un centro no es un dato personal y el
-// selector solo admite los de la empresa actual (borrarlo dejaba el panel en
-// «Todos» en cada entrada y media docena de pantallas pidiendo centro).
-const SE_QUEDAN = new Set([TOKEN_KEY, ADMIN_KEY, ACCESO_KEY, HUELLA_KEY, 'flota_token_super', PREVIA_KEY, 'flota_lang', 'panel_center',
-  'panel_theme', 'panel_theme_elegido', 'ld_theme', 'cookie_consent', 'flota_driver_token', 'flota_driver',
-  'flota_plan', 'flota_billing'])
-// Marcas que ya llevan el id del usuario dentro: no se mezclan.
-const DE_USUARIO = /^(ayuda_vista_|empleo_visto_)/
+// Lo que SÍ lleva datos de una empresa: los avisos en vivo (`ln_pending`:
+// títulos y textos; `ln_*`: ids vistos). Las preferencias de pantalla
+// (centro elegido, pestaña de la plantilla, tema, zona del plano…) no son
+// datos de nadie y borrarlas dejaba el panel «reseteado» en cada entrada.
+const CON_DATOS = /^ln_/
 
 export function aislarSesion() {
   try {
@@ -118,7 +115,7 @@ export function aislarSesion() {
     if (localStorage.getItem(HUELLA_KEY) === huella) return
     const claves = []
     for (let i = 0; i < localStorage.length; i++) claves.push(localStorage.key(i))
-    claves.filter((k) => k && !SE_QUEDAN.has(k) && !DE_USUARIO.test(k)).forEach((k) => localStorage.removeItem(k))
+    claves.filter((k) => k && CON_DATOS.test(k)).forEach((k) => localStorage.removeItem(k))
     localStorage.setItem(HUELLA_KEY, huella)
   } catch { /* sin almacenamiento: no hay nada que mezclar */ }
 }
