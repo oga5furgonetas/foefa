@@ -275,6 +275,11 @@ const INSTITUTIONS: Record<string, [RegExp, string][]> = {
 
 /** Secciones en las que la capital ilustra la noticia de un país (gobierno, economía): no en deportes ni cultura. */
 const CAPITAL_SECTIONS = new Set(['politics', 'economy', 'business', 'society', 'world']);
+/**
+ * Secciones donde la foto tiene que ser del protagonista: el lugar no dice nada. El 03-10-2026 el
+ * concierto de BTS en Bogotá salía con una autopista de Bogotá. Sin protagonista, la portadilla.
+ */
+const SUBJECT_SECTIONS = new Set(['entertainment', 'sports', 'culture', 'lifestyle']);
 
 /**
  * Último recurso para una noticia de política sin persona ni lugar en el titular («PSOE y Sumar
@@ -377,6 +382,7 @@ export function imageCandidates(
   if (capitals && opts.categoryId && CAPITALS[cc]) push(fallback, { name: CAPITALS[cc], lang: 'en', place: true, rank: 3 });
   const byRank = (x: Ranked, y: Ranked) => x.rank - y.rank;
   const strip = ({ name, lang, place, trusted }: Ranked, last = false): ImageCandidate => ({ name, lang, place, ...(trusted ? { trusted } : {}), ...(last ? { fallback: true } : {}) });
+  if (opts.categoryId && SUBJECT_SECTIONS.has(opts.categoryId)) return subjects.sort(byRank).map((c) => strip(c));
   return [...[...subjects.sort(byRank), ...places.sort(byRank), ...fromSummary].map((c) => strip(c)), ...fallback.map((c) => strip(c, true))];
 }
 

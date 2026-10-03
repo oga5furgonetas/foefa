@@ -80,3 +80,13 @@ describe('imagen ilustrativa de Wikimedia Commons', () => {
     expect(img).toMatchObject({ title: 'Madrid', license: 'Public domain', author: null, attribution: 'Wikimedia Commons' });
   });
 });
+
+describe('fotos en espectáculos y deportes (03-10-2026)', () => {
+  it('nunca la foto del lugar: el concierto de BTS en Bogotá no lleva una autopista', async () => {
+    const { imageCandidates } = await import('../../src/media/wikimedia');
+    const arts = [{ language: 'es', headline: 'BTS conquistó Bogotá: estos fueron los momentos de su primer concierto en El Campín', summary: 'BTS hizo vibrar Bogotá en su primer concierto.' }];
+    const c = imageCandidates(arts, { categoryId: 'entertainment', countryCode: 'CO' });
+    expect(c.some((x) => x.place)).toBe(false);
+    expect(imageCandidates(arts, { categoryId: 'society', countryCode: 'CO' }).some((x) => x.place)).toBe(true);
+  });
+});
