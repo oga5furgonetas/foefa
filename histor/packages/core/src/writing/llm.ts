@@ -17,7 +17,7 @@ import { claimRef, writeDeterministic, type WriteOptions } from './deterministic
 import type { Draft } from './draft';
 import type { FactSheet } from './factsheet';
 import { mediaNames, stripMediaAttribution } from './media';
-import { tidyParagraphs } from './tidy';
+import { tidyHeadline, tidyParagraphs } from './tidy';
 import { validateDraft } from './validate';
 import { longestCommonRun } from './quality';
 import { DEFAULT_EDITORIAL_SETTINGS } from '../config/settings';
@@ -203,7 +203,7 @@ export async function writeWithLlm(db: Db, fs: FactSheet, opts: WriteOptions & {
   const noMedia = (t: string | undefined) => (t ? stripMediaAttribution(t.trim(), media) : '');
   return {
     ...base,
-    headline: out.headline.trim(),
+    headline: tidyHeadline(out.headline),
     subheadline: base.subheadline,
     summary: truncate(noMedia(out.summary) || base.summary, 300),
     seoDescription: truncate(noMedia(out.seo_description) || base.seoDescription, 160),

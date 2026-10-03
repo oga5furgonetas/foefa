@@ -66,7 +66,11 @@ export function findPlaces(text: string): PlaceMatch[] {
     let idx = f.indexOf(` ${key} `);
     while (idx >= 0) {
       const originalSlice = text.slice(Math.max(0, idx - 2), idx + key.length + 2);
-      if (/\p{Lu}/u.test(originalSlice) || key.length > 6) {
+      // Tras un nombre de pila no es un lugar: «Enner Valencia» (un futbolista) hacía de Boca una
+      // noticia de España (03-10-2026). Al principio de frase, la mayúscula de «En», «De»… no cuenta.
+      const before = text.slice(Math.max(0, idx - 30), Math.max(0, idx - 1)).match(/(^|[\s(«"“])([\p{L}'’-]+)$/u)?.[2] ?? '';
+      const personName = /^\p{Lu}\p{Ll}+$/u.test(before) && !PLACE_LEADS.has(before.toLowerCase());
+      if (!personName && (/\p{Lu}/u.test(originalSlice) || key.length > 6)) {
         // Ambigüedad (Santiago, Córdoba, Valencia): prefiere la ciudad más poblada;
         // el resolvedor geográfico usa el contexto de país para desempatar.
         for (const m of entries) found.push({ at: idx, m });
@@ -89,6 +93,18 @@ export function findPlaces(text: string): PlaceMatch[] {
   }
   return out;
 }
+
+/**
+ * Palabras con mayúscula que pueden ir delante de un lugar sin que sea un nombre de persona:
+ * principio de frase («En Valencia…»), cargos y organismos («Ayuntamiento de…» va con «de»,
+ * pero «Gobierno Vasco», «Comunidad Valenciana», «Nueva York» o «Puerto Rico» no).
+ */
+const PLACE_LEADS = new Set([
+  'en', 'de', 'del', 'desde', 'hacia', 'hasta', 'para', 'por', 'sobre', 'entre', 'tras', 'y', 'e', 'o', 'a', 'al', 'la', 'el', 'los', 'las', 'con', 'sin',
+  'in', 'at', 'from', 'to', 'the', 'of', 'and', 'near', 'nach', 'aus', 'bei', 'im', 'und', 'à', 'au', 'aux', 'dans', 'et', 'le', 'les', 'da', 'em', 'do', 'na', 'no', 'nel', 'nella', 'di', 'per',
+  'nueva', 'nuevo', 'new', 'san', 'santa', 'santo', 'são', 'saint', 'sankt', 'ciudad', 'puerto', 'porto', 'port', 'puerta', 'gran', 'great', 'north', 'south', 'east', 'west', 'norte', 'sur', 'alto', 'bajo',
+  'comunidad', 'región', 'region', 'provincia', 'estado', 'gobierno', 'ayuntamiento', 'universidad', 'aeropuerto', 'hospital', 'condado', 'county', 'lake', 'lago', 'monte', 'mount', 'río', 'rio', 'river', 'isla', 'islas', 'golfo', 'mar',
+]);
 
 // Solo preposiciones/artículos de nombres propios: las conjunciones (y, and, und…) separan entidades.
 const CONNECTORS = new Set(['de', 'del', 'la', 'las', 'los', 'von', 'van', 'der', 'den', 'di', 'da', 'dos', 'das', 'du', 'le', 'of', 'for', 'para']);

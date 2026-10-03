@@ -16,6 +16,7 @@
  *   images:backfill [--hours=72]  pone imagen ilustrativa (Wikimedia Commons) a lo publicado que no tenga
  *   admin:reset-password    NEW_PASSWORD=… [--email=…] restablece la contraseña (sin correo configurado)
  *   stories:recheck [--hours=72]  vuelve a verificar y redactar lo publicado en esas horas (tras mejorar el redactor)
+ *   items:reclassify [--hours=48]  país y sección de nuevo con las reglas de hoy; retira lo que ya no es noticia
  *   articles:clean-media [--hours=168]  quita de lo publicado las atribuciones a medios («según 20minutos»)
  */
 import { and, eq, gte, inArray, isNull } from 'drizzle-orm';
@@ -25,6 +26,7 @@ import { closeDb, getDb } from '@histor/core/db/client';
 import { articles, media, rawItems, sources, stories, storyItems } from '@histor/core/db/schema';
 import { cleanStoredArticle, expandNames, MEDIA_TYPES } from '@histor/core/writing/media';
 import { bodyText } from '@histor/core/writing/draft';
+import { reclassifyRecent } from '@histor/core/services/reclassify';
 import { nonNewsReason } from '@histor/core/text/nonnews';
 import { runMigrations } from '@histor/core/db/migrate';
 import { attachStoryImage } from '@histor/core/media/wikimedia';
@@ -132,6 +134,13 @@ async function main(): Promise<number> {
       console.log(`✓ ${ids.length} historias en cola para reverificar y reescribir; ${hidden} retiradas por no ser noticia`);
       return 0;
     }
+    case 'items:reclassify': {
+      // País y sección de nuevo con las reglas de hoy (y fuera lo que ya no es noticia).
+      const hours = Number(flagValue('hours') ?? 48);
+      const r = await reclassifyRecent(getDb(), hours);
+      console.log(`✓ ${r.items} piezas recalculadas; ${r.stories} historias y ${r.articles} artículos cambian de sección o país; ${r.hidden} retiradas por no ser noticia`);
+      return 0;
+    }
     case 'articles:clean-media': {
       // Lo ya publicado, sin «según 20minutos» (Dani, 03-10-2026): se limpia en el sitio, sin
       // gastar IA ni esperar a que cada noticia se reescriba. Por defecto, la última semana.
@@ -226,7 +235,7 @@ async function main(): Promise<number> {
       return 0;
     }
     default:
-      console.log('Uso: cli <migrate|seed|create-admin|demo:seed|demo:purge|sources:check|images:backfill|images:recheck|stories:recheck|articles:clean-media|settings:editorial|social:requeue|social:brief|run-once|newsletter:send|check:env>');
+      console.log('Uso: cli <migrate|seed|create-admin|demo:seed|demo:purge|sources:check|images:backfill|images:recheck|stories:recheck|items:reclassify|articles:clean-media|settings:editorial|social:requeue|social:brief|run-once|newsletter:send|check:env>');
       return cmd ? 1 : 0;
   }
 }

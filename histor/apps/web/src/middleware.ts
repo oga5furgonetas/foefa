@@ -13,6 +13,9 @@ import { NextResponse, type NextRequest } from 'next/server';
 const LANGS = ['es', 'en', 'de', 'fr', 'it', 'pt'];
 const COUNTRY_LANG: Record<string, string> = { ES: 'es', MX: 'es', AR: 'es', CO: 'es', CL: 'es', PE: 'es', VE: 'es', EC: 'es', UY: 'es', US: 'en', GB: 'en', IE: 'en', CA: 'en', AU: 'en', DE: 'de', AT: 'de', CH: 'de', FR: 'fr', BE: 'fr', IT: 'it', PT: 'pt', BR: 'pt' };
 
+/** «Noticias de hoy» en cada idioma (las mismas palabras que i18n/routes.ts; el Edge no importa el núcleo). */
+const TODAY: Record<string, string> = { es: 'noticias-de-hoy', en: 'news-today', de: 'nachrichten-heute', fr: 'actualites-du-jour', it: 'notizie-di-oggi', pt: 'noticias-de-hoje' };
+
 function pickLang(req: NextRequest): string {
   const cookie = req.cookies.get('histor_lang')?.value;
   if (cookie && LANGS.includes(cookie)) return cookie;
@@ -114,6 +117,17 @@ export function middleware(req: NextRequest) {
     const lang = pickLang(req);
     const url = req.nextUrl.clone();
     url.pathname = `/${lang}`;
+    const res = NextResponse.redirect(url, 302);
+    res.headers.set('vary', 'accept-language, cookie');
+    return res;
+  }
+
+  // Un solo enlace para los anuncios en todo el mundo (03-10-2026): histor.es/hoy (o /today) lleva a
+  // «Noticias de hoy» en el idioma del lector, con los parámetros de la campaña intactos.
+  if (pathname === '/hoy' || pathname === '/today') {
+    const lang = pickLang(req);
+    const url = req.nextUrl.clone();
+    url.pathname = `/${lang}/${TODAY[lang] ?? TODAY.en}`;
     const res = NextResponse.redirect(url, 302);
     res.headers.set('vary', 'accept-language, cookie');
     return res;

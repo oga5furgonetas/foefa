@@ -41,14 +41,33 @@ const DATE_ONLY =
 const MATCH_GUIDE =
   /(\b(dónde ver|donde ver|cómo ver|como ver|dónde y cuándo|a qué hora (juega|juegan|es|empieza|será)|horario y (dónde|cómo)|minuto a minuto|en vivo y en directo|ver (el partido )?(gratis |en )?online|alineaci(ón|ones) (probables?|confirmadas?)|posible alineación|how to watch|where to watch|live stream|wo läuft|im tv und stream|où regarder|dove vedere|onde assistir|como assistir)\b|\bvs\.? [^:]{2,40}(en vivo|en directo|live)\b)/i;
 
+/**
+ * Más servicio con formato de noticia, visto en portada el 03-10-2026: loterías de América
+ * («Super Astro Luna entrega el número 4014», «Resultados de El Sinuano Día y Noche»), el tiempo
+ * de una ciudad («Prepárese antes de salir: pronóstico del clima en Culiacán», «Clima CDMX hoy»),
+ * la cotización del día («Dólar HOY 30 de septiembre en Colombia»), «Hoy No Circula» y los
+ * recopilatorios de temblores («Temblor en México hoy: sismos recientes»).
+ */
+const SERVICE_MORE =
+  /(\b(super astro|astro (sol|luna)|sinuano|el chance|chance (dorado|millonario)|baloto|la tinka|kábala|kabala|melate|chispazo|pick 3|quini 6|tris de las|lotería de (bogotá|medellín|cundinamarca|boyacá|santander|manizales|cali|el valle)|números ganadores|numeros ganadores|resultados? del? (sorteo|la lotería|el chance)|signo .{1,20} como ganador)\b|\b(pronóstico del (clima|tiempo)|pronostico del (clima|tiempo)) (en|para)\b|^clima (en )?[\p{Lu}\p{L} ]{2,30}( y [\p{L} ]+)? (hoy|mañana|este)\b|^el (clima|tiempo) (en|de) .{2,40} (hoy|mañana)\b|\b(dólar|dolar|euro) hoy\b|\bprecio del (dólar|dolar|euro) (hoy|en)\b|\btipo de cambio (hoy|del día)\b|\bprecio de la (luz|gasolina) (hoy|mañana|para)\b|\bhoy no circula\b|\b(temblor|sismo)s? (en [\p{L} ]{2,25} )?hoy\b|\b(sismos|temblores) recientes\b|\búltimos sismos\b)/iu;
+
+/** Directos y blogs en vivo: «Temblor hoy en Perú EN VIVO», «EN DIRECTO | …». En mayúsculas, como los marcan las webs. */
+const LIVE_BLOG = /(\bEN VIVO\b|\bEN DIRECTO\b|\bAO VIVO\b|^(directo|en directo|en vivo|live|liveblog|ticker)\s*[:|]|\bLIVE\s*[:|])/u;
+
+/** Temblores pequeños («Sismo de magnitud 4,0 se registró en el Callao»): no son noticia fuera de la zona. */
+const MINOR_QUAKE = /\b(sismo|temblor|terremoto|earthquake|quake|séisme|seisme|terremoto|erdbeben)\b.{0,40}?\b(magnitud|magnitude|stärke)\s*(de\s*)?(\d)[.,]?(\d)?/iu;
+
 /** Motivo por el que la pieza no es noticia, o null si lo es. */
 export function nonNewsReason(title: string, url: string): string | null {
   const t = title.trim();
   if (TITLE_START.test(t) || TITLE_LABEL.test(t) || TITLE_END.test(t)) return 'no es noticia (opinión, galería, resumen, pódcast o cuestionario)';
   if (GDACS_GREEN.test(t)) return 'no es noticia (alerta automática de nivel verde, impacto bajo)';
   if (SPONSORED.test(t)) return 'no es noticia (publicidad o contenido patrocinado)';
-  if (SERVICE.test(t)) return 'no es noticia (servicio: sorteos, horóscopo o pasatiempos)';
+  if (SERVICE.test(t) || SERVICE_MORE.test(t)) return 'no es noticia (servicio: sorteos, el tiempo de una ciudad, cotizaciones o pasatiempos)';
   if (MATCH_GUIDE.test(t)) return 'no es noticia (guía de partido o directo minuto a minuto)';
+  if (LIVE_BLOG.test(t)) return 'no es noticia (directo o blog en vivo)';
+  const quake = t.match(MINOR_QUAKE);
+  if (quake && Number(`${quake[4]}.${quake[5] ?? 0}`) < 5) return 'no es noticia (temblor menor de magnitud 5)';
   if (DATE_ONLY.test(t)) return 'no es noticia (agenda o efemérides del día)';
   let path = '';
   try {

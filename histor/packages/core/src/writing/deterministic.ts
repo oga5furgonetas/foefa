@@ -20,7 +20,7 @@ import { libelRisk, longestCommonRun, plainWords } from './quality';
 import type { Draft } from './draft';
 import type { FactClaim, FactSheet } from './factsheet';
 import { mediaNames, namesMedia, stripMediaAttribution } from './media';
-import { sameFact } from './tidy';
+import { sameFact, tidyHeadline } from './tidy';
 import { PHRASES } from './phrases';
 import { PROMO } from '../text/nonnews';
 import { DEFAULT_EDITORIAL_SETTINGS } from '../config/settings';
@@ -111,7 +111,8 @@ export function writeDeterministic(fs: FactSheet, opts: WriteOptions = {}): Draf
       // Los titulares de las fuentes suelen tener 17-20 palabras («Los profesores españoles trabajan
       // dos horas menos a la semana que en la media de la OCDE»): con 16, la noticia se retenía
       // entera (30-09-2026). El tope real es de 120 caracteres, más abajo.
-      const short = clean(compressClaim(c.text, c.isHeadline ? 22 : 16, { commaCut: false }));
+      const compact = clean(compressClaim(c.text, c.isHeadline ? 22 : 16, { commaCut: false }));
+      const short = compact ? tidyHeadline(compact) : compact;
       // Un titular tiene que entenderse solo.
       if (!short || !standsAlone(short) || !fit(short)) continue;
       if (!c.isHeadline && !bodyHeadlineOk(short)) continue;
@@ -143,6 +144,12 @@ export function writeDeterministic(fs: FactSheet, opts: WriteOptions = {}): Draf
     // de Malí la entrada era «Los dos aviones de la Fuerza Aérea francesa volaron a unos 50 metros
     // del aparato de Air France», de otra historia (01-10-2026).
     if (overlap < 0.2) return;
+    // Del mismo momento que el titular: «Aemet cancela los avisos naranjas…» llevaba de entrada «…tienen
+    // alerta naranja», de la pieza del día anterior (03-10-2026). El resto del texto sí puede dar contexto.
+    const when = (x: FactClaim) => x.supporters.map((s) => s.publishedAt?.getTime() ?? NaN).find((t) => Number.isFinite(t));
+    const tl = when(c);
+    const th = headlineClaim ? when(headlineClaim) : undefined;
+    if (tl != null && th != null && Math.abs(tl - th) > 18 * 3600000) return;
     // A igualdad, la mejor respaldada (van por orden) y, antes que nada, lo confirmado. Mejor de
     // otra pieza que el titular: titular y entrada de la misma fuente eran ya el 71 % del texto y
     // el control legal retenía la noticia (30-09-2026).

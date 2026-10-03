@@ -188,8 +188,20 @@ export type HomeData = {
   sections: { categoryId: string; items: ArticleCard[] }[];
 };
 
-// Primero lo duro; lo blando, al final.
-const HOME_SECTIONS = ['politics', 'economy', 'society', 'technology', 'science', 'health', 'business', 'sports', 'weather', 'culture', 'entertainment', 'lifestyle', 'travel'];
+// Primero lo duro; lo blando, al final. En el orden de un diario: política, economía y empresas,
+// sociedad, deportes y después el resto.
+const HOME_SECTIONS = ['politics', 'economy', 'business', 'society', 'sports', 'technology', 'science', 'health', 'weather', 'culture', 'entertainment', 'lifestyle', 'travel'];
+
+/** Lo de las últimas horas primero: con menos de `min`, se completa con días anteriores. */
+async function freshFirst(fetch: (since: Date) => Promise<ArticleCard[]>, min: number, limit: number): Promise<ArticleCard[]> {
+  const out: ArticleCard[] = [];
+  for (const hours of [48, 7 * 24]) {
+    const more = await fetch(new Date(Date.now() - hours * 3600000));
+    for (const a of more) if (!out.some((x) => x.id === a.id)) out.push(a);
+    if (out.length >= min) break;
+  }
+  return out.slice(0, limit);
+}
 
 /**
  * Portada: cambia con el país, la región, la hora y lo que está pasando.
@@ -236,7 +248,10 @@ export async function getHome(db: Db, geo: { lang: string; countryCode: string |
   const breaking = await list({ lang: geo.lang, breaking: true, since: new Date(Date.now() - 12 * 3600000), limit: 5, excludeIds: exclude, hardOnly: true });
   const latest = await list({ lang: geo.lang, limit: 12, excludeIds: exclude, hardOnly: true });
   const trending = await list({ lang: geo.lang, since: new Date(Date.now() - 48 * 3600000), orderBy: 'momentum', limit: 6, excludeIds: exclude });
-  const national = geo.countryCode ? await list({ lang: geo.lang, countryCode: geo.countryCode, since, orderBy: 'importance', limit: 16, excludeIds: exclude, hardOnly: true }) : [];
+  // Las de su país, recientes primero (03-10-2026: salían noticias de hace tres días entre las de hoy).
+  const national = geo.countryCode
+    ? await freshFirst((s) => list({ lang: geo.lang, countryCode: geo.countryCode!, since: s, orderBy: 'importance', limit: 16, excludeIds: exclude, hardOnly: true }), 8, 16)
+    : [];
   let local: ArticleCard[] = [];
   if (geo.cityKey) {
     const cityId = await cityIdByKey(db, geo.cityKey);
@@ -256,7 +271,7 @@ export async function getHome(db: Db, geo: { lang: string; countryCode: string |
     .limit(20);
   const sections: HomeData['sections'] = [];
   for (const categoryId of HOME_SECTIONS) {
-    const items = await list({ lang: geo.lang, categoryId, limit: 8, since: new Date(Date.now() - 14 * 86400000) });
+    const items = await freshFirst((s) => list({ lang: geo.lang, categoryId, limit: 8, since: s, orderBy: 'importance' }), 4, 8);
     if (items.length) sections.push({ categoryId, items });
   }
   return { top, secondary, breaking, latest, trending, national, local, world: worldRows.map(toCard), sections };

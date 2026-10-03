@@ -29,6 +29,20 @@ export function sameFact(a: string, b: string): boolean {
   return inter / small >= 0.6;
 }
 
+/**
+ * Titular sin los adornos de la web de origen: el marcador de agencia delante («0-1. Paraguay…»),
+ * etiquetas («ÚLTIMA HORA |», «URGENTE:», «EN VIVO:») y coletillas («(desarrollo)», «(vídeo)»,
+ * «| Fotos») vistas en portada el 03-10-2026.
+ */
+export function tidyHeadline(h: string): string {
+  let t = h.trim();
+  t = t.replace(/^\d{1,2}\s?[-–]\s?\d{1,2}\.\s+/, '');
+  t = t.replace(/^(última hora|ultima hora|urgente|breaking|eilmeldung|dernière minute|ultim'ora|última hora|exclusiva|exclusive|en vivo|en directo|directo|vídeo|video|fotos?|galería)\s*[:|–—-]\s*/i, '');
+  t = t.replace(/\s*\((desarrollo|en desarrollo|actualizad[ao]|vídeo|video|v[íi]deos|fotos?|galería|directo|en vivo|live|update[d]?|mis à jour|aggiornamento)\)\s*$/i, '');
+  t = t.replace(/\s*[|–—-]\s*(vídeo|video|fotos?|galería|directo|en vivo|live|última hora)\s*$/i, '');
+  return t.charAt(0).toUpperCase() + t.slice(1);
+}
+
 type P = Extract<ArticleBlock, { type: 'p' }>;
 
 /**

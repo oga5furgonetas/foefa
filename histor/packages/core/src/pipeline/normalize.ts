@@ -14,6 +14,7 @@ import { nonNewsReason, pressReleaseReason } from '../text/nonnews';
 import { minhash } from '../text/similarity';
 import type { VPlace } from '../verification/types';
 import { classify } from './classify';
+import { countrySignals, signalPositions } from '../config/countrySignals';
 
 type GeoIds = { regionIdByCode: Map<string, number>; cityIdByKey: Map<string, number> };
 let geoCache: { at: number; ids: GeoIds } | null = null;
@@ -84,11 +85,42 @@ export function countryVotes(
   ];
   for (const [text, w] of parts) {
     if (!text) continue;
-    const ccs = new Set(resolvePlaces(findPlaces(stripDateline(text)), src.countryCode).map((p) => p.countryCode));
+    const plain = stripDateline(text);
+    // Topónimos y, además, gentilicios, clubes, líderes e instituciones (03-10-2026).
+    const ccs = new Set([...resolvePlaces(findPlaces(plain), src.countryCode).map((p) => p.countryCode), ...countrySignals(plain)]);
     for (const cc of ccs) votes[cc] = (votes[cc] ?? 0) + w;
   }
   if (src.countryCode && domesticDesk(src)) votes[src.countryCode] = (votes[src.countryCode] ?? 0) + 1.5;
+  // Desempate: lo que el titular nombra primero suele ser el protagonista («Selección peruana…
+  // antes del amistoso contra Canadá»). Medio punto: no da la vuelta a nada más que a un empate.
+  const title = stripDateline(r.title);
+  const firstAt = new Map<string, number>(signalPositions(title));
+  for (const p of findPlaces(title)) {
+    const at = title.indexOf(p.name);
+    if (at >= 0 && (!firstAt.has(p.countryCode) || at < firstAt.get(p.countryCode)!)) firstAt.set(p.countryCode, at);
+  }
+  const lead = [...firstAt.entries()].sort((a, b) => a[1] - b[1])[0]?.[0];
+  if (lead && votes[lead] != null) votes[lead] += 0.5;
   return votes;
+}
+
+type SrcForPlace = { countryCode: string | null; slug: string; ownershipGroup: string | null; categoryHint: string | null; feedUrl: string | null };
+type Lexicon = { id: string; keywords: Record<string, string[]> }[];
+
+/** País, lugares y sección de una pieza (al llegar, y al recalcular con reglas nuevas: items:reclassify). */
+export function placeAndSection(r: { title: string; summary: string | null; contentText: string | null }, src: SrcForPlace, lang: string | null, lexicon: Lexicon) {
+  const full = [r.title, r.summary, r.contentText].filter((x): x is string => !!x).map(stripDateline).join('\n');
+  const places = resolvePlaces(findPlaces(full), src.countryCode);
+  const countryWeights = countryVotes(r, src);
+  const best = [...Object.entries(countryWeights)].sort((a, b) => b[1] - a[1])[0];
+  const weighted = best && best[1] >= 2 ? best[0] : null;
+  const city = places.find((p) => p.kind === 'city' && (!weighted || p.countryCode === weighted));
+  const region = places.find((p) => p.kind === 'region' && (!weighted || p.countryCode === weighted));
+  const countryCode = weighted ?? city?.countryCode ?? region?.countryCode ?? places.find((p) => p.kind === 'country')?.countryCode ?? (domesticDesk(src) ? src.countryCode : null);
+  // El titular dice de qué va la pieza: cuenta tres veces. Con el texto entero a la par, el
+  // derrumbe de un bar salía en «Salud» por los hospitales del cuerpo (03-10-2026).
+  const cls = classify(`${r.title}\n${r.title}\n${full}`, lang, { hint: src.categoryHint, lexicon: lexicon.length ? lexicon : undefined });
+  return { places, countryWeights, countryCode, city, region, cls };
 }
 
 export async function normalizeNewItems(db: Db, opts: { limit?: number } = {}): Promise<{ normalized: number; discarded: number }> {
@@ -117,14 +149,7 @@ export async function normalizeNewItems(db: Db, opts: { limit?: number } = {}): 
     }
     const hint = src.languages.length === 1 ? src.languages[0] : r.language;
     const lang = detectLanguage(full, hint).lang ?? hint ?? null;
-    const places = resolvePlaces(findPlaces(full), src.countryCode);
-    const countryWeights = countryVotes(r, src);
-    const best = [...Object.entries(countryWeights)].sort((a, b) => b[1] - a[1])[0];
-    const weighted = best && best[1] >= 2 ? best[0] : null;
-    const city = places.find((p) => p.kind === 'city' && (!weighted || p.countryCode === weighted));
-    const region = places.find((p) => p.kind === 'region' && (!weighted || p.countryCode === weighted));
-    const countryCode = weighted ?? city?.countryCode ?? region?.countryCode ?? places.find((p) => p.kind === 'country')?.countryCode ?? (domesticDesk(src) ? src.countryCode : null);
-    const cls = classify(full, lang, { hint: src.categoryHint, lexicon: lexicon.length ? lexicon : undefined });
+    const { places, countryWeights, countryCode, city, region, cls } = placeAndSection(r, src, lang, lexicon);
     const entities = extractEntities(full)
       .slice(0, 15)
       .map((e) => ({ name: e.name, type: e.type }));
