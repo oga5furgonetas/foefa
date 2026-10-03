@@ -12,6 +12,7 @@ import { LeadCard, ListItem, onePhotoEach, StoryCard } from '@/components/Cards'
 import { JsonLd } from '@/components/JsonLd';
 import { ForYou } from '@/components/client/ForYou';
 import { ReadTracker } from '@/components/client/ReadTracker';
+import { HouseAd } from '@/components/HouseAd';
 import { ExperimentTracker } from '@/components/client/ExperimentTracker';
 import { withHeadlineTests } from '@/lib/experiments';
 import { currentGeo, db } from '@/lib/server';
@@ -157,6 +158,8 @@ export default async function Home({ params }: { params: Promise<{ lang: string 
               </ol>
             </aside>
           </div>
+
+          <HouseAd lang={lang} placement="portada" />
 
           <ForYou lang={lang} labels={{ title: d.home.forYou, explain: d.home.forYouExplain, seeAll: d.home.seeAll }} seeAllHref={href.list(lang, 'forYou')} />
 
