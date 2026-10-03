@@ -26,6 +26,12 @@ Si algún día hace falta algo que la web no puede (escaneo en segundo plano,
 avisos sin Chrome), se cambia por una app nativa; la cuenta, el paquete
 (`com.flotadsp.flota`) y la clave de firma valen igual.
 
+## Nombre de la app: FDS (04-10-2026)
+
+Dani: «Flota da nombre a otras cosas, no a reparto». La app de Play se llama
+**FDS** (`launcherName`/`app_name` en `android/`, versión 1.0.1 / code 2;
+`short_name` del manifest web). La marca de la web sigue siendo Flota.
+
 ## Lo que ya está hecho
 
 | Qué | Dónde |
@@ -202,13 +208,13 @@ sin enseñar botón ni enlace), y la suscripción se contrata en la web.
 
 ## Textos para la ficha
 
-**Nombre**: Flota
+**Nombre** (≤ 30): FDS – Reparto y rutas
 
 **Descripción corta** (≤ 80):
-Reparto y flota: escanea paquetes, ruta ordenada, llama al cliente.
+Reparto y rutas: escanea paquetes, ruta ordenada, llama al cliente y entrega.
 
 **Descripción larga**:
-Flota es la app de reparto y gestión de flota para repartidores autónomos,
+FDS es la app de reparto para quien reparte por su cuenta y para
 supermercados con reparto a domicilio, distribuidores y empresas de
 paquetería.
 
@@ -234,7 +240,7 @@ Privacidad por diseño: cada repartidor ve solo sus pedidos, la ubicación
 solo se comparte durante la jornada que él mismo empieza y termina, y los
 datos de los clientes se borran solos. Más en flotadsp.com/privacidad.
 
-Prueba sin registrarte en flotadsp.com/prueba-reparto.
+Pruébala sin registrarte: abre la app y pulsa «Probar sin cuenta».
 
 **Categoría**: Empresa. **Etiquetas**: reparto, rutas, logística, flota.
 

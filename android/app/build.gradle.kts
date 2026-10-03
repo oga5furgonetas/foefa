@@ -19,14 +19,14 @@ android {
         minSdk = 24
         // Play exige API 35 desde el 31-08-2025 y API 36 desde el 31-08-2026.
         targetSdk = 36
-        versionCode = 1
-        versionName = "1.0.0"
+        versionCode = 2
+        versionName = "1.0.1"
 
         // Lo que abre la app. /app lleva a cada uno a lo suyo (su ruta, su panel
         // o la pantalla de entrar).
         manifestPlaceholders["hostName"] = "flotadsp.com"
         manifestPlaceholders["defaultUrl"] = "https://flotadsp.com/app"
-        manifestPlaceholders["launcherName"] = "Flota"
+        manifestPlaceholders["launcherName"] = "FDS"
         // La web declara la app en /.well-known/assetlinks.json; esto es la
         // otra mitad: la app declara la web.
         manifestPlaceholders["assetStatements"] =

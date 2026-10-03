@@ -1,6 +1,6 @@
 {
-  "name": "Flota · Reparto y flota",
-  "short_name": "Flota",
+  "name": "FDS · Reparto y rutas",
+  "short_name": "FDS",
   "description": "Reparto a domicilio y gestión de flota: escanea los paquetes, ordena la ruta por tiempo, llama o escribe al cliente y marca las entregas.",
   "start_url": "/app",
   "display": "standalone",
