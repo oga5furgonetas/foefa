@@ -199,7 +199,19 @@ Lo que dice Google ahora (04-10-2026):
 Mientras tanto la app funciona entera (prueba de 7 días, luego pide pagar
 sin enseñar botón ni enlace), y la suscripción se contrata en la web.
 
-### Resumen de lo que necesito de ti
+### Dónde estamos (04-10-2026)
+
+- Cuenta personal «FDsp» verificada; app `com.flotadsp.flota` creada.
+- Prueba interna activa (lista «yo»), versión 1.0.1 «FDS».
+- Ficha («FDS – Reparto y rutas»), configuración de la tienda (Mapas y navegación)
+  y los 10 cuestionarios hechos.
+- Prueba cerrada Alpha: España, testers = grupo `fds-testers@googlegroups.com`
+  (https://groups.google.com/g/fds-testers). Todo **enviado a revisión** el 04-10.
+- Cuenta del revisor de Google: org «Revisor Google», `status: active`,
+  `revisor_play: true` (no caduca).
+- Falta: 12 testers con la app instalada 14 días → «Solicitar acceso a producción».
+
+## Resumen de lo que necesito de ti
 
 1. La **huella SHA-256** de Play App Signing (paso 3).
 2. El usuario de la **cuenta para el revisor** de Google (paso 5).
