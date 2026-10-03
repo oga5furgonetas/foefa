@@ -23,3 +23,4 @@ backend/.venv/
 
 # El destino real de los despliegues (ver scripts/destino.ps1)
 despliegue.local.json
+Flota-*.apk
