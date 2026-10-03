@@ -472,6 +472,14 @@ el alta, preguntar qué tipo de empresa es. Con TODO dentro de la ley.
   tesseract.js servido desde `/ocr/<versión>/` (sin IA externa). OJO: esos
   ficheros no llevan huella; si se cambian, subir la versión de
   `src/lib/ocrRuta.js` (se envenenaron dos en el borde al desplegar).
+- Noche: **demo de reparto sin registro** en `/prueba-reparto` (enlace para
+  mandar por WhatsApp): oficina + Repartidor 1/2/3, súper de prueba en A Coruña
+  con 12 pedidos inventados, base `dsp_demo_reparto`, se regenera cada día
+  (`_demo_reparto_preparar`; para reiniciarla a mano, borrar `app_meta`
+  `demo_reparto_dia`). En la demo SÍ se escribe, pero solo en `/api/reparto/`
+  (`get_current_user`); lo demás da 403. Probado entero en producción.
+  En la cuenta real, «Zonas y ajustes» tiene el enlace + QR del portal para
+  mandar a los repartidores. NO se crean cuentas por nadie: se registra él.
 
 ## Pendiente (por prioridad)
 

@@ -13,10 +13,16 @@ export const colorConductor = (i) => COLORES[((i % COLORES.length) + COLORES.len
 const ESC = { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ESC[c])
 
+function encuadrar(m, puntos) {
+  if (puntos.length === 1) m.setView(puntos[0], 14)
+  else if (puntos.length > 1) m.fitBounds(puntos, { padding: [30, 30], maxZoom: 16 })
+}
+
 export default function MapaReparto({ paradas = [], base = null, vivos = [], alto = 380 }) {
   const caja = useRef(null)
   const mapa = useRef(null)
   const capa = useRef(null)
+  const encuadre = useRef([])
 
   useEffect(() => {
     if (!caja.current || mapa.current) return undefined
@@ -26,7 +32,16 @@ export default function MapaReparto({ paradas = [], base = null, vivos = [], alt
       maxZoom: 19, attribution: '© OpenStreetMap',
     }).addTo(mapa.current)
     capa.current = L.layerGroup().addTo(mapa.current)
-    return () => { mapa.current?.remove(); mapa.current = null }
+    // Si la caja cambia de tamaño tras crear el mapa (la página aún se estaba
+    // montando), Leaflet solo pinta la franja que medía al principio: visto el
+    // 03-10-2026 en producción, un tercio del mapa en gris.
+    const vigia = new ResizeObserver(() => {
+      if (!mapa.current) return
+      mapa.current.invalidateSize()
+      encuadrar(mapa.current, encuadre.current)
+    })
+    vigia.observe(caja.current)
+    return () => { vigia.disconnect(); mapa.current?.remove(); mapa.current = null }
   }, [])
 
   useEffect(() => {
@@ -67,9 +82,11 @@ export default function MapaReparto({ paradas = [], base = null, vivos = [], alt
         .addTo(capa.current)
       puntos.push([v.lat, v.lng])
     })
-    if (puntos.length === 1) m.setView(puntos[0], 14)
-    else if (puntos.length > 1) m.fitBounds(puntos, { padding: [30, 30], maxZoom: 16 })
+    encuadre.current = puntos
+    encuadrar(m, puntos)
   }, [paradas, base, vivos])
 
-  return <div ref={caja} style={{ height: alto }} className="w-full overflow-hidden rounded-xl border border-dark-700" />
+  // `isolate`: Leaflet pone sus capas con z-index 400-1000 y, sin un contexto
+  // propio, el mapa se pintaba ENCIMA de las ventanas emergentes de la página.
+  return <div ref={caja} style={{ height: alto }} className="isolate w-full overflow-hidden rounded-xl border border-dark-700" />
 }

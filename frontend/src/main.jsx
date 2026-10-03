@@ -224,6 +224,7 @@ setTimeout(() => { try { sessionStorage.removeItem('chunk_curacion') } catch { /
 const Login = lazy(() => import('./pages/Login'))
 const ResetPassword = lazy(() => import('./pages/ResetPassword'))
 const Registro = lazy(() => import('./pages/Registro'))
+const PruebaReparto = lazy(() => import('./pages/PruebaReparto'))
 const Planes = lazy(() => import('./pages/Planes'))
 const DriverPortal = lazy(() => import('./pages/driver/DriverPortal'))
 const PanelLogin = lazy(() => import('./panel/PanelLogin'))
@@ -327,6 +328,7 @@ ReactDOM.createRoot(document.getElementById('root')).render(
               <Route path="/login" element={<Login />} />
               <Route path="/reset-password" element={<ResetPassword />} />
               <Route path="/registro" element={<Registro />} />
+              <Route path="/prueba-reparto" element={<PruebaReparto />} />
               <Route path="/planes" element={<Planes />} />
               <Route path="/privacidad" element={<Privacidad />} />
               <Route path="/terminos" element={<Terminos />} />

@@ -950,7 +950,11 @@ async def get_current_user(
         # El aparcamiento tambien se puede tocar en demo: BD aislada, y deja que
         # el visitante pruebe de verdad el plano (asignar, reportar, confirmar).
         _demo_ok = ("/assistant/ask", "/parking/assign", "/parking/report", "/parking/resolve")
-        if not any(request.url.path.endswith(p) for p in _demo_ok):
+        # La demo de reparto se puede usar de verdad, pero SOLO el reparto y
+        # solo en su base aislada, que se reinicia cada día.
+        _demo_reparto = (payload.get("db_name") == "dsp_demo_reparto"
+                         and "/api/reparto/" in request.url.path)
+        if not _demo_reparto and not any(request.url.path.endswith(p) for p in _demo_ok):
             raise HTTPException(status_code=403, detail="Modo demo: solo lectura. Crea tu cuenta gratis para editar.")
     # AÍSLA: fija la BD de la organización del token para TODA esta petición.
     # Tokens antiguos sin db_name → BD por defecto (tu data) = sin cambios.
@@ -46850,6 +46854,97 @@ async def reparto_posicion(data: dict = Body(...), user: dict = Depends(require_
         # Sin jornada abierta no se guarda NADA: ni siquiera la última.
         raise HTTPException(409, "No tienes la jornada empezada")
     return {"ok": True}
+
+# ── DEMO DE REPARTO (03-10-2026) ──────────────────────────────────────────────
+# Para que un súper lo pruebe SIN registrarse: la oficina y tres repartidores
+# de mentira, con pedidos de ejemplo en A Coruña. A diferencia de la demo
+# general, aquí SÍ se puede escribir —escanear, entregar, repartir—, pero solo
+# en lo del reparto y solo en su base aislada, que vuelve a su estado cada día.
+# Los clientes son inventados y sin teléfono: nadie llama a nadie.
+
+_DEMO_REP_ORG_ID = "demo-reparto"
+_DEMO_REP_DB = "dsp_demo_reparto"
+_DEMO_REP_CONDUCTORES = [("demo-r1", "Repartidor 1"), ("demo-r2", "Repartidor 2"), ("demo-r3", "Repartidor 3")]
+_DEMO_REP_BASE = {"direccion": "Rúa Real 50, 15003 A Coruña (almacén de prueba)", "lat": 43.3700, "lng": -8.3985}
+_DEMO_REP_ZONAS = [
+    {"nombre": "Centro", "conductor_id": "demo-r1", "conductor_nombre": "Repartidor 1",
+     "cps": ["15001", "15002", "15003"], "palabras": ["Orzán", "Real"]},
+    {"nombre": "Ensanche", "conductor_id": "demo-r2", "conductor_nombre": "Repartidor 2",
+     "cps": ["15004", "15005", "15006"], "palabras": ["Juana de Vega"]},
+    {"nombre": "Os Mallos", "conductor_id": "demo-r3", "conductor_nombre": "Repartidor 3",
+     "cps": ["15007", "15008", "15009", "15010"], "palabras": ["Outeiro", "Mallos"]},
+]
+# (código, cliente, dirección, cp, lat, lng, lleva, bultos, conductor o "")
+_DEMO_REP_PEDIDOS = [
+    ("DEMO1001", "Cliente 1 (prueba)", "Rúa Real 21, 2º", "15003", 43.3703, -8.3982, "2 cajas, 1 pack de agua", 3, "demo-r1"),
+    ("DEMO1002", "Cliente 2 (prueba)", "Rúa San Andrés 98, 4º B", "15003", 43.3690, -8.4030, "Compra semanal: 4 cajas", 4, "demo-r1"),
+    ("DEMO1003", "Cliente 3 (prueba)", "Rúa Juana de Vega 14, 3º izq.", "15004", 43.3668, -8.4040, "Leche (2 packs) y 1 caja", 3, "demo-r2"),
+    ("DEMO1004", "Cliente 4 (prueba)", "Avda. Fernández Latorre 40, 1º", "15006", 43.3560, -8.4060, "1 caja de congelados", 1, "demo-r2"),
+    ("DEMO1005", "Cliente 5 (prueba)", "Rúa Médico Rodríguez 5, bajo", "15004", 43.3638, -8.4065, "3 cajas y garrafa de aceite", 4, ""),
+    ("DEMO1006", "Cliente 6 (prueba)", "Ronda de Outeiro 120, 6º A", "15007", 43.3560, -8.4120, "2 cajas", 2, "demo-r3"),
+    ("DEMO1007", "Cliente 7 (prueba)", "Rúa Barcelona 30, 2º D", "15010", 43.3585, -8.4150, "Agua (3 packs)", 3, ""),
+    ("DEMO1008", "Cliente 8 (prueba)", "Praza de Pontevedra 8, 5º", "15003", 43.3690, -8.4060, "1 caja y pan", 2, ""),
+    ("DEMO1009", "Cliente 9 (prueba)", "Rúa Orzán 70, 1º", "15003", 43.3713, -8.4040, "Compra grande: 5 cajas", 5, "demo-r1"),
+    ("DEMO1010", "Cliente 10 (prueba)", "Avda. de Finisterre 120, 7º", "15004", 43.3610, -8.4140, "2 cajas y leche", 3, ""),
+    ("DEMO1011", "Cliente 11 (prueba)", "Rúa Caballeros 15, 3º", "15009", 43.3600, -8.3960, "1 caja", 1, "demo-r3"),
+    ("DEMO1012", "Cliente 12 (prueba)", "Rúa Ramón Cabanillas 3, 2º C", "15006", 43.3580, -8.4020, "Bebidas: 4 packs", 4, ""),
+]
+
+
+async def _demo_reparto_preparar():
+    """Deja la demo de reparto como recién empezada, una vez al día."""
+    ddb = client[_DEMO_REP_DB]
+    hoy = _dia_negocio()
+    meta = await ddb.app_meta.find_one({"_id": "demo_reparto_dia"})
+    if meta and meta.get("dia") == hoy:
+        return
+    for col in ("reparto_pedidos", "reparto_jornadas", "reparto_avisos"):
+        await ddb[col].delete_many({})
+    for cid, nombre in _DEMO_REP_CONDUCTORES:
+        await ddb.drivers.update_one({"id": cid}, {"$set": {
+            "id": cid, "name": nombre, "active": True, "center": "TIENDA", "demo": True}}, upsert=True)
+    await ddb.reparto_ajustes.replace_one({"id": "ajustes"}, {
+        "id": "ajustes", "base": dict(_DEMO_REP_BASE), "zonas": [dict(z) for z in _DEMO_REP_ZONAS],
+        "ia_tickets": False, "dias_conservar": 30, "portal": True}, upsert=True)
+    nombres = dict(_DEMO_REP_CONDUCTORES)
+    ahora = datetime.now(timezone.utc).isoformat()
+    zona_de_cp = {cp: z["nombre"] for z in _DEMO_REP_ZONAS for cp in z["cps"]}
+    await ddb.reparto_pedidos.insert_many([{
+        "id": str(uuid.uuid4()), "fecha": hoy, "codigo": cod, "cliente": cli, "telefono": "",
+        "direccion": f"{dire}, {cp} A Coruña", "cp": cp, "localidad": "A Coruña",
+        "contenido": lleva, "notas": "", "bultos": bultos, "escaneos": 0,
+        "zona": zona_de_cp.get(cp, ""), "conductor_id": c, "conductor_nombre": nombres.get(c, ""),
+        "estado": "pendiente", "orden": None, "origen": "oficina",
+        "lat": lat, "lng": lng, "geo": "ok", "creado_por": "Demo", "creado_en": ahora,
+    } for cod, cli, dire, cp, lat, lng, lleva, bultos, c in _DEMO_REP_PEDIDOS])
+    await ddb.app_meta.update_one({"_id": "demo_reparto_dia"}, {"$set": {"dia": hoy, "at": ahora}}, upsert=True)
+    logger.info("Demo de reparto preparada para %s", hoy)
+
+
+@auth_router.post("/demo-reparto")
+async def demo_reparto_login(request: Request, data: dict = Body(default={})):
+    """Entrar en la demo de reparto como la oficina o como un repartidor."""
+    _rl_public_action(f"demo-rep:{_rl_key_ip(request)}", max_count=30, window_s=3600,
+                      detail="Demasiados accesos a la demo. Inténtalo más tarde.")
+    if not await global_db.organizations.find_one({"id": _DEMO_REP_ORG_ID}):
+        await global_db.organizations.insert_one({
+            "id": _DEMO_REP_ORG_ID, "name": "Supermercado de prueba", "account_type": "dsp",
+            "slug": "demo-reparto", "db_name": _DEMO_REP_DB, "status": "active", "plan": "completo",
+            "sector": "supermercado", "modulos": list(_MODULOS_REPARTO),
+            "centers": ["TIENDA"], "max_centers": 1, "demo": True,
+            "created_at": datetime.now(timezone.utc).isoformat()})
+    await _demo_reparto_preparar()
+    data = _dict_cuerpo(data)
+    if _texto_cuerpo(data.get("rol"), 20) == "conductor":
+        n = _entero(data.get("n"), "n", defecto=1, minimo=1, maximo=len(_DEMO_REP_CONDUCTORES))
+        cid, nombre = _DEMO_REP_CONDUCTORES[n - 1]
+        token = create_token(cid, "driver", nombre, org_id=_DEMO_REP_ORG_ID, db_name=_DEMO_REP_DB,
+                             account_type="dsp", centers=["TIENDA"], demo=True)
+        return {"access_token": token, "role": "driver", "driver": {"id": cid, "name": nombre}}
+    token = create_token("demo-oficina", "admin", "Oficina (prueba)", org_id=_DEMO_REP_ORG_ID,
+                         db_name=_DEMO_REP_DB, account_type="dsp", centers=["TIENDA"], demo=True)
+    return {"access_token": token, "role": "admin", "name": "Oficina (prueba)", "id": "demo-oficina",
+            "account_type": "dsp", "slug": "demo-reparto", "centers": ["TIENDA"], "demo": True}
 
 app.include_router(auth_router)
 app.include_router(api_router)

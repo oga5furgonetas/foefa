@@ -46,6 +46,7 @@ const PUBLICAS = [
   ['/registro?plan=completo&billing=monthly&flota=120', 'Alta con plan elegido'],
   // El primer paso nuevo (03-10-2026): qué tipo de empresa es.
   ['/registro?sector=supermercado&plan=completo', 'Alta de un supermercado'],
+  ['/prueba-reparto', 'Prueba del reparto sin registro'],
 ]
 
 /** Recoge los errores de consola y los fallos de JS de una página. */

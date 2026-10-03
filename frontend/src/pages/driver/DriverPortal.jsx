@@ -230,6 +230,15 @@ export default function DriverPortal() {
   }
 
   const noLeToca = portal && portal.puede_auditar === false
+  /* EN LA DEMO DE REPARTO solo se puede escribir en el reparto (lo impone el
+     servidor). Enseñar el teléfono, los días libres o la contraseña ahí era
+     invitar a pulsar algo que contesta «modo demo: solo lectura». */
+  const esDemo = (() => {
+    try {
+      const t = localStorage.getItem(DRIVER_TOKEN_KEY) || ''
+      return !!JSON.parse(atob(t.split('.')[1].replace(/-/g, '+').replace(/_/g, '/'))).demo
+    } catch { return false }
+  })()
   const hoy = new Date().toLocaleDateString('es-ES', { weekday: 'long', day: 'numeric', month: 'long' })
 
   return (
@@ -264,7 +273,7 @@ export default function DriverPortal() {
             ruta. Pedirlo desde la oficina lleva meses sin funcionar; aquí lo
             pide quien entra todos los días, una sola vez y en diez segundos.
             No bloquea nada: se puede seguir sin darlo. */}
-        {faltaTel && !telOk && (
+        {faltaTel && !telOk && !esDemo && (
           <div className="mb-4 rounded-2xl border border-brand-500/30 bg-brand-500/[0.07] p-4">
             <p className="text-[14px] font-semibold text-dark-50">¿Cuál es tu teléfono?</p>
             <p className="mt-0.5 text-[12.5px] leading-snug text-dark-400">
@@ -303,10 +312,15 @@ export default function DriverPortal() {
             icono={ClipboardCheck}
             titulo="Hacer la auditoría"
             sub={noLeToca ? 'Hoy no sales a ruta' : 'Antes de salir a ruta'}
-            principal
-            bloqueado={noLeToca}
+            principal={!esDemo}
+            bloqueado={noLeToca || esDemo}
             onClick={() => setVista('auditoria')}
           />
+          {esDemo && (
+            <p className="-mt-1 px-1 text-[12px] text-dark-500">
+              En la prueba solo funciona el reparto. La auditoría (fotos del vehículo antes de salir) va en la cuenta real.
+            </p>
+          )}
 
           {/* Decirle POR QUÉ no puede. Un botón gris sin explicación acaba en
               una llamada a la oficina, que es lo que se quiere evitar. */}
@@ -320,6 +334,7 @@ export default function DriverPortal() {
             </div>
           )}
 
+          {!esDemo && <>
           <Opcion
             icono={CalendarDays}
             titulo="Pedir días libres"
@@ -361,6 +376,7 @@ export default function DriverPortal() {
             sub={tieneClave ? 'Ponte la que quieras' : 'Ahora entras solo con el correo'}
             onClick={() => setVista('clave')}
           />
+          </>}
         </div>
       </div>
     </div>

@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useOutletContext } from 'react-router-dom'
 import {
   Loader2, Plus, ClipboardPaste, Route, Shuffle, RefreshCw, Trash2, MapPin, ShieldCheck,
-  Settings2, Package, EyeOff, X,
+  Settings2, Package, EyeOff, X, Truck,
 } from 'lucide-react'
 import {
   getRepartoAjustes, guardarRepartoAjustes, getRepartoPedidos, crearRepartoPedido,
@@ -13,6 +13,9 @@ import { lista } from '../../lib/lista'
 import { hoyLocal } from '../../lib/fecha'
 import { useToast } from '../../lib/toast'
 import MapaReparto, { colorConductor } from '../components/MapaReparto'
+import { getAdmin } from '../auth'
+import { origen } from '../../marca'
+import QRCode from 'qrcode'
 
 /* ── REPARTO A DOMICILIO Y A NEGOCIOS ────────────────────────────────────────
    Para quien reparte su propia mercancía: el súper que lleva la compra a casa,
@@ -429,6 +432,8 @@ function Ajustes({ conductores, toast }) {
         </button>
       </div>
 
+      <div className="space-y-4">
+      <PortalRepartidores />
       <aside className="h-fit rounded-xl border border-emerald-500/25 bg-emerald-500/[.05] p-4 text-[12.5px] leading-relaxed text-dark-300">
         <h2 className="mb-2 flex items-center gap-1.5 text-[14px] font-bold text-emerald-200"><ShieldCheck size={15} /> Cómo se protegen los datos</h2>
         <ul className="list-disc space-y-1.5 pl-4">
@@ -440,6 +445,35 @@ function Ajustes({ conductores, toast }) {
           <li>Tu empresa debe informar a sus clientes de que el reparto lo gestiona con esta herramienta (en su política de privacidad), y a sus conductores de la ubicación en jornada.</li>
         </ul>
       </aside>
+      </div>
     </div>
+  )
+}
+
+/* EL ENLACE PARA LOS REPARTIDORES. Sin esto la oficina no sabe cómo llegan
+   ellos a «Mi ruta»: se les pasa este enlace (o el QR) por WhatsApp, entran
+   con el correo que tengan en su ficha de Conductores, y listo. */
+function PortalRepartidores() {
+  const slug = getAdmin()?.slug
+  const enlace = `${origen()}/conductor${slug ? `/${slug}` : ''}`
+  const [qr, setQr] = useState('')
+  useEffect(() => { QRCode.toDataURL(enlace, { margin: 1, width: 132 }).then(setQr).catch(() => setQr('')) }, [enlace])
+  const texto = `Para el reparto, entra aquí desde el móvil con tu correo: ${enlace}`
+  return (
+    <section className="rounded-xl border border-dark-700 bg-dark-900 p-4 text-[12.5px] text-dark-300">
+      <h2 className="mb-1 flex items-center gap-1.5 text-[14px] font-bold text-dark-50"><Truck size={15} /> Tus repartidores, al móvil</h2>
+      <ol className="mb-3 list-decimal space-y-1 pl-4">
+        <li>Dalos de alta en <a href="/panel/conductores" className="text-brand-300">Conductores</a> con su correo.</li>
+        <li>Pásales este enlace; entran con ese correo y les sale «Mi ruta».</li>
+      </ol>
+      <div className="flex items-center gap-3">
+        {qr && <img src={qr} alt="QR del portal de repartidores" width={96} height={96} className="rounded bg-white p-1" />}
+        <div className="min-w-0">
+          <code className="block break-all text-[11.5px] text-dark-200">{enlace}</code>
+          <a href={`https://wa.me/?text=${encodeURIComponent(texto)}`} target="_blank" rel="noreferrer"
+            className="mt-2 inline-block rounded-lg bg-emerald-600 px-3 py-1.5 text-[12px] font-semibold text-white">Enviar por WhatsApp</a>
+        </div>
+      </div>
+    </section>
   )
 }

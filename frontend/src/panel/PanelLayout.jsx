@@ -772,7 +772,7 @@ export default function PanelLayout() {
         )}
         {decodeToken()?.demo && (
           <div className="flex items-center justify-between gap-2 bg-purple-500/15 px-4 py-2 text-sm text-purple-200">
-            <span>▶ {t('demo.banner')}</span>
+            <span>▶ {decodeToken()?.db_name === 'dsp_demo_reparto' ? t('demo.banner.reparto') : t('demo.banner')}</span>
             <a href="/registro" className="rounded-md bg-purple-500/30 px-3 py-1 text-xs font-semibold hover:bg-purple-500/40">{t('demo.banner.cta')}</a>
           </div>
         )}
