@@ -204,6 +204,8 @@ JWT_EXPIRE_HOURS = int(os.environ.get("JWT_EXPIRE_HOURS", "72"))
 
 def _dia_negocio():
     """Fecha de HOY para operativa (cuadrante, rutas, "ya inspecciono hoy").
+    En la zona horaria de la cuenta si la petición la ha fijado (reparto);
+    si no, Madrid.
 
     En hora ESPANOLA, no UTC: entre las 00:00 y las 02:00 locales el dia UTC
     sigue siendo el anterior, y el conductor no encontraba su asignacion del
@@ -212,7 +214,7 @@ def _dia_negocio():
     """
     try:
         from zoneinfo import ZoneInfo
-        return datetime.now(ZoneInfo("Europe/Madrid")).strftime("%Y-%m-%d")
+        return datetime.now(ZoneInfo(_region_actual.get()[1])).strftime("%Y-%m-%d")
     except Exception:
         return datetime.now(timezone.utc).strftime("%Y-%m-%d")
 
@@ -231,6 +233,10 @@ import contextvars
 _DEFAULT_DB_NAME = os.environ.get("DB_NAME", "flota")
 _GLOBAL_DB_NAME = os.environ.get("GLOBAL_DB_NAME", "flota_global")
 _current_db_name = contextvars.ContextVar("current_db_name", default=_DEFAULT_DB_NAME)
+# País (ISO2, minúsculas) y zona horaria de la cuenta que hace la petición.
+# Solo los fija el reparto (que ya se usa fuera de España); el resto del
+# producto sigue en hora de Madrid, como siempre.
+_region_actual = contextvars.ContextVar("region_actual", default=("es", "Europe/Madrid"))
 
 global_db = client[_GLOBAL_DB_NAME]  # organizaciones, usuarios, suscripciones (compartida)
 
@@ -687,6 +693,8 @@ class RegisterRequest(BaseModel):
     plan: Optional[str] = None   # plan elegido: basico | pro | flota | enterprise
     sector: Optional[str] = None  # paqueteria | supermercado | distribucion | otra
     desde_app: Optional[bool] = None  # alta desde la app de Play: ahí no se pide tarjeta con Stripe
+    zona_horaria: Optional[str] = None  # la del móvil (Intl): horas y «hoy» del reparto
+    pais: Optional[str] = None          # ISO2; si no se conoce, se deduce de la zona horaria
 
 
 # Límites y features por plan
@@ -964,6 +972,8 @@ async def get_current_user(
                          and "/api/reparto/" in request.url.path)
         if not _demo_reparto and not any(request.url.path.endswith(p) for p in _demo_ok):
             raise HTTPException(status_code=403, detail="Modo demo: solo lectura. Crea tu cuenta gratis para editar.")
+    if "/api/reparto/" in request.url.path and payload.get("org_id"):
+        _region_actual.set(await _region_de_org(payload.get("org_id")))
     if (request.method not in ("GET", "HEAD", "OPTIONS") and "/api/reparto/" in request.url.path
             and not payload.get("demo") and not payload.get("imp") and payload.get("org_id")):
         org_pago = await get_org(payload.get("org_id"))
@@ -4824,6 +4834,7 @@ async def register_dsp(data: RegisterRequest, request: Request):
         "max_centers": tope,
         "created_at": datetime.now(timezone.utc).isoformat(),
     }
+    org["pais"], org["zona_horaria"] = _region_alta(data.zona_horaria, data.pais)
     # El tipo de empresa decide con qué pantallas nace la cuenta: a un
     # supermercado que reparte a domicilio no le sirve lo mismo que a una
     # subcontrata de paquetería. Luego se puede cambiar desde la plataforma.
@@ -4959,6 +4970,75 @@ def _org_billing(org):
                 "plan": plan_key or "pro", "limits": trial_limits, "prueba_hasta": te}
     # past_due / canceled / unpaid → bloqueado
     return {"status": status, "required": True, "days_left": None, "plan": plan_key or "basico", "limits": PLAN_LIMITS.get(plan_key, PLAN_LIMITS["basico"])}
+
+
+# ── PAÍSES (04-10-2026): el reparto sirve fuera de España ─────────────────────
+# País -> prefijo telefónico y zonas horarias típicas (para deducir el país de
+# la zona horaria del móvil al darse de alta). Hispanohablantes + España.
+PAISES_REPARTO = {
+    "es": {"nombre": "España", "prefijo": "34", "zonas": ["Europe/Madrid", "Atlantic/Canary", "Africa/Ceuta"]},
+    "mx": {"nombre": "México", "prefijo": "52", "zonas": ["America/Mexico_City", "America/Cancun", "America/Merida",
+           "America/Monterrey", "America/Matamoros", "America/Chihuahua", "America/Ciudad_Juarez", "America/Ojinaga",
+           "America/Mazatlan", "America/Bahia_Banderas", "America/Hermosillo", "America/Tijuana"]},
+    "ar": {"nombre": "Argentina", "prefijo": "54", "zonas": ["America/Argentina/Buenos_Aires", "America/Argentina/Cordoba",
+           "America/Argentina/Salta", "America/Argentina/Jujuy", "America/Argentina/Tucuman", "America/Argentina/Catamarca",
+           "America/Argentina/La_Rioja", "America/Argentina/San_Juan", "America/Argentina/Mendoza",
+           "America/Argentina/San_Luis", "America/Argentina/Rio_Gallegos", "America/Argentina/Ushuaia",
+           "America/Buenos_Aires", "America/Cordoba"]},
+    "co": {"nombre": "Colombia", "prefijo": "57", "zonas": ["America/Bogota"]},
+    "cl": {"nombre": "Chile", "prefijo": "56", "zonas": ["America/Santiago", "America/Punta_Arenas", "Pacific/Easter"]},
+    "pe": {"nombre": "Perú", "prefijo": "51", "zonas": ["America/Lima"]},
+    "ve": {"nombre": "Venezuela", "prefijo": "58", "zonas": ["America/Caracas"]},
+    "ec": {"nombre": "Ecuador", "prefijo": "593", "zonas": ["America/Guayaquil", "Pacific/Galapagos"]},
+    "bo": {"nombre": "Bolivia", "prefijo": "591", "zonas": ["America/La_Paz"]},
+    "py": {"nombre": "Paraguay", "prefijo": "595", "zonas": ["America/Asuncion"]},
+    "uy": {"nombre": "Uruguay", "prefijo": "598", "zonas": ["America/Montevideo"]},
+    "cr": {"nombre": "Costa Rica", "prefijo": "506", "zonas": ["America/Costa_Rica"]},
+    "pa": {"nombre": "Panamá", "prefijo": "507", "zonas": ["America/Panama"]},
+    "gt": {"nombre": "Guatemala", "prefijo": "502", "zonas": ["America/Guatemala"]},
+    "hn": {"nombre": "Honduras", "prefijo": "504", "zonas": ["America/Tegucigalpa"]},
+    "sv": {"nombre": "El Salvador", "prefijo": "503", "zonas": ["America/El_Salvador"]},
+    "ni": {"nombre": "Nicaragua", "prefijo": "505", "zonas": ["America/Managua"]},
+    "do": {"nombre": "República Dominicana", "prefijo": "1", "zonas": ["America/Santo_Domingo"]},
+    "pr": {"nombre": "Puerto Rico", "prefijo": "1", "zonas": ["America/Puerto_Rico"]},
+    "cu": {"nombre": "Cuba", "prefijo": "53", "zonas": ["America/Havana"]},
+}
+_REGION_CACHE: dict = {}
+
+
+def _zona_valida(tz) -> Optional[str]:
+    tz = str(tz or "").strip()
+    if not tz or len(tz) > 60:
+        return None
+    try:
+        from zoneinfo import ZoneInfo
+        ZoneInfo(tz)
+        return tz
+    except Exception:                                        # noqa: BLE001
+        return None
+
+
+def _region_alta(tz, pais) -> tuple:
+    """(pais, zona) para una cuenta nueva: la zona del móvil si es válida; el
+    país, el que mande la app si lo conocemos, o el que toca a esa zona."""
+    zona = _zona_valida(tz) or "Europe/Madrid"
+    p = str(pais or "").strip().lower()
+    if p not in PAISES_REPARTO:
+        p = next((k for k, v in PAISES_REPARTO.items() if zona in v["zonas"]), "es")
+    return p, zona
+
+
+async def _region_de_org(org_id) -> tuple:
+    hit = _REGION_CACHE.get(org_id)
+    if hit and time.time() - hit[0] < 60:
+        return hit[1]
+    org = await get_org(org_id) or {}
+    p = org.get("pais") if org.get("pais") in PAISES_REPARTO else "es"
+    zona = _zona_valida(org.get("zona_horaria")) or "Europe/Madrid"
+    if len(_REGION_CACHE) > 2000:
+        _REGION_CACHE.clear()
+    _REGION_CACHE[org_id] = (time.time(), (p, zona))
+    return p, zona
 
 
 def _fecha_utc(v) -> Optional[datetime]:
@@ -46477,7 +46557,8 @@ async def _rep_ubicar(direccion, cp="", localidad="", base=None) -> Optional[tup
     consulta = ", ".join([d] + extra)
     if len(consulta) < 5:
         return None
-    params = {"q": consulta, "format": "json", "limit": 1, "countrycodes": "es"}
+    pais = _region_actual.get()[0]
+    params = {"q": consulta, "format": "json", "limit": 1, "countrycodes": pais, "addressdetails": 1}
     if base:
         # Se prefiere lo cercano al almacén: «Rúa Real 5» hay en cien pueblos.
         la, lo = base
@@ -46503,7 +46584,12 @@ async def _rep_ubicar(direccion, cp="", localidad="", base=None) -> Optional[tup
         lat, lng = float(datos[0]["lat"]), float(datos[0]["lon"])
     except (IndexError, KeyError, TypeError, ValueError):
         return None
-    if not (27.0 <= lat <= 44.5 and -19.0 <= lng <= 5.0):
+    # Que el resultado sea del país de la cuenta (Nominatim ya filtra; esto es
+    # la red por si un día no lo hace). España, además, con su caja de siempre.
+    cc = ((datos[0].get("address") or {}).get("country_code") or "").lower() if isinstance(datos[0], dict) else ""
+    if cc and cc != pais:
+        return None
+    if pais == "es" and not (27.0 <= lat <= 44.5 and -19.0 <= lng <= 5.0):
         return None
     return lat, lng
 
@@ -46866,7 +46952,7 @@ async def _rep_navegacion(desde: tuple, hasta: tuple) -> dict:
 def _rep_ahora_local() -> tuple:
     try:
         from zoneinfo import ZoneInfo
-        a = datetime.now(ZoneInfo("Europe/Madrid"))
+        a = datetime.now(ZoneInfo(_region_actual.get()[1]))
     except Exception:                                        # noqa: BLE001
         a = datetime.now(timezone.utc)
     return a.hour * 60 + a.minute, a.weekday()
@@ -46965,11 +47051,22 @@ async def reparto_ajustes_get(user: dict = Depends(require_admin)):
     a = await _rep_ajustes()
     a["portal_activo"] = await _rep_portal_activo(user, a)
     a["ia_disponible"] = _rep_ia_permitida()
+    a["pais"], a["zona_horaria"] = _region_actual.get()
+    a["paises"] = {k: {"nombre": v["nombre"], "zonas": v["zonas"]} for k, v in PAISES_REPARTO.items()}
     return a
 
 
 @api_router.put("/reparto/ajustes")
 async def reparto_ajustes_put(data: dict = Body(...), user: dict = Depends(require_admin)):
+    if ("pais" in data or "zona_horaria" in data) and not user.get("demo") and user.get("org_id"):
+        p_act, z_act = _region_actual.get()
+        p = _texto_cuerpo(data.get("pais"), 3).lower() or p_act
+        z = _zona_valida(data.get("zona_horaria")) or z_act
+        if p not in PAISES_REPARTO:
+            raise HTTPException(400, "País no disponible todavía")
+        await global_db.organizations.update_one({"id": user["org_id"]}, {"$set": {"pais": p, "zona_horaria": z}})
+        _REGION_CACHE.pop(user["org_id"], None)
+        _region_actual.set((p, z))
     a = await _rep_ajustes()
     nuevo = {"id": "ajustes"}
     base_dir = _texto_cuerpo(data.get("base_direccion"), 200)
@@ -47311,7 +47408,8 @@ async def reparto_mi_ruta(user: dict = Depends(require_any_auth)):
     ruta = await db.reparto_rutas.find_one({"id": f"{f}_{d['id']}"}, {"_id": 0})
     org = await get_org(user.get("org_id")) if user.get("org_id") else None
     return {"activo": True, "empresa": (org or {}).get("name") or "",
-            "puede_pegar": autonomo and user.get("role") == "admin", "fecha": f, "pedidos": ps, "base": a.get("base"), "ruta": ruta, "autonomo": autonomo,
+            "puede_pegar": autonomo and user.get("role") == "admin",
+            "pais": _region_actual.get()[0], "prefijo": PAISES_REPARTO.get(_region_actual.get()[0], {}).get("prefijo", "34"), "fecha": f, "pedidos": ps, "base": a.get("base"), "ruta": ruta, "autonomo": autonomo,
             "ia_tickets": bool(a.get("ia_tickets")) and _rep_ia_permitida(),
             "jornada": {"empezada": j.get("empezada"), "terminada": j.get("terminada")},
             "aviso_aceptado": bool(aviso)}

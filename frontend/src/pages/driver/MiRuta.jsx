@@ -28,11 +28,27 @@ const inp = 'w-full rounded-xl border border-dark-700 bg-dark-900 px-3 py-2.5 te
 const MOTIVOS = ['No había nadie', 'Dirección incorrecta', 'Rechazado', 'Fuera de horario', 'Otro']
 const VACIO = { codigo: '', cliente: '', telefono: '', direccion: '', contenido: '', bultos: 1, notas: '', horario: '', prioridad: false, cobrar: '', tipo: 'entrega', hueco: '' }
 
-/* WhatsApp solo para móviles españoles (6 o 7 y nueve cifras): a un fijo no
-   llega, y un botón que abre WhatsApp para nada es peor que no tenerlo. */
-function movilWhatsApp(tel) {
-  const d = String(tel || '').replace(/\D/g, '').replace(/^0034/, '').replace(/^34(?=\d{9}$)/, '')
-  return /^[67]\d{8}$/.test(d) ? `34${d}` : ''
+/* El número para wa.me. En España, solo móviles (6 o 7 y nueve cifras): a
+   un fijo no llega y un botón que abre WhatsApp para nada es peor que no
+   tenerlo. Fuera de España (04-10-2026) no sabemos distinguir fijo de móvil:
+   con prefijo internacional (+ o 00) tal cual; si no, se le pone el del país
+   de la cuenta. Argentina pide un 9 tras el 54 en los móviles. */
+export function movilWhatsApp(tel, pais = 'es', prefijo = '34') {
+  const crudo = String(tel || '').trim()
+  let d = crudo.replace(/\D/g, '')
+  if (!d) return ''
+  if (pais === 'es' || !pais) {
+    d = d.replace(/^0034/, '').replace(/^34(?=\d{9}$)/, '')
+    return /^[67]\d{8}$/.test(d) ? `34${d}` : ''
+  }
+  if (crudo.startsWith('+') || d.startsWith('00')) {
+    d = d.replace(/^00/, '')
+    return d.length >= 8 && d.length <= 15 ? d : ''
+  }
+  d = d.replace(/^0+/, '')
+  if (d.length < 7 || d.length > 12) return ''
+  if (pais === 'ar' && !d.startsWith('9')) d = `9${d}`
+  return `${prefijo}${d}`
 }
 /* El mensaje lleva la hora estimada y el enlace de seguimiento (sin datos
    personales). Sin enlace, el mensaje de siempre. */
@@ -669,8 +685,8 @@ export default function MiRuta({ onBack, embebido = false }) {
               {p.telefono
                 ? <a href={`tel:${p.telefono}`} className="flex flex-col items-center gap-0.5 rounded-xl border border-dark-700 py-2 text-[11px] text-dark-200"><Phone size={16} /> Llamar</a>
                 : <span className="flex flex-col items-center gap-0.5 rounded-xl border border-dark-800 py-2 text-[11px] text-dark-600"><Phone size={16} /> Sin teléfono</span>}
-              {movilWhatsApp(p.telefono)
-                ? <a href={`https://wa.me/${movilWhatsApp(p.telefono)}?text=${encodeURIComponent(mensaje(p, ruta.empresa))}`} target="_blank" rel="noreferrer"
+              {movilWhatsApp(p.telefono, ruta.pais, ruta.prefijo)
+                ? <a href={`https://wa.me/${movilWhatsApp(p.telefono, ruta.pais, ruta.prefijo)}?text=${encodeURIComponent(mensaje(p, ruta.empresa))}`} target="_blank" rel="noreferrer"
                     className="flex flex-col items-center gap-0.5 rounded-xl border border-emerald-600/50 py-2 text-[11px] text-emerald-300"><MessageCircle size={16} /> WhatsApp</a>
                 : <span className="flex flex-col items-center gap-0.5 rounded-xl border border-dark-800 py-2 text-[11px] text-dark-600"><MessageCircle size={16} /> —</span>}
             </div>

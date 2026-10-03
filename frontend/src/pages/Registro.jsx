@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { enAppPlay } from '../lib/enApp'
 import { evento } from '../lib/metaPixel'
+import { regionDelMovil } from '../lib/region'
 
 import { API_BASE } from '../services/api'
 import { medirAccion } from '../lib/analitica'
@@ -319,6 +320,7 @@ export default function Registro() {
           plan: selectedPlan, sector,
           // Desde la app de Play no se pide tarjeta con Stripe (Google cobra con lo suyo).
           desde_app: enAppPlay(),
+          ...regionDelMovil(),
         }),
       })
       const j = await r.json()

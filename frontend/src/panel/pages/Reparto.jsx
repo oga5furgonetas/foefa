@@ -461,6 +461,7 @@ export function Ajustes({ conductores, toast, autonomo }) {
         dias_conservar: a.dias_conservar, portal: a.portal !== false,
         hora_salida: a.hora_salida, min_parada: a.min_parada, min_bulto: a.min_bulto,
         volver: !!a.volver, trafico: a.trafico !== false,
+        ...(a.pais ? { pais: a.pais, zona_horaria: a.zona_horaria } : {}),
       })
       setA({ ...a, base: data.base, portal_activo: data.portal_activo })
       toast.success('Guardado')
@@ -470,6 +471,22 @@ export function Ajustes({ conductores, toast, autonomo }) {
   return (
     <div className="grid gap-4 lg:grid-cols-[1fr_340px]">
       <div className="space-y-4">
+        {a.paises && (
+          <section className="rounded-xl border border-dark-700 bg-dark-900 p-4">
+            <h2 className="mb-1 text-[14px] font-bold text-dark-50">País y hora</h2>
+            <p className="mb-2 text-[12px] text-dark-400">Las direcciones se buscan en este país y las horas de llegada van en esta zona horaria.</p>
+            <div className="grid gap-2 sm:grid-cols-2">
+              <select className={inp} aria-label="País" value={a.pais || 'es'}
+                onChange={(e) => setA({ ...a, pais: e.target.value, zona_horaria: (a.paises[e.target.value]?.zonas || [])[0] })}>
+                {Object.entries(a.paises).sort((x, y) => x[1].nombre.localeCompare(y[1].nombre, 'es')).map(([k, v]) => <option key={k} value={k}>{v.nombre}</option>)}
+              </select>
+              <select className={inp} aria-label="Zona horaria" value={a.zona_horaria || ''}
+                onChange={(e) => setA({ ...a, zona_horaria: e.target.value })}>
+                {(a.paises[a.pais || 'es']?.zonas || []).map((z) => <option key={z} value={z}>{z.split('/').pop().replace(/_/g, ' ')}</option>)}
+              </select>
+            </div>
+          </section>
+        )}
         <section className="rounded-xl border border-dark-700 bg-dark-900 p-4">
           <h2 className="mb-1 flex items-center gap-1.5 text-[14px] font-bold text-dark-50"><MapPin size={15} /> {autonomo ? 'Desde dónde sales' : 'Almacén o tienda'}</h2>
           <p className="mb-2 text-[12px] text-dark-400">{autonomo ? 'Tu nave, almacén o casa: la ruta se ordena desde aquí (o desde donde estés al pulsar «Montar ruta»).' : 'De aquí salen las rutas: se ordenan empezando por el punto más cercano a esta dirección.'}</p>

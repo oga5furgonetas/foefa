@@ -1811,3 +1811,28 @@ test('Cobro · suscrito con Google Play: se gestiona en Google Play, sin botones
     .toHaveAttribute('href', 'https://play.google.com/store/account/subscriptions?sku=repartidor_mensual&package=com.flotadsp.flota')
   await expect(page.getByRole('button', { name: /Suscribirme|Añadir tarjeta/ })).toHaveCount(0)
 })
+
+/* FUERA DE ESPAÑA (04-10-2026): WhatsApp con el prefijo del país de la cuenta. */
+test('Reparto · en México el WhatsApp lleva el prefijo 52, y con + se respeta el número', async ({ page }) => {
+  const fallos = vigilar(page)
+  const b64 = (o) => btoa(JSON.stringify(o)).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '')
+  const token = `${b64({ alg: 'HS256' })}.${b64({ sub: 'd1', role: 'driver', name: 'JUAN', exp: Math.floor(Date.now() / 1000) + 3600 })}.x`
+  await page.addInitScript((t) => {
+    localStorage.setItem('flota_driver_token', t)
+    localStorage.setItem('flota_driver', JSON.stringify({ id: 'd1', name: 'JUAN' }))
+    localStorage.setItem('cookie_consent', '1')
+    localStorage.setItem('ruta_nav2', 'google')
+  }, token)
+  await simularApi(page, 'vacio')
+  await page.route(/\/api\/reparto\/mi-ruta$/, (r) => r.fulfill({ json: {
+    activo: true, empresa: 'Juan Envíos', fecha: '2026-10-04', jornada: {}, aviso_aceptado: true, pais: 'mx', prefijo: '52',
+    pedidos: [
+      { id: 'p1', cliente: 'Tienda Roma', direccion: 'Av. Álvaro Obregón 120, CDMX', telefono: '55 1234 5678', estado: 'pendiente', bultos: 1, orden: 1 },
+      { id: 'p2', cliente: 'Café Condesa', direccion: 'Calle Ámsterdam 50, CDMX', telefono: '+1 305 555 0100', estado: 'pendiente', bultos: 1, orden: 2 },
+    ] } }))
+  await page.goto('/conductor?vista=ruta', { waitUntil: 'domcontentloaded' })
+  await expect(page.getByRole('link', { name: /WhatsApp/ }).first()).toHaveAttribute('href', /wa\.me\/525512345678\?/)
+  await page.getByRole('button', { name: /Ver la parada 2/ }).click()
+  await expect(page.locator('div.rounded-2xl', { hasText: 'Parada 2' }).getByRole('link', { name: /WhatsApp/ })).toHaveAttribute('href', /wa\.me\/13055550100\?/)
+  expect(fallos).toEqual([])
+})
