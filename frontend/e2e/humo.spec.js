@@ -1347,3 +1347,23 @@ test('Planes · la tarjeta Autónomo sale con precio fijo', async ({ page }) => 
   await expect(page.getByText('Autónomo', { exact: true })).toBeVisible()
   await expect(page.getByText(/Precio fijo, todo incluido · 7 días gratis/)).toBeVisible()
 })
+
+/* SUSCRIBIRSE CON STRIPE desde el aviso de prueba: el servidor crea la sesión
+   y el navegador va a su URL; al volver con ?pago=ok se espera al webhook. */
+test('Suscripción · el botón de pagar va a Stripe y la vuelta espera la activación', async ({ page }) => {
+  await entrarComoAdmin(page)
+  await simularApi(page, 'vacio')
+  await page.route(/\/api\/org\/billing/, (r) => r.fulfill({ json: { status: 'trial', required: false, days_left: 5, plan: 'autonomo', sector: 'autonomo', modulos: ['dashboard', 'reparto', 'configuracion'] } }))
+  await page.route(/\/api\/billing\/config/, (r) => r.fulfill({ json: { provider: 'stripe', ready: true, planes: ['autonomo'], checkout: {} } }))
+  const pedidos = []
+  await page.route(/\/api\/billing\/stripe\/suscripcion/, async (r) => {
+    pedidos.push(r.request().postDataJSON())
+    await r.fulfill({ json: { url: 'http://localhost:4173/panel?pago=ok', id: 'cs_test' } })
+  })
+  await page.goto('/panel/reparto', { waitUntil: 'domcontentloaded' })
+  await expect(page.getByText(/5 días/)).toBeVisible()
+  await page.getByRole('button', { name: /Autónomo/ }).first().click()
+  await expect(page).toHaveURL(/pago=ok/)
+  expect(pedidos[0]).toMatchObject({ plan: 'autonomo' })
+  await expect(page.getByText('Pago recibido, activando tu cuenta…')).toBeVisible()
+})

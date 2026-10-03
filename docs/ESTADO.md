@@ -520,8 +520,12 @@ Nada se había borrado (org `owner` sin `modulos`, usuario `dani` sin
 - **Plan Autónomo** (04-10): 7 días de prueba y 9,99 €/mes fijos (99 €/año);
   `_LIM_AUTONOMO`, `PLAN_TARIFAS["autonomo"]` con `mensual/anual/dias_prueba`,
   catálogo fusionado con el de la base (`_catalogo_planes`), alta sin
-  selector de plan, tarjeta en /planes. Falta el producto en Lemon Squeezy
-  (`LS_CHECKOUT_AUTONOMO`) para que el botón de pagar funcione.
+  selector de plan, tarjeta en /planes. **Cobro con Stripe** (la cuenta de
+  Dani): producto, precios y webhook creados por API; `/billing/stripe/suscripcion`
+  (Checkout con `trial_end`), `/billing/stripe/portal`, webhook
+  `/billing/stripe/suscripciones-webhook` (firma + idempotencia). Secretos
+  `STRIPE_PRICE_AUTONOMO(_ANNUAL)` y `STRIPE_WEBHOOK_SECRET_SUSCRIPCIONES` en Fly.
+  No probado con un pago real (modo live; haría falta una tarjeta de verdad).
 
 ## Pendiente (por prioridad)
 

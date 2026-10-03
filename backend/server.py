@@ -4938,6 +4938,8 @@ async def org_billing(user: dict = Depends(get_current_user)):
     b["org_name"] = (org or {}).get("name")
     b["modulos"] = org_modulos(org)
     b["sector"] = (org or {}).get("sector")
+    b["pago_proveedor"] = (org or {}).get("pago_proveedor")
+    b["cancela_al_final"] = bool((org or {}).get("cancela_al_final"))
     return b
 
 
@@ -5487,6 +5489,13 @@ async def admin_set_planes(data: dict = Body(...), user: dict = Depends(require_
 @api_router.get("/billing/config")
 async def billing_config(user: dict = Depends(get_current_user)):
     """URLs de checkout por plan (Básico / Pro / Flota / Enterprise)."""
+    # Con Stripe configurado (precios STRIPE_PRICE_*), manda Stripe: la sesión
+    # de pago la crea el servidor en /billing/stripe/suscripcion.
+    if _stripe_suscripciones_listo():
+        return {"provider": "stripe", "ready": True,
+                "planes": sorted({k[len("STRIPE_PRICE_"):].replace("_ANNUAL", "").lower()
+                                  for k, v in os.environ.items() if k.startswith("STRIPE_PRICE_") and v}),
+                "checkout": {}}
     return {
         "provider": "lemonsqueezy",
         "ready": bool(os.environ.get("LS_CHECKOUT_AUTONOMO")
@@ -47348,6 +47357,203 @@ async def demo_reparto_login(request: Request, data: dict = Body(default={})):
                          db_name=_DEMO_REP_DB, account_type="dsp", centers=["TIENDA"], demo=True)
     return {"access_token": token, "role": "admin", "name": "Oficina (prueba)", "id": "demo-oficina",
             "account_type": "dsp", "slug": "demo-reparto", "centers": ["TIENDA"], "demo": True}
+
+# =========================================================================
+# SUSCRIPCIONES CON STRIPE (04-10-2026)
+# =========================================================================
+# Dani tiene Stripe y quiere que quien se baja la app la pruebe 7 días y se
+# suscriba desde ahí. Stripe Checkout en modo suscripción: la tarjeta se mete
+# al suscribirse, el primer cobro llega al acabar la prueba (`trial_end`), y
+# el webhook es quien ACTIVA la empresa (nunca la vuelta a la web, que
+# cualquiera puede escribir en la barra). Portal de Stripe para cambiar de
+# tarjeta o cancelar. Reutiliza la firma del webhook de la tienda.
+#
+# Precios: `STRIPE_PRICE_<PLAN>` y `STRIPE_PRICE_<PLAN>_ANNUAL` (ids `price_…`).
+# Los planes por vehículo mandan `quantity` = vehículos en flota (con el
+# mínimo); el Autónomo, 1. Webhook propio: `STRIPE_WEBHOOK_SECRET_SUSCRIPCIONES`.
+
+def _stripe_price_id(plan: str, anual: bool) -> str:
+    canon = _plan_canon(plan).upper()
+    return os.environ.get(f"STRIPE_PRICE_{canon}_ANNUAL" if anual else f"STRIPE_PRICE_{canon}", "").strip()
+
+
+def _stripe_suscripciones_listo() -> bool:
+    return _stripe_encendido() and any(k.startswith("STRIPE_PRICE_") and v for k, v in os.environ.items())
+
+
+async def _stripe_req(metodo: str, ruta: str, datos: Optional[dict] = None) -> dict:
+    """Llamada a la API de Stripe (formulario, como pide Stripe). Lanza 502 si
+    Stripe no contesta bien, con el mensaje de Stripe en el log, nunca en la
+    respuesta (lleva ids internos)."""
+    import httpx as _httpx
+    try:
+        async with _httpx.AsyncClient(timeout=20, auth=(_stripe_clave(), "")) as c:
+            r = await c.request(metodo, f"{_STRIPE_API}{ruta}", data=datos or None)
+    except Exception as e:                                   # noqa: BLE001
+        logger.error("Stripe %s %s: %s", metodo, ruta, type(e).__name__)
+        raise HTTPException(502, "Stripe no responde ahora mismo. Inténtalo en un momento.")
+    if r.status_code >= 400:
+        logger.error("Stripe %s %s -> %s %s", metodo, ruta, r.status_code, r.text[:300])
+        raise HTTPException(502, "Stripe ha rechazado la operación. Si sigue pasando, escríbenos.")
+    return r.json()
+
+
+def _stripe_formulario(d: dict, prefijo: str = "") -> dict:
+    """{a: {b: 1}} -> {'a[b]': 1}, que es como Stripe quiere los anidados."""
+    plano = {}
+    for k, v in d.items():
+        clave = f"{prefijo}[{k}]" if prefijo else k
+        if isinstance(v, dict):
+            plano.update(_stripe_formulario(v, clave))
+        elif isinstance(v, list):
+            for i, x in enumerate(v):
+                if isinstance(x, dict):
+                    plano.update(_stripe_formulario(x, f"{clave}[{i}]"))
+                else:
+                    plano[f"{clave}[{i}]"] = x
+        elif isinstance(v, bool):
+            plano[clave] = "true" if v else "false"
+        elif v is not None:
+            plano[clave] = v
+    return plano
+
+
+@api_router.post("/billing/stripe/suscripcion")
+async def stripe_suscripcion(data: dict = Body(default={}), user: dict = Depends(require_admin)):
+    """Crea la sesión de Checkout y devuelve su URL. La empresa se activa
+    cuando Stripe lo confirma por el webhook."""
+    if user.get("demo") or user.get("imp"):
+        raise HTTPException(403, "La suscripción la contrata la propia empresa")
+    if not _stripe_suscripciones_listo():
+        raise HTTPException(503, "El pago con tarjeta no está configurado todavía")
+    org = await get_org(user.get("org_id"))
+    if not org or org.get("account_type") == "owner":
+        raise HTTPException(400, "Esta cuenta no tiene suscripción que pagar")
+    data = _dict_cuerpo(data)
+    plan = _plan_canon(_texto_cuerpo(data.get("plan"), 30) or org.get("plan") or "completo")
+    anual = bool(data.get("anual"))
+    price = _stripe_price_id(plan, anual) or (_stripe_price_id(plan, False) if anual else "")
+    if not price:
+        raise HTTPException(400, f"El plan «{plan}» aún no tiene precio en Stripe")
+    tarifa = PLAN_TARIFAS.get(plan) or {}
+    cantidad = 1
+    if tarifa.get("por_vehiculo"):
+        en_flota = await client[_tenant_db_name(org)].vehicles.count_documents(
+            {"status": {"$nin": ["deleted", "baja"]}})
+        cantidad = max(int(en_flota or 0), int(tarifa.get("minimo_vehiculos") or 0), 1)
+    cuerpo = {
+        "mode": "subscription",
+        "line_items": [{"price": price, "quantity": cantidad}],
+        "client_reference_id": org["id"],
+        "customer_email": org.get("email") or user.get("email") or None,
+        "locale": "es",
+        "allow_promotion_codes": True,
+        "success_url": f"{_PORTAL_BASE_FRONT}/panel?pago=ok",
+        "cancel_url": f"{_PORTAL_BASE_FRONT}/panel?pago=cancelado",
+        "metadata": {"org_id": org["id"], "plan": plan, "db_name": _tenant_db_name(org)},
+        "subscription_data": {"metadata": {"org_id": org["id"], "plan": plan}},
+    }
+    if org.get("stripe_customer"):
+        cuerpo["customer"] = org["stripe_customer"]
+        cuerpo.pop("customer_email", None)
+    # Lo que le quede de prueba, lo respeta Stripe: mete la tarjeta ahora y el
+    # primer cobro es al acabar. Stripe exige que el fin de prueba esté al
+    # menos 48 h por delante; si queda menos, se cobra al suscribirse.
+    try:
+        fin = datetime.fromisoformat(str(org.get("trial_ends") or "").replace("Z", "+00:00"))
+        if fin.tzinfo is None:
+            fin = fin.replace(tzinfo=timezone.utc)
+        if org.get("status") == "trial" and (fin - datetime.now(timezone.utc)).total_seconds() > 48 * 3600:
+            cuerpo["subscription_data"]["trial_end"] = int(fin.timestamp())
+    except ValueError:
+        pass
+    sesion = await _stripe_req("POST", "/checkout/sessions", _stripe_formulario(cuerpo))
+    await _audit(user, "stripe_checkout", {"plan": plan, "anual": anual, "cantidad": cantidad})
+    return {"url": sesion.get("url"), "id": sesion.get("id")}
+
+
+@api_router.post("/billing/stripe/portal")
+async def stripe_portal(user: dict = Depends(require_admin)):
+    """Portal de Stripe: cambiar la tarjeta, ver facturas, cancelar."""
+    if user.get("demo") or user.get("imp"):
+        raise HTTPException(403, "Solo la propia empresa")
+    org = await get_org(user.get("org_id"))
+    if not org or not org.get("stripe_customer"):
+        raise HTTPException(404, "Esta empresa no tiene una suscripción con tarjeta")
+    s = await _stripe_req("POST", "/billing_portal/sessions", {
+        "customer": org["stripe_customer"], "return_url": f"{_PORTAL_BASE_FRONT}/panel/configuracion"})
+    return {"url": s.get("url")}
+
+
+def _stripe_estado_org(estado_stripe: str) -> Optional[str]:
+    """Estado de Stripe -> estado de la empresa. None = no tocar."""
+    if estado_stripe in ("active", "trialing"):
+        return "active"
+    if estado_stripe in ("past_due", "unpaid", "canceled", "incomplete_expired", "paused"):
+        return "suspended"
+    return None
+
+
+async def _stripe_aplicar_evento(ev: dict) -> dict:
+    """Lo que hace cada aviso. Separado del endpoint para poder probarlo."""
+    tipo = ev.get("type") or ""
+    obj = (ev.get("data") or {}).get("object") or {}
+    meta = obj.get("metadata") or {}
+    org = None
+    if meta.get("org_id"):
+        org = await global_db.organizations.find_one({"id": meta["org_id"]})
+    if not org and obj.get("client_reference_id"):
+        org = await global_db.organizations.find_one({"id": obj["client_reference_id"]})
+    if not org and obj.get("customer"):
+        org = await global_db.organizations.find_one({"stripe_customer": obj["customer"]})
+    if not org:
+        logger.warning("Stripe suscripciones: aviso %s sin empresa conocida", tipo)
+        return {"ok": True, "aplicado": False}
+    campos, ahora = {}, datetime.now(timezone.utc).isoformat()
+    if tipo == "checkout.session.completed" and obj.get("mode") == "subscription":
+        campos = {"status": "active", "pago_proveedor": "stripe", "stripe_customer": obj.get("customer"),
+                  "stripe_subscription": obj.get("subscription"), "activada_en": ahora}
+        if meta.get("plan") in PLAN_TARIFAS:
+            campos["plan"] = meta["plan"]
+    elif tipo in ("customer.subscription.updated", "customer.subscription.created"):
+        nuevo = _stripe_estado_org(obj.get("status") or "")
+        if nuevo:
+            campos = {"status": nuevo, "stripe_status": obj.get("status"), "stripe_subscription": obj.get("id"),
+                      "pago_proveedor": "stripe"}
+            if obj.get("cancel_at_period_end"):
+                campos["cancela_al_final"] = True
+            elif "cancel_at_period_end" in obj:
+                campos["cancela_al_final"] = False
+    elif tipo == "customer.subscription.deleted":
+        campos = {"status": "suspended", "stripe_status": "canceled", "suspendida_en": ahora}
+    elif tipo == "invoice.payment_failed":
+        campos = {"stripe_ultimo_fallo": ahora}
+    if campos:
+        await global_db.organizations.update_one({"id": org["id"]}, {"$set": campos})
+        logger.info("Stripe suscripciones: %s -> %s (%s)", tipo, org.get("slug"), campos.get("status", ""))
+    return {"ok": True, "aplicado": bool(campos)}
+
+
+@api_router.post("/billing/stripe/suscripciones-webhook")
+async def stripe_suscripciones_webhook(request: Request):
+    secreto = os.environ.get("STRIPE_WEBHOOK_SECRET_SUSCRIPCIONES", "").strip()
+    raw = await request.body()
+    if not secreto:
+        logger.error("Webhook de suscripciones rechazado: sin STRIPE_WEBHOOK_SECRET_SUSCRIPCIONES")
+        raise HTTPException(503, "Webhook no configurado")
+    if not _stripe_firma_ok(raw, request.headers.get("Stripe-Signature", ""), secreto):
+        raise HTTPException(401, "Firma invalida")
+    try:
+        ev = json.loads(raw)
+    except Exception:
+        raise HTTPException(400, "JSON invalido")
+    # Stripe reintenta: el mismo aviso dos veces no puede aplicarse dos veces.
+    try:
+        await global_db.stripe_events.insert_one({"_id": f"susc_{ev.get('id')}", "type": ev.get("type"),
+                                                  "at": datetime.now(timezone.utc).isoformat()})
+    except Exception:                                        # noqa: BLE001  (duplicado)
+        return {"ok": True, "repetido": True}
+    return await _stripe_aplicar_evento(ev)
 
 app.include_router(auth_router)
 app.include_router(api_router)

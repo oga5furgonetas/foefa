@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { useT } from '../../i18n'
 import { Loader2, Plus, Building, Send, CreditCard, Check, Copy, ExternalLink, BellRing, Pencil, Trash2, Clock, MessageCircle } from 'lucide-react'
+import { stripePortal } from '../api'
 import { getOrgCenters, addOrgCenter, getTelegramConfig,
   getWhatsappEstado, getWhatsappPendientes, marcarWhatsappHecho, setWhatsappConfig, probarWhatsapp, crearPlantillasWhatsapp, getOrgBilling, getBillingUso, listarDestinatarios, guardarDestinatario, borrarDestinatario, enviarResumenDiario, getHorariosAvisos, setHorariosAvisos } from '../api'
 import { lista } from '../../lib/lista'
@@ -731,7 +732,17 @@ export default function Configuracion() {
             )}
           </div>
         )}
-        <a href="/planes" className="btn-secondary mt-3 inline-flex text-sm">{t('cfg.see.plans')}</a>
+        <div className="mt-3 flex flex-wrap gap-2">
+          {billing?.pago_proveedor === 'stripe' && billing?.status === 'active' ? (
+            <button className="btn-primary inline-flex text-sm"
+              onClick={async () => {
+                try { const { data } = await stripePortal(); if (data?.url) window.location.href = data.url } catch (e) {
+                  setMsg({ ok: false, t: e?.response?.data?.detail || 'No se pudo abrir el portal de pagos.' })
+                }
+              }}>Gestionar suscripción (tarjeta, facturas, cancelar)</button>
+          ) : null}
+          <a href="/planes" className="btn-secondary inline-flex text-sm">{t('cfg.see.plans')}</a>
+        </div>
       </div>
     </div>
   )

@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { Clock, Sparkles, AlertTriangle } from 'lucide-react'
-import { getOrgBilling, getBillingConfig } from './api'
+import { getOrgBilling, getBillingConfig, stripeSuscripcion } from './api'
 import { getAdmin, getOrgId } from './auth'
 import { useT } from '../i18n'
 
@@ -24,9 +24,35 @@ export default function TrialBanner() {
     getBillingConfig().then((r) => setCfg(r.data)).catch(() => setCfg(null))
   }, [])
 
+  // Al volver de Stripe (?pago=ok) la activación llega por el webhook unos
+  // segundos después: se vuelve a preguntar hasta verla activa (máx. 1 min).
+  const [pagoOk] = useState(() => new URLSearchParams(window.location.search).get('pago') === 'ok')
+  useEffect(() => {
+    if (!pagoOk || billing?.status === 'active') return undefined
+    let n = 0
+    const t = setInterval(() => {
+      n += 1
+      getOrgBilling().then((r) => { setBilling(r.data); if (r.data?.status === 'active' || n >= 12) clearInterval(t) }).catch(() => {})
+    }, 5000)
+    return () => clearInterval(t)
+  }, [pagoOk, billing?.status])
+
   if (!billing) return null
   if (billing.account_type === 'owner' || billing.status === 'owner') return null
-  if (billing.status === 'active') return null
+  if (billing.status === 'active') {
+    return pagoOk ? (
+      <div className="flex items-center gap-2 bg-emerald-500/15 px-4 py-2 text-sm text-emerald-200">
+        <Sparkles size={14} /> Suscripción activa. ¡Gracias!
+      </div>
+    ) : null
+  }
+  if (pagoOk && billing.status !== 'active') {
+    return (
+      <div className="flex items-center gap-2 bg-sky-500/15 px-4 py-2 text-sm text-sky-200">
+        <Clock size={14} /> Pago recibido, activando tu cuenta…
+      </div>
+    )
+  }
 
   const days = billing.days_left
   const required = billing.required
@@ -34,7 +60,9 @@ export default function TrialBanner() {
   const orgId = getOrgId()
 
   // Normalizar clave de plan (soporta formato antiguo y nuevo)
-  const rawPlan = localStorage.getItem('flota_plan') || 'pro'
+  // El plan lo dice el SERVIDOR; lo guardado al registrarse es solo respaldo
+  // (a un autónomo le salía «Pasar a Pro»).
+  const rawPlan = billing.plan || localStorage.getItem('flota_plan') || 'pro'
   const planKey = PLAN_KEY_MAP[rawPlan] || rawPlan.toLowerCase()
   const planLabel = PLAN_LABELS[planKey] || planKey
   const isEnterprise = planKey === 'enterprise'
@@ -49,8 +77,16 @@ export default function TrialBanner() {
     cfg?.checkout?.flota ||
     cfg?.checkout?.pro
 
-  const goPay = () => {
+  const goPay = async () => {
     if (isEnterprise) { window.location.href = '/contacto?asunto=Enterprise'; return }
+    // Con Stripe la sesión de pago la crea el servidor (lleva la empresa y lo
+    // que le queda de prueba) y aquí solo se va a la URL que devuelve.
+    if (cfg?.provider === 'stripe') {
+      try {
+        const { data } = await stripeSuscripcion(billing?.plan || planKey, billingMode === 'annual')
+        if (data?.url) { window.location.href = data.url; return }
+      } catch (e) { alert(e?.response?.data?.detail || 'No se pudo abrir el pago. Inténtalo en un momento.'); return }
+    }
     if (!checkoutUrl) return alert('Pasarela de pago no configurada todavía.')
     if (!orgId) return alert('No hemos podido identificar tu organización. Cierra sesión y vuelve a entrar.')
     const u = new URL(checkoutUrl)

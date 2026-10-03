@@ -825,4 +825,6 @@ export const ordenarRutas = (fecha, conductorId) => api.post('/reparto/ordenar',
 export const getRepartoVivo = () => api.get('/reparto/vivo')
 export const enlaceSeguimiento = (id) => api.post(`/reparto/pedidos/${id}/enlace`)
 export const fotoEntrega = (id) => api.get(`/reparto/pedidos/${id}/foto`)
+export const stripeSuscripcion = (plan, anual) => api.post('/billing/stripe/suscripcion', { plan, anual })
+export const stripePortal = () => api.post('/billing/stripe/portal')
 export const getRepartoEstadisticas = (dias = 14) => api.get('/reparto/estadisticas', { params: { dias } })

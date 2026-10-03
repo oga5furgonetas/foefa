@@ -63,13 +63,20 @@ después **9,99 €/mes** fijos (o **99 €/año**, 10 meses). Límites: 1 repar
 sin chat de equipo ni informe pericial. Al acabar la prueba el panel enseña el
 aviso de pago (`TrialBanner`) con el botón de pagar.
 
-**Para que el botón de pagar funcione** (hoy dice «pasarela no configurada»),
-Dani tiene que crear en **Lemon Squeezy** (la pasarela que ya usa el resto de
-planes; emite las facturas con IVA): un producto «Flota Autónomo» con variante
-mensual 9,99 € y, si quiere, anual 99 €, y poner en Fly los secretos
-`LS_CHECKOUT_AUTONOMO` y `LS_CHECKOUT_AUTONOMO_ANNUAL` (las URLs de checkout)
-más `LS_WEBHOOK_SECRET` (si no está ya). El webhook reconoce el producto por
-su nombre («Autónomo»).
+**El cobro es con Stripe** (04-10-2026, la cuenta de Dani, la misma de la
+tienda). En Stripe hay un producto «Flota Autónomo» con precios de 9,99 €/mes
+y 99 €/año (IVA incluido) y un webhook propio para las suscripciones. En Fly:
+`STRIPE_PRICE_AUTONOMO`, `STRIPE_PRICE_AUTONOMO_ANNUAL`,
+`STRIPE_WEBHOOK_SECRET_SUSCRIPCIONES` (los ids también en
+`C:\Users\Usuario\.flota-stripe-suscripciones.env`). Cómo va: el aviso de
+prueba del panel → el servidor crea una sesión de Stripe Checkout
+(`/billing/stripe/suscripcion`) respetando lo que quede de prueba (mete la
+tarjeta ahora, primer cobro al acabar los 7 días) → Stripe avisa por el webhook
+→ la empresa pasa a `active`. Impago o cancelación → `suspended` (el panel
+pide pagar). Cancelar, cambiar de tarjeta o ver facturas: «Gestionar
+suscripción» en Configuración (portal de Stripe). Para cobrar los otros
+planes por Stripe basta crear sus precios y poner `STRIPE_PRICE_OPERACION`,
+`STRIPE_PRICE_COMPLETO` (cantidad = vehículos en flota).
 
 **Cobrar dentro de la app de Play Store** (importante, cambió el 30-06-2026):
 una suscripción que desbloquea funciones de la app es un «servicio digital» y
