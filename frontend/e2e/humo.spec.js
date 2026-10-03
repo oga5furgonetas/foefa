@@ -1732,3 +1732,82 @@ test('Cobro · con un regalo pendiente, al entrar en la app se canjea antes de m
   await expect(page.getByText(/Pagado hasta el 11 de octubre de 2027/)).toBeVisible()
   expect(fallos).toEqual([])
 })
+
+/* GOOGLE PLAY DENTRO DE LA APP: precios de Google, prueba gratis, la compra se
+   comprueba en el servidor antes de cerrar el pago, y al reinstalar se
+   recupera la suscripción. Digital Goods y PaymentRequest, simulados. */
+async function simularPlay(page, { compras = [] } = {}) {
+  await page.addInitScript((compras) => {
+    sessionStorage.setItem('flota_app', '1')
+    window.__pagos = []
+    window.getDigitalGoodsService = async () => ({
+      getDetails: async (ids) => [
+        { itemId: 'repartidor_mensual', price: { currency: 'EUR', value: '9.99' }, subscriptionPeriod: 'P1M', freeTrialPeriod: 'P7D' },
+        { itemId: 'repartidor_anual', price: { currency: 'EUR', value: '99.00' }, subscriptionPeriod: 'P1Y', freeTrialPeriod: 'P7D' },
+      ].filter((d) => ids.includes(d.itemId)),
+      listPurchases: async () => compras,
+    })
+    window.PaymentRequest = class {
+      constructor(metodos) { this.metodos = metodos }
+      async show() {
+        const datos = this.metodos[0].data
+        return { details: { purchaseToken: `tok-${datos.sku}-0123456789abcdef` }, complete: async (r) => { window.__pagos.push({ ...datos, metodo: this.metodos[0].supportedMethods, r }) } }
+      }
+    }
+  }, compras)
+}
+const PLAY = { listo: true, productos: { repartidor_mensual: 'mensual', repartidor_anual: 'anual' }, paquete: 'com.flotadsp.flota', cuenta: 'c'.repeat(64) }
+
+test('Cobro · en la app de Play: 7 días gratis con Google Play y la compra se comprueba antes de cerrar', async ({ page }) => {
+  const fallos = vigilar(page)
+  const fin = new Date(Date.now() + 7 * 86400000).toISOString()
+  await entrarRepartidor(page, { status: 'trial', days_left: 7, trial_ends: fin, falta_tarjeta: true,
+    bloqueo: 'Añade tu tarjeta para empezar los 7 días gratis (hoy no se cobra nada).', play: PLAY })
+  await simularPlay(page)
+  const verificados = []
+  await page.route(/\/api\/billing\/play\/verificar/, async (r) => { verificados.push(r.request().postDataJSON()); await r.fulfill({ json: { ok: true, vigente: true, en_prueba: true } }) })
+  await page.goto('/ruta', { waitUntil: 'domcontentloaded' })
+  await expect(page.getByRole('heading', { name: 'Empieza tus 7 días gratis' })).toBeVisible()
+  await expect(page.getByRole('radio', { name: /Mensual/ })).toContainText('9,99 €')
+  await expect(page.getByRole('radio', { name: /Anual/ })).toContainText('99,00 €')
+  await expect(page.getByText(/Hoy pagas 0 €\. Al acabar los 7 días gratis, Google Play cobra 9,99\s€ al mes/)).toBeVisible()
+  await expect(page.getByRole('button', { name: /Añadir tarjeta|Comprar regalo/ })).toHaveCount(0)   // nada de Stripe en la app
+  await page.getByRole('radio', { name: /Anual/ }).click()
+  await page.getByRole('button', { name: 'Empezar 7 días gratis' }).click()
+  await expect(page.getByText('Prueba activada. Hoy no se te cobra nada.')).toBeVisible()
+  expect(verificados).toEqual([{ token: 'tok-repartidor_anual-0123456789abcdef' }])
+  expect(await page.evaluate(() => window.__pagos)).toEqual([{ sku: 'repartidor_anual', cuenta: 'c'.repeat(64), metodo: 'https://play.google.com/billing', r: 'success' }])
+  expect(fallos).toEqual([])
+})
+
+test('Cobro · en la app de Play: si el servidor no acepta la compra, el pago se cierra como fallido', async ({ page }) => {
+  await entrarRepartidor(page, { status: 'trial', days_left: 0, required: true, bloqueo: 'Tu prueba gratis ha terminado.', play: PLAY })
+  await simularPlay(page)
+  await page.route(/\/api\/billing\/play\/verificar/, (r) => r.fulfill({ status: 403, json: { detail: 'Esa compra no es de esta cuenta' } }))
+  await page.goto('/ruta', { waitUntil: 'domcontentloaded' })
+  await page.getByRole('button', { name: 'Empezar 7 días gratis' }).click()
+  await expect(page.getByText('Esa compra no es de esta cuenta')).toBeVisible()
+  expect((await page.evaluate(() => window.__pagos))[0].r).toBe('fail')
+})
+
+test('Cobro · en la app de Play: al reinstalar se recupera la suscripción que ya tenía', async ({ page }) => {
+  await entrarRepartidor(page, { status: 'trial', days_left: 0, required: true, bloqueo: 'Tu prueba gratis ha terminado.', play: PLAY })
+  await simularPlay(page, { compras: [{ itemId: 'otra_app', purchaseToken: 'x' }, { itemId: 'repartidor_mensual', purchaseToken: 'tok-viejo-0123456789abcdef' }] })
+  const verificados = []
+  await page.route(/\/api\/billing\/play\/verificar/, async (r) => { verificados.push(r.request().postDataJSON()); await r.fulfill({ json: { ok: true, vigente: true } }) })
+  await page.goto('/ruta', { waitUntil: 'domcontentloaded' })
+  await expect.poll(() => verificados.length).toBe(1)
+  expect(verificados[0]).toEqual({ token: 'tok-viejo-0123456789abcdef' })
+})
+
+test('Cobro · suscrito con Google Play: se gestiona en Google Play, sin botones de Stripe', async ({ page }) => {
+  await entrarRepartidor(page, { status: 'active', pago_proveedor: 'play',
+    play: { ...PLAY, producto: 'repartidor_mensual', hasta: '2026-10-11T10:00:00Z', renueva: true, en_prueba: true } })
+  await page.goto('/ruta', { waitUntil: 'domcontentloaded' })
+  await page.getByRole('button', { name: 'Cuenta', exact: true }).click()
+  await expect(page.getByText('Prueba con Google Play')).toBeVisible()
+  await expect(page.getByText(/Primer cobro el 11 de octubre de 2026, con Google Play/)).toBeVisible()
+  await expect(page.getByRole('link', { name: 'Gestionar o cancelar en Google Play' }))
+    .toHaveAttribute('href', 'https://play.google.com/store/account/subscriptions?sku=repartidor_mensual&package=com.flotadsp.flota')
+  await expect(page.getByRole('button', { name: /Suscribirme|Añadir tarjeta/ })).toHaveCount(0)
+})

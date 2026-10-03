@@ -290,3 +290,44 @@ Pruébala sin registrarte: abre la app y pulsa «Probar sin cuenta».
   en móviles sin él se escribe el código o se hace la foto.
 - Google revisa la primera versión en días (a veces una semana); las
   siguientes, horas.
+
+## Cobrar dentro de la app con Google Play (04-10-2026)
+
+Dentro de la app de Play no se puede cobrar con Stripe (política de Google):
+se cobra con **Google Play Billing**. Desde la versión **1.0.2 (versionCode 3)**
+la app lleva la librería de cobro (`androidbrowserhelper:billing 1.2.0`) y una
+pantalla de pago propia, `PagoActivity`, que:
+
+- elige la oferta de **prueba gratis** si el cliente tiene derecho (la de la
+  librería coge la primera de la lista y Google no garantiza el orden);
+- liga la compra a la cuenta (`obfuscatedAccountId` = sha256 de la cuenta): el
+  servidor rechaza un token de compra de otra cuenta.
+
+El servidor (`POST /billing/play/verificar`) pregunta a Google por la compra
+(API `subscriptionsv2`), la **acepta** (sin eso Google la devuelve a los 3
+días) y activa la cuenta (`pago_proveedor: play`, `play_hasta`). Sin avisos en
+tiempo real: el estado se vuelve a preguntar al abrir la app y antes de
+bloquear a nadie. Un regalo canjeado aplaza el cobro de Google (`defer`).
+
+### Lo que hace Dani en Play Console (una vez)
+
+1. Subir `FDS-1.0.2.aab` a la prueba cerrada (o interna).
+2. **Monetizar con Play → Productos → Suscripciones → Crear suscripción**, dos veces:
+   - ID `repartidor_mensual` · plan base (renovación automática, **1 mes**,
+     9,99 €) · marcar el plan base como **compatible con versiones anteriores**.
+   - ID `repartidor_anual` · plan base (**1 año**, 99 €) · compatible con
+     versiones anteriores.
+   - En cada plan base, **oferta**: «Prueba gratuita» de **7 días**, para
+     clientes nuevos. Activar plan base y oferta.
+3. **Cuenta de servicio** para que el servidor compruebe las compras:
+   - Google Cloud Console → proyecto → activar «Google Play Android Developer API».
+   - Crear cuenta de servicio → Claves → Añadir clave JSON (se descarga un fichero).
+   - Play Console → Usuarios y permisos → Invitar al correo de esa cuenta de
+     servicio, con «Ver información financiera» y «Gestionar pedidos y suscripciones».
+   - Guardar el JSON en `C:\Users\Usuario\.flota-play-cuenta.json`. Se sube a
+     Fly como secreto `GOOGLE_PLAY_CUENTA_SERVICIO` (nunca al repositorio).
+4. **Probar sin pagar**: Ajustes → Pruebas de licencia → añadir el Gmail de
+   prueba. Con esa cuenta los cobros son de prueba y las renovaciones van rápidas.
+
+Mientras no esté el secreto, la app no enseña el pago con Google y no pide
+tarjeta a quien se da de alta desde la app.

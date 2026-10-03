@@ -966,7 +966,10 @@ async def get_current_user(
             raise HTTPException(status_code=403, detail="Modo demo: solo lectura. Crea tu cuenta gratis para editar.")
     if (request.method not in ("GET", "HEAD", "OPTIONS") and "/api/reparto/" in request.url.path
             and not payload.get("demo") and not payload.get("imp") and payload.get("org_id")):
-        motivo = _rep_bloqueo_pago(await get_org(payload.get("org_id")))
+        org_pago = await get_org(payload.get("org_id"))
+        motivo = _rep_bloqueo_pago(org_pago)
+        if motivo and (org_pago or {}).get("play_token"):
+            motivo = _rep_bloqueo_pago(await _play_refrescar(org_pago))
         if motivo:
             raise HTTPException(status_code=402, detail=motivo)
     # AÍSLA: fija la BD de la organización del token para TODA esta petición.
@@ -4832,7 +4835,7 @@ async def register_dsp(data: RegisterRequest, request: Request):
     # PRUEBA CON TARJETA (04-10-2026, Dani): quien reparte solo mete la
     # tarjeta al empezar, hoy 0 €, y el día 7 se cobra si no ha cancelado.
     # Desde la app de Play no (Google obliga a cobrar con su sistema).
-    if (sector_alta == "autonomo" and not data.desde_app
+    if (sector_alta == "autonomo" and (not data.desde_app or _play_listo())
             and os.environ.get("PRUEBA_CON_TARJETA", "1").strip() != "0"):
         org["prueba_con_tarjeta"] = True
     await global_db.organizations.insert_one(dict(org))
@@ -4919,6 +4922,12 @@ def _org_billing(org):
     plan_key = _raw
     limits = PLAN_LIMITS.get(plan_key, PLAN_DEFAULT)
     status = org.get("status", "trial")
+    if status == "active" and org.get("pago_proveedor") == "play":
+        hasta = _fecha_utc(org.get("play_hasta"))
+        if hasta and hasta < datetime.now(timezone.utc) and not _regalo_vigente(org):
+            return {"status": "vencido_play", "required": True, "days_left": None, "plan": plan_key or "pro",
+                    "limits": limits}
+        return {"status": "active", "required": False, "days_left": None, "plan": plan_key or "pro", "limits": limits}
     if status == "active" and org.get("pago_proveedor") == "regalo":
         hasta = _fecha_utc(org.get("pagado_hasta"))
         if hasta and hasta < datetime.now(timezone.utc):
@@ -4974,8 +4983,8 @@ def _falta_tarjeta(org) -> bool:
     Sin Stripe configurado no se pide nada: no se puede dejar a nadie fuera
     por un fallo nuestro."""
     return (bool((org or {}).get("prueba_con_tarjeta")) and org.get("status") == "trial"
-            and not org.get("stripe_subscription") and not _regalo_vigente(org)
-            and _stripe_suscripciones_listo())
+            and not org.get("stripe_subscription") and not org.get("play_token") and not _regalo_vigente(org)
+            and (_stripe_suscripciones_listo() or _play_listo()))
 
 
 def _rep_bloqueo_pago(org) -> str:
@@ -4989,6 +4998,8 @@ def _rep_bloqueo_pago(org) -> str:
             return "Tu prueba gratis ha terminado. Suscríbete en «Cuenta» para seguir repartiendo."
         if b.get("status") == "vencido":
             return "Tu regalo ha terminado. Suscríbete en «Cuenta» para seguir repartiendo."
+        if b.get("status") == "vencido_play":
+            return "Tu suscripción de Google Play ha terminado. Renuévala en «Cuenta» para seguir repartiendo."
         return "Tu suscripción está pausada: hay un pago pendiente. Revísalo en «Cuenta»."
     if _falta_tarjeta(org):
         return "Añade tu tarjeta para empezar los 7 días gratis (hoy no se cobra nada)."
@@ -4999,6 +5010,8 @@ def _rep_bloqueo_pago(org) -> str:
 async def org_billing(user: dict = Depends(get_current_user)):
     """Estado de la suscripción de TU organización (trial, días restantes, si toca pagar)."""
     org = await get_org(user.get("org_id"))
+    if org and org.get("play_token"):
+        org = await _play_refrescar(org)
     b = _org_billing(org)
     b["account_type"] = (org or {}).get("account_type")
     b["org_name"] = (org or {}).get("name")
@@ -5018,6 +5031,12 @@ async def org_billing(user: dict = Depends(get_current_user)):
         t = PLAN_TARIFAS["autonomo"]
         b["precios"] = {"mensual": t["mensual"], "anual": t["anual"]}
         b["regalos"] = {str(m): v / 100 for m, v in _REGALO_PRECIOS.items()}
+        # Google Play (dentro de la app): qué productos y con qué cuenta ligar la compra.
+        b["play"] = {"listo": _play_listo(), "productos": _PLAY_PRODUCTOS, "paquete": _PLAY_PAQUETE,
+                     "cuenta": _play_cuenta_org(o["id"])}
+        if o.get("play_token"):
+            b["play"].update({"producto": o.get("play_producto"), "hasta": o.get("play_hasta"),
+                              "renueva": bool(o.get("play_renueva")), "en_prueba": bool(o.get("play_en_prueba"))})
     return b
 
 
@@ -47819,6 +47838,174 @@ async def stripe_cambiar_plan(data: dict = Body(default={}), user: dict = Depend
     return {"ok": True, **campos}
 
 
+# ── GOOGLE PLAY BILLING (04-10-2026) ─────────────────────────────────────────
+# Dentro de la app de Play no se puede cobrar con Stripe: se paga con Google.
+# La app (PagoActivity) liga la compra a la cuenta con obfuscatedAccountId y
+# la web nos manda el token; aquí se pregunta a Google si es de verdad, de
+# esta cuenta y de nuestros productos, y se ACEPTA (acknowledge: sin eso,
+# Google la devuelve a los 3 días). Sin avisos en tiempo real (Pub/Sub): el
+# estado se vuelve a preguntar al abrir la app y antes de bloquear a nadie.
+#
+# Credencial: `GOOGLE_PLAY_CUENTA_SERVICIO` = el JSON de la cuenta de servicio
+# (tal cual o en base64), con permiso en Play Console para ver datos
+# financieros y gestionar pedidos y suscripciones.
+_PLAY_PAQUETE = os.environ.get("PLAY_PAQUETE", "com.flotadsp.flota").strip()
+_PLAY_PRODUCTOS = {"repartidor_mensual": "mensual", "repartidor_anual": "anual"}
+_PLAY_API = "https://androidpublisher.googleapis.com/androidpublisher/v3/applications"
+_PLAY_TOKEN = {"valor": None, "caduca": 0.0}
+_PLAY_ACTIVOS = ("SUBSCRIPTION_STATE_ACTIVE", "SUBSCRIPTION_STATE_IN_GRACE_PERIOD")
+
+
+def _play_credencial() -> Optional[dict]:
+    crudo = os.environ.get("GOOGLE_PLAY_CUENTA_SERVICIO", "").strip()
+    if not crudo:
+        return None
+    try:
+        if not crudo.startswith("{"):
+            import base64 as _b64
+            crudo = _b64.b64decode(crudo).decode("utf-8")
+        info = json.loads(crudo)
+        return info if info.get("client_email") and info.get("private_key") else None
+    except Exception:                                        # noqa: BLE001
+        logger.error("GOOGLE_PLAY_CUENTA_SERVICIO no es un JSON de cuenta de servicio")
+        return None
+
+
+def _play_listo() -> bool:
+    return _play_credencial() is not None
+
+
+def _play_cuenta_org(org_id: str) -> str:
+    """El id que viaja con la compra (no dice nada de la cuenta a Google)."""
+    return hashlib.sha256(f"flota-play:{org_id}".encode()).hexdigest()
+
+
+async def _play_acceso() -> str:
+    if _PLAY_TOKEN["valor"] and _PLAY_TOKEN["caduca"] > time.time() + 60:
+        return _PLAY_TOKEN["valor"]
+    info = _play_credencial()
+    if not info:
+        raise HTTPException(503, "El cobro con Google Play no está configurado todavía")
+    ahora = int(time.time())
+    destino = info.get("token_uri") or "https://oauth2.googleapis.com/token"
+    asercion = jwt.encode({"iss": info["client_email"], "scope": "https://www.googleapis.com/auth/androidpublisher",
+                           "aud": destino, "iat": ahora, "exp": ahora + 3600}, info["private_key"], algorithm="RS256")
+    import httpx as _httpx
+    try:
+        async with _httpx.AsyncClient(timeout=20) as c:
+            r = await c.post(destino, data={"grant_type": "urn:ietf:params:oauth:grant-type:jwt-bearer",
+                                            "assertion": asercion})
+    except Exception as e:                                   # noqa: BLE001
+        logger.error("Google Play: sin token (%s)", type(e).__name__)
+        raise HTTPException(502, "Google Play no responde ahora mismo. Inténtalo en un momento.")
+    if r.status_code != 200:
+        logger.error("Google Play: token rechazado %s %s", r.status_code, r.text[:200])
+        raise HTTPException(502, "Google Play no acepta nuestra credencial. Escríbenos.")
+    j = r.json()
+    _PLAY_TOKEN.update({"valor": j.get("access_token"), "caduca": time.time() + float(j.get("expires_in") or 3000)})
+    return _PLAY_TOKEN["valor"]
+
+
+async def _play_req(metodo: str, ruta: str, cuerpo: Optional[dict] = None) -> dict:
+    import httpx as _httpx
+    acceso = await _play_acceso()
+    try:
+        async with _httpx.AsyncClient(timeout=20, headers={"Authorization": f"Bearer {acceso}"}) as c:
+            r = await c.request(metodo, f"{_PLAY_API}/{_PLAY_PAQUETE}{ruta}", json=cuerpo)
+    except Exception as e:                                   # noqa: BLE001
+        logger.error("Google Play %s %s: %s", metodo, ruta.split("/tokens/")[0], type(e).__name__)
+        raise HTTPException(502, "Google Play no responde ahora mismo. Inténtalo en un momento.")
+    if r.status_code in (400, 404, 410):
+        raise HTTPException(404, "Google Play no reconoce esa compra")
+    if r.status_code >= 300:
+        logger.error("Google Play %s -> %s %s", ruta.split("/tokens/")[0], r.status_code, r.text[:200])
+        raise HTTPException(502, "Google Play ha rechazado la operación. Si sigue pasando, escríbenos.")
+    return r.json() if r.content else {}
+
+
+def _play_estado(sub: dict) -> dict:
+    """Lo que nos importa de una suscripción (API subscriptionsv2)."""
+    item = ((sub or {}).get("lineItems") or [{}])[0] or {}
+    hasta = _fecha_utc(item.get("expiryTime"))
+    estado = (sub or {}).get("subscriptionState") or ""
+    vigente = estado in _PLAY_ACTIVOS or (
+        estado == "SUBSCRIPTION_STATE_CANCELED" and hasta is not None and hasta > datetime.now(timezone.utc))
+    return {"producto": item.get("productId"), "hasta": hasta.isoformat() if hasta else None, "estado": estado,
+            "vigente": vigente, "renueva": bool((item.get("autoRenewingPlan") or {}).get("autoRenewEnabled")),
+            "en_prueba": "freeTrial" in ((item.get("offerPhase") or {})),
+            "cuenta": ((sub or {}).get("externalAccountIdentifiers") or {}).get("obfuscatedExternalAccountId"),
+            "aceptada": (sub or {}).get("acknowledgementState") == "ACKNOWLEDGEMENT_STATE_ACKNOWLEDGED"}
+
+
+def _play_campos(token: str, e: dict) -> dict:
+    campos = {"play_token": token, "play_producto": e["producto"], "play_hasta": e["hasta"],
+              "play_renueva": e["renueva"], "play_en_prueba": e["en_prueba"], "play_estado": e["estado"],
+              "play_mirado": datetime.now(timezone.utc).isoformat()}
+    if e["vigente"]:
+        campos.update({"status": "active", "pago_proveedor": "play"})
+    return campos
+
+
+async def _play_refrescar(org: dict) -> dict:
+    """Vuelve a preguntar a Google por la suscripción de la cuenta, como mucho
+    cada 10 minutos (y siempre si ya ha caducado según lo guardado). Si Google
+    no contesta, se queda lo que había."""
+    token = (org or {}).get("play_token")
+    if not token or not _play_listo():
+        return org
+    mirado = _fecha_utc(org.get("play_mirado"))
+    hasta = _fecha_utc(org.get("play_hasta"))
+    ahora = datetime.now(timezone.utc)
+    if mirado and (ahora - mirado).total_seconds() < 600 and hasta and hasta > ahora:
+        return org
+    try:
+        e = _play_estado(await _play_req("GET", f"/purchases/subscriptionsv2/tokens/{token}"))
+    except HTTPException:
+        return org
+    campos = _play_campos(token, e)
+    await global_db.organizations.update_one({"id": org["id"]}, {"$set": campos})
+    return {**org, **campos}
+
+
+@api_router.post("/billing/play/verificar")
+async def play_verificar(data: dict = Body(default={}), user: dict = Depends(require_admin)):
+    """La app de Play nos da el token de una compra: se comprueba con Google y,
+    si vale, la cuenta queda pagada con Google Play."""
+    if user.get("demo") or user.get("imp"):
+        raise HTTPException(403, "La suscripción la contrata la propia cuenta")
+    if not _play_listo():
+        raise HTTPException(503, "El cobro con Google Play no está configurado todavía")
+    org = await get_org(user.get("org_id"))
+    if not _es_repartidor(org):
+        raise HTTPException(400, "Esta suscripción es para el plan Repartidor")
+    d = _dict_cuerpo(data)
+    token = _texto_cuerpo(d.get("token"), 600)
+    if not token or not re.fullmatch(r"[A-Za-z0-9._\-:]{20,600}", token):
+        raise HTTPException(400, "Falta la compra")
+    otra = await global_db.play_compras.find_one({"token": token}, {"_id": 0, "org_id": 1})
+    if otra and otra.get("org_id") != org["id"]:
+        raise HTTPException(409, "Esa compra ya está ligada a otra cuenta")
+    e = _play_estado(await _play_req("GET", f"/purchases/subscriptionsv2/tokens/{token}"))
+    if e["producto"] not in _PLAY_PRODUCTOS:
+        raise HTTPException(400, "Esa compra no es de nuestra suscripción")
+    if e["cuenta"] != _play_cuenta_org(org["id"]):
+        raise HTTPException(403, "Esa compra no es de esta cuenta")
+    if (org.get("stripe_subscription") and org.get("pago_proveedor") == "stripe" and org.get("status") == "active"
+            and not org.get("cancela_al_final") and e["vigente"]):
+        logger.warning("Google Play: %s ya paga con tarjeta y ha comprado en Play", org.get("slug"))
+    if not e["aceptada"] and e["vigente"]:
+        # Sin aceptar, Google devuelve el dinero a los 3 días y la cancela.
+        await _play_req("POST", f"/purchases/subscriptions/{e['producto']}/tokens/{token}:acknowledge", {})
+    await global_db.play_compras.update_one({"token": token}, {"$set": {
+        "token": token, "org_id": org["id"], "producto": e["producto"], "hasta": e["hasta"],
+        "estado": e["estado"], "actualizado_en": datetime.now(timezone.utc).isoformat()}}, upsert=True)
+    campos = _play_campos(token, e)
+    await global_db.organizations.update_one({"id": org["id"]}, {"$set": campos})
+    await _audit(user, "play_compra", {"producto": e["producto"], "vigente": e["vigente"]})
+    return {"ok": True, "vigente": e["vigente"], "hasta": e["hasta"], "en_prueba": e["en_prueba"],
+            "intervalo": _PLAY_PRODUCTOS.get(e["producto"])}
+
+
 # ── REGALAR LA APP (04-10-2026) ──────────────────────────────────────────────
 # Dani: «regalársela a alguien enviándosela por email o WhatsApp». Se paga con
 # Stripe (pago único), sale un código y un enlace que el comprador manda desde
@@ -47940,7 +48127,18 @@ async def regalo_canjear(data: dict = Body(default={}), user: dict = Depends(req
     meses = int(r.get("meses") or 1)
     try:
         sub_id = org.get("stripe_subscription")
-        if sub_id and org.get("status") == "active" and org.get("pago_proveedor") == "stripe" and not org.get("cancela_al_final"):
+        if (org.get("pago_proveedor") == "play" and org.get("play_token") and org.get("play_renueva")
+                and org.get("status") == "active"):
+            # Paga con Google Play: Google aplaza su próximo cobro lo regalado.
+            e = _play_estado(await _play_req("GET", f"/purchases/subscriptionsv2/tokens/{org['play_token']}"))
+            actual = _fecha_utc(e["hasta"]) or ahora
+            nuevo = _sumar_meses(max(actual, ahora), meses)
+            await _play_req("POST", f"/purchases/subscriptions/{e['producto']}/tokens/{org['play_token']}:defer", {
+                "deferralInfo": {"expectedExpiryTimeMillis": str(int(actual.timestamp() * 1000)),
+                                 "desiredExpiryTimeMillis": str(int(nuevo.timestamp() * 1000))}})
+            campos = {"play_hasta": nuevo.isoformat(), "play_mirado": ahora.isoformat()}
+            texto = f"Regalo aplicado: tu próximo cobro de Google Play pasa al {nuevo.strftime('%d/%m/%Y')}."
+        elif sub_id and org.get("status") == "active" and org.get("pago_proveedor") == "stripe" and not org.get("cancela_al_final"):
             # Ya paga con tarjeta: el próximo cobro se retrasa lo regalado.
             sub = await _stripe_req("GET", f"/subscriptions/{sub_id}")
             prox = _fecha_utc(_stripe_detalle_sub(sub).get("stripe_proximo_cobro")) or ahora

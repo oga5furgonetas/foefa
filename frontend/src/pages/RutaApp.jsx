@@ -2,7 +2,9 @@ import { useCallback, useEffect, useState } from 'react'
 import { Route, History, Settings2, UserCircle2, Loader2, CheckCircle2, XCircle, Package, Euro } from 'lucide-react'
 import MiRuta from './driver/MiRuta'
 import { Ajustes } from '../panel/pages/Reparto'
-import { getRepartoPedidos, getRepartoEstadisticas, getOrgBilling, canjearRegalo } from '../panel/api'
+import { getRepartoPedidos, getRepartoEstadisticas, getOrgBilling, canjearRegalo, playVerificar } from '../panel/api'
+import { enAppPlay } from '../lib/enApp'
+import { servicioPlay, comprasPlay } from '../lib/playBilling'
 import { isAuthed } from '../panel/auth'
 import { Cuenta, Muro } from './RutaCuenta'
 import { useToast } from '../lib/toast'
@@ -63,6 +65,22 @@ export default function RutaApp() {
     return undefined
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
   const bloqueado = !!billing?.bloqueo
+
+  // Dentro de la app: si la cuenta de Google ya tiene la suscripción (reinstaló,
+  // cambió de móvil) y aquí no consta, se comprueba y se liga. Una vez.
+  const [restaurado, setRestaurado] = useState(false)
+  useEffect(() => {
+    if (restaurado || !billing?.play?.listo || billing.pago_proveedor === 'play' || !enAppPlay()) return
+    setRestaurado(true)
+    ;(async () => {
+      const srv = await servicioPlay()
+      if (!srv) return
+      const nuestras = (await comprasPlay(srv)).filter((c) => billing.play.productos?.[c.itemId] && c.purchaseToken)
+      for (const c of nuestras) {
+        try { await playVerificar(c.purchaseToken); recargar(); return } catch { /* de otra cuenta o caducada: se ignora */ }
+      }
+    })()
+  }, [billing, restaurado, recargar])
 
   if (!isAuthed()) { window.location.replace('/empezar'); return null }
 

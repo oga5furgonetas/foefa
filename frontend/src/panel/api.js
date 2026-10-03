@@ -832,3 +832,4 @@ export const stripeCambiarPlan = (anual) => api.post('/billing/stripe/cambiar-pl
 export const comprarRegalo = (meses) => api.post('/billing/regalos', { meses })
 export const misRegalos = () => api.get('/billing/regalos')
 export const canjearRegalo = (codigo) => api.post('/billing/regalos/canjear', { codigo })
+export const playVerificar = (token) => api.post('/billing/play/verificar', { token })
