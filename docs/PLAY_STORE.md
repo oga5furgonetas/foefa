@@ -31,7 +31,7 @@ avisos sin Chrome), se cambia por una app nativa; la cuenta, el paquete
 | Proyecto Android (Gradle 9.1, AGP 8.13.1, `targetSdk 36`, `minSdk 24`) | `android/` |
 | Librería de Google `androidbrowserhelper 2.7.3` | `android/app/build.gradle.kts` |
 | Clave de firma (RSA 2048, 10.000 días, alias `flota`) | `C:\Users\Usuario\.flota-android.keystore`; contraseña en `C:\Users\Usuario\.flota-android-keystore.txt` (**nunca imprimirla ni subirla**) |
-| Huella SHA-256 de esa clave | `5B:48:01:D5:CE:33:D1:C5:9E:4C:A0:40:40:3C:A4:9B:15:BF:E1:FD:7A:2B:7B:1B:F1:3A:E0:EB:1C:73:44:61` |
+| Huellas SHA-256 en `assetlinks.json` | Play App Signing (la que firma lo que llega a los móviles): `C8:E4:A4:E4:F0:EB:43:17:54:DB:9A:97:53:4E:C6:9E:A2:04:A6:2C:0C:A0:82:46:01:95:4D:A5:01:80:EC:F6` · clave de subida (la nuestra): `5B:48:01:D5:CE:33:D1:C5:9E:4C:A0:40:40:3C:A4:9B:15:BF:E1:FD:7A:2B:7B:1B:F1:3A:E0:EB:1C:73:44:61` |
 | La web declara la app | `frontend/public/.well-known/assetlinks.json` (servido en https://flotadsp.com/.well-known/assetlinks.json) |
 | La app declara la web | `asset_statements` en el `AndroidManifest.xml` |
 | Manifest web (nombre, `start_url: /app`, iconos, atajos) | `frontend/public/manifest.json` |
