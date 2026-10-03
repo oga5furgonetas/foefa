@@ -306,3 +306,49 @@ async def test_prueba_de_entrega_con_foto(base):
     server._REP_LIMPIEZA.clear()
     await server.reparto_pedidos("2026-08-01", OFICINA)
     assert base.db["reparto_pedidos"].docs[0]["entrega_foto"] is None
+
+
+@pytest.mark.asyncio(loop_scope="session")
+async def test_orden_a_mano_recalcula_horas_y_no_reordena(base, monkeypatch):
+    monkeypatch.setattr(server, "_rep_ahora_local", lambda: (600, 4))
+    await server.reparto_ajustes_put({"base_direccion": "Almacén"}, OFICINA)
+    a = await server.reparto_mis_pedidos({"direccion": "Avda Montero Ríos 12"}, ANA)
+    b = await server.reparto_mis_pedidos({"direccion": "Rúa Real 5"}, ANA)
+    await server.reparto_mi_ordenar({}, ANA)
+    optimo = {p["id"]: p["orden"] for p in base.db["reparto_pedidos"].docs}
+    # Al revés de lo que dio el optimizador:
+    al_reves = sorted(optimo, key=lambda k: -optimo[k])
+    r = await server.reparto_mi_orden({"ids": al_reves}, ANA)
+    assert r["ruta"]["manual"] is True and r["ordenados"] == 2
+    nuevo = {p["id"]: p["orden"] for p in base.db["reparto_pedidos"].docs}
+    assert [k for k in sorted(nuevo, key=nuevo.get)] == al_reves
+    assert all(p["eta"] for p in base.db["reparto_pedidos"].docs)
+    # No se pueden ordenar paradas de otro.
+    otro = await server.reparto_mis_pedidos({"direccion": "Rúa Real 5"}, LUIS)
+    with pytest.raises(HTTPException) as e:
+        await server.reparto_mi_orden({"ids": [a["id"], otro["id"]]}, ANA)
+    assert e.value.status_code == 403
+
+
+@pytest.mark.asyncio(loop_scope="session")
+async def test_hueco_en_la_furgoneta_solo_en_lo_mio(base):
+    p = await server.reparto_mis_pedidos({"direccion": "Rúa Real 5", "hueco": "Detrás · izq"}, ANA)
+    assert p["hueco"] == "Detrás · izq"
+    r = await server.reparto_mi_editar(p["id"], {"hueco": "Delante · der", "notas": "timbre 2B"}, ANA)
+    assert r["hueco"] == "Delante · der"
+    with pytest.raises(HTTPException) as e:
+        await server.reparto_mi_editar(p["id"], {"hueco": "x"}, LUIS)
+    assert e.value.status_code == 403
+
+
+@pytest.mark.asyncio(loop_scope="session")
+async def test_quien_reparte_solo_pega_su_lista_y_es_suya(base, monkeypatch):
+    async def org_autonomo(_id):
+        return {"id": "o1", "account_type": "dsp", "sector": "autonomo",
+                "modulos": ["dashboard", "reparto", "configuracion"]}
+    monkeypatch.setattr(server, "get_org", org_autonomo)
+    yo = {"sub": "a9", "role": "admin", "name": "Pepe", "org_id": "o1", "db_name": "dsp_x"}
+    r = await server.reparto_pegar({"texto": "Rúa Real 5, A Coruña\nAvda Montero Ríos 12, 15003", "confirmar": True}, yo)
+    assert r["creados"] == 2
+    assert {p["conductor_id"] for p in base.db["reparto_pedidos"].docs} == {"a9"}
+    assert (await server.reparto_mi_ruta(yo))["puede_pegar"] is True

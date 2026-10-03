@@ -46553,6 +46553,7 @@ async def _rep_nuevo(datos: dict, user: dict, origen: str, fecha: str,
         "bultos": bultos, "escaneos": 1 if origen in ("escaneo", "ticket") else 0,
         "ventana_desde": None, "ventana_hasta": None,
         "tipo": reparto.tipo_parada(datos.get("tipo")), "cobrar": reparto.importe(datos.get("cobrar")),
+        "hueco": _texto_cuerpo(datos.get("hueco"), 40),
         "prioridad": bool(datos.get("prioridad")) and str(datos.get("prioridad")).strip().lower() not in ("no", "0", "false"),
         "zona": z.get("nombre") or _texto_cuerpo(datos.get("zona"), 60),
         "conductor_id": "", "conductor_nombre": "",
@@ -46697,9 +46698,14 @@ def _rep_parada(p: dict, a: dict) -> dict:
             "prioridad": bool(p.get("prioridad"))}
 
 
-async def _rep_ordenar(fecha: str, conductor_id: str, origen, salida_min: Optional[int] = None) -> dict:
+async def _rep_ordenar(fecha: str, conductor_id: str, origen, salida_min: Optional[int] = None,
+                       orden_fijo: Optional[list] = None) -> dict:
     """Ordena la ruta de un conductor por TIEMPO y guarda la hora estimada de
-    llegada a cada parada. Devuelve el resumen de la ruta."""
+    llegada a cada parada. Devuelve el resumen de la ruta.
+
+    Con `orden_fijo` (ids en el orden que ha puesto el repartidor a mano) no
+    se reordena nada: solo se recalculan las horas para ESE orden. Lo que no
+    venga en la lista va detrás, en el orden que tenía."""
     a = await _rep_ajustes()
     pend = await db.reparto_pedidos.find(
         {"fecha": fecha, "conductor_id": conductor_id, "estado": {"$in": ["pendiente", "en_ruta"]}},
@@ -46731,8 +46737,19 @@ async def _rep_ordenar(fecha: str, conductor_id: str, origen, salida_min: Option
             puntos.append(base)
             volver = len(puntos) - 1
         seg, met, fuente = await _rep_matriz(puntos)
-        r = reparto.optimiza_por_tiempo(seg, [_rep_parada(p, a) for p in ubicadas], salida_min,
-                                        dia_semana=dia, con_trafico=resumen["trafico"], volver=volver)
+        paradas = [_rep_parada(p, a) for p in ubicadas]
+        if orden_fijo:
+            pos = {pid: k for k, pid in enumerate(orden_fijo)}
+            idx = sorted(range(len(ubicadas)), key=lambda i: (pos.get(ubicadas[i]["id"], 10 ** 6), i))
+            _, lleg, fin_m, tarde_m = reparto._evalua([i + 1 for i in idx], seg, salida_min, paradas,
+                                                      dia, resumen["trafico"], volver)
+            r = {"orden": idx, "llegadas": [{"eta": t, "tarde": round(td), "espera": round(es)}
+                                            for _, t, td, es in lleg],
+                 "fin": fin_m, "minutos": round(fin_m - salida_min), "tarde": round(tarde_m)}
+            resumen["manual"] = True
+        else:
+            r = reparto.optimiza_por_tiempo(seg, paradas, salida_min,
+                                            dia_semana=dia, con_trafico=resumen["trafico"], volver=volver)
         km, prev = 0.0, 0
         for k, i in enumerate(r["orden"]):
             orden_ids.append(ubicadas[i]["id"])
@@ -46745,6 +46762,9 @@ async def _rep_ordenar(fecha: str, conductor_id: str, origen, salida_min: Option
                         "tarde": r["tarde"], "fuente": fuente})
     else:
         resumen.update({"fin": None, "minutos": 0, "km": 0, "tarde": 0, "fuente": None})
+    if orden_fijo:
+        pos = {pid: k for k, pid in enumerate(orden_fijo)}
+        sin = sorted(sin, key=lambda p: pos.get(p["id"], 10 ** 6))
     for n, pid in enumerate(orden_ids + [p["id"] for p in sin]):
         l = llegadas.get(pid)
         await db.reparto_pedidos.update_one({"id": pid}, {"$set": {
@@ -46852,10 +46872,12 @@ async def reparto_pegar(data: dict = Body(...), user: dict = Depends(require_adm
     if not data.get("confirmar"):
         return {"filas": filas, "n": len(filas)}
     f = _rep_fecha(data.get("fecha"))
+    # Quien reparte solo pega SU ruta: las paradas son suyas, no «sin conductor».
+    yo = await _rep_conductor(user) if await _rep_es_autonomo(user) else None
     hechos, repetidos = 0, 0
     for fila in filas:
         try:
-            await _rep_nuevo(fila, user, "pegado", f, ubicar=False)
+            await _rep_nuevo(fila, user, "pegado", f, conductor=yo, ubicar=False)
             hechos += 1
         except HTTPException as e:
             if e.status_code == 409:
@@ -47106,7 +47128,8 @@ async def reparto_mi_ruta(user: dict = Depends(require_any_auth)):
     aviso = await db.reparto_avisos.find_one({"driver_id": d["id"]}, {"_id": 0})
     ruta = await db.reparto_rutas.find_one({"id": f"{f}_{d['id']}"}, {"_id": 0})
     org = await get_org(user.get("org_id")) if user.get("org_id") else None
-    return {"activo": True, "empresa": (org or {}).get("name") or "", "fecha": f, "pedidos": ps, "base": a.get("base"), "ruta": ruta, "autonomo": autonomo,
+    return {"activo": True, "empresa": (org or {}).get("name") or "",
+            "puede_pegar": autonomo and user.get("role") == "admin", "fecha": f, "pedidos": ps, "base": a.get("base"), "ruta": ruta, "autonomo": autonomo,
             "ia_tickets": bool(a.get("ia_tickets")) and _rep_ia_permitida(),
             "jornada": {"empezada": j.get("empezada"), "terminada": j.get("terminada")},
             "aviso_aceptado": bool(aviso)}
@@ -47208,6 +47231,47 @@ async def reparto_mi_ordenar(data: dict = Body(...), user: dict = Depends(requir
     origen = reparto._punto(_dict_cuerpo(data)) or _rep_base(await _rep_ajustes())
     ruta = await _rep_ordenar(_dia_negocio(), d["id"], origen, salida_min=_rep_ahora_local()[0])
     return {"ordenados": ruta["paradas"], "ruta": ruta}
+
+
+@api_router.post("/reparto/mi-ruta/orden")
+async def reparto_mi_orden(data: dict = Body(...), user: dict = Depends(require_any_auth)):
+    """El orden que el repartidor pone a mano (sabe que en esa calle no se
+    puede girar, que el bar abre a las 12…). Solo sus paradas pendientes de
+    hoy; las horas se recalculan para ese orden."""
+    d = await _rep_conductor(user)
+    ids = [str(x) for x in _lista_cuerpo(data.get("ids"), 1000) if isinstance(x, str)]
+    if not ids:
+        raise HTTPException(400, "Falta el orden")
+    f = _dia_negocio()
+    mias = {p["id"] for p in await db.reparto_pedidos.find(
+        {"fecha": f, "conductor_id": d["id"], "estado": {"$in": ["pendiente", "en_ruta"]}},
+        {"_id": 0, "id": 1}).to_list(1000)}
+    if not set(ids) <= mias:
+        raise HTTPException(403, "Hay paradas que no son tuyas o ya están cerradas")
+    origen = reparto._punto(_dict_cuerpo(data.get("desde"))) or _rep_base(await _rep_ajustes())
+    ruta = await _rep_ordenar(f, d["id"], origen, salida_min=_rep_ahora_local()[0], orden_fijo=ids)
+    return {"ordenados": len(ids), "ruta": ruta}
+
+
+@api_router.post("/reparto/mis-pedidos/{pid}/editar")
+async def reparto_mi_editar(pid: str, data: dict = Body(...), user: dict = Depends(require_any_auth)):
+    """Lo que el repartidor puede cambiar de SU parada: dónde va en la
+    furgoneta y la nota. La dirección o el cliente los toca la oficina (o él,
+    si reparte solo, desde su panel)."""
+    d = await _rep_conductor(user)
+    p = await db.reparto_pedidos.find_one({"id": pid}, {"_id": 0, "id": 1, "conductor_id": 1})
+    if not p:
+        raise HTTPException(404, "Ese pedido ya no existe")
+    if p.get("conductor_id") != d["id"]:
+        raise HTTPException(403, "Ese pedido no es tuyo")
+    cambios = {}
+    if "hueco" in data:
+        cambios["hueco"] = _texto_cuerpo(data.get("hueco"), 40)
+    if "notas" in data:
+        cambios["notas"] = _texto_cuerpo(data.get("notas"), 200)
+    if cambios:
+        await db.reparto_pedidos.update_one({"id": pid}, {"$set": cambios})
+    return {"ok": True, **cambios}
 
 
 @api_router.post("/reparto/jornada")

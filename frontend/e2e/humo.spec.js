@@ -1416,3 +1416,79 @@ test('Suscripción · dentro de la app no sale el botón de pagar sin el program
   await expect(page.getByText(/5 días/)).toBeVisible()
   await expect(page.getByRole('button', { name: /Pasar a Repartidor/ })).toHaveCount(0)
 })
+
+/* LA APP DE RUTA, COMO CIRCUIT O FLEX (04-10-2026): siguiente parada
+   destacada, progreso del día, dónde va cada paquete en la furgoneta, Waze o
+   Google Maps, buscar, mapa, cambiar el orden a mano y el resumen al acabar. */
+test('Reparto · la ruta del repartidor: siguiente, furgoneta, Waze, orden a mano y resumen', async ({ page }) => {
+  const fallos = vigilar(page)
+  const b64 = (o) => btoa(JSON.stringify(o)).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '')
+  const token = `${b64({ alg: 'HS256' })}.${b64({ sub: 'd1', role: 'driver', name: 'ANA', exp: Math.floor(Date.now() / 1000) + 3600 })}.x`
+  await page.addInitScript((t) => {
+    localStorage.setItem('flota_driver_token', t)
+    localStorage.setItem('flota_driver', JSON.stringify({ id: 'd1', name: 'ANA' }))
+    localStorage.setItem('cookie_consent', '1')
+  }, token)
+  await simularApi(page, 'vacio')
+  let pedidos = [
+    { id: 'p1', cliente: 'Bar Pepe', direccion: 'Rúa Real 5', estado: 'pendiente', bultos: 1, orden: 1, eta: '10:05', lat: 43.37, lng: -8.40 },
+    { id: 'p2', cliente: 'Farmacia Sol', direccion: 'Avda Montero Ríos 12', estado: 'pendiente', bultos: 2, orden: 2, eta: '10:20', lat: 43.36, lng: -8.41 },
+    { id: 'p3', cliente: 'Kiosko Luz', direccion: 'Calle San Andrés 30', estado: 'entregado', bultos: 1, orden: 3, cobrado_importe: 12, cobrado_metodo: 'bizum', cerrado_en: '2026-10-04T08:00:00Z' },
+  ]
+  const editados = []
+  const ordenes = []
+  await page.route(/\/api\/reparto\/mis-pedidos\/p2\/editar/, async (r) => {
+    const b = r.request().postDataJSON(); editados.push(b)
+    pedidos = pedidos.map((p) => (p.id === 'p2' ? { ...p, ...b } : p))
+    await r.fulfill({ json: { ok: true, ...b } })
+  })
+  await page.route(/\/api\/reparto\/mi-ruta\/orden/, async (r) => {
+    const { ids } = r.request().postDataJSON(); ordenes.push(ids)
+    pedidos = pedidos.map((p) => (ids.includes(p.id) ? { ...p, orden: ids.indexOf(p.id) + 1 } : p))
+    await r.fulfill({ json: { ordenados: ids.length, ruta: { fin: '11:00', manual: true } } })
+  })
+  await page.route(/\/api\/reparto\/mi-ruta$/, (r) => r.fulfill({ json: {
+    activo: true, empresa: 'Súper', fecha: '2026-10-04', ia_tickets: false, jornada: {}, aviso_aceptado: true,
+    base: null, ruta: { fin: '10:40', minutos: 40, km: 9.5, trafico: true }, pedidos } }))
+  await page.goto('/conductor?vista=ruta', { waitUntil: 'domcontentloaded' })
+
+  // Progreso y siguiente parada.
+  await expect(page.getByText('de 3 paradas')).toBeVisible()
+  await expect(page.getByText('Siguiente parada')).toBeVisible()
+  const primera = page.locator('div.rounded-2xl', { hasText: 'Siguiente parada' })
+  await expect(primera.getByText('Bar Pepe')).toBeVisible()
+
+  // Waze en vez de Google Maps, y se recuerda.
+  await expect(primera.getByRole('link', { name: 'Ir' })).toHaveAttribute('href', /google\.com\/maps/)
+  await page.getByLabel('Navegador').selectOption('waze')
+  await expect(primera.getByRole('link', { name: 'Ir' })).toHaveAttribute('href', 'https://waze.com/ul?ll=43.37,-8.4&navigate=yes')
+
+  // Dónde va en la furgoneta.
+  await page.locator('div.rounded-2xl', { hasText: 'Farmacia Sol' }).getByRole('button', { name: /Dónde va en la furgoneta/ }).click()
+  await page.getByRole('button', { name: 'Detrás · izq' }).click()
+  await expect(page.getByText('En la furgoneta: Detrás · izq')).toBeVisible()
+  expect(editados).toEqual([{ hueco: 'Detrás · izq' }])
+
+  // Orden a mano: Farmacia primero.
+  await page.getByRole('button', { name: 'A mano' }).click()
+  await page.getByRole('button', { name: 'Subir Farmacia Sol' }).click()
+  await page.getByRole('button', { name: 'Guardar este orden' }).click()
+  await expect(page.getByText('Orden guardado. Con este orden acabas ≈ 11:00')).toBeVisible()
+  expect(ordenes).toEqual([['p2', 'p1']])
+  await expect(page.locator('div.rounded-2xl', { hasText: 'Siguiente parada' }).getByText('Farmacia Sol')).toBeVisible()
+
+  // Mapa.
+  await page.getByRole('button', { name: 'Mapa' }).click()
+  await expect(page.locator('.leaflet-container')).toBeVisible()
+  await page.getByRole('button', { name: 'Lista' }).click()
+
+  // Todo hecho: resumen del día con lo cobrado.
+  pedidos = pedidos.map((p) => ({ ...p, estado: p.id === 'p1' ? 'fallido' : 'entregado', motivo: p.id === 'p1' ? 'No había nadie' : undefined }))
+  await page.reload({ waitUntil: 'domcontentloaded' })
+  const resumen = page.getByLabel('Resumen del día')
+  await expect(resumen.getByText('Ruta terminada')).toBeVisible()
+  await expect(resumen.getByText('Bizum')).toBeVisible()
+  await expect(resumen.getByText('12,00 €').first()).toBeVisible()
+  await expect(resumen.getByText('Ruta planificada: 9.5 km.')).toBeVisible()
+  expect(fallos).toEqual([])
+})
