@@ -6,6 +6,7 @@ import {
   stripeSuscripcion, stripePortal, stripeCambiarPlan, comprarRegalo, misRegalos, canjearRegalo, playVerificar,
 } from '../panel/api'
 import { servicioPlay, detallesPlay, pagarConPlay } from '../lib/playBilling'
+import { evento, apuntarParaLaVuelta } from '../lib/metaPixel'
 import { getAdmin, logout } from '../panel/auth'
 import { MARCA, origen } from '../marca'
 import { enAppPlay } from '../lib/enApp'
@@ -127,7 +128,12 @@ export function Suscribirse({ b, precios, toast, titulo }) {
     setYendo(true)
     try {
       const { data } = await stripeSuscripcion('autonomo', anual)
-      if (data?.url) { window.location.href = data.url; return }
+      if (data?.url) {
+        // Se mide al volver con ?pago=ok (Stripe es otra web).
+        apuntarParaLaVuelta(b.cobro_al_suscribir ? 'StartTrial' : 'Subscribe',
+          { value: anual ? precios.anual : precios.mensual, currency: 'EUR', predicted_ltv: anual ? precios.anual : precios.mensual * 12 })
+        window.location.href = data.url; return
+      }
       toast?.error?.('No se pudo abrir el pago')
     } catch (e) { toast?.error?.(e?.response?.data?.detail || 'No se pudo abrir el pago') }
     setYendo(false)
@@ -254,6 +260,7 @@ export function PagarConPlay({ b, toast, recargar, titulo }) {
       if (!token) throw new Error('sin compra')
       const { data } = await playVerificar(token)
       await resp.complete('success')
+      evento(data?.en_prueba ? 'StartTrial' : 'Subscribe', { currency: 'EUR', value: 0, content_name: elegido })
       toast?.success?.(data?.en_prueba ? 'Prueba activada. Hoy no se te cobra nada.' : 'Suscripción activada')
       recargar()
     } catch (e) {
@@ -382,7 +389,10 @@ function Regalar({ precios, toast, resaltar }) {
   }, [resaltar])
   async function comprar() {
     setYendo(true)
-    try { const { data } = await comprarRegalo(meses); if (data?.url) { window.location.href = data.url; return } } catch (e) {
+    try {
+      const { data } = await comprarRegalo(meses)
+      if (data?.url) { apuntarParaLaVuelta('Purchase', { value: precios[String(meses)], currency: 'EUR', content_name: 'regalo' }); window.location.href = data.url; return }
+    } catch (e) {
       toast?.error?.(e?.response?.data?.detail || 'No se pudo abrir el pago')
     }
     setYendo(false)

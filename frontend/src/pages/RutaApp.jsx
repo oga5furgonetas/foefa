@@ -5,6 +5,7 @@ import { Ajustes } from '../panel/pages/Reparto'
 import { getRepartoPedidos, getRepartoEstadisticas, getOrgBilling, canjearRegalo, playVerificar } from '../panel/api'
 import { enAppPlay } from '../lib/enApp'
 import { servicioPlay, comprasPlay } from '../lib/playBilling'
+import { enviarPendiente, olvidarPendiente } from '../lib/metaPixel'
 import { isAuthed } from '../panel/auth'
 import { Cuenta, Muro } from './RutaCuenta'
 import { useToast } from '../lib/toast'
@@ -49,10 +50,12 @@ export default function RutaApp() {
         .finally(() => { try { sessionStorage.removeItem('regalo_pendiente') } catch { /* nada */ } })
       : Promise.resolve()
     canje.then(recargar)
-    if (q.get('regalo') === 'cancelado') { toast.error('Pago del regalo cancelado'); limpiar() } else if (q.get('regalo')) {
+    if (q.get('regalo') === 'cancelado') { toast.error('Pago del regalo cancelado'); olvidarPendiente(); limpiar() } else if (q.get('regalo')) {
+      enviarPendiente((p) => p.nombre === 'Purchase')
       setRegaloNuevo(q.get('regalo')); setTab('cuenta'); limpiar()
     }
     if (q.get('pago') === 'ok') {
+      enviarPendiente((p) => p.nombre === 'StartTrial' || p.nombre === 'Subscribe')
       // El webhook de Stripe tarda unos segundos: se mira varias veces.
       let n = 0
       const t = setInterval(() => { n += 1; recargar(); if (n >= 8) clearInterval(t) }, 3000)
@@ -60,7 +63,7 @@ export default function RutaApp() {
       limpiar()
       return () => clearInterval(t)
     }
-    if (q.get('pago') === 'cancelado') limpiar()
+    if (q.get('pago') === 'cancelado') { olvidarPendiente(); limpiar() }
     if (pendiente || q.get('canjear')) limpiar()
     return undefined
   }, []) // eslint-disable-line react-hooks/exhaustive-deps

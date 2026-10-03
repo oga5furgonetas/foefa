@@ -18,7 +18,10 @@ export const COMPANY = {
 }
 
 // Proveedores que tratan datos en tu nombre (encargados del tratamiento).
+import { hayPixel } from '../lib/metaPixel'
+
 export const PROCESSORS = [
+  ...(hayPixel() ? [{ name: 'Meta Platforms Ireland Ltd.', purpose: 'Medir los anuncios de Facebook (píxel), solo si lo aceptas en el aviso de cookies', country: 'Irlanda (UE) / EEUU (DPF)' }] : []),
   { name: 'Cloudflare, Inc.', purpose: 'Hosting de la web y CDN', country: 'EEUU/UE (DPF)' },
   { name: 'Fly.io (Fly.dev)', purpose: 'Hosting del backend (API)', country: 'EEUU/UE' },
   { name: 'MongoDB Atlas', purpose: 'Base de datos', country: 'UE' },

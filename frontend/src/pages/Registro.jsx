@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { enAppPlay } from '../lib/enApp'
+import { evento } from '../lib/metaPixel'
 
 import { API_BASE } from '../services/api'
 import { medirAccion } from '../lib/analitica'
@@ -329,6 +330,7 @@ export default function Registro() {
       localStorage.setItem('flota_plan', selectedPlan)
       localStorage.setItem('flota_billing', billingMode)
       medirAccion('registro_ok')
+      evento('CompleteRegistration', { content_name: sector || 'alta', status: true })
       setDone(true)
     } catch { setErr('Sin conexión con el servidor. Revisa tu red e inténtalo de nuevo.'); setBusy(false) }
   }
