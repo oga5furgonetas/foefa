@@ -6,7 +6,7 @@ import {
   Settings, Shield, LogOut, Zap, Inbox, ChevronRight, ChevronDown, AlertTriangle, BookUser,
   Search, Sun, Moon, Contrast, MapPin, Mail, UserCircle2, Languages, ShieldAlert, Menu,
   CircleHelp, Briefcase, Store, UserCheck, ImagePlus, Loader2, Bell, BellOff, MessageCircle,
-  MessagesSquare, Euro, FileSpreadsheet, PackageX, TrendingUp, Clock,
+  MessagesSquare, Euro, FileSpreadsheet, PackageX, TrendingUp, Clock, Route,
 } from 'lucide-react'
 import { getAdmin, isAuthed, isSuperAdmin, isCenterManager, logout, canSee, decodeToken, getVisibleCenters, SIEMPRE_VISIBLES, guardarAccesoFresco, esPlataforma, actualizarMiFoto } from './auth'
 import { getMe, contarPeticionesPendientes, contarCandidatosNuevos, contarConversacionesSinLeer, subirFotoAdmin } from './api'
@@ -82,6 +82,7 @@ const NAV_DEF = [
     { to: '/panel/talleres', labelKey: 'nav.workshops', icon: Wrench },
   ]},
   { g: 'nav.g.reparto', gIcon: Zap, iconCls: 'text-sky-400', iconBg: 'bg-sky-500/10', items: [
+    { to: '/panel/reparto', labelKey: 'nav.reparto', icon: Route },
     { to: '/panel/asignacion', labelKey: 'nav.assign', icon: ClipboardCheck },
     { to: '/panel/plantilla', labelKey: 'nav.template', icon: FileSpreadsheet },
     { to: '/panel/diarios', labelKey: 'nav.dnr', icon: PackageX },

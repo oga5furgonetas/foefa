@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
-import { ClipboardCheck, CalendarDays, CalendarClock, LogOut, Lock, Ban, ShoppingBag, RefreshCw } from 'lucide-react'
-import { getPortalVehicles, getMyShifts, getMiFicha, guardarMiTelefono, tiendaEscaparate, DRIVER_TOKEN_KEY } from '../../services/api'
+import { ClipboardCheck, CalendarDays, CalendarClock, LogOut, Lock, Ban, ShoppingBag, RefreshCw, Route } from 'lucide-react'
+import { getPortalVehicles, getMyShifts, getMiFicha, guardarMiTelefono, tiendaEscaparate, repMiRuta, DRIVER_TOKEN_KEY } from '../../services/api'
 import { lista } from '../../lib/lista'
 import { medirSeccion } from '../../lib/analitica'
 import { vigilarVersion } from '../../lib/versionApp'
@@ -11,6 +11,7 @@ import MisTurnos from './MisTurnos'
 import MiClave from './MiClave'
 import PedirDias from './PedirDias'
 import Tienda from './Tienda'
+import MiRuta from './MiRuta'
 
 const DRIVER_KEY = 'flota_driver'
 
@@ -119,7 +120,15 @@ export default function DriverPortal() {
     return () => { vivo = false }
   }, [driver])
 
-  const [vista, setVista] = useState('inicio') // inicio | auditoria | dias | turnos | clave
+  const [vista, setVista] = useState('inicio') // inicio | auditoria | dias | turnos | clave | ruta
+  // «Mi ruta» solo sale en empresas que reparten así; lo decide el servidor.
+  const [reparto, setReparto] = useState(null)
+  useEffect(() => {
+    if (!driver || vista !== 'inicio') return
+    repMiRuta().then((r) => setReparto(r.data?.activo
+      ? lista(r.data.pedidos).filter((p) => !['entregado', 'fallido'].includes(p.estado)).length : null))
+      .catch(() => setReparto(null))
+  }, [driver, vista])
   const [faltaTel, setFaltaTel] = useState(false)
   const [tieneClave, setTieneClave] = useState(true)
   const [tel, setTel] = useState('')
@@ -208,6 +217,7 @@ export default function DriverPortal() {
   if (vista === 'turnos') return <MisTurnos onBack={() => setVista('inicio')} />
   if (vista === 'clave') return <MiClave onBack={() => setVista('inicio')} />
   if (vista === 'tienda') return <Tienda onBack={() => setVista('inicio')} />
+  if (vista === 'ruta') return <MiRuta onBack={() => setVista('inicio')} />
   if (result) {
     return <InspectionDone result={result} onNew={() => { setResult(null); setVista('inicio') }} onLogout={logout} />
   }
@@ -280,6 +290,15 @@ export default function DriverPortal() {
         )}
 
         <div className="flex flex-col gap-2.5">
+          {reparto !== null && (
+            <Opcion
+              icono={Route}
+              titulo="Mi ruta"
+              sub={reparto > 0 ? `${reparto} entrega${reparto > 1 ? 's' : ''} pendiente${reparto > 1 ? 's' : ''}` : 'Escanea los bultos al cargar'}
+              principal
+              onClick={() => setVista('ruta')}
+            />
+          )}
           <Opcion
             icono={ClipboardCheck}
             titulo="Hacer la auditoría"

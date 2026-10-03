@@ -2,7 +2,8 @@
 """Una base de datos de mentira, lo justo para probar flujos enteros del
 servidor sin MongoDB: find/find_one/update (con upsert)/insert/delete/distinct
 y los operadores que usan (=, $in, $nin, $ne, $exists, rangos, $and, $or,
-$regex; $set, $unset, $setOnInsert, $addToSet, $push, $pull). No es mongomock: si
+$regex; $set, $unset, $setOnInsert, $addToSet, $push (con $each/$slice), $pull, $inc;
+replace_one). No es mongomock: si
 una prueba necesita más, se añade aquí y se dice."""
 import re
 from types import SimpleNamespace
@@ -122,7 +123,15 @@ class Col:
             if v not in d[k]:
                 d[k].append(v)
         for k, v in u.get("$push", {}).items():
-            d.setdefault(k, []).append(v)
+            # {"$each": [...], "$slice": -n} lo usa la jornada de reparto.
+            if isinstance(v, dict) and "$each" in v:
+                d.setdefault(k, []).extend(v["$each"])
+                if v.get("$slice"):
+                    d[k] = d[k][v["$slice"]:] if v["$slice"] < 0 else d[k][:v["$slice"]]
+            else:
+                d.setdefault(k, []).append(v)
+        for k, v in u.get("$inc", {}).items():
+            _poner(d, k, (_leer(d, k) if _leer(d, k) is not _FALTA else 0) + v)
         for k, v in u.get("$pull", {}).items():
             if isinstance(d.get(k), list):
                 d[k] = [x for x in d[k] if x != v]
@@ -195,7 +204,16 @@ class Col:
     async def distinct(self, campo, q=None):
         return sorted({d.get(campo) for d in self.docs if _casa(d, q) and d.get(campo) is not None})
 
-    async def count_documents(self, q=None):
+    async def replace_one(self, q, doc, upsert=False, **_):
+        for i, d in enumerate(self.docs):
+            if _casa(d, q):
+                self.docs[i] = dict(doc)
+                return SimpleNamespace(matched_count=1, modified_count=1)
+        if upsert:
+            self.docs.append(dict(doc))
+        return SimpleNamespace(matched_count=0, modified_count=0)
+
+    async def count_documents(self, q=None, **_):
         return sum(1 for d in self.docs if _casa(d, q))
 
 

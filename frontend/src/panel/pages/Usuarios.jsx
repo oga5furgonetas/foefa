@@ -35,7 +35,7 @@ const MODULES = [
     ['incidencias', 'nav.incidents'], ['talleres', 'nav.workshops'],
   ]},
   { g: 'nav.g.reparto', items: [
-    ['asignacion', 'nav.assign'], ['plantilla', 'nav.template'], ['diarios', 'nav.dnr'], ['horas', 'nav.horas'],
+    ['reparto', 'nav.reparto'], ['asignacion', 'nav.assign'], ['plantilla', 'nav.template'], ['diarios', 'nav.dnr'], ['horas', 'nav.horas'],
     // Con casilla propia desde el 30-09-2026 (antes iba con Días libres).
     ['cuadrante', 'nav.cuadrante'],
     ['turnos', 'nav.shifts'], ['aprobar-dias', 'Aprobar días libres'], ['checklist-operativo', 'nav.checklist'],

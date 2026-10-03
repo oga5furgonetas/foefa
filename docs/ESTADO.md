@@ -5,7 +5,7 @@
 > haz commit y `git push`. Una sola sesión trabajando a la vez: antes de
 > empezar, `git pull` y comprueba que nadie ha dejado nada a medias aquí.
 
-Última actualización: **30-09-2026, madrugada** (sesión `127edf58`, Claude Opus 5.5).
+Última actualización: **03-10-2026, tarde** (sesión `e88d38c9`, Claude Opus 5.5).
 
 ## Qué es y dónde está
 
@@ -450,7 +450,31 @@ Dani no se creía el 0. Estudio con datos reales (scratchpad de la sesión):
    - **Modo claro**: el naranja pasa a `#9a3412` (el `#c2410c` daba 4,2:1 sobre
      su propio fondo tintado y la prueba de contraste fallaba en el CI).
 
+## Qué se hizo el 03-10-2026: Reparto a domicilio y a negocios
+
+Dani (por WhatsApp con Dani Brao): un encargado de repartidores de Gadis
+quiere algo para su flotilla; reparten la compra con el ticket de caja pegado a
+las cajas y a boli. Idea: escanear el código, que salga la dirección y lo que
+lleva y entre solo en la ruta; lo mismo para distribuidores tipo Disgón. Y en
+el alta, preguntar qué tipo de empresa es. Con TODO dentro de la ley.
+
+- Módulo **`reparto`** (`/panel/reparto` + «Mi ruta» en el portal del
+  conductor). Explicación completa y **análisis legal** en `docs/REPARTO.md`.
+- **Alta por sector** (`/registro`, paso 0): supermercado y distribución nacen
+  con `reparto`; paquetería y «otra» con el estándar. `sector` en la org.
+- Lo legal hecho en código: la plataforma no ve datos de clientes ni
+  ubicaciones (entrando como la empresa salen tapados); conductor solo lo suyo;
+  ubicación solo en jornada y tras aceptar el aviso; borrado automático;
+  IA de tickets **bloqueada** hasta `REPARTO_IA_PERMITIDA=1` con clave de pago.
+- Pruebas: `test_reparto.py` y `test_reparto_api.py` (19), humo «Reparto» (2).
+
 ## Pendiente (por prioridad)
+
+-2. **Reparto (03-10)**: antes de cobrar a una empresa de reparto, contrato de
+   encargo art. 28 y política de privacidad (ver `docs/REPARTO.md`). La IA de
+   tickets necesita clave de Gemini de PAGO y `REPARTO_IA_PERMITIDA=1`. Para
+   que el de Gadis lo pruebe gratis: crear su cuenta como supermercado y poner
+   `status: active` en su organización.
 
 -1. **Cuadrante de OGA5, lo que decide Dani**: aceptar o no la propuesta del
    01→12-10 (en la app, o me lo dice y la acepto). Ojo con el Atlas: si la base

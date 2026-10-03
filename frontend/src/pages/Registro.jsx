@@ -4,7 +4,7 @@ import { API_BASE } from '../services/api'
 import { medirAccion } from '../lib/analitica'
 import { saveSession } from '../panel/auth'
 import { useT, LANGS } from '../i18n'
-import { Check, Zap } from 'lucide-react'
+import { Check, Zap, Package, ShoppingCart, Warehouse, Truck } from 'lucide-react'
 import { MARCA, dominio } from '../marca'
 
 function slugify(s) {
@@ -46,6 +46,48 @@ const precioMes = (p, furgonetas) =>
   p.porVehiculo * Math.max(Number(furgonetas) || 0, p.minimo)
 const annualM = (p, furgonetas) => Math.round(precioMes(p, furgonetas) * MESES_ANUAL / 12)
 const annualSave = (p, furgonetas) => precioMes(p, furgonetas) * (12 - MESES_ANUAL)
+
+/* ── Qué tipo de empresa (paso 0) ──
+   Con esto la cuenta nace con las pantallas que le sirven: a un súper que
+   lleva la compra a casa le sobra el cuadrante de una subcontrata de
+   paquetería, y le falta el escaneo de tickets y la ruta. */
+const SECTORES = [
+  { key: 'supermercado', icon: ShoppingCart, color: '#22c55e', name: 'Supermercado o tienda con reparto a domicilio',
+    sub: 'El ticket de caja a la ruta: el repartidor escanea, ve la dirección y qué lleva, y la ruta se ordena sola.' },
+  { key: 'distribucion', icon: Warehouse, color: '#0ea5e9', name: 'Distribución a negocios',
+    sub: 'Reparto a talleres, bares u obras: escaneo de bultos por la mañana, ruta ordenada y la oficina viendo por dónde va cada uno.' },
+  { key: 'paqueteria', icon: Package, color: '#fb923c', name: 'Paquetería de última milla (subcontrata)',
+    sub: 'Turnos, cuadrante, asignación de furgonetas e inspecciones diarias con foto.' },
+  { key: 'otra', icon: Truck, color: '#a855f7', name: 'Otra flota',
+    sub: 'Servicios técnicos, obra, alquiler…: vehículos, conductores, taller y vencimientos.' },
+]
+
+function SectorPicker({ onSelect }) {
+  return (
+    <div style={{ minHeight: '100vh', background: 'radial-gradient(1100px 560px at 72% -12%,rgba(14,165,233,.10),transparent),#0b0d10', color: '#eef1f6', fontFamily: 'Inter Variable,Inter,system-ui,sans-serif', padding: '24px 16px 60px' }}>
+      <div style={{ maxWidth: 760, margin: '0 auto' }}>
+        <a href="/" style={{ display: 'inline-flex', alignItems: 'center', gap: 8, textDecoration: 'none', color: '#eef1f6', marginBottom: 36 }}>
+          <div style={{ width: 30, height: 30, borderRadius: 8, background: 'linear-gradient(135deg,#fb923c,#ea6800)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><Zap size={15} color="white" /></div>
+          <b style={{ fontSize: 15 }}>{MARCA.nombre}</b>
+        </a>
+        <h1 style={{ fontSize: 'clamp(24px,4vw,34px)', fontWeight: 900, margin: '0 0 8px', textAlign: 'center' }}>¿A qué se dedica tu empresa?</h1>
+        <p style={{ color: '#8b94a3', fontSize: 15, margin: '0 0 26px', textAlign: 'center' }}>Así te preparamos las pantallas que vas a usar. Podrás añadir o quitar cosas después.</p>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(280px,1fr))', gap: 12 }}>
+          {SECTORES.map((s) => (
+            <button key={s.key} onClick={() => onSelect(s.key)} style={{ textAlign: 'left', background: '#13161b', border: '1px solid rgba(255,255,255,.08)', borderRadius: 16, padding: '18px 18px', cursor: 'pointer', color: '#eef1f6' }}>
+              <s.icon size={22} color={s.color} />
+              <div style={{ fontWeight: 800, fontSize: 15, margin: '10px 0 4px' }}>{s.name}</div>
+              <div style={{ fontSize: 12.5, color: '#8b94a3', lineHeight: 1.5 }}>{s.sub}</div>
+            </button>
+          ))}
+        </div>
+        <div style={{ textAlign: 'center', marginTop: 22, color: '#8b94a3', fontSize: 13 }}>
+          ¿Ya tienes cuenta? <a href="/panel/login" style={{ color: '#0ea5e9', textDecoration: 'none', fontWeight: 600 }}>Acceder</a>
+        </div>
+      </div>
+    </div>
+  )
+}
 
 /* ── Selector de plan (paso 1) ── */
 function PlanPicker({ onSelect, furgonetas }) {
@@ -183,6 +225,7 @@ export default function Registro() {
   // alguien entra directo, 40 es una flota tipica de DSP.
   const furgonetas = Math.max(1, Number(params.get('flota')) || 40)
 
+  const [sector, setSector] = useState(params.get('sector') || '')
   const [selectedPlan, setSelectedPlan] = useState(paramPlan)
   const [billingMode, setBillingMode] = useState(paramBilling)
 
@@ -199,12 +242,22 @@ export default function Registro() {
   const [accept, setAccept] = useState(false)
   const [done, setDone] = useState(false)
 
+  const reparte = sector === 'supermercado' || sector === 'distribucion'
+  if (!sector) {
+    return <SectorPicker onSelect={(k) => {
+      setSector(k)
+      const q = new URLSearchParams(window.location.search)
+      q.set('sector', k)
+      window.history.replaceState({}, '', `/registro?${q}`)
+    }} />
+  }
+
   // Si no hay plan en URL, mostramos el picker primero
   if (!selectedPlan) {
     return <PlanPicker furgonetas={furgonetas} onSelect={(key, billing) => {
       setSelectedPlan(key)
       setBillingMode(billing)
-      window.history.replaceState({}, '', `/registro?plan=${key}&billing=${billing}`)
+      window.history.replaceState({}, '', `/registro?sector=${sector}&plan=${key}&billing=${billing}`)
     }} />
   }
 
@@ -233,7 +286,7 @@ export default function Registro() {
         body: JSON.stringify({
           org_name: org.trim(), username: user.trim(), password: pass,
           slug: s, center: center.trim(), email: email.trim().toLowerCase(),
-          plan: selectedPlan,
+          plan: selectedPlan, sector,
         }),
       })
       const j = await r.json()
@@ -267,9 +320,15 @@ export default function Registro() {
           </p>
           {/* El primer paso de verdad es traer lo que ya tiene: se le lleva
               directo, y el panel queda a un clic. */}
-          <button style={{ ...btn, marginTop: 0 }} onClick={() => { window.location.href = '/panel/importaciones' }}>
-            Traer mis vehículos y conductores →
-          </button>
+          {reparte ? (
+            <button style={{ ...btn, marginTop: 0 }} onClick={() => { window.location.href = '/panel/reparto' }}>
+              Preparar el reparto →
+            </button>
+          ) : (
+            <button style={{ ...btn, marginTop: 0 }} onClick={() => { window.location.href = '/panel/importaciones' }}>
+              Traer mis vehículos y conductores →
+            </button>
+          )}
           <button onClick={() => { window.location.href = '/panel' }}
             style={{ marginTop: 10, background: 'none', border: 'none', color: '#8b94a3', fontSize: 13, cursor: 'pointer' }}>
             Ir al panel
@@ -327,7 +386,7 @@ export default function Registro() {
             con la primera. Sin esto la segunda nave no se podía dar de alta. */}
         <label style={lbl}>{selectedPlan === 'operacion' ? t('reg.center') : 'Tus sedes'}</label>
         <input style={inp} value={center} onChange={(e) => setCenter(e.target.value)}
-          placeholder={selectedPlan === 'operacion' ? 'OGA5' : 'OGA5, DGA1, DGA2'} />
+          placeholder={reparte ? 'Tienda centro' : selectedPlan === 'operacion' ? 'OGA5' : 'OGA5, DGA1, DGA2'} />
         {selectedPlan !== 'operacion' && <div style={hint}>Sepáralos con comas. Podrás añadir más después.</div>}
 
         <label style={lbl}>Email de contacto</label>

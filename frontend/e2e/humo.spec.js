@@ -19,6 +19,7 @@ const PANEL = [
   ['incidencias', 'Incidencias'], ['ordenes', 'Órdenes de taller'],
   ['talleres', 'Talleres'], ['asignacion', 'Asignación'],
   ['plantilla', 'Plantilla del día'], ['diarios', 'DNR diaria'], ['horas', 'Horas · WHC'],
+  ['reparto', 'Reparto'],
   ['turnos', 'Turnos'], ['cuadrante', 'Cuadrante'], ['checklist-operativo', 'Checklist'],
   ['conductores', 'Conductores'], ['incorporaciones', 'Incorporaciones'],
   ['empleo', 'Empleo'], ['contactos', 'Contactos'],
@@ -43,6 +44,8 @@ const PUBLICAS = [
   // de pulsar contratar, y se rompio al cambiar la tarifa (una llamada con la
   // firma vieja dejaba la pantalla en el aviso de error).
   ['/registro?plan=completo&billing=monthly&flota=120', 'Alta con plan elegido'],
+  // El primer paso nuevo (03-10-2026): qué tipo de empresa es.
+  ['/registro?sector=supermercado&plan=completo', 'Alta de un supermercado'],
 ]
 
 /** Recoge los errores de consola y los fallos de JS de una página. */
@@ -813,7 +816,7 @@ test.describe('Usuarios', () => {
       ]) }))
     await page.goto('/panel/usuarios', { waitUntil: 'domcontentloaded' })
     await expect(page.getByText('Mery', { exact: true })).toBeVisible({ timeout: 15000 })
-    await expect(page.getByText('ve 7 de 29 pantallas')).toBeVisible()
+    await expect(page.getByText('ve 7 de 30 pantallas')).toBeVisible()
     await page.getByRole('button', { name: 'Quién ve cada pantalla' }).click()
     const fila = (nombre) => page.locator('tr', { has: page.locator('td', { hasText: new RegExp(`^${nombre}$`) }) })
     // Mery: el Cuadrante sí y los Días libres no (van cada uno por su lado);
@@ -824,14 +827,14 @@ test.describe('Usuarios', () => {
     await expect(fila('Asignación diaria').locator('td').nth(2)).toHaveText('siempre')
     await expect(fila('Vehículos').locator('td').nth(3).getByLabel('la ve')).toBeVisible()
     await page.getByRole('button', { name: 'Editar' }).first().click()
-    await expect(page.getByText('Ve 7 de 29 pantallas del menú.')).toBeVisible()
+    await expect(page.getByText('Ve 7 de 30 pantallas del menú.')).toBeVisible()
     await expect(page.getByText('· va con Talleres')).toBeVisible()
     // El Cuadrante se marca y desmarca como cualquier otra.
     const cuadrante = page.getByRole('button', { name: 'Cuadrante', exact: true })
     await expect(cuadrante).toHaveAttribute('aria-pressed', 'true')
     await cuadrante.click()
     await expect(cuadrante).toHaveAttribute('aria-pressed', 'false')
-    await expect(page.getByText('Ve 6 de 29 pantallas del menú.')).toBeVisible()
+    await expect(page.getByText('Ve 6 de 30 pantallas del menú.')).toBeVisible()
     expect(fallos, fallos.join(' | ')).toHaveLength(0)
   })
 })
@@ -1063,5 +1066,56 @@ test.describe('Con datos', () => {
 
     await expect(page.getByText('1234 ABC')).toBeVisible()
     expect(fallos, fallos.join(' | ')).toHaveLength(0)
+  })
+})
+
+/* REPARTO A DOMICILIO (03-10-2026): la oficina ve los pedidos con su
+   conductor, y el conductor su ruta; la ubicación no se comparte sin leer
+   antes el aviso. */
+const PEDIDOS = {
+  fecha: '2026-10-03', ve_datos: true, sin_ubicar: 0,
+  base: { direccion: 'Almacén', lat: 43.36, lng: -8.41 },
+  pedidos: [
+    { id: 'p1', fecha: '2026-10-03', codigo: '8412345', cliente: 'Marta Ríos', telefono: '600111222',
+      direccion: 'Avda. Montero Ríos 12, 15003', lat: 43.369, lng: -8.405, contenido: '3 cajas y agua',
+      bultos: 4, escaneos: 2, conductor_id: 'd1', conductor_nombre: 'ANA PÉREZ', estado: 'pendiente', orden: 1, geo: 'ok' },
+  ],
+  conductores: [{ conductor_id: 'd1', nombre: 'ANA PÉREZ', total: 1, entregados: 0, fallidos: 0, pendientes: 1, bultos: 4, km: 1.2 }],
+}
+
+test.describe('Reparto', () => {
+  test('la oficina ve el pedido con su conductor', async ({ page }) => {
+    const fallos = vigilar(page)
+    await entrarComoAdmin(page)
+    await simularApi(page, 'vacio')
+    await page.route(/\/api\/reparto\/pedidos/, (r) => r.fulfill({ json: PEDIDOS }))
+    await page.goto('/panel/reparto', { waitUntil: 'domcontentloaded' })
+    await expect(page.getByText('Marta Ríos')).toBeVisible()
+    await expect(page.getByText('1/1 entregados').or(page.getByText('0/1 entregados'))).toBeVisible()
+    await page.getByRole('button', { name: /Zonas y ajustes/ }).click()
+    await expect(page.getByText('Cómo se protegen los datos')).toBeVisible()
+    expect(fallos).toEqual([])
+  })
+
+  test('el conductor ve su ruta y el aviso antes de compartir ubicación', async ({ page }) => {
+    const fallos = vigilar(page)
+    const b64 = (o) => btoa(JSON.stringify(o)).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '')
+    const token = `${b64({ alg: 'HS256' })}.${b64({ sub: 'd1', role: 'driver', name: 'ANA', exp: Math.floor(Date.now() / 1000) + 3600 })}.x`
+    await page.addInitScript((t) => {
+      localStorage.setItem('flota_driver_token', t)
+      localStorage.setItem('flota_driver', JSON.stringify({ id: 'd1', name: 'ANA PÉREZ' }))
+      localStorage.setItem('cookie_consent', '1')
+    }, token)
+    await simularApi(page, 'vacio')
+    await page.route(/\/api\/reparto\/mi-ruta/, (r) => r.fulfill({ json: {
+      activo: true, fecha: '2026-10-03', pedidos: PEDIDOS.pedidos, base: PEDIDOS.base,
+      ia_tickets: true, jornada: { empezada: null, terminada: null }, aviso_aceptado: false } }))
+    await page.goto('/conductor', { waitUntil: 'domcontentloaded' })
+    await page.getByRole('button', { name: /Mi ruta/ }).click()
+    await expect(page.getByText('Marta Ríos')).toBeVisible()
+    await expect(page.getByText('3 cajas y agua')).toBeVisible()
+    await page.getByRole('button', { name: /Empezar jornada/ }).click()
+    await expect(page.getByText('Antes de empezar: tu ubicación')).toBeVisible()
+    expect(fallos).toEqual([])
   })
 })

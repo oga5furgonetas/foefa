@@ -811,3 +811,15 @@ export const importarConductores = (fd) =>
 export const analizarMoviles = (fd) =>
   api.post('/drivers/moviles/analizar', fd, { headers: { 'Content-Type': 'multipart/form-data' } })
 export const aplicarMoviles = (body) => api.post('/drivers/moviles/aplicar', body)
+
+// ── Reparto a domicilio y a negocios ──
+export const getRepartoAjustes = () => api.get('/reparto/ajustes')
+export const guardarRepartoAjustes = (body) => api.put('/reparto/ajustes', body)
+export const getRepartoPedidos = (fecha) => api.get('/reparto/pedidos', { params: { fecha } })
+export const crearRepartoPedido = (body) => api.post('/reparto/pedidos', body)
+export const pegarRepartoPedidos = (body) => api.post('/reparto/pegar', body)
+export const editarRepartoPedido = (id, body) => api.patch(`/reparto/pedidos/${id}`, body)
+export const borrarRepartoPedido = (id) => api.delete(`/reparto/pedidos/${id}`)
+export const repartirPorZonas = (fecha) => api.post('/reparto/repartir', { fecha })
+export const ordenarRutas = (fecha, conductorId) => api.post('/reparto/ordenar', { fecha, conductor_id: conductorId || '' })
+export const getRepartoVivo = () => api.get('/reparto/vivo')
