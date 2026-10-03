@@ -700,7 +700,14 @@ _LIM_COMPLETO = {"max_vehicles": -1, "max_drivers": -1, "max_centers": -1,
                  "ai": True, "chat": True, "forensics": True,
                  "maintenance": True, "assignments": True, "export": True}
 
+# El autónomo: él, su furgoneta (dos por si la cambia) y el reparto entero.
+# Precio FIJO al mes, no por vehículo: a una persona el «mínimo 20» no le dice nada.
+_LIM_AUTONOMO = {"max_vehicles": 2, "max_drivers": 1, "max_centers": 1,
+                 "ai": True, "chat": False, "forensics": False,
+                 "maintenance": True, "assignments": False, "export": True}
+
 PLAN_LIMITS = {
+    "autonomo":   _LIM_AUTONOMO,
     "operacion":  _LIM_OPERACION,
     "completo":   _LIM_COMPLETO,
     "holding":    _LIM_COMPLETO,
@@ -4787,6 +4794,10 @@ async def register_dsp(data: RegisterRequest, request: Request):
     # Una empresa con varias naves las escribe todas de una vez («OGA5, DGA1»);
     # el plan de una sola nave se queda con la primera.
     plan_elegido = (data.plan or "").strip().lower() or None
+    sector_alta = (data.sector or "").strip().lower()
+    if sector_alta == "autonomo":
+        plan_elegido = "autonomo"
+    dias_prueba = int(PLAN_TARIFAS.get(plan_elegido or "", {}).get("dias_prueba") or 14)
     centros_alta = _centros_de_texto(data.center) or ["PRINCIPAL"]
     tope = _tope_centros({"plan": plan_elegido})
     centros_alta = centros_alta[:tope]
@@ -4795,7 +4806,7 @@ async def register_dsp(data: RegisterRequest, request: Request):
         "id": org_id, "name": org_name, "account_type": "dsp", "slug": slug,
         "db_name": f"dsp_{org_id}",
         "status": "trial",
-        "trial_ends": (datetime.now(timezone.utc) + timedelta(days=14)).isoformat(),
+        "trial_ends": (datetime.now(timezone.utc) + timedelta(days=dias_prueba)).isoformat(),
         "email": (data.email or "").strip().lower() or None,
         "plan": plan_elegido,
         "centers": centros_alta,
@@ -4829,7 +4840,8 @@ async def register_dsp(data: RegisterRequest, request: Request):
     recipient = org.get("email")
     resend_key = os.environ.get("RESEND_API_KEY", "")
     if recipient and resend_key:
-        plan_label = {"basico": "Básico", "pro": "Pro", "flota": "Flota"}.get(org.get("plan") or "", "Pro")
+        plan_label = {"basico": "Básico", "pro": "Pro", "flota": "Flota", "operacion": "Operación",
+                      "completo": "Completo", "autonomo": "Autónomo"}.get(org.get("plan") or "", "Pro")
         try:
             import httpx as _httpx
             await _httpx.AsyncClient().post(
@@ -4838,23 +4850,23 @@ async def register_dsp(data: RegisterRequest, request: Request):
                 json={
                     "from": os.environ.get("EMAIL_FROM", _EMAIL_FROM_DEFECTO),
                     "to": [recipient],
-                    "subject": f"¡Bienvenido a {MARCA}! Tu prueba gratuita de 14 días ya está activa",
+                    "subject": f"¡Bienvenido a {MARCA}! Tu prueba gratuita de {dias_prueba} días ya está activa",
                     "html": f"""
 <div style="font-family:Inter,sans-serif;max-width:520px;margin:0 auto;background:#0b0d10;color:#eef1f6;border-radius:16px;overflow:hidden">
   <div style="background:linear-gradient(135deg,#0ea5e9,#0369a1);padding:32px 28px;text-align:center">
     <div style="font-size:32px;margin-bottom:8px">⚡</div>
     <h1 style="margin:0;font-size:24px;font-weight:900;color:#fff">¡Bienvenido a {MARCA}!</h1>
-    <p style="margin:8px 0 0;color:rgba(255,255,255,.8);font-size:14px">Tu prueba gratuita de 14 días ya está activa</p>
+    <p style="margin:8px 0 0;color:rgba(255,255,255,.8);font-size:14px">Tu prueba gratuita de {dias_prueba} días ya está activa</p>
   </div>
   <div style="padding:28px">
     <p style="margin:0 0 16px;color:#cbd3e0;font-size:15px">Hola <b>{org_name}</b>,</p>
     <p style="margin:0 0 20px;color:#8b94a3;font-size:14px;line-height:1.6">
-      Tu cuenta con el plan <b style="color:#0ea5e9">{plan_label}</b> está lista. Tienes 14 días completos para probarlo sin límites y sin introducir ninguna tarjeta.
+      Tu cuenta con el plan <b style="color:#0ea5e9">{plan_label}</b> está lista. Tienes {dias_prueba} días completos para probarlo sin límites y sin introducir ninguna tarjeta.
     </p>
     <div style="background:#13161b;border:1px solid rgba(255,255,255,.08);border-radius:12px;padding:16px 20px;margin-bottom:24px">
       <div style="font-size:12px;color:#64748b;font-weight:700;text-transform:uppercase;letter-spacing:.06em;margin-bottom:10px">Tu acceso</div>
       <div style="font-size:14px;color:#cbd3e0;margin-bottom:6px">🔐 Usuario: <b style="color:#eef1f6">{username}</b></div>
-      <div style="font-size:14px;color:#cbd3e0">📦 Plan: <b style="color:#0ea5e9">{plan_label}</b> · Prueba gratuita 14 días</div>
+      <div style="font-size:14px;color:#cbd3e0">📦 Plan: <b style="color:#0ea5e9">{plan_label}</b> · Prueba gratuita {dias_prueba} días</div>
     </div>
     <a href="{_PORTAL_BASE_FRONT}/panel" style="display:block;text-align:center;background:linear-gradient(135deg,#0ea5e9,#0369a1);color:#fff;text-decoration:none;padding:14px 24px;border-radius:10px;font-weight:800;font-size:15px;margin-bottom:24px">
       Entrar al panel →
@@ -4864,7 +4876,7 @@ async def register_dsp(data: RegisterRequest, request: Request):
       Al finalizar la prueba, se cobra el plan elegido salvo cancelación.
     </p>
     <p style="margin:12px 0 0;color:#475569;font-size:11px;text-align:center;line-height:1.5">
-      🇬🇧 Welcome to {MARCA}! Your 14-day free trial is active — no card required.
+      🇬🇧 Welcome to {MARCA}! Your {dias_prueba}-day free trial is active — no card required.
       Log in at {_DOMINIO_FRONT}/panel with the username above. Questions? {CORREO_CONTACTO}
     </p>
   </div>
@@ -4935,6 +4947,8 @@ async def org_billing(user: dict = Depends(get_current_user)):
 # flota de 5 furgonetas salga a 40 EUR: por debajo de cierto tamaño el soporte
 # cuesta lo mismo que en una grande.
 PLAN_TARIFAS = {
+    # `mensual`: precio fijo (y `anual`, pagando el año: 10 meses). 7 días de prueba.
+    "autonomo":  {"por_vehiculo": 0, "minimo_vehiculos": 0, "mensual": 9.99, "anual": 99, "dias_prueba": 7, "rango": 0},
     "operacion": {"por_vehiculo": 5, "minimo_vehiculos": 20, "rango": 1},
     "completo":  {"por_vehiculo": 8, "minimo_vehiculos": 20, "rango": 2},
     "holding":   {"por_vehiculo": 0, "minimo_vehiculos": 0,  "rango": 3},  # a medida
@@ -4958,6 +4972,10 @@ def _catalogo_por_defecto():
         "descuento_anual_meses": 2,
         "iva_pct": 21,
         "planes": [
+            {"clave": "autonomo", "nombre": "Autónomo", "para": "Tú y tu furgoneta",
+             "por_vehiculo": 0, "minimo_vehiculos": 0,
+             "mensual": PLAN_TARIFAS["autonomo"]["mensual"], "anual": PLAN_TARIFAS["autonomo"]["anual"],
+             "dias_prueba": PLAN_TARIFAS["autonomo"]["dias_prueba"], "recomendado": False},
             {"clave": "operacion", "nombre": "Operación", "para": "Un centro",
              "por_vehiculo": PLAN_TARIFAS["operacion"]["por_vehiculo"],
              "minimo_vehiculos": PLAN_TARIFAS["operacion"]["minimo_vehiculos"],
@@ -4981,7 +4999,11 @@ async def _catalogo_planes(forzar: bool = False):
     try:
         doc = await global_db.plan_catalog.find_one({"_id": "vigente"}, {"_id": 0})
         if doc and isinstance(doc.get("planes"), list) and doc["planes"]:
-            datos = {**datos, **doc}
+            # Lo editado desde el panel manda, pero un plan que el código ya
+            # conoce y la base aún no (el Autónomo, 04-10-2026) no desaparece.
+            vistos = {p.get("clave") for p in doc["planes"]}
+            nuevos = [p for p in datos["planes"] if p.get("clave") not in vistos]
+            datos = {**datos, **doc, "planes": nuevos + list(doc["planes"])}
     except Exception as e:
         logger.warning(f"Catalogo de planes: uso los valores del codigo ({e})")
     _CATALOGO_CACHE.update({"ts": ahora, "datos": datos})
@@ -5012,6 +5034,8 @@ def _precio_mensual(plan, n_vehiculos: int) -> int:
     desde el panel. Esta se queda para los sitios sincronos.
     """
     t = PLAN_TARIFAS.get(_plan_canon(plan))
+    if t and t.get("mensual"):
+        return t["mensual"]
     if not t or not t.get("por_vehiculo"):
         return 0
     return int(t["por_vehiculo"] * max(int(n_vehiculos or 0), t["minimo_vehiculos"]))
@@ -5020,6 +5044,8 @@ def _precio_mensual(plan, n_vehiculos: int) -> int:
 async def _precio_vigente(plan, n_vehiculos: int) -> int:
     """Precio con la tarifa que este puesta AHORA (editable desde el panel)."""
     t = _tarifa_de(await _catalogo_planes(), plan)
+    if t and t.get("mensual"):
+        return float(t["mensual"])
     if not t or not t.get("por_vehiculo"):
         return 0
     return int(float(t["por_vehiculo"]) * max(int(n_vehiculos or 0),
@@ -5147,6 +5173,17 @@ async def billing_planes():
     cat = await _catalogo_planes()
     # Las descripciones no se editan desde el panel: son texto de producto.
     detalle = {
+        "autonomo": {
+            "incluye": [
+                "Escanear paquetes o foto de la etiqueta: dirección y teléfono solos",
+                "Ruta ordenada por tiempo, con franjas y hora estimada",
+                "Llamar y WhatsApp al cliente desde cada parada",
+                "Cobro a la entrega, recogidas y prueba de entrega con foto",
+                "Enlace de seguimiento para tus clientes",
+                "Tu furgoneta: inspecciones, taller, ITV y seguro",
+            ],
+            "no_incluye": ["Equipo de repartidores (eso es el plan Mensajería)"],
+        },
         "operacion": {
             "incluye": [
                 "Inspecciones con foto y análisis de daños por IA",
@@ -5452,7 +5489,8 @@ async def billing_config(user: dict = Depends(get_current_user)):
     """URLs de checkout por plan (Básico / Pro / Flota / Enterprise)."""
     return {
         "provider": "lemonsqueezy",
-        "ready": bool(os.environ.get("LS_CHECKOUT_OPERACION")
+        "ready": bool(os.environ.get("LS_CHECKOUT_AUTONOMO")
+                      or os.environ.get("LS_CHECKOUT_OPERACION")
                       or os.environ.get("LS_CHECKOUT_COMPLETO")
                       or os.environ.get("LS_CHECKOUT_BASICO")
                       or os.environ.get("LS_CHECKOUT_PRO")),
@@ -5460,6 +5498,8 @@ async def billing_config(user: dict = Depends(get_current_user)):
             # Claves nuevas (tarifa por furgoneta). Los productos de Lemon
             # Squeezy tienen que ser de cantidad variable: la cantidad es el
             # numero de furgonetas.
+            "autonomo": os.environ.get("LS_CHECKOUT_AUTONOMO", ""),
+            "autonomo_annual": os.environ.get("LS_CHECKOUT_AUTONOMO_ANNUAL", ""),
             "operacion": os.environ.get("LS_CHECKOUT_OPERACION", ""),
             "completo": os.environ.get("LS_CHECKOUT_COMPLETO", ""),
             "operacion_annual": os.environ.get("LS_CHECKOUT_OPERACION_ANNUAL", ""),
@@ -5530,6 +5570,7 @@ async def lemonsqueezy_webhook(request: Request):
         # Nombres nuevos primero. Sin esto, un producto "Operacion" no casaba
         # con nada y caia en el fallback, dando el plan mas permisivo a quien
         # paga el mas barato.
+        if "autonom" in s:    return "autonomo"
         if "holding" in s or "enterprise" in s: return "holding"
         if "completo" in s:   return "completo"
         if "operacion" in s:  return "operacion"

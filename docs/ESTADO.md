@@ -517,6 +517,12 @@ Nada se había borrado (org `owner` sin `modulos`, usuario `dani` sin
   `start_url: /app` (`AppRedirect` decide a dónde). Ver ahí qué le toca a Dani
   (cuenta de Play, 25 USD; huella de Play App Signing).
 
+- **Plan Autónomo** (04-10): 7 días de prueba y 9,99 €/mes fijos (99 €/año);
+  `_LIM_AUTONOMO`, `PLAN_TARIFAS["autonomo"]` con `mensual/anual/dias_prueba`,
+  catálogo fusionado con el de la base (`_catalogo_planes`), alta sin
+  selector de plan, tarjeta en /planes. Falta el producto en Lemon Squeezy
+  (`LS_CHECKOUT_AUTONOMO`) para que el botón de pagar funcione.
+
 ## Pendiente (por prioridad)
 
 -2. **Reparto (03-10)**: antes de cobrar a una empresa de reparto, contrato de

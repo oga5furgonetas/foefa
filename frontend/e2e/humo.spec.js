@@ -1326,3 +1326,23 @@ test('Reparto · prueba de entrega con nota y la oficina ve la foto', async ({ p
   await expect.poll(() => enviados.length).toBe(1)
   expect(enviados[0]).toMatchObject({ estado: 'entregado', nota: 'En el buzón' })
 })
+
+/* EL AUTÓNOMO NO ELIGE PLAN: 7 días gratis y 9,99 €/mes fijos, sin «sedes». */
+test('Alta · el autónomo va directo a su plan de 9,99 € con 7 días', async ({ page }) => {
+  await page.goto('/registro', { waitUntil: 'domcontentloaded' })
+  await page.getByRole('button', { name: /Repartidor autónomo/ }).click()
+  await expect(page).toHaveURL(/plan=autonomo/)
+  await expect(page.getByText('Plan elegido')).toBeVisible()
+  await expect(page.getByText(/9,99 €\/mes, todo incluido · 7 días gratis/)).toBeVisible()
+  await expect(page.getByRole('button', { name: 'Cambiar' })).toHaveCount(0)
+  await expect(page.getByText('Tus sedes')).toHaveCount(0)
+  await expect(page.getByPlaceholder('Pepe Repartos')).toBeVisible()
+})
+
+test('Planes · la tarjeta Autónomo sale con precio fijo', async ({ page }) => {
+  await page.route(/\/api\/billing\/planes/, (r) => r.fulfill({ json: { planes: [
+    { clave: 'operacion', nombre: 'Operación', para: 'Un centro', por_vehiculo: 5, minimo_vehiculos: 20 }] } }))
+  await page.goto('/planes', { waitUntil: 'domcontentloaded' })
+  await expect(page.getByText('Autónomo', { exact: true })).toBeVisible()
+  await expect(page.getByText(/Precio fijo, todo incluido · 7 días gratis/)).toBeVisible()
+})

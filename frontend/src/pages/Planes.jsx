@@ -10,6 +10,26 @@ import { MARCA } from '../marca'
    valores son el respaldo: los de verdad llegan de /billing/planes. */
 const PLANES_FALLBACK = [
   {
+    clave: 'autonomo',
+    nombre: 'Autónomo',
+    para: 'Tú y tu furgoneta',
+    por_vehiculo: 0,
+    minimo_vehiculos: 0,
+    mensual: 9.99,
+    anual: 99,
+    dias_prueba: 7,
+    color: '#eab308',
+    incluye: [
+      'Escanear paquetes o foto de la etiqueta',
+      'Ruta ordenada por tiempo, franjas y hora estimada',
+      'Llamar y WhatsApp al cliente desde cada parada',
+      'Cobro a la entrega y prueba de entrega con foto',
+      'Enlace de seguimiento para tus clientes',
+      'Tu furgoneta: inspecciones, taller, ITV y seguro',
+    ],
+    no_incluye: ['Equipo de repartidores'],
+  },
+  {
     clave: 'operacion',
     nombre: 'Operación',
     para: 'Una sede',
@@ -57,7 +77,8 @@ const PLANES_FALLBACK = [
 
 /* Lo que paga al mes una flota de ese tamaño. 0 = precio a medida. */
 const precioMes = (p, furgonetas) =>
-  p.por_vehiculo ? p.por_vehiculo * Math.max(Number(furgonetas) || 0, p.minimo_vehiculos) : 0
+  p.mensual ? p.mensual : p.por_vehiculo ? p.por_vehiculo * Math.max(Number(furgonetas) || 0, p.minimo_vehiculos) : 0
+const eur = (n) => (Number.isInteger(n) ? String(n) : n.toFixed(2).replace('.', ','))
 
 const ENTERPRISE = {
   feats: ['Todo lo de Completo', 'Varias sociedades consolidadas', 'Alta asistida', 'Soporte a medida', 'Integración por API'],
@@ -172,10 +193,13 @@ export default function Planes() {
       .then((d) => {
         const lista = d?.planes
         if (!Array.isArray(lista) || !lista.length) return
-        setPlanes(lista.map((p) => ({
-          ...p,
-          color: PLANES_FALLBACK.find((f) => f.clave === p.clave)?.color || '#64748b',
-        })))
+        // Lo del servidor manda (precios), lo de aquí completa (color, textos,
+        // precio fijo del autónomo) y una tarjeta que el servidor no conozca
+        // todavía no desaparece.
+        const delServidor = lista.map((p) => ({ ...(PLANES_FALLBACK.find((f) => f.clave === p.clave) || {}), ...p,
+          color: PLANES_FALLBACK.find((f) => f.clave === p.clave)?.color || '#64748b' }))
+        const faltan = PLANES_FALLBACK.filter((f) => !lista.some((p) => p.clave === f.clave))
+        setPlanes([...faltan.filter((f) => f.clave === 'autonomo'), ...delServidor, ...faltan.filter((f) => f.clave !== 'autonomo')])
       })
       .catch(() => { /* respaldo local */ })
   }, [])
@@ -270,8 +294,11 @@ export default function Planes() {
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(300px,1fr))', gap: 20, marginBottom: 24 }}>
           {planes.map((p) => {
             const mes = precioMes(p, furgonetas)
-            const aMedida = !p.por_vehiculo
-            const mostrado = billing === 'annual' ? Math.round(precioAnual(p, furgonetas) / 12) : mes
+            const aMedida = !p.por_vehiculo && !p.mensual
+            const fijo = !!p.mensual
+            const mostrado = fijo
+              ? (billing === 'annual' && p.anual ? Math.round((p.anual / 12) * 100) / 100 : mes)
+              : billing === 'annual' ? Math.round(precioAnual(p, furgonetas) / 12) : mes
             const minimo = furgonetas > 0 && furgonetas < p.minimo_vehiculos
 
             return (
@@ -301,14 +328,21 @@ export default function Planes() {
                   ) : (
                     <>
                       <div style={{ display: 'flex', alignItems: 'baseline', gap: 4 }}>
-                        <span style={{ fontSize: 44, fontWeight: 900, color: '#eef1f6' }}>{mostrado}€</span>
+                        <span style={{ fontSize: 44, fontWeight: 900, color: '#eef1f6' }}>{eur(mostrado)}€</span>
                         <span style={{ color: '#8b94a3', fontSize: 14 }}>/mes</span>
                       </div>
                       <div style={{ fontSize: 12, color: '#8b94a3', marginTop: 4 }}>
-                        {p.por_vehiculo}€ por vehículo y mes
-                        {minimo && <span style={{ color: '#64748b' }}> · mínimo {p.minimo_vehiculos}</span>}
+                        {fijo ? `Precio fijo, todo incluido · ${p.dias_prueba || 7} días gratis` : <>
+                          {p.por_vehiculo}€ por vehículo y mes
+                          {minimo && <span style={{ color: '#64748b' }}> · mínimo {p.minimo_vehiculos}</span>}
+                        </>}
                       </div>
-                      {billing === 'annual' && (
+                      {fijo && billing === 'annual' && p.anual && (
+                        <div style={{ fontSize: 12, color: '#34d399', fontWeight: 700, marginTop: 4 }}>
+                          {eur(p.anual)}€/año · ahorras {eur(Math.round((p.mensual * 12 - p.anual) * 100) / 100)}€
+                        </div>
+                      )}
+                      {!fijo && billing === 'annual' && (
                         <div style={{ fontSize: 12, color: '#34d399', fontWeight: 700, marginTop: 4 }}>
                           {precioAnual(p, furgonetas)}€/año · ahorras {ahorroAnual(p, furgonetas)}€
                         </div>
@@ -318,7 +352,7 @@ export default function Planes() {
                 </div>
 
                 <a
-                  href={aMedida ? '/contacto?asunto=Holding' : `/registro?plan=${p.clave}&billing=${billing}&flota=${furgonetas}`}
+                  href={aMedida ? '/contacto?asunto=Holding' : fijo ? `/registro?sector=autonomo&plan=autonomo&billing=${billing}` : `/registro?plan=${p.clave}&billing=${billing}&flota=${furgonetas}`}
                   onClick={() => medirAccion('plan_elegir')}
                   style={{
                     display: 'block', textAlign: 'center', padding: '12px 0',

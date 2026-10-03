@@ -10,7 +10,7 @@ _NS = {"re": re}
 for _n in ast.parse(_TEXTO).body:
     _nombre = getattr(_n, "name", None) or (
         getattr(_n.targets[0], "id", None) if isinstance(_n, ast.Assign) else None)
-    if _nombre in {"_LIM_OPERACION", "_LIM_COMPLETO", "PLAN_LIMITS", "PLAN_DEFAULT", "_SIN_TOPE",
+    if _nombre in {"_LIM_OPERACION", "_LIM_COMPLETO", "_LIM_AUTONOMO", "PLAN_LIMITS", "PLAN_DEFAULT", "_SIN_TOPE",
                    "_tope_centros", "_centros_de_texto"}:
         exec(compile(ast.Module([_n], []), "server.py", "exec"), _NS)  # noqa: S102
 tope, texto = _NS["_tope_centros"], _NS["_centros_de_texto"]

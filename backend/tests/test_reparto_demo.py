@@ -93,3 +93,25 @@ def test_cada_sector_nace_con_lo_suyo():
     todas = set(server._MODULOS_CLAVES)
     for nombre, mods in S.items():
         assert mods is None or set(mods) <= todas, nombre
+
+
+def test_plan_autonomo_precio_fijo_y_siete_dias():
+    assert server._precio_mensual("autonomo", 1) == 9.99
+    assert server._precio_mensual("autonomo", 40) == 9.99          # no es por vehículo
+    assert server._precio_mensual("operacion", 10) == 100          # los demás, como antes
+    assert server.PLAN_LIMITS["autonomo"]["max_drivers"] == 1
+    cat = server._catalogo_por_defecto()
+    aut = next(p for p in cat["planes"] if p["clave"] == "autonomo")
+    assert aut["mensual"] == 9.99 and aut["dias_prueba"] == 7 and aut["anual"] == 99
+
+
+@pytest.mark.asyncio(loop_scope="session")
+async def test_el_catalogo_de_la_base_no_borra_el_plan_autonomo(base, monkeypatch):
+    server.global_db["plan_catalog"].docs.append({"_id": "vigente", "planes": [
+        {"clave": "operacion", "nombre": "Operación", "por_vehiculo": 6, "minimo_vehiculos": 20}]})
+    server._CATALOGO_CACHE.update({"ts": 0, "datos": None})
+    cat = await server._catalogo_planes(forzar=True)
+    claves = [p["clave"] for p in cat["planes"]]
+    assert claves == ["autonomo", "completo", "operacion"] or claves[0] == "autonomo"
+    assert next(p for p in cat["planes"] if p["clave"] == "operacion")["por_vehiculo"] == 6
+    server._CATALOGO_CACHE.update({"ts": 0, "datos": None})

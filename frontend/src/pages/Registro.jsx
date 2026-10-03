@@ -18,6 +18,19 @@ function slugify(s) {
    Si cambias esto, cambialo tambien en PLAN_TARIFAS de server.py. */
 const PLANS = [
   {
+    // Precio FIJO al mes, no por vehículo: una persona con su furgoneta. Se
+    // elige solo al marcar «Repartidor autónomo»; no sale en el selector.
+    key: 'autonomo', name: 'Autónomo', color: '#eab308', mensual: 9.99, minimo: 0, porVehiculo: 0,
+    popular: false, soloSector: 'autonomo', diasPrueba: 7, who: 'Tú y tu furgoneta',
+    feats: ['Escanear paquetes o foto de la etiqueta: dirección y teléfono solos',
+            'Ruta ordenada por tiempo, con franjas y hora estimada',
+            'Llamar y WhatsApp al cliente desde cada parada',
+            'Cobro a la entrega, recogidas y prueba de entrega con foto',
+            'Enlace de seguimiento para tus clientes',
+            'Tu furgoneta: inspecciones, taller, ITV y seguro'],
+    no: ['Equipo de repartidores (eso es el plan Mensajería)'],
+  },
+  {
     key: 'operacion', name: 'Operación', color: '#64748b',
     porVehiculo: 5, minimo: 20, popular: false,
     who: 'Una sede',
@@ -43,7 +56,7 @@ const PLANS = [
 /* Lo que paga al mes esa flota. Pagando un año se pagan 10 meses. */
 const MESES_ANUAL = 10
 const precioMes = (p, furgonetas) =>
-  p.porVehiculo * Math.max(Number(furgonetas) || 0, p.minimo)
+  p.mensual ?? p.porVehiculo * Math.max(Number(furgonetas) || 0, p.minimo)
 const annualM = (p, furgonetas) => Math.round(precioMes(p, furgonetas) * MESES_ANUAL / 12)
 const annualSave = (p, furgonetas) => precioMes(p, furgonetas) * (12 - MESES_ANUAL)
 
@@ -134,7 +147,7 @@ function PlanPicker({ onSelect, furgonetas }) {
 
         {/* Plan cards */}
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(260px,1fr))', gap: 16, marginBottom: 20 }}>
-          {PLANS.map((p) => {
+          {PLANS.filter((p) => !p.soloSector).map((p) => {
             const mes = precioMes(p, furgonetas)
             const price = billing === 'annual' ? annualM(p, furgonetas) : mes
             const save = annualSave(p, furgonetas)
@@ -252,6 +265,8 @@ export default function Registro() {
       setSector(k)
       const q = new URLSearchParams(window.location.search)
       q.set('sector', k)
+      // El autónomo no elige plan: tiene el suyo, fijo al mes.
+      if (k === 'autonomo') { setSelectedPlan('autonomo'); q.set('plan', 'autonomo') }
       window.history.replaceState({}, '', `/registro?${q}`)
     }} />
   }
@@ -265,7 +280,9 @@ export default function Registro() {
     }} />
   }
 
-  const planInfo = PLANS.find(p => p.key === selectedPlan) || PLANS[1]
+  const planInfo = PLANS.find(p => p.key === selectedPlan) || PLANS.find(p => p.key === 'completo')
+  const diasPrueba = planInfo.diasPrueba || 14
+  const precioFijo = planInfo.mensual != null
   const displayPrice = billingMode === 'annual'
     ? annualM(planInfo, furgonetas) : precioMes(planInfo, furgonetas)
   const yearSave = annualSave(planInfo, furgonetas)
@@ -314,7 +331,7 @@ export default function Registro() {
           <div style={{ fontSize: 48, marginBottom: 12 }}>📧</div>
           <h2 style={{ margin: '0 0 8px', fontSize: 20 }}>¡Cuenta creada!</h2>
           <div style={{ display: 'inline-flex', alignItems: 'center', gap: 6, background: `${planInfo.color}18`, border: `1px solid ${planInfo.color}40`, borderRadius: 20, padding: '4px 14px', fontSize: 12, fontWeight: 700, color: planInfo.color, margin: '0 0 16px' }}>
-            Plan {planInfo.name} · 14 días gratis
+            Plan {planInfo.name} · {diasPrueba} días gratis
           </div>
           <p style={{ color: '#8b94a3', fontSize: 14, lineHeight: 1.6, margin: '0 0 8px' }}>
             Hemos enviado un email de bienvenida a <b style={{ color: '#0ea5e9' }}>{email}</b>.
@@ -357,26 +374,28 @@ export default function Registro() {
             <div style={{ fontSize: 10, fontWeight: 700, color: planInfo.color, textTransform: 'uppercase', letterSpacing: '.08em', marginBottom: 3 }}>Plan elegido</div>
             <div style={{ fontWeight: 900, fontSize: 16, color: '#eef1f6' }}>{planInfo.name}</div>
             <div style={{ fontSize: 12, color: '#64748b', marginTop: 2 }}>
-              {billingMode === 'annual'
-                ? `${displayPrice}€/mes · ${precioMes(planInfo, furgonetas) * MESES_ANUAL}€/año · ahorras ${yearSave}€`
-                : `${displayPrice}€/mes`
+              {precioFijo
+                ? `${displayPrice.toFixed(2).replace('.', ',')} €/mes, todo incluido · ${diasPrueba} días gratis`
+                : billingMode === 'annual'
+                  ? `${displayPrice}€/mes · ${precioMes(planInfo, furgonetas) * MESES_ANUAL}€/año · ahorras ${yearSave}€`
+                  : `${displayPrice}€/mes`
               }
             </div>
           </div>
-          <button
+          {!planInfo.soloSector && <button
             onClick={() => setSelectedPlan('')}
             style={{ background: 'rgba(255,255,255,.06)', border: '1px solid rgba(255,255,255,.1)', color: '#8b94a3', fontSize: 12, fontWeight: 600, padding: '6px 12px', borderRadius: 8, cursor: 'pointer' }}
           >
             Cambiar
-          </button>
+          </button>}
         </div>
 
         <div style={{ display: 'inline-flex', alignItems: 'center', gap: 6, background: 'rgba(52,211,153,.1)', border: '1px solid rgba(52,211,153,.25)', borderRadius: 99, padding: '3px 12px', fontSize: 11, fontWeight: 700, color: '#34d399', marginBottom: 16 }}>
-          ✓ 14 días gratis · sin tarjeta · cancela cuando quieras
+          ✓ {diasPrueba} días gratis · sin tarjeta · cancela cuando quieras
         </div>
 
-        <label style={lbl}>{t('reg.company')}</label>
-        <input style={inp} value={org} onChange={(e) => onOrg(e.target.value)} placeholder="Transportes Pérez SL" />
+        <label style={lbl}>{sector === 'autonomo' ? 'Tu nombre o el de tu negocio' : t('reg.company')}</label>
+        <input style={inp} value={org} onChange={(e) => onOrg(e.target.value)} placeholder={sector === 'autonomo' ? 'Pepe Repartos' : 'Transportes Pérez SL'} />
 
         <label style={lbl}>{t('reg.url')}</label>
         <div style={{ display: 'flex', alignItems: 'center', border: '1px solid rgba(255,255,255,.12)', borderRadius: 10, background: '#0e1116', overflow: 'hidden' }}>
@@ -388,10 +407,12 @@ export default function Registro() {
 
         {/* Con varias naves se escriben todas: el plan de una sola se queda
             con la primera. Sin esto la segunda nave no se podía dar de alta. */}
+        {sector !== 'autonomo' && <>
         <label style={lbl}>{selectedPlan === 'operacion' ? t('reg.center') : 'Tus sedes'}</label>
         <input style={inp} value={center} onChange={(e) => setCenter(e.target.value)}
           placeholder={reparte ? 'Tienda centro' : selectedPlan === 'operacion' ? 'Norte' : 'Norte, Sur, Este'} />
         {selectedPlan !== 'operacion' && <div style={hint}>Sepáralos con comas. Podrás añadir más después.</div>}
+        </>}
 
         <label style={lbl}>Email de contacto</label>
         <input style={inp} type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="admin@tuempresa.com" autoComplete="email" />
@@ -419,7 +440,7 @@ export default function Registro() {
           <input type="checkbox" checked={accept} onChange={(e) => setAccept(e.target.checked)} style={{ marginTop: 2 }} />
           <span>
             Acepto los <a href="/terminos" target="_blank" style={{ color: '#0ea5e9' }}>Términos</a>, el <a href="/encargo" target="_blank" style={{ color: '#0ea5e9' }}>Acuerdo de Encargo del Tratamiento</a> y la <a href="/privacidad" target="_blank" style={{ color: '#0ea5e9' }}>Política de Privacidad</a>.
-            {' '}Prueba gratuita de 14 días — sin cobro durante la prueba. Al finalizar se cobra el plan {planInfo.name} ({displayPrice}€/mes) salvo cancelación.
+            {' '}Prueba gratuita de {diasPrueba} días — sin cobro durante la prueba. Al finalizar se cobra el plan {planInfo.name} ({precioFijo ? displayPrice.toFixed(2).replace('.', ',') : displayPrice} €/mes) salvo cancelación.
           </span>
         </label>
 

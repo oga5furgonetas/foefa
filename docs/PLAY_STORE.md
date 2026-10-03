@@ -54,6 +54,37 @@ Para una versión nueva: subir `versionCode` (entero, siempre mayor) y
 hace falta una versión nueva si cambia algo del propio envoltorio (icono,
 nombre, `targetSdk` que Play exija).
 
+## El plan del autónomo: 7 días gratis y 9,99 €/mes
+
+Quien se da de alta como «Repartidor autónomo» no elige plan: entra en el plan
+**Autónomo** (`PLAN_TARIFAS["autonomo"]`): **7 días de prueba** sin tarjeta y
+después **9,99 €/mes** fijos (o **99 €/año**, 10 meses). Límites: 1 repartidor
+(él), 2 vehículos, 1 base; todo el reparto, su furgoneta, taller y vencimientos;
+sin chat de equipo ni informe pericial. Al acabar la prueba el panel enseña el
+aviso de pago (`TrialBanner`) con el botón de pagar.
+
+**Para que el botón de pagar funcione** (hoy dice «pasarela no configurada»),
+Dani tiene que crear en **Lemon Squeezy** (la pasarela que ya usa el resto de
+planes; emite las facturas con IVA): un producto «Flota Autónomo» con variante
+mensual 9,99 € y, si quiere, anual 99 €, y poner en Fly los secretos
+`LS_CHECKOUT_AUTONOMO` y `LS_CHECKOUT_AUTONOMO_ANNUAL` (las URLs de checkout)
+más `LS_WEBHOOK_SECRET` (si no está ya). El webhook reconoce el producto por
+su nombre («Autónomo»).
+
+**Cobrar dentro de la app de Play Store** (importante, cambió el 30-06-2026):
+una suscripción que desbloquea funciones de la app es un «servicio digital» y
+Google quiere su parte. Desde el 30-06-2026, en la UE (y EE. UU. y Reino
+Unido) Google permite **mandar al usuario a pagar en la web** (programa
+«External Content Links») o usar una pasarela propia dentro de la app, pero
+cobra igualmente una **comisión del 10 %** de lo ingresado por esa vía (con
+Google Play Billing serían 10 % + 5 %). Hay que **apuntarse al programa** en
+Play Console y declarar los enlaces. Alternativa limpia: que el autónomo se
+suscriba en flotadsp.com (web, sin la app) y la app solo sirva para usarlo;
+lo que se contrata fuera de la app, sin enlaces desde ella, no paga comisión.
+En la práctica: en la app, al acabar la prueba, el botón de pagar lleva a la
+web de Lemon Squeezy; si Google lo revisa y lo considera venta desde la app,
+toca apuntarse al programa (10 %) o quitar el botón dentro de la app.
+
 ## Lo que tiene que hacer Dani (no se puede hacer por él)
 
 1. **Cuenta de desarrollador de Google Play**: https://play.google.com/console

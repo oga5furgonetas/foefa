@@ -101,7 +101,10 @@ export function decodeToken() {
 const HUELLA_KEY = 'flota_huella'
 // La sesión real guardada mientras se mira una demo (ver `guardarSesionPrevia`).
 const PREVIA_KEY = 'flota_sesion_previa'
-const SE_QUEDAN = new Set([TOKEN_KEY, ADMIN_KEY, ACCESO_KEY, HUELLA_KEY, 'flota_token_super', PREVIA_KEY, 'flota_lang',
+// `panel_center` se queda: el nombre de un centro no es un dato personal y el
+// selector solo admite los de la empresa actual (borrarlo dejaba el panel en
+// «Todos» en cada entrada y media docena de pantallas pidiendo centro).
+const SE_QUEDAN = new Set([TOKEN_KEY, ADMIN_KEY, ACCESO_KEY, HUELLA_KEY, 'flota_token_super', PREVIA_KEY, 'flota_lang', 'panel_center',
   'panel_theme', 'panel_theme_elegido', 'ld_theme', 'cookie_consent', 'flota_driver_token', 'flota_driver',
   'flota_plan', 'flota_billing'])
 // Marcas que ya llevan el id del usuario dentro: no se mezclan.
