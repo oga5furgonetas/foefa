@@ -17,7 +17,7 @@ export async function reclassifyRecent(db: Db, hours: number): Promise<{ items: 
   const rows = await db
     .select()
     .from(rawItems)
-    .where(and(eq(rawItems.status, 'normalized'), gte(rawItems.fetchedAt, since)));
+    .where(and(inArray(rawItems.status, ['normalized', 'clustered']), gte(rawItems.fetchedAt, since)));
   if (!rows.length) return { items: 0, stories: 0, articles: 0, hidden: 0 };
   const srcRows = await db.select().from(sources).where(inArray(sources.id, [...new Set(rows.map((r) => r.sourceId))]));
   const srcById = new Map(srcRows.map((s) => [s.id, s]));
