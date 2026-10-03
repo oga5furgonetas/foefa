@@ -1,12 +1,14 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import {
   ArrowLeft, ScanLine, Camera, Loader2, Navigation, Phone, Check, X, Route, MapPin, Play, Square, Package,
+  MessageCircle, Clock,
 } from 'lucide-react'
 import {
   repMiRuta, repEscanear, repLeerTicket, repNuevoPedido, repEstado, repOrdenar, repJornada, repPosicion,
 } from '../../services/api'
 import { lista } from '../../lib/lista'
 import { compressImage } from '../../lib/compressImage'
+import { origen } from '../../marca'
 import { leerTicketEnMovil } from '../../lib/leerTicket'
 
 /* ── MI RUTA ────────────────────────────────────────────────────────────────
@@ -22,13 +24,35 @@ import { leerTicketEnMovil } from '../../lib/leerTicket'
 
 const inp = 'w-full rounded-xl border border-dark-700 bg-dark-900 px-3 py-2.5 text-[15px] text-dark-50 placeholder:text-dark-500 focus:border-brand-500 focus:outline-none'
 const MOTIVOS = ['No había nadie', 'Dirección incorrecta', 'Rechazado', 'Fuera de horario', 'Otro']
-const VACIO = { codigo: '', cliente: '', telefono: '', direccion: '', contenido: '', bultos: 1, notas: '' }
+const VACIO = { codigo: '', cliente: '', telefono: '', direccion: '', contenido: '', bultos: 1, notas: '', horario: '', prioridad: false, cobrar: '', tipo: 'entrega' }
+
+/* WhatsApp solo para móviles españoles (6 o 7 y nueve cifras): a un fijo no
+   llega, y un botón que abre WhatsApp para nada es peor que no tenerlo. */
+function movilWhatsApp(tel) {
+  const d = String(tel || '').replace(/\D/g, '').replace(/^0034/, '').replace(/^34(?=\d{9}$)/, '')
+  return /^[67]\d{8}$/.test(d) ? `34${d}` : ''
+}
+/* El mensaje lleva la hora estimada y el enlace de seguimiento (sin datos
+   personales). Sin enlace, el mensaje de siempre. */
+function mensaje(p, empresa) {
+  const quien = empresa ? `el repartidor de ${empresa}` : 'el repartidor'
+  const que = p.tipo === 'recogida' ? 'a hacer la recogida' : 'con su pedido'
+  const cuando = p.eta ? `, llegada aproximada a las ${p.eta}` : ''
+  const enlace = p.seguimiento ? ` Puede seguirlo aquí: ${origen()}/s/${p.seguimiento}` : ''
+  return `Hola, soy ${quien}. Voy de camino ${que}${cuando}.${enlace}`
+}
+const euros = (n) => `${Number(n || 0).toFixed(2).replace('.', ',')} €`
+
+function minutosATexto(m) {
+  const h = Math.floor(m / 60)
+  return `${h ? `${h} h ` : ''}${m % 60} min`
+}
 
 const navegar = (p) => (p.lat != null
   ? `https://www.google.com/maps/dir/?api=1&destination=${p.lat},${p.lng}`
   : `https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(p.direccion || '')}`)
 
-export default function MiRuta({ onBack }) {
+export default function MiRuta({ onBack, embebido = false }) {
   const [ruta, setRuta] = useState(null)
   const [err, setErr] = useState('')
   const [aviso, setAviso] = useState('')
@@ -38,6 +62,10 @@ export default function MiRuta({ onBack }) {
   const [ocupado, setOcupado] = useState('')
   const [verAviso, setVerAviso] = useState(false)
   const [fallo, setFallo] = useState(null)
+  const [cobro, setCobro] = useState(null)
+  // {p, pago}: la hoja de «foto de la entrega» antes de dar por entregado.
+  const [prueba, setPrueba] = useState(null)
+  const [notaEntrega, setNotaEntrega] = useState('')
 
   const cargar = useCallback(() => {
     repMiRuta().then(({ data }) => setRuta(data))
@@ -120,9 +148,13 @@ export default function MiRuta({ onBack }) {
     } catch (e) { setAviso(e?.response?.data?.detail || 'No se pudo guardar') } finally { setOcupado('') }
   }
 
-  async function marcar(p, estado, motivo) {
+  async function marcar(p, estado, motivo, pago, extra) {
+    // Con importe a cobrar, antes de dar por entregado hay que decir cómo pagó.
+    if (estado === 'entregado' && p.cobrar > 0 && !pago) { setCobro(p); return }
+    // Y después, la prueba de entrega (foto y/o nota), que se puede saltar.
+    if (estado === 'entregado' && !extra) { setCobro(null); setPrueba({ p, pago: pago || null }); setNotaEntrega(''); return }
     setOcupado(p.id)
-    try { await repEstado(p.id, estado, motivo); setFallo(null); cargar() } catch (e) {
+    try { await repEstado(p.id, estado, motivo, { ...(pago || {}), ...(extra || {}) }); setFallo(null); setCobro(null); setPrueba(null); cargar() } catch (e) {
       setAviso(e?.response?.data?.detail || 'No se pudo guardar')
     } finally { setOcupado('') }
   }
@@ -130,7 +162,14 @@ export default function MiRuta({ onBack }) {
   async function ordenar() {
     setOcupado('ordenar')
     const fin = async (punto) => {
-      try { const { data } = await repOrdenar(punto); setAviso(`Ruta ordenada: ${data.ordenados} paradas`); cargar() } catch (e) {
+      try {
+        const { data } = await repOrdenar(punto)
+        const rr = data.ruta
+        setAviso(rr?.fin
+          ? `Ruta ordenada por tiempo: ${data.ordenados} paradas, acabas ≈ ${rr.fin}${rr.fuente === 'linea_recta' ? ' (sin servidor de rutas: calculada por distancia)' : ''}`
+          : `Ruta ordenada: ${data.ordenados} paradas`)
+        cargar()
+      } catch (e) {
         setAviso(e?.response?.data?.detail || 'No se pudo ordenar')
       } finally { setOcupado('') }
     }
@@ -140,17 +179,18 @@ export default function MiRuta({ onBack }) {
       () => fin(null), { timeout: 8000, maximumAge: 60000 })
   }
 
-  if (err) return <Marco onBack={onBack}><p className="text-red-300">{err}</p></Marco>
-  if (!ruta) return <Marco onBack={onBack}><div className="flex justify-center py-16"><Loader2 className="animate-spin text-dark-500" /></div></Marco>
-  if (!ruta.activo) return <Marco onBack={onBack}><p className="text-dark-400">Tu empresa no usa el reparto por aquí.</p></Marco>
+  if (err) return <Marco onBack={onBack} embebido={embebido}><p className="text-red-300">{err}</p></Marco>
+  if (!ruta) return <Marco onBack={onBack} embebido={embebido}><div className="flex justify-center py-16"><Loader2 className="animate-spin text-dark-500" /></div></Marco>
+  if (!ruta.activo) return <Marco onBack={onBack} embebido={embebido}><p className="text-dark-400">Tu empresa no usa el reparto por aquí.</p></Marco>
 
   const pendientes = lista(ruta.pedidos).filter((p) => !['entregado', 'fallido'].includes(p.estado))
   const hechos = lista(ruta.pedidos).filter((p) => ['entregado', 'fallido'].includes(p.estado))
 
   return (
-    <Marco onBack={onBack}>
-      {/* JORNADA Y UBICACIÓN */}
-      {jornadaAbierta ? (
+    <Marco onBack={onBack} embebido={embebido}>
+      {/* JORNADA Y UBICACIÓN. El autónomo no tiene oficina que le siga: a él
+          no se le pide compartir nada. */}
+      {ruta.autonomo ? null : jornadaAbierta ? (
         <div className="mb-3 flex items-center justify-between gap-2 rounded-2xl border border-emerald-500/30 bg-emerald-500/[.07] px-3.5 py-2.5">
           <span className="flex items-center gap-2 text-[12.5px] text-emerald-200">
             <span className="h-2 w-2 animate-pulse rounded-full bg-emerald-400" /> En jornada · la oficina ve tu ubicación
@@ -169,10 +209,20 @@ export default function MiRuta({ onBack }) {
 
       {/* ESCANEAR */}
       <div className="rounded-2xl border border-brand-400/40 bg-brand-500/[.08] p-3.5">
-        <button onClick={() => setEscaner(true)}
-          className="flex w-full items-center justify-center gap-2 rounded-xl bg-brand-500 py-3.5 text-[16px] font-bold text-white active:scale-[.99]">
-          <ScanLine size={20} /> Escanear bulto
-        </button>
+        <div className="grid grid-cols-2 gap-2">
+          <button onClick={() => setEscaner(true)}
+            className="flex items-center justify-center gap-2 rounded-xl bg-brand-500 py-3.5 text-[15px] font-bold text-white active:scale-[.99]">
+            <ScanLine size={19} /> Escanear
+          </button>
+          {/* La etiqueta del paquete trae dirección y teléfono: con una foto
+              entra en la ruta sin que nadie haya metido la lista antes. Es lo
+              que usa el autónomo que carga sus paquetes y sale. */}
+          <label className="flex cursor-pointer items-center justify-center gap-2 rounded-xl border border-brand-400/60 py-3.5 text-[15px] font-bold text-brand-200 active:scale-[.99]">
+            {ocupado === 'ticket' ? <Loader2 size={19} className="animate-spin" /> : <Camera size={19} />} Foto etiqueta
+            <input type="file" accept="image/*" capture="environment" className="hidden" disabled={ocupado === 'ticket'}
+              onChange={(e) => { const f = e.target.files?.[0]; e.target.value = ''; if (f) { setNuevo({ ...VACIO }); leerTicket(f) } }} />
+          </label>
+        </div>
         <div className="mt-2.5 flex gap-2">
           <input className={inp} value={codigo} onChange={(e) => setCodigo(e.target.value)} inputMode="text"
             placeholder="o escribe el código" onKeyDown={(e) => e.key === 'Enter' && buscar(codigo)} />
@@ -200,9 +250,20 @@ export default function MiRuta({ onBack }) {
           {ocupado === 'ordenar' ? <Loader2 size={13} className="animate-spin" /> : <Route size={13} />} Ordenar ruta
         </button>
       </div>
+      {ruta.ruta?.fin && pendientes.length > 0 && (
+        <p className="mb-2 flex flex-wrap items-center gap-x-2 rounded-xl bg-dark-900 px-3 py-2 text-[12.5px] text-dark-300">
+          <Clock size={13} className="text-brand-300" />
+          <span>Acabas ≈ <b className="text-dark-50">{ruta.ruta.fin}</b></span>
+          <span>· {minutosATexto(ruta.ruta.minutos)} · {ruta.ruta.km} km</span>
+          <span className="text-dark-500">· {ruta.ruta.fuente === 'linea_recta' ? 'por distancia' : ruta.ruta.trafico ? 'con tráfico típico' : 'sin tráfico'}</span>
+          {ruta.ruta.tarde > 0 && <span className="text-red-300">· {ruta.ruta.tarde} min tarde en alguna franja</span>}
+        </p>
+      )}
       {pendientes.length === 0 && (
         <p className="rounded-xl border border-dashed border-dark-700 px-4 py-6 text-center text-[13px] text-dark-400">
-          Escanea los bultos según los cargas y se irán poniendo aquí.
+          {ruta.autonomo
+            ? 'Escanea cada paquete o hazle una foto a la etiqueta: la dirección y el teléfono entran solos. Luego «Ordenar ruta».'
+            : 'Escanea los bultos según los cargas y se irán poniendo aquí.'}
         </p>
       )}
       <div className="flex flex-col gap-2.5">
@@ -211,8 +272,21 @@ export default function MiRuta({ onBack }) {
             <div className="flex items-start gap-3">
               <span className="mt-0.5 flex h-7 min-w-7 items-center justify-center rounded-full bg-brand-500 px-1.5 text-[13px] font-bold text-white">{p.orden ?? i + 1}</span>
               <div className="min-w-0 flex-1">
-                <p className="text-[15px] font-semibold text-dark-50">{p.cliente || 'Cliente'}</p>
+                <div className="flex items-start justify-between gap-2">
+                  <p className="text-[15px] font-semibold text-dark-50">{p.cliente || 'Cliente'}</p>
+                  {p.eta && <span className={`shrink-0 text-[13px] font-bold ${p.tarde_min ? 'text-red-300' : 'text-brand-200'}`}>≈ {p.eta}</span>}
+                </div>
+                {(p.prioridad || p.ventana_desde || p.tarde_min > 0 || p.tipo === 'recogida' || p.cobrar > 0) && (
+                  <div className="mt-0.5 flex flex-wrap gap-1.5 text-[11px]">
+                    {p.prioridad && <span className="rounded bg-amber-500/15 px-1.5 font-bold text-amber-300">URGENTE</span>}
+                    {p.tipo === 'recogida' && <span className="rounded bg-violet-500/15 px-1.5 font-bold text-violet-300">RECOGIDA</span>}
+                    {p.cobrar > 0 && <span className="rounded bg-emerald-500/15 px-1.5 font-bold text-emerald-300">COBRAR {euros(p.cobrar)}</span>}
+                    {p.ventana_desde && <span className="rounded bg-dark-800 px-1.5 text-dark-300">Horario {p.ventana_desde}–{p.ventana_hasta}</span>}
+                    {p.tarde_min > 0 && <span className="rounded bg-red-500/15 px-1.5 text-red-300">llega {p.tarde_min} min tarde</span>}
+                  </div>
+                )}
                 <p className="text-[13px] leading-snug text-dark-300">{p.direccion}</p>
+                {p.telefono && <p className="text-[12.5px] text-dark-400">{p.telefono}</p>}
                 {p.contenido && <p className="mt-1 flex items-start gap-1 text-[12.5px] text-dark-400"><Package size={13} className="mt-0.5 shrink-0" /> {p.contenido}</p>}
                 <p className="mt-0.5 text-[11.5px] text-dark-500">
                   {p.bultos} bulto{p.bultos > 1 ? 's' : ''}{p.escaneos ? ` · ${p.escaneos} escaneado${p.escaneos > 1 ? 's' : ''}` : ''}
@@ -220,14 +294,20 @@ export default function MiRuta({ onBack }) {
                 </p>
               </div>
             </div>
-            <div className="mt-3 grid grid-cols-4 gap-1.5">
+            <div className="mt-3 grid grid-cols-3 gap-1.5">
               <a href={navegar(p)} target="_blank" rel="noreferrer" className="flex flex-col items-center gap-0.5 rounded-xl border border-dark-700 py-2 text-[11px] text-dark-200"><Navigation size={16} /> Ir</a>
               {p.telefono
                 ? <a href={`tel:${p.telefono}`} className="flex flex-col items-center gap-0.5 rounded-xl border border-dark-700 py-2 text-[11px] text-dark-200"><Phone size={16} /> Llamar</a>
-                : <span className="flex flex-col items-center gap-0.5 rounded-xl border border-dark-800 py-2 text-[11px] text-dark-600"><Phone size={16} /> —</span>}
-              <button onClick={() => setFallo(p)} disabled={ocupado === p.id} className="flex flex-col items-center gap-0.5 rounded-xl border border-red-500/30 py-2 text-[11px] text-red-300"><X size={16} /> No</button>
-              <button onClick={() => marcar(p, 'entregado')} disabled={ocupado === p.id} className="flex flex-col items-center gap-0.5 rounded-xl bg-emerald-600 py-2 text-[11px] font-semibold text-white">
-                {ocupado === p.id ? <Loader2 size={16} className="animate-spin" /> : <Check size={16} />} Entregado
+                : <span className="flex flex-col items-center gap-0.5 rounded-xl border border-dark-800 py-2 text-[11px] text-dark-600"><Phone size={16} /> Sin teléfono</span>}
+              {movilWhatsApp(p.telefono)
+                ? <a href={`https://wa.me/${movilWhatsApp(p.telefono)}?text=${encodeURIComponent(mensaje(p, ruta.empresa))}`} target="_blank" rel="noreferrer"
+                    className="flex flex-col items-center gap-0.5 rounded-xl border border-emerald-600/50 py-2 text-[11px] text-emerald-300"><MessageCircle size={16} /> WhatsApp</a>
+                : <span className="flex flex-col items-center gap-0.5 rounded-xl border border-dark-800 py-2 text-[11px] text-dark-600"><MessageCircle size={16} /> —</span>}
+            </div>
+            <div className="mt-1.5 grid grid-cols-[1fr_2fr] gap-1.5">
+              <button onClick={() => setFallo(p)} disabled={ocupado === p.id} className="flex items-center justify-center gap-1 rounded-xl border border-red-500/30 py-2.5 text-[13px] text-red-300"><X size={15} /> {p.tipo === 'recogida' ? 'No recogido' : 'No entregado'}</button>
+              <button onClick={() => marcar(p, 'entregado')} disabled={ocupado === p.id} className="flex items-center justify-center gap-1.5 rounded-xl bg-emerald-600 py-2.5 text-[14px] font-semibold text-white">
+                {ocupado === p.id ? <Loader2 size={16} className="animate-spin" /> : <Check size={16} />} {p.tipo === 'recogida' ? 'Recogido' : 'Entregado'}
               </button>
             </div>
           </div>
@@ -267,6 +347,17 @@ export default function MiRuta({ onBack }) {
             <input className={inp} placeholder="Cliente" value={nuevo.cliente} onChange={(e) => setNuevo({ ...nuevo, cliente: e.target.value })} />
             <input className={inp} placeholder="Teléfono" inputMode="tel" value={nuevo.telefono} onChange={(e) => setNuevo({ ...nuevo, telefono: e.target.value })} />
             <input className={inp} placeholder="Qué lleva" value={nuevo.contenido} onChange={(e) => setNuevo({ ...nuevo, contenido: e.target.value })} />
+            <input className={inp} placeholder="Horario del cliente (ej. de 10 a 12)" value={nuevo.horario || ''} onChange={(e) => setNuevo({ ...nuevo, horario: e.target.value })} />
+            <div className="grid grid-cols-2 gap-2">
+              <input className={inp} inputMode="decimal" placeholder="A cobrar (€)" value={nuevo.cobrar || ''} onChange={(e) => setNuevo({ ...nuevo, cobrar: e.target.value })} />
+              <select className={inp} value={nuevo.tipo || 'entrega'} onChange={(e) => setNuevo({ ...nuevo, tipo: e.target.value })} aria-label="Tipo de parada">
+                <option value="entrega">Entrega</option>
+                <option value="recogida">Recogida</option>
+              </select>
+            </div>
+            <label className="flex items-center gap-2 text-[14px] text-dark-200">
+              <input type="checkbox" checked={!!nuevo.prioridad} onChange={(e) => setNuevo({ ...nuevo, prioridad: e.target.checked })} /> Urgente
+            </label>
             <div className="flex items-center gap-2 text-[13px] text-dark-300">
               Bultos <input className={`${inp} w-20`} type="number" min="1" max="99" value={nuevo.bultos} onChange={(e) => setNuevo({ ...nuevo, bultos: e.target.value })} />
             </div>
@@ -279,8 +370,55 @@ export default function MiRuta({ onBack }) {
         </Hoja>
       )}
 
+      {cobro && (
+        <Hoja titulo={`Cobrar ${euros(cobro.cobrar)}`} onClose={() => setCobro(null)}>
+          <p className="mb-3 text-[13px] text-dark-400">¿Cómo ha pagado?</p>
+          <div className="grid grid-cols-3 gap-2">
+            {[['efectivo', 'Efectivo'], ['tarjeta', 'Tarjeta'], ['bizum', 'Bizum']].map(([k, t]) => (
+              <button key={k} onClick={() => marcar(cobro, 'entregado', '', { metodo: k })}
+                className="rounded-xl bg-emerald-600 py-3.5 text-[15px] font-bold text-white">{t}</button>
+            ))}
+          </div>
+          <button onClick={() => marcar(cobro, 'fallido', 'No ha pagado')}
+            className="mt-3 w-full rounded-xl border border-red-500/30 py-3 text-[14px] text-red-300">No ha pagado: no lo entrego</button>
+        </Hoja>
+      )}
+
+      {prueba && (
+        <Hoja titulo="Prueba de entrega" onClose={() => setPrueba(null)}>
+          <p className="mb-3 text-[13px] text-dark-400">
+            Una foto del paquete donde lo dejas (en el portal, con el vecino…) evita discusiones después.
+            <b className="text-dark-200"> Sin personas en la foto.</b> Es opcional.
+          </p>
+          <label className="flex w-full cursor-pointer items-center justify-center gap-2 rounded-xl bg-brand-500 py-3.5 text-[15px] font-bold text-white">
+            {ocupado === 'foto' ? <Loader2 size={18} className="animate-spin" /> : <Camera size={18} />}
+            {ocupado === 'foto' ? 'Guardando…' : 'Hacer foto y entregar'}
+            <input type="file" accept="image/*" capture="environment" className="hidden" disabled={!!ocupado}
+              onChange={async (e) => {
+                const f = e.target.files?.[0]; e.target.value = ''
+                if (!f) return
+                setOcupado('foto')
+                try {
+                  // Pequeña a propósito: 640 px y calidad 0,6 son ~40-70 KB, de sobra
+                  // para ver dónde quedó, y cabe en el pedido sin fotos sueltas por ahí.
+                  const blob = await compressImage(f, 640, 0.6)
+                  const foto = await new Promise((ok, ko) => { const r = new FileReader(); r.onload = () => ok(r.result); r.onerror = ko; r.readAsDataURL(blob) })
+                  await marcar(prueba.p, 'entregado', '', prueba.pago || { sin_cobro: true }, { foto, nota: notaEntrega })
+                } catch { setAviso('No se pudo guardar la foto'); setOcupado('') }
+              }} />
+          </label>
+          <input className={`${inp} mt-2`} placeholder="Nota (opcional): «al vecino del 2º», «en el buzón»…" value={notaEntrega}
+            onChange={(e) => setNotaEntrega(e.target.value)} />
+          <button onClick={() => marcar(prueba.p, 'entregado', '', prueba.pago || { sin_cobro: true }, { nota: notaEntrega })}
+            disabled={!!ocupado}
+            className="mt-3 w-full rounded-xl border border-dark-600 py-3 text-[14px] font-semibold text-dark-100">
+            Entregar sin foto
+          </button>
+        </Hoja>
+      )}
+
       {fallo && (
-        <Hoja titulo="¿Por qué no se ha entregado?" onClose={() => setFallo(null)}>
+        <Hoja titulo={fallo.tipo === 'recogida' ? '¿Por qué no se ha recogido?' : '¿Por qué no se ha entregado?'} onClose={() => setFallo(null)}>
           <div className="flex flex-col gap-2">
             {MOTIVOS.map((m) => (
               <button key={m} onClick={() => marcar(fallo, 'fallido', m)}
@@ -308,7 +446,9 @@ export default function MiRuta({ onBack }) {
   )
 }
 
-function Marco({ onBack, children }) {
+function Marco({ onBack, children, embebido }) {
+  // Dentro del panel (el autónomo) va sin pantalla completa ni botón de volver.
+  if (embebido) return <div className="mx-auto max-w-md">{children}</div>
   return (
     <div className="min-h-screen bg-dark-950 px-4 py-5">
       <div className="mx-auto max-w-md">

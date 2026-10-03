@@ -47,8 +47,26 @@ Pantallas: `panel/pages/Reparto.jsx`, `pages/driver/MiRuta.jsx`,
 | Geocodificación | Norma de uso de Nominatim | 1 petición/s con User-Agent propio. Si el volumen crece (muchas empresas), hay que pasar a un servicio propio o de pago: Nominatim público no admite uso masivo. |
 | Mapa | Norma de uso de teselas de OSM | Válido para poco uso con atribución (puesta). Con muchos clientes, proveedor de teselas propio. La web del panel pide teselas a OSM: mencionarlo en la política de privacidad (IP del usuario). |
 | Sistemas de terceros | Lo que pasó con Amazon (24-09) | Nada se lee de sistemas ajenos: ni de la caja del súper ni de la app de Disgón. Solo lo que la empresa mete, pega o escanea de sus propias cajas. Integrar con su TPV/ERP solo con su autorización y su API. |
+| Ruta por tiempo | Norma de uso de FOSSGIS | Matriz de tiempos por carretera del servidor de rutas de OpenStreetMap (FOSSGIS, UE): solo coordenadas, 1 petición/s, identificados, atribución y enlace «corregir el mapa» bajo el mapa. Tráfico: **típico por hora** (estimación, se dice así), no en vivo; el tráfico real solo lo dan servicios de pago (TomTom, HERE, Google) con clave. Si el volumen crece: OSRM propio (`REPARTO_RUTAS_URL`). |
+| Enlace de seguimiento del cliente | RGPD art. 5.1.c y 25 | `/s/<token>`: estado, hora estimada, paradas antes y franja. Sin nombre, dirección, teléfono, contenido ni ubicación del repartidor (lo prueba `test_seguimiento_del_cliente_sin_datos_personales`). Token de 128 bits, caduca al día siguiente, `Disallow: /s/` y `noindex`. |
+| Prueba de entrega (foto) | RGPD art. 5.1.c, 6.1.b | Foto pequeña (640 px, ~50 KB) del paquete donde se deja, guardada en el propio pedido en la base de la empresa (no en el R2 público), nunca en la lista ni en «mi ruta» (se pide una a una), y se borra con el resto de datos personales. La pantalla pide «sin personas en la foto». Es la práctica estándar del sector (Routific, Onfleet). |
+| Cobro a la entrega | — | Importe a cobrar y método (efectivo, tarjeta, Bizum): no se guarda ningún dato de pago, solo cómo pagó y cuánto. |
+| WhatsApp/llamar al cliente | RGPD art. 6.1.b | Desde el móvil del repartidor y para la entrega (ejecución del contrato del cliente con la empresa). WhatsApp solo con móviles; el mensaje es fijo y neutro. |
 | Marcas | Ley de Marcas | Ni «Amazon» ni nombres de otras apps de rutas en pantalla (`check-marca`). |
 | Llamar al cliente | — | «Llamar» usa el teléfono del conductor, que el cliente verá. Si hace falta ocultarlo, llamadas enmascaradas (no hecho). |
+
+### Hecho el 03-10 (noche)
+- Ruta por TIEMPO (`reparto.optimiza_por_tiempo`): matriz por carretera, tráfico típico por hora,
+  minutos por parada y por bulto, franjas del cliente (columna «horario» o nota que hable de
+  horas; «portal 5-7» no cuenta), urgentes, hora de salida, volver al almacén; hora estimada
+  de cada parada y aviso de «llegará tarde».
+- Autónomo (`sector: autonomo`): es su propio repartidor; «Mi ruta» dentro de su panel; foto
+  de la etiqueta; llamar y WhatsApp en cada parada; demo propia y aislada por visitante.
+- Panel por sector: inicio de reparto, «Tiendas/Almacenes», «Repartidores», sin cierres de
+  turno ni ejemplos de paquetería; avisos en vivo solo de los módulos que tiene la empresa.
+- Nada de una empresa en otra: lo guardado en el navegador se borra al cambiar de sesión
+  (`aislarSesion`). Lo destapó la demo enseñando avisos de OGA5 de la sesión anterior.
+- Seguimiento para el cliente, cobro a la entrega, recogidas y «reintentar mañana».
 
 ### Hecho el 03-10 (tarde)
 - Contrato de encargo publicado y aceptado en el alta; política de privacidad

@@ -1714,7 +1714,7 @@ function AddVehicleModal({ centers, onSaved, onClose }) {
                     {centers.map(c => <option key={c} value={c}>{c}</option>)}
                   </select>
                 ) : (
-                  <input className="input w-full text-sm" placeholder="OGA5, DGA1…" value={form.center} onChange={e => set('center', e.target.value)} />
+                  <input className="input w-full text-sm" placeholder="Norte, Sur…" value={form.center} onChange={e => set('center', e.target.value)} />
                 )}
               </div>
             </div>

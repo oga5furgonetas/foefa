@@ -225,6 +225,7 @@ const Login = lazy(() => import('./pages/Login'))
 const ResetPassword = lazy(() => import('./pages/ResetPassword'))
 const Registro = lazy(() => import('./pages/Registro'))
 const PruebaReparto = lazy(() => import('./pages/PruebaReparto'))
+const SeguimientoPedido = lazy(() => import('./pages/SeguimientoPedido'))
 const Planes = lazy(() => import('./pages/Planes'))
 const DriverPortal = lazy(() => import('./pages/driver/DriverPortal'))
 const PanelLogin = lazy(() => import('./panel/PanelLogin'))
@@ -289,8 +290,16 @@ const Verify = lazy(() => import('./pages/Verify'))
 const NotFound = lazy(() => import('./pages/NotFound'))
 
 /* Toda la app vive en /panel. /app es un alias legado que redirige al panel nuevo. */
+/* /app: por donde arranca la APP instalada (Play Store, PWA). Lleva a cada
+   uno a lo suyo: el repartidor a su ruta, la oficina al panel, y quien no ha
+   entrado nunca a la pantalla de entrar, que ofrece darse de alta. */
 function AppRedirect() {
-  window.location.replace('/panel')
+  let destino = '/login'
+  try {
+    if (localStorage.getItem('flota_driver_token')) destino = '/conductor?vista=ruta'
+    else if (localStorage.getItem('flota_token')) destino = '/panel'
+  } catch { /* sin almacenamiento */ }
+  window.location.replace(destino)
   return null
 }
 
@@ -329,6 +338,7 @@ ReactDOM.createRoot(document.getElementById('root')).render(
               <Route path="/reset-password" element={<ResetPassword />} />
               <Route path="/registro" element={<Registro />} />
               <Route path="/prueba-reparto" element={<PruebaReparto />} />
+              <Route path="/s/:token" element={<SeguimientoPedido />} />
               <Route path="/planes" element={<Planes />} />
               <Route path="/privacidad" element={<Privacidad />} />
               <Route path="/terminos" element={<Terminos />} />

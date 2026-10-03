@@ -36,7 +36,12 @@ function loadPending() {
   } catch { return [] }
 }
 
-export default function LiveNotifier({ center, centers }) {
+/* `ve(clave)`: si la empresa tiene esa pantalla. Sin esto, a un súper con
+   solo el reparto le llegaban avisos de candidatos o de checklist de turnos,
+   que ni tiene ni puede abrir. */
+export default function LiveNotifier({ center, centers, ve = () => true }) {
+  const veRef = useRef(ve)
+  veRef.current = ve
   const nav = useNavigate()
   const loc = useLocation()
   const me = getAdmin()
@@ -73,7 +78,7 @@ export default function LiveNotifier({ center, centers }) {
       const today = hoyLocal()
       for (const c of targets()) {
         // ── CHAT: ¿mensaje nuevo de otra persona? ──
-        try {
+        if (veRef.current('chat')) try {
           const r = await getChat(c)
           const msgs = r.data?.messages || []
           const last = msgs[msgs.length - 1]
@@ -94,7 +99,7 @@ export default function LiveNotifier({ center, centers }) {
         } catch { /* red caída: reintenta al siguiente tick */ }
 
         // ── CHECKLIST: ¿tarea nueva hoy? ──
-        try {
+        if (veRef.current('checklist-operativo')) try {
           const r = await getChecklist(c, today)
           const ids = []
           let firstNewText = null
@@ -118,7 +123,7 @@ export default function LiveNotifier({ center, centers }) {
         } catch { /* siguiente tick */ }
 
         // ── CANDIDATOS: ¿ha entrado gente nueva a Empleo sin mirar? ──
-        try {
+        if (veRef.current('empleo')) try {
           const r = await contarCandidatosNuevos(c)
           const n = r.data?.nuevos || 0
           const k = `ln_cand_${c}`
@@ -144,7 +149,7 @@ export default function LiveNotifier({ center, centers }) {
         // de bloques: sin eso, cada vuelta de 25 s volveria a apuntar la misma.
         // Solo cuenta lo reciente (`PENDING_TTL_MS`): una alerta de hace dias no
         // es un aviso "en vivo" y al abrir el panel un lunes inundaria la lista.
-        try {
+        if (veRef.current('inspecciones')) try {
           const r = await getAlerts(c, 'combustible')
           const k = `ln_fuel_${c}`
           const vistos = new Set(JSON.parse(localStorage.getItem(k) || '[]'))

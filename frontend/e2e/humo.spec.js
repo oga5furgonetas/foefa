@@ -1142,9 +1142,187 @@ test('Reparto · el ticket se lee en el móvil sin mandarlo a nadie', async ({ p
   await page.goto('/conductor', { waitUntil: 'domcontentloaded' })
   await page.getByRole('button', { name: /Mi ruta/ }).click()
   await page.getByRole('button', { name: /Añadir un pedido sin código/ }).click()
-  await page.locator('input[type=file]').setInputFiles('e2e/fixtures/ticket.png')
+  await page.getByRole('dialog').locator('input[type=file]').setInputFiles('e2e/fixtures/ticket.png')
   await expect(page.getByPlaceholder('Dirección completa')).toHaveValue(/Juana de Vega 14/, { timeout: 60000 })
   await expect(page.getByPlaceholder('Dirección completa')).toHaveValue(/15004/)
   await expect(page.getByPlaceholder('Teléfono')).toHaveValue('981123456')
   expect(alServidor).toEqual([])
+})
+
+/* NADA DE UNA EMPRESA EN OTRA (03-10-2026): un aviso que dejó guardado OTRA
+   sesión en este navegador no puede salir al entrar con otra cuenta. Pasó en
+   la demo con «Candidatos nuevos · OGA5». */
+test('Sesión · los avisos de otra empresa no se ven', async ({ page }) => {
+  await page.addInitScript(() => {
+    if (sessionStorage.getItem('sembrado')) return
+    sessionStorage.setItem('sembrado', '1')
+    localStorage.setItem('flota_huella', 'otra-empresa|otro-usuario')
+    localStorage.setItem('ln_pending', JSON.stringify([{ key: 'x', icon: 'candidato', title: 'Candidatos nuevos · OGA5',
+      body: 'de otra empresa', to: '/panel/empleo', ts: Date.now() }]))
+  })
+  await entrarComoAdmin(page)
+  await simularApi(page, 'vacio')
+  await page.goto('/panel/configuracion', { waitUntil: 'domcontentloaded' })
+  await expect(page.getByRole('heading', { name: 'Configuración' })).toBeVisible()
+  await page.waitForTimeout(800)
+  await expect(page.getByText('Candidatos nuevos · OGA5')).toHaveCount(0)
+  expect(await page.evaluate(() => localStorage.getItem('ln_pending'))).not.toContain('OGA5')
+})
+
+/* EL AUTÓNOMO: foto de la etiqueta -> dirección y teléfono -> en su ruta con
+   llamar y WhatsApp, y sin nada de jornada ni ubicación para una oficina. */
+test('Reparto · el autónomo mete un paquete con foto y le salen llamar y WhatsApp', async ({ page }) => {
+  test.setTimeout(90000)
+  const b64 = (o) => btoa(JSON.stringify(o)).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '')
+  const token = `${b64({ alg: 'HS256' })}.${b64({ sub: 'demo-a-1', role: 'driver', name: 'Autónomo', exp: Math.floor(Date.now() / 1000) + 3600 })}.x`
+  await page.addInitScript((t) => {
+    localStorage.setItem('flota_driver_token', t)
+    localStorage.setItem('flota_driver', JSON.stringify({ id: 'demo-a-1', name: 'Autónomo (prueba)' }))
+    localStorage.setItem('cookie_consent', '1')
+  }, token)
+  await simularApi(page, 'vacio')
+  const guardados = []
+  await page.route(/\/api\/reparto\/mis-pedidos/, async (r) => {
+    const b = r.request().postDataJSON(); guardados.push(b)
+    await r.fulfill({ json: { id: 'n1', ...b, estado: 'pendiente', bultos: 1 } })
+  })
+  await page.route(/\/api\/reparto\/mi-ruta/, (r) => r.fulfill({ json: {
+    activo: true, autonomo: true, fecha: '2026-10-03', base: null, ia_tickets: false, jornada: {}, aviso_aceptado: false,
+    pedidos: guardados.map((g, i) => ({ id: `n${i}`, estado: 'pendiente', bultos: 1, orden: i + 1, eta: '10:42', ...g })) } }))
+  await page.goto('/conductor?vista=ruta', { waitUntil: 'domcontentloaded' })
+  await expect(page.getByText('Empezar jornada')).toHaveCount(0)
+  await page.locator('label', { hasText: 'Foto etiqueta' }).locator('input[type=file]').setInputFiles('e2e/fixtures/ticket.png')
+  await expect(page.getByPlaceholder('Teléfono')).toHaveValue('981123456', { timeout: 60000 })
+  // Un fijo: llamar sí, WhatsApp no. Se cambia a un móvil para ver los dos.
+  await page.getByPlaceholder('Teléfono').fill('600 11 22 33')
+  await page.getByRole('button', { name: 'Añadir a mi ruta' }).click()
+  await expect(page.getByRole('link', { name: /Llamar/ })).toHaveAttribute('href', 'tel:600 11 22 33')
+  await expect(page.getByRole('link', { name: /WhatsApp/ })).toHaveAttribute('href', /wa\.me\/34600112233/)
+  await expect(page.getByText('≈ 10:42')).toBeVisible()
+})
+
+/* CADA EMPRESA, SU PANEL (03-10-2026): un súper no ve la portada de flota ni
+   los cierres de turno; ve su reparto, «Tiendas» y «Repartidores». */
+test('Sector · un súper ve el panel de reparto, no el de paquetería', async ({ page }) => {
+  const fallos = vigilar(page)
+  await entrarComoAdmin(page)
+  await simularApi(page, 'vacio')
+  await page.route(/\/api\/org\/billing/, (r) => r.fulfill({ json: {
+    status: 'active', plan: 'completo', sector: 'supermercado',
+    modulos: ['dashboard', 'reparto', 'vehiculos', 'conductores', 'configuracion'] } }))
+  await page.route(/\/api\/reparto\/pedidos/, (r) => r.fulfill({ json: PEDIDOS }))
+  await page.goto('/panel', { waitUntil: 'domcontentloaded' })
+  await expect(page.getByRole('heading', { name: 'El reparto de hoy' })).toBeVisible()
+  await expect(page.getByText('Pedidos hoy')).toBeVisible()
+  await page.goto('/panel/configuracion', { waitUntil: 'domcontentloaded' })
+  await expect(page.getByText('Tiendas', { exact: true })).toBeVisible()
+  await expect(page.getByText('Cierre del turno de mañana')).toHaveCount(0)
+  await expect(page.getByPlaceholder('Nueva tienda (ej. Centro)')).toBeVisible()
+  expect(fallos).toEqual([])
+})
+
+/* EL CLIENTE SIGUE SU PEDIDO: estado, hora y paradas antes; nada personal. */
+test('Reparto · la página de seguimiento del cliente', async ({ page }) => {
+  const fallos = vigilar(page)
+  await page.route(/\/api\/seguimiento\//, (r) => r.fulfill({ json: {
+    empresa: 'Supermercado de prueba', estado: 'pendiente', eta: '10:42', paradas_antes: 2, franja: ['10:00', '12:00'], tipo: 'entrega' } }))
+  await page.goto('/s/abcdefghijklmnopqrstuv', { waitUntil: 'domcontentloaded' })
+  await expect(page.getByText('Llegada aproximada')).toBeVisible()
+  await expect(page.getByText('10:42')).toBeVisible()
+  await expect(page.getByText('Quedan 2 paradas antes de la tuya.')).toBeVisible()
+  expect(fallos).toEqual([])
+})
+
+/* COBRO A LA ENTREGA: con importe, «Entregado» pide cómo ha pagado. */
+test('Reparto · al entregar un pedido a cobrar se elige cómo pagó', async ({ page }) => {
+  const b64 = (o) => btoa(JSON.stringify(o)).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '')
+  const token = `${b64({ alg: 'HS256' })}.${b64({ sub: 'd1', role: 'driver', name: 'ANA', exp: Math.floor(Date.now() / 1000) + 3600 })}.x`
+  await page.addInitScript((t) => {
+    localStorage.setItem('flota_driver_token', t)
+    localStorage.setItem('flota_driver', JSON.stringify({ id: 'd1', name: 'ANA' }))
+    localStorage.setItem('cookie_consent', '1')
+  }, token)
+  await simularApi(page, 'vacio')
+  const enviados = []
+  await page.route(/\/api\/reparto\/pedidos\/p1\/estado/, async (r) => { enviados.push(r.request().postDataJSON()); await r.fulfill({ json: {} }) })
+  await page.route(/\/api\/reparto\/mi-ruta/, (r) => r.fulfill({ json: {
+    activo: true, empresa: 'Súper', fecha: '2026-10-03', ia_tickets: false, jornada: {}, aviso_aceptado: true,
+    pedidos: [{ id: 'p1', cliente: 'Cliente 1', direccion: 'Rúa Real 5', telefono: '600111222', estado: 'pendiente',
+      bultos: 1, orden: 1, eta: '10:42', cobrar: 23.5, seguimiento: 'tok123tok123tok123' }] } }))
+  await page.goto('/conductor?vista=ruta', { waitUntil: 'domcontentloaded' })
+  await expect(page.getByText('COBRAR 23,50 €')).toBeVisible()
+  await expect(page.getByRole('link', { name: /WhatsApp/ })).toHaveAttribute('href', /s%2Ftok123tok123tok123/)
+  await page.getByRole('button', { name: 'Entregado', exact: true }).click()
+  await expect(page.getByText('¿Cómo ha pagado?')).toBeVisible()
+  await page.getByRole('button', { name: 'Bizum' }).click()
+  // Tras el cobro, la prueba de entrega (opcional); aquí sin foto.
+  await expect(page.getByRole('heading', { name: 'Prueba de entrega' })).toBeVisible()
+  await page.getByRole('button', { name: 'Entregar sin foto' }).click()
+  await expect.poll(() => enviados.length).toBe(1)
+  expect(enviados[0]).toMatchObject({ estado: 'entregado', metodo: 'bizum' })
+})
+
+/* LA DEMO NO PISA TU SESIÓN (03-10-2026): Dani entró en la demo del reparto y
+   «le desapareció todo» porque la demo había sustituido su sesión. Ahora la
+   real se guarda y se vuelve con un botón. */
+test('Sesión · entrar en la demo no te quita tu cuenta', async ({ page }) => {
+  // Sesión real puesta UNA vez (no en cada carga, como hace entrarComoAdmin:
+  // eso volvería a poner la real encima de la demo y no probaría nada).
+  const b64 = (o) => btoa(JSON.stringify(o)).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '')
+  const tokenReal = `${b64({ alg: 'HS256' })}.${b64({ sub: 'a1', role: 'admin', name: 'Admin Test', exp: Math.floor(Date.now() / 1000) + 3600 })}.firma`
+  await page.addInitScript((t) => {
+    if (sessionStorage.getItem('sesion_puesta')) return
+    sessionStorage.setItem('sesion_puesta', '1')
+    localStorage.setItem('flota_token', t)
+    localStorage.setItem('flota_admin', JSON.stringify({ id: 'a1', name: 'Admin Test', role: 'admin', centers: ['NORTE'] }))
+    localStorage.setItem('panel_center', 'NORTE'); localStorage.setItem('flota_lang', 'es')
+    localStorage.setItem('cookie_consent', '1'); localStorage.setItem('ayuda_vista_a1', '1')
+  }, tokenReal)
+  await simularApi(page, 'vacio')
+  const _b64 = (o) => btoa(JSON.stringify(o)).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '')
+  const demoTok = `${_b64({ alg: 'HS256' })}.${_b64({ sub: 'demo-oficina', role: 'admin', name: 'Oficina (prueba)', demo: true, db_name: 'dsp_demo_reparto', org_id: 'demo-reparto', exp: Math.floor(Date.now() / 1000) + 3600 })}.x`
+  await page.route(/\/api\/auth\/demo-reparto/, (r) => r.fulfill({ json: { access_token: demoTok, role: 'admin', name: 'Oficina (prueba)', id: 'demo-oficina', demo: true, centers: ['TIENDA'] } }))
+  await page.route(/\/api\/reparto\/pedidos/, (r) => r.fulfill({ json: PEDIDOS }))
+  await page.goto('/prueba-reparto', { waitUntil: 'domcontentloaded' })
+  await page.getByRole('button', { name: /Entrar como la oficina/ }).click()
+  await expect(page).toHaveURL(/\/panel\/reparto/)
+  await expect(page.getByText(/Demo de reparto/)).toBeVisible()
+  await page.getByRole('button', { name: 'Volver a mi cuenta' }).click()
+  await expect(page).toHaveURL(/\/panel$/)
+  expect(await page.evaluate(() => localStorage.getItem('flota_token'))).toBe(tokenReal)
+  expect(await page.evaluate(() => localStorage.getItem('flota_sesion_previa'))).toBeNull()
+})
+
+test('Alta · la tarjeta de DSP de Amazon y la de autónomo están', async ({ page }) => {
+  await page.goto('/registro', { waitUntil: 'domcontentloaded' })
+  await expect(page.getByRole('button', { name: /DSP de Amazon/ })).toBeVisible()
+  await expect(page.getByRole('button', { name: /Repartidor autónomo/ })).toBeVisible()
+  await expect(page.getByRole('button', { name: /Mensajería y paquetería/ })).toBeVisible()
+  await page.getByRole('button', { name: /DSP de Amazon/ }).click()
+  await expect(page).toHaveURL(/sector=dsp_amazon/)
+})
+
+/* PRUEBA DE ENTREGA: al entregar sin cobro se ofrece la foto; «sin foto»
+   manda la nota; en la oficina la foto se pide una a una. */
+test('Reparto · prueba de entrega con nota y la oficina ve la foto', async ({ page }) => {
+  const b64 = (o) => btoa(JSON.stringify(o)).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '')
+  const token = `${b64({ alg: 'HS256' })}.${b64({ sub: 'd1', role: 'driver', name: 'ANA', exp: Math.floor(Date.now() / 1000) + 3600 })}.x`
+  await page.addInitScript((t) => {
+    localStorage.setItem('flota_driver_token', t)
+    localStorage.setItem('flota_driver', JSON.stringify({ id: 'd1', name: 'ANA' }))
+    localStorage.setItem('cookie_consent', '1')
+  }, token)
+  await simularApi(page, 'vacio')
+  const enviados = []
+  await page.route(/\/api\/reparto\/pedidos\/p1\/estado/, async (r) => { enviados.push(r.request().postDataJSON()); await r.fulfill({ json: {} }) })
+  await page.route(/\/api\/reparto\/mi-ruta/, (r) => r.fulfill({ json: {
+    activo: true, fecha: '2026-10-03', ia_tickets: false, jornada: {}, aviso_aceptado: true,
+    pedidos: [{ id: 'p1', cliente: 'Cliente 1', direccion: 'Rúa Real 5', estado: 'pendiente', bultos: 1, orden: 1 }] } }))
+  await page.goto('/conductor?vista=ruta', { waitUntil: 'domcontentloaded' })
+  await page.getByRole('button', { name: 'Entregado', exact: true }).click()
+  await expect(page.getByRole('heading', { name: 'Prueba de entrega' })).toBeVisible()
+  await page.getByPlaceholder(/Nota \(opcional\)/).fill('En el buzón')
+  await page.getByRole('button', { name: 'Entregar sin foto' }).click()
+  await expect.poll(() => enviados.length).toBe(1)
+  expect(enviados[0]).toMatchObject({ estado: 'entregado', nota: 'En el buzón' })
 })

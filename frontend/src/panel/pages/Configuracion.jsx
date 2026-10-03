@@ -6,6 +6,8 @@ import { getOrgCenters, addOrgCenter, getTelegramConfig,
   getWhatsappEstado, getWhatsappPendientes, marcarWhatsappHecho, setWhatsappConfig, probarWhatsapp, crearPlantillasWhatsapp, getOrgBilling, getBillingUso, listarDestinatarios, guardarDestinatario, borrarDestinatario, enviarResumenDiario, getHorariosAvisos, setHorariosAvisos } from '../api'
 import { lista } from '../../lib/lista'
 import { getAdmin, isSuperAdmin } from '../auth'
+import { usePlan } from '../../lib/usePlan'
+import { voces, esReparto } from '../../lib/sector'
 
 function CopyRow({ label, url }) {
   const { t } = useT()
@@ -590,6 +592,13 @@ function Destinatarios({ centers }) {
 
 export default function Configuracion() {
   const { t } = useT()
+  // Cada tipo de empresa ve lo suyo: un súper no tiene turnos de mañana y
+  // tarde ni «centros», y un autónomo no tiene ni sedes ni equipo.
+  const { billing: plan } = usePlan()
+  const sector = plan?.sector
+  const vz = voces(sector)
+  const reparte = esReparto(sector)
+  const autonomo = sector === 'autonomo'
   const [centers, setCenters] = useState(null)
   const [tg, setTg] = useState(null)
   const [billing, setBilling] = useState(null)
@@ -625,15 +634,23 @@ export default function Configuracion() {
       <h1 className="rise font-display text-[clamp(26px,3vw,36px)] font-semibold leading-none tracking-[-0.03em] text-dark-50">{t('cfg.title')}</h1>
       {msg && <div className={`rounded-lg px-3 py-2 text-sm ${msg.ok ? 'bg-emerald-500/10 text-emerald-300' : 'bg-red-500/10 text-red-300'}`}>{msg.t}</div>}
 
-      <Link to="/panel/portal-conductor"
-        className="flex items-center justify-between rounded-xl border border-dark-800 px-4 py-3 text-sm text-dark-300 transition hover:border-dark-600 hover:text-dark-100">
-        <span>Enlaces y accesos de los conductores</span>
-        <span className="font-semibold text-brand-300">Portal Conductor →</span>
-      </Link>
+      {reparte ? (
+        <Link to="/panel/reparto"
+          className="flex items-center justify-between rounded-xl border border-dark-800 px-4 py-3 text-sm text-dark-300 transition hover:border-dark-600 hover:text-dark-100">
+          <span>{autonomo ? 'Tu ruta, tu almacén y cómo se calcula la ruta' : 'Almacén, zonas, enlace de los repartidores y cálculo de rutas'}</span>
+          <span className="font-semibold text-brand-300">Ajustes del reparto →</span>
+        </Link>
+      ) : (
+        <Link to="/panel/portal-conductor"
+          className="flex items-center justify-between rounded-xl border border-dark-800 px-4 py-3 text-sm text-dark-300 transition hover:border-dark-600 hover:text-dark-100">
+          <span>Enlaces y accesos de los conductores</span>
+          <span className="font-semibold text-brand-300">Portal Conductor →</span>
+        </Link>
+      )}
 
-      {/* Centros */}
-      <div className="card p-5">
-        <div className="mb-3 flex items-center gap-2 text-sm font-semibold text-dark-200"><Building size={16} /> {t('cfg.centers')}</div>
+      {/* Centros (tiendas, almacenes). El autónomo no tiene sedes. */}
+      {!autonomo && <div className="card p-5">
+        <div className="mb-3 flex items-center gap-2 text-sm font-semibold text-dark-200"><Building size={16} /> {vz ? vz.centros : t('cfg.centers')}</div>
         {!centers ? <Loader2 className="animate-spin text-dark-400" size={16} /> : (
           <>
             <div className="mb-3 flex flex-wrap gap-2">
@@ -641,15 +658,18 @@ export default function Configuracion() {
                 centers.map((c) => <span key={c} className="rounded-lg bg-dark-800 px-3 py-1.5 text-sm font-medium">{c}</span>)}
             </div>
             <div className="flex gap-2">
-              <input className="input flex-1" placeholder={t('cfg.new.center')} value={nuevo} onChange={(e) => setNuevo(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && add()} />
+              <input className="input flex-1" placeholder={vz ? vz.nuevoCentro : t('cfg.new.center')} value={nuevo} onChange={(e) => setNuevo(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && add()} />
               <button onClick={add} disabled={busy || !nuevo.trim()} className="btn-primary flex items-center gap-1.5 disabled:opacity-50">
                 {busy ? <Loader2 size={15} className="animate-spin" /> : <Plus size={15} />} {t('cfg.add')}
               </button>
             </div>
-            <p className="mt-2 text-xs text-dark-500">Cada sede tiene sus propios conductores, vehículos, turnos y avisos.</p>
+            <p className="mt-2 text-xs text-dark-500">
+              {reparte ? `Cada ${vz.centro.toLowerCase()} tiene sus propios repartidores, vehículos y avisos.`
+                : 'Cada sede tiene sus propios conductores, vehículos, turnos y avisos.'}
+            </p>
           </>
         )}
-      </div>
+      </div>}
 
       {/* Telegram */}
       <div className="card p-5">
@@ -667,7 +687,7 @@ export default function Configuracion() {
 
       <WhatsAppCard />
 
-      <Destinatarios centers={centers || []} />
+      {!reparte && <Destinatarios centers={centers || []} />}
 
       {/* Plan */}
       <div className="card p-5">
@@ -685,7 +705,7 @@ export default function Configuracion() {
           <div className="mt-3 rounded-lg border border-dark-800 bg-dark-900/40 p-3">
             <div className="flex flex-wrap items-baseline gap-x-6 gap-y-1">
               <span className="text-[13px] text-dark-400">
-                En flota: <b className="text-dark-100 tabular-nums">{uso.en_flota}</b> furgonetas
+                En flota: <b className="text-dark-100 tabular-nums">{uso.en_flota}</b> vehículos
               </span>
               {uso.pagadas != null && (
                 <span className="text-[13px] text-dark-400">
@@ -695,7 +715,7 @@ export default function Configuracion() {
             </div>
             {uso.desfase > 0 && (
               <p className="mt-2 text-[12px] leading-relaxed text-amber-300">
-                Tienes {uso.desfase} furgoneta{uso.desfase > 1 ? 's' : ''} más de las que pagas.
+                Tienes {uso.desfase} vehículo{uso.desfase > 1 ? 's' : ''} más de los que pagas.
                 No se bloquea nada: se ajustará en la próxima factura.
               </p>
             )}
@@ -706,7 +726,7 @@ export default function Configuracion() {
             )}
             {uso.pagadas == null && (
               <p className="mt-2 text-[12px] leading-relaxed text-dark-500">
-                Sin suscripción medida todavía. Se cobra por furgoneta en flota: las de baja no cuentan.
+                Sin suscripción medida todavía. Se cobra por vehículo en flota: los de baja no cuentan.
               </p>
             )}
           </div>

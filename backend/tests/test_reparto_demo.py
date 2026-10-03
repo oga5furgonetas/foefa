@@ -59,3 +59,37 @@ async def test_el_repartidor_de_prueba_lleva_su_token(base):
     p = server.decode_token(r["access_token"])
     assert p["role"] == "driver" and p["sub"] == "demo-r3" and p["demo"]
     assert p["db_name"] == "dsp_demo_reparto"
+
+
+@pytest.mark.asyncio(loop_scope="session")
+async def test_cada_visitante_autonomo_tiene_su_ruta_y_se_borra_al_dia_siguiente(base):
+    a = await server.demo_reparto_login(_Peticion(), {"rol": "autonomo"})
+    b = await server.demo_reparto_login(_Peticion(), {"rol": "autonomo"})
+    ida, idb = a["driver"]["id"], b["driver"]["id"]
+    assert ida != idb and ida.startswith("demo-a-")
+    ddb = base.bases["dsp_demo_reparto"]
+    assert {ida, idb} <= {d["id"] for d in ddb["drivers"].docs}
+    base.dia["hoy"] = "2026-10-05"
+    await server.demo_reparto_login(_Peticion(), {})
+    assert not any(d["id"].startswith("demo-a-") for d in ddb["drivers"].docs)
+
+
+def test_cada_sector_nace_con_lo_suyo():
+    S = server.SECTORES_REGISTRO
+    dsp = set(S["dsp_amazon"])
+    # La DSP de Amazon lo tiene TODO lo suyo (lo que a Dani «le desapareció»).
+    for k in ("plantilla", "diarios", "horas", "cuadrante", "turnos", "asignacion", "checklist-operativo", "reparto"):
+        assert k in dsp, k
+    assert S["paqueteria"] == S["dsp_amazon"]
+    # Un súper no carga con la operación por turnos ni con lo de Amazon.
+    sup = set(S["supermercado"])
+    assert "reparto" in sup and not {"diarios", "horas", "plantilla", "cuadrante", "turnos"} & sup
+    # El autónomo, sin equipo.
+    assert "conductores" not in S["autonomo"] and "reparto" in S["autonomo"]
+    # La mensajería: reparto con escaneo Y turnos, sin lo de Amazon.
+    men = set(S["mensajeria"])
+    assert {"reparto", "turnos", "cuadrante"} <= men and not {"diarios", "horas"} & men
+    # Todas las claves existen de verdad en el catálogo de pantallas.
+    todas = set(server._MODULOS_CLAVES)
+    for nombre, mods in S.items():
+        assert mods is None or set(mods) <= todas, nombre

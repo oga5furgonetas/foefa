@@ -8,7 +8,7 @@ import {
   CircleHelp, Briefcase, Store, UserCheck, ImagePlus, Loader2, Bell, BellOff, MessageCircle,
   MessagesSquare, Euro, FileSpreadsheet, PackageX, TrendingUp, Clock, Route,
 } from 'lucide-react'
-import { getAdmin, isAuthed, isSuperAdmin, isCenterManager, logout, canSee, decodeToken, getVisibleCenters, SIEMPRE_VISIBLES, guardarAccesoFresco, esPlataforma, actualizarMiFoto } from './auth'
+import { aislarSesion, haySesionPrevia, volverASesionPrevia, getAdmin, isAuthed, isSuperAdmin, isCenterManager, logout, canSee, decodeToken, getVisibleCenters, SIEMPRE_VISIBLES, guardarAccesoFresco, esPlataforma, actualizarMiFoto } from './auth'
 import { getMe, contarPeticionesPendientes, contarCandidatosNuevos, contarConversacionesSinLeer, subirFotoAdmin } from './api'
 import { pushSupported, isPushEnabled, enablePush, disablePush } from '../lib/push'
 import TrialBanner from './TrialBanner'
@@ -20,6 +20,7 @@ import MenuMovil from './components/MenuMovil'
 import EquipoEnLinea from './components/EquipoEnLinea'
 import { useT, LANGS } from '../i18n'
 import { usePlan } from '../lib/usePlan'
+import { voces } from '../lib/sector'
 import { vigilarVersion, recargarCuandoNadieMira } from '../lib/versionApp'
 import { MARCA } from '../marca'
 
@@ -299,11 +300,14 @@ function MenuUsuario({ admin, showAdmin, lang, setLang, langs, onLogout, t }) {
 
 
 export default function PanelLayout() {
+  // ANTES de pintar nada (los avisos leen lo guardado al montarse).
+  aislarSesion()
   const nav = useNavigate()
   const loc = useLocation()
   const admin = getAdmin()
   const { lang, setLang, t } = useT()
-  const { limits, modulos } = usePlan()
+  const { limits, modulos, billing } = usePlan()
+  const vz = voces(billing?.sector)
   // ¿Tiene la empresa activada esta pantalla? (Negocio → Clientes → Módulos)
   const moduloOk = (k) => !Array.isArray(modulos) || SIN_MODULO.has(k) || modulos.includes(MODULO_DE[k] || k)
   const [center, setCenter] = useState(() => localStorage.getItem('panel_center') || 'Todos')
@@ -551,7 +555,8 @@ export default function PanelLayout() {
   // Menú agrupado (traducido) + lista plana para guard/paleta/móvil
   const groups = NAV_DEF
     .map((g) => ({ ...g, key: g.g, g: t(g.g), items: g.items.filter(itemVisible).map((it) => ({
-      ...it, label: t(it.labelKey),
+      // Un súper tiene repartidores, no «conductores».
+      ...it, label: it.labelKey === 'nav.drivers' && vz ? vz.conductores : t(it.labelKey),
       // El aviso se cuelga aqui, del sitio donde ya se traduce el menu, para
       // que cualquier entrada futura solo tenga que anadir su clave a AVISOS.
       aviso: AVISOS[it.to] ? AVISOS[it.to]({ peticionesPend, candidatosNuevos, chatSinLeer, wsSinLeer }) : 0,
@@ -773,7 +778,10 @@ export default function PanelLayout() {
         {decodeToken()?.demo && (
           <div className="flex items-center justify-between gap-2 bg-purple-500/15 px-4 py-2 text-sm text-purple-200">
             <span>▶ {decodeToken()?.db_name === 'dsp_demo_reparto' ? t('demo.banner.reparto') : t('demo.banner')}</span>
-            <a href="/registro" className="rounded-md bg-purple-500/30 px-3 py-1 text-xs font-semibold hover:bg-purple-500/40">{t('demo.banner.cta')}</a>
+            {haySesionPrevia()
+              ? <button onClick={() => { volverASesionPrevia(); window.location.href = '/panel' }}
+                  className="rounded-md bg-purple-500/30 px-3 py-1 text-xs font-semibold hover:bg-purple-500/40">Volver a mi cuenta</button>
+              : <a href="/registro" className="rounded-md bg-purple-500/30 px-3 py-1 text-xs font-semibold hover:bg-purple-500/40">{t('demo.banner.cta')}</a>}
           </div>
         )}
         {/* HAY UNA VERSIÓN NUEVA DE LA APP.
@@ -954,7 +962,7 @@ export default function PanelLayout() {
       <PrimerosPasos
         puedeVer={(k) => itemVisible({ to: k === 'dashboard' ? '/panel' : `/panel/${k}` })}
         idUsuario={admin?.id || admin?.sub} />
-      <LiveNotifier center={center} centers={centers} />
+      <LiveNotifier center={center} centers={centers} ve={(k) => moduloOk(k) && (SIEMPRE_VISIBLES.has(k) || canSee(k))} />
       <AsistenteBurbuja center={center} centers={centers} />
     </div>
   )

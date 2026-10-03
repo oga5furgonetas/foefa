@@ -5,7 +5,7 @@
 > haz commit y `git push`. Una sola sesión trabajando a la vez: antes de
 > empezar, `git pull` y comprueba que nadie ha dejado nada a medias aquí.
 
-Última actualización: **03-10-2026, tarde** (sesión `e88d38c9`, Claude Opus 5.5).
+Última actualización: **04-10-2026, madrugada** (sesión `e88d38c9`, Claude).
 
 ## Qué es y dónde está
 
@@ -480,6 +480,42 @@ el alta, preguntar qué tipo de empresa es. Con TODO dentro de la ley.
   (`get_current_user`); lo demás da 403. Probado entero en producción.
   En la cuenta real, «Zonas y ajustes» tiene el enlace + QR del portal para
   mandar a los repartidores. NO se crean cuentas por nadie: se registra él.
+
+## Qué se hizo el 03/04-10-2026 (noche): sectores, autónomo, ruta por tiempo, app
+
+Dani (03-10, noche): «a mi usuario dani le desapareció todo» → la demo del
+reparto había PISADO su sesión (saveSession en /prueba-reparto). Arreglado:
+`guardarSesionPrevia`/`volverASesionPrevia` en `panel/auth.js`, botón «Volver a
+mi cuenta» en el aviso de demo, y salir de una demo devuelve la sesión real.
+Nada se había borrado (org `owner` sin `modulos`, usuario `dani` sin
+`permissions`). Si vuelve a pasar: cerrar sesión y entrar.
+
+- **Alta por sector** (`SECTORES_REGISTRO`): `dsp_amazon` (TODO: plantilla,
+  DNR, horas, cuadrante, turnos…; `paqueteria` es su nombre viejo),
+  `mensajeria` (reparto + turnos, sin lo de Amazon), `supermercado` y
+  `distribucion` (reparto), `autonomo` (reparto sin equipo; es su propio
+  repartidor: `_rep_es_autonomo`, «Mi ruta» dentro de su panel), `otra`.
+  La tarjeta «DSP de Amazon» está permitida en `check-marca` (uso descriptivo).
+- **Panel por sector**: `lib/sector.js` (voces: Tiendas/Almacenes/Bases,
+  Repartidores), `InicioReparto.jsx` como portada de quien reparte,
+  Configuración sin cierres de turno para ellos, avisos en vivo solo de los
+  módulos que tiene la empresa, ejemplos neutros (sin OGA5; `check-marca` lo
+  vigila). `aislarSesion()` borra lo guardado en el navegador al cambiar de
+  empresa/usuario (la demo enseñaba «Candidatos nuevos · OGA5» de Dani).
+- **Ruta por tiempo** (`reparto.optimiza_por_tiempo` + `_rep_matriz` con el
+  OSRM de FOSSGIS, 1 req/s): tráfico típico por hora, minutos por parada y
+  bulto, franjas («horario» o nota que hable de horas), urgentes, hora de
+  salida, volver al almacén; `eta`/`tarde_min` por pedido; `reparto_rutas`.
+- **Más**: seguimiento del cliente `/s/<token>` (sin datos personales,
+  caduca al día siguiente), cobro a la entrega (efectivo/tarjeta/Bizum),
+  recogidas, «reintentar mañana», llamar/WhatsApp con la hora, **prueba de
+  entrega** (foto pequeña en el pedido + nota; `/reparto/pedidos/{id}/foto`;
+  se borra con los datos personales), estadísticas (`/reparto/estadisticas`).
+- **App de Play Store** (TWA): carpeta `android/`, guía completa en
+  `docs/PLAY_STORE.md`. Clave en `~/.flota-android.keystore` (contraseña en
+  `~/.flota-android-keystore.txt`), `assetlinks.json` publicado, manifest con
+  `start_url: /app` (`AppRedirect` decide a dónde). Ver ahí qué le toca a Dani
+  (cuenta de Play, 25 USD; huella de Play App Signing).
 
 ## Pendiente (por prioridad)
 

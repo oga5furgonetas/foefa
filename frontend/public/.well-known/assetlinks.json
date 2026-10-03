@@ -1,0 +1,10 @@
+[{
+  "relation": ["delegate_permission/common.handle_all_urls"],
+  "target": {
+    "namespace": "android_app",
+    "package_name": "com.flotadsp.flota",
+    "sha256_cert_fingerprints": [
+      "5B:48:01:D5:CE:33:D1:C5:9E:4C:A0:40:40:3C:A4:9B:15:BF:E1:FD:7A:2B:7B:1B:F1:3A:E0:EB:1C:73:44:61"
+    ]
+  }
+}]

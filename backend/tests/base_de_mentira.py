@@ -106,6 +106,19 @@ def _casa(d, q):
     return True
 
 
+def _proyecta(d, proyeccion):
+    """Solo las proyecciones de EXCLUSIÓN ({campo: 0}): quitan lo que Mongo
+    también quitaría (p. ej. la foto de entrega, que no viaja en la lista).
+    Las de inclusión se ignoran a propósito: honrarlas de golpe cambiaría lo
+    que ven cientos de pruebas escritas antes."""
+    d = dict(d)
+    if isinstance(proyeccion, dict):
+        for k, v in proyeccion.items():
+            if k != "_id" and v in (0, False):
+                d.pop(k, None)
+    return d
+
+
 class Col:
     def __init__(self, docs=None):
         self.docs = [dict(d) for d in (docs or [])]
@@ -160,7 +173,7 @@ class Col:
                 raise NotImplementedError(type(op).__name__)
 
     def find(self, q=None, proyeccion=None, **_):
-        return Cursor([dict(d) for d in self.docs if _casa(d, q)])
+        return Cursor([_proyecta(d, proyeccion) for d in self.docs if _casa(d, q)])
 
     async def update_one(self, q, u, upsert=False, **_):
         for d in self.docs:

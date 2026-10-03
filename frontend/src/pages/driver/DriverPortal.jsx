@@ -120,7 +120,8 @@ export default function DriverPortal() {
     return () => { vivo = false }
   }, [driver])
 
-  const [vista, setVista] = useState('inicio') // inicio | auditoria | dias | turnos | clave | ruta
+  // ?vista=ruta abre directamente «Mi ruta» (la demo y el enlace del autónomo).
+  const [vista, setVista] = useState(() => (new URLSearchParams(window.location.search).get('vista') === 'ruta' ? 'ruta' : 'inicio'))
   // «Mi ruta» solo sale en empresas que reparten así; lo decide el servidor.
   const [reparto, setReparto] = useState(null)
   useEffect(() => {
@@ -205,6 +206,20 @@ export default function DriverPortal() {
     setDriver(d)
   }
   const logout = () => {
+    // Salir de la demo devuelve la sesión real del conductor, si la había.
+    try {
+      const raw = esDemo && localStorage.getItem('flota_driver_previo')
+      if (raw) {
+        const { token, driver: d } = JSON.parse(raw)
+        localStorage.removeItem('flota_driver_previo')
+        if (token && d) {
+          localStorage.setItem(DRIVER_TOKEN_KEY, token)
+          localStorage.setItem(DRIVER_KEY, d)
+          setDriver(JSON.parse(d)); setResult(null); setVista('inicio')
+          return
+        }
+      }
+    } catch { /* se sale del todo */ }
     localStorage.removeItem(DRIVER_KEY)
     localStorage.removeItem(DRIVER_TOKEN_KEY)
     setDriver(null)

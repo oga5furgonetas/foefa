@@ -4,7 +4,7 @@ import { API_BASE } from '../services/api'
 import { medirAccion } from '../lib/analitica'
 import { saveSession } from '../panel/auth'
 import { useT, LANGS } from '../i18n'
-import { Check, Zap, Package, ShoppingCart, Warehouse, Truck } from 'lucide-react'
+import { Check, Zap, Package, ShoppingCart, Warehouse, Truck, User, Send } from 'lucide-react'
 import { MARCA, dominio } from '../marca'
 
 function slugify(s) {
@@ -52,12 +52,16 @@ const annualSave = (p, furgonetas) => precioMes(p, furgonetas) * (12 - MESES_ANU
    lleva la compra a casa le sobra el cuadrante de una subcontrata de
    paquetería, y le falta el escaneo de tickets y la ruta. */
 const SECTORES = [
+  { key: 'dsp_amazon', icon: Package, color: '#fb923c', name: 'DSP de Amazon',
+    sub: 'Plantilla del día, DNR diaria, horas (WHC), cuadrante y turnos, asignación de furgonetas, inspecciones con foto e IA, taller y vencimientos. Todo lo de una DSP, sin extensiones ni nada que toque los sistemas de Amazon.' },
+  { key: 'mensajeria', icon: Send, color: '#f472b6', name: 'Mensajería y paquetería',
+    sub: 'Escaneo de bultos, rutas por tiempo con franjas y hora estimada, seguimiento para el cliente, cobro a la entrega, y turnos y cuadrante del equipo.' },
   { key: 'supermercado', icon: ShoppingCart, color: '#22c55e', name: 'Supermercado o tienda con reparto a domicilio',
-    sub: 'El ticket de caja a la ruta: el repartidor escanea, ve la dirección y qué lleva, y la ruta se ordena sola.' },
+    sub: 'El ticket de caja a la ruta: el repartidor escanea, ve la dirección y qué lleva, la ruta se ordena sola y el cliente recibe la hora por WhatsApp.' },
   { key: 'distribucion', icon: Warehouse, color: '#0ea5e9', name: 'Distribución a negocios',
-    sub: 'Reparto a talleres, bares u obras: escaneo de bultos por la mañana, ruta ordenada y la oficina viendo por dónde va cada uno.' },
-  { key: 'paqueteria', icon: Package, color: '#fb923c', name: 'Paquetería de última milla (subcontrata)',
-    sub: 'Turnos, cuadrante, asignación de furgonetas e inspecciones diarias con foto.' },
+    sub: 'Reparto a talleres, bares u obras: escaneo de bultos por la mañana, zonas por repartidor, ruta ordenada y la oficina viendo por dónde va cada uno.' },
+  { key: 'autonomo', icon: User, color: '#eab308', name: 'Repartidor autónomo',
+    sub: 'Tú solo con tu furgoneta: escaneas o fotografías cada paquete, la ruta se ordena sola y llamas o escribes al cliente desde cada parada.' },
   { key: 'otra', icon: Truck, color: '#a855f7', name: 'Otra flota',
     sub: 'Servicios técnicos, obra, alquiler…: vehículos, conductores, taller y vencimientos.' },
 ]
@@ -242,7 +246,7 @@ export default function Registro() {
   const [accept, setAccept] = useState(false)
   const [done, setDone] = useState(false)
 
-  const reparte = sector === 'supermercado' || sector === 'distribucion'
+  const reparte = ['supermercado', 'distribucion', 'autonomo', 'mensajeria'].includes(sector)
   if (!sector) {
     return <SectorPicker onSelect={(k) => {
       setSector(k)
@@ -386,7 +390,7 @@ export default function Registro() {
             con la primera. Sin esto la segunda nave no se podía dar de alta. */}
         <label style={lbl}>{selectedPlan === 'operacion' ? t('reg.center') : 'Tus sedes'}</label>
         <input style={inp} value={center} onChange={(e) => setCenter(e.target.value)}
-          placeholder={reparte ? 'Tienda centro' : selectedPlan === 'operacion' ? 'OGA5' : 'OGA5, DGA1, DGA2'} />
+          placeholder={reparte ? 'Tienda centro' : selectedPlan === 'operacion' ? 'Norte' : 'Norte, Sur, Este'} />
         {selectedPlan !== 'operacion' && <div style={hint}>Sepáralos con comas. Podrás añadir más después.</div>}
 
         <label style={lbl}>Email de contacto</label>

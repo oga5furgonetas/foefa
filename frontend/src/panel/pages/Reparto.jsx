@@ -7,7 +7,7 @@ import {
 import {
   getRepartoAjustes, guardarRepartoAjustes, getRepartoPedidos, crearRepartoPedido,
   pegarRepartoPedidos, editarRepartoPedido, borrarRepartoPedido, repartirPorZonas,
-  ordenarRutas, getRepartoVivo, getDrivers,
+  ordenarRutas, getRepartoVivo, getDrivers, enlaceSeguimiento, fotoEntrega,
 } from '../api'
 import { lista } from '../../lib/lista'
 import { hoyLocal } from '../../lib/fecha'
@@ -16,6 +16,8 @@ import MapaReparto, { colorConductor } from '../components/MapaReparto'
 import { getAdmin } from '../auth'
 import { origen } from '../../marca'
 import QRCode from 'qrcode'
+import { usePlan } from '../../lib/usePlan'
+import MiRuta from '../../pages/driver/MiRuta'
 
 /* ── REPARTO A DOMICILIO Y A NEGOCIOS ────────────────────────────────────────
    Para quien reparte su propia mercancía: el súper que lleva la compra a casa,
@@ -38,12 +40,60 @@ const inp = 'w-full rounded-lg border border-dark-700 bg-dark-900 px-3 py-2 text
 const btn = 'inline-flex items-center gap-1.5 rounded-lg border border-dark-700 bg-dark-900 px-3 py-2 text-[12.5px] font-semibold text-dark-200 hover:border-dark-500 disabled:opacity-40'
 const btnP = 'inline-flex items-center gap-1.5 rounded-lg bg-brand-500 px-3 py-2 text-[12.5px] font-semibold text-white hover:bg-brand-600 disabled:opacity-40'
 
-const VACIO = { codigo: '', cliente: '', telefono: '', direccion: '', contenido: '', bultos: 1, conductor_id: '' }
+const VACIO = { codigo: '', cliente: '', telefono: '', direccion: '', contenido: '', bultos: 1, conductor_id: '', horario: '', prioridad: false, cobrar: '', tipo: 'entrega' }
+const euros = (n) => `${Number(n || 0).toFixed(2).replace('.', ',')} €`
+const METODO = { efectivo: 'efectivo', tarjeta: 'tarjeta', bizum: 'Bizum', pagado: 'pagado' }
+
+/* La caja del repartidor: lo cobrado por método, para cuadrar al volver. */
+function caja(r) {
+  const c = r?.cobrado || {}
+  const total = Object.values(c).reduce((a, b) => a + b, 0)
+  if (!total && !r?.a_cobrar) return ''
+  return ` · cobrado ${euros(total)}${r.a_cobrar ? ` de ${euros(r.a_cobrar)}` : ''}`
+}
+
+/* «2 h 10 min · 18 km · acaba 13:40», o nada si la ruta aún no se ordenó. */
+function manana(f) {
+  const d = new Date(`${f}T12:00:00`)
+  d.setDate(d.getDate() + 1)
+  return d.toISOString().slice(0, 10)
+}
+
+export function resumenRuta(r) {
+  const ruta = r?.ruta
+  if (!ruta?.minutos) return r?.km ? ` · ${r.km} km` : ''
+  const h = Math.floor(ruta.minutos / 60)
+  const m = ruta.minutos % 60
+  return ` · ${h ? `${h} h ` : ''}${m} min · ${ruta.km} km · acaba ${ruta.fin}${ruta.tarde ? ` · ${ruta.tarde} min tarde` : ''}`
+}
+
+function Llegada({ p }) {
+  const franja = p.ventana_desde && `${p.ventana_desde}–${p.ventana_hasta}`
+  return (
+    <div className="text-[12px]">
+      {p.eta ? <b className={p.tarde_min ? 'text-red-300' : 'text-dark-100'}>≈ {p.eta}</b> : <span className="text-dark-500">—</span>}
+      {p.prioridad && <span className="ml-1.5 rounded bg-amber-500/15 px-1 text-[10px] font-bold text-amber-300">URGENTE</span>}
+      {p.tipo === 'recogida' && <span className="ml-1.5 rounded bg-violet-500/15 px-1 text-[10px] font-bold text-violet-300">RECOGIDA</span>}
+      {p.cobrar > 0 && (
+        <div className={`text-[11px] ${p.cobrado_metodo ? 'text-emerald-300' : 'text-dark-400'}`}>
+          {p.cobrado_metodo ? `cobrado ${euros(p.cobrado_importe)} · ${METODO[p.cobrado_metodo] || p.cobrado_metodo}` : `a cobrar ${euros(p.cobrar)}`}
+        </div>
+      )}
+      {franja && <div className="text-[11px] text-dark-500">franja {franja}</div>}
+      {p.tarde_min > 0 && <div className="text-[11px] text-red-300">{p.tarde_min} min tarde</div>}
+      {p.espera_min > 0 && <div className="text-[11px] text-dark-500">espera {p.espera_min} min</div>}
+    </div>
+  )
+}
 
 export default function Reparto() {
   const { center } = useOutletContext() || {}
   const toast = useToast()
-  const [pestana, setPestana] = useState('hoy')
+  const { billing } = usePlan()
+  const autonomo = billing?.sector === 'autonomo'
+  const [pestana, setPestana] = useState(null)
+  // El autónomo es la oficina y el repartidor: lo primero, su ruta.
+  const vista = pestana || (autonomo ? 'ruta' : 'hoy')
   const [fecha, setFecha] = useState(hoyLocal())
   const [datos, setDatos] = useState(null)
   const [conductores, setConductores] = useState([])
@@ -52,6 +102,7 @@ export default function Reparto() {
   const [ocupado, setOcupado] = useState('')
   const [nuevo, setNuevo] = useState(null)
   const [pegado, setPegado] = useState(null)
+  const [foto, setFoto] = useState(null)   // {foto, nota, cuando, cliente}
 
   const cargar = useCallback(() => {
     getRepartoPedidos(fecha).then(({ data }) => setDatos(data))
@@ -125,6 +176,15 @@ export default function Reparto() {
 
   const tapado = datos && datos.ve_datos === false
 
+  async function copiarEnlace(p) {
+    try {
+      const { data } = await enlaceSeguimiento(p.id)
+      const url = `${window.location.origin}/s/${data.token}`
+      await navigator.clipboard.writeText(url)
+      toast.success('Enlace copiado: el cliente ve la hora estimada, sin datos personales')
+    } catch (e) { toast.error(e?.response?.data?.detail || 'No se pudo copiar el enlace') }
+  }
+
   return (
     <div className="mx-auto max-w-7xl space-y-4 p-4">
       <header className="flex flex-wrap items-end justify-between gap-3">
@@ -133,16 +193,19 @@ export default function Reparto() {
           <p className="text-[12.5px] text-dark-400">Pedidos del día, quién los lleva, en qué orden y por dónde va cada conductor.</p>
         </div>
         <div className="flex gap-1 rounded-xl border border-dark-700 bg-dark-900 p-1">
-          {[['hoy', 'Pedidos', Package], ['ajustes', 'Zonas y ajustes', Settings2]].map(([k, t, I]) => (
+          {[...(autonomo ? [['ruta', 'Mi ruta', Route]] : []),
+            ['hoy', autonomo ? 'Mapa y pedidos' : 'Pedidos', Package],
+            ['ajustes', autonomo ? 'Ajustes' : 'Zonas y ajustes', Settings2]].map(([k, t, I]) => (
             <button key={k} onClick={() => setPestana(k)}
-              className={`inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-[12.5px] font-semibold ${pestana === k ? 'bg-dark-700 text-dark-50' : 'text-dark-400'}`}>
+              className={`inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-[12.5px] font-semibold ${vista === k ? 'bg-dark-700 text-dark-50' : 'text-dark-400'}`}>
               <I size={14} /> {t}
             </button>
           ))}
         </div>
       </header>
 
-      {pestana === 'ajustes' ? <Ajustes conductores={conductores} toast={toast} /> : (
+      {vista === 'ruta' ? <MiRuta embebido onBack={() => setPestana('hoy')} />
+        : vista === 'ajustes' ? <Ajustes conductores={conductores} toast={toast} autonomo={autonomo} /> : (
         <>
           {tapado && (
             <div className="flex items-start gap-2 rounded-xl border border-amber-500/30 bg-amber-500/[.07] px-3.5 py-3 text-[12.5px] text-amber-200">
@@ -156,12 +219,12 @@ export default function Reparto() {
               style={{ width: 170 }} className={inp} aria-label="Día del reparto" />
             <button className={btnP} disabled={tapado} onClick={() => setNuevo({ ...VACIO })}><Plus size={14} /> Añadir pedido</button>
             <button className={btn} disabled={tapado} onClick={() => setPegado({ texto: '', filas: null })}><ClipboardPaste size={14} /> Pegar lista</button>
-            <button className={btn} disabled={!!ocupado || tapado}
+            {!autonomo && <button className={btn} disabled={!!ocupado || tapado}
               onClick={() => accion('zonas', () => repartirPorZonas(fecha), (d) => `${d.asignados} pedidos asignados por zona`)}>
               {ocupado === 'zonas' ? <Loader2 size={14} className="animate-spin" /> : <Shuffle size={14} />} Repartir por zonas
-            </button>
+            </button>}
             <button className={btn} disabled={!!ocupado || tapado}
-              onClick={() => accion('ordenar', () => ordenarRutas(fecha), (d) => `${d.ordenados} paradas ordenadas en ${d.conductores} rutas`)}>
+              onClick={() => accion('ordenar', () => ordenarRutas(fecha), (d) => `${d.ordenados} paradas ordenadas por tiempo en ${d.conductores} rutas${(d.rutas || []).some((r) => r.fuente === 'linea_recta') ? ' (sin servidor de rutas: por distancia)' : ''}`)}>
               {ocupado === 'ordenar' ? <Loader2 size={14} className="animate-spin" /> : <Route size={14} />} Ordenar rutas
             </button>
             <button className={btn} onClick={cargar} aria-label="Recargar"><RefreshCw size={14} /></button>
@@ -182,12 +245,16 @@ export default function Reparto() {
                     onClick={() => setFiltro(filtro === (r.conductor_id || '') ? null : (r.conductor_id || ''))}
                     color={colorDe[r.conductor_id || '']}
                     titulo={r.conductor_id ? r.nombre : 'Sin conductor'}
-                    sub={`${r.entregados}/${r.total} entregados${r.fallidos ? ` · ${r.fallidos} fallidos` : ''}${r.km ? ` · ${r.km} km` : ''}`}
+                    sub={`${r.entregados}/${r.total} entregados${r.fallidos ? ` · ${r.fallidos} fallidos` : ''}${resumenRuta(r)}${caja(r)}`}
                     vivo={vivos.some((v) => v.conductor_id === r.conductor_id)} />
                 ))}
               </div>
 
               <MapaReparto paradas={paradas} base={datos.base} vivos={vivosMapa} />
+              <p className="-mt-2 text-right text-[10.5px] text-dark-500">
+                Tiempos por carretera: OSRM (FOSSGIS) con datos de © OpenStreetMap · tráfico típico por hora, no en tiempo real ·{' '}
+                <a href="https://www.openstreetmap.org/fixthemap" target="_blank" rel="noreferrer" className="underline">corregir el mapa</a>
+              </p>
 
               {pedidos.length === 0 ? (
                 <div className="rounded-xl border border-dashed border-dark-700 px-4 py-10 text-center text-[13px] text-dark-400">
@@ -199,7 +266,7 @@ export default function Reparto() {
                   <table className="w-full min-w-[820px] text-left text-[12.5px]">
                     <thead className="bg-dark-900 text-[11px] uppercase tracking-wide text-dark-500">
                       <tr><th className="px-3 py-2">#</th><th className="px-3 py-2">Pedido</th><th className="px-3 py-2">Dirección</th>
-                        <th className="px-3 py-2">Lleva</th><th className="px-3 py-2">Conductor</th><th className="px-3 py-2">Estado</th><th /></tr>
+                        <th className="px-3 py-2">Lleva</th><th className="px-3 py-2">Llega</th><th className="px-3 py-2">Conductor</th><th className="px-3 py-2">Estado</th><th /></tr>
                     </thead>
                     <tbody className="divide-y divide-dark-800">
                       {pedidos.map((p) => (
@@ -221,6 +288,7 @@ export default function Reparto() {
                             </div>
                           </td>
                           <td className="px-3 py-2 text-dark-300">{p.contenido || '—'}<div className="text-[11px] text-dark-500">{p.bultos} bulto{p.bultos > 1 ? 's' : ''}{p.escaneos ? ` · ${p.escaneos} escaneado${p.escaneos > 1 ? 's' : ''}` : ''}</div></td>
+                          <td className="whitespace-nowrap px-3 py-2"><Llegada p={p} /></td>
                           <td className="px-3 py-2">
                             <select className={`${inp} py-1.5`} value={p.conductor_id || ''} disabled={tapado}
                               aria-label="Conductor"
@@ -237,6 +305,24 @@ export default function Reparto() {
                           <td className="px-3 py-2">
                             <span className={`rounded-full px-2 py-0.5 text-[11px] font-semibold ${ESTADOS[p.estado]?.[1] || ''}`}>{ESTADOS[p.estado]?.[0] || p.estado}</span>
                             {p.motivo && <div className="mt-1 text-[11px] text-dark-500">{p.motivo}</div>}
+                            {p.reintento > 0 && <div className="mt-1 text-[11px] text-dark-500">{p.reintento}º intento</div>}
+                            {p.entrega_nota && <div className="mt-1 text-[11px] text-dark-400">«{p.entrega_nota}»</div>}
+                            {p.tiene_foto && !tapado && (
+                              <button className="mt-1 block text-[11.5px] font-semibold text-brand-300"
+                                onClick={async () => {
+                                  try { const { data } = await fotoEntrega(p.id); setFoto({ ...data, cliente: p.cliente || p.direccion }) } catch { toast.error('No se pudo abrir la foto') }
+                                }}>Ver foto de entrega</button>
+                            )}
+                            {p.estado === 'fallido' && !tapado && (
+                              <button className="mt-1 block text-[11.5px] font-semibold text-brand-300"
+                                onClick={() => accion('r', () => editarRepartoPedido(p.id, { fecha: manana(fecha) }), () => 'Pasado a mañana')}>
+                                Reintentar mañana
+                              </button>
+                            )}
+                            {['pendiente', 'en_ruta'].includes(p.estado) && !tapado && (
+                              <button className="mt-1 block text-[11.5px] font-semibold text-dark-400 hover:text-brand-300"
+                                onClick={() => copiarEnlace(p)}>Copiar enlace para el cliente</button>
+                            )}
                           </td>
                           <td className="px-3 py-2 text-right">
                             <button className="rounded p-1 text-dark-500 hover:text-red-300" aria-label="Borrar pedido" disabled={tapado}
@@ -255,6 +341,14 @@ export default function Reparto() {
         </>
       )}
 
+      {foto && (
+        <Ventana titulo={`Entrega · ${foto.cliente}`} onClose={() => setFoto(null)}>
+          <img src={foto.foto} alt="Prueba de entrega" className="mx-auto max-h-[70vh] rounded-lg" />
+          {foto.nota && <p className="mt-2 text-[13px] text-dark-200">«{foto.nota}»</p>}
+          {foto.cuando && <p className="mt-1 text-[11.5px] text-dark-500">{new Date(foto.cuando).toLocaleString('es-ES')}</p>}
+        </Ventana>
+      )}
+
       {nuevo && (
         <Ventana titulo="Añadir pedido" onClose={() => setNuevo(null)}>
           <div className="grid gap-2 sm:grid-cols-2">
@@ -264,6 +358,15 @@ export default function Reparto() {
             <input className={inp} placeholder="Teléfono" inputMode="tel" value={nuevo.telefono} onChange={(e) => setNuevo({ ...nuevo, telefono: e.target.value })} />
             <input className={inp} type="number" min="1" max="99" placeholder="Bultos" value={nuevo.bultos} onChange={(e) => setNuevo({ ...nuevo, bultos: e.target.value })} />
             <input className={`${inp} sm:col-span-2`} placeholder="Qué lleva (3 cajas, agua, leche…)" value={nuevo.contenido} onChange={(e) => setNuevo({ ...nuevo, contenido: e.target.value })} />
+            <input className={inp} placeholder="Horario del cliente (ej. de 10 a 12)" value={nuevo.horario} onChange={(e) => setNuevo({ ...nuevo, horario: e.target.value })} />
+            <label className="flex items-center gap-2 text-[13px] text-dark-200">
+              <input type="checkbox" checked={nuevo.prioridad} onChange={(e) => setNuevo({ ...nuevo, prioridad: e.target.checked })} /> Urgente (congelados, medicinas…)
+            </label>
+            <input className={inp} inputMode="decimal" placeholder="A cobrar en la entrega (€)" value={nuevo.cobrar} onChange={(e) => setNuevo({ ...nuevo, cobrar: e.target.value })} />
+            <select className={inp} value={nuevo.tipo} onChange={(e) => setNuevo({ ...nuevo, tipo: e.target.value })} aria-label="Tipo de parada">
+              <option value="entrega">Entrega</option>
+              <option value="recogida">Recogida (envases, devolución)</option>
+            </select>
             <select className={`${inp} sm:col-span-2`} value={nuevo.conductor_id} onChange={(e) => setNuevo({ ...nuevo, conductor_id: e.target.value })} aria-label="Conductor">
               <option value="">Conductor: el de su zona (o ninguno)</option>
               {conductores.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
@@ -336,7 +439,7 @@ function Ventana({ titulo, onClose, children }) {
 }
 
 /* ── ZONAS Y AJUSTES ─────────────────────────────────────────────────────── */
-function Ajustes({ conductores, toast }) {
+function Ajustes({ conductores, toast, autonomo }) {
   const [a, setA] = useState(null)
   const [guardando, setGuardando] = useState(false)
   useEffect(() => {
@@ -356,6 +459,8 @@ function Ajustes({ conductores, toast }) {
       const { data } = await guardarRepartoAjustes({
         base_direccion: a.base_direccion, zonas: a.zonas, ia_tickets: !!a.ia_tickets,
         dias_conservar: a.dias_conservar, portal: a.portal !== false,
+        hora_salida: a.hora_salida, min_parada: a.min_parada, min_bulto: a.min_bulto,
+        volver: !!a.volver, trafico: a.trafico !== false,
       })
       setA({ ...a, base: data.base, portal_activo: data.portal_activo })
       toast.success('Guardado')
@@ -400,6 +505,33 @@ function Ajustes({ conductores, toast }) {
         </section>
 
         <section className="space-y-3 rounded-xl border border-dark-700 bg-dark-900 p-4">
+          <h2 className="text-[14px] font-bold text-dark-50">Cómo se calcula la ruta</h2>
+          <p className="text-[12px] text-dark-400">
+            Se ordena por el TIEMPO que se tarda por carretera, contando el tráfico típico de cada hora, el rato en
+            cada portal y el horario de cada cliente. Cada parada lleva su hora estimada de llegada.
+          </p>
+          <div className="flex flex-wrap items-center gap-x-5 gap-y-2 text-[13px] text-dark-200">
+            <label className="flex items-center gap-2">Salida a las
+              <input type="time" style={{ width: 110 }} className="rounded-lg border border-dark-700 bg-dark-900 px-2 py-1 text-dark-100"
+                value={a.hora_salida || '09:00'} onChange={(e) => setA({ ...a, hora_salida: e.target.value })} /></label>
+            <label className="flex items-center gap-2">Minutos en cada parada
+              <input type="number" min="1" max="30" style={{ width: 64 }} className="rounded-lg border border-dark-700 bg-dark-900 px-2 py-1 text-dark-100"
+                value={a.min_parada ?? 4} onChange={(e) => setA({ ...a, min_parada: e.target.value })} /></label>
+            <label className="flex items-center gap-2">+ por cada bulto de más
+              <input type="number" min="0" max="10" style={{ width: 64 }} className="rounded-lg border border-dark-700 bg-dark-900 px-2 py-1 text-dark-100"
+                value={a.min_bulto ?? 1} onChange={(e) => setA({ ...a, min_bulto: e.target.value })} /></label>
+          </div>
+          <label className="flex items-center gap-2.5 text-[13px] text-dark-200">
+            <input type="checkbox" checked={a.trafico !== false} onChange={(e) => setA({ ...a, trafico: e.target.checked })} />
+            Contar el tráfico típico de cada hora (horas punta de mañana, mediodía y tarde)
+          </label>
+          <label className="flex items-center gap-2.5 text-[13px] text-dark-200">
+            <input type="checkbox" checked={!!a.volver} onChange={(e) => setA({ ...a, volver: e.target.checked })} />
+            La ruta termina volviendo al almacén
+          </label>
+        </section>
+
+        <section className="space-y-3 rounded-xl border border-dark-700 bg-dark-900 p-4">
           <label className="flex items-start gap-2.5 text-[13px] text-dark-200">
             <input type="checkbox" className="mt-1" checked={a.portal !== false} onChange={(e) => setA({ ...a, portal: e.target.checked })} />
             <span><b>«Mi ruta» en el móvil de los conductores</b><br />
@@ -433,7 +565,7 @@ function Ajustes({ conductores, toast }) {
       </div>
 
       <div className="space-y-4">
-      <PortalRepartidores />
+      {!autonomo && <PortalRepartidores />}
       <aside className="h-fit rounded-xl border border-emerald-500/25 bg-emerald-500/[.05] p-4 text-[12.5px] leading-relaxed text-dark-300">
         <h2 className="mb-2 flex items-center gap-1.5 text-[14px] font-bold text-emerald-200"><ShieldCheck size={15} /> Cómo se protegen los datos</h2>
         <ul className="list-disc space-y-1.5 pl-4">

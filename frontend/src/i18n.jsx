@@ -646,7 +646,7 @@ const DICT = {
   // ── Configuración (ampliado) ──────────────────────────────────────────────
   'cfg.centers':           { es: 'Centros',            en: 'Centres',              fr: 'Centres',                de: 'Zentren',               it: 'Centri',                pt: 'Centros' },
   'cfg.no.centers':        { es: 'Aún no hay centros.', en: 'No centres yet.',     fr: 'Aucun centre encore.',   de: 'Noch keine Zentren.',   it: 'Ancora nessun centro.', pt: 'Ainda sem centros.' },
-  'cfg.new.center':        { es: 'Nuevo centro (ej. OGA5)', en: 'New centre (e.g. OGA5)', fr: 'Nouveau centre (ex. OGA5)', de: 'Neues Zentrum (z.B. OGA5)', it: 'Nuovo centro (es. OGA5)', pt: 'Novo centro (ex. OGA5)' },
+  'cfg.new.center':        { es: 'Nuevo centro (ej. Norte)', en: 'New centre (e.g. North)', fr: 'Nouveau centre (ex. Nord)', de: 'Neues Zentrum (z.B. Nord)', it: 'Nuovo centro (es. Nord)', pt: 'Novo centro (ex. Norte)' },
   'cfg.add':               { es: 'Añadir',             en: 'Add',                  fr: 'Ajouter',                de: 'Hinzufügen',            it: 'Aggiungi',              pt: 'Adicionar' },
   'cfg.telegram':          { es: 'Avisos por Telegram', en: 'Telegram alerts',     fr: 'Alertes Telegram',       de: 'Telegram-Benachrichtigungen', it: 'Avvisi Telegram',  pt: 'Avisos por Telegram' },
   'cfg.tg.enabled':        { es: 'Activado',           en: 'Enabled',              fr: 'Activé',                 de: 'Aktiviert',             it: 'Attivato',              pt: 'Ativado' },

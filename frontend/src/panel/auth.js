@@ -90,6 +90,36 @@ export function decodeToken() {
   } catch { return null }
 }
 
+/* NADA DE UNA EMPRESA SE VE EN OTRA (03-10-2026).
+   El panel guarda cosas en el navegador: los avisos pendientes, borradores,
+   el centro elegido… Sin dueño. Entrando en la demo después de haber usado la
+   cuenta de Dani en el mismo navegador, la demo enseñaba «Candidatos nuevos ·
+   OGA5». En un ordenador compartido eso es enseñarle a una empresa cosas de
+   otra. Ahora cada sesión deja su HUELLA (empresa + usuario) y, si al abrir el
+   panel no coincide con la de lo guardado, se borra todo menos lo que no es
+   de nadie: idioma, tema, cookies y las propias sesiones. */
+const HUELLA_KEY = 'flota_huella'
+// La sesión real guardada mientras se mira una demo (ver `guardarSesionPrevia`).
+const PREVIA_KEY = 'flota_sesion_previa'
+const SE_QUEDAN = new Set([TOKEN_KEY, ADMIN_KEY, ACCESO_KEY, HUELLA_KEY, 'flota_token_super', PREVIA_KEY, 'flota_lang',
+  'panel_theme', 'panel_theme_elegido', 'ld_theme', 'cookie_consent', 'flota_driver_token', 'flota_driver',
+  'flota_plan', 'flota_billing'])
+// Marcas que ya llevan el id del usuario dentro: no se mezclan.
+const DE_USUARIO = /^(ayuda_vista_|empleo_visto_)/
+
+export function aislarSesion() {
+  try {
+    const p = decodeToken()
+    if (!p) return
+    const huella = `${p.org_id || p.db_name || 'propia'}|${p.sub || ''}`
+    if (localStorage.getItem(HUELLA_KEY) === huella) return
+    const claves = []
+    for (let i = 0; i < localStorage.length; i++) claves.push(localStorage.key(i))
+    claves.filter((k) => k && !SE_QUEDAN.has(k) && !DE_USUARIO.test(k)).forEach((k) => localStorage.removeItem(k))
+    localStorage.setItem(HUELLA_KEY, huella)
+  } catch { /* sin almacenamiento: no hay nada que mezclar */ }
+}
+
 // org_id real de la organización (no es lo mismo que admin.id, que es el id del usuario).
 export function getOrgId() {
   return decodeToken()?.org_id || null
@@ -228,7 +258,42 @@ export function isDispatcher() {
   return getAdminRole() === 'dispatcher'
 }
 
+/* LA DEMO NO PISA TU SESIÓN (03-10-2026). Dani entró en la demo del reparto
+   desde su navegador y «le desapareció todo»: la demo había sustituido su
+   sesión por la de la empresa de prueba. Ahora, al entrar en una demo con una
+   sesión real abierta, la real se guarda aparte y se vuelve a ella con un
+   botón, o sola al salir de la demo. */
+
+export function guardarSesionPrevia() {
+  try {
+    const p = decodeToken()
+    const token = getToken()
+    if (!token || !p || p.demo) return
+    localStorage.setItem(PREVIA_KEY, JSON.stringify({ token, admin: localStorage.getItem(ADMIN_KEY), acceso: localStorage.getItem(ACCESO_KEY) }))
+  } catch { /* sin almacenamiento */ }
+}
+
+export function haySesionPrevia() {
+  try { return !!localStorage.getItem(PREVIA_KEY) } catch { return false }
+}
+
+/** Vuelve a la sesión real guardada. Devuelve true si la había. */
+export function volverASesionPrevia() {
+  try {
+    const raw = localStorage.getItem(PREVIA_KEY)
+    if (!raw) return false
+    const { token, admin, acceso } = JSON.parse(raw)
+    localStorage.removeItem(PREVIA_KEY)
+    if (token) localStorage.setItem(TOKEN_KEY, token)
+    if (admin) localStorage.setItem(ADMIN_KEY, admin); else localStorage.removeItem(ADMIN_KEY)
+    if (acceso) localStorage.setItem(ACCESO_KEY, acceso); else localStorage.removeItem(ACCESO_KEY)
+    return true
+  } catch { return false }
+}
+
 export function logout() {
+  // Salir de una demo es volver a lo tuyo, no quedarse fuera.
+  if (decodeToken()?.demo && volverASesionPrevia()) return
   localStorage.removeItem(TOKEN_KEY)
   localStorage.removeItem(ADMIN_KEY)
   localStorage.removeItem(ACCESO_KEY)

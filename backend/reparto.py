@@ -172,6 +172,212 @@ def largo_ruta_km(origen, paradas) -> float:
     return round(total, 1)
 
 
+# ── LA RUTA POR TIEMPO (03-10-2026) ───────────────────────────────────────────
+# Lo de arriba ordena por línea recta. Esto ordena por lo que de verdad cuesta:
+# MINUTOS por carretera (una matriz de tiempos que da el servidor de rutas),
+# con el tráfico típico de cada hora, el rato que se pasa en cada portal y las
+# franjas horarias de los clientes. Lo que se minimiza es la hora a la que
+# acabas, con un castigo fuerte por llegar tarde a una franja.
+#
+# TRÁFICO: «típico», no en vivo. El tráfico en tiempo real solo lo dan
+# servicios de pago; aquí cada tramo se alarga según la hora del día a la que
+# se va a hacer (salir a las 8:15 no es salir a las 11). Los factores son una
+# estimación de ciudad española, no una medida: por eso se llaman así en
+# pantalla y nunca «en vivo».
+
+# (desde, hasta, factor) en minutos del día, de lunes a viernes.
+TRAFICO_LABORABLE = [
+    (7 * 60 + 30, 9 * 60 + 30, 1.35),     # entrada a trabajar y colegios
+    (9 * 60 + 30, 13 * 60 + 30, 1.12),
+    (13 * 60 + 30, 15 * 60 + 30, 1.25),   # salida de mediodía
+    (15 * 60 + 30, 17 * 60 + 30, 1.12),
+    (17 * 60 + 30, 20 * 60 + 30, 1.35),   # vuelta a casa
+]
+TRAFICO_SABADO = [(10 * 60, 14 * 60, 1.15), (17 * 60, 20 * 60 + 30, 1.12)]
+
+CASTIGO_TARDE = 20      # cada minuto tarde en una franja cuenta como 20
+PESO_PRIORIDAD = 0.5    # los urgentes tiran hacia el principio, sin romper la ruta
+
+
+def factor_trafico(minuto_del_dia: float, dia_semana: int, con_trafico: bool = True) -> float:
+    """dia_semana: 0 = lunes … 6 = domingo."""
+    if not con_trafico or dia_semana == 6:
+        return 1.0
+    franjas = TRAFICO_SABADO if dia_semana == 5 else TRAFICO_LABORABLE
+    m = minuto_del_dia % (24 * 60)
+    for a, b, f in franjas:
+        if a <= m < b:
+            return f
+    return 1.0
+
+
+def hm(minutos) -> str:
+    m = int(round(minutos)) % (24 * 60)
+    return f"{m // 60:02d}:{m % 60:02d}"
+
+
+def a_minutos(texto) -> "int | None":
+    """«9», «9:30», «09.30», «9h» -> minutos del día."""
+    m = re.fullmatch(r"\s*([01]?\d|2[0-3])(?:\s*[:.h]\s*([0-5]\d))?\s*h?\s*", str(texto or ""))
+    if not m:
+        return None
+    return int(m.group(1)) * 60 + int(m.group(2) or 0)
+
+
+_VENT_RE = re.compile(r"(?:de\s+|entre\s+)?([01]?\d|2[0-3])(?:[:.h]([0-5]\d))?\s*h?\s*(?:-|a|y|hasta)\s*([01]?\d|2[0-3])(?:[:.h]([0-5]\d))?\s*h?", re.I)
+
+
+def lee_ventana(texto) -> tuple:
+    """Franja horaria de un texto libre -> (desde, hasta) en minutos, o (None, None).
+
+    «de 10 a 12», «10:30-13», «entre 17 y 19 h», «por la mañana», «tarde».
+    No inventa: si no hay nada reconocible, no hay franja.
+    """
+    t = norm(texto)
+    if not t:
+        return (None, None)
+    m = _VENT_RE.search(t)
+    if m:
+        a = int(m.group(1)) * 60 + int(m.group(2) or 0)
+        b = int(m.group(3)) * 60 + int(m.group(4) or 0)
+        # Solo horas de reparto: «portal 5-7» no es una franja de 5 a 7.
+        if b > a and a >= 6 * 60 and b <= 23 * 60 + 59:
+            return (a, b)
+    if re.search(r"\b(por la )?manana\b", t):
+        return (9 * 60, 14 * 60)
+    if re.search(r"\b(por la )?tarde\b", t):
+        return (16 * 60, 21 * 60)
+    return (None, None)
+
+
+_HABLA_DE_HORAS = re.compile(r"\b(hora|horario|franja|entre|entregar|manana|tarde|desde|hasta)\b|\d\s*h\b|\d[:.]\d\d")
+
+
+def ventana_de_nota(texto) -> tuple:
+    """Como `lee_ventana`, pero para notas libres: solo si la nota habla de
+    horas. «Portal 2-4, 3º» no es una franja; «entregar de 10 a 12» sí."""
+    if not _HABLA_DE_HORAS.search(norm(texto)):
+        return (None, None)
+    return lee_ventana(texto)
+
+
+
+def _evalua(orden, matriz, salida, paradas, dia_semana, con_trafico, volver):
+    """Recorre la ruta en el tiempo. Devuelve (coste, llegadas, fin, tarde_total)."""
+    t = salida
+    prev = 0
+    llegadas = []
+    tarde_total = 0.0
+    prioridad = 0.0
+    for i in orden:
+        p = paradas[i - 1]
+        t += matriz[prev][i] / 60.0 * factor_trafico(t, dia_semana, con_trafico)
+        desde, hasta = p.get("desde"), p.get("hasta")
+        espera = 0.0
+        if desde is not None and t < desde:
+            espera = desde - t
+            t = desde
+        tarde = max(0.0, t - hasta) if hasta is not None else 0.0
+        tarde_total += tarde
+        if p.get("prioridad"):
+            prioridad += t - salida
+        llegadas.append((i, t, tarde, espera))
+        t += p.get("servicio", 0)
+        prev = i
+    if volver and orden:
+        t += matriz[prev][0] / 60.0 * factor_trafico(t, dia_semana, con_trafico)
+    coste = (t - salida) + CASTIGO_TARDE * tarde_total + PESO_PRIORIDAD * prioridad
+    return coste, llegadas, t, tarde_total
+
+
+def optimiza_por_tiempo(matriz, paradas, salida, dia_semana=0, con_trafico=True, volver=False,
+                        presupuesto_evaluaciones=60000):
+    """Orden de las paradas que acaba antes respetando franjas.
+
+    `matriz`: segundos de i a j, con el nodo 0 = punto de salida y 1..n las
+    paradas en el orden de `paradas`. Cada parada: {servicio (min), desde,
+    hasta (min del día o None), prioridad}. Devuelve
+    {"orden": [índices de `paradas`], "llegadas": [{eta, tarde, espera}],
+     "fin": min, "minutos": total, "tarde": total de minutos tarde}.
+
+    Búsqueda local (mover una parada, invertir un tramo) desde tres arranques
+    —el más cercano en tiempo, el que cierra antes su franja y el orden en que
+    llegaron— y se queda con el mejor. Para las 10-60 paradas de un repartidor
+    da en milisegundos lo que una persona tardaría un rato en cuadrar a mano.
+    """
+    n = len(paradas)
+    if n == 0:
+        return {"orden": [], "llegadas": [], "fin": salida, "minutos": 0, "tarde": 0}
+    ev = lambda o: _evalua(o, matriz, salida, paradas, dia_semana, con_trafico, volver)  # noqa: E731
+
+    def vecino():
+        quedan, o, prev = set(range(1, n + 1)), [], 0
+        while quedan:
+            sig = min(quedan, key=lambda j: (matriz[prev][j], j))
+            o.append(sig)
+            quedan.discard(sig)
+            prev = sig
+        return o
+
+    arranques = [vecino(),
+                 sorted(range(1, n + 1), key=lambda j: (paradas[j - 1].get("hasta") or 10 ** 6, matriz[0][j])),
+                 list(range(1, n + 1))]
+    gastado = 0
+    mejor, mejor_c = None, float("inf")
+    for o in arranques:
+        c = ev(o)[0]
+        mejora = True
+        while mejora and gastado < presupuesto_evaluaciones:
+            mejora = False
+            # Mover una parada a otro sitio.
+            for a in range(n):
+                for b in range(n):
+                    if a == b:
+                        continue
+                    nuevo = o[:a] + o[a + 1:]
+                    nuevo.insert(b, o[a])
+                    gastado += 1
+                    cn = ev(nuevo)[0]
+                    if cn + 1e-9 < c:
+                        o, c, mejora = nuevo, cn, True
+                        break
+                if mejora or gastado >= presupuesto_evaluaciones:
+                    break
+            if mejora:
+                continue
+            # Invertir un tramo (deshace cruces).
+            for a in range(n - 1):
+                for b in range(a + 1, n):
+                    nuevo = o[:a] + o[a:b + 1][::-1] + o[b + 1:]
+                    gastado += 1
+                    cn = ev(nuevo)[0]
+                    if cn + 1e-9 < c:
+                        o, c, mejora = nuevo, cn, True
+                        break
+                if mejora or gastado >= presupuesto_evaluaciones:
+                    break
+        if c < mejor_c:
+            mejor, mejor_c = o, c
+    _, llegadas, fin, tarde = ev(mejor)
+    return {"orden": [i - 1 for i in mejor],
+            "llegadas": [{"eta": t, "tarde": round(td), "espera": round(es)} for _, t, td, es in llegadas],
+            "fin": fin, "minutos": round(fin - salida), "tarde": round(tarde)}
+
+
+def matriz_en_linea_recta(puntos) -> tuple:
+    """Plan B sin servidor de rutas: km en línea recta × 1,35 (las calles no
+    van rectas) a 22 km/h de media urbana con paradas. Devuelve (segundos, metros)."""
+    n = len(puntos)
+    seg = [[0.0] * n for _ in range(n)]
+    met = [[0.0] * n for _ in range(n)]
+    for i in range(n):
+        for j in range(n):
+            if i != j:
+                km = distancia_km(puntos[i], puntos[j]) * 1.35
+                met[i][j] = km * 1000
+                seg[i][j] = km / 22.0 * 3600
+    return seg, met
+
 # ── PEGAR LA LISTA DEL DÍA ────────────────────────────────────────────────────
 # La oficina pega lo que tenga: una exportación de su programa, una hoja de
 # Excel copiada (tabuladores) o una lista escrita a mano con «;». Si la
@@ -188,6 +394,10 @@ _CABECERAS = {
     "cp": ("cp", "codigo postal", "c p", "postal"),
     "localidad": ("localidad", "poblacion", "ciudad", "municipio"),
     "notas": ("notas", "observaciones", "obs", "comentarios"),
+    "horario": ("horario", "franja", "hora", "ventana", "hora entrega", "entrega"),
+    "prioridad": ("prioridad", "urgente"),
+    "cobrar": ("cobrar", "a cobrar", "importe", "total", "reembolso", "contra reembolso"),
+    "tipo": ("tipo", "entrega o recogida"),
 }
 _ORDEN_SIN_CABECERA = ("codigo", "cliente", "direccion", "telefono", "contenido")
 
@@ -248,6 +458,27 @@ def lee_pegado(texto) -> list:
             p["codigo"] = normaliza_codigo(p["codigo"])
         salida.append(p)
     return salida
+
+
+def importe(v) -> float:
+    """«23,50 €», «23.5», «1.234,50» -> 23.5 / 1234.5. Lo raro, 0."""
+    t = re.sub(r"[^\d,.-]", "", str(v or ""))
+    if not t:
+        return 0.0
+    if "," in t and "." in t:
+        t = t.replace(".", "").replace(",", ".") if t.rfind(",") > t.rfind(".") else t.replace(",", "")
+    else:
+        t = t.replace(",", ".")
+    try:
+        n = round(float(t), 2)
+    except ValueError:
+        return 0.0
+    return n if 0 <= n <= 100000 else 0.0
+
+
+def tipo_parada(v) -> str:
+    """Entrega o recogida (envases, devoluciones, cambios)."""
+    return "recogida" if re.search(r"recog|devol|envase|retir", norm(v)) else "entrega"
 
 
 # ── PRIVACIDAD ────────────────────────────────────────────────────────────────

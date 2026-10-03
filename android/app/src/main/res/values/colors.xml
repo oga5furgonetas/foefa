@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- El mismo fondo que la web (#070a0e): la pantalla de carga no da un salto. -->
+    <color name="fondo">#070A0E</color>
+</resources>

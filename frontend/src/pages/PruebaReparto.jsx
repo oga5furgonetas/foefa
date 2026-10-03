@@ -1,8 +1,8 @@
 import { useEffect, useState } from 'react'
 import QRCode from 'qrcode'
-import { Building2, Truck, Loader2, ScanLine, Camera, ShieldCheck } from 'lucide-react'
+import { Building2, Truck, Loader2, ScanLine, Camera, ShieldCheck, User } from 'lucide-react'
 import { API_BASE, DRIVER_TOKEN_KEY } from '../services/api'
-import { saveSession } from '../panel/auth'
+import { saveSession, guardarSesionPrevia } from '../panel/auth'
 import { MARCA, origen } from '../marca'
 
 /* ── PRUEBA DEL REPARTO, SIN REGISTRARSE ─────────────────────────────────────
@@ -41,11 +41,20 @@ export default function PruebaReparto() {
       })
       const j = await r.json()
       if (!r.ok || !j.access_token) throw new Error(j.detail || 'No se pudo entrar')
-      if (rol === 'conductor') {
+      if (rol === 'conductor' || rol === 'autonomo') {
+        // Igual para un conductor real que prueba la demo en su móvil.
+        const previo = localStorage.getItem(DRIVER_TOKEN_KEY)
+        if (previo && !/\.eyJ.*ZGVtbyI6dHJ1ZQ/.test(previo)) {
+          try {
+            const p = JSON.parse(atob(previo.split('.')[1].replace(/-/g, '+').replace(/_/g, '/')))
+            if (!p.demo) localStorage.setItem('flota_driver_previo', JSON.stringify({ token: previo, driver: localStorage.getItem('flota_driver') }))
+          } catch { /* token raro: no se guarda */ }
+        }
         localStorage.setItem(DRIVER_TOKEN_KEY, j.access_token)
         localStorage.setItem('flota_driver', JSON.stringify(j.driver))
-        window.location.href = '/conductor'
+        window.location.href = '/conductor?vista=ruta'
       } else {
+        guardarSesionPrevia()   // tu cuenta de verdad se queda guardada: se vuelve con un botón
         saveSession(j)
         // La bienvenida general del panel tapaba el reparto nada más entrar.
         try { localStorage.setItem(`ayuda_vista_${j.id}`, '1') } catch { /* sin almacenamiento: sale la bienvenida */ }
@@ -69,7 +78,19 @@ export default function PruebaReparto() {
           inventados que vuelven a empezar cada día.
         </p>
 
-        <div className="mt-7 grid gap-4 md:grid-cols-2">
+        <section className="mt-7 rounded-2xl border border-amber-400/40 bg-amber-500/[.06] p-5">
+          <h2 className="flex items-center gap-2 text-[18px] font-bold text-dark-50"><User className="text-amber-300" size={20} /> ¿Eres autónomo?</h2>
+          <p className="mt-1 text-[13px] text-dark-400">
+            Tu ruta empieza vacía: escanea tus paquetes o hazle una foto a la etiqueta y la dirección y el teléfono
+            entran solos. La ruta se ordena por tiempo y en cada parada tienes llamar y WhatsApp. Lo que metas solo lo ves tú.
+          </p>
+          <button onClick={() => entrar('autonomo')} disabled={!!ocupado}
+            className="mt-4 inline-flex w-full items-center justify-center gap-2 rounded-xl bg-amber-500 py-3 text-[15px] font-bold text-dark-950 disabled:opacity-50 md:w-auto md:px-8">
+            {ocupado === 'autonomo' && <Loader2 size={16} className="animate-spin" />} Probar como autónomo
+          </button>
+        </section>
+
+        <div className="mt-4 grid gap-4 md:grid-cols-2">
           <section className="rounded-2xl border border-dark-700 bg-dark-900 p-5">
             <Building2 className="text-sky-400" />
             <h2 className="mt-2 text-[18px] font-bold text-dark-50">La oficina</h2>

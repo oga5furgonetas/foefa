@@ -96,3 +96,79 @@ def test_limpia_ticket_de_la_ia():
     assert d["codigo"] == "841234" and d["telefono"] == "600112233"
     assert d["cp"] == "15003" and d["bultos"] == 1 and d["cliente"] == ""
     assert R.limpia_ticket("no es json")["bultos"] == 1
+
+
+# ── LA RUTA POR TIEMPO ─────────────────────────────────────────────────────────
+
+def test_trafico_tipico_por_hora():
+    assert R.factor_trafico(8 * 60 + 15, 0) > 1.3        # lunes a las 8:15
+    assert R.factor_trafico(11 * 60, 0) < R.factor_trafico(8 * 60 + 15, 0)
+    assert R.factor_trafico(8 * 60 + 15, 6) == 1.0       # domingo
+    assert R.factor_trafico(8 * 60 + 15, 0, con_trafico=False) == 1.0
+
+
+def test_lee_ventana():
+    assert R.lee_ventana("Entregar de 10 a 12") == (600, 720)
+    assert R.lee_ventana("10:30-13") == (630, 780)
+    assert R.lee_ventana("entre 17 y 19 h") == (1020, 1140)
+    assert R.lee_ventana("por la tarde") == (960, 1260)
+    assert R.lee_ventana("3º izq, llamar al timbre") == (None, None)
+    assert R.lee_ventana("") == (None, None)
+
+
+def _matriz(n, f):
+    return [[0 if i == j else f(i, j) for j in range(n)] for i in range(n)]
+
+
+def test_por_tiempo_respeta_la_franja_aunque_quede_mas_lejos():
+    # Cuatro paradas en una línea a 5 min cada una; la más lejana (4) solo
+    # puede recibir de 9:00 a 9:10. Por distancia iría la última (9:20 + paradas).
+    m = _matriz(5, lambda i, j: abs(i - j) * 300)
+    paradas = [{"servicio": 3}, {"servicio": 3}, {"servicio": 3}, {"servicio": 3, "desde": 540, "hasta": 550}]
+    r = R.optimiza_por_tiempo(m, paradas, salida=530, dia_semana=6)
+    assert r["orden"][0] == 3 and r["tarde"] == 0
+    eta = {i: l["eta"] for i, l in zip(r["orden"], r["llegadas"])}
+    assert 540 <= eta[3] <= 550
+
+
+def test_por_tiempo_sin_franjas_no_es_peor_que_el_orden_de_llegada():
+    import random
+    rnd = random.Random(3)
+    pts = [(rnd.random(), rnd.random()) for _ in range(16)]
+    m = _matriz(16, lambda i, j: ((pts[i][0] - pts[j][0]) ** 2 + (pts[i][1] - pts[j][1]) ** 2) ** .5 * 3600)
+    paradas = [{"servicio": 4} for _ in range(15)]
+    r = R.optimiza_por_tiempo(m, paradas, salida=600, dia_semana=6)
+    assert sorted(r["orden"]) == list(range(15))
+    tal_cual = R._evalua(list(range(1, 16)), m, 600, paradas, 6, False, False)[2] - 600
+    assert r["minutos"] <= round(tal_cual)
+
+
+def test_el_trafico_de_la_hora_punta_alarga_la_ruta():
+    m = _matriz(3, lambda i, j: 600)
+    paradas = [{"servicio": 2}, {"servicio": 2}]
+    punta = R.optimiza_por_tiempo(m, paradas, salida=8 * 60, dia_semana=1)
+    valle = R.optimiza_por_tiempo(m, paradas, salida=11 * 60, dia_semana=1)
+    assert punta["minutos"] > valle["minutos"]
+
+
+def test_urgente_primero_si_no_cuesta_casi_nada():
+    m = _matriz(3, lambda i, j: 300)
+    paradas = [{"servicio": 3}, {"servicio": 3, "prioridad": True}]
+    assert R.optimiza_por_tiempo(m, paradas, salida=600, dia_semana=6)["orden"][0] == 1
+
+
+def test_pegado_lee_horario():
+    ps = R.lee_pegado("Cliente;Dirección;Horario\nAna;Rúa Real 5;de 10 a 12\n")
+    assert ps[0]["horario"] == "de 10 a 12"
+
+
+def test_linea_recta_de_respaldo():
+    seg, met = R.matriz_en_linea_recta([(43.37, -8.40), (43.38, -8.40)])
+    assert 1000 < met[0][1] < 2000 and seg[0][1] > 0 and seg[1][1] == 0
+
+
+def test_numeros_de_portal_no_son_franjas():
+    assert R.lee_ventana("portal 5-7") == (None, None)
+    assert R.ventana_de_nota("Portal 12-14, 3º") == (None, None)
+    assert R.ventana_de_nota("Entregar de 10 a 12, portal 2") == (600, 720)
+    assert R.ventana_de_nota("solo por la tarde") == (960, 1260)

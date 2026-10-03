@@ -246,7 +246,7 @@ export const repLeerTicket = (file) => {
   return api.post('/reparto/ticket', fd, { timeout: 60000 })
 }
 export const repNuevoPedido = (body) => api.post('/reparto/mis-pedidos', body)
-export const repEstado = (id, estado, motivo) => api.post(`/reparto/pedidos/${id}/estado`, { estado, motivo })
+export const repEstado = (id, estado, motivo, cobro) => api.post(`/reparto/pedidos/${id}/estado`, { estado, motivo, ...(cobro || {}) })
 export const repOrdenar = (punto) => api.post('/reparto/mi-ruta/ordenar', punto || {})
 export const repJornada = (accion, aceptoAviso) => api.post('/reparto/jornada', { accion, acepto_aviso: !!aceptoAviso })
 export const repPosicion = (lat, lng) => api.post('/reparto/posicion', { lat, lng })

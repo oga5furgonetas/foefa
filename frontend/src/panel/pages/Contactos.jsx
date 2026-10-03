@@ -94,7 +94,7 @@ function ContactModal({ contact, onSave, onClose }) {
             </Field>
           </div>
           <Field label={t('ct.center')} icon={<MapPin size={12} />}>
-            <input className="input w-full text-sm" placeholder="OGA5, DGA1…" value={form.center} onChange={e => set('center', e.target.value)} />
+            <input className="input w-full text-sm" placeholder="Norte, Sur…" value={form.center} onChange={e => set('center', e.target.value)} />
           </Field>
           <Field label={t('ct.notes')} icon={<StickyNote size={12} />}>
             <textarea className="input w-full resize-none text-sm" rows={2} placeholder="Cualquier nota relevante…" value={form.notes} onChange={e => set('notes', e.target.value)} />

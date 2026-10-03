@@ -18,10 +18,18 @@ import { join, relative } from 'node:path'
 
 const RAIZ = process.cwd()
 const SRC = join(RAIZ, 'frontend', 'src')
-const PATRON = /flotadsp|\bamazon\b|\bcortex\b|\bdsps?\b|\bdnr\b|scorecard|\bwiniw\b|transporter id/i
+// OGA5/DGA1/DGA2 son las naves de Dani: como ejemplo en un campo, le dicen a
+// un súper o a un taller que el producto es de paquetería (03-10-2026).
+const PATRON = /flotadsp|\bamazon\b|\bcortex\b|\bdsps?\b|\bdnr\b|scorecard|\bwiniw\b|transporter id|\boga5\b|\bdga[12]\b/i
 
 /* Menciones legítimas: [fichero, trozo de la línea, por qué]. */
 const PERMITIDO = [
+  ['panel/components/TiendaPrendas.jsx', 'camiseta oga5', 'la tienda de ropa es del dueño (solo super-admin)'],
+  // En el ALTA se pregunta a qué se dedica la empresa y una opción es ser DSP
+  // de Amazon (lo pidió Dani el 03-10-2026): es nombrar al cliente del
+  // cliente, un uso descriptivo. Solo en esa tarjeta.
+  ['pages/Registro.jsx', 'dsp de amazon', 'tarjeta del sector en el alta'],
+  ['pages/Registro.jsx', 'plantilla del d', 'descripción de la tarjeta DSP de Amazon: nombra sus módulos (DNR, WHC)'],
   ['panel/pages/Gastos.jsx', 'amazon', 'compras en Amazon como proveedor de material: es un comercio, no la plataforma'],
   ['panel/pages/Tienda.jsx', 'amazon', 'comparativa de precios de la tienda con Amazon como comercio'],
   // «dsp» es el VALOR interno del tipo de cuenta de un cliente (account_type) y

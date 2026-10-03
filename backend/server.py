@@ -1214,11 +1214,24 @@ _MODULOS_FIJOS = ("dashboard", "configuracion")
 _MODULOS_REPARTO = ["dashboard", "reparto", "vehiculos", "inspecciones", "revision", "incidencias",
                     "talleres", "ordenes", "vencimientos", "conductores", "chat", "importaciones",
                     "configuracion"]
+# La DSP de Amazon (lo que es la flota de Dani) nace con TODO: plantilla del
+# día, DNR, horas (WHC), cuadrante, turnos… Lo de paquetería por turnos que
+# en el estándar no va. Una mensajería que no trabaja para Amazon lleva el
+# reparto con escaneo más la operación por turnos, sin lo de Amazon.
+_MODULOS_DSP_AMAZON = [k for k in _MODULOS_CLAVES if k not in ("ia-peritaje",)]
+_MODULOS_MENSAJERIA = _MODULOS_REPARTO + ["asignacion", "cuadrante", "turnos", "checklist-operativo",
+                                          "aparcamiento", "incorporaciones", "empleo", "contactos"]
 SECTORES_REGISTRO = {
-    "paqueteria": None,
+    "dsp_amazon": _MODULOS_DSP_AMAZON,
+    "paqueteria": _MODULOS_DSP_AMAZON,      # nombre antiguo de la misma opción
+    "mensajeria": _MODULOS_MENSAJERIA,
     "supermercado": _MODULOS_REPARTO,
     "distribucion": _MODULOS_REPARTO,
     "otra": None,
+    # El autónomo es la oficina y el repartidor a la vez: «Mi ruta» en su
+    # propio panel, su furgoneta y su taller. Ni equipo ni turnos.
+    "autonomo": ["dashboard", "reparto", "vehiculos", "inspecciones", "incidencias", "talleres",
+                 "ordenes", "vencimientos", "configuracion"],
 }
 
 
@@ -46349,6 +46362,11 @@ async def _rep_ajustes() -> dict:
     a.setdefault("base", None)
     a.setdefault("ia_tickets", False)
     a.setdefault("dias_conservar", reparto.DIAS_CONSERVAR)
+    a.setdefault("min_parada", 4)
+    a.setdefault("min_bulto", 1)
+    a.setdefault("hora_salida", "09:00")
+    a.setdefault("volver", False)
+    a.setdefault("trafico", True)
     return a
 
 
@@ -46399,14 +46417,32 @@ async def _rep_limpiar(user: dict):
         await db.reparto_pedidos.update_many(
             {"fecha": {"$lt": limite}, "anonimizado": {"$ne": True}},
             {"$set": {"cliente": None, "telefono": None, "direccion": None, "lat": None,
-                      "lng": None, "notas": None, "contenido": None, "anonimizado": True}})
+                      "lng": None, "notas": None, "contenido": None, "entrega_foto": None,
+                      "entrega_nota": None, "anonimizado": True}})
         lim_rastro = (hoy - timedelta(days=reparto.DIAS_RASTRO)).strftime("%Y-%m-%d")
         await db.reparto_jornadas.delete_many({"fecha": {"$lt": lim_rastro}})
+        await global_db.reparto_enlaces.delete_many({"caduca": {"$lt": hoy.strftime("%Y-%m-%d")}})
     except Exception as e:                                   # noqa: BLE001
         logger.warning(f"reparto: limpieza fallida: {e}")
 
 
+async def _rep_es_autonomo(user: dict) -> bool:
+    if user.get("role") != "admin" or not user.get("org_id"):
+        return False
+    org = await get_org(user.get("org_id"))
+    return (org or {}).get("sector") == "autonomo"
+
+
 async def _rep_conductor(user: dict) -> dict:
+    """Quién reparte: el conductor de su móvil, o el propio autónomo, que es
+    su oficina y su repartidor a la vez (se le crea su ficha la primera vez)."""
+    if user.get("role") == "admin" and await _rep_es_autonomo(user):
+        d = await db.drivers.find_one({"id": user.get("sub")}, {"_id": 0, "id": 1, "name": 1})
+        if not d:
+            d = {"id": user.get("sub"), "name": user.get("name") or "Yo", "active": True,
+                 "autonomo": True, "created_at": datetime.now(timezone.utc).isoformat()}
+            await db.drivers.insert_one(dict(d))
+        return {"id": d["id"], "name": d.get("name")}
     if user.get("role") != "driver":
         raise HTTPException(403, "Esto es para el móvil del conductor")
     d = await db.drivers.find_one({"id": user.get("sub")}, {"_id": 0, "id": 1, "name": 1})
@@ -46458,12 +46494,16 @@ async def _rep_nuevo(datos: dict, user: dict, origen: str, fecha: str,
         "contenido": _texto_cuerpo(datos.get("contenido"), 300),
         "notas": _texto_cuerpo(datos.get("notas"), 200),
         "bultos": bultos, "escaneos": 1 if origen in ("escaneo", "ticket") else 0,
+        "ventana_desde": None, "ventana_hasta": None,
+        "tipo": reparto.tipo_parada(datos.get("tipo")), "cobrar": reparto.importe(datos.get("cobrar")),
+        "prioridad": bool(datos.get("prioridad")) and str(datos.get("prioridad")).strip().lower() not in ("no", "0", "false"),
         "zona": z.get("nombre") or _texto_cuerpo(datos.get("zona"), 60),
         "conductor_id": "", "conductor_nombre": "",
         "estado": "pendiente", "orden": None, "origen": origen,
         "lat": None, "lng": None, "geo": "pendiente",
         "creado_por": user.get("name") or "", "creado_en": datetime.now(timezone.utc).isoformat(),
     }
+    _rep_pon_ventana(p, datos)
     if conductor:
         p["conductor_id"], p["conductor_nombre"] = conductor["id"], conductor.get("name") or ""
     else:
@@ -46481,6 +46521,19 @@ async def _rep_nuevo(datos: dict, user: dict, origen: str, fecha: str,
             p["geo"] = "no"
     await db.reparto_pedidos.insert_one(dict(p))
     return p
+
+
+def _rep_pon_ventana(p: dict, datos: dict):
+    """La franja horaria del cliente: de la columna «horario», o de unas
+    horas sueltas, o de la nota si habla de horas. Si no hay, no hay."""
+    d = reparto.a_minutos(datos.get("ventana_desde"))
+    h = reparto.a_minutos(datos.get("ventana_hasta"))
+    if d is None or h is None or h <= d:
+        d, h = reparto.lee_ventana(_texto_cuerpo(datos.get("horario"), 60))
+    if d is None:
+        d, h = reparto.ventana_de_nota(p.get("notas") or "")
+    p["ventana_desde"] = reparto.hm(d) if d is not None else None
+    p["ventana_hasta"] = reparto.hm(h) if h is not None else None
 
 
 async def _rep_ubicar_pendientes(fecha: str):
@@ -46503,6 +46556,12 @@ def _rep_resumen(pedidos: list, base) -> list:
                                  "bultos": 0, "_paradas": []})
         r["total"] += 1
         r["bultos"] += int(p.get("bultos") or 1)
+        if p.get("cobrar"):
+            r["a_cobrar"] = round(r.get("a_cobrar", 0) + float(p.get("cobrar") or 0), 2)
+        if p.get("cobrado_importe"):
+            caja = r.setdefault("cobrado", {})
+            m = p.get("cobrado_metodo") or "otro"
+            caja[m] = round(caja.get(m, 0) + float(p.get("cobrado_importe") or 0), 2)
         if p.get("estado") == "entregado":
             r["entregados"] += 1
         elif p.get("estado") == "fallido":
@@ -46518,15 +46577,126 @@ def _rep_resumen(pedidos: list, base) -> list:
     return sorted(salida, key=lambda r: (r["conductor_id"] == "", r["nombre"]))
 
 
-async def _rep_ordenar(fecha: str, conductor_id: str, origen) -> int:
+_REP_RUTAS_LOCK = asyncio.Lock()
+_REP_RUTAS_ULTIMA = [0.0]
+# Servidor de rutas de OpenStreetMap que mantiene FOSSGIS (Alemania). Su norma:
+# identificarse, una petición por segundo como mucho y nada de uso masivo. Se
+# le mandan SOLO coordenadas, nunca nombres ni teléfonos. Si un día no da
+# abasto (muchas empresas), se monta un OSRM propio y se cambia esta variable.
+_REP_RUTAS_URL = os.environ.get("REPARTO_RUTAS_URL", "https://routing.openstreetmap.de/routed-car").rstrip("/")
+
+
+async def _rep_matriz(puntos: list) -> tuple:
+    """Tiempos (s) y distancias (m) por carretera entre todos los puntos.
+    Devuelve (segundos, metros, fuente). Sin servidor, línea recta con un
+    factor de calles y velocidad urbana, y la fuente lo dice."""
+    if 2 <= len(puntos) <= 100:
+        coords = ";".join(f"{lo:.6f},{la:.6f}" for la, lo in puntos)
+        import httpx as _httpx
+        async with _REP_RUTAS_LOCK:
+            espera = 1.1 - (time.time() - _REP_RUTAS_ULTIMA[0])
+            if espera > 0:
+                await asyncio.sleep(espera)
+            try:
+                async with _httpx.AsyncClient(timeout=20, headers={
+                        "User-Agent": f"{MARCA}/1.0 (reparto; {CORREO_CONTACTO})"}) as c:
+                    r = await c.get(f"{_REP_RUTAS_URL}/table/v1/driving/{coords}",
+                                    params={"annotations": "duration,distance"})
+                    j = r.json() if r.status_code == 200 else {}
+            except Exception as e:                           # noqa: BLE001
+                logger.warning(f"reparto: servidor de rutas sin respuesta: {type(e).__name__}")
+                j = {}
+            finally:
+                _REP_RUTAS_ULTIMA[0] = time.time()
+        seg, met = j.get("durations"), j.get("distances")
+        if (j.get("code") == "Ok" and isinstance(seg, list) and len(seg) == len(puntos)
+                and all(isinstance(f, list) and len(f) == len(puntos) for f in seg)):
+            # Un tramo que el servidor no sabe hacer (null) se rellena en línea
+            # recta en vez de tirar la ruta entera.
+            plan_b_s, plan_b_m = reparto.matriz_en_linea_recta(puntos)
+            seg = [[v if isinstance(v, (int, float)) else plan_b_s[i][k] for k, v in enumerate(f)]
+                   for i, f in enumerate(seg)]
+            met = [[v if isinstance(v, (int, float)) else plan_b_m[i][k] for k, v in enumerate(f)]
+                   for i, f in enumerate(met or plan_b_m)]
+            return seg, met, "carreteras"
+    s, m = reparto.matriz_en_linea_recta(puntos)
+    return s, m, "linea_recta"
+
+
+def _rep_ahora_local() -> tuple:
+    try:
+        from zoneinfo import ZoneInfo
+        a = datetime.now(ZoneInfo("Europe/Madrid"))
+    except Exception:                                        # noqa: BLE001
+        a = datetime.now(timezone.utc)
+    return a.hour * 60 + a.minute, a.weekday()
+
+
+def _rep_parada(p: dict, a: dict) -> dict:
+    bultos = int(p.get("bultos") or 1)
+    return {"servicio": float(a.get("min_parada", 4)) + float(a.get("min_bulto", 1)) * max(0, bultos - 1),
+            "desde": reparto.a_minutos(p.get("ventana_desde")),
+            "hasta": reparto.a_minutos(p.get("ventana_hasta")),
+            "prioridad": bool(p.get("prioridad"))}
+
+
+async def _rep_ordenar(fecha: str, conductor_id: str, origen, salida_min: Optional[int] = None) -> dict:
+    """Ordena la ruta de un conductor por TIEMPO y guarda la hora estimada de
+    llegada a cada parada. Devuelve el resumen de la ruta."""
+    a = await _rep_ajustes()
     pend = await db.reparto_pedidos.find(
         {"fecha": fecha, "conductor_id": conductor_id, "estado": {"$in": ["pendiente", "en_ruta"]}},
-        {"_id": 0, "id": 1, "lat": 1, "lng": 1}).to_list(1000)
+        {"_id": 0, "id": 1, "lat": 1, "lng": 1, "bultos": 1, "ventana_desde": 1,
+         "ventana_hasta": 1, "prioridad": 1}).to_list(1000)
     hechos = await db.reparto_pedidos.count_documents(
         {"fecha": fecha, "conductor_id": conductor_id, "estado": {"$in": ["entregado", "fallido"]}})
-    for i, p in enumerate(reparto.ordena_ruta(origen, pend)):
-        await db.reparto_pedidos.update_one({"id": p["id"]}, {"$set": {"orden": hechos + i + 1}})
-    return len(pend)
+    ubicadas = [p for p in pend if reparto._punto(p)]
+    sin = [p for p in pend if not reparto._punto(p)]
+    base = _rep_base(a)
+    origen = origen or base or (reparto._punto(ubicadas[0]) if ubicadas else None)
+    ahora, dia_hoy = _rep_ahora_local()
+    salida_cfg = reparto.a_minutos(a.get("hora_salida")) or 9 * 60
+    try:
+        dia = datetime.fromisoformat(fecha).weekday()
+    except ValueError:
+        dia = dia_hoy
+    if salida_min is None:
+        salida_min = max(ahora, salida_cfg) if fecha == _dia_negocio() else salida_cfg
+    resumen = {"id": f"{fecha}_{conductor_id}", "fecha": fecha, "conductor_id": conductor_id,
+               "salida": reparto.hm(salida_min), "paradas": len(pend), "sin_ubicar": len(sin),
+               "trafico": a.get("trafico", True) is not False, "volver": bool(a.get("volver")),
+               "calculada_en": datetime.now(timezone.utc).isoformat()}
+    orden_ids, llegadas = [], {}
+    if ubicadas and origen:
+        puntos = [origen] + [reparto._punto(p) for p in ubicadas]
+        volver = False
+        if a.get("volver") and base:
+            puntos.append(base)
+            volver = len(puntos) - 1
+        seg, met, fuente = await _rep_matriz(puntos)
+        r = reparto.optimiza_por_tiempo(seg, [_rep_parada(p, a) for p in ubicadas], salida_min,
+                                        dia_semana=dia, con_trafico=resumen["trafico"], volver=volver)
+        km, prev = 0.0, 0
+        for k, i in enumerate(r["orden"]):
+            orden_ids.append(ubicadas[i]["id"])
+            llegadas[ubicadas[i]["id"]] = r["llegadas"][k]
+            km += met[prev][i + 1]
+            prev = i + 1
+        if volver:
+            km += met[prev][volver]
+        resumen.update({"fin": reparto.hm(r["fin"]), "minutos": r["minutos"], "km": round(km / 1000, 1),
+                        "tarde": r["tarde"], "fuente": fuente})
+    else:
+        resumen.update({"fin": None, "minutos": 0, "km": 0, "tarde": 0, "fuente": None})
+    for n, pid in enumerate(orden_ids + [p["id"] for p in sin]):
+        l = llegadas.get(pid)
+        await db.reparto_pedidos.update_one({"id": pid}, {"$set": {
+            "orden": hechos + n + 1,
+            "eta": reparto.hm(l["eta"]) if l else None,
+            "tarde_min": l["tarde"] if l else 0,
+            "espera_min": l["espera"] if l else 0}})
+    await db.reparto_rutas.replace_one({"id": resumen["id"]}, dict(resumen), upsert=True)
+    return resumen
 
 
 # ── OFICINA ───────────────────────────────────────────────────────────────────
@@ -46573,6 +46743,12 @@ async def reparto_ajustes_put(data: dict = Body(...), user: dict = Depends(requi
     nuevo["dias_conservar"] = _entero(data.get("dias_conservar"), "dias_conservar",
                                       defecto=reparto.DIAS_CONSERVAR, minimo=1, maximo=90)
     nuevo["portal"] = data.get("portal") is not False
+    nuevo["min_parada"] = _entero(data.get("min_parada"), "min_parada", defecto=4, minimo=1, maximo=30)
+    nuevo["min_bulto"] = _entero(data.get("min_bulto"), "min_bulto", defecto=1, minimo=0, maximo=10)
+    hs = reparto.a_minutos(data.get("hora_salida"))
+    nuevo["hora_salida"] = reparto.hm(hs) if hs is not None else "09:00"
+    nuevo["volver"] = bool(data.get("volver"))
+    nuevo["trafico"] = data.get("trafico") is not False
     nuevo["actualizado_por"] = user.get("name") or ""
     nuevo["actualizado_en"] = datetime.now(timezone.utc).isoformat()
     await db.reparto_ajustes.replace_one({"id": "ajustes"}, nuevo, upsert=True)
@@ -46586,10 +46762,19 @@ async def reparto_pedidos(fecha: str = "", user: dict = Depends(require_admin)):
     await _rep_limpiar(user)
     f = _rep_fecha(fecha)
     a = await _rep_ajustes()
-    ps = await db.reparto_pedidos.find({"fecha": f}, {"_id": 0}).sort("creado_en", 1).to_list(3000)
+    ps = await db.reparto_pedidos.find({"fecha": f}, {"_id": 0, "entrega_foto": 0}).sort("creado_en", 1).to_list(3000)
+    # Se indica que la hay sin mandarla: la pantalla la pide al pulsar.
+    con_foto = {p["id"] for p in await db.reparto_pedidos.find(
+        {"fecha": f, "entrega_foto": {"$ne": None, "$exists": True}}, {"_id": 0, "id": 1}).to_list(3000)}
+    for p in ps:
+        p["tiene_foto"] = p["id"] in con_foto
+    rutas = {r["conductor_id"]: r async for r in db.reparto_rutas.find({"fecha": f}, {"_id": 0})}
+    conductores = _rep_resumen(ps, _rep_base(a))
+    for c in conductores:
+        c["ruta"] = rutas.get(c["conductor_id"])
     return {"fecha": f, "ve_datos": _rep_ve_datos(user), "base": a.get("base") if _rep_ve_datos(user) else None,
             "pedidos": [_rep_sale(p, user) for p in ps],
-            "conductores": _rep_resumen(ps, _rep_base(a)),
+            "conductores": conductores,
             "sin_ubicar": sum(1 for p in ps if p.get("geo") == "pendiente")}
 
 
@@ -46639,6 +46824,22 @@ async def reparto_editar(pid: str, data: dict = Body(...), user: dict = Depends(
         cambios["codigo"] = reparto.normaliza_codigo(cambios["codigo"])
     if "bultos" in data:
         cambios["bultos"] = _entero(data.get("bultos"), "bultos", defecto=1, minimo=1, maximo=99)
+    if "horario" in data:
+        v = {}
+        _rep_pon_ventana(v, {"horario": data.get("horario")})
+        cambios["ventana_desde"], cambios["ventana_hasta"] = v["ventana_desde"], v["ventana_hasta"]
+    if "prioridad" in data:
+        cambios["prioridad"] = bool(data.get("prioridad"))
+    if "tipo" in data:
+        cambios["tipo"] = reparto.tipo_parada(data.get("tipo"))
+    if "cobrar" in data:
+        cambios["cobrar"] = reparto.importe(data.get("cobrar"))
+    if "fecha" in data:
+        # Pasar a otro día (reintentar mañana un no entregado): vuelve a estar
+        # pendiente y fuera de la ruta que ya estaba ordenada.
+        cambios["fecha"] = _rep_fecha(data.get("fecha"))
+        cambios.update({"estado": "pendiente", "orden": None, "eta": None, "motivo": "",
+                        "reintento": int(p.get("reintento") or 0) + 1})
     if "conductor_id" in data:
         cid = _texto_cuerpo(data.get("conductor_id"), 60)
         cambios["conductor_id"], cambios["conductor_nombre"] = cid, await _rep_nombre_conductor(cid)
@@ -46656,6 +46857,16 @@ async def reparto_editar(pid: str, data: dict = Body(...), user: dict = Depends(
     if cambios:
         await db.reparto_pedidos.update_one({"id": pid}, {"$set": cambios})
     return _rep_sale({**p, **cambios}, user)
+
+
+@api_router.get("/reparto/pedidos/{pid}/foto")
+async def reparto_foto(pid: str, user: dict = Depends(require_admin)):
+    if not _rep_ve_datos(user):
+        raise HTTPException(403, "La prueba de entrega es de la empresa")
+    p = await db.reparto_pedidos.find_one({"id": pid}, {"_id": 0, "entrega_foto": 1, "entrega_nota": 1, "cerrado_en": 1})
+    if not p or not p.get("entrega_foto"):
+        raise HTTPException(404, "Ese pedido no tiene foto de entrega")
+    return {"foto": p["entrega_foto"], "nota": p.get("entrega_nota") or "", "cuando": p.get("cerrado_en")}
 
 
 @api_router.delete("/reparto/pedidos/{pid}")
@@ -46689,10 +46900,112 @@ async def reparto_ordenar(data: dict = Body(...), user: dict = Depends(require_a
     base = _rep_base(await _rep_ajustes())
     cid = _texto_cuerpo(data.get("conductor_id"), 60)
     ids = [cid] if cid else [c for c in await db.reparto_pedidos.distinct("conductor_id", {"fecha": f}) if c]
-    total = 0
-    for c in ids:
-        total += await _rep_ordenar(f, c, base)
-    return {"ordenados": total, "conductores": len(ids)}
+    rutas = [await _rep_ordenar(f, c, base) for c in ids]
+    return {"ordenados": sum(r["paradas"] for r in rutas), "conductores": len(ids), "rutas": rutas}
+
+
+# ── SEGUIMIENTO PARA EL CLIENTE ───────────────────────────────────────────────
+# «Tu pedido llega ≈ 10:42 · quedan 3 paradas antes». Lo que NO sale: la
+# dirección, el nombre, el teléfono, lo que lleva ni dónde está el repartidor.
+# El enlace no se adivina (128 bits), vale hasta el final del día siguiente y
+# el índice global solo guarda en qué base buscarlo.
+
+async def _rep_enlace(p: dict) -> str:
+    if p.get("seguimiento"):
+        return p["seguimiento"]
+    import secrets as _secrets
+    token = _secrets.token_urlsafe(16)
+    caduca = (datetime.fromisoformat(p.get("fecha") or _dia_negocio()) + timedelta(days=2)).strftime("%Y-%m-%d")
+    await global_db.reparto_enlaces.insert_one({"token": token, "db_name": _current_db_name.get(),
+                                                "pedido_id": p["id"], "caduca": caduca})
+    await db.reparto_pedidos.update_one({"id": p["id"]}, {"$set": {"seguimiento": token}})
+    p["seguimiento"] = token
+    return token
+
+
+@api_router.post("/reparto/pedidos/{pid}/enlace")
+async def reparto_enlace(pid: str, user: dict = Depends(require_any_auth)):
+    p = await db.reparto_pedidos.find_one({"id": pid}, {"_id": 0})
+    if not p:
+        raise HTTPException(404, "Ese pedido ya no existe")
+    if user.get("role") == "driver" and p.get("conductor_id") != user.get("sub"):
+        raise HTTPException(403, "Ese pedido no es tuyo")
+    if user.get("role") not in ("driver", "admin") or (user.get("role") == "admin" and not _rep_ve_datos(user)):
+        raise HTTPException(403, "No puedes compartir ese pedido")
+    return {"token": await _rep_enlace(p)}
+
+
+@api_router.get("/seguimiento/{token}")
+async def seguimiento_publico(token: str, request: Request):
+    _rl_public_action(f"seg:{_rl_key_ip(request)}", max_count=120, window_s=3600)
+    if not re.fullmatch(r"[A-Za-z0-9_-]{16,40}", token or ""):
+        raise HTTPException(404, "Enlace no válido")
+    e = await global_db.reparto_enlaces.find_one({"token": token}, {"_id": 0})
+    if not e or (e.get("caduca") or "") < _dia_negocio():
+        raise HTTPException(404, "Este enlace ha caducado")
+    tdb = client[e["db_name"]]
+    p = await tdb.reparto_pedidos.find_one({"id": e["pedido_id"]}, {"_id": 0})
+    if not p:
+        raise HTTPException(404, "Este enlace ha caducado")
+    antes = 0
+    if p.get("estado") in ("pendiente", "en_ruta") and p.get("orden") and p.get("conductor_id"):
+        antes = await tdb.reparto_pedidos.count_documents({
+            "fecha": p.get("fecha"), "conductor_id": p.get("conductor_id"),
+            "estado": {"$in": ["pendiente", "en_ruta"]}, "orden": {"$lt": p["orden"]}})
+    org = await global_db.organizations.find_one({"db_name": e["db_name"]}, {"_id": 0, "name": 1}) or {}
+    return {"empresa": org.get("name") or "", "estado": p.get("estado"), "fecha": p.get("fecha"),
+            "eta": p.get("eta"), "franja": [p.get("ventana_desde"), p.get("ventana_hasta")]
+            if p.get("ventana_desde") else None, "paradas_antes": antes, "tipo": p.get("tipo") or "entrega"}
+
+
+@api_router.get("/reparto/estadisticas")
+async def reparto_estadisticas(dias: int = 14, user: dict = Depends(require_admin)):
+    """Cómo va el reparto: por día, por repartidor, por zona y por qué no se
+    entrega. Sale de campos que NO son personales (estado, motivo, zona,
+    repartidor, hora estimada), así que sigue valiendo después de que se
+    borren los datos de los clientes."""
+    dias = max(1, min(90, int(dias or 14)))
+    hoy = datetime.fromisoformat(_dia_negocio())
+    desde = (hoy - timedelta(days=dias - 1)).strftime("%Y-%m-%d")
+    ps = await db.reparto_pedidos.find(
+        {"fecha": {"$gte": desde, "$lte": hoy.strftime("%Y-%m-%d")}},
+        {"_id": 0, "fecha": 1, "estado": 1, "motivo": 1, "zona": 1, "conductor_id": 1,
+         "conductor_nombre": 1, "tarde_min": 1, "ventana_desde": 1, "bultos": 1}).to_list(50000)
+    por_dia = {(hoy - timedelta(days=i)).strftime("%Y-%m-%d"): {"total": 0, "entregados": 0, "fallidos": 0}
+               for i in range(dias)}
+    por_rep, por_zona, motivos = {}, {}, {}
+    con_franja = tarde = 0
+    for p in ps:
+        e = p.get("estado")
+        d = por_dia.setdefault(p.get("fecha"), {"total": 0, "entregados": 0, "fallidos": 0})
+        d["total"] += 1
+        r = por_rep.setdefault(p.get("conductor_id") or "", {"nombre": p.get("conductor_nombre") or "",
+                                                              "total": 0, "entregados": 0, "fallidos": 0})
+        z = por_zona.setdefault(p.get("zona") or "Sin zona", {"total": 0, "entregados": 0, "fallidos": 0})
+        r["total"] += 1
+        z["total"] += 1
+        if e == "entregado":
+            d["entregados"] += 1; r["entregados"] += 1; z["entregados"] += 1
+        elif e == "fallido":
+            d["fallidos"] += 1; r["fallidos"] += 1; z["fallidos"] += 1
+            m = p.get("motivo") or "Sin motivo"
+            motivos[m] = motivos.get(m, 0) + 1
+        if p.get("ventana_desde"):
+            con_franja += 1
+            if (p.get("tarde_min") or 0) > 0:
+                tarde += 1
+    cerrados = sum(1 for p in ps if p.get("estado") in ("entregado", "fallido"))
+    entregados = sum(1 for p in ps if p.get("estado") == "entregado")
+    return {
+        "desde": desde, "dias": dias, "total": len(ps), "entregados": entregados,
+        "tasa_entrega": round(100 * entregados / cerrados) if cerrados else None,
+        "franjas": {"con_franja": con_franja, "previstas_tarde": tarde},
+        "por_dia": [{"fecha": f, **v} for f, v in sorted(por_dia.items())],
+        "por_repartidor": sorted(({"conductor_id": k, **v} for k, v in por_rep.items()),
+                                 key=lambda x: -x["total"]),
+        "por_zona": sorted(({"zona": k, **v} for k, v in por_zona.items()), key=lambda x: -x["total"]),
+        "motivos": sorted(({"motivo": k, "n": v} for k, v in motivos.items()), key=lambda x: -x["n"]),
+    }
 
 
 @api_router.get("/reparto/vivo")
@@ -46717,19 +47030,26 @@ async def reparto_vivo(user: dict = Depends(require_admin)):
 
 @api_router.get("/reparto/mi-ruta")
 async def reparto_mi_ruta(user: dict = Depends(require_any_auth)):
-    if user.get("role") != "driver":
+    autonomo = await _rep_es_autonomo(user)
+    if user.get("role") != "driver" and not autonomo:
         return {"activo": False}
     a = await _rep_ajustes()
     if not await _rep_portal_activo(user, a):
         return {"activo": False}
     d = await _rep_conductor(user)
+    autonomo = autonomo or str(d["id"]).startswith("demo-a-")
     f = _dia_negocio()
-    ps = await db.reparto_pedidos.find({"fecha": f, "conductor_id": d["id"]}, {"_id": 0}).to_list(500)
+    ps = await db.reparto_pedidos.find({"fecha": f, "conductor_id": d["id"]}, {"_id": 0, "entrega_foto": 0}).to_list(500)
+    for p in ps:
+        if p.get("telefono") and p.get("estado") in ("pendiente", "en_ruta") and not p.get("seguimiento"):
+            await _rep_enlace(p)
     ps.sort(key=lambda x: (x.get("estado") in ("entregado", "fallido"),
                            x.get("orden") is None, x.get("orden") or 0, x.get("creado_en") or ""))
     j = await db.reparto_jornadas.find_one({"id": f"{d['id']}_{f}"}, {"_id": 0, "rastro": 0}) or {}
     aviso = await db.reparto_avisos.find_one({"driver_id": d["id"]}, {"_id": 0})
-    return {"activo": True, "fecha": f, "pedidos": ps, "base": a.get("base"),
+    ruta = await db.reparto_rutas.find_one({"id": f"{f}_{d['id']}"}, {"_id": 0})
+    org = await get_org(user.get("org_id")) if user.get("org_id") else None
+    return {"activo": True, "empresa": (org or {}).get("name") or "", "fecha": f, "pedidos": ps, "base": a.get("base"), "ruta": ruta, "autonomo": autonomo,
             "ia_tickets": bool(a.get("ia_tickets")) and _rep_ia_permitida(),
             "jornada": {"empezada": j.get("empezada"), "terminada": j.get("terminada")},
             "aviso_aceptado": bool(aviso)}
@@ -46799,6 +47119,28 @@ async def reparto_estado(pid: str, data: dict = Body(...), user: dict = Depends(
         raise HTTPException(400, "Estado no válido")
     cambios = {"estado": e, "motivo": _texto_cuerpo(data.get("motivo"), 200) if e == "fallido" else ""}
     cambios["cerrado_en"] = datetime.now(timezone.utc).isoformat() if e in ("entregado", "fallido") else None
+    if e == "entregado" and (p.get("cobrar") or 0) > 0:
+        metodo = _texto_cuerpo(data.get("metodo"), 20).lower()
+        if metodo not in ("efectivo", "tarjeta", "bizum", "pagado"):
+            raise HTTPException(400, "Di cómo ha pagado: efectivo, tarjeta o Bizum")
+        cobrado = reparto.importe(data.get("importe")) if data.get("importe") not in (None, "") else p.get("cobrar")
+        cambios.update({"cobrado_metodo": metodo, "cobrado_importe": cobrado})
+    elif e != "entregado":
+        cambios.update({"cobrado_metodo": None, "cobrado_importe": None})
+    # PRUEBA DE ENTREGA (03-10-2026): una foto pequeña del paquete en el
+    # portal y/o una nota («se lo dejé al vecino del 2º»). La foto se guarda
+    # en el propio pedido, en la base de la empresa (no en el R2 público) y
+    # se borra con el resto de datos personales al cumplirse el plazo.
+    # Para evitar fotos de personas, la pantalla lo dice antes de disparar.
+    foto = _texto_cuerpo(data.get("foto"), 400000)
+    if foto:
+        if not foto.startswith("data:image/jpeg;base64,") or len(foto) > 300000:
+            raise HTTPException(400, "La foto de entrega tiene que ser un JPEG pequeño")
+        cambios["entrega_foto"] = foto
+    if "nota" in data:
+        cambios["entrega_nota"] = _texto_cuerpo(data.get("nota"), 300)
+    if e != "entregado":
+        cambios.update({"entrega_foto": None, "entrega_nota": cambios.get("entrega_nota")})
     await db.reparto_pedidos.update_one({"id": pid}, {"$set": cambios})
     return {**p, **cambios}
 
@@ -46807,7 +47149,8 @@ async def reparto_estado(pid: str, data: dict = Body(...), user: dict = Depends(
 async def reparto_mi_ordenar(data: dict = Body(...), user: dict = Depends(require_any_auth)):
     d = await _rep_conductor(user)
     origen = reparto._punto(_dict_cuerpo(data)) or _rep_base(await _rep_ajustes())
-    return {"ordenados": await _rep_ordenar(_dia_negocio(), d["id"], origen)}
+    ruta = await _rep_ordenar(_dia_negocio(), d["id"], origen, salida_min=_rep_ahora_local()[0])
+    return {"ordenados": ruta["paradas"], "ruta": ruta}
 
 
 @api_router.post("/reparto/jornada")
@@ -46879,7 +47222,7 @@ _DEMO_REP_PEDIDOS = [
     ("DEMO1001", "Cliente 1 (prueba)", "Rúa Real 21, 2º", "15003", 43.3703, -8.3982, "2 cajas, 1 pack de agua", 3, "demo-r1"),
     ("DEMO1002", "Cliente 2 (prueba)", "Rúa San Andrés 98, 4º B", "15003", 43.3690, -8.4030, "Compra semanal: 4 cajas", 4, "demo-r1"),
     ("DEMO1003", "Cliente 3 (prueba)", "Rúa Juana de Vega 14, 3º izq.", "15004", 43.3668, -8.4040, "Leche (2 packs) y 1 caja", 3, "demo-r2"),
-    ("DEMO1004", "Cliente 4 (prueba)", "Avda. Fernández Latorre 40, 1º", "15006", 43.3560, -8.4060, "1 caja de congelados", 1, "demo-r2"),
+    ("DEMO1004", "Cliente 4 (prueba)", "Avda. Fernández Latorre 40, 1º", "15006", 43.3560, -8.4060, "1 caja de congelados (urgente)", 1, "demo-r2"),
     ("DEMO1005", "Cliente 5 (prueba)", "Rúa Médico Rodríguez 5, bajo", "15004", 43.3638, -8.4065, "3 cajas y garrafa de aceite", 4, ""),
     ("DEMO1006", "Cliente 6 (prueba)", "Ronda de Outeiro 120, 6º A", "15007", 43.3560, -8.4120, "2 cajas", 2, "demo-r3"),
     ("DEMO1007", "Cliente 7 (prueba)", "Rúa Barcelona 30, 2º D", "15010", 43.3585, -8.4150, "Agua (3 packs)", 3, ""),
@@ -46891,6 +47234,10 @@ _DEMO_REP_PEDIDOS = [
 ]
 
 
+_DEMO_REP_FRANJAS = {"DEMO1002": ("10:00", "11:00"), "DEMO1006": ("12:00", "14:00"), "DEMO1009": ("17:00", "20:00")}
+_DEMO_REP_NOTAS = {"DEMO1002": "Entregar de 10 a 11", "DEMO1006": "Solo de 12 a 14", "DEMO1009": "Por la tarde, de 17 a 20"}
+
+
 async def _demo_reparto_preparar():
     """Deja la demo de reparto como recién empezada, una vez al día."""
     ddb = client[_DEMO_REP_DB]
@@ -46898,21 +47245,26 @@ async def _demo_reparto_preparar():
     meta = await ddb.app_meta.find_one({"_id": "demo_reparto_dia"})
     if meta and meta.get("dia") == hoy:
         return
-    for col in ("reparto_pedidos", "reparto_jornadas", "reparto_avisos"):
+    for col in ("reparto_pedidos", "reparto_jornadas", "reparto_avisos", "reparto_rutas"):
         await ddb[col].delete_many({})
+    await ddb.drivers.delete_many({"id": {"$regex": "^demo-a-"}})
     for cid, nombre in _DEMO_REP_CONDUCTORES:
         await ddb.drivers.update_one({"id": cid}, {"$set": {
             "id": cid, "name": nombre, "active": True, "center": "TIENDA", "demo": True}}, upsert=True)
     await ddb.reparto_ajustes.replace_one({"id": "ajustes"}, {
         "id": "ajustes", "base": dict(_DEMO_REP_BASE), "zonas": [dict(z) for z in _DEMO_REP_ZONAS],
-        "ia_tickets": False, "dias_conservar": 30, "portal": True}, upsert=True)
+        "ia_tickets": False, "dias_conservar": 30, "portal": True,
+        "min_parada": 4, "min_bulto": 1, "hora_salida": "09:00", "volver": False, "trafico": True}, upsert=True)
     nombres = dict(_DEMO_REP_CONDUCTORES)
     ahora = datetime.now(timezone.utc).isoformat()
     zona_de_cp = {cp: z["nombre"] for z in _DEMO_REP_ZONAS for cp in z["cps"]}
     await ddb.reparto_pedidos.insert_many([{
         "id": str(uuid.uuid4()), "fecha": hoy, "codigo": cod, "cliente": cli, "telefono": "",
         "direccion": f"{dire}, {cp} A Coruña", "cp": cp, "localidad": "A Coruña",
-        "contenido": lleva, "notas": "", "bultos": bultos, "escaneos": 0,
+        "contenido": lleva, "notas": _DEMO_REP_NOTAS.get(cod, ""), "bultos": bultos, "escaneos": 0,
+        "ventana_desde": _DEMO_REP_FRANJAS.get(cod, (None, None))[0],
+        "ventana_hasta": _DEMO_REP_FRANJAS.get(cod, (None, None))[1],
+        "prioridad": cod == "DEMO1004",
         "zona": zona_de_cp.get(cp, ""), "conductor_id": c, "conductor_nombre": nombres.get(c, ""),
         "estado": "pendiente", "orden": None, "origen": "oficina",
         "lat": lat, "lng": lng, "geo": "ok", "creado_por": "Demo", "creado_en": ahora,
@@ -46935,6 +47287,16 @@ async def demo_reparto_login(request: Request, data: dict = Body(default={})):
             "created_at": datetime.now(timezone.utc).isoformat()})
     await _demo_reparto_preparar()
     data = _dict_cuerpo(data)
+    if _texto_cuerpo(data.get("rol"), 20) == "autonomo":
+        # Cada visitante, su autónomo y su ruta vacía: escanea o fotografía sus
+        # propios paquetes sin ver los de nadie. Se borra al día siguiente.
+        cid = f"demo-a-{uuid.uuid4().hex[:10]}"
+        await client[_DEMO_REP_DB].drivers.insert_one({"id": cid, "name": "Autónomo (prueba)", "active": True,
+                                                       "center": "TIENDA", "demo": True})
+        token = create_token(cid, "driver", "Autónomo (prueba)", org_id=_DEMO_REP_ORG_ID, db_name=_DEMO_REP_DB,
+                             account_type="dsp", centers=["TIENDA"], demo=True)
+        return {"access_token": token, "role": "driver", "driver": {"id": cid, "name": "Autónomo (prueba)"},
+                "autonomo": True}
     if _texto_cuerpo(data.get("rol"), 20) == "conductor":
         n = _entero(data.get("n"), "n", defecto=1, minimo=1, maximo=len(_DEMO_REP_CONDUCTORES))
         cid, nombre = _DEMO_REP_CONDUCTORES[n - 1]

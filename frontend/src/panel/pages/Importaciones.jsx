@@ -109,7 +109,7 @@ function ImportarFlota({ center, alTerminar }) {
             </button>
             <button onClick={() => descargarPlantilla('plantilla-furgonetas.csv',
               ['Matrícula', 'Centro', 'Marca', 'Modelo', 'Kilómetros', 'Bastidor', 'Próxima ITV', 'Renting'],
-              ['1234 ABC', center && center !== 'Todos' ? center : 'OGA5', 'Toyota', 'Proace', '25300', 'VF1ABCDEFGH123456', '15/03/2027', 'Arval'])}
+              ['1234 ABC', center && center !== 'Todos' ? center : 'NORTE', 'Toyota', 'Proace', '25300', 'VF1ABCDEFGH123456', '15/03/2027', 'Arval'])}
               className="inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-dark-300 ring-1 ring-dark-700 hover:text-dark-100">
               <Download size={14} /> Descargar plantilla
             </button>
@@ -120,7 +120,7 @@ function ImportarFlota({ center, alTerminar }) {
       {pegando && !vista && (
         <div className="space-y-2">
           <textarea value={pegado} onChange={(e) => setPegado(e.target.value)} rows={8} autoFocus
-            placeholder={'Copia las filas en Excel (con la cabecera) y pégalas aquí.\nMatrícula\tCentro\tMarca\n1234 ABC\tOGA5\tToyota'}
+            placeholder={'Copia las filas en Excel (con la cabecera) y pégalas aquí.\nMatrícula\tCentro\tMarca\n1234 ABC\tNORTE\tToyota'}
             className="w-full rounded-lg border border-dark-700 bg-dark-950 p-3 font-mono text-[12.5px] text-dark-100 outline-none focus:border-brand-500/50" />
           <div className="flex justify-end gap-2">
             <button onClick={() => { setPegando(false); setPegado('') }} className="px-3 py-1.5 text-[13px] text-dark-400 hover:text-dark-200">Cancelar</button>

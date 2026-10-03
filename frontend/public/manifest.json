@@ -1,15 +1,60 @@
 {
-  "name": "Flota",
+  "name": "Flota · Reparto y flota",
   "short_name": "Flota",
-  "description": "Gestión de flotas con IA: inspecciones, taller, vencimientos y equipo",
-  "start_url": "/conductor",
+  "description": "Reparto a domicilio y gestión de flota: escanea los paquetes, ordena la ruta por tiempo, llama o escribe al cliente y marca las entregas.",
+  "start_url": "/app",
   "display": "standalone",
   "background_color": "#070a0e",
   "theme_color": "#070a0e",
   "orientation": "portrait",
   "icons": [
-    { "src": "/favicon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" },
-    { "src": "/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any maskable" },
-    { "src": "/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any maskable" }
+    {
+      "src": "/favicon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    },
+    {
+      "src": "/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ],
+  "scope": "/",
+  "id": "/app",
+  "lang": "es",
+  "categories": [
+    "business",
+    "productivity",
+    "navigation"
+  ],
+  "shortcuts": [
+    {
+      "name": "Mi ruta",
+      "url": "/conductor?vista=ruta",
+      "icons": [
+        {
+          "src": "/icon-192.png",
+          "sizes": "192x192"
+        }
+      ]
+    },
+    {
+      "name": "Panel",
+      "url": "/panel",
+      "icons": [
+        {
+          "src": "/icon-192.png",
+          "sizes": "192x192"
+        }
+      ]
+    }
   ]
 }

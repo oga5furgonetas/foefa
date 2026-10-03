@@ -1,0 +1,159 @@
+# La app de Android de Flota (Play Store)
+
+Preparada el 03-10-2026 para que un autónomo (o cualquier repartidor o
+empresa) instale Flota desde Play Store. Carpeta `android/` del repo.
+
+## Qué es y por qué así
+
+Es una **Trusted Web Activity**: la propia web flotadsp.com abierta por
+Chrome a pantalla completa, sin barra de direcciones, con su icono, su nombre
+y su pantalla de arranque. Es lo que recomienda Google para una web que ya es
+una app (PWA), y lo que usan Twitter Lite, Starbucks, etc.
+
+- **Una sola app**: no hay otro código que mantener; lo que se despliega en
+  la web lo ve la app al momento, sin esperar a que Play apruebe una versión.
+- **Mismos permisos**: cámara (escanear, foto de la etiqueta) y ubicación
+  (solo en jornada) los pide Chrome con sus diálogos, como en el navegador.
+  La app en sí no declara permisos: menos preguntas en la revisión de Play.
+- **Enlaces**: los de flotadsp.com (portal del conductor, seguimiento de un
+  pedido) se abren dentro de la app si está instalada (`autoVerify`).
+- **Arranque**: `/app` lleva a cada uno a lo suyo: repartidor a «Mi ruta»,
+  oficina al panel, nuevo a entrar/darse de alta.
+
+Si algún día hace falta algo que la web no puede (escaneo en segundo plano,
+avisos sin Chrome), se cambia por una app nativa; la cuenta, el paquete
+(`com.flotadsp.flota`) y la clave de firma valen igual.
+
+## Lo que ya está hecho
+
+| Qué | Dónde |
+|---|---|
+| Proyecto Android (Gradle 9.1, AGP 8.13.1, `targetSdk 36`, `minSdk 24`) | `android/` |
+| Librería de Google `androidbrowserhelper 2.7.3` | `android/app/build.gradle.kts` |
+| Clave de firma (RSA 2048, 10.000 días, alias `flota`) | `C:\Users\Usuario\.flota-android.keystore`; contraseña en `C:\Users\Usuario\.flota-android-keystore.txt` (**nunca imprimirla ni subirla**) |
+| Huella SHA-256 de esa clave | `5B:48:01:D5:CE:33:D1:C5:9E:4C:A0:40:40:3C:A4:9B:15:BF:E1:FD:7A:2B:7B:1B:F1:3A:E0:EB:1C:73:44:61` |
+| La web declara la app | `frontend/public/.well-known/assetlinks.json` (servido en https://flotadsp.com/.well-known/assetlinks.json) |
+| La app declara la web | `asset_statements` en el `AndroidManifest.xml` |
+| Manifest web (nombre, `start_url: /app`, iconos, atajos) | `frontend/public/manifest.json` |
+| Iconos y pantalla de arranque | `android/app/src/main/res/mipmap-*`, `drawable/splash.png` (del logo) |
+| Compilado firmado | `android/app/build/outputs/bundle/release/app-release.aab` (lo que se sube a Play) y `apk/release/app-release.apk` (para instalar a mano y probar) |
+
+### Cómo volver a compilar
+
+Desde bash, en `android/`:
+
+```bash
+export FLOTA_KEYSTORE='C:\Users\Usuario\.flota-android.keystore'
+export FLOTA_KEYSTORE_PASSWORD="$(tr -d '\r\n' < /c/Users/Usuario/.flota-android-keystore.txt)"
+export JAVA_HOME='C:\Program Files\Microsoft\jdk-17.0.19.10-hotspot'
+./gradlew bundleRelease assembleRelease
+```
+
+Para una versión nueva: subir `versionCode` (entero, siempre mayor) y
+`versionName` en `android/app/build.gradle.kts`. Como la app es la web, solo
+hace falta una versión nueva si cambia algo del propio envoltorio (icono,
+nombre, `targetSdk` que Play exija).
+
+## Lo que tiene que hacer Dani (no se puede hacer por él)
+
+1. **Cuenta de desarrollador de Google Play**: https://play.google.com/console
+   — pago único de 25 USD, con su Google y una identidad verificada (DNI).
+   Si la cuenta es de empresa hace falta el CIF; mientras no exista la
+   sociedad, cuenta personal (se puede traspasar después). Google exige
+   además **número de teléfono y dirección públicos** en la ficha para
+   cuentas de empresa, y correo de contacto: `contacto@flotadsp.com`.
+2. **Crear la app** en la consola: nombre «Flota», idioma español (España),
+   app (no juego), gratis.
+3. **Play App Signing** (lo propone al subir el primer AAB): aceptar. Google
+   firmará lo que llegue a los móviles con SU clave. En *Configuración →
+   Integridad de la app* saldrá la **huella SHA-256 del certificado de firma
+   de la app**: hay que **pasármela** para añadirla a `assetlinks.json`; si
+   no, la app abre con barra de direcciones (sigue funcionando, pero fea).
+4. **Subir el AAB** en *Pruebas → Prueba interna* primero (llega a los
+   correos que se añadan, al instante) y, cuando esté probado, *Producción*.
+   Google Play exige para cuentas personales nuevas (desde nov. 2023)
+   **una prueba cerrada con al menos 12 probadores durante 14 días** antes
+   de poder publicar en producción: conviene empezar esa prueba cuanto
+   antes con repartidores de confianza.
+5. **Ficha de la tienda** (textos abajo, listos para pegar), capturas de
+   pantalla (mínimo 2 de teléfono, se sacan de la demo), icono 512×512
+   (`frontend/public/icon-512.png`) y gráfico de cabecera 1024×500 (se puede
+   hacer con el logo sobre fondo `#070a0e`).
+6. **Cuestionarios** de la consola: clasificación de contenido (todo «no»;
+   sale «Para todos»), público objetivo (mayores de 18: es una herramienta
+   de trabajo), anuncios (no), app de noticias (no), seguridad de los datos
+   (respuestas abajo), declaración de permisos (ninguno propio).
+7. **Política de privacidad**: `https://flotadsp.com/privacidad`.
+
+## Textos para la ficha
+
+**Nombre**: Flota
+
+**Descripción corta** (≤ 80):
+Reparto y flota: escanea paquetes, ruta ordenada, llama al cliente.
+
+**Descripción larga**:
+Flota es la app de reparto y gestión de flota para repartidores autónomos,
+supermercados con reparto a domicilio, distribuidores y empresas de
+paquetería.
+
+Para el repartidor:
+• Escanea el código de cada paquete o haz una foto a la etiqueta: la
+  dirección y el teléfono entran solos (la foto se lee en tu móvil, no se
+  envía a nadie).
+• La ruta se ordena por tiempo, contando el tráfico típico de cada hora, el
+  rato en cada portal y el horario de cada cliente, con la hora estimada de
+  cada parada.
+• En cada parada: ir con el navegador, llamar o escribir por WhatsApp al
+  cliente con su hora de llegada, marcar entregado o no entregado, y cobrar
+  (efectivo, tarjeta o Bizum) si el pedido lo lleva.
+• Recogidas, urgentes y reintentos para otro día.
+
+Para la oficina:
+• Pedidos del día en el mapa, por repartidor y por zona, y dónde va cada
+  uno mientras está en jornada.
+• Enlace de seguimiento para el cliente sin datos personales.
+• Vehículos, inspecciones con foto, taller, ITV y vencimientos.
+
+Privacidad por diseño: cada repartidor ve solo sus pedidos, la ubicación
+solo se comparte durante la jornada que él mismo empieza y termina, y los
+datos de los clientes se borran solos. Más en flotadsp.com/privacidad.
+
+Prueba sin registrarte en flotadsp.com/prueba-reparto.
+
+**Categoría**: Empresa. **Etiquetas**: reparto, rutas, logística, flota.
+
+## Seguridad de los datos (cuestionario de Play), respuestas
+
+- ¿Recoge o comparte datos del usuario? **Sí, recoge.**
+- Ubicación aproximada/precisa: **Sí**, precisa, **opcional**, solo durante
+  la jornada que el usuario inicia; finalidad: funciones de la app; **no se
+  comparte** con terceros; se borra a los 30 días.
+- Información personal (nombre, correo, teléfono): **Sí**, del usuario y de
+  los clientes de la empresa que éste introduce; finalidad: funciones de la
+  app; no se comparte; se borra según el plazo de la empresa (30 días por
+  defecto).
+- Fotos: **Sí** (inspecciones de vehículos; la foto de la etiqueta se
+  procesa en el dispositivo y **no se recoge**).
+- Mensajes, audio, historial de navegación, contactos, calendario, archivos,
+  salud, identificadores de dispositivo: **No**.
+- Datos cifrados en tránsito: **Sí** (HTTPS). El usuario puede pedir que se
+  borren sus datos: **Sí** (contacto@flotadsp.com y desde su empresa).
+- ¿Se ha validado de forma independiente? No.
+
+## Riesgos y cosas a vigilar
+
+- **Sin la huella de Play App Signing en `assetlinks.json`**, la app se abre
+  con barra de direcciones. Es lo primero que hay que hacer tras el primer
+  AAB subido.
+- `assetlinks.json` se sirve desde Cloudflare Pages con el fallback de la
+  SPA (`/* /index.html 200`): como el fichero existe en `dist`, Pages lo
+  sirve tal cual. Comprobado con `curl` tras desplegar; si alguna vez
+  devolviera HTML, la verificación de Google falla.
+- Chrome tiene que estar instalado y actualizado en el móvil (en Android lo
+  está casi siempre). Sin él, la app abre la web en una pestaña normal
+  (`FALLBACK_STRATEGY = customtabs`), no falla.
+- El escaneo de códigos usa el lector del propio Chrome (`BarcodeDetector`);
+  en móviles sin él se escribe el código o se hace la foto.
+- Google revisa la primera versión en días (a veces una semana); las
+  siguientes, horas.

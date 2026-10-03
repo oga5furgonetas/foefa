@@ -1,3 +1,6 @@
+import InicioReparto from './InicioReparto'
+import { usePlan } from '../../lib/usePlan'
+import { esReparto } from '../../lib/sector'
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useOutletContext } from 'react-router-dom'
@@ -261,7 +264,15 @@ function ItvAlerts({ items }) {
 }
 
 /* ── Main ── */
+/* Una empresa que reparte ve su reparto; las demás, la portada de flota. Va
+   en una función aparte para no romper el orden de los hooks de la portada. */
 export default function Dashboard() {
+  const { billing } = usePlan()
+  if (esReparto(billing?.sector)) return <InicioReparto sector={billing.sector} />
+  return <DashboardFlota />
+}
+
+function DashboardFlota() {
   const { center, admin } = useOutletContext?.() || {}
   const { t, lang } = useT()
   const locale = LANG_LOCALE[lang] || 'es-ES'
