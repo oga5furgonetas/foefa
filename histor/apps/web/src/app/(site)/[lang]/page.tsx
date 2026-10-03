@@ -16,6 +16,9 @@ import { ExperimentTracker } from '@/components/client/ExperimentTracker';
 import { withHeadlineTests } from '@/lib/experiments';
 import { currentGeo, db } from '@/lib/server';
 
+/** Palabras de cinco letras o más que no dicen de qué va un titular. */
+const STOP = new Set(['sobre', 'segun', 'entre', 'desde', 'hasta', 'durante', 'contra', 'tras', 'cuando', 'donde', 'porque', 'about', 'after', 'before', 'their', 'there', 'which', 'while', 'with', 'nach', 'gegen', 'unter', 'apres', 'avant', 'contre', 'dopo', 'prima', 'contro', 'sobre', 'apos', 'antes']);
+
 export async function generateMetadata({ params }: { params: Promise<{ lang: string }> }): Promise<Metadata> {
   const { lang } = await params;
   const d = dict(lang);
@@ -48,10 +51,27 @@ export default async function Home({ params }: { params: Promise<{ lang: string 
   // decretos de vivienda tras protestas…» seguidas en la sección España (01-10-2026).
   const seen = new Set<number>();
   const shownWords: Set<string>[] = [];
-  const words = (h: string) => new Set(h.normalize('NFD').replace(/\p{M}/gu, '').toLowerCase().split(/[^\p{L}\p{N}]+/u).filter((w) => w.length >= 5));
+  // Por raíces (seis letras) y sin palabras vacías: «decreto»/«decretos» y «decidir»/«decidirá» son
+  // lo mismo. El 03-10-2026 la votación de los decretos de vivienda salía tres veces en «España».
+  const words = (h: string) =>
+    new Set(
+      h
+        .normalize('NFD')
+        .replace(/\p{M}/gu, '')
+        .toLowerCase()
+        .split(/[^\p{L}\p{N}]+/u)
+        .filter((w) => w.length >= 5 && !STOP.has(w))
+        .map((w) => w.slice(0, 6)),
+    );
   const repeats = (h: string) => {
     const w = words(h);
-    return w.size > 0 && shownWords.some((s) => [...w].filter((x) => s.has(x)).length / Math.min(w.size, s.size || 1) >= 0.6);
+    return (
+      w.size > 0 &&
+      shownWords.some((s) => {
+        const shared = [...w].filter((x) => s.has(x)).length;
+        return shared >= 3 && shared / Math.min(w.size, s.size || 1) >= 0.55;
+      })
+    );
   };
   const take = <T extends { id: number; headline: string }>(xs: T[], n: number) => {
     const out: T[] = [];

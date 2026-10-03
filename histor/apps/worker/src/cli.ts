@@ -13,6 +13,7 @@
  *   social:brief [--slot=am|pm] [--lang=es]  manda ya «Las claves del día» al canal de Telegram
  *   social:requeue [--hours=3]   vuelve a poner en cola lo publicado que ahora sí puede ir a redes
  *   images:recheck [--hours=72]   rehace las fotos de archivo con las reglas actuales
+ *   videos:sync             lee los canales de vídeo y empareja los vídeos con las historias
  *   images:backfill [--hours=72]  pone imagen ilustrativa (Wikimedia Commons) a lo publicado que no tenga
  *   admin:reset-password    NEW_PASSWORD=… [--email=…] restablece la contraseña (sin correo configurado)
  *   stories:recheck [--hours=72]  vuelve a verificar y redactar lo publicado en esas horas (tras mejorar el redactor)
@@ -24,6 +25,7 @@ import { ensureAdmin, operatorResetPassword } from '@histor/core/auth/users';
 import { SOURCE_SEEDS } from '@histor/core/config/sources';
 import { closeDb, getDb } from '@histor/core/db/client';
 import { articles, media, rawItems, sources, stories, storyItems } from '@histor/core/db/schema';
+import { ingestVideos, matchVideos } from '@histor/core/media/videos';
 import { cleanStoredArticle, expandNames, MEDIA_TYPES } from '@histor/core/writing/media';
 import { bodyText } from '@histor/core/writing/draft';
 import { reclassifyRecent } from '@histor/core/services/reclassify';
@@ -234,8 +236,14 @@ async function main(): Promise<number> {
       console.log(`✓ imágenes: ${ids.length} historias revisadas`, tally);
       return 0;
     }
+    case 'videos:sync': {
+      const added = await ingestVideos(getDb());
+      const matched = await matchVideos(getDb());
+      console.log(`✓ vídeos: ${added} nuevos, ${matched} emparejados`);
+      return 0;
+    }
     default:
-      console.log('Uso: cli <migrate|seed|create-admin|demo:seed|demo:purge|sources:check|images:backfill|images:recheck|stories:recheck|items:reclassify|articles:clean-media|settings:editorial|social:requeue|social:brief|run-once|newsletter:send|check:env>');
+      console.log('Uso: cli <migrate|seed|create-admin|demo:seed|demo:purge|sources:check|images:backfill|images:recheck|videos:sync|stories:recheck|items:reclassify|articles:clean-media|settings:editorial|social:requeue|social:brief|run-once|newsletter:send|check:env>');
       return cmd ? 1 : 0;
   }
 }

@@ -17,6 +17,7 @@ import { enqueue, releaseStale, work } from '@histor/core/jobs/queue';
 import { sendDueNewsletters } from '@histor/core/newsletter/index';
 import { dispatchStoryAlerts } from '@histor/core/notify/index';
 import { attachStoryImage } from '@histor/core/media/wikimedia';
+import { ingestVideos, matchVideos } from '@histor/core/media/videos';
 import { pingIndexNow, storyUrls } from '@histor/core/seo/indexnow';
 import { logger, reportError } from '@histor/core/observability/index';
 import { maintenance, runPipelineOnce, type TickStats } from '@histor/core/pipeline/run';
@@ -163,6 +164,9 @@ async function main() {
         return [] as string[];
       });
       if (briefs.length) logger.info({ briefs }, 'resumen del día enviado');
+      // Vídeos de canales de noticias y su historia (cada 5 min; los RSS de YouTube son ligeros).
+      const vids = env().INGEST_ENABLED && !env().DEMO_MODE ? await ingestVideos(db).then(async (added) => ({ added, matched: await matchVideos(db) })).catch((e) => ({ error: String((e as Error).message) })) : null;
+      if (vids && ('error' in vids || vids.added || vids.matched)) logger.info({ vids }, 'vídeos');
       const released = await releaseStale(db, 15);
       if (posts.posted || posts.failed || released) logger.info({ posts, released }, 'periódico');
     }),

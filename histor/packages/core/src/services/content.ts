@@ -25,6 +25,7 @@ import {
   rawItems,
 } from '../db/schema';
 import { env } from '../env';
+import { videoForStory } from '../media/videos';
 import { href } from '../i18n/routes';
 
 export function demoMode(): boolean {
@@ -317,7 +318,8 @@ export async function getArticleDetail(db: Db, lang: string, slug: string) {
     .where(eq(articleEntities.articleId, a.id));
   const related = await relatedArticles(db, a, ents.map((e) => e.id));
   const evs = await db.select().from(events).where(eq(events.storyId, a.storyId));
-  return { article: a, story, author: author ?? null, image: image ?? null, versions, corrections: corr, alternates, entities: ents, related, events: evs };
+  const video = await videoForStory(db, a.storyId, a.language).catch(() => null);
+  return { article: a, story, author: author ?? null, image: image ?? null, video, versions, corrections: corr, alternates, entities: ents, related, events: evs };
 }
 
 export async function relatedArticles(db: Db, a: { id: number; storyId: number; language: string; categoryId: string | null }, entityIds: number[], limit = 6): Promise<ArticleCard[]> {

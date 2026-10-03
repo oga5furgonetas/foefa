@@ -15,6 +15,13 @@
       "when": 1790470852436,
       "tag": "0001_search_and_extensions",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1791024383688,
+      "tag": "0002_videos",
+      "breakpoints": true
     }
   ]
 }

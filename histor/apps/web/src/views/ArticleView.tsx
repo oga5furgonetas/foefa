@@ -25,7 +25,7 @@ const KIND_LABEL = (d: Dict, kind: string) =>
   ({ correction: d.label.correction, clarification: d.label.clarification, update: d.label.update, retraction: d.label.retracted })[kind] ?? d.label.update;
 
 export function ArticleView({ data, lang, d, tz, experiment }: { data: ArticleDetail; lang: string; d: Dict; tz: string; experiment?: { key: string; variant: string; headline: string } }) {
-  const { article: a, story, author, image, versions, corrections, alternates, entities, related } = data;
+  const { article: a, story, author, image, video, versions, corrections, alternates, entities, related } = data;
   const retracted = a.status === 'retracted';
   const underReviewNote = NOTES[lang]?.underReview;
   const underReview = !retracted && corrections.some((c) => c.note === underReviewNote && c.version === a.version);
@@ -141,6 +141,26 @@ export function ArticleView({ data, lang, d, tz, experiment }: { data: ArticleDe
                   ` (${image.license})`
                 )}
               </span>
+            </figcaption>
+          </figure>
+        )}
+
+        {video && !retracted && (
+          <figure className="article-video" style={{ margin: '0 0 22px' }}>
+            <div style={{ position: 'relative', paddingTop: '56.25%', background: '#000' }}>
+              <iframe
+                src={`https://www.youtube-nocookie.com/embed/${video.externalId}?rel=0`}
+                title={video.title}
+                loading="lazy"
+                allow="accelerometer; encrypted-media; gyroscope; picture-in-picture"
+                allowFullScreen
+                referrerPolicy="strict-origin-when-cross-origin"
+                style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', border: 0 }}
+              />
+            </div>
+            <figcaption className="meta" style={{ marginTop: 6 }}>
+              <span>{t(d.article.videoCredit, { channel: video.channelName })}</span>
+              <span className="muted">· {video.title}</span>
             </figcaption>
           </figure>
         )}

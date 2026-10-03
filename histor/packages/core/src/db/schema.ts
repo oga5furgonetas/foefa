@@ -541,6 +541,30 @@ export const media = pgTable('media', {
   createdAt: ts('created_at').notNull().defaultNow(),
 });
 
+/**
+ * Vídeos de canales de noticias (YouTube, por su RSS público) emparejados con una historia. Se
+ * insertan con el reproductor oficial de YouTube, con el nombre del canal (03-10-2026).
+ */
+export const videos = pgTable(
+  'videos',
+  {
+    id: serial('id').primaryKey(),
+    provider: text('provider').notNull().default('youtube'),
+    externalId: text('external_id').notNull(),
+    channelId: text('channel_id').notNull(),
+    channelName: text('channel_name').notNull(),
+    language: text('language').notNull(),
+    title: text('title').notNull(),
+    description: text('description'),
+    publishedAt: ts('published_at').notNull(),
+    storyId: bigint('story_id', { mode: 'number' }).references(() => stories.id, { onDelete: 'set null' }),
+    matchScore: real('match_score'),
+    matchedAt: ts('matched_at'),
+    createdAt: ts('created_at').notNull().defaultNow(),
+  },
+  (t) => [uniqueIndex('videos_provider_external_idx').on(t.provider, t.externalId), index('videos_story_idx').on(t.storyId), index('videos_published_idx').on(t.publishedAt)],
+);
+
 export const articles = pgTable(
   'articles',
   {

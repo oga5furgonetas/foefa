@@ -89,7 +89,8 @@ function publicCsp(dev: boolean): string {
     `img-src 'self' data: blob: https:`,
     `font-src 'self' data:`,
     `connect-src 'self'${ads ? ` ${ADS.connect}` : ''}`,
-    ...(ads ? [`frame-src ${ADS.frame}`] : []),
+    // Vídeos de la noticia con el reproductor oficial de YouTube sin cookies (03-10-2026).
+    `frame-src https://www.youtube-nocookie.com${ads ? ` ${ADS.frame}` : ''}`,
     `frame-ancestors 'none'`,
     `form-action 'self' https://checkout.stripe.com https://accounts.google.com https://appleid.apple.com`,
     `base-uri 'self'`,
