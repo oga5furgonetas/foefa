@@ -75,7 +75,7 @@ export default function Repartidores() {
         {/* El vídeo de la app (el mismo de TikTok, mudo y en bucle): se ve lo
             que hace antes de pulsar nada. Las capturas, de reserva si no carga. */}
         <div className="-mx-5 mt-7 flex snap-x gap-3 overflow-x-auto px-5 pb-2">
-          <video src={`/videos/tiktok-${video}.mp4`} poster={`/capturas-ruta/${capturas}/1-ruta.png`} autoPlay muted loop playsInline preload="metadata"
+          <video src={`/videos/tiktok-${video}.mp4?v=3`} poster={`/capturas-ruta/${capturas}/1-ruta.png`} autoPlay muted loop playsInline preload="metadata"
             width="390" height="693" aria-label={tx('Vídeo de la app')}
             className="w-[62%] max-w-[240px] shrink-0 snap-center rounded-[22px] border border-dark-700 bg-dark-900 object-cover shadow-2xl shadow-black/40" />
           {['2-mapa', '3-navegando'].map((n) => (

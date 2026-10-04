@@ -81,6 +81,8 @@ for (const [lang, cfg] of Object.entries(IDIOMAS)) {
       await page.evaluate(() => window.scrollTo(0, 0))
 
       await page.getByRole('button', { name: /^(Empezar a navegar|开始导航)$/ }).click()
+      // Chromium emulado solo avisa de la posición cuando cambia: un empujón para la guía.
+      await context.setGeolocation({ latitude: 43.36361, longitude: -8.41181 })
       const nav = page.getByRole('dialog')
       await expect(nav.getByTestId('guia-texto')).toBeVisible()
       await page.waitForTimeout(3500)

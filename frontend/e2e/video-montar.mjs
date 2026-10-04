@@ -27,53 +27,53 @@ const SALIDAS = [path.join(process.cwd(), '..', 'docs', 'videos'), path.join(pro
 const GUION = {
   es: { voz: 'es-ES-AlvaroNeural', frases: [
     '¿Todavía ordenas la ruta a mano?',
-    'Haz una foto a la etiqueta y la dirección entra sola.',
-    'La ruta se ordena sola por tiempo, con el tráfico.',
-    'Y te guía con voz hasta cada puerta.',
+    'Foto a la etiqueta y la dirección entra sola.',
+    'La ruta se ordena sola.',
+    'Te guía con voz hasta cada puerta.',
     'Entregado. Siguiente.',
-    'Pruébala gratis siete días, sin registrarte. FDS, en flotadsp punto com.'] },
+    'Crea tu cuenta gratis: siete días sin tarjeta. FDS, en flotadsp punto com.'] },
   en: { voz: 'en-US-GuyNeural', frases: [
     'Still planning your route by hand?',
-    'Snap the label and the address goes in by itself.',
-    'The route sorts itself by time, with traffic.',
-    'And it guides you by voice to every door.',
+    'Snap the label, the address goes in.',
+    'The route sorts itself.',
+    'Voice guidance to every door.',
     'Delivered. Next.',
-    'Try it free for seven days, no sign-up. FDS, at flotadsp dot com.'] },
+    'Create your free account: seven days, no card. FDS, at flotadsp dot com.'] },
   pt: { voz: 'pt-PT-DuarteNeural', frases: [
     'Ainda ordenas a rota à mão?',
-    'Tira uma foto à etiqueta e a morada entra sozinha.',
-    'A rota ordena-se sozinha por tempo, com o trânsito.',
-    'E guia-te por voz até cada porta.',
+    'Foto à etiqueta e a morada entra sozinha.',
+    'A rota ordena-se sozinha.',
+    'Guia-te por voz até cada porta.',
     'Entregue. Seguinte.',
-    'Experimenta grátis sete dias, sem registo. FDS, em flotadsp ponto com.'] },
+    'Cria a tua conta grátis: sete dias sem cartão. FDS, em flotadsp ponto com.'] },
   fr: { voz: 'fr-FR-HenriNeural', frases: [
     'Vous triez encore votre tournée à la main ?',
-    'Photographiez l’étiquette : l’adresse est saisie toute seule.',
-    'La tournée se trie toute seule, avec le trafic.',
-    'Et elle vous guide à la voix jusqu’à chaque porte.',
+    'Photo de l’étiquette, l’adresse est saisie.',
+    'La tournée se trie toute seule.',
+    'Guidage vocal jusqu’à chaque porte.',
     'Livré. Suivant.',
-    'Essayez gratuitement sept jours, sans inscription. FDS, sur flotadsp point com.'] },
+    'Créez votre compte gratuit : sept jours sans carte. FDS, sur flotadsp point com.'] },
   it: { voz: 'it-IT-DiegoNeural', frases: [
     'Ordini ancora il giro a mano?',
-    'Fai una foto all’etichetta e l’indirizzo entra da solo.',
-    'Il percorso si ordina da solo per tempo, con il traffico.',
-    'E ti guida con la voce fino a ogni porta.',
+    'Foto all’etichetta e l’indirizzo entra.',
+    'Il percorso si ordina da solo.',
+    'Ti guida con la voce fino a ogni porta.',
     'Consegnato. Avanti.',
-    'Provala gratis per sette giorni, senza registrarti. FDS, su flotadsp punto com.'] },
+    'Crea il tuo account gratis: sette giorni senza carta. FDS, su flotadsp punto com.'] },
   de: { voz: 'de-DE-ConradNeural', frases: [
     'Planst du deine Tour noch von Hand?',
-    'Etikett fotografieren, und die Adresse ist drin.',
-    'Die Route sortiert sich von selbst nach Zeit, mit Verkehr.',
-    'Und sie führt dich per Sprache bis zu jeder Tür.',
+    'Etikett fotografieren, Adresse ist drin.',
+    'Die Route sortiert sich von selbst.',
+    'Sprachführung bis zu jeder Tür.',
     'Zugestellt. Weiter.',
-    'Teste sie sieben Tage gratis, ohne Anmeldung. FDS, auf flotadsp punkt com.'] },
+    'Erstelle dein kostenloses Konto: sieben Tage ohne Karte. FDS, auf flotadsp punkt com.'] },
   zh: { voz: 'zh-CN-YunxiNeural', frases: [
     '还在手动排路线吗？',
     '拍一下面单，地址自动录入。',
-    '路线按时间自动排好，还考虑路况。',
-    '并用中文语音导航到每个门口。',
+    '路线自动排好。',
+    '中文语音导航到每个门口。',
     '已送达，下一站。',
-    '免注册，免费试用七天。FDS，flotadsp 点 com。'] },
+    '免费创建账号，七天免绑卡。FDS，flotadsp 点 com。'] },
 }
 
 function run(args, input) {
@@ -86,7 +86,7 @@ function duracion(f) {
 
 function voz(lang, i, texto, destino) {
   if (fs.existsSync(destino)) return
-  execFileSync('py', ['-3', '-m', 'edge_tts', '--voice', GUION[lang].voz, '--rate=+8%', '--text', texto, '--write-media', destino], { stdio: 'inherit' })
+  execFileSync('py', ['-3', '-m', 'edge_tts', '--voice', GUION[lang].voz, '--rate=+14%', '--text', texto, '--write-media', destino], { stdio: 'inherit' })
 }
 
 /* Base musical: un «pad» de dos acordes y un pulso suave a 100 bpm, hecha con

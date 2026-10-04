@@ -24,6 +24,11 @@ test('Ruta · editar una parada y quitarla con doble toque', async ({ page }) =>
   ]
   const editados = []
   const quitados = []
+  // El buscador de direcciones (Photon) devuelve una sugerencia con su punto exacto.
+  await page.route(/photon\.komoot\.io/, (r) => r.fulfill({ json: { features: [
+    { geometry: { coordinates: [-8.405, 43.369] }, properties: { street: 'Avenida Montero Ríos', housenumber: '12', postcode: '15001', city: 'A Coruña', countrycode: 'ES' } },
+    { geometry: { coordinates: [-8.4, 43.37] }, properties: { name: 'Zona sin calle', countrycode: 'ES' } },
+  ] } }))
   await page.route(/\/api\/reparto\/mi-ruta\/trazado/, (r) => r.fulfill({ json: { linea: [], fuente: 'linea_recta' } }))
   await page.route(/\/api\/reparto\/mis-pedidos\/p1\/editar/, async (r) => {
     const b = r.request().postDataJSON(); editados.push(b)
@@ -41,16 +46,24 @@ test('Ruta · editar una parada y quitarla con doble toque', async ({ page }) =>
   const sig = page.locator('div.rounded-2xl', { hasText: 'Siguiente parada' })
   await expect(sig.getByText('Farmacia Sol')).toBeVisible()
 
+  // Con paradas cargadas, la carga es una barra compacta; lo demás, bajo «Más formas de añadir».
+  await expect(page.getByRole('button', { name: 'Escanear' })).toBeVisible()
+  await expect(page.getByPlaceholder('o escribe el código')).toHaveCount(0)
+  await page.getByRole('button', { name: 'Más formas de añadir' }).click()
+  await expect(page.getByPlaceholder('o escribe el código')).toBeVisible()
+
   // Editar: se abre la hoja con los datos de la parada y sin la foto del ticket.
   await sig.getByRole('button', { name: /Editar parada: Farmacia Sol/ }).click()
   await expect(page.getByRole('heading', { name: 'Editar parada' })).toBeVisible()
   await expect(page.getByText('Foto del ticket')).toHaveCount(0)
-  await page.getByPlaceholder('Dirección completa').fill('Avda. Montero Ríos 12, A Coruña')
+  await page.getByPlaceholder('Dirección completa').fill('Montero Ríos 12')
+  await page.getByRole('button', { name: /Avenida Montero Ríos 12, 15001 A Coruña/ }).click()
+  await expect(page.getByText('Sitio encontrado en el mapa')).toBeVisible()
   await page.getByPlaceholder('Cliente', { exact: true }).fill('Farmacia Sol 2')
   await page.getByRole('button', { name: 'Guardar cambios' }).click()
   await expect(page.getByText('✓ Cambios guardados')).toBeVisible()
   expect(editados).toHaveLength(1)
-  expect(editados[0]).toMatchObject({ direccion: 'Avda. Montero Ríos 12, A Coruña', cliente: 'Farmacia Sol 2', telefono: '600000001' })
+  expect(editados[0]).toMatchObject({ direccion: 'Avenida Montero Ríos 12, 15001 A Coruña', lat: 43.369, lng: -8.405, cliente: 'Farmacia Sol 2', telefono: '600000001' })
   await expect(page.getByText('Farmacia Sol 2')).toBeVisible()
 
   // Quitar: el primer toque pide confirmar, el segundo la quita.

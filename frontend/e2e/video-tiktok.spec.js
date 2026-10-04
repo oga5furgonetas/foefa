@@ -21,48 +21,55 @@ import { simularApi, entrarComoAdmin } from './api-simulada.js'
 
 const ESC = {
   es: {
-    locale: 'es-ES', clientes: ['Bar Pepe', 'Lucía M.', 'Farmacia Sol', 'Kiosko Luz'],
+    locale: 'es-ES',
+    mas: 'Más formas de añadir', clientes: ['Bar Pepe', 'Lucía M.', 'Farmacia Sol', 'Kiosko Luz'],
     rotulos: ['¿Aún ordenas la ruta a mano?', 'Foto a la etiqueta y entra sola', 'La ruta se ordena sola por tiempo',
       'Te guía con voz hasta cada puerta', 'Entregado. Siguiente.'],
     cierre: ['GRATIS 7 días', 'FDS · flotadsp.com'],
     botonNav: 'Empezar a navegar', botonNuevo: 'Añadir un pedido sin código',
   },
   zh: {
-    locale: 'zh-CN', clientes: ['王记超市', '李女士', 'Farmacia Sol', '陈先生'],
+    locale: 'zh-CN',
+    mas: '更多添加方式', clientes: ['王记超市', '李女士', 'Farmacia Sol', '陈先生'],
     rotulos: ['还在手动排路线？', '拍面单，地址自动录入', '路线按时间自动排好', '中文语音导航到每个门口', '已送达，下一站。'],
     cierre: ['免费7天', 'FDS · flotadsp.com/cn'],
     botonNav: '开始导航', botonNuevo: '添加无单号订单',
   },
   en: {
-    locale: 'en-GB', clientes: ["Pepe's Bar", 'Lucy M.', 'Sun Pharmacy', 'Luz Kiosk'],
+    locale: 'en-GB',
+    mas: 'More ways to add', clientes: ["Pepe's Bar", 'Lucy M.', 'Sun Pharmacy', 'Luz Kiosk'],
     rotulos: ['Still planning your route by hand?', 'Snap the label: address goes in', 'The route sorts itself by time',
       'Voice guidance to every door', 'Delivered. Next.'],
     cierre: ['FREE 7 days', 'FDS · flotadsp.com'],
     botonNav: 'Start navigation', botonNuevo: 'Add an order without a code',
   },
   pt: {
-    locale: 'pt-PT', clientes: ['Bar do Zé', 'Lúcia M.', 'Farmácia Sol', 'Quiosque Luz'],
+    locale: 'pt-PT',
+    mas: 'Mais formas de adicionar', clientes: ['Bar do Zé', 'Lúcia M.', 'Farmácia Sol', 'Quiosque Luz'],
     rotulos: ['Ainda ordenas a rota à mão?', 'Foto à etiqueta e a morada entra', 'A rota ordena-se sozinha por tempo',
       'Guia-te por voz até cada porta', 'Entregue. Seguinte.'],
     cierre: ['GRÁTIS 7 dias', 'FDS · flotadsp.com'],
     botonNav: 'Começar a navegar', botonNuevo: 'Adicionar uma encomenda sem código',
   },
   fr: {
-    locale: 'fr-FR', clientes: ['Bar Pépé', 'Lucie M.', 'Pharmacie Soleil', 'Kiosque Luz'],
+    locale: 'fr-FR',
+    mas: 'Plus de façons d’ajouter', clientes: ['Bar Pépé', 'Lucie M.', 'Pharmacie Soleil', 'Kiosque Luz'],
     rotulos: ['Vous triez encore votre tournée à la main ?', "Photo de l'étiquette : l'adresse est saisie", 'La tournée se trie toute seule',
       "Guidage vocal jusqu'à chaque porte", 'Livré. Suivant.'],
     cierre: ['GRATUIT 7 jours', 'FDS · flotadsp.com'],
     botonNav: 'Démarrer la navigation', botonNuevo: 'Ajouter une commande sans code',
   },
   it: {
-    locale: 'it-IT', clientes: ['Bar Pepe', 'Lucia M.', 'Farmacia Sole', 'Edicola Luz'],
+    locale: 'it-IT',
+    mas: 'Altri modi per aggiungere', clientes: ['Bar Pepe', 'Lucia M.', 'Farmacia Sole', 'Edicola Luz'],
     rotulos: ['Ordini ancora il giro a mano?', "Foto all'etichetta e l'indirizzo entra", 'Il percorso si ordina da solo',
       'Guida vocale fino a ogni porta', 'Consegnato. Avanti.'],
     cierre: ['GRATIS 7 giorni', 'FDS · flotadsp.com'],
     botonNav: 'Avvia navigazione', botonNuevo: 'Aggiungi un ordine senza codice',
   },
   de: {
-    locale: 'de-DE', clientes: ['Bar Pepe', 'Lucia M.', 'Sonnen-Apotheke', 'Kiosk Luz'],
+    locale: 'de-DE',
+    mas: 'Weitere Wege zum Hinzufügen', clientes: ['Bar Pepe', 'Lucia M.', 'Sonnen-Apotheke', 'Kiosk Luz'],
     rotulos: ['Planst du deine Tour noch von Hand?', 'Etikett fotografieren, Adresse ist drin', 'Die Route sortiert sich von selbst',
       'Sprachführung bis zu jeder Tür', 'Zugestellt. Weiter.'],
     cierre: ['GRATIS 7 Tage', 'FDS · flotadsp.com'],
@@ -70,24 +77,19 @@ const ESC = {
   },
 }
 
+/* El trazado y la navegación son REALES (el camino por las calles que da el
+   servidor de rutas entre estas mismas paradas, e2e/fixtures/coruna-real.json):
+   antes eran 5 puntos a mano y en el vídeo se veían rayas rectas. */
+const REAL = JSON.parse(fs.readFileSync(path.join(process.cwd(), 'e2e', 'fixtures', 'coruna-real.json'), 'utf8'))
+const NAVEGAR = REAL.navegar
+const YO = { latitude: 43.3636, longitude: -8.4118 }
+
 const pedidosDe = (c) => [
-  { id: 'p1', cliente: c[0], direccion: 'Rúa Galera 10, A Coruña', telefono: '600000001', estado: 'pendiente', bultos: 2, orden: 1, eta: '10:05', lat: 43.3704, lng: -8.4003, hueco: 'Detrás · izq' },
-  { id: 'p2', cliente: c[1], direccion: 'Rúa Real 5, A Coruña', telefono: '600000002', estado: 'pendiente', bultos: 1, orden: 2, eta: '10:14', lat: 43.3690, lng: -8.4010, cobrar: 24.5, hueco: 'Medio · der' },
-  { id: 'p3', cliente: c[2], direccion: 'Avda. Montero Ríos 12, A Coruña', estado: 'pendiente', bultos: 1, orden: 3, eta: '10:26', lat: 43.3660, lng: -8.4060, franja: ['10:00', '12:00'] },
+  { id: 'p1', cliente: c[2], direccion: 'Rúa Sinfónica de Galicia 8, A Coruña', estado: 'pendiente', bultos: 1, orden: 1, eta: '10:05', lat: 43.363889, lng: -8.409899, franja: ['10:00', '12:00'] },
+  { id: 'p2', cliente: c[1], direccion: 'Rúa Emilia Pardo Bazán 14, A Coruña', telefono: '600000002', estado: 'pendiente', bultos: 1, orden: 2, eta: '10:16', lat: 43.363999, lng: -8.407109, cobrar: 24.5, hueco: 'Medio · der' },
+  { id: 'p3', cliente: c[0], direccion: 'Rúa Marcial del Adalid 5, A Coruña', telefono: '600000001', estado: 'pendiente', bultos: 2, orden: 3, eta: '10:24', lat: 43.36219, lng: -8.407002, hueco: 'Detrás · izq' },
   { id: 'p4', cliente: c[3], direccion: 'Rúa San Andrés 30, A Coruña', estado: 'entregado', bultos: 1, orden: 4, cobrado_importe: 12, cobrado_metodo: 'tarjeta', cerrado_en: '2026-10-02T08:00:00Z' },
 ]
-
-const NAVEGAR = {
-  fuente: 'carreteras', metros: 999, minutos: 4.1,
-  linea: [[43.3665, -8.4065], [43.3675, -8.4074], [43.3679, -8.4066], [43.3713, -8.4006], [43.3704, -8.4003]],
-  pasos: [
-    { texto: 'Sal por Túnel Praza de Lugo', icono: 'recto', punto: [43.3665, -8.4065], metros: 140, calle: 'Praza de Lugo', maniobra: { tipo: 'depart' } },
-    { texto: 'Gira a la derecha por Praza de Pontevedra', icono: 'derecha', punto: [43.3675, -8.4074], metros: 86, calle: 'Praza de Pontevedra', maniobra: { tipo: 'turn', mod: 'right' } },
-    { texto: 'Sigue recto por Rúa San Andrés', icono: 'recto', punto: [43.3679, -8.4066], metros: 620, calle: 'Rúa San Andrés', maniobra: { tipo: 'continue', mod: 'straight' } },
-    { texto: 'Gira a la derecha por Rúa Torreiro', icono: 'derecha', punto: [43.3713, -8.4006], metros: 99, calle: 'Rúa Torreiro', maniobra: { tipo: 'turn', mod: 'right' } },
-    { texto: 'Has llegado', icono: 'llegada', punto: [43.3704, -8.4003], metros: 0, maniobra: { tipo: 'arrive' } },
-  ],
-}
 
 /* El rótulo: una capa encima de la app, grande y legible en un móvil, con la
    fuente del sistema. Se mete y se quita por DOM: no toca la app. */
@@ -150,15 +152,13 @@ for (const [lang, cfg] of Object.entries(ESC)) {
       await entrarComoAdmin(page)
       await simularApi(page, 'vacio')
       await context.grantPermissions(['geolocation'])
-      await context.setGeolocation({ latitude: 43.3677, longitude: -8.4070 })
+      await context.setGeolocation(YO)
       const fin = new Date(Date.now() + 30 * 86400000).toISOString()
       await page.route(/\/api\/org\/billing/, (r) => r.fulfill({ json: {
         plan: 'autonomo', sector: 'autonomo', modulos: ['dashboard', 'reparto', 'configuracion'],
         precios: { mensual: 9.99, anual: 99 }, regalos: { 1: 9.99, 12: 99 },
         status: 'active', suscrita: true, ciclo: 'mensual', proximo_cobro: fin } }))
-      await page.route(/\/api\/reparto\/mi-ruta\/trazado/, (r) => r.fulfill({ json: {
-        linea: [[43.3704, -8.4003], [43.3697, -8.4007], [43.3690, -8.4010], [43.3675, -8.4035], [43.3660, -8.4060]],
-        fuente: 'carreteras', km: 3.1, minutos: 9 } }))
+      await page.route(/\/api\/reparto\/mi-ruta\/trazado/, (r) => r.fulfill({ json: REAL.trazado }))
       await page.route(/\/api\/reparto\/mi-ruta\/navegar/, (r) => r.fulfill({ json: NAVEGAR }))
       let pedidos = pedidosDe(cfg.clientes)
       await page.route(/\/api\/reparto\/pedidos\/p1\/estado/, async (r) => {
@@ -167,19 +167,20 @@ for (const [lang, cfg] of Object.entries(ESC)) {
       })
       await page.route(/\/api\/reparto\/mi-ruta$/, (r) => r.fulfill({ json: {
         activo: true, autonomo: true, empresa: '', fecha: '2026-10-02', ia_tickets: false, jornada: {}, aviso_aceptado: true,
-        base: null, ruta: { fin: '10:40', minutos: 40, km: 9.5, trafico: true }, pedidos } }))
+        base: null, ruta: { fin: '10:30', minutos: 30, km: REAL.trazado.km, trafico: true }, pedidos } }))
 
       // 1. La lista.
       await page.goto('/ruta', { waitUntil: 'domcontentloaded' })
-      await page.waitForTimeout(1200)
+      await page.waitForTimeout(700)
       await rotulo(page, cfg.rotulos[0])
-      await page.waitForTimeout(2600)
+      await page.waitForTimeout(1900)
 
       // 2. Pedido nuevo (la foto a la etiqueta): se abre y se cierra.
+      await page.getByRole('button', { name: cfg.mas }).click()
       await page.getByRole('button', { name: cfg.botonNuevo }).click()
-      await page.waitForTimeout(600)
+      await page.waitForTimeout(400)
       await rotulo(page, cfg.rotulos[1])
-      await page.waitForTimeout(2800)
+      await page.waitForTimeout(2000)
       await page.keyboard.press('Escape')
       await page.getByRole('button', { name: /^(Cerrar|关闭|Close|Fechar|Fermer|Chiudi|Schließen)$/ }).first().click().catch(() => {})
       await page.waitForTimeout(500)
@@ -190,26 +191,27 @@ for (const [lang, cfg] of Object.entries(ESC)) {
       await contenedor.scrollIntoViewIfNeeded()
       await page.evaluate(() => window.scrollBy(0, 200))
       await rotulo(page, cfg.rotulos[2])
-      await page.waitForTimeout(4600)
+      await page.waitForTimeout(3000)
       await page.evaluate(() => window.scrollTo(0, 0))
 
       // 4. La navegación.
       await page.getByRole('button', { name: cfg.botonNav }).click()
+      await context.setGeolocation({ latitude: 43.36361, longitude: -8.41181 })   // Chromium emulado solo avisa si cambia
       const nav = page.getByRole('dialog')
       await expect(nav.getByTestId('guia-texto')).toBeVisible()
       await rotulo(page, cfg.rotulos[3])
-      await page.waitForTimeout(2200)
-      await context.setGeolocation({ latitude: 43.3700, longitude: -8.4029 })
-      await page.waitForTimeout(2200)
-      await context.setGeolocation({ latitude: 43.37038, longitude: -8.40032 })
-      await page.waitForTimeout(1800)
+      await page.waitForTimeout(1500)
+      await context.setGeolocation({ latitude: 43.3638, longitude: -8.4108 })
+      await page.waitForTimeout(1500)
+      await context.setGeolocation({ latitude: 43.363889, longitude: -8.409899 })
+      await page.waitForTimeout(1100)
 
       // 5. Entregado.
       await rotulo(page, cfg.rotulos[4])
       await nav.getByRole('button', { name: /^(Entregado|已送达|Delivered|Entregue|Livré|Consegnato|Zugestellt)$/ }).click()
       await page.waitForTimeout(700)
       await page.getByRole('button', { name: /^(Entregar sin foto|不拍照直接送达|Deliver without photo|Entregar sem foto|Livrer sans photo|Consegna senza foto|Ohne Foto zustellen)$/ }).click().catch(() => {})
-      await page.waitForTimeout(2200)
+      await page.waitForTimeout(1300)
 
       // 6. Cierre con marca.
       marcas.push((Date.now() - t0) / 1000)
@@ -221,7 +223,7 @@ for (const [lang, cfg] of Object.entries(ESC)) {
         document.body.appendChild(c)
         requestAnimationFrame(() => requestAnimationFrame(() => c.classList.add('ver')))
       }, cfg.cierre)
-      await page.waitForTimeout(3200)
+      await page.waitForTimeout(2800)
 
       const destino = path.join(process.cwd(), 'test-results', 'video-tiktok')
       fs.mkdirSync(destino, { recursive: true })

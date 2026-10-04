@@ -1,7 +1,7 @@
 import { Suspense, lazy, useCallback, useEffect, useRef, useState } from 'react'
 import {
   ArrowLeft, ScanLine, Camera, Loader2, Navigation, Phone, Check, X, Route, MapPin, Play, Square, Package,
-  MessageCircle, Clock, Search, List, Pencil, Map as MapaIcono, ArrowUp, ArrowDown, ArrowUpDown, Mic, ClipboardPaste, Trophy,
+  MessageCircle, Clock, Search, List, Pencil, ChevronDown, Map as MapaIcono, ArrowUp, ArrowDown, ArrowUpDown, Mic, ClipboardPaste, Trophy,
 } from 'lucide-react'
 import {
   repMiRuta, repEscanear, repLeerTicket, repNuevoPedido, repEstado, repOrdenar, repJornada, repPosicion,
@@ -12,6 +12,7 @@ import { lista } from '../../lib/lista'
 import { compressImage } from '../../lib/compressImage'
 import { origen } from '../../marca'
 import { leerTicketEnMovil } from '../../lib/leerTicket'
+import { buscarDirecciones } from '../../lib/direcciones'
 import { fijarPais, importe, simboloMoneda, metodosCobro } from '../../lib/region'
 import { tx, useIdioma, locale, txError } from '../../lib/idioma'
 
@@ -338,7 +339,8 @@ export default function MiRuta({ onBack, embebido = false }) {
         const { id, ...campos } = nuevo
         await repMiEditar(id, { cliente: campos.cliente, telefono: campos.telefono, direccion: campos.direccion, contenido: campos.contenido,
           bultos: campos.bultos, horario: campos.horario || '', cobrar: campos.cobrar || '', tipo: campos.tipo || 'entrega',
-          prioridad: !!campos.prioridad, hueco: campos.hueco || '', notas: campos.notas || '' })
+          prioridad: !!campos.prioridad, hueco: campos.hueco || '', notas: campos.notas || '',
+          ...(campos.lat != null ? { lat: campos.lat, lng: campos.lng, cp: campos.cp || '', localidad: campos.localidad || '' } : {}) })
         setNuevo(null); setQuitando(false); cargar(); setAviso(tx('✓ Cambios guardados'))
         return
       }
@@ -352,6 +354,26 @@ export default function MiRuta({ onBack, embebido = false }) {
   /* QUITAR UNA PARADA: dos toques (el segundo confirma), para que un dedo
      torpe en el coche no borre una entrega. */
   const [quitando, setQuitando] = useState(false)
+  const [masCarga, setMasCarga] = useState(false)   // «Más formas de añadir» abierto
+
+  /* SUGERENCIAS DE DIRECCIÓN al escribir en la hoja de una parada: al tocar
+     una, la parada queda con su punto exacto en el mapa. Si se sigue
+     escribiendo, el punto elegido se descarta (la dirección ya no es esa). */
+  const [sugs, setSugs] = useState([])
+  const textoDir = nuevo?.direccion || ''
+  const tienePunto = nuevo?.lat != null
+  const hayHoja = !!nuevo
+  useEffect(() => {
+    if (!hayHoja || tienePunto || textoDir.trim().length < 4) { setSugs([]); return undefined }
+    const ctl = new AbortController()
+    const t = setTimeout(async () => {
+      try {
+        const lista2 = await buscarDirecciones(textoDir, { cerca: yo || ruta?.base || null, pais: ruta?.pais || '', senal: ctl.signal })
+        if (!ctl.signal.aborted) setSugs(lista2)
+      } catch { /* sin servicio: se escribe la dirección entera y el servidor la sitúa */ }
+    }, 350)
+    return () => { clearTimeout(t); ctl.abort() }
+  }, [textoDir, tienePunto, hayHoja, yo, ruta?.base, ruta?.pais])
   async function quitarParada() {
     if (!nuevo?.id) return
     if (!quitando) { setQuitando(true); return }
@@ -547,6 +569,13 @@ export default function MiRuta({ onBack, embebido = false }) {
               onChange={(e) => { const f = e.target.files?.[0]; e.target.value = ''; if (f) { setNuevo({ ...VACIO }); leerTicket(f) } }} />
           </label>
         </div>
+        {total > 0 && (
+          <button onClick={() => setMasCarga((v) => !v)} aria-expanded={masCarga}
+            className="mt-2.5 flex w-full items-center justify-center gap-1.5 text-[12.5px] font-semibold text-brand-300">
+            {tx('Más formas de añadir')} <ChevronDown size={14} className={masCarga ? 'rotate-180' : ''} />
+          </button>
+        )}
+        {(total === 0 || masCarga) && (<>
         <div className="mt-2.5 flex gap-2">
           <input className={inp} value={codigo} onChange={(e) => setCodigo(e.target.value)} inputMode="text"
             placeholder={tx('o escribe el código')} onKeyDown={(e) => e.key === 'Enter' && buscar(codigo)} />
@@ -570,6 +599,7 @@ export default function MiRuta({ onBack, embebido = false }) {
             <ClipboardPaste size={16} /> {tx('Pegar una lista de direcciones')}
           </button>
         )}
+              </>)}
       </div>
 
       {aviso && (
@@ -919,7 +949,8 @@ export default function MiRuta({ onBack, embebido = false }) {
           </>}
           <div className="flex flex-col gap-2">
             <div className="flex gap-2">
-              <input className={inp} placeholder={tx('Dirección completa')} value={nuevo.direccion} onChange={(e) => setNuevo({ ...nuevo, direccion: e.target.value })} />
+              <input className={inp} placeholder={tx('Dirección completa')} value={nuevo.direccion} autoComplete="street-address"
+                onChange={(e) => setNuevo({ ...nuevo, direccion: e.target.value, lat: null, lng: null })} />
               {Reconocedor && (
                 <button type="button" onClick={dictar} aria-label={tx('Dictar la dirección')}
                   className={`shrink-0 rounded-xl border px-3 ${escuchando ? 'animate-pulse border-red-400 text-red-300' : 'border-dark-600 text-dark-200'}`}>
@@ -927,6 +958,19 @@ export default function MiRuta({ onBack, embebido = false }) {
                 </button>
               )}
             </div>
+            {sugs.length > 0 && (
+              <ul className="-mt-1 overflow-hidden rounded-xl border border-dark-700 bg-dark-900" aria-label={tx('Direcciones sugeridas')}>
+                {sugs.map((sg) => (
+                  <li key={sg.direccion}>
+                    <button type="button" onClick={() => { setNuevo({ ...nuevo, direccion: sg.direccion, cp: sg.cp, localidad: sg.localidad, lat: sg.lat, lng: sg.lng }); setSugs([]) }}
+                      className="flex w-full items-center gap-2 border-b border-dark-800 px-3 py-2.5 text-left text-[14px] text-dark-100 last:border-0 active:bg-dark-800">
+                      <MapPin size={15} className="shrink-0 text-brand-300" /> <span className="min-w-0 flex-1 truncate">{sg.direccion}</span>
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            )}
+            {nuevo.lat != null && <p className="-mt-1 flex items-center gap-1 text-[12px] text-emerald-300"><Check size={13} /> {tx('Sitio encontrado en el mapa')}</p>}
             <input className={inp} placeholder={tx('Cliente')} value={nuevo.cliente} onChange={(e) => setNuevo({ ...nuevo, cliente: e.target.value })} />
             <input className={inp} placeholder={tx('Teléfono')} inputMode="tel" value={nuevo.telefono} onChange={(e) => setNuevo({ ...nuevo, telefono: e.target.value })} />
             <input className={inp} placeholder={tx('Qué lleva')} value={nuevo.contenido} onChange={(e) => setNuevo({ ...nuevo, contenido: e.target.value })} />
