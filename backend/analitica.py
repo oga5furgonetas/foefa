@@ -40,6 +40,9 @@ PRIMEROS = {
     "verify", "privacidad", "terminos", "cookies",
     "aviso-legal", "contacto", "security", "seguridad", "peritaje-tecnico",
     "reset-password", "app", "lab", "t",
+    # Landing de los anuncios y su version china (04-10-2026): sin esto salian
+    # como «/otra» y no se podia medir el embudo de los anuncios.
+    "repartidores", "cn", "zh", "empezar", "ruta", "instalar",
 }
 SEGMENTOS = ("visitante", "demo", "conductor", "cliente", "propio")
 _RANGO = {s: i for i, s in enumerate(SEGMENTOS)}
