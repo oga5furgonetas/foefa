@@ -138,7 +138,8 @@ for (const [lang, cfg] of Object.entries(TEXTOS)) {
           await tocar(page, wa)
           // El texto REAL que envía el botón (el mismo enlace de wa.me).
           const href = await wa.getAttribute('href')
-          const texto = decodeURIComponent(href.split('text=')[1] || '')
+          // En la grabación la app corre en localhost: en el anuncio se ve la dirección real.
+          const texto = decodeURIComponent(href.split('text=')[1] || '').replace(/https?:\/\/localhost:\d+/, 'flotadsp.com')
           await page.evaluate(([t, titulo]) => {
             const b = document.createElement('div'); b.id = 'burbuja-video'
             b.innerHTML = '<small></small><div></div>'; b.querySelector('small').textContent = titulo; b.querySelector('div').textContent = t
