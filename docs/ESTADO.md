@@ -540,6 +540,25 @@ Nada se había borrado (org `owner` sin `modulos`, usuario `dani` sin
   «autónomo» ya no sale en pantalla: tarjeta «Repartir yo mismo», plan
   «Repartidor». Stripe devuelve a /ruta?pago=ok a quien reparte solo.
 
+## Qué se hizo el 04-10-2026 (madrugada): idiomas, China, moneda
+
+- App de reparto en 7 idiomas (es en pt fr it de zh): `lib/idioma.js` (`tx`,
+  `txError`), diccionario `lib/textosRuta{A,B,C}.js` (C = mensajes del
+  servidor). Sigue el idioma del móvil o el elegido en Cuenta/Empezar/alta.
+  Comprobar: `node scripts/check-textos-ruta.mjs`. Las pruebas e2e fijan es-ES.
+- Portada en chino en `/cn` (`pages/landingZh.js`) con capturas reales de la
+  app en chino (`e2e/capturas-ruta.spec.js --update-snapshots`). El PANEL aún
+  no tiene chino (la portada lo dice). Anuncios: `tools/anuncios/anuncio.html`
+  + `node e2e/anuncios.mjs [idiomas]` → `docs/anuncios/<idioma>/`.
+- Cobros en la moneda del país (`lib/region.js` importe/metodosCobro); fuera de
+  España «Transferencia» en vez de Bizum (el servidor la acepta).
+- Arreglos: `/registro?sector=autonomo` (enlace del regalo) enseñaba planes de
+  empresa; el alta del repartidor ya no dice «sin tarjeta»; pastel 200 ilegibles
+  en modo día; aviso de cookies traducido.
+- Play: token OK y ve las 2 suscripciones, pero verificar compras da 401
+  (falta permiso de pedidos/suscripciones o no ha propagado). `PLAY_COBRO_ACTIVO`
+  sigue apagado.
+
 ## Pendiente (por prioridad)
 
 -2. **Reparto (03-10)**: antes de cobrar a una empresa de reparto, contrato de
