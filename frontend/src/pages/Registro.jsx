@@ -249,7 +249,9 @@ export default function Registro() {
   const furgonetas = Math.max(1, Number(params.get('flota')) || 40)
 
   const [sector, setSector] = useState(params.get('sector') || '')
-  const [selectedPlan, setSelectedPlan] = useState(paramPlan)
+  // Quien reparte solo tiene un único plan: con ?sector=autonomo (el regalo, /cn)
+  // no se le enseñan los planes de empresa.
+  const [selectedPlan, setSelectedPlan] = useState(paramPlan || (params.get('sector') === 'autonomo' ? 'autonomo' : ''))
   const [billingMode, setBillingMode] = useState(paramBilling)
 
   const [org, setOrg] = useState('')

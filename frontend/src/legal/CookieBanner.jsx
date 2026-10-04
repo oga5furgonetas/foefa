@@ -2,12 +2,15 @@ import { useEffect, useState } from 'react'
 import { Cookie, X } from 'lucide-react'
 import { Link } from 'react-router-dom'
 import { hayPixel, consentimiento, guardarConsentimiento, cargarPixel } from '../lib/metaPixel'
+import { tx, useIdioma } from '../lib/idioma'
 
 // Sin píxel: banner informativo (solo almacenamiento estrictamente necesario,
 // guía AEPD: informar + permitir cerrar). Con píxel de Meta: consentimiento
 // de verdad, con «Aceptar» y «Solo necesarias» igual de fáciles, y nada de
 // medición hasta que se acepta.
 export default function CookieBanner() {
+  // En el idioma del móvil (o el elegido): lo ve quien llega de un anuncio en cualquier país.
+  useIdioma()
   const [show, setShow] = useState(false)
   const conPixel = hayPixel()
   useEffect(() => {
@@ -38,27 +41,27 @@ export default function CookieBanner() {
         <div className="flex items-start gap-3">
           <Cookie size={20} className="mt-0.5 shrink-0 text-amber-400" />
           <div className="flex-1 text-sm text-dark-300">
-            <b className="text-dark-100">Cookies.</b> Usamos almacenamiento necesario para que la web funcione. Si aceptas, también el píxel de Meta para saber qué anuncios nos traen visitas y altas.
-            {' '}<Link to="/cookies" className="text-sky-400 hover:underline">Más información</Link>.
+            <b className="text-dark-100">{tx('Cookies.')}</b> {tx('Usamos almacenamiento necesario para que la web funcione. Si aceptas, también el píxel de Meta para saber qué anuncios nos traen visitas y altas.')}
+            {' '}<Link to="/cookies" className="text-sky-400 hover:underline">{tx('Más información')}</Link>
           </div>
         </div>
         <div className="mt-3 grid grid-cols-2 gap-2">
-          <button onClick={() => decidir(false)} className="rounded-lg border border-dark-600 px-3 py-2 text-sm font-semibold text-dark-100">Solo necesarias</button>
-          <button onClick={() => decidir(true)} className="rounded-lg border border-dark-600 px-3 py-2 text-sm font-semibold text-dark-100">Aceptar</button>
+          <button onClick={() => decidir(false)} className="rounded-lg border border-dark-600 px-3 py-2 text-sm font-semibold text-dark-100">{tx('Solo necesarias')}</button>
+          <button onClick={() => decidir(true)} className="rounded-lg border border-dark-600 px-3 py-2 text-sm font-semibold text-dark-100">{tx('Aceptar')}</button>
         </div>
       </div>
     )
   }
   return (
     <div className="fixed inset-x-3 bottom-3 z-50 mx-auto max-w-3xl rounded-xl border border-dark-700 bg-dark-900/95 p-4 shadow-2xl backdrop-blur">
-      <div className="flex items-start gap-3">
+      <div className="flex flex-wrap items-start gap-3">
         <Cookie size={20} className="mt-0.5 shrink-0 text-amber-400" />
-        <div className="flex-1 text-sm text-dark-300">
-          <b className="text-dark-100">Cookies necesarias.</b> Usamos solo almacenamiento imprescindible para iniciar sesión y recordar tus preferencias. No usamos cookies de seguimiento ni marketing.
-          {' '}<Link to="/cookies" className="text-sky-400 hover:underline">Más información</Link>.
+        <div className="min-w-0 flex-1 basis-[17rem] text-sm text-dark-300">
+          <b className="text-dark-100">{tx('Cookies necesarias.')}</b> {tx('Usamos solo almacenamiento imprescindible para iniciar sesión y recordar tus preferencias. No usamos cookies de seguimiento ni marketing.')}
+          {' '}<Link to="/cookies" className="text-sky-400 hover:underline">{tx('Más información')}</Link>
         </div>
-        <button onClick={accept} className="btn-primary px-3 py-1.5 text-sm">Entendido</button>
-        <button onClick={accept} className="btn-ghost p-1.5 text-dark-400" aria-label="Cerrar"><X size={16} /></button>
+        <button onClick={accept} className="btn-primary shrink-0 whitespace-nowrap px-3 py-1.5 text-sm">{tx('Entendido')}</button>
+        <button onClick={accept} className="btn-ghost p-1.5 text-dark-400" aria-label={tx('Cerrar')}><X size={16} /></button>
       </div>
     </div>
   )

@@ -5,6 +5,8 @@ import {
   Sun, Moon, Truck, Package, KeySquare, HardHat, Building2, Cable,
 } from 'lucide-react'
 import { useT, LANGS } from '../i18n'
+import { LANDING_ZH } from './landingZh'
+import { cambiarIdioma } from '../lib/idioma'
 import { API_BASE } from '../lib/apiBase'
 import { saveSession } from '../panel/auth'
 import { MARCA } from '../marca'
@@ -22,13 +24,47 @@ import ProductoReal from './ProductoReal'
    ejemplo, y lo dice. No hay cifras de clientes ni logos de empresas: el
    producto es nuevo y cualquier número de ese tipo sería inventado. */
 
-function useTexto() {
-  const { lang } = useT()
+function useTexto(lang) {
   return (k) => {
+    if (lang === 'zh') return LANDING_ZH[k] || LANDING[k]?.en || k
     const e = LANDING[k]
     if (!e) return k
     return e[lang] || e.es || k
   }
+}
+
+/* La app del repartidor en chino, con capturas hechas desde la propia app
+   (e2e/capturas-ruta.spec.js). Si faltan, la sección no sale. */
+const CAPTURAS_ZH = ['/capturas-ruta/zh/1-ruta.png', '/capturas-ruta/zh/2-mapa.png', '/capturas-ruta/zh/3-navegando.png']
+function AppRepartidorZh({ tx }) {
+  const [rotas, setRotas] = useState(0)
+  if (rotas) return null
+  return (
+    <section className="border-t border-[color:var(--ld-border)]" aria-labelledby="zh-app">
+      <div className="mx-auto grid max-w-[1120px] items-center gap-10 px-5 py-16 sm:py-24 lg:grid-cols-[1fr_1.25fr]">
+        <div>
+          <p className="text-[12.5px] font-semibold uppercase tracking-[0.16em] text-[color:var(--ld-accent)]">{tx('zh.app.eyebrow')}</p>
+          <h2 id="zh-app" className="mt-3 font-display text-[clamp(26px,3.4vw,40px)] font-bold leading-[1.15] text-[color:var(--ld-text)]">{tx('zh.app.titulo')}</h2>
+          <p className="mt-4 text-[16px] leading-relaxed text-[color:var(--ld-muted)]">{tx('zh.app.sub')}</p>
+          <ul className="mt-5 grid gap-2 sm:grid-cols-2">
+            {['zh.app.1', 'zh.app.2', 'zh.app.3', 'zh.app.4'].map((k) => (
+              <li key={k} className="flex items-center gap-2 text-[15px] text-[color:var(--ld-text)]">
+                <Sparkles size={14} className="text-[color:var(--ld-accent)]" /> {tx(k)}
+              </li>
+            ))}
+          </ul>
+          <a href="/registro?sector=autonomo" className={`${BTN_PRIMARIO} mt-7`}>{tx('zh.app.cta')} <ArrowRight size={16} /></a>
+          <p className="mt-3 text-[13px] text-[color:var(--ld-dim)]">{tx('zh.app.precio')}</p>
+        </div>
+        <div className="flex justify-center gap-3 sm:gap-4">
+          {CAPTURAS_ZH.map((src, i) => (
+            <img key={src} src={src} alt="" loading="lazy" width="390" height="844" onError={() => setRotas(1)}
+              className={`w-[31%] max-w-[220px] rounded-[22px] border border-[color:var(--ld-border-strong)] shadow-2xl shadow-black/30 ${i === 1 ? 'translate-y-6' : ''}`} />
+          ))}
+        </div>
+      </div>
+    </section>
+  )
 }
 
 /* El botón principal: cian de la marca con tinta oscura. La tinta es fija
@@ -172,9 +208,26 @@ const SEGURIDAD = [
   { icono: Fingerprint, t: 'seg.3t', d: 'seg.3d' },
 ]
 
-export default function Landing() {
-  const { lang, setLang } = useT()
-  const tx = useTexto()
+/* La portada en chino vive en /cn (idioma="zh"): el panel aún no tiene chino,
+   así que no entra en LANGS; la app del repartidor sí, y se le pone. */
+export default function Landing({ idioma = '' }) {
+  const { lang: langPanel, setLang } = useT()
+  const lang = idioma || langPanel
+  const zh = lang === 'zh'
+  const tx = useTexto(lang)
+  useEffect(() => {
+    if (!zh) return undefined
+    cambiarIdioma('zh')
+    const antes = [document.documentElement.lang, document.title]
+    document.documentElement.lang = 'zh-CN'
+    document.title = `${MARCA.nombre} · AI 车队管理与中文配送 App`
+    return () => { [document.documentElement.lang, document.title] = antes }
+  }, [zh])
+  function elegirIdioma(l) {
+    if (l === 'zh') { window.location.href = '/cn'; return }
+    setLang(l)
+    if (zh) window.location.href = '/'
+  }
   const [demo, setDemo] = useState('')          // '' | 'cargando' | 'error'
   const [tema, setTema] = useState(() => {
     try { return localStorage.getItem('ld_theme') || 'dark' } catch { return 'dark' }
@@ -212,8 +265,8 @@ export default function Landing() {
           <div className="flex items-center gap-1 sm:gap-5">
             <a href="#producto" className="hidden text-[14px] font-medium text-[color:var(--ld-muted)] hover:text-[color:var(--ld-text)] md:inline">{tx('nav.producto')}</a>
             <a href="/planes" className="hidden text-[14px] font-medium text-[color:var(--ld-muted)] hover:text-[color:var(--ld-text)] sm:inline">{tx('nav.precios')}</a>
-            <a href="/panel/login" className="px-2 text-[14px] font-medium text-[color:var(--ld-muted)] hover:text-[color:var(--ld-text)]">{tx('nav.entrar')}</a>
-            <a href="/registro" className="rounded-lg bg-gradient-to-br from-brand-400 to-brand-600 px-3.5 py-2 text-[13.5px] font-semibold text-[#04121a] hover:brightness-110">{tx('nav.probar')}</a>
+            <a href="/panel/login" className="whitespace-nowrap px-2 text-[14px] font-medium text-[color:var(--ld-muted)] hover:text-[color:var(--ld-text)]">{tx('nav.entrar')}</a>
+            <a href="/registro" className="whitespace-nowrap rounded-lg bg-gradient-to-br from-brand-400 to-brand-600 px-3.5 py-2 text-[13.5px] font-semibold text-[#04121a] hover:brightness-110">{tx('nav.probar')}</a>
           </div>
         </div>
       </nav>
@@ -236,12 +289,13 @@ export default function Landing() {
             </h1>
             <p className="mt-6 max-w-[34rem] text-[17.5px] leading-relaxed text-[color:var(--ld-muted)]">{tx('hero.sub')}</p>
             <div className="mt-8 flex flex-wrap items-center gap-3">
-              <a href="/registro" className={BTN_PRIMARIO}>{tx('hero.cta')} <ArrowRight size={16} /></a>
+              <a href={zh ? '/empezar' : '/registro'} className={BTN_PRIMARIO}>{tx('hero.cta')} <ArrowRight size={16} /></a>
               <button type="button" onClick={abrirDemo} disabled={demo === 'cargando'} className={BTN_SECUNDARIO}>
                 {demo === 'cargando' ? '…' : tx('hero.demo')}
               </button>
             </div>
             <p className="mt-4 text-[13px] text-[color:var(--ld-dim)]">{tx('hero.mini')}</p>
+            {zh && <p className="mt-2 max-w-md text-[12.5px] leading-relaxed text-[color:var(--ld-dim)]">{tx('zh.panel')}</p>}
             {demo === 'error' && (
               <p role="status" className="mt-3 max-w-md text-[13px] text-[color:var(--ld-warn)]">{tx('hero.demoErr')}</p>
             )}
@@ -281,6 +335,9 @@ export default function Landing() {
           ))}
         </ul>
       </Seccion>
+
+      {/* ── En chino: la app del repartidor, que sí está traducida entera ── */}
+      {zh && <AppRepartidorZh tx={tx} />}
 
       {/* ── Capturas reales de la app ── */}
       <ProductoReal lang={lang} />
@@ -355,9 +412,9 @@ export default function Landing() {
             <p className="mt-3 max-w-xs text-[13px] leading-relaxed text-[color:var(--ld-dim)]">{MARCA.lema}</p>
             <div className="mt-5 flex items-center gap-2">
               <label htmlFor="ld-idioma" className="sr-only">Idioma</label>
-              <select id="ld-idioma" value={lang} onChange={(e) => setLang(e.target.value)}
+              <select id="ld-idioma" value={lang} onChange={(e) => elegirIdioma(e.target.value)}
                 className="rounded-lg border border-[color:var(--ld-border-strong)] bg-[color:var(--ld-surface)] px-2.5 py-1.5 text-[13px] text-[color:var(--ld-text)]">
-                {Object.entries(LANGS).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
+                {Object.entries({ ...LANGS, zh: '中文' }).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
               </select>
               <button type="button" onClick={() => setTema((v) => (v === 'dark' ? 'light' : 'dark'))}
                 aria-label={tx('pie.tema')} title={tx('pie.tema')}

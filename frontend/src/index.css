@@ -116,6 +116,18 @@ html[data-panel-theme='light'] .text-amber-200 { color: #92400e; }
 html[data-panel-theme='light'] .text-emerald-200 { color: #065f46; }
 html[data-panel-theme='light'] .text-red-200 { color: #991b1b; }
 html[data-panel-theme='light'] .text-brand-200 { color: #075965; }
+/* Los pastel que faltaban: en modo día salían casi blancos sobre papel (la
+   etiqueta «En la furgoneta: …» de la ruta, el regalo, filtros del panel). */
+html[data-panel-theme='light'] .text-sky-200 { color: #0369a1; }
+html[data-panel-theme='light'] .text-violet-200 { color: #6d28d9; }
+html[data-panel-theme='light'] .text-orange-200 { color: #9a3412; }
+html[data-panel-theme='light'] .text-rose-200, html[data-panel-theme='light'] .text-rose-300 { color: #9f1239; }
+html[data-panel-theme='light'] .text-pink-200, html[data-panel-theme='light'] .text-pink-300,
+html[data-panel-theme='light'] .text-pink-400, html[data-panel-theme='light'] .text-fuchsia-200 { color: #9d174d; }
+html[data-panel-theme='light'] .text-lime-300, html[data-panel-theme='light'] .text-lime-400 { color: #3f6212; }
+html[data-panel-theme='light'] .text-blue-300, html[data-panel-theme='light'] .text-blue-400 { color: #1d4ed8; }
+html[data-panel-theme='light'] .text-cyan-300, html[data-panel-theme='light'] .text-teal-300 { color: #0e7490; }
+html[data-panel-theme='light'] .text-yellow-300, html[data-panel-theme='light'] .text-yellow-400 { color: #854d0e; }
 
 /* Texto "slate" heredado (pensado para fondo oscuro) → tinta en modo día */
 html[data-panel-theme='light'] .text-slate-100, html[data-panel-theme='light'] .text-slate-200 { color: #27272d; }
@@ -585,6 +597,8 @@ html[data-panel-theme='hibrido'] main .text-orange-300,
 html[data-panel-theme='hibrido'] main .text-orange-400 { color: #9a3412; }
 html[data-panel-theme='hibrido'] main .text-sky-300,
 html[data-panel-theme='hibrido'] main .text-sky-400 { color: #0369a1; }
+html[data-panel-theme='hibrido'] main .text-sky-200 { color: #0369a1; }
+html[data-panel-theme='hibrido'] main .text-violet-200 { color: #6d28d9; }
 html[data-panel-theme='hibrido'] main .text-violet-300,
 html[data-panel-theme='hibrido'] main .text-violet-400 { color: #6d28d9; }
 html[data-panel-theme='hibrido'] main .text-purple-200,

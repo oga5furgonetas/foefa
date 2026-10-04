@@ -13,7 +13,7 @@ const raiz = join(dirname(fileURLToPath(import.meta.url)), '..', 'frontend', 'sr
 const FICHEROS = [
   'pages/driver/MiRuta.jsx', 'pages/driver/Navegacion.jsx', 'pages/Empezar.jsx', 'pages/InstalarApp.jsx',
   'pages/RegaloPagina.jsx', 'pages/RutaApp.jsx', 'pages/RutaCuenta.jsx', 'pages/SeguimientoPedido.jsx', 'lib/guia.js',
-  'pages/Registro.jsx',
+  'pages/Registro.jsx', 'legal/CookieBanner.jsx',
 ]
 // Nombres que llegan de datos (el plan del autónomo en Registro: tt(planInfo.name)).
 const DE_DATOS = ['Repartidor']
@@ -66,3 +66,13 @@ if (fallos.length) {
   process.exit(1)
 }
 console.log(`textos de ruta: ${usadas.size} usados, ${Object.keys(dic).length} traducidos a 6 idiomas`)
+
+// La portada en chino (/cn): las mismas claves que la de seis idiomas.
+const { LANDING } = await import(new URL('file://' + join(raiz, 'pages/landingTextos.js').replace(/\\/g, '/')))
+const { LANDING_ZH } = await import(new URL('file://' + join(raiz, 'pages/landingZh.js').replace(/\\/g, '/')))
+const faltanZh = Object.keys(LANDING).filter((k) => !LANDING_ZH[k] || !LANDING_ZH[k].trim())
+if (faltanZh.length) {
+  console.error('portada en chino, faltan: ' + faltanZh.join(', '))
+  process.exit(1)
+}
+console.log(`portada en chino: ${Object.keys(LANDING).length} textos`)

@@ -1904,3 +1904,18 @@ test.describe('Idiomas · la app de reparto sigue el idioma del móvil', () => {
     await expect(page.getByRole('button', { name: /以配送员套餐创建账号/ })).toBeVisible()
   })
 })
+
+test('Portada en chino · /cn entera en chino, con la app del repartidor y su alta en chino', async ({ page }) => {
+  const fallos = vigilar(page)
+  await page.goto('/cn', { waitUntil: 'domcontentloaded' })
+  await expect(page.getByRole('heading', { level: 1 })).toContainText('你的车队')
+  await expect(page).toHaveTitle(/中文配送 App/)
+  await expect(page.locator('html')).toHaveAttribute('lang', 'zh-CN')
+  await expect(page.getByRole('heading', { name: /用中文的配送 App/ })).toBeVisible()
+  await expect(page.getByText('管理后台目前提供西班牙语', { exact: false })).toBeVisible()   // no promete el panel en chino
+  await expect(page.getByRole('button', { name: '知道了' })).toBeVisible()                   // cookies en chino
+  await page.getByRole('link', { name: /开始免费试用/ }).click()
+  await expect(page).toHaveURL(/registro\?sector=autonomo/)
+  await expect(page.getByText('已选套餐')).toBeVisible()
+  expect(fallos).toEqual([])
+})

@@ -347,6 +347,8 @@ ReactDOM.createRoot(document.getElementById('root')).render(
           <Suspense fallback={<RouteLoader />}>
             <Routes>
               <Route path="/" element={<Landing />} />
+              <Route path="/cn" element={<Landing idioma="zh" />} />
+              <Route path="/zh" element={<Landing idioma="zh" />} />
               <Route path="/login" element={<Login />} />
               <Route path="/reset-password" element={<ResetPassword />} />
               <Route path="/registro" element={<Registro />} />
