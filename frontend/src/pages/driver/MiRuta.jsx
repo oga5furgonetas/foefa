@@ -1,7 +1,7 @@
 import { Suspense, lazy, useCallback, useEffect, useRef, useState } from 'react'
 import {
   ArrowLeft, ScanLine, Camera, Loader2, Navigation, Phone, Check, X, Route, MapPin, Play, Square, Package,
-  MessageCircle, Clock, Search, List, Pencil, ChevronDown, Map as MapaIcono, ArrowUp, ArrowDown, ArrowUpDown, Mic, ClipboardPaste, Trophy,
+  MessageCircle, Clock, Search, List, Pencil, ChevronDown, GripVertical, Map as MapaIcono, ArrowUp, ArrowDown, ArrowUpDown, Mic, ClipboardPaste, Trophy,
 } from 'lucide-react'
 import {
   repMiRuta, repEscanear, repLeerTicket, repNuevoPedido, repEstado, repOrdenar, repJornada, repPosicion,
@@ -449,6 +449,45 @@ export default function MiRuta({ onBack, embebido = false }) {
     } catch (e) { setAviso(txError(e, 'No se pudo guardar el orden')) } finally { setOcupado('') }
   }
 
+  /* ARRASTRAR PARA REORDENAR (con el dedo o el ratón): se agarra el asa de una
+     parada y se suelta donde toca; las demás se van apartando. Las flechas
+     siguen ahí para quien prefiera tocar. */
+  const filasOrden = useRef({})
+  const [arrastrando, setArrastrando] = useState(null)
+  function empezarArrastre(e, id) {
+    e.preventDefault()
+    setArrastrando(id)
+    const mueve = (ev) => {
+      const y = ev.clientY
+      setReordenar((ids) => {
+        if (!ids) return ids
+        const desde = ids.indexOf(id)
+        let hasta = desde
+        ids.forEach((otro, k) => {
+          const el = filasOrden.current[otro]
+          if (!el || otro === id) return
+          const r = el.getBoundingClientRect()
+          const medio = r.top + r.height / 2
+          if (k < desde && y < medio) hasta = Math.min(hasta, k)
+          if (k > desde && y > medio) hasta = Math.max(hasta, k)
+        })
+        if (hasta === desde) return ids
+        const n = ids.filter((x) => x !== id)
+        n.splice(hasta, 0, id)
+        return n
+      })
+    }
+    const suelta = () => {
+      window.removeEventListener('pointermove', mueve)
+      window.removeEventListener('pointerup', suelta)
+      window.removeEventListener('pointercancel', suelta)
+      setArrastrando(null)
+    }
+    window.addEventListener('pointermove', mueve)
+    window.addEventListener('pointerup', suelta)
+    window.addEventListener('pointercancel', suelta)
+  }
+
   function mover(i, d) {
     setReordenar((ids) => {
       const j = i + d
@@ -632,13 +671,16 @@ export default function MiRuta({ onBack, embebido = false }) {
       {/* CAMBIAR EL ORDEN A MANO: el repartidor conoce la zona mejor que nadie. */}
       {reordenar && (
         <div className="rounded-2xl border border-brand-400/40 bg-dark-900 p-3">
-          <p className="mb-2 text-[12.5px] text-dark-300">{tx('Sube o baja cada parada. Al guardar se recalculan las horas con tu orden.')}</p>
+          <p className="mb-2 text-[12.5px] text-dark-300">{tx('Arrastra cada parada por el asa, o usa las flechas. Al guardar se recalculan las horas con tu orden.')}</p>
           <ol className="flex flex-col gap-1.5">
             {reordenar.map((id, i) => {
               const p = porId[id]
               if (!p) return null
               return (
-                <li key={id} className="flex items-center gap-2 rounded-xl border border-dark-700 px-2.5 py-2">
+                <li key={id} ref={(el) => { filasOrden.current[id] = el }}
+                  className={`flex items-center gap-2 rounded-xl border px-2.5 py-2 ${arrastrando === id ? 'border-brand-400 bg-brand-500/10 shadow-lg' : 'border-dark-700'}`}>
+                  <button type="button" onPointerDown={(e) => empezarArrastre(e, id)} aria-label={`${tx('Arrastrar')} ${p.cliente || p.direccion}`}
+                    style={{ touchAction: 'none' }} className="-ml-1 shrink-0 cursor-grab rounded-lg p-1.5 text-dark-400 active:cursor-grabbing"><GripVertical size={18} /></button>
                   <span className="w-6 text-center text-[13px] font-bold text-brand-200">{i + 1}</span>
                   <span className="min-w-0 flex-1">
                     <span className="block truncate text-[13.5px] font-semibold text-dark-50">{p.cliente || p.direccion}</span>

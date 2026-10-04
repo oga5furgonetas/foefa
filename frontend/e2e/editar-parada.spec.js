@@ -75,3 +75,43 @@ test('Ruta · editar una parada y quitarla con doble toque', async ({ page }) =>
   expect(quitados).toEqual(['p1'])
   await expect(page.getByText('Farmacia Sol 2')).toHaveCount(0)
 })
+
+test('Ruta · reordenar arrastrando el asa de una parada', async ({ page }) => {
+  await page.addInitScript(() => {
+    localStorage.setItem('cookie_consent', JSON.stringify({ v: 1, at: new Date().toISOString() }))
+    localStorage.setItem('guia_voz', '0')
+    localStorage.setItem('fds_instalar_cerrado', '1')
+  })
+  await entrarComoAdmin(page)
+  await simularApi(page, 'vacio')
+  const fin = new Date(Date.now() + 30 * 86400000).toISOString()
+  await page.route(/\/api\/org\/billing/, (r) => r.fulfill({ json: {
+    plan: 'autonomo', sector: 'autonomo', modulos: ['dashboard', 'reparto', 'configuracion'],
+    precios: { mensual: 9.99, anual: 99 }, regalos: { 1: 9.99, 12: 99 },
+    status: 'active', suscrita: true, ciclo: 'mensual', proximo_cobro: fin } }))
+  const pedidos = ['Uno', 'Dos', 'Tres'].map((c, i) => ({ id: `p${i + 1}`, cliente: c, direccion: `Calle ${i + 1}`, estado: 'pendiente', bultos: 1, orden: i + 1, lat: 43.36 + i / 100, lng: -8.4 }))
+  const ordenes = []
+  await page.route(/\/api\/reparto\/mi-ruta\/orden/, async (r) => {
+    ordenes.push(r.request().postDataJSON().ids)
+    await r.fulfill({ json: { ordenados: 3, ruta: { fin: '11:00', manual: true } } })
+  })
+  await page.route(/\/api\/reparto\/mi-ruta\/trazado/, (r) => r.fulfill({ json: { linea: [], fuente: 'linea_recta' } }))
+  await page.route(/\/api\/reparto\/mi-ruta$/, (r) => r.fulfill({ json: {
+    activo: true, autonomo: true, empresa: '', fecha: '2026-10-04', ia_tickets: false, jornada: {}, aviso_aceptado: true,
+    base: null, ruta: { fin: '10:30', minutos: 30, km: 2, trafico: true }, pedidos } }))
+  await page.goto('/ruta', { waitUntil: 'domcontentloaded' })
+  await page.getByRole('button', { name: 'A mano' }).click()
+  const asa = page.getByRole('button', { name: /Arrastrar Uno/ })
+  const destino = page.getByRole('button', { name: /Arrastrar Tres/ })
+  const a = await asa.boundingBox()
+  const b = await destino.boundingBox()
+  // Se agarra el asa de «Uno» y se suelta por debajo de «Tres».
+  await page.mouse.move(a.x + a.width / 2, a.y + a.height / 2)
+  await page.mouse.down()
+  await page.mouse.move(a.x + a.width / 2, (a.y + b.y) / 2, { steps: 5 })
+  await page.mouse.move(a.x + a.width / 2, b.y + b.height + 6, { steps: 8 })
+  await page.mouse.up()
+  await page.getByRole('button', { name: 'Guardar este orden' }).click()
+  await expect.poll(() => ordenes.length).toBe(1)
+  expect(ordenes[0]).toEqual(['p2', 'p3', 'p1'])
+})

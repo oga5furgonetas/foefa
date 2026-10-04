@@ -289,6 +289,8 @@ export const B = {
   "Direcciones sugeridas": ["Suggested addresses", "Moradas sugeridas", "Adresses suggérées", "Indirizzi suggeriti", "Adressvorschläge", "建议地址"],
   "Sitio encontrado en el mapa": ["Place found on the map", "Local encontrado no mapa", "Lieu trouvé sur la carte", "Posto trovato sulla mappa", "Ort auf der Karte gefunden", "已在地图上找到"],
   "Más formas de añadir": ["More ways to add", "Mais formas de adicionar", "Plus de façons d’ajouter", "Altri modi per aggiungere", "Weitere Wege zum Hinzufügen", "更多添加方式"],
+  "Arrastrar": ["Drag", "Arrastar", "Faire glisser", "Trascina", "Ziehen", "拖动"],
+  "Arrastra cada parada por el asa, o usa las flechas. Al guardar se recalculan las horas con tu orden.": ["Drag each stop by its handle, or use the arrows. Saving recalculates the times with your order.", "Arrasta cada paragem pela pega, ou usa as setas. Ao guardar, as horas são recalculadas com a tua ordem.", "Fais glisser chaque arrêt par la poignée, ou utilise les flèches. À l’enregistrement, les heures sont recalculées.", "Trascina ogni fermata dalla maniglia, o usa le frecce. Al salvataggio gli orari vengono ricalcolati.", "Ziehe jeden Stopp am Griff oder nutze die Pfeile. Beim Speichern werden die Zeiten neu berechnet.", "拖动手柄或使用箭头调整每个停靠点。保存后会按你的顺序重新计算时间。"],
   "Mostrar contraseña": ["Show password", "Mostrar palavra-passe", "Afficher le mot de passe", "Mostra password", "Passwort anzeigen", "显示密码"],
   "Ocultar contraseña": ["Hide password", "Ocultar palavra-passe", "Masquer le mot de passe", "Nascondi password", "Passwort verbergen", "隐藏密码"],
   "Repetir contraseña": ["Repeat password", "Repetir palavra-passe", "Répéter le mot de passe", "Ripeti password", "Passwort wiederholen", "确认密码"],
