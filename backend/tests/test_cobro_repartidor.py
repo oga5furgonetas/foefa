@@ -287,3 +287,55 @@ async def test_pagar_el_anio_de_una_vez_para_uno_mismo(base):
     assert (await server._stripe_aplicar_evento(ev))["aplicado"] is True
     hecho = await server.regalo_canjear({"codigo": reg["codigo"]}, YO)
     assert hecho["ok"] is True
+
+
+# ── PRUEBA SIN TARJETA POR DEFECTO (04-10-2026) ─────────────────────────────
+# Con tarjeta, 400 visitas de anuncio dieron 0 altas. Ahora quien reparte solo
+# entra directo; la tarjeta se pide al acabar los 7 días (el muro de siempre).
+
+async def _alta_autonomo(monkeypatch, env):
+    g = Db()
+    monkeypatch.setattr(server, "global_db", g)
+    monkeypatch.setattr(server, "_ensure_tenant_indexes", lambda *a, **k: _nada())
+    if env is None:
+        monkeypatch.delenv("PRUEBA_CON_TARJETA", raising=False)
+    else:
+        monkeypatch.setenv("PRUEBA_CON_TARJETA", env)
+    monkeypatch.setattr(server, "_stripe_suscripciones_listo", lambda: True)
+    req = SimpleNamespace(headers={}, client=SimpleNamespace(host="198.51.100.7"))
+    datos = server.RegisterRequest(org_name="Rosa Reparte", username="rosa-reparte", password="12345678",
+                                   slug="rosa-reparte", sector="autonomo", email="rosa@x.es")
+    out = await server.register_dsp(datos, req)
+    org = g["organizations"].docs[0]
+    return out, org
+
+
+async def _nada():
+    return None
+
+
+@pytest.mark.asyncio(loop_scope="session")
+async def test_alta_de_repartidor_ya_no_pide_tarjeta_por_defecto(monkeypatch):
+    out, org = await _alta_autonomo(monkeypatch, None)
+    assert out.access_token
+    assert org["status"] == "trial" and org["plan"] == "autonomo"
+    assert not org.get("prueba_con_tarjeta")
+    # Entra directo: ni muro de tarjeta ni bloqueo, y tiene sus días de prueba.
+    assert server._falta_tarjeta(org) is False
+    assert server._rep_bloqueo_pago(org) == ""
+    fin = datetime.fromisoformat(org["trial_ends"])
+    assert 6 <= (fin - datetime.now(timezone.utc)).days <= 7
+
+
+@pytest.mark.asyncio(loop_scope="session")
+async def test_la_prueba_sin_tarjeta_se_corta_al_acabar_los_dias(monkeypatch):
+    _, org = await _alta_autonomo(monkeypatch, None)
+    org["trial_ends"] = _iso(-1)     # el día 8
+    assert "prueba gratis ha terminado" in server._rep_bloqueo_pago(org)
+
+
+@pytest.mark.asyncio(loop_scope="session")
+async def test_con_el_interruptor_la_tarjeta_vuelve(monkeypatch):
+    _, org = await _alta_autonomo(monkeypatch, "1")
+    assert org["prueba_con_tarjeta"] is True
+    assert server._falta_tarjeta(org) is True
