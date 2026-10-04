@@ -2,6 +2,11 @@ import { useEffect, useState } from 'react'
 import { Download, Share, X, Smartphone } from 'lucide-react'
 import { alCambiarInstalable, sePuedeInstalar, instalar, yaEsApp, esIphone } from '../lib/instalar'
 import { tx } from '../lib/idioma'
+import { desdeChina } from '../lib/apiBase'
+
+/* En China no hay Google Play y casi ningún Android trae Chrome (sin él no
+   se instala la web): allí se descarga la app de China (WebView propio). */
+export const APK_CHINA = '/descargas/FDS-china.apk'
 
 /* La tarjeta «Instala FDS en tu móvil», en la app de ruta abierta desde el
    navegador. No sale si ya es app (instalada o la de Play) ni si la cerró. */
@@ -14,6 +19,7 @@ export default function InstalarApp() {
   useEffect(() => alCambiarInstalable(setPuede), [])
   if (oculta || yaEsApp()) return null
   const iphone = esIphone()
+  const apk = !iphone && desdeChina()
   function cerrar() {
     try { localStorage.setItem('fds_instalar_cerrado', '1') } catch { /* nada */ }
     setOculta(true)
@@ -36,7 +42,15 @@ export default function InstalarApp() {
         </div>
         <button onClick={cerrar} aria-label={tx('No mostrar más')} className="rounded p-1 text-dark-500"><X size={16} /></button>
       </div>
-      {paso === 'iphone' ? (
+      {apk ? (
+        <>
+          <a href={APK_CHINA} download
+            className="mt-3 flex w-full items-center justify-center gap-2 rounded-xl bg-brand-500 py-2.5 text-[14.5px] font-bold text-brand-tinta">
+            <Download size={17} /> {tx('Descargar la app para Android')}
+          </a>
+          <p className="mt-2 text-[12px] leading-snug text-dark-400">{tx('Al instalarla, el móvil puede pedirte permitir apps de esta fuente: es la app de FDS, firmada por nosotros.')}</p>
+        </>
+      ) : paso === 'iphone' ? (
         <ol className="mt-3 space-y-1.5 text-[13px] text-dark-200">
           <li className="flex items-center gap-2">1. {tx('Abre esta página en Safari.')}</li>
           <li className="flex items-center gap-2">2. {tx('Pulsa')} <Share size={15} className="text-sky-300" /> <b>{tx('Compartir')}</b> {tx('(abajo).')}</li>

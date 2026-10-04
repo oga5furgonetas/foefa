@@ -108,4 +108,5 @@ export const LANDING_ZH = {
   'zh.app.4': '代收款与送达凭证',
   'zh.app.precio': '每月 9.99 €，前 7 天免费，可随时取消。',
   'zh.app.cta': '开始免费试用',
+  'zh.app.apk': '下载安卓应用（APK，无需 Google Play）',
 }

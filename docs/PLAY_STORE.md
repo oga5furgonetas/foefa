@@ -54,8 +54,17 @@ Desde bash, en `android/`:
 export FLOTA_KEYSTORE='C:\Users\Usuario\.flota-android.keystore'
 export FLOTA_KEYSTORE_PASSWORD="$(tr -d '\r\n' < /c/Users/Usuario/.flota-android-keystore.txt)"
 export JAVA_HOME='C:\Program Files\Microsoft\jdk-17.0.19.10-hotspot'
-./gradlew bundleRelease assembleRelease
+./gradlew bundlePlayRelease assembleChinaRelease
 ```
+
+**Dos variantes (04-10-2026).** `play` es la de Google Play (lo que se sube:
+`app/build/outputs/bundle/playRelease/app-play-release.aab`). `china` es para
+China, donde no hay Play ni casi Chrome: paquete `com.flotadsp.flota.cn`, abre
+la web en un WebView propio (`src/china/java/.../WebActivity.java`: ubicación,
+cámara y fotos con los permisos del sistema) y cobra con Stripe. Su APK
+(`app/build/outputs/apk/china/release/app-china-release.apk`) se copia a
+`frontend/public/descargas/FDS-china.apk` y se descarga desde la web (la
+tarjeta «Instala la app» lo ofrece desde China, y la portada /cn).
 
 Para una versión nueva: subir `versionCode` (entero, siempre mayor) y
 `versionName` en `android/app/build.gradle.kts`. Como la app es la web, solo

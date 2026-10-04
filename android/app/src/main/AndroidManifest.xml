@@ -44,7 +44,7 @@
                 android:value="300" />
             <meta-data
                 android:name="android.support.customtabs.trusted.FILE_PROVIDER_AUTHORITY"
-                android:value="com.flotadsp.flota.fileprovider" />
+                android:value="${applicationId}.fileprovider" />
             <!-- Sin Chrome (u otro navegador compatible) la web se abre igual,
                  en una pestaña normal, en vez de fallar. -->
             <meta-data
@@ -79,7 +79,7 @@
 
         <provider
             android:name="androidx.core.content.FileProvider"
-            android:authorities="com.flotadsp.flota.fileprovider"
+            android:authorities="${applicationId}.fileprovider"
             android:grantUriPermissions="true"
             android:exported="false">
             <meta-data

@@ -1,4 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <paths>
     <files-path path="twa_splash/" name="twa_splash" />
+    <!-- Fotos hechas con la cámara en la app de China (WebActivity). -->
+    <cache-path path="fotos/" name="fotos" />
 </paths>

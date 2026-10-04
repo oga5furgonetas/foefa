@@ -55,6 +55,9 @@ function AppRepartidorZh({ tx }) {
           </ul>
           <a href="/registro?sector=autonomo" className={`${BTN_PRIMARIO} mt-7`}>{tx('zh.app.cta')} <ArrowRight size={16} /></a>
           <p className="mt-3 text-[13px] text-[color:var(--ld-dim)]">{tx('zh.app.precio')}</p>
+          <a href="/descargas/FDS-china.apk" download className="mt-2 inline-flex items-center gap-1.5 text-[13.5px] font-semibold text-[color:var(--ld-accent)] hover:underline underline-offset-4">
+            {tx('zh.app.apk')} <ArrowRight size={14} />
+          </a>
         </div>
         <div className="flex justify-center gap-3 sm:gap-4">
           {CAPTURAS_ZH.map((src, i) => (

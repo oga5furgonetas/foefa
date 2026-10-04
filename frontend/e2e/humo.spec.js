@@ -2030,3 +2030,12 @@ test('Cobro · en China se ofrece pagar el año de una vez y a la vuelta se canj
   expect(canjes[0]).toEqual({ codigo: 'ABCDEFGH' })
   expect(fallos).toEqual([])
 })
+
+test.describe('App · en China se descarga la app (sin Play ni Chrome)', () => {
+  test.use({ locale: 'zh-CN', timezoneId: 'Asia/Shanghai' })
+  test('la tarjeta de instalar ofrece el APK de China', async ({ page }) => {
+    await entrarRepartidor(page, { status: 'active', plan: 'autonomo', days_left: 0 })
+    await page.goto('/ruta', { waitUntil: 'domcontentloaded' })
+    await expect(page.getByRole('link', { name: '下载安卓应用' })).toHaveAttribute('href', '/descargas/FDS-china.apk')
+  })
+})

@@ -50,6 +50,7 @@ import { isStaleChunkError } from './lib/chunkError'
 import Landing from './pages/Landing'
 import CookieBanner from './legal/CookieBanner'
 import { MARCA } from './marca'
+import { DE_PLAY } from './lib/enApp'
 
 /* ── Auto-recuperación tras deploy: si una pestaña abierta pide un chunk viejo
    (invalidado por un despliegue), Vite emite vite:preloadError. Recargamos UNA
@@ -302,7 +303,7 @@ function AppRedirect() {
   // (allí no se puede cobrar con tarjeta). Solo si la abre Play (Android lo
   // dice como android-app://): la app instalada desde la web también arranca
   // en /app y en ella sí se paga con tarjeta.
-  try { if (/^android-app:\/\//.test(document.referrer)) sessionStorage.setItem('flota_app', '1') } catch { /* sin almacenamiento */ }
+  try { if (DE_PLAY.test(document.referrer)) sessionStorage.setItem('flota_app', '1') } catch { /* sin almacenamiento */ }
   // Sin sesión, lo primero es decir qué eres («Repartir yo mismo», de una
   // empresa, la oficina): la app es sobre todo de quien reparte.
   let destino = '/empezar'

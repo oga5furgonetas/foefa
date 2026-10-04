@@ -45,6 +45,21 @@ android {
         }
     }
 
+    // Dos apps del mismo código (04-10-2026):
+    //  · play:  la de Google Play (TWA con Chrome, cobro con Play Billing).
+    //  · china: para descargar desde la web en China, donde no hay Play ni
+    //    Chrome: paquete propio (.cn, no choca con la de Play) y WebView propio
+    //    (src/china). Se compila con  ./gradlew assembleChinaRelease
+    flavorDimensions += "canal"
+    productFlavors {
+        create("play") { dimension = "canal" }
+        create("china") {
+            dimension = "canal"
+            applicationIdSuffix = ".cn"
+            versionNameSuffix = "-cn"
+        }
+    }
+
     buildTypes {
         release {
             isMinifyEnabled = false
