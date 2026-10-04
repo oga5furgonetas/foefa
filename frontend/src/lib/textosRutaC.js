@@ -60,4 +60,6 @@ export const C = {
   "Ese código no es válido": ["That code isn’t valid", "Esse código não é válido", "Ce code n’est pas valide", "Quel codice non è valido", "Dieser Code ist ungültig", "该礼品码无效"],
   "Ese regalo ya se ha usado": ["That gift has already been used", "Essa oferta já foi usada", "Ce cadeau a déjà été utilisé", "Quel regalo è già stato usato", "Dieses Geschenk wurde schon eingelöst", "该礼品已被使用"],
   "Ese regalo ha caducado": ["That gift has expired", "Essa oferta expirou", "Ce cadeau a expiré", "Quel regalo è scaduto", "Dieses Geschenk ist abgelaufen", "该礼品已过期"],
+  // China (PIPL)
+  "Para usar la app desde China hace falta tu consentimiento para tratar tus datos fuera de China.": ["To use the app from China, your consent to process your data outside China is required.", "Para usar a app a partir da China é preciso o seu consentimento para tratar os seus dados fora da China.", "Pour utiliser l’app depuis la Chine, votre consentement au traitement de vos données hors de Chine est nécessaire.", "Per usare l’app dalla Cina serve il tuo consenso al trattamento dei dati fuori dalla Cina.", "Um die App aus China zu nutzen, brauchen wir deine Zustimmung zur Verarbeitung deiner Daten außerhalb Chinas.", "在中国使用本应用，需要你同意在中国境外处理你的数据。"],
 }

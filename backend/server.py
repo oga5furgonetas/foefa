@@ -695,6 +695,8 @@ class RegisterRequest(BaseModel):
     desde_app: Optional[bool] = None  # alta desde la app de Play: ahí no se pide tarjeta con Stripe
     zona_horaria: Optional[str] = None  # la del móvil (Intl): horas y «hoy» del reparto
     pais: Optional[str] = None          # ISO2; si no se conoce, se deduce de la zona horaria
+    # China (PIPL): consentimiento aparte para tratar los datos fuera de China.
+    acepta_transferencia: Optional[bool] = None
 
 
 # Límites y features por plan
@@ -4835,6 +4837,13 @@ async def register_dsp(data: RegisterRequest, request: Request):
         "created_at": datetime.now(timezone.utc).isoformat(),
     }
     org["pais"], org["zona_horaria"] = _region_alta(data.zona_horaria, data.pais)
+    # China: la ley de protección de datos (PIPL, art. 39) pide consentimiento
+    # APARTE para sacar los datos personales de China (aquí van a la UE). Sin
+    # él no se crea la cuenta; con él queda apuntado cuándo se dio.
+    if org["pais"] == "cn":
+        if not data.acepta_transferencia:
+            raise HTTPException(400, "Para usar la app desde China hace falta tu consentimiento para tratar tus datos fuera de China.")
+        org["consentimiento_transferencia"] = datetime.now(timezone.utc).isoformat()
     # El tipo de empresa decide con qué pantallas nace la cuenta: a un
     # supermercado que reparte a domicilio no le sirve lo mismo que a una
     # subcontrata de paquetería. Luego se puede cambiar desde la plataforma.
@@ -46563,6 +46572,13 @@ async def _rep_ubicar(direccion, cp="", localidad="", base=None) -> Optional[tup
     if len(consulta) < 5:
         return None
     pais = _region_actual.get()[0]
+    # En China OpenStreetMap tiene pocas direcciones: con clave de Amap
+    # (AMAP_KEY, la da una cuenta de desarrollador de Amap) se busca allí
+    # primero; si no hay clave o no lo encuentra, se sigue con Nominatim.
+    if pais == "cn" and os.environ.get("AMAP_KEY", "").strip():
+        pt = await _rep_ubicar_amap(consulta)
+        if pt:
+            return pt
     params = {"q": consulta, "format": "json", "limit": 1, "countrycodes": pais, "addressdetails": 1}
     if base:
         # Se prefiere lo cercano al almacén: «Rúa Real 5» hay en cien pueblos.
@@ -46597,6 +46613,27 @@ async def _rep_ubicar(direccion, cp="", localidad="", base=None) -> Optional[tup
     if pais == "es" and not (27.0 <= lat <= 44.5 and -19.0 <= lng <= 5.0):
         return None
     return lat, lng
+
+
+async def _rep_ubicar_amap(consulta: str) -> Optional[tuple]:
+    """Dirección china -> (lat, lng) en WGS-84 con el geocodificador de Amap.
+    Amap da GCJ-02 (el desplazamiento oficial chino): se convierte para que
+    cuadre con el GPS del móvil, el mapa y las rutas."""
+    import httpx as _httpx
+    try:
+        async with _httpx.AsyncClient(timeout=8) as c:
+            r = await c.get("https://restapi.amap.com/v3/geocode/geo",
+                            params={"key": os.environ.get("AMAP_KEY", "").strip(), "address": consulta, "output": "JSON"})
+        d = r.json() if r.status_code == 200 else {}
+        if str(d.get("status")) != "1" or not d.get("geocodes"):
+            return None
+        lng, lat = (float(x) for x in str(d["geocodes"][0].get("location") or "").split(","))
+    except Exception as e:                                   # noqa: BLE001
+        logger.warning(f"reparto: Amap no ubicó una dirección: {type(e).__name__}")
+        return None
+    if not (18.0 <= lat <= 54.0 and 73.0 <= lng <= 135.5):
+        return None
+    return reparto.gcj02_a_wgs84(lat, lng)
 
 
 async def _rep_ajustes() -> dict:

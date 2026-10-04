@@ -569,12 +569,21 @@ Nada se había borrado (org `owner` sin `modulos`, usuario `dani` sin
   saldrán en español en el panel chino hasta añadirlas a i18nZhLit.
 - China como país (cn, +86, Asia/Shanghai, CNY). Con cuenta en China la ruta
   navega con Amap/Baidu (coordenadas WGS-84), avisa por SMS y no usa Google.
-- Lo que falta para China continental (decisiones de Dani, no hecho):
-  API bajo dominio propio (hoy *.fly.dev); APK directa o tiendas chinas (no
-  hay Play); Web Push no llega (va por FCM); Alipay/WeChat Pay en Stripe;
-  PIPL (datos de clientes chinos fuera de China) e ICP solo si se aloja allí;
-  geocodificación pobre con OSM (mejor la API de Amap, pide cuenta china);
-  anuncios: Facebook está bloqueado (WeChat/Douyin/Xiaohongshu).
+- China continental, hecho el 04-10 (Dani: «sí a todo»):
+  · API por flotadsp.com/api (Worker `infra/web-dominio`); la web lo usa solo
+    desde China (`lib/apiBase.js`: zona horaria o zh-CN).
+  · App Android para China: variante `china` (com.flotadsp.flota.cn, WebView
+    propio con ubicación/cámara/fotos), APK en `/descargas/FDS-china.apk`.
+  · Pagar el año de una vez (regalo `para_mi` que se canjea solo). Alipay y
+    WeChat Pay pedidos en Stripe por API (preferencia «on»), pero Stripe los
+    da como NO disponibles hasta que el titular los active en el Dashboard.
+  · Direcciones con Amap si hay `AMAP_KEY` en Fly (GCJ-02 → WGS-84).
+  · PIPL: consentimiento aparte en el alta desde China (obligatorio en el
+    servidor, `consentimiento_transferencia`) y apartado 9 de Privacidad.
+  · Falta (de Dani): activar Alipay/WeChat Pay en Stripe; clave de Amap;
+    probar el APK en un Android chino; anuncios en WeChat/Douyin/Xiaohongshu
+    (piden empresa china); Web Push no llega en China (va por FCM); revisión
+    por un abogado del texto PIPL.
 
 ## Pendiente (por prioridad)
 

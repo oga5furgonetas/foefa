@@ -641,3 +641,47 @@ def pasos_osrm(ruta: dict) -> list:
                           "maniobra": {"tipo": m.get("type") or "", "mod": m.get("modifier") or "",
                                        "salida": m.get("exit") if isinstance(m.get("exit"), int) else None}})
     return fuera
+
+
+# ── China: coordenadas GCJ-02 ↔ WGS-84 (04-10-2026) ──────────────────────────
+# Los mapas chinos (Amap, Baidu sobre GCJ) dan las coordenadas con el
+# desplazamiento oficial (cientos de metros). El GPS del móvil, OpenStreetMap
+# y OSRM van en WGS-84: lo que llega de Amap se convierte antes de guardarlo.
+_GCJ_A = 6378245.0
+_GCJ_EE = 0.00669342162296594323
+
+
+def _gcj_tlat(x: float, y: float) -> float:
+    r = -100.0 + 2.0 * x + 3.0 * y + 0.2 * y * y + 0.1 * x * y + 0.2 * math.sqrt(abs(x))
+    r += (20.0 * math.sin(6.0 * x * math.pi) + 20.0 * math.sin(2.0 * x * math.pi)) * 2.0 / 3.0
+    r += (20.0 * math.sin(y * math.pi) + 40.0 * math.sin(y / 3.0 * math.pi)) * 2.0 / 3.0
+    r += (160.0 * math.sin(y / 12.0 * math.pi) + 320.0 * math.sin(y * math.pi / 30.0)) * 2.0 / 3.0
+    return r
+
+
+def _gcj_tlng(x: float, y: float) -> float:
+    r = 300.0 + x + 2.0 * y + 0.1 * x * x + 0.1 * x * y + 0.1 * math.sqrt(abs(x))
+    r += (20.0 * math.sin(6.0 * x * math.pi) + 20.0 * math.sin(2.0 * x * math.pi)) * 2.0 / 3.0
+    r += (20.0 * math.sin(x * math.pi) + 40.0 * math.sin(x / 3.0 * math.pi)) * 2.0 / 3.0
+    r += (150.0 * math.sin(x / 12.0 * math.pi) + 300.0 * math.sin(x / 30.0 * math.pi)) * 2.0 / 3.0
+    return r
+
+
+def wgs84_a_gcj02(lat: float, lng: float) -> tuple:
+    dlat = _gcj_tlat(lng - 105.0, lat - 35.0)
+    dlng = _gcj_tlng(lng - 105.0, lat - 35.0)
+    rad = lat / 180.0 * math.pi
+    magia = 1 - _GCJ_EE * math.sin(rad) ** 2
+    raiz = math.sqrt(magia)
+    dlat = (dlat * 180.0) / ((_GCJ_A * (1 - _GCJ_EE)) / (magia * raiz) * math.pi)
+    dlng = (dlng * 180.0) / (_GCJ_A / raiz * math.cos(rad) * math.pi)
+    return lat + dlat, lng + dlng
+
+
+def gcj02_a_wgs84(lat: float, lng: float) -> tuple:
+    """Inversa por aproximaciones sucesivas: error por debajo del centímetro."""
+    wlat, wlng = lat, lng
+    for _ in range(6):
+        glat, glng = wgs84_a_gcj02(wlat, wlng)
+        wlat, wlng = wlat - (glat - lat), wlng - (glng - lng)
+    return wlat, wlng

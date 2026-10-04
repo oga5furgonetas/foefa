@@ -8,6 +8,7 @@ import { medirAccion } from '../lib/analitica'
 import { saveSession } from '../panel/auth'
 import { useT, LANGS } from '../i18n'
 import { tx, useIdioma, IDIOMAS, cambiarIdioma } from '../lib/idioma'
+import { desdeChina } from '../lib/apiBase'
 import { Check, Zap, Package, ShoppingCart, Warehouse, Truck, User, Send } from 'lucide-react'
 import { MARCA, dominio } from '../marca'
 
@@ -265,6 +266,11 @@ export default function Registro() {
   const [err, setErr] = useState('')
   const [busy, setBusy] = useState(false)
   const [accept, setAccept] = useState(false)
+  // China (PIPL): consentimiento APARTE para tratar los datos fuera de China.
+  const [transfer, setTransfer] = useState(false)
+  // Un nombre que no da letras (chino, árabe…) no deja identificador: se
+  // propone uno para que nadie se atasque en «la URL debe tener 3 letras».
+  const [sufijo] = useState(() => `empresa-${Math.random().toString(36).slice(2, 6)}`)
   const [done, setDone] = useState(false)
 
   const reparte = ['supermercado', 'distribucion', 'autonomo', 'mensajeria'].includes(sector)
@@ -299,7 +305,8 @@ export default function Registro() {
     ? annualM(planInfo, furgonetas) : precioMes(planInfo, furgonetas)
   const yearSave = annualSave(planInfo, furgonetas)
 
-  function onOrg(v) { setOrg(v); if (!slugTouched) setSlug(slugify(v)) }
+  function onOrg(v) { setOrg(v); if (!slugTouched) setSlug(slugify(v) || (v.trim() ? sufijo : '')) }
+  const china = regionDelMovil().pais === 'cn' || desdeChina()
 
   const soloYo = sector === 'autonomo'
   // Los textos que ve quien reparte solo, en el idioma de su app; el alta de
@@ -326,6 +333,7 @@ export default function Registro() {
     if (pass.length < 8) return setErr(tt('La contraseña debe tener al menos 8 caracteres.'))
     if (pass !== pass2) return setErr(tt('Las contraseñas no coinciden.'))
     if (!accept) return setErr(tt('Debes aceptar los Términos y la Política de Privacidad para continuar.'))
+    if (china && !transfer) return setErr(tx('Para usar la app desde China hace falta tu consentimiento para tratar tus datos fuera de China.'))
     setBusy(true)
     try {
       const r = await fetch(`${API_BASE}/auth/register`, {
@@ -337,6 +345,7 @@ export default function Registro() {
           // Desde la app de Play no se pide tarjeta con Stripe (Google cobra con lo suyo).
           desde_app: enAppPlay(),
           ...regionDelMovil(),
+          ...(china ? { acepta_transferencia: transfer } : {}),
         }),
       })
       const j = await r.json()
@@ -485,6 +494,13 @@ export default function Registro() {
               n: diasPrueba, plan: tt(planInfo.name), precio: precioFijo ? displayPrice.toFixed(2).replace('.', ',') : displayPrice })}
           </span>
         </label>
+
+        {china && (
+          <label style={{ display: 'flex', alignItems: 'flex-start', gap: 8, marginTop: 10, fontSize: 12, color: '#8b94a3', lineHeight: 1.5, cursor: 'pointer' }}>
+            <input type="checkbox" checked={transfer} onChange={(e) => setTransfer(e.target.checked)} style={{ marginTop: 2 }} />
+            <span>{tx('Acepto que mis datos personales y los que introduzca de mis clientes se traten fuera de China, en la Unión Europea, para prestar el servicio. Quién los trata, para qué y cómo ejercer mis derechos está en la Política de Privacidad.')}</span>
+          </label>
+        )}
 
         <button
           style={{ ...btn, opacity: busy ? .6 : 1, cursor: busy ? 'wait' : 'pointer' }}

@@ -9,6 +9,7 @@ import pytest
 from fastapi import HTTPException
 from fastapi.security import HTTPAuthorizationCredentials
 
+import reparto
 import server
 from base_de_mentira import Col, Db
 
@@ -130,3 +131,53 @@ async def test_cambiar_pais_desde_ajustes(cuentas, monkeypatch):
     with pytest.raises(HTTPException) as e:
         await server.reparto_ajustes_put({"pais": "zz"}, yo)
     assert e.value.status_code == 400
+
+
+def test_coordenadas_chinas_gcj02_ida_y_vuelta():
+    # Tiananmen en WGS-84; en GCJ-02 se desplaza unos cientos de metros.
+    lat, lng = 39.9087, 116.3975
+    glat, glng = reparto.wgs84_a_gcj02(lat, lng)
+    assert 0.0005 < abs(glat - lat) + abs(glng - lng) < 0.01
+    wlat, wlng = reparto.gcj02_a_wgs84(glat, glng)
+    assert abs(wlat - lat) < 1e-6 and abs(wlng - lng) < 1e-6
+
+
+@pytest.mark.asyncio(loop_scope="session")
+async def test_en_china_con_clave_de_amap_se_ubica_alli(monkeypatch):
+    monkeypatch.setenv("AMAP_KEY", "k")
+    glat, glng = reparto.wgs84_a_gcj02(31.2397, 121.4998)
+
+    class R:
+        status_code = 200
+        def json(self):
+            return {"status": "1", "geocodes": [{"location": f"{glng},{glat}"}]}
+
+    class C:
+        async def __aenter__(self): return self
+        async def __aexit__(self, *a): return False
+        async def get(self, url, params=None):
+            assert "amap.com" in url and params["address"].startswith("上海")
+            return R()
+
+    import httpx
+    monkeypatch.setattr(httpx, "AsyncClient", lambda *a, **k: C())
+    tok = server._region_actual.set(("cn", "Asia/Shanghai"))
+    try:
+        lat, lng = await server._rep_ubicar("上海市黄浦区南京东路 100 号")
+    finally:
+        server._region_actual.reset(tok)
+    assert abs(lat - 31.2397) < 1e-5 and abs(lng - 121.4998) < 1e-5
+
+
+@pytest.mark.asyncio(loop_scope="session")
+async def test_alta_desde_china_pide_consentimiento_de_transferencia(monkeypatch):
+    """PIPL: sin el consentimiento aparte no se crea la cuenta (y no se toca la base)."""
+    g = Db()
+    monkeypatch.setattr(server, "global_db", g)
+    req = SimpleNamespace(headers={}, client=SimpleNamespace(host="203.0.113.9"))
+    datos = server.RegisterRequest(org_name="李师傅", username="li@example.cn", password="12345678", slug="reparto-ab12",
+                                   sector="autonomo", zona_horaria="Asia/Shanghai", pais="cn")
+    with pytest.raises(HTTPException) as e:
+        await server.register_dsp(datos, req)
+    assert e.value.status_code == 400 and "China" in e.value.detail
+    assert not g["organizations"].docs and not g["admin_users"].docs

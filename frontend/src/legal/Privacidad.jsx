@@ -60,7 +60,11 @@ export default function Privacidad() {
       <h2>8. Menores</h2>
       <p>El servicio está dirigido a empresas. No tratamos conscientemente datos de menores de 14 años.</p>
 
-      <h2>9. Cambios</h2>
+      <h2>9. Usuarios en China</h2>
+      <p>Si usas {COMPANY.brand} desde la República Popular China, tus datos personales y los de tus clientes que introduzcas se tratan <strong>fuera de China, en la Unión Europea</strong> (y con los encargados del apartado 5), para prestarte el servicio. Lo hacemos solo con tu <strong>consentimiento expreso y separado</strong>, que se pide al crear la cuenta y queda registrado con su fecha, conforme a la Ley de Protección de Información Personal de China (PIPL). Quién trata los datos, para qué, qué datos y cómo ejercer tus derechos (acceso, copia, rectificación, supresión y retirada del consentimiento) es lo que explica esta política; escríbenos a <a href={`mailto:${COMPANY.privacyEmail}`}>{COMPANY.privacyEmail}</a>. Retirar el consentimiento implica dejar de usar el servicio y que borremos la cuenta.</p>
+      <p lang="zh-CN">如果你在中华人民共和国境内使用 {COMPANY.brand}，你的个人信息以及你录入的客户信息将为提供服务而在<strong>中国境外（欧盟）</strong>处理（以及第 5 节所列的受托处理方）。我们仅在取得你<strong>单独、明确的同意</strong>后进行处理：该同意在注册时取得并记录日期，符合《中华人民共和国个人信息保护法》。处理者身份、处理目的、信息种类以及如何行使你的权利（查阅、复制、更正、删除及撤回同意），均见本政策；请发送邮件至 <a href={`mailto:${COMPANY.privacyEmail}`}>{COMPANY.privacyEmail}</a>。撤回同意意味着停止使用本服务并删除账号。</p>
+
+      <h2>10. Cambios</h2>
       <p>Podemos actualizar esta política; te avisaremos por correo o en el panel cuando los cambios sean sustanciales. La versión vigente es siempre la publicada en esta página.</p>
     </LegalLayout>
   )

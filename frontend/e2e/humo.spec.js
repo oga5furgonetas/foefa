@@ -1902,6 +1902,15 @@ test.describe('Idiomas · la app de reparto sigue el idioma del móvil', () => {
     await expect(page.getByText(/sin tarjeta/)).toHaveCount(0)
     await expect(page.getByRole('link', { name: '隐私政策' })).toHaveAttribute('href', '/privacidad')
     await expect(page.getByRole('button', { name: /以配送员套餐创建账号/ })).toBeVisible()
+    // PIPL: consentimiento aparte para tratar los datos fuera de China.
+    await page.getByPlaceholder('Pepe').fill('李师傅')
+    await page.getByPlaceholder('tu@correo.com').fill('li@example.cn')
+    await page.locator('input[type=password]').first().fill('12345678')
+    await page.locator('input[type=password]').nth(1).fill('12345678')
+    await page.getByRole('checkbox').first().check()
+    await expect(page.getByText(/传输至中国境外/)).toBeVisible()
+    await page.getByRole('button', { name: /以配送员套餐创建账号/ }).click()
+    await expect(page.getByText('在中国使用本应用，需要你同意在中国境外处理你的数据。')).toBeVisible()
   })
 })
 
