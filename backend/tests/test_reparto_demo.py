@@ -69,6 +69,10 @@ async def test_cada_visitante_autonomo_tiene_su_ruta_y_se_borra_al_dia_siguiente
     assert ida != idb and ida.startswith("demo-a-")
     ddb = base.bases["dsp_demo_reparto"]
     assert {ida, idb} <= {d["id"] for d in ddb["drivers"].docs}
+    # Cada uno con sus 8 paradas de ejemplo, que no se cruzan con las del otro.
+    suyas = [p for p in ddb["reparto_pedidos"].docs if p["conductor_id"] == ida]
+    assert len(suyas) == 8 and all(p["lat"] is not None for p in suyas)
+    assert not {p["codigo"] for p in suyas} & {p["codigo"] for p in ddb["reparto_pedidos"].docs if p["conductor_id"] == idb}
     base.dia["hoy"] = "2026-10-05"
     await server.demo_reparto_login(_Peticion(), {})
     assert not any(d["id"].startswith("demo-a-") for d in ddb["drivers"].docs)

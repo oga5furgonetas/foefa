@@ -2048,3 +2048,21 @@ test.describe('App · en China se descarga la app (sin Play ni Chrome)', () => {
     await expect(page.getByRole('link', { name: '下载安卓应用' })).toHaveAttribute('href', '/descargas/FDS-china.apk')
   })
 })
+
+test('Anuncio · quien llega del anuncio ve la app y la prueba con paradas antes del alta', async ({ page }) => {
+  const fallos = vigilar(page)
+  await simularApi(page, 'vacio')
+  await page.route(/\/api\/auth\/demo-reparto/, (r) => r.fulfill({ json: { access_token: 'tok', role: 'driver', driver: { id: 'demo-a-1', name: 'Repartidor (prueba)' }, autonomo: true } }))
+  await page.route(/\/api\/reparto\/mi-ruta$/, (r) => r.fulfill({ json: {
+    activo: true, autonomo: true, prueba: true, fecha: '2026-10-04', jornada: {}, aviso_aceptado: true, pais: 'es',
+    pedidos: [{ id: 'p1', cliente: 'Cliente 1 (prueba)', direccion: 'Rúa Real 21, 15003 A Coruña', estado: 'pendiente', bultos: 3, orden: 1, lat: 43.37, lng: -8.398 }] } }))
+  await page.goto('/registro?sector=autonomo&plan=autonomo&utm_source=facebook', { waitUntil: 'domcontentloaded' })
+  await expect(page).toHaveURL(/\/repartidores\?/)
+  await expect(page.getByRole('heading', { name: 'Tu ruta de reparto, ordenada sola.' })).toBeVisible()
+  await expect(page.getByRole('link', { name: /Crear mi cuenta/ })).toHaveAttribute('href', '/registro?sector=autonomo&plan=autonomo')
+  await page.getByRole('button', { name: /Probarla ahora/ }).first().click()
+  await expect(page).toHaveURL(/\/conductor\?vista=ruta/)
+  await expect(page.getByText('Ruta de prueba con paradas de ejemplo. Se borra mañana.')).toBeVisible()
+  await expect(page.getByText('Cliente 1 (prueba)')).toBeVisible()
+  expect(fallos).toEqual([])
+})

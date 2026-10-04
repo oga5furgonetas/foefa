@@ -454,6 +454,14 @@ export default function MiRuta({ onBack, embebido = false }) {
         </button>
       )}
 
+      {/* LA PRUEBA SIN CUENTA: se dice que lo es y cómo quedársela. */}
+      {ruta.prueba && (
+        <div className="mb-3 flex items-center justify-between gap-3 rounded-2xl border border-amber-400/40 bg-amber-500/[.08] px-3.5 py-2.5">
+          <span className="text-[12.5px] leading-snug text-amber-100">{tx('Ruta de prueba con paradas de ejemplo. Se borra mañana.')}</span>
+          <a href="/registro?sector=autonomo&plan=autonomo" className="shrink-0 rounded-lg bg-amber-400 px-3 py-1.5 text-[12.5px] font-bold text-[#1a1300]">{tx('Crear mi cuenta')}</a>
+        </div>
+      )}
+
       {/* LA CABECERA DEL DÍA: lo primero que se ve. Cuánto llevas, cuánto
           queda, a qué hora acabas y si vas tarde respecto a lo previsto. */}
       {total > 0 && (

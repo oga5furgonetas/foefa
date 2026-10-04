@@ -228,6 +228,19 @@ const ResetPassword = lazy(() => import('./pages/ResetPassword'))
 const Registro = lazy(() => import('./pages/Registro'))
 const PruebaReparto = lazy(() => import('./pages/PruebaReparto'))
 const Empezar = lazy(() => import('./pages/Empezar'))
+const Repartidores = lazy(() => import('./pages/Repartidores'))
+
+/* EL ANUNCIO DE REPARTIDORES (04-10-2026) apunta a /registro?sector=autonomo
+   …&utm_source=…: 410 visitas y 0 altas, porque aterrizaban en un formulario
+   de una app que no habían visto. Si llega del anuncio (lleva utm), va a la
+   página que la enseña y deja probarla; el alta, después. Sin tocar el
+   anuncio. El botón «Crear mi cuenta» de esa página va sin utm: no hay bucle. */
+try {
+  const q = new URLSearchParams(window.location.search)
+  if (window.location.pathname === '/registro' && q.get('sector') === 'autonomo' && q.get('utm_source')) {
+    window.location.replace(`/repartidores${window.location.search}`)
+  }
+} catch { /* sin URL: nada */ }
 const RutaApp = lazy(() => import('./pages/RutaApp'))
 const SeguimientoPedido = lazy(() => import('./pages/SeguimientoPedido'))
 const RegaloPagina = lazy(() => import('./pages/RegaloPagina'))
@@ -355,6 +368,7 @@ ReactDOM.createRoot(document.getElementById('root')).render(
               <Route path="/registro" element={<Registro />} />
               <Route path="/prueba-reparto" element={<PruebaReparto />} />
               <Route path="/empezar" element={<Empezar />} />
+              <Route path="/repartidores" element={<Repartidores />} />
               <Route path="/ruta" element={<RutaApp />} />
               <Route path="/s/:token" element={<SeguimientoPedido />} />
               <Route path="/regalo/:codigo" element={<RegaloPagina />} />

@@ -47588,7 +47588,9 @@ async def reparto_mi_ruta(user: dict = Depends(require_any_auth)):
             "pais": _region_actual.get()[0], "prefijo": PAISES_REPARTO.get(_region_actual.get()[0], {}).get("prefijo", "34"), "fecha": f, "pedidos": ps, "base": a.get("base"), "ruta": ruta, "autonomo": autonomo,
             "ia_tickets": bool(a.get("ia_tickets")) and _rep_ia_permitida(),
             "jornada": {"empezada": j.get("empezada"), "terminada": j.get("terminada")},
-            "aviso_aceptado": bool(aviso)}
+            "aviso_aceptado": bool(aviso),
+            # La prueba sin cuenta: la app invita a crear la cuenta de verdad.
+            "prueba": bool(user.get("demo")) and str(d["id"]).startswith("demo-a-")}
 
 
 @api_router.post("/reparto/escanear")
@@ -47925,6 +47927,22 @@ async def demo_reparto_login(request: Request, data: dict = Body(default={})):
         cid = f"demo-a-{uuid.uuid4().hex[:10]}"
         await client[_DEMO_REP_DB].drivers.insert_one({"id": cid, "name": "Repartidor (prueba)", "active": True,
                                                        "center": "TIENDA", "demo": True})
+        # Con 8 paradas de ejemplo ya puestas (04-10-2026): quien llega de un
+        # anuncio no tiene paquetes a mano, y una ruta vacía no enseña nada.
+        # Así ve al momento la ruta, la ordena, el mapa y la navegación. Son
+        # suyas (código con su sufijo) y se borran con la demo al día siguiente.
+        hoy = _dia_negocio()
+        ahora = datetime.now(timezone.utc).isoformat()
+        await client[_DEMO_REP_DB].reparto_pedidos.insert_many([{
+            "id": str(uuid.uuid4()), "fecha": hoy, "codigo": f"{cod}-{cid[-4:].upper()}", "cliente": cli,
+            "telefono": "", "direccion": f"{dire}, {cp} A Coruña", "cp": cp, "localidad": "A Coruña",
+            "contenido": lleva, "notas": _DEMO_REP_NOTAS.get(cod, ""), "bultos": bultos, "escaneos": 0,
+            "ventana_desde": _DEMO_REP_FRANJAS.get(cod, (None, None))[0],
+            "ventana_hasta": _DEMO_REP_FRANJAS.get(cod, (None, None))[1],
+            "prioridad": cod == "DEMO1004", "zona": "", "conductor_id": cid, "conductor_nombre": "Repartidor (prueba)",
+            "estado": "pendiente", "orden": None, "origen": "conductor",
+            "lat": lat, "lng": lng, "geo": "ok", "creado_por": "Demo", "creado_en": ahora,
+        } for cod, cli, dire, cp, lat, lng, lleva, bultos, _c in _DEMO_REP_PEDIDOS[:8]])
         token = create_token(cid, "driver", "Repartidor (prueba)", org_id=_DEMO_REP_ORG_ID, db_name=_DEMO_REP_DB,
                              account_type="dsp", centers=["TIENDA"], demo=True)
         return {"access_token": token, "role": "driver", "driver": {"id": cid, "name": "Repartidor (prueba)"},
