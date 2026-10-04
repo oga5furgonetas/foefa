@@ -675,3 +675,12 @@ Nada se había borrado (org `owner` sin `modulos`, usuario `dani` sin
 - **Rutas por las calles**: `_rep_osrm` prueba el servidor principal y, si falla, el de respaldo; un fallo ya no se guarda (antes dejaba rayas rectas hasta reiniciar).
 - Capturas de la landing con trazado REAL (`e2e/fixtures/coruna-real.json`); las anteriores eran 5 puntos a mano = rayas rectas.
 - Alta de repartidor sin «repetir contraseña» y campos a 16 px (iOS hacía zoom).
+
+## 04-10-2026 noche: campaña de registros, entrada de la app, editar paradas
+
+- **Meta**: campaña nueva «FDS Registros — Lead — ES+PT (05-10-2026)» (ids campaña 52642982601539 / conjunto 52642982601739 / anuncio 52642982601939), objetivo Clientes potenciales con conversión en SITIO WEB (con formularios instantáneos Meta exige aceptar condiciones de leads), evento «Cliente potencial» (Lead) del píxel «fds», 70 €/día hasta el 8-oct, España+Portugal, anunciante FDs, mejoras de IA de Meta desactivadas. Quedó en BORRADOR: Dani pulsa Publicar (el clasificador bloquea publicar/gastar). Al publicarla, pausar «FDS Repartidores — 250 € hoy — 7 idiomas» (campaña antigua, optimiza visitas baratas y tiene un cambio de contenido sin publicar).
+- Eventos del píxel: `Lead` al pulsar «Crear mi cuenta» (landing y pantalla de entrada) o «Probarla ahora»; `CompleteRegistration` al terminar el alta. Solo con cookies de anuncios aceptadas. En el Chrome de Dani el script de Meta se descarga pero no se ejecuta (bloqueador/protección de rastreo); en otro navegador sí envía.
+- Facturación Meta: el umbral de cobro (ahora 19 €, antes 2 €) lo sube Meta solo según el historial; no se fija a mano. Para pagar de golpe: «Añadir fondos» (prepago) en Facturación y pagos.
+- Pantalla de entrada de la app (`/empezar`): «Crear mi cuenta gratis» arriba, «Ya tengo cuenta · Entrar», empresas plegado; SIN «probar sin cuenta» (incongruente si crear cuenta es gratis; la landing sí lo conserva).
+- Repartidor: `POST /reparto/mis-pedidos/{id}/editar` ahora cambia cliente, teléfono, dirección (vuelve a situarla), bultos, cobro, horario…; `POST /reparto/mis-pedidos/{id}/quitar` (solo paradas propias o, si reparte solo, cualquiera; no las cerradas). En la app: botón «Editar» en cada parada y «Quitar esta parada» con doble toque. Tests: `test_reparto_api.py`, `e2e/editar-parada.spec.js`.
+- Pendiente de la «app bomba»: buscador de direcciones con sugerencias al añadir parada, arrastrar para reordenar, barra compacta de carga cuando ya hay paradas, vídeo de 15 s para anuncios.
