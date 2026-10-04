@@ -1938,3 +1938,32 @@ test.describe('Idiomas · errores del servidor en la app de ruta', () => {
     expect(fallos.filter((f) => !/402|422/.test(f))).toEqual([])
   })
 })
+
+test.describe('Reparto · en México se cobra en pesos', () => {
+  test.use({ locale: 'es-MX' })
+  test('el importe sale en pesos y en vez de Bizum se ofrece transferencia', async ({ page }) => {
+    const fallos = vigilar(page)
+    const b64 = (o) => btoa(JSON.stringify(o)).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '')
+    const token = `${b64({ alg: 'HS256' })}.${b64({ sub: 'd1', role: 'driver', name: 'JUAN', exp: Math.floor(Date.now() / 1000) + 3600 })}.x`
+    await page.addInitScript((t) => {
+      localStorage.setItem('flota_driver_token', t)
+      localStorage.setItem('flota_driver', JSON.stringify({ id: 'd1', name: 'JUAN' }))
+      localStorage.setItem('cookie_consent', '1')
+    }, token)
+    await simularApi(page, 'vacio')
+    const estados = []
+    await page.route(/\/api\/reparto\/pedidos\/p1\/estado/, async (r) => { estados.push(r.request().postDataJSON()); await r.fulfill({ json: {} }) })
+    await page.route(/\/api\/reparto\/mi-ruta$/, (r) => r.fulfill({ json: {
+      activo: true, empresa: 'Juan Envíos', fecha: '2026-10-04', jornada: {}, aviso_aceptado: true, pais: 'mx', prefijo: '52',
+      pedidos: [{ id: 'p1', cliente: 'Tienda Roma', direccion: 'Av. Álvaro Obregón 120, CDMX', estado: 'pendiente', bultos: 1, orden: 1, cobrar: 250 }] } }))
+    await page.goto('/conductor?vista=ruta', { waitUntil: 'domcontentloaded' })
+    await expect(page.getByText('COBRAR $250.00')).toBeVisible()
+    await page.getByRole('button', { name: 'Entregado', exact: true }).click()
+    await expect(page.getByRole('button', { name: 'Bizum' })).toHaveCount(0)
+    await page.getByRole('button', { name: 'Transferencia' }).click()
+    await page.getByRole('button', { name: 'Entregar sin foto' }).click()
+    await expect.poll(() => estados.length).toBe(1)
+    expect(estados[0]).toMatchObject({ estado: 'entregado', metodo: 'transferencia' })
+    expect(fallos).toEqual([])
+  })
+})

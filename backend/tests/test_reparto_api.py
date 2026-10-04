@@ -252,6 +252,10 @@ async def test_cobro_recogida_y_reintento(base):
     vista = await server.reparto_pedidos("", OFICINA)
     ana = next(c for c in vista["conductores"] if c["conductor_id"] == "d1")
     assert ana["a_cobrar"] == 23.5 and ana["cobrado"] == {"bizum": 23.5}
+    # Fuera de España no hay Bizum: se acepta la transferencia.
+    t = await server.reparto_mis_pedidos({"direccion": "Rúa Real 7", "cobrar": "10"}, ANA)
+    r = await server.reparto_estado(t["id"], {"estado": "entregado", "metodo": "transferencia"}, ANA)
+    assert r["cobrado_metodo"] == "transferencia"
     rec = await server.reparto_mis_pedidos({"direccion": "Rúa Real 5", "tipo": "Recogida de envases"}, ANA)
     assert rec["tipo"] == "recogida"
     f = await server.reparto_estado(rec["id"], {"estado": "fallido", "motivo": "No había nadie"}, ANA)

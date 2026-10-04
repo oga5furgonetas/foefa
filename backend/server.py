@@ -47131,7 +47131,9 @@ async def reparto_pedidos(fecha: str = "", user: dict = Depends(require_admin)):
     return {"fecha": f, "ve_datos": _rep_ve_datos(user), "base": a.get("base") if _rep_ve_datos(user) else None,
             "pedidos": [_rep_sale(p, user) for p in ps],
             "conductores": conductores,
-            "sin_ubicar": sum(1 for p in ps if p.get("geo") == "pendiente")}
+            "sin_ubicar": sum(1 for p in ps if p.get("geo") == "pendiente"),
+            # El país de la cuenta: la oficina ve los cobros en su moneda.
+            "pais": _region_actual.get()[0]}
 
 
 @api_router.post("/reparto/pedidos")
@@ -47481,8 +47483,9 @@ async def reparto_estado(pid: str, data: dict = Body(...), user: dict = Depends(
     cambios["cerrado_en"] = datetime.now(timezone.utc).isoformat() if e in ("entregado", "fallido") else None
     if e == "entregado" and (p.get("cobrar") or 0) > 0:
         metodo = _texto_cuerpo(data.get("metodo"), 20).lower()
-        if metodo not in ("efectivo", "tarjeta", "bizum", "pagado"):
-            raise HTTPException(400, "Di cómo ha pagado: efectivo, tarjeta o Bizum")
+        # Bizum solo existe en España; fuera, la transferencia hace su papel.
+        if metodo not in ("efectivo", "tarjeta", "bizum", "transferencia", "pagado"):
+            raise HTTPException(400, "Di cómo ha pagado: efectivo, tarjeta, Bizum o transferencia")
         cobrado = reparto.importe(data.get("importe")) if data.get("importe") not in (None, "") else p.get("cobrar")
         cambios.update({"cobrado_metodo": metodo, "cobrado_importe": cobrado})
     elif e != "entregado":

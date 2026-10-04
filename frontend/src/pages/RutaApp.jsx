@@ -12,6 +12,7 @@ import InstalarApp from './InstalarApp'
 import { useToast } from '../lib/toast'
 import { lista } from '../lib/lista'
 import { hoyLocal, fechaEs } from '../lib/fecha'
+import { importe } from '../lib/region'
 import { tx, useIdioma, txError } from '../lib/idioma'
 
 /* ── LA APP DE QUIEN REPARTE SOLO (04-10-2026) ───────────────────────────────
@@ -24,7 +25,7 @@ import { tx, useIdioma, txError } from '../lib/idioma'
 const PESTANAS = [
   ['hoy', 'Hoy', Route], ['historial', 'Historial', History], ['ajustes', 'Ajustes', Settings2], ['cuenta', 'Cuenta', UserCircle2],
 ]
-const euros = (n) => `${Number(n || 0).toFixed(2).replace('.', ',')} €`
+const euros = (n) => importe(n)
 
 export default function RutaApp() {
   useIdioma()

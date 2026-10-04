@@ -16,7 +16,8 @@ const FICHEROS = [
   'pages/Registro.jsx', 'legal/CookieBanner.jsx',
 ]
 // Nombres que llegan de datos (el plan del autónomo en Registro: tt(planInfo.name)).
-const DE_DATOS = ['Repartidor']
+// y los métodos de cobro de lib/region.js (metodosCobro), que se pintan con tx(t).
+const DE_DATOS = ['Repartidor', 'Bizum', 'Transferencia']
 // Listas cuyos textos se traducen al pintarlos.
 const LISTAS = ['MOTIVOS', 'NAVEGADORES', 'HUECOS', 'PESTANAS', 'GIROS', 'ORDINALES', 'OPCIONES', 'ESTADO']
 

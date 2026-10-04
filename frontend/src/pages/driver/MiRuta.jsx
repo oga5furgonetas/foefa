@@ -12,6 +12,7 @@ import { lista } from '../../lib/lista'
 import { compressImage } from '../../lib/compressImage'
 import { origen } from '../../marca'
 import { leerTicketEnMovil } from '../../lib/leerTicket'
+import { fijarPais, importe, simboloMoneda, metodosCobro } from '../../lib/region'
 import { tx, useIdioma, locale, txError } from '../../lib/idioma'
 
 /* ── MI RUTA ────────────────────────────────────────────────────────────────
@@ -60,7 +61,7 @@ function mensaje(p, empresa) {
   const enlace = p.seguimiento ? ` ${tx('Puede seguirlo aquí:')} ${origen()}/s/${p.seguimiento}` : ''
   return `${tx('Hola, soy {quien}. Voy de camino {que}', { quien, que })}${cuando}.${enlace}`
 }
-const euros = (n) => `${Number(n || 0).toFixed(2).replace('.', ',')} €`
+const euros = (n) => importe(n)
 
 function minutosATexto(m) {
   const h = Math.floor(m / 60)
@@ -180,7 +181,7 @@ export default function MiRuta({ onBack, embebido = false }) {
   }, [vista, firmaRuta])
 
   const cargar = useCallback(() => {
-    repMiRuta().then(({ data }) => setRuta(data))
+    repMiRuta().then(({ data }) => { fijarPais(data?.pais); setRuta(data) })
       .catch((e) => setErr(txError(e, 'No se pudo cargar tu ruta')))
   }, [])
   useEffect(cargar, [cargar])
@@ -824,7 +825,7 @@ export default function MiRuta({ onBack, embebido = false }) {
             <input className={inp} placeholder={tx('Qué lleva')} value={nuevo.contenido} onChange={(e) => setNuevo({ ...nuevo, contenido: e.target.value })} />
             <input className={inp} placeholder={tx('Horario del cliente (ej. de 10 a 12)')} value={nuevo.horario || ''} onChange={(e) => setNuevo({ ...nuevo, horario: e.target.value })} />
             <div className="grid grid-cols-2 gap-2">
-              <input className={inp} inputMode="decimal" placeholder={tx('A cobrar (€)')} value={nuevo.cobrar || ''} onChange={(e) => setNuevo({ ...nuevo, cobrar: e.target.value })} />
+              <input className={inp} inputMode="decimal" placeholder={tx('A cobrar ({moneda})', { moneda: simboloMoneda() })} value={nuevo.cobrar || ''} onChange={(e) => setNuevo({ ...nuevo, cobrar: e.target.value })} />
               <select className={inp} value={nuevo.tipo || 'entrega'} onChange={(e) => setNuevo({ ...nuevo, tipo: e.target.value })} aria-label={tx('Tipo de parada')}>
                 <option value="entrega">{tx('Entrega')}</option>
                 <option value="recogida">{tx('Recogida')}</option>
@@ -853,7 +854,7 @@ export default function MiRuta({ onBack, embebido = false }) {
         <Hoja titulo={`${tx('Cobrar')} ${euros(cobro.cobrar)}`} onClose={() => setCobro(null)}>
           <p className="mb-3 text-[13px] text-dark-400">{tx('¿Cómo ha pagado?')}</p>
           <div className="grid grid-cols-3 gap-2">
-            {[['efectivo', 'Efectivo'], ['tarjeta', 'Tarjeta'], ['bizum', 'Bizum']].map(([k, t]) => (
+            {metodosCobro().map(([k, t]) => (
               <button key={k} onClick={() => marcar(cobro, 'entregado', '', { metodo: k })}
                 className="rounded-xl bg-emerald-600 py-3.5 text-[15px] font-bold text-white">{tx(t)}</button>
             ))}
@@ -1028,7 +1029,7 @@ function Resumen({ hechos, ruta }) {
   ok.forEach((p) => { if (p.cobrado_importe) cobros[p.cobrado_metodo || 'otro'] = (cobros[p.cobrado_metodo || 'otro'] || 0) + Number(p.cobrado_importe) })
   const horas = hechos.map((p) => p.cerrado_en).filter(Boolean).sort()
   const durMin = horas.length > 1 ? Math.round((new Date(horas[horas.length - 1]) - new Date(horas[0])) / 60000) : 0
-  const NOMBRE = { efectivo: tx('Efectivo'), tarjeta: tx('Tarjeta'), bizum: 'Bizum', pagado: tx('Ya pagado'), otro: tx('Otro') }
+  const NOMBRE = { efectivo: tx('Efectivo'), tarjeta: tx('Tarjeta'), bizum: 'Bizum', transferencia: tx('Transferencia'), pagado: tx('Ya pagado'), otro: tx('Otro') }
   return (
     <div className="mt-3 rounded-2xl border border-emerald-500/40 bg-emerald-500/[.07] p-4" aria-label={tx('Resumen del día')}>
       <p className="flex items-center gap-2 text-[16px] font-bold text-emerald-200"><Trophy size={18} /> {tx('Ruta terminada')}</p>

@@ -18,6 +18,7 @@ import { origen } from '../../marca'
 import QRCode from 'qrcode'
 import { usePlan } from '../../lib/usePlan'
 import MiRuta from '../../pages/driver/MiRuta'
+import { fijarPais, importe, simboloMoneda } from '../../lib/region'
 
 /* ── REPARTO A DOMICILIO Y A NEGOCIOS ────────────────────────────────────────
    Para quien reparte su propia mercancía: el súper que lleva la compra a casa,
@@ -41,8 +42,9 @@ const btn = 'inline-flex items-center gap-1.5 rounded-lg border border-dark-700 
 const btnP = 'inline-flex items-center gap-1.5 rounded-lg bg-brand-500 px-3 py-2 text-[12.5px] font-semibold text-white hover:bg-brand-600 disabled:opacity-40'
 
 const VACIO = { codigo: '', cliente: '', telefono: '', direccion: '', contenido: '', bultos: 1, conductor_id: '', horario: '', prioridad: false, cobrar: '', tipo: 'entrega' }
-const euros = (n) => `${Number(n || 0).toFixed(2).replace('.', ',')} €`
-const METODO = { efectivo: 'efectivo', tarjeta: 'tarjeta', bizum: 'Bizum', pagado: 'pagado' }
+// En la moneda del país de la cuenta (llega con los pedidos: datos.pais).
+const euros = (n) => importe(n)
+const METODO = { efectivo: 'efectivo', tarjeta: 'tarjeta', bizum: 'Bizum', transferencia: 'transferencia', pagado: 'pagado' }
 
 /* La caja del repartidor: lo cobrado por método, para cuadrar al volver. */
 function caja(r) {
@@ -105,7 +107,7 @@ export default function Reparto() {
   const [foto, setFoto] = useState(null)   // {foto, nota, cuando, cliente}
 
   const cargar = useCallback(() => {
-    getRepartoPedidos(fecha).then(({ data }) => setDatos(data))
+    getRepartoPedidos(fecha).then(({ data }) => { fijarPais(data?.pais); setDatos(data) })
       .catch((e) => toast.error(e?.response?.data?.detail || 'No se pudieron cargar los pedidos'))
   }, [fecha, toast])
   useEffect(cargar, [cargar])
@@ -362,7 +364,7 @@ export default function Reparto() {
             <label className="flex items-center gap-2 text-[13px] text-dark-200">
               <input type="checkbox" checked={nuevo.prioridad} onChange={(e) => setNuevo({ ...nuevo, prioridad: e.target.checked })} /> Urgente (congelados, medicinas…)
             </label>
-            <input className={inp} inputMode="decimal" placeholder="A cobrar en la entrega (€)" value={nuevo.cobrar} onChange={(e) => setNuevo({ ...nuevo, cobrar: e.target.value })} />
+            <input className={inp} inputMode="decimal" placeholder={`A cobrar en la entrega (${simboloMoneda()})`} value={nuevo.cobrar} onChange={(e) => setNuevo({ ...nuevo, cobrar: e.target.value })} />
             <select className={inp} value={nuevo.tipo} onChange={(e) => setNuevo({ ...nuevo, tipo: e.target.value })} aria-label="Tipo de parada">
               <option value="entrega">Entrega</option>
               <option value="recogida">Recogida (envases, devolución)</option>

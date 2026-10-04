@@ -9,6 +9,7 @@ import { repNavegar } from '../../services/api'
 import {
   prepararLinea, proyectar, situarPasos, proximoPaso, textoDistancia, distanciaHablada, metrosEntre, rumbo as rumboEntre, textoPaso,
 } from '../../lib/guia'
+import { importe } from '../../lib/region'
 import { tx, useIdioma, locale, txError } from '../../lib/idioma'
 
 /* ── LA GUÍA DENTRO DE LA APP (04-10-2026) ───────────────────────────────────
@@ -225,7 +226,7 @@ export default function Navegacion({ parada, numero, quedan, onSalir, onEntregar
             <p className="text-[14px] text-dark-300">{parada.direccion}</p>
             <div className="mt-2 flex flex-wrap gap-1.5 text-[12px]">
               {parada.hueco && <span className="inline-flex items-center gap-1 rounded-lg bg-sky-500/20 px-2 py-1 font-bold text-sky-200"><Package size={13} /> {tx('Búscalo: {sitio}', { sitio: tx(parada.hueco) })}</span>}
-              {parada.cobrar > 0 && <span className="rounded-lg bg-emerald-500/15 px-2 py-1 font-bold text-emerald-300">{tx('Cobrar')} {Number(parada.cobrar).toFixed(2).replace('.', ',')} €</span>}
+              {parada.cobrar > 0 && <span className="rounded-lg bg-emerald-500/15 px-2 py-1 font-bold text-emerald-300">{tx('Cobrar')} {importe(parada.cobrar)}</span>}
               {parada.bultos > 1 && <span className="rounded-lg bg-dark-800 px-2 py-1 text-dark-200">{tx('{n} bultos', { n: parada.bultos })}</span>}
             </div>
             {(parada.notas || parada.contenido) && <p className="mt-1.5 text-[13px] text-dark-400">{[parada.contenido, parada.notas].filter(Boolean).join(' · ')}</p>}
