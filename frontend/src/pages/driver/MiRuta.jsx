@@ -1,11 +1,11 @@
 import { Suspense, lazy, useCallback, useEffect, useRef, useState } from 'react'
 import {
   ArrowLeft, ScanLine, Camera, Loader2, Navigation, Phone, Check, X, Route, MapPin, Play, Square, Package,
-  MessageCircle, Clock, Search, List, Map as MapaIcono, ArrowUp, ArrowDown, ArrowUpDown, Mic, ClipboardPaste, Trophy,
+  MessageCircle, Clock, Search, List, Pencil, Map as MapaIcono, ArrowUp, ArrowDown, ArrowUpDown, Mic, ClipboardPaste, Trophy,
 } from 'lucide-react'
 import {
   repMiRuta, repEscanear, repLeerTicket, repNuevoPedido, repEstado, repOrdenar, repJornada, repPosicion,
-  repMiOrden, repMiEditar, repPegarMiLista, repTrazado,
+  repMiOrden, repMiEditar, repMiQuitar, repPegarMiLista, repTrazado,
 } from '../../services/api'
 import { hoyLocal } from '../../lib/fecha'
 import { lista } from '../../lib/lista'
@@ -333,11 +333,40 @@ export default function MiRuta({ onBack, embebido = false }) {
   async function guardarNuevo() {
     setOcupado('guardar')
     try {
+      if (nuevo.id) {
+        // Editar una parada que ya está en la ruta.
+        const { id, ...campos } = nuevo
+        await repMiEditar(id, { cliente: campos.cliente, telefono: campos.telefono, direccion: campos.direccion, contenido: campos.contenido,
+          bultos: campos.bultos, horario: campos.horario || '', cobrar: campos.cobrar || '', tipo: campos.tipo || 'entrega',
+          prioridad: !!campos.prioridad, hueco: campos.hueco || '', notas: campos.notas || '' })
+        setNuevo(null); setQuitando(false); cargar(); setAviso(tx('✓ Cambios guardados'))
+        return
+      }
       await repNuevoPedido(nuevo)
       setNuevo(null); setCodigo('')
       cargar()
       if (carga) { setCarga({ n: carga.n + 1 }); setAviso('') } else setAviso(tx('✓ Añadido a tu ruta'))
     } catch (e) { setAviso(txError(e, 'No se pudo guardar')) } finally { setOcupado('') }
+  }
+
+  /* QUITAR UNA PARADA: dos toques (el segundo confirma), para que un dedo
+     torpe en el coche no borre una entrega. */
+  const [quitando, setQuitando] = useState(false)
+  async function quitarParada() {
+    if (!nuevo?.id) return
+    if (!quitando) { setQuitando(true); return }
+    setOcupado('guardar')
+    try {
+      await repMiQuitar(nuevo.id)
+      setNuevo(null); setQuitando(false); setAbierta(null); cargar(); setAviso(tx('Parada quitada de tu ruta'))
+    } catch (e) { setAviso(txError(e, 'No se pudo quitar')) } finally { setOcupado('') }
+  }
+  const editar = (p) => {
+    setQuitando(false)
+    setNuevo({ ...VACIO, id: p.id, codigo: '', cliente: p.cliente || '', telefono: p.telefono || '', direccion: p.direccion || '',
+      contenido: p.contenido || '', bultos: p.bultos || 1, notas: p.notas || '', tipo: p.tipo || 'entrega', prioridad: !!p.prioridad,
+      cobrar: p.cobrar > 0 ? String(p.cobrar).replace('.', ',') : '', hueco: p.hueco || '',
+      horario: p.ventana_desde ? `de ${p.ventana_desde} a ${p.ventana_hasta}` : '' })
   }
 
   async function marcar(p, estado, motivo, pago, extra) {
@@ -737,10 +766,16 @@ export default function MiRuta({ onBack, embebido = false }) {
                   {p.bultos > 1 ? tx('{n} bultos', { n: p.bultos }) : tx('1 bulto')}{p.escaneos ? ` · ${p.escaneos > 1 ? tx('{n} escaneados', { n: p.escaneos }) : tx('1 escaneado')}` : ''}
                   {p.lat == null && ` · ${tx('sin ubicar en el mapa')}`}{p.geo === 'aprox' && ` · ${tx('ubicación aproximada (la calle)')}`}{p.notas && ` · ${p.notas}`}
                 </p>
-                <button onClick={() => setHuecoDe(p)}
-                  className={`mt-1.5 inline-flex items-center gap-1 rounded-lg px-2 py-1 text-[12px] font-semibold ${p.hueco ? 'bg-sky-500/15 text-sky-200' : 'border border-dashed border-dark-700 text-dark-400'}`}>
-                  <Package size={12} /> {p.hueco ? tx('En la furgoneta: {sitio}', { sitio: tx(p.hueco) }) : tx('¿Dónde va en la furgoneta?')}
-                </button>
+                <div className="mt-1.5 flex flex-wrap gap-1.5">
+                  <button onClick={() => setHuecoDe(p)}
+                    className={`inline-flex items-center gap-1 rounded-lg px-2 py-1 text-[12px] font-semibold ${p.hueco ? 'bg-sky-500/15 text-sky-200' : 'border border-dashed border-dark-700 text-dark-400'}`}>
+                    <Package size={12} /> {p.hueco ? tx('En la furgoneta: {sitio}', { sitio: tx(p.hueco) }) : tx('¿Dónde va en la furgoneta?')}
+                  </button>
+                  <button onClick={() => editar(p)} aria-label={`${tx('Editar parada')}: ${p.cliente || p.direccion}`}
+                    className="inline-flex items-center gap-1 rounded-lg border border-dark-700 px-2 py-1 text-[12px] font-semibold text-dark-200">
+                    <Pencil size={12} /> {tx('Editar')}
+                  </button>
+                </div>
               </div>
             </div>
             <div className="mt-3 grid grid-cols-3 gap-1.5">
@@ -870,7 +905,8 @@ export default function MiRuta({ onBack, embebido = false }) {
       )}
 
       {nuevo && (
-        <Hoja titulo={nuevo.codigo ? tx('El código {c} no está en la lista', { c: nuevo.codigo }) : tx('Pedido nuevo')} onClose={() => setNuevo(null)}>
+        <Hoja titulo={nuevo.id ? tx('Editar parada') : nuevo.codigo ? tx('El código {c} no está en la lista', { c: nuevo.codigo }) : tx('Pedido nuevo')} onClose={() => { setNuevo(null); setQuitando(false) }}>
+          {!nuevo.id && <>
           <label className="mb-1 flex w-full cursor-pointer items-center justify-center gap-2 rounded-xl bg-brand-500 py-3 text-[15px] font-bold text-white">
             {ocupado === 'ticket' ? <Loader2 size={18} className="animate-spin" /> : <Camera size={18} />}
             {ocupado === 'ticket' ? tx('Leyendo el ticket…') : tx('Foto del ticket')}
@@ -880,6 +916,7 @@ export default function MiRuta({ onBack, embebido = false }) {
           <p className="mb-3 text-center text-[11.5px] text-dark-500">
             {ruta.ia_tickets ? tx('Lo lee la IA y la foto no se guarda.') : tx('Se lee en tu móvil: la foto no se envía a ningún sitio. La primera vez tarda un poco.')}
           </p>
+          </>}
           <div className="flex flex-col gap-2">
             <div className="flex gap-2">
               <input className={inp} placeholder={tx('Dirección completa')} value={nuevo.direccion} onChange={(e) => setNuevo({ ...nuevo, direccion: e.target.value })} />
@@ -915,8 +952,14 @@ export default function MiRuta({ onBack, embebido = false }) {
           {nuevo.de_ticket && <p className="mt-2 text-[12px] text-amber-200/90">{tx('Revisa lo leído del ticket antes de guardar.')}</p>}
           <button onClick={guardarNuevo} disabled={nuevo.direccion.trim().length < 4 || ocupado === 'guardar'}
             className="mt-3 w-full rounded-xl bg-emerald-600 py-3 text-[15px] font-bold text-white disabled:opacity-40">
-            {ocupado === 'guardar' ? tx('Guardando…') : tx('Añadir a mi ruta')}
+            {ocupado === 'guardar' ? tx('Guardando…') : nuevo.id ? tx('Guardar cambios') : tx('Añadir a mi ruta')}
           </button>
+          {nuevo.id && (
+            <button onClick={quitarParada} disabled={ocupado === 'guardar'}
+              className={`mt-2 w-full rounded-xl border py-3 text-[14px] font-semibold ${quitando ? 'border-red-400 bg-red-500/15 text-red-200' : 'border-red-500/30 text-red-300'}`}>
+              {quitando ? tx('¿Seguro? Toca otra vez para quitarla') : tx('Quitar esta parada')}
+            </button>
+          )}
         </Hoja>
       )}
 

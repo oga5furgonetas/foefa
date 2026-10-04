@@ -47778,22 +47778,91 @@ async def reparto_mi_orden(data: dict = Body(...), user: dict = Depends(require_
 @api_router.post("/reparto/mis-pedidos/{pid}/editar")
 async def reparto_mi_editar(pid: str, data: dict = Body(...), user: dict = Depends(require_any_auth)):
     """Lo que el repartidor puede cambiar de SU parada: dónde va en la
-    furgoneta y la nota. La dirección o el cliente los toca la oficina (o él,
-    si reparte solo, desde su panel)."""
+    furgoneta y la nota siempre; y, mientras no esté entregada, también el
+    cliente, el teléfono, la dirección (se vuelve a situar en el mapa), lo que
+    lleva, los bultos, la hora del cliente, el importe a cobrar y si es
+    urgente. Quien reparte solo no tiene oficina que le corrija una calle."""
     d = await _rep_conductor(user)
-    p = await db.reparto_pedidos.find_one({"id": pid}, {"_id": 0, "id": 1, "conductor_id": 1})
+    p = await db.reparto_pedidos.find_one({"id": pid}, {"_id": 0})
     if not p:
         raise HTTPException(404, "Ese pedido ya no existe")
     if p.get("conductor_id") != d["id"]:
         raise HTTPException(403, "Ese pedido no es tuyo")
+    data = _dict_cuerpo(data)
     cambios = {}
     if "hueco" in data:
         cambios["hueco"] = _texto_cuerpo(data.get("hueco"), 40)
     if "notas" in data:
         cambios["notas"] = _texto_cuerpo(data.get("notas"), 200)
+    abierto = p.get("estado") in ("pendiente", "en_ruta")
+    campos = {"cliente", "telefono", "direccion", "contenido", "bultos", "horario", "cobrar", "prioridad", "tipo", "cp", "localidad"}
+    if campos & set(data) and not abierto:
+        raise HTTPException(409, "Esa parada ya está cerrada: no se puede cambiar")
+    if abierto:
+        if "cliente" in data:
+            cambios["cliente"] = _texto_cuerpo(data.get("cliente"), 120)
+        if "telefono" in data:
+            cambios["telefono"] = _texto_cuerpo(data.get("telefono"), 30)
+            if cambios["telefono"] != (p.get("telefono") or ""):
+                cambios["seguimiento"] = None     # el enlace de seguimiento se vuelve a crear con el teléfono nuevo
+        if "contenido" in data:
+            cambios["contenido"] = _texto_cuerpo(data.get("contenido"), 300)
+        if "bultos" in data:
+            try:
+                cambios["bultos"] = max(1, min(99, int(float(str(data.get("bultos") or 1).replace(",", ".")))))
+            except ValueError:
+                raise HTTPException(400, "Los bultos tienen que ser un número")
+        if "cobrar" in data:
+            cambios["cobrar"] = reparto.importe(data.get("cobrar"))
+        if "tipo" in data:
+            cambios["tipo"] = reparto.tipo_parada(data.get("tipo"))
+        if "prioridad" in data:
+            cambios["prioridad"] = bool(data.get("prioridad")) and str(data.get("prioridad")).strip().lower() not in ("no", "0", "false")
+        if "horario" in data:
+            tmp = {"notas": cambios.get("notas", p.get("notas") or "")}
+            _rep_pon_ventana(tmp, {"horario": data.get("horario")})
+            cambios["ventana_desde"], cambios["ventana_hasta"] = tmp["ventana_desde"], tmp["ventana_hasta"]
+        if "direccion" in data:
+            direccion = _texto_cuerpo(data.get("direccion"), 200)
+            if len(direccion) < 4:
+                raise HTTPException(400, "Falta la dirección de entrega")
+            if direccion != (p.get("direccion") or ""):
+                cp = _texto_cuerpo(data.get("cp"), 10) or reparto.extrae_cp(direccion)
+                loc = _texto_cuerpo(data.get("localidad"), 80)
+                cambios.update({"direccion": direccion, "cp": cp, "localidad": loc})
+                pt = reparto._punto(data)
+                if pt:
+                    cambios.update({"lat": pt[0], "lng": pt[1], "geo": "manual"})
+                else:
+                    pt = await _rep_ubicar(direccion, cp, loc, _rep_base(await _rep_ajustes()))
+                    if pt:
+                        cambios.update({"lat": pt[0], "lng": pt[1], "geo": pt[2] if len(pt) > 2 else "ok"})
+                    else:
+                        cambios.update({"lat": None, "lng": None, "geo": "no"})   # no se inventa un sitio
     if cambios:
         await db.reparto_pedidos.update_one({"id": pid}, {"$set": cambios})
-    return {"ok": True, **cambios}
+    return {"ok": True, **{k: v for k, v in {**p, **cambios}.items() if k != "entrega_foto"}}
+
+
+@api_router.post("/reparto/mis-pedidos/{pid}/quitar")
+async def reparto_mi_quitar(pid: str, user: dict = Depends(require_any_auth)):
+    """Quitar de MI ruta una parada que aún no se ha hecho (se cargó por error,
+    el cliente anuló, está repetida). Quien reparte solo puede quitar cualquiera
+    de las suyas; el repartidor de una empresa, solo las que metió él (por
+    escáner, foto o a mano): lo que mandó la oficina lo quita la oficina."""
+    d = await _rep_conductor(user)
+    p = await db.reparto_pedidos.find_one({"id": pid}, {"_id": 0, "id": 1, "conductor_id": 1, "estado": 1, "origen": 1})
+    if not p:
+        raise HTTPException(404, "Ese pedido ya no existe")
+    if p.get("conductor_id") != d["id"]:
+        raise HTTPException(403, "Ese pedido no es tuyo")
+    if p.get("estado") not in ("pendiente", "en_ruta"):
+        raise HTTPException(409, "Esa parada ya está cerrada: no se puede quitar")
+    propia = p.get("origen") in ("conductor", "ticket", "escaneo")
+    if not (await _rep_es_autonomo(user) or str(d["id"]).startswith("demo-a-") or propia):
+        raise HTTPException(403, "Esa parada la ha cargado tu oficina: pídele que la quite")
+    await db.reparto_pedidos.delete_one({"id": pid})
+    return {"ok": True}
 
 
 @api_router.post("/reparto/jornada")

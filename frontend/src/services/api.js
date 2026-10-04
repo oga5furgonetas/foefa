@@ -252,6 +252,7 @@ export const repJornada = (accion, aceptoAviso) => api.post('/reparto/jornada', 
 export const repPosicion = (lat, lng) => api.post('/reparto/posicion', { lat, lng })
 export const repMiOrden = (ids, desde) => api.post('/reparto/mi-ruta/orden', { ids, ...(desde ? { desde } : {}) })
 export const repMiEditar = (id, body) => api.post(`/reparto/mis-pedidos/${id}/editar`, body)
+export const repMiQuitar = (id) => api.post(`/reparto/mis-pedidos/${id}/quitar`)
 export const repPegarMiLista = (texto, confirmar) => api.post('/reparto/pegar', { texto, confirmar: !!confirmar })
 export const repTrazado = (desde) => api.post('/reparto/mi-ruta/trazado', desde ? { desde } : {})
 export const repNavegar = (id, desde) => api.post('/reparto/mi-ruta/navegar', { id, desde })

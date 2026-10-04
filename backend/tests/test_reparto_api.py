@@ -488,3 +488,68 @@ async def test_trazado_usa_el_respaldo_y_no_guarda_el_fallo(monkeypatch):
     monkeypatch.setattr(httpx, "AsyncClient", cliente(True, True))
     r = await server._rep_trazado(pts)
     assert r["fuente"] == "carreteras"
+
+
+@pytest.mark.asyncio(loop_scope="session")
+async def test_editar_una_parada_cambia_la_direccion_y_la_vuelve_a_situar(base):
+    p = await server.reparto_mis_pedidos({"direccion": "Rúa Real 5", "cliente": "Bar Pepe", "telefono": "600000001"}, ANA)
+    assert (p["lat"], p["lng"]) == (43.3712, -8.3990)
+    r = await server.reparto_mi_editar(p["id"], {"direccion": "Avda. Montero Ríos 12", "cliente": "Farmacia Sol",
+                                                 "bultos": "3", "cobrar": "12,50", "prioridad": True}, ANA)
+    assert (r["lat"], r["lng"]) == (43.3690, -8.4050) and r["cliente"] == "Farmacia Sol"
+    assert r["bultos"] == 3 and r["cobrar"] == 12.5 and r["prioridad"] is True
+    # Una dirección que no se encuentra no se inventa: queda sin punto.
+    r = await server.reparto_mi_editar(p["id"], {"direccion": "Calle que no existe 99"}, ANA)
+    assert r["lat"] is None and r["geo"] == "no"
+    # Dirección demasiado corta: se rechaza y no cambia nada.
+    with pytest.raises(HTTPException) as e:
+        await server.reparto_mi_editar(p["id"], {"direccion": "ab"}, ANA)
+    assert e.value.status_code == 400
+    # Con el sitio ya elegido en el buscador (coordenadas), se respeta.
+    r = await server.reparto_mi_editar(p["id"], {"direccion": "Rúa Nueva 1", "lat": 43.3, "lng": -8.4}, ANA)
+    assert (r["lat"], r["lng"], r["geo"]) == (43.3, -8.4, "manual")
+
+
+@pytest.mark.asyncio(loop_scope="session")
+async def test_editar_no_toca_lo_cerrado_ni_lo_de_otro(base):
+    p = await server.reparto_mis_pedidos({"direccion": "Rúa Real 5"}, ANA)
+    with pytest.raises(HTTPException) as e:
+        await server.reparto_mi_editar(p["id"], {"cliente": "X"}, LUIS)
+    assert e.value.status_code == 403
+    await server.reparto_estado(p["id"], {"estado": "entregado"}, ANA)
+    with pytest.raises(HTTPException) as e:
+        await server.reparto_mi_editar(p["id"], {"direccion": "Rúa Real 7"}, ANA)
+    assert e.value.status_code == 409
+    # La nota y el hueco sí se pueden poner siempre.
+    r = await server.reparto_mi_editar(p["id"], {"notas": "lo dejé en portería"}, ANA)
+    assert r["notas"] == "lo dejé en portería"
+
+
+@pytest.mark.asyncio(loop_scope="session")
+async def test_quitar_una_parada(base, monkeypatch):
+    mia = await server.reparto_mis_pedidos({"direccion": "Rúa Real 5"}, ANA)          # la metió ella
+    de_oficina = await server._rep_nuevo({"direccion": "Avda. Montero Ríos 12", "conductor_id": "d1"}, OFICINA, "oficina", HOY)
+    # Lo que mandó la oficina, no lo quita la repartidora de empresa.
+    with pytest.raises(HTTPException) as e:
+        await server.reparto_mi_quitar(de_oficina["id"], ANA)
+    assert e.value.status_code == 403
+    # Lo suyo sí; de otro, no.
+    with pytest.raises(HTTPException) as e:
+        await server.reparto_mi_quitar(mia["id"], LUIS)
+    assert e.value.status_code == 403
+    assert (await server.reparto_mi_quitar(mia["id"], ANA))["ok"]
+    assert await server.db.reparto_pedidos.find_one({"id": mia["id"]}) is None
+    with pytest.raises(HTTPException) as e:
+        await server.reparto_mi_quitar(mia["id"], ANA)
+    assert e.value.status_code == 404
+    # Quien reparte solo puede quitar cualquiera de las suyas.
+    async def autonomo(_u):
+        return True
+    monkeypatch.setattr(server, "_rep_es_autonomo", autonomo)
+    assert (await server.reparto_mi_quitar(de_oficina["id"], ANA))["ok"]
+    # Y una ya entregada no se quita.
+    otra = await server.reparto_mis_pedidos({"direccion": "Rúa Real 5"}, ANA)
+    await server.reparto_estado(otra["id"], {"estado": "entregado"}, ANA)
+    with pytest.raises(HTTPException) as e:
+        await server.reparto_mi_quitar(otra["id"], ANA)
+    assert e.value.status_code == 409
