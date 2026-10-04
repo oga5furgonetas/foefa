@@ -319,4 +319,6 @@ export const B = {
   "7 días gratis; luego 9,99 €/mes o 99 €/año": ["7 days free; then €9.99/month or €99/year", "7 dias grátis; depois 9,99 €/mês ou 99 €/ano", "7 jours gratuits ; puis 9,99 €/mois ou 99 €/an", "7 giorni gratis; poi 9,99 €/mese o 99 €/anno", "7 Tage gratis; danach 9,99 €/Monat oder 99 €/Jahr", "免费 7 天；之后每月 9.99 € 或每年 99 €"],
   "Cancelas cuando quieras desde la app": ["Cancel any time from the app", "Cancela quando quiser na app", "Annulez quand vous voulez depuis l’app", "Annulli quando vuoi dall’app", "Jederzeit in der App kündbar", "可随时在应用内取消"],
   "Para empezar la prueba se pide tarjeta: hoy no se cobra nada": ["A card is needed to start the trial: nothing is charged today", "Para começar o teste pede-se cartão: hoje não se cobra nada", "Une carte est demandée pour démarrer l’essai : rien n’est débité aujourd’hui", "Per iniziare la prova serve una carta: oggi non si paga nulla", "Zum Start des Tests wird eine Karte abgefragt: Heute wird nichts abgebucht", "开始试用需要绑卡：今天不扣款"],
+  // Vídeo en la página del anuncio
+  "Vídeo de la app": ["Video of the app", "Vídeo da app", "Vidéo de l’app", "Video dell’app", "Video der App", "应用视频"],
 }

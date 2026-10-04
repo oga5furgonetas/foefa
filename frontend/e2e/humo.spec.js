@@ -2060,6 +2060,12 @@ test('Anuncio · quien llega del anuncio ve la app y la prueba con paradas antes
   await expect(page).toHaveURL(/\/repartidores\?/)
   await expect(page.getByRole('heading', { name: 'Tu ruta de reparto, ordenada sola.' })).toBeVisible()
   await expect(page.getByRole('link', { name: /Crear mi cuenta/ })).toHaveAttribute('href', '/registro?sector=autonomo&plan=autonomo')
+  // El vídeo de la app, mudo y en bucle (sin muted el navegador no lo arranca solo).
+  const video = page.locator('video')
+  await expect(video).toHaveAttribute('src', /[/]videos[/]tiktok-es[.]mp4$/)
+  await expect(video).toHaveJSProperty('muted', true)
+  await expect(video).toHaveAttribute('autoplay', '')
+  await expect(video).toHaveAttribute('playsinline', '')
   await page.getByRole('button', { name: /Probarla ahora/ }).first().click()
   await expect(page).toHaveURL(/\/conductor\?vista=ruta/)
   await expect(page.getByText('Ruta de prueba con paradas de ejemplo. Se borra mañana.')).toBeVisible()

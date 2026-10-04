@@ -73,8 +73,12 @@ def test_no_se_guarda_persona_ni_ip():
         {"sid": "abcdef1234567890", "tipo": "vista", "ruta": "/panel/vehiculos",
          "ip": "1.2.3.4", "sub": "dani", "name": "Dani"},
         "Chrome", {"sub": "u1", "name": "Ana", "org_id": "oga5", "role": "admin"}, AHORA)
-    assert set(e) <= {"ts", "sid", "tipo", "seg", "ruta", "org", "disp", "ref", "utm", "nombre"}
+    assert set(e) <= {"ts", "sid", "tipo", "seg", "ruta", "org", "disp", "ref", "utm", "anuncio", "nombre"}
     assert e["org"] == "oga5"
+    # El idioma/variante del anuncio (utm_content) sí se guarda: dice qué anuncio trae altas.
+    e3 = an.evento_desde({"sid": "abcdef1234567890", "tipo": "vista", "ruta": "/repartidores",
+                          "utm": "facebook", "anuncio": "fr"}, "Chrome", None, AHORA)
+    assert e3["utm"] == "facebook" and e3["anuncio"] == "fr"
     # el visitante y el equipo propio no llevan empresa
     e2 = an.evento_desde({"sid": "abcdef1234567890", "tipo": "vista", "ruta": "/"},
                          "Chrome", {"sa": True, "org_id": "owner"}, AHORA)

@@ -81,6 +81,8 @@ function origen() {
     const p = new URLSearchParams(window.location.search)
     const utm = p.get('utm_source')
     if (utm) fuera.utm = utm.toLowerCase().slice(0, 60)
+    const anuncio = p.get('utm_content')
+    if (anuncio) fuera.anuncio = anuncio.toLowerCase().slice(0, 40)
     const ref = document.referrer
     if (ref) {
       const h = new URL(ref).hostname

@@ -138,7 +138,9 @@ def evento_desde(cuerpo, user_agent, claims, ahora):
         doc["nombre"] = nombre
     if cuerpo.get("disp") in DISPOSITIVOS:
         doc["disp"] = cuerpo["disp"]
-    for campo in ("ref", "utm"):
+    # «anuncio» = utm_content: el idioma/variante del anuncio (04-10-2026), para
+    # saber qué país y qué creatividad traen altas.
+    for campo in ("ref", "utm", "anuncio"):
         v = limpiar_origen(cuerpo.get(campo))
         if v:
             doc[campo] = v

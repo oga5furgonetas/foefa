@@ -26,6 +26,7 @@ export default function Repartidores() {
   const [ocupado, setOcupado] = useState(false)
   const [err, setErr] = useState('')
   const capturas = idioma() === 'zh' ? 'zh' : 'es'
+  const video = ['es', 'en', 'pt', 'fr', 'it', 'de', 'zh'].includes(idioma()) ? idioma() : 'es'
 
   async function probar() {
     medirAccion('rep_probar')
@@ -69,8 +70,13 @@ export default function Repartidores() {
         <p className="mt-2 text-center text-[12.5px] text-dark-400">{tx('Con 8 paradas de ejemplo. Sin datos ni tarjeta: pruébala en 1 minuto.')}</p>
         {err && <p role="alert" className="mt-2 text-center text-[13px] text-red-300">{err}</p>}
 
+        {/* El vídeo de la app (el mismo de TikTok, mudo y en bucle): se ve lo
+            que hace antes de pulsar nada. Las capturas, de reserva si no carga. */}
         <div className="-mx-5 mt-7 flex snap-x gap-3 overflow-x-auto px-5 pb-2">
-          {['1-ruta', '2-mapa', '3-navegando'].map((n) => (
+          <video src={`/videos/tiktok-${video}.mp4`} poster={`/capturas-ruta/${capturas}/1-ruta.png`} autoPlay muted loop playsInline preload="metadata"
+            width="390" height="693" aria-label={tx('Vídeo de la app')}
+            className="w-[62%] max-w-[240px] shrink-0 snap-center rounded-[22px] border border-dark-700 bg-dark-900 object-cover shadow-2xl shadow-black/40" />
+          {['2-mapa', '3-navegando'].map((n) => (
             <img key={n} src={`/capturas-ruta/${capturas}/${n}.png`} alt="" loading="lazy" width="390" height="844"
               className="w-[62%] max-w-[240px] shrink-0 snap-center rounded-[22px] border border-dark-700 shadow-2xl shadow-black/40" />
           ))}
