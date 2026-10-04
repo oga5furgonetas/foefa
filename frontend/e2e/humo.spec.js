@@ -1906,7 +1906,10 @@ test.describe('Idiomas · la app de reparto sigue el idioma del móvil', () => {
     await page.getByPlaceholder('Pepe').fill('李师傅')
     await page.getByPlaceholder('tu@correo.com').fill('li@example.cn')
     await page.locator('input[type=password]').first().fill('12345678')
-    await page.locator('input[type=password]').nth(1).fill('12345678')
+    // Quien reparte solo no repite la contraseña (un campo menos en el móvil) y puede verla.
+    await expect(page.locator('input[type=password]')).toHaveCount(1)
+    await page.getByRole('button', { name: '显示密码' }).click()
+    await expect(page.locator('input[type=password]')).toHaveCount(0)
     await page.getByRole('checkbox').first().check()
     await expect(page.getByText(/传输至中国境外/)).toBeVisible()
     await page.getByRole('button', { name: /以配送员套餐创建账号/ }).click()

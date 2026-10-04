@@ -270,6 +270,8 @@ export const B = {
   "Tu correo": ["Your email", "O seu e-mail", "Votre e-mail", "La tua email", "Deine E-Mail", "你的邮箱"],
   "Entrarás con tu correo y esta contraseña.": ["You’ll log in with your email and this password.", "Vai entrar com o seu e-mail e esta palavra-passe.", "Vous vous connecterez avec votre e-mail et ce mot de passe.", "Accederai con la tua email e questa password.", "Du meldest dich mit deiner E-Mail und diesem Passwort an.", "以后用你的邮箱和此密码登录。"],
   "Contraseña": ["Password", "Palavra-passe", "Mot de passe", "Password", "Passwort", "密码"],
+  "Mostrar contraseña": ["Show password", "Mostrar palavra-passe", "Afficher le mot de passe", "Mostra password", "Passwort anzeigen", "显示密码"],
+  "Ocultar contraseña": ["Hide password", "Ocultar palavra-passe", "Masquer le mot de passe", "Nascondi password", "Passwort verbergen", "隐藏密码"],
   "Repetir contraseña": ["Repeat password", "Repetir palavra-passe", "Répéter le mot de passe", "Ripeti password", "Passwort wiederholen", "确认密码"],
   "Repite la contraseña": ["Repeat the password", "Repita a palavra-passe", "Répétez le mot de passe", "Ripeti la password", "Passwort wiederholen", "再次输入密码"],
   "Acepto los [Términos], el [Acuerdo de Encargo del Tratamiento] y la [Política de Privacidad].": ["I accept the [Terms], the [Data Processing Agreement] and the [Privacy Policy].", "Aceito os [Termos], o [Acordo de Subcontratação] e a [Política de Privacidade].", "J’accepte les [Conditions], l’[Accord de sous-traitance des données] et la [Politique de confidentialité].", "Accetto i [Termini], l’[Accordo sul trattamento dei dati] e l’[Informativa sulla privacy].", "Ich akzeptiere die [AGB], den [Auftragsverarbeitungsvertrag] und die [Datenschutzerklärung].", "我同意[条款]、[数据处理协议]和[隐私政策]。"],

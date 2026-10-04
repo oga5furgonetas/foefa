@@ -250,6 +250,7 @@ export default function Registro() {
   const furgonetas = Math.max(1, Number(params.get('flota')) || 40)
 
   const [sector, setSector] = useState(params.get('sector') || '')
+  const [verPass, setVerPass] = useState(false)
   // Quien reparte solo tiene un único plan: con ?sector=autonomo (el regalo, /cn)
   // no se le enseñan los planes de empresa.
   const [selectedPlan, setSelectedPlan] = useState(paramPlan || (params.get('sector') === 'autonomo' ? 'autonomo' : ''))
@@ -331,7 +332,7 @@ export default function Registro() {
       return setErr(tt('Introduce un email válido.'))
     if (usuario.length < 3) return setErr('El usuario debe tener al menos 3 caracteres.')
     if (pass.length < 8) return setErr(tt('La contraseña debe tener al menos 8 caracteres.'))
-    if (pass !== pass2) return setErr(tt('Las contraseñas no coinciden.'))
+    if (!soloYo && pass !== pass2) return setErr(tt('Las contraseñas no coinciden.'))
     if (!accept) return setErr(tt('Debes aceptar los Términos y la Política de Privacidad para continuar.'))
     if (china && !transfer) return setErr(tx('Para usar la app desde China hace falta tu consentimiento para tratar tus datos fuera de China.'))
     setBusy(true)
@@ -471,8 +472,16 @@ export default function Registro() {
         {soloYo && <div style={hint}>{tt('Entrarás con tu correo y esta contraseña.')}</div>}
 
         <label style={lbl}>{soloYo ? tt('Contraseña') : t('login.pass')}</label>
-        <input style={inp} type="password" value={pass} onChange={(e) => setPass(e.target.value)} autoComplete="new-password" />
+        <input style={inp} type={soloYo && verPass ? 'text' : 'password'} value={pass} onChange={(e) => setPass(e.target.value)}
+          onKeyDown={(e) => soloYo && e.key === 'Enter' && submit()} autoComplete="new-password" />
+        {soloYo && (
+          <button type="button" onClick={() => setVerPass((v) => !v)}
+            style={{ background: 'none', border: 'none', color: '#0ea5e9', fontSize: 13, fontWeight: 600, padding: '8px 0 0', cursor: 'pointer' }}>
+            {verPass ? tt('Ocultar contraseña') : tt('Mostrar contraseña')}
+          </button>
+        )}
 
+        {!soloYo && <>
         <label style={lbl}>{tt('Repetir contraseña')}</label>
         <input
           style={{ ...inp, borderColor: pass2 && pass !== pass2 ? 'rgba(248,113,113,.6)' : 'rgba(255,255,255,.12)' }}
@@ -485,6 +494,7 @@ export default function Registro() {
         {pass2 && pass !== pass2 && (
           <div style={{ color: '#f87171', fontSize: 12, marginTop: 4 }}>{tt('Las contraseñas no coinciden')}</div>
         )}
+        </>}
 
         <label style={{ display: 'flex', alignItems: 'flex-start', gap: 8, marginTop: 16, fontSize: 12, color: '#8b94a3', lineHeight: 1.5, cursor: 'pointer' }}>
           <input type="checkbox" checked={accept} onChange={(e) => setAccept(e.target.checked)} style={{ marginTop: 2 }} />
@@ -527,7 +537,7 @@ export default function Registro() {
 const wrap = { minHeight: '100vh', background: 'radial-gradient(1100px 560px at 72% -12%,rgba(14,165,233,.10),transparent),#0b0d10', color: '#eef1f6', fontFamily: 'Inter Variable,Inter,system-ui,sans-serif', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24, position: 'relative' }
 const card = { width: '100%', maxWidth: 420, background: '#13161b', border: '1px solid rgba(255,255,255,.08)', borderRadius: 18, padding: '24px 22px' }
 const lbl = { display: 'block', fontSize: 12, color: '#8b94a3', margin: '12px 0 5px', fontWeight: 600 }
-const inp = { width: '100%', padding: '11px 12px', borderRadius: 10, border: '1px solid rgba(255,255,255,.12)', background: '#0e1116', color: '#eef1f6', fontSize: 14, boxSizing: 'border-box' }
+const inp = { width: '100%', padding: '11px 12px', borderRadius: 10, border: '1px solid rgba(255,255,255,.12)', background: '#0e1116', color: '#eef1f6', fontSize: 16, boxSizing: 'border-box' }
 const hint = { fontSize: 11, color: '#8b94a3', marginTop: 5 }
 const btn = { width: '100%', marginTop: 20, padding: 13, border: 'none', borderRadius: 11, background: 'linear-gradient(135deg,#fb923c,#ea6800)', color: '#fff', fontSize: 15, fontWeight: 800, cursor: 'pointer' }
 const sel = { background: '#13161b', color: '#e7ebf2', border: '1px solid rgba(255,255,255,.12)', borderRadius: 9, padding: '7px 10px', fontSize: 13, fontWeight: 600 }

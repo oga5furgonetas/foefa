@@ -53,7 +53,7 @@ export default function Repartidores() {
   return (
     <div className="min-h-screen bg-dark-950 px-5 pb-10 pt-6 text-dark-100">
       <div className="mx-auto max-w-md">
-        <div className="mb-6 flex items-center gap-2.5">
+        <div className="mb-4 flex items-center gap-2.5">
           <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-gradient-to-br from-brand-400 to-brand-600"><Zap size={18} className="text-white" /></div>
           <b className="text-[17px] text-dark-50">FDS</b>
           <select value={lang} onChange={(e) => cambiarIdioma(e.target.value)} aria-label="Idioma / Language"
@@ -63,10 +63,10 @@ export default function Repartidores() {
         </div>
 
         <p className="text-[12.5px] font-bold uppercase tracking-[0.14em] text-brand-300">{tx('Para quien reparte solo')}</p>
-        <h1 className="mt-2 font-display text-[34px] font-extrabold leading-[1.05] text-dark-50">{tx('Tu ruta de reparto, ordenada sola.')}</h1>
-        <p className="mt-3 text-[15.5px] leading-relaxed text-dark-300">{tx('Haz una foto a la etiqueta o escanea el paquete: la app ordena las paradas por tiempo y te lleva con voz hasta cada puerta.')}</p>
+        <h1 className="mt-1.5 font-display text-[32px] font-extrabold leading-[1.05] text-dark-50">{tx('Tu ruta de reparto, ordenada sola.')}</h1>
+        <p className="mt-2 text-[15px] leading-snug text-dark-300">{tx('Haz una foto a la etiqueta o escanea el paquete: la app ordena las paradas por tiempo y te lleva con voz hasta cada puerta.')}</p>
 
-        <div className="mt-6">{botonProbar}</div>
+        <div className="mt-4">{botonProbar}</div>
         <p className="mt-2 text-center text-[12.5px] text-dark-400">{tx('Con 8 paradas de ejemplo. Sin datos ni tarjeta: pruébala en 1 minuto.')}</p>
         {err && <p role="alert" className="mt-2 text-center text-[13px] text-red-300">{err}</p>}
 
