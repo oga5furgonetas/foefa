@@ -96,7 +96,7 @@ export default function Repartidores() {
           <ul className="mt-3 space-y-1.5 text-[14px] text-dark-300">
             <li className="flex gap-2"><Check size={16} className="mt-0.5 shrink-0 text-emerald-400" /> {tx('7 días gratis; luego 9,99 €/mes o 99 €/año')}</li>
             <li className="flex gap-2"><Check size={16} className="mt-0.5 shrink-0 text-emerald-400" /> {tx('Cancelas cuando quieras desde la app')}</li>
-            <li className="flex gap-2"><Check size={16} className="mt-0.5 shrink-0 text-emerald-400" /> {tx('Para empezar la prueba se pide tarjeta: hoy no se cobra nada')}</li>
+            <li className="flex gap-2"><Check size={16} className="mt-0.5 shrink-0 text-emerald-400" /> {tx('Sin tarjeta: la prueba empieza ya y hoy no pagas nada')}</li>
           </ul>
           <a href="/registro?sector=autonomo&plan=autonomo" onClick={() => medirAccion('rep_alta')}
             className="mt-4 flex w-full items-center justify-center gap-2 rounded-2xl border border-brand-400/50 py-3.5 text-[15.5px] font-bold text-brand-200">

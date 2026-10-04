@@ -4889,11 +4889,13 @@ async def register_dsp(data: RegisterRequest, request: Request):
         org["sector"] = sector
         if SECTORES_REGISTRO[sector]:
             org["modulos"] = list(SECTORES_REGISTRO[sector])
+    # PRUEBA SIN TARJETA POR DEFECTO (04-10-2026, Dani: con tarjeta casi nadie
+    # se daba de alta desde los anuncios). `PRUEBA_CON_TARJETA=1` la vuelve a pedir.
     # PRUEBA CON TARJETA (04-10-2026, Dani): quien reparte solo mete la
     # tarjeta al empezar, hoy 0 €, y el día 7 se cobra si no ha cancelado.
     # Desde la app de Play no (Google obliga a cobrar con su sistema).
     if (sector_alta == "autonomo" and (not data.desde_app or _play_listo())
-            and os.environ.get("PRUEBA_CON_TARJETA", "1").strip() != "0"):
+            and os.environ.get("PRUEBA_CON_TARJETA", "0").strip() == "1"):
         org["prueba_con_tarjeta"] = True
     await global_db.organizations.insert_one(dict(org))
     user_id = str(uuid.uuid4())
