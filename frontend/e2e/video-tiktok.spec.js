@@ -101,12 +101,17 @@ const ROTULO_CSS = `
   #cierre-video { position: fixed; inset: 0; z-index: 99998; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 22px;
     background: radial-gradient(120% 80% at 80% 10%, #0b6e6a 0%, #071a1f 45%, #04090c 100%); opacity: 0; transition: opacity .5s }
   #cierre-video.ver { opacity: 1 }
-  #cierre-video .gratis { white-space: nowrap; max-width: 92vw; font: 900 96px/1 Inter, system-ui, sans-serif; letter-spacing: 1px; background: #FFD43B; color: #1a1300; border-radius: 28px; padding: 14px 44px; transform: rotate(-3deg); box-shadow: 0 16px 50px rgba(255,212,59,.35) }
+  #cierre-video .gratis { text-align: center; max-width: 88vw; font: 900 62px/1.05 Inter, system-ui, sans-serif; letter-spacing: 1px; background: #FFD43B; color: #1a1300; border-radius: 28px; padding: 14px 44px; transform: rotate(-3deg); box-shadow: 0 16px 50px rgba(255,212,59,.35) }
   #cierre-video .marca { font: 700 34px/1.2 Inter, system-ui, sans-serif; color: #d7fff9; margin-top: 12px; text-align: center }
   #cierre-video .logo { width: 110px; height: 110px; border-radius: 30px; background: #0FC2BC; color: #04201f; display: flex; align-items: center; justify-content: center; font: 900 44px Inter, system-ui, sans-serif }
 `
 
+// Los instantes de cada rótulo (segundos desde que arranca la grabación), para
+// colocar la voz en off encima en el montaje.
+let t0 = 0
+const marcas = []
 async function rotulo(page, texto) {
+  marcas.push((Date.now() - t0) / 1000)
   await page.evaluate((t) => {
     let el = document.getElementById('rotulo-video')
     if (!el) { el = document.createElement('div'); el.id = 'rotulo-video'; document.body.appendChild(el) }
@@ -118,7 +123,10 @@ async function rotulo(page, texto) {
 // El vídeo va al nivel del fichero (Playwright no lo admite dentro de un describe).
 test.use({
   timezoneId: 'Europe/Madrid', viewport: { width: 540, height: 960 }, deviceScaleFactor: 2,
-  video: { mode: 'on', size: { width: 1080, height: 1920 } },
+  // El vídeo se graba al tamaño del viewport (Playwright solo REDUCE: si se
+  // pide 1080×1920 sale la pantalla pequeña y gris alrededor, visto el 04-10).
+  // Se escala a 1080×1920 al montar (e2e/video-montar.mjs).
+  video: { mode: 'on', size: { width: 540, height: 960 } },
 })
 
 for (const [lang, cfg] of Object.entries(ESC)) {
@@ -128,6 +136,8 @@ for (const [lang, cfg] of Object.entries(ESC)) {
 
     test('grabar', async ({ page, context }, testInfo) => {
       test.skip(!['all', 'changed'].includes(testInfo.config.updateSnapshots), 'solo con --update-snapshots')
+      // La grabación arranca con la página (justo antes de esta línea).
+      t0 = Date.now(); marcas.length = 0
       test.setTimeout(180_000)
       await page.addInitScript((css) => {
         localStorage.setItem('cookie_consent', JSON.stringify({ v: 1, at: new Date().toISOString() }))
@@ -202,6 +212,7 @@ for (const [lang, cfg] of Object.entries(ESC)) {
       await page.waitForTimeout(2200)
 
       // 6. Cierre con marca.
+      marcas.push((Date.now() - t0) / 1000)
       await page.evaluate(([g, m]) => {
         document.getElementById('rotulo-video')?.remove()
         const c = document.createElement('div'); c.id = 'cierre-video'
@@ -217,6 +228,7 @@ for (const [lang, cfg] of Object.entries(ESC)) {
       await context.close()
       const v = await page.video().path()
       fs.copyFileSync(v, path.join(destino, `${lang}.webm`))
+      fs.writeFileSync(path.join(destino, `${lang}.json`), JSON.stringify({ marcas, fin: (Date.now() - t0) / 1000 }))
     })
   })
 }
