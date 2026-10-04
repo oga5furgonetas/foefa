@@ -10,7 +10,7 @@ import { simularApi, entrarComoAdmin } from './api-simulada.js'
    relanza y se rehacen.
 
    Uso:  npx playwright test capturas-ruta --project=escritorio --update-snapshots
-   Salida: public/capturas-ruta/<idioma>/{1-ruta,2-mapa,3-navegando,4-plan}.png
+   Salida: public/capturas-ruta/<idioma>/{1-ruta,2-mapa,3-navegando}.png
    ──────────────────────────────────────────────────────────────────────────── */
 
 const IDIOMAS = {
@@ -93,10 +93,6 @@ for (const [lang, cfg] of Object.entries(IDIOMAS)) {
       await page.waitForTimeout(3500)
       await page.screenshot({ path: path.join(destino, '3-navegando.png') })
 
-      await page.goto('/ruta', { waitUntil: 'domcontentloaded' })
-      await page.locator('nav button').nth(3).click()          // pestaña Cuenta
-      await page.waitForTimeout(1500)
-      await page.screenshot({ path: path.join(destino, '4-plan.png') })
     })
   })
 }
