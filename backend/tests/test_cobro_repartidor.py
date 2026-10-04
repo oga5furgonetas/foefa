@@ -268,3 +268,22 @@ async def test_un_regalo_devuelto_deja_de_valer(base):
     with pytest.raises(HTTPException) as e:
         await server.regalo_canjear({"codigo": reg["codigo"]}, OTRO)
     assert e.value.status_code == 404
+
+
+@pytest.mark.asyncio(loop_scope="session")
+async def test_pagar_el_anio_de_una_vez_para_uno_mismo(base):
+    """China (Alipay/WeChat Pay sin cobro mensual): el año de una vez es un
+    regalo para la propia cuenta; vuelve con ?regalo_propio= y se canjea."""
+    r = await server.regalo_comprar({"meses": 12, "para_mi": True}, YO)
+    _, ruta, d = base.llamadas[-1]
+    assert ruta == "/checkout/sessions" and d["mode"] == "payment" and d["locale"] == "auto"
+    assert d["success_url"].endswith(f"/ruta?regalo_propio={r['id']}")
+    assert "Regalo" not in d["line_items[0][price_data][product_data][name]"]
+    reg = base.g["regalos"].docs[-1]
+    assert reg["para_mi"] is True and reg["meses"] == 12
+    ev = {"type": "checkout.session.completed", "data": {"object": {
+        "mode": "payment", "payment_status": "paid", "payment_intent": "pi_9",
+        "metadata": {"tipo": "regalo", "regalo_id": r["id"], "org_id": "o1"}}}}
+    assert (await server._stripe_aplicar_evento(ev))["aplicado"] is True
+    hecho = await server.regalo_canjear({"codigo": reg["codigo"]}, YO)
+    assert hecho["ok"] is True

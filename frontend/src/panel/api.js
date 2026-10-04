@@ -829,7 +829,7 @@ export const stripeSuscripcion = (plan, anual) => api.post('/billing/stripe/susc
 export const stripePortal = () => api.post('/billing/stripe/portal')
 export const getRepartoEstadisticas = (dias = 14) => api.get('/reparto/estadisticas', { params: { dias } })
 export const stripeCambiarPlan = (anual) => api.post('/billing/stripe/cambiar-plan', { anual })
-export const comprarRegalo = (meses) => api.post('/billing/regalos', { meses })
+export const comprarRegalo = (meses, paraMi = false) => api.post('/billing/regalos', { meses, ...(paraMi ? { para_mi: true } : {}) })
 export const misRegalos = () => api.get('/billing/regalos')
 export const canjearRegalo = (codigo) => api.post('/billing/regalos/canjear', { codigo })
 export const playVerificar = (token) => api.post('/billing/play/verificar', { token })

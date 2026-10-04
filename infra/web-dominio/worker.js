@@ -12,10 +12,16 @@
  *   · `X-Forwarded-Host` le dice a las funciones de Pages (sitemap, robots,
  *     ofertas de empleo) cuál es el dominio de verdad.
  *
+ *   · /api/* -> el servidor (Fly) por el mismo dominio (04-10-2026). Desde
+ *     China *.fly.dev no siempre llega; flotadsp.com sí. La web solo usa este
+ *     camino desde China (lib/apiBase.js): así no se gasta cuota del Worker
+ *     con el resto del mundo, que sigue yendo directo.
+ *
  * Si algún día se activa el dominio en Pages (Workers & Pages -> flota ->
- * Custom domains), este Worker sobra: se borra y listo.
+ * Custom domains), este Worker sobra salvo por /api.
  */
 const ORIGEN = 'https://flota-2fg.pages.dev'
+const API = 'https://flota-backend.fly.dev'
 const CANONICO = 'flotadsp.com'
 
 export default {
@@ -25,10 +31,14 @@ export default {
       url.hostname = CANONICO
       return Response.redirect(url.toString(), 301)
     }
-    const destino = new URL(url.pathname + url.search, ORIGEN)
+    const esApi = url.pathname === '/api' || url.pathname.startsWith('/api/')
+    const destino = new URL(url.pathname + url.search, esApi ? API : ORIGEN)
     const cabeceras = new Headers(request.headers)
     cabeceras.delete('host')
     cabeceras.set('X-Forwarded-Host', CANONICO)
+    // El servidor saca la IP del cliente de aquí (límites por IP, registro).
+    const ip = request.headers.get('CF-Connecting-IP')
+    if (esApi && ip) cabeceras.set('X-Forwarded-For', ip)
     const conCuerpo = !['GET', 'HEAD'].includes(request.method)
     const r = await fetch(destino, {
       method: request.method,

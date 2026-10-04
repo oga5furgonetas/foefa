@@ -2,7 +2,7 @@ import { useCallback, useEffect, useState } from 'react'
 import { Route, History, Settings2, UserCircle2, Loader2, CheckCircle2, XCircle, Package, Euro } from 'lucide-react'
 import MiRuta from './driver/MiRuta'
 import { Ajustes } from '../panel/pages/Reparto'
-import { getRepartoPedidos, getRepartoEstadisticas, getOrgBilling, canjearRegalo, playVerificar } from '../panel/api'
+import { getRepartoPedidos, getRepartoEstadisticas, getOrgBilling, canjearRegalo, misRegalos, playVerificar } from '../panel/api'
 import { enAppPlay } from '../lib/enApp'
 import { servicioPlay, comprasPlay } from '../lib/playBilling'
 import { enviarPendiente, olvidarPendiente } from '../lib/metaPixel'
@@ -54,6 +54,27 @@ export default function RutaApp() {
         .finally(() => { try { sessionStorage.removeItem('regalo_pendiente') } catch { /* nada */ } })
       : Promise.resolve()
     canje.then(recargar)
+    // El año pagado de una vez (China): es un regalo para sí mismo; en cuanto
+    // Stripe confirma el pago (el webhook tarda unos segundos), se canjea.
+    const propio = q.get('regalo_propio')
+    let tPropio = null
+    if (propio) {
+      limpiar()
+      toast.success(tx('Confirmando el pago…'))
+      let n = 0
+      const mirar = () => misRegalos().then(({ data }) => {
+        const r = (data?.regalos || []).find((x) => x.id === propio)
+        if (r?.codigo && r.estado === 'pagado') {
+          return canjearRegalo(r.codigo).then(({ data: d }) => { toast.success(d?.mensaje || tx('Regalo aplicado')); recargar() })
+        }
+        if (r?.estado === 'canjeado') { recargar(); return null }
+        n += 1
+        if (n < 20) tPropio = setTimeout(mirar, 3000)
+        else toast.error(tx('El pago tarda en confirmarse. Si ya has pagado, vuelve a entrar en un rato.'))
+        return null
+      }).catch((e) => toast.error(txError(e, 'No se pudo canjear el regalo')))
+      mirar()
+    }
     if (q.get('regalo') === 'cancelado') { toast.error(tx('Pago del regalo cancelado')); olvidarPendiente(); limpiar() } else if (q.get('regalo')) {
       enviarPendiente((p) => p.nombre === 'Purchase')
       setRegaloNuevo(q.get('regalo')); setTab('cuenta'); limpiar()
@@ -69,7 +90,7 @@ export default function RutaApp() {
     }
     if (q.get('pago') === 'cancelado') { olvidarPendiente(); limpiar() }
     if (pendiente || q.get('canjear')) limpiar()
-    return undefined
+    return () => clearTimeout(tPropio)
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
   const bloqueado = !!billing?.bloqueo
 

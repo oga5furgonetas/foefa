@@ -2009,3 +2009,24 @@ test.describe('Reparto · en China', () => {
     expect(fallos).toEqual([])
   })
 })
+
+test('Cobro · en China se ofrece pagar el año de una vez y a la vuelta se canjea solo', async ({ page }) => {
+  const fallos = vigilar(page)
+  await entrarRepartidor(page, { status: 'trial', days_left: 7, pais: 'cn', falta_tarjeta: true })
+  const pedidos = []
+  await page.route(/\/api\/billing\/regalos$/, async (r) => {
+    if (r.request().method() === 'POST') { pedidos.push(r.request().postDataJSON()); await r.fulfill({ json: { url: '/ruta?regalo_propio=r1', id: 'r1' } }) }
+    else await r.fulfill({ json: { regalos: [{ id: 'r1', meses: 12, estado: 'pagado', codigo: 'ABCDEFGH' }] } })
+  })
+  const canjes = []
+  await page.route(/\/api\/billing\/regalos\/canjear/, async (r) => { canjes.push(r.request().postDataJSON()); await r.fulfill({ json: { ok: true, mensaje: 'Regalo aplicado' } }) })
+  await page.goto('/ruta', { waitUntil: 'domcontentloaded' })
+  await page.getByRole('button', { name: 'Cuenta', exact: true }).click()
+  await expect(page.getByRole('heading', { name: 'O paga el año de una vez' })).toBeVisible()
+  await page.getByRole('button', { name: 'Pagar 1 año' }).click()
+  await expect.poll(() => pedidos.length).toBe(1)
+  expect(pedidos[0]).toEqual({ meses: 12, para_mi: true })
+  await expect.poll(() => canjes.length).toBe(1)
+  expect(canjes[0]).toEqual({ codigo: 'ABCDEFGH' })
+  expect(fallos).toEqual([])
+})

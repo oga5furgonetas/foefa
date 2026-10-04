@@ -5102,6 +5102,8 @@ async def org_billing(user: dict = Depends(get_current_user)):
     b["sector"] = (org or {}).get("sector")
     b["pago_proveedor"] = (org or {}).get("pago_proveedor")
     b["cancela_al_final"] = bool((org or {}).get("cancela_al_final"))
+    # El país de la cuenta: en China se ofrece pagar el año de una vez.
+    b["pais"] = (await _region_de_org(org["id"]))[0] if org else "es"
     o = org or {}
     b["falta_tarjeta"] = _falta_tarjeta(o) if org else False
     b["bloqueo"] = _rep_bloqueo_pago(o) if org else ""
@@ -48170,22 +48172,30 @@ async def regalo_comprar(data: dict = Body(default={}), user: dict = Depends(req
             break
     rid = uuid.uuid4().hex
     vuelta = "ruta" if org.get("sector") == "autonomo" else "panel/configuracion"
-    nombre = f"Regalo {MARCA}: {'1 año' if meses == 12 else '1 mes'} del plan Repartidor"
+    # «Para mí» (04-10-2026): pagar de una vez para la propia cuenta, sin
+    # suscripción. Es lo que vale en China, donde se paga con Alipay o WeChat
+    # Pay y esos métodos no admiten cobros mensuales automáticos. Es un regalo
+    # que, al volver del pago, la app se canjea a sí misma.
+    para_mi = bool(_dict_cuerpo(data).get("para_mi"))
+    que = "1 año" if meses == 12 else "1 mes"
+    nombre = (f"{MARCA}: {que} del plan Repartidor" if para_mi
+              else f"Regalo {MARCA}: {que} del plan Repartidor")
     sesion = await _stripe_req("POST", "/checkout/sessions", _stripe_formulario({
-        "mode": "payment", "locale": "es",
+        # «auto»: el pago en el idioma del navegador (chino para quien lo tiene).
+        "mode": "payment", "locale": "auto",
         "line_items": [{"quantity": 1, "price_data": {"currency": "eur", "unit_amount": _REGALO_PRECIOS[meses],
                                                       "product_data": {"name": nombre}}}],
         "customer_email": org.get("email") or user.get("email") or None,
         # Sin client_reference_id: el webhook de la tienda (misma cuenta de
         # Stripe) lo leería como un id de pedido.
-        "success_url": f"{_PORTAL_BASE_FRONT}/{vuelta}?regalo={rid}",
+        "success_url": f"{_PORTAL_BASE_FRONT}/{vuelta}?{'regalo_propio' if para_mi else 'regalo'}={rid}",
         "cancel_url": f"{_PORTAL_BASE_FRONT}/{vuelta}?regalo=cancelado",
         "metadata": {"tipo": "regalo", "regalo_id": rid, "org_id": org["id"]},
         "payment_intent_data": {"metadata": {"tipo": "regalo", "regalo_id": rid}},
     }))
     await global_db.regalos.insert_one({
         "id": rid, "codigo": codigo, "meses": meses, "importe": _REGALO_PRECIOS[meses] / 100,
-        "estado": "pendiente_pago", "comprador_org": org["id"], "stripe_sesion": sesion.get("id"),
+        "estado": "pendiente_pago", "comprador_org": org["id"], "stripe_sesion": sesion.get("id"), "para_mi": para_mi,
         "creado_en": ahora.isoformat(), "caduca_en": _sumar_meses(ahora, 12).isoformat()})
     await _audit(user, "regalo_compra", {"meses": meses})
     return {"url": sesion.get("url"), "id": rid}
