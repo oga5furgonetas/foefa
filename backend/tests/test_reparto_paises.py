@@ -181,3 +181,24 @@ async def test_alta_desde_china_pide_consentimiento_de_transferencia(monkeypatch
         await server.register_dsp(datos, req)
     assert e.value.status_code == 400 and "China" in e.value.detail
     assert not g["organizations"].docs and not g["admin_users"].docs
+
+
+@pytest.mark.asyncio(loop_scope="session")
+async def test_alta_no_crea_colecciones_vacias(monkeypatch):
+    """Atlas tiene tope de 500 colecciones: los índices de una empresa nueva
+    no deben crear colecciones (solo se ponen donde ya hay datos)."""
+    creadas = []
+
+    class Col:
+        def __init__(self, n): self.name = n
+        async def create_index(self, *a, **k): creadas.append(self.name)
+        async def drop_index(self, *a, **k): return None
+
+    class BdNueva:
+        async def list_collection_names(self): return ["vehicles"]
+        def __getitem__(self, n): return Col(n)
+        def __getattr__(self, n): return Col(n)
+
+    monkeypatch.setattr(server, "client", {"dsp_nueva": BdNueva()})
+    await server._ensure_tenant_indexes("dsp_nueva")
+    assert creadas and set(creadas) == {"vehicles"}

@@ -1444,9 +1444,46 @@ async def _idx(coleccion, *args, **kwargs):
         logger.warning(f"Indice {coleccion.name} {args}: {e}")
 
 
+class _ColeccionAusente:
+    """Una colección que la empresa aún no usa: sus índices no se crean."""
+    def __init__(self, nombre):
+        self.name = nombre
+
+    async def create_index(self, *a, **k):
+        return None
+
+    async def drop_index(self, *a, **k):
+        return None
+
+
+class _BdSoloExistentes:
+    """LOS ÍNDICES, SOLO DONDE YA HAY COLECCIÓN (04-10-2026).
+
+    Crear un índice crea la colección. Al dar de alta una empresa se creaban
+    así unas 50, casi todas vacías para siempre (lo de Amazon, la tienda, el
+    empleo…), y el plan de Atlas tiene un tope de 500 colecciones en total:
+    con 7 empresas se llenó y las altas nuevas daban 500 en todo
+    («cannot create a new collection»). Le pasó a Daniel Brao el 04-10.
+
+    Ahora una colección nace cuando se guarda su primer dato (Mongo la crea
+    sola) y sus índices se ponen en el siguiente arranque, que recorre todas
+    las empresas (create_indexes)."""
+    def __init__(self, tdb, existentes):
+        self._tdb = tdb
+        self._existentes = existentes
+
+    def __getitem__(self, nombre):
+        return self._tdb[nombre] if nombre in self._existentes else _ColeccionAusente(nombre)
+
+    def __getattr__(self, nombre):
+        if nombre.startswith("_"):
+            raise AttributeError(nombre)
+        return self[nombre]
+
+
 async def _ensure_tenant_indexes(db_name: str):
     """Crea índices en la BD de un tenant. Idempotente. Llamar al registrar un DSP nuevo."""
-    tdb = client[db_name]
+    tdb = _BdSoloExistentes(client[db_name], set(await client[db_name].list_collection_names()))
     await _idx(tdb.vehicles, "id")
     await _idx(tdb.vehicles, "license_plate")
     # UNA MATRICULA VIVA, UNA FICHA. `create_vehicle` ya comparaba en Python,
@@ -16815,7 +16852,14 @@ async def unhandled_exception_handler(request: Request, exc: Exception):
                                  f"{request.method} {request.url.path}\n{trace[-600:]}")
     except Exception:
         logger.error(f"Error notificando excepción: {exc}")
-    return JSONResponse(status_code=500, content={"detail": "Error interno del servidor"})
+    # Con la cabecera CORS: este 500 sale por fuera del middleware de CORS y,
+    # sin ella, el navegador lo ve como un fallo de red y la app no puede
+    # decir nada útil (pasó el 04-10: «No se pudo cargar tu ruta»).
+    cabeceras = {}
+    origen = request.headers.get("origin") or ""
+    if origen and (origen in cors_origins or "*" in cors_origins):
+        cabeceras = {"Access-Control-Allow-Origin": origen, "Access-Control-Allow-Credentials": "true", "Vary": "Origin"}
+    return JSONResponse(status_code=500, content={"detail": "Error interno del servidor"}, headers=cabeceras)
 
 
 def _severity_emoji(sev: str) -> str:
