@@ -202,3 +202,38 @@ async def test_alta_no_crea_colecciones_vacias(monkeypatch):
     monkeypatch.setattr(server, "client", {"dsp_nueva": BdNueva()})
     await server._ensure_tenant_indexes("dsp_nueva")
     assert creadas and set(creadas) == {"vehicles"}
+
+
+@pytest.mark.asyncio(loop_scope="session")
+async def test_si_nominatim_no_encuentra_photon_da_la_calle_aproximada(monkeypatch):
+    """«Avenida de mahia 2 1b, 15220 bertamirans»: Nominatim no la encuentra;
+    Photon da un punto de la Avenida da Mahía (15220) -> aproximada. Una calle
+    con el mismo nombre en otro código postal no vale."""
+    monkeypatch.setattr(server, "_REP_GEO_ULTIMA", [0.0])
+
+    class R:
+        def __init__(self, j): self.status_code, self._j = 200, j
+        def json(self): return self._j
+
+    otra = {"type": "Feature", "geometry": {"coordinates": [-8.40, 43.37]},
+            "properties": {"countrycode": "ES", "type": "street", "name": "Avenida da Mahía", "postcode": "15001"}}
+    buena = {"type": "Feature", "geometry": {"coordinates": [-8.6434, 42.8627]},
+             "properties": {"countrycode": "ES", "type": "house", "name": "O Lar de Pepe", "street": "Avenida da Mahía",
+                            "housenumber": "95", "postcode": "15220"}}
+
+    class C:
+        def __init__(self, *a, **k): pass
+        async def __aenter__(self): return self
+        async def __aexit__(self, *a): return False
+        async def get(self, url, params=None, **k):
+            if "nominatim" in url:
+                return R([])
+            return R({"features": [otra, buena]})
+
+    import httpx
+    monkeypatch.setattr(httpx, "AsyncClient", C)
+    async def sin_espera(*a, **k): return None
+    monkeypatch.setattr(server, "_geo_pide", lambda c, url, params=None, intentos=1: c.get(url, params=params))
+    monkeypatch.setattr(server.asyncio, "sleep", sin_espera)
+    pt = await server._rep_ubicar("Avenida de mahia 2 1b, 15220,bertamirans, ames, A coruña")
+    assert pt == (42.8627, -8.6434, "aprox")

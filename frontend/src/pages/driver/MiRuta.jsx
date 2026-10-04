@@ -696,7 +696,7 @@ export default function MiRuta({ onBack, embebido = false }) {
                 {p.contenido && <p className="mt-1 flex items-start gap-1 text-[12.5px] text-dark-400"><Package size={13} className="mt-0.5 shrink-0" /> {p.contenido}</p>}
                 <p className="mt-0.5 text-[11.5px] text-dark-500">
                   {p.bultos > 1 ? tx('{n} bultos', { n: p.bultos }) : tx('1 bulto')}{p.escaneos ? ` · ${p.escaneos > 1 ? tx('{n} escaneados', { n: p.escaneos }) : tx('1 escaneado')}` : ''}
-                  {p.lat == null && ` · ${tx('sin ubicar en el mapa')}`}{p.notas && ` · ${p.notas}`}
+                  {p.lat == null && ` · ${tx('sin ubicar en el mapa')}`}{p.geo === 'aprox' && ` · ${tx('ubicación aproximada (la calle)')}`}{p.notas && ` · ${p.notas}`}
                 </p>
                 <button onClick={() => setHuecoDe(p)}
                   className={`mt-1.5 inline-flex items-center gap-1 rounded-lg px-2 py-1 text-[12px] font-semibold ${p.hueco ? 'bg-sky-500/15 text-sky-200' : 'border border-dashed border-dark-700 text-dark-400'}`}>

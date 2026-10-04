@@ -46648,7 +46648,11 @@ async def _rep_ubicar(direccion, cp="", localidad="", base=None) -> Optional[tup
     try:
         lat, lng = float(datos[0]["lat"]), float(datos[0]["lon"])
     except (IndexError, KeyError, TypeError, ValueError):
-        return None
+        # Nominatim es estricto: «Avenida de mahia 2 1b» o una calle en
+        # gallego no las encuentra. Segundo intento con Photon (mismos datos
+        # de OpenStreetMap, tolera faltas); si no hay portal, la calle sola,
+        # marcada como aproximada para que el repartidor lo sepa.
+        return await _rep_ubicar_photon(consulta, pais, base)
     # Que el resultado sea del país de la cuenta (Nominatim ya filtra; esto es
     # la red por si un día no lo hace). España, además, con su caja de siempre.
     cc = ((datos[0].get("address") or {}).get("country_code") or "").lower() if isinstance(datos[0], dict) else ""
@@ -46657,6 +46661,90 @@ async def _rep_ubicar(direccion, cp="", localidad="", base=None) -> Optional[tup
     if pais == "es" and not (27.0 <= lat <= 44.5 and -19.0 <= lng <= 5.0):
         return None
     return lat, lng
+
+
+def _rep_partes_direccion(consulta: str) -> dict:
+    """«Ruela de Brión 11-D 2G, 15702 santiago» -> calle, portal, cp y lugar
+    (sin piso, puerta ni letras, que los buscadores no entienden)."""
+    texto = " ".join(str(consulta or "").replace(";", ",").split())
+    cp = (re.search(r"\b(\d{5})\b", texto) or [None, ""])[1]
+    m = re.match(r"^\s*([^\d,]+?)\s*,?\s*(\d{1,4})\b", texto)
+    calle = (m.group(1) if m else texto.split(",")[0]).strip(" ,.-")
+    portal = m.group(2) if m else ""
+    lugares = [t.strip() for t in texto.split(",")[1:] if t.strip() and not re.search(r"\d", t)]
+    resto = re.sub(r"\b\d{5}\b", "", texto.split(cp, 1)[1] if cp and cp in texto else "").strip(" ,")
+    if resto and not re.search(r"\d", resto):
+        lugares = [x.strip() for x in resto.split(",") if x.strip()] or lugares
+    return {"calle": calle, "portal": portal, "cp": cp, "lugar": ", ".join(lugares[:2])}
+
+
+async def _rep_ubicar_photon(consulta: str, pais: str, base=None) -> Optional[tuple]:
+    """Photon (komoot), mismos datos de OpenStreetMap con búsqueda tolerante.
+    Devuelve (lat, lng) si encuentra el portal, (lat, lng, "aprox") si solo la
+    calle, o None. Siempre del país de la cuenta y, si hay código postal, con
+    ese código: nada de una calle con el mismo nombre en otra ciudad."""
+    d = _rep_partes_direccion(consulta)
+    if len(d["calle"]) < 3:
+        return None
+    import httpx as _httpx
+
+    async def pedir(q):
+        params = {"q": q, "limit": 6}
+        if base:
+            params.update({"lat": base[0], "lon": base[1]})
+        try:
+            async with _REP_GEO_LOCK:
+                espera = 1.1 - (time.time() - _REP_GEO_ULTIMA[0])
+                if espera > 0:
+                    await asyncio.sleep(espera)
+                try:
+                    async with _httpx.AsyncClient(timeout=8, headers={"User-Agent": f"{MARCA}/1.0 (reparto; {CORREO_CONTACTO})"}) as c:
+                        r = await c.get("https://photon.komoot.io/api/", params=params)
+                finally:
+                    _REP_GEO_ULTIMA[0] = time.time()
+            return (r.json() or {}).get("features") or [] if r.status_code == 200 else []
+        except Exception as e:                               # noqa: BLE001
+            logger.warning(f"reparto: Photon no respondió: {type(e).__name__}")
+            return []
+
+    vacias = {"de", "da", "do", "del", "la", "el", "los", "las", "os", "as", "a", "o", "rua", "calle", "c",
+              "avenida", "avda", "av", "plaza", "praza", "pza", "camino", "camiño", "travesia", "ruela", "lugar"}
+    clave = [t for t in reparto.norm(d["calle"]).split() if t not in vacias and len(t) > 1]
+
+    def misma_calle(pr):
+        nombre = reparto.norm(" ".join(str(pr.get(k) or "") for k in ("street", "name")))
+        return bool(clave) and all(t in nombre for t in clave)
+
+    def valida(f, tipos):
+        pr = f.get("properties") or {}
+        if (pr.get("countrycode") or "").lower() != pais or pr.get("type") not in tipos or not misma_calle(pr):
+            return None
+        if d["cp"] and pr.get("postcode") and pr["postcode"] != d["cp"]:
+            return None
+        if not d["cp"] and d["lugar"]:
+            sitio = reparto.norm(" ".join(str(pr.get(k) or "") for k in ("city", "district", "locality", "county")))
+            if not any(reparto.norm(x) in sitio for x in d["lugar"].split(",") if x.strip()):
+                return None
+        try:
+            lng, lat = (float(x) for x in f["geometry"]["coordinates"][:2])
+        except (KeyError, TypeError, ValueError):
+            return None
+        if pais == "es" and not (27.0 <= lat <= 44.5 and -19.0 <= lng <= 5.0):
+            return None
+        return lat, lng
+
+    donde = " ".join(x for x in (d["cp"], d["lugar"]) if x)
+    if d["portal"]:
+        for f in await pedir(f"{d['calle']} {d['portal']}, {donde}"):
+            pt = valida(f, ("house",))
+            if pt and str((f.get("properties") or {}).get("housenumber") or "").split()[0:1] == [d["portal"]]:
+                return pt
+    # Sin el portal: la calle (o un punto de esa misma calle) como aproximada.
+    for f in await pedir(f"{d['calle']}, {donde}"):
+        pt = valida(f, ("street", "house"))
+        if pt:
+            return pt[0], pt[1], "aprox"
+    return None
 
 
 async def _rep_ubicar_amap(consulta: str) -> Optional[tuple]:
@@ -46841,7 +46929,7 @@ async def _rep_nuevo(datos: dict, user: dict, origen: str, fecha: str,
     elif ubicar:
         pt = await _rep_ubicar(direccion, cp, p["localidad"], _rep_base(a))
         if pt:
-            p["lat"], p["lng"], p["geo"] = pt[0], pt[1], "ok"
+            p["lat"], p["lng"], p["geo"] = pt[0], pt[1], (pt[2] if len(pt) > 2 else "ok")
         else:
             p["geo"] = "no"
     await db.reparto_pedidos.insert_one(dict(p))
@@ -46869,7 +46957,7 @@ async def _rep_ubicar_pendientes(fecha: str):
         pt = await _rep_ubicar(p.get("direccion"), p.get("cp"), p.get("localidad"), base)
         await db.reparto_pedidos.update_one(
             {"id": p["id"]},
-            {"$set": {"lat": pt[0], "lng": pt[1], "geo": "ok"} if pt else {"geo": "no"}})
+            {"$set": {"lat": pt[0], "lng": pt[1], "geo": pt[2] if len(pt) > 2 else "ok"} if pt else {"geo": "no"}})
 
 
 def _rep_resumen(pedidos: list, base) -> list:
@@ -47299,7 +47387,7 @@ async def reparto_editar(pid: str, data: dict = Body(...), user: dict = Depends(
         a = await _rep_ajustes()
         pt = await _rep_ubicar(cambios["direccion"], cambios.get("cp") or p.get("cp"),
                                cambios.get("localidad") or p.get("localidad"), _rep_base(a))
-        cambios.update({"lat": pt[0], "lng": pt[1], "geo": "ok"} if pt else {"lat": None, "lng": None, "geo": "no"})
+        cambios.update({"lat": pt[0], "lng": pt[1], "geo": pt[2] if len(pt) > 2 else "ok"} if pt else {"lat": None, "lng": None, "geo": "no"})
     if cambios:
         await db.reparto_pedidos.update_one({"id": pid}, {"$set": cambios})
     return _rep_sale({**p, **cambios}, user)
@@ -47597,7 +47685,19 @@ async def reparto_estado(pid: str, data: dict = Body(...), user: dict = Depends(
 @api_router.post("/reparto/mi-ruta/ordenar")
 async def reparto_mi_ordenar(data: dict = Body(...), user: dict = Depends(require_any_auth)):
     d = await _rep_conductor(user)
-    origen = reparto._punto(_dict_cuerpo(data)) or _rep_base(await _rep_ajustes())
+    a = await _rep_ajustes()
+    origen = reparto._punto(_dict_cuerpo(data)) or _rep_base(a)
+    # Antes de ordenar, otro intento con las que no se ubicaron (el buscador
+    # mejora; o se metieron cuando no respondía). Como mucho 10: uno por
+    # segundo, para no dejar al repartidor esperando.
+    sin = await db.reparto_pedidos.find(
+        {"fecha": _dia_negocio(), "conductor_id": d["id"], "estado": {"$in": ["pendiente", "en_ruta"]},
+         "lat": None, "geo": {"$in": ["no", "pendiente"]}}, {"_id": 0}).to_list(10)
+    for p in sin:
+        pt = await _rep_ubicar(p.get("direccion"), p.get("cp"), p.get("localidad"), _rep_base(a))
+        if pt:
+            await db.reparto_pedidos.update_one({"id": p["id"]}, {"$set": {
+                "lat": pt[0], "lng": pt[1], "geo": pt[2] if len(pt) > 2 else "ok"}})
     ruta = await _rep_ordenar(_dia_negocio(), d["id"], origen, salida_min=_rep_ahora_local()[0])
     return {"ordenados": ruta["paradas"], "ruta": ruta}
 

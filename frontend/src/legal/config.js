@@ -28,6 +28,7 @@ export const PROCESSORS = [
   { name: 'Cloudflare R2', purpose: 'Almacenamiento de imágenes', country: 'EEUU/UE (DPF)' },
   { name: 'Google (Gemini / Vertex AI)', purpose: 'Análisis de imágenes (IA)', country: 'EEUU/UE (DPF)' },
   { name: 'OpenStreetMap Foundation', purpose: 'Ubicar direcciones de entrega en el mapa (solo la dirección, sin nombre ni teléfono) y teselas del mapa', country: 'Reino Unido (adecuación UE)' },
+  { name: 'komoot GmbH (buscador Photon, datos de OpenStreetMap)', purpose: 'Segundo intento para ubicar una dirección de entrega que el anterior no encuentra (solo la dirección, sin nombre ni teléfono)', country: 'Alemania (UE)' },
   { name: 'FOSSGIS e.V. (servidor de rutas de OpenStreetMap)', purpose: 'Calcular tiempos por carretera entre paradas (solo coordenadas, sin nombres ni teléfonos)', country: 'Alemania (UE)' },
   { name: 'Lemon Squeezy', purpose: 'Pagos (Merchant of Record), facturación', country: 'EEUU/UE (DPF)' },
 ]
