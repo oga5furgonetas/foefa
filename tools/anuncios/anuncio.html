@@ -1,0 +1,116 @@
+<!doctype html>
+<html><head><meta charset="utf-8">
+<!-- Los anuncios de la app del repartidor. Se generan con tools/anuncios/anuncio.mjs
+     (docs/anuncios/<idioma>/). Las capturas son de la app de verdad. -->
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0 }
+  body { font-family: 'Segoe UI', 'Microsoft YaHei', 'PingFang SC', 'Noto Sans SC', system-ui, -apple-system, Roboto, sans-serif; background: #000 }
+  .lienzo { position: relative; overflow: hidden; color: #fff;
+    background: radial-gradient(120% 80% at 80% 10%, #0b6e6a 0%, #071a1f 45%, #04090c 100%) }
+  .marca { position: absolute; display: flex; align-items: center; gap: 14px; font-weight: 800; letter-spacing: .5px }
+  .logo { width: 56px; height: 56px; border-radius: 16px; background: #0FC2BC; color: #04201f; display: flex; align-items: center; justify-content: center; font-size: 24px; font-weight: 900 }
+  .movil { position: absolute; border-radius: 52px; padding: 14px; background: #111; box-shadow: 0 40px 80px rgba(0,0,0,.6), 0 0 0 2px #2a2f33 inset }
+  .movil img { display: block; width: 100%; border-radius: 40px }
+  h1 { font-weight: 900; line-height: 1.02; letter-spacing: -1.5px }
+  .acento { color: #14E7D8 }
+  ul { list-style: none }
+  li { display: flex; gap: 14px; align-items: flex-start; font-weight: 600 }
+  .paso { position: absolute; text-align: center }
+  .num { display: inline-flex; width: 64px; height: 64px; border-radius: 32px; background: #14E7D8; color: #032; font-weight: 900; font-size: 34px; align-items: center; justify-content: center }
+  .gratis { display: inline-block; background: #FFD43B; color: #1a1300; font-weight: 900; letter-spacing: 1px; border-radius: 22px; transform: rotate(-3deg); box-shadow: 0 14px 40px rgba(255,212,59,.35) }
+  .letra { color: #d7fff9; font-weight: 700 }
+</style></head>
+<body>
+<div id="a" class="lienzo" style="width:1080px;height:1350px">
+  <div class="marca" style="left:64px;top:56px;font-size:30px"><span class="logo">FDS</span><span data-t="tag"></span></div>
+  <h1 style="position:absolute;left:64px;top:150px;width:580px;font-size:80px"><span data-t="h1a"></span><span class="acento" data-t="h1b"></span></h1>
+  <ul style="position:absolute;left:64px;top:560px;width:540px;font-size:31px;display:grid;gap:22px">
+    <li><b>📸</b><span data-t="b1"></span></li><li><b>🗺️</b><span data-t="b2"></span></li>
+    <li><b>🧭</b><span data-t="b3"></span></li><li><b>💬</b><span data-t="b4"></span></li>
+  </ul>
+  <div style="position:absolute;left:64px;top:1060px">
+    <span class="gratis" style="font-size:92px;padding:10px 40px" data-t="gratis"></span>
+    <div class="letra" style="margin-top:26px;font-size:32px" data-t="letra"></div>
+  </div>
+  <div class="movil" style="left:650px;top:150px;width:390px;transform:rotate(4deg)"><img data-img="navegando"></div>
+</div>
+
+<div id="b" class="lienzo" style="width:1080px;height:1350px">
+  <div class="marca" style="left:64px;top:56px;font-size:30px"><span class="logo">FDS</span></div>
+  <div style="position:absolute;right:56px;top:46px"><span class="gratis" style="font-size:54px;padding:6px 26px" data-t="gratis"></span></div>
+  <h1 style="position:absolute;left:64px;right:64px;top:160px;font-size:70px;text-align:center"><span data-t="b_h1a"></span><br><span class="acento" data-t="b_h1b"></span></h1>
+  <div class="paso" style="left:40px;top:410px;width:330px">
+    <div class="movil" style="position:relative;width:300px;margin:0 auto;padding:10px;border-radius:40px"><img style="border-radius:32px" data-img="cabecera"></div>
+    <div style="margin-top:26px"><span class="num">1</span></div><p style="margin-top:12px;font-size:29px;font-weight:800" data-t="p1"></p>
+  </div>
+  <div class="paso" style="left:375px;top:410px;width:330px">
+    <div class="movil" style="position:relative;width:300px;margin:0 auto;padding:10px;border-radius:40px"><img style="border-radius:32px" data-img="mapa"></div>
+    <div style="margin-top:26px"><span class="num">2</span></div><p style="margin-top:12px;font-size:29px;font-weight:800" data-t="p2"></p>
+  </div>
+  <div class="paso" style="left:710px;top:410px;width:330px">
+    <div class="movil" style="position:relative;width:300px;margin:0 auto;padding:10px;border-radius:40px"><img style="border-radius:32px" data-img="llegado"></div>
+    <div style="margin-top:26px"><span class="num">3</span></div><p style="margin-top:12px;font-size:29px;font-weight:800" data-t="p3"></p>
+  </div>
+  <div class="letra" style="position:absolute;left:0;right:0;top:1250px;text-align:center;font-size:32px" data-t="letra"></div>
+</div>
+
+<div id="c" class="lienzo" style="width:1080px;height:1920px">
+  <div class="marca" style="left:0;right:0;justify-content:center;top:120px;font-size:34px"><span class="logo">FDS</span><span data-t="tag"></span></div>
+  <h1 style="position:absolute;left:60px;right:60px;top:230px;font-size:86px;text-align:center" data-t="c_h1"></h1>
+  <div class="movil" style="left:110px;top:580px;width:400px;transform:rotate(-5deg)"><img data-img="navegando"></div>
+  <div class="movil" style="left:570px;top:640px;width:400px;transform:rotate(5deg)"><img data-img="llegado"></div>
+  <div style="position:absolute;left:0;right:0;top:1480px;text-align:center;font-size:36px;font-weight:700;color:#cfe" data-t="c_sub"></div>
+  <div style="position:absolute;left:0;right:0;top:1580px;text-align:center"><span class="gratis" style="font-size:110px;padding:10px 54px" data-t="gratis"></span></div>
+  <div class="letra" style="position:absolute;left:0;right:0;top:1790px;text-align:center;font-size:34px" data-t="letra"></div>
+</div>
+<script>
+  const T = {
+    es: { tag: 'Para quien reparte solo', h1a: 'Tu ruta de reparto, ', h1b: 'ordenada sola.',
+      b1: 'Foto a la etiqueta: entra la dirección y el teléfono', b2: 'Ruta ordenada por tiempo, con tráfico típico', b3: 'Te guía con voz hasta cada puerta', b4: 'WhatsApp al cliente con tu hora de llegada',
+      gratis: 'GRATIS', letra: '7 días de prueba · luego 9,99 €/mes · cancela cuando quieras',
+      b_h1a: 'Repartes solo.', b_h1b: 'La app hace el resto.', p1: 'Mete tus paquetes', p2: 'Ruta ordenada', p3: 'Te lleva a la puerta',
+      c_h1: '¿Aún ordenas la ruta <span class="acento">a mano?</span>', c_sub: 'Foto a la etiqueta · ruta ordenada · te guía a cada puerta' },
+    en: { tag: 'For couriers who deliver solo', h1a: 'Your delivery route, ', h1b: 'sorted for you.',
+      b1: 'Snap the label: address and phone go straight in', b2: 'Route ordered by time, with typical traffic', b3: 'Voice guidance to every door', b4: 'WhatsApp your customer your arrival time',
+      gratis: 'FREE', letra: '7-day trial · then €9.99/month · cancel anytime',
+      b_h1a: 'You deliver solo.', b_h1b: 'The app does the rest.', p1: 'Add your parcels', p2: 'Route sorted', p3: 'Guided to the door',
+      c_h1: 'Still planning your route <span class="acento">by hand?</span>', c_sub: 'Snap the label · sorted route · guided to every door' },
+    pt: { tag: 'Para quem entrega sozinho', h1a: 'A sua rota de entregas, ', h1b: 'ordenada sozinha.',
+      b1: 'Fotografe a etiqueta: entram a morada e o telefone', b2: 'Rota ordenada por tempo, com trânsito típico', b3: 'Guia por voz até cada porta', b4: 'WhatsApp ao cliente com a hora de chegada',
+      gratis: 'GRÁTIS', letra: '7 dias de teste · depois 9,99 €/mês · cancele quando quiser',
+      b_h1a: 'Entrega sozinho.', b_h1b: 'A app faz o resto.', p1: 'Junte as encomendas', p2: 'Rota ordenada', p3: 'Leva-o à porta',
+      c_h1: 'Ainda ordena a rota <span class="acento">à mão?</span>', c_sub: 'Foto à etiqueta · rota ordenada · guia até cada porta' },
+    fr: { tag: 'Pour les livreurs indépendants', h1a: 'Votre tournée, ', h1b: 'organisée toute seule.',
+      b1: "Photo de l'étiquette : adresse et téléphone ajoutés", b2: 'Tournée triée par temps, trafic habituel compris', b3: "Guidage vocal jusqu'à chaque porte", b4: "WhatsApp au client avec votre heure d'arrivée",
+      gratis: 'GRATUIT', letra: "7 jours d'essai · puis 9,99 €/mois · résiliable à tout moment",
+      b_h1a: 'Vous livrez seul.', b_h1b: "L'appli fait le reste.", p1: 'Ajoutez vos colis', p2: 'Tournée triée', p3: "Jusqu'à la porte",
+      c_h1: 'Vous triez encore votre tournée <span class="acento">à la main ?</span>', c_sub: "Photo de l'étiquette · tournée triée · guidage jusqu'à la porte" },
+    it: { tag: 'Per chi consegna da solo', h1a: 'Il tuo giro di consegne, ', h1b: 'ordinato da solo.',
+      b1: "Foto all'etichetta: entrano indirizzo e telefono", b2: 'Percorso ordinato per tempo, con traffico tipico', b3: 'Guida vocale fino a ogni porta', b4: "WhatsApp al cliente con l'orario di arrivo",
+      gratis: 'GRATIS', letra: '7 giorni di prova · poi 9,99 €/mese · disdici quando vuoi',
+      b_h1a: 'Consegni da solo.', b_h1b: "L'app fa il resto.", p1: 'Aggiungi i pacchi', p2: 'Percorso ordinato', p3: 'Ti porta alla porta',
+      c_h1: 'Ordini ancora il giro <span class="acento">a mano?</span>', c_sub: "Foto all'etichetta · percorso ordinato · guida fino alla porta" },
+    de: { tag: 'Für alle, die allein zustellen', h1a: 'Deine Zustelltour, ', h1b: 'von selbst sortiert.',
+      b1: 'Etikett fotografieren: Adresse und Telefon sind drin', b2: 'Route nach Zeit sortiert, mit typischem Verkehr', b3: 'Sprachführung bis zu jeder Tür', b4: 'WhatsApp an den Kunden mit deiner Ankunftszeit',
+      gratis: 'GRATIS', letra: '7 Tage testen · danach 9,99 €/Monat · jederzeit kündbar',
+      b_h1a: 'Du lieferst allein.', b_h1b: 'Die App macht den Rest.', p1: 'Pakete erfassen', p2: 'Route sortiert', p3: 'Bis zur Haustür',
+      c_h1: 'Planst du deine Tour noch <span class="acento">von Hand?</span>', c_sub: 'Etikett fotografieren · Route sortiert · bis zu jeder Tür' },
+    zh: { tag: '个人配送员专用', h1a: '你的配送路线，', h1b: '自动排好。',
+      b1: '拍面单：地址和电话自动录入', b2: '按时间排序路线，考虑常规路况', b3: '中文语音导航到每个门口', b4: '用 WhatsApp 告诉客户你的到达时间',
+      gratis: '免费', letra: '免费试用 7 天 · 之后每月 9.99 € · 随时取消',
+      b_h1a: '一个人送货？', b_h1b: '其余交给 App。', p1: '录入包裹', p2: '路线排好', p3: '导航到门口',
+      c_h1: '还在<span class="acento">手动排路线？</span>', c_sub: '拍面单 · 自动排线 · 导航到每个门口' },
+  }
+  // Capturas: las de chino salen de la app en chino (e2e/capturas-ruta.spec.js).
+  const ZH = '../../frontend/public/capturas-ruta/zh/'
+  const IMG = {
+    zh: { navegando: ZH + '3-navegando.png', cabecera: ZH + '1-ruta.png', mapa: ZH + '2-mapa.png', llegado: ZH + '1-ruta.png' },
+    otro: { navegando: '../../docs/capturas-ruta/6-navegando.png', cabecera: '../../docs/capturas-ruta/5-cabecera.png',
+      mapa: '../../docs/capturas-ruta/3-mapa.png', llegado: '../../docs/capturas-ruta/7-has-llegado.png' },
+  }
+  const lang = new URLSearchParams(location.search).get('lang') || 'es'
+  document.querySelectorAll('[data-img]').forEach((el) => { el.src = (IMG[lang] || IMG.otro)[el.dataset.img] })
+  document.querySelectorAll('[data-t]').forEach((el) => { el.innerHTML = T[lang][el.dataset.t] })
+  document.documentElement.lang = lang
+</script>
+</body></html>
