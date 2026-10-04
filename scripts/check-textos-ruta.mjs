@@ -17,7 +17,7 @@ const FICHEROS = [
 ]
 // Nombres que llegan de datos (el plan del autónomo en Registro: tt(planInfo.name)).
 // y los métodos de cobro de lib/region.js (metodosCobro), que se pintan con tx(t).
-const DE_DATOS = ['Repartidor', 'Bizum', 'Transferencia']
+const DE_DATOS = ['Repartidor', 'Bizum', 'Transferencia', '高德地图', '百度地图']
 // Listas cuyos textos se traducen al pintarlos.
 const LISTAS = ['MOTIVOS', 'NAVEGADORES', 'HUECOS', 'PESTANAS', 'GIROS', 'ORDINALES', 'OPCIONES', 'ESTADO']
 

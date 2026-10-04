@@ -5002,6 +5002,9 @@ PAISES_REPARTO = {
     "do": {"nombre": "República Dominicana", "prefijo": "1", "zonas": ["America/Santo_Domingo"]},
     "pr": {"nombre": "Puerto Rico", "prefijo": "1", "zonas": ["America/Puerto_Rico"]},
     "cu": {"nombre": "Cuba", "prefijo": "53", "zonas": ["America/Havana"]},
+    # China (04-10-2026): la app en chino; allí se navega con Amap/Baidu y se
+    # avisa por SMS (Google y WhatsApp están bloqueados).
+    "cn": {"nombre": "China", "prefijo": "86", "zonas": ["Asia/Shanghai", "Asia/Urumqi"]},
 }
 _REGION_CACHE: dict = {}
 

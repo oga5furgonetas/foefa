@@ -20,6 +20,7 @@ export function regionDelMovil() {
 const MONEDAS = {
   es: 'EUR', mx: 'MXN', ar: 'ARS', co: 'COP', cl: 'CLP', pe: 'PEN', ve: 'VES', ec: 'USD', bo: 'BOB', py: 'PYG',
   uy: 'UYU', cr: 'CRC', pa: 'USD', gt: 'GTQ', hn: 'HNL', sv: 'USD', ni: 'NIO', do: 'DOP', pr: 'USD', cu: 'CUP',
+  cn: 'CNY',
 }
 let paisRuta = (() => {
   try { const g = localStorage.getItem('fds_pais'); if (g && MONEDAS[g]) return g } catch { /* sin almacenamiento */ }

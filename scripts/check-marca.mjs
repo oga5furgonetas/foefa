@@ -54,6 +54,7 @@ const PERMITIDO = [
   ['panel/ayudaFichas.js', 'amazon rellena la columna dsc', 'ficha de ayuda de la DNR diaria'],
   ['panel/PanelLayout.jsx', "'nav.dnr'", 'entrada de menu de la DNR diaria'],
   ['i18n.jsx', "'nav.dnr'", 'nombre del menu de la DNR diaria'],
+  ['i18nZh.js', "'nav.dnr'", 'nombre del menu de la DNR diaria, en chino'],
 ]
 
 function ficheros(dir, out = []) {

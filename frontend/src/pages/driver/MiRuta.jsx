@@ -74,8 +74,27 @@ const MapaReparto = lazy(() => import('../../panel/components/MapaReparto'))
 /* Con qué navega cada uno: Google Maps o Waze. Se recuerda en el móvil. */
 /* «En la app» guía aquí dentro (Navegacion.jsx); los otros dos abren su app. */
 const NAVEGADORES = [['app', 'Esta app'], ['google', 'Google Maps'], ['waze', 'Waze']]
+/* En China Google Maps y Waze no funcionan: allí se navega con Amap (高德) o
+   Baidu (百度). Los dos abren su app con el destino puesto y aceptan las
+   coordenadas del GPS tal cual (WGS-84), así que el punto no se desplaza. */
+const NAVEGADORES_CHINA = [['app', 'Esta app'], ['amap', '高德地图'], ['baidu', '百度地图']]
+// Por el PAÍS de la cuenta, no por el idioma: quien habla chino y reparte en
+// España necesita Google Maps (Amap y Baidu solo cubren China).
+export const enChina = (pais) => pais === 'cn'
+const nombreNavegador = (nav) => ({ google: 'Google Maps', waze: 'Waze', amap: '高德地图', baidu: '百度地图' }[nav] || 'Google Maps')
 const Navegacion = lazy(() => import('./Navegacion'))
 function navegar(p, nav) {
+  const nombre = encodeURIComponent(p.cliente || p.direccion || '')
+  if (nav === 'amap') {
+    return p.lat != null
+      ? `https://uri.amap.com/navigation?to=${p.lng},${p.lat},${nombre}&mode=car&coordinate=wgs84&callnative=1`
+      : `https://uri.amap.com/search?keyword=${encodeURIComponent(p.direccion || '')}&callnative=1`
+  }
+  if (nav === 'baidu') {
+    return p.lat != null
+      ? `https://api.map.baidu.com/direction?destination=latlng:${p.lat},${p.lng}|name:${nombre}&coord_type=wgs84&mode=driving&output=html&src=flota`
+      : `https://api.map.baidu.com/geocoder?address=${encodeURIComponent(p.direccion || '')}&output=html&src=flota`
+  }
   if (nav === 'waze') {
     return p.lat != null
       ? `https://waze.com/ul?ll=${p.lat},${p.lng}&navigate=yes`
@@ -147,6 +166,14 @@ export default function MiRuta({ onBack, embebido = false }) {
   const [escuchando, setEscuchando] = useState(false)
   useEffect(() => guarda('ruta_vista', vista), [vista])
   useEffect(() => guarda('ruta_nav2', nav), [nav])
+  // La app de navegación de fuera: la elegida, o la del país si guía esta app.
+  const fuera = nav === 'app' ? (enChina(ruta?.pais) ? 'amap' : 'google') : nav
+  // Lo elegido en otro país no vale aquí (Google en China, Amap fuera): se vuelve a esta app.
+  useEffect(() => {
+    if (!ruta) return
+    const china = enChina(ruta.pais)
+    if ((china && ['google', 'waze'].includes(nav)) || (!china && ['amap', 'baidu'].includes(nav))) setNav('app')
+  }, [ruta, nav])
   const [guiando, setGuiando] = useState(null)       // id de la parada a la que se guía; null = sin guía
   const [abierta, setAbierta] = useState(null)       // la parada desplegada (además de la siguiente)
   const [deshacer, setDeshacer] = useState(null)     // {p, estado} recién cerrada, para volver atrás
@@ -551,7 +578,7 @@ export default function MiRuta({ onBack, embebido = false }) {
             {tx('Ir con')}
             <select value={nav} onChange={(e) => setNav(e.target.value)} aria-label={tx('Navegador')}
               className="rounded-lg border border-dark-700 bg-dark-900 px-1.5 py-1 text-[12.5px] text-dark-100">
-              {NAVEGADORES.map(([k, t]) => <option key={k} value={k}>{tx(t)}</option>)}
+              {(enChina(ruta.pais) ? NAVEGADORES_CHINA : NAVEGADORES).map(([k, t]) => <option key={k} value={k}>{tx(t)}</option>)}
             </select>
           </label>
         </div>
@@ -576,7 +603,7 @@ export default function MiRuta({ onBack, embebido = false }) {
               {tx('{n} sin situar en el mapa todavía (la dirección no se ha encontrado o se está buscando).', { n: pendientes.filter((p) => p.lat == null).length })}
             </p>
           )}
-          {enlaceVarias(pendientes) && (
+          {!enChina(ruta.pais) && enlaceVarias(pendientes) && (
             <a href={enlaceVarias(pendientes)} target="_blank" rel="noreferrer"
               className="mt-2 flex w-full items-center justify-center gap-2 rounded-xl border border-sky-500/50 bg-sky-500/10 py-3 text-[14px] font-bold text-sky-200">
               <Navigation size={16} /> {tx('Las próximas {n} paradas en Google Maps', { n: Math.min(4, pendientes.filter((p) => p.lat != null).length) })}
@@ -644,7 +671,7 @@ export default function MiRuta({ onBack, embebido = false }) {
                   <button onClick={() => setGuiando(p.id)} aria-label={`${tx('Ir a')} ${p.cliente || p.direccion}`}
                     className="flex w-12 shrink-0 items-center justify-center border-l border-dark-800 text-brand-300"><Navigation size={17} /></button>
                 ) : (
-                  <a href={navegar(p, nav === 'app' ? 'google' : nav)} target="_blank" rel="noreferrer" aria-label={`${tx('Ir a')} ${p.cliente || p.direccion}`}
+                  <a href={navegar(p, nav === 'app' ? (enChina(ruta.pais) ? 'amap' : 'google') : nav)} target="_blank" rel="noreferrer" aria-label={`${tx('Ir a')} ${p.cliente || p.direccion}`}
                     className="flex w-12 shrink-0 items-center justify-center border-l border-dark-800 text-dark-300"><Navigation size={17} /></a>
                 )}
               </div>
@@ -682,13 +709,17 @@ export default function MiRuta({ onBack, embebido = false }) {
                 <button onClick={() => setGuiando(p.id)}
                   className={`flex flex-col items-center gap-0.5 rounded-xl py-2 text-[11px] ${esSiguiente ? 'bg-brand-500 font-bold text-brand-tinta' : 'border border-dark-700 text-dark-200'}`}><Navigation size={16} /> {tx('Ir')}</button>
               ) : (
-                <a href={navegar(p, nav === 'app' ? 'google' : nav)} target="_blank" rel="noreferrer"
+                <a href={navegar(p, nav === 'app' ? (enChina(ruta.pais) ? 'amap' : 'google') : nav)} target="_blank" rel="noreferrer"
                   className={`flex flex-col items-center gap-0.5 rounded-xl py-2 text-[11px] ${esSiguiente ? 'bg-brand-500 font-bold text-brand-tinta' : 'border border-dark-700 text-dark-200'}`}><Navigation size={16} /> {tx('Ir')}</a>
               )}
               {p.telefono
                 ? <a href={`tel:${p.telefono}`} className="flex flex-col items-center gap-0.5 rounded-xl border border-dark-700 py-2 text-[11px] text-dark-200"><Phone size={16} /> {tx('Llamar')}</a>
                 : <span className="flex flex-col items-center gap-0.5 rounded-xl border border-dark-800 py-2 text-[11px] text-dark-600"><Phone size={16} /> {tx('Sin teléfono')}</span>}
-              {movilWhatsApp(p.telefono, ruta.pais, ruta.prefijo)
+              {ruta.pais === 'cn' ? (p.telefono
+                ? <a href={`sms:${p.telefono.replace(/[^\d+]/g, '')}?&body=${encodeURIComponent(mensaje(p, ruta.empresa))}`}
+                    className="flex flex-col items-center gap-0.5 rounded-xl border border-emerald-600/50 py-2 text-[11px] text-emerald-300"><MessageCircle size={16} /> {tx('SMS')}</a>
+                : <span className="flex flex-col items-center gap-0.5 rounded-xl border border-dark-800 py-2 text-[11px] text-dark-600"><MessageCircle size={16} /> —</span>)
+              : movilWhatsApp(p.telefono, ruta.pais, ruta.prefijo)
                 ? <a href={`https://wa.me/${movilWhatsApp(p.telefono, ruta.pais, ruta.prefijo)}?text=${encodeURIComponent(mensaje(p, ruta.empresa))}`} target="_blank" rel="noreferrer"
                     className="flex flex-col items-center gap-0.5 rounded-xl border border-emerald-600/50 py-2 text-[11px] text-emerald-300"><MessageCircle size={16} /> WhatsApp</a>
                 : <span className="flex flex-col items-center gap-0.5 rounded-xl border border-dark-800 py-2 text-[11px] text-dark-600"><MessageCircle size={16} /> —</span>}
@@ -757,7 +788,7 @@ export default function MiRuta({ onBack, embebido = false }) {
           <Navegacion parada={objetivo} numero={objetivo?.orden ?? (objetivo ? pendientes.indexOf(objetivo) + 1 : null)}
             quedan={pendientes.length} onSalir={() => setGuiando(null)}
             onEntregar={(p) => marcar(p, 'entregado')} onNoEntregar={(p) => setFallo(p)}
-            enlaceFuera={(p) => navegar(p, 'google')} />
+            enlaceFuera={(p) => navegar(p, fuera)} nombreFuera={nombreNavegador(fuera)} />
         </Suspense>
       )}
 

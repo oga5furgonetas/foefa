@@ -285,4 +285,8 @@ export const B = {
   "Cookies necesarias.": ["Necessary cookies.", "Cookies necessários.", "Cookies nécessaires.", "Cookie necessari.", "Notwendige Cookies.", "必要的 Cookies。"],
   "Usamos solo almacenamiento imprescindible para iniciar sesión y recordar tus preferencias. No usamos cookies de seguimiento ni marketing.": ["We only use essential storage to log you in and remember your preferences. We don’t use tracking or marketing cookies.", "Usamos apenas o armazenamento indispensável para iniciar sessão e lembrar as suas preferências. Não usamos cookies de rastreio nem de marketing.", "Nous n’utilisons que le stockage indispensable pour la connexion et vos préférences. Aucun cookie de suivi ni de marketing.", "Usiamo solo l’archiviazione indispensabile per l’accesso e le tue preferenze. Nessun cookie di tracciamento o marketing.", "Wir nutzen nur den unbedingt nötigen Speicher für die Anmeldung und deine Einstellungen. Keine Tracking- oder Marketing-Cookies.", "我们仅使用登录和记住偏好所必需的存储，不使用任何跟踪或营销 Cookies。"],
   "Entendido": ["Got it", "Entendido", "Compris", "Ho capito", "Verstanden", "知道了"],
+  // China: SMS y navegadores de allí
+  "SMS": ["SMS", "SMS", "SMS", "SMS", "SMS", "短信"],
+  "高德地图": ["Amap (高德地图)", "Amap (高德地图)", "Amap (高德地图)", "Amap (高德地图)", "Amap (高德地图)", "高德地图"],
+  "百度地图": ["Baidu Maps (百度地图)", "Baidu Maps (百度地图)", "Baidu Maps (百度地图)", "Baidu Maps (百度地图)", "Baidu Maps (百度地图)", "百度地图"],
 }

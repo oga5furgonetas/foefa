@@ -1,6 +1,8 @@
-import { createContext, useContext, useState, useCallback } from 'react'
+import { createContext, useContext, useState, useCallback, useEffect } from 'react'
+import { ZH } from './i18nZh'
+import { activarZh, desactivarZh, zhActivo } from './lib/traductorZh'
 
-export const LANGS = { es: 'Español', en: 'English', fr: 'Français', de: 'Deutsch', it: 'Italiano', pt: 'Português' }
+export const LANGS = { es: 'Español', en: 'English', fr: 'Français', de: 'Deutsch', it: 'Italiano', pt: 'Português', zh: '中文' }
 
 // Diccionarios. Clave → texto por idioma. Fallback a inglés y luego a la clave.
 const DICT = {
@@ -1582,7 +1584,7 @@ const DICT = {
 }
 
 // Locale BCP-47 por idioma (para toLocaleDateString / toLocaleTimeString)
-export const LANG_LOCALE = { es: 'es-ES', en: 'en-GB', fr: 'fr-FR', de: 'de-DE', it: 'it-IT', pt: 'pt-PT' }
+export const LANG_LOCALE = { es: 'es-ES', en: 'en-GB', fr: 'fr-FR', de: 'de-DE', it: 'it-IT', pt: 'pt-PT', zh: 'zh-CN' }
 
 const LangCtx = createContext({ lang: 'es', setLang: () => {}, t: (k) => k })
 
@@ -1596,9 +1598,18 @@ function detect() {
 export function LangProvider({ children }) {
   const [lang, setLangState] = useState(detect)
   const setLang = useCallback((l) => { localStorage.setItem('flota_lang', l); setLangState(l) }, [])
+  // En chino, además, el traductor de las frases escritas tal cual en las
+  // pantallas. Al salir del chino se recarga: los textos ya cambiados no
+  // tienen vuelta atrás sin re-pintar todo.
+  useEffect(() => {
+    if (lang === 'zh') { activarZh(); return }
+    if (zhActivo()) { desactivarZh(); window.location.reload() }
+  }, [lang])
   const t = useCallback((key) => {
     const e = DICT[key]
     if (!e) return key
+    // El chino va en su propio fichero (i18nZh.js) para no tocar 1.400 líneas.
+    if (lang === 'zh') return ZH[key] || e.en || key
     return e[lang] || e.en || key
   }, [lang])
   return <LangCtx.Provider value={{ lang, setLang, t }}>{children}</LangCtx.Provider>

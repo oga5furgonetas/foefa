@@ -51,7 +51,7 @@ const horaMas = (min) => {
   return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`
 }
 
-export default function Navegacion({ parada, numero, quedan, onSalir, onEntregar, onNoEntregar, enlaceFuera }) {
+export default function Navegacion({ parada, numero, quedan, onSalir, onEntregar, onNoEntregar, enlaceFuera, nombreFuera = 'Google Maps' }) {
   useIdioma()
   const [pos, setPos] = useState(null)          // {p:[lat,lng], rumbo}
   const [errPos, setErrPos] = useState('')
@@ -260,7 +260,7 @@ export default function Navegacion({ parada, numero, quedan, onSalir, onEntregar
               {parada.telefono
                 ? <a href={`tel:${parada.telefono}`} className="flex items-center justify-center gap-1 rounded-xl border border-dark-700 py-2.5 text-dark-100"><Phone size={15} /> {tx('Llamar')}</a>
                 : <span className="flex items-center justify-center rounded-xl border border-dark-800 py-2.5 text-dark-600">{tx('Sin teléfono')}</span>}
-              <a href={enlaceFuera(parada)} target="_blank" rel="noreferrer" className="flex items-center justify-center gap-1 rounded-xl border border-dark-700 py-2.5 text-dark-100"><Navigation size={15} /> Google Maps</a>
+              <a href={enlaceFuera(parada)} target="_blank" rel="noreferrer" className="flex items-center justify-center gap-1 rounded-xl border border-dark-700 py-2.5 text-dark-100"><Navigation size={15} /> {nombreFuera}</a>
               <button onClick={() => { setLlegado(parada.id); if (navigator.vibrate) navigator.vibrate(60) }}
                 className="rounded-xl border border-emerald-600/50 py-2.5 font-semibold text-emerald-300">{tx('Ya he llegado')}</button>
             </div>

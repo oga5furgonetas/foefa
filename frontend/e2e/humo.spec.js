@@ -1967,3 +1967,45 @@ test.describe('Reparto · en México se cobra en pesos', () => {
     expect(fallos).toEqual([])
   })
 })
+
+test('Idiomas · el panel en chino: diccionario y frases fijas de las pantallas', async ({ page }) => {
+  const fallos = vigilar(page)
+  await simularApi(page, 'lleno')
+  await entrarComoAdmin(page)
+  await page.addInitScript(() => { localStorage.setItem('cookie_consent', '1'); localStorage.setItem('flota_lang', 'zh') })
+  await page.goto('/panel/vehiculos', { waitUntil: 'domcontentloaded' })
+  await expect(page.getByText('添加车辆').first()).toBeVisible()          // frase fija (traductorZh)
+  await page.goto('/panel/asignacion', { waitUntil: 'domcontentloaded' })
+  await expect(page.getByText('添加一行').first()).toBeVisible()          // t('asgn.add.row')
+  await expect(page.getByText('Añadir fila')).toHaveCount(0)
+  expect(fallos).toEqual([])
+})
+
+test.describe('Reparto · en China', () => {
+  test.use({ locale: 'zh-CN' })
+  test('navega con Amap/Baidu, avisa por SMS y cobra en yuanes', async ({ page }) => {
+    const fallos = vigilar(page)
+    const b64 = (o) => btoa(JSON.stringify(o)).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '')
+    const token = `${b64({ alg: 'HS256' })}.${b64({ sub: 'd1', role: 'driver', name: 'LI', exp: Math.floor(Date.now() / 1000) + 3600 })}.x`
+    await page.addInitScript((t) => {
+      localStorage.setItem('flota_driver_token', t)
+      localStorage.setItem('flota_driver', JSON.stringify({ id: 'd1', name: 'LI' }))
+      localStorage.setItem('cookie_consent', '1')
+      localStorage.setItem('ruta_nav2', 'google')            // lo de otro país no vale aquí
+    }, token)
+    await simularApi(page, 'vacio')
+    await page.route(/\/api\/reparto\/mi-ruta$/, (r) => r.fulfill({ json: {
+      activo: true, empresa: '', fecha: '2026-10-04', jornada: {}, aviso_aceptado: true, pais: 'cn', prefijo: '86',
+      pedidos: [{ id: 'p1', cliente: '王记超市', direccion: '上海市黄浦区南京东路 100 号', telefono: '138 0013 8000', estado: 'pendiente', bultos: 1, orden: 1, cobrar: 88, lat: 31.2397, lng: 121.4998 }] } }))
+    await page.goto('/conductor?vista=ruta', { waitUntil: 'domcontentloaded' })
+    const sel = page.getByLabel('导航应用')
+    await expect(sel).toHaveValue('app')
+    await expect(sel.locator('option')).toHaveText(['本应用', '高德地图', '百度地图'])
+    await sel.selectOption('amap')
+    await expect(page.getByRole('link', { name: /出发/ }).first()).toHaveAttribute('href', /uri\.amap\.com\/navigation\?to=121\.4998,31\.2397,.*coordinate=wgs84/)
+    await expect(page.getByRole('link', { name: /短信/ })).toHaveAttribute('href', /^sms:13800138000\?&body=/)
+    await expect(page.getByRole('link', { name: /WhatsApp/ })).toHaveCount(0)
+    await expect(page.getByText(/代收.*¥88\.00/).first()).toBeVisible()
+    expect(fallos).toEqual([])
+  })
+})
