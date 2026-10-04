@@ -47970,7 +47970,12 @@ def _play_credencial() -> Optional[dict]:
 
 
 def _play_listo() -> bool:
-    return _play_credencial() is not None
+    """Cobrar con Google Play: hace falta la credencial Y el interruptor
+    `PLAY_COBRO_ACTIVO=1`. El interruptor existe porque, si se enciende antes
+    de que la app con cobro (1.0.2) esté en Play y de que Google active los
+    permisos de la cuenta de servicio, quien se da de alta desde la app se
+    quedaría sin poder pagar ni usarla."""
+    return (os.environ.get("PLAY_COBRO_ACTIVO", "").strip() == "1") and _play_credencial() is not None
 
 
 def _play_cuenta_org(org_id: str) -> str:

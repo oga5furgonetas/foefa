@@ -49,6 +49,7 @@ def base(monkeypatch):
         return None
     monkeypatch.setattr(server, "_audit", audit)
     monkeypatch.setenv("GOOGLE_PLAY_CUENTA_SERVICIO", json.dumps({"client_email": "x@y.iam.gserviceaccount.com", "private_key": "k"}))
+    monkeypatch.setenv("PLAY_COBRO_ACTIVO", "1")
     monkeypatch.delenv("STRIPE_SECRET_KEY", raising=False)
     llamadas, respuestas = [], {}
 
@@ -191,3 +192,8 @@ async def test_la_firma_con_la_clave_de_google_funciona(monkeypatch):
     assert reclamos["iss"] == "sa@p.iam.gserviceaccount.com" and reclamos["scope"].endswith("/androidpublisher")
     assert await server._play_acceso() == "ya29.x" and len(vistos) == 1   # se reutiliza
     server._PLAY_TOKEN.update({"valor": None, "caduca": 0})
+
+
+def test_sin_el_interruptor_no_se_cobra_con_play(base, monkeypatch):
+    monkeypatch.setenv("PLAY_COBRO_ACTIVO", "0")
+    assert not server._play_listo() and not server._falta_tarjeta(base.o1)
