@@ -1372,7 +1372,8 @@ test('App · sin sesión arranca en Empezar: crear cuenta, entrar y probar a la 
   await expect(page).toHaveURL(/\/empezar/)
   await expect(page.getByRole('heading', { name: 'Tu ruta de reparto, ordenada sola.' })).toBeVisible()
   await expect(page.getByRole('link', { name: /Ya tengo cuenta/ })).toHaveAttribute('href', '/panel/login')
-  await expect(page.getByRole('button', { name: 'Probar sin cuenta' })).toBeVisible()
+  // Crear cuenta es gratis: aquí no hay «probar sin cuenta» (sería una incongruencia).
+  await expect(page.getByRole('button', { name: 'Probar sin cuenta' })).toHaveCount(0)
   // Lo de empresas, plegado hasta que se pide.
   await expect(page.getByRole('link', { name: /Gestiono una empresa/ })).toHaveCount(0)
   await page.getByRole('button', { name: 'Soy de una empresa' }).click()

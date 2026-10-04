@@ -4,6 +4,7 @@ import { API_BASE, DRIVER_TOKEN_KEY } from '../services/api'
 import { MARCA } from '../marca'
 import { tx, useIdioma, IDIOMAS, cambiarIdioma, idioma, txError } from '../lib/idioma'
 import { medirAccion } from '../lib/analitica'
+import { evento } from '../lib/metaPixel'
 
 /* ── LA PÁGINA DEL ANUNCIO DE REPARTIDORES (04-10-2026) ──────────────────────
    Medido: de 410 personas que llegaron del anuncio al formulario de alta, 0
@@ -30,6 +31,7 @@ export default function Repartidores() {
 
   async function probar() {
     medirAccion('rep_probar')
+    evento('Lead', { content_name: 'probar_demo' })   // intención: la señal con la que Meta optimiza los anuncios
     setOcupado(true); setErr('')
     try {
       const r = await fetch(`${API_BASE}/auth/demo-reparto`, {
@@ -98,7 +100,7 @@ export default function Repartidores() {
             <li className="flex gap-2"><Check size={16} className="mt-0.5 shrink-0 text-emerald-400" /> {tx('Cancelas cuando quieras desde la app')}</li>
             <li className="flex gap-2"><Check size={16} className="mt-0.5 shrink-0 text-emerald-400" /> {tx('Sin tarjeta: la prueba empieza ya y hoy no pagas nada')}</li>
           </ul>
-          <a href="/registro?sector=autonomo&plan=autonomo" onClick={() => medirAccion('rep_alta')}
+          <a href="/registro?sector=autonomo&plan=autonomo" onClick={() => { medirAccion('rep_alta'); evento('Lead', { content_name: 'crear_cuenta' }) }}
             className="mt-4 flex w-full items-center justify-center gap-2 rounded-2xl border border-brand-400/50 py-3.5 text-[15.5px] font-bold text-brand-200">
             {tx('Crear mi cuenta')} <ArrowRight size={17} />
           </a>

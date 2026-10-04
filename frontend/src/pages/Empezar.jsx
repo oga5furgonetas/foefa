@@ -1,8 +1,9 @@
 import { useState } from 'react'
-import { Zap, Users, Building2, Loader2, ArrowRight, ChevronDown, Check } from 'lucide-react'
-import { API_BASE, DRIVER_TOKEN_KEY } from '../services/api'
+import { Zap, Users, Building2, ArrowRight, ChevronDown, Check } from 'lucide-react'
 import { MARCA } from '../marca'
-import { tx, useIdioma, IDIOMAS, cambiarIdioma, txError } from '../lib/idioma'
+import { tx, useIdioma, IDIOMAS, cambiarIdioma } from '../lib/idioma'
+import { medirAccion } from '../lib/analitica'
+import { evento } from '../lib/metaPixel'
 
 /* ── LA PRIMERA PANTALLA DE LA APP (04-10-2026) ──────────────────────────────
    Quien se baja la app de Play Store es, casi siempre, una persona que
@@ -23,24 +24,7 @@ const OPCIONES_EMPRESA = [
 
 export default function Empezar() {
   const lang = useIdioma()
-  const [ocupado, setOcupado] = useState(false)
-  const [err, setErr] = useState('')
   const [empresa, setEmpresa] = useState(false)
-
-  // «Probar sin cuenta»: una ruta vacía y propia, que se borra al día siguiente.
-  async function probar() {
-    setOcupado(true); setErr('')
-    try {
-      const r = await fetch(`${API_BASE}/auth/demo-reparto`, {
-        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ rol: 'autonomo' }),
-      })
-      const j = await r.json()
-      if (!r.ok || !j.access_token) throw new Error(txError(j, 'No se pudo abrir la prueba'))
-      localStorage.setItem(DRIVER_TOKEN_KEY, j.access_token)
-      localStorage.setItem('flota_driver', JSON.stringify(j.driver))
-      window.location.href = '/conductor?vista=ruta'
-    } catch (e) { setErr(e.message || tx('Sin conexión')); setOcupado(false) }
-  }
 
   return (
     <div className="flex min-h-screen flex-col bg-dark-950 px-5 py-8 text-dark-100">
@@ -57,7 +41,7 @@ export default function Empezar() {
         <h1 className="mt-2 font-display text-[32px] font-extrabold leading-[1.05] text-dark-50">{tx('Tu ruta de reparto, ordenada sola.')}</h1>
         <p className="mt-3 text-[15px] leading-snug text-dark-300">{tx('Haz una foto a la etiqueta o escanea el paquete: la app ordena las paradas por tiempo y te lleva con voz hasta cada puerta.')}</p>
 
-        <a href="/registro?sector=autonomo&plan=autonomo"
+        <a href="/registro?sector=autonomo&plan=autonomo" onClick={() => { medirAccion('rep_alta'); evento('Lead', { content_name: 'crear_cuenta_app' }) }}
           className="mt-6 flex w-full items-center justify-center gap-2 rounded-2xl bg-gradient-to-br from-brand-400 to-brand-600 py-4 text-[17px] font-extrabold text-[#04121a] shadow-[0_12px_30px_-10px_rgba(20,231,216,.6)] active:scale-[.99]">
           {tx('Crear mi cuenta gratis')} <ArrowRight size={18} />
         </a>
@@ -71,12 +55,6 @@ export default function Empezar() {
           {tx('Ya tengo cuenta')} · {tx('Entrar')}
         </a>
 
-        <button onClick={probar} disabled={ocupado}
-          className="mt-3 inline-flex w-full items-center justify-center gap-2 rounded-2xl border border-dashed border-dark-600 py-3.5 text-[14px] font-semibold text-dark-200 disabled:opacity-50">
-          {ocupado && <Loader2 size={15} className="animate-spin" />} {tx('Probar sin cuenta')}
-        </button>
-        <p className="mt-1.5 text-center text-[11.5px] text-dark-500">{tx('Una ruta de prueba, solo tuya, que se borra mañana.')}</p>
-        {err && <p className="mt-3 text-center text-[13px] text-red-300">{err}</p>}
 
         <div className="mt-auto pt-8">
           <button onClick={() => setEmpresa((v) => !v)} aria-expanded={empresa}
