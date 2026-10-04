@@ -1874,3 +1874,23 @@ test('App · dentro de la app de Play no se ofrece instalar', async ({ page }) =
   await expect(page.getByRole('button', { name: 'Ruta', exact: false }).first()).toBeVisible()
   await expect(page.getByLabel('Instalar la app')).toHaveCount(0)
 })
+
+test.describe('Idiomas · la app de reparto sigue el idioma del móvil', () => {
+  test.use({ locale: 'zh-CN' })
+  test('móvil en chino: Empezar y la ruta salen en chino, y se puede volver al español', async ({ page }) => {
+    const fallos = vigilar(page)
+    await page.goto('/empezar', { waitUntil: 'domcontentloaded' })
+    await expect(page.getByRole('heading', { name: '你想做什么？' })).toBeVisible()
+    await expect(page.getByRole('link', { name: /我自己送货/ })).toBeVisible()
+    await page.getByRole('combobox', { name: /Idioma/ }).selectOption('es')
+    await expect(page.getByRole('heading', { name: '¿Qué vas a hacer?' })).toBeVisible()
+    await page.getByRole('combobox', { name: /Idioma/ }).selectOption('zh')
+    await entrarRepartidor(page, { status: 'active', plan: 'autonomo', days_left: 0 })
+    await page.goto('/ruta', { waitUntil: 'domcontentloaded' })
+    await expect(page.getByRole('button', { name: '今天', exact: true })).toBeVisible()
+    await expect(page.getByRole('button', { name: '设置', exact: true })).toBeVisible()
+    await page.getByRole('button', { name: '账号', exact: true }).click()
+    await expect(page.getByText('你的账号')).toBeVisible()
+    expect(fallos).toEqual([])
+  })
+})

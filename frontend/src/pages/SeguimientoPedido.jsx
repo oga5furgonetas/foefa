@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { useParams } from 'react-router-dom'
 import { Loader2, Package, CheckCircle2, Clock, XCircle, Truck } from 'lucide-react'
 import { API_BASE } from '../services/api'
+import { tx } from '../lib/idioma'
 
 /* ── «¿CUÁNDO LLEGA MI PEDIDO?» ─────────────────────────────────────────────
    El enlace que el repartidor manda por WhatsApp. Dice el estado, la hora
@@ -27,9 +28,9 @@ export default function SeguimientoPedido() {
       .then(async (r) => {
         const j = await r.json().catch(() => ({}))
         if (!vivo) return
-        if (r.ok) { setD(j); setErr('') } else setErr(j.detail || 'Este enlace no es válido.')
+        if (r.ok) { setD(j); setErr('') } else setErr(j.detail || tx('Este enlace no es válido.'))
       })
-      .catch(() => vivo && setErr('Sin conexión. Inténtalo de nuevo en un momento.'))
+      .catch(() => vivo && setErr(tx('Sin conexión. Inténtalo de nuevo en un momento.')))
     leer()
     const t = setInterval(leer, 60000)
     return () => { vivo = false; clearInterval(t) }
@@ -48,21 +49,20 @@ export default function SeguimientoPedido() {
             {d.empresa && <p className="text-[13px] font-semibold uppercase tracking-wider text-dark-400">{d.empresa}</p>}
             <e.icono size={40} className={`mx-auto mt-4 ${e.color}`} />
             <h1 className="mt-3 text-[22px] font-bold text-dark-50">
-              {recogida && e.texto === 'Entregado' ? 'Recogido' : recogida && e.texto === 'En reparto' ? 'Recogida en camino' : e.texto}
+              {tx(recogida && e.texto === 'Entregado' ? 'Recogido' : recogida && e.texto === 'En reparto' ? 'Recogida en camino' : e.texto)}
             </h1>
             {(d.estado === 'pendiente' || d.estado === 'en_ruta') && (
               <div className="mt-4 space-y-2 text-[15px]">
-                {d.eta && <p className="flex items-center justify-center gap-2"><Clock size={16} className="text-brand-300" /> Llegada aproximada: <b className="text-dark-50">{d.eta}</b></p>}
-                {d.paradas_antes > 0 && <p className="text-dark-300">Quedan {d.paradas_antes} parada{d.paradas_antes > 1 ? 's' : ''} antes de la tuya.</p>}
-                {d.paradas_antes === 0 && d.eta && <p className="font-semibold text-emerald-300">¡Eres la siguiente parada!</p>}
-                {d.franja && <p className="text-[13px] text-dark-400">Tu horario: de {d.franja[0]} a {d.franja[1]}</p>}
-                {!d.eta && <p className="text-dark-400">Aún no tiene hora: el repartidor todavía está preparando la ruta.</p>}
+                {d.eta && <p className="flex items-center justify-center gap-2"><Clock size={16} className="text-brand-300" /> {tx('Llegada aproximada:')} <b className="text-dark-50">{d.eta}</b></p>}
+                {d.paradas_antes > 0 && <p className="text-dark-300">{d.paradas_antes > 1 ? tx('Quedan {n} paradas antes de la tuya.', { n: d.paradas_antes }) : tx('Queda 1 parada antes de la tuya.')}</p>}
+                {d.paradas_antes === 0 && d.eta && <p className="font-semibold text-emerald-300">{tx('¡Eres la siguiente parada!')}</p>}
+                {d.franja && <p className="text-[13px] text-dark-400">{tx('Tu horario: de {a} a {b}', { a: d.franja[0], b: d.franja[1] })}</p>}
+                {!d.eta && <p className="text-dark-400">{tx('Aún no tiene hora: el repartidor todavía está preparando la ruta.')}</p>}
               </div>
             )}
-            {d.estado === 'fallido' && <p className="mt-3 text-[14px] text-dark-300">La tienda se pondrá en contacto contigo para volver a intentarlo.</p>}
+            {d.estado === 'fallido' && <p className="mt-3 text-[14px] text-dark-300">{tx('La tienda se pondrá en contacto contigo para volver a intentarlo.')}</p>}
             <p className="mt-6 text-[11px] leading-snug text-dark-500">
-              La hora es una estimación y puede variar con el tráfico. Esta página no muestra datos personales ni la
-              ubicación del repartidor, y deja de funcionar al día siguiente.
+              {tx('La hora es una estimación y puede variar con el tráfico. Esta página no muestra datos personales ni la ubicación del repartidor, y deja de funcionar al día siguiente.')}
             </p>
           </>
         )}

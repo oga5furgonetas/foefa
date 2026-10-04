@@ -72,8 +72,51 @@ export function textoDistancia(m) {
 }
 
 // Lo mismo pero para decirlo en voz alta.
-export function distanciaHablada(m) {
-  if (m < 1000) return `${Math.max(10, Math.round(m / 10) * 10)} metros`
+const sinTraducir = (t, v) => t.replace(/\{(\w+)\}/g, (x, k) => (v && v[k] != null ? String(v[k]) : x))
+export function distanciaHablada(m, tx = sinTraducir) {
+  if (m < 1000) return tx('{n} metros', { n: Math.max(10, Math.round(m / 10) * 10) })
   const km = Math.round(m / 100) / 10
-  return km === 1 ? '1 kilómetro' : `${String(km).replace('.', ',')} kilómetros`
+  return km === 1 ? tx('1 kilómetro') : tx('{n} kilómetros', { n: String(km).replace('.', ',') })
+}
+
+/* LA FRASE DE CADA MANIOBRA, EN EL IDIOMA DE LA APP. El servidor manda la
+   maniobra en bruto (tipo, modificador y salida de OSRM) y aquí se escribe;
+   si no viene (respuestas guardadas de antes), la frase del servidor. Misma
+   lógica que reparto.instruccion en el servidor. */
+const GIROS = {
+  uturn: 'Da la vuelta', 'sharp right': 'Gira cerrado a la derecha', right: 'Gira a la derecha',
+  'slight right': 'Ligeramente a la derecha', straight: 'Sigue recto', 'slight left': 'Ligeramente a la izquierda',
+  left: 'Gira a la izquierda', 'sharp left': 'Gira cerrado a la izquierda',
+}
+const ORDINALES = ['primera', 'segunda', 'tercera', 'cuarta', 'quinta', 'sexta', 'séptima', 'octava', 'novena', 'décima']
+
+export function textoPaso(paso, tx) {
+  const m = paso?.maniobra
+  if (!m || !m.tipo) return paso?.texto ? tx(paso.texto) : ''
+  const calle = (paso.calle || '').trim()
+  const por = (accion) => (calle ? tx('{accion} por {calle}', { accion, calle }) : accion)
+  const giro = tx(GIROS[m.mod] || 'Sigue')
+  switch (m.tipo) {
+    case 'hacia_parada': return tx('Ve hacia la parada')
+    case 'depart': return calle ? tx('Sal por {calle}', { calle }) : tx('Empieza la ruta')
+    case 'arrive': return tx('Has llegado')
+    case 'roundabout': case 'rotary':
+      return m.salida >= 1 && m.salida <= 10
+        ? por(tx('En la rotonda, toma la {n} salida', { n: tx(ORDINALES[m.salida - 1]) }))
+        : por(tx('Entra en la rotonda'))
+    case 'exit roundabout': case 'exit rotary': return por(tx('Sal de la rotonda'))
+    case 'roundabout turn': return por(tx('En la rotonda, {giro}', { giro: giro.charAt(0).toLowerCase() + giro.slice(1) }))
+    case 'new name': case 'continue':
+      if (!m.mod || m.mod === 'straight') return por(tx('Sigue recto'))
+      return por(giro)
+    case 'fork': {
+      const lado = m.mod.includes('right') ? tx('a la derecha') : m.mod.includes('left') ? tx('a la izquierda') : tx('recto')
+      return por(tx('En la bifurcación, mantente {lado}', { lado }))
+    }
+    case 'merge': return por(tx('Incorpórate'))
+    case 'on ramp': return por(tx('Toma la entrada'))
+    case 'off ramp': return por(tx('Toma la salida'))
+    case 'end of road': return por(tx('Al final de la calle, {giro}', { giro: giro.charAt(0).toLowerCase() + giro.slice(1) }))
+    default: return por(giro)
+  }
 }

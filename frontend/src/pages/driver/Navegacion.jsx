@@ -7,8 +7,9 @@ import {
 } from 'lucide-react'
 import { repNavegar } from '../../services/api'
 import {
-  prepararLinea, proyectar, situarPasos, proximoPaso, textoDistancia, distanciaHablada, metrosEntre, rumbo as rumboEntre,
+  prepararLinea, proyectar, situarPasos, proximoPaso, textoDistancia, distanciaHablada, metrosEntre, rumbo as rumboEntre, textoPaso,
 } from '../../lib/guia'
+import { tx, useIdioma, locale } from '../../lib/idioma'
 
 /* ── LA GUÍA DENTRO DE LA APP (04-10-2026) ───────────────────────────────────
    Dani: «yo quiero el navegador ya dentro, que coja la ruta y te vaya
@@ -36,8 +37,9 @@ function decir(texto) {
     if (!s || !texto) return
     s.cancel()
     const u = new SpeechSynthesisUtterance(texto)
-    u.lang = 'es-ES'
-    const v = s.getVoices().find((x) => (x.lang || '').toLowerCase().startsWith('es'))
+    u.lang = locale()
+    const base = locale().slice(0, 2).toLowerCase()
+    const v = s.getVoices().find((x) => (x.lang || '').toLowerCase().startsWith(base))
     if (v) u.voice = v
     s.speak(u)
   } catch { /* sin voz en este móvil: se sigue viendo */ }
@@ -49,6 +51,7 @@ const horaMas = (min) => {
 }
 
 export default function Navegacion({ parada, numero, quedan, onSalir, onEntregar, onNoEntregar, enlaceFuera }) {
+  useIdioma()
   const [pos, setPos] = useState(null)          // {p:[lat,lng], rumbo}
   const [errPos, setErrPos] = useState('')
   const [guia, setGuia] = useState(null)        // {id, prep, pasos, metros, minutos, fuente}
@@ -67,7 +70,7 @@ export default function Navegacion({ parada, numero, quedan, onSalir, onEntregar
 
   // La posición, mientras esta pantalla está abierta. Y la pantalla encendida.
   useEffect(() => {
-    if (!('geolocation' in navigator)) { setErrPos('Este móvil no da la ubicación.'); return undefined }
+    if (!('geolocation' in navigator)) { setErrPos(tx('Este móvil no da la ubicación.')); return undefined }
     let anterior = null
     let rumboUltimo = null
     const id = navigator.geolocation.watchPosition((g) => {
@@ -77,7 +80,7 @@ export default function Navegacion({ parada, numero, quedan, onSalir, onEntregar
       if (!anterior || metrosEntre(anterior, p) > 4) anterior = p
       setErrPos('')
       setPos({ p, rumbo: rumboUltimo })
-    }, (e) => setErrPos(e.code === 1 ? 'Dale permiso de ubicación a la app para que te guíe.' : 'No llega la ubicación del móvil.'),
+    }, (e) => setErrPos(e.code === 1 ? tx('Dale permiso de ubicación a la app para que te guíe.') : tx('No llega la ubicación del móvil.')),
     { enableHighAccuracy: true, maximumAge: 2000, timeout: 20000 })
     return () => navigator.geolocation.clearWatch(id)
   }, [])
@@ -99,10 +102,10 @@ export default function Navegacion({ parada, numero, quedan, onSalir, onEntregar
       setGuia({ id: p.id, prep, pasos: situarPasos(prep, data.pasos), metros: data.metros, minutos: data.minutos, fuente: data.fuente })
       setErrGuia('')
       fueraSeguidas.current = 0
-      if (!recalculo) habla(`Vamos a ${p.cliente || 'la siguiente parada'}. ${distanciaHablada(data.metros || 0)}.`)
-      else habla('Ruta recalculada.')
+      if (!recalculo) habla(`${tx('Vamos a {destino}.', { destino: p.cliente || tx('la siguiente parada') })} ${distanciaHablada(data.metros || 0, tx)}.`)
+      else habla(tx('Ruta recalculada.'))
     } catch (e) {
-      setErrGuia(e?.response?.data?.detail || 'No se pudo calcular la ruta')
+      setErrGuia(e?.response?.data?.detail || tx('No se pudo calcular la ruta'))
     } finally { setPidiendo(false) }
   }, [habla])
 
@@ -122,7 +125,7 @@ export default function Navegacion({ parada, numero, quedan, onSalir, onEntregar
     const { hecho, fuera } = proyectar(guia.prep, pos.p)
     if (llegado !== parada.id && (metrosEntre(pos.p, destino) < LLEGADA_M || (guia.prep.total - hecho < 25 && fuera < FUERA_M))) {
       setLlegado(parada.id)
-      habla(`Has llegado a ${parada.cliente || 'la parada'}.${parada.hueco ? ` Va ${parada.hueco.replace('·', '')}.` : ''}`)
+      habla(`${tx('Has llegado a {destino}.', { destino: parada.cliente || tx('la parada') })}${parada.hueco ? ` ${tx('Va {sitio}.', { sitio: tx(parada.hueco).replace('·', '') })}` : ''}`)
       if (navigator.vibrate) navigator.vibrate([80, 60, 80])
       return
     }
@@ -139,10 +142,11 @@ export default function Navegacion({ parada, numero, quedan, onSalir, onEntregar
     const clave = `${guia.id}:${i}`
     if (falta <= 400 && falta > 130 && !dichos.current.has(`${clave}:lejos`)) {
       dichos.current.add(`${clave}:lejos`)
-      habla(`En ${distanciaHablada(Math.round(falta / 50) * 50)}, ${paso.texto.charAt(0).toLowerCase()}${paso.texto.slice(1)}.`)
+      const frase = textoPaso(paso, tx)
+      habla(tx('En {distancia}, {accion}.', { distancia: distanciaHablada(Math.round(falta / 50) * 50, tx), accion: frase.charAt(0).toLowerCase() + frase.slice(1) }))
     } else if (falta <= 50 && !dichos.current.has(`${clave}:cerca`)) {
       dichos.current.add(`${clave}:cerca`)
-      habla(`${paso.texto}.`)
+      habla(`${textoPaso(paso, tx)}.`)
     }
   }, [pos, parada, guia, llegado, pidiendo, habla, pedirGuia])
 
@@ -160,7 +164,7 @@ export default function Navegacion({ parada, numero, quedan, onSalir, onEntregar
   const flecha = guia?.fuente === 'linea_recta' && pos && parada ? rumboEntre(pos.p, [parada.lat, parada.lng]) : null
 
   return (
-    <div className="fixed inset-0 z-[45] bg-dark-950" role="dialog" aria-modal="true" aria-label="Navegación">
+    <div className="fixed inset-0 z-[45] bg-dark-950" role="dialog" aria-modal="true" aria-label={tx('Navegación')}>
       <MapaGuia linea={lista ? guia.prep.linea : null} yo={pos?.p} rumbo={pos?.rumbo}
         destino={parada ? [parada.lat, parada.lng] : null} numero={numero} seguir={seguir} onMover={() => setSeguir(false)} />
 
@@ -169,13 +173,13 @@ export default function Navegacion({ parada, numero, quedan, onSalir, onEntregar
         {!parada ? null : errPos ? (
           <Banda tono="ambar"><MapPin size={30} /><span className="text-[16px] font-bold leading-snug">{errPos}</span></Banda>
         ) : !lista ? (
-          <Banda><Loader2 size={30} className="animate-spin" /><span className="text-[17px] font-bold">{errGuia || 'Calculando la ruta…'}</span></Banda>
+          <Banda><Loader2 size={30} className="animate-spin" /><span className="text-[17px] font-bold">{errGuia || tx('Calculando la ruta…')}</span></Banda>
         ) : haLlegado ? (
-          <Banda><Flag size={34} /><span className="text-[20px] font-bold">Has llegado</span></Banda>
+          <Banda><Flag size={34} /><span className="text-[20px] font-bold">{tx('Has llegado')}</span></Banda>
         ) : guia.fuente === 'linea_recta' ? (
           <Banda tono="ambar">
             <Navigation size={34} style={{ transform: `rotate(${flecha ?? 0}deg)` }} />
-            <span><b className="block text-[24px] leading-none">{textoDistancia(restante)}</b><span className="text-[14px]">Sin indicaciones ahora: sigue la flecha hasta la parada</span></span>
+            <span><b className="block text-[24px] leading-none">{textoDistancia(restante)}</b><span className="text-[14px]">{tx('Sin indicaciones ahora: sigue la flecha hasta la parada')}</span></span>
           </Banda>
         ) : (
           <div>
@@ -183,25 +187,25 @@ export default function Navegacion({ parada, numero, quedan, onSalir, onEntregar
               <Icono size={44} strokeWidth={2.6} className="shrink-0" />
               <span className="min-w-0">
                 <b className="block text-[30px] leading-none tracking-tight" data-testid="guia-distancia">{textoDistancia(falta)}</b>
-                <span className="mt-1 block text-[16px] font-semibold leading-snug" data-testid="guia-texto">{paso?.icono === 'llegada' ? 'Llegas a tu parada' : paso?.texto}</span>
+                <span className="mt-1 block text-[16px] font-semibold leading-snug" data-testid="guia-texto">{paso?.icono === 'llegada' ? tx('Llegas a tu parada') : textoPaso(paso, tx)}</span>
               </span>
             </Banda>
             {luego && luego.icono !== 'llegada' && (
               <div className="ml-3 inline-flex items-center gap-1.5 rounded-b-xl bg-emerald-900/95 px-3 py-1.5 text-[13px] text-emerald-50">
-                Luego {(() => { const I = ICONOS[luego.icono] || ArrowUp; return <I size={15} /> })()} {luego.texto}
+                {tx('Luego')} {(() => { const I = ICONOS[luego.icono] || ArrowUp; return <I size={15} /> })()} {textoPaso(luego, tx)}
               </div>
             )}
           </div>
         )}
-        {pidiendo && lista && <p className="mt-2 inline-block rounded-full bg-dark-900/90 px-3 py-1 text-[12px] text-dark-200">Recalculando…</p>}
+        {pidiendo && lista && <p className="mt-2 inline-block rounded-full bg-dark-900/90 px-3 py-1 text-[12px] text-dark-200">{tx('Recalculando…')}</p>}
       </div>
 
       {/* BOTONES DEL MAPA */}
       <div className="absolute right-3 top-1/2 flex -translate-y-1/2 flex-col gap-2">
-        <button onClick={() => setVoz((v) => !v)} aria-label={voz ? 'Silenciar la voz' : 'Activar la voz'}
+        <button onClick={() => setVoz((v) => !v)} aria-label={voz ? tx('Silenciar la voz') : tx('Activar la voz')}
           className="rounded-full border border-dark-700 bg-dark-900/95 p-3 text-dark-100 shadow-lg">{voz ? <Volume2 size={20} /> : <VolumeX size={20} />}</button>
         {!seguir && (
-          <button onClick={() => setSeguir(true)} aria-label="Centrar en mí"
+          <button onClick={() => setSeguir(true)} aria-label={tx('Centrar en mí')}
             className="rounded-full border border-dark-700 bg-dark-900/95 p-3 text-sky-300 shadow-lg"><LocateFixed size={20} /></button>
         )}
       </div>
@@ -210,28 +214,28 @@ export default function Navegacion({ parada, numero, quedan, onSalir, onEntregar
       <div className="absolute inset-x-0 bottom-0 rounded-t-3xl border-t border-dark-700 bg-dark-950/[.97] p-4 pb-6 shadow-2xl">
         {!parada ? (
           <div className="text-center">
-            <p className="text-[20px] font-bold text-dark-50">No quedan paradas</p>
-            <p className="mt-1 text-[13px] text-dark-400">Ruta terminada. Buen trabajo.</p>
-            <button onClick={onSalir} className="mt-4 w-full rounded-xl bg-brand-500 py-3.5 text-[15px] font-bold text-brand-tinta">Volver a la ruta</button>
+            <p className="text-[20px] font-bold text-dark-50">{tx('No quedan paradas')}</p>
+            <p className="mt-1 text-[13px] text-dark-400">{tx('Ruta terminada. Buen trabajo.')}</p>
+            <button onClick={onSalir} className="mt-4 w-full rounded-xl bg-brand-500 py-3.5 text-[15px] font-bold text-brand-tinta">{tx('Volver a la ruta')}</button>
           </div>
         ) : haLlegado ? (
           <>
-            <p className="text-[12px] font-bold uppercase tracking-wider text-emerald-300">Parada {numero}{quedan > 1 ? ` · quedan ${quedan}` : ''}</p>
-            <p className="text-[20px] font-bold leading-tight text-dark-50">{parada.cliente || 'Cliente'}</p>
+            <p className="text-[12px] font-bold uppercase tracking-wider text-emerald-300">{tx('Parada {n}', { n: numero })}{quedan > 1 ? ` · ${tx('quedan {n}', { n: quedan })}` : ''}</p>
+            <p className="text-[20px] font-bold leading-tight text-dark-50">{parada.cliente || tx('Cliente')}</p>
             <p className="text-[14px] text-dark-300">{parada.direccion}</p>
             <div className="mt-2 flex flex-wrap gap-1.5 text-[12px]">
-              {parada.hueco && <span className="inline-flex items-center gap-1 rounded-lg bg-sky-500/20 px-2 py-1 font-bold text-sky-200"><Package size={13} /> Búscalo: {parada.hueco}</span>}
-              {parada.cobrar > 0 && <span className="rounded-lg bg-emerald-500/15 px-2 py-1 font-bold text-emerald-300">Cobrar {Number(parada.cobrar).toFixed(2).replace('.', ',')} €</span>}
-              {parada.bultos > 1 && <span className="rounded-lg bg-dark-800 px-2 py-1 text-dark-200">{parada.bultos} bultos</span>}
+              {parada.hueco && <span className="inline-flex items-center gap-1 rounded-lg bg-sky-500/20 px-2 py-1 font-bold text-sky-200"><Package size={13} /> {tx('Búscalo: {sitio}', { sitio: tx(parada.hueco) })}</span>}
+              {parada.cobrar > 0 && <span className="rounded-lg bg-emerald-500/15 px-2 py-1 font-bold text-emerald-300">{tx('Cobrar')} {Number(parada.cobrar).toFixed(2).replace('.', ',')} €</span>}
+              {parada.bultos > 1 && <span className="rounded-lg bg-dark-800 px-2 py-1 text-dark-200">{tx('{n} bultos', { n: parada.bultos })}</span>}
             </div>
             {(parada.notas || parada.contenido) && <p className="mt-1.5 text-[13px] text-dark-400">{[parada.contenido, parada.notas].filter(Boolean).join(' · ')}</p>}
             <div className="mt-3 grid grid-cols-[auto_1fr_2fr] gap-2">
               {parada.telefono
-                ? <a href={`tel:${parada.telefono}`} aria-label="Llamar" className="flex items-center justify-center rounded-xl border border-dark-600 px-4 text-dark-100"><Phone size={18} /></a>
+                ? <a href={`tel:${parada.telefono}`} aria-label={tx('Llamar')} className="flex items-center justify-center rounded-xl border border-dark-600 px-4 text-dark-100"><Phone size={18} /></a>
                 : <span />}
-              <button onClick={() => onNoEntregar(parada)} className="rounded-xl border border-red-500/40 py-3.5 text-[14px] font-semibold text-red-300">No entregado</button>
+              <button onClick={() => onNoEntregar(parada)} className="rounded-xl border border-red-500/40 py-3.5 text-[14px] font-semibold text-red-300">{tx('No entregado')}</button>
               <button onClick={() => onEntregar(parada)} className="flex items-center justify-center gap-1.5 rounded-xl bg-emerald-600 py-3.5 text-[16px] font-bold text-white">
-                <Check size={18} /> {parada.tipo === 'recogida' ? 'Recogido' : 'Entregado'}
+                <Check size={18} /> {parada.tipo === 'recogida' ? tx('Recogido') : tx('Entregado')}
               </button>
             </div>
           </>
@@ -240,26 +244,26 @@ export default function Navegacion({ parada, numero, quedan, onSalir, onEntregar
             <div className="flex items-start gap-3">
               <span className="flex h-9 min-w-9 items-center justify-center rounded-full bg-brand-500 px-1.5 text-[15px] font-bold text-brand-tinta">{numero}</span>
               <div className="min-w-0 flex-1">
-                <p className="truncate text-[17px] font-bold text-dark-50">{parada.cliente || 'Cliente'}</p>
+                <p className="truncate text-[17px] font-bold text-dark-50">{parada.cliente || tx('Cliente')}</p>
                 <p className="truncate text-[13px] text-dark-300">{parada.direccion}</p>
                 {lista && (
                   <p className="mt-0.5 text-[13px] text-dark-200">
-                    {minRest != null && <>Llegas <b className="text-emerald-300">≈ {horaMas(minRest)}</b> · </>}{textoDistancia(restante)}
+                    {minRest != null && <>{tx('Llegas')} <b className="text-emerald-300">≈ {horaMas(minRest)}</b> · </>}{textoDistancia(restante)}
                     {minRest != null && <> · {Math.max(1, Math.round(minRest))} min</>}
                   </p>
                 )}
               </div>
-              <button onClick={onSalir} aria-label="Salir de la navegación" className="rounded-full border border-dark-700 p-2.5 text-dark-300"><X size={18} /></button>
+              <button onClick={onSalir} aria-label={tx('Salir de la navegación')} className="rounded-full border border-dark-700 p-2.5 text-dark-300"><X size={18} /></button>
             </div>
             <div className="mt-3 grid grid-cols-3 gap-2 text-[12px]">
               {parada.telefono
-                ? <a href={`tel:${parada.telefono}`} className="flex items-center justify-center gap-1 rounded-xl border border-dark-700 py-2.5 text-dark-100"><Phone size={15} /> Llamar</a>
-                : <span className="flex items-center justify-center rounded-xl border border-dark-800 py-2.5 text-dark-600">Sin teléfono</span>}
+                ? <a href={`tel:${parada.telefono}`} className="flex items-center justify-center gap-1 rounded-xl border border-dark-700 py-2.5 text-dark-100"><Phone size={15} /> {tx('Llamar')}</a>
+                : <span className="flex items-center justify-center rounded-xl border border-dark-800 py-2.5 text-dark-600">{tx('Sin teléfono')}</span>}
               <a href={enlaceFuera(parada)} target="_blank" rel="noreferrer" className="flex items-center justify-center gap-1 rounded-xl border border-dark-700 py-2.5 text-dark-100"><Navigation size={15} /> Google Maps</a>
               <button onClick={() => { setLlegado(parada.id); if (navigator.vibrate) navigator.vibrate(60) }}
-                className="rounded-xl border border-emerald-600/50 py-2.5 font-semibold text-emerald-300">Ya he llegado</button>
+                className="rounded-xl border border-emerald-600/50 py-2.5 font-semibold text-emerald-300">{tx('Ya he llegado')}</button>
             </div>
-            <p className="mt-2 text-center text-[10.5px] text-dark-500">Tu ubicación se usa para guiarte y no se guarda.</p>
+            <p className="mt-2 text-center text-[10.5px] text-dark-500">{tx('Tu ubicación se usa para guiarte y no se guarda.')}</p>
           </>
         )}
       </div>

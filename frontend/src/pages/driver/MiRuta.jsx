@@ -12,6 +12,7 @@ import { lista } from '../../lib/lista'
 import { compressImage } from '../../lib/compressImage'
 import { origen } from '../../marca'
 import { leerTicketEnMovil } from '../../lib/leerTicket'
+import { tx, useIdioma, locale } from '../../lib/idioma'
 
 /* ── MI RUTA ────────────────────────────────────────────────────────────────
    Lo que hace el repartidor al cargar: escanea el código de la caja. Si el
@@ -53,11 +54,11 @@ export function movilWhatsApp(tel, pais = 'es', prefijo = '34') {
 /* El mensaje lleva la hora estimada y el enlace de seguimiento (sin datos
    personales). Sin enlace, el mensaje de siempre. */
 function mensaje(p, empresa) {
-  const quien = empresa ? `el repartidor de ${empresa}` : 'el repartidor'
-  const que = p.tipo === 'recogida' ? 'a hacer la recogida' : 'con su pedido'
-  const cuando = p.eta ? `, llegada aproximada a las ${p.eta}` : ''
-  const enlace = p.seguimiento ? ` Puede seguirlo aquí: ${origen()}/s/${p.seguimiento}` : ''
-  return `Hola, soy ${quien}. Voy de camino ${que}${cuando}.${enlace}`
+  const quien = empresa ? tx('el repartidor de {empresa}', { empresa }) : tx('el repartidor')
+  const que = p.tipo === 'recogida' ? tx('a hacer la recogida') : tx('con su pedido')
+  const cuando = p.eta ? tx(', llegada aproximada a las {hora}', { hora: p.eta }) : ''
+  const enlace = p.seguimiento ? ` ${tx('Puede seguirlo aquí:')} ${origen()}/s/${p.seguimiento}` : ''
+  return `${tx('Hola, soy {quien}. Voy de camino {que}', { quien, que })}${cuando}.${enlace}`
 }
 const euros = (n) => `${Number(n || 0).toFixed(2).replace('.', ',')} €`
 
@@ -122,6 +123,7 @@ const porOrden = (a, b) => (a.orden ?? 1e9) - (b.orden ?? 1e9)
 const Reconocedor = typeof window !== 'undefined' ? (window.SpeechRecognition || window.webkitSpeechRecognition) : null
 
 export default function MiRuta({ onBack, embebido = false }) {
+  useIdioma()
   const [ruta, setRuta] = useState(null)
   const [err, setErr] = useState('')
   const [aviso, setAviso] = useState('')
@@ -179,7 +181,7 @@ export default function MiRuta({ onBack, embebido = false }) {
 
   const cargar = useCallback(() => {
     repMiRuta().then(({ data }) => setRuta(data))
-      .catch((e) => setErr(e?.response?.data?.detail || 'No se pudo cargar tu ruta'))
+      .catch((e) => setErr(e?.response?.data?.detail || tx('No se pudo cargar tu ruta')))
   }, [])
   useEffect(cargar, [cargar])
 
@@ -206,7 +208,7 @@ export default function MiRuta({ onBack, embebido = false }) {
       cargar()
     } catch (e) {
       if (e?.response?.status === 428) setVerAviso(true)
-      else setAviso(e?.response?.data?.detail || 'No se pudo')
+      else setAviso(e?.response?.data?.detail || tx('No se pudo'))
     } finally { setOcupado('') }
   }
 
@@ -218,14 +220,14 @@ export default function MiRuta({ onBack, embebido = false }) {
       const { data } = await repEscanear(cod)
       if (data.encontrado) {
         const p = data.pedido
-        setAviso(`✓ ${p.cliente || p.direccion} · bulto ${p.escaneos} de ${p.bultos}${p.hueco ? ` · va ${p.hueco}` : ''}`)
+        setAviso(`✓ ${p.cliente || p.direccion} · ${tx('bulto {a} de {b}', { a: p.escaneos, b: p.bultos })}${p.hueco ? ` · ${tx('va {sitio}', { sitio: tx(p.hueco) })}` : ''}`)
         if (navigator.vibrate) navigator.vibrate(80)
         setCodigo('')
         cargar()
       } else {
         setNuevo({ ...VACIO, codigo: data.codigo })
       }
-    } catch (e) { setAviso(e?.response?.data?.detail || 'No se pudo buscar') } finally { setOcupado('') }
+    } catch (e) { setAviso(e?.response?.data?.detail || tx('No se pudo buscar')) } finally { setOcupado('') }
   }
 
   /* El código de barras de la etiqueta, de la misma foto: así una foto da
@@ -257,13 +259,13 @@ export default function MiRuta({ onBack, embebido = false }) {
       ])
       if (codigoFoto && !data.codigo) data.codigo = codigoFoto
       const algo = data?.direccion || data?.telefono || data?.cliente
-      if (!algo) setAviso('No he podido leer el ticket. Prueba con más luz y el ticket recto, o escríbelo.')
+      if (!algo) setAviso(tx('No he podido leer el ticket. Prueba con más luz y el ticket recto, o escríbelo.'))
       setNuevo((n) => ({
         ...n, ...Object.fromEntries(Object.entries(data || {}).filter(([, v]) => v !== '' && v != null)),
         codigo: n?.codigo || data?.codigo || '', de_ticket: true,
         direccion: [data?.direccion, data?.cp, data?.localidad].filter(Boolean).join(', ') || n?.direccion || '',
       }))
-    } catch (e) { setAviso(e?.response?.data?.detail || 'No se pudo leer el ticket') } finally { setOcupado('') }
+    } catch (e) { setAviso(e?.response?.data?.detail || tx('No se pudo leer el ticket')) } finally { setOcupado('') }
   }
 
   // «Cargar paquetes»: una foto tras otra, y al acabar «Montar ruta».
@@ -275,8 +277,8 @@ export default function MiRuta({ onBack, embebido = false }) {
       await repNuevoPedido(nuevo)
       setNuevo(null); setCodigo('')
       cargar()
-      if (carga) { setCarga({ n: carga.n + 1 }); setAviso('') } else setAviso('✓ Añadido a tu ruta')
-    } catch (e) { setAviso(e?.response?.data?.detail || 'No se pudo guardar') } finally { setOcupado('') }
+      if (carga) { setCarga({ n: carga.n + 1 }); setAviso('') } else setAviso(tx('✓ Añadido a tu ruta'))
+    } catch (e) { setAviso(e?.response?.data?.detail || tx('No se pudo guardar')) } finally { setOcupado('') }
   }
 
   async function marcar(p, estado, motivo, pago, extra) {
@@ -292,7 +294,7 @@ export default function MiRuta({ onBack, embebido = false }) {
       if (navigator.vibrate) navigator.vibrate(estado === 'entregado' ? 60 : [40, 60, 40])
       cargar()
     } catch (e) {
-      setAviso(e?.response?.data?.detail || 'No se pudo guardar')
+      setAviso(e?.response?.data?.detail || tx('No se pudo guardar'))
     } finally { setOcupado('') }
   }
 
@@ -303,13 +305,13 @@ export default function MiRuta({ onBack, embebido = false }) {
         const { data } = await repOrdenar(punto)
         const rr = data.ruta
         const n = data.ordenados
-        const paradas = `${n} parada${n === 1 ? '' : 's'}`
+        const paradas = n === 1 ? tx('1 parada') : tx('{n} paradas', { n })
         setAviso(rr?.fin
-          ? `Ruta ordenada por tiempo: ${paradas}, acabas ≈ ${rr.fin}${rr.fuente === 'linea_recta' ? ' (sin servidor de rutas: calculada por distancia)' : ''}`
-          : `Ruta ordenada: ${paradas}`)
+          ? `${tx('Ruta ordenada por tiempo: {paradas}, acabas ≈ {fin}', { paradas, fin: rr.fin })}${rr.fuente === 'linea_recta' ? ` ${tx('(sin servidor de rutas: calculada por distancia)')}` : ''}`
+          : tx('Ruta ordenada: {paradas}', { paradas }))
         cargar()
       } catch (e) {
-        setAviso(e?.response?.data?.detail || 'No se pudo ordenar')
+        setAviso(e?.response?.data?.detail || tx('No se pudo ordenar'))
       } finally { setOcupado('') }
     }
     if (!('geolocation' in navigator)) return fin(null)
@@ -322,8 +324,8 @@ export default function MiRuta({ onBack, embebido = false }) {
     const d = deshacer
     if (!d) return
     setDeshacer(null)
-    try { await repEstado(d.p.id, 'pendiente'); setAviso(`Vuelve a tu ruta: ${d.p.cliente || d.p.direccion}`); cargar() } catch (e) {
-      setAviso(e?.response?.data?.detail || 'No se pudo deshacer')
+    try { await repEstado(d.p.id, 'pendiente'); setAviso(tx('Vuelve a tu ruta: {quien}', { quien: d.p.cliente || d.p.direccion })); cargar() } catch (e) {
+      setAviso(e?.response?.data?.detail || tx('No se pudo deshacer'))
     }
   }
 
@@ -332,9 +334,9 @@ export default function MiRuta({ onBack, embebido = false }) {
     try {
       const { data } = await repMiOrden(reordenar, await posicionAhora())
       setReordenar(null)
-      setAviso(data.ruta?.fin ? `Orden guardado. Con este orden acabas ≈ ${data.ruta.fin}` : 'Orden guardado')
+      setAviso(data.ruta?.fin ? tx('Orden guardado. Con este orden acabas ≈ {fin}', { fin: data.ruta.fin }) : tx('Orden guardado'))
       cargar()
-    } catch (e) { setAviso(e?.response?.data?.detail || 'No se pudo guardar el orden') } finally { setOcupado('') }
+    } catch (e) { setAviso(e?.response?.data?.detail || tx('No se pudo guardar el orden')) } finally { setOcupado('') }
   }
 
   function mover(i, d) {
@@ -349,19 +351,19 @@ export default function MiRuta({ onBack, embebido = false }) {
   async function ponerHueco(p, hueco) {
     setOcupado(`hueco-${p.id}`)
     try { await repMiEditar(p.id, { hueco }); setHuecoDe(null); cargar() } catch (e) {
-      setAviso(e?.response?.data?.detail || 'No se pudo guardar')
+      setAviso(e?.response?.data?.detail || tx('No se pudo guardar'))
     } finally { setOcupado('') }
   }
 
   function dictar() {
     if (!Reconocedor || escuchando) return
     const r = new Reconocedor()
-    r.lang = 'es-ES'; r.interimResults = false; r.maxAlternatives = 1
+    r.lang = locale(); r.interimResults = false; r.maxAlternatives = 1
     r.onresult = (ev) => {
       const dicho = ev.results?.[0]?.[0]?.transcript || ''
       if (dicho) setNuevo((n) => ({ ...n, direccion: dicho }))
     }
-    r.onerror = (ev) => setAviso(ev.error === 'not-allowed' ? 'Dale permiso al micrófono para dictar.' : 'No te he entendido. Prueba otra vez o escríbelo.')
+    r.onerror = (ev) => setAviso(ev.error === 'not-allowed' ? tx('Dale permiso al micrófono para dictar.') : tx('No te he entendido. Prueba otra vez o escríbelo.'))
     r.onend = () => setEscuchando(false)
     setEscuchando(true)
     try { r.start() } catch { setEscuchando(false) }
@@ -374,16 +376,16 @@ export default function MiRuta({ onBack, embebido = false }) {
       if (!confirmar) { setPegar({ ...pegar, n: data.n }); return }
       setPegar(null)
       const n = data.creados
-      setAviso(`✓ ${n} parada${n === 1 ? '' : 's'} añadida${n === 1 ? '' : 's'}${data.repetidos ? ` (${data.repetidos} ya estaban)` : ''}. Se están situando en el mapa (≈ ${Math.max(1, n)} s); luego «Ordenar ruta».`)
+      setAviso(`✓ ${n === 1 ? tx('1 parada añadida') : tx('{n} paradas añadidas', { n })}${data.repetidos ? ` ${tx('({n} ya estaban)', { n: data.repetidos })}` : ''}. ${tx('Se están situando en el mapa (≈ {s} s); luego «Ordenar ruta».', { s: Math.max(1, n) })}`)
       cargar()
       // Se van ubicando en el servidor a una por segundo: se recarga al acabar.
       setTimeout(cargar, Math.min(60, n + 3) * 1000)
-    } catch (e) { setAviso(e?.response?.data?.detail || 'No se pudo leer la lista') } finally { setOcupado('') }
+    } catch (e) { setAviso(e?.response?.data?.detail || tx('No se pudo leer la lista')) } finally { setOcupado('') }
   }
 
   if (err) return <Marco onBack={onBack} embebido={embebido}><p className="text-red-300">{err}</p></Marco>
   if (!ruta) return <Marco onBack={onBack} embebido={embebido}><div className="flex justify-center py-16"><Loader2 className="animate-spin text-dark-500" /></div></Marco>
-  if (!ruta.activo) return <Marco onBack={onBack} embebido={embebido}><p className="text-dark-400">Tu empresa no usa el reparto por aquí.</p></Marco>
+  if (!ruta.activo) return <Marco onBack={onBack} embebido={embebido}><p className="text-dark-400">{tx('Tu empresa no usa el reparto por aquí.')}</p></Marco>
 
   const pendientes = lista(ruta.pedidos).filter((p) => !['entregado', 'fallido'].includes(p.estado)).sort(porOrden)
   const hechos = lista(ruta.pedidos).filter((p) => ['entregado', 'fallido'].includes(p.estado))
@@ -410,17 +412,17 @@ export default function MiRuta({ onBack, embebido = false }) {
       {ruta.autonomo ? null : jornadaAbierta ? (
         <div className="mb-3 flex items-center justify-between gap-2 rounded-2xl border border-emerald-500/30 bg-emerald-500/[.07] px-3.5 py-2.5">
           <span className="flex items-center gap-2 text-[12.5px] text-emerald-200">
-            <span className="h-2 w-2 animate-pulse rounded-full bg-emerald-400" /> En jornada · la oficina ve tu ubicación
+            <span className="h-2 w-2 animate-pulse rounded-full bg-emerald-400" /> {tx('En jornada · la oficina ve tu ubicación')}
           </span>
           <button onClick={() => jornada('terminar')} disabled={ocupado === 'jornada'}
             className="inline-flex shrink-0 items-center gap-1 rounded-lg border border-emerald-500/40 px-2.5 py-1.5 text-[12px] font-semibold text-emerald-200">
-            <Square size={12} /> Terminar
+            <Square size={12} /> {tx('Terminar')}
           </button>
         </div>
       ) : (
         <button onClick={() => (ruta.aviso_aceptado ? jornada('empezar') : setVerAviso(true))} disabled={ocupado === 'jornada'}
           className="mb-3 flex w-full items-center justify-center gap-2 rounded-2xl border border-dark-700 bg-dark-900 py-3 text-[14px] font-semibold text-dark-100">
-          <Play size={15} /> {ruta.jornada?.terminada ? 'Volver a empezar la jornada' : 'Empezar jornada'}
+          <Play size={15} /> {ruta.jornada?.terminada ? tx('Volver a empezar la jornada') : tx('Empezar jornada')}
         </button>
       )}
 
@@ -438,38 +440,38 @@ export default function MiRuta({ onBack, embebido = false }) {
         <div className="grid grid-cols-2 gap-2">
           <button onClick={() => setEscaner(true)}
             className="flex items-center justify-center gap-2 rounded-xl bg-brand-500 py-3.5 text-[15px] font-bold text-white active:scale-[.99]">
-            <ScanLine size={19} /> Escanear
+            <ScanLine size={19} /> {tx('Escanear')}
           </button>
           {/* La etiqueta del paquete trae dirección y teléfono: con una foto
               entra en la ruta sin que nadie haya metido la lista antes. Es lo
               que usa el autónomo que carga sus paquetes y sale. */}
           <label className="flex cursor-pointer items-center justify-center gap-2 rounded-xl border border-brand-400/60 py-3.5 text-[15px] font-bold text-brand-200 active:scale-[.99]">
-            {ocupado === 'ticket' ? <Loader2 size={19} className="animate-spin" /> : <Camera size={19} />} Foto etiqueta
+            {ocupado === 'ticket' ? <Loader2 size={19} className="animate-spin" /> : <Camera size={19} />} {tx('Foto etiqueta')}
             <input type="file" accept="image/*" capture="environment" className="hidden" disabled={ocupado === 'ticket'}
               onChange={(e) => { const f = e.target.files?.[0]; e.target.value = ''; if (f) { setNuevo({ ...VACIO }); leerTicket(f) } }} />
           </label>
         </div>
         <div className="mt-2.5 flex gap-2">
           <input className={inp} value={codigo} onChange={(e) => setCodigo(e.target.value)} inputMode="text"
-            placeholder="o escribe el código" onKeyDown={(e) => e.key === 'Enter' && buscar(codigo)} />
+            placeholder={tx('o escribe el código')} onKeyDown={(e) => e.key === 'Enter' && buscar(codigo)} />
           <button onClick={() => buscar(codigo)} disabled={!codigo.trim() || ocupado === 'buscar'}
             className="shrink-0 rounded-xl border border-dark-600 px-4 text-[14px] font-semibold text-dark-100 disabled:opacity-40">
-            {ocupado === 'buscar' ? <Loader2 size={15} className="animate-spin" /> : 'Buscar'}
+            {ocupado === 'buscar' ? <Loader2 size={15} className="animate-spin" /> : tx('Buscar')}
           </button>
         </div>
         <button onClick={() => setNuevo({ ...VACIO })} className="mt-2 text-[12.5px] font-semibold text-brand-300">
-          + Añadir un pedido sin código
+          + {tx('Añadir un pedido sin código')}
         </button>
         {ruta.autonomo && (
           <button onClick={() => setCarga({ n: 0 })}
             className="mt-2 flex w-full items-center justify-center gap-2 rounded-xl border border-amber-400/50 bg-amber-500/10 py-3 text-[14px] font-bold text-amber-200">
-            <Package size={17} /> Cargar paquetes: uno tras otro
+            <Package size={17} /> {tx('Cargar paquetes: uno tras otro')}
           </button>
         )}
         {ruta.puede_pegar && (
           <button onClick={() => setPegar({ texto: '', n: null })}
             className="mt-2 flex w-full items-center justify-center gap-2 rounded-xl border border-dark-600 py-2.5 text-[13.5px] font-semibold text-dark-100">
-            <ClipboardPaste size={16} /> Pegar una lista de direcciones
+            <ClipboardPaste size={16} /> {tx('Pegar una lista de direcciones')}
           </button>
         )}
       </div>
@@ -485,18 +487,18 @@ export default function MiRuta({ onBack, embebido = false }) {
 
       {/* LA RUTA */}
       <div className="mb-2 mt-5 flex items-center justify-between gap-2">
-        <h2 className="text-[15px] font-bold text-dark-50">{pendientes.length} por entregar</h2>
+        <h2 className="text-[15px] font-bold text-dark-50">{tx('{n} por entregar', { n: pendientes.length })}</h2>
         {!reordenar && (
           <div className="flex gap-1.5">
             {pendientes.length > 1 && (
               <button onClick={() => { setReordenar(pendientes.map((p) => p.id)); setVista('lista') }}
                 className="inline-flex items-center gap-1 rounded-lg border border-dark-700 px-2 py-1.5 text-[12.5px] font-semibold text-dark-200">
-                <ArrowUpDown size={13} /> A mano
+                <ArrowUpDown size={13} /> {tx('A mano')}
               </button>
             )}
             <button onClick={ordenar} disabled={!pendientes.length || ocupado === 'ordenar'}
               className="inline-flex items-center gap-1.5 rounded-lg border border-dark-700 px-2.5 py-1.5 text-[12.5px] font-semibold text-dark-200 disabled:opacity-40">
-              {ocupado === 'ordenar' ? <Loader2 size={13} className="animate-spin" /> : <Route size={13} />} Ordenar ruta
+              {ocupado === 'ordenar' ? <Loader2 size={13} className="animate-spin" /> : <Route size={13} />} {tx('Ordenar ruta')}
             </button>
           </div>
         )}
@@ -504,7 +506,7 @@ export default function MiRuta({ onBack, embebido = false }) {
       {/* CAMBIAR EL ORDEN A MANO: el repartidor conoce la zona mejor que nadie. */}
       {reordenar && (
         <div className="rounded-2xl border border-brand-400/40 bg-dark-900 p-3">
-          <p className="mb-2 text-[12.5px] text-dark-300">Sube o baja cada parada. Al guardar se recalculan las horas con tu orden.</p>
+          <p className="mb-2 text-[12.5px] text-dark-300">{tx('Sube o baja cada parada. Al guardar se recalculan las horas con tu orden.')}</p>
           <ol className="flex flex-col gap-1.5">
             {reordenar.map((id, i) => {
               const p = porId[id]
@@ -516,19 +518,19 @@ export default function MiRuta({ onBack, embebido = false }) {
                     <span className="block truncate text-[13.5px] font-semibold text-dark-50">{p.cliente || p.direccion}</span>
                     {p.cliente && <span className="block truncate text-[12px] text-dark-400">{p.direccion}</span>}
                   </span>
-                  <button onClick={() => mover(i, -1)} disabled={i === 0} aria-label={`Subir ${p.cliente || p.direccion}`}
+                  <button onClick={() => mover(i, -1)} disabled={i === 0} aria-label={`${tx('Subir')} ${p.cliente || p.direccion}`}
                     className="rounded-lg border border-dark-700 p-2 text-dark-200 disabled:opacity-30"><ArrowUp size={15} /></button>
-                  <button onClick={() => mover(i, 1)} disabled={i === reordenar.length - 1} aria-label={`Bajar ${p.cliente || p.direccion}`}
+                  <button onClick={() => mover(i, 1)} disabled={i === reordenar.length - 1} aria-label={`${tx('Bajar')} ${p.cliente || p.direccion}`}
                     className="rounded-lg border border-dark-700 p-2 text-dark-200 disabled:opacity-30"><ArrowDown size={15} /></button>
                 </li>
               )
             })}
           </ol>
           <div className="mt-3 grid grid-cols-[1fr_2fr] gap-2">
-            <button onClick={() => setReordenar(null)} className="rounded-xl border border-dark-600 py-2.5 text-[14px] text-dark-200">Cancelar</button>
+            <button onClick={() => setReordenar(null)} className="rounded-xl border border-dark-600 py-2.5 text-[14px] text-dark-200">{tx('Cancelar')}</button>
             <button onClick={guardarOrden} disabled={ocupado === 'orden'}
               className="flex items-center justify-center gap-1.5 rounded-xl bg-brand-500 py-2.5 text-[14px] font-bold text-white disabled:opacity-50">
-              {ocupado === 'orden' && <Loader2 size={15} className="animate-spin" />} Guardar este orden
+              {ocupado === 'orden' && <Loader2 size={15} className="animate-spin" />} {tx('Guardar este orden')}
             </button>
           </div>
         </div>
@@ -536,19 +538,19 @@ export default function MiRuta({ onBack, embebido = false }) {
 
       {!reordenar && pendientes.length > 0 && (
         <div className="mb-2.5 flex items-center gap-2">
-          <div className="inline-flex rounded-lg border border-dark-700 p-0.5" role="group" aria-label="Vista">
+          <div className="inline-flex rounded-lg border border-dark-700 p-0.5" role="group" aria-label={tx('Vista')}>
             {[['lista', 'Lista', List], ['mapa', 'Mapa', MapaIcono]].map(([k, t, I]) => (
               <button key={k} onClick={() => setVista(k)} aria-pressed={vista === k}
                 className={`inline-flex items-center gap-1 rounded-md px-2.5 py-1 text-[12.5px] font-semibold ${vista === k ? 'bg-dark-700 text-dark-50' : 'text-dark-400'}`}>
-                <I size={13} /> {t}
+                <I size={13} /> {tx(t)}
               </button>
             ))}
           </div>
           <label className="ml-auto flex items-center gap-1 text-[12px] text-dark-400">
-            Ir con
-            <select value={nav} onChange={(e) => setNav(e.target.value)} aria-label="Navegador"
+            {tx('Ir con')}
+            <select value={nav} onChange={(e) => setNav(e.target.value)} aria-label={tx('Navegador')}
               className="rounded-lg border border-dark-700 bg-dark-900 px-1.5 py-1 text-[12.5px] text-dark-100">
-              {NAVEGADORES.map(([k, t]) => <option key={k} value={k}>{t}</option>)}
+              {NAVEGADORES.map(([k, t]) => <option key={k} value={k}>{tx(t)}</option>)}
             </select>
           </label>
         </div>
@@ -565,18 +567,18 @@ export default function MiRuta({ onBack, embebido = false }) {
           </Suspense>
           <p className="mt-1.5 flex flex-wrap items-center gap-x-2 text-[12px] text-dark-400">
             {trazado?.fuente === 'carreteras'
-              ? <><span className="inline-block h-1 w-5 rounded bg-sky-600" /> Por las calles: <b className="text-dark-200">{String(trazado.km).replace('.', ',')} km</b> · {minutosATexto(trazado.minutos)} conduciendo (sin contar paradas)</>
-              : trazado ? 'Sin servidor de rutas ahora: rayas rectas entre paradas.' : 'Calculando el recorrido…'}
+              ? <><span className="inline-block h-1 w-5 rounded bg-sky-600" /> {tx('Por las calles:')} <b className="text-dark-200">{String(trazado.km).replace('.', ',')} km</b> · {tx('{t} conduciendo (sin contar paradas)', { t: minutosATexto(trazado.minutos) })}</>
+              : trazado ? tx('Sin servidor de rutas ahora: rayas rectas entre paradas.') : tx('Calculando el recorrido…')}
           </p>
           {pendientes.some((p) => p.lat == null) && (
             <p className="mt-1 text-[12px] text-amber-200/90">
-              {pendientes.filter((p) => p.lat == null).length} sin situar en el mapa todavía (la dirección no se ha encontrado o se está buscando).
+              {tx('{n} sin situar en el mapa todavía (la dirección no se ha encontrado o se está buscando).', { n: pendientes.filter((p) => p.lat == null).length })}
             </p>
           )}
           {enlaceVarias(pendientes) && (
             <a href={enlaceVarias(pendientes)} target="_blank" rel="noreferrer"
               className="mt-2 flex w-full items-center justify-center gap-2 rounded-xl border border-sky-500/50 bg-sky-500/10 py-3 text-[14px] font-bold text-sky-200">
-              <Navigation size={16} /> Las próximas {Math.min(4, pendientes.filter((p) => p.lat != null).length)} paradas en Google Maps
+              <Navigation size={16} /> {tx('Las próximas {n} paradas en Google Maps', { n: Math.min(4, pendientes.filter((p) => p.lat != null).length) })}
             </a>
           )}
         </div>
@@ -586,18 +588,18 @@ export default function MiRuta({ onBack, embebido = false }) {
         <div className="relative mb-2.5">
           <Search size={15} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-dark-500" />
           <input className={`${inp} pl-9`} value={filtro} onChange={(e) => setFiltro(e.target.value)}
-            placeholder="Buscar cliente, calle, teléfono…" aria-label="Buscar en la ruta" />
+            placeholder={tx('Buscar cliente, calle, teléfono…')} aria-label={tx('Buscar en la ruta')} />
         </div>
       )}
 
       {pendientes.length === 0 && total === 0 && (
         <p className="rounded-xl border border-dashed border-dark-700 px-4 py-6 text-center text-[13px] text-dark-400">
           {ruta.autonomo
-            ? 'Escanea cada paquete o hazle una foto a la etiqueta: la dirección y el teléfono entran solos. Luego «Ordenar ruta».'
-            : 'Escanea los bultos según los cargas y se irán poniendo aquí.'}
+            ? tx('Escanea cada paquete o hazle una foto a la etiqueta: la dirección y el teléfono entran solos. Luego «Ordenar ruta».')
+            : tx('Escanea los bultos según los cargas y se irán poniendo aquí.')}
         </p>
       )}
-      {q && visibles.length === 0 && <p className="py-4 text-center text-[13px] text-dark-400">Nada con «{filtro.trim()}» en las paradas pendientes.</p>}
+      {q && visibles.length === 0 && <p className="py-4 text-center text-[13px] text-dark-400">{tx('Nada con «{q}» en las paradas pendientes.', { q: filtro.trim() })}</p>}
       {/* LAS PARADAS. La siguiente, entera y destacada; las demás, en una
           línea (número, cliente, calle, hora) y se despliegan al tocarlas:
           con 80 paradas, una lista de tarjetas enormes no hay quien la lleve. */}
@@ -608,19 +610,19 @@ export default function MiRuta({ onBack, embebido = false }) {
           const juntas = enPuerta[clavePuerta(p)] || 1
           const etiquetas = (
             <>
-              {p.prioridad && <span className="rounded bg-amber-500/15 px-1.5 font-bold text-amber-300">URGENTE</span>}
-              {p.tipo === 'recogida' && <span className="rounded bg-violet-500/15 px-1.5 font-bold text-violet-300">RECOGIDA</span>}
-              {p.cobrar > 0 && <span className="rounded bg-emerald-500/15 px-1.5 font-bold text-emerald-300">COBRAR {euros(p.cobrar)}</span>}
-              {p.ventana_desde && <span className="rounded bg-dark-800 px-1.5 text-dark-300">Horario {p.ventana_desde}–{p.ventana_hasta}</span>}
-              {p.tarde_min > 0 && <span className="rounded bg-red-500/15 px-1.5 text-red-300">llega {p.tarde_min} min tarde</span>}
-              {juntas > 1 && <span className="rounded bg-sky-500/15 px-1.5 font-semibold text-sky-300">{juntas} paradas en esta puerta</span>}
+              {p.prioridad && <span className="rounded bg-amber-500/15 px-1.5 font-bold text-amber-300">{tx('URGENTE')}</span>}
+              {p.tipo === 'recogida' && <span className="rounded bg-violet-500/15 px-1.5 font-bold text-violet-300">{tx('RECOGIDA')}</span>}
+              {p.cobrar > 0 && <span className="rounded bg-emerald-500/15 px-1.5 font-bold text-emerald-300">{tx('COBRAR')} {euros(p.cobrar)}</span>}
+              {p.ventana_desde && <span className="rounded bg-dark-800 px-1.5 text-dark-300">{tx('Horario')} {p.ventana_desde}–{p.ventana_hasta}</span>}
+              {p.tarde_min > 0 && <span className="rounded bg-red-500/15 px-1.5 text-red-300">{tx('llega {n} min tarde', { n: p.tarde_min })}</span>}
+              {juntas > 1 && <span className="rounded bg-sky-500/15 px-1.5 font-semibold text-sky-300">{tx('{n} paradas en esta puerta', { n: juntas })}</span>}
             </>
           )
           const hayEtiquetas = p.prioridad || p.tipo === 'recogida' || p.cobrar > 0 || p.ventana_desde || p.tarde_min > 0 || juntas > 1
           if (!esSiguiente && abierta !== p.id) {
             return (
               <div key={p.id} className="flex items-stretch gap-1 rounded-2xl border border-dark-800 bg-dark-900/70">
-                <button onClick={() => setAbierta(p.id)} aria-label={`Ver la parada ${p.orden ?? i + 1}: ${p.cliente || p.direccion}`}
+                <button onClick={() => setAbierta(p.id)} aria-label={`${tx('Ver la parada {n}', { n: p.orden ?? i + 1 })}: ${p.cliente || p.direccion}`}
                   className="flex min-w-0 flex-1 items-center gap-3 px-3 py-2.5 text-left">
                   <span className="flex h-7 min-w-7 items-center justify-center rounded-full border border-brand-400/50 px-1.5 text-[12.5px] font-bold text-brand-200">{p.orden ?? i + 1}</span>
                   <span className="min-w-0 flex-1">
@@ -632,16 +634,16 @@ export default function MiRuta({ onBack, embebido = false }) {
                     {(hayEtiquetas || p.hueco) && (
                       <span className="mt-1 flex flex-wrap gap-1 text-[10.5px]">
                         {etiquetas}
-                        {p.hueco && <span className="rounded bg-sky-500/15 px-1.5 text-sky-200">{p.hueco}</span>}
+                        {p.hueco && <span className="rounded bg-sky-500/15 px-1.5 text-sky-200">{tx(p.hueco)}</span>}
                       </span>
                     )}
                   </span>
                 </button>
                 {nav === 'app' && p.lat != null ? (
-                  <button onClick={() => setGuiando(p.id)} aria-label={`Ir a ${p.cliente || p.direccion}`}
+                  <button onClick={() => setGuiando(p.id)} aria-label={`${tx('Ir a')} ${p.cliente || p.direccion}`}
                     className="flex w-12 shrink-0 items-center justify-center border-l border-dark-800 text-brand-300"><Navigation size={17} /></button>
                 ) : (
-                  <a href={navegar(p, nav === 'app' ? 'google' : nav)} target="_blank" rel="noreferrer" aria-label={`Ir a ${p.cliente || p.direccion}`}
+                  <a href={navegar(p, nav === 'app' ? 'google' : nav)} target="_blank" rel="noreferrer" aria-label={`${tx('Ir a')} ${p.cliente || p.direccion}`}
                     className="flex w-12 shrink-0 items-center justify-center border-l border-dark-800 text-dark-300"><Navigation size={17} /></a>
                 )}
               </div>
@@ -650,14 +652,14 @@ export default function MiRuta({ onBack, embebido = false }) {
           return (
           <div key={p.id} className={`rounded-2xl border p-3.5 ${esSiguiente ? 'border-brand-400/70 bg-gradient-to-b from-brand-500/[.12] to-dark-900 shadow-lg shadow-black/20' : 'border-dark-600 bg-dark-900'}`}>
             <div className="mb-2 flex items-center justify-between">
-              <p className={`text-[11px] font-bold uppercase tracking-wider ${esSiguiente ? 'text-brand-300' : 'text-dark-400'}`}>{esSiguiente ? 'Siguiente parada' : `Parada ${p.orden ?? i + 1}`}</p>
-              {!esSiguiente && <button onClick={() => setAbierta(null)} className="text-[12px] font-semibold text-dark-400">Plegar</button>}
+              <p className={`text-[11px] font-bold uppercase tracking-wider ${esSiguiente ? 'text-brand-300' : 'text-dark-400'}`}>{esSiguiente ? tx('Siguiente parada') : tx('Parada {n}', { n: p.orden ?? i + 1 })}</p>
+              {!esSiguiente && <button onClick={() => setAbierta(null)} className="text-[12px] font-semibold text-dark-400">{tx('Plegar')}</button>}
             </div>
             <div className="flex items-start gap-3">
               <span className={`mt-0.5 flex items-center justify-center rounded-full bg-brand-500 px-1.5 font-bold text-brand-tinta ${esSiguiente ? 'h-9 min-w-9 text-[15px]' : 'h-7 min-w-7 text-[13px]'}`}>{p.orden ?? i + 1}</span>
               <div className="min-w-0 flex-1">
                 <div className="flex items-start justify-between gap-2">
-                  <p className={`${esSiguiente ? 'text-[18px]' : 'text-[15px]'} font-bold leading-tight text-dark-50`}>{p.cliente || 'Cliente'}</p>
+                  <p className={`${esSiguiente ? 'text-[18px]' : 'text-[15px]'} font-bold leading-tight text-dark-50`}>{p.cliente || tx('Cliente')}</p>
                   {p.eta && <span className={`shrink-0 rounded-lg px-2 py-0.5 text-[13px] font-bold ${p.tarde_min ? 'bg-red-500/15 text-red-300' : 'bg-brand-500/15 text-brand-200'}`}>≈ {p.eta}</span>}
                 </div>
                 {hayEtiquetas && <div className="mt-1 flex flex-wrap gap-1.5 text-[11px]">{etiquetas}</div>}
@@ -665,35 +667,35 @@ export default function MiRuta({ onBack, embebido = false }) {
                 {p.telefono && <p className="text-[12.5px] text-dark-400">{p.telefono}</p>}
                 {p.contenido && <p className="mt-1 flex items-start gap-1 text-[12.5px] text-dark-400"><Package size={13} className="mt-0.5 shrink-0" /> {p.contenido}</p>}
                 <p className="mt-0.5 text-[11.5px] text-dark-500">
-                  {p.bultos} bulto{p.bultos > 1 ? 's' : ''}{p.escaneos ? ` · ${p.escaneos} escaneado${p.escaneos > 1 ? 's' : ''}` : ''}
-                  {p.lat == null && ' · sin ubicar en el mapa'}{p.notas && ` · ${p.notas}`}
+                  {p.bultos > 1 ? tx('{n} bultos', { n: p.bultos }) : tx('1 bulto')}{p.escaneos ? ` · ${p.escaneos > 1 ? tx('{n} escaneados', { n: p.escaneos }) : tx('1 escaneado')}` : ''}
+                  {p.lat == null && ` · ${tx('sin ubicar en el mapa')}`}{p.notas && ` · ${p.notas}`}
                 </p>
                 <button onClick={() => setHuecoDe(p)}
                   className={`mt-1.5 inline-flex items-center gap-1 rounded-lg px-2 py-1 text-[12px] font-semibold ${p.hueco ? 'bg-sky-500/15 text-sky-200' : 'border border-dashed border-dark-700 text-dark-400'}`}>
-                  <Package size={12} /> {p.hueco ? `En la furgoneta: ${p.hueco}` : '¿Dónde va en la furgoneta?'}
+                  <Package size={12} /> {p.hueco ? tx('En la furgoneta: {sitio}', { sitio: tx(p.hueco) }) : tx('¿Dónde va en la furgoneta?')}
                 </button>
               </div>
             </div>
             <div className="mt-3 grid grid-cols-3 gap-1.5">
               {nav === 'app' && p.lat != null ? (
                 <button onClick={() => setGuiando(p.id)}
-                  className={`flex flex-col items-center gap-0.5 rounded-xl py-2 text-[11px] ${esSiguiente ? 'bg-brand-500 font-bold text-brand-tinta' : 'border border-dark-700 text-dark-200'}`}><Navigation size={16} /> Ir</button>
+                  className={`flex flex-col items-center gap-0.5 rounded-xl py-2 text-[11px] ${esSiguiente ? 'bg-brand-500 font-bold text-brand-tinta' : 'border border-dark-700 text-dark-200'}`}><Navigation size={16} /> {tx('Ir')}</button>
               ) : (
                 <a href={navegar(p, nav === 'app' ? 'google' : nav)} target="_blank" rel="noreferrer"
-                  className={`flex flex-col items-center gap-0.5 rounded-xl py-2 text-[11px] ${esSiguiente ? 'bg-brand-500 font-bold text-brand-tinta' : 'border border-dark-700 text-dark-200'}`}><Navigation size={16} /> Ir</a>
+                  className={`flex flex-col items-center gap-0.5 rounded-xl py-2 text-[11px] ${esSiguiente ? 'bg-brand-500 font-bold text-brand-tinta' : 'border border-dark-700 text-dark-200'}`}><Navigation size={16} /> {tx('Ir')}</a>
               )}
               {p.telefono
-                ? <a href={`tel:${p.telefono}`} className="flex flex-col items-center gap-0.5 rounded-xl border border-dark-700 py-2 text-[11px] text-dark-200"><Phone size={16} /> Llamar</a>
-                : <span className="flex flex-col items-center gap-0.5 rounded-xl border border-dark-800 py-2 text-[11px] text-dark-600"><Phone size={16} /> Sin teléfono</span>}
+                ? <a href={`tel:${p.telefono}`} className="flex flex-col items-center gap-0.5 rounded-xl border border-dark-700 py-2 text-[11px] text-dark-200"><Phone size={16} /> {tx('Llamar')}</a>
+                : <span className="flex flex-col items-center gap-0.5 rounded-xl border border-dark-800 py-2 text-[11px] text-dark-600"><Phone size={16} /> {tx('Sin teléfono')}</span>}
               {movilWhatsApp(p.telefono, ruta.pais, ruta.prefijo)
                 ? <a href={`https://wa.me/${movilWhatsApp(p.telefono, ruta.pais, ruta.prefijo)}?text=${encodeURIComponent(mensaje(p, ruta.empresa))}`} target="_blank" rel="noreferrer"
                     className="flex flex-col items-center gap-0.5 rounded-xl border border-emerald-600/50 py-2 text-[11px] text-emerald-300"><MessageCircle size={16} /> WhatsApp</a>
                 : <span className="flex flex-col items-center gap-0.5 rounded-xl border border-dark-800 py-2 text-[11px] text-dark-600"><MessageCircle size={16} /> —</span>}
             </div>
             <div className="mt-1.5 grid grid-cols-[1fr_2fr] gap-1.5">
-              <button onClick={() => setFallo(p)} disabled={ocupado === p.id} className="flex items-center justify-center gap-1 rounded-xl border border-red-500/30 py-3 text-[13px] text-red-300"><X size={15} /> {p.tipo === 'recogida' ? 'No recogido' : 'No entregado'}</button>
+              <button onClick={() => setFallo(p)} disabled={ocupado === p.id} className="flex items-center justify-center gap-1 rounded-xl border border-red-500/30 py-3 text-[13px] text-red-300"><X size={15} /> {p.tipo === 'recogida' ? tx('No recogido') : tx('No entregado')}</button>
               <button onClick={() => marcar(p, 'entregado')} disabled={ocupado === p.id} className="flex items-center justify-center gap-1.5 rounded-xl bg-emerald-600 py-3 text-[15px] font-bold text-white active:scale-[.99]">
-                {ocupado === p.id ? <Loader2 size={16} className="animate-spin" /> : <Check size={17} />} {p.tipo === 'recogida' ? 'Recogido' : 'Entregado'}
+                {ocupado === p.id ? <Loader2 size={16} className="animate-spin" /> : <Check size={17} />} {p.tipo === 'recogida' ? tx('Recogido') : tx('Entregado')}
               </button>
             </div>
           </div>
@@ -703,13 +705,13 @@ export default function MiRuta({ onBack, embebido = false }) {
       )}
       {hechos.length > 0 && (
         <details className="mt-4">
-          <summary className="cursor-pointer text-[13px] text-dark-400">{hechos.length} hechos hoy</summary>
+          <summary className="cursor-pointer text-[13px] text-dark-400">{tx('{n} hechos hoy', { n: hechos.length })}</summary>
           <div className="mt-2 flex flex-col gap-1.5">
             {hechos.map((p) => (
               <div key={p.id} className="flex items-center justify-between gap-2 rounded-xl border border-dark-800 px-3 py-2 text-[12.5px]">
                 <span className="truncate text-dark-300">{p.cliente || p.direccion}</span>
                 <span className={`shrink-0 ${p.estado === 'entregado' ? 'text-emerald-300' : 'text-red-300'}`}>
-                  {p.estado === 'entregado' ? `Entregado${p.cobrado_importe ? ` · ${euros(p.cobrado_importe)}` : ''}` : `No · ${p.motivo || ''}`}
+                  {p.estado === 'entregado' ? `${tx('Entregado')}${p.cobrado_importe ? ` · ${euros(p.cobrado_importe)}` : ''}` : `${tx('No')} · ${p.motivo ? tx(p.motivo) : ''}`}
                 </span>
               </div>
             ))}
@@ -718,32 +720,32 @@ export default function MiRuta({ onBack, embebido = false }) {
       )}
 
       {huecoDe && (
-        <Hoja titulo="¿Dónde va en la furgoneta?" onClose={() => setHuecoDe(null)}>
-          <p className="mb-3 text-[13px] text-dark-400">{huecoDe.cliente || huecoDe.direccion}. Al llegar sabrás dónde buscarlo.</p>
+        <Hoja titulo={tx('¿Dónde va en la furgoneta?')} onClose={() => setHuecoDe(null)}>
+          <p className="mb-3 text-[13px] text-dark-400">{huecoDe.cliente || huecoDe.direccion}. {tx('Al llegar sabrás dónde buscarlo.')}</p>
           <HuecoRejilla valor={huecoDe.hueco} ocupado={ocupado === `hueco-${huecoDe.id}`} onElegir={(h) => ponerHueco(huecoDe, h)} />
           {huecoDe.hueco && (
-            <button onClick={() => ponerHueco(huecoDe, '')} className="mt-3 w-full rounded-xl border border-dark-600 py-2.5 text-[13.5px] text-dark-200">Quitar</button>
+            <button onClick={() => ponerHueco(huecoDe, '')} className="mt-3 w-full rounded-xl border border-dark-600 py-2.5 text-[13.5px] text-dark-200">{tx('Quitar')}</button>
           )}
         </Hoja>
       )}
 
       {pegar && (
-        <Hoja titulo="Pegar una lista de direcciones" onClose={() => setPegar(null)}>
+        <Hoja titulo={tx('Pegar una lista de direcciones')} onClose={() => setPegar(null)}>
           <p className="mb-2 text-[13px] text-dark-400">
-            Una parada por línea (de un correo, un Excel, un WhatsApp…). Si hay columnas con cabecera (dirección, cliente, teléfono, horario…), se leen.
+            {tx('Una parada por línea (de un correo, un Excel, un WhatsApp…). Si hay columnas con cabecera (dirección, cliente, teléfono, horario…), se leen.')}
           </p>
-          <textarea className={`${inp} h-40 font-mono text-[13px]`} value={pegar.texto} aria-label="Lista de direcciones"
+          <textarea className={`${inp} h-40 font-mono text-[13px]`} value={pegar.texto} aria-label={tx('Lista de direcciones')}
             onChange={(e) => setPegar({ texto: e.target.value, n: null })}
             placeholder={'Calle Mayor 3, 28013 Madrid\nAvenida de la Constitución 12, Sevilla'} />
           {pegar.n == null ? (
             <button onClick={() => pegarLista(false)} disabled={pegar.texto.trim().length < 5 || ocupado === 'pegar'}
               className="mt-3 w-full rounded-xl bg-brand-500 py-3 text-[15px] font-bold text-white disabled:opacity-40">
-              {ocupado === 'pegar' ? 'Leyendo…' : 'Revisar'}
+              {ocupado === 'pegar' ? tx('Leyendo…') : tx('Revisar')}
             </button>
           ) : (
             <button onClick={() => pegarLista(true)} disabled={ocupado === 'pegar'}
               className="mt-3 w-full rounded-xl bg-emerald-600 py-3 text-[15px] font-bold text-white disabled:opacity-40">
-              {ocupado === 'pegar' ? 'Añadiendo…' : `Añadir ${pegar.n} parada${pegar.n === 1 ? '' : 's'} a mi ruta`}
+              {ocupado === 'pegar' ? tx('Añadiendo…') : pegar.n === 1 ? tx('Añadir 1 parada a mi ruta') : tx('Añadir {n} paradas a mi ruta', { n: pegar.n })}
             </button>
           )}
         </Hoja>
@@ -765,10 +767,10 @@ export default function MiRuta({ onBack, embebido = false }) {
               {deshacer.estado === 'entregado' ? <Check size={16} /> : <X size={16} />}
             </span>
             <span className="min-w-0 flex-1 text-[13px] leading-tight text-dark-100">
-              <b className="block truncate">{deshacer.estado === 'entregado' ? (deshacer.p.tipo === 'recogida' ? 'Recogido' : 'Entregado') : 'No entregado'} · {deshacer.p.cliente || deshacer.p.direccion}</b>
-              {siguiente && siguiente.id !== deshacer.p.id && <span className="block truncate text-dark-400">Siguiente: {siguiente.cliente || siguiente.direccion}{siguiente.eta ? ` ≈ ${siguiente.eta}` : ''}</span>}
+              <b className="block truncate">{deshacer.estado === 'entregado' ? (deshacer.p.tipo === 'recogida' ? tx('Recogido') : tx('Entregado')) : tx('No entregado')} · {deshacer.p.cliente || deshacer.p.direccion}</b>
+              {siguiente && siguiente.id !== deshacer.p.id && <span className="block truncate text-dark-400">{tx('Siguiente:')} {siguiente.cliente || siguiente.direccion}{siguiente.eta ? ` ≈ ${siguiente.eta}` : ''}</span>}
             </span>
-            <button onClick={deshacerUltima} className="shrink-0 rounded-lg px-2 py-1.5 text-[13px] font-bold text-brand-300">Deshacer</button>
+            <button onClick={deshacerUltima} className="shrink-0 rounded-lg px-2 py-1.5 text-[13px] font-bold text-brand-300">{tx('Deshacer')}</button>
           </div>
         </div>
       )}
@@ -776,100 +778,100 @@ export default function MiRuta({ onBack, embebido = false }) {
       {escaner && <Escaner onCodigo={buscar} onClose={() => setEscaner(false)} />}
 
       {carga && !nuevo && (
-        <Hoja titulo={carga.n ? `${carga.n} paquete${carga.n > 1 ? 's' : ''} cargado${carga.n > 1 ? 's' : ''}` : 'Cargar paquetes'} onClose={() => setCarga(null)}>
+        <Hoja titulo={carga.n ? (carga.n > 1 ? tx('{n} paquetes cargados', { n: carga.n }) : tx('1 paquete cargado')) : tx('Cargar paquetes')} onClose={() => setCarga(null)}>
           <p className="mb-3 text-[13px] text-dark-400">
-            Haz una foto a la etiqueta de cada paquete: se lee el código, la dirección y el teléfono. Al acabar, «Montar ruta».
+            {tx('Haz una foto a la etiqueta de cada paquete: se lee el código, la dirección y el teléfono. Al acabar, «Montar ruta».')}
           </p>
           <label className="flex w-full cursor-pointer items-center justify-center gap-2 rounded-xl bg-brand-500 py-4 text-[16px] font-bold text-white">
             {ocupado === 'ticket' ? <Loader2 size={18} className="animate-spin" /> : <Camera size={18} />}
-            {ocupado === 'ticket' ? 'Leyendo…' : carga.n ? 'Siguiente paquete' : 'Primer paquete'}
+            {ocupado === 'ticket' ? tx('Leyendo…') : carga.n ? tx('Siguiente paquete') : tx('Primer paquete')}
             <input type="file" accept="image/*" capture="environment" className="hidden" disabled={ocupado === 'ticket'}
               onChange={(e) => { const f = e.target.files?.[0]; e.target.value = ''; if (f) { setNuevo({ ...VACIO }); leerTicket(f) } }} />
           </label>
           <button onClick={() => { setNuevo({ ...VACIO }) }} className="mt-2 w-full rounded-xl border border-dark-600 py-3 text-[14px] font-semibold text-dark-100">
-            Escribirlo a mano
+            {tx('Escribirlo a mano')}
           </button>
           <button onClick={() => { setCarga(null); if (pendientes.length) ordenar() }} disabled={ocupado === 'ordenar'}
             className="mt-3 w-full rounded-xl bg-emerald-600 py-3.5 text-[15px] font-bold text-white disabled:opacity-50">
-            {carga.n || pendientes.length ? <><Route size={16} className="mr-1 inline" /> Montar ruta y empezar</> : 'Cerrar'}
+            {carga.n || pendientes.length ? <><Route size={16} className="mr-1 inline" /> {tx('Montar ruta y empezar')}</> : tx('Cerrar')}
           </button>
         </Hoja>
       )}
 
       {nuevo && (
-        <Hoja titulo={nuevo.codigo ? `El código ${nuevo.codigo} no está en la lista` : 'Pedido nuevo'} onClose={() => setNuevo(null)}>
+        <Hoja titulo={nuevo.codigo ? tx('El código {c} no está en la lista', { c: nuevo.codigo }) : tx('Pedido nuevo')} onClose={() => setNuevo(null)}>
           <label className="mb-1 flex w-full cursor-pointer items-center justify-center gap-2 rounded-xl bg-brand-500 py-3 text-[15px] font-bold text-white">
             {ocupado === 'ticket' ? <Loader2 size={18} className="animate-spin" /> : <Camera size={18} />}
-            {ocupado === 'ticket' ? 'Leyendo el ticket…' : 'Foto del ticket'}
+            {ocupado === 'ticket' ? tx('Leyendo el ticket…') : tx('Foto del ticket')}
             <input type="file" accept="image/*" capture="environment" className="hidden" disabled={ocupado === 'ticket'}
               onChange={(e) => { leerTicket(e.target.files?.[0]); e.target.value = '' }} />
           </label>
           <p className="mb-3 text-center text-[11.5px] text-dark-500">
-            {ruta.ia_tickets ? 'Lo lee la IA y la foto no se guarda.' : 'Se lee en tu móvil: la foto no se envía a ningún sitio. La primera vez tarda un poco.'}
+            {ruta.ia_tickets ? tx('Lo lee la IA y la foto no se guarda.') : tx('Se lee en tu móvil: la foto no se envía a ningún sitio. La primera vez tarda un poco.')}
           </p>
           <div className="flex flex-col gap-2">
             <div className="flex gap-2">
-              <input className={inp} placeholder="Dirección completa" value={nuevo.direccion} onChange={(e) => setNuevo({ ...nuevo, direccion: e.target.value })} />
+              <input className={inp} placeholder={tx('Dirección completa')} value={nuevo.direccion} onChange={(e) => setNuevo({ ...nuevo, direccion: e.target.value })} />
               {Reconocedor && (
-                <button type="button" onClick={dictar} aria-label="Dictar la dirección"
+                <button type="button" onClick={dictar} aria-label={tx('Dictar la dirección')}
                   className={`shrink-0 rounded-xl border px-3 ${escuchando ? 'animate-pulse border-red-400 text-red-300' : 'border-dark-600 text-dark-200'}`}>
                   <Mic size={18} />
                 </button>
               )}
             </div>
-            <input className={inp} placeholder="Cliente" value={nuevo.cliente} onChange={(e) => setNuevo({ ...nuevo, cliente: e.target.value })} />
-            <input className={inp} placeholder="Teléfono" inputMode="tel" value={nuevo.telefono} onChange={(e) => setNuevo({ ...nuevo, telefono: e.target.value })} />
-            <input className={inp} placeholder="Qué lleva" value={nuevo.contenido} onChange={(e) => setNuevo({ ...nuevo, contenido: e.target.value })} />
-            <input className={inp} placeholder="Horario del cliente (ej. de 10 a 12)" value={nuevo.horario || ''} onChange={(e) => setNuevo({ ...nuevo, horario: e.target.value })} />
+            <input className={inp} placeholder={tx('Cliente')} value={nuevo.cliente} onChange={(e) => setNuevo({ ...nuevo, cliente: e.target.value })} />
+            <input className={inp} placeholder={tx('Teléfono')} inputMode="tel" value={nuevo.telefono} onChange={(e) => setNuevo({ ...nuevo, telefono: e.target.value })} />
+            <input className={inp} placeholder={tx('Qué lleva')} value={nuevo.contenido} onChange={(e) => setNuevo({ ...nuevo, contenido: e.target.value })} />
+            <input className={inp} placeholder={tx('Horario del cliente (ej. de 10 a 12)')} value={nuevo.horario || ''} onChange={(e) => setNuevo({ ...nuevo, horario: e.target.value })} />
             <div className="grid grid-cols-2 gap-2">
-              <input className={inp} inputMode="decimal" placeholder="A cobrar (€)" value={nuevo.cobrar || ''} onChange={(e) => setNuevo({ ...nuevo, cobrar: e.target.value })} />
-              <select className={inp} value={nuevo.tipo || 'entrega'} onChange={(e) => setNuevo({ ...nuevo, tipo: e.target.value })} aria-label="Tipo de parada">
-                <option value="entrega">Entrega</option>
-                <option value="recogida">Recogida</option>
+              <input className={inp} inputMode="decimal" placeholder={tx('A cobrar (€)')} value={nuevo.cobrar || ''} onChange={(e) => setNuevo({ ...nuevo, cobrar: e.target.value })} />
+              <select className={inp} value={nuevo.tipo || 'entrega'} onChange={(e) => setNuevo({ ...nuevo, tipo: e.target.value })} aria-label={tx('Tipo de parada')}>
+                <option value="entrega">{tx('Entrega')}</option>
+                <option value="recogida">{tx('Recogida')}</option>
               </select>
             </div>
             <label className="flex items-center gap-2 text-[14px] text-dark-200">
-              <input type="checkbox" checked={!!nuevo.prioridad} onChange={(e) => setNuevo({ ...nuevo, prioridad: e.target.checked })} /> Urgente
+              <input type="checkbox" checked={!!nuevo.prioridad} onChange={(e) => setNuevo({ ...nuevo, prioridad: e.target.checked })} /> {tx('Urgente')}
             </label>
             <div className="flex items-center gap-2 text-[13px] text-dark-300">
-              Bultos <input className={`${inp} w-20`} type="number" min="1" max="99" value={nuevo.bultos} onChange={(e) => setNuevo({ ...nuevo, bultos: e.target.value })} />
+              {tx('Bultos')} <input className={`${inp} w-20`} type="number" min="1" max="99" value={nuevo.bultos} onChange={(e) => setNuevo({ ...nuevo, bultos: e.target.value })} />
             </div>
             <div>
-              <p className="mb-1.5 text-[13px] text-dark-300">¿Dónde lo dejas en la furgoneta? <span className="text-dark-500">(opcional)</span></p>
+              <p className="mb-1.5 text-[13px] text-dark-300">{tx('¿Dónde lo dejas en la furgoneta?')} <span className="text-dark-500">{tx('(opcional)')}</span></p>
               <HuecoRejilla valor={nuevo.hueco} onElegir={(h) => setNuevo({ ...nuevo, hueco: nuevo.hueco === h ? '' : h })} />
             </div>
           </div>
-          {nuevo.de_ticket && <p className="mt-2 text-[12px] text-amber-200/90">Revisa lo leído del ticket antes de guardar.</p>}
+          {nuevo.de_ticket && <p className="mt-2 text-[12px] text-amber-200/90">{tx('Revisa lo leído del ticket antes de guardar.')}</p>}
           <button onClick={guardarNuevo} disabled={nuevo.direccion.trim().length < 4 || ocupado === 'guardar'}
             className="mt-3 w-full rounded-xl bg-emerald-600 py-3 text-[15px] font-bold text-white disabled:opacity-40">
-            {ocupado === 'guardar' ? 'Guardando…' : 'Añadir a mi ruta'}
+            {ocupado === 'guardar' ? tx('Guardando…') : tx('Añadir a mi ruta')}
           </button>
         </Hoja>
       )}
 
       {cobro && (
-        <Hoja titulo={`Cobrar ${euros(cobro.cobrar)}`} onClose={() => setCobro(null)}>
-          <p className="mb-3 text-[13px] text-dark-400">¿Cómo ha pagado?</p>
+        <Hoja titulo={`${tx('Cobrar')} ${euros(cobro.cobrar)}`} onClose={() => setCobro(null)}>
+          <p className="mb-3 text-[13px] text-dark-400">{tx('¿Cómo ha pagado?')}</p>
           <div className="grid grid-cols-3 gap-2">
             {[['efectivo', 'Efectivo'], ['tarjeta', 'Tarjeta'], ['bizum', 'Bizum']].map(([k, t]) => (
               <button key={k} onClick={() => marcar(cobro, 'entregado', '', { metodo: k })}
-                className="rounded-xl bg-emerald-600 py-3.5 text-[15px] font-bold text-white">{t}</button>
+                className="rounded-xl bg-emerald-600 py-3.5 text-[15px] font-bold text-white">{tx(t)}</button>
             ))}
           </div>
           <button onClick={() => marcar(cobro, 'fallido', 'No ha pagado')}
-            className="mt-3 w-full rounded-xl border border-red-500/30 py-3 text-[14px] text-red-300">No ha pagado: no lo entrego</button>
+            className="mt-3 w-full rounded-xl border border-red-500/30 py-3 text-[14px] text-red-300">{tx('No ha pagado: no lo entrego')}</button>
         </Hoja>
       )}
 
       {prueba && (
-        <Hoja titulo="Prueba de entrega" onClose={() => setPrueba(null)}>
+        <Hoja titulo={tx('Prueba de entrega')} onClose={() => setPrueba(null)}>
           <p className="mb-3 text-[13px] text-dark-400">
-            Una foto del paquete donde lo dejas (en el portal, con el vecino…) evita discusiones después.
-            <b className="text-dark-200"> Sin personas en la foto.</b> Es opcional.
+            {tx('Una foto del paquete donde lo dejas (en el portal, con el vecino…) evita discusiones después.')}
+            <b className="text-dark-200"> {tx('Sin personas en la foto.')}</b> {tx('Es opcional.')}
           </p>
           <label className="flex w-full cursor-pointer items-center justify-center gap-2 rounded-xl bg-brand-500 py-3.5 text-[15px] font-bold text-white">
             {ocupado === 'foto' ? <Loader2 size={18} className="animate-spin" /> : <Camera size={18} />}
-            {ocupado === 'foto' ? 'Guardando…' : 'Hacer foto y entregar'}
+            {ocupado === 'foto' ? tx('Guardando…') : tx('Hacer foto y entregar')}
             <input type="file" accept="image/*" capture="environment" className="hidden" disabled={!!ocupado}
               onChange={async (e) => {
                 const f = e.target.files?.[0]; e.target.value = ''
@@ -881,41 +883,41 @@ export default function MiRuta({ onBack, embebido = false }) {
                   const blob = await compressImage(f, 640, 0.6)
                   const foto = await new Promise((ok, ko) => { const r = new FileReader(); r.onload = () => ok(r.result); r.onerror = ko; r.readAsDataURL(blob) })
                   await marcar(prueba.p, 'entregado', '', prueba.pago || { sin_cobro: true }, { foto, nota: notaEntrega })
-                } catch { setAviso('No se pudo guardar la foto'); setOcupado('') }
+                } catch { setAviso(tx('No se pudo guardar la foto')); setOcupado('') }
               }} />
           </label>
-          <input className={`${inp} mt-2`} placeholder="Nota (opcional): «al vecino del 2º», «en el buzón»…" value={notaEntrega}
+          <input className={`${inp} mt-2`} placeholder={tx('Nota (opcional): «al vecino del 2º», «en el buzón»…')} value={notaEntrega}
             onChange={(e) => setNotaEntrega(e.target.value)} />
           <button onClick={() => marcar(prueba.p, 'entregado', '', prueba.pago || { sin_cobro: true }, { nota: notaEntrega })}
             disabled={!!ocupado}
             className="mt-3 w-full rounded-xl border border-dark-600 py-3 text-[14px] font-semibold text-dark-100">
-            Entregar sin foto
+            {tx('Entregar sin foto')}
           </button>
         </Hoja>
       )}
 
       {fallo && (
-        <Hoja titulo={fallo.tipo === 'recogida' ? '¿Por qué no se ha recogido?' : '¿Por qué no se ha entregado?'} onClose={() => setFallo(null)}>
+        <Hoja titulo={fallo.tipo === 'recogida' ? tx('¿Por qué no se ha recogido?') : tx('¿Por qué no se ha entregado?')} onClose={() => setFallo(null)}>
           <div className="flex flex-col gap-2">
             {MOTIVOS.map((m) => (
               <button key={m} onClick={() => marcar(fallo, 'fallido', m)}
-                className="rounded-xl border border-dark-700 bg-dark-900 py-3 text-[14px] text-dark-100">{m}</button>
+                className="rounded-xl border border-dark-700 bg-dark-900 py-3 text-[14px] text-dark-100">{tx(m)}</button>
             ))}
           </div>
         </Hoja>
       )}
 
       {verAviso && (
-        <Hoja titulo="Antes de empezar: tu ubicación" onClose={() => setVerAviso(false)}>
+        <Hoja titulo={tx('Antes de empezar: tu ubicación')} onClose={() => setVerAviso(false)}>
           <div className="space-y-2 text-[13.5px] leading-relaxed text-dark-300">
             <p className="flex gap-2"><MapPin size={16} className="mt-0.5 shrink-0 text-brand-300" />
-              Mientras tengas la <b className="text-dark-100">jornada empezada</b>, la oficina de tu empresa verá en el mapa por dónde vas, para organizar el reparto y avisar a los clientes.</p>
-            <p>Solo se comparte desde que pulses «Empezar jornada» hasta que pulses «Terminar». Fuera de la jornada no se guarda nada.</p>
-            <p>El recorrido se borra a los 30 días. Lo ve solo tu empresa, que es la responsable de estos datos; puedes pedirle acceso o explicaciones cuando quieras.</p>
+              {tx('Mientras tengas la jornada empezada, la oficina de tu empresa verá en el mapa por dónde vas, para organizar el reparto y avisar a los clientes.')}</p>
+            <p>{tx('Solo se comparte desde que pulses «Empezar jornada» hasta que pulses «Terminar». Fuera de la jornada no se guarda nada.')}</p>
+            <p>{tx('El recorrido se borra a los 30 días. Lo ve solo tu empresa, que es la responsable de estos datos; puedes pedirle acceso o explicaciones cuando quieras.')}</p>
           </div>
           <button onClick={() => jornada('empezar', true)} disabled={ocupado === 'jornada'}
             className="mt-4 w-full rounded-xl bg-brand-500 py-3 text-[15px] font-bold text-white">
-            Entendido, empezar jornada
+            {tx('Entendido, empezar jornada')}
           </button>
         </Hoja>
       )}
@@ -930,8 +932,8 @@ function Marco({ onBack, children, embebido }) {
     <div className="min-h-screen bg-dark-950 px-4 py-5">
       <div className="mx-auto max-w-md">
         <header className="mb-4 flex items-center gap-3">
-          <button onClick={onBack} className="rounded-lg border border-dark-700 p-2 text-dark-400" aria-label="Volver"><ArrowLeft size={16} /></button>
-          <h1 className="font-display text-[22px] font-bold text-dark-50">Mi ruta</h1>
+          <button onClick={onBack} className="rounded-lg border border-dark-700 p-2 text-dark-400" aria-label={tx('Volver')}><ArrowLeft size={16} /></button>
+          <h1 className="font-display text-[22px] font-bold text-dark-50">{tx('Mi ruta')}</h1>
         </header>
         {children}
       </div>
@@ -947,9 +949,9 @@ function Cabecera({ fecha, hechos, total, entregados, pendientes, rr, retraso, c
   const R = 26
   const L = 2 * Math.PI * R
   let dia = ''
-  try { dia = new Date(`${fecha}T12:00:00`).toLocaleDateString('es-ES', { weekday: 'long', day: 'numeric', month: 'long' }) } catch { dia = '' }
+  try { dia = new Date(`${fecha}T12:00:00`).toLocaleDateString(locale(), { weekday: 'long', day: 'numeric', month: 'long' }) } catch { dia = '' }
   return (
-    <section aria-label="Progreso del día"
+    <section aria-label={tx('Progreso del día')}
       className="mb-3 overflow-hidden rounded-3xl border border-brand-400/30 bg-gradient-to-br from-brand-500/[.18] via-dark-900 to-dark-900 p-4 shadow-lg shadow-black/20">
       <div className="flex items-center gap-4">
         <div className="relative h-[68px] w-[68px] shrink-0">
@@ -960,17 +962,17 @@ function Cabecera({ fecha, hechos, total, entregados, pendientes, rr, retraso, c
           </svg>
           <span className="absolute inset-0 flex flex-col items-center justify-center leading-none">
             <b className="text-[17px] text-dark-50">{hechos}</b>
-            <span className="text-[10.5px] text-dark-400">de {total}</span>
+            <span className="text-[10.5px] text-dark-400">{tx('de {n}', { n: total })}</span>
           </span>
         </div>
         <div className="min-w-0 flex-1">
           {dia && <p className="text-[11.5px] font-semibold uppercase tracking-wider text-brand-300">{dia}</p>}
           <p className="text-[19px] font-bold leading-tight text-dark-50">
-            {pendientes ? `Quedan ${pendientes} parada${pendientes === 1 ? '' : 's'}` : 'Todo hecho'}
+            {pendientes ? (pendientes === 1 ? tx('Queda 1 parada') : tx('Quedan {n} paradas', { n: pendientes })) : tx('Todo hecho')}
           </p>
           {pendientes > 0 && rr?.fin && (
             <p className="mt-0.5 flex flex-wrap items-center gap-x-1.5 text-[12.5px] text-dark-300">
-              <Clock size={12} className="text-brand-300" /> Acabas ≈ <b className="text-dark-50">{rr.fin}</b>
+              <Clock size={12} className="text-brand-300" /> {tx('Acabas ≈')} <b className="text-dark-50">{rr.fin}</b>
               {rr.km ? <span>· {String(rr.km).replace('.', ',')} km</span> : null}
               {rr.minutos ? <span>· {minutosATexto(rr.minutos)}</span> : null}
             </p>
@@ -978,21 +980,21 @@ function Cabecera({ fecha, hechos, total, entregados, pendientes, rr, retraso, c
         </div>
       </div>
       <div className="mt-3 flex flex-wrap gap-1.5 text-[11.5px]">
-        <span className="rounded-full bg-emerald-500/15 px-2 py-0.5 font-semibold text-emerald-300">{entregados} hecha{entregados === 1 ? '' : 's'}</span>
-        {hechos - entregados > 0 && <span className="rounded-full bg-red-500/15 px-2 py-0.5 font-semibold text-red-300">{hechos - entregados} sin hacer</span>}
-        {cobrado > 0 && <span className="rounded-full bg-dark-800 px-2 py-0.5 text-dark-200">Cobrado {euros(cobrado)}</span>}
+        <span className="rounded-full bg-emerald-500/15 px-2 py-0.5 font-semibold text-emerald-300">{entregados === 1 ? tx('1 hecha') : tx('{n} hechas', { n: entregados })}</span>
+        {hechos - entregados > 0 && <span className="rounded-full bg-red-500/15 px-2 py-0.5 font-semibold text-red-300">{tx('{n} sin hacer', { n: hechos - entregados })}</span>}
+        {cobrado > 0 && <span className="rounded-full bg-dark-800 px-2 py-0.5 text-dark-200">{tx('Cobrado')} {euros(cobrado)}</span>}
         {pendientes > 0 && rr?.fin && (
           <span className="rounded-full bg-dark-800 px-2 py-0.5 text-dark-400">
-            {rr.manual ? 'tu orden' : rr.fuente === 'linea_recta' ? 'por distancia' : rr.trafico ? 'con tráfico típico' : 'sin tráfico'}
+            {rr.manual ? tx('tu orden') : rr.fuente === 'linea_recta' ? tx('por distancia') : rr.trafico ? tx('con tráfico típico') : tx('sin tráfico')}
           </span>
         )}
-        {fueraHorario > 0 && <span className="rounded-full bg-red-500/15 px-2 py-0.5 text-red-300">{fueraHorario} fuera de su horario</span>}
-        {pendientes > 0 && retraso > 5 && <span className="rounded-full bg-amber-500/15 px-2 py-0.5 font-semibold text-amber-300">Vas {minutosATexto(retraso)} por detrás de lo previsto</span>}
+        {fueraHorario > 0 && <span className="rounded-full bg-red-500/15 px-2 py-0.5 text-red-300">{tx('{n} fuera de su horario', { n: fueraHorario })}</span>}
+        {pendientes > 0 && retraso > 5 && <span className="rounded-full bg-amber-500/15 px-2 py-0.5 font-semibold text-amber-300">{tx('Vas {t} por detrás de lo previsto', { t: minutosATexto(retraso) })}</span>}
       </div>
       {onGuiar && (
         <button onClick={onGuiar}
           className="mt-3.5 flex w-full items-center justify-center gap-2 rounded-2xl bg-brand-500 py-3.5 text-[16px] font-bold text-brand-tinta shadow-lg shadow-brand-500/20 active:scale-[.99]">
-          <Navigation size={18} /> Empezar a navegar
+          <Navigation size={18} /> {tx('Empezar a navegar')}
         </button>
       )}
     </section>
@@ -1002,17 +1004,17 @@ function Cabecera({ fecha, hechos, total, entregados, pendientes, rr, retraso, c
 /* La furgoneta vista desde arriba, la cabina delante: seis zonas. */
 function HuecoRejilla({ valor, onElegir, ocupado = false }) {
   return (
-    <div className="rounded-2xl border border-dark-700 p-2" role="group" aria-label="Zona de la furgoneta">
-      <p className="mb-1 text-center text-[10.5px] uppercase tracking-wider text-dark-500">Cabina</p>
+    <div className="rounded-2xl border border-dark-700 p-2" role="group" aria-label={tx('Zona de la furgoneta')}>
+      <p className="mb-1 text-center text-[10.5px] uppercase tracking-wider text-dark-500">{tx('Cabina')}</p>
       <div className="grid grid-cols-2 gap-1.5">
         {HUECOS.map((h) => (
           <button key={h} type="button" onClick={() => onElegir(h)} disabled={ocupado} aria-pressed={valor === h}
             className={`rounded-lg py-2.5 text-[13px] font-semibold disabled:opacity-50 ${valor === h ? 'bg-sky-500 text-white' : 'border border-dark-700 bg-dark-900 text-dark-200'}`}>
-            {h}
+            {tx(h)}
           </button>
         ))}
       </div>
-      <p className="mt-1 text-center text-[10.5px] uppercase tracking-wider text-dark-500">Puertas</p>
+      <p className="mt-1 text-center text-[10.5px] uppercase tracking-wider text-dark-500">{tx('Puertas')}</p>
     </div>
   )
 }
@@ -1026,28 +1028,28 @@ function Resumen({ hechos, ruta }) {
   ok.forEach((p) => { if (p.cobrado_importe) cobros[p.cobrado_metodo || 'otro'] = (cobros[p.cobrado_metodo || 'otro'] || 0) + Number(p.cobrado_importe) })
   const horas = hechos.map((p) => p.cerrado_en).filter(Boolean).sort()
   const durMin = horas.length > 1 ? Math.round((new Date(horas[horas.length - 1]) - new Date(horas[0])) / 60000) : 0
-  const NOMBRE = { efectivo: 'Efectivo', tarjeta: 'Tarjeta', bizum: 'Bizum', pagado: 'Ya pagado', otro: 'Otro' }
+  const NOMBRE = { efectivo: tx('Efectivo'), tarjeta: tx('Tarjeta'), bizum: 'Bizum', pagado: tx('Ya pagado'), otro: tx('Otro') }
   return (
-    <div className="mt-3 rounded-2xl border border-emerald-500/40 bg-emerald-500/[.07] p-4" aria-label="Resumen del día">
-      <p className="flex items-center gap-2 text-[16px] font-bold text-emerald-200"><Trophy size={18} /> Ruta terminada</p>
+    <div className="mt-3 rounded-2xl border border-emerald-500/40 bg-emerald-500/[.07] p-4" aria-label={tx('Resumen del día')}>
+      <p className="flex items-center gap-2 text-[16px] font-bold text-emerald-200"><Trophy size={18} /> {tx('Ruta terminada')}</p>
       <div className="mt-3 grid grid-cols-2 gap-2 text-center">
-        <div className="rounded-xl bg-dark-900 py-2.5"><p className="text-[22px] font-bold text-dark-50">{ok.length}</p><p className="text-[11.5px] text-dark-400">hechas</p></div>
-        <div className="rounded-xl bg-dark-900 py-2.5"><p className={`text-[22px] font-bold ${no.length ? 'text-red-300' : 'text-dark-50'}`}>{no.length}</p><p className="text-[11.5px] text-dark-400">sin hacer</p></div>
+        <div className="rounded-xl bg-dark-900 py-2.5"><p className="text-[22px] font-bold text-dark-50">{ok.length}</p><p className="text-[11.5px] text-dark-400">{tx('hechas')}</p></div>
+        <div className="rounded-xl bg-dark-900 py-2.5"><p className={`text-[22px] font-bold ${no.length ? 'text-red-300' : 'text-dark-50'}`}>{no.length}</p><p className="text-[11.5px] text-dark-400">{tx('sin hacer')}</p></div>
       </div>
       {Object.keys(cobros).length > 0 && (
         <div className="mt-3 text-[13px] text-dark-200">
-          <p className="mb-1 font-semibold">Cobrado</p>
+          <p className="mb-1 font-semibold">{tx('Cobrado')}</p>
           {Object.entries(cobros).map(([m, v]) => (
             <p key={m} className="flex justify-between"><span className="text-dark-400">{NOMBRE[m] || m}</span><span>{euros(v)}</span></p>
           ))}
-          <p className="mt-1 flex justify-between border-t border-dark-700 pt-1 font-bold"><span>Total</span><span>{euros(Object.values(cobros).reduce((a, b) => a + b, 0))}</span></p>
+          <p className="mt-1 flex justify-between border-t border-dark-700 pt-1 font-bold"><span>{tx('Total')}</span><span>{euros(Object.values(cobros).reduce((a, b) => a + b, 0))}</span></p>
         </div>
       )}
       <p className="mt-3 text-[12px] text-dark-400">
-        {durMin > 0 && <>De la primera a la última parada: {minutosATexto(durMin)}. </>}
-        {ruta?.km ? <>Ruta planificada: {ruta.km} km.</> : null}
+        {durMin > 0 && <>{tx('De la primera a la última parada: {t}.', { t: minutosATexto(durMin) })} </>}
+        {ruta?.km ? <>{tx('Ruta planificada: {km} km.', { km: ruta.km })}</> : null}
       </p>
-      {no.length > 0 && <p className="mt-1 text-[12px] text-dark-400">Las no hechas siguen en «hechos hoy» con su motivo.</p>}
+      {no.length > 0 && <p className="mt-1 text-[12px] text-dark-400">{tx('Las no hechas siguen en «hechos hoy» con su motivo.')}</p>}
     </div>
   )
 }
@@ -1058,7 +1060,7 @@ function Hoja({ titulo, onClose, children }) {
       <div className="max-h-[92vh] w-full max-w-md overflow-y-auto rounded-t-3xl border border-dark-700 bg-dark-950 p-4 pb-8">
         <div className="mb-3 flex items-start justify-between gap-3">
           <h2 className="text-[16px] font-bold text-dark-50">{titulo}</h2>
-          <button onClick={onClose} className="rounded p-1 text-dark-400" aria-label="Cerrar"><X size={18} /></button>
+          <button onClick={onClose} className="rounded p-1 text-dark-400" aria-label={tx('Cerrar')}><X size={18} /></button>
         </div>
         {children}
       </div>
@@ -1084,7 +1086,7 @@ function Escaner({ onCodigo, onClose }) {
     let temporizador = null
     async function arrancar() {
       if (!('BarcodeDetector' in window)) {
-        setError('Este móvil no sabe leer códigos desde el navegador. Escribe el código o haz la foto del ticket.')
+        setError(tx('Este móvil no sabe leer códigos desde el navegador. Escribe el código o haz la foto del ticket.'))
         return
       }
       try {
@@ -1109,7 +1111,7 @@ function Escaner({ onCodigo, onClose }) {
         }
         mirar()
       } catch {
-        setError('No se pudo abrir la cámara. Dale permiso en el navegador o escribe el código.')
+        setError(tx('No se pudo abrir la cámara. Dale permiso en el navegador o escribe el código.'))
       }
     }
     arrancar()
@@ -1121,10 +1123,10 @@ function Escaner({ onCodigo, onClose }) {
   }, [])
 
   return (
-    <div className="fixed inset-0 z-50 flex flex-col bg-black" role="dialog" aria-modal="true" aria-label="Escanear">
+    <div className="fixed inset-0 z-50 flex flex-col bg-black" role="dialog" aria-modal="true" aria-label={tx('Escanear')}>
       <div className="flex items-center justify-between p-4">
-        <span className="text-[15px] font-semibold text-white">Apunta al código de la caja</span>
-        <button onClick={onClose} className="rounded-full bg-white/10 p-2 text-white" aria-label="Cerrar"><X size={18} /></button>
+        <span className="text-[15px] font-semibold text-white">{tx('Apunta al código de la caja')}</span>
+        <button onClick={onClose} className="rounded-full bg-white/10 p-2 text-white" aria-label={tx('Cerrar')}><X size={18} /></button>
       </div>
       {error ? <p className="px-6 py-10 text-center text-[14px] text-white/80">{error}</p> : (
         <div className="relative flex-1">

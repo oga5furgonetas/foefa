@@ -28,6 +28,8 @@ export default defineConfig({
   reporter: process.env.CI ? [['list'], ['github']] : 'list',
   use: {
     baseURL: 'http://localhost:4173',
+    // La app de reparto sigue el idioma del móvil: las pruebas, en español.
+    locale: 'es-ES',
     trace: 'retain-on-failure',
     screenshot: 'only-on-failure',
   },

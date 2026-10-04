@@ -207,3 +207,10 @@ def test_pasos_de_una_ruta_osrm():
     assert [x["texto"] for x in p] == ["Sal por Túnel Praza de Lugo", "Gira a la derecha por Praza de Pontevedra", "Has llegado"]
     assert p[1]["punto"] == [43.3675, -8.4074] and p[0]["metros"] == 140
     assert R.pasos_osrm({}) == [] and R.pasos_osrm(None) == []
+
+
+def test_los_pasos_llevan_la_maniobra_en_bruto_para_traducirla():
+    p = R.pasos_osrm({"legs": [{"steps": [
+        {"maneuver": {"type": "roundabout", "modifier": "right", "exit": 2, "location": [-8.4, 43.3]}, "name": "Avda Oza", "distance": 50}]}]})
+    assert p[0]["maniobra"] == {"tipo": "roundabout", "mod": "right", "salida": 2}
+    assert p[0]["texto"].startswith("En la rotonda, toma la segunda salida")

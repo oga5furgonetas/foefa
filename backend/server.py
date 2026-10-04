@@ -46917,7 +46917,7 @@ async def _rep_navegacion(desde: tuple, hasta: tuple) -> dict:
     metros = round(reparto.distancia_km(desde, hasta) * 1000)
     salida = {"fuente": "linea_recta", "linea": [list(desde), list(hasta)], "metros": metros,
               "minutos": None, "pasos": [{"texto": "Ve hacia la parada", "icono": "recto", "punto": list(hasta),
-                                          "calle": "", "metros": metros}]}
+                                          "calle": "", "metros": metros, "maniobra": {"tipo": "hacia_parada"}}]}
     coords = f"{desde[1]:.6f},{desde[0]:.6f};{hasta[1]:.6f},{hasta[0]:.6f}"
     import httpx as _httpx
     async with _REP_RUTAS_LOCK:

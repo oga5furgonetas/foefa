@@ -636,5 +636,8 @@ def pasos_osrm(ruta: dict) -> list:
             calle = (s.get("name") or s.get("ref") or "").strip()
             texto, icono = instruccion(m.get("type"), m.get("modifier"), calle, m.get("exit"))
             fuera.append({"texto": texto, "icono": icono, "punto": [loc[1], loc[0]], "calle": calle,
-                          "metros": round(s.get("distance") or 0)})
+                          "metros": round(s.get("distance") or 0),
+                          # En bruto, para que la app lo escriba en el idioma de cada uno.
+                          "maniobra": {"tipo": m.get("type") or "", "mod": m.get("modifier") or "",
+                                       "salida": m.get("exit") if isinstance(m.get("exit"), int) else None}})
     return fuera

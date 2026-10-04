@@ -12,6 +12,7 @@ import InstalarApp from './InstalarApp'
 import { useToast } from '../lib/toast'
 import { lista } from '../lib/lista'
 import { hoyLocal, fechaEs } from '../lib/fecha'
+import { tx, useIdioma } from '../lib/idioma'
 
 /* ── LA APP DE QUIEN REPARTE SOLO (04-10-2026) ───────────────────────────────
    No es el panel de una empresa pequeña: es otro producto, como Circuit o
@@ -26,6 +27,7 @@ const PESTANAS = [
 const euros = (n) => `${Number(n || 0).toFixed(2).replace('.', ',')} €`
 
 export default function RutaApp() {
+  useIdioma()
   const toast = useToast()
   const [tab, setTab] = useState(() => {
     try { return sessionStorage.getItem('ruta_tab') || 'hoy' } catch { return 'hoy' }
@@ -46,12 +48,12 @@ export default function RutaApp() {
     let pendiente = q.get('canjear') || ''
     try { pendiente = pendiente || sessionStorage.getItem('regalo_pendiente') || '' } catch { /* nada */ }
     const canje = pendiente
-      ? canjearRegalo(pendiente).then(({ data }) => toast.success(data?.mensaje || 'Regalo aplicado'))
-        .catch((e) => toast.error(e?.response?.data?.detail || 'No se pudo canjear el regalo'))
+      ? canjearRegalo(pendiente).then(({ data }) => toast.success(data?.mensaje || tx('Regalo aplicado')))
+        .catch((e) => toast.error(e?.response?.data?.detail || tx('No se pudo canjear el regalo')))
         .finally(() => { try { sessionStorage.removeItem('regalo_pendiente') } catch { /* nada */ } })
       : Promise.resolve()
     canje.then(recargar)
-    if (q.get('regalo') === 'cancelado') { toast.error('Pago del regalo cancelado'); olvidarPendiente(); limpiar() } else if (q.get('regalo')) {
+    if (q.get('regalo') === 'cancelado') { toast.error(tx('Pago del regalo cancelado')); olvidarPendiente(); limpiar() } else if (q.get('regalo')) {
       enviarPendiente((p) => p.nombre === 'Purchase')
       setRegaloNuevo(q.get('regalo')); setTab('cuenta'); limpiar()
     }
@@ -60,7 +62,7 @@ export default function RutaApp() {
       // El webhook de Stripe tarda unos segundos: se mira varias veces.
       let n = 0
       const t = setInterval(() => { n += 1; recargar(); if (n >= 8) clearInterval(t) }, 3000)
-      toast.success('Tarjeta añadida. Activando tu cuenta…')
+      toast.success(tx('Tarjeta añadida. Activando tu cuenta…'))
       limpiar()
       return () => clearInterval(t)
     }
@@ -93,7 +95,7 @@ export default function RutaApp() {
       {billing?.status === 'trial' && !billing.bloqueo && !billing.falta_tarjeta && billing.days_left != null && billing.days_left <= 3 && tab !== 'cuenta' && (
         <button onClick={() => setTab('cuenta')}
           className="flex w-full items-center justify-center gap-1.5 bg-amber-500/15 px-4 py-2 text-[13px] font-semibold text-amber-200">
-          Quedan {billing.days_left} día{billing.days_left === 1 ? '' : 's'} de prueba · Ver mi plan
+          {billing.days_left === 1 ? tx('Queda 1 día de prueba · Ver mi plan') : tx('Quedan {n} días de prueba · Ver mi plan', { n: billing.days_left })}
         </button>
       )}
       <main className="flex-1 px-4 pb-24 pt-4">
@@ -107,7 +109,7 @@ export default function RutaApp() {
         {tab === 'historial' && <Historial />}
         {tab === 'cuenta' && <Cuenta billing={billing} recargar={recargar} toast={toast} resaltarRegalo={regaloNuevo} />}
       </main>
-      <nav className="fixed inset-x-0 bottom-0 z-40 border-t border-dark-800 bg-dark-950/95 pb-[env(safe-area-inset-bottom)] backdrop-blur" aria-label="Secciones">
+      <nav className="fixed inset-x-0 bottom-0 z-40 border-t border-dark-800 bg-dark-950/95 pb-[env(safe-area-inset-bottom)] backdrop-blur" aria-label={tx('Secciones')}>
         <div className="mx-auto grid max-w-md grid-cols-4">
           {PESTANAS.map(([k, t, I]) => (
             <button key={k} onClick={() => setTab(k)}
@@ -117,7 +119,7 @@ export default function RutaApp() {
               <span className={`flex h-8 w-14 items-center justify-center rounded-full transition-all ${tab === k ? 'bg-brand-500/20' : ''}`}>
                 <I size={20} strokeWidth={tab === k ? 2.4 : 2} />
               </span>
-              {t}
+              {tx(t)}
             </button>
           ))}
         </div>
@@ -142,19 +144,19 @@ function Historial() {
   const hoy = hoyLocal()
   return (
     <div className="mx-auto max-w-md">
-      <h1 className="font-display text-[22px] font-bold text-dark-50">Historial</h1>
+      <h1 className="font-display text-[22px] font-bold text-dark-50">{tx('Historial')}</h1>
       <p className="mb-4 text-[12.5px] text-dark-400">
-        Últimos 30 días: {est.total} paradas, {est.entregados} entregadas
-        {est.tasa_entrega != null ? ` (${est.tasa_entrega} % a la primera)` : ''}.
+        {tx('Últimos 30 días: {total} paradas, {ok} entregadas', { total: est.total, ok: est.entregados })}
+        {est.tasa_entrega != null ? ` ${tx('({p} % a la primera)', { p: est.tasa_entrega })}` : ''}.
       </p>
-      {dias.length === 0 && <p className="rounded-xl border border-dashed border-dark-700 px-4 py-8 text-center text-[13px] text-dark-400">Aún no hay repartos. Hoy empieza en «Hoy».</p>}
+      {dias.length === 0 && <p className="rounded-xl border border-dashed border-dark-700 px-4 py-8 text-center text-[13px] text-dark-400">{tx('Aún no hay repartos. Hoy empieza en «Hoy».')}</p>}
       <div className="flex flex-col gap-2">
         {dias.map((d) => (
           <button key={d.fecha} onClick={() => setDia(dia === d.fecha ? null : d.fecha)}
             className={`rounded-2xl border p-3.5 text-left ${dia === d.fecha ? 'border-brand-500/60 bg-brand-500/10' : 'border-dark-700 bg-dark-900'}`}>
             <div className="flex items-center justify-between">
-              <span className="text-[14px] font-semibold text-dark-50">{d.fecha === hoy ? 'Hoy' : fechaEs(d.fecha)}</span>
-              <span className="text-[12.5px] text-dark-400">{d.entregados}/{d.total} entregados{d.fallidos ? ` · ${d.fallidos} no` : ''}</span>
+              <span className="text-[14px] font-semibold text-dark-50">{d.fecha === hoy ? tx('Hoy') : fechaEs(d.fecha)}</span>
+              <span className="text-[12.5px] text-dark-400">{tx('{ok}/{total} entregados', { ok: d.entregados, total: d.total })}{d.fallidos ? ` · ${tx('{n} no', { n: d.fallidos })}` : ''}</span>
             </div>
             {dia === d.fecha && (
               pedidos === null ? <Loader2 size={16} className="mt-3 animate-spin text-dark-500" /> : <Dia datos={pedidos} />
@@ -173,10 +175,10 @@ function Dia({ datos }) {
   return (
     <div className="mt-3 space-y-1.5 text-[12.5px]">
       <div className="flex flex-wrap gap-x-4 gap-y-1 text-dark-300">
-        <span className="flex items-center gap-1"><Package size={13} /> {ps.length} paradas</span>
+        <span className="flex items-center gap-1"><Package size={13} /> {tx('{n} paradas', { n: ps.length })}</span>
         {ruta?.km ? <span>{ruta.km} km</span> : null}
         {ruta?.minutos ? <span>{Math.floor(ruta.minutos / 60)} h {ruta.minutos % 60} min</span> : null}
-        {cobrado > 0 && <span className="flex items-center gap-1 text-emerald-300"><Euro size={13} /> {euros(cobrado)} cobrados</span>}
+        {cobrado > 0 && <span className="flex items-center gap-1 text-emerald-300"><Euro size={13} /> {tx('{importe} cobrados', { importe: euros(cobrado) })}</span>}
       </div>
       <ul className="divide-y divide-dark-800 rounded-xl border border-dark-800">
         {ps.map((p) => (
@@ -185,7 +187,7 @@ function Dia({ datos }) {
               : p.estado === 'fallido' ? <XCircle size={14} className="mt-0.5 shrink-0 text-red-400" />
                 : <Package size={14} className="mt-0.5 shrink-0 text-dark-500" />}
             <span className="min-w-0 flex-1">
-              <span className="block truncate text-dark-100">{p.cliente || p.direccion || 'Pedido'}</span>
+              <span className="block truncate text-dark-100">{p.cliente || p.direccion || tx('Pedido')}</span>
               <span className="block truncate text-[11.5px] text-dark-500">
                 {p.direccion && p.cliente ? `${p.direccion} · ` : ''}{p.eta ? `≈ ${p.eta}` : ''}{p.motivo ? ` · ${p.motivo}` : ''}
                 {p.cobrado_importe ? ` · ${euros(p.cobrado_importe)} ${p.cobrado_metodo || ''}` : ''}
