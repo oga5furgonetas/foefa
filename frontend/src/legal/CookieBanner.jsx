@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Cookie, X } from 'lucide-react'
 import { Link } from 'react-router-dom'
 import { hayPixel, consentimiento, guardarConsentimiento, cargarPixel } from '../lib/metaPixel'
@@ -34,10 +34,25 @@ export default function CookieBanner() {
     guardarConsentimiento(anuncios)
     setShow(false)
   }
+  /* QUE NO TAPE NADA. Es fijo abajo: en un móvil cubría el botón «Crear
+     cuenta» del alta (medido el 04-10-2026 con la pantalla en chino, que ocupa
+     más líneas), y quien llega del anuncio no sabe que tiene que cerrarlo
+     antes. Mientras está a la vista, la página reserva abajo su altura, así
+     que todo se puede desplazar por encima de él. */
+  const caja = useRef(null)
+  useEffect(() => {
+    if (!show || !caja.current) return undefined
+    const body = document.body
+    const ajustar = () => { if (caja.current) body.style.paddingBottom = `${caja.current.offsetHeight + 24}px` }
+    ajustar()
+    const ro = typeof ResizeObserver !== 'undefined' ? new ResizeObserver(ajustar) : null
+    if (ro) ro.observe(caja.current)
+    return () => { if (ro) ro.disconnect(); body.style.paddingBottom = '' }
+  }, [show])
   if (!show) return null
   if (conPixel) {
     return (
-      <div className="fixed inset-x-3 bottom-3 z-50 mx-auto max-w-3xl rounded-xl border border-dark-700 bg-dark-900/95 p-4 shadow-2xl backdrop-blur" role="dialog" aria-label="Cookies">
+      <div ref={caja} className="fixed inset-x-3 bottom-3 z-50 mx-auto max-w-3xl rounded-xl border border-dark-700 bg-dark-900/95 p-4 shadow-2xl backdrop-blur" role="dialog" aria-label="Cookies">
         <div className="flex items-start gap-3">
           <Cookie size={20} className="mt-0.5 shrink-0 text-amber-400" />
           <div className="flex-1 text-sm text-dark-300">
@@ -53,7 +68,7 @@ export default function CookieBanner() {
     )
   }
   return (
-    <div className="fixed inset-x-3 bottom-3 z-50 mx-auto max-w-3xl rounded-xl border border-dark-700 bg-dark-900/95 p-4 shadow-2xl backdrop-blur">
+    <div ref={caja} className="fixed inset-x-3 bottom-3 z-50 mx-auto max-w-3xl rounded-xl border border-dark-700 bg-dark-900/95 p-4 shadow-2xl backdrop-blur">
       <div className="flex flex-wrap items-start gap-3">
         <Cookie size={20} className="mt-0.5 shrink-0 text-amber-400" />
         <div className="min-w-0 flex-1 basis-[17rem] text-sm text-dark-300">
