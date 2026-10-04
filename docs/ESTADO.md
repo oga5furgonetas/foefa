@@ -559,6 +559,23 @@ Nada se había borrado (org `owner` sin `modulos`, usuario `dani` sin
   (falta permiso de pedidos/suscripciones o no ha propagado). `PLAY_COBRO_ACTIVO`
   sigue apagado.
 
+## Qué se hizo el 04-10-2026 (mañana): panel en chino y China
+
+- Panel con chino como 7º idioma: `src/i18nZh.js` (las 1.397 claves de DICT;
+  `check-i18n.mjs` falla si falta una) + `lib/traductorZh.js`, que en chino
+  cambia en pantalla las ~1.500 frases escritas tal cual en el JSX
+  (`src/i18nZhLit.js`, carga aparte). Fuera quedan módulos del dueño (Valor,
+  Negocio, tienda) y los de Amazon (DNR, horas). Frases nuevas en el JSX
+  saldrán en español en el panel chino hasta añadirlas a i18nZhLit.
+- China como país (cn, +86, Asia/Shanghai, CNY). Con cuenta en China la ruta
+  navega con Amap/Baidu (coordenadas WGS-84), avisa por SMS y no usa Google.
+- Lo que falta para China continental (decisiones de Dani, no hecho):
+  API bajo dominio propio (hoy *.fly.dev); APK directa o tiendas chinas (no
+  hay Play); Web Push no llega (va por FCM); Alipay/WeChat Pay en Stripe;
+  PIPL (datos de clientes chinos fuera de China) e ICP solo si se aloja allí;
+  geocodificación pobre con OSM (mejor la API de Amap, pide cuenta china);
+  anuncios: Facebook está bloqueado (WeChat/Douyin/Xiaohongshu).
+
 ## Pendiente (por prioridad)
 
 -2. **Reparto (03-10)**: antes de cobrar a una empresa de reparto, contrato de
