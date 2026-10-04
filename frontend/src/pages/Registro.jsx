@@ -7,6 +7,7 @@ import { API_BASE } from '../services/api'
 import { medirAccion } from '../lib/analitica'
 import { saveSession } from '../panel/auth'
 import { useT, LANGS } from '../i18n'
+import { tx, useIdioma, IDIOMAS, cambiarIdioma } from '../lib/idioma'
 import { Check, Zap, Package, ShoppingCart, Warehouse, Truck, User, Send } from 'lucide-react'
 import { MARCA, dominio } from '../marca'
 
@@ -238,6 +239,8 @@ function PlanPicker({ onSelect, furgonetas }) {
 /* ── Formulario de registro (paso 2) ── */
 export default function Registro() {
   const { t, lang, setLang } = useT()
+  // Quien reparte solo sigue el idioma de su app (7 idiomas, chino incluido).
+  const idiomaApp = useIdioma()
   const params = new URLSearchParams(window.location.search)
   const paramPlan = params.get('plan') || ''
   const paramBilling = params.get('billing') || 'monthly'
@@ -297,19 +300,30 @@ export default function Registro() {
   function onOrg(v) { setOrg(v); if (!slugTouched) setSlug(slugify(v)) }
 
   const soloYo = sector === 'autonomo'
+  // Los textos que ve quien reparte solo, en el idioma de su app; el alta de
+  // empresa sigue con los suyos.
+  const tt = (texto, vars) => (soloYo ? tx(texto, vars)
+    : texto.replace(/\{(\w+)\}/g, (m, k) => (vars && vars[k] != null ? String(vars[k]) : m)))
+  // «Acepto los [Términos], el [Acuerdo…] y la [Política…].»: los [ ] son enlaces, en orden.
+  const conEnlaces = (texto, hrefs) => texto.split(/(\[[^\]]+\])/).map((trozo, i) => {
+    const m = trozo.match(/^\[(.+)\]$/)
+    if (!m) return trozo
+    const href = hrefs.shift()
+    return <a key={i} href={href} target="_blank" rel="noreferrer" style={{ color: '#0ea5e9' }}>{m[1]}</a>
+  })
 
   async function submit() {
     setErr('')
     const s = soloYo ? `${slugify(org) || 'reparto'}-${Math.random().toString(36).slice(2, 6)}` : slugify(slug)
     const usuario = soloYo ? email.trim().toLowerCase() : user.trim()
-    if (!org.trim()) return setErr(soloYo ? 'Dinos tu nombre.' : 'Indica el nombre de tu empresa.')
+    if (!org.trim()) return setErr(soloYo ? tt('Dinos tu nombre.') : 'Indica el nombre de tu empresa.')
     if (s.length < 3) return setErr('La URL de tu empresa debe tener al menos 3 caracteres (a-z, 0-9).')
     if (!email.trim() || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim()))
-      return setErr('Introduce un email válido.')
+      return setErr(tt('Introduce un email válido.'))
     if (usuario.length < 3) return setErr('El usuario debe tener al menos 3 caracteres.')
-    if (pass.length < 8) return setErr('La contraseña debe tener al menos 8 caracteres.')
-    if (pass !== pass2) return setErr('Las contraseñas no coinciden.')
-    if (!accept) return setErr('Debes aceptar los Términos y la Política de Privacidad para continuar.')
+    if (pass.length < 8) return setErr(tt('La contraseña debe tener al menos 8 caracteres.'))
+    if (pass !== pass2) return setErr(tt('Las contraseñas no coinciden.'))
+    if (!accept) return setErr(tt('Debes aceptar los Términos y la Política de Privacidad para continuar.'))
     setBusy(true)
     try {
       const r = await fetch(`${API_BASE}/auth/register`, {
@@ -325,7 +339,7 @@ export default function Registro() {
       })
       const j = await r.json()
       if (!r.ok || !j.access_token) {
-        setErr(j.detail || 'No se pudo crear la cuenta. Prueba con otro usuario o URL.')
+        setErr(j.detail || (soloYo ? tt('No se pudo crear la cuenta. Prueba con otro correo.') : 'No se pudo crear la cuenta. Prueba con otro usuario o URL.'))
         setBusy(false); return
       }
       saveSession(j)   // le faltaba admin_role; una sola función lo guarda todo
@@ -334,7 +348,7 @@ export default function Registro() {
       medirAccion('registro_ok')
       evento('CompleteRegistration', { content_name: sector || 'alta', status: true })
       setDone(true)
-    } catch { setErr('Sin conexión con el servidor. Revisa tu red e inténtalo de nuevo.'); setBusy(false) }
+    } catch { setErr(tt('Sin conexión con el servidor. Revisa tu red e inténtalo de nuevo.')); setBusy(false) }
   }
 
   // Pantalla de confirmación
@@ -343,21 +357,21 @@ export default function Registro() {
       <div style={wrap}>
         <div style={{ ...card, textAlign: 'center', maxWidth: 440 }}>
           <div style={{ fontSize: 48, marginBottom: 12 }}>📧</div>
-          <h2 style={{ margin: '0 0 8px', fontSize: 20 }}>¡Cuenta creada!</h2>
+          <h2 style={{ margin: '0 0 8px', fontSize: 20 }}>{tt('¡Cuenta creada!')}</h2>
           <div style={{ display: 'inline-flex', alignItems: 'center', gap: 6, background: `${planInfo.color}18`, border: `1px solid ${planInfo.color}40`, borderRadius: 20, padding: '4px 14px', fontSize: 12, fontWeight: 700, color: planInfo.color, margin: '0 0 16px' }}>
-            Plan {planInfo.name} · {diasPrueba} días gratis
+            {tt('Plan {plan} · {n} días gratis', { plan: tt(planInfo.name), n: diasPrueba })}
           </div>
           <p style={{ color: '#8b94a3', fontSize: 14, lineHeight: 1.6, margin: '0 0 8px' }}>
-            Hemos enviado un email de bienvenida a <b style={{ color: '#0ea5e9' }}>{email}</b>.
+            {tt('Hemos enviado un email de bienvenida a')} <b style={{ color: '#0ea5e9' }}>{email}</b>.
           </p>
           <p style={{ color: '#64748b', fontSize: 12, marginBottom: 22 }}>
-            {soloYo ? 'Ya puedes escanear tus primeros paquetes.' : 'Puedes acceder ahora y verificar tu email después.'}
+            {soloYo ? tt('Ya puedes escanear tus primeros paquetes.') : 'Puedes acceder ahora y verificar tu email después.'}
           </p>
           {/* El primer paso de verdad es traer lo que ya tiene: se le lleva
               directo, y el panel queda a un clic. */}
           {reparte ? (
             <button style={{ ...btn, marginTop: 0 }} onClick={() => { window.location.href = soloYo ? '/ruta' : '/panel/reparto' }}>
-              {soloYo ? 'Empezar mi ruta →' : 'Preparar el reparto →'}
+              {soloYo ? tt('Empezar mi ruta →') : 'Preparar el reparto →'}
             </button>
           ) : (
             <button style={{ ...btn, marginTop: 0 }} onClick={() => { window.location.href = '/panel/importaciones' }}>
@@ -376,20 +390,26 @@ export default function Registro() {
   return (
     <div style={wrap}>
       <div style={{ position: 'absolute', top: 18, right: 18 }}>
-        <select value={lang} onChange={(e) => setLang(e.target.value)} style={sel}>
-          {Object.entries(LANGS).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
-        </select>
+        {soloYo ? (
+          <select value={idiomaApp} onChange={(e) => cambiarIdioma(e.target.value)} style={sel} aria-label="Idioma / Language">
+            {Object.entries(IDIOMAS).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
+          </select>
+        ) : (
+          <select value={lang} onChange={(e) => setLang(e.target.value)} style={sel}>
+            {Object.entries(LANGS).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
+          </select>
+        )}
       </div>
 
       <div style={{ ...card, maxWidth: 440 }}>
         {/* Plan elegido — cabecera */}
         <div style={{ background: `${planInfo.color}10`, border: `1px solid ${planInfo.color}35`, borderRadius: 14, padding: '14px 16px', marginBottom: 20, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
           <div>
-            <div style={{ fontSize: 10, fontWeight: 700, color: planInfo.color, textTransform: 'uppercase', letterSpacing: '.08em', marginBottom: 3 }}>Plan elegido</div>
-            <div style={{ fontWeight: 900, fontSize: 16, color: '#eef1f6' }}>{planInfo.name}</div>
+            <div style={{ fontSize: 10, fontWeight: 700, color: planInfo.color, textTransform: 'uppercase', letterSpacing: '.08em', marginBottom: 3 }}>{tt('Plan elegido')}</div>
+            <div style={{ fontWeight: 900, fontSize: 16, color: '#eef1f6' }}>{tt(planInfo.name)}</div>
             <div style={{ fontSize: 12, color: '#64748b', marginTop: 2 }}>
               {precioFijo
-                ? `${displayPrice.toFixed(2).replace('.', ',')} €/mes, todo incluido · ${diasPrueba} días gratis`
+                ? tt('{precio} €/mes, todo incluido · {n} días gratis', { precio: displayPrice.toFixed(2).replace('.', ','), n: diasPrueba })
                 : billingMode === 'annual'
                   ? `${displayPrice}€/mes · ${precioMes(planInfo, furgonetas) * MESES_ANUAL}€/año · ahorras ${yearSave}€`
                   : `${displayPrice}€/mes`
@@ -405,10 +425,10 @@ export default function Registro() {
         </div>
 
         <div style={{ display: 'inline-flex', alignItems: 'center', gap: 6, background: 'rgba(52,211,153,.1)', border: '1px solid rgba(52,211,153,.25)', borderRadius: 99, padding: '3px 12px', fontSize: 11, fontWeight: 700, color: '#34d399', marginBottom: 16 }}>
-          ✓ {diasPrueba} días gratis · sin tarjeta · cancela cuando quieras
+          ✓ {soloYo ? tt('{n} días gratis · hoy 0 € · cancela cuando quieras', { n: diasPrueba }) : `${diasPrueba} días gratis · sin tarjeta · cancela cuando quieras`}
         </div>
 
-        <label style={lbl}>{soloYo ? 'Tu nombre' : t('reg.company')}</label>
+        <label style={lbl}>{soloYo ? tt('Tu nombre') : t('reg.company')}</label>
         <input style={inp} value={org} onChange={(e) => onOrg(e.target.value)} placeholder={soloYo ? 'Pepe' : 'Transportes Pérez SL'} />
 
         {!soloYo && <>
@@ -430,36 +450,37 @@ export default function Registro() {
         {selectedPlan !== 'operacion' && <div style={hint}>Sepáralos con comas. Podrás añadir más después.</div>}
         </>}
 
-        <label style={lbl}>Email de contacto</label>
-        <input style={inp} type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="admin@tuempresa.com" autoComplete="email" />
+        <label style={lbl}>{soloYo ? tt('Tu correo') : 'Email de contacto'}</label>
+        <input style={inp} type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder={soloYo ? 'tu@correo.com' : 'admin@tuempresa.com'} autoComplete="email" />
 
         {!soloYo && <>
         <label style={lbl}>{t('login.user')}</label>
         <input style={inp} value={user} onChange={(e) => setUser(e.target.value)} autoComplete="username" />
         </>}
-        {soloYo && <div style={hint}>Entrarás con tu correo y esta contraseña.</div>}
+        {soloYo && <div style={hint}>{tt('Entrarás con tu correo y esta contraseña.')}</div>}
 
-        <label style={lbl}>{t('login.pass')}</label>
+        <label style={lbl}>{soloYo ? tt('Contraseña') : t('login.pass')}</label>
         <input style={inp} type="password" value={pass} onChange={(e) => setPass(e.target.value)} autoComplete="new-password" />
 
-        <label style={lbl}>Repetir contraseña</label>
+        <label style={lbl}>{tt('Repetir contraseña')}</label>
         <input
           style={{ ...inp, borderColor: pass2 && pass !== pass2 ? 'rgba(248,113,113,.6)' : 'rgba(255,255,255,.12)' }}
           type="password" value={pass2}
           onChange={(e) => setPass2(e.target.value)}
           onKeyDown={(e) => e.key === 'Enter' && submit()}
           autoComplete="new-password"
-          placeholder="Repite la contraseña"
+          placeholder={tt('Repite la contraseña')}
         />
         {pass2 && pass !== pass2 && (
-          <div style={{ color: '#f87171', fontSize: 12, marginTop: 4 }}>Las contraseñas no coinciden</div>
+          <div style={{ color: '#f87171', fontSize: 12, marginTop: 4 }}>{tt('Las contraseñas no coinciden')}</div>
         )}
 
         <label style={{ display: 'flex', alignItems: 'flex-start', gap: 8, marginTop: 16, fontSize: 12, color: '#8b94a3', lineHeight: 1.5, cursor: 'pointer' }}>
           <input type="checkbox" checked={accept} onChange={(e) => setAccept(e.target.checked)} style={{ marginTop: 2 }} />
           <span>
-            Acepto los <a href="/terminos" target="_blank" style={{ color: '#0ea5e9' }}>Términos</a>, el <a href="/encargo" target="_blank" style={{ color: '#0ea5e9' }}>Acuerdo de Encargo del Tratamiento</a> y la <a href="/privacidad" target="_blank" style={{ color: '#0ea5e9' }}>Política de Privacidad</a>.
-            {' '}Prueba gratuita de {diasPrueba} días — sin cobro durante la prueba. Al finalizar se cobra el plan {planInfo.name} ({precioFijo ? displayPrice.toFixed(2).replace('.', ',') : displayPrice} €/mes) salvo cancelación.
+            {conEnlaces(tt('Acepto los [Términos], el [Acuerdo de Encargo del Tratamiento] y la [Política de Privacidad].'), ['/terminos', '/encargo', '/privacidad'])}
+            {' '}{tt('Prueba gratuita de {n} días — sin cobro durante la prueba. Al finalizar se cobra el plan {plan} ({precio} €/mes) salvo cancelación.', {
+              n: diasPrueba, plan: tt(planInfo.name), precio: precioFijo ? displayPrice.toFixed(2).replace('.', ',') : displayPrice })}
           </span>
         </label>
 
@@ -468,7 +489,7 @@ export default function Registro() {
           disabled={busy}
           onClick={submit}
         >
-          {busy ? 'Creando cuenta…' : `Crear cuenta con plan ${planInfo.name}`}
+          {busy ? tt('Creando cuenta…') : tt('Crear cuenta con plan {plan}', { plan: tt(planInfo.name) })}
         </button>
 
         {err && (
@@ -478,7 +499,7 @@ export default function Registro() {
         )}
 
         <div style={{ textAlign: 'center', marginTop: 16, color: '#8b94a3', fontSize: 13 }}>
-          {t('reg.have')} <a href="/panel/login" style={{ color: '#0ea5e9', textDecoration: 'none', fontWeight: 600 }}>{t('login.btn')}</a>
+          {soloYo ? tt('¿Ya tienes cuenta?') : t('reg.have')} <a href="/panel/login" style={{ color: '#0ea5e9', textDecoration: 'none', fontWeight: 600 }}>{soloYo ? tt('Entrar') : t('login.btn')}</a>
         </div>
       </div>
     </div>

@@ -13,15 +13,19 @@ const raiz = join(dirname(fileURLToPath(import.meta.url)), '..', 'frontend', 'sr
 const FICHEROS = [
   'pages/driver/MiRuta.jsx', 'pages/driver/Navegacion.jsx', 'pages/Empezar.jsx', 'pages/InstalarApp.jsx',
   'pages/RegaloPagina.jsx', 'pages/RutaApp.jsx', 'pages/RutaCuenta.jsx', 'pages/SeguimientoPedido.jsx', 'lib/guia.js',
+  'pages/Registro.jsx',
 ]
+// Nombres que llegan de datos (el plan del autónomo en Registro: tt(planInfo.name)).
+const DE_DATOS = ['Repartidor']
 // Listas cuyos textos se traducen al pintarlos.
 const LISTAS = ['MOTIVOS', 'NAVEGADORES', 'HUECOS', 'PESTANAS', 'GIROS', 'ORDINALES', 'OPCIONES', 'ESTADO']
 
-const usadas = new Set()
+const usadas = new Set(DE_DATOS)
 const cadenas = (trozo) => [...trozo.matchAll(/'((?:\\'|[^'])*)'/g)].map((m) => m[1].replace(/\\'/g, "'"))
 for (const f of FICHEROS) {
   const s = readFileSync(join(raiz, f), 'utf8')
-  for (const m of s.matchAll(/\btx\(\s*'((?:\\'|[^'])*)'/g)) usadas.add(m[1].replace(/\\'/g, "'"))
+  // tx('…') y, en Registro, tt('…') (el mismo tx solo para quien reparte solo).
+  for (const m of s.matchAll(/\bt[xt]\(\s*'((?:\\'|[^'])*)'/g)) usadas.add(m[1].replace(/\\'/g, "'"))
   // tx(a ? 'x' : 'y') y similares: las cadenas dentro del primer argumento.
   for (const m of s.matchAll(/\btx\(([^()]*\?[^()]*)\)/g)) cadenas(m[1]).forEach((c) => usadas.add(c))
   for (const nombre of LISTAS) {
