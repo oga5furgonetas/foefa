@@ -109,6 +109,13 @@ function navegar(p, nav) {
    se dice en qué zona se deja; al llegar a la parada se sabe dónde buscar. */
 const HUECOS = ['Delante · izq', 'Delante · der', 'Medio · izq', 'Medio · der', 'Detrás · izq', 'Detrás · der']
 
+// Metros entre dos puntos (para no repintar por un temblor del GPS).
+const metrosEntre = (a, b) => {
+  const r = Math.PI / 180
+  const x = Math.sin(((b.lat - a.lat) * r) / 2) ** 2 + Math.cos(a.lat * r) * Math.cos(b.lat * r) * Math.sin(((b.lng - a.lng) * r) / 2) ** 2
+  return 12742000 * Math.asin(Math.sqrt(x))
+}
+
 // Dónde estoy ahora (si el móvil lo dice en 8 s); si no, null y se sale del almacén.
 const posicionAhora = () => new Promise((ok) => {
   if (!('geolocation' in navigator)) { ok(null); return }
@@ -192,20 +199,44 @@ export default function MiRuta({ onBack, embebido = false }) {
   // orden o la lista de lo que queda (no en cada repintado).
   const firmaRuta = ruta ? lista(ruta.pedidos).filter((p) => !['entregado', 'fallido'].includes(p.estado)).sort(porOrden)
     .map((p) => `${p.id}:${p.lat ?? ''}`).join('|') : ''
+  /* EL PUNTO AZUL SE MUEVE CONTIGO (como Google Maps, Circuit o Amazon Flex):
+     mientras el mapa está abierto se sigue la posición del móvil; esa posición
+     solo se pinta aquí. Si te alejas más de 150 m de donde se calculó el
+     camino (y han pasado 30 s), se recalcula desde donde estás, y la línea
+     deja de incluir lo ya recorrido. */
+  const ultimaPos = useRef(null)
+  const origenTrazado = useRef(null)
+  const [recalcular, setRecalcular] = useState(0)
+  useEffect(() => {
+    if (vista !== 'mapa' || !('geolocation' in navigator)) return undefined
+    const id = navigator.geolocation.watchPosition((pos) => {
+      const nuevo = { lat: pos.coords.latitude, lng: pos.coords.longitude }
+      ultimaPos.current = nuevo
+      setYo((a) => (!a || metrosEntre(a, nuevo) > 8 ? nuevo : a))
+      const o = origenTrazado.current
+      if (o && metrosEntre(o, nuevo) > 150 && Date.now() - o.t > 30000) {
+        origenTrazado.current = { ...nuevo, t: Date.now() }
+        setRecalcular((n) => n + 1)
+      }
+    }, () => {}, { enableHighAccuracy: true, maximumAge: 5000, timeout: 20000 })
+    return () => { navigator.geolocation.clearWatch(id); ultimaPos.current = null }
+  }, [vista])
+
   useEffect(() => {
     if (vista !== 'mapa' || !firmaRuta) return undefined
     let vivo = true
     ;(async () => {
-      const aqui = await posicionAhora()
+      const aqui = ultimaPos.current || await posicionAhora()
       if (!vivo) return
       setYo(aqui)
+      origenTrazado.current = aqui ? { ...aqui, t: Date.now() } : null
       try {
         const { data } = await repTrazado(aqui)
         if (vivo) setTrazado(data)
-      } catch { if (vivo) setTrazado(null) }
+      } catch { if (vivo) setTrazado({ fuente: 'linea_recta', linea: [] }) }
     })()
     return () => { vivo = false }
-  }, [vista, firmaRuta])
+  }, [vista, firmaRuta, recalcular])
 
   const cargar = useCallback(() => {
     repMiRuta().then(({ data }) => { fijarPais(data?.pais); setRuta(data) })

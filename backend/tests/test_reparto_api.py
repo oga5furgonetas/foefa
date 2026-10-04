@@ -440,3 +440,51 @@ async def test_navegacion_sin_servidor_de_rutas_da_la_direccion_en_recto(monkeyp
     assert r["fuente"] == "linea_recta" and r["pasos"][0]["texto"] == "Ve hacia la parada"
     assert 100 <= r["metros"] <= 120
     assert server._REP_NAVEGACION == {}   # lo fallido no se guarda: el siguiente intento vuelve a preguntar
+
+
+@pytest.mark.asyncio(loop_scope="session")
+async def test_trazado_usa_el_respaldo_y_no_guarda_el_fallo(monkeypatch):
+    """Si el servidor principal de rutas no contesta se pregunta al de respaldo;
+    y un fallo total NO se queda guardado (antes dejaba rayas rectas hasta reiniciar)."""
+    import httpx
+    llamadas = []
+
+    class Resp:
+        def __init__(self, ok):
+            self.status_code = 200 if ok else 503
+            self._ok = ok
+
+        def json(self):
+            return {"code": "Ok", "routes": [{"distance": 1500, "duration": 180,
+                    "geometry": {"coordinates": [[-8.4, 43.0], [-8.405, 43.005], [-8.41, 43.01]]}}]} if self._ok else {}
+
+    def cliente(principal_ok, respaldo_ok):
+        class C:
+            def __init__(self, *a, **k):
+                pass
+
+            async def __aenter__(self):
+                return self
+
+            async def __aexit__(self, *a):
+                return False
+
+            async def get(self, url, params=None):
+                llamadas.append(url)
+                return Resp(respaldo_ok if "router.project-osrm.org" in url else principal_ok)
+        return C
+    pts = [(43.0, -8.4), (43.01, -8.41)]
+    monkeypatch.setattr(server, "_REP_RUTAS_ULTIMA", [0.0])
+    monkeypatch.setattr(httpx, "AsyncClient", cliente(False, True))
+    server._REP_TRAZADOS.clear()
+    r = await server._rep_trazado(pts)
+    assert r["fuente"] == "carreteras" and len(r["linea"]) == 3 and len(llamadas) == 2
+    # Todo caído: rayas rectas, y NO se guarda.
+    server._REP_TRAZADOS.clear()
+    monkeypatch.setattr(httpx, "AsyncClient", cliente(False, False))
+    r = await server._rep_trazado(pts)
+    assert r["fuente"] == "linea_recta" and server._REP_TRAZADOS == {}
+    # Y al volver el servidor, el siguiente intento ya da calles.
+    monkeypatch.setattr(httpx, "AsyncClient", cliente(True, True))
+    r = await server._rep_trazado(pts)
+    assert r["fuente"] == "carreteras"

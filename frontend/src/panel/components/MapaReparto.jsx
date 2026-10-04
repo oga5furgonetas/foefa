@@ -1,6 +1,8 @@
-import { useEffect, useRef } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import L from 'leaflet'
 import 'leaflet/dist/leaflet.css'
+import { Crosshair, LocateFixed } from 'lucide-react'
+import { tx } from '../../lib/idioma'
 
 /* EL MAPA DEL REPARTO. Puntos dibujados (círculos y etiquetas), no los
    iconos de Leaflet: esos son imágenes que el empaquetador no encuentra y
@@ -27,6 +29,12 @@ export default function MapaReparto({ paradas = [], base = null, vivos = [], alt
   const mapa = useRef(null)
   const capa = useRef(null)
   const encuadre = useRef([])
+  const capaYo = useRef(null)
+  const yoRef = useRef(yo)
+  const [seguir, setSeguir] = useState(false)
+  const seguirRef = useRef(false)
+  yoRef.current = yo
+  seguirRef.current = seguir
 
   useEffect(() => {
     if (!caja.current || mapa.current) return undefined
@@ -36,6 +44,7 @@ export default function MapaReparto({ paradas = [], base = null, vivos = [], alt
       maxZoom: 19, attribution: '© OpenStreetMap',
     }).addTo(mapa.current)
     capa.current = L.layerGroup().addTo(mapa.current)
+    capaYo.current = L.layerGroup().addTo(mapa.current)
     // Si la caja cambia de tamaño tras crear el mapa (la página aún se estaba
     // montando), Leaflet solo pinta la franja que medía al principio: visto el
     // 03-10-2026 en producción, un tercio del mapa en gris.
@@ -78,22 +87,17 @@ export default function MapaReparto({ paradas = [], base = null, vivos = [], alt
     const conCalles = trazado?.fuente === 'carreteras' && trazado.linea?.length > 1
     if (conCalles) {
       // Como un navegador: borde blanco y línea gruesa encima, por debajo de las paradas.
-      L.polyline(trazado.linea, { color: '#ffffff', weight: 8, opacity: 0.9, interactive: false }).addTo(capa.current)
-      L.polyline(trazado.linea, { color: '#0284c7', weight: 5, opacity: 0.95, interactive: false }).addTo(capa.current)
+      L.polyline(trazado.linea, { color: '#ffffff', weight: 9, opacity: 0.95, lineCap: 'round', lineJoin: 'round', interactive: false }).addTo(capa.current)
+      L.polyline(trazado.linea, { color: '#0284c7', weight: 5.5, opacity: 1, lineCap: 'round', lineJoin: 'round', interactive: false }).addTo(capa.current)
     } else {
       Object.entries(porConductor).forEach(([color, lista]) => {
         const linea = lista.sort((a, b) => a[0] - b[0]).map((x) => x[1])
-        if (yo?.lat != null) linea.unshift([yo.lat, yo.lng])
+        if (yoRef.current?.lat != null) linea.unshift([yoRef.current.lat, yoRef.current.lng])
         else if (base?.lat != null) linea.unshift([base.lat, base.lng])
         if (linea.length > 1) L.polyline(linea, { color, weight: 3, opacity: 0.6, dashArray: '6 6' }).addTo(capa.current)
       })
     }
-    if (yo?.lat != null) {
-      L.circleMarker([yo.lat, yo.lng], { radius: 14, stroke: false, fillColor: '#3b82f6', fillOpacity: 0.2, interactive: false }).addTo(capa.current)
-      L.circleMarker([yo.lat, yo.lng], { radius: 7, color: '#ffffff', weight: 3, fillColor: '#2563eb', fillOpacity: 1 })
-        .bindTooltip('Estás aquí').addTo(capa.current)
-      puntos.push([yo.lat, yo.lng])
-    }
+    if (yoRef.current?.lat != null) puntos.push([yoRef.current.lat, yoRef.current.lng])
     vivos.forEach((v) => {
       if (v.lat == null) return
       L.circleMarker([v.lat, v.lng], { radius: 11, color: v.color || '#0ea5e9', weight: 4, fillColor: '#fff', fillOpacity: 1 })
@@ -102,10 +106,40 @@ export default function MapaReparto({ paradas = [], base = null, vivos = [], alt
       puntos.push([v.lat, v.lng])
     })
     encuadre.current = puntos
-    encuadrar(m, puntos)
-  }, [paradas, base, vivos, trazado, yo])
+    if (!seguirRef.current) encuadrar(m, puntos)
+  }, [paradas, base, vivos, trazado])
+
+  // El punto azul se mueve solo (sin recolocar el mapa mientras lo exploras);
+  // con «Seguirme» el mapa va detrás de él.
+  useEffect(() => {
+    const m = mapa.current
+    if (!m || !capaYo.current) return
+    capaYo.current.clearLayers()
+    if (yo?.lat == null) return
+    L.circleMarker([yo.lat, yo.lng], { radius: 14, stroke: false, fillColor: '#3b82f6', fillOpacity: 0.2, interactive: false }).addTo(capaYo.current)
+    L.circleMarker([yo.lat, yo.lng], { radius: 7, color: '#ffffff', weight: 3, fillColor: '#2563eb', fillOpacity: 1 })
+      .bindTooltip('Estás aquí').addTo(capaYo.current)
+    if (seguir) m.setView([yo.lat, yo.lng], Math.max(m.getZoom(), 16), { animate: true })
+  }, [yo, seguir])
 
   // `isolate`: Leaflet pone sus capas con z-index 400-1000 y, sin un contexto
   // propio, el mapa se pintaba ENCIMA de las ventanas emergentes de la página.
-  return <div ref={caja} style={{ height: alto }} className="isolate w-full overflow-hidden rounded-xl border border-dark-700" />
+  return (
+    <div className="relative isolate">
+      <div ref={caja} style={{ height: alto }} className="w-full overflow-hidden rounded-xl border border-dark-700" />
+      {/* Tras mover o ampliar el mapa, un toque lo devuelve a la ruta entera. */}
+      <div className="absolute bottom-7 right-2.5 z-[1100] flex flex-col gap-2">
+        {yo?.lat != null && (
+          <button type="button" onClick={() => setSeguir((v) => !v)} aria-pressed={seguir} aria-label={tx('Seguirme')}
+            className={`flex h-10 w-10 items-center justify-center rounded-full border shadow-lg active:scale-95 ${seguir ? 'border-sky-600 bg-sky-600 text-white' : 'border-dark-700 bg-white text-slate-700'}`}>
+            <LocateFixed size={19} />
+          </button>
+        )}
+        <button type="button" onClick={() => { setSeguir(false); encuadrar(mapa.current, encuadre.current) }} aria-label={tx('Centrar la ruta')}
+          className="flex h-10 w-10 items-center justify-center rounded-full border border-dark-700 bg-white text-slate-700 shadow-lg active:scale-95">
+          <Crosshair size={19} />
+        </button>
+      </div>
+    </div>
+  )
 }

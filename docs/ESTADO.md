@@ -667,3 +667,11 @@ Nada se había borrado (org `owner` sin `modulos`, usuario `dani` sin
   `curl --resolve flotadsp.com:443:104.21.49.241`.
 - El login de Cloudflare en el navegador integrado falla por la comprobación
   anti-robots: que Dani lo haga en su Chrome.
+
+## 04-10-2026 tarde: píxel de Meta, mapa del repartidor
+
+- **Píxel de Meta** (id 1317231944812644, conjunto de datos «fds»): se activa SOLO al compilar con `VITE_META_PIXEL_ID=1317231944812644` (añadirlo SIEMPRE al `vite build` del despliegue; sin él no hay píxel ni pregunta de cookies de anuncios). No se carga hasta que la persona acepta «Aceptar» en el aviso de cookies (AEPD).
+- **Mapa del repartidor**: el punto azul sigue la posición del móvil; si se avanza >150 m (y pasan 30 s) se recalcula el camino; botones «Seguirme» y «Centrar la ruta». Test `e2e/mapa-vivo.spec.js`.
+- **Rutas por las calles**: `_rep_osrm` prueba el servidor principal y, si falla, el de respaldo; un fallo ya no se guarda (antes dejaba rayas rectas hasta reiniciar).
+- Capturas de la landing con trazado REAL (`e2e/fixtures/coruna-real.json`); las anteriores eran 5 puntos a mano = rayas rectas.
+- Alta de repartidor sin «repetir contraseña» y campos a 16 px (iOS hacía zoom).

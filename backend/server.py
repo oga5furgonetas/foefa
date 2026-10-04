@@ -46999,6 +46999,28 @@ _REP_RUTAS_ULTIMA = [0.0]
 # le mandan SOLO coordenadas, nunca nombres ni teléfonos. Si un día no da
 # abasto (muchas empresas), se monta un OSRM propio y se cambia esta variable.
 _REP_RUTAS_URL = os.environ.get("REPARTO_RUTAS_URL", "https://routing.openstreetmap.de/routed-car").rstrip("/")
+# Servidor de respaldo (el demo público de OSRM): solo se pregunta si el principal
+# no contesta, para que un fallo suelto no deje al repartidor con rayas rectas.
+_REP_RUTAS_RESPALDO = os.environ.get("REPARTO_RUTAS_RESPALDO", "https://router.project-osrm.org").rstrip("/")
+
+
+async def _rep_osrm(coords: str, steps: bool, timeout: int) -> dict:
+    """Pregunta la ruta a OSRM (principal y, si falla, respaldo). Devuelve el JSON
+    con code == "Ok" o {} si ninguno contesta. Va DENTRO de _REP_RUTAS_LOCK."""
+    import httpx as _httpx
+    for base in [u for u in (_REP_RUTAS_URL, _REP_RUTAS_RESPALDO) if u]:
+        try:
+            async with _httpx.AsyncClient(timeout=timeout, headers={
+                    "User-Agent": f"{MARCA}/1.0 (reparto; {CORREO_CONTACTO})"}) as c:
+                resp = await c.get(f"{base}/route/v1/driving/{coords}",
+                                   params={"overview": "full", "geometries": "geojson", "steps": "true" if steps else "false"})
+                j = resp.json() if resp.status_code == 200 else {}
+        except Exception as e:                               # noqa: BLE001
+            logger.warning(f"reparto: rutas sin respuesta en {base.split('/')[2]}: {type(e).__name__}")
+            j = {}
+        if j.get("code") == "Ok" and (j.get("routes") or [None])[0]:
+            return j
+    return {}
 
 
 async def _rep_matriz(puntos: list) -> tuple:
@@ -47052,20 +47074,12 @@ async def _rep_trazado(puntos: list) -> dict:
     salida = {"linea": [[la, lo] for la, lo in puntos], "fuente": "linea_recta", "km": None, "minutos": None}
     if 2 <= len(puntos) <= 80:
         coords = ";".join(f"{lo:.6f},{la:.6f}" for la, lo in puntos)
-        import httpx as _httpx
         async with _REP_RUTAS_LOCK:
             espera = 1.1 - (time.time() - _REP_RUTAS_ULTIMA[0])
             if espera > 0:
                 await asyncio.sleep(espera)
             try:
-                async with _httpx.AsyncClient(timeout=20, headers={
-                        "User-Agent": f"{MARCA}/1.0 (reparto; {CORREO_CONTACTO})"}) as c:
-                    resp = await c.get(f"{_REP_RUTAS_URL}/route/v1/driving/{coords}",
-                                       params={"overview": "full", "geometries": "geojson", "steps": "false"})
-                    j = resp.json() if resp.status_code == 200 else {}
-            except Exception as e:                           # noqa: BLE001
-                logger.warning(f"reparto: trazado sin respuesta: {type(e).__name__}")
-                j = {}
+                j = await _rep_osrm(coords, False, 20)
             finally:
                 _REP_RUTAS_ULTIMA[0] = time.time()
         ruta = (j.get("routes") or [None])[0] if j.get("code") == "Ok" else None
@@ -47074,9 +47088,10 @@ async def _rep_trazado(puntos: list) -> dict:
             salida = {"linea": reparto.aligera_linea([[c[1], c[0]] for c in geo if isinstance(c, list) and len(c) == 2]),
                       "fuente": "carreteras", "km": round((ruta.get("distance") or 0) / 1000, 1),
                       "minutos": round((ruta.get("duration") or 0) / 60)}
-    if len(_REP_TRAZADOS) > 300:
-        _REP_TRAZADOS.clear()
-    _REP_TRAZADOS[clave] = salida
+    if salida["fuente"] == "carreteras":      # lo fallido no se guarda: el siguiente intento vuelve a preguntar
+        if len(_REP_TRAZADOS) > 300:
+            _REP_TRAZADOS.clear()
+        _REP_TRAZADOS[clave] = salida
     return salida
 
 
@@ -47095,20 +47110,12 @@ async def _rep_navegacion(desde: tuple, hasta: tuple) -> dict:
               "minutos": None, "pasos": [{"texto": "Ve hacia la parada", "icono": "recto", "punto": list(hasta),
                                           "calle": "", "metros": metros, "maniobra": {"tipo": "hacia_parada"}}]}
     coords = f"{desde[1]:.6f},{desde[0]:.6f};{hasta[1]:.6f},{hasta[0]:.6f}"
-    import httpx as _httpx
     async with _REP_RUTAS_LOCK:
         espera = 1.1 - (time.time() - _REP_RUTAS_ULTIMA[0])
         if espera > 0:
             await asyncio.sleep(espera)
         try:
-            async with _httpx.AsyncClient(timeout=15, headers={
-                    "User-Agent": f"{MARCA}/1.0 (reparto; {CORREO_CONTACTO})"}) as c:
-                resp = await c.get(f"{_REP_RUTAS_URL}/route/v1/driving/{coords}",
-                                   params={"overview": "full", "geometries": "geojson", "steps": "true"})
-                j = resp.json() if resp.status_code == 200 else {}
-        except Exception as e:                               # noqa: BLE001
-            logger.warning(f"reparto: navegación sin respuesta: {type(e).__name__}")
-            j = {}
+            j = await _rep_osrm(coords, True, 15)
         finally:
             _REP_RUTAS_ULTIMA[0] = time.time()
     ruta = (j.get("routes") or [None])[0] if j.get("code") == "Ok" else None

@@ -19,23 +19,18 @@ const IDIOMAS = {
 }
 
 const pedidosDe = (c) => [
-  { id: 'p1', cliente: c[0], direccion: 'Rúa Galera 10, A Coruña', telefono: '600000001', estado: 'pendiente', bultos: 2, orden: 1, eta: '10:05', lat: 43.3704, lng: -8.4003, hueco: 'Detrás · izq' },
-  { id: 'p2', cliente: c[1], direccion: 'Rúa Real 5, A Coruña', telefono: '600000002', estado: 'pendiente', bultos: 1, orden: 2, eta: '10:14', lat: 43.3690, lng: -8.4010, cobrar: 24.5, hueco: 'Medio · der' },
-  { id: 'p3', cliente: c[2], direccion: 'Avda. Montero Ríos 12, A Coruña', estado: 'pendiente', bultos: 1, orden: 3, eta: '10:26', lat: 43.3660, lng: -8.4060, franja: ['10:00', '12:00'] },
+  { id: 'p3', cliente: c[2], direccion: 'Rúa Sinfónica de Galicia 8, A Coruña', estado: 'pendiente', bultos: 1, orden: 1, eta: '10:05', lat: 43.363889, lng: -8.409899, franja: ['10:00', '12:00'] },
+  { id: 'p2', cliente: c[1], direccion: 'Rúa Emilia Pardo Bazán 14, A Coruña', telefono: '600000002', estado: 'pendiente', bultos: 1, orden: 2, eta: '10:16', lat: 43.363999, lng: -8.407109, cobrar: 24.5, hueco: 'Medio · der' },
+  { id: 'p1', cliente: c[0], direccion: 'Rúa Marcial del Adalid 5, A Coruña', telefono: '600000001', estado: 'pendiente', bultos: 2, orden: 3, eta: '10:24', lat: 43.36219, lng: -8.407002, hueco: 'Detrás · izq' },
   { id: 'p4', cliente: c[3], direccion: 'Rúa San Andrés 30, A Coruña', estado: 'entregado', bultos: 1, orden: 4, cobrado_importe: 12, cobrado_metodo: 'tarjeta', cerrado_en: '2026-10-04T08:00:00Z' },
 ]
 
-const NAVEGAR = {
-  fuente: 'carreteras', metros: 999, minutos: 4.1,
-  linea: [[43.3665, -8.4065], [43.3675, -8.4074], [43.3679, -8.4066], [43.3713, -8.4006], [43.3704, -8.4003]],
-  pasos: [
-    { texto: 'Sal por Túnel Praza de Lugo', icono: 'recto', punto: [43.3665, -8.4065], metros: 140, calle: 'Praza de Lugo', maniobra: { tipo: 'depart' } },
-    { texto: 'Gira a la derecha por Praza de Pontevedra', icono: 'derecha', punto: [43.3675, -8.4074], metros: 86, calle: 'Praza de Pontevedra', maniobra: { tipo: 'turn', mod: 'right' } },
-    { texto: 'Sigue recto por Rúa San Andrés', icono: 'recto', punto: [43.3679, -8.4066], metros: 620, calle: 'Rúa San Andrés', maniobra: { tipo: 'continue', mod: 'straight' } },
-    { texto: 'Gira a la derecha por Rúa Torreiro', icono: 'derecha', punto: [43.3713, -8.4006], metros: 99, calle: 'Rúa Torreiro', maniobra: { tipo: 'turn', mod: 'right' } },
-    { texto: 'Has llegado', icono: 'llegada', punto: [43.3704, -8.4003], metros: 0, maniobra: { tipo: 'arrive' } },
-  ],
-}
+/* El trazado y la navegación son REALES: el camino por las calles que da el
+   servidor de rutas (OSRM) entre estas mismas paradas, guardado en
+   fixtures/coruna-real.json. Antes eran 5 puntos escritos a mano y en las
+   capturas se veían rayas rectas (04-10-2026, Dani). */
+const REAL = JSON.parse(fs.readFileSync(path.join(process.cwd(), 'e2e', 'fixtures', 'coruna-real.json'), 'utf8'))
+const NAVEGAR = REAL.navegar
 
 for (const [lang, cfg] of Object.entries(IDIOMAS)) {
   test.describe(`capturas de la app de ruta (${lang})`, () => {
@@ -60,19 +55,17 @@ for (const [lang, cfg] of Object.entries(IDIOMAS)) {
       await entrarComoAdmin(page)
       await simularApi(page, 'vacio')
       await context.grantPermissions(['geolocation'])
-      await context.setGeolocation({ latitude: 43.3677, longitude: -8.4070 })
+      await context.setGeolocation({ latitude: 43.3636, longitude: -8.4118 })
       const fin = new Date(Date.now() + 30 * 86400000).toISOString()
       await page.route(/\/api\/org\/billing/, (r) => r.fulfill({ json: {
         plan: 'autonomo', sector: 'autonomo', modulos: ['dashboard', 'reparto', 'configuracion'],
         precios: { mensual: 9.99, anual: 99 }, regalos: { 1: 9.99, 12: 99 },
         status: 'active', suscrita: true, ciclo: 'mensual', proximo_cobro: fin } }))
-      await page.route(/\/api\/reparto\/mi-ruta\/trazado/, (r) => r.fulfill({ json: {
-        linea: [[43.3704, -8.4003], [43.3697, -8.4007], [43.3690, -8.4010], [43.3675, -8.4035], [43.3660, -8.4060]],
-        fuente: 'carreteras', km: 3.1, minutos: 9 } }))
+      await page.route(/\/api\/reparto\/mi-ruta\/trazado/, (r) => r.fulfill({ json: REAL.trazado }))
       await page.route(/\/api\/reparto\/mi-ruta\/navegar/, (r) => r.fulfill({ json: NAVEGAR }))
       await page.route(/\/api\/reparto\/mi-ruta$/, (r) => r.fulfill({ json: {
         activo: true, autonomo: true, empresa: '', fecha: '2026-10-02', ia_tickets: false, jornada: {}, aviso_aceptado: true,
-        base: null, ruta: { fin: '10:40', minutos: 40, km: 9.5, trafico: true }, pedidos: pedidosDe(cfg.clientes) } }))
+        base: null, ruta: { fin: '10:30', minutos: 30, km: REAL.trazado.km, trafico: true }, pedidos: pedidosDe(cfg.clientes) } }))
 
       await page.goto('/ruta', { waitUntil: 'domcontentloaded' })
       await page.waitForTimeout(2000)

@@ -270,6 +270,8 @@ export const B = {
   "Tu correo": ["Your email", "O seu e-mail", "Votre e-mail", "La tua email", "Deine E-Mail", "你的邮箱"],
   "Entrarás con tu correo y esta contraseña.": ["You’ll log in with your email and this password.", "Vai entrar com o seu e-mail e esta palavra-passe.", "Vous vous connecterez avec votre e-mail et ce mot de passe.", "Accederai con la tua email e questa password.", "Du meldest dich mit deiner E-Mail und diesem Passwort an.", "以后用你的邮箱和此密码登录。"],
   "Contraseña": ["Password", "Palavra-passe", "Mot de passe", "Password", "Passwort", "密码"],
+  "Seguirme": ["Follow me", "Seguir-me", "Me suivre", "Seguimi", "Mir folgen", "跟随我"],
+  "Centrar la ruta": ["Center the route", "Centrar a rota", "Recentrer l’itinéraire", "Centra il percorso", "Route zentrieren", "回到整条路线"],
   "Mostrar contraseña": ["Show password", "Mostrar palavra-passe", "Afficher le mot de passe", "Mostra password", "Passwort anzeigen", "显示密码"],
   "Ocultar contraseña": ["Hide password", "Ocultar palavra-passe", "Masquer le mot de passe", "Nascondi password", "Passwort verbergen", "隐藏密码"],
   "Repetir contraseña": ["Repeat password", "Repetir palavra-passe", "Répéter le mot de passe", "Ripeti password", "Passwort wiederholen", "确认密码"],
