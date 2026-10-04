@@ -35,7 +35,7 @@ function useTexto(lang) {
 
 /* La app del repartidor en chino, con capturas hechas desde la propia app
    (e2e/capturas-ruta.spec.js). Si faltan, la sección no sale. */
-const CAPTURAS_ZH = ['/capturas-ruta/zh/1-ruta.png', '/capturas-ruta/zh/2-mapa.png', '/capturas-ruta/zh/3-navegando.png']
+const CAPTURAS_ZH = ['/capturas-ruta/zh/1-ruta.webp', '/capturas-ruta/zh/2-mapa.webp', '/capturas-ruta/zh/3-navegando.webp']
 function AppRepartidorZh({ tx }) {
   const [rotas, setRotas] = useState(0)
   if (rotas) return null

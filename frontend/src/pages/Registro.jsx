@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { enAppPlay } from '../lib/enApp'
 import { evento } from '../lib/metaPixel'
+import { leerRef, useInvitacion } from '../lib/referido'
 import { regionDelMovil } from '../lib/region'
 
 import { API_BASE } from '../services/api'
@@ -251,6 +252,7 @@ export default function Registro() {
 
   const [sector, setSector] = useState(params.get('sector') || '')
   const [verPass, setVerPass] = useState(false)
+  const invitacion = useInvitacion()
   // Quien reparte solo tiene un único plan: con ?sector=autonomo (el regalo, /cn)
   // no se le enseñan los planes de empresa.
   const [selectedPlan, setSelectedPlan] = useState(paramPlan || (params.get('sector') === 'autonomo' ? 'autonomo' : ''))
@@ -343,6 +345,7 @@ export default function Registro() {
           org_name: org.trim(), username: usuario, password: pass,
           slug: s, center: center.trim(), email: email.trim().toLowerCase(),
           plan: selectedPlan, sector,
+          ...(sector === 'autonomo' && leerRef() ? { ref: leerRef() } : {}),
           // Desde la app de Play no se pide tarjeta con Stripe (Google cobra con lo suyo).
           desde_app: enAppPlay(),
           ...regionDelMovil(),
@@ -440,6 +443,11 @@ export default function Registro() {
           ✓ {soloYo ? tt('{n} días gratis · hoy 0 € · cancela cuando quieras', { n: diasPrueba }) : `${diasPrueba} días gratis · sin tarjeta · cancela cuando quieras`}
         </div>
 
+        {soloYo && invitacion && (
+          <div style={{ marginBottom: 6, padding: '9px 12px', borderRadius: 10, background: 'rgba(167,139,250,.12)', border: '1px solid rgba(167,139,250,.35)', color: '#ddd6fe', fontSize: 13, fontWeight: 600 }}>
+            🎁 {tt('Te ha invitado un compañero: {n} días gratis', { n: invitacion.dias })}
+          </div>
+        )}
         <label style={lbl}>{soloYo ? tt('Tu nombre') : t('reg.company')}</label>
         <input style={inp} value={org} onChange={(e) => onOrg(e.target.value)} placeholder={soloYo ? 'Pepe' : 'Transportes Pérez SL'} />
 

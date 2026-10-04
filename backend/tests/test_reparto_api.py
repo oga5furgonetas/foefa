@@ -553,3 +553,26 @@ async def test_quitar_una_parada(base, monkeypatch):
     with pytest.raises(HTTPException) as e:
         await server.reparto_mi_quitar(otra["id"], ANA)
     assert e.value.status_code == 409
+
+
+@pytest.mark.asyncio(loop_scope="session")
+async def test_paradas_de_ejemplo_se_ponen_alrededor_y_se_quitan(base):
+    r = await server.reparto_mis_ejemplo({"lat": 43.36, "lng": -8.41}, ANA)
+    assert r["n"] == 3
+    ps = [p async for p in server.db.reparto_pedidos.find({"conductor_id": "d1", "ejemplo": True}, {"_id": 0})]
+    assert len(ps) == 3 and all(p["lat"] is not None and abs(p["lat"] - 43.36) < 0.02 for p in ps)
+    assert all(p["geo"] == "manual" and p["estado"] == "pendiente" for p in ps)
+    assert sorted(p["cobrar"] for p in ps) == [0, 0, 12.5]
+    # Salen en su ruta y con orden.
+    mi = await server.reparto_mi_ruta(ANA)
+    assert len([p for p in mi["pedidos"] if p.get("ejemplo")]) == 3
+    # No se duplican.
+    with pytest.raises(HTTPException) as e:
+        await server.reparto_mis_ejemplo({"lat": 43.36, "lng": -8.41}, ANA)
+    assert e.value.status_code == 409
+    # Otro conductor no los ve ni los quita.
+    assert (await server.reparto_mis_quitar_ejemplos(LUIS))["quitadas"] == 0
+    # Una real mezclada con los ejemplos NO se toca.
+    real = await server.reparto_mis_pedidos({"direccion": "Rúa Real 5"}, ANA)
+    assert (await server.reparto_mis_quitar_ejemplos(ANA))["quitadas"] == 3
+    assert await server.db.reparto_pedidos.find_one({"id": real["id"]}) is not None

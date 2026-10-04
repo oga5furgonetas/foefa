@@ -12,6 +12,8 @@ import { MARCA, origen } from '../marca'
 import { enAppPlay } from '../lib/enApp'
 import { lista } from '../lib/lista'
 import { tx, useIdioma, locale, IDIOMAS, idioma, cambiarIdioma, txError } from '../lib/idioma'
+import { invitar } from '../lib/compartir'
+import { getReferidos } from '../services/api'
 
 /* ── LA CUENTA DE QUIEN REPARTE SOLO (04-10-2026) ────────────────────────────
    Dani: «quiero mejorarla ya, o la suscripción de un año, o regalársela a
@@ -54,6 +56,7 @@ export function Cuenta({ billing, recargar, toast, resaltarRegalo }) {
           {!enApp && b.regalos && <Regalar precios={b.regalos} toast={toast} resaltar={resaltarRegalo} />}
         </>
       )}
+      <Invitar />
       <section className="mt-4 rounded-3xl border border-dark-700 bg-dark-900 p-4">
         <label className="flex items-center justify-between gap-3 text-[14px] font-semibold text-dark-100">
           🌐 {tx('Idioma')}
@@ -542,5 +545,29 @@ export function Muro({ billing, toast, recargar, irACuenta }) {
       <Canjear toast={toast} recargar={recargar} />
       <button onClick={irACuenta} className="mt-4 w-full text-center text-[13px] font-semibold text-dark-400">{tx('Ver mi cuenta')}</button>
     </div>
+  )
+}
+
+/* «Invita a un compañero»: la regla, tu progreso y el botón. */
+function Invitar() {
+  useIdioma()
+  const [r, setR] = useState(null)
+  useEffect(() => { getReferidos().then(({ data }) => setR(data)).catch(() => {}) }, [])
+  return (
+    <section className="mt-4 rounded-3xl border border-emerald-400/30 bg-emerald-500/[.06] p-4">
+      <p className="text-[15px] font-bold text-dark-50">{tx('Invita a un compañero y gana 1 mes gratis')}</p>
+      <p className="mt-1 text-[13px] leading-snug text-dark-300">
+        {tx('Tu amigo empieza con {dias} días gratis. Cuando haga {n} entregas con la app, tú ganas 1 mes gratis (hasta {tope} meses).',
+          { dias: 14, n: r?.entregas ?? 5, tope: r?.tope ?? 6 })}
+      </p>
+      {r && r.invitados > 0 && (
+        <p className="mt-2 text-[12.5px] font-semibold text-emerald-200">
+          {tx('Has invitado a {a} · ya la usan {b} · meses ganados: {c}', { a: r.invitados, b: r.premiados, c: r.meses_ganados })}
+        </p>
+      )}
+      <button onClick={invitar} className="mt-3 flex w-full items-center justify-center gap-2 rounded-xl bg-emerald-600 py-3 text-[14.5px] font-bold text-white">
+        <MessageCircle size={17} /> {tx('Invitar a un compañero')}
+      </button>
+    </section>
   )
 }

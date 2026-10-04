@@ -5,6 +5,7 @@ import { MARCA } from '../marca'
 import { tx, useIdioma, IDIOMAS, cambiarIdioma, idioma, txError } from '../lib/idioma'
 import { medirAccion } from '../lib/analitica'
 import { evento } from '../lib/metaPixel'
+import { useInvitacion } from '../lib/referido'
 
 /* ── LA PÁGINA DEL ANUNCIO DE REPARTIDORES (04-10-2026) ──────────────────────
    Medido: de 410 personas que llegaron del anuncio al formulario de alta, 0
@@ -22,8 +23,16 @@ const VENTAJAS = [
   [ScanLine, 'Escanea los paquetes al cargar y sabes dónde va cada uno'],
 ]
 
+const PREGUNTAS = [
+  ['¿Sirve con los paquetes de mi agencia?', 'Sí. Escaneas el código de la etiqueta o le haces una foto y la app intenta leer la dirección (si no la lee, la escribes tú), o pegas tu lista de direcciones. No necesita conectarse con tu agencia.'],
+  ['¿Qué hacéis con mis datos y mi ubicación?', 'La foto de la etiqueta se lee en tu móvil. Tu ubicación solo se usa para guiarte y no se guarda. Los datos de tus clientes se borran solos a los días que tú fijes.'],
+  ['¿Cuánto cuesta?', '7 días gratis, sin tarjeta. Después 9,99 € al mes o 99 € al año, y cancelas cuando quieras desde la propia app.'],
+  ['¿Tengo que instalar algo?', 'Funciona en el navegador de cualquier móvil. Puedes añadirla a tu pantalla de inicio y se abre como una app.'],
+]
+
 export default function Repartidores() {
   const lang = useIdioma()
+  const invitacion = useInvitacion()
   const [ocupado, setOcupado] = useState(false)
   const [err, setErr] = useState('')
   const capturas = idioma() === 'zh' ? 'zh' : 'es'
@@ -73,12 +82,17 @@ export default function Repartidores() {
           </select>
         </div>
 
+        {invitacion && (
+          <p className="mb-3 rounded-xl border border-violet-400/40 bg-violet-500/10 px-3 py-2 text-[13px] font-semibold text-violet-200">
+            🎁 {tx('Te ha invitado un compañero: {n} días gratis', { n: invitacion.dias })}
+          </p>
+        )}
         <p className="text-[12.5px] font-bold uppercase tracking-[0.14em] text-brand-300">{tx('Para quien reparte solo')}</p>
         <h1 className="mt-1.5 font-display text-[32px] font-extrabold leading-[1.05] text-dark-50">{tx('Tu ruta de reparto, ordenada sola.')}</h1>
         <p className="mt-2 text-[15px] leading-snug text-dark-300">{tx('Haz una foto a la etiqueta o escanea el paquete: la app ordena las paradas por tiempo y te lleva con voz hasta cada puerta.')}</p>
 
         <div className="mt-4">{botonCrear}</div>
-        <p className="mt-2 text-center text-[12.5px] text-dark-300">{tx('7 días gratis · sin tarjeta · cancelas cuando quieras')}</p>
+        <p className="mt-2 text-center text-[12.5px] text-dark-300">{invitacion ? tx('{n} días gratis · sin tarjeta · cancelas cuando quieras', { n: invitacion.dias }) : tx('7 días gratis · sin tarjeta · cancelas cuando quieras')}</p>
         <div className="mt-3">{botonProbar}</div>
         <p className="mt-1.5 text-center text-[12px] text-dark-500">{tx('Con 8 paradas de ejemplo. Sin datos ni tarjeta: pruébala en 1 minuto.')}</p>
         {err && <p role="alert" className="mt-2 text-center text-[13px] text-red-300">{err}</p>}
@@ -86,11 +100,11 @@ export default function Repartidores() {
         {/* El vídeo de la app (el mismo de TikTok, mudo y en bucle): se ve lo
             que hace antes de pulsar nada. Las capturas, de reserva si no carga. */}
         <div className="-mx-5 mt-7 flex snap-x gap-3 overflow-x-auto px-5 pb-2">
-          <video src={`/videos/web-${video}.mp4?v=1`} poster={`/capturas-ruta/${capturas}/1-ruta.png`} autoPlay muted loop playsInline preload="metadata"
+          <video src={`/videos/web-${video}.mp4?v=1`} poster={`/capturas-ruta/${capturas}/1-ruta.webp`} autoPlay muted loop playsInline preload="metadata"
             width="390" height="693" aria-label={tx('Vídeo de la app')}
             className="w-[62%] max-w-[240px] shrink-0 snap-center rounded-[22px] border border-dark-700 bg-dark-900 object-cover shadow-2xl shadow-black/40" />
           {['2-mapa', '3-navegando'].map((n) => (
-            <img key={n} src={`/capturas-ruta/${capturas}/${n}.png`} alt="" loading="lazy" width="390" height="844"
+            <img key={n} src={`/capturas-ruta/${capturas}/${n}.webp`} alt="" loading="lazy" width="390" height="844"
               className="w-[62%] max-w-[240px] shrink-0 snap-center rounded-[22px] border border-dark-700 shadow-2xl shadow-black/40" />
           ))}
         </div>
@@ -103,6 +117,21 @@ export default function Repartidores() {
             </li>
           ))}
         </ul>
+
+        {/* LAS DUDAS QUE FRENAN ANTES DE DAR EL CORREO (05-10-2026): respondidas aquí. */}
+        <section className="mt-8" aria-label={tx('Preguntas frecuentes')}>
+          <h2 className="mb-2 text-[16px] font-bold text-dark-50">{tx('Preguntas frecuentes')}</h2>
+          <div className="divide-y divide-dark-800 overflow-hidden rounded-2xl border border-dark-700 bg-dark-900">
+            {PREGUNTAS.map(([q, r]) => (
+              <details key={q} className="group px-4 py-3">
+                <summary className="flex cursor-pointer list-none items-center justify-between gap-3 text-[14.5px] font-semibold text-dark-100">
+                  {tx(q)} <span className="text-brand-300 transition group-open:rotate-45">+</span>
+                </summary>
+                <p className="mt-2 text-[13.5px] leading-relaxed text-dark-300">{tx(r)}</p>
+              </details>
+            ))}
+          </div>
+        </section>
 
         <section className="mt-8 rounded-3xl border border-dark-700 bg-dark-900 p-5">
           <h2 className="text-[18px] font-bold text-dark-50">{tx('¿Te convence? Créate la cuenta')}</h2>

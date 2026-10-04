@@ -697,6 +697,7 @@ class RegisterRequest(BaseModel):
     pais: Optional[str] = None          # ISO2; si no se conoce, se deduce de la zona horaria
     # China (PIPL): consentimiento aparte para tratar los datos fuera de China.
     acepta_transferencia: Optional[bool] = None
+    ref: Optional[str] = None            # código de quien le invitó (programa «invita a un compañero»)
 
 
 # Límites y features por plan
@@ -4858,6 +4859,11 @@ async def register_dsp(data: RegisterRequest, request: Request):
     if sector_alta == "autonomo":
         plan_elegido = "autonomo"
     dias_prueba = int(PLAN_TARIFAS.get(plan_elegido or "", {}).get("dias_prueba") or 14)
+    # «Invita a un compañero»: quien llega con el enlace de otro repartidor
+    # empieza con 7 días MÁS de prueba (14 en vez de 7).
+    invitador = await _referidor_valido(data.ref) if sector_alta == "autonomo" else None
+    if invitador:
+        dias_prueba += _REF_DIAS_EXTRA
     centros_alta = _centros_de_texto(data.center) or ["PRINCIPAL"]
     tope = _tope_centros({"plan": plan_elegido})
     centros_alta = centros_alta[:tope]
@@ -4873,6 +4879,8 @@ async def register_dsp(data: RegisterRequest, request: Request):
         "max_centers": tope,
         "created_at": datetime.now(timezone.utc).isoformat(),
     }
+    if invitador:
+        org["referido_por"] = invitador["id"]
     org["pais"], org["zona_horaria"] = _region_alta(data.zona_horaria, data.pais)
     # China: la ley de protección de datos (PIPL, art. 39) pide consentimiento
     # APARTE para sacar los datos personales de China (aquí van a la UE). Sin
@@ -47592,6 +47600,10 @@ async def reparto_mi_ruta(user: dict = Depends(require_any_auth)):
     aviso = await db.reparto_avisos.find_one({"driver_id": d["id"]}, {"_id": 0})
     ruta = await db.reparto_rutas.find_one({"id": f"{f}_{d['id']}"}, {"_id": 0})
     org = await get_org(user.get("org_id")) if user.get("org_id") else None
+    try:
+        await _referido_premiar(org, d["id"])
+    except Exception as e:                                   # noqa: BLE001
+        logger.warning(f"referidos: {type(e).__name__}")
     return {"activo": True, "empresa": (org or {}).get("name") or "",
             "puede_pegar": autonomo and user.get("role") == "admin",
             "pais": _region_actual.get()[0], "prefijo": PAISES_REPARTO.get(_region_actual.get()[0], {}).get("prefijo", "34"), "fecha": f, "pedidos": ps, "base": a.get("base"), "ruta": ruta, "autonomo": autonomo,
@@ -47863,6 +47875,48 @@ async def reparto_mi_quitar(pid: str, user: dict = Depends(require_any_auth)):
         raise HTTPException(403, "Esa parada la ha cargado tu oficina: pídele que la quite")
     await db.reparto_pedidos.delete_one({"id": pid})
     return {"ok": True}
+
+
+# ── PARADAS DE EJEMPLO (05-10-2026) ───────────────────────────────────────────
+# Quien se acaba de registrar y aún no tiene paquetes veía una pantalla vacía y
+# no podía comprobar nada de lo que prometía el anuncio (ruta ordenada, mapa,
+# guía por voz). Con un toque se le ponen 3 paradas de ejemplo ALREDEDOR de
+# donde está, para que vea la app trabajando en menos de un minuto. Son suyas
+# y se quitan todas de golpe (o una a una) cuando cargue las de verdad.
+_EJEMPLO_PARADAS = [
+    ("Cliente de ejemplo 1", "Calle de ejemplo 1", 0.0030, 0.0040, 1, 0),
+    ("Cliente de ejemplo 2", "Calle de ejemplo 2", 0.0060, -0.0020, 2, 12.5),
+    ("Cliente de ejemplo 3", "Calle de ejemplo 3", -0.0040, 0.0070, 1, 0),
+]
+
+
+@api_router.post("/reparto/mis-pedidos/ejemplo")
+async def reparto_mis_ejemplo(data: dict = Body(default={}), user: dict = Depends(require_any_auth)):
+    d = await _rep_conductor(user)
+    f = _dia_negocio()
+    if await db.reparto_pedidos.find_one({"fecha": f, "conductor_id": d["id"], "ejemplo": True,
+                                          "estado": {"$in": ["pendiente", "en_ruta"]}}, {"_id": 0, "id": 1}):
+        raise HTTPException(409, "Ya tienes paradas de ejemplo")
+    a = await _rep_ajustes()
+    pt = reparto._punto(_dict_cuerpo(data)) or _rep_base(a) or (40.4168, -3.7038)
+    for nombre, calle, dla, dlo, bultos, cobrar in _EJEMPLO_PARADAS:
+        p = await _rep_nuevo({"cliente": nombre, "direccion": calle, "bultos": bultos, "cobrar": cobrar or "",
+                              "contenido": "Paquete de ejemplo", "lat": round(pt[0] + dla, 6), "lng": round(pt[1] + dlo, 6)},
+                             user, "conductor", f, conductor=d, ubicar=False)
+        await db.reparto_pedidos.update_one({"id": p["id"]}, {"$set": {"ejemplo": True}})
+    try:
+        await _rep_ordenar(f, d["id"], pt, salida_min=_rep_ahora_local()[0])
+    except Exception as e:                                   # noqa: BLE001
+        logger.warning(f"reparto: ejemplo sin ordenar: {type(e).__name__}")
+    return {"ok": True, "n": len(_EJEMPLO_PARADAS)}
+
+
+@api_router.post("/reparto/mis-pedidos/quitar-ejemplos")
+async def reparto_mis_quitar_ejemplos(user: dict = Depends(require_any_auth)):
+    d = await _rep_conductor(user)
+    r = await db.reparto_pedidos.delete_many({"fecha": _dia_negocio(), "conductor_id": d["id"], "ejemplo": True,
+                                              "estado": {"$in": ["pendiente", "en_ruta"]}})
+    return {"ok": True, "quitadas": r.deleted_count}
 
 
 @api_router.post("/reparto/jornada")
@@ -48499,6 +48553,133 @@ async def regalo_ver(codigo: str):
     return {"estado": p["estado"], "meses": p["meses"]}
 
 
+async def _aplicar_meses(org: dict, meses: int, ahora: datetime) -> tuple:
+    """Suma `meses` gratis a una cuenta SEA CUAL SEA su forma de pago (Google Play,
+    Stripe o sin pagar): devuelve (campos a guardar, texto, nueva fecha). Lo usan
+    canjear un regalo y el programa de invitar a un compañero."""
+    sub_id = org.get("stripe_subscription")
+    if (org.get("pago_proveedor") == "play" and org.get("play_token") and org.get("play_renueva")
+            and org.get("status") == "active"):
+        # Paga con Google Play: Google aplaza su próximo cobro lo regalado.
+        e = _play_estado(await _play_req("GET", f"/purchases/subscriptionsv2/tokens/{org['play_token']}"))
+        actual = _fecha_utc(e["hasta"]) or ahora
+        nuevo = _sumar_meses(max(actual, ahora), meses)
+        await _play_req("POST", f"/purchases/subscriptions/{e['producto']}/tokens/{org['play_token']}:defer", {
+            "deferralInfo": {"expectedExpiryTimeMillis": str(int(actual.timestamp() * 1000)),
+                             "desiredExpiryTimeMillis": str(int(nuevo.timestamp() * 1000))}})
+        campos = {"play_hasta": nuevo.isoformat(), "play_mirado": ahora.isoformat()}
+        texto = f"Regalo aplicado: tu próximo cobro de Google Play pasa al {nuevo.strftime('%d/%m/%Y')}."
+    elif sub_id and org.get("status") == "active" and org.get("pago_proveedor") == "stripe" and not org.get("cancela_al_final"):
+        # Ya paga con tarjeta: el próximo cobro se retrasa lo regalado.
+        sub = await _stripe_req("GET", f"/subscriptions/{sub_id}")
+        prox = _fecha_utc(_stripe_detalle_sub(sub).get("stripe_proximo_cobro")) or ahora
+        nuevo = _sumar_meses(max(prox, ahora), meses)
+        sub2 = await _stripe_req("POST", f"/subscriptions/{sub_id}", {
+            "trial_end": int(nuevo.timestamp()), "proration_behavior": "none"})
+        campos = _stripe_detalle_sub(sub2)
+        texto = f"Regalo aplicado: tu próximo cobro pasa al {nuevo.strftime('%d/%m/%Y')}."
+    else:
+        bases = [ahora, _fecha_utc(org.get("pagado_hasta")),
+                 _fecha_utc(org.get("trial_ends")) if org.get("status") == "trial" else None,
+                 _fecha_utc(org.get("stripe_proximo_cobro")) if org.get("status") == "active" else None]
+        nuevo = _sumar_meses(max(b for b in bases if b), meses)
+        campos = {"status": "active", "pago_proveedor": "regalo", "pagado_hasta": nuevo.isoformat()}
+        texto = f"Regalo aplicado: tienes la app pagada hasta el {nuevo.strftime('%d/%m/%Y')}."
+    return campos, texto, nuevo
+
+
+# ── INVITA A UN COMPAÑERO (05-10-2026) ─────────────────────────────────────────
+# Dani: «haz que se registre un amigo y te damos un mes gratis». Reglas, pensadas
+# para que no se pueda abusar sin perder dinero real:
+#   · el invitado empieza con 14 días de prueba en vez de 7 (cuesta 0);
+#   · el que invita gana 1 MES GRATIS cuando el invitado ya la USA DE VERDAD:
+#     5 entregas hechas (las paradas de ejemplo no cuentan) y la cuenta con
+#     más de 24 h;
+#   · como mucho 6 meses ganados por persona;
+#   · el mes se suma con el mismo mecanismo que un regalo (Stripe, Google Play
+#     o sin pagar todavía), así que nunca toca un cobro a mano.
+_REF_DIAS_EXTRA = 7
+_REF_ENTREGAS = 5
+_REF_TOPE = 6
+_REF_HORAS = 24
+
+
+def _codigo_ref(texto) -> str:
+    return re.sub(r"[^A-Z0-9]", "", str(texto or "").upper())[:12]
+
+
+async def _referidor_valido(codigo) -> Optional[dict]:
+    c = _codigo_ref(codigo)
+    if len(c) < 5:
+        return None
+    return await global_db.organizations.find_one({"ref_codigo": c}, {"_id": 0, "id": 1})
+
+
+async def _mi_codigo_ref(org: dict) -> str:
+    if org.get("ref_codigo"):
+        return org["ref_codigo"]
+    for _ in range(6):
+        c = _nuevo_codigo_regalo()[:6]
+        if await global_db.organizations.find_one({"ref_codigo": c}, {"_id": 0, "id": 1}):
+            continue
+        await global_db.organizations.update_one({"id": org["id"], "ref_codigo": {"$exists": False}}, {"$set": {"ref_codigo": c}})
+        o2 = await global_db.organizations.find_one({"id": org["id"]}, {"_id": 0, "ref_codigo": 1}) or {}
+        return o2.get("ref_codigo") or c
+    raise HTTPException(503, "No se ha podido crear tu enlace de invitación ahora")
+
+
+@api_router.get("/referidos")
+async def referidos_mios(user: dict = Depends(require_admin)):
+    if user.get("demo") or user.get("imp"):
+        raise HTTPException(403, "Los enlaces de invitación son de cada cuenta")
+    org = await get_org(user.get("org_id"))
+    if not _es_repartidor(org):
+        raise HTTPException(400, "La invitación es para el plan Repartidor")
+    codigo = await _mi_codigo_ref(org)
+    invitados = await global_db.organizations.count_documents({"referido_por": org["id"]})
+    premiados = await global_db.organizations.count_documents({"referido_por": org["id"], "ref_premiado": True})
+    return {"codigo": codigo, "invitados": invitados, "premiados": premiados, "meses_ganados": premiados,
+            "tope": _REF_TOPE, "entregas": _REF_ENTREGAS, "dias_extra": _REF_DIAS_EXTRA}
+
+
+@api_router.get("/referidos/{codigo}")
+async def referidos_valido(codigo: str):
+    """¿El enlace de invitación vale? (para enseñar «14 días gratis» solo si es cierto)."""
+    return {"valido": bool(await _referidor_valido(codigo)), "dias_extra": _REF_DIAS_EXTRA}
+
+
+async def _referido_premiar(org: dict, conductor_id: str):
+    """Si esta cuenta llegó por invitación y ya la usa de verdad, el que invitó
+    gana su mes. Se mira cuando el repartidor abre su ruta (barato: solo si
+    vino invitado y aún no se ha premiado)."""
+    if not org or not org.get("referido_por") or org.get("ref_premiado"):
+        return
+    ahora = datetime.now(timezone.utc)
+    creada = _fecha_utc(org.get("created_at"))
+    if not creada or (ahora - creada).total_seconds() < _REF_HORAS * 3600:
+        return
+    n = await db.reparto_pedidos.count_documents({"conductor_id": conductor_id, "estado": "entregado", "ejemplo": {"$ne": True}})
+    if n < _REF_ENTREGAS:
+        return
+    if await global_db.organizations.count_documents({"referido_por": org["referido_por"], "ref_premiado": True}) >= _REF_TOPE:
+        return
+    # Atómico: solo una vez por cuenta invitada.
+    res = await global_db.organizations.update_one({"id": org["id"], "ref_premiado": {"$ne": True}},
+                                                   {"$set": {"ref_premiado": True, "ref_premiado_en": ahora.isoformat()}})
+    if not getattr(res, "modified_count", 0):
+        return
+    try:
+        invitador = await global_db.organizations.find_one({"id": org["referido_por"]}, {"_id": 0})
+        if not invitador:
+            raise RuntimeError("quien invitó ya no existe")
+        campos, _texto, _nuevo = await _aplicar_meses(invitador, 1, ahora)
+        await global_db.organizations.update_one({"id": invitador["id"]}, {"$set": campos, "$inc": {"ref_meses": 1}})
+    except Exception as e:                                   # noqa: BLE001
+        # No se pudo sumar el mes: se deja sin premiar para reintentarlo luego.
+        await global_db.organizations.update_one({"id": org["id"]}, {"$unset": {"ref_premiado": "", "ref_premiado_en": ""}})
+        logger.warning(f"referidos: no se pudo premiar: {type(e).__name__}")
+
+
 @api_router.post("/billing/regalos/canjear")
 async def regalo_canjear(data: dict = Body(default={}), user: dict = Depends(require_admin)):
     if user.get("demo") or user.get("imp"):
@@ -48522,34 +48703,7 @@ async def regalo_canjear(data: dict = Body(default={}), user: dict = Depends(req
         raise HTTPException(409, "Ese regalo ya se ha usado")
     meses = int(r.get("meses") or 1)
     try:
-        sub_id = org.get("stripe_subscription")
-        if (org.get("pago_proveedor") == "play" and org.get("play_token") and org.get("play_renueva")
-                and org.get("status") == "active"):
-            # Paga con Google Play: Google aplaza su próximo cobro lo regalado.
-            e = _play_estado(await _play_req("GET", f"/purchases/subscriptionsv2/tokens/{org['play_token']}"))
-            actual = _fecha_utc(e["hasta"]) or ahora
-            nuevo = _sumar_meses(max(actual, ahora), meses)
-            await _play_req("POST", f"/purchases/subscriptions/{e['producto']}/tokens/{org['play_token']}:defer", {
-                "deferralInfo": {"expectedExpiryTimeMillis": str(int(actual.timestamp() * 1000)),
-                                 "desiredExpiryTimeMillis": str(int(nuevo.timestamp() * 1000))}})
-            campos = {"play_hasta": nuevo.isoformat(), "play_mirado": ahora.isoformat()}
-            texto = f"Regalo aplicado: tu próximo cobro de Google Play pasa al {nuevo.strftime('%d/%m/%Y')}."
-        elif sub_id and org.get("status") == "active" and org.get("pago_proveedor") == "stripe" and not org.get("cancela_al_final"):
-            # Ya paga con tarjeta: el próximo cobro se retrasa lo regalado.
-            sub = await _stripe_req("GET", f"/subscriptions/{sub_id}")
-            prox = _fecha_utc(_stripe_detalle_sub(sub).get("stripe_proximo_cobro")) or ahora
-            nuevo = _sumar_meses(max(prox, ahora), meses)
-            sub2 = await _stripe_req("POST", f"/subscriptions/{sub_id}", {
-                "trial_end": int(nuevo.timestamp()), "proration_behavior": "none"})
-            campos = _stripe_detalle_sub(sub2)
-            texto = f"Regalo aplicado: tu próximo cobro pasa al {nuevo.strftime('%d/%m/%Y')}."
-        else:
-            bases = [ahora, _fecha_utc(org.get("pagado_hasta")),
-                     _fecha_utc(org.get("trial_ends")) if org.get("status") == "trial" else None,
-                     _fecha_utc(org.get("stripe_proximo_cobro")) if org.get("status") == "active" else None]
-            nuevo = _sumar_meses(max(b for b in bases if b), meses)
-            campos = {"status": "active", "pago_proveedor": "regalo", "pagado_hasta": nuevo.isoformat()}
-            texto = f"Regalo aplicado: tienes la app pagada hasta el {nuevo.strftime('%d/%m/%Y')}."
+        campos, texto, nuevo = await _aplicar_meses(org, meses, ahora)
     except HTTPException:
         await global_db.regalos.update_one({"codigo": codigo}, {"$set": {"estado": "pagado"},
                                                                 "$unset": {"canjeado_por": "", "canjeado_en": ""}})

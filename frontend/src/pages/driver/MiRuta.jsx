@@ -5,7 +5,7 @@ import {
 } from 'lucide-react'
 import {
   repMiRuta, repEscanear, repLeerTicket, repNuevoPedido, repEstado, repOrdenar, repJornada, repPosicion,
-  repMiOrden, repMiEditar, repMiQuitar, repPegarMiLista, repTrazado,
+  repMiOrden, repMiEditar, repMiQuitar, repEjemplo, repQuitarEjemplos, repPegarMiLista, repTrazado,
 } from '../../services/api'
 import { hoyLocal } from '../../lib/fecha'
 import { lista } from '../../lib/lista'
@@ -13,6 +13,8 @@ import { compressImage } from '../../lib/compressImage'
 import { origen } from '../../marca'
 import { leerTicketEnMovil } from '../../lib/leerTicket'
 import { buscarDirecciones } from '../../lib/direcciones'
+import { invitar } from '../../lib/compartir'
+import { medirAccion } from '../../lib/analitica'
 import { fijarPais, importe, simboloMoneda, metodosCobro } from '../../lib/region'
 import { tx, useIdioma, locale, txError } from '../../lib/idioma'
 
@@ -382,6 +384,19 @@ export default function MiRuta({ onBack, embebido = false }) {
       await repMiQuitar(nuevo.id)
       setNuevo(null); setQuitando(false); setAbierta(null); cargar(); setAviso(tx('Parada quitada de tu ruta'))
     } catch (e) { setAviso(txError(e, 'No se pudo quitar')) } finally { setOcupado('') }
+  }
+  /* PARADAS DE EJEMPLO: para ver la app trabajando sin tener paquetes. */
+  async function cargarEjemplo() {
+    setOcupado('ejemplo'); medirAccion('ejemplo_cargar')
+    try {
+      await repEjemplo(await posicionAhora())
+      cargar()
+      setAviso(tx('Son paradas de ejemplo, a tu alrededor: pulsa «Empezar a navegar» y míralo en acción. Quítalas cuando cargues las tuyas.'))
+    } catch (e) { setAviso(txError(e, 'No se pudo preparar el ejemplo')) } finally { setOcupado('') }
+  }
+  async function quitarEjemplos() {
+    setOcupado('ejemplo')
+    try { await repQuitarEjemplos(); cargar(); setAviso(tx('Ejemplos quitados. Ya puedes cargar tus paquetes.')) } catch (e) { setAviso(txError(e, 'No se pudo quitar')) } finally { setOcupado('') }
   }
   const editar = (p) => {
     setQuitando(false)
@@ -761,11 +776,26 @@ export default function MiRuta({ onBack, embebido = false }) {
       )}
 
       {pendientes.length === 0 && total === 0 && (
-        <p className="rounded-xl border border-dashed border-dark-700 px-4 py-6 text-center text-[13px] text-dark-400">
-          {ruta.autonomo
-            ? tx('Escanea cada paquete o hazle una foto a la etiqueta: la dirección y el teléfono entran solos. Luego «Ordenar ruta».')
-            : tx('Escanea los bultos según los cargas y se irán poniendo aquí.')}
-        </p>
+        <div className="rounded-xl border border-dashed border-dark-700 px-4 py-5 text-center">
+          <p className="text-[13px] text-dark-400">
+            {ruta.autonomo
+              ? tx('Escanea cada paquete o hazle una foto a la etiqueta: la dirección y el teléfono entran solos. Luego «Ordenar ruta».')
+              : tx('Escanea los bultos según los cargas y se irán poniendo aquí.')}
+          </p>
+          {ruta.autonomo && (
+            <button onClick={cargarEjemplo} disabled={ocupado === 'ejemplo'}
+              className="mt-3.5 inline-flex w-full items-center justify-center gap-2 rounded-xl border border-fuchsia-400/50 bg-fuchsia-500/10 py-3 text-[14px] font-bold text-fuchsia-200 disabled:opacity-60">
+              {ocupado === 'ejemplo' ? <Loader2 size={16} className="animate-spin" /> : <Play size={16} />} {tx('Verlo en acción con 3 paradas de ejemplo')}
+            </button>
+          )}
+        </div>
+      )}
+      {pendientes.some((p) => p.ejemplo) && (
+        <div className="mb-2 flex items-center justify-between gap-3 rounded-xl border border-fuchsia-400/30 bg-fuchsia-500/[.07] px-3 py-2">
+          <span className="text-[12.5px] leading-snug text-fuchsia-100">{tx('Estas paradas son de ejemplo.')}</span>
+          <button onClick={quitarEjemplos} disabled={ocupado === 'ejemplo'}
+            className="shrink-0 rounded-lg border border-fuchsia-400/50 px-2.5 py-1.5 text-[12px] font-bold text-fuchsia-100">{tx('Quitar los ejemplos')}</button>
+        </div>
       )}
       {q && visibles.length === 0 && <p className="py-4 text-center text-[13px] text-dark-400">{tx('Nada con «{q}» en las paradas pendientes.', { q: filtro.trim() })}</p>}
       {/* LAS PARADAS. La siguiente, entera y destacada; las demás, en una
@@ -778,6 +808,7 @@ export default function MiRuta({ onBack, embebido = false }) {
           const juntas = enPuerta[clavePuerta(p)] || 1
           const etiquetas = (
             <>
+              {p.ejemplo && <span className="rounded bg-fuchsia-500/15 px-1.5 font-bold text-fuchsia-300">{tx('EJEMPLO')}</span>}
               {p.prioridad && <span className="rounded bg-amber-500/15 px-1.5 font-bold text-amber-300">{tx('URGENTE')}</span>}
               {p.tipo === 'recogida' && <span className="rounded bg-violet-500/15 px-1.5 font-bold text-violet-300">{tx('RECOGIDA')}</span>}
               {p.cobrar > 0 && <span className="rounded bg-emerald-500/15 px-1.5 font-bold text-emerald-300">{tx('COBRAR')} {euros(p.cobrar)}</span>}
@@ -786,7 +817,7 @@ export default function MiRuta({ onBack, embebido = false }) {
               {juntas > 1 && <span className="rounded bg-sky-500/15 px-1.5 font-semibold text-sky-300">{tx('{n} paradas en esta puerta', { n: juntas })}</span>}
             </>
           )
-          const hayEtiquetas = p.prioridad || p.tipo === 'recogida' || p.cobrar > 0 || p.ventana_desde || p.tarde_min > 0 || juntas > 1
+          const hayEtiquetas = p.ejemplo || p.prioridad || p.tipo === 'recogida' || p.cobrar > 0 || p.ventana_desde || p.tarde_min > 0 || juntas > 1
           if (!esSiguiente && abierta !== p.id) {
             return (
               <div key={p.id} className="flex items-stretch gap-1 rounded-2xl border border-dark-800 bg-dark-900/70">
@@ -1245,6 +1276,10 @@ function Resumen({ hechos, ruta }) {
           <p className="mt-1 flex justify-between border-t border-dark-700 pt-1 font-bold"><span>{tx('Total')}</span><span>{euros(Object.values(cobros).reduce((a, b) => a + b, 0))}</span></p>
         </div>
       )}
+      <button onClick={invitar}
+        className="mt-3 flex w-full items-center justify-center gap-2 rounded-xl border border-emerald-400/40 py-2.5 text-[13.5px] font-bold text-emerald-200">
+        <MessageCircle size={15} /> {tx('Invitar a un compañero')}
+      </button>
       <p className="mt-3 text-[12px] text-dark-400">
         {durMin > 0 && <>{tx('De la primera a la última parada: {t}.', { t: minutosATexto(durMin) })} </>}
         {ruta?.km ? <>{tx('Ruta planificada: {km} km.', { km: ruta.km })}</> : null}

@@ -76,6 +76,16 @@ const GUION = {
     '免费创建账号，七天免绑卡。FDS，flotadsp 点 com。'] },
 }
 
+/* Los otros ganchos (e2e/video-ganchos.spec.js): una promesa concreta cada uno. */
+const CIERRE_ES = 'Crea tu cuenta gratis: siete días sin tarjeta. FDS, en flotadsp punto com.'
+const CIERRE_PT = 'Cria a tua conta grátis: sete dias sem cartão. FDS, em flotadsp ponto com.'
+Object.assign(GUION, {
+  'es-llama': { voz: GUION.es.voz, frases: ['¿Te llaman para preguntar dónde estás?', 'Avísales con un toque, con tu hora de llegada.', 'Ellos saben cuándo llegas. Tú, a conducir.', CIERRE_ES] },
+  'es-cobro': { voz: GUION.es.voz, frases: ['¿Cobras contrarreembolso?', 'Apunta cómo te pagan: efectivo, tarjeta o Bizum.', 'Y sabes en todo momento lo que llevas cobrado.', CIERRE_ES] },
+  'pt-llama': { voz: GUION.pt.voz, frases: ['Ligam-te a perguntar onde estás?', 'Avisa-os com um toque, com a tua hora de chegada.', 'Eles sabem quando chegas. Tu, a conduzir.', CIERRE_PT] },
+  'pt-cobro': { voz: GUION.pt.voz, frases: ['Cobras à cobrança?', 'Regista como te pagam: dinheiro, cartão ou transferência.', 'E sabes sempre o que levas cobrado.', CIERRE_PT] },
+})
+
 function run(args, input) {
   return execFileSync(FFMPEG, ['-hide_banner', '-loglevel', 'error', '-y', ...args], { input, stdio: ['pipe', 'pipe', 'inherit'] })
 }
