@@ -1367,11 +1367,18 @@ test('App · quien reparte solo ve su app y no el panel de empresa', async ({ pa
 })
 
 /* LA APP ARRANCA EN «EMPEZAR» si no hay sesión; «Repartir yo mismo» lleva al alta. */
-test('App · sin sesión arranca en Empezar y «Repartir yo mismo» lleva al alta', async ({ page }) => {
+test('App · sin sesión arranca en Empezar: crear cuenta, entrar y probar a la vista; empresas plegado', async ({ page }) => {
   await page.goto('/app', { waitUntil: 'domcontentloaded' })
   await expect(page).toHaveURL(/\/empezar/)
-  await expect(page.getByRole('heading', { name: '¿Qué vas a hacer?' })).toBeVisible()
-  await page.getByRole('link', { name: /Repartir yo mismo/ }).click()
+  await expect(page.getByRole('heading', { name: 'Tu ruta de reparto, ordenada sola.' })).toBeVisible()
+  await expect(page.getByRole('link', { name: /Ya tengo cuenta/ })).toHaveAttribute('href', '/panel/login')
+  await expect(page.getByRole('button', { name: 'Probar sin cuenta' })).toBeVisible()
+  // Lo de empresas, plegado hasta que se pide.
+  await expect(page.getByRole('link', { name: /Gestiono una empresa/ })).toHaveCount(0)
+  await page.getByRole('button', { name: 'Soy de una empresa' }).click()
+  await expect(page.getByRole('link', { name: /Gestiono una empresa/ })).toHaveAttribute('href', '/panel/login')
+  await expect(page.getByRole('link', { name: /Soy repartidor de una empresa/ })).toBeVisible()
+  await page.getByRole('link', { name: /Crear mi cuenta gratis/ }).click()
   await expect(page).toHaveURL(/registro\?sector=autonomo/)
   await expect(page.getByText('Plan elegido')).toBeVisible()
 })
@@ -1880,10 +1887,10 @@ test.describe('Idiomas · la app de reparto sigue el idioma del móvil', () => {
   test('móvil en chino: Empezar y la ruta salen en chino, y se puede volver al español', async ({ page }) => {
     const fallos = vigilar(page)
     await page.goto('/empezar', { waitUntil: 'domcontentloaded' })
-    await expect(page.getByRole('heading', { name: '你想做什么？' })).toBeVisible()
-    await expect(page.getByRole('link', { name: /我自己送货/ })).toBeVisible()
+    await expect(page.getByRole('heading', { name: '你的配送路线，自动排好。' })).toBeVisible()
+    await expect(page.getByRole('link', { name: /免费创建我的账号/ })).toBeVisible()
     await page.getByRole('combobox', { name: /Idioma/ }).selectOption('es')
-    await expect(page.getByRole('heading', { name: '¿Qué vas a hacer?' })).toBeVisible()
+    await expect(page.getByRole('heading', { name: 'Tu ruta de reparto, ordenada sola.' })).toBeVisible()
     await page.getByRole('combobox', { name: /Idioma/ }).selectOption('zh')
     await entrarRepartidor(page, { status: 'active', plan: 'autonomo', days_left: 0 })
     await page.goto('/ruta', { waitUntil: 'domcontentloaded' })
@@ -1895,7 +1902,7 @@ test.describe('Idiomas · la app de reparto sigue el idioma del móvil', () => {
   })
   test('móvil en chino: el alta del repartidor sale en chino y no promete «sin tarjeta»', async ({ page }) => {
     await page.goto('/empezar', { waitUntil: 'domcontentloaded' })
-    await page.getByRole('link', { name: /我自己送货/ }).click()
+    await page.getByRole('link', { name: /免费创建我的账号/ }).click()
     await expect(page).toHaveURL(/sector=autonomo/)
     await expect(page.getByText('已选套餐')).toBeVisible()
     await expect(page.getByText(/免费 7 天 · 今天 0 €/)).toBeVisible()

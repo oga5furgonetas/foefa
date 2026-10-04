@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Zap, Truck, Users, Building2, Loader2, ArrowRight } from 'lucide-react'
+import { Zap, Users, Building2, Loader2, ArrowRight, ChevronDown, Check } from 'lucide-react'
 import { API_BASE, DRIVER_TOKEN_KEY } from '../services/api'
 import { MARCA } from '../marca'
 import { tx, useIdioma, IDIOMAS, cambiarIdioma, txError } from '../lib/idioma'
@@ -11,10 +11,8 @@ import { tx, useIdioma, IDIOMAS, cambiarIdioma, txError } from '../lib/idioma'
    propios… que pueda crear ya su propia ruta»). Aquí lo primero es decir qué
    eres, y el que reparte por su cuenta se crea la cuenta en tres campos. */
 
-const OPCIONES = [
-  { key: 'yo', icono: Truck, color: '#eab308', titulo: 'Repartir yo mismo',
-    sub: 'Tengo mi furgoneta y mis paquetes. Quiero escanearlos, ordenar la ruta y entregar.',
-    a: '/registro?sector=autonomo&plan=autonomo' },
+// Lo de empresas va plegado: quien se baja la app casi siempre reparte por su cuenta.
+const OPCIONES_EMPRESA = [
   { key: 'empresa-rep', icono: Users, color: '#22c55e', titulo: 'Soy repartidor de una empresa',
     sub: 'Mi empresa ya usa Flota y me ha dado acceso. Entro con mi correo.',
     a: '/conductor?vista=ruta' },
@@ -27,6 +25,7 @@ export default function Empezar() {
   const lang = useIdioma()
   const [ocupado, setOcupado] = useState(false)
   const [err, setErr] = useState('')
+  const [empresa, setEmpresa] = useState(false)
 
   // «Probar sin cuenta»: una ruta vacía y propia, que se borra al día siguiente.
   async function probar() {
@@ -54,35 +53,54 @@ export default function Empezar() {
             {Object.entries(IDIOMAS).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
           </select>
         </div>
-        <h1 className="font-display text-[30px] font-extrabold leading-tight text-dark-50">{tx('¿Qué vas a hacer?')}</h1>
-        <p className="mt-2 text-[14px] text-dark-400">{tx('Elige y te llevamos a lo tuyo. Tarda un minuto.')}</p>
+        <p className="text-[12.5px] font-bold uppercase tracking-[0.14em] text-brand-300">{tx('Para quien reparte solo')}</p>
+        <h1 className="mt-2 font-display text-[32px] font-extrabold leading-[1.05] text-dark-50">{tx('Tu ruta de reparto, ordenada sola.')}</h1>
+        <p className="mt-3 text-[15px] leading-snug text-dark-300">{tx('Haz una foto a la etiqueta o escanea el paquete: la app ordena las paradas por tiempo y te lleva con voz hasta cada puerta.')}</p>
 
-        <div className="mt-6 flex flex-col gap-3">
-          {OPCIONES.map((o) => (
-            <a key={o.key} href={o.a}
-              className="flex items-center gap-3.5 rounded-2xl border border-dark-700 bg-dark-900 p-4 active:scale-[.99]">
-              <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl" style={{ background: `${o.color}22` }}>
-                <o.icono size={22} style={{ color: o.color }} />
-              </span>
-              <span className="min-w-0 flex-1">
-                <span className="block text-[16px] font-bold text-dark-50">{tx(o.titulo)}</span>
-                <span className="mt-0.5 block text-[12.5px] leading-snug text-dark-400">{tx(o.sub)}</span>
-              </span>
-              <ArrowRight size={18} className="shrink-0 text-dark-500" />
-            </a>
-          ))}
-        </div>
+        <a href="/registro?sector=autonomo&plan=autonomo"
+          className="mt-6 flex w-full items-center justify-center gap-2 rounded-2xl bg-gradient-to-br from-brand-400 to-brand-600 py-4 text-[17px] font-extrabold text-[#04121a] shadow-[0_12px_30px_-10px_rgba(20,231,216,.6)] active:scale-[.99]">
+          {tx('Crear mi cuenta gratis')} <ArrowRight size={18} />
+        </a>
+        <ul className="mt-3 space-y-1 text-[13px] text-dark-300">
+          <li className="flex gap-2"><Check size={15} className="mt-0.5 shrink-0 text-emerald-400" /> {tx('7 días gratis; luego 9,99 €/mes o 99 €/año')}</li>
+          <li className="flex gap-2"><Check size={15} className="mt-0.5 shrink-0 text-emerald-400" /> {tx('Sin tarjeta: la prueba empieza ya y hoy no pagas nada')}</li>
+        </ul>
+
+        <a href="/panel/login"
+          className="mt-5 flex w-full items-center justify-center rounded-2xl border border-dark-600 py-3.5 text-[15.5px] font-bold text-dark-100 active:scale-[.99]">
+          {tx('Ya tengo cuenta')} · {tx('Entrar')}
+        </a>
 
         <button onClick={probar} disabled={ocupado}
-          className="mt-5 inline-flex items-center justify-center gap-2 rounded-2xl border border-dashed border-dark-600 py-3.5 text-[14px] font-semibold text-dark-200 disabled:opacity-50">
+          className="mt-3 inline-flex w-full items-center justify-center gap-2 rounded-2xl border border-dashed border-dark-600 py-3.5 text-[14px] font-semibold text-dark-200 disabled:opacity-50">
           {ocupado && <Loader2 size={15} className="animate-spin" />} {tx('Probar sin cuenta')}
         </button>
         <p className="mt-1.5 text-center text-[11.5px] text-dark-500">{tx('Una ruta de prueba, solo tuya, que se borra mañana.')}</p>
         {err && <p className="mt-3 text-center text-[13px] text-red-300">{err}</p>}
 
-        <p className="mt-auto pt-8 text-center text-[13px] text-dark-400">
-          {tx('¿Ya tienes cuenta?')} <a href="/panel/login" className="font-semibold text-brand-300">{tx('Entrar')}</a>
-        </p>
+        <div className="mt-auto pt-8">
+          <button onClick={() => setEmpresa((v) => !v)} aria-expanded={empresa}
+            className="mx-auto flex items-center gap-1.5 text-[13.5px] font-semibold text-dark-400">
+            {tx('Soy de una empresa')} <ChevronDown size={15} className={empresa ? 'rotate-180' : ''} />
+          </button>
+          {empresa && (
+            <div className="mt-3 flex flex-col gap-2.5">
+              {OPCIONES_EMPRESA.map((o) => (
+                <a key={o.key} href={o.a}
+                  className="flex items-center gap-3.5 rounded-2xl border border-dark-700 bg-dark-900 p-3.5 active:scale-[.99]">
+                  <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl" style={{ background: `${o.color}22` }}>
+                    <o.icono size={20} style={{ color: o.color }} />
+                  </span>
+                  <span className="min-w-0 flex-1">
+                    <span className="block text-[15px] font-bold text-dark-50">{tx(o.titulo)}</span>
+                    <span className="mt-0.5 block text-[12px] leading-snug text-dark-400">{tx(o.sub)}</span>
+                  </span>
+                  <ArrowRight size={17} className="shrink-0 text-dark-500" />
+                </a>
+              ))}
+            </div>
+          )}
+        </div>
       </div>
     </div>
   )
