@@ -9,7 +9,7 @@ import { repNavegar } from '../../services/api'
 import {
   prepararLinea, proyectar, situarPasos, proximoPaso, textoDistancia, distanciaHablada, metrosEntre, rumbo as rumboEntre, textoPaso,
 } from '../../lib/guia'
-import { tx, useIdioma, locale } from '../../lib/idioma'
+import { tx, useIdioma, locale, txError } from '../../lib/idioma'
 
 /* ── LA GUÍA DENTRO DE LA APP (04-10-2026) ───────────────────────────────────
    Dani: «yo quiero el navegador ya dentro, que coja la ruta y te vaya
@@ -105,7 +105,7 @@ export default function Navegacion({ parada, numero, quedan, onSalir, onEntregar
       if (!recalculo) habla(`${tx('Vamos a {destino}.', { destino: p.cliente || tx('la siguiente parada') })} ${distanciaHablada(data.metros || 0, tx)}.`)
       else habla(tx('Ruta recalculada.'))
     } catch (e) {
-      setErrGuia(e?.response?.data?.detail || tx('No se pudo calcular la ruta'))
+      setErrGuia(txError(e, 'No se pudo calcular la ruta'))
     } finally { setPidiendo(false) }
   }, [habla])
 

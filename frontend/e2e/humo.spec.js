@@ -1919,3 +1919,22 @@ test('Portada en chino · /cn entera en chino, con la app del repartidor y su al
   await expect(page.getByText('已选套餐')).toBeVisible()
   expect(fallos).toEqual([])
 })
+
+test.describe('Idiomas · errores del servidor en la app de ruta', () => {
+  test.use({ locale: 'zh-CN' })
+  test('el aviso de pago del servidor sale traducido, y un 422 no rompe la pantalla', async ({ page }) => {
+    const fallos = vigilar(page)
+    await entrarRepartidor(page, { status: 'active', plan: 'autonomo', days_left: 0 })
+    await page.route(/\/api\/reparto\/mi-ruta$/, (r) => r.fulfill({ status: 402,
+      json: { detail: 'Tu prueba gratis ha terminado. Suscríbete en «Cuenta» para seguir repartiendo.' } }))
+    await page.goto('/ruta', { waitUntil: 'domcontentloaded' })
+    await expect(page.getByText('免费试用已结束。请在「账号」中订阅以继续配送。')).toBeVisible()
+    await page.unroute(/\/api\/reparto\/mi-ruta$/)
+    await page.route(/\/api\/reparto\/mi-ruta$/, (r) => r.fulfill({ status: 422,
+      json: { detail: [{ loc: ['body', 'x'], msg: 'field required', type: 'value_error' }] } }))
+    await page.reload({ waitUntil: 'domcontentloaded' })
+    await expect(page.getByText('x: field required')).toBeVisible()   // services/api.js lo aplana
+    await expect(page.getByRole('button', { name: '今天', exact: true })).toBeVisible()
+    expect(fallos.filter((f) => !/402|422/.test(f))).toEqual([])
+  })
+})

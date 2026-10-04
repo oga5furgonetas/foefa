@@ -26,6 +26,8 @@ for (const f of FICHEROS) {
   const s = readFileSync(join(raiz, f), 'utf8')
   // tx('…') y, en Registro, tt('…') (el mismo tx solo para quien reparte solo).
   for (const m of s.matchAll(/\bt[xt]\(\s*'((?:\\'|[^'])*)'/g)) usadas.add(m[1].replace(/\\'/g, "'"))
+  // txError(e, 'por defecto')
+  for (const m of s.matchAll(/\btxError\(\s*\w+,\s*'((?:\\'|[^'])*)'/g)) usadas.add(m[1].replace(/\\'/g, "'"))
   // tx(a ? 'x' : 'y') y similares: las cadenas dentro del primer argumento.
   for (const m of s.matchAll(/\btx\(([^()]*\?[^()]*)\)/g)) cadenas(m[1]).forEach((c) => usadas.add(c))
   for (const nombre of LISTAS) {
@@ -47,8 +49,15 @@ for (const f of FICHEROS) {
 
 const { A } = await import(new URL('file://' + join(raiz, 'lib/textosRutaA.js').replace(/\\/g, '/')))
 const { B } = await import(new URL('file://' + join(raiz, 'lib/textosRutaB.js').replace(/\\/g, '/')))
-const dic = { ...A, ...B }
-const dobles = Object.keys(A).filter((k) => k in B)
+const { C } = await import(new URL('file://' + join(raiz, 'lib/textosRutaC.js').replace(/\\/g, '/')))
+const dic = { ...A, ...B, ...C }
+const dobles = [...Object.keys(A).filter((k) => k in B), ...Object.keys(C).filter((k) => k in A || k in B)]
+// Los mensajes del servidor (C) cuentan como usados mientras el servidor los diga.
+const servidor = readFileSync(join(raiz, '..', '..', 'backend', 'server.py'), 'utf8')
+for (const k of Object.keys(C)) {
+  if (servidor.includes(`"${k}"`)) usadas.add(k)
+  else console.log(`Aviso: el servidor ya no dice «${k}»`)
+}
 
 const vars = (t) => [...t.matchAll(/\{(\w+)\}/g)].map((m) => m[1]).sort().join(',')
 const fallos = []

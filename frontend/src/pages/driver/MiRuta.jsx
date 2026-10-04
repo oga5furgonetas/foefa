@@ -12,7 +12,7 @@ import { lista } from '../../lib/lista'
 import { compressImage } from '../../lib/compressImage'
 import { origen } from '../../marca'
 import { leerTicketEnMovil } from '../../lib/leerTicket'
-import { tx, useIdioma, locale } from '../../lib/idioma'
+import { tx, useIdioma, locale, txError } from '../../lib/idioma'
 
 /* ── MI RUTA ────────────────────────────────────────────────────────────────
    Lo que hace el repartidor al cargar: escanea el código de la caja. Si el
@@ -181,7 +181,7 @@ export default function MiRuta({ onBack, embebido = false }) {
 
   const cargar = useCallback(() => {
     repMiRuta().then(({ data }) => setRuta(data))
-      .catch((e) => setErr(e?.response?.data?.detail || tx('No se pudo cargar tu ruta')))
+      .catch((e) => setErr(txError(e, 'No se pudo cargar tu ruta')))
   }, [])
   useEffect(cargar, [cargar])
 
@@ -208,7 +208,7 @@ export default function MiRuta({ onBack, embebido = false }) {
       cargar()
     } catch (e) {
       if (e?.response?.status === 428) setVerAviso(true)
-      else setAviso(e?.response?.data?.detail || tx('No se pudo'))
+      else setAviso(txError(e, 'No se pudo'))
     } finally { setOcupado('') }
   }
 
@@ -227,7 +227,7 @@ export default function MiRuta({ onBack, embebido = false }) {
       } else {
         setNuevo({ ...VACIO, codigo: data.codigo })
       }
-    } catch (e) { setAviso(e?.response?.data?.detail || tx('No se pudo buscar')) } finally { setOcupado('') }
+    } catch (e) { setAviso(txError(e, 'No se pudo buscar')) } finally { setOcupado('') }
   }
 
   /* El código de barras de la etiqueta, de la misma foto: así una foto da
@@ -265,7 +265,7 @@ export default function MiRuta({ onBack, embebido = false }) {
         codigo: n?.codigo || data?.codigo || '', de_ticket: true,
         direccion: [data?.direccion, data?.cp, data?.localidad].filter(Boolean).join(', ') || n?.direccion || '',
       }))
-    } catch (e) { setAviso(e?.response?.data?.detail || tx('No se pudo leer el ticket')) } finally { setOcupado('') }
+    } catch (e) { setAviso(txError(e, 'No se pudo leer el ticket')) } finally { setOcupado('') }
   }
 
   // «Cargar paquetes»: una foto tras otra, y al acabar «Montar ruta».
@@ -278,7 +278,7 @@ export default function MiRuta({ onBack, embebido = false }) {
       setNuevo(null); setCodigo('')
       cargar()
       if (carga) { setCarga({ n: carga.n + 1 }); setAviso('') } else setAviso(tx('✓ Añadido a tu ruta'))
-    } catch (e) { setAviso(e?.response?.data?.detail || tx('No se pudo guardar')) } finally { setOcupado('') }
+    } catch (e) { setAviso(txError(e, 'No se pudo guardar')) } finally { setOcupado('') }
   }
 
   async function marcar(p, estado, motivo, pago, extra) {
@@ -294,7 +294,7 @@ export default function MiRuta({ onBack, embebido = false }) {
       if (navigator.vibrate) navigator.vibrate(estado === 'entregado' ? 60 : [40, 60, 40])
       cargar()
     } catch (e) {
-      setAviso(e?.response?.data?.detail || tx('No se pudo guardar'))
+      setAviso(txError(e, 'No se pudo guardar'))
     } finally { setOcupado('') }
   }
 
@@ -311,7 +311,7 @@ export default function MiRuta({ onBack, embebido = false }) {
           : tx('Ruta ordenada: {paradas}', { paradas }))
         cargar()
       } catch (e) {
-        setAviso(e?.response?.data?.detail || tx('No se pudo ordenar'))
+        setAviso(txError(e, 'No se pudo ordenar'))
       } finally { setOcupado('') }
     }
     if (!('geolocation' in navigator)) return fin(null)
@@ -325,7 +325,7 @@ export default function MiRuta({ onBack, embebido = false }) {
     if (!d) return
     setDeshacer(null)
     try { await repEstado(d.p.id, 'pendiente'); setAviso(tx('Vuelve a tu ruta: {quien}', { quien: d.p.cliente || d.p.direccion })); cargar() } catch (e) {
-      setAviso(e?.response?.data?.detail || tx('No se pudo deshacer'))
+      setAviso(txError(e, 'No se pudo deshacer'))
     }
   }
 
@@ -336,7 +336,7 @@ export default function MiRuta({ onBack, embebido = false }) {
       setReordenar(null)
       setAviso(data.ruta?.fin ? tx('Orden guardado. Con este orden acabas ≈ {fin}', { fin: data.ruta.fin }) : tx('Orden guardado'))
       cargar()
-    } catch (e) { setAviso(e?.response?.data?.detail || tx('No se pudo guardar el orden')) } finally { setOcupado('') }
+    } catch (e) { setAviso(txError(e, 'No se pudo guardar el orden')) } finally { setOcupado('') }
   }
 
   function mover(i, d) {
@@ -351,7 +351,7 @@ export default function MiRuta({ onBack, embebido = false }) {
   async function ponerHueco(p, hueco) {
     setOcupado(`hueco-${p.id}`)
     try { await repMiEditar(p.id, { hueco }); setHuecoDe(null); cargar() } catch (e) {
-      setAviso(e?.response?.data?.detail || tx('No se pudo guardar'))
+      setAviso(txError(e, 'No se pudo guardar'))
     } finally { setOcupado('') }
   }
 
@@ -380,7 +380,7 @@ export default function MiRuta({ onBack, embebido = false }) {
       cargar()
       // Se van ubicando en el servidor a una por segundo: se recarga al acabar.
       setTimeout(cargar, Math.min(60, n + 3) * 1000)
-    } catch (e) { setAviso(e?.response?.data?.detail || tx('No se pudo leer la lista')) } finally { setOcupado('') }
+    } catch (e) { setAviso(txError(e, 'No se pudo leer la lista')) } finally { setOcupado('') }
   }
 
   if (err) return <Marco onBack={onBack} embebido={embebido}><p className="text-red-300">{err}</p></Marco>

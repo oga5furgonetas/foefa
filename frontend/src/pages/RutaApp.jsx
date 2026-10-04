@@ -12,7 +12,7 @@ import InstalarApp from './InstalarApp'
 import { useToast } from '../lib/toast'
 import { lista } from '../lib/lista'
 import { hoyLocal, fechaEs } from '../lib/fecha'
-import { tx, useIdioma } from '../lib/idioma'
+import { tx, useIdioma, txError } from '../lib/idioma'
 
 /* ── LA APP DE QUIEN REPARTE SOLO (04-10-2026) ───────────────────────────────
    No es el panel de una empresa pequeña: es otro producto, como Circuit o
@@ -49,7 +49,7 @@ export default function RutaApp() {
     try { pendiente = pendiente || sessionStorage.getItem('regalo_pendiente') || '' } catch { /* nada */ }
     const canje = pendiente
       ? canjearRegalo(pendiente).then(({ data }) => toast.success(data?.mensaje || tx('Regalo aplicado')))
-        .catch((e) => toast.error(e?.response?.data?.detail || tx('No se pudo canjear el regalo')))
+        .catch((e) => toast.error(txError(e, 'No se pudo canjear el regalo')))
         .finally(() => { try { sessionStorage.removeItem('regalo_pendiente') } catch { /* nada */ } })
       : Promise.resolve()
     canje.then(recargar)

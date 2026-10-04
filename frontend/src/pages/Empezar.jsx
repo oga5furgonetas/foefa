@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { Zap, Truck, Users, Building2, Loader2, ArrowRight } from 'lucide-react'
 import { API_BASE, DRIVER_TOKEN_KEY } from '../services/api'
 import { MARCA } from '../marca'
-import { tx, useIdioma, IDIOMAS, cambiarIdioma } from '../lib/idioma'
+import { tx, useIdioma, IDIOMAS, cambiarIdioma, txError } from '../lib/idioma'
 
 /* ── LA PRIMERA PANTALLA DE LA APP (04-10-2026) ──────────────────────────────
    Quien se baja la app de Play Store es, casi siempre, una persona que
@@ -36,7 +36,7 @@ export default function Empezar() {
         method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ rol: 'autonomo' }),
       })
       const j = await r.json()
-      if (!r.ok || !j.access_token) throw new Error(j.detail || tx('No se pudo abrir la prueba'))
+      if (!r.ok || !j.access_token) throw new Error(txError(j, 'No se pudo abrir la prueba'))
       localStorage.setItem(DRIVER_TOKEN_KEY, j.access_token)
       localStorage.setItem('flota_driver', JSON.stringify(j.driver))
       window.location.href = '/conductor?vista=ruta'

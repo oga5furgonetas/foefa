@@ -341,7 +341,7 @@ export default function Registro() {
       })
       const j = await r.json()
       if (!r.ok || !j.access_token) {
-        setErr(j.detail || (soloYo ? tt('No se pudo crear la cuenta. Prueba con otro correo.') : 'No se pudo crear la cuenta. Prueba con otro usuario o URL.'))
+        setErr((typeof j.detail === 'string' && (soloYo ? tt(j.detail) : j.detail)) || (soloYo ? tt('No se pudo crear la cuenta. Prueba con otro correo.') : 'No se pudo crear la cuenta. Prueba con otro usuario o URL.'))
         setBusy(false); return
       }
       saveSession(j)   // le faltaba admin_role; una sola función lo guarda todo

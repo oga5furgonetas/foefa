@@ -11,7 +11,7 @@ import { getAdmin, logout } from '../panel/auth'
 import { MARCA, origen } from '../marca'
 import { enAppPlay } from '../lib/enApp'
 import { lista } from '../lib/lista'
-import { tx, useIdioma, locale, IDIOMAS, idioma, cambiarIdioma } from '../lib/idioma'
+import { tx, useIdioma, locale, IDIOMAS, idioma, cambiarIdioma, txError } from '../lib/idioma'
 
 /* ── LA CUENTA DE QUIEN REPARTE SOLO (04-10-2026) ────────────────────────────
    Dani: «quiero mejorarla ya, o la suscripción de un año, o regalársela a
@@ -146,7 +146,7 @@ export function Suscribirse({ b, precios, toast, titulo }) {
         window.location.href = data.url; return
       }
       toast?.error?.(tx('No se pudo abrir el pago'))
-    } catch (e) { toast?.error?.(e?.response?.data?.detail || tx('No se pudo abrir el pago')) }
+    } catch (e) { toast?.error?.(txError(e, 'No se pudo abrir el pago')) }
     setYendo(false)
   }
   return (
@@ -190,14 +190,14 @@ function Gestionar({ b, precios, toast, recargar }) {
   async function portal() {
     setOcupado('portal')
     try { const { data } = await stripePortal(); if (data?.url) { window.location.href = data.url; return } } catch (e) {
-      toast?.error?.(e?.response?.data?.detail || tx('No se pudo abrir la gestión del pago'))
+      toast?.error?.(txError(e, 'No se pudo abrir la gestión del pago'))
     }
     setOcupado('')
   }
   async function cambiar() {
     setOcupado('cambio')
     try { await stripeCambiarPlan(aAnual); toast?.success?.(aAnual ? tx('Ya estás en el plan anual') : tx('Ya estás en el plan mensual')); setConfirmar(false); recargar() } catch (e) {
-      toast?.error?.(e?.response?.data?.detail || tx('No se pudo cambiar el plan'))
+      toast?.error?.(txError(e, 'No se pudo cambiar el plan'))
     }
     setOcupado('')
   }
@@ -277,7 +277,7 @@ export function PagarConPlay({ b, toast, recargar, titulo }) {
     } catch (e) {
       try { await resp?.complete('fail') } catch { /* ya cerrada */ }
       // Cancelar en la ventana de Google no es un error que contar.
-      if (e?.name !== 'AbortError') toast?.error?.(e?.response?.data?.detail || tx('No se completó el pago'))
+      if (e?.name !== 'AbortError') toast?.error?.(txError(e, 'No se completó el pago'))
     }
     setYendo(false)
   }
@@ -340,7 +340,7 @@ function BotonPortal({ toast, texto, principal }) {
   async function ir() {
     setYendo(true)
     try { const { data } = await stripePortal(); if (data?.url) { window.location.href = data.url; return } } catch (e) {
-      toast?.error?.(e?.response?.data?.detail || tx('No se pudo abrir la gestión del pago'))
+      toast?.error?.(txError(e, 'No se pudo abrir la gestión del pago'))
     }
     setYendo(false)
   }
@@ -358,7 +358,7 @@ function Canjear({ toast, recargar }) {
   async function canjear() {
     setOcupado(true)
     try { const { data } = await canjearRegalo(codigo); toast?.success?.(data?.mensaje || tx('Regalo aplicado')); setCodigo(''); recargar() } catch (e) {
-      toast?.error?.(e?.response?.data?.detail || tx('No se pudo canjear'))
+      toast?.error?.(txError(e, 'No se pudo canjear'))
     }
     setOcupado(false)
   }
@@ -404,7 +404,7 @@ function Regalar({ precios, toast, resaltar }) {
       const { data } = await comprarRegalo(meses)
       if (data?.url) { apuntarParaLaVuelta('Purchase', { value: precios[String(meses)], currency: 'EUR', content_name: 'regalo' }); window.location.href = data.url; return }
     } catch (e) {
-      toast?.error?.(e?.response?.data?.detail || tx('No se pudo abrir el pago'))
+      toast?.error?.(txError(e, 'No se pudo abrir el pago'))
     }
     setYendo(false)
   }

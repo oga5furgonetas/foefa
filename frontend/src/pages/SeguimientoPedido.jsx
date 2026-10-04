@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import { useParams } from 'react-router-dom'
 import { Loader2, Package, CheckCircle2, Clock, XCircle, Truck } from 'lucide-react'
 import { API_BASE } from '../services/api'
-import { tx } from '../lib/idioma'
+import { tx, txError } from '../lib/idioma'
 
 /* ── «¿CUÁNDO LLEGA MI PEDIDO?» ─────────────────────────────────────────────
    El enlace que el repartidor manda por WhatsApp. Dice el estado, la hora
@@ -28,7 +28,7 @@ export default function SeguimientoPedido() {
       .then(async (r) => {
         const j = await r.json().catch(() => ({}))
         if (!vivo) return
-        if (r.ok) { setD(j); setErr('') } else setErr(j.detail || tx('Este enlace no es válido.'))
+        if (r.ok) { setD(j); setErr('') } else setErr(txError(j, 'Este enlace no es válido.'))
       })
       .catch(() => vivo && setErr(tx('Sin conexión. Inténtalo de nuevo en un momento.')))
     leer()

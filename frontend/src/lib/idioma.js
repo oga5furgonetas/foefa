@@ -48,6 +48,16 @@ export function tx(texto, vars) {
   return s
 }
 
+/* El mensaje de un error del servidor, traducido si lo conocemos, o el de por
+   defecto. Vale para axios (e.response.data) y para fetch (el JSON, e.detail).
+   Con fetch no pasa por el normalizador de services/api.js y un 422 trae
+   `detail` como LISTA: pintarla rompería la pantalla, así que solo se usa si
+   es texto. */
+export function txError(e, porDefecto, vars) {
+  const d = e?.response?.data?.detail ?? e?.detail
+  return typeof d === 'string' && d.trim() ? tx(d) : tx(porDefecto, vars)
+}
+
 /* Para que una pantalla se repinte al cambiar de idioma. */
 export function useIdioma() {
   const [l, setL] = useState(actual)
