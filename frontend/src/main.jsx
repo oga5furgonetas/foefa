@@ -1,5 +1,6 @@
 import React, { Suspense, lazy, useEffect } from 'react'
 import ReactDOM from 'react-dom/client'
+import { escucharInstalacion } from './lib/instalar'
 import { BrowserRouter, Route, Routes, useLocation } from 'react-router-dom'
 /* Tipografía self-hosted (la CSP bloquea Google Fonts). Vite las sirve desde
    el propio dominio.
@@ -297,8 +298,11 @@ const NotFound = lazy(() => import('./pages/NotFound'))
    uno a lo suyo: el repartidor a su ruta, la oficina al panel, y quien no ha
    entrado nunca a la pantalla de entrar, que ofrece darse de alta. */
 function AppRedirect() {
-  // Marca de «estoy dentro de la app instalada»: la lee el aviso de pago.
-  try { sessionStorage.setItem('flota_app', '1') } catch { /* sin almacenamiento */ }
+  // Marca de «estoy dentro de la app DE GOOGLE PLAY»: la lee el aviso de pago
+  // (allí no se puede cobrar con tarjeta). Solo si la abre Play (Android lo
+  // dice como android-app://): la app instalada desde la web también arranca
+  // en /app y en ella sí se paga con tarjeta.
+  try { if (/^android-app:\/\//.test(document.referrer)) sessionStorage.setItem('flota_app', '1') } catch { /* sin almacenamiento */ }
   // Sin sesión, lo primero es decir qué eres («Repartir yo mismo», de una
   // empresa, la oficina): la app es sobre todo de quien reparte.
   let destino = '/empezar'
@@ -329,6 +333,8 @@ function Medidor() {
   useEffect(() => { medirVista(pathname) }, [pathname])
   return null
 }
+
+escucharInstalacion()
 
 ReactDOM.createRoot(document.getElementById('root')).render(
   <React.StrictMode>

@@ -1836,3 +1836,41 @@ test('Reparto · en México el WhatsApp lleva el prefijo 52, y con + se respeta 
   await expect(page.locator('div.rounded-2xl', { hasText: 'Parada 2' }).getByRole('link', { name: /WhatsApp/ })).toHaveAttribute('href', /wa\.me\/13055550100\?/)
   expect(fallos).toEqual([])
 })
+
+/* INSTALAR DESDE LA WEB (04-10-2026): mientras Play valida, la app se instala
+   desde el navegador. Con el aviso de Chrome, un botón; sin él, instrucciones. */
+test('App · desde la web se puede instalar la app (y no sale si ya es app)', async ({ page }) => {
+  const fallos = vigilar(page)
+  await entrarRepartidor(page, { status: 'trial', days_left: 6, trial_ends: new Date(Date.now() + 6 * 86400000).toISOString() })
+  await page.goto('/ruta', { waitUntil: 'domcontentloaded' })
+  const tarjeta = page.getByLabel('Instalar la app')
+  await expect(tarjeta).toBeVisible()
+  // Sin aviso de Chrome: instrucciones.
+  await tarjeta.getByRole('button', { name: 'Cómo instalarla' }).click()
+  await expect(tarjeta.getByText(/Instalar aplicación/)).toBeVisible()
+  // Con el aviso de Chrome: el botón lo lanza.
+  await page.evaluate(() => {
+    const e = new Event('beforeinstallprompt')
+    e.prompt = () => { window.__pedido = true }
+    e.userChoice = Promise.resolve({ outcome: 'accepted' })
+    window.dispatchEvent(e)
+  })
+  await page.reload({ waitUntil: 'domcontentloaded' })
+  await page.evaluate(() => {
+    const e = new Event('beforeinstallprompt')
+    e.prompt = () => { window.__pedido = true }
+    e.userChoice = Promise.resolve({ outcome: 'accepted' })
+    window.dispatchEvent(e)
+  })
+  await page.getByLabel('Instalar la app').getByRole('button', { name: 'Instalar la app' }).click()
+  await expect.poll(() => page.evaluate(() => window.__pedido)).toBe(true)
+  await expect(page.getByLabel('Instalar la app')).toHaveCount(0)
+  expect(fallos).toEqual([])
+})
+
+test('App · dentro de la app de Play no se ofrece instalar', async ({ page }) => {
+  await entrarRepartidor(page, { status: 'trial', days_left: 6 }, { enApp: true })
+  await page.goto('/ruta', { waitUntil: 'domcontentloaded' })
+  await expect(page.getByRole('button', { name: 'Ruta', exact: false }).first()).toBeVisible()
+  await expect(page.getByLabel('Instalar la app')).toHaveCount(0)
+})

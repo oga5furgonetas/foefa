@@ -57,6 +57,9 @@ for (const ruta of PAGINAS) {
     // y 0 en la siguiente): se estaba midiendo el esqueleto de carga.
     await enMain().first().waitFor({ state: 'visible', timeout: 6000 }).catch(() => {})
     await page.waitForTimeout(400)
+    // Con el equipo cargado la primera carga tarda más: se espera a que la red
+    // se calme (el botón «Actualizar» va deshabilitado mientras carga).
+    await page.waitForLoadState('networkidle', { timeout: 6000 }).catch(() => {})
     const total = await enMain().count()
     const tope = Math.min(total, 45)
     let pulsados = 0
@@ -84,7 +87,7 @@ for (const ruta of PAGINAS) {
       if (!elegido) break   // no queda ninguno por probar
 
       try {
-        await elegido.click({ timeout: 2000, noWaitAfter: true })
+        await elegido.click({ timeout: 5000, noWaitAfter: true })
         pulsados++
       } catch { continue }
 
