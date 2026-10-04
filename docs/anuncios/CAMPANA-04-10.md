@@ -90,6 +90,22 @@ saltarse la caché del borde.
   el titular de arriba. Botón: «Más información». Misma URL con `utm_source=tiktok`.
 - Público: 18-55, intereses «Delivery / Logistics / Gig economy».
 
+## Lo que quedó montado en TikTok (04-10, 20:30)
+
+Cuenta FlotaDSP_adv (7673552723603275797). Campaña «FDS Repartidores — 250 € hoy — 7 idiomas»,
+Tráfico → web, presupuesto de campaña **Lifetime 250 €**, grupos con inicio hoy 16:50 y fin hoy
+23:59, segmentación manual 18-54, identidad TikTok «FlotaDSP», CTA dinámico, texto ≤100 car.
+**La cuenta solo admite Europa + Argentina, Turquía, Marruecos, Egipto…: NO hay EE. UU., México,
+Brasil, Canadá ni Australia.** Por eso 6 grupos (sin chino): ES (España+Argentina), EN (UK+IE),
+PT (PT), FR (FR+BE+CH), DE (DE+AT+CH), IT (IT+CH), cada uno con su vídeo `tiktok-<idioma>.mp4`,
+URL `utm_source=tiktok…utm_content=<idioma>` y texto en su idioma. Borrador guardado:
+**Dani pulsa «Publish all»** (y TikTok pedirá método de pago si no lo hay).
+
+Gotchas: el buscador de ubicaciones devuelve estados antes que países (Upper Austria vs Austria);
+el campo URL necesita dos clics (el primero solo lo pone en edición); el nombre del grupo/anuncio
+no se deja escribir; el `Upload` del panel de creatividades hay que abrirlo con clic en el botón
+(no por ref) y el input de fichero es el de «Step 1 of 4».
+
 ## Qué medir mañana (nuestra analítica, anónima)
 
 `analitica_eventos` desde hoy 14:30: sesiones con `utm`, cuántas pulsan
