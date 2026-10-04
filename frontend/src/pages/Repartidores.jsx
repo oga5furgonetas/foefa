@@ -45,10 +45,19 @@ export default function Repartidores() {
     } catch (e) { setErr(e.message || tx('Sin conexión')); setOcupado(false) }
   }
 
+  /* LO QUE SE PIDE PRIMERO ES EL ALTA (05-10-2026): el botón grande es «Crear mi
+     cuenta gratis» (7 días, sin tarjeta); probarla sin registrarse queda como
+     segunda opción, para quien quiere verla antes de dar el correo. */
+  const botonCrear = (
+    <a href="/registro?sector=autonomo&plan=autonomo" onClick={() => { medirAccion('rep_alta'); evento('Lead', { content_name: 'crear_cuenta' }) }}
+      className="flex w-full items-center justify-center gap-2 rounded-2xl bg-gradient-to-br from-brand-400 to-brand-600 py-4 text-[17px] font-extrabold text-[#04121a] shadow-[0_12px_30px_-10px_rgba(20,231,216,.6)] active:scale-[.99]">
+      {tx('Crear mi cuenta gratis')} <ArrowRight size={19} />
+    </a>
+  )
   const botonProbar = (
     <button onClick={probar} disabled={ocupado}
-      className="flex w-full items-center justify-center gap-2 rounded-2xl bg-gradient-to-br from-brand-400 to-brand-600 py-4 text-[17px] font-extrabold text-[#04121a] shadow-[0_12px_30px_-10px_rgba(20,231,216,.6)] active:scale-[.99] disabled:opacity-60">
-      {ocupado ? <Loader2 size={19} className="animate-spin" /> : <Route size={19} />} {tx('Probarla ahora, sin registrarme')}
+      className="flex w-full items-center justify-center gap-2 rounded-2xl border border-brand-400/50 py-3.5 text-[15.5px] font-bold text-brand-200 active:scale-[.99] disabled:opacity-60">
+      {ocupado ? <Loader2 size={18} className="animate-spin" /> : <Route size={18} />} {tx('Probarla ahora, sin registrarme')}
     </button>
   )
 
@@ -68,14 +77,16 @@ export default function Repartidores() {
         <h1 className="mt-1.5 font-display text-[32px] font-extrabold leading-[1.05] text-dark-50">{tx('Tu ruta de reparto, ordenada sola.')}</h1>
         <p className="mt-2 text-[15px] leading-snug text-dark-300">{tx('Haz una foto a la etiqueta o escanea el paquete: la app ordena las paradas por tiempo y te lleva con voz hasta cada puerta.')}</p>
 
-        <div className="mt-4">{botonProbar}</div>
-        <p className="mt-2 text-center text-[12.5px] text-dark-400">{tx('Con 8 paradas de ejemplo. Sin datos ni tarjeta: pruébala en 1 minuto.')}</p>
+        <div className="mt-4">{botonCrear}</div>
+        <p className="mt-2 text-center text-[12.5px] text-dark-300">{tx('7 días gratis · sin tarjeta · cancelas cuando quieras')}</p>
+        <div className="mt-3">{botonProbar}</div>
+        <p className="mt-1.5 text-center text-[12px] text-dark-500">{tx('Con 8 paradas de ejemplo. Sin datos ni tarjeta: pruébala en 1 minuto.')}</p>
         {err && <p role="alert" className="mt-2 text-center text-[13px] text-red-300">{err}</p>}
 
         {/* El vídeo de la app (el mismo de TikTok, mudo y en bucle): se ve lo
             que hace antes de pulsar nada. Las capturas, de reserva si no carga. */}
         <div className="-mx-5 mt-7 flex snap-x gap-3 overflow-x-auto px-5 pb-2">
-          <video src={`/videos/tiktok-${video}.mp4?v=3`} poster={`/capturas-ruta/${capturas}/1-ruta.png`} autoPlay muted loop playsInline preload="metadata"
+          <video src={`/videos/web-${video}.mp4?v=1`} poster={`/capturas-ruta/${capturas}/1-ruta.png`} autoPlay muted loop playsInline preload="metadata"
             width="390" height="693" aria-label={tx('Vídeo de la app')}
             className="w-[62%] max-w-[240px] shrink-0 snap-center rounded-[22px] border border-dark-700 bg-dark-900 object-cover shadow-2xl shadow-black/40" />
           {['2-mapa', '3-navegando'].map((n) => (
