@@ -27,7 +27,7 @@ const PREGUNTAS = [
   ['¿Sirve con los paquetes de mi agencia?', 'Sí. Escaneas el código de la etiqueta o le haces una foto y la app intenta leer la dirección (si no la lee, la escribes tú), o pegas tu lista de direcciones. No necesita conectarse con tu agencia.'],
   ['¿Qué hacéis con mis datos y mi ubicación?', 'La foto de la etiqueta se lee en tu móvil. Tu ubicación solo se usa para guiarte y no se guarda. Los datos de tus clientes se borran solos a los días que tú fijes.'],
   ['¿Cuánto cuesta?', '7 días gratis, sin tarjeta. Después 9,99 € al mes o 99 € al año, y cancelas cuando quieras desde la propia app.'],
-  ['¿Tengo que instalar algo?', 'Funciona en el navegador de cualquier móvil. Puedes añadirla a tu pantalla de inicio y se abre como una app.'],
+  ['¿Tengo que instalar algo?', 'Funciona en el navegador de cualquier móvil, Android o iPhone: la añades a tu pantalla de inicio y se abre como una app. La app de Google Play y la de App Store llegarán próximamente.'],
 ]
 
 export default function Repartidores() {

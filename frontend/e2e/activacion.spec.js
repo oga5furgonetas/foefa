@@ -139,3 +139,50 @@ test('Instalar · /instalar no da 404: lleva a la app', async ({ page }) => {
   await expect(page).toHaveURL(/\/(ruta|empezar)/)
   await expect(page.getByText('Página no encontrada')).toHaveCount(0)
 })
+
+/* INSTALAR LA APP (05-10-2026): tras registrarse, la tarjeta «Instala FDS en tu móvil» funciona en Android
+   (aviso de Chrome) y explica los pasos en iPhone, avisando de que la de App Store llegará próximamente. */
+const SIN_PAQUETES = { activo: true, autonomo: true, empresa: '', fecha: '2026-10-05', ia_tickets: false, jornada: {}, aviso_aceptado: true, base: null, ruta: null, pedidos: [] }
+
+test.describe('Instalar · Android', () => {
+  test.use({ userAgent: 'Mozilla/5.0 (Linux; Android 14; Pixel 8) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Mobile Safari/537.36' })
+  test('con el aviso de Chrome, «Instalar la app» lanza la instalación', async ({ page, context }) => {
+    await preparar(page, context)
+    await page.addInitScript(() => localStorage.removeItem('fds_instalar_cerrado'))
+    await page.route(/\/api\/reparto\/mi-ruta$/, (r) => r.fulfill({ json: SIN_PAQUETES }))
+    await page.goto('/ruta', { waitUntil: 'domcontentloaded' })
+    await expect(page.getByText('Instala FDS en tu móvil')).toBeVisible()
+    await page.evaluate(() => {
+      const e = new Event('beforeinstallprompt')
+      e.prompt = () => { window.__lanzado = true }
+      e.userChoice = Promise.resolve({ outcome: 'accepted' })
+      window.dispatchEvent(e)
+    })
+    await page.getByRole('button', { name: 'Instalar la app' }).click()
+    await expect.poll(() => page.evaluate(() => window.__lanzado)).toBe(true)
+    await expect(page.getByText('Instala FDS en tu móvil')).toHaveCount(0)
+  })
+})
+
+test.describe('Instalar · iPhone', () => {
+  test.use({ userAgent: 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_5 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.5 Mobile/15E148 Safari/604.1' })
+  test('explica los pasos de Safari, avisa de entrar una vez y de que la App Store llega próximamente', async ({ page, context }) => {
+    await preparar(page, context)
+    await page.addInitScript(() => localStorage.removeItem('fds_instalar_cerrado'))
+    await page.route(/\/api\/reparto\/mi-ruta$/, (r) => r.fulfill({ json: SIN_PAQUETES }))
+    await page.goto('/ruta', { waitUntil: 'domcontentloaded' })
+    await page.getByRole('button', { name: 'Cómo instalarla' }).click()
+    await expect(page.getByText('Abre esta página en Safari.')).toBeVisible()
+    await expect(page.getByText('Elige «Añadir a pantalla de inicio».')).toBeVisible()
+    await expect(page.getByText('La app de la App Store llegará próximamente.')).toBeVisible()
+    await expect(page.getByText('entra una vez con tu correo y tu contraseña')).toBeVisible()
+  })
+})
+
+test('Instalar · la portada dice que sirve en Android e iPhone y que las tiendas llegan próximamente', async ({ page }) => {
+  await page.addInitScript(() => localStorage.setItem('cookie_consent', JSON.stringify({ v: 1, at: new Date().toISOString() })))
+  await page.goto('/repartidores', { waitUntil: 'domcontentloaded' })
+  await page.getByText('¿Tengo que instalar algo?').click()
+  await expect(page.getByText(/Android o iPhone/)).toBeVisible()
+  await expect(page.getByText(/Google Play y la de App Store llegarán próximamente/)).toBeVisible()
+})

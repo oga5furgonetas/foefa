@@ -55,12 +55,15 @@ export default function InstalarApp() {
           <li className="flex items-center gap-2">1. {tx('Abre esta página en Safari.')}</li>
           <li className="flex items-center gap-2">2. {tx('Pulsa')} <Share size={15} className="text-sky-300" /> <b>{tx('Compartir')}</b> {tx('(abajo).')}</li>
           <li>3. {tx('Elige «Añadir a pantalla de inicio».')}</li>
+          <li className="pt-1 text-[12px] text-dark-400">{tx('En iPhone se instala así y funciona como una app. La app de la App Store llegará próximamente.')}</li>
+          <li className="text-[12px] text-dark-400">{tx('Al abrirla desde el icono, entra una vez con tu correo y tu contraseña.')}</li>
         </ol>
       ) : paso === 'android' ? (
         <ol className="mt-3 space-y-1.5 text-[13px] text-dark-200">
           <li>1. {tx('Abre esta página en Chrome.')}</li>
           <li>2. {tx('Pulsa el menú ⋮ (arriba a la derecha).')}</li>
           <li>3. {tx('Elige «Instalar aplicación» o «Añadir a pantalla de inicio».')}</li>
+          <li className="pt-1 text-[12px] text-dark-400">{tx('La app de Google Play llegará próximamente.')}</li>
         </ol>
       ) : (
         <button onClick={pulsar}
