@@ -14,7 +14,13 @@ export const PIXEL_ID = String(import.meta.env.VITE_META_PIXEL_ID || '').trim()
 const CLAVE = 'cookie_consent'
 const PENDIENTE = 'meta_pendiente'
 
-export function hayPixel() { return /^\d{8,20}$/.test(PIXEL_ID) }
+/* Píxel de TikTok (05-10-2026): mismo consentimiento, mismos eventos. Sin
+   `VITE_TIKTOK_PIXEL_ID` no existe. TikTok optimiza los anuncios por «registro»
+   en vez de por clic, que es lo que trae repartidores y no curiosos. */
+export const TT_ID = String(import.meta.env.VITE_TIKTOK_PIXEL_ID || '').trim()
+const hayMeta = () => /^\d{8,20}$/.test(PIXEL_ID)
+const hayTT = () => /^[A-Z0-9]{10,30}$/i.test(TT_ID)
+export function hayPixel() { return hayMeta() || hayTT() }
 
 export function consentimiento() {
   try {
@@ -47,14 +53,34 @@ export function cargarPixel() {
     s.src = 'https://connect.facebook.net/en_US/fbevents.js'
     document.head.appendChild(s)
   }
-  f.fbq('init', PIXEL_ID)
-  f.fbq('track', 'PageView')
+  if (hayMeta()) {
+    f.fbq('init', PIXEL_ID)
+    f.fbq('track', 'PageView')
+  }
+  cargarTikTok()
+}
+
+/* Fragmento oficial de TikTok, sin <script> en línea. */
+const TT_EVENTOS = { Lead: 'ClickButton', CompleteRegistration: 'CompleteRegistration', StartTrial: 'StartTrial', Subscribe: 'Subscribe', Purchase: 'CompletePayment' }
+function cargarTikTok() {
+  if (!hayTT() || window.ttq) return
+  const t = (window.ttq = [])
+  t._i = {}; t._o = {}
+  for (const m of ['page', 'track', 'identify', 'instances', 'debug', 'on', 'off', 'once', 'ready', 'alias', 'group', 'enableCookie', 'disableCookie']) {
+    t[m] = (...args) => { t.push([m, ...args]) }
+  }
+  const s = document.createElement('script')
+  s.async = true
+  s.src = `https://analytics.tiktok.com/i18n/pixel/events.js?sdkid=${encodeURIComponent(TT_ID)}&lib=ttq`
+  document.head.appendChild(s)
+  t.push(['page'])
 }
 
 export function evento(nombre, datos) {
   if (!aceptado()) return
   cargarPixel()
-  try { window.fbq('track', nombre, datos || {}) } catch { /* medir nunca rompe nada */ }
+  try { if (hayMeta()) window.fbq('track', nombre, datos || {}) } catch { /* medir nunca rompe nada */ }
+  try { if (hayTT() && TT_EVENTOS[nombre]) window.ttq.push(['track', TT_EVENTOS[nombre], datos || {}]) } catch { /* idem */ }
 }
 
 /* Antes de ir a Stripe: lo que se medirá al volver con ?pago=ok / ?regalo=. */
@@ -68,7 +94,8 @@ export function enviarPendiente(soloSi) {
     if (!p || (soloSi && !soloSi(p))) return
     if (!aceptado()) return
     sessionStorage.removeItem(PENDIENTE)
-    window.fbq('track', p.nombre, p.datos || {})
+    if (hayMeta()) window.fbq('track', p.nombre, p.datos || {})
+    if (hayTT() && TT_EVENTOS[p.nombre]) window.ttq.push(['track', TT_EVENTOS[p.nombre], p.datos || {}])
   } catch { /* nada */ }
 }
 

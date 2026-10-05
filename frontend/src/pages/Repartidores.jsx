@@ -91,6 +91,18 @@ export default function Repartidores() {
         <h1 className="mt-1.5 font-display text-[32px] font-extrabold leading-[1.05] text-dark-50">{tx('Tu ruta de reparto, ordenada sola.')}</h1>
         <p className="mt-2 text-[15px] leading-snug text-dark-300">{tx('Haz una foto a la etiqueta o escanea el paquete: la app ordena las paradas por tiempo y te lleva con voz hasta cada puerta.')}</p>
 
+        {/* PARA QUIÉN ES (05-10-2026): quien reparte para una agencia, una plataforma o un súper
+            tiene que verse reflejado nada más entrar. Las marcas son de sus dueños; no hay relación. */}
+        <div className="mt-3">
+          <p className="text-[13px] font-semibold text-dark-200">{tx('Sirve igual si repartes para una agencia, una plataforma o un súper:')}</p>
+          <div className="mt-1.5 flex flex-wrap gap-1.5">
+            {['Paquetería', 'Amazon', 'MRW', 'Nacex', 'Tipsa', 'Glovo', 'Súper a domicilio'].map((m) => (
+              <span key={m} className="rounded-full border border-dark-700 bg-dark-900 px-2.5 py-1 text-[12px] font-semibold text-dark-100">{tx(m)}</span>
+            ))}
+          </div>
+          <p className="mt-1 text-[11px] text-dark-500">{tx('Marcas de sus dueños, sin relación con ellas. Tú metes los paquetes y la app ordena la ruta.')}</p>
+        </div>
+
         <div className="mt-4">{botonCrear}</div>
         <p className="mt-2 text-center text-[12.5px] text-dark-300">{invitacion ? tx('{n} días gratis · sin tarjeta · cancelas cuando quieras', { n: invitacion.dias }) : tx('7 días gratis · sin tarjeta · cancelas cuando quieras')}</p>
         <div className="mt-3">{botonProbar}</div>
