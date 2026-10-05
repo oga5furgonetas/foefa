@@ -208,7 +208,42 @@ export function canSee(moduleKey) {
   return perms.includes(moduleKey)
 }
 
+/* LA DEMO DE REPARTO NO ATRAPA (05-10-2026, Dani Brao: «le di a demo y no doy
+   salido; le doy a entrar y me lleva a la demo»). «Probarla ahora» abre la demo
+   con una sesión de CONDUCTOR (`flota_driver_token`), y la app instalada arranca
+   en /app, que miraba primero esa sesión: aunque entrara con su cuenta, cada vez
+   que abría la app volvía a la demo. Ahora una sesión de demo nunca gana a nada:
+   entrar con tu cuenta la borra, /app la descarta y en la demo hay «Salir». */
+const DRIVER_TOKEN = 'flota_driver_token'
+
+export function hayDemoDeReparto() {
+  try {
+    const t = localStorage.getItem(DRIVER_TOKEN) || ''
+    return !!t && !!JSON.parse(atob(t.split('.')[1].replace(/-/g, '+').replace(/_/g, '/'))).demo
+  } catch { return false }
+}
+
+/** Quita la sesión de demo del conductor; si al entrar en ella había una real guardada, la devuelve. */
+export function salirDeLaDemoDeReparto() {
+  try {
+    if (!hayDemoDeReparto()) return
+    const previo = localStorage.getItem('flota_driver_previo')
+    localStorage.removeItem('flota_driver_previo')
+    const { token, driver } = previo ? JSON.parse(previo) : {}
+    if (token && driver) {
+      localStorage.setItem(DRIVER_TOKEN, token)
+      localStorage.setItem('flota_driver', driver)
+    } else {
+      localStorage.removeItem(DRIVER_TOKEN)
+      localStorage.removeItem('flota_driver')
+    }
+  } catch { /* sin almacenamiento */ }
+}
+
 export function saveSession(j) {
+  // Entrar con una cuenta de verdad termina cualquier demo de reparto abierta
+  // en este navegador (si no, la app volvía a abrirse en la demo).
+  if (j?.access_token && !j.demo) salirDeLaDemoDeReparto()
   if (j?.access_token) localStorage.setItem(TOKEN_KEY, j.access_token)
   // Un login recien hecho manda sobre cualquier acceso guardado antes: si no,
   // un resto de la sesion anterior del mismo usuario ganaria al token nuevo

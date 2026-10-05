@@ -20,6 +20,7 @@ import '@fontsource/ibm-plex-mono/400.css'
 import '@fontsource/ibm-plex-mono/500.css'
 import '@fontsource/ibm-plex-mono/600.css'
 import { medirVista } from './lib/analitica'
+import { salirDeLaDemoDeReparto } from './panel/auth'
 
 /* Señal de vida para /arranque.js. Ese vigilante espera 10 s y, si esta marca
    no aparece, da por hecho que el bundle llegó envenenado (pantalla en blanco)
@@ -320,6 +321,9 @@ function AppRedirect() {
   // Sin sesión, lo primero es decir qué eres («Repartir yo mismo», de una
   // empresa, la oficina): la app es sobre todo de quien reparte.
   let destino = '/empezar'
+  // La demo de «Probarla ahora» no es la casa de nadie: si la app arrancara en
+  // ella, quien ya tiene cuenta no saldría nunca de la demo (Dani Brao, 05-10).
+  salirDeLaDemoDeReparto()
   try {
     if (localStorage.getItem('flota_driver_token')) destino = '/conductor?vista=ruta'
     else if (localStorage.getItem('flota_token')) destino = '/panel'

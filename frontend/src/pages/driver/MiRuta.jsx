@@ -17,6 +17,7 @@ import { invitar } from '../../lib/compartir'
 import { medirAccion } from '../../lib/analitica'
 import { fijarPais, importe, simboloMoneda, metodosCobro } from '../../lib/region'
 import { tx, useIdioma, locale, txError } from '../../lib/idioma'
+import { salirDeLaDemoDeReparto } from '../../panel/auth'
 
 /* ── MI RUTA ────────────────────────────────────────────────────────────────
    Lo que hace el repartidor al cargar: escanea el código de la caja. Si el
@@ -594,7 +595,12 @@ export default function MiRuta({ onBack, embebido = false }) {
       {ruta.prueba && (
         <div className="mb-3 flex items-center justify-between gap-3 rounded-2xl border border-amber-400/40 bg-amber-500/[.08] px-3.5 py-2.5">
           <span className="text-[12.5px] leading-snug text-amber-100">{tx('Ruta de prueba con paradas de ejemplo. Se borra mañana.')}</span>
-          <a href="/registro?sector=autonomo&plan=autonomo" className="shrink-0 rounded-lg bg-amber-400 px-3 py-1.5 text-[12.5px] font-bold text-[#1a1300]">{tx('Crear mi cuenta')}</a>
+          <div className="flex shrink-0 flex-col items-stretch gap-1.5">
+            <a href="/registro?sector=autonomo&plan=autonomo" className="rounded-lg bg-amber-400 px-3 py-1.5 text-center text-[12.5px] font-bold text-[#1a1300]">{tx('Crear mi cuenta')}</a>
+            {/* Quien ya tiene cuenta tiene que poder SALIR de la demo (Dani Brao, 05-10). */}
+            <button type="button" onClick={() => { salirDeLaDemoDeReparto(); window.location.href = '/panel/login' }}
+              className="rounded-lg border border-amber-400/50 px-3 py-1.5 text-[12px] font-semibold text-amber-100">{tx('Ya tengo cuenta')}</button>
+          </div>
         </div>
       )}
 
