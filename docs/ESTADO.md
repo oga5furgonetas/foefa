@@ -704,3 +704,10 @@ Nada se había borrado (org `owner` sin `modulos`, usuario `dani` sin
 - Resend en Flota: `RESEND_API_KEY` (clave solo-envío, copia en `C:\Users\Usuario\.flota-resend.txt`), `EMAIL_FROM="FDS <contacto@flotadsp.com>"` y `CORREO_CONTACTO=contacto@flotadsp.com` en Fly. El dominio `flotadsp.com` está verificado (envío de prueba OK). Se envía desde el panel de superadmin (`POST /admin/correo`, tope 40/h).
 - RECIBIR correos NO está activo: la clave es solo de envío y no hay entrada. Las respuestas van al `responder_a` (iCloud de Dani). Para recibir en la web haría falta Resend Inbound o reenvío de dominio (Cloudflare Email Routing) + webhook.
 - Primer correo real: pregunta de opinión al primer registro (Guilherme), 05-10.
+
+## 05-10-2026 — spot «tipo tele» y estado de Meta
+- Spot de 38 s (9:16, 4:5, 1:1): locución neuronal (edge-tts, es-ES-AlvaroNeural) + 4 planos de archivo de Pexels (licencia comercial, ver `docs/anuncios/reales/stock/LICENCIAS.txt`) + la app real grabada limpia + subtítulos + música sintetizada. Se regenera con `node scripts/montar-spot-tele.mjs` (necesita `frontend/e2e/spot-material.spec.js` → `test-results/spot-material/es.webm` y las voces en `docs/anuncios/reales/spot/`). Salidas en `docs/anuncios/reales/salida/` (no van a git).
+- Kit para anuncios con personas reales: `docs/anuncios/reales/GUIONES.md` + `scripts/montar-anuncio-real.mjs`.
+- TikTok: el spot (versión 720p, 3,7 MB) está añadido como primera creatividad del anuncio ES (grupo `Ad group 20261004045045`, solo España, 25-54, intereses Express Deliveries + Logistics).
+- META: la cuenta publicitaria está RESTRINGIDA por fallo de pago («Cuenta pendiente de pago… saldo que se debe liquidar»); el anuncio ES+PT sale con «Error en el pago». Hasta que Dani pague, Meta no sirve nada. Hay 3 borradores en «Revisar y publicar». El spot 4:5 (`spot-tele-4x5-1080.mp4`, 4,3 MB) está listo para subir a Meta (límite del puente de subida: 10 MB).
+- Google Play (API, solo lectura): prueba cerrada «alpha» con `fds-testers@googlegroups.com`, versión 3 publicada en la pista; interna con la 2; producción vacía. No se ve el estado de revisión ni cuántos testers se han unido.
