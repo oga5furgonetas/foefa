@@ -699,3 +699,8 @@ Nada se había borrado (org `owner` sin `modulos`, usuario `dani` sin
 - Píxel de TikTok: soporte ya en `src/lib/metaPixel.js` (variable `VITE_TIKTOK_PIXEL_ID`, CSP en `public/_headers`). FALTA el ID: TikTok exige verificar el teléfono de Dani por SMS para abrir Events Manager (no se pudo). Con el ID: build con la variable, y poner el grupo ES a optimizar por registro.
 - `/repartidores` tiene og propios (`functions/repartidores.js`, `public/og-repartidores.png`); la portada nombra Paquetería/Amazon/MRW/Nacex/Tipsa/Glovo/Súper (sin relación con las marcas).
 - Grupos de Facebook: publicado en 5 (ver memoria facebook-grupos-publicar); un admin borró la publicación en Estafetas (PT).
+
+## 05-10-2026 — correo activado
+- Resend en Flota: `RESEND_API_KEY` (clave solo-envío, copia en `C:\Users\Usuario\.flota-resend.txt`), `EMAIL_FROM="FDS <contacto@flotadsp.com>"` y `CORREO_CONTACTO=contacto@flotadsp.com` en Fly. El dominio `flotadsp.com` está verificado (envío de prueba OK). Se envía desde el panel de superadmin (`POST /admin/correo`, tope 40/h).
+- RECIBIR correos NO está activo: la clave es solo de envío y no hay entrada. Las respuestas van al `responder_a` (iCloud de Dani). Para recibir en la web haría falta Resend Inbound o reenvío de dominio (Cloudflare Email Routing) + webhook.
+- Primer correo real: pregunta de opinión al primer registro (Guilherme), 05-10.
