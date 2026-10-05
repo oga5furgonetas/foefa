@@ -250,3 +250,21 @@ async def test_respuestas_al_buzon_de_contacto_nunca_al_personal(mundo):
     mundo.monkeypatch.setattr(server, "CORREO_CONTACTO", "")
     mundo.monkeypatch.delenv("CORREO_RESPUESTAS")
     assert await server._ciclo_responder_a() == ""              # sin buzón, el correo no invita a contestar
+
+
+@pytest.mark.asyncio(loop_scope="session")
+async def test_misma_persona_con_dos_cuentas_no_recibe_dos_seguidos(mundo):
+    mundo.g["organizations"].docs.append(_org(horas=0.2))
+    mundo.g["organizations"].docs.append({**_org(horas=24, ciclo_correos={"bienvenida": {"at": "x"}}), "id": "o2"})
+    mundo.monkeypatch.setenv("CICLO_CORREOS", "1")
+    assert await server._ciclo_enviar("o1", "bienvenida", AHORA) is True
+    assert await server._ciclo_enviar("o2", "primer_dia", AHORA) is False      # mismo correo, hace nada
+    assert len(mundo.enviados) == 1
+
+
+@pytest.mark.asyncio(loop_scope="session")
+async def test_la_marca_es_la_del_remitente(mundo):
+    mundo.monkeypatch.setenv("EMAIL_FROM", "FDS <contacto@x.es>")
+    mundo.g["organizations"].docs.append(_org(horas=0.2))
+    await server._ciclo_enviar("o1", "bienvenida", AHORA)
+    assert mundo.enviados[0].subject.startswith("Tu cuenta de FDS")

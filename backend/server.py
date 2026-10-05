@@ -20295,6 +20295,13 @@ async def _ciclo_enviar(org_id: str, clave: str, ahora: Optional[datetime] = Non
         uso = await _ciclo_uso(org)
         if ciclo_correos.toca(org, uso, ahora) != clave:
             return False
+        # La misma PERSONA con dos cuentas (pasó el 05-10: dos altas con el mismo
+        # correo) no recibe dos correos del ciclo seguidos: la separación vale por dirección.
+        reciente = (ahora - ciclo_correos.SEPARACION).isoformat()
+        if await global_db[_CORREOS_COL].find_one(
+                {"para": org["email"], "por": {"$regex": "^ciclo:"}, "ok": True, "at": {"$gte": reciente},
+                 "org_id": {"$ne": org_id}}, {"_id": 0, "id": 1}):
+            return False
         marca = f"ciclo_correos.{clave}"
         r = await global_db.organizations.update_one(
             {"id": org_id, marca: {"$exists": False}}, {"$set": {marca: {"at": ahora.isoformat()}}})
@@ -20303,7 +20310,9 @@ async def _ciclo_enviar(org_id: str, clave: str, ahora: Optional[datetime] = Non
         responder = await _ciclo_responder_a()
         t = PLAN_TARIFAS["autonomo"]
         baja = _baja_url(org_id)
-        c = ciclo_correos.correo(clave, org, uso, ahora, marca=MARCA, base=_PORTAL_BASE_FRONT,
+        # La marca del correo es la del REMITENTE («FDS <contacto@…>»), la que ve el
+        # repartidor en la app; MARCA es la del panel de empresas.
+        c = ciclo_correos.correo(clave, org, uso, ahora, marca=_email_remitente()[0], base=_PORTAL_BASE_FRONT,
                                  baja=baja, mensual=t["mensual"], anual=t["anual"],
                                  con_respuesta=bool(responder))
         ok = await _enviar_email(
