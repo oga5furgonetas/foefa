@@ -6,6 +6,7 @@ import { tx, useIdioma, IDIOMAS, cambiarIdioma, idioma, txError } from '../lib/i
 import { medirAccion } from '../lib/analitica'
 import { evento } from '../lib/metaPixel'
 import { useInvitacion } from '../lib/referido'
+import AltaRapida from './AltaRapida'
 
 /* ── LA PÁGINA DEL ANUNCIO DE REPARTIDORES (04-10-2026) ──────────────────────
    Medido: de 410 personas que llegaron del anuncio al formulario de alta, 0
@@ -54,15 +55,8 @@ export default function Repartidores() {
     } catch (e) { setErr(e.message || tx('Sin conexión')); setOcupado(false) }
   }
 
-  /* LO QUE SE PIDE PRIMERO ES EL ALTA (05-10-2026): el botón grande es «Crear mi
-     cuenta gratis» (7 días, sin tarjeta); probarla sin registrarse queda como
+  /* EL ALTA VA DENTRO DE LA PORTADA (05-10-2026): ver AltaRapida. Probarla sin registrarse queda como
      segunda opción, para quien quiere verla antes de dar el correo. */
-  const botonCrear = (
-    <a href="/registro?sector=autonomo&plan=autonomo" onClick={() => { medirAccion('rep_alta'); evento('Lead', { content_name: 'crear_cuenta' }) }}
-      className="flex w-full items-center justify-center gap-2 rounded-2xl bg-gradient-to-br from-brand-400 to-brand-600 py-4 text-[17px] font-extrabold text-[#04121a] shadow-[0_12px_30px_-10px_rgba(20,231,216,.6)] active:scale-[.99]">
-      {tx('Crear mi cuenta gratis')} <ArrowRight size={19} />
-    </a>
-  )
   const botonProbar = (
     <button onClick={probar} disabled={ocupado}
       className="flex w-full items-center justify-center gap-2 rounded-2xl border border-brand-400/50 py-3.5 text-[15.5px] font-bold text-brand-200 active:scale-[.99] disabled:opacity-60">
@@ -103,7 +97,7 @@ export default function Repartidores() {
           <p className="mt-1 text-[11px] text-dark-500">{tx('Marcas de sus dueños, sin relación con ellas. Tú metes los paquetes y la app ordena la ruta.')}</p>
         </div>
 
-        <div className="mt-4">{botonCrear}</div>
+        <AltaRapida dias={invitacion ? invitacion.dias : 7} />
         <p className="mt-2 text-center text-[12.5px] text-dark-300">{invitacion ? tx('{n} días gratis · sin tarjeta · cancelas cuando quieras', { n: invitacion.dias }) : tx('7 días gratis · sin tarjeta · cancelas cuando quieras')}</p>
         <div className="mt-3">{botonProbar}</div>
         <p className="mt-1.5 text-center text-[12px] text-dark-500">{tx('Con 8 paradas de ejemplo. Sin datos ni tarjeta: pruébala en 1 minuto.')}</p>
