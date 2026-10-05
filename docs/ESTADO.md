@@ -735,3 +735,8 @@ Nada se había borrado (org `owner` sin `modulos`, usuario `dani` sin
   NO se usó el vídeo de la chica que le mandaron a Dani (contenido e imagen de otra persona).
 - Gotcha: las pruebas de humo fallan si `dist` se compiló con `VITE_META_PIXEL_ID` (el aviso de cookies tapa
   botones) o con `VITE_API_URL` (CORS desde localhost). Para probar, `npx vite build` a secas; para desplegar, con las dos.
+- **Demo que atrapaba** (05-10 noche, Dani Brao): «Probarla ahora» guarda una sesión de CONDUCTOR de demo
+  (`flota_driver_token` con `demo: true`) y `/app` (arranque de la app instalada) la miraba antes que la cuenta:
+  quien ya tenía cuenta volvía siempre a la demo. Arreglado en `panel/auth.js` (`hayDemoDeReparto`,
+  `salirDeLaDemoDeReparto`; `saveSession` la borra), `AppRedirect` en `main.jsx` y botón «Ya tengo cuenta» en la
+  ruta de prueba. Prueba: `e2e/demo-no-atrapa.spec.js` (3 de 4 fallan con el código de antes). Comprobado en producción.
