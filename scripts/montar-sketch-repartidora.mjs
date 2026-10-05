@@ -44,10 +44,23 @@ const finDeVoz = (f) => {
   return m.length ? m[m.length - 1] : total
 }
 const RESPIRO = 0.12
+// Cada rótulo: [texto, fuente, tamaño, color, y, desde (s dentro de la escena)]
+const R = (texto, y, { fuente = 'serif', tam = 92, color = 'white', desde = 0 } = {}) => ({ texto, fuente, tam, color, y, desde })
+// VARIANTES DEL GANCHO: en anuncios gana quien prueba varios primeros segundos a la vez y se
+// queda con el que trae altas. Solo cambia la primera frase (voz y rótulo); el resto es igual.
+//   VARIANTE=pov|directo|nadie node scripts/montar-sketch-repartidora.mjs
+const GANCHOS = {
+  base: [R('SI ERES REPARTIDOR/A', 1030, { fuente: 'sans', tam: 44, color: '0x5eead4' }), R('¿AÚN REPARTES', 1100), R('A OJO?', 1205)],
+  pov: [R('POV:', 1000, { tam: 84 }), R('PRIMER DÍA', 1100), R('REPARTIENDO', 1205)],
+  directo: [R('REPARTIDORES', 1000, { tam: 88 }), R('DE PAQUETERÍA:', 1100, { tam: 88 }), R('ESTO OS INTERESA', 1205, { tam: 80 })],
+  nadie: [R('LO QUE NADIE', 1000), R('TE CUENTA AL', 1100), R('EMPEZAR A REPARTIR', 1205, { tam: 78 })],
+}
+const VARIANTE = process.env.VARIANTE || 'base'
+if (!GANCHOS[VARIANTE]) throw new Error(`VARIANTE desconocida: ${VARIANTE}`)
 const VOCES = []
 let t = 0
 for (let i = 1; i <= 8; i++) {
-  const f = path.join(VOZ, `s${i}.mp3`)
+  const f = path.join(VOZ, i === 1 && VARIANTE !== 'base' ? `h_${VARIANTE}.mp3` : `s${i}.mp3`)
   const fin = finDeVoz(f)
   VOCES.push({ f, t, fin })
   t += fin + RESPIRO
@@ -60,14 +73,9 @@ const tramo = (i) => {
   return { t0, d: Math.round((t1 - t0) * 100) / 100 }
 }
 
-// Cada rótulo: [texto, fuente, tamaño, color, y, desde (s dentro de la escena)]
-const R = (texto, y, { fuente = 'serif', tam = 92, color = 'white', desde = 0 } = {}) => ({ texto, fuente, tam, color, y, desde })
-
 // Escenas (una por frase): de archivo (el problema) o de la app (la solución), sin huecos.
 const ESCENAS = [
-  { stock: 'pexels-13433120.mp4', ss: 3.0, rotulos: [
-    R('SI ERES REPARTIDOR/A', 1030, { fuente: 'sans', tam: 44, color: '0x5eead4' }),
-    R('¿AÚN REPARTES', 1100), R('A OJO?', 1205)] },
+  { stock: 'pexels-13433120.mp4', ss: 3.0, rotulos: GANCHOS[VARIANTE] },
   { stock: 'pexels-13441291.mp4', ss: 4.0, rotulos: [
     R('Dando vueltas', 1120, { tam: 84 }), R('buscando la calle…', 1215, { tam: 84 })] },
   { stock: 'pexels-5054453.mp4', ss: 3.0, rotulos: [
@@ -149,11 +157,12 @@ const cadena = `${retardos};${VOCES.map((_, i) => `[v${i}]`).join('')}amix=input
   `[${VOCES.length + 1}:a][llave]sidechaincompress=threshold=0.04:ratio=6:attack=20:release=250[mus];` +
   `[${nRuido}:a]volume=0.5[sala];` +
   '[voz][mus][sala]amix=inputs=3:normalize=0,alimiter=limit=0.95,loudnorm=I=-14:TP=-1.5:LRA=9[a]'
-const final = path.join(SALIDA, 'sketch-repartidora-9x16.mp4')
+const sufijo = VARIANTE === 'base' ? '' : `-${VARIANTE}`
+const final = path.join(SALIDA, `sketch-repartidora${sufijo}-9x16.mp4`)
 execFileSync(FF, ['-y', '-v', 'error', '-i', path.join(tmp, 'video.mp4'), ...entradas, '-i', path.join(tmp, 'musica.wav'),
   '-f', 'lavfi', '-i', `anoisesrc=color=brown:amplitude=0.006:d=${FIN}`,
   '-filter_complex', cadena, '-map', '0:v', '-map', '[a]', '-c:v', 'copy', '-c:a', 'aac', '-b:a', '192k',
   '-ar', '44100', '-t', String(FIN), '-movflags', '+faststart', final], { stdio: 'inherit' })
 execFileSync(FF, ['-y', '-v', 'error', '-i', final, '-vf', 'scale=720:1280', '-c:v', 'libx264', '-preset', 'slow',
-  '-crf', '23', '-c:a', 'copy', '-movflags', '+faststart', path.join(SALIDA, 'sketch-repartidora-720p.mp4')], { stdio: 'inherit' })
+  '-crf', '23', '-c:a', 'copy', '-movflags', '+faststart', path.join(SALIDA, `sketch-repartidora${sufijo}-720p.mp4`)], { stdio: 'inherit' })
 console.log('listo:', final)

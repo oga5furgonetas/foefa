@@ -24,12 +24,23 @@ AJUSTES = [("+8%", "+4Hz"), ("+4%", "-2Hz"), ("+4%", "-3Hz"), ("+6%", "+2Hz"),
            ("+10%", "+0Hz"), ("+8%", "+1Hz"), ("+8%", "+2Hz"), ("+6%", "+3Hz")]
 
 
+# Variantes del gancho (la primera frase): h_<nombre>.mp3, ver montar-sketch-repartidora.mjs.
+GANCHOS = {
+    "pov": "Tu primer día repartiendo…",   # «POV» solo en el rótulo: la voz lo deletrea
+    "directo": "Repartidores de paquetería, esto os interesa.",
+    "nadie": "Lo que nadie te cuenta cuando empiezas a repartir.",
+}
+
+
 async def main():
     lineas = [l.strip() for l in io.open(os.path.join(DIR, "guion.txt"), encoding="utf-8") if l.strip()]
     for i, texto in enumerate(lineas, 1):
         rate, pitch = AJUSTES[(i - 1) % len(AJUSTES)]
         await edge_tts.Communicate(texto, VOZ, rate=rate, pitch=pitch).save(os.path.join(DIR, f"s{i}.mp3"))
         print(f"s{i}.mp3")
+    for nombre, texto in GANCHOS.items():
+        await edge_tts.Communicate(texto, VOZ, rate="+8%", pitch="+3Hz").save(os.path.join(DIR, f"h_{nombre}.mp3"))
+        print(f"h_{nombre}.mp3")
 
 
 asyncio.run(main())
