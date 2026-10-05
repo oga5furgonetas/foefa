@@ -122,3 +122,13 @@ test('Activación · quien ya la usa ve «¿Qué tal te va?» una vez, y su opin
   await expect(page.getByText('¡Gracias! Lo leo yo personalmente.')).toBeVisible()
   expect(enviado).toEqual({ valor: 4, texto: 'Me falta importar un Excel' })
 })
+
+test('Activación · el idioma se cambia también desde Ajustes', async ({ page, context }) => {
+  await preparar(page, context)
+  await page.route(/\/api\/reparto\/mi-ruta$/, (r) => r.fulfill({ json: {
+    activo: true, autonomo: true, empresa: '', fecha: '2026-10-05', ia_tickets: false, jornada: {}, aviso_aceptado: true, base: null, ruta: null, pedidos: [] } }))
+  await page.goto('/ruta', { waitUntil: 'domcontentloaded' })
+  await page.getByRole('navigation', { name: 'Secciones' }).getByRole('button', { name: 'Ajustes' }).click({ force: true })
+  await page.getByLabel('Idioma').selectOption('pt')
+  await expect(page.locator('nav button', { hasText: /Conta/ })).toBeVisible()
+})

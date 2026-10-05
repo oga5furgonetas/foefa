@@ -17,6 +17,7 @@ import { getAdmin } from '../auth'
 import { origen } from '../../marca'
 import QRCode from 'qrcode'
 import { usePlan } from '../../lib/usePlan'
+import { IDIOMAS, idioma, cambiarIdioma, useIdioma, tx } from '../../lib/idioma'
 import MiRuta from '../../pages/driver/MiRuta'
 import { fijarPais, importe, simboloMoneda } from '../../lib/region'
 
@@ -442,6 +443,7 @@ function Ventana({ titulo, onClose, children }) {
 
 /* ── ZONAS Y AJUSTES ─────────────────────────────────────────────────────── */
 export function Ajustes({ conductores, toast, autonomo }) {
+  const lang = useIdioma()
   const [a, setA] = useState(null)
   const [guardando, setGuardando] = useState(false)
   useEffect(() => {
@@ -487,6 +489,17 @@ export function Ajustes({ conductores, toast, autonomo }) {
                 {(a.paises[a.pais || 'es']?.zonas || []).map((z) => <option key={z} value={z}>{z.split('/').pop().replace(/_/g, ' ')}</option>)}
               </select>
             </div>
+          </section>
+        )}
+        {autonomo && (
+          <section className="rounded-xl border border-dark-700 bg-dark-900 p-4">
+            <label className="flex items-center justify-between gap-3 text-[14px] font-semibold text-dark-100">
+              🌐 {tx('Idioma')}
+              <select value={lang || idioma()} onChange={(e) => cambiarIdioma(e.target.value)} aria-label={tx('Idioma')}
+                className="rounded-xl border border-dark-700 bg-dark-950 px-3 py-2 text-[14px] text-dark-50">
+                {Object.entries(IDIOMAS).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
+              </select>
+            </label>
           </section>
         )}
         <section className="rounded-xl border border-dark-700 bg-dark-900 p-4">
