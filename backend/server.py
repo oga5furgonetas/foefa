@@ -20275,17 +20275,11 @@ async def _ciclo_uso(org: dict) -> dict:
 
 
 async def _ciclo_responder_a() -> str:
-    """A dónde van las respuestas: `CORREO_RESPUESTAS` o el correo del dueño.
-    contacto@ solo envía (no hay buzón de entrada): una respuesta ahí se pierde."""
+    """A dónde van las respuestas: SOLO a `CORREO_RESPUESTAS`, si existe y es un
+    buzón que se lee. Sin él, el correo no invita a contestar (Dani, 05-10: el
+    correo personal no se enseña; contacto@ solo envía, una respuesta ahí se pierde)."""
     fijo = os.environ.get("CORREO_RESPUESTAS", "").strip().lower()
-    if _correo_valido(fijo):
-        return fijo
-    sa = os.environ.get("SUPERADMIN_USERNAME", "").strip()
-    if not sa:
-        return ""
-    u = await global_db.admin_users.find_one({"username": sa}, {"_id": 0, "email": 1})
-    e = ((u or {}).get("email") or "").strip().lower()
-    return e if _correo_valido(e) else ""
+    return fijo if _correo_valido(fijo) else ""
 
 
 async def _ciclo_enviar(org_id: str, clave: str, ahora: Optional[datetime] = None) -> bool:
