@@ -692,3 +692,10 @@ Nada se había borrado (org `owner` sin `modulos`, usuario `dani` sin
 - Datos reales (analitica_eventos, últimas 12 h): TikTok 137 sesiones (61 fr, 29 es, 17 it, 17 de, 9 en, 4 pt), CPC 0,01-0,02 €, 0 acciones; Facebook ~213 sesiones relevantes en /repartidores. Casi todos los `rep_alta`/`rep_probar` de ayer eran pruebas (tablets de revisión de Meta, mis tests). Cero registros reales de anuncios. Volumen aún pequeño: con ~1 % de conversión harían falta ≥1000 visitas buenas.
 - Cambios: landing con «Crear mi cuenta gratis» como botón principal y probar como secundario; vídeo de la landing 0,4 MB (`public/videos/web-<idioma>.mp4`, sin audio) en vez de 8 MB; TikTok: grupos EN/FR/DE/IT PAUSADOS (el gasto se iba a Francia), quedan ES y PT. Ojo: en la UI de TikTok el interruptor tarda ~6 s en aplicarse; esperar antes del siguiente clic (un clic doble pausó PT por error y se reactivó).
 - Posible siguiente paso si sigue en 0: optimizar TikTok por un evento (necesita píxel de TikTok, hoy solo hay el de Meta) y probar `/registro` directo como destino de un grupo.
+
+## 05-10-2026 (madrugada) — calidad de tráfico
+- Datos 8 días (analitica_eventos): TikTok trajo 0 registros. Solo el anuncio ES tuvo interés (28 de 72 sesiones llegaron a /registro); FR/IT/DE/PT/EN rebotaron el 100 %.
+- Hallazgo: el grupo de anuncios ES de TikTok estaba dirigido también a **Argentina**. Corregido: solo España, 25-54 años, intereses Express Deliveries + Logistics (audiencia 2,1-2,6 M). FR/IT/DE/EN siguen pausados; PT activo con poca muestra.
+- Píxel de TikTok: soporte ya en `src/lib/metaPixel.js` (variable `VITE_TIKTOK_PIXEL_ID`, CSP en `public/_headers`). FALTA el ID: TikTok exige verificar el teléfono de Dani por SMS para abrir Events Manager (no se pudo). Con el ID: build con la variable, y poner el grupo ES a optimizar por registro.
+- `/repartidores` tiene og propios (`functions/repartidores.js`, `public/og-repartidores.png`); la portada nombra Paquetería/Amazon/MRW/Nacex/Tipsa/Glovo/Súper (sin relación con las marcas).
+- Grupos de Facebook: publicado en 5 (ver memoria facebook-grupos-publicar); un admin borró la publicación en Estafetas (PT).
