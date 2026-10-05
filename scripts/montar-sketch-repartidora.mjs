@@ -14,7 +14,7 @@
 // LICENCIA DE PEXELS: las personas que salen NO pueden aparecer usando ni recomendando FDS.
 // Por eso los planos de archivo solo cuentan el problema (buscar calles, apuntar a mano) y la app
 // sale aparte, en su propia pantalla. No cambiar eso.
-import { execFileSync } from 'child_process'
+import { execFileSync, spawnSync } from 'child_process'
 import fs from 'fs'
 import path from 'path'
 import os from 'os'
@@ -32,37 +32,61 @@ fs.copyFileSync('C:/Windows/Fonts/georgiab.ttf', path.join(tmp, 'serif.ttf'))
 fs.copyFileSync('C:/Windows/Fonts/arialbd.ttf', path.join(tmp, 'sans.ttf'))
 const run = (args) => execFileSync(FF, ['-y', '-v', 'error', ...args], { stdio: 'inherit', cwd: tmp })
 
-const FIN = 20.0
 const FONDO = '0x061a1f'
-// Las frases de la voz: [fichero, segundo en que entra].
-const VOCES = [['s1', 0.0], ['s2', 1.75], ['s3', 3.7], ['s4', 5.5], ['s5', 7.2], ['s6', 10.2], ['s7', 12.6], ['s8', 15.1]]
+// LA VOZ MANDA EL RITMO: cada escena dura lo que su frase (s1..s8) más un respiro.
+// Se mide dónde acaba de hablar cada fichero (silencedetect), así se puede cambiar
+// la voz —otra voz sintética o una persona de verdad— sin tocar ningún número.
+const finDeVoz = (f) => {
+  const r = spawnSync(FF, ['-v', 'info', '-i', f, '-af', 'silencedetect=n=-40dB:d=0.15', '-f', 'null', '-'], { encoding: 'utf8' })
+  const m = [...(r.stderr || '').matchAll(/silence_start: ([0-9.]+)/g)].map((x) => parseFloat(x[1]))
+  const total = parseFloat((spawnSync(FF.replace(/ffmpeg(\.exe)?$/i, 'ffprobe$1'), ['-v', 'error', '-show_entries', 'format=duration',
+    '-of', 'csv=p=0', f], { encoding: 'utf8' }).stdout || '0').trim())
+  return m.length ? m[m.length - 1] : total
+}
+const RESPIRO = 0.12
+const VOCES = []
+let t = 0
+for (let i = 1; i <= 8; i++) {
+  const f = path.join(VOZ, `s${i}.mp3`)
+  const fin = finDeVoz(f)
+  VOCES.push({ f, t, fin })
+  t += fin + RESPIRO
+}
+const FIN = Math.round((VOCES[7].t + VOCES[7].fin + 1.1) * 10) / 10
+// Cada escena va de que empieza su frase a que empieza la siguiente (el corte, justo antes de hablar).
+const tramo = (i) => {
+  const t0 = i === 0 ? 0 : VOCES[i].t + 0.1
+  const t1 = i === 7 ? FIN : VOCES[i + 1].t + 0.1
+  return { t0, d: Math.round((t1 - t0) * 100) / 100 }
+}
 
 // Cada rótulo: [texto, fuente, tamaño, color, y, desde (s dentro de la escena)]
 const R = (texto, y, { fuente = 'serif', tam = 92, color = 'white', desde = 0 } = {}) => ({ texto, fuente, tam, color, y, desde })
 
-// Escenas: de archivo (el problema) o de la app (la solución), sin huecos.
+// Escenas (una por frase): de archivo (el problema) o de la app (la solución), sin huecos.
 const ESCENAS = [
-  { t0: 0.0, d: 1.9, stock: 'pexels-13433120.mp4', ss: 3.0, rotulos: [
+  { stock: 'pexels-13433120.mp4', ss: 3.0, rotulos: [
     R('SI ERES REPARTIDOR/A', 1030, { fuente: 'sans', tam: 44, color: '0x5eead4' }),
     R('¿AÚN REPARTES', 1100), R('A OJO?', 1205)] },
-  { t0: 1.9, d: 1.95, stock: 'pexels-13441291.mp4', ss: 4.0, rotulos: [
-    R('Vueltas y más vueltas', 1120, { tam: 80 }), R('buscando cada calle…', 1215, { tam: 80 })] },
-  { t0: 3.85, d: 1.75, stock: 'pexels-5054453.mp4', ss: 3.0, rotulos: [
+  { stock: 'pexels-13441291.mp4', ss: 4.0, rotulos: [
+    R('Dando vueltas', 1120, { tam: 84 }), R('buscando la calle…', 1215, { tam: 84 })] },
+  { stock: 'pexels-5054453.mp4', ss: 3.0, rotulos: [
     R('…y la ruta,', 1120, { tam: 84 }), R('en un papel', 1220, { tam: 84 })] },
-  { t0: 5.6, d: 1.7, stock: 'pexels-13441317.mp4', ss: 1.5, rotulos: [
+  { stock: 'pexels-13441317.mp4', ss: 1.5, rotulos: [
     R('Mira, en 3 pasos', 1150, { tam: 90 })] },
-  { t0: 7.3, d: 3.0, app: 0.8, rotulos: [
-    R('1. FOTO A LA ETIQUETA', 150, { tam: 70 }), R('la dirección entra sola', 245, { fuente: 'sans', tam: 46, color: '0x5eead4' })] },
-  { t0: 10.3, d: 2.4, app: 8.7, rotulos: [
+  { app: 0.8, rotulos: [
+    R('1. FOTO A LA ETIQUETA', 150, { tam: 70 }), R('y la dirección se pone sola', 245, { fuente: 'sans', tam: 46, color: '0x5eead4' })] },
+  { app: 8.7, rotulos: [
     R('2. RUTA ORDENADA SOLA', 150, { tam: 70 }), R('por tiempo, con hora de llegada', 245, { fuente: 'sans', tam: 46, color: '0x5eead4' })] },
-  { t0: 12.7, d: 2.4, app: 12.2, rotulos: [
+  { app: 12.2, rotulos: [
     R('3. TE LLEVA A CADA PUERTA', 150, { tam: 66 }), R('con voz, sin pensar', 245, { fuente: 'sans', tam: 46, color: '0x5eead4' })] },
-  { t0: 15.1, d: FIN - 15.1, cierre: 16.8, rotulos: [
+  { cierre: 16.8, rotulos: [
     R('FDS', 640, { fuente: 'sans', tam: 150, color: '0x0FC2BC' }),
     R('PRUÉBALA GRATIS', 830, { tam: 96 }), R('7 DÍAS', 945, { tam: 120 }),
     R('Sin tarjeta', 1100, { fuente: 'sans', tam: 56, color: '0x5eead4', desde: 0.6 }),
     R('flotadsp.com/repartidores', 1210, { fuente: 'sans', tam: 52, desde: 1.2 })] },
-]
+].map((e, i) => ({ ...e, ...tramo(i) }))
+console.log('duración', FIN, 's; escenas', ESCENAS.map((e) => e.d).join(' '))
 
 // drawtext con el texto en un fichero (tildes, «¿» y comas sin escapar nada) y aparición rápida.
 let nTexto = 0
@@ -113,14 +137,21 @@ const bajo = '0.10*sin(2*PI*(55+27.5*lt(mod(t,4),2))*t)*(0.6+0.4*exp(-6*mod(t,0.
 run(['-f', 'lavfi', '-i', `aevalsrc='${bombo}+${charles}+${bajo}|${bombo}+${charles}+${bajo}':s=44100:d=${FIN}`,
   '-af', `afade=t=in:d=0.3,afade=t=out:st=${FIN - 1.2}:d=1.2,volume=0.9`, 'musica.wav'])
 
-// Voz encima de la música, con la música bajando cuando habla (sidechain).
-const entradas = VOCES.flatMap(([f]) => ['-i', path.join(VOZ, `${f}.mp3`)])
-const retardos = VOCES.map(([, t], i) => `[${i + 1}:a]adelay=${Math.round(t * 1000)}|${Math.round(t * 1000)}[v${i}]`).join(';')
-const cadena = `${retardos};${VOCES.map((_, i) => `[v${i}]`).join('')}amix=inputs=${VOCES.length}:normalize=0,volume=1.7,asplit=2[voz][llave];` +
+// Voz encima de la música, con la música bajando cuando habla (sidechain). La voz se trata
+// como una grabación de móvil en una habitación: sin graves de estudio, compresión, un
+// eco de sala cortísimo y ruido de fondo muy bajo. Así no suena a locutor ni a máquina.
+const entradas = VOCES.flatMap((v) => ['-i', v.f])
+const retardos = VOCES.map((v, i) => `[${i + 1}:a]adelay=${Math.round(v.t * 1000)}|${Math.round(v.t * 1000)}[v${i}]`).join(';')
+const nRuido = VOCES.length + 2
+const cadena = `${retardos};${VOCES.map((_, i) => `[v${i}]`).join('')}amix=inputs=${VOCES.length}:normalize=0,volume=1.7,` +
+  'highpass=f=120,lowpass=f=8500,equalizer=f=2800:t=q:w=1.2:g=3,' +
+  'acompressor=threshold=-22dB:ratio=3.5:attack=6:release=90:makeup=2,aecho=0.85:0.6:14|27:0.10|0.06,asplit=2[voz][llave];' +
   `[${VOCES.length + 1}:a][llave]sidechaincompress=threshold=0.04:ratio=6:attack=20:release=250[mus];` +
-  '[voz][mus]amix=inputs=2:normalize=0,alimiter=limit=0.95,loudnorm=I=-14:TP=-1.5:LRA=9[a]'
+  `[${nRuido}:a]volume=0.5[sala];` +
+  '[voz][mus][sala]amix=inputs=3:normalize=0,alimiter=limit=0.95,loudnorm=I=-14:TP=-1.5:LRA=9[a]'
 const final = path.join(SALIDA, 'sketch-repartidora-9x16.mp4')
 execFileSync(FF, ['-y', '-v', 'error', '-i', path.join(tmp, 'video.mp4'), ...entradas, '-i', path.join(tmp, 'musica.wav'),
+  '-f', 'lavfi', '-i', `anoisesrc=color=brown:amplitude=0.006:d=${FIN}`,
   '-filter_complex', cadena, '-map', '0:v', '-map', '[a]', '-c:v', 'copy', '-c:a', 'aac', '-b:a', '192k',
   '-ar', '44100', '-t', String(FIN), '-movflags', '+faststart', final], { stdio: 'inherit' })
 execFileSync(FF, ['-y', '-v', 'error', '-i', final, '-vf', 'scale=720:1280', '-c:v', 'libx264', '-preset', 'slow',
