@@ -48648,6 +48648,57 @@ async def referidos_valido(codigo: str):
     return {"valido": bool(await _referidor_valido(codigo)), "dias_extra": _REF_DIAS_EXTRA}
 
 
+# ── OPINIÓN DE QUIEN YA USA LA APP (05-10-2026) ──────────────────────────────
+# A quien se ha registrado y ya ha hecho entregas de verdad se le pregunta UNA vez
+# cómo le va y qué le falta. Se guarda en la base global para que Dani lo lea.
+_OPINION_MIN_HORAS = 20
+_OPINION_MIN_ENTREGAS = 2
+
+
+@api_router.get("/opinion/estado")
+async def opinion_estado(user: dict = Depends(require_admin)):
+    """¿Toca preguntarle? Solo si es un repartidor autónomo real que ya la usa."""
+    if user.get("demo") or user.get("imp"):
+        return {"pedir": False}
+    org = await get_org(user.get("org_id"))
+    if not _es_repartidor(org) or org.get("opinion_dada") or org.get("opinion_saltada"):
+        return {"pedir": False}
+    creada = _fecha_utc(org.get("created_at"))
+    if not creada or (datetime.now(timezone.utc) - creada).total_seconds() < _OPINION_MIN_HORAS * 3600:
+        return {"pedir": False}
+    n = await db.reparto_pedidos.count_documents({"estado": "entregado", "ejemplo": {"$ne": True}})
+    return {"pedir": n >= _OPINION_MIN_ENTREGAS}
+
+
+@api_router.post("/opinion")
+async def opinion_enviar(data: dict = Body(default={}), user: dict = Depends(require_admin)):
+    if user.get("demo") or user.get("imp"):
+        raise HTTPException(403, "La opinión es de cada cuenta")
+    org = await get_org(user.get("org_id"))
+    if not _es_repartidor(org):
+        raise HTTPException(400, "La opinión es para el plan Repartidor")
+    d = _dict_cuerpo(data)
+    if d.get("saltar"):
+        await global_db.organizations.update_one({"id": org["id"]}, {"$set": {"opinion_saltada": True}})
+        return {"ok": True}
+    texto = str(d.get("texto") or "").strip()[:1500]
+    try:
+        valor = int(d.get("valor"))
+    except (TypeError, ValueError):
+        valor = None
+    if valor is not None and not 1 <= valor <= 5:
+        valor = None
+    if not texto and valor is None:
+        raise HTTPException(400, "Escribe algo o elige una nota")
+    n = await db.reparto_pedidos.count_documents({"estado": "entregado", "ejemplo": {"$ne": True}})
+    await global_db.opiniones_repartidores.insert_one({
+        "id": str(uuid.uuid4()), "org_id": org["id"], "org": org.get("name"), "email": org.get("email"),
+        "valor": valor, "texto": texto, "entregas": n, "ts": datetime.now(timezone.utc).isoformat(),
+    })
+    await global_db.organizations.update_one({"id": org["id"]}, {"$set": {"opinion_dada": True}})
+    return {"ok": True}
+
+
 async def _referido_premiar(org: dict, conductor_id: str):
     """Si esta cuenta llegó por invitación y ya la usa de verdad, el que invitó
     gana su mes. Se mira cuando el repartidor abre su ruta (barato: solo si

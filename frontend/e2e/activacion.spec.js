@@ -106,3 +106,19 @@ test('Activación · un código que no vale NO promete días de más', async ({ 
   await expect(page.getByText('7 días gratis · sin tarjeta · cancelas cuando quieras')).toBeVisible()
   await expect(page.getByText(/Te ha invitado un compañero/)).toHaveCount(0)
 })
+
+test('Activación · quien ya la usa ve «¿Qué tal te va?» una vez, y su opinión se envía', async ({ page, context }) => {
+  await preparar(page, context)
+  let enviado = null
+  await page.route(/\/api\/opinion\/estado/, (r) => r.fulfill({ json: { pedir: true } }))
+  await page.route(/\/api\/opinion$/, async (r) => { enviado = r.request().postDataJSON(); await r.fulfill({ json: { ok: true } }) })
+  await page.route(/\/api\/reparto\/mi-ruta$/, (r) => r.fulfill({ json: {
+    activo: true, autonomo: true, empresa: '', fecha: '2026-10-05', ia_tickets: false, jornada: {}, aviso_aceptado: true, base: null, ruta: null, pedidos: [] } }))
+  await page.goto('/ruta', { waitUntil: 'domcontentloaded' })
+  await expect(page.getByText('¿Qué tal te va la app?')).toBeVisible()
+  await page.getByRole('button', { name: '4', exact: true }).click()
+  await page.getByPlaceholder('Escribe aquí qué te falta o qué mejorarías').fill('Me falta importar un Excel')
+  await page.getByRole('button', { name: 'Enviar mi opinión' }).click()
+  await expect(page.getByText('¡Gracias! Lo leo yo personalmente.')).toBeVisible()
+  expect(enviado).toEqual({ valor: 4, texto: 'Me falta importar un Excel' })
+})

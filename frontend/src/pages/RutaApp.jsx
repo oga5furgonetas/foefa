@@ -8,6 +8,7 @@ import { servicioPlay, comprasPlay } from '../lib/playBilling'
 import { enviarPendiente, olvidarPendiente } from '../lib/metaPixel'
 import { isAuthed } from '../panel/auth'
 import { Cuenta, Muro } from './RutaCuenta'
+import OpinionRuta from './OpinionRuta'
 import InstalarApp from './InstalarApp'
 import { useToast } from '../lib/toast'
 import { lista } from '../lib/lista'
@@ -121,6 +122,7 @@ export default function RutaApp() {
         </button>
       )}
       <main className="flex-1 px-4 pb-24 pt-4">
+        {tab === 'hoy' && !bloqueado && <OpinionRuta />}
         {tab === 'hoy' && <InstalarApp />}
         {(tab === 'hoy' || tab === 'ajustes') && bloqueado
           ? <Muro billing={billing} toast={toast} recargar={recargar} irACuenta={() => setTab('cuenta')} />

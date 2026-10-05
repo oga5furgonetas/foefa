@@ -816,6 +816,8 @@ export const aplicarMoviles = (body) => api.post('/drivers/moviles/aplicar', bod
 export const getRepartoAjustes = () => api.get('/reparto/ajustes')
 export const guardarRepartoAjustes = (body) => api.put('/reparto/ajustes', body)
 export const getRepartoPedidos = (fecha) => api.get('/reparto/pedidos', { params: { fecha } })
+export const opinionEstado = () => api.get('/opinion/estado')
+export const opinionEnviar = (d) => api.post('/opinion', d)
 export const crearRepartoPedido = (body) => api.post('/reparto/pedidos', body)
 export const pegarRepartoPedidos = (body) => api.post('/reparto/pegar', body)
 export const editarRepartoPedido = (id, body) => api.patch(`/reparto/pedidos/${id}`, body)
