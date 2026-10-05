@@ -1,0 +1,31 @@
+# Sketch «¿Aún repartes a ojo?» en TikTok (05-10-2026)
+
+Vídeos (720p, menos de 10 MB, para subir desde el navegador): `docs/anuncios/reales/salida/tiktok/`
+(y a 1080p en `Descargas\FDS-anuncios\`). Se rehacen con `py -3 scripts/voz_sketch.py` y
+`VARIANTE=base|pov|directo|nadie node scripts/montar-sketch-repartidora.mjs`.
+
+| Fichero | Gancho (primer segundo) | `utm_content` |
+|---|---|---|
+| FDS-1-a-ojo.mp4 | «Si eres repartidor/a: ¿aún repartes a ojo?» | `es-sketch-ojo` |
+| FDS-2-pov-primer-dia.mp4 | «POV: primer día repartiendo» | `es-sketch-pov` |
+| FDS-3-repartidores-paqueteria.mp4 | «Repartidores de paquetería: esto os interesa» | `es-sketch-directo` |
+| FDS-4-lo-que-nadie-te-cuenta.mp4 | «Lo que nadie te cuenta al empezar a repartir» | `es-sketch-nadie` |
+
+## Anuncio (grupo ES, solo España, 25-54)
+- Las 4 como creatividades del MISMO anuncio: TikTok reparte el gasto hacia la que mejor va.
+- Texto del anuncio (≤100): `¿Aún ordenas la ruta a ojo? Foto a la etiqueta y la ruta se ordena sola. 7 días gratis.`
+- URL: `https://flotadsp.com/repartidores?utm_source=tiktok&utm_medium=cpc&utm_campaign=rep_lead_oct&utm_content=es-sketch`
+- A los 3-4 días: mirar en `analitica_eventos` las altas por `utm_content` y quitar las que no traen ninguna.
+
+## Vídeo normal (orgánico) en la cuenta de TikTok
+Descripción:
+> ¿Tú también repartes a ojo? Foto a la etiqueta → ruta ordenada → te lleva a cada puerta. 7 días gratis, sin tarjeta 👉 flotadsp.com/repartidores
+> #repartidor #repartidores #paqueteria #mensajeria #ultimamilla #furgoneta #autonomos #reparto
+
+- Lo viral es esto, no el anuncio: TikTok lo enseña a pocas personas y lo amplía si lo ven entero, lo comparten y comentan.
+- Uno al día (un gancho distinto cada día) y contestar a los comentarios.
+- El vídeo orgánico anterior tenía 0 vistas: si los nuevos también, mirar en la app si la cuenta o el vídeo están en revisión o restringidos antes de seguir publicando.
+
+## Licencia
+Planos de Pexels (ver `reales/stock/LICENCIAS.txt`): las personas que salen NO pueden aparecer usando ni
+recomendando FDS. Por eso solo cuentan el problema y la app sale aparte. No usar imagen de terceros sin permiso.
