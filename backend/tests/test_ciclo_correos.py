@@ -177,6 +177,7 @@ def mundo(monkeypatch):
     monkeypatch.setattr(server, "_enviar_email", enviar)
     monkeypatch.setattr(server, "_ciclo_uso", ciclo_uso)
     monkeypatch.setattr(server, "SECRET_KEY", "secreto-de-prueba")
+    monkeypatch.setattr(server, "CORREO_CONTACTO", "contacto@x.es")
     monkeypatch.setenv("SUPERADMIN_USERNAME", "dani")
     monkeypatch.delenv("CORREO_RESPUESTAS", raising=False)
     monkeypatch.setenv("RESEND_API_KEY", "x")
@@ -190,8 +191,8 @@ async def test_bienvenida_sale_una_sola_vez(mundo):
     assert await server._ciclo_enviar("o1", "bienvenida", AHORA) is False
     assert len(mundo.enviados) == 1
     e = mundo.enviados[0]
-    assert e.to == "pepe@x.es" and e.responder_a == ""          # sin buzón que se lea, nadie
-    assert "contesta" not in mundo.g["correos_enviados"].docs[0]["cuerpo"].lower()
+    assert e.to == "pepe@x.es" and e.responder_a == "contacto@x.es"
+    assert "contesta a este correo" in mundo.g["correos_enviados"].docs[0]["cuerpo"]
     assert e.cabeceras["List-Unsubscribe"].startswith("<") and "/api/correo/baja?o=o1&t=" in e.cabeceras["List-Unsubscribe"]
     org = mundo.g["organizations"].docs[0]
     assert org["ciclo_correos"]["bienvenida"]["ok"] is True
@@ -239,10 +240,13 @@ async def test_baja(mundo):
 
 
 @pytest.mark.asyncio(loop_scope="session")
-async def test_respuestas_solo_a_un_buzon_dicho_a_proposito(mundo):
-    """Nunca el correo personal del dueño (Dani, 05-10): solo CORREO_RESPUESTAS."""
-    assert await server._ciclo_responder_a() == ""
+async def test_respuestas_al_buzon_de_contacto_nunca_al_personal(mundo):
+    """Nunca el correo personal del dueño (Dani, 05-10): CORREO_RESPUESTAS o contacto@."""
+    assert await server._ciclo_responder_a() == "contacto@x.es"
     mundo.monkeypatch.setenv("CORREO_RESPUESTAS", "soporte@x.es")
     assert await server._ciclo_responder_a() == "soporte@x.es"
     mundo.monkeypatch.setenv("CORREO_RESPUESTAS", "no-es-un-correo")
-    assert await server._ciclo_responder_a() == ""
+    assert await server._ciclo_responder_a() == "contacto@x.es"
+    mundo.monkeypatch.setattr(server, "CORREO_CONTACTO", "")
+    mundo.monkeypatch.delenv("CORREO_RESPUESTAS")
+    assert await server._ciclo_responder_a() == ""              # sin buzón, el correo no invita a contestar
