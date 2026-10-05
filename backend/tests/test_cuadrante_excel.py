@@ -170,3 +170,62 @@ def test_una_hoja_que_no_es_el_cuadrante_da_un_error_claro():
     wb.save(buf)
     with pytest.raises(ValueError, match="Nombre"):
         cx.leer_mensual(buf.getvalue())
+
+
+def _semanal_de_otro_centro():
+    """Como la de DGA2 (05-10-2026): la primera pestaña no es el cuadrante y la semanal
+    trae solo el NÚMERO del día (7..18 y 29, 30, 1, 2…), sin mes."""
+    wb = openpyxl.Workbook()
+    d = wb.active
+    d.title = "diario"
+    d["A1"] = "4"
+    d["E10"], d["F10"] = "Nombre", "Código"
+    ws = wb.create_sheet("semanal")
+    ws["A5"], ws["B5"] = "Orden", "Nombre"
+    dias = list(range(28, 31)) + list(range(1, 9))          # 28, 29, 30, 1..8 (cambia de mes)
+    for i, n in enumerate(dias):
+        ws.cell(5, 3 + i, float(n))
+        ws.cell(6, 3 + i, "1" if i % 2 == 0 else " N/T")
+    ws["A6"], ws["B6"] = 1, "ADRIAN SALAZAR"
+    ws["B7"] = "MAXIMA"
+    return wb
+
+
+def _bytes(wb):
+    b = io.BytesIO()
+    wb.save(b)
+    return b.getvalue()
+
+
+def test_hoja_semanal_con_solo_numero_de_dia_pone_el_mes_y_avisa():
+    r = cx.leer_mensual(_bytes(_semanal_de_otro_centro()), ref=dt.date(2026, 10, 5))
+    assert r["fechas"][0] == "2026-09-28" and r["fechas"][-1] == "2026-10-08"
+    assert len(r["fechas"]) == 11
+    assert any("solo trae el número del día" in a and "28/09/2026 al 08/10/2026" in a for a in r["avisos"])
+    assert r["filas"][0]["celdas"]["2026-10-01"]["cod"] in ("1", "N/T")
+    assert r["filas"][0]["celdas"]["2026-09-28"]["cod"] == "1"       # el de la columna 28
+
+
+def test_se_prueban_todas_las_pestanas_aunque_la_primera_no_sirva():
+    r = cx.leer_mensual(_bytes(_semanal_de_otro_centro()), ref=dt.date(2026, 10, 5))
+    assert r["filas"] and r["filas"][0]["nombre"] == "ADRIAN SALAZAR"
+
+
+def test_si_ninguna_pestana_tiene_dias_da_el_error_de_siempre():
+    wb = openpyxl.Workbook()
+    wb.active["B2"], wb.active["C2"] = "Orden", "Nombre"
+    with pytest.raises(ValueError, match="no tiene fechas"):
+        cx.leer_mensual(_bytes(wb))
+
+
+def test_entre_varias_semanales_gana_la_que_llega_mas_tarde():
+    wb = openpyxl.Workbook()
+    for nombre, dias in (("semanal", [20, 21, 22, 23, 24, 25, 26]), ("semanal 2", [29, 30, 1, 2, 3, 4, 5])):
+        ws = wb.active if nombre == "semanal" else wb.create_sheet(nombre)
+        ws.title = nombre
+        ws["A5"], ws["B5"] = "Orden", "Nombre"
+        for k, n in enumerate(dias):
+            ws.cell(5, 3 + k, float(n))
+        ws["B6"] = "ADRIAN SALAZAR"
+    r = cx.leer_mensual(_bytes(wb), ref=dt.date(2026, 10, 5))           # la más reciente: hasta el 05-10
+    assert r["fechas"][0] == "2026-09-29" and r["fechas"][-1] == "2026-10-05"

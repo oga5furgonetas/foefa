@@ -132,22 +132,59 @@ def _primero_mes_siguiente(d: dt.date) -> dt.date:
     return (d.replace(day=28) + dt.timedelta(days=4)).replace(day=1)
 
 
-def leer_mensual(contenido: bytes, hoja: str = "") -> Dict[str, Any]:
-    """Los bytes del .xlsx -> {fechas, filas, maximas, codigos, avisos, leyenda}.
+def _fechas_por_numero(ws, fila: int, cols: List[int], ref: dt.date) -> Dict[int, dt.date]:
+    """Hojas SEMANALES de otros centros: la cabecera trae solo el NÚMERO del día
+    (7, 8, 9… y a veces 29, 30, 1, 2…), sin mes ni año. El mes se deduce de la
+    fecha de hoy (el primer día se coloca en el mes más cercano a `ref`) y, al
+    bajar el número, se pasa al mes siguiente. DGA2, 05-10-2026: «semanal» tenía
+    7..18 y 21..29 y el importador solo conocía fechas de verdad."""
+    nums = {}
+    for c in cols:
+        v = ws.cell(fila, c).value
+        if isinstance(v, (int, float)) and not isinstance(v, bool) and float(v).is_integer() and 1 <= int(v) <= 31:
+            nums[c] = int(v)
+    if len(nums) < 7:
+        return {}
+    orden = sorted(nums)
+    # Una hoja semanal llega hasta hoy (o poco después): el ÚLTIMO día se coloca
+    # en el mes más cercano a `ref` y se cuenta hacia atrás (si el número SUBE al
+    # ir hacia atrás, era del mes anterior). DGA2: «semanal 2» = 7..18, 29, 30,
+    # 1..5 es del 07-09 al 05-10, no octubre y noviembre.
+    ultimo = None
+    for delta in (-1, 0, 1):
+        m = ref.month + delta
+        y = ref.year + (m - 1) // 12
+        m = (m - 1) % 12 + 1
+        try:
+            cand = dt.date(y, m, nums[orden[-1]])
+        except ValueError:
+            continue
+        if ultimo is None or abs((cand - ref).days) < abs((ultimo - ref).days):
+            ultimo = cand
+    if ultimo is None:
+        return {}
+    out = {orden[-1]: ultimo}
+    actual, siguiente = ultimo, nums[orden[-1]]
+    for c in reversed(orden[:-1]):
+        n = nums[c]
+        y, m = actual.year, actual.month
+        if n > siguiente:                                    # al ir hacia atrás: mes anterior
+            m -= 1
+            if m == 0:
+                y, m = y - 1, 12
+        try:
+            actual = dt.date(y, m, n)
+        except ValueError:
+            return {}
+        out[c] = actual
+        siguiente = n
+    if (max(out.values()) - min(out.values())).days > 75:
+        return {}
+    return out
 
-    Lanza ValueError con un mensaje para la pantalla si no es la hoja esperada.
-    """
-    import openpyxl
-    try:
-        wb_v = openpyxl.load_workbook(io.BytesIO(contenido), data_only=True)
-        wb_f = openpyxl.load_workbook(io.BytesIO(contenido), data_only=False)
-    except Exception as e:                                        # noqa: BLE001
-        raise ValueError("No se puede abrir el Excel: %s" % str(e)[:120])
-    nombre_hoja = hoja if hoja in wb_v.sheetnames else (
-        "MENSUAL" if "MENSUAL" in wb_v.sheetnames else wb_v.sheetnames[0])
-    ws, ws_f = wb_v[nombre_hoja], wb_f[nombre_hoja]
 
-    # ── La cabecera: la fila con «Nombre» ──
+def _cabecera(ws, ws_f, ref: dt.date):
+    """(fila_cab, col_nombre, col_orden, {columna: fecha}) de esta hoja, o ValueError."""
     fila_cab = col_nombre = col_orden = None
     for fila in ws.iter_rows(min_row=1, max_row=min(ws.max_row, 80)):
         for c in fila[:10]:
@@ -161,7 +198,6 @@ def leer_mensual(contenido: bytes, hoja: str = "") -> Dict[str, Any]:
     for c in range(1, col_nombre):
         if _n(ws.cell(fila_cab, c).value) == "ORDEN":
             col_orden = c
-
     # ── Los días: toda columna con una fecha en la cabecera ──
     cols = list(range(col_nombre + 1, ws.max_column + 1))
     fechas_col = {c: _fecha(ws.cell(fila_cab, c).value) for c in cols}
@@ -169,8 +205,43 @@ def leer_mensual(contenido: bytes, hoja: str = "") -> Dict[str, Any]:
     if len(fechas_col) < 7:
         fechas_col = _fechas_por_formula(ws_f, fila_cab, cols)
     if len(fechas_col) < 7:
+        fechas_col = _fechas_por_numero(ws, fila_cab, cols, ref)
+    if len(fechas_col) < 7:
         raise ValueError("La fila de «Nombre» no tiene fechas en las columnas de los días. "
                          "¿Es la hoja MENSUAL del cuadrante?")
+    return fila_cab, col_nombre, col_orden, fechas_col
+
+
+def leer_mensual(contenido: bytes, hoja: str = "", ref: Optional[dt.date] = None) -> Dict[str, Any]:
+    """Los bytes del .xlsx -> {fechas, filas, maximas, codigos, avisos, leyenda}.
+
+    Lanza ValueError con un mensaje para la pantalla si no es la hoja esperada.
+    Se prueban todas las pestañas (la pedida, MENSUAL, y las demás por orden) y
+    se usa la primera que tiene una cabecera con días; `ref` (hoy por defecto)
+    sirve para poner mes y año cuando la cabecera solo trae el número del día.
+    """
+    import openpyxl
+    ref = ref or dt.date.today()
+    try:
+        wb_v = openpyxl.load_workbook(io.BytesIO(contenido), data_only=True)
+        wb_f = openpyxl.load_workbook(io.BytesIO(contenido), data_only=False)
+    except Exception as e:                                        # noqa: BLE001
+        raise ValueError("No se puede abrir el Excel: %s" % str(e)[:120])
+    preferidas = ([hoja] if hoja in wb_v.sheetnames else []) + (["MENSUAL"] if "MENSUAL" in wb_v.sheetnames else [])
+    validas, ultimo_error = [], None
+    for nombre_hoja in preferidas + [n for n in wb_v.sheetnames if n not in preferidas]:
+        ws_i, ws_fi = wb_v[nombre_hoja], wb_f[nombre_hoja]
+        try:
+            validas.append((nombre_hoja, ws_i, ws_fi) + _cabecera(ws_i, ws_fi, ref))
+        except ValueError as e:
+            ultimo_error = ultimo_error or e
+            continue
+        if nombre_hoja in preferidas:
+            break                                              # la pedida / MENSUAL manda
+    if not validas:
+        raise ultimo_error or ValueError("No encuentro la hoja del cuadrante.")
+    # Entre varias semanales, la que llega más tarde (la última, hasta hoy).
+    nombre_hoja, ws, ws_f, fila_cab, col_nombre, col_orden, fechas_col = max(validas, key=lambda v: max(v[6].values()))
     orden_cols = sorted(fechas_col, key=lambda c: fechas_col[c])
     fechas = [fechas_col[c] for c in orden_cols]
     repetidas = [f for f, n in Counter(fechas).items() if n > 1]
@@ -181,6 +252,11 @@ def leer_mensual(contenido: bytes, hoja: str = "") -> Dict[str, Any]:
               if fechas[i + 1] != fechas[i] + dt.timedelta(days=1)]
     if huecos:
         avisos.append("Faltan días en la hoja: " + ", ".join(f.strftime("%d/%m") for f in huecos[:10]))
+
+    primera = orden_cols[0]
+    if not _fecha(ws.cell(fila_cab, primera).value) and not isinstance(ws_f.cell(fila_cab, primera).value, str):
+        avisos.append("La hoja solo trae el número del día, sin mes: se ha puesto del %s al %s (contando hacia atrás desde hoy). "
+                      "Compruébalo antes de guardar." % (fechas[0].strftime("%d/%m/%Y"), fechas[-1].strftime("%d/%m/%Y")))
 
     leyenda = _leyenda(ws_f)
     colores = dict(POR_DEFECTO)
