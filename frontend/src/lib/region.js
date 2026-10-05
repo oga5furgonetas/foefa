@@ -11,6 +11,8 @@ export function regionDelMovil() {
     const r = new Intl.Locale(navigator.language || '').maximize().region
     if (r && /^[A-Z]{2}$/.test(r)) fuera.pais = r.toLowerCase()
   } catch { /* idioma raro */ }
+  // El idioma de la app al darse de alta: en ese le llegan los correos.
+  try { fuera.idioma = idioma() } catch { /* nada */ }
   return fuera
 }
 

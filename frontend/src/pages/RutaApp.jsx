@@ -32,6 +32,9 @@ export default function RutaApp() {
   useIdioma()
   const toast = useToast()
   const [tab, setTab] = useState(() => {
+    // ?tab=cuenta: el enlace del correo «te quedan 2 días» abre directamente la cuenta.
+    const pedida = new URLSearchParams(window.location.search).get('tab')
+    if (PESTANAS.some(([k]) => k === pedida)) return pedida
     try { return sessionStorage.getItem('ruta_tab') || 'hoy' } catch { return 'hoy' }
   })
   useEffect(() => { try { sessionStorage.setItem('ruta_tab', tab) } catch { /* nada */ } }, [tab])

@@ -5,12 +5,13 @@ import seguimiento
 import reparto
 import whatsapp
 import analitica
+import ciclo_correos
 from ai_learning import (
     get_few_shot_examples, build_few_shot_prompt_parts_multimodal,
     get_pattern_lessons, get_part_lesson, save_feedback as _save_ai_feedback,
 )
 from fastapi import FastAPI, APIRouter, UploadFile, File, Form, HTTPException, Depends, Body, Request
-from fastapi.responses import JSONResponse, PlainTextResponse, Response, StreamingResponse
+from fastapi.responses import HTMLResponse, JSONResponse, PlainTextResponse, Response, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from starlette.middleware.cors import CORSMiddleware
@@ -698,6 +699,7 @@ class RegisterRequest(BaseModel):
     # China (PIPL): consentimiento aparte para tratar los datos fuera de China.
     acepta_transferencia: Optional[bool] = None
     ref: Optional[str] = None            # código de quien le invitó (programa «invita a un compañero»)
+    idioma: Optional[str] = None         # el de la app al darse de alta: en ese idioma le llegan los correos
 
 
 # Límites y features por plan
@@ -4882,6 +4884,8 @@ async def register_dsp(data: RegisterRequest, request: Request):
     if invitador:
         org["referido_por"] = invitador["id"]
     org["pais"], org["zona_horaria"] = _region_alta(data.zona_horaria, data.pais)
+    if (data.idioma or "").strip().lower()[:2] in ("es", "en", "pt", "fr", "it", "de", "zh"):
+        org["idioma"] = data.idioma.strip().lower()[:2]
     # China: la ley de protección de datos (PIPL, art. 39) pide consentimiento
     # APARTE para sacar los datos personales de China (aquí van a la UE). Sin
     # él no se crea la cuenta; con él queda apuntado cuándo se dio.
@@ -4923,7 +4927,11 @@ async def register_dsp(data: RegisterRequest, request: Request):
     # Enviar email de bienvenida con Resend (no bloqueante)
     recipient = org.get("email")
     resend_key = os.environ.get("RESEND_API_KEY", "")
-    if recipient and resend_key:
+    if recipient and resend_key and ciclo_correos.es_candidata(org):
+        # Quien reparte solo: la bienvenida del ciclo (los pasos de la primera
+        # ruta, en su idioma). En segundo plano: el alta no espera al correo.
+        asyncio.create_task(_ciclo_enviar(org_id, "bienvenida"))
+    elif recipient and resend_key:
         plan_label = {"basico": "Básico", "pro": "Pro", "flota": "Flota", "operacion": "Operación",
                       "completo": "Completo", "autonomo": "Repartidor"}.get(org.get("plan") or "", "Pro")
         try:
@@ -4945,7 +4953,7 @@ async def register_dsp(data: RegisterRequest, request: Request):
   <div style="padding:28px">
     <p style="margin:0 0 16px;color:#cbd3e0;font-size:15px">Hola <b>{org_name}</b>,</p>
     <p style="margin:0 0 20px;color:#8b94a3;font-size:14px;line-height:1.6">
-      Tu cuenta con el plan <b style="color:#0ea5e9">{plan_label}</b> está lista. Tienes {dias_prueba} días completos para probarlo sin límites y sin introducir ninguna tarjeta.
+      Tu cuenta con el plan <b style="color:#0ea5e9">{plan_label}</b> está lista. Tienes {dias_prueba} días completos para probarlo sin límites{"" if org.get("prueba_con_tarjeta") else " y sin introducir ninguna tarjeta"}.
     </p>
     <div style="background:#13161b;border:1px solid rgba(255,255,255,.08);border-radius:12px;padding:16px 20px;margin-bottom:24px">
       <div style="font-size:12px;color:#64748b;font-weight:700;text-transform:uppercase;letter-spacing:.06em;margin-bottom:10px">Tu acceso</div>
@@ -4957,10 +4965,11 @@ async def register_dsp(data: RegisterRequest, request: Request):
     </a>
     <p style="margin:0;color:#64748b;font-size:12px;text-align:center;line-height:1.6">
       Si tienes alguna pregunta, escríbenos a <a href="mailto:{CORREO_CONTACTO}" style="color:#0ea5e9">{CORREO_CONTACTO}</a><br>
-      Al finalizar la prueba, se cobra el plan elegido salvo cancelación.
+      {"Al finalizar la prueba, se cobra el plan elegido salvo cancelación." if org.get("prueba_con_tarjeta")
+       else "Al acabar la prueba eliges tú si seguir: sin tarjeta no se cobra nada."}
     </p>
     <p style="margin:12px 0 0;color:#475569;font-size:11px;text-align:center;line-height:1.5">
-      🇬🇧 Welcome to {MARCA}! Your {dias_prueba}-day free trial is active — no card required.
+      🇬🇧 Welcome to {MARCA}! Your {dias_prueba}-day free trial is active{"" if org.get("prueba_con_tarjeta") else " — no card required"}.
       Log in at {_DOMINIO_FRONT}/panel with the username above. Questions? {CORREO_CONTACTO}
     </p>
   </div>
@@ -6481,7 +6490,8 @@ def _email_remitente() -> tuple:
 
 
 async def _resend_enviar(cli, to: str, subject: str, html: str,
-                         responder_a: str, copia: Optional[list], texto: str):
+                         responder_a: str, copia: Optional[list], texto: str,
+                         cabeceras: Optional[dict] = None):
     r = await cli.post(
         "https://api.resend.com/emails",
         headers={"Authorization": f"Bearer {os.environ.get('RESEND_API_KEY', '')}",
@@ -6497,13 +6507,15 @@ async def _resend_enviar(cli, to: str, subject: str, html: str,
             # Version en texto plano: hay clientes -y filtros de spam- que
             # puntuan peor un correo que solo trae HTML.
             "text": texto or None,
+            "headers": cabeceras or None,
         }.items() if v is not None})
     agotado = r.status_code == 429 and "daily_quota_exceeded" in r.text
     return r.status_code < 300, agotado, r.status_code, r.text[:300]
 
 
 async def _brevo_enviar(cli, to: str, subject: str, html: str,
-                        responder_a: str, copia: Optional[list], texto: str):
+                        responder_a: str, copia: Optional[list], texto: str,
+                        cabeceras: Optional[dict] = None):
     nombre, correo = _email_remitente()
     r = await cli.post(
         "https://api.brevo.com/v3/smtp/email",
@@ -6515,6 +6527,7 @@ async def _brevo_enviar(cli, to: str, subject: str, html: str,
             "textContent": texto or None,
             "replyTo": {"email": responder_a} if responder_a else None,
             "cc": [{"email": c} for c in copia] if copia else None,
+            "headers": cabeceras or None,
         }.items() if v is not None})
     # 402 es «sin creditos» y 429 su limite por minuto/dia: las dos significan
     # que por hoy no se cuenta con el, no que este correo estuviera mal.
@@ -6524,7 +6537,7 @@ async def _brevo_enviar(cli, to: str, subject: str, html: str,
 
 async def _enviar_email(to: str, subject: str, html: str,
                         responder_a: str = "", copia: Optional[list] = None,
-                        texto: str = "") -> bool:
+                        texto: str = "", cabeceras: Optional[dict] = None) -> bool:
     """Envia un correo transaccional. Devuelve False si no lo coge nadie.
 
     OJO con el remitente: su dominio DEBE estar verificado en el proveedor
@@ -6541,7 +6554,7 @@ async def _enviar_email(to: str, subject: str, html: str,
             async with _httpx.AsyncClient(timeout=15) as _c:
                 enviar = _resend_enviar if nombre == "resend" else _brevo_enviar
                 ok, agotado, codigo, cuerpo = await enviar(
-                    _c, to, subject, html, responder_a, copia, texto)
+                    _c, to, subject, html, responder_a, copia, texto, cabeceras)
             if ok:
                 return True
             if agotado:
@@ -20228,6 +20241,153 @@ async def admin_correo_enviar(body: dict = Body(...), user: dict = Depends(requi
         # peor que uno que falla: nadie vuelve a intentarlo.
         raise HTTPException(502, "No se ha podido enviar. Queda apuntado el intento.")
     return {"ok": True, "id": doc["id"], "para": para}
+
+
+# ── CORREOS DEL ALTA AL FIN DE LA PRUEBA (quien reparte solo) ───────────────
+# Qué se manda y cuándo lo decide `ciclo_correos.py` (léelo: explica el porqué).
+# Aquí solo se lee la cuenta, se marca ANTES de mandar (así nunca salen dos) y
+# se apunta en `correos_enviados` como cualquier otro correo.
+# La bienvenida sale siempre (sustituye a la de antes). Los de seguimiento
+# («primer_dia», «casi_fin») solo con CICLO_CORREOS=1.
+CICLO_CADA_MIN = 30
+
+
+def _ciclo_seguimiento_activo() -> bool:
+    return os.environ.get("CICLO_CORREOS", "0").strip() == "1"
+
+
+def _baja_firma(org_id: str) -> str:
+    import hmac as _hmac
+    import hashlib as _hl
+    return _hmac.new(SECRET_KEY.encode(), f"baja-correos:{org_id}".encode(), _hl.sha256).hexdigest()[:32]
+
+
+def _baja_url(org_id: str) -> str:
+    return f"{_BACKEND_BASE}/api/correo/baja?o={org_id}&t={_baja_firma(org_id)}"
+
+
+async def _ciclo_uso(org: dict) -> dict:
+    """Lo que ha hecho de verdad: paradas suyas (las de ejemplo no) y entregas."""
+    col = client[_tenant_db_name(org)].reparto_pedidos
+    reales = {"ejemplo": {"$ne": True}}
+    return {"paradas": await col.count_documents(reales),
+            "entregadas": await col.count_documents({**reales, "estado": "entregado"})}
+
+
+async def _ciclo_responder_a() -> str:
+    """A dónde van las respuestas: `CORREO_RESPUESTAS` o el correo del dueño.
+    contacto@ solo envía (no hay buzón de entrada): una respuesta ahí se pierde."""
+    fijo = os.environ.get("CORREO_RESPUESTAS", "").strip().lower()
+    if _correo_valido(fijo):
+        return fijo
+    sa = os.environ.get("SUPERADMIN_USERNAME", "").strip()
+    if not sa:
+        return ""
+    u = await global_db.admin_users.find_one({"username": sa}, {"_id": 0, "email": 1})
+    e = ((u or {}).get("email") or "").strip().lower()
+    return e if _correo_valido(e) else ""
+
+
+async def _ciclo_enviar(org_id: str, clave: str, ahora: Optional[datetime] = None) -> bool:
+    """Manda el correo `clave` a esa cuenta si toca. True si salió."""
+    try:
+        ahora = ahora or datetime.now(timezone.utc)
+        org = await global_db.organizations.find_one({"id": org_id}, {"_id": 0})
+        if not org or not ciclo_correos.es_candidata(org):
+            return False
+        uso = await _ciclo_uso(org)
+        if ciclo_correos.toca(org, uso, ahora) != clave:
+            return False
+        marca = f"ciclo_correos.{clave}"
+        r = await global_db.organizations.update_one(
+            {"id": org_id, marca: {"$exists": False}}, {"$set": {marca: {"at": ahora.isoformat()}}})
+        if not r.modified_count:
+            return False                       # otro proceso se adelantó
+        responder = await _ciclo_responder_a()
+        t = PLAN_TARIFAS["autonomo"]
+        baja = _baja_url(org_id)
+        c = ciclo_correos.correo(clave, org, uso, ahora, marca=MARCA, base=_PORTAL_BASE_FRONT,
+                                 baja=baja, mensual=t["mensual"], anual=t["anual"],
+                                 con_respuesta=bool(responder))
+        ok = await _enviar_email(
+            org["email"], c["asunto"], c["html"], responder_a=responder, texto=c["texto"],
+            cabeceras={"List-Unsubscribe": f"<{baja}>",
+                       "List-Unsubscribe-Post": "List-Unsubscribe=One-Click"})
+        await global_db[_CORREOS_COL].insert_one({
+            "id": str(uuid.uuid4()), "para": org["email"], "copia": [], "asunto": c["asunto"],
+            "cuerpo": c["texto"], "responder_a": responder, "por": f"ciclo:{clave}",
+            "org_id": org_id, "at": ahora.isoformat(), "ok": bool(ok)})
+        if ok:
+            await global_db.organizations.update_one(
+                {"id": org_id}, {"$set": {f"{marca}.ok": True, f"{marca}.idioma": c["idioma"]}})
+        else:
+            # No salió: se quita la marca para reintentarlo en la siguiente vuelta
+            # (mientras siga tocando; fuera de su ventana ya no se manda).
+            await global_db.organizations.update_one({"id": org_id}, {"$unset": {marca: ""}})
+        return bool(ok)
+    except Exception as e:                                       # noqa: BLE001
+        logger.error("ciclo de correos (%s, %s): %s", org_id, clave, e)
+        return False
+
+
+async def ciclo_correos_vuelta(ahora: Optional[datetime] = None) -> dict:
+    """Una vuelta: a cada cuenta en prueba de quien reparte solo, lo que le toque."""
+    ahora = ahora or datetime.now(timezone.utc)
+    desde = (ahora - timedelta(days=30)).isoformat()
+    orgs = await global_db.organizations.find(
+        {"status": "trial", "sector": "autonomo", "created_at": {"$gte": desde},
+         "correos_baja": {"$ne": True}}, {"_id": 0}).to_list(2000)
+    hechos = {}
+    for org in orgs:
+        clave = ciclo_correos.toca(org, await _ciclo_uso(org), ahora)
+        if not clave or (clave != "bienvenida" and not _ciclo_seguimiento_activo()):
+            continue
+        if await _ciclo_enviar(org["id"], clave, ahora):
+            hechos[clave] = hechos.get(clave, 0) + 1
+    return hechos
+
+
+async def _bucle_ciclo_correos():
+    await asyncio.sleep(120)
+    while True:
+        try:
+            if os.environ.get("RESEND_API_KEY") or os.environ.get("BREVO_API_KEY"):
+                hechos = await ciclo_correos_vuelta()
+                await _latido("ciclo_correos", enviados=hechos, cada_min=CICLO_CADA_MIN,
+                              seguimiento=_ciclo_seguimiento_activo(), error=None)
+        except Exception as e:                                   # noqa: BLE001
+            logger.error("Bucle del ciclo de correos: %s", e)
+            await _latido("ciclo_correos", error=str(e)[:200], cada_min=CICLO_CADA_MIN)
+        await asyncio.sleep(CICLO_CADA_MIN * 60)
+
+
+@app.on_event("startup")
+async def start_ciclo_correos():
+    asyncio.create_task(_bucle_ciclo_correos())
+
+
+def _baja_pagina(titulo: str, texto: str) -> HTMLResponse:
+    import html as _h
+    return HTMLResponse(
+        "<!doctype html><html lang='es'><head><meta charset='utf-8'>"
+        "<meta name='viewport' content='width=device-width,initial-scale=1'>"
+        f"<title>{_h.escape(titulo)}</title></head>"
+        "<body style='font-family:-apple-system,Segoe UI,Arial,sans-serif;max-width:480px;margin:60px auto;"
+        "padding:0 16px;color:#111827;line-height:1.6'>"
+        f"<h1 style='font-size:22px'>{_h.escape(titulo)}</h1><p>{_h.escape(texto)}</p></body></html>")
+
+
+@api_router.api_route("/correo/baja", methods=["GET", "POST"], include_in_schema=False)
+async def correo_baja(o: str = "", t: str = ""):
+    """Darse de baja de los correos del ciclo. GET desde el enlace del correo y
+    POST «de un clic» (cabecera List-Unsubscribe-Post, la usan Gmail y Apple)."""
+    import hmac as _hmac
+    o = re.sub(r"[^a-z0-9]", "", (o or "").lower())[:40]
+    if not (o and t and SECRET_KEY and _hmac.compare_digest(_baja_firma(o), str(t)[:64])):
+        return _baja_pagina("Enlace no válido", "Este enlace de baja no es válido o está incompleto.")
+    await global_db.organizations.update_one(
+        {"id": o}, {"$set": {"correos_baja": True, "correos_baja_at": datetime.now(timezone.utc).isoformat()}})
+    return _baja_pagina("Hecho", "No te enviaremos más correos de este tipo. Tu cuenta sigue igual.")
 
 
 # ── EMPLEO: OFERTAS Y CANDIDATOS ─────────────────────────────────────────────
