@@ -711,3 +711,27 @@ Nada se había borrado (org `owner` sin `modulos`, usuario `dani` sin
 - TikTok: el spot (versión 720p, 3,7 MB) está añadido como primera creatividad del anuncio ES (grupo `Ad group 20261004045045`, solo España, 25-54, intereses Express Deliveries + Logistics).
 - META: la cuenta publicitaria está RESTRINGIDA por fallo de pago («Cuenta pendiente de pago… saldo que se debe liquidar»); el anuncio ES+PT sale con «Error en el pago». Hasta que Dani pague, Meta no sirve nada. Hay 3 borradores en «Revisar y publicar». El spot 4:5 (`spot-tele-4x5-1080.mp4`, 4,3 MB) está listo para subir a Meta (límite del puente de subida: 10 MB).
 - Google Play (API, solo lectura): prueba cerrada «alpha» con `fds-testers@googlegroups.com`, versión 3 publicada en la pista; interna con la 2; producción vacía. No se ve el estado de revisión ni cuántos testers se han unido.
+
+## 05-10-2026 tarde (sesión 6b0ba015): embudo medido, correos del ciclo, sketch
+- **Embudo real** (`analitica_eventos`, 48 h hasta las 14:17 UTC): TikTok ES 316 sesiones / 216 rebotes /
+  1 `rep_form_inicio` / 0 altas; TikTok PT 178 (177 rebotes); Meta ES 173 (0 altas, cuenta bloqueada por pago).
+  **Grupos de Facebook: 1 visita en total** (`utm_source=grupo`, `paq_autonomos_video`); LinkedIn 1. TikTok cuenta
+  204 clics ES el 4-5/10 y nosotros registramos MÁS sesiones que clics: la gente NO se pierde mientras carga la
+  página (descartado tocar la carga); el problema es la calidad del tráfico (CPC 0,04 €, CTR 0,66 %).
+- Altas reales recientes: Guilherme (05-10, Instagram), Juanjo (03-10, app), José Arturo (04-10, 2 paradas),
+  Daniel Brao (04-10, conocido de Dani). Guilherme y Juanjo: 0 paradas → hacía falta seguimiento.
+- **Correos del ciclo** (`backend/ciclo_correos.py`, léelo): bienvenida con los 3 pasos reales (sale SIEMPRE a
+  quien reparte solo; sustituye a la de antes, que decía «se cobra salvo cancelación» a quien no metió tarjeta:
+  falso, corregido también para empresas), «¿te ayudo con tu primera ruta?» a las 20-72 h si 0 paradas, y «te
+  quedan 2 días» (estos dos SOLO con `CICLO_CORREOS=1`, hoy APAGADO: falta el sí de Dani). Baja de un clic
+  (`/api/correo/baja`, firma HMAC, cabecera List-Unsubscribe), idioma del alta (`idioma` en `/auth/register`),
+  respuestas a `CORREO_RESPUESTAS` o al correo del super-admin. 38 pruebas en `test_ciclo_correos.py`
+  (incluida una que comprueba que cada botón citado entre «» existe en el diccionario de la app).
+- **Anuncio sketch «¿Aún repartes a ojo?»** (formato «X en 30 s» de TikTok que mandó Dani): 22,7 s, repartidora
+  de Pexels (licencia: solo el problema, nunca usando FDS), voz Ximena con guion coloquial tratada como móvil,
+  3 pasos con la app real. `py -3 scripts/voz_sketch.py` + `node scripts/montar-sketch-repartidora.mjs`
+  (la app: `npx playwright test e2e/spot-material.spec.js --update-snapshots`; OJO, cualquier otra pasada de
+  Playwright BORRA `test-results/`). Salida en `docs/anuncios/reales/salida/` y `Descargas\FDS-sketch-repartidora.mp4`.
+  NO se usó el vídeo de la chica que le mandaron a Dani (contenido e imagen de otra persona).
+- Gotcha: las pruebas de humo fallan si `dist` se compiló con `VITE_META_PIXEL_ID` (el aviso de cookies tapa
+  botones) o con `VITE_API_URL` (CORS desde localhost). Para probar, `npx vite build` a secas; para desplegar, con las dos.
