@@ -1,7 +1,7 @@
 import React, { Suspense, lazy, useEffect } from 'react'
 import ReactDOM from 'react-dom/client'
 import { escucharInstalacion } from './lib/instalar'
-import { BrowserRouter, Route, Routes, useLocation } from 'react-router-dom'
+import { BrowserRouter, Route, Routes, useLocation, Navigate } from 'react-router-dom'
 /* Tipografía self-hosted (la CSP bloquea Google Fonts). Vite las sirve desde
    el propio dominio.
 
@@ -385,6 +385,8 @@ ReactDOM.createRoot(document.getElementById('root')).render(
               <Route path="/verify" element={<Verify />} />
               <Route path="/verify/:hash" element={<Verify />} />
               <Route path="/app" element={<AppRedirect />} />
+              {/* /instalar no es una página: la instalación es la tarjeta de la app. Se lleva a la app (entrar o registrarse y verla). */}
+              <Route path="/instalar" element={<Navigate to="/ruta" replace />} />
               <Route path="/taller/t/:token" element={<PortalTallerLista />} />
               <Route path="/empleo" element={<Ofertas />} />
               <Route path="/empleo/:slug/:oferta" element={<EmpleoPublica />} />

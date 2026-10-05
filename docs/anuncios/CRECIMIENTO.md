@@ -10,7 +10,7 @@
   entre 15.000 y 50.000 € de anuncios, o un vídeo viral. Con 250 € no sale.
 - «Descargar»: la app de Play Store **no está publicada** (una cuenta personal nueva
   necesita 12 probadores durante 14 días antes de poder publicar). Hoy se «descarga»
-  instalando desde la web (flotadsp.com/instalar) y registrándose.
+  instalando desde la web (entrando en flotadsp.com/instalar o /repartidores y registrándose; la app te ofrece instalarla) y registrándose.
 
 ## Lo que ya está hecho (técnico)
 

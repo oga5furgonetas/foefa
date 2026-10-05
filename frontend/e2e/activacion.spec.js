@@ -132,3 +132,10 @@ test('Activación · el idioma se cambia también desde Ajustes', async ({ page,
   await page.getByLabel('Idioma').selectOption('pt')
   await expect(page.locator('nav button', { hasText: /Conta/ })).toBeVisible()
 })
+
+test('Instalar · /instalar no da 404: lleva a la app', async ({ page }) => {
+  await page.addInitScript(() => localStorage.setItem('cookie_consent', JSON.stringify({ v: 1, at: new Date().toISOString() })))
+  await page.goto('/instalar', { waitUntil: 'domcontentloaded' })
+  await expect(page).toHaveURL(/\/(ruta|empezar)/)
+  await expect(page.getByText('Página no encontrada')).toHaveCount(0)
+})
