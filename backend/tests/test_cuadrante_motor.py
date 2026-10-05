@@ -469,3 +469,26 @@ def test_la_pareja_cede_si_hace_falta_cubrir_rutas():
 def test_pareja_con_ids_que_no_estan_se_ignora():
     res = cm.generar_cuadrante(entrada(gente(6), dias=7, maxima=3, libran_juntos=[["x", "y"], ["c0", "c0"]]))
     assert res["celdas"]
+
+
+# ── Libra antes quien lleva más días seguidos (menos los de horario marcado) ──
+def _previos(cid, valor, n=5):
+    return {f"{cid}|{dia(-i)}": valor for i in range(1, n + 1)}
+
+
+def test_libra_antes_quien_llega_con_mas_dias_seguidos():
+    celdas = {**_previos("A", "1", 5), **_previos("B", "N/T", 5)}
+    e = entrada([{"id": "A", "nombre": "A"}, {"id": "B", "nombre": "B"}], dias=7, maxima=1,
+                colchon=0, celdas=celdas)
+    res = cm.generar_cuadrante(e)
+    assert not trabaja(res, "A", dia(0))             # llegaba con 5 seguidos: descansa primero
+    assert trabaja(res, "B", dia(0))
+
+
+def test_el_de_horario_marcado_no_entra_en_el_reparto_por_racha():
+    celdas = {**_previos("A", "1", 5), **_previos("B", "1", 5)}
+    conductores = [{"id": "A", "nombre": "A", "tipo": "empresa"},       # L-V fijo
+                   {"id": "B", "nombre": "B"}]
+    res = cm.generar_cuadrante(entrada(conductores, dias=7, maxima=1, colchon=0, celdas=celdas))
+    # El lunes (día 0) A trabaja por su horario fijo, aunque llegue con racha; descansa B si hace falta.
+    assert trabaja(res, "A", dia(0))

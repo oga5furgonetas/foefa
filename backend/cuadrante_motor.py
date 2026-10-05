@@ -107,6 +107,7 @@ PESO_SOBRA = 3000.0
 PESO_EXTRA = 90.0
 PESO_SEMANA_CORTA = 1000.0
 PREMIO_LIBRES_JUNTOS = 2.0
+PESO_RACHA = 2.0                 # libra antes quien lleva más días seguidos (por día de racha previa, decae en los 4 primeros días)
 PESO_JUNTOS = 40.0               # que dos personas (pareja) libren y trabajen los mismos días: preferencia, cede ante cubrir rutas
 # Reparto justo: desempates, ver la cuenta de los 99 en la cabecera.
 PESO_EXTRA_REPETIDO = 1.0
@@ -284,6 +285,24 @@ def generar_cuadrante(entrada: Dict[str, Any]) -> Dict[str, Any]:
 
     fijos = {(c["id"], d): fijo(c, d) for c in conductores for d in todos}
 
+    def racha_previa(c) -> int:
+        """Días seguidos trabajados justo antes del periodo (0 si libró ayer)."""
+        run = 0
+        for d in reversed(hist):
+            if fijos[c["id"], d][0] == 1:
+                run += 1
+            else:
+                break
+        return run
+
+    def descanso_prioritario(c) -> bool:
+        """A quien tiene el horario marcado (L-V, solo finde, días que no puede, nº de días
+        propio) no se le reparte el descanso por racha: lo suyo ya está dicho."""
+        return ((c.get("tipo") or "normal") == "normal" and not c.get("patron") and not c.get("dias_no")
+                and not c.get("dias_semana"))
+
+    racha0 = {c["id"]: racha_previa(c) for c in conductores if descanso_prioritario(c)}
+
     def tope_de(c, lunes_sem) -> int:
         lim = limites.get((c["id"], lunes_sem))
         if lim is not None:
@@ -366,6 +385,13 @@ def generar_cuadrante(entrada: Dict[str, Any]) -> Dict[str, Any]:
                     k = xv.get((cid, d))
                     if k is not None and d.weekday() >= 5:
                         m.c[k] += PESO_FINDE_RECIENTE * fr
+            # Quien lleva más días seguidos libra antes (desempate suave: el tope de 6 sigue siendo ley).
+            r0 = racha0.get(cid, 0)
+            if r0:
+                for i, d in enumerate(plan[:4]):
+                    k = xv.get((cid, d))
+                    if k is not None:
+                        m.c[k] += PESO_RACHA * r0 / (i + 1)
             # ── Semana de lunes a domingo: 5 + 2 (o 6 con el extra en la fase 2) ──
             for sem in semanas:
                 if not any((cid, d) in xv for d in sem):
