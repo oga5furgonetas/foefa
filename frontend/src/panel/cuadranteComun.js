@@ -67,7 +67,7 @@ export const claseDif = (d) => (d.dif == null ? 'text-dark-500'
 
 /* Rutas, extras, máxima y diferencia de cada día, como la fila RUTAS (cuenta
    de 1) de su hoja: lo que está en otro centro no cuenta aquí. */
-export function resumenDias(dias, personas, celda, maximas, colchonDe) {
+export function resumenDias(dias, personas, celda, maximas, colchonDe, refuerzoDe = () => 0) {
   const m = {}
   for (const f of dias) {
     let rutas = 0
@@ -79,7 +79,8 @@ export function resumenDias(dias, personas, celda, maximas, colchonDe) {
       if (c.extra) extras += 1
     }
     const mx = maximas?.[f]
-    m[f] = { rutas, extras, maxima: mx ?? null, dif: mx == null ? null : rutas - mx, colchon: colchonDe(f) }
+    const ref = refuerzoDe(f) || 0                 // los que BAJAN de otros centros cuentan como rutas
+    m[f] = { rutas, extras, refuerzo: ref, maxima: mx ?? null, dif: mx == null ? null : rutas + ref - mx, colchon: colchonDe(f) }
   }
   return m
 }

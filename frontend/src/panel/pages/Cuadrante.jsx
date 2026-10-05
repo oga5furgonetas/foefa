@@ -619,7 +619,7 @@ function Importar({ center, centers, setCenter, onCerrar, onHecho }) {
 /* ── AJUSTES Y ESTUDIO ──────────────────────────────────────────────────── */
 function Ajustes({ center, datos, personas, onCambio }) {
   const [estudio, setEstudio] = useState(null)
-  const [nuevo, setNuevo] = useState({ tipo: 'colchon_dia', fecha: '', colchon: 3, driver_id: '', lunes: '', max_dias: 4 })
+  const [nuevo, setNuevo] = useState({ tipo: 'colchon_dia', fecha: '', colchon: 3, driver_id: '', lunes: '', max_dias: 4, refuerzo: 2, driver_a: '', driver_b: '' })
   const [err, setErr] = useState('')
   useEffect(() => {
     let vivo = true
@@ -666,7 +666,9 @@ function Ajustes({ center, datos, personas, onCambio }) {
             <li key={a.id} className="flex items-center gap-2 rounded-lg border border-dark-800 px-2.5 py-1.5">
               <span className="text-dark-200">
                 {a.tipo === 'colchon_dia' ? `El ${fmt(a.fecha)} a +${a.colchon}`
-                  : `${nombre[a.driver_id] || 'Alguien'}: como mucho ${a.max_dias} días la semana del ${fmt(a.lunes)}`}
+                  : a.tipo === 'refuerzo_dia' ? `El ${fmt(a.fecha)} bajan ${a.refuerzo} de otros centros`
+                    : a.tipo === 'libran_juntos' ? `${nombre[a.driver_ids?.[0]] || 'Alguien'} y ${nombre[a.driver_ids?.[1]] || 'alguien'}: librar los mismos días`
+                      : `${nombre[a.driver_id] || 'Alguien'}: como mucho ${a.max_dias} días la semana del ${fmt(a.lunes)}`}
               </span>
               <button onClick={() => borrar(a.id)} aria-label="Quitar" className="ml-auto text-dark-500 hover:text-red-300"><X size={14} /></button>
             </li>
@@ -677,8 +679,28 @@ function Ajustes({ center, datos, personas, onCambio }) {
             className="rounded-lg border border-dark-700 bg-dark-900 px-2 py-1 text-xs text-dark-100">
             <option value="colchon_dia">Un día con otro colchón</option>
             <option value="limite_semana">Máximo de días de alguien en una semana</option>
+            <option value="refuerzo_dia">Un día en que bajan personas de otros centros</option>
+            <option value="libran_juntos">Que dos personas libren los mismos días</option>
           </select>
-          {nuevo.tipo === 'colchon_dia' ? (
+          {nuevo.tipo === 'refuerzo_dia' ? (
+            <>
+              <input type="date" value={nuevo.fecha} onChange={(e) => setNuevo((n) => ({ ...n, fecha: e.target.value }))} aria-label="Día"
+                className="rounded-lg border border-dark-700 bg-dark-900 px-2 py-1 text-xs text-dark-100" />
+              <input type="number" min={0} max={60} value={nuevo.refuerzo} aria-label="Cuántos bajan de otros centros"
+                onChange={(e) => setNuevo((n) => ({ ...n, refuerzo: Number(e.target.value) }))}
+                className="w-14 rounded-lg border border-dark-700 bg-dark-900 px-2 py-1 text-xs text-dark-100" />
+            </>
+          ) : nuevo.tipo === 'libran_juntos' ? (
+            <>
+              {['driver_a', 'driver_b'].map((k, i) => (
+                <select key={k} value={nuevo[k]} onChange={(e) => setNuevo((n) => ({ ...n, [k]: e.target.value }))} aria-label={`Persona ${i + 1}`}
+                  className="max-w-[12rem] rounded-lg border border-dark-700 bg-dark-900 px-2 py-1 text-xs text-dark-100">
+                  <option value="">— persona {i + 1} —</option>
+                  {personas.map((p) => <option key={p.id} value={p.id}>{p.nombre}</option>)}
+                </select>
+              ))}
+            </>
+          ) : nuevo.tipo === 'colchon_dia' ? (
             <>
               <input type="date" value={nuevo.fecha} onChange={(e) => setNuevo((n) => ({ ...n, fecha: e.target.value }))} aria-label="Día"
                 className="rounded-lg border border-dark-700 bg-dark-900 px-2 py-1 text-xs text-dark-100" />
@@ -773,6 +795,7 @@ export default function Cuadrante() {
   const [hojaAbierta, setHojaAbierta] = useState(false)
   const [ocupado, setOcupado] = useState('')
   const [maxEdit, setMaxEdit] = useState({})
+  const [refEdit, setRefEdit] = useState({})
   const pedida = useRef(0)
 
   const cargar = useCallback(async (silencio = false) => {
@@ -781,7 +804,7 @@ export default function Cuadrante() {
     if (!silencio) setCargando(true)
     try {
       const r = await getCuadrante(center, rango.desde, rango.hasta)
-      if (n === pedida.current) { setDatos(r.data); setMaxEdit({}) }
+      if (n === pedida.current) { setDatos(r.data); setMaxEdit({}); setRefEdit({}) }
     } catch (e) {
       if (n === pedida.current) setErr(e?.response?.data?.detail || 'No se ha podido cargar el cuadrante.')
     } finally {
@@ -815,8 +838,13 @@ export default function Cuadrante() {
     return a ? a.colchon : (datos?.config?.colchon ?? 2)
   }, [datos])
 
-  const porDia = useMemo(() => resumenDias(dias, personas, celda, datos?.maximas, colchonDe),
-    [dias, personas, celda, datos, colchonDe])
+  const refuerzoDe = useCallback((f) => {
+    const a = lista(datos?.ajustes).find((x) => x.tipo === 'refuerzo_dia' && x.fecha === f)
+    return a ? a.refuerzo : 0
+  }, [datos])
+
+  const porDia = useMemo(() => resumenDias(dias, personas, celda, datos?.maximas, colchonDe, refuerzoDe),
+    [dias, personas, celda, datos, colchonDe, refuerzoDe])
 
   /* El 7º día seguido, contando la semana de antes (viene en los datos). */
   const septimos = useMemo(() => septimosDe(personas, celda, rango.desde, rango.hasta), [personas, celda, rango])
@@ -883,6 +911,15 @@ export default function Cuadrante() {
       await cuadranteMaximas(center, { [f]: v === '' ? null : v })
       cargar(true)
     } catch (e) { setErr(e?.response?.data?.detail || 'No se ha podido guardar la máxima.') }
+  }
+
+  const guardarRefuerzo = async (f) => {
+    const v = refEdit[f]
+    if (v === undefined || String(v || 0) === String(refuerzoDe(f) || 0)) return
+    try {
+      await cuadranteAjuste({ center, tipo: 'refuerzo_dia', fecha: f, refuerzo: v === '' ? 0 : Number(v) })
+      cargar(true)
+    } catch (e) { setErr(e?.response?.data?.detail || 'No se ha podido guardar.') }
   }
 
   const aceptar = async () => {
@@ -1204,6 +1241,23 @@ export default function Cuadrante() {
                               onBlur={() => guardarMaxima(f)}
                               onKeyDown={(e) => { if (e.key === 'Enter') e.currentTarget.blur() }}
                               className="w-9 rounded-[3px] border border-dark-700 bg-dark-900 px-0 py-0.5 text-center text-[11px] font-bold text-dark-100" />
+                          </td>
+                        ))}
+                        <td colSpan={2} />
+                      </tr>
+                      <tr>
+                        <td className="sticky left-0 z-10 bg-dark-900 px-2 py-1 text-[11px] font-bold text-violet-200"
+                          title="Gente que baja de otros centros ese día: cuenta como rutas hechas, así hacen falta menos de aquí y se encadenan menos días">
+                          Bajan de otros centros
+                        </td>
+                        {dias.map((f) => (
+                          <td key={f} className={`px-[1px] py-0.5 text-center ${wd(f) === 6 ? COLUMNA_DOMINGO : ''}`}>
+                            <input type="number" min={0} max={60} aria-label={`Bajan de otros centros el ${fmt(f)}`}
+                              value={refEdit[f] ?? (refuerzoDe(f) || '')}
+                              onChange={(e) => setRefEdit((m) => ({ ...m, [f]: e.target.value }))}
+                              onBlur={() => guardarRefuerzo(f)}
+                              onKeyDown={(e) => { if (e.key === 'Enter') e.currentTarget.blur() }}
+                              className="w-9 rounded-[3px] border border-violet-500/40 bg-dark-900 px-0 py-0.5 text-center text-[11px] font-bold text-violet-200" />
                           </td>
                         ))}
                         <td colSpan={2} />

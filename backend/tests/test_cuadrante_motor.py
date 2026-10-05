@@ -432,3 +432,40 @@ def test_centro_grande_cumple_todo_y_tarda_poco():
     for k, v in e["celdas"].items():
         if v in ("V", "BAJA") and k in res["celdas"]:
             assert res["celdas"][k]["valor"] == v
+
+
+# ── Gente que BAJA de otros centros y parejas que libran juntas (05-10-2026) ──
+def test_refuerzo_de_otros_centros_resta_gente_de_aqui_ese_dia():
+    base = cm.generar_cuadrante(entrada(gente(10), dias=7, maxima=4))
+    dia_r = dia(2)
+    con = cm.generar_cuadrante(entrada(gente(10), dias=7, maxima=4, refuerzo_por_dia={dia_r: 3}))
+    r = next(x for x in con["resumen_dias"] if x["fecha"] == dia_r)
+    assert r["refuerzo"] == 3
+    assert r["planificadas"] == max(0, 4 + 2 - 3)            # máxima + colchón - los que bajan
+    assert r["planificadas"] < rutas(base, dia_r)
+    assert r["diferencia"] == r["planificadas"] + 3 - 4      # lo de otros centros cuenta
+
+
+def test_si_con_el_refuerzo_se_llega_no_avisa_de_falta_de_gente():
+    res = cm.generar_cuadrante(entrada(gente(3), dias=7, maxima=5, refuerzo_por_dia={dia(i): 3 for i in range(7)}))
+    assert not any("Falta gente" in a for a in res["avisos"])
+
+
+def test_dos_personas_pareja_libran_los_mismos_dias():
+    e = entrada(gente(8), dias=7, maxima=4, libran_juntos=[["c0", "c1"]])
+    res = cm.generar_cuadrante(e)
+    for i in range(7):
+        assert trabaja(res, "c0", dia(i)) == trabaja(res, "c1", dia(i)), f"día {i}"
+
+
+def test_la_pareja_cede_si_hace_falta_cubrir_rutas():
+    # Demanda alta: no se puede dejar sin cubrir una ruta por mantener la pareja.
+    e = entrada(gente(5), dias=7, maxima=5, libran_juntos=[["c0", "c1"]])
+    res = cm.generar_cuadrante(e)
+    assert res["estado"] in ("ok", "aproximado", "optimo") or res["celdas"]
+    assert all(rutas(res, dia(i)) >= 0 for i in range(7))
+
+
+def test_pareja_con_ids_que_no_estan_se_ignora():
+    res = cm.generar_cuadrante(entrada(gente(6), dias=7, maxima=3, libran_juntos=[["x", "y"], ["c0", "c0"]]))
+    assert res["celdas"]

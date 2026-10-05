@@ -44675,10 +44675,14 @@ async def _cua_entrada(center: str, desde: str, hasta: str, colchon=None, permit
     cfg = await db[_CUA_CONFIG].find_one({"center": center}, {"_id": 0}) or {}
     colchon = int(cfg.get("colchon", 2) if colchon is None else colchon)
     permitir_extra = bool(cfg.get("permitir_extra", True) if permitir_extra is None else permitir_extra)
-    colchon_dia, limites = {}, []
+    colchon_dia, limites, refuerzo_dia, juntos = {}, [], {}, []
     async for a in db[_CUA_AJUSTES].find({"center": center}, {"_id": 0}):
         if a.get("tipo") == "colchon_dia" and desde <= str(a.get("fecha") or "") <= hasta:
             colchon_dia[a["fecha"]] = int(a["colchon"])
+        elif a.get("tipo") == "refuerzo_dia" and desde <= str(a.get("fecha") or "") <= hasta:
+            refuerzo_dia[a["fecha"]] = int(a["refuerzo"])          # gente que BAJA de otros centros ese día
+        elif a.get("tipo") == "libran_juntos" and len(a.get("driver_ids") or []) == 2                 and all(x in ids for x in a["driver_ids"]):
+            juntos.append(list(a["driver_ids"]))
         elif a.get("tipo") == "limite_semana" and a.get("driver_id") in ids:
             limites.append({"conductor_id": a["driver_id"], "lunes": a["lunes"], "max_dias": int(a["max_dias"])})
     conductores = []
@@ -44699,7 +44703,8 @@ async def _cua_entrada(center: str, desde: str, hasta: str, colchon=None, permit
     entrada = {"fecha_inicio": desde, "fecha_fin": hasta, "colchon": colchon,
                "permitir_extra": permitir_extra, "maximas": maximas, "conductores": conductores,
                "celdas": celdas, "bloqueadas": sorted(set(bloqueadas)), "colchon_por_dia": colchon_dia,
-               "limites_semana": limites, "extras": sorted(extras_ahora), "segundos": 45}
+               "limites_semana": limites, "extras": sorted(extras_ahora), "segundos": 45,
+               "refuerzo_por_dia": refuerzo_dia, "libran_juntos": juntos}
     return entrada, personas, extras_ahora
 
 
@@ -45073,6 +45078,32 @@ async def cuadrante_ajuste(data: dict = Body(...), user: dict = Depends(require_
         filtro = {"center": center, "tipo": tipo, "fecha": f}
         await cambio.antes(_CUA_AJUSTES, filtro)
         await db[_CUA_AJUSTES].update_one(filtro, {"$set": {**doc, "fecha": f, "colchon": c},
+                                                   "$setOnInsert": {"id": str(uuid.uuid4())}}, upsert=True)
+    elif tipo == "refuerzo_dia":
+        # Gente que baja de otros centros ese día: cuenta como rutas hechas, así hacen falta
+        # menos de aquí y nadie tiene que encadenar tantos días. 0 = quitarlo.
+        f = _cua_fecha(data.get("fecha"))
+        n = int(data.get("refuerzo")) if str(data.get("refuerzo", "")).strip().isdigit() else -1
+        if not 0 <= n <= 60:
+            raise HTTPException(400, "Los que bajan de otros centros van de 0 a 60")
+        filtro = {"center": center, "tipo": tipo, "fecha": f}
+        await cambio.antes(_CUA_AJUSTES, filtro)
+        if n == 0:
+            await db[_CUA_AJUSTES].delete_one(filtro)
+        else:
+            await db[_CUA_AJUSTES].update_one(filtro, {"$set": {**doc, "fecha": f, "refuerzo": n},
+                                                       "$setOnInsert": {"id": str(uuid.uuid4())}}, upsert=True)
+    elif tipo == "libran_juntos":
+        a, b = _texto_cuerpo(data.get("driver_a"), 80), _texto_cuerpo(data.get("driver_b"), 80)
+        if not a or not b or a == b:
+            raise HTTPException(400, "Elige dos personas distintas")
+        for x in (a, b):
+            if not await db.drivers.find_one({"id": x}, {"_id": 0, "id": 1}):
+                raise HTTPException(400, "Una de las dos personas ya no existe")
+        par = sorted([a, b])
+        filtro = {"center": center, "tipo": tipo, "driver_ids": par}
+        await cambio.antes(_CUA_AJUSTES, filtro)
+        await db[_CUA_AJUSTES].update_one(filtro, {"$set": {**doc, "driver_ids": par},
                                                    "$setOnInsert": {"id": str(uuid.uuid4())}}, upsert=True)
     elif tipo == "limite_semana":
         did = _texto_cuerpo(data.get("driver_id"), 80)
@@ -45582,6 +45613,7 @@ async def cuadrante_exportar(center: str, desde: str, hasta: str, user: dict = D
             for i in range((date_cls.fromisoformat(hasta) - date_cls.fromisoformat(desde)).days + 1)]
     colchon = datos["config"]["colchon"]
     colchon_dia = {a["fecha"]: a["colchon"] for a in datos["ajustes"] if a.get("tipo") == "colchon_dia"}
+    refuerzo_dia = {a["fecha"]: a["refuerzo"] for a in datos["ajustes"] if a.get("tipo") == "refuerzo_dia"}
 
     rel = lambda c: PatternFill("solid", fgColor=c)  # noqa: E731
     F_BLANCO, F_CREMA, F_NARANJA, F_ROSA = rel("FFFFFF"), rel("FFF2CC"), rel("F8CBAD"), rel("FF99CC")
@@ -45675,9 +45707,10 @@ async def cuadrante_exportar(center: str, desde: str, hasta: str, user: dict = D
         ws.conditional_formatting.add(zona, FormulaRule(formula=[formula], fill=F_ROJO,
                                                         font=Font(color="FFFFFF", bold=True)))
     # Las tres filas de abajo, con fórmulas.
-    fr, fm, fd = ult + 2, ult + 3, ult + 4
+    fr, fm, fo, fd = ult + 2, ult + 3, ult + 4, ult + 5
     ws.cell(fr, 2, "RUTAS (cuenta de 1)").font = Font(bold=True, size=9)
     ws.cell(fm, 2, "MÁXIMA").font = Font(bold=True, size=9)
+    ws.cell(fo, 2, "BAJAN DE OTROS CENTROS").font = Font(bold=True, size=9)
     ws.cell(fd, 2, f"DIFERENCIA (objetivo +{colchon})").font = Font(bold=True, size=9)
     for j, d in enumerate(dias):
         col = C0 + j
@@ -45690,7 +45723,10 @@ async def cuadrante_exportar(center: str, desde: str, hasta: str, user: dict = D
         c = ws.cell(fm, col, mx)
         c.font = Font(bold=True, size=9)
         c.alignment = centro
-        c = ws.cell(fd, col, f'=IF({L}{fm}="","",{L}{fr}-{L}{fm})')
+        c = ws.cell(fo, col, refuerzo_dia.get(d.isoformat()) or None)
+        c.font = Font(bold=True, size=9)
+        c.alignment = centro
+        c = ws.cell(fd, col, f'=IF({L}{fm}="","",{L}{fr}+N({L}{fo})-{L}{fm})')
         c.font = Font(bold=True, size=9)
         c.alignment = centro
         cz = colchon_dia.get(d.isoformat(), colchon)

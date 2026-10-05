@@ -107,6 +107,7 @@ PESO_SOBRA = 3000.0
 PESO_EXTRA = 90.0
 PESO_SEMANA_CORTA = 1000.0
 PREMIO_LIBRES_JUNTOS = 2.0
+PESO_JUNTOS = 40.0               # que dos personas (pareja) libren y trabajen los mismos días: preferencia, cede ante cubrir rutas
 # Reparto justo: desempates, ver la cuenta de los 99 en la cabecera.
 PESO_EXTRA_REPETIDO = 1.0
 TOPE_REPETIDOS = 3
@@ -203,6 +204,8 @@ def generar_cuadrante(entrada: Dict[str, Any]) -> Dict[str, Any]:
       "celdas": {"id|AAAA-MM-DD": "1" | "N/T" | "V" | ...},   # incluir 6 días antes
       "bloqueadas": ["id|AAAA-MM-DD", ...],   # fijadas a mano: no se tocan
       "colchon_por_dia": {"2026-10-09": 3},
+      "refuerzo_por_dia": {"2026-10-09": 4},   # gente que BAJA de otros centros ese día: cuenta como rutas hechas
+      "libran_juntos": [["id_a", "id_b"]],     # parejas que preferimos que libren (y trabajen) los mismos días
       "limites_semana": [{"conductor_id", "lunes", "max_dias"}],
       "extras": ["id|AAAA-MM-DD", ...],   # las celdas que ya son día extra (rosa)
       "segundos": 60,                   # tope de cálculo por fase
@@ -228,6 +231,10 @@ def generar_cuadrante(entrada: Dict[str, Any]) -> Dict[str, Any]:
     bloqueadas = set(entrada.get("bloqueadas") or [])
     extras_ya = set(entrada.get("extras") or [])
     colchon_dia = {_d(k): int(v) for k, v in (entrada.get("colchon_por_dia") or {}).items()}
+    refuerzo = {_d(k): max(0, int(v)) for k, v in (entrada.get("refuerzo_por_dia") or {}).items()}
+    ids_ok = {str(c["id"]) for c in conductores}
+    juntos = [(str(a), str(b)) for a, b in (entrada.get("libran_juntos") or [])
+              if str(a) in ids_ok and str(b) in ids_ok and str(a) != str(b)]
     limites = {(str(l["conductor_id"]), _d(l["lunes"])): int(l["max_dias"])
                for l in (entrada.get("limites_semana") or [])}
 
@@ -319,7 +326,7 @@ def generar_cuadrante(entrada: Dict[str, Any]) -> Dict[str, Any]:
         # ── Cada día: máxima + colchón ──
         for d in plan:
             coef, cte = suma([(c["id"], d) for c in conductores], que=1)
-            objetivo = maximas[d] + colchon_dia.get(d, colchon)
+            objetivo = max(0, maximas[d] + colchon_dia.get(d, colchon) - refuerzo.get(d, 0))
             faltas = [m.var(0, ub, entera=False, coste=pen) for ub, pen in TRAMOS_FALTA]
             sobra = m.var(0, None, entera=False, coste=PESO_SOBRA)
             c1 = dict(coef)
@@ -330,6 +337,24 @@ def generar_cuadrante(entrada: Dict[str, Any]) -> Dict[str, Any]:
             c2[sobra] = -1
             m.restr(c2, -math.inf, objetivo - cte)
             vars_dia[d] = (faltas, sobra)
+
+        # ── Parejas: que libren (y trabajen) los mismos días. Preferencia, no obligación:
+        # cede ante cubrir las rutas. |A - B| <= holgura, con coste por día en que difieran.
+        for a, b in juntos:
+            for d in plan:
+                ca, ka = suma([(a, d)])
+                cb, kb = suma([(b, d)])
+                dif = dict(ca)
+                for k, v in cb.items():
+                    dif[k] = dif.get(k, 0) - v
+                dif = {k: v for k, v in dif.items() if v}
+                if not dif:
+                    continue                      # los dos ya decididos: nada que repartir
+                h = m.var(0, 1, entera=False, coste=PESO_JUNTOS)
+                c1 = dict(dif); c1[h] = -1
+                m.restr(c1, -math.inf, kb - ka)           # A - B - h <= kb - ka
+                c2 = {k: -v for k, v in dif.items()}; c2[h] = -1
+                m.restr(c2, -math.inf, ka - kb)           # B - A - h <= ka - kb
 
         extras_sem = {}
         for c in conductores:
@@ -495,16 +520,19 @@ def generar_cuadrante(entrada: Dict[str, Any]) -> Dict[str, Any]:
     for d in plan:
         n = sum(ruta_final(c["id"], d) for c in conductores)
         cz = colchon_dia.get(d, colchon)
+        r = refuerzo.get(d, 0)                   # los que bajan de otros centros ese día
         objetivo = maximas[d] + cz
-        resumen.append({"fecha": d.isoformat(), "maxima": maximas[d], "colchon": cz,
-                        "objetivo": objetivo, "planificadas": n, "diferencia": n - maximas[d]})
-        deficit_total += max(0, objetivo - n)
-        if n < maximas[d]:
-            avisos.append(f"{d:%d/%m}: {n} rutas para una máxima de {maximas[d]}. Falta gente.")
-        elif n < objetivo:
-            avisos.append(f"{d:%d/%m}: {n} rutas, no se llega al colchón de +{cz}.")
-        elif n > objetivo:
-            avisos.append(f"{d:%d/%m}: {n} rutas, {n - objetivo} por encima de +{cz} "
+        tot = n + r                              # rutas de aquí + refuerzo
+        resumen.append({"fecha": d.isoformat(), "maxima": maximas[d], "colchon": cz, "refuerzo": r,
+                        "objetivo": objetivo, "planificadas": n, "diferencia": tot - maximas[d]})
+        deficit_total += max(0, objetivo - tot)
+        suf = f" (con {r} que bajan de otros centros)" if r else ""
+        if tot < maximas[d]:
+            avisos.append(f"{d:%d/%m}: {tot} rutas{suf} para una máxima de {maximas[d]}. Falta gente.")
+        elif tot < objetivo:
+            avisos.append(f"{d:%d/%m}: {tot} rutas{suf}, no se llega al colchón de +{cz}.")
+        elif tot > objetivo:
+            avisos.append(f"{d:%d/%m}: {tot} rutas{suf}, {tot - objetivo} por encima de +{cz} "
                           "por celdas fijadas a mano.")
     # Rachas que no se pueden arreglar (días ya pasados, celdas protegidas o fijadas)
     nombre = {c["id"]: c.get("nombre") or c["id"] for c in conductores}

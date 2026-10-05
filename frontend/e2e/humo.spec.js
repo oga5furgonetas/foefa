@@ -509,6 +509,27 @@ test.describe('Cuadrante', () => {
     expect(fallos, fallos.join(' | ')).toHaveLength(0)
   })
 
+  test('gente que baja de otros centros: fila editable que suma a la diferencia, y se guarda', async ({ page }) => {
+    const fallos = vigilar(page)
+    await entrarComoAdmin(page)
+    await simularApi(page, 'vacio')
+    const d = DATOS()
+    d.ajustes = [{ id: 'a1', center: 'NORTE', tipo: 'refuerzo_dia', fecha: dia(1), refuerzo: 3 }]
+    await page.route(/\/api\/cuadrante\?/, json(d))
+    let guardado = null
+    await page.route(/\/api\/cuadrante\/ajustes$/, async (route) => { guardado = route.request().postDataJSON(); await route.fulfill({ json: { ok: true } }) })
+    await page.goto('/panel/cuadrante', { waitUntil: 'domcontentloaded' })
+    await expect(page.getByText('Bajan de otros centros', { exact: true })).toBeVisible({ timeout: 15000 })
+    // El día con 3 que bajan viene ya puesto.
+    await expect(page.getByLabel(new RegExp(`Bajan de otros centros el ${dia(1).slice(8, 10)}/`))).toHaveValue('3')
+    // Poner 2 otro día lo guarda como orden del centro.
+    const otro = page.getByLabel(new RegExp(`Bajan de otros centros el ${dia(3).slice(8, 10)}/`))
+    await otro.fill('2')
+    await otro.blur()
+    await expect.poll(() => guardado).toMatchObject({ tipo: 'refuerzo_dia', fecha: dia(3), refuerzo: 2 })
+    expect(fallos, fallos.join(' | ')).toHaveLength(0)
+  })
+
   test('el asistente enseña lo entendido y solo aplica al confirmar', async ({ page }) => {
     const fallos = vigilar(page)
     await entrarComoAdmin(page)
