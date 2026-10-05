@@ -12,7 +12,7 @@ const PLAN_KEY_MAP = {
   Pro: 'pro',
   Enterprise: 'enterprise',
 }
-const PLAN_LABELS = { basico: 'Básico', pro: 'Pro', flota: 'Flota', enterprise: 'Enterprise', operacion: 'Operación', completo: 'Completo', autonomo: 'Repartidor' }
+const PLAN_LABELS = { basico: 'Básico', pro: 'Pro', flota: 'Flota', enterprise: 'Enterprise', operacion: 'Esencial', completo: 'Pro', holding: 'Empresa', autonomo: 'Repartidor' }
 
 export default function TrialBanner() {
   const { t } = useT()

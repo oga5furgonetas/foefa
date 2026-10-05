@@ -740,3 +740,33 @@ Nada se había borrado (org `owner` sin `modulos`, usuario `dani` sin
   quien ya tenía cuenta volvía siempre a la demo. Arreglado en `panel/auth.js` (`hayDemoDeReparto`,
   `salirDeLaDemoDeReparto`; `saveSession` la borra), `AppRedirect` en `main.jsx` y botón «Ya tengo cuenta» en la
   ruta de prueba. Prueba: `e2e/demo-no-atrapa.spec.js` (3 de 4 fallan con el código de antes). Comprobado en producción.
+
+## 06-10-2026 (madrugada): precios, demo comercial y reunión con Transportes Auto Radio (miércoles 07-10)
+- **Auto Radio** (tautoradio.com): paquetería gallega desde 1985, 5 delegaciones de transporte (Coruña-Pocomaco,
+  Santiago-A Sionlla, Lugo-O Ceao, Ourense-San Cibrao, Vigo-Beade) + 2 naves de logística en Pocomaco, +150 vehículos,
+  +250 personas. Ya usan **Alertran** (TMS: envíos, PDA, trazabilidad) y **Bizneo** (RR. HH.). Flota entra por lo que no
+  tienen: estado de la flota, golpes y quién los causa, taller, vencimientos y la operación de cada delegación.
+- **Precios nuevos** (estudio completo en `docs/PRECIOS.md`: competencia con fuentes, coste por vehículo, margen y todas
+  las casuísticas). Esencial 5 €/veh (mín. 10, 1 delegación) · Pro 9 € (mín. 20) · Empresa desde 12 € (100+, a medida).
+  Volumen −10/−15/−20 % desde 50/150/300 (`DESCUENTOS_VOLUMEN`, `_con_volumen`; también en el COBRO mensual) y anual
+  2 meses gratis. Complementos (`COMPLEMENTOS` en server.py y `lib/precios.js`). Fundador: Pro a 6 € congelado 24 meses
+  (nadie había reservado la oferta vieja «Completo a 5 € para siempre»). Las claves no cambian: operacion=Esencial,
+  completo=Pro, holding=Empresa. Esencial ya NO abre `_MODULOS_SOLO_PRO` (cuadrante, asignación, origen de daños…).
+  `/planes` y el alta usan `lib/precios.js`. Pruebas: `test_precios.py`, humo «Planes · con 150 vehículos…».
+- **Arreglos de cobro**: el cobro mensual automático habría FACTURADO a las demos (la pública y la del súper salían como
+  empresas activas con plan) y no aplicaba el descuento por volumen. Ahora excluye `interna`, `demo` y `_ORGS_DEMO`.
+- **Alta**: decía «Al finalizar se cobra el plan… salvo cancelación» sin tarjeta (falso); ahora «sin tarjeta no se cobra nunca».
+- **Demo comercial «Paquetería del Noroeste (demo)»** (`backend/demo_comercial.py`, org `demo-noroeste`, base
+  `dsp_demo_noroeste`, plan Pro, `interna`): 5 delegaciones gallegas, 150 furgonetas, 171 conductores, un mes de
+  inspecciones (~3.600), 42 golpes nuevos con su coste, 3 conductores que concentran golpes, 5 en taller con orden,
+  ITV a punto de caducar, cuadrante ±14 días. Todo inventado, sin teléfonos ni correos. Se crea al arrancar si no
+  existe y se vuelve a sembrar cada madrugada (≥4:00 Madrid); `POST /admin/demo-comercial` (super-admin) la regenera ya.
+  Se entra con «entrar como» desde Negocio. Se PUEDE escribir (para la inspección en directo). El histórico NO tiene
+  fotos: la atribución de golpes exige las dos fotos y sale con certeza media/baja; la prueba con fotos se hace en directo.
+  Verificado contra una base `prueba_*` del clúster (inicio, hoy, golpes por conductor, costes, ITV, taller,
+  disponibilidad, revisión): script en el scratchpad de la sesión 6b0ba015 (`verificar_demo.py`), base borrada al acabar.
+- **Presentación**: artefacto «Flota para Transportes Auto Radio» (14 diapositivas, notas del orador con la demo en
+  directo): https://claude.ai/artifact/SMsSFEV2iVJDEh5kWGBqyb. Huecos para Dani: [€__] coste medio de un golpe,
+  [teléfono], horas de cuadrante antes/después.
+- Pendiente antes de un cliente de pago: clave de Gemini de PAGO (la gratuita da ~20 peticiones/día; 150 furgonetas
+  hacen 150 inspecciones/día) y base de datos dedicada (tope de 500 colecciones, sin copias).

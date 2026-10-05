@@ -4,95 +4,20 @@ import { Check, Zap, ArrowRight } from 'lucide-react'
 import { API_BASE } from '../lib/apiBase'
 import { medirAccion } from '../lib/analitica'
 import { MARCA } from '../marca'
+import { PLANES_EMPRESA, DESCUENTOS_VOLUMEN, COMPLEMENTOS, REGLAS, MESES_ANUAL, precioMes, precioVehiculo, descuentoVolumen, eur } from '../lib/precios'
 
-/* Tarifa POR FURGONETA. Un DSP sabe lo que le cuesta cada furgoneta al mes;
-   "8 € por furgoneta" lo compara solo con lo que le cuesta un golpe. Estos
-   valores son el respaldo: los de verdad llegan de /billing/planes. */
-const PLANES_FALLBACK = [
-  {
-    clave: 'autonomo',
-    nombre: 'Repartidor',
-    para: 'Repartes tú mismo',
-    por_vehiculo: 0,
-    minimo_vehiculos: 0,
-    mensual: 9.99,
-    anual: 99,
-    dias_prueba: 7,
-    color: '#eab308',
-    incluye: [
-      'Escanear paquetes o foto de la etiqueta',
-      'Ruta ordenada por tiempo, franjas y hora estimada',
-      'Llamar y WhatsApp al cliente desde cada parada',
-      'Cobro a la entrega y prueba de entrega con foto',
-      'Enlace de seguimiento para tus clientes',
-      'Tu furgoneta: inspecciones, taller, ITV y seguro',
-    ],
-    no_incluye: ['Equipo de repartidores'],
-  },
-  {
-    clave: 'operacion',
-    nombre: 'Operación',
-    para: 'Una sede',
-    por_vehiculo: 5,
-    minimo_vehiculos: 20,
-    color: '#64748b',
-    incluye: [
-      'Inspecciones con foto y análisis de daños por IA',
-      'Histórico de daños por vehículo',
-      'Reparaciones: taller, coste real y cierre',
-      'Avisos de mantenimiento e ITV',
-      'Portal del conductor',
-      'Chat de la sede',
-    ],
-    no_incluye: ['Asignación diaria y turnos', 'Informe pericial firmado', 'Exportar datos', 'Varias sedes'],
-  },
-  {
-    clave: 'completo',
-    nombre: 'Completo',
-    para: 'Varias sedes',
-    por_vehiculo: 8,
-    minimo_vehiculos: 20,
-    recomendado: true,
-    color: '#fb923c',
-    incluye: [
-      'Todo lo de Operación, sin límite de sedes',
-      'Asignación diaria y cuadrante de turnos',
-      'Informe pericial firmado y cadena de custodia',
-      'Exportar datos',
-    ],
-    no_incluye: [],
-  },
-  {
-    clave: 'holding',
-    nombre: 'Holding',
-    para: 'Cinco sedes o más',
-    por_vehiculo: 0,
-    minimo_vehiculos: 0,
-    color: '#a78bfa',
-    incluye: ['Todo lo de Completo', 'Varias sociedades', 'API para tus sistemas',
-              'Soporte con SLA', 'Alta asistida'],
-    no_incluye: [],
-  },
-]
+/* Tarifa POR VEHÍCULO, con usuarios y conductores ilimitados. Los planes, los
+   descuentos y los complementos viven en lib/precios.js (y su porqué, en
+   docs/PRECIOS.md); los de verdad llegan de /billing/planes. */
+const AUTONOMO = { clave: 'autonomo', nombre: 'Repartidor', mensual: 9.99, anual: 99, dias_prueba: 7 }
+const precioAnual = (p, n, tramos) => precioMes(p, n, tramos) * MESES_ANUAL
+const ahorroAnual = (p, n, tramos) => precioMes(p, n, tramos) * (12 - MESES_ANUAL)
+const tarjeta = { background: '#13161b', border: '1px solid rgba(255,255,255,.08)', borderRadius: 20 }
 
-/* Lo que paga al mes una flota de ese tamaño. 0 = precio a medida. */
-const precioMes = (p, furgonetas) =>
-  p.mensual ? p.mensual : p.por_vehiculo ? p.por_vehiculo * Math.max(Number(furgonetas) || 0, p.minimo_vehiculos) : 0
-const eur = (n) => (Number.isInteger(n) ? String(n) : n.toFixed(2).replace('.', ','))
-
-const ENTERPRISE = {
-  feats: ['Todo lo de Completo', 'Varias sociedades consolidadas', 'Alta asistida', 'Soporte a medida', 'Integración por API'],
-}
-
-/* Pagando un año se pagan 10 meses: dos salen gratis. Antes esto era una
-   tabla de importes a mano que había que cuadrar con Lemon Squeezy. */
-const MESES_ANUAL = 10
-const precioAnual = (p, furgonetas) => precioMes(p, furgonetas) * MESES_ANUAL
-const ahorroAnual = (p, furgonetas) => precioMes(p, furgonetas) * (12 - MESES_ANUAL)
-
-/* ── Oferta Fundador: Completo a precio de Operación para siempre, plazas
-   por el backend. La reserva no cobra: captura el contacto y avisa por Telegram
-   para cerrar la venta por teléfono. ── */
+/* ── Oferta fundador (06-10-2026): Pro a 6 € por vehículo, congelado 24 meses, para las
+   10 primeras empresas. No se suma al descuento por volumen; sí al anual. Antes era
+   «Completo a 5 € para siempre»: nadie había reservado, se cambió sin faltar a nadie.
+   La reserva no cobra: guarda el contacto y avisa por Telegram para cerrar la venta. ── */
 function FounderOffer() {
   const [slots, setSlots] = useState(null)          // { total, left }
   const [open, setOpen] = useState(false)
@@ -137,11 +62,11 @@ function FounderOffer() {
             ⭐ Oferta fundador {slots ? `· quedan ${slots.left} de ${slots.total} plazas` : '· plazas limitadas'}
           </div>
           <h2 style={{ margin: '0 0 8px', fontSize: 24, fontWeight: 900, lineHeight: 1.2 }}>
-            El plan Completo a <span style={{ color: '#fbbf24' }}>5€ por vehículo, para siempre</span>
+            El plan Pro a <span style={{ color: '#fbbf24' }}>6 € por vehículo, congelado 24 meses</span>
           </h2>
           <p style={{ margin: 0, color: '#94a3b8', fontSize: 14, lineHeight: 1.6, maxWidth: 520 }}>
-            Cuadrante, varias sedes, informe pericial y exportación — todo el plan Completo (8€/vehículo) al precio del de Operación,
-            <b style={{ color: '#cbd3e0' }}> bloqueado de por vida</b> mientras seas cliente. Solo para las primeras empresas.
+            Todo Pro (9 €/vehículo): delegaciones ilimitadas, quién causa los golpes, cuadrante y turnos, plantilla y exportación.
+            Solo para las 10 primeras empresas, <b style={{ color: '#cbd3e0' }}>sin subidas durante dos años</b>. Se suma al pago anual.
             Reservar es gratis y sin compromiso: te llamamos y lo activamos juntos.
           </p>
         </div>
@@ -178,12 +103,15 @@ function FounderOffer() {
 }
 
 export default function Planes() {
-  const { lang, setLang, t } = useT()
+  const { lang, setLang } = useT()
   const [billing, setBilling] = useState('monthly') // 'monthly' | 'annual'
-  /* El visitante escribe cuántas furgonetas tiene y ve SU precio. Una tabla
-     de planes obliga a hacer cuentas; esto no. */
+  /* El visitante escribe cuántos vehículos tiene y ve SU precio, ya con el
+     descuento por volumen. Una tabla de planes obliga a hacer cuentas; esto no. */
   const [furgonetas, setFurgonetas] = useState(40)
-  const [planes, setPlanes] = useState(PLANES_FALLBACK)
+  const [planes, setPlanes] = useState(PLANES_EMPRESA)
+  const [tramos, setTramos] = useState(DESCUENTOS_VOLUMEN)
+  const [complementos, setComplementos] = useState(COMPLEMENTOS)
+  const [autonomo, setAutonomo] = useState(AUTONOMO)
 
   useEffect(() => {
     // Los precios mandan desde el backend. Si no responde, se quedan los de
@@ -191,25 +119,25 @@ export default function Planes() {
     fetch(`${API_BASE}/billing/planes`)
       .then((r) => (r.ok ? r.json() : null))
       .then((d) => {
-        const lista = d?.planes
-        if (!Array.isArray(lista) || !lista.length) return
-        // Lo del servidor manda (precios), lo de aquí completa (color, textos,
-        // precio fijo del autónomo) y una tarjeta que el servidor no conozca
-        // todavía no desaparece.
-        const delServidor = lista.map((p) => ({ ...(PLANES_FALLBACK.find((f) => f.clave === p.clave) || {}), ...p,
-          color: PLANES_FALLBACK.find((f) => f.clave === p.clave)?.color || '#64748b' }))
-        const faltan = PLANES_FALLBACK.filter((f) => !lista.some((p) => p.clave === f.clave))
-        setPlanes([...faltan.filter((f) => f.clave === 'autonomo'), ...delServidor, ...faltan.filter((f) => f.clave !== 'autonomo')])
+        const lista = Array.isArray(d?.planes) ? d.planes : []
+        setPlanes(PLANES_EMPRESA.map((f) => {
+          const s = lista.find((p) => p.clave === f.clave)
+          return s ? { ...f, ...s, desde: f.desde ?? d?.desde_empresa, color: f.color } : f
+        }))
+        const aut = lista.find((p) => p.clave === 'autonomo')
+        if (aut) setAutonomo({ ...AUTONOMO, ...aut })
+        if (Array.isArray(d?.descuentos_volumen) && d.descuentos_volumen.length) setTramos(d.descuentos_volumen)
+        if (Array.isArray(d?.complementos) && d.complementos.length) setComplementos(d.complementos)
       })
       .catch(() => { /* respaldo local */ })
   }, [])
 
+  const pct = descuentoVolumen(furgonetas, tramos)
 
   return (
     <div style={{ minHeight: '100vh', background: 'radial-gradient(1100px 560px at 72% -12%,rgba(14,165,233,.10),transparent),#0b0d10', color: '#eef1f6', fontFamily: 'Inter Variable,Inter,system-ui,sans-serif', padding: '20px 16px 80px' }}>
       <div style={{ maxWidth: 1100, margin: '0 auto' }}>
 
-        {/* Nav */}
         <nav style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 48 }}>
           <a href="/" style={{ display: 'flex', alignItems: 'center', gap: 10, textDecoration: 'none', color: '#eef1f6' }}>
             <div style={{ width: 32, height: 32, borderRadius: 9, background: 'linear-gradient(135deg,#fb923c,#ea6800)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
@@ -225,218 +153,171 @@ export default function Planes() {
           </div>
         </nav>
 
-        {/* Header */}
-        <div style={{ textAlign: 'center', marginBottom: 36 }}>
-          <div style={{ display: 'inline-flex', alignItems: 'center', gap: 6, background: 'rgba(245,158,11,.10)', border: '1px solid rgba(245,158,11,.30)', borderRadius: 20, padding: '4px 14px', fontSize: 12, fontWeight: 700, color: '#fbbf24', marginBottom: 10, letterSpacing: '.06em' }}>
-            ⭐ Acceso Fundador · plazas limitadas
-          </div>
+        <div style={{ textAlign: 'center', marginBottom: 32 }}>
           <div style={{ display: 'inline-flex', alignItems: 'center', gap: 6, background: 'rgba(14,165,233,.12)', border: '1px solid rgba(14,165,233,.3)', borderRadius: 20, padding: '4px 14px', fontSize: 12, fontWeight: 700, color: '#38bdf8', marginBottom: 16, letterSpacing: '.06em', textTransform: 'uppercase' }}>
-            ✨ 14 días gratis en todos los planes
+            ✨ 14 días gratis · sin tarjeta
           </div>
           <h1 style={{ fontSize: 'clamp(28px,5vw,44px)', fontWeight: 900, margin: '0 0 12px', lineHeight: 1.1 }}>
-            El plan que necesita tu flota
+            Se paga por vehículo. La gente, gratis.
           </h1>
-          <p style={{ color: '#8b94a3', fontSize: 16, maxWidth: 500, margin: '0 auto 24px' }}>
-            Sin permanencia. Sin tarjeta durante la prueba. Cancela cuando quieras.
+          <p style={{ color: '#8b94a3', fontSize: 16, maxWidth: 560, margin: '0 auto 24px' }}>
+            Usuarios de oficina y conductores ilimitados en todos los planes. Sin instalar nada en las furgonetas.
+            Mensual sin permanencia, o anual con 2 meses gratis.
           </p>
 
-          {/* Toggle mensual / anual */}
           <div style={{ display: 'inline-flex', alignItems: 'center', background: '#13161b', border: '1px solid rgba(255,255,255,.1)', borderRadius: 14, padding: 4, gap: 4 }}>
-            <button
-              onClick={() => setBilling('monthly')}
-              style={{ padding: '8px 20px', borderRadius: 10, border: 'none', cursor: 'pointer', fontWeight: 700, fontSize: 14, background: billing === 'monthly' ? '#1e293b' : 'transparent', color: billing === 'monthly' ? '#eef1f6' : '#64748b', transition: 'all .2s' }}
-            >
+            <button onClick={() => setBilling('monthly')}
+              style={{ padding: '8px 20px', borderRadius: 10, border: 'none', cursor: 'pointer', fontWeight: 700, fontSize: 14, background: billing === 'monthly' ? '#1e293b' : 'transparent', color: billing === 'monthly' ? '#eef1f6' : '#64748b' }}>
               Mensual
             </button>
-            <button
-              onClick={() => setBilling('annual')}
-              style={{ padding: '8px 20px', borderRadius: 10, border: 'none', cursor: 'pointer', fontWeight: 700, fontSize: 14, display: 'flex', alignItems: 'center', gap: 8, background: billing === 'annual' ? '#1e293b' : 'transparent', color: billing === 'annual' ? '#eef1f6' : '#64748b', transition: 'all .2s' }}
-            >
+            <button onClick={() => setBilling('annual')}
+              style={{ padding: '8px 20px', borderRadius: 10, border: 'none', cursor: 'pointer', fontWeight: 700, fontSize: 14, display: 'flex', alignItems: 'center', gap: 8, background: billing === 'annual' ? '#1e293b' : 'transparent', color: billing === 'annual' ? '#eef1f6' : '#64748b' }}>
               Anual
-              <span style={{ background: 'rgba(52,211,153,.15)', color: '#34d399', fontSize: 11, fontWeight: 800, padding: '2px 8px', borderRadius: 99, whiteSpace: 'nowrap' }}>
-                2 meses gratis
-              </span>
+              <span style={{ background: 'rgba(52,211,153,.15)', color: '#34d399', fontSize: 11, fontWeight: 800, padding: '2px 8px', borderRadius: 99, whiteSpace: 'nowrap' }}>2 meses gratis</span>
             </button>
           </div>
-
-          {billing === 'annual' && (
-            <p style={{ color: '#34d399', fontSize: 13, marginTop: 10, fontWeight: 600 }}>
-              💚 Un solo pago al año · sin renovaciones mensuales · precio bloqueado
-            </p>
-          )}
         </div>
 
-        {/* Oferta fundador con plazas reales */}
         <FounderOffer />
 
-        {/* Cards */}
-        {/* Cuántas furgonetas tienes: el precio se calcula con TU flota */}
+        {/* Cuántos vehículos tienes: el precio se calcula con TU flota */}
         <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 28 }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 14, flexWrap: 'wrap', justifyContent: 'center', background: '#13161b', border: '1px solid rgba(255,255,255,.1)', borderRadius: 16, padding: '14px 22px' }}>
-            <label htmlFor="flota" style={{ fontSize: 14, color: '#cbd5e1', fontWeight: 600 }}>
-              ¿Cuántos vehículos tienes?
-            </label>
-            <input
-              id="flota"
-              type="range" min="5" max="200" step="5"
-              value={furgonetas}
-              onChange={(e) => setFurgonetas(Number(e.target.value))}
-              style={{ width: 220, accentColor: '#fb923c' }}
-            />
-            <input
-              type="number" min="1" max="2000" value={furgonetas}
-              onChange={(e) => setFurgonetas(Math.max(1, Math.min(2000, Number(e.target.value) || 1)))}
-              style={{ width: 74, background: '#0b0d10', border: '1px solid rgba(255,255,255,.14)', borderRadius: 10, padding: '8px 10px', color: '#eef1f6', fontSize: 15, fontWeight: 800, textAlign: 'center' }}
-            />
+          <div style={{ ...tarjeta, borderRadius: 16, display: 'flex', alignItems: 'center', gap: 14, flexWrap: 'wrap', justifyContent: 'center', padding: '14px 22px' }}>
+            <label htmlFor="flota" style={{ fontSize: 14, color: '#cbd5e1', fontWeight: 600 }}>¿Cuántos vehículos tienes?</label>
+            <input id="flota" type="range" min="5" max="400" step="5" value={furgonetas}
+              onChange={(e) => setFurgonetas(Number(e.target.value))} style={{ width: 220, accentColor: '#fb923c' }} />
+            <input type="number" min="1" max="5000" value={furgonetas} aria-label="Número de vehículos"
+              onChange={(e) => setFurgonetas(Math.max(1, Math.min(5000, Number(e.target.value) || 1)))}
+              style={{ width: 80, background: '#0b0d10', border: '1px solid rgba(255,255,255,.14)', borderRadius: 10, padding: '8px 10px', color: '#eef1f6', fontSize: 15, fontWeight: 800, textAlign: 'center' }} />
+            <span style={{ fontSize: 12.5, fontWeight: 700, color: pct ? '#34d399' : '#64748b' }}>
+              {pct ? `−${pct} % por volumen` : `Desde ${tramos[0]?.desde || 50} vehículos, −${tramos[0]?.pct || 10} %`}
+            </span>
           </div>
         </div>
 
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(300px,1fr))', gap: 20, marginBottom: 24 }}>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(290px,1fr))', gap: 20, marginBottom: 28 }}>
           {planes.map((p) => {
-            const mes = precioMes(p, furgonetas)
-            const aMedida = !p.por_vehiculo && !p.mensual
-            const fijo = !!p.mensual
-            const mostrado = fijo
-              ? (billing === 'annual' && p.anual ? Math.round((p.anual / 12) * 100) / 100 : mes)
-              : billing === 'annual' ? Math.round(precioAnual(p, furgonetas) / 12) : mes
-            const minimo = furgonetas > 0 && furgonetas < p.minimo_vehiculos
-
+            const aMedida = !p.por_vehiculo
+            const mes = precioMes(p, furgonetas, tramos)
+            const mostrado = billing === 'annual' ? Math.round(precioAnual(p, furgonetas, tramos) / 12) : mes
+            const minimo = furgonetas < p.minimo_vehiculos
+            const porVeh = aMedida ? 0 : precioVehiculo(p, furgonetas, tramos)
             return (
               <div key={p.clave} style={{
+                ...tarjeta,
                 background: p.recomendado ? 'linear-gradient(145deg,#0f172a,#0c1929)' : '#13161b',
-                border: p.recomendado ? `2px solid ${p.color}` : '1px solid rgba(255,255,255,.08)',
-                borderRadius: 20,
-                padding: '28px 24px',
-                position: 'relative',
-                display: 'flex', flexDirection: 'column',
+                border: p.recomendado ? `2px solid ${p.color}` : tarjeta.border,
+                padding: '28px 24px', position: 'relative', display: 'flex', flexDirection: 'column',
                 boxShadow: p.recomendado ? `0 0 40px ${p.color}22` : 'none',
               }}>
                 {p.recomendado && (
-                  <div style={{ position: 'absolute', top: -12, left: '50%', transform: 'translateX(-50%)', background: p.color, borderRadius: 20, padding: '3px 14px', fontSize: 11, fontWeight: 800, whiteSpace: 'nowrap', letterSpacing: '.04em', color: '#0b0d10' }}>
+                  <div style={{ position: 'absolute', top: -12, left: '50%', transform: 'translateX(-50%)', background: p.color, borderRadius: 20, padding: '3px 14px', fontSize: 11, fontWeight: 800, whiteSpace: 'nowrap', color: '#0b0d10' }}>
                     Recomendado
                   </div>
                 )}
-
                 <div style={{ marginBottom: 20 }}>
                   <div style={{ fontSize: 12, fontWeight: 700, color: p.color, textTransform: 'uppercase', letterSpacing: '.08em', marginBottom: 6 }}>{p.nombre}</div>
                   <div style={{ fontSize: 13, color: '#8b94a3', marginBottom: 16 }}>{p.para}</div>
-
                   {aMedida ? (
-                    <div style={{ display: 'flex', alignItems: 'baseline', gap: 6 }}>
-                      <span style={{ fontSize: 30, fontWeight: 900, color: '#eef1f6' }}>A medida</span>
-                    </div>
+                    <>
+                      <div style={{ display: 'flex', alignItems: 'baseline', gap: 6 }}>
+                        <span style={{ fontSize: 15, color: '#8b94a3' }}>desde</span>
+                        <span style={{ fontSize: 44, fontWeight: 900 }}>{p.desde || 12}€</span>
+                        <span style={{ color: '#8b94a3', fontSize: 14 }}>/vehículo</span>
+                      </div>
+                      <div style={{ fontSize: 12, color: '#8b94a3', marginTop: 4 }}>A medida: lo cerramos con vosotros</div>
+                    </>
                   ) : (
                     <>
                       <div style={{ display: 'flex', alignItems: 'baseline', gap: 4 }}>
-                        <span style={{ fontSize: 44, fontWeight: 900, color: '#eef1f6' }}>{eur(mostrado)}€</span>
+                        <span style={{ fontSize: 44, fontWeight: 900 }}>{eur(mostrado)}€</span>
                         <span style={{ color: '#8b94a3', fontSize: 14 }}>/mes</span>
                       </div>
                       <div style={{ fontSize: 12, color: '#8b94a3', marginTop: 4 }}>
-                        {fijo ? `Precio fijo, todo incluido · ${p.dias_prueba || 7} días gratis` : <>
-                          {p.por_vehiculo}€ por vehículo y mes
-                          {minimo && <span style={{ color: '#64748b' }}> · mínimo {p.minimo_vehiculos}</span>}
-                        </>}
+                        {porVeh !== p.por_vehiculo
+                          ? <><s>{eur(p.por_vehiculo)}€</s> <b style={{ color: '#34d399' }}>{eur(porVeh)}€</b> por vehículo y mes</>
+                          : <>{eur(p.por_vehiculo)}€ por vehículo y mes</>}
+                        {minimo && <span style={{ color: '#64748b' }}> · mínimo {p.minimo_vehiculos}</span>}
                       </div>
-                      {fijo && billing === 'annual' && p.anual && (
+                      {billing === 'annual' && (
                         <div style={{ fontSize: 12, color: '#34d399', fontWeight: 700, marginTop: 4 }}>
-                          {eur(p.anual)}€/año · ahorras {eur(Math.round((p.mensual * 12 - p.anual) * 100) / 100)}€
-                        </div>
-                      )}
-                      {!fijo && billing === 'annual' && (
-                        <div style={{ fontSize: 12, color: '#34d399', fontWeight: 700, marginTop: 4 }}>
-                          {precioAnual(p, furgonetas)}€/año · ahorras {ahorroAnual(p, furgonetas)}€
+                          {eur(precioAnual(p, furgonetas, tramos))}€/año · ahorras {eur(ahorroAnual(p, furgonetas, tramos))}€
                         </div>
                       )}
                     </>
                   )}
                 </div>
 
-                <a
-                  href={aMedida ? '/contacto?asunto=Holding' : fijo ? `/registro?sector=autonomo&plan=autonomo&billing=${billing}` : `/registro?plan=${p.clave}&billing=${billing}&flota=${furgonetas}`}
+                <a href={aMedida ? '/contacto?asunto=Plan%20Empresa' : `/registro?plan=${p.clave}&billing=${billing}&flota=${furgonetas}`}
                   onClick={() => medirAccion('plan_elegir')}
                   style={{
-                    display: 'block', textAlign: 'center', padding: '12px 0',
-                    borderRadius: 12, fontWeight: 800, fontSize: 14, textDecoration: 'none',
-                    marginBottom: 24,
+                    display: 'block', textAlign: 'center', padding: '12px 0', borderRadius: 12, fontWeight: 800, fontSize: 14,
+                    textDecoration: 'none', marginBottom: 24,
                     background: p.recomendado ? `linear-gradient(135deg,${p.color},${p.color}cc)` : 'transparent',
-                    color: p.recomendado ? '#0b0d10' : p.color,
-                    border: p.recomendado ? 'none' : `1.5px solid ${p.color}`,
-                  }}
-                >
+                    color: p.recomendado ? '#0b0d10' : p.color, border: p.recomendado ? 'none' : `1.5px solid ${p.color}`,
+                  }}>
                   {aMedida ? 'Hablamos →' : 'Empezar 14 días gratis →'}
                 </a>
 
-                <div style={{ flex: 1 }}>
-                  <ul style={{ listStyle: 'none', padding: 0, margin: 0, display: 'flex', flexDirection: 'column', gap: 8 }}>
-                    {(p.incluye || []).map((f) => (
-                      <li key={f} style={{ display: 'flex', alignItems: 'flex-start', gap: 8, fontSize: 13, color: '#cbd5e1', lineHeight: 1.45 }}>
-                        <Check size={14} color={p.color} style={{ flexShrink: 0, marginTop: 2 }} /> {f}
-                      </li>
-                    ))}
-                  </ul>
-                  {(p.no_incluye || []).length > 0 && (
-                    <ul style={{ listStyle: 'none', padding: 0, margin: '12px 0 0', display: 'flex', flexDirection: 'column', gap: 6 }}>
-                      {p.no_incluye.map((f) => (
-                        <li key={f} style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12, color: '#475569' }}>
-                          <span style={{ fontSize: 14, lineHeight: 1 }}>✕</span> {f}
-                        </li>
-                      ))}
-                    </ul>
-                  )}
-                </div>
+                <ul style={{ listStyle: 'none', padding: 0, margin: 0, display: 'flex', flexDirection: 'column', gap: 8, flex: 1 }}>
+                  {(p.incluye || []).map((f) => (
+                    <li key={f} style={{ display: 'flex', alignItems: 'flex-start', gap: 8, fontSize: 13, color: '#cbd5e1', lineHeight: 1.45 }}>
+                      <Check size={14} color={p.color} style={{ flexShrink: 0, marginTop: 2 }} /> {f}
+                    </li>
+                  ))}
+                  {(p.no_incluye || []).map((f) => (
+                    <li key={f} style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12, color: '#475569' }}>
+                      <span style={{ fontSize: 14, lineHeight: 1 }}>✕</span> {f}
+                    </li>
+                  ))}
+                </ul>
               </div>
             )
           })}
         </div>
 
-        {/* Nota fundadores */}
-        <div style={{ background: 'rgba(245,158,11,.06)', border: '1px solid rgba(245,158,11,.18)', borderRadius: 14, padding: '14px 20px', marginBottom: 16, display: 'flex', alignItems: 'flex-start', gap: 12 }}>
-          <span style={{ fontSize: 18 }}>⭐</span>
-          <div>
-            <div style={{ fontSize: 13, fontWeight: 700, color: '#fbbf24', marginBottom: 3 }}>Los primeros clientes tienen acceso prioritario a todas las mejoras</div>
-            <div style={{ fontSize: 12.5, color: '#64748b', lineHeight: 1.5 }}>
-              Como cliente fundador, recibirás antes que nadie cada nueva función, mejora del análisis de IA y actualización del sistema. Tu flota y tu feedback moldean el producto directamente.
+        {/* Complementos: paga más y obtén… */}
+        <h2 style={{ fontSize: 22, fontWeight: 900, margin: '40px 0 6px' }}>Complementos</h2>
+        <p style={{ color: '#8b94a3', fontSize: 14, margin: '0 0 16px' }}>Se añaden a cualquier plan cuando os hagan falta.</p>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(250px,1fr))', gap: 14, marginBottom: 36 }}>
+          {complementos.map((c) => (
+            <div key={c.clave} style={{ ...tarjeta, borderRadius: 16, padding: '16px 18px' }}>
+              <div style={{ fontSize: 14, fontWeight: 800, marginBottom: 4 }}>{c.nombre}</div>
+              <div style={{ fontSize: 13, fontWeight: 700, color: '#fb923c', marginBottom: 6 }}>{c.precio}</div>
+              <div style={{ fontSize: 12.5, color: '#8b94a3', lineHeight: 1.5 }}>{c.que}</div>
             </div>
-          </div>
+          ))}
         </div>
 
-        {/* Nota upgrade prorrateado */}
-        <div style={{ background: 'rgba(14,165,233,.06)', border: '1px solid rgba(14,165,233,.18)', borderRadius: 14, padding: '14px 20px', marginBottom: 24, display: 'flex', alignItems: 'flex-start', gap: 12 }}>
-          <span style={{ fontSize: 18 }}>🔄</span>
-          <div>
-            <div style={{ fontSize: 13, fontWeight: 700, color: '#38bdf8', marginBottom: 3 }}>Cambia de plan cuando quieras — pagarás solo la diferencia</div>
-            <div style={{ fontSize: 12.5, color: '#64748b', lineHeight: 1.5 }}>
-              Si subes de Operación a Completo a mitad de mes, calculamos los días que llevas en el plan actual y te descontamos ese importe del nuevo. Nunca pagas dos veces lo mismo. Y si tu flota crece o encoge, el precio se ajusta: pagas por las furgonetas que tengas.
+        {/* Lo que siempre se pregunta */}
+        <h2 style={{ fontSize: 22, fontWeight: 900, margin: '0 0 16px' }}>Cómo se cuenta</h2>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(300px,1fr))', gap: 14, marginBottom: 36 }}>
+          {REGLAS.map(([q, a]) => (
+            <div key={q} style={{ ...tarjeta, borderRadius: 16, padding: '16px 18px' }}>
+              <div style={{ fontSize: 14, fontWeight: 800, marginBottom: 6 }}>{q}</div>
+              <div style={{ fontSize: 13, color: '#94a3b8', lineHeight: 1.55 }}>{a}</div>
             </div>
-          </div>
+          ))}
         </div>
 
-        {/* Enterprise */}
-        <div style={{ background: '#13161b', border: '1px solid rgba(255,255,255,.08)', borderRadius: 20, padding: '28px 32px', display: 'flex', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'space-between', gap: 24 }}>
+        {/* El repartidor que va solo: otro producto, otra tarifa */}
+        <div style={{ ...tarjeta, padding: '22px 26px', display: 'flex', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'space-between', gap: 16 }}>
           <div>
-            <div style={{ fontSize: 12, fontWeight: 700, color: '#f59e0b', textTransform: 'uppercase', letterSpacing: '.08em', marginBottom: 6 }}>Enterprise</div>
-            <h3 style={{ margin: '0 0 8px', fontSize: 22, fontWeight: 900 }}>Grupos de empresas · 5+ sedes</h3>
-            <p style={{ color: '#8b94a3', fontSize: 14, margin: 0 }}>Precio a medida · alta asistida</p>
-            <ul style={{ listStyle: 'none', padding: 0, margin: '12px 0 0', display: 'flex', flexWrap: 'wrap', gap: '6px 20px' }}>
-              {ENTERPRISE.feats.map((f) => (
-                <li key={f} style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, color: '#94a3b8' }}>
-                  <Check size={13} color="#f59e0b" /> {f}
-                </li>
-              ))}
-            </ul>
+            <div style={{ fontSize: 12, fontWeight: 700, color: '#eab308', textTransform: 'uppercase', letterSpacing: '.08em', marginBottom: 4 }}>¿Repartes tú solo?</div>
+            <div style={{ fontSize: 15, color: '#cbd5e1' }}>
+              La app de ruta para quien reparte por su cuenta: <b>{eur(autonomo.mensual)}€ al mes</b> o {eur(autonomo.anual)}€ al año, {autonomo.dias_prueba || 7} días gratis.
+            </div>
           </div>
-          <a href="/contacto?asunto=Enterprise" style={{ display: 'inline-flex', alignItems: 'center', gap: 8, padding: '13px 28px', borderRadius: 12, background: 'rgba(245,158,11,.15)', border: '1.5px solid rgba(245,158,11,.4)', color: '#fbbf24', fontWeight: 800, fontSize: 14, textDecoration: 'none', whiteSpace: 'nowrap' }}>
-            Hablar con ventas →
+          <a href="/repartidores" style={{ padding: '11px 22px', borderRadius: 12, border: '1.5px solid #eab308', color: '#eab308', fontWeight: 800, fontSize: 14, textDecoration: 'none', whiteSpace: 'nowrap' }}>
+            Ver la app de reparto →
           </a>
         </div>
 
-        {/* FAQ */}
-        <div style={{ marginTop: 48, textAlign: 'center' }}>
+        <div style={{ marginTop: 40, textAlign: 'center' }}>
           <p style={{ color: '#64748b', fontSize: 13 }}>
-            ¿Dudas? <a href="/contacto" style={{ color: '#0ea5e9', textDecoration: 'none' }}>Contacta con nosotros</a> · Puedes empezar con la prueba gratuita y cambiar de plan en cualquier momento.
+            Precios sin IVA. ¿Dudas? <a href="/contacto" style={{ color: '#0ea5e9', textDecoration: 'none' }}>Contacta con nosotros</a>.
           </p>
         </div>
-
       </div>
     </div>
   )

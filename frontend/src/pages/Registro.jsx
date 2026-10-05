@@ -12,6 +12,7 @@ import { tx, useIdioma, IDIOMAS, cambiarIdioma } from '../lib/idioma'
 import { desdeChina } from '../lib/apiBase'
 import { Check, Zap, Package, ShoppingCart, Warehouse, Truck, User, Send } from 'lucide-react'
 import { MARCA, dominio } from '../marca'
+import { PLANES_EMPRESA, MESES_ANUAL, precioMes as precioMesPlan, eur } from '../lib/precios'
 
 function slugify(s) {
   return (s || '').toLowerCase().trim()
@@ -20,8 +21,8 @@ function slugify(s) {
     .replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 30)
 }
 
-/* Tarifa POR FURGONETA — misma fuente que /planes y que el backend.
-   Si cambias esto, cambialo tambien en PLAN_TARIFAS de server.py. */
+/* Tarifa POR VEHÍCULO — misma fuente que /planes (lib/precios.js) y que el backend
+   (PLAN_TARIFAS de server.py; el porqué, en docs/PRECIOS.md). */
 const PLANS = [
   {
     // Precio FIJO al mes, no por vehículo: una persona con su furgoneta. Se
@@ -36,33 +37,16 @@ const PLANS = [
             'Tu furgoneta: inspecciones, taller, ITV y seguro'],
     no: ['Equipo de repartidores (eso es el plan Mensajería)'],
   },
-  {
-    key: 'operacion', name: 'Operación', color: '#64748b',
-    porVehiculo: 5, minimo: 20, popular: false,
-    who: 'Una sede',
-    feats: ['Inspecciones con foto y análisis de daños por IA',
-            'Histórico de daños por vehículo',
-            'Reparaciones: taller, coste real y cierre',
-            'Avisos de mantenimiento e ITV',
-            'Portal del conductor', 'Chat de la sede'],
-    no: ['Asignación diaria y turnos', 'Informe pericial firmado', 'Exportar datos', 'Varias sedes'],
-  },
-  {
-    key: 'completo', name: 'Completo', color: '#fb923c',
-    porVehiculo: 8, minimo: 20, popular: true,
-    who: 'Varias sedes',
-    feats: ['Todo lo de Operación, sin límite de sedes',
-            'Asignación diaria y cuadrante de turnos',
-            'Informe pericial firmado y cadena de custodia',
-            'Exportar datos'],
-    no: [],
-  },
+  // Esencial y Pro: los mismos que /planes (lib/precios.js). Empresa se cierra hablando.
+  ...PLANES_EMPRESA.filter((p) => p.por_vehiculo).map((p) => ({
+    key: p.clave, name: p.nombre, color: p.color, porVehiculo: p.por_vehiculo, minimo: p.minimo_vehiculos,
+    popular: !!p.recomendado, who: p.para, feats: p.incluye, no: p.no_incluye,
+  })),
 ]
 
-/* Lo que paga al mes esa flota. Pagando un año se pagan 10 meses. */
-const MESES_ANUAL = 10
+/* Lo que paga al mes esa flota (con mínimo y descuento por volumen). Pagando un año se pagan 10 meses. */
 const precioMes = (p, furgonetas) =>
-  p.mensual ?? p.porVehiculo * Math.max(Number(furgonetas) || 0, p.minimo)
+  p.mensual ?? precioMesPlan({ por_vehiculo: p.porVehiculo, minimo_vehiculos: p.minimo }, furgonetas)
 const annualM = (p, furgonetas) => Math.round(precioMes(p, furgonetas) * MESES_ANUAL / 12)
 const annualSave = (p, furgonetas) => precioMes(p, furgonetas) * (12 - MESES_ANUAL)
 
@@ -178,9 +162,9 @@ function PlanPicker({ onSelect, furgonetas }) {
                 <div style={{ fontSize: 12, color: '#64748b', marginBottom: 14 }}>{p.who}</div>
 
                 <div style={{ display: 'flex', alignItems: 'baseline', gap: 3, marginBottom: 4 }}>
-                  <span style={{ fontSize: 38, fontWeight: 900 }}>{price}€</span>
+                  <span style={{ fontSize: 38, fontWeight: 900 }}>{eur(price)}€</span>
                   <span style={{ color: '#64748b', fontSize: 13 }}>/mes</span>
-                  {billing === 'annual' && <span style={{ marginLeft: 6, fontSize: 12, color: '#475569', textDecoration: 'line-through' }}>{mes}€</span>}
+                  {billing === 'annual' && <span style={{ marginLeft: 6, fontSize: 12, color: '#475569', textDecoration: 'line-through' }}>{eur(mes)}€</span>}
                 </div>
                 {/* El precio es por furgoneta: sin esta línea, «200 €/mes» parecía
                     una cuota fija y chocaba con el «desde 5 €» de la portada. */}
@@ -190,7 +174,7 @@ function PlanPicker({ onSelect, furgonetas }) {
                 </div>
 
                 {billing === 'annual' && (
-                  <div style={{ fontSize: 11, color: '#34d399', fontWeight: 700, marginBottom: 4 }}>{precioMes(p, furgonetas) * MESES_ANUAL}€/año · ahorras {save}€</div>
+                  <div style={{ fontSize: 11, color: '#34d399', fontWeight: 700, marginBottom: 4 }}>{eur(precioMes(p, furgonetas) * MESES_ANUAL)}€/año · ahorras {eur(save)}€</div>
                 )}
 
                 <ul style={{ listStyle: 'none', padding: 0, margin: '14px 0', display: 'flex', flexDirection: 'column', gap: 6, flex: 1 }}>
@@ -508,7 +492,7 @@ export default function Registro() {
           <input type="checkbox" checked={accept} onChange={(e) => setAccept(e.target.checked)} style={{ marginTop: 2 }} />
           <span>
             {conEnlaces(tt('Acepto los [Términos], el [Acuerdo de Encargo del Tratamiento] y la [Política de Privacidad].'), ['/terminos', '/encargo', '/privacidad'])}
-            {' '}{tt('Prueba gratuita de {n} días — sin cobro durante la prueba. Al finalizar se cobra el plan {plan} ({precio} €/mes) salvo cancelación.', {
+            {' '}{tt('Prueba gratuita de {n} días. Hoy no se cobra nada y sin tarjeta no se cobra nunca: al acabar eliges si seguir con el plan {plan} ({precio} €/mes).', {
               n: diasPrueba, plan: tt(planInfo.name), precio: precioFijo ? displayPrice.toFixed(2).replace('.', ',') : displayPrice })}
           </span>
         </label>

@@ -8,7 +8,7 @@ from typing import Optional
 _TEXTO = io.open(Path(__file__).resolve().parents[1] / "server.py", encoding="utf-8-sig").read()
 _NS = {"Optional": Optional}
 _QUIERO = {"MODULOS_PANEL", "_MODULOS_CLAVES", "MODULOS_ESTANDAR", "_MODULOS_FIJOS",
-           "org_modulos", "_modulos_modo"}
+           "_MODULOS_SOLO_PRO", "org_modulos", "_modulos_modo"}
 for _n in ast.parse(_TEXTO).body:
     _nombre = getattr(_n, "name", None) or (
         getattr(_n.targets[0], "id", None) if isinstance(_n, ast.Assign) else None)

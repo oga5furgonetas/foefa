@@ -6,6 +6,7 @@ import reparto
 import whatsapp
 import analitica
 import ciclo_correos
+import demo_comercial as _demo_com
 from ai_learning import (
     get_few_shot_examples, build_few_shot_prompt_parts_multimodal,
     get_pattern_lessons, get_part_lesson, save_feedback as _save_ai_feedback,
@@ -1268,6 +1269,12 @@ SECTORES_REGISTRO = {
 }
 
 
+# Lo que solo abre el plan Pro (o Empresa): con Esencial no sale aunque la empresa
+# lo tenga marcado. Casa con lo que dice /billing/planes (docs/PRECIOS.md §3).
+_MODULOS_SOLO_PRO = ("asignacion", "cuadrante", "turnos", "checklist-operativo", "plantilla",
+                     "aparcamiento", "incorporaciones", "empleo", "contactos", "origen-danos", "revision")
+
+
 def org_modulos(org) -> Optional[list]:
     """Claves que ve la empresa, o None si lo ve TODO."""
     if not org or org.get("account_type") == "owner" or org.get("id") == "demo":
@@ -1278,6 +1285,8 @@ def org_modulos(org) -> Optional[list]:
     if not isinstance(m, list):
         m = MODULOS_ESTANDAR
     vistos = set(m) | set(_MODULOS_FIJOS)
+    if str(org.get("plan") or "").strip().lower() in ("operacion", "basico"):   # Esencial
+        vistos -= set(_MODULOS_SOLO_PRO)
     return [k for k in _MODULOS_CLAVES if k in vistos]
 
 
@@ -5198,10 +5207,31 @@ async def org_billing(user: dict = Depends(get_current_user)):
 PLAN_TARIFAS = {
     # `mensual`: precio fijo (y `anual`, pagando el año: 10 meses). 7 días de prueba.
     "autonomo":  {"por_vehiculo": 0, "minimo_vehiculos": 0, "mensual": 9.99, "anual": 99, "dias_prueba": 7, "rango": 0},
-    "operacion": {"por_vehiculo": 5, "minimo_vehiculos": 20, "rango": 1},
-    "completo":  {"por_vehiculo": 8, "minimo_vehiculos": 20, "rango": 2},
-    "holding":   {"por_vehiculo": 0, "minimo_vehiculos": 0,  "rango": 3},  # a medida
+    # Precios del 06-10-2026: el porqué (competencia, costes, margen) está en docs/PRECIOS.md.
+    # Las claves no cambian (hay datos con ellas); en pantalla se llaman Esencial, Pro y Empresa.
+    "operacion": {"por_vehiculo": 5, "minimo_vehiculos": 10, "rango": 1},   # Esencial
+    "completo":  {"por_vehiculo": 9, "minimo_vehiculos": 20, "rango": 2},   # Pro
+    "holding":   {"por_vehiculo": 0, "minimo_vehiculos": 0,  "rango": 3},   # Empresa: a medida, desde 12 €
 }
+# Descuento por volumen sobre el precio por vehículo (docs/PRECIOS.md §5): desde 50
+# vehículos −10 %, desde 150 −15 %, desde 300 −20 %. El anual (2 meses gratis) se suma aparte.
+DESCUENTOS_VOLUMEN = ((300, 20), (150, 15), (50, 10))
+
+
+def _descuento_volumen(n_vehiculos) -> int:
+    """Porcentaje de descuento por tamaño de flota (0 si no llega al primer tramo)."""
+    n = int(n_vehiculos or 0)
+    for desde, pct in DESCUENTOS_VOLUMEN:
+        if n >= desde:
+            return pct
+    return 0
+
+
+def _con_volumen(por_vehiculo, n_vehiculos, minimo) -> float:
+    """Importe al mes de un plan por vehículo, con el mínimo y el descuento por volumen."""
+    n = max(int(n_vehiculos or 0), int(minimo or 0))
+    bruto = float(por_vehiculo) * n
+    return round(bruto * (100 - _descuento_volumen(n)) / 100, 2)
 # Claves antiguas -> nuevas. Sin esto, una organizacion con plan "pro" se
 # quedaria sin tarifa y sin limites.
 _PLAN_ALIAS = {"basico": "operacion", "pro": "completo", "flota": "completo",
@@ -5225,15 +5255,15 @@ def _catalogo_por_defecto():
              "por_vehiculo": 0, "minimo_vehiculos": 0,
              "mensual": PLAN_TARIFAS["autonomo"]["mensual"], "anual": PLAN_TARIFAS["autonomo"]["anual"],
              "dias_prueba": PLAN_TARIFAS["autonomo"]["dias_prueba"], "recomendado": False},
-            {"clave": "operacion", "nombre": "Operación", "para": "Un centro",
+            {"clave": "operacion", "nombre": "Esencial", "para": "Una delegación",
              "por_vehiculo": PLAN_TARIFAS["operacion"]["por_vehiculo"],
              "minimo_vehiculos": PLAN_TARIFAS["operacion"]["minimo_vehiculos"],
              "recomendado": False},
-            {"clave": "completo", "nombre": "Completo", "para": "Varios centros",
+            {"clave": "completo", "nombre": "Pro", "para": "Varias delegaciones y la operación diaria",
              "por_vehiculo": PLAN_TARIFAS["completo"]["por_vehiculo"],
              "minimo_vehiculos": PLAN_TARIFAS["completo"]["minimo_vehiculos"],
              "recomendado": True},
-            {"clave": "holding", "nombre": "Holding", "para": "Cinco estaciones o más",
+            {"clave": "holding", "nombre": "Empresa", "para": "100 vehículos o más",
              "por_vehiculo": 0, "minimo_vehiculos": 0, "recomendado": False},
         ],
     }
@@ -5287,7 +5317,7 @@ def _precio_mensual(plan, n_vehiculos: int) -> int:
         return t["mensual"]
     if not t or not t.get("por_vehiculo"):
         return 0
-    return int(t["por_vehiculo"] * max(int(n_vehiculos or 0), t["minimo_vehiculos"]))
+    return _con_volumen(t["por_vehiculo"], n_vehiculos, t["minimo_vehiculos"])
 
 
 async def _precio_vigente(plan, n_vehiculos: int) -> int:
@@ -5297,8 +5327,7 @@ async def _precio_vigente(plan, n_vehiculos: int) -> int:
         return float(t["mensual"])
     if not t or not t.get("por_vehiculo"):
         return 0
-    return int(float(t["por_vehiculo"]) * max(int(n_vehiculos or 0),
-                                              int(t.get("minimo_vehiculos") or 0)))
+    return _con_volumen(t["por_vehiculo"], n_vehiculos, t.get("minimo_vehiculos"))
 
 
 # Compatibilidad: precio de referencia de una flota tipo (30 furgonetas), para
@@ -5433,33 +5462,38 @@ async def billing_planes():
             ],
             "no_incluye": ["Equipo de repartidores (eso es el plan Mensajería)"],
         },
+        # Lo que lleva cada plan (docs/PRECIOS.md §3). Tiene que casar con lo que de
+        # verdad abre la app: `_MODULOS_SOLO_PRO` y PLAN_LIMITS.
         "operacion": {
             "incluye": [
-                "Inspecciones con foto y análisis de daños por IA",
-                "Histórico de daños por vehículo",
-                "Reparaciones: taller, coste real y cierre",
-                "Avisos de mantenimiento e ITV",
-                "Portal del conductor",
-                "Chat del equipo",
+                "Vehículos, documentos y vencimientos (ITV, seguro, renting)",
+                "Inspección diaria con fotos y daños detectados por IA",
+                "Incidencias, talleres y órdenes de reparación con su coste",
+                "Conductores y su portal en el móvil",
+                "Chat interno, importar de Excel y avisos por correo",
+                "Usuarios y conductores ilimitados",
             ],
-            "no_incluye": ["Asignación diaria y turnos",
-                           "Atribución de daños por conductor",
-                           "Informe pericial firmado", "Exportar datos", "Varias sedes"],
+            "no_incluye": ["Quién causa los golpes", "Qué furgoneta lleva cada uno",
+                           "Cuadrante, turnos y días libres", "Varias delegaciones"],
         },
         "completo": {
             "incluye": [
-                "Todo lo de Operación, sin límite de sedes",
-                "Asignación diaria y cuadrante de turnos con generador automático",
-                "Atribución de daños por conductor",
-                "Disponibilidad de flota: si llegas al trabajo de mañana",
-                "Informe pericial firmado y cadena de custodia",
-                "Exportar datos",
+                "Todo lo de Esencial, con delegaciones ilimitadas y un jefe por delegación",
+                "Revisión rápida de daños y quién causa los golpes",
+                "Qué furgoneta lleva cada uno: asignación y furgonetas fijas",
+                "Cuadrante con motor, turnos y días libres desde el móvil",
+                "Plantilla de salida, checklist de apertura y cierre, aparcamiento",
+                "Incorporaciones, empleo y contactos",
+                "Informe de inspección firmado y exportar a Excel",
             ],
             "no_incluye": [],
         },
         "holding": {
-            "incluye": ["Todo lo de Completo", "Varias sociedades",
-                        "API para tus sistemas", "Soporte con SLA", "Alta asistida"],
+            "incluye": ["Todo lo de Pro", "Informes periciales con IA para reclamar al renting o al seguro",
+                        "WhatsApp con conductores y talleres (2.000 mensajes al mes)",
+                        "API de solo lectura para sacar flota y taller a vuestros sistemas",
+                        "Implantación y formación por delegación incluidas",
+                        "Soporte prioritario con persona asignada"],
             "no_incluye": [],
         },
     }
@@ -5476,7 +5510,33 @@ async def billing_planes():
         "moneda": cat.get("moneda", "EUR"),
         "descuento_anual_meses": cat.get("descuento_anual_meses", 2),
         "planes": planes,
+        "desde_empresa": EMPRESA_DESDE_VEHICULO,
+        "descuentos_volumen": [{"desde": d, "pct": pct} for d, pct in sorted(DESCUENTOS_VOLUMEN)],
+        "complementos": COMPLEMENTOS,
     }
+
+
+# Lo que se puede añadir a un plan (docs/PRECIOS.md §4). Se enseña en /planes; se
+# contrata hablando con nosotros y se factura en el cobro mensual.
+EMPRESA_DESDE_VEHICULO = 12
+COMPLEMENTOS = [
+    {"clave": "reparto", "nombre": "Reparto", "precio": "6 € por conductor que la use en el mes",
+     "que": "App de ruta: escanear o foto a la etiqueta, ruta ordenada por tiempo, navegación, "
+            "prueba de entrega, seguimiento para el cliente y cobro."},
+    {"clave": "whatsapp", "nombre": "WhatsApp", "precio": "150 € de alta + mensajes a precio de Meta + 20 %",
+     "que": "Avisos y conversaciones con conductores y talleres desde vuestro número. Incluido en Empresa."},
+    {"clave": "peritaje", "nombre": "Informe pericial con IA", "precio": "9 € cada uno · 20 por 120 €",
+     "que": "Informe para reclamar un golpe al renting o al seguro. Incluido en Empresa."},
+    {"clave": "colaboradores", "nombre": "Vehículos de colaboradores", "precio": "3 € por vehículo y mes",
+     "que": "Furgonetas de subcontratas: inspección, documentos y vencimientos."},
+    {"clave": "campana", "nombre": "Vehículos de campaña", "precio": "0,30 € por día de alta",
+     "que": "Furgonetas de refuerzo en Black Friday o Navidad, solo los días que estén."},
+    {"clave": "implantacion", "nombre": "Implantación asistida", "precio": "490 € hasta 50 vehículos · 990 € hasta 200",
+     "que": "Cargamos flota y conductores, configuramos delegaciones y permisos y formamos al equipo. "
+            "Gratis con contrato anual de 100 vehículos o más."},
+    {"clave": "formacion", "nombre": "Formación presencial", "precio": "300 € por jornada + desplazamiento",
+     "que": "En vuestras delegaciones."},
+]
 
 
 # =========================
@@ -5510,7 +5570,11 @@ async def _cobros_del_mes(mes: str, crear: bool = True):
     cat = await _catalogo_planes()
     iva_pct = float(cat.get("iva_pct") or 21)
     orgs = await global_db.organizations.find(
-        {"account_type": "dsp", "status": {"$in": ["active", "trial"]}}, {"_id": 0}).to_list(2000)
+        {"account_type": "dsp", "status": {"$in": ["active", "trial"]},
+         # Las demos (la pública, la del súper y la comercial) NO se facturan: antes
+         # salían como empresas activas con plan y se les generaba un cobro.
+         "interna": {"$ne": True}, "demo": {"$ne": True}, "id": {"$nin": list(_ORGS_DEMO)}},
+        {"_id": 0}).to_list(2000)
 
     creados = []
     for o in orgs:
@@ -5529,7 +5593,8 @@ async def _cobros_del_mes(mes: str, crear: bool = True):
         minimo = int(tarifa.get("minimo_vehiculos") or 0)
         # Precio pactado a mano (holding, descuentos): manda sobre la tarifa.
         pactado = _a_numero(o.get("precio_mes_pactado"))
-        base = round(pactado if pactado > 0 else por_veh * max(vehiculos, minimo), 2)
+        # Con el descuento por volumen (docs/PRECIOS.md §5), el mismo que enseña /planes.
+        base = round(pactado if pactado > 0 else _con_volumen(por_veh, vehiculos, minimo), 2)
         if base <= 0:
             continue                      # a medida sin precio puesto: no se cobra solo
 
@@ -6805,6 +6870,78 @@ async def _demo_regenerar():
         await ddb.shifts.insert_many(turnos, ordered=False)
     await ddb.app_meta.update_one({"_id": "demo_dia"}, {"$set": {"dia": hoy, "clave": clave, "at": ahora}}, upsert=True)
     logger.info("Demo: datos regenerados para %s", hoy)
+
+
+# ── DEMO COMERCIAL «Paquetería del Noroeste» (06-10-2026) ─────────────────────
+# Para enseñar Flota a una paquetería de verdad (la primera, Transportes Auto Radio):
+# 5 delegaciones, 150 furgonetas y un mes de operación. Qué lleva y por qué, en
+# demo_comercial.py. Se puede escribir en ella (inspección en directo con el móvil),
+# no se factura (`interna`) y se entra con «entrar como» desde Negocio.
+_DEMO_COM_DB = os.environ.get("DEMO_COMERCIAL_DB", "dsp_demo_noroeste")
+_ORGS_DEMO = ("demo", "demo-reparto", _demo_com.ORG_ID)
+
+
+async def demo_comercial_sembrar(forzar: bool = False) -> dict:
+    """Crea la empresa y sus datos. Con `forzar`, borra lo que haya y vuelve a sembrar
+    con las fechas de hoy (lo hecho en directo en una reunión se pierde: es la idea)."""
+    org = await global_db.organizations.find_one({"id": _demo_com.ORG_ID}, {"_id": 0, "id": 1})
+    if org and not forzar:
+        return {"creada": False}
+    if not org:
+        await global_db.organizations.insert_one({
+            "id": _demo_com.ORG_ID, "name": _demo_com.NOMBRE, "account_type": "dsp", "slug": _demo_com.ORG_ID,
+            "db_name": _DEMO_COM_DB, "status": "active", "plan": "completo", "sector": "mensajeria",
+            "modulos": list(_demo_com.MODULOS), "centers": list(_demo_com.CENTROS), "max_centers": 999,
+            "interna": True, "pais": "es", "zona_horaria": "Europe/Madrid",
+            "created_at": datetime.now(timezone.utc).isoformat()})
+    ddb = client[_DEMO_COM_DB]
+    datos = _demo_com.generar()
+    cuenta = {}
+    for col, docs in datos.items():
+        await ddb[col].delete_many({})
+        if docs:
+            await ddb[col].insert_many([dict(d) for d in docs])
+        cuenta[col] = len(docs)
+    try:
+        await _ensure_tenant_indexes(_DEMO_COM_DB)
+    except Exception as e:                                        # noqa: BLE001
+        logger.warning("Demo comercial: índices: %s", e)
+    await ddb.app_meta.update_one({"_id": "demo_comercial"}, {"$set": {"dia": _demo_com_dia()}}, upsert=True)
+    logger.info("Demo comercial sembrada: %s", cuenta)
+    return {"creada": True, **cuenta}
+
+
+def _demo_com_dia() -> str:
+    from zoneinfo import ZoneInfo
+    return datetime.now(ZoneInfo("Europe/Madrid")).strftime("%Y-%m-%d")
+
+
+@app.on_event("startup")
+async def start_demo_comercial():
+    """La crea si no existe y la vuelve a sembrar cada madrugada (desde las 4:00 de
+    Madrid): sin esto, el día de la reunión «Hoy» sale vacío y el último mes no llega
+    a hoy. Los accesos al portal que se den (driver_accounts) no se tocan."""
+    async def _bucle():
+        await asyncio.sleep(60)
+        while os.environ.get("DEMO_COMERCIAL", "1").strip() != "0":
+            try:
+                if not (await demo_comercial_sembrar())["creada"]:
+                    from zoneinfo import ZoneInfo
+                    meta = await client[_DEMO_COM_DB].app_meta.find_one({"_id": "demo_comercial"}) or {}
+                    if meta.get("dia") != _demo_com_dia() and datetime.now(ZoneInfo("Europe/Madrid")).hour >= 4:
+                        await demo_comercial_sembrar(forzar=True)
+            except Exception as e:                                # noqa: BLE001
+                logger.error("Demo comercial: %s", e)
+            await asyncio.sleep(30 * 60)
+    asyncio.create_task(_bucle())
+
+
+@api_router.post("/admin/demo-comercial")
+async def admin_demo_comercial(user: dict = Depends(require_superadmin)):
+    """Vuelve a sembrar la demo comercial con las fechas de hoy (antes de una reunión)."""
+    r = await demo_comercial_sembrar(forzar=True)
+    await _audit(user, "demo_comercial_regenerada", r)
+    return {"success": True, **r}
 
 
 @auth_router.post("/demo-login")

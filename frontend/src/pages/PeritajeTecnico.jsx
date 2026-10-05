@@ -3,7 +3,7 @@ import { ShieldCheck, FileLock2, Fingerprint, AlertTriangle, Check, ArrowRight }
 import { LANGS, useT } from '../i18n'
 import { MARCA } from '../marca'
 
-// Página de la función estrella: el informe pericial (plan Completo).
+// Página de la función estrella: el informe pericial (plan Pro).
 // Lenguaje: "evidencia técnica con cadena de custodia". NUNCA "admisible en juicio".
 export default function PeritajeTecnico() {
   const { lang, setLang } = useT()
@@ -97,7 +97,7 @@ export default function PeritajeTecnico() {
       {/* Qué incluye */}
       <section className="mx-auto max-w-5xl px-5 py-16">
         <h2 className="mb-3 text-center text-3xl font-extrabold">Qué incluye el informe pericial</h2>
-        <p className="mb-10 text-center text-dark-400">Va en el plan Completo, con lo que de verdad cierra disputas:</p>
+        <p className="mb-10 text-center text-dark-400">Va en el plan Pro, con lo que de verdad cierra disputas:</p>
         <div className="grid gap-3 md:grid-cols-2">
           {[
             ['Peritaje técnico firmado', 'PDF con cadena de custodia hash + datos del conductor.'],

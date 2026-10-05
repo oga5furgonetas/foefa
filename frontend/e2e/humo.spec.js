@@ -1405,12 +1405,26 @@ test('App · sin sesión arranca en Empezar: crear cuenta, entrar y probar a la 
   await expect(page.getByText('Plan elegido')).toBeVisible()
 })
 
-test('Planes · la tarjeta Repartidor sale con precio fijo', async ({ page }) => {
+test('Planes · el repartidor sale aparte con su precio fijo aunque el servidor no lo mande', async ({ page }) => {
   await page.route(/\/api\/billing\/planes/, (r) => r.fulfill({ json: { planes: [
-    { clave: 'operacion', nombre: 'Operación', para: 'Un centro', por_vehiculo: 5, minimo_vehiculos: 20 }] } }))
+    { clave: 'operacion', nombre: 'Esencial', para: 'Una delegación', por_vehiculo: 5, minimo_vehiculos: 10 }] } }))
   await page.goto('/planes', { waitUntil: 'domcontentloaded' })
-  await expect(page.getByText('Repartidor', { exact: true })).toBeVisible()
-  await expect(page.getByText(/Precio fijo, todo incluido · 7 días gratis/)).toBeVisible()
+  await expect(page.getByText('¿Repartes tú solo?')).toBeVisible()
+  await expect(page.getByText(/9,99€ al mes/)).toBeVisible()
+})
+
+/* PRECIOS DEL 06-10-2026 (docs/PRECIOS.md): Esencial, Pro y Empresa, descuento por volumen
+   y complementos. 150 vehículos en Pro = 9 € − 15 % = 7,65 € → 1.147,50 € al mes. */
+test('Planes · con 150 vehículos, Pro sale con el −15 % por volumen y hay complementos', async ({ page }) => {
+  await page.goto('/planes', { waitUntil: 'domcontentloaded' })
+  await expect(page.getByText('Pro', { exact: true })).toBeVisible()
+  await expect(page.getByText('Esencial', { exact: true })).toBeVisible()
+  await page.getByLabel('Número de vehículos').fill('150')
+  await expect(page.getByText('−15 % por volumen')).toBeVisible()
+  await expect(page.getByText('1147,50€').first()).toBeVisible()          // en español, 4 cifras van sin punto
+  await expect(page.getByText('7,65€').first()).toBeVisible()
+  await expect(page.getByRole('heading', { name: 'Complementos' })).toBeVisible()
+  await expect(page.getByText('Vehículos de colaboradores')).toBeVisible()
 })
 
 /* SUSCRIBIRSE CON STRIPE desde el aviso de prueba: el servidor crea la sesión

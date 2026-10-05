@@ -501,15 +501,15 @@ async def test_tarifa_por_furgoneta(client):
 
     # Precio: por furgoneta, con mínimo facturable
     assert srv._precio_mensual("operacion", 40) == 200
-    assert srv._precio_mensual("completo", 40) == 320
-    assert srv._precio_mensual("completo", 120) == 960
-    assert srv._precio_mensual("operacion", 5) == 100      # mínimo de 20
+    assert srv._precio_mensual("completo", 40) == 360
+    assert srv._precio_mensual("completo", 120) == 972     # 9 x 120 con el -10 % desde 50
+    assert srv._precio_mensual("operacion", 5) == 50       # mínimo de 10
     assert srv._precio_mensual("holding", 500) == 0        # a medida
 
     # Las claves antiguas siguen valiendo: ninguna organización se rompe
     assert srv._plan_canon("pro") == "completo"
     assert srv._plan_canon("basico") == "operacion"
-    assert srv._precio_mensual("pro", 40) == 320
+    assert srv._precio_mensual("pro", 40) == 360
 
     # La IA va en TODOS los planes
     for plan in ("operacion", "completo", "holding", "basico", "pro", "flota"):

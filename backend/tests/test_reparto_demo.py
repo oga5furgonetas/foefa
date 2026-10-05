@@ -103,7 +103,7 @@ def test_cada_sector_nace_con_lo_suyo():
 def test_plan_autonomo_precio_fijo_y_siete_dias():
     assert server._precio_mensual("autonomo", 1) == 9.99
     assert server._precio_mensual("autonomo", 40) == 9.99          # no es por vehículo
-    assert server._precio_mensual("operacion", 10) == 100          # los demás, como antes
+    assert server._precio_mensual("operacion", 10) == 50           # los demás, por vehículo (Esencial, mínimo 10)
     assert server.PLAN_LIMITS["autonomo"]["max_drivers"] == 1
     cat = server._catalogo_por_defecto()
     aut = next(p for p in cat["planes"] if p["clave"] == "autonomo")
