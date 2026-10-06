@@ -34,8 +34,9 @@ const PLANS = [
             'Llamar y WhatsApp al cliente desde cada parada',
             'Cobro a la entrega, recogidas y prueba de entrega con foto',
             'Enlace de seguimiento para tus clientes',
-            'Tu furgoneta: inspecciones, taller, ITV y seguro'],
-    no: ['Equipo de repartidores (eso es el plan Mensajería)'],
+            'Navegación con voz dentro de la app, parada a parada'],
+    // Sin furgoneta, taller ni equipo: la app de ruta no tiene panel de flota (SECTORES_REGISTRO).
+    no: ['Equipo de repartidores y flota (para eso están los planes de empresa)'],
   },
   // Esencial y Pro: los mismos que /planes (lib/precios.js). Empresa se cierra hablando.
   ...PLANES_EMPRESA.filter((p) => p.por_vehiculo).map((p) => ({

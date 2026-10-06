@@ -5465,9 +5465,10 @@ async def billing_planes():
                 "Llamar y WhatsApp al cliente desde cada parada",
                 "Cobro a la entrega, recogidas y prueba de entrega con foto",
                 "Enlace de seguimiento para tus clientes",
-                "Tu furgoneta: inspecciones, taller, ITV y seguro",
+                "Navegación con voz dentro de la app, parada a parada",
             ],
-            "no_incluye": ["Equipo de repartidores (eso es el plan Mensajería)"],
+            # Sin furgoneta, taller ni equipo: SECTORES_REGISTRO["autonomo"] no lleva flota.
+            "no_incluye": ["Equipo de repartidores y flota (para eso están los planes de empresa)"],
         },
         # Lo que lleva cada plan (docs/PRECIOS.md §3). Tiene que casar con lo que de
         # verdad abre la app: `_MODULOS_SOLO_PRO` y PLAN_LIMITS.
