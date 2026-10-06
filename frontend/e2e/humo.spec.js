@@ -1089,6 +1089,33 @@ test.describe('Con datos', () => {
     await expect(page.getByText('1234 ABC')).toBeVisible()
     expect(fallos, fallos.join(' | ')).toHaveLength(0)
   })
+
+  /* 06-10-2026: /planes vende colaboradores a 3 € y campaña a 0,30 €/día, y Pro promete
+     exportar a Excel. La ficha tiene que poder marcarlo y la lista bajarse. */
+  test('la ficha dice cómo se factura cada furgoneta y la lista se baja en Excel', async ({ page }) => {
+    const fallos = vigilar(page)
+    await entrarComoAdmin(page)
+    await simularApi(page, 'lleno')
+    let cuerpo = null
+    await page.route('**/api/vehicles/*', (route) => {
+      if (route.request().method() !== 'PATCH') return route.fallback()
+      cuerpo = route.request().postDataJSON()
+      return route.fulfill({ status: 200, contentType: 'application/json', body: '{"success":true}' })
+    })
+    await page.goto('/panel/vehiculos', { waitUntil: 'domcontentloaded' })
+    await expect(page.getByText('1234 ABC')).toBeVisible({ timeout: 15000 })
+
+    const descarga = page.waitForEvent('download')
+    await page.getByRole('button', { name: /Excel/ }).click()
+    expect((await descarga).suggestedFilename()).toMatch(/^furgonetas-\d{4}-\d{2}-\d{2}\.csv$/)
+
+    await page.getByText('1234 ABC').first().click()
+    await expect(page.getByText('Cómo se factura')).toBeVisible()
+    await page.getByRole('button', { name: 'De colaborador' }).click()
+    await expect.poll(() => cuerpo).toEqual({ alta: 'colaborador' })
+    await expect(page.getByText('Subcontrata con su furgoneta: 3 € al mes, fuera del plan.')).toBeVisible()
+    expect(fallos, fallos.join(' | ')).toHaveLength(0)
+  })
 })
 
 /* REPARTO A DOMICILIO (03-10-2026): la oficina ve los pedidos con su

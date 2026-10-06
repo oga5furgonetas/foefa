@@ -419,6 +419,12 @@ function Cobros() {
                       <td className="py-2 pr-3">
                         <div className="font-medium text-dark-100">{c.org_nombre}</div>
                         <div className="text-[11px] text-dark-500">{c.plan}</div>
+                        {/* Desglose: plan + colaboradores, campaña y reparto (06-10-2026). */}
+                        {(c.lineas || []).length > 1 && (
+                          <div className="mt-0.5 text-[11px] leading-snug text-dark-500">
+                            {c.lineas.map((li) => `${li.concepto}: ${eur(li.importe)}`).join(' · ')}
+                          </div>
+                        )}
                       </td>
                       <td className="py-2 text-right text-dark-300">{c.vehiculos}</td>
                       <td className="py-2 text-right text-dark-400">{eur(c.base)}</td>

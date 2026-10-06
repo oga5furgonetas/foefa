@@ -15,7 +15,7 @@ export const PLANES_EMPRESA = [
       'Chat interno, importar de Excel y avisos por correo',
       'Usuarios y conductores ilimitados',
     ],
-    no_incluye: ['Quién causa los golpes', 'Qué furgoneta lleva cada uno', 'Cuadrante, turnos y días libres', 'Varias delegaciones'],
+    no_incluye: ['Quién causa los golpes', 'Qué furgoneta lleva cada uno', 'Cuadrante, turnos y días libres', 'Informe pericial firmado', 'Varias delegaciones'],
   },
   {
     clave: 'completo', nombre: 'Pro', para: 'Varias delegaciones y la operación diaria',
@@ -27,7 +27,8 @@ export const PLANES_EMPRESA = [
       'Cuadrante con motor, turnos y días libres desde el móvil',
       'Plantilla de salida, checklist de apertura y cierre, aparcamiento',
       'Incorporaciones, empleo y contactos',
-      'Informe de inspección firmado y exportar a Excel',
+      'Informe pericial firmado, sin límite, para reclamar al renting o al seguro',
+      'Exportar a Excel',
     ],
     no_incluye: [],
   },
@@ -36,7 +37,6 @@ export const PLANES_EMPRESA = [
     por_vehiculo: 0, minimo_vehiculos: 0, desde: 12, color: '#a78bfa',
     incluye: [
       'Todo lo de Pro',
-      'Informes periciales con IA para reclamar al renting o al seguro',
       'WhatsApp con conductores y talleres (2.000 mensajes al mes)',
       'API de solo lectura para sacar flota y taller a vuestros sistemas',
       'Implantación y formación por delegación incluidas',
@@ -79,12 +79,10 @@ export const COMPLEMENTOS = [
     que: 'App de ruta: escanear o foto a la etiqueta, ruta ordenada por tiempo, navegación, prueba de entrega, seguimiento para el cliente y cobro.' },
   { clave: 'whatsapp', nombre: 'WhatsApp', precio: '150 € de alta + mensajes a precio de Meta + 20 %',
     que: 'Avisos y conversaciones con conductores y talleres desde vuestro número. Incluido en Empresa.' },
-  { clave: 'peritaje', nombre: 'Informe pericial con IA', precio: '9 € cada uno · 20 por 120 €',
-    que: 'Informe para reclamar un golpe al renting o al seguro. Incluido en Empresa.' },
   { clave: 'colaboradores', nombre: 'Vehículos de colaboradores', precio: '3 € por vehículo y mes',
-    que: 'Furgonetas de subcontratas: inspección, documentos y vencimientos.' },
+    que: 'Furgonetas de subcontratas: inspección, documentos y vencimientos. Se marcan en la ficha.' },
   { clave: 'campana', nombre: 'Vehículos de campaña', precio: '0,30 € por día de alta',
-    que: 'Furgonetas de refuerzo en Black Friday o Navidad, solo los días que estén.' },
+    que: 'Furgonetas de refuerzo en Black Friday o Navidad, solo los días que estén. Se cobran a mes vencido.' },
   { clave: 'implantacion', nombre: 'Implantación asistida', precio: '490 € hasta 50 vehículos · 990 € hasta 200',
     que: 'Cargamos flota y conductores, configuramos delegaciones y permisos y formamos al equipo. Gratis con contrato anual de 100 vehículos o más.' },
   { clave: 'formacion', nombre: 'Formación presencial', precio: '300 € por jornada + desplazamiento',
@@ -93,10 +91,10 @@ export const COMPLEMENTOS = [
 
 /* Las reglas que siempre se preguntan (docs/PRECIOS.md §6). */
 export const REGLAS = [
-  ['¿Qué vehículo cuenta?', 'Los dados de alta y no dados de baja, el máximo del mes. Los que están en el taller cuentan; los dados de baja, no.'],
-  ['¿Pago por usuario o por conductor?', 'No. Usuarios de oficina y conductores ilimitados en todos los planes: solo se paga por vehículo.'],
-  ['¿Y si la flota crece o baja a mitad de mes?', 'Se prorratea por días. Subir de plan es inmediato; bajar, al acabar lo pagado.'],
-  ['¿Furgonetas de subcontratas o de campaña?', 'Colaboradores a 3 € al mes, o de campaña a 0,30 € por día solo mientras estén.'],
+  ['¿Qué vehículo cuenta?', 'Los que tienes de alta el día que se hace la factura del mes. Los que están en el taller cuentan; los dados de baja, no.'],
+  ['¿Pago por usuario o por conductor?', 'No. Usuarios de oficina y conductores ilimitados en todos los planes: se paga por vehículo. Solo la app de reparto, si la usáis, va por conductor.'],
+  ['¿Y si la flota crece o baja a mitad de mes?', 'Ese mes no se toca: la factura siguiente ya sale con los vehículos que tengas. Nunca se cobra a toro pasado.'],
+  ['¿Furgonetas de subcontratas o de campaña?', 'Se marcan en la ficha de cada una: las de colaboradores a 3 € al mes y las de campaña a 0,30 € por día que estén, fuera del plan.'],
   ['¿Tengo permanencia?', 'Mensual: no, cancelas cuando quieras. Anual: un año, con 2 meses gratis.'],
-  ['¿Mis datos?', 'Son tuyos. Los exportas cuando quieras; si te vas, tienes 30 días para descargarlos y después se borran. El contrato de encargo del tratamiento va incluido.'],
+  ['¿Mis datos?', 'Son tuyos. Si os vais, os los devolvemos o los borramos, lo que elijáis: lo dice el contrato de encargo del tratamiento, que va incluido.'],
 ]

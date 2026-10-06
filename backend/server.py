@@ -348,6 +348,10 @@ class Vehicle(BaseModel):
     vin: Optional[str] = None
     bloqueada: Optional[bool] = False       # candado de la plantilla diaria
     bloqueada_motivo: Optional[str] = None
+    # Cómo entra en la factura (ALTAS_VEHICULO): propia, colaborador o campana.
+    alta: Optional[str] = "propia"
+    campana_desde: Optional[str] = None     # AAAA-MM-DD, solo las de campaña
+    campana_hasta: Optional[str] = None
     status: str = "active"
     center: Optional[str] = None
     current_driver_id: Optional[str] = None
@@ -401,6 +405,9 @@ class VehicleCreate(BaseModel):
     workshop_status: Optional[str] = None
     workshop_reason: Optional[str] = None
     documents: List[str] = []
+    alta: Optional[str] = "propia"            # propia | colaborador | campana
+    campana_desde: Optional[str] = None
+    campana_hasta: Optional[str] = None
 
 
 class Driver(BaseModel):
@@ -5358,8 +5365,8 @@ async def upgrade_preview(new_plan: str, user: dict = Depends(require_admin)):
     if _plan_canon(new_plan) == _plan_canon(current_plan):
         raise HTTPException(400, "Ya estás en ese plan")
 
-    # El precio depende del tamaño de la flota, no es plano.
-    n_vehiculos = await db.vehicles.count_documents({"status": {"$nin": ["deleted", "baja"]}})
+    # El precio depende del tamaño de la flota, no es plano (solo las propias).
+    n_vehiculos = await db.vehicles.count_documents(_FILTRO_PROPIAS)
     current_price = _precio_mensual(current_plan, n_vehiculos)
     new_price = _precio_mensual(new_plan, n_vehiculos)
 
@@ -5474,7 +5481,8 @@ async def billing_planes():
                 "Usuarios y conductores ilimitados",
             ],
             "no_incluye": ["Quién causa los golpes", "Qué furgoneta lleva cada uno",
-                           "Cuadrante, turnos y días libres", "Varias delegaciones"],
+                           "Cuadrante, turnos y días libres", "Informe pericial firmado",
+                           "Varias delegaciones"],
         },
         "completo": {
             "incluye": [
@@ -5484,12 +5492,14 @@ async def billing_planes():
                 "Cuadrante con motor, turnos y días libres desde el móvil",
                 "Plantilla de salida, checklist de apertura y cierre, aparcamiento",
                 "Incorporaciones, empleo y contactos",
-                "Informe de inspección firmado y exportar a Excel",
+                # `forensics` va en Pro sin límite (PLAN_LIMITS): ya no es complemento.
+                "Informe pericial firmado, sin límite, para reclamar al renting o al seguro",
+                "Exportar a Excel",
             ],
             "no_incluye": [],
         },
         "holding": {
-            "incluye": ["Todo lo de Pro", "Informes periciales con IA para reclamar al renting o al seguro",
+            "incluye": ["Todo lo de Pro",
                         "WhatsApp con conductores y talleres (2.000 mensajes al mes)",
                         "API de solo lectura para sacar flota y taller a vuestros sistemas",
                         "Implantación y formación por delegación incluidas",
@@ -5525,18 +5535,127 @@ COMPLEMENTOS = [
             "prueba de entrega, seguimiento para el cliente y cobro."},
     {"clave": "whatsapp", "nombre": "WhatsApp", "precio": "150 € de alta + mensajes a precio de Meta + 20 %",
      "que": "Avisos y conversaciones con conductores y talleres desde vuestro número. Incluido en Empresa."},
-    {"clave": "peritaje", "nombre": "Informe pericial con IA", "precio": "9 € cada uno · 20 por 120 €",
-     "que": "Informe para reclamar un golpe al renting o al seguro. Incluido en Empresa."},
+    # El informe pericial firmado ya NO es complemento (06-10-2026): la app lo da sin
+    # límite en Pro y Empresa (`forensics`) y la página del peritaje dice «va en el plan
+    # Pro». Cobrarlo a 9 € era prometer algo que la app no hacía.
     {"clave": "colaboradores", "nombre": "Vehículos de colaboradores", "precio": "3 € por vehículo y mes",
-     "que": "Furgonetas de subcontratas: inspección, documentos y vencimientos."},
+     "que": "Furgonetas de subcontratas: inspección, documentos y vencimientos. Se marcan en la ficha."},
     {"clave": "campana", "nombre": "Vehículos de campaña", "precio": "0,30 € por día de alta",
-     "que": "Furgonetas de refuerzo en Black Friday o Navidad, solo los días que estén."},
+     "que": "Furgonetas de refuerzo en Black Friday o Navidad, solo los días que estén. Se cobran a mes vencido."},
     {"clave": "implantacion", "nombre": "Implantación asistida", "precio": "490 € hasta 50 vehículos · 990 € hasta 200",
      "que": "Cargamos flota y conductores, configuramos delegaciones y permisos y formamos al equipo. "
             "Gratis con contrato anual de 100 vehículos o más."},
     {"clave": "formacion", "nombre": "Formación presencial", "precio": "300 € por jornada + desplazamiento",
      "que": "En vuestras delegaciones."},
 ]
+
+# Cómo entra cada furgoneta en la factura (06-10-2026). Hasta hoy /planes vendía
+# colaboradores a 3 € y campaña a 0,30 €/día, pero la ficha no tenía forma de
+# marcarlas y el cobro las contaba todas como propias, a precio de plan.
+#   propia       → cuenta para el plan (y para su mínimo y su descuento por volumen)
+#   colaborador  → 3 € al mes, fuera del plan
+#   campana      → 0,30 € por día entre `campana_desde` y `campana_hasta`, a mes vencido
+ALTAS_VEHICULO = ("propia", "colaborador", "campana")
+PRECIO_COLABORADOR = 3.0
+PRECIO_CAMPANA_DIA = 0.30
+PRECIO_REPARTO_CONDUCTOR = 6.0
+_FILTRO_EN_FLOTA = {"status": {"$nin": ["deleted", "baja"]}}
+_FILTRO_PROPIAS = {**_FILTRO_EN_FLOTA, "alta": {"$nin": ["colaborador", "campana"]}}
+
+
+def _mes_anterior(mes: str) -> str:
+    a, m = int(mes[:4]), int(mes[5:7])
+    return f"{a - 1}-12" if m == 1 else f"{a}-{m - 1:02d}"
+
+
+def _dia_iso(valor):
+    """date de un 'AAAA-MM-DD' (o del principio de un ISO con hora); None si no lo es."""
+    try:
+        return datetime.strptime(str(valor or "")[:10], "%Y-%m-%d").date()
+    except ValueError:
+        return None
+
+
+def _dias_de_campana(v: dict, mes: str) -> int:
+    """Días de ese mes (AAAA-MM) en que la furgoneta de campaña estuvo de alta.
+    Sin fecha de fin, cuenta hasta el final del mes: sigue de alta."""
+    a, m = int(mes[:4]), int(mes[5:7])
+    ini_mes, fin_mes = date_cls(a, m, 1), date_cls(a, m, calendar.monthrange(a, m)[1])
+    desde = _dia_iso(v.get("campana_desde")) or _dia_iso(v.get("created_at"))
+    if not desde:
+        return 0
+    hasta = _dia_iso(v.get("campana_hasta")) or fin_mes
+    return max(0, (min(hasta, fin_mes) - max(desde, ini_mes)).days + 1)
+
+
+def _alta_limpia(data: dict, previo: Optional[dict] = None) -> dict:
+    """Valida el tipo de alta y sus fechas antes de guardar. Rellena lo obvio: la
+    campaña empieza hoy si no se dice, y una de campaña que se da de baja termina hoy
+    (si no, seguiría sumando días hasta fin de mes)."""
+    previo = previo or {}
+    hoy = _dia_negocio()
+    if "alta" in data:
+        alta = str(data.get("alta") or "propia").strip().lower()
+        if alta not in ALTAS_VEHICULO:
+            raise HTTPException(400, "Tipo de alta no válido: propia, colaborador o campana")
+        data["alta"] = alta
+        if alta == "campana" and not (data.get("campana_desde") or previo.get("campana_desde")):
+            data["campana_desde"] = hoy
+    for k in ("campana_desde", "campana_hasta"):
+        if k in data and data[k] not in (None, ""):
+            if not _dia_iso(data[k]):
+                raise HTTPException(400, "Las fechas de campaña van como AAAA-MM-DD")
+            data[k] = str(data[k])[:10]
+    alta = data.get("alta", previo.get("alta"))
+    d = _dia_iso(data.get("campana_desde", previo.get("campana_desde")))
+    h = _dia_iso(data.get("campana_hasta", previo.get("campana_hasta")))
+    if alta == "campana" and d and h and h < d:
+        raise HTTPException(400, "La campaña no puede acabar antes de empezar")
+    if (alta == "campana" and data.get("status") == "baja"
+            and not (data.get("campana_hasta") or previo.get("campana_hasta"))):
+        data["campana_hasta"] = hoy
+    return data
+
+
+async def _cuenta_flota(mes: str) -> dict:
+    """Lo que entra en la factura de `mes` de la empresa fijada con set_current_org_db.
+
+    Propias y colaboradores: los que hay HOY (se paga por adelantado). Días de campaña
+    y conductores de reparto: los del mes ANTERIOR, que ya se pueden contar enteros.
+    """
+    previo = _mes_anterior(mes)
+    propias = await db.vehicles.count_documents(_FILTRO_PROPIAS)
+    colaboradores = await db.vehicles.count_documents({**_FILTRO_EN_FLOTA, "alta": "colaborador"})
+    dias = 0
+    for v in await db.vehicles.find({"alta": "campana", "status": {"$ne": "deleted"}},
+                                    {"_id": 0, "campana_desde": 1, "campana_hasta": 1,
+                                     "created_at": 1}).to_list(5000):
+        dias += _dias_de_campana(v, previo)
+    # Los pedidos se anonimizan a los días que fije la empresa, pero conservan
+    # conductor y fecha: el recuento no depende de los datos personales.
+    ids = {p.get("conductor_id") for p in await db.reparto_pedidos.find(
+        {"fecha": {"$gte": previo + "-01", "$lte": previo + "-31"}, "ejemplo": {"$ne": True}},
+        {"_id": 0, "conductor_id": 1}).to_list(200000)}
+    ids.discard(None)
+    ids.discard("")
+    return {"propias": propias, "colaboradores": colaboradores, "campana_dias": dias,
+            "reparto_conductores": len(ids), "mes_vencido": previo}
+
+
+def _lineas_complementos(cuenta: dict) -> list:
+    """Las líneas de la factura que no son el plan, solo las que tienen importe."""
+    lineas = []
+    for clave, n, precio, texto in (
+            ("colaboradores", cuenta["colaboradores"], PRECIO_COLABORADOR,
+             "Vehículos de colaboradores"),
+            ("campana", cuenta["campana_dias"], PRECIO_CAMPANA_DIA,
+             f"Días de vehículos de campaña ({cuenta['mes_vencido']})"),
+            ("reparto", cuenta["reparto_conductores"], PRECIO_REPARTO_CONDUCTOR,
+             f"Conductores con la app de reparto ({cuenta['mes_vencido']})")):
+        if n:
+            lineas.append({"clave": clave, "concepto": texto, "cantidad": n,
+                           "precio": precio, "importe": round(n * precio, 2)})
+    return lineas
 
 
 # =========================
@@ -5562,6 +5681,10 @@ async def _cobros_del_mes(mes: str, crear: bool = True):
     tarifa vigente. Una vez creado el cobro ya no se recalcula: si el cliente
     crece a mitad de mes, se le cobra lo nuevo el mes siguiente, no a toro
     pasado.
+
+    El plan va solo con las PROPIAS; colaboradores, días de campaña y conductores
+    de reparto van en `lineas` aparte (los dos últimos, del mes anterior). Un
+    precio pactado sustituye a la línea del plan, no a los complementos.
     """
     existentes = await global_db.cobros.find({"mes": mes}, {"_id": 0}).to_list(2000)
     if existentes or not crear:
@@ -5580,23 +5703,31 @@ async def _cobros_del_mes(mes: str, crear: bool = True):
     for o in orgs:
         plan = _plan_canon(o.get("plan"))
         tarifa = _tarifa_de(cat, plan)
-        if not tarifa:
-            continue
+        if not tarifa or tarifa.get("mensual"):
+            continue                      # el repartidor paga cuota fija con tarjeta, no aquí
         try:
             set_current_org_db(_tenant_db_name(o))
-            vehiculos = await db.vehicles.count_documents({"status": {"$nin": ["deleted", "baja"]}})
+            cuenta = await _cuenta_flota(mes)
         except Exception as e:
             logger.warning(f"Cobros: no pude contar furgonetas de {o.get('name')}: {e}")
-            vehiculos = 0
+            cuenta = {"propias": 0, "colaboradores": 0, "campana_dias": 0,
+                      "reparto_conductores": 0, "mes_vencido": _mes_anterior(mes)}
+        vehiculos = cuenta["propias"]
 
         por_veh = float(tarifa.get("por_vehiculo") or 0)
         minimo = int(tarifa.get("minimo_vehiculos") or 0)
         # Precio pactado a mano (holding, descuentos): manda sobre la tarifa.
         pactado = _a_numero(o.get("precio_mes_pactado"))
         # Con el descuento por volumen (docs/PRECIOS.md §5), el mismo que enseña /planes.
-        base = round(pactado if pactado > 0 else _con_volumen(por_veh, vehiculos, minimo), 2)
-        if base <= 0:
+        plan_importe = round(pactado if pactado > 0 else _con_volumen(por_veh, vehiculos, minimo), 2)
+        if plan_importe <= 0:
             continue                      # a medida sin precio puesto: no se cobra solo
+        nombre_plan = tarifa.get("nombre", plan)
+        lineas = [{"clave": "plan", "concepto": f"Plan {nombre_plan} · {vehiculos} vehículos",
+                   "cantidad": vehiculos, "precio": por_veh, "importe": plan_importe,
+                   "pactado": pactado > 0}] + _lineas_complementos(cuenta)
+        base = round(sum(li["importe"] for li in lineas), 2)
+        extra = "".join(f" + {li['cantidad']} {li['clave']}" for li in lineas[1:])
 
         iva = round(base * iva_pct / 100, 2)
         doc = {
@@ -5604,7 +5735,8 @@ async def _cobros_del_mes(mes: str, crear: bool = True):
             "org_id": o.get("id"), "org_nombre": o.get("name"),
             "email": o.get("email"), "plan": plan,
             "vehiculos": vehiculos, "precio_unitario": por_veh,
-            "concepto": f"{MARCA} · {tarifa.get('nombre', plan)} · {vehiculos} furgonetas · {mes}",
+            "concepto": f"{MARCA} · {nombre_plan} · {vehiculos} furgonetas{extra} · {mes}",
+            "lineas": lineas,
             "base": base, "iva_pct": iva_pct, "iva": iva, "total": round(base + iva, 2),
             "estado": "en_prueba" if o.get("status") == "trial" else "pendiente",
             "creado_en": datetime.now(timezone.utc).isoformat(),
@@ -5945,8 +6077,8 @@ async def _vehiculos_facturables(db_name: str) -> int:
     un precio: "pagas por las que trabajan".
     """
     try:
-        return await client[db_name].vehicles.count_documents(
-            {"status": {"$nin": ["deleted", "baja"]}})
+        # Las de colaboradores y las de campaña van aparte (3 €/mes, 0,30 €/día).
+        return await client[db_name].vehicles.count_documents(_FILTRO_PROPIAS)
     except Exception as e:
         logger.warning("Conteo facturable de %s: %s", db_name, e)
         return 0
@@ -5963,8 +6095,18 @@ async def billing_uso(user: dict = Depends(get_current_user)):
     org = await get_org(user.get("org_id")) or {}
     en_flota = await _vehiculos_facturables(_tenant_db_name(org))
     pagadas = org.get("vehiculos_pagados")
+    # Las que van aparte del plan, para que la cuenta cuadre a la vista.
+    try:
+        vehs = client[_tenant_db_name(org)].vehicles
+        colaboradores = await vehs.count_documents({**_FILTRO_EN_FLOTA, "alta": "colaborador"})
+        campana = await vehs.count_documents({**_FILTRO_EN_FLOTA, "alta": "campana"})
+    except Exception as e:                                       # noqa: BLE001
+        logger.warning("billing/uso: %s", e)
+        colaboradores = campana = 0
     return {
         "en_flota": en_flota,
+        "colaboradores": colaboradores,
+        "campana": campana,
         "pagadas": pagadas,                       # None = sin suscripción medida
         "desfase": (en_flota - pagadas) if isinstance(pagadas, int) else None,
         "plan": org.get("plan"),
@@ -9611,7 +9753,7 @@ async def get_vehicles_portal(user: dict = Depends(require_any_auth)):
 
 @api_router.post("/vehicles", response_model=Vehicle)
 async def create_vehicle(data: VehicleCreate, _=Depends(require_admin)):
-    vehicle = Vehicle(**data.model_dump())
+    vehicle = Vehicle(**_alta_limpia(data.model_dump()))
     if getattr(vehicle, "center", None):
         vehicle.center = _centro_norm(vehicle.center, await _centros_conocidos())
 
@@ -10290,6 +10432,8 @@ async def update_vehicle(vehicle_id: str, data: dict, _=Depends(require_admin)):
         # lo demas, pero no se ofrece para asignar ese dia (lo pidio Mery el
         # 03-09-2026: «una que no esta en taller pero no quieres que salga»).
         "bloqueada", "bloqueada_motivo",
+        # Propia, de colaborador o de campaña: cambia lo que se factura (06-10-2026).
+        "alta", "campana_desde", "campana_hasta",
     }
     data = {k: v for k, v in data.items() if k in _VEHICLE_ALLOWED}
     # EL CENTRO SE GUARDA LIMPIO. Aqui entraba 'AMZL OGA5 SANTIAGO XPT' y
@@ -10298,7 +10442,9 @@ async def update_vehicle(vehicle_id: str, data: dict, _=Depends(require_admin)):
     # limpio en la base: un centro nuevo se queda tal cual.
     if "center" in data:
         data["center"] = _centro_norm(data["center"], await _centros_conocidos())
-    prev = await db.vehicles.find_one({"id": vehicle_id}, {"_id": 0, "status": 1})
+    prev = await db.vehicles.find_one({"id": vehicle_id}, {"_id": 0, "status": 1, "alta": 1,
+                                                           "campana_desde": 1, "campana_hasta": 1})
+    data = _alta_limpia(data, prev)
     try:
         result = await db.vehicles.update_one({"id": vehicle_id}, {"$set": data})
     except DuplicateKeyError:
@@ -24372,7 +24518,9 @@ async def put_vehicle(vehicle_id: str, data: dict, _=Depends(require_admin)):
     data.pop("_id", None)
     data.pop("id", None)
     data["updated_at"] = datetime.now(timezone.utc).isoformat()
-    prev = await db.vehicles.find_one({"id": vehicle_id}, {"_id": 0, "status": 1})
+    prev = await db.vehicles.find_one({"id": vehicle_id}, {"_id": 0, "status": 1, "alta": 1,
+                                                           "campana_desde": 1, "campana_hasta": 1})
+    data = _alta_limpia(data, prev)
     try:
         result = await db.vehicles.update_one({"id": vehicle_id}, {"$set": data})
     except DuplicateKeyError:

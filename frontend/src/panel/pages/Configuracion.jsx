@@ -706,8 +706,15 @@ export default function Configuracion() {
           <div className="mt-3 rounded-lg border border-dark-800 bg-dark-900/40 p-3">
             <div className="flex flex-wrap items-baseline gap-x-6 gap-y-1">
               <span className="text-[13px] text-dark-400">
-                En flota: <b className="text-dark-100 tabular-nums">{uso.en_flota}</b> vehículos
+                En el plan: <b className="text-dark-100 tabular-nums">{uso.en_flota}</b> vehículos
               </span>
+              {/* Las de subcontratas y de campaña van aparte (3 €/mes, 0,30 €/día). */}
+              {(uso.colaboradores > 0 || uso.campana > 0) && (
+                <span className="text-[13px] text-dark-400">
+                  Aparte: <b className="text-dark-100 tabular-nums">{uso.colaboradores || 0}</b> de colaboradores
+                  {' · '}<b className="text-dark-100 tabular-nums">{uso.campana || 0}</b> de campaña
+                </span>
+              )}
               {uso.pagadas != null && (
                 <span className="text-[13px] text-dark-400">
                   Pagadas: <b className="text-dark-100 tabular-nums">{uso.pagadas}</b>

@@ -61,7 +61,7 @@ persona. Es el argumento contra los programas de RR. HH., que cobran por emplead
 | Plantilla de salida, checklist de apertura/cierre, aparcamiento | — | ✓ | ✓ |
 | Incorporaciones, empleo y contactos | — | ✓ | ✓ |
 | Exportar a Excel | — | ✓ | ✓ |
-| Informes periciales con IA (para reclamar al renting o al seguro) | — | 9 € por informe | ✓ incluidos |
+| Informe pericial firmado (para reclamar al renting o al seguro) | — | ✓ sin límite | ✓ sin límite |
 | WhatsApp con conductores y talleres | — | complemento | ✓ incluido (hasta 2.000 mensajes/mes) |
 | API de solo lectura (flota y taller a vuestros sistemas) | — | — | ✓ |
 | Implantación asistida y formación por delegación | — | — | ✓ incluida |
@@ -83,14 +83,18 @@ es una persona con una furgoneta, no una empresa, y por debajo de Circuit o Rout
 
 | Complemento | Precio | Para quién |
 |---|---|---|
-| **Reparto**: app de ruta para conductores (escanear o foto a la etiqueta, ruta ordenada por tiempo, navegación, prueba de entrega, seguimiento para el cliente, cobro) | 6 € por conductor que la use en el mes | Empresas sin PDA ni ruta optimizada (súper, distribución, pequeñas mensajerías) |
+| **Reparto**: app de ruta para conductores (escanear o foto a la etiqueta, ruta ordenada por tiempo, navegación, prueba de entrega, seguimiento para el cliente, cobro) | 6 € por conductor que la use en el mes (se cuenta solo: conductores distintos con pedidos el mes anterior) | Empresas sin PDA ni ruta optimizada (súper, distribución, pequeñas mensajerías) |
 | **WhatsApp** con número propio | 150 € de alta + mensajes a precio de Meta + 20 % | Pro (Empresa ya lo trae) |
-| **Informe pericial con IA** | 9 € cada uno (bono de 20 por 120 €) | Pro |
-| **Vehículos de colaboradores** (subcontrata con su furgoneta: inspección, documentos y vencimientos) | 3 € por vehículo y mes | Paquetería con autónomos que reparten para ella |
-| **Vehículos de campaña** (Black Friday, Navidad) | 0,30 € por día de alta | Picos de temporada |
+| **Vehículos de colaboradores** (subcontrata con su furgoneta: inspección, documentos y vencimientos) | 3 € por vehículo y mes (se marca en la ficha: «Cómo se factura») | Paquetería con autónomos que reparten para ella |
+| **Vehículos de campaña** (Black Friday, Navidad) | 0,30 € por día de alta, a mes vencido (fechas en la ficha) | Picos de temporada |
 | **Implantación asistida** (cargamos flota y conductores, configuramos delegaciones y permisos, formación online) | 490 € hasta 50 vehículos · 990 € hasta 200 · a medida por encima | Esencial y Pro. **Gratis con contrato anual de 100 vehículos o más** |
 | **Formación presencial** | 300 € por jornada + desplazamiento | Quien la pida |
 | **Integración con su programa de envíos** (Alertran u otro) | A presupuestar tras ver su API (orientativo 1.500–3.000 € + 100 €/mes de mantenimiento) | Empresa |
+
+Cómo se cobra cada uno (06-10-2026): reparto, colaboradores y campaña los calcula solo el cobro
+mensual (`_cuenta_flota` y `_lineas_complementos` en server.py) y salen como líneas aparte en Negocio.
+WhatsApp, implantación, formación e integración se pactan y se facturan a mano. El informe pericial
+dejó de ser complemento el 06-10: la app lo da sin límite en Pro (`forensics`) y la web lo vendía a 9 €.
 
 ## 5. Descuentos
 
@@ -106,17 +110,17 @@ es una persona con una furgoneta, no una empresa, y por debajo de Circuit o Rout
 
 | Caso | Regla |
 |---|---|
-| ¿Qué vehículo cuenta? | Los dados de alta y no dados de baja; se factura el máximo del mes. Los que están en el taller cuentan (es cuando más se usa la app). |
-| Alta o baja a mitad de mes | Se prorratea por días. |
+| ¿Qué vehículo cuenta? | Las propias de alta el día que se genera el cobro del mes (por adelantado). Las del taller cuentan; las de baja, las de colaboradores y las de campaña, no (van aparte). |
+| Alta o baja a mitad de mes | Ese mes no se toca: el cobro ya está hecho y lo nuevo entra en el del mes siguiente. Nunca a toro pasado. (No hay prorrateo automático en el cobro mensual.) |
 | Usuarios y conductores | Ilimitados. Nunca se cobra por persona. |
-| Furgonetas de subcontratas | Complemento de colaboradores (3 €) o como vehículo normal si usan todo. |
-| Picos de temporada | Vehículos de campaña por días. |
-| Cambio de plan | Subir: inmediato y prorrateado. Bajar: al final del periodo pagado. |
+| Furgonetas de subcontratas | Se marcan «De colaborador» en la ficha: 3 € al mes, fuera del plan, del mínimo y del descuento por volumen. |
+| Picos de temporada | Se marcan «De campaña» con fechas: 0,30 € por día, en el cobro del mes siguiente. Al darla de baja, la campaña se cierra ese día. |
+| Cambio de plan | Subir: se activa cuando entra el pago (o lo fuerza el super-admin); la vista previa calcula la diferencia de los días que quedan. Bajar: desde el panel, al momento; el cobro del mes ya hecho no se devuelve. |
 | Prueba | 14 días de Pro sin tarjeta, autoservicio. Más de 50 vehículos: piloto acompañado. |
-| IA, uso razonable | Incluidas hasta 2 inspecciones por vehículo y día; por encima, 0,05 € cada una (evita abusos, nadie normal llega). |
-| Impago | Aviso a los 7 días, solo lectura a los 15, datos guardados 90 días. |
-| Baja | Mensual: cuando quiera. Anual: al acabar el año. Exporta todo cuando quiera; 30 días para descargar y después se borra (RGPD). |
-| Subida de precio | Como mucho una vez al año, con 60 días de aviso. Los fundadores, congelado 24 meses. |
+| IA, uso razonable | Propuesta: hasta 2 inspecciones por vehículo y día; por encima, 0,05 € cada una. **No está implementado**: hoy no se mide ni se cobra. |
+| Impago | Propuesta: aviso a los 7 días, solo lectura a los 15, datos guardados 90 días. **Hoy es manual**: el cobro se marca a mano en Negocio y la cuenta se suspende desde allí. |
+| Baja | Mensual: cuando quiera. Anual: al acabar el año. Se le devuelven o se borran los datos, lo que elija (contrato de encargo). El borrado lo hace el super-admin a mano («Eliminar empresa»); no hay borrado automático. |
+| Subida de precio | Como mucho una vez al año, con al menos 30 días de aviso (lo que dicen los Términos). Los fundadores, congelado 24 meses. |
 | Datos personales | Somos encargados del tratamiento: el contrato de encargo (art. 28 RGPD) va incluido en el alta. |
 | Cobro | Tarjeta (Stripe) o domiciliación/transferencia con factura para Empresa y anuales. |
 

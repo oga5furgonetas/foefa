@@ -62,3 +62,127 @@ def test_los_textos_de_cada_plan_casan_con_lo_que_abre_la_app():
     assert server.PLAN_LIMITS["operacion"]["max_centers"] == 1           # «Varias delegaciones»: no
     assert server.PLAN_LIMITS["completo"]["max_centers"] == -1
     assert server.PLAN_LIMITS["operacion"]["ai"] is True                 # la IA va en todos
+
+
+# ── Colaboradores, campaña y reparto: lo que /planes vende como complemento se cobra así ──
+
+@pytest.mark.parametrize("desde,hasta,mes,dias", [
+    ("2026-11-20", "2026-12-10", "2026-11", 11),     # del 20 al 30 de noviembre
+    ("2026-11-20", "2026-12-10", "2026-12", 10),     # y del 1 al 10 de diciembre
+    ("2026-11-20", None, "2026-12", 31),             # sin fin: sigue de alta todo el mes
+    ("2027-01-05", None, "2026-12", 0),              # aún no había empezado
+    ("2026-11-01", "2026-11-01", "2026-11", 1),      # un solo día
+])
+def test_dias_de_campana(desde, hasta, mes, dias):
+    assert server._dias_de_campana({"campana_desde": desde, "campana_hasta": hasta}, mes) == dias
+
+
+def test_mes_anterior():
+    assert server._mes_anterior("2027-01") == "2026-12"
+    assert server._mes_anterior("2026-10") == "2026-09"
+
+
+def test_alta_limpia_valida_y_rellena(monkeypatch):
+    monkeypatch.setattr(server, "_dia_negocio", lambda: "2026-12-24")
+    with pytest.raises(server.HTTPException):
+        server._alta_limpia({"alta": "alquilada"})
+    with pytest.raises(server.HTTPException):
+        server._alta_limpia({"alta": "campana", "campana_desde": "2026-12-10", "campana_hasta": "2026-12-01"})
+    with pytest.raises(server.HTTPException):
+        server._alta_limpia({"campana_desde": "24/12/2026"})
+    # La campaña sin fecha empieza hoy.
+    assert server._alta_limpia({"alta": "Campana"})["campana_desde"] == "2026-12-24"
+    # Una de campaña que se da de baja deja de sumar días hoy.
+    previo = {"alta": "campana", "campana_desde": "2026-11-20"}
+    assert server._alta_limpia({"status": "baja"}, previo)["campana_hasta"] == "2026-12-24"
+    # Una propia que se da de baja no se toca.
+    assert "campana_hasta" not in server._alta_limpia({"status": "baja"}, {"alta": "propia"})
+
+
+@pytest.mark.asyncio(loop_scope="session")
+async def test_la_factura_cobra_cada_furgoneta_a_su_precio(monkeypatch):
+    from base_de_mentira import Col, Db
+    propias = [{"id": f"p{i}", "status": "active"} for i in range(28)]
+    propias += [{"id": "t1", "status": "taller", "alta": "propia"},      # la del taller cuenta
+                {"id": "b1", "status": "baja"}]                           # la de baja, no
+    colab = [{"id": f"c{i}", "status": "active", "alta": "colaborador"} for i in range(4)]
+    campana = [{"id": "k1", "status": "baja", "alta": "campana",          # 10 días de septiembre
+                "campana_desde": "2026-09-21", "campana_hasta": "2026-09-30"},
+               {"id": "k2", "status": "deleted", "alta": "campana",       # borrada por error: no
+                "campana_desde": "2026-09-01"}]
+    t = Db()
+    t["vehicles"] = Col(propias + [{"id": "p_otra", "status": "active"}] + colab + campana)
+    t["reparto_pedidos"] = Col([
+        {"id": "r1", "fecha": "2026-09-03", "conductor_id": "d1"},
+        {"id": "r2", "fecha": "2026-09-30", "conductor_id": "d1"},
+        {"id": "r3", "fecha": "2026-09-15", "conductor_id": "d2"},
+        {"id": "r4", "fecha": "2026-09-15", "conductor_id": "d3", "ejemplo": True},   # de ejemplo: no
+        {"id": "r5", "fecha": "2026-10-02", "conductor_id": "d4"},                    # es de este mes
+    ])
+    g = Db()
+    g["cobros"] = Col([])
+    g["organizations"] = Col([
+        {"id": "o1", "name": "Norte", "account_type": "dsp", "status": "active", "plan": "completo",
+         "db_name": "dsp_norte"},
+        {"id": "o2", "name": "Repartidor", "account_type": "dsp", "status": "active", "plan": "autonomo",
+         "db_name": "dsp_rep"},
+    ])
+    monkeypatch.setattr(server, "db", t)
+    monkeypatch.setattr(server, "global_db", g)
+    monkeypatch.setattr(server, "set_current_org_db", lambda *_: None)
+
+    async def cat(forzar=False):
+        return server._catalogo_por_defecto()
+    monkeypatch.setattr(server, "_catalogo_planes", cat)
+
+    cobros = await server._cobros_del_mes("2026-10")
+    assert [c["org_nombre"] for c in cobros] == ["Norte"]          # el repartidor paga con tarjeta
+    c = cobros[0]
+    lineas = {li["clave"]: li for li in c["lineas"]}
+    assert c["vehiculos"] == 30 and lineas["plan"]["importe"] == 270            # 30 propias × 9 €
+    assert lineas["colaboradores"]["cantidad"] == 4 and lineas["colaboradores"]["importe"] == 12
+    assert lineas["campana"]["cantidad"] == 10 and lineas["campana"]["importe"] == 3
+    assert lineas["reparto"]["cantidad"] == 2 and lineas["reparto"]["importe"] == 12
+    assert c["base"] == 297 and c["total"] == round(297 * 1.21, 2)
+
+
+@pytest.mark.asyncio(loop_scope="session")
+async def test_precio_pactado_sustituye_al_plan_no_a_los_complementos(monkeypatch):
+    from base_de_mentira import Col, Db
+    t = Db()
+    t["vehicles"] = Col([{"id": f"p{i}", "status": "active"} for i in range(150)]
+                        + [{"id": "c1", "status": "active", "alta": "colaborador"}])
+    t["reparto_pedidos"] = Col([])
+    g = Db()
+    g["cobros"] = Col([])
+    g["organizations"] = Col([{"id": "o1", "name": "Auto", "account_type": "dsp", "status": "active",
+                               "plan": "holding", "db_name": "dsp_auto", "precio_mes_pactado": 900}])
+    monkeypatch.setattr(server, "db", t)
+    monkeypatch.setattr(server, "global_db", g)
+    monkeypatch.setattr(server, "set_current_org_db", lambda *_: None)
+
+    async def cat(forzar=False):
+        return server._catalogo_por_defecto()
+    monkeypatch.setattr(server, "_catalogo_planes", cat)
+    c = (await server._cobros_del_mes("2026-10"))[0]
+    assert c["base"] == 903 and c["lineas"][0]["pactado"] is True
+
+
+@pytest.mark.asyncio(loop_scope="session")
+async def test_el_informe_pericial_va_en_pro_y_no_se_vende_aparte(monkeypatch):
+    """La web decía «9 € cada uno» y la app lo daba gratis en Pro: ahora dice lo que hace."""
+    async def cat(forzar=False):
+        return server._catalogo_por_defecto()
+    monkeypatch.setattr(server, "_catalogo_planes", cat)
+    r = await server.billing_planes()
+    por_clave = {p["clave"]: p for p in r["planes"]}
+    assert any("pericial" in x for x in por_clave["completo"]["incluye"])
+    assert server.PLAN_LIMITS["completo"]["forensics"] is True
+    assert any("pericial" in x for x in por_clave["operacion"]["no_incluye"])
+    assert server.PLAN_LIMITS["operacion"]["forensics"] is False
+    assert "peritaje" not in {c["clave"] for c in r["complementos"]}
+    # Los complementos que se cobran solos tienen su precio en el código, el mismo que la web.
+    precios = {c["clave"]: c["precio"] for c in r["complementos"]}
+    assert precios["colaboradores"].startswith(f"{server.PRECIO_COLABORADOR:g} €")
+    assert precios["campana"].startswith("0,30 €") and server.PRECIO_CAMPANA_DIA == 0.30
+    assert precios["reparto"].startswith(f"{server.PRECIO_REPARTO_CONDUCTOR:g} €")

@@ -32,7 +32,9 @@ const ROUTE_FEATURE = {
   asignacion: 'assignments',
   plantilla: 'assignments',
   'ia-peritaje': 'forensics',
-  importaciones: 'export',
+  // Importar NO va con `export` (06-10-2026): la bienvenida manda aquí a cargar la
+  // flota y Esencial promete «importar de Excel»; sin esto, un cliente de Esencial
+  // no podía ni dar de alta sus furgonetas desde su Excel.
 }
 
 // Menú ÚNICO agrupado por intención (sin pestañas: todo el mapa visible siempre).

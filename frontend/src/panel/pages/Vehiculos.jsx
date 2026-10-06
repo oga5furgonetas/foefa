@@ -10,6 +10,7 @@ import GuidedEmpty from '../components/GuidedEmpty'
 import VidaVehiculo from '../components/VidaVehiculo'
 import { ultimaRueda } from '../../lib/rueda'
 import { useOrden } from '../../lib/orden'
+import { usePlan } from '../../lib/usePlan'
 import ThOrden from '../components/ThOrden'
 import QRCode from 'qrcode'
 import {
@@ -49,6 +50,15 @@ function NivelDeposito({ c, compacto = false }) {
 
 // El visor 3D (three.js ~400 kB) se carga solo al abrir la pestaña Gemelo 3D.
 const Vehicle3DViewer = lazy(() => import('../twin3d/Vehicle3DViewer'))
+
+// Cómo entra cada furgoneta en la factura: los mismos precios que /planes (lib/precios.js).
+const ALTAS = [['propia', 'Propia'], ['colaborador', 'De colaborador'], ['campana', 'De campaña']]
+const ALTA_AYUDA = {
+  propia: 'Cuenta en el plan.',
+  colaborador: 'Subcontrata con su furgoneta: 3 € al mes, fuera del plan.',
+  campana: 'Refuerzo de temporada: 0,30 € por cada día entre estas fechas, fuera del plan. Al darla de baja deja de contar.',
+}
+const ALTA_CORTA = { colaborador: 'COLAB.', campana: 'CAMPAÑA' }
 
 const STATUS_MAP = {
   active: { label: 'Disponible',  labelKey: 'veh.available', dot: 'bg-emerald-400', badge: 'bg-emerald-500/10 text-emerald-400 ring-1 ring-emerald-500/30' },
@@ -995,6 +1005,38 @@ function VehicleDetail({ vehicle: initVehicle, onClose, onSaved }) {
                     onSave={v => patch({ provider: v.trim() })}
                   />
                 </div>
+                {/* CÓMO SE FACTURA (06-10-2026). /planes vende las de subcontratas a 3 € y
+                    las de campaña a 0,30 € por día; sin marcarlas aquí, la factura las
+                    cobraba como propias, a precio de plan. */}
+                <div className="col-span-2 px-3 py-2.5">
+                  <div className="mb-1 text-[10px] font-medium uppercase tracking-wider text-dark-500">Cómo se factura</div>
+                  <div className="flex flex-wrap gap-1.5">
+                    {ALTAS.map(([k, label]) => {
+                      const actual = (vehicle.alta || 'propia') === k
+                      return (
+                        <button key={k} disabled={busy}
+                          onClick={() => !actual && patch(k === 'campana' && !vehicle.campana_desde
+                            ? { alta: k, campana_desde: hoyLocal() } : { alta: k })}
+                          className={`rounded-full px-2.5 py-0.5 text-[10px] font-semibold transition ${actual
+                            ? 'cursor-default bg-brand-500/20 text-brand-300'
+                            : 'bg-dark-700 text-dark-200 hover:bg-dark-600'}`}>
+                          {label}
+                        </button>
+                      )
+                    })}
+                  </div>
+                  <p className="mt-1.5 text-[11.5px] leading-snug text-dark-500">{ALTA_AYUDA[vehicle.alta || 'propia']}</p>
+                </div>
+                {vehicle.alta === 'campana' && (<>
+                  <EditableField label="Campaña desde" icon={<Calendar size={13} />}
+                    value={vehicle.campana_desde} type="date"
+                    onSave={v => patch({ campana_desde: v })}
+                  />
+                  <EditableField label="Campaña hasta" icon={<Calendar size={13} />}
+                    value={vehicle.campana_hasta} type="date"
+                    onSave={v => patch({ campana_hasta: v })}
+                  />
+                </>)}
               </div>
             </Section>
 
@@ -2821,6 +2863,7 @@ export default function Vehiculos() {
   const { orden: ordenTabla, pulsar: pulsarTabla, ordenar: ordenarTabla } = useOrden()
   const { center, centers } = useOutletContext()
   const { t, lang } = useT()
+  const { limits } = usePlan()
   const [vehicles, setVehicles] = useState(null)
   const [lastInsp, setLastInsp] = useState({})
   const [spare, setSpare] = useState({})          // vehicle_id → última declaración
@@ -2891,6 +2934,25 @@ export default function Vehiculos() {
     }
   }, [vehicles, lastInsp, spare])
 
+  /* EXPORTAR A EXCEL (06-10-2026): Pro lo promete y la flota no se podía sacar.
+     CSV con «;» y BOM: el Excel en español lo abre con acentos y columnas. Sale lo
+     que se ve (filtro y centro incluidos). */
+  const exportarExcel = () => {
+    const cab = ['Matrícula', 'Marca', 'Modelo', 'Centro', 'Estado', 'Kilómetros', 'ITV (caducidad)',
+      'Fin renting', 'Proveedor', 'Tipo', 'Combustible', 'VIN', 'Cómo se factura', 'Campaña desde',
+      'Campaña hasta', 'Última inspección']
+    const filas = list.map((v) => [v.license_plate, v.brand, v.model, v.center,
+      t((STATUS_MAP[v.status] || STATUS_MAP.baja).labelKey), v.mileage ?? '', v.itv_date, v.renting_end_date,
+      v.provider, v.vehicle_type, v.fuel_type, v.vin,
+      (ALTAS.find(([k]) => k === (v.alta || 'propia')) || ['', ''])[1], v.campana_desde, v.campana_hasta,
+      String(lastInsp[v.id] || '').slice(0, 10)])
+    const csv = [cab, ...filas].map((f) => f.map((c) => `"${String(c ?? '').replace(/"/g, '""')}"`).join(';')).join('\r\n')
+    const url = URL.createObjectURL(new Blob(['\ufeff' + csv], { type: 'text/csv;charset=utf-8' }))
+    const a = document.createElement('a')
+    a.href = url; a.download = `furgonetas-${hoyLocal()}.csv`; a.click()
+    setTimeout(() => URL.revokeObjectURL(url), 1000)
+  }
+
   if (err) return <p className="text-red-400">{err}</p>
 
   return (
@@ -2913,6 +2975,12 @@ export default function Vehiculos() {
                 placeholder={`${t('ui.search')} ${t('veh.plate')}, VIN…`} value={q} onChange={e => setQ(e.target.value)}
               />
             </div>
+            {limits?.export !== false && list.length > 0 && (
+              <button onClick={exportarExcel} title="Descargar la lista en Excel (CSV)"
+                className="flex shrink-0 items-center gap-1.5 rounded-xl border border-white/[0.07] px-3 py-2.5 text-[13px] font-semibold text-dark-200 transition hover:border-white/[0.14] hover:text-dark-50">
+                <Download size={15} /> <span className="hidden sm:inline">Excel</span>
+              </button>
+            )}
             <button
               onClick={() => setAddOpen(true)}
               className="group relative flex items-center gap-1.5 overflow-hidden rounded-xl bg-gradient-to-br from-brand-400 to-brand-600 px-4 py-2.5 text-[13.5px] font-semibold text-white shadow-lg shadow-brand-500/25 transition-all duration-300 [text-shadow:0_1px_1px_rgba(0,0,0,0.15)] hover:-translate-y-px hover:shadow-xl hover:shadow-brand-500/30 hover:brightness-110 active:translate-y-0 active:scale-[0.98]"
@@ -3087,6 +3155,10 @@ export default function Vehiculos() {
                           {verMatricula(v.license_plate)}
                           {v.vin && <QrCode size={9} className="ml-1.5 inline text-dark-700" title="Tiene VIN" />}
                           {v.bloqueada && <Lock size={10} className="ml-1.5 inline text-amber-400" title="Bloqueada para la plantilla diaria" />}
+                          {ALTA_CORTA[v.alta] && (
+                            <span className="ml-1.5 rounded bg-dark-800 px-1 py-px text-[9px] font-semibold tracking-normal text-dark-400"
+                              title={ALTA_AYUDA[v.alta]}>{ALTA_CORTA[v.alta]}</span>
+                          )}
                         </td>
                         <td className="max-w-[190px] truncate px-2 py-1.5 text-dark-400">
                           {[v.brand, v.model].filter(Boolean).join(' ') || '—'}

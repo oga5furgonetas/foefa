@@ -770,3 +770,28 @@ Nada se había borrado (org `owner` sin `modulos`, usuario `dani` sin
   [teléfono], horas de cuadrante antes/después.
 - Pendiente antes de un cliente de pago: clave de Gemini de PAGO (la gratuita da ~20 peticiones/día; 150 furgonetas
   hacen 150 inspecciones/día) y base de datos dedicada (tope de 500 colecciones, sin copias).
+
+## 06-10-2026 (mañana): lo que /planes promete, la app lo hace
+Repaso de cada frase de `/planes` y de la presentación contra el código (Dani: «sin falsos positivos»).
+- **Colaboradores y campaña se cobran de verdad**. Antes /planes vendía 3 €/mes y 0,30 €/día pero la ficha no podía
+  marcarlas y el cobro las contaba como propias a precio de plan. Ahora cada furgoneta tiene `alta`
+  (`propia` | `colaborador` | `campana`) y `campana_desde`/`campana_hasta`, en la ficha («Cómo se factura») y en
+  `PATCH/PUT/POST /vehicles` (`_alta_limpia` valida; la campaña empieza hoy si no se dice y se cierra al darla de baja).
+  `_FILTRO_PROPIAS` es lo que cuenta para el plan, su mínimo y su volumen (cobro, Lemon/Stripe vía
+  `_vehiculos_facturables`, vista previa de cambio de plan).
+- **El cobro mensual tiene líneas** (`lineas`): plan + colaboradores (hoy) + días de campaña y conductores de reparto
+  (6 €, conductores distintos con pedidos) del MES ANTERIOR (`_cuenta_flota`, `_lineas_complementos`). Un precio
+  pactado sustituye solo la línea del plan. El repartidor (cuota fija) ya no entra en el cobro. Negocio enseña el desglose.
+- **Informe pericial**: /planes lo vendía a 9 € en Pro, pero la app lo da sin límite en Pro (`forensics`) y la página
+  del peritaje dice «va en el plan Pro». Ahora es «incluido en Pro, sin límite» y Esencial lo lista como no incluido.
+- **«Cómo se cuenta»** decía «el máximo del mes», «se prorratea por días» y «30 días y se borran»: nada de eso lo hace
+  la app. Ahora: las de alta el día de la factura, lo nuevo entra el mes siguiente (nunca a toro pasado), y al irse
+  se devuelven o se borran los datos según el contrato de encargo (el borrado es manual, «Eliminar empresa»).
+- **Importar de Excel estaba cerrado en Esencial** (la ruta `importaciones` iba con `export`) aunque Esencial lo
+  promete y la bienvenida manda ahí a cargar la flota. Abierto en todos los planes.
+- **Exportar a Excel**: Pro lo promete y la lista de furgonetas no se podía bajar. Botón «Excel» en Vehículos (CSV con
+  «;» y BOM), solo con `export` (Pro y Empresa).
+- La API de solo lectura que promete Empresa SÍ existe: `GET /api/partner/v1/flota` con llave (`LlavesPartner.jsx`).
+- PRECIOS.md §6 marca lo que aún es propuesta y no hace la app: 0,05 € por inspección de más e impago automático.
+- Catálogo de producción (`plan_catalog` «vigente») actualizado a Esencial 5/10, Pro 9/20, Empresa 0/0.
+- Pruebas: `test_precios.py` (22), humo «la ficha dice cómo se factura…».
