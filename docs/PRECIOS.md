@@ -79,6 +79,23 @@ Margen bruto (sin personas): Esencial ≈ 75 %, Pro ≈ 85 %, Empresa ≈ 85 % (
 9,99 €/mes o 99 €/año, 7 días de prueba. Es otro producto (la app de ruta, sin panel). Se queda igual:
 es una persona con una furgoneta, no una empresa, y por debajo de Circuit o Routific.
 
+### Plan Reparto: súper y distribución (06-10-2026, tarde)
+El supermercado que lleva la compra a casa (Gadis) y el distribuidor que reparte a negocios (Disgón)
+compran el **reparto por repartidor**, no la flota por furgoneta: tienen 2–4 furgonetas por tienda y
+lo que les importa es ticket → ruta → seguimiento → prueba de entrega. Con Esencial (mínimo 10) una
+tienda con 3 furgonetas y 5 repartidores pagaba 80 €/mes, 35 € de ellos por furgonetas que no existen.
+
+| | **Reparto** |
+|---|---|
+| Precio | **12 € por repartidor activo al mes** (el que tuvo pedidos el mes anterior; lo cuenta solo el cobro), mínimo 3 (36 €) |
+| Incluye | Pedidos sin límite (a mano, pegados, escaneados), zonas, ruta por tiempo, navegación con voz, prueba de entrega, seguimiento al cliente, cobro, mapa de la oficina; **sus furgonetas sin cobrar** (fichas, vencimientos, inspección con fotos e IA, taller); tiendas o almacenes y usuarios sin límite |
+| No incluye | Lo de Pro: quién causa los golpes, cuadrante, asignación (`_MODULOS_SOLO_PRO`). Si lo quieren: Pro por vehículo + la app de reparto a 6 € |
+| Descuentos | Volumen −10/−15/−20 % desde 50/150/300 repartidores; anual 10 meses. Prueba 14 días sin tarjeta |
+| Ejemplos | Tienda con 3 furgonetas y 5 repartidores: 60 €/mes (antes 80). Tienda con 2 repartidores: 36 €. Cadena de 100 tiendas y 500 repartidores: 6.000 − 20 % = 4.800 €/mes (48 € por tienda) |
+| Por qué 12 y no 6 | Para ellos es el producto entero, no un añadido. Coste por repartidor (rutas, geocodificación, fotos) entre 0,50 y 1 €. Sigue muy por debajo de las herramientas de rutas para equipos, que van por conductor a precios bastante más altos |
+| Cómo está hecho | `PLAN_TARIFAS["reparto"]` (`por_repartidor`, `minimo_repartidores`), `_LIM_REPARTO`, `_cobros_del_mes` cobra `reparto_conductores` del mes anterior y no suma la línea de la app; alta con `?sector=supermercado` o `distribucion` nace en Reparto; `/planes` lo enseña aparte con su propio «¿cuántos repartidores?»; el selector del alta en esos sectores enseña Reparto y Pro (Esencial no) |
+| Antes de una cadena | Servidor de rutas propio (OSRM): el de demostración de FOSSGIS admite 1 petición por segundo |
+
 ## 4. Complementos («paga más y obtén…»)
 
 | Complemento | Precio | Para quién |

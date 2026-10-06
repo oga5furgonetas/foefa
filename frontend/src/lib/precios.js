@@ -46,6 +46,25 @@ export const PLANES_EMPRESA = [
   },
 ]
 
+/* REPARTO (06-10-2026): el súper o el distribuidor compra el reparto por REPARTIDOR, no la flota por
+   furgoneta: tiene 2–4 furgonetas por tienda y con Esencial (mínimo 10) pagaba furgonetas que no
+   existen. 12 € por repartidor activo al mes (el que tuvo pedidos), mínimo 3, furgonetas incluidas.
+   Si quieren lo de Pro (quién causa los golpes, cuadrante), ese es Pro por vehículo + la app a 6 €. */
+export const PLAN_REPARTO = {
+  clave: 'reparto', nombre: 'Reparto', para: 'Súper y distribución: por repartidor, furgonetas incluidas',
+  por_repartidor: 12, minimo_repartidores: 3, color: '#22c55e', sectores: ['supermercado', 'distribucion'],
+  incluye: [
+    'Pedidos sin límite: a mano, pegados de vuestro programa o escaneando la caja',
+    'Zonas por repartidor y ruta ordenada por tiempo, con franjas y hora estimada',
+    'Navegación con voz, prueba de entrega con foto y cobro a la entrega',
+    'Enlace de seguimiento para el cliente',
+    'La oficina ve el progreso y dónde va cada repartidor en jornada',
+    'Vuestras furgonetas incluidas: fichas, ITV y seguro, inspección con fotos e IA, taller',
+    'Tiendas o almacenes y usuarios sin límite',
+  ],
+  no_incluye: ['Quién causa los golpes, cuadrante y asignación (eso es Pro, por vehículo)'],
+}
+
 export const DESCUENTOS_VOLUMEN = [{ desde: 50, pct: 10 }, { desde: 150, pct: 15 }, { desde: 300, pct: 20 }]
 
 /** Porcentaje de descuento por tamaño de flota. */
@@ -55,18 +74,26 @@ export function descuentoVolumen(n, tramos = DESCUENTOS_VOLUMEN) {
   return pct
 }
 
-/** Lo que paga al mes esa flota en ese plan: mínimo y descuento por volumen. 0 = a medida. */
-export function precioMes(p, furgonetas, tramos) {
+/* La unidad que se cobra: el repartidor activo en Reparto, la furgoneta en los demás. */
+const unidad = (p) => (p.por_repartidor
+  ? { precio: Number(p.por_repartidor), minimo: p.minimo_repartidores || 0 }
+  : { precio: Number(p.por_vehiculo) || 0, minimo: p.minimo_vehiculos || 0 })
+
+/** Lo que paga al mes con `unidades` (furgonetas o repartidores) en ese plan: mínimo y
+    descuento por volumen. 0 = a medida. */
+export function precioMes(p, unidades, tramos) {
   if (p.mensual) return p.mensual
-  if (!p.por_vehiculo) return 0
-  const n = Math.max(Number(furgonetas) || 0, p.minimo_vehiculos || 0)
-  return Math.round(p.por_vehiculo * n * (100 - descuentoVolumen(n, tramos))) / 100
+  const u = unidad(p)
+  if (!u.precio) return 0
+  const n = Math.max(Number(unidades) || 0, u.minimo)
+  return Math.round(u.precio * n * (100 - descuentoVolumen(n, tramos))) / 100
 }
 
-/** Precio por vehículo ya con el descuento por volumen. */
-export function precioVehiculo(p, furgonetas, tramos) {
-  const n = Math.max(Number(furgonetas) || 0, p.minimo_vehiculos || 0)
-  return Math.round(p.por_vehiculo * (100 - descuentoVolumen(n, tramos))) / 100
+/** Precio por unidad (vehículo o repartidor) ya con el descuento por volumen. */
+export function precioVehiculo(p, unidades, tramos) {
+  const u = unidad(p)
+  const n = Math.max(Number(unidades) || 0, u.minimo)
+  return Math.round(u.precio * (100 - descuentoVolumen(n, tramos))) / 100
 }
 
 /* Pagando un año se pagan 10 meses: dos salen gratis. */
@@ -75,8 +102,8 @@ export const MESES_ANUAL = 10
 export const eur = (n) => (Number.isInteger(n) ? n.toLocaleString('es-ES') : n.toLocaleString('es-ES', { minimumFractionDigits: 2, maximumFractionDigits: 2 }))
 
 export const COMPLEMENTOS = [
-  { clave: 'reparto', nombre: 'Reparto', precio: '6 € por conductor que la use en el mes',
-    que: 'App de ruta: escanear o foto a la etiqueta, ruta ordenada por tiempo, navegación, prueba de entrega, seguimiento para el cliente y cobro.' },
+  { clave: 'reparto', nombre: 'App de reparto', precio: '6 € por conductor que la use en el mes',
+    que: 'Para los planes de flota (Esencial, Pro y Empresa): escanear o foto a la etiqueta, ruta ordenada por tiempo, navegación, prueba de entrega, seguimiento para el cliente y cobro. Súper y distribución la llevan incluida en el plan Reparto.' },
   { clave: 'whatsapp', nombre: 'WhatsApp', precio: '150 € de alta + mensajes a precio de Meta + 20 %',
     que: 'Avisos y conversaciones con conductores y talleres desde vuestro número. Incluido en Empresa.' },
   { clave: 'colaboradores', nombre: 'Vehículos de colaboradores', precio: '3 € por vehículo y mes',
@@ -92,7 +119,7 @@ export const COMPLEMENTOS = [
 /* Las reglas que siempre se preguntan (docs/PRECIOS.md §6). */
 export const REGLAS = [
   ['¿Qué vehículo cuenta?', 'Los que tienes de alta el día que se hace la factura del mes. Los que están en el taller cuentan; los dados de baja, no.'],
-  ['¿Pago por usuario o por conductor?', 'No. Usuarios de oficina y conductores ilimitados en todos los planes: se paga por vehículo. Solo la app de reparto, si la usáis, va por conductor.'],
+  ['¿Pago por usuario o por conductor?', 'No. Usuarios de oficina y conductores ilimitados en todos los planes: se paga por vehículo. Solo el reparto va por repartidor: como complemento (6 €) en los planes de flota, o como plan Reparto (12 €, furgonetas incluidas) si sois un súper o un distribuidor.'],
   ['¿Y si la flota crece o baja a mitad de mes?', 'Ese mes no se toca: la factura siguiente ya sale con los vehículos que tengas. Nunca se cobra a toro pasado.'],
   ['¿Furgonetas de subcontratas o de campaña?', 'Se marcan en la ficha de cada una: las de colaboradores a 3 € al mes y las de campaña a 0,30 € por día que estén, fuera del plan.'],
   ['¿Tengo permanencia?', 'Mensual: no, cancelas cuando quieras. Anual: un año, con 2 meses gratis.'],

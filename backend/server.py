@@ -728,8 +728,16 @@ _LIM_AUTONOMO = {"max_vehicles": 1, "max_drivers": 1, "max_centers": 1,
                  "ai": False, "chat": False, "forensics": False,
                  "maintenance": False, "assignments": False, "export": True}
 
+# Reparto (súper y distribución): tiendas o almacenes sin tope (una cadena tiene muchas),
+# la flota básica de sus furgonetas sin cobrarla, y fuera lo de Pro (quién causa los
+# golpes, cuadrante, asignación: `_MODULOS_SOLO_PRO`). Se cobra por repartidor activo.
+_LIM_REPARTO = {"max_vehicles": -1, "max_drivers": -1, "max_centers": -1,
+                "ai": True, "chat": True, "forensics": False,
+                "maintenance": True, "assignments": False, "export": True}
+
 PLAN_LIMITS = {
     "autonomo":   _LIM_AUTONOMO,
+    "reparto":    _LIM_REPARTO,
     "operacion":  _LIM_OPERACION,
     "completo":   _LIM_COMPLETO,
     "holding":    _LIM_COMPLETO,
@@ -1292,7 +1300,7 @@ def org_modulos(org) -> Optional[list]:
     if not isinstance(m, list):
         m = MODULOS_ESTANDAR
     vistos = set(m) | set(_MODULOS_FIJOS)
-    if str(org.get("plan") or "").strip().lower() in ("operacion", "basico"):   # Esencial
+    if str(org.get("plan") or "").strip().lower() in ("operacion", "basico", "reparto"):   # Esencial y Reparto
         vistos -= set(_MODULOS_SOLO_PRO)
     return [k for k in _MODULOS_CLAVES if k in vistos]
 
@@ -4876,6 +4884,9 @@ async def register_dsp(data: RegisterRequest, request: Request):
     sector_alta = (data.sector or "").strip().lower()
     if sector_alta == "autonomo":
         plan_elegido = "autonomo"
+    # Súper y distribución sin plan elegido: el suyo es Reparto (por repartidor), no uno de flota.
+    if sector_alta in ("supermercado", "distribucion") and not plan_elegido:
+        plan_elegido = "reparto"
     dias_prueba = int(PLAN_TARIFAS.get(plan_elegido or "", {}).get("dias_prueba") or 14)
     # «Invita a un compañero»: quien llega con el enlace de otro repartidor
     # empieza con 7 días MÁS de prueba (14 en vez de 7).
@@ -5219,6 +5230,10 @@ PLAN_TARIFAS = {
     "operacion": {"por_vehiculo": 5, "minimo_vehiculos": 10, "rango": 1},   # Esencial
     "completo":  {"por_vehiculo": 9, "minimo_vehiculos": 20, "rango": 2},   # Pro
     "holding":   {"por_vehiculo": 0, "minimo_vehiculos": 0,  "rango": 3},   # Empresa: a medida, desde 12 €
+    # Reparto (06-10-2026): súper y distribución compran el reparto por REPARTIDOR, no la flota
+    # por furgoneta (tienen 2–4 por tienda; con Esencial pagaban furgonetas que no existen).
+    # 12 € por repartidor activo (con pedidos el mes anterior), mínimo 3, sus furgonetas incluidas.
+    "reparto":   {"por_vehiculo": 0, "minimo_vehiculos": 0, "por_repartidor": 12, "minimo_repartidores": 3, "rango": 1},
 }
 # Descuento por volumen sobre el precio por vehículo (docs/PRECIOS.md §5): desde 50
 # vehículos −10 %, desde 150 −15 %, desde 300 −20 %. El anual (2 meses gratis) se suma aparte.
@@ -5272,6 +5287,11 @@ def _catalogo_por_defecto():
              "recomendado": True},
             {"clave": "holding", "nombre": "Empresa", "para": "100 vehículos o más",
              "por_vehiculo": 0, "minimo_vehiculos": 0, "recomendado": False},
+            {"clave": "reparto", "nombre": "Reparto", "para": "Súper y distribución: por repartidor, furgonetas incluidas",
+             "por_vehiculo": 0, "minimo_vehiculos": 0,
+             "por_repartidor": PLAN_TARIFAS["reparto"]["por_repartidor"],
+             "minimo_repartidores": PLAN_TARIFAS["reparto"]["minimo_repartidores"],
+             "sectores": ["supermercado", "distribucion"], "recomendado": False},
         ],
     }
 
@@ -5289,7 +5309,11 @@ async def _catalogo_planes(forzar: bool = False):
             # conoce y la base aún no (el Autónomo, 04-10-2026) no desaparece.
             vistos = {p.get("clave") for p in doc["planes"]}
             nuevos = [p for p in datos["planes"] if p.get("clave") not in vistos]
-            datos = {**datos, **doc, "planes": nuevos + list(doc["planes"])}
+            # Un campo que el código conoce y la base no (por_repartidor, sectores…) se
+            # rellena del código: lo editado desde el panel solo pisa lo que trae.
+            defectos = {p.get("clave"): p for p in datos["planes"]}
+            datos = {**datos, **doc,
+                     "planes": nuevos + [{**defectos.get(p.get("clave"), {}), **p} for p in doc["planes"]]}
     except Exception as e:
         logger.warning(f"Catalogo de planes: uso los valores del codigo ({e})")
     _CATALOGO_CACHE.update({"ts": ahora, "datos": datos})
@@ -5322,6 +5346,8 @@ def _precio_mensual(plan, n_vehiculos: int) -> int:
     t = PLAN_TARIFAS.get(_plan_canon(plan))
     if t and t.get("mensual"):
         return t["mensual"]
+    if t and t.get("por_repartidor"):          # Reparto: `n_vehiculos` son repartidores activos
+        return _con_volumen(t["por_repartidor"], n_vehiculos, t.get("minimo_repartidores"))
     if not t or not t.get("por_vehiculo"):
         return 0
     return _con_volumen(t["por_vehiculo"], n_vehiculos, t["minimo_vehiculos"])
@@ -5332,6 +5358,8 @@ async def _precio_vigente(plan, n_vehiculos: int) -> int:
     t = _tarifa_de(await _catalogo_planes(), plan)
     if t and t.get("mensual"):
         return float(t["mensual"])
+    if t and t.get("por_repartidor"):          # Reparto: la unidad es el repartidor activo
+        return _con_volumen(t["por_repartidor"], n_vehiculos, t.get("minimo_repartidores"))
     if not t or not t.get("por_vehiculo"):
         return 0
     return _con_volumen(t["por_vehiculo"], n_vehiculos, t.get("minimo_vehiculos"))
@@ -5367,8 +5395,13 @@ async def upgrade_preview(new_plan: str, user: dict = Depends(require_admin)):
 
     # El precio depende del tamaño de la flota, no es plano (solo las propias).
     n_vehiculos = await db.vehicles.count_documents(_FILTRO_PROPIAS)
-    current_price = _precio_mensual(current_plan, n_vehiculos)
-    new_price = _precio_mensual(new_plan, n_vehiculos)
+    # Reparto se cobra por repartidor activo (con pedidos el mes anterior), no por furgoneta.
+    n_rep = (await _cuenta_flota(_mes_actual()))["reparto_conductores"]
+
+    def _unidades(plan):
+        return n_rep if PLAN_TARIFAS.get(_plan_canon(plan), {}).get("por_repartidor") else n_vehiculos
+    current_price = _precio_mensual(current_plan, _unidades(current_plan))
+    new_price = _precio_mensual(new_plan, _unidades(new_plan))
 
     if new_price <= current_price:
         return {"type": "downgrade", "current_plan": current_plan, "new_plan": new_plan,
@@ -5507,13 +5540,30 @@ async def billing_planes():
                         "Soporte prioritario con persona asignada"],
             "no_incluye": [],
         },
+        # Reparto: lo que abre `_MODULOS_REPARTO` con `_LIM_REPARTO` (sin lo de Pro).
+        "reparto": {
+            "incluye": [
+                "Pedidos sin límite: a mano, pegados de vuestro programa o escaneando la caja",
+                "Zonas por repartidor y ruta ordenada por tiempo, con franjas y hora estimada",
+                "Navegación con voz, prueba de entrega con foto y cobro a la entrega",
+                "Enlace de seguimiento para el cliente",
+                "La oficina ve el progreso y dónde va cada repartidor en jornada",
+                "Vuestras furgonetas incluidas: fichas, ITV y seguro, inspección con fotos e IA, taller",
+                "Tiendas o almacenes y usuarios sin límite",
+            ],
+            "no_incluye": ["Quién causa los golpes, cuadrante y asignación (eso es Pro, por vehículo)"],
+        },
     }
     planes = []
     for p in cat.get("planes") or []:
         d = detalle.get(p.get("clave"), {"incluye": [], "no_incluye": []})
+        if p.get("por_repartidor"):
+            desde = int(float(p["por_repartidor"]) * int(p.get("minimo_repartidores") or 0))
+        else:
+            desde = int(float(p.get("por_vehiculo") or 0) * int(p.get("minimo_vehiculos") or 0))
         planes.append({
             **p,
-            "desde": int(float(p.get("por_vehiculo") or 0) * int(p.get("minimo_vehiculos") or 0)),
+            "desde": desde,
             "incluye": p.get("incluye") or d["incluye"],
             "no_incluye": p.get("no_incluye") or d["no_incluye"],
         })
@@ -5531,9 +5581,10 @@ async def billing_planes():
 # contrata hablando con nosotros y se factura en el cobro mensual.
 EMPRESA_DESDE_VEHICULO = 12
 COMPLEMENTOS = [
-    {"clave": "reparto", "nombre": "Reparto", "precio": "6 € por conductor que la use en el mes",
-     "que": "App de ruta: escanear o foto a la etiqueta, ruta ordenada por tiempo, navegación, "
-            "prueba de entrega, seguimiento para el cliente y cobro."},
+    {"clave": "reparto", "nombre": "App de reparto", "precio": "6 € por conductor que la use en el mes",
+     "que": "Para los planes de flota (Esencial, Pro y Empresa): escanear o foto a la etiqueta, ruta ordenada "
+            "por tiempo, navegación, prueba de entrega, seguimiento para el cliente y cobro. "
+            "Súper y distribución la llevan incluida en el plan Reparto."},
     {"clave": "whatsapp", "nombre": "WhatsApp", "precio": "150 € de alta + mensajes a precio de Meta + 20 %",
      "que": "Avisos y conversaciones con conductores y talleres desde vuestro número. Incluido en Empresa."},
     # El informe pericial firmado ya NO es complemento (06-10-2026): la app lo da sin
@@ -5719,14 +5770,31 @@ async def _cobros_del_mes(mes: str, crear: bool = True):
         minimo = int(tarifa.get("minimo_vehiculos") or 0)
         # Precio pactado a mano (holding, descuentos): manda sobre la tarifa.
         pactado = _a_numero(o.get("precio_mes_pactado"))
-        # Con el descuento por volumen (docs/PRECIOS.md §5), el mismo que enseña /planes.
-        plan_importe = round(pactado if pactado > 0 else _con_volumen(por_veh, vehiculos, minimo), 2)
+        nombre_plan = tarifa.get("nombre", plan)
+        por_rep = float(tarifa.get("por_repartidor") or 0)
+        complementos = _lineas_complementos(cuenta)
+        if por_rep:
+            # Reparto: se cobra por repartidor activo del mes anterior (el que tuvo pedidos),
+            # con su mínimo y su volumen; las furgonetas van incluidas y la app de reparto
+            # también, así que esa línea de complemento no se suma.
+            unidades = cuenta["reparto_conductores"]
+            minimo_rep = int(tarifa.get("minimo_repartidores") or 0)
+            plan_importe = round(pactado if pactado > 0 else _con_volumen(por_rep, unidades, minimo_rep), 2)
+            linea_plan = {"clave": "plan",
+                          "concepto": f"Plan {nombre_plan} · {unidades} repartidores activos ({cuenta['mes_vencido']})",
+                          "cantidad": unidades, "precio": por_rep, "importe": plan_importe, "pactado": pactado > 0}
+            complementos = [li for li in complementos if li["clave"] != "reparto"]
+            unidad_txt = f"{unidades} repartidores"
+        else:
+            # Con el descuento por volumen (docs/PRECIOS.md §5), el mismo que enseña /planes.
+            plan_importe = round(pactado if pactado > 0 else _con_volumen(por_veh, vehiculos, minimo), 2)
+            linea_plan = {"clave": "plan", "concepto": f"Plan {nombre_plan} · {vehiculos} vehículos",
+                          "cantidad": vehiculos, "precio": por_veh, "importe": plan_importe,
+                          "pactado": pactado > 0}
+            unidad_txt = f"{vehiculos} furgonetas"
         if plan_importe <= 0:
             continue                      # a medida sin precio puesto: no se cobra solo
-        nombre_plan = tarifa.get("nombre", plan)
-        lineas = [{"clave": "plan", "concepto": f"Plan {nombre_plan} · {vehiculos} vehículos",
-                   "cantidad": vehiculos, "precio": por_veh, "importe": plan_importe,
-                   "pactado": pactado > 0}] + _lineas_complementos(cuenta)
+        lineas = [linea_plan] + complementos
         base = round(sum(li["importe"] for li in lineas), 2)
         extra = "".join(f" + {li['cantidad']} {li['clave']}" for li in lineas[1:])
 
@@ -5735,8 +5803,8 @@ async def _cobros_del_mes(mes: str, crear: bool = True):
             "id": str(uuid.uuid4()), "mes": mes,
             "org_id": o.get("id"), "org_nombre": o.get("name"),
             "email": o.get("email"), "plan": plan,
-            "vehiculos": vehiculos, "precio_unitario": por_veh,
-            "concepto": f"{MARCA} · {nombre_plan} · {vehiculos} furgonetas{extra} · {mes}",
+            "vehiculos": vehiculos, "precio_unitario": por_rep or por_veh,
+            "concepto": f"{MARCA} · {nombre_plan} · {unidad_txt}{extra} · {mes}",
             "lineas": lineas,
             "base": base, "iva_pct": iva_pct, "iva": iva, "total": round(base + iva, 2),
             "estado": "en_prueba" if o.get("status") == "trial" else "pendiente",
@@ -5895,14 +5963,14 @@ async def admin_set_planes(data: dict = Body(...), user: dict = Depends(require_
     if not isinstance(entrantes, list) or not entrantes:
         raise HTTPException(400, "Hace falta la lista de planes")
 
-    validos = {p["clave"] for p in _catalogo_por_defecto()["planes"]}
+    defectos = {p["clave"]: p for p in _catalogo_por_defecto()["planes"]}
     planes = []
     for p in entrantes:
         p = _dict_cuerpo(p)      # un elemento que no es un objeto no es un plan
         clave = (p.get("clave") or "").strip()
-        if clave not in validos:
+        if clave not in defectos:
             raise HTTPException(400, f"Plan desconocido: {clave or '(vacío)'}")
-        planes.append({
+        nuevo = {
             "clave": clave,
             "nombre": (p.get("nombre") or clave).strip()[:40],
             "para": (p.get("para") or "").strip()[:80],
@@ -5911,7 +5979,15 @@ async def admin_set_planes(data: dict = Body(...), user: dict = Depends(require_
             "minimo_vehiculos": _entero(p.get("minimo_vehiculos"), f"mínimo de {clave}",
                                         defecto=0, minimo=0, maximo=10000),
             "recomendado": bool(p.get("recomendado")),
-        })
+        }
+        # El plan Reparto se cobra por repartidor: se guarda su precio y su mínimo (si no
+        # viniesen, los del código), para que editar desde el panel no lo deje a 0.
+        if defectos[clave].get("por_repartidor"):
+            nuevo["por_repartidor"] = _decimal(p.get("por_repartidor"), f"precio por repartidor de {clave}",
+                                               defecto=defectos[clave]["por_repartidor"], minimo=0, maximo=1000)
+            nuevo["minimo_repartidores"] = _entero(p.get("minimo_repartidores"), f"mínimo de repartidores de {clave}",
+                                                   defecto=defectos[clave]["minimo_repartidores"], minimo=0, maximo=10000)
+        planes.append(nuevo)
     if len({p["clave"] for p in planes}) != len(planes):
         raise HTTPException(400, "Hay planes repetidos")
 

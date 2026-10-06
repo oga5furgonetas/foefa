@@ -4,7 +4,7 @@ import { Check, Zap, ArrowRight } from 'lucide-react'
 import { API_BASE } from '../lib/apiBase'
 import { medirAccion } from '../lib/analitica'
 import { MARCA } from '../marca'
-import { PLANES_EMPRESA, DESCUENTOS_VOLUMEN, COMPLEMENTOS, REGLAS, MESES_ANUAL, precioMes, precioVehiculo, descuentoVolumen, eur } from '../lib/precios'
+import { PLANES_EMPRESA, PLAN_REPARTO, DESCUENTOS_VOLUMEN, COMPLEMENTOS, REGLAS, MESES_ANUAL, precioMes, precioVehiculo, descuentoVolumen, eur } from '../lib/precios'
 
 /* Tarifa POR VEHÍCULO, con usuarios y conductores ilimitados. Los planes, los
    descuentos y los complementos viven en lib/precios.js (y su porqué, en
@@ -112,6 +112,9 @@ export default function Planes() {
   const [tramos, setTramos] = useState(DESCUENTOS_VOLUMEN)
   const [complementos, setComplementos] = useState(COMPLEMENTOS)
   const [autonomo, setAutonomo] = useState(AUTONOMO)
+  // Reparto va aparte: su unidad es el repartidor, no la furgoneta del deslizador de arriba.
+  const [reparto, setReparto] = useState(PLAN_REPARTO)
+  const [repartidores, setRepartidores] = useState(5)
 
   useEffect(() => {
     // Los precios mandan desde el backend. Si no responde, se quedan los de
@@ -126,6 +129,8 @@ export default function Planes() {
         }))
         const aut = lista.find((p) => p.clave === 'autonomo')
         if (aut) setAutonomo({ ...AUTONOMO, ...aut })
+        const rep = lista.find((p) => p.clave === 'reparto')
+        if (rep) setReparto({ ...PLAN_REPARTO, ...rep, color: PLAN_REPARTO.color })
         if (Array.isArray(d?.descuentos_volumen) && d.descuentos_volumen.length) setTramos(d.descuentos_volumen)
         if (Array.isArray(d?.complementos) && d.complementos.length) setComplementos(d.complementos)
       })
@@ -275,6 +280,61 @@ export default function Planes() {
             )
           })}
         </div>
+
+        {/* Reparto: súper y distribución pagan por repartidor activo, con las furgonetas incluidas */}
+        {(() => {
+          const mesRep = precioMes(reparto, repartidores, tramos)
+          const porRep = precioVehiculo(reparto, repartidores, tramos)
+          const minRep = reparto.minimo_repartidores || 0
+          const mostradoRep = billing === 'annual' ? Math.round(mesRep * MESES_ANUAL / 12) : mesRep
+          return (
+            <div id="reparto" style={{ ...tarjeta, border: `1.5px solid ${reparto.color}55`, padding: '26px 28px', marginTop: 40, display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(280px,1fr))', gap: 24, alignItems: 'start' }}>
+              <div style={{ minWidth: 0 }}>
+                <div style={{ fontSize: 12, fontWeight: 700, color: reparto.color, textTransform: 'uppercase', letterSpacing: '.08em', marginBottom: 6 }}>¿Repartís vuestra propia mercancía?</div>
+                <h2 style={{ fontSize: 24, fontWeight: 900, margin: '0 0 8px', lineHeight: 1.2 }}>Plan {reparto.nombre}: por repartidor, con las furgonetas incluidas</h2>
+                <p style={{ margin: '0 0 16px', color: '#94a3b8', fontSize: 14, lineHeight: 1.6 }}>
+                  Para el supermercado que lleva la compra a casa y el distribuidor que reparte a negocios. Se paga por repartidor que haya tenido pedidos en el mes; las furgonetas, las tiendas y los usuarios no se cobran.
+                </p>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap', marginBottom: 14 }}>
+                  <label htmlFor="repartidores" style={{ fontSize: 14, color: '#cbd5e1', fontWeight: 600 }}>¿Cuántos repartidores tenéis?</label>
+                  <input id="repartidores" type="number" min="1" max="5000" value={repartidores} aria-label="Número de repartidores"
+                    onChange={(e) => setRepartidores(Math.max(1, Math.min(5000, Number(e.target.value) || 1)))}
+                    style={{ width: 80, background: '#0b0d10', border: '1px solid rgba(255,255,255,.14)', borderRadius: 10, padding: '8px 10px', color: '#eef1f6', fontSize: 15, fontWeight: 800, textAlign: 'center' }} />
+                </div>
+                <div style={{ display: 'flex', alignItems: 'baseline', gap: 4 }}>
+                  <span style={{ fontSize: 40, fontWeight: 900 }}>{eur(mostradoRep)}€</span>
+                  <span style={{ color: '#8b94a3', fontSize: 14 }}>/mes</span>
+                </div>
+                <div style={{ fontSize: 12, color: '#8b94a3', marginTop: 4 }}>
+                  {porRep !== Number(reparto.por_repartidor)
+                    ? <><s>{eur(reparto.por_repartidor)}€</s> <b style={{ color: '#34d399' }}>{eur(porRep)}€</b> por repartidor activo y mes</>
+                    : <>{eur(reparto.por_repartidor)}€ por repartidor activo y mes</>}
+                  {repartidores < minRep && <span style={{ color: '#64748b' }}> · mínimo {minRep}</span>}
+                </div>
+                {billing === 'annual' && (
+                  <div style={{ fontSize: 12, color: '#34d399', fontWeight: 700, marginTop: 4 }}>{eur(mesRep * MESES_ANUAL)}€/año · ahorras {eur(mesRep * (12 - MESES_ANUAL))}€</div>
+                )}
+                <a href={`/registro?sector=supermercado&plan=reparto&billing=${billing}&repartidores=${repartidores}`}
+                  onClick={() => medirAccion('plan_elegir')}
+                  style={{ display: 'inline-block', marginTop: 16, padding: '12px 22px', borderRadius: 12, fontWeight: 800, fontSize: 14, textDecoration: 'none', background: `linear-gradient(135deg,${reparto.color},${reparto.color}cc)`, color: '#0b0d10' }}>
+                  Empezar 14 días gratis →
+                </a>
+              </div>
+              <ul style={{ listStyle: 'none', padding: 0, margin: 0, display: 'flex', flexDirection: 'column', gap: 8, minWidth: 0 }}>
+                {(reparto.incluye || []).map((f) => (
+                  <li key={f} style={{ display: 'flex', alignItems: 'flex-start', gap: 8, fontSize: 13, color: '#cbd5e1', lineHeight: 1.45 }}>
+                    <Check size={14} color={reparto.color} style={{ flexShrink: 0, marginTop: 2 }} /> {f}
+                  </li>
+                ))}
+                {(reparto.no_incluye || []).map((f) => (
+                  <li key={f} style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12, color: '#475569' }}>
+                    <span style={{ fontSize: 14, lineHeight: 1 }}>✕</span> {f}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )
+        })()}
 
         {/* Complementos: paga más y obtén… */}
         <h2 style={{ fontSize: 22, fontWeight: 900, margin: '40px 0 6px' }}>Complementos</h2>

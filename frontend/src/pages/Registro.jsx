@@ -12,7 +12,7 @@ import { tx, useIdioma, IDIOMAS, cambiarIdioma } from '../lib/idioma'
 import { desdeChina } from '../lib/apiBase'
 import { Check, Zap, Package, ShoppingCart, Warehouse, Truck, User, Send } from 'lucide-react'
 import { MARCA, dominio } from '../marca'
-import { PLANES_EMPRESA, MESES_ANUAL, precioMes as precioMesPlan, eur } from '../lib/precios'
+import { PLANES_EMPRESA, PLAN_REPARTO, MESES_ANUAL, precioMes as precioMesPlan, eur } from '../lib/precios'
 
 function slugify(s) {
   return (s || '').toLowerCase().trim()
@@ -38,6 +38,14 @@ const PLANS = [
     // Sin furgoneta, taller ni equipo: la app de ruta no tiene panel de flota (SECTORES_REGISTRO).
     no: ['Equipo de repartidores y flota (para eso están los planes de empresa)'],
   },
+  {
+    // Reparto: súper y distribución pagan por repartidor activo, con sus furgonetas
+    // incluidas. Solo sale en esos sectores (con Pro al lado, por si quieren la flota entera).
+    key: 'reparto', name: PLAN_REPARTO.nombre, color: PLAN_REPARTO.color, porVehiculo: 0,
+    porRepartidor: PLAN_REPARTO.por_repartidor, minimo: PLAN_REPARTO.minimo_repartidores,
+    popular: false, soloSectores: PLAN_REPARTO.sectores, who: PLAN_REPARTO.para,
+    feats: PLAN_REPARTO.incluye, no: PLAN_REPARTO.no_incluye,
+  },
   // Esencial y Pro: los mismos que /planes (lib/precios.js). Empresa se cierra hablando.
   ...PLANES_EMPRESA.filter((p) => p.por_vehiculo).map((p) => ({
     key: p.clave, name: p.nombre, color: p.color, porVehiculo: p.por_vehiculo, minimo: p.minimo_vehiculos,
@@ -46,8 +54,10 @@ const PLANS = [
 ]
 
 /* Lo que paga al mes esa flota (con mínimo y descuento por volumen). Pagando un año se pagan 10 meses. */
-const precioMes = (p, furgonetas) =>
-  p.mensual ?? precioMesPlan({ por_vehiculo: p.porVehiculo, minimo_vehiculos: p.minimo }, furgonetas)
+const precioMes = (p, unidades) =>
+  p.mensual ?? precioMesPlan(p.porRepartidor
+    ? { por_repartidor: p.porRepartidor, minimo_repartidores: p.minimo }
+    : { por_vehiculo: p.porVehiculo, minimo_vehiculos: p.minimo }, unidades)
 const annualM = (p, furgonetas) => Math.round(precioMes(p, furgonetas) * MESES_ANUAL / 12)
 const annualSave = (p, furgonetas) => precioMes(p, furgonetas) * (12 - MESES_ANUAL)
 
@@ -98,9 +108,16 @@ function SectorPicker({ onSelect }) {
 }
 
 /* ── Selector de plan (paso 1) ── */
-function PlanPicker({ onSelect, furgonetas }) {
+function PlanPicker({ onSelect, furgonetas, setFurgonetas, repartidores, setRepartidores, sector }) {
   const { lang, setLang } = useT()
   const [billing, setBilling] = useState('monthly')
+  // Súper y distribución ven Reparto (recomendado) y Pro; a ellos Esencial (mínimo 10
+  // furgonetas) les cobraría furgonetas que no tienen. El resto, Esencial y Pro.
+  const reparteSector = PLAN_REPARTO.sectores.includes(sector)
+  const visibles = PLANS.filter((p) => !p.soloSector
+    && (p.soloSectores ? p.soloSectores.includes(sector) : !(reparteSector && p.key === 'operacion')))
+  const destacado = (p) => (reparteSector ? p.key === 'reparto' : p.popular)
+  const campoN = { width: 72, background: '#0b0d10', border: '1px solid rgba(255,255,255,.14)', borderRadius: 10, padding: '7px 8px', color: '#eef1f6', fontSize: 14, fontWeight: 800, textAlign: 'center' }
 
   return (
     <div style={{ minHeight: '100vh', background: 'radial-gradient(1100px 560px at 72% -12%,rgba(14,165,233,.10),transparent),#0b0d10', color: '#eef1f6', fontFamily: 'Inter Variable,Inter,system-ui,sans-serif', padding: '24px 16px 60px' }}>
@@ -136,25 +153,43 @@ function PlanPicker({ onSelect, furgonetas }) {
           </div>
         </div>
 
+        {/* Cuántos sois: el precio se calcula con lo vuestro, no con una flota tipo */}
+        <div style={{ display: 'flex', justifyContent: 'center', gap: 18, flexWrap: 'wrap', marginBottom: 22 }}>
+          {reparteSector && (
+            <label style={{ display: 'flex', alignItems: 'center', gap: 10, fontSize: 13.5, color: '#cbd5e1', fontWeight: 600 }}>
+              ¿Cuántos repartidores tenéis?
+              <input type="number" min="1" max="5000" value={repartidores} aria-label="Número de repartidores" style={campoN}
+                onChange={(e) => setRepartidores(Math.max(1, Math.min(5000, Number(e.target.value) || 1)))} />
+            </label>
+          )}
+          <label style={{ display: 'flex', alignItems: 'center', gap: 10, fontSize: 13.5, color: '#cbd5e1', fontWeight: 600 }}>
+            {reparteSector ? '¿Y furgonetas?' : '¿Cuántos vehículos tienes?'}
+            <input type="number" min="1" max="5000" value={furgonetas} aria-label="Número de vehículos" style={campoN}
+              onChange={(e) => setFurgonetas(Math.max(1, Math.min(5000, Number(e.target.value) || 1)))} />
+          </label>
+        </div>
+
         {/* Plan cards */}
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(260px,1fr))', gap: 16, marginBottom: 20 }}>
-          {PLANS.filter((p) => !p.soloSector).map((p) => {
-            const mes = precioMes(p, furgonetas)
-            const price = billing === 'annual' ? annualM(p, furgonetas) : mes
-            const save = annualSave(p, furgonetas)
+          {visibles.map((p) => {
+            const n = p.porRepartidor ? repartidores : furgonetas
+            const pop = destacado(p)
+            const mes = precioMes(p, n)
+            const price = billing === 'annual' ? annualM(p, n) : mes
+            const save = annualSave(p, n)
             return (
               <div key={p.key} style={{
-                background: p.popular ? 'linear-gradient(145deg,#0f172a,#0c1929)' : '#13161b',
-                border: p.popular ? `2px solid ${p.color}` : '1px solid rgba(255,255,255,.08)',
+                background: pop ? 'linear-gradient(145deg,#0f172a,#0c1929)' : '#13161b',
+                border: pop ? `2px solid ${p.color}` : '1px solid rgba(255,255,255,.08)',
                 borderRadius: 18, padding: '24px 20px', position: 'relative', display: 'flex', flexDirection: 'column',
-                boxShadow: p.popular ? `0 0 32px ${p.color}20` : 'none',
+                boxShadow: pop ? `0 0 32px ${p.color}20` : 'none',
                 cursor: 'pointer', transition: 'transform .15s',
               }}
                 onMouseEnter={e => e.currentTarget.style.transform = 'translateY(-2px)'}
                 onMouseLeave={e => e.currentTarget.style.transform = 'translateY(0)'}
               >
-                {p.popular && (
-                  <div style={{ position: 'absolute', top: -11, left: '50%', transform: 'translateX(-50%)', background: p.color, borderRadius: 20, padding: '3px 12px', fontSize: 10, fontWeight: 800, whiteSpace: 'nowrap' }}>
+                {pop && (
+                  <div style={{ position: 'absolute', top: -11, left: '50%', transform: 'translateX(-50%)', background: p.color, borderRadius: 20, padding: '3px 12px', fontSize: 10, fontWeight: 800, whiteSpace: 'nowrap', color: '#0b0d10' }}>
                     Recomendado
                   </div>
                 )}
@@ -170,12 +205,13 @@ function PlanPicker({ onSelect, furgonetas }) {
                 {/* El precio es por furgoneta: sin esta línea, «200 €/mes» parecía
                     una cuota fija y chocaba con el «desde 5 €» de la portada. */}
                 <div style={{ fontSize: 11.5, color: '#64748b', marginBottom: 10 }}>
-                  {p.porVehiculo}€ por vehículo · con {Math.max(furgonetas, p.minimo)} vehículos
-                  {furgonetas < p.minimo && ` (mínimo ${p.minimo})`}
+                  {p.porRepartidor
+                    ? <>{p.porRepartidor}€ por repartidor activo · con {Math.max(n, p.minimo)} repartidores{n < p.minimo && ` (mínimo ${p.minimo})`} · furgonetas incluidas</>
+                    : <>{p.porVehiculo}€ por vehículo · con {Math.max(n, p.minimo)} vehículos{n < p.minimo && ` (mínimo ${p.minimo})`}</>}
                 </div>
 
                 {billing === 'annual' && (
-                  <div style={{ fontSize: 11, color: '#34d399', fontWeight: 700, marginBottom: 4 }}>{eur(precioMes(p, furgonetas) * MESES_ANUAL)}€/año · ahorras {eur(save)}€</div>
+                  <div style={{ fontSize: 11, color: '#34d399', fontWeight: 700, marginBottom: 4 }}>{eur(mes * MESES_ANUAL)}€/año · ahorras {eur(save)}€</div>
                 )}
 
                 <ul style={{ listStyle: 'none', padding: 0, margin: '14px 0', display: 'flex', flexDirection: 'column', gap: 6, flex: 1 }}>
@@ -195,10 +231,10 @@ function PlanPicker({ onSelect, furgonetas }) {
                 <button
                   onClick={() => onSelect(p.key, billing)}
                   style={{
-                    width: '100%', padding: '11px 0', borderRadius: 10, border: p.popular ? 'none' : `1.5px solid ${p.color}`,
+                    width: '100%', padding: '11px 0', borderRadius: 10, border: pop ? 'none' : `1.5px solid ${p.color}`,
                     cursor: 'pointer', fontWeight: 800, fontSize: 14,
-                    background: p.popular ? `linear-gradient(135deg,${p.color},${p.color}cc)` : 'transparent',
-                    color: p.popular ? '#fff' : p.color,
+                    background: pop ? `linear-gradient(135deg,${p.color},${p.color}cc)` : 'transparent',
+                    color: pop ? '#0b0d10' : p.color,
                   }}
                 >
                   Empezar con {p.name} →
@@ -231,9 +267,11 @@ export default function Registro() {
   const params = new URLSearchParams(window.location.search)
   const paramPlan = params.get('plan') || ''
   const paramBilling = params.get('billing') || 'monthly'
-  // La calculadora de /planes manda el tamaño de flota en la URL. Si
-  // alguien entra directo, 40 es una flota tipica de DSP.
-  const furgonetas = Math.max(1, Number(params.get('flota')) || 40)
+  // La calculadora de /planes manda el tamaño en la URL (flota o repartidores). Si alguien
+  // entra directo, 40 es una flota típica de DSP; un súper empieza con 5 repartidores y 5 furgonetas.
+  const esSectorReparto = PLAN_REPARTO.sectores.includes(params.get('sector') || '')
+  const [furgonetas, setFurgonetas] = useState(Math.max(1, Number(params.get('flota')) || (esSectorReparto ? 5 : 40)))
+  const [repartidores, setRepartidores] = useState(Math.max(1, Number(params.get('repartidores')) || 5))
 
   const [sector, setSector] = useState(params.get('sector') || '')
   const [verPass, setVerPass] = useState(false)
@@ -275,7 +313,8 @@ export default function Registro() {
 
   // Si no hay plan en URL, mostramos el picker primero
   if (!selectedPlan) {
-    return <PlanPicker furgonetas={furgonetas} onSelect={(key, billing) => {
+    return <PlanPicker furgonetas={furgonetas} setFurgonetas={setFurgonetas} repartidores={repartidores}
+      setRepartidores={setRepartidores} sector={sector} onSelect={(key, billing) => {
       setSelectedPlan(key)
       setBillingMode(billing)
       // Se conserva lo que traía la URL (utm_source de un anuncio): sin eso el
@@ -289,9 +328,11 @@ export default function Registro() {
   const planInfo = PLANS.find(p => p.key === selectedPlan) || PLANS.find(p => p.key === 'completo')
   const diasPrueba = planInfo.diasPrueba || 14
   const precioFijo = planInfo.mensual != null
+  // Reparto se cuenta por repartidores; los demás, por furgonetas.
+  const nUnid = planInfo.porRepartidor ? repartidores : furgonetas
   const displayPrice = billingMode === 'annual'
-    ? annualM(planInfo, furgonetas) : precioMes(planInfo, furgonetas)
-  const yearSave = annualSave(planInfo, furgonetas)
+    ? annualM(planInfo, nUnid) : precioMes(planInfo, nUnid)
+  const yearSave = annualSave(planInfo, nUnid)
 
   function onOrg(v) { setOrg(v); if (!slugTouched) setSlug(slugify(v) || (v.trim() ? sufijo : '')) }
   const china = regionDelMovil().pais === 'cn' || desdeChina()
@@ -411,8 +452,8 @@ export default function Registro() {
               {precioFijo
                 ? tt('{precio} €/mes, todo incluido · {n} días gratis', { precio: displayPrice.toFixed(2).replace('.', ','), n: diasPrueba })
                 : billingMode === 'annual'
-                  ? `${displayPrice}€/mes · ${precioMes(planInfo, furgonetas) * MESES_ANUAL}€/año · ahorras ${yearSave}€`
-                  : `${displayPrice}€/mes`
+                  ? `${displayPrice}€/mes · ${precioMes(planInfo, nUnid) * MESES_ANUAL}€/año · ahorras ${yearSave}€`
+                  : `${displayPrice}€/mes${planInfo.porRepartidor ? ` · con ${Math.max(nUnid, planInfo.minimo)} repartidores activos` : ''}`
               }
             </div>
           </div>

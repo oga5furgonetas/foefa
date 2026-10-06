@@ -260,7 +260,7 @@ function EditorTarifas() {
           <thead>
             <tr className="text-[11px] uppercase tracking-wide text-dark-500">
               <th className="pb-2 text-left font-semibold">Plan</th>
-              <th className="pb-2 text-right font-semibold">€ / furgoneta</th>
+              <th className="pb-2 text-right font-semibold">€ / unidad</th>
               <th className="pb-2 text-right font-semibold">Mínimo</th>
               <th className="pb-2 text-right font-semibold">Desde</th>
               <th className="pb-2 text-right font-semibold">Con 40</th>
@@ -268,22 +268,27 @@ function EditorTarifas() {
           </thead>
           <tbody className="divide-y divide-dark-800">
             {cat.planes.map((p) => {
-              const pv = Number(p.por_vehiculo) || 0
-              const min = Number(p.minimo_vehiculos) || 0
+              // Reparto se cobra por repartidor activo; el resto, por furgoneta.
+              const porRep = p.clave === 'reparto'
+              const campoP = porRep ? 'por_repartidor' : 'por_vehiculo'
+              const campoM = porRep ? 'minimo_repartidores' : 'minimo_vehiculos'
+              const pv = Number(p[campoP]) || 0
+              const min = Number(p[campoM]) || 0
               return (
                 <tr key={p.clave}>
                   <td className="py-2 pr-3">
                     <span className="font-medium text-dark-100">{p.nombre}</span>
                     <span className="ml-2 text-[11px] text-dark-500">{p.para}</span>
+                    {porRep && <span className="ml-2 text-[11px] text-emerald-300">por repartidor</span>}
                   </td>
                   <td className="py-2 text-right">
-                    <input type="text" inputMode="decimal" value={p.por_vehiculo ?? ''}
-                      onChange={(e) => cambiar(p.clave, 'por_vehiculo', e.target.value)}
+                    <input type="text" inputMode="decimal" value={p[campoP] ?? ''}
+                      onChange={(e) => cambiar(p.clave, campoP, e.target.value)}
                       className="w-20 rounded-lg border border-dark-700 bg-dark-900 px-2 py-1 text-right text-dark-100" />
                   </td>
                   <td className="py-2 text-right">
-                    <input type="number" min="0" value={p.minimo_vehiculos ?? 0}
-                      onChange={(e) => cambiar(p.clave, 'minimo_vehiculos', e.target.value)}
+                    <input type="number" min="0" value={p[campoM] ?? 0}
+                      onChange={(e) => cambiar(p.clave, campoM, e.target.value)}
                       className="w-20 rounded-lg border border-dark-700 bg-dark-900 px-2 py-1 text-right text-dark-100" />
                   </td>
                   <td className="py-2 text-right text-dark-300">{pv ? `${Math.round(pv * min)} €` : 'a medida'}</td>

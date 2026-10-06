@@ -186,3 +186,76 @@ async def test_el_informe_pericial_va_en_pro_y_no_se_vende_aparte(monkeypatch):
     assert precios["colaboradores"].startswith(f"{server.PRECIO_COLABORADOR:g} €")
     assert precios["campana"].startswith("0,30 €") and server.PRECIO_CAMPANA_DIA == 0.30
     assert precios["reparto"].startswith(f"{server.PRECIO_REPARTO_CONDUCTOR:g} €")
+
+
+# ── Plan Reparto (06-10-2026): súper y distribución pagan por repartidor activo, furgonetas incluidas ──
+
+def test_reparto_se_cobra_por_repartidor_con_minimo_y_volumen():
+    assert server._precio_mensual("reparto", 0) == 36          # mínimo 3 × 12 €
+    assert server._precio_mensual("reparto", 2) == 36
+    assert server._precio_mensual("reparto", 5) == 60
+    assert server._precio_mensual("reparto", 60) == 648        # 720 − 10 %
+    assert server.PLAN_LIMITS["reparto"]["max_centers"] == -1  # tiendas y almacenes sin tope
+    # Sin lo de Pro, como Esencial.
+    assert "cuadrante" not in server.org_modulos({"account_type": "dsp", "plan": "reparto",
+                                                   "modulos": ["reparto", "vehiculos", "cuadrante"]})
+    assert "reparto" in server.org_modulos({"account_type": "dsp", "plan": "reparto",
+                                            "modulos": ["reparto", "vehiculos", "cuadrante"]})
+
+
+@pytest.mark.asyncio(loop_scope="session")
+async def test_la_pagina_de_precios_trae_el_plan_reparto(monkeypatch):
+    async def cat(forzar=False):
+        return server._catalogo_por_defecto()
+    monkeypatch.setattr(server, "_catalogo_planes", cat)
+    r = await server.billing_planes()
+    rep = next(p for p in r["planes"] if p["clave"] == "reparto")
+    assert rep["por_repartidor"] == 12 and rep["minimo_repartidores"] == 3 and rep["desde"] == 36
+    assert rep["sectores"] == ["supermercado", "distribucion"]
+    assert any("furgonetas incluidas" in x.lower() for x in rep["incluye"])
+
+
+@pytest.mark.asyncio(loop_scope="session")
+async def test_el_catalogo_de_la_base_no_pierde_lo_que_el_codigo_sabe(monkeypatch):
+    """El catálogo «vigente» de producción se guardó sin por_repartidor: se rellena del código."""
+    class Cat:
+        async def find_one(self, *a, **k):
+            return {"planes": [{"clave": "reparto", "nombre": "Reparto", "por_vehiculo": 0, "minimo_vehiculos": 0},
+                               {"clave": "completo", "nombre": "Pro", "por_vehiculo": 9, "minimo_vehiculos": 20}]}
+
+    class G:
+        plan_catalog = Cat()
+    monkeypatch.setattr(server, "global_db", G())
+    server._CATALOGO_CACHE.update({"ts": 0.0, "datos": None})
+    cat = await server._catalogo_planes(forzar=True)
+    rep = server._tarifa_de(cat, "reparto")
+    assert rep["por_repartidor"] == 12 and rep["minimo_repartidores"] == 3
+    assert server._tarifa_de(cat, "operacion")["por_vehiculo"] == 5      # el que la base no trae sigue
+    assert await server._precio_vigente("reparto", 5) == 60
+    server._CATALOGO_CACHE.update({"ts": 0.0, "datos": None})
+
+
+@pytest.mark.asyncio(loop_scope="session")
+async def test_la_factura_del_plan_reparto_cuenta_repartidores_no_furgonetas(monkeypatch):
+    from base_de_mentira import Col, Db
+    t = Db()
+    t["vehicles"] = Col([{"id": f"v{i}", "status": "active"} for i in range(3)])
+    t["reparto_pedidos"] = Col([{"id": f"r{i}", "fecha": "2026-09-%02d" % (i % 9 + 11), "conductor_id": f"d{i % 5}"}
+                                for i in range(20)])
+    g = Db()
+    g["cobros"] = Col([])
+    g["organizations"] = Col([{"id": "o1", "name": "Súper Centro", "account_type": "dsp", "status": "active",
+                               "plan": "reparto", "db_name": "dsp_super"}])
+    monkeypatch.setattr(server, "db", t)
+    monkeypatch.setattr(server, "global_db", g)
+    monkeypatch.setattr(server, "set_current_org_db", lambda *_: None)
+
+    async def cat(forzar=False):
+        return server._catalogo_por_defecto()
+    monkeypatch.setattr(server, "_catalogo_planes", cat)
+
+    c = (await server._cobros_del_mes("2026-10"))[0]
+    lineas = {li["clave"]: li for li in c["lineas"]}
+    assert lineas["plan"]["cantidad"] == 5 and lineas["plan"]["importe"] == 60     # 5 repartidores × 12 €
+    assert "reparto" not in lineas                                                  # la app va incluida
+    assert c["base"] == 60 and "5 repartidores" in c["concepto"]

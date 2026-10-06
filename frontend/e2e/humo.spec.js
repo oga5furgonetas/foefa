@@ -1454,6 +1454,33 @@ test('Planes · con 150 vehículos, Pro sale con el −15 % por volumen y hay co
   await expect(page.getByText('Vehículos de colaboradores')).toBeVisible()
 })
 
+/* PLAN REPARTO (06-10-2026): súper y distribución pagan por repartidor activo (12 €, mínimo 3),
+   con las furgonetas incluidas. En su alta no sale Esencial (mínimo 10 furgonetas). */
+test('Planes · Reparto se cobra por repartidor y el alta del súper lo propone con Pro, sin Esencial', async ({ page }) => {
+  await page.goto('/planes', { waitUntil: 'domcontentloaded' })
+  await expect(page.getByRole('heading', { name: /Plan Reparto: por repartidor/ })).toBeVisible()
+  await page.getByLabel('Número de repartidores').fill('2')
+  await expect(page.getByText('36€', { exact: true })).toBeVisible()          // mínimo 3 × 12 €
+  await page.getByLabel('Número de repartidores').fill('5')
+  await expect(page.getByText('60€', { exact: true })).toBeVisible()
+  await page.getByRole('link', { name: 'Empezar 14 días gratis →' }).last().click()
+  await expect(page).toHaveURL(/registro\?sector=supermercado&plan=reparto/)
+  await expect(page.getByText('Plan elegido')).toBeVisible()
+  await expect(page.getByText(/60€\/mes · con 5 repartidores activos/)).toBeVisible()
+
+  // Entrando por el alta, el súper elige entre Reparto (destacado) y Pro.
+  await page.goto('/registro?sector=supermercado', { waitUntil: 'domcontentloaded' })
+  await expect(page.getByRole('button', { name: 'Empezar con Reparto →' })).toBeVisible()
+  await expect(page.getByRole('button', { name: 'Empezar con Pro →' })).toBeVisible()
+  await expect(page.getByRole('button', { name: 'Empezar con Esencial →' })).toHaveCount(0)
+  await expect(page.getByText(/furgonetas incluidas/).first()).toBeVisible()
+
+  // Una DSP o una mensajería sigue viendo Esencial y Pro, sin Reparto.
+  await page.goto('/registro?sector=mensajeria', { waitUntil: 'domcontentloaded' })
+  await expect(page.getByRole('button', { name: 'Empezar con Esencial →' })).toBeVisible()
+  await expect(page.getByRole('button', { name: 'Empezar con Reparto →' })).toHaveCount(0)
+})
+
 /* SUSCRIBIRSE CON STRIPE desde el aviso de prueba: el servidor crea la sesión
    y el navegador va a su URL; al volver con ?pago=ok se espera al webhook. */
 test('Suscripción · el botón de pagar va a Stripe y la vuelta espera la activación', async ({ page }) => {
