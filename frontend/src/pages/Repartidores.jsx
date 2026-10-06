@@ -1,9 +1,9 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { Zap, Loader2, ScanLine, Route, Navigation, MessageCircle, Camera, Check, ArrowRight } from 'lucide-react'
 import { API_BASE, DRIVER_TOKEN_KEY } from '../services/api'
 import { MARCA } from '../marca'
 import { tx, useIdioma, IDIOMAS, cambiarIdioma, idioma, txError } from '../lib/idioma'
-import { medirAccion } from '../lib/analitica'
+import { medirAccion, varianteAB } from '../lib/analitica'
 import { evento } from '../lib/metaPixel'
 import { useInvitacion } from '../lib/referido'
 import AltaRapida from './AltaRapida'
@@ -31,11 +31,48 @@ const PREGUNTAS = [
   ['¿Tengo que instalar algo?', 'Funciona en el navegador de cualquier móvil, Android o iPhone: la añades a tu pantalla de inicio y se abre como una app. La app de Google Play y la de App Store llegarán próximamente.'],
 ]
 
+/* QUÉ VERSIÓN VE CADA VISITA (06-10-2026). Ni «verla primero» (04-10) ni «el alta arriba»
+   (05-10) trajeron altas: de 1.107 visitas de TikTok, el 88 % se fue sin hacer nada más.
+   En vez de otro cambio a ojo, las dos a la vez:
+     a — la de ahora: el formulario de alta arriba.
+     b — primero el vídeo de la app y dos botones; el formulario se abre al pulsar.
+   Sale de la clave de sesión (analitica.js), así que el informe la recalcula sin
+   guardar nada más. `?v=a` / `?v=b` la fuerza para revisarla. */
+function versionDe() {
+  try {
+    const v = new URLSearchParams(window.location.search).get('v')
+    if (v === 'a' || v === 'b') return v
+  } catch { /* sin URL: la de la sesión */ }
+  return varianteAB()
+}
+
+/* Hasta ahora solo se sabía si alguien pulsaba; no si se quedaba a mirar. Dos señales,
+   una vez por visita: sigue en la página a los 10 s, y ha bajado hasta la mitad. */
+function useMedirInteres() {
+  useEffect(() => {
+    const t = setTimeout(() => medirAccion('rep_10s'), 10000)
+    let mitad = false
+    const alBajar = () => {
+      const h = document.documentElement.scrollHeight - window.innerHeight
+      if (!mitad && h > 0 && window.scrollY / h >= 0.5) {
+        mitad = true
+        medirAccion('rep_mitad')
+        window.removeEventListener('scroll', alBajar)
+      }
+    }
+    window.addEventListener('scroll', alBajar, { passive: true })
+    return () => { clearTimeout(t); window.removeEventListener('scroll', alBajar) }
+  }, [])
+}
+
 export default function Repartidores() {
   const lang = useIdioma()
   const invitacion = useInvitacion()
   const [ocupado, setOcupado] = useState(false)
   const [err, setErr] = useState('')
+  const [version] = useState(versionDe)
+  const [verAlta, setVerAlta] = useState(false)
+  useMedirInteres()
   const capturas = idioma() === 'zh' ? 'zh' : 'es'
   const video = ['es', 'en', 'pt', 'fr', 'it', 'de', 'zh'].includes(idioma()) ? idioma() : 'es'
 
@@ -64,6 +101,49 @@ export default function Repartidores() {
     </button>
   )
 
+  /* Las piezas de la portada; cada versión las ordena a su manera. */
+  /* PARA QUIÉN ES (05-10-2026): quien reparte para una agencia, una plataforma o un súper
+     tiene que verse reflejado nada más entrar. Las marcas son de sus dueños; no hay relación. */
+  const paraQuien = (
+    <div className="mt-3">
+      <p className="text-[13px] font-semibold text-dark-200">{tx('Sirve igual si repartes para una agencia, una plataforma o un súper:')}</p>
+      <div className="mt-1.5 flex flex-wrap gap-1.5">
+        {['Paquetería', 'Amazon', 'MRW', 'Nacex', 'Tipsa', 'Glovo', 'Súper a domicilio'].map((m) => (
+          <span key={m} className="rounded-full border border-dark-700 bg-dark-900 px-2.5 py-1 text-[12px] font-semibold text-dark-100">{tx(m)}</span>
+        ))}
+      </div>
+      <p className="mt-1 text-[11px] text-dark-500">{tx('Marcas de sus dueños, sin relación con ellas. Tú metes los paquetes y la app ordena la ruta.')}</p>
+    </div>
+  )
+  const textoGratis = (
+    <p className="mt-2 text-center text-[12.5px] text-dark-300">{invitacion ? tx('{n} días gratis · sin tarjeta · cancelas cuando quieras', { n: invitacion.dias }) : tx('7 días gratis · sin tarjeta · cancelas cuando quieras')}</p>
+  )
+  const alta = (enfocar) => (<>
+    <AltaRapida dias={invitacion ? invitacion.dias : 7} enfocar={enfocar} />
+    {textoGratis}
+  </>)
+  const probarBloque = (<>
+    <div className="mt-3">{botonProbar}</div>
+    <p className="mt-1.5 text-center text-[12px] text-dark-500">{tx('Con 8 paradas de ejemplo. Sin datos ni tarjeta: pruébala en 1 minuto.')}</p>
+    {err && <p role="alert" className="mt-2 text-center text-[13px] text-red-300">{err}</p>}
+  </>)
+  /* El vídeo de la app (el mismo de TikTok, mudo y en bucle): se ve lo que hace antes de
+     pulsar nada. El póster es la primera captura, de reserva si el vídeo no carga. */
+  const videoApp = (ancho) => (
+    <video src={`/videos/web-${video}.mp4?v=1`} poster={`/capturas-ruta/${capturas}/1-ruta.webp`} autoPlay muted loop playsInline preload="metadata"
+      width="390" height="693" aria-label={tx('Vídeo de la app')}
+      className={`${ancho} shrink-0 snap-center rounded-[22px] border border-dark-700 bg-dark-900 object-cover shadow-2xl shadow-black/40`} />
+  )
+  const capturasApp = (conVideo) => (
+    <div className="-mx-5 mt-7 flex snap-x gap-3 overflow-x-auto px-5 pb-2">
+      {conVideo && videoApp('w-[62%] max-w-[240px]')}
+      {['2-mapa', '3-navegando'].map((n) => (
+        <img key={n} src={`/capturas-ruta/${capturas}/${n}.webp`} alt="" loading="lazy" width="390" height="844"
+          className="w-[62%] max-w-[240px] shrink-0 snap-center rounded-[22px] border border-dark-700 shadow-2xl shadow-black/40" />
+      ))}
+    </div>
+  )
+
   return (
     <div className="min-h-screen bg-dark-950 px-5 pb-10 pt-6 text-dark-100">
       <div className="mx-auto max-w-md">
@@ -85,35 +165,34 @@ export default function Repartidores() {
         <h1 className="mt-1.5 font-display text-[32px] font-extrabold leading-[1.05] text-dark-50">{tx('Tu ruta de reparto, ordenada sola.')}</h1>
         <p className="mt-2 text-[15px] leading-snug text-dark-300">{tx('Haz una foto a la etiqueta o escanea el paquete: la app ordena las paradas por tiempo y te lleva con voz hasta cada puerta.')}</p>
 
-        {/* PARA QUIÉN ES (05-10-2026): quien reparte para una agencia, una plataforma o un súper
-            tiene que verse reflejado nada más entrar. Las marcas son de sus dueños; no hay relación. */}
-        <div className="mt-3">
-          <p className="text-[13px] font-semibold text-dark-200">{tx('Sirve igual si repartes para una agencia, una plataforma o un súper:')}</p>
-          <div className="mt-1.5 flex flex-wrap gap-1.5">
-            {['Paquetería', 'Amazon', 'MRW', 'Nacex', 'Tipsa', 'Glovo', 'Súper a domicilio'].map((m) => (
-              <span key={m} className="rounded-full border border-dark-700 bg-dark-900 px-2.5 py-1 text-[12px] font-semibold text-dark-100">{tx(m)}</span>
-            ))}
+        {version === 'b' ? (<>
+          {/* B: lo primero que se ve es la app funcionando, como en el vídeo del anuncio. */}
+          <div className="mt-4 flex items-center gap-3">
+            {videoApp('w-[44%] max-w-[170px]')}
+            <ul className="flex-1 space-y-2.5">
+              {VENTAJAS.slice(0, 3).map(([I, t]) => (
+                <li key={t} className="flex items-start gap-2 text-[13.5px] leading-snug text-dark-100">
+                  <I size={16} className="mt-0.5 shrink-0 text-brand-300" /> <span>{tx(t)}</span>
+                </li>
+              ))}
+            </ul>
           </div>
-          <p className="mt-1 text-[11px] text-dark-500">{tx('Marcas de sus dueños, sin relación con ellas. Tú metes los paquetes y la app ordena la ruta.')}</p>
-        </div>
-
-        <AltaRapida dias={invitacion ? invitacion.dias : 7} />
-        <p className="mt-2 text-center text-[12.5px] text-dark-300">{invitacion ? tx('{n} días gratis · sin tarjeta · cancelas cuando quieras', { n: invitacion.dias }) : tx('7 días gratis · sin tarjeta · cancelas cuando quieras')}</p>
-        <div className="mt-3">{botonProbar}</div>
-        <p className="mt-1.5 text-center text-[12px] text-dark-500">{tx('Con 8 paradas de ejemplo. Sin datos ni tarjeta: pruébala en 1 minuto.')}</p>
-        {err && <p role="alert" className="mt-2 text-center text-[13px] text-red-300">{err}</p>}
-
-        {/* El vídeo de la app (el mismo de TikTok, mudo y en bucle): se ve lo
-            que hace antes de pulsar nada. Las capturas, de reserva si no carga. */}
-        <div className="-mx-5 mt-7 flex snap-x gap-3 overflow-x-auto px-5 pb-2">
-          <video src={`/videos/web-${video}.mp4?v=1`} poster={`/capturas-ruta/${capturas}/1-ruta.webp`} autoPlay muted loop playsInline preload="metadata"
-            width="390" height="693" aria-label={tx('Vídeo de la app')}
-            className="w-[62%] max-w-[240px] shrink-0 snap-center rounded-[22px] border border-dark-700 bg-dark-900 object-cover shadow-2xl shadow-black/40" />
-          {['2-mapa', '3-navegando'].map((n) => (
-            <img key={n} src={`/capturas-ruta/${capturas}/${n}.webp`} alt="" loading="lazy" width="390" height="844"
-              className="w-[62%] max-w-[240px] shrink-0 snap-center rounded-[22px] border border-dark-700 shadow-2xl shadow-black/40" />
-          ))}
-        </div>
+          {verAlta ? alta(true) : (
+            <button onClick={() => { medirAccion('rep_abrir_alta'); setVerAlta(true) }}
+              className="mt-4 flex w-full items-center justify-center gap-2 rounded-2xl bg-gradient-to-br from-brand-400 to-brand-600 py-4 text-[17px] font-extrabold text-[#04121a] shadow-[0_12px_30px_-10px_rgba(20,231,216,.6)] active:scale-[.99]">
+              {tx('Crear mi cuenta gratis')} <ArrowRight size={19} />
+            </button>
+          )}
+          {!verAlta && textoGratis}
+          {probarBloque}
+          {paraQuien}
+          {capturasApp(false)}
+        </>) : (<>
+          {paraQuien}
+          {alta(false)}
+          {probarBloque}
+          {capturasApp(true)}
+        </>)}
 
         <ul className="mt-6 space-y-3">
           {VENTAJAS.map(([I, t]) => (

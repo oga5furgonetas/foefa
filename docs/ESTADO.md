@@ -808,3 +808,19 @@ Repaso de cada frase de `/planes` y de la presentación contra el código (Dani:
   pasa a v3: quien aceptó la v2 (solo Meta) vuelve a ver el aviso.
 - Pendiente (decide Dani, es gasto): cuando Events Manager reciba eventos, poner el grupo ES a optimizar por
   «CompleteRegistration» en vez de por clic. Del 04 al 06-10 TikTok trajo 1.079 sesiones y 0 altas.
+
+## 06-10-2026 (mediodía): /repartidores en prueba A/B y el sketch en anuncios
+- **Sketch en TikTok Ads** (Dani autorizó el Submit): el anuncio «Copy 4…» (ID 1878222770014641, grupo ES) lleva
+  FDS-1..4 + el post «¿Todavía ordenas…», etiqueta de IA en los 4 FDS y el píxel en Tracking. Tras el Submit los FDS aún
+  no salían en la lista de creatividades ni tenían impresiones (revisión de TikTok); comprobar que entran.
+- **Corrección de un dato que di mal**: las «241 vistas de /registro» desde TikTok eran la redirección a /repartidores
+  (main.jsx, 04-10), no gente en el formulario. Lo real: de 1.107 visitas de TikTok, el 88 % solo ve una página.
+- **/repartidores, prueba A/B** (`Repartidores.jsx`): a = el alta arriba (como el 05-10); b = primero el vídeo de la app
+  con 3 ventajas y dos botones (el alta se abre en la misma página). La versión sale del `sid` (`varianteAB` en
+  `lib/analitica.js`: último carácter par → a, impar → b), así que no se guarda nada más; `?v=a|b` la fuerza.
+  Nuevas señales en las dos: `rep_10s` (sigue a los 10 s), `rep_mitad` (bajó a la mitad) y `rep_abrir_alta` (b).
+  Resultado: `MONGO_URL=... python scripts/ab_repartidores.py 2026-10-06 tiktok`. Mirar en 2-3 días: con ~350
+  visitas/día, las diferencias en 10 s/mitad se ven pronto; en altas, no.
+- **Frase falsa quitada**: el alta en portada decía «al finalizar se cobra… salvo cancelación» junto a «sin tarjeta».
+  Ahora la misma de /registro: «sin tarjeta no se cobra nunca: al acabar eliges si seguir».
+- Pruebas: humo «Anuncio · versión a/b» y «mide si la gente se queda»; las del alta en portada fuerzan `?v=a`.

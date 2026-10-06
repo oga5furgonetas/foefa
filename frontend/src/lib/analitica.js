@@ -130,6 +130,14 @@ export function medirSeccion(ruta) {
   vista(patronDe(ruta))
 }
 
+/* PRUEBA A/B SIN GUARDAR NADA MÁS (06-10-2026): la versión sale de la clave de sesión,
+   que ya viaja en cada evento. Así el informe la recalcula igual (último carácter de
+   `sid`, código par → «a», impar → «b») y la primera vista ya cae en su grupo. */
+export function varianteAB() {
+  const s = sid()
+  return s.charCodeAt(s.length - 1) % 2 ? 'b' : 'a'
+}
+
 export function medirAccion(nombre) {
   mandar({ tipo: 'accion', nombre, ruta: patronDe(window.location.pathname) })
 }

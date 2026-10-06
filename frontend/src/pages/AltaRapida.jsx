@@ -25,7 +25,7 @@ const conEnlaces = (texto, hrefs) => texto.split(/(\[[^\]]+\])/).map((trozo, i) 
   return <a key={i} href={hrefs.shift()} target="_blank" rel="noreferrer" className="text-brand-300 underline">{m[1]}</a>
 })
 
-export default function AltaRapida({ dias = 7 }) {
+export default function AltaRapida({ dias = 7, enfocar = false }) {
   useIdioma()
   const [nombre, setNombre] = useState('')
   const [email, setEmail] = useState('')
@@ -78,8 +78,9 @@ export default function AltaRapida({ dias = 7 }) {
   const campo = 'w-full rounded-xl border border-dark-700 bg-dark-900 px-3.5 py-3 text-[16px] text-dark-50 placeholder:text-dark-500'
   return (
     <form onSubmit={enviar} noValidate className="mt-4 space-y-2.5 rounded-3xl border border-brand-400/30 bg-brand-500/[.06] p-4" aria-label={tx('Crear mi cuenta gratis')}>
+      {/* `enfocar`: solo cuando la persona acaba de pulsar «Crear mi cuenta» (versión B de /repartidores). */}
       <input value={nombre} onChange={(e) => setNombre(e.target.value)} onFocus={inicio} autoComplete="name" placeholder={tx('Tu nombre')}
-        aria-label={tx('Tu nombre')} className={campo} />
+        aria-label={tx('Tu nombre')} className={campo} autoFocus={enfocar} />
       <input value={email} onChange={(e) => setEmail(e.target.value)} onFocus={inicio} type="email" inputMode="email" autoComplete="email" autoCapitalize="none"
         placeholder={tx('Tu correo')} aria-label={tx('Tu correo')} className={campo} />
       <div className="relative">
@@ -92,7 +93,9 @@ export default function AltaRapida({ dias = 7 }) {
         <input type="checkbox" checked={acepto} onChange={(e) => setAcepto(e.target.checked)} className="mt-0.5" />
         <span>
           {conEnlaces(tx('Acepto los [Términos], el [Acuerdo de Encargo del Tratamiento] y la [Política de Privacidad].'), ['/terminos', '/encargo', '/privacidad'])}
-          {' '}{tx('Prueba gratuita de {n} días — sin cobro durante la prueba. Al finalizar se cobra el plan {plan} ({precio} €/mes) salvo cancelación.', { n: dias, plan: tx('Repartidor'), precio: '9,99' })}
+          {/* Decía «al finalizar se cobra… salvo cancelación» con «sin tarjeta» al lado: sin tarjeta no se
+              cobra nada (06-10-2026). La misma frase que el alta de /registro, ya traducida. */}
+          {' '}{tx('Prueba gratuita de {n} días. Hoy no se cobra nada y sin tarjeta no se cobra nunca: al acabar eliges si seguir con el plan {plan} ({precio} €/mes).', { n: dias, plan: tx('Repartidor'), precio: '9,99' })}
         </span>
       </label>
       {err && <p role="alert" className="text-[13px] text-red-300">{err}</p>}

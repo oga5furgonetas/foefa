@@ -83,7 +83,7 @@ test('Activación · quien llega con el enlace de un compañero ve «14 días» 
   await page.route(/\/api\/referidos\/MALO99/, (r) => r.fulfill({ json: { valido: false, dias_extra: 7 } }))
   let cuerpo = null
   await page.route(/\/api\/auth\/register/, async (r) => { cuerpo = r.request().postDataJSON(); await r.fulfill({ status: 400, json: { detail: 'prueba' } }) })
-  await page.goto('/repartidores?ref=ABC123&utm_source=referido', { waitUntil: 'domcontentloaded' })
+  await page.goto('/repartidores?v=a&ref=ABC123&utm_source=referido', { waitUntil: 'domcontentloaded' })
   await expect(page.getByText('Te ha invitado un compañero: 14 días gratis').first()).toBeVisible()
   await expect(page.getByText('14 días gratis · sin tarjeta · cancelas cuando quieras')).toBeVisible()
   // El alta se hace en la propia portada: el código del amigo viaja con ella.
@@ -100,7 +100,7 @@ test('Activación · quien llega con el enlace de un compañero ve «14 días» 
 test('Activación · un código que no vale NO promete días de más', async ({ page }) => {
   await page.addInitScript(() => localStorage.setItem('cookie_consent', JSON.stringify({ v: 1, at: new Date().toISOString() })))
   await page.route(/\/api\/referidos\/MALO99/, (r) => r.fulfill({ json: { valido: false, dias_extra: 7 } }))
-  await page.goto('/repartidores?ref=MALO99', { waitUntil: 'domcontentloaded' })
+  await page.goto('/repartidores?v=a&ref=MALO99', { waitUntil: 'domcontentloaded' })
   await expect(page.getByText('7 días gratis · sin tarjeta · cancelas cuando quieras')).toBeVisible()
   await expect(page.getByText(/Te ha invitado un compañero/)).toHaveCount(0)
 })
@@ -179,7 +179,7 @@ test.describe('Instalar · iPhone', () => {
 
 test('Instalar · la portada dice que sirve en Android e iPhone y que las tiendas llegan próximamente', async ({ page }) => {
   await page.addInitScript(() => localStorage.setItem('cookie_consent', JSON.stringify({ v: 1, at: new Date().toISOString() })))
-  await page.goto('/repartidores', { waitUntil: 'domcontentloaded' })
+  await page.goto('/repartidores?v=a', { waitUntil: 'domcontentloaded' })
   await page.getByText('¿Tengo que instalar algo?').click()
   await expect(page.getByText(/Android o iPhone/)).toBeVisible()
   await expect(page.getByText(/Google Play y la de App Store llegarán próximamente/)).toBeVisible()
@@ -193,7 +193,7 @@ test('Portada · el alta se hace dentro de la propia portada y lleva a la app', 
     await r.fulfill({ json: { access_token: 'tok', token_type: 'bearer', user: { role: 'admin', username: cuerpo.username }, org: { id: 'o1' } } })
   })
   await page.route(/\/api\/(org|reparto|auth\/me)/, (r) => r.fulfill({ status: 401, json: { detail: 'x' } }))
-  await page.goto('/repartidores?ref=ABC123&utm_source=tiktok', { waitUntil: 'domcontentloaded' })
+  await page.goto('/repartidores?v=a&ref=ABC123&utm_source=tiktok', { waitUntil: 'domcontentloaded' })
   await page.getByPlaceholder('Tu nombre').fill('Rosa')
   await page.getByPlaceholder('Tu correo').fill('Rosa@Example.es')
   await page.getByPlaceholder('Contraseña').fill('12345678')
@@ -210,7 +210,7 @@ test('Portada · el alta se hace dentro de la propia portada y lleva a la app', 
 test('Portada · si el correo ya existe lo dice y no se pierde lo escrito', async ({ page }) => {
   await page.addInitScript(() => localStorage.setItem('cookie_consent', JSON.stringify({ v: 2, anuncios: false, at: new Date().toISOString() })))
   await page.route(/\/api\/auth\/register/, (r) => r.fulfill({ status: 400, json: { detail: 'Ese correo ya tiene cuenta' } }))
-  await page.goto('/repartidores', { waitUntil: 'domcontentloaded' })
+  await page.goto('/repartidores?v=a', { waitUntil: 'domcontentloaded' })
   await page.getByPlaceholder('Tu nombre').fill('Rosa')
   await page.getByPlaceholder('Tu correo').fill('rosa@example.es')
   await page.getByPlaceholder('Contraseña').fill('12345678')

@@ -2145,3 +2145,43 @@ test('Anuncio · quien llega del anuncio ve la app y la prueba con paradas antes
   await expect(page.getByText('Cliente 1 (prueba)')).toBeVisible()
   expect(fallos).toEqual([])
 })
+
+/* LA PORTADA DE REPARTIDORES EN PRUEBA A/B (06-10-2026): la versión b enseña primero la app y
+   abre el alta al pulsar; las dos miden si la gente se queda (10 s) y si baja (la mitad). */
+test('Anuncio · versión b: primero el vídeo, el alta se abre al pulsar y no promete cobrar sin tarjeta', async ({ page }) => {
+  const fallos = vigilar(page)
+  await simularApi(page, 'vacio')
+  await page.goto('/repartidores?v=b', { waitUntil: 'domcontentloaded' })
+  await expect(page.locator('video')).toHaveCount(1)
+  await expect(page.locator('form[aria-label="Crear mi cuenta gratis"]')).toHaveCount(0)
+  await page.getByRole('button', { name: 'Crear mi cuenta gratis' }).click()
+  await expect(page.getByRole('textbox', { name: 'Tu nombre' })).toBeFocused()
+  await expect(page.getByText(/sin tarjeta no se cobra nunca/)).toBeVisible()
+  await expect(page.getByText(/salvo cancelación/)).toHaveCount(0)
+  expect(fallos).toEqual([])
+})
+
+test('Anuncio · versión a: el alta arriba, igual que antes', async ({ page }) => {
+  await simularApi(page, 'vacio')
+  await page.goto('/repartidores?v=a', { waitUntil: 'domcontentloaded' })
+  await expect(page.locator('form[aria-label="Crear mi cuenta gratis"]')).toBeVisible()
+  await expect(page.getByText(/salvo cancelación/)).toHaveCount(0)
+})
+
+test('Anuncio · mide si la gente se queda: a los 10 s y al llegar a la mitad', async ({ page }) => {
+  await page.clock.install()
+  await simularApi(page, 'vacio')
+  const acciones = []
+  await page.route(/\/api\/analitica\/evento/, (r) => {
+    const j = r.request().postDataJSON()
+    if (j && j.tipo === 'accion') acciones.push(j.nombre)
+    return r.fulfill({ json: { ok: true } })
+  })
+  await page.goto('/repartidores?v=a', { waitUntil: 'domcontentloaded' })
+  await expect(page.getByRole('heading', { name: 'Tu ruta de reparto, ordenada sola.' })).toBeVisible()
+  await page.clock.fastForward(11_000)
+  await expect.poll(() => acciones).toContain('rep_10s')
+  await page.evaluate(() => window.scrollTo(0, document.documentElement.scrollHeight))
+  await expect.poll(() => acciones).toContain('rep_mitad')
+  expect(acciones.filter((a) => a === 'rep_10s')).toHaveLength(1)
+})
