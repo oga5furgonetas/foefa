@@ -18,7 +18,7 @@
 #     "staging_web": "https://staging.<proyecto>.pages.dev",
 #     "staging_api": "https://<tu-api-staging>/api" }
 # Variables equivalentes: FLOTA_PAGES, FLOTA_WEB, FLOTA_BACKEND,
-# FLOTA_STAGING_WEB, FLOTA_STAGING_API.
+# FLOTA_STAGING_WEB, FLOTA_STAGING_API, FLOTA_META_PIXEL, FLOTA_TIKTOK_PIXEL.
 #
 #   . (Join-Path $PSScriptRoot "destino.ps1")
 #   $d = Get-Destino -Requiere pages, web, backend
@@ -32,6 +32,10 @@ function Get-Destino {
         backend     = $env:FLOTA_BACKEND
         staging_web = $env:FLOTA_STAGING_WEB
         staging_api = $env:FLOTA_STAGING_API
+        # Los pixeles van en la COMPILACION de la web (VITE_*): sin ellos, un
+        # despliegue con el script los quitaba sin avisar (06-10-2026).
+        meta_pixel   = $env:FLOTA_META_PIXEL
+        tiktok_pixel = $env:FLOTA_TIKTOK_PIXEL
     }
     $fichero = Join-Path $PSScriptRoot "..\despliegue.local.json"
     if (Test-Path $fichero) {

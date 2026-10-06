@@ -5,7 +5,7 @@ import { hayPixel, consentimiento, guardarConsentimiento, cargarPixel } from '..
 import { tx, useIdioma } from '../lib/idioma'
 
 // Sin píxel: banner informativo (solo almacenamiento estrictamente necesario,
-// guía AEPD: informar + permitir cerrar). Con píxel de Meta: consentimiento
+// guía AEPD: informar + permitir cerrar). Con píxeles (Meta, TikTok): consentimiento
 // de verdad, con «Aceptar» y «Solo necesarias» igual de fáciles, y nada de
 // medición hasta que se acepta.
 export default function CookieBanner() {
@@ -56,7 +56,7 @@ export default function CookieBanner() {
         <div className="flex items-start gap-3">
           <Cookie size={20} className="mt-0.5 shrink-0 text-amber-400" />
           <div className="flex-1 text-sm text-dark-300">
-            <b className="text-dark-100">{tx('Cookies.')}</b> {tx('Usamos almacenamiento necesario para que la web funcione. Si aceptas, también el píxel de Meta para saber qué anuncios nos traen visitas y altas.')}
+            <b className="text-dark-100">{tx('Cookies.')}</b> {tx('Usamos almacenamiento necesario para que la web funcione. Si aceptas, también los píxeles de Meta y TikTok para saber qué anuncios nos traen visitas y altas.')}
             {' '}<Link to="/cookies" className="text-sky-400 hover:underline">{tx('Más información')}</Link>
           </div>
         </div>

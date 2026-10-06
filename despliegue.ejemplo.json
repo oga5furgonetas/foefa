@@ -3,5 +3,7 @@
   "web": "https://tu-dominio.com",
   "backend": "https://tu-api.fly.dev",
   "staging_web": "https://staging.nombre-del-proyecto.pages.dev",
-  "staging_api": "https://tu-api-staging.fly.dev/api"
+  "staging_api": "https://tu-api-staging.fly.dev/api",
+  "meta_pixel": "id-del-pixel-de-meta (opcional)",
+  "tiktok_pixel": "id-del-pixel-de-tiktok (opcional)"
 }

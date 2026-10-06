@@ -27,12 +27,14 @@ export function consentimiento() {
     const v = localStorage.getItem(CLAVE)
     if (!v) return null
     const j = JSON.parse(v)
-    return j && j.v >= 2 ? j : (hayPixel() ? null : j)   // con píxel nuevo, el aviso viejo no vale: se vuelve a preguntar
+    // v3 (06-10-2026): el aviso ya nombra Meta Y TikTok. Quien aceptó la v2 solo
+    // consintió Meta, así que con píxeles se le vuelve a preguntar.
+    return j && j.v >= 3 ? j : (hayPixel() ? null : j)
   } catch { return null }
 }
 
 export function guardarConsentimiento(anuncios) {
-  try { localStorage.setItem(CLAVE, JSON.stringify({ v: 2, anuncios: !!anuncios, at: new Date().toISOString() })) } catch { /* nada */ }
+  try { localStorage.setItem(CLAVE, JSON.stringify({ v: 3, anuncios: !!anuncios, at: new Date().toISOString() })) } catch { /* nada */ }
   if (anuncios) cargarPixel()
 }
 
@@ -60,27 +62,44 @@ export function cargarPixel() {
   cargarTikTok()
 }
 
-/* Fragmento oficial de TikTok, sin <script> en línea. */
+/* Fragmento oficial de TikTok (Events Manager, 06-10-2026), sin <script> en línea.
+   La versión anterior era un resumen y no ponía `TiktokAnalyticsObject`, `_i[id]`
+   ni `_t`, que el script de TikTok usa para reconocer el píxel: esto es el oficial
+   paso a paso. */
 const TT_EVENTOS = { Lead: 'ClickButton', CompleteRegistration: 'CompleteRegistration', StartTrial: 'StartTrial', Subscribe: 'Subscribe', Purchase: 'CompletePayment' }
+const TT_METODOS = ['page', 'track', 'identify', 'instances', 'debug', 'on', 'off', 'once', 'ready', 'alias',
+  'group', 'enableCookie', 'disableCookie', 'holdConsent', 'revokeConsent', 'grantConsent']
 function cargarTikTok() {
   if (!hayTT() || window.ttq) return
-  const t = (window.ttq = [])
-  t._i = {}; t._o = {}
-  for (const m of ['page', 'track', 'identify', 'instances', 'debug', 'on', 'off', 'once', 'ready', 'alias', 'group', 'enableCookie', 'disableCookie']) {
-    t[m] = (...args) => { t.push([m, ...args]) }
+  window.TiktokAnalyticsObject = 'ttq'
+  const ttq = (window.ttq = window.ttq || [])
+  ttq.methods = TT_METODOS
+  ttq.setAndDefer = (obj, m) => { obj[m] = (...args) => { obj.push([m, ...args]) } }
+  for (const m of TT_METODOS) ttq.setAndDefer(ttq, m)
+  ttq.instance = (id) => {
+    const e = ttq._i[id] || []
+    for (const m of TT_METODOS) ttq.setAndDefer(e, m)
+    return e
   }
-  const s = document.createElement('script')
-  s.async = true
-  s.src = `https://analytics.tiktok.com/i18n/pixel/events.js?sdkid=${encodeURIComponent(TT_ID)}&lib=ttq`
-  document.head.appendChild(s)
-  t.push(['page'])
+  ttq.load = (id, opciones) => {
+    const r = 'https://analytics.tiktok.com/i18n/pixel/events.js'
+    ttq._i = ttq._i || {}; ttq._i[id] = []; ttq._i[id]._u = r
+    ttq._t = ttq._t || {}; ttq._t[id] = +new Date()
+    ttq._o = ttq._o || {}; ttq._o[id] = opciones || {}
+    const s = document.createElement('script')
+    s.type = 'text/javascript'; s.async = true
+    s.src = `${r}?sdkid=${encodeURIComponent(id)}&lib=ttq`
+    document.head.appendChild(s)
+  }
+  ttq.load(TT_ID)
+  ttq.page()
 }
 
 export function evento(nombre, datos) {
   if (!aceptado()) return
   cargarPixel()
   try { if (hayMeta()) window.fbq('track', nombre, datos || {}) } catch { /* medir nunca rompe nada */ }
-  try { if (hayTT() && TT_EVENTOS[nombre]) window.ttq.push(['track', TT_EVENTOS[nombre], datos || {}]) } catch { /* idem */ }
+  try { if (hayTT() && TT_EVENTOS[nombre]) window.ttq.track(TT_EVENTOS[nombre], datos || {}) } catch { /* idem */ }
 }
 
 /* Antes de ir a Stripe: lo que se medirá al volver con ?pago=ok / ?regalo=. */

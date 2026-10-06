@@ -795,3 +795,16 @@ Repaso de cada frase de `/planes` y de la presentación contra el código (Dani:
 - PRECIOS.md §6 marca lo que aún es propuesta y no hace la app: 0,05 € por inspección de más e impago automático.
 - Catálogo de producción (`plan_catalog` «vigente») actualizado a Esencial 5/10, Pro 9/20, Empresa 0/0.
 - Pruebas: `test_precios.py` (22), humo «la ficha dice cómo se factura…».
+
+## 06-10-2026 (mañana): píxel de TikTok en marcha
+- Dani verificó su teléfono en TikTok Ads y se creó el píxel **«Flota web flotadsp.com» (ID `DB2AIGBC77U04C8M31L0`)** en
+  Events Manager: web, solo píxel de navegador (sin Events API), coincidencia avanzada automática APAGADA.
+- El cargador de `src/lib/metaPixel.js` era un resumen del fragmento oficial (sin `TiktokAnalyticsObject`, `_i[id]` ni
+  `_t`): ahora es el oficial paso a paso. Verificado en producción: carga `events.js` y manda `api/v2/pixel`.
+- `deploy-frontend.ps1` compila YA con `VITE_API_URL` y los dos píxeles, leídos de `despliegue.local.json`
+  (`meta_pixel`, `tiktok_pixel`, fuera de git) o `FLOTA_META_PIXEL`/`FLOTA_TIKTOK_PIXEL`. Antes `npm run build` iba
+  sin ellos y un despliegue con el script los quitaba sin avisar.
+- Aviso de cookies y /cookies nombran Meta y TikTok (cookies `_ttp`, `_tt_enable_cookie`, `ttcsid`). El consentimiento
+  pasa a v3: quien aceptó la v2 (solo Meta) vuelve a ver el aviso.
+- Pendiente (decide Dani, es gasto): cuando Events Manager reciba eventos, poner el grupo ES a optimizar por
+  «CompleteRegistration» en vez de por clic. Del 04 al 06-10 TikTok trajo 1.079 sesiones y 0 altas.

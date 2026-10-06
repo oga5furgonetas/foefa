@@ -27,6 +27,11 @@ Write-Host "==> Comprobando los hooks de React..."
 if ($LASTEXITCODE -ne 0) { throw "hay hooks mal puestos: la pantalla se caeria" }
 
 Write-Host "==> Compilando frontend (produccion)..."
+# La API y los pixeles se cosen en la compilacion. Antes `npm run build` iba sin
+# ellos: la web llamaba a /api del propio dominio y sin pixeles no se media nada.
+$env:VITE_API_URL = "$($d.backend)/api"
+if ($d.meta_pixel)   { $env:VITE_META_PIXEL_ID   = $d.meta_pixel }   else { Write-Host "    (sin pixel de Meta)" }
+if ($d.tiktok_pixel) { $env:VITE_TIKTOK_PIXEL_ID = $d.tiktok_pixel } else { Write-Host "    (sin pixel de TikTok)" }
 npm run build
 if ($LASTEXITCODE -ne 0) { throw "la compilacion ha fallado, no se despliega nada" }
 
