@@ -44,14 +44,18 @@ if not BASE or not SECRETO:
 PANTALLAS = [
     "/health",
     "/incorporaciones/personas",
-    "/dnr/investigaciones",
-    "/asociados",
     "/whc/estado",
     "/stats/dashboard",
     "/drivers",
     "/vehicles",
-    "/cortex/overview?day=%s" % datetime.date.today().isoformat(),
-    "/cortex/informes-auto",
+    # DNR, asociados y Cortex eran de FlotaDSP: en Flota no existen y daban 404
+    # en cada despliegue (06-10-2026). En su lugar, lo que mira un cliente de pago.
+    "/alerts/itv",
+    "/incidents",
+    "/work-orders",
+    "/onboarding",
+    "/billing/uso",
+    "/billing/planes",
 ]
 
 
