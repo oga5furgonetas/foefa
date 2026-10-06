@@ -824,3 +824,8 @@ Repaso de cada frase de `/planes` y de la presentación contra el código (Dani:
 - **Frase falsa quitada**: el alta en portada decía «al finalizar se cobra… salvo cancelación» junto a «sin tarjeta».
   Ahora la misma de /registro: «sin tarjeta no se cobra nunca: al acabar eliges si seguir».
 - Pruebas: humo «Anuncio · versión a/b» y «mide si la gente se queda»; las del alta en portada fuerzan `?v=a`.
+
+## 06-10-2026 (tarde): repaso de precios por tipo de cliente
+- Corregido el plan Repartidor en el alta (Registro.jsx) y en /billing/planes: prometía «Tu furgoneta: inspecciones, taller, ITV y seguro» (la app de ruta no lleva flota: SECTORES_REGISTRO["autonomo"]) y hablaba del «plan Mensajería» (es un sector). Ahora: «Navegación con voz dentro de la app». Backend desplegado y comprobado en la API.
+- Hallazgo: el súper/distribución (Gadis, Disgón) compra REPARTO por repartidor, no flota por furgoneta. Con Esencial (mín. 10) una tienda con 3 furgonetas y 5 repartidores paga 80 €/mes, 35 € por furgonetas que no tiene. Propuesta a Dani (sin decidir): plan «Reparto» a 12 € por repartidor activo (mín. 3) con sus furgonetas sin coste, o como mínimo quitar el mínimo de 10 a esos sectores (45 €/mes). El resto (Repartidor 9,99; Esencial/Pro/Empresa por vehículo; complemento Reparto 6 €) se queda.
+- Gotcha: deploy-frontend.ps1 NO se lanza con `2>&1` desde PowerShell 5.1: el aviso de tamaño de chunk de vite va por stderr y con $ErrorActionPreference=Stop corta el script en «npm run build» sin error visible.
