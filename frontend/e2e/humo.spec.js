@@ -1481,6 +1481,66 @@ test('Planes · Reparto se cobra por repartidor y el alta del súper lo propone 
   await expect(page.getByRole('button', { name: 'Empezar con Reparto →' })).toHaveCount(0)
 })
 
+/* LA CUENTA DEL REPARTIDOR (06-10-2026): con qué entra, cambiar el correo (el usuario cambia con
+   él y pide la contraseña) y la contraseña. Y desde «entrar como» la plataforma solo mira:
+   franja arriba y sin botones de tarjeta, plan ni contraseña (antes daban «Solo la propia empresa»). */
+test('Cuenta del repartidor · ve con qué entra, cambia correo y contraseña; «entrar como» solo mira', async ({ page }) => {
+  await entrarComoAdmin(page)
+  await simularApi(page, 'vacio')
+  await page.route(/\/api\/org\/billing/, (r) => r.fulfill({ json: {
+    status: 'trial', required: false, days_left: 5, plan: 'autonomo', sector: 'autonomo', suscrito: true,
+    pago_proveedor: 'stripe', stripe_status: 'trialing', modulos: ['dashboard', 'reparto', 'configuracion'] } }))
+  await page.route(/\/api\/billing\/config/, (r) => r.fulfill({ json: { provider: 'stripe', ready: true, planes: ['autonomo'], checkout: {} } }))
+  await page.route(/\/api\/auth\/me$/, (r) => r.fulfill({ json: { id: 'a1', role: 'admin', name: 'Admin Test', username: 'dani@correo.es', email: 'dani@correo.es' } }))
+  const correos = []
+  const claves = []
+  await page.route(/\/api\/auth\/my-email/, async (r) => {
+    correos.push(r.request().postDataJSON())
+    await r.fulfill({ json: { success: true, email: 'nuevo@correo.es', username: 'nuevo@correo.es' } })
+  })
+  await page.route(/\/api\/auth\/change-my-password/, async (r) => {
+    claves.push(r.request().postDataJSON())
+    await r.fulfill({ json: { success: true } })
+  })
+
+  await page.goto('/ruta', { waitUntil: 'domcontentloaded' })
+  await page.getByRole('button', { name: 'Cuenta', exact: true }).click()
+  const acceso = page.getByRole('region', { name: 'Tu acceso' })
+  await expect(acceso.getByText('dani@correo.es')).toBeVisible()
+  await expect(page.getByRole('button', { name: /Tarjeta, facturas y cancelar/ })).toBeVisible()
+
+  // Correo: entra con él, así que pide la contraseña y el usuario cambia con él.
+  await acceso.getByRole('button', { name: 'Cambiar correo' }).click()
+  await acceso.getByLabel('Nuevo correo').fill('nuevo@correo.es')
+  await acceso.getByRole('button', { name: 'Guardar' }).click()
+  await expect(acceso.getByText('Escribe tu contraseña actual.')).toBeVisible()
+  await acceso.getByLabel('Contraseña actual').fill('clave-buena')
+  await acceso.getByRole('button', { name: 'Guardar' }).click()
+  await expect(acceso.getByText('nuevo@correo.es')).toBeVisible()
+  expect(correos).toEqual([{ email: 'nuevo@correo.es', tambien_usuario: true, password: 'clave-buena' }])
+
+  // Contraseña: mínimo 8 y luego al servidor.
+  await acceso.getByRole('button', { name: 'Cambiar contraseña' }).click()
+  await acceso.getByLabel('Contraseña actual').fill('clave-buena')
+  await acceso.getByLabel('Nueva contraseña').fill('corta')
+  await acceso.getByRole('button', { name: 'Guardar' }).click()
+  await expect(acceso.getByText('La contraseña debe tener al menos 8 caracteres.')).toBeVisible()
+  await acceso.getByLabel('Nueva contraseña').fill('una-clave-larga')
+  await acceso.getByRole('button', { name: 'Guardar' }).click()
+  await expect(acceso.getByRole('button', { name: 'Cambiar contraseña' })).toBeVisible()
+  expect(claves).toEqual([{ current_password: 'clave-buena', new_password: 'una-clave-larga' }])
+
+  // «Entrar como» desde la plataforma: franja con «Volver a mi cuenta» y nada que pueda fallar.
+  await page.addInitScript(() => localStorage.setItem('flota_token_super', 'token-de-la-plataforma'))
+  await page.reload({ waitUntil: 'domcontentloaded' })
+  await expect(page.getByText(/Estás viendo la cuenta de Admin Test como plataforma/)).toBeVisible()
+  await expect(page.getByRole('button', { name: 'Volver a mi cuenta' })).toBeVisible()
+  await page.getByRole('button', { name: 'Cuenta', exact: true }).click()
+  await expect(page.getByRole('region', { name: 'Tu acceso' })).toBeVisible()
+  await expect(page.getByRole('button', { name: /Tarjeta, facturas y cancelar/ })).toHaveCount(0)
+  await expect(page.getByRole('button', { name: 'Cambiar contraseña' })).toHaveCount(0)
+})
+
 /* SUSCRIBIRSE CON STRIPE desde el aviso de prueba: el servidor crea la sesión
    y el navegador va a su URL; al volver con ?pago=ok se espera al webhook. */
 test('Suscripción · el botón de pagar va a Stripe y la vuelta espera la activación', async ({ page }) => {
@@ -1629,6 +1689,32 @@ test('Reparto · la ruta del repartidor: siguiente, furgoneta, Waze, orden a man
 
 /* LA GUÍA DENTRO DE LA APP: con el móvil moviéndose por las calles, la
    maniobra en grande, «Has llegado» al llegar, Entregado y a la siguiente. */
+/* CASO ARTURO (06-10-2026): su única parada no se encontró en el mapa y no le salía «Empezar a
+   navegar» sin decir por qué. Ahora la cabecera lo explica y lleva a corregir la dirección. */
+test('Reparto · si ninguna parada está en el mapa, dice por qué no se navega y lleva a corregirla', async ({ page }) => {
+  const b64 = (o) => btoa(JSON.stringify(o)).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '')
+  const token = `${b64({ alg: 'HS256' })}.${b64({ sub: 'd1', role: 'driver', name: 'ARTURO', exp: Math.floor(Date.now() / 1000) + 3600 })}.x`
+  await page.addInitScript((t) => {
+    localStorage.setItem('flota_driver_token', t)
+    localStorage.setItem('flota_driver', JSON.stringify({ id: 'd1', name: 'ARTURO' }))
+    localStorage.setItem('cookie_consent', '1')
+  }, token)
+  await simularApi(page, 'vacio')
+  let pedidos = [{ id: 'p1', cliente: 'Cliente', direccion: 'Rua inventada 99', estado: 'pendiente', bultos: 1, orden: 1, lat: null, lng: null, geo: 'no' }]
+  await page.route(/\/api\/reparto\/mi-ruta$/, (r) => r.fulfill({ json: {
+    activo: true, empresa: 'Yo', fecha: '2026-10-06', ia_tickets: false, jornada: {}, aviso_aceptado: true, base: null, ruta: null, pedidos } }))
+  await page.goto('/conductor?vista=ruta', { waitUntil: 'domcontentloaded' })
+  await expect(page.getByText(/No encontramos la dirección en el mapa/)).toBeVisible()
+  await expect(page.getByRole('button', { name: 'Empezar a navegar' })).toHaveCount(0)
+  await page.getByRole('button', { name: 'Corregir la dirección' }).click()
+  await expect(page.locator('input[value="Rua inventada 99"]')).toBeVisible()          // abre su ficha para corregirla
+  // Mientras se está buscando no se da por perdida.
+  pedidos = [{ ...pedidos[0], geo: 'pendiente' }]
+  await page.reload({ waitUntil: 'domcontentloaded' })
+  await expect(page.getByText(/Queda 1 parada/)).toBeVisible()
+  await expect(page.getByText(/No encontramos la dirección en el mapa/)).toHaveCount(0)
+})
+
 test('Reparto · navegar dentro de la app: maniobras, llegada, entregar y a la siguiente', async ({ page, context }) => {
   const fallos = vigilar(page)
   const b64 = (o) => btoa(JSON.stringify(o)).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '')

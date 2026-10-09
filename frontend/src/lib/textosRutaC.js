@@ -62,4 +62,7 @@ export const C = {
   "Ese regalo ha caducado": ["That gift has expired", "Essa oferta expirou", "Ce cadeau a expiré", "Quel regalo è scaduto", "Dieses Geschenk ist abgelaufen", "该礼品已过期"],
   // China (PIPL)
   "Para usar la app desde China hace falta tu consentimiento para tratar tus datos fuera de China.": ["To use the app from China, your consent to process your data outside China is required.", "Para usar a app a partir da China é preciso o seu consentimento para tratar os seus dados fora da China.", "Pour utiliser l’app depuis la Chine, votre consentement au traitement de vos données hors de Chine est nécessaire.", "Per usare l’app dalla Cina serve il tuo consenso al trattamento dei dati fuori dalla Cina.", "Um die App aus China zu nutzen, brauchen wir deine Zustimmung zur Verarbeitung deiner Daten außerhalb Chinas.", "在中国使用本应用，需要你同意在中国境外处理你的数据。"],
+  // Cuenta: cambiar correo y contraseña (06-10-2026)
+  "La contraseña actual no es correcta": ["The current password is incorrect", "A palavra-passe atual não está correta", "Le mot de passe actuel est incorrect", "La password attuale non è corretta", "Das aktuelle Passwort ist falsch", "当前密码不正确"],
+  "Ya hay otra cuenta con ese correo": ["There’s already another account with that email", "Já existe outra conta com esse e-mail", "Il existe déjà un autre compte avec cet e-mail", "Esiste già un altro account con questa email", "Es gibt bereits ein anderes Konto mit dieser E-Mail", "已有其他账户使用该邮箱"],
 }

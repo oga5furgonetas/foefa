@@ -1,13 +1,14 @@
 import { useEffect, useState } from 'react'
 import {
-  Loader2, LogOut, Gift, CreditCard, Check, Copy, MessageCircle, Mail, Sparkles, ShieldCheck, CalendarClock, Crown,
+  Loader2, LogOut, Gift, CreditCard, Check, Copy, MessageCircle, Mail, Sparkles, ShieldCheck, CalendarClock, Crown, KeyRound,
 } from 'lucide-react'
 import {
   stripeSuscripcion, stripePortal, stripeCambiarPlan, comprarRegalo, misRegalos, canjearRegalo, playVerificar,
+  getMe, setMyEmail, changeMyPassword, pedirEnlaceClave,
 } from '../panel/api'
 import { servicioPlay, detallesPlay, pagarConPlay } from '../lib/playBilling'
 import { evento, apuntarParaLaVuelta } from '../lib/metaPixel'
-import { getAdmin, logout } from '../panel/auth'
+import { getAdmin, logout, esSuplantacion } from '../panel/auth'
 import { MARCA, origen } from '../marca'
 import { enAppPlay } from '../lib/enApp'
 import { lista } from '../lib/lista'
@@ -39,11 +40,14 @@ export function Cuenta({ billing, recargar, toast, resaltarRegalo }) {
   const enApp = enAppPlay()
   const b = billing || {}
   const precios = b.precios || { mensual: 9.99, anual: 99 }
+  // Desde «entrar como» se VE el plan, pero pagar, cambiar o dar de baja es cosa del cliente
+  // (el servidor lo rechaza): no se enseñan botones que solo pueden fallar.
+  const suplantando = esSuplantacion()
   return (
     <div className="mx-auto max-w-md pb-6">
       <h1 className="font-display text-[24px] font-bold text-dark-50">{tx('Tu cuenta')}</h1>
       <p className="mb-4 text-[13px] text-dark-400">{admin?.name || ''}</p>
-      {!billing ? <Loader2 className="mx-auto my-10 animate-spin text-dark-500" /> : (
+      {!billing ? <Loader2 className="mx-auto my-10 animate-spin text-dark-500" /> : suplantando ? <Estado b={b} precios={precios} /> : (
         <>
           <Estado b={b} precios={precios} />
           {!enApp && b.status === 'suspended' && b.pago_proveedor === 'stripe' && b.stripe_status !== 'canceled'
@@ -56,7 +60,8 @@ export function Cuenta({ billing, recargar, toast, resaltarRegalo }) {
           {!enApp && b.regalos && <Regalar precios={b.regalos} toast={toast} resaltar={resaltarRegalo} />}
         </>
       )}
-      <Invitar />
+      {!suplantando && <Invitar />}
+      <Acceso toast={toast} soloVer={suplantando} />
       <section className="mt-4 rounded-3xl border border-dark-700 bg-dark-900 p-4">
         <label className="flex items-center justify-between gap-3 text-[14px] font-semibold text-dark-100">
           🌐 {tx('Idioma')}
@@ -76,6 +81,137 @@ export function Cuenta({ billing, recargar, toast, resaltarRegalo }) {
         <LogOut size={15} /> {tx('Cerrar sesión')}
       </button>
     </div>
+  )
+}
+
+/* TU ACCESO (06-10-2026). Dani: «le falta para vincular el email y para cambiar contraseña,
+   o cuál es mi usuario». El repartidor entra con el correo del alta, pero la pantalla no lo
+   decía. Aquí: con qué entra, cambiar el correo (si entra con él, el usuario cambia con él y
+   se pide la contraseña), cambiar la contraseña y, si no recuerda la actual, un enlace al
+   correo. Desde «entrar como» solo se ve. */
+function Acceso({ toast, soloVer }) {
+  useIdioma()
+  const [me, setMe] = useState(null)
+  const [abierto, setAbierto] = useState('')            // '' | 'correo' | 'clave'
+  const [correo, setCorreo] = useState('')
+  const [actual, setActual] = useState('')
+  const [nueva, setNueva] = useState('')
+  const [ver, setVer] = useState(false)
+  const [ocupado, setOcupado] = useState(false)
+  const [err, setErr] = useState('')
+  useEffect(() => { getMe().then(({ data }) => setMe(data || {})).catch(() => setMe({})) }, [])
+
+  const usuario = me?.username || ''
+  const email = me?.email || ''
+  const entraConCorreo = !!usuario && usuario.toLowerCase() === email.toLowerCase()
+  const cerrar = () => { setAbierto(''); setCorreo(''); setActual(''); setNueva(''); setVer(false); setErr('') }
+
+  async function guardarCorreo(e) {
+    e.preventDefault(); setErr('')
+    const c = correo.trim().toLowerCase()
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(c)) return setErr(tx('Introduce un email válido.'))
+    if (entraConCorreo && !actual) return setErr(tx('Escribe tu contraseña actual.'))
+    setOcupado(true)
+    try {
+      const { data } = await setMyEmail(c, entraConCorreo ? { tambien_usuario: true, password: actual } : {})
+      setMe((m) => ({ ...m, email: data?.email || c, username: data?.username || m?.username }))
+      toast?.success?.(entraConCorreo ? tx('Hecho. Desde ahora entras con {correo}.', { correo: c }) : tx('Correo guardado.'))
+      cerrar()
+    } catch (e2) { setErr(txError(e2, 'No se pudo guardar el correo.')) }
+    setOcupado(false)
+  }
+
+  async function guardarClave(e) {
+    e.preventDefault(); setErr('')
+    if (!actual) return setErr(tx('Escribe tu contraseña actual.'))
+    if (nueva.length < 8) return setErr(tx('La contraseña debe tener al menos 8 caracteres.'))
+    setOcupado(true)
+    try {
+      await changeMyPassword(actual, nueva)
+      toast?.success?.(tx('Contraseña cambiada.'))
+      cerrar()
+    } catch (e2) { setErr(txError(e2, 'No se pudo cambiar la contraseña.')) }
+    setOcupado(false)
+  }
+
+  async function enlace() {
+    setOcupado(true); setErr('')
+    try {
+      await pedirEnlaceClave(email)
+      toast?.success?.(tx('Te hemos mandado un enlace a {correo} para crear una contraseña nueva. Si no llega, mira en spam.', { correo: email }))
+      cerrar()
+    } catch { setErr(tx('Sin conexión con el servidor. Revisa tu red e inténtalo de nuevo.')) }
+    setOcupado(false)
+  }
+
+  const campo = 'w-full rounded-xl border border-dark-700 bg-dark-950 px-3 py-2.5 text-[16px] text-dark-50 placeholder:text-dark-500'
+  const botonSec = 'rounded-xl border border-dark-600 py-2.5 text-[13.5px] font-semibold text-dark-100'
+  const pie = (
+    <>
+      {err && <p role="alert" className="text-[13px] text-red-300">{err}</p>}
+      <div className="grid grid-cols-2 gap-2">
+        <button type="button" onClick={cerrar} className={botonSec}>{tx('Cancelar')}</button>
+        <button type="submit" disabled={ocupado}
+          className="flex items-center justify-center gap-2 rounded-xl bg-brand-500 py-2.5 text-[13.5px] font-bold text-brand-tinta disabled:opacity-60">
+          {ocupado && <Loader2 size={15} className="animate-spin" />} {tx('Guardar')}
+        </button>
+      </div>
+    </>
+  )
+  return (
+    <section className="mt-4 rounded-3xl border border-dark-700 bg-dark-900 p-4" aria-labelledby="acceso-titulo">
+      <h2 id="acceso-titulo" className="flex items-center gap-2 text-[15px] font-bold text-dark-50"><KeyRound size={16} className="text-brand-300" /> {tx('Tu acceso')}</h2>
+      <dl className="mt-3 space-y-1.5 text-[14px]">
+        <div className="flex items-baseline justify-between gap-3">
+          <dt className="shrink-0 text-dark-400">{tx('Entras con')}</dt>
+          <dd className="min-w-0 select-all break-all text-right font-semibold text-dark-50">{me ? usuario || '—' : '…'}</dd>
+        </div>
+        {me && !entraConCorreo && (
+          <div className="flex items-baseline justify-between gap-3">
+            <dt className="shrink-0 text-dark-400">{tx('Correo')}</dt>
+            <dd className="min-w-0 break-all text-right text-dark-100">{email || tx('Sin correo')}</dd>
+          </div>
+        )}
+      </dl>
+
+      {!soloVer && me && !abierto && (
+        <div className="mt-3 grid grid-cols-2 gap-2">
+          <button type="button" onClick={() => setAbierto('correo')} className={botonSec}>{tx('Cambiar correo')}</button>
+          <button type="button" onClick={() => setAbierto('clave')} className={botonSec}>{tx('Cambiar contraseña')}</button>
+        </div>
+      )}
+
+      {abierto === 'correo' && (
+        <form onSubmit={guardarCorreo} noValidate className="mt-3 space-y-2">
+          <input id="acceso-correo" type="email" inputMode="email" autoComplete="email" autoCapitalize="none" value={correo}
+            onChange={(e) => setCorreo(e.target.value)} placeholder={tx('Nuevo correo')} aria-label={tx('Nuevo correo')} className={campo} />
+          {entraConCorreo && <>
+            <input id="acceso-clave-correo" type="password" autoComplete="current-password" value={actual}
+              onChange={(e) => setActual(e.target.value)} placeholder={tx('Contraseña actual')} aria-label={tx('Contraseña actual')} className={campo} />
+            <p className="text-[12.5px] text-dark-400">{tx('Entrarás con el correo nuevo.')}</p>
+          </>}
+          {pie}
+        </form>
+      )}
+
+      {abierto === 'clave' && (
+        <form onSubmit={guardarClave} noValidate className="mt-3 space-y-2">
+          <input id="acceso-clave-actual" type={ver ? 'text' : 'password'} autoComplete="current-password" value={actual}
+            onChange={(e) => setActual(e.target.value)} placeholder={tx('Contraseña actual')} aria-label={tx('Contraseña actual')} className={campo} />
+          <input id="acceso-clave-nueva" type={ver ? 'text' : 'password'} autoComplete="new-password" value={nueva}
+            onChange={(e) => setNueva(e.target.value)} placeholder={tx('Nueva contraseña')} aria-label={tx('Nueva contraseña')} className={campo} />
+          <button type="button" onClick={() => setVer((v) => !v)} className="text-[13px] font-semibold text-brand-300">
+            {ver ? tx('Ocultar contraseña') : tx('Mostrar contraseña')}
+          </button>
+          {pie}
+          {email && (
+            <button type="button" onClick={enlace} disabled={ocupado} className="w-full pt-1 text-center text-[13px] font-semibold text-brand-300">
+              {tx('No recuerdo la actual: mándame un enlace al correo')}
+            </button>
+          )}
+        </form>
+      )}
+    </section>
   )
 }
 

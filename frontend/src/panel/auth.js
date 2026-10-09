@@ -76,6 +76,22 @@ export function isAuthed() {
   return true
 }
 
+/* «ENTRAR COMO» DESDE LA PLATAFORMA (06-10-2026). El token lleva `imp` y la sesión del
+   super-admin queda guardada en `flota_token_super`. El panel lo avisaba con una franja;
+   la app del repartidor (/ruta) no, y Dani pulsaba «Tarjeta, facturas y cancelar» de un
+   cliente sin saber por qué le decía que no. */
+export const esSuplantacion = () => !!decodeToken()?.imp || !!localStorage.getItem('flota_token_super')
+
+export function volverASuper() {
+  const superTok = localStorage.getItem('flota_token_super')
+  if (superTok) {
+    localStorage.setItem(TOKEN_KEY, superTok)
+    localStorage.removeItem('flota_token_super')
+    localStorage.removeItem(ADMIN_KEY)
+  }
+  window.location.href = '/panel/admin'
+}
+
 // Decodifica el payload del JWT (sin verificar firma — solo lectura cliente).
 // El backend pone aquí: sub, role, name, exp, sa, org_id, db_name, account_type, centers, permissions.
 export function decodeToken() {

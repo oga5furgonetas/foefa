@@ -610,7 +610,9 @@ export default function MiRuta({ onBack, embebido = false }) {
         <Cabecera fecha={ruta.fecha} hechos={hechos.length} total={total} entregados={entregados.length}
           pendientes={pendientes.length} rr={ruta.ruta} retraso={retraso} cobrado={cobradoHoy}
           fueraHorario={pendientes.filter((p) => p.tarde_min > 0).length}
-          onGuiar={nav === 'app' && pendientes.some((p) => p.lat != null) ? () => setGuiando(pendientes.find((p) => p.lat != null).id) : null} />
+          onGuiar={nav === 'app' && pendientes.some((p) => p.lat != null) ? () => setGuiando(pendientes.find((p) => p.lat != null).id) : null}
+          onCorregir={!pendientes.some((p) => p.lat != null) && pendientes.some((p) => p.geo === 'no')
+            ? () => editar(pendientes.find((p) => p.geo === 'no')) : null} />
       )}
 
       {/* ESCANEAR */}
@@ -1181,7 +1183,11 @@ function Marco({ onBack, children, embebido }) {
 /* LA CABECERA DEL DÍA: anillo de progreso, lo que queda y a qué hora se
    acaba. «Vas X min por detrás» compara la hora de ahora con la prevista
    para la parada siguiente; solo sale si de verdad va más de 5 min tarde. */
-function Cabecera({ fecha, hechos, total, entregados, pendientes, rr, retraso, cobrado, fueraHorario, onGuiar }) {
+/* `onCorregir` (06-10-2026): a Arturo no le salía «Empezar a navegar» y no sabía por qué. Su
+   única parada no estaba en el mapa (la dirección no se encontró) y sin un punto no hay
+   adónde guiar; el aviso quedaba abajo, debajo del mapa. Ahora lo dice aquí y lleva a
+   corregirla: al escribirla salen sugerencias, y elegir una la sitúa. */
+function Cabecera({ fecha, hechos, total, entregados, pendientes, rr, retraso, cobrado, fueraHorario, onGuiar, onCorregir }) {
   const pct = total ? hechos / total : 0
   const R = 26
   const L = 2 * Math.PI * R
@@ -1233,6 +1239,14 @@ function Cabecera({ fecha, hechos, total, entregados, pendientes, rr, retraso, c
           className="mt-3.5 flex w-full items-center justify-center gap-2 rounded-2xl bg-brand-500 py-3.5 text-[16px] font-bold text-brand-tinta shadow-lg shadow-brand-500/20 active:scale-[.99]">
           <Navigation size={18} /> {tx('Empezar a navegar')}
         </button>
+      )}
+      {!onGuiar && onCorregir && (
+        <div role="status" className="mt-3.5 rounded-2xl border border-amber-500/30 bg-amber-500/10 p-3">
+          <p className="text-[13px] leading-snug text-amber-100">{tx('No encontramos la dirección en el mapa, así que todavía no se puede navegar. Corrígela y elige una de las sugerencias.')}</p>
+          <button onClick={onCorregir} className="mt-2 flex w-full items-center justify-center gap-2 rounded-xl bg-amber-500/25 py-2.5 text-[14px] font-bold text-amber-100">
+            <Pencil size={15} /> {tx('Corregir la dirección')}
+          </button>
+        </div>
       )}
     </section>
   )

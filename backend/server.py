@@ -7521,13 +7521,15 @@ async def get_me(user: dict = Depends(get_current_user)):
     theme = None
     email = None
     photo_url = None
+    username = None     # con qué entra (el repartidor, su correo): su pantalla de Cuenta lo enseña
     if user.get("role") == "admin":
         admin_doc = await global_db.admin_users.find_one(
-            {"id": user["sub"]}, {"_id": 0, "theme": 1, "email": 1, "photo_url": 1})
+            {"id": user["sub"]}, {"_id": 0, "theme": 1, "email": 1, "photo_url": 1, "username": 1})
         if admin_doc:
             theme = admin_doc.get("theme")
             email = admin_doc.get("email")
             photo_url = admin_doc.get("photo_url")
+            username = admin_doc.get("username")
     return {
         "id": user["sub"],
         "role": user["role"],
@@ -7536,6 +7538,7 @@ async def get_me(user: dict = Depends(get_current_user)):
         "name": user.get("name"),
         "theme": theme,
         "email": email,
+        "username": username,
         "photo_url": photo_url,
         # Permisos, rol y centros TAL COMO ESTAN AHORA en la base de datos
         # (get_current_user ya los ha refrescado). El panel los relee al abrir
@@ -7550,12 +7553,42 @@ async def get_me(user: dict = Depends(get_current_user)):
 
 @auth_router.post("/my-email")
 async def set_my_email(data: dict, user: dict = Depends(get_current_user)):
-    """Cada admin vincula (o borra) su propio email de recuperación."""
+    """Cada admin vincula (o borra) su propio email de recuperación.
+
+    Con `tambien_usuario` (la Cuenta del repartidor, 06-10-2026): quien ENTRA con su
+    correo lo cambia y el usuario cambia con él; si no, seguiría entrando con el viejo
+    y la pantalla le diría lo contrario. Como cambia con qué se entra, pide la
+    contraseña. Desde «entrar como» no se puede: sería quedarse con la cuenta.
+    """
     if user.get("role") != "admin":
         raise HTTPException(status_code=403, detail="Solo administradores")
+    if user.get("imp") or user.get("demo"):
+        raise HTTPException(status_code=403, detail=_SOLO_EL_CLIENTE)
     em = _texto_cuerpo(data.get("email")).lower()
     if em and not _EMAIL_RE.match(em):
         raise HTTPException(status_code=400, detail="Email no válido")
+    if data.get("tambien_usuario"):
+        if not em:
+            raise HTTPException(status_code=400, detail="Email no válido")
+        doc = await global_db.admin_users.find_one({"id": user["sub"]}, {"_id": 0})
+        if not doc or not verify_password(_texto_cuerpo(data.get("password")), doc.get("hashed_password") or ""):
+            await asyncio.sleep(0.8)
+            raise HTTPException(status_code=401, detail="La contraseña actual no es correcta")
+        viejo = (doc.get("username") or "").strip().lower()
+        if viejo != (doc.get("email") or "").strip().lower():
+            raise HTTPException(status_code=400, detail="Tu usuario no es tu correo: cambia solo el correo")
+        otro = await _admin_por_usuario(em, {"_id": 0, "id": 1})
+        choca = await global_db.admin_users.find_one({"email": em, "id": {"$ne": user["sub"]}}, {"_id": 0, "id": 1})
+        if (otro and otro.get("id") != user["sub"]) or choca:
+            raise HTTPException(status_code=409, detail="Ya hay otra cuenta con ese correo")
+        await global_db.admin_users.update_one({"id": user["sub"]}, {"$set": {"username": em, "email": em}})
+        # Los avisos de la cuenta (prueba, cobro) van al correo de la empresa: si era el viejo, el nuevo.
+        if user.get("org_id"):
+            await global_db.organizations.update_one(
+                {"id": user["org_id"], "email": viejo}, {"$set": {"email": em}})
+        _ADMIN_EXISTS_CACHE.pop(user["sub"], None)
+        await _audit(user, "cambio_de_correo_y_usuario", {"de": viejo, "a": em})
+        return {"success": True, "email": em, "username": em}
     # Evita que dos cuentas compartan email (rompería recuperar-contraseña).
     if em:
         clash = await global_db.admin_users.find_one(
@@ -7765,6 +7798,8 @@ async def change_my_password(data: dict, user: dict = Depends(get_current_user))
     conductor que quisiera cambiarla tenía que pedírselo a la oficina y decirle
     cuál quería — o sea, contar su contraseña en voz alta a otra persona.
     """
+    if user.get("imp") or user.get("demo"):
+        raise HTTPException(status_code=403, detail=_SOLO_EL_CLIENTE)
     current = _texto_cuerpo(data.get("current_password"))
     new = _texto_cuerpo(data.get("new_password"))
     if len(new) < 6:
@@ -48794,10 +48829,19 @@ def _stripe_detalle_sub(sub: dict) -> dict:
     return d
 
 
+# «Entrar como» (token `imp`): la plataforma VE la cuenta del cliente, pero la tarjeta,
+# el plan, la baja, el correo y la contraseña solo los toca el propio cliente. Antes
+# decía «Solo la propia empresa» y Dani (06-10) no sabía qué le pasaba al pulsar.
+_SOLO_EL_CLIENTE = ("Estás dentro como la plataforma: la tarjeta, el plan, la baja, el correo "
+                    "y la contraseña solo los puede cambiar el propio cliente desde su cuenta")
+
+
 @api_router.post("/billing/stripe/portal")
 async def stripe_portal(user: dict = Depends(require_admin)):
     """Portal de Stripe: cambiar la tarjeta, ver facturas, cancelar."""
-    if user.get("demo") or user.get("imp"):
+    if user.get("imp"):
+        raise HTTPException(403, _SOLO_EL_CLIENTE)
+    if user.get("demo"):
         raise HTTPException(403, "Solo la propia empresa")
     org = await get_org(user.get("org_id"))
     if not org or not org.get("stripe_customer"):
@@ -48813,7 +48857,9 @@ async def stripe_cambiar_plan(data: dict = Body(default={}), user: dict = Depend
     """Pasar de mensual a anual (o al revés) sin darse de baja. Stripe prorratea:
     lo no usado del periodo actual se descuenta; en prueba no se cobra nada
     hasta que acabe."""
-    if user.get("demo") or user.get("imp"):
+    if user.get("imp"):
+        raise HTTPException(403, _SOLO_EL_CLIENTE)
+    if user.get("demo"):
         raise HTTPException(403, "Solo la propia empresa")
     org = await get_org(user.get("org_id"))
     if not org or not org.get("stripe_subscription"):

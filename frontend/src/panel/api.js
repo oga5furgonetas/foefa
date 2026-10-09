@@ -655,7 +655,9 @@ export const subirFotoAdmin = (id, file) => {
 /* ── Perfil / cuenta ── */
 export const changeMyPassword = (current_password, new_password) =>
   api.post('/auth/change-my-password', { current_password, new_password })
-export const setMyEmail = (email) => api.post('/auth/my-email', { email })
+// `extra`: { tambien_usuario, password } cuando se entra con el correo y el usuario cambia con él.
+export const setMyEmail = (email, extra = {}) => api.post('/auth/my-email', { email, ...extra })
+export const pedirEnlaceClave = (email) => api.post('/auth/forgot-password', { email })
 export const forgotPassword = (email) => api.post('/auth/forgot-password', { email })
 
 /* ── Package Intelligence Center (Cortex) ── */

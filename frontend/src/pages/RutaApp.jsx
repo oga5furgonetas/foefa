@@ -6,7 +6,7 @@ import { getRepartoPedidos, getRepartoEstadisticas, getOrgBilling, canjearRegalo
 import { enAppPlay } from '../lib/enApp'
 import { servicioPlay, comprasPlay } from '../lib/playBilling'
 import { enviarPendiente, olvidarPendiente } from '../lib/metaPixel'
-import { isAuthed } from '../panel/auth'
+import { isAuthed, esSuplantacion, volverASuper, getAdmin } from '../panel/auth'
 import { Cuenta, Muro } from './RutaCuenta'
 import OpinionRuta from './OpinionRuta'
 import InstalarApp from './InstalarApp'
@@ -118,6 +118,13 @@ export default function RutaApp() {
 
   return (
     <div className="flex min-h-screen flex-col bg-dark-950 text-dark-100">
+      {/* «Entrar como» desde la plataforma: la misma franja que en el panel, que aquí faltaba. */}
+      {esSuplantacion() && (
+        <div className="flex items-center justify-between gap-3 bg-amber-500/15 px-4 py-2 text-[13px] text-amber-200">
+          <span className="min-w-0">{tx('Estás viendo la cuenta de {nombre} como plataforma: su tarjeta, su plan y su contraseña solo los cambia el propio repartidor.', { nombre: getAdmin()?.name || '' })}</span>
+          <button onClick={volverASuper} className="shrink-0 rounded-md bg-amber-500/30 px-3 py-1 text-[12px] font-semibold">{tx('Volver a mi cuenta')}</button>
+        </div>
+      )}
       {billing?.status === 'trial' && !billing.bloqueo && !billing.falta_tarjeta && billing.days_left != null && billing.days_left <= 3 && tab !== 'cuenta' && (
         <button onClick={() => setTab('cuenta')}
           className="flex w-full items-center justify-center gap-1.5 bg-amber-500/15 px-4 py-2 text-[13px] font-semibold text-amber-200">
