@@ -3,6 +3,7 @@ import { Cookie, X } from 'lucide-react'
 import { Link } from 'react-router-dom'
 import { hayPixel, consentimiento, guardarConsentimiento, cargarPixel } from '../lib/metaPixel'
 import { tx, useIdioma } from '../lib/idioma'
+import { medirAccion } from '../lib/analitica'
 
 // Sin píxel: banner informativo (solo almacenamiento estrictamente necesario,
 // guía AEPD: informar + permitir cerrar). Con píxeles (Meta, TikTok): consentimiento
@@ -32,6 +33,8 @@ export default function CookieBanner() {
   }
   function decidir(anuncios) {
     guardarConsentimiento(anuncios)
+    // Cuántos aceptan: el píxel solo ve a esos, y es lo que le llega a TikTok para aprender.
+    medirAccion(anuncios ? 'cookies_si' : 'cookies_no')
     setShow(false)
   }
   /* QUE NO TAPE NADA. Es fijo abajo: en un móvil cubría el botón «Crear

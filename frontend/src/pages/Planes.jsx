@@ -377,6 +377,12 @@ export default function Planes() {
           <p style={{ color: '#64748b', fontSize: 13 }}>
             Precios sin IVA. ¿Dudas? <a href="/contacto" style={{ color: '#0ea5e9', textDecoration: 'none' }}>Contacta con nosotros</a>.
           </p>
+          {/* LSSI art. 10: el aviso legal accesible desde cada página pública. */}
+          <p style={{ color: '#64748b', fontSize: 12, marginTop: 8 }}>
+            {[['/aviso-legal', 'Aviso legal'], ['/privacidad', 'Privacidad'], ['/terminos', 'Términos'], ['/cookies', 'Cookies']].map(([h, t], i) => (
+              <span key={h}>{i > 0 && ' · '}<a href={h} style={{ color: '#64748b' }}>{t}</a></span>
+            ))}
+          </p>
         </div>
       </div>
     </div>

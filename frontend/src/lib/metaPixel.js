@@ -66,7 +66,9 @@ export function cargarPixel() {
    La versión anterior era un resumen y no ponía `TiktokAnalyticsObject`, `_i[id]`
    ni `_t`, que el script de TikTok usa para reconocer el píxel: esto es el oficial
    paso a paso. */
-const TT_EVENTOS = { Lead: 'ClickButton', CompleteRegistration: 'CompleteRegistration', StartTrial: 'StartTrial', Subscribe: 'Subscribe', Purchase: 'CompletePayment' }
+// ViewContent (10-10-2026): «le interesa» (bajó a la mitad de /repartidores o empezó el alta).
+// Con 0 altas TikTok no tenía nada que aprender y la campaña iba a «Click»; esto da ~100 a la semana.
+const TT_EVENTOS = { Lead: 'ClickButton', CompleteRegistration: 'CompleteRegistration', StartTrial: 'StartTrial', Subscribe: 'Subscribe', Purchase: 'CompletePayment', ViewContent: 'ViewContent' }
 const TT_METODOS = ['page', 'track', 'identify', 'instances', 'debug', 'on', 'off', 'once', 'ready', 'alias',
   'group', 'enableCookie', 'disableCookie', 'holdConsent', 'revokeConsent', 'grantConsent']
 function cargarTikTok() {
@@ -100,6 +102,15 @@ export function evento(nombre, datos) {
   cargarPixel()
   try { if (hayMeta()) window.fbq('track', nombre, datos || {}) } catch { /* medir nunca rompe nada */ }
   try { if (hayTT() && TT_EVENTOS[nombre]) window.ttq.track(TT_EVENTOS[nombre], datos || {}) } catch { /* idem */ }
+}
+
+/* El mismo evento una sola vez por página cargada: «le interesa» puede llegar por dos
+   caminos (bajar a la mitad o empezar el alta) y contarlo dos veces engañaría a la puja. */
+const yaEnviados = new Set()
+export function eventoUnaVez(nombre, datos) {
+  if (yaEnviados.has(nombre) || !aceptado()) return
+  yaEnviados.add(nombre)
+  evento(nombre, datos)
 }
 
 /* Antes de ir a Stripe: lo que se medirá al volver con ?pago=ok / ?regalo=. */

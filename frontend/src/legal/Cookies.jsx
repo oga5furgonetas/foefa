@@ -26,7 +26,7 @@ export default function Cookies() {
       </table>
 
       <h2>3. Cookies de terceros</h2>
-      <p>Durante el proceso de pago serás redirigido a <strong>Stripe</strong> (o a <strong>Lemon Squeezy</strong> en algunos planes de empresa), que pueden establecer sus propias cookies necesarias para procesar el pago. Consulta sus políticas en <a href="https://stripe.com/es/privacy" target="_blank" rel="noreferrer">stripe.com/es/privacy</a> y <a href="https://www.lemonsqueezy.com/privacy" target="_blank" rel="noreferrer">lemonsqueezy.com/privacy</a>.</p>
+      <p>Durante el proceso de pago serás redirigido a <strong>Stripe</strong>, que puede establecer sus propias cookies necesarias para procesar el pago. Consulta su política en <a href="https://stripe.com/es/privacy" target="_blank" rel="noreferrer">stripe.com/es/privacy</a>.</p>
       {hayPixel() && <p>Si aceptas la medición de anuncios, <strong>Meta Platforms Ireland</strong> y <strong>TikTok Technology Limited</strong> (Irlanda) reciben a través de sus píxeles la página visitada y los eventos (alta, prueba, suscripción, regalo), sin tu correo ni tus datos de reparto. Consulta sus políticas en <a href="https://www.facebook.com/privacy/policy" target="_blank" rel="noreferrer">facebook.com/privacy/policy</a> y <a href="https://www.tiktok.com/legal/page/eea/privacy-policy/es" target="_blank" rel="noreferrer">tiktok.com/legal</a>.</p>}
 
       <h2>4. Gestión y consentimiento</h2>

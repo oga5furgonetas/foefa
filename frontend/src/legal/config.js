@@ -20,8 +20,16 @@ export const COMPANY = {
 // Proveedores que tratan datos en tu nombre (encargados del tratamiento).
 import { hayPixel } from '../lib/metaPixel'
 
+// 10-10-2026: faltaban Stripe (cobra el plan Repartidor), Google Play (cobra dentro de su app),
+// Resend (manda los correos) y TikTok (su píxel); sobraba Lemon Squeezy, que no está activo.
 export const PROCESSORS = [
-  ...(hayPixel() ? [{ name: 'Meta Platforms Ireland Ltd.', purpose: 'Medir los anuncios de Facebook (píxel), solo si lo aceptas en el aviso de cookies', country: 'Irlanda (UE) / EEUU (DPF)' }] : []),
+  ...(hayPixel() ? [
+    { name: 'Meta Platforms Ireland Ltd.', purpose: 'Medir los anuncios de Facebook e Instagram (píxel), solo si lo aceptas en el aviso de cookies', country: 'Irlanda (UE) / EEUU (DPF)' },
+    { name: 'TikTok Technology Limited', purpose: 'Medir los anuncios de TikTok (píxel), solo si lo aceptas en el aviso de cookies', country: 'Irlanda (UE)' },
+  ] : []),
+  { name: 'Stripe Payments Europe, Ltd.', purpose: 'Cobro de la suscripción con tarjeta (los datos de la tarjeta no pasan por nosotros)', country: 'Irlanda (UE)' },
+  { name: 'Google Ireland Ltd. (Google Play)', purpose: 'Cobro de la suscripción si la contratas dentro de la app de Google Play', country: 'Irlanda (UE)' },
+  { name: 'Resend', purpose: 'Envío de correos de la cuenta (bienvenida, avisos, recuperar contraseña)', country: 'EEUU' },
   { name: 'Cloudflare, Inc.', purpose: 'Hosting de la web y CDN', country: 'EEUU/UE (DPF)' },
   { name: 'Fly.io (Fly.dev)', purpose: 'Hosting del backend (API)', country: 'EEUU/UE' },
   { name: 'MongoDB Atlas', purpose: 'Base de datos', country: 'UE' },
@@ -30,5 +38,4 @@ export const PROCESSORS = [
   { name: 'OpenStreetMap Foundation', purpose: 'Ubicar direcciones de entrega en el mapa (solo la dirección, sin nombre ni teléfono) y teselas del mapa', country: 'Reino Unido (adecuación UE)' },
   { name: 'komoot GmbH (buscador Photon, datos de OpenStreetMap)', purpose: 'Segundo intento para ubicar una dirección de entrega que el anterior no encuentra (solo la dirección, sin nombre ni teléfono)', country: 'Alemania (UE)' },
   { name: 'FOSSGIS e.V. (servidor de rutas de OpenStreetMap)', purpose: 'Calcular tiempos por carretera entre paradas (solo coordenadas, sin nombres ni teléfonos)', country: 'Alemania (UE)' },
-  { name: 'Lemon Squeezy', purpose: 'Pagos (Merchant of Record), facturación', country: 'EEUU/UE (DPF)' },
 ]

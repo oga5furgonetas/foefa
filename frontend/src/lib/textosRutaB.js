@@ -412,4 +412,7 @@ export const B = {
   // Mi ruta: parada que no se encontró en el mapa (06-10-2026)
   "No encontramos la dirección en el mapa, así que todavía no se puede navegar. Corrígela y elige una de las sugerencias.": ["We couldn’t find the address on the map, so you can’t navigate yet. Fix it and pick one of the suggestions.", "Não encontrámos a morada no mapa, por isso ainda não é possível navegar. Corrija-a e escolha uma das sugestões.", "Nous n’avons pas trouvé l’adresse sur la carte, la navigation n’est donc pas encore possible. Corrigez-la et choisissez une des suggestions.", "Non abbiamo trovato l’indirizzo sulla mappa, quindi non puoi ancora navigare. Correggilo e scegli uno dei suggerimenti.", "Wir haben die Adresse nicht auf der Karte gefunden, deshalb kannst du noch nicht navigieren. Korrigiere sie und wähle einen der Vorschläge.", "地图上找不到这个地址，所以暂时无法导航。请修改地址并选择一个建议。"],
   "Corregir la dirección": ["Fix the address", "Corrigir a morada", "Corriger l’adresse", "Correggi l’indirizzo", "Adresse korrigieren", "修改地址"],
+  // Pie de /repartidores: enlaces legales (LSSI, 10-10-2026)
+  "Aviso legal": ["Legal notice", "Aviso legal", "Mentions légales", "Note legali", "Impressum", "法律声明"],
+  "Cookies": ["Cookies", "Cookies", "Cookies", "Cookie", "Cookies", "Cookie"],
 }

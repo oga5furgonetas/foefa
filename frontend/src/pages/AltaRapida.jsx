@@ -4,7 +4,7 @@ import { API_BASE } from '../services/api'
 import { saveSession } from '../panel/auth'
 import { tx, useIdioma, txError } from '../lib/idioma'
 import { medirAccion } from '../lib/analitica'
-import { evento } from '../lib/metaPixel'
+import { evento, eventoUnaVez } from '../lib/metaPixel'
 import { leerRef } from '../lib/referido'
 import { regionDelMovil } from '../lib/region'
 import { enAppPlay } from '../lib/enApp'
@@ -35,7 +35,12 @@ export default function AltaRapida({ dias = 7, enfocar = false }) {
   const [err, setErr] = useState('')
   const [ocupado, setOcupado] = useState(false)
   const [empezado, setEmpezado] = useState(false)
-  const inicio = () => { if (!empezado) { setEmpezado(true); medirAccion('rep_form_inicio') } }
+  const inicio = () => {
+    if (empezado) return
+    setEmpezado(true)
+    medirAccion('rep_form_inicio')
+    eventoUnaVez('ViewContent', { content_name: 'repartidores_interes' })   // mismo «le interesa» que bajar a la mitad
+  }
 
   async function enviar(e) {
     e.preventDefault()

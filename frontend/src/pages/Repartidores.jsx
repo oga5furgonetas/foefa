@@ -4,7 +4,7 @@ import { API_BASE, DRIVER_TOKEN_KEY } from '../services/api'
 import { MARCA } from '../marca'
 import { tx, useIdioma, IDIOMAS, cambiarIdioma, idioma, txError } from '../lib/idioma'
 import { medirAccion, varianteAB } from '../lib/analitica'
-import { evento } from '../lib/metaPixel'
+import { evento, eventoUnaVez } from '../lib/metaPixel'
 import { useInvitacion } from '../lib/referido'
 import AltaRapida from './AltaRapida'
 
@@ -57,6 +57,8 @@ function useMedirInteres() {
       if (!mitad && h > 0 && window.scrollY / h >= 0.5) {
         mitad = true
         medirAccion('rep_mitad')
+        // Para que el anuncio busque gente así y no a quien pulsa y se va (10-10-2026).
+        eventoUnaVez('ViewContent', { content_name: 'repartidores_interes' })
         window.removeEventListener('scroll', alBajar)
       }
     }
@@ -235,7 +237,9 @@ export default function Repartidores() {
         <div className="mt-6">{botonProbar}</div>
 
         <p className="mt-8 text-center text-[12px] text-dark-500">
-          {MARCA.nombre} · <a href="/privacidad" className="hover:underline">{tx('Privacidad')}</a> · <a href="/terminos" className="hover:underline">{tx('Términos')}</a>
+          {/* LSSI art. 10: quién está detrás, a un clic desde la página que se comparte (10-10-2026:
+              un grupo de Telegram borró el enlace porque desde aquí no se llegaba al aviso legal). */}
+          {MARCA.nombre} · <a href="/aviso-legal" className="hover:underline">{tx('Aviso legal')}</a> · <a href="/privacidad" className="hover:underline">{tx('Privacidad')}</a> · <a href="/terminos" className="hover:underline">{tx('Términos')}</a> · <a href="/cookies" className="hover:underline">{tx('Cookies')}</a>
         </p>
       </div>
     </div>
