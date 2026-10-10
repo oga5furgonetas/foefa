@@ -121,7 +121,7 @@ export default function Repartidores() {
     </div>
   )
   const textoGratis = (
-    <p className="mt-2 text-center text-[12.5px] text-dark-300">{invitacion ? tx('{n} días gratis · sin tarjeta · cancelas cuando quieras', { n: invitacion.dias }) : promoGratis() ? tx('Gratis y sin límite hasta el {fecha} · sin tarjeta', { fecha: fechaPromo(locale()) }) : tx('Gratis hasta {n} paradas al día · sin tarjeta', { n: PARADAS_GRATIS })}</p>
+    <p className="mt-2 text-center text-[12.5px] text-dark-300">{invitacion && !promoGratis() ? tx('{n} días gratis · sin tarjeta · cancelas cuando quieras', { n: invitacion.dias }) : promoGratis() ? tx('Gratis y sin límite hasta el {fecha} · sin tarjeta', { fecha: fechaPromo(locale()) }) : tx('Gratis hasta {n} paradas al día · sin tarjeta', { n: PARADAS_GRATIS })}</p>
   )
   const alta = (enfocar) => (<>
     <AltaRapida dias={invitacion ? invitacion.dias : 7} enfocar={enfocar} />
@@ -163,7 +163,7 @@ export default function Repartidores() {
 
         {invitacion && (
           <p className="mb-3 rounded-xl border border-violet-400/40 bg-violet-500/10 px-3 py-2 text-[13px] font-semibold text-violet-200">
-            🎁 {tx('Te ha invitado un compañero: {n} días gratis', { n: invitacion.dias })}
+            🎁 {promoGratis() ? tx('Te ha invitado un compañero · gratis y sin límite hasta el {fecha}', { fecha: fechaPromo(locale()) }) : tx('Te ha invitado un compañero: {n} días gratis', { n: invitacion.dias })}
           </p>
         )}
         <p className="text-[12.5px] font-bold uppercase tracking-[0.14em] text-brand-300">{tx('Para quien reparte solo')}</p>

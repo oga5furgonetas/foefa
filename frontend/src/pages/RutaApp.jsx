@@ -21,6 +21,7 @@ import { lista } from '../lib/lista'
 import { hoyLocal, fechaEs } from '../lib/fecha'
 import { importe } from '../lib/region'
 import { tx, useIdioma, txError, locale } from '../lib/idioma'
+import { invitar } from '../lib/compartir'
 
 /* ── LA APP DE QUIEN REPARTE SOLO (04-10-2026) ───────────────────────────────
    No es el panel de una empresa pequeña: es otro producto, como Circuit o
@@ -155,6 +156,14 @@ export default function RutaApp() {
         )}
         {tab === 'hoy' && !bloqueado && <OpinionRuta />}
         {tab === 'hoy' && <InstalarApp />}
+        {tab === 'hoy' && !esSuplantacion() && (
+          <div className="mx-auto mb-3 flex max-w-md items-center justify-between gap-3 rounded-2xl border border-emerald-400/30 bg-emerald-500/[.08] px-3.5 py-2.5">
+            <button onClick={() => setTab('cuenta')} className="min-w-0 text-left text-[13px] leading-snug text-emerald-100">
+              💶 {tx('Gana {euros} por cada compañero que la use.', { euros: '5 €' })} <span className="font-semibold underline">{tx('Mi cartera')}</span>
+            </button>
+            <button onClick={invitar} className="shrink-0 rounded-xl bg-emerald-600 px-3 py-1.5 text-[12.5px] font-bold text-white">{tx('Invitar')}</button>
+          </div>
+        )}
         {(tab === 'hoy' || tab === 'ajustes') && bloqueado
           ? <Muro billing={billing} toast={toast} recargar={recargar} irACuenta={() => setTab('cuenta')} />
           : <>

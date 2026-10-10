@@ -5,7 +5,7 @@ import { Activity,
   Loader2, Building2, CheckCircle2, Clock, Euro, Sparkles, Gift, PauseCircle,
   LogIn, Trash2, Database, BrainCircuit, ExternalLink, RefreshCw, Megaphone,
   Play, Pause, Plus, Star, Eye, MousePointerClick, Tag, Save,
-  Receipt, Upload, Check, Undo2, Building, Coins, LayoutGrid, X, Mail,
+  Receipt, Upload, Check, Undo2, Building, Coins, LayoutGrid, X, Mail, Wallet,
 } from 'lucide-react'
 import {
   getAdminOverview, getAdminOrgs, getLeads, updateOrg, impersonateOrg, deleteOrg,
@@ -16,6 +16,7 @@ import {
   adminGetEmisor, adminSetEmisor, revisarFacturacion as revisarFacturacionApi, getSaludSistema,
   getAdminModulos,
   crearEnlaceTienda, getSuscripcionesEmpleo, enviarCampanaCandidatos,
+  adminRetiradas, adminRetiradaPagada, adminRetiradaRechazar,
 } from '../api'
 import { API_BASE } from '../../services/api'
 import { hoyLocal } from '../../lib/fecha'
@@ -588,6 +589,86 @@ function DatosEmisor() {
    RGPD/LOPD. Por eso "enviar a todos" exige escribir ENVIAR a mano (mismo
    patrón que borrar Cortex, gotcha 45): la decisión la toma una persona
    mirando la pantalla, nunca un clic accidental. */
+/* RETIRADAS DE LA CARTERA (10-10-2026). Los repartidores ganan saldo invitando a compañeros
+   que usan la app de verdad y piden cobrarlo. Aquí se ve a quién, cuánto, por dónde y A QUIÉN
+   INVITÓ (para ver si cuadra antes de pagar): se hace el Bizum o la transferencia a mano y se
+   marca «Pagada»; o se rechaza con un motivo (el saldo vuelve, salvo que sea trampa). */
+function RetiradasCartera() {
+  const [estado, setEstado] = useState('pendiente')
+  const [datos, setDatos] = useState(null)
+  const [err, setErr] = useState('')
+  const [ocupado, setOcupado] = useState('')
+  const cargar = () => adminRetiradas(estado).then(({ data }) => setDatos(data)).catch((e) => setErr(e?.response?.data?.detail || 'No se pudieron leer'))
+  useEffect(() => { cargar() }, [estado]) // eslint-disable-line react-hooks/exhaustive-deps
+  const eur = (c) => `${((Number(c) || 0) / 100).toFixed(2).replace('.', ',').replace(',00', '')} €`
+  async function pagada(r) {
+    if (!window.confirm(`¿Ya has enviado ${eur(r.importe)} a ${r.titular} por ${r.metodo === 'bizum' ? 'Bizum' : 'transferencia'}? Se le avisará por correo.`)) return
+    setOcupado(r.id); setErr('')
+    try { await adminRetiradaPagada(r.id); cargar() } catch (e) { setErr(e?.response?.data?.detail || 'No se pudo marcar') } finally { setOcupado('') }
+  }
+  async function rechazar(r, fraude) {
+    const motivo = window.prompt(fraude ? 'Motivo (el saldo NO vuelve: trampa)' : 'Motivo (el saldo vuelve a su cartera)', fraude ? 'Las invitaciones no cumplen las condiciones' : 'Revisa tus datos de cobro')
+    if (motivo === null) return
+    setOcupado(r.id); setErr('')
+    try { await adminRetiradaRechazar(r.id, { motivo, sin_devolver: !!fraude }); cargar() } catch (e) { setErr(e?.response?.data?.detail || 'No se pudo rechazar') } finally { setOcupado('') }
+  }
+  const lista = datos?.retiradas || []
+  return (
+    <div className="card space-y-3 p-4">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <div className="flex items-center gap-2">
+          <Wallet size={16} className="text-emerald-400" />
+          <h3 className="text-sm font-semibold">Retiradas de la cartera («Invita y gana»)</h3>
+        </div>
+        <select value={estado} onChange={(e) => setEstado(e.target.value)} className="input w-auto py-1 text-[12.5px]" aria-label="Qué retiradas ver">
+          <option value="pendiente">Pendientes</option><option value="pagada">Pagadas</option>
+          <option value="rechazada">Rechazadas</option><option value="todas">Todas</option>
+        </select>
+      </div>
+      <p className="text-[12px] text-dark-400">
+        Cada invitado que usa la app de verdad da {eur(datos?.por_invitado ?? 500)}; se cobra desde {eur(datos?.retirada_min ?? 1500)}.
+        Antes de pagar, mira sus invitados: si se dieron de alta desde su misma red salen marcados.
+      </p>
+      {err && <p className="text-[12.5px] text-red-300">{err}</p>}
+      {!datos ? <Loader2 size={16} className="animate-spin text-dark-500" /> : lista.length === 0 ? (
+        <p className="text-[12.5px] text-dark-500">No hay retiradas {estado === 'todas' ? '' : estado === 'pendiente' ? 'pendientes' : estado + 's'}.</p>
+      ) : (
+        <ul className="space-y-2">
+          {lista.map((r) => (
+            <li key={r.id} className="rounded-xl border border-dark-700 p-3 text-[12.5px]">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <span className="font-semibold text-dark-100">{r.titular} · <span className="text-emerald-300">{eur(r.importe)}</span></span>
+                <span className="text-dark-400">{String(r.creada || '').slice(0, 16).replace('T', ' ')} · {r.estado}</span>
+              </div>
+              <p className="mt-1 text-dark-300">
+                {r.metodo === 'bizum' ? 'Bizum' : 'Transferencia'}: <b className="select-all text-dark-100">{r.destino}</b> · cuenta «{r.org}» ({r.email})
+              </p>
+              {r.motivo && <p className="mt-1 text-dark-400">Motivo: {r.motivo}</p>}
+              <details className="mt-1">
+                <summary className="cursor-pointer text-dark-400">Sus invitados ({(r.invitados || []).length})</summary>
+                <ul className="mt-1 space-y-0.5 text-[12px]">
+                  {(r.invitados || []).map((i, k) => (
+                    <li key={k} className={i.sospechoso ? 'text-amber-300' : 'text-dark-300'}>
+                      {i.nombre} · alta {i.alta} · {i.premiado ? 'la usa (pagado)' : 'aún no la usa'}{i.sospechoso ? ' · ⚠ misma red' : ''} · {i.correo}
+                    </li>
+                  ))}
+                </ul>
+              </details>
+              {r.estado === 'pendiente' && (
+                <div className="mt-2 flex flex-wrap gap-2">
+                  <button onClick={() => pagada(r)} disabled={ocupado === r.id} className="btn-primary flex items-center gap-1 px-3 py-1.5 text-[12.5px]"><Check size={13} /> Ya la he pagado</button>
+                  <button onClick={() => rechazar(r, false)} disabled={ocupado === r.id} className="btn-secondary px-3 py-1.5 text-[12.5px]">Rechazar (devolver saldo)</button>
+                  <button onClick={() => rechazar(r, true)} disabled={ocupado === r.id} className="btn-ghost px-3 py-1.5 text-[12.5px] text-red-300">Rechazar por trampa</button>
+                </div>
+              )}
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
+  )
+}
+
 function CampanaCandidatos() {
   const [enlaceTienda, setEnlaceTienda] = useState('')
   const [subs, setSubs] = useState(null)
@@ -1057,6 +1138,10 @@ export default function Negocio() {
         <a href={`${API_BASE}/ai/export-dataset`} target="_blank" rel="noreferrer" className="btn-secondary flex items-center gap-2 text-sm">
           <BrainCircuit size={15} /> {t('neg.export.ai')}
         </a>
+      </div>
+
+      <div className="mt-6">
+        <RetiradasCartera />
       </div>
 
       <div className="mt-6">

@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import {
-  Loader2, LogOut, Gift, CreditCard, Check, Copy, MessageCircle, Mail, Sparkles, ShieldCheck, CalendarClock, Crown, KeyRound,
+  Loader2, LogOut, Gift, CreditCard, Check, Copy, MessageCircle, Mail, Sparkles, ShieldCheck, CalendarClock, Crown, KeyRound, Wallet,
 } from 'lucide-react'
 import {
   stripeSuscripcion, stripePortal, stripeCambiarPlan, comprarRegalo, misRegalos, canjearRegalo, playVerificar,
@@ -14,7 +14,7 @@ import { enAppPlay } from '../lib/enApp'
 import { lista } from '../lib/lista'
 import { tx, useIdioma, locale, IDIOMAS, idioma, cambiarIdioma, txError } from '../lib/idioma'
 import { invitar } from '../lib/compartir'
-import { getReferidos } from '../services/api'
+import { getReferidos, retirarCartera } from '../services/api'
 
 /* ── LA CUENTA DE QUIEN REPARTE SOLO (04-10-2026) ────────────────────────────
    Dani: «quiero mejorarla ya, o la suscripción de un año, o regalársela a
@@ -61,7 +61,7 @@ export function Cuenta({ billing, recargar, toast, resaltarRegalo }) {
           {!enApp && b.regalos && <Regalar precios={b.regalos} toast={toast} resaltar={resaltarRegalo} />}
         </>
       )}
-      {!suplantando && <Invitar />}
+      {!suplantando && <Invitar toast={toast} />}
       <Acceso toast={toast} soloVer={suplantando} />
       <section className="mt-4 rounded-3xl border border-dark-700 bg-dark-900 p-4">
         <label className="flex items-center justify-between gap-3 text-[14px] font-semibold text-dark-100">
@@ -699,26 +699,96 @@ export function Muro({ billing, toast, recargar, irACuenta }) {
   )
 }
 
-/* «Invita a un compañero»: la regla, tu progreso y el botón. */
-function Invitar() {
+/* LA CARTERA «INVITA Y GANA» (10-10-2026). Dani: «por cada persona nueva que se lo pasan y
+   se registra, algo de dinero que puedan retirar; nosotros lo aprobamos y les pagamos». Las
+   reglas las pone el servidor (importes en céntimos); aquí se cuentan claras, se ve el saldo,
+   se invita en un toque y se pide el pago por Bizum o transferencia. */
+const cent = (c) => euros((Number(c) || 0) / 100)
+const ESTADO_RETIRADA = { pendiente: ['En revisión', 'text-amber-200'], pagada: ['Pagada', 'text-emerald-300'], rechazada: ['No pagada', 'text-red-300'] }
+
+function Invitar({ toast }) {
   useIdioma()
   const [r, setR] = useState(null)
-  useEffect(() => { getReferidos().then(({ data }) => setR(data)).catch(() => {}) }, [])
+  const [pidiendo, setPidiendo] = useState(false)
+  const [form, setForm] = useState({ titular: '', metodo: 'bizum', destino: '' })
+  const [enviando, setEnviando] = useState(false)
+  const cargar = () => getReferidos().then(({ data }) => setR(data)).catch(() => {})
+  useEffect(() => { cargar() }, [])
+  async function pedir(e) {
+    e.preventDefault()
+    setEnviando(true)
+    try {
+      await retirarCartera(form)
+      toast?.success?.(tx('Pedido. Lo revisamos y te lo pagamos en unos días.'))
+      setPidiendo(false)
+      cargar()
+    } catch (err) { toast?.error?.(txError(err, 'No se pudo pedir el pago')) } finally { setEnviando(false) }
+  }
+  const saldo = r?.saldo || 0
+  const puede = r && saldo >= (r.retirada_min || 1500) && !r.pendiente
+  const campo = 'w-full rounded-xl border border-dark-700 bg-dark-950 px-3 py-2.5 text-[15px] text-dark-50'
   return (
-    <section className="mt-4 rounded-3xl border border-emerald-400/30 bg-emerald-500/[.06] p-4">
-      <p className="text-[15px] font-bold text-dark-50">{tx('Invita a un compañero y gana 1 mes gratis')}</p>
-      <p className="mt-1 text-[13px] leading-snug text-dark-300">
-        {tx('Tu amigo empieza con {dias} días gratis. Cuando haga {n} entregas con la app, tú ganas 1 mes gratis (hasta {tope} meses).',
-          { dias: 14, n: r?.entregas ?? 5, tope: r?.tope ?? 6 })}
+    <section className="mt-4 rounded-3xl border border-emerald-400/30 bg-gradient-to-br from-emerald-500/[.12] to-dark-900 p-4" aria-label={tx('Tu cartera')}>
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <p className="text-[12px] font-bold uppercase tracking-wider text-emerald-300">{tx('Invita y gana')}</p>
+          <p className="mt-0.5 text-[16px] font-bold leading-tight text-dark-50">{tx('{euros} por cada compañero que la use', { euros: cent(r?.por_invitado ?? 500) })}</p>
+        </div>
+        <div className="shrink-0 text-right">
+          <p className="text-[11px] text-dark-400">{tx('Tu saldo')}</p>
+          <p className="text-[24px] font-extrabold leading-none text-emerald-200">{cent(saldo)}</p>
+        </div>
+      </div>
+      <p className="mt-2 text-[12.5px] leading-snug text-dark-300">
+        {tx('Pásale tu enlace. Cuando se registre y haga {n} entregas en {d} días distintos (en su primer mes), ganas {euros}. Lo cobras por Bizum o transferencia desde {min}.', {
+          n: r?.entregas_cartera ?? 20, d: r?.dias_distintos ?? 2, euros: cent(r?.por_invitado ?? 500), min: cent(r?.retirada_min ?? 1500) })}
       </p>
-      {r && r.invitados > 0 && (
+      {r && (r.invitados > 0 || r.ganado > 0) && (
         <p className="mt-2 text-[12.5px] font-semibold text-emerald-200">
-          {tx('Has invitado a {a} · ya la usan {b} · meses ganados: {c}', { a: r.invitados, b: r.premiados, c: r.meses_ganados })}
+          {tx('Invitados: {a} · ya la usan: {b} · ganado: {c}', { a: r.invitados, b: r.premiados, c: cent(r.ganado) })}
         </p>
       )}
       <button onClick={invitar} className="mt-3 flex w-full items-center justify-center gap-2 rounded-xl bg-emerald-600 py-3 text-[14.5px] font-bold text-white">
         <MessageCircle size={17} /> {tx('Invitar a un compañero')}
       </button>
+      {r?.pendiente && <p className="mt-2 text-center text-[12.5px] text-amber-200">{tx('Tienes un pago en revisión. Te avisamos por correo cuando lo enviemos.')}</p>}
+      {puede && !pidiendo && (
+        <button onClick={() => setPidiendo(true)} className="mt-2 flex w-full items-center justify-center gap-2 rounded-xl border border-emerald-400/60 py-2.5 text-[14px] font-bold text-emerald-200">
+          <Wallet size={16} /> {tx('Cobrar {euros}', { euros: cent(saldo) })}
+        </button>
+      )}
+      {pidiendo && (
+        <form onSubmit={pedir} className="mt-3 space-y-2 rounded-2xl border border-dark-700 bg-dark-900 p-3">
+          <p className="text-[13px] font-semibold text-dark-100">{tx('¿Dónde te lo enviamos?')}</p>
+          <div className="grid grid-cols-2 gap-2">
+            {[['bizum', 'Bizum'], ['iban', 'Transferencia']].map(([k, t]) => (
+              <button key={k} type="button" aria-pressed={form.metodo === k} onClick={() => setForm({ ...form, metodo: k, destino: '' })}
+                className={`rounded-xl py-2 text-[13.5px] font-semibold ${form.metodo === k ? 'bg-emerald-600 text-white' : 'border border-dark-700 text-dark-200'}`}>{tx(t)}</button>
+            ))}
+          </div>
+          <input className={campo} value={form.titular} onChange={(e) => setForm({ ...form, titular: e.target.value })}
+            placeholder={tx('Nombre y apellidos del titular')} autoComplete="name" aria-label={tx('Nombre y apellidos del titular')} />
+          <input className={campo} value={form.destino} onChange={(e) => setForm({ ...form, destino: e.target.value })}
+            placeholder={form.metodo === 'bizum' ? tx('Móvil con Bizum') : tx('IBAN (ES…)')} aria-label={form.metodo === 'bizum' ? tx('Móvil con Bizum') : tx('IBAN (ES…)')}
+            inputMode={form.metodo === 'bizum' ? 'tel' : 'text'} autoComplete={form.metodo === 'bizum' ? 'tel' : 'off'} />
+          <button type="submit" disabled={enviando} className="flex w-full items-center justify-center gap-2 rounded-xl bg-emerald-600 py-2.5 text-[14px] font-bold text-white disabled:opacity-50">
+            {enviando ? <Loader2 size={16} className="animate-spin" /> : <Check size={16} />} {tx('Pedir el pago de {euros}', { euros: cent(saldo) })}
+          </button>
+          <p className="text-[11.5px] leading-snug text-dark-400">{tx('Lo revisamos y te lo pagamos en unos días. Solo usamos estos datos para pagarte.')}</p>
+          <button type="button" onClick={() => setPidiendo(false)} className="w-full text-[12.5px] text-dark-400">{tx('Cancelar')}</button>
+        </form>
+      )}
+      {lista(r?.retiradas).length > 0 && (
+        <ul className="mt-3 space-y-1 text-[12.5px]">
+          {lista(r.retiradas).map((x) => (
+            <li key={x.id} className="flex items-center justify-between gap-2 rounded-xl bg-dark-950/60 px-3 py-2">
+              <span className="text-dark-300">{fecha(x.creada)} · {cent(x.importe)} · {x.metodo === 'bizum' ? 'Bizum' : tx('Transferencia')} {x.destino}</span>
+              <span className={`shrink-0 font-semibold ${ESTADO_RETIRADA[x.estado]?.[1] || ''}`} title={x.motivo || ''}>{tx(ESTADO_RETIRADA[x.estado]?.[0] || x.estado)}</span>
+            </li>
+          ))}
+        </ul>
+      )}
+      <p className="mt-2 text-[11px] text-dark-500"><a href="/terminos#invita" className="underline">{tx('Condiciones del programa')}</a></p>
     </section>
   )
 }

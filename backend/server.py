@@ -4911,6 +4911,7 @@ async def register_dsp(data: RegisterRequest, request: Request):
     }
     if invitador:
         org["referido_por"] = invitador["id"]
+    org["alta_red"] = _huella_red(ip)
     org["pais"], org["zona_horaria"] = _region_alta(data.zona_horaria, data.pais)
     if (data.idioma or "").strip().lower()[:2] in ("es", "en", "pt", "fr", "it", "de", "zh"):
         org["idioma"] = data.idioma.strip().lower()[:2]
@@ -49452,6 +49453,41 @@ _REF_ENTREGAS = 5
 _REF_TOPE = 6
 _REF_HORAS = 24
 
+# ── LA CARTERA: «INVITA Y GANA» (10-10-2026) ─────────────────────────────────
+# Dani: «una mini cartera: por cada persona nueva que se lo pasan y se registra, algo
+# de dinero que puedan retirar; nosotros lo aprobamos y les pagamos». Sustituye al
+# «1 mes gratis» (con la app gratis hasta el 31-12, un mes no valía nada). Reglas
+# contra las trampas, porque aquí sale dinero de verdad:
+#   · se gana _REF_CENT por invitado que la USA DE VERDAD: _REF_ENTREGAS_CARTERA
+#     entregas reales (las de ejemplo no cuentan) en al menos _REF_DIAS_DISTINTOS días
+#     distintos, dentro de sus primeros _REF_VENTANA_DIAS días, y la cuenta con > 24 h;
+#   · si el invitado se dio de alta desde la MISMA RED que quien invita, no se paga solo:
+#     queda «para revisar» (la plataforma decide);
+#   · como mucho _REF_TOPE_MES invitados premiados al mes por persona;
+#   · se retira desde _REF_RETIRADA_MIN; la retirada la revisa la plataforma, la paga a
+#     mano (Bizum o transferencia) y la marca pagada; si la rechaza, el saldo vuelve.
+# Los importes van en céntimos.
+_REF_CENT = int(round(float(os.environ.get("REF_EUROS", "5") or 5) * 100))
+_REF_ENTREGAS_CARTERA = 20
+_REF_DIAS_DISTINTOS = 2
+_REF_VENTANA_DIAS = 30
+_REF_TOPE_MES = 20
+_REF_RETIRADA_MIN = 1500
+
+
+def _huella_red(ip: str) -> str:
+    """La red desde la que se dio de alta, sin guardar la IP: una huella con la clave del
+    servidor (no se puede volver atrás) que solo sirve para comparar dos altas."""
+    ip = str(ip or "").strip()
+    if not ip or ip == "?":
+        return ""
+    return hashlib.sha256(f"{SECRET_KEY}:red:{ip}".encode()).hexdigest()[:16]
+
+
+def _euros_txt(cent: int) -> str:
+    v = (int(cent or 0)) / 100
+    return (f"{v:.2f}".rstrip("0").rstrip(".") if v != int(v) else str(int(v))).replace(".", ",") + " €"
+
 
 def _codigo_ref(texto) -> str:
     return re.sub(r"[^A-Z0-9]", "", str(texto or "").upper())[:12]
@@ -49487,8 +49523,19 @@ async def referidos_mios(user: dict = Depends(require_admin)):
     codigo = await _mi_codigo_ref(org)
     invitados = await global_db.organizations.count_documents({"referido_por": org["id"]})
     premiados = await global_db.organizations.count_documents({"referido_por": org["id"], "ref_premiado": True})
+    retiradas = await global_db.cartera_retiradas.find(
+        {"org_id": org["id"]}, {"_id": 0, "id": 1, "importe": 1, "metodo": 1, "destino": 1, "estado": 1,
+                                "creada": 1, "resuelta": 1, "motivo": 1}).sort("creada", -1).to_list(10)
+    for r in retiradas:
+        r["destino"] = _tapar_destino(r.get("destino"))
     return {"codigo": codigo, "invitados": invitados, "premiados": premiados, "meses_ganados": premiados,
-            "tope": _REF_TOPE, "entregas": _REF_ENTREGAS, "dias_extra": _REF_DIAS_EXTRA}
+            "tope": _REF_TOPE, "entregas": _REF_ENTREGAS, "dias_extra": _REF_DIAS_EXTRA,
+            # La cartera
+            "saldo": int(org.get("cartera_saldo") or 0), "ganado": int(org.get("cartera_ganado") or 0),
+            "por_invitado": _REF_CENT, "retirada_min": _REF_RETIRADA_MIN,
+            "entregas_cartera": _REF_ENTREGAS_CARTERA, "dias_distintos": _REF_DIAS_DISTINTOS,
+            "ventana_dias": _REF_VENTANA_DIAS, "tope_mes": _REF_TOPE_MES,
+            "pendiente": any(r.get("estado") == "pendiente" for r in retiradas), "retiradas": retiradas}
 
 
 @api_router.get("/referidos/{codigo}")
@@ -49549,35 +49596,186 @@ async def opinion_enviar(data: dict = Body(default={}), user: dict = Depends(req
 
 
 async def _referido_premiar(org: dict, conductor_id: str):
-    """Si esta cuenta llegó por invitación y ya la usa de verdad, el que invitó
-    gana su mes. Se mira cuando el repartidor abre su ruta (barato: solo si
-    vino invitado y aún no se ha premiado)."""
-    if not org or not org.get("referido_por") or org.get("ref_premiado"):
+    """Si esta cuenta llegó por invitación y ya la usa de verdad, quien invitó gana
+    _REF_CENT en su cartera. Se mira cuando el repartidor abre su ruta (barato: solo
+    si vino invitado y aún no se ha premiado). Ver las reglas en «LA CARTERA»."""
+    if not org or not org.get("referido_por") or org.get("ref_premiado") or org.get("ref_sospechoso"):
         return
     ahora = datetime.now(timezone.utc)
     creada = _fecha_utc(org.get("created_at"))
     if not creada or (ahora - creada).total_seconds() < _REF_HORAS * 3600:
         return
-    n = await db.reparto_pedidos.count_documents({"conductor_id": conductor_id, "estado": "entregado", "ejemplo": {"$ne": True}})
-    if n < _REF_ENTREGAS:
+    limite = (creada + timedelta(days=_REF_VENTANA_DIAS)).strftime("%Y-%m-%d")
+    q = {"conductor_id": conductor_id, "estado": "entregado", "ejemplo": {"$ne": True}, "fecha": {"$lte": limite}}
+    if await db.reparto_pedidos.count_documents(q) < _REF_ENTREGAS_CARTERA:
         return
-    if await global_db.organizations.count_documents({"referido_por": org["referido_por"], "ref_premiado": True}) >= _REF_TOPE:
+    if len(await db.reparto_pedidos.distinct("fecha", q)) < _REF_DIAS_DISTINTOS:
+        return
+    invitador = await global_db.organizations.find_one({"id": org["referido_por"]}, {"_id": 0})
+    if not invitador:
+        return
+    if org.get("alta_red") and org.get("alta_red") == invitador.get("alta_red"):
+        # La misma red que quien invita: no se paga solo; lo revisa la plataforma.
+        await global_db.organizations.update_one({"id": org["id"]}, {"$set": {"ref_sospechoso": "misma_red"}})
+        return
+    mes = ahora.strftime("%Y-%m")
+    if await global_db.cartera_movimientos.count_documents(
+            {"org_id": invitador["id"], "tipo": "referido", "mes": mes}) >= _REF_TOPE_MES:
         return
     # Atómico: solo una vez por cuenta invitada.
     res = await global_db.organizations.update_one({"id": org["id"], "ref_premiado": {"$ne": True}},
                                                    {"$set": {"ref_premiado": True, "ref_premiado_en": ahora.isoformat()}})
     if not getattr(res, "modified_count", 0):
         return
+    await global_db.cartera_movimientos.insert_one({
+        "id": str(uuid.uuid4()), "org_id": invitador["id"], "tipo": "referido", "importe": _REF_CENT,
+        "invitado_id": org["id"], "invitado": org.get("name") or "", "mes": mes, "ts": ahora.isoformat()})
+    await global_db.organizations.update_one(
+        {"id": invitador["id"]}, {"$inc": {"cartera_saldo": _REF_CENT, "cartera_ganado": _REF_CENT}})
+
+
+# ── RETIRAR EL SALDO ──────────────────────────────────────────────────────────
+_RE_IBAN = re.compile(r"^[A-Z]{2}\d{2}[A-Z0-9]{10,30}$")
+
+
+def _iban_valido(iban: str) -> bool:
+    """Formato y dígitos de control (ISO 13616, módulo 97)."""
+    i = re.sub(r"\s+", "", str(iban or "")).upper()
+    if not _RE_IBAN.match(i) or (i.startswith("ES") and len(i) != 24):
+        return False
+    num = "".join(str(int(c, 36)) for c in i[4:] + i[:4])
+    return int(num) % 97 == 1
+
+
+def _bizum_valido(tel: str) -> str:
+    """Un móvil español (Bizum): 9 cifras empezando por 6 o 7, con o sin +34. '' si no."""
+    t = re.sub(r"[\s.-]", "", str(tel or ""))
+    t = re.sub(r"^(\+34|0034)", "", t)
+    return t if re.fullmatch(r"[67]\d{8}", t) else ""
+
+
+def _tapar_destino(d) -> str:
+    d = str(d or "")
+    return ("•••• " + d[-4:]) if len(d) > 4 else d
+
+
+@api_router.post("/cartera/retirar")
+async def cartera_retirar(data: dict = Body(default={}), user: dict = Depends(require_admin)):
+    """Pide cobrar TODO el saldo. Se descuenta ya (para no pedirlo dos veces) y queda
+    pendiente hasta que la plataforma lo paga o lo rechaza (y entonces vuelve)."""
+    if user.get("demo") or user.get("imp"):
+        raise HTTPException(403, "La cartera es de cada cuenta")
+    org = await get_org(user.get("org_id"))
+    if not _es_repartidor(org):
+        raise HTTPException(400, "La cartera es para el plan Repartidor")
+    d = _dict_cuerpo(data)
+    titular = _texto_cuerpo(d.get("titular"), 80).strip()
+    if len(titular) < 5 or " " not in titular:
+        raise HTTPException(400, "Escribe tu nombre y apellidos, como en tu banco")
+    metodo = _texto_cuerpo(d.get("metodo"), 10).lower()
+    if metodo == "bizum":
+        destino = _bizum_valido(d.get("destino"))
+        if not destino:
+            raise HTTPException(400, "Ese móvil no vale para Bizum: 9 cifras, empezando por 6 o 7")
+    elif metodo == "iban":
+        destino = re.sub(r"\s+", "", _texto_cuerpo(d.get("destino"), 40)).upper()
+        if not _iban_valido(destino):
+            raise HTTPException(400, "Ese IBAN no es correcto: revísalo (ES y 22 cifras)")
+    else:
+        raise HTTPException(400, "Elige Bizum o transferencia")
+    if await global_db.cartera_retiradas.find_one({"org_id": org["id"], "estado": "pendiente"}, {"_id": 0, "id": 1}):
+        raise HTTPException(409, "Ya tienes una retirada en revisión: espera a que te la paguemos")
+    importe = int(org.get("cartera_saldo") or 0)
+    if importe < _REF_RETIRADA_MIN:
+        raise HTTPException(400, f"Se puede retirar desde {_euros_txt(_REF_RETIRADA_MIN)}")
+    # Atómico: solo si el saldo sigue ahí (dos toques seguidos no cobran dos veces).
+    res = await global_db.organizations.update_one(
+        {"id": org["id"], "cartera_saldo": {"$gte": importe}}, {"$inc": {"cartera_saldo": -importe}})
+    if not getattr(res, "modified_count", 0):
+        raise HTTPException(409, "Tu saldo ha cambiado: vuelve a abrir la cartera")
+    ahora = datetime.now(timezone.utc).isoformat()
+    ret = {"id": str(uuid.uuid4()), "org_id": org["id"], "org": org.get("name") or "", "email": org.get("email") or "",
+           "importe": importe, "metodo": metodo, "destino": destino, "titular": titular,
+           "estado": "pendiente", "creada": ahora}
+    await global_db.cartera_retiradas.insert_one(dict(ret))
+    await global_db.cartera_movimientos.insert_one({
+        "id": str(uuid.uuid4()), "org_id": org["id"], "tipo": "retirada", "importe": -importe,
+        "retirada_id": ret["id"], "ts": ahora})
+    # Aviso a la plataforma para que lo pague.
     try:
-        invitador = await global_db.organizations.find_one({"id": org["referido_por"]}, {"_id": 0})
-        if not invitador:
-            raise RuntimeError("quien invitó ya no existe")
-        campos, _texto, _nuevo = await _aplicar_meses(invitador, 1, ahora)
-        await global_db.organizations.update_one({"id": invitador["id"]}, {"$set": campos, "$inc": {"ref_meses": 1}})
+        await _enviar_email(CORREO_CONTACTO, f"Retirada de cartera pendiente: {_euros_txt(importe)} · {org.get('name') or ''}",
+                            f"<p>{html_escape(org.get('name') or '')} pide cobrar <b>{_euros_txt(importe)}</b> por "
+                            f"{'Bizum' if metodo == 'bizum' else 'transferencia'}.</p>"
+                            f"<p>Revísala y márcala pagada en el panel: Negocio → Retiradas de la cartera.</p>",
+                            texto=f"{org.get('name') or ''} pide cobrar {_euros_txt(importe)}. Panel: Negocio → Retiradas de la cartera.")
     except Exception as e:                                   # noqa: BLE001
-        # No se pudo sumar el mes: se deja sin premiar para reintentarlo luego.
-        await global_db.organizations.update_one({"id": org["id"]}, {"$unset": {"ref_premiado": "", "ref_premiado_en": ""}})
-        logger.warning(f"referidos: no se pudo premiar: {type(e).__name__}")
+        logger.warning(f"cartera: no se pudo avisar de la retirada: {type(e).__name__}")
+    ret["destino"] = _tapar_destino(destino)
+    return {"ok": True, "retirada": {k: ret[k] for k in ("id", "importe", "metodo", "destino", "estado", "creada")}}
+
+
+@api_router.get("/admin/cartera/retiradas")
+async def admin_cartera_retiradas(estado: str = "pendiente", _: dict = Depends(require_superadmin)):
+    """Las retiradas para pagar, con lo necesario para decidir: a quién, cuánto, cómo y
+    a quién invitó (cuándo se dio de alta y si la red coincide)."""
+    q = {} if estado == "todas" else {"estado": estado}
+    rets = await global_db.cartera_retiradas.find(q, {"_id": 0}).sort("creada", -1).to_list(200)
+    for r in rets:
+        invitados = await global_db.organizations.find(
+            {"referido_por": r["org_id"]},
+            {"_id": 0, "id": 1, "name": 1, "created_at": 1, "ref_premiado": 1, "ref_sospechoso": 1, "email": 1}).to_list(200)
+        r["invitados"] = [{"nombre": i.get("name") or "", "alta": str(i.get("created_at") or "")[:10],
+                           "premiado": bool(i.get("ref_premiado")), "sospechoso": i.get("ref_sospechoso") or "",
+                           "correo": i.get("email") or ""} for i in invitados]
+    return {"retiradas": rets, "por_invitado": _REF_CENT, "retirada_min": _REF_RETIRADA_MIN}
+
+
+async def _retirada_resolver(rid: str, user: dict, estado: str, motivo: str = "") -> dict:
+    ahora = datetime.now(timezone.utc).isoformat()
+    res = await global_db.cartera_retiradas.update_one(
+        {"id": rid, "estado": "pendiente"},
+        {"$set": {"estado": estado, "resuelta": ahora, "por": user.get("sub"), "motivo": motivo}})
+    if not getattr(res, "modified_count", 0):
+        raise HTTPException(409, "Esa retirada ya no está pendiente")
+    return await global_db.cartera_retiradas.find_one({"id": rid}, {"_id": 0})
+
+
+@api_router.post("/admin/cartera/retiradas/{rid}/pagada")
+async def admin_retirada_pagada(rid: str, user: dict = Depends(require_superadmin)):
+    """Ya se ha hecho el Bizum o la transferencia: se marca pagada y se le avisa."""
+    r = await _retirada_resolver(rid, user, "pagada")
+    if r.get("email"):
+        try:
+            await _enviar_email(r["email"], f"Te hemos pagado {_euros_txt(r['importe'])}",
+                                f"<p>Hola {html_escape(r.get('titular') or '')}:</p><p>Te hemos enviado <b>{_euros_txt(r['importe'])}</b> "
+                                f"por {'Bizum' if r.get('metodo') == 'bizum' else 'transferencia'} por invitar a compañeros a la app. "
+                                f"¡Gracias por recomendarnos!</p>",
+                                texto=f"Te hemos enviado {_euros_txt(r['importe'])} por invitar a compañeros a la app. ¡Gracias!")
+        except Exception as e:                               # noqa: BLE001
+            logger.warning(f"cartera: no se pudo avisar del pago: {type(e).__name__}")
+    return {"ok": True, "estado": r["estado"]}
+
+
+@api_router.post("/admin/cartera/retiradas/{rid}/rechazar")
+async def admin_retirada_rechazar(rid: str, data: dict = Body(default={}), user: dict = Depends(require_superadmin)):
+    """No se paga (datos mal, trampas…): el saldo vuelve a la cartera, o no si es fraude."""
+    d = _dict_cuerpo(data)
+    motivo = _texto_cuerpo(d.get("motivo"), 300).strip() or "Revisa tus datos de cobro"
+    r = await _retirada_resolver(rid, user, "rechazada", motivo)
+    if not d.get("sin_devolver"):
+        await global_db.organizations.update_one({"id": r["org_id"]}, {"$inc": {"cartera_saldo": int(r["importe"])}})
+        await global_db.cartera_movimientos.insert_one({
+            "id": str(uuid.uuid4()), "org_id": r["org_id"], "tipo": "devolucion", "importe": int(r["importe"]),
+            "retirada_id": rid, "ts": datetime.now(timezone.utc).isoformat()})
+    if r.get("email"):
+        try:
+            await _enviar_email(r["email"], "Tu retirada no se ha podido pagar",
+                                f"<p>No hemos podido pagarte {_euros_txt(r['importe'])}: {html_escape(motivo)}.</p>"
+                                f"<p>{'El saldo vuelve a tu cartera: puedes pedirlo otra vez desde la app.' if not d.get('sin_devolver') else ''}</p>",
+                                texto=f"No hemos podido pagarte {_euros_txt(r['importe'])}: {motivo}.")
+        except Exception as e:                               # noqa: BLE001
+            logger.warning(f"cartera: no se pudo avisar del rechazo: {type(e).__name__}")
+    return {"ok": True, "estado": r["estado"]}
 
 
 @api_router.post("/billing/regalos/canjear")

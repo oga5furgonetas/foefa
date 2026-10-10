@@ -660,6 +660,10 @@ export const setMyEmail = (email, extra = {}) => api.post('/auth/my-email', { em
 export const pedirEnlaceClave = (email) => api.post('/auth/forgot-password', { email })
 // Pase de un solo uso (10 min) para abrir la cuenta en Chrome o en otro móvil sin volver a entrar.
 export const crearPaseMovil = () => api.post('/auth/pase-movil')
+// Retiradas de la cartera de los repartidores (solo la plataforma): ver, marcar pagada, rechazar.
+export const adminRetiradas = (estado = 'pendiente') => api.get('/admin/cartera/retiradas', { params: { estado } })
+export const adminRetiradaPagada = (id) => api.post(`/admin/cartera/retiradas/${id}/pagada`)
+export const adminRetiradaRechazar = (id, body) => api.post(`/admin/cartera/retiradas/${id}/rechazar`, body)
 export const forgotPassword = (email) => api.post('/auth/forgot-password', { email })
 
 /* ── Package Intelligence Center (Cortex) ── */

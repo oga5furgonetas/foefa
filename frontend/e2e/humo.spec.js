@@ -2025,6 +2025,36 @@ test('Cobro · con la promoción: «Gratis sin límite», sin aviso de prueba ni
   expect(fallos).toEqual([])
 })
 
+/* LA CARTERA «INVITA Y GANA» (10-10-2026): saldo, invitar y pedir el pago por Bizum. */
+test('Cartera · ve su saldo, invita y pide cobrar por Bizum', async ({ page }) => {
+  const fallos = vigilar(page)
+  await entrarRepartidor(page, { status: 'trial', days_left: 6, promo: { activa: true, hasta: '2026-12-31' } })
+  let ref = { codigo: 'ABC123', invitados: 4, premiados: 3, saldo: 1500, ganado: 1500, por_invitado: 500, retirada_min: 1500,
+    entregas_cartera: 20, dias_distintos: 2, pendiente: false, retiradas: [] }
+  await page.route(/\/api\/referidos$/, (r) => r.fulfill({ json: ref }))
+  const pedidos = []
+  await page.route(/\/api\/cartera\/retirar/, async (r) => {
+    pedidos.push(r.request().postDataJSON())
+    ref = { ...ref, saldo: 0, pendiente: true, retiradas: [{ id: 'r1', importe: 1500, metodo: 'bizum', destino: '•••• 5678', estado: 'pendiente', creada: '2026-10-10T12:00:00Z' }] }
+    await r.fulfill({ json: { ok: true } })
+  })
+  await page.goto('/ruta', { waitUntil: 'domcontentloaded' })
+  await expect(page.getByText(/Gana 5 € por cada compañero que la use/)).toBeVisible()
+  await page.getByRole('button', { name: 'Cuenta', exact: true }).click()
+  const cartera = page.getByRole('region', { name: 'Tu cartera' })
+  await expect(cartera.getByText('15 €', { exact: true })).toBeVisible()
+  await expect(cartera.getByText('Invitados: 4 · ya la usan: 3 · ganado: 15 €')).toBeVisible()
+  await cartera.getByRole('button', { name: 'Cobrar 15 €' }).click()
+  await cartera.getByPlaceholder('Nombre y apellidos del titular').fill('Pepe Pérez')
+  await cartera.getByPlaceholder('Móvil con Bizum').fill('612 345 678')
+  await cartera.getByRole('button', { name: 'Pedir el pago de 15 €' }).click()
+  await expect.poll(() => pedidos.length).toBe(1)
+  expect(pedidos[0]).toEqual({ titular: 'Pepe Pérez', metodo: 'bizum', destino: '612 345 678' })
+  await expect(cartera.getByText('Tienes un pago en revisión. Te avisamos por correo cuando lo enviemos.')).toBeVisible()
+  await expect(cartera.getByText('En revisión', { exact: true })).toBeVisible()
+  expect(fallos).toEqual([])
+})
+
 test('Cobro · alta nueva: muro de «7 días gratis» con tarjeta, hoy 0 €, y elegir anual', async ({ page }) => {
   const fallos = vigilar(page)
   const fin = new Date(Date.now() + 7 * 86400000).toISOString()

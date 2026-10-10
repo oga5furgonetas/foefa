@@ -2,6 +2,8 @@ import { tx } from './idioma'
 import { origen } from '../marca'
 import { medirAccion } from './analitica'
 import { getReferidos } from '../services/api'
+import { promoGratis, fechaPromo } from './precios'
+import { locale } from './idioma'
 
 /* INVITAR A UN COMPAÑERO (05-10-2026). Quien reparte conoce a otros que
    reparten: el mejor anuncio es que se la enseñe él. Un toque abre el
@@ -14,6 +16,10 @@ export function enlaceInvitar(codigo) {
 }
 
 export function textoInvitar(codigo) {
+  // 10-10-2026: con la promoción, lo que engancha es «gratis y sin límite hasta el 31-12».
+  if (promoGratis()) {
+    return `${tx('Uso FDS para ordenar mi ruta de reparto y navegar parada a parada. Es gratis y sin límite hasta el {fecha}, solo registrarte:', { fecha: fechaPromo(locale()) })} ${enlaceInvitar(codigo)}`
+  }
   const base = tx('Uso FDS para ordenar mi ruta de reparto y navegar parada a parada. Pruébala gratis, sin tarjeta:')
   const extra = codigo ? ` ${tx('Con mi enlace empiezas con 14 días gratis.')}` : ''
   return `${base}${extra} ${enlaceInvitar(codigo)}`

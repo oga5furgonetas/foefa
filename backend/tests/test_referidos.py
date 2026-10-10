@@ -78,66 +78,116 @@ async def test_el_invitado_entra_con_14_dias_y_queda_ligado(mundo):
     assert "referido_por" not in mundo.g["organizations"].docs[-1]
 
 
-def _entregas(mundo, n, ejemplo=False):
+def _entregas(mundo, n, ejemplo=False, fecha=None):
+    hoy = fecha or datetime.now(timezone.utc).strftime("%Y-%m-%d")
     for i in range(n):
         mundo.t["reparto_pedidos"].docs.append({"id": f"p{len(mundo.t['reparto_pedidos'].docs)}", "conductor_id": "c1",
-                                                "estado": "entregado", **({"ejemplo": True} if ejemplo else {})})
+                                                "estado": "entregado", "fecha": hoy, **({"ejemplo": True} if ejemplo else {})})
+
+
+def _dia(n):
+    return (datetime.now(timezone.utc) + timedelta(days=n)).strftime("%Y-%m-%d")
+
+
+SUPER = {"sub": "sa1", "role": "admin", "sa": True}
 
 
 @pytest.mark.asyncio(loop_scope="session")
-async def test_el_mes_se_gana_con_uso_real_y_solo_una_vez(mundo):
+async def test_la_cartera_gana_5_euros_con_uso_real_en_dos_dias_y_solo_una_vez(mundo):
+    """10-10-2026: por cada invitado que la usa de verdad (20 entregas reales en 2 días
+    distintos, en su primer mes), 5 € en la cartera de quien invitó."""
     codigo = (await server.referidos_mios(YO))["codigo"]
     await _alta(ref=codigo)
     inv = mundo.g["organizations"].docs[-1]
-    antes = mundo.g["organizations"].docs[0]["trial_ends"]
-    # Cuenta nueva (menos de 24 h): aunque haya 5 entregas, aún no.
-    _entregas(mundo, 5)
-    await server._referido_premiar(inv, "c1")
+    assert inv["alta_red"] and "198.51.100.7" not in str(inv)       # la huella, nunca la IP
+    _entregas(mundo, 25)
+    await server._referido_premiar(inv, "c1")                       # cuenta de menos de 24 h
     assert not inv.get("ref_premiado")
-    # Pasadas 24 h pero con entregas de ejemplo: no cuentan.
     inv["created_at"] = _iso(-2)
     mundo.t["reparto_pedidos"].docs.clear()
-    _entregas(mundo, 9, ejemplo=True)
-    _entregas(mundo, 4)
+    _entregas(mundo, 30, ejemplo=True)
+    _entregas(mundo, 20, fecha=_dia(-1))                            # 20 reales, pero en un solo día
     await server._referido_premiar(inv, "c1")
     assert not inv.get("ref_premiado")
-    # 5 reales: gana el mes (la cuenta de quien invitó pasa a pagada, +1 mes sobre su prueba).
-    _entregas(mundo, 1)
+    _entregas(mundo, 1)                                             # otro día: ya está
     await server._referido_premiar(inv, "c1")
     assert inv["ref_premiado"] is True
     o1 = mundo.g["organizations"].docs[0]
-    assert o1["status"] == "active" and o1["pago_proveedor"] == "regalo" and o1["ref_meses"] == 1
-    assert datetime.fromisoformat(o1["pagado_hasta"]) > datetime.fromisoformat(antes) + timedelta(days=27)
-    assert (await server.referidos_mios(YO))["premiados"] == 1
-    # Una sola vez por invitado.
-    hasta = o1["pagado_hasta"]
-    await server._referido_premiar(inv, "c1")
-    assert o1["pagado_hasta"] == hasta and o1["ref_meses"] == 1
+    assert o1["cartera_saldo"] == 500 and o1["cartera_ganado"] == 500
+    r = await server.referidos_mios(YO)
+    assert r["saldo"] == 500 and r["premiados"] == 1 and r["por_invitado"] == 500 and r["retirada_min"] == 1500
+    await server._referido_premiar(inv, "c1")                       # una sola vez
+    assert o1["cartera_saldo"] == 500 and len(mundo.g["cartera_movimientos"].docs) == 1
 
 
 @pytest.mark.asyncio(loop_scope="session")
-async def test_tope_de_meses_por_persona(mundo):
-    codigo = (await server.referidos_mios(YO))["codigo"]
-    for i in range(server._REF_TOPE):
-        mundo.g["organizations"].docs.append({"id": f"x{i}", "referido_por": "o1", "ref_premiado": True})
-    await _alta(ref=codigo, usuario="el-septimo")
-    inv = mundo.g["organizations"].docs[-1]
-    inv["created_at"] = _iso(-3)
-    _entregas(mundo, 8)
-    await server._referido_premiar(inv, "c1")
-    assert not inv.get("ref_premiado") and "ref_meses" not in mundo.g["organizations"].docs[0]
-
-
-@pytest.mark.asyncio(loop_scope="session")
-async def test_si_falla_sumar_el_mes_se_reintenta(mundo, monkeypatch):
+async def test_desde_la_misma_red_no_se_paga_solo(mundo):
+    mundo.g["organizations"].docs[0]["alta_red"] = server._huella_red("198.51.100.7")
     codigo = (await server.referidos_mios(YO))["codigo"]
     await _alta(ref=codigo)
     inv = mundo.g["organizations"].docs[-1]
     inv["created_at"] = _iso(-3)
-    _entregas(mundo, 6)
-
-    async def roto(*a, **k):
-        raise HTTPException(502, "Stripe no contesta")
-    monkeypatch.setattr(server, "_aplicar_meses", roto)
+    _entregas(mundo, 15, fecha=_dia(-1))
+    _entregas(mundo, 10)
     await server._referido_premiar(inv, "c1")
-    assert not inv.get("ref_premiado")          # queda sin premiar: la próxima vez lo vuelve a intentar
+    assert not inv.get("ref_premiado") and inv["ref_sospechoso"] == "misma_red"
+    assert not mundo.g["organizations"].docs[0].get("cartera_saldo")
+
+
+@pytest.mark.asyncio(loop_scope="session")
+async def test_tope_de_invitados_premiados_al_mes(mundo):
+    codigo = (await server.referidos_mios(YO))["codigo"]
+    mes = datetime.now(timezone.utc).strftime("%Y-%m")
+    for i in range(server._REF_TOPE_MES):
+        mundo.g["cartera_movimientos"].docs.append({"id": f"m{i}", "org_id": "o1", "tipo": "referido", "mes": mes, "importe": 500})
+    await _alta(ref=codigo, usuario="el-veintiuno")
+    inv = mundo.g["organizations"].docs[-1]
+    inv["created_at"] = _iso(-3)
+    _entregas(mundo, 15, fecha=_dia(-1))
+    _entregas(mundo, 10)
+    await server._referido_premiar(inv, "c1")
+    assert not inv.get("ref_premiado")
+
+
+@pytest.mark.asyncio(loop_scope="session")
+async def test_retirar_el_saldo_y_que_la_plataforma_lo_pague_o_lo_rechace(mundo, monkeypatch):
+    correos = []
+
+    async def correo(para, asunto, html, **k):
+        correos.append((para, asunto))
+        return True
+    monkeypatch.setattr(server, "_enviar_email", correo)
+    o1 = mundo.g["organizations"].docs[0]
+    o1["cartera_saldo"] = 1000
+    datos = {"titular": "Pepe Pérez", "metodo": "bizum", "destino": "+34 612 345 678"}
+    with pytest.raises(HTTPException) as e:                     # menos del mínimo (15 €)
+        await server.cartera_retirar(datos, YO)
+    assert e.value.status_code == 400
+    o1["cartera_saldo"] = 1500
+    for malo in ({**datos, "destino": "912345678"}, {**datos, "titular": "Pepe"},
+                 {**datos, "metodo": "iban", "destino": "ES91 2100 0418 4502 0005 1333"}, {**datos, "metodo": "paypal"}):
+        with pytest.raises(HTTPException):
+            await server.cartera_retirar(malo, YO)
+    r = await server.cartera_retirar(datos, YO)
+    assert r["retirada"]["importe"] == 1500 and r["retirada"]["destino"] == "•••• 5678"
+    assert o1["cartera_saldo"] == 0
+    with pytest.raises(HTTPException) as e:                     # una en revisión cada vez
+        await server.cartera_retirar(datos, YO)
+    assert e.value.status_code in (400, 409)
+    assert any("Retirada de cartera pendiente" in a for _, a in correos)
+    # La plataforma la ve entera (para pagar) y la rechaza: el saldo vuelve.
+    lista = await server.admin_cartera_retiradas("pendiente", SUPER)
+    ret = lista["retiradas"][0]
+    assert ret["destino"] == "612345678" and ret["titular"] == "Pepe Pérez"
+    await server.admin_retirada_rechazar(ret["id"], {"motivo": "El móvil no tiene Bizum"}, SUPER)
+    assert o1["cartera_saldo"] == 1500
+    with pytest.raises(HTTPException):
+        await server.admin_retirada_pagada(ret["id"], SUPER)    # ya no está pendiente
+    # Otra vez, ahora por transferencia, y se paga.
+    r = await server.cartera_retirar({"titular": "Pepe Pérez", "metodo": "iban", "destino": "ES91 2100 0418 4502 0005 1332"}, YO)
+    await server.admin_retirada_pagada(r["retirada"]["id"], SUPER)
+    assert mundo.g["cartera_retiradas"].docs[-1]["estado"] == "pagada" and o1["cartera_saldo"] == 0
+    assert any(a.startswith("Te hemos pagado 15") for _, a in correos)
+    mis = await server.referidos_mios(YO)
+    assert sorted(x["estado"] for x in mis["retiradas"]) == ["pagada", "rechazada"]
+    assert mis["retiradas"][0]["destino"].startswith("•••• ")

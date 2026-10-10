@@ -256,6 +256,8 @@ export const repMiQuitar = (id) => api.post(`/reparto/mis-pedidos/${id}/quitar`)
 export const repEjemplo = (desde) => api.post('/reparto/mis-pedidos/ejemplo', desde || {})
 export const repQuitarEjemplos = () => api.post('/reparto/mis-pedidos/quitar-ejemplos')
 export const getReferidos = () => api.get('/referidos')
+// La cartera «Invita y gana»: pedir que te paguen el saldo (Bizum o transferencia).
+export const retirarCartera = (body) => api.post('/cartera/retirar', body)
 export const repPegarMiLista = (texto, confirmar) => api.post('/reparto/pegar', { texto, confirmar: !!confirmar })
 export const repTrazado = (desde) => api.post('/reparto/mi-ruta/trazado', desde ? { desde } : {})
 // Desde dónde y hacia dónde abrir Street View para ver la puerta de una parada.
