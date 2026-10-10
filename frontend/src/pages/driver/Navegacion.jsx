@@ -289,6 +289,8 @@ function MapaGuia({ linea, yo, rumbo, destino, numero, seguir, onMover }) {
   const capas = useRef({})
   const avisa = useRef(onMover)
   avisa.current = onMover
+  const yoAhora = useRef(yo)
+  yoAhora.current = yo
 
   useEffect(() => {
     const m = L.map(caja.current, { zoomControl: false, attributionControl: true }).setView(destino || [40.4, -3.7], destino ? 16 : 6)
@@ -322,6 +324,9 @@ function MapaGuia({ linea, yo, rumbo, destino, numero, seguir, onMover }) {
         iconSize: [38, 38], iconAnchor: [6, 38],
       })
       capas.current.destino = L.marker(destino, { icon: icono, zIndexOffset: 500 }).addTo(m)
+      // Sin ubicación todavía (sin permiso o sin GPS) nada mueve el mapa: al pasar a la
+      // siguiente parada se quedaba en la anterior y la nueva caía fuera de la pantalla.
+      if (!yoAhora.current) m.setView(destino, Math.max(m.getZoom(), 16), { animate: true })
     }
   }, [destino?.[0], destino?.[1], numero]) // eslint-disable-line react-hooks/exhaustive-deps
 
