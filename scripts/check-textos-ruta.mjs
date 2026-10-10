@@ -13,13 +13,13 @@ const raiz = join(dirname(fileURLToPath(import.meta.url)), '..', 'frontend', 'sr
 const FICHEROS = [
   'pages/driver/MiRuta.jsx', 'pages/driver/Navegacion.jsx', 'pages/Empezar.jsx', 'pages/InstalarApp.jsx',
   'pages/RegaloPagina.jsx', 'pages/RutaApp.jsx', 'pages/RutaCuenta.jsx', 'pages/SeguimientoPedido.jsx', 'lib/guia.js',
-  'pages/Registro.jsx', 'legal/CookieBanner.jsx', 'pages/Repartidores.jsx',
+  'pages/Registro.jsx', 'legal/CookieBanner.jsx', 'pages/Repartidores.jsx', 'pages/PaseMovil.jsx',
 ]
 // Nombres que llegan de datos (el plan del autónomo en Registro: tt(planInfo.name)).
 // y los métodos de cobro de lib/region.js (metodosCobro), que se pintan con tx(t).
 const DE_DATOS = ['Repartidor', 'Bizum', 'Transferencia', '高德地图', '百度地图']
 // Listas cuyos textos se traducen al pintarlos.
-const LISTAS = ['MOTIVOS', 'NAVEGADORES', 'HUECOS', 'PESTANAS', 'GIROS', 'ORDINALES', 'OPCIONES', 'ESTADO', 'VENTAJAS']
+const LISTAS = ['MOTIVOS', 'DONDE', 'NAVEGADORES', 'HUECOS', 'PESTANAS', 'GIROS', 'ORDINALES', 'OPCIONES', 'ESTADO', 'VENTAJAS']
 
 const usadas = new Set(DE_DATOS)
 const cadenas = (trozo) => [...trozo.matchAll(/'((?:\\'|[^'])*)'/g)].map((m) => m[1].replace(/\\'/g, "'"))

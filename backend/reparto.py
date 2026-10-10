@@ -32,7 +32,12 @@ MAX_PEGADO = 500             # líneas por pegada
 
 # Lo que se tapa a quien no es la empresa (el dueño del producto entrando
 # como ella). La zona, el estado y los bultos no son datos de nadie.
-CAMPOS_PERSONALES = ("cliente", "telefono", "direccion", "lat", "lng", "notas")
+CAMPOS_PERSONALES = ("cliente", "telefono", "direccion", "lat", "lng", "notas", "entrega_recibe")
+
+# DÓNDE SE DEJA (10-10-2026, como Circuit/Spoke): un toque en vez de escribir la
+# nota. Lo ve el cliente en su enlace de seguimiento («Entregado: en el buzón»).
+DONDE_ENTREGA = {"mano": "En mano", "vecino": "Al vecino", "buzon": "En el buzón",
+                 "porteria": "En portería o recepción", "seguro": "En un lugar seguro"}
 
 
 def sin_acentos(s) -> str:

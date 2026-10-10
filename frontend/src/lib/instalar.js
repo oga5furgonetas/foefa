@@ -41,10 +41,11 @@ export async function instalar() {
   return outcome   // 'accepted' | 'dismissed'
 }
 
-/* Ya se está usando como app (instalada o la de Play). */
+/* Ya se está usando como app (instalada, la de Play o la del APK). */
 export function yaEsApp() {
   try {
     return window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone === true
+      || /FDS(China|App)\//.test(navigator.userAgent)
       || /^android-app:\/\//.test(document.referrer) || sessionStorage.getItem('flota_app') === '1'
   } catch { return false }
 }
@@ -53,3 +54,31 @@ export function esIphone() {
   const ua = (typeof navigator !== 'undefined' && navigator.userAgent) || ''
   return /iPhone|iPad|iPod/i.test(ua) || (/Macintosh/i.test(ua) && typeof document !== 'undefined' && 'ontouchend' in document)
 }
+
+export const esAndroid = () => /Android/i.test((typeof navigator !== 'undefined' && navigator.userAgent) || '')
+
+/* El navegador de DENTRO de otra app (10-10-2026). Quien llega por un anuncio de
+   TikTok o Instagram se da de alta ahí, y ahí no se instala nada: ni el aviso de
+   Chrome ni «Añadir a inicio». Devuelve el nombre para decírselo, o ''. */
+export function navegadorInterno() {
+  const ua = (typeof navigator !== 'undefined' && navigator.userAgent) || ''
+  if (/FDS(China|App)\//.test(ua)) return ''
+  if (/musical_ly|Bytedance|TikTok|trill_/i.test(ua)) return 'TikTok'
+  if (/Instagram/i.test(ua)) return 'Instagram'
+  if (/FBAN|FBAV|FB_IAB|FBIOS/i.test(ua)) return 'Facebook'
+  if (/Snapchat|LinkedInApp|Twitter|Line\/|; wv\)/i.test(ua)) return 'app'
+  return ''
+}
+
+/* Abre la dirección en Chrome desde el navegador de otra app (Android). Si no hay
+   Chrome, Android la abre donde pueda. */
+export function enlaceChrome(ruta) {
+  const { host, origin } = window.location
+  return `intent://${host}${ruta}#Intent;scheme=https;package=com.android.chrome;S.browser_fallback_url=${encodeURIComponent(origin + ruta)};end`
+}
+
+/* Recién dada de alta: la app le pide instalarla antes de nada. */
+const RECIEN = 'fds_recien_alta'
+export function marcarRecienAlta() { try { localStorage.setItem(RECIEN, '1') } catch { /* nada */ } }
+export function recienAlta() { try { return localStorage.getItem(RECIEN) === '1' } catch { return false } }
+export function olvidarRecienAlta() { try { localStorage.removeItem(RECIEN) } catch { /* nada */ } }

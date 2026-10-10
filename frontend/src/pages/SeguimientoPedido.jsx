@@ -60,6 +60,8 @@ export default function SeguimientoPedido() {
                 {!d.eta && <p className="text-dark-400">{tx('Aún no tiene hora: el repartidor todavía está preparando la ruta.')}</p>}
               </div>
             )}
+            {/* Dónde quedó, sin nombres ni fotos (10-10-2026). */}
+            {d.estado === 'entregado' && d.dejado && <p className="mt-3 text-[15px] text-dark-200">{tx(d.dejado)}</p>}
             {d.estado === 'fallido' && <p className="mt-3 text-[14px] text-dark-300">{tx('La tienda se pondrá en contacto contigo para volver a intentarlo.')}</p>}
             <p className="mt-6 text-[11px] leading-snug text-dark-500">
               {tx('La hora es una estimación y puede variar con el tráfico. Esta página no muestra datos personales ni la ubicación del repartidor, y deja de funcionar al día siguiente.')}

@@ -6741,6 +6741,12 @@ async def admin_login(data: LoginRequest, request: Request):
 
     _rl_ok(rl_user)
     _rl_ok(rl_ip)
+    logger.info(f"Admin login: {data.username} (org={user.get('org_id')})")
+    return await _sesion_de_admin(user)
+
+
+async def _sesion_de_admin(user: dict) -> TokenResponse:
+    """La sesión de un admin ya comprobado: la usan el login y el paso al móvil."""
     org = await get_org(user.get("org_id"))
     db_name = _tenant_db_name(org)
     account_type = (org or {}).get("account_type", "owner")
@@ -6748,7 +6754,6 @@ async def admin_login(data: LoginRequest, request: Request):
                          org_id=user.get("org_id"), db_name=db_name, account_type=account_type,
                          centers=(org or {}).get("centers"), super_admin=bool(user.get("super_admin")),
                          permissions=user.get("permissions"))
-    logger.info(f"Admin login: {data.username} (org={user.get('org_id')})")
     return TokenResponse(
         access_token=token,
         role=user["role"],
@@ -7638,6 +7643,53 @@ async def set_my_email(data: dict, user: dict = Depends(get_current_user)):
     await global_db.admin_users.update_one(
         {"id": user["sub"]}, {"$set": {"email": em or None}})
     return {"success": True, "email": em or None}
+
+
+# PASAR LA SESIÓN AL NAVEGADOR DE VERDAD (10-10-2026). Quien llega por un anuncio
+# se da de alta dentro del navegador de TikTok/Instagram, donde no se puede instalar
+# la app; al abrir Chrome para instalarla tendría que volver a entrar. Con esto la
+# app pide un pase de un solo uso que dura 10 minutos, lo manda a Chrome en el
+# fragmento de la dirección (no llega a ningún servidor ni queda en registros) y
+# Chrome lo canjea por la misma sesión. Se guarda solo su huella, no el pase.
+_PASE_MIN = 10
+
+
+def _huella_pase(pase: str) -> str:
+    return hashlib.sha256(pase.encode()).hexdigest()
+
+
+@auth_router.post("/pase-movil")
+async def crear_pase_movil(user: dict = Depends(get_current_user)):
+    if user.get("role") != "admin":
+        raise HTTPException(status_code=403, detail="Solo administradores")
+    if user.get("imp") or user.get("demo"):
+        raise HTTPException(status_code=403, detail=_SOLO_EL_CLIENTE)
+    pase = secrets.token_urlsafe(24)
+    ahora = datetime.now(timezone.utc)
+    await global_db.pases_movil.delete_many({"expira": {"$lt": ahora.isoformat()}})
+    await global_db.pases_movil.insert_one({
+        "huella": _huella_pase(pase), "admin_id": user["sub"], "usado": False,
+        "creado": ahora.isoformat(), "expira": (ahora + timedelta(minutes=_PASE_MIN)).isoformat()})
+    return {"pase": pase, "minutos": _PASE_MIN}
+
+
+@auth_router.post("/pase-movil/canjear", response_model=TokenResponse)
+async def canjear_pase_movil(data: dict, request: Request):
+    rl_ip = f"ip:{_rl_key_ip(request)}"
+    _rl_check(rl_ip)
+    huella = _huella_pase(_texto_cuerpo(data.get("pase")))
+    doc = await global_db.pases_movil.find_one({"huella": huella}, {"_id": 0})
+    valido = bool(doc) and not doc.get("usado") and doc.get("expira", "") > datetime.now(timezone.utc).isoformat()
+    # Se marca usado con la condición en la misma escritura: dos canjes a la vez, solo uno gana.
+    if valido:
+        valido = (await global_db.pases_movil.update_one(
+            {"huella": huella, "usado": False}, {"$set": {"usado": True}})).modified_count == 1
+    user = await global_db.admin_users.find_one({"id": doc["admin_id"]}, {"_id": 0}) if valido else None
+    if not user or user.get("disabled"):
+        await _rl_fail(rl_ip, f"pase al móvil no válido (IP {_rl_key_ip(request)})")
+        raise HTTPException(status_code=401, detail="El enlace ha caducado. Entra con tu correo y tu contraseña.")
+    _rl_ok(rl_ip)
+    return await _sesion_de_admin(user)
 
 
 def _is_center_manager(user: dict) -> bool:
@@ -47479,7 +47531,8 @@ async def _rep_limpiar(user: dict):
             {"fecha": {"$lt": limite}, "anonimizado": {"$ne": True}},
             {"$set": {"cliente": None, "telefono": None, "direccion": None, "lat": None,
                       "lng": None, "notas": None, "contenido": None, "entrega_foto": None,
-                      "entrega_nota": None, "anonimizado": True}})
+                      "entrega_nota": None, "entrega_firma": None, "entrega_recibe": None,
+                      "anonimizado": True}})
         lim_rastro = (hoy - timedelta(days=reparto.DIAS_RASTRO)).strftime("%Y-%m-%d")
         await db.reparto_jornadas.delete_many({"fecha": {"$lt": lim_rastro}})
         await global_db.reparto_enlaces.delete_many({"caduca": {"$lt": hoy.strftime("%Y-%m-%d")}})
@@ -47951,10 +48004,11 @@ async def reparto_pedidos(fecha: str = "", user: dict = Depends(require_admin)):
     await _rep_limpiar(user)
     f = _rep_fecha(fecha)
     a = await _rep_ajustes()
-    ps = await db.reparto_pedidos.find({"fecha": f}, {"_id": 0, "entrega_foto": 0}).sort("creado_en", 1).to_list(3000)
+    ps = await db.reparto_pedidos.find({"fecha": f}, {"_id": 0, "entrega_foto": 0, "entrega_firma": 0}).sort("creado_en", 1).to_list(3000)
     # Se indica que la hay sin mandarla: la pantalla la pide al pulsar.
     con_foto = {p["id"] for p in await db.reparto_pedidos.find(
-        {"fecha": f, "entrega_foto": {"$ne": None, "$exists": True}}, {"_id": 0, "id": 1}).to_list(3000)}
+        {"fecha": f, "$or": [{"entrega_foto": {"$ne": None, "$exists": True}},
+                             {"entrega_firma": {"$ne": None, "$exists": True}}]}, {"_id": 0, "id": 1}).to_list(3000)}
     for p in ps:
         p["tiene_foto"] = p["id"] in con_foto
     rutas = {r["conductor_id"]: r async for r in db.reparto_rutas.find({"fecha": f}, {"_id": 0})}
@@ -48062,10 +48116,13 @@ async def reparto_editar(pid: str, data: dict = Body(...), user: dict = Depends(
 async def reparto_foto(pid: str, user: dict = Depends(require_admin)):
     if not _rep_ve_datos(user):
         raise HTTPException(403, "La prueba de entrega es de la empresa")
-    p = await db.reparto_pedidos.find_one({"id": pid}, {"_id": 0, "entrega_foto": 1, "entrega_nota": 1, "cerrado_en": 1})
-    if not p or not p.get("entrega_foto"):
+    p = await db.reparto_pedidos.find_one({"id": pid}, {"_id": 0, "entrega_foto": 1, "entrega_nota": 1, "cerrado_en": 1,
+                                                       "entrega_firma": 1, "entrega_donde": 1, "entrega_recibe": 1})
+    if not p or not (p.get("entrega_foto") or p.get("entrega_firma")):
         raise HTTPException(404, "Ese pedido no tiene foto de entrega")
-    return {"foto": p["entrega_foto"], "nota": p.get("entrega_nota") or "", "cuando": p.get("cerrado_en")}
+    return {"foto": p.get("entrega_foto") or "", "nota": p.get("entrega_nota") or "", "cuando": p.get("cerrado_en"),
+            "firma": p.get("entrega_firma") or "", "recibe": p.get("entrega_recibe") or "",
+            "donde": reparto.DONDE_ENTREGA.get(p.get("entrega_donde") or "", "")}
 
 
 @api_router.delete("/reparto/pedidos/{pid}")
@@ -48154,7 +48211,9 @@ async def seguimiento_publico(token: str, request: Request):
     org = await global_db.organizations.find_one({"db_name": e["db_name"]}, {"_id": 0, "name": 1}) or {}
     return {"empresa": org.get("name") or "", "estado": p.get("estado"), "fecha": p.get("fecha"),
             "eta": p.get("eta"), "franja": [p.get("ventana_desde"), p.get("ventana_hasta")]
-            if p.get("ventana_desde") else None, "paradas_antes": antes, "tipo": p.get("tipo") or "entrega"}
+            if p.get("ventana_desde") else None, "paradas_antes": antes, "tipo": p.get("tipo") or "entrega",
+            # Dónde quedó (sin nombres ni fotos): «Entregado: en el buzón».
+            "dejado": reparto.DONDE_ENTREGA.get(p.get("entrega_donde") or "") if p.get("estado") == "entregado" else None}
 
 
 @api_router.get("/reparto/estadisticas")
@@ -48238,7 +48297,7 @@ async def reparto_mi_ruta(user: dict = Depends(require_any_auth)):
     d = await _rep_conductor(user)
     autonomo = autonomo or str(d["id"]).startswith("demo-a-")
     f = _dia_negocio()
-    ps = await db.reparto_pedidos.find({"fecha": f, "conductor_id": d["id"]}, {"_id": 0, "entrega_foto": 0}).to_list(500)
+    ps = await db.reparto_pedidos.find({"fecha": f, "conductor_id": d["id"]}, {"_id": 0, "entrega_foto": 0, "entrega_firma": 0}).to_list(500)
     for p in ps:
         if p.get("telefono") and p.get("estado") in ("pendiente", "en_ruta") and not p.get("seguimiento"):
             await _rep_enlace(p)
@@ -48269,7 +48328,7 @@ async def reparto_escanear(data: dict = Body(...), user: dict = Depends(require_
     if not codigo:
         raise HTTPException(400, "No llega ningún código")
     f = _dia_negocio()
-    p = await db.reparto_pedidos.find_one({"fecha": f, "codigo": codigo}, {"_id": 0})
+    p = await db.reparto_pedidos.find_one({"fecha": f, "codigo": codigo}, {"_id": 0, "entrega_foto": 0, "entrega_firma": 0})
     if not p:
         return {"encontrado": False, "codigo": codigo}
     if p.get("conductor_id") and p["conductor_id"] != d["id"]:
@@ -48347,10 +48406,27 @@ async def reparto_estado(pid: str, data: dict = Body(...), user: dict = Depends(
         cambios["entrega_foto"] = foto
     if "nota" in data:
         cambios["entrega_nota"] = _texto_cuerpo(data.get("nota"), 300)
+    # Dónde lo deja, quién lo recoge y su firma (10-10-2026): lo que piden las
+    # tiendas y las agencias cuando alguien dice «no me ha llegado». La firma es
+    # un PNG pequeño del dedo sobre la pantalla; como la foto, vive en el pedido
+    # y se borra con los datos personales.
+    donde = _texto_cuerpo(data.get("donde"), 20)
+    if donde:
+        if donde not in reparto.DONDE_ENTREGA:
+            raise HTTPException(400, "Dónde se ha dejado: en mano, vecino, buzón, portería o lugar seguro")
+        cambios["entrega_donde"] = donde
+    if "recibe" in data:
+        cambios["entrega_recibe"] = _texto_cuerpo(data.get("recibe"), 80)
+    firma = _texto_cuerpo(data.get("firma"), 120000)
+    if firma:
+        if not firma.startswith("data:image/png;base64,") or len(firma) > 100000:
+            raise HTTPException(400, "La firma tiene que ser una imagen pequeña")
+        cambios["entrega_firma"] = firma
     if e != "entregado":
-        cambios.update({"entrega_foto": None, "entrega_nota": cambios.get("entrega_nota")})
+        cambios.update({"entrega_foto": None, "entrega_nota": cambios.get("entrega_nota"), "entrega_firma": None,
+                        "entrega_donde": None, "entrega_recibe": None})
     await db.reparto_pedidos.update_one({"id": pid}, {"$set": cambios})
-    return {**p, **cambios}
+    return {k: v for k, v in {**p, **cambios}.items() if k not in ("entrega_foto", "entrega_firma")}
 
 
 @api_router.post("/reparto/mi-ruta/ordenar")
@@ -48501,7 +48577,7 @@ async def reparto_mi_editar(pid: str, data: dict = Body(...), user: dict = Depen
                         cambios.update({"lat": None, "lng": None, "geo": "no"})   # no se inventa un sitio
     if cambios:
         await db.reparto_pedidos.update_one({"id": pid}, {"$set": cambios})
-    return {"ok": True, **{k: v for k, v in {**p, **cambios}.items() if k != "entrega_foto"}}
+    return {"ok": True, **{k: v for k, v in {**p, **cambios}.items() if k not in ("entrega_foto", "entrega_firma")}}
 
 
 @api_router.post("/reparto/mis-pedidos/{pid}/quitar")

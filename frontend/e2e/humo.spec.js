@@ -1583,6 +1583,64 @@ test('Suscripción · dentro de la app no sale el botón de pagar sin el program
 /* LA APP DE RUTA, COMO CIRCUIT O FLEX (04-10-2026): siguiente parada
    destacada, progreso del día, dónde va cada paquete en la furgoneta, Waze o
    Google Maps, buscar, mapa, cambiar el orden a mano y el resumen al acabar. */
+/* COMO CIRCUIT/SPOKE (10-10-2026): al entregar, dónde lo deja de un toque, quién lo recoge y su firma;
+   con un paquete en la mano, el escáner dice su parada en grande; y la fachada en Street View. */
+test('Reparto · entregar con «dónde lo dejas», firma, y el buscador de paquetes', async ({ page }) => {
+  const fallos = vigilar(page)
+  const b64 = (o) => btoa(JSON.stringify(o)).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '')
+  const token = `${b64({ alg: 'HS256' })}.${b64({ sub: 'd1', role: 'driver', name: 'ANA', exp: Math.floor(Date.now() / 1000) + 3600 })}.x`
+  await page.addInitScript((t) => {
+    localStorage.setItem('flota_driver_token', t)
+    localStorage.setItem('flota_driver', JSON.stringify({ id: 'd1', name: 'ANA' }))
+    localStorage.setItem('cookie_consent', '1')
+  }, token)
+  await simularApi(page, 'vacio')
+  const pedidos = [
+    { id: 'p1', cliente: 'Bar Pepe', direccion: 'Rúa Real 5', estado: 'pendiente', bultos: 1, orden: 1, eta: '10:05', lat: 43.37, lng: -8.40, codigo: 'ABC123' },
+    { id: 'p2', cliente: 'Farmacia Sol', direccion: 'Avda Montero Ríos 12', estado: 'pendiente', bultos: 2, orden: 2, eta: '10:20', lat: 43.36, lng: -8.41 },
+  ]
+  const estados = []
+  await page.route(/\/api\/reparto\/pedidos\/p1\/estado/, async (r) => { estados.push(r.request().postDataJSON()); await r.fulfill({ json: { ok: true } }) })
+  await page.route(/\/api\/reparto\/escanear/, (r) => r.fulfill({ json: { encontrado: true, pedido: { ...pedidos[1], escaneos: 1 } } }))
+  await page.route(/\/api\/reparto\/mi-ruta\/trazado/, (r) => r.fulfill({ json: { linea: [], fuente: null, km: null, minutos: null } }))
+  await page.route(/\/api\/reparto\/mi-ruta$/, (r) => r.fulfill({ json: {
+    activo: true, empresa: 'Súper', fecha: '2026-10-04', ia_tickets: false, jornada: {}, aviso_aceptado: true,
+    base: null, ruta: { fin: '10:40', minutos: 40, km: 9.5, trafico: true }, pedidos } }))
+  await page.goto('/conductor?vista=ruta', { waitUntil: 'domcontentloaded' })
+  const primera = page.locator('div.rounded-2xl', { hasText: 'Siguiente parada' })
+  await expect(primera.getByRole('link', { name: 'Ver la fachada' })).toHaveAttribute('href', /map_action=pano&viewpoint=43\.37,-8\.4/)
+
+  // Entregar: al vecino, quién lo recoge y firma con el dedo.
+  await primera.getByRole('button', { name: 'Entregado', exact: true }).click()
+  await page.getByRole('button', { name: 'Al vecino' }).click()
+  await page.getByPlaceholder('¿Quién lo recoge? (opcional)').fill('Marta (2ºB)')
+  await page.getByRole('button', { name: 'Que firme en la pantalla' }).click()
+  const lienzo = page.getByLabel('Firma aquí con el dedo').first()
+  await expect(page.getByRole('button', { name: 'Listo' })).toBeDisabled()
+  const caja = await lienzo.boundingBox()
+  await page.mouse.move(caja.x + 30, caja.y + 40)
+  await page.mouse.down()
+  await page.mouse.move(caja.x + 120, caja.y + 90, { steps: 8 })
+  await page.mouse.move(caja.x + 220, caja.y + 30, { steps: 8 })
+  await page.mouse.up()
+  await page.getByRole('button', { name: 'Listo' }).click()
+  await expect(page.getByRole('button', { name: 'Firmado · repetir' })).toBeVisible()
+  await page.getByRole('button', { name: 'Entregar sin foto' }).click()
+  await expect.poll(() => estados.length).toBe(1)
+  expect(estados[0]).toMatchObject({ estado: 'entregado', donde: 'vecino', recibe: 'Marta (2ºB)' })
+  expect(estados[0].firma).toMatch(/^data:image\/png;base64,/)
+
+  // El buscador de paquetes: escribir el código de uno que ya está en la ruta dice su parada en grande.
+  await page.getByRole('button', { name: /Más formas de añadir/ }).click()
+  await page.getByPlaceholder('o escribe el código').fill('XYZ')
+  await page.getByRole('button', { name: 'Buscar', exact: true }).click()
+  const hoja = page.getByRole('dialog', { name: 'Este paquete va en la parada' })
+  await expect(hoja.getByText('Farmacia Sol')).toBeVisible()
+  await expect(hoja.getByText('2', { exact: true })).toBeVisible()
+  await expect(hoja.getByRole('button', { name: 'Escanear el siguiente' })).toBeVisible()
+  expect(fallos).toEqual([])
+})
+
 test('Reparto · la ruta del repartidor: siguiente, furgoneta, Waze, orden a mano y resumen', async ({ page }) => {
   const fallos = vigilar(page)
   const b64 = (o) => btoa(JSON.stringify(o)).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '')
@@ -1819,6 +1877,55 @@ test('Cobro · plan gratis: sin pagar se sigue repartiendo con tope y «Quitar e
   expect(fallos).toEqual([])
 })
 
+/* EL ÚLTIMO PASO DEL ALTA (10-10-2026): recién creada la cuenta, instalar la app antes que nada.
+   En el ordenador, un QR con un pase de un solo uso; dentro de TikTok, salir a Chrome ya con la cuenta. */
+test('Alta · recién creada la cuenta pide instalar la app (QR en el ordenador) y se puede saltar', async ({ page }) => {
+  const fallos = vigilar(page)
+  await entrarRepartidor(page, { status: 'trial', days_left: 7, required: false })
+  await page.addInitScript(() => { if (!sessionStorage.getItem('ya')) { localStorage.setItem('fds_recien_alta', '1'); sessionStorage.setItem('ya', '1') } })
+  await page.route(/\/api\/auth\/pase-movil$/, (r) => r.fulfill({ json: { pase: 'pase-de-prueba', minutos: 10 } }))
+  await page.goto('/ruta', { waitUntil: 'domcontentloaded' })
+  const paso = page.getByRole('dialog', { name: 'Último paso: instala la app' })
+  await expect(paso.getByRole('img', { name: 'Código QR para abrir tu cuenta en el móvil' })).toBeVisible()
+  await paso.getByRole('button', { name: 'Ahora no, seguir en la web' }).click()
+  await expect(paso).toHaveCount(0)
+  await page.reload({ waitUntil: 'domcontentloaded' })
+  await expect(page.getByRole('button', { name: 'Hoy', exact: true })).toBeVisible()
+  await expect(page.getByRole('dialog', { name: 'Último paso: instala la app' })).toHaveCount(0)
+  expect(fallos).toEqual([])
+})
+
+test('Alta · el pase del QR entra en la cuenta y quita el pase de la dirección', async ({ page }) => {
+  await simularApi(page, 'vacio')
+  let pedido = null
+  await page.route(/\/api\/auth\/pase-movil\/canjear/, async (r) => {
+    pedido = r.request().postDataJSON()
+    await r.fulfill({ json: { access_token: 'tok-pase', role: 'admin', name: 'Rosa', id: 'a1', account_type: 'dsp', slug: 'rosa' } })
+  })
+  await page.route(/\/api\/org\/billing/, (r) => r.fulfill({ json: { ...BILLING_BASE, status: 'trial', days_left: 7 } }))
+  await page.goto('/pase?p=pase-de-prueba', { waitUntil: 'domcontentloaded' })
+  await page.waitForURL('**/ruta')
+  expect(pedido).toEqual({ pase: 'pase-de-prueba' })
+  expect(await page.evaluate(() => localStorage.getItem('flota_token'))).toBe('tok-pase')
+})
+
+test.describe('Alta desde el navegador de TikTok (Android)', () => {
+  test.use({ userAgent: 'Mozilla/5.0 (Linux; Android 14; SM-A546B Build/UP1A; wv) AppleWebKit/537.36 (KHTML, like Gecko) Version/4.0 Chrome/128.0 Mobile Safari/537.36 musical_ly_2023607030 BytedanceWebview/d8a21c6' })
+  test('le dice dónde está, saca un pase para abrir Chrome y ofrece el APK', async ({ page }) => {
+    await entrarRepartidor(page, { status: 'trial', days_left: 7, required: false })
+    await page.addInitScript(() => localStorage.setItem('fds_recien_alta', '1'))
+    let pases = 0
+    await page.route(/\/api\/auth\/pase-movil$/, (r) => { pases += 1; return r.fulfill({ json: { pase: 'p1', minutos: 10 } }) })
+    await page.goto('/ruta', { waitUntil: 'domcontentloaded' })
+    const paso = page.getByRole('dialog', { name: 'Último paso: instala la app' })
+    await expect(paso.getByText('Estás en el navegador de TikTok: desde aquí el móvil no deja instalar nada.')).toBeVisible()
+    await expect(paso.getByRole('link', { name: 'Descargar la app para Android' })).toHaveAttribute('href', '/descargas/FDS.apk')
+    await paso.getByRole('button', { name: 'Abrir en Chrome' }).click()
+    await expect(paso.getByText(/¿No se ha abierto\? Pulsa ⋮/)).toBeVisible({ timeout: 6000 })
+    expect(pases).toBe(1)
+  })
+})
+
 test('Cobro · alta nueva: muro de «7 días gratis» con tarjeta, hoy 0 €, y elegir anual', async ({ page }) => {
   const fallos = vigilar(page)
   const fin = new Date(Date.now() + 7 * 86400000).toISOString()
@@ -2037,40 +2144,41 @@ test('Reparto · en México el WhatsApp lleva el prefijo 52, y con + se respeta 
 
 /* INSTALAR DESDE LA WEB (04-10-2026): mientras Play valida, la app se instala
    desde el navegador. Con el aviso de Chrome, un botón; sin él, instrucciones. */
-test('App · desde la web se puede instalar la app (y no sale si ya es app)', async ({ page }) => {
-  const fallos = vigilar(page)
-  await entrarRepartidor(page, { status: 'trial', days_left: 6, trial_ends: new Date(Date.now() + 6 * 86400000).toISOString() })
-  await page.goto('/ruta', { waitUntil: 'domcontentloaded' })
-  const tarjeta = page.getByLabel('Instalar la app')
-  await expect(tarjeta).toBeVisible()
-  // Sin aviso de Chrome: instrucciones.
-  await tarjeta.getByRole('button', { name: 'Cómo instalarla' }).click()
-  await expect(tarjeta.getByText(/Instalar aplicación/)).toBeVisible()
-  // Con el aviso de Chrome: el botón lo lanza.
-  await page.evaluate(() => {
-    const e = new Event('beforeinstallprompt')
-    e.prompt = () => { window.__pedido = true }
-    e.userChoice = Promise.resolve({ outcome: 'accepted' })
-    window.dispatchEvent(e)
+const UA_ANDROID = 'Mozilla/5.0 (Linux; Android 14; SM-A546B) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0 Mobile Safari/537.36'
+test.describe('App · instalar desde la web en Android', () => {
+  test.use({ userAgent: UA_ANDROID })
+  test('ofrece el APK y, si Chrome deja, instalar en un toque (y no sale si ya es app)', async ({ page }) => {
+    const fallos = vigilar(page)
+    await entrarRepartidor(page, { status: 'trial', days_left: 6, trial_ends: new Date(Date.now() + 6 * 86400000).toISOString() })
+    await page.goto('/ruta', { waitUntil: 'domcontentloaded' })
+    const tarjeta = page.getByLabel('Instalar la app')
+    await expect(tarjeta).toBeVisible()
+    // Sin aviso de Chrome: el APK.
+    await expect(tarjeta.getByRole('link', { name: 'Descargar la app para Android' })).toHaveAttribute('href', '/descargas/FDS.apk')
+    // Con el aviso de Chrome: el botón lo lanza.
+    await page.evaluate(() => {
+      const e = new Event('beforeinstallprompt')
+      e.prompt = () => { window.__pedido = true }
+      e.userChoice = Promise.resolve({ outcome: 'accepted' })
+      window.dispatchEvent(e)
+    })
+    await page.getByLabel('Instalar la app').getByRole('button', { name: 'Instalar la app' }).click()
+    await expect.poll(() => page.evaluate(() => window.__pedido)).toBe(true)
+    await expect(page.getByLabel('Instalar la app')).toHaveCount(0)
+    expect(fallos).toEqual([])
   })
-  await page.reload({ waitUntil: 'domcontentloaded' })
-  await page.evaluate(() => {
-    const e = new Event('beforeinstallprompt')
-    e.prompt = () => { window.__pedido = true }
-    e.userChoice = Promise.resolve({ outcome: 'accepted' })
-    window.dispatchEvent(e)
-  })
-  await page.getByLabel('Instalar la app').getByRole('button', { name: 'Instalar la app' }).click()
-  await expect.poll(() => page.evaluate(() => window.__pedido)).toBe(true)
-  await expect(page.getByLabel('Instalar la app')).toHaveCount(0)
-  expect(fallos).toEqual([])
 })
 
-test('App · dentro de la app de Play no se ofrece instalar', async ({ page }) => {
-  await entrarRepartidor(page, { status: 'trial', days_left: 6 }, { enApp: true })
-  await page.goto('/ruta', { waitUntil: 'domcontentloaded' })
-  await expect(page.getByRole('button', { name: 'Ruta', exact: false }).first()).toBeVisible()
-  await expect(page.getByLabel('Instalar la app')).toHaveCount(0)
+test.describe('App · dentro de la app (Play o el APK) no se ofrece instalar', () => {
+  test.use({ userAgent: UA_ANDROID })
+  test('ni la tarjeta ni el paso de después del alta', async ({ page }) => {
+    await entrarRepartidor(page, { status: 'trial', days_left: 6 }, { enApp: true })
+    await page.addInitScript(() => localStorage.setItem('fds_recien_alta', '1'))
+    await page.goto('/ruta', { waitUntil: 'domcontentloaded' })
+    await expect(page.getByRole('button', { name: 'Ruta', exact: false }).first()).toBeVisible()
+    await expect(page.getByLabel('Instalar la app')).toHaveCount(0)
+    await expect(page.getByRole('dialog', { name: 'Último paso: instala la app' })).toHaveCount(0)
+  })
 })
 
 test.describe('Idiomas · la app de reparto sigue el idioma del móvil', () => {
@@ -2242,7 +2350,7 @@ test('Cobro · en China se ofrece pagar el año de una vez y a la vuelta se canj
 })
 
 test.describe('App · en China se descarga la app (sin Play ni Chrome)', () => {
-  test.use({ locale: 'zh-CN', timezoneId: 'Asia/Shanghai' })
+  test.use({ locale: 'zh-CN', timezoneId: 'Asia/Shanghai', userAgent: UA_ANDROID })
   test('la tarjeta de instalar ofrece el APK de China', async ({ page }) => {
     await entrarRepartidor(page, { status: 'active', plan: 'autonomo', days_left: 0 })
     await page.goto('/ruta', { waitUntil: 'domcontentloaded' })

@@ -89,6 +89,9 @@ function Llegada({ p }) {
   )
 }
 
+// Dónde dejó el repartidor el paquete (mismas claves que el servidor, reparto.DONDE_ENTREGA).
+const DONDE_ENTREGA = { mano: 'En mano', vecino: 'Al vecino', buzon: 'En el buzón', porteria: 'En portería o recepción', seguro: 'En un lugar seguro' }
+
 export default function Reparto() {
   const { center } = useOutletContext() || {}
   const toast = useToast()
@@ -309,12 +312,13 @@ export default function Reparto() {
                             <span className={`rounded-full px-2 py-0.5 text-[11px] font-semibold ${ESTADOS[p.estado]?.[1] || ''}`}>{ESTADOS[p.estado]?.[0] || p.estado}</span>
                             {p.motivo && <div className="mt-1 text-[11px] text-dark-500">{p.motivo}</div>}
                             {p.reintento > 0 && <div className="mt-1 text-[11px] text-dark-500">{p.reintento}º intento</div>}
+                            {p.entrega_donde && <div className="mt-1 text-[11px] text-dark-300">{DONDE_ENTREGA[p.entrega_donde] || ''}</div>}
                             {p.entrega_nota && <div className="mt-1 text-[11px] text-dark-400">«{p.entrega_nota}»</div>}
                             {p.tiene_foto && !tapado && (
                               <button className="mt-1 block text-[11.5px] font-semibold text-brand-300"
                                 onClick={async () => {
                                   try { const { data } = await fotoEntrega(p.id); setFoto({ ...data, cliente: p.cliente || p.direccion }) } catch { toast.error('No se pudo abrir la foto') }
-                                }}>Ver foto de entrega</button>
+                                }}>Ver prueba de entrega</button>
                             )}
                             {p.estado === 'fallido' && !tapado && (
                               <button className="mt-1 block text-[11.5px] font-semibold text-brand-300"
@@ -346,7 +350,11 @@ export default function Reparto() {
 
       {foto && (
         <Ventana titulo={`Entrega · ${foto.cliente}`} onClose={() => setFoto(null)}>
-          <img src={foto.foto} alt="Prueba de entrega" className="mx-auto max-h-[70vh] rounded-lg" />
+          {foto.foto && <img src={foto.foto} alt="Prueba de entrega" className="mx-auto max-h-[70vh] rounded-lg" />}
+          {(foto.donde || foto.recibe) && (
+            <p className="mt-2 text-[13px] text-dark-200">{[foto.donde, foto.recibe && `Lo recoge: ${foto.recibe}`].filter(Boolean).join(' · ')}</p>
+          )}
+          {foto.firma && <img src={foto.firma} alt="Firma" className="mt-2 w-full max-w-xs rounded-lg bg-white" />}
           {foto.nota && <p className="mt-2 text-[13px] text-dark-200">«{foto.nota}»</p>}
           {foto.cuando && <p className="mt-1 text-[11.5px] text-dark-500">{new Date(foto.cuando).toLocaleString('es-ES')}</p>}
         </Ventana>

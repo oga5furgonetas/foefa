@@ -845,3 +845,23 @@ Repaso de cada frase de `/planes` y de la presentación contra el código (Dani:
 - Campaña TikTok «interés ES» publicada por Dani: primera hora 7,49 €, 9 clics a 0,83 €, 21 visitas y **9 llegan a la mitad (43 %, antes 3,5 %)**; 0 altas aún. Ojo: 0 de 21 pulsan el aviso de cookies, así que el píxel apenas manda señal; revisar en unas horas y, si sigue, rediseñar el aviso (siempre con las dos opciones igual de fáciles).
 - Carrusel de 7 fotos («5 trucos para acabar antes la ruta») e imagen suelta para TikTok en docs/anuncios/tiktok-fotos (texto y hashtags en TEXTO.md); se regeneran con scripts/tiktok-fotos.mjs.
 - Fallan 2 pruebas de test_valor_oddspapi.py también sin cambios (fechas fijas, probablemente): tarea aparte sugerida.
+
+## 10-10-2026 (noche): instalar la app al darse de alta y entrega como Circuit/Spoke
+- **Último paso del alta** (`PasoInstalar` en `pages/InstalarApp.jsx`, marca `fds_recien_alta` que ponen
+  AltaRapida y Registro): a pantalla completa, antes de la ruta, se puede saltar. Dentro del navegador de
+  TikTok/Instagram/Facebook (`navegadorInterno()`): «Abrir en Chrome» (Android, `intent://`) o «Abrir en
+  Safari» (iPhone, `x-safari-https://`) con un **pase de un solo uso** (`/auth/pase-movil`, 10 min, se guarda
+  solo su huella en `flota_global.pases_movil`; lo canjea `/pase?p=…`). En Chrome: instalar en un toque si
+  Chrome deja, si no el APK. En el ordenador: QR con el pase.
+- **APK sin Play** (`/descargas/FDS.apk`): variante `web` de `android/` (paquete `com.flotadsp.flota.web`,
+  la misma TWA de Play firmada con la clave de subida; `assetlinks.json` la declara). Comparte la sesión de
+  Chrome. Recompilar: `./gradlew assembleWebRelease` (ver docs/PLAY_STORE.md) y copiar el APK.
+- **Entrega**: «¿Dónde lo dejas?» (en mano, vecino, buzón, portería, lugar seguro; `entrega_donde`), quién lo
+  recoge (`entrega_recibe`) y **firma con el dedo** (`entrega_firma`, PNG ≤ 100 KB). Nombre y firma se borran
+  con los datos personales; el cliente ve en `/s/<token>` solo «Entregado: al vecino». La oficina lo ve en
+  «Ver prueba de entrega».
+- **Buscador de paquetes**: escanear un paquete que ya está en la ruta abre su parada en grande y su hueco.
+- **Ver la fachada** (Street View) en cada parada situada.
+- TikTok orgánico: carrusel «5 trucos» publicado el 10-10 (en revisión al subirlo); el enlace del perfil
+  sigue en /registro (cambiarlo a /repartidores lo decide Dani). `docs/anuncios/tiktok-fotos/carrusel-trucos.mp4`
+  es la versión en vídeo por si hace falta.

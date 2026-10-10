@@ -9,7 +9,8 @@ import { enviarPendiente, olvidarPendiente } from '../lib/metaPixel'
 import { isAuthed, esSuplantacion, volverASuper, getAdmin } from '../panel/auth'
 import { Cuenta, Muro } from './RutaCuenta'
 import OpinionRuta from './OpinionRuta'
-import InstalarApp from './InstalarApp'
+import InstalarApp, { PasoInstalar } from './InstalarApp'
+import { recienAlta, olvidarRecienAlta, yaEsApp } from '../lib/instalar'
 import { useToast } from '../lib/toast'
 import { lista } from '../lib/lista'
 import { hoyLocal, fechaEs } from '../lib/fecha'
@@ -97,6 +98,9 @@ export default function RutaApp() {
     return () => clearTimeout(tPropio)
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
   const bloqueado = !!billing?.bloqueo
+  // Recién creada la cuenta: antes de la ruta, instalar la app (se puede saltar).
+  const [instalarPrimero, setInstalarPrimero] = useState(() => recienAlta() && !yaEsApp() && !esSuplantacion())
+  useEffect(() => { if (yaEsApp()) olvidarRecienAlta() }, [])
 
   // Dentro de la app: si la cuenta de Google ya tiene la suscripción (reinstaló,
   // cambió de móvil) y aquí no consta, se comprueba y se liga. Una vez.
@@ -118,6 +122,7 @@ export default function RutaApp() {
 
   return (
     <div className="flex min-h-screen flex-col bg-dark-950 text-dark-100">
+      {instalarPrimero && <PasoInstalar onListo={() => { olvidarRecienAlta(); setInstalarPrimero(false) }} />}
       {/* «Entrar como» desde la plataforma: la misma franja que en el panel, que aquí faltaba. */}
       {esSuplantacion() && (
         <div className="flex items-center justify-between gap-3 bg-amber-500/15 px-4 py-2 text-[13px] text-amber-200">

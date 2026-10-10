@@ -658,6 +658,8 @@ export const changeMyPassword = (current_password, new_password) =>
 // `extra`: { tambien_usuario, password } cuando se entra con el correo y el usuario cambia con él.
 export const setMyEmail = (email, extra = {}) => api.post('/auth/my-email', { email, ...extra })
 export const pedirEnlaceClave = (email) => api.post('/auth/forgot-password', { email })
+// Pase de un solo uso (10 min) para abrir la cuenta en Chrome o en otro móvil sin volver a entrar.
+export const crearPaseMovil = () => api.post('/auth/pase-movil')
 export const forgotPassword = (email) => api.post('/auth/forgot-password', { email })
 
 /* ── Package Intelligence Center (Cortex) ── */

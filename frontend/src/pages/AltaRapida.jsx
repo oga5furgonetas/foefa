@@ -9,6 +9,7 @@ import { leerRef } from '../lib/referido'
 import { regionDelMovil } from '../lib/region'
 import { enAppPlay } from '../lib/enApp'
 import { PARADAS_GRATIS } from '../lib/precios'
+import { marcarRecienAlta } from '../lib/instalar'
 
 /* EL ALTA, DENTRO DE LA PORTADA (05-10-2026). Medido: 541 visitas de TikTok en 72 h, 1 clic en
    «Crear cuenta» y 0 altas: el camino «botón → otra pantalla → formulario» perdía a casi todos en el
@@ -74,6 +75,7 @@ export default function AltaRapida({ dias = 7, enfocar = false }) {
       try { localStorage.setItem('flota_plan', 'autonomo'); localStorage.setItem('flota_billing', 'monthly') } catch { /* nada */ }
       medirAccion('registro_ok')
       evento('CompleteRegistration', { content_name: 'autonomo', status: true })
+      marcarRecienAlta()   // la app le pide instalarla antes de nada
       window.location.href = '/ruta'
     } catch {
       setErr(tx('Sin conexión con el servidor. Revisa tu red e inténtalo de nuevo.'))

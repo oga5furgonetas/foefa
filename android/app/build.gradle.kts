@@ -50,6 +50,10 @@ android {
     //  · china: para descargar desde la web en China, donde no hay Play ni
     //    Chrome: paquete propio (.cn, no choca con la de Play) y WebView propio
     //    (src/china). Se compila con  ./gradlew assembleChinaRelease
+    //  · web:   la misma app de Play para instalar sin Play (10-10-2026): quien se
+    //    da de alta en la web la descarga en /descargas/FDS.apk mientras Play
+    //    está en prueba cerrada. Paquete propio (.web) para no chocar con la de
+    //    Play; abre Chrome con la sesión que ya tiene. ./gradlew assembleWebRelease
     flavorDimensions += "canal"
     productFlavors {
         create("play") { dimension = "canal" }
@@ -57,6 +61,11 @@ android {
             dimension = "canal"
             applicationIdSuffix = ".cn"
             versionNameSuffix = "-cn"
+        }
+        create("web") {
+            dimension = "canal"
+            applicationIdSuffix = ".web"
+            versionNameSuffix = "-web"
         }
     }
 

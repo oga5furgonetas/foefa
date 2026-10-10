@@ -7,6 +7,7 @@ import { regionDelMovil } from '../lib/region'
 import { API_BASE } from '../services/api'
 import { medirAccion } from '../lib/analitica'
 import { saveSession } from '../panel/auth'
+import { marcarRecienAlta } from '../lib/instalar'
 import { useT, LANGS } from '../i18n'
 import { tx, useIdioma, IDIOMAS, cambiarIdioma } from '../lib/idioma'
 import { desdeChina } from '../lib/apiBase'
@@ -388,6 +389,7 @@ export default function Registro() {
       localStorage.setItem('flota_billing', billingMode)
       medirAccion('registro_ok')
       evento('CompleteRegistration', { content_name: sector || 'alta', status: true })
+      if (soloYo) marcarRecienAlta()   // la app de ruta le pide instalarla antes de nada
       setDone(true)
     } catch { setErr(tt('Sin conexión con el servidor. Revisa tu red e inténtalo de nuevo.')); setBusy(false) }
   }

@@ -2,6 +2,7 @@ import { Suspense, lazy, useCallback, useEffect, useRef, useState } from 'react'
 import {
   ArrowLeft, ScanLine, Camera, Loader2, Navigation, Phone, Check, X, Route, MapPin, Play, Square, Package,
   MessageCircle, Clock, Search, List, Pencil, ChevronDown, GripVertical, Map as MapaIcono, ArrowUp, ArrowDown, ArrowUpDown, Mic, ClipboardPaste, Trophy,
+  Eye, PenLine,
 } from 'lucide-react'
 import {
   repMiRuta, repEscanear, repLeerTicket, repNuevoPedido, repEstado, repOrdenar, repJornada, repPosicion,
@@ -32,6 +33,10 @@ import { salirDeLaDemoDeReparto } from '../../panel/auth'
 
 const inp = 'w-full rounded-xl border border-dark-700 bg-dark-900 px-3 py-2.5 text-[15px] text-dark-50 placeholder:text-dark-500 focus:border-brand-500 focus:outline-none'
 const MOTIVOS = ['No había nadie', 'Dirección incorrecta', 'Rechazado', 'Fuera de horario', 'Otro']
+/* DÓNDE SE DEJA (10-10-2026, como Circuit/Spoke): un toque en vez de escribirlo.
+   El cliente lo ve en su enlace de seguimiento. Mismas claves que el servidor. */
+const DONDE = [['mano', 'En mano'], ['vecino', 'Al vecino'], ['buzon', 'En el buzón'], ['porteria', 'En portería o recepción'], ['seguro', 'En un lugar seguro']]
+const CON_QUIEN = ['mano', 'vecino', 'porteria']
 const VACIO = { codigo: '', cliente: '', telefono: '', direccion: '', contenido: '', bultos: 1, notas: '', horario: '', prioridad: false, cobrar: '', tipo: 'entrega', hueco: '' }
 
 /* El número para wa.me. En España, solo móviles (6 o 7 y nueve cifras): a
@@ -168,6 +173,8 @@ export default function MiRuta({ onBack, embebido = false }) {
   // {p, pago}: la hoja de «foto de la entrega» antes de dar por entregado.
   const [prueba, setPrueba] = useState(null)
   const [notaEntrega, setNotaEntrega] = useState('')
+  const [entrega, setEntrega] = useState({ donde: '', recibe: '', firma: '', firmando: false })
+  const [encontrado, setEncontrado] = useState(null)
   const [vista, setVista] = useState(() => lee('ruta_vista', 'lista'))
   const [nav, setNav] = useState(() => lee('ruta_nav2', 'app'))
   const [filtro, setFiltro] = useState('')
@@ -284,6 +291,8 @@ export default function MiRuta({ onBack, embebido = false }) {
       if (data.encontrado) {
         const p = data.pedido
         setAviso(`✓ ${p.cliente || p.direccion} · ${tx('bulto {a} de {b}', { a: p.escaneos, b: p.bultos })}${p.hueco ? ` · ${tx('va {sitio}', { sitio: tx(p.hueco) })}` : ''}`)
+        // EL BUSCADOR DE PAQUETES (como Circuit): con el paquete en la mano, qué parada es, en grande.
+        if (p.estado !== 'entregado' && p.estado !== 'fallido') setEncontrado(p)
         if (navigator.vibrate) navigator.vibrate(80)
         setCodigo('')
         cargar()
@@ -407,11 +416,22 @@ export default function MiRuta({ onBack, embebido = false }) {
       horario: p.ventana_desde ? `de ${p.ventana_desde} a ${p.ventana_hasta}` : '' })
   }
 
+  // Lo que acompaña a «Entregado»: la nota, dónde quedó, quién lo recogió y su firma.
+  function datosEntrega() {
+    const d = { nota: notaEntrega }
+    if (entrega.donde) d.donde = entrega.donde
+    if (CON_QUIEN.includes(entrega.donde)) {
+      if (entrega.recibe.trim()) d.recibe = entrega.recibe.trim()
+      if (entrega.firma) d.firma = entrega.firma
+    }
+    return d
+  }
+
   async function marcar(p, estado, motivo, pago, extra) {
     // Con importe a cobrar, antes de dar por entregado hay que decir cómo pagó.
     if (estado === 'entregado' && p.cobrar > 0 && !pago) { setCobro(p); return }
     // Y después, la prueba de entrega (foto y/o nota), que se puede saltar.
-    if (estado === 'entregado' && !extra) { setCobro(null); setPrueba({ p, pago: pago || null }); setNotaEntrega(''); return }
+    if (estado === 'entregado' && !extra) { setCobro(null); setPrueba({ p, pago: pago || null }); setNotaEntrega(''); setEntrega({ donde: '', recibe: '', firma: '', firmando: false }); return }
     setOcupado(p.id)
     try {
       await repEstado(p.id, estado, motivo, { ...(pago || {}), ...(extra || {}) })
@@ -515,7 +535,10 @@ export default function MiRuta({ onBack, embebido = false }) {
 
   async function ponerHueco(p, hueco) {
     setOcupado(`hueco-${p.id}`)
-    try { await repMiEditar(p.id, { hueco }); setHuecoDe(null); cargar() } catch (e) {
+    try {
+      await repMiEditar(p.id, { hueco }); setHuecoDe(null); cargar()
+      setEncontrado((e) => (e && e.id === p.id ? { ...e, hueco } : e))
+    } catch (e) {
       setAviso(txError(e, 'No se pudo guardar'))
     } finally { setOcupado('') }
   }
@@ -882,6 +905,13 @@ export default function MiRuta({ onBack, embebido = false }) {
                     className={`inline-flex items-center gap-1 rounded-lg px-2 py-1 text-[12px] font-semibold ${p.hueco ? 'bg-sky-500/15 text-sky-200' : 'border border-dashed border-dark-700 text-dark-400'}`}>
                     <Package size={12} /> {p.hueco ? tx('En la furgoneta: {sitio}', { sitio: tx(p.hueco) }) : tx('¿Dónde va en la furgoneta?')}
                   </button>
+                  {/* LA FACHADA ANTES DE LLEGAR (como Circuit): Street View en ese punto. */}
+                  {p.lat != null && ruta.pais !== 'cn' && (
+                    <a href={`https://www.google.com/maps/@?api=1&map_action=pano&viewpoint=${p.lat},${p.lng}`} target="_blank" rel="noreferrer"
+                      className="inline-flex items-center gap-1 rounded-lg border border-dark-700 px-2 py-1 text-[12px] font-semibold text-dark-200">
+                      <Eye size={12} /> {tx('Ver la fachada')}
+                    </a>
+                  )}
                   <button onClick={() => editar(p)} aria-label={`${tx('Editar parada')}: ${p.cliente || p.direccion}`}
                     className="inline-flex items-center gap-1 rounded-lg border border-dark-700 px-2 py-1 text-[12px] font-semibold text-dark-200">
                     <Pencil size={12} /> {tx('Editar')}
@@ -934,6 +964,26 @@ export default function MiRuta({ onBack, embebido = false }) {
             ))}
           </div>
         </details>
+      )}
+
+      {encontrado && (
+        <Hoja titulo={tx('Este paquete va en la parada')} onClose={() => setEncontrado(null)}>
+          <div className="flex items-center gap-4">
+            <span className="flex h-20 min-w-20 shrink-0 items-center justify-center rounded-2xl bg-brand-500 px-3 text-[40px] font-extrabold text-brand-tinta">{encontrado.orden ?? '—'}</span>
+            <div className="min-w-0">
+              <p className="text-[18px] font-bold leading-tight text-dark-50">{encontrado.cliente || tx('Cliente')}</p>
+              <p className="mt-0.5 text-[14px] leading-snug text-dark-200">{encontrado.direccion}</p>
+              <p className="mt-1 text-[12.5px] text-dark-400">{tx('bulto {a} de {b}', { a: encontrado.escaneos, b: encontrado.bultos })}</p>
+            </div>
+          </div>
+          {encontrado.orden == null && <p className="mt-3 text-[12.5px] text-amber-200">{tx('Aún sin número: pulsa «Ordenar ruta» y tendrá su parada.')}</p>}
+          <p className="mb-1.5 mt-4 text-[13px] text-dark-300">{tx('¿Dónde lo dejas en la furgoneta?')}</p>
+          <HuecoRejilla valor={encontrado.hueco} ocupado={ocupado === `hueco-${encontrado.id}`} onElegir={(h) => ponerHueco(encontrado, h)} />
+          <button onClick={() => { setEncontrado(null); setEscaner(true) }}
+            className="mt-4 flex w-full items-center justify-center gap-2 rounded-xl bg-brand-500 py-3 text-[15px] font-bold text-brand-tinta">
+            <ScanLine size={18} /> {tx('Escanear el siguiente')}
+          </button>
+        </Hoja>
       )}
 
       {huecoDe && (
@@ -1104,6 +1154,32 @@ export default function MiRuta({ onBack, embebido = false }) {
 
       {prueba && (
         <Hoja titulo={tx('Prueba de entrega')} onClose={() => setPrueba(null)}>
+          {prueba.p.tipo !== 'recogida' && (
+            <div className="mb-3">
+              <p className="mb-1.5 text-[13px] text-dark-300">{tx('¿Dónde lo dejas?')}</p>
+              <div className="flex flex-wrap gap-1.5">
+                {DONDE.map(([k, t]) => (
+                  <button key={k} type="button" aria-pressed={entrega.donde === k}
+                    onClick={() => setEntrega({ ...entrega, donde: entrega.donde === k ? '' : k })}
+                    className={`rounded-full px-3 py-1.5 text-[13px] font-semibold ${entrega.donde === k ? 'bg-brand-500 text-brand-tinta' : 'border border-dark-700 text-dark-200'}`}>{tx(t)}</button>
+                ))}
+              </div>
+              {CON_QUIEN.includes(entrega.donde) && (
+                <div className="mt-2 space-y-2">
+                  <input className={inp} placeholder={tx('¿Quién lo recoge? (opcional)')} value={entrega.recibe} autoComplete="off"
+                    onChange={(e) => setEntrega({ ...entrega, recibe: e.target.value })} />
+                  {entrega.firmando
+                    ? <Firma onListo={(firma) => setEntrega({ ...entrega, firma, firmando: false })} onCancelar={() => setEntrega({ ...entrega, firmando: false })} />
+                    : (
+                      <button type="button" onClick={() => setEntrega({ ...entrega, firmando: true })}
+                        className={`flex w-full items-center justify-center gap-2 rounded-xl py-2.5 text-[14px] font-semibold ${entrega.firma ? 'bg-emerald-500/15 text-emerald-200' : 'border border-dark-600 text-dark-100'}`}>
+                        {entrega.firma ? <Check size={16} /> : <PenLine size={16} />} {entrega.firma ? tx('Firmado · repetir') : tx('Que firme en la pantalla')}
+                      </button>
+                    )}
+                </div>
+              )}
+            </div>
+          )}
           <p className="mb-3 text-[13px] text-dark-400">
             {tx('Una foto del paquete donde lo dejas (en el portal, con el vecino…) evita discusiones después.')}
             <b className="text-dark-200"> {tx('Sin personas en la foto.')}</b> {tx('Es opcional.')}
@@ -1121,13 +1197,13 @@ export default function MiRuta({ onBack, embebido = false }) {
                   // para ver dónde quedó, y cabe en el pedido sin fotos sueltas por ahí.
                   const blob = await compressImage(f, 640, 0.6)
                   const foto = await new Promise((ok, ko) => { const r = new FileReader(); r.onload = () => ok(r.result); r.onerror = ko; r.readAsDataURL(blob) })
-                  await marcar(prueba.p, 'entregado', '', prueba.pago || { sin_cobro: true }, { foto, nota: notaEntrega })
+                  await marcar(prueba.p, 'entregado', '', prueba.pago || { sin_cobro: true }, { foto, ...datosEntrega() })
                 } catch { setAviso(tx('No se pudo guardar la foto')); setOcupado('') }
               }} />
           </label>
           <input className={`${inp} mt-2`} placeholder={tx('Nota (opcional): «al vecino del 2º», «en el buzón»…')} value={notaEntrega}
             onChange={(e) => setNotaEntrega(e.target.value)} />
-          <button onClick={() => marcar(prueba.p, 'entregado', '', prueba.pago || { sin_cobro: true }, { nota: notaEntrega })}
+          <button onClick={() => marcar(prueba.p, 'entregado', '', prueba.pago || { sin_cobro: true }, datosEntrega())}
             disabled={!!ocupado}
             className="mt-3 w-full rounded-xl border border-dark-600 py-3 text-[14px] font-semibold text-dark-100">
             {tx('Entregar sin foto')}
@@ -1249,6 +1325,49 @@ function Cabecera({ fecha, hechos, total, entregados, pendientes, rr, retraso, c
         </div>
       )}
     </section>
+  )
+}
+
+/* LA FIRMA CON EL DEDO (10-10-2026). Fondo blanco y trazo negro, como en
+   papel; sale un PNG pequeño (480×160) que se guarda en el pedido. */
+function Firma({ onListo, onCancelar }) {
+  const lienzo = useRef(null)
+  const trazo = useRef(null)
+  const [vacia, setVacia] = useState(true)
+  const limpiar = () => {
+    const ctx = lienzo.current.getContext('2d')
+    ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, 480, 160)
+    ctx.strokeStyle = '#111'; ctx.lineWidth = 2.5; ctx.lineCap = 'round'; ctx.lineJoin = 'round'
+    setVacia(true)
+  }
+  useEffect(limpiar, [])
+  const punto = (e) => {
+    const r = lienzo.current.getBoundingClientRect()
+    return [(e.clientX - r.left) * (480 / r.width), (e.clientY - r.top) * (160 / r.height)]
+  }
+  const empezar = (e) => { e.preventDefault(); lienzo.current.setPointerCapture?.(e.pointerId); trazo.current = punto(e) }
+  const mover = (e) => {
+    if (!trazo.current) return
+    const ctx = lienzo.current.getContext('2d')
+    const [x, y] = punto(e)
+    ctx.beginPath(); ctx.moveTo(...trazo.current); ctx.lineTo(x, y); ctx.stroke()
+    trazo.current = [x, y]
+    setVacia(false)
+  }
+  const soltar = () => { trazo.current = null }
+  return (
+    <div>
+      <canvas ref={lienzo} width={480} height={160} aria-label={tx('Firma aquí con el dedo')}
+        onPointerDown={empezar} onPointerMove={mover} onPointerUp={soltar} onPointerLeave={soltar}
+        className="block aspect-[3/1] w-full touch-none rounded-xl bg-white" />
+      <p className="mt-1 text-center text-[11.5px] text-dark-500">{tx('Firma aquí con el dedo')}</p>
+      <div className="mt-1.5 grid grid-cols-3 gap-1.5">
+        <button type="button" onClick={onCancelar} className="rounded-xl border border-dark-700 py-2 text-[13px] text-dark-300">{tx('Cancelar')}</button>
+        <button type="button" onClick={limpiar} className="rounded-xl border border-dark-700 py-2 text-[13px] text-dark-200">{tx('Borrar')}</button>
+        <button type="button" disabled={vacia} onClick={() => onListo(lienzo.current.toDataURL('image/png'))}
+          className="rounded-xl bg-emerald-600 py-2 text-[13px] font-bold text-white disabled:opacity-40">{tx('Listo')}</button>
+      </div>
+    </div>
   )
 }
 

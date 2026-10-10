@@ -57,6 +57,14 @@ export JAVA_HOME='C:\Program Files\Microsoft\jdk-17.0.19.10-hotspot'
 ./gradlew bundlePlayRelease assembleChinaRelease
 ```
 
+**Tercera variante, `web` (10-10-2026).** La misma app de Play con paquete
+`com.flotadsp.flota.web`, para descargar desde la web (`/descargas/FDS.apk`)
+mientras Play está en prueba cerrada: `./gradlew assembleWebRelease` y copiar
+`app/build/outputs/apk/web/release/app-web-release.apk` a
+`frontend/public/descargas/FDS.apk`. Va firmada con la clave de subida, y
+`assetlinks.json` declara ese paquete con esa huella (por eso abre a pantalla
+completa).
+
 **Dos variantes (04-10-2026).** `play` es la de Google Play (lo que se sube:
 `app/build/outputs/bundle/playRelease/app-play-release.aab`). `china` es para
 China, donde no hay Play ni casi Chrome: paquete `com.flotadsp.flota.cn`, abre

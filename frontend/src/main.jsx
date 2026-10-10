@@ -243,6 +243,7 @@ try {
   }
 } catch { /* sin URL: nada */ }
 const RutaApp = lazy(() => import('./pages/RutaApp'))
+const PaseMovil = lazy(() => import('./pages/PaseMovil'))
 const SeguimientoPedido = lazy(() => import('./pages/SeguimientoPedido'))
 const RegaloPagina = lazy(() => import('./pages/RegaloPagina'))
 const Planes = lazy(() => import('./pages/Planes'))
@@ -374,6 +375,7 @@ ReactDOM.createRoot(document.getElementById('root')).render(
               <Route path="/empezar" element={<Empezar />} />
               <Route path="/repartidores" element={<Repartidores />} />
               <Route path="/ruta" element={<RutaApp />} />
+              <Route path="/pase" element={<PaseMovil />} />
               <Route path="/s/:token" element={<SeguimientoPedido />} />
               <Route path="/regalo/:codigo" element={<RegaloPagina />} />
               <Route path="/planes" element={<Planes />} />

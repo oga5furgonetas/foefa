@@ -33,14 +33,14 @@ const BASE = `
   .pie b { color:var(--marca) }
 </style>`
 
-const portada = `
+const portada = (llamada) => `
 <div class="lienzo" style="background:url(${fondoCargando}) center/cover">
   <div style="position:absolute; inset:0; background:linear-gradient(180deg, rgba(5,20,26,.55) 0%, rgba(5,20,26,.35) 35%, rgba(5,20,26,.92) 70%, rgba(5,20,26,.98) 100%)"></div>
   <div style="position:absolute; left:80px; right:150px; bottom:440px; display:flex; flex-direction:column; align-items:flex-start; gap:34px">
     <span class="pildora" style="background:var(--marca); color:#04121a; font-size:30px; padding:14px 28px">Para repartidores</span>
     <h1 class="titular con-resalte" style="font-size:112px">5 trucos para <span class="resalta">acabar antes</span> la ruta</h1>
     <p style="font-size:46px; font-weight:700; color:var(--gris)">El 4 casi nadie lo hace</p>
-    <span class="pildora" style="border:3px solid var(--blanco); font-size:30px; padding:14px 30px">Desliza ➜</span>
+    <span class="pildora" style="border:3px solid var(--blanco); font-size:30px; padding:14px 30px">${llamada}</span>
   </div>
 </div>`
 
@@ -93,7 +93,7 @@ const suelta = `
   </div>
 </div>`
 
-const PIEZAS = [['1-portada', portada], ...TRUCOS.map((t, i) => [`${i + 2}-truco-${i + 1}`, truco(t, i)]), ['7-la-app', cierre], ['imagen-suelta', suelta]]
+const PIEZAS = [['1-portada', portada('Desliza ➜')], ['1-portada-video', portada('Los 5, en 20 segundos')], ...TRUCOS.map((t, i) => [`${i + 2}-truco-${i + 1}`, truco(t, i)]), ['7-la-app', cierre], ['imagen-suelta', suelta]]
 
 const nav = await chromium.launch()
 const pag = await nav.newPage({ viewport: { width: 1080, height: 1920 }, deviceScaleFactor: 1 })

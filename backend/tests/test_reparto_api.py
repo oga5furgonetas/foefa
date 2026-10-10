@@ -297,7 +297,9 @@ async def test_prueba_de_entrega_con_foto(base):
     with pytest.raises(HTTPException):
         await server.reparto_estado(p["id"], {"estado": "entregado", "foto": "data:image/png;base64,xx"}, ANA)
     r = await server.reparto_estado(p["id"], {"estado": "entregado", "foto": foto, "nota": "Al vecino del 2º"}, ANA)
-    assert r["entrega_foto"] == foto and r["entrega_nota"] == "Al vecino del 2º"
+    # La respuesta no devuelve la foto (no hace falta y pesa); el pedido sí la guarda.
+    assert "entrega_foto" not in r and r["entrega_nota"] == "Al vecino del 2º"
+    assert base.db["reparto_pedidos"].docs[0]["entrega_foto"] == foto
     # La lista de la oficina no carga con la foto, pero dice que la hay.
     vista = await server.reparto_pedidos("", OFICINA)
     assert "entrega_foto" not in vista["pedidos"][0] and vista["pedidos"][0]["tiene_foto"] is True
@@ -310,6 +312,39 @@ async def test_prueba_de_entrega_con_foto(base):
     server._REP_LIMPIEZA.clear()
     await server.reparto_pedidos("2026-08-01", OFICINA)
     assert base.db["reparto_pedidos"].docs[0]["entrega_foto"] is None
+
+
+@pytest.mark.asyncio(loop_scope="session")
+async def test_prueba_de_entrega_donde_quien_y_firma(base):
+    """Como Circuit/Spoke (10-10-2026): dónde lo deja de un toque, quién lo recoge y su firma.
+    El cliente ve en su enlace dónde quedó, sin nombres; la firma se borra al plazo."""
+    p = await server.reparto_mis_pedidos({"direccion": "Rúa Real 5", "telefono": "612345678"}, ANA)
+    firma = "data:image/png;base64," + "B" * 3000
+    with pytest.raises(HTTPException):
+        await server.reparto_estado(p["id"], {"estado": "entregado", "donde": "tejado"}, ANA)
+    with pytest.raises(HTTPException):
+        await server.reparto_estado(p["id"], {"estado": "entregado", "firma": "data:image/jpeg;base64,xx"}, ANA)
+    r = await server.reparto_estado(p["id"], {"estado": "entregado", "donde": "vecino", "recibe": "Marta (2ºB)", "firma": firma}, ANA)
+    assert "entrega_firma" not in r and r["entrega_donde"] == "vecino" and r["entrega_recibe"] == "Marta (2ºB)"
+    # La oficina la ve junto a la foto; la lista solo dice que la hay.
+    vista = await server.reparto_pedidos("", OFICINA)
+    assert "entrega_firma" not in vista["pedidos"][0] and vista["pedidos"][0]["tiene_foto"] is True
+    prueba = await server.reparto_foto(p["id"], OFICINA)
+    assert prueba["firma"] == firma and prueba["donde"] == "Al vecino" and prueba["recibe"] == "Marta (2ºB)"
+    # El cliente, en su enlace: dónde quedó, nada más.
+    enlace = (await server.reparto_enlace(p["id"], ANA))["token"]
+    seg = await server.seguimiento_publico(enlace, SimpleNamespace(headers={}, client=SimpleNamespace(host="1.1.1.1")))
+    assert seg["dejado"] == "Al vecino" and "Marta" not in str(seg)
+    # Si al final no se entrega, no queda nada de la entrega.
+    await server.reparto_estado(p["id"], {"estado": "fallido", "motivo": "No había nadie"}, ANA)
+    doc = base.db["reparto_pedidos"].docs[0]
+    assert doc["entrega_firma"] is None and doc["entrega_donde"] is None and doc["entrega_recibe"] is None
+    # Y al plazo se borran la firma y el nombre con el resto de datos personales.
+    await server.reparto_estado(p["id"], {"estado": "entregado", "recibe": "Marta", "firma": firma}, ANA)
+    doc["fecha"] = "2026-08-01"
+    server._REP_LIMPIEZA.clear()
+    await server.reparto_pedidos("2026-08-01", OFICINA)
+    assert doc["entrega_firma"] is None and doc["entrega_recibe"] is None
 
 
 @pytest.mark.asyncio(loop_scope="session")
