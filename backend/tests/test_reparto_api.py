@@ -141,7 +141,7 @@ async def test_zonas_reparten_y_la_ruta_se_ordena_desde_el_almacen(base):
     # Repetir la pegada no duplica.
     r = await server.reparto_pegar({"texto": "Código;Cliente;Dirección\nA1;Ana;Rúa Real 5\n",
                                     "confirmar": True}, OFICINA)
-    assert r == {"creados": 0, "repetidos": 1, "fecha": HOY}
+    assert r == {"creados": 0, "repetidos": 1, "fecha": HOY, "sin_hueco": 0}
 
 
 @pytest.mark.asyncio(loop_scope="session")

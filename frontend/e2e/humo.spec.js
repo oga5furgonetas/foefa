@@ -1804,6 +1804,21 @@ async function entrarRepartidor(page, billing, { enApp = false } = {}) {
   await page.route(/\/api\/reparto\/mi-ruta/, (r) => r.fulfill({ json: { activo: true, autonomo: true, fecha: '2026-10-04', pedidos: [], jornada: {}, aviso_aceptado: true } }))
 }
 
+/* PLAN GRATIS (10-10-2026): con la prueba acabada y sin pagar ya no hay muro: se reparte con un
+   tope de paradas al día, y la app lo dice y ofrece quitarlo. */
+test('Cobro · plan gratis: sin pagar se sigue repartiendo con tope y «Quitar el tope» lleva a Cuenta', async ({ page }) => {
+  const fallos = vigilar(page)
+  await entrarRepartidor(page, { status: 'trial', days_left: 0, required: true, trial_ends: new Date(Date.now() - 86400000).toISOString(),
+    bloqueo: '', gratis: { activo: true, tope: 15, usadas: 4 } })
+  await page.goto('/ruta', { waitUntil: 'domcontentloaded' })
+  await expect(page.getByText('Plan gratis: hasta 15 paradas nuevas al día.')).toBeVisible()
+  await expect(page.getByRole('heading', { name: 'Tu prueba ha terminado' })).toHaveCount(0)          // sin muro
+  await page.getByRole('button', { name: 'Quitar el tope' }).click()
+  await expect(page.getByText('Plan gratis', { exact: true })).toBeVisible()
+  await expect(page.getByText(/Sigues gratis con hasta 15 paradas nuevas al día/)).toBeVisible()
+  expect(fallos).toEqual([])
+})
+
 test('Cobro · alta nueva: muro de «7 días gratis» con tarjeta, hoy 0 €, y elegir anual', async ({ page }) => {
   const fallos = vigilar(page)
   const fin = new Date(Date.now() + 7 * 86400000).toISOString()

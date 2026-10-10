@@ -4,6 +4,7 @@ import { MARCA } from '../marca'
 import { tx, useIdioma, IDIOMAS, cambiarIdioma } from '../lib/idioma'
 import { medirAccion } from '../lib/analitica'
 import { evento } from '../lib/metaPixel'
+import { PARADAS_GRATIS } from '../lib/precios'
 
 /* ── LA PRIMERA PANTALLA DE LA APP (04-10-2026) ──────────────────────────────
    Quien se baja la app de Play Store es, casi siempre, una persona que
@@ -46,7 +47,8 @@ export default function Empezar() {
           {tx('Crear mi cuenta gratis')} <ArrowRight size={18} />
         </a>
         <ul className="mt-3 space-y-1 text-[13px] text-dark-300">
-          <li className="flex gap-2"><Check size={15} className="mt-0.5 shrink-0 text-emerald-400" /> {tx('7 días gratis; luego 9,99 €/mes o 99 €/año')}</li>
+          <li className="flex gap-2"><Check size={15} className="mt-0.5 shrink-0 text-emerald-400" /> {tx('Gratis para siempre hasta {n} paradas al día', { n: PARADAS_GRATIS })}</li>
+          <li className="flex gap-2"><Check size={15} className="mt-0.5 shrink-0 text-emerald-400" /> {tx('Sin tope: 9,99 €/mes o 99 €/año, con 7 días de prueba')}</li>
           <li className="flex gap-2"><Check size={15} className="mt-0.5 shrink-0 text-emerald-400" /> {tx('Sin tarjeta: la prueba empieza ya y hoy no pagas nada')}</li>
         </ul>
 

@@ -85,7 +85,9 @@ def test_prueba_con_tarjeta_pide_tarjeta_hasta_tenerla(base, monkeypatch):
 
 
 @pytest.mark.asyncio(loop_scope="session")
-async def test_el_bloqueo_salta_al_escribir_en_el_reparto_y_no_al_leer(base, monkeypatch):
+async def test_sin_pagar_la_app_no_se_bloquea_sigue_el_plan_gratis(base, monkeypatch):
+    """Plan gratis (10-10-2026): con la prueba acabada se puede seguir escribiendo en el reparto;
+    el tope de paradas va en _rep_nuevo (test_plan_gratis.py), no en la puerta."""
     async def ficha(sub):
         return sub
     monkeypatch.setattr(server, "_ficha_activa_de", ficha)
@@ -95,9 +97,8 @@ async def test_el_bloqueo_salta_al_escribir_en_el_reparto_y_no_al_leer(base, mon
 
     def peticion(metodo, ruta):
         return SimpleNamespace(method=metodo, url=SimpleNamespace(path=ruta), headers={}, client=None)
-    with pytest.raises(HTTPException) as e:
-        await server.get_current_user(peticion("POST", "/api/reparto/mis-pedidos"), cred)
-    assert e.value.status_code == 402 and "Suscríbete" in e.value.detail
+    u = await server.get_current_user(peticion("POST", "/api/reparto/mis-pedidos"), cred)
+    assert u["sub"] == "d1"
     u = await server.get_current_user(peticion("GET", "/api/reparto/mi-ruta"), cred)
     assert u["sub"] == "d1"
     # Una empresa con la prueba vencida no se bloquea por aquí.

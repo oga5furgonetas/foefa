@@ -251,6 +251,14 @@ function Estado({ b, precios }) {
   } else if (b.status === 'active') {
     chip = [tx('Activa'), 'bg-emerald-500/15 text-emerald-300']
   }
+  // PLAN GRATIS (10-10-2026): sin pagar se sigue repartiendo con tope; en la prueba se avisa de qué viene después.
+  const g = b.gratis
+  if (g?.activo) {
+    chip = [tx('Plan gratis'), 'bg-sky-500/15 text-sky-200']
+    linea = `${linea ? `${linea} ` : ''}${tx('Sigues gratis con hasta {n} paradas nuevas al día. Suscríbete para no tener tope.', { n: g.tope })}`
+  } else if (g && b.status === 'trial' && !b.falta_tarjeta) {
+    linea = `${linea ? `${linea} ` : ''}${tx('Después sigues gratis con hasta {n} paradas al día.', { n: g.tope })}`
+  }
   return (
     <section className="overflow-hidden rounded-3xl border border-brand-400/30 bg-gradient-to-br from-brand-500/[.16] via-dark-900 to-dark-900 p-5 shadow-lg shadow-black/20">
       <div className="flex items-center justify-between gap-2">

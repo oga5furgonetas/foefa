@@ -12,7 +12,7 @@ import { tx, useIdioma, IDIOMAS, cambiarIdioma } from '../lib/idioma'
 import { desdeChina } from '../lib/apiBase'
 import { Check, Zap, Package, ShoppingCart, Warehouse, Truck, User, Send } from 'lucide-react'
 import { MARCA, dominio } from '../marca'
-import { PLANES_EMPRESA, PLAN_REPARTO, MESES_ANUAL, precioMes as precioMesPlan, eur } from '../lib/precios'
+import { PLANES_EMPRESA, PLAN_REPARTO, MESES_ANUAL, PARADAS_GRATIS, precioMes as precioMesPlan, eur } from '../lib/precios'
 
 function slugify(s) {
   return (s || '').toLowerCase().trim()
@@ -534,8 +534,12 @@ export default function Registro() {
           <input type="checkbox" checked={accept} onChange={(e) => setAccept(e.target.checked)} style={{ marginTop: 2 }} />
           <span>
             {conEnlaces(tt('Acepto los [Términos], el [Acuerdo de Encargo del Tratamiento] y la [Política de Privacidad].'), ['/terminos', '/encargo', '/privacidad'])}
-            {' '}{tt('Prueba gratuita de {n} días. Hoy no se cobra nada y sin tarjeta no se cobra nunca: al acabar eliges si seguir con el plan {plan} ({precio} €/mes).', {
-              n: diasPrueba, plan: tt(planInfo.name), precio: precioFijo ? displayPrice.toFixed(2).replace('.', ',') : displayPrice })}
+            {' '}{soloYo
+              // Quien reparte solo: después de la prueba sigue gratis con tope (10-10-2026).
+              ? tt('{n} días sin tope y gratis. Después sigues gratis con hasta {p} paradas al día; sin tarjeta no se cobra nunca. Sin tope: plan {plan} ({precio} €/mes).', {
+                n: diasPrueba, p: PARADAS_GRATIS, plan: tt(planInfo.name), precio: displayPrice.toFixed(2).replace('.', ',') })
+              : tt('Prueba gratuita de {n} días. Hoy no se cobra nada y sin tarjeta no se cobra nunca: al acabar eliges si seguir con el plan {plan} ({precio} €/mes).', {
+                n: diasPrueba, plan: tt(planInfo.name), precio: precioFijo ? displayPrice.toFixed(2).replace('.', ',') : displayPrice })}
           </span>
         </label>
 

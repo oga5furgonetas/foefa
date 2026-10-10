@@ -4,7 +4,7 @@ import { Check, Zap, ArrowRight } from 'lucide-react'
 import { API_BASE } from '../lib/apiBase'
 import { medirAccion } from '../lib/analitica'
 import { MARCA } from '../marca'
-import { PLANES_EMPRESA, PLAN_REPARTO, DESCUENTOS_VOLUMEN, COMPLEMENTOS, REGLAS, MESES_ANUAL, precioMes, precioVehiculo, descuentoVolumen, eur } from '../lib/precios'
+import { PLANES_EMPRESA, PLAN_REPARTO, DESCUENTOS_VOLUMEN, COMPLEMENTOS, REGLAS, MESES_ANUAL, PARADAS_GRATIS, precioMes, precioVehiculo, descuentoVolumen, eur } from '../lib/precios'
 
 /* Tarifa POR VEHÍCULO, con usuarios y conductores ilimitados. Los planes, los
    descuentos y los complementos viven en lib/precios.js (y su porqué, en
@@ -365,7 +365,7 @@ export default function Planes() {
           <div>
             <div style={{ fontSize: 12, fontWeight: 700, color: '#eab308', textTransform: 'uppercase', letterSpacing: '.08em', marginBottom: 4 }}>¿Repartes tú solo?</div>
             <div style={{ fontSize: 15, color: '#cbd5e1' }}>
-              La app de ruta para quien reparte por su cuenta: <b>{eur(autonomo.mensual)}€ al mes</b> o {eur(autonomo.anual)}€ al año, {autonomo.dias_prueba || 7} días gratis.
+              La app de ruta para quien reparte por su cuenta: <b>gratis hasta {autonomo.paradas_gratis || PARADAS_GRATIS} paradas al día</b>, sin tarjeta. Sin tope, {eur(autonomo.mensual)}€ al mes o {eur(autonomo.anual)}€ al año.
             </div>
           </div>
           <a href="/repartidores" style={{ padding: '11px 22px', borderRadius: 12, border: '1.5px solid #eab308', color: '#eab308', fontWeight: 800, fontSize: 14, textDecoration: 'none', whiteSpace: 'nowrap' }}>

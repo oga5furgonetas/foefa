@@ -998,11 +998,12 @@ async def get_current_user(
     if (request.method not in ("GET", "HEAD", "OPTIONS") and "/api/reparto/" in request.url.path
             and not payload.get("demo") and not payload.get("imp") and payload.get("org_id")):
         org_pago = await get_org(payload.get("org_id"))
-        motivo = _rep_bloqueo_pago(org_pago)
-        if motivo and (org_pago or {}).get("play_token"):
-            motivo = _rep_bloqueo_pago(await _play_refrescar(org_pago))
-        if motivo:
-            raise HTTPException(status_code=402, detail=motivo)
+        # PLAN GRATIS (10-10-2026): al acabar la prueba o dejar de pagar, la app del repartidor
+        # ya NO se bloquea entera; sigue con un tope de paradas nuevas al día (_rep_quedan_gratis,
+        # en _rep_nuevo). Solo se para a quien tiene que meter la tarjeta para EMPEZAR
+        # (PRUEBA_CON_TARJETA=1, hoy apagado).
+        if org_pago and _falta_tarjeta(org_pago):
+            raise HTTPException(status_code=402, detail=_rep_bloqueo_pago(org_pago))
     # AÍSLA: fija la BD de la organización del token para TODA esta petición.
     # Tokens antiguos sin db_name → BD por defecto (tu data) = sin cambios.
     set_current_org_db(payload.get("db_name"))
@@ -4993,7 +4994,8 @@ async def register_dsp(data: RegisterRequest, request: Request):
     <p style="margin:0;color:#64748b;font-size:12px;text-align:center;line-height:1.6">
       Si tienes alguna pregunta, escríbenos a <a href="mailto:{CORREO_CONTACTO}" style="color:#0ea5e9">{CORREO_CONTACTO}</a><br>
       {"Al finalizar la prueba, se cobra el plan elegido salvo cancelación." if org.get("prueba_con_tarjeta")
-       else "Al acabar la prueba eliges tú si seguir: sin tarjeta no se cobra nada."}
+       else (f"Al acabar la prueba sigues gratis con hasta {REP_GRATIS_PARADAS_DIA} paradas al día; sin tarjeta no se cobra nada."
+             if plan_elegido == "autonomo" else "Al acabar la prueba eliges tú si seguir: sin tarjeta no se cobra nada.")}
     </p>
     <p style="margin:12px 0 0;color:#475569;font-size:11px;text-align:center;line-height:1.5">
       🇬🇧 Welcome to {MARCA}! Your {dias_prueba}-day free trial is active{"" if org.get("prueba_con_tarjeta") else " — no card required"}.
@@ -5181,6 +5183,35 @@ def _rep_bloqueo_pago(org) -> str:
     return ""
 
 
+# PLAN GRATIS DEL REPARTIDOR (10-10-2026, Dani: «haz plan gratis con tope de paradas», como hace
+# Spoke). Al darse de alta: 7 días sin tope y sin tarjeta. Después, si no paga (o se le acaba el
+# regalo, o deja de pagar), sigue GRATIS para siempre con un tope de paradas nuevas al día; las de
+# ejemplo no cuentan. Pagando (9,99 €/mes o 99 €/año), sin tope. `REP_GRATIS_PARADAS` lo cambia.
+REP_GRATIS_PARADAS_DIA = max(1, int(os.environ.get("REP_GRATIS_PARADAS", "15") or 15))
+REP_TOPE_MENSAJE = "Has llegado al tope de paradas gratis de hoy. Pasa a ilimitado en «Cuenta» o sigue mañana."
+
+
+def _rep_sin_ilimitado(org) -> bool:
+    """El repartidor que hoy usa el plan gratis (con tope): prueba acabada sin pagar, regalo o
+    Google Play vencidos, o pago pendiente. Las empresas y la cuenta propia, nunca."""
+    if not _es_repartidor(org) or (org or {}).get("account_type") == "owner":
+        return False
+    return bool(_org_billing(org).get("required"))
+
+
+async def _rep_quedan_gratis(user: dict, fecha: str) -> Optional[int]:
+    """Paradas nuevas que le quedan para ese día en el plan gratis; None si no tiene tope."""
+    if user.get("imp") or user.get("demo") or not user.get("org_id"):
+        return None
+    org = await get_org(user.get("org_id"))
+    if org and org.get("play_token"):
+        org = await _play_refrescar(org)
+    if not _rep_sin_ilimitado(org):
+        return None
+    hechas = await db.reparto_pedidos.count_documents({"fecha": fecha, "ejemplo": {"$ne": True}})
+    return max(0, REP_GRATIS_PARADAS_DIA - hechas)
+
+
 @api_router.get("/org/billing")
 async def org_billing(user: dict = Depends(get_current_user)):
     """Estado de la suscripción de TU organización (trial, días restantes, si toca pagar)."""
@@ -5198,7 +5229,14 @@ async def org_billing(user: dict = Depends(get_current_user)):
     b["pais"] = (await _region_de_org(org["id"]))[0] if org else "es"
     o = org or {}
     b["falta_tarjeta"] = _falta_tarjeta(o) if org else False
-    b["bloqueo"] = _rep_bloqueo_pago(o) if org else ""
+    # Muro solo si falta la tarjeta para empezar; sin pagar, plan gratis con tope (abajo).
+    b["bloqueo"] = _rep_bloqueo_pago(o) if org and b["falta_tarjeta"] else ""
+    if org and _es_repartidor(o):
+        try:
+            usadas = await db.reparto_pedidos.count_documents({"fecha": _dia_negocio(), "ejemplo": {"$ne": True}})
+        except Exception:                                        # noqa: BLE001
+            usadas = 0
+        b["gratis"] = {"activo": _rep_sin_ilimitado(o), "tope": REP_GRATIS_PARADAS_DIA, "usadas": usadas}
     b["suscrito"] = bool(o.get("stripe_subscription")) and o.get("pago_proveedor") == "stripe" and o.get("status") == "active"
     for k in ("stripe_status", "stripe_intervalo", "stripe_proximo_cobro", "pagado_hasta", "trial_ends"):
         b[k] = o.get(k)
@@ -5276,7 +5314,8 @@ def _catalogo_por_defecto():
             {"clave": "autonomo", "nombre": "Repartidor", "para": "Repartes tú mismo",
              "por_vehiculo": 0, "minimo_vehiculos": 0,
              "mensual": PLAN_TARIFAS["autonomo"]["mensual"], "anual": PLAN_TARIFAS["autonomo"]["anual"],
-             "dias_prueba": PLAN_TARIFAS["autonomo"]["dias_prueba"], "recomendado": False},
+             "dias_prueba": PLAN_TARIFAS["autonomo"]["dias_prueba"],
+             "paradas_gratis": REP_GRATIS_PARADAS_DIA, "recomendado": False},
             {"clave": "operacion", "nombre": "Esencial", "para": "Una delegación",
              "por_vehiculo": PLAN_TARIFAS["operacion"]["por_vehiculo"],
              "minimo_vehiculos": PLAN_TARIFAS["operacion"]["minimo_vehiculos"],
@@ -5493,6 +5532,7 @@ async def billing_planes():
     detalle = {
         "autonomo": {
             "incluye": [
+                f"Gratis para siempre hasta {REP_GRATIS_PARADAS_DIA} paradas al día, sin tarjeta; sin tope con el plan",
                 "Escanear paquetes o foto de la etiqueta: dirección y teléfono solos",
                 "Ruta ordenada por tiempo, con franjas y hora estimada",
                 "Llamar y WhatsApp al cliente desde cada parada",
@@ -47495,6 +47535,9 @@ async def _rep_nuevo(datos: dict, user: dict, origen: str, fecha: str,
     direccion = _texto_cuerpo(datos.get("direccion"), 200)
     if len(direccion) < 4:
         raise HTTPException(400, "Falta la dirección de entrega")
+    quedan = await _rep_quedan_gratis(user, fecha)           # plan gratis del repartidor
+    if quedan is not None and quedan <= 0:
+        raise HTTPException(402, REP_TOPE_MENSAJE)
     cp = _texto_cuerpo(datos.get("cp"), 10) or reparto.extrae_cp(direccion)
     codigo = reparto.normaliza_codigo(_texto_cuerpo(datos.get("codigo"), 120))
     if codigo:
@@ -47945,8 +47988,14 @@ async def reparto_pegar(data: dict = Body(...), user: dict = Depends(require_adm
     f = _rep_fecha(data.get("fecha"))
     # Quien reparte solo pega SU ruta: las paradas son suyas, no «sin conductor».
     yo = await _rep_conductor(user) if await _rep_es_autonomo(user) else None
-    hechos, repetidos = 0, 0
+    quedan = await _rep_quedan_gratis(user, f)
+    if quedan is not None and quedan <= 0:
+        raise HTTPException(402, REP_TOPE_MENSAJE)
+    hechos, repetidos, sin_hueco = 0, 0, 0
     for fila in filas:
+        if quedan is not None and hechos >= quedan:
+            sin_hueco += 1                                   # plan gratis: el resto, mañana o con el plan
+            continue
         try:
             await _rep_nuevo(fila, user, "pegado", f, conductor=yo, ubicar=False)
             hechos += 1
@@ -47956,7 +48005,7 @@ async def reparto_pegar(data: dict = Body(...), user: dict = Depends(require_adm
             else:
                 raise
     asyncio.create_task(_rep_ubicar_pendientes(f))
-    return {"creados": hechos, "repetidos": repetidos, "fecha": f}
+    return {"creados": hechos, "repetidos": repetidos, "fecha": f, "sin_hueco": sin_hueco}
 
 
 @api_router.patch("/reparto/pedidos/{pid}")

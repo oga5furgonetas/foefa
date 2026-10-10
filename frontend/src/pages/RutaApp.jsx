@@ -132,6 +132,17 @@ export default function RutaApp() {
         </button>
       )}
       <main className="flex-1 px-4 pb-24 pt-4">
+        {/* PLAN GRATIS (10-10-2026): sin pagar ya no hay muro; se reparte con un tope de paradas al día. */}
+        {tab === 'hoy' && !bloqueado && billing?.gratis?.activo && (
+          <div className="mx-auto mb-3 flex max-w-md items-center justify-between gap-3 rounded-2xl border border-sky-500/30 bg-sky-500/10 px-3.5 py-2.5">
+            <p className="min-w-0 text-[13px] leading-snug text-sky-100">
+              {tx('Plan gratis: hasta {n} paradas nuevas al día.', { n: billing.gratis.tope })}
+            </p>
+            <button onClick={() => setTab('cuenta')} className="shrink-0 rounded-xl bg-brand-500 px-3 py-1.5 text-[12.5px] font-bold text-brand-tinta">
+              {tx('Quitar el tope')}
+            </button>
+          </div>
+        )}
         {tab === 'hoy' && !bloqueado && <OpinionRuta />}
         {tab === 'hoy' && <InstalarApp />}
         {(tab === 'hoy' || tab === 'ajustes') && bloqueado

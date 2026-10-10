@@ -96,6 +96,10 @@ export function precioVehiculo(p, unidades, tramos) {
   return Math.round(u.precio * (100 - descuentoVolumen(n, tramos))) / 100
 }
 
+/* PLAN GRATIS DEL REPARTIDOR (10-10-2026): sin pagar, hasta estas paradas nuevas al día
+   (REP_GRATIS_PARADAS_DIA en server.py; /billing/planes la devuelve como `paradas_gratis`). */
+export const PARADAS_GRATIS = 15
+
 /* Pagando un año se pagan 10 meses: dos salen gratis. */
 export const MESES_ANUAL = 10
 

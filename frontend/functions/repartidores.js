@@ -5,7 +5,8 @@
  * repartidores en un grupo de Facebook enseñaba una tarjeta de gestión de flotas,
  * que no tiene que ver con lo que se ofrece y parece una estafa. Aquí se sustituyen
  * solo para esta ruta; la persona recibe la misma página y React monta igual. */
-const TITULO = 'Tu ruta de reparto, ordenada sola · 7 días gratis'
+// Plan gratis (10-10-2026): gratis para siempre con tope de paradas; sin tope, de pago.
+const TITULO = 'Tu ruta de reparto, ordenada sola · Gratis hasta 15 paradas al día'
 const DESCRIPCION = 'Foto a la etiqueta, paradas ordenadas y guía por voz hasta la puerta. Para repartidores autónomos. Sin tarjeta.'
 
 export async function onRequestGet(context) {

@@ -76,8 +76,21 @@ implantación, soporte) y con la API.
 Margen bruto (sin personas): Esencial ≈ 75 %, Pro ≈ 85 %, Empresa ≈ 85 % (con el WhatsApp incluido).
 
 ### El repartidor autónomo (FDS)
-9,99 €/mes o 99 €/año, 7 días de prueba. Es otro producto (la app de ruta, sin panel). Se queda igual:
-es una persona con una furgoneta, no una empresa, y por debajo de Circuit o Routific.
+**Gratis para siempre hasta 15 paradas nuevas al día, sin tarjeta.** Sin tope: 9,99 €/mes o 99 €/año.
+Al darse de alta, 7 días sin tope (14 si llega invitado). Es otro producto (la app de ruta, sin panel):
+una persona con una furgoneta, no una empresa.
+
+Por qué el plan gratis (10-10-2026, Dani: «haz plan gratis con tope de paradas»): es lo que hace Spoke
+(antes Circuit), el líder, con 10 paradas por ruta. El repartidor la prueba en su trabajo real, ve que le
+sirve y paga cuando el tope se le queda corto (un repartidor hace de 50 a más de 200 paradas al día).
+Con 2.005 visitas de TikTok y 0 altas, pedir pagar o la tarjeta antes de usarla era la barrera.
+
+Cómo está hecho: `REP_GRATIS_PARADAS_DIA` (15, o `REP_GRATIS_PARADAS` en el entorno) y
+`_rep_quedan_gratis` en server.py; el tope va en `_rep_nuevo` (402 con `REP_TOPE_MENSAJE`) y en pegar
+una lista (entra hasta el tope y devuelve `sin_hueco`). La app ya no se bloquea nunca al acabar la
+prueba, vencer un regalo o fallar un pago: pasa al plan gratis. Solo hay muro si algún día se vuelve a
+pedir la tarjeta para empezar (`PRUEBA_CON_TARJETA=1`, apagado). Las paradas de ejemplo no cuentan.
+Pruebas: `test_plan_gratis.py`.
 
 ### Plan Reparto: súper y distribución (06-10-2026, tarde)
 El supermercado que lleva la compra a casa (Gadis) y el distribuidor que reparte a negocios (Disgón)

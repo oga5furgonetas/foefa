@@ -65,4 +65,6 @@ export const C = {
   // Cuenta: cambiar correo y contraseña (06-10-2026)
   "La contraseña actual no es correcta": ["The current password is incorrect", "A palavra-passe atual não está correta", "Le mot de passe actuel est incorrect", "La password attuale non è corretta", "Das aktuelle Passwort ist falsch", "当前密码不正确"],
   "Ya hay otra cuenta con ese correo": ["There’s already another account with that email", "Já existe outra conta com esse e-mail", "Il existe déjà un autre compte avec cet e-mail", "Esiste già un altro account con questa email", "Es gibt bereits ein anderes Konto mit dieser E-Mail", "已有其他账户使用该邮箱"],
+  // Plan gratis: tope de paradas (10-10-2026)
+  "Has llegado al tope de paradas gratis de hoy. Pasa a ilimitado en «Cuenta» o sigue mañana.": ["You’ve reached today’s free stop limit. Go unlimited in “Account” or continue tomorrow.", "Chegou ao limite de paragens grátis de hoje. Passe a ilimitado em «Conta» ou continue amanhã.", "Vous avez atteint la limite d’arrêts gratuits du jour. Passez en illimité dans « Compte » ou continuez demain.", "Hai raggiunto il limite di fermate gratis di oggi. Passa a illimitato in «Account» o continua domani.", "Du hast das heutige Limit an kostenlosen Stopps erreicht. Wechsle unter „Konto“ zu unbegrenzt oder mach morgen weiter.", "今天的免费站点已用完。可在“账户”中升级为不限站点，或明天继续。"],
 }
