@@ -2596,3 +2596,17 @@ test('Ruta · Mi dinero hoy: poner la tarifa y ver lo ganado', async ({ page }) 
   await expect(tarjeta).toContainText('2,40')
   expect(fallos).toEqual([])
 })
+
+/* CALCULADORA (11-10-2026): página pública para Google; calcula con los números de cada uno. */
+test('Calculadora repartidor · calcula lo que queda al mes y lleva a la app', async ({ page }) => {
+  const fallos = vigilar(page)
+  await page.goto('/calculadora-repartidor', { waitUntil: 'domcontentloaded' })
+  await expect(page.getByRole('heading', { name: '¿Cuánto gana un repartidor autónomo?' })).toBeVisible()
+  // 100 × 1,10 × 22 = 2420; 120 × 0,15 × 22 = 396; 2420 − 396 − 600 = 1424 (en español, sin punto con 4 cifras)
+  const resultado = page.getByRole('region', { name: 'Resultado' })
+  await expect(resultado).toContainText('1424 €')
+  await page.getByLabel('Paradas entregadas al día').fill('120')
+  await expect(resultado).toContainText('1908 €')
+  await expect(page.getByRole('link', { name: /Probar FDS gratis/ })).toHaveAttribute('href', /utm_source=calculadora/)
+  expect(fallos).toEqual([])
+})

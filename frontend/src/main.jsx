@@ -228,6 +228,7 @@ const Login = lazy(() => import('./pages/Login'))
 const ResetPassword = lazy(() => import('./pages/ResetPassword'))
 const Registro = lazy(() => import('./pages/Registro'))
 const PruebaReparto = lazy(() => import('./pages/PruebaReparto'))
+const CalculadoraRepartidor = lazy(() => import('./pages/CalculadoraRepartidor'))
 const Empezar = lazy(() => import('./pages/Empezar'))
 const Repartidores = lazy(() => import('./pages/Repartidores'))
 
@@ -372,6 +373,7 @@ ReactDOM.createRoot(document.getElementById('root')).render(
               <Route path="/reset-password" element={<ResetPassword />} />
               <Route path="/registro" element={<Registro />} />
               <Route path="/prueba-reparto" element={<PruebaReparto />} />
+              <Route path="/calculadora-repartidor" element={<CalculadoraRepartidor />} />
               <Route path="/empezar" element={<Empezar />} />
               <Route path="/repartidores" element={<Repartidores />} />
               <Route path="/ruta" element={<RutaApp />} />
