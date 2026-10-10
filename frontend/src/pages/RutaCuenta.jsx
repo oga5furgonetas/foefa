@@ -1,7 +1,8 @@
 import { useEffect, useState } from 'react'
 import {
-  Loader2, LogOut, Gift, CreditCard, Check, Copy, MessageCircle, Mail, Sparkles, ShieldCheck, CalendarClock, Crown, KeyRound, Wallet,
+  Loader2, LogOut, Gift, CreditCard, Check, Copy, MessageCircle, Mail, Sparkles, ShieldCheck, CalendarClock, Crown, KeyRound, Wallet, QrCode,
 } from 'lucide-react'
+import QRCode from 'qrcode'
 import {
   stripeSuscripcion, stripePortal, stripeCambiarPlan, comprarRegalo, misRegalos, canjearRegalo, playVerificar,
   getMe, setMyEmail, changeMyPassword, pedirEnlaceClave,
@@ -13,7 +14,7 @@ import { MARCA, origen } from '../marca'
 import { enAppPlay } from '../lib/enApp'
 import { lista } from '../lib/lista'
 import { tx, useIdioma, locale, IDIOMAS, idioma, cambiarIdioma, txError } from '../lib/idioma'
-import { invitar } from '../lib/compartir'
+import { invitar, enlaceInvitar } from '../lib/compartir'
 import { getReferidos, retirarCartera } from '../services/api'
 
 /* ── LA CUENTA DE QUIEN REPARTE SOLO (04-10-2026) ────────────────────────────
@@ -710,6 +711,12 @@ function Invitar({ toast }) {
   useIdioma()
   const [r, setR] = useState(null)
   const [pidiendo, setPidiendo] = useState(false)
+  // 11-10-2026: en la nave, a primera hora, el compañero está al lado: un QR es más rápido que un WhatsApp.
+  const [qr, setQr] = useState('')
+  async function verQr() {
+    if (qr) { setQr(''); return }
+    try { setQr(await QRCode.toDataURL(enlaceInvitar(r?.codigo), { margin: 1, width: 260 })) } catch { setQr('') }
+  }
   const [form, setForm] = useState({ titular: '', metodo: 'bizum', destino: '' })
   const [enviando, setEnviando] = useState(false)
   const cargar = () => getReferidos().then(({ data }) => setR(data)).catch(() => {})
@@ -751,6 +758,17 @@ function Invitar({ toast }) {
       <button onClick={invitar} className="mt-3 flex w-full items-center justify-center gap-2 rounded-xl bg-emerald-700 py-3 text-[14.5px] font-bold text-white">
         <MessageCircle size={17} /> {tx('Invitar a un compañero')}
       </button>
+      {r?.codigo && (
+        <button onClick={verQr} aria-expanded={!!qr} className="mt-2 flex w-full items-center justify-center gap-2 rounded-xl border border-emerald-400/50 py-2.5 text-[14px] font-semibold text-emerald-200">
+          <QrCode size={16} /> {qr ? tx('Ocultar el QR') : tx('Enseñar mi QR a un compañero')}
+        </button>
+      )}
+      {qr && (
+        <div className="mt-3 rounded-2xl bg-white p-3 text-center">
+          <img src={qr} alt={tx('Código QR de tu invitación')} width="220" height="220" className="mx-auto" />
+          <p className="mt-1 text-[12.5px] font-semibold text-slate-800">{tx('Que lo escanee con la cámara del móvil: entra con tu invitación.')}</p>
+        </div>
+      )}
       {r?.pendiente && <p className="mt-2 text-center text-[12.5px] text-amber-200">{tx('Tienes un pago en revisión. Te avisamos por correo cuando lo enviemos.')}</p>}
       {puede && !pidiendo && (
         <button onClick={() => setPidiendo(true)} className="mt-2 flex w-full items-center justify-center gap-2 rounded-xl border border-emerald-400/60 py-2.5 text-[14px] font-bold text-emerald-200">
