@@ -196,6 +196,12 @@ export default function MiRuta({ onBack, embebido = false }) {
     if ((china && ['google', 'waze'].includes(nav)) || (!china && ['amap', 'baidu'].includes(nav))) setNav('app')
   }, [ruta, nav])
   const [guiando, setGuiando] = useState(null)       // id de la parada a la que se guía; null = sin guía
+  // 10-10-2026: se mide cuándo EMPIEZA a navegar (no cada parada), para el embudo del alta.
+  const guiandoAntes = useRef(null)
+  useEffect(() => {
+    if (guiando && !guiandoAntes.current) medirAccion('ruta_navegar')
+    guiandoAntes.current = guiando
+  }, [guiando])
   const [abierta, setAbierta] = useState(null)       // la parada desplegada (además de la siguiente)
   const [deshacer, setDeshacer] = useState(null)     // {p, estado} recién cerrada, para volver atrás
   const [trazado, setTrazado] = useState(null)
@@ -292,6 +298,7 @@ export default function MiRuta({ onBack, embebido = false }) {
   async function buscar(c, foto) {
     const cod = String(c || '').trim()
     if (!cod) return
+    medirAccion(foto ? 'ruta_escaneo' : 'ruta_codigo')
     setEscaner(false); setOcupado('buscar'); setAviso('')
     try {
       const { data } = await repEscanear(cod)
@@ -324,6 +331,7 @@ export default function MiRuta({ onBack, embebido = false }) {
 
   async function leerTicket(file) {
     if (!file) return
+    medirAccion('ruta_foto_etiqueta')
     setOcupado('ticket')
     try {
       // Con IA en el servidor solo si la empresa la tiene permitida (clave de
@@ -364,6 +372,7 @@ export default function MiRuta({ onBack, embebido = false }) {
         return
       }
       await repNuevoPedido(nuevo)
+      medirAccion('ruta_parada_nueva')
       setNuevo(null); setCodigo('')
       cargar()
       if (carga) { setCarga({ n: carga.n + 1 }); setAviso('') } else setAviso(tx('✓ Añadido a tu ruta'))
@@ -442,6 +451,7 @@ export default function MiRuta({ onBack, embebido = false }) {
     setOcupado(p.id)
     try {
       await repEstado(p.id, estado, motivo, { ...(pago || {}), ...(extra || {}) })
+      medirAccion(estado === 'entregado' ? 'ruta_entregado' : 'ruta_no_entregado')
       setFallo(null); setCobro(null); setPrueba(null); setAbierta(null)
       setDeshacer({ p, estado })
       if (navigator.vibrate) navigator.vibrate(estado === 'entregado' ? 60 : [40, 60, 40])
@@ -452,6 +462,7 @@ export default function MiRuta({ onBack, embebido = false }) {
   }
 
   async function ordenar() {
+    medirAccion('ruta_ordenar')
     setOcupado('ordenar')
     const fin = async (punto) => {
       try {
@@ -664,7 +675,7 @@ export default function MiRuta({ onBack, embebido = false }) {
       {/* ESCANEAR */}
       <div className="rounded-2xl border border-brand-400/40 bg-brand-500/[.08] p-3.5">
         <div className="grid grid-cols-2 gap-2">
-          <button onClick={() => setEscaner(true)}
+          <button onClick={() => { medirAccion('ruta_escaner'); setEscaner(true) }}
             className="flex items-center justify-center gap-2 rounded-xl bg-brand-500 py-3.5 text-[15px] font-bold text-brand-tinta active:scale-[.99]">
             <ScanLine size={19} /> {tx('Escanear')}
           </button>
