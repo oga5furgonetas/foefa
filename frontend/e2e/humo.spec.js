@@ -2632,3 +2632,26 @@ test('Ruta · recorrido de bienvenida la primera vez, 3 pasos y probar con ejemp
   await expect(hoja).toHaveCount(0)
   expect(fallos).toEqual([])
 })
+
+/* INVITA Y GANA EN LATINOAMÉRICA (11-10-2026): fuera de España se cobra por PayPal. */
+test('Cartera · fuera de España se cobra por PayPal', async ({ page }) => {
+  const fallos = vigilar(page)
+  await entrarRepartidor(page, { status: 'trial', days_left: 6, pais: 'mx', promo: { activa: true, hasta: '2026-12-31' } })
+  await page.route(/\/api\/referidos$/, (r) => r.fulfill({ json: { codigo: 'MX1234', invitados: 5, premiados: 4, saldo: 1000, ganado: 1000,
+    por_invitado: 250, retirada_min: 1000, entregas_cartera: 20, dias_distintos: 2, pendiente: false, retiradas: [], cartera: true, metodos: ['paypal'] } }))
+  const pedidos = []
+  await page.route(/\/api\/cartera\/retirar/, async (r) => { pedidos.push(r.request().postDataJSON()); await r.fulfill({ json: { ok: true } }) })
+  await page.goto('/ruta', { waitUntil: 'domcontentloaded' })
+  await expect(page.getByText(/Gana 2,50 € por cada compañero que la use/)).toBeVisible()
+  await page.getByRole('button', { name: 'Cuenta', exact: true }).click()
+  const cartera = page.getByRole('region', { name: 'Tu cartera' })
+  await expect(cartera.getByText(/Lo cobras por PayPal desde 10 €/)).toBeVisible()
+  await cartera.getByRole('button', { name: 'Cobrar 10 €' }).click()
+  await expect(cartera.getByRole('button', { name: 'Bizum' })).toHaveCount(0)
+  await cartera.getByPlaceholder('Nombre y apellidos del titular').fill('Juan Pérez')
+  await cartera.getByPlaceholder('Correo de tu PayPal').fill('juan@correo.mx')
+  await cartera.getByRole('button', { name: 'Pedir el pago de 10 €' }).click()
+  await expect.poll(() => pedidos.length).toBe(1)
+  expect(pedidos[0]).toEqual({ titular: 'Juan Pérez', metodo: 'paypal', destino: 'juan@correo.mx' })
+  expect(fallos).toEqual([])
+})

@@ -62,7 +62,7 @@ export function Cuenta({ billing, recargar, toast, resaltarRegalo }) {
           {!enApp && b.regalos && <Regalar precios={b.regalos} toast={toast} resaltar={resaltarRegalo} />}
         </>
       )}
-      {!suplantando && (b?.pais || 'es') === 'es' && <Invitar toast={toast} />}
+      {!suplantando && (b?.pais || 'es') !== 'cn' && <Invitar toast={toast} />}
       <Acceso toast={toast} soloVer={suplantando} />
       <section className="mt-4 rounded-3xl border border-dark-700 bg-dark-900 p-4">
         <label className="flex items-center justify-between gap-3 text-[14px] font-semibold text-dark-100">
@@ -717,7 +717,12 @@ function Invitar({ toast }) {
     if (qr) { setQr(''); return }
     try { setQr(await QRCode.toDataURL(enlaceInvitar(r?.codigo), { margin: 1, width: 260 })) } catch { setQr('') }
   }
-  const [form, setForm] = useState({ titular: '', metodo: 'bizum', destino: '' })
+  const [form, setForm] = useState({ titular: '', metodo: '', destino: '' })
+  // El método de cobro, el primero que valga en su país (fuera de España, PayPal).
+  useEffect(() => {
+    const metodos = r ? (r.metodos?.length ? r.metodos : ['bizum', 'iban']) : null
+    if (metodos && !metodos.includes(form.metodo)) setForm((f) => ({ ...f, metodo: metodos[0], destino: '' }))
+  }, [r, form.metodo])
   const [enviando, setEnviando] = useState(false)
   const cargar = () => getReferidos().then(({ data }) => setR(data)).catch(() => {})
   useEffect(() => { cargar() }, [])
@@ -747,7 +752,7 @@ function Invitar({ toast }) {
         </div>
       </div>
       <p className="mt-2 text-[12.5px] leading-snug text-dark-300">
-        {tx('Pásale tu enlace. Cuando se registre y haga {n} entregas en {d} días distintos (en su primer mes), ganas {euros}. Lo cobras por Bizum o transferencia desde {min}.', {
+        {tx(r?.metodos?.includes('bizum') === false ? 'Pásale tu enlace. Cuando se registre y haga {n} entregas en {d} días distintos (en su primer mes), ganas {euros}. Lo cobras por PayPal desde {min}.' : 'Pásale tu enlace. Cuando se registre y haga {n} entregas en {d} días distintos (en su primer mes), ganas {euros}. Lo cobras por Bizum o transferencia desde {min}.', {
           n: r?.entregas_cartera ?? 20, d: r?.dias_distintos ?? 2, euros: cent(r?.por_invitado ?? 250), min: cent(r?.retirada_min ?? 1000) })}
       </p>
       {r && (r.invitados > 0 || r.ganado > 0) && (
@@ -779,7 +784,7 @@ function Invitar({ toast }) {
         <form onSubmit={pedir} className="mt-3 space-y-2 rounded-2xl border border-dark-700 bg-dark-900 p-3">
           <p className="text-[13px] font-semibold text-dark-100">{tx('¿Dónde te lo enviamos?')}</p>
           <div className="grid grid-cols-2 gap-2">
-            {[['bizum', 'Bizum'], ['iban', 'Transferencia']].map(([k, t]) => (
+            {(r?.metodos || ['bizum', 'iban']).map((k) => [k, { bizum: 'Bizum', iban: tx('Transferencia'), paypal: 'PayPal' }[k]]).map(([k, t]) => (
               <button key={k} type="button" aria-pressed={form.metodo === k} onClick={() => setForm({ ...form, metodo: k, destino: '' })}
                 className={`rounded-xl py-2 text-[13.5px] font-semibold ${form.metodo === k ? 'bg-emerald-600 text-white' : 'border border-dark-700 text-dark-200'}`}>{tx(t)}</button>
             ))}
@@ -787,8 +792,8 @@ function Invitar({ toast }) {
           <input className={campo} value={form.titular} onChange={(e) => setForm({ ...form, titular: e.target.value })}
             placeholder={tx('Nombre y apellidos del titular')} autoComplete="name" aria-label={tx('Nombre y apellidos del titular')} />
           <input className={campo} value={form.destino} onChange={(e) => setForm({ ...form, destino: e.target.value })}
-            placeholder={form.metodo === 'bizum' ? tx('Móvil con Bizum') : tx('IBAN (ES…)')} aria-label={form.metodo === 'bizum' ? tx('Móvil con Bizum') : tx('IBAN (ES…)')}
-            inputMode={form.metodo === 'bizum' ? 'tel' : 'text'} autoComplete={form.metodo === 'bizum' ? 'tel' : 'off'} />
+            placeholder={form.metodo === 'bizum' ? tx('Móvil con Bizum') : form.metodo === 'paypal' ? tx('Correo de tu PayPal') : tx('IBAN (ES…)')} aria-label={form.metodo === 'bizum' ? tx('Móvil con Bizum') : form.metodo === 'paypal' ? tx('Correo de tu PayPal') : tx('IBAN (ES…)')}
+            inputMode={form.metodo === 'bizum' ? 'tel' : form.metodo === 'paypal' ? 'email' : 'text'} autoComplete={form.metodo === 'bizum' ? 'tel' : form.metodo === 'paypal' ? 'email' : 'off'} />
           <button type="submit" disabled={enviando} className="flex w-full items-center justify-center gap-2 rounded-xl bg-emerald-700 py-2.5 text-[14px] font-bold text-white disabled:opacity-50">
             {enviando ? <Loader2 size={16} className="animate-spin" /> : <Check size={16} />} {tx('Pedir el pago de {euros}', { euros: cent(saldo) })}
           </button>
@@ -800,7 +805,7 @@ function Invitar({ toast }) {
         <ul className="mt-3 space-y-1 text-[12.5px]">
           {lista(r.retiradas).map((x) => (
             <li key={x.id} className="flex items-center justify-between gap-2 rounded-xl bg-dark-950/60 px-3 py-2">
-              <span className="text-dark-300">{fecha(x.creada)} · {cent(x.importe)} · {x.metodo === 'bizum' ? 'Bizum' : tx('Transferencia')} {x.destino}</span>
+              <span className="text-dark-300">{fecha(x.creada)} · {cent(x.importe)} · {{ bizum: 'Bizum', iban: tx('Transferencia'), paypal: 'PayPal' }[x.metodo] || x.metodo} {x.destino}</span>
               <span className={`shrink-0 font-semibold ${ESTADO_RETIRADA[x.estado]?.[1] || ''}`} title={x.motivo || ''}>{tx(ESTADO_RETIRADA[x.estado]?.[0] || x.estado)}</span>
             </li>
           ))}

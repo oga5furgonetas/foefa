@@ -602,7 +602,7 @@ function RetiradasCartera() {
   useEffect(() => { cargar() }, [estado]) // eslint-disable-line react-hooks/exhaustive-deps
   const eur = (c) => `${((Number(c) || 0) / 100).toFixed(2).replace('.', ',').replace(',00', '')} €`
   async function pagada(r) {
-    if (!window.confirm(`¿Ya has enviado ${eur(r.importe)} a ${r.titular} por ${r.metodo === 'bizum' ? 'Bizum' : 'transferencia'}? Se le avisará por correo.`)) return
+    if (!window.confirm(`¿Ya has enviado ${eur(r.importe)} a ${r.titular} por ${({ bizum: 'Bizum', iban: 'transferencia', paypal: 'PayPal' })[r.metodo] || r.metodo}? Se le avisará por correo.`)) return
     setOcupado(r.id); setErr('')
     try { await adminRetiradaPagada(r.id); cargar() } catch (e) { setErr(e?.response?.data?.detail || 'No se pudo marcar') } finally { setOcupado('') }
   }
@@ -641,7 +641,7 @@ function RetiradasCartera() {
                 <span className="text-dark-400">{String(r.creada || '').slice(0, 16).replace('T', ' ')} · {r.estado}</span>
               </div>
               <p className="mt-1 text-dark-300">
-                {r.metodo === 'bizum' ? 'Bizum' : 'Transferencia'}: <b className="select-all text-dark-100">{r.destino}</b> · cuenta «{r.org}» ({r.email})
+                {({ bizum: 'Bizum', iban: 'Transferencia', paypal: 'PayPal' })[r.metodo] || r.metodo}: <b className="select-all text-dark-100">{r.destino}</b> · cuenta «{r.org}» ({r.email})
               </p>
               {r.motivo && <p className="mt-1 text-dark-400">Motivo: {r.motivo}</p>}
               <details className="mt-1">

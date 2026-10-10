@@ -78,10 +78,15 @@ async def test_el_invitado_entra_con_14_dias_y_queda_ligado(mundo):
     assert "referido_por" not in mundo.g["organizations"].docs[-1]
 
 
-def _entregas(mundo, n, ejemplo=False, fecha=None):
+def _entregas(mundo, n, ejemplo=False, fecha=None, cada_min=25):
+    """Entregas como las de verdad: cada una a una dirección distinta y repartidas en el día
+    (cada `cada_min` minutos desde las 8:00). Con cada_min=0, todas «de golpe»."""
     hoy = fecha or datetime.now(timezone.utc).strftime("%Y-%m-%d")
+    inicio = datetime.fromisoformat(f"{hoy}T08:00:00+00:00")
     for i in range(n):
-        mundo.t["reparto_pedidos"].docs.append({"id": f"p{len(mundo.t['reparto_pedidos'].docs)}", "conductor_id": "c1",
+        k = len(mundo.t["reparto_pedidos"].docs)
+        mundo.t["reparto_pedidos"].docs.append({"id": f"p{k}", "conductor_id": "c1", "direccion": f"Calle {k} nº {i}",
+                                                "cerrado_en": (inicio + timedelta(minutes=i * cada_min)).isoformat(),
                                                 "estado": "entregado", "fecha": hoy, **({"ejemplo": True} if ejemplo else {})})
 
 
@@ -111,7 +116,7 @@ async def test_la_cartera_gana_5_euros_con_uso_real_en_dos_dias_y_solo_una_vez(m
     _entregas(mundo, 20, fecha=_dia(-1))                            # 20 reales, pero en un solo día
     await server._referido_premiar(inv, "c1")
     assert not inv.get("ref_premiado")
-    _entregas(mundo, 1)                                             # otro día: ya está
+    _entregas(mundo, 3)                                             # otro día (3 entregas en 50 min): ya está
     await server._referido_premiar(inv, "c1")
     assert inv["ref_premiado"] is True
     o1 = mundo.g["organizations"].docs[0]
@@ -132,7 +137,7 @@ async def test_desde_el_corte_cada_invitado_da_2_euros_50(mundo):
     inv = mundo.g["organizations"].docs[-1]
     inv["created_at"] = _iso(-2)
     _entregas(mundo, 20, fecha=_dia(-1))
-    _entregas(mundo, 1)
+    _entregas(mundo, 3)
     await server._referido_premiar(inv, "c1")
     o1 = mundo.g["organizations"].docs[0]
     assert inv["ref_premiado"] is True and o1["cartera_saldo"] == 250 and o1["cartera_ganado"] == 250
@@ -213,20 +218,47 @@ async def test_retirar_el_saldo_y_que_la_plataforma_lo_pague_o_lo_rechace(mundo,
 
 
 @pytest.mark.asyncio(loop_scope="session")
-async def test_invita_y_gana_solo_en_espana(mundo):
-    """11-10-2026: se paga por Bizum o a una cuenta española; una cuenta de México no lo tiene."""
+async def test_fuera_de_espana_se_cobra_por_paypal_y_en_china_no_hay(mundo):
+    """11-10-2026: en Latinoamérica también se gana; se cobra por PayPal (Bizum e IBAN son de España)."""
     o1 = mundo.g["organizations"].docs[0]
     o1["pais"] = "mx"
-    o1["cartera_saldo"] = 2000
-    assert (await server.referidos_mios(YO))["cartera"] is False
-    with pytest.raises(HTTPException) as e:
-        await server.cartera_retirar({"titular": "Pepe Pérez", "metodo": "bizum", "destino": "+34 612 345 678"}, YO)
-    assert e.value.status_code == 400
-    codigo = (await server.referidos_mios(YO))["codigo"]
+    o1["created_at"] = "2026-10-12T08:00:00+00:00"
+    r = await server.referidos_mios(YO)
+    assert r["cartera"] is True and r["metodos"] == ["paypal"] and r["por_invitado"] == 250
+    codigo = r["codigo"]
     await _alta(ref=codigo)
     inv = mundo.g["organizations"].docs[-1]
     inv["created_at"] = _iso(-2)
     _entregas(mundo, 20, fecha=_dia(-1))
-    _entregas(mundo, 1)
+    _entregas(mundo, 3)
     await server._referido_premiar(inv, "c1")
-    assert not inv.get("ref_premiado") and o1["cartera_saldo"] == 2000
+    assert inv["ref_premiado"] is True
+    o1["cartera_saldo"] = 1000
+    with pytest.raises(HTTPException) as e:
+        await server.cartera_retirar({"titular": "Pepe Pérez", "metodo": "bizum", "destino": "+34 612 345 678"}, YO)
+    assert e.value.status_code == 400
+    with pytest.raises(HTTPException):
+        await server.cartera_retirar({"titular": "Pepe Pérez", "metodo": "paypal", "destino": "no-es-un-correo"}, YO)
+    r = await server.cartera_retirar({"titular": "Pepe Pérez", "metodo": "paypal", "destino": "Pepe.Perez@Gmail.com"}, YO)
+    assert r["retirada"]["destino"] == "p•••@gmail.com"
+    assert mundo.g["cartera_retiradas"].docs[-1]["destino"] == "pepe.perez@gmail.com"
+    # China: no hay cómo pagar.
+    o1["pais"] = "cn"
+    assert (await server.referidos_mios(YO))["cartera"] is False
+
+
+@pytest.mark.asyncio(loop_scope="session")
+async def test_veinte_entregas_de_golpe_no_cuentan(mundo):
+    """Marcar 20 «entregadas» en dos minutos (o todas a la misma dirección) no es usar la app."""
+    codigo = (await server.referidos_mios(YO))["codigo"]
+    await _alta(ref=codigo)
+    inv = mundo.g["organizations"].docs[-1]
+    inv["created_at"] = _iso(-2)
+    _entregas(mundo, 20, fecha=_dia(-1), cada_min=0)
+    _entregas(mundo, 20, cada_min=0)
+    await server._referido_premiar(inv, "c1")
+    assert not inv.get("ref_premiado")
+    # Repartidas en el día pero todas a la misma puerta: tampoco.
+    for p in mundo.t["reparto_pedidos"].docs:
+        p["direccion"] = "Calle Falsa 123"
+    assert server._ref_uso_real([{**p, "cerrado_en": p["cerrado_en"]} for p in mundo.t["reparto_pedidos"].docs])[0] <= 2

@@ -49559,7 +49559,8 @@ async def referidos_mios(user: dict = Depends(require_admin)):
             # La cartera
             "saldo": int(org.get("cartera_saldo") or 0), "ganado": int(org.get("cartera_ganado") or 0),
             "por_invitado": _ref_importe(org), "retirada_min": _REF_RETIRADA_MIN,
-            "cartera": _ref_en_espana(org),
+            "cartera": _ref_disponible(org),
+            "metodos": ["bizum", "iban", "paypal"] if _ref_en_espana(org) else ["paypal"],
             "entregas_cartera": _REF_ENTREGAS_CARTERA, "dias_distintos": _REF_DIAS_DISTINTOS,
             "ventana_dias": _REF_VENTANA_DIAS, "tope_mes": _REF_TOPE_MES,
             "pendiente": any(r.get("estado") == "pendiente" for r in retiradas), "retiradas": retiradas}
@@ -49623,8 +49624,35 @@ async def opinion_enviar(data: dict = Body(default={}), user: dict = Depends(req
 
 
 def _ref_en_espana(org: dict) -> bool:
-    """«Invita y gana» se paga por Bizum o a una cuenta española: solo para cuentas de España."""
+    """En España se cobra por Bizum o transferencia; fuera, por PayPal."""
     return ((org or {}).get("pais") or "es") == "es"
+
+
+def _ref_disponible(org: dict) -> bool:
+    """«Invita y gana» está en todos los países de la app salvo China (allí no hay cómo pagar)."""
+    return ((org or {}).get("pais") or "es") != "cn"
+
+
+# Una entrega cuenta para «Invita y gana» si es de verdad: un día vale si sus entregas van a
+# direcciones distintas y se reparten al menos _REF_MIN_SPAN_MIN minutos (no 20 «entregadas» de golpe).
+_REF_MIN_SPAN_MIN = 45
+
+
+def _ref_uso_real(entregas: list) -> tuple:
+    """(entregas que cuentan, días que cuentan) de una lista de pedidos entregados."""
+    por_dia = {}
+    for p in entregas:
+        por_dia.setdefault(p.get("fecha") or "", []).append(p)
+    total, dias = 0, 0
+    for _f, ps in por_dia.items():
+        horas = sorted(t for t in (_fecha_utc(p.get("cerrado_en")) for p in ps) if t)
+        if len(horas) < 2 or (horas[-1] - horas[0]).total_seconds() < _REF_MIN_SPAN_MIN * 60:
+            continue
+        distintas = {re.sub(r"\s+", " ", str(p.get("direccion") or "").strip().lower()) for p in ps}
+        distintas.discard("")
+        total += len(distintas)
+        dias += 1
+    return total, dias
 
 
 def _ref_importe(invitador: dict) -> int:
@@ -49648,10 +49676,12 @@ async def _referido_premiar(org: dict, conductor_id: str):
     q = {"conductor_id": conductor_id, "estado": "entregado", "ejemplo": {"$ne": True}, "fecha": {"$lte": limite}}
     if await db.reparto_pedidos.count_documents(q) < _REF_ENTREGAS_CARTERA:
         return
-    if len(await db.reparto_pedidos.distinct("fecha", q)) < _REF_DIAS_DISTINTOS:
+    hechas = await db.reparto_pedidos.find(q, {"_id": 0, "fecha": 1, "direccion": 1, "cerrado_en": 1}).to_list(5000)
+    cuentan, dias = _ref_uso_real(hechas)
+    if cuentan < _REF_ENTREGAS_CARTERA or dias < _REF_DIAS_DISTINTOS:
         return
     invitador = await global_db.organizations.find_one({"id": org["referido_por"]}, {"_id": 0})
-    if not invitador or not _ref_en_espana(invitador):
+    if not invitador or not _ref_disponible(invitador):
         return
     if org.get("alta_red") and org.get("alta_red") == invitador.get("alta_red"):
         # La misma red que quien invita: no se paga solo; lo revisa la plataforma.
@@ -49696,7 +49726,13 @@ def _bizum_valido(tel: str) -> str:
 
 def _tapar_destino(d) -> str:
     d = str(d or "")
+    if "@" in d:                                              # PayPal: p•••@gmail.com
+        u, _, dom = d.partition("@")
+        return f"{u[:1]}•••@{dom}"
     return ("•••• " + d[-4:]) if len(d) > 4 else d
+
+
+_RE_CORREO_PAYPAL = re.compile(r"^[^@\s]{1,64}@[^@\s]+\.[a-z]{2,}$", re.I)
 
 
 @api_router.post("/cartera/retirar")
@@ -49708,14 +49744,20 @@ async def cartera_retirar(data: dict = Body(default={}), user: dict = Depends(re
     org = await get_org(user.get("org_id"))
     if not _es_repartidor(org):
         raise HTTPException(400, "La cartera es para el plan Repartidor")
-    if not _ref_en_espana(org):
-        raise HTTPException(400, "«Invita y gana» es solo para cuentas de España")
+    if not _ref_disponible(org):
+        raise HTTPException(400, "«Invita y gana» no está disponible en tu país")
     d = _dict_cuerpo(data)
     titular = _texto_cuerpo(d.get("titular"), 80).strip()
     if len(titular) < 5 or " " not in titular:
-        raise HTTPException(400, "Escribe tu nombre y apellidos, como en tu banco")
+        raise HTTPException(400, "Escribe tu nombre y apellidos, como en tu banco o en PayPal")
     metodo = _texto_cuerpo(d.get("metodo"), 10).lower()
-    if metodo == "bizum":
+    if metodo in ("bizum", "iban") and not _ref_en_espana(org):
+        raise HTTPException(400, "Fuera de España se cobra por PayPal")
+    if metodo == "paypal":
+        destino = _texto_cuerpo(d.get("destino"), 120).strip().lower()
+        if not _RE_CORREO_PAYPAL.match(destino):
+            raise HTTPException(400, "Escribe el correo de tu cuenta de PayPal")
+    elif metodo == "bizum":
         destino = _bizum_valido(d.get("destino"))
         if not destino:
             raise HTTPException(400, "Ese móvil no vale para Bizum: 9 cifras, empezando por 6 o 7")
@@ -49724,7 +49766,7 @@ async def cartera_retirar(data: dict = Body(default={}), user: dict = Depends(re
         if not _iban_valido(destino):
             raise HTTPException(400, "Ese IBAN no es correcto: revísalo (ES y 22 cifras)")
     else:
-        raise HTTPException(400, "Elige Bizum o transferencia")
+        raise HTTPException(400, "Elige Bizum, transferencia o PayPal")
     if await global_db.cartera_retiradas.find_one({"org_id": org["id"], "estado": "pendiente"}, {"_id": 0, "id": 1}):
         raise HTTPException(409, "Ya tienes una retirada en revisión: espera a que te la paguemos")
     importe = int(org.get("cartera_saldo") or 0)
@@ -49747,7 +49789,7 @@ async def cartera_retirar(data: dict = Body(default={}), user: dict = Depends(re
     try:
         await _enviar_email(CORREO_CONTACTO, f"Retirada de cartera pendiente: {_euros_txt(importe)} · {org.get('name') or ''}",
                             f"<p>{html_escape(org.get('name') or '')} pide cobrar <b>{_euros_txt(importe)}</b> por "
-                            f"{'Bizum' if metodo == 'bizum' else 'transferencia'}.</p>"
+                            f"{ {'bizum': 'Bizum', 'iban': 'transferencia', 'paypal': 'PayPal'}.get(metodo, metodo) }.</p>"
                             f"<p>Revísala y márcala pagada en el panel: Negocio → Retiradas de la cartera.</p>",
                             texto=f"{org.get('name') or ''} pide cobrar {_euros_txt(importe)}. Panel: Negocio → Retiradas de la cartera.")
     except Exception as e:                                   # noqa: BLE001

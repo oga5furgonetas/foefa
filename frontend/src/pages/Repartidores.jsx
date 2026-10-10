@@ -8,8 +8,8 @@ import { evento, eventoUnaVez } from '../lib/metaPixel'
 import { useInvitacion } from '../lib/referido'
 import AltaRapida from './AltaRapida'
 import { PARADAS_GRATIS, promoGratis, fechaPromo, eurosRef } from '../lib/precios'
-/* «Invita y gana» se paga por Bizum: solo se anuncia a quien está en España (por la hora del móvil). */
-const enEspana = () => { try { return /^(Europe\/Madrid|Atlantic\/Canary|Africa\/Ceuta)$/.test(Intl.DateTimeFormat().resolvedOptions().timeZone) } catch { return true } }
+/* «Invita y gana»: en España por Bizum; en Latinoamérica por PayPal. En China no hay (por la hora del móvil). */
+const conInvita = () => { try { return !/^Asia\/(Shanghai|Chongqing|Harbin|Urumqi|Hong_Kong|Macau)$/.test(Intl.DateTimeFormat().resolvedOptions().timeZone) } catch { return true } }
 
 /* ── LA PÁGINA DEL ANUNCIO DE REPARTIDORES (04-10-2026) ──────────────────────
    Medido: de 410 personas que llegaron del anuncio al formulario de alta, 0
@@ -175,7 +175,7 @@ export default function Repartidores() {
         {promoGratis() && (
           <div className="mt-3.5 rounded-2xl border border-amber-400/40 bg-amber-500/10 px-3.5 py-2.5">
             <p className="text-[14.5px] font-bold leading-snug text-amber-200">🎁 {tx('Gratis y sin límite hasta el {fecha} · sin tarjeta', { fecha: fechaPromo(locale()) })}</p>
-            {enEspana() && <p className="mt-0.5 text-[13.5px] leading-snug text-dark-200">💶 {tx('Gana {euros} por cada compañero que la use.', { euros: eurosRef(undefined, locale()) })}</p>}
+            {conInvita() && <p className="mt-0.5 text-[13.5px] leading-snug text-dark-200">💶 {tx('Gana {euros} por cada compañero que la use.', { euros: eurosRef(undefined, locale()) })}</p>}
           </div>
         )}
 
