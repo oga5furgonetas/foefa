@@ -90,8 +90,10 @@ const ESCENAS = [
     R('3. TE LLEVA A CADA PUERTA', 150, { tam: 66 }), R('con voz, sin pensar', 245, { fuente: 'sans', tam: 46, color: '0x5eead4' })] },
   { cierre: 16.8, rotulos: [
     R('FDS', 640, { fuente: 'sans', tam: 150, color: '0x0FC2BC' }),
-    R('PRUÉBALA GRATIS', 830, { tam: 96 }), R('7 DÍAS', 945, { tam: 120 }),
-    R('Sin tarjeta', 1100, { fuente: 'sans', tam: 56, color: '0x5eead4', desde: 0.6 }),
+    // 10-10-2026: con el plan gratis. La voz dice «siete días gratis, y sin tarjeta» (sigue
+    // siendo verdad: 7 días sin tope); el rótulo cuenta lo que viene después.
+    R('7 DÍAS SIN LÍMITE', 800, { tam: 92 }), R('y después, gratis', 915, { tam: 84 }),
+    R('hasta 15 paradas al día · sin tarjeta', 1030, { fuente: 'sans', tam: 50, color: '0x5eead4', desde: 0.6 }),
     R('flotadsp.com/repartidores', 1210, { fuente: 'sans', tam: 52, desde: 1.2 })] },
 ].map((e, i) => ({ ...e, ...tramo(i) }))
 console.log('duración', FIN, 's; escenas', ESCENAS.map((e) => e.d).join(' '))

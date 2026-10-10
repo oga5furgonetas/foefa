@@ -53,19 +53,27 @@ export default function CookieBanner() {
     return () => { if (ro) ro.disconnect(); body.style.paddingBottom = '' }
   }, [show])
   if (!show) return null
+  /* QUE SE RESPONDA (10-10-2026). Como barrita que no estorbaba, casi nadie la
+     contestaba: 3 de ~3.200 visitas en 4 días. Sin respuesta no hay píxel, y
+     Meta y TikTok no saben qué anuncio trae altas ni a quién parecerse. Ahora
+     es una ventana que pide elegir, con las dos opciones IGUALES (mismo
+     tamaño, color y sitio: rechazar es tan fácil como aceptar, guía de la AEPD)
+     y la web entera sigue funcionando elijas lo que elijas. */
   if (conPixel) {
     return (
-      <div ref={caja} className="fixed inset-x-3 bottom-3 z-50 mx-auto max-w-3xl rounded-xl border border-dark-700 bg-dark-900/95 p-4 shadow-2xl backdrop-blur" role="dialog" aria-label="Cookies">
-        <div className="flex items-start gap-3">
-          <Cookie size={20} className="mt-0.5 shrink-0 text-amber-400" />
-          <div className="flex-1 text-sm text-dark-300">
-            <b className="text-dark-100">{tx('Cookies.')}</b> {tx('Usamos almacenamiento necesario para que la web funcione. Si aceptas, también los píxeles de Meta y TikTok para saber qué anuncios nos traen visitas y altas.')}
-            {' '}<Link to="/cookies" className="text-sky-400 hover:underline">{tx('Más información')}</Link>
+      <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/50 p-3 sm:items-center" role="dialog" aria-modal="true" aria-label="Cookies">
+        <div ref={caja} className="w-full max-w-md rounded-2xl border border-dark-700 bg-dark-900 p-4 shadow-2xl">
+          <div className="flex items-start gap-3">
+            <Cookie size={20} className="mt-0.5 shrink-0 text-amber-400" />
+            <div className="flex-1 text-[14px] leading-snug text-dark-300">
+              <b className="text-dark-100">{tx('Cookies.')}</b> {tx('Usamos almacenamiento necesario para que la web funcione. Si aceptas, también los píxeles de Meta y TikTok para saber qué anuncios nos traen visitas y altas.')}
+              {' '}<Link to="/cookies" className="text-sky-400 hover:underline">{tx('Más información')}</Link>
+            </div>
           </div>
-        </div>
-        <div className="mt-3 grid grid-cols-2 gap-2">
-          <button onClick={() => decidir(false)} className="rounded-lg border border-dark-600 px-3 py-2 text-sm font-semibold text-dark-100">{tx('Solo necesarias')}</button>
-          <button onClick={() => decidir(true)} className="rounded-lg border border-dark-600 px-3 py-2 text-sm font-semibold text-dark-100">{tx('Aceptar')}</button>
+          <div className="mt-4 grid grid-cols-2 gap-2">
+            <button onClick={() => decidir(false)} className="rounded-xl border border-dark-500 bg-dark-800 px-3 py-3 text-[15px] font-bold text-dark-50">{tx('Solo necesarias')}</button>
+            <button onClick={() => decidir(true)} className="rounded-xl border border-dark-500 bg-dark-800 px-3 py-3 text-[15px] font-bold text-dark-50">{tx('Aceptar')}</button>
+          </div>
         </div>
       </div>
     )
