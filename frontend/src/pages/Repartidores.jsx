@@ -169,6 +169,13 @@ export default function Repartidores() {
         <p className="text-[12.5px] font-bold uppercase tracking-[0.14em] text-brand-300">{tx('Para quien reparte solo')}</p>
         <h1 className="mt-1.5 font-display text-[32px] font-extrabold leading-[1.05] text-dark-50">{tx('Tu ruta de reparto, ordenada sola.')}</h1>
         <p className="mt-2 text-[15px] leading-snug text-dark-300">{tx('Haz una foto a la etiqueta o escanea el paquete: la app ordena las paradas por tiempo y te lleva con voz hasta cada puerta.')}</p>
+        {/* 10-10-2026: lo que promete el anuncio, arriba del todo (antes solo salía junto al formulario). */}
+        {promoGratis() && (
+          <div className="mt-3.5 rounded-2xl border border-amber-400/40 bg-amber-500/10 px-3.5 py-2.5">
+            <p className="text-[14.5px] font-bold leading-snug text-amber-200">🎁 {tx('Gratis y sin límite hasta el {fecha} · sin tarjeta', { fecha: fechaPromo(locale()) })}</p>
+            <p className="mt-0.5 text-[13.5px] leading-snug text-dark-200">💶 {tx('Gana {euros} por cada compañero que la use.', { euros: '5 €' })}</p>
+          </div>
+        )}
 
         {version === 'b' ? (<>
           {/* B: lo primero que se ve es la app funcionando, como en el vídeo del anuncio. */}
