@@ -96,7 +96,7 @@ export default function PruebaReparto() {
             <h2 className="mt-2 text-[18px] font-bold text-dark-50">La oficina</h2>
             <p className="mt-1 text-[13px] text-dark-400">En el ordenador: los pedidos del día, el mapa, las zonas de cada repartidor y quién va por dónde.</p>
             <button onClick={() => entrar('oficina')} disabled={!!ocupado}
-              className="mt-4 inline-flex w-full items-center justify-center gap-2 rounded-xl bg-brand-500 py-3 text-[15px] font-bold text-white disabled:opacity-50">
+              className="mt-4 inline-flex w-full items-center justify-center gap-2 rounded-xl bg-brand-500 py-3 text-[15px] font-bold text-brand-tinta disabled:opacity-50">
               {ocupado === 'oficina' && <Loader2 size={16} className="animate-spin" />} Entrar como la oficina
             </button>
           </section>
@@ -108,7 +108,7 @@ export default function PruebaReparto() {
             <div className="mt-4 grid grid-cols-3 gap-2">
               {[1, 2, 3].map((n) => (
                 <button key={n} onClick={() => entrar('conductor', n)} disabled={!!ocupado}
-                  className="inline-flex items-center justify-center gap-1.5 rounded-xl bg-emerald-600 py-3 text-[14px] font-bold text-white disabled:opacity-50">
+                  className="inline-flex items-center justify-center gap-1.5 rounded-xl bg-emerald-700 py-3 text-[14px] font-bold text-white disabled:opacity-50">
                   {ocupado === `conductor${n}` && <Loader2 size={14} className="animate-spin" />} Repartidor {n}
                 </button>
               ))}

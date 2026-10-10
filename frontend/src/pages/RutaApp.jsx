@@ -161,7 +161,7 @@ export default function RutaApp() {
             <button onClick={() => setTab('cuenta')} className="min-w-0 text-left text-[13px] leading-snug text-emerald-100">
               💶 {tx('Gana {euros} por cada compañero que la use.', { euros: '5 €' })} <span className="font-semibold underline">{tx('Mi cartera')}</span>
             </button>
-            <button onClick={invitar} className="shrink-0 rounded-xl bg-emerald-600 px-3 py-1.5 text-[12.5px] font-bold text-white">{tx('Invitar')}</button>
+            <button onClick={invitar} className="shrink-0 rounded-xl bg-emerald-700 px-3 py-1.5 text-[12.5px] font-bold text-white">{tx('Invitar')}</button>
           </div>
         )}
         {(tab === 'hoy' || tab === 'ajustes') && bloqueado

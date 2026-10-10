@@ -665,7 +665,7 @@ export default function MiRuta({ onBack, embebido = false }) {
       <div className="rounded-2xl border border-brand-400/40 bg-brand-500/[.08] p-3.5">
         <div className="grid grid-cols-2 gap-2">
           <button onClick={() => setEscaner(true)}
-            className="flex items-center justify-center gap-2 rounded-xl bg-brand-500 py-3.5 text-[15px] font-bold text-white active:scale-[.99]">
+            className="flex items-center justify-center gap-2 rounded-xl bg-brand-500 py-3.5 text-[15px] font-bold text-brand-tinta active:scale-[.99]">
             <ScanLine size={19} /> {tx('Escanear')}
           </button>
           {/* La etiqueta del paquete trae dirección y teléfono: con una foto
@@ -766,7 +766,7 @@ export default function MiRuta({ onBack, embebido = false }) {
           <div className="mt-3 grid grid-cols-[1fr_2fr] gap-2">
             <button onClick={() => setReordenar(null)} className="rounded-xl border border-dark-600 py-2.5 text-[14px] text-dark-200">{tx('Cancelar')}</button>
             <button onClick={guardarOrden} disabled={ocupado === 'orden'}
-              className="flex items-center justify-center gap-1.5 rounded-xl bg-brand-500 py-2.5 text-[14px] font-bold text-white disabled:opacity-50">
+              className="flex items-center justify-center gap-1.5 rounded-xl bg-brand-500 py-2.5 text-[14px] font-bold text-brand-tinta disabled:opacity-50">
               {ocupado === 'orden' && <Loader2 size={15} className="animate-spin" />} {tx('Guardar este orden')}
             </button>
           </div>
@@ -960,7 +960,7 @@ export default function MiRuta({ onBack, embebido = false }) {
             </div>
             <div className="mt-1.5 grid grid-cols-[1fr_2fr] gap-1.5">
               <button onClick={() => setFallo(p)} disabled={ocupado === p.id} className="flex items-center justify-center gap-1 rounded-xl border border-red-500/30 py-3 text-[13px] text-red-300"><X size={15} /> {p.tipo === 'recogida' ? tx('No recogido') : tx('No entregado')}</button>
-              <button onClick={() => marcar(p, 'entregado')} disabled={ocupado === p.id} className="flex items-center justify-center gap-1.5 rounded-xl bg-emerald-600 py-3 text-[15px] font-bold text-white active:scale-[.99]">
+              <button onClick={() => marcar(p, 'entregado')} disabled={ocupado === p.id} className="flex items-center justify-center gap-1.5 rounded-xl bg-emerald-700 py-3 text-[15px] font-bold text-white active:scale-[.99]">
                 {ocupado === p.id ? <Loader2 size={16} className="animate-spin" /> : <Check size={17} />} {p.tipo === 'recogida' ? tx('Recogido') : tx('Entregado')}
               </button>
             </div>
@@ -995,7 +995,7 @@ export default function MiRuta({ onBack, embebido = false }) {
                       <RotateCcw size={13} /> {tx('Volver a intentarlo')}
                     </button>
                     <button onClick={() => marcar(p, 'entregado')} disabled={ocupado === p.id}
-                      className="flex items-center justify-center gap-1 rounded-lg bg-emerald-600 py-2 text-[12.5px] font-bold text-white">
+                      className="flex items-center justify-center gap-1 rounded-lg bg-emerald-700 py-2 text-[12.5px] font-bold text-white">
                       <Check size={13} /> {p.tipo === 'recogida' ? tx('Recogido') : tx('Entregado')}
                     </button>
                   </div>
@@ -1049,12 +1049,12 @@ export default function MiRuta({ onBack, embebido = false }) {
             placeholder={'Calle Mayor 3, 28013 Madrid\nAvenida de la Constitución 12, Sevilla'} />
           {pegar.n == null ? (
             <button onClick={() => pegarLista(false)} disabled={pegar.texto.trim().length < 5 || ocupado === 'pegar'}
-              className="mt-3 w-full rounded-xl bg-brand-500 py-3 text-[15px] font-bold text-white disabled:opacity-40">
+              className="mt-3 w-full rounded-xl bg-brand-500 py-3 text-[15px] font-bold text-brand-tinta disabled:opacity-40">
               {ocupado === 'pegar' ? tx('Leyendo…') : tx('Revisar')}
             </button>
           ) : (
             <button onClick={() => pegarLista(true)} disabled={ocupado === 'pegar'}
-              className="mt-3 w-full rounded-xl bg-emerald-600 py-3 text-[15px] font-bold text-white disabled:opacity-40">
+              className="mt-3 w-full rounded-xl bg-emerald-700 py-3 text-[15px] font-bold text-white disabled:opacity-40">
               {ocupado === 'pegar' ? tx('Añadiendo…') : pegar.n === 1 ? tx('Añadir 1 parada a mi ruta') : tx('Añadir {n} paradas a mi ruta', { n: pegar.n })}
             </button>
           )}
@@ -1092,7 +1092,7 @@ export default function MiRuta({ onBack, embebido = false }) {
           <p className="mb-3 text-[13px] text-dark-400">
             {tx('Haz una foto a la etiqueta de cada paquete: se lee el código, la dirección y el teléfono. Al acabar, «Montar ruta».')}
           </p>
-          <label className="flex w-full cursor-pointer items-center justify-center gap-2 rounded-xl bg-brand-500 py-4 text-[16px] font-bold text-white">
+          <label className="flex w-full cursor-pointer items-center justify-center gap-2 rounded-xl bg-brand-500 py-4 text-[16px] font-bold text-brand-tinta">
             {ocupado === 'ticket' ? <Loader2 size={18} className="animate-spin" /> : <Camera size={18} />}
             {ocupado === 'ticket' ? tx('Leyendo…') : carga.n ? tx('Siguiente paquete') : tx('Primer paquete')}
             <input type="file" accept="image/*" capture="environment" className="hidden" disabled={ocupado === 'ticket'}
@@ -1102,7 +1102,7 @@ export default function MiRuta({ onBack, embebido = false }) {
             {tx('Escribirlo a mano')}
           </button>
           <button onClick={() => { setCarga(null); if (pendientes.length) ordenar() }} disabled={ocupado === 'ordenar'}
-            className="mt-3 w-full rounded-xl bg-emerald-600 py-3.5 text-[15px] font-bold text-white disabled:opacity-50">
+            className="mt-3 w-full rounded-xl bg-emerald-700 py-3.5 text-[15px] font-bold text-white disabled:opacity-50">
             {carga.n || pendientes.length ? <><Route size={16} className="mr-1 inline" /> {tx('Montar ruta y empezar')}</> : tx('Cerrar')}
           </button>
         </Hoja>
@@ -1111,7 +1111,7 @@ export default function MiRuta({ onBack, embebido = false }) {
       {nuevo && (
         <Hoja titulo={nuevo.id ? tx('Editar parada') : nuevo.codigo ? tx('El código {c} no está en la lista', { c: nuevo.codigo }) : tx('Pedido nuevo')} onClose={() => { setNuevo(null); setQuitando(false) }}>
           {!nuevo.id && <>
-          <label className="mb-1 flex w-full cursor-pointer items-center justify-center gap-2 rounded-xl bg-brand-500 py-3 text-[15px] font-bold text-white">
+          <label className="mb-1 flex w-full cursor-pointer items-center justify-center gap-2 rounded-xl bg-brand-500 py-3 text-[15px] font-bold text-brand-tinta">
             {ocupado === 'ticket' ? <Loader2 size={18} className="animate-spin" /> : <Camera size={18} />}
             {ocupado === 'ticket' ? tx('Leyendo el ticket…') : tx('Foto del ticket')}
             <input type="file" accept="image/*" capture="environment" className="hidden" disabled={ocupado === 'ticket'}
@@ -1168,7 +1168,7 @@ export default function MiRuta({ onBack, embebido = false }) {
           </div>
           {nuevo.de_ticket && <p className="mt-2 text-[12px] text-amber-200/90">{tx('Revisa lo leído del ticket antes de guardar.')}</p>}
           <button onClick={guardarNuevo} disabled={nuevo.direccion.trim().length < 4 || ocupado === 'guardar'}
-            className="mt-3 w-full rounded-xl bg-emerald-600 py-3 text-[15px] font-bold text-white disabled:opacity-40">
+            className="mt-3 w-full rounded-xl bg-emerald-700 py-3 text-[15px] font-bold text-white disabled:opacity-40">
             {ocupado === 'guardar' ? tx('Guardando…') : nuevo.id ? tx('Guardar cambios') : tx('Añadir a mi ruta')}
           </button>
           {nuevo.id && (
@@ -1186,7 +1186,7 @@ export default function MiRuta({ onBack, embebido = false }) {
           <div className="grid grid-cols-3 gap-2">
             {metodosCobro().map(([k, t]) => (
               <button key={k} onClick={() => marcar(cobro, 'entregado', '', { metodo: k })}
-                className="rounded-xl bg-emerald-600 py-3.5 text-[15px] font-bold text-white">{tx(t)}</button>
+                className="rounded-xl bg-emerald-700 py-3.5 text-[15px] font-bold text-white">{tx(t)}</button>
             ))}
           </div>
           <button onClick={() => marcar(cobro, 'fallido', 'No ha pagado')}
@@ -1226,7 +1226,7 @@ export default function MiRuta({ onBack, embebido = false }) {
             {tx('Una foto del paquete donde lo dejas (en el portal, con el vecino…) evita discusiones después.')}
             <b className="text-dark-200"> {tx('Sin personas en la foto.')}</b> {tx('Es opcional.')}
           </p>
-          <label className="flex w-full cursor-pointer items-center justify-center gap-2 rounded-xl bg-brand-500 py-3.5 text-[15px] font-bold text-white">
+          <label className="flex w-full cursor-pointer items-center justify-center gap-2 rounded-xl bg-brand-500 py-3.5 text-[15px] font-bold text-brand-tinta">
             {ocupado === 'foto' ? <Loader2 size={18} className="animate-spin" /> : <Camera size={18} />}
             {ocupado === 'foto' ? tx('Guardando…') : tx('Hacer foto y entregar')}
             <input type="file" accept="image/*" capture="environment" className="hidden" disabled={!!ocupado}
@@ -1273,7 +1273,7 @@ export default function MiRuta({ onBack, embebido = false }) {
             <p>{tx('El recorrido se borra a los 30 días. Lo ve solo tu empresa, que es la responsable de estos datos; puedes pedirle acceso o explicaciones cuando quieras.')}</p>
           </div>
           <button onClick={() => jornada('empezar', true)} disabled={ocupado === 'jornada'}
-            className="mt-4 w-full rounded-xl bg-brand-500 py-3 text-[15px] font-bold text-white">
+            className="mt-4 w-full rounded-xl bg-brand-500 py-3 text-[15px] font-bold text-brand-tinta">
             {tx('Entendido, empezar jornada')}
           </button>
         </Hoja>
@@ -1429,7 +1429,7 @@ function Firma({ onListo, onCancelar }) {
         <button type="button" onClick={onCancelar} className="rounded-xl border border-dark-700 py-2 text-[13px] text-dark-300">{tx('Cancelar')}</button>
         <button type="button" onClick={limpiar} className="rounded-xl border border-dark-700 py-2 text-[13px] text-dark-200">{tx('Borrar')}</button>
         <button type="button" disabled={vacia} onClick={() => onListo(lienzo.current.toDataURL('image/png'))}
-          className="rounded-xl bg-emerald-600 py-2 text-[13px] font-bold text-white disabled:opacity-40">{tx('Listo')}</button>
+          className="rounded-xl bg-emerald-700 py-2 text-[13px] font-bold text-white disabled:opacity-40">{tx('Listo')}</button>
       </div>
     </div>
   )

@@ -643,7 +643,7 @@ function PortalRepartidores() {
         <div className="min-w-0">
           <code className="block break-all text-[11.5px] text-dark-200">{enlace}</code>
           <a href={`https://wa.me/?text=${encodeURIComponent(texto)}`} target="_blank" rel="noreferrer"
-            className="mt-2 inline-block rounded-lg bg-emerald-600 px-3 py-1.5 text-[12px] font-semibold text-white">Enviar por WhatsApp</a>
+            className="mt-2 inline-block rounded-lg bg-emerald-700 px-3 py-1.5 text-[12px] font-semibold text-white">Enviar por WhatsApp</a>
         </div>
       </div>
     </section>

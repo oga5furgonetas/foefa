@@ -300,7 +300,7 @@ export default function DriverPortal() {
                 placeholder="600 000 000"
                 className="min-w-0 flex-1 rounded-xl border border-dark-700 bg-dark-900 px-3 py-2.5 text-[15px] text-dark-50 placeholder:text-dark-500 focus:border-brand-500 focus:outline-none" />
               <button onClick={guardarTel} disabled={guardandoTel || tel.trim().length < 9}
-                className="shrink-0 rounded-xl bg-brand-500 px-4 py-2.5 text-[14px] font-semibold text-white disabled:opacity-40">
+                className="shrink-0 rounded-xl bg-brand-500 px-4 py-2.5 text-[14px] font-semibold text-brand-tinta disabled:opacity-40">
                 {guardandoTel ? '…' : 'Guardar'}
               </button>
             </div>

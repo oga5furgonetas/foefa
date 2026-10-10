@@ -593,7 +593,7 @@ export default function PortalTaller() {
             </button>
             {ultimo ? (
               <button onClick={() => window.close()}
-                className="flex min-h-[52px] flex-1 items-center justify-center gap-1.5 rounded-xl bg-emerald-600 text-[16px] font-semibold text-white active:bg-emerald-700">
+                className="flex min-h-[52px] flex-1 items-center justify-center gap-1.5 rounded-xl bg-emerald-700 text-[16px] font-semibold text-white active:bg-emerald-700">
                 <Check size={19} /> Finalizar
               </button>
             ) : (

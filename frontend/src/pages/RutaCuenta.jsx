@@ -636,7 +636,7 @@ function TarjetaRegalo({ r, nuevo, toast }) {
       {r.estado === 'pagado' && (
         <div className="mt-2.5 grid grid-cols-3 gap-1.5 text-[12px]">
           <a href={`https://wa.me/?text=${encodeURIComponent(msg)}`} target="_blank" rel="noreferrer"
-            className="flex items-center justify-center gap-1 rounded-xl bg-emerald-600 py-2 font-semibold text-white"><MessageCircle size={14} /> WhatsApp</a>
+            className="flex items-center justify-center gap-1 rounded-xl bg-emerald-700 py-2 font-semibold text-white"><MessageCircle size={14} /> WhatsApp</a>
           <a href={`mailto:?subject=${encodeURIComponent(tx('Te regalo {que} de {marca}', { que, marca: MARCA.nombre }))}&body=${encodeURIComponent(msg)}`}
             className="flex items-center justify-center gap-1 rounded-xl border border-dark-600 py-2 font-semibold text-dark-100"><Mail size={14} /> {tx('Correo')}</a>
           <button onClick={async () => { try { await navigator.clipboard.writeText(msg); toast?.success?.(tx('Copiado')) } catch { toast?.error?.(tx('No se pudo copiar')) } }}
@@ -748,7 +748,7 @@ function Invitar({ toast }) {
           {tx('Invitados: {a} · ya la usan: {b} · ganado: {c}', { a: r.invitados, b: r.premiados, c: cent(r.ganado) })}
         </p>
       )}
-      <button onClick={invitar} className="mt-3 flex w-full items-center justify-center gap-2 rounded-xl bg-emerald-600 py-3 text-[14.5px] font-bold text-white">
+      <button onClick={invitar} className="mt-3 flex w-full items-center justify-center gap-2 rounded-xl bg-emerald-700 py-3 text-[14.5px] font-bold text-white">
         <MessageCircle size={17} /> {tx('Invitar a un compañero')}
       </button>
       {r?.pendiente && <p className="mt-2 text-center text-[12.5px] text-amber-200">{tx('Tienes un pago en revisión. Te avisamos por correo cuando lo enviemos.')}</p>}
@@ -771,7 +771,7 @@ function Invitar({ toast }) {
           <input className={campo} value={form.destino} onChange={(e) => setForm({ ...form, destino: e.target.value })}
             placeholder={form.metodo === 'bizum' ? tx('Móvil con Bizum') : tx('IBAN (ES…)')} aria-label={form.metodo === 'bizum' ? tx('Móvil con Bizum') : tx('IBAN (ES…)')}
             inputMode={form.metodo === 'bizum' ? 'tel' : 'text'} autoComplete={form.metodo === 'bizum' ? 'tel' : 'off'} />
-          <button type="submit" disabled={enviando} className="flex w-full items-center justify-center gap-2 rounded-xl bg-emerald-600 py-2.5 text-[14px] font-bold text-white disabled:opacity-50">
+          <button type="submit" disabled={enviando} className="flex w-full items-center justify-center gap-2 rounded-xl bg-emerald-700 py-2.5 text-[14px] font-bold text-white disabled:opacity-50">
             {enviando ? <Loader2 size={16} className="animate-spin" /> : <Check size={16} />} {tx('Pedir el pago de {euros}', { euros: cent(saldo) })}
           </button>
           <p className="text-[11.5px] leading-snug text-dark-400">{tx('Lo revisamos y te lo pagamos en unos días. Solo usamos estos datos para pagarte.')}</p>

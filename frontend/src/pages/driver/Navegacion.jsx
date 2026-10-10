@@ -235,7 +235,7 @@ export default function Navegacion({ parada, numero, quedan, onSalir, onEntregar
                 ? <a href={`tel:${parada.telefono}`} aria-label={tx('Llamar')} className="flex items-center justify-center rounded-xl border border-dark-600 px-4 text-dark-100"><Phone size={18} /></a>
                 : <span />}
               <button onClick={() => onNoEntregar(parada)} className="rounded-xl border border-red-500/40 py-3.5 text-[14px] font-semibold text-red-300">{tx('No entregado')}</button>
-              <button onClick={() => onEntregar(parada)} className="flex items-center justify-center gap-1.5 rounded-xl bg-emerald-600 py-3.5 text-[16px] font-bold text-white">
+              <button onClick={() => onEntregar(parada)} className="flex items-center justify-center gap-1.5 rounded-xl bg-emerald-700 py-3.5 text-[16px] font-bold text-white">
                 <Check size={18} /> {parada.tipo === 'recogida' ? tx('Recogido') : tx('Entregado')}
               </button>
             </div>

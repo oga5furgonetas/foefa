@@ -109,7 +109,7 @@ export default function MiClave({ onBack }) {
             {err && <p className="rounded-lg bg-red-500/10 px-3 py-2 text-[13px] text-red-300">{err}</p>}
 
             <button onClick={guardar} disabled={!puede}
-              className="mt-1 flex w-full items-center justify-center gap-2 rounded-xl bg-brand-500 py-3.5 text-[15px] font-bold text-white disabled:opacity-40">
+              className="mt-1 flex w-full items-center justify-center gap-2 rounded-xl bg-brand-500 py-3.5 text-[15px] font-bold text-brand-tinta disabled:opacity-40">
               {ocupado ? <Loader2 size={16} className="animate-spin" /> : <Lock size={16} />}
               {creando ? 'Crear mi contraseña' : 'Guardar'}
             </button>

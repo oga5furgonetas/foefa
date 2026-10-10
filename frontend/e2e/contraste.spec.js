@@ -152,4 +152,63 @@ test.describe('contraste real en los tres temas', () => {
     expect(n, 'axe no vio un texto claramente ilegible: el medidor no mide')
       .toBeGreaterThan(0)
   })
+
+  /* LA APP DE RUTA (10-10-2026). El repartidor nuevo la abre sin paquetes y el
+     botón que le deja probarla —«Verlo en acción con 3 paradas de ejemplo»— salía
+     en fucsia casi blanco sobre papel en el tema por defecto (híbrido), igual que
+     «Gana 5 € por cada compañero». Cuatro altas de un anuncio llegaron ahí ese día y
+     ninguna lo pulsó. Se mira vacía y con paradas de ejemplo, en los tres temas. */
+  test('la app de ruta se lee vacía y con paradas de ejemplo', async ({ page }) => {
+    test.setTimeout(180_000)
+    await page.addInitScript({ content: AXE })
+    await page.addInitScript({ content: `
+      const e = document.createElement('style')
+      e.textContent = '*,*::before,*::after{animation-duration:0s!important;'
+        + 'animation-delay:0s!important;transition-duration:0s!important;'
+        + 'transition-delay:0s!important}'
+      document.addEventListener('DOMContentLoaded', () => document.head.appendChild(e))
+    ` })
+    await entrarComoAdmin(page)
+    await simularApi(page, 'vacio')
+    await page.route(/\/api\/org\/billing/, (r) => r.fulfill({ json: {
+      status: 'trial', days_left: 7, plan: 'autonomo', sector: 'autonomo',
+      modulos: ['dashboard', 'reparto', 'configuracion'], promo: { activa: true, hasta: '2026-12-31' } } }))
+    let pedidos = []
+    await page.route(/\/api\/reparto\/mi-ruta/, (r) => r.fulfill({ json: {
+      activo: true, autonomo: true, fecha: '2026-10-10', pedidos, base: null, ia_tickets: false, jornada: {}, aviso_aceptado: true } }))
+    const EJEMPLOS = [1, 2, 3].map((n) => ({
+      id: `e${n}`, cliente: `Cliente de ejemplo ${n}`, direccion: `Calle de ejemplo ${n}`, estado: 'pendiente',
+      orden: n, ejemplo: true, bultos: 1, lat: 43.36 + n / 1000, lng: -8.41, geo: 'ok' }))
+
+    const fallos = []
+    for (const conEjemplos of [false, true]) {
+      pedidos = conEjemplos ? EJEMPLOS : []
+      for (const tema of TEMAS) {
+        await page.goto('/ruta', { waitUntil: 'domcontentloaded' })
+        await page.evaluate((t) => {
+          try {
+            localStorage.setItem('panel_theme', t)
+            localStorage.setItem('panel_theme_elegido', '1')
+            localStorage.setItem('cookie_consent', JSON.stringify({ v: 3, anuncios: false, at: '2026-10-10T00:00:00Z' }))
+          } catch { /* incógnito */ }
+        }, tema)
+        await page.reload({ waitUntil: 'domcontentloaded' })
+        // Fuera del panel el tema noche no pone atributo: es el CSS de base.
+        await page.waitForFunction(
+          (t) => (document.documentElement.getAttribute('data-panel-theme') || 'dark') === t, tema, { timeout: 20_000 })
+        await expect(page.getByText(conEjemplos ? 'Estas paradas son de ejemplo.' : 'Verlo en acción con 3 paradas de ejemplo')).toBeVisible()
+        const malos = await page.evaluate(async () => {
+          const r = await window.axe.run(document.querySelector('main') || document, {
+            runOnly: { type: 'rule', values: ['color-contrast'] },
+          })
+          return r.violations.flatMap((v) => v.nodes.map((n) => ({
+            msg: (n.any?.[0]?.message || '').slice(0, 110),
+            html: (n.html || '').replace(/\s+/g, ' ').slice(0, 150),
+          })))
+        })
+        for (const m of malos) fallos.push(`[${tema}] /ruta ${conEjemplos ? 'con ejemplos' : 'vacía'} · ${m.msg} · ${m.html}`)
+      }
+    }
+    expect(fallos.join('\n') || 'sin fallos', `${fallos.length} textos por debajo de 4,5:1`).toBe('sin fallos')
+  })
 })

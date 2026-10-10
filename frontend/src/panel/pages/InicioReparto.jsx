@@ -91,7 +91,7 @@ export default function InicioReparto({ sector }) {
           <p className="text-[13px] capitalize text-dark-400">{fecha}</p>
         </div>
         <div className="flex flex-wrap gap-2">
-          <Link to="/panel/reparto" className="inline-flex items-center gap-1.5 rounded-lg bg-brand-500 px-3 py-2 text-[13px] font-semibold text-white">
+          <Link to="/panel/reparto" className="inline-flex items-center gap-1.5 rounded-lg bg-brand-500 px-3 py-2 text-[13px] font-semibold text-brand-tinta">
             {autonomo ? <><Route size={15} /> Mi ruta</> : <><Package size={15} /> Pedidos y mapa</>}
           </Link>
         </div>

@@ -652,7 +652,7 @@ export default function PedirDias({ onBack }) {
             {err && <p className="mt-3 rounded-lg bg-red-500/10 px-3 py-2 text-[13px] text-red-300">{err}</p>}
 
             <button onClick={enviar} disabled={enviando || !notaOk}
-              className="mt-4 flex w-full items-center justify-center gap-2 rounded-xl bg-brand-500 py-3.5 text-[15px] font-bold text-white disabled:opacity-50">
+              className="mt-4 flex w-full items-center justify-center gap-2 rounded-xl bg-brand-500 py-3.5 text-[15px] font-bold text-brand-tinta disabled:opacity-50">
               {enviando ? <Loader2 size={16} className="animate-spin" /> : editando ? <Check size={16} /> : <Send size={16} />}
               {editando ? 'Guardar cambios' : 'Enviar petición'}
             </button>
