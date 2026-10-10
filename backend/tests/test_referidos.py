@@ -95,7 +95,9 @@ SUPER = {"sub": "sa1", "role": "admin", "sa": True}
 @pytest.mark.asyncio(loop_scope="session")
 async def test_la_cartera_gana_5_euros_con_uso_real_en_dos_dias_y_solo_una_vez(mundo):
     """10-10-2026: por cada invitado que la usa de verdad (20 entregas reales en 2 días
-    distintos, en su primer mes), 5 € en la cartera de quien invitó."""
+    distintos, en su primer mes), 5 € en la cartera de quien invitó. Desde el 11-10 son
+    2,50 €, pero esta cuenta se creó antes del corte (con los anuncios de 5 €): cobra 5 €."""
+    mundo.g["organizations"].docs[0]["created_at"] = "2026-10-10T12:00:00+00:00"
     codigo = (await server.referidos_mios(YO))["codigo"]
     await _alta(ref=codigo)
     inv = mundo.g["organizations"].docs[-1]
@@ -115,9 +117,26 @@ async def test_la_cartera_gana_5_euros_con_uso_real_en_dos_dias_y_solo_una_vez(m
     o1 = mundo.g["organizations"].docs[0]
     assert o1["cartera_saldo"] == 500 and o1["cartera_ganado"] == 500
     r = await server.referidos_mios(YO)
-    assert r["saldo"] == 500 and r["premiados"] == 1 and r["por_invitado"] == 500 and r["retirada_min"] == 1500
+    assert r["saldo"] == 500 and r["premiados"] == 1 and r["por_invitado"] == 500 and r["retirada_min"] == 1000
     await server._referido_premiar(inv, "c1")                       # una sola vez
     assert o1["cartera_saldo"] == 500 and len(mundo.g["cartera_movimientos"].docs) == 1
+
+
+@pytest.mark.asyncio(loop_scope="session")
+async def test_desde_el_corte_cada_invitado_da_2_euros_50(mundo):
+    """11-10-2026: las cuentas creadas desde el 12-10 (hora de Madrid) ganan 2,50 €."""
+    mundo.g["organizations"].docs[0]["created_at"] = "2026-10-12T08:00:00+00:00"
+    codigo = (await server.referidos_mios(YO))["codigo"]
+    assert (await server.referidos_mios(YO))["por_invitado"] == 250
+    await _alta(ref=codigo)
+    inv = mundo.g["organizations"].docs[-1]
+    inv["created_at"] = _iso(-2)
+    _entregas(mundo, 20, fecha=_dia(-1))
+    _entregas(mundo, 1)
+    await server._referido_premiar(inv, "c1")
+    o1 = mundo.g["organizations"].docs[0]
+    assert inv["ref_premiado"] is True and o1["cartera_saldo"] == 250 and o1["cartera_ganado"] == 250
+    assert mundo.g["cartera_movimientos"].docs[-1]["importe"] == 250
 
 
 @pytest.mark.asyncio(loop_scope="session")
@@ -158,18 +177,18 @@ async def test_retirar_el_saldo_y_que_la_plataforma_lo_pague_o_lo_rechace(mundo,
         return True
     monkeypatch.setattr(server, "_enviar_email", correo)
     o1 = mundo.g["organizations"].docs[0]
-    o1["cartera_saldo"] = 1000
+    o1["cartera_saldo"] = 750
     datos = {"titular": "Pepe Pérez", "metodo": "bizum", "destino": "+34 612 345 678"}
-    with pytest.raises(HTTPException) as e:                     # menos del mínimo (15 €)
+    with pytest.raises(HTTPException) as e:                     # menos del mínimo (10 €)
         await server.cartera_retirar(datos, YO)
     assert e.value.status_code == 400
-    o1["cartera_saldo"] = 1500
+    o1["cartera_saldo"] = 1000
     for malo in ({**datos, "destino": "912345678"}, {**datos, "titular": "Pepe"},
                  {**datos, "metodo": "iban", "destino": "ES91 2100 0418 4502 0005 1333"}, {**datos, "metodo": "paypal"}):
         with pytest.raises(HTTPException):
             await server.cartera_retirar(malo, YO)
     r = await server.cartera_retirar(datos, YO)
-    assert r["retirada"]["importe"] == 1500 and r["retirada"]["destino"] == "•••• 5678"
+    assert r["retirada"]["importe"] == 1000 and r["retirada"]["destino"] == "•••• 5678"
     assert o1["cartera_saldo"] == 0
     with pytest.raises(HTTPException) as e:                     # una en revisión cada vez
         await server.cartera_retirar(datos, YO)
@@ -180,14 +199,14 @@ async def test_retirar_el_saldo_y_que_la_plataforma_lo_pague_o_lo_rechace(mundo,
     ret = lista["retiradas"][0]
     assert ret["destino"] == "612345678" and ret["titular"] == "Pepe Pérez"
     await server.admin_retirada_rechazar(ret["id"], {"motivo": "El móvil no tiene Bizum"}, SUPER)
-    assert o1["cartera_saldo"] == 1500
+    assert o1["cartera_saldo"] == 1000
     with pytest.raises(HTTPException):
         await server.admin_retirada_pagada(ret["id"], SUPER)    # ya no está pendiente
     # Otra vez, ahora por transferencia, y se paga.
     r = await server.cartera_retirar({"titular": "Pepe Pérez", "metodo": "iban", "destino": "ES91 2100 0418 4502 0005 1332"}, YO)
     await server.admin_retirada_pagada(r["retirada"]["id"], SUPER)
     assert mundo.g["cartera_retiradas"].docs[-1]["estado"] == "pagada" and o1["cartera_saldo"] == 0
-    assert any(a.startswith("Te hemos pagado 15") for _, a in correos)
+    assert any(a.startswith("Te hemos pagado 10") for _, a in correos)
     mis = await server.referidos_mios(YO)
     assert sorted(x["estado"] for x in mis["retiradas"]) == ["pagada", "rechazada"]
     assert mis["retiradas"][0]["destino"].startswith("•••• ")

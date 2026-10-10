@@ -38,9 +38,9 @@ export default function Terminos() {
 
       <h2 id="invita">5 bis. Programa «Invita y gana» (plan Repartidor)</h2>
       <ul>
-        <li>Cada cuenta del plan Repartidor tiene un enlace de invitación. Por cada persona que se registre con él y <strong>use la app de verdad</strong> —al menos <strong>20 entregas</strong> en <strong>2 días distintos</strong> durante sus primeros <strong>30 días</strong>— quien invita gana <strong>5 €</strong> en su cartera.</li>
+        <li>Cada cuenta del plan Repartidor tiene un enlace de invitación. Por cada persona que se registre con él y <strong>use la app de verdad</strong> —al menos <strong>20 entregas</strong> en <strong>2 días distintos</strong> durante sus primeros <strong>30 días</strong>— quien invita gana <strong>2,50 €</strong> en su cartera. Las cuentas creadas antes del <strong>12 de octubre de 2026</strong>, que se dieron de alta cuando la oferta era de 5 €, siguen ganando <strong>5 €</strong> por invitado.</li>
         <li>No cuentan las cuentas propias o duplicadas, las creadas para conseguir el premio ni las entregas de ejemplo. Si la persona invitada se registra desde la misma red que quien invita, el premio queda en revisión. Como máximo se premian 20 invitaciones al mes por cuenta.</li>
-        <li>El saldo se puede cobrar desde <strong>15 €</strong>, por Bizum o transferencia a una cuenta a nombre de quien invita. Revisamos cada solicitud y la pagamos normalmente en un plazo de 7 días hábiles; si los datos no son correctos te avisamos y el saldo vuelve a tu cartera.</li>
+        <li>El saldo se puede cobrar desde <strong>10 €</strong>, por Bizum o transferencia a una cuenta a nombre de quien invita. Revisamos cada solicitud y la pagamos normalmente en un plazo de 7 días hábiles; si los datos no son correctos te avisamos y el saldo vuelve a tu cartera.</li>
         <li>Si detectamos trampas o un uso contrario a estas condiciones podemos anular el saldo afectado y cerrar la participación en el programa.</li>
         <li>Lo que cobres es un ingreso tuyo: declararlo, si corresponde, es responsabilidad de quien lo recibe. Podemos pedirte tu NIF antes de pagarte si la normativa fiscal lo exige.</li>
         <li>Podemos cambiar o terminar el programa avisando con 15 días; el saldo ya ganado se respeta y se puede cobrar.</li>

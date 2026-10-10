@@ -7,7 +7,7 @@ import { medirAccion, varianteAB } from '../lib/analitica'
 import { evento, eventoUnaVez } from '../lib/metaPixel'
 import { useInvitacion } from '../lib/referido'
 import AltaRapida from './AltaRapida'
-import { PARADAS_GRATIS, promoGratis, fechaPromo } from '../lib/precios'
+import { PARADAS_GRATIS, promoGratis, fechaPromo, eurosRef } from '../lib/precios'
 
 /* ── LA PÁGINA DEL ANUNCIO DE REPARTIDORES (04-10-2026) ──────────────────────
    Medido: de 410 personas que llegaron del anuncio al formulario de alta, 0
@@ -173,7 +173,7 @@ export default function Repartidores() {
         {promoGratis() && (
           <div className="mt-3.5 rounded-2xl border border-amber-400/40 bg-amber-500/10 px-3.5 py-2.5">
             <p className="text-[14.5px] font-bold leading-snug text-amber-200">🎁 {tx('Gratis y sin límite hasta el {fecha} · sin tarjeta', { fecha: fechaPromo(locale()) })}</p>
-            <p className="mt-0.5 text-[13.5px] leading-snug text-dark-200">💶 {tx('Gana {euros} por cada compañero que la use.', { euros: '5 €' })}</p>
+            <p className="mt-0.5 text-[13.5px] leading-snug text-dark-200">💶 {tx('Gana {euros} por cada compañero que la use.', { euros: eurosRef(undefined, locale()) })}</p>
           </div>
         )}
 

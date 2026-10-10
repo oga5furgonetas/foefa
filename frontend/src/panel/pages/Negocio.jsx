@@ -626,7 +626,7 @@ function RetiradasCartera() {
         </select>
       </div>
       <p className="text-[12px] text-dark-400">
-        Cada invitado que usa la app de verdad da {eur(datos?.por_invitado ?? 500)}; se cobra desde {eur(datos?.retirada_min ?? 1500)}.
+        Cada invitado que usa la app de verdad da {eur(datos?.por_invitado ?? 250)} (5 € las cuentas creadas antes del 12-10-2026); se cobra desde {eur(datos?.retirada_min ?? 1000)}.
         Antes de pagar, mira sus invitados: si se dieron de alta desde su misma red salen marcados.
       </p>
       {err && <p className="text-[12.5px] text-red-300">{err}</p>}

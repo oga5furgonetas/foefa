@@ -2029,7 +2029,7 @@ test('Cobro · con la promoción: «Gratis sin límite», sin aviso de prueba ni
 test('Cartera · ve su saldo, invita y pide cobrar por Bizum', async ({ page }) => {
   const fallos = vigilar(page)
   await entrarRepartidor(page, { status: 'trial', days_left: 6, promo: { activa: true, hasta: '2026-12-31' } })
-  let ref = { codigo: 'ABC123', invitados: 4, premiados: 3, saldo: 1500, ganado: 1500, por_invitado: 500, retirada_min: 1500,
+  let ref = { codigo: 'ABC123', invitados: 4, premiados: 3, saldo: 1500, ganado: 1500, por_invitado: 250, retirada_min: 1000,
     entregas_cartera: 20, dias_distintos: 2, pendiente: false, retiradas: [] }
   await page.route(/\/api\/referidos$/, (r) => r.fulfill({ json: ref }))
   const pedidos = []
@@ -2039,7 +2039,7 @@ test('Cartera · ve su saldo, invita y pide cobrar por Bizum', async ({ page }) 
     await r.fulfill({ json: { ok: true } })
   })
   await page.goto('/ruta', { waitUntil: 'domcontentloaded' })
-  await expect(page.getByText(/Gana 5 € por cada compañero que la use/)).toBeVisible()
+  await expect(page.getByText(/Gana 2,50 € por cada compañero que la use/)).toBeVisible()
   await page.getByRole('button', { name: 'Cuenta', exact: true }).click()
   const cartera = page.getByRole('region', { name: 'Tu cartera' })
   await expect(cartera.getByText('15 €', { exact: true })).toBeVisible()

@@ -104,6 +104,14 @@ export const PARADAS_GRATIS = 15
    pago para ganar nombre y clientes»). Hasta ese día, incluido, ningún repartidor tiene tope ni
    paga; después, lo de siempre. La misma fecha que REP_GRATIS_HASTA en server.py. */
 export const GRATIS_SIN_LIMITE_HASTA = '2026-12-31'
+/* «INVITA Y GANA» (11-10-2026): 2,50 € por compañero que use la app (antes 5 €; las cuentas creadas
+   antes del 12-10 siguen con 5 €, lo dice el servidor en /referidos). En céntimos, como el servidor. */
+export const REF_CENT = 250
+export const eurosRef = (cent = REF_CENT, loc = 'es-ES') => {
+  try {
+    return new Intl.NumberFormat(loc, { style: 'currency', currency: 'EUR', minimumFractionDigits: cent % 100 ? 2 : 0 }).format(cent / 100).replace(/[\u00a0\u202f]/g, ' ')
+  } catch { return `${(cent / 100).toFixed(2).replace('.', ',')} €` }
+}
 export const promoGratis = (hoy = new Date()) => hoy <= new Date(`${GRATIS_SIN_LIMITE_HASTA}T23:59:59`)
 /* «31 de diciembre» en el idioma de la pantalla (se le pasa locale() para no importar idioma aquí). */
 export const fechaPromo = (loc = 'es-ES') => new Date(`${GRATIS_SIN_LIMITE_HASTA}T12:00:00`)

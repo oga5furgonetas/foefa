@@ -49467,12 +49467,16 @@ _REF_HORAS = 24
 #   · se retira desde _REF_RETIRADA_MIN; la retirada la revisa la plataforma, la paga a
 #     mano (Bizum o transferencia) y la marca pagada; si la rechaza, el saldo vuelve.
 # Los importes van en céntimos.
-_REF_CENT = int(round(float(os.environ.get("REF_EUROS", "5") or 5) * 100))
+# 11-10-2026: Dani lo baja a 2,50 €. Quien creó su cuenta antes del corte lo hizo con anuncios que
+# decían 5 €, y a esas cuentas se les respeta: siguen ganando 5 € por invitado (ver _ref_importe).
+_REF_CENT = int(round(float(os.environ.get("REF_EUROS", "2.5") or 2.5) * 100))
+_REF_CENT_PRIMEROS = 500
+_REF_CORTE = datetime(2026, 10, 11, 22, 0, tzinfo=timezone.utc)   # 12-10-2026 00:00 en Madrid
 _REF_ENTREGAS_CARTERA = 20
 _REF_DIAS_DISTINTOS = 2
 _REF_VENTANA_DIAS = 30
 _REF_TOPE_MES = 20
-_REF_RETIRADA_MIN = 1500
+_REF_RETIRADA_MIN = 1000
 
 
 def _huella_red(ip: str) -> str:
@@ -49532,7 +49536,7 @@ async def referidos_mios(user: dict = Depends(require_admin)):
             "tope": _REF_TOPE, "entregas": _REF_ENTREGAS, "dias_extra": _REF_DIAS_EXTRA,
             # La cartera
             "saldo": int(org.get("cartera_saldo") or 0), "ganado": int(org.get("cartera_ganado") or 0),
-            "por_invitado": _REF_CENT, "retirada_min": _REF_RETIRADA_MIN,
+            "por_invitado": _ref_importe(org), "retirada_min": _REF_RETIRADA_MIN,
             "entregas_cartera": _REF_ENTREGAS_CARTERA, "dias_distintos": _REF_DIAS_DISTINTOS,
             "ventana_dias": _REF_VENTANA_DIAS, "tope_mes": _REF_TOPE_MES,
             "pendiente": any(r.get("estado") == "pendiente" for r in retiradas), "retiradas": retiradas}
@@ -49595,6 +49599,13 @@ async def opinion_enviar(data: dict = Body(default={}), user: dict = Depends(req
     return {"ok": True}
 
 
+def _ref_importe(invitador: dict) -> int:
+    """Céntimos que gana esta cuenta por cada invitado que usa la app: 5 € si se dio de alta
+    antes del corte (con la oferta de 5 € en los anuncios), si no _REF_CENT."""
+    creada = _fecha_utc((invitador or {}).get("created_at"))
+    return _REF_CENT_PRIMEROS if creada and creada < _REF_CORTE else _REF_CENT
+
+
 async def _referido_premiar(org: dict, conductor_id: str):
     """Si esta cuenta llegó por invitación y ya la usa de verdad, quien invitó gana
     _REF_CENT en su cartera. Se mira cuando el repartidor abre su ruta (barato: solo
@@ -49627,11 +49638,12 @@ async def _referido_premiar(org: dict, conductor_id: str):
                                                    {"$set": {"ref_premiado": True, "ref_premiado_en": ahora.isoformat()}})
     if not getattr(res, "modified_count", 0):
         return
+    importe = _ref_importe(invitador)
     await global_db.cartera_movimientos.insert_one({
-        "id": str(uuid.uuid4()), "org_id": invitador["id"], "tipo": "referido", "importe": _REF_CENT,
+        "id": str(uuid.uuid4()), "org_id": invitador["id"], "tipo": "referido", "importe": importe,
         "invitado_id": org["id"], "invitado": org.get("name") or "", "mes": mes, "ts": ahora.isoformat()})
     await global_db.organizations.update_one(
-        {"id": invitador["id"]}, {"$inc": {"cartera_saldo": _REF_CENT, "cartera_ganado": _REF_CENT}})
+        {"id": invitador["id"]}, {"$inc": {"cartera_saldo": importe, "cartera_ganado": importe}})
 
 
 # ── RETIRAR EL SALDO ──────────────────────────────────────────────────────────

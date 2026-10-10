@@ -725,14 +725,14 @@ function Invitar({ toast }) {
     } catch (err) { toast?.error?.(txError(err, 'No se pudo pedir el pago')) } finally { setEnviando(false) }
   }
   const saldo = r?.saldo || 0
-  const puede = r && saldo >= (r.retirada_min || 1500) && !r.pendiente
+  const puede = r && saldo >= (r.retirada_min || 1000) && !r.pendiente
   const campo = 'w-full rounded-xl border border-dark-700 bg-dark-950 px-3 py-2.5 text-[15px] text-dark-50'
   return (
     <section className="mt-4 rounded-3xl border border-emerald-400/30 bg-gradient-to-br from-emerald-500/[.12] to-dark-900 p-4" aria-label={tx('Tu cartera')}>
       <div className="flex items-start justify-between gap-3">
         <div>
           <p className="text-[12px] font-bold uppercase tracking-wider text-emerald-300">{tx('Invita y gana')}</p>
-          <p className="mt-0.5 text-[16px] font-bold leading-tight text-dark-50">{tx('{euros} por cada compañero que la use', { euros: cent(r?.por_invitado ?? 500) })}</p>
+          <p className="mt-0.5 text-[16px] font-bold leading-tight text-dark-50">{tx('{euros} por cada compañero que la use', { euros: cent(r?.por_invitado ?? 250) })}</p>
         </div>
         <div className="shrink-0 text-right">
           <p className="text-[11px] text-dark-400">{tx('Tu saldo')}</p>
@@ -741,7 +741,7 @@ function Invitar({ toast }) {
       </div>
       <p className="mt-2 text-[12.5px] leading-snug text-dark-300">
         {tx('Pásale tu enlace. Cuando se registre y haga {n} entregas en {d} días distintos (en su primer mes), ganas {euros}. Lo cobras por Bizum o transferencia desde {min}.', {
-          n: r?.entregas_cartera ?? 20, d: r?.dias_distintos ?? 2, euros: cent(r?.por_invitado ?? 500), min: cent(r?.retirada_min ?? 1500) })}
+          n: r?.entregas_cartera ?? 20, d: r?.dias_distintos ?? 2, euros: cent(r?.por_invitado ?? 250), min: cent(r?.retirada_min ?? 1000) })}
       </p>
       {r && (r.invitados > 0 || r.ganado > 0) && (
         <p className="mt-2 text-[12.5px] font-semibold text-emerald-200">
