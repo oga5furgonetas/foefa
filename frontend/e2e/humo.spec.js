@@ -2597,6 +2597,44 @@ test('Ruta · Mi dinero hoy: poner la tarifa y ver lo ganado', async ({ page }) 
   expect(fallos).toEqual([])
 })
 
+/* «COMPARTE TU DÍA» (11-10-2026): al acabar la ruta, una imagen del día con SU QR de invitación. */
+test('Ruta · Comparte tu día: al acabar, imagen con el enlace de invitación', async ({ page }) => {
+  const fallos = vigilar(page)
+  await entrarRepartidor(page, { status: 'trial', days_left: 6, promo: { activa: true, hasta: '2026-12-31' } })
+  await page.addInitScript(() => {
+    window.__compartido = null
+    navigator.canShare = () => true
+    navigator.share = async (d) => { window.__compartido = { texto: d.text, tipo: d.files?.[0]?.type, tam: d.files?.[0]?.size } }
+  })
+  const hecho = (n) => ({ id: `h${n}`, cliente: `Cliente ${n}`, direccion: `Calle ${n}`, estado: 'entregado', orden: n, lat: 43.36, lng: -8.41 })
+  const pedidos = [1, 2, 3, 4, 5].map(hecho)
+  await page.route(/\/api\/reparto\/mi-ruta/, (r) => r.fulfill({ json: {
+    activo: true, autonomo: true, fecha: '2026-10-11', aviso_aceptado: true,
+    jornada: { empezada: '2026-10-11T07:00:00Z', terminada: '2026-10-11T10:30:00Z' }, ruta: { km: 42.5 }, pedidos } }))
+  await page.route(/\/api\/referidos$/, (r) => r.fulfill({ json: { codigo: 'ANA123', invitados: 0, premiados: 0, saldo: 0, ganado: 0 } }))
+  await page.goto('/ruta', { waitUntil: 'domcontentloaded' })
+  await page.getByRole('button', { name: 'Comparte tu día' }).click()
+  await expect.poll(() => page.evaluate(() => window.__compartido)).not.toBeNull()
+  const c = await page.evaluate(() => window.__compartido)
+  expect(c.tipo).toBe('image/png')
+  expect(c.tam).toBeGreaterThan(10000)
+  expect(c.texto).toContain('Hoy he hecho 5 paradas')
+  expect(c.texto).toMatch(/\/repartidores\?ref=ANA123&utm_source=referido&utm_medium=dia/)
+  expect(fallos).toEqual([])
+})
+
+/* Con paradas pendientes todavía no se ofrece. */
+test('Ruta · Comparte tu día no sale con paradas pendientes', async ({ page }) => {
+  await entrarRepartidor(page, { status: 'trial', days_left: 6, promo: { activa: true, hasta: '2026-12-31' } })
+  const p = (n, estado) => ({ id: `h${n}`, cliente: `Cliente ${n}`, direccion: `Calle ${n}`, estado, orden: n, lat: 43.36, lng: -8.41 })
+  await page.route(/\/api\/reparto\/mi-ruta/, (r) => r.fulfill({ json: {
+    activo: true, autonomo: true, fecha: '2026-10-11', aviso_aceptado: true, jornada: {}, ruta: { km: 10 },
+    pedidos: [1, 2, 3, 4, 5].map((n) => p(n, 'entregado')).concat([p(6, 'pendiente')]) } }))
+  await page.goto('/ruta', { waitUntil: 'domcontentloaded' })
+  await expect(page.getByText('Cliente 6').first()).toBeVisible()
+  await expect(page.getByRole('button', { name: 'Comparte tu día' })).toHaveCount(0)
+})
+
 /* CALCULADORA (11-10-2026): página pública para Google; calcula con los números de cada uno. */
 test('Calculadora repartidor · calcula lo que queda al mes y lleva a la app', async ({ page }) => {
   const fallos = vigilar(page)

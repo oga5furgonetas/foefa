@@ -2,7 +2,7 @@ import { Suspense, lazy, useCallback, useEffect, useRef, useState } from 'react'
 import {
   ArrowLeft, ScanLine, Camera, Loader2, Navigation, Phone, Check, X, Route, MapPin, Play, Square, Package,
   MessageCircle, Clock, Search, List, Pencil, ChevronDown, GripVertical, Map as MapaIcono, ArrowUp, ArrowDown, ArrowUpDown, Mic, ClipboardPaste, Trophy,
-  Eye, PenLine, RotateCcw, HelpCircle,
+  Eye, PenLine, RotateCcw, HelpCircle, Share2,
 } from 'lucide-react'
 import {
   repMiRuta, repEscanear, repLeerTicket, repNuevoPedido, repEstado, repOrdenar, repJornada, repPosicion,
@@ -17,6 +17,7 @@ import { lectorDeCodigos, leerCodigo } from '../../lib/codigos'
 import { buscarDirecciones } from '../../lib/direcciones'
 import { invitar } from '../../lib/compartir'
 import { medirAccion } from '../../lib/analitica'
+import { compartirDia } from '../../lib/compartirDia'
 import { fijarPais, importe, simboloMoneda, metodosCobro } from '../../lib/region'
 import { tx, useIdioma, locale, txError } from '../../lib/idioma'
 import { salirDeLaDemoDeReparto } from '../../panel/auth'
@@ -699,6 +700,13 @@ export default function MiRuta({ onBack, embebido = false }) {
         <Cabecera fecha={ruta.fecha} hechos={hechos.length} total={total} entregados={entregados.length}
           pendientes={pendientes.length} rr={ruta.ruta} retraso={retraso} cobrado={cobradoHoy}
           dinero={dinero} onTarifa={ruta.autonomo && gan ? () => setTarifa({ parada: aEuros(gan.pago_parada), dia: aEuros(gan.pago_dia), km: aEuros(gan.coste_km) || '0,12' }) : null}
+          onCompartir={entregados.length >= 5 && pendientes.length === 0 ? () => {
+            const ini = ruta.jornada?.empezada ? new Date(ruta.jornada.empezada).getTime() : 0
+            const fin = ruta.jornada?.terminada ? new Date(ruta.jornada.terminada).getTime() : Date.now()
+            compartirDia({ paradas: entregados.length, minutos: ini ? (fin - ini) / 60000 : 0, km: Number(ruta?.ruta?.km) || 0 })
+              .then((r) => { if (r === 'descargado') setAviso(tx('Imagen descargada y texto copiado: pégalo donde quieras.')) })
+              .catch(() => setAviso(tx('No se pudo preparar la imagen')))
+          } : null}
           fueraHorario={pendientes.filter((p) => p.tarde_min > 0).length}
           onGuiar={nav === 'app' && pendientes.some((p) => p.lat != null) ? () => setGuiando(pendientes.find((p) => p.lat != null).id) : null}
           onCorregir={!pendientes.some((p) => p.lat != null) && pendientes.some((p) => p.geo === 'no')
@@ -1407,7 +1415,7 @@ function Marco({ onBack, children, embebido }) {
    única parada no estaba en el mapa (la dirección no se encontró) y sin un punto no hay
    adónde guiar; el aviso quedaba abajo, debajo del mapa. Ahora lo dice aquí y lleva a
    corregirla: al escribirla salen sugerencias, y elegir una la sitúa. */
-function Cabecera({ fecha, hechos, total, entregados, pendientes, rr, retraso, cobrado, fueraHorario, onGuiar, onCorregir, dinero, onTarifa }) {
+function Cabecera({ fecha, hechos, total, entregados, pendientes, rr, retraso, cobrado, fueraHorario, onGuiar, onCorregir, dinero, onTarifa, onCompartir }) {
   const pct = total ? hechos / total : 0
   const R = 26
   const L = 2 * Math.PI * R
@@ -1468,6 +1476,11 @@ function Cabecera({ fecha, hechos, total, entregados, pendientes, rr, retraso, c
             <span className="block text-[10.5px] text-dark-400">{tx('Limpio')}</span>
             <b className="text-[19px] leading-none text-emerald-200">{euros(dinero.neto)}</b>
           </span>
+        </button>
+      )}
+      {onCompartir && (
+        <button onClick={onCompartir} className="mt-3 flex w-full items-center justify-center gap-2 rounded-2xl bg-emerald-700 py-3 text-[15px] font-bold text-white">
+          <Share2 size={17} /> {tx('Comparte tu día')}
         </button>
       )}
       {!dinero && onTarifa && (
