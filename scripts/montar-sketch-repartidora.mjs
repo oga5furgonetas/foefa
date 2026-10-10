@@ -90,10 +90,10 @@ const ESCENAS = [
     R('3. TE LLEVA A CADA PUERTA', 150, { tam: 66 }), R('con voz, sin pensar', 245, { fuente: 'sans', tam: 46, color: '0x5eead4' })] },
   { cierre: 16.8, rotulos: [
     R('FDS', 640, { fuente: 'sans', tam: 150, color: '0x0FC2BC' }),
-    // 10-10-2026: con el plan gratis. La voz dice «siete días gratis, y sin tarjeta» (sigue
-    // siendo verdad: 7 días sin tope); el rótulo cuenta lo que viene después.
-    R('7 DÍAS SIN LÍMITE', 800, { tam: 92 }), R('y después, gratis', 915, { tam: 84 }),
-    R('hasta 15 paradas al día · sin tarjeta', 1030, { fuente: 'sans', tam: 50, color: '0x5eead4', desde: 0.6 }),
+    // 10-10-2026: la promoción. La voz (s8) ya solo dice «Dale al enlace y pruébala» (la
+    // grabación con «siete días gratis» está en s8-7dias.mp3); la oferta va en el rótulo.
+    R('GRATIS Y SIN LÍMITE', 800, { tam: 88 }), R('hasta el 31 de diciembre', 915, { tam: 74 }),
+    R('sin tarjeta · solo registrarte', 1030, { fuente: 'sans', tam: 50, color: '0x5eead4', desde: 0.6 }),
     R('flotadsp.com/repartidores', 1210, { fuente: 'sans', tam: 52, desde: 1.2 })] },
 ].map((e, i) => ({ ...e, ...tramo(i) }))
 console.log('duración', FIN, 's; escenas', ESCENAS.map((e) => e.d).join(' '))

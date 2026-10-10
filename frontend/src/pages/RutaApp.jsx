@@ -135,7 +135,7 @@ export default function RutaApp() {
           <button onClick={volverASuper} className="shrink-0 rounded-md bg-amber-500/30 px-3 py-1 text-[12px] font-semibold">{tx('Volver a mi cuenta')}</button>
         </div>
       )}
-      {billing?.status === 'trial' && !billing.bloqueo && !billing.falta_tarjeta && billing.days_left != null && billing.days_left <= 3 && tab !== 'cuenta' && (
+      {billing?.status === 'trial' && !billing.promo?.activa && !billing.bloqueo && !billing.falta_tarjeta && billing.days_left != null && billing.days_left <= 3 && tab !== 'cuenta' && (
         <button onClick={() => setTab('cuenta')}
           className="flex w-full items-center justify-center gap-1.5 bg-amber-500/15 px-4 py-2 text-[13px] font-semibold text-amber-200">
           {billing.days_left === 1 ? tx('Queda 1 día de prueba · Ver mi plan') : tx('Quedan {n} días de prueba · Ver mi plan', { n: billing.days_left })}

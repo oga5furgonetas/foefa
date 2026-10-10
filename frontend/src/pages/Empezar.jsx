@@ -1,10 +1,10 @@
 import { useState } from 'react'
 import { Zap, Users, Building2, ArrowRight, ChevronDown, Check } from 'lucide-react'
 import { MARCA } from '../marca'
-import { tx, useIdioma, IDIOMAS, cambiarIdioma } from '../lib/idioma'
+import { tx, useIdioma, IDIOMAS, cambiarIdioma, locale } from '../lib/idioma'
 import { medirAccion } from '../lib/analitica'
 import { evento } from '../lib/metaPixel'
-import { PARADAS_GRATIS } from '../lib/precios'
+import { PARADAS_GRATIS, promoGratis, fechaPromo } from '../lib/precios'
 
 /* ── LA PRIMERA PANTALLA DE LA APP (04-10-2026) ──────────────────────────────
    Quien se baja la app de Play Store es, casi siempre, una persona que
@@ -47,9 +47,15 @@ export default function Empezar() {
           {tx('Crear mi cuenta gratis')} <ArrowRight size={18} />
         </a>
         <ul className="mt-3 space-y-1 text-[13px] text-dark-300">
+          {promoGratis() ? (<>
+            <li className="flex gap-2"><Check size={15} className="mt-0.5 shrink-0 text-emerald-400" /> {tx('Gratis y sin límite hasta el {fecha}', { fecha: fechaPromo(locale()) })}</li>
+            <li className="flex gap-2"><Check size={15} className="mt-0.5 shrink-0 text-emerald-400" /> {tx('Después, gratis hasta {n} paradas al día, o sin tope por 9,99 €/mes', { n: PARADAS_GRATIS })}</li>
+            <li className="flex gap-2"><Check size={15} className="mt-0.5 shrink-0 text-emerald-400" /> {tx('Sin tarjeta: te registras y empiezas ya')}</li>
+          </>) : (<>
           <li className="flex gap-2"><Check size={15} className="mt-0.5 shrink-0 text-emerald-400" /> {tx('Gratis para siempre hasta {n} paradas al día', { n: PARADAS_GRATIS })}</li>
           <li className="flex gap-2"><Check size={15} className="mt-0.5 shrink-0 text-emerald-400" /> {tx('Sin tope: 9,99 €/mes o 99 €/año, con 7 días de prueba')}</li>
           <li className="flex gap-2"><Check size={15} className="mt-0.5 shrink-0 text-emerald-400" /> {tx('Sin tarjeta: la prueba empieza ya y hoy no pagas nada')}</li>
+          </>)}
         </ul>
 
         <a href="/panel/login"

@@ -17,6 +17,9 @@ const fondoCargando = b64(path.join(SALIDA, 'fondos', 'cargando.jpg'), 'image/jp
 const fondoApuntando = b64(path.join(SALIDA, 'fondos', 'apuntando.jpg'), 'image/jpeg')
 const captura = b64(path.join(RAIZ, 'frontend', 'public', 'capturas-ruta', 'es', '1-ruta.png'), 'image/png')
 const PARADAS = 15
+// 10-10-2026: la promoción (ver frontend/src/lib/precios.js). Al acabar, volver a la de abajo.
+const OFERTA = 'Gratis y sin límite hasta el 31 de diciembre'
+// const OFERTA = `Gratis hasta ${PARADAS} paradas al día · sin tarjeta`
 
 const BASE = `
 <link href="https://fonts.googleapis.com/css2?family=Archivo+Black&family=Inter:wght@500;700;800&display=swap" rel="stylesheet">
@@ -75,7 +78,7 @@ const cierre = `
     <div style="width:100%; height:100%; border-radius:42px; overflow:hidden; background:url(${captura}) top center/cover"></div>
   </div>
   <div style="position:absolute; left:80px; right:150px; top:1310px; display:flex; flex-direction:column; align-items:flex-start; gap:22px">
-    <span class="pildora" style="background:var(--amarillo); color:#111; font-size:34px; letter-spacing:1px; text-transform:none; padding:16px 30px">Gratis hasta ${PARADAS} paradas al día · sin tarjeta</span>
+    <span class="pildora" style="background:var(--amarillo); color:#111; font-size:30px; letter-spacing:0.5px; text-transform:none; padding:16px 26px">${OFERTA}</span>
     <p style="font-size:34px; font-weight:800; color:var(--blanco)">flotadsp.com/repartidores <span style="color:var(--gris); font-weight:700">· enlace en el perfil</span></p>
   </div>
 </div>`
@@ -88,17 +91,41 @@ const suelta = `
     <p style="margin-top:36px; font-size:46px; line-height:1.3; font-weight:700; color:var(--blanco)">Haz una foto a la etiqueta y la app ordena las paradas sola.</p>
   </div>
   <div style="position:absolute; left:80px; right:150px; top:1350px; display:flex; flex-direction:column; align-items:flex-start; gap:22px">
-    <span class="pildora" style="background:var(--amarillo); color:#111; font-size:34px; letter-spacing:1px; text-transform:none; padding:16px 30px">Gratis hasta ${PARADAS} paradas al día · sin tarjeta</span>
+    <span class="pildora" style="background:var(--amarillo); color:#111; font-size:30px; letter-spacing:0.5px; text-transform:none; padding:16px 26px">${OFERTA}</span>
     <p style="font-size:34px; font-weight:800; color:var(--blanco)">flotadsp.com/repartidores <span style="color:var(--gris); font-weight:700">· enlace en el perfil</span></p>
   </div>
 </div>`
 
-const PIEZAS = [['1-portada', portada('Desliza ➜')], ['1-portada-video', portada('Los 5, en 20 segundos')], ...TRUCOS.map((t, i) => [`${i + 2}-truco-${i + 1}`, truco(t, i)]), ['7-la-app', cierre], ['imagen-suelta', suelta]]
+
+/* EL ANUNCIO DE LA PROMOCIÓN (10-10-2026): lo que se ofrece, en grande, y la app de verdad. */
+const promo = (alto) => {
+  const alto916 = alto > 1500       // 9:16: todo por encima de lo que tapa TikTok abajo (~420 px) y a la derecha (~150 px)
+  return `
+<div class="lienzo" style="height:${alto}px; background:radial-gradient(900px 700px at 80% 0%, rgba(20,231,216,.22), transparent 60%), var(--noche)">
+  <div style="position:absolute; left:80px; right:${alto916 ? 150 : 80}px; top:${alto916 ? 200 : 70}px">
+    <span class="pildora" style="background:var(--marca); color:#04121a; font-size:28px; padding:12px 26px">Para repartidores</span>
+    <h1 class="titular" style="margin-top:28px; font-size:${alto916 ? 100 : 92}px">Tu ruta de reparto, <span style="color:var(--marca)">ordenada sola</span></h1>
+    <p style="margin-top:22px; font-size:${alto916 ? 40 : 38}px; line-height:1.3; font-weight:700; color:var(--gris)">Foto a la etiqueta, la app ordena las paradas y te guía con voz.</p>
+  </div>
+  <div style="position:absolute; left:${alto916 ? 560 : 620}px; top:${alto916 ? 800 : 520}px; width:${alto916 ? 360 : 380}px; height:${alto916 ? 580 : 600}px; border-radius:46px; padding:12px; background:#0d1b20; box-shadow:0 40px 90px rgba(0,0,0,.55), 0 0 0 3px rgba(20,231,216,.35)">
+    <div style="width:100%; height:100%; border-radius:36px; overflow:hidden; background:url(${captura}) top center/cover"></div>
+  </div>
+  <div style="position:absolute; left:80px; width:${alto916 ? 450 : 500}px; top:${alto916 ? 840 : 560}px; display:flex; flex-direction:column; align-items:flex-start; gap:18px">
+    <div class="titular" style="font-size:${alto916 ? 64 : 70}px; line-height:1.05; color:var(--amarillo)">GRATIS Y SIN LÍMITE</div>
+    <div style="font-size:${alto916 ? 38 : 36}px; font-weight:800">hasta el 31 de diciembre</div>
+    <div style="font-size:30px; font-weight:700; color:var(--gris)">Sin tarjeta · solo registrarte</div>
+    <div style="margin-top:22px; font-size:${alto916 ? 28 : 30}px; font-weight:800">flotadsp.com/repartidores</div>
+  </div>
+</div>`
+}
+
+const PIEZAS = [['1-portada', portada('Desliza ➜')], ['1-portada-video', portada('Los 5, en 20 segundos')], ...TRUCOS.map((t, i) => [`${i + 2}-truco-${i + 1}`, truco(t, i)]), ['7-la-app', cierre], ['imagen-suelta', suelta], ['promo-9x16', promo(1920)], ['promo-4x5', promo(1350), 1350]]
 
 const nav = await chromium.launch()
 const pag = await nav.newPage({ viewport: { width: 1080, height: 1920 }, deviceScaleFactor: 1 })
-for (const [nombre, html] of PIEZAS) {
-  await pag.setContent(`<!doctype html><html><head><meta charset="utf-8">${BASE}</head><body>${html}</body></html>`, { waitUntil: 'networkidle' })
+for (const [nombre, html, alto = 1920] of PIEZAS) {
+  await pag.setViewportSize({ width: 1080, height: alto })
+  await pag.setContent(`<!doctype html><html><head><meta charset="utf-8">${BASE}<style>body{height:${alto}px}</style></head><body>${html}</body></html>`, { waitUntil: 'networkidle' })
   await pag.evaluate(() => document.fonts.ready)
   const destino = path.join(SALIDA, `${nombre}.png`)
   await pag.screenshot({ path: destino })

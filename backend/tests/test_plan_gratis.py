@@ -1,6 +1,7 @@
 # -*- coding: utf-8 -*-
 """Plan gratis del repartidor (10-10-2026): sin pagar, la app sigue con un tope de paradas
-nuevas al día; las de ejemplo no cuentan; pagando, o siendo empresa, no hay tope."""
+nuevas al día; las de ejemplo no cuentan; pagando, o siendo empresa, no hay tope.
+Y la promoción: hasta REP_GRATIS_HASTA nadie tiene tope (las pruebas del tope la apagan)."""
 from datetime import datetime, timedelta, timezone
 
 import pytest
@@ -15,6 +16,12 @@ HOY = "2026-10-10"
 
 def _iso(dias):
     return (datetime.now(timezone.utc) + timedelta(days=dias)).isoformat()
+
+
+@pytest.fixture(autouse=True)
+def sin_promocion(monkeypatch):
+    """Lo de después de la promoción: el tope de siempre."""
+    monkeypatch.setattr(server, "REP_GRATIS_HASTA", "")
 
 
 @pytest.fixture
@@ -120,3 +127,24 @@ def test_el_plan_dice_lo_del_gratis():
     assert not server._rep_sin_ilimitado({"plan": "autonomo", "status": "trial", "trial_ends": _iso(2)})
     assert not server._rep_sin_ilimitado({"plan": "completo", "status": "trial", "trial_ends": _iso(-1)})
     assert not server._rep_sin_ilimitado({"plan": "autonomo", "account_type": "owner"})
+
+
+@pytest.mark.asyncio(loop_scope="session")
+async def test_con_la_promocion_nadie_tiene_tope_y_la_app_lo_sabe(base, monkeypatch):
+    """«Gratis y sin límite hasta el 31 de diciembre»: ni tope de paradas ni plan gratis; el
+    día siguiente vuelve el tope."""
+    monkeypatch.setattr(server, "REP_GRATIS_HASTA", "2099-12-31")
+    acabada = {"plan": "autonomo", "status": "trial", "trial_ends": _iso(-1)}
+    assert server._rep_sin_ilimitado(acabada) is False
+    assert await server._rep_quedan_gratis(YO, HOY) is None
+    for i in range(5):                                          # más que el tope (3)
+        await server._rep_nuevo({"direccion": f"Rúa Real {i}"}, YO, "conductor", HOY)
+    b = await server.org_billing(YO)
+    assert b["promo"] == {"activa": True, "hasta": "2099-12-31"} and b["gratis"]["activo"] is False
+    monkeypatch.setattr(server, "REP_GRATIS_HASTA", "2000-01-01")
+    assert server._rep_sin_ilimitado(acabada) is True
+    assert (await server.org_billing(YO))["promo"]["activa"] is False
+
+
+def test_la_fecha_de_la_promocion_se_dice_en_castellano():
+    assert server._fecha_larga("2026-12-31") == "31 de diciembre"

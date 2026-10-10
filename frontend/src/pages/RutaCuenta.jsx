@@ -52,8 +52,9 @@ export function Cuenta({ billing, recargar, toast, resaltarRegalo }) {
           <Estado b={b} precios={precios} />
           {!enApp && b.status === 'suspended' && b.pago_proveedor === 'stripe' && b.stripe_status !== 'canceled'
             ? <BotonPortal toast={toast} texto={tx('Revisar mi tarjeta y pagar')} principal />
-            : !enApp && !b.suscrito && !conPlay(b) && <><Suscribirse b={b} precios={precios} toast={toast} />{b.pais === 'cn' && <PagoUnAno precio={precios.anual} toast={toast} />}</>}
-          {enApp && !b.suscrito && !conPlay(b) && b.play?.listo && <PagarConPlay b={b} toast={toast} recargar={recargar} />}
+            // Durante la promoción no hay nada que pagar: no se ofrece suscribirse.
+            : !enApp && !b.suscrito && !conPlay(b) && !b.promo?.activa && <><Suscribirse b={b} precios={precios} toast={toast} />{b.pais === 'cn' && <PagoUnAno precio={precios.anual} toast={toast} />}</>}
+          {enApp && !b.suscrito && !conPlay(b) && !b.promo?.activa && b.play?.listo && <PagarConPlay b={b} toast={toast} recargar={recargar} />}
           {conPlay(b) && <GestionarPlay b={b} />}
           {!enApp && b.suscrito && <Gestionar b={b} precios={precios} toast={toast} recargar={recargar} />}
           <Canjear toast={toast} recargar={recargar} />
@@ -258,6 +259,12 @@ function Estado({ b, precios }) {
     linea = `${linea ? `${linea} ` : ''}${tx('Sigues gratis con hasta {n} paradas nuevas al día. Suscríbete para no tener tope.', { n: g.tope })}`
   } else if (g && b.status === 'trial' && !b.falta_tarjeta) {
     linea = `${linea ? `${linea} ` : ''}${tx('Después sigues gratis con hasta {n} paradas al día.', { n: g.tope })}`
+  }
+  // LA PROMOCIÓN (10-10-2026): gratis y sin límite hasta una fecha; ni prueba ni cobros que contar.
+  if (b.promo?.activa && !b.suscrito && !conPlay(b) && b.pago_proveedor !== 'regalo') {
+    chip = [tx('Gratis sin límite'), 'bg-emerald-500/15 text-emerald-300']
+    linea = tx('Hasta el {fecha} no tienes tope de paradas ni pagas nada. Después, gratis hasta {n} paradas al día, o sin tope por {precio}.', {
+      fecha: fecha(`${b.promo.hasta}T12:00:00`), n: g?.tope || 15, precio: `${euros(precios.mensual)}${tx('/mes')}` })
   }
   return (
     <section className="overflow-hidden rounded-3xl border border-brand-400/30 bg-gradient-to-br from-brand-500/[.16] via-dark-900 to-dark-900 p-5 shadow-lg shadow-black/20">

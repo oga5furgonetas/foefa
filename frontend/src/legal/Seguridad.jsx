@@ -33,7 +33,7 @@ export default function Seguridad() {
         <li>Backend alojado en la Unión Europea (región de París). Base de datos en MongoDB Atlas (UE).</li>
         <li>Frontend servido por la red global de Cloudflare, con cabeceras de seguridad (CSP) y lista blanca de orígenes (CORS).</li>
         <li>Limitación de peticiones (rate limiting) en los endpoints públicos para frenar abusos.</li>
-        <li>Los pagos los procesa Lemon Squeezy como Merchant of Record: <strong>nunca vemos ni almacenamos tarjetas</strong>. Sus notificaciones se verifican con firma criptográfica y se rechazan si no están firmadas.</li>
+        <li>Los pagos los procesa Stripe (y Google Play dentro de la app de Play): <strong>nunca vemos ni almacenamos tarjetas</strong>. Sus notificaciones se verifican con firma criptográfica y se rechazan si no están firmadas.</li>
       </ul>
 
       <h2>4. Copias de seguridad y continuidad</h2>

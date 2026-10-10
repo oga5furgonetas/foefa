@@ -2,13 +2,13 @@ import { useState } from 'react'
 import { Loader2, ArrowRight, Eye, EyeOff } from 'lucide-react'
 import { API_BASE } from '../services/api'
 import { saveSession } from '../panel/auth'
-import { tx, useIdioma, txError } from '../lib/idioma'
+import { tx, useIdioma, txError, locale } from '../lib/idioma'
 import { medirAccion } from '../lib/analitica'
 import { evento, eventoUnaVez } from '../lib/metaPixel'
 import { leerRef } from '../lib/referido'
 import { regionDelMovil } from '../lib/region'
 import { enAppPlay } from '../lib/enApp'
-import { PARADAS_GRATIS } from '../lib/precios'
+import { PARADAS_GRATIS, promoGratis, fechaPromo } from '../lib/precios'
 import { marcarRecienAlta } from '../lib/instalar'
 
 /* EL ALTA, DENTRO DE LA PORTADA (05-10-2026). Medido: 541 visitas de TikTok en 72 h, 1 clic en
@@ -103,7 +103,9 @@ export default function AltaRapida({ dias = 7, enfocar = false }) {
           {conEnlaces(tx('Acepto los [Términos], el [Acuerdo de Encargo del Tratamiento] y la [Política de Privacidad].'), ['/terminos', '/encargo', '/privacidad'])}
           {/* Decía «al finalizar se cobra… salvo cancelación» con «sin tarjeta» al lado: sin tarjeta no se
               cobra nada (06-10-2026). La misma frase que el alta de /registro, ya traducida. */}
-          {' '}{tx('{n} días sin tope y gratis. Después sigues gratis con hasta {p} paradas al día; sin tarjeta no se cobra nunca. Sin tope: plan {plan} ({precio} €/mes).', { n: dias, p: PARADAS_GRATIS, plan: tx('Repartidor'), precio: '9,99' })}
+          {' '}{promoGratis()
+            ? tx('Gratis y sin límite hasta el {fecha}. Después sigues gratis con hasta {p} paradas al día; sin tarjeta no se cobra nunca. Sin tope: plan {plan} ({precio} €/mes).', { fecha: fechaPromo(locale()), p: PARADAS_GRATIS, plan: tx('Repartidor'), precio: '9,99' })
+            : tx('{n} días sin tope y gratis. Después sigues gratis con hasta {p} paradas al día; sin tarjeta no se cobra nunca. Sin tope: plan {plan} ({precio} €/mes).', { n: dias, p: PARADAS_GRATIS, plan: tx('Repartidor'), precio: '9,99' })}
         </span>
       </label>
       {err && <p role="alert" className="text-[13px] text-red-300">{err}</p>}

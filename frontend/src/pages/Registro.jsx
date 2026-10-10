@@ -9,11 +9,11 @@ import { medirAccion } from '../lib/analitica'
 import { saveSession } from '../panel/auth'
 import { marcarRecienAlta } from '../lib/instalar'
 import { useT, LANGS } from '../i18n'
-import { tx, useIdioma, IDIOMAS, cambiarIdioma } from '../lib/idioma'
+import { tx, useIdioma, IDIOMAS, cambiarIdioma, locale } from '../lib/idioma'
 import { desdeChina } from '../lib/apiBase'
 import { Check, Zap, Package, ShoppingCart, Warehouse, Truck, User, Send } from 'lucide-react'
 import { MARCA, dominio } from '../marca'
-import { PLANES_EMPRESA, PLAN_REPARTO, MESES_ANUAL, PARADAS_GRATIS, precioMes as precioMesPlan, eur } from '../lib/precios'
+import { PLANES_EMPRESA, PLAN_REPARTO, MESES_ANUAL, PARADAS_GRATIS, promoGratis, fechaPromo, precioMes as precioMesPlan, eur } from '../lib/precios'
 
 function slugify(s) {
   return (s || '').toLowerCase().trim()
@@ -450,9 +450,13 @@ export default function Registro() {
             era «Repartidor 9,99 €/mes» y lo de gratis estaba en la letra pequeña. */}
         {soloYo ? (
           <div style={{ background: 'rgba(52,211,153,.08)', border: '1px solid rgba(52,211,153,.3)', borderRadius: 14, padding: '14px 16px', marginBottom: 20 }}>
-            <div style={{ fontWeight: 900, fontSize: 19, color: '#eef1f6', lineHeight: 1.25 }}>{tt('Gratis hasta {n} paradas al día · sin tarjeta', { n: PARADAS_GRATIS })}</div>
+            <div style={{ fontWeight: 900, fontSize: 19, color: '#eef1f6', lineHeight: 1.25 }}>{promoGratis()
+              ? tt('Gratis y sin límite hasta el {fecha} · sin tarjeta', { fecha: fechaPromo(locale()) })
+              : tt('Gratis hasta {n} paradas al día · sin tarjeta', { n: PARADAS_GRATIS })}</div>
             <div style={{ fontSize: 12.5, color: '#94a3b8', marginTop: 5 }}>
-              {tt('Sin tope: {precio} €/mes, y los {n} primeros días ya van sin tope.', { precio: displayPrice.toFixed(2).replace('.', ','), n: diasPrueba })}
+              {promoGratis()
+                ? tt('Después, gratis hasta {n} paradas al día, o sin tope por {precio} €/mes.', { n: PARADAS_GRATIS, precio: displayPrice.toFixed(2).replace('.', ',') })
+                : tt('Sin tope: {precio} €/mes, y los {n} primeros días ya van sin tope.', { precio: displayPrice.toFixed(2).replace('.', ','), n: diasPrueba })}
             </div>
           </div>
         ) : (
@@ -547,7 +551,10 @@ export default function Registro() {
           <input type="checkbox" checked={accept} onChange={(e) => setAccept(e.target.checked)} style={{ marginTop: 2 }} />
           <span>
             {conEnlaces(tt('Acepto los [Términos], el [Acuerdo de Encargo del Tratamiento] y la [Política de Privacidad].'), ['/terminos', '/encargo', '/privacidad'])}
-            {' '}{soloYo
+            {' '}{soloYo && promoGratis()
+              ? tt('Gratis y sin límite hasta el {fecha}. Después sigues gratis con hasta {p} paradas al día; sin tarjeta no se cobra nunca. Sin tope: plan {plan} ({precio} €/mes).', {
+                fecha: fechaPromo(locale()), p: PARADAS_GRATIS, plan: tt(planInfo.name), precio: displayPrice.toFixed(2).replace('.', ',') })
+              : soloYo
               // Quien reparte solo: después de la prueba sigue gratis con tope (10-10-2026).
               ? tt('{n} días sin tope y gratis. Después sigues gratis con hasta {p} paradas al día; sin tarjeta no se cobra nunca. Sin tope: plan {plan} ({precio} €/mes).', {
                 n: diasPrueba, p: PARADAS_GRATIS, plan: tt(planInfo.name), precio: displayPrice.toFixed(2).replace('.', ',') })

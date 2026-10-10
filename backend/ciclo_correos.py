@@ -25,6 +25,7 @@ El módulo no toca la base ni manda nada: decide QUÉ toca y DEVUELVE el texto.
 Así se prueba entero sin red ni Mongo (tests/test_ciclo_correos.py).
 """
 import html as _html
+import re
 from datetime import datetime, timedelta, timezone
 
 CLAVES = ("bienvenida", "primer_dia", "casi_fin")
@@ -72,8 +73,9 @@ def es_candidata(org: dict) -> bool:
             and not o.get("correos_baja"))
 
 
-def toca(org: dict, uso: dict, ahora: datetime) -> str:
-    """La clave del correo que toca mandar AHORA, o "" si ninguno."""
+def toca(org: dict, uso: dict, ahora: datetime, promo: bool = False) -> str:
+    """La clave del correo que toca mandar AHORA, o "" si ninguno. Con la promoción
+    «gratis y sin límite» activa no hay «se acaba tu prueba»: no se acaba nada."""
     if not es_candidata(org):
         return ""
     enviados = org.get("ciclo_correos") or {}
@@ -91,6 +93,8 @@ def toca(org: dict, uso: dict, ahora: datetime) -> str:
             and not (uso or {}).get("paradas")):
         return "primer_dia"
     fin = _fecha(org.get("trial_ends"))
+    if promo:
+        return ""
     if ("casi_fin" not in enviados and fin and timedelta(0) < fin - ahora <= CASI_FIN_ANTES
             and edad >= CASI_FIN_EDAD_MIN):
         return "casi_fin"
@@ -106,8 +110,7 @@ _T = {
         "bienvenida": (
             "Tu cuenta de {marca} está lista: así cargas tu primera ruta",
             "Hola {nombre}:\n\n"
-            "Ya tienes tu cuenta. Tienes {dias} días gratis y no te hemos pedido tarjeta, así que al acabar "
-            "la prueba no se cobra nada solo. Si quieres seguir, lo eliges tú ({mes} al mes o {anio} al año).\n\n"
+            "{intro}"
             "Tu primera ruta, en 3 pasos:\n"
             "1. Abre la app: {ruta}\n"
             "   En el móvil, «Instalar la app» te la deja en la pantalla de inicio.\n"
@@ -141,6 +144,13 @@ _T = {
         "ayuda_sin": "Consejo: haz la primera prueba con 3 o 4 paquetes antes de salir; en dos minutos ves si te sirve.",
         "ayuda_corta": "¿Qué te frenó o qué le falta? Contéstame con una línea y lo miro.",
         "ayuda_corta_sin": "Si no tienes paquetes a mano, dentro de la app puedes verla funcionar con 3 paradas de ejemplo.",
+        "intro": (
+            "Ya tienes tu cuenta. Tienes {dias} días gratis y no te hemos pedido tarjeta, así que al acabar "
+            "la prueba no se cobra nada solo. Si quieres seguir, lo eliges tú ({mes} al mes o {anio} al año).\n\n"),
+        "intro_promo": (
+            "Ya tienes tu cuenta. Es gratis y sin límite hasta el {promo} y no te hemos pedido tarjeta. "
+            "Después sigues gratis con hasta {tope} paradas al día; sin tope, {mes} al mes o {anio} al año, "
+            "solo si tú quieres.\n\n"),
         "firma": "Daniel, de {marca}",
         "baja": "¿No quieres más correos como este? Date de baja aquí: {baja}",
         "boton": {"bienvenida": "Abrir la app", "primer_dia": "Cargar mi primera ruta", "casi_fin": "Ver mi cuenta"},
@@ -149,8 +159,7 @@ _T = {
         "bienvenida": (
             "A tua conta {marca} está pronta: assim carregas a tua primeira rota",
             "Olá {nombre}:\n\n"
-            "Já tens a tua conta. Tens {dias} dias grátis e não te pedimos cartão, por isso no fim do teste "
-            "não é cobrado nada automaticamente. Se quiseres continuar, és tu que escolhes ({mes} por mês ou {anio} por ano).\n\n"
+            "{intro}"
             "A tua primeira rota, em 3 passos:\n"
             "1. Abre a app: {ruta}\n"
             "   No telemóvel, «Instalar a app» deixa-a no ecrã inicial.\n"
@@ -184,6 +193,13 @@ _T = {
         "ayuda_sin": "Dica: faz o primeiro teste com 3 ou 4 volumes antes de sair; em dois minutos vês se te serve.",
         "ayuda_corta": "O que te travou ou o que falta? Responde-me numa linha e eu vejo.",
         "ayuda_corta_sin": "Se não tens volumes à mão, dentro da app podes vê-la a funcionar com 3 paragens de exemplo.",
+        "intro": (
+            "Já tens a tua conta. Tens {dias} dias grátis e não te pedimos cartão, por isso no fim do teste "
+            "não é cobrado nada automaticamente. Se quiseres continuar, és tu que escolhes ({mes} por mês ou {anio} por ano).\n\n"),
+        "intro_promo": (
+            "Já tens a tua conta. É grátis e sem limite até {promo} e não te pedimos cartão. "
+            "Depois continuas grátis com até {tope} paragens por dia; sem limite, {mes} por mês ou {anio} por ano, "
+            "só se quiseres.\n\n"),
         "firma": "Daniel, da {marca}",
         "baja": "Não queres mais e-mails como este? Cancela aqui: {baja}",
         "boton": {"bienvenida": "Abrir a app", "primer_dia": "Carregar a minha primeira rota", "casi_fin": "Ver a minha conta"},
@@ -192,8 +208,7 @@ _T = {
         "bienvenida": (
             "Your {marca} account is ready: here's how to load your first route",
             "Hi {nombre},\n\n"
-            "Your account is ready. You have {dias} free days and we didn't ask for a card, so nothing is "
-            "charged automatically when the trial ends. If you want to keep going, you choose ({mes} a month or {anio} a year).\n\n"
+            "{intro}"
             "Your first route in 3 steps:\n"
             "1. Open the app: {ruta}\n"
             "   On your phone, «Install the app» puts it on your home screen.\n"
@@ -227,6 +242,13 @@ _T = {
         "ayuda_sin": "Tip: try it first with 3 or 4 parcels before you head out; in two minutes you'll know if it works for you.",
         "ayuda_corta": "What stopped you, or what's missing? Reply with one line and I'll look into it.",
         "ayuda_corta_sin": "No parcels at hand? Inside the app you can see it working with 3 sample stops.",
+        "intro": (
+            "Your account is ready. You have {dias} free days and we didn't ask for a card, so nothing is "
+            "charged automatically when the trial ends. If you want to keep going, you choose ({mes} a month or {anio} a year).\n\n"),
+        "intro_promo": (
+            "Your account is ready. It's free with no limit until {promo}, and we didn't ask for a card. "
+            "After that you stay free with up to {tope} stops a day; no limit for {mes} a month or {anio} a year, "
+            "only if you want.\n\n"),
         "firma": "Daniel, {marca}",
         "baja": "Don't want emails like this? Unsubscribe here: {baja}",
         "boton": {"bienvenida": "Open the app", "primer_dia": "Load my first route", "casi_fin": "See my account"},
@@ -237,6 +259,25 @@ _T = {
 def _euros(v, idioma):
     s = ("%.2f" % v).rstrip("0").rstrip(".") if isinstance(v, float) and v != int(v) else str(int(v))
     return (s.replace(".", ",") if idioma != "en" else s) + " €"
+
+
+_MESES = {
+    "es": ("enero", "febrero", "marzo", "abril", "mayo", "junio", "julio", "agosto", "septiembre",
+           "octubre", "noviembre", "diciembre"),
+    "pt": ("janeiro", "fevereiro", "março", "abril", "maio", "junho", "julho", "agosto", "setembro",
+           "outubro", "novembro", "dezembro"),
+    "en": ("January", "February", "March", "April", "May", "June", "July", "August", "September",
+           "October", "November", "December"),
+}
+
+
+def _dia_mes(iso, idioma):
+    """'2026-12-31' -> «31 de diciembre» / «31 de dezembro» / «31 December»."""
+    m = re.match(r"^(\d{4})-(\d{2})-(\d{2})", str(iso or ""))
+    if not m:
+        return ""
+    dia, mes = int(m.group(3)), _MESES[idioma][int(m.group(2)) - 1]
+    return f"{dia} {mes}" if idioma == "en" else f"{dia} de {mes}"
 
 
 def _fin_legible(org):
@@ -254,7 +295,8 @@ def _quedan(org, ahora):
 
 
 def correo(clave: str, org: dict, uso: dict, ahora: datetime, *, marca: str, base: str,
-           baja: str, mensual: float, anual: float, con_respuesta: bool) -> dict:
+           baja: str, mensual: float, anual: float, con_respuesta: bool,
+           promo_hasta: str = "", tope: int = 15) -> dict:
     """{asunto, texto, html} del correo `clave` para esta cuenta."""
     if clave not in CLAVES:
         raise ValueError(clave)
@@ -280,7 +322,9 @@ def correo(clave: str, org: dict, uso: dict, ahora: datetime, *, marca: str, bas
         "mes": _euros(mensual, idioma), "anio": _euros(anual, idioma), "hecho": hecho,
         "ayuda": t["ayuda"] if con_respuesta else t["ayuda_sin"],
         "ayuda_corta": t["ayuda_corta"] if con_respuesta else t["ayuda_corta_sin"],
+        "promo": _dia_mes(promo_hasta, idioma), "tope": tope,
     }
+    datos["intro"] = (t["intro_promo"] if promo_hasta else t["intro"]).format(**datos)
     asunto_m, cuerpo_m = t[clave]
     asunto = asunto_m.format(**datos)
     cuerpo = cuerpo_m.format(**datos)

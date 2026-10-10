@@ -100,6 +100,15 @@ export function precioVehiculo(p, unidades, tramos) {
    (REP_GRATIS_PARADAS_DIA en server.py; /billing/planes la devuelve como `paradas_gratis`). */
 export const PARADAS_GRATIS = 15
 
+/* GRATIS Y SIN LÍMITE HASTA ESTA FECHA (10-10-2026, Dani: «ponerla gratis y más adelante de
+   pago para ganar nombre y clientes»). Hasta ese día, incluido, ningún repartidor tiene tope ni
+   paga; después, lo de siempre. La misma fecha que REP_GRATIS_HASTA en server.py. */
+export const GRATIS_SIN_LIMITE_HASTA = '2026-12-31'
+export const promoGratis = (hoy = new Date()) => hoy <= new Date(`${GRATIS_SIN_LIMITE_HASTA}T23:59:59`)
+/* «31 de diciembre» en el idioma de la pantalla (se le pasa locale() para no importar idioma aquí). */
+export const fechaPromo = (loc = 'es-ES') => new Date(`${GRATIS_SIN_LIMITE_HASTA}T12:00:00`)
+  .toLocaleDateString(loc, { day: 'numeric', month: 'long' })
+
 /* Pagando un año se pagan 10 meses: dos salen gratis. */
 export const MESES_ANUAL = 10
 

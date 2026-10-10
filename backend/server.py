@@ -4994,7 +4994,10 @@ async def register_dsp(data: RegisterRequest, request: Request):
     <p style="margin:0;color:#64748b;font-size:12px;text-align:center;line-height:1.6">
       Si tienes alguna pregunta, escríbenos a <a href="mailto:{CORREO_CONTACTO}" style="color:#0ea5e9">{CORREO_CONTACTO}</a><br>
       {"Al finalizar la prueba, se cobra el plan elegido salvo cancelación." if org.get("prueba_con_tarjeta")
-       else (f"Al acabar la prueba sigues gratis con hasta {REP_GRATIS_PARADAS_DIA} paradas al día; sin tarjeta no se cobra nada."
+       else ((f"Es gratis y sin límite hasta el {_fecha_larga(REP_GRATIS_HASTA)}. Después sigues gratis con hasta "
+              f"{REP_GRATIS_PARADAS_DIA} paradas al día; sin tarjeta no se cobra nada."
+              if _rep_promo_activa() else
+              f"Al acabar la prueba sigues gratis con hasta {REP_GRATIS_PARADAS_DIA} paradas al día; sin tarjeta no se cobra nada.")
              if plan_elegido == "autonomo" else "Al acabar la prueba eliges tú si seguir: sin tarjeta no se cobra nada.")}
     </p>
     <p style="margin:12px 0 0;color:#475569;font-size:11px;text-align:center;line-height:1.5">
@@ -5189,12 +5192,38 @@ def _rep_bloqueo_pago(org) -> str:
 # ejemplo no cuentan. Pagando (9,99 €/mes o 99 €/año), sin tope. `REP_GRATIS_PARADAS` lo cambia.
 REP_GRATIS_PARADAS_DIA = max(1, int(os.environ.get("REP_GRATIS_PARADAS", "15") or 15))
 REP_TOPE_MENSAJE = "Has llegado al tope de paradas gratis de hoy. Pasa a ilimitado en «Cuenta» o sigue mañana."
+# GRATIS Y SIN LÍMITE HASTA UNA FECHA (10-10-2026, Dani: «ponerla gratis y más adelante de
+# pago para ganar nombre y clientes»). Hasta ese día (incluido) ningún repartidor tiene tope de
+# paradas ni tiene que pagar; después, lo de siempre: gratis con tope o el plan sin tope.
+# La fecha se anuncia en la web y en los anuncios: si se cambia, cambiarla también en
+# frontend/src/lib/precios.js (GRATIS_SIN_LIMITE_HASTA).
+REP_GRATIS_HASTA = (os.environ.get("REP_GRATIS_HASTA", "2026-12-31") or "").strip()
+
+
+_MESES_ES = ("enero", "febrero", "marzo", "abril", "mayo", "junio", "julio", "agosto",
+             "septiembre", "octubre", "noviembre", "diciembre")
+
+
+def _fecha_larga(iso: str) -> str:
+    """'2026-12-31' -> '31 de diciembre'."""
+    try:
+        d = date_cls.fromisoformat(str(iso)[:10])
+        return f"{d.day} de {_MESES_ES[d.month - 1]}"
+    except ValueError:
+        return str(iso)
+
+
+def _rep_promo_activa() -> bool:
+    return bool(REP_GRATIS_HASTA) and _dia_negocio() <= REP_GRATIS_HASTA
 
 
 def _rep_sin_ilimitado(org) -> bool:
     """El repartidor que hoy usa el plan gratis (con tope): prueba acabada sin pagar, regalo o
-    Google Play vencidos, o pago pendiente. Las empresas y la cuenta propia, nunca."""
+    Google Play vencidos, o pago pendiente. Las empresas y la cuenta propia, nunca. Mientras
+    dura la promoción, nadie."""
     if not _es_repartidor(org) or (org or {}).get("account_type") == "owner":
+        return False
+    if _rep_promo_activa():
         return False
     return bool(_org_billing(org).get("required"))
 
@@ -5237,6 +5266,8 @@ async def org_billing(user: dict = Depends(get_current_user)):
         except Exception:                                        # noqa: BLE001
             usadas = 0
         b["gratis"] = {"activo": _rep_sin_ilimitado(o), "tope": REP_GRATIS_PARADAS_DIA, "usadas": usadas}
+        # La promoción: la app lo dice y no habla de «prueba» ni de cobros mientras dura.
+        b["promo"] = {"activa": _rep_promo_activa(), "hasta": REP_GRATIS_HASTA}
     b["suscrito"] = bool(o.get("stripe_subscription")) and o.get("pago_proveedor") == "stripe" and o.get("status") == "active"
     for k in ("stripe_status", "stripe_intervalo", "stripe_proximo_cobro", "pagado_hasta", "trial_ends"):
         b[k] = o.get(k)
@@ -5315,7 +5346,8 @@ def _catalogo_por_defecto():
              "por_vehiculo": 0, "minimo_vehiculos": 0,
              "mensual": PLAN_TARIFAS["autonomo"]["mensual"], "anual": PLAN_TARIFAS["autonomo"]["anual"],
              "dias_prueba": PLAN_TARIFAS["autonomo"]["dias_prueba"],
-             "paradas_gratis": REP_GRATIS_PARADAS_DIA, "recomendado": False},
+             "paradas_gratis": REP_GRATIS_PARADAS_DIA, "recomendado": False,
+             "gratis_hasta": REP_GRATIS_HASTA if _rep_promo_activa() else None},
             {"clave": "operacion", "nombre": "Esencial", "para": "Una delegación",
              "por_vehiculo": PLAN_TARIFAS["operacion"]["por_vehiculo"],
              "minimo_vehiculos": PLAN_TARIFAS["operacion"]["minimo_vehiculos"],
@@ -5532,6 +5564,8 @@ async def billing_planes():
     detalle = {
         "autonomo": {
             "incluye": [
+                (f"Gratis y sin límite hasta el {_fecha_larga(REP_GRATIS_HASTA)}, sin tarjeta; después, gratis hasta "
+                 f"{REP_GRATIS_PARADAS_DIA} paradas al día o sin tope con el plan") if _rep_promo_activa() else
                 f"Gratis para siempre hasta {REP_GRATIS_PARADAS_DIA} paradas al día, sin tarjeta; sin tope con el plan",
                 "Escanear paquetes o foto de la etiqueta: dirección y teléfono solos",
                 "Ruta ordenada por tiempo, con franjas y hora estimada",
@@ -20780,7 +20814,7 @@ async def _ciclo_enviar(org_id: str, clave: str, ahora: Optional[datetime] = Non
         if not org or not ciclo_correos.es_candidata(org):
             return False
         uso = await _ciclo_uso(org)
-        if ciclo_correos.toca(org, uso, ahora) != clave:
+        if ciclo_correos.toca(org, uso, ahora, promo=_rep_promo_activa()) != clave:
             return False
         # La misma PERSONA con dos cuentas (pasó el 05-10: dos altas con el mismo
         # correo) no recibe dos correos del ciclo seguidos: la separación vale por dirección.
@@ -20801,7 +20835,9 @@ async def _ciclo_enviar(org_id: str, clave: str, ahora: Optional[datetime] = Non
         # repartidor en la app; MARCA es la del panel de empresas.
         c = ciclo_correos.correo(clave, org, uso, ahora, marca=_email_remitente()[0], base=_PORTAL_BASE_FRONT,
                                  baja=baja, mensual=t["mensual"], anual=t["anual"],
-                                 con_respuesta=bool(responder))
+                                 con_respuesta=bool(responder),
+                                 promo_hasta=REP_GRATIS_HASTA if _rep_promo_activa() else "",
+                                 tope=REP_GRATIS_PARADAS_DIA)
         ok = await _enviar_email(
             org["email"], c["asunto"], c["html"], responder_a=responder, texto=c["texto"],
             cabeceras={"List-Unsubscribe": f"<{baja}>",
@@ -20832,7 +20868,7 @@ async def ciclo_correos_vuelta(ahora: Optional[datetime] = None) -> dict:
          "correos_baja": {"$ne": True}}, {"_id": 0}).to_list(2000)
     hechos = {}
     for org in orgs:
-        clave = ciclo_correos.toca(org, await _ciclo_uso(org), ahora)
+        clave = ciclo_correos.toca(org, await _ciclo_uso(org), ahora, promo=_rep_promo_activa())
         if not clave or (clave != "bienvenida" and not _ciclo_seguimiento_activo()):
             continue
         if await _ciclo_enviar(org["id"], clave, ahora):

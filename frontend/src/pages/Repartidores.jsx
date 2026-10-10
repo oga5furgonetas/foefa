@@ -2,12 +2,12 @@ import { useEffect, useState } from 'react'
 import { Zap, Loader2, ScanLine, Route, Navigation, MessageCircle, Camera, Check, ArrowRight } from 'lucide-react'
 import { API_BASE, DRIVER_TOKEN_KEY } from '../services/api'
 import { MARCA } from '../marca'
-import { tx, useIdioma, IDIOMAS, cambiarIdioma, idioma, txError } from '../lib/idioma'
+import { tx, useIdioma, IDIOMAS, cambiarIdioma, idioma, txError, locale } from '../lib/idioma'
 import { medirAccion, varianteAB } from '../lib/analitica'
 import { evento, eventoUnaVez } from '../lib/metaPixel'
 import { useInvitacion } from '../lib/referido'
 import AltaRapida from './AltaRapida'
-import { PARADAS_GRATIS } from '../lib/precios'
+import { PARADAS_GRATIS, promoGratis, fechaPromo } from '../lib/precios'
 
 /* ── LA PÁGINA DEL ANUNCIO DE REPARTIDORES (04-10-2026) ──────────────────────
    Medido: de 410 personas que llegaron del anuncio al formulario de alta, 0
@@ -28,7 +28,9 @@ const VENTAJAS = [
 const PREGUNTAS = [
   ['¿Sirve con los paquetes de mi agencia?', 'Sí. Escaneas el código de la etiqueta o le haces una foto y la app intenta leer la dirección (si no la lee, la escribes tú), o pegas tu lista de direcciones. No necesita conectarse con tu agencia.'],
   ['¿Qué hacéis con mis datos y mi ubicación?', 'La foto de la etiqueta se lee en tu móvil. Tu ubicación solo se usa para guiarte y no se guarda. Los datos de tus clientes se borran solos a los días que tú fijes.'],
-  ['¿Cuánto cuesta?', 'Gratis para siempre hasta 15 paradas al día, sin tarjeta. Sin tope: 9,99 € al mes o 99 € al año, y los 7 primeros días van sin tope. Cancelas cuando quieras desde la propia app.'],
+  ['¿Cuánto cuesta?', promoGratis()
+    ? 'Gratis y sin límite hasta el 31 de diciembre, sin tarjeta. Después sigues gratis con hasta 15 paradas al día, o sin tope por 9,99 € al mes o 99 € al año. Cancelas cuando quieras desde la propia app.'
+    : 'Gratis para siempre hasta 15 paradas al día, sin tarjeta. Sin tope: 9,99 € al mes o 99 € al año, y los 7 primeros días van sin tope. Cancelas cuando quieras desde la propia app.'],
   ['¿Tengo que instalar algo?', 'Funciona en el navegador de cualquier móvil, Android o iPhone: la añades a tu pantalla de inicio y se abre como una app. La app de Google Play y la de App Store llegarán próximamente.'],
 ]
 
@@ -119,7 +121,7 @@ export default function Repartidores() {
     </div>
   )
   const textoGratis = (
-    <p className="mt-2 text-center text-[12.5px] text-dark-300">{invitacion ? tx('{n} días gratis · sin tarjeta · cancelas cuando quieras', { n: invitacion.dias }) : tx('Gratis hasta {n} paradas al día · sin tarjeta', { n: PARADAS_GRATIS })}</p>
+    <p className="mt-2 text-center text-[12.5px] text-dark-300">{invitacion ? tx('{n} días gratis · sin tarjeta · cancelas cuando quieras', { n: invitacion.dias }) : promoGratis() ? tx('Gratis y sin límite hasta el {fecha} · sin tarjeta', { fecha: fechaPromo(locale()) }) : tx('Gratis hasta {n} paradas al día · sin tarjeta', { n: PARADAS_GRATIS })}</p>
   )
   const alta = (enfocar) => (<>
     <AltaRapida dias={invitacion ? invitacion.dias : 7} enfocar={enfocar} />
@@ -224,10 +226,16 @@ export default function Repartidores() {
         <section className="mt-8 rounded-3xl border border-dark-700 bg-dark-900 p-5">
           <h2 className="text-[18px] font-bold text-dark-50">{tx('¿Te convence? Créate la cuenta')}</h2>
           <ul className="mt-3 space-y-1.5 text-[14px] text-dark-300">
+            {promoGratis() ? (<>
+              <li className="flex gap-2"><Check size={16} className="mt-0.5 shrink-0 text-emerald-400" /> {tx('Gratis y sin límite hasta el {fecha}', { fecha: fechaPromo(locale()) })}</li>
+              <li className="flex gap-2"><Check size={16} className="mt-0.5 shrink-0 text-emerald-400" /> {tx('Después, gratis hasta {n} paradas al día, o sin tope por 9,99 €/mes', { n: PARADAS_GRATIS })}</li>
+              <li className="flex gap-2"><Check size={16} className="mt-0.5 shrink-0 text-emerald-400" /> {tx('Sin tarjeta: te registras y empiezas ya')}</li>
+            </>) : (<>
             <li className="flex gap-2"><Check size={16} className="mt-0.5 shrink-0 text-emerald-400" /> {tx('Gratis para siempre hasta {n} paradas al día', { n: PARADAS_GRATIS })}</li>
             <li className="flex gap-2"><Check size={16} className="mt-0.5 shrink-0 text-emerald-400" /> {tx('Sin tope: 9,99 €/mes o 99 €/año, con 7 días de prueba')}</li>
             <li className="flex gap-2"><Check size={16} className="mt-0.5 shrink-0 text-emerald-400" /> {tx('Cancelas cuando quieras desde la app')}</li>
             <li className="flex gap-2"><Check size={16} className="mt-0.5 shrink-0 text-emerald-400" /> {tx('Sin tarjeta: la prueba empieza ya y hoy no pagas nada')}</li>
+            </>)}
           </ul>
           <a href="/registro?sector=autonomo&plan=autonomo" onClick={() => { medirAccion('rep_alta'); evento('Lead', { content_name: 'crear_cuenta' }) }}
             className="mt-4 flex w-full items-center justify-center gap-2 rounded-2xl border border-brand-400/50 py-3.5 text-[15.5px] font-bold text-brand-200">

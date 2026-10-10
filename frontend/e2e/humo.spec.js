@@ -1382,8 +1382,9 @@ test('Alta · quien reparte solo va directo a su plan: 7 días, 9,99 €, tres c
   await page.getByRole('button', { name: /Repartir yo mismo/ }).click()
   await expect(page).toHaveURL(/plan=autonomo/)
   // Lo primero que ve es que es gratis; el precio, solo como «sin tope» (10-10-2026).
-  await expect(page.getByText('Gratis hasta 15 paradas al día · sin tarjeta')).toBeVisible()
-  await expect(page.getByText(/Sin tope: 9,99 €\/mes, y los 7 primeros días ya van sin tope/)).toBeVisible()
+  // Promoción (10-10-2026): gratis y sin límite hasta el 31 de diciembre; después, 15 paradas o 9,99 €.
+  await expect(page.getByText('Gratis y sin límite hasta el 31 de diciembre · sin tarjeta')).toBeVisible()
+  await expect(page.getByText(/Después, gratis hasta 15 paradas al día, o sin tope por 9,99 €\/mes/)).toBeVisible()
   await expect(page.getByText('Plan elegido')).toHaveCount(0)
   await expect(page.getByRole('button', { name: 'Cambiar' })).toHaveCount(0)
   await expect(page.getByText('Tus sedes')).toHaveCount(0)
@@ -1431,7 +1432,7 @@ test('App · sin sesión arranca en Empezar: crear cuenta, entrar y probar a la 
   await expect(page.getByRole('link', { name: /Soy repartidor de una empresa/ })).toBeVisible()
   await page.getByRole('link', { name: /Crear mi cuenta gratis/ }).click()
   await expect(page).toHaveURL(/registro\?sector=autonomo/)
-  await expect(page.getByText('Gratis hasta 15 paradas al día · sin tarjeta')).toBeVisible()
+  await expect(page.getByText('Gratis y sin límite hasta el 31 de diciembre · sin tarjeta')).toBeVisible()
 })
 
 test('Planes · el repartidor sale aparte con su precio fijo aunque el servidor no lo mande', async ({ page }) => {
@@ -2008,6 +2009,22 @@ test.describe('Alta desde el navegador de TikTok (Android)', () => {
   })
 })
 
+/* PROMOCIÓN (10-10-2026): gratis y sin límite hasta el 31-12. La app no habla de prueba ni de cobros. */
+test('Cobro · con la promoción: «Gratis sin límite», sin aviso de prueba ni ofertas de pago', async ({ page }) => {
+  const fallos = vigilar(page)
+  await entrarRepartidor(page, { status: 'trial', days_left: 1, required: false, trial_ends: new Date(Date.now() + 86400000).toISOString(),
+    gratis: { activo: false, tope: 15, usadas: 20 }, promo: { activa: true, hasta: '2026-12-31' } })
+  await page.goto('/ruta', { waitUntil: 'domcontentloaded' })
+  await expect(page.getByRole('button', { name: 'Hoy', exact: true })).toBeVisible()
+  await expect(page.getByText(/Queda 1 día de prueba/)).toHaveCount(0)
+  await expect(page.getByText('Plan gratis: hasta 15 paradas nuevas al día.')).toHaveCount(0)
+  await page.getByRole('button', { name: 'Cuenta', exact: true }).click()
+  await expect(page.getByText('Gratis sin límite', { exact: true })).toBeVisible()
+  await expect(page.getByText(/Hasta el 31\/12\/2026 no tienes tope de paradas ni pagas nada|Hasta el .* no tienes tope de paradas ni pagas nada/)).toBeVisible()
+  await expect(page.getByRole('button', { name: /Pagar con tarjeta|Suscribirme/ })).toHaveCount(0)
+  expect(fallos).toEqual([])
+})
+
 test('Cobro · alta nueva: muro de «7 días gratis» con tarjeta, hoy 0 €, y elegir anual', async ({ page }) => {
   const fallos = vigilar(page)
   const fin = new Date(Date.now() + 7 * 86400000).toISOString()
@@ -2286,7 +2303,7 @@ test.describe('Idiomas · la app de reparto sigue el idioma del móvil', () => {
     await page.getByRole('link', { name: /免费创建我的账号/ }).click()
     await expect(page).toHaveURL(/sector=autonomo/)
     // Lo primero, que es gratis (10-10-2026), y en chino.
-    await expect(page.getByText('每天最多 15 个站点免费 · 无需绑卡')).toBeVisible()
+    await expect(page.getByText('12月31日前免费且不限 · 无需绑卡')).toBeVisible()
     await expect(page.getByText('免费 · 无需绑卡 · 今天 0 欧元')).toBeVisible()
     await expect(page.getByText(/sin tarjeta/)).toHaveCount(0)
     await expect(page.getByRole('link', { name: '隐私政策' })).toHaveAttribute('href', '/privacidad')
@@ -2317,7 +2334,7 @@ test('Portada en chino · /cn entera en chino, con la app del repartidor y su al
   await expect(page.getByRole('button', { name: '知道了' })).toBeVisible()                   // cookies en chino
   await page.getByRole('link', { name: /开始免费试用/ }).click()
   await expect(page).toHaveURL(/registro\?sector=autonomo/)
-  await expect(page.getByText('每天最多 15 个站点免费 · 无需绑卡')).toBeVisible()
+  await expect(page.getByText('12月31日前免费且不限 · 无需绑卡')).toBeVisible()
   expect(fallos).toEqual([])
 })
 

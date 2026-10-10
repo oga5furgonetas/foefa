@@ -6,7 +6,8 @@
  * que no tiene que ver con lo que se ofrece y parece una estafa. Aquí se sustituyen
  * solo para esta ruta; la persona recibe la misma página y React monta igual. */
 // Plan gratis (10-10-2026): gratis para siempre con tope de paradas; sin tope, de pago.
-const TITULO = 'Tu ruta de reparto, ordenada sola · Gratis hasta 15 paradas al día'
+// 10-10-2026: gratis y sin límite hasta el 31 de diciembre (promoción; ver lib/precios.js).
+const TITULO = 'Tu ruta de reparto, ordenada sola · Gratis y sin límite hasta el 31 de diciembre'
 const DESCRIPCION = 'Foto a la etiqueta, paradas ordenadas y guía por voz hasta la puerta. Para repartidores autónomos. Sin tarjeta.'
 
 export async function onRequestGet(context) {
