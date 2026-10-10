@@ -906,3 +906,21 @@ Repaso de cada frase de `/planes` y de la presentación contra el código (Dani:
   «Require review»). Orgánico: carrusel «Promo de lanzamiento» en TikTok (la subida de VÍDEO en TikTok Studio se queda
   cargando desde el navegador; las fotos sí van) y reel en la página FDs de Facebook. Telegram Web no tiene sesión
   (pide QR del móvil): el mensaje lo pega Dani. edge-tts sigue con 403 aunque se actualice: sin voz nueva.
+
+## 10-10-2026 (noche, 4): publicidad hecha y primera ronda de fallos
+
+- **Publicado**: anuncio Meta «Lanzamiento + gana 5 €» (en circulación), 2 vídeos al anuncio de TikTok, carrusel en
+  TikTok, reel en la página FDs y posts en los grupos «Repartidores BCN» y «Repartidores de paquetería autónomos»
+  (11,9 mil). Subir Meta a 30 €/día lo bloqueó el control de permisos (gasto): sigue a 15 €/día, lo decide Dani.
+  La vista previa de /repartidores en Facebook decía «7 días gratis»: imagen og nueva (`og-repartidores.png?v=promo1231`)
+  y re-extraída en el depurador de Facebook. Telegram Web pide QR: el mensaje lo pega Dani.
+- **Fallo grave arreglado**: en el tema por defecto (híbrido) los textos pastel 100-300 salían casi blancos sobre el
+  contenido claro. El repartidor nuevo NO veía «Verlo en acción con 3 paradas de ejemplo» ni «Gana 5 €». Reglas
+  generadas al final de `index.css` para todas las clases que usa la app; botones blancos sobre turquesa/verde a
+  4,5:1 (`text-brand-tinta`, `bg-emerald-700`); `contraste.spec.js` mira ya /ruta (vacía, con ejemplos, Historial,
+  Ajustes y Cuenta) en los tres temas.
+- **Guía**: sin ubicación, al entregar el mapa se quedaba en la parada anterior; ahora salta a la siguiente.
+- **Medición** en la app de ruta: `ruta_escaner`, `ruta_escaneo`, `ruta_codigo`, `ruta_foto_etiqueta`,
+  `ruta_parada_nueva`, `ruta_ordenar`, `ruta_navegar`, `ruta_entregado`, `ruta_no_entregado`.
+- **Portada /repartidores**: la oferta del anuncio (gratis hasta el 31-12 y 5 € por compañero) arriba del todo.
+- Dato: TikTok precarga la portada; sus «visitas» casi nunca son personas (ver memoria origen-altas).
