@@ -4,10 +4,13 @@ import { MARCA, origen } from '../marca'
 // páginas legales lo DICEN en vez de inventar un CIF o una dirección: un aviso
 // legal con datos falsos es peor que uno incompleto.
 export const COMPANY = {
-  legalName: MARCA.nombre,   // razón social cuando se constituya la sociedad
+  // Titular (LSSI art. 10): hasta que exista la sociedad, el promotor como persona física
+  // (Dani, 10-10-2026). Cuando se constituya: la razón social y su CIF.
+  legalName: 'Daniel Lampón Vieites',
+  personaFisica: true,
   brand: MARCA.nombre,
-  cif: '',           // rellenar cuando se constituya la sociedad
-  address: '',       // rellenar cuando haya sede
+  cif: '',           // NIF: pendiente de que Dani decida publicarlo (o el CIF de la sociedad)
+  address: '',       // domicilio completo (calle, número, CP, municipio, provincia): pendiente
   registry: '',
   contactEmail: MARCA.correo,
   privacyEmail: MARCA.correo,

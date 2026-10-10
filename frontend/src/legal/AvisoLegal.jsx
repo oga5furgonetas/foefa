@@ -8,8 +8,10 @@ export default function AvisoLegal() {
 
       <h2>1. Titular</h2>
       <ul>
-        <li><strong>Denominación:</strong> {COMPANY.legalName} (servicio prestado por su promotor, persona física, sin sociedad mercantil constituida a la fecha de publicación de este aviso).</li>
-        {COMPANY.cif && <li><strong>CIF/NIF:</strong> {COMPANY.cif}</li>}
+        {COMPANY.personaFisica
+          ? <li><strong>Titular:</strong> {COMPANY.legalName}, persona física, que presta el servicio con la marca {COMPANY.brand} (sin sociedad mercantil constituida a la fecha de este aviso).</li>
+          : <li><strong>Denominación:</strong> {COMPANY.legalName}</li>}
+        {COMPANY.cif && <li><strong>NIF:</strong> {COMPANY.cif}</li>}
         {COMPANY.address && <li><strong>Domicilio:</strong> {COMPANY.address}</li>}
         {COMPANY.registry && <li><strong>Registro:</strong> {COMPANY.registry}</li>}
         <li><strong>Contacto:</strong> <a href={`mailto:${COMPANY.contactEmail}`}>{COMPANY.contactEmail}</a></li>

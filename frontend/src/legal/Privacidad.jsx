@@ -8,7 +8,7 @@ export default function Privacidad() {
 
       <h2>1. Responsable del tratamiento</h2>
       <ul>
-        <li><strong>{COMPANY.legalName}</strong>{COMPANY.cif ? `, CIF ${COMPANY.cif}` : ''}.</li>
+        <li><strong>{COMPANY.legalName}</strong>{COMPANY.cif ? `, NIF ${COMPANY.cif}` : ''}.</li>
         {COMPANY.address && <li>Domicilio: {COMPANY.address}.</li>}
         <li>Contacto en materia de privacidad: <a href={`mailto:${COMPANY.privacyEmail}`}>{COMPANY.privacyEmail}</a>.</li>
       </ul>

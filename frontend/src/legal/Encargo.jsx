@@ -15,7 +15,7 @@ export default function Encargo() {
       <h2>1. Partes y papeles</h2>
       <ul>
         <li><strong>Responsable del tratamiento:</strong> la empresa cliente titular de la cuenta. Decide qué datos mete, para qué y durante cuánto tiempo.</li>
-        <li><strong>Encargado del tratamiento:</strong> {COMPANY.legalName}{COMPANY.cif ? ` (CIF ${COMPANY.cif})` : ''}, que presta {COMPANY.brand}.</li>
+        <li><strong>Encargado del tratamiento:</strong> {COMPANY.legalName}{COMPANY.cif ? ` (NIF ${COMPANY.cif})` : ''}, que presta {COMPANY.brand}.</li>
       </ul>
 
       <h2>2. Objeto, duración y naturaleza</h2>

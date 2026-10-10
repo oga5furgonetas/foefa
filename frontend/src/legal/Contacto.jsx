@@ -41,7 +41,7 @@ export default function Contacto() {
           <div className="mb-6 mt-4 grid gap-3 sm:grid-cols-3">
             <div className="rounded-lg border border-dark-800 bg-dark-900 p-3"><div className="mb-1 flex items-center gap-1 text-xs text-dark-500"><Mail size={12} /> Soporte</div><a href={`mailto:${COMPANY.contactEmail}`} className="text-sm">{COMPANY.contactEmail}</a></div>
             <div className="rounded-lg border border-dark-800 bg-dark-900 p-3"><div className="mb-1 flex items-center gap-1 text-xs text-dark-500"><Mail size={12} /> Privacidad</div><a href={`mailto:${COMPANY.privacyEmail}`} className="text-sm">{COMPANY.privacyEmail}</a></div>
-            <div className="rounded-lg border border-dark-800 bg-dark-900 p-3"><div className="mb-1 flex items-center gap-1 text-xs text-dark-500">Empresa</div><div className="text-sm">{COMPANY.legalName}</div></div>
+            <div className="rounded-lg border border-dark-800 bg-dark-900 p-3"><div className="mb-1 flex items-center gap-1 text-xs text-dark-500">{COMPANY.personaFisica ? 'Titular' : 'Empresa'}</div><div className="text-sm">{COMPANY.legalName}</div></div>
           </div>
 
           <form onSubmit={submit} className="space-y-3">
