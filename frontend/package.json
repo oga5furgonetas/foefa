@@ -19,6 +19,7 @@
     "@react-three/fiber": "^8.18.0",
     "@tesseract.js-data/spa": "^1.0.0",
     "axios": "^1.7.9",
+    "barcode-detector": "3.2.2",
     "leaflet": "^1.9.4",
     "lucide-react": "^0.469.0",
     "qrcode": "^1.5.4",

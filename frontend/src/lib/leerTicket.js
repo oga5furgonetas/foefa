@@ -74,8 +74,56 @@ async function lector() {
   return _lector
 }
 
+/* LA FOTO PREPARADA PARA LEER (10-10-2026). Una etiqueta fotografiada en la
+   furgoneta llega con poca luz, sombras y letra pequeña, y el OCR fallaba a
+   menudo. Antes de leer: a tamaño de lectura (≈ 2000 px de ancho, sin pasarse),
+   en grises y con el contraste estirado (lo más oscuro a negro y lo más claro a
+   blanco, sin contar los extremos: un brillo o una sombra no lo estropean). */
+async function preparar(imagen) {
+  try {
+    const bmp = await createImageBitmap(imagen)
+    const escala = Math.min(2, 2000 / Math.max(bmp.width, bmp.height))
+    const c = document.createElement('canvas')
+    c.width = Math.round(bmp.width * escala); c.height = Math.round(bmp.height * escala)
+    const ctx = c.getContext('2d', { willReadFrequently: true })
+    ctx.imageSmoothingQuality = 'high'
+    ctx.drawImage(bmp, 0, 0, c.width, c.height)
+    const img = ctx.getImageData(0, 0, c.width, c.height)
+    const d = img.data
+    const hist = new Uint32Array(256)
+    for (let i = 0; i < d.length; i += 4) {
+      const g = (d[i] * 299 + d[i + 1] * 587 + d[i + 2] * 114) / 1000
+      d[i] = g
+      hist[g | 0] += 1
+    }
+    const total = d.length / 4
+    let bajo = 0, alto = 255, acum = 0
+    for (; bajo < 255 && (acum += hist[bajo]) < total * 0.01; bajo += 1);
+    acum = 0
+    for (; alto > 0 && (acum += hist[alto]) < total * 0.01; alto -= 1);
+    const rango = Math.max(1, alto - bajo)
+    for (let i = 0; i < d.length; i += 4) {
+      const v = Math.max(0, Math.min(255, ((d[i] - bajo) * 255) / rango))
+      d[i] = d[i + 1] = d[i + 2] = v
+    }
+    ctx.putImageData(img, 0, 0)
+    return await new Promise((ok) => c.toBlob((b) => ok(b || imagen), 'image/png'))
+  } catch { return imagen }
+}
+
 export async function leerTicketEnMovil(imagen) {
   const w = await lector()
-  const { data } = await w.recognize(imagen)
-  return { ...interpretaTicket(data?.text), texto: data?.text || '' }
+  const lista = await preparar(imagen)
+  // Primero como un documento; si no sale una dirección, como texto suelto
+  // (las etiquetas tienen bloques repartidos y el modo documento los mezcla).
+  await w.setParameters({ tessedit_pageseg_mode: '3' })
+  let { data } = await w.recognize(lista)
+  let leido = interpretaTicket(data?.text)
+  if (!leido.direccion) {
+    await w.setParameters({ tessedit_pageseg_mode: '11' })
+    const otra = (await w.recognize(lista)).data
+    const segundo = interpretaTicket(otra?.text)
+    if (segundo.direccion) { data = otra; leido = segundo }
+  }
+  return { ...leido, texto: data?.text || '' }
 }

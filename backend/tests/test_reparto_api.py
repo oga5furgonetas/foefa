@@ -181,6 +181,27 @@ async def test_ia_de_tickets_solo_con_clave_de_pago(base, monkeypatch):
 
 
 @pytest.mark.asyncio(loop_scope="session")
+async def test_ia_de_etiquetas_con_su_propia_clave_y_por_defecto_para_quien_reparte_solo(base, monkeypatch):
+    """10-10-2026: una clave de pago solo para etiquetas (REPARTO_IA_CLAVE). Sin elegir nada, quien reparte
+    solo la tiene encendida; una empresa, apagada hasta que la active. Si lo apaga, se respeta."""
+    monkeypatch.delenv("REPARTO_IA_PERMITIDA", raising=False)
+    monkeypatch.delenv("REPARTO_IA_CLAVE", raising=False)
+    solo = {"sub": "a1", "role": "admin", "org_id": "o1"}
+
+    async def es_autonomo(user):
+        return user is solo
+
+    monkeypatch.setattr(server, "_rep_es_autonomo", es_autonomo)
+    assert await server._rep_ia_activa({"ia_tickets": None}, solo) is False          # sin clave, nada
+    monkeypatch.setenv("REPARTO_IA_CLAVE", "clave-de-pago")
+    assert server._rep_ia_permitida() is True
+    assert await server._rep_ia_activa({"ia_tickets": None}, solo) is True
+    assert await server._rep_ia_activa({"ia_tickets": None}, OFICINA) is False
+    assert await server._rep_ia_activa({"ia_tickets": False}, solo) is False         # lo apagó él
+    assert await server._rep_ia_activa({"ia_tickets": True}, OFICINA) is True
+
+
+@pytest.mark.asyncio(loop_scope="session")
 async def test_ruta_por_tiempo_con_franja_y_hora_estimada(base):
     await server.reparto_ajustes_put({"base_direccion": "Almacén", "hora_salida": "10:00",
                                       "min_parada": 5}, OFICINA)
@@ -345,6 +366,48 @@ async def test_prueba_de_entrega_donde_quien_y_firma(base):
     server._REP_LIMPIEZA.clear()
     await server.reparto_pedidos("2026-08-01", OFICINA)
     assert doc["entrega_firma"] is None and doc["entrega_recibe"] is None
+
+
+@pytest.mark.asyncio(loop_scope="session")
+async def test_ver_la_puerta_mira_desde_su_calle_hacia_la_casa(base, monkeypatch):
+    """«Ver la puerta» (10-10-2026): Street View desde el punto de la calle, mirando a la casa,
+    calculado una vez y vuelto a calcular si la dirección cambia de sitio."""
+    preguntas = []
+
+    async def calle(casa, direccion=""):
+        preguntas.append((casa, direccion))
+        return (casa[0] - 0.0003, casa[1])          # la calle, ~33 m al sur
+
+    monkeypatch.setattr(server, "_rep_calle_cercana", calle)
+    p = await server.reparto_mis_pedidos({"direccion": "Rúa Real 5"}, ANA)
+    doc = next(d for d in base.db["reparto_pedidos"].docs if d["id"] == p["id"])
+    doc.update({"lat": 43.37, "lng": -8.40})
+    v = await server.reparto_fachada(p["id"], ANA)
+    assert v["rumbo"] == 0 and v["lat"] == round(43.37 - 0.0003, 6)      # mirando al norte, a la casa
+    assert preguntas == [((43.37, -8.40), "Rúa Real 5")]
+    await server.reparto_fachada(p["id"], ANA)
+    assert len(preguntas) == 1                       # guardado: no se vuelve a preguntar
+    doc.update({"lat": 43.38})
+    await server.reparto_fachada(p["id"], ANA)
+    assert len(preguntas) == 2                       # otra posición: se recalcula
+    with pytest.raises(HTTPException) as e:
+        await server.reparto_fachada(p["id"], {"sub": "otro", "role": "driver"})
+    assert e.value.status_code == 403
+    # Sin calle conocida: desde la casa y sin rumbo, en vez de mirar a cualquier sitio.
+    assert server.reparto.vista_fachada((43.37, -8.40), None)["rumbo"] is None
+    assert round(server.reparto.rumbo((43.37, -8.40), (43.37, -8.39))) == 90
+
+
+@pytest.mark.asyncio(loop_scope="session")
+async def test_un_no_entregado_se_reintenta_o_se_entrega_despues(base):
+    """Dani: «si pones un paquete en incidencia, que te deje volver a intentarlo y cambiarle el estado»."""
+    p = await server.reparto_mis_pedidos({"direccion": "Rúa Real 5"}, ANA)
+    await server.reparto_estado(p["id"], {"estado": "fallido", "motivo": "No había nadie"}, ANA)
+    r = await server.reparto_estado(p["id"], {"estado": "pendiente"}, ANA)
+    assert r["estado"] == "pendiente" and r["motivo"] == "" and r["cerrado_en"] is None
+    await server.reparto_estado(p["id"], {"estado": "fallido", "motivo": "No había nadie"}, ANA)
+    r = await server.reparto_estado(p["id"], {"estado": "entregado", "donde": "buzon"}, ANA)
+    assert r["estado"] == "entregado" and r["motivo"] == "" and r["entrega_donde"] == "buzon"
 
 
 @pytest.mark.asyncio(loop_scope="session")

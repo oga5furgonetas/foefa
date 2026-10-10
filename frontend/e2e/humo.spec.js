@@ -1602,13 +1602,15 @@ test('Reparto · entregar con «dónde lo dejas», firma, y el buscador de paque
   const estados = []
   await page.route(/\/api\/reparto\/pedidos\/p1\/estado/, async (r) => { estados.push(r.request().postDataJSON()); await r.fulfill({ json: { ok: true } }) })
   await page.route(/\/api\/reparto\/escanear/, (r) => r.fulfill({ json: { encontrado: true, pedido: { ...pedidos[1], escaneos: 1 } } }))
+  await page.route(/\/api\/reparto\/pedidos\/p1\/fachada/, (r) => r.fulfill({ json: { lat: 43.3697, lng: -8.4, rumbo: 12 } }))
   await page.route(/\/api\/reparto\/mi-ruta\/trazado/, (r) => r.fulfill({ json: { linea: [], fuente: null, km: null, minutos: null } }))
   await page.route(/\/api\/reparto\/mi-ruta$/, (r) => r.fulfill({ json: {
     activo: true, empresa: 'Súper', fecha: '2026-10-04', ia_tickets: false, jornada: {}, aviso_aceptado: true,
     base: null, ruta: { fin: '10:40', minutos: 40, km: 9.5, trafico: true }, pedidos } }))
   await page.goto('/conductor?vista=ruta', { waitUntil: 'domcontentloaded' })
   const primera = page.locator('div.rounded-2xl', { hasText: 'Siguiente parada' })
-  await expect(primera.getByRole('link', { name: 'Ver la fachada' })).toHaveAttribute('href', /map_action=pano&viewpoint=43\.37,-8\.4/)
+  // Ver la puerta: desde la calle y mirando a la casa (rumbo que da el servidor).
+  await expect(primera.getByRole('link', { name: 'Ver la puerta' })).toHaveAttribute('href', /map_action=pano&viewpoint=43\.3697,-8\.4&heading=12/)
 
   // Entregar: al vecino, quién lo recoge y firma con el dedo.
   await primera.getByRole('button', { name: 'Entregado', exact: true }).click()
@@ -1638,6 +1640,84 @@ test('Reparto · entregar con «dónde lo dejas», firma, y el buscador de paque
   await expect(hoja.getByText('Farmacia Sol')).toBeVisible()
   await expect(hoja.getByText('2', { exact: true })).toBeVisible()
   await expect(hoja.getByRole('button', { name: 'Escanear el siguiente' })).toBeVisible()
+  expect(fallos).toEqual([])
+})
+
+/* 10-10-2026, lo que pidió Dani: el micrófono (bloqueado por la cabecera; ahora, si no hay dictado, el del
+   teclado), un código que ya trae la dirección, y que un no entregado se pueda reintentar o entregar. */
+async function rutaDeAna(page, pedidos, extra = {}) {
+  const b64 = (o) => btoa(JSON.stringify(o)).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '')
+  const token = `${b64({ alg: 'HS256' })}.${b64({ sub: 'd1', role: 'driver', name: 'ANA', exp: Math.floor(Date.now() / 1000) + 3600 })}.x`
+  await page.addInitScript((t) => {
+    localStorage.setItem('flota_driver_token', t)
+    localStorage.setItem('flota_driver', JSON.stringify({ id: 'd1', name: 'ANA' }))
+    localStorage.setItem('cookie_consent', '1')
+  }, token)
+  await simularApi(page, 'vacio')
+  await page.route(/\/api\/reparto\/mi-ruta\/trazado/, (r) => r.fulfill({ json: { linea: [], fuente: null } }))
+  await page.route(/\/api\/reparto\/mi-ruta$/, (r) => r.fulfill({ json: {
+    activo: true, empresa: 'Súper', fecha: '2026-10-04', jornada: {}, aviso_aceptado: true, ruta: { fin: '10:40' }, pedidos, ...extra } }))
+}
+
+test('Reparto · sin dictado en el navegador, el micro lleva al del teclado; un código con dirección la rellena', async ({ page }) => {
+  const fallos = vigilar(page)
+  await page.addInitScript(() => { delete window.SpeechRecognition; delete window.webkitSpeechRecognition })
+  await rutaDeAna(page, [])
+  await page.route(/\/api\/reparto\/escanear/, (r) => r.fulfill({ json: { encontrado: false, codigo: 'GLS123' } }))
+  await page.goto('/conductor?vista=ruta', { waitUntil: 'domcontentloaded' })
+  await page.getByPlaceholder('o escribe el código').fill('GLS123|Rúa Real 5|15003 A Coruña|Marta|612345678')
+  await page.getByRole('button', { name: 'Buscar', exact: true }).click()
+  const hoja = page.getByRole('dialog')
+  await expect(hoja.getByPlaceholder('Dirección completa')).toHaveValue(/Rúa Real 5.*15003/)
+  await hoja.getByRole('button', { name: 'Dictar la dirección' }).click()
+  await expect(page.getByText('Toca la dirección y usa el micrófono de tu teclado 🎤 para dictarla.')).toBeVisible()
+  await expect(hoja.getByPlaceholder('Dirección completa')).toBeFocused()
+  expect(fallos).toEqual([])
+})
+
+test('Reparto · un no entregado se puede volver a intentar o dar por entregado después', async ({ page }) => {
+  const fallos = vigilar(page)
+  await rutaDeAna(page, [
+    { id: 'p1', cliente: 'Bar Pepe', direccion: 'Rúa Real 5', estado: 'pendiente', bultos: 1, orden: 1, lat: 43.37, lng: -8.40 },
+    { id: 'p2', cliente: 'Farmacia Sol', direccion: 'Avda Montero Ríos 12', estado: 'fallido', motivo: 'No había nadie', bultos: 1, orden: 2 },
+  ])
+  const estados = []
+  await page.route(/\/api\/reparto\/pedidos\/p2\/estado/, async (r) => { estados.push(r.request().postDataJSON()); await r.fulfill({ json: { ok: true } }) })
+  await page.goto('/conductor?vista=ruta', { waitUntil: 'domcontentloaded' })
+  await expect(page.getByText('1 sin entregar')).toBeVisible()
+  await page.getByRole('button', { name: 'Volver a intentarlo' }).click()
+  await expect.poll(() => estados.length).toBe(1)
+  expect(estados[0]).toMatchObject({ estado: 'pendiente', motivo: '' })
+  expect(fallos).toEqual([])
+})
+
+test('Historial · cada día en su pantalla, con la prueba de entrega y «Pasar a hoy»', async ({ page }) => {
+  const fallos = vigilar(page)
+  await entrarRepartidor(page, { status: 'trial', days_left: 6 })
+  await page.route(/\/api\/reparto\/estadisticas/, (r) => r.fulfill({ json: { total: 3, entregados: 2, tasa_entrega: 67,
+    por_dia: [{ fecha: '2026-10-08', total: 3, entregados: 2, fallidos: 1 }] } }))
+  await page.route(/\/api\/reparto\/pedidos\?/, (r) => r.fulfill({ json: { fecha: '2026-10-08', pedidos: [
+    { id: 'h1', cliente: 'Bar Pepe', direccion: 'Rúa Real 5', estado: 'entregado', cerrado_en: '2026-10-08T08:15:00Z', entrega_donde: 'vecino', entrega_recibe: 'Marta', tiene_foto: true },
+    { id: 'h2', cliente: 'Kiosko Luz', direccion: 'San Andrés 30', estado: 'entregado', cerrado_en: '2026-10-08T11:40:00Z' },
+    { id: 'h3', cliente: 'Farmacia Sol', direccion: 'Avda Montero Ríos 12', estado: 'fallido', motivo: 'No había nadie' },
+  ], conductores: [{ ruta: { km: 23.5 } }] } }))
+  await page.route(/\/api\/reparto\/pedidos\/h1\/foto/, (r) => r.fulfill({ json: { foto: '', firma: 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==', donde: 'Al vecino', recibe: 'Marta', nota: '', cuando: '2026-10-08T08:15:00Z' } }))
+  const movidos = []
+  await page.route(/\/api\/reparto\/pedidos\/h3$/, async (r) => { movidos.push(r.request().postDataJSON()); await r.fulfill({ json: { ok: true } }) })
+  await page.goto('/ruta?tab=historial', { waitUntil: 'domcontentloaded' })
+  await page.getByRole('button', { name: /8 de octubre/ }).click()
+  await expect(page.getByText('23.5 km')).toBeVisible()
+  await expect(page.getByText('Al vecino')).toBeVisible()
+  // La prueba de entrega con la firma.
+  await page.getByRole('button', { name: /Bar Pepe/ }).click()
+  await page.getByRole('button', { name: 'Ver prueba de entrega' }).click()
+  await expect(page.getByRole('dialog', { name: 'Prueba de entrega' }).getByRole('img', { name: 'Firma' })).toBeVisible()
+  await page.getByRole('dialog', { name: 'Prueba de entrega' }).getByRole('button', { name: 'Cerrar' }).click()
+  // El no entregado, a la ruta de hoy.
+  await page.getByRole('button', { name: /Farmacia Sol/ }).click()
+  await page.getByRole('button', { name: 'Pasar a hoy' }).click()
+  await expect.poll(() => movidos.length).toBe(1)
+  expect(movidos[0].fecha).toMatch(/^\d{4}-\d{2}-\d{2}$/)
   expect(fallos).toEqual([])
 })
 

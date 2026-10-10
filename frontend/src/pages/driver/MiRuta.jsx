@@ -2,17 +2,18 @@ import { Suspense, lazy, useCallback, useEffect, useRef, useState } from 'react'
 import {
   ArrowLeft, ScanLine, Camera, Loader2, Navigation, Phone, Check, X, Route, MapPin, Play, Square, Package,
   MessageCircle, Clock, Search, List, Pencil, ChevronDown, GripVertical, Map as MapaIcono, ArrowUp, ArrowDown, ArrowUpDown, Mic, ClipboardPaste, Trophy,
-  Eye, PenLine,
+  Eye, PenLine, RotateCcw,
 } from 'lucide-react'
 import {
   repMiRuta, repEscanear, repLeerTicket, repNuevoPedido, repEstado, repOrdenar, repJornada, repPosicion,
-  repMiOrden, repMiEditar, repMiQuitar, repEjemplo, repQuitarEjemplos, repPegarMiLista, repTrazado,
+  repMiOrden, repMiEditar, repMiQuitar, repEjemplo, repQuitarEjemplos, repPegarMiLista, repTrazado, repFachada,
 } from '../../services/api'
 import { hoyLocal } from '../../lib/fecha'
 import { lista } from '../../lib/lista'
 import { compressImage } from '../../lib/compressImage'
 import { origen } from '../../marca'
-import { leerTicketEnMovil } from '../../lib/leerTicket'
+import { leerTicketEnMovil, interpretaTicket } from '../../lib/leerTicket'
+import { lectorDeCodigos, leerCodigo } from '../../lib/codigos'
 import { buscarDirecciones } from '../../lib/direcciones'
 import { invitar } from '../../lib/compartir'
 import { medirAccion } from '../../lib/analitica'
@@ -182,6 +183,8 @@ export default function MiRuta({ onBack, embebido = false }) {
   const [huecoDe, setHuecoDe] = useState(null)       // la parada a la que se le dice dónde va
   const [pegar, setPegar] = useState(null)           // null | {texto, n}
   const [escuchando, setEscuchando] = useState(false)
+  const reconocedor = useRef(null)
+  const dirInput = useRef(null)
   useEffect(() => guarda('ruta_vista', vista), [vista])
   useEffect(() => guarda('ruta_nav2', nav), [nav])
   // La app de navegación de fuera: la elegida, o la del país si guía esta app.
@@ -282,7 +285,11 @@ export default function MiRuta({ onBack, embebido = false }) {
     } finally { setOcupado('') }
   }
 
-  async function buscar(c) {
+  /* ESCANEAR Y YA (10-10-2026): si el paquete está en la lista, sale su parada;
+     si no, con el MISMO gesto se lee la etiqueta (el fotograma en el que se leyó
+     el código) y se rellena la parada nueva. Algunos códigos 2D ya llevan la
+     dirección dentro: entonces ni hace falta leer la foto. */
+  async function buscar(c, foto) {
     const cod = String(c || '').trim()
     if (!cod) return
     setEscaner(false); setOcupado('buscar'); setAviso('')
@@ -297,7 +304,14 @@ export default function MiRuta({ onBack, embebido = false }) {
         setCodigo('')
         cargar()
       } else {
-        setNuevo({ ...VACIO, codigo: data.codigo })
+        const dentro = cod.length > 25 ? interpretaTicket(cod.replace(/[|^~;]+/g, '\n')) : {}
+        if (dentro.direccion) {
+          setNuevo({ ...VACIO, ...Object.fromEntries(Object.entries(dentro).filter(([, v]) => v)), codigo: data.codigo, de_ticket: true,
+            direccion: [dentro.direccion, dentro.cp, dentro.localidad].filter(Boolean).join(', ') })
+        } else {
+          setNuevo({ ...VACIO, codigo: data.codigo })
+          if (foto) { setOcupado(''); await leerTicket(foto); return }
+        }
       }
     } catch (e) { setAviso(txError(e, 'No se pudo buscar')) } finally { setOcupado('') }
   }
@@ -305,15 +319,7 @@ export default function MiRuta({ onBack, embebido = false }) {
   /* El código de barras de la etiqueta, de la misma foto: así una foto da
      el código Y la dirección. Si el móvil no sabe leer códigos, nada. */
   async function codigoDeFoto(blob) {
-    try {
-      if (!('BarcodeDetector' in window)) return ''
-      const soportados = await window.BarcodeDetector.getSupportedFormats()
-      const quiero = ['code_128', 'ean_13', 'ean_8', 'qr_code', 'code_39', 'itf', 'upc_a', 'upc_e', 'data_matrix', 'codabar'].filter((f) => soportados.includes(f))
-      const det = new window.BarcodeDetector({ formats: quiero })
-      const bmp = await createImageBitmap(blob)
-      const codigos = await det.detect(bmp)
-      return codigos.find((c) => c.rawValue)?.rawValue || ''
-    } catch { return '' }
+    try { return await leerCodigo(await createImageBitmap(blob)) } catch { return '' }
   }
 
   async function leerTicket(file) {
@@ -325,7 +331,8 @@ export default function MiRuta({ onBack, embebido = false }) {
       const blob = await compressImage(file, 1600, 0.85)
       const [data, codigoFoto] = await Promise.all([
         ruta?.ia_tickets
-          ? repLeerTicket(new File([blob], 'ticket.jpg', { type: 'image/jpeg' })).then((r) => r.data)
+          // Si la IA no contesta (saturada, sin saldo), se lee en el móvil en vez de dar error.
+          ? repLeerTicket(new File([blob], 'ticket.jpg', { type: 'image/jpeg' })).then((r) => r.data).catch(() => leerTicketEnMovil(blob))
           : leerTicketEnMovil(blob),
         codigoDeFoto(blob),
       ])
@@ -543,18 +550,34 @@ export default function MiRuta({ onBack, embebido = false }) {
     } finally { setOcupado('') }
   }
 
+  /* DICTAR (10-10-2026). No funcionaba: la web tenía el micrófono prohibido en
+     su cabecera (Permissions-Policy). Ahora se ve lo que va entendiendo mientras
+     hablas y, si el móvil no deja dictar aquí (iPhone instalado, navegador de
+     TikTok…), te lleva al campo para usar el micrófono del teclado, que va siempre. */
+  const usaElTeclado = () => {
+    setAviso(tx('Toca la dirección y usa el micrófono de tu teclado 🎤 para dictarla.'))
+    dirInput.current?.focus()
+  }
   function dictar() {
-    if (!Reconocedor || escuchando) return
+    if (escuchando) { reconocedor.current?.stop(); return }
+    if (!Reconocedor) { usaElTeclado(); return }
     const r = new Reconocedor()
-    r.lang = locale(); r.interimResults = false; r.maxAlternatives = 1
+    reconocedor.current = r
+    let oido = ''
+    r.lang = locale(); r.interimResults = true; r.continuous = false; r.maxAlternatives = 1
     r.onresult = (ev) => {
-      const dicho = ev.results?.[0]?.[0]?.transcript || ''
-      if (dicho) setNuevo((n) => ({ ...n, direccion: dicho }))
+      oido = Array.from(ev.results).map((x) => x[0]?.transcript || '').join(' ').trim()
+      if (oido) setNuevo((n) => ({ ...n, direccion: oido, lat: null, lng: null }))
     }
-    r.onerror = (ev) => setAviso(ev.error === 'not-allowed' ? tx('Dale permiso al micrófono para dictar.') : tx('No te he entendido. Prueba otra vez o escríbelo.'))
-    r.onend = () => setEscuchando(false)
+    r.onerror = (ev) => {
+      if (ev.error === 'no-speech') setAviso(tx('No te he oído. Toca el micrófono y di la dirección.'))
+      else if (ev.error === 'aborted') return
+      else usaElTeclado()
+    }
+    r.onend = () => { setEscuchando(false); reconocedor.current = null }
+    setAviso('')
     setEscuchando(true)
-    try { r.start() } catch { setEscuchando(false) }
+    try { r.start() } catch { setEscuchando(false); usaElTeclado() }
   }
 
   async function pegarLista(confirmar) {
@@ -905,13 +928,9 @@ export default function MiRuta({ onBack, embebido = false }) {
                     className={`inline-flex items-center gap-1 rounded-lg px-2 py-1 text-[12px] font-semibold ${p.hueco ? 'bg-sky-500/15 text-sky-200' : 'border border-dashed border-dark-700 text-dark-400'}`}>
                     <Package size={12} /> {p.hueco ? tx('En la furgoneta: {sitio}', { sitio: tx(p.hueco) }) : tx('¿Dónde va en la furgoneta?')}
                   </button>
-                  {/* LA FACHADA ANTES DE LLEGAR (como Circuit): Street View en ese punto. */}
-                  {p.lat != null && ruta.pais !== 'cn' && (
-                    <a href={`https://www.google.com/maps/@?api=1&map_action=pano&viewpoint=${p.lat},${p.lng}`} target="_blank" rel="noreferrer"
-                      className="inline-flex items-center gap-1 rounded-lg border border-dark-700 px-2 py-1 text-[12px] font-semibold text-dark-200">
-                      <Eye size={12} /> {tx('Ver la fachada')}
-                    </a>
-                  )}
+                  {/* VER LA PUERTA antes de llegar: solo si la dirección está situada en su portal
+                      (no «aproximada», que es solo la calle) y fuera de China (sin Street View). */}
+                  {p.lat != null && p.geo !== 'aprox' && ruta.pais !== 'cn' && <VerPuerta p={p} />}
                   <button onClick={() => editar(p)} aria-label={`${tx('Editar parada')}: ${p.cliente || p.direccion}`}
                     className="inline-flex items-center gap-1 rounded-lg border border-dark-700 px-2 py-1 text-[12px] font-semibold text-dark-200">
                     <Pencil size={12} /> {tx('Editar')}
@@ -950,16 +969,40 @@ export default function MiRuta({ onBack, embebido = false }) {
         })}
       </div>
       )}
+      {/* LO HECHO HOY, Y CORREGIBLE (10-10-2026): un «no entregado» se puede
+          volver a intentar (vuelve a la ruta) o dar por entregado si al final se
+          entregó; un entregado por error, pasarlo a no entregado. Si hay
+          incidencias, la lista sale abierta. */}
       {hechos.length > 0 && (
-        <details className="mt-4">
-          <summary className="cursor-pointer text-[13px] text-dark-400">{tx('{n} hechos hoy', { n: hechos.length })}</summary>
+        <details className="mt-4" open={hechos.some((p) => p.estado === 'fallido')}>
+          <summary className="cursor-pointer text-[13px] text-dark-400">
+            {tx('{n} hechos hoy', { n: hechos.length })}
+            {hechos.some((p) => p.estado === 'fallido') && <span className="text-red-300"> · {tx('{n} sin entregar', { n: hechos.filter((p) => p.estado === 'fallido').length })}</span>}
+          </summary>
           <div className="mt-2 flex flex-col gap-1.5">
             {hechos.map((p) => (
-              <div key={p.id} className="flex items-center justify-between gap-2 rounded-xl border border-dark-800 px-3 py-2 text-[12.5px]">
-                <span className="truncate text-dark-300">{p.cliente || p.direccion}</span>
-                <span className={`shrink-0 ${p.estado === 'entregado' ? 'text-emerald-300' : 'text-red-300'}`}>
-                  {p.estado === 'entregado' ? `${tx('Entregado')}${p.cobrado_importe ? ` · ${euros(p.cobrado_importe)}` : ''}` : `${tx('No')} · ${p.motivo ? tx(p.motivo) : ''}`}
-                </span>
+              <div key={p.id} className={`rounded-xl border px-3 py-2 text-[12.5px] ${p.estado === 'fallido' ? 'border-red-500/30 bg-red-500/[.05]' : 'border-dark-800'}`}>
+                <div className="flex items-center justify-between gap-2">
+                  <span className="min-w-0 truncate text-dark-200">{p.cliente || p.direccion}</span>
+                  <span className={`shrink-0 ${p.estado === 'entregado' ? 'text-emerald-300' : 'text-red-300'}`}>
+                    {p.estado === 'entregado' ? `${tx('Entregado')}${p.cobrado_importe ? ` · ${euros(p.cobrado_importe)}` : ''}` : `${tx('No')} · ${p.motivo ? tx(p.motivo) : ''}`}
+                  </span>
+                </div>
+                {p.estado === 'fallido' ? (
+                  <div className="mt-2 grid grid-cols-2 gap-1.5">
+                    <button onClick={() => marcar(p, 'pendiente', '')} disabled={ocupado === p.id}
+                      className="flex items-center justify-center gap-1 rounded-lg border border-brand-400/50 py-2 text-[12.5px] font-semibold text-brand-200">
+                      <RotateCcw size={13} /> {tx('Volver a intentarlo')}
+                    </button>
+                    <button onClick={() => marcar(p, 'entregado')} disabled={ocupado === p.id}
+                      className="flex items-center justify-center gap-1 rounded-lg bg-emerald-600 py-2 text-[12.5px] font-bold text-white">
+                      <Check size={13} /> {p.tipo === 'recogida' ? tx('Recogido') : tx('Entregado')}
+                    </button>
+                  </div>
+                ) : (
+                  <button onClick={() => setFallo(p)} disabled={ocupado === p.id}
+                    className="mt-1 text-[11.5px] font-semibold text-dark-400 underline underline-offset-2">{tx('Corregir: no se entregó')}</button>
+                )}
               </div>
             ))}
           </div>
@@ -1080,15 +1123,14 @@ export default function MiRuta({ onBack, embebido = false }) {
           </>}
           <div className="flex flex-col gap-2">
             <div className="flex gap-2">
-              <input className={inp} placeholder={tx('Dirección completa')} value={nuevo.direccion} autoComplete="street-address"
+              <input ref={dirInput} className={inp} placeholder={escuchando ? tx('Te escucho: di la dirección…') : tx('Dirección completa')} value={nuevo.direccion} autoComplete="street-address"
                 onChange={(e) => setNuevo({ ...nuevo, direccion: e.target.value, lat: null, lng: null })} />
-              {Reconocedor && (
-                <button type="button" onClick={dictar} aria-label={tx('Dictar la dirección')}
-                  className={`shrink-0 rounded-xl border px-3 ${escuchando ? 'animate-pulse border-red-400 text-red-300' : 'border-dark-600 text-dark-200'}`}>
-                  <Mic size={18} />
-                </button>
-              )}
+              <button type="button" onClick={dictar} aria-label={escuchando ? tx('Parar de dictar') : tx('Dictar la dirección')} aria-pressed={escuchando}
+                className={`shrink-0 rounded-xl border px-3 ${escuchando ? 'animate-pulse border-red-400 bg-red-500/15 text-red-300' : 'border-dark-600 text-dark-200'}`}>
+                <Mic size={18} />
+              </button>
             </div>
+            {escuchando && <p className="-mt-1 text-[12px] font-semibold text-red-300">{tx('Te escucho: di la dirección…')}</p>}
             {sugs.length > 0 && (
               <ul className="-mt-1 overflow-hidden rounded-xl border border-dark-700 bg-dark-900" aria-label={tx('Direcciones sugeridas')}>
                 {sugs.map((sg) => (
@@ -1328,6 +1370,28 @@ function Cabecera({ fecha, hechos, total, entregados, pendientes, rr, retraso, c
   )
 }
 
+/* VER LA PUERTA (10-10-2026). Street View desde la calle de la dirección y
+   mirando a la casa (el servidor calcula el punto y el rumbo). El enlace existe
+   desde el principio, apuntando a la casa; en cuanto llega el rumbo, se afina:
+   así nunca es un botón muerto ni lo bloquea el navegador como ventana emergente. */
+function VerPuerta({ p }) {
+  const [vista, setVista] = useState(null)
+  useEffect(() => {
+    let vivo = true
+    repFachada(p.id).then(({ data }) => { if (vivo) setVista(data) }).catch(() => {})
+    return () => { vivo = false }
+  }, [p.id, p.lat, p.lng])
+  const v = vista || { lat: p.lat, lng: p.lng, rumbo: null }
+  const href = `https://www.google.com/maps/@?api=1&map_action=pano&viewpoint=${v.lat},${v.lng}`
+    + (v.rumbo != null ? `&heading=${v.rumbo}&pitch=5&fov=75` : '')
+  return (
+    <a href={href} target="_blank" rel="noreferrer"
+      className="inline-flex items-center gap-1 rounded-lg border border-dark-700 px-2 py-1 text-[12px] font-semibold text-dark-200">
+      <Eye size={12} /> {tx('Ver la puerta')}
+    </a>
+  )
+}
+
 /* LA FIRMA CON EL DEDO (10-10-2026). Fondo blanco y trazo negro, como en
    papel; sale un PNG pequeño (480×160) que se guarda en el pedido. */
 function Firma({ onListo, onCancelar }) {
@@ -1446,6 +1510,17 @@ function Hoja({ titulo, onClose, children }) {
    (BarcodeDetector, en Chrome de Android). Sin librerías ni nada que salga
    del móvil. Donde no existe (iPhone), se dice y se escribe el código o se
    hace la foto del ticket. */
+/* El fotograma de la cámara en el momento de leer el código: la etiqueta entera. */
+async function fotograma(v) {
+  try {
+    const c = document.createElement('canvas')
+    c.width = v.videoWidth; c.height = v.videoHeight
+    if (!c.width || !c.height) return null
+    c.getContext('2d').drawImage(v, 0, 0)
+    return await new Promise((ok) => c.toBlob(ok, 'image/jpeg', 0.92))
+  } catch { return null }
+}
+
 function Escaner({ onCodigo, onClose }) {
   const video = useRef(null)
   const [error, setError] = useState('')
@@ -1459,15 +1534,15 @@ function Escaner({ onCodigo, onClose }) {
     let stream = null
     let temporizador = null
     async function arrancar() {
-      if (!('BarcodeDetector' in window)) {
+      let detector
+      try { detector = await lectorDeCodigos() } catch {
         setError(tx('Este móvil no sabe leer códigos desde el navegador. Escribe el código o haz la foto del ticket.'))
         return
       }
       try {
-        const soportados = await window.BarcodeDetector.getSupportedFormats()
-        const quiero = ['code_128', 'ean_13', 'ean_8', 'qr_code', 'code_39', 'itf', 'upc_a', 'upc_e', 'data_matrix', 'codabar']
-        const detector = new window.BarcodeDetector({ formats: quiero.filter((f) => soportados.includes(f)) })
-        stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' }, audio: false })
+        // Con resolución alta: el mismo fotograma sirve después para leer la dirección.
+        stream = await navigator.mediaDevices.getUserMedia({
+          video: { facingMode: 'environment', width: { ideal: 1920 }, height: { ideal: 1080 } }, audio: false })
         if (parar) { stream.getTracks().forEach((t) => t.stop()); return }
         video.current.srcObject = stream
         await video.current.play()
@@ -1477,7 +1552,7 @@ function Escaner({ onCodigo, onClose }) {
             const codigos = await detector.detect(video.current)
             if (codigos.length && codigos[0].rawValue) {
               if (navigator.vibrate) navigator.vibrate(60)
-              avisa.current(codigos[0].rawValue)
+              avisa.current(codigos[0].rawValue, await fotograma(video.current))
               return
             }
           } catch { /* un fotograma malo: se sigue */ }
@@ -1499,7 +1574,7 @@ function Escaner({ onCodigo, onClose }) {
   return (
     <div className="fixed inset-0 z-50 flex flex-col bg-black" role="dialog" aria-modal="true" aria-label={tx('Escanear')}>
       <div className="flex items-center justify-between p-4">
-        <span className="text-[15px] font-semibold text-white">{tx('Apunta al código de la caja')}</span>
+        <span className="text-[15px] font-semibold text-white">{tx('Apunta a la etiqueta, con el código dentro del recuadro')}</span>
         <button onClick={onClose} className="rounded-full bg-white/10 p-2 text-white" aria-label={tx('Cerrar')}><X size={18} /></button>
       </div>
       {error ? <p className="px-6 py-10 text-center text-[14px] text-white/80">{error}</p> : (

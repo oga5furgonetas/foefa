@@ -47297,8 +47297,33 @@ def _rep_ia_permitida() -> bool:
     PAGO: en el nivel gratuito de la API de Gemini, Google puede usar lo que
     se le envía para mejorar sus productos, y eso con datos personales de
     los clientes de otra empresa no se puede hacer. Quien ponga una clave de
-    pago lo confirma con REPARTO_IA_PERMITIDA=1."""
-    return os.environ.get("REPARTO_IA_PERMITIDA", "").strip() == "1"
+    pago lo confirma con REPARTO_IA_PERMITIDA=1.
+
+    O con REPARTO_IA_CLAVE (10-10-2026): una clave de un proyecto CON
+    facturación solo para leer etiquetas, aparte de la del resto de la IA (que
+    puede seguir en el nivel gratuito). Así solo se paga esto."""
+    return (os.environ.get("REPARTO_IA_PERMITIDA", "").strip() == "1"
+            or bool(os.environ.get("REPARTO_IA_CLAVE", "").strip()))
+
+
+def _rep_cliente_ia():
+    clave = os.environ.get("REPARTO_IA_CLAVE", "").strip()
+    if clave:
+        from google import genai as genai_sdk
+        return genai_sdk.Client(api_key=clave)
+    return _gemini_client_plantilla()
+
+
+async def _rep_ia_activa(a: dict, user: dict) -> bool:
+    """¿Se leen las etiquetas con IA? Si no se ha elegido, sí para quien reparte
+    solo (es su propia lista y quien más lo necesita) y no para las empresas,
+    que lo activan ellas en Ajustes."""
+    if not _rep_ia_permitida():
+        return False
+    v = a.get("ia_tickets")
+    if v is None:
+        v = await _rep_es_autonomo(user)
+    return bool(v)
 
 
 _REP_CAMPOS_EDITABLES = ("codigo", "cliente", "telefono", "direccion", "cp", "localidad",
@@ -47473,7 +47498,7 @@ async def _rep_ajustes() -> dict:
     a = await db.reparto_ajustes.find_one({"id": "ajustes"}, {"_id": 0}) or {}
     a.setdefault("zonas", [])
     a.setdefault("base", None)
-    a.setdefault("ia_tickets", False)
+    a.setdefault("ia_tickets", None)          # sin elegir: ver _rep_ia_activa
     a.setdefault("dias_conservar", reparto.DIAS_CONSERVAR)
     a.setdefault("min_parada", 4)
     a.setdefault("min_bulto", 1)
@@ -47532,7 +47557,7 @@ async def _rep_limpiar(user: dict):
             {"$set": {"cliente": None, "telefono": None, "direccion": None, "lat": None,
                       "lng": None, "notas": None, "contenido": None, "entrega_foto": None,
                       "entrega_nota": None, "entrega_firma": None, "entrega_recibe": None,
-                      "anonimizado": True}})
+                      "vista": None, "anonimizado": True}})
         lim_rastro = (hoy - timedelta(days=reparto.DIAS_RASTRO)).strftime("%Y-%m-%d")
         await db.reparto_jornadas.delete_many({"fecha": {"$lt": lim_rastro}})
         await global_db.reparto_enlaces.delete_many({"caduca": {"$lt": hoy.strftime("%Y-%m-%d")}})
@@ -47937,6 +47962,7 @@ async def reparto_ajustes_get(user: dict = Depends(require_admin)):
     a = await _rep_ajustes()
     a["portal_activo"] = await _rep_portal_activo(user, a)
     a["ia_disponible"] = _rep_ia_permitida()
+    a["ia_tickets"] = await _rep_ia_activa(a, user)
     a["pais"], a["zona_horaria"] = _region_actual.get()
     a["paises"] = {k: {"nombre": v["nombre"], "zonas": v["zonas"]} for k, v in PAISES_REPARTO.items()}
     return a
@@ -48314,7 +48340,7 @@ async def reparto_mi_ruta(user: dict = Depends(require_any_auth)):
     return {"activo": True, "empresa": (org or {}).get("name") or "",
             "puede_pegar": autonomo and user.get("role") == "admin",
             "pais": _region_actual.get()[0], "prefijo": PAISES_REPARTO.get(_region_actual.get()[0], {}).get("prefijo", "34"), "fecha": f, "pedidos": ps, "base": a.get("base"), "ruta": ruta, "autonomo": autonomo,
-            "ia_tickets": bool(a.get("ia_tickets")) and _rep_ia_permitida(),
+            "ia_tickets": await _rep_ia_activa(a, user),
             "jornada": {"empezada": j.get("empezada"), "terminada": j.get("terminada")},
             "aviso_aceptado": bool(aviso),
             # La prueba sin cuenta: la app invita a crear la cuenta de verdad.
@@ -48348,7 +48374,7 @@ async def reparto_ticket(file: UploadFile = File(...), user: dict = Depends(requ
     lo revise. La foto no se guarda en ningún sitio."""
     await _rep_conductor(user)
     a = await _rep_ajustes()
-    if not a.get("ia_tickets") or not _rep_ia_permitida():
+    if not await _rep_ia_activa(a, user):
         raise HTTPException(403, "La lectura de tickets con IA no está activada en tu empresa. Escribe la dirección a mano.")
     datos = await file.read(8 * 1024 * 1024 + 1)
     if len(datos) > 8 * 1024 * 1024:
@@ -48356,7 +48382,7 @@ async def reparto_ticket(file: UploadFile = File(...), user: dict = Depends(requ
     if len(datos) < 200:
         raise HTTPException(400, "La foto ha llegado vacía")
     try:
-        leido = await _gemini_extract(_gemini_client_plantilla(), _modelo_ia(), reparto.PROMPT_TICKET, datos)
+        leido = await _gemini_extract(_rep_cliente_ia(), _modelo_ia(), reparto.PROMPT_TICKET, datos)
     except Exception as e:                                   # noqa: BLE001
         logger.warning(f"reparto: ticket ilegible por la IA: {type(e).__name__}")
         raise HTTPException(503, "La IA no ha podido leer el ticket ahora. Escribe la dirección a mano.")
@@ -48427,6 +48453,58 @@ async def reparto_estado(pid: str, data: dict = Body(...), user: dict = Depends(
                         "entrega_donde": None, "entrega_recibe": None})
     await db.reparto_pedidos.update_one({"id": pid}, {"$set": cambios})
     return {k: v for k, v in {**p, **cambios}.items() if k not in ("entrega_foto", "entrega_firma")}
+
+
+async def _rep_calle_cercana(casa: tuple, direccion: str = "") -> Optional[tuple]:
+    """El punto de la calle más cercano a la casa, según el servidor de rutas
+    (OSRM «nearest»), y de LA calle de la dirección si está entre las cercanas:
+    una casa en una esquina se ve desde su calle, no desde la de atrás. Solo
+    sale la posición, una petición por segundo."""
+    import httpx as _httpx
+    async with _REP_RUTAS_LOCK:
+        espera = 1.1 - (time.time() - _REP_RUTAS_ULTIMA[0])
+        if espera > 0:
+            await asyncio.sleep(espera)
+        try:
+            for base in [u for u in (_REP_RUTAS_URL, _REP_RUTAS_RESPALDO) if u]:
+                try:
+                    async with _httpx.AsyncClient(timeout=8, headers={
+                            "User-Agent": f"{MARCA}/1.0 (reparto; {CORREO_CONTACTO})"}) as c:
+                        r = await c.get(f"{base}/nearest/v1/driving/{casa[1]:.6f},{casa[0]:.6f}", params={"number": 5})
+                        j = r.json() if r.status_code == 200 else {}
+                except Exception as e:                       # noqa: BLE001
+                    logger.warning(f"reparto: calle cercana sin respuesta en {base.split('/')[2]}: {type(e).__name__}")
+                    j = {}
+                punto = reparto.calle_de_la_direccion(j.get("waypoints") if j.get("code") == "Ok" else None, direccion)
+                if punto:
+                    return punto
+        finally:
+            _REP_RUTAS_ULTIMA[0] = time.time()
+    return None
+
+
+@api_router.get("/reparto/pedidos/{pid}/fachada")
+async def reparto_fachada(pid: str, user: dict = Depends(require_any_auth)):
+    """Desde dónde y hacia dónde abrir Street View para ver la puerta de una
+    parada. Se guarda en el pedido con las coordenadas de las que sale: si la
+    dirección cambia, se vuelve a calcular."""
+    p = await db.reparto_pedidos.find_one({"id": pid}, {"_id": 0, "conductor_id": 1, "lat": 1, "lng": 1, "vista": 1, "direccion": 1})
+    if not p:
+        raise HTTPException(404, "Esa parada ya no existe")
+    if user.get("role") == "driver":
+        if p.get("conductor_id") != user.get("sub"):
+            raise HTTPException(403, "Esa parada no es tuya")
+    elif user.get("role") != "admin" or not _rep_ve_datos(user):
+        raise HTTPException(403, "No puedes ver esa parada")
+    casa = reparto._punto(p)
+    if not casa:
+        raise HTTPException(400, "Esta parada no está situada en el mapa")
+    v = p.get("vista") or {}
+    if v.get("de") == [round(casa[0], 6), round(casa[1], 6)]:
+        return {k: v.get(k) for k in ("lat", "lng", "rumbo")}
+    vista = reparto.vista_fachada(casa, await _rep_calle_cercana(casa, p.get("direccion") or ""))
+    await db.reparto_pedidos.update_one({"id": pid}, {"$set": {"vista": {**vista, "de": [round(casa[0], 6), round(casa[1], 6)]}}})
+    return vista
 
 
 @api_router.post("/reparto/mi-ruta/ordenar")

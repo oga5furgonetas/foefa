@@ -113,6 +113,52 @@ def distancia_km(a, b) -> float:
     return 2 * r * math.asin(min(1.0, math.sqrt(h)))
 
 
+def rumbo(a, b) -> float:
+    """Hacia dónde hay que mirar desde a para ver b, en grados (0 = norte, 90 = este)."""
+    (la1, lo1), (la2, lo2) = a, b
+    p1, p2 = math.radians(la1), math.radians(la2)
+    dl = math.radians(lo2 - lo1)
+    x = math.sin(dl) * math.cos(p2)
+    y = math.cos(p1) * math.sin(p2) - math.sin(p1) * math.cos(p2) * math.cos(dl)
+    return (math.degrees(math.atan2(x, y)) + 360) % 360
+
+
+_TIPOS_VIA = re.compile(r"^(calle|c|cl|rua|r|avenida|avda|av|plaza|praza|pza|paseo|po|travesia|trav|camino|carretera|ctra|"
+                        r"ronda|glorieta|lugar|lg|urbanizacion|urb|estrada|rueiro|calzada|via|bulevar)(?![a-z])\.?\s*"
+                        r"(de\s+(la\s+|los\s+|las\s+)?|del\s+|da\s+|do\s+|das\s+|dos\s+)?")
+
+
+def calle_de_la_direccion(waypoints, direccion: str = ""):
+    """De los puntos de calle cercanos que da OSRM (el más cercano primero), el
+    de la calle de la dirección si está entre ellos; si no, el más cercano."""
+    validos = [w for w in (waypoints or []) if isinstance(w, dict) and isinstance(w.get("location"), list)
+               and len(w["location"]) == 2]
+    if not validos:
+        return None
+    via = _TIPOS_VIA.sub("", norm(str(direccion or "").split(",")[0].replace("/", " ")))
+    via = re.sub(r"\s*\d.*$", "", via).strip()
+    elegido = validos[0]
+    if len(via) >= 4:
+        for w in validos:
+            nombre = _TIPOS_VIA.sub("", norm(w.get("name") or "")).strip()
+            if nombre and (via in nombre or nombre in via):
+                elegido = w
+                break
+    lo, la = elegido["location"]
+    return (float(la), float(lo))
+
+
+def vista_fachada(casa, calle) -> dict:
+    """VER LA PUERTA (10-10-2026): desde el punto de la calle más cercano a la
+    casa (donde pasa el coche de Street View), mirando hacia la casa. Si la calle
+    no se sabe o la casa está encima de ella (dirección situada solo por la
+    calle), se mira desde la casa sin rumbo: mejor eso que apuntar a la acera
+    de enfrente."""
+    if not calle or distancia_km(casa, calle) * 1000 < 4:
+        return {"lat": round(casa[0], 6), "lng": round(casa[1], 6), "rumbo": None}
+    return {"lat": round(calle[0], 6), "lng": round(calle[1], 6), "rumbo": round(rumbo(calle, casa))}
+
+
 def _punto(p):
     try:
         la, lo = float(p.get("lat")), float(p.get("lng"))

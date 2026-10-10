@@ -865,3 +865,25 @@ Repaso de cada frase de `/planes` y de la presentación contra el código (Dani:
 - TikTok orgánico: carrusel «5 trucos» publicado el 10-10 (en revisión al subirlo); el enlace del perfil
   sigue en /registro (cambiarlo a /repartidores lo decide Dani). `docs/anuncios/tiktok-fotos/carrusel-trucos.mp4`
   es la versión en vídeo por si hace falta.
+
+## 10-10-2026 (noche, 2): micro, escáner universal, historial, incidencias, ver la puerta
+- **Micrófono**: no iba porque `_headers` tenía `Permissions-Policy: microphone=()`. Ahora `microphone=(self)`;
+  el dictado enseña lo que entiende y, si el navegador no deja (iPhone instalada, TikTok), lleva al micro del teclado.
+- **Escáner en cualquier móvil**: `lib/codigos.js` usa el lector del navegador o, si no hay (iPhone, navegador de
+  TikTok, ordenador), `barcode-detector` (zxing-cpp en WebAssembly) servido desde `/ocr/.../zxing-reader-3.1.3.wasm`.
+  **Escanear y ya**: si el código no está en la lista, el fotograma de la etiqueta se lee y rellena la parada; un
+  código 2D que ya trae la dirección la rellena sin foto.
+- **OCR en el móvil**: la foto se prepara (tamaño, grises, contraste) y, si no sale dirección, segundo intento en
+  modo «texto suelto». Techo del OCR: para leer bien de verdad, IA con clave DE PAGO.
+- **IA de etiquetas**: `REPARTO_IA_CLAVE` (clave de un proyecto con facturación solo para esto). Sin elegir, activa
+  para quien reparte solo, apagada para empresas. **La clave de Flota en Fly (…k1qQ, «Proyecto de Gemini 3») es de
+  nivel gratuito**: no vale para datos de clientes. El proyecto «flota» (…OX8A) es Nivel 1 prepago. Falta que Dani
+  ponga la clave (yo no meto claves).
+- **Incidencias**: en «hechos hoy» un no entregado se puede «Volver a intentarlo» o dar por entregado; un entregado,
+  corregir a no entregado.
+- **Historial**: cada día en su pantalla (horas, km, cobrado, cada parada con hora, dónde se dejó, prueba con firma),
+  «Ver otro día» y «Pasar a hoy» para lo no entregado.
+- **Ver la puerta**: `/reparto/pedidos/{id}/fachada` pide a OSRM `nearest` (5 puntos) el de la calle de la dirección
+  y calcula el rumbo hacia la casa; el enlace abre Street View mirando al portal. Se guarda en `vista` (se borra con
+  los datos personales). No sale con ubicación «aproximada» ni en China.
+- TikTok: la bio del perfil ya dice «Gratis: flotadsp.com/repartidores» (el enlace clicable no está disponible en la cuenta).

@@ -2,7 +2,7 @@ import { defineConfig, loadEnv } from 'vite'
 import react from '@vitejs/plugin-react'
 import { readFileSync, writeFileSync, existsSync, readdirSync, mkdirSync, renameSync, copyFileSync } from 'node:fs'
 import { join, relative, dirname, resolve } from 'node:path'
-import { OCR_RUTA } from './src/lib/ocrRuta.js'
+import { OCR_RUTA, ZXING_WASM } from './src/lib/ocrRuta.js'
 
 /* LOS MAPAS DE FUENTE NO SE PUBLICAN.
    Hasta el 26-09-2026 cada `.js` servido llevaba su `.map` al lado, y el `.map`
@@ -66,6 +66,7 @@ function ocrLocal() {
     [nm('tesseract.js-core/tesseract-core-simd-lstm.wasm.js'), 'tesseract-core-simd-lstm.wasm.js'],
     [nm('tesseract.js-core/tesseract-core-relaxedsimd-lstm.wasm.js'), 'tesseract-core-relaxedsimd-lstm.wasm.js'],
     [nm('@tesseract.js-data/spa/4.0.0_best_int/spa.traineddata.gz'), 'spa.traineddata.gz'],
+    [nm('zxing-wasm/dist/reader/zxing_reader.wasm'), ZXING_WASM.split('/').pop()],
   ]
   let salida = ''
   return {
