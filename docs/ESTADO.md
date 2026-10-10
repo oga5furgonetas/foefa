@@ -887,3 +887,22 @@ Repaso de cada frase de `/planes` y de la presentación contra el código (Dani:
   y calcula el rumbo hacia la casa; el enlace abre Street View mirando al portal. Se guarda en `vista` (se borra con
   los datos personales). No sale con ubicación «aproximada» ni en China.
 - TikTok: la bio del perfil ya dice «Gratis: flotadsp.com/repartidores» (el enlace clicable no está disponible en la cuenta).
+
+## 10-10-2026 (noche, 3): de dónde salen las altas y anuncios «Promo de lanzamiento + gana 5 €»
+
+- **Origen de las altas** (cruce `organizations.created_at` ↔ `registro_ok` de `analitica_eventos` y la primera
+  visita de esa sesión; utm_campaign NO se guarda, la campaña se distingue por `utm_content`): el 10-10, 4 de 5 altas
+  vienen de Meta «Gratis sin límite» (`facebook`+`video`), unas 23 visitas y 7,68 € → ~1,9 € por alta. TikTok: 203 €,
+  2.328 clics, ~3.700 visitas en 12 días y **0 altas**. Las del 03–07/10 eran casi todas pruebas (Revisor Google,
+  pepito, Prueba prueba, Dani, Juanjo desde la app de Play).
+- **Vídeo nuevo**: `VARIANTE=directo|pov EXTRA=gana node scripts/montar-sketch-repartidora.mjs` añade al final una
+  tarjeta sin voz «Y además… GANA 5 € por cada compañero que la use · Lo cobras por Bizum» con las condiciones, y la
+  oferta se titula «Promo de lanzamiento». Salida en `docs/anuncios/reales/salida/meta/FDS-{directo,pov}-gana-*.mp4`
+  (4:5 con laterales desenfocados para el feed). Imagen nueva `lanzamiento-{9x16,4x5}` en tiktok-fotos.
+- **Publicado**: Meta, anuncio «FDS — Lanzamiento + gana 5 € (vídeo)» dentro de «FDS Registros — Gratis 15 paradas»
+  (mismo presupuesto, `utm_content=gana`); Meta propuso imágenes con IA que ponían a la persona de Pexels junto a la
+  app: NO usadas (licencia). TikTok: los 2 vídeos «gana» y un 4.º texto añadidos al anuncio Smart+ (TikTok había
+  vuelto a meter 12 vídeos generados en inglés: quitados; el interruptor de autoañadir no se deja apagar, se marcó
+  «Require review»). Orgánico: carrusel «Promo de lanzamiento» en TikTok (la subida de VÍDEO en TikTok Studio se queda
+  cargando desde el navegador; las fotos sí van) y reel en la página FDs de Facebook. Telegram Web no tiene sesión
+  (pide QR del móvil): el mensaje lo pega Dani. edge-tts sigue con 403 aunque se actualice: sin voz nueva.

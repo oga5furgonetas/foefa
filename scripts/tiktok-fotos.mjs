@@ -144,7 +144,35 @@ const invita = (alto) => {
 </div>`
 }
 
-const PIEZAS = [['1-portada', portada('Desliza ➜')], ['1-portada-video', portada('Los 5, en 20 segundos')], ...TRUCOS.map((t, i) => [`${i + 2}-truco-${i + 1}`, truco(t, i)]), ['7-la-app', cierre], ['imagen-suelta', suelta], ['promo-9x16', promo(1920)], ['promo-4x5', promo(1350), 1350], ['invita-9x16', invita(1920)], ['invita-4x5', invita(1350), 1350]]
+/* «PROMO DE LANZAMIENTO» (10-10-2026): la app se está creando con los repartidores y a los
+   primeros se les premia: gratis y sin límite hasta el 31-12 y 5 € por cada compañero que la use. */
+const lanzamiento = (alto) => {
+  const alto916 = alto > 1500
+  const dcha = alto916 ? 150 : 80
+  return `
+<div class="lienzo" style="height:${alto}px; background:radial-gradient(900px 700px at 85% 0%, rgba(20,231,216,.20), transparent 60%), radial-gradient(800px 600px at 0% 100%, rgba(255,212,59,.14), transparent 60%), var(--noche)">
+  <div style="position:absolute; left:80px; right:${dcha}px; top:${alto916 ? 200 : 70}px">
+    <span class="pildora" style="background:var(--amarillo); color:#111; font-size:28px; padding:12px 26px">Promo de lanzamiento</span>
+    <h1 class="titular" style="margin-top:28px; font-size:${alto916 ? 92 : 84}px">Estamos creando la app que te <span style="color:var(--marca)">facilita el reparto</span></h1>
+    <p style="margin-top:22px; font-size:${alto916 ? 40 : 36}px; line-height:1.3; font-weight:700; color:var(--gris)">Y queremos premiar a los primeros que la usen.</p>
+  </div>
+  <div style="position:absolute; left:80px; right:${dcha}px; top:${alto916 ? 860 : 600}px; display:flex; flex-direction:column; gap:22px">
+    ${[['✅', 'Gratis y sin límite', 'hasta el 31 de diciembre · sin tarjeta'], ['💶', 'Gana 5&nbsp;€ por cada compañero', 'que la use · lo cobras por Bizum']].map(([i, t, s]) => `
+      <div style="display:flex; gap:24px; align-items:center; border-radius:30px; padding:${alto916 ? 30 : 24}px 30px; background:rgba(255,255,255,.06); border:2px solid rgba(20,231,216,.3)">
+        <div style="font-size:${alto916 ? 76 : 64}px">${i}</div>
+        <div><div class="titular" style="font-size:${alto916 ? 54 : 48}px">${t}</div>
+        <div style="margin-top:8px; font-size:${alto916 ? 32 : 30}px; font-weight:700; color:var(--gris)">${s}</div></div>
+      </div>`).join('')}
+  </div>
+  <div style="position:absolute; left:80px; right:${dcha}px; top:${alto916 ? 1300 : 1060}px; display:flex; flex-direction:column; align-items:flex-start; gap:14px">
+    <div style="font-size:${alto916 ? 34 : 32}px; font-weight:800">📸 Foto a la etiqueta · 🗺️ ruta ordenada · 🗣️ guía con voz</div>
+    <div style="font-size:${alto916 ? 34 : 32}px; font-weight:800; color:var(--marca)">flotadsp.com/repartidores</div>
+    <div style="font-size:22px; font-weight:600; color:var(--gris)">Los 5&nbsp;€ cuentan cuando tu compañero hace 20 entregas en 2 días distintos. Cobro desde 15&nbsp;€. Condiciones en la web.</div>
+  </div>
+</div>`
+}
+
+const PIEZAS = [['lanzamiento-9x16', lanzamiento(1920)], ['lanzamiento-4x5', lanzamiento(1350), 1350],['1-portada', portada('Desliza ➜')], ['1-portada-video', portada('Los 5, en 20 segundos')], ...TRUCOS.map((t, i) => [`${i + 2}-truco-${i + 1}`, truco(t, i)]), ['7-la-app', cierre], ['imagen-suelta', suelta], ['promo-9x16', promo(1920)], ['promo-4x5', promo(1350), 1350], ['invita-9x16', invita(1920)], ['invita-4x5', invita(1350), 1350]]
 
 const nav = await chromium.launch()
 const pag = await nav.newPage({ viewport: { width: 1080, height: 1920 }, deviceScaleFactor: 1 })

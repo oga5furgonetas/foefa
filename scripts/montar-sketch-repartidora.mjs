@@ -65,11 +65,18 @@ for (let i = 1; i <= 8; i++) {
   VOCES.push({ f, t, fin })
   t += fin + RESPIRO
 }
-const FIN = Math.round((VOCES[7].t + VOCES[7].fin + 1.1) * 10) / 10
+// EXTRA=gana (10-10-2026): tras la oferta, una tarjeta más sin voz con «Invita y gana» (5 € por
+// cada compañero que use la app; condiciones en Terminos.jsx #invita). La de la oferta se titula
+// «Promo de lanzamiento». Sale como sketch-repartidora-<variante>-gana-9x16.mp4.
+const EXTRA = process.env.EXTRA || ''
+if (EXTRA && EXTRA !== 'gana') throw new Error(`EXTRA desconocido: ${EXTRA}`)
+const FIN_VOZ = Math.round((VOCES[7].t + VOCES[7].fin + 1.1) * 10) / 10
+const EXTRA_D = EXTRA ? 3.9 : 0
+const FIN = Math.round((FIN_VOZ + EXTRA_D) * 10) / 10
 // Cada escena va de que empieza su frase a que empieza la siguiente (el corte, justo antes de hablar).
 const tramo = (i) => {
   const t0 = i === 0 ? 0 : VOCES[i].t + 0.1
-  const t1 = i === 7 ? FIN : VOCES[i + 1].t + 0.1
+  const t1 = i === 7 ? FIN_VOZ : VOCES[i + 1].t + 0.1
   return { t0, d: Math.round((t1 - t0) * 100) / 100 }
 }
 
@@ -92,10 +99,21 @@ const ESCENAS = [
     R('FDS', 640, { fuente: 'sans', tam: 150, color: '0x0FC2BC' }),
     // 10-10-2026: la promoción. La voz (s8) ya solo dice «Dale al enlace y pruébala» (la
     // grabación con «siete días gratis» está en s8-7dias.mp3); la oferta va en el rótulo.
+    ...(EXTRA ? [R('PROMO DE LANZAMIENTO', 545, { fuente: 'sans', tam: 46, color: '0xFFD43B' })] : []),
     R('GRATIS Y SIN LÍMITE', 800, { tam: 88 }), R('hasta el 31 de diciembre', 915, { tam: 74 }),
     R('sin tarjeta · solo registrarte', 1030, { fuente: 'sans', tam: 50, color: '0x5eead4', desde: 0.6 }),
     R('flotadsp.com/repartidores', 1210, { fuente: 'sans', tam: 52, desde: 1.2 })] },
 ].map((e, i) => ({ ...e, ...tramo(i) }))
+if (EXTRA) {
+  ESCENAS.push({ cierre: 8.7, t0: FIN_VOZ, d: EXTRA_D, rotulos: [
+    R('Y ADEMÁS…', 560, { fuente: 'sans', tam: 54, color: '0x5eead4' }),
+    R('GANA 5 €', 680, { fuente: 'sans', tam: 170, color: '0xFFD43B', desde: 0.25 }),
+    R('por cada compañero', 900, { tam: 80, desde: 0.25 }), R('que la use', 1000, { tam: 80, desde: 0.25 }),
+    R('Lo cobras por Bizum', 1130, { fuente: 'sans', tam: 54, color: '0x5eead4', desde: 0.9 }),
+    R('flotadsp.com/repartidores', 1290, { fuente: 'sans', tam: 52, desde: 1.4 }),
+    R('Cuenta cuando hace 20 entregas en 2 días distintos', 1385, { fuente: 'sans', tam: 30, color: '0xa9c2c6', desde: 1.4 }),
+    R('Cobro desde 15 € · condiciones en la web', 1430, { fuente: 'sans', tam: 30, color: '0xa9c2c6', desde: 1.4 })] })
+}
 console.log('duración', FIN, 's; escenas', ESCENAS.map((e) => e.d).join(' '))
 
 // drawtext con el texto en un fichero (tildes, «¿» y comas sin escapar nada) y aparición rápida.
@@ -159,7 +177,7 @@ const cadena = `${retardos};${VOCES.map((_, i) => `[v${i}]`).join('')}amix=input
   `[${VOCES.length + 1}:a][llave]sidechaincompress=threshold=0.04:ratio=6:attack=20:release=250[mus];` +
   `[${nRuido}:a]volume=0.5[sala];` +
   '[voz][mus][sala]amix=inputs=3:normalize=0,alimiter=limit=0.95,loudnorm=I=-14:TP=-1.5:LRA=9[a]'
-const sufijo = VARIANTE === 'base' ? '' : `-${VARIANTE}`
+const sufijo = (VARIANTE === 'base' ? '' : `-${VARIANTE}`) + (EXTRA ? `-${EXTRA}` : '')
 const final = path.join(SALIDA, `sketch-repartidora${sufijo}-9x16.mp4`)
 execFileSync(FF, ['-y', '-v', 'error', '-i', path.join(tmp, 'video.mp4'), ...entradas, '-i', path.join(tmp, 'musica.wav'),
   '-f', 'lavfi', '-i', `anoisesrc=color=brown:amplitude=0.006:d=${FIN}`,
