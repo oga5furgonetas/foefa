@@ -210,3 +210,23 @@ async def test_retirar_el_saldo_y_que_la_plataforma_lo_pague_o_lo_rechace(mundo,
     mis = await server.referidos_mios(YO)
     assert sorted(x["estado"] for x in mis["retiradas"]) == ["pagada", "rechazada"]
     assert mis["retiradas"][0]["destino"].startswith("•••• ")
+
+
+@pytest.mark.asyncio(loop_scope="session")
+async def test_invita_y_gana_solo_en_espana(mundo):
+    """11-10-2026: se paga por Bizum o a una cuenta española; una cuenta de México no lo tiene."""
+    o1 = mundo.g["organizations"].docs[0]
+    o1["pais"] = "mx"
+    o1["cartera_saldo"] = 2000
+    assert (await server.referidos_mios(YO))["cartera"] is False
+    with pytest.raises(HTTPException) as e:
+        await server.cartera_retirar({"titular": "Pepe Pérez", "metodo": "bizum", "destino": "+34 612 345 678"}, YO)
+    assert e.value.status_code == 400
+    codigo = (await server.referidos_mios(YO))["codigo"]
+    await _alta(ref=codigo)
+    inv = mundo.g["organizations"].docs[-1]
+    inv["created_at"] = _iso(-2)
+    _entregas(mundo, 20, fecha=_dia(-1))
+    _entregas(mundo, 1)
+    await server._referido_premiar(inv, "c1")
+    assert not inv.get("ref_premiado") and o1["cartera_saldo"] == 2000

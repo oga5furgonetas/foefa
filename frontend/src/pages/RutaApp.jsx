@@ -164,7 +164,7 @@ export default function RutaApp() {
         )}
         {tab === 'hoy' && !bloqueado && <OpinionRuta />}
         {tab === 'hoy' && <InstalarApp />}
-        {tab === 'hoy' && !esSuplantacion() && (
+        {tab === 'hoy' && !esSuplantacion() && (billing?.pais || 'es') === 'es' && (
           <div className="mx-auto mb-3 flex max-w-md items-center justify-between gap-3 rounded-2xl border border-emerald-400/30 bg-emerald-500/[.08] px-3.5 py-2.5">
             <button onClick={() => setTab('cuenta')} className="min-w-0 text-left text-[13px] leading-snug text-emerald-100">
               💶 {tx('Gana {euros} por cada compañero que la use.', { euros: eurosRef(porInvitado, locale()) })} <span className="font-semibold underline">{tx('Mi cartera')}</span>

@@ -62,7 +62,7 @@ export function Cuenta({ billing, recargar, toast, resaltarRegalo }) {
           {!enApp && b.regalos && <Regalar precios={b.regalos} toast={toast} resaltar={resaltarRegalo} />}
         </>
       )}
-      {!suplantando && <Invitar toast={toast} />}
+      {!suplantando && (b?.pais || 'es') === 'es' && <Invitar toast={toast} />}
       <Acceso toast={toast} soloVer={suplantando} />
       <section className="mt-4 rounded-3xl border border-dark-700 bg-dark-900 p-4">
         <label className="flex items-center justify-between gap-3 text-[14px] font-semibold text-dark-100">

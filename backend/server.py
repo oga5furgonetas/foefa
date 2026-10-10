@@ -49559,6 +49559,7 @@ async def referidos_mios(user: dict = Depends(require_admin)):
             # La cartera
             "saldo": int(org.get("cartera_saldo") or 0), "ganado": int(org.get("cartera_ganado") or 0),
             "por_invitado": _ref_importe(org), "retirada_min": _REF_RETIRADA_MIN,
+            "cartera": _ref_en_espana(org),
             "entregas_cartera": _REF_ENTREGAS_CARTERA, "dias_distintos": _REF_DIAS_DISTINTOS,
             "ventana_dias": _REF_VENTANA_DIAS, "tope_mes": _REF_TOPE_MES,
             "pendiente": any(r.get("estado") == "pendiente" for r in retiradas), "retiradas": retiradas}
@@ -49621,6 +49622,11 @@ async def opinion_enviar(data: dict = Body(default={}), user: dict = Depends(req
     return {"ok": True}
 
 
+def _ref_en_espana(org: dict) -> bool:
+    """«Invita y gana» se paga por Bizum o a una cuenta española: solo para cuentas de España."""
+    return ((org or {}).get("pais") or "es") == "es"
+
+
 def _ref_importe(invitador: dict) -> int:
     """Céntimos que gana esta cuenta por cada invitado que usa la app: 5 € si se dio de alta
     antes del corte (con la oferta de 5 € en los anuncios), si no _REF_CENT."""
@@ -49645,7 +49651,7 @@ async def _referido_premiar(org: dict, conductor_id: str):
     if len(await db.reparto_pedidos.distinct("fecha", q)) < _REF_DIAS_DISTINTOS:
         return
     invitador = await global_db.organizations.find_one({"id": org["referido_por"]}, {"_id": 0})
-    if not invitador:
+    if not invitador or not _ref_en_espana(invitador):
         return
     if org.get("alta_red") and org.get("alta_red") == invitador.get("alta_red"):
         # La misma red que quien invita: no se paga solo; lo revisa la plataforma.
@@ -49702,6 +49708,8 @@ async def cartera_retirar(data: dict = Body(default={}), user: dict = Depends(re
     org = await get_org(user.get("org_id"))
     if not _es_repartidor(org):
         raise HTTPException(400, "La cartera es para el plan Repartidor")
+    if not _ref_en_espana(org):
+        raise HTTPException(400, "«Invita y gana» es solo para cuentas de España")
     d = _dict_cuerpo(data)
     titular = _texto_cuerpo(d.get("titular"), 80).strip()
     if len(titular) < 5 or " " not in titular:
