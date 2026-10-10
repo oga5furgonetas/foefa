@@ -145,6 +145,18 @@ def _diccionario_app():
     return {"es": es, "en": en, "pt": pt}
 
 
+@pytest.mark.parametrize("idioma", cc.IDIOMAS)
+def test_primer_dia_con_promocion_no_cuenta_dias_de_prueba(idioma):
+    """10-10-2026: con «gratis y sin límite hasta el 31-12» el correo del día siguiente
+    decía «te quedan 6 días de prueba». Con la promoción se recuerda la fecha, no días."""
+    org = _org(horas=26, idioma=idioma)
+    con = cc.correo("primer_dia", org, {}, AHORA, marca="FDS", base="https://flotadsp.com", baja="https://api.x/b",
+                    mensual=9.99, anual=99, con_respuesta=True, promo_hasta="2026-12-31")["texto"]
+    sin = _correo("primer_dia", org)["texto"]
+    assert "31" in con and not re.search(r"\b[0-9]+ (días|dias|trial days)", con)
+    assert re.search(r"\b[0-9]+ (días|dias|trial days)", sin)          # sin promoción, como siempre
+
+
 def test_los_botones_que_cita_existen_en_la_app():
     """Un correo que dice «pulsa X» y X no está en la pantalla es peor que nada."""
     dic = _diccionario_app()

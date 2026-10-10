@@ -127,7 +127,8 @@ _T = {
             "1. Abre {ruta}\n"
             "2. «Cargar paquetes: uno tras otro» y una foto a cada etiqueta.\n"
             "3. «Montar ruta y empezar».\n\n"
-            "Te quedan {quedan} días de prueba.\n\n"
+            "¿Hoy no tienes paquetes? En la app, «Verlo en acción con 3 paradas de ejemplo».\n\n"
+            "{plazo}\n\n"
             "{ayuda_corta}"),
         "casi_fin": (
             "Te quedan {quedan} días de prueba en {marca}",
@@ -147,6 +148,8 @@ _T = {
         "intro": (
             "Ya tienes tu cuenta. Tienes {dias} días gratis y no te hemos pedido tarjeta, así que al acabar "
             "la prueba no se cobra nada solo. Si quieres seguir, lo eliges tú ({mes} al mes o {anio} al año).\n\n"),
+        "plazo": "Te quedan {quedan} días de prueba.",
+        "plazo_promo": "Recuerda: es gratis y sin límite hasta el {promo}.",
         "intro_promo": (
             "Ya tienes tu cuenta. Es gratis y sin límite hasta el {promo} y no te hemos pedido tarjeta. "
             "Después sigues gratis con hasta {tope} paradas al día; sin tope, {mes} al mes o {anio} al año, "
@@ -176,7 +179,8 @@ _T = {
             "1. Abre {ruta}\n"
             "2. «Carregar volumes: um após outro» e uma foto a cada etiqueta.\n"
             "3. «Montar rota e começar».\n\n"
-            "Ainda tens {quedan} dias de teste.\n\n"
+            "Hoje não tens volumes? Na app, «Ver em ação com 3 paragens de exemplo».\n\n"
+            "{plazo}\n\n"
             "{ayuda_corta}"),
         "casi_fin": (
             "Faltam {quedan} dias do teu teste na {marca}",
@@ -196,6 +200,8 @@ _T = {
         "intro": (
             "Já tens a tua conta. Tens {dias} dias grátis e não te pedimos cartão, por isso no fim do teste "
             "não é cobrado nada automaticamente. Se quiseres continuar, és tu que escolhes ({mes} por mês ou {anio} por ano).\n\n"),
+        "plazo": "Ainda tens {quedan} dias de teste.",
+        "plazo_promo": "Lembra-te: é grátis e sem limite até {promo}.",
         "intro_promo": (
             "Já tens a tua conta. É grátis e sem limite até {promo} e não te pedimos cartão. "
             "Depois continuas grátis com até {tope} paragens por dia; sem limite, {mes} por mês ou {anio} por ano, "
@@ -225,7 +231,8 @@ _T = {
             "1. Open {ruta}\n"
             "2. «Load parcels: one after another» and a photo of each label.\n"
             "3. «Build route and start».\n\n"
-            "You have {quedan} trial days left.\n\n"
+            "No parcels today? In the app, «See it in action with 3 sample stops».\n\n"
+            "{plazo}\n\n"
             "{ayuda_corta}"),
         "casi_fin": (
             "{quedan} days left in your {marca} trial",
@@ -245,6 +252,8 @@ _T = {
         "intro": (
             "Your account is ready. You have {dias} free days and we didn't ask for a card, so nothing is "
             "charged automatically when the trial ends. If you want to keep going, you choose ({mes} a month or {anio} a year).\n\n"),
+        "plazo": "You have {quedan} trial days left.",
+        "plazo_promo": "Remember: it's free with no limit until {promo}.",
         "intro_promo": (
             "Your account is ready. It's free with no limit until {promo}, and we didn't ask for a card. "
             "After that you stay free with up to {tope} stops a day; no limit for {mes} a month or {anio} a year, "
@@ -325,6 +334,9 @@ def correo(clave: str, org: dict, uso: dict, ahora: datetime, *, marca: str, bas
         "promo": _dia_mes(promo_hasta, idioma), "tope": tope,
     }
     datos["intro"] = (t["intro_promo"] if promo_hasta else t["intro"]).format(**datos)
+    # 10-10-2026: con la promoción no hay «días de prueba» que contar (el correo del día
+    # siguiente decía «te quedan 6 días» a quien tiene la app gratis hasta el 31-12).
+    datos["plazo"] = (t["plazo_promo"] if promo_hasta else t["plazo"]).format(**datos)
     asunto_m, cuerpo_m = t[clave]
     asunto = asunto_m.format(**datos)
     cuerpo = cuerpo_m.format(**datos)
