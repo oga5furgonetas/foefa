@@ -2566,3 +2566,33 @@ test('Portada repartidores · sugiere el correo bien escrito si hay una errata e
   await correo.fill('pepe@empresa.es')
   await expect(page.getByRole('button', { name: /¿Querías decir/ })).toHaveCount(0)
 })
+
+/* «MI DINERO HOY» (11-10-2026): el autónomo pone su tarifa y la cabecera dice cuánto lleva ganado,
+   la gasolina de lo hecho y el neto. */
+test('Ruta · Mi dinero hoy: poner la tarifa y ver lo ganado', async ({ page }) => {
+  const fallos = vigilar(page)
+  await entrarRepartidor(page, { status: 'trial', days_left: 6, promo: { activa: true, hasta: '2026-12-31' } })
+  let gan = { pago_parada: 0, pago_dia: 0, coste_km: 0 }
+  const guardado = []
+  const hecho = (n) => ({ id: `h${n}`, cliente: `Cliente ${n}`, direccion: `Calle ${n}`, estado: 'entregado', orden: n, lat: 43.36, lng: -8.41 })
+  await page.route(/\/api\/reparto\/mi-ruta/, (r) => r.fulfill({ json: {
+    activo: true, autonomo: true, fecha: '2026-10-11', jornada: {}, aviso_aceptado: true, ganancias: gan,
+    ruta: { km: 20 }, pedidos: [hecho(1), hecho(2)] } }))
+  await page.route(/\/api\/reparto\/ganancias/, async (r) => {
+    guardado.push(r.request().postDataJSON())
+    gan = r.request().postDataJSON()
+    await r.fulfill({ json: gan })
+  })
+  await page.goto('/ruta', { waitUntil: 'domcontentloaded' })
+  await page.getByRole('button', { name: /Pon tu tarifa/ }).click()
+  const hoja = page.getByRole('dialog', { name: 'Mi dinero hoy' })
+  await hoja.getByPlaceholder('1,10').fill('1,10')
+  await hoja.getByRole('button', { name: 'Guardar' }).click()
+  await expect.poll(() => guardado.length).toBe(1)
+  expect(guardado[0]).toEqual({ pago_parada: 110, pago_dia: 0, coste_km: 12 })
+  // 2 entregas × 1,10 € = 2,20 €; gasolina de lo hecho: 20 km × 2/2 × 0,12 € = 2,40 €.
+  const tarjeta = page.getByRole('button', { name: 'Mi dinero hoy' })
+  await expect(tarjeta).toContainText('2,20')
+  await expect(tarjeta).toContainText('2,40')
+  expect(fallos).toEqual([])
+})

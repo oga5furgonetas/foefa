@@ -254,6 +254,8 @@ export const repMiOrden = (ids, desde) => api.post('/reparto/mi-ruta/orden', { i
 export const repMiEditar = (id, body) => api.post(`/reparto/mis-pedidos/${id}/editar`, body)
 export const repMiQuitar = (id) => api.post(`/reparto/mis-pedidos/${id}/quitar`)
 export const repEjemplo = (desde) => api.post('/reparto/mis-pedidos/ejemplo', desde || {})
+// «Mi dinero hoy» (11-10-2026): la tarifa del autónomo, en céntimos.
+export const repGanancias = (datos) => api.put('/reparto/ganancias', datos)
 export const repQuitarEjemplos = () => api.post('/reparto/mis-pedidos/quitar-ejemplos')
 export const getReferidos = () => api.get('/referidos')
 // La cartera «Invita y gana»: pedir que te paguen el saldo (Bizum o transferencia).

@@ -47542,6 +47542,10 @@ async def _rep_ajustes() -> dict:
     a.setdefault("hora_salida", "09:00")
     a.setdefault("volver", False)
     a.setdefault("trafico", True)
+    # «Mi dinero hoy» (11-10-2026), en céntimos: 0 = sin poner.
+    a.setdefault("pago_parada", 0)
+    a.setdefault("pago_dia", 0)
+    a.setdefault("coste_km", 0)
     return a
 
 
@@ -48054,12 +48058,28 @@ async def reparto_ajustes_put(data: dict = Body(...), user: dict = Depends(requi
     nuevo["hora_salida"] = reparto.hm(hs) if hs is not None else "09:00"
     nuevo["volver"] = bool(data.get("volver"))
     nuevo["trafico"] = data.get("trafico") is not False
+    # La tarifa se cambia en su propia pantalla (PUT /reparto/ganancias): guardar los ajustes no la borra.
+    for k in ("pago_parada", "pago_dia", "coste_km"):
+        nuevo[k] = int(a.get(k) or 0)
     nuevo["actualizado_por"] = user.get("name") or ""
     nuevo["actualizado_en"] = datetime.now(timezone.utc).isoformat()
     await db.reparto_ajustes.replace_one({"id": "ajustes"}, nuevo, upsert=True)
     nuevo["portal_activo"] = await _rep_portal_activo(user, nuevo)
     nuevo["ia_disponible"] = _rep_ia_permitida()
     return nuevo
+
+
+@api_router.put("/reparto/ganancias")
+async def reparto_ganancias_put(data: dict = Body(...), user: dict = Depends(require_admin)):
+    """La tarifa del autónomo para «Mi dinero hoy», en céntimos. Solo la toca quien reparte solo."""
+    if not await _rep_es_autonomo(user):
+        raise HTTPException(403, "Esto es para quien reparte por su cuenta")
+    data = _dict_cuerpo(data)
+    campos = {"pago_parada": _entero(data.get("pago_parada"), "pago_parada", defecto=0, minimo=0, maximo=2000),
+              "pago_dia": _entero(data.get("pago_dia"), "pago_dia", defecto=0, minimo=0, maximo=50000),
+              "coste_km": _entero(data.get("coste_km"), "coste_km", defecto=0, minimo=0, maximo=200)}
+    await db.reparto_ajustes.update_one({"id": "ajustes"}, {"$set": campos}, upsert=True)
+    return campos
 
 
 @api_router.get("/reparto/pedidos")
@@ -48379,6 +48399,8 @@ async def reparto_mi_ruta(user: dict = Depends(require_any_auth)):
             "pais": _region_actual.get()[0], "prefijo": PAISES_REPARTO.get(_region_actual.get()[0], {}).get("prefijo", "34"), "fecha": f, "pedidos": ps, "base": a.get("base"), "ruta": ruta, "autonomo": autonomo,
             "ia_tickets": await _rep_ia_activa(a, user),
             "jornada": {"empezada": j.get("empezada"), "terminada": j.get("terminada")},
+            # «Mi dinero hoy»: solo para quien reparte por su cuenta (a un conductor le paga su empresa).
+            "ganancias": ({k: int(a.get(k) or 0) for k in ("pago_parada", "pago_dia", "coste_km")} if autonomo else None),
             "aviso_aceptado": bool(aviso),
             # La prueba sin cuenta: la app invita a crear la cuenta de verdad.
             "prueba": bool(user.get("demo")) and str(d["id"]).startswith("demo-a-")}

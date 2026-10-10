@@ -237,6 +237,30 @@ async def test_el_autonomo_es_su_propio_repartidor(base, monkeypatch):
 
 
 @pytest.mark.asyncio(loop_scope="session")
+async def test_mi_dinero_hoy_tarifa_del_autonomo(base, monkeypatch):
+    """11-10-2026: el autónomo pone su tarifa (céntimos) y la ve en su ruta; guardar los demás
+    ajustes no la borra; una empresa no la toca."""
+    async def org_autonomo(_id):
+        return {"id": "o1", "account_type": "dsp", "sector": "autonomo",
+                "modulos": ["dashboard", "reparto", "configuracion"]}
+    monkeypatch.setattr(server, "get_org", org_autonomo)
+    yo = {"sub": "a9", "role": "admin", "name": "Pepe", "org_id": "o1", "db_name": "dsp_x"}
+    assert (await server.reparto_mi_ruta(yo))["ganancias"] == {"pago_parada": 0, "pago_dia": 0, "coste_km": 0}
+    r = await server.reparto_ganancias_put({"pago_parada": "110", "pago_dia": 0, "coste_km": 12}, yo)
+    assert r == {"pago_parada": 110, "pago_dia": 0, "coste_km": 12}
+    await server.reparto_ajustes_put({"hora_salida": "08:30"}, yo)
+    assert (await server.reparto_mi_ruta(yo))["ganancias"] == {"pago_parada": 110, "pago_dia": 0, "coste_km": 12}
+    with pytest.raises(HTTPException):
+        await server.reparto_ganancias_put({"pago_parada": 99999}, yo)
+
+    async def no_autonomo(_user):
+        return False
+    monkeypatch.setattr(server, "_rep_es_autonomo", no_autonomo)
+    with pytest.raises(HTTPException):
+        await server.reparto_ganancias_put({"pago_parada": 100}, OFICINA)
+
+
+@pytest.mark.asyncio(loop_scope="session")
 async def test_un_admin_que_no_es_autonomo_no_tiene_mi_ruta(base):
     assert (await server.reparto_mi_ruta(OFICINA)) == {"activo": False}
 

@@ -6,7 +6,7 @@ import {
 } from 'lucide-react'
 import {
   repMiRuta, repEscanear, repLeerTicket, repNuevoPedido, repEstado, repOrdenar, repJornada, repPosicion,
-  repMiOrden, repMiEditar, repMiQuitar, repEjemplo, repQuitarEjemplos, repPegarMiLista, repTrazado, repFachada,
+  repMiOrden, repMiEditar, repMiQuitar, repEjemplo, repQuitarEjemplos, repPegarMiLista, repTrazado, repFachada, repGanancias,
 } from '../../services/api'
 import { hoyLocal } from '../../lib/fecha'
 import { lista } from '../../lib/lista'
@@ -182,6 +182,7 @@ export default function MiRuta({ onBack, embebido = false }) {
   const [reordenar, setReordenar] = useState(null)   // null | [ids] mientras se cambia a mano
   const [huecoDe, setHuecoDe] = useState(null)       // la parada a la que se le dice dónde va
   const [pegar, setPegar] = useState(null)           // null | {texto, n}
+  const [tarifa, setTarifa] = useState(null)         // «Mi dinero hoy»: null | {parada, dia, km} (texto en €)
   const [escuchando, setEscuchando] = useState(false)
   const reconocedor = useRef(null)
   const dirInput = useRef(null)
@@ -626,6 +627,29 @@ export default function MiRuta({ onBack, embebido = false }) {
   const etaSig = siguiente && ruta.fecha === hoyLocal() ? aMin(siguiente.eta) : null
   const retraso = etaSig != null ? Math.max(0, ahora.getHours() * 60 + ahora.getMinutes() - etaSig) : 0
   const cobradoHoy = entregados.reduce((a, p) => a + (Number(p.cobrado_importe) || 0), 0)
+  /* «MI DINERO HOY» (11-10-2026). Lo que lleva ganado con su tarifa, la gasolina de lo que lleva
+     hecho (km de la ruta × parte hecha × €/km) y el neto; por hora si ha empezado la jornada. */
+  const gan = ruta?.ganancias
+  let dinero = null
+  if (gan && (gan.pago_parada || gan.pago_dia)) {
+    const bruto = (entregados.length * gan.pago_parada + (entregados.length ? gan.pago_dia : 0)) / 100
+    const km = (Number(ruta?.ruta?.km) || 0) * (total ? hechos.length / total : 0)
+    const gasolina = (gan.coste_km * km) / 100
+    const neto = bruto - gasolina
+    const empezo = ruta?.jornada?.empezada ? new Date(ruta.jornada.empezada).getTime() : 0
+    const horas = empezo ? (Date.now() - empezo) / 3600000 : 0
+    dinero = { bruto, gasolina, neto, porHora: horas >= 0.25 ? neto / horas : null }
+  }
+  const aEuros = (c) => (c ? String(c / 100).replace('.', ',') : '')
+  const aCent = (t) => Math.round((Number(String(t || '').replace(',', '.')) || 0) * 100)
+  async function guardarTarifa() {
+    setOcupado('tarifa')
+    try {
+      await repGanancias({ pago_parada: aCent(tarifa.parada), pago_dia: aCent(tarifa.dia), coste_km: aCent(tarifa.km) })
+      medirAccion('ruta_tarifa')
+      setTarifa(null); cargar()
+    } catch (e) { setAviso(txError(e, 'No se pudo guardar')) } finally { setOcupado('') }
+  }
 
   return (
     <Marco onBack={onBack} embebido={embebido}>
@@ -666,6 +690,7 @@ export default function MiRuta({ onBack, embebido = false }) {
       {total > 0 && (
         <Cabecera fecha={ruta.fecha} hechos={hechos.length} total={total} entregados={entregados.length}
           pendientes={pendientes.length} rr={ruta.ruta} retraso={retraso} cobrado={cobradoHoy}
+          dinero={dinero} onTarifa={ruta.autonomo && gan ? () => setTarifa({ parada: aEuros(gan.pago_parada), dia: aEuros(gan.pago_dia), km: aEuros(gan.coste_km) || '0,12' }) : null}
           fueraHorario={pendientes.filter((p) => p.tarde_min > 0).length}
           onGuiar={nav === 'app' && pendientes.some((p) => p.lat != null) ? () => setGuiando(pendientes.find((p) => p.lat != null).id) : null}
           onCorregir={!pendientes.some((p) => p.lat != null) && pendientes.some((p) => p.geo === 'no')
@@ -1050,6 +1075,23 @@ export default function MiRuta({ onBack, embebido = false }) {
         </Hoja>
       )}
 
+      {tarifa && (
+        <Hoja titulo={tx('Mi dinero hoy')} onClose={() => setTarifa(null)}>
+          <p className="mb-3 text-[13px] text-dark-400">{tx('Pon cómo te pagan y la app te dice cuánto llevas ganado hoy, la gasolina y lo que te queda limpio.')}</p>
+          {[['parada', tx('Te pagan por cada entrega (€)'), '1,10'], ['dia', tx('Fijo por día, si te pagan así (€)'), '0'], ['km', tx('Gasolina por km (€)'), '0,12']].map(([k, t, ej]) => (
+            <label key={k} className="mb-2.5 block">
+              <span className="mb-1 block text-[13px] font-semibold text-dark-200">{t}</span>
+              <input className={inp} inputMode="decimal" value={tarifa[k]} placeholder={ej}
+                onChange={(e) => setTarifa({ ...tarifa, [k]: e.target.value.replace(/[^0-9.,]/g, '') })} />
+            </label>
+          ))}
+          <p className="mb-3 text-[12px] text-dark-500">{tx('Una furgoneta diésel gasta unos 0,10–0,15 € por km. Solo lo ves tú.')}</p>
+          <button onClick={guardarTarifa} disabled={ocupado === 'tarifa' || (!aCent(tarifa.parada) && !aCent(tarifa.dia))}
+            className="w-full rounded-xl bg-brand-500 py-3 text-[15px] font-bold text-brand-tinta disabled:opacity-40">
+            {ocupado === 'tarifa' ? tx('Guardando…') : tx('Guardar')}
+          </button>
+        </Hoja>
+      )}
       {pegar && (
         <Hoja titulo={tx('Pegar una lista de direcciones')} onClose={() => setPegar(null)}>
           <p className="mb-2 text-[13px] text-dark-400">
@@ -1316,7 +1358,7 @@ function Marco({ onBack, children, embebido }) {
    única parada no estaba en el mapa (la dirección no se encontró) y sin un punto no hay
    adónde guiar; el aviso quedaba abajo, debajo del mapa. Ahora lo dice aquí y lleva a
    corregirla: al escribirla salen sugerencias, y elegir una la sitúa. */
-function Cabecera({ fecha, hechos, total, entregados, pendientes, rr, retraso, cobrado, fueraHorario, onGuiar, onCorregir }) {
+function Cabecera({ fecha, hechos, total, entregados, pendientes, rr, retraso, cobrado, fueraHorario, onGuiar, onCorregir, dinero, onTarifa }) {
   const pct = total ? hechos / total : 0
   const R = 26
   const L = 2 * Math.PI * R
@@ -1363,6 +1405,27 @@ function Cabecera({ fecha, hechos, total, entregados, pendientes, rr, retraso, c
         {fueraHorario > 0 && <span className="rounded-full bg-red-500/15 px-2 py-0.5 text-red-300">{tx('{n} fuera de su horario', { n: fueraHorario })}</span>}
         {pendientes > 0 && retraso > 5 && <span className="rounded-full bg-amber-500/15 px-2 py-0.5 font-semibold text-amber-300">{tx('Vas {t} por detrás de lo previsto', { t: minutosATexto(retraso) })}</span>}
       </div>
+      {dinero && (
+        <button onClick={onTarifa} aria-label={tx('Mi dinero hoy')}
+          className="mt-3 flex w-full items-center justify-between gap-2 rounded-2xl border border-emerald-400/30 bg-emerald-500/[.08] px-3 py-2 text-left">
+          <span className="min-w-0">
+            <span className="block text-[11px] font-bold uppercase tracking-wider text-emerald-300">{tx('Mi dinero hoy')}</span>
+            <span className="block text-[12.5px] text-dark-300">
+              {tx('Llevas {a} · gasolina ≈ {b}', { a: euros(dinero.bruto), b: euros(dinero.gasolina) })}
+              {dinero.porHora != null ? ` · ${tx('{c}/hora', { c: euros(dinero.porHora) })}` : ''}
+            </span>
+          </span>
+          <span className="shrink-0 text-right">
+            <span className="block text-[10.5px] text-dark-400">{tx('Limpio')}</span>
+            <b className="text-[19px] leading-none text-emerald-200">{euros(dinero.neto)}</b>
+          </span>
+        </button>
+      )}
+      {!dinero && onTarifa && (
+        <button onClick={onTarifa} className="mt-3 w-full rounded-2xl border border-dashed border-emerald-400/40 px-3 py-2 text-[12.5px] font-semibold text-emerald-200">
+          💶 {tx('¿Cuánto llevas ganado hoy? Pon tu tarifa')}
+        </button>
+      )}
       {onGuiar && (
         <button onClick={onGuiar}
           className="mt-3.5 flex w-full items-center justify-center gap-2 rounded-2xl bg-brand-500 py-3.5 text-[16px] font-bold text-brand-tinta shadow-lg shadow-brand-500/20 active:scale-[.99]">
