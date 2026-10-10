@@ -2551,3 +2551,15 @@ test('Anuncio · mide si la gente se queda: a los 10 s y al llegar a la mitad', 
   await expect.poll(() => acciones).toContain('rep_mitad')
   expect(acciones.filter((a) => a === 'rep_10s')).toHaveLength(1)
 })
+
+/* ERRATA EN EL CORREO (10-10-2026): «gmial.com» sugiere «gmail.com» y un toque lo corrige. */
+test('Portada repartidores · sugiere el correo bien escrito si hay una errata en el dominio', async ({ page }) => {
+  await page.goto('/repartidores?v=a', { waitUntil: 'domcontentloaded' })
+  const correo = page.getByLabel('Tu correo')
+  await correo.fill('pepe@gmial.com')
+  await page.getByRole('button', { name: '¿Querías decir pepe@gmail.com?' }).click()
+  await expect(correo).toHaveValue('pepe@gmail.com')
+  await expect(page.getByRole('button', { name: /¿Querías decir/ })).toHaveCount(0)
+  await correo.fill('pepe@empresa.es')
+  await expect(page.getByRole('button', { name: /¿Querías decir/ })).toHaveCount(0)
+})

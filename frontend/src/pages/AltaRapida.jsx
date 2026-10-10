@@ -10,6 +10,7 @@ import { regionDelMovil } from '../lib/region'
 import { enAppPlay } from '../lib/enApp'
 import { PARADAS_GRATIS, promoGratis, fechaPromo } from '../lib/precios'
 import { marcarRecienAlta } from '../lib/instalar'
+import { sugerenciaCorreo } from '../lib/correo'
 
 /* EL ALTA, DENTRO DE LA PORTADA (05-10-2026). Medido: 541 visitas de TikTok en 72 h, 1 clic en
    «Crear cuenta» y 0 altas: el camino «botón → otra pantalla → formulario» perdía a casi todos en el
@@ -91,6 +92,12 @@ export default function AltaRapida({ dias = 7, enfocar = false }) {
         aria-label={tx('Tu nombre')} className={campo} autoFocus={enfocar} />
       <input value={email} onChange={(e) => setEmail(e.target.value)} onFocus={inicio} type="email" inputMode="email" autoComplete="email" autoCapitalize="none"
         placeholder={tx('Tu correo')} aria-label={tx('Tu correo')} className={campo} />
+      {sugerenciaCorreo(email) && (
+        <button type="button" onClick={() => setEmail(sugerenciaCorreo(email))}
+          className="-mt-1 block w-full text-left text-[13px] font-semibold text-amber-200 underline underline-offset-2">
+          {tx('¿Querías decir {correo}?', { correo: sugerenciaCorreo(email) })}
+        </button>
+      )}
       <div className="relative">
         <input value={pass} onChange={(e) => setPass(e.target.value)} onFocus={inicio} type={ver ? 'text' : 'password'} autoComplete="new-password"
           placeholder={tx('Contraseña')} aria-label={tx('Contraseña')} className={`${campo} pr-12`} />

@@ -13,6 +13,7 @@ import { tx, useIdioma, IDIOMAS, cambiarIdioma, locale } from '../lib/idioma'
 import { desdeChina } from '../lib/apiBase'
 import { Check, Zap, Package, ShoppingCart, Warehouse, Truck, User, Send } from 'lucide-react'
 import { MARCA, dominio } from '../marca'
+import { sugerenciaCorreo } from '../lib/correo'
 import { PLANES_EMPRESA, PLAN_REPARTO, MESES_ANUAL, PARADAS_GRATIS, promoGratis, fechaPromo, precioMes as precioMesPlan, eur } from '../lib/precios'
 
 function slugify(s) {
@@ -515,6 +516,12 @@ export default function Registro() {
 
         <label style={lbl}>{soloYo ? tt('Tu correo') : 'Email de contacto'}</label>
         <input style={inp} type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder={soloYo ? 'tu@correo.com' : 'admin@tuempresa.com'} autoComplete="email" />
+        {sugerenciaCorreo(email) && (
+          <button type="button" onClick={() => setEmail(sugerenciaCorreo(email))}
+            style={{ ...hint, display: 'block', color: '#fbbf24', fontSize: 13, fontWeight: 600, textDecoration: 'underline', background: 'none', border: 0, padding: 0, cursor: 'pointer', textAlign: 'left' }}>
+            {tt('¿Querías decir {correo}?', { correo: sugerenciaCorreo(email) })}
+          </button>
+        )}
 
         {!soloYo && <>
         <label style={lbl}>{t('login.user')}</label>

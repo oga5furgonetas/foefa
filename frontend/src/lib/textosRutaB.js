@@ -517,4 +517,6 @@ export const B = {
   "Pagada": ["Paid","Paga","Payée","Pagata","Bezahlt","已付款"],
   "No pagada": ["Not paid","Não paga","Non payée","Non pagata","Nicht bezahlt","未付款"],
   "Uso FDS para ordenar mi ruta de reparto y navegar parada a parada. Es gratis y sin límite hasta el {fecha}, solo registrarte:": ["I use FDS to sort my delivery route and navigate stop by stop. It’s free and unlimited until {fecha}, you just sign up:","Uso a FDS para ordenar a minha rota de entregas e navegar paragem a paragem. É grátis e sem limite até {fecha}, só tens de te registar:","J’utilise FDS pour organiser ma tournée et naviguer arrêt par arrêt. C’est gratuit et sans limite jusqu’au {fecha}, il suffit de s’inscrire :","Uso FDS per ordinare il mio percorso di consegna e navigare fermata per fermata. È gratis e senza limiti fino al {fecha}, basta registrarsi:","Ich nutze FDS, um meine Lieferroute zu ordnen und Stopp für Stopp zu navigieren. Kostenlos und ohne Limit bis zum {fecha}, einfach registrieren:","我用 FDS 排序送货路线、逐站导航。{fecha}前免费且不限，注册即可："],
+  // Errata en el correo al darse de alta (10-10-2026)
+  "¿Querías decir {correo}?": ["Did you mean {correo}?", "Querias dizer {correo}?", "Vouliez-vous dire {correo} ?", "Intendevi {correo}?", "Meintest du {correo}?", "你是不是想输入 {correo}？"],
 }
