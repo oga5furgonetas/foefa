@@ -2,7 +2,7 @@ import { Suspense, lazy, useCallback, useEffect, useRef, useState } from 'react'
 import {
   ArrowLeft, ScanLine, Camera, Loader2, Navigation, Phone, Check, X, Route, MapPin, Play, Square, Package,
   MessageCircle, Clock, Search, List, Pencil, ChevronDown, GripVertical, Map as MapaIcono, ArrowUp, ArrowDown, ArrowUpDown, Mic, ClipboardPaste, Trophy,
-  Eye, PenLine, RotateCcw,
+  Eye, PenLine, RotateCcw, HelpCircle,
 } from 'lucide-react'
 import {
   repMiRuta, repEscanear, repLeerTicket, repNuevoPedido, repEstado, repOrdenar, repJornada, repPosicion,
@@ -183,6 +183,7 @@ export default function MiRuta({ onBack, embebido = false }) {
   const [huecoDe, setHuecoDe] = useState(null)       // la parada a la que se le dice dónde va
   const [pegar, setPegar] = useState(null)           // null | {texto, n}
   const [tarifa, setTarifa] = useState(null)         // «Mi dinero hoy»: null | {parada, dia, km} (texto en €)
+  const [tour, setTour] = useState(-1)               // recorrido de bienvenida: -1 cerrado, 0..2 el paso
   const [escuchando, setEscuchando] = useState(false)
   const reconocedor = useRef(null)
   const dirInput = useRef(null)
@@ -421,6 +422,13 @@ export default function MiRuta({ onBack, embebido = false }) {
       setAviso(tx('Son paradas de ejemplo, a tu alrededor: pulsa «Empezar a navegar» y míralo en acción. Quítalas cuando cargues las tuyas.'))
     } catch (e) { setAviso(txError(e, 'No se pudo preparar el ejemplo')) } finally { setOcupado('') }
   }
+  // La primera vez que quien reparte solo abre su ruta vacía, el recorrido sale solo (una vez).
+  const TOUR = 'fds_tour_ruta'
+  useEffect(() => {
+    if (!ruta?.autonomo || lista(ruta.pedidos).length) return
+    try { if (localStorage.getItem(TOUR)) return; localStorage.setItem(TOUR, '1') } catch { return }
+    setTour(0); medirAccion('tour_visto')
+  }, [ruta?.autonomo, ruta?.pedidos])
   async function quitarEjemplos() {
     setOcupado('ejemplo')
     try { await repQuitarEjemplos(); cargar(); setAviso(tx('Ejemplos quitados. Ya puedes cargar tus paquetes.')) } catch (e) { setAviso(txError(e, 'No se pudo quitar')) } finally { setOcupado('') }
@@ -867,6 +875,11 @@ export default function MiRuta({ onBack, embebido = false }) {
 
       {pendientes.length === 0 && total === 0 && (
         <div className="rounded-xl border border-dashed border-dark-700 px-4 py-5 text-center">
+          {ruta.autonomo && (
+            <button onClick={() => setTour(0)} className="mb-2 inline-flex items-center gap-1.5 text-[13px] font-semibold text-brand-300 underline underline-offset-2">
+              <HelpCircle size={15} /> {tx('¿Cómo funciona?')}
+            </button>
+          )}
           <p className="text-[13px] text-dark-400">
             {ruta.autonomo
               ? tx('Escanea cada paquete o hazle una foto a la etiqueta: la dirección y el teléfono entran solos. Luego «Ordenar ruta».')
@@ -1075,6 +1088,42 @@ export default function MiRuta({ onBack, embebido = false }) {
         </Hoja>
       )}
 
+      {tour >= 0 && (() => {
+        const PASOS = [
+          [ScanLine, tx('1. Mete tus paquetes'), tx('Escanea el código o haz una foto a la etiqueta: la dirección y el teléfono entran solos. También puedes escribirla o pegar una lista.')],
+          [Route, tx('2. Ordena la ruta'), tx('Pulsa «Ordenar ruta»: la app pone las paradas en el orden que menos tardas, con el tráfico de cada hora y la hora de llegada a cada una.')],
+          [Navigation, tx('3. Navega y entrega'), tx('Pulsa «Empezar a navegar»: te lleva con voz a cada puerta. Al llegar, «Entregado» con foto o firma, y pasa a la siguiente.')],
+        ]
+        const [Icono, titulo, texto] = PASOS[tour]
+        const ultimo = tour === PASOS.length - 1
+        return (
+          <Hoja titulo={tx('Así funciona')} onClose={() => setTour(-1)}>
+            <div className="flex items-start gap-3">
+              <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-brand-500/15 text-brand-300"><Icono size={22} /></span>
+              <div>
+                <p className="text-[17px] font-bold text-dark-50">{titulo}</p>
+                <p className="mt-1 text-[14px] leading-snug text-dark-300">{texto}</p>
+              </div>
+            </div>
+            <div className="mt-4 flex items-center justify-center gap-1.5" aria-hidden="true">
+              {PASOS.map((_, i) => <span key={i} className={`h-1.5 rounded-full ${i === tour ? 'w-6 bg-brand-400' : 'w-1.5 bg-dark-600'}`} />)}
+            </div>
+            {!ultimo ? (
+              <button onClick={() => setTour(tour + 1)} className="mt-4 w-full rounded-xl bg-brand-500 py-3 text-[15px] font-bold text-brand-tinta">{tx('Siguiente')}</button>
+            ) : (
+              <>
+                {pendientes.length === 0 && (
+                  <button onClick={() => { setTour(-1); medirAccion('tour_ejemplo'); cargarEjemplo() }} disabled={ocupado === 'ejemplo'}
+                    className="mt-4 flex w-full items-center justify-center gap-2 rounded-xl bg-brand-500 py-3 text-[15px] font-bold text-brand-tinta">
+                    <Play size={16} /> {tx('Verlo en acción con 3 paradas de ejemplo')}
+                  </button>
+                )}
+                <button onClick={() => setTour(-1)} className="mt-2 w-full rounded-xl border border-dark-700 py-2.5 text-[14px] font-semibold text-dark-200">{tx('Empezar con mis paquetes')}</button>
+              </>
+            )}
+          </Hoja>
+        )
+      })()}
       {tarifa && (
         <Hoja titulo={tx('Mi dinero hoy')} onClose={() => setTarifa(null)}>
           <p className="mb-3 text-[13px] text-dark-400">{tx('Pon cómo te pagan y la app te dice cuánto llevas ganado hoy, la gasolina y lo que te queda limpio.')}</p>

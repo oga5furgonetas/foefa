@@ -209,6 +209,8 @@ export async function entrarComoAdmin(page, { superAdmin = false, centros = ['NO
       // ninguno en ninguna pantalla.
       localStorage.setItem('cookie_consent', '1')
       localStorage.setItem('ayuda_vista_a1', '1')
+      // El recorrido de bienvenida de la ruta (MiRuta.jsx) se da por visto; su test lo quita.
+      localStorage.setItem('fds_tour_ruta', '1')
     },
     {
       centros,

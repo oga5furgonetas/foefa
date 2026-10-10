@@ -2610,3 +2610,25 @@ test('Calculadora repartidor · calcula lo que queda al mes y lleva a la app', a
   await expect(page.getByRole('link', { name: /Probar FDS gratis/ })).toHaveAttribute('href', /utm_source=calculadora/)
   expect(fallos).toEqual([])
 })
+
+/* RECORRIDO DE BIENVENIDA (11-10-2026): la primera vez que el autónomo abre su ruta vacía. */
+test('Ruta · recorrido de bienvenida la primera vez, 3 pasos y probar con ejemplos', async ({ page }) => {
+  const fallos = vigilar(page)
+  await entrarRepartidor(page, { status: 'trial', days_left: 6, promo: { activa: true, hasta: '2026-12-31' } })
+  await page.addInitScript(() => localStorage.removeItem('fds_tour_ruta'))
+  let ejemplo = 0
+  await page.route(/\/api\/reparto\/mis-pedidos\/ejemplo/, async (r) => { ejemplo += 1; await r.fulfill({ json: { ok: true, n: 3 } }) })
+  await page.goto('/ruta', { waitUntil: 'domcontentloaded' })
+  const hoja = page.getByRole('dialog', { name: 'Así funciona' })
+  await expect(hoja.getByText('1. Mete tus paquetes')).toBeVisible()
+  await hoja.getByRole('button', { name: 'Siguiente' }).click()
+  await expect(hoja.getByText('2. Ordena la ruta')).toBeVisible()
+  await hoja.getByRole('button', { name: 'Siguiente' }).click()
+  await expect(hoja.getByText('3. Navega y entrega')).toBeVisible()
+  await hoja.getByRole('button', { name: 'Verlo en acción con 3 paradas de ejemplo' }).click()
+  await expect.poll(() => ejemplo).toBe(1)
+  // Solo sale una vez: la app deja la marca de visto (luego se vuelve a ver con «¿Cómo funciona?»).
+  expect(await page.evaluate(() => localStorage.getItem('fds_tour_ruta'))).toBe('1')
+  await expect(hoja).toHaveCount(0)
+  expect(fallos).toEqual([])
+})
