@@ -26,7 +26,7 @@ export async function onRequestGet(context) {
     `<meta property="og:title" content="${TITULO}" />`,
     `<meta property="og:description" content="${DESCRIPCION}" />`,
     `<meta property="og:url" content="${base}/repartidores" />`,
-    `<meta property="og:image" content="${base}/og-repartidores.png" />`,
+    `<meta property="og:image" content="${base}/og-repartidores.png?v=promo1231" />`,
     `<meta property="og:image:width" content="1200" />`,
     `<meta property="og:image:height" content="630" />`,
     `<meta property="og:image:alt" content="${TITULO}" />`,
