@@ -107,12 +107,12 @@ const ESCENAS = [
 if (EXTRA) {
   ESCENAS.push({ cierre: 8.7, t0: FIN_VOZ, d: EXTRA_D, rotulos: [
     R('Y ADEMÁS…', 560, { fuente: 'sans', tam: 54, color: '0x5eead4' }),
-    R('GANA 5 €', 680, { fuente: 'sans', tam: 170, color: '0xFFD43B', desde: 0.25 }),
+    R('GANA 2,50 €', 690, { fuente: 'sans', tam: 138, color: '0xFFD43B', desde: 0.25 }),
     R('por cada compañero', 900, { tam: 80, desde: 0.25 }), R('que la use', 1000, { tam: 80, desde: 0.25 }),
     R('Lo cobras por Bizum', 1130, { fuente: 'sans', tam: 54, color: '0x5eead4', desde: 0.9 }),
     R('flotadsp.com/repartidores', 1290, { fuente: 'sans', tam: 52, desde: 1.4 }),
     R('Cuenta cuando hace 20 entregas en 2 días distintos', 1385, { fuente: 'sans', tam: 30, color: '0xa9c2c6', desde: 1.4 }),
-    R('Cobro desde 15 € · condiciones en la web', 1430, { fuente: 'sans', tam: 30, color: '0xa9c2c6', desde: 1.4 })] })
+    R('Cobro desde 10 € · condiciones en la web', 1430, { fuente: 'sans', tam: 30, color: '0xa9c2c6', desde: 1.4 })] })
 }
 console.log('duración', FIN, 's; escenas', ESCENAS.map((e) => e.d).join(' '))
 
