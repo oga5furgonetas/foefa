@@ -9,8 +9,8 @@ export const COMPANY = {
   legalName: 'Daniel Lampón Vieites',
   personaFisica: true,
   brand: MARCA.nombre,
-  cif: '',           // NIF: pendiente de que Dani decida publicarlo (o el CIF de la sociedad)
-  address: '',       // domicilio completo (calle, número, CP, municipio, provincia): pendiente
+  cif: '45957087M',  // NIF del titular (Dani lo dio para publicarlo el 10-10-2026); el CIF cuando haya sociedad
+  address: 'Loureiros, 31, 15704 Santiago de Compostela (A Coruña)',
   registry: '',
   contactEmail: MARCA.correo,
   privacyEmail: MARCA.correo,
