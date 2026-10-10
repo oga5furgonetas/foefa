@@ -169,6 +169,10 @@ test.describe('contraste real en los tres temas', () => {
       document.addEventListener('DOMContentLoaded', () => document.head.appendChild(e))
     ` })
     await entrarComoAdmin(page)
+    // El aviso de cookies tapa la barra de pestañas: se da por contestado en cada carga.
+    await page.addInitScript(() => {
+      try { localStorage.setItem('cookie_consent', JSON.stringify({ v: 3, anuncios: false, at: '2026-10-10T00:00:00Z' })) } catch { /* nada */ }
+    })
     await simularApi(page, 'vacio')
     await page.route(/\/api\/org\/billing/, (r) => r.fulfill({ json: {
       status: 'trial', days_left: 7, plan: 'autonomo', sector: 'autonomo',
@@ -189,15 +193,16 @@ test.describe('contraste real en los tres temas', () => {
           try {
             localStorage.setItem('panel_theme', t)
             localStorage.setItem('panel_theme_elegido', '1')
-            localStorage.setItem('cookie_consent', JSON.stringify({ v: 3, anuncios: false, at: '2026-10-10T00:00:00Z' }))
           } catch { /* incógnito */ }
         }, tema)
         await page.reload({ waitUntil: 'domcontentloaded' })
         // Fuera del panel el tema noche no pone atributo: es el CSS de base.
         await page.waitForFunction(
           (t) => (document.documentElement.getAttribute('data-panel-theme') || 'dark') === t, tema, { timeout: 20_000 })
+        // La app recuerda la última pestaña: se vuelve a «Hoy».
+        await page.getByRole('button', { name: 'Hoy', exact: true }).click()
         await expect(page.getByText(conEjemplos ? 'Estas paradas son de ejemplo.' : 'Verlo en acción con 3 paradas de ejemplo')).toBeVisible()
-        const malos = await page.evaluate(async () => {
+        const medir = () => page.evaluate(async () => {
           const r = await window.axe.run(document.querySelector('main') || document, {
             runOnly: { type: 'rule', values: ['color-contrast'] },
           })
@@ -206,7 +211,16 @@ test.describe('contraste real en los tres temas', () => {
             html: (n.html || '').replace(/\s+/g, ' ').slice(0, 150),
           })))
         })
-        for (const m of malos) fallos.push(`[${tema}] /ruta ${conEjemplos ? 'con ejemplos' : 'vacía'} · ${m.msg} · ${m.html}`)
+        for (const m of await medir()) fallos.push(`[${tema}] /ruta ${conEjemplos ? 'con ejemplos' : 'vacía'} · ${m.msg} · ${m.html}`)
+        // Las otras pestañas, una vez por tema (con la ruta vacía basta).
+        if (!conEjemplos) {
+          for (const pestana of ['Historial', 'Ajustes', 'Cuenta']) {
+            await page.getByRole('button', { name: pestana, exact: true }).click()
+            await page.waitForFunction(() => ((document.querySelector('main')?.innerText) || '').trim().length > 40, null, { timeout: 20_000 })
+            await page.waitForTimeout(400)
+            for (const m of await medir()) fallos.push(`[${tema}] /ruta ${pestana} · ${m.msg} · ${m.html}`)
+          }
+        }
       }
     }
     expect(fallos.join('\n') || 'sin fallos', `${fallos.length} textos por debajo de 4,5:1`).toBe('sin fallos')

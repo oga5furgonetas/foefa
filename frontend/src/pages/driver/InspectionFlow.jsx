@@ -50,8 +50,8 @@ function StepBar({ step }) {
         <div key={s.label} className="flex flex-1 items-center">
           <div className="flex flex-col items-center gap-1">
             <div className={`flex h-7 w-7 items-center justify-center rounded-full text-xs font-bold transition-all ${
-              i < step  ? 'bg-brand-500 text-white' :
-              i === step ? 'bg-brand-500 text-white ring-4 ring-brand-500/20' :
+              i < step  ? 'bg-brand-500 text-brand-tinta' :
+              i === step ? 'bg-brand-500 text-brand-tinta ring-4 ring-brand-500/20' :
                            'bg-dark-800 text-dark-500'
             }`}>
               {i < step ? <Check size={13} /> : s.short}

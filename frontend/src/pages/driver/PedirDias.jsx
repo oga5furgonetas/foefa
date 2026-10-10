@@ -558,7 +558,7 @@ export default function PedirDias({ onBack }) {
                         : est === 'libre' ? 'Ya lo tienes libre'
                         : est === 'pasado' ? 'Día pasado' : ''}
                     className={`aspect-square rounded-lg text-[13px] tabular-nums transition-colors ${
-                      marcado ? 'bg-brand-500 font-bold text-white'
+                      marcado ? 'bg-brand-500 font-bold text-brand-tinta'
                         : est === 'pasado' ? 'text-dark-700'
                           // Esperando respuesta va en AZUL, no en otro naranja:
                           // en la pantalla del móvil el ámbar y el naranja de

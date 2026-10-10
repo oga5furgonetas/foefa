@@ -40,7 +40,7 @@ const ESTADOS = {
 }
 const inp = 'w-full rounded-lg border border-dark-700 bg-dark-900 px-3 py-2 text-[13px] text-dark-100 placeholder:text-dark-500 focus:border-brand-500 focus:outline-none'
 const btn = 'inline-flex items-center gap-1.5 rounded-lg border border-dark-700 bg-dark-900 px-3 py-2 text-[12.5px] font-semibold text-dark-200 hover:border-dark-500 disabled:opacity-40'
-const btnP = 'inline-flex items-center gap-1.5 rounded-lg bg-brand-500 px-3 py-2 text-[12.5px] font-semibold text-white hover:bg-brand-600 disabled:opacity-40'
+const btnP = 'inline-flex items-center gap-1.5 rounded-lg bg-brand-500 px-3 py-2 text-[12.5px] font-semibold text-brand-tinta hover:bg-brand-600 disabled:opacity-40'
 
 const VACIO = { codigo: '', cliente: '', telefono: '', direccion: '', contenido: '', bultos: 1, conductor_id: '', horario: '', prioridad: false, cobrar: '', tipo: 'entrega' }
 // En la moneda del país de la cuenta (llega con los pedidos: datos.pais).
