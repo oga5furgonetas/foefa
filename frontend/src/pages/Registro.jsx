@@ -445,7 +445,17 @@ export default function Registro() {
       </div>
 
       <div style={{ ...card, maxWidth: 440 }}>
-        {/* Plan elegido — cabecera */}
+        {/* QUIEN REPARTE SOLO VE PRIMERO QUE ES GRATIS (10-10-2026). Medido: desde la app,
+            «Repartir yo mismo» → este formulario → se iban sin enviarlo; lo primero que leían
+            era «Repartidor 9,99 €/mes» y lo de gratis estaba en la letra pequeña. */}
+        {soloYo ? (
+          <div style={{ background: 'rgba(52,211,153,.08)', border: '1px solid rgba(52,211,153,.3)', borderRadius: 14, padding: '14px 16px', marginBottom: 20 }}>
+            <div style={{ fontWeight: 900, fontSize: 19, color: '#eef1f6', lineHeight: 1.25 }}>{tt('Gratis hasta {n} paradas al día · sin tarjeta', { n: PARADAS_GRATIS })}</div>
+            <div style={{ fontSize: 12.5, color: '#94a3b8', marginTop: 5 }}>
+              {tt('Sin tope: {precio} €/mes, y los {n} primeros días ya van sin tope.', { precio: displayPrice.toFixed(2).replace('.', ','), n: diasPrueba })}
+            </div>
+          </div>
+        ) : (
         <div style={{ background: `${planInfo.color}10`, border: `1px solid ${planInfo.color}35`, borderRadius: 14, padding: '14px 16px', marginBottom: 20, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
           <div>
             <div style={{ fontSize: 10, fontWeight: 700, color: planInfo.color, textTransform: 'uppercase', letterSpacing: '.08em', marginBottom: 3 }}>{tt('Plan elegido')}</div>
@@ -466,9 +476,10 @@ export default function Registro() {
             Cambiar
           </button>}
         </div>
+        )}
 
         <div style={{ display: 'inline-flex', alignItems: 'center', gap: 6, background: 'rgba(52,211,153,.1)', border: '1px solid rgba(52,211,153,.25)', borderRadius: 99, padding: '3px 12px', fontSize: 11, fontWeight: 700, color: '#34d399', marginBottom: 16 }}>
-          ✓ {soloYo ? tt('{n} días gratis · hoy 0 € · cancela cuando quieras', { n: diasPrueba }) : `${diasPrueba} días gratis · sin tarjeta · cancela cuando quieras`}
+          ✓ {soloYo ? tt('Gratis · sin tarjeta · hoy 0 €') : `${diasPrueba} días gratis · sin tarjeta · cancela cuando quieras`}
         </div>
 
         {soloYo && invitacion && (

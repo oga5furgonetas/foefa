@@ -481,4 +481,6 @@ export const B = {
   "Foto de la entrega": ["Delivery photo","Foto da entrega","Photo de la livraison","Foto della consegna","Zustellfoto","送达照片"],
   "Firma": ["Signature","Assinatura","Signature","Firma","Unterschrift","签名"],
   "No se pudo abrir la foto": ["Couldn’t open the photo","Não foi possível abrir a foto","Impossible d’ouvrir la photo","Impossibile aprire la foto","Foto konnte nicht geöffnet werden","无法打开照片"],
+  "Sin tope: {precio} €/mes, y los {n} primeros días ya van sin tope.": ["No limit: €{precio}/month, and the first {n} days are already unlimited.","Sem limite: {precio} €/mês, e os primeiros {n} dias já são sem limite.","Sans limite : {precio} €/mois, et les {n} premiers jours sont déjà sans limite.","Senza limiti: {precio} €/mese, e i primi {n} giorni sono già senza limiti.","Ohne Limit: {precio} €/Monat, und die ersten {n} Tage sind schon ohne Limit.","不限站点：每月 {precio} 欧元；前 {n} 天本来就不限。"],
+  "Gratis · sin tarjeta · hoy 0 €": ["Free · no card · €0 today","Grátis · sem cartão · hoje 0 €","Gratuit · sans carte · 0 € aujourd’hui","Gratis · senza carta · oggi 0 €","Kostenlos · ohne Karte · heute 0 €","免费 · 无需绑卡 · 今天 0 欧元"],
 }
