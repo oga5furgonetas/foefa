@@ -924,3 +924,10 @@ Repaso de cada frase de `/planes` y de la presentación contra el código (Dani:
   `ruta_parada_nueva`, `ruta_ordenar`, `ruta_navegar`, `ruta_entregado`, `ruta_no_entregado`.
 - **Portada /repartidores**: la oferta del anuncio (gratis hasta el 31-12 y 5 € por compañero) arriba del todo.
 - Dato: TikTok precarga la portada; sus «visitas» casi nunca son personas (ver memoria origen-altas).
+- **Correo del día siguiente** («¿Te ayudo con tu primera ruta?»): con la promoción decía «te quedan N días de
+  prueba»; ahora recuerda «gratis y sin límite hasta el …» y las paradas de ejemplo (es/pt/en, con test).
+- **Alta**: si el dominio del correo tiene una errata (gmial.com, hotmal.es, gmail.con…) sugiere el bueno
+  (`lib/correo.js`, en la portada y en /registro, con test de humo).
+- Revisado sin cambios: /repartidores pesa 331 KB de JS y pinta en 2,1 s con 4G lento; carga bien con el navegador
+  de TikTok y de Facebook; sin errores de navegador desde el 06-10. Las sesiones de la app de Play que saltan
+  /app ↔ /empezar y pulsan sin rellenar nada son el robot de pruebas de Google (móvil y tableta a la vez).
