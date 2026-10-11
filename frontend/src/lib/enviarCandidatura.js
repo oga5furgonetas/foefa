@@ -82,3 +82,21 @@ export async function enviarCandidatura(http, url, cuerpo, opciones = {}) {
   }
   throw ultimo
 }
+
+/* SI CON EL CV NO SALE, SIN EL CV (11-10-2026). Visto en los errores guardados: el 21-09 una persona falló
+   diez veces seguidas con el currículum adjunto y entró a la primera en cuanto lo quitó; el 06-10 otra
+   falló cuatro y no volvió. En Android, un CV elegido desde Drive u otra nube puede no poder leerse al
+   enviarlo, y la subida muere sin respuesta, siempre igual: reintentar con el mismo fichero no arregla
+   nada. Lo que importa es la candidatura; el CV se puede pedir al llamar.
+   Solo se quita el CV si el fallo es SIN respuesta: si el servidor contesta (un 400, un 429), el
+   fichero no tiene la culpa y mandar sin él daría el mismo error.
+   `cuerpo(conCv)` monta el FormData con o sin el fichero. Devuelve la respuesta y `sinCv: true` si
+   entró sin el currículum, para decírselo a la persona. */
+export async function enviarConCvOSinEl(http, url, cuerpo, hayCv, opciones = {}) {
+  try {
+    return { ...(await enviarCandidatura(http, url, cuerpo(hayCv), opciones)), sinCv: false }
+  } catch (e) {
+    if (!hayCv || e?.response) throw e
+    return { ...(await enviarCandidatura(http, url, cuerpo(false), opciones)), sinCv: true }
+  }
+}

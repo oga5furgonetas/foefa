@@ -1417,6 +1417,44 @@ test('App · quien reparte solo ve su app y no el panel de empresa', async ({ pa
   expect(fallos).toEqual([])
 })
 
+/* EMPLEO: SI EL CURRÍCULUM NO SE PUEDE SUBIR, LA CANDIDATURA ENTRA SIN ÉL (11-10-2026). Visto en los errores
+   guardados: con un CV de la nube el envío moría sin respuesta siempre igual; una persona entró al quitarlo y
+   otra se fue. Aquí el servidor «se cae» cada vez que llega con fichero, como pasaba en esos móviles. */
+test('Empleo · si el currículum no se puede subir, la candidatura entra sin él y se avisa', async ({ page }) => {
+  test.setTimeout(60000)
+  const fallos = vigilar(page)
+  let conCv = 0
+  let sinCv = 0
+  await page.route(/\/api\/empleo\/publica\/fds\/repartidor/, async (r) => {
+    if (r.request().method() === 'GET') {
+      return r.fulfill({ json: { titulo: 'Repartidor/a de paquetería', ciudad: 'Vigo', descripcion: 'Reparto de paquetería.', preguntas: [] } })
+    }
+    const cuerpo = (r.request().postDataBuffer() || Buffer.from('')).toString('latin1')
+    if (cuerpo.includes('name="cv"')) { conCv += 1; return r.abort('failed') }
+    sinCv += 1
+    return r.fulfill({ json: { ok: true } })
+  })
+  await page.route(/\/api\/client-error/, (r) => r.fulfill({ json: { ok: true } }))
+  await page.goto('/empleo/fds/repartidor', { waitUntil: 'domcontentloaded' })
+  const cajas = page.locator('input[type=text], input[type=tel], input:not([type])')
+  await cajas.nth(0).fill('Ana Pérez López')
+  await page.locator('input[type=tel]').fill('612345678')
+  await page.getByPlaceholder('12345678A o X1234567A').fill('12345678Z')
+  await page.getByRole('button', { name: /Continuar/ }).click()
+  await page.getByRole('button', { name: 'Sí', exact: true }).click()
+  await page.getByRole('button', { name: 'Ya mismo' }).click()
+  // El CV se lee al elegirlo: aparece su nombre.
+  await page.locator('input[type=file]').setInputFiles({ name: 'cv-ana.pdf', mimeType: 'application/pdf', buffer: Buffer.from('%PDF-1.4 cv de prueba') })
+  await expect(page.getByText('cv-ana.pdf')).toBeVisible()
+  await page.locator('input[type=checkbox]').first().check()
+  await page.getByRole('button', { name: /Enviar candidatura/ }).click()
+  await expect(page.getByText('¡Listo! Ya la tenemos')).toBeVisible({ timeout: 45000 })
+  await expect(page.getByText(/Tu currículum no se ha podido subir desde el móvil/)).toBeVisible()
+  expect(conCv).toBeGreaterThan(0)
+  expect(sinCv).toBe(1)
+  expect(fallos).toEqual([])
+})
+
 /* LA APP ARRANCA DIRECTA EN LA RUTA para quien reparte por su cuenta (11-10-2026): la primera vez pasa por el
    panel, que lo manda a /ruta; desde entonces /app va directo, sin cargar el panel. Otra cuenta no lo hereda. */
 test('App · quien reparte solo abre la app directo en su ruta, sin pasar por el panel', async ({ page }) => {

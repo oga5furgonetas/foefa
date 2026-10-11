@@ -31,7 +31,7 @@ import { pathToFileURL } from 'node:url'
 import { resolve } from 'node:path'
 
 const RUTA = resolve('frontend/src/lib/enviarCandidatura.js')
-const { enviarCandidatura, seArreglaSolo, REINTENTOS, TIMEOUT_ENVIO_MS } =
+const { enviarCandidatura, enviarConCvOSinEl, seArreglaSolo, REINTENTOS, TIMEOUT_ENVIO_MS } =
   await import(pathToFileURL(RUTA).href)
 
 const fallos = []
@@ -115,12 +115,48 @@ const conEstado = (status, detail) => Object.assign(new Error('req failed'), {
 {
   const { readFileSync } = await import('node:fs')
   const src = readFileSync('frontend/src/pages/Empleo.jsx', 'utf8')
-  ok(src.includes('enviarCandidatura(http,'),
-    'Empleo.jsx tiene que enviar por aquí, o los reintentos no existen')
+  ok(src.includes('enviarConCvOSinEl(http,'),
+    'Empleo.jsx tiene que enviar por aquí, o los reintentos (y el envío sin CV) no existen')
+  ok(src.includes('await x.arrayBuffer()'),
+    'Empleo.jsx tiene que leer el CV al elegirlo: un fichero de la nube se descubre ilegible al enviar')
   ok(!/await http\.post\(`\/empleo\/publica/.test(src),
     'quedó un envío directo sin reintentos en Empleo.jsx')
   ok(seArreglaSolo(corte()) && !seArreglaSolo(conEstado(400)),
     'la regla de qué se reintenta está del revés')
+}
+
+/* ── 9. Si con el CV no sale, entra sin él (11-10-2026) ────────────────── */
+{
+  // El caso real: con el fichero, el envío muere sin respuesta TODAS las veces; sin él, entra.
+  const vistos = []
+  const http = { post: async (_u, c) => { vistos.push(c); if (c.cv) throw corte(); return { data: { ok: true } } } }
+  let r = null
+  try { r = await enviarConCvOSinEl(http, '/x', (conCv) => ({ cv: conCv }), true, { espera: sinDormir }) } catch { /* lo dice el ok */ }
+  ok(r?.data?.ok === true && r?.sinCv === true, 'si con el CV no sale, la candidatura tiene que entrar sin él y avisarlo')
+  ok(vistos.filter((c) => c.cv).length === REINTENTOS, 'antes de quitar el CV hay que intentarlo con él de verdad')
+}
+{
+  // Con el CV a la primera: entra con él y no se dice nada raro.
+  const http = { post: async () => ({ data: { ok: true } }) }
+  const r = await enviarConCvOSinEl(http, '/x', (conCv) => ({ cv: conCv }), true, { espera: sinDormir })
+  ok(r?.sinCv === false, 'si entra con el CV, no hay que decir que no se subió')
+}
+{
+  // Un 400 no es culpa del fichero: no se reintenta sin él (daría el mismo 400).
+  let n = 0
+  const http = { post: async () => { n += 1; throw conEstado(400, 'Escribe tu DNI') } }
+  let detalle = ''
+  try { await enviarConCvOSinEl(http, '/x', (conCv) => ({ cv: conCv }), true, { espera: sinDormir }) } catch (e) {
+    detalle = e?.response?.data?.detail || ''
+  }
+  ok(n === 1 && detalle === 'Escribe tu DNI', 'un 400 con CV tiene que llegar tal cual, sin reintentar sin el CV')
+}
+{
+  // Sin CV desde el principio y sin respuesta: el error sube (no hay nada que quitar).
+  const http = { post: async () => { throw corte() } }
+  let hubo = false
+  try { await enviarConCvOSinEl(http, '/x', () => ({}), false, { espera: sinDormir }) } catch { hubo = true }
+  ok(hubo, 'sin CV, un corte tras todos los intentos tiene que acabar en error')
 }
 
 if (fallos.length) {

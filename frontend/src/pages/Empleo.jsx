@@ -6,7 +6,7 @@ import {
   ChevronRight, ShieldCheck, Paperclip, X, Truck, GraduationCap, Users,
 } from 'lucide-react'
 import { API_BASE } from '../lib/apiBase'
-import { enviarCandidatura } from '../lib/enviarCandidatura'
+import { enviarConCvOSinEl } from '../lib/enviarCandidatura'
 import { medirAccion } from '../lib/analitica'
 import RopaCartel from './RopaCartel'
 import { normalizarDetalle } from '../services/api'
@@ -97,6 +97,7 @@ export default function Empleo() {
   const [f, setF] = useState(VACIO)
   const [resp, setResp] = useState({})
   const [cv, setCv] = useState(null)
+  const [sinCv, setSinCv] = useState(false)   // entró, pero el currículum no se pudo subir
 
   /* EL FONDO DEL BODY TAMBIEN, no solo el del marco. La app entera es oscura
      y esta pagina no: sin esto, en el movil se ve la franja negra al rebotar el
@@ -170,12 +171,16 @@ export default function Empleo() {
     if (!f.consiento) { setError('Acepta que guardemos tus datos para poder enviar la candidatura.'); return }
     setEnviando(true); setError('')
     try {
-      const fd = new FormData()
-      fd.append('datos', JSON.stringify({ ...f, respuestas: resp, edad, origen: params.get('de') || 'directo' }))
-      if (cv) fd.append('cv', cv, cv.name)
-      await enviarCandidatura(http,
-        `/empleo/publica/${encodeURIComponent(slug)}/${encodeURIComponent(ofertaSlug)}`, fd,
+      const cuerpo = (conCv) => {
+        const fd = new FormData()
+        fd.append('datos', JSON.stringify({ ...f, respuestas: resp, edad, origen: params.get('de') || 'directo' }))
+        if (conCv && cv) fd.append('cv', cv, cv.name)
+        return fd
+      }
+      const r = await enviarConCvOSinEl(http,
+        `/empleo/publica/${encodeURIComponent(slug)}/${encodeURIComponent(ofertaSlug)}`, cuerpo, !!cv,
         { alReintentar: (n, total) => setReintento(`Se ha cortado el envío. Reintentando… (${n} de ${total})`) })
+      if (r.sinCv) { setSinCv(true); avisarDelFallo({ code: 'CV_NO_SUBIO' }, slug, ofertaSlug) }
       medirAccion('candidatura_enviada')
       setHecho(true); setError(''); setReintento('')
     } catch (err) {
@@ -225,6 +230,12 @@ export default function Empleo() {
             una persona, no un robot. Si encajas te llamamos al{' '}
             <b className="text-slate-900">{f.telefono}</b>.
           </p>
+          {sinCv && (
+            <p className="mx-auto mt-4 max-w-sm rounded-xl bg-amber-50 px-4 py-3 text-[14px] leading-relaxed text-amber-800">
+              Tu currículum no se ha podido subir desde el móvil, pero la candidatura sí ha llegado.
+              No hace falta repetirla: si te llamamos, nos lo das entonces.
+            </p>
+          )}
           {/* LA TIENDA, AQUI Y NO ANTES. Esta persona acaba de apuntarse: es
               el unico momento del embudo en que se le puede ensenar otra cosa
               sin quitarle atencion a lo que vino a hacer. Y solo aparece si el
@@ -420,11 +431,20 @@ export default function Empleo() {
                 <label className="flex cursor-pointer items-center justify-center gap-2 rounded-xl border-2 border-dashed border-slate-300 px-3.5 py-4 text-[14px] text-slate-500 hover:border-orange-400 hover:text-orange-600">
                   <Paperclip size={16} /> Adjuntar PDF o foto
                   <input type="file" accept=".pdf,.doc,.docx,image/*" className="hidden"
-                    onChange={(e) => {
+                    onChange={async (e) => {
                       const x = e.target.files?.[0]
+                      e.target.value = ''
                       if (!x) return
                       if (x.size > 8 * 1024 * 1024) { setError('El currículum no puede pasar de 8 MB.'); return }
-                      setError(''); setCv(x)
+                      /* Se LEE ya y se guarda la copia en memoria (11-10-2026): un fichero de Drive o de
+                         la nube puede no poder leerse al enviar, y el envío entero moría sin respuesta.
+                         Si no se puede leer, mejor saberlo ahora que al darle a enviar. */
+                      try {
+                        const copia = new File([await x.arrayBuffer()], x.name, { type: x.type || 'application/octet-stream' })
+                        setError(''); setCv(copia)
+                      } catch {
+                        setError('No hemos podido abrir ese archivo desde tu móvil (pasa con los que están en Drive o en la nube). Descárgalo primero o hazle una foto al currículum. También puedes enviar la candidatura sin él.')
+                      }
                     }} />
                 </label>
               )}
