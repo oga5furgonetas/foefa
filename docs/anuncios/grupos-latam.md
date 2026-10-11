@@ -11,13 +11,17 @@ Enlace: `https://flotadsp.com/repartidores?utm_source=grupo&utm_medium=facebook&
 
 | Fecha | Grupo | Miembros | Estado | utm_content |
 |---|---|---|---|---|
-| 11-10 | Repartidores Mercado Libre México | 87 mil | pendiente de admin | mx_ml_mexico |
+| 11-10 | Repartidores Mercado Libre México | 87 mil | SUPRIMIDO por los admins (visto el 11-10 noche) | mx_ml_mexico |
 | 11-10 | Repartidores CDMX | 42 mil | pendiente de admin | mx_repartidores_cdmx |
 | 11-10 | Mercado flex envios logísticas repartidores cadetes (AR) | 72 mil | pendiente de admin | ar_flex_cadetes |
 | 11-10 | MENSAJERÍA Y LOGÍSTICA BOGOTA | 9,7 mil | pendiente de admin | co_mensajeria_bogota |
-| 11-10 | Motorista Entregador Mercado Livre (BR) | 53 mil | pendiente + una copia suprimida al instante (filtro) | br_motorista_ml |
-| 11-10 | Repartidores mercado libre CDMX y Edo. Mex. | 7 mil | pendiente (+ copia suprimida) | mx_ml_cdmx_edomex |
+| 11-10 | Motorista Entregador Mercado Livre (BR) | 53 mil | SUPRIMIDO (visto el 11-10 noche) | br_motorista_ml |
+| 11-10 | Repartidores mercado libre CDMX y Edo. Mex. | 7 mil | SUPRIMIDO (visto el 11-10 noche) | mx_ml_cdmx_edomex |
 | 11-10 | mensajería mercado libre envios flex en el dia particulares (AR) | 25 mil | pendiente | ar_flex_particulares |
+
+Lección (11-10 noche): los grupos de Mercado Libre suprimen la publicación de una app aunque sea gratis y
+nuestra. Los que siguen pendientes no son de ML salvo el de cadetes Flex. Para los próximos: grupos de
+mensajería/paquetería en general, no de una plataforma, y leer sus normas antes.
 
 Unido, sin publicar: Repartidores de Mercado Libre y Amazon (México), Repartidores mercado libre CDMX y Edo. Mex.,
 mensajería mercado libre envios flex en el dia particulares (AR, 25 mil), Mercado envíos Flex zona oeste (AR),
