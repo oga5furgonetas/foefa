@@ -1,5 +1,11 @@
-"""Cuántos usuarios hay de verdad: cuentas por sector, sin demos ni pruebas, y conductores dentro de empresas."""
+"""Cuántos usuarios hay de verdad: cuentas por sector, sin demos ni pruebas, y conductores dentro de empresas.
+
+11-10-2026: los testers de Google Play (Dani los consigue en otro grupo) se dan de alta en lote desde la
+app, a veces con el correo como nombre. No son repartidores: se cuentan aparte para no inflar la cifra
+del objetivo (1000 usuarios reales). Regla: 3 o más altas de autónomo en el mismo minuto, o el correo de nombre (las 4 de Meta de
+la noche del 10-10 llegaron en 4 minutos y son reales)."""
 import os, collections, re
+from datetime import datetime
 from pymongo import MongoClient
 
 cli = MongoClient(os.environ["MONGO_URL"], serverSelectionTimeoutMS=20000)
@@ -7,7 +13,16 @@ g = cli["flota_global"]
 PRUEBA = re.compile(r"prueba|test|demo|revisor|pepito|claude", re.I)
 por = collections.Counter()
 conductores = 0
-reales_aut = []
+autonomos = []
+
+
+def fecha(o):
+    try:
+        return datetime.fromisoformat(str(o.get("created_at") or "").replace("Z", "+00:00"))
+    except ValueError:
+        return None
+
+
 for o in g.organizations.find({}, {"_id": 0, "id": 1, "name": 1, "sector": 1, "demo": 1, "db_name": 1, "account_type": 1, "created_at": 1}):
     if o.get("demo") or o.get("account_type") == "owner":
         por["demo/propia"] += 1
@@ -16,15 +31,25 @@ for o in g.organizations.find({}, {"_id": 0, "id": 1, "name": 1, "sector": 1, "d
         por["prueba (nombre)"] += 1
         continue
     s = o.get("sector") or "sin sector"
-    por[s] += 1
     if s == "autonomo":
-        reales_aut.append(o)
-    elif o.get("db_name"):
+        autonomos.append(o)
+        continue
+    por[s] += 1
+    if o.get("db_name"):
         try:
             conductores += cli[o["db_name"]].drivers.count_documents({"active": {"$ne": False}})
         except Exception:
             pass
+
+reales_aut, testers = [], []
+for o in autonomos:
+    f = fecha(o)
+    lote = sum(1 for x in autonomos if f and fecha(x) and abs((fecha(x) - f).total_seconds()) <= 60)
+    (testers if lote >= 3 or "@" in (o.get("name") or "") else reales_aut).append(o)
+por["autonomo"] = len(reales_aut)
+por["tester de Play (lote o correo de nombre)"] = len(testers)
 print("cuentas por sector:", dict(por))
 print("autónomos reales:", len(reales_aut))
+print("testers de Play aparte:", len(testers))
 print("conductores activos dentro de empresas:", conductores)
 print("usuarios con acceso (admin_users):", g.admin_users.count_documents({}))
