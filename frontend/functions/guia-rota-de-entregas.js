@@ -130,7 +130,8 @@ function pagina() {
   ${PREGUNTAS.map(([q, a]) => `<details><summary>${q}</summary><p>${a}</p></details>`).join('\n  ')}
 
   <footer>FDS · <a href="/aviso-legal">Aviso legal</a> · <a href="/privacidad">Privacidade</a> ·
-  <a href="/guia-ruta-de-reparto" hreflang="es">En español</a></footer>
+  <a href="/guia-ruta-de-reparto" hreflang="es">En español</a> ·
+  <a href="/guia-ganhar-mais-entregador">Como ganhar mais como entregador</a></footer>
 </main>
 </body>
 </html>`
