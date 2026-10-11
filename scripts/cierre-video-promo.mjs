@@ -1,7 +1,7 @@
 // CIERRE NUEVO PARA LOS VÍDEOS DE LA APP (11-10-2026). Los vídeos de docs/videos/tiktok-<idioma>.mp4 acaban con
 // «GRATIS 7 días», la oferta de antes. La voz de la app (edge-tts) da 403 y no se pueden volver a grabar, así que
-// se corta el vídeo justo antes del cierre (16,4 s, tras «Entregado. Siguiente.») y se le pega un cierre de 4 s con
-// la oferta de ahora. Sale docs/videos/shorts-<idioma>.mp4 (vertical, para Shorts/Reels/TikTok).
+// se corta el vídeo justo antes del cierre y se le pega un cierre de 4 s con la oferta de ahora.
+// Salen docs/videos/shorts-*.mp4 (vertical, para Shorts/Reels/TikTok).
 //   cd frontend && node ../scripts/cierre-video-promo.mjs
 import fs from 'fs'
 import path from 'path'
@@ -14,8 +14,12 @@ const RAIZ = path.resolve(process.cwd(), '..')
 const VIDEOS = path.join(RAIZ, 'docs', 'videos')
 const FFMPEG = ['ffmpeg', path.join(os.homedir(), 'AppData/Local/Microsoft/WinGet/Packages/Gyan.FFmpeg_Microsoft.Winget.Source_8wekyb3d8bbwe/ffmpeg-9.0.2-full_build/bin/ffmpeg.exe')]
   .find((f) => { try { execFileSync(f, ['-version'], { stdio: 'ignore' }); return true } catch { return false } })
-const CORTE = 16.4
 const DURA = 4
+// [vídeo de origen, segundo del corte (justo antes del cierre viejo), idioma del cierre, vídeo de salida]
+const VIDEOS_A_CORTAR = [
+  ['tiktok-es.mp4', 16.4, 'es', 'shorts-es.mp4'], ['tiktok-pt.mp4', 16.4, 'pt', 'shorts-pt.mp4'],
+  ['tiktok-es-llama.mp4', 9.2, 'es', 'shorts-es-llama.mp4'], ['tiktok-pt-llama.mp4', 9.2, 'pt', 'shorts-pt-llama.mp4'],
+]
 
 // Lo que dice el cierre en cada idioma (nada que la app no cumpla: ver src/lib/precios.js y Terminos 5 bis).
 const CIERRES = {
@@ -47,12 +51,14 @@ const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'cierre-'))
 const navegador = await chromium.launch()
 const pagina = await navegador.newPage({ viewport: { width: 1080, height: 1920 } })
 for (const [idioma, c] of Object.entries(CIERRES)) {
-  const origen = path.join(VIDEOS, `tiktok-${idioma}.mp4`)
-  if (!fs.existsSync(origen)) continue
   await pagina.setContent(html(c), { waitUntil: 'networkidle' })
+  await pagina.screenshot({ path: path.join(tmp, `cierre-${idioma}.png`) })
+}
+for (const [fuente, CORTE, idioma, destino] of VIDEOS_A_CORTAR) {
+  const origen = path.join(VIDEOS, fuente)
+  if (!fs.existsSync(origen)) continue
   const png = path.join(tmp, `cierre-${idioma}.png`)
-  await pagina.screenshot({ path: png })
-  const salida = path.join(VIDEOS, `shorts-${idioma}.mp4`)
+  const salida = path.join(VIDEOS, destino)
   // [0] el vídeo hasta el corte (audio con un fundido final); [1] el cierre fijo 4 s, en silencio.
   execFileSync(FFMPEG, ['-y', '-v', 'error',
     '-t', String(CORTE), '-i', origen,
