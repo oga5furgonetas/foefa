@@ -55,6 +55,8 @@ jobs:
         run: node scripts/check-detalle-error.mjs
       - name: Envio de una candidatura (se reintenta, y reintentarlo es seguro)
         run: node scripts/check-envio-candidatura.mjs
+      - name: Leer una etiqueta en cada pais (telefono, calle y CP de cada sitio)
+        run: node scripts/check-leer-etiqueta.mjs
       - name: Modulos por empresa (el menu y el catalogo cuadran)
         run: node scripts/check-modulos.mjs
       - name: Aviso de version nueva (no salta sin version nueva ni encadena recargas)

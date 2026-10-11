@@ -18,7 +18,7 @@ import { buscarDirecciones } from '../../lib/direcciones'
 import { invitar } from '../../lib/compartir'
 import { medirAccion } from '../../lib/analitica'
 import { compartirDia } from '../../lib/compartirDia'
-import { fijarPais, importe, simboloMoneda, metodosCobro } from '../../lib/region'
+import { fijarPais, importe, simboloMoneda, metodosCobro, paisActual } from '../../lib/region'
 import { tx, useIdioma, locale, txError } from '../../lib/idioma'
 import { salirDeLaDemoDeReparto } from '../../panel/auth'
 
@@ -314,7 +314,7 @@ export default function MiRuta({ onBack, embebido = false }) {
         setCodigo('')
         cargar()
       } else {
-        const dentro = cod.length > 25 ? interpretaTicket(cod.replace(/[|^~;]+/g, '\n')) : {}
+        const dentro = cod.length > 25 ? interpretaTicket(cod.replace(/[|^~;]+/g, '\n'), paisActual()) : {}
         if (dentro.direccion) {
           setNuevo({ ...VACIO, ...Object.fromEntries(Object.entries(dentro).filter(([, v]) => v)), codigo: data.codigo, de_ticket: true,
             direccion: [dentro.direccion, dentro.cp, dentro.localidad].filter(Boolean).join(', ') })
@@ -343,8 +343,8 @@ export default function MiRuta({ onBack, embebido = false }) {
       const [data, codigoFoto] = await Promise.all([
         ruta?.ia_tickets
           // Si la IA no contesta (saturada, sin saldo), se lee en el móvil en vez de dar error.
-          ? repLeerTicket(new File([blob], 'ticket.jpg', { type: 'image/jpeg' })).then((r) => r.data).catch(() => leerTicketEnMovil(blob))
-          : leerTicketEnMovil(blob),
+          ? repLeerTicket(new File([blob], 'ticket.jpg', { type: 'image/jpeg' })).then((r) => r.data).catch(() => leerTicketEnMovil(blob, paisActual()))
+          : leerTicketEnMovil(blob, paisActual()),
         codigoDeFoto(blob),
       ])
       if (codigoFoto && !data.codigo) data.codigo = codigoFoto

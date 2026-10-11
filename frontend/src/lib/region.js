@@ -31,6 +31,9 @@ let paisRuta = (() => {
   return 'es'
 })()
 
+// El país de la ruta (para leer las etiquetas con sus teléfonos y códigos postales).
+export const paisActual = () => paisRuta
+
 export function fijarPais(pais) {
   if (!pais || !MONEDAS[pais]) return
   paisRuta = pais
