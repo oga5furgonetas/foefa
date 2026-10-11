@@ -111,6 +111,8 @@ const _NOISE = [
   'dynamically imported module', 'Importing a module script failed', 'ChunkLoadError',
   'Failed to fetch', 'NetworkError', 'Load failed', 'network error',
   'Script error', 'ResizeObserver loop',
+  // El navegador de dentro de Facebook en Android (su puente con Java), no nuestro código.
+  'Java object is gone',
   // Navegadores viejos sin 'wasm-unsafe-eval' en CSP: el 3D degrada solo, no es accionable.
   'WebAssembly.instantiate', 'WebAssembly.compile',
 ]

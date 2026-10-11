@@ -134,6 +134,13 @@ export const BR = {
     'Toque em «Começar a navegar»: o app te leva por voz até cada porta. Ao chegar, «Entregue» com foto ou assinatura, e vai para a próxima.',
   'Siguiente': 'Próximo',
 
+  // Aviso de cookies (lo primero que se ve)
+  'Usamos almacenamiento necesario para que la web funcione. Si aceptas, también los píxeles de Meta y TikTok para saber qué anuncios nos traen visitas y altas.':
+    'Usamos o armazenamento necessário para o site funcionar. Se você aceitar, também os pixels da Meta e do TikTok para saber quais anúncios nos trazem visitas e cadastros.',
+  'Solo necesarias': 'Só as necessárias',
+  'Usamos solo almacenamiento imprescindible para iniciar sesión y recordar tus preferencias. No usamos cookies de seguimiento ni marketing.':
+    'Usamos apenas o armazenamento indispensável para entrar na conta e lembrar suas preferências. Não usamos cookies de rastreamento nem de marketing.',
+
   // Aviso de la mañana
   'Aviso por la mañana': 'Aviso de manhã',
   '¿Te aviso por la mañana para cargar tu ruta?': 'Quer um aviso de manhã para carregar sua rota?',
