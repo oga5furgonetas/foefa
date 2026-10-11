@@ -2839,6 +2839,18 @@ test.describe('Portada de repartidores desde Brasil', () => {
     await expect(page.getByText(/paragens/)).toHaveCount(0)
     expect(fallos).toEqual([])
   })
+  // Gramática de Brasil, no solo palabras (11-10-2026): antes salía «guia-o por voz», «a app», «Ganha… que a use».
+  test('la portada está escrita en portugués de Brasil (você, «o app»), no en el de Portugal', async ({ page }) => {
+    const fallos = vigilar(page)
+    await simularApi(page, 'vacio')
+    await page.goto('/repartidores', { waitUntil: 'domcontentloaded' })
+    await expect(page.getByRole('heading', { name: 'Sua rota de entregas, organizada sozinha.' })).toBeVisible()
+    await expect(page.getByText(/Tire uma foto da etiqueta ou escaneie o pacote: o app organiza as paradas/)).toBeVisible()
+    await expect(page.getByText(/Ganhe .* por cada colega que usar o app/)).toBeVisible()
+    const texto = await page.locator('body').innerText()
+    expect(texto).not.toMatch(/guia-o|\ba app\b|Ganha |telemóvel|morada|paragem/)
+    expect(fallos).toEqual([])
+  })
 })
 
 /* «COMPARTE TU DÍA» (11-10-2026): al acabar la ruta, una imagen del día con SU QR de invitación. */

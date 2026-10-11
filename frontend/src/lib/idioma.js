@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { TEXTOS } from './textosRuta'
+import { BR } from './textosBrasil'
 
 /* IDIOMA DE LA APP DE REPARTO (04-10-2026)
    La app del repartidor (ruta, navegación, cuenta, alta, regalo, seguimiento)
@@ -94,7 +95,8 @@ export function cambiarIdioma(l) {
 
 export function tx(texto, vars) {
   let s = (actual !== 'es' && TEXTOS[texto] && TEXTOS[texto][actual]) || texto
-  if (actual === 'pt' && BRASIL && s !== texto) s = aBrasil(s)
+  // Brasil: el texto escrito para allí (textosBrasil.js) y, si no lo hay, el de Portugal con la capa de palabras.
+  if (actual === 'pt' && BRASIL) s = BR[texto] || (s !== texto ? aBrasil(s) : s)
   else if (actual === 'es' && LATAM) s = aLatam(s)
   if (vars) s = s.replace(/\{(\w+)\}/g, (m, k) => (vars[k] != null ? String(vars[k]) : m))
   return s

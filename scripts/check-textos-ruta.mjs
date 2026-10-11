@@ -68,6 +68,13 @@ for (const [k, l] of Object.entries(dic)) {
   else l.forEach((x, i) => { if (vars(x) !== vars(k)) fallos.push(`variables distintas (${i}): «${k}» → «${x}»`) })
 }
 dobles.forEach((k) => fallos.push(`repetida en A y B: «${k}»`))
+// El portugués de Brasil del embudo (textosBrasil.js): cada clave existe en el diccionario y lleva sus variables.
+const { BR } = await import(new URL('file://' + join(raiz, 'lib/textosBrasil.js').replace(/\\/g, '/')))
+for (const [k, br] of Object.entries(BR)) {
+  if (!(k in dic)) fallos.push(`textosBrasil: la clave ya no existe en el diccionario: «${k}»`)
+  else if (vars(br) !== vars(k)) fallos.push(`textosBrasil: variables distintas: «${k}» → «${br}»`)
+  if (/(^|[^\p{L}])(telemóvel|palavra-passe|paragem|paragens|morada|ecrã|registo)([^\p{L}]|$)/iu.test(br)) fallos.push(`textosBrasil: palabra de Portugal: «${br}»`)
+}
 const sobran = Object.keys(dic).filter((k) => !usadas.has(k))
 
 if (sobran.length) console.log(`Aviso: ${sobran.length} traducciones sin uso:\n  ` + sobran.join('\n  '))
