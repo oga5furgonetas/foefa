@@ -78,6 +78,54 @@ async def test_cada_visitante_autonomo_tiene_su_ruta_y_se_borra_al_dia_siguiente
     assert not any(d["id"].startswith("demo-a-") for d in ddb["drivers"].docs)
 
 
+
+@pytest.mark.asyncio(loop_scope="session")
+async def test_la_demo_pone_las_paradas_en_una_ciudad_del_pais_del_visitante(base):
+    """11-10-2026: quien llega de México ve paquetes en Ciudad de México, a su hora y saliendo de allí;
+    de Venezuela, en Bogotá; de España (o sin país), en A Coruña como siempre."""
+    mx = await server.demo_reparto_login(_Peticion(), {"rol": "autonomo", "pais": "mx", "zona_horaria": "America/Mexico_City"})
+    assert mx["ciudad"] == "Ciudad de México"
+    ddb = base.bases["dsp_demo_reparto"]
+    suyas = [p for p in ddb["reparto_pedidos"].docs if p["conductor_id"] == mx["driver"]["id"]]
+    assert len(suyas) == 8 and all(p["direccion"].endswith("Ciudad de México") for p in suyas)
+    assert all(19.3 < p["lat"] < 19.5 and -99.2 < p["lng"] < -99.1 for p in suyas)
+    assert "Calle Colima 150, Col. Roma, Ciudad de México" in {p["direccion"] for p in suyas}
+    assert suyas[0]["fecha"] == server._hoy_en("America/Mexico_City")
+    tok = server.decode_token(mx["access_token"])
+    assert tok["rg"] == ["mx", "America/Mexico_City", "mx"] and tok["demo"]
+    # Con su ciudad puesta, el almacén (de donde sale la ruta sin GPS) está allí, no en A Coruña.
+    marca = server._demo_ciudad.set("mx")
+    try:
+        assert 19.3 < server._rep_base(await server._rep_ajustes())[0] < 19.5
+    finally:
+        server._demo_ciudad.reset(marca)
+    ve = await server.demo_reparto_login(_Peticion(), {"rol": "autonomo", "pais": "ve", "zona_horaria": "America/Caracas"})
+    assert ve["ciudad"] == "Bogotá"
+    assert server.decode_token(ve["access_token"])["rg"] == ["ve", "America/Caracas", "co"]
+    # Una zona que no existe no rompe: usa la de la ciudad.
+    co = await server.demo_reparto_login(_Peticion(), {"rol": "autonomo", "pais": "co", "zona_horaria": "Marte/Base"})
+    assert server.decode_token(co["access_token"])["rg"] == ["co", "America/Bogota", "co"]
+    es = await server.demo_reparto_login(_Peticion(), {"rol": "autonomo", "pais": "es"})
+    assert es["ciudad"] == "A Coruña" and "rg" not in server.decode_token(es["access_token"])
+    br = await server.demo_reparto_login(_Peticion(), {"rol": "autonomo", "pais": "br", "zona_horaria": "America/Sao_Paulo"})
+    suyas = [p for p in ddb["reparto_pedidos"].docs if p["conductor_id"] == br["driver"]["id"]]
+    assert suyas[0]["cliente"] == "Cliente 1 (teste)" and suyas[2]["contenido"] == "2 pacotes"
+
+
+def test_las_paradas_de_ejemplo_sin_gps_caen_en_su_pais():
+    marca = server._region_actual.set(("ar", "America/Argentina/Buenos_Aires"))
+    try:
+        assert server._rep_centro_pais()[0] < -34
+    finally:
+        server._region_actual.reset(marca)
+    marca = server._region_actual.set(("uy", "America/Montevideo"))     # sin ciudad propia: Buenos Aires
+    try:
+        assert server._rep_centro_pais()[0] < -34
+    finally:
+        server._region_actual.reset(marca)
+    assert server._rep_centro_pais() is None                            # España: el almacén o Madrid, como antes
+
+
 def test_cada_sector_nace_con_lo_suyo():
     S = server.SECTORES_REGISTRO
     dsp = set(S["dsp_amazon"])

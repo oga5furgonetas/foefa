@@ -1,0 +1,35 @@
+# Publicaciones en grupos de Latinoamérica (11-10-2026)
+
+Reglas: como el perfil de Daniel (no la página FDs), diciendo que la app es nuestra, texto distinto por grupo y en
+su forma de hablar, condiciones de «Invita y gana» completas (20 entregas en 2 días, cobro desde 10 € por PayPal).
+Solo grupos de PAQUETERÍA / mensajería (en los de comida, con 1-2 pedidos, ordenar la ruta no sirve). Si un grupo
+pide responder preguntas sobre la experiencia de quien se une, no se inventa: se salta. 2-3 por tanda.
+Enlace: `https://flotadsp.com/repartidores?utm_source=grupo&utm_medium=facebook&utm_content=<pais>_<grupo>`.
+
+| Fecha | Grupo | Miembros | Estado | utm_content |
+|---|---|---|---|---|
+| 11-10 | Repartidores Mercado Libre México | 87 mil | pendiente de admin | mx_ml_mexico |
+| 11-10 | Repartidores CDMX | 42 mil | visible | mx_repartidores_cdmx |
+| 11-10 | Mercado flex envios logísticas repartidores cadetes (AR) | 72 mil | visible | ar_flex_cadetes |
+
+Unido, sin publicar: Repartidores de Mercado Libre y Amazon (México), Repartidores mercado libre CDMX y Edo. Mex.,
+mensajería mercado libre envios flex en el dia particulares (AR, 25 mil), Mercado envíos Flex zona oeste (AR),
+REPARTIDOR DE PAQUETERIA, MENSAJERÍA Y LOGÍSTICA BOGOTA (única regla: que sea de mensajería), Mensajeros Medellín.
+
+## Texto Colombia (pendiente)
+
+¡Buenas, parceros! 👋 Les comparto una app que hicimos nosotros (somos un equipo pequeño de España, no es
+publicidad pagada) para los que hacen mensajería con muchas paradas:
+
+📸 Le toma una foto a la guía o escanea el código y la dirección entra sola
+🗺️ Le ordena las paradas por tiempo
+🔊 Lo guía con voz hasta cada puerta
+💵 Le dice cuánto lleva ganado en el día y cuánto se fue en gasolina
+
+Es gratis y sin límite hasta el 31 de diciembre, sin tarjeta, desde el navegador del celular.
+Y si se la pasa a otro mensajero y la usa de verdad (20 entregas en 2 días distintos), le mandamos 2,50 euros por
+PayPal por cada uno (se cobra desde 10 euros).
+
+Pruébela sin registrarse, con paradas de ejemplo en Bogotá 👉 <enlace>
+
+Si algo no le funciona en su zona, me dice y lo arreglamos.

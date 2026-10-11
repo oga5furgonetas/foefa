@@ -2631,7 +2631,13 @@ test.describe('Portada de repartidores desde México', () => {
     await expect(page.getByText('Estafeta', { exact: true })).toBeVisible()
     await expect(page.getByText('MRW', { exact: true })).toHaveCount(0)
     await expect(page.getByText(/Gana 2[,.]50/).first()).toBeVisible()
-    expect(fallos).toEqual([])
+    // «Probarla ahora» pide la demo con su país y su hora: paradas en Ciudad de México, no en A Coruña.
+    const pedida = []
+    await page.route(/\/api\/auth\/demo-reparto/, (r) => { pedida.push(r.request().postDataJSON()); r.fulfill({ status: 503, json: { detail: 'parada en el test' } }) })
+    await page.getByRole('button', { name: 'Probarla ahora, sin registrarme' }).first().click()
+    await expect.poll(() => pedida.length).toBe(1)
+    expect(pedida[0]).toEqual({ rol: 'autonomo', pais: 'mx', zona_horaria: 'America/Mexico_City' })
+    expect(fallos.filter((f) => !/503|parada en el test/.test(f))).toEqual([])
   })
 })
 

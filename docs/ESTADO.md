@@ -931,3 +931,26 @@ Repaso de cada frase de `/planes` y de la presentación contra el código (Dani:
 - Revisado sin cambios: /repartidores pesa 331 KB de JS y pinta en 2,1 s con 4G lento; carga bien con el navegador
   de TikTok y de Facebook; sin errores de navegador desde el 06-10. Las sesiones de la app de Play que saltan
   /app ↔ /empezar y pulsan sin rellenar nada son el robot de pruebas de Google (móvil y tableta a la vez).
+
+## 11-10-2026 (tarde): Latinoamérica sin presupuesto de Meta
+
+- **Giro**: Dani ya no tiene dinero para Meta; pide Latinoamérica y crecer en orgánico («el dinero les viene genial»).
+  Plan y diario en `docs/PLAN-1000.md`. Cifra a esta hora: 16 autónomos reales.
+- **Invita y gana fuera de España**: por PayPal (España sigue con Bizum/IBAN; China no tiene). Para frenar trampas,
+  solo cuentan entregas a direcciones distintas y repartidas en el día (`_ref_uso_real`, 45 min de margen).
+- **«Comparte tu día»** (`lib/compartirDia.js`): al acabar la ruta (5+ entregas, nada pendiente) imagen 1080×1920
+  con paradas, horas, km y el QR de invitación de quien la comparte (`utm_medium=dia`). Se dibuja en el móvil.
+- **Moneda local**: «Mi dinero hoy» pide la tarifa en la moneda del país, entiende «2.500» como dos mil quinientos,
+  y el backend admite tarifas en pesos (topes solo contra disparates).
+- **Brasil** entra en `PAISES_REPARTO` (reales, prefijo 55, cobro por **Pix**).
+- **Portada por país**: «Sirve igual si repartes para…» enseña las empresas del país del visitante (por la hora
+  del móvil, `paisDelMovil()` en `lib/region.js`). Excepción de `check-marca` para esa lista.
+- **Demo en su ciudad**: «Probarla ahora» manda país y zona; la demo pone 8 paquetes en Ciudad de México, Buenos
+  Aires, Bogotá, Santiago, Lima o São Paulo (países vecinos, la más cercana), a su hora y con el almacén allí. El
+  token de demo lleva `rg` = [país, zona, ciudad]; sin país conocido, A Coruña como siempre. Coordenadas de
+  Nominatim; donde solo encontró la calle, la dirección va sin número. Las paradas de ejemplo de una cuenta real sin
+  GPS ni almacén caen en su país (`_rep_centro_pais`), no en Madrid.
+- **Grupos de Facebook** (como Daniel, no como la página FDs): publicado en «Repartidores Mercado Libre México»
+  (pendiente de admin), «Repartidores CDMX» y «Mercado flex envios logísticas repartidores cadetes» (Argentina).
+  Unido a 3 de Colombia y 2 más de Argentina. Un grupo pedía «¿cuánto llevas repartiendo?»: no se inventa, se salta.
+- Las «594 visitas de YouTube» del 03-10 eran un robot (todas en «/», ni una acción).

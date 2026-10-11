@@ -204,6 +204,15 @@ JWT_ALGORITHM = "HS256"
 JWT_EXPIRE_HOURS = int(os.environ.get("JWT_EXPIRE_HOURS", "72"))
 
 
+def _hoy_en(zona: str) -> str:
+    """La fecha de hoy en esa zona horaria (la de un visitante de la demo, por ejemplo)."""
+    try:
+        from zoneinfo import ZoneInfo
+        return datetime.now(ZoneInfo(zona)).strftime("%Y-%m-%d")
+    except Exception:                                        # noqa: BLE001
+        return _dia_negocio()
+
+
 def _dia_negocio():
     """Fecha de HOY para operativa (cuadrante, rutas, "ya inspecciono hoy").
     En la zona horaria de la cuenta si la petición la ha fijado (reparto);
@@ -239,6 +248,8 @@ _current_db_name = contextvars.ContextVar("current_db_name", default=_DEFAULT_DB
 # Solo los fija el reparto (que ya se usa fuera de España); el resto del
 # producto sigue en hora de Madrid, como siempre.
 _region_actual = contextvars.ContextVar("region_actual", default=("es", "Europe/Madrid"))
+# La ciudad de ejemplo de quien prueba la demo de reparto sin cuenta (ver _DEMO_REP_CIUDADES).
+_demo_ciudad = contextvars.ContextVar("demo_ciudad", default="")
 
 global_db = client[_GLOBAL_DB_NAME]  # organizaciones, usuarios, suscripciones (compartida)
 
@@ -855,7 +866,7 @@ def create_token(user_id: str, role: str, name: str,
                  account_type: Optional[str] = None, centers: Optional[list] = None,
                  super_admin: bool = False, permissions: Optional[list] = None,
                  demo: bool = False, allowed_centers: Optional[list] = None,
-                 suplantado: bool = False) -> str:
+                 suplantado: bool = False, region: Optional[list] = None) -> str:
     # El conductor entra en su portal una vez cada muchos dias: pedir dias libres
     # o mirar sus turnos no es algo diario. Con las 72 h del panel, el token le
     # caducaba entre visita y visita y la pantalla le soltaba
@@ -877,6 +888,8 @@ def create_token(user_id: str, role: str, name: str,
         payload["sa"] = True
     if demo:
         payload["demo"] = True  # solo lectura: get_current_user bloquea mutaciones
+        if region:
+            payload["rg"] = list(region)   # demo de reparto: [país, zona, ciudad de ejemplo]
     if suplantado:
         # El super-admin mirando la cuenta de un cliente. Solo lo lee la
         # analitica, para no contar sus paseos por el panel como uso del cliente.
@@ -994,7 +1007,12 @@ async def get_current_user(
         if not _demo_reparto and not any(request.url.path.endswith(p) for p in _demo_ok):
             raise HTTPException(status_code=403, detail="Modo demo: solo lectura. Crea tu cuenta gratis para editar.")
     if "/api/reparto/" in request.url.path and payload.get("org_id"):
-        _region_actual.set(await _region_de_org(payload.get("org_id")))
+        rg = payload.get("rg") if payload.get("demo") else None
+        if isinstance(rg, list) and len(rg) == 3 and _zona_valida(rg[1]):
+            _region_actual.set((str(rg[0]), rg[1]))
+            _demo_ciudad.set(str(rg[2]))
+        else:
+            _region_actual.set(await _region_de_org(payload.get("org_id")))
     if (request.method not in ("GET", "HEAD", "OPTIONS") and "/api/reparto/" in request.url.path
             and not payload.get("demo") and not payload.get("imp") and payload.get("org_id")):
         org_pago = await get_org(payload.get("org_id"))
@@ -47551,7 +47569,18 @@ async def _rep_ajustes() -> dict:
     a.setdefault("pago_parada", 0)
     a.setdefault("pago_dia", 0)
     a.setdefault("coste_km", 0)
+    ciudad = _DEMO_REP_CIUDADES.get(_demo_ciudad.get())
+    if ciudad:
+        a["base"] = {"direccion": f"Almacén de prueba, {ciudad['ciudad']}", "lat": ciudad["base"][0], "lng": ciudad["base"][1]}
     return a
+
+
+def _rep_centro_pais():
+    """Un punto de la ciudad grande del país de la cuenta, para las paradas de ejemplo de quien
+    no deja ver dónde está ni tiene almacén (antes caían en Madrid aunque fuera de México)."""
+    k = _DEMO_REP_PAIS_CIUDAD.get(_region_actual.get()[0], _region_actual.get()[0])
+    c = _DEMO_REP_CIUDADES.get(k)
+    return c["base"] if c else None
 
 
 def _rep_base(a: dict):
@@ -48765,7 +48794,7 @@ async def reparto_mis_ejemplo(data: dict = Body(default={}), user: dict = Depend
                                           "estado": {"$in": ["pendiente", "en_ruta"]}}, {"_id": 0, "id": 1}):
         raise HTTPException(409, "Ya tienes paradas de ejemplo")
     a = await _rep_ajustes()
-    pt = reparto._punto(_dict_cuerpo(data)) or _rep_base(a) or (40.4168, -3.7038)
+    pt = reparto._punto(_dict_cuerpo(data)) or _rep_base(a) or _rep_centro_pais() or (40.4168, -3.7038)
     for nombre, calle, dla, dlo, bultos, cobrar in _EJEMPLO_PARADAS:
         p = await _rep_nuevo({"cliente": nombre, "direccion": calle, "bultos": bultos, "cobrar": cobrar or "",
                               "contenido": "Paquete de ejemplo", "lat": round(pt[0] + dla, 6), "lng": round(pt[1] + dlo, 6)},
@@ -48868,6 +48897,54 @@ _DEMO_REP_PEDIDOS = [
 
 
 _DEMO_REP_FRANJAS = {"DEMO1002": ("10:00", "11:00"), "DEMO1006": ("12:00", "14:00"), "DEMO1009": ("17:00", "20:00")}
+
+# LA DEMO EN SU CIUDAD (11-10-2026). Quien llega de Latinoamérica ve 8 paquetes en una ciudad de su
+# país, a su hora. Coordenadas sacadas de Nominatim (el buscador de la app) el 11-10-2026; donde solo
+# encontró la calle (no el portal), la dirección va sin número para no inventarlo.
+_DEMO_REP_CIUDADES = {
+    "mx": {"zona": "America/Mexico_City", "ciudad": "Ciudad de México", "base": (19.4170, -99.1640), "paradas": [
+        ("Calle Colima 150, Col. Roma", 19.41992, -99.15911), ("Calle Durango 200, Col. Condesa", 19.4195, -99.1672),
+        ("Calle Orizaba 101, Col. Roma", 19.41878, -99.16015), ("Av. Álvaro Obregón 120, Col. Roma", 19.4192, -99.15585),
+        ("Av. Ámsterdam 80, Col. Condesa", 19.41384, -99.17002), ("Calle Mérida 90, Col. Roma", 19.42012, -99.15739),
+        ("Av. Michoacán, Col. Condesa", 19.41143, -99.17635), ("Calle Tonalá, Col. Roma", 19.41697, -99.16235)]},
+    "ar": {"zona": "America/Argentina/Buenos_Aires", "ciudad": "Buenos Aires", "base": (-34.5895, -58.4300), "paradas": [
+        ("Gorriti 4800, Palermo", -34.59085, -58.42913), ("Thames 1500, Palermo", -34.58875, -58.43238),
+        ("Honduras 4900, Palermo", -34.58951, -58.42915), ("Armenia 1600, Palermo", -34.59001, -58.42837),
+        ("Serrano 1300, Palermo", -34.59086, -58.43365), ("Av. Scalabrini Ortiz 1700, Palermo", -34.59023, -58.42416),
+        ("Gurruchaga 1400, Palermo", -34.59067, -58.43147), ("Uriarte 1700, Palermo", -34.58678, -58.43121)]},
+    "co": {"zona": "America/Bogota", "ciudad": "Bogotá", "base": (4.6470, -74.0600), "paradas": [
+        ("Calle 63, Chapinero", 4.64441, -74.05462), ("Calle 65, Chapinero", 4.64797, -74.05725),
+        ("Calle 60, Chapinero", 4.6464, -74.06309), ("Calle 61, Chapinero", 4.64796, -74.06404),
+        ("Calle 66, Chapinero", 4.65231, -74.06238), ("Calle 59, Chapinero", 4.64608, -74.06459),
+        ("Calle 67, Chapinero", 4.65222, -74.06058), ("Calle 57, Chapinero", 4.64159, -74.05942)]},
+    "cl": {"zona": "America/Santiago", "ciudad": "Santiago", "base": (-33.4320, -70.6150), "paradas": [
+        ("Av. Providencia, Providencia", -33.42028, -70.60705), ("General Holley 100, Providencia", -33.4202, -70.60925),
+        ("Av. Nueva Providencia, Providencia", -33.42732, -70.61666), ("Av. Salvador 300, Providencia", -33.43665, -70.62543),
+        ("Av. Italia 1100, Providencia", -33.44474, -70.62528), ("Av. Manuel Montt, Providencia", -33.44583, -70.61411),
+        ("Av. Pedro de Valdivia, Providencia", -33.44437, -70.60634), ("Av. Ricardo Lyon, Providencia", -33.44408, -70.60304)]},
+    "pe": {"zona": "America/Lima", "ciudad": "Lima", "base": (-12.1240, -77.0300), "paradas": [
+        ("Av. José Larco, Miraflores", -12.12925, -77.02971), ("Calle Schell, Miraflores", -12.12304, -77.02862),
+        ("Calle Berlín 200, Miraflores", -12.12172, -77.03211), ("Av. Diagonal, Miraflores", -12.12092, -77.03023),
+        ("Calle Alcanfores, Miraflores", -12.12762, -77.0281), ("Av. Petit Thouars, Miraflores", -12.10833, -77.02964),
+        ("Calle Porta, Miraflores", -12.12704, -77.03288), ("Av. 28 de Julio, Miraflores", -12.12915, -77.02381)]},
+    "br": {"zona": "America/Sao_Paulo", "ciudad": "São Paulo", "base": (-23.5620, -46.6820), "pt": True, "paradas": [
+        ("Rua dos Pinheiros, Pinheiros", -23.56434, -46.67879), ("Rua Teodoro Sampaio 1000, Pinheiros", -23.55875, -46.67964),
+        ("Rua Cardeal Arcoverde, Pinheiros", -23.5562, -46.6793), ("Rua Fradique Coutinho, Pinheiros", -23.5639, -46.68596),
+        ("Rua Artur de Azevedo, Pinheiros", -23.56593, -46.68722), ("Rua Mourato Coelho, Pinheiros", -23.56447, -46.68692),
+        ("Rua Lisboa 400, Pinheiros", -23.56061, -46.67886), ("Rua Joaquim Antunes 500, Pinheiros", -23.56412, -46.68138)]},
+}
+# Países sin ciudad propia: la más cercana (y su propia hora, que la pone el móvil).
+_DEMO_REP_PAIS_CIUDAD = {"ve": "co", "pa": "co", "ec": "pe", "bo": "pe", "py": "ar", "uy": "ar", "cr": "mx", "gt": "mx",
+                         "hn": "mx", "sv": "mx", "ni": "mx", "do": "mx", "pr": "mx", "cu": "mx"}
+# Lo que lleva cada paquete y sus notas (paquetería, no la compra del súper).
+_DEMO_REP_LLEVA = {
+    "es": (["1 paquete mediano", "Sobre (documentos)", "2 paquetes", "Caja grande", "Paquete pequeño", "Paquete frágil",
+            "3 paquetes", "1 paquete"], ["", "Entregar de 10 a 11", "", "", "", "Solo de 12 a 14", "", "Por la tarde, de 17 a 20"]),
+    "pt": (["1 pacote médio", "Envelope (documentos)", "2 pacotes", "Caixa grande", "Pacote pequeno", "Pacote frágil",
+            "3 pacotes", "1 pacote"], ["", "Entregar das 10 às 11", "", "", "", "Só das 12 às 14", "", "À tarde, das 17 às 20"]),
+}
+_DEMO_REP_BULTOS = [1, 1, 2, 1, 1, 1, 3, 1]
+_DEMO_REP_FRANJAS_I = {1: ("10:00", "11:00"), 5: ("12:00", "14:00"), 7: ("17:00", "20:00")}
 _DEMO_REP_NOTAS = {"DEMO1002": "Entregar de 10 a 11", "DEMO1006": "Solo de 12 a 14", "DEMO1009": "Por la tarde, de 17 a 20"}
 
 
@@ -48926,26 +49003,49 @@ async def demo_reparto_login(request: Request, data: dict = Body(default={})):
         cid = f"demo-a-{uuid.uuid4().hex[:10]}"
         await client[_DEMO_REP_DB].drivers.insert_one({"id": cid, "name": "Repartidor (prueba)", "active": True,
                                                        "center": "TIENDA", "demo": True})
+        # Su país (lo deduce el móvil por su hora): paradas en una ciudad suya y a su hora.
+        pais = _texto_cuerpo(data.get("pais"), 3).lower()
+        ck = pais if pais in _DEMO_REP_CIUDADES else _DEMO_REP_PAIS_CIUDAD.get(pais, "")
+        ciudad = _DEMO_REP_CIUDADES.get(ck)
+        region = None
+        if ciudad:
+            zona = _zona_valida(data.get("zona_horaria")) or ciudad["zona"]
+            region = [pais, zona, ck]
         # Con 8 paradas de ejemplo ya puestas (04-10-2026): quien llega de un
         # anuncio no tiene paquetes a mano, y una ruta vacía no enseña nada.
         # Así ve al momento la ruta, la ordena, el mapa y la navegación. Son
         # suyas (código con su sufijo) y se borran con la demo al día siguiente.
-        hoy = _dia_negocio()
+        hoy = _hoy_en(region[1]) if region else _dia_negocio()
         ahora = datetime.now(timezone.utc).isoformat()
-        await client[_DEMO_REP_DB].reparto_pedidos.insert_many([{
-            "id": str(uuid.uuid4()), "fecha": hoy, "codigo": f"{cod}-{cid[-4:].upper()}", "cliente": cli,
-            "telefono": "", "direccion": f"{dire}, {cp} A Coruña", "cp": cp, "localidad": "A Coruña",
-            "contenido": lleva, "notas": _DEMO_REP_NOTAS.get(cod, ""), "bultos": bultos, "escaneos": 0,
-            "ventana_desde": _DEMO_REP_FRANJAS.get(cod, (None, None))[0],
-            "ventana_hasta": _DEMO_REP_FRANJAS.get(cod, (None, None))[1],
-            "prioridad": cod == "DEMO1004", "zona": "", "conductor_id": cid, "conductor_nombre": "Repartidor (prueba)",
-            "estado": "pendiente", "orden": None, "origen": "conductor",
-            "lat": lat, "lng": lng, "geo": "ok", "creado_por": "Demo", "creado_en": ahora,
-        } for cod, cli, dire, cp, lat, lng, lleva, bultos, _c in _DEMO_REP_PEDIDOS[:8]])
+        if ciudad:
+            lleva_c, notas_c = _DEMO_REP_LLEVA["pt" if ciudad.get("pt") else "es"]
+            docs = [{
+                "id": str(uuid.uuid4()), "fecha": hoy, "codigo": f"DEMO{1001 + i}-{cid[-4:].upper()}",
+                "cliente": f"Cliente {i + 1} ({'teste' if ciudad.get('pt') else 'prueba'})", "telefono": "",
+                "direccion": f"{dire}, {ciudad['ciudad']}", "cp": "", "localidad": ciudad["ciudad"],
+                "contenido": lleva_c[i], "notas": notas_c[i], "bultos": _DEMO_REP_BULTOS[i], "escaneos": 0,
+                "ventana_desde": _DEMO_REP_FRANJAS_I.get(i, (None, None))[0],
+                "ventana_hasta": _DEMO_REP_FRANJAS_I.get(i, (None, None))[1],
+                "prioridad": i == 3, "zona": "", "conductor_id": cid, "conductor_nombre": "Repartidor (prueba)",
+                "estado": "pendiente", "orden": None, "origen": "conductor",
+                "lat": lat, "lng": lng, "geo": "ok", "creado_por": "Demo", "creado_en": ahora,
+            } for i, (dire, lat, lng) in enumerate(ciudad["paradas"])]
+        else:
+            docs = [{
+                "id": str(uuid.uuid4()), "fecha": hoy, "codigo": f"{cod}-{cid[-4:].upper()}", "cliente": cli,
+                "telefono": "", "direccion": f"{dire}, {cp} A Coruña", "cp": cp, "localidad": "A Coruña",
+                "contenido": lleva, "notas": _DEMO_REP_NOTAS.get(cod, ""), "bultos": bultos, "escaneos": 0,
+                "ventana_desde": _DEMO_REP_FRANJAS.get(cod, (None, None))[0],
+                "ventana_hasta": _DEMO_REP_FRANJAS.get(cod, (None, None))[1],
+                "prioridad": cod == "DEMO1004", "zona": "", "conductor_id": cid, "conductor_nombre": "Repartidor (prueba)",
+                "estado": "pendiente", "orden": None, "origen": "conductor",
+                "lat": lat, "lng": lng, "geo": "ok", "creado_por": "Demo", "creado_en": ahora,
+            } for cod, cli, dire, cp, lat, lng, lleva, bultos, _c in _DEMO_REP_PEDIDOS[:8]]
+        await client[_DEMO_REP_DB].reparto_pedidos.insert_many(docs)
         token = create_token(cid, "driver", "Repartidor (prueba)", org_id=_DEMO_REP_ORG_ID, db_name=_DEMO_REP_DB,
-                             account_type="dsp", centers=["TIENDA"], demo=True)
+                             account_type="dsp", centers=["TIENDA"], demo=True, region=region)
         return {"access_token": token, "role": "driver", "driver": {"id": cid, "name": "Repartidor (prueba)"},
-                "autonomo": True}
+                "autonomo": True, "ciudad": ciudad["ciudad"] if ciudad else "A Coruña"}
     if _texto_cuerpo(data.get("rol"), 20) == "conductor":
         n = _entero(data.get("n"), "n", defecto=1, minimo=1, maximo=len(_DEMO_REP_CONDUCTORES))
         cid, nombre = _DEMO_REP_CONDUCTORES[n - 1]
