@@ -16,6 +16,8 @@ Enlace: `https://flotadsp.com/repartidores?utm_source=grupo&utm_medium=facebook&
 | 11-10 | Mercado flex envios logísticas repartidores cadetes (AR) | 72 mil | pendiente de admin | ar_flex_cadetes |
 | 11-10 | MENSAJERÍA Y LOGÍSTICA BOGOTA | 9,7 mil | pendiente de admin | co_mensajeria_bogota |
 | 11-10 | Motorista Entregador Mercado Livre (BR) | 53 mil | pendiente + una copia suprimida al instante (filtro) | br_motorista_ml |
+| 11-10 | Repartidores mercado libre CDMX y Edo. Mex. | 7 mil | pendiente (+ copia suprimida) | mx_ml_cdmx_edomex |
+| 11-10 | mensajería mercado libre envios flex en el dia particulares (AR) | 25 mil | pendiente | ar_flex_particulares |
 
 Unido, sin publicar: Repartidores de Mercado Libre y Amazon (México), Repartidores mercado libre CDMX y Edo. Mex.,
 mensajería mercado libre envios flex en el dia particulares (AR, 25 mil), Mercado envíos Flex zona oeste (AR),
@@ -39,3 +41,13 @@ PayPal por cada uno (se cobra desde 10 euros).
 Pruébela sin registrarse, con paradas de ejemplo en Bogotá 👉 <enlace>
 
 Si algo no le funciona en su zona, me dice y lo arreglamos.
+
+## Para pegar en Telegram o WhatsApp (lo pega Dani: no se inicia sesión por él)
+
+¡Hola! 👋 Les comparto una app que hicimos para repartidores de paquetería (es nuestra, la estamos lanzando):
+📸 Foto a la guía y la dirección entra sola · 🗺️ ordena las paradas por tiempo · 🔊 te guía con voz
+(y en Android dices "entregado" y sigues manejando) · 💵 te dice cuánto llevas ganado hoy, en tu moneda.
+Gratis y sin límite hasta el 31 de diciembre, sin tarjeta. Si se la pasas a otro repartidor y la usa
+(20 entregas en 2 días), te mandamos 2,50 € por PayPal por cada uno (se cobra desde 10 €).
+Pruébala sin registrarte, con paquetes de ejemplo en tu ciudad 👉
+https://flotadsp.com/repartidores?utm_source=telegram&utm_content=latam_dani

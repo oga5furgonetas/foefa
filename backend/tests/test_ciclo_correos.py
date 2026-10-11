@@ -37,7 +37,8 @@ def test_primer_dia_solo_sin_paradas_y_en_su_ventana():
     assert cc.toca(_org(horas=24, ciclo_correos=env), {"paradas": 0}, AHORA) == "primer_dia"
     assert cc.toca(_org(horas=24, ciclo_correos=env), {"paradas": 3}, AHORA) == ""   # ya la usa
     assert cc.toca(_org(horas=10, ciclo_correos=env), {"paradas": 0}, AHORA) == ""   # demasiado pronto
-    assert cc.toca(_org(horas=80, ciclo_correos=env), {"paradas": 0}, AHORA) == ""   # pasó su momento
+    # Pasó su momento: ya no es el del día siguiente, sino el recordatorio (desde el día 3, 11-10-2026).
+    assert cc.toca(_org(horas=80, ciclo_correos=env), {"paradas": 0}, AHORA) == "recordatorio"
 
 
 def test_casi_fin_con_dos_dias_o_menos():
@@ -50,6 +51,42 @@ def test_casi_fin_con_dos_dias_o_menos():
 def test_prueba_corta_no_recibe_casi_fin_encima_del_alta():
     env = {"bienvenida": {"at": AHORA.isoformat()}}
     assert cc.toca(_org(horas=30, dias_prueba=2, ciclo_correos=env), {"paradas": 4}, AHORA) == ""
+
+
+def test_recordatorio_entre_el_dia_3_y_el_8_si_sigue_sin_paradas():
+    """11-10-2026: muchos se dan de alta en fin de semana; el lunes ya no se acuerdan."""
+    env = {"bienvenida": {"at": "2026-10-01T00:00:00+00:00"}, "primer_dia": {"at": "2026-10-02T00:00:00+00:00"}}
+    assert cc.toca(_org(horas=24 * 4, ciclo_correos=env), {"paradas": 0}, AHORA) == "recordatorio"
+    assert cc.toca(_org(horas=24 * 4, ciclo_correos=env), {"paradas": 2}, AHORA) == ""      # ya la usa
+    assert cc.toca(_org(horas=24 * 2, ciclo_correos=env), {"paradas": 0}, AHORA) == ""      # pronto
+    assert cc.toca(_org(horas=24 * 9, ciclo_correos=env), {"paradas": 0}, AHORA) == ""      # tarde
+    env["recordatorio"] = {"at": "2026-10-03T00:00:00+00:00"}
+    assert cc.toca(_org(horas=24 * 4, ciclo_correos=env), {"paradas": 0}, AHORA) == ""      # una vez
+
+
+def test_invita_cuando_ya_lleva_10_entregas_de_verdad():
+    env = {"bienvenida": {"at": "2026-10-01T00:00:00+00:00"}}
+    assert cc.toca(_org(horas=30, ciclo_correos=env), {"paradas": 36, "entregadas": 11}, AHORA) == "invita"
+    assert cc.toca(_org(horas=30, ciclo_correos=env), {"paradas": 9, "entregadas": 9}, AHORA) == ""
+    # 11 «entregadas» en 20 minutos a medianoche: alguien probando, no repartiendo. No se le escribe.
+    assert cc.toca(_org(horas=30, ciclo_correos=env), {"paradas": 36, "entregadas": 11, "entregadas_reales": 0}, AHORA) == ""
+    assert cc.toca(_org(horas=30, ciclo_correos=env), {"paradas": 36, "entregadas": 11, "entregadas_reales": 10}, AHORA) == "invita"
+    assert cc.toca(_org(horas=30, ciclo_correos=env, pais="cn"), {"paradas": 36, "entregadas": 11}, AHORA) == ""
+    env["invita"] = {"at": "2026-10-09T00:00:00+00:00"}
+    assert cc.toca(_org(horas=30, ciclo_correos=env), {"paradas": 50, "entregadas": 40}, AHORA) == ""
+
+
+@pytest.mark.parametrize("pais,cent,cobro", [("es", 500, "Bizum o transferencia"), ("mx", 250, "PayPal")])
+def test_invita_lleva_su_enlace_y_las_condiciones_de_verdad(pais, cent, cobro):
+    c = cc.correo("invita", _org(horas=30, pais=pais), {"paradas": 36, "entregadas": 11}, AHORA, marca="FDS",
+                  base="https://flotadsp.com", baja="https://b", mensual=9.99, anual=99, con_respuesta=True,
+                  ref_enlace="https://flotadsp.com/repartidores?ref=AB12", ref_cent=cent, ref_espana=pais == "es")
+    t = c["texto"]
+    assert "Llevas 11 entregas" in c["asunto"]
+    assert "https://flotadsp.com/repartidores?ref=AB12" in t
+    assert ("5 €" if cent == 500 else "2,50 €") in t and cobro in t and "desde 10 €" in t
+    assert "20 entregas en 2 días distintos" in t
+    assert "ruta?tab=cuenta" in c["html"]                       # el botón lleva a su enlace y su QR
 
 
 def test_nunca_dos_del_ciclo_en_menos_de_18_horas():
@@ -101,7 +138,7 @@ def test_nunca_dice_que_se_cobra_solo():
     for clave in cc.CLAVES:
         t = _correo(clave)["texto"].lower()
         assert "se cobra el plan" not in t and "salvo cancelación" not in t
-        if clave != "primer_dia":                     # ese no habla de pagos
+        if clave in ("bienvenida", "casi_fin"):      # los demás no hablan de pagos
             assert "no se cobra nada solo" in t
 
 
@@ -280,3 +317,25 @@ async def test_la_marca_es_la_del_remitente(mundo):
     mundo.g["organizations"].docs.append(_org(horas=0.2))
     await server._ciclo_enviar("o1", "bienvenida", AHORA)
     assert mundo.enviados[0].subject.startswith("Tu cuenta de FDS")
+
+
+@pytest.mark.asyncio(loop_scope="session")
+async def test_el_de_invita_sale_con_su_codigo_de_invitacion(mundo):
+    alta = (datetime.now(timezone.utc) - timedelta(hours=30)).isoformat()
+    mundo.g["organizations"].docs.append({
+        "id": "o9", "name": "Barry", "sector": "autonomo", "plan": "autonomo", "status": "trial",
+        "email": "barry@x.es", "pais": "es", "db_name": "dsp_o9", "created_at": alta,
+        "trial_ends": (datetime.now(timezone.utc) + timedelta(days=60)).isoformat(),
+        "ciclo_correos": {"bienvenida": {"at": alta}}})
+    mundo.uso.update({"paradas": 36, "entregadas": 11, "entregadas_reales": 11})
+    mundo.monkeypatch.setenv("CICLO_CORREOS", "1")
+    textos = []
+
+    async def enviar(to, subject, html, responder_a="", copia=None, texto="", cabeceras=None):
+        textos.append(texto)
+        return True
+    mundo.monkeypatch.setattr(server, "_enviar_email", enviar)
+    assert await server._ciclo_enviar("o9", "invita")
+    org = next(o for o in mundo.g["organizations"].docs if o["id"] == "o9")
+    assert org.get("ref_codigo") and f"/repartidores?ref={org['ref_codigo']}&utm_source=referido" in textos[0]
+    assert not await server._ciclo_enviar("o9", "invita")                       # una sola vez

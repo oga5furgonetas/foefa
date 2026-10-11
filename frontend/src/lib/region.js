@@ -23,6 +23,8 @@ const MONEDAS = {
   es: 'EUR', mx: 'MXN', ar: 'ARS', co: 'COP', cl: 'CLP', pe: 'PEN', ve: 'VES', ec: 'USD', bo: 'BOB', py: 'PYG',
   uy: 'UYU', cr: 'CRC', pa: 'USD', gt: 'GTQ', hn: 'HNL', sv: 'USD', ni: 'NIO', do: 'DOP', pr: 'USD', cu: 'CUP',
   br: 'BRL', cn: 'CNY',
+  pt: 'EUR', fr: 'EUR', it: 'EUR', de: 'EUR', ie: 'EUR', be: 'EUR', nl: 'EUR', at: 'EUR', ad: 'EUR',
+  gb: 'GBP', ch: 'CHF', us: 'USD',
 }
 let paisRuta = (() => {
   try { const g = localStorage.getItem('fds_pais'); if (g && MONEDAS[g]) return g } catch { /* sin almacenamiento */ }
@@ -69,6 +71,7 @@ const ZONA_PAIS = {
   'America/Montevideo': 'uy', 'America/Costa_Rica': 'cr', 'America/Panama': 'pa', 'America/Guatemala': 'gt',
   'America/Tegucigalpa': 'hn', 'America/El_Salvador': 'sv', 'America/Managua': 'ni', 'America/Santo_Domingo': 'do',
   'America/Puerto_Rico': 'pr', 'America/Havana': 'cu', 'Europe/Madrid': 'es', 'Atlantic/Canary': 'es', 'Africa/Ceuta': 'es',
+  'Europe/Lisbon': 'pt', 'Atlantic/Madeira': 'pt', 'Atlantic/Azores': 'pt',
 }
 export function paisDelMovil() {
   let z = ''
@@ -77,5 +80,6 @@ export function paisDelMovil() {
   if (/^America\/(Argentina\/|Buenos_Aires$|Cordoba$)/.test(z)) return 'ar'
   if (/^America\/(Mexico_City|Cancun|Merida|Monterrey|Matamoros|Chihuahua|Ciudad_Juarez|Ojinaga|Mazatlan|Bahia_Banderas|Hermosillo|Tijuana)$/.test(z)) return 'mx'
   if (/^America\/(Sao_Paulo|Bahia|Fortaleza|Recife|Belem|Maceio|Araguaina|Santarem|Manaus|Cuiaba|Campo_Grande|Porto_Velho|Boa_Vista|Rio_Branco|Eirunepe|Noronha)$/.test(z)) return 'br'
+  if (/^(America\/(New_York|Chicago|Denver|Los_Angeles|Phoenix|Anchorage|Detroit|Boise|Indiana\/.+|Kentucky\/.+)|Pacific\/Honolulu)$/.test(z)) return 'us'
   return ''
 }

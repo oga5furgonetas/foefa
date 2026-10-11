@@ -51,5 +51,23 @@ por["tester de Play (lote o correo de nombre)"] = len(testers)
 print("cuentas por sector:", dict(por))
 print("autónomos reales:", len(reales_aut))
 print("testers de Play aparte:", len(testers))
+# Cuántos la usan de verdad: con paradas suyas (no de ejemplo) y con algún día de reparto real
+# (direcciones distintas y entregas repartidas al menos 45 min, la vara de «Invita y gana»).
+con_paradas = con_reparto = 0
+for o in reales_aut:
+    if not o.get("db_name"):
+        continue
+    col = cli[o["db_name"]].reparto_pedidos
+    if col.count_documents({"ejemplo": {"$ne": True}}, limit=1):
+        con_paradas += 1
+    por_dia = collections.defaultdict(list)
+    for p in col.find({"ejemplo": {"$ne": True}, "estado": "entregado"}, {"_id": 0, "fecha": 1, "direccion": 1, "cerrado_en": 1}):
+        por_dia[p.get("fecha")].append(p)
+    for ps in por_dia.values():
+        horas = sorted(datetime.fromisoformat(str(p["cerrado_en"]).replace("Z", "+00:00")) for p in ps if p.get("cerrado_en"))
+        if len(horas) >= 2 and (horas[-1] - horas[0]).total_seconds() >= 45 * 60 and len({str(p.get("direccion")).lower() for p in ps}) >= 2:
+            con_reparto += 1
+            break
+print("de ellos, con paradas suyas:", con_paradas, "· con algún día de reparto de verdad:", con_reparto)
 print("conductores activos dentro de empresas:", conductores)
 print("usuarios con acceso (admin_users):", g.admin_users.count_documents({}))

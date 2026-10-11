@@ -20,6 +20,8 @@ const PARA_QUIEN = {
   cl: ['Paquetería', 'Mercado Libre', 'Chilexpress', 'Starken', 'Blue Express', 'Súper a domicilio'],
   pe: ['Paquetería', 'Mercado Libre', 'Olva Courier', 'Shalom', 'Súper a domicilio'],
   br: ['Paquetería', 'Mercado Livre', 'Shopee', 'Correios', 'Loggi', 'Súper a domicilio'],
+  pt: ['Paquetería', 'CTT', 'DPD', 'GLS', 'Amazon', 'Súper a domicilio'],
+  us: ['Paquetería', 'Amazon', 'FedEx', 'UPS', 'USPS', 'Súper a domicilio'],
   latam: ['Paquetería', 'Mercado Libre', 'Amazon', 'DHL', 'Súper a domicilio'],
 }
 const paraQuienAqui = () => { const p = paisDelMovil(); return PARA_QUIEN[p] || (p ? PARA_QUIEN.latam : PARA_QUIEN.es) }

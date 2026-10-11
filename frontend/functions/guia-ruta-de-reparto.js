@@ -121,7 +121,7 @@ function pagina() {
     <ul>
       <li>Le haces una foto a la etiqueta o escaneas el código y la dirección entra sola.</li>
       <li>Ordena las paradas por tiempo, con el tráfico típico de cada hora, y te dice a qué hora llegas a cada una.</li>
-      <li>Te guía con voz hasta cada puerta.</li>
+      <li>Te guía con voz hasta cada puerta y, en Android, con manos libres: dices «entregado» y sigues conduciendo.</li>
       <li>Te dice cuánto llevas ganado en el día y cuánto se fue en gasolina, en la moneda de tu país.</li>
     </ul>
     <p class="oferta">${oferta}</p>

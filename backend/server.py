@@ -5123,6 +5123,24 @@ PAISES_REPARTO = {
            "America/Recife", "America/Belem", "America/Maceio", "America/Araguaina", "America/Santarem", "America/Manaus",
            "America/Cuiaba", "America/Campo_Grande", "America/Porto_Velho", "America/Boa_Vista", "America/Rio_Branco",
            "America/Eirunepe", "America/Noronha"]},
+    # Europa y Estados Unidos (11-10-2026): sin estar aquí, una cuenta de Lisboa quedaba como España
+    # y el buscador de direcciones buscaba en España (Guilherme, 05-10). Estados Unidos, además, por
+    # los repartidores hispanos que llegan de los vídeos en español.
+    "pt": {"nombre": "Portugal", "prefijo": "351", "zonas": ["Europe/Lisbon", "Atlantic/Madeira", "Atlantic/Azores"]},
+    "fr": {"nombre": "Francia", "prefijo": "33", "zonas": ["Europe/Paris"]},
+    "it": {"nombre": "Italia", "prefijo": "39", "zonas": ["Europe/Rome"]},
+    "de": {"nombre": "Alemania", "prefijo": "49", "zonas": ["Europe/Berlin", "Europe/Busingen"]},
+    "gb": {"nombre": "Reino Unido", "prefijo": "44", "zonas": ["Europe/London"]},
+    "ie": {"nombre": "Irlanda", "prefijo": "353", "zonas": ["Europe/Dublin"]},
+    "be": {"nombre": "Bélgica", "prefijo": "32", "zonas": ["Europe/Brussels"]},
+    "nl": {"nombre": "Países Bajos", "prefijo": "31", "zonas": ["Europe/Amsterdam"]},
+    "ch": {"nombre": "Suiza", "prefijo": "41", "zonas": ["Europe/Zurich"]},
+    "at": {"nombre": "Austria", "prefijo": "43", "zonas": ["Europe/Vienna"]},
+    "ad": {"nombre": "Andorra", "prefijo": "376", "zonas": ["Europe/Andorra"]},
+    "us": {"nombre": "Estados Unidos", "prefijo": "1", "zonas": [
+           "America/New_York", "America/Chicago", "America/Denver", "America/Los_Angeles", "America/Phoenix",
+           "America/Anchorage", "America/Detroit", "America/Boise", "America/Indiana/Indianapolis",
+           "America/Kentucky/Louisville", "Pacific/Honolulu"]},
     # China (04-10-2026): la app en chino; allí se navega con Amap/Baidu y se
     # avisa por SMS (Google y WhatsApp están bloqueados).
     "cn": {"nombre": "China", "prefijo": "86", "zonas": ["Asia/Shanghai", "Asia/Urumqi"]},
@@ -20815,8 +20833,11 @@ async def _ciclo_uso(org: dict) -> dict:
     """Lo que ha hecho de verdad: paradas suyas (las de ejemplo no) y entregas."""
     col = client[_tenant_db_name(org)].reparto_pedidos
     reales = {"ejemplo": {"$ne": True}}
-    return {"paradas": await col.count_documents(reales),
-            "entregadas": await col.count_documents({**reales, "estado": "entregado"})}
+    hechas = await col.find({**reales, "estado": "entregado"}, {"_id": 0, "fecha": 1, "direccion": 1, "cerrado_en": 1}).to_list(5000)
+    # Las que cuentan como reparto de verdad (direcciones distintas, repartidas en el día), con la misma
+    # vara que «Invita y gana»: 11 «entregadas» en 20 minutos a medianoche son alguien probando.
+    return {"paradas": await col.count_documents(reales), "entregadas": len(hechas),
+            "entregadas_reales": _ref_uso_real(hechas)[0]}
 
 
 async def _ciclo_responder_a() -> str:
@@ -20855,13 +20876,20 @@ async def _ciclo_enviar(org_id: str, clave: str, ahora: Optional[datetime] = Non
         responder = await _ciclo_responder_a()
         t = PLAN_TARIFAS["autonomo"]
         baja = _baja_url(org_id)
+        # «Invita y gana» (11-10-2026): su enlace de verdad, lo que gana y cómo cobra.
+        ref = {}
+        if clave == "invita":
+            codigo = await _mi_codigo_ref(org)
+            ref = {"ref_enlace": f"{_PORTAL_BASE_FRONT}/repartidores?ref={codigo}&utm_source=referido"
+                                 f"&utm_medium=correo&utm_campaign=rep_invitar",
+                   "ref_cent": _ref_importe(org), "ref_espana": _ref_en_espana(org), "ref_min_cent": _REF_RETIRADA_MIN}
         # La marca del correo es la del REMITENTE («FDS <contacto@…>»), la que ve el
         # repartidor en la app; MARCA es la del panel de empresas.
         c = ciclo_correos.correo(clave, org, uso, ahora, marca=_email_remitente()[0], base=_PORTAL_BASE_FRONT,
                                  baja=baja, mensual=t["mensual"], anual=t["anual"],
                                  con_respuesta=bool(responder),
                                  promo_hasta=REP_GRATIS_HASTA if _rep_promo_activa() else "",
-                                 tope=REP_GRATIS_PARADAS_DIA)
+                                 tope=REP_GRATIS_PARADAS_DIA, **ref)
         ok = await _enviar_email(
             org["email"], c["asunto"], c["html"], responder_a=responder, texto=c["texto"],
             cabeceras={"List-Unsubscribe": f"<{baja}>",

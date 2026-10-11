@@ -14,6 +14,12 @@ haría alguien que lleva la app y se fija en cada alta:
     parada suya (las de ejemplo no cuentan). Corto y personal: ¿te ayudo?
   · «casi_fin» — cuando quedan 2 días o menos de prueba. Lo que lleva hecho,
     cuándo acaba y que no se cobra nada solo.
+  · «recordatorio» (11-10-2026) — entre el día 3 y el 8, si SIGUE sin cargar
+    ninguna parada: muchos se dan de alta en fin de semana y el lunes ya no se
+    acuerdan. Los tres pasos otra vez y lo que le ahorra (manos libres, su dinero).
+  · «invita» (11-10-2026) — cuando ya lleva 10 entregas de verdad (direcciones
+    distintas y repartidas en el día, como cuenta «Invita y gana»: marcar 11 en 20
+    minutos a medianoche es probar, no repartir). Su enlace y las condiciones exactas.
 
 Reglas que no se rompen:
   · Uno por persona y clave, nunca dos (el servidor lo marca ANTES de mandar).
@@ -28,7 +34,7 @@ import html as _html
 import re
 from datetime import datetime, timedelta, timezone
 
-CLAVES = ("bienvenida", "primer_dia", "casi_fin")
+CLAVES = ("bienvenida", "primer_dia", "casi_fin", "recordatorio", "invita")
 IDIOMAS = ("es", "pt", "en")
 SEPARACION = timedelta(hours=18)
 BIENVENIDA_HASTA = timedelta(hours=2)      # si falló al darse de alta, se reintenta hasta aquí
@@ -36,6 +42,9 @@ PRIMER_DIA_DESDE = timedelta(hours=20)
 PRIMER_DIA_HASTA = timedelta(hours=72)
 CASI_FIN_ANTES = timedelta(days=2)
 CASI_FIN_EDAD_MIN = timedelta(days=3)      # una prueba corta no recibe dos correos seguidos
+RECORDATORIO_DESDE = timedelta(days=3)
+RECORDATORIO_HASTA = timedelta(days=8)
+INVITA_ENTREGAS = 10                       # entregas suyas (no de ejemplo) para pedirle que invite
 
 _PAISES_PT = {"pt", "br", "ao", "mz", "cv"}
 _PAISES_ES = {"es", "mx", "ar", "co", "cl", "pe", "ve", "ec", "bo", "py", "uy", "cr", "pa",
@@ -73,6 +82,12 @@ def es_candidata(org: dict) -> bool:
             and not o.get("correos_baja"))
 
 
+def _reales(uso: dict) -> int:
+    """Entregas de reparto de verdad (las que cuenta «Invita y gana»); si no se sabe, todas."""
+    u = uso or {}
+    return int(u.get("entregadas_reales", u.get("entregadas")) or 0)
+
+
 def toca(org: dict, uso: dict, ahora: datetime, promo: bool = False) -> str:
     """La clave del correo que toca mandar AHORA, o "" si ninguno. Con la promoción
     «gratis y sin límite» activa no hay «se acaba tu prueba»: no se acaba nada."""
@@ -92,6 +107,12 @@ def toca(org: dict, uso: dict, ahora: datetime, promo: bool = False) -> str:
     if ("primer_dia" not in enviados and PRIMER_DIA_DESDE <= edad <= PRIMER_DIA_HASTA
             and not (uso or {}).get("paradas")):
         return "primer_dia"
+    if ("recordatorio" not in enviados and RECORDATORIO_DESDE <= edad <= RECORDATORIO_HASTA
+            and not (uso or {}).get("paradas")):
+        return "recordatorio"
+    if ("invita" not in enviados and _reales(uso) >= INVITA_ENTREGAS
+            and str(org.get("pais") or "es").lower() != "cn"):        # en China no hay cómo pagar
+        return "invita"
     fin = _fecha(org.get("trial_ends"))
     if promo:
         return ""
@@ -138,6 +159,32 @@ _T = {
             "pestaña «Cuenta», y elige {mes} al mes o {anio} al año. Si no, no pagas nada.\n\n"
             "Cuenta: {cuenta}\n\n"
             "{ayuda_corta}"),
+        "recordatorio": (
+            "¿Repartes esta semana? Tu ruta, lista en 2 minutos",
+            "Hola {nombre}:\n\n"
+            "Hace unos días creaste tu cuenta en {marca} y todavía no has metido ningún paquete. "
+            "Cuando tengas la ruta delante, es así de rápido:\n\n"
+            "1. Abre {ruta}\n"
+            "2. «Cargar paquetes: uno tras otro» y una foto a cada etiqueta: la dirección entra sola.\n"
+            "3. «Montar ruta y empezar»: te ordena las paradas por tiempo y te guía con voz.\n\n"
+            "Y dos cosas que te ahorran tiempo: «Manos libres» (en Android dices \"entregado\" y sigues "
+            "conduciendo) y «Mi dinero hoy» (cuánto llevas ganado y lo que se va en gasolina).\n\n"
+            "{plazo}\n\n"
+            "{ayuda_corta}"),
+        "invita": (
+            "Llevas {entregadas} entregas con {marca}: ¿se la pasas a un compañero?",
+            "Hola {nombre}:\n\n"
+            "Ya llevas {entregadas} entregas con {marca}. Si conoces a otro repartidor al que le pueda servir, "
+            "pásale tu enlace:\n\n"
+            "{invita}\n\n"
+            "Cuando se registre y haga 20 entregas en 2 días distintos (en su primer mes), ganas {euros} por "
+            "cada uno. Lo cobras por {cobro} desde {minimo}. Tu enlace, tu QR y las condiciones están en la app, "
+            "pestaña «Cuenta»: {cuenta}\n\n"
+            "{ayuda_invita}"),
+        "cobro_es": "Bizum o transferencia",
+        "ayuda_invita": "¿Le falta algo a la app para tu reparto? Contéstame con una línea y lo miro.",
+        "ayuda_invita_sin": "Gracias por usarla.",
+        "cobro_fuera": "PayPal",
         "hecho_si": "En estos días has cargado {paradas} paradas{entregas}.\n\n",
         "entregas": " y entregado {n}",
         "hecho_no": "Todavía no has cargado ninguna parada: aún estás a tiempo de probarla con tu ruta de verdad ({ruta}).\n\n",
@@ -156,7 +203,8 @@ _T = {
             "solo si tú quieres.\n\n"),
         "firma": "Daniel, de {marca}",
         "baja": "¿No quieres más correos como este? Date de baja aquí: {baja}",
-        "boton": {"bienvenida": "Abrir la app", "primer_dia": "Cargar mi primera ruta", "casi_fin": "Ver mi cuenta"},
+        "boton": {"bienvenida": "Abrir la app", "primer_dia": "Cargar mi primera ruta", "casi_fin": "Ver mi cuenta",
+                  "recordatorio": "Cargar mi ruta", "invita": "Ver mi enlace y mi QR"},
     },
     "pt": {
         "bienvenida": (
@@ -190,6 +238,32 @@ _T = {
             "separador «Conta», e escolhe {mes} por mês ou {anio} por ano. Se não, não pagas nada.\n\n"
             "Conta: {cuenta}\n\n"
             "{ayuda_corta}"),
+        "recordatorio": (
+            "Vais distribuir esta semana? A tua rota pronta em 2 minutos",
+            "Olá {nombre}:\n\n"
+            "Há uns dias criaste a tua conta na {marca} e ainda não carregaste nenhum volume. "
+            "Quando tiveres a rota à frente, é assim de rápido:\n\n"
+            "1. Abre {ruta}\n"
+            "2. «Carregar volumes: um após outro» e uma foto a cada etiqueta: a morada entra sozinha.\n"
+            "3. «Montar rota e começar»: ordena as paragens por tempo e guia-te por voz.\n\n"
+            "E duas coisas que te poupam tempo: «Mãos livres» (no Android dizes \"entregue\" e continuas a "
+            "conduzir) e «O meu dinheiro hoje» (quanto já ganhaste e o que vai em combustível).\n\n"
+            "{plazo}\n\n"
+            "{ayuda_corta}"),
+        "invita": (
+            "Já levas {entregadas} entregas com a {marca}: passas a um colega?",
+            "Olá {nombre}:\n\n"
+            "Já levas {entregadas} entregas com a {marca}. Se conheces outro estafeta a quem possa servir, "
+            "passa-lhe o teu link:\n\n"
+            "{invita}\n\n"
+            "Quando se registar e fizer 20 entregas em 2 dias diferentes (no primeiro mês), ganhas {euros} por "
+            "cada um. Recebes por {cobro} a partir de {minimo}. O teu link, o teu QR e as condições estão na app, "
+            "separador «Conta»: {cuenta}\n\n"
+            "{ayuda_invita}"),
+        "cobro_es": "Bizum ou transferência",
+        "ayuda_invita": "Falta alguma coisa à app para a tua distribuição? Responde-me com uma linha e eu vejo.",
+        "ayuda_invita_sin": "Obrigado por a usares.",
+        "cobro_fuera": "PayPal",
         "hecho_si": "Nestes dias carregaste {paradas} paragens{entregas}.\n\n",
         "entregas": " e entregaste {n}",
         "hecho_no": "Ainda não carregaste nenhuma paragem: ainda vais a tempo de a testar com a tua rota real ({ruta}).\n\n",
@@ -208,7 +282,8 @@ _T = {
             "só se quiseres.\n\n"),
         "firma": "Daniel, da {marca}",
         "baja": "Não queres mais e-mails como este? Cancela aqui: {baja}",
-        "boton": {"bienvenida": "Abrir a app", "primer_dia": "Carregar a minha primeira rota", "casi_fin": "Ver a minha conta"},
+        "boton": {"bienvenida": "Abrir a app", "primer_dia": "Carregar a minha primeira rota", "casi_fin": "Ver a minha conta",
+                  "recordatorio": "Carregar a minha rota", "invita": "Ver o meu link e o meu QR"},
     },
     "en": {
         "bienvenida": (
@@ -242,6 +317,32 @@ _T = {
             "«Account» tab, and choose {mes} a month or {anio} a year. Otherwise you pay nothing.\n\n"
             "Account: {cuenta}\n\n"
             "{ayuda_corta}"),
+        "recordatorio": (
+            "Delivering this week? Your route ready in 2 minutes",
+            "Hi {nombre},\n\n"
+            "A few days ago you created your {marca} account and you haven't loaded any parcels yet. "
+            "When you have your route in front of you, it's this quick:\n\n"
+            "1. Open {ruta}\n"
+            "2. «Load parcels: one after another» and snap each label: the address goes in by itself.\n"
+            "3. «Build route and start»: it sorts your stops by time and guides you by voice.\n\n"
+            "And two things that save you time: «Hands-free» (on Android you say \"delivered\" and keep "
+            "driving) and «My money today» (how much you've earned and what goes on fuel).\n\n"
+            "{plazo}\n\n"
+            "{ayuda_corta}"),
+        "invita": (
+            "{entregadas} deliveries with {marca}: will you pass it on to a colleague?",
+            "Hi {nombre},\n\n"
+            "You've already made {entregadas} deliveries with {marca}. If you know another driver it could help, "
+            "send them your link:\n\n"
+            "{invita}\n\n"
+            "When they sign up and make 20 deliveries on 2 different days (in their first month), you earn {euros} "
+            "for each one. You get paid by {cobro} from {minimo}. Your link, your QR code and the terms are in the "
+            "app, «Account» tab: {cuenta}\n\n"
+            "{ayuda_invita}"),
+        "cobro_es": "Bizum or bank transfer",
+        "ayuda_invita": "Is anything missing for your deliveries? Reply with one line and I'll look into it.",
+        "ayuda_invita_sin": "Thanks for using it.",
+        "cobro_fuera": "PayPal",
         "hecho_si": "So far you've loaded {paradas} stops{entregas}.\n\n",
         "entregas": " and delivered {n}",
         "hecho_no": "You haven't loaded any stops yet: there's still time to try it with your real route ({ruta}).\n\n",
@@ -260,13 +361,15 @@ _T = {
             "only if you want.\n\n"),
         "firma": "Daniel, {marca}",
         "baja": "Don't want emails like this? Unsubscribe here: {baja}",
-        "boton": {"bienvenida": "Open the app", "primer_dia": "Load my first route", "casi_fin": "See my account"},
+        "boton": {"bienvenida": "Open the app", "primer_dia": "Load my first route", "casi_fin": "See my account",
+                  "recordatorio": "Load my route", "invita": "See my link and QR code"},
     },
 }
 
 
 def _euros(v, idioma):
-    s = ("%.2f" % v).rstrip("0").rstrip(".") if isinstance(v, float) and v != int(v) else str(int(v))
+    # Con céntimos, siempre dos cifras: «2,50 €», no «2,5 €».
+    s = ("%.2f" % v) if isinstance(v, float) and v != int(v) else str(int(v))
     return (s.replace(".", ",") if idioma != "en" else s) + " €"
 
 
@@ -305,7 +408,8 @@ def _quedan(org, ahora):
 
 def correo(clave: str, org: dict, uso: dict, ahora: datetime, *, marca: str, base: str,
            baja: str, mensual: float, anual: float, con_respuesta: bool,
-           promo_hasta: str = "", tope: int = 15) -> dict:
+           promo_hasta: str = "", tope: int = 15, ref_enlace: str = "", ref_cent: int = 250,
+           ref_espana: bool = True, ref_min_cent: int = 1000) -> dict:
     """{asunto, texto, html} del correo `clave` para esta cuenta."""
     if clave not in CLAVES:
         raise ValueError(clave)
@@ -331,7 +435,11 @@ def correo(clave: str, org: dict, uso: dict, ahora: datetime, *, marca: str, bas
         "mes": _euros(mensual, idioma), "anio": _euros(anual, idioma), "hecho": hecho,
         "ayuda": t["ayuda"] if con_respuesta else t["ayuda_sin"],
         "ayuda_corta": t["ayuda_corta"] if con_respuesta else t["ayuda_corta_sin"],
-        "promo": _dia_mes(promo_hasta, idioma), "tope": tope,
+        "ayuda_invita": t["ayuda_invita"] if con_respuesta else t["ayuda_invita_sin"],
+        "promo": _dia_mes(promo_hasta, idioma), "tope": tope, "entregadas": _reales(uso),
+        # «Invita y gana»: su enlace (o, si no llega, la pestaña donde está), lo que gana y cómo cobra.
+        "invita": ref_enlace or cuenta, "euros": _euros(ref_cent / 100, idioma),
+        "cobro": t["cobro_es"] if ref_espana else t["cobro_fuera"], "minimo": _euros(ref_min_cent / 100, idioma),
     }
     datos["intro"] = (t["intro_promo"] if promo_hasta else t["intro"]).format(**datos)
     # 10-10-2026: con la promoción no hay «días de prueba» que contar (el correo del día
@@ -346,7 +454,7 @@ def correo(clave: str, org: dict, uso: dict, ahora: datetime, *, marca: str, bas
     firma = t["firma"].format(marca=marca)
     pie = t["baja"].format(baja=baja)
     texto = f"{cuerpo}\n\n{firma}\n\n--\n{pie}"
-    enlace = cuenta if clave == "casi_fin" else ruta
+    enlace = cuenta if clave in ("casi_fin", "invita") else ruta
     return {"asunto": asunto, "texto": texto, "idioma": idioma,
             "html": _html_de(cuerpo, firma, t["boton"][clave], enlace, pie)}
 

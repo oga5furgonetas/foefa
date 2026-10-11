@@ -962,3 +962,22 @@ Repaso de cada frase de `/planes` y de la presentación contra el código (Dani:
   verificado** con `public/google51144a3efae4ec3d.html` (NO BORRAR) y sitemap enviado. «Probar sin cuenta» NO va en
   /empezar (decisión de Dani del 04-10; lo volví a poner y lo quité). Post de BCN corregido a 2,50 €; reel de FDs
   con comentario de actualización; el carrusel de TikTok del 10-10 lo tiene que editar Dani desde el móvil.
+
+## 11-10-2026 (mediodía y tarde): «no pares»
+
+- **Español de Latinoamérica** en la app (`aLatam()` en `lib/idioma.js`): celular, camioneta, toma una foto,
+  estacionar, auto… para quien tiene la hora de un país latino o el móvil en es-MX, es-AR, es-US…
+- **Manos libres** en la guía (`Navegacion.jsx`, `ordenDeVoz()`): «entregado», «no entregado», «he llegado»,
+  «deshacer», «llamar», «repite», «silencio» en es/pt/en. Por voz no pide la foto; «deshacer» deshace. No escucha
+  mientras habla la app, frases de ≤4 palabras, 2,5 s entre órdenes. En la portada como ventaja («en Android»).
+- **Correos nuevos** (`ciclo_correos.py`): «recordatorio» (días 3-8 sin paradas) e «invita» (a las 10 entregas,
+  con su enlace de «Invita y gana», importe —5 € o 2,50 € según su alta—, Bizum/PayPal y mínimo de 10 €).
+  Los importes con céntimos salen ya con dos cifras («2,50 €»).
+- **Países**: Portugal, Francia, Italia, Alemania, Reino Unido, Irlanda, Bélgica, Países Bajos, Suiza, Austria,
+  Andorra y EE. UU. entran en `PAISES_REPARTO` (antes caían en «es» y el buscador de direcciones buscaba en
+  España). `tools/metricas/corregir_pais_por_zona.py` corrige las cuentas ya creadas (solo Guilherme, Lisboa).
+- **YouTube Shorts** (canal «FlotaDSP»): 5 vídeos públicos (ver memoria youtube-shorts-flota). Las 2-3
+  «visitas» de cada uno al publicarlo, sin ninguna acción, son el robot de YouTube que revisa los enlaces.
+- **Métrica**: `usuarios_total.py` separa a los testers de Play (correo como nombre o 3 altas en el mismo
+  minuto). A esta hora: 16 autónomos reales + 3 testers. Un usuario de verdad ya: 36 paradas y 11 entregas.
+- Grupos de Facebook: 7 publicaciones en grupos latinos, todas pendientes de admin.
