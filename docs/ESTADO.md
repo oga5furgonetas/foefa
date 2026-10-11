@@ -956,3 +956,9 @@ Repaso de cada frase de `/planes` y de la presentación contra el código (Dani:
   pendiente: mirar `/groups/<id>/my_pending_content`).
   Unido a 3 de Colombia y 2 más de Argentina. Un grupo pedía «¿cuánto llevas repartiendo?»: no se inventa, se salta.
 - Las «594 visitas de YouTube» del 03-10 eran un robot (todas en «/», ni una acción).
+- **Más tarde**: portugués de Brasil (`aBrasil()` en `lib/idioma.js`: senha, paradas, celular, cadastro…; voz y
+  fechas pt-BR), demo en un módulo (`lib/demoReparto.js`), guías HTML para Google en Pages Functions
+  (`functions/guia-ruta-de-reparto.js` y `guia-rota-de-entregas.js`, en el sitemap), **Google Search Console
+  verificado** con `public/google51144a3efae4ec3d.html` (NO BORRAR) y sitemap enviado. «Probar sin cuenta» NO va en
+  /empezar (decisión de Dani del 04-10; lo volví a poner y lo quité). Post de BCN corregido a 2,50 €; reel de FDs
+  con comentario de actualización; el carrusel de TikTok del 10-10 lo tiene que editar Dani desde el móvil.
