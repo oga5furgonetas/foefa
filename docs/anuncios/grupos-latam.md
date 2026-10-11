@@ -15,10 +15,12 @@ Enlace: `https://flotadsp.com/repartidores?utm_source=grupo&utm_medium=facebook&
 | 11-10 | Repartidores CDMX | 42 mil | pendiente de admin | mx_repartidores_cdmx |
 | 11-10 | Mercado flex envios logísticas repartidores cadetes (AR) | 72 mil | pendiente de admin | ar_flex_cadetes |
 | 11-10 | MENSAJERÍA Y LOGÍSTICA BOGOTA | 9,7 mil | pendiente de admin | co_mensajeria_bogota |
+| 11-10 | Motorista Entregador Mercado Livre (BR) | 53 mil | pendiente + una copia suprimida al instante (filtro) | br_motorista_ml |
 
 Unido, sin publicar: Repartidores de Mercado Libre y Amazon (México), Repartidores mercado libre CDMX y Edo. Mex.,
 mensajería mercado libre envios flex en el dia particulares (AR, 25 mil), Mercado envíos Flex zona oeste (AR),
-REPARTIDOR DE PAQUETERIA, MENSAJERÍA Y LOGÍSTICA BOGOTA (única regla: que sea de mensajería), Mensajeros Medellín.
+REPARTIDOR DE PAQUETERIA, Mensajeros Medellín. Brasil: «Entregadores Mercado Livre» (37 mil) PROHÍBE la
+autopromoción en sus normas: no publicar ahí.
 
 ## Texto Colombia (publicado en Bogotá el 11-10)
 
