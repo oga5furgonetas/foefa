@@ -348,4 +348,27 @@ export function logout() {
   localStorage.removeItem(TOKEN_KEY)
   localStorage.removeItem(ADMIN_KEY)
   localStorage.removeItem(ACCESO_KEY)
+  localStorage.removeItem(INICIO_KEY)
+}
+
+/* LA APP ARRANCA DIRECTA EN SU RUTA (11-10-2026). La app instalada abre /app, que mandaba a quien tiene
+   sesión al panel; el panel cargaba entero, pedía el plan y, al ver que es un repartidor por su cuenta, lo
+   llevaba a /ruta: dos pantallas y el panel de empresa en cada apertura. RutaApp apunta aquí que este
+   usuario vive en /ruta, con su id dentro (otra cuenta en el mismo móvil no lo hereda), y /app va directo. */
+const INICIO_KEY = 'flota_inicio'
+
+export function apuntarInicio(ruta) {
+  try {
+    const id = decodeToken()?.sub
+    if (!id) return
+    if (ruta) localStorage.setItem(INICIO_KEY, JSON.stringify({ id, ruta }))
+    else localStorage.removeItem(INICIO_KEY)
+  } catch { /* sin almacenamiento */ }
+}
+
+export function inicioGuardado() {
+  try {
+    const a = JSON.parse(localStorage.getItem(INICIO_KEY))
+    return a && a.id && a.id === decodeToken()?.sub ? a.ruta : null
+  } catch { return null }
 }

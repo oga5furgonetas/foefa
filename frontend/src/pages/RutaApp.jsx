@@ -11,7 +11,7 @@ import {
 import { enAppPlay } from '../lib/enApp'
 import { servicioPlay, comprasPlay } from '../lib/playBilling'
 import { enviarPendiente, olvidarPendiente } from '../lib/metaPixel'
-import { isAuthed, esSuplantacion, volverASuper, getAdmin } from '../panel/auth'
+import { isAuthed, esSuplantacion, volverASuper, getAdmin, apuntarInicio } from '../panel/auth'
 import { Cuenta, Muro } from './RutaCuenta'
 import OpinionRuta from './OpinionRuta'
 import AvisoManana from './AvisoManana'
@@ -112,6 +112,11 @@ export default function RutaApp() {
     if (pendiente || q.get('canjear')) limpiar()
     return () => clearTimeout(tPropio)
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
+  // La próxima vez que abra la app, directo aquí (y si la cuenta ya no es de repartidor, al panel).
+  useEffect(() => {
+    if (!billing?.sector || esSuplantacion()) return
+    apuntarInicio(billing.sector === 'autonomo' ? '/ruta' : null)
+  }, [billing?.sector])
   const bloqueado = !!billing?.bloqueo
   // Recién creada la cuenta: antes de la ruta, instalar la app (se puede saltar).
   const [instalarPrimero, setInstalarPrimero] = useState(() => recienAlta() && !yaEsApp() && !esSuplantacion())

@@ -16,7 +16,7 @@ export default function Cookies() {
         <thead><tr className="border-b border-dark-800 text-left text-dark-500"><th className="py-1">Nombre</th><th>Finalidad</th><th>Duración</th><th>Tipo</th></tr></thead>
         <tbody className="text-dark-300">
           <tr className="border-b border-dark-800/60"><td className="py-1.5"><code>flota_token</code></td><td>Mantener tu sesión iniciada</td><td>Hasta cerrar sesión</td><td>Necesaria</td></tr>
-          <tr className="border-b border-dark-800/60"><td className="py-1.5"><code>flota_admin</code></td><td>Recordar tu cuenta y permisos</td><td>Hasta cerrar sesión</td><td>Necesaria</td></tr>
+          <tr className="border-b border-dark-800/60"><td className="py-1.5"><code>flota_admin</code>, <code>flota_inicio</code></td><td>Recordar tu cuenta, tus permisos y en qué pantalla se abre la app</td><td>Hasta cerrar sesión</td><td>Necesaria</td></tr>
           <tr className="border-b border-dark-800/60"><td className="py-1.5"><code>panel_tab</code>, <code>panel_center</code></td><td>Recordar tu pestaña y centro activo</td><td>Hasta limpiar el navegador</td><td>Preferencia</td></tr>
           <tr className="border-b border-dark-800/60"><td className="py-1.5"><code>flota_plan</code></td><td>Recordar el plan elegido durante el registro</td><td>Sesión</td><td>Necesaria</td></tr>
           <tr className="border-b border-dark-800/60"><td className="py-1.5"><code>cookie_consent</code></td><td>Recordar que has visto este aviso{hayPixel() ? ' y lo que elegiste' : ''}</td><td>12 meses</td><td>Necesaria</td></tr>

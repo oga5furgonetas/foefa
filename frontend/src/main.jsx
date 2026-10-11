@@ -20,7 +20,7 @@ import '@fontsource/ibm-plex-mono/400.css'
 import '@fontsource/ibm-plex-mono/500.css'
 import '@fontsource/ibm-plex-mono/600.css'
 import { medirVista } from './lib/analitica'
-import { salirDeLaDemoDeReparto } from './panel/auth'
+import { salirDeLaDemoDeReparto, inicioGuardado } from './panel/auth'
 
 /* Señal de vida para /arranque.js. Ese vigilante espera 10 s y, si esta marca
    no aparece, da por hecho que el bundle llegó envenenado (pantalla en blanco)
@@ -328,7 +328,8 @@ function AppRedirect() {
   salirDeLaDemoDeReparto()
   try {
     if (localStorage.getItem('flota_driver_token')) destino = '/conductor?vista=ruta'
-    else if (localStorage.getItem('flota_token')) destino = '/panel'
+    // Quien reparte por su cuenta, directo a su ruta (sin pasar por el panel).
+    else if (localStorage.getItem('flota_token')) destino = inicioGuardado() || '/panel'
   } catch { /* sin almacenamiento */ }
   window.location.replace(destino)
   return null

@@ -1417,6 +1417,33 @@ test('App · quien reparte solo ve su app y no el panel de empresa', async ({ pa
   expect(fallos).toEqual([])
 })
 
+/* LA APP ARRANCA DIRECTA EN LA RUTA para quien reparte por su cuenta (11-10-2026): la primera vez pasa por el
+   panel, que lo manda a /ruta; desde entonces /app va directo, sin cargar el panel. Otra cuenta no lo hereda. */
+test('App · quien reparte solo abre la app directo en su ruta, sin pasar por el panel', async ({ page }) => {
+  const fallos = vigilar(page)
+  await entrarComoAdmin(page)
+  await simularApi(page, 'vacio')
+  await page.route(/\/api\/org\/billing/, (r) => r.fulfill({ json: { status: 'trial', days_left: 6, plan: 'autonomo', sector: 'autonomo', modulos: ['dashboard', 'reparto', 'configuracion'] } }))
+  await page.route(/\/api\/reparto\/mi-ruta/, (r) => r.fulfill({ json: { activo: true, autonomo: true, fecha: '2026-10-04', pedidos: [], base: null, ia_tickets: false, jornada: {}, aviso_aceptado: false } }))
+  await page.goto('/app', { waitUntil: 'domcontentloaded' })
+  await expect(page).toHaveURL(/\/ruta/)
+  await expect(page.getByRole('button', { name: /Cargar paquetes/ })).toBeVisible()
+  await expect.poll(() => page.evaluate(() => localStorage.getItem('flota_inicio'))).toContain('/ruta')
+  // Segunda apertura: /app → /ruta sin una sola visita a /panel.
+  const pasos = []
+  page.on('framenavigated', (f) => { if (f === page.mainFrame()) pasos.push(new URL(f.url()).pathname) })
+  await page.goto('/app', { waitUntil: 'domcontentloaded' })
+  await expect(page).toHaveURL(/\/ruta/)
+  await expect(page.getByRole('button', { name: /Cargar paquetes/ })).toBeVisible()
+  expect(pasos.filter((p) => p.startsWith('/panel'))).toEqual([])
+  // Lo apuntado es de ESA cuenta: con otro usuario en el mismo móvil, /app va al panel como siempre.
+  await page.evaluate(() => localStorage.setItem('flota_inicio', JSON.stringify({ id: 'otro', ruta: '/ruta' })))
+  await page.route(/\/api\/org\/billing/, (r) => r.fulfill({ json: { status: 'active', plan: 'pro', sector: 'mensajeria' } }))
+  await page.goto('/app', { waitUntil: 'domcontentloaded' })
+  await expect(page).toHaveURL(/\/panel/)
+  expect(fallos).toEqual([])
+})
+
 /* LA APP ARRANCA EN «EMPEZAR» si no hay sesión; «Repartir yo mismo» lleva al alta. */
 test('App · sin sesión arranca en Empezar: crear cuenta, entrar y probar a la vista; empresas plegado', async ({ page }) => {
   await page.goto('/app', { waitUntil: 'domcontentloaded' })
