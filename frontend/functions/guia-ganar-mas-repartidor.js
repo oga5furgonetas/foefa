@@ -41,7 +41,7 @@ const GUIA = {
     ['¿Cómo sé si una ruta me sale a cuenta?', 'Mira lo que te queda por hora en esa ruta (lo cobrado menos la gasolina, entre las horas) y compáralo con tus otras rutas. Si una zona tiene muchos kilómetros entre paradas, es la que más te cuesta.'],
     ['¿Qué es lo que más tiempo hace perder?', 'Normalmente tres cosas: dar vueltas por no llevar la ruta ordenada, buscar el paquete en cada parada y las entregas fallidas que hay que repetir.'],
   ],
-  pie: { legal: 'Aviso legal', privacidad: 'Privacidad', otros: [['Em português', '/guia-ganhar-mais-entregador', 'pt-BR'], ['Cómo ordenar la ruta', '/guia-ruta-de-reparto']] },
+  pie: { legal: 'Aviso legal', privacidad: 'Privacidad', otros: [['Em português', '/guia-ganhar-mais-entregador', 'pt-BR'], ['Cómo ordenar la ruta', '/guia-ruta-de-reparto'], ['Ruta con más de 10 paradas', '/guia-mas-de-10-paradas']] },
 }
 
 export async function onRequestGet() {

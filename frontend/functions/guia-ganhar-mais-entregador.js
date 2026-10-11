@@ -40,7 +40,7 @@ const GUIA = {
     ['Como sei se uma rota compensa?', 'Veja quanto sobra por hora nessa rota (o recebido menos o combustível, dividido pelas horas) e compare com as outras. Bairro com muitos quilômetros entre paradas é o que mais custa.'],
     ['O que mais faz perder tempo?', 'Normalmente três coisas: rodar sem a rota organizada, procurar o pacote em cada parada e as entregas frustradas que precisam ser repetidas.'],
   ],
-  pie: { legal: 'Aviso legal', privacidad: 'Privacidade', otros: [['En español', '/guia-ganar-mas-repartidor', 'es'], ['Como organizar a rota', '/guia-rota-de-entregas']] },
+  pie: { legal: 'Aviso legal', privacidad: 'Privacidade', otros: [['En español', '/guia-ganar-mas-repartidor', 'es'], ['Como organizar a rota', '/guia-rota-de-entregas'], ['Rota com mais de 10 paradas', '/guia-mais-de-10-paradas']] },
 }
 
 export async function onRequestGet() {

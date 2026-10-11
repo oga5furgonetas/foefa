@@ -4,7 +4,7 @@
  * functions/ para que no sea una ruta: wrangler la mete al empaquetar quien la importa. */
 export const BASE = 'https://flotadsp.com'
 export const PROMO_HASTA = '2026-12-31'          // la misma fecha que src/lib/precios.js
-const enPromo = () => new Date().toISOString().slice(0, 10) <= PROMO_HASTA
+export const enPromo = () => new Date().toISOString().slice(0, 10) <= PROMO_HASTA
 
 const esc = (t) => String(t).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;')
 

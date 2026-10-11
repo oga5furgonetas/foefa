@@ -131,7 +131,8 @@ function pagina() {
 
   <footer>FDS · <a href="/aviso-legal">Aviso legal</a> · <a href="/privacidad">Privacidade</a> ·
   <a href="/guia-ruta-de-reparto" hreflang="es">En español</a> ·
-  <a href="/guia-ganhar-mais-entregador">Como ganhar mais como entregador</a></footer>
+  <a href="/guia-ganhar-mais-entregador">Como ganhar mais como entregador</a> ·
+  <a href="/guia-mais-de-10-paradas">Rota com mais de 10 paradas</a></footer>
 </main>
 </body>
 </html>`
