@@ -37,13 +37,35 @@ const PALABRAS_BR = {
   descarregue: 'baixe', ficheiro: 'arquivo', ficheiros: 'arquivos', contacto: 'contato', contactos: 'contatos',
   estafeta: 'entregador', estafetas: 'entregadores',
 }
-const RE_BR = new RegExp(String.raw`\b(${Object.keys(PALABRAS_BR).join('|')})\b`, 'gi')
-export function aBrasil(s) {
-  return s.replace(RE_BR, (m) => {
-    const r = PALABRAS_BR[m.toLowerCase()]
+// Cambia palabras de un diccionario respetando la mayúscula inicial; las frases largas, antes.
+const cambiador = (mapa) => {
+  const re = new RegExp(String.raw`\b(${Object.keys(mapa).sort((a, b) => b.length - a.length).join('|')})\b`, 'gi')
+  return (s) => s.replace(re, (m) => {
+    const r = mapa[m.toLowerCase()]
     return m[0] !== m[0].toLowerCase() ? r[0].toUpperCase() + r.slice(1) : r
   })
 }
+export const aBrasil = cambiador(PALABRAS_BR)
+
+/* ESPAÑOL DE LATINOAMÉRICA (11-10-2026). La app está escrita en español de España; quien está allí (hora
+   de un país latino o el móvil en es-MX, es-AR…) lee «celular», «camioneta», «toma una foto». Mismo
+   cuidado que con Brasil: solo cambios que no rompen el género ni la frase. */
+const LATAM = (() => {
+  try {
+    const z = Intl.DateTimeFormat().resolvedOptions().timeZone || ''
+    if (/^America\/(Mexico_City|Cancun|Merida|Monterrey|Matamoros|Chihuahua|Ciudad_Juarez|Ojinaga|Mazatlan|Bahia_Banderas|Hermosillo|Tijuana|Bogota|Lima|Santiago|Punta_Arenas|Caracas|Guayaquil|La_Paz|Asuncion|Montevideo|Argentina\/.+|Buenos_Aires|Cordoba|Costa_Rica|Panama|Guatemala|Tegucigalpa|El_Salvador|Managua|Santo_Domingo|Puerto_Rico|Havana)$/.test(z)) return true
+    const l = ((navigator.languages && navigator.languages[0]) || navigator.language || '').toLowerCase()
+    return /^es-/.test(l) && l !== 'es-es'
+  } catch { return false }
+})()
+export const aLatam = cambiador({
+  'haz una foto': 'toma una foto', 'hazle una foto': 'tómale una foto', 'haces una foto': 'tomas una foto',
+  'hacer una foto': 'tomar una foto', 'hacerle una foto': 'tomarle una foto',
+  'móvil': 'celular', 'móviles': 'celulares', furgoneta: 'camioneta', furgonetas: 'camionetas',
+  'el ordenador': 'la computadora', 'un ordenador': 'una computadora', 'del ordenador': 'de la computadora',
+  'tu ordenador': 'tu computadora', 'al ordenador': 'a la computadora',
+  aparcar: 'estacionar', aparca: 'estaciona', 'gasóleo': 'diésel', coche: 'auto', coches: 'autos',
+})
 const oyentes = new Set()
 
 export function idiomaDelMovil() {
@@ -73,6 +95,7 @@ export function cambiarIdioma(l) {
 export function tx(texto, vars) {
   let s = (actual !== 'es' && TEXTOS[texto] && TEXTOS[texto][actual]) || texto
   if (actual === 'pt' && BRASIL && s !== texto) s = aBrasil(s)
+  else if (actual === 'es' && LATAM) s = aLatam(s)
   if (vars) s = s.replace(/\{(\w+)\}/g, (m, k) => (vars[k] != null ? String(vars[k]) : m))
   return s
 }

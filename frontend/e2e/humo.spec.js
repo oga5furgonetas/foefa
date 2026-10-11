@@ -2502,6 +2502,7 @@ test('Anuncio · quien llega del anuncio ve la app y la prueba con paradas antes
   await expect(page).toHaveURL(/\/repartidores\?/)
   await expect(page.getByRole('heading', { name: 'Tu ruta de reparto, ordenada sola.' })).toBeVisible()
   await expect(page.getByRole('link', { name: /Crear mi cuenta/ }).first()).toHaveAttribute('href', '/registro?sector=autonomo&plan=autonomo')
+  await expect(page.getByText(/^Haz una foto a la etiqueta/).first()).toBeVisible()      // en España, como siempre
   // El vídeo de la app, mudo y en bucle (sin muted el navegador no lo arranca solo).
   const video = page.locator('video')
   await expect(video).toHaveAttribute('src', /[/]videos[/]web-es[.]mp4([?]v=[0-9]+)?$/)
@@ -2631,6 +2632,9 @@ test.describe('Portada de repartidores desde México', () => {
     await expect(page.getByText('Estafeta', { exact: true })).toBeVisible()
     await expect(page.getByText('MRW', { exact: true })).toHaveCount(0)
     await expect(page.getByText(/Gana 2[,.]50/).first()).toBeVisible()
+    // Español de allí: «toma una foto», no «haz una foto» (lib/idioma.js, aLatam).
+    await expect(page.getByText(/^Toma una foto a la etiqueta/).first()).toBeVisible()
+    await expect(page.getByText(/Haz una foto a la etiqueta/)).toHaveCount(0)
     // «Probarla ahora» pide la demo con su país y su hora: paradas en Ciudad de México, no en A Coruña.
     const pedida = []
     await page.route(/\/api\/auth\/demo-reparto/, (r) => { pedida.push(r.request().postDataJSON()); r.fulfill({ status: 503, json: { detail: 'parada en el test' } }) })
