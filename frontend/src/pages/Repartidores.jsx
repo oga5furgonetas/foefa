@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { Zap, Loader2, ScanLine, Route, Navigation, MessageCircle, Camera, Check, ArrowRight } from 'lucide-react'
+import { Zap, Loader2, ScanLine, Route, Navigation, MessageCircle, Camera, Check, ArrowRight, Mic, Wallet } from 'lucide-react'
 import { MARCA } from '../marca'
 import { tx, useIdioma, IDIOMAS, cambiarIdioma, idioma, locale } from '../lib/idioma'
 import { medirAccion, varianteAB } from '../lib/analitica'
@@ -36,6 +36,8 @@ const VENTAJAS = [
   [Camera, 'Foto a la etiqueta: la dirección y el teléfono entran solos'],
   [Route, 'La ruta se ordena sola por tiempo, con el tráfico típico'],
   [Navigation, 'Te guía con voz hasta cada puerta, dentro de la app'],
+  [Mic, 'Manos libres en Android: di «entregado» y sigue conduciendo'],
+  [Wallet, 'Cuánto llevas ganado hoy y la gasolina, en tu moneda'],
   [MessageCircle, 'Avisa al cliente con tu hora de llegada'],
   [ScanLine, 'Escanea los paquetes al cargar y sabes dónde va cada uno'],
 ]
