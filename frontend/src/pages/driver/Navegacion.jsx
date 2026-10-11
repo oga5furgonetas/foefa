@@ -3,14 +3,14 @@ import L from 'leaflet'
 import 'leaflet/dist/leaflet.css'
 import {
   ArrowUp, ArrowUpLeft, ArrowUpRight, CornerUpLeft, CornerUpRight, RotateCw, Undo2, MapPin, X, Phone, Volume2, VolumeX,
-  LocateFixed, Loader2, Check, Package, Navigation, Flag,
+  LocateFixed, Loader2, Check, Package, Navigation, Flag, Mic, MicOff,
 } from 'lucide-react'
 import { repNavegar } from '../../services/api'
 import {
   prepararLinea, proyectar, situarPasos, proximoPaso, textoDistancia, distanciaHablada, metrosEntre, rumbo as rumboEntre, textoPaso,
 } from '../../lib/guia'
 import { importe } from '../../lib/region'
-import { tx, useIdioma, locale, txError } from '../../lib/idioma'
+import { tx, useIdioma, locale, txError, idioma } from '../../lib/idioma'
 
 /* ── LA GUÍA DENTRO DE LA APP (04-10-2026) ───────────────────────────────────
    Dani: «yo quiero el navegador ya dentro, que coja la ruta y te vaya
@@ -32,6 +32,31 @@ const RECALCULAR_CADA = 15000
 
 const leeVoz = () => { try { return localStorage.getItem('guia_voz') !== '0' } catch { return true } }
 
+/* MANOS LIBRES (11-10-2026). Con el micrófono activado, la guía escucha órdenes cortas mientras conduces:
+   «entregado», «no entregado», «he llegado», «deshacer», «llamar», «repite», «silencio». Para que la voz de
+   la propia app no se tome por una orden: no se escucha mientras habla, solo valen frases de hasta 4
+   palabras y entre orden y orden pasan 2,5 s. Lo reconoce el propio móvil (en Android, el servicio de Google). */
+const Reconocedor = typeof window !== 'undefined' ? (window.SpeechRecognition || window.webkitSpeechRecognition) : null
+const leeManos = () => { try { return localStorage.getItem('guia_manos') === '1' } catch { return false } }
+const sinAcentos = (t) => String(t || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().trim()
+const ORDENES = {
+  es: [['deshacer', /\bdeshac(er|e)\b|\bdeshaz\b|\bme he equivocado\b/], ['no_entregado', /\bno (lo |la )?(he )?entregad[oa]\b|\bno esta\b|\bno hay nadie\b|\bausente\b/],
+    ['entregado', /\bentregad[oa]\b|\bentregue\b|\bhecho\b|\blisto\b/], ['llegado', /\b(he|ya) llegad[oa]\b|\bllegue\b|\bya estoy\b/],
+    ['llamar', /\bllam(a|ar|alo|ala)\b/], ['repite', /\brepit(e|elo)\b|\brepetir\b|\botra vez\b/], ['silencio', /\bsilencio\b|\bcallate\b/],
+    ['voz', /\bhabla\b|\bactiva la voz\b/]],
+  pt: [['deshacer', /\bdesfaz(er)?\b/], ['no_entregado', /\bnao (foi )?entreg(ue|ado|ada)\b|\bnao esta\b|\bninguem\b|\bausente\b/],
+    ['entregado', /\bentreg(ue|ado|ada)\b|\bfeito\b|\bpronto\b/], ['llegado', /\bcheguei\b|\bja estou\b/], ['llamar', /\bliga(r)?\b/],
+    ['repite', /\brepet(e|ir)\b/], ['silencio', /\bsilencio\b/], ['voz', /\bfala\b/]],
+  en: [['deshacer', /\bundo\b/], ['no_entregado', /\bnot delivered\b|\bnobody\b|\bno one\b/], ['entregado', /\bdelivered\b|\bdone\b/],
+    ['llegado', /\barrived\b|\bi'?m here\b/], ['llamar', /\bcall\b/], ['repite', /\brepeat\b/], ['silencio', /\bmute\b|\bquiet\b/],
+    ['voz', /\bunmute\b|\bvoice on\b/]],
+}
+export function ordenDeVoz(texto, lengua = 'es') {
+  const t = sinAcentos(texto)
+  if (!t || t.split(/\s+/).length > 4) return null
+  return ((ORDENES[lengua] || ORDENES.es).find(([, re]) => re.test(t)) || [null])[0]
+}
+
 function decir(texto) {
   try {
     const s = window.speechSynthesis
@@ -51,7 +76,7 @@ const horaMas = (min) => {
   return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`
 }
 
-export default function Navegacion({ parada, numero, quedan, onSalir, onEntregar, onNoEntregar, enlaceFuera, nombreFuera = 'Google Maps' }) {
+export default function Navegacion({ parada, numero, quedan, onSalir, onEntregar, onNoEntregar, onEntregarVoz, onDeshacer, enlaceFuera, nombreFuera = 'Google Maps' }) {
   useIdioma()
   const [pos, setPos] = useState(null)          // {p:[lat,lng], rumbo}
   const [errPos, setErrPos] = useState('')
@@ -67,6 +92,39 @@ export default function Navegacion({ parada, numero, quedan, onSalir, onEntregar
   const vozRef = useRef(voz)
   vozRef.current = voz
   const habla = useCallback((t) => { if (vozRef.current) decir(t) }, [])
+  const [manos, setManos] = useState(() => leeManos() && !!Reconocedor && !!ORDENES[idioma()])
+  const [oido, setOido] = useState('')
+  const [avisoManos, setAvisoManos] = useState('')
+  const ultimaOrden = useRef(0)
+  const alOir = useRef(() => {})
+  // Escucha mientras está activado; Chrome corta tras un silencio, así que se vuelve a arrancar.
+  useEffect(() => {
+    try { localStorage.setItem('guia_manos', manos ? '1' : '0') } catch { /* nada */ }
+    if (!manos || !Reconocedor) return undefined
+    let vivo = true
+    let r = null
+    const arrancar = () => {
+      if (!vivo) return
+      try {
+        r = new Reconocedor()
+        r.lang = locale()
+        r.continuous = true
+        r.interimResults = false
+        r.onresult = (e) => {
+          for (let i = e.resultIndex; i < e.results.length; i++) if (e.results[i].isFinal) alOir.current(e.results[i][0].transcript)
+        }
+        r.onerror = (e) => {
+          if (e.error === 'not-allowed' || e.error === 'service-not-allowed') {
+            vivo = false; setManos(false); setAvisoManos(tx('Dale permiso al micrófono para usar manos libres.'))
+          }
+        }
+        r.onend = () => { if (vivo) setTimeout(arrancar, 400) }
+        r.start()
+      } catch { /* ya estaba escuchando */ }
+    }
+    arrancar()
+    return () => { vivo = false; try { r?.abort() } catch { /* nada */ } }
+  }, [manos])
   useEffect(() => { try { localStorage.setItem('guia_voz', voz ? '1' : '0') } catch { /* nada */ } if (!voz) try { window.speechSynthesis?.cancel() } catch { /* nada */ } }, [voz])
 
   // La posición, mientras esta pantalla está abierta. Y la pantalla encendida.
@@ -162,6 +220,28 @@ export default function Navegacion({ parada, numero, quedan, onSalir, onEntregar
   const minRest = lista && guia.minutos && guia.prep.total ? (guia.minutos * restante) / guia.prep.total : null
   const Icono = ICONOS[paso?.icono] || ArrowUp
   const haLlegado = parada && llegado === parada.id
+
+  // Lo que hace cada orden de voz (con lo que hay en pantalla ahora mismo).
+  alOir.current = (texto) => {
+    try { if (window.speechSynthesis?.speaking) return } catch { /* nada */ }
+    if (Date.now() - ultimaOrden.current < 2500) return
+    const orden = ordenDeVoz(texto, idioma())
+    if (!orden) return
+    ultimaOrden.current = Date.now()
+    setOido(texto)
+    if (orden === 'silencio') { setVoz(false); return }
+    if (orden === 'voz') { setVoz(true); return }
+    if (orden === 'repite') { if (paso) decir(`${textoPaso(paso, tx)}.`); return }
+    if (orden === 'deshacer') { if (onDeshacer) { onDeshacer(); habla(tx('Deshecho.')) } return }
+    if (!parada) return
+    if (orden === 'llegado') { setLlegado(parada.id); habla(tx('Has llegado')); return }
+    if (orden === 'entregado') { (onEntregarVoz || onEntregar)(parada); habla(tx('Hecho. Si no era, di «deshacer».')); return }
+    if (orden === 'no_entregado') { onNoEntregar(parada); return }
+    if (orden === 'llamar') {
+      if (parada.telefono) window.location.href = `tel:${parada.telefono}`
+      else habla(tx('Esta parada no tiene teléfono.'))
+    }
+  }
   const flecha = guia?.fuente === 'linea_recta' && pos && parada ? rumboEntre(pos.p, [parada.lat, parada.lng]) : null
 
   return (
@@ -199,12 +279,28 @@ export default function Navegacion({ parada, numero, quedan, onSalir, onEntregar
           </div>
         )}
         {pidiendo && lista && <p className="mt-2 inline-block rounded-full bg-dark-900/90 px-3 py-1 text-[12px] text-dark-200">{tx('Recalculando…')}</p>}
+        {(manos || avisoManos) && (
+          <div className="pointer-events-auto mt-2 max-w-[22rem] rounded-xl bg-dark-900/95 px-3 py-2 text-[12.5px] text-dark-100 shadow-lg" role="status">
+            {avisoManos || (<>
+              <b className="text-emerald-300">🎤 {tx('Manos libres')}</b> · {tx('Di «entregado», «no entregado», «he llegado», «llamar» o «repite»')}
+              {oido && <span className="mt-0.5 block text-dark-300">{tx('Entendido: «{texto}»', { texto: oido })}</span>}
+              <span className="mt-0.5 block text-[10.5px] text-dark-400">{tx('Para entenderte, el móvil usa su reconocimiento de voz (en Android, el de Google).')}</span>
+            </>)}
+          </div>
+        )}
       </div>
 
       {/* BOTONES DEL MAPA */}
       <div className="absolute right-3 top-1/2 flex -translate-y-1/2 flex-col gap-2">
         <button onClick={() => setVoz((v) => !v)} aria-label={voz ? tx('Silenciar la voz') : tx('Activar la voz')}
           className="rounded-full border border-dark-700 bg-dark-900/95 p-3 text-dark-100 shadow-lg">{voz ? <Volume2 size={20} /> : <VolumeX size={20} />}</button>
+        {Reconocedor && ORDENES[idioma()] && (
+          <button onClick={() => { setAvisoManos(''); setOido(''); setManos((m) => !m) }} aria-pressed={manos}
+            aria-label={manos ? tx('Quitar manos libres') : tx('Manos libres')}
+            className={`rounded-full border p-3 shadow-lg ${manos ? 'border-emerald-500 bg-emerald-700 text-white' : 'border-dark-700 bg-dark-900/95 text-dark-100'}`}>
+            {manos ? <Mic size={20} /> : <MicOff size={20} />}
+          </button>
+        )}
         {!seguir && (
           <button onClick={() => setSeguir(true)} aria-label={tx('Centrar en mí')}
             className="rounded-full border border-dark-700 bg-dark-900/95 p-3 text-sky-300 shadow-lg"><LocateFixed size={20} /></button>

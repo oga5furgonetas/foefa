@@ -1183,6 +1183,7 @@ export default function MiRuta({ onBack, embebido = false }) {
           <Navegacion parada={objetivo} numero={objetivo?.orden ?? (objetivo ? pendientes.indexOf(objetivo) + 1 : null)}
             quedan={pendientes.length} onSalir={() => setGuiando(null)}
             onEntregar={(p) => marcar(p, 'entregado')} onNoEntregar={(p) => setFallo(p)}
+            onEntregarVoz={(p) => marcar(p, 'entregado', undefined, undefined, {})} onDeshacer={deshacer ? deshacerUltima : null}
             enlaceFuera={(p) => navegar(p, fuera)} nombreFuera={nombreNavegador(fuera)} />
         </Suspense>
       )}

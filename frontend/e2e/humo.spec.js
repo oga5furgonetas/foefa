@@ -1930,6 +1930,70 @@ test('Reparto · navegar dentro de la app: maniobras, llegada, entregar y a la s
   expect(fallos).toEqual([])
 })
 
+/* MANOS LIBRES (11-10-2026): en la guía, órdenes de voz cortas. El reconocimiento del navegador se simula. */
+test('Reparto · manos libres: «he llegado» y «entregado» por voz, sin foto y a la siguiente', async ({ page, context }) => {
+  const fallos = vigilar(page)
+  const b64 = (o) => btoa(JSON.stringify(o)).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '')
+  const token = `${b64({ alg: 'HS256' })}.${b64({ sub: 'd1', role: 'driver', name: 'ANA', exp: Math.floor(Date.now() / 1000) + 3600 })}.x`
+  await page.addInitScript((t) => {
+    localStorage.setItem('flota_driver_token', t)
+    localStorage.setItem('flota_driver', JSON.stringify({ id: 'd1', name: 'ANA' }))
+    localStorage.setItem('cookie_consent', '1')
+    localStorage.setItem('guia_voz', '0')
+    window.webkitSpeechRecognition = class {
+      constructor() { window.__rec = this }
+      start() { window.__escuchando = (window.__escuchando || 0) + 1 }
+      abort() {}
+      stop() {}
+    }
+    window.SpeechRecognition = window.webkitSpeechRecognition
+    window.__decir = (frase) => window.__rec.onresult({ resultIndex: 0, results: [Object.assign([{ transcript: frase }], { isFinal: true })] })
+  }, token)
+  await context.grantPermissions(['geolocation'])
+  await context.setGeolocation({ latitude: 43.3665, longitude: -8.4065 })
+  await simularApi(page, 'vacio')
+  let pedidos = [
+    { id: 'p1', cliente: 'Bar Pepe', direccion: 'Rúa Galera 10', estado: 'pendiente', bultos: 1, orden: 1, lat: 43.3704, lng: -8.4003 },
+    { id: 'p2', cliente: 'Farmacia Sol', direccion: 'Rúa Real 5', estado: 'pendiente', bultos: 1, orden: 2, lat: 43.3690, lng: -8.4010 },
+  ]
+  await page.route(/\/api\/reparto\/mi-ruta\/navegar/, (r) => r.fulfill({ json: {
+    fuente: 'carreteras', metros: 600, minutos: 3, linea: [[43.3665, -8.4065], [43.3704, -8.4003]],
+    pasos: [{ texto: 'Sigue recto por Rúa San Andrés', icono: 'recto', punto: [43.3665, -8.4065], metros: 600 },
+      { texto: 'Has llegado', icono: 'llegada', punto: [43.3704, -8.4003], metros: 0 }] } }))
+  const estados = []
+  await page.route(/\/api\/reparto\/pedidos\/p\d\/estado/, async (r) => {
+    estados.push(r.request().postDataJSON())
+    pedidos = pedidos.map((p) => (r.request().url().includes(`/${p.id}/`) ? { ...p, estado: 'entregado' } : p))
+    await r.fulfill({ json: {} })
+  })
+  await page.route(/\/api\/reparto\/mi-ruta$/, (r) => r.fulfill({ json: {
+    activo: true, autonomo: true, fecha: '2026-10-11', jornada: {}, aviso_aceptado: true, base: null,
+    ruta: { fin: '10:40', minutos: 40, km: 9.5, trafico: true }, pedidos } }))
+  await page.goto('/conductor?vista=ruta', { waitUntil: 'domcontentloaded' })
+  await page.getByRole('button', { name: 'Empezar a navegar' }).click()
+  const nav = page.getByRole('dialog', { name: 'Navegación' })
+  await expect(nav.getByText('Bar Pepe')).toBeVisible()
+
+  await nav.getByRole('button', { name: 'Manos libres' }).click()
+  await expect(nav.getByText(/Di «entregado», «no entregado»/)).toBeVisible()
+  await expect.poll(() => page.evaluate(() => window.__escuchando || 0)).toBeGreaterThan(0)
+  // Una frase larga (o la propia voz de la guía) no es una orden.
+  await page.evaluate(() => window.__decir('ya casi he llegado y luego lo dejo entregado'))
+  await expect(nav.getByText('Has llegado')).toHaveCount(0)
+  await page.evaluate(() => window.__decir('he llegado'))
+  await expect(nav.getByText('Has llegado')).toBeVisible()
+  await expect(nav.getByText('Entendido: «he llegado»')).toBeVisible()
+  await page.waitForTimeout(2600)                                  // entre orden y orden, 2,5 s
+  await page.evaluate(() => window.__decir('Entregado'))
+  await expect.poll(() => estados.length).toBe(1)
+  expect(estados[0]).toMatchObject({ estado: 'entregado' })
+  await expect(page.getByRole('button', { name: 'Entregar sin foto' })).toHaveCount(0)   // por voz no pide la foto
+  await expect(nav.getByText('Farmacia Sol')).toBeVisible()                              // y sola, a la siguiente
+  // Se queda activado para la próxima vez.
+  expect(await page.evaluate(() => localStorage.getItem('guia_manos'))).toBe('1')
+  expect(fallos).toEqual([])
+})
+
 /* ── EL COBRO DE QUIEN REPARTE SOLO (04-10-2026) ─────────────────────────────
    Prueba con tarjeta (hoy 0 €), muro al acabar, pasar a anual, regalos y la
    app de Play sin botones de pago. */
