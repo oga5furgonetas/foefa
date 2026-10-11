@@ -1,5 +1,8 @@
 # Publicaciones en grupos de Latinoamérica (11-10-2026)
 
+OJO: al publicar, Facebook te enseña TU publicación en el muro del grupo aunque esté pendiente de
+admin. Comprobar siempre en `/groups/<id>/my_pending_content` (Pendiente/Publicado) antes de darla por visible.
+
 Reglas: como el perfil de Daniel (no la página FDs), diciendo que la app es nuestra, texto distinto por grupo y en
 su forma de hablar, condiciones de «Invita y gana» completas (20 entregas en 2 días, cobro desde 10 € por PayPal).
 Solo grupos de PAQUETERÍA / mensajería (en los de comida, con 1-2 pedidos, ordenar la ruta no sirve). Si un grupo
@@ -9,9 +12,9 @@ Enlace: `https://flotadsp.com/repartidores?utm_source=grupo&utm_medium=facebook&
 | Fecha | Grupo | Miembros | Estado | utm_content |
 |---|---|---|---|---|
 | 11-10 | Repartidores Mercado Libre México | 87 mil | pendiente de admin | mx_ml_mexico |
-| 11-10 | Repartidores CDMX | 42 mil | visible | mx_repartidores_cdmx |
-| 11-10 | Mercado flex envios logísticas repartidores cadetes (AR) | 72 mil | visible | ar_flex_cadetes |
-| 11-10 | MENSAJERÍA Y LOGÍSTICA BOGOTA | 9,7 mil | visible | co_mensajeria_bogota |
+| 11-10 | Repartidores CDMX | 42 mil | pendiente de admin | mx_repartidores_cdmx |
+| 11-10 | Mercado flex envios logísticas repartidores cadetes (AR) | 72 mil | pendiente de admin | ar_flex_cadetes |
+| 11-10 | MENSAJERÍA Y LOGÍSTICA BOGOTA | 9,7 mil | pendiente de admin | co_mensajeria_bogota |
 
 Unido, sin publicar: Repartidores de Mercado Libre y Amazon (México), Repartidores mercado libre CDMX y Edo. Mex.,
 mensajería mercado libre envios flex en el dia particulares (AR, 25 mil), Mercado envíos Flex zona oeste (AR),

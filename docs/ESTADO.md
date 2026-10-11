@@ -951,6 +951,8 @@ Repaso de cada frase de `/planes` y de la presentación contra el código (Dani:
   Nominatim; donde solo encontró la calle, la dirección va sin número. Las paradas de ejemplo de una cuenta real sin
   GPS ni almacén caen en su país (`_rep_centro_pais`), no en Madrid.
 - **Grupos de Facebook** (como Daniel, no como la página FDs): publicado en «Repartidores Mercado Libre México»
-  (pendiente de admin), «Repartidores CDMX» y «Mercado flex envios logísticas repartidores cadetes» (Argentina).
+  «Repartidores CDMX», «Mercado flex envios logísticas repartidores cadetes» (Argentina) y «MENSAJERÍA Y
+  LOGÍSTICA BOGOTA»: las 4 pendientes de aprobación del admin (Facebook enseña la tuya en el muro aunque esté
+  pendiente: mirar `/groups/<id>/my_pending_content`).
   Unido a 3 de Colombia y 2 más de Argentina. Un grupo pedía «¿cuánto llevas repartiendo?»: no se inventa, se salta.
 - Las «594 visitas de YouTube» del 03-10 eran un robot (todas en «/», ni una acción).
