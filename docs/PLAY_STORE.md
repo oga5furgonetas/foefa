@@ -269,9 +269,60 @@ Privacidad por diseño: cada repartidor ve solo sus pedidos, la ubicación
 solo se comparte durante la jornada que él mismo empieza y termina, y los
 datos de los clientes se borran solos. Más en flotadsp.com/privacidad.
 
-Pruébala sin registrarte: abre la app y pulsa «Probar sin cuenta».
 
 **Categoría**: Empresa. **Etiquetas**: reparto, rutas, logística, flota.
+
+### Fichas para Latinoamérica y Brasil (11-10-2026)
+
+En Play Console → Presencia en la tienda → Ficha principal → «Gestionar traducciones» → añadir
+**Español (Latinoamérica) – es-419** y **Portugués (Brasil) – pt-BR**, y pegar esto. Sin Bizum (solo existe en
+España); la app ya cobra en la moneda del país, con Pix en Brasil. Sin «pruébala sin cuenta»: en la
+app no está a propósito (Dani, 04-10: la cuenta es gratis, sería una incongruencia).
+
+**es-419 · Nombre** (≤ 30): FDS – Rutas de reparto
+
+**es-419 · Descripción corta** (≤ 80):
+Ordena tu ruta de reparto sola: foto a la guía, mapa y guía por voz. Gratis.
+
+**es-419 · Descripción larga**:
+FDS es la app para repartidores y mensajeros de paquetería que reparten por su cuenta.
+
+• Le tomas una foto a la guía o escaneas el código del paquete: la dirección y el teléfono entran solos
+  (la foto se lee en tu celular, no se envía a nadie). También puedes pegar una lista de direcciones.
+• La ruta se ordena sola por tiempo, con el tráfico típico de cada hora, y ves la hora estimada de cada parada.
+• Te guía con voz hasta cada puerta, dentro de la app, o abre tu navegador de siempre.
+• En cada parada: llamar o escribir por WhatsApp al cliente, marcar entregado o no entregado y cobrar
+  (efectivo, tarjeta o transferencia) si el pedido lo lleva.
+• «Mi dinero hoy»: pon cuánto te pagan por entrega y la app te dice cuánto llevas ganado, la gasolina y lo
+  que te queda limpio, en la moneda de tu país.
+• Al terminar, comparte tu día con una imagen para tu estado.
+• Invita a otros repartidores con tu enlace y gana por cada uno que la use (cobro por PayPal).
+
+Gratis y sin límite hasta el 31 de diciembre, sin tarjeta. Después, gratis hasta 15 paradas al día.
+
+
+**pt-BR · Nome** (≤ 30): FDS – Rotas de entrega
+
+**pt-BR · Descrição curta** (≤ 80):
+Organize sua rota de entregas: foto da etiqueta, mapa e guia por voz. Grátis.
+
+**pt-BR · Descrição completa**:
+FDS é o app para entregadores e motoristas de encomendas que trabalham por conta própria.
+
+• Tire uma foto da etiqueta ou escaneie o código do pacote: o endereço e o telefone entram sozinhos
+  (a foto é lida no seu celular, não é enviada a ninguém). Também dá para colar uma lista de endereços.
+• A rota se organiza sozinha por tempo, com o trânsito típico de cada hora, e você vê o horário previsto de
+  cada parada.
+• O app te guia por voz até cada porta, ou abre o seu navegador de sempre.
+• Em cada parada: ligar ou mandar WhatsApp ao cliente, marcar entregue ou não entregue e receber
+  (dinheiro, cartão ou Pix) se o pedido tiver cobrança.
+• «Meu dinheiro hoje»: informe quanto você ganha por entrega e o app mostra quanto já ganhou, o combustível
+  e o que sobra, em reais.
+• No fim do dia, compartilhe o seu dia com uma imagem para o seu status.
+• Convide outros entregadores com o seu link e ganhe por cada um que usar (pagamento por PayPal).
+
+Grátis e sem limite até 31 de dezembro, sem cartão. Depois, grátis até 15 paradas por dia.
+
 
 ## Seguridad de los datos (cuestionario de Play), respuestas
 

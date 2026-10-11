@@ -1,15 +1,14 @@
 import { useEffect, useState } from 'react'
 import { Zap, Loader2, ScanLine, Route, Navigation, MessageCircle, Camera, Check, ArrowRight } from 'lucide-react'
-import { API_BASE, DRIVER_TOKEN_KEY } from '../services/api'
 import { MARCA } from '../marca'
-import { tx, useIdioma, IDIOMAS, cambiarIdioma, idioma, txError, locale } from '../lib/idioma'
+import { tx, useIdioma, IDIOMAS, cambiarIdioma, idioma, locale } from '../lib/idioma'
 import { medirAccion, varianteAB } from '../lib/analitica'
 import { evento, eventoUnaVez } from '../lib/metaPixel'
 import { useInvitacion } from '../lib/referido'
 import AltaRapida from './AltaRapida'
 import { PARADAS_GRATIS, promoGratis, fechaPromo, eurosRef } from '../lib/precios'
 import { paisDelMovil } from '../lib/region'
-const zonaDelMovil = () => { try { return Intl.DateTimeFormat().resolvedOptions().timeZone || '' } catch { return '' } }
+import { abrirDemoReparto } from '../lib/demoReparto'
 /* «Invita y gana»: en España por Bizum; en Latinoamérica por PayPal. En China no hay (por la hora del móvil). */
 const conInvita = () => { try { return !/^Asia\/(Shanghai|Chongqing|Harbin|Urumqi|Hong_Kong|Macau)$/.test(Intl.DateTimeFormat().resolvedOptions().timeZone) } catch { return true } }
 /* Con quién reparte la gente en cada país (11-10-2026): quien llega de México tiene que ver lo suyo. */
@@ -102,15 +101,7 @@ export default function Repartidores() {
     evento('Lead', { content_name: 'probar_demo' })   // intención: la señal con la que Meta optimiza los anuncios
     setOcupado(true); setErr('')
     try {
-      const r = await fetch(`${API_BASE}/auth/demo-reparto`, {
-        // Su país y su hora: la demo le pone las paradas en una ciudad suya (11-10-2026).
-        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ rol: 'autonomo', pais: paisDelMovil(), zona_horaria: zonaDelMovil() }),
-      })
-      const j = await r.json()
-      if (!r.ok || !j.access_token) throw new Error(txError(j, 'No se pudo abrir la prueba'))
-      localStorage.setItem(DRIVER_TOKEN_KEY, j.access_token)
-      localStorage.setItem('flota_driver', JSON.stringify(j.driver))
-      window.location.href = '/conductor?vista=ruta'
+      await abrirDemoReparto()          // en una ciudad de su país y a su hora (11-10-2026)
     } catch (e) { setErr(e.message || tx('Sin conexión')); setOcupado(false) }
   }
 
