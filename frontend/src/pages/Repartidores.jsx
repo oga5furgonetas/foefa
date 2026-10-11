@@ -264,7 +264,7 @@ export default function Repartidores() {
         <p className="mt-8 text-center text-[12px] text-dark-500">
           {/* LSSI art. 10: quién está detrás, a un clic desde la página que se comparte (10-10-2026:
               un grupo de Telegram borró el enlace porque desde aquí no se llegaba al aviso legal). */}
-          {MARCA.nombre} · <a href="/aviso-legal" className="hover:underline">{tx('Aviso legal')}</a> · <a href="/privacidad" className="hover:underline">{tx('Privacidad')}</a> · <a href="/terminos" className="hover:underline">{tx('Términos')}</a> · <a href="/cookies" className="hover:underline">{tx('Cookies')}</a>
+          {MARCA.nombre} · <a href="/aviso-legal" className="hover:underline">{tx('Aviso legal')}</a> · <a href="/privacidad" className="hover:underline">{tx('Privacidad')}</a> · <a href="/terminos" className="hover:underline">{tx('Términos')}</a> · <a href="/cookies" className="hover:underline">{tx('Cookies')}</a> · <a href={idioma() === 'pt' ? '/guia-rota-de-entregas' : '/guia-ruta-de-reparto'} className="hover:underline">{tx('Guía: cómo ordenar la ruta')}</a>
         </p>
       </div>
     </div>
