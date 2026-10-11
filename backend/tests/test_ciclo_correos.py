@@ -13,7 +13,8 @@ import ciclo_correos as cc
 import server
 from base_de_mentira import Col, Db
 
-AHORA = datetime(2026, 10, 10, 12, 0, tzinfo=timezone.utc)
+# Lunes 12-10-2026 a las 8:00 de Madrid: «primer_dia» y «recordatorio» solo salen por la mañana de su hora.
+AHORA = datetime(2026, 10, 12, 6, 0, tzinfo=timezone.utc)
 
 
 def _org(horas=1, dias_prueba=7, **extra):
@@ -62,6 +63,31 @@ def test_recordatorio_entre_el_dia_3_y_el_8_si_sigue_sin_paradas():
     assert cc.toca(_org(horas=24 * 9, ciclo_correos=env), {"paradas": 0}, AHORA) == ""      # tarde
     env["recordatorio"] = {"at": "2026-10-03T00:00:00+00:00"}
     assert cc.toca(_org(horas=24 * 4, ciclo_correos=env), {"paradas": 0}, AHORA) == ""      # una vez
+
+
+def test_primer_dia_y_recordatorio_solo_por_la_manana_de_su_hora_y_no_en_domingo():
+    env = {"bienvenida": {"at": "2026-10-01T00:00:00+00:00"}}
+    sin = {"paradas": 0}
+    for hora_utc, sale in ((4, False), (5, True), (6, True), (7, False), (15, False), (22, False)):
+        ahora = AHORA.replace(hour=hora_utc)              # Madrid = UTC+2 en octubre: sale de 7:00 a 8:59
+        org = _org(horas=30, ciclo_correos=env, created_at=(ahora - timedelta(hours=30)).isoformat())
+        assert (cc.toca(org, sin, ahora) == "primer_dia") is sale, hora_utc
+    # El domingo no: no se reparte (o no se carga) y molestar ese día no ayuda.
+    domingo = AHORA - timedelta(days=1)
+    org = _org(horas=30, ciclo_correos=env, created_at=(domingo - timedelta(hours=30)).isoformat())
+    assert cc.toca(org, sin, domingo) == ""
+    # Su zona manda: las 8:00 de Madrid son la 1:00 en Ciudad de México; allí sale a sus 7-8.
+    org = _org(horas=24 * 4, ciclo_correos=env, zona_horaria="America/Mexico_City")
+    assert cc.toca(org, sin, AHORA) == ""
+    mx = AHORA + timedelta(hours=7)                       # 8:00 en Ciudad de México
+    org = _org(horas=24 * 4, ciclo_correos=env, zona_horaria="America/Mexico_City",
+               created_at=(mx - timedelta(days=4)).isoformat())
+    assert cc.toca(org, sin, mx) == "recordatorio"
+    # Una zona que no existe no rompe nada: cuenta la de Madrid.
+    assert cc.en_su_manana({"zona_horaria": "Marte/Olimpo"}, AHORA) is True
+    # Lo demás no espera a la mañana: la bienvenida sale al momento.
+    tarde = AHORA.replace(hour=20)
+    assert cc.toca(_org(horas=0.1, created_at=(tarde - timedelta(hours=0.1)).isoformat()), {}, tarde) == "bienvenida"
 
 
 def test_invita_cuando_ya_lleva_10_entregas_de_verdad():

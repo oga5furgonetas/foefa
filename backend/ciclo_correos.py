@@ -17,6 +17,9 @@ haría alguien que lleva la app y se fija en cada alta:
   · «recordatorio» (11-10-2026) — entre el día 3 y el 8, si SIGUE sin cargar
     ninguna parada: muchos se dan de alta en fin de semana y el lunes ya no se
     acuerdan. Los tres pasos otra vez y lo que le ahorra (manos libres, su dinero).
+  · «primer_dia» y «recordatorio» salen POR LA MAÑANA de su hora (12-10-2026): de 7 a 9, de lunes a
+    sábado, que es cuando carga la furgoneta y tiene los paquetes delante. Antes salían a la hora a la
+    que se dio de alta (de tarde o de noche, desde el anuncio), cuando ya no hay nada que cargar.
   · «invita» (11-10-2026) — cuando ya lleva 10 entregas de verdad (direcciones
     distintas y repartidas en el día, como cuenta «Invita y gana»: marcar 11 en 20
     minutos a medianoche es probar, no repartir). Su enlace y las condiciones exactas.
@@ -44,6 +47,7 @@ CASI_FIN_ANTES = timedelta(days=2)
 CASI_FIN_EDAD_MIN = timedelta(days=3)      # una prueba corta no recibe dos correos seguidos
 RECORDATORIO_DESDE = timedelta(days=3)
 RECORDATORIO_HASTA = timedelta(days=8)
+MANANA_DESDE, MANANA_HASTA = 7, 9          # «primer_dia» y «recordatorio», de 7:00 a 8:59 de su hora
 INVITA_ENTREGAS = 10                       # entregas suyas (no de ejemplo) para pedirle que invite
 
 _PAISES_PT = {"pt", "br", "ao", "mz", "cv"}
@@ -88,6 +92,17 @@ def _reales(uso: dict) -> int:
     return int(u.get("entregadas_reales", u.get("entregadas")) or 0)
 
 
+def en_su_manana(org: dict, ahora: datetime) -> bool:
+    """De 7 a 9 de la mañana de su hora (su zona; si no consta, Madrid), de lunes a sábado."""
+    from zoneinfo import ZoneInfo
+    try:
+        zona = ZoneInfo(str((org or {}).get("zona_horaria") or "Europe/Madrid"))
+    except Exception:                                            # noqa: BLE001 — zona rara: la de Madrid
+        zona = ZoneInfo("Europe/Madrid")
+    local = ahora.astimezone(zona)
+    return local.weekday() != 6 and MANANA_DESDE <= local.hour < MANANA_HASTA
+
+
 def toca(org: dict, uso: dict, ahora: datetime, promo: bool = False) -> str:
     """La clave del correo que toca mandar AHORA, o "" si ninguno. Con la promoción
     «gratis y sin límite» activa no hay «se acaba tu prueba»: no se acaba nada."""
@@ -104,11 +119,12 @@ def toca(org: dict, uso: dict, ahora: datetime, promo: bool = False) -> str:
     ultimos = [u for u in ultimos if u]
     if ultimos and ahora - max(ultimos) < SEPARACION:
         return ""
+    manana = en_su_manana(org, ahora)
     if ("primer_dia" not in enviados and PRIMER_DIA_DESDE <= edad <= PRIMER_DIA_HASTA
-            and not (uso or {}).get("paradas")):
+            and not (uso or {}).get("paradas") and manana):
         return "primer_dia"
     if ("recordatorio" not in enviados and RECORDATORIO_DESDE <= edad <= RECORDATORIO_HASTA
-            and not (uso or {}).get("paradas")):
+            and not (uso or {}).get("paradas") and manana):
         return "recordatorio"
     if ("invita" not in enviados and _reales(uso) >= INVITA_ENTREGAS
             and str(org.get("pais") or "es").lower() != "cn"):        # en China no hay cómo pagar
