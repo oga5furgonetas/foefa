@@ -981,3 +981,29 @@ Repaso de cada frase de `/planes` y de la presentación contra el código (Dani:
 - **Métrica**: `usuarios_total.py` separa a los testers de Play (correo como nombre o 3 altas en el mismo
   minuto). A esta hora: 16 autónomos reales + 3 testers. Un usuario de verdad ya: 36 paradas y 11 entregas.
 - Grupos de Facebook: 7 publicaciones en grupos latinos, todas pendientes de admin.
+
+## 11-10-2026 (noche): arreglos de lo que veían los usuarios
+
+- **Errores guardados de los navegadores** (`client_errors` en la base `flota`, scratchpad `errores_cliente.py`):
+  de ahí salieron tres fallos reales.
+  - **Empleo**: con un CV elegido desde Drive/la nube, el envío moría sin respuesta siempre igual (el 21-09 una
+    persona falló 10 veces y entró al quitar el CV; el 06-10 otra falló 4 y se fue). Ahora el CV se lee al
+    elegirlo y, si con él no sale, la candidatura entra sin él y se le dice (`enviarConCvOSinEl`, vigilado por
+    `scripts/check-envio-candidatura.mjs` y un test de humo).
+  - **Traductor del navegador**: «removeChild… not a child» al pulsar «Entrar» con la página traducida (3 intentos
+    el 03-10). `main.jsx` hace tolerantes `removeChild`/`insertBefore` (solución del propio React, issue 11538).
+  - «Java object is gone» (navegador de Facebook) pasa a ruido: no es nuestro.
+- **La app instalada abre directa en /ruta** para quien reparte solo (`flota_inicio` con su id; antes cargaba el
+  panel de empresa en cada apertura). El bucle /app↔/panel del 11-10 a las 7:00 era el robot de Play relanzando.
+- **Correos «primer día» y «recordatorio» por la mañana de su hora** (7-9, lunes a sábado): salían a la hora del
+  alta, de tarde o de noche. Nadie tenía avisos push activados, así que el correo es lo único que llega el lunes.
+- **Portugués de Brasil de verdad en el embudo** (`lib/textosBrasil.js`): portada, «Empezar», alta, primera
+  pantalla, recorrido, aviso de la mañana y cookies. Antes: «guia-o por voz», «a app», «Ganha… que a use».
+- **Guías para Google**: «ruta con más de 10 paradas» (es) y «rota com mais de 10 paradas» (pt-BR), con el dato
+  del límite de la ayuda oficial; enlazadas y pedida su indexación. `enPromo()` exportado de la plantilla.
+- **9 Shorts** en YouTube (en, fr, it, de añadidos). TikTok por web: la subida llega a sus servidores pero la
+  página no pasa del procesado con Chrome en segundo plano; Dani no quiso traer Chrome al frente.
+- **Para Dani**: (1) la campaña de TikTok «interés» sigue gastando (90 visitas en 24 h, 0 altas; 203 € antes y 0
+  altas): pausarla y pasar ese dinero a Meta (~1,9 € por alta) cuando arregle el pago; (2) el carrusel de TikTok
+  del 10-10 dice «5 € por Bizum» (editar desde el móvil); (3) 3 de los 7 posts en grupos de Mercado Libre los
+  suprimieron los admins.
