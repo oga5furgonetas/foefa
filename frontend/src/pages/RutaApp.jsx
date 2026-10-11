@@ -14,6 +14,7 @@ import { enviarPendiente, olvidarPendiente } from '../lib/metaPixel'
 import { isAuthed, esSuplantacion, volverASuper, getAdmin } from '../panel/auth'
 import { Cuenta, Muro } from './RutaCuenta'
 import OpinionRuta from './OpinionRuta'
+import AvisoManana from './AvisoManana'
 import InstalarApp, { PasoInstalar } from './InstalarApp'
 import { recienAlta, olvidarRecienAlta, yaEsApp } from '../lib/instalar'
 import { useToast } from '../lib/toast'
@@ -172,6 +173,7 @@ export default function RutaApp() {
             <button onClick={invitar} className="shrink-0 rounded-xl bg-emerald-700 px-3 py-1.5 text-[12.5px] font-bold text-white">{tx('Invitar')}</button>
           </div>
         )}
+        {tab === 'hoy' && !esSuplantacion() && <AvisoManana toast={toast} />}
         {(tab === 'hoy' || tab === 'ajustes') && bloqueado
           ? <Muro billing={billing} toast={toast} recargar={recargar} irACuenta={() => setTab('cuenta')} />
           : <>

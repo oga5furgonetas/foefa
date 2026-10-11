@@ -1930,6 +1930,32 @@ test('Reparto · navegar dentro de la app: maniobras, llegada, entregar y a la s
   expect(fallos).toEqual([])
 })
 
+/* AVISO DE LA MAÑANA (11-10-2026): se ofrece una vez; «Sí, avísame» suscribe el móvil a los avisos. */
+test('Ruta · aviso de la mañana: se ofrece, se activa y no se vuelve a preguntar', async ({ page }) => {
+  const fallos = vigilar(page)
+  await entrarRepartidor(page, { status: 'trial', days_left: 6, promo: { activa: true, hasta: '2026-12-31' } })
+  await page.addInitScript(() => {
+    // Un navegador con avisos: permiso que se concede y una suscripción de mentira.
+    window.Notification = { permission: 'default', requestPermission: async () => 'granted' }
+    window.PushManager = function () {}
+    const reg = { pushManager: { getSubscription: async () => null, subscribe: async () => ({ toJSON: () => ({ endpoint: 'https://push.example/e1', keys: {} }) }) } }
+    Object.defineProperty(navigator, 'serviceWorker', { value: { register: async () => reg, ready: Promise.resolve(reg), getRegistration: async () => reg }, configurable: true })
+  })
+  const suscritas = []
+  await page.route(/\/api\/push\/vapid-key/, (r) => r.fulfill({ json: { key: 'BEl62iUYgUivxIkv69yViEuiBIa-Ib9-SkvMeAtA3LFgDzkrxZJjSgSnfckjBJuBkr3qBUYIHBQFLXYp5Nksh8U', enabled: true } }))
+  await page.route(/\/api\/push\/subscribe/, async (r) => { suscritas.push(r.request().postDataJSON()); await r.fulfill({ json: { ok: true } }) })
+  await page.goto('/ruta', { waitUntil: 'domcontentloaded' })
+  const tarjeta = page.getByRole('region', { name: 'Aviso por la mañana' })
+  await expect(tarjeta.getByText('¿Te aviso por la mañana para cargar tu ruta?')).toBeVisible()
+  await tarjeta.getByRole('button', { name: 'Sí, avísame' }).click()
+  await expect.poll(() => suscritas.length).toBe(1)
+  expect(suscritas[0].subscription.endpoint).toBe('https://push.example/e1')
+  await expect(tarjeta).toHaveCount(0)
+  await page.reload({ waitUntil: 'domcontentloaded' })
+  await expect(page.getByRole('region', { name: 'Aviso por la mañana' })).toHaveCount(0)    // no se vuelve a preguntar
+  expect(fallos).toEqual([])
+})
+
 /* MANOS LIBRES (11-10-2026): en la guía, órdenes de voz cortas. El reconocimiento del navegador se simula. */
 test('Reparto · manos libres: «he llegado» y «entregado» por voz, sin foto y a la siguiente', async ({ page, context }) => {
   const fallos = vigilar(page)

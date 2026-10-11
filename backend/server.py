@@ -20945,6 +20945,69 @@ async def _bucle_ciclo_correos():
 @app.on_event("startup")
 async def start_ciclo_correos():
     asyncio.create_task(_bucle_ciclo_correos())
+    asyncio.create_task(_bucle_aviso_manana())
+
+
+# ── AVISO DE LA MAÑANA (11-10-2026) ─────────────────────────────────────────
+# Quien reparte solo y lo ha pedido en la app (AvisoManana.jsx) recibe UNA notificación a las 8 de su
+# hora, de lunes a sábado, solo si ese día aún no ha metido paquetes. Durante sus primeros 21 días:
+# es para arrancar, no para perseguir a nadie. Uno por día y cuenta (se marca ANTES de mandar).
+AVISO_MANANA_HORA = 8
+AVISO_MANANA_DIAS = 21
+_AVISO_MANANA_TEXTOS = {
+    "es": ("¿Empezamos la ruta?", "Mete tus paquetes con una foto a la etiqueta y la ruta se ordena sola."),
+    "pt": ("Começamos a rota?", "Carrega os teus volumes com uma foto à etiqueta e a rota ordena-se sozinha."),
+    "en": ("Ready to start your route?", "Snap each parcel label and your route sorts itself."),
+}
+
+
+async def _aviso_manana_vuelta(ahora: Optional[datetime] = None) -> int:
+    """Una vuelta: manda el aviso a quien le toca AHORA. Devuelve cuántos se mandaron."""
+    if not _push_enabled:
+        return 0
+    from zoneinfo import ZoneInfo
+    ahora = ahora or datetime.now(timezone.utc)
+    desde = (ahora - timedelta(days=AVISO_MANANA_DIAS)).isoformat()
+    con_aviso = set(await global_db.push_subscriptions.distinct("org_id"))
+    if not con_aviso:
+        return 0
+    orgs = await global_db.organizations.find(
+        {"id": {"$in": list(con_aviso)}, "sector": "autonomo", "created_at": {"$gte": desde}},
+        {"_id": 0}).to_list(2000)
+    mandados = 0
+    for org in orgs:
+        try:
+            zona = _zona_valida(org.get("zona_horaria")) or "Europe/Madrid"
+            local = ahora.astimezone(ZoneInfo(zona))
+            if local.hour != AVISO_MANANA_HORA or local.weekday() == 6:      # a las 8, de lunes a sábado
+                continue
+            hoy = local.strftime("%Y-%m-%d")
+            if org.get("aviso_manana") == hoy:
+                continue
+            col = client[_tenant_db_name(org)].reparto_pedidos
+            if await col.find_one({"fecha": hoy, "ejemplo": {"$ne": True}}, {"_id": 0, "id": 1}):
+                continue                                                # ya tiene paquetes hoy
+            r = await global_db.organizations.update_one(
+                {"id": org["id"], "aviso_manana": {"$ne": hoy}}, {"$set": {"aviso_manana": hoy}})
+            if not r.modified_count:
+                continue
+            titulo, cuerpo = _AVISO_MANANA_TEXTOS[ciclo_correos.idioma_de(org)]
+            usuarios = await global_db.push_subscriptions.distinct("user_id", {"org_id": org["id"]})
+            await send_web_push_to_users(usuarios, titulo, cuerpo, url="/ruta?utm_source=push&utm_content=manana")
+            mandados += 1
+        except Exception as e:                                   # noqa: BLE001
+            logger.warning("aviso de la mañana (%s): %s", org.get("id"), e)
+    return mandados
+
+
+async def _bucle_aviso_manana():
+    await asyncio.sleep(150)
+    while True:
+        try:
+            await _aviso_manana_vuelta()
+        except Exception as e:                                   # noqa: BLE001
+            logger.error("Bucle del aviso de la mañana: %s", e)
+        await asyncio.sleep(10 * 60)
 
 
 def _baja_pagina(titulo: str, texto: str) -> HTMLResponse:
