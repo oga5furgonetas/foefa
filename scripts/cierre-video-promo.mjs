@@ -19,12 +19,19 @@ const DURA = 4
 const VIDEOS_A_CORTAR = [
   ['tiktok-es.mp4', 16.4, 'es', 'shorts-es.mp4'], ['tiktok-pt.mp4', 16.4, 'pt', 'shorts-pt.mp4'],
   ['tiktok-es-llama.mp4', 9.2, 'es', 'shorts-es-llama.mp4'], ['tiktok-pt-llama.mp4', 9.2, 'pt', 'shorts-pt-llama.mp4'],
+  // 11-10-2026: el cierre viejo empieza en 16,6 / 17,6 / 16,8 / 15,8 s (medido por el brillo): 0,4 s antes.
+  ['tiktok-en.mp4', 16.2, 'en', 'shorts-en.mp4'], ['tiktok-fr.mp4', 17.2, 'fr', 'shorts-fr.mp4'],
+  ['tiktok-it.mp4', 16.4, 'it', 'shorts-it.mp4'], ['tiktok-de.mp4', 15.4, 'de', 'shorts-de.mp4'],
 ]
 
 // Lo que dice el cierre en cada idioma (nada que la app no cumpla: ver src/lib/precios.js y Terminos 5 bis).
 const CIERRES = {
   es: { gratis: 'GRATIS y sin límite', hasta: 'hasta el 31 de diciembre · sin tarjeta', gana: 'Y gana 2,50 € por cada compañero que la use' },
   pt: { gratis: 'GRÁTIS e sem limite', hasta: 'até 31 de dezembro · sem cartão', gana: 'E ganhe 2,50 € por cada colega que usar' },
+  en: { gratis: 'FREE, no limits', hasta: 'until December 31 · no card', gana: 'And earn €2.50 for each colleague who uses it' },
+  fr: { gratis: 'GRATUIT et sans limite', hasta: 'jusqu’au 31 décembre · sans carte', gana: 'Et gagnez 2,50 € par collègue qui l’utilise' },
+  it: { gratis: 'GRATIS e senza limiti', hasta: 'fino al 31 dicembre · senza carta', gana: 'E guadagni 2,50 € per ogni collega che la usa' },
+  de: { gratis: 'GRATIS und ohne Limit', hasta: 'bis 31. Dezember · ohne Karte', gana: 'Und verdiene 2,50 € pro Kollege, der sie nutzt' },
 }
 
 const html = (c) => `<!doctype html><html><head><meta charset="utf-8">
@@ -35,7 +42,7 @@ const html = (c) => `<!doctype html><html><head><meta charset="utf-8">
     background: radial-gradient(circle at 50% 18%, #0d5a5a 0, #05141a 55%) }
   .caja { position:absolute; inset:0; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:34px; padding:0 70px; text-align:center }
   .logo { width:170px; height:170px; border-radius:38px; background:#14e7d8; color:#04121a; font:900 64px/170px Inter, sans-serif }
-  .pildora { background:#FFD43B; color:#1a1300; font:900 82px/1.05 Inter, sans-serif; border-radius:34px; padding:22px 46px; transform:rotate(-3deg); box-shadow:0 16px 50px rgba(255,212,59,.35) }
+  .pildora { background:#FFD43B; color:#1a1300; font:900 76px/1.05 Inter, sans-serif; max-width:940px; border-radius:34px; padding:22px 46px; transform:rotate(-3deg); box-shadow:0 16px 50px rgba(255,212,59,.35) }
   .hasta { font:800 46px/1.2 Inter, sans-serif; color:#d7fff9 }
   .gana { font:800 44px/1.25 Inter, sans-serif; color:#14e7d8; max-width:900px }
   .web { font:700 44px/1.2 Inter, sans-serif; color:#a9c2c6; margin-top:20px }
