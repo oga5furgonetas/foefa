@@ -250,8 +250,11 @@ async def test_mi_dinero_hoy_tarifa_del_autonomo(base, monkeypatch):
     assert r == {"pago_parada": 110, "pago_dia": 0, "coste_km": 12}
     await server.reparto_ajustes_put({"hora_salida": "08:30"}, yo)
     assert (await server.reparto_mi_ruta(yo))["ganancias"] == {"pago_parada": 110, "pago_dia": 0, "coste_km": 12}
-    with pytest.raises(HTTPException):
-        await server.reparto_ganancias_put({"pago_parada": 99999}, yo)
+    # En su moneda: en Colombia 2.500 pesos por entrega son 250.000 «céntimos» y valen.
+    r = await server.reparto_ganancias_put({"pago_parada": 250000, "pago_dia": 0, "coste_km": 45000}, yo)
+    assert r["pago_parada"] == 250000 and r["coste_km"] == 45000
+    with pytest.raises(HTTPException):                       # un disparate, no
+        await server.reparto_ganancias_put({"pago_parada": 10_000_001}, yo)
 
     async def no_autonomo(_user):
         return False
@@ -301,6 +304,9 @@ async def test_cobro_recogida_y_reintento(base):
     t = await server.reparto_mis_pedidos({"direccion": "Rúa Real 7", "cobrar": "10"}, ANA)
     r = await server.reparto_estado(t["id"], {"estado": "entregado", "metodo": "transferencia"}, ANA)
     assert r["cobrado_metodo"] == "transferencia"
+    # En Brasil se cobra por Pix.
+    x = await server.reparto_mis_pedidos({"direccion": "Rúa Real 9", "cobrar": "30"}, ANA)
+    assert (await server.reparto_estado(x["id"], {"estado": "entregado", "metodo": "pix"}, ANA))["cobrado_metodo"] == "pix"
     rec = await server.reparto_mis_pedidos({"direccion": "Rúa Real 5", "tipo": "Recogida de envases"}, ANA)
     assert rec["tipo"] == "recogida"
     f = await server.reparto_estado(rec["id"], {"estado": "fallido", "motivo": "No había nadie"}, ANA)

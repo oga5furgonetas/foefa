@@ -2597,6 +2597,44 @@ test('Ruta · Mi dinero hoy: poner la tarifa y ver lo ganado', async ({ page }) 
   expect(fallos).toEqual([])
 })
 
+/* En Latinoamérica la tarifa va en su moneda y con sus miles: «2.500» pesos son 2500, no 2,5. */
+test('Ruta · Mi dinero hoy en Colombia: en pesos y con punto de miles', async ({ page }) => {
+  const fallos = vigilar(page)
+  await entrarRepartidor(page, { status: 'trial', days_left: 6, pais: 'co', promo: { activa: true, hasta: '2026-12-31' } })
+  const guardado = []
+  await page.route(/\/api\/reparto\/mi-ruta/, (r) => r.fulfill({ json: {
+    activo: true, autonomo: true, pais: 'co', fecha: '2026-10-11', jornada: {}, aviso_aceptado: true,
+    ganancias: { pago_parada: 0, pago_dia: 0, coste_km: 0 }, ruta: { km: 20 },
+    pedidos: [{ id: 'h1', cliente: 'Cliente 1', direccion: 'Calle 1', estado: 'entregado', orden: 1, lat: 4.6, lng: -74.08 }] } }))
+  await page.route(/\/api\/reparto\/ganancias/, async (r) => { guardado.push(r.request().postDataJSON()); await r.fulfill({ json: r.request().postDataJSON() }) })
+  await page.goto('/ruta', { waitUntil: 'domcontentloaded' })
+  await page.getByRole('button', { name: /Pon tu tarifa/ }).click()
+  const hoja = page.getByRole('dialog', { name: 'Mi dinero hoy' })
+  await expect(hoja.getByText(/Te pagan por cada entrega/)).not.toContainText('€')
+  await expect(hoja.getByText('Pon lo que gasta tu vehículo por km. Solo lo ves tú.')).toBeVisible()
+  await hoja.getByText(/Te pagan por cada entrega/).locator('..').getByRole('textbox').fill('2.500')
+  await hoja.getByText(/Gasolina por km/).locator('..').getByRole('textbox').fill('450')
+  await hoja.getByRole('button', { name: 'Guardar' }).click()
+  await expect.poll(() => guardado.length).toBe(1)
+  expect(guardado[0]).toEqual({ pago_parada: 250000, pago_dia: 0, coste_km: 45000 })
+  expect(fallos).toEqual([])
+})
+
+/* LATINOAMÉRICA (11-10-2026): quien llega desde México ve con quién se reparte allí, no MRW ni Nacex. */
+test.describe('Portada de repartidores desde México', () => {
+  test.use({ locale: 'es-MX', timezoneId: 'America/Mexico_City' })
+  test('enseña las empresas de su país y «Invita y gana»', async ({ page }) => {
+    const fallos = vigilar(page)
+    await simularApi(page, 'vacio')
+    await page.goto('/repartidores', { waitUntil: 'domcontentloaded' })
+    await expect(page.getByText('Mercado Libre', { exact: true })).toBeVisible()
+    await expect(page.getByText('Estafeta', { exact: true })).toBeVisible()
+    await expect(page.getByText('MRW', { exact: true })).toHaveCount(0)
+    await expect(page.getByText(/Gana 2[,.]50/).first()).toBeVisible()
+    expect(fallos).toEqual([])
+  })
+})
+
 /* «COMPARTE TU DÍA» (11-10-2026): al acabar la ruta, una imagen del día con SU QR de invitación. */
 test('Ruta · Comparte tu día: al acabar, imagen con el enlace de invitación', async ({ page }) => {
   const fallos = vigilar(page)

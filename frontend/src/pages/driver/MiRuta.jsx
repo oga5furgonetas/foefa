@@ -650,7 +650,12 @@ export default function MiRuta({ onBack, embebido = false }) {
     dinero = { bruto, gasolina, neto, porHora: horas >= 0.25 ? neto / horas : null }
   }
   const aEuros = (c) => (c ? String(c / 100).replace('.', ',') : '')
-  const aCent = (t) => Math.round((Number(String(t || '').replace(',', '.')) || 0) * 100)
+  // «2.500» o «1,500» (miles, como se escribe en Colombia, Chile o Argentina) son 2500 y 1500, no 2,5.
+  const aCent = (t) => {
+    const s = String(t || '').trim()
+    const n = /^[1-9]\d{0,2}([.,]\d{3})+$/.test(s) ? Number(s.replace(/[.,]/g, '')) : Number(s.replace(',', '.'))
+    return Math.round((n || 0) * 100)
+  }
   async function guardarTarifa() {
     setOcupado('tarifa')
     try {
@@ -699,7 +704,7 @@ export default function MiRuta({ onBack, embebido = false }) {
       {total > 0 && (
         <Cabecera fecha={ruta.fecha} hechos={hechos.length} total={total} entregados={entregados.length}
           pendientes={pendientes.length} rr={ruta.ruta} retraso={retraso} cobrado={cobradoHoy}
-          dinero={dinero} onTarifa={ruta.autonomo && gan ? () => setTarifa({ parada: aEuros(gan.pago_parada), dia: aEuros(gan.pago_dia), km: aEuros(gan.coste_km) || '0,12' }) : null}
+          dinero={dinero} onTarifa={ruta.autonomo && gan ? () => setTarifa({ parada: aEuros(gan.pago_parada), dia: aEuros(gan.pago_dia), km: aEuros(gan.coste_km) || (simboloMoneda() === '€' ? '0,12' : '') }) : null}
           onCompartir={entregados.length >= 5 && pendientes.length === 0 ? () => {
             const ini = ruta.jornada?.empezada ? new Date(ruta.jornada.empezada).getTime() : 0
             const fin = ruta.jornada?.terminada ? new Date(ruta.jornada.terminada).getTime() : Date.now()
@@ -1135,14 +1140,16 @@ export default function MiRuta({ onBack, embebido = false }) {
       {tarifa && (
         <Hoja titulo={tx('Mi dinero hoy')} onClose={() => setTarifa(null)}>
           <p className="mb-3 text-[13px] text-dark-400">{tx('Pon cómo te pagan y la app te dice cuánto llevas ganado hoy, la gasolina y lo que te queda limpio.')}</p>
-          {[['parada', tx('Te pagan por cada entrega (€)'), '1,10'], ['dia', tx('Fijo por día, si te pagan así (€)'), '0'], ['km', tx('Gasolina por km (€)'), '0,12']].map(([k, t, ej]) => (
+          {[['parada', tx('Te pagan por cada entrega ({moneda})', { moneda: simboloMoneda() }), simboloMoneda() === '€' ? '1,10' : '0'],
+            ['dia', tx('Fijo por día, si te pagan así ({moneda})', { moneda: simboloMoneda() }), '0'],
+            ['km', tx('Gasolina por km ({moneda})', { moneda: simboloMoneda() }), simboloMoneda() === '€' ? '0,12' : '0']].map(([k, t, ej]) => (
             <label key={k} className="mb-2.5 block">
               <span className="mb-1 block text-[13px] font-semibold text-dark-200">{t}</span>
               <input className={inp} inputMode="decimal" value={tarifa[k]} placeholder={ej}
                 onChange={(e) => setTarifa({ ...tarifa, [k]: e.target.value.replace(/[^0-9.,]/g, '') })} />
             </label>
           ))}
-          <p className="mb-3 text-[12px] text-dark-500">{tx('Una furgoneta diésel gasta unos 0,10–0,15 € por km. Solo lo ves tú.')}</p>
+          <p className="mb-3 text-[12px] text-dark-500">{simboloMoneda() === '€' ? tx('Una furgoneta diésel gasta unos 0,10–0,15 € por km. Solo lo ves tú.') : tx('Pon lo que gasta tu vehículo por km. Solo lo ves tú.')}</p>
           <button onClick={guardarTarifa} disabled={ocupado === 'tarifa' || (!aCent(tarifa.parada) && !aCent(tarifa.dia))}
             className="w-full rounded-xl bg-brand-500 py-3 text-[15px] font-bold text-brand-tinta disabled:opacity-40">
             {ocupado === 'tarifa' ? tx('Guardando…') : tx('Guardar')}
@@ -1598,7 +1605,7 @@ function Resumen({ hechos, ruta }) {
   ok.forEach((p) => { if (p.cobrado_importe) cobros[p.cobrado_metodo || 'otro'] = (cobros[p.cobrado_metodo || 'otro'] || 0) + Number(p.cobrado_importe) })
   const horas = hechos.map((p) => p.cerrado_en).filter(Boolean).sort()
   const durMin = horas.length > 1 ? Math.round((new Date(horas[horas.length - 1]) - new Date(horas[0])) / 60000) : 0
-  const NOMBRE = { efectivo: tx('Efectivo'), tarjeta: tx('Tarjeta'), bizum: 'Bizum', transferencia: tx('Transferencia'), pagado: tx('Ya pagado'), otro: tx('Otro') }
+  const NOMBRE = { efectivo: tx('Efectivo'), tarjeta: tx('Tarjeta'), bizum: 'Bizum', pix: 'Pix', transferencia: tx('Transferencia'), pagado: tx('Ya pagado'), otro: tx('Otro') }
   return (
     <div className="mt-3 rounded-2xl border border-emerald-500/40 bg-emerald-500/[.07] p-4" aria-label={tx('Resumen del día')}>
       <p className="flex items-center gap-2 text-[16px] font-bold text-emerald-200"><Trophy size={18} /> {tx('Ruta terminada')}</p>

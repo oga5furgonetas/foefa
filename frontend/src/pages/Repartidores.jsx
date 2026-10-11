@@ -8,8 +8,21 @@ import { evento, eventoUnaVez } from '../lib/metaPixel'
 import { useInvitacion } from '../lib/referido'
 import AltaRapida from './AltaRapida'
 import { PARADAS_GRATIS, promoGratis, fechaPromo, eurosRef } from '../lib/precios'
+import { paisDelMovil } from '../lib/region'
 /* «Invita y gana»: en España por Bizum; en Latinoamérica por PayPal. En China no hay (por la hora del móvil). */
 const conInvita = () => { try { return !/^Asia\/(Shanghai|Chongqing|Harbin|Urumqi|Hong_Kong|Macau)$/.test(Intl.DateTimeFormat().resolvedOptions().timeZone) } catch { return true } }
+/* Con quién reparte la gente en cada país (11-10-2026): quien llega de México tiene que ver lo suyo. */
+const PARA_QUIEN = {
+  es: ['Paquetería', 'Amazon', 'MRW', 'Nacex', 'Tipsa', 'Glovo', 'Súper a domicilio'],
+  mx: ['Paquetería', 'Mercado Libre', 'Amazon', 'Estafeta', 'DHL', 'J&T', 'Súper a domicilio'],
+  co: ['Paquetería', 'Mercado Libre', 'Servientrega', 'Coordinadora', 'Interrapidísimo', 'Súper a domicilio'],
+  ar: ['Paquetería', 'Mercado Libre', 'Andreani', 'OCA', 'Correo Argentino', 'Súper a domicilio'],
+  cl: ['Paquetería', 'Mercado Libre', 'Chilexpress', 'Starken', 'Blue Express', 'Súper a domicilio'],
+  pe: ['Paquetería', 'Mercado Libre', 'Olva Courier', 'Shalom', 'Súper a domicilio'],
+  br: ['Paquetería', 'Mercado Livre', 'Shopee', 'Correios', 'Loggi', 'Súper a domicilio'],
+  latam: ['Paquetería', 'Mercado Libre', 'Amazon', 'DHL', 'Súper a domicilio'],
+}
+const paraQuienAqui = () => { const p = paisDelMovil(); return PARA_QUIEN[p] || (p ? PARA_QUIEN.latam : PARA_QUIEN.es) }
 
 /* ── LA PÁGINA DEL ANUNCIO DE REPARTIDORES (04-10-2026) ──────────────────────
    Medido: de 410 personas que llegaron del anuncio al formulario de alta, 0
@@ -115,7 +128,7 @@ export default function Repartidores() {
     <div className="mt-3">
       <p className="text-[13px] font-semibold text-dark-200">{tx('Sirve igual si repartes para una agencia, una plataforma o un súper:')}</p>
       <div className="mt-1.5 flex flex-wrap gap-1.5">
-        {['Paquetería', 'Amazon', 'MRW', 'Nacex', 'Tipsa', 'Glovo', 'Súper a domicilio'].map((m) => (
+        {paraQuienAqui().map((m) => (
           <span key={m} className="rounded-full border border-dark-700 bg-dark-900 px-2.5 py-1 text-[12px] font-semibold text-dark-100">{tx(m)}</span>
         ))}
       </div>

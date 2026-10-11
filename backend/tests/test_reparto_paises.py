@@ -18,6 +18,8 @@ def test_pais_de_la_zona_horaria_del_movil():
     assert server._region_alta("America/Mexico_City", None) == ("mx", "America/Mexico_City")
     assert server._region_alta("America/Argentina/Cordoba", "") == ("ar", "America/Argentina/Cordoba")
     assert server._region_alta("Atlantic/Canary", None) == ("es", "Atlantic/Canary")
+    assert server._region_alta("America/Sao_Paulo", "br") == ("br", "America/Sao_Paulo")     # Brasil (11-10)
+    assert server._region_alta("America/Manaus", None) == ("br", "America/Manaus")
     assert server._region_alta("Zona/Inventada", "zz") == ("es", "Europe/Madrid")       # basura: España
     assert server._region_alta("America/Bogota", "cl") == ("cl", "America/Bogota")      # el país que manda la app manda
     assert server._region_alta(None, None) == ("es", "Europe/Madrid")

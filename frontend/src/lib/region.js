@@ -22,7 +22,7 @@ export function regionDelMovil() {
 const MONEDAS = {
   es: 'EUR', mx: 'MXN', ar: 'ARS', co: 'COP', cl: 'CLP', pe: 'PEN', ve: 'VES', ec: 'USD', bo: 'BOB', py: 'PYG',
   uy: 'UYU', cr: 'CRC', pa: 'USD', gt: 'GTQ', hn: 'HNL', sv: 'USD', ni: 'NIO', do: 'DOP', pr: 'USD', cu: 'CUP',
-  cn: 'CNY',
+  br: 'BRL', cn: 'CNY',
 }
 let paisRuta = (() => {
   try { const g = localStorage.getItem('fds_pais'); if (g && MONEDAS[g]) return g } catch { /* sin almacenamiento */ }
@@ -54,7 +54,28 @@ export function simboloMoneda() {
   try { return formato().formatToParts(0).find((x) => x.type === 'currency')?.value || '€' } catch { return '€' }
 }
 
-/* Cómo puede pagar el cliente en la puerta: Bizum solo existe en España. */
+/* Cómo puede pagar el cliente en la puerta: Bizum solo existe en España y Pix en Brasil. */
 export const metodosCobro = () => (paisRuta === 'es'
   ? [['efectivo', 'Efectivo'], ['tarjeta', 'Tarjeta'], ['bizum', 'Bizum']]
-  : [['efectivo', 'Efectivo'], ['tarjeta', 'Tarjeta'], ['transferencia', 'Transferencia']])
+  : paisRuta === 'br'
+    ? [['efectivo', 'Efectivo'], ['tarjeta', 'Tarjeta'], ['pix', 'Pix']]
+    : [['efectivo', 'Efectivo'], ['tarjeta', 'Tarjeta'], ['transferencia', 'Transferencia']])
+
+/* EL PAÍS DE QUIEN VISITA (sin cuenta todavía), por la hora del móvil: la portada le enseña las
+   empresas con las que reparte en SU país (en México no hay MRW). '' si no se sabe. */
+const ZONA_PAIS = {
+  'America/Bogota': 'co', 'America/Santiago': 'cl', 'America/Punta_Arenas': 'cl', 'America/Lima': 'pe',
+  'America/Caracas': 've', 'America/Guayaquil': 'ec', 'America/La_Paz': 'bo', 'America/Asuncion': 'py',
+  'America/Montevideo': 'uy', 'America/Costa_Rica': 'cr', 'America/Panama': 'pa', 'America/Guatemala': 'gt',
+  'America/Tegucigalpa': 'hn', 'America/El_Salvador': 'sv', 'America/Managua': 'ni', 'America/Santo_Domingo': 'do',
+  'America/Puerto_Rico': 'pr', 'America/Havana': 'cu', 'Europe/Madrid': 'es', 'Atlantic/Canary': 'es', 'Africa/Ceuta': 'es',
+}
+export function paisDelMovil() {
+  let z = ''
+  try { z = Intl.DateTimeFormat().resolvedOptions().timeZone || '' } catch { return '' }
+  if (ZONA_PAIS[z]) return ZONA_PAIS[z]
+  if (/^America\/(Argentina\/|Buenos_Aires$|Cordoba$)/.test(z)) return 'ar'
+  if (/^America\/(Mexico_City|Cancun|Merida|Monterrey|Matamoros|Chihuahua|Ciudad_Juarez|Ojinaga|Mazatlan|Bahia_Banderas|Hermosillo|Tijuana)$/.test(z)) return 'mx'
+  if (/^America\/(Sao_Paulo|Bahia|Fortaleza|Recife|Belem|Maceio|Araguaina|Santarem|Manaus|Cuiaba|Campo_Grande|Porto_Velho|Boa_Vista|Rio_Branco|Eirunepe|Noronha)$/.test(z)) return 'br'
+  return ''
+}

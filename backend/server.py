@@ -5100,6 +5100,11 @@ PAISES_REPARTO = {
     "do": {"nombre": "República Dominicana", "prefijo": "1", "zonas": ["America/Santo_Domingo"]},
     "pr": {"nombre": "Puerto Rico", "prefijo": "1", "zonas": ["America/Puerto_Rico"]},
     "cu": {"nombre": "Cuba", "prefijo": "53", "zonas": ["America/Havana"]},
+    # Brasil (11-10-2026): la app en portugués, en reales y cobrando por Pix.
+    "br": {"nombre": "Brasil", "prefijo": "55", "zonas": ["America/Sao_Paulo", "America/Bahia", "America/Fortaleza",
+           "America/Recife", "America/Belem", "America/Maceio", "America/Araguaina", "America/Santarem", "America/Manaus",
+           "America/Cuiaba", "America/Campo_Grande", "America/Porto_Velho", "America/Boa_Vista", "America/Rio_Branco",
+           "America/Eirunepe", "America/Noronha"]},
     # China (04-10-2026): la app en chino; allí se navega con Amap/Baidu y se
     # avisa por SMS (Google y WhatsApp están bloqueados).
     "cn": {"nombre": "China", "prefijo": "86", "zonas": ["Asia/Shanghai", "Asia/Urumqi"]},
@@ -48071,13 +48076,14 @@ async def reparto_ajustes_put(data: dict = Body(...), user: dict = Depends(requi
 
 @api_router.put("/reparto/ganancias")
 async def reparto_ganancias_put(data: dict = Body(...), user: dict = Depends(require_admin)):
-    """La tarifa del autónomo para «Mi dinero hoy», en céntimos. Solo la toca quien reparte solo."""
+    """La tarifa del autónomo para «Mi dinero hoy», en céntimos DE SU MONEDA (un repartidor de Colombia
+    cobra 2.500 pesos por entrega: 250.000 «céntimos»). Los topes solo paran disparates."""
     if not await _rep_es_autonomo(user):
         raise HTTPException(403, "Esto es para quien reparte por su cuenta")
     data = _dict_cuerpo(data)
-    campos = {"pago_parada": _entero(data.get("pago_parada"), "pago_parada", defecto=0, minimo=0, maximo=2000),
-              "pago_dia": _entero(data.get("pago_dia"), "pago_dia", defecto=0, minimo=0, maximo=50000),
-              "coste_km": _entero(data.get("coste_km"), "coste_km", defecto=0, minimo=0, maximo=200)}
+    campos = {"pago_parada": _entero(data.get("pago_parada"), "pago_parada", defecto=0, minimo=0, maximo=10_000_000),
+              "pago_dia": _entero(data.get("pago_dia"), "pago_dia", defecto=0, minimo=0, maximo=100_000_000),
+              "coste_km": _entero(data.get("coste_km"), "coste_km", defecto=0, minimo=0, maximo=1_000_000)}
     await db.reparto_ajustes.update_one({"id": "ajustes"}, {"$set": campos}, upsert=True)
     return campos
 
@@ -48472,9 +48478,9 @@ async def reparto_estado(pid: str, data: dict = Body(...), user: dict = Depends(
     cambios["cerrado_en"] = datetime.now(timezone.utc).isoformat() if e in ("entregado", "fallido") else None
     if e == "entregado" and (p.get("cobrar") or 0) > 0:
         metodo = _texto_cuerpo(data.get("metodo"), 20).lower()
-        # Bizum solo existe en España; fuera, la transferencia hace su papel.
-        if metodo not in ("efectivo", "tarjeta", "bizum", "transferencia", "pagado"):
-            raise HTTPException(400, "Di cómo ha pagado: efectivo, tarjeta, Bizum o transferencia")
+        # Bizum solo existe en España y Pix en Brasil; fuera, la transferencia hace su papel.
+        if metodo not in ("efectivo", "tarjeta", "bizum", "pix", "transferencia", "pagado"):
+            raise HTTPException(400, "Di cómo ha pagado: efectivo, tarjeta, Bizum, Pix o transferencia")
         cobrado = reparto.importe(data.get("importe")) if data.get("importe") not in (None, "") else p.get("cobrar")
         cambios.update({"cobrado_metodo": metodo, "cobrado_importe": cobrado})
     elif e != "entregado":

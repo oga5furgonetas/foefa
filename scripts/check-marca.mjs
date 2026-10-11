@@ -24,7 +24,7 @@ const PATRON = /flotadsp|\bamazon\b|\bcortex\b|\bdsps?\b|\bdnr\b|scorecard|\bwin
 
 /* Menciones legítimas: [fichero, trozo de la línea, por qué]. */
 const PERMITIDO = [
-  ['pages/Repartidores.jsx', "'amazon', 'mrw'", 'portada de repartidores: a quien sirve (uso descriptivo; la propia pagina avisa de que son marcas ajenas, sin relacion)'],
+  ['pages/Repartidores.jsx', "['paquetería', '", 'portada de repartidores: a quien sirve en cada pais (uso descriptivo; la propia pagina avisa de que son marcas ajenas, sin relacion)'],
   ['lib/apiBase.js', 'ennuestrodominio', 'regex tecnica del dominio donde se sirve la app (no es texto visible)'],
   ['lib/enApp.js', 'de_play', 'identificador tecnico del paquete de Play (no es texto visible)'],
   ['panel/components/TiendaPrendas.jsx', 'camiseta oga5', 'la tienda de ropa es del dueño (solo super-admin)'],
