@@ -2641,6 +2641,21 @@ test.describe('Portada de repartidores desde México', () => {
   })
 })
 
+/* BRASIL (11-10-2026): portugués de allí (senha, paradas, cadastro) y sus empresas. */
+test.describe('Portada de repartidores desde Brasil', () => {
+  test.use({ locale: 'pt-BR', timezoneId: 'America/Sao_Paulo' })
+  test('habla como en Brasil y enseña sus empresas', async ({ page }) => {
+    const fallos = vigilar(page)
+    await simularApi(page, 'vacio')
+    await page.goto('/repartidores?v=a', { waitUntil: 'domcontentloaded' })      // la versión con el alta arriba
+    await expect(page.getByPlaceholder('Senha')).toBeVisible()
+    await expect(page.getByPlaceholder('Palavra-passe')).toHaveCount(0)
+    await expect(page.getByText('Mercado Livre', { exact: true })).toBeVisible()
+    await expect(page.getByText(/paragens/)).toHaveCount(0)
+    expect(fallos).toEqual([])
+  })
+})
+
 /* «COMPARTE TU DÍA» (11-10-2026): al acabar la ruta, una imagen del día con SU QR de invitación. */
 test('Ruta · Comparte tu día: al acabar, imagen con el enlace de invitación', async ({ page }) => {
   const fallos = vigilar(page)
