@@ -134,6 +134,42 @@ export const BR = {
     'Toque em «Começar a navegar»: o app te leva por voz até cada porta. Ao chegar, «Entregue» com foto ou assinatura, e vai para a próxima.',
   'Siguiente': 'Próximo',
 
+  // Instalar la app (el paso justo después del alta)
+  'Abre esta página en Safari.': 'Abra esta página no Safari.',
+  'Pulsa': 'Toque em',
+  'Compartir': 'Compartilhar',
+  '(abajo).': '(embaixo).',
+  'Elige «Añadir a pantalla de inicio».': 'Escolha «Adicionar à Tela de Início».',
+  'En iPhone se instala así y funciona como una app. La app de la App Store llegará próximamente.':
+    'No iPhone ele se instala assim e funciona como um app. O app da App Store chega em breve.',
+  'Al abrirla desde el icono, entra una vez con tu correo y tu contraseña.': 'Ao abrir pelo ícone, entre uma vez com seu e-mail e sua senha.',
+  'Descargar la app para Android': 'Baixar o app para Android',
+  'Al instalarla, el móvil puede pedirte permitir apps de esta fuente: es la app de FDS, firmada por nosotros.':
+    'Ao instalar, o celular pode pedir para permitir apps desta fonte: é o app do FDS, assinado por nós.',
+  'Estás en el navegador de otra app: desde aquí el móvil no deja instalar nada.': 'Você está no navegador de outro app: daqui o celular não deixa instalar nada.',
+  'Estás en el navegador de {app}: desde aquí el móvil no deja instalar nada.': 'Você está no navegador do {app}: daqui o celular não deixa instalar nada.',
+  'Abrir en Safari': 'Abrir no Safari',
+  'Abrir en Chrome': 'Abrir no Chrome',
+  'Entras ya con tu cuenta, sin escribir nada.': 'Você já entra na sua conta, sem digitar nada.',
+  '¿No se ha abierto? Pulsa ··· (arriba) y «Abrir en el navegador».': 'Não abriu? Toque em ··· (em cima) e «Abrir no navegador».',
+  '¿No se ha abierto? Pulsa ⋮ (arriba) y «Abrir en Chrome» o «Abrir en el navegador».': 'Não abriu? Toque em ⋮ (em cima) e «Abrir no Chrome» ou «Abrir no navegador».',
+  'Instalar la app': 'Instalar o app',
+  'Instala FDS en tu móvil': 'Instale o FDS no seu celular',
+  'Con su icono, a pantalla completa y sin buscar la web cada día.': 'Com ícone próprio, em tela cheia e sem procurar o site todo dia.',
+  'No mostrar más': 'Não mostrar mais',
+  'Cómo instalarla': 'Como instalar',
+  'Último paso: instala la app': 'Último passo: instale o app',
+  'Cuenta creada': 'Conta criada',
+  'Con su icono en el móvil, a pantalla completa y sin buscar la web: cada mañana la abres en un toque.':
+    'Com ícone no celular, em tela cheia e sem procurar o site: toda manhã você abre com um toque.',
+  'Instalada. Ábrela desde el icono de FDS.': 'Instalado. Abra pelo ícone do FDS.',
+  'Código QR para abrir tu cuenta en el móvil': 'Código QR para abrir sua conta no celular',
+  'Abre {web} en el móvil y entra con tu correo y tu contraseña.': 'Abra {web} no celular e entre com seu e-mail e sua senha.',
+  'Apunta con la cámara del móvil: entras en tu cuenta sin escribir nada y desde ahí la instalas. Vale 10 minutos.':
+    'Aponte a câmera do celular: você entra na sua conta sem digitar nada e instala o app por lá. Vale por 10 minutos.',
+  'Seguir': 'Continuar',
+  'Ahora no, seguir en la web': 'Agora não, continuar na web',
+
   // Aviso de cookies (lo primero que se ve)
   'Usamos almacenamiento necesario para que la web funcione. Si aceptas, también los píxeles de Meta y TikTok para saber qué anuncios nos traen visitas y altas.':
     'Usamos o armazenamento necessário para o site funcionar. Se você aceitar, também os pixels da Meta e do TikTok para saber quais anúncios nos trazem visitas e cadastros.',
