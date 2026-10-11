@@ -29,6 +29,25 @@ import { salirDeLaDemoDeReparto, inicioGuardado } from './panel/auth'
    y para eso está el ErrorBoundary. */
 window.__flotaArrancada = true
 
+/* EL TRADUCTOR DEL NAVEGADOR NO PUEDE TUMBAR LA APP (11-10-2026). Al traducir la página, Chrome cambia los
+   textos por <font> suyos; cuando React quiere quitar o mover el texto original, ya no está donde lo
+   dejó y salta «Failed to execute 'removeChild'… not a child of this node»: pantalla de error. Visto el
+   03-10 en /panel/login, tres intentos seguidos desde el mismo Android, y el 24-08 en la portada. Con
+   la app en seis idiomas y gente de Brasil o de fuera, traducir es normal. La salida es la que da el
+   propio React (issue 11538): si el nodo ya no es hijo, no se hace nada en vez de lanzar. */
+if (typeof Node === 'function' && Node.prototype) {
+  const quitar = Node.prototype.removeChild
+  Node.prototype.removeChild = function removeChild(hijo) {
+    if (hijo && hijo.parentNode !== this) return hijo
+    return quitar.call(this, hijo)
+  }
+  const meterAntes = Node.prototype.insertBefore
+  Node.prototype.insertBefore = function insertBefore(nuevo, referencia) {
+    if (referencia && referencia.parentNode !== this) return nuevo
+    return meterAntes.call(this, nuevo, referencia)
+  }
+}
+
 /* Tema del panel ANTES del primer render: sin destello oscuro→claro.
    Solo miraba 'light', y al pasar el defecto a 'hibrido' eso significaba que
    quien no hubiera elegido nunca tema —o sea, todo el mundo la primera vez—

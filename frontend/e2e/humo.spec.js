@@ -1417,6 +1417,32 @@ test('App · quien reparte solo ve su app y no el panel de empresa', async ({ pa
   expect(fallos).toEqual([])
 })
 
+/* EL TRADUCTOR DEL NAVEGADOR NO TUMBA LA APP (11-10-2026): como hace Chrome al traducir, se cambia un texto
+   de React por <font> y luego React lo quita; sin la defensa de main.jsx, «removeChild… not a child». */
+test('Traductor · si el navegador traduce la página, React no revienta al pulsar «Entrar»', async ({ page }) => {
+  const fallos = vigilar(page)
+  // El servidor tarda y dice que no: lo que importa es el momento en que el botón pasa a «Entrando…».
+  await page.route(/\/api\/auth\/login/, async (r) => {
+    await new Promise((ok) => setTimeout(ok, 400))
+    return r.fulfill({ status: 401, json: { detail: 'Usuario o contraseña incorrectos' } })
+  })
+  await page.goto('/panel/login', { waitUntil: 'domcontentloaded' })
+  await page.locator('input:not([type=password]):not([type=checkbox]):not([type=hidden])').first().fill('prueba@ejemplo.test')
+  await page.locator('input[type=password]').fill('clave-de-prueba')
+  // Lo que hace Google Traductor: el texto «Entrar», cambiado por un <font> suyo.
+  await page.evaluate(() => {
+    const boton = [...document.querySelectorAll('button')].find((b) => /^\s*Entrar/.test(b.textContent))
+    for (const t of [...boton.childNodes].filter((n) => n.nodeType === 3 && n.textContent.trim())) {
+      const f = document.createElement('font'); f.textContent = 'Log in'
+      t.replaceWith(f)
+    }
+  })
+  await page.getByRole('button', { name: /Log in/ }).click()
+  await expect(page.getByText('Usuario o contraseña incorrectos')).toBeVisible()
+  await expect(page.getByText('Algo ha ido mal')).toHaveCount(0)
+  expect(fallos.filter((f) => !/401/.test(f))).toEqual([])
+})
+
 /* EMPLEO: SI EL CURRÍCULUM NO SE PUEDE SUBIR, LA CANDIDATURA ENTRA SIN ÉL (11-10-2026). Visto en los errores
    guardados: con un CV de la nube el envío moría sin respuesta siempre igual; una persona entró al quitarlo y
    otra se fue. Aquí el servidor «se cae» cada vez que llega con fichero, como pasaba en esos móviles. */
