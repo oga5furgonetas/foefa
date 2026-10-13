@@ -1150,6 +1150,13 @@ de la etiqueta de cualquier empresa.
   no tenía `SECRET_KEY` local; la salud pública y la conexión con Mongo se comprobaron por separado.
 - **Integración en GitHub**: merge commit `4711086` en `main` (publicación verificada el 13-10-2026).
 
+## 13-10-2026: repartir mejor los fines de semana del cuadrante
+
+- El motor ahora considera sábado y domingo como un fin de semana conjunto: basta trabajar uno de los dos días para que cuente como asignado.
+- Usa los fines realmente trabajados en las cuatro semanas anteriores y aumenta progresivamente el coste de asignar más fines en el período nuevo a una misma persona. Favorece la rotación y reduce rachas de tres fines trabajados cuando hay cobertura y personas elegibles.
+- Esta es una preferencia de equidad, no una garantía que pueda ignorar cobertura, turnos protegidos, tipo de jornada o restricciones de cada persona.
+- Verificación: 54 pruebas del motor del cuadrante pasan, incluidas pruebas de tres semanas con cobertura holgada y de prioridad por historial.
+
 ## 13-10-2026: reducir errores al leer direcciones de etiquetas
 
 - El OCR móvil compara tres segmentaciones antes de elegir dirección y conserva alternativas cuando discrepan. En la foto real de OGA5 enviada por Dani, el formulario muestra `Ladeira, Chazo 33`; el teléfono queda vacío porque `636830253` aparece junto a códigos/logística y no está rotulado.

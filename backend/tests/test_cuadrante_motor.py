@@ -287,6 +287,28 @@ def test_los_findes_rotan_hacia_quien_menos_lleva():
     assert not trabaja(res, "c0", dia(5)) and not trabaja(res, "c0", dia(6))
 
 
+def test_reparte_fines_completos_y_evitan_tres_seguidos_con_cobertura_holgada():
+    # Doce personas permiten rotar los cinco puestos de fin de semana a lo
+    # largo de tres semanas sin cargar tres fines seguidos a la misma persona.
+    conds = gente(12)
+    res = cm.generar_cuadrante(entrada(conds, dias=21, maxima=3))
+    findes_por_persona = {c["id"]: 0 for c in conds}
+    for inicio in (dia(5), dia(12), dia(19)):
+        sabado = dt.date.fromisoformat(inicio)
+        domingo = (sabado + dt.timedelta(days=1)).isoformat()
+        for c in conds:
+            if trabaja(res, c["id"], inicio) or trabaja(res, c["id"], domingo):
+                findes_por_persona[c["id"]] += 1
+    assert max(findes_por_persona.values()) <= 2
+
+
+def test_historial_de_fines_completos_da_prioridad_a_quien_ya_trabajo_varios():
+    conds = gente(12)
+    conds[0]["findes_trabajados_recientes"] = 4
+    res = cm.generar_cuadrante(entrada(conds, dias=7, maxima=3))
+    assert not trabaja(res, "c0", dia(5)) and not trabaja(res, "c0", dia(6))
+
+
 def test_rota_descanso_de_lunes_si_la_persona_ya_libro_los_lunes():
     # Con cobertura holgada, quien acumuló cuatro lunes libres trabaja el lunes
     # siguiente; el descanso se mueve a otro día disponible de esa semana.

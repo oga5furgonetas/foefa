@@ -112,8 +112,9 @@ PESO_JUNTOS = 40.0               # que dos personas (pareja) libren y trabajen l
 # Reparto justo: desempates, ver la cuenta de los 99 en la cabecera.
 PESO_EXTRA_REPETIDO = 1.0
 TOPE_REPETIDOS = 3
-PESO_FINDE_RECIENTE = 0.2       # por día de finde trabajado en las 4 semanas de antes (tope 5)
+PESO_FINDE_RECIENTE = 0.2       # compatibilidad con entradas antiguas, por día trabajado
 PESO_FINDE_ALTERNAR = 0.25    # desempate suave para alternar respecto al finde anterior
+PESO_REPARTO_FINDE = 3.0      # coste creciente por persona según findes recientes y asignados
 PESO_ROTAR_DESCANSO_DIA = 1.5 # rota los días libres repetidos según las 4 semanas previas
 
 TIPOS = ("normal", "empresa", "finde", "inactivo")
@@ -403,10 +404,33 @@ def generar_cuadrante(entrada: Dict[str, Any]) -> Dict[str, Any]:
                     k = xv.get((cid, d))
                     if k is not None:
                         m.c[k] -= PESO_ROTAR_DESCANSO_DIA * min(4, int(libres_previos[d.weekday()] or 0))
-            # Los findes rotan: primero se intenta alternar un finde trabajado y
-            # uno libre; el historial de cuatro semanas desempata después.
+            # Reparte fines de semana completos como unidad: cada persona que
+            # trabaja sábado o domingo cuenta como un finde trabajado. El coste
+            # crece con sus findes recientes y con los ya asignados en el plan,
+            # para favorecer descansos de fin de semana más regulares.
+            findes_plan = []
+            sabados = sorted({d - dt.timedelta(days=(d.weekday() - 5) % 7)
+                               for d in plan if d.weekday() >= 5})
+            for sab in sabados:
+                dias_finde = [d for d in (sab, sab + dt.timedelta(days=1)) if d in plan]
+                z = m.var(coste=PESO_REPARTO_FINDE)
+                coef, cte = suma([(cid, d) for d in dias_finde])
+                coef[z] = coef.get(z, 0) - 2
+                m.restr(coef, -math.inf, -cte)
+                findes_plan.append(z)
+            historicos = max(0, min(8, int(c.get("findes_trabajados_recientes") or 0)))
+            if findes_plan:
+                suma_findes = {z: 1 for z in findes_plan}
+                # Penalizaciones convexas (h >= total - nivel) evitan cargar
+                # varios fines consecutivos a la misma persona si hay relevo.
+                for nivel in range(1, historicos + len(findes_plan) + 1):
+                    h = m.var(0, None, entera=False, coste=PESO_REPARTO_FINDE)
+                    restr = dict(suma_findes)
+                    restr[h] = -1
+                    m.restr(restr, -math.inf, nivel - historicos)
+            # Compatibilidad con llamadas antiguas que solo aportan días.
             fr = min(5, int(c.get("findes_recientes") or 0))
-            if fr:
+            if fr and not c.get("findes_trabajados_recientes"):
                 for d in plan:
                     k = xv.get((cid, d))
                     if k is not None and d.weekday() >= 5:
