@@ -826,13 +826,13 @@ export default function Cuadrante() {
   const dias = useMemo(() => rangoDias(rango.desde, rango.hasta, 92), [rango])
   const personas = useMemo(() => lista(datos?.personas), [datos])
   const hoy = datos?.hoy || hoyLocal()
-  const fuera = (p) => p.tipo === 'inactivo' && p.ficha_activa === false
+  const fuera = (p) => p.tipo === 'inactivo'
   const personasVista = useMemo(() => {
     const visibles = mostrarFuera ? personas : personas.filter((p) => !fuera(p))
     return ordenAlfabetico
       ? [...visibles].sort((a, b) => new Intl.Collator('es', { sensitivity: 'base', numeric: true }).compare(a.nombre || '', b.nombre || ''))
       : visibles
-  }, [personas, mostrarFuera, ordenAlfabetico, rango.hasta])
+  }, [personas, mostrarFuera, ordenAlfabetico])
   const propuesta = datos?.propuesta || null
   const mostrarProp = Boolean(propuesta) && verPropuesta
   const cambiosProp = useMemo(() => {

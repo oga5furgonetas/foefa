@@ -587,9 +587,8 @@ Nada se había borrado (org `owner` sin `modulos`, usuario `dani` sin
 
 ## Última sesión — 13-10-2026: cuadrante, nombres y equidad de fines de semana
 
-- En `/panel/cuadrante`, las fichas marcadas fuera (tipo inactivo y ficha de
-  baja, o fecha de baja anterior al periodo) se ocultan de la vista operativa;
-  «Mostrar fuera» las recupera sin borrar fichas ni turnos históricos.
+- En `/panel/cuadrante`, las personas con tipo «inactivo» se ocultan de la vista
+  operativa; «Mostrar fuera» las recupera sin borrar fichas ni turnos históricos.
 - Orden alfabético opcional en la tabla y en MENSUAL; es solo visual y conserva
   las celdas vinculadas al ID de cada conductor. Se puede editar el nombre
   visible por persona sin cambiar la ficha ni reasignar turnos. La importación
