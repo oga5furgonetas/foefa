@@ -23,13 +23,15 @@ function encuadrar(m, puntos) {
 /* `trazado`: el camino por las calles ({linea:[[lat,lng]…], fuente}); con él
    no se pintan las rayas discontinuas de punto a punto. `yo`: dónde está el
    móvil ahora (solo se pinta aquí, no se envía). Una parada con `grande` es
-   la siguiente: más grande y con anillo. */
-export default function MapaReparto({ paradas = [], base = null, vivos = [], alto = 380, trazado = null, yo = null }) {
+   la siguiente: más grande y con anillo. `zonas`: las de carga y descarga
+   (13-10-2026), un cuadradito morado «C/D» que no cuenta para encuadrar. */
+export default function MapaReparto({ paradas = [], base = null, vivos = [], alto = 380, trazado = null, yo = null, zonas = [] }) {
   const caja = useRef(null)
   const mapa = useRef(null)
   const capa = useRef(null)
   const encuadre = useRef([])
   const capaYo = useRef(null)
+  const capaZonas = useRef(null)
   const yoRef = useRef(yo)
   const [seguir, setSeguir] = useState(false)
   const seguirRef = useRef(false)
@@ -44,6 +46,7 @@ export default function MapaReparto({ paradas = [], base = null, vivos = [], alt
       maxZoom: 19, attribution: '© OpenStreetMap',
     }).addTo(mapa.current)
     capa.current = L.layerGroup().addTo(mapa.current)
+    capaZonas.current = L.layerGroup().addTo(mapa.current)
     capaYo.current = L.layerGroup().addTo(mapa.current)
     // Si la caja cambia de tamaño tras crear el mapa (la página aún se estaba
     // montando), Leaflet solo pinta la franja que medía al principio: visto el
@@ -108,6 +111,22 @@ export default function MapaReparto({ paradas = [], base = null, vivos = [], alt
     encuadre.current = puntos
     if (!seguirRef.current) encuadrar(m, puntos)
   }, [paradas, base, vivos, trazado])
+
+  useEffect(() => {
+    if (!mapa.current || !capaZonas.current) return
+    capaZonas.current.clearLayers()
+    zonas.forEach((z) => {
+      const icono = L.divIcon({
+        className: '',
+        html: '<div style="width:26px;height:18px;border-radius:4px;background:#7c3aed;color:#fff;font:800 9px/18px system-ui;text-align:center;border:1.5px solid #fff;box-shadow:0 1px 3px rgba(0,0,0,.4)">C/D</div>',
+        iconSize: [26, 18], iconAnchor: [13, 9],
+      })
+      const detalle = [z.calle, z.horario, z.maximo && `${tx('máx.')} ${z.maximo}`].filter(Boolean).map(esc).join(' · ')
+      L.marker([z.lat, z.lng], { icon: icono, zIndexOffset: -800 })
+        .bindTooltip(`${esc(tx('Carga y descarga'))}${detalle ? `<br>${detalle}` : ''}`)
+        .addTo(capaZonas.current)
+    })
+  }, [zonas])
 
   // El punto azul se mueve solo (sin recolocar el mapa mientras lo exploras);
   // con «Seguirme» el mapa va detrás de él.

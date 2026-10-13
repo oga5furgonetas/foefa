@@ -262,6 +262,7 @@ export const getReferidos = () => api.get('/referidos')
 export const retirarCartera = (body) => api.post('/cartera/retirar', body)
 export const repPegarMiLista = (texto, confirmar) => api.post('/reparto/pegar', { texto, confirmar: !!confirmar })
 export const repTrazado = (desde) => api.post('/reparto/mi-ruta/trazado', desde ? { desde } : {})
+export const repZonasCarga = () => api.get('/reparto/mi-ruta/zonas-carga')
 // Desde dónde y hacia dónde abrir Street View para ver la puerta de una parada.
 export const repFachada = (id) => api.get(`/reparto/pedidos/${id}/fachada`)
 export const repNavegar = (id, desde) => api.post('/reparto/mi-ruta/navegar', { id, desde })

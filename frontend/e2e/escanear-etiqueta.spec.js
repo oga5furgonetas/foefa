@@ -142,3 +142,33 @@ test('Hoja de reparto · con una foto de la hoja impresa salen las tres paradas 
   for (const trozo of ['X812345; María López; Calle Mayor 12 15001 A Coruña; 612345678', 'X812346; Bar Pepe; Rúa Real 5 15003 A Coruña; 981223344',
     'X812347; Ana Ruiz; Avenida de Finisterre 100 15004 A Coruña']) expect(texto).toContain(trozo)
 })
+
+/* ZONAS DE CARGA Y DESCARGA (13-10-2026): en el mapa, un «C/D» morado por zona; el interruptor
+   las quita y se recuerda. Las zonas las da el servidor (de OpenStreetMap), aquí simuladas. */
+test('Mapa · las zonas de carga y descarga cerca de las paradas, y se pueden quitar', async ({ page }) => {
+  await preparar(page)
+  await page.route(/\/api\/reparto\/mi-ruta$/, (r) => r.fulfill({ json: {
+    activo: true, autonomo: true, empresa: '', fecha: '2026-10-13', ia_tickets: false, jornada: {}, aviso_aceptado: true,
+    base: null, ruta: { fin: '10:30', minutos: 30, km: 2, trafico: true }, pedidos: [
+      { id: 'p1', cliente: 'Farmacia Sol', direccion: 'Rúa Real 5', estado: 'pendiente', bultos: 1, orden: 1, lat: 43.3712, lng: -8.3990 },
+      { id: 'p2', cliente: 'Bar Pepe', direccion: 'Montero Ríos 12', estado: 'pendiente', bultos: 1, orden: 2, lat: 43.3690, lng: -8.4050 }] } }))
+  let pedidas = 0
+  await page.route(/\/api\/reparto\/mi-ruta\/zonas-carga$/, (r) => { pedidas += 1; return r.fulfill({ json: { fuente: 'OpenStreetMap', incompleto: false, zonas: [
+    { id: 'way101', lat: 43.3692, lng: -8.4049, horario: 'Mo-Fr 08:00-14:00', maximo: '30 min', calle: 'Rúa Montero Ríos' },
+    { id: 'node5', lat: 43.3713, lng: -8.3992, horario: '', maximo: '', calle: '' }] } }) })
+  await page.route(/tile\.openstreetmap\.org/, (r) => r.fulfill({ status: 204 }))
+  await page.goto('/ruta', { waitUntil: 'domcontentloaded' })
+  await page.getByRole('button', { name: 'Mapa' }).click()
+  await expect(page.getByText('2 cerca de tus paradas', { exact: false })).toBeVisible()
+  await expect(page.locator('.leaflet-marker-icon', { hasText: 'C/D' })).toHaveCount(2)
+  const interruptor = page.getByRole('checkbox', { name: /Zonas de carga y descarga/ })
+  await interruptor.uncheck()
+  await expect(page.locator('.leaflet-marker-icon', { hasText: 'C/D' })).toHaveCount(0)
+  // Apagado se recuerda: al volver, ni se piden.
+  const antes = pedidas
+  await page.reload({ waitUntil: 'domcontentloaded' })
+  await page.getByRole('button', { name: 'Mapa' }).click()
+  await expect(page.getByRole('checkbox', { name: /Zonas de carga y descarga/ })).not.toBeChecked()
+  await page.waitForTimeout(800)
+  expect(pedidas).toBe(antes)
+})

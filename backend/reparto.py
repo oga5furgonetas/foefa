@@ -736,3 +736,82 @@ def gcj02_a_wgs84(lat: float, lng: float) -> tuple:
         glat, glng = wgs84_a_gcj02(wlat, wlng)
         wlat, wlng = wlat - (glat - lat), wlng - (glng - lng)
     return wlat, wlng
+
+
+# ── ZONAS DE CARGA Y DESCARGA (13-10-2026) ────────────────────────────────────
+# Dónde puede parar la furgoneta a descargar, pintado en el mapa del repartidor.
+# Sale de OpenStreetMap (Overpass): sirve en cualquier país y es gratis, pero
+# solo están las zonas que alguien ha apuntado (en España, pocas fuera de las
+# grandes ciudades). NO dice si están libres: eso no lo publica nadie.
+# Etiquetas (wiki de OSM, «Street parking» y «Key:restriction»):
+#   parking:<lado>:restriction=loading_only (y :conditional con su horario),
+#   el esquema antiguo parking:condition:<lado>=loading, y un aparcamiento
+#   dibujado aparte con restriction=loading_only o access=delivery.
+# Al servidor de Overpass se le pregunta por cuadrados de ~5 km (TESELA), nunca
+# por los puntos de la ruta: así no sabe qué calles reparte nadie.
+
+TESELA = 0.05
+
+
+def teselas(s: float, w: float, n: float, e: float, lado: float = TESELA) -> list:
+    """Los cuadrados (claves enteras) que tapan la caja."""
+    fs, fn = math.floor(s / lado), math.floor(n / lado)
+    fw, fe = math.floor(w / lado), math.floor(e / lado)
+    return [(i, j) for i in range(fs, fn + 1) for j in range(fw, fe + 1)]
+
+
+def caja_de_tesela(t: tuple, lado: float = TESELA) -> tuple:
+    i, j = t
+    return (round(i * lado, 6), round(j * lado, 6), round((i + 1) * lado, 6), round((j + 1) * lado, 6))
+
+
+def consulta_zonas_carga(s: float, w: float, n: float, e: float) -> str:
+    caja = f"{s},{w},{n},{e}"
+    return (
+        "[out:json][timeout:25];("
+        f'way[~"^parking:(both|left|right)(:restriction|:restriction:conditional)$"~"loading_only"]({caja});'
+        f'way[~"^parking:condition:(both|left|right)(:conditional)?$"~"loading"]({caja});'
+        f'nwr["amenity"="parking"]["restriction"~"loading_only"]({caja});'
+        f'nwr["amenity"="parking"]["access"="delivery"]({caja});'
+        ");out center tags qt;"
+    )
+
+
+def _horario_zona(tags: dict) -> str:
+    """«loading_only @ (Mo-Fr 08:00-14:00)» → «Mo-Fr 08:00-14:00». Vacío si es a cualquier hora."""
+    for k, v in tags.items():
+        if k.endswith(":conditional") and ("loading" in str(v)):
+            m = re.search(r"@\s*\(?([^);]+)\)?", str(v))
+            if m:
+                return m.group(1).strip()[:60]
+    return ""
+
+
+def _maximo_zona(tags: dict) -> str:
+    for k in ("parking:both:maxstay", "parking:right:maxstay", "parking:left:maxstay", "maxstay"):
+        if tags.get(k):
+            return str(tags[k])[:20]
+    return ""
+
+
+def zonas_de_overpass(j: dict, limite: int = 400) -> list:
+    """La respuesta de Overpass → [{id, lat, lng, horario, maximo, calle}]. Nunca lanza."""
+    out, vistos = [], set()
+    for el in (j or {}).get("elements") or []:
+        if not isinstance(el, dict):
+            continue
+        c = el.get("center") or el
+        lat, lng = c.get("lat"), c.get("lon")
+        if not isinstance(lat, (int, float)) or not isinstance(lng, (int, float)):
+            continue
+        clave = f"{el.get('type', '')}{el.get('id', '')}"
+        if clave in vistos:
+            continue
+        vistos.add(clave)
+        tags = el.get("tags") or {}
+        out.append({"id": clave, "lat": round(float(lat), 6), "lng": round(float(lng), 6),
+                    "horario": _horario_zona(tags), "maximo": _maximo_zona(tags),
+                    "calle": str(tags.get("name") or "")[:80]})
+        if len(out) >= limite:
+            break
+    return out

@@ -5,7 +5,7 @@ import {
   Eye, PenLine, RotateCcw, HelpCircle, Share2, FileUp,
 } from 'lucide-react'
 import {
-  repMiRuta, repEscanear, repLeerTicket, repNuevoPedido, repEstado, repOrdenar, repJornada, repPosicion,
+  repMiRuta, repZonasCarga, repEscanear, repLeerTicket, repNuevoPedido, repEstado, repOrdenar, repJornada, repPosicion,
   repMiOrden, repMiEditar, repMiQuitar, repEjemplo, repQuitarEjemplos, repPegarMiLista, repTrazado, repFachada, repGanancias,
 } from '../../services/api'
 import { hoyLocal } from '../../lib/fecha'
@@ -83,6 +83,7 @@ function minutosATexto(m) {
 
 // El mapa (Leaflet) pesa: solo se descarga si se abre la vista de mapa.
 const MapaReparto = lazy(() => import('../../panel/components/MapaReparto'))
+const SIN_ZONAS = []
 
 /* Con qué navega cada uno: Google Maps o Waze. Se recuerda en el móvil. */
 /* «En la app» guía aquí dentro (Navegacion.jsx); los otros dos abren su app. */
@@ -262,6 +263,23 @@ export default function MiRuta({ onBack, embebido = false }) {
     })()
     return () => { vivo = false }
   }, [vista, firmaRuta, recalcular])
+
+  /* ZONAS DE CARGA Y DESCARGA (13-10-2026), con el mapa abierto y el interruptor
+     puesto (se recuerda en el móvil). Salen de OpenStreetMap: solo las que alguien
+     ha apuntado, y sin saber si están libres. */
+  const [verZonas, setVerZonas] = useState(() => { try { return localStorage.getItem('ruta_zonas_carga') !== '0' } catch { return true } })
+  const [zonas, setZonas] = useState(null)   // null | {zonas, incompleto}
+  useEffect(() => {
+    if (vista !== 'mapa' || !verZonas || !firmaRuta) return undefined
+    let vivo = true
+    repZonasCarga().then(({ data }) => { if (vivo) setZonas(data) })
+      .catch(() => { if (vivo) setZonas({ zonas: [], incompleto: true }) })
+    return () => { vivo = false }
+  }, [vista, verZonas, firmaRuta])
+  function cambiarZonas(v) {
+    setVerZonas(v)
+    try { localStorage.setItem('ruta_zonas_carga', v ? '1' : '0') } catch { /* sin almacenamiento */ }
+  }
 
   const cargar = useCallback(() => {
     repMiRuta().then(({ data }) => { fijarPais(data?.pais); setRuta(data) })
@@ -953,7 +971,7 @@ export default function MiRuta({ onBack, embebido = false }) {
       {!reordenar && vista === 'mapa' && pendientes.length > 0 && (
         <div className="mb-3">
           <Suspense fallback={<div className="flex h-[420px] items-center justify-center rounded-xl border border-dark-700"><Loader2 className="animate-spin text-dark-500" /></div>}>
-            <MapaReparto alto={420} base={yo ? null : ruta.base} yo={yo} trazado={trazado}
+            <MapaReparto alto={420} base={yo ? null : ruta.base} yo={yo} trazado={trazado} zonas={verZonas ? zonas?.zonas || SIN_ZONAS : SIN_ZONAS}
               paradas={lista(ruta.pedidos).map((p, i) => ({
                 lat: p.lat, lng: p.lng, estado: p.estado, orden: p.orden, color: '#0ea5e9', grande: siguiente?.id === p.id,
                 etiqueta: p.orden ?? i + 1, titulo: p.cliente || p.direccion, sub: p.eta ? `≈ ${p.eta} · ${p.direccion}` : p.direccion,
@@ -964,6 +982,17 @@ export default function MiRuta({ onBack, embebido = false }) {
               ? <><span className="inline-block h-1 w-5 rounded bg-sky-600" /> {tx('Por las calles:')} <b className="text-dark-200">{String(trazado.km).replace('.', ',')} km</b> · {tx('{t} conduciendo (sin contar paradas)', { t: minutosATexto(trazado.minutos) })}</>
               : trazado ? tx('Sin servidor de rutas ahora: rayas rectas entre paradas.') : tx('Calculando el recorrido…')}
           </p>
+          <label className="mt-1.5 flex flex-wrap items-center gap-x-2 gap-y-1 text-[12px] text-dark-300">
+            <input type="checkbox" checked={verZonas} onChange={(e) => cambiarZonas(e.target.checked)} className="h-4 w-4 accent-violet-600" />
+            <span className="rounded bg-violet-600 px-1 text-[9px] font-extrabold leading-4 text-white">C/D</span>
+            {tx('Zonas de carga y descarga')}
+            {verZonas && zonas && (
+              <span className="text-dark-400">
+                · {zonas.zonas.length ? tx('{n} cerca de tus paradas', { n: zonas.zonas.length }) : tx('ninguna apuntada cerca')}
+                {zonas.incompleto ? ` ${tx('(no se han podido cargar todas)')}` : ''} · OpenStreetMap
+              </span>
+            )}
+          </label>
           {pendientes.some((p) => p.lat == null) && (
             <p className="mt-1 text-[12px] text-amber-200/90">
               {tx('{n} sin situar en el mapa todavía (la dirección no se ha encontrado o se está buscando).', { n: pendientes.filter((p) => p.lat == null).length })}
