@@ -5,7 +5,7 @@
 > haz commit y `git push`. Una sola sesión trabajando a la vez: antes de
 > empezar, `git pull` y comprueba que nadie ha dejado nada a medias aquí.
 
-Última actualización: **04-10-2026, madrugada** (sesión `e88d38c9`, Claude).
+Última actualización: **13-10-2026, madrugada** (sesión en la nube `01FkmXNv`, Claude; ver la última sección).
 
 ## Qué es y dónde está
 
@@ -1007,3 +1007,47 @@ Repaso de cada frase de `/planes` y de la presentación contra el código (Dani:
   altas): pausarla y pasar ese dinero a Meta (~1,9 € por alta) cuando arregle el pago; (2) el carrusel de TikTok
   del 10-10 dice «5 € por Bizum» (editar desde el móvil); (3) 3 de los 7 posts en grupos de Mercado Libre los
   suprimieron los admins.
+
+## 13-10-2026 (madrugada, sesión en la nube 01FkmXNv): meter paradas sin escribir y zonas de carga
+
+Rama **`reparto-etiquetas-carga`** (subida; **sin desplegar**: desde la nube no hay acceso a Fly ni a Cloudflare).
+Dani pidió: lo que más cuesta es meter las paradas (punto 1), dirigirse a quien reparte con lista sin
+ordenar (punto 2), zonas de carga y descarga en el mapa, y que el escáner lea la dirección y el teléfono
+de la etiqueta de cualquier empresa.
+- **Escáner con todos los códigos** (`lib/codigoEtiqueta.js`): antes se quedaba con el PRIMER código (la
+  barra) y GLS pone la dirección en su SEGUNDO 2D. Ahora junta lo leído durante medio segundo y lo
+  interpreta: GS1 Scan4Transport (4301 nombre, 4302/4303 dirección, 4305 localidad, 4308 teléfono, 420 CP,
+  4309 coordenadas con la fórmula de github.com/gs1/geocode), ANSI MH10.8.3 de UPS/FedEx (heurístico) y
+  datos separados por «|». Lo que falte lo pone la foto del mismo instante sin pisar lo leído.
+  **No probado con etiquetas reales** (no hay muestras): pedir a Dani fotos de 5-10 etiquetas de empresas
+  distintas (SEUR, GLS, MRW, Correos, CTT, Amazon…) y añadir sus códigos como casos en `check-leer-etiqueta.mjs`.
+- **«Escanear seguidos»** (en «Cargar paquetes»): la cámara no se cierra; si la etiqueta trae la dirección
+  completa en sus códigos, la parada entra sola; los repetidos no cuentan; el resto queda «para revisar».
+- **Foto de la hoja de reparto entera** y **abrir un CSV/texto** en «Pegar una lista» (`lib/hojaReparto.js`,
+  `leerHojaEnMovil`): el OCR del móvil + qué líneas son paradas; va a la caja con cabecera para revisar.
+  Probado con una hoja impresa leída de verdad por el OCR: salen las 3 paradas; confunde a veces la «Z» del
+  código con «7» (por eso se revisa).
+- **Zonas de carga y descarga** (`GET /reparto/mi-ruta/zonas-carga`, `reparto.zonas_de_overpass`): de
+  OpenStreetMap por Overpass, por cuadrados de ~5 km (nunca las paradas), 24 h en memoria, una petición por
+  segundo. Interruptor «C/D» en el mapa. Solo salen las apuntadas en OSM (en España, pocas fuera de grandes
+  ciudades) y no dice si están libres. **No verificado contra Overpass real** (la red de la nube lo bloquea):
+  tras desplegar, abrir el mapa con paradas en el centro de Barcelona o Madrid y mirar si salen «C/D».
+  Siguiente fuente posible: el dataset de Open Data BCN «Zonas de carga y descarga» (en datos.gob.es).
+- **Portada /repartidores**: ventajas y la pregunta de la agencia hablan de cualquier etiqueta, la hoja en una
+  foto y las zonas (no se tocó el titular: prueba A/B). Igual en `functions/repartidores.js`.
+- Pruebas: `e2e/escanear-etiqueta.spec.js` (escáner y cámara simulados, hoja con OCR real, CSV, mapa),
+  `backend/tests/test_zonas_carga.py`, casos nuevos en `scripts/check-leer-etiqueta.mjs`.
+- **Hallado y SIN arreglar** (estaba así antes de esta sesión):
+  - El **CI de GitHub está rojo en todos los commits**. Desde el 10-10 22:00 cada ejecución muere en ~3 s
+    sin logs (probablemente minutos de Actions agotados en el repo privado: mirar Settings → Billing).
+    Antes fallaban 7 pruebas de Playwright: `activacion.spec.js` (3 × 2, textos de la oferta vieja
+    «1 mes gratis»/«14 días» frente a la promo hasta el 31-12) y `humo` «pide instalar la app (QR en el
+    ordenador)» en el proyecto móvil (el QR solo sale en ordenador).
+  - `test_valor_oddspapi.py`: 2 pruebas con partidos fechados el 09-10-2026, caducadas desde entonces.
+  - Chequeos del CI en rojo: `check-hooks` y `check-version-app` rompen en Linux (`pathname.slice(1)`, solo
+    vale en Windows); falsos positivos en `check-importados` (`tx` es un parámetro en `lib/guia.js`, «lista»
+    es texto en `PruebaReparto.jsx`) y `check-efectos` (`InstalarApp.jsx:26` devuelve su limpieza); de verdad:
+    falta la ficha de ayuda de `reparto`, `.text-pink-300` en el híbrido, 2 rutas sin consumidor
+    (`/admin/demo-comercial`, webhook de suscripciones de Stripe) y 2 «division-sin-guard».
+- **Para desplegar** (Dani, desde su PC): `git pull`, fusionar la rama en `main`, y lo de «Cómo desplegar»
+  (backend y web: hay cambios en los dos).
