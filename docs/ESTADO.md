@@ -5,7 +5,7 @@
 > haz commit y `git push`. Una sola sesión trabajando a la vez: antes de
 > empezar, `git pull` y comprueba que nadie ha dejado nada a medias aquí.
 
-Última actualización: **13-10-2026, madrugada** (sesión en la nube `01FkmXNv`, Claude; ver la última sección).
+Última actualización: **13-10-2026** (merge `4711086` y publicación de etiquetas y zonas de carga).
 
 ## Qué es y dónde está
 
@@ -1047,7 +1047,7 @@ Repaso de cada frase de `/planes` y de la presentación contra el código (Dani:
 - Verificación antes de publicar: 1.141 pruebas de backend pasaron, 1 omitida; 157 pruebas de humo pasaron; lint sin errores (52 avisos preexistentes), compilación y chequeos estáticos correctos.
 ## 13-10-2026 (madrugada, sesión en la nube 01FkmXNv): meter paradas sin escribir y zonas de carga
 
-Rama **`reparto-etiquetas-carga`** (subida; **sin desplegar**: desde la nube no hay acceso a Fly ni a Cloudflare).
+Rama **`reparto-etiquetas-carga`**, integrada en `main` y publicada en Flota el 13-10-2026 desde el PC de Dani.
 Dani pidió: lo que más cuesta es meter las paradas (punto 1), dirigirse a quien reparte con lista sin
 ordenar (punto 2), zonas de carga y descarga en el mapa, y que el escáner lea la dirección y el teléfono
 de la etiqueta de cualquier empresa.
@@ -1090,5 +1090,13 @@ de la etiqueta de cualquier empresa.
   ya rojas antes de esta sesión (comprobado contra `f1ee87c`): `activacion.spec.js` (3 × 2), `demo-no-atrapa`
   «Ya tengo cuenta» (× 2, lo tapa el recorrido «Así funciona») y `humo` «pide instalar la app» en móvil.
   Backend: todo verde salvo las 2 de `test_valor_oddspapi.py` (fechas caducadas).
-- **Para desplegar** (Dani, desde su PC): `git pull`, fusionar la rama en `main`, y lo de «Cómo desplegar»
-  (backend y web: hay cambios en los dos).
+- Validación de publicación en el PC: compilación de producción y chequeo de etiqueta correctos; pasaron
+  4 pruebas `test_zonas_carga.py` y 5 pruebas nuevas de `escanear-etiqueta.spec.js`. ESLint terminó sin errores
+  (52 avisos existentes). La batería completa previa reportó 9 fallos de navegador y 2 pruebas de fechas
+  caducadas, todos documentados como preexistentes y ajenos a esta rama.
+- **Publicado**: Fly `flota-backend` desplegó y la máquina quedó en buen estado; `/api/health` devolvió
+  `status=ok`, `mongo_connected=true`. Pages `flota` publicó el bundle nuevo, verificado contra el local;
+  los 229 ficheros del edge terminaron sirviéndose correctamente. Fly informó que falta un registro AAAA,
+  pero el dominio/API responde por HTTPS. El humo autenticado de los scripts no corrió porque este entorno
+  no tenía `SECRET_KEY` local; la salud pública y la conexión con Mongo se comprobaron por separado.
+- **Integración en GitHub**: merge commit `4711086` en `main` (publicación verificada el 13-10-2026).
