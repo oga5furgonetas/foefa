@@ -76,11 +76,22 @@ def test_los_dos_que_viven_dentro_de_un_array_tambien_se_repuntan():
     assert src.count("array_filters=[") == 2, "los dos, y solo los dos"
 
 
-def test_solo_se_fusiona_con_el_mismo_correo():
-    """Por nombre no: dos tocayos acabarian con el historial mezclado."""
+def test_se_admite_correo_igual_o_par_exacto_no_ambiguo():
+    """El correo vale; sin correo, solo el par exacto y único revisado en UI."""
     src = _fuente("drivers_fusionar")
-    assert "MISMO correo" in src
-    assert "email" in src and "tocayos" in src
+    assert "mismo correo" in src
+    assert "mismo nombre y centro" in src
+    assert "El nombre y centro no identifican un par único" in src
+    assert "otro_correo" in src and "mismo_centro" in src
+
+
+def test_la_fusion_conserva_la_ficha_con_correo_en_cuadrante():
+    """También traslada o combina las reglas guardadas en cuadrante_personas."""
+    src = _fuente("_repuntar_conductor")
+    assert "_CUA_PERSONAS" in src
+    assert '"en_cuadrante"' in src
+    assert '"reglas_fijas"' in src
+    assert '"fusionada_en"' in src
 
 
 def test_la_absorbida_no_se_borra():

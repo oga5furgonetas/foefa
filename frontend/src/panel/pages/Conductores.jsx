@@ -309,9 +309,9 @@ function SaludFichas({ onCambio }) {
   }
 
   const fusionar = async (grupo) => {
-    const conservar = elegida[grupo.email] || grupo.sugerida
+    const conservar = elegida[grupo.clave] || grupo.sugerida
     const absorber = grupo.fichas.filter((f) => f.id !== conservar).map((f) => f.id)
-    setOcupado(grupo.email); setErr('')
+    setOcupado(grupo.clave); setErr('')
     try {
       await fusionarConductores({ conservar, absorber })
       cargar(); onCambio?.()
@@ -334,10 +334,10 @@ function SaludFichas({ onCambio }) {
           {dups.total > 0 && <span className="ml-2 rounded-full bg-amber-500/20 px-2 py-0.5 text-[11.5px] font-bold text-amber-300">{dups.fichas_de_mas} de más</span>}
         </h2>
         <p className="mb-3 max-w-[70ch] text-[13px] text-dark-400">
-          Se emparejan por <b className="text-dark-200">correo</b>, nunca por nombre: dos
-          tocayos distintos acabarían mezclados y uno auditando la furgoneta del otro.
-          Se conserva la ficha con más historial y la otra se marca fusionada — no se
-          borra, así que se puede deshacer.
+          Se agrupan por correo compartido. También se muestran como propuesta los pares
+          con nombre completo exacto, mismo centro y solo una ficha con correo. Esa ficha
+          se conserva para el acceso; revisa cada pareja antes de pulsar Fusionar. La ficha
+          anterior queda marcada y recuperable, y se trasladan sus turnos y configuración del cuadrante.
         </p>
         <button onClick={repasar} disabled={ocupado === 'repaso'}
           className="mb-3 rounded-lg border border-dark-700 px-3 py-1.5 text-[12.5px] text-dark-300 hover:border-dark-500 disabled:opacity-50">
@@ -348,17 +348,19 @@ function SaludFichas({ onCambio }) {
         ) : (
           <div className="space-y-2">
             {dups.grupos.map((g) => {
-              const conservar = elegida[g.email] || g.sugerida
+              const conservar = elegida[g.clave] || g.sugerida
               return (
-                <div key={g.email} className="card p-3">
-                  <p className="mb-2 font-mono text-[12px] text-dark-500">{g.email}</p>
+                <div key={g.clave} className="card p-3">
+                  <p className="mb-2 font-mono text-[12px] text-dark-500">
+                    {g.tipo === 'nombre_centro' ? `Coincidencia exacta · ${g.fichas[0]?.center || 'sin centro'}` : g.email}
+                  </p>
                   <div className="space-y-1">
                     {g.fichas.map((f) => (
                       <label key={f.id}
                         className={`flex cursor-pointer flex-wrap items-center gap-2 rounded-lg border px-3 py-2 text-[13px] ${
                           f.id === conservar ? 'border-emerald-500/40 bg-emerald-500/[0.07]' : 'border-dark-800 hover:border-dark-700'}`}>
-                        <input type="radio" name={`c-${g.email}`} checked={f.id === conservar}
-                          onChange={() => setElegida((e) => ({ ...e, [g.email]: f.id }))}
+                        <input type="radio" name={`c-${g.clave}`} checked={f.id === conservar}
+                          onChange={() => setElegida((e) => ({ ...e, [g.clave]: f.id }))}
                           className="accent-emerald-500" />
                         <span className="font-semibold text-dark-100">{f.nombre}</span>
                         <span className="text-dark-500">
@@ -368,9 +370,9 @@ function SaludFichas({ onCambio }) {
                       </label>
                     ))}
                   </div>
-                  <button onClick={() => fusionar(g)} disabled={ocupado === g.email}
+                  <button onClick={() => fusionar(g)} disabled={ocupado === g.clave}
                     className="mt-2 rounded-lg bg-brand-500/20 px-3 py-1.5 text-[13px] font-semibold text-brand-200 hover:bg-brand-500/30 disabled:opacity-50">
-                    {ocupado === g.email ? 'Fusionando…' : `Fusionar ${g.fichas.length} fichas en una`}
+                    {ocupado === g.clave ? 'Fusionando…' : `Fusionar ${g.fichas.length} fichas en una`}
                   </button>
                 </div>
               )

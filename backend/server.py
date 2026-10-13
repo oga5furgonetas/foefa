@@ -11000,16 +11000,53 @@ async def drivers_duplicados(_=Depends(require_admin)):
     entraria como si fuera un id.
     """
     porcorreo: dict = {}
+    conductores = []
     async for d in db.drivers.find({}, {"_id": 0}):
         e = (d.get("email") or "").strip().lower()
         if not e or d.get("merged_into"):
-            continue
-        porcorreo.setdefault(e, []).append(d)
+            if d.get("merged_into"):
+                continue
+        conductores.append(d)
+        if e:
+            porcorreo.setdefault(e, []).append(d)
     grupos = {e: v for e, v in porcorreo.items() if len(v) > 1}
-    if not grupos:
+    salida = []
+    ids_vistos = set()
+    for e, fichas in sorted(grupos.items()):
+        ids_vistos.update(d.get("id") for d in fichas if d.get("id"))
+        salida.append({"clave": "email:" + e, "tipo": "correo", "email": e,
+                       "fichas": fichas, "sugerida": None})
+
+    # Caso de importación habitual: cuadrante con nombre exacto y ficha de
+    # acceso añadida después con correo. Solo se propone si son EXACTAMENTE
+    # dos fichas activas, mismo nombre completo normalizado, mismo centro no
+    # vacío y solo una tiene correo. Nunca se fusiona automáticamente.
+    por_nombre_centro: dict = {}
+    for d in conductores:
+        if d.get("active") is False or not d.get("id"):
+            continue
+        nombre, centro = _imp_norm(d.get("name")), _imp_norm(d.get("center"))
+        if nombre and centro:
+            por_nombre_centro.setdefault((nombre, centro), []).append(d)
+    for (nombre_norm, centro_norm), fichas in sorted(por_nombre_centro.items()):
+        if len(fichas) != 2:
+            continue
+        con_correo = [d for d in fichas if (d.get("email") or "").strip()]
+        sin_correo = [d for d in fichas if not (d.get("email") or "").strip()]
+        if len(con_correo) != 1 or len(sin_correo) != 1:
+            continue
+        if any(d["id"] in ids_vistos for d in fichas):
+            continue
+        conservar = con_correo[0]
+        clave = "nombre:%s:%s" % (centro_norm, conservar["id"])
+        salida.append({"clave": clave, "tipo": "nombre_centro",
+                       "email": (conservar.get("email") or "").strip().lower(),
+                       "fichas": fichas, "sugerida": conservar["id"]})
+
+    if not salida:
         return {"grupos": [], "total": 0, "fichas_de_mas": 0}
 
-    ids = [d["id"] for v in grupos.values() for d in v if d.get("id")]
+    ids = [d["id"] for g in salida for d in g["fichas"] if d.get("id")]
     async def _cuenta(col, campo):
         out: dict = {}
         async for r in db[col].aggregate([
@@ -11028,7 +11065,8 @@ async def drivers_duplicados(_=Depends(require_admin)):
                 asig[sl["driver_id"]] = asig.get(sl["driver_id"], 0) + 1
 
     fuera = []
-    for e, fichas in sorted(grupos.items()):
+    for grupo in salida:
+        fichas = grupo["fichas"]
         filas = []
         for d in fichas:
             i = d["id"]
@@ -11043,7 +11081,8 @@ async def drivers_duplicados(_=Depends(require_admin)):
                                      ("inspecciones", "turnos", "peticiones", "asignaciones"))
         # La que mas historial tiene primero: es la que conviene conservar.
         filas.sort(key=lambda x: -x["total"])
-        fuera.append({"email": e, "fichas": filas, "sugerida": filas[0]["id"]})
+        sugerida = grupo["sugerida"] or filas[0]["id"]
+        fuera.append({**grupo, "fichas": filas, "sugerida": sugerida})
     return {"grupos": fuera, "total": len(fuera),
             "fichas_de_mas": sum(len(g["fichas"]) - 1 for g in fuera)}
 
@@ -11394,6 +11433,42 @@ async def _repuntar_conductor(absorber: list, conservar: str, nombre: str) -> di
         array_filters=[{"m.driver_id": {"$in": absorber}}])
     if r.modified_count:
         movidos["vehicles.mileage_history"] = r.modified_count
+    # El cuadrante guarda preferencias y pertenencia fuera de `shifts`. Se
+    # copia lo que falte a la ficha superviviente y se conserva la fuente como
+    # respaldo marcado, para que no aparezca como una segunda persona.
+    cuadrante_movidos = 0
+    async for origen in db[_CUA_PERSONAS].find({"driver_id": {"$in": absorber}}, {"_id": 0}):
+        centro = origen.get("center")
+        if not centro:
+            continue
+        destino = await db[_CUA_PERSONAS].find_one(
+            {"center": centro, "driver_id": conservar}, {"_id": 0})
+        campos = {k: v for k, v in origen.items()
+                  if k not in ("center", "driver_id", "fusionada_en")}
+        if destino:
+            relleno = {k: v for k, v in campos.items()
+                       if k not in destino or destino.get(k) in (None, "", [])}
+            if origen.get("en_cuadrante"):
+                relleno["en_cuadrante"] = True
+            if origen.get("apodos"):
+                relleno["apodos"] = sorted(set(destino.get("apodos") or []) |
+                                             set(origen.get("apodos") or []))
+            if origen.get("reglas_fijas") and destino.get("reglas_fijas"):
+                dias = set((destino.get("reglas_fijas") or {}).get("dias_no") or [])
+                dias.update((origen.get("reglas_fijas") or {}).get("dias_no") or [])
+                relleno["reglas_fijas"] = {"dias_no": sorted(dias)}
+            if relleno:
+                await db[_CUA_PERSONAS].update_one(
+                    {"center": centro, "driver_id": conservar}, {"$set": relleno})
+        else:
+            await db[_CUA_PERSONAS].insert_one({**campos, "center": centro,
+                                               "driver_id": conservar})
+        await db[_CUA_PERSONAS].update_one(
+            {"center": centro, "driver_id": origen.get("driver_id")},
+            {"$set": {"fusionada_en": conservar}})
+        cuadrante_movidos += 1
+    if cuadrante_movidos:
+        movidos["cuadrante_personas"] = cuadrante_movidos
     return movidos
 
 
@@ -11448,13 +11523,29 @@ async def drivers_fusionar(data: dict = Body(...), user: dict = Depends(require_
     otras = await db.drivers.find({"id": {"$in": absorber}}, {"_id": 0}).to_list(20)
     if len(otras) != len(absorber):
         raise HTTPException(404, "Alguna de las fichas a absorber no existe")
-    # Mismo correo o no se toca: es la unica prueba de que son la misma persona.
+    # Prueba principal: mismo correo. Para una ficha importada sin correo,
+    # se admite solo el par exacto y no ambiguo que muestra la herramienta:
+    # nombre completo exacto, mismo centro y exactamente dos fichas activas,
+    # una con correo (la que se conserva) y otra sin él.
     correo = (buena.get("email") or "").strip().lower()
     for o in otras:
-        if (o.get("email") or "").strip().lower() != correo or not correo:
+        otro_correo = (o.get("email") or "").strip().lower()
+        if correo and otro_correo == correo:
+            continue
+        mismo_nombre = bool(_imp_norm(buena.get("name")) and
+                            _imp_norm(buena.get("name")) == _imp_norm(o.get("name")))
+        centro = _imp_norm(buena.get("center"))
+        mismo_centro = bool(centro and centro == _imp_norm(o.get("center")))
+        if not correo or otro_correo or not mismo_nombre or not mismo_centro:
             raise HTTPException(400,
-                                "Solo se fusionan fichas con el MISMO correo. "
-                                "Por nombre no: dos tocayos acabarian mezclados.")
+                                "Solo se fusionan fichas con el mismo correo o el par exacto "
+                                "de mismo nombre y centro, con correo solo en la ficha conservada.")
+        coincidencias = await db.drivers.find({"merged_into": {"$exists": False},
+            "active": {"$ne": False}}, {"_id": 0, "id": 1, "name": 1, "center": 1}).to_list(5000)
+        exactas = [d for d in coincidencias if _imp_norm(d.get("name")) == _imp_norm(buena.get("name"))
+                   and _imp_norm(d.get("center")) == centro]
+        if len(exactas) != 2 or {d.get("id") for d in exactas} != {conservar, o.get("id")}:
+            raise HTTPException(400, "El nombre y centro no identifican un par único; no se fusionó.")
 
     movidos = await _repuntar_conductor(absorber, conservar, buena.get("name") or "")
 

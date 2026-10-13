@@ -1176,3 +1176,11 @@ de la etiqueta de cualquier empresa.
 - Una dirección leída de foto exige revisión/confirmación manual antes de guardarse. No se afirma compatibilidad perfecta con todas las empresas: el QR/DataMatrix solo da la dirección si la empresa la codificó; si no, la foto se interpreta localmente y datos dudosos quedan para revisar.
 - Verificación: `check-leer-etiqueta.mjs`, ESLint en los tres archivos tocados, build Vite y Playwright móvil usando la foto real. No desplegado todavía.
 - Pendiente para ampliar cobertura: reunir etiquetas reales de distintas compañías y añadir el texto OCR/códigos de cada formato como casos. No hay un formato QR único universal.
+
+## 13-10-2026: fusionar fichas de conductor sin perder el cuadrante
+
+- «Fichas duplicadas» también propone (sin fusionar automáticamente) solo pares con nombre completo normalizado idéntico, mismo centro no vacío, exactamente dos fichas activas y correo en una sola. La ficha con correo queda sugerida para conservar el acceso del conductor.
+- La API vuelve a comprobar esas condiciones y rechaza coincidencias ambiguas. La fusión sigue siendo recuperable (`merged_into`) y repunta historiales, asignaciones y acceso; también copia/completa la configuración `cuadrante_personas` y marca su origen como respaldo.
+- Se aplicara a Nora la ficha de acceso que Dani confirmó. Ningún otro par basado solo en el nombre se fusionará sin revisión.
+- Verificación: 1.147 pruebas de backend pasan (1 omitida), 157 pruebas de humo pasan, ESLint sin errores (52 avisos previos), build y seis chequeos estáticos correctos.
+- Publicación y fusión de Nora: pendiente al cerrar esta sesión.
