@@ -87,6 +87,7 @@ function Asistente({ center, datos, onCerrar, onHecho }) {
   const [hasta, setHasta] = useState(ultimaMax && ultimaMax > manana ? ultimaMax : sumaDias(lunesDe(manana), 13))
   const [colchon, setColchon] = useState(datos?.config?.colchon ?? 2)
   const [extra, setExtra] = useState(datos?.config?.permitir_extra ?? true)
+  const [desdeCero, setDesdeCero] = useState(false)
   const [info, setInfo] = useState(null)
   const [maximas, setMaximas] = useState({})
   const [bajas, setBajas] = useState({})       // did -> 'sigue' | 'vuelve:<fecha>' | 'nada'
@@ -167,7 +168,8 @@ function Asistente({ center, datos, onCerrar, onHecho }) {
         }
       }
       if (celdas.length) await cuadranteCeldas(center, celdas)
-      const r = await cuadranteProponer({ center, desde, hasta, colchon: Number(colchon), permitir_extra: extra })
+      const r = await cuadranteProponer({ center, desde, hasta, colchon: Number(colchon), permitir_extra: extra,
+        desde_cero: desdeCero })
       onHecho(r.data)
     } catch (e) {
       setErr(e?.response?.data?.detail || 'No se ha podido calcular.')
@@ -196,11 +198,16 @@ function Asistente({ center, datos, onCerrar, onHecho }) {
               <input type="checkbox" checked={extra} onChange={(e) => setExtra(e.target.checked)} />
               Poner días extra (6º día) si no se llega
             </label>
+            <label className="flex items-center gap-2 pb-2 text-xs text-dark-300">
+              <input type="checkbox" checked={desdeCero} onChange={(e) => setDesdeCero(e.target.checked)} />
+              Recalcular como cuadrante en blanco
+            </label>
           </div>
           <p className="mt-1.5 text-[11.5px] text-dark-500">
             Hoy no se toca: el día ya está en marcha. {dias.length} días. Al calcular,
             el motor rota los descansos según las últimas 4 semanas (también lunes y martes)
             y favorece alternar fines de semana. Es un desempate: primero cubre las rutas.
+            {desdeCero && ' Se recalculan solo las celdas movibles; las fijadas, aprobadas, especiales y de otros centros se conservan. Nada cambia hasta que aceptes la propuesta.'}
           </p>
         </section>
 

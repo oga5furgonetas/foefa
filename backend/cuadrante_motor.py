@@ -141,6 +141,19 @@ def _cod(v) -> str:
     return "1" if s in ("1.0", "1,0") else s
 
 
+def celdas_plan_en_blanco(entrada: Dict[str, Any]) -> Dict[str, str]:
+    """Vista base para rehacer el tramo: vacía solo lo movible, no lo protegido."""
+    inicio, fin = _d(entrada["fecha_inicio"]), _d(entrada["fecha_fin"])
+    bloqueadas = set(entrada.get("bloqueadas") or [])
+    celdas = dict(entrada.get("celdas") or {})
+    for clave in celdas:
+        _, fecha = clave.split("|", 1)
+        if (inicio <= _d(fecha) <= fin and clave not in bloqueadas
+                and _cod(celdas[clave]) in MOVIBLES):
+            celdas[clave] = ""
+    return celdas
+
+
 class _Programa:
     """Programa entero pequeño con matriz DISPERSA sobre scipy (HiGHS).
 

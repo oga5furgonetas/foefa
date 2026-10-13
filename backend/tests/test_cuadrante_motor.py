@@ -297,6 +297,19 @@ def test_rota_descanso_de_lunes_si_la_persona_ya_libro_los_lunes():
     assert trabaja(res, "c0", dia(0))
 
 
+def test_rehacer_desde_cero_vacia_solo_el_tramo_y_conserva_celdas_protegidas():
+    original = {f"c0|{dia(-1)}": "1", f"c0|{dia(0)}": "1",
+                f"c0|{dia(1)}": "N/T", f"c1|{dia(1)}": "BAJA",
+                f"c2|{dia(1)}": "V"}
+    base = {"fecha_inicio": dia(0), "fecha_fin": dia(1), "celdas": original,
+            "bloqueadas": [f"c0|{dia(1)}"]}
+    limpia = cm.celdas_plan_en_blanco(base)
+    assert limpia == {f"c0|{dia(-1)}": "1", f"c0|{dia(0)}": "",
+                      f"c0|{dia(1)}": "N/T", f"c1|{dia(1)}": "BAJA",
+                      f"c2|{dia(1)}": "V"}
+    assert original[f"c0|{dia(0)}"] == "1"  # el original no se muta
+
+
 # ── CAMBIAR LO MÍNIMO ────────────────────────────────────────────────────────
 
 def test_un_cuadrante_que_ya_cumple_no_se_toca():

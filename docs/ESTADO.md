@@ -600,6 +600,10 @@ Nada se había borrado (org `owner` sin `modulos`, usuario `dani` sin
   sobrepasa las celdas fijadas ni las reglas de cobertura. No se asignan
   L1/L2/L3 a personas por deducción: faltan las elegibilidades individuales
   que Dani indicó que facilitará.
+- El asistente tiene «Recalcular como cuadrante en blanco»: limpia solo la
+  entrada del motor dentro del tramo seleccionado y conserva descansos previos,
+  normas de cada persona y celdas no movibles, fijadas o aprobadas. Devuelve una
+  propuesta con el antes correcto; los turnos actuales solo cambian al aceptarla.
 - Verificado: 1.139 pruebas backend pasan, 1 omitida; checks del repositorio,
   eslint (sin errores), build Vite, check de hooks, 157 pruebas de humo de
   escritorio y 9 pruebas del cuadrante en serie pasan. Publicado en producción:
@@ -607,9 +611,12 @@ Nada se había borrado (org `owner` sin `modulos`, usuario `dani` sin
   nuevo en `https://flotadsp.com/panel/cuadrante` y los 229 recursos del edge
   quedaron calientes. El humo autenticado no pudo ejecutarse porque falta
   `SECRET_KEY` en el entorno local; se verificaron por separado la salud pública
-  de la API, Mongo y que producción sirve exactamente el bundle compilado.
-- Seguimiento: prueba focalizada del motor (51 pasan), ESLint y compilación
-  vuelven a pasar con la rotación por día de semana. Nuevo despliegue pendiente.
+  de la API (versión 6.0.0, Mongo conectado) y que producción sirve exactamente
+  el bundle compilado. La pantalla muestra el criterio y la opción de cuadrante
+  en blanco.
+- Seguimiento publicado: prueba focalizada del motor (52 pasan), ESLint y build
+  Vite pasan; se verificó que solo se vacían las celdas movibles del tramo y se
+  mantienen códigos especiales como BAJA y V.
 
 ## Sesión anterior — 13-10-2026: escaneo de paquetes en lote
 

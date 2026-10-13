@@ -45543,11 +45543,16 @@ async def _cua_entrada(center: str, desde: str, hasta: str, colchon=None, permit
 
 
 async def _cua_proponer(center: str, desde: str, hasta: str, user: dict, origen: str = "asistente",
-                        colchon=None, permitir_extra=None) -> dict:
+                        colchon=None, permitir_extra=None, desde_cero=False) -> dict:
     """Calcula con el motor y deja la propuesta pendiente. No cambia ni un turno."""
     entrada, personas, extras_ahora = await _cua_entrada(center, desde, hasta, colchon, permitir_extra)
     if not entrada["conductores"]:
         raise HTTPException(400, "No hay nadie en el cuadrante de este centro para esas fechas")
+    valores_antes = dict(entrada["celdas"])
+    if desde_cero:
+        # El motor parte en blanco dentro del tramo, pero el historial anterior
+        # (incluidos descansos) ya está calculado y las celdas protegidas siguen.
+        entrada["celdas"] = _cm.celdas_plan_en_blanco(entrada)
     try:
         res = await asyncio.to_thread(_cm.generar_cuadrante, entrada)
     except ValueError as e:
@@ -45558,16 +45563,18 @@ async def _cua_proponer(center: str, desde: str, hasta: str, user: dict, origen:
     nombre = {p["id"]: p["nombre"] for p in personas}
     cambios = []
     for k, v in res["celdas"].items():
+        antes = valores_antes.get(k, "") if desde_cero else v["antes"]
         antes_extra = k in extras_ahora
-        if v["cambiado"] or v["extra"] != antes_extra:
+        if v["valor"] != antes or v["extra"] != antes_extra:
             did, fecha = k.split("|")
             cambios.append({"driver_id": did, "nombre": nombre.get(did, ""), "fecha": fecha,
-                            "antes": v["antes"], "valor": v["valor"], "extra": v["extra"],
+                            "antes": antes, "valor": v["valor"], "extra": v["extra"],
                             "antes_extra": antes_extra})
     doc = {"id": str(uuid.uuid4()), "center": center, "desde": desde, "hasta": hasta,
            "creada_en": datetime.now(timezone.utc).isoformat(), "creada_por": (user or {}).get("name") or "",
            "origen": origen, "estado": "pendiente", "colchon": entrada["colchon"],
-           "permitir_extra": entrada["permitir_extra"], "resumen_dias": res["resumen_dias"],
+           "permitir_extra": entrada["permitir_extra"], "desde_cero": bool(desde_cero),
+           "resumen_dias": res["resumen_dias"],
            "avisos": res["avisos"], "extras": res["extras"], "deficit": res["deficit"],
            "faltan_conductores": res["faltan_conductores"], "estado_calculo": res["estado"],
            "cambios": cambios,
@@ -45989,7 +45996,7 @@ async def cuadrante_proponer(data: dict = Body(...), user: dict = Depends(requir
             raise HTTPException(400, "El colchón tiene que ser un número")
     pe = data.get("permitir_extra")
     return await _cua_proponer(center, desde, hasta, user, "asistente", colchon,
-                               None if pe is None else bool(pe))
+                               None if pe is None else bool(pe), bool(data.get("desde_cero", False)))
 
 
 @api_router.post("/cuadrante/propuestas/{pid}/aceptar")
