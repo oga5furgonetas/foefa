@@ -17,14 +17,16 @@ const DESCRIPCION = 'Foto a la etiqueta, paradas ordenadas y guía por voz hasta
 const PROMO_HASTA = '2026-12-31'
 const enPromo = () => new Date().toISOString().slice(0, 10) <= PROMO_HASTA
 const VENTAJAS = [
-  'Foto a la etiqueta: la dirección y el teléfono entran solos',
+  'Escanea o haz una foto a la etiqueta, sea de la empresa que sea: la dirección y el teléfono entran solos',
+  '¿Te dan una hoja con la lista? Una foto y entran todas las paradas',
   'La ruta se ordena sola por tiempo, con el tráfico típico',
   'Te guía con voz hasta cada puerta, dentro de la app',
   'Manos libres en Android: di «entregado» y sigue conduciendo',
   'Cuánto llevas ganado hoy y la gasolina, en tu moneda',
+  'Las zonas de carga y descarga cerca de tus paradas, en el mapa',
 ]
 const preguntas = () => [
-  ['¿Sirve con los paquetes de mi agencia?', 'Sí. Escaneas el código de la etiqueta o le haces una foto y la app intenta leer la dirección (si no la lee, la escribes tú), o pegas tu lista de direcciones. No necesita conectarse con tu agencia.'],
+  ['¿Sirve con los paquetes de mi agencia?', 'Sí. Escaneas la etiqueta: si su código ya trae la dirección, entra sola; si no, la app la lee de la foto (y si no puede, la escribes tú). También puedes hacer una foto a tu hoja de reparto o pegar la lista. No necesita conectarse con tu agencia.'],
   ['¿Qué hacéis con mis datos y mi ubicación?', 'La foto de la etiqueta se lee en tu móvil. Tu ubicación solo se usa para guiarte y no se guarda. Los datos de tus clientes se borran solos a los días que tú fijes.'],
   ['¿Cuánto cuesta?', enPromo()
     ? 'Gratis y sin límite hasta el 31 de diciembre, sin tarjeta. Después sigues gratis con hasta 15 paradas al día, o sin tope por 9,99 € al mes o 99 € al año. Cancelas cuando quieras desde la propia app.'

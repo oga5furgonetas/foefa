@@ -15,6 +15,8 @@ import { pathToFileURL } from 'node:url'
 import { resolve } from 'node:path'
 
 const { interpretaTicket, telefonoDe } = await import(pathToFileURL(resolve('frontend/src/lib/interpretaEtiqueta.js')).href)
+const { datosDeCodigos, geoGS1 } = await import(pathToFileURL(resolve('frontend/src/lib/codigoEtiqueta.js')).href)
+const { paradasDeHoja, textoParaPegar, csvAPegar } = await import(pathToFileURL(resolve('frontend/src/lib/hojaReparto.js')).href)
 
 const CASOS = [
   ['es', `SEUR
@@ -88,9 +90,69 @@ if (telefonoDe('15001\n612 345', 'es') !== '') fallos.push('es: el teléfono jun
 // Sin país conocido, se busca un teléfono de 9 a 11 cifras.
 if (telefonoDe('Tel 0612 345 6789', 'xx') !== '06123456789') fallos.push('país desconocido: el teléfono de 11 cifras tenía que salir')
 
+/* LOS CÓDIGOS DE LA ETIQUETA (13-10-2026), con datosDeCodigos de frontend/src/lib/codigoEtiqueta.js.
+   Los textos son EXACTAMENTE lo que devuelve el lector de la app (zxing-wasm 3.1.3, textMode «Plain»):
+   se generaron los códigos con su escritor y se leyeron con su lector. Las coordenadas 4309 son las de
+   la Gran Vía de Madrid pasadas por la fórmula del conversor de GS1 (github.com/gs1/geocode). */
+const GS = '\x1d'
+const CODIGOS = [
+  ['GS1 DataMatrix (Scan4Transport)', 'es',
+    [`0038412345000000001742028013${GS}4301Maria Lopez${GS}4302Gran Via 32 3B${GS}4305Madrid${GS}4308+34612345678${GS}430913042030003562950000`],
+    { codigo: '384123450000000017', cliente: 'Maria Lopez', telefono: '612345678', direccion: 'Gran Via 32 3B', cp: '28013', localidad: 'Madrid', lat: 40.4203, lng: -3.705, completa: true }],
+  ['GS1 legible con paréntesis', 'es',
+    ['(00)384123450000000017(420)15001(4302)Rúa Real 5(4305)A Coruña'],
+    { codigo: '384123450000000017', direccion: 'Rúa Real 5', cp: '15001', localidad: 'A Coruña' }],
+  // GLS pone la dirección en su SEGUNDO código 2D: antes solo se leía el primero (la barra).
+  ['barra + 2D con los datos separados', 'es',
+    ['ZX81234567', 'ES|28013|MADRID|MARIA LOPEZ|GRAN VIA 32|612345678'],
+    { codigo: 'ZX81234567', cliente: 'MARIA LOPEZ', telefono: '612345678', direccion: 'GRAN VIA 32', cp: '28013', localidad: 'MADRID', completa: true }],
+  ['ANSI MH10.8.3 (UPS/FedEx)', 'us',
+    [`[)>\x1e01${GS}96841706672${GS}840${GS}001${GS}1Z12345675${GS}UPSN${GS}12345E${GS}089${GS}${GS}1/1${GS}10.1${GS}Y${GS}634 MAIN ST${GS}YORK${GS}PA\x1e\x04`],
+    { direccion: '634 MAIN ST', cp: '84170', localidad: 'YORK, PA' }],
+  ['solo la barra: sin dirección, que la complete la foto', 'es', ['ZX81234567'],
+    { codigo: 'ZX81234567', direccion: '', completa: false }],
+  ['un EAN de producto no se toma por GS1', 'es', ['8412345678905'], { codigo: '8412345678905', direccion: '' }],
+]
+for (const [nombre, pais, valores, esperado] of CODIGOS) {
+  const r = datosDeCodigos(valores, pais)
+  for (const [k, v] of Object.entries(esperado)) {
+    if (r[k] !== v) fallos.push(`códigos · ${nombre} · ${k}: esperaba «${v}» y salió «${r[k]}»`)
+  }
+}
+// 4309 al oeste de Greenwich: longitud negativa (la norma la guarda sumándole 360).
+const g = geoGS1('13042030003562950000')
+if (!g || g.lat !== 40.4203 || g.lng !== -3.705) fallos.push(`códigos · 4309: esperaba 40.4203,-3.705 y salió ${JSON.stringify(g)}`)
+
+/* LA HOJA DE REPARTO (13-10-2026): qué líneas del texto leído son paradas (hojaReparto.js). */
+const HOJA_ES = `HOJA DE REPARTO  13/10/2026   Ruta 4
+N° Código Destinatario Dirección CP Población Teléfono
+1 ZX812345 María López C/ Mayor 12 3ºB 15001 A Coruña 612 345 678
+2 ZX812346 Bar Pepe Rúa Real 5 15003 A Coruña 981 22 33 44
+3 ZX812347 Ana Ruiz Avda. de Finisterre 100 15004 A Coruña
+Total bultos: 3
+Firma del conductor:`
+const hoja = paradasDeHoja(HOJA_ES, 'es')
+const esperadaHoja = [
+  { codigo: 'ZX812345', cliente: 'María López', direccion: 'C/ Mayor 12 3ºB 15001 A Coruña', telefono: '612345678' },
+  { codigo: 'ZX812346', cliente: 'Bar Pepe', direccion: 'Rúa Real 5 15003 A Coruña', telefono: '981223344' },
+  { codigo: 'ZX812347', cliente: 'Ana Ruiz', direccion: 'Avda. de Finisterre 100 15004 A Coruña', telefono: '' },
+]
+if (JSON.stringify(hoja) !== JSON.stringify(esperadaHoja)) fallos.push(`hoja · España: salió ${JSON.stringify(hoja)}`)
+// El nombre en la línea de arriba y el CP con la población en la de abajo (México).
+const hojaMx = paradasDeHoja(`Juan Pérez\nCalle Hidalgo 245 Int. 3\n64000 Monterrey\n81 1234 5678\nJosefina Ruiz\nAv. Insurgentes Sur 1602\n03940 Ciudad de Mexico`, 'mx')
+const esperadaMx = [
+  { codigo: '', cliente: 'Juan Pérez', direccion: 'Calle Hidalgo 245 Int. 3, 64000 Monterrey', telefono: '8112345678' },
+  { codigo: '', cliente: 'Josefina Ruiz', direccion: 'Av. Insurgentes Sur 1602, 03940 Ciudad de Mexico', telefono: '' },
+]
+if (JSON.stringify(hojaMx) !== JSON.stringify(esperadaMx)) fallos.push(`hoja · México: salió ${JSON.stringify(hojaMx)}`)
+if (!textoParaPegar(hoja).startsWith('codigo; cliente; direccion; telefono\nZX812345; María López;')) fallos.push('hoja: el texto para pegar no lleva la cabecera')
+// Un CSV con comas y comillas pasa a «;» sin romper «López, María».
+const csv = csvAPegar('codigo,cliente,direccion\nZX1,"López, María","Calle Mayor 12, 15001 A Coruña"\n')
+if (csv !== 'codigo; cliente; direccion\nZX1; López, María; Calle Mayor 12, 15001 A Coruña') fallos.push(`csv: salió ${JSON.stringify(csv)}`)
+
 if (fallos.length) {
   console.error(`\n[check-leer-etiqueta] ${fallos.length} problema(s):`)
   for (const f of fallos) console.error('  - ' + f)
   process.exit(1)
 }
-console.log(`[check-leer-etiqueta] ok — ${CASOS.length} etiquetas de ${new Set(CASOS.map((c) => c[0])).size} países`)
+console.log(`[check-leer-etiqueta] ok — ${CASOS.length} etiquetas de ${new Set(CASOS.map((c) => c[0])).size} países y ${CODIGOS.length} etiquetas por sus códigos`)

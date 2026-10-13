@@ -48755,6 +48755,83 @@ async def reparto_mi_trazado(data: dict = Body(...), user: dict = Depends(requir
     return await _rep_trazado(puntos[:80])
 
 
+# ZONAS DE CARGA Y DESCARGA (13-10-2026). De OpenStreetMap vía Overpass, por
+# cuadrados de ~5 km (reparto.TESELA) guardados 24 h en memoria: a Overpass se le
+# pregunta por la zona, no por las paradas, y una vez por segundo como mucho.
+_ZONAS_URL = os.environ.get("REPARTO_ZONAS_URL", "https://overpass-api.de/api/interpreter")
+_ZONAS_CACHE: dict = {}
+_ZONAS_LOCK = asyncio.Lock()
+_ZONAS_ULTIMA = [0.0]
+_ZONAS_TTL = 24 * 3600
+_ZONAS_MAX_TESELAS = 9
+
+
+async def _rep_zonas_tesela(t: tuple) -> Optional[list]:
+    """Las zonas de un cuadrado (de la caché o de Overpass). None si Overpass no contesta."""
+    hit = _ZONAS_CACHE.get(t)
+    if hit and time.time() - hit[0] < _ZONAS_TTL:
+        return hit[1]
+    import httpx as _httpx
+    async with _ZONAS_LOCK:
+        hit = _ZONAS_CACHE.get(t)
+        if hit and time.time() - hit[0] < _ZONAS_TTL:
+            return hit[1]
+        espera = 1.1 - (time.time() - _ZONAS_ULTIMA[0])
+        if espera > 0:
+            await asyncio.sleep(espera)
+        try:
+            async with _httpx.AsyncClient(timeout=30, headers={
+                    "User-Agent": f"{MARCA}/1.0 (reparto; {CORREO_CONTACTO})"}) as c:
+                r = await c.post(_ZONAS_URL, data={"data": reparto.consulta_zonas_carga(*reparto.caja_de_tesela(t))})
+            if r.status_code != 200:
+                logger.warning(f"reparto: zonas de carga, Overpass dio {r.status_code}")
+                return None
+            zonas = reparto.zonas_de_overpass(r.json())
+        except Exception as e:                               # noqa: BLE001
+            logger.warning(f"reparto: zonas de carga sin respuesta: {type(e).__name__}")
+            return None
+        finally:
+            _ZONAS_ULTIMA[0] = time.time()
+        if len(_ZONAS_CACHE) > 5000:
+            _ZONAS_CACHE.clear()
+        _ZONAS_CACHE[t] = (time.time(), zonas)
+        return zonas
+
+
+@api_router.get("/reparto/mi-ruta/zonas-carga")
+async def reparto_mi_zonas_carga(user: dict = Depends(require_any_auth)):
+    """Zonas de carga y descarga cerca de las paradas que le quedan hoy."""
+    d = await _rep_conductor(user)
+    ps = await db.reparto_pedidos.find(
+        {"fecha": _dia_negocio(), "conductor_id": d["id"], "estado": {"$in": ["pendiente", "en_ruta"]},
+         "lat": {"$ne": None}, "lng": {"$ne": None}},
+        {"_id": 0, "lat": 1, "lng": 1}).to_list(500)
+    if not ps:
+        return {"zonas": [], "incompleto": False, "fuente": "OpenStreetMap"}
+    margen = 0.003                                           # ~300 m alrededor de cada parada
+    s_, n_ = min(p["lat"] for p in ps) - margen, max(p["lat"] for p in ps) + margen
+    w_, e_ = min(p["lng"] for p in ps) - margen, max(p["lng"] for p in ps) + margen
+    ts = reparto.teselas(s_, w_, n_, e_)
+    if len(ts) > _ZONAS_MAX_TESELAS:
+        # Ruta muy extendida: los cuadrados con más paradas.
+        cuenta: dict = {}
+        for p in ps:
+            k = reparto.teselas(p["lat"], p["lng"], p["lat"], p["lng"])[0]
+            cuenta[k] = cuenta.get(k, 0) + 1
+        ts = sorted(cuenta, key=lambda k: -cuenta[k])[:_ZONAS_MAX_TESELAS]
+    zonas, incompleto, vistas = [], False, set()
+    for t in ts:
+        z = await _rep_zonas_tesela(t)
+        if z is None:
+            incompleto = True
+            continue
+        # Una calle que cruza el borde de dos cuadrados viene en los dos.
+        zonas.extend(x for x in z if x["id"] not in vistas and not vistas.add(x["id"]))
+    # Solo las que quedan cerca de alguna parada (a menos de ~300 m).
+    cerca = [z for z in zonas if any(abs(z["lat"] - p["lat"]) <= margen and abs(z["lng"] - p["lng"]) <= margen * 1.4 for p in ps)]
+    return {"zonas": cerca[:300], "incompleto": incompleto, "fuente": "OpenStreetMap"}
+
+
 @api_router.post("/reparto/mi-ruta/navegar")
 async def reparto_mi_navegar(data: dict = Body(...), user: dict = Depends(require_any_auth)):
     """Guía giro a giro hasta UNA parada suya y pendiente, desde donde está

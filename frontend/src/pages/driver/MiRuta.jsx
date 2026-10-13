@@ -2,18 +2,20 @@ import { Suspense, lazy, useCallback, useEffect, useRef, useState } from 'react'
 import {
   ArrowLeft, ScanLine, Camera, Loader2, Navigation, Phone, Check, X, Route, MapPin, Play, Square, Package,
   MessageCircle, Clock, Search, List, Pencil, ChevronDown, GripVertical, Map as MapaIcono, ArrowUp, ArrowDown, ArrowUpDown, Mic, ClipboardPaste, Trophy,
-  Eye, PenLine, RotateCcw, HelpCircle, Share2,
+  Eye, PenLine, RotateCcw, HelpCircle, Share2, FileUp,
 } from 'lucide-react'
 import {
-  repMiRuta, repEscanear, repLeerTicket, repNuevoPedido, repEstado, repOrdenar, repJornada, repPosicion,
+  repMiRuta, repZonasCarga, repEscanear, repLeerTicket, repNuevoPedido, repEstado, repOrdenar, repJornada, repPosicion,
   repMiOrden, repMiEditar, repMiQuitar, repEjemplo, repQuitarEjemplos, repPegarMiLista, repTrazado, repFachada, repGanancias,
 } from '../../services/api'
 import { hoyLocal } from '../../lib/fecha'
 import { lista } from '../../lib/lista'
 import { compressImage } from '../../lib/compressImage'
 import { origen } from '../../marca'
-import { leerTicketEnMovil, interpretaTicket } from '../../lib/leerTicket'
+import { leerTicketEnMovil, leerHojaEnMovil } from '../../lib/leerTicket'
+import { textoParaPegar, csvAPegar } from '../../lib/hojaReparto'
 import { lectorDeCodigos, leerCodigo } from '../../lib/codigos'
+import { datosDeCodigos } from '../../lib/codigoEtiqueta'
 import { buscarDirecciones } from '../../lib/direcciones'
 import { invitar } from '../../lib/compartir'
 import { medirAccion } from '../../lib/analitica'
@@ -81,6 +83,7 @@ function minutosATexto(m) {
 
 // El mapa (Leaflet) pesa: solo se descarga si se abre la vista de mapa.
 const MapaReparto = lazy(() => import('../../panel/components/MapaReparto'))
+const SIN_ZONAS = []
 
 /* Con qué navega cada uno: Google Maps o Waze. Se recuerda en el móvil. */
 /* «En la app» guía aquí dentro (Navegacion.jsx); los otros dos abren su app. */
@@ -261,6 +264,23 @@ export default function MiRuta({ onBack, embebido = false }) {
     return () => { vivo = false }
   }, [vista, firmaRuta, recalcular])
 
+  /* ZONAS DE CARGA Y DESCARGA (13-10-2026), con el mapa abierto y el interruptor
+     puesto (se recuerda en el móvil). Salen de OpenStreetMap: solo las que alguien
+     ha apuntado, y sin saber si están libres. */
+  const [verZonas, setVerZonas] = useState(() => { try { return localStorage.getItem('ruta_zonas_carga') !== '0' } catch { return true } })
+  const [zonas, setZonas] = useState(null)   // null | {zonas, incompleto}
+  useEffect(() => {
+    if (vista !== 'mapa' || !verZonas || !firmaRuta) return undefined
+    let vivo = true
+    repZonasCarga().then(({ data }) => { if (vivo) setZonas(Array.isArray(data?.zonas) ? data : { zonas: [], incompleto: true }) })
+      .catch(() => { if (vivo) setZonas({ zonas: [], incompleto: true }) })
+    return () => { vivo = false }
+  }, [vista, verZonas, firmaRuta])
+  function cambiarZonas(v) {
+    setVerZonas(v)
+    try { localStorage.setItem('ruta_zonas_carga', v ? '1' : '0') } catch { /* sin almacenamiento */ }
+  }
+
   const cargar = useCallback(() => {
     repMiRuta().then(({ data }) => { fijarPais(data?.pais); setRuta(data) })
       .catch((e) => setErr(txError(e, 'No se pudo cargar tu ruta')))
@@ -296,15 +316,25 @@ export default function MiRuta({ onBack, embebido = false }) {
 
   /* ESCANEAR Y YA (10-10-2026): si el paquete está en la lista, sale su parada;
      si no, con el MISMO gesto se lee la etiqueta (el fotograma en el que se leyó
-     el código) y se rellena la parada nueva. Algunos códigos 2D ya llevan la
-     dirección dentro: entonces ni hace falta leer la foto. */
+     el código) y se rellena la parada nueva.
+     TODOS LOS CÓDIGOS DE LA ETIQUETA (13-10-2026): llega la lista de lo leído
+     (la barra y los 2D). Del 2D sale la dirección si la trae, sea GS1, UPS o
+     separada por «|» (lib/codigoEtiqueta.js); lo que falte lo completa la foto. */
   async function buscar(c, foto) {
-    const cod = String(c || '').trim()
-    if (!cod) return
+    const valores = (Array.isArray(c) ? c : [c]).map((v) => String(v || '').trim()).filter(Boolean)
+    if (!valores.length) return
+    const datos = datosDeCodigos(valores, paisActual())
     medirAccion(foto ? 'ruta_escaneo' : 'ruta_codigo')
     setEscaner(false); setOcupado('buscar'); setAviso('')
     try {
-      const { data } = await repEscanear(cod)
+      // El paquete puede estar en la lista con cualquiera de sus códigos (la barra o el del bulto).
+      let data = null
+      let codigo = ''   // el principal, como lo guarda el servidor
+      for (const cod of (datos.codigos.length ? datos.codigos : valores).slice(0, 3)) {
+        data = (await repEscanear(cod)).data
+        if (!codigo) codigo = data.codigo || ''
+        if (data.encontrado) break
+      }
       if (data.encontrado) {
         const p = data.pedido
         setAviso(`✓ ${p.cliente || p.direccion} · ${tx('bulto {a} de {b}', { a: p.escaneos, b: p.bultos })}${p.hueco ? ` · ${tx('va {sitio}', { sitio: tx(p.hueco) })}` : ''}`)
@@ -313,15 +343,17 @@ export default function MiRuta({ onBack, embebido = false }) {
         if (navigator.vibrate) navigator.vibrate(80)
         setCodigo('')
         cargar()
+        return
+      }
+      if (datos.direccion) {
+        const { codigos: _c, completa: _completa, ...campos } = datos
+        setNuevo({ ...VACIO, ...Object.fromEntries(Object.entries(campos).filter(([, v]) => v !== '' && v != null)), codigo, de_ticket: true,
+          direccion: [datos.direccion, datos.cp, datos.localidad].filter(Boolean).join(', ') })
+        // El código no lo traía todo (sin teléfono o sin población): la foto pone lo que falta, sin pisar lo leído.
+        if (foto && (!datos.completa || !datos.telefono)) { setOcupado(''); await leerTicket(foto, true); return }
       } else {
-        const dentro = cod.length > 25 ? interpretaTicket(cod.replace(/[|^~;]+/g, '\n'), paisActual()) : {}
-        if (dentro.direccion) {
-          setNuevo({ ...VACIO, ...Object.fromEntries(Object.entries(dentro).filter(([, v]) => v)), codigo: data.codigo, de_ticket: true,
-            direccion: [dentro.direccion, dentro.cp, dentro.localidad].filter(Boolean).join(', ') })
-        } else {
-          setNuevo({ ...VACIO, codigo: data.codigo })
-          if (foto) { setOcupado(''); await leerTicket(foto); return }
-        }
+        setNuevo({ ...VACIO, codigo })
+        if (foto) { setOcupado(''); await leerTicket(foto); return }
       }
     } catch (e) { setAviso(txError(e, 'No se pudo buscar')) } finally { setOcupado('') }
   }
@@ -332,7 +364,9 @@ export default function MiRuta({ onBack, embebido = false }) {
     try { return await leerCodigo(await createImageBitmap(blob)) } catch { return '' }
   }
 
-  async function leerTicket(file) {
+  /* `soloHuecos`: los datos ya vienen del código de la etiqueta (exactos); la
+     foto solo rellena lo que falte, nunca los cambia por lo que lea el OCR. */
+  async function leerTicket(file, soloHuecos = false) {
     if (!file) return
     medirAccion('ruta_foto_etiqueta')
     setOcupado('ticket')
@@ -349,17 +383,71 @@ export default function MiRuta({ onBack, embebido = false }) {
       ])
       if (codigoFoto && !data.codigo) data.codigo = codigoFoto
       const algo = data?.direccion || data?.telefono || data?.cliente
-      if (!algo) setAviso(tx('No he podido leer el ticket. Prueba con más luz y el ticket recto, o escríbelo.'))
-      setNuevo((n) => ({
-        ...n, ...Object.fromEntries(Object.entries(data || {}).filter(([, v]) => v !== '' && v != null)),
-        codigo: n?.codigo || data?.codigo || '', de_ticket: true,
-        direccion: [data?.direccion, data?.cp, data?.localidad].filter(Boolean).join(', ') || n?.direccion || '',
-      }))
+      if (!algo && !soloHuecos) setAviso(tx('No he podido leer el ticket. Prueba con más luz y el ticket recto, o escríbelo.'))
+      setNuevo((n) => {
+        const leido = Object.fromEntries(Object.entries(data || {}).filter(([, v]) => v !== '' && v != null))
+        const dir = [data?.direccion, data?.cp, data?.localidad].filter(Boolean).join(', ')
+        if (soloHuecos) {
+          return { ...n, ...Object.fromEntries(Object.entries(leido).filter(([k]) => !n?.[k] && k !== 'direccion' && k !== 'cp' && k !== 'localidad')),
+            de_ticket: true, direccion: n?.direccion || dir }
+        }
+        return { ...n, ...leido, codigo: n?.codigo || data?.codigo || '', de_ticket: true, direccion: dir || n?.direccion || '' }
+      })
     } catch (e) { setAviso(txError(e, 'No se pudo leer el ticket')) } finally { setOcupado('') }
   }
 
   // «Cargar paquetes»: una foto tras otra, y al acabar «Montar ruta».
   const [carga, setCarga] = useState(null)   // null | {n}
+
+  /* ESCANEAR SEGUIDOS (13-10-2026). Con 80 paquetes, abrir la cámara, revisar
+     y guardar cada uno es lo que hacía abandonar. Ahora la cámara no se cierra:
+     el paquete cuya etiqueta trae en sus códigos la dirección completa entra
+     solo (es el dato de la empresa, no un OCR); el que ya estaba en la lista
+     se cuenta; los demás se guardan con su foto y se revisan al acabar, uno a
+     uno, con la hoja de siempre. */
+  const [seguidos, setSeguidos] = useState(null)   // null | {abierto, nuevos, yaEstaban, revisar: [{valores, foto}], ultimo}
+
+  async function escaneoSeguido(valores, foto) {
+    const datos = datosDeCodigos(valores, paisActual())
+    medirAccion('ruta_escaneo')
+    const sumar = (cambio) => setSeguidos((s) => (s ? { ...s, ...cambio(s) } : s))
+    try {
+      let data = null
+      let codigo = ''
+      for (const cod of (datos.codigos.length ? datos.codigos : valores).slice(0, 3)) {
+        data = (await repEscanear(cod)).data
+        if (!codigo) codigo = data.codigo || ''
+        if (data.encontrado) break
+      }
+      if (data?.encontrado) {
+        sumar((s) => ({ yaEstaban: s.yaEstaban + 1, ultimo: `✓ ${data.pedido.cliente || data.pedido.direccion}` }))
+        return
+      }
+      if (datos.completa) {
+        const { codigos: _c, completa: _completa, ...campos } = datos
+        await repNuevoPedido({ ...VACIO, ...Object.fromEntries(Object.entries(campos).filter(([, v]) => v !== '' && v != null)),
+          codigo, de_ticket: true, direccion: [datos.direccion, datos.cp, datos.localidad].filter(Boolean).join(', ') })
+        medirAccion('ruta_parada_nueva')
+        sumar((s) => ({ nuevos: s.nuevos + 1, ultimo: `+ ${datos.direccion}` }))
+        return
+      }
+    } catch { /* sin red o error: se revisa luego a mano */ }
+    sumar((s) => ({ revisar: [...s.revisar, { valores, foto }], ultimo: tx('Para revisar al acabar') }))
+  }
+
+  function cerrarSeguidos() {
+    setSeguidos((s) => (s ? { ...s, abierto: false } : s))
+    setCarga((c) => ({ n: (c?.n || 0) + (seguidos?.nuevos || 0) }))
+    cargar()
+  }
+
+  // El siguiente de los dudosos, con la hoja de siempre (lee la foto si el código no traía la dirección).
+  function revisarSiguiente() {
+    const [primero, ...resto] = seguidos?.revisar || []
+    if (!primero) return
+    setSeguidos((s) => ({ ...s, revisar: resto }))
+    buscar(primero.valores, primero.foto)
+  }
 
   async function guardarNuevo() {
     setOcupado('guardar')
@@ -599,6 +687,36 @@ export default function MiRuta({ onBack, embebido = false }) {
     setAviso('')
     setEscuchando(true)
     try { r.start() } catch { setEscuchando(false); usaElTeclado() }
+  }
+
+  /* LA HOJA DE REPARTO EN UNA FOTO (13-10-2026): se lee en el móvil y lo que son
+     paradas va a la caja, con cabecera, para revisarlo antes de añadir. */
+  async function leerHoja(file) {
+    if (!file) return
+    medirAccion('ruta_foto_hoja')
+    setOcupado('hoja')
+    try {
+      const { paradas } = await leerHojaEnMovil(file, paisActual())
+      if (!paradas.length) {
+        setPegar((p) => ({ ...p, nota: tx('No he encontrado direcciones en la foto. Prueba con la hoja plana, recta y con luz, o pega la lista.') }))
+        return
+      }
+      setPegar({ texto: textoParaPegar(paradas), n: null,
+        nota: tx('He leído {n} paradas. Revísalas (cada línea: código; cliente; dirección; teléfono) y pulsa «Revisar».', { n: paradas.length }) })
+    } catch (e) { setPegar((p) => ({ ...p, nota: txError(e, 'No se pudo leer la foto') })) } finally { setOcupado('') }
+  }
+
+  /* Un fichero de texto o CSV (lo que exportan muchos programas de reparto). Un
+     Excel de verdad no se lee aquí: se copian sus celdas y se pegan. */
+  async function abrirFichero(file) {
+    if (!file) return
+    medirAccion('ruta_fichero')
+    if (/\.(xlsx?|ods|pdf)$/i.test(file.name)) {
+      setPegar((p) => ({ ...p, nota: tx('Ese fichero no se puede abrir aquí. Ábrelo, selecciona las filas, copia y pégalas en la caja.') }))
+      return
+    }
+    const texto = csvAPegar(await file.text())
+    setPegar({ texto, n: null, nota: '' })
   }
 
   async function pegarLista(confirmar) {
@@ -853,7 +971,7 @@ export default function MiRuta({ onBack, embebido = false }) {
       {!reordenar && vista === 'mapa' && pendientes.length > 0 && (
         <div className="mb-3">
           <Suspense fallback={<div className="flex h-[420px] items-center justify-center rounded-xl border border-dark-700"><Loader2 className="animate-spin text-dark-500" /></div>}>
-            <MapaReparto alto={420} base={yo ? null : ruta.base} yo={yo} trazado={trazado}
+            <MapaReparto alto={420} base={yo ? null : ruta.base} yo={yo} trazado={trazado} zonas={verZonas ? zonas?.zonas || SIN_ZONAS : SIN_ZONAS}
               paradas={lista(ruta.pedidos).map((p, i) => ({
                 lat: p.lat, lng: p.lng, estado: p.estado, orden: p.orden, color: '#0ea5e9', grande: siguiente?.id === p.id,
                 etiqueta: p.orden ?? i + 1, titulo: p.cliente || p.direccion, sub: p.eta ? `≈ ${p.eta} · ${p.direccion}` : p.direccion,
@@ -864,6 +982,17 @@ export default function MiRuta({ onBack, embebido = false }) {
               ? <><span className="inline-block h-1 w-5 rounded bg-sky-600" /> {tx('Por las calles:')} <b className="text-dark-200">{String(trazado.km).replace('.', ',')} km</b> · {tx('{t} conduciendo (sin contar paradas)', { t: minutosATexto(trazado.minutos) })}</>
               : trazado ? tx('Sin servidor de rutas ahora: rayas rectas entre paradas.') : tx('Calculando el recorrido…')}
           </p>
+          <label className="mt-1.5 flex flex-wrap items-center gap-x-2 gap-y-1 text-[12px] text-dark-300">
+            <input type="checkbox" checked={verZonas} onChange={(e) => cambiarZonas(e.target.checked)} className="h-4 w-4 accent-violet-600" />
+            <span className="rounded bg-violet-600 px-1 text-[9px] font-extrabold leading-4 text-white">C/D</span>
+            {tx('Zonas de carga y descarga')}
+            {verZonas && zonas && (
+              <span className="text-dark-400">
+                · {zonas.zonas.length ? tx('{n} cerca de tus paradas', { n: zonas.zonas.length }) : tx('ninguna apuntada cerca')}
+                {zonas.incompleto ? ` ${tx('(no se han podido cargar todas)')}` : ''} · OpenStreetMap
+              </span>
+            )}
+          </label>
           {pendientes.some((p) => p.lat == null) && (
             <p className="mt-1 text-[12px] text-amber-200/90">
               {tx('{n} sin situar en el mapa todavía (la dirección no se ha encontrado o se está buscando).', { n: pendientes.filter((p) => p.lat == null).length })}
@@ -1161,8 +1290,21 @@ export default function MiRuta({ onBack, embebido = false }) {
           <p className="mb-2 text-[13px] text-dark-400">
             {tx('Una parada por línea (de un correo, un Excel, un WhatsApp…). Si hay columnas con cabecera (dirección, cliente, teléfono, horario…), se leen.')}
           </p>
+          <div className="mb-2 grid grid-cols-2 gap-2">
+            <label className="flex cursor-pointer items-center justify-center gap-2 rounded-xl border border-brand-400/60 py-2.5 text-[13.5px] font-bold text-brand-200">
+              {ocupado === 'hoja' ? <Loader2 size={16} className="animate-spin" /> : <Camera size={16} />} {ocupado === 'hoja' ? tx('Leyendo…') : tx('Foto de la hoja')}
+              <input type="file" accept="image/*" capture="environment" className="hidden" disabled={ocupado === 'hoja'}
+                onChange={(e) => { const f = e.target.files?.[0]; e.target.value = ''; leerHoja(f) }} />
+            </label>
+            <label className="flex cursor-pointer items-center justify-center gap-2 rounded-xl border border-dark-600 py-2.5 text-[13.5px] font-semibold text-dark-100">
+              <FileUp size={16} /> {tx('Abrir un fichero')}
+              <input type="file" accept=".csv,.txt,.tsv,text/plain,text/csv,text/tab-separated-values,.xlsx,.xls,.pdf" className="hidden" aria-label={tx('Abrir un fichero')}
+                onChange={(e) => { const f = e.target.files?.[0]; e.target.value = ''; abrirFichero(f) }} />
+            </label>
+          </div>
+          {pegar.nota && <p role="status" className="mb-2 text-[12.5px] text-amber-200/90">{pegar.nota}</p>}
           <textarea className={`${inp} h-40 font-mono text-[13px]`} value={pegar.texto} aria-label={tx('Lista de direcciones')}
-            onChange={(e) => setPegar({ texto: e.target.value, n: null })}
+            onChange={(e) => setPegar({ texto: e.target.value, n: null, nota: pegar.nota })}
             placeholder={'Calle Mayor 3, 28013 Madrid\nAvenida de la Constitución 12, Sevilla'} />
           {pegar.n == null ? (
             <button onClick={() => pegarLista(false)} disabled={pegar.texto.trim().length < 5 || ocupado === 'pegar'}
@@ -1204,8 +1346,15 @@ export default function MiRuta({ onBack, embebido = false }) {
       )}
 
       {escaner && <Escaner onCodigo={buscar} onClose={() => setEscaner(false)} />}
+      {seguidos?.abierto && (
+        <Escaner seguido onCodigo={escaneoSeguido} onClose={cerrarSeguidos}
+          estado={seguidos.nuevos + seguidos.yaEstaban + seguidos.revisar.length === 0 ? '' : [tx('{n} añadidos', { n: seguidos.nuevos }),
+            seguidos.yaEstaban ? tx('{n} ya estaban', { n: seguidos.yaEstaban }) : '',
+            seguidos.revisar.length ? tx('{n} para revisar', { n: seguidos.revisar.length }) : ''].filter(Boolean).join(' · ')
+            + (seguidos.ultimo ? `\n${seguidos.ultimo}` : '')} />
+      )}
 
-      {carga && !nuevo && (
+      {carga && !nuevo && !seguidos?.abierto && (
         <Hoja titulo={carga.n ? (carga.n > 1 ? tx('{n} paquetes cargados', { n: carga.n }) : tx('1 paquete cargado')) : tx('Cargar paquetes')} onClose={() => setCarga(null)}>
           <p className="mb-3 text-[13px] text-dark-400">
             {tx('Haz una foto a la etiqueta de cada paquete: se lee el código, la dirección y el teléfono. Al acabar, «Montar ruta».')}
@@ -1216,6 +1365,15 @@ export default function MiRuta({ onBack, embebido = false }) {
             <input type="file" accept="image/*" capture="environment" className="hidden" disabled={ocupado === 'ticket'}
               onChange={(e) => { const f = e.target.files?.[0]; e.target.value = ''; if (f) { setNuevo({ ...VACIO }); leerTicket(f) } }} />
           </label>
+          <button onClick={() => { medirAccion('ruta_escaner'); setSeguidos((s) => ({ nuevos: 0, yaEstaban: 0, revisar: s?.revisar || [], ultimo: '', abierto: true })) }}
+            className="mt-2 flex w-full items-center justify-center gap-2 rounded-xl border border-brand-400/60 py-3 text-[14px] font-bold text-brand-200">
+            <ScanLine size={17} /> {tx('Escanear seguidos')}
+          </button>
+          {seguidos?.revisar?.length > 0 && (
+            <button onClick={revisarSiguiente} className="mt-2 w-full rounded-xl border border-amber-400/60 bg-amber-500/10 py-3 text-[14px] font-bold text-amber-200">
+              {tx('Revisar {n} paquetes sin dirección', { n: seguidos.revisar.length })}
+            </button>
+          )}
           <button onClick={() => { setNuevo({ ...VACIO }) }} className="mt-2 w-full rounded-xl border border-dark-600 py-3 text-[14px] font-semibold text-dark-100">
             {tx('Escribirlo a mano')}
           </button>
@@ -1665,7 +1823,9 @@ async function fotograma(v) {
   } catch { return null }
 }
 
-function Escaner({ onCodigo, onClose }) {
+/* `seguido` (13-10-2026): la cámara no se cierra tras cada paquete; los que ya
+   se han leído no se repiten y `estado` se enseña abajo («12 añadidos…»). */
+function Escaner({ onCodigo, onClose, seguido = false, estado = '' }) {
   const video = useRef(null)
   const [error, setError] = useState('')
   // Por referencia: si fuera dependencia del efecto, cada repintado de la
@@ -1677,6 +1837,7 @@ function Escaner({ onCodigo, onClose }) {
     let parar = false
     let stream = null
     let temporizador = null
+    const vistos = new Set()
     async function arrancar() {
       let detector
       try { detector = await lectorDeCodigos() } catch {
@@ -1690,13 +1851,26 @@ function Escaner({ onCodigo, onClose }) {
         if (parar) { stream.getTracks().forEach((t) => t.stop()); return }
         video.current.srcObject = stream
         await video.current.play()
+        const leer = async () => (await detector.detect(video.current)).map((c) => c.rawValue).filter(Boolean)
         const mirar = async () => {
           if (parar) return
           try {
-            const codigos = await detector.detect(video.current)
-            if (codigos.length && codigos[0].rawValue) {
+            let leidos = (await leer()).filter((v) => !vistos.has(v))
+            if (leidos.length) {
+              // Una etiqueta lleva varios códigos (la barra y uno o dos 2D, el de GLS con la
+              // dirección aparte) y no siempre se ven en el mismo fotograma: medio segundo más.
+              const juntos = new Set(leidos)
+              for (let i = 0; i < 2 && !parar; i += 1) {
+                await new Promise((ok) => setTimeout(ok, 250))
+                try { (await leer()).forEach((v) => { if (!vistos.has(v)) juntos.add(v) }) } catch { /* fotograma malo */ }
+              }
+              leidos = [...juntos]
+              const foto = await fotograma(video.current)
               if (navigator.vibrate) navigator.vibrate(60)
-              avisa.current(codigos[0].rawValue, await fotograma(video.current))
+              if (!seguido) { avisa.current(leidos, foto); return }
+              leidos.forEach((v) => vistos.add(v))
+              avisa.current(leidos, foto)
+              temporizador = setTimeout(mirar, 900)   // un respiro para cambiar de paquete
               return
             }
           } catch { /* un fotograma malo: se sigue */ }
@@ -1713,7 +1887,7 @@ function Escaner({ onCodigo, onClose }) {
       clearTimeout(temporizador)
       if (stream) stream.getTracks().forEach((t) => t.stop())
     }
-  }, [])
+  }, [seguido])
 
   return (
     <div className="fixed inset-0 z-50 flex flex-col bg-black" role="dialog" aria-modal="true" aria-label={tx('Escanear')}>
@@ -1725,6 +1899,11 @@ function Escaner({ onCodigo, onClose }) {
         <div className="relative flex-1">
           <video ref={video} playsInline muted className="h-full w-full object-cover" />
           <div className="pointer-events-none absolute inset-x-8 top-1/2 h-40 -translate-y-1/2 rounded-2xl border-2 border-white/70" />
+          {seguido && (
+            <p role="status" aria-live="polite" className="absolute inset-x-4 bottom-6 whitespace-pre-line rounded-xl bg-black/70 px-4 py-3 text-center text-[15px] font-semibold text-white">
+              {estado || tx('Pasa las etiquetas una tras otra')}
+            </p>
+          )}
         </div>
       )}
     </div>
