@@ -598,8 +598,9 @@ Nada se había borrado (org `owner` sin `modulos`, usuario `dani` sin
   y libre como criterio suave. No sobrepasa las celdas fijadas ni las reglas
   de cobertura. No se asignan L1/L2/L3 a personas por deducción: faltan las
   elegibilidades individuales que Dani indicó que facilitará.
-- Verificación pendiente hasta terminar la batería backend; el build y check
-  de hooks del frontend ya pasan. Todavía no publicado.
+- Verificado: 1.139 pruebas backend pasan, 1 omitida; checks del repositorio,
+  eslint (sin errores), build Vite, check de hooks, 157 pruebas de humo de
+  escritorio y 9 pruebas del cuadrante en serie pasan. Despliegue pendiente.
 
 ## Sesión anterior — 13-10-2026: escaneo de paquetes en lote
 
