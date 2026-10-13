@@ -3,7 +3,7 @@ import { useParams, useSearchParams } from 'react-router-dom'
 import axios from 'axios'
 import {
   Loader2, AlertTriangle, CheckCircle2, MapPin, Clock, Euro, Package,
-  ChevronRight, ShieldCheck, Paperclip, X, Truck, GraduationCap, Users,
+  ChevronRight, ShieldCheck, Paperclip, X, Truck, GraduationCap, Users, Gift, ArrowRight,
 } from 'lucide-react'
 import { API_BASE } from '../lib/apiBase'
 import { enviarConCvOSinEl } from '../lib/enviarCandidatura'
@@ -79,7 +79,7 @@ function avisarDelFallo(e, slug, ofertaSlug) {
 const VACIO = {
   nombre: '', telefono: '', email: '', ciudad: '', dni: '', nacimiento: '',
   carnet_desde: '', carnet_fisico: '', experiencia: '', disponibilidad: '',
-  consiento: false, web: '',
+  consiento: false, novedades_fds: false, web: '',
 }
 
 const CUANDO = ['Ya mismo', 'Esta semana', 'En 15 días', 'En un mes']
@@ -169,6 +169,9 @@ export default function Empleo() {
     if (!f.carnet_fisico) { setError('Dinos si tienes el carnet B contigo.'); return }
     if (!f.disponibilidad) { setError('Dinos cuándo puedes empezar.'); return }
     if (!f.consiento) { setError('Acepta que guardemos tus datos para poder enviar la candidatura.'); return }
+    if (f.novedades_fds && !/^[^@\s]+@[^@\s]+\.[a-z]{2,}$/i.test(f.email.trim())) {
+      setError('Escribe un correo válido para recibir novedades de FDS.'); return
+    }
     setEnviando(true); setError('')
     try {
       const cuerpo = (conCv) => {
@@ -236,6 +239,22 @@ export default function Empleo() {
               No hace falta repetirla: si te llamamos, nos lo das entonces.
             </p>
           )}
+          <div className="mx-auto mt-6 max-w-sm rounded-2xl border border-emerald-200 bg-gradient-to-br from-emerald-50 to-lime-50 p-4 text-left shadow-sm">
+            <div className="flex items-start gap-3">
+              <span className="rounded-xl bg-emerald-600 p-2.5 text-lime-100"><Gift size={20} /></span>
+              <div>
+                <p className="text-[11px] font-extrabold uppercase tracking-wider text-emerald-700">Invita y gana</p>
+                <h2 className="mt-0.5 text-[17px] font-extrabold leading-snug text-slate-900">¿Conoces a alguien que reparte?</h2>
+                <p className="mt-1 text-[13px] leading-relaxed text-slate-700">Enséñale Flota para escanear paquetes, ordenar paradas y seguir su ruta. Crea tu cuenta y comparte tu enlace: puedes ganar <b>2,50 €</b> cuando un nuevo repartidor se registre con él y complete 20 entregas reales válidas.</p>
+              </div>
+            </div>
+            <a href="/repartidores?utm_source=empleo&utm_medium=gracias&utm_campaign=invita_gana"
+              onClick={() => medirAccion('empleo_invita_click')}
+              className="mt-3 flex min-h-11 items-center justify-center gap-2 rounded-xl bg-emerald-700 px-4 py-2.5 text-center text-[14px] font-bold text-white hover:bg-emerald-800">
+              Ver Flota y crear mi enlace <ArrowRight size={16} />
+            </a>
+            <p className="mt-2 text-center text-[10.5px] leading-relaxed text-slate-500">El premio requiere 20 entregas reales a direcciones distintas en 2 días, durante los primeros 30 días. <a className="underline" href="/terminos#invita">Condiciones</a>.</p>
+          </div>
           {/* LA TIENDA, AQUI Y NO ANTES. Esta persona acaba de apuntarse: es
               el unico momento del embudo en que se le puede ensenar otra cosa
               sin quitarle atencion a lo que vino a hacer. Y solo aparece si el
@@ -462,6 +481,15 @@ export default function Empleo() {
               <span>
                 Acepto que guardéis mis datos <b className="text-slate-800">12 meses</b> para este
                 proceso de selección. Puedo pedir que los borréis cuando quiera.
+              </span>
+            </label>
+
+            <label className="flex items-start gap-2.5 rounded-xl border border-emerald-100 bg-emerald-50/60 p-3.5 text-[13px] leading-relaxed text-slate-700">
+              <input type="checkbox" checked={f.novedades_fds} onChange={(e) => set('novedades_fds', e.target.checked)}
+                className="mt-0.5 h-4 w-4 shrink-0 accent-emerald-600" />
+              <span>
+                <b className="text-slate-900">Quiero recibir novedades de FDS</b>
+                <span className="mt-0.5 block text-[12px] text-slate-500">Opcional y separado de la candidatura. Si la marcas, necesitamos tu correo. Puedes retirar el consentimiento cuando quieras; consulta cómo hacerlo en la <a href="/privacidad" target="_blank" rel="noreferrer" className="underline">política de privacidad</a>.</span>
               </span>
             </label>
 

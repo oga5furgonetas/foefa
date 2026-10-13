@@ -1451,17 +1451,22 @@ test('Empleo · si el currículum no se puede subir, la candidatura entra sin é
   const fallos = vigilar(page)
   let conCv = 0
   let sinCv = 0
+  let datosEnviados = null
   await page.route(/\/api\/empleo\/publica\/fds\/repartidor/, async (r) => {
     if (r.request().method() === 'GET') {
       return r.fulfill({ json: { titulo: 'Repartidor/a de paquetería', ciudad: 'Vigo', descripcion: 'Reparto de paquetería.', preguntas: [] } })
     }
     const cuerpo = (r.request().postDataBuffer() || Buffer.from('')).toString('latin1')
     if (cuerpo.includes('name="cv"')) { conCv += 1; return r.abort('failed') }
+    const json = cuerpo.match(/name="datos"\r\n\r\n([\s\S]*?)\r\n--/)
+    if (json) datosEnviados = JSON.parse(json[1])
     sinCv += 1
     return r.fulfill({ json: { ok: true } })
   })
   await page.route(/\/api\/client-error/, (r) => r.fulfill({ json: { ok: true } }))
   await page.goto('/empleo/fds/repartidor', { waitUntil: 'domcontentloaded' })
+  const cookies = page.getByRole('dialog', { name: 'Cookies' })
+  if (await cookies.isVisible().catch(() => false)) await cookies.getByRole('button', { name: 'Solo necesarias' }).click()
   const cajas = page.locator('input[type=text], input[type=tel], input:not([type])')
   await cajas.nth(0).fill('Ana Pérez López')
   await page.locator('input[type=tel]').fill('612345678')
@@ -1469,13 +1474,23 @@ test('Empleo · si el currículum no se puede subir, la candidatura entra sin é
   await page.getByRole('button', { name: /Continuar/ }).click()
   await page.getByRole('button', { name: 'Sí', exact: true }).click()
   await page.getByRole('button', { name: 'Ya mismo' }).click()
+  const novedades = page.getByRole('checkbox', { name: /Quiero recibir novedades de FDS/ })
+  await expect(novedades).not.toBeChecked()
+  await novedades.check()
   // El CV se lee al elegirlo: aparece su nombre.
   await page.locator('input[type=file]').setInputFiles({ name: 'cv-ana.pdf', mimeType: 'application/pdf', buffer: Buffer.from('%PDF-1.4 cv de prueba') })
   await expect(page.getByText('cv-ana.pdf')).toBeVisible()
   await page.locator('input[type=checkbox]').first().check()
   await page.getByRole('button', { name: /Enviar candidatura/ }).click()
+  await expect(page.getByText(/Escribe un correo válido para recibir novedades de FDS/)).toBeVisible()
+  await page.getByRole('button', { name: 'Atrás' }).click()
+  await page.locator('input[type=email]').fill('ana@example.com')
+  await page.getByRole('button', { name: /Continuar/ }).click()
+  await page.getByRole('button', { name: /Enviar candidatura/ }).click()
   await expect(page.getByText('¡Listo! Ya la tenemos')).toBeVisible({ timeout: 45000 })
   await expect(page.getByText(/Tu currículum no se ha podido subir desde el móvil/)).toBeVisible()
+  await expect(page.getByRole('link', { name: /Ver Flota y crear mi enlace/ })).toHaveAttribute('href', /utm_source=empleo/)
+  expect(datosEnviados).toMatchObject({ novedades_fds: true, email: 'ana@example.com' })
   expect(conCv).toBeGreaterThan(0)
   expect(sinCv).toBe(1)
   expect(fallos).toEqual([])

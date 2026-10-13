@@ -20,6 +20,7 @@ export default function Privacidad() {
         <li><strong>Vehículos:</strong> matrícula, marca, modelo, VIN, kilometraje, fechas de ITV y renting, documentos.</li>
         <li><strong>Inspecciones:</strong> fotografías del vehículo, fecha y hora, análisis de la IA (daños detectados), comentarios.</li>
         <li><strong>Reparto (si la empresa lo usa):</strong> datos de los clientes de la empresa a los que se entrega (nombre, teléfono, dirección y qué lleva el pedido) y la <strong>ubicación del conductor solo durante la jornada</strong> que él mismo empieza y termina en su móvil, tras haber leído un aviso.</li>
+        <li><strong>Candidaturas de empleo:</strong> datos del formulario y, si marcas la casilla opcional, el registro de tu autorización para recibir novedades de FDS y su fecha.</li>
         <li><strong>Uso del servicio:</strong> registros técnicos (logs) imprescindibles para la seguridad y el funcionamiento.</li>
         <li><strong>Programa «Invita y gana»:</strong> quién invitó a quién, el saldo de la cartera y, si pides cobrarlo, el nombre del titular y el teléfono de Bizum, el IBAN o el email de PayPal. En la cartera individual del portal guardamos también el identificador del conductor, su email de empresa y la empresa asociada a su enlace. Para evitar trampas guardamos una huella cifrada de la red desde la que se crea cada cuenta (no la dirección IP), que solo sirve para comparar dos altas.</li>
       </ul>
@@ -33,6 +34,7 @@ export default function Privacidad() {
         <li><strong>Seguridad y prevención de fraude</strong> (también en «Invita y gana»): interés legítimo (art. 6.1.f).</li>
         <li><strong>Pagar el saldo de «Invita y gana»:</strong> ejecución de las condiciones del programa (art. 6.1.b) y obligaciones contables y fiscales (art. 6.1.c).</li>
         <li><strong>Comunicaciones del servicio</strong> (avisos, soporte): ejecución del contrato.</li>
+        <li><strong>Novedades de FDS para candidatos:</strong> consentimiento opcional, separado de la candidatura y revocable en cualquier momento. No marcarlo no afecta a la candidatura.</li>
         <li><strong>Mejora del modelo de IA (anonimizado / agregado):</strong> interés legítimo; nunca se publican imágenes ni se identifican personas.</li>
       </ul>
 
@@ -42,6 +44,7 @@ export default function Privacidad() {
         <li>Inspecciones y fotos: durante la vigencia del contrato; el cliente puede solicitar su eliminación en cualquier momento.</li>
         <li>Reparto: los datos personales de cada pedido se borran solos a los días que fije la empresa (por defecto 30, máximo 90); los recorridos de ubicación, a los 30 días; los enlaces de seguimiento que recibe el cliente dejan de funcionar al día siguiente del reparto y no muestran datos personales.</li>
         <li>Datos fiscales: 6 años (art. 30 Código de Comercio). Los pagos de «Invita y gana» (titular, importe y cuenta o Bizum) se guardan ese mismo plazo.</li>
+        <li>Datos de candidaturas: hasta 12 meses. La elección sobre novedades se conserva junto con la candidatura durante ese plazo o hasta que se retire el consentimiento y se solicite la supresión cuando proceda.</li>
       </ul>
 
       <h2>5. Encargados del tratamiento (a quién comunicamos datos)</h2>

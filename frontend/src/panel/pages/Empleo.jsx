@@ -319,13 +319,13 @@ export default function Empleo() {
      Excel en español abre en columnas de una vez, sin el asistente. */
   const exportar = () => {
     const cab = ['Nombre', 'Teléfono', 'Correo', 'DNI', 'Edad', 'Ciudad', 'Carnet desde',
-      'Carnet físico', 'Experiencia', 'Disponibilidad', 'Origen', 'Fase', 'Motivo', 'Notas', 'Día', 'CV']
+      'Carnet físico', 'Experiencia', 'Disponibilidad', 'Novedades FDS', 'Origen', 'Fase', 'Motivo', 'Notas', 'Día', 'CV']
     const esc = (v) => `"${String(v ?? '').replace(/"/g, '""')}"`
     const filas = visibles.map((c) => [
       c.nombre, c.telefono, c.email, c.dni, c.edad, c.ciudad, c.carnet_desde,
       // Vacío cuando no consta, no un «no»: el campo existe desde el 09-09-2026.
       c.carnet_fisico === 'si' ? 'Sí' : c.carnet_fisico === 'no' ? 'No' : '',
-      c.experiencia, c.disponibilidad, c.origen, c.fase, c.motivo_descarte, c.notas,
+      c.experiencia, c.disponibilidad, c.novedades_fds ? 'Sí' : 'No', c.origen, c.fase, c.motivo_descarte, c.notas,
       (c.creado_en || '').slice(0, 10), c.cv_url,
     ].map(esc).join(';'))
     const csv = '﻿' + [cab.map(esc).join(';'), ...filas].join('\r\n')
@@ -583,6 +583,7 @@ function Tarjeta({ c, t, activa, ultimaVisita, onAbrir, onArrastrar, onSoltar })
         <span className="rounded bg-dark-800 px-1 py-px text-dark-400">{c.origen}</span>
         <span className="text-dark-500">{dia(c.creado_en)}</span>
         {c.cv_url && <FileText size={10} className="text-brand-400" />}
+        {c.novedades_fds && <span className="rounded bg-emerald-500/15 px-1 py-px font-semibold text-emerald-300">Novedades FDS</span>}
         {c.fase === 'otra_estacion' && (
           <span className={`rounded px-1 py-px font-semibold ${c.estacion ? 'bg-cyan-500/10 text-cyan-300' : 'bg-amber-500/15 text-amber-300'}`}>
             {c.estacion || '¿qué estación?'}
@@ -833,7 +834,7 @@ function Datos({ c, t }) {
   ].filter(([, v]) => v)
   const carnet = c.carnet_fisico === 'si' ? t('empleo.carnetSi')
     : c.carnet_fisico === 'no' ? t('empleo.carnetNo') : ''
-  if (!filas.length && !carnet) return null
+  if (!filas.length && !carnet && !c.novedades_fds) return null
   return (
     <div className="grid gap-1">
       {filas.map(([Icon, v], i) => (
@@ -846,6 +847,11 @@ function Datos({ c, t }) {
           c.carnet_fisico === 'no' ? 'font-semibold text-amber-300' : 'text-dark-300'}`}>
           <IdCard size={12} className={`shrink-0 ${c.carnet_fisico === 'no' ? 'text-amber-400' : 'text-dark-500'}`} />
           <span className="min-w-0 truncate">{carnet}</span>
+        </div>
+      )}
+      {c.novedades_fds && (
+        <div className="flex items-center gap-1.5 text-[12px] font-semibold text-emerald-300" title={c.novedades_fds_aceptado_en ? `Consentimiento: ${c.novedades_fds_aceptado_en}` : 'Consentimiento guardado'}>
+          <Check size={12} className="shrink-0" /> <span className="min-w-0 truncate">Aceptó recibir novedades de FDS</span>
         </div>
       )}
     </div>

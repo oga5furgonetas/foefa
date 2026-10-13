@@ -21513,6 +21513,10 @@ async def empleo_apuntarse(slug: str, oferta_slug: str, request: Request):
             raise HTTPException(400, "Dinos si tienes el carnet B fisicamente")
     if not datos.get("consiento"):
         raise HTTPException(400, "Hay que aceptar que guardemos tus datos para el proceso")
+    novedades_fds = datos.get("novedades_fds") is True
+    email = _empleo_texto(datos.get("email"), 160).strip().lower()
+    if novedades_fds and not _EMAIL_RE.fullmatch(email):
+        raise HTTPException(400, "Escribe un correo válido para recibir novedades de FDS")
 
     hoy = _hoy_madrid()
     cuantos = await db.candidatos.count_documents(
@@ -21528,7 +21532,11 @@ async def empleo_apuntarse(slug: str, oferta_slug: str, request: Request):
         "oferta_id": o["id"], "oferta_titulo": o.get("titulo") or "",
         "nombre": nombre, "telefono": telefono,
         "tel_clave": _telefono_digitos(telefono)[-9:],
-        "email": _empleo_texto(datos.get("email"), 160).lower(),
+        "email": email,
+        # Consentimiento opcional y separado de la candidatura. Guardamos la
+        # fecha para poder acreditar cuándo se marcó; desmarcado no autoriza.
+        "novedades_fds": novedades_fds,
+        "novedades_fds_aceptado_en": ahora.isoformat() if novedades_fds else None,
         "ciudad": _empleo_texto(datos.get("ciudad"), 80),
         "centro": o.get("centro") or "",
         "carnet_desde": _empleo_texto(datos.get("carnet_desde"), 20),
@@ -41401,7 +41409,8 @@ async def candidatos_campana_bienvenida(body: dict = Body(...), user: dict = Dep
         destinatarios = [{"email": email_prueba, "nombre": user.get("name") or "Dani"}]
     else:
         fichas = await db.candidatos.find(
-            {"email": {"$exists": True, "$ne": ""}}, {"_id": 0, "email": 1, "nombre": 1}).to_list(2000)
+            {"email": {"$exists": True, "$ne": ""}, "novedades_fds": True},
+            {"_id": 0, "email": 1, "nombre": 1}).to_list(2000)
         destinatarios = _campana_destinatarios(fichas)
 
     # Un cupón PERSONAL por destinatario, con su propio reloj de 4h desde que se

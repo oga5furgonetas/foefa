@@ -297,6 +297,20 @@ def test_una_pagina_vieja_no_se_queda_sin_poder_apuntarse():
     assert 'raise HTTPException(400, "Dinos si tienes el carnet B fisicamente")' in src
 
 
+def test_novedades_fds_es_opcional_separado_y_registra_el_consentimiento():
+    src = _fuente_de("empleo_apuntarse")
+    assert 'novedades_fds = datos.get("novedades_fds") is True' in src
+    assert 'if novedades_fds and not _EMAIL_RE.fullmatch(email):' in src
+    assert '"novedades_fds": novedades_fds' in src
+    assert '"novedades_fds_aceptado_en": ahora.isoformat() if novedades_fds else None' in src
+
+
+def test_las_campanas_reales_solo_incluyen_candidatos_con_permiso_de_novedades():
+    src = _fuente_de("candidatos_campana_bienvenida")
+    assert '"novedades_fds": True' in src
+    assert 'if modo == "real":' in src
+
+
 def test_reintentar_tras_un_error_no_gasta_el_cupo():
     """El tope es de CANDIDATURAS, no de intentos.
 

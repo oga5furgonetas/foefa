@@ -1037,3 +1037,11 @@ Repaso de cada frase de `/planes` y de la presentación contra el código (Dani:
 - Super-admin → Negocio: resumen por conductor de invitaciones, cualificados, premios, saldo y detalle de altas; la cola «Retiradas de la cartera» conserva los datos de pago y las acciones de registrar pago enviado o rechazar/devolver el saldo.
 - El pago se ejecuta manualmente (Bizum, transferencia o PayPal) y después se registra en el panel. No hay proveedor de pagos bancarios conectado.
 - Publicado en Pages `flota` y API `flota-backend`; health de Fly y verificación del bundle/edge en verde. Pasaron lint/build, 157 pruebas de humo y backend (1.139 pasaron, 1 omitida). El humo autenticado de despliegue no corrió: faltaba SECRET_KEY local; no se leyó ni cambió ningún secreto.
+
+## 13-10-2026: consentimiento de novedades y referidos desde candidaturas
+
+- El formulario público de empleo añade «Quiero recibir novedades de FDS», desmarcado por defecto y separado del consentimiento necesario para la candidatura. Si se marca, exige un correo válido y registra la fecha del consentimiento.
+- Las campañas reales para candidatos incluyen solo a quienes aceptaron recibir novedades; las pruebas de campaña siguen usando su destinatario de prueba explícito.
+- Tras enviar la candidatura se muestra «Invita y gana», con enlace etiquetado a la página de repartidores y condiciones del premio de 2,50 €.
+- El panel de empleo indica el consentimiento en cada ficha y en la exportación CSV; la política de privacidad describe el uso opcional.
+- Verificación antes de publicar: 1.141 pruebas de backend pasaron, 1 omitida; 157 pruebas de humo pasaron; lint sin errores (52 avisos preexistentes), compilación y chequeos estáticos correctos.
