@@ -198,7 +198,9 @@ function Asistente({ center, datos, onCerrar, onHecho }) {
             </label>
           </div>
           <p className="mt-1.5 text-[11.5px] text-dark-500">
-            Hoy no se toca: el día ya está en marcha. {dias.length} días.
+            Hoy no se toca: el día ya está en marcha. {dias.length} días. Al calcular,
+            el motor rota los descansos según las últimas 4 semanas (también lunes y martes)
+            y favorece alternar fines de semana. Es un desempate: primero cubre las rutas.
           </p>
         </section>
 
@@ -997,6 +999,10 @@ export default function Cuadrante() {
           <p className="mt-2 max-w-[74ch] text-[13px] text-dark-400">
             Quién trabaja cada día. El motor lo cuadra a máxima +{datos?.config?.colchon ?? 2}, con 5 días y 2 libres y nunca
             7 seguidos. Lo que tocas a mano queda con candado; lo que propone el motor lo aceptas tú.
+          </p>
+          <p className="mt-1 max-w-[74ch] text-[11.5px] text-brand-300/90">
+            Equidad al recalcular: rota los días libres según las últimas 4 semanas (incluidos lunes y martes)
+            y alterna fines de semana; la cobertura de rutas tiene prioridad.
           </p>
         </div>
         <div className="ml-auto flex flex-wrap items-center gap-2">

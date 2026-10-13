@@ -287,6 +287,16 @@ def test_los_findes_rotan_hacia_quien_menos_lleva():
     assert not trabaja(res, "c0", dia(5)) and not trabaja(res, "c0", dia(6))
 
 
+def test_rota_descanso_de_lunes_si_la_persona_ya_libro_los_lunes():
+    # Con cobertura holgada, quien acumuló cuatro lunes libres trabaja el lunes
+    # siguiente; el descanso se mueve a otro día disponible de esa semana.
+    conds = gente(10)
+    conds[0]["descansos_semana_previos"] = [4, 0, 0, 0, 0, 0, 0]
+    res = cm.generar_cuadrante(entrada(conds, maxima=3))
+    assert rutas(res, dia(0)) == 5
+    assert trabaja(res, "c0", dia(0))
+
+
 # ── CAMBIAR LO MÍNIMO ────────────────────────────────────────────────────────
 
 def test_un_cuadrante_que_ya_cumple_no_se_toca():

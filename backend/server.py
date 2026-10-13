@@ -45472,6 +45472,7 @@ async def _cua_entrada(center: str, desde: str, hasta: str, colchon=None, permit
     celdas, bloqueadas, extras_ahora = {}, [], set()
     extras_prev: dict = {}
     findes_prev: dict = {}
+    descansos_prev: dict = {}
     async for s in db.shifts.find({"driver_id": {"$in": list(ids)}, "date": {"$gte": desde_stats, "$lte": fin_ext}},
                                   {"_id": 0}):
         did, f = s["driver_id"], s["date"]
@@ -45494,6 +45495,9 @@ async def _cua_entrada(center: str, desde: str, hasta: str, colchon=None, permit
                 extras_prev[did] = extras_prev.get(did, 0) + 1
             if date_cls.fromisoformat(f).weekday() >= 5 and cod in _cm.TRABAJO:
                 findes_prev[did] = findes_prev.get(did, 0) + 1
+            if cod in _cm.DE_LIBRE:
+                por_dia = descansos_prev.setdefault(did, [0] * 7)
+                por_dia[date_cls.fromisoformat(f).weekday()] += 1
     # Lo concedido a un conductor (pedido desde su portal) no lo mueve nadie.
     for k in await _cua_aprobados(ids, desde, fin_ext):
         bloqueadas.append(k)
@@ -45528,6 +45532,7 @@ async def _cua_entrada(center: str, desde: str, hasta: str, colchon=None, permit
                 c[k] = r[k]
         c["extras_recientes"] = extras_prev.get(p["id"], 0)
         c["findes_recientes"] = findes_prev.get(p["id"], 0)
+        c["descansos_semana_previos"] = descansos_prev.get(p["id"], [0] * 7)
         conductores.append(c)
     entrada = {"fecha_inicio": desde, "fecha_fin": hasta, "colchon": colchon,
                "permitir_extra": permitir_extra, "maximas": maximas, "conductores": conductores,

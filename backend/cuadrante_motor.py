@@ -114,6 +114,7 @@ PESO_EXTRA_REPETIDO = 1.0
 TOPE_REPETIDOS = 3
 PESO_FINDE_RECIENTE = 0.2       # por día de finde trabajado en las 4 semanas de antes (tope 5)
 PESO_FINDE_ALTERNAR = 0.25    # desempate suave para alternar respecto al finde anterior
+PESO_ROTAR_DESCANSO_DIA = 1.5 # rota los días libres repetidos según las 4 semanas previas
 
 TIPOS = ("normal", "empresa", "finde", "inactivo")
 
@@ -379,6 +380,16 @@ def generar_cuadrante(entrada: Dict[str, Any]) -> Dict[str, Any]:
         extras_sem = {}
         for c in conductores:
             cid, tipo = c["id"], c.get("tipo") or "normal"
+            # Evita que los mismos conductores acumulen siempre lunes/martes
+            # libres. Premia trabajar en los días de la semana que más libró
+            # recientemente para que el descanso rote a otros días. Solo pesa
+            # como desempate; la cobertura y los límites semanales mandan.
+            libres_previos = c.get("descansos_semana_previos") or []
+            if len(libres_previos) == 7:
+                for d in plan:
+                    k = xv.get((cid, d))
+                    if k is not None:
+                        m.c[k] -= PESO_ROTAR_DESCANSO_DIA * min(4, int(libres_previos[d.weekday()] or 0))
             # Los findes rotan: primero se intenta alternar un finde trabajado y
             # uno libre; el historial de cuatro semanas desempata después.
             fr = min(5, int(c.get("findes_recientes") or 0))
