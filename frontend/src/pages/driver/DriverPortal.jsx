@@ -367,12 +367,14 @@ export default function DriverPortal() {
             aviso={sinVer}
             onClick={() => setVista('dias')}
           />
-          {cuadrante && <Opcion
+          <Opcion
             icono={CalendarClock}
             titulo="Tu cuadrante"
-            sub={`Publicado hasta el ${new Date(`${cuadrante.hasta}T12:00:00`).toLocaleDateString('es-ES', { day: 'numeric', month: 'long', year: 'numeric' })}`}
+            sub={cuadrante?.hasta
+              ? `Publicado hasta el ${new Date(`${cuadrante.hasta}T12:00:00`).toLocaleDateString('es-ES', { day: 'numeric', month: 'long', year: 'numeric' })}`
+              : 'Consulta aquí el cuadrante publicado'}
             onClick={() => setVista('cuadrante')}
-          />}
+          />
           {/* LA ROPA, CON EL PRECIO EN LA PROPIA ENTRADA. Estaba aquí desde el
               08-09 y no entró casi nadie: decía «La del equipo, con tu nombre»
               y nada más, así que abrirla era averiguar si costaba 20 € o 200.

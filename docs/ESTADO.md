@@ -623,6 +623,9 @@ Nada se había borrado (org `owner` sin `modulos`, usuario `dani` sin
   ESLint y Vite build pasan; el despliegue de Pages sirve el bundle exacto,
   backend sano y 230 recursos del edge calientes. El humo autenticado no pudo
   ejecutarse en este entorno porque falta `SECRET_KEY`.
+- «Tu cuadrante» queda siempre visible en el inicio del conductor; antes se
+  ocultaba si la API no devolvía periodo. Si no hay periodo publicado asociado,
+  la pantalla informa de ello en vez de esconder la entrada.
 
 ## Sesión anterior — 13-10-2026: escaneo de paquetes en lote
 
