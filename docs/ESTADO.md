@@ -1119,8 +1119,8 @@ de la etiqueta de cualquier empresa.
 
 ## 13-10-2026: reducir errores al leer direcciones de etiquetas
 
-- El OCR móvil compara tres segmentaciones antes de elegir dirección y conserva alternativas cuando discrepan. En la foto real de OGA5 enviada por Dani, el formulario ahora muestra `Ladeira, Chazo 33`; el teléfono queda vacío porque `636830253` no está rotulado y aparece junto a códigos/logística.
-- La calle se extrae desde el tipo de vía (`Ladeira`) y se descarta ruido OCR posterior (`AZ 00`). CP y localidad se buscan alrededor de la dirección incluso si el CP viene en una línea separada.
+- El OCR móvil compara tres segmentaciones antes de elegir dirección y conserva alternativas cuando discrepan. En la foto real de OGA5 enviada por Dani, el formulario muestra `Ladeira, Chazo 33`; el teléfono queda vacío porque `636830253` aparece junto a códigos/logística y no está rotulado.
+- La calle se extrae desde el tipo de vía (`Ladeira`) y se descarta ruido OCR posterior (`AZ 00`). Se busca CP/localidad por toda la etiqueta, pero cuando el número está mezclado con tracking/ciclo y no tiene contexto suficiente se deja vacío para no guardar un CP falso (en esta foto el OCR no pudo confirmar `15938`).
 - Una dirección leída de foto exige revisión/confirmación manual antes de guardarse. No se afirma compatibilidad perfecta con todas las empresas: el QR/DataMatrix solo da la dirección si la empresa la codificó; si no, la foto se interpreta localmente y datos dudosos quedan para revisar.
 - Verificación: `check-leer-etiqueta.mjs`, ESLint en los tres archivos tocados, build Vite y Playwright móvil usando la foto real. No desplegado todavía.
 - Pendiente para ampliar cobertura: reunir etiquetas reales de distintas compañías y añadir el texto OCR/códigos de cada formato como casos. No hay un formato QR único universal.

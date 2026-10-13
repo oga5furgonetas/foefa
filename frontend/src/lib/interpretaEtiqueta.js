@@ -105,9 +105,19 @@ export function interpretaTicket(texto, pais = 'es') {
   }
   // El código postal y la población: en la línea de la dirección o cerca.
   const forma = CP_PAIS[pais] || CP_PAIS.es
-  const cerca = iVia >= 0 ? lineas.slice(iVia, iVia + 5) : lineas
+  // Los bloques OCR pueden reordenar columnas: buscar el CP en toda la etiqueta y priorizar el más cercano.
+  const cerca = iVia >= 0
+    ? lineas.map((l, i) => ({ l, i })).sort((a, b) => Math.abs(a.i - iVia) - Math.abs(b.i - iVia)).map(({ l }) => l)
+    : lineas
   for (const l of cerca) {
+    const indice = lineas.indexOf(l)
+    const contexto = lineas.slice(Math.max(0, indice - 1), indice + 2).join(' ')
+    // Fechas, pesos y números pegados a cycle/tracking no son códigos postales.
+    if (LINEA_LOGISTICA.test(l) || /\d\s*\/\s*\d/.test(l) || LINEA_LOGISTICA.test(contexto)) continue
     const conRotulo = l.match(CP_CON_RETULO)
+    // Si el OCR detectó tracking/pesos, un CP suelto puede ser una secuencia del ciclo o del bulto.
+    // Exigimos que el CP comparta línea con la localidad o que venga rotulado para no inventarlo.
+    if (etiquetaLogistica && !conRotulo && /^[A-Z]?\d[\d-]{3,9}[A-Z]{0,3}$/i.test(l.trim())) continue
     const m = conRotulo || l.match(forma)
     if (!m) continue
     const cp = m[1]
