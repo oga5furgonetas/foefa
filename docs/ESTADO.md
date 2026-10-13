@@ -1049,5 +1049,9 @@ de la etiqueta de cualquier empresa.
     es texto en `PruebaReparto.jsx`) y `check-efectos` (`InstalarApp.jsx:26` devuelve su limpieza); de verdad:
     falta la ficha de ayuda de `reparto`, `.text-pink-300` en el híbrido, 2 rutas sin consumidor
     (`/admin/demo-comercial`, webhook de suscripciones de Stripe) y 2 «division-sin-guard».
+- **Batería completa de Playwright con la rama** (13-10, 01:50): 409 pasan, 42 se saltan y fallan 9, todas
+  ya rojas antes de esta sesión (comprobado contra `f1ee87c`): `activacion.spec.js` (3 × 2), `demo-no-atrapa`
+  «Ya tengo cuenta» (× 2, lo tapa el recorrido «Así funciona») y `humo` «pide instalar la app» en móvil.
+  Backend: todo verde salvo las 2 de `test_valor_oddspapi.py` (fechas caducadas).
 - **Para desplegar** (Dani, desde su PC): `git pull`, fusionar la rama en `main`, y lo de «Cómo desplegar»
   (backend y web: hay cambios en los dos).
