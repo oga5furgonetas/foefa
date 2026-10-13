@@ -11465,7 +11465,9 @@ async def _repuntar_conductor(absorber: list, conservar: str, nombre: str) -> di
                                                "driver_id": conservar})
         await db[_CUA_PERSONAS].update_one(
             {"center": centro, "driver_id": origen.get("driver_id")},
-            {"$set": {"fusionada_en": conservar}})
+            # Mantener la copia como respaldo, pero sacarla del roster visible:
+            # si no, el panel enseña una segunda fila vacía de la ficha absorbida.
+            {"$set": {"fusionada_en": conservar, "en_cuadrante": False}})
         cuadrante_movidos += 1
     if cuadrante_movidos:
         movidos["cuadrante_personas"] = cuadrante_movidos
@@ -30573,6 +30575,17 @@ async def get_my_shifts(desde: Optional[str] = None, hasta: Optional[str] = None
                         user: dict = Depends(require_any_auth)):
     """Calendario propio del conductor: sus turnos + sus solicitudes."""
     did = user.get("sub")
+    # Una sesión que seguía abierta durante la fusión conserva el ID antiguo
+    # en su JWT. Resolver la cadena de fichas absorbidas evita que el portal
+    # parezca vacío hasta que el conductor cierre sesión y vuelva a entrar.
+    vistos = set()
+    while did and did not in vistos:
+        vistos.add(did)
+        ficha = await db.drivers.find_one({"id": did}, {"_id": 0, "merged_into": 1})
+        destino = (ficha or {}).get("merged_into")
+        if not destino:
+            break
+        did = destino
     q = {"driver_id": did}
     if desde or hasta:
         rng = {}

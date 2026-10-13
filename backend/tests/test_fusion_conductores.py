@@ -92,6 +92,7 @@ def test_la_fusion_conserva_la_ficha_con_correo_en_cuadrante():
     assert '"en_cuadrante"' in src
     assert '"reglas_fijas"' in src
     assert '"fusionada_en"' in src
+    assert '"en_cuadrante": False' in src
 
 
 def test_la_absorbida_no_se_borra():

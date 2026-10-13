@@ -313,6 +313,23 @@ async def test_flujo_completo_de_turnos(client, admin_token):
     r = await client.get(f"/api/shifts/mine?desde={dias[0]}&hasta={dias[-1]}", headers=dh)
     assert r.status_code == 200 and r.json()["shifts"]
 
+    # Una sesión abierta antes de fusionar fichas conserva el ID antiguo en
+    # el JWT. Debe seguir viendo los turnos y el periodo publicado de la ficha
+    # superviviente, sin obligar al conductor a volver a iniciar sesión.
+    antiguo = str(uuid.uuid4())
+    await server.db.drivers.insert_one({"id": antiguo, "merged_into": did, "active": False})
+    await server.db[server._CUA_PERSONAS].insert_one({
+        "driver_id": did, "center": centro, "en_cuadrante": True,
+        "cuadrante_desde": dias[0], "cuadrante_hasta": dias[-1],
+    })
+    viejo_token = server.create_token(antiguo, "driver", "Conductor Turnos")
+    r = await client.get(
+        f"/api/shifts/mine?desde={dias[0]}&hasta={dias[-1]}",
+        headers={"Authorization": f"Bearer {viejo_token}"})
+    assert r.status_code == 200 and r.json()["shifts"]
+    assert r.json()["cuadrante"] == {
+        "desde": dias[0], "hasta": dias[-1], "hoja": None}
+
     # Sin explicacion NO se puede pedir: se comprueba aqui porque es la regla
     # que mas facil se cae de un refactor, y sin ella la oficina vuelve a
     # preguntar por WhatsApp de que va cada peticion.
