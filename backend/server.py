@@ -30499,7 +30499,18 @@ async def get_my_shifts(desde: Optional[str] = None, hasta: Optional[str] = None
     # buscarlas entre las suyas.
     sin_ver = [r for r in reqs
                if r.get("status") in ("aprobado", "rechazado") and not r.get("visto_at")]
-    return {"shifts": shifts, "requests": reqs, "sin_ver": sin_ver}
+    # El rango publicado se consulta por el ID firmado del conductor, nunca por
+    # un ID que envíe el cliente. Un conductor sólo recibe su propio periodo.
+    roster = await db[_CUA_PERSONAS].find_one(
+        {"driver_id": did, "en_cuadrante": True},
+        {"_id": 0, "cuadrante_desde": 1, "cuadrante_hasta": 1, "cuadrante_hoja": 1},
+        sort=[("actualizado_en", -1)],
+    )
+    cuadrante = ({"desde": roster.get("cuadrante_desde"),
+                  "hasta": roster.get("cuadrante_hasta"),
+                  "hoja": roster.get("cuadrante_hoja")}
+                 if roster else None)
+    return {"shifts": shifts, "requests": reqs, "sin_ver": sin_ver, "cuadrante": cuadrante}
 
 
 # ─── BLOQUEAR LA PETICIÓN DE DÍAS ────────────────────────────────────────────
@@ -31717,6 +31728,8 @@ CODIGOS_CUADRANTE_INFO = {
     "RA":        ("trabaja", "Ride along", "apoyo", False),
     # El extra SI cuenta: es un dia de mas que alguien hace, y lo hace en ruta.
     "EXTRA":     ("extra", "Extra", "apoyo", True),
+    # Código literal de la hoja mensual: una ruta 1 marcada como día extra.
+    "1.EXTRA":   ("extra", "Extra", "apoyo", True),
     # ── LIBRE ──────────────────────────────────────────────────────────────
     "N/T":       ("libre", "No trabaja", "libre", False),
     "L":         ("libre", "Libre", "libre", False),
@@ -46901,7 +46914,8 @@ async def cuadrante_importar(file: UploadFile = File(...), center: str = Form(..
     for f, drv in emparejadas:
         campos = {"en_cuadrante": True, "nombre": f["nombre"], "tipo": f["tipo"] if f["tipo"] in _cm.TIPOS else "normal",
                   "patron": f.get("patron"), "inactivo_desde": f.get("inactivo_desde"),
-                  "alta_desde": f.get("alta_desde")}
+                  "alta_desde": f.get("alta_desde"), "cuadrante_desde": hoja["periodo_desde"],
+                  "cuadrante_hasta": hoja["periodo_hasta"], "cuadrante_hoja": hoja["hoja"]}
         if f.get("orden") is not None:
             campos["orden"] = f["orden"]
         await _cua_guardar_persona(center, drv["id"], campos, user, cambio)
@@ -46917,6 +46931,15 @@ async def cuadrante_importar(file: UploadFile = File(...), center: str = Form(..
     await _audit(user, "cuadrante_importar", {"center": center, "celdas": guardadas, "personas": len(emparejadas)})
     logger.info("Cuadrante importado de Excel: %s %s..%s, %d celdas, %d personas", center,
                 hoja["fechas"][0], hoja["fechas"][-1], guardadas, len(emparejadas))
+    # Avisar solo a las personas incluidas en este cuadrante que tengan una
+    # suscripción push activa. El envío va en segundo plano para no retrasar
+    # la publicación si algún móvil está desconectado.
+    if _push_enabled:
+        try:
+            asyncio.create_task(send_web_push_to_users(
+                ids, "Cuadrante disponible", "Movil ya tienes tu cuadrante, entra para verlo.", "/conductor"))
+        except Exception as e:
+            logger.debug("push de cuadrante no iniciado: %s", e)
     resumen.update(guardado=True, celdas=guardadas, respetados=respetados, fijadas_respetadas=fijadas,
                    fichas_creadas=fichas_creadas, emparejadas=len(emparejadas),
                    fuera_por_eleccion=fuera_por_eleccion, alias_guardados=len(ids_elegidos))

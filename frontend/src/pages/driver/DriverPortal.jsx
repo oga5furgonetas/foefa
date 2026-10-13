@@ -8,6 +8,7 @@ import DriverLogin from './DriverLogin'
 import InspectionFlow from './InspectionFlow'
 import InspectionDone from './InspectionDone'
 import MisTurnos from './MisTurnos'
+import TuCuadrante from './TuCuadrante'
 import MiClave from './MiClave'
 import PedirDias from './PedirDias'
 import Tienda from './Tienda'
@@ -94,6 +95,7 @@ export default function DriverPortal() {
   const [portal, setPortal] = useState(null)   // {vehicles, puede_auditar, motivo}
   const [result, setResult] = useState(null)
   const [sinVer, setSinVer] = useState(0)      // respuestas que aún no ha leído
+  const [cuadrante, setCuadrante] = useState(null)
   // null = apagada o todavía sin contestar. Con datos: {desde, n} para poder
   // poner el precio en la entrada del menú, que es lo que hace que se entre.
   const [tienda, setTienda] = useState(null)
@@ -198,7 +200,10 @@ export default function DriverPortal() {
   useEffect(() => {
     if (!driver || vista !== 'inicio') return
     getMyShifts()
-      .then((r) => setSinVer(lista(r.data?.sin_ver).length))
+      .then((r) => {
+        setSinVer(lista(r.data?.sin_ver).length)
+        setCuadrante(r.data?.cuadrante?.desde && r.data?.cuadrante?.hasta ? r.data.cuadrante : null)
+      })
       .catch(() => setSinVer(0))
   }, [driver, vista])
 
@@ -231,6 +236,7 @@ export default function DriverPortal() {
   if (!driver) return <DriverLogin onLogin={login} />
   if (vista === 'dias') return <PedirDias onBack={() => setVista('inicio')} />
   if (vista === 'turnos') return <MisTurnos onBack={() => setVista('inicio')} />
+  if (vista === 'cuadrante') return <TuCuadrante onBack={() => setVista('inicio')} />
   if (vista === 'clave') return <MiClave onBack={() => setVista('inicio')} />
   if (vista === 'tienda') return <Tienda onBack={() => setVista('inicio')} />
   if (vista === 'ruta') return <MiRuta onBack={() => setVista('inicio')} />
@@ -361,15 +367,12 @@ export default function DriverPortal() {
             aviso={sinVer}
             onClick={() => setVista('dias')}
           />
-          {/* Se deja a la vista y apagado a propósito: el cuadrante todavía no
-              se publica a los conductores, y una opción que no está genera más
-              preguntas que una que dice cuándo llegará. */}
-          <Opcion
+          {cuadrante && <Opcion
             icono={CalendarClock}
-            titulo="Mis turnos"
-            sub="Aquí verás qué días trabajas"
-            pronto
-          />
+            titulo="Tu cuadrante"
+            sub={`Publicado hasta el ${new Date(`${cuadrante.hasta}T12:00:00`).toLocaleDateString('es-ES', { day: 'numeric', month: 'long', year: 'numeric' })}`}
+            onClick={() => setVista('cuadrante')}
+          />}
           {/* LA ROPA, CON EL PRECIO EN LA PROPIA ENTRADA. Estaba aquí desde el
               08-09 y no entró casi nadie: decía «La del equipo, con tu nombre»
               y nada más, así que abrirla era averiguar si costaba 20 € o 200.

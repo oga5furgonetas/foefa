@@ -50,11 +50,16 @@ def _rgb(celda) -> str:
     f = celda.fill
     if not f or not f.fill_type:
         return ""
-    c = f.fgColor
-    if c is None or c.type != "rgb" or not isinstance(c.rgb, str):
-        return ""
-    v = c.rgb[-6:].upper()
-    return "" if v == "FFFFFF" else v
+    # Algunos Excel guardan el color visible en bgColor aunque el patrón sea
+    # sólido y fgColor sea theme=0 (blanco). La plantilla definitiva usa justo
+    # esa forma: ignorarlo convertía los colores de categoría en "normal".
+    for c in (f.fgColor, f.bgColor):
+        if c is None or c.type != "rgb" or not isinstance(c.rgb, str):
+            continue
+        v = c.rgb[-6:].upper()
+        if v != "FFFFFF":
+            return v
+    return ""
 
 
 def _codigo(v):
@@ -103,6 +108,61 @@ def _fechas_por_formula(ws_f, fila: int, cols: List[int]) -> Dict[int, dt.date]:
             f = _fecha(v)
             if f:
                 out[c] = f
+    return out
+
+
+def _rango_titulo(ws, fila: int) -> tuple[Optional[dt.date], Optional[dt.date]]:
+    """Rango explícito del cuadrante, si el título contiene dos fechas."""
+    texto = " ".join(str(ws.cell(r, c).value or "")
+                     for r in range(1, min(fila, 8) + 1)
+                     for c in range(1, min(ws.max_column, 8) + 1))
+    halladas = re.findall(r"(?<!\d)(\d{1,2})[-/.](\d{1,2})[-/.](\d{4})(?!\d)", texto)
+    if len(halladas) < 2:
+        return None, None
+    try:
+        inicio = dt.date(*(int(x) for x in reversed(halladas[0])))
+        fin = dt.date(*(int(x) for x in reversed(halladas[1])))
+    except ValueError:
+        return None, None
+    if fin < inicio or (fin - inicio).days > 75:
+        return None, None
+    return inicio, fin
+
+
+def _fechas_por_titulo(ws, fila: int, cols: List[int]) -> Dict[int, dt.date]:
+    """Resuelve días numéricos con el rango mensual explícito del título.
+
+    La hoja de octubre puede tener 1..31 y después 1,2 del mes siguiente.
+    Inferir el mes desde hoy elige mal ese último 2 (y puede producir un
+    septiembre 31); el título «del 01-10-2026 al 31-10-2026» fija el ancla.
+    """
+    inicio, fin_titulo = _rango_titulo(ws, fila)
+    if not inicio or not fin_titulo:
+        return {}
+
+    nums = {}
+    for c in cols:
+        v = ws.cell(fila, c).value
+        if isinstance(v, (int, float)) and not isinstance(v, bool) and float(v).is_integer() and 1 <= int(v) <= 31:
+            nums[c] = int(v)
+    if not nums:
+        return {}
+
+    actual = inicio
+    out: Dict[int, dt.date] = {}
+    for c in sorted(nums):
+        n = nums[c]
+        if n != actual.day:
+            ultimo_dia = (_primero_mes_siguiente(actual) - dt.timedelta(days=1)).day
+            if n != 1 or actual.day != ultimo_dia:
+                return {}
+            actual = _primero_mes_siguiente(actual)
+        if n != actual.day:
+            return {}
+        out[c] = actual
+        actual += dt.timedelta(days=1)
+    if fin_titulo not in out.values():
+        return {}
     return out
 
 
@@ -205,6 +265,8 @@ def _cabecera(ws, ws_f, ref: dt.date):
     if len(fechas_col) < 7:
         fechas_col = _fechas_por_formula(ws_f, fila_cab, cols)
     if len(fechas_col) < 7:
+        fechas_col = _fechas_por_titulo(ws, fila_cab, cols)
+    if len(fechas_col) < 7:
         fechas_col = _fechas_por_numero(ws, fila_cab, cols, ref)
     if len(fechas_col) < 7:
         raise ValueError("La fila de «Nombre» no tiene fechas en las columnas de los días. "
@@ -242,6 +304,11 @@ def leer_mensual(contenido: bytes, hoja: str = "", ref: Optional[dt.date] = None
         raise ultimo_error or ValueError("No encuentro la hoja del cuadrante.")
     # Entre varias semanales, la que llega más tarde (la última, hasta hoy).
     nombre_hoja, ws, ws_f, fila_cab, col_nombre, col_orden, fechas_col = max(validas, key=lambda v: max(v[6].values()))
+    rango = _rango_titulo(ws, fila_cab)
+    # El título es el periodo autorizado. Algunas plantillas incluyen días
+    # auxiliares del mes siguiente para completar la cuadrícula; no se importan.
+    if rango[0] and rango[1]:
+        fechas_col = {c: d for c, d in fechas_col.items() if rango[0] <= d <= rango[1]}
     orden_cols = sorted(fechas_col, key=lambda c: fechas_col[c])
     fechas = [fechas_col[c] for c in orden_cols]
     repetidas = [f for f, n in Counter(fechas).items() if n > 1]
@@ -254,7 +321,7 @@ def leer_mensual(contenido: bytes, hoja: str = "", ref: Optional[dt.date] = None
         avisos.append("Faltan días en la hoja: " + ", ".join(f.strftime("%d/%m") for f in huecos[:10]))
 
     primera = orden_cols[0]
-    if not _fecha(ws.cell(fila_cab, primera).value) and not isinstance(ws_f.cell(fila_cab, primera).value, str):
+    if not rango[0] and not _fecha(ws.cell(fila_cab, primera).value) and not isinstance(ws_f.cell(fila_cab, primera).value, str):
         avisos.append("La hoja solo trae el número del día, sin mes: se ha puesto del %s al %s (contando hacia atrás desde hoy). "
                       "Compruébalo antes de guardar." % (fechas[0].strftime("%d/%m/%Y"), fechas[-1].strftime("%d/%m/%Y")))
 
@@ -289,7 +356,7 @@ def leer_mensual(contenido: bytes, hoja: str = "", ref: Optional[dt.date] = None
             cod, hora = _codigo(ws.cell(r, c).value)
             if not cod:
                 continue
-            extra = cod == "1" and _rgb(ws_f.cell(r, c)) in rosas
+            extra = cod == "1.EXTRA" or (cod == "1" and _rgb(ws_f.cell(r, c)) in rosas)
             celdas[fechas_col[c].isoformat()] = {"cod": cod, "hora": hora, "extra": extra}
             codigos[cod] += 1
         orden = ws.cell(r, col_orden).value if col_orden else None
@@ -336,7 +403,8 @@ def leer_mensual(contenido: bytes, hoja: str = "", ref: Optional[dt.date] = None
         if ultimos and sum(1 for x in ultimos if x == "S") >= 0.6 * len(ultimos):
             f["tipo"] = "inactivo"
             f["nota_import"] = "Oficina (S): no entra en rutas"
-    return {"hoja": nombre_hoja, "fechas": [d.isoformat() for d in fechas], "filas": filas,
+    return {"hoja": nombre_hoja, "fechas": [d.isoformat() for d in fechas],
+            "periodo_desde": fechas[0].isoformat(), "periodo_hasta": fechas[-1].isoformat(), "filas": filas,
             "maximas": maximas, "codigos": dict(codigos.most_common()), "avisos": avisos,
             "leyenda": leyenda}
 

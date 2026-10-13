@@ -8,6 +8,7 @@ import io
 import openpyxl
 import pytest
 from openpyxl.styles import PatternFill
+from openpyxl.styles.colors import Color
 
 import cuadrante_excel as cx
 
@@ -102,6 +103,17 @@ def test_tipos_por_el_color_del_nombre_y_patron_deducido():
     assert f["SARA FINDE"]["tipo"] == "finde"
     assert f["PACO SEVA"]["tipo"] == "normal" and f["PACO SEVA"]["inactivo_desde"] == "2026-10-01"
     assert f["ANA PEREZ"]["tipo"] == "normal" and f["ANA PEREZ"]["orden"] == 1
+
+
+def test_color_guardado_en_bgcolor_y_codigo_1_extra():
+    wb = openpyxl.load_workbook(io.BytesIO(hoja()))
+    ws = wb["MENSUAL"]
+    # La plantilla real guarda el color de nombre como bgColor con fgColor theme=0.
+    ws["C19"].fill = PatternFill("solid", fgColor=Color(theme=0), bgColor=AZUL)
+    ws["D19"] = "1.EXTRA"
+    f = por_nombre(cx.leer_mensual(_bytes(wb)))["ANA PEREZ"]
+    assert f["tipo"] == "empresa"
+    assert f["celdas"]["2026-09-28"]["extra"] is True
 
 
 def test_la_oficina_no_entra_en_rutas():
@@ -204,6 +216,28 @@ def test_hoja_semanal_con_solo_numero_de_dia_pone_el_mes_y_avisa():
     assert any("solo trae el número del día" in a and "28/09/2026 al 08/10/2026" in a for a in r["avisos"])
     assert r["filas"][0]["celdas"]["2026-10-01"]["cod"] in ("1", "N/T")
     assert r["filas"][0]["celdas"]["2026-09-28"]["cod"] == "1"       # el de la columna 28
+
+
+def test_mes_con_dias_numericos_ancla_en_rango_del_titulo_y_acepta_mes_siguiente():
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    ws.title = "12 A 26"
+    ws["A1"] = "CUADRANTE OGA5 del 01-10-2026 al 31-10-2026"
+    ws["B4"], ws["C4"] = "Orden", "Nombre"
+    for i, n in enumerate([*range(1, 32), 1, 2], start=4):
+        ws.cell(4, i, n)
+    ws["B5"], ws["C5"] = 1, "LUIS FRANCO LOPEZ"
+    for i in range(33):
+        ws.cell(5, i + 4, "1")
+    ws["C40"] = "MAXIMA"
+    r = cx.leer_mensual(_bytes(wb), ref=dt.date(2026, 10, 13))
+    assert r["fechas"][0] == "2026-10-01"
+    assert r["fechas"][30] == "2026-10-31"
+    assert r["fechas"][-1] == "2026-10-31"
+    assert len(r["fechas"]) == 31
+    assert r["periodo_desde"] == "2026-10-01" and r["periodo_hasta"] == "2026-10-31"
+    assert not r["avisos"]
+    assert r["filas"][0]["nombre"] == "LUIS FRANCO LOPEZ"
 
 
 def test_se_prueban_todas_las_pestanas_aunque_la_primera_no_sirva():

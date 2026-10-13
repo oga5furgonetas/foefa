@@ -617,6 +617,12 @@ Nada se había borrado (org `owner` sin `modulos`, usuario `dani` sin
 - Seguimiento publicado: prueba focalizada del motor (52 pasan), ESLint y build
   Vite pasan; se verificó que solo se vacían las celdas movibles del tramo y se
   mantienen códigos especiales como BAJA y V.
+- En el portal del conductor, «Tu cuadrante» ya muestra el periodo como
+  calendario mensual adaptable al móvil, con resumen de trabajo/libres/extras,
+  colores por estado y «—» para los días sin dato (sin confundirlos con libres).
+  ESLint y Vite build pasan; el despliegue de Pages sirve el bundle exacto,
+  backend sano y 230 recursos del edge calientes. El humo autenticado no pudo
+  ejecutarse en este entorno porque falta `SECRET_KEY`.
 
 ## Sesión anterior — 13-10-2026: escaneo de paquetes en lote
 
