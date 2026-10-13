@@ -12,6 +12,7 @@
 
 import { OCR_RUTA } from './ocrRuta'
 import { interpretaTicket } from './interpretaEtiqueta'
+import { paradasDeHoja } from './hojaReparto'
 
 // Las reglas de qué es teléfono, calle o CP (por país) viven en interpretaEtiqueta.js.
 export { interpretaTicket }
@@ -43,10 +44,10 @@ async function lector() {
    menudo. Antes de leer: a tamaño de lectura (≈ 2000 px de ancho, sin pasarse),
    en grises y con el contraste estirado (lo más oscuro a negro y lo más claro a
    blanco, sin contar los extremos: un brillo o una sombra no lo estropean). */
-async function preparar(imagen) {
+async function preparar(imagen, ancho = 2000) {
   try {
     const bmp = await createImageBitmap(imagen)
-    const escala = Math.min(2, 2000 / Math.max(bmp.width, bmp.height))
+    const escala = Math.min(2, ancho / Math.max(bmp.width, bmp.height))
     const c = document.createElement('canvas')
     c.width = Math.round(bmp.width * escala); c.height = Math.round(bmp.height * escala)
     const ctx = c.getContext('2d', { willReadFrequently: true })
@@ -90,4 +91,22 @@ export async function leerTicketEnMovil(imagen, pais = 'es') {
     if (segundo.direccion) { data = otra; leido = segundo }
   }
   return { ...leido, texto: data?.text || '' }
+}
+
+/* LA HOJA DE REPARTO ENTERA (13-10-2026): una foto, todas las paradas. Una hoja
+   A4 tiene la letra más pequeña que una etiqueta: se lee a más resolución, primero
+   como bloque de filas (tabla) y, si salen pocas paradas, por columnas. Qué línea
+   es parada lo decide hojaReparto.js; el repartidor lo revisa antes de añadir. */
+export async function leerHojaEnMovil(imagen, pais = 'es') {
+  const w = await lector()
+  const lista = await preparar(imagen, 2800)
+  let mejor = { paradas: [], texto: '' }
+  for (const modo of ['6', '4']) {
+    await w.setParameters({ tessedit_pageseg_mode: modo })
+    const texto = (await w.recognize(lista)).data?.text || ''
+    const paradas = paradasDeHoja(texto, pais)
+    if (paradas.length > mejor.paradas.length) mejor = { paradas, texto }
+    if (paradas.length >= 3) break
+  }
+  return mejor
 }

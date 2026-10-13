@@ -87,3 +87,58 @@ test('Escanear seguidos · la etiqueta con todo entra sola, la repetida no cuent
   await expect(page.getByRole('button', { name: 'Revisar 1 paquetes sin dirección' })).toBeVisible()
   await expect(page.getByRole('heading', { name: '1 paquete cargado' })).toBeVisible()
 })
+
+/* LA HOJA DE REPARTO (13-10-2026): la foto se lee DE VERDAD con el lector de la app (tesseract en el
+   navegador, servido desde dist/ocr): la «foto» es una captura de una hoja impresa con tres paradas. */
+async function abrirPegar(page) {
+  await page.route(/\/api\/reparto\/mi-ruta$/, (r) => r.fulfill({ json: {
+    activo: true, autonomo: true, puede_pegar: true, empresa: '', fecha: '2026-10-13', ia_tickets: false, jornada: {}, aviso_aceptado: true,
+    base: null, ruta: null, pedidos: [] } }))
+  const pegados = []
+  await page.route(/\/api\/reparto\/pegar$/, async (r) => {
+    const b = r.request().postDataJSON(); pegados.push(b)
+    const n = b.texto.split('\n').length - 1
+    await r.fulfill({ json: b.confirmar ? { creados: n, repetidos: 0 } : { n, filas: [] } })
+  })
+  await page.goto('/ruta', { waitUntil: 'domcontentloaded' })
+  await page.getByRole('button', { name: 'Pegar una lista de direcciones' }).click()
+  return { hoja: page.getByRole('dialog', { name: 'Pegar una lista de direcciones' }), pegados }
+}
+
+test('Hoja de reparto · un CSV con comas y comillas entra por columnas', async ({ page }) => {
+  await preparar(page)
+  const { hoja, pegados } = await abrirPegar(page)
+  await hoja.getByLabel('Abrir un fichero').setInputFiles({ name: 'ruta.csv', mimeType: 'text/csv',
+    buffer: Buffer.from('codigo,cliente,direccion,telefono\nZX1,"López, María","Calle Mayor 12, 15001 A Coruña",612345678\n') })
+  await expect(hoja.getByLabel('Lista de direcciones')).toHaveValue('codigo; cliente; direccion; telefono\nZX1; López, María; Calle Mayor 12, 15001 A Coruña; 612345678')
+  await hoja.getByRole('button', { name: 'Revisar' }).click()
+  await expect(hoja.getByRole('button', { name: 'Añadir 1 parada a mi ruta' })).toBeVisible()
+  expect(pegados[0].texto).toContain('ZX1; López, María;')
+  // Un Excel no se abre aquí: se explica cómo copiarlo.
+  await hoja.getByLabel('Abrir un fichero').setInputFiles({ name: 'ruta.xlsx', mimeType: 'application/octet-stream', buffer: Buffer.from('PK') })
+  await expect(hoja.getByText('Ese fichero no se puede abrir aquí.', { exact: false })).toBeVisible()
+})
+
+test('Hoja de reparto · con una foto de la hoja impresa salen las tres paradas para revisar', async ({ page, context }) => {
+  test.setTimeout(150000)
+  await preparar(page)
+  const imprenta = await context.newPage()
+  await imprenta.setViewportSize({ width: 1400, height: 520 })
+  await imprenta.setContent(`<body style="margin:30px;font:22px Arial;background:#fff;color:#000">
+    <h2 style="font:bold 26px Arial">HOJA DE REPARTO 13/10/2026 Ruta 4</h2>
+    <table style="border-collapse:collapse;font:22px Arial" cellpadding="8">
+      <tr><th>N°</th><th>Código</th><th>Destinatario</th><th>Dirección</th><th>Teléfono</th></tr>
+      <tr><td>1</td><td>ZX812345</td><td>María López</td><td>Calle Mayor 12 15001 A Coruña</td><td>612 345 678</td></tr>
+      <tr><td>2</td><td>ZX812346</td><td>Bar Pepe</td><td>Rúa Real 5 15003 A Coruña</td><td>981 22 33 44</td></tr>
+      <tr><td>3</td><td>ZX812347</td><td>Ana Ruiz</td><td>Avenida de Finisterre 100 15004 A Coruña</td><td></td></tr>
+    </table><p>Total bultos: 3</p></body>`)
+  const foto = await imprenta.screenshot()
+  await imprenta.close()
+  const { hoja } = await abrirPegar(page)
+  await hoja.locator('input[type=file][accept="image/*"]').setInputFiles({ name: 'hoja.png', mimeType: 'image/png', buffer: foto })
+  await expect(hoja.getByText(/He leído 3 paradas/)).toBeVisible({ timeout: 120000 })
+  const texto = await hoja.getByLabel('Lista de direcciones').inputValue()
+  // La letra del código la puede confundir (la «Z» sale a veces «7»): por eso se revisa antes de añadir.
+  for (const trozo of ['X812345; María López; Calle Mayor 12 15001 A Coruña; 612345678', 'X812346; Bar Pepe; Rúa Real 5 15003 A Coruña; 981223344',
+    'X812347; Ana Ruiz; Avenida de Finisterre 100 15004 A Coruña']) expect(texto).toContain(trozo)
+})

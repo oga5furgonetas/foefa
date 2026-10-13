@@ -16,6 +16,7 @@ import { resolve } from 'node:path'
 
 const { interpretaTicket, telefonoDe } = await import(pathToFileURL(resolve('frontend/src/lib/interpretaEtiqueta.js')).href)
 const { datosDeCodigos, geoGS1 } = await import(pathToFileURL(resolve('frontend/src/lib/codigoEtiqueta.js')).href)
+const { paradasDeHoja, textoParaPegar, csvAPegar } = await import(pathToFileURL(resolve('frontend/src/lib/hojaReparto.js')).href)
 
 const CASOS = [
   ['es', `SEUR
@@ -121,6 +122,33 @@ for (const [nombre, pais, valores, esperado] of CODIGOS) {
 // 4309 al oeste de Greenwich: longitud negativa (la norma la guarda sumándole 360).
 const g = geoGS1('13042030003562950000')
 if (!g || g.lat !== 40.4203 || g.lng !== -3.705) fallos.push(`códigos · 4309: esperaba 40.4203,-3.705 y salió ${JSON.stringify(g)}`)
+
+/* LA HOJA DE REPARTO (13-10-2026): qué líneas del texto leído son paradas (hojaReparto.js). */
+const HOJA_ES = `HOJA DE REPARTO  13/10/2026   Ruta 4
+N° Código Destinatario Dirección CP Población Teléfono
+1 ZX812345 María López C/ Mayor 12 3ºB 15001 A Coruña 612 345 678
+2 ZX812346 Bar Pepe Rúa Real 5 15003 A Coruña 981 22 33 44
+3 ZX812347 Ana Ruiz Avda. de Finisterre 100 15004 A Coruña
+Total bultos: 3
+Firma del conductor:`
+const hoja = paradasDeHoja(HOJA_ES, 'es')
+const esperadaHoja = [
+  { codigo: 'ZX812345', cliente: 'María López', direccion: 'C/ Mayor 12 3ºB 15001 A Coruña', telefono: '612345678' },
+  { codigo: 'ZX812346', cliente: 'Bar Pepe', direccion: 'Rúa Real 5 15003 A Coruña', telefono: '981223344' },
+  { codigo: 'ZX812347', cliente: 'Ana Ruiz', direccion: 'Avda. de Finisterre 100 15004 A Coruña', telefono: '' },
+]
+if (JSON.stringify(hoja) !== JSON.stringify(esperadaHoja)) fallos.push(`hoja · España: salió ${JSON.stringify(hoja)}`)
+// El nombre en la línea de arriba y el CP con la población en la de abajo (México).
+const hojaMx = paradasDeHoja(`Juan Pérez\nCalle Hidalgo 245 Int. 3\n64000 Monterrey\n81 1234 5678\nJosefina Ruiz\nAv. Insurgentes Sur 1602\n03940 Ciudad de Mexico`, 'mx')
+const esperadaMx = [
+  { codigo: '', cliente: 'Juan Pérez', direccion: 'Calle Hidalgo 245 Int. 3, 64000 Monterrey', telefono: '8112345678' },
+  { codigo: '', cliente: 'Josefina Ruiz', direccion: 'Av. Insurgentes Sur 1602, 03940 Ciudad de Mexico', telefono: '' },
+]
+if (JSON.stringify(hojaMx) !== JSON.stringify(esperadaMx)) fallos.push(`hoja · México: salió ${JSON.stringify(hojaMx)}`)
+if (!textoParaPegar(hoja).startsWith('codigo; cliente; direccion; telefono\nZX812345; María López;')) fallos.push('hoja: el texto para pegar no lleva la cabecera')
+// Un CSV con comas y comillas pasa a «;» sin romper «López, María».
+const csv = csvAPegar('codigo,cliente,direccion\nZX1,"López, María","Calle Mayor 12, 15001 A Coruña"\n')
+if (csv !== 'codigo; cliente; direccion\nZX1; López, María; Calle Mayor 12, 15001 A Coruña') fallos.push(`csv: salió ${JSON.stringify(csv)}`)
 
 if (fallos.length) {
   console.error(`\n[check-leer-etiqueta] ${fallos.length} problema(s):`)

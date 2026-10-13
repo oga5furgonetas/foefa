@@ -2,7 +2,7 @@ import { Suspense, lazy, useCallback, useEffect, useRef, useState } from 'react'
 import {
   ArrowLeft, ScanLine, Camera, Loader2, Navigation, Phone, Check, X, Route, MapPin, Play, Square, Package,
   MessageCircle, Clock, Search, List, Pencil, ChevronDown, GripVertical, Map as MapaIcono, ArrowUp, ArrowDown, ArrowUpDown, Mic, ClipboardPaste, Trophy,
-  Eye, PenLine, RotateCcw, HelpCircle, Share2,
+  Eye, PenLine, RotateCcw, HelpCircle, Share2, FileUp,
 } from 'lucide-react'
 import {
   repMiRuta, repEscanear, repLeerTicket, repNuevoPedido, repEstado, repOrdenar, repJornada, repPosicion,
@@ -12,7 +12,8 @@ import { hoyLocal } from '../../lib/fecha'
 import { lista } from '../../lib/lista'
 import { compressImage } from '../../lib/compressImage'
 import { origen } from '../../marca'
-import { leerTicketEnMovil } from '../../lib/leerTicket'
+import { leerTicketEnMovil, leerHojaEnMovil } from '../../lib/leerTicket'
+import { textoParaPegar, csvAPegar } from '../../lib/hojaReparto'
 import { lectorDeCodigos, leerCodigo } from '../../lib/codigos'
 import { datosDeCodigos } from '../../lib/codigoEtiqueta'
 import { buscarDirecciones } from '../../lib/direcciones'
@@ -670,6 +671,36 @@ export default function MiRuta({ onBack, embebido = false }) {
     try { r.start() } catch { setEscuchando(false); usaElTeclado() }
   }
 
+  /* LA HOJA DE REPARTO EN UNA FOTO (13-10-2026): se lee en el móvil y lo que son
+     paradas va a la caja, con cabecera, para revisarlo antes de añadir. */
+  async function leerHoja(file) {
+    if (!file) return
+    medirAccion('ruta_foto_hoja')
+    setOcupado('hoja')
+    try {
+      const { paradas } = await leerHojaEnMovil(file, paisActual())
+      if (!paradas.length) {
+        setPegar((p) => ({ ...p, nota: tx('No he encontrado direcciones en la foto. Prueba con la hoja plana, recta y con luz, o pega la lista.') }))
+        return
+      }
+      setPegar({ texto: textoParaPegar(paradas), n: null,
+        nota: tx('He leído {n} paradas. Revísalas (cada línea: código; cliente; dirección; teléfono) y pulsa «Revisar».', { n: paradas.length }) })
+    } catch (e) { setPegar((p) => ({ ...p, nota: txError(e, 'No se pudo leer la foto') })) } finally { setOcupado('') }
+  }
+
+  /* Un fichero de texto o CSV (lo que exportan muchos programas de reparto). Un
+     Excel de verdad no se lee aquí: se copian sus celdas y se pegan. */
+  async function abrirFichero(file) {
+    if (!file) return
+    medirAccion('ruta_fichero')
+    if (/\.(xlsx?|ods|pdf)$/i.test(file.name)) {
+      setPegar((p) => ({ ...p, nota: tx('Ese fichero no se puede abrir aquí. Ábrelo, selecciona las filas, copia y pégalas en la caja.') }))
+      return
+    }
+    const texto = csvAPegar(await file.text())
+    setPegar({ texto, n: null, nota: '' })
+  }
+
   async function pegarLista(confirmar) {
     setOcupado('pegar')
     try {
@@ -1230,8 +1261,21 @@ export default function MiRuta({ onBack, embebido = false }) {
           <p className="mb-2 text-[13px] text-dark-400">
             {tx('Una parada por línea (de un correo, un Excel, un WhatsApp…). Si hay columnas con cabecera (dirección, cliente, teléfono, horario…), se leen.')}
           </p>
+          <div className="mb-2 grid grid-cols-2 gap-2">
+            <label className="flex cursor-pointer items-center justify-center gap-2 rounded-xl border border-brand-400/60 py-2.5 text-[13.5px] font-bold text-brand-200">
+              {ocupado === 'hoja' ? <Loader2 size={16} className="animate-spin" /> : <Camera size={16} />} {ocupado === 'hoja' ? tx('Leyendo…') : tx('Foto de la hoja')}
+              <input type="file" accept="image/*" capture="environment" className="hidden" disabled={ocupado === 'hoja'}
+                onChange={(e) => { const f = e.target.files?.[0]; e.target.value = ''; leerHoja(f) }} />
+            </label>
+            <label className="flex cursor-pointer items-center justify-center gap-2 rounded-xl border border-dark-600 py-2.5 text-[13.5px] font-semibold text-dark-100">
+              <FileUp size={16} /> {tx('Abrir un fichero')}
+              <input type="file" accept=".csv,.txt,.tsv,text/plain,text/csv,text/tab-separated-values,.xlsx,.xls,.pdf" className="hidden" aria-label={tx('Abrir un fichero')}
+                onChange={(e) => { const f = e.target.files?.[0]; e.target.value = ''; abrirFichero(f) }} />
+            </label>
+          </div>
+          {pegar.nota && <p role="status" className="mb-2 text-[12.5px] text-amber-200/90">{pegar.nota}</p>}
           <textarea className={`${inp} h-40 font-mono text-[13px]`} value={pegar.texto} aria-label={tx('Lista de direcciones')}
-            onChange={(e) => setPegar({ texto: e.target.value, n: null })}
+            onChange={(e) => setPegar({ texto: e.target.value, n: null, nota: pegar.nota })}
             placeholder={'Calle Mayor 3, 28013 Madrid\nAvenida de la Constitución 12, Sevilla'} />
           {pegar.n == null ? (
             <button onClick={() => pegarLista(false)} disabled={pegar.texto.trim().length < 5 || ocupado === 'pegar'}
