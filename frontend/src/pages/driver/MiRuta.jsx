@@ -272,7 +272,7 @@ export default function MiRuta({ onBack, embebido = false }) {
   useEffect(() => {
     if (vista !== 'mapa' || !verZonas || !firmaRuta) return undefined
     let vivo = true
-    repZonasCarga().then(({ data }) => { if (vivo) setZonas(data) })
+    repZonasCarga().then(({ data }) => { if (vivo) setZonas(Array.isArray(data?.zonas) ? data : { zonas: [], incompleto: true }) })
       .catch(() => { if (vivo) setZonas({ zonas: [], incompleto: true }) })
     return () => { vivo = false }
   }, [vista, verZonas, firmaRuta])
