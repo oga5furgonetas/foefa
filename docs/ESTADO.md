@@ -5,7 +5,7 @@
 > haz commit y `git push`. Una sola sesión trabajando a la vez: antes de
 > empezar, `git pull` y comprueba que nadie ha dejado nada a medias aquí.
 
-Última actualización: **13-10-2026** (merge `4711086` y publicación de etiquetas y zonas de carga).
+Última actualización: **13-10-2026** (mejora del escaneo por lotes y lectura de etiquetas).
 
 ## Qué es y dónde está
 
@@ -584,6 +584,22 @@ Nada se había borrado (org `owner` sin `modulos`, usuario `dani` sin
     probar el APK en un Android chino; anuncios en WeChat/Douyin/Xiaohongshu
     (piden empresa china); Web Push no llega en China (va por FCM); revisión
     por un abogado del texto PIPL.
+
+## Última sesión — 13-10-2026: escaneo de paquetes en lote
+
+- `POST /reparto/escanear/lote` admite hasta 100 paquetes, busca códigos
+  alternativos en una consulta y guarda las paradas en bloque; la geocodificación
+  sigue en segundo plano. En el móvil «Escanear seguidos» envía tandas de 20,
+  evita duplicados y deja para revisar las etiquetas sin dirección verificable.
+- Se asocian al pedido los distintos códigos de una etiqueta para que un QR
+  alternativo localice la parada en escaneos posteriores. El OCR reconoce la
+  forma sin prefijo «Ladeira, Chazo 33» y el CP `15938` del ejemplo de Boiro;
+  no inventa un teléfono.
+- Verificado: 35 tests de `test_reparto_api.py`, chequeo de lectura de etiquetas,
+  eslint focalizado, build de producción y dos pruebas Playwright de escaneo.
+- **No publicado**: falta desplegar frontend y backend para que llegue a
+  `flotadsp.com`. Los códigos que solo contienen un identificador siguen
+  necesitando OCR/revisión o una integración de datos de la empresa.
 
 ## Pendiente (por prioridad)
 

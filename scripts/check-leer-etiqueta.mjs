@@ -74,6 +74,11 @@ Telemóvel: 912 345 678`, { telefono: '912345678', direccion: 'Rua Augusta 100, 
 123 Main St. Apt 4
 Springfield, IL 62701
 Phone: (217) 555-0123`, { telefono: '2175550123', direccion: '123 Main St. Apt 4', cp: '62701', localidad: 'Springfield, IL', cliente: 'John Smith' }],
+  ['es', `Astelerios Triñanes Domínguez
+Ladeira, Chazo 33
+Abanqueiro, Boiro
+Boiro A Coruña
+15938`, { direccion: 'Ladeira, Chazo 33', cp: '15938', localidad: 'Boiro A Coruña', telefono: '' }],
 ]
 
 const fallos = []

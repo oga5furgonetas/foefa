@@ -5,7 +5,7 @@ import {
   Eye, PenLine, RotateCcw, HelpCircle, Share2, FileUp,
 } from 'lucide-react'
 import {
-  repMiRuta, repZonasCarga, repEscanear, repLeerTicket, repNuevoPedido, repEstado, repOrdenar, repJornada, repPosicion,
+  repMiRuta, repZonasCarga, repEscanear, repEscanearLote, repLeerTicket, repNuevoPedido, repEstado, repOrdenar, repJornada, repPosicion,
   repMiOrden, repMiEditar, repMiQuitar, repEjemplo, repQuitarEjemplos, repPegarMiLista, repTrazado, repFachada, repGanancias,
 } from '../../services/api'
 import { hoyLocal } from '../../lib/fecha'
@@ -330,11 +330,8 @@ export default function MiRuta({ onBack, embebido = false }) {
       // El paquete puede estar en la lista con cualquiera de sus códigos (la barra o el del bulto).
       let data = null
       let codigo = ''   // el principal, como lo guarda el servidor
-      for (const cod of (datos.codigos.length ? datos.codigos : valores).slice(0, 3)) {
-        data = (await repEscanear(cod)).data
-        if (!codigo) codigo = data.codigo || ''
-        if (data.encontrado) break
-      }
+      data = (await repEscanear(datos.codigos.length ? datos.codigos : valores)).data
+      codigo = data.codigo || ''
       if (data.encontrado) {
         const p = data.pedido
         setAviso(`✓ ${p.cliente || p.direccion} · ${tx('bulto {a} de {b}', { a: p.escaneos, b: p.bultos })}${p.hueco ? ` · ${tx('va {sitio}', { sitio: tx(p.hueco) })}` : ''}`)
@@ -406,38 +403,61 @@ export default function MiRuta({ onBack, embebido = false }) {
      se cuenta; los demás se guardan con su foto y se revisan al acabar, uno a
      uno, con la hoja de siempre. */
   const [seguidos, setSeguidos] = useState(null)   // null | {abierto, nuevos, yaEstaban, revisar: [{valores, foto}], ultimo}
+  const colaEscaneoRef = useRef([])
+  const envioEscaneoRef = useRef(null)
+  const temporizadorEscaneoRef = useRef(null)
+
+  async function vaciarColaEscaneo() {
+    if (envioEscaneoRef.current) return envioEscaneoRef.current
+    const trabajo = (async () => {
+      while (colaEscaneoRef.current.length) {
+        const lote = colaEscaneoRef.current.splice(0, 20)
+        const paquetes = lote.map(({ valores, datos }) => {
+          const codigos = datos.codigos?.length ? datos.codigos : valores
+          const { codigos: _c, completa: _completa, ...campos } = datos
+          return { codigos, datos: { ...Object.fromEntries(Object.entries(campos).filter(([, v]) => v !== '' && v != null)),
+            codigo: datos.codigo || codigos[0] || '', de_ticket: true,
+            direccion: datos.direccion ? [datos.direccion, datos.cp, datos.localidad].filter(Boolean).join(', ') : '' } }
+        })
+        try {
+          const { data } = await repEscanearLote(paquetes)
+          let nuevos = 0; let existentes = 0; const revisar = []
+          ;(data.items || []).forEach((item, i) => {
+            if (item.estado === 'nuevo') nuevos += 1
+            else if (item.estado === 'existente' || item.estado === 'repetido') existentes += 1
+            else revisar.push({ valores: lote[i].valores, foto: lote[i].foto })
+          })
+          if (nuevos) setCarga((c) => c ? { ...c, n: c.n + nuevos } : c)
+          if (nuevos) medirAccion('ruta_parada_nueva')
+          setSeguidos((s) => s ? ({ ...s, nuevos: s.nuevos + nuevos, yaEstaban: s.yaEstaban + existentes,
+            revisar: [...s.revisar, ...revisar], ultimo: revisar.length ? tx('Para revisar al acabar') : (nuevos ? `+ ${nuevos} ${tx('paradas añadidas')}` : `✓ ${existentes} ${tx('ya estaban')}`), enCola: colaEscaneoRef.current.length }) : s)
+        } catch {
+          setSeguidos((s) => s ? ({ ...s, revisar: [...s.revisar, ...lote.map(({ valores, foto }) => ({ valores, foto }))],
+            ultimo: tx('Para revisar al acabar'), enCola: colaEscaneoRef.current.length }) : s)
+        }
+      }
+    })()
+    envioEscaneoRef.current = trabajo
+    try { await trabajo } finally {
+      // El candado pertenece a esta promesa; una tanda concurrente no debe borrar el siguiente candado.
+      if (envioEscaneoRef.current === trabajo) envioEscaneoRef.current = null
+    }
+  }
 
   async function escaneoSeguido(valores, foto) {
     const datos = datosDeCodigos(valores, paisActual())
     medirAccion('ruta_escaneo')
-    const sumar = (cambio) => setSeguidos((s) => (s ? { ...s, ...cambio(s) } : s))
-    try {
-      let data = null
-      let codigo = ''
-      for (const cod of (datos.codigos.length ? datos.codigos : valores).slice(0, 3)) {
-        data = (await repEscanear(cod)).data
-        if (!codigo) codigo = data.codigo || ''
-        if (data.encontrado) break
-      }
-      if (data?.encontrado) {
-        sumar((s) => ({ yaEstaban: s.yaEstaban + 1, ultimo: `✓ ${data.pedido.cliente || data.pedido.direccion}` }))
-        return
-      }
-      if (datos.completa) {
-        const { codigos: _c, completa: _completa, ...campos } = datos
-        await repNuevoPedido({ ...VACIO, ...Object.fromEntries(Object.entries(campos).filter(([, v]) => v !== '' && v != null)),
-          codigo, de_ticket: true, direccion: [datos.direccion, datos.cp, datos.localidad].filter(Boolean).join(', ') })
-        medirAccion('ruta_parada_nueva')
-        sumar((s) => ({ nuevos: s.nuevos + 1, ultimo: `+ ${datos.direccion}` }))
-        return
-      }
-    } catch { /* sin red o error: se revisa luego a mano */ }
-    sumar((s) => ({ revisar: [...s.revisar, { valores, foto }], ultimo: tx('Para revisar al acabar') }))
+    colaEscaneoRef.current.push({ valores, foto, datos })
+    setSeguidos((s) => s ? ({ ...s, enCola: colaEscaneoRef.current.length, ultimo: tx('Paquete leído; guardando lote') }) : s)
+    clearTimeout(temporizadorEscaneoRef.current)
+    if (colaEscaneoRef.current.length >= 20) await vaciarColaEscaneo()
+    else temporizadorEscaneoRef.current = setTimeout(() => { vaciarColaEscaneo() }, 650)
   }
 
-  function cerrarSeguidos() {
-    setSeguidos((s) => (s ? { ...s, abierto: false } : s))
-    setCarga((c) => ({ n: (c?.n || 0) + (seguidos?.nuevos || 0) }))
+  async function cerrarSeguidos() {
+    clearTimeout(temporizadorEscaneoRef.current)
+    await vaciarColaEscaneo()
+    setSeguidos((s) => (s ? { ...s, abierto: false, enCola: 0 } : s))
     cargar()
   }
 
@@ -1350,7 +1370,8 @@ export default function MiRuta({ onBack, embebido = false }) {
         <Escaner seguido onCodigo={escaneoSeguido} onClose={cerrarSeguidos}
           estado={seguidos.nuevos + seguidos.yaEstaban + seguidos.revisar.length === 0 ? '' : [tx('{n} añadidos', { n: seguidos.nuevos }),
             seguidos.yaEstaban ? tx('{n} ya estaban', { n: seguidos.yaEstaban }) : '',
-            seguidos.revisar.length ? tx('{n} para revisar', { n: seguidos.revisar.length }) : ''].filter(Boolean).join(' · ')
+            seguidos.revisar.length ? tx('{n} para revisar', { n: seguidos.revisar.length }) : '',
+            seguidos.enCola ? `${seguidos.enCola} ${tx('en cola')}` : ''].filter(Boolean).join(' · ')
             + (seguidos.ultimo ? `\n${seguidos.ultimo}` : '')} />
       )}
 
@@ -1861,7 +1882,7 @@ function Escaner({ onCodigo, onClose, seguido = false, estado = '' }) {
               // dirección aparte) y no siempre se ven en el mismo fotograma: medio segundo más.
               const juntos = new Set(leidos)
               for (let i = 0; i < 2 && !parar; i += 1) {
-                await new Promise((ok) => setTimeout(ok, 250))
+                await new Promise((ok) => setTimeout(ok, 160))
                 try { (await leer()).forEach((v) => { if (!vistos.has(v)) juntos.add(v) }) } catch { /* fotograma malo */ }
               }
               leidos = [...juntos]
@@ -1869,8 +1890,8 @@ function Escaner({ onCodigo, onClose, seguido = false, estado = '' }) {
               if (navigator.vibrate) navigator.vibrate(60)
               if (!seguido) { avisa.current(leidos, foto); return }
               leidos.forEach((v) => vistos.add(v))
-              avisa.current(leidos, foto)
-              temporizador = setTimeout(mirar, 900)   // un respiro para cambiar de paquete
+              await avisa.current(leidos, foto)
+              temporizador = setTimeout(mirar, 120)   // breve margen para cambiar de paquete
               return
             }
           } catch { /* un fotograma malo: se sigue */ }

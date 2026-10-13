@@ -47796,18 +47796,24 @@ async def _rep_nombre_conductor(cid: str) -> str:
 
 
 async def _rep_nuevo(datos: dict, user: dict, origen: str, fecha: str,
-                     conductor: Optional[dict] = None, ubicar: bool = True) -> dict:
+                     conductor: Optional[dict] = None, ubicar: bool = True,
+                     _ajustes_cache: Optional[dict] = None, _cupo_comprobado: bool = False,
+                     _codigo_comprobado: bool = False, _insertar: bool = True) -> dict:
     datos = _dict_cuerpo(datos)
-    a = await _rep_ajustes()
+    a = _ajustes_cache if _ajustes_cache is not None else await _rep_ajustes()
     direccion = _texto_cuerpo(datos.get("direccion"), 200)
     if len(direccion) < 4:
         raise HTTPException(400, "Falta la dirección de entrega")
-    quedan = await _rep_quedan_gratis(user, fecha)           # plan gratis del repartidor
+    quedan = None if _cupo_comprobado else await _rep_quedan_gratis(user, fecha)  # plan gratis del repartidor
     if quedan is not None and quedan <= 0:
         raise HTTPException(402, REP_TOPE_MENSAJE)
     cp = _texto_cuerpo(datos.get("cp"), 10) or reparto.extrae_cp(direccion)
     codigo = reparto.normaliza_codigo(_texto_cuerpo(datos.get("codigo"), 120))
-    if codigo:
+    codigos_entrada = datos.get("codigos") if isinstance(datos.get("codigos"), list) else []
+    codigos = list(dict.fromkeys(reparto.normaliza_codigo(_texto_cuerpo(x, 120))
+                                  for x in codigos_entrada if x))[:20]
+    codigos = [c for c in codigos if c and c != codigo]
+    if codigo and not _codigo_comprobado:
         ya = await db.reparto_pedidos.find_one({"fecha": fecha, "codigo": codigo}, {"_id": 0})
         if ya:
             raise HTTPException(409, "Ese código ya está en los pedidos de ese día")
@@ -47817,7 +47823,7 @@ async def _rep_nuevo(datos: dict, user: dict, origen: str, fecha: str,
     except ValueError:
         bultos = 1
     p = {
-        "id": str(uuid.uuid4()), "fecha": fecha, "codigo": codigo,
+        "id": str(uuid.uuid4()), "fecha": fecha, "codigo": codigo, "codigos": codigos,
         "cliente": _texto_cuerpo(datos.get("cliente"), 120),
         "telefono": _texto_cuerpo(datos.get("telefono"), 30),
         "direccion": direccion, "cp": cp,
@@ -47851,7 +47857,8 @@ async def _rep_nuevo(datos: dict, user: dict, origen: str, fecha: str,
             p["lat"], p["lng"], p["geo"] = pt[0], pt[1], (pt[2] if len(pt) > 2 else "ok")
         else:
             p["geo"] = "no"
-    await db.reparto_pedidos.insert_one(dict(p))
+    if _insertar:
+        await db.reparto_pedidos.insert_one(dict(p))
     return p
 
 
@@ -47877,6 +47884,19 @@ async def _rep_ubicar_pendientes(fecha: str):
         await db.reparto_pedidos.update_one(
             {"id": p["id"]},
             {"$set": {"lat": pt[0], "lng": pt[1], "geo": pt[2] if len(pt) > 2 else "ok"} if pt else {"geo": "no"}})
+
+
+_REP_UBICACION_TAREAS = set()
+
+
+def _rep_programar_ubicacion(fecha: str):
+    """Una sola cola de geocodificación por empresa y día, aunque entren lotes seguidos."""
+    clave = f"rep-geo:{_current_db_name.get()}:{fecha}"
+    if any(not t.done() and t.get_name() == clave for t in _REP_UBICACION_TAREAS):
+        return
+    tarea = asyncio.create_task(_rep_ubicar_pendientes(fecha), name=clave)
+    _REP_UBICACION_TAREAS.add(tarea)
+    tarea.add_done_callback(_REP_UBICACION_TAREAS.discard)
 
 
 def _rep_resumen(pedidos: list, base) -> list:
@@ -48290,7 +48310,7 @@ async def reparto_pegar(data: dict = Body(...), user: dict = Depends(require_adm
                 repetidos += 1
             else:
                 raise
-    asyncio.create_task(_rep_ubicar_pendientes(f))
+    _rep_programar_ubicacion(f)
     return {"creados": hechos, "repetidos": repetidos, "fecha": f, "sin_hueco": sin_hueco}
 
 
@@ -48558,13 +48578,17 @@ async def reparto_mi_ruta(user: dict = Depends(require_any_auth)):
 @api_router.post("/reparto/escanear")
 async def reparto_escanear(data: dict = Body(...), user: dict = Depends(require_any_auth)):
     d = await _rep_conductor(user)
-    codigo = reparto.normaliza_codigo(_texto_cuerpo(data.get("codigo"), 120))
-    if not codigo:
+    crudos = data.get("codigos") if isinstance(data.get("codigos"), list) else [data.get("codigo")]
+    codigos = list(dict.fromkeys(reparto.normaliza_codigo(_texto_cuerpo(x, 120)) for x in crudos if x))
+    codigos = [c for c in codigos if c][:20]
+    if not codigos:
         raise HTTPException(400, "No llega ningún código")
     f = _dia_negocio()
-    p = await db.reparto_pedidos.find_one({"fecha": f, "codigo": codigo}, {"_id": 0, "entrega_foto": 0, "entrega_firma": 0})
+    p = await db.reparto_pedidos.find_one(
+        {"fecha": f, "$or": [{"codigo": {"$in": codigos}}, {"codigos": {"$in": codigos}}]},
+        {"_id": 0, "entrega_foto": 0, "entrega_firma": 0})
     if not p:
-        return {"encontrado": False, "codigo": codigo}
+        return {"encontrado": False, "codigo": codigos[0]}
     if p.get("conductor_id") and p["conductor_id"] != d["id"]:
         raise HTTPException(409, f"Ese pedido lo lleva {p.get('conductor_nombre') or 'otro conductor'}")
     cambios = {"conductor_id": d["id"], "conductor_nombre": d.get("name") or ""}
@@ -48574,6 +48598,99 @@ async def reparto_escanear(data: dict = Body(...), user: dict = Depends(require_
     p.update(cambios)
     p["escaneos"] = int(p.get("escaneos") or 0) + 1
     return {"encontrado": True, "pedido": p}
+
+
+@api_router.post("/reparto/escanear/lote")
+async def reparto_escanear_lote(data: dict = Body(...), user: dict = Depends(require_any_auth)):
+    """Busca y registra hasta 100 etiquetas en una sola petición.
+
+    Solo crea sin preguntar a Photon las direcciones que ya llegaron completas
+    desde los códigos; el resto vuelve como `revisar` para no inventar datos.
+    """
+    conductor = await _rep_conductor(user)
+    paquetes = data.get("paquetes")
+    if not isinstance(paquetes, list) or not paquetes or len(paquetes) > 100:
+        raise HTTPException(400, "El lote debe contener entre 1 y 100 paquetes")
+    fecha = _dia_negocio()
+    ajustes = await _rep_ajustes()
+    codigos_por_paquete = []
+    todos = set()
+    for fila in paquetes:
+        fila = fila if isinstance(fila, dict) else {}
+        crudos = fila.get("codigos") if isinstance(fila.get("codigos"), list) else []
+        datos_fila = fila.get("datos") if isinstance(fila.get("datos"), dict) else {}
+        crudos = [*crudos, fila.get("codigo") or datos_fila.get("codigo")]
+        codigos = list(dict.fromkeys(reparto.normaliza_codigo(_texto_cuerpo(x, 120)) for x in crudos if x))[:20]
+        codigos = [c for c in codigos if c]
+        codigos_por_paquete.append(codigos)
+        todos.update(codigos)
+
+    existentes = {}
+    if todos:
+        encontrados = await db.reparto_pedidos.find(
+            {"fecha": fecha, "$or": [{"codigo": {"$in": list(todos)}}, {"codigos": {"$in": list(todos)}}]},
+            {"_id": 0}).to_list(2000)
+        existentes = {}
+        for pedido in encontrados:
+            for valor in [pedido.get("codigo"), *(pedido.get("codigos") or [])]:
+                if valor:
+                    existentes[valor] = pedido
+
+    quedan = await _rep_quedan_gratis(user, fecha)
+    ya_procesados = set()
+    creados = repetidos = revisar = limite = otro_conductor = 0
+    resultados = []
+    pedidos_nuevos = []
+    for fila, codigos in zip(paquetes, codigos_por_paquete):
+        fila = fila if isinstance(fila, dict) else {}
+        datos_fila = _dict_cuerpo(fila.get("datos") if isinstance(fila.get("datos"), dict) else {})
+        codigo = reparto.normaliza_codigo(_texto_cuerpo(datos_fila.get("codigo"), 120)) or (codigos[0] if codigos else "")
+        if any(c in ya_procesados for c in codigos):
+            repetidos += 1
+            resultados.append({"estado": "repetido", "codigo": codigo})
+            continue
+        ya_procesados.update(codigos)
+
+        existente = next((existentes[c] for c in codigos if c in existentes), None)
+        if existente:
+            if existente.get("conductor_id") and existente["conductor_id"] != conductor["id"]:
+                otro_conductor += 1
+                resultados.append({"estado": "otro_conductor", "codigo": codigo})
+                continue
+            cambios = {"conductor_id": conductor["id"], "conductor_nombre": conductor.get("name") or ""}
+            if not existente.get("conductor_id"):
+                cambios["orden"] = None
+            await db.reparto_pedidos.update_one(
+                {"id": existente["id"]}, {"$set": cambios, "$inc": {"escaneos": 1}})
+            repetidos += 1
+            resultados.append({"estado": "existente", "codigo": codigo})
+            continue
+
+        direccion = _texto_cuerpo(datos_fila.get("direccion"), 200)
+        if len(direccion) < 4:
+            revisar += 1
+            resultados.append({"estado": "revisar", "codigo": codigo})
+            continue
+        if quedan is not None and quedan <= 0:
+            limite += 1
+            resultados.append({"estado": "limite", "codigo": codigo})
+            continue
+        datos_fila["codigo"] = codigo
+        datos_fila["codigos"] = codigos
+        pedido = await _rep_nuevo(datos_fila, user, "escaneo", fecha, conductor=conductor, ubicar=False,
+                                  _ajustes_cache=ajustes, _cupo_comprobado=True,
+                                  _codigo_comprobado=True, _insertar=False)
+        pedidos_nuevos.append(pedido)
+        creados += 1
+        if quedan is not None:
+            quedan -= 1
+        resultados.append({"estado": "nuevo", "codigo": codigo})
+
+    if pedidos_nuevos:
+        await db.reparto_pedidos.insert_many(pedidos_nuevos)
+        _rep_programar_ubicacion(fecha)
+    return {"items": resultados, "nuevos": creados, "existentes": repetidos,
+            "revisar": revisar, "limite": limite, "otro_conductor": otro_conductor}
 
 
 @api_router.post("/reparto/ticket")

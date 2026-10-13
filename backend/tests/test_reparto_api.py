@@ -79,6 +79,41 @@ async def test_escanear_lo_que_no_esta_y_el_segundo_bulto(base):
 
 
 @pytest.mark.asyncio(loop_scope="session")
+async def test_lote_de_100_paquetes_se_guarda_con_una_peticion_y_codigos_alternativos(base, monkeypatch):
+    monkeypatch.setattr(server, "_rep_programar_ubicacion", lambda _fecha: None)
+    paquetes = [{"codigos": [f"ZX{i:08d}", f"DM{i:08d}"], "datos": {
+        "codigo": f"ZX{i:08d}", "cliente": f"Cliente {i}", "direccion": f"Calle {i} 12, 15003 A Coruña",
+        "cp": "15003", "localidad": "A Coruña", "telefono": ""}}
+        for i in range(100)]
+    r = await server.reparto_escanear_lote({"paquetes": paquetes}, ANA)
+    assert r["nuevos"] == 100 and r["revisar"] == 0 and len(r["items"]) == 100
+    assert len(base.db["reparto_pedidos"].docs) == 100
+    assert base.db["reparto_pedidos"].docs[0]["geo"] == "pendiente"
+    # Se puede encontrar el paquete escaneando el código 2D alternativo, sin otra llamada por símbolo.
+    encontrado = await server.reparto_escanear({"codigos": ["otro", "DM00000042"]}, ANA)
+    assert encontrado["encontrado"] and encontrado["pedido"]["codigo"] == "ZX00000042"
+
+
+@pytest.mark.asyncio(loop_scope="session")
+async def test_lote_no_inventa_direccion_y_deduplica_repeticiones(base):
+    paquetes = [
+        {"codigos": ["ZX11111111"], "datos": {"codigo": "ZX11111111", "direccion": "Rúa Real 5"}},
+        {"codigos": ["ZX22222222"], "datos": {"codigo": "ZX22222222"}},
+        {"codigos": ["ZX11111111"], "datos": {"codigo": "ZX11111111", "direccion": "Rúa Real 5"}},
+    ]
+    r = await server.reparto_escanear_lote({"paquetes": paquetes}, ANA)
+    assert [x["estado"] for x in r["items"]] == ["nuevo", "revisar", "repetido"]
+    assert len(base.db["reparto_pedidos"].docs) == 1
+
+
+@pytest.mark.asyncio(loop_scope="session")
+async def test_lote_rechaza_mas_de_100_paquetes(base):
+    with pytest.raises(HTTPException) as e:
+        await server.reparto_escanear_lote({"paquetes": [{}] * 101}, ANA)
+    assert e.value.status_code == 400
+
+
+@pytest.mark.asyncio(loop_scope="session")
 async def test_cada_conductor_ve_y_cierra_solo_lo_suyo(base):
     p = await server.reparto_mis_pedidos({"direccion": "Rúa Real 5"}, ANA)
     ruta_luis = await server.reparto_mi_ruta(LUIS)

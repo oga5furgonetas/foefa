@@ -39,14 +39,24 @@ async function preparar(page) {
     base: null, ruta: null, pedidos: [] } }))
   const buscados = []
   await page.route(/\/api\/reparto\/escanear$/, async (r) => {
-    const { codigo } = r.request().postDataJSON(); buscados.push(codigo)
+    const body = r.request().postDataJSON(); const codigo = body.codigo || body.codigos?.[0]; buscados.push(codigo)
     await r.fulfill({ json: { encontrado: false, codigo } })
   })
   const creados = []
+  const lotes = []
+  await page.route(/\/api\/reparto\/escanear\/lote$/, async (r) => {
+    const { paquetes } = r.request().postDataJSON(); lotes.push(paquetes)
+    const items = paquetes.map(({ datos }) => {
+      if (datos.direccion) { creados.push(datos); return { estado: 'nuevo', codigo: datos.codigo } }
+      return { estado: 'revisar', codigo: datos.codigo }
+    })
+    await r.fulfill({ json: { items, nuevos: items.filter((x) => x.estado === 'nuevo').length,
+      existentes: 0, revisar: items.filter((x) => x.estado === 'revisar').length, limite: 0, otro_conductor: 0 } })
+  })
   await page.route(/\/api\/reparto\/mis-pedidos$/, async (r) => {
     creados.push(r.request().postDataJSON()); await r.fulfill({ json: { id: `n${creados.length}` } })
   })
-  return { buscados, creados }
+  return { buscados, creados, lotes }
 }
 
 test('Escanear · una etiqueta con la barra y un 2D aparte (como GLS) rellena dirección y teléfono', async ({ page }) => {
@@ -66,8 +76,8 @@ test('Escanear · una etiqueta con la barra y un 2D aparte (como GLS) rellena di
   expect(creados[0]).toMatchObject({ codigo: 'ZX81234567', telefono: '612345678', cliente: 'MARIA LOPEZ', de_ticket: true })
 })
 
-test('Escanear seguidos · la etiqueta con todo entra sola, la repetida no cuenta y la que no trae dirección queda para revisar', async ({ page }) => {
-  const { creados } = await preparar(page)
+test('Escanear seguidos · guarda la etiqueta completa en lote, evita repetidas y deja la incompleta para revisar', async ({ page }) => {
+  const { creados, lotes } = await preparar(page)
   await page.goto('/ruta', { waitUntil: 'domcontentloaded' })
   await page.getByRole('button', { name: 'Cargar paquetes: uno tras otro' }).click()
   await page.getByRole('button', { name: 'Escanear seguidos' }).click()
@@ -81,11 +91,13 @@ test('Escanear seguidos · la etiqueta con todo entra sola, la repetida no cuent
   await page.evaluate(() => { window.__ahora = ['ZX99999999'] })
   await expect(estado).toHaveText(/1 añadidos · 1 para revisar/)
   expect(creados).toHaveLength(1)
+  expect(lotes.length).toBeGreaterThan(0)
+  expect(lotes[0]).toHaveLength(1)
   expect(creados[0]).toMatchObject({ codigo: '384123450000000017', cliente: 'Maria Lopez', telefono: '612345678', lat: 40.4203, lng: -3.705 })
 
   await page.getByRole('dialog', { name: 'Escanear' }).getByRole('button', { name: 'Cerrar' }).click()
   await expect(page.getByRole('button', { name: 'Revisar 1 paquetes sin dirección' })).toBeVisible()
-  await expect(page.getByRole('heading', { name: '1 paquete cargado' })).toBeVisible()
+  await expect(page.getByRole('dialog', { name: 'Cargar paquetes' })).toBeVisible()
 })
 
 /* LA HOJA DE REPARTO (13-10-2026): la foto se lee DE VERDAD con el lector de la app (tesseract en el

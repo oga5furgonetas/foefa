@@ -239,7 +239,8 @@ export const updateMileage = (vehicleId, km) =>
 
 // ── Reparto: la ruta del conductor ──
 export const repMiRuta = () => api.get('/reparto/mi-ruta')
-export const repEscanear = (codigo) => api.post('/reparto/escanear', { codigo })
+export const repEscanear = (codigo) => api.post('/reparto/escanear', Array.isArray(codigo) ? { codigos: codigo } : { codigo })
+export const repEscanearLote = (paquetes) => api.post('/reparto/escanear/lote', { paquetes }, { timeout: 30000 })
 export const repLeerTicket = (file) => {
   const fd = new FormData()
   fd.append('file', file)

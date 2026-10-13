@@ -69,7 +69,14 @@ export function interpretaTicket(texto, pais = 'es') {
 
   out.telefono = telefonoDe(todo, pais)
 
-  const iVia = lineas.findIndex((l) => VIA.test(' ' + l + ' '))
+  let iVia = lineas.findIndex((l) => VIA.test(' ' + l + ' '))
+  // En algunas etiquetas españolas la calle no lleva prefijo: p. ej. «Ladeira, Chazo 33».
+  // Solo aceptamos esta forma si cerca aparece un CP; así no confundimos pesos/fechas con la dirección.
+  if (iVia < 0) {
+    const cpRe = CP_PAIS[pais] || CP_PAIS.es
+    iVia = lineas.findIndex((l, i) => /\b[A-ZÁÉÍÓÚÑ][\p{L}.'’-]+(?:\s*,?\s+[\p{L}.'’-]+){0,4}\s+\d{1,4}[A-Z]?\b/iu.test(l)
+      && lineas.slice(i + 1, i + 4).some((s) => cpRe.test(s) || CP_CON_RETULO.test(s)))
+  }
   if (iVia >= 0) {
     out.direccion = lineas[iVia].replace(/^(direcci[oó]n|domicilio|dir\.?|endere[cç]o|address)\s*[:.-]?\s*/i, '')
     // El piso, el apartamento o la colonia suelen ir en la línea siguiente («2º B», «Depto 4», «Col. Centro»).
