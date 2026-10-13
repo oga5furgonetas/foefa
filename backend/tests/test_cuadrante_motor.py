@@ -309,6 +309,24 @@ def test_historial_de_fines_completos_da_prioridad_a_quien_ya_trabajo_varios():
     assert not trabaja(res, "c0", dia(5)) and not trabaja(res, "c0", dia(6))
 
 
+def test_equidad_de_finde_corrige_patron_previo_entre_personas_elegibles():
+    # El historial puesto en las celdas no debe conservar una distribución
+    # extrema: que c0 trabaje los tres fines y c1 libre los tres.
+    conds = gente(12)
+    celdas = {}
+    for sabado in (5, 12, 19):
+        for n in (sabado, sabado + 1):
+            celdas[f"c0|{dia(n)}"] = "1"
+            celdas[f"c1|{dia(n)}"] = "N/T"
+    res = cm.generar_cuadrante(entrada(conds, dias=21, maxima=3, celdas=celdas))
+    findes_c0 = sum(trabaja(res, "c0", dia(s)) or trabaja(res, "c0", dia(s + 1))
+                    for s in (5, 12, 19))
+    findes_c1 = sum(trabaja(res, "c1", dia(s)) or trabaja(res, "c1", dia(s + 1))
+                    for s in (5, 12, 19))
+    assert findes_c0 < 3
+    assert findes_c1 > 0
+
+
 def test_rota_descanso_de_lunes_si_la_persona_ya_libro_los_lunes():
     # Con cobertura holgada, quien acumuló cuatro lunes libres trabaja el lunes
     # siguiente; el descanso se mueve a otro día disponible de esa semana.

@@ -1153,9 +1153,10 @@ de la etiqueta de cualquier empresa.
 ## 13-10-2026: repartir mejor los fines de semana del cuadrante
 
 - El motor ahora considera sábado y domingo como un fin de semana conjunto: basta trabajar uno de los dos días para que cuente como asignado.
-- Usa los fines realmente trabajados en las cuatro semanas anteriores y aumenta progresivamente el coste de asignar más fines en el período nuevo a una misma persona. Favorece la rotación y reduce rachas de tres fines trabajados cuando hay cobertura y personas elegibles.
+- Usa los fines realmente trabajados en las cuatro semanas anteriores y reparte primero un fin a cada persona antes de volver a cargar a alguien con otro, minimizando repeticiones. No conserva por encima de la equidad los turnos de fin de semana que ya estuvieran puestos; sí conserva turnos fijados y aprobados.
+- Rota los días de descanso laborables según el historial, sin premiar unirlos en días consecutivos. La prioridad de equidad se activa si el número de personas disponibles para fines es al menos el doble de la cobertura máxima prevista; con menos personal se mantiene el criterio previo para no poner en riesgo la cobertura.
 - Esta es una preferencia de equidad, no una garantía que pueda ignorar cobertura, turnos protegidos, tipo de jornada o restricciones de cada persona.
-- Verificación: 54 pruebas del motor del cuadrante pasan, incluidas pruebas de tres semanas con cobertura holgada y de prioridad por historial.
+- Verificación: 55 pruebas del motor del cuadrante pasan, incluidas pruebas de tres semanas, de turnos preexistentes desiguales y de historial.
 - Publicado en Fly desde `0b05583`; `/api/health` respondió `status=ok` y `mongo_connected=true`. El script de humo terminó con error porque no recibió `FLOTA_BACKEND`/`SECRET_KEY` localmente, aunque el servicio remoto está sano.
 - El nuevo cálculo no altera cuadrantes ya guardados: para aplicarlo hay que volver a proponer el tramo. La opción de cuadrante en blanco deja que se regenere, conservando los turnos protegidos y el historial previo.
 

@@ -114,7 +114,7 @@ PESO_EXTRA_REPETIDO = 1.0
 TOPE_REPETIDOS = 3
 PESO_FINDE_RECIENTE = 0.2       # compatibilidad con entradas antiguas, por día trabajado
 PESO_FINDE_ALTERNAR = 0.25    # desempate suave para alternar respecto al finde anterior
-PESO_REPARTO_FINDE = 3.0      # coste creciente por persona según findes recientes y asignados
+PESO_REPARTO_FINDE = 1.0      # penaliza repetir finde antes de repartir el primero a otra persona
 PESO_ROTAR_DESCANSO_DIA = 1.5 # rota los días libres repetidos según las 4 semanas previas
 
 TIPOS = ("normal", "empresa", "finde", "inactivo")
@@ -301,6 +301,16 @@ def generar_cuadrante(entrada: Dict[str, Any]) -> Dict[str, Any]:
 
     fijos = {(c["id"], d): fijo(c, d) for c in conductores for d in todos}
 
+    # La rotación entre personas es útil cuando hay margen para ella. Si el
+    # grupo apenas cubre el objetivo diario, se prioriza no dejar rutas cortas.
+    meta_rotacion = max(max(0, maximas[d] + colchon_dia.get(d, colchon) - refuerzo.get(d, 0))
+                        for d in plan)
+    finde_dias = [d for d in plan if d.weekday() >= 5]
+    elegibles_findes = min((sum(1 for c in conductores
+                                if fijos[c["id"], d] is None or fijos[c["id"], d][0] == 1)
+                            for d in finde_dias), default=0)
+    rotar_findes = elegibles_findes >= 2 * meta_rotacion
+
     def racha_previa(c) -> int:
         """Días seguidos trabajados justo antes del periodo (0 si libró ayer)."""
         run = 0
@@ -409,15 +419,16 @@ def generar_cuadrante(entrada: Dict[str, Any]) -> Dict[str, Any]:
             # crece con sus findes recientes y con los ya asignados en el plan,
             # para favorecer descansos de fin de semana más regulares.
             findes_plan = []
-            sabados = sorted({d - dt.timedelta(days=(d.weekday() - 5) % 7)
-                               for d in plan if d.weekday() >= 5})
-            for sab in sabados:
-                dias_finde = [d for d in (sab, sab + dt.timedelta(days=1)) if d in plan]
-                z = m.var(coste=PESO_REPARTO_FINDE)
-                coef, cte = suma([(cid, d) for d in dias_finde])
-                coef[z] = coef.get(z, 0) - 2
-                m.restr(coef, -math.inf, -cte)
-                findes_plan.append(z)
+            if rotar_findes:
+                sabados = sorted({d - dt.timedelta(days=(d.weekday() - 5) % 7)
+                                   for d in plan if d.weekday() >= 5})
+                for sab in sabados:
+                    dias_finde = [d for d in (sab, sab + dt.timedelta(days=1)) if d in plan]
+                    z = m.var(coste=0.0)
+                    coef, cte = suma([(cid, d) for d in dias_finde])
+                    coef[z] = coef.get(z, 0) - 2
+                    m.restr(coef, -math.inf, -cte)
+                    findes_plan.append(z)
             historicos = max(0, min(8, int(c.get("findes_trabajados_recientes") or 0)))
             if findes_plan:
                 suma_findes = {z: 1 for z in findes_plan}
@@ -507,37 +518,46 @@ def generar_cuadrante(entrada: Dict[str, Any]) -> Dict[str, Any]:
                     continue
                 v = cur(cid, d)
                 w = 3.0 if (d - ini).days < 7 else 1.0
+                if rotar_findes and d.weekday() >= 5:
+                    # La memoria del cuadrante sigue protegiendo los días de
+                    # diario, pero no debe bloquear la rotación de los findes.
+                    w *= 0.1
                 if v in DE_TRABAJO:
                     m.c[k] -= w                  # w·(1 - x): la constante no cambia nada
                     m.constante += w
                 elif v in DE_LIBRE:
                     m.c[k] += w
-            # ── Premio a librar dos días seguidos dentro de la semana ──
-            for sem in semanas:
-                pares, gratis = [], 0
-                for a, b in zip(sem, sem[1:]):
-                    ka, kb = xv.get((cid, a)), xv.get((cid, b))
-                    if ka is None and kb is None:
-                        if fijos[cid, a][0] == 0 and fijos[cid, b][0] == 0:
-                            gratis += 1
-                        continue
-                    tope_p = 1.0
-                    for k, dd in ((ka, a), (kb, b)):
-                        if k is None:
-                            tope_p = min(tope_p, 1.0 - fijos[cid, dd][0])
-                    if tope_p <= 0:
-                        continue
-                    p = m.var(0, tope_p, entera=True)
-                    for k in (ka, kb):
-                        if k is not None:
-                            m.restr({p: 1, k: 1}, -math.inf, 1)
-                    pares.append(p)
-                if pares and not gratis:
-                    z = m.var(0, 1, entera=True, coste=-PREMIO_LIBRES_JUNTOS)
-                    c1 = {z: 1}
-                    for p in pares:
-                        c1[p] = -1
-                    m.restr(c1, -math.inf, 0)
+            # No se premia juntar los libres en días consecutivos. La rotación
+            # por historial de días de la semana de arriba favorece alternarlos
+            # entre laborables sin añadir binarias ni poner en riesgo cobertura.
+            # Si el grupo no tiene margen para rotar fines, conserva la regla
+            # anterior de agrupar descansos, para no empeorar la cobertura.
+            if not rotar_findes:
+                for sem in semanas:
+                    pares, gratis = [], 0
+                    for a, b in zip(sem, sem[1:]):
+                        ka, kb = xv.get((cid, a)), xv.get((cid, b))
+                        if ka is None and kb is None:
+                            if fijos[cid, a][0] == 0 and fijos[cid, b][0] == 0:
+                                gratis += 1
+                            continue
+                        tope_p = 1.0
+                        for k, dd in ((ka, a), (kb, b)):
+                            if k is None:
+                                tope_p = min(tope_p, 1.0 - fijos[cid, dd][0])
+                        if tope_p <= 0:
+                            continue
+                        p = m.var(0, tope_p, entera=True)
+                        for k in (ka, kb):
+                            if k is not None:
+                                m.restr({p: 1, k: 1}, -math.inf, 1)
+                        pares.append(p)
+                    if pares and not gratis:
+                        z = m.var(0, 1, entera=True, coste=-PREMIO_LIBRES_JUNTOS)
+                        c1 = {z: 1}
+                        for p in pares:
+                            c1[p] = -1
+                        m.restr(c1, -math.inf, 0)
 
         res = m.resolver(segundos)
         if res.x is None:
