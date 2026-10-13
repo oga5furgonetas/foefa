@@ -10,7 +10,9 @@ export const BR = {
   // Portada /repartidores
   'Paquetería': 'Encomendas',
   'Súper a domicilio': 'Supermercado delivery',
-  'Foto a la etiqueta: la dirección y el teléfono entran solos': 'Foto da etiqueta: o endereço e o telefone entram sozinhos',
+  'Escanea o haz una foto a la etiqueta, sea de la empresa que sea: la dirección y el teléfono entran solos': 'Escaneie ou tire uma foto da etiqueta, de qualquer empresa: o endereço e o telefone entram sozinhos',
+  '¿Te dan una hoja con la lista? Una foto y entran todas las paradas': 'Recebeu uma folha com a lista? Uma foto e todas as paradas entram',
+  'Las zonas de carga y descarga cerca de tus paradas, en el mapa': 'As zonas de carga e descarga perto das suas paradas, no mapa',
   'La ruta se ordena sola por tiempo, con el tráfico típico': 'A rota se organiza sozinha por tempo, com o trânsito de cada hora',
   'Te guía con voz hasta cada puerta, dentro de la app': 'Te guia por voz até cada porta, dentro do app',
   'Manos libres en Android: di «entregado» y sigue conduciendo': 'Mãos livres no Android: diga «entregue» e continue dirigindo',
@@ -18,8 +20,7 @@ export const BR = {
   'Avisa al cliente con tu hora de llegada': 'Avise o cliente com o seu horário de chegada',
   'Escanea los paquetes al cargar y sabes dónde va cada uno': 'Escaneie os pacotes ao carregar e saiba onde vai cada um',
   '¿Sirve con los paquetes de mi agencia?': 'Funciona com os pacotes da minha transportadora?',
-  'Sí. Escaneas el código de la etiqueta o le haces una foto y la app intenta leer la dirección (si no la lee, la escribes tú), o pegas tu lista de direcciones. No necesita conectarse con tu agencia.':
-    'Sim. Você escaneia o código da etiqueta ou tira uma foto e o app tenta ler o endereço (se não conseguir, você digita), ou cola a sua lista de endereços. Não precisa se conectar com a sua transportadora.',
+  'Sí. Escaneas la etiqueta: si su código ya trae la dirección, entra sola; si no, la app la lee de la foto (y si no puede, la escribes tú). También puedes hacer una foto a tu hoja de reparto o pegar la lista. No necesita conectarse con tu agencia.': 'Sim. Você escaneia a etiqueta: se o código já traz o endereço, ele entra sozinho; se não, o app lê da foto (e se não conseguir, você digita). Também dá para tirar uma foto da sua folha de entregas ou colar a lista. Não precisa se conectar com a sua transportadora.',
   '¿Qué hacéis con mis datos y mi ubicación?': 'O que vocês fazem com os meus dados e a minha localização?',
   'La foto de la etiqueta se lee en tu móvil. Tu ubicación solo se usa para guiarte y no se guarda. Los datos de tus clientes se borran solos a los días que tú fijes.':
     'A foto da etiqueta é lida no seu celular. A sua localização só é usada para te guiar e não é guardada. Os dados dos seus clientes se apagam sozinhos depois dos dias que você definir.',
