@@ -113,6 +113,7 @@ PESO_JUNTOS = 40.0               # que dos personas (pareja) libren y trabajen l
 PESO_EXTRA_REPETIDO = 1.0
 TOPE_REPETIDOS = 3
 PESO_FINDE_RECIENTE = 0.2       # por día de finde trabajado en las 4 semanas de antes (tope 5)
+PESO_FINDE_ALTERNAR = 0.25    # desempate suave para alternar respecto al finde anterior
 
 TIPOS = ("normal", "empresa", "finde", "inactivo")
 
@@ -378,13 +379,24 @@ def generar_cuadrante(entrada: Dict[str, Any]) -> Dict[str, Any]:
         extras_sem = {}
         for c in conductores:
             cid, tipo = c["id"], c.get("tipo") or "normal"
-            # Los findes rotan: cuanto más findes lleva, algo más cuesta ponerle otro.
+            # Los findes rotan: primero se intenta alternar un finde trabajado y
+            # uno libre; el historial de cuatro semanas desempata después.
             fr = min(5, int(c.get("findes_recientes") or 0))
             if fr:
                 for d in plan:
                     k = xv.get((cid, d))
                     if k is not None and d.weekday() >= 5:
                         m.c[k] += PESO_FINDE_RECIENTE * fr
+            anterior = bool(c.get("finde_previo", False))
+            # Incentivo ligero en el primer fin de semana del periodo. El
+            # siguiente cálculo leerá ese fin de semana como historial; así
+            # alterna sin añadir binarias al optimizador.
+            sabado = next((d for d in plan if d.weekday() == 5), None)
+            if sabado is not None:
+                for d in (sabado, sabado + dt.timedelta(days=1)):
+                    k = xv.get((cid, d))
+                    if k is not None:
+                        m.c[k] += PESO_FINDE_ALTERNAR * (1 if anterior else -1)
             # Quien lleva más días seguidos libra antes (desempate suave: el tope de 6 sigue siendo ley).
             r0 = racha0.get(cid, 0)
             if r0:

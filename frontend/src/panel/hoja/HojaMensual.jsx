@@ -1,4 +1,4 @@
-import { memo, useMemo } from 'react'
+import { memo, useMemo, useState } from 'react'
 import { Lock } from 'lucide-react'
 import { useRejilla } from './useRejilla'
 import {
@@ -81,7 +81,13 @@ const FilaPersona = memo(function FilaPersona({ p, r, dias, celdas, sc0, sc1, ac
 })
 
 export default function HojaMensual({ datos, dias, celda, porDia, guardarCeldas, guardarMaximas, deshacer, avisar }) {
-  const personas = useMemo(() => datos?.personas || [], [datos])
+  const [ordenAlfabetico, setOrdenAlfabetico] = useState(false)
+  const personas = useMemo(() => {
+    const lista = datos?.personas || []
+    return ordenAlfabetico
+      ? [...lista].sort((a, b) => new Intl.Collator('es', { sensitivity: 'base', numeric: true }).compare(a.nombre || '', b.nombre || ''))
+      : lista
+  }, [datos, ordenAlfabetico])
   const P = personas.length
   const hoy = datos?.hoy
   const desde = dias[0]
@@ -186,6 +192,12 @@ export default function HojaMensual({ datos, dias, celda, porDia, guardarCeldas,
 
   return (
     <div {...g.propsCaja} className="h-full overflow-auto outline-none" aria-label="Hoja MENSUAL">
+      <div className="sticky left-0 top-0 z-40 flex justify-end bg-dark-950/90 p-1">
+        <button type="button" onClick={() => setOrdenAlfabetico((v) => !v)} aria-pressed={ordenAlfabetico}
+          className={`rounded border px-2 py-1 text-[11px] ${ordenAlfabetico ? 'border-brand-500/60 bg-brand-500/15 text-dark-50' : 'border-dark-700 text-dark-300'}`}>
+          {ordenAlfabetico ? 'A–Z (visual)' : 'Orden original'}
+        </button>
+      </div>
       <table className="border-separate border-spacing-0 text-[12px]">
         <thead>
           <tr>

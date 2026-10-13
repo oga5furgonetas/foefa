@@ -287,6 +287,7 @@ function Asistente({ center, datos, onCerrar, onHecho }) {
    los martes») y debajo se ve, mientras se escribe, lo que va a aplicar el
    motor y lo que NO sabe aplicar. Nada se aplica en silencio. */
 function EditorPersona({ center, persona, onCerrar, onGuardado }) {
+  const [nombre, setNombre] = useState(persona.nombre || '')
   const [tipo, setTipo] = useState(persona.tipo || 'normal')
   const [patron, setPatron] = useState(persona.patron || [0, 1, 2, 3, 4])
   const [nota, setNota] = useState(persona.nota || '')
@@ -310,7 +311,7 @@ function EditorPersona({ center, persona, onCerrar, onGuardado }) {
     setOcupado(true); setErr('')
     try {
       await cuadrantePersona(persona.id, center, {
-        tipo, patron: tipo === 'empresa' ? patron : null, nota, apodos,
+        nombre: nombre.trim(), tipo, patron: tipo === 'empresa' ? patron : null, nota, apodos,
         alta_desde: alta || null, inactivo_desde: baja || null, ...extra,
       })
       onGuardado()
@@ -322,6 +323,12 @@ function EditorPersona({ center, persona, onCerrar, onGuardado }) {
   return (
     <Modal titulo={persona.nombre} onCerrar={onCerrar}>
       <div className="space-y-4 text-[13px] text-dark-300">
+        <label className="block">
+          <span className="mb-1 block text-[11px] font-semibold uppercase tracking-wide text-dark-500">Nombre visible en el cuadrante</span>
+          <input value={nombre} onChange={(e) => setNombre(e.target.value)} maxLength={80}
+            className="w-full rounded-lg border border-dark-700 bg-dark-900 px-3 py-2 text-[13px] text-dark-100" />
+          <span className="mt-1 block text-[11px] text-dark-500">Solo cambia cómo aparece aquí; no cambia la ficha ni mezcla personas.</span>
+        </label>
         {!persona.ficha_activa && (
           <p className="rounded-lg border border-amber-500/30 bg-amber-500/5 px-3 py-2 text-xs text-amber-300">
             Su ficha está de baja en Conductores aunque sale en el cuadrante.
@@ -796,6 +803,8 @@ export default function Cuadrante() {
   const [ocupado, setOcupado] = useState('')
   const [maxEdit, setMaxEdit] = useState({})
   const [refEdit, setRefEdit] = useState({})
+  const [ordenAlfabetico, setOrdenAlfabetico] = useState(false)
+  const [mostrarFuera, setMostrarFuera] = useState(false)
   const pedida = useRef(0)
 
   const cargar = useCallback(async (silencio = false) => {
@@ -816,6 +825,14 @@ export default function Cuadrante() {
 
   const dias = useMemo(() => rangoDias(rango.desde, rango.hasta, 92), [rango])
   const personas = useMemo(() => lista(datos?.personas), [datos])
+  const fuera = (p) => (p.tipo === 'inactivo' && p.ficha_activa === false)
+    || Boolean(p.inactivo_desde && p.inactivo_desde <= rango.hasta)
+  const personasVista = useMemo(() => {
+    const visibles = mostrarFuera ? personas : personas.filter((p) => !fuera(p))
+    return ordenAlfabetico
+      ? [...visibles].sort((a, b) => new Intl.Collator('es', { sensitivity: 'base', numeric: true }).compare(a.nombre || '', b.nombre || ''))
+      : visibles
+  }, [personas, mostrarFuera, ordenAlfabetico, rango.hasta])
   const hoy = datos?.hoy || hoyLocal()
   const propuesta = datos?.propuesta || null
   const mostrarProp = Boolean(propuesta) && verPropuesta
@@ -1100,6 +1117,14 @@ export default function Cuadrante() {
                   </button>
                 )}
                 <div className="ml-auto flex flex-wrap items-center gap-2">
+                  <button onClick={() => setOrdenAlfabetico((v) => !v)} aria-pressed={ordenAlfabetico}
+                    className={`rounded-lg border px-2.5 py-1 text-xs ${ordenAlfabetico ? 'border-brand-500/60 bg-brand-500/15 text-dark-50' : 'border-dark-700 text-dark-300 hover:bg-dark-800'}`}>
+                    {ordenAlfabetico ? 'A–Z (visual)' : 'Orden original'}
+                  </button>
+                  <button onClick={() => setMostrarFuera((v) => !v)} aria-pressed={mostrarFuera}
+                    className={`rounded-lg border px-2.5 py-1 text-xs ${mostrarFuera ? 'border-amber-500/50 bg-amber-500/10 text-amber-200' : 'border-dark-700 text-dark-300 hover:bg-dark-800'}`}>
+                    {mostrarFuera ? 'Ocultar fuera' : `Mostrar fuera (${personas.filter(fuera).length})`}
+                  </button>
                   {/* El cuadrante en grande, como su Excel: DIARIO, MENSUAL y DEBER HORAS. */}
                   <button onClick={() => setHojaAbierta(true)}
                     className="flex items-center gap-1.5 rounded-lg border border-emerald-500/50 bg-emerald-500/10 px-2.5 py-1 text-xs font-semibold text-emerald-300 hover:bg-emerald-500/20">
@@ -1142,7 +1167,7 @@ export default function Cuadrante() {
 
               {cargando && !datos ? (
                 <div className="card flex items-center gap-2 p-8 text-dark-400"><Loader2 className="animate-spin" size={18} /> Cargando el cuadrante…</div>
-              ) : personas.length === 0 ? (
+              ) : personasVista.length === 0 ? (
                 <div className="card space-y-2 p-6 text-[13px] text-dark-300">
                   <p className="text-dark-100">Todavía no hay nadie en el cuadrante de {center} para estas fechas.</p>
                   <p>Importa la hoja del mes o añade a la gente en «Personas y notas».</p>
@@ -1172,7 +1197,7 @@ export default function Cuadrante() {
                       </tr>
                     </thead>
                     <tbody>
-                      {personas.map((p) => (
+                      {personasVista.map((p) => (
                         <tr key={p.id} className="border-t border-dark-800/70">
                           <td className="sticky left-0 z-10 bg-dark-900 px-2 py-0.5">
                             <button onClick={() => setPersona(p)} className="flex w-full items-center gap-1.5 text-left"

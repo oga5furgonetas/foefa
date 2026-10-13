@@ -45798,6 +45798,11 @@ async def cuadrante_persona(driver_id: str, data: dict = Body(...), user: dict =
         if t not in _cm.TIPOS:
             raise HTTPException(400, "Tipo no válido")
         campos["tipo"] = t
+    if "nombre" in data:
+        nombre_visible = " ".join(str(data.get("nombre") or "").split())
+        if not nombre_visible or len(nombre_visible) > 80:
+            raise HTTPException(400, "El nombre visible debe tener entre 1 y 80 caracteres")
+        campos["nombre"] = nombre_visible
     if "patron" in data:
         campos["patron"] = _cua_lista_dias_semana(data.get("patron"))
     for k in ("alta_desde", "inactivo_desde"):
@@ -46877,7 +46882,7 @@ async def cuadrante_importar(file: UploadFile = File(...), center: str = Form(..
     for i in range(0, len(ops), 500):
         await _bulk_turnos(ops[i:i + 500])
     for f, drv in emparejadas:
-        campos = {"en_cuadrante": True, "tipo": f["tipo"] if f["tipo"] in _cm.TIPOS else "normal",
+        campos = {"en_cuadrante": True, "nombre": f["nombre"], "tipo": f["tipo"] if f["tipo"] in _cm.TIPOS else "normal",
                   "patron": f.get("patron"), "inactivo_desde": f.get("inactivo_desde"),
                   "alta_desde": f.get("alta_desde")}
         if f.get("orden") is not None:

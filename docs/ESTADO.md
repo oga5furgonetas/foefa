@@ -5,7 +5,7 @@
 > haz commit y `git push`. Una sola sesión trabajando a la vez: antes de
 > empezar, `git pull` y comprueba que nadie ha dejado nada a medias aquí.
 
-Última actualización: **13-10-2026** (OCR de etiquetas con lectura por consenso y confirmación).
+Última actualización: **13-10-2026** (cuadrante y rotación equitativa de fines de semana).
 
 ## Qué es y dónde está
 
@@ -585,7 +585,23 @@ Nada se había borrado (org `owner` sin `modulos`, usuario `dani` sin
     (piden empresa china); Web Push no llega en China (va por FCM); revisión
     por un abogado del texto PIPL.
 
-## Última sesión — 13-10-2026: escaneo de paquetes en lote
+## Última sesión — 13-10-2026: cuadrante, nombres y equidad de fines de semana
+
+- En `/panel/cuadrante`, las fichas marcadas fuera (tipo inactivo y ficha de
+  baja, o fecha de baja anterior al periodo) se ocultan de la vista operativa;
+  «Mostrar fuera» las recupera sin borrar fichas ni turnos históricos.
+- Orden alfabético opcional en la tabla y en MENSUAL; es solo visual y conserva
+  las celdas vinculadas al ID de cada conductor. Se puede editar el nombre
+  visible por persona sin cambiar la ficha ni reasignar turnos. La importación
+  ahora conserva el rótulo exacto de la fila de Excel, sin emparejar por parecido.
+- El motor toma el último fin de semana completo y favorece alternar trabajado
+  y libre como criterio suave. No sobrepasa las celdas fijadas ni las reglas
+  de cobertura. No se asignan L1/L2/L3 a personas por deducción: faltan las
+  elegibilidades individuales que Dani indicó que facilitará.
+- Verificación pendiente hasta terminar la batería backend; el build y check
+  de hooks del frontend ya pasan. Todavía no publicado.
+
+## Sesión anterior — 13-10-2026: escaneo de paquetes en lote
 
 - `POST /reparto/escanear/lote` admite hasta 100 paquetes, busca códigos
   alternativos en una consulta y guarda las paradas en bloque; la geocodificación
