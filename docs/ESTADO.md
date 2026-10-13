@@ -1156,6 +1156,8 @@ de la etiqueta de cualquier empresa.
 - Usa los fines realmente trabajados en las cuatro semanas anteriores y aumenta progresivamente el coste de asignar más fines en el período nuevo a una misma persona. Favorece la rotación y reduce rachas de tres fines trabajados cuando hay cobertura y personas elegibles.
 - Esta es una preferencia de equidad, no una garantía que pueda ignorar cobertura, turnos protegidos, tipo de jornada o restricciones de cada persona.
 - Verificación: 54 pruebas del motor del cuadrante pasan, incluidas pruebas de tres semanas con cobertura holgada y de prioridad por historial.
+- Publicado en Fly desde `0b05583`; `/api/health` respondió `status=ok` y `mongo_connected=true`. El script de humo terminó con error porque no recibió `FLOTA_BACKEND`/`SECRET_KEY` localmente, aunque el servicio remoto está sano.
+- El nuevo cálculo no altera cuadrantes ya guardados: para aplicarlo hay que volver a proponer el tramo. La opción de cuadrante en blanco deja que se regenere, conservando los turnos protegidos y el historial previo.
 
 ## 13-10-2026: reducir errores al leer direcciones de etiquetas
 
