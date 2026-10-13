@@ -599,7 +599,12 @@ Nada se había borrado (org `owner` sin `modulos`, usuario `dani` sin
   elegibilidades individuales que Dani indicó que facilitará.
 - Verificado: 1.139 pruebas backend pasan, 1 omitida; checks del repositorio,
   eslint (sin errores), build Vite, check de hooks, 157 pruebas de humo de
-  escritorio y 9 pruebas del cuadrante en serie pasan. Despliegue pendiente.
+  escritorio y 9 pruebas del cuadrante en serie pasan. Publicado en producción:
+  Fly `flota-backend` sano y conectado a Mongo; Pages `flota` sirve el bundle
+  nuevo en `https://flotadsp.com/panel/cuadrante` y los 229 recursos del edge
+  quedaron calientes. El humo autenticado no pudo ejecutarse porque falta
+  `SECRET_KEY` en el entorno local; se verificaron por separado la salud pública
+  de la API, Mongo y que producción sirve exactamente el bundle compilado.
 
 ## Sesión anterior — 13-10-2026: escaneo de paquetes en lote
 
