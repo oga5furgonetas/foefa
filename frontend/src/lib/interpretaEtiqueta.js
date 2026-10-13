@@ -13,7 +13,7 @@
    Sin imports a propósito: así lo ejecuta tal cual scripts/check-leer-etiqueta.mjs con etiquetas de
    cada país (gotcha 40: probar lo que corre, no una copia). */
 
-export const VIA = new RegExp(String.raw`(^|\s)(c\/|cl\.?|calle|r[uú]a|r\/|avda\.?|av\.?|avenida|plaza|praza|pza\.?|paseo|p[ºo]\.?|traves[ií]a|trav\.?|camino|carretera|ctra\.?|lugar|lg\.?|urb\.?|urbanizaci[oó]n|ronda|glorieta|pol[ií]gono|pol\.?|estrada|camiño|rueiro|bloque|carrera|cra\.?|kr\.?|diagonal|dg\.?|transversal|tv\.|autopista|jir[oó]n|jr\.?|pasaje|psje\.?|calzada|calz\.?|privada|priv\.?|cerrada|andador|boulevard|bulevar|blvd\.?|prolongaci[oó]n|prol\.?|rodovia|rod\.?|alameda|al\.|travessa|largo|pra[cç]a|street|st\.|avenue|ave\.?|road|rd\.|drive|dr\.|lane|ln\.|rue|chemin|via|viale|piazza|corso|stra(ss|ß)e|str\.|weg|platz|allee)\s`, 'i')
+export const VIA = new RegExp(String.raw`(^|\s)(c\/|cl\.?|calle|r[uú]a|r\/|avda\.?|av\.?|avenida|plaza|praza|pza\.?|paseo|p[ºo]\.?|traves[ií]a|trav\.?|camino|carretera|ctra\.?|lugar|lg\.?|urb\.?|urbanizaci[oó]n|ronda|glorieta|pol[ií]gono|pol\.?|estrada|camiño|rueiro|bloque|carrera|cra\.?|kr\.?|diagonal|dg\.?|transversal|tv\.|autopista|jir[oó]n|jr\.?|pasaje|psje\.?|calzada|calz\.?|privada|priv\.?|cerrada|andador|boulevard|bulevar|blvd\.?|prolongaci[oó]n|prol\.?|rodovia|rod\.?|alameda|al\.|travessa|largo|pra[cç]a|street|st\.|avenue|ave\.?|road|rd\.|drive|dr\.|lane|ln\.|rue|chemin|via|viale|piazza|corso|stra(ss|ß)e|str\.|weg|platz|allee|ladeira)[\s,]+`, 'i')
 
 // Lo que va en la línea siguiente y es parte de la dirección: piso, puerta, apartamento, colonia, barrio.
 const SIGUE = /^(\d+\s*[ºª°%o]|bajo|entlo|piso|puerta|esc\.?|portal|apto\.?|apt\.?|apartamento|depto\.?|dpto\.?|departamento|int\.?|interior|casa|bloco|torre|col\.?|colonia|fracc\.?|fraccionamiento|barrio|bairro|b[º°]\.?|villa|urbanizaci[oó]n|conjunto|sector)(?=[\s,.:]|$)/i
@@ -39,6 +39,8 @@ const CP_CON_RETULO = /\b(?:c\.?\s?p\.?|cep|c[oó]digo postal|zip|postal)\s*[:.-
 
 const ETIQ_CLIENTE = /\b(?:cliente|nombre|nome|destinatari[oa]|destinat[aá]rio|recebedor|sr\.?|sra\.?|d\.|dña\.?|ship to|deliver to|to)\s*[:.-]\s*(.{3,60})|\b(?:cliente|nombre|nome|destinatari[oa]|destinat[aá]rio|sr\.?|sra\.?|dña\.?)\s+(.{3,60})/i
 const ETIQ_CODIGO = /\b(?:ticket|tique|n[ºo°]\.?\s*(?:de\s*)?(?:ticket|pedido|factura)?|pedido|factura\s+simplificada|albar[aá]n|gu[ií]a|rastreo|tracking|c[oó]digo de rastreio|pedido n[ºo°]?)\s*[:#.-]?\s*([A-Z0-9][A-Z0-9/-]{3,25})/i
+const LINEA_LOGISTICA = /\b(?:cycle|ciclo|kg|kgs|weight|peso|tnw|awb|tracking|rastreo|shipment|envio)\b/i
+const ROTULO_TELEFONO = /\b(?:t[1il]f|tel(?:[ée]fono)?|telefone|phone|mobile|movil|cel|whatsapp)/i
 
 /* El teléfono: cada tira de cifras con separadores, sin prefijo del país, con un largo y una primera
    cifra de las que usa ese país. Un número de seguimiento es más largo y no pasa. */
@@ -67,18 +69,35 @@ export function interpretaTicket(texto, pais = 'es') {
   const todo = lineas.join('\n')
   const out = { codigo: '', cliente: '', telefono: '', direccion: '', cp: '', localidad: '', contenido: '' }
 
-  out.telefono = telefonoDe(todo, pais)
+  // Exclude package identifiers from phone detection; accept labeled or digits-only lines.
+  const telefonoRotulado = lineas.some((l) => ROTULO_TELEFONO.test(l))
+  const etiquetaLogistica = /\b(?:cycle|ciclo|kg|kgs|weight|peso|tnw|awb|tracking|rastreo|shipment|envio)\b/i.test(todo) ||
+    /\b[A-Z]{1,4}\d{6,}\b/i.test(todo)
+  // Conserva líneas con texto (incluidas etiquetas de teléfono mal reconocidas);
+  // solo excluye tiras numéricas aisladas cuando la etiqueta tiene tracking/logística.
+  const lineasTelefono = lineas.filter((l) => !etiquetaLogistica || !/^[+\d\s()./-]+$/.test(l))
+  out.telefono = telefonoDe(lineasTelefono.join('\n'), pais)
+  out.telefonoRotulado = telefonoRotulado
 
   let iVia = lineas.findIndex((l) => VIA.test(' ' + l + ' '))
   // En algunas etiquetas españolas la calle no lleva prefijo: p. ej. «Ladeira, Chazo 33».
   // Solo aceptamos esta forma si cerca aparece un CP; así no confundimos pesos/fechas con la dirección.
   if (iVia < 0) {
     const cpRe = CP_PAIS[pais] || CP_PAIS.es
-    iVia = lineas.findIndex((l, i) => /\b[A-ZÁÉÍÓÚÑ][\p{L}.'’-]+(?:\s*,?\s+[\p{L}.'’-]+){0,4}\s+\d{1,4}[A-Z]?\b/iu.test(l)
+    iVia = lineas.findIndex((l, i) => !LINEA_LOGISTICA.test(l) && !/\b\d{1,2}\/\d{1,2}\b/.test(l) &&
+      /\b[A-ZÁÉÍÓÚÑ][\p{L}.'’-]+(?:\s*,?\s+[\p{L}.'’-]+){0,4}\s+\d{1,4}[A-Z]?\b/iu.test(l)
       && lineas.slice(i + 1, i + 4).some((s) => cpRe.test(s) || CP_CON_RETULO.test(s)))
   }
   if (iVia >= 0) {
-    out.direccion = lineas[iVia].replace(/^(direcci[oó]n|domicilio|dir\.?|endere[cç]o|address)\s*[:.-]?\s*/i, '')
+    const linea = lineas[iVia]
+    const via = VIA.exec(' ' + linea + ' ')
+    // El OCR puede mezclar la calle con campos vecinos (p. ej. «IN : Ladeira… AZ 00»).
+    // Empieza en el tipo de vía y acepta el número; solo conserva después un complemento conocido.
+    let direccion = via ? linea.slice(Math.max(0, via.index + via[1].length - 1)) : linea
+    direccion = direccion.replace(/^(direcci[oó]n|domicilio|dir\.?|endere[cç]o|address)\s*[:.-]?\s*/i, '').trim()
+    const direccionConNumero = direccion.match(/^(.+?\b\d{1,4}[A-Z]?\b)(.*)$/i)
+    const complemento = direccionConNumero?.[2].match(/^\s+((?:piso|puerta|entlo|bajo|apto\.?|apartamento|depto\.?|dpto\.?|int\.?|interior|casa|bloco|torre|esc\.?|portal)\b.*)$/i)
+    out.direccion = direccionConNumero ? `${direccionConNumero[1]}${complemento ? ` ${complemento[1]}` : ''}` : direccion
     // El piso, el apartamento o la colonia suelen ir en la línea siguiente («2º B», «Depto 4», «Col. Centro»).
     // El OCR lee a veces «3º» como «3%» o «3o».
     const sig = lineas[iVia + 1] || ''
@@ -86,7 +105,7 @@ export function interpretaTicket(texto, pais = 'es') {
   }
   // El código postal y la población: en la línea de la dirección o cerca.
   const forma = CP_PAIS[pais] || CP_PAIS.es
-  const cerca = iVia >= 0 ? lineas.slice(iVia, iVia + 4) : lineas
+  const cerca = iVia >= 0 ? lineas.slice(iVia, iVia + 5) : lineas
   for (const l of cerca) {
     const conRotulo = l.match(CP_CON_RETULO)
     const m = conRotulo || l.match(forma)
@@ -100,6 +119,10 @@ export function interpretaTicket(texto, pais = 'es') {
     else {
       const antes = l.slice(0, l.indexOf(m[0])).replace(/[\s,.-]+$/, '').trim()
       if (antes && antes.length < 40 && !/\d{3,}/.test(antes) && !VIA.test(' ' + antes + ' ')) out.localidad = antes
+      else {
+        const previa = lineas[lineas.indexOf(l) - 1] || ''
+        if (previa && previa.length < 40 && !/\d{3,}/.test(previa) && !LINEA_LOGISTICA.test(previa) && !VIA.test(' ' + previa + ' ')) out.localidad = previa
+      }
     }
     break
   }

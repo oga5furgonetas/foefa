@@ -379,16 +379,24 @@ export default function MiRuta({ onBack, embebido = false }) {
         codigoDeFoto(blob),
       ])
       if (codigoFoto && !data.codigo) data.codigo = codigoFoto
+      // En una etiqueta logística, cifras aisladas pueden ser un tracking/peso leído como teléfono.
+      // Solo las conservamos si la propia etiqueta las identifica como teléfono.
+      if (!data.telefonoRotulado && /\b(?:cycle|ciclo|kg|kgs|weight|peso|tnw|awb|tracking|rastreo|shipment|envio)\b|\b[A-Z]{1,4}\d{6,}\b/i.test(data.texto || '')) data.telefono = ''
       const algo = data?.direccion || data?.telefono || data?.cliente
       if (!algo && !soloHuecos) setAviso(tx('No he podido leer el ticket. Prueba con más luz y el ticket recto, o escríbelo.'))
       setNuevo((n) => {
-        const leido = Object.fromEntries(Object.entries(data || {}).filter(([, v]) => v !== '' && v != null))
+      const leido = Object.fromEntries(Object.entries(data || {}).filter(([k, v]) =>
+        !['texto', 'alternativasDireccion', 'direccionAmbigua', 'telefonoRotulado'].includes(k) && v !== '' && v != null))
         const dir = [data?.direccion, data?.cp, data?.localidad].filter(Boolean).join(', ')
         if (soloHuecos) {
           return { ...n, ...Object.fromEntries(Object.entries(leido).filter(([k]) => !n?.[k] && k !== 'direccion' && k !== 'cp' && k !== 'localidad')),
-            de_ticket: true, direccion: n?.direccion || dir }
+            de_ticket: true, direccion: n?.direccion || dir,
+            ...(n?.direccion ? {} : { requiere_confirmar_direccion: true, direccion_confirmada: false,
+              alternativas_direccion: data?.alternativasDireccion || [] }) }
         }
-        return { ...n, ...leido, codigo: n?.codigo || data?.codigo || '', de_ticket: true, direccion: dir || n?.direccion || '' }
+      return { ...n, ...leido, codigo: n?.codigo || data?.codigo || '', de_ticket: true, direccion: dir || n?.direccion || '',
+        requiere_confirmar_direccion: true, direccion_confirmada: false,
+        alternativas_direccion: data?.alternativasDireccion || [] }
       })
     } catch (e) { setAviso(txError(e, 'No se pudo leer el ticket')) } finally { setOcupado('') }
   }
@@ -470,6 +478,10 @@ export default function MiRuta({ onBack, embebido = false }) {
   }
 
   async function guardarNuevo() {
+    if (nuevo.requiere_confirmar_direccion && !nuevo.direccion_confirmada) {
+      setAviso(tx('Revisa lo leído del ticket antes de guardar.'))
+      return
+    }
     setOcupado('guardar')
     try {
       if (nuevo.id) {
@@ -1421,7 +1433,8 @@ export default function MiRuta({ onBack, embebido = false }) {
           <div className="flex flex-col gap-2">
             <div className="flex gap-2">
               <input ref={dirInput} className={inp} placeholder={escuchando ? tx('Te escucho: di la dirección…') : tx('Dirección completa')} value={nuevo.direccion} autoComplete="street-address"
-                onChange={(e) => setNuevo({ ...nuevo, direccion: e.target.value, lat: null, lng: null })} />
+                onChange={(e) => setNuevo({ ...nuevo, direccion: e.target.value, lat: null, lng: null,
+                  ...(nuevo.requiere_confirmar_direccion ? { direccion_confirmada: true } : {}) })} />
               <button type="button" onClick={dictar} aria-label={escuchando ? tx('Parar de dictar') : tx('Dictar la dirección')} aria-pressed={escuchando}
                 className={`shrink-0 rounded-xl border px-3 ${escuchando ? 'animate-pulse border-red-400 bg-red-500/15 text-red-300' : 'border-dark-600 text-dark-200'}`}>
                 <Mic size={18} />
@@ -1463,8 +1476,30 @@ export default function MiRuta({ onBack, embebido = false }) {
               <HuecoRejilla valor={nuevo.hueco} onElegir={(h) => setNuevo({ ...nuevo, hueco: nuevo.hueco === h ? '' : h })} />
             </div>
           </div>
-          {nuevo.de_ticket && <p className="mt-2 text-[12px] text-amber-200/90">{tx('Revisa lo leído del ticket antes de guardar.')}</p>}
-          <button onClick={guardarNuevo} disabled={nuevo.direccion.trim().length < 4 || ocupado === 'guardar'}
+          {nuevo.requiere_confirmar_direccion ? (
+            <div role="alert" className="mt-2 rounded-xl border border-amber-400/50 bg-amber-500/10 p-3 text-[12px] text-amber-100">
+              <p>{tx('Revisa lo leído del ticket antes de guardar.')}</p>
+              {nuevo.alternativas_direccion?.length > 1 && (
+                <div className="mt-2 flex flex-col gap-1.5">
+                  {nuevo.alternativas_direccion.map((a, i) => (
+                    <button key={`${a.direccion}-${a.cp}-${i}`} type="button"
+                      onClick={() => setNuevo({ ...nuevo, direccion: [a.direccion, a.cp, a.localidad].filter(Boolean).join(', '),
+                        cp: a.cp || '', localidad: a.localidad || '', lat: null, lng: null, direccion_confirmada: true })}
+                      className="rounded-lg border border-amber-300/40 px-2.5 py-2 text-left text-[13px] font-semibold text-amber-50">
+                      { [a.direccion, a.cp, a.localidad].filter(Boolean).join(', ') }
+                    </button>
+                  ))}
+                </div>
+              )}
+              <label className="mt-2 flex items-center gap-2">
+                <input type="checkbox" checked={!!nuevo.direccion_confirmada}
+                  onChange={(e) => setNuevo({ ...nuevo, direccion_confirmada: e.target.checked })} />
+                {tx('Revisa lo leído del ticket antes de guardar.')}
+              </label>
+            </div>
+          ) : nuevo.de_ticket && <p className="mt-2 text-[12px] text-amber-200/90">{tx('Revisa lo leído del ticket antes de guardar.')}</p>}
+          <button onClick={guardarNuevo} disabled={nuevo.direccion.trim().length < 4 || ocupado === 'guardar' ||
+            (nuevo.requiere_confirmar_direccion && !nuevo.direccion_confirmada)}
             className="mt-3 w-full rounded-xl bg-emerald-700 py-3 text-[15px] font-bold text-white disabled:opacity-40">
             {ocupado === 'guardar' ? tx('Guardando…') : nuevo.id ? tx('Guardar cambios') : tx('Añadir a mi ruta')}
           </button>

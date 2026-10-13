@@ -79,18 +79,44 @@ async function preparar(imagen, ancho = 2000) {
 export async function leerTicketEnMovil(imagen, pais = 'es') {
   const w = await lector()
   const lista = await preparar(imagen)
-  // Primero como un documento; si no sale una dirección, como texto suelto
-  // (las etiquetas tienen bloques repartidos y el modo documento los mezcla).
-  await w.setParameters({ tessedit_pageseg_mode: '3' })
-  let { data } = await w.recognize(lista)
-  let leido = interpretaTicket(data?.text, pais)
-  if (!leido.direccion) {
-    await w.setParameters({ tessedit_pageseg_mode: '11' })
-    const otra = (await w.recognize(lista)).data
-    const segundo = interpretaTicket(otra?.text, pais)
-    if (segundo.direccion) { data = otra; leido = segundo }
+  // Las etiquetas mezclan bloques y columnas. Una sola lectura puede encontrar
+  // una dirección plausible pero confundir un CP/calle; comparar segmentaciones
+  // ayuda a detectar el desacuerdo antes de dejarla guardar.
+  const pasadas = []
+  for (const modo of ['3', '6', '11']) {
+    await w.setParameters({ tessedit_pageseg_mode: modo })
+    const data = (await w.recognize(lista)).data
+    pasadas.push({ datos: interpretaTicket(data?.text, pais), texto: data?.text || '' })
   }
-  return { ...leido, texto: data?.text || '' }
+  const candidatas = new Map()
+  for (const pasada of pasadas) {
+    const d = pasada.datos
+    if (!d.direccion) continue
+    const clave = [d.direccion, d.cp, d.localidad].map((x) => String(x || '').normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim()).join('|')
+    const anterior = candidatas.get(clave)
+    if (anterior) anterior.votos += 1
+    else candidatas.set(clave, { direccion: d.direccion, cp: d.cp, localidad: d.localidad, votos: 1, datos: d, texto: pasada.texto })
+  }
+  const ordenadas = [...candidatas.values()].sort((a, b) => b.votos - a.votos ||
+    Number(!!b.cp) + Number(!!b.localidad) - Number(!!a.cp) - Number(!!a.localidad))
+  const mejor = ordenadas[0] || { datos: pasadas[0]?.datos || {}, texto: pasadas[0]?.texto || '' }
+  const consenso = (campo) => {
+    const votos = new Map()
+    for (const pasada of pasadas) {
+      const valor = pasada.datos[campo]
+      if (!valor) continue
+      const clave = String(valor).trim().toLowerCase()
+      const fila = votos.get(clave) || { valor, n: 0 }
+      fila.n += 1
+      votos.set(clave, fila)
+    }
+    return [...votos.values()].sort((a, b) => b.n - a.n)[0]?.valor || ''
+  }
+  return { ...mejor.datos, codigo: consenso('codigo'), cliente: consenso('cliente'),
+    telefono: consenso('telefono'), contenido: consenso('contenido'), texto: mejor.texto,
+    alternativasDireccion: ordenadas.map(({ direccion, cp, localidad }) => ({ direccion, cp, localidad })),
+    direccionAmbigua: ordenadas.length > 1 }
 }
 
 /* LA HOJA DE REPARTO ENTERA (13-10-2026): una foto, todas las paradas. Una hoja

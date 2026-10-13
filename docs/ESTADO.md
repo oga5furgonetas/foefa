@@ -5,7 +5,7 @@
 > haz commit y `git push`. Una sola sesión trabajando a la vez: antes de
 > empezar, `git pull` y comprueba que nadie ha dejado nada a medias aquí.
 
-Última actualización: **13-10-2026** (mejora del escaneo por lotes y lectura de etiquetas).
+Última actualización: **13-10-2026** (OCR de etiquetas con lectura por consenso y confirmación).
 
 ## Qué es y dónde está
 
@@ -1116,3 +1116,11 @@ de la etiqueta de cualquier empresa.
   pero el dominio/API responde por HTTPS. El humo autenticado de los scripts no corrió porque este entorno
   no tenía `SECRET_KEY` local; la salud pública y la conexión con Mongo se comprobaron por separado.
 - **Integración en GitHub**: merge commit `4711086` en `main` (publicación verificada el 13-10-2026).
+
+## 13-10-2026: reducir errores al leer direcciones de etiquetas
+
+- El OCR móvil compara tres segmentaciones antes de elegir dirección y conserva alternativas cuando discrepan. En la foto real de OGA5 enviada por Dani, el formulario ahora muestra `Ladeira, Chazo 33`; el teléfono queda vacío porque `636830253` no está rotulado y aparece junto a códigos/logística.
+- La calle se extrae desde el tipo de vía (`Ladeira`) y se descarta ruido OCR posterior (`AZ 00`). CP y localidad se buscan alrededor de la dirección incluso si el CP viene en una línea separada.
+- Una dirección leída de foto exige revisión/confirmación manual antes de guardarse. No se afirma compatibilidad perfecta con todas las empresas: el QR/DataMatrix solo da la dirección si la empresa la codificó; si no, la foto se interpreta localmente y datos dudosos quedan para revisar.
+- Verificación: `check-leer-etiqueta.mjs`, ESLint en los tres archivos tocados, build Vite y Playwright móvil usando la foto real. No desplegado todavía.
+- Pendiente para ampliar cobertura: reunir etiquetas reales de distintas compañías y añadir el texto OCR/códigos de cada formato como casos. No hay un formato QR único universal.

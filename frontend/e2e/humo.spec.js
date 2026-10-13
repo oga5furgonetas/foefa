@@ -1194,6 +1194,9 @@ test('Reparto · el ticket se lee en el móvil sin mandarlo a nadie', async ({ p
   await expect(page.getByPlaceholder('Dirección completa')).toHaveValue(/Juana de Vega 14/, { timeout: 60000 })
   await expect(page.getByPlaceholder('Dirección completa')).toHaveValue(/15004/)
   await expect(page.getByPlaceholder('Teléfono')).toHaveValue('981123456')
+  await expect(page.getByRole('button', { name: 'Añadir a mi ruta' })).toBeDisabled()
+  await page.getByRole('checkbox', { name: /Revisa lo leído del ticket/ }).check()
+  await expect(page.getByRole('button', { name: 'Añadir a mi ruta' })).toBeEnabled()
   expect(alServidor).toEqual([])
 })
 
@@ -1243,6 +1246,7 @@ test('Reparto · el autónomo mete un paquete con foto y le salen llamar y Whats
   await expect(page.getByPlaceholder('Teléfono')).toHaveValue('981123456', { timeout: 60000 })
   // Un fijo: llamar sí, WhatsApp no. Se cambia a un móvil para ver los dos.
   await page.getByPlaceholder('Teléfono').fill('600 11 22 33')
+  await page.getByRole('checkbox', { name: /Revisa lo leído del ticket/ }).check() // El OCR no debe poder guardar una dirección sin revisión explícita.
   await page.getByRole('button', { name: 'Añadir a mi ruta' }).click()
   await expect(page.getByRole('link', { name: /Llamar/ })).toHaveAttribute('href', 'tel:600 11 22 33')
   await expect(page.getByRole('link', { name: /WhatsApp/ })).toHaveAttribute('href', /wa\.me\/34600112233/)
