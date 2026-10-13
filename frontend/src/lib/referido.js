@@ -29,7 +29,7 @@ export function useInvitacion() {
     let vivo = true
     fetch(`${API_BASE}/referidos/${encodeURIComponent(c)}`)
       .then((r) => (r.ok ? r.json() : null))
-      .then((j) => { if (vivo && j?.valido) setInv({ dias: 7 + (Number(j.dias_extra) || 7) }) })
+      .then((j) => { if (vivo && j?.valido) setInv({ dias: 7 + (Number(j.dias_extra) || 7), por_invitado: Number(j.por_invitado) || 250 }) })
       .catch(() => {})
     return () => { vivo = false }
   }, [])

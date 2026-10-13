@@ -1787,6 +1787,16 @@ async def create_indexes():
         await _idx(global_db.stripe_events, "event_id", unique=True)
         await _idx(global_db.forensic_index, "content_hash", unique=True)
         await _idx(global_db.forensic_index, [("signed_at", -1)])
+        # Cartera individual de conductores: el referido se vincula a la ficha
+        # laboral concreta (empresa + conductor), no a la cartera del DSP.
+        await _idx(global_db.driver_referidos, "codigo", unique=True)
+        await _idx(global_db.driver_referidos, [("org_id", 1), ("driver_id", 1)], unique=True,
+                   name="driver_referido_unico")
+        await _idx(global_db.cartera_movimientos,
+                   [("driver_ref_id", 1), ("invitado_id", 1)], unique=True,
+                   name="driver_referido_movimiento_unico",
+                   partialFilterExpression={"tipo": "referido", "driver_ref_id": {"$type": "string"},
+                                            "invitado_id": {"$type": "string"}})
         # Enlaces del portal de talleres. El token es la unica llave que hay:
         # unico, y indexado por orden para poder revocarlos de golpe.
         await _idx(global_db.taller_enlaces, "token", unique=True)
@@ -4928,7 +4938,10 @@ async def register_dsp(data: RegisterRequest, request: Request):
         "created_at": datetime.now(timezone.utc).isoformat(),
     }
     if invitador:
-        org["referido_por"] = invitador["id"]
+        if invitador.get("tipo") == "driver":
+            org["referido_conductor_id"] = invitador["id"]
+        else:
+            org["referido_por"] = invitador["id"]
     org["alta_red"] = _huella_red(ip)
     org["pais"], org["zona_horaria"] = _region_alta(data.zona_horaria, data.pais)
     if (data.idioma or "").strip().lower()[:2] in ("es", "en", "pt", "fr", "it", "de", "zh"):
@@ -20880,7 +20893,7 @@ async def _ciclo_enviar(org_id: str, clave: str, ahora: Optional[datetime] = Non
         ref = {}
         if clave == "invita":
             codigo = await _mi_codigo_ref(org)
-            ref = {"ref_enlace": f"{_PORTAL_BASE_FRONT}/repartidores?ref={codigo}&utm_source=referido"
+            ref = {"ref_enlace": f"{_PORTAL_BASE_FRONT}/invita?ref={codigo}&utm_source=referido"
                                  f"&utm_medium=correo&utm_campaign=rep_invitar",
                    "ref_cent": _ref_importe(org), "ref_espana": _ref_en_espana(org), "ref_min_cent": _REF_RETIRADA_MIN}
         # La marca del correo es la del REMITENTE («FDS <contacto@…>»), la que ve el
@@ -20957,6 +20970,7 @@ AVISO_MANANA_DIAS = 21
 _AVISO_MANANA_TEXTOS = {
     "es": ("¿Empezamos la ruta?", "Mete tus paquetes con una foto a la etiqueta y la ruta se ordena sola."),
     "pt": ("Começamos a rota?", "Carrega os teus volumes com uma foto à etiqueta e a rota ordena-se sozinha."),
+    "br": ("Vamos começar a rota?", "Coloque seus pacotes com uma foto da etiqueta e a rota se organiza sozinha."),
     "en": ("Ready to start your route?", "Snap each parcel label and your route sorts itself."),
 }
 
@@ -49696,6 +49710,7 @@ _REF_DIAS_DISTINTOS = 2
 _REF_VENTANA_DIAS = 30
 _REF_TOPE_MES = 20
 _REF_RETIRADA_MIN = 1000
+_DRIVER_REF_RETIRADA_MIN = 3000
 
 
 def _huella_red(ip: str) -> str:
@@ -49720,7 +49735,78 @@ async def _referidor_valido(codigo) -> Optional[dict]:
     c = _codigo_ref(codigo)
     if len(c) < 5:
         return None
-    return await global_db.organizations.find_one({"ref_codigo": c}, {"_id": 0, "id": 1})
+    org = await global_db.organizations.find_one({"ref_codigo": c}, {"_id": 0, "id": 1})
+    if org:
+        return {"id": org["id"], "tipo": "org"}
+    driver = await global_db.driver_referidos.find_one({"codigo": c}, {"_id": 0, "id": 1})
+    return {"id": driver["id"], "tipo": "driver"} if driver else None
+
+
+async def _driver_ref_cuenta(user: dict, request: Optional[Request] = None) -> dict:
+    """Cartera de referido personal, vinculada al conductor y a su DSP."""
+    if user.get("role") != "driver" or user.get("demo") or user.get("imp"):
+        raise HTTPException(403, "La cartera individual solo está disponible en una cuenta real de conductor")
+    org_id, driver_id = str(user.get("org_id") or ""), str(user.get("sub") or "")
+    if not org_id or not driver_id:
+        raise HTTPException(403, "No se pudo identificar tu cuenta de conductor")
+    driver = await db.drivers.find_one({"id": driver_id}, {"_id": 0, "id": 1, "name": 1, "email": 1})
+    email = str((driver or {}).get("email") or "").strip().lower()
+    if not driver or not email or "@" not in email:
+        raise HTTPException(400, "Tu ficha necesita un email válido. Pide a tu responsable que lo actualice.")
+    org = await get_org(org_id)
+    if not org:
+        raise HTTPException(403, "No se encontró la empresa asociada a tu acceso")
+    if not _ref_disponible(org):
+        raise HTTPException(403, "El programa de invitaciones no está disponible en tu país")
+    ref = await global_db.driver_referidos.find_one({"org_id": org_id, "driver_id": driver_id}, {"_id": 0})
+    if ref:
+        # El email laboral puede cambiar. Conservamos el mismo código y el saldo.
+        cambios = {"driver_email": email, "driver_name": driver.get("name") or ""}
+        if request and not ref.get("alta_red"):
+            cambios["alta_red"] = _huella_red(_rl_key_ip(request))
+        await global_db.driver_referidos.update_one({"id": ref["id"]}, {"$set": cambios})
+        ref.update(cambios)
+        return ref
+    for _ in range(8):
+        codigo = _nuevo_codigo_regalo()
+        if (await global_db.organizations.find_one({"ref_codigo": codigo}, {"_id": 1})
+                or await global_db.driver_referidos.find_one({"codigo": codigo}, {"_id": 1})):
+            continue
+        ref = {"id": uuid.uuid4().hex, "org_id": org_id, "driver_id": driver_id,
+               "driver_email": email, "driver_name": driver.get("name") or "", "codigo": codigo,
+               "saldo": 0, "ganado": 0, "creado": datetime.now(timezone.utc).isoformat(),
+               "alta_red": _huella_red(_rl_key_ip(request)) if request else ""}
+        try:
+            await global_db.driver_referidos.insert_one(dict(ref))
+            return ref
+        except DuplicateKeyError:
+            # Dos peticiones simultáneas para la misma ficha: recuperar la que ganó.
+            existente = await global_db.driver_referidos.find_one({"org_id": org_id, "driver_id": driver_id}, {"_id": 0})
+            if existente:
+                return existente
+    raise HTTPException(503, "No se pudo crear tu enlace de invitación. Inténtalo de nuevo.")
+
+
+@api_router.get("/conductor/referidos")
+async def conductor_referidos(request: Request, user: dict = Depends(get_current_user)):
+    ref = await _driver_ref_cuenta(user, request)
+    org = await get_org(ref["org_id"])
+    invitados = await global_db.organizations.count_documents({"referido_conductor_id": ref["id"]})
+    premiados = await global_db.organizations.count_documents(
+        {"referido_conductor_id": ref["id"], "ref_premiado": True})
+    retiradas = await global_db.cartera_retiradas.find(
+        {"tipo_solicitante": "driver", "driver_ref_id": ref["id"]},
+        {"_id": 0, "id": 1, "importe": 1, "metodo": 1, "destino": 1, "estado": 1,
+         "creada": 1, "resuelta": 1, "motivo": 1}).sort("creada", -1).to_list(10)
+    for r in retiradas:
+        r["destino"] = _tapar_destino(r.get("destino"))
+    return {"codigo": ref["codigo"], "enlace": f"{_PORTAL_BASE_FRONT}/invita?ref={ref['codigo']}&utm_source=referido&utm_medium=compartir&utm_campaign=driver_portal",
+            "invitados": invitados, "premiados": premiados, "saldo": int(ref.get("saldo") or 0),
+            "ganado": int(ref.get("ganado") or 0), "por_invitado": _REF_CENT,
+            "retirada_min": _DRIVER_REF_RETIRADA_MIN, "entregas_cartera": _REF_ENTREGAS_CARTERA,
+            "dias_distintos": _REF_DIAS_DISTINTOS, "ventana_dias": _REF_VENTANA_DIAS,
+            "metodos": ["bizum", "iban"] if _ref_en_espana(org) else ["paypal"],
+            "pendiente": any(r.get("estado") == "pendiente" for r in retiradas), "retiradas": retiradas}
 
 
 async def _mi_codigo_ref(org: dict) -> str:
@@ -49766,7 +49852,13 @@ async def referidos_mios(user: dict = Depends(require_admin)):
 @api_router.get("/referidos/{codigo}")
 async def referidos_valido(codigo: str):
     """¿El enlace de invitación vale? (para enseñar «14 días gratis» solo si es cierto)."""
-    return {"valido": bool(await _referidor_valido(codigo)), "dias_extra": _REF_DIAS_EXTRA}
+    invitador = await _referidor_valido(codigo)
+    importe = _REF_CENT
+    if invitador and invitador.get("tipo") == "org":
+        org = await global_db.organizations.find_one({"id": invitador["id"]}, {"_id": 0})
+        if org:
+            importe = _ref_importe(org)
+    return {"valido": bool(invitador), "dias_extra": _REF_DIAS_EXTRA, "por_invitado": importe}
 
 
 # ── OPINIÓN DE QUIEN YA USA LA APP (05-10-2026) ──────────────────────────────
@@ -49860,10 +49952,9 @@ def _ref_importe(invitador: dict) -> int:
 
 
 async def _referido_premiar(org: dict, conductor_id: str):
-    """Si esta cuenta llegó por invitación y ya la usa de verdad, quien invitó gana
-    _REF_CENT en su cartera. Se mira cuando el repartidor abre su ruta (barato: solo
-    si vino invitado y aún no se ha premiado). Ver las reglas en «LA CARTERA»."""
-    if not org or not org.get("referido_por") or org.get("ref_premiado") or org.get("ref_sospechoso"):
+    """Premia una sola vez al autónomo que invitó: puede ser otro autónomo o un conductor."""
+    driver_ref_id = org.get("referido_conductor_id")
+    if not org or not (org.get("referido_por") or driver_ref_id) or org.get("ref_premiado") or org.get("ref_sospechoso"):
         return
     ahora = datetime.now(timezone.utc)
     creada = _fecha_utc(org.get("created_at"))
@@ -49877,28 +49968,46 @@ async def _referido_premiar(org: dict, conductor_id: str):
     cuentan, dias = _ref_uso_real(hechas)
     if cuentan < _REF_ENTREGAS_CARTERA or dias < _REF_DIAS_DISTINTOS:
         return
-    invitador = await global_db.organizations.find_one({"id": org["referido_por"]}, {"_id": 0})
-    if not invitador or not _ref_disponible(invitador):
-        return
-    if org.get("alta_red") and org.get("alta_red") == invitador.get("alta_red"):
+    invitador = None
+    if driver_ref_id:
+        invitador = await global_db.driver_referidos.find_one({"id": driver_ref_id}, {"_id": 0})
+        empresa_invita = await get_org(invitador.get("org_id")) if invitador else None
+        if not invitador or not empresa_invita or not _ref_disponible(empresa_invita):
+            return
+        red_invitador = invitador.get("alta_red")
+    else:
+        invitador = await global_db.organizations.find_one({"id": org["referido_por"]}, {"_id": 0})
+        if not invitador or not _ref_disponible(invitador):
+            return
+        red_invitador = invitador.get("alta_red")
+    if org.get("alta_red") and org.get("alta_red") == red_invitador:
         # La misma red que quien invita: no se paga solo; lo revisa la plataforma.
         await global_db.organizations.update_one({"id": org["id"]}, {"$set": {"ref_sospechoso": "misma_red"}})
         return
     mes = ahora.strftime("%Y-%m")
-    if await global_db.cartera_movimientos.count_documents(
-            {"org_id": invitador["id"], "tipo": "referido", "mes": mes}) >= _REF_TOPE_MES:
+    criterio_mes = ({"driver_ref_id": driver_ref_id} if driver_ref_id else {"org_id": invitador["id"]})
+    if not driver_ref_id and await global_db.cartera_movimientos.count_documents(
+            {**criterio_mes, "tipo": "referido", "mes": mes}) >= _REF_TOPE_MES:
         return
     # Atómico: solo una vez por cuenta invitada.
     res = await global_db.organizations.update_one({"id": org["id"], "ref_premiado": {"$ne": True}},
                                                    {"$set": {"ref_premiado": True, "ref_premiado_en": ahora.isoformat()}})
     if not getattr(res, "modified_count", 0):
         return
-    importe = _ref_importe(invitador)
-    await global_db.cartera_movimientos.insert_one({
-        "id": str(uuid.uuid4()), "org_id": invitador["id"], "tipo": "referido", "importe": importe,
-        "invitado_id": org["id"], "invitado": org.get("name") or "", "mes": mes, "ts": ahora.isoformat()})
-    await global_db.organizations.update_one(
-        {"id": invitador["id"]}, {"$inc": {"cartera_saldo": importe, "cartera_ganado": importe}})
+    importe = _REF_CENT if driver_ref_id else _ref_importe(invitador)
+    movimiento = {"id": str(uuid.uuid4()), "tipo": "referido", "importe": importe,
+                  "invitado_id": org["id"], "invitado": org.get("name") or "", "mes": mes,
+                  "ts": ahora.isoformat()}
+    if driver_ref_id:
+        movimiento["driver_ref_id"] = driver_ref_id
+        await global_db.cartera_movimientos.insert_one(movimiento)
+        await global_db.driver_referidos.update_one(
+            {"id": driver_ref_id}, {"$inc": {"saldo": importe, "ganado": importe}})
+    else:
+        movimiento["org_id"] = invitador["id"]
+        await global_db.cartera_movimientos.insert_one(movimiento)
+        await global_db.organizations.update_one(
+            {"id": invitador["id"]}, {"$inc": {"cartera_saldo": importe, "cartera_ganado": importe}})
 
 
 # ── RETIRAR EL SALDO ──────────────────────────────────────────────────────────
@@ -49930,6 +50039,66 @@ def _tapar_destino(d) -> str:
 
 
 _RE_CORREO_PAYPAL = re.compile(r"^[^@\s]{1,64}@[^@\s]+\.[a-z]{2,}$", re.I)
+
+
+@api_router.post("/conductor/referidos/retirar")
+async def conductor_referidos_retirar(data: dict = Body(default={}), user: dict = Depends(get_current_user)):
+    """Solicita el pago de la cartera individual del conductor autenticado."""
+    ref = await _driver_ref_cuenta(user)
+    empresa = await get_org(ref["org_id"])
+    d = _dict_cuerpo(data)
+    titular = _texto_cuerpo(d.get("titular"), 80).strip()
+    if len(titular) < 5 or " " not in titular:
+        raise HTTPException(400, "Escribe tu nombre y apellidos, como en tu cuenta de cobro")
+    metodo = _texto_cuerpo(d.get("metodo"), 10).lower()
+    en_espana = _ref_en_espana(empresa)
+    if metodo in ("bizum", "iban") and not en_espana:
+        raise HTTPException(400, "Fuera de España se cobra por PayPal")
+    if metodo == "paypal":
+        destino = _texto_cuerpo(d.get("destino"), 120).strip().lower()
+        if not _RE_CORREO_PAYPAL.match(destino):
+            raise HTTPException(400, "Escribe el correo de tu cuenta de PayPal")
+    elif metodo == "bizum":
+        destino = _bizum_valido(d.get("destino"))
+        if not destino:
+            raise HTTPException(400, "Ese móvil no vale para Bizum: 9 cifras, empezando por 6 o 7")
+    elif metodo == "iban":
+        destino = re.sub(r"\s+", "", _texto_cuerpo(d.get("destino"), 40)).upper()
+        if not _iban_valido(destino):
+            raise HTTPException(400, "Ese IBAN no es correcto: revísalo")
+    else:
+        raise HTTPException(400, "Elige Bizum, transferencia o PayPal")
+    if await global_db.cartera_retiradas.find_one(
+            {"tipo_solicitante": "driver", "driver_ref_id": ref["id"], "estado": "pendiente"}, {"_id": 0, "id": 1}):
+        raise HTTPException(409, "Ya tienes una retirada en revisión: espera a que la resolvamos")
+    importe = int(ref.get("saldo") or 0)
+    if importe < _DRIVER_REF_RETIRADA_MIN:
+        raise HTTPException(400, f"Puedes solicitar el pago desde {_euros_txt(_DRIVER_REF_RETIRADA_MIN)}")
+    res = await global_db.driver_referidos.update_one(
+        {"id": ref["id"], "saldo": {"$gte": importe}}, {"$inc": {"saldo": -importe}})
+    if not getattr(res, "modified_count", 0):
+        raise HTTPException(409, "Tu saldo ha cambiado: vuelve a abrir la cartera")
+    ahora = datetime.now(timezone.utc).isoformat()
+    ret = {"id": str(uuid.uuid4()), "tipo_solicitante": "driver", "driver_ref_id": ref["id"],
+           "driver_id": ref["driver_id"], "driver_org_id": ref["org_id"],
+           "org_id": ref["org_id"], "org": empresa.get("name") or "", "email": ref["driver_email"],
+           "importe": importe, "metodo": metodo, "destino": destino, "titular": titular,
+           "estado": "pendiente", "creada": ahora}
+    await global_db.cartera_retiradas.insert_one(dict(ret))
+    await global_db.cartera_movimientos.insert_one({
+        "id": str(uuid.uuid4()), "driver_ref_id": ref["id"], "tipo": "retirada", "importe": -importe,
+        "retirada_id": ret["id"], "ts": ahora})
+    try:
+        await _enviar_email(CORREO_CONTACTO, f"Cartera de conductor: retirada pendiente {_euros_txt(importe)} · {ref.get('driver_name') or ''}",
+                            f"<p>{html_escape(ref.get('driver_name') or '')} ({html_escape(ref['driver_email'])}), conductor de "
+                            f"{html_escape(empresa.get('name') or '')}, solicita <b>{_euros_txt(importe)}</b> por "
+                            f"{ {'bizum': 'Bizum', 'iban': 'transferencia', 'paypal': 'PayPal'}.get(metodo, metodo) }.</p>"
+                            "<p>Revisa la solicitud en el panel: Negocio → Retiradas de la cartera.</p>",
+                            texto=f"{ref.get('driver_name') or ''} ({ref['driver_email']}) solicita {_euros_txt(importe)}. Revisa Negocio → Retiradas de la cartera.")
+    except Exception as e:  # noqa: BLE001
+        logger.warning(f"cartera conductor: no se pudo avisar de la retirada: {type(e).__name__}")
+    ret["destino"] = _tapar_destino(destino)
+    return {"ok": True, "retirada": {k: ret[k] for k in ("id", "importe", "metodo", "destino", "estado", "creada")}}
 
 
 @api_router.post("/cartera/retirar")
@@ -49995,6 +50164,52 @@ async def cartera_retirar(data: dict = Body(default={}), user: dict = Depends(re
     return {"ok": True, "retirada": {k: ret[k] for k in ("id", "importe", "metodo", "destino", "estado", "creada")}}
 
 
+@api_router.get("/admin/cartera/conductores")
+async def admin_cartera_conductores(_: dict = Depends(require_superadmin)):
+    """Resumen de captación de la cartera personal, solo visible para super-admin."""
+    refs = await global_db.driver_referidos.find(
+        {}, {"_id": 0, "id": 1, "org_id": 1, "driver_name": 1, "driver_email": 1,
+            "codigo": 1, "saldo": 1, "ganado": 1, "creado": 1}).sort("creado", -1).to_list(1000)
+    orgs = await global_db.organizations.find(
+        {"referido_conductor_id": {"$in": [r["id"] for r in refs]}},
+        {"_id": 0, "id": 1, "name": 1, "email": 1, "created_at": 1,
+         "referido_conductor_id": 1, "ref_premiado": 1, "ref_sospechoso": 1}).to_list(5000) if refs else []
+    por_invitador = {}
+    for org in orgs:
+        por_invitador.setdefault(org.get("referido_conductor_id"), []).append({
+            "nombre": org.get("name") or "", "correo": org.get("email") or "",
+            "alta": str(org.get("created_at") or "")[:10],
+            "premiado": bool(org.get("ref_premiado")),
+            "sospechoso": org.get("ref_sospechoso") or "",
+        })
+    pendientes = await global_db.cartera_retiradas.find(
+        {"tipo_solicitante": "driver", "estado": "pendiente"},
+        {"_id": 0, "driver_ref_id": 1, "importe": 1}).to_list(2000)
+    pendientes_por_ref = {}
+    for p in pendientes:
+        rid = p.get("driver_ref_id")
+        pendientes_por_ref[rid] = pendientes_por_ref.get(rid, 0) + int(p.get("importe") or 0)
+    empresas = {str(o.get("id")): o for o in await global_db.organizations.find(
+        {"id": {"$in": list({str(r.get("org_id") or "") for r in refs})}},
+        {"_id": 0, "id": 1, "name": 1}).to_list(1000)} if refs else {}
+    filas = []
+    for r in refs:
+        invitados = por_invitador.get(r["id"], [])
+        filas.append({
+            "id": r["id"], "conductor": r.get("driver_name") or "Conductor",
+            "email": r.get("driver_email") or "", "empresa": (empresas.get(str(r.get("org_id") or "")) or {}).get("name") or "",
+            "codigo": r.get("codigo") or "", "creado": r.get("creado") or "",
+            "invitados": len(invitados), "validos": sum(1 for i in invitados if i["premiado"]),
+            "ganado": int(r.get("ganado") or 0), "saldo": int(r.get("saldo") or 0),
+            "pendiente_pago": pendientes_por_ref.get(r["id"], 0), "referencias": invitados[:100],
+        })
+    return {"conductores": filas, "totales": {
+        "conductores": len(filas), "invitados": sum(x["invitados"] for x in filas),
+        "validos": sum(x["validos"] for x in filas), "ganado": sum(x["ganado"] for x in filas),
+        "saldo": sum(x["saldo"] for x in filas), "pendiente_pago": sum(pendientes_por_ref.values()),
+    }, "por_invitado": _REF_CENT, "retirada_min": _DRIVER_REF_RETIRADA_MIN}
+
+
 @api_router.get("/admin/cartera/retiradas")
 async def admin_cartera_retiradas(estado: str = "pendiente", _: dict = Depends(require_superadmin)):
     """Las retiradas para pagar, con lo necesario para decidir: a quién, cuánto, cómo y
@@ -50002,13 +50217,27 @@ async def admin_cartera_retiradas(estado: str = "pendiente", _: dict = Depends(r
     q = {} if estado == "todas" else {"estado": estado}
     rets = await global_db.cartera_retiradas.find(q, {"_id": 0}).sort("creada", -1).to_list(200)
     for r in rets:
-        invitados = await global_db.organizations.find(
-            {"referido_por": r["org_id"]},
-            {"_id": 0, "id": 1, "name": 1, "created_at": 1, "ref_premiado": 1, "ref_sospechoso": 1, "email": 1}).to_list(200)
+        if r.get("tipo_solicitante") == "driver":
+            invitados = await global_db.organizations.find(
+                {"referido_conductor_id": r.get("driver_ref_id")},
+                {"_id": 0, "id": 1, "name": 1, "created_at": 1, "ref_premiado": 1, "ref_sospechoso": 1, "email": 1}).to_list(200)
+            ref = await global_db.driver_referidos.find_one({"id": r.get("driver_ref_id")},
+                                                            {"_id": 0, "driver_name": 1, "driver_email": 1}) or {}
+            r["beneficiario"] = ref.get("driver_name") or "Conductor"
+            r["beneficiario_email"] = ref.get("driver_email") or r.get("email") or ""
+            r["cartera_individual"] = True
+        else:
+            invitados = await global_db.organizations.find(
+                {"referido_por": r["org_id"]},
+                {"_id": 0, "id": 1, "name": 1, "created_at": 1, "ref_premiado": 1, "ref_sospechoso": 1, "email": 1}).to_list(200)
+            r["beneficiario"] = r.get("org") or "Cuenta de repartidor"
+            r["beneficiario_email"] = r.get("email") or ""
+            r["cartera_individual"] = False
         r["invitados"] = [{"nombre": i.get("name") or "", "alta": str(i.get("created_at") or "")[:10],
                            "premiado": bool(i.get("ref_premiado")), "sospechoso": i.get("ref_sospechoso") or "",
                            "correo": i.get("email") or ""} for i in invitados]
-    return {"retiradas": rets, "por_invitado": _REF_CENT, "retirada_min": _REF_RETIRADA_MIN}
+    return {"retiradas": rets, "por_invitado": _REF_CENT, "retirada_min": _REF_RETIRADA_MIN,
+            "retirada_min_conductor": _DRIVER_REF_RETIRADA_MIN}
 
 
 async def _retirada_resolver(rid: str, user: dict, estado: str, motivo: str = "") -> dict:
@@ -50027,9 +50256,10 @@ async def admin_retirada_pagada(rid: str, user: dict = Depends(require_superadmi
     r = await _retirada_resolver(rid, user, "pagada")
     if r.get("email"):
         try:
+            metodo = {"bizum": "Bizum", "iban": "transferencia", "paypal": "PayPal"}.get(r.get("metodo"), r.get("metodo"))
             await _enviar_email(r["email"], f"Te hemos pagado {_euros_txt(r['importe'])}",
                                 f"<p>Hola {html_escape(r.get('titular') or '')}:</p><p>Te hemos enviado <b>{_euros_txt(r['importe'])}</b> "
-                                f"por {'Bizum' if r.get('metodo') == 'bizum' else 'transferencia'} por invitar a compañeros a la app. "
+                                f"por {html_escape(metodo)} por invitar a compañeros a la app. "
                                 f"¡Gracias por recomendarnos!</p>",
                                 texto=f"Te hemos enviado {_euros_txt(r['importe'])} por invitar a compañeros a la app. ¡Gracias!")
         except Exception as e:                               # noqa: BLE001
@@ -50044,10 +50274,17 @@ async def admin_retirada_rechazar(rid: str, data: dict = Body(default={}), user:
     motivo = _texto_cuerpo(d.get("motivo"), 300).strip() or "Revisa tus datos de cobro"
     r = await _retirada_resolver(rid, user, "rechazada", motivo)
     if not d.get("sin_devolver"):
-        await global_db.organizations.update_one({"id": r["org_id"]}, {"$inc": {"cartera_saldo": int(r["importe"])}})
-        await global_db.cartera_movimientos.insert_one({
-            "id": str(uuid.uuid4()), "org_id": r["org_id"], "tipo": "devolucion", "importe": int(r["importe"]),
-            "retirada_id": rid, "ts": datetime.now(timezone.utc).isoformat()})
+        if r.get("tipo_solicitante") == "driver":
+            await global_db.driver_referidos.update_one(
+                {"id": r["driver_ref_id"]}, {"$inc": {"saldo": int(r["importe"])}})
+            await global_db.cartera_movimientos.insert_one({
+                "id": str(uuid.uuid4()), "driver_ref_id": r["driver_ref_id"], "tipo": "devolucion",
+                "importe": int(r["importe"]), "retirada_id": rid, "ts": datetime.now(timezone.utc).isoformat()})
+        else:
+            await global_db.organizations.update_one({"id": r["org_id"]}, {"$inc": {"cartera_saldo": int(r["importe"])}})
+            await global_db.cartera_movimientos.insert_one({
+                "id": str(uuid.uuid4()), "org_id": r["org_id"], "tipo": "devolucion", "importe": int(r["importe"]),
+                "retirada_id": rid, "ts": datetime.now(timezone.utc).isoformat()})
     if r.get("email"):
         try:
             await _enviar_email(r["email"], "Tu retirada no se ha podido pagar",

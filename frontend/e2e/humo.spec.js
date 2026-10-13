@@ -34,7 +34,7 @@ const PANEL = [
 ]
 
 const PUBLICAS = [
-  ['/', 'Landing'], ['/login', 'Login'], ['/planes', 'Planes'],
+  ['/', 'Landing'], ['/login', 'Login'], ['/planes', 'Planes'], ['/invita?ref=ABCDE1', 'Landing de invitación'],
   ['/registro', 'Registro'], ['/contacto', 'Contacto'],
   ['/security', 'Seguridad'], ['/peritaje-tecnico', 'Peritaje'],
   ['/verify', 'Verificador'], ['/privacidad', 'Privacidad'],
@@ -2875,7 +2875,7 @@ test('Ruta · Comparte tu día: al acabar, imagen con el enlace de invitación',
   expect(c.tipo).toBe('image/png')
   expect(c.tam).toBeGreaterThan(10000)
   expect(c.texto).toContain('Hoy he hecho 5 paradas')
-  expect(c.texto).toMatch(/\/repartidores\?ref=ANA123&utm_source=referido&utm_medium=dia/)
+  expect(c.texto).toMatch(/\/invita\?ref=ANA123&utm_source=referido&utm_medium=dia/)
   expect(fallos).toEqual([])
 })
 

@@ -662,6 +662,7 @@ export const pedirEnlaceClave = (email) => api.post('/auth/forgot-password', { e
 export const crearPaseMovil = () => api.post('/auth/pase-movil')
 // Retiradas de la cartera de los repartidores (solo la plataforma): ver, marcar pagada, rechazar.
 export const adminRetiradas = (estado = 'pendiente') => api.get('/admin/cartera/retiradas', { params: { estado } })
+export const adminReferidosConductores = () => api.get('/admin/cartera/conductores')
 export const adminRetiradaPagada = (id) => api.post(`/admin/cartera/retiradas/${id}/pagada`)
 export const adminRetiradaRechazar = (id, body) => api.post(`/admin/cartera/retiradas/${id}/rechazar`, body)
 export const forgotPassword = (email) => api.post('/auth/forgot-password', { email })

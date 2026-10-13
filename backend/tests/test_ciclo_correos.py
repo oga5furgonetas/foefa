@@ -363,5 +363,5 @@ async def test_el_de_invita_sale_con_su_codigo_de_invitacion(mundo):
     mundo.monkeypatch.setattr(server, "_enviar_email", enviar)
     assert await server._ciclo_enviar("o9", "invita")
     org = next(o for o in mundo.g["organizations"].docs if o["id"] == "o9")
-    assert org.get("ref_codigo") and f"/repartidores?ref={org['ref_codigo']}&utm_source=referido" in textos[0]
+    assert org.get("ref_codigo") and f"/invita?ref={org['ref_codigo']}&utm_source=referido" in textos[0]
     assert not await server._ciclo_enviar("o9", "invita")                       # una sola vez

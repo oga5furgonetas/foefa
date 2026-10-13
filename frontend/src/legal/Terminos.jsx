@@ -46,6 +46,14 @@ export default function Terminos() {
         <li>Podemos cambiar o terminar el programa avisando con 15 días; el saldo ya ganado se respeta y se puede cobrar.</li>
       </ul>
 
+      <h2 id="invita-conductor">5 ter. Cartera individual de conductores</h2>
+      <ul>
+        <li>Los conductores con acceso real al portal pueden generar un enlace personal para recomendar la app Flota a repartidores externos. La recomendación es personal y no implica que la empresa para la que trabaja el conductor patrocine o recomiende Flota.</li>
+        <li>El premio de <strong>2,50 €</strong> se abona únicamente en la cartera individual del conductor cuyo acceso y email de empresa generaron el enlace. La empresa no recibe ese saldo. No hay un límite mensual de premios. Solo cuenta una nueva cuenta autónoma que se registre con ese enlace y complete, en sus primeros 30 días, 20 entregas reales a direcciones distintas, en al menos 2 días distintos y repartidas durante cada jornada. No cuentan demos, duplicados, autocitas ni entregas de ejemplo; las altas desde la misma red pueden quedar en revisión.</li>
+        <li>El conductor puede solicitar el pago desde <strong>30 €</strong>, a su nombre, por Bizum o transferencia en España y por PayPal en los países donde esté disponible. La solicitud se revisa manualmente; normalmente se resuelve en 7 días hábiles. Si se rechaza por datos incorrectos, el saldo vuelve a su cartera; si se confirma fraude, puede anularse.</li>
+        <li>El conductor es responsable de facilitar un medio de cobro propio y de declarar los ingresos cuando corresponda. Podemos pedir información fiscal necesaria antes de pagar. El email de empresa identifica la cartera, pero no es por sí mismo el medio de pago.</li>
+      </ul>
+
       <h2>6. Disponibilidad del Servicio</h2>
       <p>{COMPANY.brand} hace esfuerzos razonables para mantener el Servicio disponible 24/7, pero no garantiza un nivel de servicio (SLA) específico salvo acuerdo separado. Pueden producirse interrupciones por mantenimiento o causas ajenas (fallos de proveedores, fuerza mayor).</p>
 

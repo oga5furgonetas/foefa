@@ -119,7 +119,7 @@ def test_el_detector_encuentra_valor_en_la_casa_espanola():
     assert o.ref_cuotas == {"pinnacle": 2.67} and o.fuente == "oddspapi" and o.ts_cuota == AHORA
 
 
-def _cliente(pedidas, estado=200):
+def _cliente(pedidas, estado=200, inicio=None):
     def manejar(req):
         pedidas.append(req)
         if estado != 200:
@@ -127,15 +127,22 @@ def _cliente(pedidas, estado=200):
         if req.url.path.endswith("/participants"):
             return httpx.Response(200, json=EQUIPOS)
         casa = req.url.params["bookmaker"]
-        return httpx.Response(200, json=[PINNACLE if casa == "pinnacle" else _fixture(
-            casa, ((3.05, 3.10, 2.45), (1.95, 1.80), (2.70, 1.45)))])
+        if casa == "pinnacle":
+            fixture = {**PINNACLE, "startTime": inicio} if inicio else PINNACLE
+        else:
+            fixture = _fixture(casa, ((3.05, 3.10, 2.45), (1.95, 1.80), (2.70, 1.45)),
+                               inicio=inicio or "2026-10-09T19:00:00.000Z")
+        return httpx.Response(200, json=[fixture])
     return httpx.Client(transport=httpx.MockTransport(manejar))
 
 
 def test_leer_una_casa_por_peticion_rota_y_guarda_los_equipos(tmp_path):
     pedidas = []
     cache = tmp_path / "oddspapi_equipos.json"
-    f = OddsPapi(clave=CLAVE, cliente=_cliente(pedidas), torneos=[8, 17, 7],
+    # /leer compara con el reloj real: el fixture debe seguir antes del inicio
+    # también cuando esta prueba se ejecute después del 9 de octubre de 2026.
+    inicio = (datetime.now(timezone.utc) + timedelta(hours=2)).isoformat()
+    f = OddsPapi(clave=CLAVE, cliente=_cliente(pedidas, inicio=inicio), torneos=[8, 17, 7],
                  casas=["bet365.es", "codere.es"], cache=str(cache))
     lec = f.leer([])
     cuotas = [r for r in pedidas if r.url.path.endswith("/odds-by-tournaments")]
@@ -146,7 +153,7 @@ def test_leer_una_casa_por_peticion_rota_y_guarda_los_equipos(tmp_path):
     assert {c.casa for c in lec.cuotas} == {"pinnacle", "bet365.es"}
 
     pedidas.clear()
-    g = OddsPapi(clave=CLAVE, cliente=_cliente(pedidas), casas=["bet365.es", "codere.es"], cache=str(cache))
+    g = OddsPapi(clave=CLAVE, cliente=_cliente(pedidas, inicio=inicio), casas=["bet365.es", "codere.es"], cache=str(cache))
     g.vueltas_previas = 1                     # la segunda lectura le toca a la segunda casa
     lec = g.leer([])
     assert lec.coste == 2 and [r.url.params["bookmaker"] for r in pedidas] == ["pinnacle", "codere.es"]
@@ -307,14 +314,17 @@ def test_un_mercado_de_otro_deporte_no_se_cuela():
 
 def test_pide_los_equipos_de_cada_deporte(tmp_path):
     pedidos = []
+    inicio_futuro = (datetime.now(timezone.utc) + timedelta(hours=2)).isoformat()
 
     def manejar(req):
         if req.url.path.endswith("/participants"):
             pedidos.append(req.url.params["sportId"])
             return httpx.Response(200, json={"501": "Miami Dolphins", "502": "Kansas City Chiefs"}
                                   if req.url.params["sportId"] == "14" else EQUIPOS)
-        return httpx.Response(200, json=[_nfl(req.url.params["bookmaker"], (6.29, 1.137), (1.95, 1.87),
-                                               (1.602, 2.41)), PINNACLE])
+        nfl = _nfl(req.url.params["bookmaker"], (6.29, 1.137), (1.95, 1.87), (1.602, 2.41))
+        nfl["startTime"] = inicio_futuro
+        pinnacle = {**PINNACLE, "startTime": inicio_futuro}
+        return httpx.Response(200, json=[nfl, pinnacle])
     f = OddsPapi(clave=CLAVE, cliente=httpx.Client(transport=httpx.MockTransport(manejar)),
                  casas=["gamdom"], cache=str(tmp_path / "c.json"))
     lec = f.leer(["31", "8"])

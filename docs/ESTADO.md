@@ -1007,3 +1007,33 @@ Repaso de cada frase de `/planes` y de la presentación contra el código (Dani:
   altas): pausarla y pasar ese dinero a Meta (~1,9 € por alta) cuando arregle el pago; (2) el carrusel de TikTok
   del 10-10 dice «5 € por Bizum» (editar desde el móvil); (3) 3 de los 7 posts en grupos de Mercado Libre los
   suprimieron los admins.
+- **Más tarde (noche)**: la foto de la etiqueta entiende el país (`lib/interpretaEtiqueta.js`: teléfonos, CP y
+  calles de México, Brasil, Colombia, Argentina, Perú, Portugal, EE. UU.…; colonia/bairro y depto/apto se pegan a
+  la dirección; `scripts/check-leer-etiqueta.mjs` con 12 etiquetas, en CI). Brasil también en «Instalar la app»
+  y en los **correos** (idioma «br» en `ciclo_correos.py`: você, celular, pacotes; y el aviso push de la
+  mañana). Los correos en español, con «celular», «Toca» y «toma una foto» para Latinoamérica.
+- Calidad de paradas: 6 de 24 sin situar en el mapa; todas con la dirección rota de origen (códigos o fotos con
+  prefijos y símbolos), varias de pruebas de Dani. Con tan pocos casos no se tocó el buscador.
+
+## 13-10-2026: compartir el referido con la recompensa visible
+
+- El mensaje de «Invitar a un compañero» ahora incluye el importe real que devuelve `/referidos` (2,50 € para las
+  cuentas nuevas; 5 € para las cuentas antiguas que conservan aquella oferta) y las condiciones principales del
+  programa: 20 entregas reales a direcciones distintas, en 2 días y durante el primer mes.
+- Se conservan el enlace personal y sus UTM. El texto está traducido a los seis idiomas de la app y a portugués de
+  Brasil; `check-textos-ruta.mjs` vigila también `lib/compartir.js`.
+- Pendiente: publicación o compra de anuncios requiere fijar países/canales y un límite de gasto. No desplegar
+  cambios sobre FlotaDSP; el destino correcto es Flota (`flota`).
+## 13-10-2026: referido y cartera individual en el portal del conductor
+
+- El portal real de conductor genera un enlace personal asociado al identificador de conductor y a su email laboral; no usa la cartera del DSP ni aparece en la demo.
+- Las nuevas altas autónomas con ese enlace quedan atribuidas al conductor. El premio de 2,50 € se acredita tras uso real (20 entregas válidas, 2 días), sin tope mensual y con detección de misma red.
+- La cartera individual permite solicitar Bizum/IBAN o PayPal desde 30 €. Las solicitudes quedan visibles al super-admin en «Negocio → Retiradas de la cartera» y se pueden pagar o rechazar desde allí.
+- Se actualizaron las condiciones y el aviso de privacidad; la implementación se publicó el 13-10-2026 en Flota.
+## 13-10-2026: captación y control de referidos de conductores
+
+- Enlace individual ahora abre `/invita`: página móvil con propuesta centrada en el problema del repartidor, demo, alta y atribución del código referido. El enlace antiguo `/repartidores?ref=...` sigue funcionando.
+- Cartera del conductor: premio 2,50 €, sin límite mensual y retirada desde 30 €. El formulario explica dónde solicitarla y ofrece Bizum/IBAN en España o PayPal fuera de España.
+- Super-admin → Negocio: resumen por conductor de invitaciones, cualificados, premios, saldo y detalle de altas; la cola «Retiradas de la cartera» conserva los datos de pago y las acciones de registrar pago enviado o rechazar/devolver el saldo.
+- El pago se ejecuta manualmente (Bizum, transferencia o PayPal) y después se registra en el panel. No hay proveedor de pagos bancarios conectado.
+- Publicado en Pages `flota` y API `flota-backend`; health de Fly y verificación del bundle/edge en verde. Pasaron lint/build, 157 pruebas de humo y backend (1.139 pasaron, 1 omitida). El humo autenticado de despliegue no corrió: faltaba SECRET_KEY local; no se leyó ni cambió ningún secreto.

@@ -12,6 +12,7 @@ import MiClave from './MiClave'
 import PedirDias from './PedirDias'
 import Tienda from './Tienda'
 import MiRuta from './MiRuta'
+import DriverReferralWallet from './DriverReferralWallet'
 
 const DRIVER_KEY = 'flota_driver'
 
@@ -314,6 +315,7 @@ export default function DriverPortal() {
         )}
 
         <div className="flex flex-col gap-2.5">
+          {!esDemo && <DriverReferralWallet />}
           {reparto !== null && (
             <Opcion
               icono={Route}

@@ -5,7 +5,7 @@ import { Activity,
   Loader2, Building2, CheckCircle2, Clock, Euro, Sparkles, Gift, PauseCircle,
   LogIn, Trash2, Database, BrainCircuit, ExternalLink, RefreshCw, Megaphone,
   Play, Pause, Plus, Star, Eye, MousePointerClick, Tag, Save,
-  Receipt, Upload, Check, Undo2, Building, Coins, LayoutGrid, X, Mail, Wallet,
+  Receipt, Upload, Check, Undo2, Building, Coins, LayoutGrid, X, Mail, Wallet, Copy,
 } from 'lucide-react'
 import {
   getAdminOverview, getAdminOrgs, getLeads, updateOrg, impersonateOrg, deleteOrg,
@@ -16,7 +16,7 @@ import {
   adminGetEmisor, adminSetEmisor, revisarFacturacion as revisarFacturacionApi, getSaludSistema,
   getAdminModulos,
   crearEnlaceTienda, getSuscripcionesEmpleo, enviarCampanaCandidatos,
-  adminRetiradas, adminRetiradaPagada, adminRetiradaRechazar,
+  adminReferidosConductores, adminRetiradas, adminRetiradaPagada, adminRetiradaRechazar,
 } from '../api'
 import { API_BASE } from '../../services/api'
 import { hoyLocal } from '../../lib/fecha'
@@ -589,6 +589,52 @@ function DatosEmisor() {
    RGPD/LOPD. Por eso "enviar a todos" exige escribir ENVIAR a mano (mismo
    patrón que borrar Cortex, gotcha 45): la decisión la toma una persona
    mirando la pantalla, nunca un clic accidental. */
+/* RESUMEN DE REFERIDOS DE CONDUCTORES. Solo el super-admin llega a Negocio: permite medir
+   invitaciones y conversiones antes de que alguien solicite cobrar. */
+function ResumenReferidosConductores() {
+  const [data, setData] = useState(null)
+  const [err, setErr] = useState('')
+  const [abiertos, setAbiertos] = useState({})
+  const cargar = () => adminReferidosConductores().then(({ data: d }) => { setData(d); setErr('') })
+    .catch((e) => setErr(e?.response?.data?.detail || 'No se pudo cargar el resumen de invitaciones'))
+  useEffect(() => { cargar() }, [])
+  const eur = (c) => `${((Number(c) || 0) / 100).toFixed(2).replace('.', ',').replace(',00', '')} €`
+  const t = data?.totales || {}
+  return <section className="card mt-6 space-y-3 p-4">
+    <div className="flex flex-wrap items-center justify-between gap-2">
+      <div><h3 className="flex items-center gap-2 text-sm font-bold"><Gift size={16} className="text-lime-400" /> Referidos de conductores</h3>
+        <p className="mt-1 text-[12px] text-dark-400">Rendimiento de enlaces personales y saldo atribuible a cada conductor.</p></div>
+      <button onClick={cargar} className="btn-secondary flex items-center gap-1.5 px-2.5 py-1.5 text-xs"><RefreshCw size={13} /> Actualizar</button>
+    </div>
+    {err && <p role="alert" className="text-xs text-red-300">{err}</p>}
+    {!data ? <Loader2 size={16} className="animate-spin text-dark-500" /> : <>
+      <div className="grid grid-cols-2 gap-2 md:grid-cols-3 xl:grid-cols-6">
+        {[["Conductores", t.conductores], ["Registros", t.invitados], ["Cualificados", t.validos], ["Premios generados", eur(t.ganado)], ["Saldo disponible", eur(t.saldo)], ["Pagos pendientes", eur(t.pendiente_pago)]].map(([label, value]) =>
+          <div key={label} className="rounded-xl border border-dark-800 bg-dark-900/50 p-3"><p className="text-[10px] font-semibold uppercase tracking-wide text-dark-500">{label}</p><p className="mt-1 text-lg font-bold text-dark-100">{value ?? 0}</p></div>)}
+      </div>
+      <div className="overflow-x-auto rounded-xl border border-dark-800">
+        <table className="w-full min-w-[780px] text-left text-[12px]">
+          <thead className="bg-dark-900 text-dark-400"><tr>{['Conductor / email laboral', 'Empresa', 'Invitados', 'Cualificados', 'Ganado', 'Saldo', ''].map((x) => <th key={x} className="px-3 py-2 font-semibold">{x}</th>)}</tr></thead>
+          <tbody>{data.conductores.map((r) => <Fragment key={r.id}>
+            <tr className="border-t border-dark-800 text-dark-200">
+              <td className="px-3 py-2"><b>{r.conductor}</b><span className="block text-[10.5px] text-dark-500">{r.email}</span></td>
+              <td className="px-3 py-2">{r.empresa || '—'}</td><td className="px-3 py-2 tabular-nums">{r.invitados}</td>
+              <td className="px-3 py-2 tabular-nums">{r.validos}</td><td className="px-3 py-2 tabular-nums">{eur(r.ganado)}</td>
+              <td className="px-3 py-2 tabular-nums text-emerald-300">{eur(r.saldo)}{r.pendiente_pago > 0 && <span className="block text-[10px] text-amber-300">{eur(r.pendiente_pago)} en solicitud</span>}</td>
+              <td className="px-3 py-2"><button onClick={() => setAbiertos((v) => ({ ...v, [r.id]: !v[r.id] }))} className="text-brand-300 underline">{abiertos[r.id] ? 'Ocultar' : 'Ver detalle'}</button></td>
+            </tr>
+            {abiertos[r.id] && <tr className="border-t border-dark-800 bg-dark-900/40"><td colSpan={7} className="px-3 py-2">
+              {r.referencias.length ? <div className="grid gap-1 sm:grid-cols-2">{r.referencias.map((i, n) => <p key={`${r.id}-${n}`} className={`text-[11px] ${i.sospechoso ? 'text-amber-300' : 'text-dark-300'}`}>{i.nombre || 'Cuenta'} · {i.correo} · alta {i.alta || '—'} · {i.premiado ? 'premio validado' : 'pendiente de completar uso real'}{i.sospechoso ? ' · misma red: revisar' : ''}</p>)}</div> : <p className="text-[11px] text-dark-500">Aún no ha traído registros.</p>}
+            </td></tr>}
+          </Fragment>)}</tbody>
+        </table>
+        {!data.conductores.length && <p className="p-4 text-sm text-dark-500">Aún no hay carteras individuales generadas.</p>}
+      </div>
+      <p className="text-[10.5px] text-dark-500">Los pagos se realizan manualmente desde «Retiradas de la cartera» después de revisar el método y confirmar la transferencia o Bizum.</p>
+    </>}
+  </section>
+}
+
 /* RETIRADAS DE LA CARTERA (10-10-2026). Los repartidores ganan saldo invitando a compañeros
    que usan la app de verdad y piden cobrarlo. Aquí se ve a quién, cuánto, por dónde y A QUIÉN
    INVITÓ (para ver si cuadra antes de pagar): se hace el Bizum o la transferencia a mano y se
@@ -598,6 +644,7 @@ function RetiradasCartera() {
   const [datos, setDatos] = useState(null)
   const [err, setErr] = useState('')
   const [ocupado, setOcupado] = useState('')
+  const [copiado, setCopiado] = useState('')
   const cargar = () => adminRetiradas(estado).then(({ data }) => setDatos(data)).catch((e) => setErr(e?.response?.data?.detail || 'No se pudieron leer'))
   useEffect(() => { cargar() }, [estado]) // eslint-disable-line react-hooks/exhaustive-deps
   const eur = (c) => `${((Number(c) || 0) / 100).toFixed(2).replace('.', ',').replace(',00', '')} €`
@@ -611,6 +658,10 @@ function RetiradasCartera() {
     if (motivo === null) return
     setOcupado(r.id); setErr('')
     try { await adminRetiradaRechazar(r.id, { motivo, sin_devolver: !!fraude }); cargar() } catch (e) { setErr(e?.response?.data?.detail || 'No se pudo rechazar') } finally { setOcupado('') }
+  }
+  async function copiarDestino(r) {
+    try { await navigator.clipboard.writeText(r.destino || ''); setCopiado(r.id); setTimeout(() => setCopiado(''), 1800) }
+    catch { setErr('No se pudo copiar el dato de cobro; selecciónalo manualmente.') }
   }
   const lista = datos?.retiradas || []
   return (
@@ -626,7 +677,8 @@ function RetiradasCartera() {
         </select>
       </div>
       <p className="text-[12px] text-dark-400">
-        Cada invitado que usa la app de verdad da {eur(datos?.por_invitado ?? 250)} (5 € las cuentas creadas antes del 12-10-2026); se cobra desde {eur(datos?.retirada_min ?? 1000)}.
+        Cada invitado que usa la app de verdad da {eur(datos?.por_invitado ?? 250)} (5 € las cuentas creadas antes del 12-10-2026). Retirada de empresa desde {eur(datos?.retirada_min ?? 1000)} · cartera individual de conductor desde {eur(datos?.retirada_min_conductor ?? 3000)}.
+        El pago se hace en Bizum, banco o PayPal por el canal correspondiente; este panel guarda el resultado y avisa al conductor, pero no mueve dinero automáticamente.
         Antes de pagar, mira sus invitados: si se dieron de alta desde su misma red salen marcados.
       </p>
       {err && <p className="text-[12.5px] text-red-300">{err}</p>}
@@ -641,8 +693,11 @@ function RetiradasCartera() {
                 <span className="text-dark-400">{String(r.creada || '').slice(0, 16).replace('T', ' ')} · {r.estado}</span>
               </div>
               <p className="mt-1 text-dark-300">
-                {({ bizum: 'Bizum', iban: 'Transferencia', paypal: 'PayPal' })[r.metodo] || r.metodo}: <b className="select-all text-dark-100">{r.destino}</b> · cuenta «{r.org}» ({r.email})
+                {({ bizum: 'Bizum', iban: 'Transferencia', paypal: 'PayPal' })[r.metodo] || r.metodo}: <b className="select-all text-dark-100">{r.destino}</b> · {r.cartera_individual
+                  ? `cartera individual de ${r.beneficiario} (${r.beneficiario_email}), conductor de «${r.org}»`
+                  : `cuenta «${r.org}» (${r.email})`}
               </p>
+              {r.estado === 'pendiente' && <button onClick={() => copiarDestino(r)} className="mt-1 flex items-center gap-1 text-[11px] font-semibold text-brand-300 underline"><Copy size={12} />{copiado === r.id ? 'Dato copiado' : 'Copiar dato de cobro'}</button>}
               {r.motivo && <p className="mt-1 text-dark-400">Motivo: {r.motivo}</p>}
               <details className="mt-1">
                 <summary className="cursor-pointer text-dark-400">Sus invitados ({(r.invitados || []).length})</summary>
@@ -656,7 +711,7 @@ function RetiradasCartera() {
               </details>
               {r.estado === 'pendiente' && (
                 <div className="mt-2 flex flex-wrap gap-2">
-                  <button onClick={() => pagada(r)} disabled={ocupado === r.id} className="btn-primary flex items-center gap-1 px-3 py-1.5 text-[12.5px]"><Check size={13} /> Ya la he pagado</button>
+                  <button onClick={() => pagada(r)} disabled={ocupado === r.id} className="btn-primary flex items-center gap-1 px-3 py-1.5 text-[12.5px]"><Check size={13} /> Registrar pago enviado</button>
                   <button onClick={() => rechazar(r, false)} disabled={ocupado === r.id} className="btn-secondary px-3 py-1.5 text-[12.5px]">Rechazar (devolver saldo)</button>
                   <button onClick={() => rechazar(r, true)} disabled={ocupado === r.id} className="btn-ghost px-3 py-1.5 text-[12.5px] text-red-300">Rechazar por trampa</button>
                 </div>
@@ -1138,6 +1193,10 @@ export default function Negocio() {
         <a href={`${API_BASE}/ai/export-dataset`} target="_blank" rel="noreferrer" className="btn-secondary flex items-center gap-2 text-sm">
           <BrainCircuit size={15} /> {t('neg.export.ai')}
         </a>
+      </div>
+
+      <div className="mt-6">
+        <ResumenReferidosConductores />
       </div>
 
       <div className="mt-6">

@@ -48,6 +48,8 @@ export const BR = {
   'Haz una foto a la etiqueta o escanea el paquete: la app ordena las paradas por tiempo y te lleva con voz hasta cada puerta.':
     'Tire uma foto da etiqueta ou escaneie o pacote: o app organiza as paradas por tempo e te leva por voz até cada porta.',
   'Gana {euros} por cada compañero que la use.': 'Ganhe {euros} por cada colega que usar o app.',
+  'Si te registras con mi enlace y completas 20 entregas a direcciones distintas en 2 días diferentes, repartidas durante el día y dentro de tus primeros 30 días, gano {euros}.':
+    'Se você se cadastrar pelo meu link e fizer 20 entregas em endereços diferentes, em 2 dias distintos, distribuídas ao longo do dia e nos seus primeiros 30 dias, eu ganho {euros}.',
   'Crear mi cuenta gratis': 'Criar minha conta grátis',
   '¿Te convence? Créate la cuenta': 'Gostou? Crie sua conta',
   'Gratis y sin límite hasta el {fecha}': 'Grátis e sem limite até {fecha}',

@@ -258,6 +258,9 @@ export const repEjemplo = (desde) => api.post('/reparto/mis-pedidos/ejemplo', de
 export const repGanancias = (datos) => api.put('/reparto/ganancias', datos)
 export const repQuitarEjemplos = () => api.post('/reparto/mis-pedidos/quitar-ejemplos')
 export const getReferidos = () => api.get('/referidos')
+// Cartera individual de quien entra en el portal de empresa como conductor.
+export const getDriverReferidos = () => api.get('/conductor/referidos')
+export const retirarDriverReferidos = (body) => api.post('/conductor/referidos/retirar', body)
 // La cartera «Invita y gana»: pedir que te paguen el saldo (Bizum o transferencia).
 export const retirarCartera = (body) => api.post('/cartera/retirar', body)
 export const repPegarMiLista = (texto, confirmar) => api.post('/reparto/pegar', { texto, confirmar: !!confirmar })
