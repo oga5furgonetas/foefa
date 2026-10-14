@@ -91,13 +91,20 @@ export function interpretaTicket(texto, pais = 'es') {
   if (iVia >= 0) {
     const linea = lineas[iVia]
     const via = VIA.exec(' ' + linea + ' ')
-    // El OCR puede mezclar la calle con campos vecinos (p. ej. «IN : Ladeira… AZ 00»).
-    // Empieza en el tipo de vía y acepta el número; solo conserva después un complemento conocido.
-    let direccion = via ? linea.slice(Math.max(0, via.index + via[1].length - 1)) : linea
+    // El OCR puede pegar a la calle un campo vecino («IN : Ladeira… AZ 00»). Lo de ANTES del tipo de vía
+    // solo se quita si es un rótulo (acaba en «:»): «123 Main St.» o «GRAN VIA 32» llevan el número o el
+    // nombre delante y son la dirección entera (14-10-2026: cortar siempre se comía «123 Main» y «GRAN»).
+    let direccion = linea
+    if (via && via.index > 0) {
+      const antes = linea.slice(0, Math.max(0, via.index + via[1].length - 1))
+      if (/[:：]\s*$/.test(antes)) direccion = linea.slice(antes.length)
+    }
     direccion = direccion.replace(/^(direcci[oó]n|domicilio|dir\.?|endere[cç]o|address)\s*[:.-]?\s*/i, '').trim()
+    // Tras el número solo se corta lo que es basura del OCR (uno o dos trozos de letras y un número suelto,
+    // «AZ 00»); «# 32-16 Apto 501», «, 2º Esq», «- Apto 45» o «3B» son parte de la dirección.
     const direccionConNumero = direccion.match(/^(.+?\b\d{1,4}[A-Z]?\b)(.*)$/i)
-    const complemento = direccionConNumero?.[2].match(/^\s+((?:piso|puerta|entlo|bajo|apto\.?|apartamento|depto\.?|dpto\.?|int\.?|interior|casa|bloco|torre|esc\.?|portal)\b.*)$/i)
-    out.direccion = direccionConNumero ? `${direccionConNumero[1]}${complemento ? ` ${complemento[1]}` : ''}` : direccion
+    const basura = direccionConNumero && /^\s+(?:[A-Z]{1,4}\s+){1,2}\d{1,4}\s*$/i.test(direccionConNumero[2])
+    out.direccion = basura ? direccionConNumero[1] : direccion
     // El piso, el apartamento o la colonia suelen ir en la línea siguiente («2º B», «Depto 4», «Col. Centro»).
     // El OCR lee a veces «3º» como «3%» o «3o».
     const sig = lineas[iVia + 1] || ''
@@ -131,7 +138,8 @@ export function interpretaTicket(texto, pais = 'es') {
       if (antes && antes.length < 40 && !/\d{3,}/.test(antes) && !VIA.test(' ' + antes + ' ')) out.localidad = antes
       else {
         const previa = lineas[lineas.indexOf(l) - 1] || ''
-        if (previa && previa.length < 40 && !/\d{3,}/.test(previa) && !LINEA_LOGISTICA.test(previa) && !VIA.test(' ' + previa + ' ')) out.localidad = previa
+        // Una población tiene al menos una palabra de 3 letras: «ES» (el país dentro de un código) no lo es.
+        if (previa && previa.length < 40 && /\p{L}{3,}/u.test(previa) && !/\d{3,}/.test(previa) && !LINEA_LOGISTICA.test(previa) && !VIA.test(' ' + previa + ' ')) out.localidad = previa
       }
     }
     break

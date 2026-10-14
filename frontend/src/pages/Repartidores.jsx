@@ -6,7 +6,7 @@ import { medirAccion, varianteAB } from '../lib/analitica'
 import { evento, eventoUnaVez } from '../lib/metaPixel'
 import { useInvitacion } from '../lib/referido'
 import AltaRapida from './AltaRapida'
-import { PARADAS_GRATIS, promoGratis, fechaPromo, eurosRef } from '../lib/precios'
+import { PARADAS_GRATIS, promoGratis, fechaPromo, eurosRef, refCentActual, refPromoActiva, fechaRefPromo } from '../lib/precios'
 import { paisDelMovil } from '../lib/region'
 import { abrirDemoReparto } from '../lib/demoReparto'
 /* «Invita y gana»: en España por Bizum; en Latinoamérica por PayPal. En China no hay (por la hora del móvil). */
@@ -187,7 +187,7 @@ export default function Repartidores() {
         {promoGratis() && (
           <div className="mt-3.5 rounded-2xl border border-amber-400/40 bg-amber-500/10 px-3.5 py-2.5">
             <p className="text-[14.5px] font-bold leading-snug text-amber-200">🎁 {tx('Gratis y sin límite hasta el {fecha} · sin tarjeta', { fecha: fechaPromo(locale()) })}</p>
-            {conInvita() && <p className="mt-0.5 text-[13.5px] leading-snug text-dark-200">💶 {tx('Gana {euros} por cada compañero que la use.', { euros: eurosRef(undefined, locale()) })}</p>}
+            {conInvita() && <p className="mt-0.5 text-[13.5px] leading-snug text-dark-200">💶 {tx('Gana {euros} por cada compañero que la use.', { euros: eurosRef(refCentActual(), locale()) })}{refPromoActiva() && <span className="ml-1 rounded-md bg-emerald-400/20 px-1.5 py-0.5 text-[11px] font-bold text-emerald-100">{tx('Promo hasta el {fecha}', { fecha: fechaRefPromo(locale()) })}</span>}</p>}
           </div>
         )}
 

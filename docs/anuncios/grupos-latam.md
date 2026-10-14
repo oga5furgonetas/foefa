@@ -4,7 +4,7 @@ OJO: al publicar, Facebook te enseña TU publicación en el muro del grupo aunqu
 admin. Comprobar siempre en `/groups/<id>/my_pending_content` (Pendiente/Publicado) antes de darla por visible.
 
 Reglas: como el perfil de Daniel (no la página FDs), diciendo que la app es nuestra, texto distinto por grupo y en
-su forma de hablar, condiciones de «Invita y gana» completas (20 entregas en 2 días, cobro desde 10 € por PayPal).
+su forma de hablar, condiciones de «Invita y gana» completas (20 entregas en 2 días; desde el 14-10, 10 € por alta hasta el 31-10, el mínimo de retirada solo se dice al cobrar).
 Solo grupos de PAQUETERÍA / mensajería (en los de comida, con 1-2 pedidos, ordenar la ruta no sirve). Si un grupo
 pide responder preguntas sobre la experiencia de quien se une, no se inventa: se salta. 2-3 por tanda.
 Enlace: `https://flotadsp.com/repartidores?utm_source=grupo&utm_medium=facebook&utm_content=<pais>_<grupo>`.
@@ -39,8 +39,8 @@ publicidad pagada) para los que hacen mensajería con muchas paradas:
 💵 Le dice cuánto lleva ganado en el día y cuánto se fue en gasolina
 
 Es gratis y sin límite hasta el 31 de diciembre, sin tarjeta, desde el navegador del celular.
-Y si se la pasa a otro mensajero y la usa de verdad (20 entregas en 2 días distintos), le mandamos 2,50 euros por
-PayPal por cada uno (se cobra desde 10 euros).
+Y si se la pasa a otro mensajero y la usa de verdad (20 entregas en 2 días distintos), le mandamos 10 euros por
+PayPal por cada uno que se registre hasta el 31 de octubre (promoción; después, 2,50 euros).
 
 Pruébela sin registrarse, con paradas de ejemplo en Bogotá 👉 <enlace>
 
@@ -52,6 +52,7 @@ Si algo no le funciona en su zona, me dice y lo arreglamos.
 📸 Foto a la guía y la dirección entra sola · 🗺️ ordena las paradas por tiempo · 🔊 te guía con voz
 (y en Android dices "entregado" y sigues manejando) · 💵 te dice cuánto llevas ganado hoy, en tu moneda.
 Gratis y sin límite hasta el 31 de diciembre, sin tarjeta. Si se la pasas a otro repartidor y la usa
-(20 entregas en 2 días), te mandamos 2,50 € por PayPal por cada uno (se cobra desde 10 €).
+(20 entregas en 2 días), te mandamos 10 € por PayPal por cada uno que se registre hasta el 31 de octubre
+(promoción; después, 2,50 €).
 Pruébala sin registrarte, con paquetes de ejemplo en tu ciudad 👉
 https://flotadsp.com/repartidores?utm_source=telegram&utm_content=latam_dani

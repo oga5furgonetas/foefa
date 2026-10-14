@@ -20895,7 +20895,8 @@ async def _ciclo_enviar(org_id: str, clave: str, ahora: Optional[datetime] = Non
             codigo = await _mi_codigo_ref(org)
             ref = {"ref_enlace": f"{_PORTAL_BASE_FRONT}/invita?ref={codigo}&utm_source=referido"
                                  f"&utm_medium=correo&utm_campaign=rep_invitar",
-                   "ref_cent": _ref_importe(org), "ref_espana": _ref_en_espana(org), "ref_min_cent": _REF_RETIRADA_MIN}
+                   "ref_cent": _ref_importe(org), "ref_espana": _ref_en_espana(org), "ref_min_cent": _REF_RETIRADA_MIN,
+                   "ref_promo_hasta": _REF_PROMO_HASTA_DIA if _ref_promo_activa() else ""}
         # La marca del correo es la del REMITENTE («FDS <contacto@…>»), la que ve el
         # repartidor en la app; MARCA es la del panel de empresas.
         c = ciclo_correos.correo(clave, org, uso, ahora, marca=_email_remitente()[0], base=_PORTAL_BASE_FRONT,
@@ -22199,6 +22200,31 @@ async def empleo_listar_candidatos(oferta: Optional[str] = None, fase: Optional[
     return {"candidatos": cands, "fases": list(EMPLEO_FASES)}
 
 
+@api_router.post("/empleo/candidatos/archivar-fase")
+async def empleo_archivar_fase(datos: dict = Body(...), user: dict = Depends(require_admin)):
+    """Oculta una columna completa sin borrar fichas, notas ni historial."""
+    oferta_id = _empleo_texto(datos.get("oferta_id"), 100)
+    fase = _empleo_texto(datos.get("fase"), 40)
+    ids = datos.get("ids") if isinstance(datos.get("ids"), list) else []
+    if not oferta_id:
+        raise HTTPException(400, "Falta la oferta")
+    if fase not in EMPLEO_FASES:
+        raise HTTPException(400, "Esa fase no existe")
+    ids = list(dict.fromkeys(_empleo_texto(x, 100) for x in ids if _empleo_texto(x, 100)))[:500]
+    if not ids:
+        raise HTTPException(400, "No hay candidatos que archivar")
+    filtro = _filtro_centro(user, datos.get("center"))
+    if "center" in filtro:
+        filtro["centro"] = filtro.pop("center")
+    query = {**filtro, "oferta_id": oferta_id, "fase": fase, "id": {"$in": ids}, "archivado": {"$ne": True}}
+    ahora = datetime.now(timezone.utc).isoformat()
+    por = user.get("name") or user.get("username") or ""
+    res = await db.candidatos.update_many(query, {"$set": {
+        "archivado": True, "archivado_en": ahora, "archivado_por": por,
+    }})
+    return {"archivados": res.modified_count}
+
+
 @api_router.patch("/empleo/candidatos/{cand_id}")
 async def empleo_mover_candidato(cand_id: str, datos: dict = Body(...),
                                  user: dict = Depends(require_admin)):
@@ -22206,6 +22232,13 @@ async def empleo_mover_candidato(cand_id: str, datos: dict = Body(...),
     if not c:
         raise HTTPException(404, "Ese candidato no existe")
     cambios: dict = {}
+    if "archivado" in datos:
+        if not isinstance(datos["archivado"], bool):
+            raise HTTPException(400, "archivado debe ser verdadero o falso")
+        cambios["archivado"] = datos["archivado"]
+        if datos["archivado"]:
+            cambios["archivado_en"] = datetime.now(timezone.utc).isoformat()
+            cambios["archivado_por"] = user.get("name") or user.get("username") or ""
     if "fase" in datos:
         f = str(datos["fase"] or "").strip()
         if f not in EMPLEO_FASES:
@@ -22236,6 +22269,8 @@ async def empleo_mover_candidato(cand_id: str, datos: dict = Body(...),
         return c
     orden: dict = {"$set": {**cambios, "tocado_en": datetime.now(timezone.utc).isoformat(),
                             "tocado_por": user.get("name") or user.get("username") or ""}}
+    if datos.get("archivado") is False:
+        orden["$unset"] = {"archivado_en": "", "archivado_por": ""}
     # QUIEN LO MOVIO Y CUANDO. Es lo que permite contestar «cuanto lleva este sin
     # que lo toque nadie», que es la pregunta que evita perder candidatos: a los
     # tres dias sin llamar ya estan en otra empresa. Se guarda solo el cambio de
@@ -49912,8 +49947,20 @@ _REF_ENTREGAS_CARTERA = 20
 _REF_DIAS_DISTINTOS = 2
 _REF_VENTANA_DIAS = 30
 _REF_TOPE_MES = 20
-_REF_RETIRADA_MIN = 1000
-_DRIVER_REF_RETIRADA_MIN = 3000
+# 14-10-2026 (Dani): se retira desde 60 € (las dos carteras) y, PROMOCIÓN, 10 € por cada invitado que se dé
+# de alta hasta el 31-10-2026 incluido (hora de Madrid). Manda la fecha de ALTA del invitado, no la de sus
+# 20 entregas: quien invita en octubre cobra los 10 € aunque el compañero las complete en noviembre (dentro
+# de su primer mes). El mínimo de retirada no se enseña hasta que intentan cobrar (lo pidió así); en las
+# condiciones (Terminos.jsx) sí consta.
+_REF_RETIRADA_MIN = 6000
+_DRIVER_REF_RETIRADA_MIN = 6000
+_REF_PROMO_CENT = 1000
+_REF_PROMO_HASTA_DIA = "2026-10-31"
+_REF_PROMO_HASTA = datetime(2026, 10, 31, 23, 0, tzinfo=timezone.utc)   # 01-11-2026 00:00 en Madrid (ya en CET)
+
+
+def _ref_promo_activa(ahora: Optional[datetime] = None) -> bool:
+    return (ahora or datetime.now(timezone.utc)) < _REF_PROMO_HASTA
 
 
 def _huella_red(ip: str) -> str:
@@ -50005,7 +50052,7 @@ async def conductor_referidos(request: Request, user: dict = Depends(get_current
         r["destino"] = _tapar_destino(r.get("destino"))
     return {"codigo": ref["codigo"], "enlace": f"{_PORTAL_BASE_FRONT}/invita?ref={ref['codigo']}&utm_source=referido&utm_medium=compartir&utm_campaign=driver_portal",
             "invitados": invitados, "premiados": premiados, "saldo": int(ref.get("saldo") or 0),
-            "ganado": int(ref.get("ganado") or 0), "por_invitado": _REF_CENT,
+            "ganado": int(ref.get("ganado") or 0), "por_invitado": _ref_importe({}), **_ref_promo_datos(),
             "retirada_min": _DRIVER_REF_RETIRADA_MIN, "entregas_cartera": _REF_ENTREGAS_CARTERA,
             "dias_distintos": _REF_DIAS_DISTINTOS, "ventana_dias": _REF_VENTANA_DIAS,
             "metodos": ["bizum", "iban"] if _ref_en_espana(org) else ["paypal"],
@@ -50044,7 +50091,7 @@ async def referidos_mios(user: dict = Depends(require_admin)):
             "tope": _REF_TOPE, "entregas": _REF_ENTREGAS, "dias_extra": _REF_DIAS_EXTRA,
             # La cartera
             "saldo": int(org.get("cartera_saldo") or 0), "ganado": int(org.get("cartera_ganado") or 0),
-            "por_invitado": _ref_importe(org), "retirada_min": _REF_RETIRADA_MIN,
+            "por_invitado": _ref_importe(org), "retirada_min": _REF_RETIRADA_MIN, **_ref_promo_datos(),
             "cartera": _ref_disponible(org),
             "metodos": ["bizum", "iban", "paypal"] if _ref_en_espana(org) else ["paypal"],
             "entregas_cartera": _REF_ENTREGAS_CARTERA, "dias_distintos": _REF_DIAS_DISTINTOS,
@@ -50061,7 +50108,7 @@ async def referidos_valido(codigo: str):
         org = await global_db.organizations.find_one({"id": invitador["id"]}, {"_id": 0})
         if org:
             importe = _ref_importe(org)
-    return {"valido": bool(invitador), "dias_extra": _REF_DIAS_EXTRA, "por_invitado": importe}
+    return {"valido": bool(invitador), "dias_extra": _REF_DIAS_EXTRA, "por_invitado": importe, **_ref_promo_datos()}
 
 
 # ── OPINIÓN DE QUIEN YA USA LA APP (05-10-2026) ──────────────────────────────
@@ -50147,11 +50194,21 @@ def _ref_uso_real(entregas: list) -> tuple:
     return total, dias
 
 
-def _ref_importe(invitador: dict) -> int:
-    """Céntimos que gana esta cuenta por cada invitado que usa la app: 5 € si se dio de alta
-    antes del corte (con la oferta de 5 € en los anuncios), si no _REF_CENT."""
+def _ref_importe(invitador: dict, invitado: Optional[dict] = None) -> int:
+    """Céntimos que gana esta cuenta por cada invitado que usa la app. Con la promoción, 10 € si el
+    invitado se dio de alta antes del 01-11-2026 (sin invitado —para enseñar cuánto se gana ahora—,
+    mientras la promoción esté activa). Si no: 5 € si quien invita se dio de alta antes del corte
+    (con la oferta de 5 € en los anuncios), si no _REF_CENT."""
+    alta_invitado = _fecha_utc((invitado or {}).get("created_at")) if invitado else None
+    if _ref_promo_activa(alta_invitado):
+        return _REF_PROMO_CENT
     creada = _fecha_utc((invitador or {}).get("created_at"))
     return _REF_CENT_PRIMEROS if creada and creada < _REF_CORTE else _REF_CENT
+
+
+def _ref_promo_datos() -> dict:
+    """Lo que la app enseña de la promoción mientras dura (y nada después)."""
+    return {"promo_hasta": _REF_PROMO_HASTA_DIA, "promo_cent": _REF_PROMO_CENT} if _ref_promo_activa() else {}
 
 
 async def _referido_premiar(org: dict, conductor_id: str):
@@ -50197,7 +50254,7 @@ async def _referido_premiar(org: dict, conductor_id: str):
                                                    {"$set": {"ref_premiado": True, "ref_premiado_en": ahora.isoformat()}})
     if not getattr(res, "modified_count", 0):
         return
-    importe = _REF_CENT if driver_ref_id else _ref_importe(invitador)
+    importe = _ref_importe({} if driver_ref_id else invitador, org)
     movimiento = {"id": str(uuid.uuid4()), "tipo": "referido", "importe": importe,
                   "invitado_id": org["id"], "invitado": org.get("name") or "", "mes": mes,
                   "ts": ahora.isoformat()}
@@ -50276,7 +50333,8 @@ async def conductor_referidos_retirar(data: dict = Body(default={}), user: dict 
         raise HTTPException(409, "Ya tienes una retirada en revisión: espera a que la resolvamos")
     importe = int(ref.get("saldo") or 0)
     if importe < _DRIVER_REF_RETIRADA_MIN:
-        raise HTTPException(400, f"Puedes solicitar el pago desde {_euros_txt(_DRIVER_REF_RETIRADA_MIN)}")
+        raise HTTPException(400, f"Puedes solicitar el pago desde {_euros_txt(_DRIVER_REF_RETIRADA_MIN)}: "
+                                 f"te faltan {_euros_txt(_DRIVER_REF_RETIRADA_MIN - importe)}")
     res = await global_db.driver_referidos.update_one(
         {"id": ref["id"], "saldo": {"$gte": importe}}, {"$inc": {"saldo": -importe}})
     if not getattr(res, "modified_count", 0):
@@ -50340,7 +50398,8 @@ async def cartera_retirar(data: dict = Body(default={}), user: dict = Depends(re
         raise HTTPException(409, "Ya tienes una retirada en revisión: espera a que te la paguemos")
     importe = int(org.get("cartera_saldo") or 0)
     if importe < _REF_RETIRADA_MIN:
-        raise HTTPException(400, f"Se puede retirar desde {_euros_txt(_REF_RETIRADA_MIN)}")
+        raise HTTPException(400, f"Se puede retirar desde {_euros_txt(_REF_RETIRADA_MIN)}: "
+                                 f"te faltan {_euros_txt(_REF_RETIRADA_MIN - importe)}")
     # Atómico: solo si el saldo sigue ahí (dos toques seguidos no cobran dos veces).
     res = await global_db.organizations.update_one(
         {"id": org["id"], "cartera_saldo": {"$gte": importe}}, {"$inc": {"cartera_saldo": -importe}})
@@ -50410,7 +50469,7 @@ async def admin_cartera_conductores(_: dict = Depends(require_superadmin)):
         "conductores": len(filas), "invitados": sum(x["invitados"] for x in filas),
         "validos": sum(x["validos"] for x in filas), "ganado": sum(x["ganado"] for x in filas),
         "saldo": sum(x["saldo"] for x in filas), "pendiente_pago": sum(pendientes_por_ref.values()),
-    }, "por_invitado": _REF_CENT, "retirada_min": _DRIVER_REF_RETIRADA_MIN}
+    }, "por_invitado": _ref_importe({}), "retirada_min": _DRIVER_REF_RETIRADA_MIN, **_ref_promo_datos()}
 
 
 @api_router.get("/admin/cartera/retiradas")
@@ -50439,7 +50498,7 @@ async def admin_cartera_retiradas(estado: str = "pendiente", _: dict = Depends(r
         r["invitados"] = [{"nombre": i.get("name") or "", "alta": str(i.get("created_at") or "")[:10],
                            "premiado": bool(i.get("ref_premiado")), "sospechoso": i.get("ref_sospechoso") or "",
                            "correo": i.get("email") or ""} for i in invitados]
-    return {"retiradas": rets, "por_invitado": _REF_CENT, "retirada_min": _REF_RETIRADA_MIN,
+    return {"retiradas": rets, "por_invitado": _ref_importe({}), "retirada_min": _REF_RETIRADA_MIN, **_ref_promo_datos(),
             "retirada_min_conductor": _DRIVER_REF_RETIRADA_MIN}
 
 

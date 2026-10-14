@@ -110,9 +110,25 @@ def test_invita_lleva_su_enlace_y_las_condiciones_de_verdad(pais, cent, cobro):
     t = c["texto"]
     assert "Llevas 11 entregas" in c["asunto"]
     assert "https://flotadsp.com/repartidores?ref=AB12" in t
-    assert ("5 €" if cent == 500 else "2,50 €") in t and cobro in t and "desde 10 €" in t
+    assert ("5 €" if cent == 500 else "2,50 €") in t and cobro in t
+    assert "desde 10 €" not in t and "desde 60 €" not in t    # el mínimo solo se dice al intentar cobrar (14-10-2026)
     assert "20 entregas en 2 días distintos" in t
     assert "ruta?tab=cuenta" in c["html"]                       # el botón lleva a su enlace y su QR
+
+
+@pytest.mark.parametrize("idioma,frase", [("es", "10 € por cada compañero que se registre con tu enlace hasta el 31 de octubre"),
+                                          ("pt", "10 € por cada colega que se registe com o teu link até 31 de outubro"),
+                                          ("en", "10 € for every colleague who signs up with your link until 31 October"),
+                                          ("br", "10 € por cada colega que se cadastrar com o seu link até 31 de outubro")])
+def test_invita_con_la_promocion_de_10_euros_dice_hasta_cuando(idioma, frase):
+    """14-10-2026: 10 € por cada invitado que se registre hasta el 31-10; el correo lo dice solo mientras dura."""
+    org = _org(horas=30, idioma=idioma, pais="br" if idioma == "br" else "es")
+    con = cc.correo("invita", org, {"paradas": 36, "entregadas": 11}, AHORA, marca="FDS", base="https://flotadsp.com",
+                    baja="https://b", mensual=9.99, anual=99, con_respuesta=True, ref_cent=1000, ref_promo_hasta="2026-10-31")["texto"]
+    assert frase in con
+    sin = cc.correo("invita", org, {"paradas": 36, "entregadas": 11}, AHORA, marca="FDS", base="https://flotadsp.com",
+                    baja="https://b", mensual=9.99, anual=99, con_respuesta=True, ref_cent=250)["texto"]
+    assert "promo" not in sin.lower() and ("2.50 €" if idioma == "en" else "2,50 €") in sin
 
 
 def test_nunca_dos_del_ciclo_en_menos_de_18_horas():
@@ -136,7 +152,8 @@ def test_a_quien_no_se_le_escribe(cambio):
 
 # ── EL IDIOMA ───────────────────────────────────────────────────────────────
 @pytest.mark.parametrize("org,idioma", [
-    ({"idioma": "pt", "pais": "es"}, "pt"), ({"pais": "pt"}, "pt"), ({"pais": "br"}, "pt"),
+    ({"idioma": "pt", "pais": "es"}, "pt"), ({"pais": "pt"}, "pt"), ({"pais": "br"}, "br"), ({"idioma": "pt", "pais": "br"}, "br"),
+    ({"pais": "pt", "zona_horaria": "America/Sao_Paulo"}, "br"), ({"idioma": "pt", "pais": "pt"}, "pt"),
     ({"pais": "mx"}, "es"), ({}, "es"), ({"pais": "fr"}, "en"), ({"idioma": "fr", "pais": "fr"}, "en"),
 ])
 def test_idioma(org, idioma):
@@ -201,11 +218,18 @@ def _diccionario_app():
     """Claves (español) y traducciones (en, pt) de los textos de la app."""
     raiz = Path(__file__).resolve().parents[2] / "frontend" / "src" / "lib"
     es, en, pt = set(), set(), set()
+    pt_de = {}
     for f in raiz.glob("textosRuta*.js"):
         for m in re.finditer(r'^\s*"((?:[^"\\]|\\.)+)":\s*\["((?:[^"\\]|\\.)*)",\s*"((?:[^"\\]|\\.)*)"',
                              f.read_text(encoding="utf-8"), re.M):
-            es.add(m.group(1)); en.add(m.group(2)); pt.add(m.group(3))
-    return {"es": es, "en": en, "pt": pt}
+            es.add(m.group(1)); en.add(m.group(2)); pt.add(m.group(3)); pt_de[m.group(1)] = m.group(3)
+    # En Brasil la app enseña textosBrasil.js y, lo que no está ahí, el portugués de siempre.
+    br_dic = {}
+    for m in re.finditer(r"^\s*'((?:[^'\\]|\\.)+)':\s*\n?\s*'((?:[^'\\]|\\.)*)'",
+                         (raiz / "textosBrasil.js").read_text(encoding="utf-8"), re.M):
+        br_dic[m.group(1)] = m.group(2)
+    br = set(br_dic.values()) | {v for k, v in pt_de.items() if k not in br_dic}
+    return {"es": es, "en": en, "pt": pt, "br": br}
 
 
 @pytest.mark.parametrize("idioma", cc.IDIOMAS)
@@ -218,6 +242,16 @@ def test_primer_dia_con_promocion_no_cuenta_dias_de_prueba(idioma):
     sin = _correo("primer_dia", org)["texto"]
     assert "31" in con and not re.search(r"\b[0-9]+ (días|dias|trial days)", con)
     assert re.search(r"\b[0-9]+ (días|dias|trial days)", sin)          # sin promoción, como siempre
+
+
+def test_en_latinoamerica_celular_y_toca_y_en_espana_movil_y_pulsa():
+    """11-10-2026: los correos decían «móvil», «Pulsa» y «haz una foto» también en México o Colombia."""
+    mx = _correo("bienvenida", _org(horas=0.5, pais="mx"))["texto"]
+    assert "celular" in mx and "Toca «" in mx and "móvil" not in mx and "Pulsa" not in mx
+    es = _correo("bienvenida", _org(horas=0.5, pais="es"))["texto"]
+    assert "móvil" in es and "Pulsa «" in es and "celular" not in es
+    # Los botones que cita siguen siendo los de la app (aLatam no los toca).
+    assert "«Cargar paquetes: uno tras otro»" in mx
 
 
 def test_los_botones_que_cita_existen_en_la_app():

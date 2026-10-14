@@ -97,7 +97,8 @@ test('Escanear seguidos · guarda la etiqueta completa en lote, evita repetidas 
 
   await page.getByRole('dialog', { name: 'Escanear' }).getByRole('button', { name: 'Cerrar' }).click()
   await expect(page.getByRole('button', { name: 'Revisar 1 paquetes sin dirección' })).toBeVisible()
-  await expect(page.getByRole('dialog', { name: 'Cargar paquetes' })).toBeVisible()
+  // La hoja de carga vuelve con la cuenta: con un paquete se titula «1 paquete cargado» (no «Cargar paquetes»).
+  await expect(page.getByRole('dialog', { name: '1 paquete cargado' })).toBeVisible()
 })
 
 /* LA HOJA DE REPARTO (13-10-2026): la foto se lee DE VERDAD con el lector de la app (tesseract en el

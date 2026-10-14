@@ -677,7 +677,7 @@ function RetiradasCartera() {
         </select>
       </div>
       <p className="text-[12px] text-dark-400">
-        Cada invitado que usa la app de verdad da {eur(datos?.por_invitado ?? 250)} (5 € las cuentas creadas antes del 12-10-2026). Retirada de empresa desde {eur(datos?.retirada_min ?? 1000)} · cartera individual de conductor desde {eur(datos?.retirada_min_conductor ?? 3000)}.
+        Cada invitado que usa la app de verdad da {eur(datos?.por_invitado ?? 250)}{datos?.promo_hasta ? ` (promoción: 10 € por los que se registren hasta el ${datos.promo_hasta}; después 2,50 €, y 5 € para las cuentas creadas antes del 12-10-2026)` : ' (5 € las cuentas creadas antes del 12-10-2026)'}. Retirada desde {eur(datos?.retirada_min ?? 6000)}, igual para la cartera de conductor ({eur(datos?.retirada_min_conductor ?? 6000)}); el mínimo no se enseña en la app hasta que intentan cobrar.
         El pago se hace en Bizum, banco o PayPal por el canal correspondiente; este panel guarda el resultado y avisa al conductor, pero no mueve dinero automáticamente.
         Antes de pagar, mira sus invitados: si se dieron de alta desde su misma red salen marcados.
       </p>

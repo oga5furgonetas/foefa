@@ -23,6 +23,12 @@ async def _nada():
 
 
 @pytest.fixture
+def sin_promo(monkeypatch):
+    """Las reglas de siempre (5 € / 2,50 €): la promoción de 10 € del 14-10-2026 ya pasó."""
+    monkeypatch.setattr(server, "_REF_PROMO_HASTA", datetime(2026, 10, 1, tzinfo=timezone.utc))
+
+
+@pytest.fixture
 def mundo(monkeypatch):
     g = Db()
     g["organizations"] = Col([
@@ -98,7 +104,7 @@ SUPER = {"sub": "sa1", "role": "admin", "sa": True}
 
 
 @pytest.mark.asyncio(loop_scope="session")
-async def test_la_cartera_gana_5_euros_con_uso_real_en_dos_dias_y_solo_una_vez(mundo):
+async def test_la_cartera_gana_5_euros_con_uso_real_en_dos_dias_y_solo_una_vez(mundo, sin_promo):
     """10-10-2026: por cada invitado que la usa de verdad (20 entregas reales en 2 días
     distintos, en su primer mes), 5 € en la cartera de quien invitó. Desde el 11-10 son
     2,50 €, pero esta cuenta se creó antes del corte (con los anuncios de 5 €): cobra 5 €."""
@@ -122,13 +128,14 @@ async def test_la_cartera_gana_5_euros_con_uso_real_en_dos_dias_y_solo_una_vez(m
     o1 = mundo.g["organizations"].docs[0]
     assert o1["cartera_saldo"] == 500 and o1["cartera_ganado"] == 500
     r = await server.referidos_mios(YO)
-    assert r["saldo"] == 500 and r["premiados"] == 1 and r["por_invitado"] == 500 and r["retirada_min"] == 1000
+    assert r["saldo"] == 500 and r["premiados"] == 1 and r["por_invitado"] == 500 and r["retirada_min"] == 6000
+    assert "promo_hasta" not in r
     await server._referido_premiar(inv, "c1")                       # una sola vez
     assert o1["cartera_saldo"] == 500 and len(mundo.g["cartera_movimientos"].docs) == 1
 
 
 @pytest.mark.asyncio(loop_scope="session")
-async def test_desde_el_corte_cada_invitado_da_2_euros_50(mundo):
+async def test_desde_el_corte_cada_invitado_da_2_euros_50(mundo, sin_promo):
     """11-10-2026: las cuentas creadas desde el 12-10 (hora de Madrid) ganan 2,50 €."""
     mundo.g["organizations"].docs[0]["created_at"] = "2026-10-12T08:00:00+00:00"
     codigo = (await server.referidos_mios(YO))["codigo"]
@@ -142,6 +149,39 @@ async def test_desde_el_corte_cada_invitado_da_2_euros_50(mundo):
     o1 = mundo.g["organizations"].docs[0]
     assert inv["ref_premiado"] is True and o1["cartera_saldo"] == 250 and o1["cartera_ganado"] == 250
     assert mundo.g["cartera_movimientos"].docs[-1]["importe"] == 250
+
+
+@pytest.mark.asyncio(loop_scope="session")
+async def test_promocion_10_euros_por_invitado_dado_de_alta_hasta_el_31_de_octubre(mundo, monkeypatch):
+    """14-10-2026 (Dani): 10 € por cada invitado que se registre hasta el 31-10-2026, en vez de 2,50 € (o 5 €).
+    Manda la fecha de alta del invitado: si se registró en la promoción, cobra 10 € aunque las 20 entregas
+    lleguen después; si se registra ya en noviembre, lo de siempre."""
+    mundo.g["organizations"].docs[0]["created_at"] = "2026-10-12T08:00:00+00:00"
+    r = await server.referidos_mios(YO)
+    assert r["por_invitado"] == 1000 and r["promo_hasta"] == "2026-10-31" and r["promo_cent"] == 1000
+    assert (await server.referidos_valido(r["codigo"]))["por_invitado"] == 1000
+    await _alta(ref=r["codigo"])
+    inv = mundo.g["organizations"].docs[-1]
+    inv["created_at"] = _iso(-2)                                  # alta en la promoción
+    _entregas(mundo, 20, fecha=_dia(-1))
+    _entregas(mundo, 3)
+    # Las entregas se completan cuando la promoción ya ha terminado: sigue valiendo su fecha de alta.
+    monkeypatch.setattr(server, "_REF_PROMO_HASTA", datetime.now(timezone.utc) - timedelta(days=1))
+    assert "promo_hasta" not in await server.referidos_mios(YO)
+    await server._referido_premiar(inv, "c1")
+    o1 = mundo.g["organizations"].docs[0]
+    assert inv["ref_premiado"] is True and o1["cartera_saldo"] == 1000
+    assert mundo.g["cartera_movimientos"].docs[-1]["importe"] == 1000
+    # Otro invitado, dado de alta cuando ya no hay promoción (acabó hace 3 días; él se registró hace 2): 2,50 €.
+    monkeypatch.setattr(server, "_REF_PROMO_HASTA", datetime.now(timezone.utc) - timedelta(days=3))
+    await _alta(ref=r["codigo"], usuario="luis-reparte")
+    inv2 = mundo.g["organizations"].docs[-1]
+    inv2["created_at"] = _iso(-2)
+    mundo.t["reparto_pedidos"].docs.clear()
+    _entregas(mundo, 20, fecha=_dia(-1))
+    _entregas(mundo, 3)
+    await server._referido_premiar(inv2, "c1")
+    assert o1["cartera_saldo"] == 1250 and mundo.g["cartera_movimientos"].docs[-1]["importe"] == 250
 
 
 @pytest.mark.asyncio(loop_scope="session")
@@ -182,18 +222,18 @@ async def test_retirar_el_saldo_y_que_la_plataforma_lo_pague_o_lo_rechace(mundo,
         return True
     monkeypatch.setattr(server, "_enviar_email", correo)
     o1 = mundo.g["organizations"].docs[0]
-    o1["cartera_saldo"] = 750
+    o1["cartera_saldo"] = 4500
     datos = {"titular": "Pepe Pérez", "metodo": "bizum", "destino": "+34 612 345 678"}
-    with pytest.raises(HTTPException) as e:                     # menos del mínimo (10 €)
+    with pytest.raises(HTTPException) as e:                     # menos del mínimo (60 €): el mensaje dice cuánto falta
         await server.cartera_retirar(datos, YO)
-    assert e.value.status_code == 400
-    o1["cartera_saldo"] = 1000
+    assert e.value.status_code == 400 and "60 €" in e.value.detail and "15 €" in e.value.detail
+    o1["cartera_saldo"] = 6000
     for malo in ({**datos, "destino": "912345678"}, {**datos, "titular": "Pepe"},
                  {**datos, "metodo": "iban", "destino": "ES91 2100 0418 4502 0005 1333"}, {**datos, "metodo": "paypal"}):
         with pytest.raises(HTTPException):
             await server.cartera_retirar(malo, YO)
     r = await server.cartera_retirar(datos, YO)
-    assert r["retirada"]["importe"] == 1000 and r["retirada"]["destino"] == "•••• 5678"
+    assert r["retirada"]["importe"] == 6000 and r["retirada"]["destino"] == "•••• 5678"
     assert o1["cartera_saldo"] == 0
     with pytest.raises(HTTPException) as e:                     # una en revisión cada vez
         await server.cartera_retirar(datos, YO)
@@ -204,21 +244,21 @@ async def test_retirar_el_saldo_y_que_la_plataforma_lo_pague_o_lo_rechace(mundo,
     ret = lista["retiradas"][0]
     assert ret["destino"] == "612345678" and ret["titular"] == "Pepe Pérez"
     await server.admin_retirada_rechazar(ret["id"], {"motivo": "El móvil no tiene Bizum"}, SUPER)
-    assert o1["cartera_saldo"] == 1000
+    assert o1["cartera_saldo"] == 6000
     with pytest.raises(HTTPException):
         await server.admin_retirada_pagada(ret["id"], SUPER)    # ya no está pendiente
     # Otra vez, ahora por transferencia, y se paga.
     r = await server.cartera_retirar({"titular": "Pepe Pérez", "metodo": "iban", "destino": "ES91 2100 0418 4502 0005 1332"}, YO)
     await server.admin_retirada_pagada(r["retirada"]["id"], SUPER)
     assert mundo.g["cartera_retiradas"].docs[-1]["estado"] == "pagada" and o1["cartera_saldo"] == 0
-    assert any(a.startswith("Te hemos pagado 10") for _, a in correos)
+    assert any(a.startswith("Te hemos pagado 60") for _, a in correos)
     mis = await server.referidos_mios(YO)
     assert sorted(x["estado"] for x in mis["retiradas"]) == ["pagada", "rechazada"]
     assert mis["retiradas"][0]["destino"].startswith("•••• ")
 
 
 @pytest.mark.asyncio(loop_scope="session")
-async def test_fuera_de_espana_se_cobra_por_paypal_y_en_china_no_hay(mundo):
+async def test_fuera_de_espana_se_cobra_por_paypal_y_en_china_no_hay(mundo, sin_promo):
     """11-10-2026: en Latinoamérica también se gana; se cobra por PayPal (Bizum e IBAN son de España)."""
     o1 = mundo.g["organizations"].docs[0]
     o1["pais"] = "mx"
@@ -233,7 +273,7 @@ async def test_fuera_de_espana_se_cobra_por_paypal_y_en_china_no_hay(mundo):
     _entregas(mundo, 3)
     await server._referido_premiar(inv, "c1")
     assert inv["ref_premiado"] is True
-    o1["cartera_saldo"] = 1000
+    o1["cartera_saldo"] = 6000
     with pytest.raises(HTTPException) as e:
         await server.cartera_retirar({"titular": "Pepe Pérez", "metodo": "bizum", "destino": "+34 612 345 678"}, YO)
     assert e.value.status_code == 400

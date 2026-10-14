@@ -5,7 +5,7 @@
 > haz commit y `git push`. Una sola sesión trabajando a la vez: antes de
 > empezar, `git pull` y comprueba que nadie ha dejado nada a medias aquí.
 
-Última actualización: **13-10-2026** (OCR de etiquetas con lectura por consenso y confirmación).
+Última actualización: **14-10-2026** (promoción «Invita y gana 10 €», retirada desde 60 €, anuncio Meta en borrador).
 
 ## Qué es y dónde está
 
@@ -1124,3 +1124,54 @@ de la etiqueta de cualquier empresa.
 - Una dirección leída de foto exige revisión/confirmación manual antes de guardarse. No se afirma compatibilidad perfecta con todas las empresas: el QR/DataMatrix solo da la dirección si la empresa la codificó; si no, la foto se interpreta localmente y datos dudosos quedan para revisar.
 - Verificación: `check-leer-etiqueta.mjs`, ESLint en los tres archivos tocados, build Vite y Playwright móvil usando la foto real. No desplegado todavía.
 - Pendiente para ampliar cobertura: reunir etiquetas reales de distintas compañías y añadir el texto OCR/códigos de cada formato como casos. No hay un formato QR único universal.
+
+## 13-10-2026: archivar candidatos del tablero de Empleo
+
+- Cada columna ofrece «Limpiar columna»; oculta en bloque los candidatos visibles de esa fase. La ficha, el CV, las notas, el consentimiento de novedades y el historial no se borran.
+- «Ocultos» permite consultar las candidaturas archivadas; desde su ficha se pueden restaurar al tablero. También se puede archivar/restaurar una persona individualmente.
+- La acción conserva la fase original y registra quién/cuándo la archivó. Sigue vigente el plazo de retención existente de las candidaturas (12 meses); archivar no lo amplía.
+- El lote está acotado por oferta, fase, centro y los IDs visibles, evitando actuar sobre otros resultados filtrados.
+- Verificación: prueba de interfaz de archivar/restaurar, pruebas de Empleo en backend, ESLint, chequeos estáticos y build. Despliegue pendiente.
+
+## 14-10-2026: puesta a punto, promoción de 10 € y anuncio
+
+Dani: «corrígelo todo, mira todo lo que se ha implementado, pon la app a punto» + anuncio de Facebook con
+«10 € por cada amigo que inviten y la empiece a usar», mínimo de retirada 60 € que no se vea hasta
+intentar retirar, promoción hasta el 31-10-2026.
+
+- **Recogido lo que la sesión del 13-10 dejó sin publicar** (archivar candidatos de Empleo, cartera de
+  conductor unificada, consentimiento de novedades): su test leía la función sin el decorador de la ruta y
+  prohibía «expira_en» aunque solo saliera en una proyección; el test del escáner esperaba el diálogo
+  «Cargar paquetes» cuando con un paquete se titula «1 paquete cargado»; faltaban 4 traducciones
+  («Paquete leído; guardando lote», «en cola», «paradas añadidas», «ya estaban») y el chino de 7 claves de
+  Empleo. Y la «mejora de precisión» del 13-10 en `interpretaEtiqueta.js` rompía 6 casos del checker
+  (cortaba «123 Main St.» a «St.», «GRAN VIA 32» a «VIA 32», «Carrera 7 # 32-16 Apto 501» a «Carrera 7»):
+  ahora lo de antes del tipo de vía solo se quita si es un rótulo («IN :»), y tras el número solo se corta
+  basura del OCR («AZ 00»); «ES» ya no vale como población.
+- **Promoción «Invita y gana 10 €»** (`_REF_PROMO_*` en server.py): 10 € por cada invitado que se dé de
+  alta hasta el 31-10-2026 incluido (hora de Madrid; manda la fecha de alta del invitado, no la de sus 20
+  entregas), también para la cartera de conductor. `/referidos` y `/referidos/{codigo}` mandan
+  `promo_hasta` y `promo_cent` mientras dura; la app (`lib/precios.js`: `refCentActual`, `refPromoActiva`,
+  `fechaRefPromo`) lo pinta en la portada, la tarjeta de la ruta, la cartera, /invita y la página de empleo.
+  El correo «invita» lo dice en es/pt/en/br.
+- **Retirada desde 60 €** (`_REF_RETIRADA_MIN` y `_DRIVER_REF_RETIRADA_MIN`), y **no se enseña hasta que
+  intentan cobrar**: el botón «Cobrar» sale con cualquier saldo y, por debajo, dice «Se puede cobrar a
+  partir de 60 €. Te faltan X» (el servidor responde lo mismo). Fuera de la app, el mínimo SÍ consta en
+  las condiciones (Terminos 5 bis y 5 ter): publicar condiciones falsas o callar una esencial es un riesgo
+  legal real; Dani queda avisado. Quitado de los correos, de la cartera de conductor y del panel.
+- **Correos del ciclo**: idioma «br» (portugués de Brasil: você, celular, pacotes) y, en español, «celular»,
+  «Toca» y «toma una foto» para Latinoamérica (`_a_latam` en ciclo_correos.py). El aviso push de la mañana,
+  también en brasileño.
+- **Anuncio Meta** (docs/anuncios/CAMPANA-14-10-INVITA10.md): vídeos `FDS-{directo,pov}-gana10-{9x16,4x5}.mp4`
+  (`scripts/anuncio-gana10.mjs` corta la tarjeta «2,50 €» y pega la de 10 €), imagen
+  `tiktok-fotos/gana10-9x16.png`. En el Administrador de anuncios, el anuncio «FDS — Lanzamiento + gana
+  2,50 €» de la campaña «FDS Registros» se ha renombrado «FDS — Invita y gana 10 € (promo hasta el 31-10)»
+  con los textos nuevos y la URL `utm_content=gana10`, guardado como borrador; **el vídeo sigue siendo el de
+  2,50 €** (cambiar el contenido multimedia da «Error de permiso #1487184» con mi control) y la cuenta sigue
+  restringida por el pago: lo publica Dani tras pagar y cambiar el vídeo.
+- Medido: 17 autónomos reales (+1 en 3 días, de EE. UU.), 0 invitaciones usadas, 0 retiradas. Sin anuncios
+  activos no entra nadie.
+- Pendiente de la lista del 13-10 (no tocado hoy): CI de GitHub rojo (minutos agotados: Dani), `check-hooks` y
+  `check-version-app` en Linux, `activacion.spec.js` con textos viejos, `demo-no-atrapa`, test_valor_oddspapi
+  con fechas caducadas, ficha de ayuda de `reparto`. Los 9 Shorts de YouTube y los posts en grupos siguen
+  diciendo «2,50 €» y «cobro desde 10 €».

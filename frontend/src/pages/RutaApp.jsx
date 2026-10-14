@@ -24,7 +24,7 @@ import { importe } from '../lib/region'
 import { tx, useIdioma, txError, locale } from '../lib/idioma'
 import { invitar } from '../lib/compartir'
 import { getReferidos } from '../services/api'
-import { REF_CENT, eurosRef } from '../lib/precios'
+import { eurosRef, refCentActual, refPromoActiva, REF_PROMO_HASTA, fechaRefPromo } from '../lib/precios'
 
 /* ── LA APP DE QUIEN REPARTE SOLO (04-10-2026) ───────────────────────────────
    No es el panel de una empresa pequeña: es otro producto, como Circuit o
@@ -53,10 +53,15 @@ export default function RutaApp() {
   // prueba), «Hoy» y «Ajustes» enseñan el muro; historial y cuenta, siempre.
   const [billing, setBilling] = useState(null)
   // Lo que gana ESTA cuenta por invitado (las de antes del 12-10 siguen a 5 €): lo dice el servidor.
-  const [porInvitado, setPorInvitado] = useState(REF_CENT)
+  const [porInvitado, setPorInvitado] = useState(refCentActual())
+  // Hasta cuándo dura la promoción de 10 €: lo dice el servidor; antes de que conteste, la fecha fija.
+  const [promoHasta, setPromoHasta] = useState(refPromoActiva() ? REF_PROMO_HASTA : '')
   useEffect(() => {
     if (esSuplantacion()) return
-    getReferidos().then(({ data }) => { if (data?.por_invitado) setPorInvitado(data.por_invitado) }).catch(() => {})
+    getReferidos().then(({ data }) => {
+      if (data?.por_invitado) setPorInvitado(data.por_invitado)
+      if (data && 'por_invitado' in data) setPromoHasta(data.promo_hasta || '')
+    }).catch(() => {})
   }, [])
   const [regaloNuevo, setRegaloNuevo] = useState(null)
   const recargar = useCallback(() => getOrgBilling().then(({ data }) => setBilling(data)).catch(() => setBilling({})), [])
@@ -173,7 +178,8 @@ export default function RutaApp() {
         {tab === 'hoy' && !esSuplantacion() && (billing?.pais || 'es') !== 'cn' && (
           <div className="mx-auto mb-3 flex max-w-md items-center justify-between gap-3 rounded-2xl border border-emerald-400/30 bg-emerald-500/[.08] px-3.5 py-2.5">
             <button onClick={() => setTab('cuenta')} className="min-w-0 text-left text-[13px] leading-snug text-emerald-100">
-              💶 {tx('Gana {euros} por cada compañero que la use.', { euros: eurosRef(porInvitado, locale()) })} <span className="font-semibold underline">{tx('Mi cartera')}</span>
+              💶 {tx('Gana {euros} por cada compañero que la use.', { euros: eurosRef(porInvitado, locale()) })}{promoHasta && <span className="ml-1 rounded-md bg-emerald-400/20 px-1.5 py-0.5 text-[11px] font-bold text-emerald-100">{tx('Promo hasta el {fecha}', { fecha: fechaRefPromo(locale(), promoHasta) })}</span>} <span className="font-semibold underline">{tx('Mi cartera')}</span>
+              <span className="mt-0.5 block text-[11px] font-normal text-emerald-200/80">{tx('Se valida cuando complete 20 entregas reales en 2 días, no por registrarse.')}</span>
             </button>
             <button onClick={invitar} className="shrink-0 rounded-xl bg-emerald-700 px-3 py-1.5 text-[12.5px] font-bold text-white">{tx('Invitar')}</button>
           </div>

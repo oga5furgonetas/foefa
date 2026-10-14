@@ -49,6 +49,11 @@ export const BR = {
   'Haz una foto a la etiqueta o escanea el paquete: la app ordena las paradas por tiempo y te lleva con voz hasta cada puerta.':
     'Tire uma foto da etiqueta ou escaneie o pacote: o app organiza as paradas por tempo e te leva por voz até cada porta.',
   'Gana {euros} por cada compañero que la use.': 'Ganhe {euros} por cada colega que usar o app.',
+  'Se valida cuando complete 20 entregas reales en 2 días, no por registrarse.': 'Só vale quando completar 20 entregas reais em 2 dias, não só por se cadastrar.',
+  'Promo hasta el {fecha}': 'Promoção até {fecha}',
+  'Promoción hasta el {fecha}: {euros} por cada compañero que se registre con tu enlace.': 'Promoção até {fecha}: {euros} por cada colega que se cadastrar com o seu link.',
+  'Pásale tu enlace. Cuando se registre y haga {n} entregas en {d} días distintos (en su primer mes), ganas {euros}. Lo cobras por PayPal.': 'Mande o seu link. Quando ele se cadastrar e fizer {n} entregas em {d} dias diferentes (no primeiro mês), você ganha {euros}. Você recebe por PayPal.',
+  'Se puede cobrar a partir de {min}. Te faltan {falta}.': 'Dá para receber a partir de {min}. Faltam {falta}.',
   'Si te registras con mi enlace y completas 20 entregas a direcciones distintas en 2 días diferentes, repartidas durante el día y dentro de tus primeros 30 días, gano {euros}.':
     'Se você se cadastrar pelo meu link e fizer 20 entregas em endereços diferentes, em 2 dias distintos, distribuídas ao longo do dia e nos seus primeiros 30 dias, eu ganho {euros}.',
   'Crear mi cuenta gratis': 'Criar minha conta grátis',

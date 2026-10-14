@@ -3,7 +3,7 @@ import { useOutletContext } from 'react-router-dom'
 import {
   Briefcase, Plus, Copy, Check, Loader2, AlertTriangle, Trash2, X,
   MessageCircle, IdCard, Link2, Search, Download, FileText,
-  Phone, Mail, Calendar, MapPin, Clock, ExternalLink, Save, History,
+  Phone, Mail, Calendar, MapPin, Clock, ExternalLink, Save, History, Archive, RotateCcw,
   ChevronRight, ChevronLeft, UserPlus, Send,
 } from 'lucide-react'
 import { useT } from '../../i18n'
@@ -20,7 +20,7 @@ const PESTANAS_EMP = [
 ]
 import {
   getOfertas, crearOferta, editarOferta,
-  getCandidatos, moverCandidato, contratarCandidato, borrarCandidato,
+  getCandidatos, moverCandidato, archivarFaseCandidatos, contratarCandidato, borrarCandidato,
   getEtts, crearEtt, editarEtt, borrarEtt, enviarCandidatoAEtt, deshacerEnvioEtt,
   getInvitados, crearInvitado, marcarInvitadoEscrito, borrarInvitado,
   guardarPlantillaInvitacion,
@@ -135,6 +135,8 @@ export default function Empleo() {
   const [ficha, setFicha] = useState(null)
   const [busca, setBusca] = useState('')
   const [soloOrigen, setSoloOrigen] = useState('')
+  const [verArchivados, setVerArchivados] = useState(false)
+  const [archivandoFase, setArchivandoFase] = useState('')
   // Cuántos por página en cada columna, y en cuál está cada una. Object en vez
   // de un solo número: cada columna se pasea por su propia lista de golpear
   // "siguiente" en Contactado no puede reiniciar Por contactar.
@@ -213,6 +215,38 @@ export default function Empleo() {
     }
   }
 
+  const archivar = async (c, archivado = true) => {
+    try {
+      const { data } = await moverCandidato(c.id, { archivado })
+      actualizar(c, data)
+      if (archivado) {
+        if (ficha?.id === c.id) setFicha(null)
+      } else {
+        setVerArchivados(false)
+        if (ficha?.id === c.id) setFicha(data)
+      }
+    } catch (e) {
+      setError(e?.response?.data?.detail || t('empleo.errMover'))
+    }
+  }
+
+  const archivarColumna = async (fase) => {
+    const items = porFase[fase] || []
+    if (!items.length) return
+    if (!window.confirm(`${t('empleo.confirmArchivarColumna')}\n\n${t('empleo.fase.' + fase)}: ${items.length}`)) return
+    setArchivandoFase(fase)
+    try {
+      const { data } = await archivarFaseCandidatos({ oferta_id: sel.id, fase, ids: items.map((c) => c.id), center })
+      const ids = new Set(items.map((c) => c.id))
+      const { data: refrescados } = await getCandidatos({ oferta: sel?.id, center })
+      setCands(refrescados.candidatos || [])
+      if (ficha && ids.has(ficha.id)) setFicha(null)
+      if (!data.archivados) setError(t('empleo.sinCambiosArchivado'))
+    } catch (e) {
+      setError(e?.response?.data?.detail || t('empleo.errMover'))
+    } finally { setArchivandoFase('') }
+  }
+
   const contratar = async (c) => {
     try {
       const { data } = await contratarCandidato(c.id)
@@ -256,10 +290,11 @@ export default function Empleo() {
     const q = clave(busca)
     return cands.filter((c) => {
       if (soloOrigen && (c.origen || 'directo') !== soloOrigen) return false
+      if (!!c.archivado !== verArchivados) return false
       if (!q) return true
       return clave(`${c.nombre} ${c.telefono} ${c.ciudad} ${c.email} ${c.dni}`).includes(q)
     })
-  }, [cands, busca, soloOrigen])
+  }, [cands, busca, soloOrigen, verArchivados])
 
   // Buscar o cambiar de filtro vuelve todas las columnas a la página 1: si no,
   // una búsqueda que deja tres resultados se queda mostrando la página 4 vacía.
@@ -404,6 +439,10 @@ export default function Empleo() {
               className="rounded-lg border border-dark-700 bg-dark-950 px-2 py-1.5 text-[12px] text-dark-100">
               {[10, 15, 20].map((n) => <option key={n} value={n}>{n} / {t('empleo.pagina')}</option>)}
             </select>
+            <button onClick={() => { setVerArchivados((v) => !v); setFicha(null); setPaginaPorFase({}) }}
+              className={`flex items-center gap-1 rounded-lg px-2 py-1.5 text-[12px] ring-1 ${verArchivados ? 'bg-brand-500/10 text-brand-300 ring-brand-500/30' : 'text-dark-300 ring-dark-700 hover:text-dark-100'}`}>
+              <Archive size={13} /> {verArchivados ? t('empleo.volverTablero') : `${t('empleo.ocultos')} (${cands.filter((c) => c.archivado).length})`}
+            </button>
             <button onClick={exportar} disabled={!visibles.length}
               className="flex items-center gap-1 rounded-lg px-2 py-1.5 text-[12px] text-dark-300 ring-1 ring-dark-700 hover:text-dark-100 disabled:opacity-40">
               <Download size={13} /> {t('empleo.exportar')}
@@ -424,9 +463,10 @@ export default function Empleo() {
                 const irA = (p) => setPaginaPorFase((m) => ({ ...m, [f]: p }))
                 return (
                 <div key={f}
-                  onDragOver={(e) => { e.preventDefault(); setEncima(f) }}
+                  onDragOver={(e) => { if (!verArchivados) { e.preventDefault(); setEncima(f) } }}
                   onDragLeave={() => setEncima((x) => (x === f ? '' : x))}
                   onDrop={(e) => {
+                    if (verArchivados) return
                     e.preventDefault(); setEncima('')
                     const id = e.dataTransfer?.getData('text/plain') || ''
                     const c = cands.find((x) => x.id === id) || arrastraRef.current
@@ -438,7 +478,14 @@ export default function Empleo() {
                     <span className={`inline-flex rounded px-2 py-0.5 text-[10px] font-semibold uppercase ring-1 ${FASE[f].pill}`}>
                       {t('empleo.fase.' + f)}
                     </span>
-                    <span className="cifra text-[11px] font-bold text-dark-500">{total}</span>
+                    <div className="flex items-center gap-1.5">
+                      <span className="cifra text-[11px] font-bold text-dark-500">{total}</span>
+                      {!verArchivados && total > 0 && <button type="button" disabled={!!archivandoFase}
+                        onClick={() => archivarColumna(f)} title={t('empleo.archivarColumna')} aria-label={`${t('empleo.archivarColumna')} ${t('empleo.fase.' + f)}`}
+                        className="rounded p-1 text-dark-500 hover:bg-dark-800 hover:text-dark-200 disabled:opacity-40">
+                        {archivandoFase === f ? <Loader2 size={12} className="animate-spin" /> : <Archive size={12} />}
+                      </button>}
+                    </div>
                   </div>
                   <p className={`-mt-1 mb-2 truncate px-0.5 text-[10.5px] ${FASES_ANTIGUAS.includes(f) ? 'text-amber-400/80' : 'text-dark-500'}`}>
                     {t('empleo.faseAyuda.' + f)}
@@ -454,7 +501,7 @@ export default function Empleo() {
                   )}
                   <div className="space-y-2">
                     {items.map((c) => (
-                      <Tarjeta key={c.id} c={c} t={t} activa={ficha?.id === c.id} ultimaVisita={ultimaVisita}
+                      <Tarjeta key={c.id} c={c} t={t} activa={ficha?.id === c.id} ultimaVisita={ultimaVisita} archivada={verArchivados}
                         onAbrir={() => setFicha(c)}
                         onArrastrar={(e) => {
                           arrastraRef.current = c
@@ -495,7 +542,7 @@ export default function Empleo() {
               {ficha ? (
                 <FichaCandidato c={cands.find((x) => x.id === ficha.id) || ficha} oferta={sel} t={t}
                   onCerrar={() => setFicha(null)} onMover={mover} onContratar={contratar}
-                  onBorrar={borrar} onNotas={guardarNotas} onTelefono={guardarTelefono}
+                  onBorrar={borrar} onNotas={guardarNotas} onTelefono={guardarTelefono} onArchivar={archivar}
                   estaciones={estacionesConocidas}
                   onRecargar={() => cargarCands(sel)} />
               ) : (
@@ -554,13 +601,13 @@ function Embudo({ e, t }) {
 }
 
 /* ── Una tarjeta del tablero ──────────────────────────────────────────── */
-function Tarjeta({ c, t, activa, ultimaVisita, onAbrir, onArrastrar, onSoltar }) {
+function Tarjeta({ c, t, activa, ultimaVisita, archivada, onAbrir, onArrastrar, onSoltar }) {
   const quieto = diasQuieto(c)
   const urge = c.fase === 'nuevo' && (quieto ?? 0) >= 3
   const nuevo = esRecienLlegado(c, ultimaVisita)
   return (
     <button
-      draggable
+      draggable={!archivada}
       onDragStart={(e) => onArrastrar(e)}
       onDragEnd={onSoltar}
       onClick={onAbrir}
@@ -609,7 +656,7 @@ function Tarjeta({ c, t, activa, ultimaVisita, onAbrir, onArrastrar, onSoltar })
 
 /* ── La ficha completa ────────────────────────────────────────────────── */
 function FichaCandidato({ c, oferta, t, onCerrar, onMover, onContratar, onBorrar, onNotas,
-                         onRecargar, onTelefono, estaciones = [] }) {
+                         onRecargar, onTelefono, onArchivar, estaciones = [] }) {
   const [tel, setTel] = useState('')
   const [est, setEst] = useState(c.estacion || '')
   const [pideEst, setPideEst] = useState(false)
@@ -729,7 +776,7 @@ function FichaCandidato({ c, oferta, t, onCerrar, onMover, onContratar, onBorrar
 
         {/* Mover: los seis botones a la vista, porque arrastrar no vale en el
             móvil y la oficina también abre esto desde una tablet. */}
-        <div>
+        {!c.archivado && <div>
           <div className="mb-1.5 text-[11px] font-semibold uppercase tracking-wider text-dark-500">{t('empleo.moverA')}</div>
           <div className="flex flex-wrap gap-1.5">
             {FASES_TABLERO.filter((x) => x !== 'contratado').map((x) => (
@@ -761,7 +808,7 @@ function FichaCandidato({ c, oferta, t, onCerrar, onMover, onContratar, onBorrar
               </button>
             </form>
           )}
-        </div>
+        </div>}
 
         <div>
           <div className="mb-1.5 text-[11px] font-semibold uppercase tracking-wider text-dark-500">{t('empleo.notas')}</div>
@@ -808,6 +855,12 @@ function FichaCandidato({ c, oferta, t, onCerrar, onMover, onContratar, onBorrar
             <IdCard size={13} /> {t('empleo.tieneFicha')}
           </span>
         )}
+        <button onClick={() => onArchivar(c, !c.archivado)} title={c.archivado ? t('empleo.restaurar') : t('empleo.archivar')}
+          aria-label={c.archivado ? t('empleo.restaurar') : t('empleo.archivar')}
+          className="flex items-center justify-center gap-1.5 rounded-lg px-2.5 py-2 text-[12px] font-semibold text-dark-300 ring-1 ring-dark-700 hover:bg-dark-800 hover:text-dark-100">
+          {c.archivado ? <RotateCcw size={13} /> : <Archive size={13} />}
+          {c.archivado ? t('empleo.restaurar') : t('empleo.archivar')}
+        </button>
         <button onClick={() => onBorrar(c)} aria-label={t('empleo.borrar')} title={t('empleo.borrar')}
           className="rounded-lg px-2.5 py-2 text-red-300 ring-1 ring-red-500/30 hover:bg-red-500/10">
           <Trash2 size={13} />

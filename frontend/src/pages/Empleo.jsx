@@ -8,6 +8,7 @@ import {
 import { API_BASE } from '../lib/apiBase'
 import { enviarConCvOSinEl } from '../lib/enviarCandidatura'
 import { medirAccion } from '../lib/analitica'
+import { refPromoActiva, fechaRefPromo } from '../lib/precios'
 import RopaCartel from './RopaCartel'
 import { normalizarDetalle } from '../services/api'
 import { MARCA } from '../marca'
@@ -245,7 +246,7 @@ export default function Empleo() {
               <div>
                 <p className="text-[11px] font-extrabold uppercase tracking-wider text-emerald-700">Invita y gana</p>
                 <h2 className="mt-0.5 text-[17px] font-extrabold leading-snug text-slate-900">¿Conoces a alguien que reparte?</h2>
-                <p className="mt-1 text-[13px] leading-relaxed text-slate-700">Enséñale Flota para escanear paquetes, ordenar paradas y seguir su ruta. Crea tu cuenta y comparte tu enlace: puedes ganar <b>2,50 €</b> cuando un nuevo repartidor se registre con él y complete 20 entregas reales válidas.</p>
+                <p className="mt-1 text-[13px] leading-relaxed text-slate-700">Enséñale Flota para escanear paquetes, ordenar paradas y seguir su ruta. Crea tu cuenta y comparte tu enlace: puedes ganar <b>{refPromoActiva() ? '10 €' : '2,50 €'}</b> cuando un nuevo repartidor se registre con él y complete 20 entregas reales válidas{refPromoActiva() ? <> (promoción para los que se registren hasta el {fechaRefPromo()}; después, 2,50 €)</> : null}.</p>
               </div>
             </div>
             <a href="/repartidores?utm_source=empleo&utm_medium=gracias&utm_campaign=invita_gana"

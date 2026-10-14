@@ -107,6 +107,16 @@ export const GRATIS_SIN_LIMITE_HASTA = '2026-12-31'
 /* «INVITA Y GANA» (11-10-2026): 2,50 € por compañero que use la app (antes 5 €; las cuentas creadas
    antes del 12-10 siguen con 5 €, lo dice el servidor en /referidos). En céntimos, como el servidor. */
 export const REF_CENT = 250
+/* PROMOCIÓN (14-10-2026, Dani): 10 € por cada compañero que se registre hasta el 31-10-2026 incluido. El
+   servidor manda `promo_hasta` y `promo_cent` en /referidos mientras dura; esto es para pintar antes de que
+   conteste y en la portada. El mínimo de retirada (60 €) no se enseña hasta que intentan cobrar. */
+export const REF_PROMO_CENT = 1000
+export const REF_PROMO_HASTA = '2026-10-31'
+export const refPromoActiva = (hoy = new Date()) => hoy <= new Date(`${REF_PROMO_HASTA}T23:59:59`)
+export const refCentActual = () => (refPromoActiva() ? REF_PROMO_CENT : REF_CENT)
+/* «31 de octubre» en el idioma de la pantalla. */
+export const fechaRefPromo = (loc = 'es-ES', dia = REF_PROMO_HASTA) => new Date(`${dia}T12:00:00`)
+  .toLocaleDateString(loc, { day: 'numeric', month: 'long' })
 export const eurosRef = (cent = REF_CENT, loc = 'es-ES') => {
   try {
     return new Intl.NumberFormat(loc, { style: 'currency', currency: 'EUR', minimumFractionDigits: cent % 100 ? 2 : 0 }).format(cent / 100).replace(/[\u00a0\u202f]/g, ' ')

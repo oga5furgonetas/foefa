@@ -38,7 +38,9 @@ import re
 from datetime import datetime, timedelta, timezone
 
 CLAVES = ("bienvenida", "primer_dia", "casi_fin", "recordatorio", "invita")
-IDIOMAS = ("es", "pt", "en")
+# «br» es el portugués de Brasil (11-10-2026): mismos datos que «pt», escrito para allí (você, celular,
+# paradas, pacotes). Sin él, a un brasileño le llegaba «telemóvel», «paragens» y «morada».
+IDIOMAS = ("es", "pt", "en", "br")
 SEPARACION = timedelta(hours=18)
 BIENVENIDA_HASTA = timedelta(hours=2)      # si falló al darse de alta, se reintenta hasta aquí
 PRIMER_DIA_DESDE = timedelta(hours=20)
@@ -65,14 +67,23 @@ def _fecha(v):
         return None
 
 
+_ZONAS_BR = {"America/Sao_Paulo", "America/Bahia", "America/Fortaleza", "America/Recife", "America/Belem",
+             "America/Maceio", "America/Araguaina", "America/Santarem", "America/Manaus", "America/Cuiaba",
+             "America/Campo_Grande", "America/Porto_Velho", "America/Boa_Vista", "America/Rio_Branco",
+             "America/Eirunepe", "America/Noronha"}
+
+
 def idioma_de(org: dict) -> str:
-    """El idioma que eligió en la app; si no consta, el de su país; si no, español."""
-    i = str((org or {}).get("idioma") or "").lower()[:2]
+    """El idioma que eligió en la app; si no consta, el de su país; si no, español. En portugués,
+    Brasil (por país o por su hora) lee el de allí."""
+    o = org or {}
+    i = str(o.get("idioma") or "").lower()[:2]
+    pais = str(o.get("pais") or "").lower()
+    brasil = pais == "br" or str(o.get("zona_horaria") or "") in _ZONAS_BR
     if i in IDIOMAS:
-        return i
-    pais = str((org or {}).get("pais") or "").lower()
+        return "br" if i == "pt" and brasil else i
     if pais in _PAISES_PT:
-        return "pt"
+        return "br" if brasil else "pt"
     if not pais or pais in _PAISES_ES:
         return "es"
     return "en"
@@ -194,10 +205,11 @@ _T = {
             "pásale tu enlace:\n\n"
             "{invita}\n\n"
             "Cuando se registre y haga 20 entregas en 2 días distintos (en su primer mes), ganas {euros} por "
-            "cada uno. Lo cobras por {cobro} desde {minimo}. Tu enlace, tu QR y las condiciones están en la app, "
+            "cada uno. {promo_ref}Lo cobras por {cobro}. Tu enlace, tu QR y las condiciones están en la app, "
             "pestaña «Cuenta»: {cuenta}\n\n"
             "{ayuda_invita}"),
         "cobro_es": "Bizum o transferencia",
+        "promo_ref": "Son {euros} por cada compañero que se registre con tu enlace hasta el {promo_hasta} (promoción). ",
         "ayuda_invita": "¿Le falta algo a la app para tu reparto? Contéstame con una línea y lo miro.",
         "ayuda_invita_sin": "Gracias por usarla.",
         "cobro_fuera": "PayPal",
@@ -273,10 +285,11 @@ _T = {
             "passa-lhe o teu link:\n\n"
             "{invita}\n\n"
             "Quando se registar e fizer 20 entregas em 2 dias diferentes (no primeiro mês), ganhas {euros} por "
-            "cada um. Recebes por {cobro} a partir de {minimo}. O teu link, o teu QR e as condições estão na app, "
+            "cada um. {promo_ref}Recebes por {cobro}. O teu link, o teu QR e as condições estão na app, "
             "separador «Conta»: {cuenta}\n\n"
             "{ayuda_invita}"),
         "cobro_es": "Bizum ou transferência",
+        "promo_ref": "São {euros} por cada colega que se registe com o teu link até {promo_hasta} (promoção). ",
         "ayuda_invita": "Falta alguma coisa à app para a tua distribuição? Responde-me com uma linha e eu vejo.",
         "ayuda_invita_sin": "Obrigado por a usares.",
         "cobro_fuera": "PayPal",
@@ -352,10 +365,11 @@ _T = {
             "send them your link:\n\n"
             "{invita}\n\n"
             "When they sign up and make 20 deliveries on 2 different days (in their first month), you earn {euros} "
-            "for each one. You get paid by {cobro} from {minimo}. Your link, your QR code and the terms are in the "
+            "for each one. {promo_ref}You get paid by {cobro}. Your link, your QR code and the terms are in the "
             "app, «Account» tab: {cuenta}\n\n"
             "{ayuda_invita}"),
         "cobro_es": "Bizum or bank transfer",
+        "promo_ref": "It's {euros} for every colleague who signs up with your link until {promo_hasta} (promotion). ",
         "ayuda_invita": "Is anything missing for your deliveries? Reply with one line and I'll look into it.",
         "ayuda_invita_sin": "Thanks for using it.",
         "cobro_fuera": "PayPal",
@@ -383,6 +397,103 @@ _T = {
 }
 
 
+# Portugués de Brasil: los mismos correos que «pt», escritos para allí. Los botones que se citan son los
+# que enseña la app en Brasil (frontend/src/lib/textosBrasil.js); lo vigila test_los_botones_que_cita….
+_T["br"] = {
+    **_T["pt"],
+    "bienvenida": (
+        "Sua conta {marca} está pronta: veja como carregar sua primeira rota",
+        "Olá {nombre}:\n\n"
+        "{intro}"
+        "Sua primeira rota, em 3 passos:\n"
+        "1. Abra o app: {ruta}\n"
+        "   No celular, «Instalar o app» deixa ele na tela inicial.\n"
+        "2. Toque em «Carregar pacotes: um atrás do outro» e tire uma foto da etiqueta de cada pacote. "
+        "O endereço entra sozinho; se algum não for lido, você digita.\n"
+        "3. Toque em «Montar rota e começar»: o app organiza as paradas e te leva até cada porta.\n\n"
+        "Sem pacotes à mão? Dentro do app, «Ver funcionando com 3 paradas de exemplo».\n\n"
+        "{ayuda}"),
+    "primer_dia": (
+        "Posso te ajudar com a sua primeira rota?",
+        "Olá {nombre}:\n\n"
+        "Você criou sua conta no {marca} e ainda não carregou nenhuma parada. "
+        "Se ficou pela metade, o mais rápido é:\n\n"
+        "1. Abra {ruta}\n"
+        "2. «Carregar pacotes: um atrás do outro» e uma foto de cada etiqueta.\n"
+        "3. «Montar rota e começar».\n\n"
+        "Hoje você não tem pacotes? No app, «Ver funcionando com 3 paradas de exemplo».\n\n"
+        "{plazo}\n\n"
+        "{ayuda_corta}"),
+    "casi_fin": (
+        "Faltam {quedan} dias do seu teste no {marca}",
+        "Olá {nombre}:\n\n"
+        "{hecho}"
+        "Seu teste grátis termina em {fin}. Nada é cobrado automaticamente: se quiser continuar, entre no app, "
+        "aba «Conta», e escolha {mes} por mês ou {anio} por ano. Se não, você não paga nada.\n\n"
+        "Conta: {cuenta}\n\n"
+        "{ayuda_corta}"),
+    "recordatorio": (
+        "Vai entregar esta semana? Sua rota pronta em 2 minutos",
+        "Olá {nombre}:\n\n"
+        "Há alguns dias você criou sua conta no {marca} e ainda não carregou nenhum pacote. "
+        "Quando estiver com a rota em mãos, é rápido assim:\n\n"
+        "1. Abra {ruta}\n"
+        "2. «Carregar pacotes: um atrás do outro» e uma foto de cada etiqueta: o endereço entra sozinho.\n"
+        "3. «Montar rota e começar»: o app organiza as paradas por tempo e te guia por voz.\n\n"
+        "E duas coisas que economizam tempo: «Mãos livres» (no Android você diz \"entregue\" e continua "
+        "dirigindo) e «O meu dinheiro hoje» (quanto você já ganhou e quanto foi de combustível).\n\n"
+        "{plazo}\n\n"
+        "{ayuda_corta}"),
+    "invita": (
+        "Você já fez {entregadas} entregas com o {marca}: indica para um colega?",
+        "Olá {nombre}:\n\n"
+        "Você já fez {entregadas} entregas com o {marca}. Se conhece outro entregador que possa usar, "
+        "mande o seu link:\n\n"
+        "{invita}\n\n"
+        "Quando ele se cadastrar e fizer 20 entregas em 2 dias diferentes (no primeiro mês), você ganha {euros} "
+        "por cada um. {promo_ref}Você recebe por {cobro}. Seu link, seu QR e as condições estão no app, "
+        "aba «Conta»: {cuenta}\n\n"
+        "{ayuda_invita}"),
+    "promo_ref": "São {euros} por cada colega que se cadastrar com o seu link até {promo_hasta} (promoção). ",
+    "ayuda_invita": "Falta alguma coisa no app para as suas entregas? Me responda com uma linha que eu vejo.",
+    "ayuda_invita_sin": "Obrigado por usar o app.",
+    "hecho_si": "Nesses dias você carregou {paradas} paradas{entregas}.\n\n",
+    "entregas": " e entregou {n}",
+    "hecho_no": "Você ainda não carregou nenhuma parada: ainda dá tempo de testar com a sua rota de verdade ({ruta}).\n\n",
+    "ayuda": "Se algo não funcionar ou faltar alguma coisa, responda este e-mail: sou eu que leio.",
+    "ayuda_sin": "Dica: faça o primeiro teste com 3 ou 4 pacotes antes de sair; em dois minutos você vê se serve.",
+    "ayuda_corta": "O que te travou ou o que está faltando? Me responda em uma linha que eu vejo.",
+    "ayuda_corta_sin": "Se não tiver pacotes à mão, dentro do app você pode ver ele funcionando com 3 paradas de exemplo.",
+    "intro": (
+        "Sua conta está pronta. Você tem {dias} dias grátis e não pedimos cartão, então no fim do teste "
+        "nada é cobrado automaticamente. Se quiser continuar, é você quem escolhe ({mes} por mês ou {anio} por ano).\n\n"),
+    "plazo": "Você ainda tem {quedan} dias de teste.",
+    "plazo_promo": "Lembrete: é grátis e sem limite até {promo}.",
+    "intro_promo": (
+        "Sua conta está pronta. É grátis e sem limite até {promo} e não pedimos cartão. "
+        "Depois você continua grátis com até {tope} paradas por dia; sem limite, {mes} por mês ou {anio} por ano, "
+        "só se quiser.\n\n"),
+    "firma": "Daniel, do {marca}",
+    "baja": "Não quer mais e-mails como este? Cancele aqui: {baja}",
+    "boton": {"bienvenida": "Abrir o app", "primer_dia": "Carregar minha primeira rota", "casi_fin": "Ver minha conta",
+              "recordatorio": "Carregar minha rota", "invita": "Ver meu link e meu QR"},
+}
+
+# Español de Latinoamérica (11-10-2026): los correos están en español de España; a quien es de allí se le
+# cambian las palabras que allí suenan de fuera (las mismas que la app, lib/idioma.js → aLatam).
+_LATAM = _PAISES_ES - {"es", "gq"}
+_A_LATAM = (("En el móvil", "En el celular"), ("en el móvil", "en el celular"), ("tu móvil", "tu celular"),
+            ("el móvil", "el celular"), ("móvil", "celular"), ("hazle una foto", "tómale una foto"),
+            ("Haz una foto", "Toma una foto"), ("haz una foto", "toma una foto"), ("Pulsa ", "Toca "),
+            ("pulsa ", "toca "), ("furgoneta", "camioneta"), ("ordenador", "computadora"))
+
+
+def _a_latam(texto: str) -> str:
+    for a, b in _A_LATAM:
+        texto = texto.replace(a, b)
+    return texto
+
+
 def _euros(v, idioma):
     # Con céntimos, siempre dos cifras: «2,50 €», no «2,5 €».
     s = ("%.2f" % v) if isinstance(v, float) and v != int(v) else str(int(v))
@@ -397,6 +508,9 @@ _MESES = {
     "en": ("January", "February", "March", "April", "May", "June", "July", "August", "September",
            "October", "November", "December"),
 }
+
+
+_MESES["br"] = _MESES["pt"]
 
 
 def _dia_mes(iso, idioma):
@@ -425,7 +539,7 @@ def _quedan(org, ahora):
 def correo(clave: str, org: dict, uso: dict, ahora: datetime, *, marca: str, base: str,
            baja: str, mensual: float, anual: float, con_respuesta: bool,
            promo_hasta: str = "", tope: int = 15, ref_enlace: str = "", ref_cent: int = 250,
-           ref_espana: bool = True, ref_min_cent: int = 1000) -> dict:
+           ref_espana: bool = True, ref_min_cent: int = 6000, ref_promo_hasta: str = "") -> dict:
     """{asunto, texto, html} del correo `clave` para esta cuenta."""
     if clave not in CLAVES:
         raise ValueError(clave)
@@ -457,6 +571,9 @@ def correo(clave: str, org: dict, uso: dict, ahora: datetime, *, marca: str, bas
         "invita": ref_enlace or cuenta, "euros": _euros(ref_cent / 100, idioma),
         "cobro": t["cobro_es"] if ref_espana else t["cobro_fuera"], "minimo": _euros(ref_min_cent / 100, idioma),
     }
+    # 14-10-2026: el mínimo de retirada ya no se dice en el correo (solo al intentar cobrar); la promoción, sí.
+    datos["promo_ref"] = (t["promo_ref"].format(euros=datos["euros"], promo_hasta=_dia_mes(ref_promo_hasta, idioma))
+                          if ref_promo_hasta else "")
     datos["intro"] = (t["intro_promo"] if promo_hasta else t["intro"]).format(**datos)
     # 10-10-2026: con la promoción no hay «días de prueba» que contar (el correo del día
     # siguiente decía «te quedan 6 días» a quien tiene la app gratis hasta el 31-12).
@@ -464,6 +581,8 @@ def correo(clave: str, org: dict, uso: dict, ahora: datetime, *, marca: str, bas
     asunto_m, cuerpo_m = t[clave]
     asunto = asunto_m.format(**datos)
     cuerpo = cuerpo_m.format(**datos)
+    if idioma == "es" and str(org.get("pais") or "").lower() in _LATAM:
+        asunto, cuerpo = _a_latam(asunto), _a_latam(cuerpo)
     if not nombre:
         # «Hola :» queda feo: sin nombre, el saludo va sin él.
         cuerpo = cuerpo.replace(" :\n", ":\n").replace(" ,\n", ",\n")

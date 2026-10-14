@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { Copy, Gift, Loader2, Wallet } from 'lucide-react'
+import { refCentActual, refPromoActiva, REF_PROMO_CENT, fechaRefPromo } from '../../lib/precios'
 import { getDriverReferidos, retirarDriverReferidos } from '../../services/api'
 
 const euros = (centimos) => `${((Number(centimos) || 0) / 100).toFixed(2).replace('.', ',').replace(',00', '')} €`
@@ -65,7 +66,8 @@ export default function DriverReferralWallet() {
           <p className="text-[10px] font-extrabold uppercase tracking-[.16em] text-lime-200">Invita · comparte · gana</p>
           <h2 className="mt-0.5 text-[18px] font-extrabold text-white">Tu próximo reparto puede traer premio</h2>
           <p className="mt-1 text-[12.5px] leading-relaxed text-emerald-50">
-            Comparte Flota con otros repartidores. Ganas <strong className="text-lime-200">{euros(data?.por_invitado ?? 250)}</strong> cuando se registren con tu enlace y completen 20 entregas reales en al menos 2 días dentro de sus primeros 30 días.
+            Comparte Flota con otros repartidores. Ganas <strong className="text-lime-200">{euros(data?.por_invitado ?? refCentActual())}</strong> cuando se registren con tu enlace y completen 20 entregas reales en al menos 2 días dentro de sus primeros 30 días.
+            {(data ? data.promo_hasta : refPromoActiva()) && <> <span className="rounded-md bg-lime-300/20 px-1.5 py-0.5 text-[11px] font-bold text-lime-100">Promoción: {euros(data?.promo_cent ?? REF_PROMO_CENT)} por cada uno que se registre hasta el {fechaRefPromo('es-ES', data?.promo_hasta || undefined)}</span></>}
           </p>
         </div>
       </div>
@@ -76,12 +78,10 @@ export default function DriverReferralWallet() {
             <p className="text-[10px] font-semibold uppercase tracking-wider text-dark-400">Tu cartera individual</p>
             <p className="text-[24px] font-extrabold leading-tight text-lime-200">{euros(data.saldo)}</p>
           </div>
-          <p className="text-right text-[11px] leading-snug text-dark-300">{data.invitados} invitado{data.invitados === 1 ? '' : 's'} · {data.premiados} válido{data.premiados === 1 ? '' : 's'}<br />Retira desde {euros(data.retirada_min)}</p>
+          <p className="text-right text-[11px] leading-snug text-dark-300">{data.invitados} invitado{data.invitados === 1 ? '' : 's'} · {data.premiados} válido{data.premiados === 1 ? '' : 's'}</p>
         </div>
-        <div className="mt-2">
-          <div className="h-2 overflow-hidden rounded-full bg-dark-950/80"><div className="h-full rounded-full bg-gradient-to-r from-emerald-400 to-lime-300 transition-all" style={{ width: `${Math.min(100, (Number(data.saldo || 0) / Number(data.retirada_min || 3000)) * 100)}%` }} /></div>
-          <p className="mt-1 text-[10.5px] text-emerald-100">{data.saldo >= data.retirada_min ? '¡Ya puedes solicitar tu cobro!' : `Te faltan ${euros(data.retirada_min - data.saldo)} para solicitarlo`} · {data.metodos?.includes('bizum') ? 'Bizum o transferencia' : 'Métodos de cobro disponibles'}{data.metodos?.includes('paypal') ? ' o PayPal' : ''}</p>
-        </div>
+        {/* El mínimo de retirada no se enseña hasta que intentan cobrar (14-10-2026). */}
+        <p className="mt-2 text-[10.5px] text-emerald-100">Se cobra por {data.metodos?.includes('bizum') ? 'Bizum o transferencia' : 'los métodos disponibles'}{data.metodos?.includes('paypal') ? ' o PayPal' : ''}.</p>
         {data.enlace && <p className="mt-2 break-all rounded-lg bg-dark-950/50 px-2.5 py-2 text-[11px] text-dark-400">{data.enlace}</p>}
         <div className="mt-2 flex gap-2">
           <button onClick={compartir} className="flex flex-1 items-center justify-center gap-2 rounded-xl bg-lime-300 px-3 py-3 text-[14px] font-extrabold text-emerald-950 shadow-md shadow-black/20 active:scale-[.99]">
@@ -92,9 +92,13 @@ export default function DriverReferralWallet() {
           </button>
         </div>
         {copiado && <p className="mt-1.5 text-center text-[12px] text-emerald-300">Copiado: ya puedes compartirlo</p>}
-        <button onClick={() => setAbierto((v) => !v)} disabled={data.saldo < (data.retirada_min || 1000) || data.pendiente}
-          className={`mt-2 flex w-full items-center justify-center gap-2 rounded-xl px-3 py-2.5 text-[13px] font-bold ${data.saldo >= data.retirada_min && !data.pendiente ? 'bg-white text-emerald-950 shadow-md' : 'border border-white/15 text-dark-200 disabled:opacity-70'}`}>
-          <Wallet size={16} /> {data.pendiente ? 'Cobro solicitado · en revisión' : data.saldo < (data.retirada_min || 3000) ? `Retirar desde ${euros(data.retirada_min)}` : 'Elegir método y solicitar cobro'}
+        <button onClick={() => {
+            const minimo = data.retirada_min || 6000
+            if (data.saldo < minimo) { setError(`Puedes solicitar el pago desde ${euros(minimo)}: te faltan ${euros(minimo - data.saldo)}.`); return }
+            setError(''); setAbierto((v) => !v)
+          }} disabled={!(data.saldo > 0) || data.pendiente}
+          className={`mt-2 flex w-full items-center justify-center gap-2 rounded-xl px-3 py-2.5 text-[13px] font-bold ${data.saldo > 0 && !data.pendiente ? 'bg-white text-emerald-950 shadow-md' : 'border border-white/15 text-dark-200 disabled:opacity-70'}`}>
+          <Wallet size={16} /> {data.pendiente ? 'Cobro solicitado · en revisión' : 'Solicitar el cobro'}
         </button>
         {abierto && <form onSubmit={solicitar} className="mt-3 space-y-2 rounded-xl border border-dark-700 bg-dark-950/60 p-3">
           <label className="block text-[11px] text-dark-400">Nombre y apellidos del titular
@@ -124,7 +128,7 @@ export default function DriverReferralWallet() {
       {aviso && <p className="mt-2 text-[12px] text-emerald-300">{aviso}</p>}
       {error && <p className="mt-2 text-[12px] text-red-300">{error}</p>}
       {error && !data && <button onClick={cargar} className="mt-1 text-[12px] text-emerald-300 underline">Reintentar</button>}
-      <p className="relative mt-2 text-[10.5px] leading-relaxed text-dark-300">Al llegar a {euros(data?.retirada_min || 3000)}, pulsa el botón de cobro, elige {data?.metodos?.includes('bizum') ? 'Bizum o transferencia (IBAN)' : 'PayPal'} y añade los datos del titular. Revisamos la solicitud antes de enviar el pago. Tu enlace y saldo son personales, independientes de tu empresa. <a href="/terminos#invita-conductor" target="_blank" rel="noreferrer" className="text-lime-200 underline">Ver condiciones</a>.</p>
+      <p className="relative mt-2 text-[10.5px] leading-relaxed text-dark-300">Para cobrar, pulsa el botón de cobro, elige {data?.metodos?.includes('bizum') ? 'Bizum o transferencia (IBAN)' : 'PayPal'} y añade los datos del titular. Revisamos la solicitud antes de enviar el pago. Tu enlace y saldo son personales, independientes de tu empresa. <a href="/terminos#invita-conductor" target="_blank" rel="noreferrer" className="text-lime-200 underline">Ver condiciones</a>.</p>
     </section>
   )
 }

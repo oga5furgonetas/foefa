@@ -333,7 +333,9 @@ def _fuente_de(nombre):
     arbol = ast.parse(texto)
     for n in ast.walk(arbol):
         if isinstance(n, (ast.AsyncFunctionDef, ast.FunctionDef)) and n.name == nombre:
-            return chr(10).join(texto.splitlines()[n.lineno - 1:n.end_lineno])
+            # Con sus decoradores: la ruta («@api_router.post("/…")») es parte de lo que se comprueba.
+            desde = min([n.lineno] + [d.lineno for d in n.decorator_list])
+            return chr(10).join(texto.splitlines()[desde - 1:n.end_lineno])
     raise AssertionError("no existe %s en server.py" % nombre)
 
 
@@ -383,6 +385,23 @@ def test_primer_whatsapp_con_su_nombre_y_las_cuatro_preguntas():
     assert otra.startswith("Hola, te escribimos por la oferta de reparto.\nAntes de pasarte")
     assert "Winiw" not in otra and "Soy" not in otra
     assert NS["_empleo_nombre_pila"]("María José") == "María"
+
+
+def test_archivar_candidatos_oculta_sin_borrar_y_permite_restaurar():
+    lote = _fuente_de("empleo_archivar_fase")
+    individual = _fuente_de("empleo_mover_candidato")
+    assert '"/empleo/candidatos/archivar-fase"' in lote
+    assert "update_many(query" in lote
+    assert '"oferta_id": oferta_id' in lote and '"fase": fase' in lote
+    assert '"id": {"$in": ids}' in lote and '"archivado": {"$ne": True}' in lote
+    assert "archivado_en" in lote and "archivado_por" in lote
+    assert "delete_one" not in lote and "delete_many" not in lote
+    assert '"archivado" in datos' in individual
+    assert '"$unset"' in individual and '"archivado_en"' in individual
+    # Archivar no amplía ni reinicia la retención legal existente de la ficha: «expira_en» no se escribe
+    # (en el individual solo sale en una proyección, "expira_en": 0).
+    assert "expira_en" not in lote
+    assert individual.count('"expira_en"') == individual.count('"expira_en": 0')
 
 
 if __name__ == "__main__":

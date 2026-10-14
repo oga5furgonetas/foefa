@@ -2229,28 +2229,39 @@ test('Cobro · con la promoción: «Gratis sin límite», sin aviso de prueba ni
 test('Cartera · ve su saldo, invita y pide cobrar por Bizum', async ({ page }) => {
   const fallos = vigilar(page)
   await entrarRepartidor(page, { status: 'trial', days_left: 6, promo: { activa: true, hasta: '2026-12-31' } })
-  let ref = { codigo: 'ABC123', invitados: 4, premiados: 3, saldo: 1500, ganado: 1500, por_invitado: 250, retirada_min: 1000,
-    entregas_cartera: 20, dias_distintos: 2, pendiente: false, retiradas: [] }
+  // 14-10-2026: promoción de 10 € hasta el 31-10 (lo dice el servidor) y retirada desde 60 €, que NO se
+  // enseña hasta que pulsa «Cobrar» con menos saldo.
+  let ref = { codigo: 'ABC123', invitados: 4, premiados: 3, saldo: 4500, ganado: 4500, por_invitado: 1000, retirada_min: 6000,
+    promo_hasta: '2026-10-31', promo_cent: 1000, entregas_cartera: 20, dias_distintos: 2, pendiente: false, retiradas: [] }
   await page.route(/\/api\/referidos$/, (r) => r.fulfill({ json: ref }))
   const pedidos = []
   await page.route(/\/api\/cartera\/retirar/, async (r) => {
     pedidos.push(r.request().postDataJSON())
-    ref = { ...ref, saldo: 0, pendiente: true, retiradas: [{ id: 'r1', importe: 1500, metodo: 'bizum', destino: '•••• 5678', estado: 'pendiente', creada: '2026-10-10T12:00:00Z' }] }
+    ref = { ...ref, saldo: 0, pendiente: true, retiradas: [{ id: 'r1', importe: 7500, metodo: 'bizum', destino: '•••• 5678', estado: 'pendiente', creada: '2026-10-10T12:00:00Z' }] }
     await r.fulfill({ json: { ok: true } })
   })
   await page.goto('/ruta', { waitUntil: 'domcontentloaded' })
-  await expect(page.getByText(/Gana 2,50 € por cada compañero que la use/)).toBeVisible()
+  await expect(page.getByText(/Gana 10 € por cada compañero que la use/)).toBeVisible()
+  await expect(page.getByText('Promo hasta el 31 de octubre')).toBeVisible()
   await page.getByRole('button', { name: 'Cuenta', exact: true }).click()
   const cartera = page.getByRole('region', { name: 'Tu cartera' })
-  await expect(cartera.getByText('15 €', { exact: true })).toBeVisible()
-  await expect(cartera.getByText('Invitados: 4 · ya la usan: 3 · ganado: 15 €')).toBeVisible()
+  await expect(cartera.getByText('45 €', { exact: true })).toBeVisible()
+  await expect(cartera.getByText('Invitados: 4 · ya la usan: 3 · ganado: 45 €')).toBeVisible()
+  await expect(cartera.getByText('Promoción hasta el 31 de octubre: 10 € por cada compañero que se registre con tu enlace.')).toBeVisible()
+  await expect(cartera.getByText(/desde \d+ €/)).toHaveCount(0)          // el mínimo no está a la vista
   await cartera.getByRole('button', { name: 'Enseñar mi QR a un compañero' }).click()
   await expect(cartera.getByRole('img', { name: 'Código QR de tu invitación' })).toBeVisible()
   await cartera.getByRole('button', { name: 'Ocultar el QR' }).click()
-  await cartera.getByRole('button', { name: 'Cobrar 15 €' }).click()
+  await cartera.getByRole('button', { name: 'Cobrar 45 €' }).click()      // con 45 €: ahora sí se entera del mínimo
+  await expect(page.getByText('Se puede cobrar a partir de 60 €. Te faltan 15 €.')).toBeVisible()
+  await expect(cartera.getByPlaceholder('Nombre y apellidos del titular')).toHaveCount(0)
+  ref = { ...ref, saldo: 7500, ganado: 7500 }
+  await page.reload({ waitUntil: 'domcontentloaded' })
+  await page.getByRole('button', { name: 'Cuenta', exact: true }).click()
+  await cartera.getByRole('button', { name: 'Cobrar 75 €' }).click()
   await cartera.getByPlaceholder('Nombre y apellidos del titular').fill('Pepe Pérez')
   await cartera.getByPlaceholder('Móvil con Bizum').fill('612 345 678')
-  await cartera.getByRole('button', { name: 'Pedir el pago de 15 €' }).click()
+  await cartera.getByRole('button', { name: 'Pedir el pago de 75 €' }).click()
   await expect.poll(() => pedidos.length).toBe(1)
   expect(pedidos[0]).toEqual({ titular: 'Pepe Pérez', metodo: 'bizum', destino: '612 345 678' })
   await expect(cartera.getByText('Tienes un pago en revisión. Te avisamos por correo cuando lo enviemos.')).toBeVisible()
@@ -2831,7 +2842,8 @@ test.describe('Portada de repartidores desde México', () => {
     await expect(page.getByText('Mercado Libre', { exact: true })).toBeVisible()
     await expect(page.getByText('Estafeta', { exact: true })).toBeVisible()
     await expect(page.getByText('MRW', { exact: true })).toHaveCount(0)
-    await expect(page.getByText(/Gana 2[,.]50/).first()).toBeVisible()
+    // 10 € con la promoción hasta el 31-10-2026, 2,50 € después: el texto de la portada lo decide la fecha.
+    await expect(page.getByText(/Gana (10|2[,.]50) € por cada compañero/).first()).toBeVisible()
     // Español de allí: «toma una foto», no «haz una foto» (lib/idioma.js, aLatam).
     await expect(page.getByText(/^Toma una foto a la etiqueta/).first()).toBeVisible()
     await expect(page.getByText(/Haz una foto a la etiqueta/)).toHaveCount(0)
@@ -2950,20 +2962,23 @@ test('Ruta · recorrido de bienvenida la primera vez, 3 pasos y probar con ejemp
 test('Cartera · fuera de España se cobra por PayPal', async ({ page }) => {
   const fallos = vigilar(page)
   await entrarRepartidor(page, { status: 'trial', days_left: 6, pais: 'mx', promo: { activa: true, hasta: '2026-12-31' } })
-  await page.route(/\/api\/referidos$/, (r) => r.fulfill({ json: { codigo: 'MX1234', invitados: 5, premiados: 4, saldo: 1000, ganado: 1000,
-    por_invitado: 250, retirada_min: 1000, entregas_cartera: 20, dias_distintos: 2, pendiente: false, retiradas: [], cartera: true, metodos: ['paypal'] } }))
+  // Sin promoción (el servidor no manda promo_hasta): 2,50 € y ningún aviso de promoción.
+  await page.route(/\/api\/referidos$/, (r) => r.fulfill({ json: { codigo: 'MX1234', invitados: 5, premiados: 4, saldo: 6000, ganado: 6000,
+    por_invitado: 250, retirada_min: 6000, entregas_cartera: 20, dias_distintos: 2, pendiente: false, retiradas: [], cartera: true, metodos: ['paypal'] } }))
   const pedidos = []
   await page.route(/\/api\/cartera\/retirar/, async (r) => { pedidos.push(r.request().postDataJSON()); await r.fulfill({ json: { ok: true } }) })
   await page.goto('/ruta', { waitUntil: 'domcontentloaded' })
   await expect(page.getByText(/Gana 2,50 € por cada compañero que la use/)).toBeVisible()
+  await expect(page.getByText(/Promo hasta el/)).toHaveCount(0)
   await page.getByRole('button', { name: 'Cuenta', exact: true }).click()
   const cartera = page.getByRole('region', { name: 'Tu cartera' })
-  await expect(cartera.getByText(/Lo cobras por PayPal desde 10 €/)).toBeVisible()
-  await cartera.getByRole('button', { name: 'Cobrar 10 €' }).click()
+  await expect(cartera.getByText(/Lo cobras por PayPal\./)).toBeVisible()
+  await expect(cartera.getByText(/Promoción/)).toHaveCount(0)
+  await cartera.getByRole('button', { name: 'Cobrar 60 €' }).click()
   await expect(cartera.getByRole('button', { name: 'Bizum' })).toHaveCount(0)
   await cartera.getByPlaceholder('Nombre y apellidos del titular').fill('Juan Pérez')
   await cartera.getByPlaceholder('Correo de tu PayPal').fill('juan@correo.mx')
-  await cartera.getByRole('button', { name: 'Pedir el pago de 10 €' }).click()
+  await cartera.getByRole('button', { name: 'Pedir el pago de 60 €' }).click()
   await expect.poll(() => pedidos.length).toBe(1)
   expect(pedidos[0]).toEqual({ titular: 'Juan Pérez', metodo: 'paypal', destino: 'juan@correo.mx' })
   expect(fallos).toEqual([])
