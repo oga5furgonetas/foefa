@@ -1175,3 +1175,27 @@ intentar retirar, promoción hasta el 31-10-2026.
   `check-version-app` en Linux, `activacion.spec.js` con textos viejos, `demo-no-atrapa`, test_valor_oddspapi
   con fechas caducadas, ficha de ayuda de `reparto`. Los 9 Shorts de YouTube y los posts en grupos siguen
   diciendo «2,50 €» y «cobro desde 10 €».
+
+## 14-10-2026 (tarde): el anuncio, publicado; reel en la página; Runway
+
+- Dani pagó el saldo de la cuenta publicitaria (20,84 €) y quiso que el anuncio vendiera la app (qué es, qué
+  hace, que la prueben) además del premio. Texto nuevo «la app primero» (CAMPANA-14-10-INVITA10.md), vídeos
+  `FDS-directo-gana10-{9x16,4x5}.mp4` subidos y seleccionados, botón «Ver detalles», enlace visible
+  `flotadsp.com/repartidores`, dos imágenes generadas por Meta a partir de las pantallas de la app (no las de
+  la persona de Pexels). **Publicado**: anuncio 52644270307539 en la campaña «FDS Registros — Gratis 15 paradas»
+  (conjunto España · 20-55 · reparto · registro), estado «En preparación» hasta que Meta lo revise.
+- Trucos del editor de Meta que funcionaron: el «Texto principal» solo acepta TECLADO (clic + Ctrl+A + escribir;
+  `insertText` y el evento `paste` dejan el editor roto: «no se ha podido cargar el componente»); para subir un
+  vídeo, interceptar `HTMLInputElement.prototype.click` al pulsar «Subir» en «Cambiar selección», meter el input
+  capturado en el DOM con un aria-label y usar file_upload (máx. 10 MB por llamada); al pulsar una miniatura
+  seleccionada sale su panel de información y tapa la de al lado: mover el ratón a un hueco antes de pulsar.
+  «Revisar y publicar (N)» publica TODOS los borradores (hay 3 ajenos: no usarlo); el «Publicar» del editor
+  publica solo ese anuncio.
+- **Reel en la página FDs** con el vídeo 4:5 y el texto largo (`utm_content=post_gana10`): publicado desde el
+  compositor de Business Suite (un vídeo corto se convierte en reel; descripción por teclado; «Compartir»).
+- **Runway**: Dani entró con su cuenta (Personal · Free · 500 créditos). En el plan gratuito ningún modelo de
+  vídeo (Gen-4.5, Seedance 2.5, Grok Imagine Lite) deja generar: el botón es «Upgrade». Hace falta el plan
+  Standard (lo decide Dani). Si lo activa: 3 clips de ambiente de 5-8 s en 9:16 (furgoneta con paquetes, mano
+  con el móvil ante una etiqueta sin que se vea la pantalla, repartidor de espaldas en un portal) y montar
+  gancho + app real (tiktok-es.mp4 hasta 16,4 s) + tarjeta «gratis sin límite» + tarjeta «gana 10 €». Nada
+  de personas de IA diciendo que usan la app.
