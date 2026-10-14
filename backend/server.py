@@ -50103,7 +50103,7 @@ async def referidos_mios(user: dict = Depends(require_admin)):
 async def referidos_valido(codigo: str):
     """¿El enlace de invitación vale? (para enseñar «14 días gratis» solo si es cierto)."""
     invitador = await _referidor_valido(codigo)
-    importe = _REF_CENT
+    importe = _ref_importe({})          # con la promoción, 10 € también para los enlaces de conductor
     if invitador and invitador.get("tipo") == "org":
         org = await global_db.organizations.find_one({"id": invitador["id"]}, {"_id": 0})
         if org:
