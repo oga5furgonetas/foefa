@@ -23,28 +23,34 @@ anuncios y países MX, CO, AR, CL, PE (allí se cobra por PayPal: cambiar «Bizu
 - Se montan con `cd frontend && node ../scripts/anuncio-gana10.mjs` (corta la tarjeta «2,50 €» de los
   vídeos del 11-10 y pega la nueva). Al subirlos a Meta, URL con `?v=3` si coge el vídeo viejo de la caché.
 
-## Textos
+## Textos (versión «la app primero», 14-10 tarde: Dani quiere que se entienda qué es y qué hace)
 
 **Texto principal (ES):**
 
-> ¿Repartes por tu cuenta? Esta app te ordena la ruta sola: foto a la etiqueta o escanea el paquete, las
-> paradas se ordenan por tiempo y te guía con voz hasta cada puerta. Gratis y sin límite hasta el 31 de
-> diciembre, sin tarjeta.
+> 🚚 ¿Repartes paquetes? Hay una app nueva que te hace solo el trabajo pesado del día.
 >
-> 🎁 Y hasta el 31 de octubre: **10 € por cada compañero que invites y la use** (20 entregas en 2 días).
+> FDS ordena tu ruta sola:
+> 📸 Foto a la etiqueta o escanea el paquete: la dirección y el teléfono entran solos.
+> 🗺️ Todas tus paradas ordenadas por tiempo, con el tráfico de cada hora. Sin tope de paradas.
+> 🔊 Te guía con voz hasta cada puerta y, en Android, manos libres: dices «entregado» y sigues.
+> 📋 ¿Te dan la ruta en una hoja? Una foto y entran todas las paradas.
+> 💶 Cuánto llevas ganado hoy y lo que se va en gasolina.
+>
+> Gratis y sin límite hasta el 31 de diciembre. Sin tarjeta. Pruébala sin registrarte en 1 minuto.
+>
+> 🎁 Y hasta el 31 de octubre: GANA 10 € por cada compañero que invites y la use (20 entregas en 2 días).
 > Lo cobras por Bizum o transferencia.
 
-**Titular:** Gana 10 € por cada compañero que la use
-**Descripción:** Gratis y sin límite hasta el 31-12 · promo hasta el 31-10
-**Botón:** Registrarte
+**Titular:** Tu ruta ordenada sola · Gana 10 € por invitar
+**Descripción:** Gratis y sin límite hasta el 31-12 · sin tarjeta · promo 10 € hasta el 31-10
+**Enlace visible:** flotadsp.com/repartidores · **Botón:** Registrarte (o «Ver detalles»)
 **URL:** `https://flotadsp.com/repartidores?utm_source=facebook&utm_medium=cpc&utm_campaign=rep_invita10&utm_content=gana10`
 
-Versión corta (para la variante de texto que Meta deja añadir):
+Imagen con las funciones (segundo anuncio o historia): `docs/anuncios/tiktok-fotos/funciones-4x5.png` y
+`funciones-9x16.png` (`cd frontend && node ../scripts/anuncio-funciones.mjs`). Las zonas de carga no
+se anuncian: en España salen pocas y no está comprobado contra Overpass real.
 
-> Ordena tu ruta de reparto con una foto a la etiqueta. Gratis hasta el 31-12. Y por cada compañero que
-> invites y la use, 10 € (hasta el 31-10). Lo cobras por Bizum.
-
-**Latinoamérica (si se abre el conjunto):** igual, con «Lo cobras por PayPal» y «celular»/«toma una foto».
+**Latinoamérica (si se abre el conjunto):** igual, con «Lo cobras por PayPal», «celular» y «toma una foto».
 
 ## Qué NO dice y por qué
 
