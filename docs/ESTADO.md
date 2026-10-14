@@ -1199,3 +1199,27 @@ intentar retirar, promoción hasta el 31-10-2026.
   con el móvil ante una etiqueta sin que se vea la pantalla, repartidor de espaldas en un portal) y montar
   gancho + app real (tiktok-es.mp4 hasta 16,4 s) + tarjeta «gratis sin límite» + tarjeta «gana 10 €». Nada
   de personas de IA diciendo que usan la app.
+
+## 14-10-2026 (noche): spot v2 «como para la tele», en el anuncio y en la página
+
+- Dani: «esto va a tener poco gancho… busca manera de hacer un vídeo increíble como si fuera para la tele…
+  imágenes, ángulos y montaje de app, nada cutre». Runway gratis no genera vídeo, así que el spot v2 se hizo con
+  lo que hay: la app real grabada limpia a 720×1280 (`frontend/e2e/spot-v2.spec.js`, apunta los instantes de
+  lista/etiqueta/mapa/navegación/entregado/dinero), metida en un móvil dibujado en HTML (bisel, isla, sombra)
+  que flota, gira y «respira» sobre un fondo de marca; planos de archivo con color y zoom lento; título por
+  escena; tarjetas «GRATIS y sin límite», «GANA 10 €» y cierre; locución es-ES-AlvaroNeural (9 frases) y música
+  propia (numpy) con ducking bajo la voz y loudnorm a -14 LUFS. 39,6 s. Pipeline, en orden:
+  `py -3 scripts/spot-v2/voz.py` → `py -3 scripts/spot-v2/musica.py` → `cd frontend && node
+  ../scripts/spot-v2/tarjetas.mjs` → `npx playwright test spot-v2 --project=escritorio --update-snapshots` →
+  `node ../scripts/montar-spot-v2.mjs`. Salidas: `docs/anuncios/reales/salida/spot-v2-{9x16,4x5,1x1}.mp4` y
+  las `-web` (< 6 MB, para el puente de subida de Meta). Las voces `vo*.mp3` van a git (edge-tts necesita red);
+  `musica.wav` no (7,5 MB, se regenera igual).
+- Gotchas de ffmpeg: `scale` con `t` sobre un PNG en bucle da «invalid size» → `zoompan`; el recorte de la
+  pantalla con `alphamerge` sobre la máscara en gris; `rotate` con `c=none` para no perder la transparencia.
+- **Anuncio 52644270307539**: añadidos `spot-v2-9x16-web.mp4` y `spot-v2-4x5-web.mp4` junto a los dos gana10
+  (4 vídeos; Meta elige por ubicación). «Los cambios se han publicado correctamente · 1 anuncio actualizado».
+  Al subir con el input capturado, Meta avisa de «Funcionamiento incorrecto de la extensión del navegador»:
+  Aceptar y seguir, la subida va bien.
+- **Reel en la página FDs** con el spot 9:16 y la descripción larga (`utm_content=post_gana10`): PUBLICADO a las 20:10 (reel de 0:40 en «Publicaciones y reels»).
+  Gotcha: el compositor se queda en «Realizando tu publicación» para siempre aunque ya esté publicado; no
+  pulsar «Compartir» otra vez (saldría repetido): comprobar en una pestaña nueva la lista de publicaciones.
