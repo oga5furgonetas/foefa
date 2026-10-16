@@ -1223,3 +1223,21 @@ intentar retirar, promoción hasta el 31-10-2026.
 - **Reel en la página FDs** con el spot 9:16 y la descripción larga (`utm_content=post_gana10`): PUBLICADO a las 20:10 (reel de 0:40 en «Publicaciones y reels»).
   Gotcha: el compositor se queda en «Realizando tu publicación» para siempre aunque ya esté publicado; no
   pulsar «Compartir» otra vez (saldría repetido): comprobar en una pestaña nueva la lista de publicaciones.
+
+## 17-10-2026 (01:57): caída de 31 h por la lista de acceso de Atlas
+
+- **Síntoma**: la web cargaba pero la API no (`/api/health` sin respuesta); en los logs de Fly, en el arranque,
+  `ServerSelectionTimeoutError: SSL handshake failed … TLSV1_ALERT_INTERNAL_ERROR` en los 3 nodos de cluster1
+  y «machine has reached its max restart count of 10». Ese error de TLS es lo que da Atlas cuando la IP que
+  conecta NO está en su lista de acceso (no es un fallo de certificados).
+- **Causa**: el 15-10 a las 18:45, Atlas («System», nadie a mano) quitó de *Network Access* `0.0.0.0/0` y
+  `188.85.223.181/32` (proyecto «Project 0» de la org «Trafico's Org - 2026-05-26»). El backend siguió vivo
+  sin poder abrir conexiones nuevas (último evento de analítica: 15-10 18h; última alta: 15-10 14:31) y el
+  17-10 a la 01:45 Fly lo reinició y ya no arrancó. Fly no tiene IP de salida fija (ahora sale por
+  167.88.159.82; cambia si mueve la máquina), así que una regla por IP no sirve.
+- **Arreglo**: Dani volvió a poner `0.0.0.0/0` permanente en Atlas → `fly machine restart` → API 200 y
+  `mongo_connected: true`. Los anuncios de Meta estuvieron mandando gente a un registro roto ~31 h.
+- **Cómo verlo antes la próxima vez**: `/api/health` ya dice `mongo_connected` (Fly mira `/api/vivo` a
+  propósito, ver fly.toml). Si `mongo_connected` es false y desde el PC sí conecta, mirar Atlas → Activity
+  Feed → «Network permission entry removed». Desde el PC la cadena buena es `~/.flota-mongo-uri.txt`
+  (`~/.flotia-mongo.txt.txt` es vieja: «bad auth»).
