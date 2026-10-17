@@ -1340,3 +1340,24 @@ intentar retirar, promoción hasta el 31-10-2026.
   tapaba «Entregado» de la siguiente parada con la pantalla quieta).
 - Pruebas: servidor completo en verde; web 189 en verde (`humo contraste editar-parada escanear-etiqueta
   activacion`). Desplegado servidor y web.
+
+## 17-10-2026 (tarde): la opinión de los repartidores, pedida y leída
+
+Dani: «pedir opinión a quienes la usan para que nos llegue el feedback» y «la clave es saber qué necesidad real
+hay que cubrir, sin falsos positivos». Medido antes: 3 opiniones en 12 días (las tres «5» sin texto), solo 3 de
+39 cuentas de repartidor llegaban a ver la pregunta de la app (2 entregas reales) y nadie las leía.
+- **Correo «opinion»** (`ciclo_correos.py`): a los 5 días, una vez, de 9 a 21 h de su hora, si no ha opinado
+  ni pulsado «Ahora no». A quien ha cargado paradas: nota de 1 a 5; a quien no: «¿Qué te frenó?» (no he tenido
+  reparto / no supe meter los paquetes / ya uso otra app / mi empresa no me deja / otra cosa), después del
+  recordatorio. Cada opción es un enlace a `/opinion?o=…&t=…&r=N|m=motivo` (firmado con `_opinion_firma`).
+- **Página `/opinion`** (`pages/OpinionCorreo.jsx`, sin sesión): la respuesta viene marcada y cuenta al pulsar
+  «Enviar» (abrir el enlace no guarda nada: los antivirus del correo abren todos los enlaces). La pregunta
+  abierta es la de la necesidad: «¿Qué es lo que más te complica en tu día de reparto?». `robots`: Disallow.
+- **«Mándanos una idea»** en la pestaña Cuenta (`IdeaRuta`), siempre; se guarda como `tipo: "sugerencia"`.
+- **Te llega**: cada opinión va a `CORREO_CONTACTO` («Responder» le escribe a esa persona; `por: aviso:opinion`)
+  y se ve en Negocio → «Opiniones de los repartidores» (`GET /admin/opiniones`, con la media y qué les frena).
+- Tope de 5 opiniones por cuenta y día. Endpoints: `GET/POST /api/opinion/correo`, `POST /api/opinion` acepta
+  `tipo` y `motivo`.
+- Al desplegar (17-10, 15:30): 19 cuentas recibirán el correo el domingo 18 desde las 9:00 y 1 el lunes; las
+  demás, cuando cumplan 5 días.
+- Negocio ya no se cae entero si Referidos, Cobros o Salud reciben una respuesta incompleta.

@@ -20905,6 +20905,8 @@ async def _ciclo_enviar(org_id: str, clave: str, ahora: Optional[datetime] = Non
                                       f"&utm_medium=correo&utm_campaign=rep_invitar",
                         "ref_cent": _ref_importe(org), "ref_espana": _ref_en_espana(org), "ref_min_cent": _REF_RETIRADA_MIN,
                         "ref_promo_hasta": _REF_PROMO_HASTA_DIA if _ref_promo_activa() else ""})
+        if clave == "opinion":
+            ref["opinion_url"] = _opinion_url(org_id)
         # La marca del correo es la del REMITENTE («FDS <contacto@…>»), la que ve el
         # repartidor en la app; MARCA es la del panel de empresas.
         c = ciclo_correos.correo(clave, org, uso, ahora, marca=_email_remitente()[0], base=_PORTAL_BASE_FRONT,
@@ -50383,8 +50385,90 @@ async def referidos_valido(codigo: str):
 # ── OPINIÓN DE QUIEN YA USA LA APP (05-10-2026) ──────────────────────────────
 # A quien se ha registrado y ya ha hecho entregas de verdad se le pregunta UNA vez
 # cómo le va y qué le falta. Se guarda en la base global para que Dani lo lea.
+# 17-10-2026 (Dani: «pedir opinión a quienes la usan para que nos llegue el feedback»). Medido ese día: 3
+# opiniones en 12 días (las tres «5» sin texto) y solo 3 de 39 cuentas llegaban a ver la pregunta; y nadie
+# las leía. Ahora: (1) «Mándanos una idea» en la pestaña Cuenta, siempre; (2) el correo «opinion» del ciclo
+# (ciclo_correos.py), que se contesta con un clic en /opinion sin entrar: nota a quien la usa y «¿qué te
+# frenó?» a quien no; y (3) cada opinión le llega a Dani al buzón de contacto («Responder» le escribe a
+# quien la dio) y se ve en Negocio → Opiniones.
 _OPINION_MIN_HORAS = 20
 _OPINION_MIN_ENTREGAS = 2
+_OPINION_TOPE_DIA = 5                     # por cuenta y día: el formulario público no es un buzón sin fondo
+_OPINION_MOTIVOS = {"no_ruta": "Todavía no he tenido reparto", "no_supe": "No supe cómo meter los paquetes",
+                    "otra_app": "Ya uso otra app", "empresa": "Mi empresa no me deja", "otro": "Otra cosa"}
+
+
+def _opinion_firma(org_id: str) -> str:
+    import hmac as _hmac
+    import hashlib as _hl
+    return _hmac.new(SECRET_KEY.encode(), f"opinion:{org_id}".encode(), _hl.sha256).hexdigest()[:24]
+
+
+def _opinion_url(org_id: str) -> str:
+    """El enlace del correo «opinion»: abre /opinion sin entrar (firmado: solo vale para esa cuenta)."""
+    return f"{_PORTAL_BASE_FRONT}/opinion?o={org_id}&t={_opinion_firma(org_id)}"
+
+
+def _opinion_valores(d: dict) -> tuple:
+    """(nota de 1 a 5 o None, motivo conocido o "", texto) de lo que manda un formulario."""
+    texto = str(d.get("texto") or "").strip()[:1500]
+    try:
+        valor = int(d.get("valor"))
+    except (TypeError, ValueError):
+        valor = None
+    if valor is not None and not 1 <= valor <= 5:
+        valor = None
+    motivo = str(d.get("motivo") or "")
+    return valor, (motivo if motivo in _OPINION_MOTIVOS else ""), texto
+
+
+async def _opinion_guardar(org: dict, *, valor, motivo: str, texto: str, origen: str, tipo: str,
+                           entregas: int, paradas: int) -> dict:
+    """La guarda, deja de preguntarle y se la manda a Dani."""
+    hace_un_dia = (datetime.now(timezone.utc) - timedelta(days=1)).isoformat()
+    if await global_db.opiniones_repartidores.count_documents(
+            {"org_id": org["id"], "ts": {"$gte": hace_un_dia}}) >= _OPINION_TOPE_DIA:
+        raise HTTPException(429, "Ya nos has escrito varias veces hoy. ¡Gracias! Lo leemos todo.")
+    doc = {"id": str(uuid.uuid4()), "org_id": org["id"], "org": org.get("name"), "email": org.get("email"),
+           "valor": valor, "motivo": motivo, "texto": texto, "tipo": tipo, "origen": origen,
+           "entregas": entregas, "paradas": paradas, "pais": org.get("pais") or "", "idioma": org.get("idioma") or "",
+           "ts": datetime.now(timezone.utc).isoformat()}
+    await global_db.opiniones_repartidores.insert_one(dict(doc))
+    await global_db.organizations.update_one({"id": org["id"]}, {"$set": {"opinion_dada": True}})
+    await _opinion_avisar(doc)
+    return doc
+
+
+async def _opinion_avisar(doc: dict) -> None:
+    """Cada opinión, al buzón de contacto (que reenvía a Dani). «Responder» le escribe a quien la dio."""
+    try:
+        para = (CORREO_CONTACTO or "").strip()
+        if not _correo_valido(para):
+            return
+        v = doc.get("valor")
+        que = ("★" * v + "☆" * (5 - v)) if v else (
+            _OPINION_MOTIVOS.get(doc.get("motivo") or "") or ("idea" if doc.get("tipo") == "sugerencia" else "opinión"))
+        asunto = f"Opinión de {doc.get('org') or 'un repartidor'}: {que}"
+        de_donde = {"correo": "contestando al correo", "app": "desde la app"}.get(doc.get("origen"), "")
+        lineas = [f"{doc.get('org') or 'Sin nombre'} ({doc.get('email') or 'sin correo'}), {de_donde}.",
+                  f"Lleva {doc.get('paradas') or 0} paradas y {doc.get('entregas') or 0} entregas."]
+        if v:
+            lineas.append(f"Nota: {v} de 5")
+        if doc.get("motivo"):
+            lineas.append(f"Qué le frenó: {_OPINION_MOTIVOS.get(doc['motivo'])}")
+        lineas += ["", doc.get("texto") or "(sin texto)", "",
+                   "Contesta a este correo y le llega a esa persona. Todas las opiniones: Negocio → Opiniones."]
+        texto = "\n".join(lineas)
+        html = ('<div style="font-family:Arial,sans-serif;font-size:15px;line-height:1.6">'
+                + html_escape(texto).replace("\n", "<br>") + "</div>")
+        responder = str(doc.get("email") or "") if _correo_valido(str(doc.get("email") or "")) else ""
+        ok = await _enviar_email(para, asunto, html, responder_a=responder, texto=texto)
+        await global_db[_CORREOS_COL].insert_one({
+            "id": str(uuid.uuid4()), "para": para, "copia": [], "asunto": asunto, "cuerpo": texto,
+            "responder_a": responder, "por": "aviso:opinion", "org_id": doc.get("org_id"),
+            "at": datetime.now(timezone.utc).isoformat(), "ok": bool(ok)})
+    except Exception as e:                                       # noqa: BLE001 — avisar no puede tumbar la opinión
+        logger.warning("aviso de opinión: %s", e)
 
 
 @api_router.get("/opinion/estado")
@@ -50413,22 +50497,69 @@ async def opinion_enviar(data: dict = Body(default={}), user: dict = Depends(req
     if d.get("saltar"):
         await global_db.organizations.update_one({"id": org["id"]}, {"$set": {"opinion_saltada": True}})
         return {"ok": True}
-    texto = str(d.get("texto") or "").strip()[:1500]
-    try:
-        valor = int(d.get("valor"))
-    except (TypeError, ValueError):
-        valor = None
-    if valor is not None and not 1 <= valor <= 5:
-        valor = None
-    if not texto and valor is None:
+    valor, motivo, texto = _opinion_valores(d)
+    if not texto and valor is None and not motivo:
         raise HTTPException(400, "Escribe algo o elige una nota")
-    n = await db.reparto_pedidos.count_documents({"estado": "entregado", "ejemplo": {"$ne": True}})
-    await global_db.opiniones_repartidores.insert_one({
-        "id": str(uuid.uuid4()), "org_id": org["id"], "org": org.get("name"), "email": org.get("email"),
-        "valor": valor, "texto": texto, "entregas": n, "ts": datetime.now(timezone.utc).isoformat(),
-    })
-    await global_db.organizations.update_one({"id": org["id"]}, {"$set": {"opinion_dada": True}})
+    reales = {"ejemplo": {"$ne": True}}
+    n = await db.reparto_pedidos.count_documents({**reales, "estado": "entregado"})
+    paradas = await db.reparto_pedidos.count_documents(reales)
+    # «Mándanos una idea» (pestaña Cuenta) es una «sugerencia»: se puede mandar siempre.
+    await _opinion_guardar(org, valor=valor, motivo=motivo, texto=texto, origen="app",
+                           tipo="sugerencia" if d.get("tipo") == "sugerencia" else "opinion",
+                           entregas=n, paradas=paradas)
     return {"ok": True}
+
+
+async def _opinion_org_del_enlace(o, t) -> dict:
+    import hmac as _hmac
+    o, t = str(o or "")[:64], str(t or "")[:64]
+    if not o or not t or not _hmac.compare_digest(_opinion_firma(o), t):
+        raise HTTPException(404, "Este enlace no es válido")
+    org = await global_db.organizations.find_one({"id": o}, {"_id": 0})
+    if not org:
+        raise HTTPException(404, "Este enlace no es válido")
+    return org
+
+
+@api_router.get("/opinion/correo")
+async def opinion_correo_estado(o: str = "", t: str = ""):
+    """La página /opinion del correo, sin sesión: solo si ya ha cargado paradas (nota) o no (qué le frenó)."""
+    org = await _opinion_org_del_enlace(o, t)
+    uso = await _ciclo_uso(org)
+    return {"usa": bool(uso.get("paradas")), "ya": bool(org.get("opinion_dada"))}
+
+
+@api_router.post("/opinion/correo")
+async def opinion_correo_enviar(data: dict = Body(default={})):
+    """La respuesta del correo «opinion». Pide pulsar «Enviar» en la página: abrir el enlace no cuenta
+    (los antivirus del correo abren todos los enlaces)."""
+    d = _dict_cuerpo(data)
+    org = await _opinion_org_del_enlace(d.get("o"), d.get("t"))
+    valor, motivo, texto = _opinion_valores(d)
+    if not texto and valor is None and not motivo:
+        raise HTTPException(400, "Elige una respuesta o escribe algo")
+    uso = await _ciclo_uso(org)
+    await _opinion_guardar(org, valor=valor, motivo=motivo, texto=texto, origen="correo", tipo="opinion",
+                           entregas=int(uso.get("entregadas") or 0), paradas=int(uso.get("paradas") or 0))
+    return {"ok": True}
+
+
+@api_router.get("/admin/opiniones")
+async def admin_opiniones(_: dict = Depends(require_superadmin)):
+    """Negocio → Opiniones: lo que dicen los repartidores, lo último primero, y un resumen."""
+    ops = await global_db.opiniones_repartidores.find({}, {"_id": 0}).to_list(2000)
+    ops.sort(key=lambda o: str(o.get("ts") or ""), reverse=True)
+    notas = [o["valor"] for o in ops if isinstance(o.get("valor"), int)]
+    motivos = {}
+    for o in ops:
+        if o.get("motivo") in _OPINION_MOTIVOS:
+            motivos[o["motivo"]] = motivos.get(o["motivo"], 0) + 1
+    return {"opiniones": ops[:300], "resumen": {
+        "total": len(ops), "media": round(sum(notas) / len(notas), 1) if notas else None, "con_nota": len(notas),
+        "con_texto": sum(1 for o in ops if o.get("texto")),
+        "motivos": [{"motivo": k, "texto": _OPINION_MOTIVOS[k], "n": n}
+                    for k, n in sorted(motivos.items(), key=lambda x: -x[1])],
+        "pedidas_por_correo": await global_db.organizations.count_documents({"ciclo_correos.opinion.ok": True})}}
 
 
 def _ref_en_espana(org: dict) -> bool:

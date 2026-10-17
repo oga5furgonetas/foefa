@@ -17,6 +17,7 @@ import { tx, useIdioma, locale, IDIOMAS, idioma, cambiarIdioma, txError } from '
 import { refCentActual, refPromoActiva, REF_PROMO_HASTA, REF_PROMO_CENT, fechaRefPromo } from '../lib/precios'
 import { invitar, enlaceInvitar } from '../lib/compartir'
 import { getReferidos, retirarCartera } from '../services/api'
+import { IdeaRuta } from './OpinionRuta'
 
 /* ── LA CUENTA DE QUIEN REPARTE SOLO (04-10-2026) ────────────────────────────
    Dani: «quiero mejorarla ya, o la suscripción de un año, o regalársela a
@@ -65,6 +66,7 @@ export function Cuenta({ billing, recargar, toast, resaltarRegalo }) {
       )}
       {!suplantando && (b?.pais || 'es') !== 'cn' && <Invitar toast={toast} />}
       <Acceso toast={toast} soloVer={suplantando} />
+      {!suplantando && <IdeaRuta />}
       <section className="mt-4 rounded-3xl border border-dark-700 bg-dark-900 p-4">
         <label className="flex items-center justify-between gap-3 text-[14px] font-semibold text-dark-100">
           🌐 {tx('Idioma')}

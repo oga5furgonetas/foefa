@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
-import { Star, Loader2 } from 'lucide-react'
+import { Star, Loader2, Lightbulb, ChevronDown } from 'lucide-react'
 import { opinionEstado, opinionEnviar } from '../panel/api'
-import { tx, useIdioma } from '../lib/idioma'
+import { tx, useIdioma, txError } from '../lib/idioma'
 
 /* ¿QUÉ TAL TE VA? (05-10-2026): a quien se registró y ya ha hecho entregas de
    verdad se le pregunta UNA vez qué le falta. Lo decide el servidor (`pedir`):
@@ -58,6 +58,53 @@ export default function OpinionRuta() {
           </div>
         </>
       )}
+    </section>
+  )
+}
+
+/* MÁNDANOS UNA IDEA (17-10-2026), en la pestaña Cuenta: siempre a mano, no solo cuando la app pregunta.
+   Le llega a Dani al correo, y «Responder» le escribe a quien la mandó. */
+export function IdeaRuta() {
+  useIdioma()
+  const [abierto, setAbierto] = useState(false)
+  const [texto, setTexto] = useState('')
+  const [ocupado, setOcupado] = useState(false)
+  const [hecho, setHecho] = useState(false)
+  const [err, setErr] = useState('')
+  const enviar = async () => {
+    setOcupado(true); setErr('')
+    try {
+      await opinionEnviar({ tipo: 'sugerencia', texto })
+      setHecho(true); setTexto('')
+    } catch (e) {
+      setErr(txError(e?.response?.data, 'No se ha podido enviar. Inténtalo otra vez.'))
+    } finally { setOcupado(false) }
+  }
+  return (
+    <section className="mt-4 rounded-3xl border border-dark-700 bg-dark-900 p-4">
+      <button type="button" onClick={() => { setAbierto((v) => !v); setHecho(false); setErr('') }} aria-expanded={abierto}
+        className="flex w-full items-center gap-3 text-left">
+        <Lightbulb size={20} className="shrink-0 text-brand-300" />
+        <span className="min-w-0 flex-1">
+          <span className="block text-[15px] font-bold text-dark-50">{tx('Mándanos una idea')}</span>
+          <span className="block text-[12.5px] leading-snug text-dark-400">{tx('¿Algo que no va o que echas en falta? Lo leo yo y te contesto por correo.')}</span>
+        </span>
+        <ChevronDown size={18} className={`shrink-0 text-dark-400 transition-transform ${abierto ? 'rotate-180' : ''}`} />
+      </button>
+      {abierto && (hecho ? (
+        <p role="status" className="mt-3 text-[14.5px] font-semibold text-brand-200">{tx('¡Recibido! Gracias.')}</p>
+      ) : (
+        <div className="mt-3">
+          <textarea value={texto} onChange={(e) => setTexto(e.target.value)} rows={4} maxLength={1500} autoFocus
+            aria-label={tx('Mándanos una idea')} placeholder={tx('Escribe tu idea o lo que no te funciona')}
+            className="w-full rounded-xl border border-dark-700 bg-dark-950 px-3 py-2 text-[16px] text-dark-50" />
+          {err && <p role="alert" className="mt-1 text-[13px] text-red-300">{err}</p>}
+          <button type="button" onClick={enviar} disabled={ocupado || !texto.trim()}
+            className="mt-2 flex w-full items-center justify-center gap-2 rounded-xl bg-brand-500 py-3 text-[14.5px] font-bold text-brand-tinta disabled:opacity-50">
+            {ocupado && <Loader2 size={16} className="animate-spin" />} {tx('Enviar')}
+          </button>
+        </div>
+      ))}
     </section>
   )
 }

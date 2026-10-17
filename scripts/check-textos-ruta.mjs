@@ -14,7 +14,7 @@ const FICHEROS = [
   'pages/driver/MiRuta.jsx', 'pages/driver/Navegacion.jsx', 'pages/Empezar.jsx', 'pages/InstalarApp.jsx',
   'pages/RegaloPagina.jsx', 'pages/RutaApp.jsx', 'pages/RutaCuenta.jsx', 'pages/SeguimientoPedido.jsx', 'lib/guia.js',
   'pages/Registro.jsx', 'legal/CookieBanner.jsx', 'pages/Repartidores.jsx', 'pages/PaseMovil.jsx', 'lib/compartir.js',
-  'pages/driver/AntesPuerta.jsx', 'pages/driver/AjustesMovil.jsx',
+  'pages/driver/AntesPuerta.jsx', 'pages/driver/AjustesMovil.jsx', 'pages/OpinionRuta.jsx', 'pages/OpinionCorreo.jsx',
 ]
 // Nombres que llegan de datos (el plan del autónomo en Registro: tt(planInfo.name)).
 // y los métodos de cobro de lib/region.js (metodosCobro), que se pintan con tx(t).

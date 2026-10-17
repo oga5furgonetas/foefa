@@ -18,6 +18,8 @@ export async function onRequestGet({ request }) {
     // Seguimiento de pedidos del cliente: enlaces privados, nunca en un buscador.
     'Disallow: /s/',
     'Disallow: /regalo/',
+    // La respuesta del correo «¿Qué tal te va?»: enlace personal.
+    'Disallow: /opinion',
     'Disallow: /login',
     'Disallow: /reset-password',
     '',

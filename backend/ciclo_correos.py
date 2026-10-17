@@ -26,6 +26,11 @@ haría alguien que lleva la app y se fija en cada alta:
   · El BONO DE BIENVENIDA (17-10-2026): mientras pueda ganarlo, la bienvenida, «primer_dia» y
     «recordatorio» lo dicen en un párrafo; y «bono» (una vez, por la mañana) se lo cuenta a quien se dio de
     alta antes y no ha recibido desde entonces ningún correo que lo diga.
+  · «opinion» (17-10-2026) — a los 5 días, UNA vez, si no ha dado ya su opinión en la app: a quien ha
+    cargado paradas, qué nota le da; a quien no, qué le frenó (después del recordatorio: primero se le
+    ayuda y luego se le pregunta). Se contesta con un clic: cada opción es un enlace a la página
+    /opinion, que pide confirmar con «Enviar» (los antivirus del correo abren los enlaces y eso no
+    puede contar como respuesta). Lo que conteste le llega a Dani.
 
 Reglas que no se rompen:
   · Uno por persona y clave, nunca dos (el servidor lo marca ANTES de mandar).
@@ -40,7 +45,7 @@ import html as _html
 import re
 from datetime import datetime, timedelta, timezone
 
-CLAVES = ("bienvenida", "primer_dia", "casi_fin", "recordatorio", "invita", "bono")
+CLAVES = ("bienvenida", "primer_dia", "casi_fin", "recordatorio", "invita", "bono", "opinion")
 # «br» es el portugués de Brasil (11-10-2026): mismos datos que «pt», escrito para allí (você, celular,
 # paradas, pacotes). Sin él, a un brasileño le llegaba «telemóvel», «paragens» y «morada».
 IDIOMAS = ("es", "pt", "en", "br")
@@ -57,6 +62,10 @@ INVITA_ENTREGAS = 10                       # entregas suyas (no de ejemplo) para
 BONO_DESDE = datetime(2026, 10, 16, 22, 0, tzinfo=timezone.utc)   # 17-10-2026 00:00 en Madrid: nace el bono
 BONO_ENTREGAS = 20                         # las del bono (las mismas que «Invita y gana»)
 CON_BONO = ("bienvenida", "primer_dia", "recordatorio")   # correos que llevan el párrafo del bono
+OPINION_DESDE = timedelta(days=5)          # «opinion», a los 5 días de darse de alta…
+OPINION_HASTA = timedelta(days=30)         # …y no más tarde (ya no se acuerda de la app)
+NOTAS = (5, 4, 3, 2, 1)                    # las respuestas de un clic de quien la usa
+MOTIVOS = ("no_ruta", "no_supe", "otra_app", "empresa", "otro")   # y las de quien no ha cargado nada
 
 _PAISES_PT = {"pt", "br", "ao", "mz", "cv"}
 _PAISES_ES = {"es", "mx", "ar", "co", "cl", "pe", "ve", "ec", "bo", "py", "uy", "cr", "pa",
@@ -162,6 +171,11 @@ def toca(org: dict, uso: dict, ahora: datetime, promo: bool = False, bono: bool 
     if ("invita" not in enviados and _reales(uso) >= INVITA_ENTREGAS
             and str(org.get("pais") or "es").lower() != "cn"):        # en China no hay cómo pagar
         return "invita"
+    # ¿Qué tal te va? / ¿Qué te frenó? Una vez, si no lo ha dicho ya en la app ni ha pulsado «Ahora no».
+    if ("opinion" not in enviados and not org.get("opinion_dada") and not org.get("opinion_saltada")
+            and OPINION_DESDE <= edad <= OPINION_HASTA and en_su_dia(org, ahora)
+            and ((uso or {}).get("paradas") or "recordatorio" in enviados or edad > RECORDATORIO_HASTA)):
+        return "opinion"
     fin = _fecha(org.get("trial_ends"))
     if promo:
         return ""
@@ -570,6 +584,85 @@ _T["br"] = {
               "recordatorio": "Carregar minha rota", "invita": "Ver meu link e meu QR", "bono": "Carregar minha rota"},
 }
 
+# ¿QUÉ TAL TE VA? (17-10-2026) — «opinion». {opciones} son los enlaces de un clic (en el HTML, botones).
+# Sin «comillas» a propósito: lo que va entre ellas tiene que ser un botón de la app (lo vigila un test).
+_OPINION = {
+    "es": {
+        "opinion_usa": (
+            "¿Qué tal te va con {marca}? (se contesta con un clic)",
+            "Hola {nombre}:\n\n"
+            "Llevas {paradas} paradas con {marca} y me gustaría saber qué tal te va. ¿Qué nota le das? "
+            "Pulsa una:\n\n{opciones}\n\n"
+            "Y si le falta algo o algo te estorba, dímelo: lo leo yo y lo arreglo. Puedes contestar a este correo."),
+        "opinion_frena": (
+            "¿Qué te frenó con {marca}? (se contesta con un clic)",
+            "Hola {nombre}:\n\n"
+            "Hace unos días creaste tu cuenta en {marca} y no has llegado a cargar ninguna ruta. No pasa nada, "
+            "pero me ayudaría mucho saber por qué. Pulsa la que más se parezca:\n\n{opciones}\n\n"
+            "Con eso me basta. Si quieres contarme más, contesta a este correo: lo leo yo."),
+        "notas": ("Me encanta", "Bien", "Normal", "Regular", "Mal"),
+        "motivos": {"no_ruta": "Todavía no he tenido reparto", "no_supe": "No supe cómo meter los paquetes",
+                    "otra_app": "Ya uso otra app", "empresa": "Mi empresa no me deja", "otro": "Otra cosa"},
+    },
+    "pt": {
+        "opinion_usa": (
+            "Como te está a correr a {marca}? (responde com um clique)",
+            "Olá {nombre}:\n\n"
+            "Já levas {paradas} paragens com a {marca} e gostava de saber como te está a correr. Que nota lhe dás? "
+            "Carrega numa:\n\n{opciones}\n\n"
+            "E se faltar alguma coisa ou algo te atrapalhar, diz-me: leio eu e resolvo. Podes responder a este e-mail."),
+        "opinion_frena": (
+            "O que te travou na {marca}? (responde com um clique)",
+            "Olá {nombre}:\n\n"
+            "Há uns dias criaste a tua conta na {marca} e ainda não carregaste nenhuma rota. Não faz mal, "
+            "mas ajudava-me muito saber porquê. Carrega na que mais se parecer:\n\n{opciones}\n\n"
+            "Com isso chega. Se quiseres contar mais, responde a este e-mail: leio eu."),
+        "notas": ("Adoro", "Bem", "Normal", "Mais ou menos", "Mal"),
+        "motivos": {"no_ruta": "Ainda não tive entregas", "no_supe": "Não percebi como meter as encomendas",
+                    "otra_app": "Já uso outra app", "empresa": "A minha empresa não deixa", "otro": "Outra coisa"},
+    },
+    "en": {
+        "opinion_usa": (
+            "How is {marca} working for you? (one click to answer)",
+            "Hi {nombre}:\n\n"
+            "You have done {paradas} stops with {marca} and I would love to know how it is going. What score "
+            "would you give it? Tap one:\n\n{opciones}\n\n"
+            "And if something is missing or gets in your way, tell me: I read it myself and fix it. "
+            "You can just reply to this email."),
+        "opinion_frena": (
+            "What stopped you with {marca}? (one click to answer)",
+            "Hi {nombre}:\n\n"
+            "A few days ago you created your {marca} account and you have not loaded a route yet. That is fine, "
+            "but it would really help me to know why. Tap the one that fits best:\n\n{opciones}\n\n"
+            "That is all I need. If you want to tell me more, just reply to this email: I read it myself."),
+        "notas": ("Love it", "Good", "OK", "So-so", "Bad"),
+        "motivos": {"no_ruta": "I have not had deliveries yet", "no_supe": "I did not know how to add the parcels",
+                    "otra_app": "I already use another app", "empresa": "My company does not allow it",
+                    "otro": "Something else"},
+    },
+    "br": {
+        "opinion_usa": (
+            "Como está indo com o {marca}? (responda com um clique)",
+            "Olá {nombre}:\n\n"
+            "Você já fez {paradas} paradas com o {marca} e eu queria saber como está indo. Que nota você dá? "
+            "Toque em uma:\n\n{opciones}\n\n"
+            "E se faltar algo ou alguma coisa atrapalhar, me fala: eu leio e resolvo. Pode responder este e-mail."),
+        "opinion_frena": (
+            "O que te travou no {marca}? (responda com um clique)",
+            "Olá {nombre}:\n\n"
+            "Há alguns dias você criou sua conta no {marca} e ainda não carregou nenhuma rota. Tudo bem, "
+            "mas me ajudaria muito saber por quê. Toque na que mais combina:\n\n{opciones}\n\n"
+            "Isso já basta. Se quiser contar mais, responda este e-mail: eu leio."),
+        "notas": ("Adorei", "Bom", "Normal", "Mais ou menos", "Ruim"),
+        "motivos": {"no_ruta": "Ainda não tive entregas", "no_supe": "Não entendi como colocar os pacotes",
+                    "otra_app": "Já uso outro app", "empresa": "Minha empresa não deixa", "otro": "Outra coisa"},
+    },
+}
+for _i, _d in _OPINION.items():
+    _T[_i].update(_d)
+_MARCA_OPCIONES = "\x00"                    # dónde van las opciones dentro del cuerpo
+
+
 # Español de Latinoamérica (11-10-2026): los correos están en español de España; a quien es de allí se le
 # cambian las palabras que allí suenan de fuera (las mismas que la app, lib/idioma.js → aLatam).
 _LATAM = _PAISES_ES - {"es", "gq"}
@@ -631,7 +724,7 @@ def correo(clave: str, org: dict, uso: dict, ahora: datetime, *, marca: str, bas
            baja: str, mensual: float, anual: float, con_respuesta: bool,
            promo_hasta: str = "", tope: int = 15, ref_enlace: str = "", ref_cent: int = 250,
            ref_espana: bool = True, ref_min_cent: int = 6000, ref_promo_hasta: str = "",
-           bono_hasta: str = "", bono_cent: int = 1000) -> dict:
+           bono_hasta: str = "", bono_cent: int = 1000, opinion_url: str = "") -> dict:
     """{asunto, texto, html} del correo `clave` para esta cuenta."""
     if clave not in CLAVES:
         raise ValueError(clave)
@@ -678,7 +771,22 @@ def correo(clave: str, org: dict, uso: dict, ahora: datetime, *, marca: str, bas
     # 10-10-2026: con la promoción no hay «días de prueba» que contar (el correo del día
     # siguiente decía «te quedan 6 días» a quien tiene la app gratis hasta el 31-12).
     datos["plazo"] = (t["plazo_promo"] if promo_hasta else t["plazo"]).format(**datos)
-    asunto_m, cuerpo_m = t[clave]
+    opciones = []
+    if clave == "opinion":
+        if not opinion_url:
+            raise ValueError("el correo de opinión necesita opinion_url")
+        url = f"{opinion_url}{'&' if '?' in opinion_url else '?'}{utm}"
+        if paradas:
+            asunto_m, cuerpo_m = t["opinion_usa"]
+            opciones = [("★" * n + "☆" * (5 - n) + "  " + t["notas"][i], f"{url}&r={n}") for i, n in enumerate(NOTAS)]
+        else:
+            asunto_m, cuerpo_m = t["opinion_frena"]
+            opciones = [(t["motivos"][m], f"{url}&m={m}") for m in MOTIVOS]
+        if idioma == "es" and str(org.get("pais") or "").lower() in _LATAM:
+            opciones = [(_a_latam(a), b) for a, b in opciones]
+        datos.update(paradas=paradas, opciones=_MARCA_OPCIONES)
+    else:
+        asunto_m, cuerpo_m = t[clave]
     asunto = asunto_m.format(**datos)
     cuerpo = cuerpo_m.format(**datos)
     if bono_hasta and clave in CON_BONO:
@@ -693,12 +801,40 @@ def correo(clave: str, org: dict, uso: dict, ahora: datetime, *, marca: str, bas
         cuerpo = cuerpo.replace(" :\n", ":\n").replace(" ,\n", ",\n")
     firma = t["firma"].format(marca=marca)
     pie = t["baja"].format(baja=baja)
+    if clave == "opinion":
+        lineas = "\n".join(f"· {a}: {b}" for a, b in opciones)
+        texto = f"{cuerpo.replace(_MARCA_OPCIONES, lineas)}\n\n{firma}\n\n--\n{pie}"
+        return {"asunto": asunto, "texto": texto, "idioma": idioma,
+                "html": _html_opinion(cuerpo, opciones, firma, pie)}
     texto = f"{cuerpo}\n\n{firma}\n\n--\n{pie}"
     enlace = cuenta if clave in ("casi_fin", "invita") else ruta
     if clave == "bono" and not bono_hasta:
         raise ValueError("el correo del bono necesita bono_hasta")
     return {"asunto": asunto, "texto": texto, "idioma": idioma,
             "html": _html_de(cuerpo, firma, t["boton"][clave], enlace, pie)}
+
+
+def _html_opinion(cuerpo, opciones, firma, pie):
+    """El de la opinión: el mismo aspecto sobrio, con las opciones como botones claros uno debajo de otro."""
+    import re
+    antes, _sep, despues = cuerpo.partition(_MARCA_OPCIONES)
+
+    def parrafos(texto, color="#0369a1"):
+        esc = _html.escape(texto.strip("\n"))
+        return re.sub(r"(https?://[^\s<]+)", r'<a href="\1" style="color:%s">\1</a>' % color, esc).replace("\n", "<br>")
+    botones = "".join(
+        f'<a href="{_html.escape(b)}" style="display:block;margin:0 0 8px;padding:11px 16px;border:1px solid #cbd5e1;'
+        f'border-radius:8px;color:#0f172a;text-decoration:none;font-weight:600">{_html.escape(a)}</a>'
+        for a, b in opciones)
+    return (
+        '<div style="font-family:-apple-system,Segoe UI,Inter,Arial,sans-serif;font-size:15px;'
+        'line-height:1.6;color:#111827;max-width:560px">'
+        f'<p style="margin:0">{parrafos(antes)}</p>'
+        f'<div style="margin:18px 0 20px;max-width:380px">{botones}</div>'
+        f'<p style="margin:0">{parrafos(despues)}</p>'
+        f'<p style="margin:22px 0 0">{_html.escape(firma)}</p>'
+        '<p style="margin:28px 0 0;color:#6b7280;font-size:12px">'
+        f'{parrafos(pie, "#6b7280")}</p></div>')
 
 
 def _html_de(cuerpo, firma, boton, enlace, pie):

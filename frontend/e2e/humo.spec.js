@@ -3276,3 +3276,92 @@ test('Cartera · fuera de España se cobra por PayPal', async ({ page }) => {
   expect(pedidos[0]).toEqual({ titular: 'Juan Pérez', metodo: 'paypal', destino: 'juan@correo.mx' })
   expect(fallos).toEqual([])
 })
+
+/* OPINIÓN DE LOS REPARTIDORES (17-10-2026). El correo «¿Qué tal te va?» se contesta con un clic sin entrar:
+   abrir el enlace NO guarda nada (lo abren los antivirus del correo); cuenta al pulsar «Enviar». La pregunta
+   abierta es la de la necesidad: qué le complica el día de reparto. Y «Mándanos una idea», siempre en Cuenta. */
+test.describe('Opinión de los repartidores', () => {
+  async function correo(page, estado) {
+    const r = { enviado: null }
+    await page.route(/\/api\/opinion\/correo/, async (ruta) => {
+      if (ruta.request().method() === 'POST') { r.enviado = ruta.request().postDataJSON(); return ruta.fulfill({ json: { ok: true } }) }
+      return ruta.fulfill(estado ? { json: estado } : { status: 404, json: { detail: 'Este enlace no es válido' } })
+    })
+    return r
+  }
+
+  test('desde el correo, la nota viene marcada y solo cuenta al pulsar Enviar', async ({ page }) => {
+    const fallos = vigilar(page)
+    await simularApi(page, 'vacio')
+    const r = await correo(page, { usa: true, ya: false })
+    await page.goto('/opinion?o=o1&t=firma&utm_source=correo&utm_content=opinion&r=4', { waitUntil: 'domcontentloaded' })
+    await expect(page.getByRole('heading', { name: '¿Qué tal te va la app?' })).toBeVisible()
+    await expect(page.getByRole('radio', { name: '4 · Bien' })).toHaveAttribute('aria-checked', 'true')
+    expect(r.enviado).toBeNull()                                                // abrir el enlace no cuenta
+    await page.getByLabel('¿Qué es lo que más te complica en tu día de reparto? (opcional)').fill('Los portales sin número')
+    await page.getByRole('button', { name: 'Enviar', exact: true }).click()
+    await expect(page.getByText('¡Gracias! Lo leo yo personalmente.')).toBeVisible()
+    expect(r.enviado).toEqual({ o: 'o1', t: 'firma', valor: 4, texto: 'Los portales sin número' })
+    expect(fallos).toEqual([])
+  })
+
+  test('desde el correo, qué le frenó; y si no supo cargar paquetes, cómo se hace', async ({ page }) => {
+    const fallos = vigilar(page)
+    await simularApi(page, 'vacio')
+    const r = await correo(page, { usa: false, ya: false })
+    await page.goto('/opinion?o=o1&t=firma&m=no_supe', { waitUntil: 'domcontentloaded' })
+    await expect(page.getByRole('heading', { name: '¿Qué te frenó?' })).toBeVisible()
+    await expect(page.getByRole('radio', { name: 'No supe cómo meter los paquetes' })).toHaveAttribute('aria-checked', 'true')
+    await page.getByRole('button', { name: 'Enviar', exact: true }).click()
+    await expect(page.getByText('«Cargar paquetes: uno tras otro»')).toBeVisible()
+    await expect(page.getByRole('link', { name: 'Abrir la app' })).toHaveAttribute('href', '/ruta')
+    expect(r.enviado).toEqual({ o: 'o1', t: 'firma', texto: '', motivo: 'no_supe' })
+    expect(fallos).toEqual([])
+  })
+
+  test('un enlace que no vale lo dice y no deja enviar', async ({ page }) => {
+    const fallos = vigilar(page)
+    await simularApi(page, 'vacio')
+    await correo(page, null)
+    await page.goto('/opinion?o=o1&t=mala&r=5', { waitUntil: 'domcontentloaded' })
+    await expect(page.getByRole('alert')).toContainText('contacto@flotadsp.com')
+    await expect(page.getByRole('button', { name: 'Enviar', exact: true })).toHaveCount(0)
+    expect(fallos).toEqual([])
+  })
+
+  test('en Cuenta, «Mándanos una idea» se puede mandar siempre', async ({ page }) => {
+    const fallos = vigilar(page)
+    await entrarRepartidor(page, { status: 'trial', days_left: 60, promo: { activa: true, hasta: '2026-12-31' } })
+    let enviado = null
+    await page.route(/\/api\/opinion$/, async (ruta) => { enviado = ruta.request().postDataJSON(); await ruta.fulfill({ json: { ok: true } }) })
+    await page.goto('/ruta?tab=cuenta', { waitUntil: 'domcontentloaded' })
+    await page.getByRole('button', { name: /Mándanos una idea/ }).click()
+    await page.getByRole('textbox', { name: 'Mándanos una idea' }).fill('Que avise si un cliente cierra a mediodía')
+    await page.getByRole('button', { name: 'Enviar', exact: true }).click()
+    await expect(page.getByText('¡Recibido! Gracias.')).toBeVisible()
+    expect(enviado).toEqual({ tipo: 'sugerencia', texto: 'Que avise si un cliente cierra a mediodía' })
+    expect(fallos).toEqual([])
+  })
+
+  test('Negocio enseña las opiniones y qué les frena', async ({ page }) => {
+    const fallos = vigilar(page)
+    await entrarComoAdmin(page, { superAdmin: true })
+    await simularApi(page, 'vacio')
+    await page.route(/\/api\/admin\/opiniones/, (ruta) => ruta.fulfill({ json: {
+      opiniones: [
+        { id: 'a', org: 'Pepe', email: 'pepe@x.es', valor: 2, texto: 'Se me cierra con la cámara', tipo: 'opinion', origen: 'correo', paradas: 40, entregas: 35, ts: '2026-10-18T09:00:00+00:00' },
+        { id: 'b', org: 'Ana', email: 'ana@x.es', motivo: 'no_supe', texto: '', tipo: 'opinion', origen: 'correo', paradas: 0, entregas: 0, ts: '2026-10-18T08:00:00+00:00' },
+        { id: 'c', org: 'Luis', texto: 'Modo noche', tipo: 'sugerencia', origen: 'app', paradas: 3, entregas: 2, ts: '2026-10-17T20:00:00+00:00' },
+      ],
+      resumen: { total: 3, media: 2, con_nota: 1, con_texto: 2, pedidas_por_correo: 12, motivos: [{ motivo: 'no_supe', texto: 'No supe cómo meter los paquetes', n: 1 }] },
+    } }))
+    await page.goto('/panel/admin', { waitUntil: 'domcontentloaded' })
+    const s = page.getByRole('region', { name: 'Opiniones de los repartidores' })
+    await expect(s.getByText('Se me cierra con la cámara')).toBeVisible()
+    await expect(s.getByText('No supe cómo meter los paquetes · 1')).toBeVisible()
+    await expect(s.getByRole('link', { name: 'Contestar' }).first()).toHaveAttribute('href', 'mailto:pepe@x.es')
+    await expect(s.getByText('Idea', { exact: true })).toBeVisible()
+    await expect(s.getByText('2 de 5 (1)')).toBeVisible()
+    expect(fallos).toEqual([])
+  })
+})

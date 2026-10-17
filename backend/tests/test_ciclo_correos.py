@@ -164,9 +164,68 @@ def test_idioma(org, idioma):
 def _correo(clave, org=None, uso=None, con_respuesta=True, **extra):
     if clave == "bono":
         extra.setdefault("bono_hasta", "2026-12-31")
+    if clave == "opinion":
+        extra.setdefault("opinion_url", "https://flotadsp.com/opinion?o=o1&t=abc")
     return cc.correo(clave, org or _org(horas=24 * 5.5), uso or {}, AHORA, marca="FDS",
                      base="https://flotadsp.com", baja="https://api.x/api/correo/baja?o=o1&t=abc",
                      mensual=9.99, anual=99, con_respuesta=con_respuesta, **extra)
+
+
+# ── ¿QUÉ TAL TE VA? (17-10-2026) ─────────────────────────────────────────────
+DIEZ = AHORA + timedelta(hours=2)            # lunes 12-10 a las 10:00 de Madrid
+_ENV_VIEJO = {"bienvenida": {"at": "2026-10-01T00:00:00+00:00"}, "primer_dia": {"at": "2026-10-02T00:00:00+00:00"}}
+
+
+def test_opinion_a_los_5_dias_a_quien_la_usa():
+    org = _org(horas=24 * 6, dias_prueba=60, ciclo_correos=_ENV_VIEJO)
+    assert cc.toca(org, {"paradas": 3}, DIEZ) == "opinion"
+    assert cc.toca(_org(horas=24 * 4, dias_prueba=60, ciclo_correos=_ENV_VIEJO), {"paradas": 3}, DIEZ) == ""
+    assert cc.toca(_org(horas=24 * 31, dias_prueba=60, ciclo_correos=_ENV_VIEJO), {"paradas": 3}, DIEZ) == ""
+    assert cc.toca(org, {"paradas": 3}, DIEZ + timedelta(hours=12)) == ""             # a las 22:00, no
+    assert cc.toca(org, {"paradas": 3}, DIEZ, promo=True) == "opinion"                # con la promoción, también
+
+
+def test_opinion_a_quien_no_la_usa_despues_del_recordatorio():
+    """Primero se le ayuda (recordatorio, del día 3 al 8) y luego se le pregunta qué le frenó."""
+    assert cc.toca(_org(horas=24 * 6, dias_prueba=60, ciclo_correos=_ENV_VIEJO), {"paradas": 0}, DIEZ) == ""
+    con_rec = {**_ENV_VIEJO, "recordatorio": {"at": "2026-10-05T06:00:00+00:00"}}
+    assert cc.toca(_org(horas=24 * 6, dias_prueba=60, ciclo_correos=con_rec), {"paradas": 0}, DIEZ) == "opinion"
+    assert cc.toca(_org(horas=24 * 9, dias_prueba=60, ciclo_correos=_ENV_VIEJO), {"paradas": 0}, DIEZ) == "opinion"
+
+
+@pytest.mark.parametrize("extra", [{"opinion_dada": True}, {"opinion_saltada": True},
+                                   {"ciclo_correos": {**_ENV_VIEJO, "opinion": {"at": "2026-10-09T08:00:00+00:00"}}}])
+def test_opinion_una_vez_y_nunca_a_quien_ya_contesto(extra):
+    org = _org(horas=24 * 6, dias_prueba=60, **{"ciclo_correos": _ENV_VIEJO, **extra})
+    assert cc.toca(org, {"paradas": 3}, DIEZ) == ""
+
+
+@pytest.mark.parametrize("idioma", cc.IDIOMAS)
+def test_correo_opinion_nota_de_un_clic_a_quien_la_usa(idioma):
+    c = _correo("opinion", _org(horas=24 * 6, idioma=idioma), {"paradas": 7, "entregadas": 5})
+    for n in cc.NOTAS:
+        assert f"opinion?o=o1&t=abc&utm_source=correo&utm_medium=email&utm_campaign=ciclo&utm_content=opinion&r={n}" in c["texto"]
+        assert f"utm_content=opinion&amp;r={n}" in c["html"]
+    assert "7" in c["texto"] and "&m=" not in c["texto"]
+    assert c["html"].count("display:block") == 5 and "★★★★★" in c["html"]
+    assert "https://api.x/api/correo/baja?o=o1&amp;t=abc" in c["html"]
+    assert "{" not in c["texto"] and "\x00" not in c["texto"] and "\x00" not in c["html"]
+
+
+@pytest.mark.parametrize("idioma", cc.IDIOMAS)
+def test_correo_opinion_que_te_freno_a_quien_no_la_usa(idioma):
+    c = _correo("opinion", _org(horas=24 * 9, idioma=idioma), {"paradas": 0})
+    for m in cc.MOTIVOS:
+        assert f"utm_content=opinion&m={m}" in c["texto"]
+    assert "&r=" not in c["texto"] and c["html"].count("display:block") == len(cc.MOTIVOS)
+
+
+def test_correo_opinion_en_latinoamerica_y_sin_enlace():
+    mx = _correo("opinion", _org(horas=24 * 9, pais="mx"), {"paradas": 0})["texto"]
+    assert "Toca la que" in mx and "Pulsa" not in mx
+    with pytest.raises(ValueError):
+        cc.correo("opinion", _org(horas=24 * 9), {}, AHORA, marca="FDS", base="https://flotadsp.com",
+                  baja="https://b", mensual=9.99, anual=99, con_respuesta=True)
 
 
 def test_primer_dia_solo_dice_ayer_si_fue_ayer():
@@ -336,6 +395,18 @@ def mundo(monkeypatch):
     monkeypatch.delenv("CORREO_RESPUESTAS", raising=False)
     monkeypatch.setenv("RESEND_API_KEY", "x")
     return SimpleNamespace(g=g, enviados=enviados, uso=uso, ok=mundo_ok, monkeypatch=monkeypatch)
+
+
+@pytest.mark.asyncio(loop_scope="session")
+async def test_el_correo_de_opinion_lleva_su_enlace_firmado(mundo):
+    # Con el bono ya contado (si no, le toca antes el del bono).
+    env = {**_ENV_VIEJO, "bono": {"at": "2026-10-05T08:00:00+00:00"}}
+    mundo.g["organizations"].docs.append(_org(horas=24 * 9, dias_prueba=60, ciclo_correos=env))
+    assert await server._ciclo_enviar("o1", "opinion", DIEZ) is True
+    assert await server._ciclo_enviar("o1", "opinion", DIEZ) is False
+    cuerpo = mundo.g["correos_enviados"].docs[-1]["cuerpo"]
+    assert f"/opinion?o=o1&t={server._opinion_firma('o1')}&utm_source=correo" in cuerpo and "&m=no_supe" in cuerpo
+    assert mundo.g["correos_enviados"].docs[-1]["por"] == "ciclo:opinion"
 
 
 @pytest.mark.asyncio(loop_scope="session")

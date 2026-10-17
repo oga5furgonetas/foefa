@@ -16,7 +16,7 @@ import {
   adminGetEmisor, adminSetEmisor, revisarFacturacion as revisarFacturacionApi, getSaludSistema,
   getAdminModulos,
   crearEnlaceTienda, getSuscripcionesEmpleo, enviarCampanaCandidatos,
-  adminReferidosConductores, adminRetiradas, adminRetiradaPagada, adminRetiradaRechazar,
+  adminReferidosConductores, adminRetiradas, adminRetiradaPagada, adminRetiradaRechazar, adminOpiniones,
 } from '../api'
 import { API_BASE } from '../../services/api'
 import { hoyLocal } from '../../lib/fecha'
@@ -139,7 +139,7 @@ function SaludSistema() {
   }, [])
 
   if (err) return <div className="card mt-6 p-4 text-sm text-red-300">{err}</div>
-  if (!s) return null
+  if (!s?.mongo || !s.servidor) return null           // sin la medida completa, nada (no tumba Negocio)
 
   const m = s.mongo
   const COLOR = { critico: '#f87171', aviso: '#fbbf24', bien: '#34d399' }
@@ -394,7 +394,7 @@ function Cobros() {
 
       {!datos ? (
         <div className="flex items-center gap-2 text-sm text-dark-400"><Loader2 size={14} className="animate-spin" /> Cargando…</div>
-      ) : datos.cobros.length === 0 ? (
+      ) : (datos.cobros || []).length === 0 ? (
         <p className="text-sm text-dark-500">Todavía no hay clientes a los que cobrar.</p>
       ) : (
         <>
@@ -418,7 +418,7 @@ function Cobros() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-dark-800">
-                {datos.cobros.map((c) => {
+                {(datos.cobros || []).map((c) => {
                   const e = EST[c.estado] || EST.pendiente
                   return (
                     <tr key={c.id}>
@@ -615,7 +615,7 @@ function ResumenReferidosConductores() {
       <div className="overflow-x-auto rounded-xl border border-dark-800">
         <table className="w-full min-w-[780px] text-left text-[12px]">
           <thead className="bg-dark-900 text-dark-400"><tr>{['Conductor / email laboral', 'Empresa', 'Invitados', 'Cualificados', 'Ganado', 'Saldo', ''].map((x) => <th key={x} className="px-3 py-2 font-semibold">{x}</th>)}</tr></thead>
-          <tbody>{data.conductores.map((r) => <Fragment key={r.id}>
+          <tbody>{(data.conductores || []).map((r) => <Fragment key={r.id}>
             <tr className="border-t border-dark-800 text-dark-200">
               <td className="px-3 py-2"><b>{r.conductor}</b><span className="block text-[10.5px] text-dark-500">{r.email}</span></td>
               <td className="px-3 py-2">{r.empresa || '—'}</td><td className="px-3 py-2 tabular-nums">{r.invitados}</td>
@@ -628,9 +628,58 @@ function ResumenReferidosConductores() {
             </td></tr>}
           </Fragment>)}</tbody>
         </table>
-        {!data.conductores.length && <p className="p-4 text-sm text-dark-500">Aún no hay carteras individuales generadas.</p>}
+        {!(data.conductores || []).length && <p className="p-4 text-sm text-dark-500">Aún no hay carteras individuales generadas.</p>}
       </div>
       <p className="text-[10.5px] text-dark-500">Los pagos se realizan manualmente desde «Retiradas de la cartera» después de revisar el método y confirmar la transferencia o Bizum.</p>
+    </>}
+  </section>
+}
+
+/* OPINIONES DE LOS REPARTIDORES (17-10-2026). Lo que contestan en la app («¿Qué tal te va?»), en
+   «Mándanos una idea» (Cuenta) y al correo «opinion» del ciclo. Cada una llega también a contacto@ con
+   «Responder» a quien la dio. Lo que más vale: qué les frena y qué les complica el día (la necesidad real). */
+const ORIGEN_OPINION = { app: 'App', correo: 'Correo' }
+function Opiniones() {
+  const [data, setData] = useState(null)
+  const [err, setErr] = useState('')
+  const cargar = () => adminOpiniones().then(({ data: d }) => { setData(d); setErr('') })
+    .catch((e) => setErr(e?.response?.data?.detail || 'No se pudieron leer las opiniones'))
+  useEffect(() => { cargar() }, [])
+  const r = data?.resumen || {}
+  const cuando = (iso) => {
+    const d = new Date(iso)
+    return Number.isNaN(d.getTime()) ? '' : d.toLocaleString('es-ES', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })
+  }
+  return <section className="card space-y-3 p-4" aria-label="Opiniones de los repartidores">
+    <div className="flex flex-wrap items-center justify-between gap-2">
+      <div><h3 className="flex items-center gap-2 text-sm font-bold"><Star size={16} className="text-amber-300" /> Opiniones de los repartidores</h3>
+        <p className="mt-1 text-[12px] text-dark-400">Las de la app, las ideas de «Cuenta» y las respuestas al correo «¿Qué tal te va?» (sale solo a los 5 días). Cada una te llega también a {'contacto@'}: «Responder» le escribe a esa persona.</p></div>
+      <button onClick={cargar} className="btn-secondary flex items-center gap-1.5 px-2.5 py-1.5 text-xs"><RefreshCw size={13} /> Actualizar</button>
+    </div>
+    {err && <p role="alert" className="text-xs text-red-300">{err}</p>}
+    {!data ? <Loader2 size={16} className="animate-spin text-dark-500" /> : <>
+      <div className="grid grid-cols-2 gap-2 md:grid-cols-4">
+        {[['Opiniones', r.total], ['Nota media', r.media != null ? `${String(r.media).replace('.', ',')} de 5 (${r.con_nota})` : '—'], ['Con texto', r.con_texto], ['Correos pedidos', r.pedidas_por_correo]].map(([label, value]) =>
+          <div key={label} className="rounded-xl border border-dark-800 bg-dark-900/50 p-3"><p className="text-[10px] font-semibold uppercase tracking-wide text-dark-500">{label}</p><p className="mt-1 text-lg font-bold text-dark-100">{value ?? 0}</p></div>)}
+      </div>
+      {r.motivos?.length > 0 && <div>
+        <p className="text-[11px] font-semibold uppercase tracking-wide text-dark-500">Qué les frenó</p>
+        <ul className="mt-1 flex flex-wrap gap-1.5">{r.motivos.map((m) => <li key={m.motivo} className="rounded-full border border-dark-700 px-2.5 py-1 text-[12px] text-dark-200">{m.texto} · <b>{m.n}</b></li>)}</ul>
+      </div>}
+      {(data.opiniones || []).length ? <ul className="divide-y divide-dark-800 rounded-xl border border-dark-800">
+        {(data.opiniones || []).map((o) => <li key={o.id} className="p-3 text-[12.5px]">
+          <p className="flex flex-wrap items-center gap-x-2 gap-y-1 text-dark-400">
+            <span className="tabular-nums">{cuando(o.ts)}</span>
+            <b className="text-dark-100">{o.org || 'Sin nombre'}</b>
+            <span className="rounded bg-dark-800 px-1.5 py-0.5 text-[10.5px] text-dark-300">{o.tipo === 'sugerencia' ? 'Idea' : ORIGEN_OPINION[o.origen] || 'App'}</span>
+            {o.valor ? <span className="text-amber-300" aria-label={`${o.valor} de 5`}>{'★'.repeat(o.valor)}{'☆'.repeat(5 - o.valor)}</span> : null}
+            {o.motivo && <span className="text-amber-200">{(r.motivos || []).find((m) => m.motivo === o.motivo)?.texto || o.motivo}</span>}
+            <span>{o.paradas ?? '—'} paradas · {o.entregas ?? 0} entregas</span>
+            {o.email && <a href={`mailto:${o.email}`} className="text-brand-300 underline">Contestar</a>}
+          </p>
+          {o.texto ? <p className="mt-1 whitespace-pre-line text-[13.5px] text-dark-100">{o.texto}</p> : <p className="mt-1 text-dark-500">Sin texto</p>}
+        </li>)}
+      </ul> : <p className="text-sm text-dark-500">Aún no hay opiniones.</p>}
     </>}
   </section>
 }
@@ -1193,6 +1242,10 @@ export default function Negocio() {
         <a href={`${API_BASE}/ai/export-dataset`} target="_blank" rel="noreferrer" className="btn-secondary flex items-center gap-2 text-sm">
           <BrainCircuit size={15} /> {t('neg.export.ai')}
         </a>
+      </div>
+
+      <div className="mt-6">
+        <Opiniones />
       </div>
 
       <div className="mt-6">
