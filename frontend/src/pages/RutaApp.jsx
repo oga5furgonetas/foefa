@@ -56,12 +56,21 @@ export default function RutaApp() {
   const [porInvitado, setPorInvitado] = useState(refCentActual())
   // Hasta cuándo dura la promoción de 10 €: lo dice el servidor; antes de que conteste, la fecha fija.
   const [promoHasta, setPromoHasta] = useState(refPromoActiva() ? REF_PROMO_HASTA : '')
+  // Con el bono de bienvenida por ganar, su tarjeta (en la ruta) ya dice lo de invitar: no se repite arriba.
+  const [bonoPendiente, setBonoPendiente] = useState(false)
   useEffect(() => {
     if (esSuplantacion()) return
     getReferidos().then(({ data }) => {
       if (data?.por_invitado) setPorInvitado(data.por_invitado)
       if (data && 'por_invitado' in data) setPromoHasta(data.promo_hasta || '')
+      setBonoPendiente(!!(data?.bono && !data.bono.pagado))
     }).catch(() => {})
+  }, [])
+  // La tarjeta del bono ganado lleva a la cartera.
+  useEffect(() => {
+    const ir = () => setTab('cuenta')
+    window.addEventListener('fds-ir-cuenta', ir)
+    return () => window.removeEventListener('fds-ir-cuenta', ir)
   }, [])
   const [regaloNuevo, setRegaloNuevo] = useState(null)
   const recargar = useCallback(() => getOrgBilling().then(({ data }) => setBilling(data)).catch(() => setBilling({})), [])
@@ -175,7 +184,7 @@ export default function RutaApp() {
         )}
         {tab === 'hoy' && !bloqueado && <OpinionRuta />}
         {tab === 'hoy' && <InstalarApp />}
-        {tab === 'hoy' && !esSuplantacion() && (billing?.pais || 'es') !== 'cn' && (
+        {tab === 'hoy' && !esSuplantacion() && !bonoPendiente && (billing?.pais || 'es') !== 'cn' && (
           <div className="mx-auto mb-3 flex max-w-md items-center justify-between gap-3 rounded-2xl border border-emerald-400/30 bg-emerald-500/[.08] px-3.5 py-2.5">
             <button onClick={() => setTab('cuenta')} className="min-w-0 text-left text-[13px] leading-snug text-emerald-100">
               💶 {tx('Gana {euros} por cada compañero que la use.', { euros: eurosRef(porInvitado, locale()) })}{promoHasta && <span className="ml-1 rounded-md bg-emerald-400/20 px-1.5 py-0.5 text-[11px] font-bold text-emerald-100">{tx('Promo hasta el {fecha}', { fecha: fechaRefPromo(locale(), promoHasta) })}</span>} <span className="font-semibold underline">{tx('Mi cartera')}</span>

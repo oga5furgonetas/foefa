@@ -161,10 +161,47 @@ def test_idioma(org, idioma):
 
 
 # ── LOS TEXTOS ──────────────────────────────────────────────────────────────
-def _correo(clave, org=None, uso=None, con_respuesta=True):
+def _correo(clave, org=None, uso=None, con_respuesta=True, **extra):
+    if clave == "bono":
+        extra.setdefault("bono_hasta", "2026-12-31")
     return cc.correo(clave, org or _org(horas=24 * 5.5), uso or {}, AHORA, marca="FDS",
                      base="https://flotadsp.com", baja="https://api.x/api/correo/baja?o=o1&t=abc",
-                     mensual=9.99, anual=99, con_respuesta=con_respuesta)
+                     mensual=9.99, anual=99, con_respuesta=con_respuesta, **extra)
+
+
+def test_el_bono_va_en_los_correos_de_arrancar_y_solo_si_puede_ganarlo():
+    """17-10-2026: 10 € por la primera ruta de verdad. Lo dicen la bienvenida, «primer_dia» y «recordatorio»
+    (antes de la despedida) mientras pueda ganarlo; sin `bono_hasta`, ni una palabra."""
+    for clave in cc.CON_BONO:
+        t = _correo(clave, bono_hasta="2026-12-31", ref_cent=1000)["texto"]
+        assert "te damos 10 € cuando hagas tus primeras 20 entregas" in t and "31 de diciembre" in t
+        assert t.index("te damos 10 €") < t.index("Daniel, de FDS")
+        assert "te damos" not in _correo(clave)["texto"]
+    assert "te damos" not in _correo("casi_fin", bono_hasta="2026-12-31")["texto"]
+    c = _correo("bono", uso={"paradas": 9, "entregadas": 7, "entregadas_reales": 7}, ref_cent=1000)
+    assert c["asunto"] == "10 € por tu primera ruta con FDS"
+    assert "Ya llevas 7 entregas que cuentan" in c["texto"] and "10 € más por cada compañero" in c["texto"]
+    assert "Ya llevas" not in _correo("bono", uso={"paradas": 0})["texto"]
+    with pytest.raises(ValueError):
+        cc.correo("bono", _org(horas=30), {}, AHORA, marca="FDS", base="https://x", baja="https://b",
+                  mensual=9.99, anual=99, con_respuesta=True)
+
+
+def test_el_correo_del_bono_solo_a_quien_no_lo_sabe_y_por_la_manana():
+    lunes = datetime(2026, 10, 19, 6, 30, tzinfo=timezone.utc)          # 8:30 en Madrid
+    org = {"id": "o1", "name": "A", "email": "a@a.com", "sector": "autonomo", "status": "trial",
+           "created_at": "2026-10-05T18:56:00+00:00",
+           "ciclo_correos": {"bienvenida": {"at": "2026-10-05T18:56:00+00:00"},
+                             "primer_dia": {"at": "2026-10-07T05:10:00+00:00"}}}
+    assert cc.toca(org, {"paradas": 4, "entregadas_reales": 3}, lunes, promo=True, bono=True) == "bono"
+    assert cc.toca(org, {"paradas": 4}, lunes, promo=True, bono=False) == ""
+    assert cc.toca(org, {"paradas": 4}, lunes + timedelta(hours=8), promo=True, bono=True) == ""   # por la tarde no
+    assert cc.toca(org, {"paradas": 40, "entregadas_reales": 20}, lunes, promo=True, bono=True) == "invita"
+    # Ya le llegó un correo del ciclo desde que existe el bono (ese lo llevaba): no se le repite.
+    ya = dict(org, ciclo_correos={**org["ciclo_correos"], "recordatorio": {"at": "2026-10-17T06:00:00+00:00"}})
+    assert cc.toca(ya, {"paradas": 4}, lunes, promo=True, bono=True) == ""
+    hecho = dict(org, ciclo_correos={**org["ciclo_correos"], "bono": {"at": "2026-10-18T06:00:00+00:00"}})
+    assert cc.toca(hecho, {"paradas": 4}, lunes + timedelta(days=1), promo=True, bono=True) == ""
 
 
 @pytest.mark.parametrize("idioma", cc.IDIOMAS)

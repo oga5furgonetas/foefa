@@ -20891,12 +20891,16 @@ async def _ciclo_enviar(org_id: str, clave: str, ahora: Optional[datetime] = Non
         baja = _baja_url(org_id)
         # «Invita y gana» (11-10-2026): su enlace de verdad, lo que gana y cómo cobra.
         ref = {}
-        if clave == "invita":
+        b = _bono_resumen(org, ahora)
+        if b and not b["pagado"]:
+            ref.update(bono_hasta=_REF_PROMO_HASTA_DIA, bono_cent=b["cent"], ref_cent=_ref_importe(org),
+                       ref_espana=_ref_en_espana(org))
+        if clave in ("invita", "bono"):
             codigo = await _mi_codigo_ref(org)
-            ref = {"ref_enlace": f"{_PORTAL_BASE_FRONT}/invita?ref={codigo}&utm_source=referido"
-                                 f"&utm_medium=correo&utm_campaign=rep_invitar",
-                   "ref_cent": _ref_importe(org), "ref_espana": _ref_en_espana(org), "ref_min_cent": _REF_RETIRADA_MIN,
-                   "ref_promo_hasta": _REF_PROMO_HASTA_DIA if _ref_promo_activa() else ""}
+            ref.update({"ref_enlace": f"{_PORTAL_BASE_FRONT}/invita?ref={codigo}&utm_source=referido"
+                                      f"&utm_medium=correo&utm_campaign=rep_invitar",
+                        "ref_cent": _ref_importe(org), "ref_espana": _ref_en_espana(org), "ref_min_cent": _REF_RETIRADA_MIN,
+                        "ref_promo_hasta": _REF_PROMO_HASTA_DIA if _ref_promo_activa() else ""})
         # La marca del correo es la del REMITENTE («FDS <contacto@…>»), la que ve el
         # repartidor en la app; MARCA es la del panel de empresas.
         c = ciclo_correos.correo(clave, org, uso, ahora, marca=_email_remitente()[0], base=_PORTAL_BASE_FRONT,
@@ -20934,7 +20938,9 @@ async def ciclo_correos_vuelta(ahora: Optional[datetime] = None) -> dict:
          "correos_baja": {"$ne": True}}, {"_id": 0}).to_list(2000)
     hechos = {}
     for org in orgs:
-        clave = ciclo_correos.toca(org, await _ciclo_uso(org), ahora, promo=_rep_promo_activa())
+        b = _bono_resumen(org, ahora)
+        clave = ciclo_correos.toca(org, await _ciclo_uso(org), ahora, promo=_rep_promo_activa(),
+                                   bono=bool(b and not b["pagado"]))
         if not clave or (clave != "bienvenida" and not _ciclo_seguimiento_activo()):
             continue
         if await _ciclo_enviar(org["id"], clave, ahora):
@@ -20974,6 +20980,13 @@ _AVISO_MANANA_TEXTOS = {
     "br": ("Vamos começar a rota?", "Coloque seus pacotes com uma foto da etiqueta e a rota se organiza sozinha."),
     "en": ("Ready to start your route?", "Snap each parcel label and your route sorts itself."),
 }
+# Con el bono de bienvenida por ganar (17-10-2026).
+_AVISO_MANANA_BONO = {
+    "es": "Foto a la etiqueta de cada paquete y la ruta se ordena sola. Tu primera ruta de verdad te da {euros}.",
+    "pt": "Uma foto à etiqueta de cada volume e a rota ordena-se sozinha. A tua primeira rota a sério dá-te {euros}.",
+    "br": "Uma foto da etiqueta de cada pacote e a rota se organiza sozinha. Sua primeira rota de verdade vale {euros}.",
+    "en": "Snap each parcel label and your route sorts itself. Your first real route earns you {euros}.",
+}
 
 
 async def _aviso_manana_vuelta(ahora: Optional[datetime] = None) -> int:
@@ -21006,7 +21019,11 @@ async def _aviso_manana_vuelta(ahora: Optional[datetime] = None) -> int:
                 {"id": org["id"], "aviso_manana": {"$ne": hoy}}, {"$set": {"aviso_manana": hoy}})
             if not r.modified_count:
                 continue
-            titulo, cuerpo = _AVISO_MANANA_TEXTOS[ciclo_correos.idioma_de(org)]
+            idioma = ciclo_correos.idioma_de(org)
+            titulo, cuerpo = _AVISO_MANANA_TEXTOS[idioma]
+            b = _bono_resumen(org, ahora)
+            if b and not b["pagado"]:
+                cuerpo = _AVISO_MANANA_BONO[idioma].format(euros=ciclo_correos._euros(b["cent"] / 100, idioma))
             usuarios = await global_db.push_subscriptions.distinct("user_id", {"org_id": org["id"]})
             await send_web_push_to_users(usuarios, titulo, cuerpo, url="/ruta?utm_source=push&utm_content=manana")
             mandados += 1
@@ -48598,7 +48615,14 @@ async def reparto_mi_ruta(user: dict = Depends(require_any_auth)):
         await _referido_premiar(org, d["id"])
     except Exception as e:                                   # noqa: BLE001
         logger.warning(f"referidos: {type(e).__name__}")
-    return {"activo": True, "empresa": (org or {}).get("name") or "",
+    # El bono de bienvenida: cuánto le falta para su primera ruta de verdad (y se paga al llegar).
+    bono = None
+    if autonomo and not user.get("demo"):
+        try:
+            bono = await _bono_estado(org, d["id"])
+        except Exception as e:                               # noqa: BLE001
+            logger.warning(f"bono: {type(e).__name__}")
+    return {"activo": True, "empresa": (org or {}).get("name") or "", "bono": bono,
             "puede_pegar": autonomo and user.get("role") == "admin",
             "pais": _region_actual.get()[0], "prefijo": PAISES_REPARTO.get(_region_actual.get()[0], {}).get("prefijo", "34"), "fecha": f, "pedidos": ps, "base": a.get("base"), "ruta": ruta, "autonomo": autonomo,
             "ia_tickets": await _rep_ia_activa(a, user),
@@ -49955,8 +49979,9 @@ _REF_TOPE_MES = 20
 _REF_RETIRADA_MIN = 6000
 _DRIVER_REF_RETIRADA_MIN = 6000
 _REF_PROMO_CENT = 1000
-_REF_PROMO_HASTA_DIA = "2026-10-31"
-_REF_PROMO_HASTA = datetime(2026, 10, 31, 23, 0, tzinfo=timezone.utc)   # 01-11-2026 00:00 en Madrid (ya en CET)
+# 17-10-2026 (Dani): la promoción se alarga hasta el 31-12-2026 y se añade el bono de bienvenida (_bono_estado).
+_REF_PROMO_HASTA_DIA = "2026-12-31"
+_REF_PROMO_HASTA = datetime(2026, 12, 31, 23, 0, tzinfo=timezone.utc)   # 01-01-2027 00:00 en Madrid (CET)
 
 
 def _ref_promo_activa(ahora: Optional[datetime] = None) -> bool:
@@ -50095,7 +50120,7 @@ async def referidos_mios(user: dict = Depends(require_admin)):
             "cartera": _ref_disponible(org),
             "metodos": ["bizum", "iban", "paypal"] if _ref_en_espana(org) else ["paypal"],
             "entregas_cartera": _REF_ENTREGAS_CARTERA, "dias_distintos": _REF_DIAS_DISTINTOS,
-            "ventana_dias": _REF_VENTANA_DIAS, "tope_mes": _REF_TOPE_MES,
+            "ventana_dias": _REF_VENTANA_DIAS, "tope_mes": _REF_TOPE_MES, "bono": _bono_resumen(org),
             "pendiente": any(r.get("estado") == "pendiente" for r in retiradas), "retiradas": retiradas}
 
 
@@ -50209,6 +50234,77 @@ def _ref_importe(invitador: dict, invitado: Optional[dict] = None) -> int:
 def _ref_promo_datos() -> dict:
     """Lo que la app enseña de la promoción mientras dura (y nada después)."""
     return {"promo_hasta": _REF_PROMO_HASTA_DIA, "promo_cent": _REF_PROMO_CENT} if _ref_promo_activa() else {}
+
+
+# ── BONO DE BIENVENIDA (17-10-2026) ──────────────────────────────────────────
+# Dani: «que ganen 10 € por registrarse». Se paga por la PRIMERA RUTA DE VERDAD, no por el alta: pagar por
+# registrarse llena la cartera de cuentas falsas, y lo que hace falta es que metan su ruta (de las 14 altas
+# del anuncio del 14-10, solo una metió una parada suya). La vara es la de «Invita y gana»: _REF_ENTREGAS_CARTERA
+# entregas reales (direcciones distintas, repartidas en el día) en _REF_DIAS_DISTINTOS días distintos, con la
+# cuenta de más de 24 h. Para quien se dio de alta hasta el fin de la promoción, dentro de sus primeros
+# _REF_VENTANA_DIAS días (a las cuentas de antes del 17-10 se les cuentan desde el 17-10). Una vez por cuenta,
+# a la misma cartera que los premios por invitar (se retira desde _REF_RETIRADA_MIN). Si la cuenta se dio de
+# alta desde la misma red que otra que ya lo cobró, no se paga solo: queda para revisar.
+_BONO_CENT = _REF_PROMO_CENT
+_BONO_DESDE = datetime(2026, 10, 16, 22, 0, tzinfo=timezone.utc)      # 17-10-2026 00:00 en Madrid
+
+
+def _bono_limite(org: dict) -> Optional[datetime]:
+    """Hasta cuándo puede ganar el bono esta cuenta (None si no le toca)."""
+    o = org or {}
+    if (o.get("demo") or o.get("account_type") == "owner" or not _ref_disponible(o)
+            or not (o.get("sector") == "autonomo" or o.get("plan") == "autonomo")):
+        return None
+    creada = _fecha_utc(o.get("created_at"))
+    if not creada or creada >= _REF_PROMO_HASTA:
+        return None
+    return max(creada, _BONO_DESDE) + timedelta(days=_REF_VENTANA_DIAS)
+
+
+def _bono_resumen(org: dict, ahora: Optional[datetime] = None) -> Optional[dict]:
+    """Lo que se enseña del bono sin mirar las entregas (cartera, correos)."""
+    o = org or {}
+    if o.get("bono_pagado"):
+        return {"cent": int(o.get("bono_cent") or _BONO_CENT), "pagado": True, "pagado_en": o.get("bono_pagado_en")}
+    limite = _bono_limite(o)
+    if not limite or (ahora or datetime.now(timezone.utc)) > limite:
+        return None
+    return {"cent": _BONO_CENT, "pagado": False, "hasta": _REF_PROMO_HASTA_DIA, "limite": limite.strftime("%Y-%m-%d"),
+            "objetivo": _REF_ENTREGAS_CARTERA, "dias_objetivo": _REF_DIAS_DISTINTOS,
+            "revisar": bool(o.get("bono_sospechoso"))}
+
+
+async def _bono_estado(org: dict, conductor_id: str) -> Optional[dict]:
+    """Cuánto lleva hacia el bono, y si ya lo ha hecho, se le paga (una vez)."""
+    ahora = datetime.now(timezone.utc)
+    estado = _bono_resumen(org, ahora)
+    if not estado or estado["pagado"] or not conductor_id:
+        return estado
+    q = {"conductor_id": conductor_id, "estado": "entregado", "ejemplo": {"$ne": True}, "fecha": {"$lte": estado["limite"]}}
+    hechas = await db.reparto_pedidos.find(q, {"_id": 0, "fecha": 1, "direccion": 1, "cerrado_en": 1}).to_list(5000)
+    cuentan, dias = _ref_uso_real(hechas)
+    estado.update(entregas=min(cuentan, _REF_ENTREGAS_CARTERA), dias=min(dias, _REF_DIAS_DISTINTOS))
+    creada = _fecha_utc(org.get("created_at"))
+    if (cuentan < _REF_ENTREGAS_CARTERA or dias < _REF_DIAS_DISTINTOS or org.get("bono_sospechoso")
+            or not creada or (ahora - creada).total_seconds() < _REF_HORAS * 3600):
+        return estado
+    red = org.get("alta_red")
+    if red and await global_db.organizations.count_documents({"alta_red": red, "bono_pagado": True, "id": {"$ne": org["id"]}}):
+        await global_db.organizations.update_one({"id": org["id"]}, {"$set": {"bono_sospechoso": "misma_red"}})
+        estado["revisar"] = True
+        return estado
+    # Atómico: una sola vez por cuenta.
+    res = await global_db.organizations.update_one(
+        {"id": org["id"], "bono_pagado": {"$ne": True}},
+        {"$set": {"bono_pagado": True, "bono_pagado_en": ahora.isoformat(), "bono_cent": _BONO_CENT}})
+    if not getattr(res, "modified_count", 0):
+        return estado
+    await global_db.cartera_movimientos.insert_one({
+        "id": str(uuid.uuid4()), "tipo": "bienvenida", "importe": _BONO_CENT, "org_id": org["id"],
+        "mes": ahora.strftime("%Y-%m"), "ts": ahora.isoformat()})
+    await global_db.organizations.update_one(
+        {"id": org["id"]}, {"$inc": {"cartera_saldo": _BONO_CENT, "cartera_ganado": _BONO_CENT}})
+    return {"cent": _BONO_CENT, "pagado": True, "pagado_en": ahora.isoformat(), "nuevo": True}
 
 
 async def _referido_premiar(org: dict, conductor_id: str):

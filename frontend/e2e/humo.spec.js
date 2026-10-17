@@ -2229,10 +2229,10 @@ test('Cobro · con la promoción: «Gratis sin límite», sin aviso de prueba ni
 test('Cartera · ve su saldo, invita y pide cobrar por Bizum', async ({ page }) => {
   const fallos = vigilar(page)
   await entrarRepartidor(page, { status: 'trial', days_left: 6, promo: { activa: true, hasta: '2026-12-31' } })
-  // 14-10-2026: promoción de 10 € hasta el 31-10 (lo dice el servidor) y retirada desde 60 €, que NO se
-  // enseña hasta que pulsa «Cobrar» con menos saldo.
+  // 14-10-2026: promoción de 10 € (desde el 17-10, hasta el 31-12; lo dice el servidor) y retirada desde 60 €,
+  // que NO se enseña hasta que pulsa «Cobrar» con menos saldo.
   let ref = { codigo: 'ABC123', invitados: 4, premiados: 3, saldo: 4500, ganado: 4500, por_invitado: 1000, retirada_min: 6000,
-    promo_hasta: '2026-10-31', promo_cent: 1000, entregas_cartera: 20, dias_distintos: 2, pendiente: false, retiradas: [] }
+    promo_hasta: '2026-12-31', promo_cent: 1000, entregas_cartera: 20, dias_distintos: 2, pendiente: false, retiradas: [] }
   await page.route(/\/api\/referidos$/, (r) => r.fulfill({ json: ref }))
   const pedidos = []
   await page.route(/\/api\/cartera\/retirar/, async (r) => {
@@ -2242,12 +2242,12 @@ test('Cartera · ve su saldo, invita y pide cobrar por Bizum', async ({ page }) 
   })
   await page.goto('/ruta', { waitUntil: 'domcontentloaded' })
   await expect(page.getByText(/Gana 10 € por cada compañero que la use/)).toBeVisible()
-  await expect(page.getByText('Promo hasta el 31 de octubre')).toBeVisible()
+  await expect(page.getByText('Promo hasta el 31 de diciembre')).toBeVisible()
   await page.getByRole('button', { name: 'Cuenta', exact: true }).click()
   const cartera = page.getByRole('region', { name: 'Tu cartera' })
   await expect(cartera.getByText('45 €', { exact: true })).toBeVisible()
   await expect(cartera.getByText('Invitados: 4 · ya la usan: 3 · ganado: 45 €')).toBeVisible()
-  await expect(cartera.getByText('Promoción hasta el 31 de octubre: 10 € por cada compañero que se registre con tu enlace.')).toBeVisible()
+  await expect(cartera.getByText('Promoción hasta el 31 de diciembre: 10 € por cada compañero que se registre con tu enlace.')).toBeVisible()
   await expect(cartera.getByText(/desde \d+ €/)).toHaveCount(0)          // el mínimo no está a la vista
   await cartera.getByRole('button', { name: 'Enseñar mi QR a un compañero' }).click()
   await expect(cartera.getByRole('img', { name: 'Código QR de tu invitación' })).toBeVisible()
@@ -2266,6 +2266,50 @@ test('Cartera · ve su saldo, invita y pide cobrar por Bizum', async ({ page }) 
   expect(pedidos[0]).toEqual({ titular: 'Pepe Pérez', metodo: 'bizum', destino: '612 345 678' })
   await expect(cartera.getByText('Tienes un pago en revisión. Te avisamos por correo cuando lo enviemos.')).toBeVisible()
   await expect(cartera.getByText('En revisión', { exact: true })).toBeVisible()
+  expect(fallos).toEqual([])
+})
+
+/* EL BONO DE BIENVENIDA (17-10-2026): 10 € por la primera ruta de verdad (20 entregas en 2 días), con lo que
+   lleva a la vista; las paradas de ejemplo no cuentan y se dice; ganado, se celebra y lleva a la cartera. */
+test('Bono · la tarjeta de la primera ruta: progreso, ejemplos que no cuentan y ganado lleva a la cartera', async ({ page }) => {
+  const fallos = vigilar(page)
+  await entrarRepartidor(page, { status: 'trial', days_left: 60, promo: { activa: true, hasta: '2026-12-31' } })
+  let bono = { cent: 1000, pagado: false, hasta: '2026-12-31', objetivo: 20, dias_objetivo: 2, entregas: 0, dias: 0, revisar: false }
+  let pedidos = []
+  await page.route(/\/api\/reparto\/mi-ruta$/, (r) => r.fulfill({ json: {
+    activo: true, autonomo: true, fecha: '2026-10-17', pedidos, jornada: {}, aviso_aceptado: true, bono } }))
+  await page.route(/\/api\/reparto\/mi-ruta\/trazado/, (r) => r.fulfill({ json: { linea: [], fuente: null } }))
+  await page.route(/\/api\/referidos$/, (r) => r.fulfill({ json: {
+    codigo: 'ABC123', invitados: 0, premiados: 0, saldo: bono.pagado ? 1000 : 0, ganado: bono.pagado ? 1000 : 0, por_invitado: 1000,
+    retirada_min: 6000, promo_hasta: '2026-12-31', promo_cent: 1000, entregas_cartera: 20, dias_distintos: 2, pendiente: false,
+    retiradas: [], bono: bono.pagado ? { cent: 1000, pagado: true, pagado_en: bono.pagado_en } : bono } }))
+  await page.goto('/ruta', { waitUntil: 'domcontentloaded' })
+  const tarjeta = page.getByTestId('bono')
+  await expect(tarjeta.getByText('10 € por tu primera ruta real')).toBeVisible()
+  await expect(tarjeta.getByText('Haz 20 entregas con la app en 2 días distintos y son tuyos. Hasta el 31 de diciembre.')).toBeVisible()
+  await expect(tarjeta.getByText('0 de 20 entregas')).toBeVisible()
+  await expect(tarjeta.getByText(/foto a la etiqueta de cada uno, aquí abajo/)).toBeVisible()
+  // Con la tarjeta a la vista, el aviso de «invitar» de arriba no se repite.
+  await expect(page.getByText(/Gana 10 € por cada compañero que la use/)).toHaveCount(0)
+  // Solo paradas de ejemplo: no cuentan, y se dice.
+  pedidos = [{ id: 'e1', cliente: 'Ejemplo', direccion: 'Calle Real 1', estado: 'pendiente', orden: 1, ejemplo: true }]
+  await page.reload({ waitUntil: 'domcontentloaded' })
+  await expect(tarjeta.getByText('Las paradas de ejemplo no cuentan: quítalas y mete las tuyas.')).toBeVisible()
+  // Con entregas de verdad: lo que lleva.
+  pedidos = []
+  bono = { ...bono, entregas: 12, dias: 1 }
+  await page.reload({ waitUntil: 'domcontentloaded' })
+  await expect(tarjeta.getByText('12 de 20 entregas')).toBeVisible()
+  await expect(tarjeta.getByText('1 de 2 días')).toBeVisible()
+  await expect(tarjeta.getByRole('progressbar')).toHaveAttribute('aria-valuenow', '12')
+  // Ganado: se celebra y lleva a la cartera, que lo dice.
+  bono = { cent: 1000, pagado: true, pagado_en: new Date().toISOString(), nuevo: true }
+  await page.reload({ waitUntil: 'domcontentloaded' })
+  await expect(page.getByTestId('bono')).toHaveCount(0)
+  await page.getByTestId('bono-ganado').click()
+  const cartera = page.getByRole('region', { name: 'Tu cartera' })
+  await expect(cartera.getByText('Bono de bienvenida: 10 € ganados con tu primera ruta.')).toBeVisible()
+  await expect(cartera.getByText('10 €', { exact: true })).toBeVisible()
   expect(fallos).toEqual([])
 })
 
@@ -2842,8 +2886,8 @@ test.describe('Portada de repartidores desde México', () => {
     await expect(page.getByText('Mercado Libre', { exact: true })).toBeVisible()
     await expect(page.getByText('Estafeta', { exact: true })).toBeVisible()
     await expect(page.getByText('MRW', { exact: true })).toHaveCount(0)
-    // 10 € con la promoción hasta el 31-10-2026, 2,50 € después: el texto de la portada lo decide la fecha.
-    await expect(page.getByText(/Gana (10|2[,.]50) € por cada compañero/).first()).toBeVisible()
+    // Con la promoción (hasta el 31-12-2026), 10 € por su primera ruta y 10 € por compañero; después, 2,50 €.
+    await expect(page.getByText(/Gana (10 € con tu primera ruta real y 10 €|2[,.]50 €) por cada compañero/).first()).toBeVisible()
     // Español de allí: «toma una foto», no «haz una foto» (lib/idioma.js, aLatam).
     await expect(page.getByText(/^Toma una foto a la etiqueta/).first()).toBeVisible()
     await expect(page.getByText(/Haz una foto a la etiqueta/)).toHaveCount(0)

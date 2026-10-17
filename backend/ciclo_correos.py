@@ -23,6 +23,9 @@ haría alguien que lleva la app y se fija en cada alta:
   · «invita» (11-10-2026) — cuando ya lleva 10 entregas de verdad (direcciones
     distintas y repartidas en el día, como cuenta «Invita y gana»: marcar 11 en 20
     minutos a medianoche es probar, no repartir). Su enlace y las condiciones exactas.
+  · El BONO DE BIENVENIDA (17-10-2026): mientras pueda ganarlo, la bienvenida, «primer_dia» y
+    «recordatorio» lo dicen en un párrafo; y «bono» (una vez, por la mañana) se lo cuenta a quien se dio de
+    alta antes y no ha recibido desde entonces ningún correo que lo diga.
 
 Reglas que no se rompen:
   · Uno por persona y clave, nunca dos (el servidor lo marca ANTES de mandar).
@@ -37,7 +40,7 @@ import html as _html
 import re
 from datetime import datetime, timedelta, timezone
 
-CLAVES = ("bienvenida", "primer_dia", "casi_fin", "recordatorio", "invita")
+CLAVES = ("bienvenida", "primer_dia", "casi_fin", "recordatorio", "invita", "bono")
 # «br» es el portugués de Brasil (11-10-2026): mismos datos que «pt», escrito para allí (você, celular,
 # paradas, pacotes). Sin él, a un brasileño le llegaba «telemóvel», «paragens» y «morada».
 IDIOMAS = ("es", "pt", "en", "br")
@@ -51,6 +54,9 @@ RECORDATORIO_DESDE = timedelta(days=3)
 RECORDATORIO_HASTA = timedelta(days=8)
 MANANA_DESDE, MANANA_HASTA = 7, 9          # «primer_dia» y «recordatorio», de 7:00 a 8:59 de su hora
 INVITA_ENTREGAS = 10                       # entregas suyas (no de ejemplo) para pedirle que invite
+BONO_DESDE = datetime(2026, 10, 16, 22, 0, tzinfo=timezone.utc)   # 17-10-2026 00:00 en Madrid: nace el bono
+BONO_ENTREGAS = 20                         # las del bono (las mismas que «Invita y gana»)
+CON_BONO = ("bienvenida", "primer_dia", "recordatorio")   # correos que llevan el párrafo del bono
 
 _PAISES_PT = {"pt", "br", "ao", "mz", "cv"}
 _PAISES_ES = {"es", "mx", "ar", "co", "cl", "pe", "ve", "ec", "bo", "py", "uy", "cr", "pa",
@@ -114,9 +120,10 @@ def en_su_manana(org: dict, ahora: datetime) -> bool:
     return local.weekday() != 6 and MANANA_DESDE <= local.hour < MANANA_HASTA
 
 
-def toca(org: dict, uso: dict, ahora: datetime, promo: bool = False) -> str:
+def toca(org: dict, uso: dict, ahora: datetime, promo: bool = False, bono: bool = False) -> str:
     """La clave del correo que toca mandar AHORA, o "" si ninguno. Con la promoción
-    «gratis y sin límite» activa no hay «se acaba tu prueba»: no se acaba nada."""
+    «gratis y sin límite» activa no hay «se acaba tu prueba»: no se acaba nada.
+    `bono`: esta cuenta todavía puede ganar el bono de bienvenida."""
     if not es_candidata(org):
         return ""
     enviados = org.get("ciclo_correos") or {}
@@ -137,6 +144,11 @@ def toca(org: dict, uso: dict, ahora: datetime, promo: bool = False) -> str:
     if ("recordatorio" not in enviados and RECORDATORIO_DESDE <= edad <= RECORDATORIO_HASTA
             and not (uso or {}).get("paradas") and manana):
         return "recordatorio"
+    # El bono, a quien no se le ha dicho: ningún correo suyo desde que existe (esos ya lo llevan).
+    if (bono and "bono" not in enviados and edad >= PRIMER_DIA_DESDE and manana
+            and _reales(uso) < BONO_ENTREGAS
+            and not any((_fecha((v or {}).get("at")) or alta) >= BONO_DESDE for v in enviados.values())):
+        return "bono"
     if ("invita" not in enviados and _reales(uso) >= INVITA_ENTREGAS
             and str(org.get("pais") or "es").lower() != "cn"):        # en China no hay cómo pagar
         return "invita"
@@ -208,6 +220,23 @@ _T = {
             "cada uno. {promo_ref}Lo cobras por {cobro}. Tu enlace, tu QR y las condiciones están en la app, "
             "pestaña «Cuenta»: {cuenta}\n\n"
             "{ayuda_invita}"),
+        "bono": (
+            "{bono_euros} por tu primera ruta con {marca}",
+            "Hola {nombre}:\n\n"
+            "Hasta el {bono_hasta} tenemos un regalo para que pruebes {marca} con tu ruta de verdad:\n\n"
+            "· {bono_euros} para ti cuando hagas tus primeras 20 entregas de verdad con la app, en 2 días distintos.\n"
+            "· {euros} más por cada compañero que se registre con tu enlace y haga lo mismo.\n\n"
+            "{progreso}"
+            "Lo cobras por {cobro}. Cuando tengas los paquetes delante:\n"
+            "1. Abre {ruta}\n"
+            "2. «Cargar paquetes: uno tras otro» y una foto a cada etiqueta: la dirección entra sola.\n"
+            "3. «Montar ruta y empezar»: te ordena las paradas y te guía con voz.\n\n"
+            "Tu enlace para invitar: {invita}\n\n"
+            "{ayuda_corta}"),
+        "bono_linea": ("Y un regalo: hasta el {bono_hasta}, te damos {bono_euros} cuando hagas tus primeras 20 entregas "
+                       "de verdad con la app (en 2 días distintos), y {euros} más por cada compañero que invites y "
+                       "haga lo mismo."),
+        "progreso": "Ya llevas {n} entregas que cuentan.\n\n",
         "cobro_es": "Bizum o transferencia",
         "promo_ref": "Son {euros} por cada compañero que se registre con tu enlace hasta el {promo_hasta} (promoción). ",
         "ayuda_invita": "¿Le falta algo a la app para tu reparto? Contéstame con una línea y lo miro.",
@@ -232,7 +261,7 @@ _T = {
         "firma": "Daniel, de {marca}",
         "baja": "¿No quieres más correos como este? Date de baja aquí: {baja}",
         "boton": {"bienvenida": "Abrir la app", "primer_dia": "Cargar mi primera ruta", "casi_fin": "Ver mi cuenta",
-                  "recordatorio": "Cargar mi ruta", "invita": "Ver mi enlace y mi QR"},
+                  "recordatorio": "Cargar mi ruta", "invita": "Ver mi enlace y mi QR", "bono": "Cargar mi ruta"},
     },
     "pt": {
         "bienvenida": (
@@ -290,6 +319,22 @@ _T = {
             "{ayuda_invita}"),
         "cobro_es": "Bizum ou transferência",
         "promo_ref": "São {euros} por cada colega que se registe com o teu link até {promo_hasta} (promoção). ",
+        "bono": (
+            "{bono_euros} pela tua primeira rota com a {marca}",
+            "Olá {nombre}:\n\n"
+            "Até {bono_hasta} temos um presente para experimentares a {marca} com a tua rota a sério:\n\n"
+            "· {bono_euros} para ti quando fizeres as tuas primeiras 20 entregas a sério com a app, em 2 dias diferentes.\n"
+            "· {euros} por cada colega que se registe com o teu link e faça o mesmo.\n\n"
+            "{progreso}"
+            "Recebes por {cobro}. Quando tiveres os volumes à frente:\n"
+            "1. Abre {ruta}\n"
+            "2. «Carregar volumes: um após outro» e uma foto a cada etiqueta: a morada entra sozinha.\n"
+            "3. «Montar rota e começar»: ordena as paragens e guia-te por voz.\n\n"
+            "O teu link para convidar: {invita}\n\n"
+            "{ayuda_corta}"),
+        "bono_linea": ("E um presente: até {bono_hasta}, damos-te {bono_euros} quando fizeres as tuas primeiras 20 entregas "
+                       "a sério com a app (em 2 dias diferentes), e {euros} por cada colega que convidares e faça o mesmo."),
+        "progreso": "Já levas {n} entregas que contam.\n\n",
         "ayuda_invita": "Falta alguma coisa à app para a tua distribuição? Responde-me com uma linha e eu vejo.",
         "ayuda_invita_sin": "Obrigado por a usares.",
         "cobro_fuera": "PayPal",
@@ -312,7 +357,8 @@ _T = {
         "firma": "Daniel, da {marca}",
         "baja": "Não queres mais e-mails como este? Cancela aqui: {baja}",
         "boton": {"bienvenida": "Abrir a app", "primer_dia": "Carregar a minha primeira rota", "casi_fin": "Ver a minha conta",
-                  "recordatorio": "Carregar a minha rota", "invita": "Ver o meu link e o meu QR"},
+                  "recordatorio": "Carregar a minha rota", "invita": "Ver o meu link e o meu QR",
+                  "bono": "Carregar a minha rota"},
     },
     "en": {
         "bienvenida": (
@@ -370,6 +416,22 @@ _T = {
             "{ayuda_invita}"),
         "cobro_es": "Bizum or bank transfer",
         "promo_ref": "It's {euros} for every colleague who signs up with your link until {promo_hasta} (promotion). ",
+        "bono": (
+            "{bono_euros} for your first route with {marca}",
+            "Hi {nombre},\n\n"
+            "Until {bono_hasta} we have a gift so you can try {marca} on your real route:\n\n"
+            "· {bono_euros} for you when you make your first 20 real deliveries with the app, on 2 different days.\n"
+            "· {euros} for every colleague who signs up with your link and does the same.\n\n"
+            "{progreso}"
+            "You get paid by {cobro}. When you have your parcels in front of you:\n"
+            "1. Open {ruta}\n"
+            "2. «Load parcels: one after another» and snap each label: the address goes in by itself.\n"
+            "3. «Build route and start»: it orders your stops and guides you by voice.\n\n"
+            "Your invite link: {invita}\n\n"
+            "{ayuda_corta}"),
+        "bono_linea": ("And a gift: until {bono_hasta}, you get {bono_euros} when you make your first 20 real deliveries "
+                       "with the app (on 2 different days), plus {euros} for every colleague you invite who does the same."),
+        "progreso": "You already have {n} deliveries that count.\n\n",
         "ayuda_invita": "Is anything missing for your deliveries? Reply with one line and I'll look into it.",
         "ayuda_invita_sin": "Thanks for using it.",
         "cobro_fuera": "PayPal",
@@ -392,7 +454,7 @@ _T = {
         "firma": "Daniel, {marca}",
         "baja": "Don't want emails like this? Unsubscribe here: {baja}",
         "boton": {"bienvenida": "Open the app", "primer_dia": "Load my first route", "casi_fin": "See my account",
-                  "recordatorio": "Load my route", "invita": "See my link and QR code"},
+                  "recordatorio": "Load my route", "invita": "See my link and QR code", "bono": "Load my route"},
     },
 }
 
@@ -455,6 +517,22 @@ _T["br"] = {
         "aba «Conta»: {cuenta}\n\n"
         "{ayuda_invita}"),
     "promo_ref": "São {euros} por cada colega que se cadastrar com o seu link até {promo_hasta} (promoção). ",
+    "bono": (
+        "{bono_euros} pela sua primeira rota com o {marca}",
+        "Olá {nombre}:\n\n"
+        "Até {bono_hasta} temos um presente para você testar o {marca} com a sua rota de verdade:\n\n"
+        "· {bono_euros} para você quando fizer suas primeiras 20 entregas de verdade com o app, em 2 dias diferentes.\n"
+        "· Mais {euros} por cada colega que se cadastrar com o seu link e fizer o mesmo.\n\n"
+        "{progreso}"
+        "Você recebe por {cobro}. Quando estiver com os pacotes na sua frente:\n"
+        "1. Abra {ruta}\n"
+        "2. «Carregar pacotes: um atrás do outro» e uma foto de cada etiqueta: o endereço entra sozinho.\n"
+        "3. «Montar rota e começar»: o app organiza as paradas e te guia por voz.\n\n"
+        "Seu link para convidar: {invita}\n\n"
+        "{ayuda_corta}"),
+    "bono_linea": ("E um presente: até {bono_hasta}, você ganha {bono_euros} quando fizer suas primeiras 20 entregas "
+                   "de verdade com o app (em 2 dias diferentes), e mais {euros} por cada colega que convidar e fizer o mesmo."),
+    "progreso": "Você já tem {n} entregas que contam.\n\n",
     "ayuda_invita": "Falta alguma coisa no app para as suas entregas? Me responda com uma linha que eu vejo.",
     "ayuda_invita_sin": "Obrigado por usar o app.",
     "hecho_si": "Nesses dias você carregou {paradas} paradas{entregas}.\n\n",
@@ -476,7 +554,7 @@ _T["br"] = {
     "firma": "Daniel, do {marca}",
     "baja": "Não quer mais e-mails como este? Cancele aqui: {baja}",
     "boton": {"bienvenida": "Abrir o app", "primer_dia": "Carregar minha primeira rota", "casi_fin": "Ver minha conta",
-              "recordatorio": "Carregar minha rota", "invita": "Ver meu link e meu QR"},
+              "recordatorio": "Carregar minha rota", "invita": "Ver meu link e meu QR", "bono": "Carregar minha rota"},
 }
 
 # Español de Latinoamérica (11-10-2026): los correos están en español de España; a quien es de allí se le
@@ -539,7 +617,8 @@ def _quedan(org, ahora):
 def correo(clave: str, org: dict, uso: dict, ahora: datetime, *, marca: str, base: str,
            baja: str, mensual: float, anual: float, con_respuesta: bool,
            promo_hasta: str = "", tope: int = 15, ref_enlace: str = "", ref_cent: int = 250,
-           ref_espana: bool = True, ref_min_cent: int = 6000, ref_promo_hasta: str = "") -> dict:
+           ref_espana: bool = True, ref_min_cent: int = 6000, ref_promo_hasta: str = "",
+           bono_hasta: str = "", bono_cent: int = 1000) -> dict:
     """{asunto, texto, html} del correo `clave` para esta cuenta."""
     if clave not in CLAVES:
         raise ValueError(clave)
@@ -574,6 +653,11 @@ def correo(clave: str, org: dict, uso: dict, ahora: datetime, *, marca: str, bas
     # 14-10-2026: el mínimo de retirada ya no se dice en el correo (solo al intentar cobrar); la promoción, sí.
     datos["promo_ref"] = (t["promo_ref"].format(euros=datos["euros"], promo_hasta=_dia_mes(ref_promo_hasta, idioma))
                           if ref_promo_hasta else "")
+    # El bono de bienvenida (17-10-2026): solo si todavía puede ganarlo (lo decide el servidor).
+    datos["bono_hasta"] = _dia_mes(bono_hasta, idioma) if bono_hasta else ""
+    datos["bono_euros"] = _euros(bono_cent / 100, idioma)
+    reales = _reales(uso)
+    datos["progreso"] = t["progreso"].format(n=reales) if 0 < reales < BONO_ENTREGAS else ""
     datos["intro"] = (t["intro_promo"] if promo_hasta else t["intro"]).format(**datos)
     # 10-10-2026: con la promoción no hay «días de prueba» que contar (el correo del día
     # siguiente decía «te quedan 6 días» a quien tiene la app gratis hasta el 31-12).
@@ -581,6 +665,11 @@ def correo(clave: str, org: dict, uso: dict, ahora: datetime, *, marca: str, bas
     asunto_m, cuerpo_m = t[clave]
     asunto = asunto_m.format(**datos)
     cuerpo = cuerpo_m.format(**datos)
+    if bono_hasta and clave in CON_BONO:
+        # El párrafo del bono va antes del último (la ayuda), que es con lo que se despide.
+        antes, _sep, ultimo = cuerpo.rpartition("\n\n")
+        linea = t["bono_linea"].format(**datos)
+        cuerpo = f"{antes}\n\n{linea}\n\n{ultimo}" if antes else f"{cuerpo}\n\n{linea}"
     if idioma == "es" and str(org.get("pais") or "").lower() in _LATAM:
         asunto, cuerpo = _a_latam(asunto), _a_latam(cuerpo)
     if not nombre:
@@ -590,6 +679,8 @@ def correo(clave: str, org: dict, uso: dict, ahora: datetime, *, marca: str, bas
     pie = t["baja"].format(baja=baja)
     texto = f"{cuerpo}\n\n{firma}\n\n--\n{pie}"
     enlace = cuenta if clave in ("casi_fin", "invita") else ruta
+    if clave == "bono" and not bono_hasta:
+        raise ValueError("el correo del bono necesita bono_hasta")
     return {"asunto": asunto, "texto": texto, "idioma": idioma,
             "html": _html_de(cuerpo, firma, t["boton"][clave], enlace, pie)}
 

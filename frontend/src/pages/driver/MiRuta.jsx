@@ -2,7 +2,7 @@ import { Suspense, lazy, useCallback, useEffect, useRef, useState } from 'react'
 import {
   ArrowLeft, ScanLine, Camera, Loader2, Navigation, Phone, Check, X, Route, MapPin, Play, Square, Package,
   MessageCircle, Clock, Search, List, Pencil, ChevronDown, GripVertical, Map as MapaIcono, ArrowUp, ArrowDown, ArrowUpDown, Mic, ClipboardPaste, Trophy,
-  Eye, PenLine, RotateCcw, HelpCircle, Share2, FileUp,
+  Eye, PenLine, RotateCcw, HelpCircle, Share2, FileUp, Gift,
 } from 'lucide-react'
 import {
   repMiRuta, repZonasCarga, repEscanear, repEscanearLote, repLeerTicket, repNuevoPedido, repEstado, repOrdenar, repJornada, repPosicion,
@@ -23,6 +23,7 @@ import { compartirDia } from '../../lib/compartirDia'
 import { fijarPais, importe, simboloMoneda, metodosCobro, paisActual } from '../../lib/region'
 import { tx, useIdioma, locale, txError } from '../../lib/idioma'
 import { salirDeLaDemoDeReparto } from '../../panel/auth'
+import { eurosRef, fechaRefPromo } from '../../lib/precios'
 
 /* ── MI RUTA ────────────────────────────────────────────────────────────────
    Lo que hace el repartidor al cargar: escanea el código de la caja. Si el
@@ -868,6 +869,11 @@ export default function MiRuta({ onBack, embebido = false }) {
             ? () => editar(pendientes.find((p) => p.geo === 'no')) : null} />
       )}
 
+      {/* EL BONO DE BIENVENIDA (17-10-2026): 10 € por la primera ruta de verdad, con lo que lleva a la vista. */}
+      {ruta.autonomo && ruta.bono && (
+        <Bono b={ruta.bono} total={total} soloEjemplo={total > 0 && lista(ruta.pedidos).every((p) => p.ejemplo)} />
+      )}
+
       {/* ESCANEAR */}
       <div className="rounded-2xl border border-brand-400/40 bg-brand-500/[.08] p-3.5">
         <div className="grid grid-cols-2 gap-2">
@@ -1485,7 +1491,7 @@ export default function MiRuta({ onBack, embebido = false }) {
                     <button key={`${a.direccion}-${a.cp}-${i}`} type="button"
                       onClick={() => setNuevo({ ...nuevo, direccion: [a.direccion, a.cp, a.localidad].filter(Boolean).join(', '),
                         cp: a.cp || '', localidad: a.localidad || '', lat: null, lng: null, direccion_confirmada: true })}
-                      className="rounded-lg border border-amber-300/40 px-2.5 py-2 text-left text-[13px] font-semibold text-amber-50">
+                      className="rounded-lg border border-amber-300/40 px-2.5 py-2 text-left text-[13px] font-semibold text-amber-100">
                       { [a.direccion, a.cp, a.localidad].filter(Boolean).join(', ') }
                     </button>
                   ))}
@@ -1611,6 +1617,56 @@ export default function MiRuta({ onBack, embebido = false }) {
         </Hoja>
       )}
     </Marco>
+  )
+}
+
+/* EL BONO DE BIENVENIDA: cuánto le falta para los 10 € de su primera ruta de verdad (20 entregas reales
+   en 2 días distintos; lo cuenta el servidor con la misma vara que «Invita y gana»). Ganado, se celebra
+   tres días y lleva a la cartera. */
+function Bono({ b, total, soloEjemplo }) {
+  const euros = eurosRef(b.cent, locale())
+  if (b.pagado) {
+    const reciente = b.nuevo || (b.pagado_en && Date.now() - new Date(b.pagado_en).getTime() < 3 * 86400000)
+    if (!reciente) return null
+    return (
+      <button type="button" onClick={() => window.dispatchEvent(new Event('fds-ir-cuenta'))} data-testid="bono-ganado"
+        className="mb-3 flex w-full items-center gap-3 rounded-2xl border border-emerald-400/40 bg-emerald-500/[.12] px-3.5 py-3 text-left">
+        <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-emerald-400/20 text-emerald-100"><Trophy size={20} /></span>
+        <span className="min-w-0">
+          <span className="block text-[15px] font-extrabold text-emerald-100">{tx('¡Has ganado {euros}!', { euros })}</span>
+          <span className="block text-[12.5px] leading-snug text-emerald-200/80">{tx('Ya están en tu cartera. Invita a un compañero y gana {euros} más.', { euros })}</span>
+        </span>
+      </button>
+    )
+  }
+  const objetivo = b.objetivo || 20
+  const diasObjetivo = b.dias_objetivo || 2
+  const hechas = Math.min(b.entregas || 0, objetivo)
+  const pct = Math.round((hechas / objetivo) * 100)
+  return (
+    <div className="mb-3 rounded-2xl border border-amber-300/40 bg-gradient-to-br from-amber-400/[.16] via-amber-500/[.06] to-transparent p-3.5" data-testid="bono">
+      <div className="flex items-start gap-3">
+        <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-amber-300/20 text-amber-200"><Gift size={20} /></span>
+        <div className="min-w-0 flex-1">
+          <p className="text-[15px] font-extrabold leading-tight text-amber-100">{tx('{euros} por tu primera ruta real', { euros })}</p>
+          <p className="mt-0.5 text-[12.5px] leading-snug text-amber-200/90">
+            {tx('Haz {n} entregas con la app en {d} días distintos y son tuyos. Hasta el {fecha}.', { n: objetivo, d: diasObjetivo, fecha: fechaRefPromo(locale(), b.hasta) })}
+          </p>
+        </div>
+      </div>
+      <div className="mt-3 h-2.5 overflow-hidden rounded-full bg-dark-950/70" role="progressbar" aria-valuemin={0} aria-valuemax={objetivo}
+        aria-valuenow={hechas} aria-label={tx('Entregas para el bono')}>
+        <div className="h-full rounded-full bg-gradient-to-r from-amber-300 to-lime-300 transition-[width] duration-700" style={{ width: `${hechas ? Math.max(pct, 4) : 0}%` }} />
+      </div>
+      <p className="mt-1.5 flex items-center justify-between text-[12px] font-semibold text-amber-100">
+        <span>{tx('{a} de {b} entregas', { a: hechas, b: objetivo })}</span>
+        <span>{tx('{a} de {b} días', { a: Math.min(b.dias || 0, diasObjetivo), b: diasObjetivo })}</span>
+      </p>
+      {b.revisar ? <p className="mt-1.5 text-[12px] leading-snug text-amber-200/90">{tx('Lo estamos revisando. Te avisamos por correo.')}</p>
+        : soloEjemplo ? <p className="mt-1.5 text-[12px] leading-snug text-amber-200/90">{tx('Las paradas de ejemplo no cuentan: quítalas y mete las tuyas.')}</p>
+          : total === 0 ? <p className="mt-1.5 text-[12px] leading-snug text-amber-200/90">{tx('Empieza con los paquetes de hoy: foto a la etiqueta de cada uno, aquí abajo.')}</p>
+            : null}
+    </div>
   )
 }
 

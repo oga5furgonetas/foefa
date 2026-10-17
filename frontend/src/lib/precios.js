@@ -109,9 +109,12 @@ export const GRATIS_SIN_LIMITE_HASTA = '2026-12-31'
 export const REF_CENT = 250
 /* PROMOCIÓN (14-10-2026, Dani): 10 € por cada compañero que se registre hasta el 31-10-2026 incluido. El
    servidor manda `promo_hasta` y `promo_cent` en /referidos mientras dura; esto es para pintar antes de que
-   conteste y en la portada. El mínimo de retirada (60 €) no se enseña hasta que intentan cobrar. */
+   conteste y en la portada. El mínimo de retirada (60 €) no se enseña hasta que intentan cobrar.
+   17-10-2026: alargada hasta el 31-12-2026, y además el BONO de bienvenida: BONO_CENT para quien hace su
+   primera ruta de verdad (20 entregas en 2 días; lo cuenta el servidor en /reparto/mi-ruta → `bono`). */
 export const REF_PROMO_CENT = 1000
-export const REF_PROMO_HASTA = '2026-10-31'
+export const REF_PROMO_HASTA = '2026-12-31'
+export const BONO_CENT = 1000
 export const refPromoActiva = (hoy = new Date()) => hoy <= new Date(`${REF_PROMO_HASTA}T23:59:59`)
 export const refCentActual = () => (refPromoActiva() ? REF_PROMO_CENT : REF_CENT)
 /* «31 de octubre» en el idioma de la pantalla. */

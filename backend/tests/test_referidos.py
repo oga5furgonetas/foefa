@@ -158,7 +158,7 @@ async def test_promocion_10_euros_por_invitado_dado_de_alta_hasta_el_31_de_octub
     lleguen después; si se registra ya en noviembre, lo de siempre."""
     mundo.g["organizations"].docs[0]["created_at"] = "2026-10-12T08:00:00+00:00"
     r = await server.referidos_mios(YO)
-    assert r["por_invitado"] == 1000 and r["promo_hasta"] == "2026-10-31" and r["promo_cent"] == 1000
+    assert r["por_invitado"] == 1000 and r["promo_hasta"] == "2026-12-31" and r["promo_cent"] == 1000
     assert (await server.referidos_valido(r["codigo"]))["por_invitado"] == 1000
     await _alta(ref=r["codigo"])
     inv = mundo.g["organizations"].docs[-1]
@@ -285,6 +285,70 @@ async def test_fuera_de_espana_se_cobra_por_paypal_y_en_china_no_hay(mundo, sin_
     # China: no hay cómo pagar.
     o1["pais"] = "cn"
     assert (await server.referidos_mios(YO))["cartera"] is False
+
+
+@pytest.mark.asyncio(loop_scope="session")
+async def test_bono_de_bienvenida_por_la_primera_ruta_real_y_una_sola_vez(mundo):
+    """17-10-2026 (Dani): 10 € para quien reparte solo cuando hace su primera ruta de verdad (20 entregas
+    reales en 2 días distintos), no por registrarse. A su propia cartera y una sola vez."""
+    o1 = mundo.g["organizations"].docs[0]
+    o1["created_at"] = _iso(-2)
+    b = await server._bono_estado(o1, "c1")
+    assert b["pagado"] is False and b["cent"] == 1000 and b["hasta"] == "2026-12-31" and b["entregas"] == 0
+    assert b["objetivo"] == 20 and b["dias_objetivo"] == 2
+    _entregas(mundo, 30, ejemplo=True)                              # las de ejemplo no cuentan
+    _entregas(mundo, 12, fecha=_dia(-1))
+    b = await server._bono_estado(o1, "c1")
+    assert b["pagado"] is False and b["entregas"] == 12 and b["dias"] == 1
+    r = await server.referidos_mios(YO)
+    assert r["bono"]["pagado"] is False and r["saldo"] == 0
+    _entregas(mundo, 8)                                             # otro día: 20 en 2 días
+    b = await server._bono_estado(o1, "c1")
+    assert b["pagado"] is True and b.get("nuevo") is True
+    assert o1["bono_pagado"] is True and o1["cartera_saldo"] == 1000 and o1["cartera_ganado"] == 1000
+    mov = mundo.g["cartera_movimientos"].docs[-1]
+    assert mov["tipo"] == "bienvenida" and mov["importe"] == 1000 and mov["org_id"] == "o1"
+    b = await server._bono_estado(o1, "c1")                          # una sola vez
+    assert b["pagado"] is True and not b.get("nuevo") and o1["cartera_saldo"] == 1000
+    assert len(mundo.g["cartera_movimientos"].docs) == 1
+    assert (await server.referidos_mios(YO))["bono"] == {"cent": 1000, "pagado": True, "pagado_en": o1["bono_pagado_en"]}
+
+
+@pytest.mark.asyncio(loop_scope="session")
+async def test_bono_ni_de_golpe_ni_recien_creada_ni_para_empresas_ni_en_china(mundo):
+    o1 = mundo.g["organizations"].docs[0]
+    o1["created_at"] = _iso(-2)
+    _entregas(mundo, 20, fecha=_dia(-1), cada_min=0)                 # 40 «entregadas» de golpe: no es repartir
+    _entregas(mundo, 20, cada_min=0)
+    assert (await server._bono_estado(o1, "c1"))["pagado"] is False
+    mundo.t["reparto_pedidos"].docs.clear()
+    _entregas(mundo, 20, fecha=_dia(-1))
+    _entregas(mundo, 5)
+    o1["created_at"] = _iso(-0.5)                                    # cuenta de menos de 24 h
+    assert (await server._bono_estado(o1, "c1"))["pagado"] is False
+    o1["created_at"] = _iso(-2)
+    for cambio in ({"sector": "mensajeria", "plan": "pro"}, {"pais": "cn"}, {"demo": True}, {"account_type": "owner"}):
+        assert await server._bono_estado({**o1, **cambio}, "c1") is None
+    # Dada de alta cuando ya no hay promoción: no le toca.
+    assert await server._bono_estado({**o1, "created_at": "2027-01-02T10:00:00+00:00"}, "c1") is None
+    # De antes del bono y con su mes ya pasado: tampoco.
+    assert server._bono_resumen({**o1, "created_at": "2026-10-03T10:00:00+00:00"},
+                                datetime(2026, 11, 17, tzinfo=timezone.utc)) is None
+    assert not o1.get("bono_pagado") and not mundo.g["cartera_movimientos"].docs
+
+
+@pytest.mark.asyncio(loop_scope="session")
+async def test_bono_desde_la_misma_red_que_otra_que_ya_lo_cobro_se_revisa(mundo):
+    red = server._huella_red("198.51.100.7")
+    mundo.g["organizations"].docs.append({"id": "o2", "name": "Otra", "sector": "autonomo", "alta_red": red,
+                                          "bono_pagado": True, "created_at": _iso(-5)})
+    o1 = mundo.g["organizations"].docs[0]
+    o1.update(created_at=_iso(-2), alta_red=red)
+    _entregas(mundo, 15, fecha=_dia(-1))
+    _entregas(mundo, 10)
+    b = await server._bono_estado(o1, "c1")
+    assert b["pagado"] is False and b["revisar"] is True and o1["bono_sospechoso"] == "misma_red"
+    assert not o1.get("cartera_saldo")
 
 
 @pytest.mark.asyncio(loop_scope="session")

@@ -246,7 +246,7 @@ export default function Empleo() {
               <div>
                 <p className="text-[11px] font-extrabold uppercase tracking-wider text-emerald-700">Invita y gana</p>
                 <h2 className="mt-0.5 text-[17px] font-extrabold leading-snug text-slate-900">¿Conoces a alguien que reparte?</h2>
-                <p className="mt-1 text-[13px] leading-relaxed text-slate-700">Enséñale Flota para escanear paquetes, ordenar paradas y seguir su ruta. Crea tu cuenta y comparte tu enlace: puedes ganar <b>{refPromoActiva() ? '10 €' : '2,50 €'}</b> cuando un nuevo repartidor se registre con él y complete 20 entregas reales válidas{refPromoActiva() ? <> (promoción para los que se registren hasta el {fechaRefPromo()}; después, 2,50 €)</> : null}.</p>
+                <p className="mt-1 text-[13px] leading-relaxed text-slate-700">Enséñale Flota para escanear paquetes, ordenar paradas y seguir su ruta. Crea tu cuenta y comparte tu enlace: puedes ganar <b>{refPromoActiva() ? '10 €' : '2,50 €'}</b> cuando un nuevo repartidor se registre con él y complete 20 entregas reales válidas{refPromoActiva() ? <> (promoción para los que se registren hasta el {fechaRefPromo()}; después, 2,50 €). Y si repartes por tu cuenta, <b>10 € para ti</b> con tu primera ruta real (20 entregas en 2 días)</> : null}.</p>
               </div>
             </div>
             <a href="/repartidores?utm_source=empleo&utm_medium=gracias&utm_campaign=invita_gana"
@@ -489,7 +489,8 @@ export default function Empleo() {
               <input type="checkbox" checked={f.novedades_fds} onChange={(e) => set('novedades_fds', e.target.checked)}
                 className="mt-0.5 h-4 w-4 shrink-0 accent-emerald-600" />
               <span>
-                <b className="text-slate-900">Quiero recibir novedades de FDS</b>
+                <b className="text-slate-900">Quiero recibir novedades y promociones de FDS</b>
+                <span className="mt-0.5 block text-[12px] text-slate-600">Como la app de reparto gratis y el bono de 10 € por tu primera ruta.</span>
                 <span className="mt-0.5 block text-[12px] text-slate-500">Opcional y separado de la candidatura. Si la marcas, necesitamos tu correo. Puedes retirar el consentimiento cuando quieras; consulta cómo hacerlo en la <a href="/privacidad" target="_blank" rel="noreferrer" className="underline">política de privacidad</a>.</span>
               </span>
             </label>

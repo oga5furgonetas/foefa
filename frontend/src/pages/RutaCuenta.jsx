@@ -766,6 +766,14 @@ function Invitar({ toast }) {
         {tx(r?.metodos?.includes('bizum') === false ? 'Pásale tu enlace. Cuando se registre y haga {n} entregas en {d} días distintos (en su primer mes), ganas {euros}. Lo cobras por PayPal.' : 'Pásale tu enlace. Cuando se registre y haga {n} entregas en {d} días distintos (en su primer mes), ganas {euros}. Lo cobras por Bizum o transferencia.', {
           n: r?.entregas_cartera ?? 20, d: r?.dias_distintos ?? 2, euros: cent(r?.por_invitado ?? refCentActual()) })}
       </p>
+      {r?.bono && (
+        <p data-testid="cartera-bono" className={`mt-1.5 rounded-xl px-3 py-2 text-[12.5px] font-semibold leading-snug ${r.bono.pagado ? 'bg-emerald-400/15 text-emerald-100' : 'bg-amber-400/15 text-amber-100'}`}>
+          {r.bono.pagado
+            ? tx('Bono de bienvenida: {euros} ganados con tu primera ruta.', { euros: cent(r.bono.cent) })
+            : tx('Bono de bienvenida: {euros} cuando hagas tus primeras {n} entregas (en {d} días). Hasta el {fecha}.', {
+              euros: cent(r.bono.cent), n: r.bono.objetivo || 20, d: r.bono.dias_objetivo || 2, fecha: fechaRefPromo(locale(), r.bono.hasta) })}
+        </p>
+      )}
       {promoHasta && (
         <p className="mt-1.5 rounded-xl bg-emerald-400/15 px-3 py-2 text-[12.5px] font-semibold leading-snug text-emerald-100">
           {tx('Promoción hasta el {fecha}: {euros} por cada compañero que se registre con tu enlace.', { fecha: fechaRefPromo(locale(), promoHasta), euros: cent(r?.promo_cent ?? REF_PROMO_CENT) })}
