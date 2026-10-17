@@ -618,6 +618,8 @@ export const B = {
   "(no se han podido cargar todas)": ["(couldn’t load them all)", "(não foi possível carregar todas)", "(impossible de toutes les charger)", "(non è stato possibile caricarle tutte)", "(nicht alle konnten geladen werden)", "（未能全部加载）"],
   "Carga y descarga": ["Loading zone", "Cargas e descargas", "Aire de livraison", "Carico e scarico", "Ladezone", "装卸区"],
   "máx.": ["max.", "máx.", "max.", "max.", "max.", "最长"],
+  "No se pudo cargar el historial.": ["Couldn’t load your history.", "Não foi possível carregar o histórico.", "Impossible de charger l’historique.", "Impossibile caricare lo storico.", "Der Verlauf konnte nicht geladen werden.", "无法加载历史记录。"],
+  "Reintentar": ["Try again", "Tentar de novo", "Réessayer", "Riprova", "Erneut versuchen", "重试"],
   // El bono de bienvenida (17-10-2026): 10 € por la primera ruta de verdad.
   "¡Has ganado {euros}!": ["You’ve earned {euros}!", "Ganhaste {euros}!", "Vous avez gagné {euros} !", "Hai guadagnato {euros}!", "Du hast {euros} verdient!", "你赚到了 {euros}！"],
   "Ya están en tu cartera. Invita a un compañero y gana {euros} más.": ["It’s already in your wallet. Invite a colleague and earn {euros} more.", "Já está na tua carteira. Convida um colega e ganha mais {euros}.", "C’est déjà dans votre portefeuille. Invitez un collègue et gagnez {euros} de plus.", "Sono già nel tuo portafoglio. Invita un collega e guadagna altri {euros}.", "Das ist schon in deiner Geldbörse. Lade einen Kollegen ein und verdiene {euros} mehr.", "已存入你的钱包。邀请一位同事，再赚 {euros}。"],

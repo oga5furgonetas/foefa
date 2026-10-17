@@ -136,6 +136,52 @@ export default function RutaApp() {
   const [instalarPrimero, setInstalarPrimero] = useState(() => recienAlta() && !yaEsApp() && !esSuplantacion())
   useEffect(() => { if (yaEsApp()) olvidarRecienAlta() }, [])
 
+  // TIRAR PARA ACTUALIZAR (17-10-2026), como en cualquier app: en «Hoy», desde arriba del todo, tirar hacia
+  // abajo recarga la ruta. No en el mapa (allí arrastrar es moverlo), ni con una ventana abierta, ni en un campo.
+  const [tiron, setTiron] = useState(0)
+  const [recargando, setRecargando] = useState(false)
+  useEffect(() => {
+    if (tab !== 'hoy') return undefined
+    let y0 = null
+    let dy = 0
+    let reloj = null
+    const inicio = (e) => {
+      y0 = null
+      if (window.scrollY > 0 || e.touches.length !== 1) return
+      if (e.target?.closest?.('.leaflet-container, [role="dialog"], input, textarea, select, [data-sin-tiron]')) return
+      y0 = e.touches[0].clientY
+      dy = 0
+    }
+    const mover = (e) => {
+      if (y0 == null) return
+      dy = e.touches[0].clientY - y0
+      setTiron(dy > 0 && window.scrollY <= 0 ? Math.min(dy * 0.5, 90) : 0)
+    }
+    const fin = () => {
+      if (y0 == null) return
+      const recarga = dy * 0.5 >= 64 && window.scrollY <= 0
+      y0 = null
+      setTiron(0)
+      if (!recarga) return
+      setRecargando(true)
+      if (navigator.vibrate) navigator.vibrate(15)
+      window.dispatchEvent(new Event('fds-recargar-ruta'))
+      recargar()
+      reloj = setTimeout(() => setRecargando(false), 900)
+    }
+    window.addEventListener('touchstart', inicio, { passive: true })
+    window.addEventListener('touchmove', mover, { passive: true })
+    window.addEventListener('touchend', fin)
+    window.addEventListener('touchcancel', fin)
+    return () => {
+      clearTimeout(reloj)
+      window.removeEventListener('touchstart', inicio)
+      window.removeEventListener('touchmove', mover)
+      window.removeEventListener('touchend', fin)
+      window.removeEventListener('touchcancel', fin)
+    }
+  }, [tab, recargar])
+
   // Dentro de la app: si la cuenta de Google ya tiene la suscripción (reinstaló,
   // cambió de móvil) y aquí no consta, se comprueba y se liga. Una vez.
   const [restaurado, setRestaurado] = useState(false)
@@ -155,8 +201,18 @@ export default function RutaApp() {
   if (!isAuthed()) { window.location.replace('/empezar'); return null }
 
   return (
-    <div className="flex min-h-screen flex-col bg-dark-950 text-dark-100">
+    <main className="app-ruta flex min-h-screen flex-col bg-dark-950 text-dark-100">
       {instalarPrimero && <PasoInstalar onListo={() => { olvidarRecienAlta(); setInstalarPrimero(false) }} />}
+      {(tiron > 0 || recargando) && (
+        <div aria-hidden="true" data-testid="tiron" className="pointer-events-none fixed inset-x-0 top-0 z-50 flex justify-center"
+          style={{ transform: `translateY(${recargando ? 22 : tiron - 18}px)`, transition: tiron ? 'none' : 'transform .2s ease-out' }}>
+          <span className="flex h-9 w-9 items-center justify-center rounded-full border border-dark-700 bg-dark-900 shadow-lg">
+            {recargando
+              ? <Loader2 size={18} className="animate-spin text-brand-500" />
+              : <RotateCcw size={18} className="text-brand-500" style={{ transform: `rotate(${tiron * 4}deg)`, opacity: Math.min(1, tiron / 64) }} />}
+          </span>
+        </div>
+      )}
       {/* «Entrar como» desde la plataforma: la misma franja que en el panel, que aquí faltaba. */}
       {esSuplantacion() && (
         <div className="flex items-center justify-between gap-3 bg-amber-500/15 px-4 py-2 text-[13px] text-amber-200">
@@ -170,7 +226,8 @@ export default function RutaApp() {
           {billing.days_left === 1 ? tx('Queda 1 día de prueba · Ver mi plan') : tx('Quedan {n} días de prueba · Ver mi plan', { n: billing.days_left })}
         </button>
       )}
-      <main className="flex-1 px-4 pb-24 pt-4">
+      {/* Al cambiar de pestaña, el contenido entra con un fundido corto, como en una app. */}
+      <div key={tab} className="ruta-entra flex-1 px-4 pb-24 pt-4">
         {/* PLAN GRATIS (10-10-2026): sin pagar ya no hay muro; se reparte con un tope de paradas al día. */}
         {tab === 'hoy' && !bloqueado && billing?.gratis?.activo && (
           <div className="mx-auto mb-3 flex max-w-md items-center justify-between gap-3 rounded-2xl border border-sky-500/30 bg-sky-500/10 px-3.5 py-2.5">
@@ -202,8 +259,8 @@ export default function RutaApp() {
           </>}
         {tab === 'historial' && <Historial />}
         {tab === 'cuenta' && <Cuenta billing={billing} recargar={recargar} toast={toast} resaltarRegalo={regaloNuevo} />}
-      </main>
-      <nav className="fixed inset-x-0 bottom-0 z-40 border-t border-dark-800 bg-dark-950/95 pb-[env(safe-area-inset-bottom)] backdrop-blur" aria-label={tx('Secciones')}>
+      </div>
+      <nav className="ruta-pestanas fixed inset-x-0 bottom-0 z-40 border-t border-dark-800 bg-dark-950/95 pb-[env(safe-area-inset-bottom)] backdrop-blur" aria-label={tx('Secciones')}>
         <div className="mx-auto grid max-w-md grid-cols-4">
           {PESTANAS.map(([k, t, I]) => (
             <button key={k} onClick={() => setTab(k)}
@@ -218,7 +275,7 @@ export default function RutaApp() {
           ))}
         </div>
       </nav>
-    </div>
+    </main>
   )
 }
 
@@ -232,7 +289,11 @@ function Historial() {
   const [est, setEst] = useState(null)
   const [dia, setDia] = useState(null)
   const [otro, setOtro] = useState('')
-  useEffect(() => { getRepartoEstadisticas(30).then(({ data }) => setEst(data)).catch(() => setEst({ por_dia: [] })) }, [])
+  const cargarEst = useCallback(() => {
+    setEst(null)
+    getRepartoEstadisticas(30).then(({ data }) => setEst(data)).catch(() => setEst({ por_dia: [], error: true }))
+  }, [])
+  useEffect(() => { cargarEst() }, [cargarEst])
   if (dia) return <DiaHistorial fecha={dia} onVolver={() => setDia(null)} toast={toast} />
   if (!est) return <div className="flex justify-center py-16"><Loader2 className="animate-spin text-dark-500" /></div>
   const dias = lista(est.por_dia).filter((d) => d.total > 0).reverse()
@@ -240,11 +301,18 @@ function Historial() {
   return (
     <div className="mx-auto max-w-md">
       <h1 className="font-display text-[22px] font-bold text-dark-50">{tx('Historial')}</h1>
-      <p className="mb-4 text-[12.5px] text-dark-400">
-        {tx('Últimos 30 días: {total} paradas, {ok} entregadas', { total: est.total, ok: est.entregados })}
-        {est.tasa_entrega != null ? ` ${tx('({p} % a la primera)', { p: est.tasa_entrega })}` : ''}.
-      </p>
-      {dias.length === 0 && <p className="rounded-xl border border-dashed border-dark-700 px-4 py-8 text-center text-[13px] text-dark-400">{tx('Aún no hay repartos. Hoy empieza en «Hoy».')}</p>}
+      {est.error ? (
+        <div className="mb-4 mt-2 rounded-xl border border-dashed border-dark-700 px-4 py-6 text-center">
+          <p className="text-[13px] text-dark-400">{tx('No se pudo cargar el historial.')}</p>
+          <button type="button" onClick={cargarEst} className="mt-3 rounded-xl border border-dark-600 px-4 py-2 text-[13.5px] font-semibold text-dark-100">{tx('Reintentar')}</button>
+        </div>
+      ) : (<>
+        <p className="mb-4 text-[12.5px] text-dark-400">
+          {tx('Últimos 30 días: {total} paradas, {ok} entregadas', { total: est.total || 0, ok: est.entregados || 0 })}
+          {est.tasa_entrega != null ? ` ${tx('({p} % a la primera)', { p: est.tasa_entrega })}` : ''}.
+        </p>
+        {dias.length === 0 && <p className="rounded-xl border border-dashed border-dark-700 px-4 py-8 text-center text-[13px] text-dark-400">{tx('Aún no hay repartos. Hoy empieza en «Hoy».')}</p>}
+      </>)}
       <div className="flex flex-col gap-2">
         {dias.map((d) => (
           <button key={d.fecha} onClick={() => setDia(d.fecha)}

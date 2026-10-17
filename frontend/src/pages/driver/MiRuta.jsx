@@ -287,6 +287,11 @@ export default function MiRuta({ onBack, embebido = false }) {
       .catch((e) => setErr(txError(e, 'No se pudo cargar tu ruta')))
   }, [])
   useEffect(cargar, [cargar])
+  // «Tirar para actualizar» (RutaApp) avisa con este evento.
+  useEffect(() => {
+    window.addEventListener('fds-recargar-ruta', cargar)
+    return () => window.removeEventListener('fds-recargar-ruta', cargar)
+  }, [cargar])
 
   const jornadaAbierta = !!(ruta?.jornada?.empezada && !ruta?.jornada?.terminada)
 

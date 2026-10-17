@@ -726,3 +726,22 @@ html[data-panel-theme='hibrido'] main .text-sky-400\/80 { color: #0369a1; }
 html[data-panel-theme='hibrido'] main .text-teal-300 { color: #0f766e; }
 html[data-panel-theme='hibrido'] main .text-yellow-300,
 html[data-panel-theme='hibrido'] main .text-yellow-400 { color: #854d0e; }
+
+/* ── LA APP DEL REPARTIDOR ES UNA APP, NO UN PANEL (17-10-2026) ──────────────
+   En el tema híbrido (el de por defecto) el panel de empresas es una hoja clara dentro de un marco
+   oscuro. En /ruta, a pantalla completa en el móvil, ese marco dejaba una esquina negra arriba y la barra
+   de pestañas oscura bajo una pantalla clara: se notaba que era una web. Aquí la app entera es el <main>
+   (pestañas, avisos y la pantalla de instalar incluidos: así le valen todas las compensaciones del modo
+   día de arriba) y el contenido de cada pestaña, un <div>. Sin la esquina redondeada del panel. */
+html[data-panel-theme='hibrido'] main.app-ruta { border-top-left-radius: 0; box-shadow: none; }
+html[data-panel-theme='hibrido'] .app-ruta .ruta-pestanas,
+html[data-panel-theme='light'] .app-ruta .ruta-pestanas { box-shadow: 0 -10px 28px -22px rgba(20, 20, 30, 0.4); }
+/* Lo que se toca no se selecciona ni abre el menú de «copiar» al dejar el dedo, como en una app; el
+   texto de las paradas (direcciones, teléfonos) sí se puede seleccionar. */
+.app-ruta button, .app-ruta nav, .app-ruta [role='button'] { -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; }
+.app-ruta button:not(:disabled):active { opacity: 0.82; }
+@keyframes ruta-entra { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
+/* «backwards» y no «both»: con la animación aplicada para siempre, el contenido formaría su propia capa y
+   la barra de pestañas taparía las hojas que suben desde abajo (los botones de «Entregado», por ejemplo). */
+.ruta-entra { animation: ruta-entra 0.24s cubic-bezier(0.2, 0.8, 0.2, 1) backwards; }
+@media (prefers-reduced-motion: reduce) { .ruta-entra { animation: none; } }

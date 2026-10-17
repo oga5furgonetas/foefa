@@ -2313,6 +2313,52 @@ test('Bono · la tarjeta de la primera ruta: progreso, ejemplos que no cuentan y
   expect(fallos).toEqual([])
 })
 
+/* COMO UNA APP (17-10-2026): en «Hoy», tirar hacia abajo desde arriba recarga la ruta; en el mapa no. Y si el
+   historial no carga, se dice y se puede reintentar (antes salía «Últimos 30 días: {total} paradas…»). */
+test.describe('App del repartidor en el móvil', () => {
+  test.use({ hasTouch: true, viewport: { width: 390, height: 844 } })
+  test('tirar hacia abajo en «Hoy» recarga la ruta', async ({ page }) => {
+    const fallos = vigilar(page)
+    await entrarRepartidor(page, { status: 'trial', days_left: 60, promo: { activa: true, hasta: '2026-12-31' } })
+    let veces = 0
+    await page.route(/\/api\/reparto\/mi-ruta$/, (r) => { veces += 1; r.fulfill({ json: { activo: true, autonomo: true, fecha: '2026-10-17', pedidos: [], jornada: {}, aviso_aceptado: true } }) })
+    await page.goto('/ruta', { waitUntil: 'domcontentloaded' })
+    await expect(page.getByRole('button', { name: 'Escanear' })).toBeVisible()
+    await expect.poll(() => veces).toBeGreaterThan(0)
+    const antes = veces
+    const tirar = (desde, hasta, selector = 'body') => page.evaluate(([y0, y1, sel]) => {
+      const el = document.querySelector(sel)
+      const toque = (y) => new Touch({ identifier: 1, target: el, clientX: 200, clientY: y })
+      el.dispatchEvent(new TouchEvent('touchstart', { touches: [toque(y0)], bubbles: true }))
+      for (let y = y0; y <= y1; y += 20) el.dispatchEvent(new TouchEvent('touchmove', { touches: [toque(y)], bubbles: true }))
+      el.dispatchEvent(new TouchEvent('touchend', { touches: [], bubbles: true }))
+    }, [desde, hasta, selector])
+    await tirar(150, 200)                                            // poco: no recarga
+    await page.waitForTimeout(300)
+    expect(veces).toBe(antes)
+    await tirar(150, 360)                                            // de verdad: recarga
+    await expect.poll(() => veces).toBe(antes + 1)
+    expect(fallos).toEqual([])
+  })
+
+  test('si el historial no carga, lo dice y se puede reintentar', async ({ page }) => {
+    const fallos = vigilar(page)
+    await entrarRepartidor(page, { status: 'trial', days_left: 60, promo: { activa: true, hasta: '2026-12-31' } })
+    let falla = true
+    await page.route(/\/api\/reparto\/estadisticas/, (r) => (falla
+      ? r.fulfill({ status: 503, json: { detail: 'caído' } })
+      : r.fulfill({ json: { total: 12, entregados: 11, tasa_entrega: 92, por_dia: [] } })))
+    await page.goto('/ruta', { waitUntil: 'domcontentloaded' })
+    await page.getByRole('button', { name: 'Historial', exact: true }).click()
+    await expect(page.getByText('No se pudo cargar el historial.')).toBeVisible()
+    await expect(page.getByText(/\{total\}|Aún no hay repartos/)).toHaveCount(0)
+    falla = false
+    await page.getByRole('button', { name: 'Reintentar' }).click()
+    await expect(page.getByText('Últimos 30 días: 12 paradas, 11 entregadas (92 % a la primera).')).toBeVisible()
+    expect(fallos.filter((f) => !/503|caído/.test(f))).toEqual([])
+  })
+})
+
 test('Cobro · alta nueva: muro de «7 días gratis» con tarjeta, hoy 0 €, y elegir anual', async ({ page }) => {
   const fallos = vigilar(page)
   const fin = new Date(Date.now() + 7 * 86400000).toISOString()
