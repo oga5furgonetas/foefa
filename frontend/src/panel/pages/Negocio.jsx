@@ -1,6 +1,7 @@
 import { Fragment, useEffect, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useT } from '../../i18n'
+import Casilla from '../components/Casilla'
 import { Foto as FotoMerc, euros as eurosM, AvisosMovil } from '../../pages/mercadillo/Mercadillo'
 import { Activity,
   Loader2, Building2, CheckCircle2, Clock, Euro, Sparkles, Gift, PauseCircle,
@@ -1033,25 +1034,6 @@ function CampanaCandidatos() {
 
 const plural = (n, uno, varios) => `${n} ${n === 1 ? uno : varios}`
 
-/* Una casilla del inicio de Negocio: icono, nombre, lo justo y un globito rojo si hay algo que hacer. */
-function CasillaNegocio({ icono: Icono, titulo, detalle, aviso, tono, onClick }) {
-  const borde = { brand: 'border-brand-500/40', ambar: 'border-amber-400/50', rojo: 'border-red-500/60' }[tono] || 'border-dark-700'
-  const fondoIcono = { brand: 'bg-brand-500/15 text-brand-300', ambar: 'bg-amber-400/15 text-amber-300', rojo: 'bg-red-500/15 text-red-300' }[tono] || 'bg-dark-800 text-dark-300'
-  return (
-    <button type="button" onClick={onClick} aria-label={detalle ? `${titulo}. ${detalle}` : titulo}
-      className={`card relative flex min-h-[124px] flex-col justify-between border p-4 text-left transition hover:border-brand-500/50 active:scale-[.98] ${borde}`}>
-      {aviso > 0 && (
-        <span className="absolute right-3 top-3 flex h-6 min-w-6 items-center justify-center rounded-full bg-red-500 px-1.5 text-[12px] font-bold text-white">{aviso}</span>
-      )}
-      <span className={`flex h-10 w-10 items-center justify-center rounded-xl ${fondoIcono}`}><Icono size={20} /></span>
-      <span className="mt-3 block">
-        <span className="flex items-center gap-1 text-[15px] font-semibold leading-tight text-dark-50">{titulo} <ChevronRight size={14} className="text-dark-500" /></span>
-        {detalle && <span className="mt-0.5 block text-[12.5px] leading-snug text-dark-400">{detalle}</span>}
-      </span>
-    </button>
-  )
-}
-
 export default function Negocio() {
   const nav = useNavigate()
   const { t } = useT()
@@ -1245,7 +1227,7 @@ export default function Negocio() {
       </div>
       {msg && <div className="mb-3 rounded-lg bg-brand-500/10 px-3 py-2 text-sm text-brand-300">{msg}</div>}
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
-        {CASILLAS.map((c) => <CasillaNegocio key={c.id} {...c} onClick={() => (c.ir ? nav(c.ir) : abrir(c.id))} />)}
+        {CASILLAS.map((c) => <Casilla key={c.id} {...c} onClick={() => (c.ir ? nav(c.ir) : abrir(c.id))} />)}
       </div>
     </div>
   )

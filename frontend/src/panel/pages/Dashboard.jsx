@@ -5,14 +5,16 @@ import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useOutletContext } from 'react-router-dom'
 import {
-  Truck, ClipboardList, BellRing, AlertTriangle, ShieldAlert, CheckCircle2, ChevronRight,
+  Truck, ClipboardList, BellRing, AlertTriangle, ShieldAlert, CheckCircle2, ChevronDown,
+  ClipboardCheck, Wrench, Users, ListChecks, Store,
 } from 'lucide-react'
 import { getDashboardStats, getItvAlerts, getDamageCosts, getStatsHoy, getReviewQueue, getDanosPendientes } from '../api'
 import { useT, LANG_LOCALE } from '../../i18n'
 import { lista } from '../../lib/lista'
 import { PageSkeleton } from '../components/Skeleton'
 import Activacion from '../components/Activacion'
-import TarjetaMercadillo from '../components/TarjetaMercadillo'
+import Casilla from '../components/Casilla'
+import { mercEstado } from '../../services/api'
 import { hoyLocal, isoLocal } from '../../lib/fecha'
 
 /* ── helpers ── */
@@ -81,44 +83,6 @@ function Mini({ n, label, alerta }) {
    Donut en SVG puro: sin librería de gráficos, sin peso extra en el bundle y
    sin dependencias que mantener. Un `stroke-dasharray` sobre un círculo hace
    exactamente lo mismo que una librería para este caso. */
-/* ── TARJETA DE CIFRA ─────────────────────────────────────────────────────────
-   La fila de arriba: lo que hay que saber sin leer nada más.
-
-   `serie` es OPCIONAL y sólo se pasa cuando existe de verdad. En el mockup de
-   referencia las cinco tarjetas llevaban curva y un "↑5%", pero de casi ninguno
-   de esos datos hay histórico (no se guarda una foto diaria del score ni de los
-   daños), así que esas curvas serían dibujos. Aquí sólo lleva curva la única
-   que tiene serie real: las inspecciones por día. */
-function Cifra({ icono: Icono, n, label, sub, color, serie, onIr, alerta }) {
-  const max = serie ? Math.max(1, ...serie) : 1
-  const pts = serie && serie.length > 1
-    ? serie.map((v, i) => `${(i / (serie.length - 1)) * 100},${28 - (v / max) * 24}`).join(' ')
-    : null
-  return (
-    <button onClick={onIr} disabled={!onIr}
-      className={`group overflow-hidden rounded-2xl border border-dark-800 bg-dark-900/40 p-4 text-left transition-all ${
-        onIr ? 'hover:border-dark-600 hover:bg-dark-900' : 'cursor-default'}`}>
-      <div className="flex items-center gap-2">
-        <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg" style={{ background: color + '1f' }}>
-          <Icono size={14} style={{ color }} />
-        </span>
-        <span className="truncate text-[12px] font-medium text-dark-400">{label}</span>
-      </div>
-      <div className={`mt-2.5 font-display text-[30px] font-semibold leading-none tracking-[-0.03em] ${
-        alerta ? 'text-red-300' : 'text-dark-50'}`}>
-        <Count v={n} />
-      </div>
-      {sub && <div className="mt-1 text-[11px] text-dark-500">{sub}</div>}
-      {pts && (
-        <svg viewBox="0 0 100 30" preserveAspectRatio="none" className="mt-2 h-7 w-full">
-          <polyline points={pts} fill="none" stroke={color} strokeWidth="2"
-            strokeLinecap="round" strokeLinejoin="round" opacity="0.85" vectorEffect="non-scaling-stroke" />
-        </svg>
-      )}
-    </button>
-  )
-}
-
 function Anillo({ segmentos, centro, sub, size = 132 }) {
   const R = (size - 14) / 2
   const C = 2 * Math.PI * R
@@ -274,7 +238,14 @@ export default function Dashboard() {
 }
 
 function DashboardFlota() {
-  const { center, admin } = useOutletContext?.() || {}
+  // `ve(ruta)`: la MISMA regla que el menú (PanelLayout). Una casilla de una pantalla que no puede abrir sería
+  // una puerta que se cierra al tocarla.
+  const { center, admin, ve } = useOutletContext?.() || {}
+  const puede = (to) => (typeof ve === 'function' ? ve(to) : true)
+  const [merc, setMerc] = useState(null)
+  useEffect(() => {
+    mercEstado().then(({ data }) => setMerc(data?.visible ? data : null)).catch(() => setMerc(null))
+  }, [])
   const { t, lang } = useT()
   const locale = LANG_LOCALE[lang] || 'es-ES'
   const [data,   setData]   = useState(null)
@@ -434,6 +405,39 @@ function DashboardFlota() {
     return out
   })()
 
+  /* ── LAS CASILLAS (17-10-2026) ─────────────────────────────────────────────
+     Dani: «cámbiame el dashboard y añade este estilo de iconos». Cada casilla lleva a su pantalla con su número;
+     el globito es lo que no puede esperar (rojo) o conviene mirar hoy (naranja). Los textos son los mismos de
+     la lista de decisiones de antes, así que siguen en los seis idiomas. */
+  const semanaTotal = semana.reduce((a, d) => a + d.n, 0)
+  const salidasHoy = hoy?.salidas?.total || 0
+  const turno = (hoy?.checklist || [])[0]
+  const abiertas = data.open_incidents || 0
+  const graves = danos?.graves || 0
+  const mercAviso = merc ? (merc.por_revisar || merc.sin_leer || 0) : 0
+  const casillas = [
+    { to: '/panel/vehiculos', icono: Truck, titulo: t('nav.vehicles'), detalle: fleet ? `${active} ${t('ops.of')} ${fleet} · ${t('ops.active.veh')}` : '' },
+    { to: '/panel/revision', icono: CheckCircle2, titulo: t('nav.revision'), aviso: cola, avisoTono: 'ambar', tono: cola ? 'ambar' : '',
+      detalle: `${cola} ${t(cola === 1 ? 'ops.validate.1' : 'ops.validate')}` },
+    { to: '/panel/asignacion', icono: ClipboardCheck, titulo: t('nav.assign'), aviso: sinRevisar, avisoTono: 'ambar', tono: sinRevisar ? 'ambar' : '',
+      detalle: sinRevisar > 0 ? `${sinRevisar} ${t(sinRevisar === 1 ? 'ops.sinrevisar.1' : 'ops.sinrevisar')}` : salidasHoy ? `${salidasHoy} ${t('hoy.salidas')}` : '' },
+    { to: '/panel/inspecciones', icono: ClipboardList, titulo: t('nav.inspections'), detalle: `${semanaTotal} · ${t('ops.week').toLowerCase()}` },
+    { to: '/panel/vencimientos', icono: BellRing, titulo: t('nav.grp.expiry'), aviso: itvVencidas.length, tono: itvVencidas.length ? 'rojo' : '',
+      detalle: itvVencidas.length ? `${itvVencidas.length} ${t(itvVencidas.length === 1 ? 'ops.itv.expired.1' : 'ops.itv.expired')}`
+        : itvProximas.length ? `${itvProximas.length} ${t('ops.itv.soon')}` : '' },
+    { to: '/panel/ordenes', icono: ShieldAlert, titulo: t('nav.ordenes'), aviso: graves, tono: graves ? 'rojo' : '',
+      detalle: `${danos?.total ?? 0} ${t('ops.damage.open')}` },
+    { to: '/panel/incidencias', icono: AlertTriangle, titulo: t('nav.incidents'), detalle: `${abiertas} ${t(abiertas === 1 ? 'ops.incidents.1' : 'ops.incidents')}` },
+    { to: '/panel/talleres', icono: Wrench, titulo: t('nav.workshops'), detalle: `${inShop} ${t(inShop === 1 ? 'ops.workshop.1' : 'ops.workshop')}` },
+    { to: '/panel/conductores', icono: Users, titulo: t('nav.drivers'), detalle: data.total_drivers != null ? String(data.total_drivers) : '' },
+    ...(turno ? [{ to: '/panel/checklist-operativo', icono: ListChecks, titulo: t('nav.checklist'), detalle: `${turno.hechas}/${turno.total}` }] : []),
+    // El mercadillo de repartidores, también para la oficina (solo si está abierto; lo decide el servidor).
+    ...(merc ? [{ to: merc.por_revisar ? '/panel/admin?s=mercadillo' : '/mercadillo', siempre: true, icono: Store, titulo: 'Mercadillo',
+      aviso: mercAviso, tono: 'brand',
+      detalle: merc.por_revisar ? `${merc.por_revisar} por revisar` : merc.sin_leer ? `${merc.sin_leer} sin leer` : 'Vende lo que no uses' }] : []),
+  ].filter((c) => c.siempre || puede(c.to.split('?')[0]))
+  const irA = (to) => (to.startsWith('/panel') ? navTop(to) : window.location.assign(to))
+
   const firstName = (admin?.name || '').trim().split(/\s+/)[0] || ''
   const availPct = fleet > 0 ? Math.round((active / fleet) * 100) : null
   const totalSev = SEV_ORDER.reduce((a, k) => a + (breakdown?.[k] || 0), 0)
@@ -477,35 +481,10 @@ function DashboardFlota() {
           vacío de antes, que solo sabía decir "importa vehículos". */}
       <Activacion />
 
-      {/* El mercadillo de repartidores, para la oficina (17-10-2026): solo si está abierto. */}
-      <TarjetaMercadillo className="mb-6" />
-
-      {/* ── FILA DE CIFRAS ───────────────────────────────────────────────────
-          Lo que hay que saber de un vistazo, a cualquier hora del día. Antes
-          arriba no había NADA hasta que empezaba la operación: a las 6:45 de la
-          mañana el panel se abría prácticamente vacío. */}
-      {fleet > 0 && (
-        /* Cinco cifras: o las cinco en fila o de dos en dos con la última a lo
-           ancho. Con tres columnas quedaba un hueco al final de la segunda fila
-           que parecía una tarjeta que no había cargado. */
-        <div className="rise mb-2 grid grid-cols-2 gap-3 lg:grid-cols-5 [&>*:last-child]:col-span-2 lg:[&>*:last-child]:col-span-1" style={{ animationDelay: '20ms' }}>
-          <Cifra icono={Truck} color="#60a5fa" n={active} label={t('ops.active.veh')}
-            sub={`${t('ops.of')} ${fleet}`} onIr={() => navTop('/panel/vehiculos')} />
-          <Cifra icono={ClipboardList} color="#34d399" n={semana.reduce((a, d) => a + d.n, 0)}
-            label={t('ops.inspections')} sub={t('ops.week')}
-            serie={semana.map((d) => d.n)} onIr={() => navTop('/panel/inspecciones')} />
-          <Cifra icono={AlertTriangle} color="#fbbf24" n={data.open_incidents || 0}
-            label={t('ops.incidents')} sub={t('ops.open')} onIr={() => navTop('/panel/incidencias')} />
-          <Cifra icono={ShieldAlert} color="#f87171" n={danos?.total ?? 0}
-            label={t('ops.damage.open')}
-            sub={t((danos?.furgonetas_graves ?? 0) === 1 ? ((danos?.graves ?? 0) === 1 ? 'ops.damage.open.sub.1' : 'ops.damage.open.sub.v1') : 'ops.damage.open.sub').replace('{g}', danos?.graves ?? 0).replace('{v}', danos?.furgonetas_graves ?? 0)}
-            alerta={(danos?.graves || 0) > 0}
-            onIr={() => navTop('/panel/ordenes')} />
-          <Cifra icono={BellRing} color="#fb923c" n={itvVencidas.length + itvProximas.length} label={t('ops.itv.due')}
-            sub={itvSinFecha.length ? t('ops.itv.nodate.sub').replace('{n}', itvSinFecha.length) : t('nav.expiries')}
-            alerta={itvVencidas.length > 0} onIr={() => navTop('/panel/vencimientos')} />
-        </div>
-      )}
+      {/* Las casillas: cada una lleva a su pantalla, con su número y un globito si hay algo que hacer. */}
+      <div className="rise mb-2 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5" style={{ animationDelay: '20ms' }}>
+        {casillas.map((c) => <Casilla key={c.to} {...c} onClick={() => irA(c.to)} />)}
+      </div>
 
       {fleet === 0 ? null : (
       <div>
@@ -598,39 +577,11 @@ function DashboardFlota() {
         </section>
       )}
 
-      {/* ── 2 · DECISIONES ───────────────────────────────────────────────────
-          Una sola lista, ordenada por lo que cuesta NO hacerlo, y cada línea
-          dice por qué importa. Antes eran dos secciones con los mismos
-          números repetidos y sin explicar ninguna. */}
-      {decisiones.length > 0 && (
-        <section className="rise border-t border-white/[0.05] py-7" style={{ animationDelay: '100ms' }}>
-          <h2 className="flex items-baseline gap-2 text-[15px] font-semibold text-dark-100">
-            {t('ops.decisions')}
-            {urgentTotal > 0 && (
-              <span className="text-[13px] font-normal tabular-nums text-red-400/90">
-                (<Count v={urgentTotal} /> {t('ops.cannot.wait')})
-              </span>
-            )}
-          </h2>
-          <div className="mt-2">
-            {decisiones.map((u) => (
-              <button key={u.label} onClick={() => navTop(u.to)}
-                className="float-row group -mx-4 flex w-[calc(100%+2rem)] items-start gap-3 rounded-xl px-4 py-3 text-left">
-                <span className={`mt-[7px] h-1.5 w-1.5 shrink-0 rounded-full ${
-                  u.tono === 'red' ? 'bg-red-400' : u.tono === 'amber' ? 'bg-amber-400' : 'bg-dark-600'}`} />
-                <span className="min-w-0">
-                  <span className="block text-[14.5px] text-dark-200">
-                    <b className="font-semibold tabular-nums text-dark-50"><Count v={u.n} /></b> {u.label}
-                  </span>
-                  <span className="mt-0.5 block text-[12px] leading-snug text-dark-500">{u.why}</span>
-                </span>
-                <ChevronRight size={15} className="ml-auto mt-1 shrink-0 text-dark-500 transition-transform group-hover:translate-x-0.5 group-hover:text-dark-300" />
-              </button>
-            ))}
-          </div>
-        </section>
-      )}
-
+      {/* Lo de más detalle (gráficos, resumen y vencimientos), plegado: el inicio son las casillas y lo de hoy. */}
+      <details className="group border-t border-white/[0.05] py-5">
+        <summary className="flex cursor-pointer list-none items-center gap-2 text-[15px] font-semibold text-dark-100">
+          <ChevronDown size={16} className="text-dark-500 transition-transform group-open:rotate-180" /> {t('ops.fleet.state')}
+        </summary>
       {/* ── 2-bis · LA FLOTA, EN IMÁGENES ────────────────────────────────────
           Tres piezas y las tres con datos REALES. En el mockup de referencia
           había tarjetas con "↑5%" y curvas de tendencia: eso aquí no se puede
@@ -743,6 +694,7 @@ function DashboardFlota() {
           <ItvAlerts items={itv} />
         </section>
       )}
+      </details>
       </div>
       )}
     </div>

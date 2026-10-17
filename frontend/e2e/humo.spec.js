@@ -3613,21 +3613,58 @@ test.describe('Mercadillo de repartidores', () => {
   })
 })
 
-test('Panel · el recuadro del mercadillo sale a la oficina solo si está abierto', async ({ page }) => {
+test('Panel · la casilla del mercadillo sale a la oficina solo si está abierto', async ({ page }) => {
   const fallos = vigilar(page)
   await entrarComoAdmin(page)
   await simularApi(page, 'vacio')
   let visible = true
   await page.route(/\/api\/mercadillo\/estado/, (x) => x.fulfill({ json: visible ? { visible: true, abierto: true, sin_leer: 2 } : { visible: false } }))
   await page.goto('/panel', { waitUntil: 'domcontentloaded' })
-  const tarjeta = page.getByRole('link', { name: /Mercadillo de repartidores/ })
-  await expect(tarjeta).toHaveAttribute('href', '/mercadillo')
-  await expect(tarjeta).toContainText('Tienes 2 mensajes sin leer')
+  const casilla = page.getByRole('button', { name: /^Mercadillo\. 2 sin leer/ })
+  await expect(casilla).toBeVisible()
   visible = false
   await page.reload({ waitUntil: 'domcontentloaded' })
-  await expect(page.getByRole('heading', { level: 1 })).toBeVisible()
+  await expect(page.getByRole('button', { name: /^Vehículos/ })).toBeVisible()
   await page.waitForTimeout(400)
-  await expect(page.getByRole('link', { name: /Mercadillo de repartidores/ })).toHaveCount(0)
+  await expect(page.getByRole('button', { name: /^Mercadillo/ })).toHaveCount(0)
+  expect(fallos).toEqual([])
+})
+
+/* EL INICIO EN CASILLAS (17-10-2026). Dani: «cámbiame el dashboard y añade este estilo de iconos». */
+test('Inicio · casillas con su número; lo urgente con globito y cada una lleva a su pantalla', async ({ page }) => {
+  const fallos = vigilar(page)
+  await entrarComoAdmin(page)
+  await simularApi(page, 'lleno')
+  await page.route(/\/api\/alerts\/itv/, (x) => x.fulfill({ json: [{ vehicle_id: 'v1', plate: '1234ABC', status: 'caducada' }, { vehicle_id: 'v2', plate: '5678DEF', status: 'proxima' }] }))
+  await page.goto('/panel', { waitUntil: 'domcontentloaded' })
+  const venc = page.getByRole('button', { name: /^Vencimientos\. 1 ITV vencida/ })
+  await expect(venc).toBeVisible()
+  await expect(venc).toContainText('1')
+  for (const n of ['Vehículos', 'Revisión rápida', 'Asignación diaria', 'Inspecciones', 'Incidencias', 'Talleres', 'Conductores']) {
+    await expect(page.getByRole('button', { name: new RegExp(`^${n}`) })).toBeVisible()
+  }
+  await expect(page.getByText(/undefined|NaN/)).toHaveCount(0)
+  // La lista de decisiones ya no se repite debajo: lo urgente va en las casillas.
+  await venc.click()
+  await expect(page).toHaveURL(/\/panel\/vencimientos/)
+  expect(fallos).toEqual([])
+})
+
+/* En el móvil, la IA ya no tapa «Menú» de la barra de abajo (Dani, 17-10-2026: «es muy incómodo»). */
+test('Panel en el móvil · la burbuja de la IA queda por encima de la barra de abajo', async ({ page }) => {
+  const fallos = vigilar(page)
+  await page.setViewportSize({ width: 390, height: 844 })
+  await entrarComoAdmin(page)
+  await simularApi(page, 'vacio')
+  await page.goto('/panel', { waitUntil: 'domcontentloaded' })
+  const menu = page.getByRole('button', { name: 'Menú', exact: true }).last()
+  await expect(menu).toBeVisible()
+  const barra = await menu.boundingBox()
+  const burbuja = page.getByTitle(/IA$/).last()                         // el botón de la IA (icono, con su título)
+  const caja = await burbuja.boundingBox()
+  expect(caja.y + caja.height).toBeLessThanOrEqual(barra.y)              // no la pisa
+  // Y «Menú» se puede pulsar.
+  await menu.click()
   expect(fallos).toEqual([])
 })
 

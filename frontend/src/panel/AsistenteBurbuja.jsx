@@ -262,10 +262,11 @@ export default function AsistenteBurbuja({ center, centers }) {
   }
 
   return (
-    <div className="fixed bottom-4 right-4 z-[95] flex flex-col items-end">
+    // En el móvil, por ENCIMA de la barra de abajo (52 px + la zona segura): antes tapaba «Menú» (Dani, 17-10-2026).
+    <div className="fixed bottom-[calc(env(safe-area-inset-bottom,0px)_+_4.25rem)] right-4 z-[95] flex flex-col items-end md:bottom-4">
       {abierto && (
         <div onPaste={pegarImagenes}
-          className="mb-3 flex h-[32rem] w-[23rem] max-w-[calc(100vw-2rem)] flex-col overflow-hidden rounded-2xl border border-dark-700 bg-dark-950 shadow-2xl">
+          className="mb-3 flex h-[32rem] max-h-[calc(100dvh-9rem)] w-[23rem] max-w-[calc(100vw-2rem)] flex-col overflow-hidden rounded-2xl border border-dark-700 bg-dark-950 shadow-2xl">
           <div className="flex items-center justify-between border-b border-dark-800 bg-dark-900/80 px-3.5 py-3">
             <div className="flex items-center gap-2">
               <Sparkles size={16} className="text-brand-400" />

@@ -1426,3 +1426,12 @@ Dani: «añádeles 10 € de saldo a todo el mundo para que vea que es real».
   Facturación, Tarifas, Datos fiscales, Interesados, Reservas fundador, Ofertas del portal, Campaña a
   candidatos, ¿Hay que ampliar?, Herramientas, Cómo va el negocio) con un globito rojo si hay algo que hacer.
   Cada una abre su sección (`?s=<id>`) con «← Negocio». Las secciones son las de antes, sin cambios.
+- **Inicio del panel en casillas** (Dani, 17-10: «cámbiame el dashboard y añade este estilo de iconos»): debajo
+  del saludo, casillas (`panel/components/Casilla.jsx`, la misma que usa Negocio) para Vehículos, Revisión rápida,
+  Asignación diaria, Inspecciones, Vencimientos, Órdenes de taller, Incidencias, Talleres, Conductores, Checklist
+  y Mercadillo, con su número y globito rojo (no puede esperar) o naranja (conviene mirar). Solo salen las de las
+  pantallas que el usuario puede abrir (`ve` en el contexto del Outlet = `itemVisible` del menú). La lista de
+  decisiones desaparece (la dicen las casillas); «El día de hoy» y las salidas siguen; gráficos, resumen y
+  vencimientos, plegados en «Estado de la flota».
+- **La burbuja de la IA y los avisos en vivo** ya no tapan «Menú» en el móvil: van por encima de la barra de abajo
+  (`bottom-[calc(env(safe-area-inset-bottom)+4.25rem)]`, `md:bottom-4`); la ventana de la IA cabe en pantalla.

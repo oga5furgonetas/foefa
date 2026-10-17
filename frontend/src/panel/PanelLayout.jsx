@@ -908,7 +908,8 @@ export default function PanelLayout() {
             que más se usaba en el móvil (02-09-2026). */}
 
         <main key={loc.pathname} className="animate-fade-in flex-1 overflow-y-auto p-4 pb-24 md:p-5 md:pb-5">
-          <Outlet context={{ center, centers, admin, setCenter }} />
+          {/* `ve`: la regla del menú, para que el Inicio solo enseñe casillas de pantallas que este usuario puede abrir. */}
+          <Outlet context={{ center, centers, admin, setCenter, ve: (to) => itemVisible({ to }) }} />
         </main>
       </div>
 

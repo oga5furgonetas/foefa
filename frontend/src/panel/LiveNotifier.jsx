@@ -187,7 +187,8 @@ export default function LiveNotifier({ center, centers, ve = () => true }) {
     // y el contenedor esta anclado ABAJO, asi que al abrirse crece hacia
     // arriba (como AsistenteBurbuja). `z-[90]` < el `z-[95]` de la IA: con la
     // ventana de la IA abierta, esta tapa el boton hasta que se cierra.
-    <div className="fixed bottom-4 right-[4.5rem] z-[90] flex flex-col items-end gap-2">
+    // Como la burbuja de la IA: en el móvil, por encima de la barra de abajo.
+    <div className="fixed bottom-[calc(env(safe-area-inset-bottom,0px)_+_4.25rem)] right-[4.5rem] z-[90] flex flex-col items-end gap-2 md:bottom-4">
       {abierto && (
         // max-w descuenta los 5,5 rem de la derecha: con 4,5 rem de margen + 1 de
         // aire, a 375 px la lista se salia por la izquierda de la pantalla.
