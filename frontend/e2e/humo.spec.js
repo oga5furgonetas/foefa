@@ -2167,6 +2167,8 @@ test('Cobro · plan gratis: sin pagar se sigue repartiendo con tope y «Quitar e
 /* EL ÚLTIMO PASO DEL ALTA (10-10-2026): recién creada la cuenta, instalar la app antes que nada.
    En el ordenador, un QR con un pase de un solo uso; dentro de TikTok, salir a Chrome ya con la cuenta. */
 test('Alta · recién creada la cuenta pide instalar la app (QR en el ordenador) y se puede saltar', async ({ page }) => {
+  // El QR es para el ORDENADOR: en el móvil el paso ofrece instalar, no un QR (lo prueban los de Android/iPhone).
+  test.skip(test.info().project.name === 'movil', 'el QR solo sale en el ordenador')
   const fallos = vigilar(page)
   await entrarRepartidor(page, { status: 'trial', days_left: 7, required: false })
   await page.addInitScript(() => { if (!sessionStorage.getItem('ya')) { localStorage.setItem('fds_recien_alta', '1'); sessionStorage.setItem('ya', '1') } })
@@ -2198,7 +2200,7 @@ test('Alta · el pase del QR entra en la cuenta y quita el pase de la dirección
 
 test.describe('Alta desde el navegador de TikTok (Android)', () => {
   test.use({ userAgent: 'Mozilla/5.0 (Linux; Android 14; SM-A546B Build/UP1A; wv) AppleWebKit/537.36 (KHTML, like Gecko) Version/4.0 Chrome/128.0 Mobile Safari/537.36 musical_ly_2023607030 BytedanceWebview/d8a21c6' })
-  test('le dice dónde está, saca un pase para abrir Chrome y ofrece el APK', async ({ page }) => {
+  test('le dice dónde está y saca un pase para abrir Chrome, sin ofrecer el APK desde dentro', async ({ page }) => {
     await entrarRepartidor(page, { status: 'trial', days_left: 7, required: false })
     await page.addInitScript(() => localStorage.setItem('fds_recien_alta', '1'))
     let pases = 0
@@ -2206,7 +2208,8 @@ test.describe('Alta desde el navegador de TikTok (Android)', () => {
     await page.goto('/ruta', { waitUntil: 'domcontentloaded' })
     const paso = page.getByRole('dialog', { name: 'Último paso: instala la app' })
     await expect(paso.getByText('Estás en el navegador de TikTok: desde aquí el móvil no deja instalar nada.')).toBeVisible()
-    await expect(paso.getByRole('link', { name: 'Descargar la app para Android' })).toHaveAttribute('href', '/descargas/FDS.apk')
+    // Desde dentro de TikTok/Instagram el APK se descargaba y no se abría con la cuenta (18-10): solo Chrome con el pase.
+    await expect(paso.getByRole('link', { name: 'Descargar la app para Android' })).toHaveCount(0)
     await paso.getByRole('button', { name: 'Abrir en Chrome' }).click()
     await expect(paso.getByText(/¿No se ha abierto\? Pulsa ⋮/)).toBeVisible({ timeout: 6000 })
     expect(pases).toBe(1)

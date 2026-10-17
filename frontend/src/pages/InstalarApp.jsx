@@ -118,7 +118,11 @@ function Opciones({ ins, onInstalada }) {
             pequeña, no se veía (Wanger pulsó «Abrir en Safari» 4 veces). Ahora se ve, y con el enlace de entrada
             para copiarlo y pegarlo en el navegador: entra ya con su cuenta (vale 10 minutos, una vez). */}
         {fallo && <NoSeAbrio iphone={iphone} enlace={enlace} />}
-        {android && <DescargarApk apk={apk} />}
+        {/* SIN APK AQUÍ (18-10-2026). Medido con las 31 altas reales de repartidor: 21 entraron desde el
+            navegador de Instagram/Facebook, y 5 acabaron el día del alta pulsando «Descargar la app» desde dentro
+            y no volvieron nunca (14 la descargaron y la app solo tuvo 7 sesiones en 10 días). Descargado desde
+            ahí, el APK se queda en Descargas o, si se instala, abre Chrome SIN la cuenta. El camino que sí
+            lleva la sesión es salir a Chrome con el pase; allí se instala en un toque o con el APK. */}
       </div>
     )
   }
