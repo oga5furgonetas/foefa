@@ -577,7 +577,9 @@ export function Ajustes({ conductores, toast, autonomo }) {
             <span><b>«Mi ruta» en el móvil de los conductores</b><br />
               <span className="text-[12px] text-dark-400">Escanean los bultos al cargar, ven su ruta en orden y marcan las entregas.</span></span>
           </label>}
-          <label className={`flex items-start gap-2.5 text-[13px] text-dark-200 ${a.ia_disponible ? '' : 'opacity-60'}`}>
+          {/* A quien reparte solo no se le enseña desactivada (17-10-2026): le hablaba de «el conductor» y le decía
+              que escribe la dirección a mano, cuando la foto a la etiqueta ya se lee en su móvil. */}
+          {(!autonomo || a.ia_disponible) && <label className={`flex items-start gap-2.5 text-[13px] text-dark-200 ${a.ia_disponible ? '' : 'opacity-60'}`}>
             <input type="checkbox" className="mt-1" disabled={!a.ia_disponible} checked={!!a.ia_tickets && !!a.ia_disponible}
               onChange={(e) => setA({ ...a, ia_tickets: e.target.checked })} />
             <span><b>Leer el ticket con IA</b> cuando el código no está en la lista<br />
@@ -586,7 +588,7 @@ export function Ajustes({ conductores, toast, autonomo }) {
                   ? 'La foto se envía al proveedor de IA solo para leer dirección, teléfono y contenido, y no se guarda. Actívalo si tu empresa lo acepta como responsable de esos datos; si no, el conductor la escribe a mano.'
                   : 'Todavía no disponible: se activará cuando la IA funcione con un contrato que garantice que no se usan tus datos para entrenarla. Mientras, el conductor escribe la dirección a mano.'}
               </span></span>
-          </label>
+          </label>}
           <label className="block text-[13px] text-dark-200">
             <span className="flex flex-wrap items-center gap-2">
               <b>Borrar los datos de los clientes a los</b>
