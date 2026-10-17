@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { ClipboardCheck, CalendarDays, CalendarClock, LogOut, Lock, Ban, ShoppingBag, RefreshCw, Route } from 'lucide-react'
+import { ClipboardCheck, CalendarDays, CalendarClock, LogOut, Lock, Ban, ShoppingBag, RefreshCw, Route, Gift, ArrowLeft } from 'lucide-react'
 import { getPortalVehicles, getMyShifts, getMiFicha, guardarMiTelefono, tiendaEscaparate, repMiRuta, DRIVER_TOKEN_KEY } from '../../services/api'
 import { lista } from '../../lib/lista'
 import { medirSeccion } from '../../lib/analitica'
@@ -13,6 +13,7 @@ import PedirDias from './PedirDias'
 import Tienda from './Tienda'
 import MiRuta from './MiRuta'
 import DriverReferralWallet from './DriverReferralWallet'
+import { refCentActual } from '../../lib/precios'
 
 const DRIVER_KEY = 'flota_driver'
 
@@ -83,6 +84,53 @@ function Opcion({ icono: Icono, titulo, sub, onClick, principal, bloqueado, pron
   )
 }
 
+/* LO DEMÁS, EN CASILLAS DE TRES (17-10-2026). Dani: «más que recuadros hacia abajo, en la primera fila 3
+   cuadros y en la segunda otros 3, para que se vea más moderno». La auditoría (y «Mi ruta») siguen a lo
+   ancho y arriba: es lo de todos los días. El resto es secundario y cabe en una pantalla sin bajar. */
+function Casilla({ icono: Icono, titulo, detalle, onClick, pronto, aviso, tono }) {
+  const acento = {
+    verde: 'border-emerald-400/45 bg-emerald-500/[.10]',
+    ambar: 'border-amber-400/45 bg-amber-500/[.07]',
+  }[tono] || 'border-dark-700 bg-dark-900'
+  const icono = { verde: 'bg-emerald-400/15 text-emerald-200', ambar: 'bg-amber-400/15 text-amber-200' }[tono] || 'bg-dark-800 text-dark-300'
+  return (
+    <button onClick={pronto ? undefined : onClick} disabled={pronto} aria-label={detalle ? `${titulo}. ${detalle}` : titulo}
+      className={`relative flex min-h-[112px] flex-col justify-between rounded-2xl border p-3 text-left transition-all ${
+        pronto ? 'cursor-not-allowed border-dark-800 bg-dark-900/40 opacity-60' : `${acento} active:scale-[.97]`}`}>
+      {aviso > 0 && (
+        <span className="absolute right-2 top-2 flex h-5 min-w-5 items-center justify-center rounded-full bg-red-500 px-1.5 text-[11px] font-bold text-white">
+          {aviso}
+        </span>
+      )}
+      {pronto && (
+        <span className="absolute right-2 top-2 rounded-full border border-dark-600 px-1.5 py-0.5 text-[8.5px] font-semibold uppercase tracking-wider text-dark-400">
+          Pronto
+        </span>
+      )}
+      <span className={`flex h-9 w-9 items-center justify-center rounded-xl ${icono}`}><Icono size={18} /></span>
+      <span className="mt-2 block">
+        <span className="block text-[13px] font-bold leading-tight text-dark-100">{titulo}</span>
+        {detalle && <span className="mt-0.5 block text-[11px] leading-tight text-dark-400">{detalle}</span>}
+      </span>
+    </button>
+  )
+}
+
+/* «Comparte y gana», en su pantalla: en el inicio era una tarjeta enorme encima de la auditoría (Dani,
+   17-10-2026: «para que no sea muy cargante»). Ahora es una casilla más y aquí está todo: enlace, saldo y cobro. */
+function PantallaCartera({ onBack }) {
+  return (
+    <div className="min-h-screen bg-dark-950 px-4 py-6">
+      <div className="mx-auto max-w-md">
+        <button onClick={onBack} className="mb-5 flex items-center gap-1.5 text-[13px] text-dark-400">
+          <ArrowLeft size={15} /> Volver
+        </button>
+        <DriverReferralWallet />
+      </div>
+    </div>
+  )
+}
+
 export default function DriverPortal() {
   const [driver, setDriver] = useState(() => {
     try {
@@ -94,6 +142,8 @@ export default function DriverPortal() {
   const [portal, setPortal] = useState(null)   // {vehicles, puede_auditar, motivo}
   const [result, setResult] = useState(null)
   const [sinVer, setSinVer] = useState(0)      // respuestas que aún no ha leído
+  // ¿Tiene turnos cargados? (17-10-2026: OGA5 tiene el cuadrante hasta diciembre; DGA1, todavía no.)
+  const [tieneTurnos, setTieneTurnos] = useState(false)
   // null = apagada o todavía sin contestar. Con datos: {desde, n} para poder
   // poner el precio en la entrada del menú, que es lo que hace que se entre.
   const [tienda, setTienda] = useState(null)
@@ -198,7 +248,7 @@ export default function DriverPortal() {
   useEffect(() => {
     if (!driver || vista !== 'inicio') return
     getMyShifts()
-      .then((r) => setSinVer(lista(r.data?.sin_ver).length))
+      .then((r) => { setSinVer(lista(r.data?.sin_ver).length); setTieneTurnos(lista(r.data?.shifts).length > 0) })
       .catch(() => setSinVer(0))
   }, [driver, vista])
 
@@ -233,6 +283,7 @@ export default function DriverPortal() {
   if (vista === 'turnos') return <MisTurnos onBack={() => setVista('inicio')} />
   if (vista === 'clave') return <MiClave onBack={() => setVista('inicio')} />
   if (vista === 'tienda') return <Tienda onBack={() => setVista('inicio')} />
+  if (vista === 'cartera') return <PantallaCartera onBack={() => setVista('inicio')} />
   if (vista === 'ruta') return <MiRuta onBack={() => setVista('inicio')} />
   if (result) {
     return <InspectionDone result={result} onNew={() => { setResult(null); setVista('inicio') }} onLogout={logout} />
@@ -255,7 +306,8 @@ export default function DriverPortal() {
       return !!JSON.parse(atob(t.split('.')[1].replace(/-/g, '+').replace(/_/g, '/'))).demo
     } catch { return false }
   })()
-  const hoy = new Date().toLocaleDateString('es-ES', { weekday: 'long', day: 'numeric', month: 'long' })
+  // «Sábado, 17 de octubre»: solo la primera en mayúscula (con `capitalize` salía «17 De Octubre»).
+  const hoy = (() => { const s = new Date().toLocaleDateString('es-ES', { weekday: 'long', day: 'numeric', month: 'long' }); return s.charAt(0).toUpperCase() + s.slice(1) })()
 
   return (
     <div className="min-h-screen bg-dark-950 px-4 py-6">
@@ -265,7 +317,7 @@ export default function DriverPortal() {
             <h1 className="font-display text-[24px] font-bold leading-tight tracking-[-.02em] text-dark-50">
               Hola, {String(driver?.name || '').split(' ')[0] || 'buenas'}
             </h1>
-            <p className="mt-0.5 text-[12.5px] capitalize text-dark-500">{hoy}</p>
+            <p className="mt-0.5 text-[12.5px] text-dark-500">{hoy}</p>
           </div>
           <button onClick={logout} className="shrink-0 rounded-lg border border-dark-700 p-2 text-dark-500"
             aria-label="Salir">
@@ -315,7 +367,6 @@ export default function DriverPortal() {
         )}
 
         <div className="flex flex-col gap-2.5">
-          {!esDemo && <DriverReferralWallet />}
           {reparto !== null && (
             <Opcion
               icono={Route}
@@ -351,24 +402,29 @@ export default function DriverPortal() {
             </div>
           )}
 
-          {!esDemo && <>
-          <Opcion
+          {!esDemo && <div className="mt-1 grid grid-cols-3 gap-2.5">
+          <Casilla
             icono={CalendarDays}
             titulo="Pedir días libres"
-            sub={sinVer > 0
-              ? `Tienes ${sinVer} respuesta${sinVer > 1 ? 's' : ''} sin leer`
-              : 'Marca los días y di para qué'}
+            detalle={sinVer > 0 ? `${sinVer} respuesta${sinVer > 1 ? 's' : ''} sin leer` : 'Marca los días'}
             aviso={sinVer}
             onClick={() => setVista('dias')}
           />
-          {/* Se deja a la vista y apagado a propósito: el cuadrante todavía no
-              se publica a los conductores, y una opción que no está genera más
-              preguntas que una que dice cuándo llegará. */}
-          <Opcion
+          {/* Abierta a quien ya tiene turnos cargados; a quien no, «Pronto» (una opción que no está
+              genera más preguntas que una que dice que llegará). */}
+          <Casilla
             icono={CalendarClock}
             titulo="Mis turnos"
-            sub="Aquí verás qué días trabajas"
-            pronto
+            detalle="Qué días trabajas"
+            pronto={!tieneTurnos}
+            onClick={() => setVista('turnos')}
+          />
+          <Casilla
+            icono={Gift}
+            titulo="Comparte y gana"
+            detalle={`${(refCentActual() / 100).toFixed(2).replace('.', ',').replace(',00', '')} € por compañero`}
+            tono="verde"
+            onClick={() => setVista('cartera')}
           />
           {/* LA ROPA, CON EL PRECIO EN LA PROPIA ENTRADA. Estaba aquí desde el
               08-09 y no entró casi nadie: decía «La del equipo, con tu nombre»
@@ -377,23 +433,21 @@ export default function DriverPortal() {
               «desde» sale del escaparate —o sea, del precio de verdad—, no de
               un número escrito aquí que se quedaría viejo (gotcha 54). */}
           {tienda && (
-            <Opcion
+            <Casilla
               icono={ShoppingBag}
               titulo="Ropa del equipo"
-              sub={tienda.desde
-                ? `Sudadera, cortavientos y gorra desde ${tienda.desde.toFixed(2).replace('.', ',')} €`
-                : 'La del equipo, con tu nombre'}
-              insignia="Nuevo precio"
+              detalle={tienda.desde ? `Desde ${tienda.desde.toFixed(2).replace('.', ',')} €` : 'Con tu nombre'}
+              tono="ambar"
               onClick={() => setVista('tienda')}
             />
           )}
-          <Opcion
+          <Casilla
             icono={Lock}
             titulo={tieneClave ? 'Cambiar mi contraseña' : 'Crear mi contraseña'}
-            sub={tieneClave ? 'Ponte la que quieras' : 'Ahora entras solo con el correo'}
+            detalle={tieneClave ? null : 'Entras con el correo'}
             onClick={() => setVista('clave')}
           />
-          </>}
+          </div>}
         </div>
       </div>
     </div>

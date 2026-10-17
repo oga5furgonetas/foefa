@@ -3392,3 +3392,52 @@ test('Regalo · 10 € en la cartera: aviso en Hoy una vez, línea en la cartera
   await expect(page.getByTestId('aviso-regalo')).toHaveCount(0)
   expect(fallos).toEqual([])
 })
+
+/* PORTAL DEL CONDUCTOR EN CASILLAS (17-10-2026). La auditoría a lo ancho; lo demás en casillas de tres.
+   «Comparte y gana» ya no es una tarjeta enorme en el inicio: es una casilla que abre la cartera.
+   «Mis turnos» se abre a quien tiene turnos cargados (OGA5) y dice «Pronto» a quien no. */
+test.describe('Portal del conductor · casillas', () => {
+  async function entrarConductor(page, turnos) {
+    const exp = Math.floor(Date.now() / 1000) + 3600
+    const b64 = (o) => Buffer.from(JSON.stringify(o)).toString('base64').replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '')
+    const token = `${b64({ alg: 'HS256', typ: 'JWT' })}.${b64({ sub: 'd1', role: 'driver', name: 'ANA PÉREZ', exp })}.firma`
+    await page.addInitScript((tk) => {
+      localStorage.setItem('flota_driver_token', tk)
+      localStorage.setItem('flota_driver', JSON.stringify({ id: 'd1', name: 'ANA PÉREZ', center: 'OGA5' }))
+      localStorage.setItem('cookie_consent', '1')
+    }, token)
+    await simularApi(page, 'vacio')
+    await page.route(/\/api\/shifts\/mine/, (r) => r.fulfill({ json: { shifts: turnos, sin_ver: [], requests: [] } }))
+    await page.route(/\/api\/conductor\/referidos/, (r) => r.fulfill({ json: {
+      enlace: 'https://flotadsp.com/invita?ref=ABCD', saldo: 0, invitados: 0, premiados: 0, por_invitado: 1000,
+      metodos: ['bizum', 'iban'], retirada_min: 6000, retiradas: [], pendiente: false } }))
+    await page.goto('/conductor', { waitUntil: 'domcontentloaded' })
+    await expect(page.getByText('Pedir días libres').first()).toBeVisible({ timeout: 15000 })
+  }
+
+  test('la cartera es una casilla que abre su pantalla y se vuelve', async ({ page }) => {
+    const fallos = vigilar(page)
+    await entrarConductor(page, [{ date: '2026-10-20', type: 'trabaja' }])
+    await expect(page.getByRole('region', { name: 'Invita a probar Flota' })).toHaveCount(0)   // ya no ocupa el inicio
+    await page.getByRole('button', { name: /Comparte y gana/ }).click()
+    await expect(page.getByRole('region', { name: 'Invita a probar Flota' })).toBeVisible()
+    await page.getByRole('button', { name: 'Volver' }).click()
+    await expect(page.getByRole('button', { name: /Hacer la auditoría/ })).toBeVisible()
+    expect(fallos).toEqual([])
+  })
+
+  test('«Mis turnos» se abre a quien tiene turnos cargados', async ({ page }) => {
+    const fallos = vigilar(page)
+    await entrarConductor(page, [{ date: '2026-10-20', type: 'trabaja' }])
+    await expect(page.getByRole('button', { name: /Mis turnos/ })).toBeEnabled()
+    expect(fallos).toEqual([])
+  })
+
+  test('«Mis turnos» dice «Pronto» a quien todavía no tiene turnos', async ({ page }) => {
+    const fallos = vigilar(page)
+    await entrarConductor(page, [])
+    await expect(page.getByRole('button', { name: /Mis turnos/ })).toBeDisabled()
+    await expect(page.getByText('Pronto')).toBeVisible()
+    expect(fallos).toEqual([])
+  })
+})
