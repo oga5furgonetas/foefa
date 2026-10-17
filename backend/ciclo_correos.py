@@ -120,6 +120,16 @@ def en_su_manana(org: dict, ahora: datetime) -> bool:
     return local.weekday() != 6 and MANANA_DESDE <= local.hour < MANANA_HASTA
 
 
+def en_su_dia(org: dict, ahora: datetime) -> bool:
+    """De 9 a 21 de su hora (17-10-2026: el correo «bono» es un anuncio; no tiene que esperar a las 7 del lunes)."""
+    from zoneinfo import ZoneInfo
+    try:
+        zona = ZoneInfo(str((org or {}).get("zona_horaria") or "Europe/Madrid"))
+    except Exception:                                            # noqa: BLE001
+        zona = ZoneInfo("Europe/Madrid")
+    return 9 <= ahora.astimezone(zona).hour < 21
+
+
 def toca(org: dict, uso: dict, ahora: datetime, promo: bool = False, bono: bool = False) -> str:
     """La clave del correo que toca mandar AHORA, o "" si ninguno. Con la promoción
     «gratis y sin límite» activa no hay «se acaba tu prueba»: no se acaba nada.
@@ -145,7 +155,7 @@ def toca(org: dict, uso: dict, ahora: datetime, promo: bool = False, bono: bool 
             and not (uso or {}).get("paradas") and manana):
         return "recordatorio"
     # El bono, a quien no se le ha dicho: ningún correo suyo desde que existe (esos ya lo llevan).
-    if (bono and "bono" not in enviados and edad >= PRIMER_DIA_DESDE and manana
+    if (bono and "bono" not in enviados and edad >= PRIMER_DIA_DESDE and (manana or en_su_dia(org, ahora))
             and _reales(uso) < BONO_ENTREGAS
             and not any((_fecha((v or {}).get("at")) or alta) >= BONO_DESDE for v in enviados.values())):
         return "bono"

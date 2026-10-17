@@ -6,6 +6,7 @@ import reparto
 import whatsapp
 import analitica
 import ciclo_correos
+import campana_candidatos
 import demo_comercial as _demo_com
 from ai_learning import (
     get_few_shot_examples, build_few_shot_prompt_parts_multimodal,
@@ -20872,7 +20873,9 @@ async def _ciclo_enviar(org_id: str, clave: str, ahora: Optional[datetime] = Non
         if not org or not ciclo_correos.es_candidata(org):
             return False
         uso = await _ciclo_uso(org)
-        if ciclo_correos.toca(org, uso, ahora, promo=_rep_promo_activa()) != clave:
+        # Con el MISMO bono que la vuelta (17-10-2026: sin él, aquí no tocaba nunca «bono» y no salió ninguno).
+        b = _bono_resumen(org, ahora)
+        if ciclo_correos.toca(org, uso, ahora, promo=_rep_promo_activa(), bono=bool(b and not b["pagado"])) != clave:
             return False
         # La misma PERSONA con dos cuentas (pasó el 05-10: dos altas con el mismo
         # correo) no recibe dos correos del ciclo seguidos: la separación vale por dirección.
@@ -20966,6 +20969,7 @@ async def _bucle_ciclo_correos():
 async def start_ciclo_correos():
     asyncio.create_task(_bucle_ciclo_correos())
     asyncio.create_task(_bucle_aviso_manana())
+    asyncio.create_task(_bucle_campana_bono())
 
 
 # ── AVISO DE LA MAÑANA (11-10-2026) ─────────────────────────────────────────
@@ -21064,6 +21068,117 @@ async def correo_baja(o: str = "", t: str = ""):
     await global_db.organizations.update_one(
         {"id": o}, {"$set": {"correos_baja": True, "correos_baja_at": datetime.now(timezone.utc).isoformat()}})
     return _baja_pagina("Hecho", "No te enviaremos más correos de este tipo. Tu cuenta sigue igual.")
+
+
+# ── BAJA DE UNA DIRECCIÓN Y CAMPAÑA «10 € CON LA APP» A CANDIDATOS (17-10-2026) ──
+# La explicación, en campana_candidatos.py. La campaña se enciende con un documento en `candidatos_campanas`
+# de la base del dueño ({tipo: "bono10", activa: true, por_dia}) y sale sola por tandas de día; se apaga sola
+# cuando no queda nadie. `correos_bajas` (global) es la lista de direcciones que no quieren nada más.
+_CAMPANA_BONO_TOPE_DIA = 100       # plan gratuito de Resend
+_CAMPANA_BONO_RESERVA = 15         # lo que se deja cada día para los correos de la app (altas, contraseñas, ciclo)
+_CAMPANA_BONO_HORAS = (10, 21)     # de 10:00 a 20:59 en Madrid
+
+
+def _baja_email_firma(correo: str) -> str:
+    import hmac as _hmac
+    import hashlib as _hl
+    return _hmac.new(SECRET_KEY.encode(), f"baja-email:{correo}".encode(), _hl.sha256).hexdigest()[:32]
+
+
+def _baja_email_url(correo: str) -> str:
+    return f"{_BACKEND_BASE}/api/correo/baja-email?e={_url_quote(correo)}&t={_baja_email_firma(correo)}"
+
+
+@api_router.api_route("/correo/baja-email", methods=["GET", "POST"], include_in_schema=False)
+async def correo_baja_email(e: str = "", t: str = ""):
+    """Darse de baja una DIRECCIÓN (el botón de los correos a candidatos y su List-Unsubscribe de un clic)."""
+    import hmac as _hmac
+    correo = (e or "").strip().lower()[:120]
+    if not (correo and t and SECRET_KEY and _hmac.compare_digest(_baja_email_firma(correo), str(t)[:64])):
+        return _baja_pagina("Enlace no válido", "Este enlace de baja no es válido o está incompleto.")
+    ahora = datetime.now(timezone.utc).isoformat()
+    await global_db.correos_bajas.update_one({"email": correo}, {"$set": {"email": correo, "at": ahora}}, upsert=True)
+    owner = await global_db.organizations.find_one({"id": OWNER_ORG_ID}, {"_id": 0})
+    if owner:
+        await client[_tenant_db_name(owner)].candidatos.update_many(
+            {"email": {"$regex": f"^{re.escape(correo)}$", "$options": "i"}},
+            {"$set": {"baja_comercial": True, "novedades_fds": False, "baja_comercial_at": ahora}})
+    return _baja_pagina("Hecho", "No te volveremos a escribir. Si algún día quieres probar la app, está en flotadsp.com.")
+
+
+async def _campana_bono_vuelta(ahora: Optional[datetime] = None) -> int:
+    """Una tanda de la campaña de candidatos, si está encendida y es de día. Devuelve cuántos salieron."""
+    from zoneinfo import ZoneInfo
+    ahora = ahora or datetime.now(timezone.utc)
+    owner = await global_db.organizations.find_one({"id": OWNER_ORG_ID}, {"_id": 0})
+    if not owner:
+        return 0
+    odb = client[_tenant_db_name(owner)]
+    camp = await odb.candidatos_campanas.find_one({"tipo": campana_candidatos.CLAVE, "activa": True}, {"_id": 0})
+    if not camp:
+        return 0
+    desde, hasta = _CAMPANA_BONO_HORAS
+    if not desde <= ahora.astimezone(ZoneInfo("Europe/Madrid")).hour < hasta:
+        return 0
+    hoy = ahora.date().isoformat()                               # Resend cuenta por día UTC
+    del_dia = await global_db[_CORREOS_COL].count_documents({"at": {"$gte": hoy}, "ok": True})
+    de_la_campana = await global_db[_CORREOS_COL].count_documents({"at": {"$gte": hoy}, "por": f"campana:{campana_candidatos.CLAVE}"})
+    cupo = min(int(camp.get("por_dia") or 60) - de_la_campana, _CAMPANA_BONO_TOPE_DIA - _CAMPANA_BONO_RESERVA - del_dia)
+    if cupo <= 0:
+        return 0
+    fichas = await odb.candidatos.find({}, {"_id": 0, "email": 1, "nombre": 1, "novedades_fds": 1, "baja_comercial": 1}).to_list(5000)
+    prefijo = f"{campana_candidatos.CLAVE}:"
+    ya = [str(x["_id"])[len(prefijo):] for x in await odb.candidatos_campana_envios.find({}, {"_id": 1}).to_list(20000)
+          if str(x.get("_id", "")).startswith(prefijo)]
+    bajas = [x.get("email") for x in await global_db.correos_bajas.find({}, {"_id": 0, "email": 1}).to_list(20000)]
+    # Quien ya tiene cuenta en la app recibe el ciclo de correos (con el bono): esta no.
+    con_cuenta = [x.get("email") for x in await global_db.organizations.find({}, {"_id": 0, "email": 1}).to_list(20000)]
+    con_cuenta += [x.get("username") for x in await global_db.admin_users.find({}, {"_id": 0, "username": 1}).to_list(20000)]
+    pendientes = campana_candidatos.destinatarios(fichas, con_cuenta, ya, bajas)
+    if not pendientes:
+        await odb.candidatos_campanas.update_one({"id": camp["id"]}, {"$set": {"activa": False, "terminada": ahora.isoformat()}})
+        return 0
+    enlace = (f"{_PORTAL_BASE_FRONT}/repartidores?utm_source=correo&utm_medium=email"
+              f"&utm_campaign=candidatos&utm_content={campana_candidatos.CLAVE}")
+    responder = await _ciclo_responder_a()
+    marca = _email_remitente()[0]
+    enviados = 0
+    for d in pendientes[:cupo]:
+        if _email_sin_cuota_hoy():
+            break
+        # Se apunta ANTES de mandar: un correo por persona aunque algo falle a medias.
+        await odb.candidatos_campana_envios.update_one(
+            {"_id": f"{prefijo}{d['email']}"}, {"$setOnInsert": {"en": ahora.isoformat(), "campana": camp["id"]}}, upsert=True)
+        baja = _baja_email_url(d["email"])
+        c = campana_candidatos.correo(d["nombre"], enlace, baja, marca)
+        ok = await _enviar_email(d["email"], c["asunto"], c["html"], responder_a=responder, texto=c["texto"],
+                                 cabeceras={"List-Unsubscribe": f"<{baja}>", "List-Unsubscribe-Post": "List-Unsubscribe=One-Click"})
+        await global_db[_CORREOS_COL].insert_one({
+            "id": str(uuid.uuid4()), "para": d["email"], "copia": [], "asunto": c["asunto"], "cuerpo": c["texto"],
+            "responder_a": responder, "por": f"campana:{campana_candidatos.CLAVE}", "at": ahora.isoformat(),
+            "ok": bool(ok)})
+        if ok:
+            enviados += 1
+        elif _email_sin_cuota_hoy():
+            # Sin cuota no ha salido: se desapunta para la tanda de mañana. Un rechazo de verdad (dirección mal)
+            # se queda apuntado: repetirlo no lo arregla.
+            await odb.candidatos_campana_envios.delete_one({"_id": f"{prefijo}{d['email']}"})
+            break
+    await odb.candidatos_campanas.update_one(
+        {"id": camp["id"]}, {"$inc": {"enviados": enviados}, "$set": {"ultima_tanda": ahora.isoformat()}})
+    return enviados
+
+
+async def _bucle_campana_bono():
+    await asyncio.sleep(180)
+    while True:
+        try:
+            n = await _campana_bono_vuelta()
+            if n:
+                logger.info("campaña bono10: %s correos", n)
+        except Exception as e:                                   # noqa: BLE001
+            logger.error("Campaña bono10: %s", e)
+        await asyncio.sleep(20 * 60)
 
 
 # ── EMPLEO: OFERTAS Y CANDIDATOS ─────────────────────────────────────────────

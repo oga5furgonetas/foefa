@@ -202,7 +202,8 @@ def test_el_correo_del_bono_solo_a_quien_no_lo_sabe_y_por_la_manana():
                              "primer_dia": {"at": "2026-10-07T05:10:00+00:00"}}}
     assert cc.toca(org, {"paradas": 4, "entregadas_reales": 3}, lunes, promo=True, bono=True) == "bono"
     assert cc.toca(org, {"paradas": 4}, lunes, promo=True, bono=False) == ""
-    assert cc.toca(org, {"paradas": 4}, lunes + timedelta(hours=8), promo=True, bono=True) == ""   # por la tarde no
+    assert cc.toca(org, {"paradas": 4}, lunes + timedelta(hours=8), promo=True, bono=True) == "bono"  # de día, sí
+    assert cc.toca(org, {"paradas": 4}, lunes + timedelta(hours=16), promo=True, bono=True) == ""     # de noche, no
     assert cc.toca(org, {"paradas": 40, "entregadas_reales": 20}, lunes, promo=True, bono=True) == "invita"
     # Ya le llegó un correo del ciclo desde que existe el bono (ese lo llevaba): no se le repite.
     ya = dict(org, ciclo_correos={**org["ciclo_correos"], "recordatorio": {"at": "2026-10-17T06:00:00+00:00"}})
@@ -378,7 +379,8 @@ async def test_quien_ya_carga_paradas_no_recibe_el_de_ayuda(mundo):
     mundo.g["organizations"].docs.append(_org(horas=24, ciclo_correos={"bienvenida": {"at": "2026-10-09T12:00:00+00:00"}}))
     mundo.monkeypatch.setenv("CICLO_CORREOS", "1")
     mundo.uso["paradas"] = 7
-    assert await server.ciclo_correos_vuelta(AHORA) == {}
+    r = await server.ciclo_correos_vuelta(AHORA)
+    assert "primer_dia" not in r and "recordatorio" not in r          # (el del bono sí le puede llegar)
 
 
 @pytest.mark.asyncio(loop_scope="session")
@@ -424,10 +426,28 @@ async def test_la_marca_es_la_del_remitente(mundo):
 
 
 @pytest.mark.asyncio(loop_scope="session")
+async def test_el_correo_del_bono_sale_de_verdad(mundo):
+    """17-10-2026: la vuelta decía «bono» pero _ciclo_enviar lo volvía a mirar sin el bono y no salía ninguno."""
+    alta = (datetime.now(timezone.utc) - timedelta(days=9)).isoformat()
+    mundo.g["organizations"].docs.append({
+        "id": "o7", "name": "Juan", "sector": "autonomo", "plan": "autonomo", "status": "trial", "email": "juan@x.es",
+        "pais": "es", "db_name": "dsp_o7", "created_at": alta, "zona_horaria": "Europe/Madrid",
+        "trial_ends": (datetime.now(timezone.utc) + timedelta(days=60)).isoformat(),
+        "ciclo_correos": {"bienvenida": {"at": alta}}})
+    mundo.uso.update({"paradas": 2, "entregadas": 1, "entregadas_reales": 1})
+    mundo.monkeypatch.setenv("CICLO_CORREOS", "1")
+    a_las_11 = datetime(2026, 10, 19, 9, 0, tzinfo=timezone.utc)                  # lunes, 11:00 en Madrid
+    assert await server.ciclo_correos_vuelta(a_las_11) == {"bono": 1}
+    assert mundo.enviados[-1].subject.startswith("10 € por tu primera ruta con ")
+    assert "bono" in next(o for o in mundo.g["organizations"].docs if o["id"] == "o7")["ciclo_correos"]
+    assert await server.ciclo_correos_vuelta(a_las_11 + timedelta(hours=1)) == {}  # una sola vez
+
+
+@pytest.mark.asyncio(loop_scope="session")
 async def test_el_de_invita_sale_con_su_codigo_de_invitacion(mundo):
     alta = (datetime.now(timezone.utc) - timedelta(hours=30)).isoformat()
     mundo.g["organizations"].docs.append({
-        "id": "o9", "name": "Barry", "sector": "autonomo", "plan": "autonomo", "status": "trial",
+        "id": "o9", "name": "Barry", "sector": "autonomo", "plan": "autonomo", "status": "trial", "bono_pagado": True,
         "email": "barry@x.es", "pais": "es", "db_name": "dsp_o9", "created_at": alta,
         "trial_ends": (datetime.now(timezone.utc) + timedelta(days=60)).isoformat(),
         "ciclo_correos": {"bienvenida": {"at": alta}}})

@@ -1280,3 +1280,22 @@ intentar retirar, promoción hasta el 31-10-2026.
 - **Pendiente**: pegar en el anuncio de Meta los textos «bono» de CAMPANA-14-10-INVITA10.md (la extensión de
   Chrome se desconectó de madrugada). Medir el 19-10: `origen_altas.py 3` y cuántos «primer_dia/bono» abren y
   cargan paradas.
+
+## 17-10-2026 (mañana): campaña «10 € con la app» a los candidatos, y el correo «bono» que no salía
+
+- **Fallo del bono**: `_ciclo_enviar` volvía a mirar qué tocaba sin pasar `bono=` y descartaba siempre el correo
+  «bono»: el 17 por la mañana salieron los 13 «primer_dia» pero ninguno de los 21 «bono». Arreglado (test
+  `test_el_correo_del_bono_sale_de_verdad`). Además el «bono» sale de 9 a 21 de su hora (`en_su_dia`), no solo
+  de 7 a 9: es un anuncio, no ayuda para cargar la furgoneta.
+- **Campaña a candidatos** (Dani lo decidió tras avisarle del riesgo LSSI/Resend): `backend/campana_candidatos.py`
+  (a quién y el texto) + `_campana_bono_vuelta` en server.py. 270 personas (de 316 fichas): una por dirección,
+  sin quien dijo que no (`novedades_fds: false`), sin bajas, sin quien ya tiene cuenta (le llega el ciclo).
+  Botón «Darme de baja» y List-Unsubscribe de un clic → `/api/correo/baja-email` (firma HMAC por dirección):
+  guarda en `flota_global.correos_bajas` y marca `baja_comercial` en sus candidaturas; no se le escribe más.
+  Sale sola por tandas de 10:00 a 21:00 (Madrid), hasta `por_dia` (60) y dejando siempre 15 de los 100
+  correos diarios de Resend para la app. Se apunta en `candidatos_campana_envios` (`bono10:<correo>`) antes de
+  enviar; sin cuota, se desapunta para mañana. Se apaga sola al acabar.
+  **Encender/parar**: documento `{tipo: "bono10", activa: true|false, por_dia}` en `flota.candidatos_campanas`.
+  Ver cómo va: `correos_enviados` con `por: "campana:bono10"`; altas con `utm_campaign=candidatos`.
+- Con Brevo (300/día gratis) configurado como segundo proveedor (`BREVO_API_KEY`) iría el triple de rápido;
+  crear la cuenta es cosa de Dani.
