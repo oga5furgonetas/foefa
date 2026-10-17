@@ -1442,7 +1442,10 @@ export default function OrdenesTrabajo() {
             )}
 
             <label className="mb-1.5 block text-[12.5px] font-semibold text-dark-300">Qué le pasa</label>
-            <textarea rows={3} value={nueva.problema}
+            {/* Tan alta como el parte (hasta 8 líneas): el que llega redactado desde Estado de la flota tiene una
+                línea por zona y con 3 no se veía entero. */}
+            <textarea rows={Math.min(8, Math.max(3, String(nueva.problema || '').split('\n').length
+              + Math.floor(String(nueva.problema || '').length / 70) + 1))} value={nueva.problema}
               onChange={(e) => setNueva({ ...nueva, problema: e.target.value })}
               placeholder="Frenos hacen ruido y testigo ABS encendido"
               className="mb-4 w-full rounded-lg border border-dark-700 px-3 py-2.5 text-[14px]" />

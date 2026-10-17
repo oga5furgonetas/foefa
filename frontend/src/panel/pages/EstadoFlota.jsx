@@ -299,7 +299,8 @@ function Ficha({ id, resumen, puedeTaller, onClose }) {
               ) : null}
 
               {/* Las zonas y por qué la nota. */}
-              <section className="flex gap-4 rounded-2xl border border-dark-800 bg-dark-900/60 p-4">
+              {/* En el móvil, el dibujo encima y el porqué debajo: al lado no le quedaban ni 100 px al texto. */}
+              <section className="flex flex-col gap-4 rounded-2xl border border-dark-800 bg-dark-900/60 p-4 sm:flex-row">
                 <div className="flex flex-none flex-col items-center gap-2">
                   <Furgoneta zonas={f.zonas} />
                   <p className="flex flex-wrap justify-center gap-x-2 gap-y-0.5 text-[10.5px] text-dark-500" aria-hidden="true">

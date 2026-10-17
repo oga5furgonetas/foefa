@@ -207,7 +207,9 @@ export async function entrarComoAdmin(page, { superAdmin = false, centros = ['NO
       // overlays de bienvenida (el segundo es `fixed inset-0 z-[80]`, a
       // pantalla completa) tapan todos los botones y el barrido no pulsa
       // ninguno en ninguna pantalla.
-      localStorage.setItem('cookie_consent', '1')
+      // Con el formato de ahora (v3, el que guarda el aviso al elegir): con el antiguo '1' y los píxeles puestos en
+      // la compilación, el aviso vuelve a salir y tapa los botones en la segunda pantalla que se abre.
+      localStorage.setItem('cookie_consent', JSON.stringify({ v: 3, anuncios: false, at: '2026-10-17T00:00:00Z' }))
       localStorage.setItem('ayuda_vista_a1', '1')
       // El recorrido de bienvenida de la ruta (MiRuta.jsx) se da por visto; su test lo quita.
       localStorage.setItem('fds_tour_ruta', '1')
