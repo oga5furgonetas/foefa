@@ -1478,7 +1478,7 @@ test('Empleo · si el currículum no se puede subir, la candidatura entra sin é
   await page.getByRole('button', { name: /Continuar/ }).click()
   await page.getByRole('button', { name: 'Sí', exact: true }).click()
   await page.getByRole('button', { name: 'Ya mismo' }).click()
-  const novedades = page.getByRole('checkbox', { name: /Quiero recibir novedades de FDS/ })
+  const novedades = page.getByRole('checkbox', { name: /Quiero recibir novedades y promociones de FDS/ })
   await expect(novedades).not.toBeChecked()
   await novedades.check()
   // El CV se lee al elegirlo: aparece su nombre.
@@ -2339,6 +2339,57 @@ test.describe('App del repartidor en el móvil', () => {
     await tirar(150, 360)                                            // de verdad: recarga
     await expect.poll(() => veces).toBe(antes + 1)
     expect(fallos).toEqual([])
+  })
+
+  /* SIN COBERTURA (17-10-2026): «Entregado» sin red se guarda en el móvil, se ve hecho, y se envía al volver
+     la red con la hora a la que se hizo. Deshacer algo que aún no salió del móvil no manda nada. */
+  test('sin cobertura, la entrega se guarda en el móvil y se envía al volver la red con su hora', async ({ page }) => {
+    const fallos = vigilar(page)
+    await entrarRepartidor(page, { status: 'trial', days_left: 60, promo: { activa: true, hasta: '2026-12-31' } })
+    const parada = (id, cliente, estado = 'pendiente') => ({ id, cliente, direccion: `Rúa Real ${id.slice(1)}, A Coruña`, estado, orden: Number(id.slice(1)), lat: 43.37, lng: -8.40 })
+    const servidor = { p1: 'pendiente', p2: 'pendiente' }
+    await page.route(/\/api\/reparto\/mi-ruta$/, (r) => r.fulfill({ json: { activo: true, autonomo: true, fecha: '2026-10-17', jornada: {}, aviso_aceptado: true,
+      pedidos: [parada('p1', 'Farmacia Sol', servidor.p1), parada('p2', 'Bar Pepe', servidor.p2)] } }))
+    await page.route(/\/api\/reparto\/mi-ruta\/trazado/, (r) => r.fulfill({ json: { linea: [], fuente: null } }))
+    let red = false
+    const recibidos = []
+    await page.route(/\/api\/reparto\/pedidos\/p\d\/estado/, async (r) => {
+      if (!red) return r.abort('internetdisconnected')
+      const body = r.request().postDataJSON()
+      recibidos.push({ id: r.request().url().match(/p\d/)[0], ...body })
+      servidor[recibidos.at(-1).id] = body.estado
+      return r.fulfill({ json: {} })
+    })
+    await page.goto('/ruta', { waitUntil: 'domcontentloaded' })
+    const entregar = async () => {
+      await page.getByRole('button', { name: /^Entregado$/ }).first().click()
+      await page.getByRole('button', { name: /^Entregar sin foto$/ }).click()
+    }
+    await entregar()                                                      // Farmacia Sol, sin red
+    await expect(page.getByText('Sin cobertura: guardado en el móvil. Se envía solo cuando vuelva la conexión.')).toBeVisible()
+    await expect(page.getByTestId('sin-enviar')).toContainText('1 cambio guardado en el móvil')
+    await expect(page.getByText('Bar Pepe').first()).toBeVisible()        // la siguiente ya es Bar Pepe
+    // Deshacer algo que no ha salido del móvil: se olvida, sin mandar nada.
+    await page.getByRole('button', { name: 'Deshacer' }).click()
+    await expect(page.getByTestId('sin-enviar')).toHaveCount(0)
+    expect(await page.evaluate(() => localStorage.getItem('fds_cola_entregas'))).toBeNull()
+    await entregar()                                                      // otra vez, sin red
+    await expect(page.getByTestId('sin-enviar')).toBeVisible()
+    const guardada = JSON.parse(await page.evaluate(() => localStorage.getItem('fds_cola_entregas')))
+    expect(guardada).toHaveLength(1)
+    expect(guardada[0]).toMatchObject({ id: 'p1', estado: 'entregado' })
+    // Recargar la app sin red no la pierde: se sigue viendo hecha.
+    await page.reload({ waitUntil: 'domcontentloaded' })
+    await expect(page.getByTestId('sin-enviar')).toBeVisible()
+    expect(recibidos).toEqual([])
+    // Vuelve la red: «Enviar ahora» la manda con la hora a la que se hizo.
+    red = true
+    await page.getByRole('button', { name: 'Enviar ahora' }).click()
+    await expect(page.getByText('Ya hay conexión: enviado lo que estaba guardado.')).toBeVisible()
+    await expect(page.getByTestId('sin-enviar')).toHaveCount(0)
+    expect(recibidos).toHaveLength(1)
+    expect(recibidos[0]).toMatchObject({ id: 'p1', estado: 'entregado', hecho_en: guardada[0].hecho_en })
+    expect(fallos.filter((f) => !/internetdisconnected|ERR_INTERNET_DISCONNECTED|Failed to load resource/.test(f))).toEqual([])
   })
 
   test('si el historial no carga, lo dice y se puede reintentar', async ({ page }) => {

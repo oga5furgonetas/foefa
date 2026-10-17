@@ -2,7 +2,7 @@ import { Suspense, lazy, useCallback, useEffect, useRef, useState } from 'react'
 import {
   ArrowLeft, ScanLine, Camera, Loader2, Navigation, Phone, Check, X, Route, MapPin, Play, Square, Package,
   MessageCircle, Clock, Search, List, Pencil, ChevronDown, GripVertical, Map as MapaIcono, ArrowUp, ArrowDown, ArrowUpDown, Mic, ClipboardPaste, Trophy,
-  Eye, PenLine, RotateCcw, HelpCircle, Share2, FileUp, Gift,
+  Eye, PenLine, RotateCcw, HelpCircle, Share2, FileUp, Gift, WifiOff,
 } from 'lucide-react'
 import {
   repMiRuta, repZonasCarga, repEscanear, repEscanearLote, repLeerTicket, repNuevoPedido, repEstado, repOrdenar, repJornada, repPosicion,
@@ -22,7 +22,7 @@ import { medirAccion } from '../../lib/analitica'
 import { compartirDia } from '../../lib/compartirDia'
 import { fijarPais, importe, simboloMoneda, metodosCobro, paisActual } from '../../lib/region'
 import { tx, useIdioma, locale, txError } from '../../lib/idioma'
-import { salirDeLaDemoDeReparto } from '../../panel/auth'
+import { salirDeLaDemoDeReparto, decodeToken } from '../../panel/auth'
 import { eurosRef, fechaRefPromo } from '../../lib/precios'
 
 /* ── MI RUTA ────────────────────────────────────────────────────────────────
@@ -37,6 +37,30 @@ import { eurosRef, fechaRefPromo } from '../../lib/precios'
    segundo plano a escondidas: mientras se comparte, se dice arriba. */
 
 const inp = 'w-full rounded-xl border border-dark-700 bg-dark-900 px-3 py-2.5 text-[15px] text-dark-50 placeholder:text-dark-500 focus:border-brand-500 focus:outline-none'
+
+/* SIN COBERTURA (17-10-2026). En un garaje, un sótano o un pueblo sin datos, «Entregado» daba «No se pudo
+   guardar» y había que acordarse de repetirlo. Ahora el cambio se guarda en el móvil, la parada se ve hecha al
+   momento y se envía sola cuando vuelve la red, con la hora a la que se hizo de verdad (`hecho_en`). Cada
+   cambio lleva de quién es (empresa y usuario): en un móvil compartido no se manda nada con otra cuenta. Si
+   no cabe la foto o la firma, se guarda la entrega sin ellas antes que perderla. */
+const COLA = 'fds_cola_entregas'
+const leerCola = () => { try { const c = JSON.parse(localStorage.getItem(COLA) || '[]'); return Array.isArray(c) ? c : [] } catch { return [] } }
+const guardarCola = (c) => {
+  try { if (c.length) localStorage.setItem(COLA, JSON.stringify(c)); else localStorage.removeItem(COLA); return true } catch { return false }
+}
+// (No «yo»: el componente ya tiene un estado `yo`, la posición, y lo taparía.)
+const cuentaActual = () => { const t = decodeToken() || {}; return `${t.org_id || ''}:${t.sub || ''}` }
+const deMi = (x) => x.quien === cuentaActual()
+// Sin respuesta del servidor (o la de una pasarela caída): eso es no tener red, no un «no» del servidor.
+const sinRed = (e) => !e?.response || [502, 503, 504].includes(e.response.status)
+const aplicarCola = (r, cola) => {
+  if (!r || !cola.length) return r
+  const por = new Map(cola.map((x) => [x.id, x]))
+  return { ...r, pedidos: lista(r.pedidos).map((p) => {
+    const x = por.get(p.id)
+    return x ? { ...p, estado: x.estado, motivo: x.motivo || '', cerrado_en: x.estado === 'pendiente' ? null : x.hecho_en, sin_enviar: true } : p
+  }) }
+}
 const MOTIVOS = ['No había nadie', 'Dirección incorrecta', 'Rechazado', 'Fuera de horario', 'Otro']
 /* DÓNDE SE DEJA (10-10-2026, como Circuit/Spoke): un toque en vez de escribirlo.
    El cliente lo ve en su enlace de seguimiento. Mismas claves que el servidor. */
@@ -282,10 +306,43 @@ export default function MiRuta({ onBack, embebido = false }) {
     try { localStorage.setItem('ruta_zonas_carga', v ? '1' : '0') } catch { /* sin almacenamiento */ }
   }
 
+  const [cola, setCola] = useState(() => leerCola().filter(deMi))
   const cargar = useCallback(() => {
-    repMiRuta().then(({ data }) => { fijarPais(data?.pais); setRuta(data) })
+    // Lo guardado sin cobertura y aún sin enviar se pinta encima de lo que dice el servidor.
+    repMiRuta().then(({ data }) => { fijarPais(data?.pais); setRuta(aplicarCola(data, leerCola().filter(deMi))) })
       .catch((e) => setErr(txError(e, 'No se pudo cargar tu ruta')))
   }, [])
+  // Manda lo guardado en el móvil: al volver la red, cada 20 s mientras quede algo y al pulsar «Enviar ahora».
+  const enviandoCola = useRef(false)
+  const vaciarColaEntregas = useCallback(async () => {
+    const mias = leerCola().filter(deMi)
+    if (!mias.length || enviandoCola.current) return
+    enviandoCola.current = true
+    let enviadas = 0
+    let rechazo = null
+    try {
+      for (const x of mias) {
+        try {
+          await repEstado(x.id, x.estado, x.motivo, { ...(x.datos || {}), hecho_en: x.hecho_en })
+          enviadas += 1
+        } catch (e) {
+          if (sinRed(e)) break
+          rechazo = rechazo || e                 // el servidor no lo acepta (ya no existe, ya no es suya): no se reintenta
+        }
+        guardarCola(leerCola().filter((y) => !(y.id === x.id && y.hecho_en === x.hecho_en)))
+      }
+    } finally { enviandoCola.current = false }
+    setCola(leerCola().filter(deMi))
+    if (rechazo) setAviso(txError(rechazo, 'Un cambio guardado sin cobertura no se pudo enviar'))
+    else if (enviadas) setAviso(enviadas === 1 ? tx('Ya hay conexión: enviado lo que estaba guardado.') : tx('Ya hay conexión: enviados {n} cambios que estaban guardados.', { n: enviadas }))
+    if (enviadas || rechazo) cargar()
+  }, [cargar])
+  useEffect(() => {
+    vaciarColaEntregas()
+    const t = setInterval(vaciarColaEntregas, 20000)
+    window.addEventListener('online', vaciarColaEntregas)
+    return () => { clearInterval(t); window.removeEventListener('online', vaciarColaEntregas) }
+  }, [vaciarColaEntregas])
   useEffect(cargar, [cargar])
   // «Tirar para actualizar» (RutaApp) avisa con este evento.
   useEffect(() => {
@@ -579,6 +636,48 @@ export default function MiRuta({ onBack, embebido = false }) {
     return d
   }
 
+  /* Manda el cambio de estado; sin cobertura, lo guarda en el móvil y lo pinta ya. Devuelve 'enviado' o
+     'guardado'. Lo último que se hace con una parada manda: si se deshace algo que aún no ha salido del
+     móvil, basta con olvidarlo; si se envía algo nuevo, lo guardado de antes para esa parada sobra. */
+  async function enviarOGuardar(p, estado, motivo, datos) {
+    const hecho_en = new Date().toISOString()
+    const previa = leerCola()
+    const enCola = previa.some((x) => x.id === p.id && deMi(x))
+    const pintar = (c) => {
+      setCola(c.filter(deMi))
+      setRuta((r) => (r ? aplicarCola({ ...r, pedidos: lista(r.pedidos).map((x) => (x.id === p.id
+        ? { ...x, estado, cerrado_en: estado === 'pendiente' ? null : hecho_en, sin_enviar: false } : x)) }, c.filter(deMi)) : r))
+    }
+    if (estado === 'pendiente' && enCola) {
+      const c = previa.filter((x) => !(x.id === p.id && deMi(x)))
+      guardarCola(c)
+      pintar(c)
+      return 'guardado'
+    }
+    try {
+      await repEstado(p.id, estado, motivo, { ...datos, hecho_en })
+      if (enCola) {
+        const c = leerCola().filter((x) => !(x.id === p.id && deMi(x)))
+        guardarCola(c)
+        setCola(c.filter(deMi))
+      }
+      return 'enviado'
+    } catch (e) {
+      if (!sinRed(e)) throw e
+      const entrada = { id: p.id, estado, motivo: motivo || '', datos, hecho_en, quien: cuentaActual() }
+      let c = previa.filter((x) => !(x.id === p.id && deMi(x))).concat(entrada)
+      let ok = guardarCola(c)
+      if (!ok && (datos.foto || datos.firma)) {
+        const { foto: _foto, firma: _firma, ...resto } = datos
+        c = c.map((x) => (x === entrada ? { ...entrada, datos: resto } : x))
+        ok = guardarCola(c)
+      }
+      if (!ok) throw e
+      pintar(c)
+      return 'guardado'
+    }
+  }
+
   async function marcar(p, estado, motivo, pago, extra) {
     // Con importe a cobrar, antes de dar por entregado hay que decir cómo pagó.
     if (estado === 'entregado' && p.cobrar > 0 && !pago) { setCobro(p); return }
@@ -586,12 +685,13 @@ export default function MiRuta({ onBack, embebido = false }) {
     if (estado === 'entregado' && !extra) { setCobro(null); setPrueba({ p, pago: pago || null }); setNotaEntrega(''); setEntrega({ donde: '', recibe: '', firma: '', firmando: false }); return }
     setOcupado(p.id)
     try {
-      await repEstado(p.id, estado, motivo, { ...(pago || {}), ...(extra || {}) })
+      const como = await enviarOGuardar(p, estado, motivo, { ...(pago || {}), ...(extra || {}) })
       medirAccion(estado === 'entregado' ? 'ruta_entregado' : 'ruta_no_entregado')
       setFallo(null); setCobro(null); setPrueba(null); setAbierta(null)
       setDeshacer({ p, estado })
       if (navigator.vibrate) navigator.vibrate(estado === 'entregado' ? 60 : [40, 60, 40])
-      cargar()
+      if (como === 'guardado') setAviso(tx('Sin cobertura: guardado en el móvil. Se envía solo cuando vuelva la conexión.'))
+      else cargar()
     } catch (e) {
       setAviso(txError(e, 'No se pudo guardar'))
     } finally { setOcupado('') }
@@ -624,7 +724,11 @@ export default function MiRuta({ onBack, embebido = false }) {
     const d = deshacer
     if (!d) return
     setDeshacer(null)
-    try { await repEstado(d.p.id, 'pendiente'); setAviso(tx('Vuelve a tu ruta: {quien}', { quien: d.p.cliente || d.p.direccion })); cargar() } catch (e) {
+    try {
+      const como = await enviarOGuardar(d.p, 'pendiente', '', {})
+      setAviso(tx('Vuelve a tu ruta: {quien}', { quien: d.p.cliente || d.p.direccion }))
+      if (como === 'enviado') cargar()
+    } catch (e) {
       setAviso(txError(e, 'No se pudo deshacer'))
     }
   }
@@ -872,6 +976,18 @@ export default function MiRuta({ onBack, embebido = false }) {
           onGuiar={nav === 'app' && pendientes.some((p) => p.lat != null) ? () => setGuiando(pendientes.find((p) => p.lat != null).id) : null}
           onCorregir={!pendientes.some((p) => p.lat != null) && pendientes.some((p) => p.geo === 'no')
             ? () => editar(pendientes.find((p) => p.geo === 'no')) : null} />
+      )}
+
+      {cola.length > 0 && (
+        <div data-testid="sin-enviar" className="mb-3 flex items-center justify-between gap-3 rounded-2xl border border-sky-400/40 bg-sky-500/10 px-3.5 py-2.5">
+          <span className="flex min-w-0 items-center gap-2 text-[12.5px] leading-snug text-sky-100">
+            <WifiOff size={16} className="shrink-0" />
+            {cola.length === 1
+              ? tx('1 cambio guardado en el móvil, sin enviar. Se envía solo al volver la conexión.')
+              : tx('{n} cambios guardados en el móvil, sin enviar. Se envían solos al volver la conexión.', { n: cola.length })}
+          </span>
+          <button type="button" onClick={vaciarColaEntregas} className="shrink-0 rounded-lg border border-sky-400/50 px-2.5 py-1.5 text-[12px] font-bold text-sky-100">{tx('Enviar ahora')}</button>
+        </div>
       )}
 
       {/* EL BONO DE BIENVENIDA (17-10-2026): 10 € por la primera ruta de verdad, con lo que lleva a la vista. */}

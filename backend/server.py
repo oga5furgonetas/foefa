@@ -48780,6 +48780,19 @@ async def reparto_mis_pedidos(data: dict = Body(...), user: dict = Depends(requi
     return await _rep_nuevo(data, user, origen, _dia_negocio(), conductor=d)
 
 
+def _rep_hora_hecho(valor) -> str:
+    """La hora de una entrega. SIN COBERTURA (17-10-2026): el móvil guarda la entrega y la manda cuando vuelve
+    la red, con la hora a la que se hizo (`hecho_en`). Sin ella, todas las de un garaje o un pueblo sin datos
+    quedaban con la misma hora (la del envío): mal en el historial y sin contar para el bono ni para «Invita y
+    gana», que miden que las entregas se repartan en el día. Se acepta de las últimas 12 h y nunca del futuro;
+    si no, la de ahora."""
+    ahora = datetime.now(timezone.utc)
+    t = _fecha_utc(_texto_cuerpo(valor, 40)) if valor else None
+    if t and ahora - timedelta(hours=12) <= t <= ahora + timedelta(minutes=2):
+        return min(t, ahora).isoformat()
+    return ahora.isoformat()
+
+
 @api_router.post("/reparto/pedidos/{pid}/estado")
 async def reparto_estado(pid: str, data: dict = Body(...), user: dict = Depends(require_any_auth)):
     p = await db.reparto_pedidos.find_one({"id": pid}, {"_id": 0})
@@ -48794,7 +48807,7 @@ async def reparto_estado(pid: str, data: dict = Body(...), user: dict = Depends(
     if e not in reparto.ESTADOS:
         raise HTTPException(400, "Estado no válido")
     cambios = {"estado": e, "motivo": _texto_cuerpo(data.get("motivo"), 200) if e == "fallido" else ""}
-    cambios["cerrado_en"] = datetime.now(timezone.utc).isoformat() if e in ("entregado", "fallido") else None
+    cambios["cerrado_en"] = _rep_hora_hecho(data.get("hecho_en")) if e in ("entregado", "fallido") else None
     if e == "entregado" and (p.get("cobrar") or 0) > 0:
         metodo = _texto_cuerpo(data.get("metodo"), 20).lower()
         # Bizum solo existe en España y Pix en Brasil; fuera, la transferencia hace su papel.

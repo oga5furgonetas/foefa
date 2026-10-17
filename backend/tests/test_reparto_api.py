@@ -126,6 +126,23 @@ async def test_cada_conductor_ve_y_cierra_solo_lo_suyo(base):
 
 
 @pytest.mark.asyncio(loop_scope="session")
+async def test_sin_cobertura_la_entrega_llega_tarde_con_su_hora_de_verdad(base):
+    """17-10-2026: el móvil guarda la entrega sin red y la manda después con `hecho_en`. Vale de las últimas
+    12 h; del futuro o de hace más, la hora del servidor."""
+    from datetime import datetime, timedelta, timezone
+    ahora = datetime.now(timezone.utc)
+    p = await server.reparto_mis_pedidos({"direccion": "Rúa Real 5"}, ANA)
+    hace = (ahora - timedelta(minutes=40)).isoformat()
+    r = await server.reparto_estado(p["id"], {"estado": "entregado", "hecho_en": hace}, ANA)
+    assert r["cerrado_en"] == datetime.fromisoformat(hace).isoformat()
+    for malo in ((ahora - timedelta(hours=13)).isoformat(), (ahora + timedelta(hours=1)).isoformat(), "ayer", 5):
+        r = await server.reparto_estado(p["id"], {"estado": "entregado", "hecho_en": malo}, ANA)
+        assert abs((datetime.fromisoformat(r["cerrado_en"]) - datetime.now(timezone.utc)).total_seconds()) < 5
+    # Volver a pendiente no lleva hora, la mande quien la mande.
+    assert (await server.reparto_estado(p["id"], {"estado": "pendiente", "hecho_en": hace}, ANA))["cerrado_en"] is None
+
+
+@pytest.mark.asyncio(loop_scope="session")
 async def test_el_dueno_entrando_como_la_empresa_no_ve_datos_de_clientes(base):
     await server.reparto_crear({"cliente": "Marta", "telefono": "600111222",
                                 "direccion": "Rúa Real 5"}, OFICINA)
