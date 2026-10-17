@@ -52,7 +52,7 @@ const PREGUNTAS = [
   ['¿Cuánto cuesta?', promoGratis()
     ? 'Gratis y sin límite hasta el 31 de diciembre, sin tarjeta. Después sigues gratis con hasta 15 paradas al día, o sin tope por 9,99 € al mes o 99 € al año. Cancelas cuando quieras desde la propia app.'
     : 'Gratis para siempre hasta 15 paradas al día, sin tarjeta. Sin tope: 9,99 € al mes o 99 € al año, y los 7 primeros días van sin tope. Cancelas cuando quieras desde la propia app.'],
-  ['¿Tengo que instalar algo?', 'Funciona en el navegador de cualquier móvil, Android o iPhone: la añades a tu pantalla de inicio y se abre como una app. La app de Google Play y la de App Store llegarán próximamente.'],
+  ['¿Tengo que instalar algo?', 'Funciona en el navegador de cualquier móvil, Android o iPhone: la añades a tu pantalla de inicio y se abre como una app. En iPhone no se descarga de la App Store: se añade desde Safari, con Compartir y «Añadir a pantalla de inicio».'],
 ]
 
 /* QUÉ VERSIÓN VE CADA VISITA (06-10-2026). Ni «verla primero» (04-10) ni «el alta arriba»

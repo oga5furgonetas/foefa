@@ -30,8 +30,8 @@ export const BR = {
   'Gratis para siempre hasta 15 paradas al día, sin tarjeta. Sin tope: 9,99 € al mes o 99 € al año, y los 7 primeros días van sin tope. Cancelas cuando quieras desde la propia app.':
     'Grátis para sempre até 15 paradas por dia, sem cartão. Sem limite: 9,99 € por mês ou 99 € por ano, e os 7 primeiros dias são sem limite. Você cancela quando quiser no próprio app.',
   '¿Tengo que instalar algo?': 'Preciso instalar alguma coisa?',
-  'Funciona en el navegador de cualquier móvil, Android o iPhone: la añades a tu pantalla de inicio y se abre como una app. La app de Google Play y la de App Store llegarán próximamente.':
-    'Funciona no navegador de qualquer celular, Android ou iPhone: você adiciona à tela inicial e ele abre como um app. Os apps da Google Play e da App Store chegam em breve.',
+  'Funciona en el navegador de cualquier móvil, Android o iPhone: la añades a tu pantalla de inicio y se abre como una app. En iPhone no se descarga de la App Store: se añade desde Safari, con Compartir y «Añadir a pantalla de inicio».':
+    'Funciona no navegador de qualquer celular, Android ou iPhone: você adiciona à tela inicial e ele abre como um app. No iPhone não precisa baixar da App Store: você adiciona pelo Safari, em Compartilhar e «Adicionar à Tela de Início».',
   'Sin conexión': 'Sem conexão',
   'Probarla ahora, sin registrarme': 'Testar agora, sem cadastro',
   'Sirve igual si repartes para una agencia, una plataforma o un súper:': 'Serve do mesmo jeito se você entrega para uma transportadora, uma plataforma ou um supermercado:',
@@ -148,8 +148,11 @@ export const BR = {
   'Compartir': 'Compartilhar',
   '(abajo).': '(embaixo).',
   'Elige «Añadir a pantalla de inicio».': 'Escolha «Adicionar à Tela de Início».',
-  'En iPhone se instala así y funciona como una app. La app de la App Store llegará próximamente.':
-    'No iPhone ele se instala assim e funciona como um app. O app da App Store chega em breve.',
+  'En iPhone no se descarga de la App Store: se instala así, desde Safari, y funciona como una app.':
+    'No iPhone não precisa baixar da App Store: ele se instala assim, pelo Safari, e funciona como um app.',
+  'O copia este enlace, abre {nav} y pégalo arriba: entras ya con tu cuenta (vale 10 minutos).': 'Ou copie este link, abra o {nav} e cole lá em cima: você entra direto na sua conta (vale 10 minutos).',
+  'Copiar el enlace': 'Copiar o link',
+  'Copiado: ábrelo en {nav} y pégalo arriba': 'Copiado: abra o {nav} e cole lá em cima',
   'Al abrirla desde el icono, entra una vez con tu correo y tu contraseña.': 'Ao abrir pelo ícone, entre uma vez com seu e-mail e sua senha.',
   'Descargar la app para Android': 'Baixar o app para Android',
   'Al instalarla, el móvil puede pedirte permitir apps de esta fuente: es la app de FDS, firmada por nosotros.':

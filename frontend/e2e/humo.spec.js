@@ -2209,6 +2209,42 @@ test.describe('Alta desde el navegador de TikTok (Android)', () => {
   })
 })
 
+/* IPHONE DENTRO DE FACEBOOK (17-10-2026): Wanger pulsó «Abrir en Safari» 4 veces y no salía (Facebook no deja).
+   Ahora, si no sale, un aviso visible con el enlace de entrada para copiarlo y pegarlo en Safari. */
+test.describe('Alta desde el navegador de Facebook (iPhone)', () => {
+  test.use({ userAgent: 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_5 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Mobile/15E148 [FBAN/FBIOS;FBAV/470.0.0.40.97;FBDV/iPhone15,2;FBMD/iPhone;FBSN/iOS;FBSV/17.5;FBLC/es_ES]' })
+  test('si no se abre Safari, deja copiar el enlace de entrada para pegarlo allí', async ({ page, context }) => {
+    await context.grantPermissions(['clipboard-read', 'clipboard-write'])
+    await entrarRepartidor(page, { status: 'trial', days_left: 7, required: false })
+    await page.addInitScript(() => localStorage.setItem('fds_recien_alta', '1'))
+    await page.route(/\/api\/auth\/pase-movil$/, (r) => r.fulfill({ json: { pase: 'p1', minutos: 10 } }))
+    await page.goto('/ruta', { waitUntil: 'domcontentloaded' })
+    const paso = page.getByRole('dialog', { name: 'Último paso: instala la app' })
+    await expect(paso.getByText('Estás en el navegador de Facebook: desde aquí el móvil no deja instalar nada.')).toBeVisible()
+    await expect(paso.getByRole('link', { name: 'Descargar la app para Android' })).toHaveCount(0)   // en iPhone, nada de APK
+    await paso.getByRole('button', { name: 'Abrir en Safari' }).click()
+    const aviso = paso.getByTestId('no-se-abrio')
+    await expect(aviso).toBeVisible({ timeout: 6000 })
+    await expect(aviso.getByRole('textbox', { name: 'Enlace para entrar' })).toHaveValue(/\/pase\?p=p1$/)
+    await aviso.getByRole('button', { name: 'Copiar el enlace' }).click()
+    await expect(aviso.getByRole('button', { name: 'Copiado: ábrelo en Safari y pégalo arriba' })).toBeVisible()
+    expect(await page.evaluate(() => navigator.clipboard.readText())).toMatch(/\/pase\?p=p1$/)
+  })
+})
+
+test.describe('Instalar en iPhone desde Safari', () => {
+  test.use({ userAgent: 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_5 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.5 Mobile/15E148 Safari/604.1' })
+  test('dice que no se descarga de la App Store y cómo añadirla', async ({ page }) => {
+    await entrarRepartidor(page, { status: 'trial', days_left: 7, required: false })
+    await page.addInitScript(() => localStorage.setItem('fds_recien_alta', '1'))
+    await page.goto('/ruta', { waitUntil: 'domcontentloaded' })
+    const paso = page.getByRole('dialog', { name: 'Último paso: instala la app' })
+    await expect(paso.getByText('Elige «Añadir a pantalla de inicio».', { exact: false })).toBeVisible()
+    await expect(paso.getByText('En iPhone no se descarga de la App Store: se instala así, desde Safari, y funciona como una app.')).toBeVisible()
+    await expect(paso.getByText(/llegará próximamente/)).toHaveCount(0)
+  })
+})
+
 /* PROMOCIÓN (10-10-2026): gratis y sin límite hasta el 31-12. La app no habla de prueba ni de cobros. */
 test('Cobro · con la promoción: «Gratis sin límite», sin aviso de prueba ni ofertas de pago', async ({ page }) => {
   const fallos = vigilar(page)

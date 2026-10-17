@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { Download, Share, X, Smartphone, Loader2, ExternalLink, CheckCircle2 } from 'lucide-react'
+import { Download, Share, X, Smartphone, Loader2, ExternalLink, CheckCircle2, Copy } from 'lucide-react'
 import QRCode from 'qrcode'
 import {
   alCambiarInstalable, sePuedeInstalar, instalar, yaEsApp, esIphone, esAndroid, navegadorInterno, enlaceChrome,
@@ -23,6 +23,7 @@ function useInstalar() {
   const [puede, setPuede] = useState(sePuedeInstalar())
   const [ocupado, setOcupado] = useState(false)
   const [fallo, setFallo] = useState(false)
+  const [enlace, setEnlace] = useState('')
   useEffect(() => alCambiarInstalable(setPuede), [])
   const iphone = esIphone()
   const android = !iphone && esAndroid()
@@ -34,12 +35,13 @@ function useInstalar() {
     try {
       const { data } = await crearPaseMovil()
       const ruta = `/pase?p=${encodeURIComponent(data.pase)}`
+      setEnlace(`${window.location.origin}${ruta}`)
       window.location.href = iphone ? `x-safari-${window.location.origin}${ruta}` : enlaceChrome(ruta)
     } catch { setFallo(true) }
     // Si el navegador de la app no deja salir, se queda aquí: se explica a mano.
     setTimeout(() => { setOcupado(false); setFallo(true) }, 2500)
   }
-  return { puede, iphone, android, interno, apk, ocupado, fallo, abrirFuera }
+  return { puede, iphone, android, interno, apk, ocupado, fallo, abrirFuera, enlace }
 }
 
 const boton = 'flex w-full items-center justify-center gap-2 rounded-xl bg-brand-500 py-3 text-[15px] font-bold text-brand-tinta disabled:opacity-60'
@@ -51,7 +53,7 @@ function PasosIphone() {
       <li className="flex items-center gap-2">1. {tx('Abre esta página en Safari.')}</li>
       <li className="flex items-center gap-2">2. {tx('Pulsa')} <Share size={15} className="text-sky-300" /> <b>{tx('Compartir')}</b> {tx('(abajo).')}</li>
       <li>3. {tx('Elige «Añadir a pantalla de inicio».')}</li>
-      <li className="pt-1 text-[12px] text-dark-400">{tx('En iPhone se instala así y funciona como una app. La app de la App Store llegará próximamente.')}</li>
+      <li className="pt-1 text-[12px] text-dark-400">{tx('En iPhone no se descarga de la App Store: se instala así, desde Safari, y funciona como una app.')}</li>
       <li className="text-[12px] text-dark-400">{tx('Al abrirla desde el icono, entra una vez con tu correo y tu contraseña.')}</li>
     </ol>
   )
@@ -68,11 +70,37 @@ function DescargarApk({ apk, principal }) {
   )
 }
 
+function NoSeAbrio({ iphone, enlace }) {
+  const [copiado, setCopiado] = useState(false)
+  const nav = iphone ? 'Safari' : 'Chrome'
+  async function copiar() {
+    medirAccion('instalar_copiar_enlace')
+    try { await navigator.clipboard.writeText(enlace); setCopiado(true) } catch { setCopiado(false) }
+  }
+  return (
+    <div data-testid="no-se-abrio" className="space-y-2 rounded-xl border border-amber-400/50 bg-amber-500/10 p-3 text-[13px] leading-snug text-amber-100">
+      <p className="font-semibold">
+        {iphone
+          ? tx('¿No se ha abierto? Pulsa ··· (arriba) y «Abrir en el navegador».')
+          : tx('¿No se ha abierto? Pulsa ⋮ (arriba) y «Abrir en Chrome» o «Abrir en el navegador».')}
+      </p>
+      {enlace && (<>
+        <p>{tx('O copia este enlace, abre {nav} y pégalo arriba: entras ya con tu cuenta (vale 10 minutos).', { nav })}</p>
+        <input readOnly value={enlace} aria-label={tx('Enlace para entrar')} onFocus={(e) => e.target.select()}
+          className="w-full rounded-lg border border-amber-400/40 bg-dark-950 px-2.5 py-2 text-[12px] text-dark-100" />
+        <button type="button" onClick={copiar} className={boton}>
+          <Copy size={16} /> {copiado ? tx('Copiado: ábrelo en {nav} y pégalo arriba', { nav }) : tx('Copiar el enlace')}
+        </button>
+      </>)}
+    </div>
+  )
+}
+
 /* Lo que se le ofrece a cada uno: en un toque si se puede; si está dentro de
    TikTok/Instagram, salir a Chrome (o Safari) ya con su cuenta; si no, el APK
    (Android) o los pasos de Safari (iPhone). */
 function Opciones({ ins, onInstalada }) {
-  const { puede, iphone, android, interno, apk, ocupado, fallo, abrirFuera } = ins
+  const { puede, iphone, android, interno, apk, ocupado, fallo, abrirFuera, enlace } = ins
   if (interno && (android || iphone)) {
     return (
       <div className="space-y-2.5">
@@ -86,13 +114,10 @@ function Opciones({ ins, onInstalada }) {
           {iphone ? tx('Abrir en Safari') : tx('Abrir en Chrome')}
         </button>
         <p className="text-[12px] leading-snug text-dark-400">{tx('Entras ya con tu cuenta, sin escribir nada.')}</p>
-        {fallo && (
-          <p className="rounded-xl bg-dark-900 px-3 py-2 text-[12.5px] leading-snug text-dark-200">
-            {iphone
-              ? tx('¿No se ha abierto? Pulsa ··· (arriba) y «Abrir en el navegador».')
-              : tx('¿No se ha abierto? Pulsa ⋮ (arriba) y «Abrir en Chrome» o «Abrir en el navegador».')}
-          </p>
-        )}
+        {/* 17-10-2026: en el iPhone, el navegador de Facebook no deja saltar a Safari y el aviso, en letra
+            pequeña, no se veía (Wanger pulsó «Abrir en Safari» 4 veces). Ahora se ve, y con el enlace de entrada
+            para copiarlo y pegarlo en el navegador: entra ya con su cuenta (vale 10 minutos, una vez). */}
+        {fallo && <NoSeAbrio iphone={iphone} enlace={enlace} />}
         {android && <DescargarApk apk={apk} />}
       </div>
     )
