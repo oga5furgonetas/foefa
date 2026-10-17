@@ -18,7 +18,7 @@ import { origen } from '../../marca'
 import QRCode from 'qrcode'
 import { usePlan } from '../../lib/usePlan'
 import { IDIOMAS, idioma, cambiarIdioma, useIdioma, tx } from '../../lib/idioma'
-import MiRuta from '../../pages/driver/MiRuta'
+import MiRuta, { ElegirNavegador } from '../../pages/driver/MiRuta'
 import { fijarPais, importe, simboloMoneda } from '../../lib/region'
 
 /* ── REPARTO A DOMICILIO Y A NEGOCIOS ────────────────────────────────────────
@@ -500,7 +500,7 @@ export function Ajustes({ conductores, toast, autonomo }) {
           </section>
         )}
         {autonomo && (
-          <section className="rounded-xl border border-dark-700 bg-dark-900 p-4">
+          <section className="space-y-3 rounded-xl border border-dark-700 bg-dark-900 p-4">
             <label className="flex items-center justify-between gap-3 text-[14px] font-semibold text-dark-100">
               🌐 {tx('Idioma')}
               <select value={lang || idioma()} onChange={(e) => cambiarIdioma(e.target.value)} aria-label={tx('Idioma')}
@@ -508,6 +508,7 @@ export function Ajustes({ conductores, toast, autonomo }) {
                 {Object.entries(IDIOMAS).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
               </select>
             </label>
+            <ElegirNavegador />
           </section>
         )}
         <section className="rounded-xl border border-dark-700 bg-dark-900 p-4">

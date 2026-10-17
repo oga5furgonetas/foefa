@@ -2,7 +2,7 @@ import { tx, locale } from './idioma'
 import { origen } from '../marca'
 import { medirAccion } from './analitica'
 import { getReferidos } from '../services/api'
-import { promoGratis, fechaPromo, eurosRef } from './precios'
+import { promoGratis, fechaPromo, eurosRef, refPromoActiva, BONO_CENT } from './precios'
 
 /* INVITAR A UN COMPAÑERO. Un toque abre el «compartir» del móvil (o WhatsApp)
    con el mensaje y su enlace (?ref=…). El importe sale del servidor porque las
@@ -15,9 +15,11 @@ export function textoInvitar(codigo, porInvitado) {
   const premio = codigo && Number(porInvitado) > 0
     ? `\n\n${tx('Si te registras con mi enlace y completas 20 entregas a direcciones distintas en 2 días diferentes, repartidas durante el día y dentro de tus primeros 30 días, gano {euros}.', { euros: eurosRef(Number(porInvitado), locale()) })}`
     : ''
+  // 17-10-2026: y el invitado también se lleva su bono por la primera ruta: es lo que le convence a él.
+  const suyo = refPromoActiva() ? `\n\n${tx('Y tú ganas {euros} con tu primera ruta real (20 entregas en 2 días).', { euros: eurosRef(BONO_CENT, locale()) })}` : ''
   // 10-10-2026: con la promoción, lo que engancha es «gratis y sin límite hasta el 31-12».
   if (promoGratis()) {
-    return `${tx('Uso FDS para ordenar mi ruta de reparto y navegar parada a parada. Es gratis y sin límite hasta el {fecha}, solo registrarte:', { fecha: fechaPromo(locale()) })} ${enlaceInvitar(codigo)}${premio}`
+    return `${tx('Uso FDS para ordenar mi ruta de reparto y navegar parada a parada. Es gratis y sin límite hasta el {fecha}, solo registrarte:', { fecha: fechaPromo(locale()) })} ${enlaceInvitar(codigo)}${suyo}${premio}`
   }
   const base = tx('Uso FDS para ordenar mi ruta de reparto y navegar parada a parada. Pruébala gratis, sin tarjeta:')
   const extra = codigo ? ` ${tx('Con mi enlace empiezas con 14 días gratis.')}` : ''

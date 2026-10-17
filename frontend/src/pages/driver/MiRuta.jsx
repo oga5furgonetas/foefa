@@ -2,7 +2,7 @@ import { Suspense, lazy, useCallback, useEffect, useRef, useState } from 'react'
 import {
   ArrowLeft, ScanLine, Camera, Loader2, Navigation, Phone, Check, X, Route, MapPin, Play, Square, Package,
   MessageCircle, Clock, Search, List, Pencil, ChevronDown, GripVertical, Map as MapaIcono, ArrowUp, ArrowDown, ArrowUpDown, Mic, ClipboardPaste, Trophy,
-  Eye, PenLine, RotateCcw, HelpCircle, Share2, FileUp, Gift, WifiOff,
+  Eye, PenLine, RotateCcw, HelpCircle, Share2, FileUp, Gift, WifiOff, Plus, Bell,
 } from 'lucide-react'
 import {
   repMiRuta, repZonasCarga, repEscanear, repEscanearLote, repLeerTicket, repNuevoPedido, repEstado, repOrdenar, repJornada, repPosicion,
@@ -25,6 +25,7 @@ import { tx, useIdioma, locale, txError } from '../../lib/idioma'
 import { salirDeLaDemoDeReparto, decodeToken } from '../../panel/auth'
 import { eurosRef, fechaRefPromo } from '../../lib/precios'
 import AntesPuerta from './AntesPuerta'
+import { pushSupported, enablePush } from '../../lib/push'
 
 /* ── MI RUTA ────────────────────────────────────────────────────────────────
    Lo que hace el repartidor al cargar: escanea el código de la caja. Si el
@@ -214,6 +215,8 @@ export default function MiRuta({ onBack, embebido = false }) {
   const [pegar, setPegar] = useState(null)           // null | {texto, n}
   const [tarifa, setTarifa] = useState(null)         // «Mi dinero hoy»: null | {parada, dia, km} (texto en €)
   const [tour, setTour] = useState(-1)               // recorrido de bienvenida: -1 cerrado, 0..2 el paso
+  const [bienvenida, setBienvenida] = useState(null)  // la primera vez: null | 'inicio' | 'luego'
+  const [anadir, setAnadir] = useState(false)          // la hoja de «Añadir paradas» (botón «+»)
   const [escuchando, setEscuchando] = useState(false)
   const reconocedor = useRef(null)
   const dirInput = useRef(null)
@@ -607,13 +610,30 @@ export default function MiRuta({ onBack, embebido = false }) {
       setAviso(tx('Son paradas de ejemplo, a tu alrededor: pulsa «Empezar a navegar» y míralo en acción. Quítalas cuando cargues las tuyas.'))
     } catch (e) { setAviso(txError(e, 'No se pudo preparar el ejemplo')) } finally { setOcupado('') }
   }
-  // La primera vez que quien reparte solo abre su ruta vacía, el recorrido sale solo (una vez).
+  /* LA PRIMERA VEZ (17-10-2026). Antes salía solo el recorrido de 3 pasos y su botón grande era «Verlo en acción
+     con 3 paradas de ejemplo»: de las 14 altas del anuncio del 14-10 casi todas fueron al ejemplo y una sola metió
+     una parada suya. Ahora, una pregunta: «¿Tienes los paquetes delante?». Sí → la carga de paquetes, foto tras
+     foto. Todavía no → el aviso de mañana a las 8 y, si quiere, el ejemplo. Los 3 pasos siguen en
+     «¿Cómo funciona?». Sale una vez (la misma marca que el recorrido). */
   const TOUR = 'fds_tour_ruta'
   useEffect(() => {
-    if (!ruta?.autonomo || lista(ruta.pedidos).length) return
+    if (!embebido || !ruta?.autonomo || lista(ruta.pedidos).length) return     // solo en la app de quien reparte solo
     try { if (localStorage.getItem(TOUR)) return; localStorage.setItem(TOUR, '1') } catch { return }
-    setTour(0); medirAccion('tour_visto')
-  }, [ruta?.autonomo, ruta?.pedidos])
+    setBienvenida('inicio'); medirAccion('bienvenida_vista')
+  }, [embebido, ruta?.autonomo, ruta?.pedidos])
+  let avisoPosible = false
+  try { avisoPosible = pushSupported() && Notification.permission === 'default' && !localStorage.getItem('fds_aviso_manana') } catch { avisoPosible = false }
+  async function avisarManana() {
+    setOcupado('aviso'); medirAccion('aviso_manana_si')
+    const r = await enablePush()
+    setOcupado('')
+    try { localStorage.setItem('fds_aviso_manana', r === 'ok' ? 'si' : r === 'denied' ? 'denegado' : 'error') } catch { /* nada */ }
+    window.dispatchEvent(new Event('fds-aviso-manana'))     // la tarjeta de arriba ya no hace falta
+    setBienvenida(null)
+    setAviso(r === 'ok' ? tx('Listo: te aviso a las 8:00 los días que aún no tengas paquetes.')
+      : r === 'denied' ? tx('El móvil no ha dado permiso para avisos. Puedes activarlo en los ajustes del navegador.')
+        : tx('No se han podido activar los avisos en este móvil.'))
+  }
   async function quitarEjemplos() {
     setOcupado('ejemplo')
     try { await repQuitarEjemplos(); cargar(); setAviso(tx('Ejemplos quitados. Ya puedes cargar tus paquetes.')) } catch (e) { setAviso(txError(e, 'No se pudo quitar')) } finally { setOcupado('') }
@@ -884,6 +904,10 @@ export default function MiRuta({ onBack, embebido = false }) {
   const hechos = lista(ruta.pedidos).filter((p) => ['entregado', 'fallido'].includes(p.estado))
   const total = pendientes.length + hechos.length
   const entregados = hechos.filter((p) => p.estado === 'entregado')
+  /* LA RUTA EN MARCHA, EN LA APP DE QUIEN REPARTE SOLO (17-10-2026): lo que se usa cien veces al día es la siguiente
+     parada y su «Entregado», y quedaba a media pantalla debajo del bloque de añadir. Con paradas, añadir va en el
+     botón «+» y el bono en una línea. El portal del conductor de empresa sigue como estaba. */
+  const enMarcha = embebido && pendientes.length > 0 && !reordenar
   const q = sinTildes(filtro.trim())
   const visibles = q
     ? pendientes.filter((p) => sinTildes([p.cliente, p.direccion, p.telefono, p.codigo, p.contenido, p.notas].join(' ')).includes(q))
@@ -993,13 +1017,18 @@ export default function MiRuta({ onBack, embebido = false }) {
 
       {/* EL BONO DE BIENVENIDA (17-10-2026): 10 € por la primera ruta de verdad, con lo que lleva a la vista. */}
       {ruta.autonomo && ruta.bono && (
-        <Bono b={ruta.bono} total={total} soloEjemplo={total > 0 && lista(ruta.pedidos).every((p) => p.ejemplo)} />
+        <Bono b={ruta.bono} total={total} compacto={enMarcha} soloEjemplo={total > 0 && lista(ruta.pedidos).every((p) => p.ejemplo)} />
       )}
 
-      {/* ESCANEAR */}
+      {/* AÑADIR PARADAS: sin ruta todavía, a la vista (es lo primero que se hace); con la ruta en marcha, en la hoja
+          del botón «+» (ver enMarcha). */}
+      {(!enMarcha || anadir) && (() => {
+        const enHoja = enMarcha
+        const cerrar = () => setAnadir(false)
+        const bloque = (
       <div className="rounded-2xl border border-brand-400/40 bg-brand-500/[.08] p-3.5">
         <div className="grid grid-cols-2 gap-2">
-          <button onClick={() => { medirAccion('ruta_escaner'); setEscaner(true) }}
+          <button onClick={() => { medirAccion('ruta_escaner'); cerrar(); setEscaner(true) }}
             className="flex items-center justify-center gap-2 rounded-xl bg-brand-500 py-3.5 text-[15px] font-bold text-brand-tinta active:scale-[.99]">
             <ScanLine size={19} /> {tx('Escanear')}
           </button>
@@ -1009,41 +1038,51 @@ export default function MiRuta({ onBack, embebido = false }) {
           <label className="flex cursor-pointer items-center justify-center gap-2 rounded-xl border border-brand-400/60 py-3.5 text-[15px] font-bold text-brand-200 active:scale-[.99]">
             {ocupado === 'ticket' ? <Loader2 size={19} className="animate-spin" /> : <Camera size={19} />} {tx('Foto etiqueta')}
             <input type="file" accept="image/*" capture="environment" className="hidden" disabled={ocupado === 'ticket'}
-              onChange={(e) => { const f = e.target.files?.[0]; e.target.value = ''; if (f) { setNuevo({ ...VACIO }); leerTicket(f) } }} />
+              onChange={(e) => { const f = e.target.files?.[0]; e.target.value = ''; if (f) { cerrar(); setNuevo({ ...VACIO }); leerTicket(f) } }} />
           </label>
         </div>
-        {total > 0 && (
+        {total > 0 && !enHoja && (
           <button onClick={() => setMasCarga((v) => !v)} aria-expanded={masCarga}
             className="mt-2.5 flex w-full items-center justify-center gap-1.5 text-[12.5px] font-semibold text-brand-300">
             {tx('Más formas de añadir')} <ChevronDown size={14} className={masCarga ? 'rotate-180' : ''} />
           </button>
         )}
-        {(total === 0 || masCarga) && (<>
+        {(total === 0 || masCarga || enHoja) && (<>
         <div className="mt-2.5 flex gap-2">
           <input className={inp} value={codigo} onChange={(e) => setCodigo(e.target.value)} inputMode="text"
-            placeholder={tx('o escribe el código')} onKeyDown={(e) => e.key === 'Enter' && buscar(codigo)} />
-          <button onClick={() => buscar(codigo)} disabled={!codigo.trim() || ocupado === 'buscar'}
+            placeholder={tx('o escribe el código')} onKeyDown={(e) => { if (e.key === 'Enter') { cerrar(); buscar(codigo) } }} />
+          <button onClick={() => { cerrar(); buscar(codigo) }} disabled={!codigo.trim() || ocupado === 'buscar'}
             className="shrink-0 rounded-xl border border-dark-600 px-4 text-[14px] font-semibold text-dark-100 disabled:opacity-40">
             {ocupado === 'buscar' ? <Loader2 size={15} className="animate-spin" /> : tx('Buscar')}
           </button>
         </div>
-        <button onClick={() => setNuevo({ ...VACIO })} className="mt-2 text-[12.5px] font-semibold text-brand-300">
+        <button onClick={() => { cerrar(); setNuevo({ ...VACIO }) }} className="mt-2 text-[12.5px] font-semibold text-brand-300">
           + {tx('Añadir un pedido sin código')}
         </button>
         {ruta.autonomo && (
-          <button onClick={() => setCarga({ n: 0 })}
+          <button onClick={() => { cerrar(); setCarga({ n: 0 }) }}
             className="mt-2 flex w-full items-center justify-center gap-2 rounded-xl border border-amber-400/50 bg-amber-500/10 py-3 text-[14px] font-bold text-amber-200">
             <Package size={17} /> {tx('Cargar paquetes: uno tras otro')}
           </button>
         )}
         {ruta.puede_pegar && (
-          <button onClick={() => setPegar({ texto: '', n: null })}
+          <button onClick={() => { cerrar(); setPegar({ texto: '', n: null }) }}
             className="mt-2 flex w-full items-center justify-center gap-2 rounded-xl border border-dark-600 py-2.5 text-[13.5px] font-semibold text-dark-100">
             <ClipboardPaste size={16} /> {tx('Pegar una lista de direcciones')}
           </button>
         )}
               </>)}
       </div>
+        )
+        return enHoja ? <Hoja titulo={tx('Añadir paradas')} onClose={cerrar}>{bloque}</Hoja> : bloque
+      })()}
+      {enMarcha && !anadir && !deshacer && (
+        <button type="button" onClick={() => { medirAccion('ruta_anadir'); setAnadir(true) }} aria-label={tx('Añadir paradas')}
+          className="fixed z-30 flex h-14 w-14 items-center justify-center rounded-2xl bg-brand-500 text-brand-tinta shadow-xl shadow-black/30"
+          style={{ right: 'max(16px, env(safe-area-inset-right, 0px))', bottom: 'calc(env(safe-area-inset-bottom, 0px) + 84px)' }}>
+          <Plus size={26} strokeWidth={2.6} />
+        </button>
+      )}
 
       {aviso && (
         <button onClick={() => setAviso('')} className="mt-3 w-full rounded-xl border border-dark-700 bg-dark-900 px-3.5 py-2.5 text-left text-[13px] text-dark-100">
@@ -1118,13 +1157,13 @@ export default function MiRuta({ onBack, embebido = false }) {
               </button>
             ))}
           </div>
-          <label className="ml-auto flex items-center gap-1 text-[12px] text-dark-400">
+          {!embebido && <label className="ml-auto flex items-center gap-1 text-[12px] text-dark-400">
             {tx('Ir con')}
             <select value={nav} onChange={(e) => setNav(e.target.value)} aria-label={tx('Navegador')}
               className="rounded-lg border border-dark-700 bg-dark-900 px-1.5 py-1 text-[12.5px] text-dark-100">
               {(enChina(ruta.pais) ? NAVEGADORES_CHINA : NAVEGADORES).map(([k, t]) => <option key={k} value={k}>{tx(t)}</option>)}
             </select>
-          </label>
+          </label>}
         </div>
       )}
 
@@ -1739,6 +1778,38 @@ export default function MiRuta({ onBack, embebido = false }) {
           </button>
         </Hoja>
       )}
+      {bienvenida && (
+        <Hoja titulo={tx('Te damos la bienvenida a FDS')} onClose={() => setBienvenida(null)}>
+          {bienvenida === 'inicio' ? (<>
+            <p className="text-[20px] font-extrabold leading-tight text-dark-50">{tx('¿Tienes los paquetes delante?')}</p>
+            <p className="mt-1.5 text-[14px] leading-snug text-dark-300">{tx('Haz una foto a la etiqueta de cada paquete: la dirección entra sola y la ruta se ordena sola.')}</p>
+            {ruta.bono && !ruta.bono.pagado && (
+              <p className="mt-2 text-[13.5px] font-semibold text-amber-200">🎁 {tx('Tu primera ruta real te da {euros}.', { euros: eurosRef(ruta.bono.cent, locale()) })}</p>
+            )}
+            <button onClick={() => { setBienvenida(null); medirAccion('bienvenida_cargar'); setCarga({ n: 0 }) }}
+              className="mt-4 flex w-full items-center justify-center gap-2 rounded-xl bg-brand-500 py-3.5 text-[16px] font-bold text-brand-tinta">
+              <Camera size={19} /> {tx('Sí, cargarlos ahora')}
+            </button>
+            <button onClick={() => { setBienvenida('luego'); medirAccion('bienvenida_luego') }}
+              className="mt-2 w-full rounded-xl border border-dark-700 py-3 text-[14.5px] font-semibold text-dark-100">{tx('Todavía no')}</button>
+          </>) : (<>
+            <p className="text-[16px] font-bold leading-snug text-dark-50">{tx('Sin problema. Cuando cargues la furgoneta, abre la app y haz una foto a cada etiqueta.')}</p>
+            {avisoPosible && (
+              <button onClick={avisarManana} disabled={ocupado === 'aviso'}
+                className="mt-4 flex w-full items-center justify-center gap-2 rounded-xl bg-brand-500 py-3.5 text-[15px] font-bold text-brand-tinta disabled:opacity-60">
+                {ocupado === 'aviso' ? <Loader2 size={18} className="animate-spin" /> : <Bell size={18} />} {tx('Avísame mañana a las 8')}
+              </button>
+            )}
+            <button onClick={() => { setBienvenida(null); medirAccion('tour_ejemplo'); cargarEjemplo() }} disabled={ocupado === 'ejemplo'}
+              className="mt-2 flex w-full items-center justify-center gap-2 rounded-xl border border-dark-700 py-3 text-[14px] font-semibold text-dark-100">
+              <Play size={16} /> {tx('Mientras, verlo en acción con 3 paradas de ejemplo')}
+            </button>
+            <button onClick={() => { setBienvenida(null); setTour(0) }}
+              className="mt-3 w-full text-[13px] font-semibold text-brand-300 underline underline-offset-2">{tx('Ver cómo funciona en 3 pasos')}</button>
+          </>)}
+        </Hoja>
+      )}
+      {enMarcha && <div className="h-16" aria-hidden="true" />}
     </Marco>
   )
 }
@@ -1746,7 +1817,7 @@ export default function MiRuta({ onBack, embebido = false }) {
 /* EL BONO DE BIENVENIDA: cuánto le falta para los 10 € de su primera ruta de verdad (20 entregas reales
    en 2 días distintos; lo cuenta el servidor con la misma vara que «Invita y gana»). Ganado, se celebra
    tres días y lleva a la cartera. */
-function Bono({ b, total, soloEjemplo }) {
+function Bono({ b, total, soloEjemplo, compacto = false }) {
   const euros = eurosRef(b.cent, locale())
   if (b.pagado) {
     const reciente = b.nuevo || (b.pagado_en && Date.now() - new Date(b.pagado_en).getTime() < 3 * 86400000)
@@ -1766,6 +1837,29 @@ function Bono({ b, total, soloEjemplo }) {
   const diasObjetivo = b.dias_objetivo || 2
   const hechas = Math.min(b.entregas || 0, objetivo)
   const pct = Math.round((hechas / objetivo) * 100)
+  const dias = Math.min(b.dias || 0, diasObjetivo)
+  const pista = b.revisar ? tx('Lo estamos revisando. Te avisamos por correo.')
+    : soloEjemplo ? tx('Las paradas de ejemplo no cuentan: quítalas y mete las tuyas.')
+      : total === 0 ? tx('Empieza con los paquetes de hoy: foto a la etiqueta de cada uno, aquí abajo.') : ''
+  const barra = (alto) => (
+    <div className={`${alto} overflow-hidden rounded-full bg-dark-950/70`} role="progressbar" aria-valuemin={0} aria-valuemax={objetivo}
+      aria-valuenow={hechas} aria-label={tx('Entregas para el bono')}>
+      <div className="h-full rounded-full bg-gradient-to-r from-amber-300 to-lime-300 transition-[width] duration-700" style={{ width: `${hechas ? Math.max(pct, 4) : 0}%` }} />
+    </div>
+  )
+  if (compacto) {
+    return (
+      <div className="mb-3 rounded-2xl border border-amber-300/40 bg-amber-400/[.10] px-3 py-2.5" data-testid="bono">
+        <div className="flex items-center gap-2">
+          <Gift size={16} className="shrink-0 text-amber-200" />
+          <p className="min-w-0 flex-1 truncate text-[13px] font-bold text-amber-100">{tx('{euros} por tu primera ruta real', { euros })}</p>
+          <span className="shrink-0 text-[12px] font-semibold tabular-nums text-amber-100">{hechas}/{objetivo} · {tx('{a} de {b} días', { a: dias, b: diasObjetivo })}</span>
+        </div>
+        <div className="mt-2">{barra('h-1.5')}</div>
+        {pista && <p className="mt-1.5 text-[12px] leading-snug text-amber-200/90">{pista}</p>}
+      </div>
+    )
+  }
   return (
     <div className="mb-3 rounded-2xl border border-amber-300/40 bg-gradient-to-br from-amber-400/[.16] via-amber-500/[.06] to-transparent p-3.5" data-testid="bono">
       <div className="flex items-start gap-3">
@@ -1777,19 +1871,30 @@ function Bono({ b, total, soloEjemplo }) {
           </p>
         </div>
       </div>
-      <div className="mt-3 h-2.5 overflow-hidden rounded-full bg-dark-950/70" role="progressbar" aria-valuemin={0} aria-valuemax={objetivo}
-        aria-valuenow={hechas} aria-label={tx('Entregas para el bono')}>
-        <div className="h-full rounded-full bg-gradient-to-r from-amber-300 to-lime-300 transition-[width] duration-700" style={{ width: `${hechas ? Math.max(pct, 4) : 0}%` }} />
-      </div>
+      <div className="mt-3">{barra('h-2.5')}</div>
       <p className="mt-1.5 flex items-center justify-between text-[12px] font-semibold text-amber-100">
         <span>{tx('{a} de {b} entregas', { a: hechas, b: objetivo })}</span>
-        <span>{tx('{a} de {b} días', { a: Math.min(b.dias || 0, diasObjetivo), b: diasObjetivo })}</span>
+        <span>{tx('{a} de {b} días', { a: dias, b: diasObjetivo })}</span>
       </p>
-      {b.revisar ? <p className="mt-1.5 text-[12px] leading-snug text-amber-200/90">{tx('Lo estamos revisando. Te avisamos por correo.')}</p>
-        : soloEjemplo ? <p className="mt-1.5 text-[12px] leading-snug text-amber-200/90">{tx('Las paradas de ejemplo no cuentan: quítalas y mete las tuyas.')}</p>
-          : total === 0 ? <p className="mt-1.5 text-[12px] leading-snug text-amber-200/90">{tx('Empieza con los paquetes de hoy: foto a la etiqueta de cada uno, aquí abajo.')}</p>
-            : null}
+      {pista && <p className="mt-1.5 text-[12px] leading-snug text-amber-200/90">{pista}</p>}
     </div>
+  )
+}
+
+/* CON QUÉ NAVEGA (17-10-2026). En la app de quien reparte solo se elige en Ajustes: encima de la lista de paradas
+   solo estorbaba. El portal del conductor lo sigue teniendo encima de la lista. Se guarda en el móvil. */
+export function ElegirNavegador() {
+  useIdioma()
+  const [nav, setNav] = useState(() => lee('ruta_nav2', 'app'))
+  useEffect(() => guarda('ruta_nav2', nav), [nav])
+  return (
+    <label className="flex items-center justify-between gap-3 text-[14px] font-semibold text-dark-100">
+      <span className="flex items-center gap-1.5"><Navigation size={15} /> {tx('Navegar con')}</span>
+      <select value={nav} onChange={(e) => setNav(e.target.value)} aria-label={tx('Navegador')}
+        className="rounded-xl border border-dark-700 bg-dark-950 px-3 py-2 text-[14px] text-dark-50">
+        {(enChina(paisActual()) ? NAVEGADORES_CHINA : NAVEGADORES).map(([k, t]) => <option key={k} value={k}>{tx(t)}</option>)}
+      </select>
+    </label>
   )
 }
 

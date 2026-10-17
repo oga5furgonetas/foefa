@@ -70,7 +70,7 @@ test('grabar material limpio para el spot v2', async ({ page, context }, testInf
   await page.waitForTimeout(2200)
 
   // 2. Pedido nuevo (lo que abre la foto a la etiqueta).
-  await page.getByRole('button', { name: 'Más formas de añadir' }).click({ timeout: 2500 }).catch(() => {})
+  await page.getByRole('button', { name: 'Añadir paradas' }).click({ timeout: 2500 }).catch(() => {})
   await page.getByRole('button', { name: 'Añadir un pedido sin código' }).click()
   await page.waitForTimeout(500)
   marca('etiqueta')

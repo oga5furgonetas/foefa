@@ -46,11 +46,12 @@ test('Ruta · editar una parada y quitarla con doble toque', async ({ page }) =>
   const sig = page.locator('div.rounded-2xl', { hasText: 'Siguiente parada' })
   await expect(sig.getByText('Farmacia Sol')).toBeVisible()
 
-  // Con paradas cargadas, la carga es una barra compacta; lo demás, bajo «Más formas de añadir».
-  await expect(page.getByRole('button', { name: 'Escanear' })).toBeVisible()
+  // Con paradas cargadas (17-10-2026), añadir va en el botón «+»: la hoja trae escanear, el código y lo demás.
   await expect(page.getByPlaceholder('o escribe el código')).toHaveCount(0)
-  await page.getByRole('button', { name: 'Más formas de añadir' }).click()
+  await page.getByRole('button', { name: 'Añadir paradas' }).click()
+  await expect(page.getByRole('dialog', { name: 'Añadir paradas' }).getByRole('button', { name: 'Escanear', exact: true })).toBeVisible()
   await expect(page.getByPlaceholder('o escribe el código')).toBeVisible()
+  await page.getByRole('dialog', { name: 'Añadir paradas' }).getByRole('button', { name: 'Cerrar' }).click()
 
   // Editar: se abre la hoja con los datos de la parada y sin la foto del ticket.
   await sig.getByRole('button', { name: /Editar parada: Farmacia Sol/ }).click()

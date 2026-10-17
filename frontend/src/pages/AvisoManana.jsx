@@ -18,6 +18,10 @@ export default function AvisoManana({ toast }) {
     try {
       if (pushSupported() && Notification.permission === 'default' && !localStorage.getItem(CLAVE)) setVer(true)
     } catch { /* sin almacenamiento o sin avisos: no se ofrece */ }
+    // Contestado en la bienvenida de la ruta (MiRuta): esta tarjeta ya no hace falta.
+    const ya = () => setVer(false)
+    window.addEventListener('fds-aviso-manana', ya)
+    return () => window.removeEventListener('fds-aviso-manana', ya)
   }, [])
   if (!ver) return null
   const cerrar = (v) => { try { localStorage.setItem(CLAVE, v) } catch { /* nada */ } setVer(false) }

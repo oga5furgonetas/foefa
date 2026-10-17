@@ -56,23 +56,26 @@ test('Activación · sin paquetes, 3 paradas de ejemplo con un toque, y se quita
 
 test('Activación · invitar a un compañero: tu enlace con código, tu progreso y WhatsApp', async ({ page, context }) => {
   await preparar(page, context)
-  await page.route(/\/api\/referidos$/, (r) => r.fulfill({ json: { codigo: 'ABC123', invitados: 2, premiados: 1, meses_ganados: 1, tope: 6, entregas: 5, dias_extra: 7 } }))
+  await page.route(/\/api\/referidos$/, (r) => r.fulfill({ json: { codigo: 'ABC123', invitados: 2, premiados: 1, saldo: 1000, ganado: 1000, por_invitado: 1000,
+    promo_hasta: '2026-12-31', promo_cent: 1000, retirada_min: 6000, entregas_cartera: 20, dias_distintos: 2, dias_extra: 7, retiradas: [] } }))
   await page.route(/\/api\/reparto\/mi-ruta$/, (r) => r.fulfill({ json: {
     activo: true, autonomo: true, empresa: '', fecha: '2026-10-05', ia_tickets: false, jornada: {}, aviso_aceptado: true, base: null, ruta: null, pedidos: [] } }))
   // Sin «compartir» del sistema (escritorio): se abre WhatsApp.
   await page.addInitScript(() => { try { Object.defineProperty(navigator, 'share', { value: undefined }) } catch { /* nada */ } window.__abierto = []; window.open = (u) => { window.__abierto.push(String(u)); return null } })
   await page.goto('/ruta', { waitUntil: 'domcontentloaded' })
   await page.getByRole('navigation', { name: 'Secciones' }).getByRole('button', { name: 'Cuenta' }).click({ force: true })
-  await expect(page.getByText('Invita a un compañero y gana 1 mes gratis')).toBeVisible()
-  await expect(page.getByText(/Tu amigo empieza con 14 días gratis\. Cuando haga 5 entregas/)).toBeVisible()
-  await expect(page.getByText('Has invitado a 2 · ya la usan 1 · meses ganados: 1')).toBeVisible()
+  await expect(page.getByText('10 € por cada compañero que la use')).toBeVisible()
+  await expect(page.getByText(/Cuando se registre y haga 20 entregas en 2 días distintos/)).toBeVisible()
+  await expect(page.getByText('Invitados: 2 · ya la usan: 1 · ganado: 10 €')).toBeVisible()
   await page.getByRole('button', { name: 'Invitar a un compañero' }).click()
   await expect.poll(async () => (await page.evaluate(() => window.__abierto)).length).toBe(1)
   const abierto = (await page.evaluate(() => window.__abierto))[0]
   expect(abierto).toMatch(/^https:\/\/wa\.me\/\?text=/)
   const texto = decodeURIComponent(abierto.split('text=')[1])
-  expect(texto).toContain('/repartidores?ref=ABC123&utm_source=referido&utm_medium=compartir&utm_campaign=rep_invitar')
-  expect(texto).toContain('14 días gratis')
+  expect(texto).toContain('/invita?ref=ABC123&utm_source=referido&utm_medium=compartir&utm_campaign=rep_invitar')
+  expect(texto).toContain('gratis y sin límite hasta el 31 de diciembre')
+  expect(texto).toContain('Y tú ganas 10 € con tu primera ruta real (20 entregas en 2 días).')
+  expect(texto).toContain('gano 10 €')
 })
 
 test('Activación · quien llega con el enlace de un compañero ve «14 días» y su código viaja con el alta', async ({ page }) => {
@@ -84,8 +87,7 @@ test('Activación · quien llega con el enlace de un compañero ve «14 días» 
   let cuerpo = null
   await page.route(/\/api\/auth\/register/, async (r) => { cuerpo = r.request().postDataJSON(); await r.fulfill({ status: 400, json: { detail: 'prueba' } }) })
   await page.goto('/repartidores?v=a&ref=ABC123&utm_source=referido', { waitUntil: 'domcontentloaded' })
-  await expect(page.getByText('Te ha invitado un compañero: 14 días gratis').first()).toBeVisible()
-  await expect(page.getByText('14 días gratis · sin tarjeta · cancelas cuando quieras')).toBeVisible()
+  await expect(page.getByText('Te ha invitado un compañero · gratis y sin límite hasta el 31 de diciembre').first()).toBeVisible()
   // El alta se hace en la propia portada: el código del amigo viaja con ella.
   await page.getByPlaceholder('Tu nombre').fill('Rosa')
   await page.getByPlaceholder('Tu correo').fill('rosa@example.es')
@@ -101,7 +103,7 @@ test('Activación · un código que no vale NO promete días de más', async ({ 
   await page.addInitScript(() => localStorage.setItem('cookie_consent', JSON.stringify({ v: 1, at: new Date().toISOString() })))
   await page.route(/\/api\/referidos\/MALO99/, (r) => r.fulfill({ json: { valido: false, dias_extra: 7 } }))
   await page.goto('/repartidores?v=a&ref=MALO99', { waitUntil: 'domcontentloaded' })
-  await expect(page.getByText('7 días gratis · sin tarjeta · cancelas cuando quieras')).toBeVisible()
+  await expect(page.getByText('Gratis y sin límite hasta el 31 de diciembre · sin tarjeta').first()).toBeVisible()
   await expect(page.getByText(/Te ha invitado un compañero/)).toHaveCount(0)
 })
 
@@ -164,7 +166,7 @@ test.describe('Instalar · Android', () => {
 
 test.describe('Instalar · iPhone', () => {
   test.use({ userAgent: 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_5 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.5 Mobile/15E148 Safari/604.1' })
-  test('explica los pasos de Safari, avisa de entrar una vez y de que la App Store llega próximamente', async ({ page, context }) => {
+  test('explica los pasos de Safari, avisa de entrar una vez y de que no se descarga de la App Store', async ({ page, context }) => {
     await preparar(page, context)
     await page.addInitScript(() => localStorage.removeItem('fds_instalar_cerrado'))
     await page.route(/\/api\/reparto\/mi-ruta$/, (r) => r.fulfill({ json: SIN_PAQUETES }))
@@ -172,17 +174,17 @@ test.describe('Instalar · iPhone', () => {
     await page.getByRole('button', { name: 'Cómo instalarla' }).click()
     await expect(page.getByText('Abre esta página en Safari.')).toBeVisible()
     await expect(page.getByText('Elige «Añadir a pantalla de inicio».')).toBeVisible()
-    await expect(page.getByText('La app de la App Store llegará próximamente.')).toBeVisible()
+    await expect(page.getByText('En iPhone no se descarga de la App Store: se instala así, desde Safari, y funciona como una app.')).toBeVisible()
     await expect(page.getByText('entra una vez con tu correo y tu contraseña')).toBeVisible()
   })
 })
 
-test('Instalar · la portada dice que sirve en Android e iPhone y que las tiendas llegan próximamente', async ({ page }) => {
+test('Instalar · la portada dice que sirve en Android e iPhone y que en iPhone se añade desde Safari', async ({ page }) => {
   await page.addInitScript(() => localStorage.setItem('cookie_consent', JSON.stringify({ v: 1, at: new Date().toISOString() })))
   await page.goto('/repartidores?v=a', { waitUntil: 'domcontentloaded' })
   await page.getByText('¿Tengo que instalar algo?').click()
   await expect(page.getByText(/Android o iPhone/)).toBeVisible()
-  await expect(page.getByText(/Google Play y la de App Store llegarán próximamente/)).toBeVisible()
+  await expect(page.getByText(/En iPhone no se descarga de la App Store: se añade desde Safari/)).toBeVisible()
 })
 
 test('Portada · el alta se hace dentro de la propia portada y lleva a la app', async ({ page }) => {

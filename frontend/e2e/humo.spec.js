@@ -3132,24 +3132,67 @@ test('Calculadora repartidor · calcula lo que queda al mes y lleva a la app', a
 })
 
 /* RECORRIDO DE BIENVENIDA (11-10-2026): la primera vez que el autónomo abre su ruta vacía. */
-test('Ruta · recorrido de bienvenida la primera vez, 3 pasos y probar con ejemplos', async ({ page }) => {
+/* LA PRIMERA VEZ (17-10-2026): una pregunta, «¿Tienes los paquetes delante?». Sí → la carga de paquetes; todavía
+   no → el ejemplo (y el aviso de mañana si el móvil lo admite) o los 3 pasos. Sale una vez. */
+test('Ruta · la primera vez pregunta si tiene los paquetes: sí abre la carga, todavía no ofrece el ejemplo', async ({ page }) => {
   const fallos = vigilar(page)
   await entrarRepartidor(page, { status: 'trial', days_left: 6, promo: { activa: true, hasta: '2026-12-31' } })
   await page.addInitScript(() => localStorage.removeItem('fds_tour_ruta'))
   let ejemplo = 0
   await page.route(/\/api\/reparto\/mis-pedidos\/ejemplo/, async (r) => { ejemplo += 1; await r.fulfill({ json: { ok: true, n: 3 } }) })
   await page.goto('/ruta', { waitUntil: 'domcontentloaded' })
-  const hoja = page.getByRole('dialog', { name: 'Así funciona' })
-  await expect(hoja.getByText('1. Mete tus paquetes')).toBeVisible()
-  await hoja.getByRole('button', { name: 'Siguiente' }).click()
-  await expect(hoja.getByText('2. Ordena la ruta')).toBeVisible()
-  await hoja.getByRole('button', { name: 'Siguiente' }).click()
-  await expect(hoja.getByText('3. Navega y entrega')).toBeVisible()
-  await hoja.getByRole('button', { name: 'Verlo en acción con 3 paradas de ejemplo' }).click()
-  await expect.poll(() => ejemplo).toBe(1)
-  // Solo sale una vez: la app deja la marca de visto (luego se vuelve a ver con «¿Cómo funciona?»).
+  const hoja = page.getByRole('dialog', { name: 'Te damos la bienvenida a FDS' })
+  await expect(hoja.getByText('¿Tienes los paquetes delante?')).toBeVisible()
+  await hoja.getByRole('button', { name: 'Sí, cargarlos ahora' }).click()
+  await expect(page.getByRole('dialog', { name: 'Cargar paquetes' })).toBeVisible()
   expect(await page.evaluate(() => localStorage.getItem('fds_tour_ruta'))).toBe('1')
+  // Otra vez desde cero: «Todavía no» lleva al ejemplo y a los 3 pasos.
+  await page.evaluate(() => localStorage.removeItem('fds_tour_ruta'))
+  await page.reload({ waitUntil: 'domcontentloaded' })
+  await hoja.getByRole('button', { name: 'Todavía no' }).click()
+  await expect(hoja.getByText(/Cuando cargues la furgoneta, abre la app/)).toBeVisible()
+  await hoja.getByRole('button', { name: 'Ver cómo funciona en 3 pasos' }).click()
+  const pasos = page.getByRole('dialog', { name: 'Así funciona' })
+  await expect(pasos.getByText('1. Mete tus paquetes')).toBeVisible()
+  await pasos.getByRole('button', { name: 'Cerrar' }).click()
+  await page.evaluate(() => localStorage.removeItem('fds_tour_ruta'))
+  await page.reload({ waitUntil: 'domcontentloaded' })
+  await hoja.getByRole('button', { name: 'Todavía no' }).click()
+  await hoja.getByRole('button', { name: 'Mientras, verlo en acción con 3 paradas de ejemplo' }).click()
+  await expect.poll(() => ejemplo).toBe(1)
   await expect(hoja).toHaveCount(0)
+  expect(fallos).toEqual([])
+})
+
+/* LA RUTA EN MARCHA (17-10-2026): con paradas, añadir va en el botón «+» (hoja con todo), el bono en una línea y
+   «con qué navegar» se elige en Ajustes. */
+test('Ruta · con la ruta en marcha, añadir va en el «+» y el navegador se elige en Ajustes', async ({ page }) => {
+  const fallos = vigilar(page)
+  await entrarRepartidor(page, { status: 'trial', days_left: 60, promo: { activa: true, hasta: '2026-12-31' } })
+  await page.route(/\/api\/reparto\/mi-ruta$/, (r) => r.fulfill({ json: { activo: true, autonomo: true, fecha: '2026-10-17', jornada: {}, aviso_aceptado: true,
+    bono: { cent: 1000, pagado: false, hasta: '2026-12-31', objetivo: 20, dias_objetivo: 2, entregas: 3, dias: 0 },
+    pedidos: [{ id: 'p1', cliente: 'Farmacia Sol', direccion: 'Rúa Real 5', estado: 'pendiente', orden: 1, lat: 43.37, lng: -8.40 },
+      { id: 'p2', cliente: 'Bar Pepe', direccion: 'Rúa Nova 2', estado: 'pendiente', orden: 2, lat: 43.36, lng: -8.41 }] } }))
+  await page.route(/\/api\/reparto\/mi-ruta\/trazado/, (r) => r.fulfill({ json: { linea: [], fuente: null } }))
+  await page.goto('/ruta', { waitUntil: 'domcontentloaded' })
+  await expect(page.getByText('Siguiente parada')).toBeVisible()
+  await expect(page.getByRole('button', { name: 'Escanear', exact: true })).toHaveCount(0)      // no estorba arriba
+  await expect(page.getByTestId('bono')).toContainText('3/20')
+  await expect(page.getByLabel('Navegador')).toHaveCount(0)                                       // ni «Ir con» en la lista
+  await page.getByRole('button', { name: 'Añadir paradas' }).click()
+  const hoja = page.getByRole('dialog', { name: 'Añadir paradas' })
+  await expect(hoja.getByRole('button', { name: 'Escanear', exact: true })).toBeVisible()
+  await expect(hoja.getByPlaceholder('o escribe el código')).toBeVisible()
+  await hoja.getByRole('button', { name: /Añadir un pedido sin código/ }).click()
+  await expect(hoja).toHaveCount(0)                                                               // se cierra al elegir
+  await page.keyboard.press('Escape')
+  // Con qué navegar, en Ajustes; se recuerda y «Ir» abre Waze.
+  await page.goto('/ruta', { waitUntil: 'domcontentloaded' })
+  await page.getByRole('button', { name: 'Ajustes', exact: true }).click()
+  await page.getByLabel('Navegador').selectOption('waze')
+  await page.getByRole('button', { name: 'Hoy', exact: true }).click()
+  const primera = page.locator('div.rounded-2xl', { hasText: 'Siguiente parada' })
+  await expect(primera.getByRole('link', { name: 'Ir' })).toHaveAttribute('href', 'https://waze.com/ul?ll=43.37,-8.4&navigate=yes')
   expect(fallos).toEqual([])
 })
 

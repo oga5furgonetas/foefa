@@ -1306,3 +1306,20 @@ intentar retirar, promoción hasta el 31-10-2026.
   300/día; dominio flotadsp.com autenticado; prueba a su Gmail aceptada). La campaña salió por Brevo: 250 de
   270 el primer día (50 por Resend + 200 por Brevo), 0 rechazos, 2 bajas en la primera hora. Los 20 que faltan,
   el 18-10 a las 10:00; luego se apaga sola. Resend sigue siendo el primero para los correos de la app.
+
+## 17-10-2026 (tarde): web 4 veces más ligera, primer uso guiado y «Hoy» con la ruta en marcha
+
+- **Velocidad**: el bloque que se descarga en todas las páginas pasó de 872 KB a 217 KB (72 KB comprimido).
+  560 KB eran traducciones: el diccionario del panel vive en `src/i18nDict.js` y se pide la primera vez que una
+  pantalla llama a `useT()` (esa pantalla espera con Suspense); `textosRuta*`/`textosBrasil` solo se cargan si el
+  idioma no es el español (`lib/idioma.js`, `useIdioma` repinta con un contador). La portada `/` también va por
+  partes. `check-i18n`, `check-marca` e `i18n-muertas` leen `i18nDict.js`.
+- **Primer uso** (`MiRuta.jsx`, solo en la app del autónomo): en vez del recorrido con «Ver ejemplo» como botón
+  grande, «¿Tienes los paquetes delante?» → «Sí, cargarlos ahora» (abre la carga de paquetes) o «Todavía no» →
+  «Avísame mañana a las 8» (push), el ejemplo y los 3 pasos. Métricas: `bienvenida_vista`, `bienvenida_cargar`,
+  `bienvenida_luego`.
+- **Ruta en marcha** (autónomo): añadir paradas en el botón «+» (hoja con todo), bono en una línea, «Navegar con»
+  en Ajustes (`ElegirNavegador`); el portal del conductor de empresa sigue igual.
+- El mensaje de «Invitar» dice también el bono del invitado. `e2e/activacion.spec.js` llevaba desde el 10-10 con
+  3 tests de ofertas antiguas fallando (no estaba en la batería de siempre): puesto al día; corre con
+  `npx playwright test humo contraste editar-parada escanear-etiqueta activacion --project=escritorio`.
