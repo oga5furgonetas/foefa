@@ -1361,3 +1361,18 @@ hay que cubrir, sin falsos positivos». Medido antes: 3 opiniones en 12 días (l
 - Al desplegar (17-10, 15:30): 19 cuentas recibirán el correo el domingo 18 desde las 9:00 y 1 el lunes; las
   demás, cuando cumplan 5 días.
 - Negocio ya no se cae entero si Referidos, Cobros o Salud reciben una respuesta incompleta.
+
+## 17-10-2026 (tarde): 10 € de regalo en la cartera de cada repartidor
+
+Dani: «añádeles 10 € de saldo a todo el mundo para que vea que es real».
+- **Dado el 17-10 a las 16:40** a las 39 cuentas del plan Repartidor (37 España, 1 Portugal, 1 EE. UU.): 10 € cada
+  una, `regalos.2026-10-17` en la cuenta y un movimiento `tipo: "regalo"` en `cartera_movimientos`. Nadie tenía
+  saldo antes: todas quedan en 10 €. Fuera: China, demos y la cuenta del dueño.
+- Es APARTE del bono de bienvenida (10 € por la primera ruta real), que sigue: es lo que empuja a cargarla.
+- Se cobra con las reglas de siempre (desde 60 €): «Cobrar 10 €» dice «te faltan 50 €». Riesgo de caja: solo
+  sale si llegan a 60 € invitando a compañeros que usen la app de verdad.
+- Se ve: aviso en «Hoy» una vez por regalo (`fds_regalo_<clave>` en el navegador), línea en la cartera, posdata
+  en el correo «opinion» y, al revisar un cobro en Negocio, «Del saldo, sin invitar a nadie: Regalo · Bono».
+- Repetible: `_regalo_a_todos(clave, cent)` / `POST /admin/cartera/regalo` (super-admin, `simular`, tope 20 €,
+  una vez por clave). Términos: añadido el punto «Regalo de saldo».
+- Las cuentas que se den de alta desde hoy NO lo reciben (no lo pidió); se puede dar con otra clave.

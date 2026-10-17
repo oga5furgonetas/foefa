@@ -748,6 +748,9 @@ function RetiradasCartera() {
               </p>
               {r.estado === 'pendiente' && <button onClick={() => copiarDestino(r)} className="mt-1 flex items-center gap-1 text-[11px] font-semibold text-brand-300 underline"><Copy size={12} />{copiado === r.id ? 'Dato copiado' : 'Copiar dato de cobro'}</button>}
               {r.motivo && <p className="mt-1 text-dark-400">Motivo: {r.motivo}</p>}
+              {(r.sin_invitar || []).length > 0 && (
+                <p className="mt-1 text-amber-200">Del saldo, sin invitar a nadie: {r.sin_invitar.map((s) => `${s.que} ${eur(s.cent)}`).join(' · ')}</p>
+              )}
               <details className="mt-1">
                 <summary className="cursor-pointer text-dark-400">Sus invitados ({(r.invitados || []).length})</summary>
                 <ul className="mt-1 space-y-0.5 text-[12px]">

@@ -601,6 +601,8 @@ _OPINION = {
             "pero me ayudaría mucho saber por qué. Pulsa la que más se parezca:\n\n{opciones}\n\n"
             "Con eso me basta. Si quieres contarme más, contesta a este correo: lo leo yo."),
         "notas": ("Me encanta", "Bien", "Normal", "Regular", "Mal"),
+        "regalo_linea": ("Por cierto: te hemos regalado {regalo} en tu cartera de {marca}, para que veas que va en "
+                         "serio. Lo tienes en la app, en la pestaña Cuenta."),
         "motivos": {"no_ruta": "Todavía no he tenido reparto", "no_supe": "No supe cómo meter los paquetes",
                     "otra_app": "Ya uso otra app", "empresa": "Mi empresa no me deja", "otro": "Otra cosa"},
     },
@@ -618,6 +620,8 @@ _OPINION = {
             "mas ajudava-me muito saber porquê. Carrega na que mais se parecer:\n\n{opciones}\n\n"
             "Com isso chega. Se quiseres contar mais, responde a este e-mail: leio eu."),
         "notas": ("Adoro", "Bem", "Normal", "Mais ou menos", "Mal"),
+        "regalo_linea": ("Já agora: oferecemos-te {regalo} na tua carteira da {marca}, para veres que é a sério. "
+                         "Está na app, no separador Conta."),
         "motivos": {"no_ruta": "Ainda não tive entregas", "no_supe": "Não percebi como meter as encomendas",
                     "otra_app": "Já uso outra app", "empresa": "A minha empresa não deixa", "otro": "Outra coisa"},
     },
@@ -636,6 +640,8 @@ _OPINION = {
             "but it would really help me to know why. Tap the one that fits best:\n\n{opciones}\n\n"
             "That is all I need. If you want to tell me more, just reply to this email: I read it myself."),
         "notas": ("Love it", "Good", "OK", "So-so", "Bad"),
+        "regalo_linea": ("By the way: we have added {regalo} to your {marca} wallet as a gift, so you can see it is "
+                         "real. You will find it in the app, in the Account tab."),
         "motivos": {"no_ruta": "I have not had deliveries yet", "no_supe": "I did not know how to add the parcels",
                     "otra_app": "I already use another app", "empresa": "My company does not allow it",
                     "otro": "Something else"},
@@ -654,6 +660,8 @@ _OPINION = {
             "mas me ajudaria muito saber por quê. Toque na que mais combina:\n\n{opciones}\n\n"
             "Isso já basta. Se quiser contar mais, responda este e-mail: eu leio."),
         "notas": ("Adorei", "Bom", "Normal", "Mais ou menos", "Ruim"),
+        "regalo_linea": ("Aliás: demos {regalo} de presente na sua carteira do {marca}, para você ver que é de "
+                         "verdade. Está no app, na aba Conta."),
         "motivos": {"no_ruta": "Ainda não tive entregas", "no_supe": "Não entendi como colocar os pacotes",
                     "otra_app": "Já uso outro app", "empresa": "Minha empresa não deixa", "otro": "Outra coisa"},
     },
@@ -724,7 +732,7 @@ def correo(clave: str, org: dict, uso: dict, ahora: datetime, *, marca: str, bas
            baja: str, mensual: float, anual: float, con_respuesta: bool,
            promo_hasta: str = "", tope: int = 15, ref_enlace: str = "", ref_cent: int = 250,
            ref_espana: bool = True, ref_min_cent: int = 6000, ref_promo_hasta: str = "",
-           bono_hasta: str = "", bono_cent: int = 1000, opinion_url: str = "") -> dict:
+           bono_hasta: str = "", bono_cent: int = 1000, opinion_url: str = "", regalo_cent: int = 0) -> dict:
     """{asunto, texto, html} del correo `clave` para esta cuenta."""
     if clave not in CLAVES:
         raise ValueError(clave)
@@ -784,7 +792,11 @@ def correo(clave: str, org: dict, uso: dict, ahora: datetime, *, marca: str, bas
             opciones = [(t["motivos"][m], f"{url}&m={m}") for m in MOTIVOS]
         if idioma == "es" and str(org.get("pais") or "").lower() in _LATAM:
             opciones = [(_a_latam(a), b) for a, b in opciones]
-        datos.update(paradas=paradas, opciones=_MARCA_OPCIONES)
+        datos.update(paradas=paradas, opciones=_MARCA_OPCIONES, regalo=_euros(regalo_cent / 100, idioma))
+        if regalo_cent:
+            # El regalo de saldo (17-10-2026), antes del último párrafo: que vea que es de verdad.
+            antes, _sep, ultimo = cuerpo_m.rpartition("\n\n")
+            cuerpo_m = f"{antes}\n\n{t['regalo_linea']}\n\n{ultimo}"
     else:
         asunto_m, cuerpo_m = t[clave]
     asunto = asunto_m.format(**datos)

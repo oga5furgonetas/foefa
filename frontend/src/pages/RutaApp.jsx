@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import {
   Route, History, Settings2, UserCircle2, Loader2, CheckCircle2, XCircle, Package, Euro, ChevronRight, ChevronDown, ArrowLeft,
-  MapPin, Phone, Camera, Clock, RotateCcw, FileSpreadsheet,
+  MapPin, Phone, Camera, Clock, RotateCcw, FileSpreadsheet, X,
 } from 'lucide-react'
 import MiRuta from './driver/MiRuta'
 import { Ajustes } from '../panel/pages/Reparto'
@@ -60,12 +60,20 @@ export default function RutaApp() {
   const [promoHasta, setPromoHasta] = useState(refPromoActiva() ? REF_PROMO_HASTA : '')
   // Con el bono de bienvenida por ganar, su tarjeta (en la ruta) ya dice lo de invitar: no se repite arriba.
   const [bonoPendiente, setBonoPendiente] = useState(false)
+  // REGALO DE SALDO (17-10-2026, Dani: «para que vea que es real»): un aviso en «Hoy», una vez por regalo.
+  const [saldoRegalo, setSaldoRegalo] = useState(null)
+  const vistoRegalo = (clave) => { try { return !!localStorage.getItem(`fds_regalo_${clave}`) } catch { return false } }
+  const verRegalo = () => {
+    try { localStorage.setItem(`fds_regalo_${saldoRegalo?.clave}`, '1') } catch { /* incógnito */ }
+    setSaldoRegalo(null)
+  }
   useEffect(() => {
     if (esSuplantacion()) return
     getReferidos().then(({ data }) => {
       if (data?.por_invitado) setPorInvitado(data.por_invitado)
       if (data && 'por_invitado' in data) setPromoHasta(data.promo_hasta || '')
       setBonoPendiente(!!(data?.bono && !data.bono.pagado))
+      if (data?.regalo > 0 && data.regalo_clave && !vistoRegalo(data.regalo_clave)) setSaldoRegalo({ cent: data.regalo, clave: data.regalo_clave })
     }).catch(() => {})
   }, [])
   // La tarjeta del bono ganado lleva a la cartera.
@@ -239,6 +247,16 @@ export default function RutaApp() {
             <button onClick={() => setTab('cuenta')} className="shrink-0 rounded-xl bg-brand-500 px-3 py-1.5 text-[12.5px] font-bold text-brand-tinta">
               {tx('Quitar el tope')}
             </button>
+          </div>
+        )}
+        {tab === 'hoy' && saldoRegalo && (
+          <div data-testid="aviso-regalo" className="mx-auto mb-3 flex max-w-md items-center gap-3 rounded-2xl border border-emerald-400/40 bg-emerald-500/[.12] px-3.5 py-3">
+            <span aria-hidden="true" className="text-[24px] leading-none">🎁</span>
+            <p className="min-w-0 flex-1 text-[14px] font-semibold leading-snug text-emerald-100">
+              {tx('Te hemos regalado {euros}: ya están en tu cartera.', { euros: eurosRef(saldoRegalo.cent, locale()) })}
+            </p>
+            <button onClick={() => { verRegalo(); setTab('cuenta') }} className="shrink-0 rounded-xl bg-emerald-700 px-3 py-1.5 text-[13px] font-bold text-white">{tx('Verlo')}</button>
+            <button onClick={verRegalo} aria-label={tx('Cerrar')} className="shrink-0 p-1 text-emerald-200/80"><X size={17} /></button>
           </div>
         )}
         {tab === 'hoy' && !bloqueado && <OpinionRuta />}

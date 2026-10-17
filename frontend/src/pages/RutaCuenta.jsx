@@ -776,6 +776,11 @@ function Invitar({ toast }) {
               euros: cent(r.bono.cent), n: r.bono.objetivo || 20, d: r.bono.dias_objetivo || 2, fecha: fechaRefPromo(locale(), r.bono.hasta) })}
         </p>
       )}
+      {r?.regalo > 0 && (
+        <p data-testid="cartera-regalo" className="mt-1.5 rounded-xl bg-emerald-400/15 px-3 py-2 text-[12.5px] font-semibold leading-snug text-emerald-100">
+          🎁 {tx('Regalo: {euros} ya en tu saldo, para que veas que es de verdad.', { euros: cent(r.regalo) })}
+        </p>
+      )}
       {promoHasta && (
         <p className="mt-1.5 rounded-xl bg-emerald-400/15 px-3 py-2 text-[12.5px] font-semibold leading-snug text-emerald-100">
           {tx('Promoción hasta el {fecha}: {euros} por cada compañero que se registre con tu enlace.', { fecha: fechaRefPromo(locale(), promoHasta), euros: cent(r?.promo_cent ?? REF_PROMO_CENT) })}

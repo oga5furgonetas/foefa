@@ -3365,3 +3365,30 @@ test.describe('Opinión de los repartidores', () => {
     expect(fallos).toEqual([])
   })
 })
+
+/* REGALO DE SALDO (17-10-2026, Dani: «añádeles 10 € de saldo a todo el mundo para que vea que es real»). Se ve
+   al abrir la app (una vez), en la cartera, y se cobra con las reglas de siempre (desde 60 €). */
+test('Regalo · 10 € en la cartera: aviso en Hoy una vez, línea en la cartera y se cobra desde 60 €', async ({ page }) => {
+  const fallos = vigilar(page)
+  await entrarRepartidor(page, { status: 'trial', days_left: 60, promo: { activa: true, hasta: '2026-12-31' } })
+  await page.route(/\/api\/referidos$/, (r) => r.fulfill({ json: {
+    codigo: 'ABCD1234', invitados: 0, premiados: 0, saldo: 1000, ganado: 1000, regalo: 1000, regalo_clave: '2026-10-17',
+    por_invitado: 1000, retirada_min: 6000, promo_hasta: '2026-12-31', promo_cent: 1000, cartera: true,
+    metodos: ['bizum', 'iban', 'paypal'], entregas_cartera: 20, dias_distintos: 2, pendiente: false, retiradas: [],
+    bono: { cent: 1000, pagado: false, hasta: '2026-12-31', objetivo: 20, dias_objetivo: 2 },
+  } }))
+  await page.goto('/ruta', { waitUntil: 'domcontentloaded' })
+  const aviso = page.getByTestId('aviso-regalo')
+  await expect(aviso).toContainText('Te hemos regalado 10 €: ya están en tu cartera.')
+  await aviso.getByRole('button', { name: 'Verlo' }).click()
+  const cartera = page.getByRole('region', { name: 'Tu cartera' })
+  await expect(cartera.getByTestId('cartera-regalo')).toContainText('Regalo: 10 € ya en tu saldo')
+  await expect(cartera.getByTestId('cartera-bono')).toContainText('Bono de bienvenida')        // el bono sigue aparte
+  await cartera.getByRole('button', { name: 'Cobrar 10 €' }).click()
+  await expect(page.getByText('Se puede cobrar a partir de 60 €. Te faltan 50 €.')).toBeVisible()
+  await page.goto('/ruta', { waitUntil: 'domcontentloaded' })                                // ya lo ha visto
+  await expect(page.getByRole('button', { name: 'Hoy', exact: true })).toBeVisible()
+  await page.waitForTimeout(500)
+  await expect(page.getByTestId('aviso-regalo')).toHaveCount(0)
+  expect(fallos).toEqual([])
+})

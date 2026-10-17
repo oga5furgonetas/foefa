@@ -245,6 +245,8 @@ export const BR = {
   'Me encanta': 'Adorei',
   'Ya nos contestaste. Si quieres añadir algo, escríbelo aquí.': 'Você já respondeu. Se quiser acrescentar algo, escreva aqui.',
   'Mándanos una idea': 'Mande uma ideia',
+  'Te hemos regalado {euros}: ya están en tu cartera.': 'Demos {euros} de presente: já estão na sua carteira.',
+  'Regalo: {euros} ya en tu saldo, para que veas que es de verdad.': 'Presente: {euros} já no seu saldo, para você ver que é de verdade.',
   '¿Algo que no va o que echas en falta? Lo leo yo y te contesto por correo.': 'Algo não funciona ou está faltando? Eu leio e te respondo por e-mail.',
   'Escribe tu idea o lo que no te funciona': 'Escreva sua ideia ou o que não funciona',
   'Automático sigue al móvil: oscuro cuando el móvil está en modo oscuro.': 'Automático segue o celular: escuro quando o celular está no modo escuro.',

@@ -20907,6 +20907,7 @@ async def _ciclo_enviar(org_id: str, clave: str, ahora: Optional[datetime] = Non
                         "ref_promo_hasta": _REF_PROMO_HASTA_DIA if _ref_promo_activa() else ""})
         if clave == "opinion":
             ref["opinion_url"] = _opinion_url(org_id)
+            ref["regalo_cent"] = _regalo_total(org)        # «por cierto: tienes 10 € de regalo en tu cartera»
         # La marca del correo es la del REMITENTE («FDS <contacto@…>»), la que ve el
         # repartidor en la app; MARCA es la del panel de empresas.
         c = ciclo_correos.correo(clave, org, uso, ahora, marca=_email_remitente()[0], base=_PORTAL_BASE_FRONT,
@@ -50362,6 +50363,8 @@ async def referidos_mios(user: dict = Depends(require_admin)):
             "tope": _REF_TOPE, "entregas": _REF_ENTREGAS, "dias_extra": _REF_DIAS_EXTRA,
             # La cartera
             "saldo": int(org.get("cartera_saldo") or 0), "ganado": int(org.get("cartera_ganado") or 0),
+            # El saldo regalado (17-10-2026) y el último regalo, para el aviso de «Hoy» (una vez por regalo).
+            "regalo": _regalo_total(org), "regalo_clave": max((org.get("regalos") or {}) or [""]),
             "por_invitado": _ref_importe(org), "retirada_min": _REF_RETIRADA_MIN, **_ref_promo_datos(),
             "cartera": _ref_disponible(org),
             "metodos": ["bizum", "iban", "paypal"] if _ref_en_espana(org) else ["paypal"],
@@ -50560,6 +50563,72 @@ async def admin_opiniones(_: dict = Depends(require_superadmin)):
         "motivos": [{"motivo": k, "texto": _OPINION_MOTIVOS[k], "n": n}
                     for k, n in sorted(motivos.items(), key=lambda x: -x[1])],
         "pedidas_por_correo": await global_db.organizations.count_documents({"ciclo_correos.opinion.ok": True})}}
+
+
+# ── REGALO DE SALDO (17-10-2026) ─────────────────────────────────────────────
+# Dani: «añádeles 10 € de saldo a todo el mundo para que vea que es real». Es un regalo APARTE del bono de la
+# primera ruta, que sigue (es lo que empuja a cargarla). Va a la cartera de cada cuenta del plan Repartidor que
+# existe al darlo: fuera de China (no hay cómo cobrar), ni la cuenta del dueño ni las demos. Una vez por cuenta
+# y regalo (`regalos.<clave>`, en la MISMA escritura que el saldo: no se puede dar dos veces). Se cobra con las
+# mismas reglas que el resto del saldo (desde _REF_RETIRADA_MIN): se ve y es de verdad, y no sale dinero sin
+# más uso de la app. En las retiradas, Negocio enseña qué parte del saldo fue regalo o bono.
+_REGALO_TOPE_CENT = 2000                  # un regalo es un detalle: más de 20 € por cuenta es un error al teclear
+
+
+def _regalo_puede(org: dict) -> bool:
+    o = org or {}
+    return (not o.get("demo") and o.get("account_type") != "owner" and _ref_disponible(o)
+            and (o.get("sector") == "autonomo" or o.get("plan") == "autonomo"))
+
+
+def _regalo_total(org: dict) -> int:
+    """Céntimos regalados a esta cuenta (todos los regalos)."""
+    return sum(int((v or {}).get("cent") or 0) for v in ((org or {}).get("regalos") or {}).values())
+
+
+async def _regalo_dar(org: dict, clave: str, cent: int, ahora: datetime) -> bool:
+    """Le pone el regalo `clave` en la cartera si no lo tenía. True si se lo ha puesto ahora."""
+    res = await global_db.organizations.update_one(
+        {"id": org["id"], f"regalos.{clave}": {"$exists": False}},
+        {"$set": {f"regalos.{clave}": {"cent": cent, "en": ahora.isoformat()}},
+         "$inc": {"cartera_saldo": cent, "cartera_ganado": cent}})
+    if not getattr(res, "modified_count", 0):
+        return False
+    await global_db.cartera_movimientos.insert_one({
+        "id": str(uuid.uuid4()), "tipo": "regalo", "clave": clave, "importe": cent, "org_id": org["id"],
+        "mes": ahora.strftime("%Y-%m"), "ts": ahora.isoformat()})
+    return True
+
+
+async def _regalo_a_todos(clave: str, cent: int, simular: bool = False) -> dict:
+    """El regalo `clave` de `cent` céntimos a cada cuenta del plan Repartidor que pueda tenerlo."""
+    if not re.fullmatch(r"[0-9a-z_-]{3,32}", clave or ""):
+        raise HTTPException(400, "Clave de regalo no válida")
+    if not 0 < int(cent or 0) <= _REGALO_TOPE_CENT:
+        raise HTTPException(400, f"El regalo va de 0,01 a {_REGALO_TOPE_CENT // 100} € por cuenta")
+    ahora = datetime.now(timezone.utc)
+    orgs = await global_db.organizations.find({}, {"_id": 0}).to_list(50000)
+    candidatas = [o for o in orgs if _regalo_puede(o)]
+    ya = sum(1 for o in candidatas if clave in (o.get("regalos") or {}))
+    if simular:
+        return {"cuentas": len(candidatas), "ya_tenian": ya, "dados": 0, "cent": int(cent), "simulado": True}
+    dados = 0
+    for o in candidatas:
+        if await _regalo_dar(o, clave, int(cent), ahora):
+            dados += 1
+    logger.info("regalo %s: %s cuentas de %s, %s céntimos cada una", clave, dados, len(candidatas), cent)
+    return {"cuentas": len(candidatas), "ya_tenian": ya, "dados": dados, "cent": int(cent)}
+
+
+@api_router.post("/admin/cartera/regalo")
+async def admin_cartera_regalo(data: dict = Body(default={}), _: dict = Depends(require_superadmin)):
+    """Regala saldo a todas las cuentas del plan Repartidor, una vez por `clave`. Con `simular`, solo cuenta."""
+    d = _dict_cuerpo(data)
+    try:
+        cent = int(d.get("cent") or 0)
+    except (TypeError, ValueError):
+        cent = 0
+    return await _regalo_a_todos(str(d.get("clave") or ""), cent, simular=bool(d.get("simular")))
 
 
 def _ref_en_espana(org: dict) -> bool:
@@ -50966,6 +51035,11 @@ async def admin_cartera_retiradas(estado: str = "pendiente", _: dict = Depends(r
             r["beneficiario"] = r.get("org") or "Cuenta de repartidor"
             r["beneficiario_email"] = r.get("email") or ""
             r["cartera_individual"] = False
+            # Lo que tiene en la cartera SIN haber invitado a nadie (17-10-2026): regalos y bono de bienvenida.
+            o = await global_db.organizations.find_one(
+                {"id": r["org_id"]}, {"_id": 0, "regalos": 1, "bono_pagado": 1, "bono_cent": 1}) or {}
+            r["sin_invitar"] = ([{"que": "Regalo", "cent": _regalo_total(o)}] if _regalo_total(o) else []) + (
+                [{"que": "Bono de bienvenida", "cent": int(o.get("bono_cent") or _BONO_CENT)}] if o.get("bono_pagado") else [])
         r["invitados"] = [{"nombre": i.get("name") or "", "alta": str(i.get("created_at") or "")[:10],
                            "premiado": bool(i.get("ref_premiado")), "sospechoso": i.get("ref_sospechoso") or "",
                            "correo": i.get("email") or ""} for i in invitados]
