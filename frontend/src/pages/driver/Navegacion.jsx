@@ -6,6 +6,7 @@ import {
   LocateFixed, Loader2, Check, Package, Navigation, Flag, Mic, MicOff,
 } from 'lucide-react'
 import { repNavegar } from '../../services/api'
+import AntesPuerta from './AntesPuerta'
 import {
   prepararLinea, proyectar, situarPasos, proximoPaso, textoDistancia, distanciaHablada, metrosEntre, rumbo as rumboEntre, textoPaso,
 } from '../../lib/guia'
@@ -326,6 +327,7 @@ export default function Navegacion({ parada, numero, quedan, onSalir, onEntregar
               {parada.bultos > 1 && <span className="rounded-lg bg-dark-800 px-2 py-1 text-dark-200">{tx('{n} bultos', { n: parada.bultos })}</span>}
             </div>
             {(parada.notas || parada.contenido) && <p className="mt-1.5 text-[13px] text-dark-400">{[parada.contenido, parada.notas].filter(Boolean).join(' · ')}</p>}
+            <AntesPuerta a={parada.antes} className="mt-1.5" />
             <div className="mt-3 grid grid-cols-[auto_1fr_2fr] gap-2">
               {parada.telefono
                 ? <a href={`tel:${parada.telefono}`} aria-label={tx('Llamar')} className="flex items-center justify-center rounded-xl border border-dark-600 px-4 text-dark-100"><Phone size={18} /></a>

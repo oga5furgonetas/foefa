@@ -48607,6 +48607,24 @@ async def reparto_mi_ruta(user: dict = Depends(require_any_auth)):
             await _rep_enlace(p)
     ps.sort(key=lambda x: (x.get("estado") in ("entregado", "fallido"),
                            x.get("orden") is None, x.get("orden") or 0, x.get("creado_en") or ""))
+    # LA ÚLTIMA VEZ EN ESA PUERTA (17-10-2026): si en los últimos 90 días se dejó en portería o al vecino, se
+    # apuntó una nota o no había nadie, la parada de hoy lo recuerda. Solo lo de este mismo repartidor.
+    try:
+        pend = [p for p in ps if p.get("estado") in ("pendiente", "en_ruta") and not p.get("ejemplo")]
+        if pend:
+            desde = (datetime.strptime(f, "%Y-%m-%d") - timedelta(days=90)).strftime("%Y-%m-%d")
+            previas = await db.reparto_pedidos.find(
+                {"conductor_id": d["id"], "fecha": {"$gte": desde, "$lt": f}, "ejemplo": {"$ne": True},
+                 "$or": [{"entrega_nota": {"$nin": [None, ""]}}, {"entrega_donde": {"$nin": [None, ""]}},
+                         {"estado": "fallido"}]},
+                {"_id": 0, "direccion": 1, "lat": 1, "lng": 1, "fecha": 1, "estado": 1, "motivo": 1,
+                 "entrega_nota": 1, "entrega_donde": 1, "cerrado_en": 1}).sort("cerrado_en", -1).to_list(3000)
+            antes = reparto.ultima_vez(pend, previas)
+            for p in pend:
+                if p["id"] in antes:
+                    p["antes"] = antes[p["id"]]
+    except Exception as e:                                   # noqa: BLE001
+        logger.warning(f"la última vez: {type(e).__name__}")
     j = await db.reparto_jornadas.find_one({"id": f"{d['id']}_{f}"}, {"_id": 0, "rastro": 0}) or {}
     aviso = await db.reparto_avisos.find_one({"driver_id": d["id"]}, {"_id": 0})
     ruta = await db.reparto_rutas.find_one({"id": f"{f}_{d['id']}"}, {"_id": 0})

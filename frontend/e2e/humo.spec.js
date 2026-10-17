@@ -2392,6 +2392,24 @@ test.describe('App del repartidor en el móvil', () => {
     expect(fallos.filter((f) => !/internetdisconnected|ERR_INTERNET_DISCONNECTED|Failed to load resource/.test(f))).toEqual([])
   })
 
+  /* LA ÚLTIMA VEZ EN ESA PUERTA (17-10-2026): la parada recuerda dónde se dejó, la nota o que no había nadie. */
+  test('la parada recuerda lo que pasó la última vez en esa puerta', async ({ page }) => {
+    const fallos = vigilar(page)
+    await entrarRepartidor(page, { status: 'trial', days_left: 60, promo: { activa: true, hasta: '2026-12-31' } })
+    await page.route(/\/api\/reparto\/mi-ruta$/, (r) => r.fulfill({ json: { activo: true, autonomo: true, fecha: '2026-10-17', jornada: {}, aviso_aceptado: true,
+      pedidos: [
+        { id: 'p1', cliente: 'Farmacia Sol', direccion: 'Rúa Real 5', estado: 'pendiente', orden: 1,
+          antes: { fecha: '2026-10-10', estado: 'entregado', donde: 'porteria', nota: 'conserje Manolo', motivo: '' } },
+        { id: 'p2', cliente: 'Bar Pepe', direccion: 'Rúa Nova 2', estado: 'pendiente', orden: 2,
+          antes: { fecha: '2026-10-12', estado: 'fallido', donde: '', nota: 'timbre roto', motivo: 'No había nadie' } },
+      ] } }))
+    await page.goto('/ruta', { waitUntil: 'domcontentloaded' })
+    await expect(page.getByTestId('antes').first()).toHaveText('La última vez (10 oct): En portería o recepción · «conserje Manolo»')
+    await page.getByText('Bar Pepe').first().click()                      // se despliega la segunda
+    await expect(page.getByText('La última vez (12 oct) no se pudo: No había nadie · «timbre roto»')).toBeVisible()
+    expect(fallos).toEqual([])
+  })
+
   test('si el historial no carga, lo dice y se puede reintentar', async ({ page }) => {
     const fallos = vigilar(page)
     await entrarRepartidor(page, { status: 'trial', days_left: 60, promo: { activa: true, hasta: '2026-12-31' } })

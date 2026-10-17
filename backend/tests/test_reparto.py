@@ -6,6 +6,30 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 import reparto as R  # noqa: E402
 
+def test_la_ultima_vez_en_esa_puerta():
+    """17-10-2026: lo que pasó la última vez en una dirección (dónde se dejó, la nota, que no había nadie)."""
+    hoy = [{"id": "h1", "direccion": "Rúa Real 22, A Coruña"},
+           {"id": "h2", "direccion": "Calle Nueva 1", "lat": 43.37, "lng": -8.40},
+           {"id": "h3", "direccion": "Calle Sin Historia 9"},
+           {"id": "h4", "direccion": "Plaza Mayor 3"}]
+    previas = [
+        {"direccion": "rua real 22 a coruña", "fecha": "2026-10-01", "cerrado_en": "2026-10-01T09:00:00Z",
+         "estado": "entregado", "entrega_donde": "vecino", "entrega_nota": "al del 2º"},
+        {"direccion": "RÚA REAL, 22 · A CORUÑA", "fecha": "2026-10-10", "cerrado_en": "2026-10-10T09:00:00Z",
+         "estado": "entregado", "entrega_donde": "porteria", "entrega_nota": ""},          # la más reciente manda
+        {"direccion": "C/ Nueva nº 1", "lat": 43.37005, "lng": -8.40003, "fecha": "2026-10-12",
+         "estado": "fallido", "motivo": "No había nadie", "entrega_nota": "timbre roto"},  # escrita distinto, a 6 m
+        {"direccion": "Plaza Mayor 3", "fecha": "2026-10-05", "estado": "entregado"},     # nada que contar
+    ]
+    r = R.ultima_vez(hoy, previas)
+    assert r["h1"] == {"fecha": "2026-10-10", "estado": "entregado", "nota": "", "donde": "porteria", "motivo": ""}
+    assert r["h2"]["estado"] == "fallido" and r["h2"]["motivo"] == "No había nadie" and r["h2"]["nota"] == "timbre roto"
+    assert "h3" not in r and "h4" not in r
+    # A 200 m ya no es la misma puerta.
+    assert R.ultima_vez([{"id": "x", "direccion": "Otra 1", "lat": 43.372, "lng": -8.40}], previas) == {}
+    assert R.clave_direccion("Rúa  Real, 22 – A Coruña") == R.clave_direccion("rua real 22 a coruna")
+
+
 ZONAS = [
     {"nombre": "Centro", "cps": ["15001", "15003"], "palabras": ["Montero Rios", "Orzan"]},
     {"nombre": "Os Mallos", "cps": ["15007"], "palabras": ["Ronda de Outeiro", "Mallos"]},

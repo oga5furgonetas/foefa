@@ -215,4 +215,6 @@ export const BR = {
   'Ya hay conexión: enviados {n} cambios que estaban guardados.': 'A conexão voltou: {n} alterações salvas foram enviadas.',
   'Un cambio guardado sin cobertura no se pudo enviar': 'Uma alteração salva sem sinal não pôde ser enviada',
   'No se pudo cargar el historial.': 'Não foi possível carregar o histórico.',
+  'La última vez ({fecha}): {como}': 'Da última vez ({fecha}): {como}',
+  'La última vez ({fecha}) no se pudo: {motivo}': 'Da última vez ({fecha}) não deu: {motivo}',
 }

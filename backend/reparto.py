@@ -113,6 +113,38 @@ def distancia_km(a, b) -> float:
     return 2 * r * math.asin(min(1.0, math.sqrt(h)))
 
 
+def clave_direccion(texto) -> str:
+    """La misma puerta escrita de dos maneras («Rúa Real 22, A Coruña» y «rua real 22 a coruña») da la misma
+    clave: sin acentos, en minúscula y solo letras y cifras."""
+    return re.sub(r"[^a-z0-9]+", " ", norm(texto)).strip()
+
+
+def ultima_vez(pendientes: list, previas: list, metros: float = 20.0) -> dict:
+    """LA ÚLTIMA VEZ EN ESA PUERTA (17-10-2026): {id de parada de hoy: lo que pasó la última vez que se repartió
+    allí} (dónde se dejó, la nota, o que no se pudo y por qué). Primero por la dirección escrita; si no, por
+    estar a menos de `metros` (la misma puerta escrita distinto). De las previas manda la más reciente."""
+    previas = sorted(previas, key=lambda v: str(v.get("cerrado_en") or v.get("fecha") or ""), reverse=True)
+    por_clave = {}
+    for v in previas:
+        k = clave_direccion(v.get("direccion"))
+        if k and k not in por_clave:
+            por_clave[k] = v
+    salida = {}
+    for p in pendientes:
+        v = por_clave.get(clave_direccion(p.get("direccion")))
+        a = _punto(p)
+        if v is None and a:
+            v = next((x for x in previas if _punto(x) and distancia_km(a, _punto(x)) * 1000 <= metros), None)
+        if v is None:
+            continue
+        fallo = v.get("estado") == "fallido"
+        dato = {"fecha": v.get("fecha") or "", "estado": v.get("estado") or "", "nota": v.get("entrega_nota") or "",
+                "donde": v.get("entrega_donde") or "", "motivo": (v.get("motivo") or "") if fallo else ""}
+        if fallo or dato["nota"] or dato["donde"]:
+            salida[p["id"]] = dato
+    return salida
+
+
 def rumbo(a, b) -> float:
     """Hacia dónde hay que mirar desde a para ver b, en grados (0 = norte, 90 = este)."""
     (la1, lo1), (la2, lo2) = a, b

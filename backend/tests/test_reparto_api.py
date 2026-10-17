@@ -126,6 +126,24 @@ async def test_cada_conductor_ve_y_cierra_solo_lo_suyo(base):
 
 
 @pytest.mark.asyncio(loop_scope="session")
+async def test_mi_ruta_recuerda_la_ultima_vez_en_esa_puerta(base):
+    """17-10-2026: la parada de hoy dice lo que pasó la última vez en esa dirección (solo lo de ese repartidor)."""
+    from datetime import datetime, timedelta
+    hoy = server._dia_negocio()
+    antes = (datetime.strptime(hoy, "%Y-%m-%d") - timedelta(days=6)).strftime("%Y-%m-%d")
+    p = await server.reparto_mis_pedidos({"direccion": "Rúa Real 5"}, ANA)
+    base.db["reparto_pedidos"].docs.extend([
+        {"id": "v1", "conductor_id": "d1", "direccion": "rua real 5", "fecha": antes, "estado": "entregado",
+         "entrega_donde": "porteria", "entrega_nota": "conserje Manolo", "cerrado_en": f"{antes}T10:00:00+00:00"},
+        {"id": "v2", "conductor_id": "d2", "direccion": "Rúa Real 5", "fecha": antes, "estado": "fallido",
+         "motivo": "No había nadie", "cerrado_en": f"{antes}T11:00:00+00:00"},          # de LUIS: no cuenta
+    ])
+    r = await server.reparto_mi_ruta(ANA)
+    hoyp = next(x for x in r["pedidos"] if x["id"] == p["id"])
+    assert hoyp["antes"] == {"fecha": antes, "estado": "entregado", "nota": "conserje Manolo", "donde": "porteria", "motivo": ""}
+
+
+@pytest.mark.asyncio(loop_scope="session")
 async def test_sin_cobertura_la_entrega_llega_tarde_con_su_hora_de_verdad(base):
     """17-10-2026: el móvil guarda la entrega sin red y la manda después con `hecho_en`. Vale de las últimas
     12 h; del futuro o de hace más, la hora del servidor."""

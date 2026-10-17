@@ -24,6 +24,7 @@ import { fijarPais, importe, simboloMoneda, metodosCobro, paisActual } from '../
 import { tx, useIdioma, locale, txError } from '../../lib/idioma'
 import { salirDeLaDemoDeReparto, decodeToken } from '../../panel/auth'
 import { eurosRef, fechaRefPromo } from '../../lib/precios'
+import AntesPuerta from './AntesPuerta'
 
 /* ── MI RUTA ────────────────────────────────────────────────────────────────
    Lo que hace el repartidor al cargar: escanea el código de la caja. Si el
@@ -1273,6 +1274,7 @@ export default function MiRuta({ onBack, embebido = false }) {
                   {p.bultos > 1 ? tx('{n} bultos', { n: p.bultos }) : tx('1 bulto')}{p.escaneos ? ` · ${p.escaneos > 1 ? tx('{n} escaneados', { n: p.escaneos }) : tx('1 escaneado')}` : ''}
                   {p.lat == null && ` · ${tx('sin ubicar en el mapa')}`}{p.geo === 'aprox' && ` · ${tx('ubicación aproximada (la calle)')}`}{p.notas && ` · ${p.notas}`}
                 </p>
+                <AntesPuerta a={p.antes} className="mt-1.5" />
                 <div className="mt-1.5 flex flex-wrap gap-1.5">
                   <button onClick={() => setHuecoDe(p)}
                     className={`inline-flex items-center gap-1 rounded-lg px-2 py-1 text-[12px] font-semibold ${p.hueco ? 'bg-sky-500/15 text-sky-200' : 'border border-dashed border-dark-700 text-dark-400'}`}>
