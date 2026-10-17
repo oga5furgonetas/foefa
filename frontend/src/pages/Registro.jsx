@@ -14,7 +14,8 @@ import { desdeChina } from '../lib/apiBase'
 import { Check, Zap, Package, ShoppingCart, Warehouse, Truck, User, Send } from 'lucide-react'
 import { MARCA, dominio } from '../marca'
 import { sugerenciaCorreo } from '../lib/correo'
-import { PLANES_EMPRESA, PLAN_REPARTO, MESES_ANUAL, PARADAS_GRATIS, promoGratis, fechaPromo, precioMes as precioMesPlan, eur } from '../lib/precios'
+import { PLANES_EMPRESA, PLAN_REPARTO, MESES_ANUAL, PARADAS_GRATIS, promoGratis, fechaPromo, precioMes as precioMesPlan, eur,
+  refPromoActiva, fechaRefPromo, eurosRef, BONO_CENT } from '../lib/precios'
 
 function slugify(s) {
   return (s || '').toLowerCase().trim()
@@ -459,6 +460,12 @@ export default function Registro() {
                 ? tt('Después, gratis hasta {n} paradas al día, o sin tope por {precio} €/mes.', { n: PARADAS_GRATIS, precio: displayPrice.toFixed(2).replace('.', ',') })
                 : tt('Sin tope: {precio} €/mes, y los {n} primeros días ya van sin tope.', { precio: displayPrice.toFixed(2).replace('.', ','), n: diasPrueba })}
             </div>
+            {/* 17-10-2026: el bono, también aquí, que es donde se decide (en China no hay cómo pagarlo). */}
+            {refPromoActiva() && !china && (
+              <div data-testid="registro-bono" style={{ fontSize: 13.5, fontWeight: 700, color: '#fcd34d', marginTop: 9, lineHeight: 1.35 }}>
+                🎁 {tt('Y {euros} para ti con tu primera ruta real (20 entregas en 2 días), hasta el {fecha}.', { euros: eurosRef(BONO_CENT, locale()), fecha: fechaRefPromo(locale()) })}
+              </div>
+            )}
           </div>
         ) : (
         <div style={{ background: `${planInfo.color}10`, border: `1px solid ${planInfo.color}35`, borderRadius: 14, padding: '14px 16px', marginBottom: 20, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>

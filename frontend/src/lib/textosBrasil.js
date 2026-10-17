@@ -216,5 +216,6 @@ export const BR = {
   'Un cambio guardado sin cobertura no se pudo enviar': 'Uma alteração salva sem sinal não pôde ser enviada',
   'No se pudo cargar el historial.': 'Não foi possível carregar o histórico.',
   'La última vez ({fecha}): {como}': 'Da última vez ({fecha}): {como}',
+  'Y {euros} para ti con tu primera ruta real (20 entregas en 2 días), hasta el {fecha}.': 'E {euros} para você com sua primeira rota de verdade (20 entregas em 2 dias), até {fecha}.',
   'La última vez ({fecha}) no se pudo: {motivo}': 'Da última vez ({fecha}) não deu: {motivo}',
 }
