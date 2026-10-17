@@ -3355,7 +3355,7 @@ test.describe('Opinión de los repartidores', () => {
       ],
       resumen: { total: 3, media: 2, con_nota: 1, con_texto: 2, pedidas_por_correo: 12, motivos: [{ motivo: 'no_supe', texto: 'No supe cómo meter los paquetes', n: 1 }] },
     } }))
-    await page.goto('/panel/admin', { waitUntil: 'domcontentloaded' })
+    await page.goto('/panel/admin?s=opiniones', { waitUntil: 'domcontentloaded' })
     const s = page.getByRole('region', { name: 'Opiniones de los repartidores' })
     await expect(s.getByText('Se me cierra con la cámara')).toBeVisible()
     await expect(s.getByText('No supe cómo meter los paquetes · 1')).toBeVisible()
@@ -3592,7 +3592,7 @@ test.describe('Mercadillo de repartidores', () => {
       return x.fulfill({ json: { ok: true, visible: true } })
     })
     page.on('dialog', (d) => d.accept())
-    await page.goto('/panel/admin', { waitUntil: 'domcontentloaded' })
+    await page.goto('/panel/admin?s=mercadillo', { waitUntil: 'domcontentloaded' })
     const s = page.getByRole('region', { name: 'Mercadillo de repartidores' })
     await expect(s.getByText(/Oculto: solo lo ves tú/)).toBeVisible()
     await expect(s.getByRole('link', { name: /Verlo como repartidor/ })).toHaveAttribute('href', '/mercadillo')
@@ -3665,5 +3665,33 @@ test('Mercadillo · avisos al móvil: se activan si el móvil deja y, si no, dic
   await interruptor.click()                                       // (check() esperaría a que quede marcado)
   await expect(page.getByRole('alert')).toContainText('bloqueados los avisos')
   await expect(interruptor).not.toBeChecked()
+  expect(fallos).toEqual([])
+})
+
+/* NEGOCIO EN CASILLAS (17-10-2026). Dani: «ordénamelo en cuadraditos que clique y entre». */
+test('Negocio · casillas con lo que hay que hacer; se entra, se vuelve y el enlace lleva directo', async ({ page }) => {
+  const fallos = vigilar(page)
+  await entrarComoAdmin(page, { superAdmin: true })
+  await simularApi(page, 'vacio')
+  await page.route(/\/api\/admin\/mercadillo$/, (x) => x.fulfill({ json: { conf: { visible: true }, por_revisar: [], publicados: [], denuncias: [],
+    motivos_rechazo: {}, motivos_denuncia: {}, categorias: {}, estados_articulo: {}, avisos: { activo: false, movil: false },
+    totales: { por_revisar: 2, publicados: 1, denuncias: 1, conversaciones: 1, vendidos: 0 } } }))
+  await page.route(/\/api\/admin\/cartera\/retiradas/, (x) => x.fulfill({ json: { retiradas: [{ id: 'r1', estado: 'pendiente', importe: 6000, invitados: [] }] } }))
+  await page.goto('/panel/admin', { waitUntil: 'domcontentloaded' })
+  const merc = page.getByRole('button', { name: /^Mercadillo\. 3 por revisar/ })
+  await expect(merc).toBeVisible()
+  await expect(merc).toContainText('3')
+  await expect(page.getByRole('button', { name: /^Pagos de la cartera\. 1 por pagar/ })).toBeVisible()
+  await expect(page.getByRole('button', { name: /^Empresas/ })).toBeVisible()
+  await expect(page.getByText(/undefined|NaN/)).toHaveCount(0)                 // con datos a medias, nunca «undefined»
+  // Nada de listados en el inicio: solo casillas.
+  await expect(page.getByRole('region', { name: 'Mercadillo de repartidores' })).toHaveCount(0)
+  await merc.click()
+  await expect(page).toHaveURL(/\/panel\/admin\?s=mercadillo$/)
+  await expect(page.getByRole('region', { name: 'Mercadillo de repartidores' })).toBeVisible()
+  await expect(page.getByRole('switch', { name: 'Avisarme en el móvil' })).toBeVisible()
+  await page.getByRole('button', { name: 'Negocio', exact: true }).click()
+  await expect(page).toHaveURL(/\/panel\/admin$/)
+  await expect(page.getByRole('button', { name: /^Opiniones/ })).toBeVisible()
   expect(fallos).toEqual([])
 })

@@ -305,6 +305,8 @@ async def test_avisos_al_movil_solo_si_los_quiere_y_sin_el_mensaje(mundo, monkey
     async def push(ids, titulo, cuerpo, url="/panel"):
         pushes.append(SimpleNamespace(ids=ids, titulo=titulo, cuerpo=cuerpo, url=url))
     monkeypatch.setattr(server, "send_web_push_to_users", push)
+    monkeypatch.setattr(server, "_push_enabled", True)
+    mundo.g["push_subscriptions"] = Col([{"endpoint": "e1", "user_id": "d1"}])     # el móvil de Ana, apuntado
     await _abrir(mundo)
     a = await _anuncio(ANA, "Linterna frontal", "9")
     await server.admin_mercadillo_anuncio(a["id"], {"accion": "aprobar"}, DANI)
@@ -326,6 +328,40 @@ async def test_avisos_al_movil_solo_si_los_quiere_y_sin_el_mensaje(mundo, monkey
     n = len(pushes)
     await server.merc_responder(r["conversacion_id"], {"texto": "¿sigue?"}, PEPE)
     assert len(pushes) == n
+
+
+@pytest.mark.asyncio(loop_scope="session")
+async def test_con_el_movil_puesto_no_se_gasta_correo(mundo, monkeypatch):
+    """17-10: «correo vamos a quemar la cuota, mejor que me salte aviso». Al móvil si lo tiene; si no, correo."""
+    pushes = []
+
+    async def push(ids, titulo, cuerpo, url="/panel"):
+        pushes.append(SimpleNamespace(ids=ids, titulo=titulo, url=url))
+    monkeypatch.setattr(server, "send_web_push_to_users", push)
+    monkeypatch.setattr(server, "_push_enabled", True)
+    mundo.g["admin_users"] = Col([{"id": "dani", "super_admin": True}])
+    await _abrir(mundo)
+    # Dani sin los avisos puestos: el anuncio nuevo le llega por correo.
+    a = await _anuncio(ANA, "Gafas", "10")
+    assert mundo.enviados[-1].to == "contacto@x.es" and pushes == []
+    # Con los avisos puestos PERO sin ningún móvil apuntado: sigue por correo (no se pierde nada).
+    await server.merc_avisos_movil({"activo": True}, DANI)
+    antes = len(mundo.enviados)
+    await _anuncio(ANA, "Guantes", "6")
+    assert len(mundo.enviados) == antes + 1 and pushes == []
+    assert (await server.admin_mercadillo(DANI))["avisos"] == {"activo": True, "movil": False}
+    # Con su móvil apuntado: solo al móvil, y al panel donde se aprueba.
+    mundo.g["push_subscriptions"] = Col([{"endpoint": "dani-movil", "user_id": "dani"}, {"endpoint": "ana-movil", "user_id": "d1"}])
+    antes = len(mundo.enviados)
+    await _anuncio(LUIS, "Botas", "15")
+    assert len(mundo.enviados) == antes and pushes[-1].ids == ["dani"] and pushes[-1].url == "/panel/admin?s=mercadillo"
+    assert (await server.admin_mercadillo(DANI))["avisos"] == {"activo": True, "movil": True}
+    # Igual para quien vende: con su móvil puesto, el mensaje le llega al móvil y no por correo.
+    await server.merc_avisos_movil({"activo": True}, ANA)
+    await server.admin_mercadillo_anuncio(a["id"], {"accion": "aprobar"}, DANI)
+    antes = len([e for e in mundo.enviados if e.to == "ana@x.es"])
+    await server.merc_contactar(a["id"], {"texto": "hola"}, PEPE)
+    assert len([e for e in mundo.enviados if e.to == "ana@x.es"]) == antes and pushes[-1].ids == ["d1"]
 
 
 # ── DENUNCIAS (DSA) ─────────────────────────────────────────────────────────

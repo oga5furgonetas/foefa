@@ -19,7 +19,7 @@ const NO_SE_PUDO = {
   'server-disabled': 'Los avisos no están disponibles ahora mismo.',
   error: 'No se han podido activar. Inténtalo otra vez.',
 }
-function AvisosMovil({ activo, onCambio, pregunta }) {
+export function AvisosMovil({ activo, onCambio, pregunta, detalle = 'Cuando alguien te escriba o se revise tu anuncio' }) {
   const [ocupado, setOcupado] = useState(false)
   const [err, setErr] = useState('')
   const cambiar = async (si) => {
@@ -52,7 +52,7 @@ function AvisosMovil({ activo, onCambio, pregunta }) {
         {activo ? <Bell size={19} className="shrink-0 text-brand-300" /> : <BellOff size={19} className="shrink-0 text-dark-400" />}
         <span className="min-w-0 flex-1">
           <span className="block text-[14.5px] font-semibold text-dark-50">Avisarme en el móvil</span>
-          <span className="block text-[12px] leading-snug text-dark-400">Cuando alguien te escriba o se revise tu anuncio</span>
+          <span className="block text-[12px] leading-snug text-dark-400">{detalle}</span>
         </span>
         {ocupado ? <Loader2 size={18} className="animate-spin text-dark-400" /> : (
           <input type="checkbox" role="switch" checked={!!activo} onChange={(e) => cambiar(e.target.checked)}

@@ -1416,3 +1416,13 @@ Dani: «añádeles 10 € de saldo a todo el mundo para que vea que es real».
   se lo ofrece (tras su primer mensaje o al publicar). `mercadillo_prefs.push`; usa la suscripción push de siempre
   (`lib/push.js`, `send_web_push_to_users`). Dice quién escribe y sobre qué anuncio, nunca el mensaje; también
   salta con los avisos de FDS (publicado, rechazado…). En iPhone solo funciona con la app en la pantalla de inicio.
+- **Móvil antes que correo** (Dani, 17-10: «correo vamos a quemar la cuota, mejor que me salte aviso»): a quien
+  tiene los avisos puestos y un móvil apuntado (`_merc_movil_listo`) se le avisa SOLO al móvil; el correo, a quien
+  no (así no se pierde nada). Vale para Dani (anuncios por revisar, denuncias y mensajes de sus anuncios, que le
+  llevan a `/panel/admin?s=mercadillo`) y para todos. Dani lo activa desde su móvil en Negocio → Mercadillo
+  («Avisarme en el móvil»); a las 20:45 del 17-10 aún no tenía ningún móvil apuntado. Push activo en producción.
+- **Negocio en casillas** (Dani: «no me metas más datos en Negocio; ordénamelo en cuadraditos que clique y
+  entre»): el inicio son 16 casillas (Mercadillo, Opiniones, Empresas, Pagos de la cartera, Referidos, Cobros,
+  Facturación, Tarifas, Datos fiscales, Interesados, Reservas fundador, Ofertas del portal, Campaña a
+  candidatos, ¿Hay que ampliar?, Herramientas, Cómo va el negocio) con un globito rojo si hay algo que hacer.
+  Cada una abre su sección (`?s=<id>`) con «← Negocio». Las secciones son las de antes, sin cambios.

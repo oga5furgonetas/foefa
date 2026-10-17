@@ -1,12 +1,13 @@
 import { Fragment, useEffect, useRef, useState } from 'react'
-import { Link, useNavigate } from 'react-router-dom'
+import { useNavigate } from 'react-router-dom'
 import { useT } from '../../i18n'
-import { Foto as FotoMerc, euros as eurosM } from '../../pages/mercadillo/Mercadillo'
+import { Foto as FotoMerc, euros as eurosM, AvisosMovil } from '../../pages/mercadillo/Mercadillo'
 import { Activity,
   Loader2, Building2, CheckCircle2, Clock, Euro, Sparkles, Gift, PauseCircle,
   LogIn, Trash2, Database, BrainCircuit, ExternalLink, RefreshCw, Megaphone,
   Play, Pause, Plus, Star, Eye, MousePointerClick, Tag, Save,
   Receipt, Upload, Check, Undo2, Building, Coins, LayoutGrid, X, Mail, Wallet, Copy,
+  ArrowLeft, Store, MessageSquare, Crown, HeartPulse, ChevronRight,
 } from 'lucide-react'
 import {
   getAdminOverview, getAdminOrgs, getLeads, updateOrg, impersonateOrg, deleteOrg,
@@ -690,6 +691,12 @@ function MercadilloAdmin() {
     </p>
     {err && <p role="alert" className="text-xs text-red-300">{err}</p>}
     {!d ? <Loader2 size={16} className="animate-spin text-dark-500" /> : <>
+      {/* Los avisos de Dani (anuncios por revisar, denuncias, mensajes de sus anuncios): al móvil si los pone aquí
+          desde el móvil; si no, por correo a contacto@ (que gasta cuota). */}
+      <AvisosMovil activo={d.avisos?.activo} onCambio={() => cargar()} detalle="Anuncios por revisar, denuncias y mensajes de tus anuncios" />
+      <p className="-mt-2 text-[12px] text-dark-400">
+        {d.avisos?.movil ? 'Te llegan al móvil, sin gastar correos.' : d.avisos?.activo ? 'Activados, pero ningún móvil apuntado todavía: actívalos desde tu móvil. Mientras, te llegan por correo.' : 'Ahora te llegan por correo a contacto@. Actívalos desde tu móvil y dejarán de gastar correos.'}
+      </p>
       <div className="grid grid-cols-2 gap-2 md:grid-cols-5">
         {[['Por revisar', t.por_revisar], ['Publicados', t.publicados], ['Denuncias', t.denuncias], ['Conversaciones', t.conversaciones], ['Vendidos', t.vendidos]].map(([label, value]) =>
           <div key={label} className="rounded-xl border border-dark-800 bg-dark-900/50 p-3"><p className="text-[10px] font-semibold uppercase tracking-wide text-dark-500">{label}</p><p className="mt-1 text-lg font-bold text-dark-100">{value ?? 0}</p></div>)}
@@ -1024,6 +1031,27 @@ function CampanaCandidatos() {
   )
 }
 
+const plural = (n, uno, varios) => `${n} ${n === 1 ? uno : varios}`
+
+/* Una casilla del inicio de Negocio: icono, nombre, lo justo y un globito rojo si hay algo que hacer. */
+function CasillaNegocio({ icono: Icono, titulo, detalle, aviso, tono, onClick }) {
+  const borde = { brand: 'border-brand-500/40', ambar: 'border-amber-400/50', rojo: 'border-red-500/60' }[tono] || 'border-dark-700'
+  const fondoIcono = { brand: 'bg-brand-500/15 text-brand-300', ambar: 'bg-amber-400/15 text-amber-300', rojo: 'bg-red-500/15 text-red-300' }[tono] || 'bg-dark-800 text-dark-300'
+  return (
+    <button type="button" onClick={onClick} aria-label={detalle ? `${titulo}. ${detalle}` : titulo}
+      className={`card relative flex min-h-[124px] flex-col justify-between border p-4 text-left transition hover:border-brand-500/50 active:scale-[.98] ${borde}`}>
+      {aviso > 0 && (
+        <span className="absolute right-3 top-3 flex h-6 min-w-6 items-center justify-center rounded-full bg-red-500 px-1.5 text-[12px] font-bold text-white">{aviso}</span>
+      )}
+      <span className={`flex h-10 w-10 items-center justify-center rounded-xl ${fondoIcono}`}><Icono size={20} /></span>
+      <span className="mt-3 block">
+        <span className="flex items-center gap-1 text-[15px] font-semibold leading-tight text-dark-50">{titulo} <ChevronRight size={14} className="text-dark-500" /></span>
+        {detalle && <span className="mt-0.5 block text-[12.5px] leading-snug text-dark-400">{detalle}</span>}
+      </span>
+    </button>
+  )
+}
+
 export default function Negocio() {
   const nav = useNavigate()
   const { t } = useT()
@@ -1129,23 +1157,101 @@ export default function Negocio() {
     catch { setMsg('Backup falló') } finally { setBusy('') }
   }
 
+  /* ── NEGOCIO EN CASILLAS (17-10-2026) ─────────────────────────────────────
+     Dani: «no me metas más datos en Negocio; ordénamelo en cuadraditos que clique y entre, igual que ven los
+     conductores pero con mis propias cosas». El inicio son casillas con lo justo (y un globito si hay algo
+     que hacer); cada una abre su sección. `?s=mercadillo` abre una directamente (los avisos llevan ahí). */
+  const [s, setS] = useState(() => new URLSearchParams(window.location.search).get('s') || '')
+  const abrir = (id) => {
+    setS(id)
+    try {
+      const u = new URL(window.location.href)
+      if (id) u.searchParams.set('s', id); else u.searchParams.delete('s')
+      window.history.replaceState(null, '', u.pathname + u.search)
+    } catch { /* nada */ }
+    window.scrollTo?.(0, 0)
+  }
+  const enInicio = !s
+  const [pend, setPend] = useState({})
+  useEffect(() => {
+    if (!enInicio) return
+    adminMercadillo().then(({ data }) => setPend((p) => ({ ...p, merc: (data?.totales?.por_revisar || 0) + (data?.totales?.denuncias || 0),
+      mercPub: data?.totales?.publicados || 0, mercOn: !!data?.conf?.visible }))).catch(() => {})
+    adminRetiradas('pendiente').then(({ data }) => setPend((p) => ({ ...p, retiradas: (data?.retiradas || []).length }))).catch(() => {})
+    adminOpiniones().then(({ data }) => setPend((p) => ({ ...p, opiniones: data?.resumen?.total || 0, media: data?.resumen?.media }))).catch(() => {})
+    getSaludSistema().then(({ data }) => setPend((p) => ({ ...p, salud: data?.urgencia || 'bien' }))).catch(() => {})
+  }, [enInicio])
+  const porLlamar = (founders || []).filter((f) => f.status === 'pending').length
+  const CASILLAS = [
+    { id: 'mercadillo', titulo: 'Mercadillo', icono: Store, tono: 'brand', aviso: pend.merc,
+      detalle: pend.merc ? `${pend.merc} por revisar` : pend.mercOn === undefined ? '' : pend.mercOn ? `Encendido · ${plural(pend.mercPub, 'publicado', 'publicados')}` : 'Apagado' },
+    { id: 'opiniones', titulo: 'Opiniones', icono: MessageSquare, detalle: pend.opiniones === undefined ? '' : `${plural(pend.opiniones, 'opinión', 'opiniones')}${pend.media != null ? ` · media ${String(pend.media).replace('.', ',')}` : ''}` },
+    { id: 'empresas', titulo: 'Empresas', icono: Building2, detalle: ov?.dsps_total != null ? `${plural(ov.dsps_total, 'cliente', 'clientes')} · ${plural(ov.activos || 0, 'activo', 'activos')}` : '' },
+    { id: 'retiradas', titulo: 'Pagos de la cartera', icono: Wallet, tono: pend.retiradas ? 'ambar' : '', aviso: pend.retiradas,
+      detalle: pend.retiradas === undefined ? '' : pend.retiradas ? `${pend.retiradas} por pagar` : 'Nada pendiente' },
+    { id: 'referidos', titulo: 'Referidos', icono: Gift, detalle: 'Invitaciones y premios' },
+    { id: 'cobros', titulo: 'Cobros', icono: Receipt, detalle: ov?.mrr_estimado != null ? `${ov.mrr_estimado} € al mes` : '' },
+    { id: 'facturacion', titulo: 'Facturación', icono: Coins, detalle: 'Furgonetas pagadas' },
+    { id: 'tarifas', titulo: 'Tarifas y planes', icono: Euro, detalle: 'Precios de cada plan' },
+    { id: 'emisor', titulo: 'Tus datos fiscales', icono: Building, detalle: 'Los de las facturas' },
+    { id: 'interesados', titulo: 'Interesados', icono: Sparkles, detalle: leads ? plural(leads.length, 'contacto', 'contactos') : '' },
+    { id: 'fundador', titulo: 'Reservas fundador', icono: Crown, aviso: porLlamar, detalle: founders ? (porLlamar ? `${porLlamar} por llamar` : plural(founders.length, 'reserva', 'reservas')) : '' },
+    { id: 'ofertas', titulo: 'Ofertas del portal', icono: Megaphone, detalle: offers ? plural(offers.filter((o) => o.active).length, 'activa', 'activas') : '' },
+    { id: 'candidatos', titulo: 'Campaña a candidatos', icono: Mail, detalle: 'Correos y bajas' },
+    { id: 'salud', titulo: '¿Hay que ampliar?', icono: HeartPulse, tono: pend.salud === 'critico' ? 'rojo' : pend.salud === 'aviso' ? 'ambar' : '',
+      detalle: { critico: 'Hay que actuar', aviso: 'Míralo pronto', bien: 'Todo bien' }[pend.salud] || '' },
+    { id: 'herramientas', titulo: 'Herramientas', icono: Database, detalle: 'Copia y datos de la IA' },
+    { id: 'analitica', titulo: 'Cómo va el negocio', icono: Activity, detalle: 'Visitas y embudos', ir: '/panel/analitica' },
+  ]
+
+  const actual = CASILLAS.find((c) => c.id === s)
+  if (actual) {
+    return (
+      <div className="mx-auto max-w-6xl">
+        <button onClick={() => abrir('')} className="mb-3 flex items-center gap-1.5 text-sm font-semibold text-dark-400 hover:text-dark-100">
+          <ArrowLeft size={16} /> Negocio
+        </button>
+        <h1 className="mb-4 flex items-center gap-2.5 font-display text-[clamp(22px,2.6vw,30px)] font-semibold leading-none tracking-[-0.02em] text-dark-50">
+          <actual.icono size={24} className="text-brand-300" /> {actual.titulo}
+        </h1>
+        {msg && <div className="mb-3 rounded-lg bg-brand-500/10 px-3 py-2 text-sm text-brand-300">{msg}</div>}
+        {s === 'mercadillo' && <MercadilloAdmin />}
+        {s === 'opiniones' && <Opiniones />}
+        {s === 'retiradas' && <RetiradasCartera />}
+        {s === 'referidos' && <ResumenReferidosConductores />}
+        {s === 'cobros' && <Cobros />}
+        {s === 'tarifas' && <EditorTarifas />}
+        {s === 'emisor' && <DatosEmisor />}
+        {s === 'candidatos' && <CampanaCandidatos />}
+        {s === 'salud' && <SaludSistema />}
+        {s === 'empresas' && seccionEmpresas()}
+        {s === 'facturacion' && seccionFacturacion()}
+        {s === 'interesados' && seccionInteresados()}
+        {s === 'fundador' && seccionFundador()}
+        {s === 'ofertas' && seccionOfertas()}
+        {s === 'herramientas' && seccionHerramientas()}
+      </div>
+    )
+  }
+
   return (
     <div className="mx-auto max-w-6xl">
-      <div className="mb-4 flex items-center justify-between">
-        <h1 className="rise font-display text-[clamp(26px,3vw,36px)] font-semibold leading-none tracking-[-0.03em] text-dark-50">{t('neg.title')}</h1>
-        <div className="flex items-center gap-2">
-          {/* El trafico y los embudos viven en su propia pantalla; aqui estan
-              las cuentas y los cobros. Sin este enlace habia que saberse la URL. */}
-          <Link to="/panel/analitica" className="btn-secondary flex items-center gap-1.5 text-sm">
-            <Activity size={14} /> Cómo va el negocio
-          </Link>
-          <button onClick={load} className="btn-secondary flex items-center gap-1.5 text-sm"><RefreshCw size={14} /> {t('neg.refresh')}</button>
+      <div className="mb-5 flex items-center justify-between gap-3">
+        <div>
+          <h1 className="rise font-display text-[clamp(26px,3vw,36px)] font-semibold leading-none tracking-[-0.03em] text-dark-50">{t('neg.title')}</h1>
+          <p className="mt-1.5 text-[13px] text-dark-400">Lo tuyo, en casillas. El número rojo es lo que tienes que hacer.</p>
         </div>
+        <button onClick={() => { load(); abrir('') }} className="btn-secondary flex items-center gap-1.5 text-sm"><RefreshCw size={14} /> {t('neg.refresh')}</button>
       </div>
-
       {msg && <div className="mb-3 rounded-lg bg-brand-500/10 px-3 py-2 text-sm text-brand-300">{msg}</div>}
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
+        {CASILLAS.map((c) => <CasillaNegocio key={c.id} {...c} onClick={() => (c.ir ? nav(c.ir) : abrir(c.id))} />)}
+      </div>
+    </div>
+  )
 
-      {/* Resumen */}
+  function seccionEmpresas() {
+    return <>
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
         <Kpi icon={Building2} label={t('neg.kpi.clients')} value={ov?.dsps_total ?? '—'} accent="#0ea5e9" />
         <Kpi icon={CheckCircle2} label={t('neg.kpi.active')} value={ov?.activos ?? '—'} accent="#34d399" />
@@ -1153,32 +1259,6 @@ export default function Negocio() {
         <Kpi icon={Euro} label={t('neg.kpi.mrr')} value={ov ? `${ov.mrr_estimado} €` : '—'} accent="#a78bfa" />
         <Kpi icon={Sparkles} label={t('neg.kpi.leads')} value={ov?.interesados ?? '—'} accent="#fb923c" />
       </div>
-
-      <SaludSistema />
-      <EditorTarifas />
-      <Cobros />
-      <DatosEmisor />
-
-      {/* Facturación (honesto: facturas reales en Lemon Squeezy) */}
-      <div className="card mt-4 flex flex-wrap items-center justify-between gap-3 p-4">
-        <div>
-          <h2 className="text-sm font-semibold">{t('neg.billing')}</h2>
-          <p className="text-sm text-dark-400">{t('neg.billing.desc')} <b className="text-dark-100">{ov?.mrr_estimado ?? '—'} €/mes</b>. {t('neg.billing.lemon')}</p>
-        </div>
-        <div className="flex flex-wrap items-center gap-2">
-          {/* Se cobra por furgoneta, así que antes de facturar hay que saber
-              cuántas hay de verdad. Se revisa solo cada día; esto es para
-              mirarlo ahora, que es cuando se factura. */}
-          <button onClick={revisarFacturacion} disabled={revisando}
-            className="btn-ghost flex items-center gap-1.5 text-sm text-dark-400 hover:text-brand-300"
-            title="Compara los vehículos pagados con los que hay en flota, en todas las empresas">
-            {revisando ? <Loader2 size={14} className="animate-spin" /> : <Coins size={14} />} Revisar furgonetas facturadas
-          </button>
-          <a href="https://app.lemonsqueezy.com" target="_blank" rel="noreferrer" className="btn-secondary flex items-center gap-1.5 text-sm">{t('neg.billing.panel')} <ExternalLink size={14} /></a>
-        </div>
-      </div>
-
-      {/* Clientes / DSPs */}
       <h2 className="mb-2 mt-6 text-sm font-semibold uppercase tracking-wide text-dark-500">{t('neg.clients')}</h2>
       {!orgs ? (
         <div className="flex items-center gap-2 text-dark-400"><Loader2 className="animate-spin" size={18} /> {t('neg.loading')}</div>
@@ -1241,9 +1321,34 @@ export default function Negocio() {
           </table>
         </div>
       )}
+    </>
+  }
 
-      {/* Leads */}
-      <h2 className="mb-2 mt-6 text-sm font-semibold uppercase tracking-wide text-dark-500">{t('neg.leads')}</h2>
+  function seccionFacturacion() {
+    return <>
+      {/* Facturación (honesto: facturas reales en Lemon Squeezy) */}
+      <div className="card mt-4 flex flex-wrap items-center justify-between gap-3 p-4">
+        <div>
+          <h2 className="text-sm font-semibold">{t('neg.billing')}</h2>
+          <p className="text-sm text-dark-400">{t('neg.billing.desc')} <b className="text-dark-100">{ov?.mrr_estimado ?? '—'} €/mes</b>. {t('neg.billing.lemon')}</p>
+        </div>
+        <div className="flex flex-wrap items-center gap-2">
+          {/* Se cobra por furgoneta, así que antes de facturar hay que saber
+              cuántas hay de verdad. Se revisa solo cada día; esto es para
+              mirarlo ahora, que es cuando se factura. */}
+          <button onClick={revisarFacturacion} disabled={revisando}
+            className="btn-ghost flex items-center gap-1.5 text-sm text-dark-400 hover:text-brand-300"
+            title="Compara los vehículos pagados con los que hay en flota, en todas las empresas">
+            {revisando ? <Loader2 size={14} className="animate-spin" /> : <Coins size={14} />} Revisar furgonetas facturadas
+          </button>
+          <a href="https://app.lemonsqueezy.com" target="_blank" rel="noreferrer" className="btn-secondary flex items-center gap-1.5 text-sm">{t('neg.billing.panel')} <ExternalLink size={14} /></a>
+        </div>
+      </div>
+    </>
+  }
+
+  function seccionInteresados() {
+    return <>
       {!leads ? null : leads.length === 0 ? (
         <div className="card p-6 text-center text-dark-400">{t('neg.no.leads')}</div>
       ) : (
@@ -1258,11 +1363,11 @@ export default function Negocio() {
           ))}
         </div>
       )}
+    </>
+  }
 
-      {/* Reservas fundador — llamar y cerrar la venta */}
-      <h2 className="mb-2 mt-6 flex items-center gap-1.5 text-sm font-semibold uppercase tracking-wide text-dark-500">
-        <Star size={13} className="text-amber-400" /> Reservas fundador
-      </h2>
+  function seccionFundador() {
+    return <>
       {!founders ? null : founders.length === 0 ? (
         <div className="card p-6 text-center text-sm text-dark-400">
           Aún no hay reservas. La oferta está viva en <a href="/planes" target="_blank" rel="noreferrer" className="text-brand-400 hover:underline">{dominio()}/planes</a> — compártela con empresas que conozcas.
@@ -1283,7 +1388,11 @@ export default function Negocio() {
           ))}
         </div>
       )}
+    </>
+  }
 
+  function seccionOfertas() {
+    return <>
       {/* Ofertas del portal conductor — el espacio patrocinado */}
       <div className="mb-2 mt-6 flex items-center justify-between">
         <h2 className="flex items-center gap-1.5 text-sm font-semibold uppercase tracking-wide text-dark-500">
@@ -1370,9 +1479,11 @@ export default function Negocio() {
           })}
         </div>
       )}
+    </>
+  }
 
-      {/* Herramientas */}
-      <h2 className="mb-2 mt-6 text-sm font-semibold uppercase tracking-wide text-dark-500">{t('neg.tools')}</h2>
+  function seccionHerramientas() {
+    return <>
       <div className="flex flex-wrap gap-3">
         <button onClick={doBackup} disabled={busy === 'backup'} className="btn-secondary flex items-center gap-2 text-sm">
           {busy === 'backup' ? <Loader2 size={15} className="animate-spin" /> : <Database size={15} />} {t('neg.backup')}
@@ -1381,27 +1492,6 @@ export default function Negocio() {
           <BrainCircuit size={15} /> {t('neg.export.ai')}
         </a>
       </div>
-
-      <div className="mt-6">
-        <MercadilloAdmin />
-      </div>
-
-      <div className="mt-6">
-        <Opiniones />
-      </div>
-
-      <div className="mt-6">
-        <ResumenReferidosConductores />
-      </div>
-
-      <div className="mt-6">
-        <RetiradasCartera />
-      </div>
-
-      <div className="mt-6">
-        <CampanaCandidatos />
-      </div>
-    </div>
-  )
+    </>
+  }
 }
-

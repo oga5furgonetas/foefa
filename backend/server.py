@@ -50702,13 +50702,29 @@ async def _merc_push_usuarios(clave: str) -> list:
     return []
 
 
-async def _merc_push(clave: str, titulo: str, cuerpo: str) -> None:
+async def _merc_movil_listo(clave: str) -> list:
+    """Los usuarios a los que SÍ les llegará al móvil: tiene los avisos puestos y algún móvil apuntado. Vacío si no
+    (y entonces se avisa por correo: el correo gasta cuota —Resend da 100 al día—, el móvil no)."""
+    if not (clave and _push_enabled and await _merc_push_activo(clave)):
+        return []
+    ids = await _merc_push_usuarios(clave)
+    if ids and await global_db.push_subscriptions.count_documents({"user_id": {"$in": ids}}):
+        return ids
+    return []
+
+
+async def _merc_push(clave: str, titulo: str, cuerpo: str, ruta: str = "") -> bool:
+    """Aviso al móvil si lo tiene puesto. True si ha salido por el móvil (y así no hace falta el correo)."""
     try:
-        if clave and await _merc_push_activo(clave):
-            ruta = "/conductor?vista=mercadillo" if clave.startswith("d:") else "/mercadillo"
-            await send_web_push_to_users(await _merc_push_usuarios(clave), titulo, cuerpo, ruta)
+        ids = await _merc_movil_listo(clave)
+        if not ids:
+            return False
+        await send_web_push_to_users(ids, titulo, cuerpo,
+                                     ruta or ("/conductor?vista=mercadillo" if clave.startswith("d:") else "/mercadillo"))
+        return True
     except Exception as e:                                       # noqa: BLE001 — un aviso no puede tumbar un mensaje
         logger.warning("aviso al móvil del mercadillo: %s", e)
+        return False
 
 
 def _merc_enlace(clave: str) -> str:
@@ -50723,8 +50739,8 @@ async def _merc_avisar(clave: str, texto: str, asunto: str = "") -> None:
     ahora = datetime.now(timezone.utc).isoformat()
     await global_db[_MERC_AVISOS].insert_one({"id": str(uuid.uuid4()), "para": clave, "texto": texto[:1500],
                                               "ts": ahora, "leido": False})
-    await _merc_push(clave, "Mercadillo", texto[:170])
-    if asunto and clave != "fds":
+    por_movil = await _merc_push(clave, "Mercadillo", texto[:170])
+    if asunto and clave != "fds" and not por_movil:              # al móvil si lo tiene; si no, correo
         correo = await _merc_correo_de(clave)
         if correo:
             cuerpo = f"{texto}\n\nLo tienes en el mercadillo: {_merc_enlace(clave)}"
@@ -50737,11 +50753,14 @@ async def _merc_avisar(clave: str, texto: str, asunto: str = "") -> None:
 
 
 async def _merc_a_dani(asunto: str, texto: str) -> None:
-    """Lo que tiene que revisar Dani (anuncios nuevos, denuncias), al buzón de contacto."""
+    """Lo que tiene que revisar Dani (anuncios nuevos, denuncias): al móvil si lo tiene puesto (Dani, 17-10:
+    «correo vamos a quemar la cuota, mejor que me salte aviso»); si no, al buzón de contacto."""
+    if await _merc_push("fds", asunto.replace("Mercadillo: ", "Mercadillo · ")[:80], texto[:170], "/panel/admin?s=mercadillo"):
+        return
     para = (CORREO_CONTACTO or "").strip()
     if not _correo_valido(para):
         return
-    cuerpo = f"{texto}\n\nRevísalo en Negocio → Mercadillo: {_PORTAL_BASE_FRONT}/panel/admin"
+    cuerpo = f"{texto}\n\nRevísalo en Negocio → Mercadillo: {_PORTAL_BASE_FRONT}/panel/admin?s=mercadillo"
     try:
         await _enviar_email(para, asunto, "<div style=\"font-family:Arial,sans-serif;font-size:15px;"
                             "line-height:1.6\">" + html_escape(cuerpo).replace("\n", "<br>") + "</div>", texto=cuerpo)
@@ -50969,9 +50988,10 @@ async def _merc_escribir(c: dict, yo: dict, texto: str) -> dict:
         "$set": {"ultimo": m["ts"], "ultimo_de": yo["clave"], "ultimo_texto": texto[:120],
                  f"sin_leer.{_merc_k(yo['clave'])}": 0},                  # quien escribe ya lo ha leído todo
         "$inc": {f"sin_leer.{_merc_k(otro['clave'])}": 1}})
-    await _merc_push(otro["clave"], f"Mercadillo · {yo['nombre']}",
-                     f"Te ha escrito sobre «{c.get('anuncio_titulo') or 'un anuncio'}». Toca para leerlo.")
-    if lo_tenia_leido or not avisado or ahora - avisado > _MERC_CORREO_CADA:
+    por_movil = await _merc_push(otro["clave"], f"Mercadillo · {yo['nombre']}",
+                                 f"Te ha escrito sobre «{c.get('anuncio_titulo') or 'un anuncio'}». Toca para leerlo.")
+    # Con el aviso al móvil basta; el correo, solo a quien no lo tiene (gasta cuota).
+    if not por_movil and (lo_tenia_leido or not avisado or ahora - avisado > _MERC_CORREO_CADA):
         # Dani (el super-admin, «fds») también vende: a él se le avisa en el buzón de contacto.
         correo = ((CORREO_CONTACTO or "").strip() if otro["clave"] == "fds" else await _merc_correo_de(otro["clave"]))
         correo = correo if _correo_valido(correo) else ""
@@ -51157,6 +51177,8 @@ async def admin_mercadillo(_: dict = Depends(require_superadmin)):
             den["mensajes"] = [{"de": nombres.get(m["de"], "?"), "texto": m["texto"], "ts": m["ts"]}
                                for m in sorted(msgs, key=lambda m: m["ts"])]
     return {"conf": await _merc_conf(), "por_revisar": por_revisar, "publicados": publicados, "denuncias": denuncias,
+            # ¿A Dani le llegan los avisos al móvil (puestos y con un móvil apuntado) o por correo?
+            "avisos": {"activo": await _merc_push_activo("fds"), "movil": bool(await _merc_movil_listo("fds"))},
             "motivos_rechazo": mercadillo.MOTIVOS_RECHAZO, "motivos_denuncia": mercadillo.MOTIVOS_DENUNCIA,
             "categorias": mercadillo.CATEGORIAS, "estados_articulo": mercadillo.ESTADOS_ARTICULO,
             "totales": {"publicados": len(publicados), "por_revisar": len(por_revisar), "denuncias": len(denuncias),
