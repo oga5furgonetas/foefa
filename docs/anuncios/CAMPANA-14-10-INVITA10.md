@@ -78,6 +78,17 @@ atrae cuentas falsas, y lo que hace falta es que metan su ruta (solo 1 de 14 alt
 **Descripción:** Gratis y sin límite hasta el 31-12 · sin tarjeta · 10 € por tu primera ruta + 10 € por amigo
 **URL:** igual (`utm_content=gana10`), para comparar con lo de antes.
 
+## Textos «bono» v2 (17-10, mediodía): 5 + 5 + 5 para un solo anuncio con varias opciones de texto
+
+Página con botón de copiar para Dani: https://claude.ai/artifact/8Lkvn3mTZSjpYVHhn7Nwoq (privada, suya).
+URL: `https://flotadsp.com/repartidores?utm_source=facebook&utm_medium=cpc&utm_campaign=rep_bono&utm_content=textos`
+Botón «Registrarte». Ángulos de los 5 textos: A el regalo primero · B la ruta a ojo · C todo en una app (con
+«sin cobertura») · D tú y tus compañeros (10 € cada uno) · E última promo. Todos dicen la condición (20 entregas
+en 2 días) junto al importe. Titulares: «10 € por tu primera ruta», «Tu ruta de reparto, ordenada sola»,
+«Gratis y 10 € de regalo», «Foto a la etiqueta y a repartir», «La app gratis para repartidores».
+Descripciones: «Gratis · sin tarjeta», «Hasta el 31 de diciembre», «Última promoción así», «10 € + 10 € por
+amigo», «Sin tope de paradas». Medir con `utm_content=textos` frente a `gana10`.
+
 ## Qué NO dice y por qué
 
 - No dice el mínimo de retirada (60 €): lo pidió Dani; está en las condiciones (Terminos 5 bis) y la app lo
