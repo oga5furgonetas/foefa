@@ -1241,3 +1241,42 @@ intentar retirar, promoción hasta el 31-10-2026.
   propósito, ver fly.toml). Si `mongo_connected` es false y desde el PC sí conecta, mirar Atlas → Activity
   Feed → «Network permission entry removed». Desde el PC la cadena buena es `~/.flota-mongo-uri.txt`
   (`~/.flotia-mongo.txt.txt` es vieja: «bad auth»).
+
+## 17-10-2026: bono de 10 € por la primera ruta, promo hasta el 31-12, app más «app», entregar sin cobertura
+
+- **Uso real (17-10, 02:00)**: 31 autónomos reales; 26 abrieron la app en 7 días; 11 volvieron otro día; 9 con
+  paradas suyas, 6 con entregas; el que más, Barry (40 paradas, 12 entregadas). Las 14 altas del anuncio
+  «gana10» (14-15/10) miraron el ejemplo y no metieron ruta (1 sola parada entre todas). La caída del 15 al 17
+  les pilló justo el día siguiente.
+- **Promo «Invita y gana» hasta el 31-12-2026** (antes 31-10) y **bono de bienvenida**: 10 € a la cartera de
+  quien reparte solo cuando hace su primera ruta de verdad (20 entregas reales en 2 días distintos, la vara
+  de «Invita y gana»), una vez por cuenta, para altas hasta el 31-12 (las de antes del 17-10, con su mes
+  contado desde el 17-10). Misma red que otra que ya lo cobró → a revisar (`bono_sospechoso`). Movimiento de
+  cartera `tipo: "bienvenida"`; `organizations.bono_pagado/_en/_cent`. `/reparto/mi-ruta` devuelve `bono`
+  (progreso) y `/referidos` su resumen. Dani pidió «10 € por registrarse»: se le explicó por qué es por la
+  primera ruta (cuentas falsas; y es justo lo que empuja a meter la ruta).
+- **App**: tarjeta «10 € por tu primera ruta real» con barra (entregas y días; «las de ejemplo no cuentan»;
+  ganado → cartera), línea del bono en la cartera, portada con los dos premios, Terminos 5 bis con el bono,
+  Empleo e Invita. Correos del ciclo: párrafo del bono en bienvenida/primer_dia/recordatorio y correo «bono»
+  (una vez, por la mañana) a las altas de antes; aviso push de la mañana con el bono. «primer_dia» ya no dice
+  «Ayer» si fue hace días. Simulado contra producción: el 17-10 por la mañana salían 13 «primer_dia» + 21 «bono».
+- **Correo masivo a candidatos: NO enviado.** Dani lo pidió, pero ninguno de los 316 (272 correos) aceptó
+  publicidad: 189 vieron la casilla «Novedades FDS» y no la marcaron, 127 vienen de JOIN. Sería spam (LSSI
+  art. 21 + RGPD) y Resend puede cerrar la cuenta (y con ella los correos de la app). La casilla del formulario
+  ahora dice «novedades y promociones… el bono de 10 €»: a quien la marque (`novedades_fds: true`) sí se le
+  puede escribir (`/admin/candidatos/campana-bienvenida` ya filtra por eso).
+- **Más app que web** (`RutaApp.jsx`, `index.css`): en el tema híbrido /ruta heredaba el marco oscuro del panel
+  (esquina negra, barra de pestañas oscura): ahora toda la app es el `<main>` y la pestaña un `<div>`; fundido
+  al cambiar de pestaña (`.ruta-entra`, relleno «backwards» para no tapar las hojas); tirar para actualizar en
+  «Hoy» (no en el mapa ni con ventanas); botones sin selección de texto. Historial ya no enseña «{total}» si falla.
+- **Entregar sin cobertura** (`MiRuta.jsx`, cola `fds_cola_entregas` en localStorage con la cuenta): sin red o
+  con 502/503/504, el cambio se guarda en el móvil, se ve hecho, aviso con «Enviar ahora», se manda solo al
+  volver la red y cada 20 s; deshacer lo no enviado lo olvida. El servidor acepta `hecho_en` (últimas 12 h).
+- Gotchas de esta tanda: Playwright sirve `frontend/dist` tal cual (si es la del despliegue lleva píxeles →
+  sale el aviso de cookies y fallan 26 tests): `npx vite build` antes de los e2e. En Git Bash, `grep -c $'\r$'`
+  miente: los finales de línea, con `git ls-files --eol`. En MiRuta hay un estado `yo` (la posición): no usar
+  ese nombre para funciones de módulo. El deploy del frontend desde Bash: `powershell.exe -NoProfile
+  -ExecutionPolicy Bypass -File scripts/deploy-frontend.ps1` (con `2>&1` en PowerShell 5.1 falla por stderr).
+- **Pendiente**: pegar en el anuncio de Meta los textos «bono» de CAMPANA-14-10-INVITA10.md (la extensión de
+  Chrome se desconectó de madrugada). Medir el 19-10: `origen_altas.py 3` y cuántos «primer_dia/bono» abren y
+  cargan paradas.

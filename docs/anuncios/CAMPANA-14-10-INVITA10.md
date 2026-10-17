@@ -52,6 +52,32 @@ se anuncian: en España salen pocas y no está comprobado contra Overpass real.
 
 **Latinoamérica (si se abre el conjunto):** igual, con «Lo cobras por PayPal», «celular» y «toma una foto».
 
+## Textos (versión «bono», 17-10: 10 € por la primera ruta + 10 € por amigo, hasta el 31-12) — PENDIENTE DE PEGAR
+
+Dani (17-10): «que ganan 10 € por registrarse y por cada amigo que traigan 10 € más, hasta el 31 de diciembre».
+El bono se gana con la primera ruta de verdad (20 entregas en 2 días), no con el alta: pagar por registrarse
+atrae cuentas falsas, y lo que hace falta es que metan su ruta (solo 1 de 14 altas del 14-10 lo hizo).
+
+**Texto principal (ES):**
+
+> 🚚 ¿Repartes paquetes? Hay una app nueva que te hace sola el trabajo pesado del día.
+>
+> FDS ordena tu ruta sola:
+> 📸 Foto a la etiqueta o escanea el paquete: la dirección y el teléfono entran solos.
+> 🗺️ Todas tus paradas ordenadas por tiempo, con el tráfico de cada hora. Sin tope de paradas.
+> 🔊 Te guía con voz hasta cada puerta y, en Android, manos libres: dices «entregado» y sigues.
+> 📶 ¿Sin cobertura en un garaje? Marca la entrega igual: se envía sola al volver la señal.
+> 💶 Cuánto llevas ganado hoy y lo que se va en gasolina.
+>
+> Gratis y sin límite hasta el 31 de diciembre. Sin tarjeta.
+>
+> 🎁 Y hasta el 31 de diciembre: 10 € para ti con tu primera ruta real (20 entregas en 2 días) y 10 € más por
+> cada compañero que invites y la use. Lo cobras por Bizum o transferencia.
+
+**Titular:** Tu ruta ordenada sola · 10 € por tu primera ruta
+**Descripción:** Gratis y sin límite hasta el 31-12 · sin tarjeta · 10 € por tu primera ruta + 10 € por amigo
+**URL:** igual (`utm_content=gana10`), para comparar con lo de antes.
+
 ## Qué NO dice y por qué
 
 - No dice el mínimo de retirada (60 €): lo pidió Dani; está en las condiciones (Terminos 5 bis) y la app lo
