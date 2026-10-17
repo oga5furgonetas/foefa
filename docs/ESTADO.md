@@ -1404,3 +1404,15 @@ Dani: «añádeles 10 € de saldo a todo el mundo para que vea que es real».
     Privacidad (datos, base jurídica, plazos de borrado). El chequeo de marca no deja nombrar a Amazon: se dice «la
     plataforma para la que repartes».
   - El login acepta `?next=/ruta-interna` (solo rutas de esta web).
+- **17-10, 19:45: ENCENDIDO** (`mercadillo_conf.visible` true) tras revisarlo y verificarlo en producción con un
+  script contra la base real (`verificar_mercadillo.py` en el scratchpad: 16 comprobaciones con personas de prueba,
+  sin correos ni avisos, y lo borra todo al acabar). El iPhone 18 Pro de Dani (1.300 €) está publicado.
+- Revisión de esa tarde: (1) el vigilante de bucles daba por muerta la limpieza (late cada 6 h y el vigilante
+  espera 30 min por defecto) → `_latido(..., cada_min=360)`; (2) a Dani («fds») no le llegaba ningún aviso de los
+  mensajes de SUS anuncios → van al buzón de contacto; (3) el correo de «tienes un mensaje» sale con el primer
+  mensaje sin leer y, mientras siga sin leer, como mucho uno cada 6 h; (4) «Vender» podía pasarse de 6 fotos
+  si se elegían mientras otras se subían.
+- **Avisos al móvil** (Dani: «si quiere que le salte en el móvil»): cada uno los activa en Mensajes o cuando la app
+  se lo ofrece (tras su primer mensaje o al publicar). `mercadillo_prefs.push`; usa la suscripción push de siempre
+  (`lib/push.js`, `send_web_push_to_users`). Dice quién escribe y sobre qué anuncio, nunca el mensaje; también
+  salta con los avisos de FDS (publicado, rechazado…). En iPhone solo funciona con la app en la pantalla de inicio.

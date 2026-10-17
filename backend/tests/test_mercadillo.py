@@ -271,6 +271,63 @@ async def test_correo_de_aviso_como_mucho_cada_6_horas(mundo):
     assert len([e for e in mundo.enviados[antes:] if e.to == "ana@x.es"]) == 1
 
 
+@pytest.mark.asyncio(loop_scope="session")
+async def test_si_ya_lo_habia_leido_el_siguiente_mensaje_vuelve_a_avisar(mundo):
+    await _abrir(mundo)
+    a = await _anuncio(ANA, "Mochila", "12")
+    await server.admin_mercadillo_anuncio(a["id"], {"accion": "aprobar"}, DANI)
+    r = await server.merc_contactar(a["id"], {"texto": "hola"}, PEPE)
+    await server.merc_conversacion(r["conversacion_id"], ANA)               # Ana lo lee…
+    await server.merc_responder(r["conversacion_id"], {"texto": "sí"}, ANA)
+    antes = len([e for e in mundo.enviados if e.to == "ana@x.es"])
+    await server.merc_responder(r["conversacion_id"], {"texto": "¿cuándo?"}, PEPE)   # …y le llega el nuevo
+    assert len([e for e in mundo.enviados if e.to == "ana@x.es"]) == antes + 1
+
+
+@pytest.mark.asyncio(loop_scope="session")
+async def test_a_dani_le_llegan_los_mensajes_de_sus_anuncios(mundo):
+    """17-10: Dani vende su iPhone como «fds»: antes no se le avisaba de nada."""
+    await _abrir(mundo)
+    a = await _anuncio(DANI, "iPhone 18 Pro · 256 GB", "1.300")
+    await server.admin_mercadillo_anuncio(a["id"], {"accion": "aprobar"}, DANI)
+    await server.merc_contactar(a["id"], {"texto": "¿Lo tienes aún?"}, ANA)
+    correo = mundo.enviados[-1]
+    assert correo.to == "contacto@x.es" and "iPhone 18 Pro" in correo.subject and "¿Lo tienes aún?" not in correo.texto
+    buzon = await server.merc_buzon(DANI)
+    assert buzon["conversaciones"][0]["sin_leer"] is True and buzon["conversaciones"][0]["con"] == "Ana P."
+
+
+@pytest.mark.asyncio(loop_scope="session")
+async def test_avisos_al_movil_solo_si_los_quiere_y_sin_el_mensaje(mundo, monkeypatch):
+    """17-10: «si quiere que le salte en el móvil, que reciba notificaciones»."""
+    pushes = []
+
+    async def push(ids, titulo, cuerpo, url="/panel"):
+        pushes.append(SimpleNamespace(ids=ids, titulo=titulo, cuerpo=cuerpo, url=url))
+    monkeypatch.setattr(server, "send_web_push_to_users", push)
+    await _abrir(mundo)
+    a = await _anuncio(ANA, "Linterna frontal", "9")
+    await server.admin_mercadillo_anuncio(a["id"], {"accion": "aprobar"}, DANI)
+    r = await server.merc_contactar(a["id"], {"texto": "dato secreto 666"}, PEPE)
+    assert pushes == []                                                    # no los ha pedido: nada
+    assert (await server.merc_estado(ANA))["avisos_movil"] is False
+    assert (await server.merc_avisos_movil({"activo": True}, ANA))["avisos_movil"] is True
+    assert (await server.merc_estado(ANA))["avisos_movil"] is True
+    await server.merc_responder(r["conversacion_id"], {"texto": "otro dato secreto 777"}, PEPE)
+    p = pushes[-1]
+    assert p.ids == ["d1"] and p.url == "/conductor?vista=mercadillo"
+    assert "Pepe P." in p.titulo and "Linterna frontal" in p.cuerpo and "777" not in p.cuerpo + p.titulo
+    # Los avisos de FDS (publicado, rechazado…) también le saltan.
+    b2 = await _anuncio(ANA, "Funda", "5")
+    await server.admin_mercadillo_anuncio(b2["id"], {"accion": "aprobar"}, DANI)
+    assert "ya está publicado" in pushes[-1].cuerpo
+    # Y lo puede quitar.
+    await server.merc_avisos_movil({"activo": False}, ANA)
+    n = len(pushes)
+    await server.merc_responder(r["conversacion_id"], {"texto": "¿sigue?"}, PEPE)
+    assert len(pushes) == n
+
+
 # ── DENUNCIAS (DSA) ─────────────────────────────────────────────────────────
 @pytest.mark.asyncio(loop_scope="session")
 async def test_denuncia_acuse_ocultar_con_tres_y_decision(mundo):

@@ -290,3 +290,4 @@ export const mercConversacion = (id) => api.get(`/mercadillo/conversacion/${id}`
 export const mercResponder = (id, texto) => api.post(`/mercadillo/conversacion/${id}`, { texto })
 export const mercAvisosLeidos = () => api.post('/mercadillo/avisos/leidos')
 export const mercDenunciar = (d) => api.post('/mercadillo/denunciar', d)
+export const mercAvisosMovil = (activo) => api.post('/mercadillo/avisos-movil', { activo })

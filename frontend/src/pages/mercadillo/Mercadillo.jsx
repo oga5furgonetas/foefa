@@ -1,13 +1,68 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import {
   ArrowLeft, Plus, MessageCircle, Tag, ShieldCheck, Flag, Send, Loader2, X, Check, ImagePlus, ChevronRight,
-  Info, Eye, BadgeCheck, Store,
+  Info, Eye, BadgeCheck, Store, Bell, BellOff,
 } from 'lucide-react'
 import {
   mercEstado, mercLista, mercAnuncio, mercSubirFoto, mercFotoBlob, mercCrear, mercCambiar, mercContactar,
-  mercBuzon, mercConversacion, mercResponder, mercAvisosLeidos, mercDenunciar,
+  mercBuzon, mercConversacion, mercResponder, mercAvisosLeidos, mercDenunciar, mercAvisosMovil,
 } from '../../services/api'
 import { compressImage } from '../../lib/compressImage'
+import { enablePush } from '../../lib/push'
+
+/* AVISOS AL MÓVIL (17-10-2026). Dani: «si quiere que le salte en el móvil, que reciba notificaciones». Lo elige
+   cada uno: aquí se pide el permiso del navegador y se apunta en el servidor. El aviso dice quién escribe y sobre
+   qué anuncio, nunca el mensaje. */
+const NO_SE_PUDO = {
+  denied: 'El móvil tiene bloqueados los avisos de esta web. Actívalos en los ajustes del navegador y vuelve a probar.',
+  unsupported: 'Este navegador no permite avisos. En iPhone, primero añade la app a la pantalla de inicio y ábrela desde ahí.',
+  'server-disabled': 'Los avisos no están disponibles ahora mismo.',
+  error: 'No se han podido activar. Inténtalo otra vez.',
+}
+function AvisosMovil({ activo, onCambio, pregunta }) {
+  const [ocupado, setOcupado] = useState(false)
+  const [err, setErr] = useState('')
+  const cambiar = async (si) => {
+    setOcupado(true); setErr('')
+    try {
+      if (si) {
+        const r = await enablePush()
+        if (r !== 'ok') { setErr(NO_SE_PUDO[r] || NO_SE_PUDO.error); return }
+      }
+      const { data } = await mercAvisosMovil(si)
+      onCambio?.(!!data?.avisos_movil)
+    } catch { setErr(NO_SE_PUDO.error) } finally { setOcupado(false) }
+  }
+  if (pregunta) {
+    if (activo) return null
+    return (
+      <div className="mt-3 rounded-2xl border border-brand-400/40 bg-brand-500/[.08] p-3">
+        <p className="flex items-center gap-2 text-[14px] font-semibold text-dark-50"><Bell size={17} className="shrink-0 text-brand-300" /> {pregunta}</p>
+        {err && <p role="alert" className="mt-1.5 text-[12.5px] text-red-300">{err}</p>}
+        <button type="button" onClick={() => cambiar(true)} disabled={ocupado}
+          className="mt-2 flex items-center gap-2 rounded-xl bg-brand-500 px-3.5 py-2 text-[14px] font-bold text-brand-tinta disabled:opacity-50">
+          {ocupado && <Loader2 size={14} className="animate-spin" />} Sí, avísame en el móvil
+        </button>
+      </div>
+    )
+  }
+  return (
+    <div className="mb-4 rounded-2xl border border-dark-700 bg-dark-900 p-3">
+      <label className="flex cursor-pointer items-center gap-3">
+        {activo ? <Bell size={19} className="shrink-0 text-brand-300" /> : <BellOff size={19} className="shrink-0 text-dark-400" />}
+        <span className="min-w-0 flex-1">
+          <span className="block text-[14.5px] font-semibold text-dark-50">Avisarme en el móvil</span>
+          <span className="block text-[12px] leading-snug text-dark-400">Cuando alguien te escriba o se revise tu anuncio</span>
+        </span>
+        {ocupado ? <Loader2 size={18} className="animate-spin text-dark-400" /> : (
+          <input type="checkbox" role="switch" checked={!!activo} onChange={(e) => cambiar(e.target.checked)}
+            aria-label="Avisarme en el móvil" className="h-5 w-5 shrink-0" />
+        )}
+      </label>
+      {err && <p role="alert" className="mt-2 text-[12.5px] text-red-300">{err}</p>}
+    </div>
+  )
+}
 
 /* ── EL MERCADILLO DE REPARTIDORES (17-10-2026) ─────────────────────────────────
    Dani: «¿quieres vender algo que no uses por si un compañero lo quiere?», que lo apruebe él, y que se
@@ -281,7 +336,8 @@ function Vender({ cats, estados, previo, onBack, onHecho, onNormas }) {
   const [enviando, setEnviando] = useState(false)
   const campo = (k) => (e) => setF((x) => ({ ...x, [k]: e.target.value }))
   const elegir = async (e) => {
-    const lista = [...(e.target.files || [])].slice(0, 6 - fotos.length)
+    // Contando las que aún se están subiendo: si no, eligiendo dos veces seguidas se pasaba de 6.
+    const lista = [...(e.target.files || [])].slice(0, Math.max(0, 6 - fotos.length - subiendo))
     e.target.value = ''
     setErr('')
     for (const file of lista) {
@@ -421,7 +477,7 @@ function MisAnuncios({ mios, onBack, onEditar, onAbrir, recargar, onVender }) {
 }
 
 /* ── El buzón ── */
-function Buzon({ onBack, onChat }) {
+function Buzon({ onBack, onChat, avisos, onAvisos }) {
   const [d, setD] = useState(null)
   const [err, setErr] = useState('')
   useEffect(() => {
@@ -433,6 +489,7 @@ function Buzon({ onBack, onChat }) {
   return (
     <div>
       <Cabecera titulo="Mensajes" sub="Privados entre quien compra y quien vende" onBack={onBack} />
+      <AvisosMovil activo={avisos} onCambio={onAvisos} />
       {err && <p role="alert" className="text-[13px] text-red-300">{err}</p>}
       {!d ? !err && <Loader2 className="mx-auto mt-10 animate-spin text-dark-500" /> : (
         <>
@@ -477,7 +534,7 @@ function Buzon({ onBack, onChat }) {
 }
 
 /* ── Una conversación ── */
-function Chat({ id, motivos, onBack, onAnuncio }) {
+function Chat({ id, motivos, onBack, onAnuncio, avisos, onAvisos }) {
   const [d, setD] = useState(null)
   const [msg, setMsg] = useState('')
   const [err, setErr] = useState('')
@@ -524,6 +581,7 @@ function Chat({ id, motivos, onBack, onAnuncio }) {
           </li>
         ))}
       </ul>
+      {d.mensajes.some((m) => m.mio) && <AvisosMovil activo={avisos} onCambio={onAvisos} pregunta="¿Te avisamos en el móvil cuando te contesten?" />}
       <div ref={fin} />
       {denunciar && <Denunciar motivos={motivos} objetivo={{ conversacion_id: id }} onCerrar={() => setDenunciar(false)} />}
       <div className="fixed inset-x-0 bottom-0 z-30 border-t border-dark-800 bg-dark-950/95 px-4 pb-[max(12px,env(safe-area-inset-bottom))] pt-3 backdrop-blur">
@@ -570,8 +628,9 @@ export default function Mercadillo({ onBack, inicio = 'lista' }) {
   const estadosTxt = datos?.estados_articulo
   if (actual.v === 'normas') return <Marco><Normas onBack={atras} /></Marco>
   if (actual.v === 'anuncio') return <Marco><Ficha id={actual.id} {...comun} estados={estadosTxt} onBack={atras} onChat={(c) => ir({ v: 'chat', id: c })} onEditar={(a) => ir({ v: 'vender', previo: a })} /></Marco>
-  if (actual.v === 'chat') return <Marco><Chat id={actual.id} {...comun} onBack={atras} onAnuncio={(a) => ir({ v: 'anuncio', id: a })} /></Marco>
-  if (actual.v === 'buzon') return <Marco><Buzon onBack={atras} onChat={(c) => ir({ v: 'chat', id: c })} /></Marco>
+  const avisos = { avisos: !!estado?.avisos_movil, onAvisos: (v) => setEstado((e) => ({ ...(e || {}), avisos_movil: v })) }
+  if (actual.v === 'chat') return <Marco><Chat id={actual.id} {...comun} {...avisos} onBack={atras} onAnuncio={(a) => ir({ v: 'anuncio', id: a })} /></Marco>
+  if (actual.v === 'buzon') return <Marco><Buzon {...avisos} onBack={atras} onChat={(c) => ir({ v: 'chat', id: c })} /></Marco>
   if (actual.v === 'vender') {
     return (
       <Marco>
@@ -585,6 +644,7 @@ export default function Mercadillo({ onBack, inicio = 'lista' }) {
     return (
       <Marco>
         {actual.recien && <p role="status" className="mb-3 rounded-2xl bg-emerald-500/15 px-3 py-2.5 text-[14px] font-semibold text-emerald-100">Enviado. Lo revisamos y te avisamos en tu buzón cuando salga.</p>}
+        {actual.recien && <div className="mb-3"><AvisosMovil {...{ activo: !!estado?.avisos_movil, onCambio: (v) => setEstado((e) => ({ ...(e || {}), avisos_movil: v })) }} pregunta="¿Te avisamos en el móvil cuando salga o alguien se interese?" /></div>}
         <MisAnuncios mios={datos?.mios || []} onBack={atras} recargar={recargar} onAbrir={(id) => ir({ v: 'anuncio', id })}
           onEditar={(a) => ir({ v: 'vender', previo: a })} onVender={() => ir({ v: 'vender' })} />
       </Marco>

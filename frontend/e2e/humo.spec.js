@@ -3630,3 +3630,40 @@ test('Panel · el recuadro del mercadillo sale a la oficina solo si está abiert
   await expect(page.getByRole('link', { name: /Mercadillo de repartidores/ })).toHaveCount(0)
   expect(fallos).toEqual([])
 })
+
+test('Mercadillo · avisos al móvil: se activan si el móvil deja y, si no, dice por qué', async ({ page }) => {
+  const fallos = vigilar(page)
+  await entrarComoAdmin(page, { superAdmin: true })
+  await simularApi(page, 'vacio')
+  // El permiso y la suscripción del navegador, simulados (en las pruebas no hay servicio de avisos de verdad).
+  await page.addInitScript(() => {
+    window.__permiso = 'granted'
+    window.Notification = { requestPermission: async () => window.__permiso, permission: 'default' }
+    const sub = { endpoint: 'https://push.example/1', toJSON: () => ({ endpoint: 'https://push.example/1', keys: {} }) }
+    const reg = { pushManager: { getSubscription: async () => sub, subscribe: async () => sub } }
+    Object.defineProperty(navigator, 'serviceWorker', { value: { register: async () => reg, ready: Promise.resolve(reg), getRegistration: async () => reg }, configurable: true })
+    window.PushManager = function PushManager() {}
+  })
+  const hechos = []
+  await page.route(/\/api\/push\/vapid-key/, (x) => x.fulfill({ json: { enabled: true, key: 'AAAA' } }))
+  await page.route(/\/api\/push\/subscribe/, (x) => { hechos.push('suscrito'); return x.fulfill({ json: { ok: true } }) })
+  await page.route(/\/api\/mercadillo\/estado/, (x) => x.fulfill({ json: { visible: true, abierto: true, sin_leer: 0, avisos_movil: false } }))
+  await page.route(/\/api\/mercadillo(\?.*)?$/, (x) => x.fulfill({ json: { anuncios: [], mios: [], categorias: {}, estados_articulo: {}, motivos_denuncia: {} } }))
+  await page.route(/\/api\/mercadillo\/buzon/, (x) => x.fulfill({ json: { conversaciones: [], avisos: [] } }))
+  await page.route(/\/api\/mercadillo\/avisos-movil/, (x) => { hechos.push(x.request().postDataJSON()); return x.fulfill({ json: { avisos_movil: x.request().postDataJSON().activo } }) })
+  await page.goto('/mercadillo', { waitUntil: 'domcontentloaded' })
+  await page.getByRole('button', { name: 'Mensajes' }).click()
+  const interruptor = page.getByRole('switch', { name: 'Avisarme en el móvil' })
+  await expect(interruptor).not.toBeChecked()
+  await interruptor.check()
+  await expect(interruptor).toBeChecked()
+  expect(hechos).toEqual(['suscrito', { activo: true }])
+  await interruptor.uncheck()
+  await expect(interruptor).not.toBeChecked()
+  expect(hechos[2]).toEqual({ activo: false })
+  await page.evaluate(() => { window.__permiso = 'denied' })
+  await interruptor.click()                                       // (check() esperaría a que quede marcado)
+  await expect(page.getByRole('alert')).toContainText('bloqueados los avisos')
+  await expect(interruptor).not.toBeChecked()
+  expect(fallos).toEqual([])
+})

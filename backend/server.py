@@ -50682,6 +50682,35 @@ async def _merc_correo_de(clave: str) -> str:
         return ""
 
 
+# ── AVISOS AL MÓVIL (17-10-2026) ─────────────────────────────────────────────
+# Dani: «si quiere que le salte en el móvil, que reciba notificaciones». Lo ELIGE cada uno en el mercadillo
+# (`mercadillo_prefs.push`); el permiso del móvil lo da el propio navegador. El aviso dice quién escribe y sobre
+# qué anuncio, NUNCA el mensaje: la pantalla de bloqueo la ve cualquiera.
+async def _merc_push_activo(clave: str) -> bool:
+    p = await global_db.mercadillo_prefs.find_one({"clave": clave}, {"_id": 0, "push": 1}) or {}
+    return bool(p.get("push"))
+
+
+async def _merc_push_usuarios(clave: str) -> list:
+    """Los usuarios (como guarda el móvil su suscripción) de una persona del mercadillo."""
+    if clave.startswith("d:") or clave.startswith("a:"):
+        return [clave.split(":", 2)[2]]
+    if clave.startswith("o:"):
+        return [u["id"] for u in await global_db.admin_users.find({"org_id": clave[2:]}, {"_id": 0, "id": 1}).to_list(50) if u.get("id")]
+    if clave == "fds":
+        return [u["id"] for u in await global_db.admin_users.find({"super_admin": True}, {"_id": 0, "id": 1}).to_list(10) if u.get("id")]
+    return []
+
+
+async def _merc_push(clave: str, titulo: str, cuerpo: str) -> None:
+    try:
+        if clave and await _merc_push_activo(clave):
+            ruta = "/conductor?vista=mercadillo" if clave.startswith("d:") else "/mercadillo"
+            await send_web_push_to_users(await _merc_push_usuarios(clave), titulo, cuerpo, ruta)
+    except Exception as e:                                       # noqa: BLE001 — un aviso no puede tumbar un mensaje
+        logger.warning("aviso al móvil del mercadillo: %s", e)
+
+
 def _merc_enlace(clave: str) -> str:
     """Dónde lo lee cada uno: el conductor, en su portal; el autónomo, en su app."""
     if clave.startswith("d:"):
@@ -50694,6 +50723,7 @@ async def _merc_avisar(clave: str, texto: str, asunto: str = "") -> None:
     ahora = datetime.now(timezone.utc).isoformat()
     await global_db[_MERC_AVISOS].insert_one({"id": str(uuid.uuid4()), "para": clave, "texto": texto[:1500],
                                               "ts": ahora, "leido": False})
+    await _merc_push(clave, "Mercadillo", texto[:170])
     if asunto and clave != "fds":
         correo = await _merc_correo_de(clave)
         if correo:
@@ -50744,7 +50774,7 @@ async def merc_estado(user: dict = Depends(require_any_auth)):
     if not conf["visible"] and yo["tipo"] != "fds":
         return {"visible": False}
     r = {"visible": True, "abierto": conf["visible"], "sin_leer": await _merc_sin_leer(yo),
-         "yo": {"nombre": yo["nombre"], "tipo": yo["tipo"]}}
+         "yo": {"nombre": yo["nombre"], "tipo": yo["tipo"]}, "avisos_movil": await _merc_push_activo(yo["clave"])}
     if yo["tipo"] == "fds":
         r["por_revisar"] = await global_db[_MERC_ANUNCIOS].count_documents({"estado": {"$in": ["pendiente", "en_revision"]}})
     return r
@@ -50923,7 +50953,8 @@ async def _merc_conv_mia(conv_id: str, yo: dict) -> dict:
 
 
 async def _merc_escribir(c: dict, yo: dict, texto: str) -> dict:
-    """Guarda el mensaje y, si el otro no lo ha leído, le avisa por correo (uno cada 6 h por conversación)."""
+    """Guarda el mensaje y avisa al otro por correo con el PRIMER mensaje que tiene sin leer; mientras siga sin
+    leer, como mucho uno cada 6 h por conversación (así una charla seguida no es una ráfaga de correos)."""
     hace = (datetime.now(timezone.utc) - timedelta(minutes=10)).isoformat()
     if await global_db[_MERC_MSGS].count_documents({"de": yo["clave"], "ts": {"$gte": hace}}) >= _MERC_MENSAJES_10MIN:
         raise HTTPException(429, "Vas muy rápido. Espera un poco antes de mandar más mensajes.")
@@ -50931,13 +50962,19 @@ async def _merc_escribir(c: dict, yo: dict, texto: str) -> dict:
     m = {"id": uuid.uuid4().hex, "conv": c["id"], "de": yo["clave"], "texto": texto, "ts": ahora.isoformat()}
     await global_db[_MERC_MSGS].insert_one(dict(m))
     otro = c["vendedor"] if c["comprador"]["clave"] == yo["clave"] else c["comprador"]
+    # Antes de guardar: ¿lo tenía todo leído? (después, el contador ya incluye este mensaje)
+    avisado = _fecha_utc((c.get("avisado") or {}).get(_merc_k(otro["clave"])))
+    lo_tenia_leido = int((c.get("sin_leer") or {}).get(_merc_k(otro["clave"])) or 0) == 0
     await global_db[_MERC_CONVS].update_one({"id": c["id"]}, {
         "$set": {"ultimo": m["ts"], "ultimo_de": yo["clave"], "ultimo_texto": texto[:120],
                  f"sin_leer.{_merc_k(yo['clave'])}": 0},                  # quien escribe ya lo ha leído todo
         "$inc": {f"sin_leer.{_merc_k(otro['clave'])}": 1}})
-    avisado = _fecha_utc((c.get("avisado") or {}).get(_merc_k(otro["clave"])))
-    if otro["clave"] != "fds" and (not avisado or ahora - avisado > _MERC_CORREO_CADA):
-        correo = await _merc_correo_de(otro["clave"])
+    await _merc_push(otro["clave"], f"Mercadillo · {yo['nombre']}",
+                     f"Te ha escrito sobre «{c.get('anuncio_titulo') or 'un anuncio'}». Toca para leerlo.")
+    if lo_tenia_leido or not avisado or ahora - avisado > _MERC_CORREO_CADA:
+        # Dani (el super-admin, «fds») también vende: a él se le avisa en el buzón de contacto.
+        correo = ((CORREO_CONTACTO or "").strip() if otro["clave"] == "fds" else await _merc_correo_de(otro["clave"]))
+        correo = correo if _correo_valido(correo) else ""
         if correo:
             await global_db[_MERC_CONVS].update_one({"id": c["id"]}, {"$set": {f"avisado.{_merc_k(otro['clave'])}": ahora.isoformat()}})
             cuerpo = (f"{yo['nombre']} te ha escrito en el mercadillo sobre «{c.get('anuncio_titulo') or 'tu anuncio'}».\n\n"
@@ -51034,6 +51071,16 @@ async def merc_responder(conv_id: str, data: dict = Body(default={}), user: dict
         raise HTTPException(400, str(e)) from None
     m = await _merc_escribir(c, yo, texto)
     return {"id": m["id"], "mio": True, "texto": m["texto"], "ts": m["ts"]}
+
+
+@api_router.post("/mercadillo/avisos-movil")
+async def merc_avisos_movil(data: dict = Body(default={}), user: dict = Depends(require_any_auth)):
+    """Avisos al móvil del mercadillo: sí o no. (El permiso y la suscripción del móvil los pide la web antes.)"""
+    yo = await _merc_dentro(user)
+    activo = bool(_dict_cuerpo(data).get("activo"))
+    await global_db.mercadillo_prefs.update_one({"clave": yo["clave"]}, {"$set": {
+        "clave": yo["clave"], "push": activo, "ts": datetime.now(timezone.utc).isoformat()}}, upsert=True)
+    return {"avisos_movil": activo}
 
 
 @api_router.post("/mercadillo/avisos/leidos")
@@ -51250,15 +51297,20 @@ async def merc_limpieza(ahora: Optional[datetime] = None) -> dict:
     return hechos
 
 
+_MERC_CADA_MIN = 360
+
+
 async def _bucle_mercadillo():
     await asyncio.sleep(300)
     while True:
         try:
             hechos = await merc_limpieza()
-            await _latido("mercadillo", **hechos, error=None)
+            # Con su ritmo (`cada_min`): sin él, el vigilante de bucles lo daba por muerto a la hora (falso aviso).
+            await _latido("mercadillo", cada_min=_MERC_CADA_MIN, **hechos, error=None)
         except Exception as e:                                   # noqa: BLE001
             logger.error("Limpieza del mercadillo: %s", e)
-        await asyncio.sleep(6 * 3600)
+            await _latido("mercadillo", cada_min=_MERC_CADA_MIN, error=str(e)[:200])
+        await asyncio.sleep(_MERC_CADA_MIN * 60)
 
 
 @app.on_event("startup")
