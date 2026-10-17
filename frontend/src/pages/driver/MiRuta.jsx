@@ -999,6 +999,7 @@ export default function MiRuta({ onBack, embebido = false }) {
           } : null}
           fueraHorario={pendientes.filter((p) => p.tarde_min > 0).length}
           onGuiar={nav === 'app' && pendientes.some((p) => p.lat != null) ? () => setGuiando(pendientes.find((p) => p.lat != null).id) : null}
+          onAnadir={enMarcha ? () => { medirAccion('ruta_anadir'); setAnadir(true) } : null}
           onCorregir={!pendientes.some((p) => p.lat != null) && pendientes.some((p) => p.geo === 'no')
             ? () => editar(pendientes.find((p) => p.geo === 'no')) : null} />
       )}
@@ -1076,13 +1077,6 @@ export default function MiRuta({ onBack, embebido = false }) {
         )
         return enHoja ? <Hoja titulo={tx('Añadir paradas')} onClose={cerrar}>{bloque}</Hoja> : bloque
       })()}
-      {enMarcha && !anadir && !deshacer && (
-        <button type="button" onClick={() => { medirAccion('ruta_anadir'); setAnadir(true) }} aria-label={tx('Añadir paradas')}
-          className="fixed z-30 flex h-14 w-14 items-center justify-center rounded-2xl bg-brand-500 text-brand-tinta shadow-xl shadow-black/30"
-          style={{ right: 'max(16px, env(safe-area-inset-right, 0px))', bottom: 'calc(env(safe-area-inset-bottom, 0px) + 84px)' }}>
-          <Plus size={26} strokeWidth={2.6} />
-        </button>
-      )}
 
       {aviso && (
         <button onClick={() => setAviso('')} className="mt-3 w-full rounded-xl border border-dark-700 bg-dark-900 px-3.5 py-2.5 text-left text-[13px] text-dark-100">
@@ -1809,7 +1803,6 @@ export default function MiRuta({ onBack, embebido = false }) {
           </>)}
         </Hoja>
       )}
-      {enMarcha && <div className="h-16" aria-hidden="true" />}
     </Marco>
   )
 }
@@ -1921,7 +1914,7 @@ function Marco({ onBack, children, embebido }) {
    única parada no estaba en el mapa (la dirección no se encontró) y sin un punto no hay
    adónde guiar; el aviso quedaba abajo, debajo del mapa. Ahora lo dice aquí y lleva a
    corregirla: al escribirla salen sugerencias, y elegir una la sitúa. */
-function Cabecera({ fecha, hechos, total, entregados, pendientes, rr, retraso, cobrado, fueraHorario, onGuiar, onCorregir, dinero, onTarifa, onCompartir }) {
+function Cabecera({ fecha, hechos, total, entregados, pendientes, rr, retraso, cobrado, fueraHorario, onGuiar, onCorregir, dinero, onTarifa, onCompartir, onAnadir }) {
   const pct = total ? hechos / total : 0
   const R = 26
   const L = 2 * Math.PI * R
@@ -1994,11 +1987,23 @@ function Cabecera({ fecha, hechos, total, entregados, pendientes, rr, retraso, c
           💶 {tx('¿Cuánto llevas ganado hoy? Pon tu tarifa')}
         </button>
       )}
-      {onGuiar && (
-        <button onClick={onGuiar}
-          className="mt-3.5 flex w-full items-center justify-center gap-2 rounded-2xl bg-brand-500 py-3.5 text-[16px] font-bold text-brand-tinta shadow-lg shadow-brand-500/20 active:scale-[.99]">
-          <Navigation size={18} /> {tx('Empezar a navegar')}
-        </button>
+      {/* Con la ruta en marcha (app del autónomo), «Añadir paradas» va aquí, junto a navegar (17-10-2026): un botón
+          flotante tapaba con la pantalla quieta los botones de la siguiente parada. */}
+      {(onGuiar || onAnadir) && (
+        <div className="mt-3.5 flex gap-2">
+          {onGuiar && (
+            <button onClick={onGuiar}
+              className="flex flex-1 items-center justify-center gap-2 rounded-2xl bg-brand-500 py-3.5 text-[16px] font-bold text-brand-tinta shadow-lg shadow-brand-500/20 active:scale-[.99]">
+              <Navigation size={18} /> {tx('Empezar a navegar')}
+            </button>
+          )}
+          {onAnadir && (
+            <button type="button" onClick={onAnadir} aria-label={tx('Añadir paradas')}
+              className={`flex items-center justify-center gap-1.5 rounded-2xl border border-brand-400/60 text-[15px] font-bold text-brand-200 ${onGuiar ? 'w-14 shrink-0' : 'flex-1 py-3.5'}`}>
+              <Plus size={onGuiar ? 24 : 19} strokeWidth={2.5} /> {!onGuiar && tx('Añadir paradas')}
+            </button>
+          )}
+        </div>
       )}
       {!onGuiar && onCorregir && (
         <div role="status" className="mt-3.5 rounded-2xl border border-amber-500/30 bg-amber-500/10 p-3">

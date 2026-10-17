@@ -19,6 +19,7 @@ import QRCode from 'qrcode'
 import { usePlan } from '../../lib/usePlan'
 import { IDIOMAS, idioma, cambiarIdioma, useIdioma, tx } from '../../lib/idioma'
 import MiRuta, { ElegirNavegador } from '../../pages/driver/MiRuta'
+import AjustesMovil from '../../pages/driver/AjustesMovil'
 import { fijarPais, importe, simboloMoneda } from '../../lib/region'
 
 /* ── REPARTO A DOMICILIO Y A NEGOCIOS ────────────────────────────────────────
@@ -509,6 +510,7 @@ export function Ajustes({ conductores, toast, autonomo }) {
               </select>
             </label>
             <ElegirNavegador />
+            <div className="border-t border-dark-700 pt-3"><AjustesMovil /></div>
           </section>
         )}
         <section className="rounded-xl border border-dark-700 bg-dark-900 p-4">

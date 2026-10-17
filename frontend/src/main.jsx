@@ -20,6 +20,7 @@ import '@fontsource/ibm-plex-mono/400.css'
 import '@fontsource/ibm-plex-mono/500.css'
 import '@fontsource/ibm-plex-mono/600.css'
 import { medirVista } from './lib/analitica'
+import { aplicarTema, aplicarLetra } from './lib/tema'
 import { salirDeLaDemoDeReparto, inicioGuardado } from './panel/auth'
 
 /* Señal de vida para /arranque.js. Ese vigilante espera 10 s y, si esta marca
@@ -52,16 +53,11 @@ if (typeof Node === 'function' && Node.prototype) {
    Solo miraba 'light', y al pasar el defecto a 'hibrido' eso significaba que
    quien no hubiera elegido nunca tema —o sea, todo el mundo la primera vez—
    veía el panel en negro y luego saltaba a claro de golpe. */
-{
-  // Misma migracion que PanelLayout: sin la marca de eleccion a mano, el
-  // valor guardado es basura que escribio el codigo viejo, no una preferencia.
-  const guardado = localStorage.getItem('panel_theme_elegido')
-    ? (localStorage.getItem('panel_theme') || 'hibrido')
-    : 'hibrido'
-  if (guardado === 'light' || guardado === 'hibrido') {
-    document.documentElement.setAttribute('data-panel-theme', guardado)
-  }
-}
+// Misma migracion que PanelLayout (lib/tema.js): sin la marca de eleccion a mano, el valor guardado es basura
+// que escribio el codigo viejo, no una preferencia. 'auto' (desde la app del repartidor) sigue al movil.
+// Y la letra grande de la app del repartidor.
+aplicarTema()
+aplicarLetra()
 import './index.css'
 import { ToastProvider } from './lib/toast'
 import { LangProvider } from './i18n'

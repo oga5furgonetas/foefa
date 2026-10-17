@@ -840,6 +840,8 @@ export const fotoEntrega = (id) => api.get(`/reparto/pedidos/${id}/foto`)
 export const stripeSuscripcion = (plan, anual) => api.post('/billing/stripe/suscripcion', { plan, anual })
 export const stripePortal = () => api.post('/billing/stripe/portal')
 export const getRepartoEstadisticas = (dias = 14) => api.get('/reparto/estadisticas', { params: { dias } })
+// El mes para la gestoría (17-10-2026): CSV para Excel.
+export const getRepartoEntregasMes = (mes) => api.get('/reparto/entregas-mes', { params: { mes }, responseType: 'blob' })
 export const stripeCambiarPlan = (anual) => api.post('/billing/stripe/cambiar-plan', { anual })
 export const comprarRegalo = (meses, paraMi = false) => api.post('/billing/regalos', { meses, ...(paraMi ? { para_mi: true } : {}) })
 export const misRegalos = () => api.get('/billing/regalos')

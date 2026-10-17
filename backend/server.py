@@ -48708,6 +48708,81 @@ async def reparto_estadisticas(dias: int = 14, user: dict = Depends(require_admi
     }
 
 
+def _csv_celda(v) -> str:
+    """Una celda para Excel en español: con «;» de separador, entre comillas si hace falta."""
+    s = "" if v is None else str(v)
+    return f'"{s.replace(chr(34), chr(34) * 2)}"' if any(c in s for c in ';"\n\r') else s
+
+
+def _csv_importe(cent) -> str:
+    """Céntimos a «12,50» (coma decimal: así lo suma Excel en español)."""
+    return f"{(int(cent or 0)) / 100:.2f}".replace(".", ",")
+
+
+@api_router.get("/reparto/entregas-mes")
+async def reparto_entregas_mes(mes: str = "", user: dict = Depends(require_admin)):
+    """EL MES PARA LA GESTORÍA (17-10-2026). Las paradas cerradas del mes (entregadas y no entregadas) en CSV para
+    Excel en español (separador «;», coma decimal y BOM para los acentos), y al final los totales: entregas, lo
+    cobrado y, si tiene puesta su tarifa («Mi dinero hoy»), lo ganado y la gasolina con los km de cada ruta
+    (previstos). Los datos de los clientes se borran a los días que diga Ajustes: de lo más antiguo salen la fecha,
+    la hora, el estado y lo cobrado, con el cliente y la dirección en blanco. Quien no ve datos de clientes (el
+    dueño entrando como la empresa) los recibe en blanco también."""
+    from zoneinfo import ZoneInfo
+    if not re.fullmatch(r"\d{4}-(0[1-9]|1[0-2])", mes or ""):
+        mes = _dia_negocio()[:7]
+    try:
+        zona = ZoneInfo(_region_actual.get()[1] or "Europe/Madrid")
+    except Exception:                                            # noqa: BLE001
+        zona = ZoneInfo("Europe/Madrid")
+    ve = _rep_ve_datos(user)
+    ps = await db.reparto_pedidos.find(
+        {"fecha": {"$gte": f"{mes}-01", "$lte": f"{mes}-31"}, "estado": {"$in": ["entregado", "fallido"]},
+         "ejemplo": {"$ne": True}},
+        {"_id": 0, "fecha": 1, "cerrado_en": 1, "cliente": 1, "direccion": 1, "estado": 1, "motivo": 1, "bultos": 1,
+         "cobrado_importe": 1, "cobrado_metodo": 1, "codigo": 1, "conductor_id": 1, "conductor_nombre": 1}).to_list(50000)
+    ps.sort(key=lambda p: (p.get("fecha") or "", p.get("cerrado_en") or ""))
+    varios = len({p.get("conductor_id") for p in ps}) > 1
+    a = await _rep_ajustes()
+    pago_parada, pago_dia, coste_km = (int(a.get(k) or 0) for k in ("pago_parada", "pago_dia", "coste_km"))
+    cab = ["Fecha", "Hora", "Estado", "Motivo", "Cliente", "Dirección", "Bultos", "Cobrado", "Forma de cobro", "Código"]
+    if varios:
+        cab.append("Repartidor")
+    filas = [cab]
+    cobrado = 0
+    for p in ps:
+        hora = ""
+        t = _fecha_utc(p.get("cerrado_en"))
+        if t:
+            hora = t.astimezone(zona).strftime("%H:%M")
+        f = p.get("fecha") or ""
+        importe = reparto.importe(p.get("cobrado_importe")) if p.get("estado") == "entregado" else 0
+        cobrado += round((importe or 0) * 100)
+        fila = [f"{f[8:10]}/{f[5:7]}/{f[:4]}" if len(f) == 10 else f, hora,
+                "Entregado" if p.get("estado") == "entregado" else "No entregado",
+                p.get("motivo") or "" if p.get("estado") == "fallido" else "",
+                (p.get("cliente") or "") if ve else "", (p.get("direccion") or "") if ve else "",
+                p.get("bultos") or 1, _csv_importe(round((importe or 0) * 100)) if importe else "",
+                p.get("cobrado_metodo") or "" if importe else "", p.get("codigo") or ""]
+        if varios:
+            fila.append(p.get("conductor_nombre") or "")
+        filas.append(fila)
+    entregadas = sum(1 for p in ps if p.get("estado") == "entregado")
+    dias = sorted({p.get("fecha") for p in ps if p.get("estado") == "entregado" and p.get("fecha")})
+    filas += [[], ["Total entregadas", entregadas], ["Total no entregadas", len(ps) - entregadas],
+              ["Días con entregas", len(dias)], ["Cobrado a clientes", _csv_importe(cobrado)]]
+    if pago_parada or pago_dia:
+        filas.append(["Ganado según tu tarifa", _csv_importe(entregadas * pago_parada + len(dias) * pago_dia)])
+    if coste_km:
+        km = 0.0
+        async for r in db.reparto_rutas.find({"fecha": {"$in": dias}}, {"_id": 0, "km": 1}):
+            km += float(r.get("km") or 0)
+        filas += [["Km de las rutas (previstos)", f"{km:.1f}".replace(".", ",")],
+                  ["Gasolina estimada", _csv_importe(round(km * coste_km))]]
+    texto = "\r\n".join(";".join(_csv_celda(c) for c in fila) for fila in filas) + "\r\n"
+    return Response(content=("\ufeff" + texto).encode("utf-8"), media_type="text/csv; charset=utf-8",
+                    headers={"Content-Disposition": f'attachment; filename="entregas-{mes}.csv"'})
+
+
 @api_router.get("/reparto/vivo")
 async def reparto_vivo(user: dict = Depends(require_admin)):
     """Dónde va cada conductor AHORA. Solo los que tienen la jornada empezada:

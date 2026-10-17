@@ -126,6 +126,36 @@ async def test_cada_conductor_ve_y_cierra_solo_lo_suyo(base):
 
 
 @pytest.mark.asyncio(loop_scope="session")
+async def test_el_mes_para_la_gestoria_en_csv_para_excel(base):
+    """17-10-2026: las entregas del mes en CSV (separador «;», coma decimal, BOM) con los totales y lo ganado."""
+    base.db["reparto_pedidos"].docs.extend([
+        {"id": "m1", "conductor_id": "d1", "fecha": "2026-09-30", "estado": "entregado", "cliente": "Fuera", "direccion": "X"},
+        {"id": "m2", "conductor_id": "d1", "fecha": "2026-10-02", "estado": "entregado", "cliente": "Bar; Pepe",
+         "direccion": "Rúa Real 5", "cerrado_en": "2026-10-02T08:30:00+00:00", "cobrado_importe": 12.5, "cobrado_metodo": "tarjeta"},
+        {"id": "m3", "conductor_id": "d1", "fecha": "2026-10-02", "estado": "fallido", "motivo": "No había nadie",
+         "cliente": "Ana", "direccion": "Rúa Nova 2", "cerrado_en": "2026-10-02T09:10:00+00:00"},
+        {"id": "m4", "conductor_id": "d1", "fecha": "2026-10-03", "estado": "pendiente", "cliente": "Luis"},
+        {"id": "m5", "conductor_id": "d1", "fecha": "2026-10-05", "estado": "entregado", "ejemplo": True},
+    ])
+    base.db["reparto_ajustes"].docs.append({"id": "ajustes", "pago_parada": 180, "pago_dia": 1000, "coste_km": 12})
+    base.db["reparto_rutas"].docs.append({"id": "2026-10-02_d1", "fecha": "2026-10-02", "conductor_id": "d1", "km": 41.5})
+    r = await server.reparto_entregas_mes("2026-10", OFICINA)
+    assert r.media_type.startswith("text/csv") and 'filename="entregas-2026-10.csv"' in r.headers["content-disposition"]
+    texto = r.body.decode("utf-8")
+    assert texto.startswith("\ufeffFecha;Hora;Estado;Motivo;Cliente;Dirección;Bultos;Cobrado;Forma de cobro;Código")
+    lineas = texto.split("\r\n")
+    assert lineas[1] == '02/10/2026;10:30;Entregado;;"Bar; Pepe";Rúa Real 5;1;12,50;tarjeta;'       # hora de Madrid
+    assert lineas[2] == "02/10/2026;11:10;No entregado;No había nadie;Ana;Rúa Nova 2;1;;;"
+    assert "Fuera" not in texto and "Luis" not in texto                     # ni otro mes, ni sin cerrar, ni ejemplos
+    assert "Total entregadas;1" in texto and "Total no entregadas;1" in texto and "Cobrado a clientes;12,50" in texto
+    assert "Ganado según tu tarifa;11,80" in texto                          # 1 × 1,80 + 1 día × 10,00
+    assert "Km de las rutas (previstos);41,5" in texto and "Gasolina estimada;4,98" in texto
+    # Un mes mal escrito: el de ahora.
+    assert (await server.reparto_entregas_mes("2026-13", OFICINA)).headers["content-disposition"].endswith(
+        f'entregas-{server._dia_negocio()[:7]}.csv"')
+
+
+@pytest.mark.asyncio(loop_scope="session")
 async def test_mi_ruta_recuerda_la_ultima_vez_en_esa_puerta(base):
     """17-10-2026: la parada de hoy dice lo que pasó la última vez en esa dirección (solo lo de ese repartidor)."""
     from datetime import datetime, timedelta

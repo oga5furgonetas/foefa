@@ -1,14 +1,16 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import {
   Route, History, Settings2, UserCircle2, Loader2, CheckCircle2, XCircle, Package, Euro, ChevronRight, ChevronDown, ArrowLeft,
-  MapPin, Phone, Camera, Clock, RotateCcw,
+  MapPin, Phone, Camera, Clock, RotateCcw, FileSpreadsheet,
 } from 'lucide-react'
 import MiRuta from './driver/MiRuta'
 import { Ajustes } from '../panel/pages/Reparto'
 import {
   getRepartoPedidos, getRepartoEstadisticas, getOrgBilling, canjearRegalo, misRegalos, playVerificar, editarRepartoPedido, fotoEntrega,
+  getRepartoAjustes, getRepartoEntregasMes,
 } from '../panel/api'
 import { enAppPlay } from '../lib/enApp'
+import { medirAccion } from '../lib/analitica'
 import { servicioPlay, comprasPlay } from '../lib/playBilling'
 import { enviarPendiente, olvidarPendiente } from '../lib/metaPixel'
 import { isAuthed, esSuplantacion, volverASuper, getAdmin, apuntarInicio } from '../panel/auth'
@@ -289,6 +291,9 @@ function Historial() {
   const [est, setEst] = useState(null)
   const [dia, setDia] = useState(null)
   const [otro, setOtro] = useState('')
+  // La tarifa («Mi dinero hoy») para lo ganado en la semana, y los días que se guardan los datos de los clientes.
+  const [ajustes, setAjustes] = useState(null)
+  useEffect(() => { getRepartoAjustes().then(({ data }) => setAjustes(data || {})).catch(() => setAjustes({})) }, [])
   const cargarEst = useCallback(() => {
     setEst(null)
     getRepartoEstadisticas(30).then(({ data }) => setEst(data)).catch(() => setEst({ por_dia: [], error: true }))
@@ -312,6 +317,7 @@ function Historial() {
           {est.tasa_entrega != null ? ` ${tx('({p} % a la primera)', { p: est.tasa_entrega })}` : ''}.
         </p>
         {dias.length === 0 && <p className="rounded-xl border border-dashed border-dark-700 px-4 py-8 text-center text-[13px] text-dark-400">{tx('Aún no hay repartos. Hoy empieza en «Hoy».')}</p>}
+        {dias.length > 0 && <ResumenSemana porDia={lista(est.por_dia)} ajustes={ajustes} />}
       </>)}
       <div className="flex flex-col gap-2">
         {dias.map((d) => (
@@ -337,7 +343,99 @@ function Historial() {
             className="shrink-0 rounded-xl border border-dark-600 px-4 text-[14px] font-semibold text-dark-100 disabled:opacity-40">{tx('Ver')}</button>
         </span>
       </label>
+      <ParaGestoria diasConservar={ajustes?.dias_conservar} toast={toast} />
     </div>
+  )
+}
+
+/* LA SEMANA DE UN VISTAZO (17-10-2026): las entregas de cada uno de los últimos 7 días en barras, frente a la semana
+   anterior, y lo ganado si tiene puesta su tarifa. Sale de /reparto/estadisticas (sin datos de clientes). */
+function ResumenSemana({ porDia, ajustes }) {
+  const ultimos = porDia.slice(-7)
+  const antes = porDia.slice(-14, -7)
+  const suma = (l) => l.reduce((a, d) => a + (d.entregados || 0), 0)
+  const semana = suma(ultimos)
+  const anterior = suma(antes)
+  const tope = Math.max(1, ...ultimos.map((d) => d.entregados || 0))
+  const pagoParada = Number(ajustes?.pago_parada) || 0
+  const pagoDia = Number(ajustes?.pago_dia) || 0
+  const conTarifa = pagoParada > 0 || pagoDia > 0
+  const ganado = (semana * pagoParada + ultimos.filter((d) => d.entregados > 0).length * pagoDia) / 100
+  const dia = (f) => { try { return new Date(`${f}T12:00:00`).toLocaleDateString(locale(), { weekday: 'narrow' }) } catch { return '' } }
+  return (
+    <section data-testid="resumen-semana" aria-label={tx('Esta semana')} className="mb-4 rounded-2xl border border-dark-700 bg-dark-900 p-4">
+      <div className="flex items-baseline justify-between gap-3">
+        <p className="text-[13px] font-semibold uppercase tracking-wide text-dark-400">{tx('Esta semana')}</p>
+        <p className="text-[12.5px] text-dark-400">{tx('la anterior: {n}', { n: anterior })}</p>
+      </div>
+      <p className="mt-1 text-[24px] font-extrabold leading-none text-dark-50 tabular-nums">{tx('{n} entregas', { n: semana })}</p>
+      {conTarifa && <p className="mt-1 text-[13px] font-semibold text-emerald-300">{tx('Ganado ≈ {euros}', { euros: importe(ganado) })}</p>}
+      <div className="mt-3 grid grid-cols-7 items-end gap-1.5" style={{ height: 96 }} role="img"
+        aria-label={ultimos.map((d) => `${dia(d.fecha)} ${d.entregados || 0}`).join(', ')}>
+        {ultimos.map((d) => (
+          <div key={d.fecha} className="flex h-full flex-col items-center justify-end gap-1">
+            <span className="text-[10.5px] font-semibold tabular-nums text-dark-400">{d.entregados || ''}</span>
+            <span className="w-full rounded-t-md bg-brand-500" style={{ height: `${Math.round(((d.entregados || 0) / tope) * 64)}px`, minHeight: d.entregados ? 4 : 2, opacity: d.entregados ? 1 : 0.25 }} />
+            <span className="text-[11px] font-semibold uppercase text-dark-400">{dia(d.fecha)}</span>
+          </div>
+        ))}
+      </div>
+    </section>
+  )
+}
+
+/* EL MES PARA LA GESTORÍA (17-10-2026): todas las entregas del mes en un Excel (CSV) con los totales y lo ganado
+   (GET /reparto/entregas-mes). En el móvil se comparte directamente (WhatsApp, correo…); si no, se descarga. */
+function ParaGestoria({ diasConservar, toast }) {
+  const meses = useMemo(() => {
+    const ahora = new Date()
+    return Array.from({ length: 6 }, (_, i) => {
+      const d = new Date(ahora.getFullYear(), ahora.getMonth() - i, 1)
+      return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`
+    })
+  }, [])
+  const [mes, setMes] = useState(meses[0])
+  const [ocupado, setOcupado] = useState(false)
+  const nombreMes = (m) => {
+    try { const s = new Date(`${m}-15T12:00:00`).toLocaleDateString(locale(), { month: 'long', year: 'numeric' }); return s.charAt(0).toUpperCase() + s.slice(1) } catch { return m }
+  }
+  async function descargar() {
+    setOcupado(true)
+    medirAccion('gestoria_descargar')
+    try {
+      const { data } = await getRepartoEntregasMes(mes)
+      const nombre = `entregas-${mes}.csv`
+      const archivo = new File([data], nombre, { type: 'text/csv' })
+      if (navigator.canShare?.({ files: [archivo] })) {
+        try { await navigator.share({ files: [archivo], title: nombre }); return } catch (e) { if (e?.name === 'AbortError') return }
+      }
+      const url = URL.createObjectURL(data)
+      const a = document.createElement('a')
+      a.href = url; a.download = nombre
+      document.body.appendChild(a); a.click(); a.remove()
+      setTimeout(() => URL.revokeObjectURL(url), 10000)
+    } catch { toast?.error?.(tx('No se pudo preparar el archivo')) } finally { setOcupado(false) }
+  }
+  return (
+    <section aria-label={tx('Para tu gestoría')} className="mt-5 rounded-2xl border border-dark-700 bg-dark-900 p-4">
+      <p className="flex items-center gap-2 text-[15px] font-bold text-dark-50"><FileSpreadsheet size={17} className="text-brand-300" /> {tx('Para tu gestoría')}</p>
+      <p className="mt-1 text-[12.5px] leading-snug text-dark-400">{tx('Todas las entregas del mes en un Excel: fecha, hora, cliente, dirección y lo cobrado, con los totales y lo ganado.')}</p>
+      <div className="mt-3 flex gap-2">
+        <select value={mes} onChange={(e) => setMes(e.target.value)} aria-label={tx('Mes')}
+          className="min-w-0 flex-1 rounded-xl border border-dark-700 bg-dark-950 px-3 py-2.5 text-[15px] text-dark-50">
+          {meses.map((m) => <option key={m} value={m}>{nombreMes(m)}</option>)}
+        </select>
+        <button type="button" onClick={descargar} disabled={ocupado}
+          className="flex shrink-0 items-center gap-1.5 rounded-xl bg-brand-500 px-4 text-[14px] font-bold text-brand-tinta disabled:opacity-60">
+          {ocupado ? <Loader2 size={16} className="animate-spin" /> : <FileSpreadsheet size={16} />} {tx('Descargar')}
+        </button>
+      </div>
+      {diasConservar ? (
+        <p className="mt-2 text-[11.5px] leading-snug text-dark-500">
+          {tx('Los datos de los clientes se borran a los {n} días (lo cambias en Ajustes): de lo más antiguo salen la fecha, la hora, el estado y lo cobrado.', { n: diasConservar })}
+        </p>
+      ) : null}
+    </section>
   )
 }
 

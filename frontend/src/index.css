@@ -745,3 +745,29 @@ html[data-panel-theme='light'] .app-ruta .ruta-pestanas { box-shadow: 0 -10px 28
    la barra de pestañas taparía las hojas que suben desde abajo (los botones de «Entregado», por ejemplo). */
 .ruta-entra { animation: ruta-entra 0.24s cubic-bezier(0.2, 0.8, 0.2, 1) backwards; }
 @media (prefers-reduced-motion: reduce) { .ruta-entra { animation: none; } }
+
+/* LETRA MÁS GRANDE EN LA APP DEL REPARTIDOR (17-10-2026, Ajustes → «Letra más grande», lib/tema.js). Los textos van
+   en píxeles (text-[13px]…), así que no vale cambiar la letra base: se suben un 15 % uno a uno. No se amplía la
+   pantalla entera (zoom) porque descuadraría las hojas que suben desde abajo. Los títulos grandes (24 px o más)
+   se quedan como están: ya se leen y crecer los partiría. */
+html[data-letra='grande'] .app-ruta .text-\[9px\] { font-size: 10.5px; }
+html[data-letra='grande'] .app-ruta .text-\[9\.5px\] { font-size: 11px; }
+html[data-letra='grande'] .app-ruta .text-\[10px\] { font-size: 11.5px; }
+html[data-letra='grande'] .app-ruta .text-\[10\.5px\] { font-size: 12px; }
+html[data-letra='grande'] .app-ruta .text-\[11px\] { font-size: 12.5px; }
+html[data-letra='grande'] .app-ruta .text-\[11\.5px\] { font-size: 13px; }
+html[data-letra='grande'] .app-ruta .text-\[12px\] { font-size: 14px; }
+html[data-letra='grande'] .app-ruta .text-\[12\.5px\] { font-size: 14.5px; }
+html[data-letra='grande'] .app-ruta .text-\[13px\] { font-size: 15px; }
+html[data-letra='grande'] .app-ruta .text-\[13\.5px\] { font-size: 15.5px; }
+html[data-letra='grande'] .app-ruta .text-\[14px\] { font-size: 16px; }
+html[data-letra='grande'] .app-ruta .text-\[14\.5px\] { font-size: 16.5px; }
+html[data-letra='grande'] .app-ruta .text-\[15px\] { font-size: 17px; }
+html[data-letra='grande'] .app-ruta .text-\[15\.5px\] { font-size: 18px; }
+html[data-letra='grande'] .app-ruta .text-\[16px\] { font-size: 18.5px; }
+html[data-letra='grande'] .app-ruta .text-\[17px\] { font-size: 19.5px; }
+html[data-letra='grande'] .app-ruta .text-\[18px\] { font-size: 20.5px; }
+html[data-letra='grande'] .app-ruta .text-\[19px\] { font-size: 22px; }
+html[data-letra='grande'] .app-ruta .text-\[20px\] { font-size: 23px; }
+html[data-letra='grande'] .app-ruta .text-\[21px\] { font-size: 24px; }
+html[data-letra='grande'] .app-ruta .text-\[22px\] { font-size: 25.5px; }

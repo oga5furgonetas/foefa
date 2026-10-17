@@ -23,6 +23,7 @@ import { usePlan } from '../lib/usePlan'
 import { voces } from '../lib/sector'
 import { vigilarVersion, recargarCuandoNadieMira } from '../lib/versionApp'
 import { MARCA } from '../marca'
+import { aplicarTema } from '../lib/tema'
 
 const keyOf = (to) => (to === '/panel' ? 'dashboard' : to.split('/').pop())
 
@@ -375,8 +376,8 @@ export default function PanelLayout() {
     } catch { return 'hibrido' }
   })
   useEffect(() => {
-    document.documentElement.setAttribute('data-panel-theme', theme)
-    localStorage.setItem('panel_theme', theme)
+    aplicarTema(theme)                    // 'auto' (elegido en la app del repartidor) sigue al móvil
+    try { localStorage.setItem('panel_theme', theme) } catch { /* incognito */ }
   }, [theme])
 
   /* Un solo grupo abierto: el de la pantalla donde estás. «Hoy» va siempre
@@ -949,7 +950,7 @@ export default function PanelLayout() {
           {
             clave: 'tema',
             icono: theme === 'dark' ? Moon : theme === 'light' ? Sun : Contrast,
-            texto: theme === 'hibrido' ? 'Mixto' : theme === 'dark' ? 'Noche' : 'Día',
+            texto: theme === 'hibrido' ? 'Mixto' : theme === 'dark' ? 'Noche' : theme === 'auto' ? 'Automático' : 'Día',
             hacer: () => {
               try { localStorage.setItem('panel_theme_elegido', '1') } catch { /* incognito */ }
               setTheme((th) => (th === 'hibrido' ? 'dark' : th === 'dark' ? 'light' : 'hibrido'))

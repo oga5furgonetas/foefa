@@ -2446,6 +2446,61 @@ test.describe('App del repartidor en el móvil', () => {
     expect(fallos).toEqual([])
   })
 
+  /* AJUSTES DEL MÓVIL (17-10-2026): claro, oscuro o automático (sigue al móvil) y letra más grande; se recuerdan. */
+  test('en Ajustes se elige claro, oscuro o automático y la letra más grande', async ({ page }) => {
+    const fallos = vigilar(page)
+    await entrarRepartidor(page, { status: 'trial', days_left: 60, promo: { activa: true, hasta: '2026-12-31' } })
+    await page.emulateMedia({ colorScheme: 'dark' })
+    await page.goto('/ruta', { waitUntil: 'domcontentloaded' })
+    const tema = () => page.evaluate(() => document.documentElement.getAttribute('data-panel-theme'))
+    expect(await tema()).toBe('hibrido')
+    await page.getByRole('button', { name: 'Ajustes', exact: true }).click()
+    await page.getByRole('radio', { name: 'Oscuro' }).click()
+    expect(await tema()).toBe('dark')
+    await page.getByRole('radio', { name: 'Claro' }).click()
+    expect(await tema()).toBe('hibrido')
+    await page.getByRole('radio', { name: 'Automático' }).click()
+    expect(await tema()).toBe('dark')                                            // el móvil está en oscuro
+    await page.emulateMedia({ colorScheme: 'light' })
+    await expect.poll(tema).toBe('hibrido')                                       // y lo sigue al cambiar
+    const letra = () => page.evaluate(() => getComputedStyle(document.querySelector('.app-ruta .text-\\[12px\\]')).fontSize)
+    expect(await letra()).toBe('12px')
+    await page.getByRole('checkbox', { name: 'Letra más grande' }).check()
+    expect(await letra()).toBe('14px')
+    await page.reload({ waitUntil: 'domcontentloaded' })                         // se recuerda
+    await expect.poll(() => page.evaluate(() => document.documentElement.getAttribute('data-letra'))).toBe('grande')
+    expect(await tema()).toBe('hibrido')
+    expect(fallos).toEqual([])
+  })
+
+  /* HISTORIAL (17-10-2026): la semana en barras frente a la anterior, lo ganado con su tarifa, y el mes para la
+     gestoría en un CSV para Excel. */
+  test('historial: la semana de un vistazo y el mes para la gestoría', async ({ page }) => {
+    const fallos = vigilar(page)
+    await entrarRepartidor(page, { status: 'trial', days_left: 60, promo: { activa: true, hasta: '2026-12-31' } })
+    const dias = Array.from({ length: 14 }, (_, i) => {
+      const d = new Date(Date.now() - (13 - i) * 86400000)
+      return { fecha: d.toISOString().slice(0, 10), total: i < 7 ? 10 : 12, entregados: i < 7 ? 9 : (i === 13 ? 0 : 11), fallidos: 1 }
+    })
+    await page.route(/\/api\/reparto\/estadisticas/, (r) => r.fulfill({ json: { total: 150, entregados: 129, tasa_entrega: 90, por_dia: dias } }))
+    await page.route(/\/api\/reparto\/ajustes/, (r) => r.fulfill({ json: { pago_parada: 180, pago_dia: 0, coste_km: 12, dias_conservar: 30 } }))
+    let pedido = ''
+    await page.route(/\/api\/reparto\/entregas-mes/, (r) => { pedido = r.request().url(); return r.fulfill({ status: 200, contentType: 'text/csv', body: '\ufeffFecha;Hora\r\n' }) })
+    await page.goto('/ruta', { waitUntil: 'domcontentloaded' })
+    await page.getByRole('button', { name: 'Historial', exact: true }).click()
+    const semana = page.getByTestId('resumen-semana')
+    await expect(semana.getByText('66 entregas')).toBeVisible()                  // 6 días × 11 (hoy, 0)
+    await expect(semana.getByText('la anterior: 63')).toBeVisible()              // 7 × 9
+    await expect(semana.getByText('Ganado ≈ 118,80 €')).toBeVisible()            // 66 × 1,80
+    await expect(page.getByText(/se borran a los 30 días/)).toBeVisible()
+    const descarga = page.waitForEvent('download')
+    await page.getByRole('button', { name: 'Descargar', exact: true }).click()
+    const d = await descarga
+    expect(d.suggestedFilename()).toMatch(/^entregas-\d{4}-\d{2}\.csv$/)
+    expect(pedido).toMatch(/mes=\d{4}-\d{2}/)
+    expect(fallos).toEqual([])
+  })
+
   test('si el historial no carga, lo dice y se puede reintentar', async ({ page }) => {
     const fallos = vigilar(page)
     await entrarRepartidor(page, { status: 'trial', days_left: 60, promo: { activa: true, hasta: '2026-12-31' } })

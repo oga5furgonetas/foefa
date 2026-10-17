@@ -1323,3 +1323,20 @@ intentar retirar, promoción hasta el 31-10-2026.
 - El mensaje de «Invitar» dice también el bono del invitado. `e2e/activacion.spec.js` llevaba desde el 10-10 con
   3 tests de ofertas antiguas fallando (no estaba en la batería de siempre): puesto al día; corre con
   `npx playwright test humo contraste editar-parada escanear-etiqueta activacion --project=escritorio`.
+
+## 17-10-2026 (noche): tema y letra grande, la semana en Historial y el mes para la gestoría
+
+- **Ajustes de la app del repartidor** (`pages/driver/AjustesMovil.jsx`, en Reparto → Ajustes del autónomo):
+  Aspecto Claro / Oscuro / Automático (sigue al modo del móvil y cambia en vivo) y «Letra más grande» (×1,15 en
+  los textos de 9 a 22 px dentro de `main.app-ruta`). Se guarda en el navegador (`panel_theme`, `fds_letra`);
+  `lib/tema.js` lo aplica al arrancar (`main.jsx`) y el panel entiende `auto`.
+- **Historial**: la semana en barras frente a la anterior y «Ganado ≈» con su tarifa (si la tiene puesta).
+- **El mes para la gestoría**: `GET /api/reparto/entregas-mes?mes=AAAA-MM` devuelve un CSV para Excel en español
+  («;», coma decimal, BOM): fecha, hora de Madrid, estado, motivo, cliente, dirección, bultos, cobrado, forma de
+  cobro y código, y al final los totales (entregadas, no entregadas, días, cobrado, ganado según tarifa, km
+  previstos y gasolina). Sin ejemplos ni paradas sin cerrar. Desde Historial se comparte o se descarga (últimos 6
+  meses). Sin sesión responde 401.
+- **El «+» de añadir paradas** ya no flota: va junto a «Empezar a navegar» en el resumen del día (el flotante
+  tapaba «Entregado» de la siguiente parada con la pantalla quieta).
+- Pruebas: servidor completo en verde; web 189 en verde (`humo contraste editar-parada escanear-etiqueta
+  activacion`). Desplegado servidor y web.
