@@ -1302,3 +1302,7 @@ intentar retirar, promoción hasta el 31-10-2026.
   (fly secrets set) la campaña va SOLO por Brevo (`_enviar_email(..., solo="brevo")`, hasta `por_dia_brevo`=250)
   y no gasta los 100 de Resend. Si el proveedor rechaza 3 seguidos se para la tanda y nadie queda como enviado;
   una dirección rechazada 2 veces se aparta (`bono10-fallo:<correo>`).
+- **17-10 12:08**: `BREVO_API_KEY` configurada en flota-backend (cuenta Brevo «FlotaDSP» de Dani, plan gratis
+  300/día; dominio flotadsp.com autenticado; prueba a su Gmail aceptada). La campaña salió por Brevo: 250 de
+  270 el primer día (50 por Resend + 200 por Brevo), 0 rechazos, 2 bajas en la primera hora. Los 20 que faltan,
+  el 18-10 a las 10:00; luego se apaga sola. Resend sigue siendo el primero para los correos de la app.
