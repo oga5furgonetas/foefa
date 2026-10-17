@@ -3441,3 +3441,192 @@ test.describe('Portal del conductor · casillas', () => {
     expect(fallos).toEqual([])
   })
 })
+
+/* EL MERCADILLO (17-10-2026). API simulada: lo que se prueba aquí es la pantalla (que se entienda, que mande lo
+   que tiene que mandar y que no rompa); las reglas (aprobar, quién ve qué, fotos limpias) las prueba el
+   servidor en backend/tests/test_mercadillo.py. */
+test.describe('Mercadillo de repartidores', () => {
+  const PNG = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAIAAAACCAIAAAD91JpzAAAAFklEQVR4nGP8z8DAwMDAxMDAwMDAAAANHQEDasKb6QAAAABJRU5ErkJggg==', 'base64')
+  const LISTAS = {
+    categorias: { movil: 'Móviles y electrónica', furgoneta: 'Furgoneta y accesorios', herramientas: 'Herramientas y carga', ropa: 'Ropa de trabajo', otros: 'Otras cosas' },
+    estados_articulo: { nuevo: 'Nuevo', como_nuevo: 'Como nuevo', buen_estado: 'Buen estado', con_marcas: 'Con marcas de uso' },
+    motivos_denuncia: { prohibido: 'Está prohibido o es ilegal', estafa: 'Es un engaño o una posible estafa', otro: 'Otra cosa' },
+  }
+  const IPHONE = { id: 'a1', titulo: 'iPhone 18 Pro · 256 GB', descripcion: 'Con su caja.', precio_cent: 130000, categoria: 'movil',
+    estado_articulo: 'como_nuevo', zona: 'A Coruña', fotos: ['f1', 'f2'], estado: 'publicado', mio: false,
+    publicado_en: '2026-10-17T10:00:00+00:00', vendedor: { nombre: 'Dani · FDS', tipo: 'fds' } }
+
+  async function simular(page, { anuncios = [], mios = [], abierto = true, sinLeer = 0 } = {}) {
+    const r = { creado: null, contacto: null, denuncia: null, respuesta: null, subidas: 0 }
+    await page.route(/\/api\/mercadillo\/estado/, (x) => x.fulfill({ json: { visible: true, abierto, sin_leer: sinLeer, yo: { nombre: 'Ana P.', tipo: 'conductor' } } }))
+    await page.route(/\/api\/mercadillo\/foto\//, (x) => x.fulfill({ status: 200, contentType: 'image/png', body: PNG }))
+    await page.route(/\/api\/mercadillo\/fotos/, (x) => { r.subidas += 1; return x.fulfill({ json: { id: `nueva${r.subidas}`, bytes: 1000 } }) })
+    await page.route(/\/api\/mercadillo(\?.*)?$/, async (x) => {
+      if (x.request().method() === 'POST') { r.creado = x.request().postDataJSON(); return x.fulfill({ json: { id: 'n1', estado: 'pendiente' } }) }
+      return x.fulfill({ json: { anuncios, mios, ...LISTAS, activos_max: 3, dias: 30, yo: { nombre: 'Ana P.', tipo: 'conductor' } } })
+    })
+    await page.route(/\/api\/mercadillo\/anuncio\/a1$/, (x) => x.fulfill({ json: { ...IPHONE, conversacion_id: null } }))
+    await page.route(/\/api\/mercadillo\/anuncio\/a1\/contactar/, (x) => { r.contacto = x.request().postDataJSON(); return x.fulfill({ json: { ok: true, conversacion_id: 'c1' } }) })
+    await page.route(/\/api\/mercadillo\/conversacion\/c1$/, async (x) => {
+      if (x.request().method() === 'POST') { r.respuesta = x.request().postDataJSON(); return x.fulfill({ json: { id: 'm2', mio: true, texto: r.respuesta.texto, ts: '2026-10-17T18:01:00+00:00' } }) }
+      return x.fulfill({ json: { id: 'c1', soy: 'comprador', con: 'Dani · FDS', bloqueada: false, anuncio: IPHONE,
+        mensajes: [{ id: 'm1', mio: true, texto: 'Hola, ¿sigue disponible?', ts: '2026-10-17T18:00:00+00:00' }] } })
+    })
+    await page.route(/\/api\/mercadillo\/buzon/, (x) => x.fulfill({ json: {
+      conversaciones: [{ id: 'c1', anuncio_id: 'a1', titulo: IPHONE.titulo, precio_cent: 130000, foto: 'f1', estado_anuncio: 'publicado',
+        con: 'Luis G.', soy: 'vendedor', ultimo: '2026-10-17T18:00:00+00:00', ultimo_texto: '¿Me lo dejas en 1.200?', sin_leer: true }],
+      avisos: [{ id: 'v1', texto: 'Tu anuncio «Gorra» ya está publicado.', ts: '2026-10-17T12:00:00+00:00', leido: false }] } }))
+    await page.route(/\/api\/mercadillo\/avisos\/leidos/, (x) => x.fulfill({ json: { ok: true } }))
+    await page.route(/\/api\/mercadillo\/denunciar/, (x) => { r.denuncia = x.request().postDataJSON(); return x.fulfill({ json: { ok: true } }) })
+    return r
+  }
+
+  test('vista previa de Dani: aviso de que está oculto y vender con foto, que entra en revisión', async ({ page }) => {
+    const fallos = vigilar(page)
+    await entrarComoAdmin(page, { superAdmin: true })
+    await simularApi(page, 'vacio')
+    const r = await simular(page, { abierto: false })
+    await page.goto('/mercadillo', { waitUntil: 'domcontentloaded' })
+    await expect(page.getByText(/Vista previa: los repartidores todavía no lo ven/)).toBeVisible()
+    await expect(page.getByText('Todavía no hay nada a la venta')).toBeVisible()
+    await page.getByRole('button', { name: /Vender algo que no uses/ }).click()
+    await page.getByLabel('Añadir fotos').setInputFiles({ name: 'iphone.png', mimeType: 'image/png', buffer: PNG })
+    await expect(page.getByRole('button', { name: 'Quitar la foto 1' })).toBeVisible()
+    await page.getByLabel(/Qué vendes/).fill('iPhone 18 Pro · 256 GB')
+    await page.getByLabel(/Precio/).fill('1.300')
+    await page.getByRole('button', { name: 'Móviles y electrónica' }).click()
+    await page.getByRole('button', { name: 'Como nuevo' }).click()
+    await page.getByLabel(/Zona/).fill('A Coruña')
+    await expect(page.getByRole('button', { name: 'Publicar' })).toBeDisabled()
+    await page.getByRole('checkbox').check()
+    await page.getByRole('button', { name: 'Publicar' }).click()
+    await expect(page.getByText(/Enviado\. Lo revisamos/)).toBeVisible()
+    expect(r.creado).toMatchObject({ titulo: 'iPhone 18 Pro · 256 GB', precio: '1.300', categoria: 'movil',
+      estado_articulo: 'como_nuevo', zona: 'A Coruña', fotos: ['nueva1'], acepto: true })
+    expect(fallos).toEqual([])
+  })
+
+  test('ficha del anuncio: «Me interesa» manda el mensaje y abre la conversación', async ({ page }) => {
+    const fallos = vigilar(page)
+    await entrarComoAdmin(page, { superAdmin: true })
+    await simularApi(page, 'vacio')
+    const r = await simular(page, { anuncios: [IPHONE] })
+    await page.goto('/mercadillo', { waitUntil: 'domcontentloaded' })
+    await page.getByRole('button', { name: /iPhone 18 Pro/ }).click()
+    await expect(page.getByText('1.300 €').first()).toBeVisible()
+    await expect(page.getByText('Como nuevo')).toBeVisible()
+    await expect(page.getByText(/No pagues nunca por adelantado/)).toBeVisible()
+    await page.getByRole('button', { name: 'Me interesa' }).click()
+    await page.getByRole('button', { name: 'Enviar' }).click()
+    await expect(page.getByText('Hola, ¿sigue disponible?')).toBeVisible()
+    expect(r.contacto).toEqual({ texto: 'Hola, ¿sigue disponible?' })
+    await page.getByLabel('Escribe un mensaje').fill('¿Quedamos mañana?')
+    await page.getByRole('button', { name: 'Enviar' }).click()
+    await expect(page.getByText('¿Quedamos mañana?')).toBeVisible()
+    expect(r.respuesta).toEqual({ texto: '¿Quedamos mañana?' })
+    expect(fallos).toEqual([])
+  })
+
+  test('denunciar un anuncio y el buzón con avisos y mensajes sin leer', async ({ page }) => {
+    const fallos = vigilar(page)
+    await entrarComoAdmin(page, { superAdmin: true })
+    await simularApi(page, 'vacio')
+    const r = await simular(page, { anuncios: [IPHONE], sinLeer: 2 })
+    await page.goto('/mercadillo', { waitUntil: 'domcontentloaded' })
+    await page.getByRole('button', { name: /iPhone 18 Pro/ }).click()
+    await page.getByRole('button', { name: 'Denunciar anuncio' }).click()
+    await page.getByRole('radio', { name: 'Es un engaño o una posible estafa' }).click()
+    await page.getByLabel('Explícalo').fill('Pide Bizum por adelantado')
+    await page.getByRole('button', { name: 'Enviar denuncia' }).click()
+    await expect(page.getByText(/Recibido\. Lo revisamos/)).toBeVisible()
+    expect(r.denuncia).toEqual({ anuncio_id: 'a1', motivo: 'estafa', texto: 'Pide Bizum por adelantado' })
+    await page.getByRole('button', { name: 'Cerrar' }).click()
+    await page.getByRole('button', { name: 'Volver' }).click()
+    await page.getByRole('button', { name: 'Mensajes, 2 sin leer' }).click()
+    await expect(page.getByText('Tu anuncio «Gorra» ya está publicado.')).toBeVisible()
+    await expect(page.getByText('¿Me lo dejas en 1.200?')).toBeVisible()
+    await expect(page.getByLabel('Sin leer')).toBeVisible()
+    expect(fallos).toEqual([])
+  })
+
+  test('en el portal del conductor sale la casilla solo si está abierto', async ({ page }) => {
+    const fallos = vigilar(page)
+    const exp = Math.floor(Date.now() / 1000) + 3600
+    const b64 = (o) => Buffer.from(JSON.stringify(o)).toString('base64').replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '')
+    const token = `${b64({ alg: 'HS256', typ: 'JWT' })}.${b64({ sub: 'd1', role: 'driver', name: 'ANA PÉREZ', exp })}.firma`
+    await page.addInitScript((tk) => {
+      localStorage.setItem('flota_driver_token', tk)
+      localStorage.setItem('flota_driver', JSON.stringify({ id: 'd1', name: 'ANA PÉREZ', center: 'OGA5' }))
+      localStorage.setItem('cookie_consent', '1')
+    }, token)
+    await simularApi(page, 'vacio')
+    await simular(page, { anuncios: [IPHONE], sinLeer: 1 })
+    await page.goto('/conductor', { waitUntil: 'domcontentloaded' })
+    await page.getByRole('button', { name: /Mercadillo/ }).click()
+    await expect(page.getByRole('button', { name: /iPhone 18 Pro/ })).toBeVisible()
+    await page.getByRole('button', { name: 'Volver' }).first().click()
+    await expect(page.getByRole('button', { name: /Hacer la auditoría/ })).toBeVisible()
+    await page.unroute(/\/api\/mercadillo\/estado/)
+    await page.route(/\/api\/mercadillo\/estado/, (x) => x.fulfill({ json: { visible: false } }))
+    await page.reload({ waitUntil: 'domcontentloaded' })
+    await expect(page.getByText('Pedir días libres').first()).toBeVisible()
+    await expect(page.getByRole('button', { name: /Mercadillo/ })).toHaveCount(0)
+    expect(fallos).toEqual([])
+  })
+
+  test('Negocio: encenderlo, aprobar y rechazar con motivo', async ({ page }) => {
+    const fallos = vigilar(page)
+    await entrarComoAdmin(page, { superAdmin: true })
+    await simularApi(page, 'vacio')
+    const hechos = []
+    await page.route(/\/api\/mercadillo\/foto\//, (x) => x.fulfill({ status: 200, contentType: 'image/png', body: PNG }))
+    await page.route(/\/api\/admin\/mercadillo$/, (x) => x.fulfill({ json: {
+      conf: { visible: false }, publicados: [], denuncias: [],
+      por_revisar: [{ ...IPHONE, estado: 'pendiente', vendedor: { nombre: 'Ana P.', tipo: 'conductor', clave: 'd:owner:d1' } },
+        { ...IPHONE, id: 'a2', titulo: 'Escáner de la nave', estado: 'pendiente', vendedor: { nombre: 'Luis G.', tipo: 'conductor' } }],
+      motivos_rechazo: { empresa: 'Parece material de una empresa…', otro: 'No cumple las normas del mercadillo.' },
+      motivos_denuncia: LISTAS.motivos_denuncia, categorias: LISTAS.categorias, estados_articulo: LISTAS.estados_articulo,
+      totales: { por_revisar: 2, publicados: 0, denuncias: 0, conversaciones: 0, vendidos: 0 } } }))
+    await page.route(/\/api\/admin\/mercadillo\/(visible|anuncio\/.*)/, (x) => {
+      hechos.push([x.request().url().split('/api/admin/mercadillo/')[1], x.request().postDataJSON()])
+      return x.fulfill({ json: { ok: true, visible: true } })
+    })
+    page.on('dialog', (d) => d.accept())
+    await page.goto('/panel/admin', { waitUntil: 'domcontentloaded' })
+    const s = page.getByRole('region', { name: 'Mercadillo de repartidores' })
+    await expect(s.getByText(/Oculto: solo lo ves tú/)).toBeVisible()
+    await expect(s.getByRole('link', { name: /Verlo como repartidor/ })).toHaveAttribute('href', '/mercadillo')
+    await s.getByRole('button', { name: 'Aprobar' }).first().click()
+    await expect.poll(() => hechos.length).toBe(1)
+    expect(hechos[0]).toEqual(['anuncio/a1', { accion: 'aprobar' }])
+    const rechazar = s.getByRole('button', { name: 'Rechazar' }).nth(1)
+    await expect(rechazar).toBeDisabled()
+    await s.getByLabel('Motivo').nth(1).selectOption('empresa')
+    await s.getByLabel('Nota').nth(1).fill('Es de la nave')
+    await rechazar.click()
+    await expect.poll(() => hechos.length).toBe(2)
+    expect(hechos[1]).toEqual(['anuncio/a2', { accion: 'rechazar', motivo: 'empresa', nota: 'Es de la nave' }])
+    await s.getByRole('button', { name: 'Hacerlo visible para todos' }).click()
+    await expect.poll(() => hechos.length).toBe(3)
+    expect(hechos[2]).toEqual(['visible', { visible: true }])
+    expect(fallos).toEqual([])
+  })
+})
+
+test('Panel · el recuadro del mercadillo sale a la oficina solo si está abierto', async ({ page }) => {
+  const fallos = vigilar(page)
+  await entrarComoAdmin(page)
+  await simularApi(page, 'vacio')
+  let visible = true
+  await page.route(/\/api\/mercadillo\/estado/, (x) => x.fulfill({ json: visible ? { visible: true, abierto: true, sin_leer: 2 } : { visible: false } }))
+  await page.goto('/panel', { waitUntil: 'domcontentloaded' })
+  const tarjeta = page.getByRole('link', { name: /Mercadillo de repartidores/ })
+  await expect(tarjeta).toHaveAttribute('href', '/mercadillo')
+  await expect(tarjeta).toContainText('Tienes 2 mensajes sin leer')
+  visible = false
+  await page.reload({ waitUntil: 'domcontentloaded' })
+  await expect(page.getByRole('heading', { level: 1 })).toBeVisible()
+  await page.waitForTimeout(400)
+  await expect(page.getByRole('link', { name: /Mercadillo de repartidores/ })).toHaveCount(0)
+  expect(fallos).toEqual([])
+})

@@ -28,7 +28,10 @@ export default function Login() {
       // checklist y scorecard pedían el centro literal "Todos" — pantallas
       // vacías sin ningún error visible.
       saveSession(j)
-      window.location.href = '/panel'
+      // ?next=/mercadillo (17-10-2026): vuelve a donde iba. Solo rutas de esta web (empiezan por una barra
+      // y no por dos): un enlace no puede mandar a nadie a otra página tras entrar.
+      const next = new URLSearchParams(window.location.search).get('next') || ''
+      window.location.href = next.startsWith('/') && !next.startsWith('//') && !next.includes('\\') ? next : '/panel'
     } catch { setErr(t('login.err')); setBusy(false) }
   }
 

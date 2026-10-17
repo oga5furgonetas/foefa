@@ -56,6 +56,20 @@ export default function Terminos() {
         <li>El conductor es responsable de facilitar un medio de cobro propio y de declarar los ingresos cuando corresponda. Podemos pedir información fiscal necesaria antes de pagar. El email de empresa identifica la cartera, pero no es por sí mismo el medio de pago.</li>
       </ul>
 
+      <h2 id="mercadillo">5 quater. Mercadillo de repartidores</h2>
+      <ul>
+        <li><strong>Qué es.</strong> Un tablón dentro de la app y del portal del conductor donde los repartidores con cuenta pueden anunciar cosas suyas que ya no usan y hablar entre ellos por mensajes privados. Es solo entre particulares: no se admiten ventas profesionales, tiendas ni reventa.</li>
+        <li><strong>{COMPANY.brand} no es parte de la venta.</strong> No vende, no compra, no cobra comisión, no interviene en el pago ni en la entrega y no garantiza los artículos. El trato es entre quien vende y quien compra, que acuerdan el precio, el pago y la entrega. Recomendamos quedar en persona, revisar el artículo antes de pagar y no pagar nunca por adelantado.</li>
+        <li><strong>Revisión antes de publicar.</strong> Revisamos cada anuncio antes de que salga. Podemos no publicarlo o retirarlo si incumple estas normas; en ese caso explicamos el motivo a quien lo publicó, que puede corregirlo o pedirnos que lo revisemos otra vez escribiendo a {COMPANY.contactEmail}.</li>
+        <li><strong>No se puede anunciar:</strong> armas y réplicas; drogas, medicamentos y productos sanitarios; alcohol, tabaco y productos de vapeo; falsificaciones; objetos robados o de procedencia dudosa; material de la empresa para la que trabajas, de la plataforma para la que repartes o de sus clientes (escáneres, móviles de trabajo, uniformes, paquetes…); animales; documentos, cuentas, rutas o identificadores de reparto; servicios, empleo o dinero; contenido sexual, ofensivo o discriminatorio; y cualquier cosa cuya venta sea ilegal.</li>
+        <li><strong>Quien vende garantiza</strong> que el artículo es suyo, que lo que cuenta y las fotos son verdad y que la venta es legal, y se ocupa de lo que le toque (por ejemplo, el cambio de titular de un vehículo en Tráfico y, si corresponde, los impuestos).</li>
+        <li><strong>Límites.</strong> Hasta 3 anuncios activos por persona. Cada anuncio dura 30 días; después se puede volver a enviar.</li>
+        <li><strong>Mensajes.</strong> Las conversaciones son privadas entre las dos personas. No las leemos salvo que una de ellas las denuncie o lo exija la ley. No se permite acosar, insultar, mandar publicidad ni pedir datos bancarios o pagos por adelantado.</li>
+        <li><strong>Denunciar.</strong> Cualquier usuario puede avisar de un anuncio o de una conversación con el botón «Denunciar», diciendo el motivo. Confirmamos que lo hemos recibido, lo revisa una persona y comunicamos la decisión a quien avisó y, si se actúa, también a quien publicó, con el motivo. Si varias personas avisan del mismo anuncio, se oculta mientras se revisa. Las autoridades pueden dirigirse a {COMPANY.contactEmail}.</li>
+        <li><strong>Consecuencias.</strong> Podemos retirar anuncios, cerrar conversaciones y, ante incumplimientos graves o repetidos, quitar el acceso al mercadillo.</li>
+        <li><strong>Conductores de una empresa.</strong> Para ellos el mercadillo es voluntario y ajeno a su trabajo. La empresa puede pedirnos que no se muestre a sus conductores.</li>
+      </ul>
+
       <h2>6. Disponibilidad del Servicio</h2>
       <p>{COMPANY.brand} hace esfuerzos razonables para mantener el Servicio disponible 24/7, pero no garantiza un nivel de servicio (SLA) específico salvo acuerdo separado. Pueden producirse interrupciones por mantenimiento o causas ajenas (fallos de proveedores, fuerza mayor).</p>
 

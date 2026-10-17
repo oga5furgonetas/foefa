@@ -7,6 +7,7 @@ import whatsapp
 import analitica
 import ciclo_correos
 import campana_candidatos
+import mercadillo
 import demo_comercial as _demo_com
 from ai_learning import (
     get_few_shot_examples, build_few_shot_prompt_parts_multimodal,
@@ -50563,6 +50564,706 @@ async def admin_opiniones(_: dict = Depends(require_superadmin)):
         "motivos": [{"motivo": k, "texto": _OPINION_MOTIVOS[k], "n": n}
                     for k, n in sorted(motivos.items(), key=lambda x: -x[1])],
         "pedidas_por_correo": await global_db.organizations.count_documents({"ciclo_correos.opinion.ok": True})}}
+
+
+# ══ EL MERCADILLO DE REPARTIDORES (17-10-2026) ════════════════════════════════
+# Qué es, qué se puede vender y por qué es legal: mercadillo.py. Aquí, la base, los permisos y los avisos.
+# Vive en la base GLOBAL: lo ven los repartidores de cualquier cuenta (autónomos y conductores de empresa) y
+# cada uno solo toca lo suyo. Está OCULTO hasta que Dani lo enciende en Negocio; mientras, solo lo ve y lo
+# usa el super-admin, para probarlo en /mercadillo. Una empresa puede apagarlo para sus conductores
+# (`mercadillo_off` en su cuenta).
+_MERC_ANUNCIOS = "mercadillo_anuncios"
+_MERC_FOTOS = "mercadillo_fotos"
+_MERC_CONVS = "mercadillo_conversaciones"
+_MERC_MSGS = "mercadillo_mensajes"
+_MERC_DENUNCIAS = "mercadillo_denuncias"
+_MERC_AVISOS = "mercadillo_avisos"
+_MERC_FOTO_MAX = 15 * 1024 * 1024          # lo que llega del móvil; aquí se reduce a ~200 KB
+_MERC_FOTO_LADO = 1280
+_MERC_FOTOS_DIA = 40                       # subidas por persona y día
+_MERC_MENSAJES_10MIN = 20
+_MERC_CORREO_CADA = timedelta(hours=6)     # como mucho un correo de «tienes un mensaje» por conversación
+
+
+async def _merc_conf() -> dict:
+    c = await global_db.mercadillo_conf.find_one({"id": "conf"}, {"_id": 0}) or {}
+    return {"visible": bool(c.get("visible")), "desde": c.get("desde")}
+
+
+async def _merc_yo(user: dict) -> dict:
+    """Quién es en el mercadillo: repartidor (autónomo o conductor de empresa), gente de oficina o el super-admin
+    (que además lo prueba y lo modera). 403 para las demos y las empresas que lo han apagado."""
+    if user.get("demo") or user.get("imp"):
+        raise HTTPException(403, "El mercadillo es de cada cuenta")
+    if user.get("sa"):
+        return {"clave": "fds", "tipo": "fds", "nombre": "Dani · FDS", "org_id": user.get("org_id") or OWNER_ORG_ID}
+    org_id = user.get("org_id")
+    if user.get("role") == "driver" and user.get("sub") and org_id:
+        org = await get_org(org_id) or {}
+        if org.get("mercadillo_off"):
+            raise HTTPException(403, "Tu empresa no tiene el mercadillo")
+        return {"clave": f"d:{org_id}:{user['sub']}", "tipo": "conductor", "org_id": org_id,
+                "driver_id": user["sub"], "nombre": mercadillo.nombre_publico(user.get("name") or "")}
+    if user.get("role") == "admin" and org_id:
+        org = await get_org(org_id) or {}
+        if org.get("mercadillo_off"):
+            raise HTTPException(403, "Tu empresa no tiene el mercadillo")
+        if _es_repartidor(org):
+            return {"clave": f"o:{org_id}", "tipo": "autonomo", "org_id": org_id,
+                    "nombre": mercadillo.nombre_publico(org.get("name") or "")}
+        # La gente de OFICINA de una empresa (Dani, 17-10-2026: «a los perfiles de oficina también, por si quieren
+        # ver el mercadillo o vender algo»). Cada persona por su usuario, no la empresa entera.
+        if user.get("sub"):
+            return {"clave": f"a:{org_id}:{user['sub']}", "tipo": "oficina", "org_id": org_id,
+                    "nombre": mercadillo.nombre_publico(user.get("name") or "")}
+    raise HTTPException(403, "El mercadillo es para repartidores")
+
+
+async def _merc_dentro(user: dict) -> dict:
+    """Quién es, si puede entrar: con el mercadillo apagado, solo el super-admin."""
+    yo = await _merc_yo(user)
+    if yo["tipo"] != "fds" and not (await _merc_conf())["visible"]:
+        raise HTTPException(404, "El mercadillo todavía no está abierto")
+    return yo
+
+
+def _merc_estado(a: dict, ahora: datetime) -> str:
+    """El estado de verdad: un publicado que ya pasó sus 30 días está caducado aunque la limpieza no haya pasado."""
+    e = a.get("estado") or "pendiente"
+    caduca = _fecha_utc(a.get("caduca"))
+    return "caducado" if e == "publicado" and caduca and caduca < ahora else e
+
+
+def _merc_vista(a: dict, yo: dict, ahora: datetime) -> dict:
+    """Lo que ve cada uno de un anuncio: de quien vende, solo el nombre corto y su tipo."""
+    v = a.get("vendedor") or {}
+    mio = v.get("clave") == yo["clave"]
+    d = {k: a.get(k) for k in ("id", "titulo", "descripcion", "precio_cent", "categoria", "estado_articulo",
+                               "zona", "fotos", "creado", "publicado_en", "caduca")}
+    d.update(estado=_merc_estado(a, ahora), mio=mio,
+             vendedor={"nombre": v.get("nombre") or "Repartidor", "tipo": v.get("tipo"), "entregas": v.get("entregas")})
+    if mio or yo["tipo"] == "fds":
+        d.update(motivo=a.get("motivo") or "", motivo_clave=a.get("motivo_clave") or "",
+                 interesados=int(a.get("interesados") or 0))
+    return d
+
+
+async def _merc_entregas(yo: dict) -> Optional[int]:
+    """Entregas de verdad con la app de quien vende (autónomos): lo que da confianza a quien compra."""
+    if yo["tipo"] != "autonomo":
+        return None
+    try:
+        org = await get_org(yo["org_id"])
+        return await client[_tenant_db_name(org)].reparto_pedidos.count_documents(
+            {"estado": "entregado", "ejemplo": {"$ne": True}})
+    except Exception:                                            # noqa: BLE001
+        return None
+
+
+async def _merc_correo_de(clave: str) -> str:
+    """El correo de una persona del mercadillo, para avisarle (nunca se enseña a nadie)."""
+    try:
+        if clave.startswith("o:"):
+            org = await get_org(clave[2:]) or {}
+            c = str(org.get("email") or "")
+        elif clave.startswith("a:"):
+            _p, _org, admin_id = clave.split(":", 2)
+            u = await global_db.admin_users.find_one({"id": admin_id}, {"_id": 0, "email": 1, "username": 1}) or {}
+            c = str(u.get("email") or u.get("username") or "")
+        elif clave.startswith("d:"):
+            _p, org_id, driver_id = clave.split(":", 2)
+            org = await get_org(org_id) or {}
+            dr = await client[_tenant_db_name(org)].drivers.find_one({"id": driver_id}, {"_id": 0, "email": 1}) or {}
+            c = str(dr.get("email") or "")
+        else:
+            return ""
+        return c if _correo_valido(c) else ""
+    except Exception:                                            # noqa: BLE001
+        return ""
+
+
+def _merc_enlace(clave: str) -> str:
+    """Dónde lo lee cada uno: el conductor, en su portal; el autónomo, en su app."""
+    if clave.startswith("d:"):
+        return f"{_PORTAL_BASE_FRONT}/conductor?vista=mercadillo"
+    return f"{_PORTAL_BASE_FRONT}/mercadillo"
+
+
+async def _merc_avisar(clave: str, texto: str, asunto: str = "") -> None:
+    """Un aviso en su buzón del mercadillo y, si se le puede escribir y hay `asunto`, un correo."""
+    ahora = datetime.now(timezone.utc).isoformat()
+    await global_db[_MERC_AVISOS].insert_one({"id": str(uuid.uuid4()), "para": clave, "texto": texto[:1500],
+                                              "ts": ahora, "leido": False})
+    if asunto and clave != "fds":
+        correo = await _merc_correo_de(clave)
+        if correo:
+            cuerpo = f"{texto}\n\nLo tienes en el mercadillo: {_merc_enlace(clave)}"
+            try:
+                await _enviar_email(correo, asunto, "<div style=\"font-family:Arial,sans-serif;font-size:15px;"
+                                    "line-height:1.6\">" + html_escape(cuerpo).replace("\n", "<br>") + "</div>",
+                                    texto=cuerpo)
+            except Exception as e:                               # noqa: BLE001
+                logger.warning("aviso del mercadillo por correo: %s", e)
+
+
+async def _merc_a_dani(asunto: str, texto: str) -> None:
+    """Lo que tiene que revisar Dani (anuncios nuevos, denuncias), al buzón de contacto."""
+    para = (CORREO_CONTACTO or "").strip()
+    if not _correo_valido(para):
+        return
+    cuerpo = f"{texto}\n\nRevísalo en Negocio → Mercadillo: {_PORTAL_BASE_FRONT}/panel/admin"
+    try:
+        await _enviar_email(para, asunto, "<div style=\"font-family:Arial,sans-serif;font-size:15px;"
+                            "line-height:1.6\">" + html_escape(cuerpo).replace("\n", "<br>") + "</div>", texto=cuerpo)
+    except Exception as e:                                       # noqa: BLE001
+        logger.warning("aviso del mercadillo a Dani: %s", e)
+
+
+async def _merc_sin_leer(yo: dict) -> int:
+    n = await global_db[_MERC_AVISOS].count_documents({"para": yo["clave"], "leido": False})
+    convs = await global_db[_MERC_CONVS].find(
+        {"$or": [{"comprador.clave": yo["clave"]}, {"vendedor.clave": yo["clave"]}]},
+        {"_id": 0, "sin_leer": 1}).to_list(500)
+    # Un contador por persona, no una comparación de horas: dos mensajes en el mismo instante no se pierden.
+    return n + sum(1 for c in convs if int((c.get("sin_leer") or {}).get(_merc_k(yo["clave"])) or 0) > 0)
+
+
+def _merc_k(clave: str) -> str:
+    """La clave de una persona como nombre de campo (Mongo no admite puntos en los nombres)."""
+    return clave.replace(".", "_")
+
+
+@api_router.get("/mercadillo/estado")
+async def merc_estado(user: dict = Depends(require_any_auth)):
+    """¿Se enseña la entrada del mercadillo? Y cuántas cosas tiene sin leer (para el globito)."""
+    try:
+        yo = await _merc_yo(user)
+    except HTTPException:
+        return {"visible": False}
+    conf = await _merc_conf()
+    if not conf["visible"] and yo["tipo"] != "fds":
+        return {"visible": False}
+    r = {"visible": True, "abierto": conf["visible"], "sin_leer": await _merc_sin_leer(yo),
+         "yo": {"nombre": yo["nombre"], "tipo": yo["tipo"]}}
+    if yo["tipo"] == "fds":
+        r["por_revisar"] = await global_db[_MERC_ANUNCIOS].count_documents({"estado": {"$in": ["pendiente", "en_revision"]}})
+    return r
+
+
+@api_router.get("/mercadillo")
+async def merc_lista(categoria: str = "", user: dict = Depends(require_any_auth)):
+    """Lo publicado (lo último primero) y lo mío, con las listas para el formulario y las normas."""
+    yo = await _merc_dentro(user)
+    ahora = datetime.now(timezone.utc)
+    q = {"estado": "publicado", "caduca": {"$gt": ahora.isoformat()}}
+    if categoria in mercadillo.CATEGORIAS:
+        q["categoria"] = categoria
+    pub = await global_db[_MERC_ANUNCIOS].find(q, {"_id": 0}).to_list(300)
+    pub.sort(key=lambda a: str(a.get("publicado_en") or ""), reverse=True)
+    mios = await global_db[_MERC_ANUNCIOS].find({"vendedor.clave": yo["clave"]}, {"_id": 0}).to_list(100)
+    mios.sort(key=lambda a: str(a.get("creado") or ""), reverse=True)
+    return {"anuncios": [_merc_vista(a, yo, ahora) for a in pub],
+            "mios": [_merc_vista(a, yo, ahora) for a in mios],
+            "categorias": mercadillo.CATEGORIAS, "estados_articulo": mercadillo.ESTADOS_ARTICULO,
+            "motivos_denuncia": mercadillo.MOTIVOS_DENUNCIA, "activos_max": mercadillo.ACTIVOS_MAX,
+            "dias": mercadillo.DIAS_PUBLICADO, "yo": {"nombre": yo["nombre"], "tipo": yo["tipo"]}}
+
+
+async def _merc_anuncio_visible(anuncio_id: str, yo: dict) -> dict:
+    """El anuncio si este usuario puede verlo: publicado, suyo, de una conversación suya o el super-admin."""
+    a = await global_db[_MERC_ANUNCIOS].find_one({"id": str(anuncio_id)[:64]}, {"_id": 0})
+    if not a:
+        raise HTTPException(404, "Ese anuncio ya no está")
+    if yo["tipo"] == "fds" or (a.get("vendedor") or {}).get("clave") == yo["clave"]:
+        return a
+    if _merc_estado(a, datetime.now(timezone.utc)) == "publicado":
+        return a
+    if await global_db[_MERC_CONVS].find_one({"anuncio_id": a["id"], "comprador.clave": yo["clave"]}, {"_id": 0, "id": 1}):
+        return a
+    raise HTTPException(404, "Ese anuncio ya no está")
+
+
+@api_router.get("/mercadillo/anuncio/{anuncio_id}")
+async def merc_anuncio(anuncio_id: str, user: dict = Depends(require_any_auth)):
+    yo = await _merc_dentro(user)
+    a = await _merc_anuncio_visible(anuncio_id, yo)
+    d = _merc_vista(a, yo, datetime.now(timezone.utc))
+    c = await global_db[_MERC_CONVS].find_one({"anuncio_id": a["id"], "comprador.clave": yo["clave"]}, {"_id": 0, "id": 1})
+    d["conversacion_id"] = (c or {}).get("id")
+    return d
+
+
+def _merc_foto_limpia(datos: bytes) -> bytes:
+    """La foto, girada como se hizo, reducida y SIN metadatos: un JPEG nuevo no lleva la ubicación del móvil
+    (EXIF/GPS), ni el modelo, ni la hora. Lanza HTTPException si no es una imagen."""
+    from PIL import ImageOps
+    try:
+        im = Image.open(io.BytesIO(datos))
+        im = ImageOps.exif_transpose(im)
+        im = im.convert("RGB")
+        im.thumbnail((_MERC_FOTO_LADO, _MERC_FOTO_LADO))
+        salida = io.BytesIO()
+        im.save(salida, "JPEG", quality=80, optimize=True)        # sin exif=…: no se copia ningún metadato
+        return salida.getvalue()
+    except Exception:                                            # noqa: BLE001
+        raise HTTPException(400, "Esa foto no se puede abrir. Prueba con otra (JPG o PNG).") from None
+
+
+@api_router.post("/mercadillo/fotos")
+async def merc_subir_foto(file: UploadFile = File(...), user: dict = Depends(require_any_auth)):
+    """Sube una foto para un anuncio. Se guarda ya limpia (sin ubicación) y queda suya hasta que la use."""
+    yo = await _merc_dentro(user)
+    hace_un_dia = (datetime.now(timezone.utc) - timedelta(days=1)).isoformat()
+    if await global_db[_MERC_FOTOS].count_documents({"dueno": yo["clave"], "ts": {"$gte": hace_un_dia}}) >= _MERC_FOTOS_DIA:
+        raise HTTPException(429, "Has subido muchas fotos hoy. Prueba mañana.")
+    datos = await file.read(_MERC_FOTO_MAX + 1)
+    if not datos:
+        raise HTTPException(400, "La foto está vacía")
+    if len(datos) > _MERC_FOTO_MAX:
+        raise HTTPException(400, "La foto es demasiado grande (máximo 15 MB)")
+    limpia = _merc_foto_limpia(datos)
+    fid = uuid.uuid4().hex
+    await global_db[_MERC_FOTOS].insert_one({"id": fid, "dueno": yo["clave"], "anuncio": None, "mime": "image/jpeg",
+                                             "datos": base64.b64encode(limpia).decode("ascii"), "bytes": len(limpia),
+                                             "ts": datetime.now(timezone.utc).isoformat()})
+    return {"id": fid, "bytes": len(limpia)}
+
+
+@api_router.get("/mercadillo/foto/{foto_id}")
+async def merc_ver_foto(foto_id: str, user: dict = Depends(require_any_auth)):
+    """Una foto: la ve quien la subió, o quien puede ver su anuncio. Nunca sin sesión."""
+    yo = await _merc_dentro(user)
+    f = await global_db[_MERC_FOTOS].find_one({"id": str(foto_id)[:64]}, {"_id": 0})
+    if not f:
+        raise HTTPException(404, "Esa foto ya no está")
+    if f.get("dueno") != yo["clave"]:
+        if not f.get("anuncio"):
+            raise HTTPException(404, "Esa foto ya no está")
+        await _merc_anuncio_visible(f["anuncio"], yo)
+    return Response(content=base64.b64decode(f.get("datos") or ""), media_type=f.get("mime") or "image/jpeg",
+                    headers={"cache-control": "private, max-age=86400"})
+
+
+@api_router.post("/mercadillo")
+async def merc_crear(data: dict = Body(default={}), user: dict = Depends(require_any_auth)):
+    """Publica un anuncio: entra EN REVISIÓN y sale cuando Dani lo aprueba."""
+    yo = await _merc_dentro(user)
+    try:
+        v = mercadillo.validar(_dict_cuerpo(data))
+    except mercadillo.Invalido as e:
+        raise HTTPException(400, str(e)) from None
+    if yo["tipo"] != "fds" and await global_db[_MERC_ANUNCIOS].count_documents(
+            {"vendedor.clave": yo["clave"], "estado": {"$in": list(mercadillo.ESTADOS_ACTIVOS)}}) >= mercadillo.ACTIVOS_MAX:
+        raise HTTPException(400, f"Puedes tener {mercadillo.ACTIVOS_MAX} anuncios a la vez. Marca alguno como vendido o quítalo.")
+    fotos = await global_db[_MERC_FOTOS].find({"id": {"$in": v["fotos"]}, "dueno": yo["clave"], "anuncio": None},
+                                              {"_id": 0, "id": 1}).to_list(10)
+    if len(fotos) != len(v["fotos"]):
+        raise HTTPException(400, "Alguna foto no está subida o ya está en otro anuncio. Vuelve a subirla.")
+    ahora = datetime.now(timezone.utc).isoformat()
+    doc = {"id": uuid.uuid4().hex[:16], **v, "estado": "pendiente", "creado": ahora, "actualizado": ahora,
+           "vendedor": {"clave": yo["clave"], "tipo": yo["tipo"], "nombre": yo["nombre"], "org_id": yo.get("org_id"),
+                        "entregas": await _merc_entregas(yo)},
+           "interesados": 0}
+    await global_db[_MERC_ANUNCIOS].insert_one(dict(doc))
+    await global_db[_MERC_FOTOS].update_many({"id": {"$in": v["fotos"]}}, {"$set": {"anuncio": doc["id"]}})
+    await _merc_a_dani(f"Mercadillo: anuncio para revisar · {v['titulo']} · {mercadillo.euros(v['precio_cent'])}",
+                       f"{yo['nombre']} ({yo['tipo']}) quiere publicar «{v['titulo']}» por {mercadillo.euros(v['precio_cent'])}.")
+    return _merc_vista(doc, yo, datetime.now(timezone.utc))
+
+
+@api_router.patch("/mercadillo/anuncio/{anuncio_id}")
+async def merc_cambiar(anuncio_id: str, data: dict = Body(default={}), user: dict = Depends(require_any_auth)):
+    """Quien vende: marcarlo vendido, quitarlo o corregirlo. Corregir uno publicado lo vuelve a revisión."""
+    yo = await _merc_dentro(user)
+    a = await global_db[_MERC_ANUNCIOS].find_one({"id": str(anuncio_id)[:64], "vendedor.clave": yo["clave"]}, {"_id": 0})
+    if not a:
+        raise HTTPException(404, "Ese anuncio no es tuyo o ya no está")
+    d = _dict_cuerpo(data)
+    ahora = datetime.now(timezone.utc)
+    estado = _merc_estado(a, ahora)
+    accion = str(d.get("accion") or "")
+    if accion in ("vendido", "quitar"):
+        if estado not in mercadillo.ESTADOS_ACTIVOS:
+            raise HTTPException(400, "Ese anuncio ya no está activo")
+        nuevo = "vendido" if accion == "vendido" else "quitado"
+        await global_db[_MERC_ANUNCIOS].update_one({"id": a["id"]}, {"$set": {"estado": nuevo, "fin": ahora.isoformat(),
+                                                                              "actualizado": ahora.isoformat()}})
+        return {"ok": True, "estado": nuevo}
+    if estado not in ("pendiente", "publicado", "rechazado", "caducado"):
+        raise HTTPException(400, "Ese anuncio ya no se puede cambiar")
+    try:
+        v = mercadillo.validar({**d, "acepto": d.get("acepto")})
+    except mercadillo.Invalido as e:
+        raise HTTPException(400, str(e)) from None
+    nuevas = [f for f in v["fotos"] if f not in (a.get("fotos") or [])]
+    if nuevas and len(await global_db[_MERC_FOTOS].find(
+            {"id": {"$in": nuevas}, "dueno": yo["clave"], "anuncio": None}, {"_id": 0, "id": 1}).to_list(10)) != len(nuevas):
+        raise HTTPException(400, "Alguna foto no está subida. Vuelve a subirla.")
+    if estado in ("rechazado", "caducado") and yo["tipo"] != "fds" and await global_db[_MERC_ANUNCIOS].count_documents(
+            {"vendedor.clave": yo["clave"], "estado": {"$in": list(mercadillo.ESTADOS_ACTIVOS)}}) >= mercadillo.ACTIVOS_MAX:
+        raise HTTPException(400, f"Puedes tener {mercadillo.ACTIVOS_MAX} anuncios a la vez.")
+    await global_db[_MERC_ANUNCIOS].update_one({"id": a["id"]}, {
+        "$set": {**v, "estado": "pendiente", "actualizado": ahora.isoformat(), "motivo": "", "motivo_clave": ""},
+        "$unset": {"publicado_en": "", "caduca": "", "fin": ""}})
+    quitadas = [f for f in (a.get("fotos") or []) if f not in v["fotos"]]
+    if quitadas:
+        await global_db[_MERC_FOTOS].delete_many({"id": {"$in": quitadas}, "anuncio": a["id"]})
+    if nuevas:
+        await global_db[_MERC_FOTOS].update_many({"id": {"$in": nuevas}}, {"$set": {"anuncio": a["id"]}})
+    await _merc_a_dani(f"Mercadillo: anuncio corregido para revisar · {v['titulo']}",
+                       f"{yo['nombre']} ha cambiado «{v['titulo']}» ({mercadillo.euros(v['precio_cent'])}).")
+    return {"ok": True, "estado": "pendiente"}
+
+
+async def _merc_conv_mia(conv_id: str, yo: dict) -> dict:
+    c = await global_db[_MERC_CONVS].find_one({"id": str(conv_id)[:64]}, {"_id": 0})
+    if not c or yo["clave"] not in ((c.get("comprador") or {}).get("clave"), (c.get("vendedor") or {}).get("clave")):
+        raise HTTPException(404, "Esa conversación no existe")
+    return c
+
+
+async def _merc_escribir(c: dict, yo: dict, texto: str) -> dict:
+    """Guarda el mensaje y, si el otro no lo ha leído, le avisa por correo (uno cada 6 h por conversación)."""
+    hace = (datetime.now(timezone.utc) - timedelta(minutes=10)).isoformat()
+    if await global_db[_MERC_MSGS].count_documents({"de": yo["clave"], "ts": {"$gte": hace}}) >= _MERC_MENSAJES_10MIN:
+        raise HTTPException(429, "Vas muy rápido. Espera un poco antes de mandar más mensajes.")
+    ahora = datetime.now(timezone.utc)
+    m = {"id": uuid.uuid4().hex, "conv": c["id"], "de": yo["clave"], "texto": texto, "ts": ahora.isoformat()}
+    await global_db[_MERC_MSGS].insert_one(dict(m))
+    otro = c["vendedor"] if c["comprador"]["clave"] == yo["clave"] else c["comprador"]
+    await global_db[_MERC_CONVS].update_one({"id": c["id"]}, {
+        "$set": {"ultimo": m["ts"], "ultimo_de": yo["clave"], "ultimo_texto": texto[:120],
+                 f"sin_leer.{_merc_k(yo['clave'])}": 0},                  # quien escribe ya lo ha leído todo
+        "$inc": {f"sin_leer.{_merc_k(otro['clave'])}": 1}})
+    avisado = _fecha_utc((c.get("avisado") or {}).get(_merc_k(otro["clave"])))
+    if otro["clave"] != "fds" and (not avisado or ahora - avisado > _MERC_CORREO_CADA):
+        correo = await _merc_correo_de(otro["clave"])
+        if correo:
+            await global_db[_MERC_CONVS].update_one({"id": c["id"]}, {"$set": {f"avisado.{_merc_k(otro['clave'])}": ahora.isoformat()}})
+            cuerpo = (f"{yo['nombre']} te ha escrito en el mercadillo sobre «{c.get('anuncio_titulo') or 'tu anuncio'}».\n\n"
+                      f"Léelo y contesta aquí: {_merc_enlace(otro['clave'])}\n\n"
+                      "Por tu privacidad, el mensaje no va en este correo.")
+            try:
+                await _enviar_email(correo, f"Tienes un mensaje en el mercadillo: {c.get('anuncio_titulo') or ''}"[:120],
+                                    "<div style=\"font-family:Arial,sans-serif;font-size:15px;line-height:1.6\">"
+                                    + html_escape(cuerpo).replace("\n", "<br>") + "</div>", texto=cuerpo)
+            except Exception as e:                               # noqa: BLE001
+                logger.warning("correo de mensaje del mercadillo: %s", e)
+    return m
+
+
+@api_router.post("/mercadillo/anuncio/{anuncio_id}/contactar")
+async def merc_contactar(anuncio_id: str, data: dict = Body(default={}), user: dict = Depends(require_any_auth)):
+    """«Me interesa»: abre (o sigue) la conversación privada con quien vende."""
+    yo = await _merc_dentro(user)
+    try:
+        texto = mercadillo.mensaje(_dict_cuerpo(data).get("texto"))
+    except mercadillo.Invalido as e:
+        raise HTTPException(400, str(e)) from None
+    a = await global_db[_MERC_ANUNCIOS].find_one({"id": str(anuncio_id)[:64]}, {"_id": 0})
+    if not a or _merc_estado(a, datetime.now(timezone.utc)) != "publicado":
+        raise HTTPException(404, "Ese anuncio ya no está a la venta")
+    if (a.get("vendedor") or {}).get("clave") == yo["clave"]:
+        raise HTTPException(400, "Es tu anuncio")
+    c = await global_db[_MERC_CONVS].find_one({"anuncio_id": a["id"], "comprador.clave": yo["clave"]}, {"_id": 0})
+    if not c:
+        v = a["vendedor"]
+        c = {"id": uuid.uuid4().hex[:16], "anuncio_id": a["id"], "anuncio_titulo": a.get("titulo"),
+             "comprador": {"clave": yo["clave"], "nombre": yo["nombre"]},
+             "vendedor": {"clave": v["clave"], "nombre": v.get("nombre")},
+             "creada": datetime.now(timezone.utc).isoformat(), "sin_leer": {}, "avisado": {}}
+        await global_db[_MERC_CONVS].insert_one(dict(c))
+        await global_db[_MERC_ANUNCIOS].update_one({"id": a["id"]}, {"$inc": {"interesados": 1}})
+    if c.get("bloqueada"):
+        raise HTTPException(403, "Esta conversación está cerrada")
+    await _merc_escribir(c, yo, texto)
+    return {"ok": True, "conversacion_id": c["id"]}
+
+
+@api_router.get("/mercadillo/buzon")
+async def merc_buzon(user: dict = Depends(require_any_auth)):
+    """Su buzón: las conversaciones (lo último primero) y los avisos de FDS."""
+    yo = await _merc_dentro(user)
+    convs = await global_db[_MERC_CONVS].find(
+        {"$or": [{"comprador.clave": yo["clave"]}, {"vendedor.clave": yo["clave"]}]}, {"_id": 0}).to_list(300)
+    convs.sort(key=lambda c: str(c.get("ultimo") or c.get("creada") or ""), reverse=True)
+    ids = list({c["anuncio_id"] for c in convs})
+    anuncios = {a["id"]: a for a in await global_db[_MERC_ANUNCIOS].find(
+        {"id": {"$in": ids}}, {"_id": 0, "id": 1, "titulo": 1, "precio_cent": 1, "fotos": 1, "estado": 1, "caduca": 1}).to_list(300)}
+    ahora = datetime.now(timezone.utc)
+    lista_c = []
+    for c in convs:
+        soy_vendedor = c["vendedor"]["clave"] == yo["clave"]
+        a = anuncios.get(c["anuncio_id"]) or {}
+        lista_c.append({"id": c["id"], "anuncio_id": c["anuncio_id"], "titulo": a.get("titulo") or c.get("anuncio_titulo"),
+                        "precio_cent": a.get("precio_cent"), "foto": (a.get("fotos") or [None])[0] if a else None,
+                        "estado_anuncio": _merc_estado(a, ahora) if a else "borrado",
+                        "con": (c["comprador"] if soy_vendedor else c["vendedor"]).get("nombre"),
+                        "soy": "vendedor" if soy_vendedor else "comprador", "ultimo": c.get("ultimo"),
+                        "ultimo_texto": c.get("ultimo_texto") or "", "bloqueada": bool(c.get("bloqueada")),
+                        "sin_leer": int((c.get("sin_leer") or {}).get(_merc_k(yo["clave"])) or 0) > 0})
+    avisos = await global_db[_MERC_AVISOS].find({"para": yo["clave"]}, {"_id": 0, "para": 0}).to_list(200)
+    avisos.sort(key=lambda x: str(x.get("ts") or ""), reverse=True)
+    return {"conversaciones": lista_c, "avisos": avisos[:50]}
+
+
+@api_router.get("/mercadillo/conversacion/{conv_id}")
+async def merc_conversacion(conv_id: str, user: dict = Depends(require_any_auth)):
+    yo = await _merc_dentro(user)
+    c = await _merc_conv_mia(conv_id, yo)
+    msgs = await global_db[_MERC_MSGS].find({"conv": c["id"]}, {"_id": 0}).to_list(2000)
+    msgs.sort(key=lambda m: str(m.get("ts") or ""))
+    await global_db[_MERC_CONVS].update_one({"id": c["id"]}, {"$set": {f"sin_leer.{_merc_k(yo['clave'])}": 0}})
+    a = await global_db[_MERC_ANUNCIOS].find_one({"id": c["anuncio_id"]}, {"_id": 0}) or {}
+    soy_vendedor = c["vendedor"]["clave"] == yo["clave"]
+    return {"id": c["id"], "soy": "vendedor" if soy_vendedor else "comprador",
+            "con": (c["comprador"] if soy_vendedor else c["vendedor"]).get("nombre"), "bloqueada": bool(c.get("bloqueada")),
+            "anuncio": _merc_vista(a, yo, datetime.now(timezone.utc)) if a else {"titulo": c.get("anuncio_titulo"), "estado": "borrado"},
+            "mensajes": [{"id": m["id"], "mio": m["de"] == yo["clave"], "texto": m["texto"], "ts": m["ts"]} for m in msgs]}
+
+
+@api_router.post("/mercadillo/conversacion/{conv_id}")
+async def merc_responder(conv_id: str, data: dict = Body(default={}), user: dict = Depends(require_any_auth)):
+    yo = await _merc_dentro(user)
+    c = await _merc_conv_mia(conv_id, yo)
+    if c.get("bloqueada"):
+        raise HTTPException(403, "Esta conversación está cerrada")
+    try:
+        texto = mercadillo.mensaje(_dict_cuerpo(data).get("texto"))
+    except mercadillo.Invalido as e:
+        raise HTTPException(400, str(e)) from None
+    m = await _merc_escribir(c, yo, texto)
+    return {"id": m["id"], "mio": True, "texto": m["texto"], "ts": m["ts"]}
+
+
+@api_router.post("/mercadillo/avisos/leidos")
+async def merc_avisos_leidos(user: dict = Depends(require_any_auth)):
+    yo = await _merc_dentro(user)
+    await global_db[_MERC_AVISOS].update_many({"para": yo["clave"], "leido": False}, {"$set": {"leido": True}})
+    return {"ok": True}
+
+
+@api_router.post("/mercadillo/denunciar")
+async def merc_denunciar(data: dict = Body(default={}), user: dict = Depends(require_any_auth)):
+    """«Denunciar» un anuncio o una conversación (DSA art. 16): queda para revisar, quien avisa recibe acuse
+    y, cuando se decide, la decisión. Con avisos de 3 personas, el anuncio se oculta hasta revisarlo."""
+    yo = await _merc_dentro(user)
+    d = _dict_cuerpo(data)
+    motivo = str(d.get("motivo") or "")
+    if motivo not in mercadillo.MOTIVOS_DENUNCIA:
+        raise HTTPException(400, "Elige por qué lo denuncias")
+    texto = str(d.get("texto") or "").strip()[:1000]
+    anuncio_id, conv_id = str(d.get("anuncio_id") or "")[:64], str(d.get("conversacion_id") or "")[:64]
+    if anuncio_id:
+        a = await _merc_anuncio_visible(anuncio_id, yo)
+        objetivo = {"tipo": "anuncio", "id": a["id"], "titulo": a.get("titulo")}
+    elif conv_id:
+        c = await _merc_conv_mia(conv_id, yo)
+        objetivo = {"tipo": "conversacion", "id": c["id"], "titulo": c.get("anuncio_titulo")}
+    else:
+        raise HTTPException(400, "Falta qué denuncias")
+    ahora = datetime.now(timezone.utc).isoformat()
+    previa = await global_db[_MERC_DENUNCIAS].find_one({"objetivo.id": objetivo["id"], "de": yo["clave"], "estado": "abierta"},
+                                                      {"_id": 0, "id": 1})
+    if previa:
+        return {"ok": True, "ya": True}
+    await global_db[_MERC_DENUNCIAS].insert_one({"id": uuid.uuid4().hex[:16], "objetivo": objetivo, "motivo": motivo,
+                                                 "texto": texto, "de": yo["clave"], "de_nombre": yo["nombre"],
+                                                 "ts": ahora, "estado": "abierta"})
+    await _merc_avisar(yo["clave"], f"Hemos recibido tu aviso sobre «{objetivo['titulo'] or 'un anuncio'}». "
+                                     "Lo revisamos y te diremos qué hemos decidido.")
+    if objetivo["tipo"] == "anuncio":
+        quienes = await global_db[_MERC_DENUNCIAS].distinct("de", {"objetivo.id": objetivo["id"], "estado": "abierta"})
+        if len(quienes) >= mercadillo.DENUNCIAS_PARA_OCULTAR:
+            await global_db[_MERC_ANUNCIOS].update_one({"id": objetivo["id"], "estado": "publicado"},
+                                                       {"$set": {"estado": "en_revision", "actualizado": ahora}})
+    await _merc_a_dani(f"Mercadillo: denuncia · {mercadillo.MOTIVOS_DENUNCIA[motivo]} · {objetivo['titulo'] or ''}"[:140],
+                       f"{yo['nombre']} denuncia {('el anuncio' if objetivo['tipo'] == 'anuncio' else 'una conversación sobre')} "
+                       f"«{objetivo['titulo'] or ''}»: {mercadillo.MOTIVOS_DENUNCIA[motivo]}.\n\n{texto or '(sin explicación)'}")
+    return {"ok": True}
+
+
+# ── Lo de Dani: encender, revisar anuncios y resolver denuncias ──────────────
+@api_router.get("/admin/mercadillo")
+async def admin_mercadillo(_: dict = Depends(require_superadmin)):
+    ahora = datetime.now(timezone.utc)
+    yo = {"clave": "fds", "tipo": "fds"}
+    todos = await global_db[_MERC_ANUNCIOS].find({}, {"_id": 0}).to_list(2000)
+    todos.sort(key=lambda a: str(a.get("actualizado") or a.get("creado") or ""), reverse=True)
+
+    def con_vendedor(a):
+        d = _merc_vista(a, yo, ahora)
+        v = a.get("vendedor") or {}
+        d["vendedor"].update(clave=v.get("clave"), org_id=v.get("org_id"))
+        return d
+    por_revisar = [con_vendedor(a) for a in todos if _merc_estado(a, ahora) in ("pendiente", "en_revision")]
+    publicados = [con_vendedor(a) for a in todos if _merc_estado(a, ahora) == "publicado"]
+    denuncias = await global_db[_MERC_DENUNCIAS].find({"estado": "abierta"}, {"_id": 0}).to_list(500)
+    denuncias.sort(key=lambda x: str(x.get("ts") or ""))
+    for den in denuncias:
+        if den["objetivo"]["tipo"] == "conversacion":
+            # Para decidir hace falta leerla: los mensajes solo se miran cuando alguien la denuncia.
+            msgs = await global_db[_MERC_MSGS].find({"conv": den["objetivo"]["id"]}, {"_id": 0}).to_list(500)
+            c = await global_db[_MERC_CONVS].find_one({"id": den["objetivo"]["id"]}, {"_id": 0}) or {}
+            nombres = {(c.get("comprador") or {}).get("clave"): (c.get("comprador") or {}).get("nombre"),
+                       (c.get("vendedor") or {}).get("clave"): (c.get("vendedor") or {}).get("nombre")}
+            den["mensajes"] = [{"de": nombres.get(m["de"], "?"), "texto": m["texto"], "ts": m["ts"]}
+                               for m in sorted(msgs, key=lambda m: m["ts"])]
+    return {"conf": await _merc_conf(), "por_revisar": por_revisar, "publicados": publicados, "denuncias": denuncias,
+            "motivos_rechazo": mercadillo.MOTIVOS_RECHAZO, "motivos_denuncia": mercadillo.MOTIVOS_DENUNCIA,
+            "categorias": mercadillo.CATEGORIAS, "estados_articulo": mercadillo.ESTADOS_ARTICULO,
+            "totales": {"publicados": len(publicados), "por_revisar": len(por_revisar), "denuncias": len(denuncias),
+                        "conversaciones": await global_db[_MERC_CONVS].count_documents({}),
+                        "vendidos": sum(1 for a in todos if a.get("estado") == "vendido")}}
+
+
+@api_router.post("/admin/mercadillo/visible")
+async def admin_mercadillo_visible(data: dict = Body(default={}), _: dict = Depends(require_superadmin)):
+    visible = bool(_dict_cuerpo(data).get("visible"))
+    await global_db.mercadillo_conf.update_one({"id": "conf"}, {"$set": {"id": "conf", "visible": visible,
+                                               "desde": datetime.now(timezone.utc).isoformat()}}, upsert=True)
+    return await _merc_conf()
+
+
+@api_router.post("/admin/mercadillo/anuncio/{anuncio_id}")
+async def admin_mercadillo_anuncio(anuncio_id: str, data: dict = Body(default={}), _: dict = Depends(require_superadmin)):
+    """Aprobar, rechazar o retirar. Rechazar y retirar llevan SIEMPRE el motivo, que le llega a quien lo publicó."""
+    d = _dict_cuerpo(data)
+    accion = str(d.get("accion") or "")
+    a = await global_db[_MERC_ANUNCIOS].find_one({"id": str(anuncio_id)[:64]}, {"_id": 0})
+    if not a:
+        raise HTTPException(404, "Ese anuncio ya no está")
+    ahora = datetime.now(timezone.utc)
+    estado = _merc_estado(a, ahora)
+    vendedor = (a.get("vendedor") or {}).get("clave") or ""
+    if accion == "aprobar":
+        if estado not in ("pendiente", "en_revision"):
+            raise HTTPException(400, "Ese anuncio no está pendiente")
+        caduca = a.get("caduca") if estado == "en_revision" and a.get("caduca") else (
+            ahora + timedelta(days=mercadillo.DIAS_PUBLICADO)).isoformat()
+        await global_db[_MERC_ANUNCIOS].update_one({"id": a["id"]}, {"$set": {
+            "estado": "publicado", "publicado_en": a.get("publicado_en") or ahora.isoformat(), "caduca": caduca,
+            "actualizado": ahora.isoformat(), "motivo": "", "motivo_clave": ""}})
+        if estado == "en_revision":
+            await _merc_cerrar_denuncias(a["id"], "no_infringe")
+        await _merc_avisar(vendedor, f"Tu anuncio «{a.get('titulo')}» ya está publicado. Estará "
+                                     f"{mercadillo.DIAS_PUBLICADO} días; cuando lo vendas, márcalo como vendido.",
+                           asunto=f"Publicado en el mercadillo: {a.get('titulo')}")
+        return {"ok": True, "estado": "publicado"}
+    if accion in ("rechazar", "retirar"):
+        clave = str(d.get("motivo") or "")
+        if clave not in mercadillo.MOTIVOS_RECHAZO:
+            raise HTTPException(400, "Elige el motivo: es lo que le llega a quien lo publicó")
+        nota = str(d.get("nota") or "").strip()[:500]
+        motivo = mercadillo.MOTIVOS_RECHAZO[clave] + (f" {nota}" if nota else "")
+        nuevo = "rechazado" if accion == "rechazar" else "retirado"
+        if accion == "rechazar" and estado != "pendiente":
+            raise HTTPException(400, "Solo se rechaza lo que está pendiente; lo publicado se retira")
+        await global_db[_MERC_ANUNCIOS].update_one({"id": a["id"]}, {"$set": {
+            "estado": nuevo, "motivo": motivo, "motivo_clave": clave, "fin": ahora.isoformat(), "actualizado": ahora.isoformat()}})
+        if accion == "retirar":
+            await _merc_cerrar_denuncias(a["id"], "retirado")
+        verbo = "no se ha publicado" if accion == "rechazar" else "se ha retirado del mercadillo"
+        await _merc_avisar(vendedor, f"Tu anuncio «{a.get('titulo')}» {verbo}. Motivo: {motivo} "
+                                     f"Si crees que es un error, contesta a este aviso escribiendo a {CORREO_CONTACTO or 'contacto'} "
+                                     "y lo revisamos otra vez." + (" Puedes corregirlo y volver a enviarlo." if accion == "rechazar" else ""),
+                           asunto=f"Tu anuncio del mercadillo: {a.get('titulo')}")
+        return {"ok": True, "estado": nuevo}
+    raise HTTPException(400, "Acción desconocida")
+
+
+async def _merc_cerrar_denuncias(objetivo_id: str, decision: str) -> None:
+    """Cierra las denuncias de algo y le dice a cada uno qué se ha decidido (DSA art. 16.5)."""
+    abiertas = await global_db[_MERC_DENUNCIAS].find({"objetivo.id": objetivo_id, "estado": "abierta"}, {"_id": 0}).to_list(200)
+    texto = {"retirado": "lo hemos retirado. Gracias por avisar.",
+             "cerrada": "hemos cerrado esa conversación. Gracias por avisar.",
+             "no_infringe": "lo hemos revisado y no incumple las normas, así que sigue publicado. Gracias por avisar."}[decision]
+    for den in abiertas:
+        await global_db[_MERC_DENUNCIAS].update_one({"id": den["id"]}, {"$set": {
+            "estado": "resuelta", "decision": decision, "resuelta": datetime.now(timezone.utc).isoformat()}})
+        await _merc_avisar(den["de"], f"Sobre tu aviso de «{den['objetivo'].get('titulo') or ''}»: {texto}")
+
+
+@api_router.post("/admin/mercadillo/denuncia/{denuncia_id}")
+async def admin_mercadillo_denuncia(denuncia_id: str, data: dict = Body(default={}), _: dict = Depends(require_superadmin)):
+    """Resolver una denuncia: «no incumple» (se cierra y se avisa) o actuar (retirar el anuncio / cerrar la conversación)."""
+    d = _dict_cuerpo(data)
+    den = await global_db[_MERC_DENUNCIAS].find_one({"id": str(denuncia_id)[:64], "estado": "abierta"}, {"_id": 0})
+    if not den:
+        raise HTTPException(404, "Esa denuncia ya está resuelta")
+    decision = str(d.get("decision") or "")
+    obj = den["objetivo"]
+    if decision == "no_infringe":
+        if obj["tipo"] == "anuncio":
+            a = await global_db[_MERC_ANUNCIOS].find_one({"id": obj["id"]}, {"_id": 0, "estado": 1})
+            if a and a.get("estado") == "en_revision":
+                await global_db[_MERC_ANUNCIOS].update_one({"id": obj["id"]}, {"$set": {"estado": "publicado"}})
+        await _merc_cerrar_denuncias(obj["id"], "no_infringe")
+        return {"ok": True}
+    if decision == "actuar":
+        if obj["tipo"] == "anuncio":
+            return await admin_mercadillo_anuncio(obj["id"], {"accion": "retirar", "motivo": d.get("motivo") or "denuncias",
+                                                              "nota": d.get("nota") or ""}, {})
+        await global_db[_MERC_CONVS].update_one({"id": obj["id"]}, {"$set": {"bloqueada": True}})
+        c = await global_db[_MERC_CONVS].find_one({"id": obj["id"]}, {"_id": 0}) or {}
+        for p in (c.get("comprador") or {}, c.get("vendedor") or {}):
+            if p.get("clave"):
+                await _merc_avisar(p["clave"], f"Hemos cerrado la conversación sobre «{c.get('anuncio_titulo') or ''}» "
+                                               "tras revisar un aviso: no incumplas las normas del mercadillo.")
+        await _merc_cerrar_denuncias(obj["id"], "cerrada")
+        return {"ok": True}
+    raise HTTPException(400, "Decisión desconocida")
+
+
+# ── Limpieza: caducar y borrar a su tiempo (lo que promete la Privacidad) ──────
+async def merc_limpieza(ahora: Optional[datetime] = None) -> dict:
+    ahora = ahora or datetime.now(timezone.utc)
+    hechos = {"caducados": 0, "anuncios_borrados": 0, "conversaciones_borradas": 0, "fotos_sueltas": 0, "avisos": 0}
+    for a in await global_db[_MERC_ANUNCIOS].find({"estado": "publicado", "caduca": {"$lte": ahora.isoformat()}}, {"_id": 0}).to_list(1000):
+        await global_db[_MERC_ANUNCIOS].update_one({"id": a["id"], "estado": "publicado"},
+                                                   {"$set": {"estado": "caducado", "fin": ahora.isoformat()}})
+        await _merc_avisar((a.get("vendedor") or {}).get("clave") or "", f"Tu anuncio «{a.get('titulo')}» ha cumplido "
+                           f"{mercadillo.DIAS_PUBLICADO} días. Si sigue a la venta, ábrelo en «Mis anuncios» y vuelve a enviarlo.")
+        hechos["caducados"] += 1
+    limite = (ahora - timedelta(days=mercadillo.DIAS_BORRAR_ANUNCIO)).isoformat()
+    viejos = await global_db[_MERC_ANUNCIOS].find({"estado": {"$in": list(mercadillo.ESTADOS_FINALES)}, "fin": {"$lte": limite}},
+                                                  {"_id": 0, "id": 1}).to_list(5000)
+    if viejos:
+        ids = [a["id"] for a in viejos]
+        await global_db[_MERC_FOTOS].delete_many({"anuncio": {"$in": ids}})
+        await global_db[_MERC_ANUNCIOS].delete_many({"id": {"$in": ids}})
+        hechos["anuncios_borrados"] = len(ids)
+    limite_c = (ahora - timedelta(days=mercadillo.DIAS_BORRAR_CONVERSACION)).isoformat()
+    convs = await global_db[_MERC_CONVS].find({"$or": [{"ultimo": {"$lte": limite_c}},
+                                                        {"ultimo": {"$exists": False}, "creada": {"$lte": limite_c}}]},
+                                              {"_id": 0, "id": 1}).to_list(5000)
+    if convs:
+        ids = [c["id"] for c in convs]
+        await global_db[_MERC_MSGS].delete_many({"conv": {"$in": ids}})
+        await global_db[_MERC_CONVS].delete_many({"id": {"$in": ids}})
+        hechos["conversaciones_borradas"] = len(ids)
+    sueltas = await global_db[_MERC_FOTOS].delete_many({"anuncio": None, "ts": {"$lte": (ahora - timedelta(days=2)).isoformat()}})
+    hechos["fotos_sueltas"] = getattr(sueltas, "deleted_count", 0) or 0
+    av = await global_db[_MERC_AVISOS].delete_many({"ts": {"$lte": (ahora - timedelta(days=mercadillo.DIAS_BORRAR_AVISO)).isoformat()}})
+    hechos["avisos"] = getattr(av, "deleted_count", 0) or 0
+    await global_db[_MERC_DENUNCIAS].delete_many({"estado": "resuelta", "resuelta": {"$lte": (ahora - timedelta(days=180)).isoformat()}})
+    return hechos
+
+
+async def _bucle_mercadillo():
+    await asyncio.sleep(300)
+    while True:
+        try:
+            hechos = await merc_limpieza()
+            await _latido("mercadillo", **hechos, error=None)
+        except Exception as e:                                   # noqa: BLE001
+            logger.error("Limpieza del mercadillo: %s", e)
+        await asyncio.sleep(6 * 3600)
+
+
+@app.on_event("startup")
+async def start_mercadillo():
+    asyncio.create_task(_bucle_mercadillo())
 
 
 # ── REGALO DE SALDO (17-10-2026) ─────────────────────────────────────────────

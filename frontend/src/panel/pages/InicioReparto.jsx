@@ -6,6 +6,7 @@ import {
 import { getRepartoPedidos, getRepartoEstadisticas, getRepartoVivo, getRepartoAjustes, getDrivers } from '../api'
 import { lista } from '../../lib/lista'
 import { hoyLocal } from '../../lib/fecha'
+import TarjetaMercadillo from '../components/TarjetaMercadillo'
 
 /* ── EL INICIO DE UNA EMPRESA QUE REPARTE (03-10-2026) ───────────────────────
    Un súper o un distribuidor abre el panel para saber UNA cosa: cómo va el
@@ -96,6 +97,9 @@ export default function InicioReparto({ sector }) {
           </Link>
         </div>
       </header>
+
+      {/* El mercadillo de repartidores (17-10-2026): solo si está abierto. */}
+      <TarjetaMercadillo />
 
       {/* LO QUE TOCA HACER */}
       <div className="space-y-2">

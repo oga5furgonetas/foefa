@@ -270,3 +270,23 @@ export const repZonasCarga = () => api.get('/reparto/mi-ruta/zonas-carga')
 // Desde dónde y hacia dónde abrir Street View para ver la puerta de una parada.
 export const repFachada = (id) => api.get(`/reparto/pedidos/${id}/fachada`)
 export const repNavegar = (id, desde) => api.post('/reparto/mi-ruta/navegar', { id, desde })
+
+/* EL MERCADILLO DE REPARTIDORES (17-10-2026). Lo usan el portal del conductor (su sesión) y la app del
+   autónomo o la página /mercadillo (la de la cuenta): `tokenActual()` elige cuál por la ruta. */
+export const mercEstado = () => api.get('/mercadillo/estado')
+export const mercLista = (categoria) => api.get('/mercadillo', { params: categoria ? { categoria } : {} })
+export const mercAnuncio = (id) => api.get(`/mercadillo/anuncio/${id}`)
+export const mercSubirFoto = (blob) => {
+  const f = new FormData()
+  f.append('file', blob, 'foto.jpg')
+  return api.post('/mercadillo/fotos', f)
+}
+export const mercFotoBlob = (id) => api.get(`/mercadillo/foto/${id}`, { responseType: 'blob' })
+export const mercCrear = (d) => api.post('/mercadillo', d)
+export const mercCambiar = (id, d) => api.patch(`/mercadillo/anuncio/${id}`, d)
+export const mercContactar = (id, texto) => api.post(`/mercadillo/anuncio/${id}/contactar`, { texto })
+export const mercBuzon = () => api.get('/mercadillo/buzon')
+export const mercConversacion = (id) => api.get(`/mercadillo/conversacion/${id}`)
+export const mercResponder = (id, texto) => api.post(`/mercadillo/conversacion/${id}`, { texto })
+export const mercAvisosLeidos = () => api.post('/mercadillo/avisos/leidos')
+export const mercDenunciar = (d) => api.post('/mercadillo/denunciar', d)

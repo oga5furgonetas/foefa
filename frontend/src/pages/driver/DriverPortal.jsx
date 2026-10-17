@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
-import { ClipboardCheck, CalendarDays, CalendarClock, LogOut, Lock, Ban, ShoppingBag, RefreshCw, Route, Gift, ArrowLeft } from 'lucide-react'
-import { getPortalVehicles, getMyShifts, getMiFicha, guardarMiTelefono, tiendaEscaparate, repMiRuta, DRIVER_TOKEN_KEY } from '../../services/api'
+import { ClipboardCheck, CalendarDays, CalendarClock, LogOut, Lock, Ban, ShoppingBag, RefreshCw, Route, Gift, ArrowLeft, Store } from 'lucide-react'
+import { getPortalVehicles, getMyShifts, getMiFicha, guardarMiTelefono, tiendaEscaparate, repMiRuta, mercEstado, DRIVER_TOKEN_KEY } from '../../services/api'
 import { lista } from '../../lib/lista'
 import { medirSeccion } from '../../lib/analitica'
 import { vigilarVersion } from '../../lib/versionApp'
@@ -13,6 +13,7 @@ import PedirDias from './PedirDias'
 import Tienda from './Tienda'
 import MiRuta from './MiRuta'
 import DriverReferralWallet from './DriverReferralWallet'
+import Mercadillo from '../mercadillo/Mercadillo'
 import { refCentActual } from '../../lib/precios'
 
 const DRIVER_KEY = 'flota_driver'
@@ -144,6 +145,8 @@ export default function DriverPortal() {
   const [sinVer, setSinVer] = useState(0)      // respuestas que aún no ha leído
   // ¿Tiene turnos cargados? (17-10-2026: OGA5 tiene el cuadrante hasta diciembre; DGA1, todavía no.)
   const [tieneTurnos, setTieneTurnos] = useState(false)
+  // El mercadillo: la casilla sale solo si está abierto (lo decide el servidor), con los mensajes sin leer.
+  const [merc, setMerc] = useState(null)
   // null = apagada o todavía sin contestar. Con datos: {desde, n} para poder
   // poner el precio en la entrada del menú, que es lo que hace que se entre.
   const [tienda, setTienda] = useState(null)
@@ -172,7 +175,11 @@ export default function DriverPortal() {
   }, [driver])
 
   // ?vista=ruta abre directamente «Mi ruta» (la demo y el enlace del autónomo).
-  const [vista, setVista] = useState(() => (new URLSearchParams(window.location.search).get('vista') === 'ruta' ? 'ruta' : 'inicio'))
+  // ?vista=mercadillo: el enlace del correo de «tienes un mensaje» (17-10-2026).
+  const [vista, setVista] = useState(() => {
+    const v = new URLSearchParams(window.location.search).get('vista')
+    return v === 'ruta' || v === 'mercadillo' ? v : 'inicio'
+  })
   // «Mi ruta» solo sale en empresas que reparten así; lo decide el servidor.
   const [reparto, setReparto] = useState(null)
   useEffect(() => {
@@ -250,6 +257,7 @@ export default function DriverPortal() {
     getMyShifts()
       .then((r) => { setSinVer(lista(r.data?.sin_ver).length); setTieneTurnos(lista(r.data?.shifts).length > 0) })
       .catch(() => setSinVer(0))
+    mercEstado().then((r) => setMerc(r.data?.visible ? r.data : null)).catch(() => setMerc(null))
   }, [driver, vista])
 
   const login = (d) => {
@@ -284,6 +292,7 @@ export default function DriverPortal() {
   if (vista === 'clave') return <MiClave onBack={() => setVista('inicio')} />
   if (vista === 'tienda') return <Tienda onBack={() => setVista('inicio')} />
   if (vista === 'cartera') return <PantallaCartera onBack={() => setVista('inicio')} />
+  if (vista === 'mercadillo') return <Mercadillo onBack={() => setVista('inicio')} />
   if (vista === 'ruta') return <MiRuta onBack={() => setVista('inicio')} />
   if (result) {
     return <InspectionDone result={result} onNew={() => { setResult(null); setVista('inicio') }} onLogout={logout} />
@@ -426,6 +435,15 @@ export default function DriverPortal() {
             tono="verde"
             onClick={() => setVista('cartera')}
           />
+          {merc && (
+            <Casilla
+              icono={Store}
+              titulo="Mercadillo"
+              detalle={merc.sin_leer > 0 ? `${merc.sin_leer} mensaje${merc.sin_leer > 1 ? 's' : ''}` : 'Vende lo que no uses'}
+              aviso={merc.sin_leer}
+              onClick={() => setVista('mercadillo')}
+            />
+          )}
           {/* LA ROPA, CON EL PRECIO EN LA PROPIA ENTRADA. Estaba aquí desde el
               08-09 y no entró casi nadie: decía «La del equipo, con tu nombre»
               y nada más, así que abrirla era averiguar si costaba 20 € o 200.

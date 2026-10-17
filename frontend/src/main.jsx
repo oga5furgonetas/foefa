@@ -251,6 +251,7 @@ const Empezar = lazy(() => import('./pages/Empezar'))
 const Repartidores = lazy(() => import('./pages/Repartidores'))
 const Invita = lazy(() => import('./pages/Invita'))
 const OpinionCorreo = lazy(() => import('./pages/OpinionCorreo'))
+const MercadilloPagina = lazy(() => import('./pages/MercadilloPagina'))
 
 /* EL ANUNCIO DE REPARTIDORES (04-10-2026) apunta a /registro?sector=autonomo
    …&utm_source=…: 410 visitas y 0 altas, porque aterrizaban en un formulario
@@ -399,6 +400,7 @@ ReactDOM.createRoot(document.getElementById('root')).render(
               <Route path="/repartidores" element={<Repartidores />} />
               <Route path="/invita" element={<Invita />} />
               <Route path="/opinion" element={<OpinionCorreo />} />
+              <Route path="/mercadillo" element={<MercadilloPagina />} />
               <Route path="/ruta" element={<RutaApp />} />
               <Route path="/pase" element={<PaseMovil />} />
               <Route path="/s/:token" element={<SeguimientoPedido />} />

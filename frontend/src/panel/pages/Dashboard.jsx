@@ -12,6 +12,7 @@ import { useT, LANG_LOCALE } from '../../i18n'
 import { lista } from '../../lib/lista'
 import { PageSkeleton } from '../components/Skeleton'
 import Activacion from '../components/Activacion'
+import TarjetaMercadillo from '../components/TarjetaMercadillo'
 import { hoyLocal, isoLocal } from '../../lib/fecha'
 
 /* ── helpers ── */
@@ -475,6 +476,9 @@ function DashboardFlota() {
           desaparece cuando la flota ya está en marcha. Sustituye al estado
           vacío de antes, que solo sabía decir "importa vehículos". */}
       <Activacion />
+
+      {/* El mercadillo de repartidores, para la oficina (17-10-2026): solo si está abierto. */}
+      <TarjetaMercadillo className="mb-6" />
 
       {/* ── FILA DE CIFRAS ───────────────────────────────────────────────────
           Lo que hay que saber de un vistazo, a cualquier hora del día. Antes

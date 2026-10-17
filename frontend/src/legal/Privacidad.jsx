@@ -22,6 +22,7 @@ export default function Privacidad() {
         <li><strong>Reparto (si la empresa lo usa):</strong> datos de los clientes de la empresa a los que se entrega (nombre, teléfono, dirección y qué lleva el pedido) y la <strong>ubicación del conductor solo durante la jornada</strong> que él mismo empieza y termina en su móvil, tras haber leído un aviso.</li>
         <li><strong>Candidaturas de empleo:</strong> datos del formulario y, si marcas la casilla opcional, el registro de tu autorización para recibir novedades de FDS y su fecha.</li>
         <li><strong>Uso del servicio:</strong> registros técnicos (logs) imprescindibles para la seguridad y el funcionamiento.</li>
+        <li><strong>Mercadillo de repartidores:</strong> lo que publicas (texto, precio, zona y fotos, a las que al subirlas quitamos la ubicación y los demás datos que guarda el móvil), tu nombre con la inicial del apellido, que es lo único que ven los demás de ti, los mensajes con quien compra o vende y los avisos o denuncias. Tu teléfono, tu correo y tu empresa no se enseñan a nadie: el correo lo usamos solo para avisarte de que tienes un mensaje o de que se ha revisado tu anuncio.</li>
         <li><strong>Programa «Invita y gana»:</strong> quién invitó a quién, el saldo de la cartera y, si pides cobrarlo, el nombre del titular y el teléfono de Bizum, el IBAN o el email de PayPal. En la cartera individual del portal guardamos también el identificador del conductor, su email de empresa y la empresa asociada a su enlace. Para evitar trampas guardamos una huella cifrada de la red desde la que se crea cada cuenta (no la dirección IP), que solo sirve para comparar dos altas.</li>
       </ul>
       <p>No recogemos categorías especiales de datos (salud, ideología, etc.). La ubicación solo existe en el módulo de reparto y solo en jornada: fuera de ella no se guarda ningún punto.</p>
@@ -34,6 +35,7 @@ export default function Privacidad() {
         <li><strong>Seguridad y prevención de fraude</strong> (también en «Invita y gana»): interés legítimo (art. 6.1.f).</li>
         <li><strong>Pagar el saldo de «Invita y gana»:</strong> ejecución de las condiciones del programa (art. 6.1.b) y obligaciones contables y fiscales (art. 6.1.c).</li>
         <li><strong>Comunicaciones del servicio</strong> (avisos, soporte): ejecución del contrato.</li>
+        <li><strong>Mercadillo:</strong> publicar tus anuncios, hacerte llegar los mensajes y avisarte, en ejecución de sus condiciones (art. 6.1.b); revisar los anuncios y atender denuncias, por interés legítimo y por obligación legal (Reglamento (UE) 2022/2065 de Servicios Digitales, art. 6.1.c y f). Los mensajes solo se revisan si alguien los denuncia.</li>
         <li><strong>Novedades de FDS para candidatos:</strong> consentimiento opcional, separado de la candidatura y revocable en cualquier momento. No marcarlo no afecta a la candidatura.</li>
         <li><strong>Mejora del modelo de IA (anonimizado / agregado):</strong> interés legítimo; nunca se publican imágenes ni se identifican personas.</li>
       </ul>
@@ -43,6 +45,7 @@ export default function Privacidad() {
         <li>Datos de cuenta: durante la vigencia del contrato y hasta 1 año tras la baja, para responder reclamaciones.</li>
         <li>Inspecciones y fotos: durante la vigencia del contrato; el cliente puede solicitar su eliminación en cualquier momento.</li>
         <li>Reparto: los datos personales de cada pedido se borran solos a los días que fije la empresa (por defecto 30, máximo 90); los recorridos de ubicación, a los 30 días; los enlaces de seguimiento que recibe el cliente dejan de funcionar al día siguiente del reparto y no muestran datos personales.</li>
+        <li>Mercadillo: los anuncios y sus fotos se borran solos 60 días después de acabar (vendido, caducado, quitado o retirado); las conversaciones, 6 meses después del último mensaje; los avisos y las denuncias ya resueltas, a los 6 meses. Las fotos que no llegan a publicarse, a los 2 días.</li>
         <li>Datos fiscales: 6 años (art. 30 Código de Comercio). Los pagos de «Invita y gana» (titular, importe y cuenta o Bizum) se guardan ese mismo plazo.</li>
         <li>Datos de candidaturas: hasta 12 meses. La elección sobre novedades se conserva junto con la candidatura durante ese plazo o hasta que se retire el consentimiento y se solicite la supresión cuando proceda.</li>
       </ul>

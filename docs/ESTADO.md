@@ -1376,3 +1376,31 @@ Dani: «añádeles 10 € de saldo a todo el mundo para que vea que es real».
 - Repetible: `_regalo_a_todos(clave, cent)` / `POST /admin/cartera/regalo` (super-admin, `simular`, tope 20 €,
   una vez por clave). Términos: añadido el punto «Regalo de saldo».
 - Las cuentas que se den de alta desde hoy NO lo reciben (no lo pidió); se puede dar con otra clave.
+
+## 17-10-2026 (noche): portal en casillas y el mercadillo de repartidores (oculto hasta que Dani lo encienda)
+
+- **Portal del conductor**: la auditoría (y «Mi ruta») a lo ancho; lo demás en casillas de tres. «Comparte y gana»
+  es una casilla con su pantalla (antes, una tarjeta enorme encima de la auditoría). «Mis turnos» se abre a quien
+  tiene turnos cargados (OGA5 tiene el cuadrante hasta el 17-12; DGA1 todavía no) y dice «Pronto» al resto.
+- **Mercadillo** (`backend/mercadillo.py` + sección en `server.py`, `frontend/src/pages/mercadillo/Mercadillo.jsx`):
+  compraventa entre repartidores (autónomos, conductores de empresa) y gente de oficina. Base GLOBAL
+  (`mercadillo_anuncios`, `_fotos`, `_conversaciones`, `_mensajes`, `_denuncias`, `_avisos`, `mercadillo_conf`).
+  - **Oculto** hasta que Dani lo enciende en Negocio → Mercadillo («Hacerlo visible para todos»). Mientras, solo el
+    super-admin lo ve y lo usa en **/mercadillo** (vista previa). Una empresa puede apagarlo: `mercadillo_off`.
+  - **Nada sale sin aprobar**: cada anuncio entra «en revisión»; Dani aprueba o rechaza con motivo (le llega a quien
+    lo publicó, DSA art. 17). Corregir uno publicado lo vuelve a revisión. Tope 3 activos por persona, 30 días.
+  - **Fotos**: se vuelven a codificar con Pillow (sin EXIF/GPS) y se reducen a 1280 px; base64 en Mongo; solo con
+    sesión. Las que no llegan a un anuncio se borran a los 2 días.
+  - **Mensajes privados** por anuncio (buzón con contador de no leídos; correo «tienes un mensaje» como mucho cada
+    6 h por conversación y SIN el texto). Dani solo ve una conversación si alguien la denuncia.
+  - **Denunciar** anuncio o conversación (DSA art. 16): acuse al que avisa, decisión cuando se resuelve; con avisos
+    de 3 personas el anuncio se oculta hasta revisarlo. Dani: «No incumple» o actuar (retirar / cerrar).
+  - **Limpieza** cada 6 h (`merc_limpieza`): caduca a los 30 días (con aviso), borra anuncios y fotos 60 días tras
+    acabar, conversaciones 6 meses tras el último mensaje, avisos y denuncias resueltas a los 6 meses.
+  - Entradas: casilla «Mercadillo» en el portal (con globito) y `?vista=mercadillo`; tarjeta en Cuenta de la app del
+    autónomo y `?mercadillo=1`; recuadro en el inicio del panel para la oficina; /mercadillo. Solo en español.
+  - Legal: Términos § 5 quater «Mercadillo de repartidores» (solo particulares, FDS no interviene en el pago, lo
+    prohibido incluido el material de la empresa o de la plataforma, revisión previa, denuncias, consecuencias) y
+    Privacidad (datos, base jurídica, plazos de borrado). El chequeo de marca no deja nombrar a Amazon: se dice «la
+    plataforma para la que repartes».
+  - El login acepta `?next=/ruta-interna` (solo rutas de esta web).

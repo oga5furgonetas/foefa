@@ -1,6 +1,7 @@
 import { Fragment, useEffect, useRef, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { useT } from '../../i18n'
+import { Foto as FotoMerc, euros as eurosM } from '../../pages/mercadillo/Mercadillo'
 import { Activity,
   Loader2, Building2, CheckCircle2, Clock, Euro, Sparkles, Gift, PauseCircle,
   LogIn, Trash2, Database, BrainCircuit, ExternalLink, RefreshCw, Megaphone,
@@ -17,6 +18,7 @@ import {
   getAdminModulos,
   crearEnlaceTienda, getSuscripcionesEmpleo, enviarCampanaCandidatos,
   adminReferidosConductores, adminRetiradas, adminRetiradaPagada, adminRetiradaRechazar, adminOpiniones,
+  adminMercadillo, adminMercadilloVisible, adminMercadilloAnuncio, adminMercadilloDenuncia,
 } from '../api'
 import { API_BASE } from '../../services/api'
 import { hoyLocal } from '../../lib/fecha'
@@ -635,6 +637,139 @@ function ResumenReferidosConductores() {
   </section>
 }
 
+/* EL MERCADILLO (17-10-2026). Encenderlo para todos, la vista previa, revisar cada anuncio ANTES de que
+   salga (rechazar y retirar llevan siempre motivo: le llega a quien lo publicó) y resolver denuncias (quien
+   denuncia recibe la decisión). Las conversaciones solo se ven aquí cuando alguien las denuncia. */
+function MercadilloAdmin() {
+  const [d, setD] = useState(null)
+  const [err, setErr] = useState('')
+  const [ocupado, setOcupado] = useState('')
+  const [motivo, setMotivo] = useState({})
+  const [nota, setNota] = useState({})
+  const cargar = () => adminMercadillo().then(({ data }) => { setD(data); setErr('') })
+    .catch((e) => setErr(e?.response?.data?.detail || 'No se pudo leer el mercadillo'))
+  useEffect(() => { cargar() }, [])
+  async function hacer(id, fn) {
+    setOcupado(id); setErr('')
+    try { await fn(); await cargar() } catch (e) { setErr(e?.response?.data?.detail || 'No se pudo hacer') } finally { setOcupado('') }
+  }
+  const visible = !!d?.conf?.visible
+  const cambiarVisible = () => {
+    if (!window.confirm(visible ? '¿Ocultar el mercadillo? Los repartidores dejarán de verlo (sus anuncios y mensajes se guardan).' : '¿Hacer visible el mercadillo para todos los repartidores?')) return
+    hacer('conf', () => adminMercadilloVisible(!visible))
+  }
+  const selMotivo = (id) => (
+    <div className="mt-2 flex flex-wrap gap-1.5">
+      <select value={motivo[id] || ''} onChange={(e) => setMotivo((m) => ({ ...m, [id]: e.target.value }))} aria-label="Motivo"
+        className="min-w-0 flex-1 rounded-lg border border-dark-700 bg-dark-900 px-2 py-1.5 text-[12.5px] text-dark-100">
+        <option value="">Motivo (le llega a quien lo publicó)…</option>
+        {Object.entries(d?.motivos_rechazo || {}).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
+      </select>
+      <input value={nota[id] || ''} onChange={(e) => setNota((m) => ({ ...m, [id]: e.target.value }))} placeholder="Nota (opcional)"
+        aria-label="Nota" className="min-w-0 flex-1 rounded-lg border border-dark-700 bg-dark-900 px-2 py-1.5 text-[12.5px] text-dark-100" />
+    </div>
+  )
+  const t = d?.totales || {}
+  return <section className="card space-y-3 p-4" aria-label="Mercadillo de repartidores">
+    <div className="flex flex-wrap items-start justify-between gap-2">
+      <div className="min-w-0">
+        <h3 className="flex items-center gap-2 text-sm font-bold"><Tag size={16} className="text-brand-300" /> Mercadillo de repartidores</h3>
+        <p className="mt-1 text-[12px] text-dark-400">Compraventa entre repartidores. Nada sale sin que lo apruebes aquí.</p>
+      </div>
+      <div className="flex flex-wrap items-center gap-2">
+        <a href="/mercadillo" target="_blank" rel="noreferrer" className="btn-secondary flex items-center gap-1.5 px-2.5 py-1.5 text-xs"><Eye size={13} /> Verlo como repartidor</a>
+        <button onClick={cambiarVisible} disabled={!d || ocupado === 'conf'}
+          className={`flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-bold ${visible ? 'border border-dark-700 text-dark-200' : 'bg-emerald-600 text-white'}`}>
+          {visible ? 'Ocultarlo' : 'Hacerlo visible para todos'}
+        </button>
+        <button onClick={cargar} className="btn-secondary flex items-center gap-1.5 px-2.5 py-1.5 text-xs"><RefreshCw size={13} /> Actualizar</button>
+      </div>
+    </div>
+    <p className={`rounded-xl px-3 py-2 text-[12.5px] font-semibold ${visible ? 'bg-emerald-500/10 text-emerald-200' : 'bg-amber-500/10 text-amber-200'}`}>
+      {visible ? 'Visible: lo ven todos los repartidores (portal del conductor y app del autónomo).' : 'Oculto: solo lo ves tú, en «Verlo como repartidor». Pruébalo y enciéndelo cuando quieras.'}
+    </p>
+    {err && <p role="alert" className="text-xs text-red-300">{err}</p>}
+    {!d ? <Loader2 size={16} className="animate-spin text-dark-500" /> : <>
+      <div className="grid grid-cols-2 gap-2 md:grid-cols-5">
+        {[['Por revisar', t.por_revisar], ['Publicados', t.publicados], ['Denuncias', t.denuncias], ['Conversaciones', t.conversaciones], ['Vendidos', t.vendidos]].map(([label, value]) =>
+          <div key={label} className="rounded-xl border border-dark-800 bg-dark-900/50 p-3"><p className="text-[10px] font-semibold uppercase tracking-wide text-dark-500">{label}</p><p className="mt-1 text-lg font-bold text-dark-100">{value ?? 0}</p></div>)}
+      </div>
+
+      <div>
+        <p className="text-[11px] font-semibold uppercase tracking-wide text-dark-500">Por revisar</p>
+        {!(d.por_revisar || []).length ? <p className="mt-1 text-sm text-dark-500">Nada pendiente.</p> : (
+          <ul className="mt-1.5 space-y-2.5">
+            {d.por_revisar.map((a) => (
+              <li key={a.id} className="rounded-xl border border-dark-800 p-3">
+                <div className="flex gap-2 overflow-x-auto pb-1">
+                  {(a.fotos || []).map((f) => <FotoMerc key={f} id={f} className="h-24 w-24 shrink-0 rounded-lg" alt="" />)}
+                </div>
+                <p className="mt-2 text-[14px] font-bold text-dark-50">{a.titulo} · {eurosM(a.precio_cent)}</p>
+                <p className="text-[12px] text-dark-400">{d.categorias?.[a.categoria]} · {d.estados_articulo?.[a.estado_articulo]}{a.zona ? ` · ${a.zona}` : ''} · {a.vendedor?.nombre} ({a.vendedor?.tipo}{a.vendedor?.entregas ? `, ${a.vendedor.entregas} entregas` : ''})</p>
+                {a.estado === 'en_revision' && <p className="mt-1 text-[12px] font-semibold text-amber-300">Oculto por denuncias: decide abajo o en «Denuncias».</p>}
+                {a.descripcion && <p className="mt-1 whitespace-pre-line text-[13px] text-dark-200">{a.descripcion}</p>}
+                {selMotivo(a.id)}
+                <div className="mt-2 flex flex-wrap gap-2">
+                  <button disabled={ocupado === a.id} onClick={() => hacer(a.id, () => adminMercadilloAnuncio(a.id, { accion: 'aprobar' }))}
+                    className="btn-primary flex items-center gap-1 px-3 py-1.5 text-[12.5px]"><Check size={13} /> {a.estado === 'en_revision' ? 'No incumple: publicar' : 'Aprobar'}</button>
+                  <button disabled={ocupado === a.id || !motivo[a.id]} onClick={() => hacer(a.id, () => adminMercadilloAnuncio(a.id, { accion: a.estado === 'en_revision' ? 'retirar' : 'rechazar', motivo: motivo[a.id], nota: nota[a.id] || '' }))}
+                    className="btn-secondary px-3 py-1.5 text-[12.5px] text-red-300 disabled:opacity-50">{a.estado === 'en_revision' ? 'Retirar' : 'Rechazar'}</button>
+                </div>
+              </li>
+            ))}
+          </ul>
+        )}
+      </div>
+
+      {(d.denuncias || []).length > 0 && (
+        <div>
+          <p className="text-[11px] font-semibold uppercase tracking-wide text-dark-500">Denuncias</p>
+          <ul className="mt-1.5 space-y-2.5">
+            {d.denuncias.map((x) => (
+              <li key={x.id} className="rounded-xl border border-red-500/30 bg-red-500/[.04] p-3 text-[12.5px]">
+                <p className="font-semibold text-dark-100">{x.objetivo.tipo === 'anuncio' ? 'Anuncio' : 'Conversación sobre'} «{x.objetivo.titulo}» · {d.motivos_denuncia?.[x.motivo]}</p>
+                <p className="text-dark-400">De {x.de_nombre} · {String(x.ts || '').slice(0, 16).replace('T', ' ')}</p>
+                {x.texto && <p className="mt-1 text-dark-200">«{x.texto}»</p>}
+                {(x.mensajes || []).length > 0 && (
+                  <ul className="mt-2 max-h-48 space-y-1 overflow-y-auto rounded-lg bg-dark-900 p-2">
+                    {x.mensajes.map((m, n) => <li key={n} className="text-dark-200"><b>{m.de}:</b> {m.texto}</li>)}
+                  </ul>
+                )}
+                {x.objetivo.tipo === 'anuncio' && selMotivo(x.id)}
+                <div className="mt-2 flex flex-wrap gap-2">
+                  <button disabled={ocupado === x.id} onClick={() => hacer(x.id, () => adminMercadilloDenuncia(x.id, { decision: 'no_infringe' }))} className="btn-secondary px-3 py-1.5 text-[12.5px]">No incumple</button>
+                  <button disabled={ocupado === x.id || (x.objetivo.tipo === 'anuncio' && !motivo[x.id])}
+                    onClick={() => hacer(x.id, () => adminMercadilloDenuncia(x.id, { decision: 'actuar', motivo: motivo[x.id] || 'denuncias', nota: nota[x.id] || '' }))}
+                    className="rounded-lg bg-red-600 px-3 py-1.5 text-[12.5px] font-bold text-white disabled:opacity-50">{x.objetivo.tipo === 'anuncio' ? 'Retirar el anuncio' : 'Cerrar la conversación'}</button>
+                </div>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+
+      {(d.publicados || []).length > 0 && (
+        <details>
+          <summary className="cursor-pointer text-[12.5px] text-dark-400">Publicados ({d.publicados.length})</summary>
+          <ul className="mt-2 space-y-2">
+            {d.publicados.map((a) => (
+              <li key={a.id} className="rounded-xl border border-dark-800 p-2.5 text-[12.5px]">
+                <div className="flex items-center gap-2.5">
+                  <FotoMerc id={a.fotos?.[0]} className="h-12 w-12 shrink-0 rounded-lg" alt="" />
+                  <span className="min-w-0 flex-1"><b className="text-dark-100">{a.titulo}</b> · {eurosM(a.precio_cent)}<span className="block text-dark-400">{a.vendedor?.nombre} · hasta el {String(a.caduca || '').slice(0, 10)} · {a.interesados || 0} interesados</span></span>
+                </div>
+                {selMotivo(a.id)}
+                <button disabled={ocupado === a.id || !motivo[a.id]} onClick={() => hacer(a.id, () => adminMercadilloAnuncio(a.id, { accion: 'retirar', motivo: motivo[a.id], nota: nota[a.id] || '' }))}
+                  className="mt-2 btn-secondary px-3 py-1.5 text-[12.5px] text-red-300 disabled:opacity-50">Retirar</button>
+              </li>
+            ))}
+          </ul>
+        </details>
+      )}
+    </>}
+  </section>
+}
+
 /* OPINIONES DE LOS REPARTIDORES (17-10-2026). Lo que contestan en la app («¿Qué tal te va?»), en
    «Mándanos una idea» (Cuenta) y al correo «opinion» del ciclo. Cada una llega también a contacto@ con
    «Responder» a quien la dio. Lo que más vale: qué les frena y qué les complica el día (la necesidad real). */
@@ -1245,6 +1380,10 @@ export default function Negocio() {
         <a href={`${API_BASE}/ai/export-dataset`} target="_blank" rel="noreferrer" className="btn-secondary flex items-center gap-2 text-sm">
           <BrainCircuit size={15} /> {t('neg.export.ai')}
         </a>
+      </div>
+
+      <div className="mt-6">
+        <MercadilloAdmin />
       </div>
 
       <div className="mt-6">

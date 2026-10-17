@@ -851,3 +851,8 @@ export const comprarRegalo = (meses, paraMi = false) => api.post('/billing/regal
 export const misRegalos = () => api.get('/billing/regalos')
 export const canjearRegalo = (codigo) => api.post('/billing/regalos/canjear', { codigo })
 export const playVerificar = (token) => api.post('/billing/play/verificar', { token })
+// Negocio → Mercadillo (17-10-2026): encenderlo, revisar anuncios y resolver denuncias.
+export const adminMercadillo = () => api.get('/admin/mercadillo')
+export const adminMercadilloVisible = (visible) => api.post('/admin/mercadillo/visible', { visible })
+export const adminMercadilloAnuncio = (id, d) => api.post(`/admin/mercadillo/anuncio/${id}`, d)
+export const adminMercadilloDenuncia = (id, d) => api.post(`/admin/mercadillo/denuncia/${id}`, d)

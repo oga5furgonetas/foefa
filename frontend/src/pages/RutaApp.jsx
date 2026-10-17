@@ -25,7 +25,8 @@ import { hoyLocal, fechaEs } from '../lib/fecha'
 import { importe } from '../lib/region'
 import { tx, useIdioma, txError, locale } from '../lib/idioma'
 import { invitar } from '../lib/compartir'
-import { getReferidos } from '../services/api'
+import { getReferidos, mercEstado } from '../services/api'
+import Mercadillo from './mercadillo/Mercadillo'
 import { eurosRef, refCentActual, refPromoActiva, REF_PROMO_HASTA, fechaRefPromo } from '../lib/precios'
 
 /* ── LA APP DE QUIEN REPARTE SOLO (04-10-2026) ───────────────────────────────
@@ -75,6 +76,20 @@ export default function RutaApp() {
       setBonoPendiente(!!(data?.bono && !data.bono.pagado))
       if (data?.regalo > 0 && data.regalo_clave && !vistoRegalo(data.regalo_clave)) setSaldoRegalo({ cent: data.regalo, clave: data.regalo_clave })
     }).catch(() => {})
+  }, [])
+  // EL MERCADILLO (17-10-2026): se abre a pantalla completa desde Cuenta (o con ?mercadillo=1). La entrada solo
+  // sale si está abierto, con los mensajes sin leer.
+  const [mercAbierto, setMercAbierto] = useState(() => new URLSearchParams(window.location.search).get('mercadillo') === '1')
+  const [merc, setMerc] = useState(null)
+  const verMerc = useCallback(() => {
+    if (esSuplantacion()) return
+    mercEstado().then(({ data }) => setMerc(data?.visible ? data : null)).catch(() => setMerc(null))
+  }, [])
+  useEffect(() => { verMerc() }, [verMerc])
+  useEffect(() => {
+    const abrir = () => setMercAbierto(true)
+    window.addEventListener('fds-abrir-mercadillo', abrir)
+    return () => window.removeEventListener('fds-abrir-mercadillo', abrir)
   }, [])
   // La tarjeta del bono ganado lleva a la cartera.
   useEffect(() => {
@@ -209,6 +224,13 @@ export default function RutaApp() {
   }, [billing, restaurado, recargar])
 
   if (!isAuthed()) { window.location.replace('/empezar'); return null }
+  if (mercAbierto) {
+    return (
+      <main className="app-ruta min-h-screen bg-dark-950">
+        <Mercadillo onBack={() => { setMercAbierto(false); verMerc() }} />
+      </main>
+    )
+  }
 
   return (
     <main className="app-ruta flex min-h-screen flex-col bg-dark-950 text-dark-100">
@@ -278,7 +300,7 @@ export default function RutaApp() {
             {tab === 'ajustes' && <div className="mx-auto max-w-md"><Ajustes conductores={[]} toast={toast} autonomo /></div>}
           </>}
         {tab === 'historial' && <Historial />}
-        {tab === 'cuenta' && <Cuenta billing={billing} recargar={recargar} toast={toast} resaltarRegalo={regaloNuevo} />}
+        {tab === 'cuenta' && <Cuenta billing={billing} recargar={recargar} toast={toast} resaltarRegalo={regaloNuevo} merc={merc} />}
       </div>
       <nav className="ruta-pestanas fixed inset-x-0 bottom-0 z-40 border-t border-dark-800 bg-dark-950/95 pb-[env(safe-area-inset-bottom)] backdrop-blur" aria-label={tx('Secciones')}>
         <div className="mx-auto grid max-w-md grid-cols-4">

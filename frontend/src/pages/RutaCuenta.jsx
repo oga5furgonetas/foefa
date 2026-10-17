@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import {
-  Loader2, LogOut, Gift, CreditCard, Check, Copy, MessageCircle, Mail, Sparkles, ShieldCheck, CalendarClock, Crown, KeyRound, Wallet, QrCode,
+  Loader2, LogOut, Gift, CreditCard, Check, Copy, MessageCircle, Mail, Sparkles, ShieldCheck, CalendarClock, Crown, KeyRound, Wallet, QrCode, Store, ChevronRight,
 } from 'lucide-react'
 import QRCode from 'qrcode'
 import {
@@ -37,7 +37,7 @@ const fecha = (iso) => {
 }
 const bonito = (c) => (c ? `${c.slice(0, 4)}-${c.slice(4)}` : '')
 
-export function Cuenta({ billing, recargar, toast, resaltarRegalo }) {
+export function Cuenta({ billing, recargar, toast, resaltarRegalo, merc }) {
   const lang = useIdioma()
   const admin = getAdmin()
   const enApp = enAppPlay()
@@ -65,6 +65,20 @@ export function Cuenta({ billing, recargar, toast, resaltarRegalo }) {
         </>
       )}
       {!suplantando && (b?.pais || 'es') !== 'cn' && <Invitar toast={toast} />}
+      {merc && (
+        <button type="button" onClick={() => window.dispatchEvent(new Event('fds-abrir-mercadillo'))}
+          className="mt-4 flex w-full items-center gap-3 rounded-3xl border border-dark-700 bg-dark-900 p-4 text-left">
+          <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-brand-500/15 text-brand-300"><Store size={22} /></span>
+          <span className="min-w-0 flex-1">
+            <span className="block text-[15px] font-bold text-dark-50">Mercadillo de repartidores</span>
+            <span className="block text-[12.5px] leading-snug text-dark-400">
+              {merc.sin_leer > 0 ? `Tienes ${merc.sin_leer} mensaje${merc.sin_leer > 1 ? 's' : ''} sin leer` : 'Vende lo que no uses o encuentra algo para la furgoneta'}
+            </span>
+          </span>
+          {merc.sin_leer > 0 && <span className="flex h-6 min-w-6 items-center justify-center rounded-full bg-red-500 px-1.5 text-[12px] font-bold text-white">{merc.sin_leer}</span>}
+          <ChevronRight size={18} className="shrink-0 text-dark-500" />
+        </button>
+      )}
       <Acceso toast={toast} soloVer={suplantando} />
       {!suplantando && <IdeaRuta />}
       <section className="mt-4 rounded-3xl border border-dark-700 bg-dark-900 p-4">
