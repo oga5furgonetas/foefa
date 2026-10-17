@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import { useParams } from 'react-router-dom'
 import { Loader2, Package, CheckCircle2, Clock, XCircle, Truck } from 'lucide-react'
 import { API_BASE } from '../services/api'
-import { tx, txError } from '../lib/idioma'
+import { tx, txError, useIdioma } from '../lib/idioma'
 
 /* ── «¿CUÁNDO LLEGA MI PEDIDO?» ─────────────────────────────────────────────
    El enlace que el repartidor manda por WhatsApp. Dice el estado, la hora
@@ -18,6 +18,7 @@ const ESTADO = {
 }
 
 export default function SeguimientoPedido() {
+  useIdioma()
   const { token } = useParams()
   const [d, setD] = useState(null)
   const [err, setErr] = useState('')

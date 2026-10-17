@@ -4,7 +4,7 @@ import { Gift, Loader2, Route, Navigation, ScanLine, XCircle } from 'lucide-reac
 import { API_BASE } from '../services/api'
 import { isAuthed } from '../panel/auth'
 import { MARCA } from '../marca'
-import { tx } from '../lib/idioma'
+import { tx, useIdioma } from '../lib/idioma'
 
 /* ── EL ENLACE DEL REGALO ────────────────────────────────────────────────────
    Lo abre quien recibe el regalo por WhatsApp o correo. Dice qué le han
@@ -12,6 +12,7 @@ import { tx } from '../lib/idioma'
    la app lo canjea sola al entrar. No enseña quién lo regala. */
 
 export default function RegaloPagina() {
+  useIdioma()
   const { codigo } = useParams()
   const [d, setD] = useState(null)
   useEffect(() => {

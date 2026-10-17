@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { Bell, Loader2 } from 'lucide-react'
-import { tx } from '../lib/idioma'
+import { tx, useIdioma } from '../lib/idioma'
 import { pushSupported, enablePush } from '../lib/push'
 import { medirAccion } from '../lib/analitica'
 
@@ -11,6 +11,7 @@ import { medirAccion } from '../lib/analitica'
 const CLAVE = 'fds_aviso_manana'
 
 export default function AvisoManana({ toast }) {
+  useIdioma()
   const [ver, setVer] = useState(false)
   const [ocupado, setOcupado] = useState(false)
   useEffect(() => {

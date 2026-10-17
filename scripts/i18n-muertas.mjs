@@ -16,7 +16,7 @@ import { readFileSync, writeFileSync, readdirSync, statSync } from 'node:fs'
 import { join } from 'node:path'
 
 const SRC = join(process.cwd(), 'frontend', 'src')
-const I18N = join(SRC, 'i18n.jsx')
+const I18N = join(SRC, 'i18nDict.js')
 
 function ficheros(dir, out = []) {
   for (const n of readdirSync(dir)) {

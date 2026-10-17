@@ -4,7 +4,7 @@ import QRCode from 'qrcode'
 import {
   alCambiarInstalable, sePuedeInstalar, instalar, yaEsApp, esIphone, esAndroid, navegadorInterno, enlaceChrome,
 } from '../lib/instalar'
-import { tx } from '../lib/idioma'
+import { tx, useIdioma } from '../lib/idioma'
 import { desdeChina } from '../lib/apiBase'
 import { crearPaseMovil } from '../panel/api'
 import { medirAccion } from '../lib/analitica'
@@ -141,6 +141,7 @@ function Opciones({ ins, onInstalada }) {
 /* La tarjeta «Instala FDS en tu móvil», en la app de ruta abierta desde el
    navegador. No sale si ya es app (instalada o la de Play) ni si la cerró. */
 export default function InstalarApp() {
+  useIdioma()
   const ins = useInstalar()
   const [oculta, setOculta] = useState(() => {
     try { return localStorage.getItem('fds_instalar_cerrado') === '1' || localStorage.getItem('fds_instalada') === '1' } catch { return false }

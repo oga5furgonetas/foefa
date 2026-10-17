@@ -19,7 +19,7 @@ function walk(dir, out = []) {
   return out
 }
 
-const i18nSrc = fs.readFileSync(path.join(ROOT, 'i18n.jsx'), 'utf8')
+const i18nSrc = fs.readFileSync(path.join(ROOT, 'i18nDict.js'), 'utf8')
 const defined = new Map()
 for (const m of i18nSrc.matchAll(/^\s*'([^']+)':\s*\{/gm)) {
   defined.set(m[1], (defined.get(m[1]) || 0) + 1)

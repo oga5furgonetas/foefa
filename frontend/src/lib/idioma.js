@@ -1,6 +1,20 @@
 import { useEffect, useState } from 'react'
-import { TEXTOS } from './textosRuta'
-import { BR } from './textosBrasil'
+
+/* LAS TRADUCCIONES, SOLO SI HACEN FALTA (17-10-2026). textosRuta (A, B, C) y textosBrasil eran unos 250 KB del
+   bloque que se descarga en todas las páginas, también para quien tiene el móvil en español (casi todos), que no
+   usa ninguna: tx() devuelve el propio texto. Ahora se piden al arrancar en otro idioma o al cambiar a otro; hasta
+   que llegan (un instante) sale en español, y al llegar se repinta lo que escucha con useIdioma(). */
+let TEXTOS = {}
+let BR = {}
+let pidiendoTextos = null
+function cargarTextos() {
+  if (!pidiendoTextos) {
+    pidiendoTextos = Promise.all([import('./textosRuta'), import('./textosBrasil')])
+      .then(([a, b]) => { TEXTOS = a.TEXTOS; BR = b.BR; avisar() })
+      .catch(() => { pidiendoTextos = null })
+  }
+  return pidiendoTextos
+}
 
 /* IDIOMA DE LA APP DE REPARTO (04-10-2026)
    La app del repartidor (ruta, navegación, cuenta, alta, regalo, seguimiento)
@@ -82,6 +96,8 @@ let actual = (() => {
   return typeof navigator === 'undefined' ? 'es' : idiomaDelMovil()
 })()
 
+if (actual !== 'es') cargarTextos()
+
 export const idioma = () => actual
 export const locale = () => (actual === 'pt' && BRASIL ? 'pt-BR' : LOCALES[actual] || 'es-ES')
 
@@ -90,8 +106,11 @@ export function cambiarIdioma(l) {
   actual = l
   try { localStorage.setItem(CLAVE, l) } catch { /* nada */ }
   try { document.documentElement.lang = l } catch { /* nada */ }
-  oyentes.forEach((f) => f(l))
+  if (l !== 'es') cargarTextos()
+  avisar()
 }
+
+function avisar() { oyentes.forEach((f) => f(actual)) }
 
 export function tx(texto, vars) {
   let s = (actual !== 'es' && TEXTOS[texto] && TEXTOS[texto][actual]) || texto
@@ -114,7 +133,13 @@ export function txError(e, porDefecto, vars) {
 
 /* Para que una pantalla se repinte al cambiar de idioma. */
 export function useIdioma() {
-  const [l, setL] = useState(actual)
-  useEffect(() => { oyentes.add(setL); return () => oyentes.delete(setL) }, [])
-  return l
+  // Un contador y no el idioma: al llegar las traducciones el idioma es el mismo y, con el mismo valor, React no
+  // repintaría.
+  const [, setVuelta] = useState(0)
+  useEffect(() => {
+    const f = () => setVuelta((n) => n + 1)
+    oyentes.add(f)
+    return () => oyentes.delete(f)
+  }, [])
+  return actual
 }

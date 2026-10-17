@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import L from 'leaflet'
 import 'leaflet/dist/leaflet.css'
 import { Crosshair, LocateFixed } from 'lucide-react'
-import { tx } from '../../lib/idioma'
+import { tx, useIdioma } from '../../lib/idioma'
 
 /* EL MAPA DEL REPARTO. Puntos dibujados (círculos y etiquetas), no los
    iconos de Leaflet: esos son imágenes que el empaquetador no encuentra y
@@ -26,6 +26,7 @@ function encuadrar(m, puntos) {
    la siguiente: más grande y con anillo. `zonas`: las de carga y descarga
    (13-10-2026), un cuadradito morado «C/D» que no cuenta para encuadrar. */
 export default function MapaReparto({ paradas = [], base = null, vivos = [], alto = 380, trazado = null, yo = null, zonas = [] }) {
+  useIdioma()
   const caja = useRef(null)
   const mapa = useRef(null)
   const capa = useRef(null)

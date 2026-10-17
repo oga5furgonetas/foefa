@@ -67,7 +67,6 @@ import { ToastProvider } from './lib/toast'
 import { LangProvider } from './i18n'
 import { API_BASE } from './lib/apiBase'
 import { isStaleChunkError } from './lib/chunkError'
-import Landing from './pages/Landing'
 import CookieBanner from './legal/CookieBanner'
 import { MARCA } from './marca'
 import { DE_PLAY } from './lib/enApp'
@@ -245,6 +244,8 @@ setTimeout(() => { try { sessionStorage.removeItem('chunk_curacion') } catch { /
 
 /* Code-splitting: la landing carga al instante; el resto de rutas se descargan
    solo cuando se visitan (panel, portal conductor, legal…). */
+// La portada de empresas también va aparte (17-10-2026): quien llega a /repartidores o abre la app no la usa.
+const Landing = lazy(() => import('./pages/Landing'))
 const Login = lazy(() => import('./pages/Login'))
 const ResetPassword = lazy(() => import('./pages/ResetPassword'))
 const Registro = lazy(() => import('./pages/Registro'))
