@@ -57,9 +57,11 @@ def campana(monkeypatch):
     odb["candidatos_campanas"] = Col([{"id": "k1", "tipo": "bono10", "activa": True, "por_dia": 5}])
     enviados = []
 
-    async def enviar(to, subject, html, responder_a="", copia=None, texto="", cabeceras=None):
-        enviados.append(SimpleNamespace(to=to, subject=subject, cabeceras=cabeceras, texto=texto))
-        return True
+    resultado = {"ok": True}
+
+    async def enviar(to, subject, html, responder_a="", copia=None, texto="", cabeceras=None, solo=""):
+        enviados.append(SimpleNamespace(to=to, subject=subject, cabeceras=cabeceras, texto=texto, solo=solo))
+        return resultado["ok"]
     monkeypatch.setattr(server, "global_db", g)
     monkeypatch.setattr(server, "client", cli)
     monkeypatch.setattr(server, "_enviar_email", enviar)
@@ -67,8 +69,9 @@ def campana(monkeypatch):
     monkeypatch.setattr(server, "CORREO_CONTACTO", "contacto@x.es")
     monkeypatch.setenv("RESEND_API_KEY", "x")
     monkeypatch.delenv("CORREO_RESPUESTAS", raising=False)
+    monkeypatch.delenv("BREVO_API_KEY", raising=False)
     server._EMAIL_CUOTA_DIA.clear()
-    return SimpleNamespace(g=g, odb=odb, enviados=enviados)
+    return SimpleNamespace(g=g, odb=odb, enviados=enviados, resultado=resultado, monkeypatch=monkeypatch)
 
 
 A_LAS_12 = datetime(2026, 10, 17, 10, 0, tzinfo=timezone.utc)          # 12:00 en Madrid
@@ -98,6 +101,32 @@ async def test_deja_cuota_para_los_correos_de_la_app(campana):
     campana.g["correos_enviados"].docs.extend(
         [{"at": f"{hoy}T06:00:00+00:00", "ok": True, "por": "ciclo:primer_dia"}] * 82)   # la app ya ha mandado 82
     assert await server._campana_bono_vuelta(A_LAS_12) == 3                          # 100 - 15 de reserva - 82
+
+
+@pytest.mark.asyncio(loop_scope="session")
+async def test_con_brevo_va_solo_por_brevo_y_no_gasta_resend(campana):
+    campana.monkeypatch.setenv("BREVO_API_KEY", "x")
+    hoy = A_LAS_12.date().isoformat()
+    campana.g["correos_enviados"].docs.extend(
+        [{"at": f"{hoy}T06:00:00+00:00", "ok": True, "por": "ciclo:primer_dia"}] * 90)   # Resend casi lleno
+    assert await server._campana_bono_vuelta(A_LAS_12) == 8                          # por Brevo, todos
+    assert {e.solo for e in campana.enviados} == {"brevo"}
+
+
+@pytest.mark.asyncio(loop_scope="session")
+async def test_si_el_proveedor_rechaza_no_queda_como_enviado_y_tres_seguidos_paran(campana):
+    campana.resultado["ok"] = False
+    assert await server._campana_bono_vuelta(A_LAS_12) == 0
+    assert len(campana.enviados) == 3                                                # se para al tercero
+    apuntes = {d["_id"] for d in campana.odb["candidatos_campana_envios"].docs}
+    assert not any(a.startswith("bono10:") for a in apuntes)                         # nadie queda como enviado
+    assert sum(1 for a in apuntes if a.startswith("bono10-fallo:")) == 3
+    # Se arregla el proveedor: salen todos; una dirección rechazada dos veces se aparta.
+    campana.odb["candidatos_campana_envios"].docs.append({"_id": "bono10-fallo:c7@x.es", "n": 2})
+    campana.resultado["ok"] = True
+    assert await server._campana_bono_vuelta(A_LAS_12 + timedelta(days=1)) == 5      # por_dia 5
+    assert await server._campana_bono_vuelta(A_LAS_12 + timedelta(days=2)) == 2      # c7 apartada
+    assert "c7@x.es" not in [e.to for e in campana.enviados[3:]]
 
 
 @pytest.mark.asyncio(loop_scope="session")

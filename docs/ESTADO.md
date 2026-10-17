@@ -1297,5 +1297,8 @@ intentar retirar, promoción hasta el 31-10-2026.
   enviar; sin cuota, se desapunta para mañana. Se apaga sola al acabar.
   **Encender/parar**: documento `{tipo: "bono10", activa: true|false, por_dia}` en `flota.candidatos_campanas`.
   Ver cómo va: `correos_enviados` con `por: "campana:bono10"`; altas con `utm_campaign=candidatos`.
-- Con Brevo (300/día gratis) configurado como segundo proveedor (`BREVO_API_KEY`) iría el triple de rápido;
-  crear la cuenta es cosa de Dani.
+- **Brevo**: en FlotaDSP la campaña del 19-09 salió también por Brevo (300/día gratis); en Flota solo está
+  `RESEND_API_KEY` y la clave de Brevo no está en este PC ni en esta cuenta de Fly. Con `BREVO_API_KEY`
+  (fly secrets set) la campaña va SOLO por Brevo (`_enviar_email(..., solo="brevo")`, hasta `por_dia_brevo`=250)
+  y no gasta los 100 de Resend. Si el proveedor rechaza 3 seguidos se para la tanda y nadie queda como enviado;
+  una dirección rechazada 2 veces se aparta (`bono10-fallo:<correo>`).

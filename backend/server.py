@@ -6956,14 +6956,15 @@ async def _brevo_enviar(cli, to: str, subject: str, html: str,
 
 async def _enviar_email(to: str, subject: str, html: str,
                         responder_a: str = "", copia: Optional[list] = None,
-                        texto: str = "", cabeceras: Optional[dict] = None) -> bool:
+                        texto: str = "", cabeceras: Optional[dict] = None, solo: str = "") -> bool:
     """Envia un correo transaccional. Devuelve False si no lo coge nadie.
 
     OJO con el remitente: su dominio DEBE estar verificado en el proveedor
     (resend.com/domains, app.brevo.com/senders/domain) o devuelve 403 y no
     envia nada. Se registra el error REAL para no fallar en silencio — antes un
     dominio sin verificar parecia «no configurado»."""
-    proveedores = _email_proveedores()
+    # `solo`: por ese proveedor y ninguno más (la campaña a candidatos va solo por Brevo si lo hay).
+    proveedores = [p for p in _email_proveedores() if not solo or p == solo]
     if not (proveedores and to):
         logger.warning("email: sin proveedor con cuota o sin destinatario — no se envía a %s", to or "?")
         return False
@@ -21075,6 +21076,7 @@ async def correo_baja(o: str = "", t: str = ""):
 # de la base del dueño ({tipo: "bono10", activa: true, por_dia}) y sale sola por tandas de día; se apaga sola
 # cuando no queda nadie. `correos_bajas` (global) es la lista de direcciones que no quieren nada más.
 _CAMPANA_BONO_TOPE_DIA = 100       # plan gratuito de Resend
+_CAMPANA_BREVO_TOPE_DIA = 300      # plan gratuito de Brevo
 _CAMPANA_BONO_RESERVA = 15         # lo que se deja cada día para los correos de la app (altas, contraseñas, ciclo)
 _CAMPANA_BONO_HORAS = (10, 21)     # de 10:00 a 20:59 en Madrid
 
@@ -21123,13 +21125,22 @@ async def _campana_bono_vuelta(ahora: Optional[datetime] = None) -> int:
     hoy = ahora.date().isoformat()                               # Resend cuenta por día UTC
     del_dia = await global_db[_CORREOS_COL].count_documents({"at": {"$gte": hoy}, "ok": True})
     de_la_campana = await global_db[_CORREOS_COL].count_documents({"at": {"$gte": hoy}, "por": f"campana:{campana_candidatos.CLAVE}"})
-    cupo = min(int(camp.get("por_dia") or 60) - de_la_campana, _CAMPANA_BONO_TOPE_DIA - _CAMPANA_BONO_RESERVA - del_dia)
+    # Con Brevo configurado (BREVO_API_KEY, 300 al día gratis) la campaña va SOLO por Brevo: no gasta los 100 de
+    # Resend, que quedan enteros para los correos de la app, y una queja por spam no toca su reputación.
+    por_brevo = "brevo" in _email_proveedores()
+    if por_brevo:
+        cupo = min(int(camp.get("por_dia_brevo") or 250) - de_la_campana, _CAMPANA_BREVO_TOPE_DIA - 20 - de_la_campana)
+    else:
+        cupo = min(int(camp.get("por_dia") or 60) - de_la_campana, _CAMPANA_BONO_TOPE_DIA - _CAMPANA_BONO_RESERVA - del_dia)
     if cupo <= 0:
         return 0
     fichas = await odb.candidatos.find({}, {"_id": 0, "email": 1, "nombre": 1, "novedades_fds": 1, "baja_comercial": 1}).to_list(5000)
     prefijo = f"{campana_candidatos.CLAVE}:"
-    ya = [str(x["_id"])[len(prefijo):] for x in await odb.candidatos_campana_envios.find({}, {"_id": 1}).to_list(20000)
-          if str(x.get("_id", "")).startswith(prefijo)]
+    apuntes = await odb.candidatos_campana_envios.find({}, {"_id": 1, "n": 1}).to_list(20000)
+    ya = [str(x["_id"])[len(prefijo):] for x in apuntes if str(x.get("_id", "")).startswith(prefijo)]
+    # Una dirección que el proveedor ha rechazado dos veces (mal escrita, buzón que no existe) se aparta.
+    fallo = f"{campana_candidatos.CLAVE}-fallo:"
+    ya += [str(x["_id"])[len(fallo):] for x in apuntes if str(x.get("_id", "")).startswith(fallo) and (x.get("n") or 0) >= 2]
     bajas = [x.get("email") for x in await global_db.correos_bajas.find({}, {"_id": 0, "email": 1}).to_list(20000)]
     # Quien ya tiene cuenta en la app recibe el ciclo de correos (con el bono): esta no.
     con_cuenta = [x.get("email") for x in await global_db.organizations.find({}, {"_id": 0, "email": 1}).to_list(20000)]
@@ -21142,9 +21153,12 @@ async def _campana_bono_vuelta(ahora: Optional[datetime] = None) -> int:
               f"&utm_campaign=candidatos&utm_content={campana_candidatos.CLAVE}")
     responder = await _ciclo_responder_a()
     marca = _email_remitente()[0]
-    enviados = 0
+    def sin_cuota() -> bool:
+        return ("brevo" not in _email_proveedores()) if por_brevo else _email_sin_cuota_hoy()
+
+    enviados, rechazos_seguidos = 0, 0
     for d in pendientes[:cupo]:
-        if _email_sin_cuota_hoy():
+        if sin_cuota():
             break
         # Se apunta ANTES de mandar: un correo por persona aunque algo falle a medias.
         await odb.candidatos_campana_envios.update_one(
@@ -21152,17 +21166,26 @@ async def _campana_bono_vuelta(ahora: Optional[datetime] = None) -> int:
         baja = _baja_email_url(d["email"])
         c = campana_candidatos.correo(d["nombre"], enlace, baja, marca)
         ok = await _enviar_email(d["email"], c["asunto"], c["html"], responder_a=responder, texto=c["texto"],
-                                 cabeceras={"List-Unsubscribe": f"<{baja}>", "List-Unsubscribe-Post": "List-Unsubscribe=One-Click"})
+                                 cabeceras={"List-Unsubscribe": f"<{baja}>", "List-Unsubscribe-Post": "List-Unsubscribe=One-Click"},
+                                 **({"solo": "brevo"} if por_brevo else {}))
         await global_db[_CORREOS_COL].insert_one({
             "id": str(uuid.uuid4()), "para": d["email"], "copia": [], "asunto": c["asunto"], "cuerpo": c["texto"],
             "responder_a": responder, "por": f"campana:{campana_candidatos.CLAVE}", "at": ahora.isoformat(),
             "ok": bool(ok)})
         if ok:
             enviados += 1
-        elif _email_sin_cuota_hoy():
-            # Sin cuota no ha salido: se desapunta para la tanda de mañana. Un rechazo de verdad (dirección mal)
-            # se queda apuntado: repetirlo no lo arregla.
-            await odb.candidatos_campana_envios.delete_one({"_id": f"{prefijo}{d['email']}"})
+            rechazos_seguidos = 0
+            continue
+        # No ha salido: se desapunta, que no quede como enviado lo que nadie ha recibido.
+        await odb.candidatos_campana_envios.delete_one({"_id": f"{prefijo}{d['email']}"})
+        if sin_cuota():
+            break                                                # mañana, con cuota nueva
+        await odb.candidatos_campana_envios.update_one({"_id": f"{fallo}{d['email']}"}, {"$inc": {"n": 1}}, upsert=True)
+        rechazos_seguidos += 1
+        if rechazos_seguidos >= 3:
+            # Tres seguidos no son tres direcciones malas: es el proveedor (remitente sin verificar, clave mala).
+            logger.error("campaña %s: 3 rechazos seguidos, se para la tanda: ¿remitente sin verificar en el proveedor?",
+                         campana_candidatos.CLAVE)
             break
     await odb.candidatos_campanas.update_one(
         {"id": camp["id"]}, {"$inc": {"enviados": enviados}, "$set": {"ultima_tanda": ahora.isoformat()}})
