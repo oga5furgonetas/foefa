@@ -182,7 +182,7 @@ _T = {
         "primer_dia": (
             "¿Te ayudo con tu primera ruta?",
             "Hola {nombre}:\n\n"
-            "Ayer creaste tu cuenta en {marca} y todavía no has cargado ninguna parada. "
+            "{cuando} creaste tu cuenta en {marca} y todavía no has cargado ninguna parada. "
             "Si te quedaste a medias, lo más rápido es:\n\n"
             "1. Abre {ruta}\n"
             "2. «Cargar paquetes: uno tras otro» y una foto a cada etiqueta.\n"
@@ -237,6 +237,7 @@ _T = {
                        "de verdad con la app (en 2 días distintos), y {euros} más por cada compañero que invites y "
                        "haga lo mismo."),
         "progreso": "Ya llevas {n} entregas que cuentan.\n\n",
+        "cuando": ("Ayer", "Hace unos días"),
         "cobro_es": "Bizum o transferencia",
         "promo_ref": "Son {euros} por cada compañero que se registre con tu enlace hasta el {promo_hasta} (promoción). ",
         "ayuda_invita": "¿Le falta algo a la app para tu reparto? Contéstame con una línea y lo miro.",
@@ -279,7 +280,7 @@ _T = {
         "primer_dia": (
             "Ajudo-te com a tua primeira rota?",
             "Olá {nombre}:\n\n"
-            "Ontem criaste a tua conta na {marca} e ainda não carregaste nenhuma paragem. "
+            "{cuando} criaste a tua conta na {marca} e ainda não carregaste nenhuma paragem. "
             "Se ficaste a meio, o mais rápido é:\n\n"
             "1. Abre {ruta}\n"
             "2. «Carregar volumes: um após outro» e uma foto a cada etiqueta.\n"
@@ -335,6 +336,7 @@ _T = {
         "bono_linea": ("E um presente: até {bono_hasta}, damos-te {bono_euros} quando fizeres as tuas primeiras 20 entregas "
                        "a sério com a app (em 2 dias diferentes), e {euros} por cada colega que convidares e faça o mesmo."),
         "progreso": "Já levas {n} entregas que contam.\n\n",
+        "cuando": ("Ontem", "Há uns dias"),
         "ayuda_invita": "Falta alguma coisa à app para a tua distribuição? Responde-me com uma linha e eu vejo.",
         "ayuda_invita_sin": "Obrigado por a usares.",
         "cobro_fuera": "PayPal",
@@ -376,7 +378,7 @@ _T = {
         "primer_dia": (
             "Can I help with your first route?",
             "Hi {nombre},\n\n"
-            "You created your {marca} account yesterday and haven't loaded any stops yet. "
+            "You created your {marca} account {cuando} and haven't loaded any stops yet. "
             "If you got stuck, the quickest way is:\n\n"
             "1. Open {ruta}\n"
             "2. «Load parcels: one after another» and a photo of each label.\n"
@@ -432,6 +434,7 @@ _T = {
         "bono_linea": ("And a gift: until {bono_hasta}, you get {bono_euros} when you make your first 20 real deliveries "
                        "with the app (on 2 different days), plus {euros} for every colleague you invite who does the same."),
         "progreso": "You already have {n} deliveries that count.\n\n",
+        "cuando": ("yesterday", "a few days ago"),
         "ayuda_invita": "Is anything missing for your deliveries? Reply with one line and I'll look into it.",
         "ayuda_invita_sin": "Thanks for using it.",
         "cobro_fuera": "PayPal",
@@ -658,6 +661,9 @@ def correo(clave: str, org: dict, uso: dict, ahora: datetime, *, marca: str, bas
     datos["bono_euros"] = _euros(bono_cent / 100, idioma)
     reales = _reales(uso)
     datos["progreso"] = t["progreso"].format(n=reales) if 0 < reales < BONO_ENTREGAS else ""
+    # «Ayer» solo si fue ayer: «primer_dia» puede salir hasta 72 h después (17-10-2026, tras la caída del
+    # 15 al 17, a los del 14 les iba a llegar «Ayer creaste tu cuenta» tres días más tarde).
+    datos["cuando"] = t["cuando"][0] if ahora - alta < timedelta(hours=48) else t["cuando"][1]
     datos["intro"] = (t["intro_promo"] if promo_hasta else t["intro"]).format(**datos)
     # 10-10-2026: con la promoción no hay «días de prueba» que contar (el correo del día
     # siguiente decía «te quedan 6 días» a quien tiene la app gratis hasta el 31-12).

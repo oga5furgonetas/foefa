@@ -169,6 +169,13 @@ def _correo(clave, org=None, uso=None, con_respuesta=True, **extra):
                      mensual=9.99, anual=99, con_respuesta=con_respuesta, **extra)
 
 
+def test_primer_dia_solo_dice_ayer_si_fue_ayer():
+    assert "Ayer creaste tu cuenta" in _correo("primer_dia", _org(horas=30))["texto"]
+    t = _correo("primer_dia", _org(horas=60))["texto"]
+    assert "Hace unos días creaste tu cuenta" in t and "Ayer" not in t
+    assert "account a few days ago" in _correo("primer_dia", _org(horas=60, idioma="en"))["texto"]
+
+
 def test_el_bono_va_en_los_correos_de_arrancar_y_solo_si_puede_ganarlo():
     """17-10-2026: 10 € por la primera ruta de verdad. Lo dicen la bienvenida, «primer_dia» y «recordatorio»
     (antes de la despedida) mientras pueda ganarlo; sin `bono_hasta`, ni una palabra."""
