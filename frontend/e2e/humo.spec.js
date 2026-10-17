@@ -13,7 +13,7 @@ import { simularApi, entrarComoAdmin } from './api-simulada.js'
 
 const PANEL = [
   ['', 'Dashboard'], ['mi-dia', 'Mi día'], ['chat', 'Chat'],
-  ['vehiculos', 'Vehículos'], ['inspecciones', 'Inspecciones'],
+  ['vehiculos', 'Vehículos'], ['estado-flota', 'Estado de la flota'], ['inspecciones', 'Inspecciones'],
   ['revision', 'Revisión rápida'], ['origen-danos', 'Origen de daños'],
   ['vencimientos', 'Vencimientos'], ['aparcamiento', 'Aparcamiento'],
   ['incidencias', 'Incidencias'], ['ordenes', 'Órdenes de taller'],
@@ -838,7 +838,7 @@ test.describe('Usuarios', () => {
       ]) }))
     await page.goto('/panel/usuarios', { waitUntil: 'domcontentloaded' })
     await expect(page.getByText('Mery', { exact: true })).toBeVisible({ timeout: 15000 })
-    await expect(page.getByText('ve 7 de 30 pantallas')).toBeVisible()
+    await expect(page.getByText('ve 7 de 31 pantallas')).toBeVisible()
     await page.getByRole('button', { name: 'Quién ve cada pantalla' }).click()
     const fila = (nombre) => page.locator('tr', { has: page.locator('td', { hasText: new RegExp(`^${nombre}$`) }) })
     // Mery: el Cuadrante sí y los Días libres no (van cada uno por su lado);
@@ -846,17 +846,21 @@ test.describe('Usuarios', () => {
     await expect(fila('Cuadrante').locator('td').nth(2).getByLabel('la ve')).toBeVisible()
     await expect(fila('Días libres').locator('td').nth(2).getByLabel('no la ve')).toBeVisible()
     await expect(fila('Órdenes de taller').locator('td').nth(2).getByLabel('no la ve')).toBeVisible()
+    // El estado de la flota va con Vehículos: Mery no los tiene, Luis (sin lista) sí.
+    await expect(fila('Estado de la flota').locator('td').nth(2).getByLabel('no la ve')).toBeVisible()
+    await expect(fila('Estado de la flota').locator('td').nth(3).getByLabel('la ve')).toBeVisible()
     await expect(fila('Asignación diaria').locator('td').nth(2)).toHaveText('siempre')
     await expect(fila('Vehículos').locator('td').nth(3).getByLabel('la ve')).toBeVisible()
     await page.getByRole('button', { name: 'Editar' }).first().click()
-    await expect(page.getByText('Ve 7 de 30 pantallas del menú.')).toBeVisible()
+    await expect(page.getByText('Ve 7 de 31 pantallas del menú.')).toBeVisible()
     await expect(page.getByText('· va con Talleres')).toBeVisible()
+    await expect(page.getByText('· va con Vehículos')).toBeVisible()
     // El Cuadrante se marca y desmarca como cualquier otra.
     const cuadrante = page.getByRole('button', { name: 'Cuadrante', exact: true })
     await expect(cuadrante).toHaveAttribute('aria-pressed', 'true')
     await cuadrante.click()
     await expect(cuadrante).toHaveAttribute('aria-pressed', 'false')
-    await expect(page.getByText('Ve 6 de 30 pantallas del menú.')).toBeVisible()
+    await expect(page.getByText('Ve 6 de 31 pantallas del menú.')).toBeVisible()
     expect(fallos, fallos.join(' | ')).toHaveLength(0)
   })
 })
@@ -3731,4 +3735,94 @@ test('Negocio · casillas con lo que hay que hacer; se entra, se vuelve y el enl
   await expect(page).toHaveURL(/\/panel\/admin$/)
   await expect(page.getByRole('button', { name: /^Opiniones/ })).toBeVisible()
   expect(fallos).toEqual([])
+})
+
+/* ESTADO DE LA FLOTA (17-10-2026). Lo que se prueba aquí es la pantalla: de la peor a la mejor con su puesto,
+   los números que filtran, la ficha con las fotos y los daños, y que «Mandar al taller» abra en Órdenes el parte
+   ya redactado. El baremo (qué cuenta y cuánto) lo prueba el servidor en backend/tests/test_salud_flota.py. */
+test.describe('Estado de la flota', () => {
+  const FOTO = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAIAAAACCAIAAAD91JpzAAAAFklEQVR4nGP8z8DAwMDAxMDAwMDAAAANHQEDasKb6QAAAABJRU5ErkJggg=='
+  const hoy = new Date().toISOString().slice(0, 10)
+  const furgo = (id, matricula, salud, nivel, extra = {}) => ({
+    vehicle_id: id, matricula, modelo: 'Toyota Proace', center: 'NORTE', salud, puntos: 100 - salud, nivel,
+    urgencias: [], zonas: [], resumen: 'Sin daños pendientes', danos: 0, confirmados: 0, sin_confirmar: 0,
+    mecanica: [], averias: 0, itv_vencida: false, itv_dias: null, portada: null,
+    ultima: { fecha: hoy, dias: 0, conductor: 'Ana', km: 52854 }, ...extra,
+  })
+  const PEOR = furgo('v1', '1111 AAA', 34, 'urgente', {
+    resumen: 'Lateral derecho grave · Lateral izquierdo grave · Motor', danos: 3, mecanica: ['Motor'], itv_vencida: true,
+    zonas: [{ zona: 'lat_der', nombre: 'Lateral derecho', peor: 'grave', n: 2 }, { zona: 'lat_izq', nombre: 'Lateral izquierdo', peor: 'grave', n: 1 }],
+  })
+  const LISTA = {
+    // Desordenada a propósito: el orden lo pone la pantalla.
+    furgonetas: [furgo('v2', '2222 BBB', 100, 'bien'), PEOR, furgo('v3', '3333 CCC', 74, 'taller', { resumen: 'Frontal grave' })],
+    en_taller: [{ vehicle_id: 'v9', matricula: '9999 ZZZ', center: 'NORTE', orden: 'OT-7', taller: 'Talleres Pepe', estado: 'En reparación', entrega: null }],
+    niveles: { urgente: 1, taller: 1, vigilar: 0, bien: 1, sin_datos: 0 }, salud_media: 69, evaluadas: 3, itv_vencida: 1,
+    baremo: { urgente: 45, taller: 22, vigilar: 7 },
+  }
+  const PARTE = 'Lateral izquierdo: Puerta delantera izquierda (grave)\nAvisa el conductor: Motor'
+  const FICHA = {
+    ...PEOR, mecanica: [{ categoria: 'motor', nombre: 'Motor', puntos: 18, urgente: false, origen: 'nota' }],
+    motivos: [{ puntos: 18, texto: 'Puerta delantera izquierda: grave' }, { puntos: 18, texto: 'Motor: lo escribe el conductor' }],
+    ultima: { ...PEOR.ultima, nota: 'Luz motor encendida', id: 'i1', circulation_safe: true },
+    fotos: [{ vista: 'frontal', nombre: 'Frontal', url: FOTO, anotada: null },
+            { vista: 'lateral_izq', nombre: 'Lateral izquierdo', url: FOTO, anotada: FOTO }],
+    danos_detalle: [{ zona: 'Lateral izquierdo', pieza: 'Puerta delantera izquierda', severity: 'grave', gravedad: 'grave',
+                      humano: true, en_ultima: true, desde: '2026-07-01', foto: FOTO, foto_fecha: hoy }],
+    averias_detalle: [], checklist_mal: [{ item: 'Espejos', valor: 'dañado' }], notas_anteriores: [],
+    parte: PARTE, en_taller: null, itv_fecha: '2025-01-01',
+  }
+
+  async function abrir(page) {
+    await entrarComoAdmin(page)
+    await simularApi(page, 'vacio')
+    await page.route(/\/api\/estado-flota(\?|$)/, (r) => r.fulfill({ json: LISTA }))
+    await page.route(/\/api\/estado-flota\/v1/, (r) => r.fulfill({ json: FICHA }))
+    await page.route(/\/api\/work-orders\/preparar\/v1/, (r) => r.fulfill({ json: {
+      vehicle_id: 'v1', matricula: '1111 AAA', sugerido: 'w1', problema: 'grave: Puerta corredera izquierda',
+      falta_problema: false, ledger_ids: ['l1'], danos: [], talleres: [{ id: 'w1', name: 'Talleres Pepe' }] } }))
+    await page.goto('/panel/estado-flota', { waitUntil: 'domcontentloaded' })
+    await expect(page.getByRole('heading', { name: 'Estado de la flota' })).toBeVisible({ timeout: 15000 })
+  }
+  const tarjetas = async (page) => (await page.getByRole('button', { name: /\d{4} [A-Z]{3}/ }).allInnerTexts())
+    .map((x) => x.match(/\d{4} [A-Z]{3}/)[0])
+
+  test('de la peor a la mejor, con su puesto, y los números filtran', async ({ page }) => {
+    const fallos = vigilar(page)
+    await abrir(page)
+    expect(await tarjetas(page)).toEqual(['1111 AAA', '3333 CCC', '2222 BBB'])
+    await expect(page.getByRole('button', { name: /1111 AAA/ })).toContainText('#1')
+    await expect(page.getByRole('button', { name: /1111 AAA/ })).toContainText('ITV vencida en la ficha')
+    await page.getByRole('button', { name: /^1\s*Taller urgente/ }).click()
+    expect(await tarjetas(page)).toEqual(['1111 AAA'])
+    await page.getByRole('combobox', { name: 'Ordenar' }).selectOption('mejor')
+    await page.getByRole('button', { name: /^1\s*Taller urgente/ }).click()          // quita el filtro
+    expect(await tarjetas(page)).toEqual(['2222 BBB', '3333 CCC', '1111 AAA'])
+    await expect(page.getByRole('button', { name: /2222 BBB/ })).toContainText('#3')   // el puesto no cambia al ordenar
+    await expect(page.getByText('Ya en el taller (1)')).toBeVisible()
+    await expect(page.getByText('9999 ZZZ')).toBeVisible()
+    expect(fallos).toEqual([])
+  })
+
+  test('la ficha enseña las fotos y los daños, y «Mandar al taller» abre el parte redactado', async ({ page }) => {
+    const fallos = vigilar(page)
+    await abrir(page)
+    await page.getByRole('button', { name: /1111 AAA/ }).click()
+    const ficha = page.getByRole('dialog', { name: 'Estado de 1111 AAA' })
+    await expect(ficha.getByText('Fotos de la última inspección')).toBeVisible()
+    await expect(ficha.getByRole('button', { name: 'Ampliar: Puerta delantera izquierda' })).toBeVisible()   // el daño, con su foto
+    await expect(ficha.getByText('«Luz motor encendida»')).toBeVisible()
+    await expect(ficha.getByText('Checklist: Espejos dañado')).toBeVisible()
+    await expect(page).toHaveURL(/[?&]v=v1/)
+    // Una foto a pantalla completa; Escape cierra la foto y no la ficha.
+    await ficha.getByRole('button', { name: 'Ampliar: Frontal' }).click()
+    await expect(page.getByRole('dialog', { name: 'Foto ampliada' })).toBeVisible()
+    await page.keyboard.press('Escape')
+    await expect(page.getByRole('dialog', { name: 'Foto ampliada' })).toHaveCount(0)
+    await expect(ficha).toBeVisible()
+    await ficha.getByRole('button', { name: /Mandar al taller/ }).click()
+    await expect(page).toHaveURL(/\/panel\/ordenes$/)
+    await expect(page.locator('textarea')).toHaveValue(PARTE)
+    expect(fallos).toEqual([])
+  })
 })

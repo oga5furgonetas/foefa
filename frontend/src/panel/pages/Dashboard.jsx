@@ -6,9 +6,9 @@ import { useNavigate } from 'react-router-dom'
 import { useOutletContext } from 'react-router-dom'
 import {
   Truck, ClipboardList, BellRing, AlertTriangle, ShieldAlert, CheckCircle2, ChevronDown,
-  ClipboardCheck, Wrench, Users, ListChecks, Store,
+  ClipboardCheck, Wrench, Users, ListChecks, Store, HeartPulse,
 } from 'lucide-react'
-import { getDashboardStats, getItvAlerts, getDamageCosts, getStatsHoy, getReviewQueue, getDanosPendientes } from '../api'
+import { getDashboardStats, getItvAlerts, getDamageCosts, getStatsHoy, getReviewQueue, getEstadoFlota } from '../api'
 import { useT, LANG_LOCALE } from '../../i18n'
 import { lista } from '../../lib/lista'
 import { PageSkeleton } from '../components/Skeleton'
@@ -27,16 +27,6 @@ function greeting(t) {
 }
 function fmtDate(locale) {
   return new Date().toLocaleDateString(locale, { weekday: 'long', day: 'numeric', month: 'long' })
-}
-function fmtRelative(iso, t) {
-  if (!iso) return ''
-  const diff = Date.now() - new Date(iso).getTime()
-  const m = Math.floor(diff / 60000)
-  if (m < 1)  return t('time.now')
-  if (m < 60) return t('time.mago').replace('{n}', m)
-  const h = Math.floor(m / 60)
-  if (h < 24) return t('time.hago').replace('{n}', h)
-  return t('time.dago').replace('{n}', Math.floor(h / 24))
 }
 
 /* Contador natural: los números no aparecen, cuentan (easing cúbico, ~700 ms).
@@ -264,10 +254,9 @@ function DashboardFlota() {
      minuto: es lo único de la portada que cambia mientras la miras. */
   const [hoy, setHoy] = useState(null)
   const [cola, setCola] = useState(0)
-  // Daños abiertos en el libro (los que aún no tienen orden de taller). Es el
-  // número que pide una decisión; el de "críticos/graves en todas las
-  // inspecciones" era un histórico de meses que no cambiaba nada hoy.
-  const [danos, setDanos] = useState(null)
+  // El estado de la flota (17-10-2026): cuántas furgonetas necesitan taller y la salud media. Sustituye a los
+  // «daños abiertos» del libro, que contaban golpes sueltos; esto cuenta furgonetas, y por qué.
+  const [ef, setEf] = useState(null)
   const navTop = useNavigate()
   useEffect(() => {
     let stop = false
@@ -288,7 +277,6 @@ function DashboardFlota() {
   useEffect(() => {
     setData(null)
     setErr('')
-    const isCentered = center && center !== 'Todos'
     Promise.all([
       getDashboardStats(center),
       /* Ya NO se pide /vehicles/last-inspections. Ese endpoint devuelve un MAPA
@@ -299,10 +287,10 @@ function DashboardFlota() {
          quitado el panel y con él la petición, que además se hacía en cada
          carga para nada. */
       getItvAlerts(center).catch(() => ({ data: [] })),
-      getDanosPendientes(isCentered ? { center } : {}).catch(() => ({ data: null })),
-    ]).then(([stats, alerts, dp]) => {
+      getEstadoFlota(center).catch(() => ({ data: null })),
+    ]).then(([stats, alerts, estado]) => {
       const ra   = alerts.data
-      setDanos(dp?.data || null)
+      setEf(estado?.data || null)
       const itvList    = Array.isArray(ra)  ? ra  : (ra?.items  || ra?.alerts       || [])
 
       /* Los contadores vienen ya acotados al centro desde /stats/dashboard
@@ -326,7 +314,6 @@ function DashboardFlota() {
   const inShop = data.vehicles_in_workshop || 0
   const active = fleet - inShop
   const breakdown = data.severity_breakdown || {}
-  const critCount = (breakdown.grave || 0) + (breakdown.critico || 0)
   const todayKey = hoyLocal()
   const todayInsp = data.weekly_activity?.[todayKey]?.inspecciones || 0
   /* La ITV en tres cajones, porque no son lo mismo: vencida (no puede salir),
@@ -341,12 +328,6 @@ function DashboardFlota() {
   const itvProximas = itv.filter((a) => a.status === 'proxima' || a.status === 'urgente')
   const itvSinFecha = itv.filter((a) => a.status === 'sin_fecha')
 
-  const fleetSub = `${fleet} ${t('chart.total')} · ${inShop} ${t('dash.workshop').toLowerCase()}`
-  const workshopSub = fleet > 0 ? `${Math.round((inShop/fleet)*100)}${t('dash.workshop.sub')}` : undefined
-  const inspSub = `${data.total_inspections} ${t('dash.insptoday.sub')}`
-  const itvSub = data.open_incidents
-    ? `${data.open_incidents} ${t('dash.incidents.open')}`
-    : t('dash.incidents.none')
 
   /* ── LO QUE PIDE UNA DECISIÓN, ORDENADO POR LO QUE CUESTA NO HACERLO ──────
      Antes esto era una lista plana donde "31 incidencias abiertas" —un backlog
@@ -413,10 +394,15 @@ function DashboardFlota() {
   const salidasHoy = hoy?.salidas?.total || 0
   const turno = (hoy?.checklist || [])[0]
   const abiertas = data.open_incidents || 0
-  const graves = danos?.graves || 0
+  const urgentes = ef?.niveles?.urgente || 0
+  const aTaller = urgentes + (ef?.niveles?.taller || 0)
+  const ordenesAbiertas = (ef?.en_taller || []).filter((x) => x.orden).length
   const mercAviso = merc ? (merc.por_revisar || merc.sin_leer || 0) : 0
   const casillas = [
     { to: '/panel/vehiculos', icono: Truck, titulo: t('nav.vehicles'), detalle: fleet ? `${active} ${t('ops.of')} ${fleet} · ${t('ops.active.veh')}` : '' },
+    // La que peor está, la siguiente…: el globito son las que no pueden esperar.
+    { to: '/panel/estado-flota', icono: HeartPulse, titulo: t('nav.estadoFlota'), aviso: urgentes, tono: urgentes ? 'rojo' : aTaller ? 'ambar' : '',
+      detalle: ef?.salud_media != null ? `${t('ef.salud.media')} ${ef.salud_media}/100${aTaller ? ` · ${aTaller} ${t('ef.a.taller')}` : ''}` : '' },
     { to: '/panel/revision', icono: CheckCircle2, titulo: t('nav.revision'), aviso: cola, avisoTono: 'ambar', tono: cola ? 'ambar' : '',
       detalle: `${cola} ${t(cola === 1 ? 'ops.validate.1' : 'ops.validate')}` },
     { to: '/panel/asignacion', icono: ClipboardCheck, titulo: t('nav.assign'), aviso: sinRevisar, avisoTono: 'ambar', tono: sinRevisar ? 'ambar' : '',
@@ -425,8 +411,8 @@ function DashboardFlota() {
     { to: '/panel/vencimientos', icono: BellRing, titulo: t('nav.grp.expiry'), aviso: itvVencidas.length, tono: itvVencidas.length ? 'rojo' : '',
       detalle: itvVencidas.length ? `${itvVencidas.length} ${t(itvVencidas.length === 1 ? 'ops.itv.expired.1' : 'ops.itv.expired')}`
         : itvProximas.length ? `${itvProximas.length} ${t('ops.itv.soon')}` : '' },
-    { to: '/panel/ordenes', icono: ShieldAlert, titulo: t('nav.ordenes'), aviso: graves, tono: graves ? 'rojo' : '',
-      detalle: `${danos?.total ?? 0} ${t('ops.damage.open')}` },
+    { to: '/panel/ordenes', icono: ShieldAlert, titulo: t('nav.ordenes'),
+      detalle: ef ? `${ordenesAbiertas} ${t('ops.ordenes.abiertas')}` : '' },
     { to: '/panel/incidencias', icono: AlertTriangle, titulo: t('nav.incidents'), detalle: `${abiertas} ${t(abiertas === 1 ? 'ops.incidents.1' : 'ops.incidents')}` },
     { to: '/panel/talleres', icono: Wrench, titulo: t('nav.workshops'), detalle: `${inShop} ${t(inShop === 1 ? 'ops.workshop.1' : 'ops.workshop')}` },
     { to: '/panel/conductores', icono: Users, titulo: t('nav.drivers'), detalle: data.total_drivers != null ? String(data.total_drivers) : '' },
@@ -440,8 +426,6 @@ function DashboardFlota() {
 
   const firstName = (admin?.name || '').trim().split(/\s+/)[0] || ''
   const availPct = fleet > 0 ? Math.round((active / fleet) * 100) : null
-  const totalSev = SEV_ORDER.reduce((a, k) => a + (breakdown?.[k] || 0), 0)
-  const okPct = totalSev ? Math.round(((breakdown?.sin_danos || 0) / totalSev) * 100) : 100
 
   return (
     <div className="mx-auto max-w-5xl">
@@ -580,7 +564,7 @@ function DashboardFlota() {
       {/* Lo de más detalle (gráficos, resumen y vencimientos), plegado: el inicio son las casillas y lo de hoy. */}
       <details className="group border-t border-white/[0.05] py-5">
         <summary className="flex cursor-pointer list-none items-center gap-2 text-[15px] font-semibold text-dark-100">
-          <ChevronDown size={16} className="text-dark-500 transition-transform group-open:rotate-180" /> {t('ops.fleet.state')}
+          <ChevronDown size={16} className="text-dark-500 transition-transform group-open:rotate-180" /> {t('ops.fleet.graphs')}
         </summary>
       {/* ── 2-bis · LA FLOTA, EN IMÁGENES ────────────────────────────────────
           Tres piezas y las tres con datos REALES. En el mockup de referencia
@@ -588,8 +572,7 @@ function DashboardFlota() {
           calcular para casi ningún dato (no hay serie histórica de daños por
           semana), y una flecha verde inventada en una pantalla que se enseña a
           un cliente es lo peor que podríamos poner. Va lo que hay. */}
-      <section className="rise border-t border-white/[0.05] py-7" style={{ animationDelay: '140ms' }}>
-        <h2 className="mb-4 text-[15px] font-semibold text-dark-100">{t('ops.fleet.state')}</h2>
+      <section className="rise py-5" style={{ animationDelay: '140ms' }}>
         <div className="grid gap-5 lg:grid-cols-3">
 
           {/* Disponibilidad: cuántas furgonetas pueden salir mañana. */}

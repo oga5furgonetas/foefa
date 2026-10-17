@@ -19833,6 +19833,295 @@ async def ot_furgonetas_paradas(center: str = "", _=Depends(require_admin)):
     }
 
 
+# ─── ESTADO DE LA FLOTA (17-10-2026) ─────────────────────────────────────────
+# Dani: «cuál es la que peor está, con la última foto de las inspecciones,
+# siempre que no esté ya en el taller; ordenarla, ver las fotos y mandarla al
+# taller». El baremo y por qué es así están en `salud_flota.py`; aquí solo se
+# juntan los datos (en pocas consultas para toda la flota) y se le pasan.
+
+SALUD_VISTAS = {"frontal": "Frontal", "trasera": "Trasera", "lateral_izq": "Lateral izquierdo",
+                "lateral_der": "Lateral derecho", "odometro": "Cuentakilómetros", "combustible": "Combustible"}
+
+
+async def _salud_ultimas(ids: list) -> dict:
+    """La última inspección ANALIZADA de cada furgoneta de los últimos 180 días. {vehicle_id: inspección}
+
+    Primero se busca solo el id de la última de cada una (en Mongo, sin traer nada) y luego esas pocas
+    enteras: traerse 180 días de inspecciones con fotos y notas para quedarse con una por furgoneta serían
+    decenas de megas en cada visita a la pantalla.
+    """
+    if not ids:
+        return {}
+    desde = (datetime.now(timezone.utc) - timedelta(days=180)).isoformat()
+    ult = [r["id"] async for r in db.inspections.aggregate([
+        {"$match": {"vehicle_id": {"$in": ids}, "analysis_status": "ok", "deleted": {"$ne": True},
+                    "created_at": {"$gte": desde}}},
+        {"$sort": {"created_at": -1}},
+        {"$group": {"_id": "$vehicle_id", "id": {"$first": "$id"}}},
+    ]) if r.get("id")]
+    if not ult:
+        return {}
+    return {i["vehicle_id"]: i async for i in db.inspections.find(
+        {"id": {"$in": ult}},
+        {"_id": 0, "id": 1, "vehicle_id": 1, "driver_id": 1, "created_at": 1, "notes": 1, "photos": 1,
+         "annotated_photos": 1, "photo_vistas": 1, "analysis.damages": 1, "analysis.circulation_safe": 1})}
+
+
+def _salud_notas(insp: dict) -> dict:
+    """Lo que el conductor rellenó en la inspección (va como JSON en `notes`). {} si no se puede leer."""
+    try:
+        n = json.loads((insp or {}).get("notes") or "{}")
+    except (TypeError, ValueError):
+        return {}
+    return n if isinstance(n, dict) else {}
+
+
+def _salud_foto(insp: dict, indice) -> tuple:
+    """(foto con la marca de la IA o None, foto original o None) de la posición `indice` (1, 2, …)."""
+    try:
+        k = int(indice) - 1
+    except (TypeError, ValueError):
+        return None, None
+    fotos, anot = (insp or {}).get("photos") or [], (insp or {}).get("annotated_photos") or []
+    if k < 0 or k >= len(fotos):
+        return None, None
+    return (anot[k] if k < len(anot) and anot[k] else None), (fotos[k] or None)
+
+
+async def _salud_evaluar(vs: list, detalle: bool = False) -> list:
+    """Las fichas de salud de estas furgonetas (ya filtradas: ni de baja ni en el taller)."""
+    import salud_flota as sf
+    if not vs:
+        return []
+    ids = [v["id"] for v in vs]
+    hoy = date_cls.fromisoformat(_dia_negocio())
+    libro: dict = {}
+    async for e in db.vehicle_damage_ledger.find(
+            {"vehicle_id": {"$in": ids}, "status": "open", "orden_id": {"$in": [None, ""]}}):
+        e["ledger_id"] = str(e.pop("_id", ""))
+        libro.setdefault(e.get("vehicle_id"), []).append(e)
+    ultimas = await _salud_ultimas(ids)
+    # Lo que una persona ya juzgó en Revisión rápida, daño a daño de esas inspecciones.
+    juicio = {}
+    if ultimas:
+        async for f in db.ai_feedback.find(
+                {"inspection_id": {"$in": [u["id"] for u in ultimas.values()]}},
+                {"_id": 0, "inspection_id": 1, "damage_index": 1, "verdict": 1, "scope": 1}):
+            if f.get("scope") in (None, "all"):
+                juicio[(f.get("inspection_id"), f.get("damage_index"))] = f.get("verdict")
+    averias: dict = {}
+    async for i in db.incidents.find(
+            {"vehicle_id": {"$in": ids}, "status": {"$ne": "resolved"}},
+            {"_id": 0, "id": 1, "vehicle_id": 1, "title": 1, "description": 1, "severity": 1, "created_at": 1}):
+        averias.setdefault(i.get("vehicle_id"), []).append({
+            "id": i.get("id"), "titulo": (i.get("title") or i.get("description") or "").strip()[:200],
+            "severity": i.get("severity") or "", "fecha": str(i.get("created_at") or "")[:10]})
+    sin_nombre = [u.get("driver_id") for u in ultimas.values()
+                  if u.get("driver_id") and not _salud_notas(u).get("driver_name")]
+    nombres = {d["id"]: d.get("name") or "" async for d in db.drivers.find(
+        {"id": {"$in": sin_nombre}}, {"_id": 0, "id": 1, "name": 1})} if sin_nombre else {}
+
+    fichas = []
+    for v in vs:
+        u = ultimas.get(v["id"]) or {}
+        notas = _salud_notas(u)
+        ultima_danos = []
+        for k, dm in enumerate((u.get("analysis") or {}).get("damages") or []):
+            if not isinstance(dm, dict) or dm.get("confirmed") is False:
+                continue
+            veredicto = juicio.get((u.get("id"), k))
+            if veredicto == "wrong":
+                continue
+            ultima_danos.append({**dm, "panel": _canon_panel(dm.get("part") or ""),
+                                 "humano": veredicto in ("correct", "corrected")})
+        danos = sf.danos_a_contar(libro.get(v["id"], []), ultima_danos)
+        dias = None
+        if u.get("created_at"):
+            try:
+                dias = max(0, (hoy - date_cls.fromisoformat(str(u["created_at"])[:10])).days)
+            except ValueError:
+                dias = None
+        itv = None
+        try:
+            itv = (date_cls.fromisoformat(str(v.get("itv_date") or "")[:10]) - hoy).days
+        except ValueError:
+            itv = None
+        km = notas.get("odometer_km")
+        ultima = {
+            "id": u.get("id"), "fecha": str(u.get("created_at") or "")[:10], "dias": dias,
+            "circulation_safe": (u.get("analysis") or {}).get("circulation_safe"),
+            "conductor": (notas.get("driver_name") or nombres.get(u.get("driver_id")) or "").strip(),
+            "km": km if isinstance(km, (int, float)) and km > 0 else None,
+            "nota": str(notas.get("notes") or "").strip()[:500],
+        } if u else {}
+        f = sf.ficha(v, danos, sf.lo_que_no_se_ve(notas.get("checklist") or {}, notas.get("notes") or ""),
+                     sf.averias_vigentes(averias.get(v["id"], []), hoy), ultima, itv)
+        # La portada: la foto marcada del peor daño que se ve HOY; si no hay, la frontal de la última.
+        portada = None
+        for d in danos:
+            if d["en_ultima"]:
+                anot, orig = _salud_foto(u, d["photo_index"])
+                portada = anot or orig
+                if portada:
+                    break
+        if not portada and u:
+            vistas = u.get("photo_vistas") or []
+            k = vistas.index("frontal") + 1 if "frontal" in vistas else 1
+            portada = _salud_foto(u, k)[1]
+        f["portada"] = portada
+        if not detalle:
+            f.pop("motivos", None)
+            f["ultima"] = {k2: ultima.get(k2) for k2 in ("fecha", "dias", "conductor", "km")} if ultima else {}
+            f["mecanica"] = [m["nombre"] for m in f["mecanica"]]
+        else:
+            f["_danos"], f["_insp"], f["_libro"] = danos, u, libro.get(v["id"], [])
+            f["_averias"] = sf.averias_vigentes(averias.get(v["id"], []), hoy)
+            f["_checklist"] = notas.get("checklist") or {}
+        fichas.append(f)
+    return fichas
+
+
+async def _salud_fuera(vs: list) -> tuple:
+    """Separa las que ya están en el taller (estado «taller» o con una orden abierta). (dentro, fuera)"""
+    ordenes = {}
+    async for o in db.ordenes_trabajo.find(
+            {"estado": {"$nin": list(OT_ESTADOS_CERRADOS)}},
+            {"_id": 0, "vehicle_id": 1, "numero": 1, "taller_nombre": 1, "estado": 1,
+             "fecha_entrega_estimada": 1}):
+        ordenes.setdefault(o.get("vehicle_id"), o)
+    dentro, fuera = [], []
+    for v in vs:
+        o = ordenes.get(v["id"])
+        if v.get("status") == "taller" or o:
+            fuera.append({
+                "vehicle_id": v["id"], "matricula": v.get("license_plate") or "?",
+                "center": (v.get("center") or "").strip(),
+                "orden": (o or {}).get("numero"), "taller": (o or {}).get("taller_nombre"),
+                "estado": OT_ESTADOS.get((o or {}).get("estado"), (o or {}).get("estado")) if o else "En el taller",
+                "entrega": str((o or {}).get("fecha_entrega_estimada") or "")[:10] or None,
+            })
+        else:
+            dentro.append(v)
+    fuera.sort(key=lambda x: x["matricula"])
+    return dentro, fuera
+
+
+_SALUD_CAMPOS_VEH = {"_id": 0, "id": 1, "license_plate": 1, "brand": 1, "model": 1, "center": 1,
+                     "status": 1, "itv_date": 1}
+
+
+@api_router.get("/estado-flota")
+async def estado_flota(center: str = "", orden: str = "peor", user: dict = Depends(require_admin)):
+    """Las furgonetas que NO están en el taller, de la que peor está a la que mejor, con su nota (0-100),
+    su nivel, las zonas tocadas y una foto. Las del taller van aparte, para que se vea por qué no salen."""
+    import salud_flota as sf
+    vs = await db.vehicles.find(
+        {"status": {"$nin": ["deleted", "baja"]}, **_filtro_centro(user, center or None)},
+        _SALUD_CAMPOS_VEH).to_list(2000)
+    dentro, fuera = await _salud_fuera(vs)
+    fichas = sf.ordenar(await _salud_evaluar(dentro), orden if orden in ("peor", "mejor", "matricula", "antigua") else "peor")
+    niveles = {k: sum(1 for f in fichas if f["nivel"] == k) for k in sf.NIVELES}
+    con_datos = [f["salud"] for f in fichas if f["nivel"] != "sin_datos"]
+    return {
+        "furgonetas": fichas, "en_taller": fuera, "niveles": niveles,
+        "salud_media": round(sum(con_datos) / len(con_datos)) if con_datos else None,
+        "evaluadas": len(fichas), "itv_vencida": sum(1 for f in fichas if f["itv_vencida"]),
+        "baremo": {"urgente": sf.UMBRAL_URGENTE, "taller": sf.UMBRAL_TALLER, "vigilar": sf.UMBRAL_VIGILAR},
+    }
+
+
+@api_router.get("/estado-flota/{vehicle_id}")
+async def estado_flota_ficha(vehicle_id: str, user: dict = Depends(require_admin)):
+    """Una furgoneta entera: la nota y por qué, las fotos de la última inspección, cada daño con su foto,
+    lo que dice el conductor y el parte ya redactado para mandarla al taller."""
+    import salud_flota as sf
+    v = await db.vehicles.find_one({"id": vehicle_id, "status": {"$nin": ["deleted", "baja"]}}, _SALUD_CAMPOS_VEH)
+    if not v:
+        raise HTTPException(404, "Esa furgoneta no está o está de baja")
+    if not _user_can_see_center(user, v.get("center") or ""):
+        raise HTTPException(403, "No tienes acceso a ese centro")
+    _dentro, fuera = await _salud_fuera([v])
+    f = (await _salud_evaluar([v], detalle=True))[0]
+    u, danos = f.pop("_insp"), f.pop("_danos")
+    libro, averias, checklist = f.pop("_libro"), f.pop("_averias"), f.pop("_checklist")
+
+    # Las fotos de la última inspección, con su vista y la marca de la IA si la tiene.
+    vistas = u.get("photo_vistas") or []
+    fotos = []
+    for k, url in enumerate(u.get("photos") or []):
+        if not url:
+            continue
+        anot, _orig = _salud_foto(u, k + 1)
+        vista = vistas[k] if k < len(vistas) else ""
+        fotos.append({"vista": vista, "nombre": SALUD_VISTAS.get(vista, f"Foto {k + 1}"), "url": url, "anotada": anot})
+
+    # Cada daño con SU foto: la de hoy si sale en la última; si no, la de la inspección en que se vio.
+    viejas = {}
+    ids_viejas = list({e.get("first_seen_inspection") for e in libro if e.get("first_seen_inspection")})
+    if ids_viejas:
+        viejas = {i["id"]: i async for i in db.inspections.find(
+            {"id": {"$in": ids_viejas}},
+            {"_id": 0, "id": 1, "photos": 1, "annotated_photos": 1, "created_at": 1, "analysis.damages": 1})}
+    por_panel = {e.get("panel"): e for e in libro}
+    lista = []
+    for d in danos:
+        foto, foto_fecha = None, None
+        if d["en_ultima"]:
+            anot, orig = _salud_foto(u, d["photo_index"])
+            foto, foto_fecha = anot or orig, f["ultima"].get("fecha")
+        else:
+            vieja = viejas.get((por_panel.get(d["panel"]) or {}).get("first_seen_inspection")) or {}
+            for dm in (vieja.get("analysis") or {}).get("damages") or []:
+                if isinstance(dm, dict) and _canon_panel(dm.get("part") or "") == d["panel"]:
+                    anot, orig = _salud_foto(vieja, dm.get("photo_index"))
+                    foto = anot or orig
+                    break
+            if not foto:
+                foto = next((x for x in (vieja.get("annotated_photos") or []) if x), None) or \
+                    next((x for x in (vieja.get("photos") or []) if x), None)
+            foto_fecha = str(vieja.get("created_at") or "")[:10] or d["desde"] or None
+        lista.append({
+            "zona": sf.ZONAS[d["zona"]], "pieza": d["pieza"], "severity": d["severity"],
+            "gravedad": sf.SEVERIDAD_TXT.get(d["severity"], d["severity"]), "humano": d["humano"],
+            "en_ultima": d["en_ultima"], "desde": d["desde"], "foto": foto, "foto_fecha": foto_fecha,
+        })
+
+    # Las notas del conductor de las dos últimas semanas, sin la de la última (esa ya va arriba).
+    hace = (datetime.now(timezone.utc) - timedelta(days=14)).isoformat()
+    anteriores = []
+    async for i in db.inspections.find(
+            {"vehicle_id": vehicle_id, "created_at": {"$gte": hace}, "deleted": {"$ne": True}},
+            {"_id": 0, "id": 1, "created_at": 1, "notes": 1}).sort("created_at", -1).limit(30):
+        n = _salud_notas(i)
+        if i.get("id") != u.get("id") and str(n.get("notes") or "").strip():
+            anteriores.append({"fecha": str(i.get("created_at") or "")[:10],
+                               "conductor": (n.get("driver_name") or "").strip(),
+                               "texto": str(n["notes"]).strip()[:300]})
+
+    # El parte para el taller, redactado con todo: lo que se ve por zonas, lo que dice el conductor y las
+    # averías. Es lo que pide el taller y lo que evita la llamada para explicarlo.
+    trozos = []
+    for nombre in sf.ZONAS.values():
+        piezas = [f"{x['pieza']} ({x['gravedad']})" for x in lista if x["zona"] == nombre]
+        if piezas:
+            trozos.append(f"{nombre}: {', '.join(piezas)}")
+    if f["mecanica"]:
+        trozos.append("Avisa el conductor: " + ", ".join(m["nombre"] for m in f["mecanica"]))
+        if f["ultima"].get("nota") and any(m["origen"] == "nota" for m in f["mecanica"]):
+            trozos.append(f"Nota del conductor ({f['ultima'].get('fecha')}): «{f['ultima']['nota']}»")
+    for a in averias:
+        trozos.append(f"Avería: {a['titulo']} ({sf.SEVERIDAD_TXT.get(str(a['severity']).lower(), a['severity'])})")
+    mal = [{"item": sf.CHECKLIST_NOMBRE.get(str(k), str(k)), "valor": sf.CHECKLIST_VALOR[str(val)]}
+           for k, val in checklist.items() if str(val) in sf.CHECKLIST_VALOR]
+    return {
+        **f, "fotos": fotos, "danos_detalle": lista, "averias_detalle": averias,
+        "checklist_mal": mal, "notas_anteriores": anteriores[:5],
+        "parte": "\n".join(trozos),
+        "en_taller": fuera[0] if fuera else None,
+        "itv_fecha": v.get("itv_date") or None,
+    }
+
+
 @api_router.get("/work-orders/preparar/{vehicle_id}")
 async def ot_preparar(vehicle_id: str, _=Depends(require_admin)):
     """Una orden de taller ya redactada, lista para revisar y mandar.

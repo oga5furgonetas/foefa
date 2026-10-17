@@ -25,10 +25,15 @@ const enCatalogo = new Set([...bloque.matchAll(/"clave": "([a-z0-9-]+)"/g)].map(
 const estandar = server.match(/MODULOS_ESTANDAR = \[([\s\S]*?)\]/)
 const enEstandar = estandar ? [...estandar[1].matchAll(/"([a-z0-9-]+)"/g)].map((m) => m[1]) : []
 
+// Las que van con OTRO módulo (`MODULO_DE` en PanelLayout): se activan con ese, no tienen casilla propia.
+const moduloDe = layout.match(/const MODULO_DE = \{([^}]*)\}/)
+const vanCon = new Map(moduloDe ? [...moduloDe[1].matchAll(/'?([a-z0-9-]+)'?: '([a-z0-9-]+)'/g)].map((m) => [m[1], m[2]]) : [])
+
 const problemas = []
 if (enMenu.size < 10) problemas.push(`solo se han leido ${enMenu.size} entradas del menu: el checker no ve el menu`)
 if (enCatalogo.size < 10) problemas.push(`solo se han leido ${enCatalogo.size} modulos del catalogo`)
-for (const k of enMenu) if (!enCatalogo.has(k)) problemas.push(`«${k}» esta en el menu y no en MODULOS_PANEL: ninguna empresa podria verla`)
+for (const k of enMenu) if (!enCatalogo.has(vanCon.get(k) || k)) problemas.push(`«${k}» esta en el menu y no en MODULOS_PANEL: ninguna empresa podria verla`)
+for (const [k, padre] of vanCon) if (enMenu.has(k) && enCatalogo.has(k)) problemas.push(`«${k}» va con «${padre}» y además tiene casilla propia: sobra una de las dos`)
 for (const k of enCatalogo) if (!enMenu.has(k)) problemas.push(`«${k}» esta en MODULOS_PANEL y no en el menu`)
 for (const k of enEstandar) if (!enCatalogo.has(k)) problemas.push(`«${k}» esta en MODULOS_ESTANDAR y no en el catalogo`)
 

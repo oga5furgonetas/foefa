@@ -6,7 +6,7 @@ import {
   Settings, Shield, LogOut, Zap, Inbox, ChevronRight, ChevronDown, AlertTriangle, BookUser,
   Search, Sun, Moon, Contrast, MapPin, Mail, UserCircle2, Languages, ShieldAlert, Menu,
   CircleHelp, Briefcase, Store, UserCheck, ImagePlus, Loader2, Bell, BellOff, MessageCircle,
-  MessagesSquare, Euro, FileSpreadsheet, PackageX, TrendingUp, Clock, Route,
+  MessagesSquare, Euro, FileSpreadsheet, PackageX, TrendingUp, Clock, Route, HeartPulse,
 } from 'lucide-react'
 import { aislarSesion, haySesionPrevia, volverASesionPrevia, getAdmin, isAuthed, isSuperAdmin, isCenterManager, logout, canSee, decodeToken, getVisibleCenters, SIEMPRE_VISIBLES, guardarAccesoFresco, esPlataforma, actualizarMiFoto } from './auth'
 import { getMe, contarPeticionesPendientes, contarCandidatosNuevos, contarConversacionesSinLeer, subirFotoAdmin } from './api'
@@ -74,6 +74,7 @@ const NAV_DEF = [
   ]},
   { g: 'nav.g.fleet', gIcon: Truck, iconCls: 'text-emerald-400', iconBg: 'bg-emerald-500/10', items: [
     { to: '/panel/vehiculos', labelKey: 'nav.vehicles', icon: Truck },
+    { to: '/panel/estado-flota', labelKey: 'nav.estadoFlota', icon: HeartPulse },
     { to: '/panel/inspecciones', labelKey: 'nav.inspections', icon: ClipboardList },
     { to: '/panel/revision', labelKey: 'nav.revision', icon: CheckCircle2 },
     { to: '/panel/origen-danos', labelKey: 'nav.origen', icon: ShieldAlert },
@@ -117,8 +118,9 @@ const PALETTE_EXTRA = [
   { to: '/panel/casas-alquiler', labelKey: 'nav.rental', icon: Building2, key: 'casas-alquiler' },
 ]
 const EXPIRY_KEYS = ['avisos-itv', 'renting', 'casas-alquiler']
-// Pantallas que van con otro modulo al activarlo en una empresa.
-const MODULO_DE = { 'avisos-itv': 'vencimientos', renting: 'vencimientos', 'casas-alquiler': 'vencimientos' }
+// Pantallas que van con otro modulo al activarlo en una empresa. «Estado de la flota» es otra forma de
+// mirar los mismos vehículos: quien tiene Vehículos la tiene, sin casilla propia que nadie sabría marcar.
+const MODULO_DE = { 'avisos-itv': 'vencimientos', renting: 'vencimientos', 'casas-alquiler': 'vencimientos', 'estado-flota': 'vehiculos' }
 // Las del propio usuario: ninguna empresa se queda sin ellas.
 const SIN_MODULO = new Set(['perfil', 'login', 'portal-conductor'])
 
@@ -551,6 +553,8 @@ export default function PanelLayout() {
     // para todo el que tenga permisos definidos —el permiso no existe en
     // ninguna lista— y la entrada desaparecía del menú sin ningún error.
     if (k === 'ordenes') return canSee('talleres')
+    // El estado de la flota va con Vehículos (17-10-2026): son las mismas furgonetas.
+    if (k === 'estado-flota') return canSee('vehiculos')
     // El cuadrante iba con Turnos (29-09-2026) y desde el 30-09 tiene casilla
     // propia (Dani: «¿no puedo marcarle cuadrante?»): el servidor se la marcó
     // una vez a quien tenía Días libres (`migrar_permiso_cuadrante`).
@@ -582,6 +586,7 @@ export default function PanelLayout() {
     if (SIEMPRE_VISIBLES.has(k)) return true
     if (k === 'vencimientos') return EXPIRY_KEYS.some((ek) => canSee(ek))
     if (k === 'ordenes') return canSee('talleres')
+    if (k === 'estado-flota') return canSee('vehiculos')
     if (k === 'admin' || k === 'bandeja' || k === 'analitica' || k === 'gastos' || k === 'valor') return sa
     if (k === 'tienda' && !esPlataforma()) return false
     if (k === 'usuarios') return sa || cm

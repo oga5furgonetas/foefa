@@ -777,6 +777,9 @@ export const getCheckerCentros = () => api.get('/checkers/centros')
 export const corregirCentros = () => api.post('/checkers/centros/corregir')
 export const prepararOrden = (vehicleId) =>
   api.get(`/work-orders/preparar/${encodeURIComponent(vehicleId)}`)
+/* El estado de la flota: de la furgoneta que peor está a la que mejor, y la ficha de una (17-10-2026). */
+export const getEstadoFlota = (center) => api.get('/estado-flota', { params: centerParam(center) })
+export const getEstadoFlotaFicha = (vehicleId) => api.get(`/estado-flota/${encodeURIComponent(vehicleId)}`)
 export const getDisponibilidadFlota = (center) =>
   api.get('/fleet/disponibilidad', { params: centerParam(center) })
 export const getPautaTaller = () => api.get('/taller/pauta')

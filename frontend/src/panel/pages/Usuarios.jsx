@@ -56,6 +56,7 @@ const MODULES = [
    suya para que se vea quién las tiene sin buscarlo. */
 const VAN_CON = {
   talleres: [['ordenes', 'nav.ordenes']],
+  vehiculos: [['estado-flota', 'nav.estadoFlota']],
 }
 const DE_VENCIMIENTOS = new Set(['avisos-itv', 'renting', 'casas-alquiler'])
 const CAPACIDADES = new Set(['aprobar-dias'])

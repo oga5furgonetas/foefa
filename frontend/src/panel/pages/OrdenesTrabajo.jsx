@@ -1,16 +1,16 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { useOutletContext } from 'react-router-dom'
+import { useNavigate, useOutletContext, useSearchParams } from 'react-router-dom'
 import {
   Loader2, Plus, Link2, Copy, Check, X, Wrench, Euro, Clock, Search,
   AlertTriangle, MessageCircle, MessageSquare, Package, Eye, EyeOff, PhoneCall,
-  Download, CalendarClock, HelpCircle, Images, BarChart3, ChevronRight, Truck, Key,
+  Download, CalendarClock, HelpCircle, Images, BarChart3, ChevronRight, Truck, Key, HeartPulse,
 } from 'lucide-react'
 import {
   getOrdenes, getResumenOrdenes, getOrden, crearOrden, editarOrden, enlaceOrden,
   descargarInformeFlotaPdf,
   getParteFurgoneta, dispararSeguimientoTalleres,
   getVehicles, getWorkshops, crearTaller, exportarOrdenes, ordenesPorTaller,
-  getIncidents, getDanosPendientes, getFurgonetasParadas, prepararOrden,
+  getIncidents, getEstadoFlota, getFurgonetasParadas, prepararOrden,
   getDisponibilidadFlota, getInformeFlota, descargarInformeFlota,
 } from '../api'
 import PautaTaller from '../components/PautaTaller'
@@ -213,7 +213,9 @@ function LineaRiesgo({ r, apagado = false }) {
 
 
 export default function OrdenesTrabajo() {
-  const { center } = useOutletContext()
+  const { center, ve } = useOutletContext()
+  const navTop = useNavigate()
+  const [params, setParams] = useSearchParams()
   const [datos, setDatos] = useState(null)
   const [resumen, setResumen] = useState(null)
   const [cargando, setCargando] = useState(true)
@@ -228,11 +230,9 @@ export default function OrdenesTrabajo() {
   const [bajando, setBajando] = useState(false)
   const [tocando, setTocando] = useState(false)
   const [avisoToques, setAvisoToques] = useState('')
-  const [danos, setDanos] = useState(null)
+  const [ef, setEf] = useState(null)          // el estado de la flota: cuántas necesitan taller
   const [paradas, setParadas] = useState(null)
   const [verParadas, setVerParadas] = useState(true)
-  const [furgAbierta, setFurgAbierta] = useState(null)   // qué furgoneta está desplegada en la lista de daños
-  const [verDanos, setVerDanos] = useState(false)
   const [verComo, setVerComo] = useState(false)
   const [comparativa, setComparativa] = useState(null)
   const [dispo, setDispo] = useState(null)
@@ -336,14 +336,17 @@ export default function OrdenesTrabajo() {
     } finally { setGuardando('') }
   }
 
-  /* Los daños abiertos sin orden. Falla en silencio a proposito: es
+  /* Cuántas furgonetas necesitan taller (Estado de la flota). Falla en silencio a proposito: es
      informacion de apoyo, y si el endpoint no responde, la pantalla de
      ordenes tiene que seguir funcionando igual que antes. */
+  const veEstado = typeof ve !== 'function' || ve('/panel/estado-flota')
   useEffect(() => {
     let vivo = true
-    getDanosPendientes({ ...(center && center !== 'Todos' ? { center } : {}) })
-      .then((r) => { if (vivo) setDanos(r.data) })
-      .catch(() => {})
+    if (veEstado) {
+      getEstadoFlota(center)
+        .then((r) => { if (vivo) setEf(r.data) })
+        .catch(() => {})
+    }
     getFurgonetasParadas(center)
       .then((r) => { if (vivo) setParadas(r.data) })
       .catch(() => {})
@@ -354,25 +357,7 @@ export default function OrdenesTrabajo() {
       .then((r) => { if (vivo) setInforme(r.data) })
       .catch(() => {})
     return () => { vivo = false }
-  }, [center])
-
-  /* Desde una furgoneta entera: el parte se abre con TODOS sus daños escritos.
-     Antes se creaba uno por daño y eso son cinco viajes de la misma furgoneta
-     al taller — o peor, arreglar el golpe leve y devolverla con el grave
-     puesto. `ledger_id` sigue siendo el peor de los suyos, que es el que se
-     marca como enviado; los demás se enseñan en el texto para que el taller
-     los vea todos. */
-  const desdeFurgoneta = (g) => {
-    const peor = g.danos[0]
-    setNueva({
-      vehicle_id: g.vehicle_id, workshop_id: '',
-      problema: g.problema || '', fecha_entrega_estimada: '',
-      ledger_id: peor?.ledger_id,
-    })
-    if (!vehiculos.length) {
-      getVehicles(center).then((r) => setVehiculos(r.data || [])).catch(() => {})
-    }
-  }
+  }, [center, veEstado])
 
   /* Desde una furgoneta PARADA. Es el hueco por el que se escapaba todo: 13
      furgonetas en taller, algunas mas de dos meses, y CERO partes abiertos. No
@@ -382,14 +367,16 @@ export default function OrdenesTrabajo() {
      manda. Preparar no es crear: la orden sigue saliendo cuando una persona lo
      dice. */
   const [preparando, setPreparando] = useState('')
-  const prepararDesdeParada = async (vehicleId) => {
+  // `texto`: el parte ya redactado que trae «Mandar al taller» desde Estado de la flota (con cada lado de la
+  // furgoneta y lo que avisa el conductor); si no llega, el del libro de daños.
+  const prepararDesdeParada = async (vehicleId, texto = '') => {
     setPreparando(vehicleId); setErr('')
     try {
       const { data } = await prepararOrden(vehicleId)
       setNueva({
         vehicle_id: vehicleId,
         workshop_id: data.sugerido || '',
-        problema: data.problema || '',
+        problema: texto || data.problema || '',
         fecha_entrega_estimada: '',
         ledger_id: data.ledger_ids?.[0],
       })
@@ -399,13 +386,33 @@ export default function OrdenesTrabajo() {
       }
       // Sin daños apuntados no se inventa el texto: quien abra el parte tiene
       // que escribir qué le pasa, o el taller acabará llamando igual.
-      if (data.falta_problema) {
+      if (data.falta_problema && !texto) {
         setErr('Esta furgoneta no tiene daños apuntados: escribe qué le pasa antes de mandarla.')
       }
     } catch (e) {
       setErr(e?.response?.data?.detail || 'No se pudo preparar el parte.')
     } finally { setPreparando('') }
   }
+
+  /* «Mandar al taller» desde Estado de la flota llega aquí con ?parte=<furgoneta>: se abre el alta con el
+     taller sugerido y el parte que se redactó allí. Una sola vez, y se quita de la dirección para que
+     recargar la página no vuelva a abrirlo. */
+  const parteAbierta = useRef('')
+  useEffect(() => {
+    const id = params.get('parte')
+    if (!id || parteAbierta.current === id) return
+    parteAbierta.current = id
+    let texto = ''
+    try {
+      const g = JSON.parse(sessionStorage.getItem('estado_flota_parte') || 'null')
+      if (g?.vehicle_id === id) texto = String(g.parte || '')
+      sessionStorage.removeItem('estado_flota_parte')
+    } catch { /* sin almacenamiento: el parte sale del libro */ }
+    const p = new URLSearchParams(params)
+    p.delete('parte')
+    setParams(p, { replace: true })
+    prepararDesdeParada(id, texto)
+  }, [params])                                  // eslint-disable-line react-hooks/exhaustive-deps
 
   /* El informe para Amazon. Lo que lo hace creíble no son las cifras buenas
      —esas las enseña cualquiera— sino que diga POR ESCRITO lo que no puede
@@ -880,87 +887,23 @@ export default function OrdenesTrabajo() {
         </div>
       )}
 
-      {!!danos?.total && (
-        <div className="mb-4 overflow-hidden rounded-xl border border-dark-800 bg-dark-900">
-          <button
-            onClick={() => setVerDanos((v) => !v)}
-            className="flex w-full items-center gap-2.5 px-4 py-3 text-left hover:bg-dark-800/40">
-            <AlertTriangle size={17} className={danos.graves ? 'text-red-300' : 'text-amber-300'} />
-            <h2 className="text-[15px] font-bold">Daños esperando taller</h2>
-            <span className="text-[13px] text-dark-400">
-              {danos.furgonetas ?? danos.total} furgoneta{(danos.furgonetas ?? danos.total) === 1 ? '' : 's'}
-              {' · '}{danos.total} daño{danos.total === 1 ? '' : 's'}
-              {!!danos.furgonetas_graves && <b className="text-red-300"> · {danos.furgonetas_graves} con algo grave</b>}
-            </span>
-            <ChevronRight size={16}
-              className={`ml-auto text-dark-500 transition-transform ${verDanos ? 'rotate-90' : ''}`} />
-          </button>
-          {/* UNA FILA POR FURGONETA, NO POR DAÑO. Una furgoneta va al taller
-                UNA vez y le arreglan todo lo que lleva encima. La lista suelta
-                tenía 170 líneas y por eso no la vaciaba nadie; agrupada son 83
-                furgonetas, y solo 30 llevan algo grave: eso sí se puede
-                terminar. Y evita el fallo caro de mandarla, arreglarle el
-                rasguño y devolverla con el golpe grave todavía puesto. */}
-          {verDanos && (
-            <div className="border-t border-dark-800/60">
-              {(danos.por_furgoneta || []).slice(0, 40).map((g) => (
-                <div key={g.vehicle_id} className="border-b border-dark-800/60 last:border-b-0">
-                  <div className="flex flex-wrap items-center gap-2 px-4 py-2.5">
-                    <span className={`h-2 w-2 flex-none rounded-full ${
-                      g.peor === 'critico' ? 'bg-red-600'
-                        : g.peor === 'grave' ? 'bg-red-500'
-                          : g.peor === 'moderado' ? 'bg-amber-500' : 'bg-dark-500'}`} />
-                    <span className="font-mono text-[13px] font-semibold">{g.matricula}</span>
-                    <button onClick={() => setFurgAbierta((x) => (x === g.vehicle_id ? null : g.vehicle_id))}
-                      className="min-w-0 flex-1 truncate text-left text-[13.5px] text-dark-200 hover:text-dark-100">
-                      {g.n} daño{g.n === 1 ? '' : 's'}
-                      {!!g.graves && <b className="text-red-300"> · {g.graves} grave{g.graves === 1 ? '' : 's'}</b>}
-                      {!!g.confirmados && <span className="text-dark-500"> · {g.confirmados} confirmado{g.confirmados === 1 ? '' : 's'} por una persona</span>}
-                      <ChevronRight size={13} className={`ml-1 inline text-dark-500 transition-transform ${furgAbierta === g.vehicle_id ? 'rotate-90' : ''}`} />
-                    </button>
-                    {g.dias > 0 && (
-                      <span className={`text-[12px] tabular-nums ${
-                        g.dias > 30 ? 'font-semibold text-red-300' : 'text-dark-500'}`}>
-                        {g.dias} día{g.dias === 1 ? '' : 's'}
-                      </span>
-                    )}
-                    <button
-                      onClick={() => desdeFurgoneta(g)}
-                      className="flex-none rounded-lg border border-sky-500/30 bg-sky-500/10 px-2.5 py-1 text-[12.5px] font-semibold text-sky-300 hover:bg-sky-500/20">
-                      Un parte con todo
-                    </button>
-                  </div>
-                  {furgAbierta === g.vehicle_id && (
-                    <div className="bg-dark-800/40 px-4 pb-2.5">
-                      {g.danos.map((d) => (
-                        <div key={d.ledger_id} className="flex flex-wrap items-center gap-2 py-1 text-[13px]">
-                          <span className={`h-1.5 w-1.5 flex-none rounded-full ${
-                            d.severidad === 'critico' ? 'bg-red-600'
-                              : d.severidad === 'grave' ? 'bg-red-500'
-                                : d.severidad === 'moderado' ? 'bg-amber-500' : 'bg-dark-500'}`} />
-                          <span className="min-w-0 flex-1 truncate text-dark-200">
-                            {d.pieza}
-                            <span className="text-dark-500"> · {d.severidad}</span>
-                            <span className="text-dark-500">
-                              {d.origen === 'ai' ? ' · lo vio la IA' : ' · lo confirmó una persona'}
-                            </span>
-                          </span>
-                          <span className="tabular-nums text-[12px] text-dark-500">{d.dias} d</span>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                </div>
-              ))}
-              {(danos.furgonetas || 0) > 40 && (
-                <p className="px-4 py-2 text-[12.5px] text-dark-500">
-                  y {danos.furgonetas - 40} furgonetas más. Se enseñan primero las que
-                  llevan algo grave y las que llevan más tiempo esperando.
-                </p>
-              )}
-            </div>
-          )}
-        </div>
+      {/* ── Las que necesitan taller ───────────────────────────────────
+          Antes aquí había una lista de «daños esperando taller», golpe a golpe y agrupada por furgoneta. Desde
+          el 17-10-2026 eso es Estado de la flota: las mismas furgonetas, ordenadas de la peor a la mejor, con
+          sus fotos y lo que avisa el conductor, y desde allí se manda al taller con el parte redactado. Dos
+          listas de lo mismo con números distintos era el fallo; aquí queda la puerta. */}
+      {!!ef?.niveles && (ef.niveles.urgente + ef.niveles.taller) > 0 && (
+        <button type="button" onClick={() => navTop('/panel/estado-flota')}
+          className="mb-4 flex w-full flex-wrap items-center gap-x-2.5 gap-y-1 rounded-xl border border-dark-800 bg-dark-900 px-4 py-3 text-left hover:bg-dark-800/40">
+          <HeartPulse size={17} className={ef.niveles.urgente ? 'text-red-300' : 'text-amber-300'} />
+          <h2 className="text-[15px] font-bold">Necesitan taller</h2>
+          <span className="text-[13px] text-dark-400">
+            {ef.niveles.urgente + ef.niveles.taller} furgoneta{ef.niveles.urgente + ef.niveles.taller === 1 ? '' : 's'}
+            {!!ef.niveles.urgente && <b className="text-red-300"> · {ef.niveles.urgente} urgente{ef.niveles.urgente === 1 ? '' : 's'}</b>}
+            {' · '}de la peor a la mejor, con sus fotos
+          </span>
+          <ChevronRight size={16} className="ml-auto text-dark-500" />
+        </button>
       )}
 
       {/* ── Comparativa ────────────────────────────────────────────── */}

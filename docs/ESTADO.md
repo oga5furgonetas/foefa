@@ -1435,3 +1435,42 @@ Dani: «añádeles 10 € de saldo a todo el mundo para que vea que es real».
   vencimientos, plegados en «Estado de la flota».
 - **La burbuja de la IA y los avisos en vivo** ya no tapan «Menú» en el móvil: van por encima de la barra de abajo
   (`bottom-[calc(env(safe-area-inset-bottom)+4.25rem)]`, `md:bottom-4`); la ventana de la IA cabe en pantalla.
+
+## 17-10-2026 (noche): Estado de la flota — cuál está peor y mandarla al taller
+
+Dani: «una sección de estado de tu flota: cuál es la que peor está (con la última foto de las inspecciones),
+siempre que no esté ya en el taller; ordenarla, ver las fotos y mandarla al taller; un buen baremo, que añada
+cosas que las fotos no ven; unifica lo que esté repetido; sin falsos positivos».
+
+- **Pantalla** `/panel/estado-flota` (`panel/pages/EstadoFlota.jsx`), en el menú Flota debajo de Vehículos. Va con
+  el módulo y el permiso de Vehículos (`MODULO_DE` y `itemVisible`/`routeAllowed`; `check-modulos.mjs` acepta ya
+  pantallas que van con otro módulo). Arriba la salud media y cuántas hay en cada nivel (los números filtran);
+  debajo las furgonetas de la peor a la mejor con su puesto (#1, #2… no cambia al reordenar), su nota en un anillo,
+  la foto marcada del peor golpe y las zonas; orden por peor, mejor, foto más antigua o matrícula; buscador.
+  Al tocar una, ficha lateral (`?v=<id>`): dibujo de la furgoneta con cada zona del color de su peor daño, «por qué
+  esta nota» con los puntos, fotos de la última inspección (con o sin marcas de la IA, a pantalla completa), cada
+  daño con SU foto, lo que dice el conductor y **Mandar al taller**, que abre en Órdenes (`?parte=`) el alta con
+  el taller sugerido y el parte ya redactado por zonas. Las que ya están en el taller van aparte, abajo.
+- **Baremo** en `backend/salud_flota.py` (sin base de datos, `tests/test_salud_flota.py`). Daños de la ÚLTIMA
+  inspección contrastados con el libro (`vehicle_damage_ledger`): cuenta si la pieza tiene apunte abierto sin
+  orden; lo del libro que no sale en la última foto cuenta también. Crítico 35, grave 18, moderado 7, leve 2; lo
+  que solo vio la IA ×0,7. Lo que no se ve: checklist del conductor (luces, neumáticos, puertas, espejos «dañado»
+  o «malo») 10; nota escrita: frenos/dirección 30 y urgente, motor 18, neumáticos/puertas 12, luces/visibilidad/
+  batería 7 (vale 14 días). Averías abiertas de los últimos 30 días. La IA «no es seguro circular» 14 y urgente.
+  Niveles: urgente ≥45 o algo urgente; taller ≥22 o grave confirmado; vigilar ≥7; sin inspección en 30 días =
+  «Sin datos recientes», nunca «Bien».
+- **Lo que NO cuenta, a propósito (medido el 17-10 en la flota real):** las 28 averías abiertas (la más nueva del
+  23-09, casi todas «Vehículo en taller —» de furgonetas que ya volvieron: nadie las cerró); la ITV (14 «caducadas»
+  hasta 441 días que salen a repartir a diario: es la fecha de la ficha sin actualizar; se enseña aparte y no
+  resta); el mantenimiento (18 apuntes en toda la flota). El libro guarda un apunte por TIPO de pieza (las dos
+  puertas son «puerta»), por eso el lado sale de la última inspección.
+- **Primera foto real (17-10):** 106 evaluadas: 3 urgentes, 21 a taller, 33 vigilar, 29 bien, 20 sin datos.
+- **Unificado:** en Órdenes, «Daños esperando taller» (otra lista de lo mismo con otros números) pasa a ser una
+  puerta a Estado de la flota; en el Inicio, casilla «Estado de la flota» (globito = urgentes) y la de Órdenes
+  cuenta órdenes abiertas; lo plegado del Inicio se llama «Gráficos y vencimientos».
+- Endpoints: `GET /api/estado-flota?center=` y `GET /api/estado-flota/{vehicle_id}` (admin, por centros).
+- Verificado en producción con la base real (script de solo lectura): las 106 fichas cuadran con la lista (nota,
+  nivel, nº de daños, motivos que suman la nota, foto de cada daño de la última inspección), ninguna del taller se
+  cuela y ninguna sale «Bien» sin inspección en 30 días. Arreglado en la verificación: la zona sale del NOMBRE de la
+  pieza y no de su tipo (`_canon_panel` llama «rueda» al paso de rueda y pintaba las cuatro ruedas del dibujo);
+  un golpe leve se pinta en amarillo (en gris parecía una zona limpia) y el dibujo lleva leyenda.
