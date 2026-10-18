@@ -829,7 +829,7 @@ test.describe('Cuadrante', () => {
       saltadas: [{ nombre: 'DIARIO', motivo: 'sin días' }], sin_ficha: ['PERSONA NUEVA'], ambiguos: [],
       codigos_desconocidos: { '1.EXTRA': 1 },
       personas: { entran: ['MANUEL POMBO'], fichas_nuevas: ['MARCOS NUEVO'], vuelven: [], retenidas: 0,
-        salen: [{ nombre: 'SARA VILA', desde: '2026-10-19', por: 'fuera', dias: 7 }], en_app_no_en_hoja: ['MELVIN ESPINOSA'],
+        salen: [{ nombre: 'SARA VILA', desde: '2026-10-19', por: 'fuera', dias: 7, desactiva: true }], en_app_no_en_hoja: ['MELVIN ESPINOSA'],
         revisar: [{ nombre: 'ANA PERES', motivo: 'parecido', sugerida: 'd1', opciones: [{ id: 'd1', name: 'ANA PÉREZ', activa: true, centro: null }] }] },
       cambios: [{ hacia: 'app', nombre: 'ANA PÉREZ', fecha: dia(1), antes: '1', ahora: 'N/T', por_que: 'hoja' },
         { hacia: 'hoja', nombre: 'LUIS GÓMEZ', fecha: dia(2), antes: '1', ahora: 'N/T APROB', por_que: 'día concedido en la app' }] } }
@@ -842,7 +842,7 @@ test.describe('Cuadrante', () => {
     const g = v.getByTestId('gente')
     await expect(g.getByText('Entrarían en el cuadrante de la app: MANUEL POMBO.')).toBeVisible()
     await expect(g.getByText(/Ficha nueva \(se haría.*MARCOS NUEVO/)).toBeVisible()
-    await expect(g.getByText('Saldrían del cuadrante: SARA VILA desde el 19/10 (se quitarían 7 días).')).toBeVisible()
+    await expect(g.getByText('Saldrían del cuadrante: SARA VILA desde el 19/10 (se quitarían 7 días), y su ficha se desactivaría.')).toBeVisible()
     await expect(g.getByText(/MELVIN ESPINOSA/)).toBeVisible()
     await g.getByTestId('revisar').getByRole('button', { name: 'Es ANA PÉREZ' }).click()
     await expect(g.getByText('Es ANA PÉREZ. Entra en la próxima sincronización.')).toBeVisible()

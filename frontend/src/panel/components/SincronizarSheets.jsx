@@ -91,7 +91,8 @@ function Gente({ center, g, prueba }) {
       {salen.length > 0 && (
         <p className="flex items-start gap-1.5"><UserMinus size={14} className="mt-0.5 shrink-0 text-amber-300" />
           <span>{v('Saldrían', 'Salen')} del cuadrante: {salen.map((s) => `${s.nombre} desde el ${fmt(s.desde)}${
-            s.por === 'amarillo' ? ' (en amarillo en la hoja)' : s.dias ? ` (se ${v('quitarían', 'quitan')} ${s.dias} ${s.dias === 1 ? 'día' : 'días'})` : ''}`).join(', ')}.</span></p>
+            s.por === 'amarillo' ? ' (en amarillo en la hoja)' : s.dias ? ` (se ${v('quitarían', 'quitan')} ${s.dias} ${s.dias === 1 ? 'día' : 'días'})` : ''}${
+            s.desactiva ? `, y su ficha ${v('se desactivaría', 'queda desactivada')}` : ''}`).join('; ')}.</span></p>
       )}
       {lista(g.vuelven).length > 0 && (
         <p className="flex items-start gap-1.5"><UserPlus size={14} className="mt-0.5 shrink-0 text-emerald-300" />
@@ -200,7 +201,7 @@ export default function SincronizarSheets({ center }) {
           <ul className="list-disc space-y-1 pl-5 text-dark-400">
             <li>Si cambia solo la hoja, gana la hoja; si cambia solo aquí, gana esto. Si cambian los dos a la vez, la hoja.</li>
             <li>Lo que la app protege no lo pisa la hoja: días concedidos, suspensiones y celdas con candado. Vuelven a la hoja con una nota.</li>
-            <li>Quien añades a la hoja entra en el cuadrante (con ficha nueva si no se parece a nadie); quien quitas de la hoja sale desde el día siguiente.</li>
+            <li>Quien añades a la hoja entra en el cuadrante (con ficha nueva si no se parece a nadie); quien quitas de la hoja sale desde el día siguiente y su ficha se desactiva (si vuelve a la hoja, vuelve).</li>
             <li>Una celda que vacías en la hoja no borra nada aquí. Solo se tocan los días de hace una semana a dos meses vista.</li>
             <li>Si fueran a cambiar más de 80 celdas de golpe (una hoja mal ordenada, el mes equivocado), se para hasta que lo aceptes.</li>
           </ul>

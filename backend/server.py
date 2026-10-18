@@ -48429,7 +48429,8 @@ async def _sync_procesar(conf: dict, cuerpo: dict) -> dict:
 
     vivas_q = {"merged_into": {"$exists": False}, "status": {"$nin": ["deleted", "fusionada"]}}
     todas = await db.drivers.find(vivas_q, {"_id": 0, "id": 1, "name": 1, "active": 1, "center": 1,
-                                            "transporter_id": 1}).to_list(20000)
+                                            "transporter_id": 1, "desactivada_por": 1}).to_list(20000)
+    ficha_de_id = {x["id"]: x for x in todas}
     fichas = [x for x in todas if not x.get("center") or _cua_es_centro(x.get("center"), center)]
     nombre_de = {x["id"]: x.get("name") or "" for x in todas}
     alias = await _alias_cuadrante()
@@ -48620,8 +48621,14 @@ async def _sync_procesar(conf: dict, cuerpo: dict) -> dict:
                 dias = len(await db.shifts.find({"driver_id": did, "center": _cua_rx(center),
                                                  "date": {"$gte": borrar}}, {"_id": 0, "date": 1})
                            .to_list(5000)) if borrar else 0
+                # Dani (18-10-2026): «si no está en la hoja, desactiva ese conductor: o está de baja o ya no está
+                # con nosotros». Se desactiva su ficha también, salvo que su ficha sea de OTRO centro (se ha
+                # cambiado de nave: sigue trabajando, solo deja este cuadrante).
+                ficha = ficha_de_id.get(did) or {}
+                desactiva = bool(borrar) and ficha.get("active") is not False and (
+                    not ficha.get("center") or _cua_es_centro(ficha.get("center"), center))
                 gente["salen"].append({"nombre": nombre, "desde": deseado, "por": "fuera" if borrar else "amarillo",
-                                       "dias": dias})
+                                       "dias": dias, "desactiva": desactiva})
             else:
                 gente["vuelven"].append(nombre)
         if campos:
@@ -48740,6 +48747,15 @@ async def _sync_procesar(conf: dict, cuerpo: dict) -> dict:
     for did, campos, borrar in plan_personas:
         if campos:
             await _cua_guardar_persona(center, did, campos, yo, cambio)
+        ficha = ficha_de_id.get(did) or {}
+        if borrar and ficha.get("active") is not False and (
+                not ficha.get("center") or _cua_es_centro(ficha.get("center"), center)):
+            await db.drivers.update_one({"id": did}, {"$set": {"active": False, "desactivada_por": "hoja",
+                                                               "desactivada_en": ahora}})
+        elif "inactivo_desde" in campos and campos["inactivo_desde"] is None and ficha.get("desactivada_por") == "hoja":
+            # Vuelve a la hoja: su ficha vuelve a estar activa (solo si la desactivó la hoja, no la oficina).
+            await db.drivers.update_one({"id": did}, {"$set": {"active": True},
+                                                      "$unset": {"desactivada_por": "", "desactivada_en": ""}})
         if borrar:
             filtro = {"driver_id": did, "center": _cua_rx(center), "date": {"$gte": borrar}}
             for s in await db.shifts.find(filtro, {"_id": 0}).to_list(5000):

@@ -342,7 +342,10 @@ async def test_quitar_a_alguien_de_la_hoja_lo_saca_desde_manana_y_si_vuelve_entr
     sin_sara = {k: v for k, v in tres.items() if k != "SARA VILA OTERO"}
     r = await sync(llave, pestana(sin_sara), nave=nave)
     gente = nave.g[server._SYNC_COL].docs[0]["ultima"]["personas"]
-    assert gente["salen"] == [{"nombre": "SARA VILA OTERO", "desde": "2026-10-19", "por": "fuera", "dias": 7}]
+    assert gente["salen"] == [{"nombre": "SARA VILA OTERO", "desde": "2026-10-19", "por": "fuera", "dias": 7,
+                               "desactiva": True}]
+    sara = next(d for d in t.drivers.docs if d["id"] == "d3")
+    assert (sara["active"], sara["desactivada_por"]) == (False, "hoja")     # Dani: «si no está, desactívalo»
     p = persona(t, "d3")
     assert (p["inactivo_desde"], p["inactivo_por"], p["en_cuadrante"]) == ("2026-10-19", "hoja", True)
     assert turno(t, "d3", DIAS[6]) is not None                       # hoy y lo pasado se quedan
@@ -356,6 +359,7 @@ async def test_quitar_a_alguien_de_la_hoja_lo_saca_desde_manana_y_si_vuelve_entr
     await sync(llave, pestana(tres), nave=nave)
     assert persona(t, "d3")["inactivo_desde"] is None
     assert nave.g[server._SYNC_COL].docs[0]["ultima"]["personas"]["vuelven"] == ["SARA VILA OTERO"]
+    assert sara["active"] is True and "desactivada_por" not in sara              # vuelve: su ficha también
     assert turno(t, "d3", DIAS[9])["cod"] == "1"
 
 
@@ -407,6 +411,18 @@ async def test_muchas_salidas_de_golpe_se_retienen_pero_los_dias_siguen(nave):
     await server.cuadrante_sync_aceptar({"center": "OGA5"}, OFI)
     await sync(llave, pestana({"ANA PEREZ LOPEZ": ["N/T"] + SEMANA_ANA[1:]}), nave=nave)
     assert persona(t, "p0")["inactivo_desde"] == "2026-10-19" and turno(t, "p0", DIAS[10]) is None
+
+
+@pytest.mark.asyncio(loop_scope="session")
+async def test_quien_se_cambia_de_centro_sale_del_cuadrante_pero_su_ficha_sigue_activa(nave):
+    t = nave.t
+    llave = await conectar()
+    tres = {"ANA PEREZ LOPEZ": SEMANA_ANA, "LUIS GOMEZ RIAL": SEMANA_LUIS, "SARA VILA OTERO": SEMANA_ANA}
+    await sync(llave, pestana(tres), nave=nave)
+    next(d for d in t.drivers.docs if d["id"] == "d3")["center"] = "DGA1"       # se va a DGA1: sigue trabajando
+    await sync(llave, pestana({k: v for k, v in tres.items() if k != "SARA VILA OTERO"}), nave=nave)
+    assert persona(t, "d3")["inactivo_desde"] == "2026-10-19"
+    assert next(d for d in t.drivers.docs if d["id"] == "d3")["active"] is True
 
 
 @pytest.mark.asyncio(loop_scope="session")

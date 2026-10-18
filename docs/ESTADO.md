@@ -1580,3 +1580,20 @@ hacemos en la app; el Sheet o viceversa». En **Cuadrante → botón «Google Sh
   Ahora manda el alias (aunque la ficha esté de baja) y luego la ficha que ya está en el cuadrante. Datos sucios que
   quedan (no son de la sincronización): Álvaro Rodríguez Blanco tiene DOS fichas activas en el cuadrante, y hay ~16
   personas en el cuadrante de la app que no están en «12 A 26» (casi todas fichas de baja).
+- **18-10 noche: fusiones y bajas en producción, pedidas por Dani** («punto 2 y 3 fusiona, y el 1 si no está en
+  sheets desactiva ese conductor»). Zeus avisó de que Álvaro Rodríguez no podía subir fotos («no tiene furgoneta
+  asignada»): tenía dos fichas y la furgoneta del día estaba en la que no usa. Hecho con un script en Fly (lote
+  `fusion-bajas-2026-10-18`; lo sustituido o quitado está entero en la colección `fusion_archivo`, y lo del cuadrante
+  en «Deshacer»):
+  - Fusionadas conservando la ficha con la que entra: Álvaro (fe096428 ← 8b2ccef5: furgoneta de hoy y 2 días; 22
+    días repetidos archivados), Manuel Óscar Pombo (8f10493d ← 29e1718c: 27 días), Luis Franco (8cce009b «luis
+    franco lopez» ← ea60d355 «luis guillermo lopez»: 21 días, 3 inspecciones, km, ID de reparto y el alias).
+    `/drivers/fusionar` no servía: exige el mismo correo y se deja la furgoneta del día (`daily_assignments` sí,
+    pero no `vehicles.current_driver_id`, furgonetas fijas, móviles, persona del cuadrante, alias ni días que chocan).
+  - Comprobado como cada uno en su portal: Álvaro y Manuel pueden auditar hoy (8627MPH, 9904 NFX); Luis libra.
+  - Fuera del cuadrante de OGA5 desde el 19-10 los 14 que no están en «12 A 26» (+ una ficha ya fusionada), con
+    sus días desde mañana; las 3 fichas aún activas (Álvaro Pérez Riveiro, Juan José Mosquera Otabor, Lucía
+    Almudena López Iglesias) desactivadas con `desactivada_por: "hoja"`.
+  - Regla nueva en la sincronización: quien sale de la hoja sale del cuadrante Y su ficha se desactiva (salvo que
+    su ficha sea de otro centro: se ha cambiado de nave); si vuelve a la hoja, se reactiva (solo si la desactivó la
+    hoja). El clasificador bloqueó la primera vez escribir en producción por consola; Dani lo autorizó en el chat.
