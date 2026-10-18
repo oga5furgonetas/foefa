@@ -48633,9 +48633,10 @@ async def _sync_procesar(conf: dict, cuerpo: dict) -> dict:
                 gente["vuelven"].append(nombre)
         if campos:
             plan_personas.append((did, campos, borrar))
+    # Quien ya tiene puesta su salida (hoy o más adelante) no se lista: ya se va.
     fuera_hoja = [did for did, pa in personas_app.items()
                   if pa.get("en_cuadrante") and did not in presente and did not in antes_en_hoja
-                  and not (pa.get("inactivo_desde") and pa["inactivo_desde"] <= hoy.isoformat())]
+                  and not pa.get("inactivo_desde")]
     # Una ficha fusionada o borrada no está entre las vivas: su nombre se busca aparte (salía el id tal cual).
     sueltas = [d for d in fuera_hoja if d not in nombre_de]
     if sueltas:
