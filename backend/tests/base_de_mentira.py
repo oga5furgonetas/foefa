@@ -156,10 +156,12 @@ class Col:
         return dict(docs[0]) if docs else None
 
     async def bulk_write(self, ops, ordered=True):
-        """ReplaceOne y DeleteOne de pymongo, que es lo que usa deshacer."""
+        """ReplaceOne y DeleteOne de pymongo, que es lo que usa deshacer, y UpdateOne (la sincronización con Sheets)."""
         for op in ops:
             if type(op).__name__ == "DeleteOne":
                 await self.delete_one(op._filter)
+            elif type(op).__name__ == "UpdateOne":
+                await self.update_one(op._filter, op._doc, upsert=bool(op._upsert))
             elif type(op).__name__ == "ReplaceOne":
                 nuevo = dict(op._doc)
                 for i, d in enumerate(self.docs):

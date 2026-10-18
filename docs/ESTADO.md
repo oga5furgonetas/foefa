@@ -1522,3 +1522,33 @@ Todo en **Turnos (Días libres) → Refuerzos / Suspensiones**; en el portal, la
   el motivo) y «Suspendido» en Mis turnos. La carta de sanción del convenio va aparte.
 - Pendiente aparte: la prueba de pantalla «Cuadrante › un día concedido sale con candado» falla en el proyecto
   «móvil» desde antes de estos cambios (no encuentra la celda en la rejilla estrecha).
+
+## 18-10-2026 (noche): el cuadrante sincronizado con su Google Sheets
+
+Dani: «el cuadrante de la app lo subo de vez en cuando; lo actualizamos en un Google Sheets… a la 1 pasamos el
+cuadrante a un solo día, de 48 nos piden 44… que se vaya actualizando según los cambios que hacemos, o según lo que
+hacemos en la app; el Sheet o viceversa». En **Cuadrante → botón «Google Sheets»**.
+
+- **Cómo**: un script dentro de SU hoja (Extensiones → Apps Script, `@OnlyCurrentDoc`: solo esa hoja, sin claves de
+  Google Cloud). Se pega el código que da el panel (lleva la llave `fs_…` dentro; se enseña una vez) y se ejecuta
+  `instalar`: sincroniza cada 10 minutos, al editar (como mucho cada 2 min) y desde el menú «Flota → Sincronizar
+  ahora». Endpoints sin sesión `POST /api/cuadrante/sync/hoja` (+ `/hecho`), cabecera `X-Flota-Sync`; la llave fija
+  la base de la empresa como `_partner_auth`. Panel: `GET /api/cuadrante/sync`, `POST …/conectar|modo|aceptar|
+  desconectar` (permiso Cuadrante y el centro). Config en la base GLOBAL `cuadrante_sync_hoja`; la «base» de cada
+  celda en la de la empresa, `cuadrante_sync_base`.
+- **Lectura**: el MISMO lector del Excel (`cuadrante_excel.leer_pestanas`, la hoja montada en memoria con valores y
+  fondos). Su pestaña «12 A 26» trae solo el número del día (1..31, 1, 2) con «J V S D…» encima: el mes sale de esas
+  letras (antes se cogía «el mes más cercano a hoy», que el 10-10 habría corrido la hoja un mes entero). Sin letras ni
+  fechas, la pestaña no se usa. La DIARIO (un solo día) y «deber horas» se saltan. Si dos pestañas tienen el mismo
+  día, manda la que llega más tarde.
+- **Quién gana, celda a celda** (`_sync_decide`, con la última versión en que coincidieron): cambió solo la hoja → a
+  la app; solo la app → a la hoja con una nota «Flota dd/mm hh:mm: …»; las dos → la hoja. Lo protegido de la app
+  (día concedido, suspensión, candado) no lo pisa la hoja y vuelve a ella. Vaciar una celda en la hoja no borra nada;
+  lo que la app QUITA (un extra desaprobado que no había) sí se vacía en la hoja. El extra es un 1 rosa en la hoja y
+  EXTRA en la app: son lo mismo. Las MÁXIMAS van igual (su fila «MÁXIMA»). Solo de hoy-7 a hoy+62. Códigos que no
+  conoce («1.EXTRA») no se tocan y se dicen. Nombres que no casan solos se quedan fuera (se arreglan importando el
+  Excel una vez, que guarda el alias). Una celda con fórmula no se sobrescribe (el script la salta y lo cuenta).
+- **Frenos**: empieza SIEMPRE en prueba (cuenta lo que haría, no toca nada); al activar se acepta lo que enseñó. Más
+  de 80 celdas de golpe en cualquiera de los dos lados → retenido hasta «Aceptar estos cambios». Lo aplicado entra
+  en «Deshacer» del Cuadrante (y deshacer vuelve a la hoja solo). Una llamada cada 15 s como mucho.
+- Tests `test_sync_hoja.py` (28) y la prueba de pantalla «Google Sheets: se conecta…».

@@ -3,7 +3,7 @@ import { useOutletContext } from 'react-router-dom'
 import {
   Loader2, ChevronLeft, ChevronRight, Sparkles, MessageSquare, Undo2, Download, Upload,
   Lock, StickyNote, X, Check, AlertTriangle, Users, SlidersHorizontal, Gift, Eraser, Plus,
-  Brush, CalendarRange, Unlock, Sheet,
+  Brush, CalendarRange, Unlock, Sheet, RefreshCw,
 } from 'lucide-react'
 import {
   getCuadrante, cuadranteCeldas, cuadranteMaximas, cuadranteConfig, cuadrantePersona,
@@ -15,6 +15,7 @@ import { lista } from '../../lib/lista'
 import { hoyLocal } from '../../lib/fecha'
 import { canSee } from '../auth'
 import CuadranteChat from '../components/CuadranteChat'
+import SincronizarSheets from '../components/SincronizarSheets'
 import HojaCuadrante from '../hoja/HojaCuadrante'
 import {
   TRABAJO, LETRA, DIA, MES, PALETA, ABREV, DOMINGO_TRABAJA, COLUMNA_DOMINGO, claseCodigo, wd,
@@ -793,6 +794,7 @@ export default function Cuadrante() {
   const [nueva, setNueva] = useState(false)
   const [importar, setImportar] = useState(false)
   const [hojaAbierta, setHojaAbierta] = useState(false)
+  const [sheets, setSheets] = useState(false)
   const [ocupado, setOcupado] = useState('')
   const [maxEdit, setMaxEdit] = useState({})
   const [refEdit, setRefEdit] = useState({})
@@ -1118,6 +1120,10 @@ export default function Cuadrante() {
                   <button onClick={() => setImportar(true)}
                     className="flex items-center gap-1.5 rounded-lg border border-dark-700 px-2.5 py-1 text-xs text-dark-300 hover:bg-dark-800">
                     <Upload size={13} /> Importar hoja
+                  </button>
+                  <button onClick={() => setSheets(true)}
+                    className="flex items-center gap-1.5 rounded-lg border border-dark-700 px-2.5 py-1 text-xs text-dark-300 hover:bg-dark-800">
+                    <RefreshCw size={13} /> Google Sheets
                   </button>
                 </div>
               </div>
@@ -1481,6 +1487,12 @@ export default function Cuadrante() {
       {hojaAbierta && (
         <HojaCuadrante center={center} desde={rango.desde} hasta={rango.hasta}
           onCerrar={() => { setHojaAbierta(false); cargar(true) }} />
+      )}
+
+      {sheets && (
+        <Modal titulo="Sincronizar con Google Sheets" onCerrar={() => { setSheets(false); cargar(true) }} ancho="max-w-3xl">
+          <SincronizarSheets center={center} />
+        </Modal>
       )}
 
       {importar && (

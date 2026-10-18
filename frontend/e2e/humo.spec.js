@@ -789,6 +789,55 @@ test.describe('Cuadrante', () => {
   /* 30-09-2026: con DGA1 elegido arriba, la hoja de OGA5 salió con 67 «no
      tiene ficha» y «Crear ficha nueva» ya elegido. Ahora se avisa, no se deja
      importar ahí y un botón cambia de centro y vuelve a leer la misma hoja. */
+  test('Google Sheets: se conecta, enseña qué cambiaría sin tocar nada y se activa', async ({ page }) => {
+    const fallos = vigilar(page)
+    await entrarComoAdmin(page)
+    await simularApi(page, 'vacio')
+    await page.route(/\/api\/cuadrante\?/, json(DATOS()))
+    let estado = { conectado: false }
+    const modos = []
+    await page.route(/\/api\/cuadrante\/sync\?/, (route) => json(estado)(route))
+    await page.route(/\/api\/cuadrante\/sync\/conectar/, (route) => {
+      estado = { conectado: true, modo: 'prueba', hoja_nombre: 'CUADRANTE OGA5', hoja_url: null, ultimo_contacto: null,
+        ultima: null, historial: [] }
+      return json({ llave: 'fs_x', script: "var FLOTA_LLAVE = 'fs_x';\nfunction instalar() {}", aviso: 'Cópialo ahora: la llave no se vuelve a enseñar.' })(route)
+    })
+    await page.route(/\/api\/cuadrante\/sync\/modo/, (route) => {
+      modos.push(route.request().postDataJSON())
+      estado = { ...estado, modo: 'activo' }
+      return json({ ok: true, modo: 'activo' })(route)
+    })
+    await page.goto('/panel/cuadrante', { waitUntil: 'domcontentloaded' })
+    await expect(page.getByText('Rutas (cuenta de 1)')).toBeVisible({ timeout: 15000 })
+    await page.getByRole('button', { name: 'Google Sheets' }).click()
+    const v = page.getByTestId('sync-sheets')
+    await v.getByRole('button', { name: 'Conectar mi hoja de Google' }).click()
+    await expect(v.getByText('Extensiones → Apps Script')).toBeVisible()
+    await expect(v.getByText("var FLOTA_LLAVE = 'fs_x';")).toBeVisible()
+    await expect(v.getByRole('button', { name: 'Copiar el código' })).toBeVisible()
+    await expect(v.getByText('En prueba: no toca nada', { exact: true })).toBeVisible()
+    await expect(v.getByRole('button', { name: /Activar/ })).toBeDisabled()        // sin ver antes qué cambiaría, no
+    // Llega la hoja: en prueba enseña lo que haría.
+    estado = { ...estado, ultimo_contacto: new Date().toISOString(), ultima: {
+      modo: 'prueba', mensaje: 'Modo prueba, no se ha tocado nada: cambiaría 2 celdas en Flota y 1 en esta hoja.',
+      pestanas: [{ nombre: '12 A 26', desde: '2026-10-01', hasta: '2026-11-02', personas: 73, emparejadas: 72, usada: true }],
+      saltadas: [{ nombre: 'DIARIO', motivo: 'sin días' }], sin_ficha: ['PERSONA NUEVA'], ambiguos: [],
+      codigos_desconocidos: { '1.EXTRA': 1 },
+      cambios: [{ hacia: 'app', nombre: 'ANA PÉREZ', fecha: dia(1), antes: '1', ahora: 'N/T', por_que: 'hoja' },
+        { hacia: 'hoja', nombre: 'LUIS GÓMEZ', fecha: dia(2), antes: '1', ahora: 'N/T APROB', por_que: 'día concedido en la app' }] } }
+    await page.getByRole('dialog').getByRole('button', { name: 'Cerrar' }).click()
+    await page.getByRole('button', { name: 'Google Sheets' }).click()
+    await expect(v.getByText('cambiaría 2 celdas en Flota y 1 en esta hoja')).toBeVisible()
+    await expect(v.getByText('Pestaña «12 A 26» (01/10 → 02/11): 72 de 73 personas')).toBeVisible()
+    await expect(v.getByText(/PERSONA NUEVA/)).toBeVisible()
+    await expect(v.getByText(/1\.EXTRA \(1\)/)).toBeVisible()
+    await expect(v.getByRole('cell', { name: 'día concedido en la app' })).toBeVisible()
+    await v.getByRole('button', { name: /Activar/ }).click()
+    await expect(v.getByText('Activa', { exact: true })).toBeVisible()
+    expect(modos).toEqual([{ center: 'NORTE', modo: 'activo' }])
+    expect(fallos, fallos.join(' | ')).toHaveLength(0)
+  })
+
   test('la hoja de otro centro se avisa y se vuelve a leer en el suyo', async ({ page }) => {
     const fallos = vigilar(page)
     await entrarComoAdmin(page, { centros: ['NORTE', 'SUR'] })
@@ -3668,6 +3717,33 @@ test.describe('Portal del conductor · casillas', () => {
     const fallos = vigilar(page)
     await entrarConductor(page, [{ date: '2026-10-20', type: 'trabaja' }])
     await expect(page.getByRole('button', { name: /Mis turnos/ })).toBeEnabled()
+    expect(fallos).toEqual([])
+  })
+
+  test('«Mis turnos» es el mes en calendario: cada día con su color, y al tocarlo se ve y se pide', async ({ page }) => {
+    const fallos = vigilar(page)
+    const iso = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+    const hoy = new Date()
+    const pedidas = []
+    await entrarConductor(page, [{ date: iso(hoy), type: 'trabaja', cod: '1' }])
+    await page.route(/\/api\/shift-requests/, (r) => {
+      if (r.request().method() === 'POST') pedidas.push(r.request().postDataJSON())
+      return r.fulfill({ json: { ok: true, auto: false } })
+    })
+    await page.getByRole('button', { name: /Mis turnos/ }).click()
+    const cal = page.getByTestId('mis-turnos')
+    await expect(cal.getByText('L', { exact: true })).toBeVisible()                // la semana empieza en lunes
+    await expect(cal.getByText('D', { exact: true })).toBeVisible()
+    const dias = cal.locator('button[aria-pressed]')
+    await expect(dias).toHaveCount(new Date(hoy.getFullYear(), hoy.getMonth() + 1, 0).getDate())   // el mes entero
+    await expect(cal.getByRole('button', { name: /: Trabajas$/ })).toHaveAttribute('aria-pressed', 'true')  // hoy, marcado
+    await expect(page.getByText('Trabajas', { exact: true }).last()).toBeVisible()
+    await page.getByRole('button', { name: 'Pedir', exact: true }).click()
+    await page.getByRole('button', { name: 'Pedir libre' }).click()
+    await expect(page.getByText('Solicitud enviada, pendiente de aprobación')).toBeVisible()
+    expect(pedidas.length).toBe(1)
+    await cal.getByRole('button', { name: 'Mes siguiente' }).click()
+    await expect(dias.first()).toBeVisible()
     expect(fallos).toEqual([])
   })
 

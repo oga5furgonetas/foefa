@@ -48093,6 +48093,643 @@ async def cuadrante_importar(file: UploadFile = File(...), center: str = Form(..
     return resumen
 
 
+# ── GOOGLE SHEETS: EL CUADRANTE SE SINCRONIZA SOLO (18-10-2026) ──────────────
+# Dani: «el cuadrante de la aplicación lo actualizo yo de vez en cuando… normalmente lo actualizamos en un Drive, en
+# un Google Sheets… a la 1 de la tarde pasamos el cuadrante a un solo día, de 48 nos piden 44… que se vaya
+# actualizando según los cambios que hacemos. O que se actualice según lo que hacemos en la aplicación».
+#
+# CÓMO: un script dentro de SU hoja (Extensiones → Apps Script; sin claves de Google Cloud ni permiso a todo su
+# Drive: `@OnlyCurrentDoc`) manda la hoja cada 10 minutos y al editarla. Aquí se lee con el MISMO lector que el Excel
+# (`cuadrante_excel.leer_pestanas`: el rosa, la leyenda, las máximas, el «N/T antes de empezar») y se contesta con
+# las celdas que el script tiene que escribir en la hoja.
+#
+# QUIÉN GANA, celda a celda. Se guarda la última versión en la que la hoja y la app coincidieron (la «base»):
+#   · cambió solo la hoja → va a la app;          · cambió solo la app → va a la hoja, con una nota;
+#   · cambiaron las dos → la hoja (es donde trabajan), salvo lo protegido;
+#   · lo PROTEGIDO de la app manda siempre y vuelve a la hoja con su nota: un día concedido, una suspensión, una
+#     celda con candado. Es lo mismo que respeta el importador del Excel;
+#   · la primera vez, sin base, manda la hoja: hasta hoy la app era una copia que se subía de vez en cuando;
+#   · una celda que se vacía en la hoja no borra nada en la app (lo mismo que al importar). Lo que la APP quita
+#     (desaprobar un extra en un día que estaba vacío) sí se vacía en la hoja: si no, la hoja lo volvería a meter.
+# Solo de hoy-7 a hoy+62: lo viejo no se toca. Si más de 80 celdas de la app fueran a cambiar de golpe (una hoja
+# reordenada, el mes equivocado), no se aplica nada hasta que alguien lo acepte en el panel. En «prueba» solo se
+# cuenta lo que haría. Deshacer en el Cuadrante deshace una sincronización entera, y vuelve a la hoja sola.
+_SYNC_COL = "cuadrante_sync_hoja"        # base global: una por empresa y centro, con el hash de la llave
+_SYNC_BASE = "cuadrante_sync_base"       # base de la empresa: la última versión en que coincidieron
+_SYNC_ANTES, _SYNC_DESPUES = 7, 62
+_SYNC_TOPE = 80
+_SYNC_MAX_BYTES = 6 * 1024 * 1024
+_SYNC_ROSA = "#ff66cc"
+_SYNC_APROB = {"N/T APROB", "APROBADO"}
+_SYNC_POR_QUE = {
+    "suspension": "suspendido en la app: se cambia levantando la suspensión",
+    "aprobado": "día concedido en la app",
+    "candado": "fijado con candado en la app",
+    "app": "cambiado en la app",
+    "quitado": "quitado en la app",
+    "maxima": "máxima cambiada en la app",
+}
+
+
+def _sync_hash(tok: str) -> str:
+    return hashlib.sha256(("sync-hoja:" + str(tok or "")).encode()).hexdigest()
+
+
+def _sync_canon(cod, extra=False, hora="") -> str:
+    """Lo que se compara: el código, con el 1 rosa y el EXTRA como lo mismo (en la hoja un día extra es un 1 rosa;
+    en la app, aprobado o de un refuerzo, es «EXTRA») y la hora si la hay («V (05:43)»)."""
+    c = _cm._cod(cod)
+    if not c:
+        return ""
+    if c == "EXTRA" or (c == "1" and extra):
+        c = "EXTRA"
+    h = str(hora or "").strip()
+    return f"{c}@{h}" if h else c
+
+
+def _sync_canon_turno(doc) -> str:
+    return _sync_canon(_cua_cod_turno(doc), (doc or {}).get("extra"), (doc or {}).get("hora")) if doc else ""
+
+
+def _sync_valor_hoja(canon: str) -> tuple:
+    """(lo que se escribe en la celda, si va en rosa). El 1 va como NÚMERO: su fila de RUTAS es una suma."""
+    c, _, h = canon.partition("@")
+    if c in ("EXTRA", "1"):
+        return (f"1 ({h})" if h else 1), c == "EXTRA"
+    return (f"{c} ({h})" if h else c), False
+
+
+def _sync_decide(S: str, A: str, B: Optional[str], prot: str) -> Tuple[str, str]:
+    """Una celda: S lo de la hoja, A lo de la app, B la base (None si nunca coincidieron), prot si la app la protege.
+    Devuelve (acción, por qué): «igual» | «nada» | «a_app» | «a_hoja» (A, y si A es "", vaciarla)."""
+    if S and S == A:
+        return "igual", ""
+    if prot and A:
+        if prot == "aprobado" and S in _SYNC_APROB and A in _SYNC_APROB:
+            return "igual", ""                   # «APROBADO» o «N/T APROB»: los dos son el día concedido
+        return "a_hoja", prot
+    if not S:
+        if A and B is not None and A != B:
+            return "a_hoja", "app"
+        return "nada", ""
+    if not A:
+        if B is not None and B == S:
+            return "a_hoja", "quitado"
+        return "a_app", "nuevo"
+    if B is not None and S == B:
+        return "a_hoja", "app"
+    if B is None:
+        return "a_app", "primera"
+    if A == B:
+        return "a_app", "hoja"
+    return "a_app", "conflicto"              # cambiaron las dos: manda la hoja
+
+
+def _sync_decide_maxima(S: Optional[int], A: Optional[int], B: Optional[int]) -> str:
+    if S is None:
+        return "a_hoja" if (A is not None and B is not None and A != B) else "nada"
+    if S == A:
+        return "igual"
+    if A is None:
+        return "a_app"
+    if B is not None and S == B:
+        return "a_hoja"
+    return "a_app"
+
+
+def _sync_script(url: str, llave: str, center: str) -> str:
+    """El script que se pega en la hoja. Lleva la llave dentro: quien lo tenga puede escribir en el cuadrante de
+    ese centro, así que se enseña una vez y se puede desconectar."""
+    return _SYNC_SCRIPT.replace("__URL__", url).replace("__LLAVE__", llave).replace("__CENTRO__", center)
+
+
+_SYNC_SCRIPT = r"""/**
+ * Flota ⇄ Google Sheets · cuadrante de __CENTRO__
+ * Pégalo en Extensiones → Apps Script, guarda y ejecuta «instalar» una vez.
+ * Solo puede tocar ESTA hoja (@OnlyCurrentDoc). Para cortarlo: «Desconectar» en Flota.
+ * @OnlyCurrentDoc
+ */
+var FLOTA_URL = '__URL__';
+var FLOTA_LLAVE = '__LLAVE__';
+var MAX_FILAS = 400, MAX_COLS = 120;
+
+function instalar() {
+  ScriptApp.getProjectTriggers().forEach(function (t) {
+    var f = t.getHandlerFunction();
+    if (f === 'sincronizarFlota' || f === 'alEditarFlota') ScriptApp.deleteTrigger(t);
+  });
+  ScriptApp.newTrigger('sincronizarFlota').timeBased().everyMinutes(10).create();
+  ScriptApp.newTrigger('alEditarFlota').forSpreadsheet(SpreadsheetApp.getActive()).onEdit().create();
+  sincronizarAhora();
+}
+
+function onOpen() {
+  SpreadsheetApp.getUi().createMenu('Flota').addItem('Sincronizar ahora', 'sincronizarAhora').addToUi();
+}
+
+function alEditarFlota() {
+  var ultima = Number(PropertiesService.getScriptProperties().getProperty('ultima') || 0);
+  if (Date.now() - ultima < 2 * 60 * 1000) return;   // como mucho cada 2 minutos; el reloj recoge el resto
+  sincronizarFlota();
+}
+
+function sincronizarAhora() {
+  SpreadsheetApp.getActive().toast(sincronizarFlota(), 'Flota', 10);
+}
+
+function sincronizarFlota() {
+  var lock = LockService.getScriptLock();
+  if (!lock.tryLock(1000)) return 'Ya se estaba sincronizando.';
+  try {
+    PropertiesService.getScriptProperties().setProperty('ultima', String(Date.now()));
+    var ss = SpreadsheetApp.getActive();
+    var tz = ss.getSpreadsheetTimeZone();
+    var pestanas = ss.getSheets().map(function (h) {
+      var filas = Math.min(h.getLastRow(), MAX_FILAS), cols = Math.min(h.getLastColumn(), MAX_COLS);
+      if (filas < 3 || cols < 3) return { nombre: h.getName(), valores: [], fondos: [] };
+      var rango = h.getRange(1, 1, filas, cols);
+      var valores = rango.getValues().map(function (fila) {
+        return fila.map(function (v) {
+          return (v instanceof Date) ? '@D:' + Utilities.formatDate(v, tz, 'yyyy-MM-dd') : v;
+        });
+      });
+      var fondos = rango.getBackgrounds().map(function (fila) {
+        return fila.map(function (c) { return c === '#ffffff' ? '' : c; });
+      });
+      return { nombre: h.getName(), valores: valores, fondos: fondos };
+    });
+    var resp = UrlFetchApp.fetch(FLOTA_URL, {
+      method: 'post', contentType: 'application/json', muteHttpExceptions: true,
+      headers: { 'X-Flota-Sync': FLOTA_LLAVE },
+      payload: JSON.stringify({ hoja: ss.getName(), hoja_id: ss.getId(), pestanas: pestanas })
+    });
+    var r = {};
+    try { r = JSON.parse(resp.getContentText()); } catch (e) { r = {}; }
+    if (resp.getResponseCode() !== 200) return 'Flota no ha aceptado la hoja: ' + (r.detail || resp.getResponseCode());
+    var escritas = 0, saltadas = [];
+    (r.escribir || []).forEach(function (w) {
+      try {
+        var h = ss.getSheetByName(w.hoja);
+        if (!h) { saltadas.push(w.hoja + ' (no existe)'); return; }
+        var c = h.getRange(w.fila, w.col);
+        if (c.getFormula()) { saltadas.push(w.hoja + '!' + c.getA1Notation() + ' (tiene una fórmula)'); return; }
+        c.setValue(w.valor);
+        if (w.fondo !== null && w.fondo !== undefined) c.setBackground(w.fondo || null);
+        if (w.nota) {
+          var antes = c.getNote();
+          c.setNote(((antes ? antes + '\n' : '') + w.nota).split('\n').slice(-5).join('\n'));
+        }
+        escritas++;
+      } catch (e) {
+        saltadas.push(w.hoja + ' fila ' + w.fila + ' (' + e.message + ')');
+      }
+    });
+    if (escritas || saltadas.length) {
+      UrlFetchApp.fetch(FLOTA_URL + '/hecho', {
+        method: 'post', contentType: 'application/json', muteHttpExceptions: true,
+        headers: { 'X-Flota-Sync': FLOTA_LLAVE },
+        payload: JSON.stringify({ escritas: escritas, saltadas: saltadas.slice(0, 50) })
+      });
+    }
+    return r.mensaje || 'Hecho.';
+  } finally {
+    lock.releaseLock();
+  }
+}
+"""
+
+
+async def _sync_auth(request: Request) -> dict:
+    """Valida la llave del script y deja fijada la base de la empresa (como `_partner_auth`: este camino no tiene
+    sesión, y sin fijarla escribiría en la base por defecto)."""
+    tok = (request.headers.get("X-Flota-Sync") or "").strip()
+    if not tok:
+        raise HTTPException(401, "Falta la cabecera X-Flota-Sync")
+    doc = await global_db[_SYNC_COL].find_one({"token_hash": _sync_hash(tok)})
+    if not doc or doc.get("revocado"):
+        raise HTTPException(401, "Esta hoja ya no está conectada a Flota. Vuelve a conectarla desde el Cuadrante.")
+    set_current_org_db(doc.get("db_name") or _DEFAULT_DB_NAME)
+    return doc
+
+
+def _sync_empareja(nombres: list, fichas: list, alias: dict) -> Tuple[dict, list, list]:
+    """{nombre: ficha} de los que casan SOLOS, sin preguntar a nadie: como el importador, pero lo dudoso no se
+    propone, se deja fuera y se dice (se arregla una vez importando el Excel, que guarda el alias)."""
+    activas = [x for x in fichas if x.get("active") is not False]
+    casan, sin_ficha, ambiguos, usadas = {}, [], [], {}
+    for nombre in nombres:
+        drv, motivo = _empareja_conductor(nombre, activas, alias)
+        if not drv and motivo != "ambiguo":
+            if any(_nombres_veredicto(nombre, x.get("name")) == "si" for x in activas):
+                drv, motivo = None, "no_encontrado"
+            else:
+                drv, motivo = _empareja_conductor(nombre, fichas, alias)
+        if drv and drv["id"] in usadas:
+            ambiguos.append("%s (la misma ficha que %s)" % (nombre, usadas[drv["id"]]))
+            casan.pop(usadas[drv["id"]], None)
+            continue
+        if drv:
+            usadas[drv["id"]] = nombre
+            casan[nombre] = drv
+        else:
+            (ambiguos if motivo == "ambiguo" else sin_ficha).append(nombre)
+    return casan, sin_ficha, ambiguos
+
+
+def _sync_mensaje(r: dict) -> str:
+    if r.get("error"):
+        return r["error"]
+    if r.get("retenido"):
+        return ("Retenido: cambiarían de golpe %d celdas en Flota y %d en esta hoja. Revísalo y acéptalo en Flota → "
+                "Cuadrante → Google Sheets." % (r["a_app_cambia"], r["a_hoja_cambia"]))
+    n_app, n_hoja = r["a_app"] + r["maximas_app"], r["a_hoja"] + r["maximas_hoja"]
+    if r["modo"] == "prueba":
+        return ("Modo prueba, no se ha tocado nada: cambiaría %d celdas en Flota y %d en esta hoja. Actívalo en "
+                "Flota → Cuadrante → Google Sheets." % (n_app, n_hoja))
+    if not n_app and not n_hoja:
+        return "Todo igual en Flota y en la hoja."
+    return "Flota: %d cambios de la hoja a la app y %d de la app a la hoja." % (n_app, n_hoja)
+
+
+async def _sync_procesar(conf: dict, cuerpo: dict) -> dict:
+    """El corazón: lee la hoja, decide celda a celda y, si está activa, aplica en la app. Devuelve el resumen con
+    `escribir` (lo que el script pone en la hoja)."""
+    center = conf["center"]
+    modo = conf.get("modo") or "prueba"
+    hoy = _cua_hoy()
+    desde = (hoy - timedelta(days=_SYNC_ANTES)).isoformat()
+    hasta = (hoy + timedelta(days=_SYNC_DESPUES)).isoformat()
+    ahora = datetime.now(timezone.utc).isoformat()
+    from zoneinfo import ZoneInfo
+    sello = datetime.now(ZoneInfo("Europe/Madrid")).strftime("%d/%m %H:%M")
+    r = {"en": ahora, "modo": modo, "hoja": _texto_cuerpo(cuerpo.get("hoja"), 120), "center": center,
+         "desde": desde, "hasta": hasta, "pestanas": [], "saltadas": [], "sin_ficha": [], "ambiguos": [],
+         "a_app": 0, "a_app_cambia": 0, "a_hoja": 0, "a_hoja_cambia": 0, "conflictos": 0, "maximas_app": 0, "maximas_hoja": 0,
+         "protegidas": 0, "codigos_desconocidos": {}, "cambios": [], "retenido": False, "aplicado": False,
+         "error": None, "escribir": []}
+    pestanas = [p for p in (cuerpo.get("pestanas") or []) if isinstance(p, dict)]
+    leido = await asyncio.to_thread(_cx.leer_pestanas, pestanas, hoy)
+    r["saltadas"] = leido["saltadas"][:20]
+    fondos_de = {str(p.get("nombre") or "")[:100]: p.get("fondos") or [] for p in pestanas}
+
+    vivas_q = {"merged_into": {"$exists": False}, "status": {"$nin": ["deleted", "fusionada"]}}
+    todas = await db.drivers.find(vivas_q, {"_id": 0, "id": 1, "name": 1, "active": 1, "center": 1,
+                                            "transporter_id": 1}).to_list(20000)
+    fichas = [x for x in todas if not x.get("center") or _cua_es_centro(x.get("center"), center)]
+    alias = await _alias_cuadrante()
+
+    # ── Qué pestañas sirven, y de cuál se toma cada día ──
+    usables = []
+    for i, p in enumerate(leido["pestanas"]):
+        info = {"nombre": p["hoja"], "desde": p["fechas"][0], "hasta": p["fechas"][-1], "personas": len(p["filas"]),
+                "emparejadas": 0, "usada": False, "motivo": ""}
+        r["pestanas"].append(info)
+        if not p.get("fechas_seguras"):
+            info["motivo"] = "solo trae el número del día, sin mes ni días de la semana: no se sabe de qué mes es"
+            continue
+        if p["fechas"][-1] < desde or p["fechas"][0] > hasta:
+            info["motivo"] = "es de fechas que ya no se sincronizan"
+            continue
+        casan, sin_ficha, ambiguos = _sync_empareja([f["nombre"] for f in p["filas"]], fichas, alias)
+        info["emparejadas"] = len(casan)
+        otro = _cua_centro_de_la_hoja([f["nombre"] for f in p["filas"]], todas, alias, center)
+        if otro:
+            info["motivo"] = "parece de %s (%d personas tienen allí la ficha)" % (otro["centro"], otro["casan_alli"])
+            continue
+        if not p["filas"] or len(casan) < 0.5 * len(p["filas"]):
+            info["motivo"] = "casan menos de la mitad de los nombres con fichas de %s" % center
+            continue
+        info["usada"] = True
+        usables.append((i, p, casan, sin_ficha, ambiguos))
+    if not usables:
+        r["error"] = ("No encuentro en la hoja ninguna pestaña de cuadrante de %s con días entre el %s y el %s."
+                      % (center, desde, hasta))
+        return r
+    fuente = {}                                          # fecha -> (i, p, casan): la pestaña que llega más tarde
+    for i, p, casan, _, _ in usables:
+        for f in p["fechas"]:
+            if desde <= f <= hasta:
+                actual = fuente.get(f)
+                if actual is None or (p["fechas"][-1], i) >= (actual[1]["fechas"][-1], actual[0]):
+                    fuente[f] = (i, p, casan)
+    sin_ficha = sorted({n for u in usables for n in u[3]})
+    ambiguos = sorted({n for u in usables for n in u[4]})
+    r["sin_ficha"], r["ambiguos"] = sin_ficha[:40], ambiguos[:40]
+
+    # ── Lo que hay en cada sitio ──
+    mapa = await _cua_mapa_codigos()
+    hoja: dict = {}
+    for f, (i, p, casan) in fuente.items():
+        col = p["columnas"].get(f)
+        for fila in p["filas"]:
+            drv = casan.get(fila["nombre"])
+            if not drv or not col:
+                continue
+            cel = fila["celdas"].get(f)
+            hoja[(drv["id"], f)] = {"drv": drv, "nombre": fila["nombre"], "pestana": p["hoja"], "fila": fila["fila"],
+                                    "col": col, "cel": cel, "alta_desde": fila.get("alta_desde"), "p": p, "fecha": f}
+    ids = sorted({k[0] for k in hoja})
+    actuales: dict = {}
+    if ids:
+        async for s in db.shifts.find({"driver_id": {"$in": ids}, "date": {"$gte": desde, "$lte": hasta}},
+                                      {"_id": 0}):
+            actuales[(s["driver_id"], s["date"])] = s
+    aprobados = await _cua_aprobados(ids, desde, hasta)
+    suspendidos = await _suspendidos(ids, desde, hasta) if ids else {}
+    base_doc = await db[_SYNC_BASE].find_one({"center": center}, {"_id": 0}) or {}
+    base = dict(base_doc.get("celdas") or {})
+    base_max = dict(base_doc.get("maximas") or {})
+
+    # ── Celda a celda ──
+    a_app, a_hoja = [], []
+    for (did, f), h in sorted(hoja.items(), key=lambda kv: (kv[0][1], kv[1]["nombre"])):
+        clave = f"{did}|{f}"
+        doc = actuales.get((did, f))
+        if doc and not _cua_es_centro(doc.get("center"), center):
+            continue                                     # ese día lo lleva otro centro
+        cel = h["cel"]
+        if cel and h["alta_desde"] and f < h["alta_desde"] and cel["cod"] in ("N/T", "L"):
+            cel = None                                   # «todavía no está», no «libra» (igual que al importar)
+        if cel and cel["cod"] not in mapa and cel["cod"] not in CODIGOS_CUADRANTE_DEF:
+            r["codigos_desconocidos"][cel["cod"]] = r["codigos_desconocidos"].get(cel["cod"], 0) + 1
+            continue
+        S = _sync_canon(cel["cod"], cel["extra"], cel["hora"]) if cel else ""
+        A = _sync_canon_turno(doc)
+        B = base.get(clave)
+        prot = ""
+        if clave in suspendidos or (doc or {}).get("suspension_id"):
+            prot = "suspension"
+        elif (doc or {}).get("aprobado_req"):
+            prot = "aprobado"
+        elif (doc or {}).get("fijada"):
+            prot = "candado"
+        elif aprobados.get(clave) and S:
+            tipo_s = _cua_tipo(cel["cod"], mapa)
+            ap = aprobados[clave]
+            if (ap == "libre" and tipo_s in ("trabaja", "extra")) or (ap == "extra" and tipo_s == "libre"):
+                prot = "aprobado"
+        accion, por_que = _sync_decide(S, A, B, prot)
+        if accion == "igual":
+            base[clave] = S
+        elif accion == "nada":
+            if not S and not A:
+                base.pop(clave, None)
+        elif accion == "a_app":
+            a_app.append((h, doc, cel, S, A, por_que))
+        else:
+            a_hoja.append((h, A, S, por_que))
+        if prot and accion == "a_hoja":
+            r["protegidas"] += 1
+
+    # ── Las máximas ──
+    max_app, max_hoja = [], []
+    demanda = {}
+    async for d in db.route_demand.find({"center": center, "date": {"$gte": desde, "$lte": hasta}}, {"_id": 0}):
+        if isinstance(d.get("maximo"), (int, float)):
+            demanda[d["date"]] = int(d["maximo"])
+    for f, (i, p, casan) in fuente.items():
+        S = p["maximas"].get(f)
+        A, B = demanda.get(f), base_max.get(f)
+        acc = _sync_decide_maxima(S, A, B)
+        if acc == "igual":
+            base_max[f] = S
+        elif acc == "a_app":
+            max_app.append((f, S, A))
+        elif acc == "a_hoja" and p.get("fila_maximas") and p["columnas"].get(f):
+            max_hoja.append((f, A, p))
+
+    r["a_app"], r["a_hoja"] = len(a_app), len(a_hoja)
+    r["a_app_cambia"] = sum(1 for x in a_app if x[4])
+    r["a_hoja_cambia"] = sum(1 for x in a_hoja if x[2])
+    r["conflictos"] = sum(1 for x in a_app if x[5] == "conflicto")
+    r["maximas_app"], r["maximas_hoja"] = len(max_app), len(max_hoja)
+    for h, doc, cel, S, A, por_que in a_app[:40]:
+        r["cambios"].append({"hacia": "app", "nombre": h["drv"].get("name") or h["nombre"], "fecha": h["fecha"],
+                             "antes": A.replace("@", " ") or "—", "ahora": S.replace("@", " "), "por_que": por_que})
+    for h, A, S, por_que in a_hoja[:40]:
+        r["cambios"].append({"hacia": "hoja", "nombre": h["drv"].get("name") or h["nombre"], "fecha": h["fecha"],
+                             "antes": S.replace("@", " ") or "—", "ahora": A.replace("@", " ") or "(vacía)",
+                             "por_que": _SYNC_POR_QUE.get(por_que, por_que)})
+    for f, S, A in max_app[:20]:
+        r["cambios"].append({"hacia": "app", "nombre": "MÁXIMA", "fecha": f, "antes": "—" if A is None else str(A),
+                             "ahora": str(S), "por_que": "hoja"})
+    for f, A, p in max_hoja[:20]:
+        r["cambios"].append({"hacia": "hoja", "nombre": "MÁXIMA", "fecha": f, "antes": "—", "ahora": str(A),
+                             "por_que": _SYNC_POR_QUE["maxima"]})
+
+    if modo != "activo":
+        return r
+    # Tanto de golpe es una hoja reordenada, el mes equivocado o un Excel viejo importado en la app: no se toca nada
+    # hasta que alguien lo mire. Hacia los dos lados.
+    if max(r["a_app_cambia"], r["a_hoja_cambia"]) > _SYNC_TOPE and not conf.get("forzar_una_vez"):
+        r["retenido"] = True
+        return r
+
+    # ── Aplicar en la app (como el importador: con «Deshacer») ──
+    cambio = _CuaCambio(center, {"name": "Google Sheets"},
+                        "Sincronizar con Google Sheets (%d celdas)" % (len(a_app) + len(max_app)))
+    ops = []
+    for h, doc, cel, S, A, por_que in a_app:
+        did, f = h["drv"]["id"], h["fecha"]
+        filtro = {"driver_id": did, "date": f}
+        cambio.anota("shifts", filtro, doc)
+        campos = {"driver_id": did, "driver_name": h["drv"].get("name") or h["nombre"], "center": center,
+                  "date": f, "type": _cua_tipo(cel["cod"], mapa), "cod": cel["cod"], "extra": bool(cel["extra"])}
+        op = {"$set": campos}
+        if cel.get("hora"):
+            campos["hora"] = cel["hora"]
+        else:
+            op["$unset"] = {"hora": ""}
+        ops.append(UpdateOne(filtro, op, upsert=True))
+        base[f"{did}|{f}"] = S
+    for i in range(0, len(ops), 500):
+        await _bulk_turnos(ops[i:i + 500])
+    for f, S, A in max_app:
+        filtro = {"center": center, "date": f}
+        await cambio.antes("route_demand", filtro)
+        await db.route_demand.update_one(filtro, {"$set": {**filtro, "maximo": S, "updated_at": ahora,
+                                                           "updated_by": "Google Sheets"}}, upsert=True)
+        base_max[f] = S
+    await cambio.guardar()
+
+    # ── Lo que el script escribe en la hoja ──
+    for h, A, S, por_que in a_hoja[:300]:
+        p = h["p"]
+        rosas = {"#" + k.lower() for k, v in (p.get("leyenda") or {}).items() if v == "extra"} or {_SYNC_ROSA}
+        rosa = sorted(rosas)[0]
+        fondo_actual = ""
+        try:
+            fondo_actual = str(fondos_de.get(h["pestana"])[h["fila"] - 1][h["col"] - 1] or "").lower()
+        except (IndexError, TypeError):
+            pass
+        if A:
+            valor, en_rosa = _sync_valor_hoja(A)
+        else:
+            valor, en_rosa = "", False
+        if en_rosa:
+            fondo = rosa
+        elif fondo_actual in rosas | {"#" + c.lower() for c in _cx.ROSAS}:
+            fondo = ""                                   # deja de ser un día extra: fuera el rosa
+        else:
+            fondo = None
+        r["escribir"].append({"hoja": h["pestana"], "fila": h["fila"], "col": h["col"], "valor": valor,
+                              "fondo": fondo, "nota": "Flota %s: %s" % (sello, _SYNC_POR_QUE.get(por_que, por_que))})
+    for f, A, p in max_hoja:
+        r["escribir"].append({"hoja": p["hoja"], "fila": p["fila_maximas"], "col": p["columnas"][f], "valor": A,
+                              "fondo": None, "nota": "Flota %s: %s" % (sello, _SYNC_POR_QUE["maxima"])})
+
+    # La base, sin lo que ya no se sincroniza.
+    base = {k: v for k, v in base.items() if k.split("|")[-1] >= desde}
+    base_max = {k: v for k, v in base_max.items() if k >= desde}
+    await db[_SYNC_BASE].update_one({"center": center}, {"$set": {"center": center, "celdas": base,
+                                                                   "maximas": base_max, "actualizado_en": ahora}},
+                                    upsert=True)
+    r["aplicado"] = True
+    if a_app or max_app:
+        logger.info("Sync Google Sheets %s: %d celdas y %d máximas a la app, %d a la hoja", center, len(a_app),
+                    len(max_app), len(r["escribir"]))
+    return r
+
+
+@api_router.post("/cuadrante/sync/hoja")
+async def cuadrante_sync_hoja(request: Request):
+    """Lo llama el script de la hoja (sin sesión: con su llave en `X-Flota-Sync`)."""
+    conf = await _sync_auth(request)
+    crudo = await request.body()
+    if len(crudo) > _SYNC_MAX_BYTES:
+        raise HTTPException(413, "La hoja es demasiado grande para sincronizarla (máximo 6 MB).")
+    try:
+        cuerpo = json.loads(crudo or b"{}")
+    except ValueError:
+        raise HTTPException(400, "Lo enviado no es JSON")
+    if not isinstance(cuerpo, dict):
+        raise HTTPException(400, "Lo enviado no es un objeto")
+    ahora = datetime.now(timezone.utc)
+    ultimo = str(conf.get("ultimo_contacto") or "")
+    if ultimo and (ahora - datetime.fromisoformat(ultimo)).total_seconds() < 15:
+        raise HTTPException(429, "Se acaba de sincronizar. Prueba otra vez en unos segundos.")
+    await global_db[_SYNC_COL].update_one({"id": conf["id"]}, {"$set": {"ultimo_contacto": ahora.isoformat()}})
+    try:
+        r = await _sync_procesar(conf, cuerpo)
+    except Exception as e:                                       # noqa: BLE001
+        logger.exception("Sync Google Sheets %s", conf.get("center"))
+        r = {"en": ahora.isoformat(), "modo": conf.get("modo"), "error": "Error al leer la hoja: %s" % str(e)[:200],
+             "escribir": []}
+    r["mensaje"] = _sync_mensaje(r) if not r.get("error") else r["error"]
+    guardar = {k: v for k, v in r.items() if k != "escribir"}
+    guardar["escritas_pedidas"] = len(r.get("escribir") or [])
+    cambio = {"$set": {"ultima": guardar, "hoja_nombre": r.get("hoja") or conf.get("hoja_nombre"),
+                       "hoja_id": _texto_cuerpo(cuerpo.get("hoja_id"), 120) or conf.get("hoja_id")}}
+    if r.get("aplicado"):
+        cambio["$set"]["forzar_una_vez"] = False
+    if r.get("error") or r.get("retenido") or r.get("a_app") or r.get("a_hoja") or r.get("maximas_app") \
+            or r.get("maximas_hoja"):
+        cambio["$push"] = {"historial": {"$each": [{k: guardar.get(k) for k in (
+            "en", "modo", "a_app", "a_hoja", "maximas_app", "maximas_hoja", "conflictos", "retenido", "aplicado",
+            "error")}], "$slice": -30}}
+    await global_db[_SYNC_COL].update_one({"id": conf["id"]}, cambio)
+    return {"ok": not r.get("error"), "modo": r.get("modo"), "mensaje": r["mensaje"],
+            "escribir": r.get("escribir") or []}
+
+
+@api_router.post("/cuadrante/sync/hoja/hecho")
+async def cuadrante_sync_hecho(request: Request, data: dict = Body(...)):
+    """El script cuenta lo que escribió en la hoja (y lo que no pudo: una celda con fórmula, una pestaña que ya no
+    está), para enseñarlo en el panel."""
+    conf = await _sync_auth(request)
+    saltadas = [_texto_cuerpo(x, 160) for x in _lista_cuerpo(data.get("saltadas"), 50)]
+    escritas = _entero(data.get("escritas"), "escritas", defecto=0, minimo=0, maximo=100000)
+    await global_db[_SYNC_COL].update_one({"id": conf["id"]}, {"$set": {"ultima_escritura": {
+        "en": datetime.now(timezone.utc).isoformat(), "escritas": escritas, "saltadas": saltadas}}})
+    return {"ok": True}
+
+
+def _sync_puede(user: dict, center: str) -> str:
+    center = _cua_centro(center)
+    _cua_acceso(user, center)
+    if not _puede(user, "cuadrante"):
+        raise HTTPException(403, "Hace falta el permiso del Cuadrante")
+    return center
+
+
+def _sync_salida(conf: Optional[dict]) -> dict:
+    if not conf or conf.get("revocado"):
+        return {"conectado": False}
+    out = {k: conf.get(k) for k in ("modo", "creado_en", "creado_por", "hoja_nombre", "hoja_id", "ultimo_contacto",
+                                    "ultima", "ultima_escritura", "forzar_una_vez")}
+    out["historial"] = list(reversed(conf.get("historial") or []))[:15]
+    out["conectado"] = True
+    out["hoja_url"] = ("https://docs.google.com/spreadsheets/d/%s/edit" % conf["hoja_id"]
+                       if re.fullmatch(r"[A-Za-z0-9_\-]{20,120}", str(conf.get("hoja_id") or "")) else None)
+    return out
+
+
+@api_router.get("/cuadrante/sync")
+async def cuadrante_sync_estado(center: str, user: dict = Depends(require_admin)):
+    center = _sync_puede(user, center)
+    conf = await global_db[_SYNC_COL].find_one({"db_name": _current_db_name.get(), "center": center}, {"_id": 0})
+    return _sync_salida(conf)
+
+
+@api_router.post("/cuadrante/sync/conectar")
+async def cuadrante_sync_conectar(data: dict = Body(...), user: dict = Depends(require_admin)):
+    """Hace la llave (o una nueva: la de antes deja de valer) y devuelve el script con ella dentro. Empieza SIEMPRE
+    en prueba."""
+    center = _sync_puede(user, data.get("center"))
+    llave = "fs_" + secrets.token_urlsafe(32)
+    filtro = {"db_name": _current_db_name.get(), "center": center}
+    previo = await global_db[_SYNC_COL].find_one(filtro, {"_id": 0, "id": 1})
+    await global_db[_SYNC_COL].update_one(filtro, {
+        "$set": {**filtro, "token_hash": _sync_hash(llave), "modo": "prueba", "revocado": False,
+                 "creado_en": datetime.now(timezone.utc).isoformat(),
+                 "creado_por": user.get("name") or user.get("username") or "oficina", "forzar_una_vez": False},
+        "$setOnInsert": {"id": (previo or {}).get("id") or str(uuid.uuid4())}}, upsert=True)
+    await _audit(user, "cuadrante_sync_conectar", {"center": center})
+    return {"llave": llave, "script": _sync_script(_BACKEND_BASE + "/api/cuadrante/sync/hoja", llave, center),
+            "aviso": "Cópialo ahora: la llave no se vuelve a enseñar. Si se pierde, conecta otra vez."}
+
+
+@api_router.post("/cuadrante/sync/modo")
+async def cuadrante_sync_modo(data: dict = Body(...), user: dict = Depends(require_admin)):
+    """prueba | activo. Al activarlo se aceptan los cambios que enseñó la prueba (si no, la primera vez casi
+    siempre pasaría del tope y se quedaría retenida)."""
+    center = _sync_puede(user, data.get("center"))
+    modo = _texto_cuerpo(data.get("modo"), 10)
+    if modo not in ("prueba", "activo"):
+        raise HTTPException(400, "El modo es «prueba» o «activo»")
+    r = await global_db[_SYNC_COL].update_one(
+        {"db_name": _current_db_name.get(), "center": center, "revocado": False},
+        {"$set": {"modo": modo, "forzar_una_vez": modo == "activo"}})
+    if not r.matched_count:
+        raise HTTPException(404, "Esta hoja no está conectada")
+    await _audit(user, "cuadrante_sync_modo", {"center": center, "modo": modo})
+    return {"ok": True, "modo": modo}
+
+
+@api_router.post("/cuadrante/sync/aceptar")
+async def cuadrante_sync_aceptar(data: dict = Body(...), user: dict = Depends(require_admin)):
+    """Deja pasar UNA vez los cambios retenidos por ser demasiados de golpe."""
+    center = _sync_puede(user, data.get("center"))
+    r = await global_db[_SYNC_COL].update_one(
+        {"db_name": _current_db_name.get(), "center": center, "revocado": False},
+        {"$set": {"forzar_una_vez": True}})
+    if not r.matched_count:
+        raise HTTPException(404, "Esta hoja no está conectada")
+    await _audit(user, "cuadrante_sync_aceptar", {"center": center})
+    return {"ok": True}
+
+
+@api_router.post("/cuadrante/sync/desconectar")
+async def cuadrante_sync_desconectar(data: dict = Body(...), user: dict = Depends(require_admin)):
+    """La llave deja de valer al momento. No se borra nada: el cuadrante se queda como está."""
+    center = _sync_puede(user, data.get("center"))
+    await global_db[_SYNC_COL].update_one({"db_name": _current_db_name.get(), "center": center},
+                                          {"$set": {"revocado": True,
+                                                    "revocado_en": datetime.now(timezone.utc).isoformat()}})
+    await _audit(user, "cuadrante_sync_desconectar", {"center": center})
+    return {"ok": True}
+
+
 # ── LA HOJA: DIARIO Y DEBER HORAS ────────────────────────────────────────────
 # Dani, 30-09-2026: «nosotros usamos un Excel, que es mayor maniobrabilidad…
 # que si le clicas se expanda y sea un propio Excel con su diario, su mensual y

@@ -132,37 +132,30 @@ def _primero_mes_siguiente(d: dt.date) -> dt.date:
     return (d.replace(day=28) + dt.timedelta(days=4)).replace(day=1)
 
 
-def _fechas_por_numero(ws, fila: int, cols: List[int], ref: dt.date) -> Dict[int, dt.date]:
-    """Hojas SEMANALES de otros centros: la cabecera trae solo el NÚMERO del día
-    (7, 8, 9… y a veces 29, 30, 1, 2…), sin mes ni año. El mes se deduce de la
-    fecha de hoy (el primer día se coloca en el mes más cercano a `ref`) y, al
-    bajar el número, se pasa al mes siguiente. DGA2, 05-10-2026: «semanal» tenía
-    7..18 y 21..29 y el importador solo conocía fechas de verdad."""
-    nums = {}
-    for c in cols:
-        v = ws.cell(fila, c).value
-        if isinstance(v, (int, float)) and not isinstance(v, bool) and float(v).is_integer() and 1 <= int(v) <= 31:
-            nums[c] = int(v)
-    if len(nums) < 7:
-        return {}
-    orden = sorted(nums)
-    # Una hoja semanal llega hasta hoy (o poco después): el ÚLTIMO día se coloca
-    # en el mes más cercano a `ref` y se cuenta hacia atrás (si el número SUBE al
-    # ir hacia atrás, era del mes anterior). DGA2: «semanal 2» = 7..18, 29, 30,
-    # 1..5 es del 07-09 al 05-10, no octubre y noviembre.
-    ultimo = None
-    for delta in (-1, 0, 1):
-        m = ref.month + delta
-        y = ref.year + (m - 1) // 12
-        m = (m - 1) % 12 + 1
-        try:
-            cand = dt.date(y, m, nums[orden[-1]])
-        except ValueError:
+# Los días de la semana como los escribe la hoja: «J V S D L M X» (la de octubre
+# de OGA5) o «LUN MAR MIE…».
+_DIA_SEMANA = {"L": 0, "M": 1, "X": 2, "J": 3, "V": 4, "S": 5, "D": 6,
+               "LUN": 0, "MAR": 1, "MIE": 2, "MIER": 2, "JUE": 3, "VIE": 4, "SAB": 5, "DOM": 6,
+               "LUNES": 0, "MARTES": 1, "MIERCOLES": 2, "JUEVES": 3, "VIERNES": 4, "SABADO": 5, "DOMINGO": 6}
+
+
+def _semana_encima(ws, fila: int, cols: List[int]) -> Dict[int, int]:
+    """{columna: día de la semana} de la fila de «L M X J…» que hay justo encima
+    de los números, o {} si no la hay (hacen falta 5 letras reconocidas)."""
+    for f in (fila - 1, fila - 2):
+        if f < 1:
             continue
-        if ultimo is None or abs((cand - ref).days) < abs((ultimo - ref).days):
-            ultimo = cand
-    if ultimo is None:
-        return {}
+        out = {}
+        for c in cols:
+            t = _n(ws.cell(f, c).value).rstrip(".")
+            if t in _DIA_SEMANA:
+                out[c] = _DIA_SEMANA[t]
+        if len(out) >= 5:
+            return out
+    return {}
+
+
+def _con_meses(nums: Dict[int, int], orden: List[int], ultimo: dt.date) -> Dict[int, dt.date]:
     out = {orden[-1]: ultimo}
     actual, siguiente = ultimo, nums[orden[-1]]
     for c in reversed(orden[:-1]):
@@ -178,13 +171,58 @@ def _fechas_por_numero(ws, fila: int, cols: List[int], ref: dt.date) -> Dict[int
             return {}
         out[c] = actual
         siguiente = n
-    if (max(out.values()) - min(out.values())).days > 75:
-        return {}
     return out
 
 
+def _fechas_por_numero(ws, fila: int, cols: List[int], ref: dt.date) -> Dict[int, dt.date]:
+    """Hojas SEMANALES de otros centros: la cabecera trae solo el NÚMERO del día
+    (7, 8, 9… y a veces 29, 30, 1, 2…), sin mes ni año. El mes se deduce de la
+    fecha de hoy (el primer día se coloca en el mes más cercano a `ref`) y, al
+    bajar el número, se pasa al mes siguiente. DGA2, 05-10-2026: «semanal» tenía
+    7..18 y 21..29 y el importador solo conocía fechas de verdad.
+
+    Con la fila de días de la semana encima (la de octubre de OGA5: «J V S D…»
+    sobre 1, 2, 3… 31, 1, 2), el mes NO se adivina: se toma el que cuadra con
+    esas letras. «El más cercano a hoy» se equivoca cerca de fin de mes: el 10-10
+    habría puesto el 1..2 de esa pestaña del 01-09 al 02-10, todo un mes corrido.
+    Si hay letras y ningún mes cuadra con ellas, no se pone fecha a nada."""
+    nums = {}
+    for c in cols:
+        v = ws.cell(fila, c).value
+        if isinstance(v, (int, float)) and not isinstance(v, bool) and float(v).is_integer() and 1 <= int(v) <= 31:
+            nums[c] = int(v)
+    if len(nums) < 7:
+        return {}
+    orden = sorted(nums)
+    semana = _semana_encima(ws, fila, orden)
+    # Una hoja semanal llega hasta hoy (o poco después): el ÚLTIMO día se coloca
+    # en el mes más cercano a `ref` y se cuenta hacia atrás (si el número SUBE al
+    # ir hacia atrás, era del mes anterior). DGA2: «semanal 2» = 7..18, 29, 30,
+    # 1..5 es del 07-09 al 05-10, no octubre y noviembre.
+    candidatas = []
+    for delta in ((-2, -1, 0, 1, 2) if semana else (-1, 0, 1)):
+        m = ref.month + delta
+        y = ref.year + (m - 1) // 12
+        m = (m - 1) % 12 + 1
+        try:
+            cand = dt.date(y, m, nums[orden[-1]])
+        except ValueError:
+            continue
+        out = _con_meses(nums, orden, cand)
+        if not out or (max(out.values()) - min(out.values())).days > 75:
+            continue
+        if semana and sum(1 for c, wd in semana.items() if c in out and out[c].weekday() != wd) > 1:
+            continue                                         # una errata en las letras se perdona; dos, no
+        candidatas.append((abs((cand - ref).days), out))
+    if not candidatas:
+        return {}
+    return min(candidatas, key=lambda x: x[0])[1]
+
+
 def _cabecera(ws, ws_f, ref: dt.date):
-    """(fila_cab, col_nombre, col_orden, {columna: fecha}) de esta hoja, o ValueError."""
+    """(fila_cab, col_nombre, col_orden, {columna: fecha}, fechas_seguras) de esta
+    hoja, o ValueError. `fechas_seguras` es False solo cuando la cabecera trae el
+    número del día sin mes y no hay letras de la semana que lo confirmen."""
     fila_cab = col_nombre = col_orden = None
     for fila in ws.iter_rows(min_row=1, max_row=min(ws.max_row, 80)):
         for c in fila[:10]:
@@ -202,46 +240,23 @@ def _cabecera(ws, ws_f, ref: dt.date):
     cols = list(range(col_nombre + 1, ws.max_column + 1))
     fechas_col = {c: _fecha(ws.cell(fila_cab, c).value) for c in cols}
     fechas_col = {c: f for c, f in fechas_col.items() if f}
+    seguras = True
     if len(fechas_col) < 7:
         fechas_col = _fechas_por_formula(ws_f, fila_cab, cols)
     if len(fechas_col) < 7:
         fechas_col = _fechas_por_numero(ws, fila_cab, cols, ref)
+        seguras = bool(_semana_encima(ws, fila_cab, sorted(fechas_col)))
     if len(fechas_col) < 7:
         raise ValueError("La fila de «Nombre» no tiene fechas en las columnas de los días. "
                          "¿Es la hoja MENSUAL del cuadrante?")
-    return fila_cab, col_nombre, col_orden, fechas_col
+    return fila_cab, col_nombre, col_orden, fechas_col, seguras
 
 
-def leer_mensual(contenido: bytes, hoja: str = "", ref: Optional[dt.date] = None) -> Dict[str, Any]:
-    """Los bytes del .xlsx -> {fechas, filas, maximas, codigos, avisos, leyenda}.
-
-    Lanza ValueError con un mensaje para la pantalla si no es la hoja esperada.
-    Se prueban todas las pestañas (la pedida, MENSUAL, y las demás por orden) y
-    se usa la primera que tiene una cabecera con días; `ref` (hoy por defecto)
-    sirve para poner mes y año cuando la cabecera solo trae el número del día.
-    """
-    import openpyxl
-    ref = ref or dt.date.today()
-    try:
-        wb_v = openpyxl.load_workbook(io.BytesIO(contenido), data_only=True)
-        wb_f = openpyxl.load_workbook(io.BytesIO(contenido), data_only=False)
-    except Exception as e:                                        # noqa: BLE001
-        raise ValueError("No se puede abrir el Excel: %s" % str(e)[:120])
-    preferidas = ([hoja] if hoja in wb_v.sheetnames else []) + (["MENSUAL"] if "MENSUAL" in wb_v.sheetnames else [])
-    validas, ultimo_error = [], None
-    for nombre_hoja in preferidas + [n for n in wb_v.sheetnames if n not in preferidas]:
-        ws_i, ws_fi = wb_v[nombre_hoja], wb_f[nombre_hoja]
-        try:
-            validas.append((nombre_hoja, ws_i, ws_fi) + _cabecera(ws_i, ws_fi, ref))
-        except ValueError as e:
-            ultimo_error = ultimo_error or e
-            continue
-        if nombre_hoja in preferidas:
-            break                                              # la pedida / MENSUAL manda
-    if not validas:
-        raise ultimo_error or ValueError("No encuentro la hoja del cuadrante.")
-    # Entre varias semanales, la que llega más tarde (la última, hasta hoy).
-    nombre_hoja, ws, ws_f, fila_cab, col_nombre, col_orden, fechas_col = max(validas, key=lambda v: max(v[6].values()))
+def _leer_ws(nombre_hoja, ws, ws_f, fila_cab, col_nombre, col_orden, fechas_col, seguras) -> Dict[str, Any]:
+    """Una pestaña ya orientada -> {hoja, fechas, filas, maximas, codigos, avisos,
+    leyenda, columnas, fila_maximas, fechas_seguras}. `columnas` ({fecha: columna})
+    y la `fila` de cada persona dicen dónde está cada celda en la hoja: la
+    sincronización con Google Sheets escribe ahí lo que cambia en la app."""
     orden_cols = sorted(fechas_col, key=lambda c: fechas_col[c])
     fechas = [fechas_col[c] for c in orden_cols]
     repetidas = [f for f, n in Counter(fechas).items() if n > 1]
@@ -266,6 +281,7 @@ def leer_mensual(contenido: bytes, hoja: str = "", ref: Optional[dt.date] = None
     # ── Las personas y la fila de máximas ──
     filas: List[Dict[str, Any]] = []
     maximas: Dict[str, int] = {}
+    fila_maximas = None
     codigos: Counter = Counter()
     en_personas = True
     for r in range(fila_cab + 1, ws.max_row + 1):
@@ -275,7 +291,8 @@ def leer_mensual(contenido: bytes, hoja: str = "", ref: Optional[dt.date] = None
             continue
         if any(clave.startswith(p) for p in _PARADA):
             en_personas = False
-            if clave.startswith("MAXIMA"):
+            if clave.startswith("MAXIMA") and fila_maximas is None:
+                fila_maximas = r
                 for c in orden_cols:
                     v = ws.cell(r, c).value
                     if isinstance(v, (int, float)) and not isinstance(v, bool) and 0 <= v <= 999:
@@ -338,7 +355,115 @@ def leer_mensual(contenido: bytes, hoja: str = "", ref: Optional[dt.date] = None
             f["nota_import"] = "Oficina (S): no entra en rutas"
     return {"hoja": nombre_hoja, "fechas": [d.isoformat() for d in fechas], "filas": filas,
             "maximas": maximas, "codigos": dict(codigos.most_common()), "avisos": avisos,
-            "leyenda": leyenda}
+            "leyenda": leyenda, "columnas": {fechas_col[c].isoformat(): c for c in orden_cols},
+            "fila_maximas": fila_maximas, "fechas_seguras": seguras}
+
+
+def leer_mensual(contenido: bytes, hoja: str = "", ref: Optional[dt.date] = None) -> Dict[str, Any]:
+    """Los bytes del .xlsx -> {fechas, filas, maximas, codigos, avisos, leyenda}.
+
+    Lanza ValueError con un mensaje para la pantalla si no es la hoja esperada.
+    Se prueban todas las pestañas (la pedida, MENSUAL, y las demás por orden) y
+    se usa la primera que tiene una cabecera con días; `ref` (hoy por defecto)
+    sirve para poner mes y año cuando la cabecera solo trae el número del día.
+    """
+    import openpyxl
+    ref = ref or dt.date.today()
+    try:
+        wb_v = openpyxl.load_workbook(io.BytesIO(contenido), data_only=True)
+        wb_f = openpyxl.load_workbook(io.BytesIO(contenido), data_only=False)
+    except Exception as e:                                        # noqa: BLE001
+        raise ValueError("No se puede abrir el Excel: %s" % str(e)[:120])
+    preferidas = ([hoja] if hoja in wb_v.sheetnames else []) + (["MENSUAL"] if "MENSUAL" in wb_v.sheetnames else [])
+    validas, ultimo_error = [], None
+    for nombre_hoja in preferidas + [n for n in wb_v.sheetnames if n not in preferidas]:
+        ws_i, ws_fi = wb_v[nombre_hoja], wb_f[nombre_hoja]
+        try:
+            validas.append((nombre_hoja, ws_i, ws_fi) + _cabecera(ws_i, ws_fi, ref))
+        except ValueError as e:
+            ultimo_error = ultimo_error or e
+            continue
+        if nombre_hoja in preferidas:
+            break                                              # la pedida / MENSUAL manda
+    if not validas:
+        raise ultimo_error or ValueError("No encuentro la hoja del cuadrante.")
+    # Entre varias semanales, la que llega más tarde (la última, hasta hoy).
+    return _leer_ws(*max(validas, key=lambda v: max(v[6].values())))
+
+
+# ── LA HOJA DE GOOGLE SHEETS ─────────────────────────────────────────────────
+# La manda el script que se pega en la propia hoja (ver server.py, «GOOGLE
+# SHEETS»): por pestaña, los VALORES (getValues, con las fechas ya como
+# «@D:AAAA-MM-DD» para que no las corra la zona horaria) y los FONDOS
+# (getBackgrounds, «#ff66cc»; el blanco llega vacío). Se monta cada pestaña como
+# una hoja de Excel en memoria y se lee con el MISMO lector que el fichero: el
+# rosa, la leyenda, las máximas y el «N/T antes de empezar» salen igual.
+
+def _valor_sheets(v):
+    if isinstance(v, str):
+        if v.startswith("@D:"):
+            try:
+                return dt.datetime.combine(dt.date.fromisoformat(v[3:13]), dt.time())
+            except ValueError:
+                return None
+        v = v.strip()
+        return v[:200] or None
+    if isinstance(v, bool):
+        return None
+    if isinstance(v, (int, float)):
+        return v
+    return None
+
+
+def _fondo_sheets(v) -> str:
+    t = str(v or "").strip().lstrip("#").upper()
+    if len(t) == 8:                                  # #RRGGBBAA no lo da Sheets, pero por si acaso
+        t = t[:6]
+    if len(t) != 6 or not re.fullmatch(r"[0-9A-F]{6}", t) or t == "FFFFFF":
+        return ""
+    return t
+
+
+def leer_pestanas(pestanas: List[Dict[str, Any]], ref: Optional[dt.date] = None) -> Dict[str, Any]:
+    """[{nombre, valores, fondos}] -> {"pestanas": [lo de `_leer_ws` por cada
+    pestaña que es un cuadrante], "saltadas": [{nombre, motivo}]}.
+
+    Una pestaña sin cabecera de días (la DIARIO de un solo día, «deber horas»)
+    no es un error: se salta y se dice por qué."""
+    import openpyxl
+    from openpyxl.styles import PatternFill
+    ref = ref or dt.date.today()
+    leidas, saltadas = [], []
+    for p in pestanas[:40]:
+        nombre = str((p or {}).get("nombre") or "")[:100]
+        valores = (p or {}).get("valores") or []
+        fondos = (p or {}).get("fondos") or []
+        if not isinstance(valores, list) or not valores:
+            saltadas.append({"nombre": nombre, "motivo": "vacía"})
+            continue
+        wb = openpyxl.Workbook()
+        ws = wb.active
+        for i, fila in enumerate(valores[:400]):
+            if not isinstance(fila, list):
+                continue
+            fila_f = fondos[i] if i < len(fondos) and isinstance(fondos[i], list) else []
+            for j, v in enumerate(fila[:120]):
+                val = _valor_sheets(v)
+                color = _fondo_sheets(fila_f[j]) if j < len(fila_f) else ""
+                if val is None and not color:
+                    continue
+                celda = ws.cell(i + 1, j + 1)
+                if val is not None:
+                    celda.value = val
+                if color:
+                    celda.fill = PatternFill("solid", fgColor="FF" + color)
+        try:
+            leida = _leer_ws(nombre, ws, ws, *_cabecera(ws, ws, ref))
+        except ValueError as e:
+            saltadas.append({"nombre": nombre, "motivo": str(e)})
+            continue
+        leidas.append(leida)
+    return {"pestanas": leidas, "saltadas": saltadas}
 
 
 # ── «DEBER HORAS» ────────────────────────────────────────────────────────────

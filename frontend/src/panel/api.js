@@ -386,6 +386,12 @@ export const cuadranteChatConfirmar = (id, quitar) =>
   api.post(`/cuadrante/chat/${id}/confirmar`, { quitar }, { timeout: 240000 })
 export const cuadranteChatCancelar = (id) => api.post(`/cuadrante/chat/${id}/cancelar`, {})
 export const cuadranteEstudio = (center) => api.get('/cuadrante/estudio', { params: { center } })
+// El cuadrante sincronizado con su Google Sheets (18-10-2026).
+export const getSyncHoja = (center) => api.get('/cuadrante/sync', { params: { center } })
+export const conectarSyncHoja = (center) => api.post('/cuadrante/sync/conectar', { center })
+export const modoSyncHoja = (center, modo) => api.post('/cuadrante/sync/modo', { center, modo })
+export const aceptarSyncHoja = (center) => api.post('/cuadrante/sync/aceptar', { center })
+export const desconectarSyncHoja = (center) => api.post('/cuadrante/sync/desconectar', { center })
 export const cuadranteExportar = (center, desde, hasta) =>
   api.get('/cuadrante/exportar', { params: { center, desde, hasta }, responseType: 'blob', timeout: 120000 })
 export function cuadranteImportar(file, center, confirmar, crearFichas, emparejar, forzarCentro) {
