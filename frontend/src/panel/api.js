@@ -413,6 +413,16 @@ export const contarPeticionesPendientes = (center) =>
 // Rechazar exige motivo: lo lee el conductor tal cual.
 export const resolveShiftRequest = (id, action, motivo) =>
   api.post(`/shift-requests/${id}/resolve`, { action, motivo })
+// Refuerzos (18-10-2026): la oficina pide gente para un día; se apunta quien libra y quiere.
+export const getRefuerzos = (center) => api.get('/refuerzos', { params: centerParam(center) })
+export const crearRefuerzo = (body) => api.post('/refuerzos', body)
+export const cambiarRefuerzo = (id, body) => api.patch(`/refuerzos/${id}`, body)
+export const anularRefuerzo = (id) => api.post(`/refuerzos/${id}/anular`)
+export const getFaltasRefuerzo = (center) => api.get('/refuerzos/faltas', { params: { center } })
+// Suspensiones (18-10-2026): días en SUSP en el cuadrante, con candado, de un día a otro.
+export const getSuspensiones = (center) => api.get('/suspensiones', { params: centerParam(center) })
+export const crearSuspension = (body) => api.post('/suspensiones', body)
+export const levantarSuspension = (id) => api.post(`/suspensiones/${id}/levantar`)
 /* Importar el cuadrante mensual. El MES lo pone quien importa, no el fichero:
    el Excel de Amazon arrastra en la cabecera el texto del mes anterior cuando
    se reutiliza la plantilla. Sin `confirmar` sólo devuelve el resumen. */

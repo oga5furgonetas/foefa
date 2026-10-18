@@ -863,6 +863,7 @@ export const DICT = {
   'dr.sh.works': { es: 'Trabajas', en: 'Working', fr: 'Tu travailles', de: 'Arbeit', it: 'Lavori', pt: 'Trabalhas' },
   'dr.sh.extra': { es: 'Extra', en: 'Extra', fr: 'Extra', de: 'Extra', it: 'Extra', pt: 'Extra' },
   'dr.sh.off': { es: 'Libre', en: 'Off', fr: 'Repos', de: 'Frei', it: 'Libero', pt: 'Folga' },
+  'dr.sh.susp': { es: 'Suspendido', en: 'Suspended', fr: 'Suspendu', de: 'Suspendiert', it: 'Sospeso', pt: 'Suspenso' },
   'dr.sh.none': { es: 'Sin asignar', en: 'Not assigned', fr: 'Non assigné', de: 'Nicht zugewiesen', it: 'Non assegnato', pt: 'Sem atribuição' },
   'dr.sh.approved': { es: 'Aprobado', en: 'Approved', fr: 'Approuvé', de: 'Genehmigt', it: 'Approvato', pt: 'Aprovado' },
   'dr.sh.pending': { es: 'Pendiente', en: 'Pending', fr: 'En attente', de: 'Ausstehend', it: 'In attesa', pt: 'Pendente' },

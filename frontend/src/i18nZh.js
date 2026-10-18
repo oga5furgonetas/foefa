@@ -748,6 +748,7 @@ export const ZH = {
   'dr.sh.works': "上班",
   'dr.sh.extra': "加班",
   'dr.sh.off': "休息",
+  'dr.sh.susp': "停职",
   'dr.sh.none': "未分配",
   'dr.sh.approved': "已批准",
   'dr.sh.pending': "待批准",

@@ -10014,6 +10014,9 @@ async def get_vehicles_portal(user: dict = Depends(require_any_auth)):
 
     # ¿Hay cuadrante de hoy para su centro? Y si lo hay, ¿está él?
     hoy = _dia_negocio()
+    # Suspendido hoy: no audita aunque alguien le haya asignado furgoneta por error.
+    if await _suspendidos(list(mis_ids), hoy, hoy):
+        return _portal_payload([], permitido=False, motivo="suspendido")
     asigs = await db.daily_assignments.find(
         {"date": hoy, **({"center": {"$regex": re.escape(center[:4]), "$options": "i"}} if center else {})},
         {"_id": 0, "slots": 1}).to_list(50)
@@ -30904,6 +30907,11 @@ async def save_shifts_bulk(data: dict = Body(...), user: dict = Depends(require_
             async for r in cur:
                 protegidos[f"{r['driver_id']}|{r['date']}"] = r
 
+    # Los días de una suspensión no se cambian desde aquí, tenga el permiso que tenga quien guarda: la rejilla se
+    # manda entera y una pantalla abierta de antes de suspender pisaría la suspensión sin que nadie lo viera.
+    _fs = sorted({str(it.get("date") or "")[:10] for it in items if it.get("date")})
+    suspendidos = await _suspendidos([it.get("driver_id") for it in items], _fs[0], _fs[-1]) if _fs else {}
+
     saved, bloqueados = 0, []
     for it in items:
         did = it.get("driver_id")
@@ -30931,6 +30939,11 @@ async def save_shifts_bulk(data: dict = Body(...), user: dict = Depends(require_
         # convierta en dia de trabajo (o al reves con un extra concedido). Que
         # la celda ponga 'N/T' o 'N/T APROB' es cosmetico; que esa persona
         # aparezca puesta a ruta el dia que le diste libre, no.
+        susp = suspendidos.get(f"{did}|{date}")
+        if susp is not None and cod != _SUSP_COD:
+            bloqueados.append({"driver_name": susp.get("driver_name") or it.get("driver_name") or "",
+                               "date": date, "type": "suspendido"})
+            continue
         prot = protegidos.get(f"{did}|{date}")
         if prot is not None:
             aprobado = prot.get("type")
@@ -31018,7 +31031,11 @@ async def get_my_shifts(desde: Optional[str] = None, hasta: Optional[str] = None
     # buscarlas entre las suyas.
     sin_ver = [r for r in reqs
                if r.get("status") in ("aprobado", "rechazado") and not r.get("visto_at")]
-    return {"shifts": shifts, "requests": reqs, "sin_ver": sin_ver}
+    s = await db.suspensiones.find_one({"driver_id": did, "estado": "activa", "hasta": {"$gte": _dia_negocio()}},
+                                       {"_id": 0, "desde": 1, "hasta": 1}, sort=[("desde", 1)])
+    # Solo las fechas, escritas a mano: el motivo es de la oficina y no puede salir aquí aunque cambie la consulta.
+    susp = {"desde": s["desde"], "hasta": s["hasta"]} if s else None
+    return {"shifts": shifts, "requests": reqs, "sin_ver": sin_ver, "suspension": susp}
 
 
 # ─── BLOQUEAR LA PETICIÓN DE DÍAS ────────────────────────────────────────────
@@ -31251,6 +31268,16 @@ async def create_shift_request(data: dict = Body(...), user: dict = Depends(requ
             status_code=409,
             detail=f"Esos dias estan bloqueados ({dias}): {b.get('motivo') or 'sin motivo'}")
 
+    # Suspendido esos días: ni libre ni extra. Al aprobarlo se pisaría la suspensión en el cuadrante.
+    if typ == "extra":
+        for d in limpias:
+            impide = (await _extra_impedimentos(drv.get("center") or "", d, [did])).get(did)
+            if impide:
+                raise HTTPException(status_code=409, detail=f"El {d[8:10]}/{d[5:7]} no puedes: {impide.lower()}")
+    _susp = await _suspendidos([did], min(limpias), max(limpias))
+    if any(f"{did}|{d}" in _susp for d in limpias):
+        raise HTTPException(status_code=409, detail="Esos días estás suspendido: si tienes dudas, habla con la oficina")
+
     # Un día ya pedido y sin resolver no se pide dos veces: si no, la oficina
     # ve la misma petición repetida y no sabe cuál contestar.
     ya = await db.shift_requests.distinct(
@@ -31399,6 +31426,13 @@ async def resolve_shift_request(req_id: str, data: dict = Body(...),
         raise HTTPException(status_code=400,
                             detail="Para rechazar hay que escribir el motivo: lo va a leer el conductor")
     new_status = "aprobado" if action == "aprobar" else "rechazado"
+    if new_status == "aprobado" and req.get("type") == "extra":
+        impide = (await _extra_impedimentos(req.get("center") or "", req["date"], [req["driver_id"]])).get(req["driver_id"])
+        if impide:
+            raise HTTPException(status_code=409, detail=f"No se puede aprobar: {impide.lower()}")
+    # Aprobar un día en el que está suspendido pisaría la suspensión en el cuadrante: primero se levanta.
+    if new_status == "aprobado" and await _suspendidos([req["driver_id"]], req["date"], req["date"]):
+        raise HTTPException(status_code=409, detail="Ese día está suspendido: levanta la suspensión antes de aprobarlo")
     await db.shift_requests.update_one(
         {"id": req_id},
         # `resolved_at` faltaba: se guardaba QUIÉN contestó pero no CUÁNDO, así
@@ -31428,6 +31462,9 @@ async def resolve_shift_request(req_id: str, data: dict = Body(...),
         await _turno_aprobado(req)
     elif req.get("status") == "aprobado":
         await _turno_desaprobado(req)
+    # De un refuerzo: al cubrirse se cierra (y se da las gracias a quien esperaba); si se desaprueba, se reabre.
+    if req.get("refuerzo_id"):
+        await _refuerzo_recalcular(req["refuerzo_id"])
     return {"success": True, "status": new_status}
 
 
@@ -31490,6 +31527,8 @@ async def cancelar_mis_peticiones(data: dict = Body(...), user: dict = Depends(r
                 "/panel/turnos")
         except Exception as e:                                   # noqa: BLE001
             logger.debug("Push cancelación de días: %s", e)
+    for rid in {r.get("refuerzo_id") for r in hechas if r.get("refuerzo_id")}:
+        await _refuerzo_recalcular(rid)                     # quedó una plaza libre
     return {"canceladas": [r["date"] for r in hechas], "no": no}
 
 
@@ -31508,6 +31547,8 @@ async def cambiar_mi_peticion(data: dict = Body(...), user: dict = Depends(requi
     viejas = await db.shift_requests.find(pendientes, {"_id": 0}).to_list(62) if grupo else []
     if not viejas:
         raise HTTPException(409, "Esa petición ya no está esperando respuesta: no se puede cambiar")
+    if any(v.get("refuerzo_id") for v in viejas):
+        raise HTTPException(409, "Es de un refuerzo: bórrate y vuelve a apuntarte desde «Días extra»")
     nuevas_f = []
     for d in _lista_cuerpo((data or {}).get("dates"), 62):
         s = str(d)[:10]
@@ -31633,6 +31674,618 @@ async def _turno_desaprobado(req: dict):
     # libre normal que el cuadrante puede volver a cuadrar.
     await db.shifts.update_one(filtro, {"$set": {"cod": "N/T", "type": "libre"},
                                         "$unset": {"aprobado_req": "", "fijada": "", "extra": ""}})
+
+
+# ─── UN DÍA DE MÁS SOLO SI SE PUEDE (18-10-2026) ─────────────────────────────
+# Dani: «que tenga en cuenta su cuadrante, que no puede trabajar 7 días seguidos… no que a uno le deje trabajar y
+# legalmente no pueda». Las MISMAS reglas que ya aplica el motor del cuadrante (cuadrante_motor.py):
+#   · como mucho 6 días seguidos trabajando (o menos si su nota lo dice: `max_seguidos`);
+#   · la semana de lunes a domingo, 5 días y como mucho un 6.º extra; ninguno de más si su nota fija otros días por
+#     semana (`dias_semana`) o dice «sin extra»;
+#   · nunca un día de la semana que su nota diga que no trabaja (`dias_no`), ni quien está inactivo en el cuadrante.
+# Cuenta como trabajo todo lo que el motor cuenta (1, T, X, EXTRA, reserva, acompañante, oficina). Se mira al avisar
+# de un refuerzo, al apuntarse, al pedir un día extra y —otra vez, porque el cuadrante pudo cambiar— al aprobarlo.
+_LEY_MAX_SEGUIDOS = 6
+
+
+async def _extra_impedimentos(center: str, fecha: str, ids) -> dict:
+    """{driver_id: por qué NO puede trabajar ese día de más}. Solo salen los que no pueden."""
+    ids = [i for i in set(ids or []) if i]
+    if not ids:
+        return {}
+    d = date_cls.fromisoformat(fecha)
+    lunes = d - timedelta(days=d.weekday())
+    ini = min(d - timedelta(days=_LEY_MAX_SEGUIDOS + 1), lunes)
+    fin = max(d + timedelta(days=_LEY_MAX_SEGUIDOS + 1), lunes + timedelta(days=6))
+    trabaja = set()
+    async for s in db.shifts.find({"driver_id": {"$in": ids}, "date": {"$gte": ini.isoformat(), "$lte": fin.isoformat()}},
+                                  {"_id": 0, "driver_id": 1, "date": 1, "cod": 1, "type": 1}):
+        if s.get("date") != fecha and _cua_cod_turno(s) in _cm.TRABAJO:
+            trabaja.add((s["driver_id"], s["date"]))
+    reglas = {}
+    try:
+        for p in await _cua_personas(_cua_centro(center), fecha, fecha):
+            reglas[p["id"]] = p
+    except Exception as e:                                       # noqa: BLE001
+        # Sin las notas se aplica igual la ley (6 seguidos, 5+1 por semana): nunca se abre por no poder leerlas.
+        logger.warning("Reglas del cuadrante para %s: %s", center, e)
+    out = {}
+    for did in ids:
+        p = reglas.get(did) or {}
+        r = p.get("reglas") or {}
+        if p.get("tipo") == "inactivo" or (p.get("inactivo_desde") and p["inactivo_desde"] <= fecha):
+            out[did] = "No está en activo en el cuadrante"
+            continue
+        if d.weekday() in (r.get("dias_no") or []):
+            out[did] = "Su nota del cuadrante dice que ese día de la semana no trabaja"
+            continue
+        antes, x = 0, d - timedelta(days=1)
+        while (did, x.isoformat()) in trabaja:
+            antes, x = antes + 1, x - timedelta(days=1)
+        despues, x = 0, d + timedelta(days=1)
+        while (did, x.isoformat()) in trabaja:
+            despues, x = despues + 1, x + timedelta(days=1)
+        tope_seg = min(_LEY_MAX_SEGUIDOS, int(r.get("max_seguidos") or _LEY_MAX_SEGUIDOS))
+        if antes + 1 + despues > tope_seg:
+            out[did] = f"Serían {antes + 1 + despues} días seguidos trabajando (máximo {tope_seg})"
+            continue
+        semana = sum(1 for i in range(7) if (did, (lunes + timedelta(days=i)).isoformat()) in trabaja)
+        base = int(r.get("dias_semana") or 5)
+        tope_sem = base if (r.get("dias_semana") or r.get("sin_extra")) else base + 1
+        if semana + 1 > tope_sem:
+            out[did] = f"Serían {semana + 1} días esa semana (máximo {tope_sem})"
+    return out
+
+
+@api_router.get("/refuerzos/faltas")
+async def refuerzos_faltas(center: str = "", dias: int = 14, admin: dict = Depends(require_admin)):
+    """Los próximos días que no llegan a la máxima (una baja, una suspensión…): cuántos faltan, si ya se ha pedido
+    refuerzo y cuántos podrían apuntarse (libran ese día y la ley y su cuadrante se lo permiten). No pide nada: lo
+    lanza la oficina con un clic."""
+    center = (center or "").strip()
+    if not center or center.lower() in ("todos", "all"):
+        raise HTTPException(400, "Elige un centro: las máximas son por nave")
+    if not _user_can_see_center(admin, center):
+        raise HTTPException(403, "Ese centro no es tuyo")
+    hoy = _dia_negocio()
+    dias = max(1, min(int(dias or 14), REFUERZO_MAX_DIAS))
+    fin = (date_cls.fromisoformat(hoy) + timedelta(days=dias - 1)).isoformat()
+    pat = {"$regex": re.escape(center[:4]), "$options": "i"}
+    maximas = {}
+    async for d in db.route_demand.find({"center": pat, "date": {"$gte": hoy, "$lte": fin}}, {"_id": 0}):
+        if d.get("maximo") is not None:
+            maximas[d["date"]] = int(d["maximo"])
+    en_ruta = {}
+    async for s in db.shifts.find({"center": pat, "date": {"$gte": hoy, "$lte": fin}, **_FILTRO_RUTA}, {"_id": 0, "date": 1}):
+        en_ruta[s["date"]] = en_ruta.get(s["date"], 0) + 1
+    refs = {r["date"]: r async for r in db.refuerzos.find(
+        {"center": pat, "date": {"$gte": hoy, "$lte": fin}, "estado": {"$in": ["abierto", "cubierto"]}}, {"_id": 0})}
+    out = []
+    for f in sorted(maximas):
+        falta = maximas[f] - en_ruta.get(f, 0)
+        if falta <= 0:
+            continue
+        r = refs.get(f)
+        item = {"date": f, "dia": _refuerzo_dia(f), "maximo": maximas[f], "en_ruta": en_ruta.get(f, 0), "falta": falta,
+                "pueden": len(await _refuerzo_libres(center, f)), "refuerzo": None}
+        if r:
+            item["refuerzo"] = {"id": r["id"], "plazas": r["plazas"], "estado": r["estado"],
+                                "aprobados": await db.shift_requests.count_documents({"refuerzo_id": r["id"], "status": "aprobado"})}
+        out.append(item)
+    return {"faltas": out, "con_maximas": bool(maximas), "dias": dias}
+
+
+
+# ─── REFUERZOS: LA OFICINA PIDE GENTE PARA UN DÍA (18-10-2026) ───────────────
+# Dani: «para mañana nos hacen falta dos… a lo mejor tienen día libre; si quieren, que se postulen. Para no
+# forzar a nadie, que estén felices… sin falsos positivos; cómo nos llegaría y cómo lo aprobaríamos».
+#
+# Es el camino de las peticiones de días al revés. La oficina publica (centro, día, cuántos, nota) y lo ve
+# —y recibe el aviso— SOLO quien ese día libra según el cuadrante: códigos de libre normal (N/T, L). Nunca
+# quien trabaja, está de vacaciones, compensa, tiene un día concedido, no está disponible, suspendido o de
+# baja; tampoco quien no sale en el cuadrante de ese día: no se sabe si trabaja, y avisarle sería adivinar.
+#
+# Apuntarse crea una petición «extra» normal con `refuerzo_id`: llega y se aprueba donde ya se aprueban los
+# días (Turnos), con el mismo permiso, y al aprobarla entra en el cuadrante como EXTRA con candado
+# (_turno_aprobado). Al cubrirse las plazas se cierra solo y a quien seguía esperando se le dan las gracias;
+# si alguien se borra o se le desaprueba, se vuelve a abrir. Nada se aprueba solo.
+REFUERZO_MAX_PLAZAS = 20
+REFUERZO_MAX_DIAS = 30
+_REFUERZO_GRACIAS = "Ya se han cubierto las plazas. ¡Gracias por apuntarte!"
+_REFUERZO_ANULADO = "La oficina ya no necesita gente ese día. ¡Gracias por apuntarte!"
+_DIAS_SEMANA = ("lunes", "martes", "miércoles", "jueves", "viernes", "sábado", "domingo")
+
+
+def _refuerzo_dia(fecha: str) -> str:
+    """«domingo 19/10»: lo que se lee en un aviso del móvil."""
+    try:
+        d = datetime.strptime(str(fecha)[:10], "%Y-%m-%d")
+    except ValueError:
+        return str(fecha)
+    return f"{_DIAS_SEMANA[d.weekday()]} {d:%d/%m}"
+
+
+def _refuerzo_codigos_libres() -> set:
+    """Los códigos de un día libre normal: los que el cuadrante pinta como «libre» (N/T, L)."""
+    return {k for k, v in CODIGOS_CUADRANTE_INFO.items() if v[0] == "libre" and v[2] == "libre"}
+
+
+async def _refuerzo_libres(center: str, fecha: str, legal: bool = True) -> dict:
+    """{driver_id: nombre} de quien ese día libra según el cuadrante, sigue en activo y —con `legal`— puede
+    trabajarlo de más sin pasarse de lo que permiten la ley y su nota del cuadrante (_extra_impedimentos)."""
+    libres = _refuerzo_codigos_libres()
+    pat = re.escape((center or "").strip()[:4])
+    if not pat:
+        return {}
+    turnos = await db.shifts.find(
+        {"date": fecha, "type": "libre", "center": {"$regex": pat, "$options": "i"}},
+        {"_id": 0, "driver_id": 1, "cod": 1, "driver_name": 1}).to_list(3000)
+    # Sin código es un turno de antes de que los hubiera: «libre» a secas, que es lo que quería decir.
+    ids = {t["driver_id"]: t.get("driver_name") or "" for t in turnos
+           if t.get("driver_id") and (t.get("cod") in libres or not t.get("cod"))}
+    if not ids:
+        return {}
+    activos = {d["id"]: d.get("name") or "" async for d in db.drivers.find(
+        {"id": {"$in": list(ids)}, "active": {"$ne": False}, "status": {"$nin": ["baja", "fusionada", "inactive"]}},
+        {"_id": 0, "id": 1, "name": 1})}
+    libres = {i: activos[i] or ids[i] for i in ids if i in activos}
+    if legal and libres:
+        no = await _extra_impedimentos(center, fecha, list(libres))
+        libres = {i: n for i, n in libres.items() if i not in no}
+    return libres
+
+
+async def _refuerzo_recalcular(rid: str) -> None:
+    """Cierra el refuerzo al cubrirse (y da las gracias a quien esperaba) o lo reabre si se queda corto."""
+    r = await db.refuerzos.find_one({"id": rid}, {"_id": 0})
+    if not r or r.get("estado") == "anulado":
+        return
+    ahora = datetime.now(timezone.utc).isoformat()
+    aprobados = await db.shift_requests.count_documents({"refuerzo_id": rid, "status": "aprobado"})
+    if aprobados >= int(r.get("plazas") or 0):
+        if r.get("estado") != "cubierto":
+            await db.refuerzos.update_one({"id": rid}, {"$set": {"estado": "cubierto", "cubierto_en": ahora}})
+        esperando = await db.shift_requests.find({"refuerzo_id": rid, "status": "pendiente"}, {"_id": 0}).to_list(200)
+        for q in esperando:
+            res = await db.shift_requests.update_one(
+                {"id": q["id"], "status": "pendiente"},
+                {"$set": {"status": "rechazado", "resolved_by": "Automático", "resolved_at": ahora,
+                          "motivo_respuesta": _REFUERZO_GRACIAS, "visto_at": None}})
+            if res.modified_count:
+                try:
+                    await send_web_push_to_users([q["driver_id"]], f"Refuerzo del {_refuerzo_dia(q['date'])}: cubierto",
+                                                 _REFUERZO_GRACIAS, "/conductor")
+                except Exception as e:                           # noqa: BLE001
+                    logger.debug("Push refuerzo cubierto: %s", e)
+    elif r.get("estado") == "cubierto" and str(r.get("date")) >= _dia_negocio():
+        await db.refuerzos.update_one({"id": rid}, {"$set": {"estado": "abierto"}, "$unset": {"cubierto_en": ""}})
+
+
+def _refuerzo_semana(fecha: str) -> tuple:
+    """(lunes, domingo) de la semana de esa fecha."""
+    d = datetime.strptime(fecha, "%Y-%m-%d")
+    lunes = d - timedelta(days=d.weekday())
+    return lunes.strftime("%Y-%m-%d"), (lunes + timedelta(days=6)).strftime("%Y-%m-%d")
+
+
+@api_router.post("/refuerzos")
+async def crear_refuerzo(data: dict = Body(...), admin: dict = Depends(require_admin)):
+    """La oficina pide gente para un día. body: {center, date, plazas, nota?}
+
+    Se avisa en el acto a quien ese día libra según el cuadrante. Si no libra nadie (o el cuadrante de ese día
+    no está cargado) no se crea: publicar algo que no va a ver nadie haría creer que se ha avisado."""
+    if not _puede(admin, "aprobar-dias"):
+        raise HTTPException(403, "No tienes permiso para pedir refuerzos")
+    center = _texto_cuerpo(data.get("center"), 40)
+    fecha = _texto_cuerpo(data.get("date"), 10)
+    nota = _texto_cuerpo(data.get("nota"), 200)
+    if not center or center.lower() in ("todos", "all"):
+        raise HTTPException(400, "Elige un centro: el refuerzo es para una nave")
+    if not _user_can_see_center(admin, center):
+        raise HTTPException(403, "Ese centro no es tuyo")
+    if not re.fullmatch(r"\d{4}-\d{2}-\d{2}", fecha):
+        raise HTTPException(400, "La fecha va en formato AAAA-MM-DD")
+    hoy = _dia_negocio()
+    tope = (datetime.strptime(hoy, "%Y-%m-%d") + timedelta(days=REFUERZO_MAX_DIAS)).strftime("%Y-%m-%d")
+    if fecha < hoy:
+        raise HTTPException(400, "Ese día ya ha pasado")
+    if fecha > tope:
+        raise HTTPException(400, f"Como mucho con {REFUERZO_MAX_DIAS} días de antelación")
+    try:
+        plazas = int(data.get("plazas"))
+    except (TypeError, ValueError):
+        raise HTTPException(400, "Di cuántas personas hacen falta")
+    if not 1 <= plazas <= REFUERZO_MAX_PLAZAS:
+        raise HTTPException(400, f"Entre 1 y {REFUERZO_MAX_PLAZAS} personas")
+    # Uno por nave y día: dos llamadas para el mismo día confundirían a quien se apunta.
+    pat = re.escape(center.strip()[:4])
+    if await db.refuerzos.find_one({"date": fecha, "center": {"$regex": pat, "$options": "i"},
+                                    "estado": {"$in": ["abierto", "cubierto"]}}, {"_id": 0, "id": 1}):
+        raise HTTPException(409, "Ya hay un refuerzo para ese día: cambia sus plazas en vez de abrir otro")
+    libres = await _refuerzo_libres(center, fecha)
+    if not libres:
+        raise HTTPException(409, "Según el cuadrante nadie libra ese día (o el cuadrante de ese día no está "
+                                 "cargado): no habría a quién avisar")
+    doc = {"id": str(uuid.uuid4()), "center": center, "date": fecha, "plazas": plazas, "nota": nota,
+           "estado": "abierto", "avisados": len(libres), "creado_por": admin.get("name") or "",
+           "creado_en": datetime.now(timezone.utc).isoformat()}
+    await db.refuerzos.insert_one(dict(doc))
+    try:
+        await send_web_push_to_users(
+            list(libres), f"📣 {_refuerzo_dia(fecha)}: hacen falta {plazas} en {center}",
+            "Libras ese día. Si te apetece trabajar, apúntate en «Días extra». Es voluntario.", "/conductor?vista=extra")
+    except Exception as e:                                       # noqa: BLE001
+        logger.debug("Push refuerzo: %s", e)
+    return {"refuerzo": doc, "avisados": len(libres)}
+
+
+@api_router.get("/refuerzos")
+async def listar_refuerzos(center: str = "", admin: dict = Depends(require_admin)):
+    """Los refuerzos de los últimos 7 días en adelante, con quién se ha apuntado y lo que hace falta para decidir:
+    cuántos días trabaja esa semana y si el cuadrante sigue diciendo que libra (pudo cambiar después)."""
+    hoy = _dia_negocio()
+    desde = (datetime.strptime(hoy, "%Y-%m-%d") - timedelta(days=7)).strftime("%Y-%m-%d")
+    refs = await db.refuerzos.find({"date": {"$gte": desde}, **_filtro_centro(admin, center or None)},
+                                   {"_id": 0}).sort("date", 1).to_list(200)
+    refs = [r for r in refs if _user_can_see_center(admin, r.get("center") or "")]
+    for r in refs:
+        apuntados = await db.shift_requests.find({"refuerzo_id": r["id"], "status": {"$ne": "cancelado"}},
+                                                 {"_id": 0}).sort("created_at", 1).to_list(200)
+        libres = await _refuerzo_libres(r["center"], r["date"], legal=False) if r["date"] >= hoy else {}
+        pend = [a["driver_id"] for a in apuntados if a.get("status") == "pendiente"]
+        impide = await _extra_impedimentos(r["center"], r["date"], pend) if pend and r["date"] >= hoy else {}
+        lunes, domingo = _refuerzo_semana(r["date"])
+        trabajados = {}
+        ids = [a["driver_id"] for a in apuntados]
+        if ids:
+            async for t in db.shifts.find({"driver_id": {"$in": ids}, "date": {"$gte": lunes, "$lte": domingo},
+                                           "type": {"$in": ["trabaja", "extra"]}}, {"_id": 0, "driver_id": 1, "date": 1}):
+                if t["date"] != r["date"]:
+                    trabajados[t["driver_id"]] = trabajados.get(t["driver_id"], 0) + 1
+        r["apuntados"] = [{
+            "id": a["id"], "driver_id": a["driver_id"], "driver_name": a.get("driver_name") or "",
+            "status": a.get("status"), "nota": a.get("note") or "", "apuntado_en": a.get("created_at"),
+            "motivo_respuesta": a.get("motivo_respuesta"),
+            "dias_semana": trabajados.get(a["driver_id"], 0),
+            # Se apuntó cuando libraba; si el cuadrante ha cambiado desde entonces, que se vea antes de aprobar.
+            "ya_no_libra": a.get("status") == "pendiente" and r["date"] >= hoy and a["driver_id"] not in libres,
+            # La ley o su nota del cuadrante no le dejan trabajar ese día de más: no se puede aprobar.
+            "no_puede": impide.get(a["driver_id"]) if a.get("status") == "pendiente" else None,
+        } for a in apuntados]
+        r["aprobados"] = sum(1 for a in apuntados if a.get("status") == "aprobado")
+        r["pendientes"] = sum(1 for a in apuntados if a.get("status") == "pendiente")
+        r["pasado"] = r["date"] < hoy
+        r["libran_ahora"] = len(await _refuerzo_libres(r["center"], r["date"])) if r["date"] >= hoy else 0
+    return {"refuerzos": refs, "puede_aprobar": _puede(admin, "aprobar-dias")}
+
+
+@api_router.patch("/refuerzos/{rid}")
+async def cambiar_refuerzo(rid: str, data: dict = Body(...), admin: dict = Depends(require_admin)):
+    """Cambiar las plazas o la nota. Las plazas nunca por debajo de los ya aprobados."""
+    if not _puede(admin, "aprobar-dias"):
+        raise HTTPException(403, "No tienes permiso para cambiar refuerzos")
+    r = await db.refuerzos.find_one({"id": rid}, {"_id": 0})
+    if not r or not _user_can_see_center(admin, r.get("center") or ""):
+        raise HTTPException(404, "Ese refuerzo no existe")
+    if r.get("estado") == "anulado" or str(r.get("date")) < _dia_negocio():
+        raise HTTPException(409, "Ese refuerzo ya no se puede cambiar")
+    cambio = {}
+    if data.get("plazas") is not None:
+        try:
+            plazas = int(data.get("plazas"))
+        except (TypeError, ValueError):
+            raise HTTPException(400, "Plazas no válidas")
+        aprobados = await db.shift_requests.count_documents({"refuerzo_id": rid, "status": "aprobado"})
+        if not max(1, aprobados) <= plazas <= REFUERZO_MAX_PLAZAS:
+            raise HTTPException(400, f"Entre {max(1, aprobados)} (los ya aprobados) y {REFUERZO_MAX_PLAZAS}")
+        cambio["plazas"] = plazas
+    if data.get("nota") is not None:
+        cambio["nota"] = _texto_cuerpo(data.get("nota"), 200)
+    if cambio:
+        await db.refuerzos.update_one({"id": rid}, {"$set": cambio})
+        await _refuerzo_recalcular(rid)
+    return {"ok": True, "refuerzo": await db.refuerzos.find_one({"id": rid}, {"_id": 0})}
+
+
+@api_router.post("/refuerzos/{rid}/anular")
+async def anular_refuerzo(rid: str, admin: dict = Depends(require_admin)):
+    """Ya no hace falta gente. Solo si no hay nadie aprobado: un día extra ya concedido no se quita de golpe a
+    nadie; se desaprueba uno a uno, con su motivo, desde la lista."""
+    if not _puede(admin, "aprobar-dias"):
+        raise HTTPException(403, "No tienes permiso para anular refuerzos")
+    r = await db.refuerzos.find_one({"id": rid}, {"_id": 0})
+    if not r or not _user_can_see_center(admin, r.get("center") or ""):
+        raise HTTPException(404, "Ese refuerzo no existe")
+    if r.get("estado") == "anulado":
+        return {"ok": True}
+    if await db.shift_requests.count_documents({"refuerzo_id": rid, "status": "aprobado"}):
+        raise HTTPException(409, "Hay gente aprobada: desaprueba primero a cada uno, con su motivo")
+    ahora = datetime.now(timezone.utc).isoformat()
+    await db.refuerzos.update_one({"id": rid}, {"$set": {"estado": "anulado", "anulado_en": ahora,
+                                                         "anulado_por": admin.get("name") or ""}})
+    for q in await db.shift_requests.find({"refuerzo_id": rid, "status": "pendiente"}, {"_id": 0}).to_list(200):
+        res = await db.shift_requests.update_one(
+            {"id": q["id"], "status": "pendiente"},
+            {"$set": {"status": "rechazado", "resolved_by": admin.get("name") or "", "resolved_at": ahora,
+                      "motivo_respuesta": _REFUERZO_ANULADO, "visto_at": None}})
+        if res.modified_count:
+            try:
+                await send_web_push_to_users([q["driver_id"]], f"Refuerzo del {_refuerzo_dia(q['date'])}: ya no hace falta",
+                                             _REFUERZO_ANULADO, "/conductor")
+            except Exception as e:                               # noqa: BLE001
+                logger.debug("Push refuerzo anulado: %s", e)
+    return {"ok": True}
+
+
+async def _refuerzo_conductor(user: dict) -> tuple:
+    """(id, nombre, centro) de quien está en el portal. Solo conductores."""
+    if user.get("role") != "driver":
+        raise HTTPException(403, "Solo para conductores")
+    drv = await db.drivers.find_one({"id": user.get("sub")}, {"_id": 0, "id": 1, "name": 1, "center": 1})
+    if not drv:
+        raise HTTPException(404, "Conductor no encontrado")
+    return drv["id"], drv.get("name") or "", (drv.get("center") or "").strip()
+
+
+@api_router.get("/refuerzos/mios")
+async def refuerzos_del_conductor(user: dict = Depends(require_any_auth)):
+    """Para el portal: los refuerzos de su nave en los que puede apuntarse (ese día libra) o ya se apuntó."""
+    did, _nombre, centro = await _refuerzo_conductor(user)
+    hoy = _dia_negocio()
+    pat = re.escape(centro[:4])
+    if not pat:
+        return {"refuerzos": [], "nuevos": 0}
+    refs = await db.refuerzos.find({"date": {"$gte": hoy}, "estado": {"$in": ["abierto", "cubierto"]},
+                                    "center": {"$regex": pat, "$options": "i"}}, {"_id": 0}).sort("date", 1).to_list(60)
+    mias = {}
+    if refs:
+        for q in await db.shift_requests.find({"driver_id": did, "refuerzo_id": {"$in": [r["id"] for r in refs]}},
+                                              {"_id": 0}).sort("created_at", 1).to_list(200):
+            mias[q["refuerzo_id"]] = q                          # la última que hizo manda
+    out, libres_por = [], {}
+    for r in refs:
+        q = mias.get(r["id"]) or {}
+        estado = q.get("status") if q.get("status") in ("pendiente", "aprobado") else None
+        if r["estado"] == "cubierto" and not estado:
+            continue                                            # ya no le sirve
+        clave = (r["center"], r["date"])
+        if clave not in libres_por:
+            libres_por[clave] = await _refuerzo_libres(r["center"], r["date"])
+        if not estado and did not in libres_por[clave]:
+            continue                                            # ese día no libra: no es para él
+        aprobados = await db.shift_requests.count_documents({"refuerzo_id": r["id"], "status": "aprobado"})
+        out.append({"id": r["id"], "date": r["date"], "dia": _refuerzo_dia(r["date"]), "center": r["center"],
+                    "plazas": r["plazas"], "quedan": max(0, int(r["plazas"]) - aprobados), "nota": r.get("nota") or "",
+                    "mi_estado": estado})
+    return {"refuerzos": out, "nuevos": sum(1 for x in out if not x["mi_estado"])}
+
+
+@api_router.post("/refuerzos/{rid}/apuntarme")
+async def apuntarme_refuerzo(rid: str, data: dict = Body(default={}), user: dict = Depends(require_any_auth)):
+    """El conductor se ofrece. Queda pendiente hasta que la oficina lo apruebe."""
+    did, nombre, centro = await _refuerzo_conductor(user)
+    r = await db.refuerzos.find_one({"id": rid}, {"_id": 0})
+    hoy = _dia_negocio()
+    if not r or r.get("estado") != "abierto" or str(r.get("date")) < hoy:
+        raise HTTPException(409, "Este refuerzo ya no está abierto")
+    if not centro or not re.search(re.escape(centro[:4]), r.get("center") or "", re.I):
+        raise HTTPException(403, "Este refuerzo es de otra nave")
+    if await db.shift_requests.find_one({"refuerzo_id": rid, "driver_id": did, "status": {"$in": ["pendiente", "aprobado"]}},
+                                        {"_id": 0, "id": 1}):
+        raise HTTPException(409, "Ya estás apuntado")
+    if did not in await _refuerzo_libres(r["center"], r["date"], legal=False):
+        raise HTTPException(409, "Según el cuadrante ese día no libras: si es un error, habla con la oficina")
+    impide = (await _extra_impedimentos(r["center"], r["date"], [did])).get(did)
+    if impide:
+        raise HTTPException(409, f"No puedes ese día: {impide.lower()}")
+    fila = {"id": str(uuid.uuid4()), "grupo": str(uuid.uuid4()), "center": r["center"], "driver_id": did,
+            "driver_name": nombre, "date": r["date"], "type": "extra", "status": "pendiente",
+            "motivo": "refuerzo", "motivo_label": "Se apunta al refuerzo", "note": _texto_cuerpo((data or {}).get("nota"), 200),
+            "refuerzo_id": rid, "created_at": datetime.now(timezone.utc).isoformat(),
+            "resolved_by": None, "resolved_at": None}
+    await db.shift_requests.insert_one(dict(fila))
+    try:
+        n = await db.shift_requests.count_documents({"refuerzo_id": rid, "status": {"$in": ["pendiente", "aprobado"]}})
+        await push_center_event(r["center"], f"🙋 {nombre or 'Un conductor'} se apunta al refuerzo del {_refuerzo_dia(r['date'])}",
+                                f"{n} apuntado{'s' if n > 1 else ''} para {r['plazas']} plaza{'s' if r['plazas'] > 1 else ''}. "
+                                "Apruébalo en Turnos → Refuerzos.", "/panel/turnos?vista=refuerzos")
+    except Exception as e:                                       # noqa: BLE001
+        logger.debug("Push apuntado a refuerzo: %s", e)
+    return {"ok": True, "peticion": fila}
+
+
+@api_router.post("/refuerzos/{rid}/desapuntarme")
+async def desapuntarme_refuerzo(rid: str, user: dict = Depends(require_any_auth)):
+    """Ya no puede. Si estaba aprobado (y no es para hoy), el cuadrante vuelve a como estaba."""
+    did, nombre, _centro = await _refuerzo_conductor(user)
+    q = await db.shift_requests.find_one({"refuerzo_id": rid, "driver_id": did, "status": {"$in": ["pendiente", "aprobado"]}},
+                                         {"_id": 0})
+    if not q:
+        raise HTTPException(409, "No estás apuntado a este refuerzo")
+    hoy = _dia_negocio()
+    estado, fecha = q["status"], str(q.get("date") or "")
+    if estado == "aprobado" and fecha <= hoy or fecha < hoy:
+        raise HTTPException(409, "Es para hoy: avisa a la oficina directamente")
+    res = await db.shift_requests.update_one(
+        {"id": q["id"], "status": estado},
+        {"$set": {"status": "cancelado", "cancelado_at": datetime.now(timezone.utc).isoformat(),
+                  "cancelado_por": "conductor", "estado_antes": estado}})
+    if not res.modified_count:
+        raise HTTPException(409, "Ya había cambiado: recarga")
+    if estado == "aprobado":
+        await _turno_desaprobado(q)
+    await _refuerzo_recalcular(rid)
+    try:
+        await push_center_event(q.get("center") or "", f"↩️ {nombre or 'Un conductor'} se borra del refuerzo del {_refuerzo_dia(fecha)}",
+                                "Estaba aprobado: vuelve a quedar una plaza libre" if estado == "aprobado" else "Aún no estaba aprobado",
+                                "/panel/turnos?vista=refuerzos")
+    except Exception as e:                                       # noqa: BLE001
+        logger.debug("Push desapuntado de refuerzo: %s", e)
+    return {"ok": True}
+
+
+
+# ─── SUSPENSIONES (18-10-2026) ───────────────────────────────────────────────
+# Dani: «meter algo como suspender a alguien: si trabaja 5 días la semana que viene, que le pueda suspender en su
+# cuadrante y en el nuestro para que no trabaje, y escoger de qué día a qué día».
+#
+# Una suspensión es un rango de días con su motivo (lo lee la oficina, no el conductor). Cada día del rango pasa en el
+# cuadrante a «SUSP» con candado —el cuadrante es uno: lo leen la rejilla de Turnos, el Cuadrante y «Mis turnos»— y
+# se guarda lo que había para devolverlo si se levanta. NO se tocan los días de vacaciones, baja, compensación o un día
+# libre ya concedido: una sanción no se cumple en vacaciones ni de baja; se dicen en el resumen.
+#
+# Mientras dura: no puede auditar (aunque alguien le asigne furgoneta), ningún refuerzo le avisa (SUSP no es «libre»),
+# los días extra que tenía aprobados o pedidos esos días se le contestan, y ni guardar la rejilla, ni el Cuadrante, ni
+# importar el Excel, ni el motor pueden ponerle a trabajar esos días: para eso se levanta la suspensión.
+#
+# Esto NO sustituye a la carta de sanción: lo que exija el convenio (hechos, fecha, firma) se hace aparte.
+SUSPENSION_MAX_DIAS = 60
+_SUSP_COD = "SUSP"
+# Lo que no se pisa: ausencias ya previstas o concedidas (vacaciones, compensa, día concedido) y la baja.
+_SUSP_RESPETA = {"V", "COMP", "N/T APROB", "APROBADO", "BAJA"}
+_SUSP_EXTRA_MOTIVO = "La oficina ha cambiado tu cuadrante para ese día"
+
+
+def _susp_dias(desde: str, hasta: str) -> list:
+    a, b = date_cls.fromisoformat(desde), date_cls.fromisoformat(hasta)
+    return [(a + timedelta(days=i)).isoformat() for i in range((b - a).days + 1)]
+
+
+async def _suspendidos(driver_ids, desde: str, hasta: str) -> dict:
+    """{"driver_id|fecha": suspensión} de las suspensiones activas que pisan ese rango."""
+    ids = [i for i in set(driver_ids or []) if i]
+    if not ids or not desde or not hasta:
+        return {}
+    out = {}
+    async for s in db.suspensiones.find({"estado": "activa", "driver_id": {"$in": ids},
+                                         "desde": {"$lte": hasta}, "hasta": {"$gte": desde}}, {"_id": 0}):
+        for f in _susp_dias(max(s["desde"], desde), min(s["hasta"], hasta)):
+            out[f"{s['driver_id']}|{f}"] = s
+    return out
+
+
+@api_router.post("/suspensiones")
+async def crear_suspension(data: dict = Body(...), admin: dict = Depends(require_admin)):
+    """Suspender a un conductor de un día a otro. body: {driver_id, desde, hasta, motivo}"""
+    if not _puede(admin, "aprobar-dias"):
+        raise HTTPException(403, "No tienes permiso para suspender")
+    did = _texto_cuerpo(data.get("driver_id"), 80)
+    desde, hasta = _texto_cuerpo(data.get("desde"), 10), _texto_cuerpo(data.get("hasta"), 10)
+    motivo = _texto_cuerpo(data.get("motivo"), 300)
+    drv = await db.drivers.find_one({"id": did}, {"_id": 0, "id": 1, "name": 1, "center": 1}) if did else None
+    if not drv:
+        raise HTTPException(404, "Ese conductor no existe")
+    centro = (drv.get("center") or "").strip()
+    if not _user_can_see_center(admin, centro):
+        raise HTTPException(403, "Ese conductor es de otro centro")
+    for f in (desde, hasta):
+        if not re.fullmatch(r"\d{4}-\d{2}-\d{2}", f or ""):
+            raise HTTPException(400, "Las fechas van en formato AAAA-MM-DD")
+    if hasta < desde:
+        raise HTTPException(400, "El último día es anterior al primero")
+    if desde < _dia_negocio():
+        raise HTTPException(400, "No se puede suspender hacia atrás: empieza hoy o más adelante")
+    dias = _susp_dias(desde, hasta)
+    if len(dias) > SUSPENSION_MAX_DIAS:
+        raise HTTPException(400, f"Como mucho {SUSPENSION_MAX_DIAS} días seguidos")
+    if len(motivo) < 4:
+        raise HTTPException(400, "Escribe el motivo (lo ve solo la oficina)")
+    if await db.suspensiones.find_one({"estado": "activa", "driver_id": did, "desde": {"$lte": hasta},
+                                       "hasta": {"$gte": desde}}, {"_id": 0, "id": 1}):
+        raise HTTPException(409, "Ya tiene una suspensión que pisa esas fechas: levántala o elige otras")
+
+    sid = str(uuid.uuid4())
+    ahora = datetime.now(timezone.utc).isoformat()
+    actuales = {s["date"]: s async for s in db.shifts.find({"driver_id": did, "date": {"$in": dias}}, {"_id": 0})}
+    trabajo, libres, respetados, puestos = [], [], [], []
+    for f in dias:
+        doc = actuales.get(f)
+        cod = _cua_cod_turno(doc) if doc else ""
+        if cod in _SUSP_RESPETA:
+            respetados.append({"date": f, "cod": cod, "etiqueta": (CODIGOS_CUADRANTE_INFO.get(cod) or (0, cod))[1]})
+            continue
+        (trabajo if (doc or {}).get("type") in ("trabaja", "extra") else libres).append(f)
+        antes = {k: doc[k] for k in _TURNO_ANTES_CAMPOS if k in doc} if doc else {"vacio": True}
+        await _upsert_turno({"driver_id": did, "date": f}, {
+            "$set": {"driver_id": did, "driver_name": drv.get("name") or "", "center": (doc or {}).get("center") or centro,
+                     "date": f, "type": "libre", "cod": _SUSP_COD, "fijada": True, "extra": False,
+                     "suspension_id": sid, "antes_susp": antes},
+            "$unset": {"hora": ""}})
+        puestos.append(f)
+    if not puestos:
+        raise HTTPException(409, "Todos esos días ya son vacaciones, baja o días concedidos: no hay nada que suspender")
+
+    # Los días extra que tenía esos días (aprobados o pedidos) se le contestan: no puede trabajarlos.
+    extras = await db.shift_requests.find({"driver_id": did, "date": {"$in": puestos}, "type": "extra",
+                                           "status": {"$in": ["pendiente", "aprobado"]}}, {"_id": 0}).to_list(100)
+    for q in extras:
+        await db.shift_requests.update_one(
+            {"id": q["id"]}, {"$set": {"status": "rechazado", "resolved_by": admin.get("name") or "", "resolved_at": ahora,
+                                       "motivo_respuesta": _SUSP_EXTRA_MOTIVO, "visto_at": None}})
+        if q.get("refuerzo_id"):
+            await _refuerzo_recalcular(q["refuerzo_id"])
+    doc = {"id": sid, "driver_id": did, "driver_name": drv.get("name") or "", "center": centro, "desde": desde,
+           "hasta": hasta, "motivo": motivo, "estado": "activa", "dias": puestos, "respetados": respetados,
+           "creado_por": admin.get("name") or "", "creado_en": ahora}
+    await db.suspensiones.insert_one(dict(doc))
+    logger.info("Suspensión %s: %s %s..%s (%d días)", sid, did, desde, hasta, len(puestos))
+    return {"suspension": doc, "dias_trabajo": trabajo, "dias_libres": libres, "respetados": respetados,
+            "extras_contestados": len(extras)}
+
+
+@api_router.get("/suspensiones")
+async def listar_suspensiones(center: str = "", admin: dict = Depends(require_admin)):
+    """Las que están en curso o por venir, y las que acabaron (o se levantaron) en los últimos 30 días."""
+    hoy = _dia_negocio()
+    hace = (date_cls.fromisoformat(hoy) - timedelta(days=30)).isoformat()
+    docs = await db.suspensiones.find({"hasta": {"$gte": hace}, **_filtro_centro(admin, center or None)},
+                                      {"_id": 0}).sort("desde", 1).to_list(300)
+    docs = [d for d in docs if _user_can_see_center(admin, d.get("center") or "")]
+    for d in docs:
+        d["en_curso"] = d["estado"] == "activa" and d["desde"] <= hoy <= d["hasta"]
+        d["por_venir"] = d["estado"] == "activa" and d["desde"] > hoy
+    return {"suspensiones": docs, "puede": _puede(admin, "aprobar-dias")}
+
+
+@api_router.post("/suspensiones/{sid}/levantar")
+async def levantar_suspension(sid: str, admin: dict = Depends(require_admin)):
+    """Se levanta desde HOY: los días que faltan vuelven a como estaban; los ya cumplidos se quedan como estaban
+    (son historia). Un día que alguien cambió a mano después no se toca: manda lo último que puso una persona."""
+    if not _puede(admin, "aprobar-dias"):
+        raise HTTPException(403, "No tienes permiso para levantar suspensiones")
+    s = await db.suspensiones.find_one({"id": sid}, {"_id": 0})
+    if not s or not _user_can_see_center(admin, s.get("center") or ""):
+        raise HTTPException(404, "Esa suspensión no existe")
+    if s.get("estado") != "activa":
+        raise HTTPException(409, "Ya estaba levantada")
+    hoy = _dia_negocio()
+    if s["hasta"] < hoy:
+        raise HTTPException(409, "Ya se cumplió entera: no hay nada que levantar")
+    devueltos = 0
+    for f in [f for f in _susp_dias(max(s["desde"], hoy), s["hasta"])]:
+        filtro = {"driver_id": s["driver_id"], "date": f, "suspension_id": sid}
+        doc = await db.shifts.find_one(filtro, {"_id": 0})
+        if not doc:
+            continue
+        antes = doc.get("antes_susp")
+        if isinstance(antes, dict) and antes.get("vacio"):
+            await db.shifts.delete_one(filtro)
+        else:
+            antes = antes if isinstance(antes, dict) else {"cod": "N/T", "type": "libre"}
+            quitar = {"suspension_id": "", "antes_susp": ""}
+            quitar.update({k: "" for k in ("extra", "fijada", "hora") if k not in antes})
+            await db.shifts.update_one(filtro, {"$set": {k: antes[k] for k in _TURNO_ANTES_CAMPOS if k in antes},
+                                                "$unset": quitar})
+        devueltos += 1
+    cambio = {"estado": "levantada", "levantada_por": admin.get("name") or "",
+              "levantada_en": datetime.now(timezone.utc).isoformat()}
+    if s["desde"] < hoy:
+        # Ya había empezado: se queda como cumplida hasta ayer.
+        cambio["hasta_original"] = s["hasta"]
+        cambio["hasta"] = (date_cls.fromisoformat(hoy) - timedelta(days=1)).isoformat()
+    await db.suspensiones.update_one({"id": sid}, {"$set": cambio})
+    return {"ok": True, "dias_devueltos": devueltos}
+
 
 
 # ─── IMPORTAR EL CUADRANTE PEGÁNDOLO DESDE SHEETS ────────────────────────────
@@ -32295,6 +32948,19 @@ async def _respeta_aprobados(items: list) -> tuple:
         return items, []
     fechas = sorted({it["date"] for it in items})
     conductores = sorted({it["driver_id"] for it in items})
+    # Una suspensión tampoco la pisa la hoja del mes: esos días se quedan en SUSP.
+    suspendidos = await _suspendidos(conductores, fechas[0], fechas[-1])
+    resp_susp = []
+    if suspendidos:
+        quedan = []
+        for it in items:
+            sp = suspendidos.get(f"{it['driver_id']}|{it['date']}")
+            if sp is not None and str(it.get("cod") or "").upper() != _SUSP_COD:
+                resp_susp.append({"driver_name": sp.get("driver_name") or it.get("driver_name") or "",
+                                  "date": it["date"], "type": "suspendido"})
+            else:
+                quedan.append(it)
+        items = quedan
     aprobados = {}
     cur = db.shift_requests.find(
         {"status": "aprobado", "driver_id": {"$in": conductores},
@@ -32303,9 +32969,9 @@ async def _respeta_aprobados(items: list) -> tuple:
     async for r in cur:
         aprobados[f"{r['driver_id']}|{r['date']}"] = r
     if not aprobados:
-        return items, []
+        return items, resp_susp
 
-    limpios, respetados = [], []
+    limpios, respetados = [], list(resp_susp)
     for it in items:
         prot = aprobados.get(f"{it['driver_id']}|{it['date']}")
         if prot is None:
@@ -46178,6 +46844,10 @@ async def cuadrante_celdas(data: dict = Body(...), user: dict = Depends(require_
         if doc and not _cua_es_centro(doc.get("center"), center):
             bloqueadas.append({**p, "motivo": "ese día está en el cuadrante de %s" % doc.get("center")})
             continue
+        # Un día de una suspensión no se cambia (ni se le quita el candado) celda a celda: se levanta la suspensión.
+        if doc and doc.get("suspension_id") and (p["desbloquear"] or (p["cod"] or "") != _SUSP_COD):
+            bloqueadas.append({**p, "motivo": "está suspendido ese día: levanta la suspensión en Días libres → Suspensiones"})
+            continue
         if p["desbloquear"]:
             if doc and doc.get("fijada"):
                 # El candado de un día CONCEDIDO lo quita quien puede aprobar
@@ -46734,6 +47404,8 @@ async def _cua_aplicar_acciones(center: str, acciones: list, user: dict, cambio:
 
     async def poner(did, fecha, cod, fijada):
         filtro = {"driver_id": did, "date": fecha}
+        if await _suspendidos([did], fecha, fecha):
+            return False                                    # suspendido ese día: se levanta la suspensión antes
         doc = await db.shifts.find_one(filtro, {"_id": 0})
         if doc and not _cua_es_centro(doc.get("center"), center):
             return False
@@ -46764,7 +47436,8 @@ async def _cua_aplicar_acciones(center: str, acciones: list, user: dict, cambio:
                 filtro = {"driver_id": did, "date": f}
                 doc = await db.shifts.find_one(filtro, {"_id": 0})
                 if doc and _cua_cod_turno(doc) in (_co.AUSENCIAS_TODAS - {"N/T APROB"}) \
-                        and _cua_es_centro(doc.get("center"), center) and not doc.get("aprobado_req"):
+                        and _cua_es_centro(doc.get("center"), center) and not doc.get("aprobado_req") \
+                        and not doc.get("suspension_id"):
                     cambio.anota("shifts", filtro, doc)
                     await db.shifts.delete_one(filtro)
                     n += 1

@@ -16,6 +16,9 @@ import {
 import { useT } from '../../i18n'
 import { lista } from '../../lib/lista'
 import { canSee } from '../auth'
+import Refuerzos from '../components/Refuerzos'
+import Suspensiones from '../components/Suspensiones'
+import { getRefuerzos } from '../api'
 import { isoLocal, hoyLocal, horaLocal, diaMesLocal } from '../../lib/fecha'
 
 /* Cuantos dias se pueden pintar de una vez. 92 es un trimestre: por encima
@@ -628,7 +631,9 @@ export default function Turnos() {
   const [verPegar, setVerPegar] = useState(false)
   const [bloqueos, setBloqueos] = useState([])
   const [verBloqueos, setVerBloqueos] = useState(false)
-  const [vistaDias, setVistaDias] = useState('peticiones')  // peticiones | calendario | bloqueos
+  // peticiones | refuerzos | calendario | bloqueos. El aviso de «se apunta al refuerzo» trae ?vista=refuerzos.
+  const [vistaDias, setVistaDias] = useState(() => (new URLSearchParams(window.location.search).get('vista') === 'refuerzos' ? 'refuerzos' : 'peticiones'))
+  const [refPend, setRefPend] = useState(0)                 // apuntados a refuerzos esperando respuesta
   const [nuevoBloqueo, setNuevoBloqueo] = useState({ desde: '', hasta: '', motivo: '', driver_id: '' })
 
   /* ── LA REJILLA ─────────────────────────────────────────────────────────
@@ -688,6 +693,14 @@ export default function Turnos() {
      empresa reparte esto de una manera. El servidor lo comprueba también: un
      botón escondido no protege nada. */
   const puedeAprobar = canSee('aprobar-dias')
+  // Cuántos se han apuntado a un refuerzo y esperan respuesta: el número de la pestaña, sin tener que abrirla.
+  useEffect(() => {
+    let vivo = true
+    getRefuerzos(center)
+      .then(({ data }) => { if (vivo) setRefPend((data?.refuerzos || []).reduce((n, r) => n + (r.pasado ? 0 : r.pendientes || 0), 0)) })
+      .catch(() => {})
+    return () => { vivo = false }
+  }, [center])
 
   /* Quincena o mes completo. El mes entero cabe: la columna del nombre se
      queda fija y los días se desplazan en horizontal. */
@@ -1111,10 +1124,15 @@ export default function Turnos() {
         // El servidor ha rechazado celdas de días aprobados. Se dice cuáles y
         // se recarga: dejar en pantalla lo que NO se ha guardado sería peor
         // que el propio intento, porque pareceria que quedo hecho.
-        const q = (r.data?.bloqueados || [])
-          .slice(0, 4).map((b) => `${b.driver_name} el ${fmtNum(b.date)}`).join(' · ')
+        const bl = r.data?.bloqueados || []
+        const q = bl.slice(0, 4).map((b) => `${b.driver_name} el ${fmtNum(b.date)}`).join(' · ')
+        // Dos motivos distintos: un día concedido (y sin permiso para quitarlo) o un día de una suspensión.
+        const susp = bl.filter((b) => b.type === 'suspendido').length
+        const porque = susp === bl.length ? 'son días de una suspensión: se cambian levantándola en «Suspensiones»'
+          : susp ? 'son días aprobados o de una suspensión'
+            : 'están aprobados y no tienes permiso para quitarlos'
         setErr(`${n} ${n === 1 ? 'día no se ha guardado' : 'días no se han guardado'}: `
-          + `están aprobados y no tienes permiso para quitarlos. ${q}`
+          + `${porque}. ${q}`
           + `${n > 4 ? ` y ${n - 4} más` : ''}`)
         await cargar()
       } else {
@@ -1444,6 +1462,8 @@ export default function Turnos() {
             cuadrante escondido, sin forma de llegar. */}
         <div className="flex gap-1 rounded-lg bg-dark-900 p-1 ring-1 ring-dark-700">
           {[['peticiones', `Peticiones${grupos.length ? ` · ${grupos.length}` : ''}`],
+            ['refuerzos', `Refuerzos${refPend ? ` · ${refPend}` : ''}`],
+            ['suspensiones', 'Suspensiones'],
             ['calendario', 'Calendario'],
             ['bloqueos', 'Días cerrados']].map(([k, lbl]) => (
             <button key={k} onClick={() => setVistaDias(k)}
@@ -2366,6 +2386,8 @@ export default function Turnos() {
       )}
 
       {/* Solicitudes de los conductores */}
+      {vistaDias === 'refuerzos' && <Refuerzos center={center} puedeAprobar={puedeAprobar} onCambio={setRefPend} />}
+      {vistaDias === 'suspensiones' && <Suspensiones center={center} drivers={drivers} puede={puedeAprobar} />}
       {vistaDias === 'peticiones' && (
       <div className="card p-4">
         <h2 className="mb-3 flex items-center gap-2 text-sm font-bold text-dark-100">

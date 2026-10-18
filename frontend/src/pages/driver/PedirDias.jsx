@@ -60,7 +60,7 @@ const iso = (d) =>
    ejemplo— no se enseña nada. Un interruptor que no puede funcionar es peor
    que ninguno. Y la respuesta sigue esperando dentro de la app de todas
    formas: el push es un extra, nunca el unico camino. */
-function Campana() {
+export function Campana() {
   const [estado, setEstado] = useState('cargando')  // cargando|no|si|bloqueado|nada
   const [ocupado, setOcupado] = useState(false)
   const [aviso, setAviso] = useState('')

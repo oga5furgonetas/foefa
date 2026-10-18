@@ -951,6 +951,202 @@ test.describe('Portal del conductor · tus peticiones', () => {
   })
 })
 
+/* REFUERZOS (18-10-2026): la oficina pide gente para un día y se apunta quien libra. Lo que se prueba es la pantalla:
+   publicar (y el aviso de a cuántos se ha avisado), aprobar a quien se apunta, y en el portal la casilla «Días extra»
+   con «Me apunto». Quién lo ve y qué pasa en el cuadrante lo prueba el servidor (backend/tests/test_refuerzos.py). */
+test.describe('Refuerzos', () => {
+  const json = (body) => (route) => route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(body) })
+  const iso = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+  const dia = (n) => { const d = new Date(); d.setHours(12); d.setDate(d.getDate() + n); return iso(d) }
+
+  test('la oficina publica, ve a quién avisó y aprueba a quien se apunta', async ({ page }) => {
+    const fallos = vigilar(page)
+    await entrarComoAdmin(page)
+    await simularApi(page, 'vacio')
+    const creados = [], resueltos = []
+    let refuerzos = []
+    await page.route(/\/api\/refuerzos(\?|$)/, async (route) => {
+      if (route.request().method() === 'POST') {
+        creados.push(route.request().postDataJSON())
+        refuerzos = [{ id: 'r1', center: 'NORTE', date: dia(1), plazas: 2, nota: 'Salida 9:00', estado: 'abierto', avisados: 3,
+          libran_ahora: 3, aprobados: 0, pendientes: 1, pasado: false,
+          apuntados: [{ id: 'q1', driver_id: 'd1', driver_name: 'ANA PÉREZ', status: 'pendiente', nota: 'Puedo desde las 8',
+            dias_semana: 4, ya_no_libra: false }] }]
+        return json({ refuerzo: refuerzos[0], avisados: 3 })(route)
+      }
+      return json({ refuerzos, puede_aprobar: true })(route)
+    })
+    await page.route(/\/api\/shift-requests\/q1\/resolve/, (route) => {
+      resueltos.push(route.request().postDataJSON())
+      refuerzos = [{ ...refuerzos[0], aprobados: 1, pendientes: 0, apuntados: [{ ...refuerzos[0].apuntados[0], status: 'aprobado' }] }]
+      return json({ success: true, status: 'aprobado' })(route)
+    })
+    await page.goto('/panel/turnos?vista=refuerzos', { waitUntil: 'domcontentloaded' })
+    await expect(page.getByRole('heading', { name: 'Pedir refuerzos' })).toBeVisible({ timeout: 15000 })
+    await expect(page.getByText('No hay refuerzos pedidos para los próximos días.')).toBeVisible()
+    await page.getByLabel('Nota (opcional)').fill('Salida 9:00')
+    await page.getByRole('button', { name: 'Publicar y avisar' }).click()
+    await expect(page.getByText('Publicado. Se ha avisado a 3 personas que libran ese día.')).toBeVisible()
+    expect(creados).toEqual([{ center: 'NORTE', date: dia(1), plazas: 2, nota: 'Salida 9:00' }])
+    const r = page.getByTestId('refuerzo')
+    await expect(r.getByText('ANA PÉREZ')).toBeVisible()
+    await expect(r.getByText('«Puedo desde las 8»')).toBeVisible()
+    await expect(r.getByText('4 días más esa semana')).toBeVisible()
+    await expect(page.getByRole('button', { name: /^Refuerzos · 1$/ })).toBeVisible()
+    await r.getByRole('button', { name: 'Aprobar' }).click()
+    await expect(page.getByText('ANA PÉREZ: aprobado. Ya está en el cuadrante como EXTRA.')).toBeVisible()
+    expect(resueltos).toEqual([{ action: 'aprobar' }])
+    await expect(r.getByText('1/2 aprobados')).toBeVisible()
+    expect(fallos, fallos.join(' | ')).toHaveLength(0)
+  })
+
+  test('los días que no llegan a la máxima se piden con un clic, y quien no puede no se aprueba', async ({ page }) => {
+    const fallos = vigilar(page)
+    await entrarComoAdmin(page)
+    await simularApi(page, 'vacio')
+    const creados = []
+    await page.route(/\/api\/refuerzos\/faltas/, json({ dias: 14, con_maximas: true, faltas: [
+      { date: dia(1), dia: 'lunes 19/10', maximo: 50, en_ruta: 46, falta: 4, pueden: 9, refuerzo: null },
+      { date: dia(2), dia: 'martes 20/10', maximo: 50, en_ruta: 48, falta: 2, pueden: 5, refuerzo: null },
+      { date: dia(3), dia: 'miércoles 21/10', maximo: 50, en_ruta: 49, falta: 1, pueden: 0, refuerzo: null }] }))
+    await page.route(/\/api\/refuerzos(\?|$)/, async (route) => {
+      if (route.request().method() === 'POST') {
+        creados.push(route.request().postDataJSON())
+        return json({ refuerzo: {}, avisados: 3 })(route)
+      }
+      return json({ puede_aprobar: true, refuerzos: [{ id: 'r1', center: 'NORTE', date: dia(1), plazas: 4, nota: '', estado: 'abierto',
+        avisados: 9, libran_ahora: 9, aprobados: 0, pendientes: 1, pasado: false, apuntados: [
+          { id: 'q1', driver_id: 'd1', driver_name: 'LUIS RUIZ', status: 'pendiente', nota: '', dias_semana: 6, ya_no_libra: false,
+            no_puede: 'Serían 7 días seguidos trabajando (máximo 6)' }] }] })(route)
+    })
+    await page.goto('/panel/turnos?vista=refuerzos', { waitUntil: 'domcontentloaded' })
+    const faltas = page.getByTestId('faltas')
+    await expect(faltas.getByText('faltan 4')).toBeVisible({ timeout: 15000 })
+    await expect(faltas.getByText('nadie puede (trabajan o lo impide la ley)')).toBeVisible()
+    await faltas.getByRole('button', { name: 'Pedir todos (2)' }).click()
+    await expect(page.getByText('Pedidos 2 días. Se ha avisado a 6 personas que libran y pueden.')).toBeVisible()
+    expect(creados).toEqual([{ center: 'NORTE', date: dia(1), plazas: 4, nota: '' }, { center: 'NORTE', date: dia(2), plazas: 2, nota: '' }])
+    const r = page.getByTestId('refuerzo')
+    await expect(r.getByText('No se puede aprobar: serían 7 días seguidos trabajando (máximo 6)')).toBeVisible()
+    await expect(r.getByRole('button', { name: 'Aprobar' })).toBeDisabled()
+    expect(fallos, fallos.join(' | ')).toHaveLength(0)
+  })
+
+  test('en el portal sale «Días extra» a quien libra y se apunta', async ({ page }) => {
+    const fallos = vigilar(page)
+    const exp = Math.floor(Date.now() / 1000) + 3600
+    const b64 = (o) => Buffer.from(JSON.stringify(o)).toString('base64').replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '')
+    const token = `${b64({ alg: 'HS256', typ: 'JWT' })}.${b64({ sub: 'd1', role: 'driver', name: 'ANA PÉREZ', exp })}.firma`
+    await page.addInitScript((tk) => {
+      localStorage.setItem('flota_driver_token', tk)
+      localStorage.setItem('flota_driver', JSON.stringify({ id: 'd1', name: 'ANA PÉREZ', center: 'NORTE' }))
+    }, token)
+    await simularApi(page, 'vacio')
+    let mio = null
+    const apuntes = []
+    await page.route(/\/api\/refuerzos\/mios/, (route) => json({
+      refuerzos: [{ id: 'r1', date: dia(1), dia: 'lunes 19/10', center: 'NORTE', plazas: 2, quedan: 2, nota: 'Salida 9:00', mi_estado: mio }],
+      nuevos: mio ? 0 : 1 })(route))
+    await page.route(/\/api\/refuerzos\/r1\/apuntarme/, (route) => { apuntes.push(route.request().postDataJSON()); mio = 'pendiente'; return json({ ok: true })(route) })
+    await page.goto('/conductor', { waitUntil: 'domcontentloaded' })
+    const casilla = page.getByRole('button', { name: /Días extra/ })
+    await expect(casilla).toBeVisible({ timeout: 15000 })
+    await expect(casilla).toContainText('Hacen falta el lunes 19/10')
+    await casilla.click()
+    const tarjeta = page.getByRole('region', { name: 'Refuerzo del lunes 19/10' })
+    await expect(tarjeta.getByText('NORTE · quedan 2 plazas')).toBeVisible()
+    await tarjeta.getByLabel('Nota para la oficina').fill('Puedo desde las 8')
+    await tarjeta.getByRole('button', { name: 'Me apunto' }).click()
+    await expect(tarjeta.getByText('Apuntado. La oficina te confirmará.')).toBeVisible()
+    expect(apuntes).toEqual([{ nota: 'Puedo desde las 8' }])
+    expect(fallos, fallos.join(' | ')).toHaveLength(0)
+  })
+
+  test('sin refuerzos para sus días libres, la casilla no sale', async ({ page }) => {
+    const exp = Math.floor(Date.now() / 1000) + 3600
+    const b64 = (o) => Buffer.from(JSON.stringify(o)).toString('base64').replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '')
+    const token = `${b64({ alg: 'HS256', typ: 'JWT' })}.${b64({ sub: 'd1', role: 'driver', name: 'ANA PÉREZ', exp })}.firma`
+    await page.addInitScript((tk) => {
+      localStorage.setItem('flota_driver_token', tk)
+      localStorage.setItem('flota_driver', JSON.stringify({ id: 'd1', name: 'ANA PÉREZ', center: 'NORTE' }))
+    }, token)
+    await simularApi(page, 'vacio')
+    await page.route(/\/api\/refuerzos\/mios/, (route) => json({ refuerzos: [], nuevos: 0 })(route))
+    await page.goto('/conductor', { waitUntil: 'domcontentloaded' })
+    await expect(page.getByText('Pedir días libres').first()).toBeVisible({ timeout: 15000 })
+    await expect(page.getByRole('button', { name: /Días extra/ })).toHaveCount(0)
+  })
+})
+
+/* SUSPENSIONES (18-10-2026): la oficina suspende a alguien de un día a otro; él lo ve en el portal y en sus turnos, y no
+   puede auditar. Qué días se tocan y qué no, y que nada lo pise, lo prueba el servidor (test_suspensiones.py). */
+test.describe('Suspensiones', () => {
+  const json = (body) => (route) => route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(body) })
+  const iso = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+  const dia = (n) => { const d = new Date(); d.setHours(12); d.setDate(d.getDate() + n); return iso(d) }
+
+  test('la oficina suspende de un día a otro, ve el resumen y la levanta', async ({ page }) => {
+    const fallos = vigilar(page)
+    await entrarComoAdmin(page)
+    await simularApi(page, 'vacio')
+    await page.route(/\/api\/drivers(\?|$)/, json([{ id: 'd1', name: 'PEPE GÓMEZ', center: 'NORTE', active: true }]))
+    const creadas = [], levantadas = []
+    let lista = []
+    await page.route(/\/api\/suspensiones(\?|$)/, async (route) => {
+      if (route.request().method() === 'POST') {
+        creadas.push(route.request().postDataJSON())
+        lista = [{ id: 's1', driver_id: 'd1', driver_name: 'PEPE GÓMEZ', center: 'NORTE', desde: dia(1), hasta: dia(5),
+          motivo: 'Sanción por carta del 15-10', estado: 'activa', en_curso: false, por_venir: true, creado_por: 'Admin Test',
+          respetados: [{ date: dia(5), cod: 'V', etiqueta: 'Vacaciones' }] }]
+        return json({ suspension: lista[0], dias_trabajo: [dia(1), dia(2), dia(3)], dias_libres: [dia(4)],
+          respetados: lista[0].respetados, extras_contestados: 0 })(route)
+      }
+      return json({ suspensiones: lista, puede: true })(route)
+    })
+    await page.route(/\/api\/suspensiones\/s1\/levantar/, (route) => { levantadas.push('s1'); lista = []; return json({ ok: true, dias_devueltos: 4 })(route) })
+    await page.goto('/panel/turnos', { waitUntil: 'domcontentloaded' })
+    await page.getByRole('button', { name: 'Suspensiones', exact: true }).click({ timeout: 15000 })
+    await expect(page.getByText('No hay nadie suspendido ahora ni más adelante.')).toBeVisible()
+    await expect(page.getByRole('button', { name: 'Suspender esos días' })).toBeDisabled()      // falta todo
+    await page.getByLabel('Conductor').selectOption('d1')
+    await page.getByLabel('Hasta (incluido)').fill(dia(5))
+    await page.getByLabel('Motivo (lo ve solo la oficina)').fill('Sanción por carta del 15-10')
+    await page.getByRole('button', { name: 'Suspender esos días' }).click()
+    expect(creadas).toEqual([{ driver_id: 'd1', desde: dia(1), hasta: dia(5), motivo: 'Sanción por carta del 15-10' }])
+    await expect(page.getByText(/PEPE GÓMEZ suspendido: 3 días de trabajo pasan a SUSP \(y 1 día que ya libraba\)/)).toBeVisible()
+    await expect(page.getByText(/No se han tocado: .*\(Vacaciones\)/)).toBeVisible()
+    const fila = page.getByTestId('suspension')
+    await expect(fila.getByText('Empieza más adelante')).toBeVisible()
+    await fila.getByRole('button', { name: 'Levantar' }).click()
+    await fila.getByRole('button', { name: 'Sí, levantar' }).click()
+    await expect(page.getByText('Suspensión levantada: 4 días vuelven a como estaban en el cuadrante.')).toBeVisible()
+    expect(levantadas).toEqual(['s1'])
+    expect(fallos, fallos.join(' | ')).toHaveLength(0)
+  })
+
+  test('el conductor lo ve en su portal, no puede auditar y sus turnos dicen «Suspendido»', async ({ page }) => {
+    const fallos = vigilar(page)
+    const exp = Math.floor(Date.now() / 1000) + 3600
+    const b64 = (o) => Buffer.from(JSON.stringify(o)).toString('base64').replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '')
+    const token = `${b64({ alg: 'HS256', typ: 'JWT' })}.${b64({ sub: 'd1', role: 'driver', name: 'PEPE GÓMEZ', exp })}.firma`
+    await page.addInitScript((tk) => {
+      localStorage.setItem('flota_driver_token', tk)
+      localStorage.setItem('flota_driver', JSON.stringify({ id: 'd1', name: 'PEPE GÓMEZ', center: 'NORTE' }))
+    }, token)
+    await simularApi(page, 'vacio')
+    await page.route(/\/api\/shifts\/mine/, json({ shifts: [{ date: dia(0), type: 'libre', cod: 'SUSP' }, { date: dia(1), type: 'libre', cod: 'SUSP' }],
+      sin_ver: [], requests: [], suspension: { desde: dia(0), hasta: dia(1) } }))
+    await page.route(/\/api\/vehicles\/portal/, json({ vehicles: [], puede_auditar: false, motivo: 'suspendido' }))
+    await page.goto('/conductor', { waitUntil: 'domcontentloaded' })
+    await expect(page.getByRole('status').filter({ hasText: 'estás suspendido' })).toBeVisible({ timeout: 15000 })
+    await expect(page.getByText('Hoy no trabajas')).toBeVisible()
+    await expect(page.getByText('En el cuadrante de hoy no tienes furgoneta asignada', { exact: false })).toHaveCount(0)
+    await page.getByRole('button', { name: /Mis turnos/ }).click()
+    await expect(page.getByText('Suspendido').first()).toBeVisible()
+    expect(fallos, fallos.join(' | ')).toHaveLength(0)
+  })
+})
+
 /* LA TIENDA PÚBLICA (03-10-2026, el anuncio de FDs): la marca y no «Tienda» +
    la plataforma, la foto de cada prenda —antes era una lista de nombres—, el
    10 % de primera compra y el correo, que viaja al comprar. Una prenda sin

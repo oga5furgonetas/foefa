@@ -13,6 +13,7 @@ const TIPO = {
   trabaja: { k: 'dr.sh.works', cls: 'border-emerald-500/40 bg-emerald-500/12 text-emerald-300' },
   extra:   { k: 'dr.sh.extra', cls: 'border-amber-500/40 bg-amber-500/12 text-amber-300' },
   libre:   { k: 'dr.sh.off',   cls: 'border-dark-700 bg-dark-800/50 text-dark-500' },
+  susp:    { k: 'dr.sh.susp',  cls: 'border-red-500/40 bg-red-500/10 text-red-300' },
 }
 const ESTADO = {
   aprobado:  { k: 'dr.sh.approved', icono: Check, cls: 'text-emerald-400' },
@@ -43,7 +44,7 @@ export default function MisTurnos({ onBack }) {
     try {
       const r = await getMyShifts(dias[0], dias[DIAS - 1])
       const m = {}
-      for (const s of lista(r.data?.shifts)) m[s.date] = s.type
+      for (const s of lista(r.data?.shifts)) m[s.date] = s.cod === 'SUSP' ? 'susp' : s.type
       setTurnos(m)
       setPeticiones(lista(r.data?.requests))
     } catch {
@@ -134,7 +135,7 @@ export default function MisTurnos({ onBack }) {
                           {t('dr.sh.cancel')}
                         </button>
                       </div>
-                    ) : !pet && (
+                    ) : !pet && tipo !== 'susp' && (
                       <button onClick={() => { setPidiendo(f); setAviso('') }}
                         className="flex items-center gap-1 rounded-lg border border-dark-700 px-2 py-1 text-[11px] font-medium text-dark-400">
                         <Plus size={11} /> {t('dr.sh.ask')}

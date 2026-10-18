@@ -1491,3 +1491,34 @@ Instagram/Facebook y se dan de alta a las 13-22 h (sin paquetes). Hecho y desple
   no repite: `correos_enviados` por=`dani:que-te-freno`).
 - Pendiente: Google Play en producción (día 7 de 14 el 18-10) → cambiar el APK por el enlace de Play.
 
+
+## 18-10-2026 (tarde): refuerzos, suspensiones y la ley en el cuadrante
+
+Dani: «para mañana nos hacen falta dos… que se postulen si tienen día libre, sin forzar a nadie»; «suspender a alguien
+de un día a otro en su cuadrante y en el nuestro»; «si me cogen una baja y suspendo a 3, que se automatice y yo le dé
+a lanzar… teniendo en cuenta que no puede trabajar 7 días seguidos, que no deje trabajar a quien legalmente no puede».
+Todo en **Turnos (Días libres) → Refuerzos / Suspensiones**; en el portal, la casilla **«Días extra»**.
+
+- **Refuerzos** (`/api/refuerzos*`, colección `refuerzos`, tests `test_refuerzos.py`): la oficina publica día, nave,
+  plazas y nota. Lo ve y recibe aviso SOLO quien ese día libra según el cuadrante (N/T o L) **y puede** trabajarlo:
+  nunca quien trabaja, está de vacaciones, compensa, tiene un día concedido, no disponible, suspendido o de baja, ni
+  quien no sale en el cuadrante. Apuntarse crea una petición «extra» con `refuerzo_id`: se aprueba en Refuerzos o en
+  Peticiones y entra en el cuadrante como EXTRA con candado. Al cubrirse se cierra y a los demás se les dan las
+  gracias; si alguien se borra o se desaprueba, se reabre. Uno por nave y día; 1-20 plazas; hasta 30 días vista.
+- **La ley** (`_extra_impedimentos`): las mismas reglas del motor del cuadrante — como mucho 6 días seguidos (o lo
+  que diga su nota), semana de 5 días con un 6.º extra como mucho (ninguno si su nota fija sus días o «sin extra»), y
+  nunca un día que su nota diga que no trabaja. Se mira al avisar, al apuntarse, al pedir un día extra desde el portal
+  y otra vez al aprobar (el cuadrante pudo cambiar). Medido el 18-10 en OGA5: el lunes 19 libran 17, pueden 12; 5 no
+  (serían 7, 8 y hasta 10 días seguidos).
+- **Días que no llegan a la máxima** (`GET /api/refuerzos/faltas`): próximos 14 días, máxima vs. quien saca ruta en el
+  cuadrante (bajas, suspensiones y libres ya restados) y cuántos pueden; «Pedir N» o «Pedir todos» con un clic.
+  Nada se publica solo.
+- **Suspensiones** (`/api/suspensiones*`, colección `suspensiones`, tests `test_suspensiones.py`): conductor, desde,
+  hasta (máx. 60 días) y motivo (solo oficina). Cada día pasa a SUSP con candado guardando lo que había
+  (`antes_susp`); no se tocan vacaciones, compensa, días concedidos ni bajas. Mientras dura: no audita (aunque tenga
+  furgoneta asignada), no le llegan refuerzos, sus días extra de esas fechas se contestan, y ni la rejilla, ni el
+  Cuadrante, ni el Excel/pegado, ni el asistente, ni una petición aprobada pueden ponerle a trabajar esos días. Se
+  levanta desde hoy: lo que falta vuelve a como estaba, lo cumplido se queda. En el portal: aviso con las fechas (sin
+  el motivo) y «Suspendido» en Mis turnos. La carta de sanción del convenio va aparte.
+- Pendiente aparte: la prueba de pantalla «Cuadrante › un día concedido sale con candado» falla en el proyecto
+  «móvil» desde antes de estos cambios (no encuentra la celda en la rejilla estrecha).

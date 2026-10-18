@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
-import { ClipboardCheck, CalendarDays, CalendarClock, LogOut, Lock, Ban, ShoppingBag, RefreshCw, Route, Gift, ArrowLeft, Store } from 'lucide-react'
-import { getPortalVehicles, getMyShifts, getMiFicha, guardarMiTelefono, tiendaEscaparate, repMiRuta, mercEstado, DRIVER_TOKEN_KEY } from '../../services/api'
+import { ClipboardCheck, CalendarDays, CalendarClock, CalendarPlus, LogOut, Lock, Ban, ShoppingBag, RefreshCw, Route, Gift, ArrowLeft, Store } from 'lucide-react'
+import { getPortalVehicles, getMyShifts, getMiFicha, guardarMiTelefono, tiendaEscaparate, repMiRuta, mercEstado, getMisRefuerzos, DRIVER_TOKEN_KEY } from '../../services/api'
 import { lista } from '../../lib/lista'
 import { medirSeccion } from '../../lib/analitica'
 import { vigilarVersion } from '../../lib/versionApp'
@@ -10,11 +10,18 @@ import InspectionDone from './InspectionDone'
 import MisTurnos from './MisTurnos'
 import MiClave from './MiClave'
 import PedirDias from './PedirDias'
+import DiasExtra from './DiasExtra'
 import Tienda from './Tienda'
 import MiRuta from './MiRuta'
 import DriverReferralWallet from './DriverReferralWallet'
 import Mercadillo from '../mercadillo/Mercadillo'
 import { refCentActual } from '../../lib/precios'
+
+// «lunes 20/10»: las fechas de la suspensión, cortas y en hora local.
+const fechaCorta = (f) => {
+  const d = new Date(`${f}T12:00:00`)
+  return isNaN(d) ? f : d.toLocaleDateString('es-ES', { weekday: 'long', day: 'numeric', month: 'numeric' }).replace(',', '')
+}
 
 const DRIVER_KEY = 'flota_driver'
 
@@ -147,6 +154,10 @@ export default function DriverPortal() {
   const [tieneTurnos, setTieneTurnos] = useState(false)
   // El mercadillo: la casilla sale solo si está abierto (lo decide el servidor), con los mensajes sin leer.
   const [merc, setMerc] = useState(null)
+  // Días extra (18-10-2026): refuerzos que pide la oficina para días que libra. La casilla sale solo si hay alguno.
+  const [extra, setExtra] = useState(null)
+  // Suspensión en curso o por venir (solo las fechas: el motivo es de la oficina).
+  const [susp, setSusp] = useState(null)
   // null = apagada o todavía sin contestar. Con datos: {desde, n} para poder
   // poner el precio en la entrada del menú, que es lo que hace que se entre.
   const [tienda, setTienda] = useState(null)
@@ -178,7 +189,7 @@ export default function DriverPortal() {
   // ?vista=mercadillo: el enlace del correo de «tienes un mensaje» (17-10-2026).
   const [vista, setVista] = useState(() => {
     const v = new URLSearchParams(window.location.search).get('vista')
-    return v === 'ruta' || v === 'mercadillo' ? v : 'inicio'
+    return v === 'ruta' || v === 'mercadillo' || v === 'extra' ? v : 'inicio'
   })
   // «Mi ruta» solo sale en empresas que reparten así; lo decide el servidor.
   const [reparto, setReparto] = useState(null)
@@ -255,9 +266,10 @@ export default function DriverPortal() {
   useEffect(() => {
     if (!driver || vista !== 'inicio') return
     getMyShifts()
-      .then((r) => { setSinVer(lista(r.data?.sin_ver).length); setTieneTurnos(lista(r.data?.shifts).length > 0) })
+      .then((r) => { setSinVer(lista(r.data?.sin_ver).length); setTieneTurnos(lista(r.data?.shifts).length > 0); setSusp(r.data?.suspension || null) })
       .catch(() => setSinVer(0))
     mercEstado().then((r) => setMerc(r.data?.visible ? r.data : null)).catch(() => setMerc(null))
+    getMisRefuerzos().then((r) => setExtra(r.data || null)).catch(() => setExtra(null))
   }, [driver, vista])
 
   const login = (d) => {
@@ -288,6 +300,7 @@ export default function DriverPortal() {
 
   if (!driver) return <DriverLogin onLogin={login} />
   if (vista === 'dias') return <PedirDias onBack={() => setVista('inicio')} />
+  if (vista === 'extra') return <DiasExtra onBack={() => setVista('inicio')} />
   if (vista === 'turnos') return <MisTurnos onBack={() => setVista('inicio')} />
   if (vista === 'clave') return <MiClave onBack={() => setVista('inicio')} />
   if (vista === 'tienda') return <Tienda onBack={() => setVista('inicio')} />
@@ -388,7 +401,7 @@ export default function DriverPortal() {
           <Opcion
             icono={ClipboardCheck}
             titulo="Hacer la auditoría"
-            sub={noLeToca ? 'Hoy no sales a ruta' : 'Antes de salir a ruta'}
+            sub={portal?.motivo === 'suspendido' ? 'Hoy no trabajas' : noLeToca ? 'Hoy no sales a ruta' : 'Antes de salir a ruta'}
             principal={!esDemo}
             bloqueado={noLeToca || esDemo}
             onClick={() => setVista('auditoria')}
@@ -401,7 +414,16 @@ export default function DriverPortal() {
 
           {/* Decirle POR QUÉ no puede. Un botón gris sin explicación acaba en
               una llamada a la oficina, que es lo que se quiere evitar. */}
-          {noLeToca && (
+          {susp && (
+            <div className="flex items-start gap-2.5 rounded-xl border border-red-500/30 bg-red-500/[0.07] px-3.5 py-3" role="status">
+              <Ban size={15} className="mt-0.5 shrink-0 text-red-400" />
+              <p className="text-[12.5px] leading-relaxed text-red-200/90">
+                {susp.desde === susp.hasta ? `El ${fechaCorta(susp.desde)} no trabajas` : `Del ${fechaCorta(susp.desde)} al ${fechaCorta(susp.hasta)} no trabajas`}:
+                estás suspendido. Lo verás en «Mis turnos». Si tienes dudas, habla con la oficina.
+              </p>
+            </div>
+          )}
+          {noLeToca && portal?.motivo !== 'suspendido' && (
             <div className="flex items-start gap-2.5 rounded-xl border border-amber-500/25 bg-amber-500/[0.06] px-3.5 py-3">
               <Ban size={15} className="mt-0.5 shrink-0 text-amber-400" />
               <p className="text-[12.5px] leading-relaxed text-amber-200/90">
@@ -428,6 +450,16 @@ export default function DriverPortal() {
             pronto={!tieneTurnos}
             onClick={() => setVista('turnos')}
           />
+          {!!extra?.refuerzos?.length && (
+            <Casilla
+              icono={CalendarPlus}
+              titulo="Días extra"
+              detalle={extra.nuevos > 0 ? `Hacen falta el ${extra.refuerzos.find((x) => !x.mi_estado)?.dia || 'día que libras'}` : 'Lo que te has apuntado'}
+              aviso={extra.nuevos}
+              tono={extra.nuevos > 0 ? 'verde' : undefined}
+              onClick={() => setVista('extra')}
+            />
+          )}
           <Casilla
             icono={Gift}
             titulo="Comparte y gana"
