@@ -240,7 +240,7 @@ export default function Refuerzos({ center, puedeAprobar, onCambio }) {
                     {puedeAprobar && a.status === 'pendiente' && rechazando?.id !== a.id && (
                       <span className="ml-auto flex gap-1.5">
                         <button disabled={!!ocupado || !!a.no_puede} title={a.no_puede || ''} onClick={() => hacer(`ok-${a.id}`, () => resolveShiftRequest(a.id, 'aprobar'), `${a.driver_name}: aprobado. Ya está en el cuadrante como EXTRA.`)}
-                          className="flex items-center gap-1 rounded-lg bg-emerald-500/15 px-2.5 py-1.5 text-xs font-semibold text-emerald-300 hover:bg-emerald-500/25">
+                          className="flex items-center gap-1 rounded-lg bg-emerald-500/15 px-2.5 py-1.5 text-xs font-semibold text-emerald-300 hover:bg-emerald-500/25 disabled:cursor-not-allowed disabled:opacity-35">
                           {ocupado === `ok-${a.id}` ? <Loader2 size={13} className="animate-spin" /> : <Check size={13} />} Aprobar
                         </button>
                         <button disabled={!!ocupado} onClick={() => setRechazando({ id: a.id, motivo: '' })}
