@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useId, useState } from 'react'
 import { Bell, Loader2, ExternalLink } from 'lucide-react'
 import { tx, txError, useIdioma } from '../lib/idioma'
 import { pushSupported, enablePush, isPushEnabled } from '../lib/push'
@@ -36,6 +36,7 @@ export function mensajeAviso(r, hora) {
 export function PedirAviso({ horaInicial, onHecho, textoBoton }) {
   useIdioma()
   const ins = useInstalar()
+  const idHora = useId()     // puede haber dos a la vez (la bienvenida encima de la tarjeta de «Hoy»)
   const [hora, setHora] = useState(HORAS_CARGA.includes(horaInicial) ? horaInicial : '08:00')
   const [ocupado, setOcupado] = useState(false)
 
@@ -83,8 +84,8 @@ export function PedirAviso({ horaInicial, onHecho, textoBoton }) {
 
   return (
     <div>
-      <p id="hora-carga" className="text-[13px] font-semibold text-dark-100">{tx('¿A qué hora cargas la furgoneta?')}</p>
-      <div role="radiogroup" aria-labelledby="hora-carga" className="mt-2 grid grid-cols-4 gap-1.5">
+      <p id={idHora} className="text-[13px] font-semibold text-dark-100">{tx('¿A qué hora cargas la furgoneta?')}</p>
+      <div role="radiogroup" aria-labelledby={idHora} className="mt-2 grid grid-cols-4 gap-1.5">
         {HORAS_CARGA.map((h) => (
           <button key={h} type="button" role="radio" aria-checked={hora === h} onClick={() => setHora(h)}
             className={`rounded-lg border py-2 text-[13.5px] font-semibold tabular-nums ${hora === h
