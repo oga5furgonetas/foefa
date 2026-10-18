@@ -1474,3 +1474,20 @@ cosas que las fotos no ven; unifica lo que esté repetido; sin falsos positivos�
   cuela y ninguna sale «Bien» sin inspección en 30 días. Arreglado en la verificación: la zona sale del NOMBRE de la
   pieza y no de su tipo (`_canon_panel` llama «rueda» al paso de rueda y pintaba las cuatro ruedas del dibujo);
   un golpe leve se pinta en amarillo (en gris parecía una zona limpia) y el dibujo lleva leyenda.
+
+## 18-10-2026: foco en la app del repartidor — activación
+
+Dani: «me centraría en la app de repartidor; mil repartidores son 10.000 € al mes». Medido: 31 autónomos reales,
+18 no vuelven tras el día del alta, 0 hacen un día de reparto real; 21 entran desde el navegador de
+Instagram/Facebook y se dan de alta a las 13-22 h (sin paquetes). Hecho y desplegado:
+- **Instalar:** dentro de Instagram/Facebook/TikTok ya no se ofrece el APK (se descargaba y no abría con la cuenta);
+  solo «Abrir en Chrome/Safari» con el pase.
+- **Aviso de la mañana a su hora:** «¿A qué hora cargas la furgoneta?» (6:00-10:00) en la bienvenida («Todavía no»),
+  en la tarjeta de «Hoy» y en «Cuenta» (cambiarla). Servidor: `POST/GET /api/reparto/aviso-manana`, campo
+  `aviso_hora` de la organización, `AVISO_HORAS` (5:00-11:30), sale en la hora siguiente a la elegida, lun-sáb, solo
+  si aún no hay paquetes. Dentro de Instagram/Facebook, «Abrir en Chrome» para pedirlo allí. Textos en 6 idiomas +
+  Brasil (`check-textos-ruta.mjs` ya revisa `AvisoManana.jsx`).
+- **Correo «¿Qué te frenó con FDS?»** de Dani a 30 repartidores (scratchpad `correo_que_te_freno.py`, ENVIAR=1;
+  no repite: `correos_enviados` por=`dani:que-te-freno`).
+- Pendiente: Google Play en producción (día 7 de 14 el 18-10) → cambiar el APK por el enlace de Play.
+

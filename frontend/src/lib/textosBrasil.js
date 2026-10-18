@@ -191,10 +191,7 @@ export const BR = {
   // Aviso de la mañana
   'Aviso por la mañana': 'Aviso de manhã',
   '¿Te aviso por la mañana para cargar tu ruta?': 'Quer um aviso de manhã para carregar sua rota?',
-  'Un aviso a las 8:00, de lunes a sábado, solo si aún no has metido paquetes.': 'Um aviso às 8:00, de segunda a sábado, só se você ainda não tiver colocado pacotes.',
-  'Sí, avísame': 'Sim, me avise',
   'No, gracias': 'Não, obrigado',
-  'Listo: te aviso a las 8:00 los días que aún no tengas paquetes.': 'Pronto: te aviso às 8:00 nos dias em que você ainda não tiver pacotes.',
   'El móvil no ha dado permiso para avisos. Puedes activarlo en los ajustes del navegador.': 'O celular não deu permissão para avisos. Você pode ativar nas configurações do navegador.',
   'No se han podido activar los avisos en este móvil.': 'Não foi possível ativar os avisos neste celular.',
   // El bono de bienvenida (17-10-2026)
@@ -224,7 +221,6 @@ export const BR = {
   'Tu primera ruta real te da {euros}.': 'Sua primeira rota de verdade vale {euros}.',
   'Sí, cargarlos ahora': 'Sim, carregar agora',
   'Sin problema. Cuando cargues la furgoneta, abre la app y haz una foto a cada etiqueta.': 'Sem problema. Quando carregar a van, abra o app e tire uma foto de cada etiqueta.',
-  'Avísame mañana a las 8': 'Me avise amanhã às 8',
   'Mientras, verlo en acción con 3 paradas de ejemplo': 'Enquanto isso, ver funcionando com 3 paradas de exemplo',
   'Ver cómo funciona en 3 pasos': 'Ver como funciona em 3 passos',
   'Añadir paradas': 'Adicionar paradas',
@@ -258,4 +254,13 @@ export const BR = {
   'La última vez ({fecha}): {como}': 'Da última vez ({fecha}): {como}',
   'Y {euros} para ti con tu primera ruta real (20 entregas en 2 días), hasta el {fecha}.': 'E {euros} para você com sua primeira rota de verdade (20 entregas em 2 dias), até {fecha}.',
   'La última vez ({fecha}) no se pudo: {motivo}': 'Da última vez ({fecha}) não deu: {motivo}',
+  // El aviso de la mañana a la hora que elige (18-10-2026)
+  "Listo: te aviso a las {hora} los días que aún no tengas paquetes.": "Pronto: te aviso às {hora} nos dias em que você ainda não tiver pacotes.",
+  "Avisos activados. No he podido guardar la hora: elígela en «Cuenta».": "Avisos ativados. Não consegui salvar o horário: escolha em «Conta».",
+  "Desde aquí el móvil no deja recibir avisos. Ábrela en {nav}: entras ya con tu cuenta y te lo pregunto allí.": "Daqui o celular não deixa receber avisos. Abra no {nav}: você já entra com a sua conta e eu pergunto lá.",
+  "En iPhone los avisos llegan con la app en la pantalla de inicio: pulsa Compartir y «Añadir a pantalla de inicio».": "No iPhone, os avisos chegam com o app na tela de início: toque em Compartilhar e «Adicionar à Tela de Início».",
+  "¿A qué hora cargas la furgoneta?": "Que horas você carrega a van?",
+  "Avísame a las {hora}": "Me avise às {hora}",
+  "De lunes a sábado, solo los días que aún no hayas metido paquetes.": "De segunda a sábado, só nos dias em que você ainda não colocou pacotes.",
+  "Te aviso a las {hora}.": "Te aviso às {hora}.",
 }

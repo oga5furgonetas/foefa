@@ -2044,8 +2044,9 @@ test('Reparto · navegar dentro de la app: maniobras, llegada, entregar y a la s
   expect(fallos).toEqual([])
 })
 
-/* AVISO DE LA MAÑANA (11-10-2026): se ofrece una vez; «Sí, avísame» suscribe el móvil a los avisos. */
-test('Ruta · aviso de la mañana: se ofrece, se activa y no se vuelve a preguntar', async ({ page }) => {
+/* AVISO DE LA MAÑANA (11-10-2026): se ofrece una vez y suscribe el móvil a los avisos. Desde el 18-10 la hora
+   la elige él (la de cargar la furgoneta) y se guarda en el servidor. */
+test('Ruta · aviso de la mañana: elige la hora, se activa y no se vuelve a preguntar', async ({ page }) => {
   const fallos = vigilar(page)
   await entrarRepartidor(page, { status: 'trial', days_left: 6, promo: { activa: true, hasta: '2026-12-31' } })
   await page.addInitScript(() => {
@@ -2058,15 +2059,49 @@ test('Ruta · aviso de la mañana: se ofrece, se activa y no se vuelve a pregunt
   const suscritas = []
   await page.route(/\/api\/push\/vapid-key/, (r) => r.fulfill({ json: { key: 'BEl62iUYgUivxIkv69yViEuiBIa-Ib9-SkvMeAtA3LFgDzkrxZJjSgSnfckjBJuBkr3qBUYIHBQFLXYp5Nksh8U', enabled: true } }))
   await page.route(/\/api\/push\/subscribe/, async (r) => { suscritas.push(r.request().postDataJSON()); await r.fulfill({ json: { ok: true } }) })
+  const horas = []
+  await page.route(/\/api\/reparto\/aviso-manana$/, async (r) => { horas.push(r.request().postDataJSON()); await r.fulfill({ json: { ok: true, hora: '07:30' } }) })
   await page.goto('/ruta', { waitUntil: 'domcontentloaded' })
   const tarjeta = page.getByRole('region', { name: 'Aviso por la mañana' })
   await expect(tarjeta.getByText('¿Te aviso por la mañana para cargar tu ruta?')).toBeVisible()
-  await tarjeta.getByRole('button', { name: 'Sí, avísame' }).click()
+  await expect(tarjeta.getByRole('radio', { name: '8:00' })).toHaveAttribute('aria-checked', 'true')     // sin elegir, las 8
+  await tarjeta.getByRole('radio', { name: '7:30' }).click()
+  await tarjeta.getByRole('button', { name: 'Avísame a las 7:30' }).click()
   await expect.poll(() => suscritas.length).toBe(1)
   expect(suscritas[0].subscription.endpoint).toBe('https://push.example/e1')
+  await expect.poll(() => horas).toEqual([{ hora: '07:30' }])
+  await expect(page.getByText('Listo: te aviso a las 7:30 los días que aún no tengas paquetes.')).toBeVisible()
   await expect(tarjeta).toHaveCount(0)
   await page.reload({ waitUntil: 'domcontentloaded' })
   await expect(page.getByRole('region', { name: 'Aviso por la mañana' })).toHaveCount(0)    // no se vuelve a preguntar
+  expect(fallos).toEqual([])
+})
+
+/* «Cuenta»: la hora del aviso se ve y se cambia (18-10-2026). */
+test('Cuenta · el aviso de la mañana se cambia de hora', async ({ page }) => {
+  const fallos = vigilar(page)
+  await entrarRepartidor(page, { status: 'trial', days_left: 6, promo: { activa: true, hasta: '2026-12-31' } })
+  await page.addInitScript(() => {
+    // Un móvil que ya tiene los avisos activados.
+    window.Notification = { permission: 'granted', requestPermission: async () => 'granted' }
+    window.PushManager = function () {}
+    const sub = { toJSON: () => ({ endpoint: 'https://push.example/e1', keys: {} }) }
+    const reg = { pushManager: { getSubscription: async () => sub, subscribe: async () => sub } }
+    Object.defineProperty(navigator, 'serviceWorker', { value: { register: async () => reg, ready: Promise.resolve(reg), getRegistration: async () => reg }, configurable: true })
+  })
+  const horas = []
+  await page.route(/\/api\/reparto\/aviso-manana$/, async (r) => {
+    if (r.request().method() === 'GET') return r.fulfill({ json: { hora: '08:00' } })
+    horas.push(r.request().postDataJSON()); return r.fulfill({ json: { ok: true, hora: '06:30' } })
+  })
+  await page.goto('/ruta', { waitUntil: 'domcontentloaded' })
+  await page.getByRole('button', { name: 'Cuenta', exact: true }).click()
+  const aviso = page.getByRole('region', { name: 'Aviso por la mañana' })
+  const hora = aviso.getByRole('combobox', { name: '¿A qué hora cargas la furgoneta?' })
+  await expect(hora).toHaveValue('08:00')
+  await hora.selectOption('06:30')
+  await expect.poll(() => horas).toEqual([{ hora: '06:30' }])
+  await expect(page.getByText('Te aviso a las 6:30.')).toBeVisible()
   expect(fallos).toEqual([])
 })
 

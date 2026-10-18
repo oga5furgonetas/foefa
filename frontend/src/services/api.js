@@ -258,6 +258,9 @@ export const repEjemplo = (desde) => api.post('/reparto/mis-pedidos/ejemplo', de
 // «Mi dinero hoy» (11-10-2026): la tarifa del autónomo, en céntimos.
 export const repGanancias = (datos) => api.put('/reparto/ganancias', datos)
 export const repQuitarEjemplos = () => api.post('/reparto/mis-pedidos/quitar-ejemplos')
+// El aviso de la mañana (18-10-2026): a qué hora carga la furgoneta (de 5:00 a 11:30, de media en media hora).
+export const repAvisoManana = (hora) => api.post('/reparto/aviso-manana', { hora })
+export const repAvisoMananaVer = () => api.get('/reparto/aviso-manana')
 export const getReferidos = () => api.get('/referidos')
 // Cartera individual de quien entra en el portal de empresa como conductor.
 export const getDriverReferidos = () => api.get('/conductor/referidos')

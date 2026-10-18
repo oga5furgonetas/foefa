@@ -66,3 +66,37 @@ async def test_ni_en_domingo_ni_a_otra_hora_ni_sin_avisos(mundo, monkeypatch):
     assert await server._aviso_manana_vuelta(datetime(2026, 10, 12, 6, 10, tzinfo=timezone.utc)) == 0   # sin claves
     monkeypatch.setattr(server, "_push_enabled", True)
     assert await server._aviso_manana_vuelta(datetime(2026, 10, 12, 6, 10, tzinfo=timezone.utc)) == 1
+
+
+@pytest.mark.asyncio(loop_scope="session")
+async def test_a_la_hora_que_elige_el(mundo):
+    """18-10-2026: quien carga a las 6:30 recibe el aviso a las 6:30, no a las 8."""
+    mundo.g.organizations.docs[0]["aviso_hora"] = "06:30"
+    assert await server._aviso_manana_vuelta(datetime(2026, 10, 12, 4, 20, tzinfo=timezone.utc)) == 0   # 6:20, aún no
+    assert await server._aviso_manana_vuelta(datetime(2026, 10, 12, 4, 40, tzinfo=timezone.utc)) == 1   # 6:40
+    assert mundo.mandados[-1].usuarios == ["u1"]
+    assert await server._aviso_manana_vuelta(datetime(2026, 10, 13, 6, 10, tzinfo=timezone.utc)) == 0   # 8:10, fuera de su hora
+    # Una hora que no está en la lista no rompe nada: vuelve a las 8.
+    mundo.g.organizations.docs[0]["aviso_hora"] = "25:00"
+    assert await server._aviso_manana_vuelta(datetime(2026, 10, 14, 6, 10, tzinfo=timezone.utc)) == 1
+
+
+@pytest.mark.asyncio(loop_scope="session")
+async def test_guardar_la_hora(mundo, monkeypatch):
+    from fastapi import HTTPException
+
+    async def es_autonomo(user):
+        return user.get("org_id") == "o1"
+    monkeypatch.setattr(server, "_rep_es_autonomo", es_autonomo)
+    yo = {"sub": "u1", "role": "admin", "org_id": "o1"}
+    assert (await server.reparto_aviso_manana({"hora": "07:30"}, yo))["hora"] == "07:30"
+    assert mundo.g.organizations.docs[0]["aviso_hora"] == "07:30"
+    for mala in ("7:30", "04:30", "12:00", "07:15", None, "x" * 50):
+        with pytest.raises(HTTPException) as e:
+            await server.reparto_aviso_manana({"hora": mala}, yo)
+        assert e.value.status_code == 400
+    with pytest.raises(HTTPException) as e:                                    # un conductor de empresa, no
+        await server.reparto_aviso_manana({"hora": "07:30"}, {"sub": "c1", "role": "driver", "org_id": "empresa"})
+    assert e.value.status_code == 403
+    with pytest.raises(HTTPException):                                         # ni la demo
+        await server.reparto_aviso_manana({"hora": "07:30"}, {**yo, "demo": True})

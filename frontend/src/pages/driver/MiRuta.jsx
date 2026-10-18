@@ -2,7 +2,7 @@ import { Suspense, lazy, useCallback, useEffect, useRef, useState } from 'react'
 import {
   ArrowLeft, ScanLine, Camera, Loader2, Navigation, Phone, Check, X, Route, MapPin, Play, Square, Package,
   MessageCircle, Clock, Search, List, Pencil, ChevronDown, GripVertical, Map as MapaIcono, ArrowUp, ArrowDown, ArrowUpDown, Mic, ClipboardPaste, Trophy,
-  Eye, PenLine, RotateCcw, HelpCircle, Share2, FileUp, Gift, WifiOff, Plus, Bell,
+  Eye, PenLine, RotateCcw, HelpCircle, Share2, FileUp, Gift, WifiOff, Plus,
 } from 'lucide-react'
 import {
   repMiRuta, repZonasCarga, repEscanear, repEscanearLote, repLeerTicket, repNuevoPedido, repEstado, repOrdenar, repJornada, repPosicion,
@@ -25,7 +25,7 @@ import { tx, useIdioma, locale, txError } from '../../lib/idioma'
 import { salirDeLaDemoDeReparto, decodeToken } from '../../panel/auth'
 import { eurosRef, fechaRefPromo } from '../../lib/precios'
 import AntesPuerta from './AntesPuerta'
-import { pushSupported, enablePush } from '../../lib/push'
+import { PedirAviso, mensajeAviso } from '../AvisoManana'
 
 /* ── MI RUTA ────────────────────────────────────────────────────────────────
    Lo que hace el repartidor al cargar: escanea el código de la caja. Si el
@@ -621,19 +621,9 @@ export default function MiRuta({ onBack, embebido = false }) {
     try { if (localStorage.getItem(TOUR)) return; localStorage.setItem(TOUR, '1') } catch { return }
     setBienvenida('inicio'); medirAccion('bienvenida_vista')
   }, [embebido, ruta?.autonomo, ruta?.pedidos])
-  let avisoPosible = false
-  try { avisoPosible = pushSupported() && Notification.permission === 'default' && !localStorage.getItem('fds_aviso_manana') } catch { avisoPosible = false }
-  async function avisarManana() {
-    setOcupado('aviso'); medirAccion('aviso_manana_si')
-    const r = await enablePush()
-    setOcupado('')
-    try { localStorage.setItem('fds_aviso_manana', r === 'ok' ? 'si' : r === 'denied' ? 'denegado' : 'error') } catch { /* nada */ }
-    window.dispatchEvent(new Event('fds-aviso-manana'))     // la tarjeta de arriba ya no hace falta
-    setBienvenida(null)
-    setAviso(r === 'ok' ? tx('Listo: te aviso a las 8:00 los días que aún no tengas paquetes.')
-      : r === 'denied' ? tx('El móvil no ha dado permiso para avisos. Puedes activarlo en los ajustes del navegador.')
-        : tx('No se han podido activar los avisos en este móvil.'))
-  }
+  // El aviso de la mañana, a la hora a la que carga (18-10-2026): ya pedido en este móvil, no se vuelve a ofrecer.
+  let avisoPedido = false
+  try { avisoPedido = localStorage.getItem('fds_aviso_manana') === 'si' } catch { avisoPedido = false }
   async function quitarEjemplos() {
     setOcupado('ejemplo')
     try { await repQuitarEjemplos(); cargar(); setAviso(tx('Ejemplos quitados. Ya puedes cargar tus paquetes.')) } catch (e) { setAviso(txError(e, 'No se pudo quitar')) } finally { setOcupado('') }
@@ -1788,11 +1778,10 @@ export default function MiRuta({ onBack, embebido = false }) {
               className="mt-2 w-full rounded-xl border border-dark-700 py-3 text-[14.5px] font-semibold text-dark-100">{tx('Todavía no')}</button>
           </>) : (<>
             <p className="text-[16px] font-bold leading-snug text-dark-50">{tx('Sin problema. Cuando cargues la furgoneta, abre la app y haz una foto a cada etiqueta.')}</p>
-            {avisoPosible && (
-              <button onClick={avisarManana} disabled={ocupado === 'aviso'}
-                className="mt-4 flex w-full items-center justify-center gap-2 rounded-xl bg-brand-500 py-3.5 text-[15px] font-bold text-brand-tinta disabled:opacity-60">
-                {ocupado === 'aviso' ? <Loader2 size={18} className="animate-spin" /> : <Bell size={18} />} {tx('Avísame mañana a las 8')}
-              </button>
+            {!avisoPedido && (
+              <div className="mt-4">
+                <PedirAviso horaInicial={ruta.aviso_hora} onHecho={(r, hora) => { setBienvenida(null); setAviso(mensajeAviso(r, hora)) }} />
+              </div>
             )}
             <button onClick={() => { setBienvenida(null); medirAccion('tour_ejemplo'); cargarEjemplo() }} disabled={ocupado === 'ejemplo'}
               className="mt-2 flex w-full items-center justify-center gap-2 rounded-xl border border-dark-700 py-3 text-[14px] font-semibold text-dark-100">

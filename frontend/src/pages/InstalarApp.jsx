@@ -19,7 +19,7 @@ export const APK_ANDROID = '/descargas/FDS.apk'
 /* Lo que necesitan la tarjeta y el paso de después del alta: qué móvil es, si
    Chrome deja instalar en un toque y cómo salir del navegador de TikTok/Instagram
    sin volver a entrar (un pase de un solo uso, ver /auth/pase-movil). */
-function useInstalar() {
+export function useInstalar() {
   const [puede, setPuede] = useState(sePuedeInstalar())
   const [ocupado, setOcupado] = useState(false)
   const [fallo, setFallo] = useState(false)
@@ -70,7 +70,7 @@ function DescargarApk({ apk, principal }) {
   )
 }
 
-function NoSeAbrio({ iphone, enlace }) {
+export function NoSeAbrio({ iphone, enlace }) {
   const [copiado, setCopiado] = useState(false)
   const nav = iphone ? 'Safari' : 'Chrome'
   async function copiar() {

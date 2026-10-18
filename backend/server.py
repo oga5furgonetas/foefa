@@ -21272,6 +21272,19 @@ async def start_ciclo_correos():
 # es para arrancar, no para perseguir a nadie. Uno por día y cuenta (se marca ANTES de mandar).
 AVISO_MANANA_HORA = 8
 AVISO_MANANA_DIAS = 21
+# LA HORA LA ELIGE ÉL (18-10-2026). Quien carga a las 6 no necesita el aviso a las 8, y quien empieza a las 9
+# lo recibía en el sofá. Se elige al decir «Todavía no» en la bienvenida o en la tarjeta del aviso; sin elegir,
+# las 8. De 5:00 a 11:30, de media en media hora. El aviso sale en la hora siguiente a la elegida (el bucle
+# pasa cada 10 minutos), una vez al día.
+AVISO_HORAS = tuple(f"{h:02d}:{m:02d}" for h in range(5, 12) for m in (0, 30))
+
+
+def _aviso_hora(org: dict) -> tuple:
+    """(hora, minuto) del aviso de esa cuenta: la que eligió o las 8:00."""
+    h = str((org or {}).get("aviso_hora") or "")
+    if h not in AVISO_HORAS:
+        return AVISO_MANANA_HORA, 0
+    return int(h[:2]), int(h[3:])
 _AVISO_MANANA_TEXTOS = {
     "es": ("¿Empezamos la ruta?", "Mete tus paquetes con una foto a la etiqueta y la ruta se ordena sola."),
     "pt": ("Começamos a rota?", "Carrega os teus volumes com uma foto à etiqueta e a rota ordena-se sozinha."),
@@ -21305,7 +21318,9 @@ async def _aviso_manana_vuelta(ahora: Optional[datetime] = None) -> int:
         try:
             zona = _zona_valida(org.get("zona_horaria")) or "Europe/Madrid"
             local = ahora.astimezone(ZoneInfo(zona))
-            if local.hour != AVISO_MANANA_HORA or local.weekday() == 6:      # a las 8, de lunes a sábado
+            h, m = _aviso_hora(org)
+            desde_min = local.hour * 60 + local.minute - (h * 60 + m)
+            if not (0 <= desde_min < 60) or local.weekday() == 6:      # a su hora, de lunes a sábado
                 continue
             hoy = local.strftime("%Y-%m-%d")
             if org.get("aviso_manana") == hoy:
@@ -21328,6 +21343,27 @@ async def _aviso_manana_vuelta(ahora: Optional[datetime] = None) -> int:
         except Exception as e:                                   # noqa: BLE001
             logger.warning("aviso de la mañana (%s): %s", org.get("id"), e)
     return mandados
+
+
+@api_router.get("/reparto/aviso-manana")
+async def reparto_aviso_manana_ver(user: dict = Depends(require_any_auth)):
+    """A qué hora le llega el aviso de la mañana (para «Cuenta»)."""
+    if user.get("demo") or not await _rep_es_autonomo(user):
+        raise HTTPException(403, "Solo para quien reparte por su cuenta")
+    org = await get_org(user.get("org_id"))
+    return {"hora": "%02d:%02d" % _aviso_hora(org)}
+
+
+@api_router.post("/reparto/aviso-manana")
+async def reparto_aviso_manana(data: dict, user: dict = Depends(require_any_auth)):
+    """La hora a la que carga la furgoneta: el aviso de la mañana sale a esa hora (ver AVISO_HORAS)."""
+    hora = _texto_cuerpo(data.get("hora"), 5)
+    if hora not in AVISO_HORAS:
+        raise HTTPException(400, "Hora no válida")
+    if user.get("demo") or not await _rep_es_autonomo(user):
+        raise HTTPException(403, "Solo para quien reparte por su cuenta")
+    await global_db.organizations.update_one({"id": user.get("org_id")}, {"$set": {"aviso_hora": hora}})
+    return {"ok": True, "hora": hora}
 
 
 async def _bucle_aviso_manana():
@@ -49147,6 +49183,8 @@ async def reparto_mi_ruta(user: dict = Depends(require_any_auth)):
         except Exception as e:                               # noqa: BLE001
             logger.warning(f"bono: {type(e).__name__}")
     return {"activo": True, "empresa": (org or {}).get("name") or "", "bono": bono,
+            # A qué hora le llega el aviso de la mañana (lo elige él; sin elegir, las 8).
+            "aviso_hora": ("%02d:%02d" % _aviso_hora(org)) if autonomo else None,
             "puede_pegar": autonomo and user.get("role") == "admin",
             "pais": _region_actual.get()[0], "prefijo": PAISES_REPARTO.get(_region_actual.get()[0], {}).get("prefijo", "34"), "fecha": f, "pedidos": ps, "base": a.get("base"), "ruta": ruta, "autonomo": autonomo,
             "ia_tickets": await _rep_ia_activa(a, user),
