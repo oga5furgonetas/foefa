@@ -48626,10 +48626,16 @@ async def _sync_procesar(conf: dict, cuerpo: dict) -> dict:
                 gente["vuelven"].append(nombre)
         if campos:
             plan_personas.append((did, campos, borrar))
-    for did, pa in personas_app.items():
-        if pa.get("en_cuadrante") and did not in presente and did not in antes_en_hoja \
-                and not (pa.get("inactivo_desde") and pa["inactivo_desde"] <= hoy.isoformat()):
-            gente["en_app_no_en_hoja"].append(nombre_de.get(did) or did)
+    fuera_hoja = [did for did, pa in personas_app.items()
+                  if pa.get("en_cuadrante") and did not in presente and did not in antes_en_hoja
+                  and not (pa.get("inactivo_desde") and pa["inactivo_desde"] <= hoy.isoformat())]
+    # Una ficha fusionada o borrada no está entre las vivas: su nombre se busca aparte (salía el id tal cual).
+    sueltas = [d for d in fuera_hoja if d not in nombre_de]
+    if sueltas:
+        async for x in db.drivers.find({"id": {"$in": sueltas}}, {"_id": 0, "id": 1, "name": 1, "merged_into": 1}):
+            nombre_de[x["id"]] = (x.get("name") or "?") + (" (ficha fusionada)" if x.get("merged_into") else "")
+    for did in fuera_hoja:
+        gente["en_app_no_en_hoja"].append(nombre_de.get(did) or personas_app[did].get("nombre") or "ficha borrada")
     gente["en_app_no_en_hoja"] = sorted(gente["en_app_no_en_hoja"])[:40]
 
     # ── Las máximas ──
