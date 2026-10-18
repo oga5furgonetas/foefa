@@ -1597,3 +1597,10 @@ hacemos en la app; el Sheet o viceversa». En **Cuadrante → botón «Google Sh
   - Regla nueva en la sincronización: quien sale de la hoja sale del cuadrante Y su ficha se desactiva (salvo que
     su ficha sea de otro centro: se ha cambiado de nave); si vuelve a la hoja, se reactiva (solo si la desactivó la
     hoja). El clasificador bloqueó la primera vez escribir en producción por consola; Dani lo autorizó en el chat.
+- **18-10, 19:10: ACTIVADA por Dani.** Primera vuelta: 87 cambios a la app, 2 escritos en la hoja (0 saltados), 2
+  fichas nuevas (Ana Rodríguez Vilas, Hugo Paredes Carabel). Después, con su captura («si están fuera, sácalos…
+  Nora sale dos veces… que aparezca igual que la hoja»): `_cua_personas` ya no saca fichas fusionadas, ni (con la
+  sincronización activa y en vistas que llegan a hoy) a quien la hoja sacó y no está en ella (`personas` de
+  `cuadrante_sync_base`), y ordena por la fila de la hoja (`orden` en la misma base). Medido a las 19:27: 75 en el
+  cuadrante = 75 en la hoja, en su orden, sin dobles. La ficha de quien sale el día 1 por la pestaña nueva se
+  desactiva ese día, no al detectarlo. Tests 36.
