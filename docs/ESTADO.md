@@ -1571,3 +1571,12 @@ hacemos en la app; el Sheet o viceversa». En **Cuadrante → botón «Google Sh
   con `inactivo_por: "hoja"`, y se le quitan los días desde ahí (con «Deshacer»); si vuelve a la hoja, vuelve. El nombre
   en amarillo, el día 1 como al importar. No toca: quien nunca estuvo en la hoja (se lista) ni una salida puesta a
   mano en la app. Más de 5 salidas u 8 fichas nuevas de golpe → retenidas (los días sí siguen). Tests 33.
+- **18-10 tarde, conectada de verdad** (OGA5, hoja «SEPTIEMBRE Y OCTUBRE», en PRUEBA). Dos tropiezos ya arreglados:
+  (1) Dani pegó el código y luego se pulsó «Volver a sacar el script», que anuló el pegado: la hoja dejó de entrar
+  callada (401 en el registro). Ahora pide confirmación y, si la hoja llega con un código antiguo, el panel lo dice
+  (`hashes_viejos`, `llave_vieja_en`). (2) Fichas dobles: Manuel Óscar Pombo Vega tiene dos fichas con el mismo nombre
+  (la del cuadrante de baja con sus días, otra activa vacía) y «LUIS FRANCO LOPEZ» tenía alias a «luis guillermo
+  lopez» pero había otra activa «luis franco lopez»: la hoja casaba con las vacías y cada uno habría salido dos veces.
+  Ahora manda el alias (aunque la ficha esté de baja) y luego la ficha que ya está en el cuadrante. Datos sucios que
+  quedan (no son de la sincronización): Álvaro Rodríguez Blanco tiene DOS fichas activas en el cuadrante, y hay ~16
+  personas en el cuadrante de la app que no están en «12 A 26» (casi todas fichas de baja).
