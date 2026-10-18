@@ -1552,3 +1552,12 @@ hacemos en la app; el Sheet o viceversa». En **Cuadrante → botón «Google Sh
   de 80 celdas de golpe en cualquiera de los dos lados → retenido hasta «Aceptar estos cambios». Lo aplicado entra
   en «Deshacer» del Cuadrante (y deshacer vuelve a la hoja solo). Una llamada cada 15 s como mucho.
 - Tests `test_sync_hoja.py` (28) y la prueba de pantalla «Google Sheets: se conecta…».
+- **Medido en producción el 18-10, en prueba y sin escribir** (`_sync_procesar` en Fly con su xlsx del 13-10): «12 A
+  26» leída del 01-10 al 02-11, 73/73 nombres casan, DIARIO y «deber horas» saltadas; 0 celdas de la app pisadas, 47
+  nuevas (Manuel Óscar Pombo y Luis Franco no tenían esos días en la app), 2 a la hoja (el día concedido de David Pombo
+  el 11-10 y el N/D con candado de Benjamín el 17-10); «1.EXTRA» sin tocar. Máximas iguales. La importación del 13-10
+  de «12 A 26» salió con fechas buenas (aquel fichero acababa en el 31). **Pendiente: que Dani pegue el script en su
+  hoja, mire la prueba y lo active.** Hasta entonces no hay nada conectado.
+- **«Mis turnos» del conductor vuelve a ser un calendario** (Dani: «me gustaba más antes; así hacia abajo no»): el mes
+  en rejilla L-D con el color de cada día, puntito de pedido/aprobado, el día tocado debajo y «Pedir» desde ahí; ±2/3
+  meses. Prueba de pantalla «es el mes en calendario».
