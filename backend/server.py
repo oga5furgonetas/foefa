@@ -48322,14 +48322,31 @@ async def _sync_auth(request: Request) -> dict:
     return doc
 
 
-def _sync_empareja(nombres: list, fichas: list, alias: dict) -> Tuple[dict, dict, list]:
+def _sync_empareja(nombres: list, fichas: list, alias: dict, del_cuadrante: set = frozenset()) -> Tuple[dict, dict, list]:
     """Los nombres de una pestaña contra las fichas, sin preguntar a nadie (como el importador). Devuelve
     ({nombre: ficha} de los que casan solos, {nombre: motivo} de los que no —«no_encontrado» o «ambiguo»—, y los
-    que caen dos veces en la misma ficha)."""
+    que caen dos veces en la misma ficha).
+
+    Primero lo que ya decidió una persona (el alias, aunque esa ficha esté de baja) y luego la ficha que ya está en
+    el cuadrante del centro (`del_cuadrante`). Medido el 18-10-2026 con la hoja de Dani: Manuel Óscar Pombo Vega
+    tiene dos fichas con el mismo nombre, la del cuadrante (de baja, con sus 27 días) y otra activa y vacía; y
+    «LUIS FRANCO LOPEZ» tenía alias a su ficha de siempre, pero había otra activa «luis franco lopez». Casando
+    primero con las activas, la hoja se iba a las vacías y cada uno habría salido DOS veces en el cuadrante."""
     activas = [x for x in fichas if x.get("active") is not False]
+    por_id = {x["id"]: x for x in fichas}
+    en_cuadrante = [x for x in fichas if x["id"] in del_cuadrante]
     casan, pendientes, dobles, usadas = {}, {}, [], {}
     for nombre in nombres:
-        drv, motivo = _empareja_conductor(nombre, activas, alias)
+        drv, motivo = None, "no_encontrado"
+        did = alias.get((nombre or "").strip())
+        if did and did in por_id:
+            drv, motivo = por_id[did], "alias"
+        if not drv and en_cuadrante:
+            drv, motivo = _empareja_conductor(nombre, en_cuadrante, {})
+            if not drv:
+                motivo = "no_encontrado"
+        if not drv:
+            drv, motivo = _empareja_conductor(nombre, activas, alias)
         if not drv and motivo != "ambiguo":
             if any(_nombres_veredicto(nombre, x.get("name")) == "si" for x in activas):
                 drv, motivo = None, "no_encontrado"
@@ -48417,6 +48434,10 @@ async def _sync_procesar(conf: dict, cuerpo: dict) -> dict:
     nombre_de = {x["id"]: x.get("name") or "" for x in todas}
     alias = await _alias_cuadrante()
     ignorados = set(conf.get("ignorados") or [])
+    personas_app = {x["driver_id"]: x for x in await db[_CUA_PERSONAS].find({"center": center}, {"_id": 0})
+                    .to_list(5000)}
+    del_cuadrante = {d for d, x in personas_app.items() if x.get("en_cuadrante")
+                     and not (x.get("inactivo_desde") and x["inactivo_desde"] <= hoy.isoformat())}
 
     # ── Qué pestañas sirven, y de cuál se toma cada día ──
     usables = []
@@ -48431,7 +48452,7 @@ async def _sync_procesar(conf: dict, cuerpo: dict) -> dict:
             info["motivo"] = "es de fechas que ya no se sincronizan"
             continue
         nombres = [f["nombre"] for f in p["filas"] if f["nombre"] not in ignorados]
-        casan, pendientes, dobles = _sync_empareja(nombres, fichas, alias)
+        casan, pendientes, dobles = _sync_empareja(nombres, fichas, alias, del_cuadrante)
         info["emparejadas"] = len(casan)
         otro = _cua_centro_de_la_hoja(nombres, todas, alias, center)
         if otro:
@@ -48567,8 +48588,6 @@ async def _sync_procesar(conf: dict, cuerpo: dict) -> dict:
         for fila in p["filas"]:
             if casan.get(fila["nombre"]):
                 fila_de[casan[fila["nombre"]]["id"]] = fila
-    personas_app = {x["driver_id"]: x for x in await db[_CUA_PERSONAS].find({"center": center}, {"_id": 0})
-                    .to_list(5000)}
     antes_en_hoja = set(base_doc.get("personas") or [])
     futuras = sorted(f for f in fuente if f >= manana)
     plan_personas = []                                   # (did, campos, borrar_desde)

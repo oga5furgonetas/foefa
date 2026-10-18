@@ -421,6 +421,31 @@ async def test_la_hoja_de_otro_centro_no_entra(nave):
 
 
 @pytest.mark.asyncio(loop_scope="session")
+async def test_con_fichas_dobles_gana_lo_que_ya_se_decidio_y_la_del_cuadrante(nave):
+    """Los dos casos reales de la hoja de OGA5 (18-10-2026). Manuel: dos fichas con el mismo nombre, la del
+    cuadrante (de baja, con sus días) y otra activa y vacía. Luis: alias guardado al importar hacia su ficha de
+    siempre, y otra activa con el nombre de la hoja. Casando primero con las activas, cada uno salía dos veces."""
+    t = nave.t
+    t.drivers.docs += [{"id": "m_viejo", "name": "MANUEL OSCAR POMBO VEGA", "center": "OGA5", "active": False},
+                       {"id": "m_nuevo", "name": "MANUEL OSCAR POMBO VEGA", "center": "OGA5", "active": True},
+                       {"id": "l_viejo", "name": "luis guillermo lopez", "center": "OGA5", "active": False},
+                       {"id": "l_nuevo", "name": "luis franco lopez", "center": "OGA5", "active": True}]
+    t[server._CUA_PERSONAS].docs += [{"center": "OGA5", "driver_id": "m_viejo", "en_cuadrante": True},
+                                     {"center": "OGA5", "driver_id": "l_viejo", "en_cuadrante": True}]
+    t.app_meta.docs.append({"_id": server._ALIAS_DOC, "mapa": {"LUIS FRANCO LOPEZ": "l_viejo"}})
+    for i, f in enumerate(DIAS):
+        poner(t, "m_viejo", f, SEMANA_ANA[i])
+        poner(t, "l_viejo", f, SEMANA_LUIS[i])
+    llave = await conectar(modo="prueba")
+    await sync(llave, pestana({"ANA PEREZ LOPEZ": SEMANA_ANA, "MANUEL OSCAR POMBO VEGA": SEMANA_ANA,
+                               "LUIS FRANCO LOPEZ": SEMANA_LUIS}), nave=nave)
+    u = nave.g[server._SYNC_COL].docs[0]["ultima"]
+    assert u["personas"]["entran"] == ["ANA PEREZ LOPEZ"]          # ni Manuel ni Luis «entran»: ya estaban
+    assert u["personas"]["en_app_no_en_hoja"] == [] and u["personas"]["fichas_nuevas"] == []
+    assert u["a_app"] == 14                                         # solo los días de Ana; los suyos, iguales
+
+
+@pytest.mark.asyncio(loop_scope="session")
 async def test_la_llave(nave):
     with pytest.raises(HTTPException) as e:
         await server.cuadrante_sync_hoja(Peticion(""))
