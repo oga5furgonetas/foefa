@@ -1561,3 +1561,13 @@ hacemos en la app; el Sheet o viceversa». En **Cuadrante → botón «Google Sh
 - **«Mis turnos» del conductor vuelve a ser un calendario** (Dani: «me gustaba más antes; así hacia abajo no»): el mes
   en rejilla L-D con el color de cada día, puntito de pedido/aprobado, el día tocado debajo y «Pedir» desde ahí; ±2/3
   meses. Prueba de pantalla «es el mes en calendario».
+- **La gente también va con la hoja** (Dani: «si añado un trabajador o lo quito en la hoja, que es la que usan los de
+  oficina, que se añada o se quite en el cuadrante de la app»). En la app estar en el cuadrante es `en_cuadrante` y
+  quitar es `inactivo_desde`, así que: quien está en la hoja entra (`en_cuadrante`, y su `alta_desde` si la hoja la
+  da); sin ficha, se le hace si su nombre no se parece a NADIE (ni en otro centro, `_cua_opciones_para`); si se
+  parece, va a «Nombres que hay que mirar» en el panel: «Es X» (alias, como al importar), «ficha nueva» o «No es del
+  cuadrante» (`POST /api/cuadrante/sync/emparejar`, `ignorados` en la config). Quien ESTABA en la hoja (`personas` en
+  `cuadrante_sync_base`) y ya no está sale desde mañana, o desde el primer día de la pestaña nueva que ya no lo trae,
+  con `inactivo_por: "hoja"`, y se le quitan los días desde ahí (con «Deshacer»); si vuelve a la hoja, vuelve. El nombre
+  en amarillo, el día 1 como al importar. No toca: quien nunca estuvo en la hoja (se lista) ni una salida puesta a
+  mano en la app. Más de 5 salidas u 8 fichas nuevas de golpe → retenidas (los días sí siguen). Tests 33.

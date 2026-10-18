@@ -48305,18 +48305,29 @@ async def _sync_auth(request: Request) -> dict:
     tok = (request.headers.get("X-Flota-Sync") or "").strip()
     if not tok:
         raise HTTPException(401, "Falta la cabecera X-Flota-Sync")
-    doc = await global_db[_SYNC_COL].find_one({"token_hash": _sync_hash(tok)})
+    h = _sync_hash(tok)
+    doc = await global_db[_SYNC_COL].find_one({"token_hash": h})
+    if not doc:
+        # Una llave de antes de «Volver a sacar el script»: no vale, pero se sabe de qué hoja es, y el panel lo dice.
+        # Pasó el 18-10-2026 con la de Dani: pegó el código, sacó otro sin querer y la hoja dejó de entrar callada.
+        vieja = await global_db[_SYNC_COL].find_one({"hashes_viejos": h, "revocado": False}, {"_id": 0, "id": 1})
+        if vieja:
+            await global_db[_SYNC_COL].update_one({"id": vieja["id"]}, {"$set": {
+                "llave_vieja_en": datetime.now(timezone.utc).isoformat()}})
+            raise HTTPException(401, "Esta hoja tiene un código antiguo de Flota: después se sacó otro. Copia el de "
+                                     "Flota → Cuadrante → Google Sheets y pégalo en Apps Script en lugar de este.")
     if not doc or doc.get("revocado"):
         raise HTTPException(401, "Esta hoja ya no está conectada a Flota. Vuelve a conectarla desde el Cuadrante.")
     set_current_org_db(doc.get("db_name") or _DEFAULT_DB_NAME)
     return doc
 
 
-def _sync_empareja(nombres: list, fichas: list, alias: dict) -> Tuple[dict, list, list]:
-    """{nombre: ficha} de los que casan SOLOS, sin preguntar a nadie: como el importador, pero lo dudoso no se
-    propone, se deja fuera y se dice (se arregla una vez importando el Excel, que guarda el alias)."""
+def _sync_empareja(nombres: list, fichas: list, alias: dict) -> Tuple[dict, dict, list]:
+    """Los nombres de una pestaña contra las fichas, sin preguntar a nadie (como el importador). Devuelve
+    ({nombre: ficha} de los que casan solos, {nombre: motivo} de los que no —«no_encontrado» o «ambiguo»—, y los
+    que caen dos veces en la misma ficha)."""
     activas = [x for x in fichas if x.get("active") is not False]
-    casan, sin_ficha, ambiguos, usadas = {}, [], [], {}
+    casan, pendientes, dobles, usadas = {}, {}, [], {}
     for nombre in nombres:
         drv, motivo = _empareja_conductor(nombre, activas, alias)
         if not drv and motivo != "ambiguo":
@@ -48325,48 +48336,75 @@ def _sync_empareja(nombres: list, fichas: list, alias: dict) -> Tuple[dict, list
             else:
                 drv, motivo = _empareja_conductor(nombre, fichas, alias)
         if drv and drv["id"] in usadas:
-            ambiguos.append("%s (la misma ficha que %s)" % (nombre, usadas[drv["id"]]))
+            dobles.append("%s (la misma ficha que %s)" % (nombre, usadas[drv["id"]]))
             casan.pop(usadas[drv["id"]], None)
             continue
         if drv:
             usadas[drv["id"]] = nombre
             casan[nombre] = drv
         else:
-            (ambiguos if motivo == "ambiguo" else sin_ficha).append(nombre)
-    return casan, sin_ficha, ambiguos
+            pendientes[nombre] = motivo
+    return casan, pendientes, dobles
 
 
 def _sync_mensaje(r: dict) -> str:
     if r.get("error"):
         return r["error"]
+    gente = r.get("personas") or {}
     if r.get("retenido"):
         return ("Retenido: cambiarían de golpe %d celdas en Flota y %d en esta hoja. Revísalo y acéptalo en Flota → "
                 "Cuadrante → Google Sheets." % (r["a_app_cambia"], r["a_hoja_cambia"]))
     n_app, n_hoja = r["a_app"] + r["maximas_app"], r["a_hoja"] + r["maximas_hoja"]
+    extra = []
+    claves = (("entran", "entran %d en el cuadrante"),) if gente.get("retenidas") else (
+        ("entran", "entran %d en el cuadrante"), ("fichas_nuevas", "%d fichas nuevas"), ("salen", "salen %d"))
+    for k, txt in claves:
+        if gente.get(k):
+            extra.append(txt % len(gente[k]))
+    if gente.get("retenidas"):
+        extra.append("%d salidas o fichas nuevas retenidas por ser demasiadas de golpe: acéptalas en Flota"
+                     % gente["retenidas"])
+    cola = (" Gente: " + ", ".join(extra) + ".") if extra else ""
     if r["modo"] == "prueba":
-        return ("Modo prueba, no se ha tocado nada: cambiaría %d celdas en Flota y %d en esta hoja. Actívalo en "
-                "Flota → Cuadrante → Google Sheets." % (n_app, n_hoja))
-    if not n_app and not n_hoja:
+        return ("Modo prueba, no se ha tocado nada: cambiaría %d celdas en Flota y %d en esta hoja.%s Actívalo en "
+                "Flota → Cuadrante → Google Sheets." % (n_app, n_hoja, cola))
+    if not n_app and not n_hoja and not extra:
         return "Todo igual en Flota y en la hoja."
-    return "Flota: %d cambios de la hoja a la app y %d de la app a la hoja." % (n_app, n_hoja)
+    return "Flota: %d cambios de la hoja a la app y %d de la app a la hoja.%s" % (n_app, n_hoja, cola)
 
 
 async def _sync_procesar(conf: dict, cuerpo: dict) -> dict:
-    """El corazón: lee la hoja, decide celda a celda y, si está activa, aplica en la app. Devuelve el resumen con
-    `escribir` (lo que el script pone en la hoja)."""
+    """El corazón: lee la hoja, decide persona a persona y celda a celda y, si está activa, aplica en la app.
+    Devuelve el resumen con `escribir` (lo que el script pone en la hoja).
+
+    LA GENTE (Dani, 18-10-2026: «si añado un trabajador o lo quito en la hoja, que es la que usan los de oficina,
+    que se añada o se quite también en el cuadrante de la app»). En la app, estar en el cuadrante es tener
+    `en_cuadrante` y quitar a alguien es ponerle desde qué día se va (`inactivo_desde`), así que la hoja hace eso:
+      · quien está en la hoja entra en el cuadrante. Sin ficha, se le crea si su nombre no se parece al de NADIE
+        (ni en otro centro); si se parece, se deja para que alguien elija en el panel: dos fichas de la misma
+        persona es justo lo que se lleva meses quitando;
+      · quien ESTABA en la hoja y ya no está, sale desde mañana (o desde el día en que deja de estar: la pestaña del
+        mes que viene sin él) y se le quitan los días desde ahí. Solo quien estaba: el que nunca ha estado en la hoja
+        no se toca, se dice. Con el nombre en amarillo («se va»), sale el día 1, como al importar;
+      · una salida que puso la app a mano no la cambia la hoja; una que puso la hoja, la hoja la deshace si vuelve.
+    Más de 5 salidas u 8 fichas nuevas de golpe (una pestaña nueva a medio hacer) se retienen hasta aceptarlas."""
     center = conf["center"]
     modo = conf.get("modo") or "prueba"
     hoy = _cua_hoy()
     desde = (hoy - timedelta(days=_SYNC_ANTES)).isoformat()
     hasta = (hoy + timedelta(days=_SYNC_DESPUES)).isoformat()
+    manana = (hoy + timedelta(days=1)).isoformat()
     ahora = datetime.now(timezone.utc).isoformat()
     from zoneinfo import ZoneInfo
     sello = datetime.now(ZoneInfo("Europe/Madrid")).strftime("%d/%m %H:%M")
     r = {"en": ahora, "modo": modo, "hoja": _texto_cuerpo(cuerpo.get("hoja"), 120), "center": center,
          "desde": desde, "hasta": hasta, "pestanas": [], "saltadas": [], "sin_ficha": [], "ambiguos": [],
-         "a_app": 0, "a_app_cambia": 0, "a_hoja": 0, "a_hoja_cambia": 0, "conflictos": 0, "maximas_app": 0, "maximas_hoja": 0,
-         "protegidas": 0, "codigos_desconocidos": {}, "cambios": [], "retenido": False, "aplicado": False,
-         "error": None, "escribir": []}
+         "a_app": 0, "a_app_cambia": 0, "a_hoja": 0, "a_hoja_cambia": 0, "conflictos": 0, "maximas_app": 0,
+         "maximas_hoja": 0, "protegidas": 0, "codigos_desconocidos": {}, "cambios": [], "retenido": False,
+         "aplicado": False, "error": None, "escribir": [],
+         "personas": {"entran": [], "fichas_nuevas": [], "salen": [], "vuelven": [], "en_app_no_en_hoja": [],
+                      "revisar": [], "retenidas": 0}}
+    gente = r["personas"]
     pestanas = [p for p in (cuerpo.get("pestanas") or []) if isinstance(p, dict)]
     leido = await asyncio.to_thread(_cx.leer_pestanas, pestanas, hoy)
     r["saltadas"] = leido["saltadas"][:20]
@@ -48376,7 +48414,9 @@ async def _sync_procesar(conf: dict, cuerpo: dict) -> dict:
     todas = await db.drivers.find(vivas_q, {"_id": 0, "id": 1, "name": 1, "active": 1, "center": 1,
                                             "transporter_id": 1}).to_list(20000)
     fichas = [x for x in todas if not x.get("center") or _cua_es_centro(x.get("center"), center)]
+    nombre_de = {x["id"]: x.get("name") or "" for x in todas}
     alias = await _alias_cuadrante()
+    ignorados = set(conf.get("ignorados") or [])
 
     # ── Qué pestañas sirven, y de cuál se toma cada día ──
     usables = []
@@ -48390,96 +48430,188 @@ async def _sync_procesar(conf: dict, cuerpo: dict) -> dict:
         if p["fechas"][-1] < desde or p["fechas"][0] > hasta:
             info["motivo"] = "es de fechas que ya no se sincronizan"
             continue
-        casan, sin_ficha, ambiguos = _sync_empareja([f["nombre"] for f in p["filas"]], fichas, alias)
+        nombres = [f["nombre"] for f in p["filas"] if f["nombre"] not in ignorados]
+        casan, pendientes, dobles = _sync_empareja(nombres, fichas, alias)
         info["emparejadas"] = len(casan)
-        otro = _cua_centro_de_la_hoja([f["nombre"] for f in p["filas"]], todas, alias, center)
+        otro = _cua_centro_de_la_hoja(nombres, todas, alias, center)
         if otro:
             info["motivo"] = "parece de %s (%d personas tienen allí la ficha)" % (otro["centro"], otro["casan_alli"])
             continue
-        if not p["filas"] or len(casan) < 0.5 * len(p["filas"]):
+        if not nombres or len(casan) < 0.5 * len(nombres):
             info["motivo"] = "casan menos de la mitad de los nombres con fichas de %s" % center
             continue
         info["usada"] = True
-        usables.append((i, p, casan, sin_ficha, ambiguos))
+        usables.append((i, p, casan, pendientes, dobles))
     if not usables:
         r["error"] = ("No encuentro en la hoja ninguna pestaña de cuadrante de %s con días entre el %s y el %s."
                       % (center, desde, hasta))
         return r
-    fuente = {}                                          # fecha -> (i, p, casan): la pestaña que llega más tarde
-    for i, p, casan, _, _ in usables:
+    fuente = {}                                          # fecha -> (i, p): la pestaña que llega más tarde
+    for i, p, *_ in usables:
         for f in p["fechas"]:
             if desde <= f <= hasta:
                 actual = fuente.get(f)
                 if actual is None or (p["fechas"][-1], i) >= (actual[1]["fechas"][-1], actual[0]):
-                    fuente[f] = (i, p, casan)
-    sin_ficha = sorted({n for u in usables for n in u[3]})
-    ambiguos = sorted({n for u in usables for n in u[4]})
-    r["sin_ficha"], r["ambiguos"] = sin_ficha[:40], ambiguos[:40]
+                    fuente[f] = (i, p)
+    casan_de = {i: casan for i, _, casan, _, _ in usables}
+    r["ambiguos"] = sorted({d for u in usables for d in u[4]})[:40]
 
-    # ── Lo que hay en cada sitio ──
+    # ── Los nombres sin ficha: se crea si no se parece a nadie; si se parece, que elija una persona ──
+    pendientes: dict = {}
+    for *_, pend, _ in usables:
+        for n, m in pend.items():
+            pendientes[n] = "ambiguo" if m == "ambiguo" or pendientes.get(n) == "ambiguo" else m
+    usadas = {d["id"] for u in usables for d in u[2].values()}
+    ids_centro = {x["id"] for x in fichas}
+    otras = [{**x, "_otro_centro": True} for x in todas if x["id"] not in ids_centro and x.get("active") is not False]
+    nuevas = []
+    for nombre, motivo in sorted(pendientes.items()):
+        opciones, sugerida = _cua_opciones_para(nombre, motivo, fichas, usadas)
+        if not opciones:
+            lejos = [x for x in otras if _nombres_veredicto(nombre, x.get("name")) == "si"]
+            if lejos:
+                opciones, sugerida = _cua_opciones_para(nombre, motivo, lejos, usadas)
+        if not opciones and motivo == "no_encontrado" and len(_palabras_nombre(nombre)) >= 2:
+            nuevas.append(nombre)
+        else:
+            gente["revisar"].append({"nombre": nombre, "motivo": "duplicada" if motivo == "ambiguo" else "parecido",
+                                     "opciones": opciones, "sugerida": sugerida})
+    gente["fichas_nuevas"] = nuevas[:40]
+    gente["revisar"] = gente["revisar"][:30]
+    r["sin_ficha"] = [x["nombre"] for x in gente["revisar"]]
+
     mapa = await _cua_mapa_codigos()
-    hoja: dict = {}
-    for f, (i, p, casan) in fuente.items():
-        col = p["columnas"].get(f)
-        for fila in p["filas"]:
-            drv = casan.get(fila["nombre"])
-            if not drv or not col:
-                continue
-            cel = fila["celdas"].get(f)
-            hoja[(drv["id"], f)] = {"drv": drv, "nombre": fila["nombre"], "pestana": p["hoja"], "fila": fila["fila"],
-                                    "col": col, "cel": cel, "alta_desde": fila.get("alta_desde"), "p": p, "fecha": f}
-    ids = sorted({k[0] for k in hoja})
-    actuales: dict = {}
-    if ids:
-        async for s in db.shifts.find({"driver_id": {"$in": ids}, "date": {"$gte": desde, "$lte": hasta}},
-                                      {"_id": 0}):
-            actuales[(s["driver_id"], s["date"])] = s
-    aprobados = await _cua_aprobados(ids, desde, hasta)
-    suspendidos = await _suspendidos(ids, desde, hasta) if ids else {}
     base_doc = await db[_SYNC_BASE].find_one({"center": center}, {"_id": 0}) or {}
     base = dict(base_doc.get("celdas") or {})
     base_max = dict(base_doc.get("maximas") or {})
 
-    # ── Celda a celda ──
-    a_app, a_hoja = [], []
-    for (did, f), h in sorted(hoja.items(), key=lambda kv: (kv[0][1], kv[1]["nombre"])):
-        clave = f"{did}|{f}"
-        doc = actuales.get((did, f))
-        if doc and not _cua_es_centro(doc.get("center"), center):
-            continue                                     # ese día lo lleva otro centro
-        cel = h["cel"]
-        if cel and h["alta_desde"] and f < h["alta_desde"] and cel["cod"] in ("N/T", "L"):
-            cel = None                                   # «todavía no está», no «libra» (igual que al importar)
-        if cel and cel["cod"] not in mapa and cel["cod"] not in CODIGOS_CUADRANTE_DEF:
-            r["codigos_desconocidos"][cel["cod"]] = r["codigos_desconocidos"].get(cel["cod"], 0) + 1
-            continue
-        S = _sync_canon(cel["cod"], cel["extra"], cel["hora"]) if cel else ""
-        A = _sync_canon_turno(doc)
-        B = base.get(clave)
-        prot = ""
-        if clave in suspendidos or (doc or {}).get("suspension_id"):
-            prot = "suspension"
-        elif (doc or {}).get("aprobado_req"):
-            prot = "aprobado"
-        elif (doc or {}).get("fijada"):
-            prot = "candado"
-        elif aprobados.get(clave) and S:
-            tipo_s = _cua_tipo(cel["cod"], mapa)
-            ap = aprobados[clave]
-            if (ap == "libre" and tipo_s in ("trabaja", "extra")) or (ap == "extra" and tipo_s == "libre"):
+    def entradas(casan_por_pestana: dict) -> dict:
+        """(did, fecha) -> dónde está en la hoja y qué pone, de las personas de `casan_por_pestana`."""
+        out = {}
+        for f, (i, p) in fuente.items():
+            col = p["columnas"].get(f)
+            casan = casan_por_pestana.get(i) or {}
+            if not col:
+                continue
+            for fila in p["filas"]:
+                drv = casan.get(fila["nombre"])
+                if not drv:
+                    continue
+                out[(drv["id"], f)] = {"drv": drv, "nombre": fila["nombre"], "pestana": p["hoja"],
+                                       "fila": fila["fila"], "col": col, "cel": fila["celdas"].get(f),
+                                       "alta_desde": fila.get("alta_desde"), "p": p, "fecha": f}
+        return out
+
+    async def planificar(hoja: dict) -> Tuple[list, list]:
+        """Celda a celda: (a_app, a_hoja). Va dejando en `base` lo que ya coincide."""
+        ids = sorted({k[0] for k in hoja})
+        actuales: dict = {}
+        if ids:
+            async for s in db.shifts.find({"driver_id": {"$in": ids}, "date": {"$gte": desde, "$lte": hasta}},
+                                          {"_id": 0}):
+                actuales[(s["driver_id"], s["date"])] = s
+        aprobados = await _cua_aprobados(ids, desde, hasta)
+        suspendidos = await _suspendidos(ids, desde, hasta) if ids else {}
+        a_app, a_hoja = [], []
+        for (did, f), h in sorted(hoja.items(), key=lambda kv: (kv[0][1], kv[1]["nombre"])):
+            clave = f"{did}|{f}"
+            doc = actuales.get((did, f))
+            if doc and not _cua_es_centro(doc.get("center"), center):
+                continue                                 # ese día lo lleva otro centro
+            cel = h["cel"]
+            if cel and h["alta_desde"] and f < h["alta_desde"] and cel["cod"] in ("N/T", "L"):
+                cel = None                               # «todavía no está», no «libra» (igual que al importar)
+            if cel and cel["cod"] not in mapa and cel["cod"] not in CODIGOS_CUADRANTE_DEF:
+                r["codigos_desconocidos"][cel["cod"]] = r["codigos_desconocidos"].get(cel["cod"], 0) + 1
+                continue
+            S = _sync_canon(cel["cod"], cel["extra"], cel["hora"]) if cel else ""
+            A = _sync_canon_turno(doc)
+            B = base.get(clave)
+            prot = ""
+            if clave in suspendidos or (doc or {}).get("suspension_id"):
+                prot = "suspension"
+            elif (doc or {}).get("aprobado_req"):
                 prot = "aprobado"
-        accion, por_que = _sync_decide(S, A, B, prot)
-        if accion == "igual":
-            base[clave] = S
-        elif accion == "nada":
-            if not S and not A:
-                base.pop(clave, None)
-        elif accion == "a_app":
-            a_app.append((h, doc, cel, S, A, por_que))
-        else:
-            a_hoja.append((h, A, S, por_que))
-        if prot and accion == "a_hoja":
-            r["protegidas"] += 1
+            elif (doc or {}).get("fijada"):
+                prot = "candado"
+            elif aprobados.get(clave) and S:
+                tipo_s = _cua_tipo(cel["cod"], mapa)
+                ap = aprobados[clave]
+                if (ap == "libre" and tipo_s in ("trabaja", "extra")) or (ap == "extra" and tipo_s == "libre"):
+                    prot = "aprobado"
+            accion, por_que = _sync_decide(S, A, B, prot)
+            if accion == "igual":
+                base[clave] = S
+            elif accion == "nada":
+                if not S and not A:
+                    base.pop(clave, None)
+            elif accion == "a_app":
+                a_app.append((h, doc, cel, S, A, por_que))
+            else:
+                a_hoja.append((h, A, S, por_que))
+            if prot and accion == "a_hoja":
+                r["protegidas"] += 1
+        return a_app, a_hoja
+
+    a_app, a_hoja = await planificar(entradas(casan_de))
+
+    # ── Quién entra y quién sale del cuadrante de la app ──
+    presente: dict = {}                                  # did -> fechas en que está en la hoja
+    for f, (i, p) in fuente.items():
+        for fila in p["filas"]:
+            drv = casan_de[i].get(fila["nombre"])
+            if drv:
+                presente.setdefault(drv["id"], set()).add(f)
+    fila_de: dict = {}                                   # did -> su fila en la pestaña más reciente
+    for i, p, casan, _, _ in sorted(usables, key=lambda u: (u[1]["fechas"][-1], u[0])):
+        for fila in p["filas"]:
+            if casan.get(fila["nombre"]):
+                fila_de[casan[fila["nombre"]]["id"]] = fila
+    personas_app = {x["driver_id"]: x for x in await db[_CUA_PERSONAS].find({"center": center}, {"_id": 0})
+                    .to_list(5000)}
+    antes_en_hoja = set(base_doc.get("personas") or [])
+    futuras = sorted(f for f in fuente if f >= manana)
+    plan_personas = []                                   # (did, campos, borrar_desde)
+    for did in sorted(set(presente) | antes_en_hoja):
+        pa = personas_app.get(did) or {}
+        fila = fila_de.get(did) or {}
+        nombre = nombre_de.get(did) or fila.get("nombre") or did
+        campos = {}
+        if did in presente and pa.get("en_cuadrante") is not True:
+            campos["en_cuadrante"] = True
+            if fila.get("alta_desde") and not pa.get("alta_desde"):
+                campos["alta_desde"] = fila["alta_desde"]
+            gente["entran"].append(nombre)
+        # Desde qué día deja de estar en la hoja (hasta el último día que tiene la hoja).
+        f0 = None
+        for f in reversed(futuras):
+            if f in presente.get(did, set()):
+                break
+            f0 = f
+        amarillo = fila.get("inactivo_desde")
+        deseado = min([x for x in (f0, amarillo) if x], default=None)
+        manual = pa.get("inactivo_desde") and pa.get("inactivo_por") != "hoja"
+        actual = pa.get("inactivo_desde") if pa.get("inactivo_por") == "hoja" else None
+        borrar = None
+        if not manual and deseado != actual:
+            campos["inactivo_desde"] = deseado
+            campos["inactivo_por"] = "hoja" if deseado else None
+            if deseado:
+                borrar = f0 if f0 == deseado else None
+                dias = len(await db.shifts.find({"driver_id": did, "center": _cua_rx(center),
+                                                 "date": {"$gte": borrar}}, {"_id": 0, "date": 1})
+                           .to_list(5000)) if borrar else 0
+                gente["salen"].append({"nombre": nombre, "desde": deseado, "por": "fuera" if borrar else "amarillo",
+                                       "dias": dias})
+            else:
+                gente["vuelven"].append(nombre)
+        if campos:
+            plan_personas.append((did, campos, borrar))
+    for did, pa in personas_app.items():
+        if pa.get("en_cuadrante") and did not in presente and did not in antes_en_hoja \
+                and not (pa.get("inactivo_desde") and pa["inactivo_desde"] <= hoy.isoformat()):
+            gente["en_app_no_en_hoja"].append(nombre_de.get(did) or did)
+    gente["en_app_no_en_hoja"] = sorted(gente["en_app_no_en_hoja"])[:40]
 
     # ── Las máximas ──
     max_app, max_hoja = [], []
@@ -48487,7 +48619,7 @@ async def _sync_procesar(conf: dict, cuerpo: dict) -> dict:
     async for d in db.route_demand.find({"center": center, "date": {"$gte": desde, "$lte": hasta}}, {"_id": 0}):
         if isinstance(d.get("maximo"), (int, float)):
             demanda[d["date"]] = int(d["maximo"])
-    for f, (i, p, casan) in fuente.items():
+    for f, (i, p) in fuente.items():
         S = p["maximas"].get(f)
         A, B = demanda.get(f), base_max.get(f)
         acc = _sync_decide_maxima(S, A, B)
@@ -48498,36 +48630,66 @@ async def _sync_procesar(conf: dict, cuerpo: dict) -> dict:
         elif acc == "a_hoja" and p.get("fila_maximas") and p["columnas"].get(f):
             max_hoja.append((f, A, p))
 
-    r["a_app"], r["a_hoja"] = len(a_app), len(a_hoja)
-    r["a_app_cambia"] = sum(1 for x in a_app if x[4])
-    r["a_hoja_cambia"] = sum(1 for x in a_hoja if x[2])
-    r["conflictos"] = sum(1 for x in a_app if x[5] == "conflicto")
-    r["maximas_app"], r["maximas_hoja"] = len(max_app), len(max_hoja)
-    for h, doc, cel, S, A, por_que in a_app[:40]:
-        r["cambios"].append({"hacia": "app", "nombre": h["drv"].get("name") or h["nombre"], "fecha": h["fecha"],
-                             "antes": A.replace("@", " ") or "—", "ahora": S.replace("@", " "), "por_que": por_que})
-    for h, A, S, por_que in a_hoja[:40]:
-        r["cambios"].append({"hacia": "hoja", "nombre": h["drv"].get("name") or h["nombre"], "fecha": h["fecha"],
-                             "antes": S.replace("@", " ") or "—", "ahora": A.replace("@", " ") or "(vacía)",
-                             "por_que": _SYNC_POR_QUE.get(por_que, por_que)})
-    for f, S, A in max_app[:20]:
-        r["cambios"].append({"hacia": "app", "nombre": "MÁXIMA", "fecha": f, "antes": "—" if A is None else str(A),
-                             "ahora": str(S), "por_que": "hoja"})
-    for f, A, p in max_hoja[:20]:
-        r["cambios"].append({"hacia": "hoja", "nombre": "MÁXIMA", "fecha": f, "antes": "—", "ahora": str(A),
-                             "por_que": _SYNC_POR_QUE["maxima"]})
+    def contar():
+        r["a_app"], r["a_hoja"] = len(a_app), len(a_hoja)
+        r["a_app_cambia"] = sum(1 for x in a_app if x[4])
+        r["a_hoja_cambia"] = sum(1 for x in a_hoja if x[2])
+        r["conflictos"] = sum(1 for x in a_app if x[5] == "conflicto")
+        r["maximas_app"], r["maximas_hoja"] = len(max_app), len(max_hoja)
+        r["cambios"] = []
+        for h, doc, cel, S, A, por_que in a_app[:40]:
+            r["cambios"].append({"hacia": "app", "nombre": h["drv"].get("name") or h["nombre"], "fecha": h["fecha"],
+                                 "antes": A.replace("@", " ") or "—", "ahora": S.replace("@", " "), "por_que": por_que})
+        for h, A, S, por_que in a_hoja[:40]:
+            r["cambios"].append({"hacia": "hoja", "nombre": h["drv"].get("name") or h["nombre"], "fecha": h["fecha"],
+                                 "antes": S.replace("@", " ") or "—", "ahora": A.replace("@", " ") or "(vacía)",
+                                 "por_que": _SYNC_POR_QUE.get(por_que, por_que)})
+        for f, S, A in max_app[:20]:
+            r["cambios"].append({"hacia": "app", "nombre": "MÁXIMA", "fecha": f,
+                                 "antes": "—" if A is None else str(A), "ahora": str(S), "por_que": "hoja"})
+        for f, A, p in max_hoja[:20]:
+            r["cambios"].append({"hacia": "hoja", "nombre": "MÁXIMA", "fecha": f, "antes": "—", "ahora": str(A),
+                                 "por_que": _SYNC_POR_QUE["maxima"]})
+    contar()
 
     if modo != "activo":
         return r
+    forzar = bool(conf.get("forzar_una_vez"))
     # Tanto de golpe es una hoja reordenada, el mes equivocado o un Excel viejo importado en la app: no se toca nada
     # hasta que alguien lo mire. Hacia los dos lados.
-    if max(r["a_app_cambia"], r["a_hoja_cambia"]) > _SYNC_TOPE and not conf.get("forzar_una_vez"):
+    if max(r["a_app_cambia"], r["a_hoja_cambia"]) > _SYNC_TOPE and not forzar:
         r["retenido"] = True
         return r
+    # La gente, aparte: una pestaña del mes que viene a medio hacer dejaría fuera a media plantilla. Se retienen
+    # las salidas y las fichas nuevas, y lo demás (los días, quien entra) sigue.
+    n_salen = sum(1 for _, _, b in plan_personas if b)
+    gente_retenida = (n_salen > 5 or len(nuevas) > 8) and not forzar
+    if gente_retenida:
+        gente["retenidas"] = n_salen + len(nuevas)
+        plan_personas = [(d, {k: v for k, v in c.items() if k not in ("inactivo_desde", "inactivo_por")}, None)
+                         for d, c, _ in plan_personas]
+        nuevas = []
+    yo = {"name": "Google Sheets"}
+    cambio = _CuaCambio(center, yo, "Sincronizar con Google Sheets")
+
+    # Fichas nuevas: se crean, entran en el cuadrante y sus días se planifican en esta misma vuelta.
+    if nuevas:
+        creadas = {}
+        for nombre in nuevas:
+            ficha = await _cua_crear_conductor(center, nombre)
+            creadas[nombre] = ficha
+            await _cua_guardar_persona(center, ficha["id"], {"en_cuadrante": True, "inactivo_desde": None}, yo,
+                                       cambio)
+            presente.setdefault(ficha["id"], set())
+        hoja_nuevas = entradas({i: creadas for i, *_ in usables})
+        extra_app, extra_hoja = await planificar(hoja_nuevas)
+        a_app += extra_app
+        a_hoja += extra_hoja
+        for did, f in hoja_nuevas:
+            presente[did].add(f)
+        contar()
 
     # ── Aplicar en la app (como el importador: con «Deshacer») ──
-    cambio = _CuaCambio(center, {"name": "Google Sheets"},
-                        "Sincronizar con Google Sheets (%d celdas)" % (len(a_app) + len(max_app)))
     ops = []
     for h, doc, cel, S, A, por_que in a_app:
         did, f = h["drv"]["id"], h["fecha"]
@@ -48550,6 +48712,18 @@ async def _sync_procesar(conf: dict, cuerpo: dict) -> dict:
         await db.route_demand.update_one(filtro, {"$set": {**filtro, "maximo": S, "updated_at": ahora,
                                                            "updated_by": "Google Sheets"}}, upsert=True)
         base_max[f] = S
+    for did, campos, borrar in plan_personas:
+        if campos:
+            await _cua_guardar_persona(center, did, campos, yo, cambio)
+        if borrar:
+            filtro = {"driver_id": did, "center": _cua_rx(center), "date": {"$gte": borrar}}
+            for s in await db.shifts.find(filtro, {"_id": 0}).to_list(5000):
+                cambio.anota("shifts", {"driver_id": did, "date": s["date"]}, s)
+            await db.shifts.delete_many(filtro)
+            # Si vuelve, sus días tienen que entrar como nuevos, no como «quitados en la app».
+            base = {k: v for k, v in base.items() if not (k.startswith(did + "|") and k.split("|")[-1] >= borrar)}
+    cambio.que = "Sincronizar con Google Sheets (%d celdas%s)" % (
+        len(a_app) + len(max_app), ", %d personas" % len(plan_personas) if plan_personas else "")
     await cambio.guardar()
 
     # ── Lo que el script escribe en la hoja ──
@@ -48578,16 +48752,18 @@ async def _sync_procesar(conf: dict, cuerpo: dict) -> dict:
         r["escribir"].append({"hoja": p["hoja"], "fila": p["fila_maximas"], "col": p["columnas"][f], "valor": A,
                               "fondo": None, "nota": "Flota %s: %s" % (sello, _SYNC_POR_QUE["maxima"])})
 
-    # La base, sin lo que ya no se sincroniza.
+    # La base, sin lo que ya no se sincroniza; y quién estaba en la hoja (para saber quién sale la próxima vez).
+    # Una salida retenida sigue contando como «estaba»: si no, al día siguiente ya no se vería que se fue.
+    personas = set(presente) | (antes_en_hoja if gente_retenida else set())
     base = {k: v for k, v in base.items() if k.split("|")[-1] >= desde}
     base_max = {k: v for k, v in base_max.items() if k >= desde}
-    await db[_SYNC_BASE].update_one({"center": center}, {"$set": {"center": center, "celdas": base,
-                                                                   "maximas": base_max, "actualizado_en": ahora}},
-                                    upsert=True)
+    await db[_SYNC_BASE].update_one({"center": center}, {"$set": {
+        "center": center, "celdas": base, "maximas": base_max, "personas": sorted(personas),
+        "actualizado_en": ahora}}, upsert=True)
     r["aplicado"] = True
-    if a_app or max_app:
-        logger.info("Sync Google Sheets %s: %d celdas y %d máximas a la app, %d a la hoja", center, len(a_app),
-                    len(max_app), len(r["escribir"]))
+    if a_app or max_app or plan_personas:
+        logger.info("Sync Google Sheets %s: %d celdas y %d máximas a la app, %d a la hoja, %d personas", center,
+                    len(a_app), len(max_app), len(r["escribir"]), len(plan_personas))
     return r
 
 
@@ -48656,7 +48832,7 @@ def _sync_salida(conf: Optional[dict]) -> dict:
     if not conf or conf.get("revocado"):
         return {"conectado": False}
     out = {k: conf.get(k) for k in ("modo", "creado_en", "creado_por", "hoja_nombre", "hoja_id", "ultimo_contacto",
-                                    "ultima", "ultima_escritura", "forzar_una_vez")}
+                                    "ultima", "ultima_escritura", "forzar_una_vez", "llave_vieja_en")}
     out["historial"] = list(reversed(conf.get("historial") or []))[:15]
     out["conectado"] = True
     out["hoja_url"] = ("https://docs.google.com/spreadsheets/d/%s/edit" % conf["hoja_id"]
@@ -48678,12 +48854,16 @@ async def cuadrante_sync_conectar(data: dict = Body(...), user: dict = Depends(r
     center = _sync_puede(user, data.get("center"))
     llave = "fs_" + secrets.token_urlsafe(32)
     filtro = {"db_name": _current_db_name.get(), "center": center}
-    previo = await global_db[_SYNC_COL].find_one(filtro, {"_id": 0, "id": 1})
-    await global_db[_SYNC_COL].update_one(filtro, {
+    previo = await global_db[_SYNC_COL].find_one(filtro, {"_id": 0, "id": 1, "token_hash": 1, "revocado": 1})
+    cambio = {
         "$set": {**filtro, "token_hash": _sync_hash(llave), "modo": "prueba", "revocado": False,
-                 "creado_en": datetime.now(timezone.utc).isoformat(),
+                 "creado_en": datetime.now(timezone.utc).isoformat(), "llave_vieja_en": None,
                  "creado_por": user.get("name") or user.get("username") or "oficina", "forzar_una_vez": False},
-        "$setOnInsert": {"id": (previo or {}).get("id") or str(uuid.uuid4())}}, upsert=True)
+        "$setOnInsert": {"id": (previo or {}).get("id") or str(uuid.uuid4())}}
+    if previo and previo.get("token_hash") and not previo.get("revocado"):
+        # Solo para reconocerla si llega (y decir «tiene el código antiguo»); no da acceso a nada.
+        cambio["$push"] = {"hashes_viejos": {"$each": [previo["token_hash"]], "$slice": -5}}
+    await global_db[_SYNC_COL].update_one(filtro, cambio, upsert=True)
     await _audit(user, "cuadrante_sync_conectar", {"center": center})
     return {"llave": llave, "script": _sync_script(_BACKEND_BASE + "/api/cuadrante/sync/hoja", llave, center),
             "aviso": "Cópialo ahora: la llave no se vuelve a enseñar. Si se pierde, conecta otra vez."}
@@ -48717,6 +48897,38 @@ async def cuadrante_sync_aceptar(data: dict = Body(...), user: dict = Depends(re
         raise HTTPException(404, "Esta hoja no está conectada")
     await _audit(user, "cuadrante_sync_aceptar", {"center": center})
     return {"ok": True}
+
+
+@api_router.post("/cuadrante/sync/emparejar")
+async def cuadrante_sync_emparejar(data: dict = Body(...), user: dict = Depends(require_admin)):
+    """Un nombre de la hoja que no casó solo: es esta ficha (`eleccion` = su id: se guarda como alias, como al
+    importar), es alguien nuevo («__nueva__»: se le hace la ficha) o no es del cuadrante («__fuera__»: la hoja lo
+    deja de mirar). Se aplica en la siguiente sincronización."""
+    center = _sync_puede(user, data.get("center"))
+    nombre = " ".join(_texto_cuerpo(data.get("nombre"), 120).split())
+    eleccion = _texto_cuerpo(data.get("eleccion"), 80)
+    if not nombre or not eleccion:
+        raise HTTPException(400, "Falta el nombre o qué es")
+    filtro = {"db_name": _current_db_name.get(), "center": center, "revocado": False}
+    if not await global_db[_SYNC_COL].find_one(filtro, {"_id": 0, "id": 1}):
+        raise HTTPException(404, "Esta hoja no está conectada")
+    if eleccion == _CUA_FUERA:
+        await global_db[_SYNC_COL].update_one(filtro, {"$addToSet": {"ignorados": nombre}})
+        return {"ok": True, "nombre": nombre, "que": "fuera"}
+    if eleccion == _CUA_NUEVA:
+        ficha = await _cua_crear_conductor(center, nombre)
+    else:
+        ficha = await db.drivers.find_one({"id": eleccion, "merged_into": {"$exists": False}},
+                                          {"_id": 0, "id": 1, "name": 1})
+        if not ficha:
+            raise HTTPException(404, "Esa ficha no existe")
+    alias = await _alias_cuadrante()
+    await db.app_meta.update_one({"_id": _ALIAS_DOC}, {"$set": {
+        "mapa": {**alias, nombre: ficha["id"]}, "actualizado_en": datetime.now(timezone.utc).isoformat()}},
+        upsert=True)
+    await _audit(user, "cuadrante_sync_emparejar", {"center": center, "nombre": nombre, "ficha": ficha["id"]})
+    return {"ok": True, "nombre": nombre, "que": "nueva" if eleccion == _CUA_NUEVA else "ficha",
+            "ficha": {"id": ficha["id"], "name": ficha.get("name")}}
 
 
 @api_router.post("/cuadrante/sync/desconectar")

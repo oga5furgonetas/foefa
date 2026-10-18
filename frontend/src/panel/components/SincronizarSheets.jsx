@@ -1,9 +1,9 @@
 import { useCallback, useEffect, useState } from 'react'
 import {
-  Loader2, Copy, Check, AlertTriangle, ExternalLink, Play, Pause, Link2Off, RefreshCw, ArrowRight,
+  Loader2, Copy, Check, AlertTriangle, ExternalLink, Play, Pause, Link2Off, RefreshCw, ArrowRight, UserPlus, UserMinus,
 } from 'lucide-react'
 import {
-  getSyncHoja, conectarSyncHoja, modoSyncHoja, aceptarSyncHoja, desconectarSyncHoja,
+  getSyncHoja, conectarSyncHoja, modoSyncHoja, aceptarSyncHoja, desconectarSyncHoja, emparejarSyncHoja,
 } from '../api'
 import { lista } from '../../lib/lista'
 import { fechaHoraLocal } from '../../lib/fecha'
@@ -25,6 +25,94 @@ const dia = (f) => {
   return d.toLocaleDateString('es-ES', { weekday: 'short', day: '2-digit', month: '2-digit' })
 }
 
+const fmt = (f) => (f ? `${f.slice(8, 10)}/${f.slice(5, 7)}` : '')
+
+/* Un nombre de la hoja que no casa solo con una ficha (se parece a alguien, o a dos). Se elige aquí: es esa
+   persona (se recuerda), es alguien nuevo (se le hace la ficha) o no es del cuadrante (la hoja lo deja de mirar). */
+function Revisar({ center, item }) {
+  const [hecho, setHecho] = useState('')
+  const [ocupado, setOcupado] = useState(false)
+  const [err, setErr] = useState('')
+  const elegir = async (eleccion, txt) => {
+    setOcupado(true); setErr('')
+    try { await emparejarSyncHoja(center, item.nombre, eleccion); setHecho(txt) }
+    catch (e) { setErr(e?.response?.data?.detail || 'No se ha podido guardar.') }
+    setOcupado(false)
+  }
+  return (
+    <li className="rounded-lg border border-dark-800 px-2.5 py-2" data-testid="revisar">
+      <p className="text-dark-100">
+        «{item.nombre}» {item.motivo === 'duplicada' ? 'casa con dos fichas' : 'se parece a una ficha, pero no del todo'}
+      </p>
+      {hecho ? (
+        <p className="mt-1 text-[12px] text-emerald-300">{hecho} Entra en la próxima sincronización.</p>
+      ) : (
+        <div className="mt-1.5 flex flex-wrap gap-1.5">
+          {lista(item.opciones).map((o) => (
+            <button key={o.id} disabled={ocupado} onClick={() => elegir(o.id, `Es ${o.name}.`)}
+              className={`rounded-lg px-2.5 py-1 text-[12px] font-semibold disabled:opacity-50 ${item.sugerida === o.id
+                ? 'bg-brand-500/20 text-brand-200' : 'border border-dark-700 text-dark-200'}`}>
+              Es {o.name}{o.centro ? ` (${o.centro})` : ''}{o.activa ? '' : ' · de baja'}
+            </button>
+          ))}
+          <button disabled={ocupado} onClick={() => elegir('__nueva__', 'Ficha nueva hecha.')}
+            className="rounded-lg border border-dark-700 px-2.5 py-1 text-[12px] text-dark-300 disabled:opacity-50">
+            Es otra persona: ficha nueva
+          </button>
+          <button disabled={ocupado} onClick={() => elegir('__fuera__', 'Apartado: no es del cuadrante.')}
+            className="rounded-lg px-2.5 py-1 text-[12px] text-dark-500 hover:text-dark-300 disabled:opacity-50">
+            No es del cuadrante
+          </button>
+        </div>
+      )}
+      {err && <p className="mt-1 text-[12px] text-red-300">{err}</p>}
+    </li>
+  )
+}
+
+/* La gente: quién entra en el cuadrante de la app, quién sale, a quién se le hace ficha y qué nombres hay que
+   mirar. En prueba se dice en condicional: todavía no ha pasado nada. */
+function Gente({ center, g, prueba }) {
+  const v = (si, no) => (prueba ? si : no)
+  const salen = lista(g.salen)
+  const hay = lista(g.entran).length || lista(g.fichas_nuevas).length || salen.length || lista(g.vuelven).length
+    || lista(g.revisar).length || lista(g.en_app_no_en_hoja).length
+  if (!hay) return null
+  return (
+    <div className="space-y-1.5 rounded-lg bg-dark-950/60 p-2.5 text-[12.5px]" data-testid="gente">
+      {lista(g.entran).length > 0 && (
+        <p className="flex items-start gap-1.5"><UserPlus size={14} className="mt-0.5 shrink-0 text-emerald-300" />
+          <span>{v('Entrarían', 'Entran')} en el cuadrante de la app: {g.entran.join(', ')}.</span></p>
+      )}
+      {lista(g.fichas_nuevas).length > 0 && (
+        <p className="flex items-start gap-1.5"><UserPlus size={14} className="mt-0.5 shrink-0 text-emerald-300" />
+          <span>Ficha nueva ({v('se haría', 'hecha')}: su nombre no se parece al de nadie): {g.fichas_nuevas.join(', ')}.</span></p>
+      )}
+      {salen.length > 0 && (
+        <p className="flex items-start gap-1.5"><UserMinus size={14} className="mt-0.5 shrink-0 text-amber-300" />
+          <span>{v('Saldrían', 'Salen')} del cuadrante: {salen.map((s) => `${s.nombre} desde el ${fmt(s.desde)}${
+            s.por === 'amarillo' ? ' (en amarillo en la hoja)' : s.dias ? ` (se ${v('quitarían', 'quitan')} ${s.dias} ${s.dias === 1 ? 'día' : 'días'})` : ''}`).join(', ')}.</span></p>
+      )}
+      {lista(g.vuelven).length > 0 && (
+        <p className="flex items-start gap-1.5"><UserPlus size={14} className="mt-0.5 shrink-0 text-emerald-300" />
+          <span>{v('Volverían', 'Vuelven')} al cuadrante: {g.vuelven.join(', ')}.</span></p>
+      )}
+      {lista(g.en_app_no_en_hoja).length > 0 && (
+        <p className="text-dark-500">
+          En el cuadrante de la app pero no en tu hoja (no se tocan; si ya no están, quítalos en «Personas y notas»):{' '}
+          {g.en_app_no_en_hoja.join(', ')}.
+        </p>
+      )}
+      {lista(g.revisar).length > 0 && (
+        <div>
+          <p className="mb-1 font-semibold text-amber-300">Nombres que hay que mirar (hasta que se elija, se quedan fuera):</p>
+          <ul className="space-y-1.5">{g.revisar.map((x) => <Revisar key={x.nombre} center={center} item={x} />)}</ul>
+        </div>
+      )}
+    </div>
+  )
+}
+
 const POR_QUE = {
   primera: 'la hoja (primera vez)', hoja: 'cambiado en la hoja', nuevo: 'nuevo en la hoja',
   conflicto: 'cambiado en los dos: manda la hoja',
@@ -37,6 +125,7 @@ export default function SincronizarSheets({ center }) {
   const [copiado, setCopiado] = useState(false)
   const [err, setErr] = useState('')
   const [confirmarCorte, setConfirmarCorte] = useState(false)
+  const [confirmarOtro, setConfirmarOtro] = useState(false)   // sacar otro código deja sin servir el pegado
 
   const cargar = useCallback(() => {
     getSyncHoja(center).then(({ data }) => setEstado(data))
@@ -59,6 +148,7 @@ export default function SincronizarSheets({ center }) {
     const { data } = await conectarSyncHoja(center)
     setNueva(data)
     setConfirmarCorte(false)
+    setConfirmarOtro(false)
   })
   const copiar = () => {
     navigator.clipboard?.writeText(nueva?.script || '')
@@ -110,6 +200,7 @@ export default function SincronizarSheets({ center }) {
           <ul className="list-disc space-y-1 pl-5 text-dark-400">
             <li>Si cambia solo la hoja, gana la hoja; si cambia solo aquí, gana esto. Si cambian los dos a la vez, la hoja.</li>
             <li>Lo que la app protege no lo pisa la hoja: días concedidos, suspensiones y celdas con candado. Vuelven a la hoja con una nota.</li>
+            <li>Quien añades a la hoja entra en el cuadrante (con ficha nueva si no se parece a nadie); quien quitas de la hoja sale desde el día siguiente.</li>
             <li>Una celda que vacías en la hoja no borra nada aquí. Solo se tocan los días de hace una semana a dos meses vista.</li>
             <li>Si fueran a cambiar más de 80 celdas de golpe (una hoja mal ordenada, el mes equivocado), se para hasta que lo aceptes.</li>
           </ul>
@@ -137,6 +228,17 @@ export default function SincronizarSheets({ center }) {
             </span>
           </div>
 
+          {estado.llave_vieja_en && !nueva && (
+            <p className="flex items-start gap-2 rounded-lg bg-red-500/10 px-3 py-2 text-[13px] text-red-200" role="alert">
+              <AlertTriangle size={15} className="mt-0.5 shrink-0" />
+              <span>
+                Tu hoja intentó sincronizar a las {fechaHoraLocal(estado.llave_vieja_en)} con un código antiguo y no se ha
+                aceptado: después se sacó otro. Pega en Apps Script el código que copiaste la última vez (borrando el que hay)
+                y guarda. Si no lo tienes, sácalo otra vez abajo.
+              </span>
+            </p>
+          )}
+
           {u && (
             <div className="space-y-2 rounded-xl border border-dark-700 p-3">
               {u.error ? (
@@ -144,9 +246,9 @@ export default function SincronizarSheets({ center }) {
               ) : (
                 <>
                   <p className="text-dark-100">{u.mensaje}</p>
-                  {u.retenido && (
+                  {(u.retenido || u.personas?.retenidas > 0) && (
                     <div className="flex flex-wrap items-center gap-2 rounded-lg bg-amber-500/10 px-3 py-2 text-amber-200">
-                      <AlertTriangle size={15} /> Son demasiados cambios de golpe. Mira la lista y, si está bien, acéptalos: se aplican en la próxima sincronización.
+                      <AlertTriangle size={15} /> {u.retenido ? 'Son demasiados cambios de golpe.' : 'Saldrían o entrarían demasiadas personas de golpe (¿una pestaña a medio hacer?).'} Mira la lista y, si está bien, acéptalos: se aplican en la próxima sincronización.
                       <button onClick={() => hacer('aceptar', () => aceptarSyncHoja(center))} disabled={!!ocupado || estado.forzar_una_vez}
                         className="ml-auto rounded-lg bg-amber-500/20 px-2.5 py-1 text-xs font-bold text-amber-100 disabled:opacity-50">
                         {estado.forzar_una_vez ? 'Aceptados: en la próxima' : 'Aceptar estos cambios'}
@@ -164,12 +266,7 @@ export default function SincronizarSheets({ center }) {
                 ))}
                 {lista(u.saltadas).map((p) => <span key={p.nombre}>«{p.nombre}» no es un cuadrante</span>)}
               </div>
-              {lista(u.sin_ficha).length > 0 && (
-                <p className="text-[12px] text-amber-300">
-                  Sin ficha que case, se quedan fuera: {u.sin_ficha.join(', ')}. Para que entren, importa una vez la hoja
-                  en Excel («Importar hoja») y elige su ficha: se recuerda.
-                </p>
-              )}
+              {u.personas && <Gente center={center} g={u.personas} prueba={u.modo === 'prueba'} />}
               {lista(u.ambiguos).length > 0 && <p className="text-[12px] text-amber-300">Dudosos, fuera: {u.ambiguos.join(', ')}.</p>}
               {Object.keys(u.codigos_desconocidos || {}).length > 0 && (
                 <p className="text-[12px] text-amber-300">
@@ -220,12 +317,19 @@ export default function SincronizarSheets({ center }) {
                 {ocupado === 'modo' ? <Loader2 size={13} className="animate-spin" /> : <Play size={13} />} Activar: aplicar lo de arriba y seguir solo
               </button>
             )}
-            {!nueva && (
-              <button onClick={conectar} disabled={!!ocupado}
+            {!nueva && (confirmarOtro ? (
+              <span className="flex flex-wrap items-center gap-2 text-[12px] text-amber-200">
+                ¿Sacar un código nuevo? El que tienes pegado en la hoja dejará de funcionar y tendrás que pegar el nuevo.
+                <button onClick={conectar} disabled={!!ocupado}
+                  className="rounded-lg bg-amber-500/20 px-2.5 py-1 font-bold text-amber-100 disabled:opacity-50">Sí, sacar otro</button>
+                <button onClick={() => setConfirmarOtro(false)} className="text-dark-400 hover:text-dark-200">No</button>
+              </span>
+            ) : (
+              <button onClick={() => setConfirmarOtro(true)} disabled={!!ocupado}
                 className="flex items-center gap-1.5 rounded-lg border border-dark-700 px-3 py-1.5 text-xs text-dark-300 hover:bg-dark-800 disabled:opacity-50">
                 <RefreshCw size={13} /> Volver a sacar el script
               </button>
-            )}
+            ))}
             {confirmarCorte ? (
               <span className="ml-auto flex items-center gap-2 text-[12px]">
                 ¿Desconectar? El cuadrante se queda como está.
@@ -240,7 +344,6 @@ export default function SincronizarSheets({ center }) {
               </button>
             )}
           </div>
-          {!nueva && <p className="text-[12px] text-dark-500">«Volver a sacar el script» hace una llave nueva: la de antes deja de valer y hay que pegar el código otra vez.</p>}
           {lista(estado.historial).length > 0 && (
             <details className="text-[12px] text-dark-500">
               <summary className="cursor-pointer text-dark-400">Últimas sincronizaciones con cambios</summary>

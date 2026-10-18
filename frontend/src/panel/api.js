@@ -392,6 +392,7 @@ export const conectarSyncHoja = (center) => api.post('/cuadrante/sync/conectar',
 export const modoSyncHoja = (center, modo) => api.post('/cuadrante/sync/modo', { center, modo })
 export const aceptarSyncHoja = (center) => api.post('/cuadrante/sync/aceptar', { center })
 export const desconectarSyncHoja = (center) => api.post('/cuadrante/sync/desconectar', { center })
+export const emparejarSyncHoja = (center, nombre, eleccion) => api.post('/cuadrante/sync/emparejar', { center, nombre, eleccion })
 export const cuadranteExportar = (center, desde, hasta) =>
   api.get('/cuadrante/exportar', { params: { center, desde, hasta }, responseType: 'blob', timeout: 120000 })
 export function cuadranteImportar(file, center, confirmar, crearFichas, emparejar, forzarCentro) {

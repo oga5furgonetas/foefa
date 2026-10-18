@@ -802,6 +802,11 @@ test.describe('Cuadrante', () => {
         ultima: null, historial: [] }
       return json({ llave: 'fs_x', script: "var FLOTA_LLAVE = 'fs_x';\nfunction instalar() {}", aviso: 'Cópialo ahora: la llave no se vuelve a enseñar.' })(route)
     })
+    const emparejados = []
+    await page.route(/\/api\/cuadrante\/sync\/emparejar/, (route) => {
+      emparejados.push(route.request().postDataJSON())
+      return json({ ok: true })(route)
+    })
     await page.route(/\/api\/cuadrante\/sync\/modo/, (route) => {
       modos.push(route.request().postDataJSON())
       estado = { ...estado, modo: 'activo' }
@@ -823,18 +828,37 @@ test.describe('Cuadrante', () => {
       pestanas: [{ nombre: '12 A 26', desde: '2026-10-01', hasta: '2026-11-02', personas: 73, emparejadas: 72, usada: true }],
       saltadas: [{ nombre: 'DIARIO', motivo: 'sin días' }], sin_ficha: ['PERSONA NUEVA'], ambiguos: [],
       codigos_desconocidos: { '1.EXTRA': 1 },
+      personas: { entran: ['MANUEL POMBO'], fichas_nuevas: ['MARCOS NUEVO'], vuelven: [], retenidas: 0,
+        salen: [{ nombre: 'SARA VILA', desde: '2026-10-19', por: 'fuera', dias: 7 }], en_app_no_en_hoja: ['MELVIN ESPINOSA'],
+        revisar: [{ nombre: 'ANA PERES', motivo: 'parecido', sugerida: 'd1', opciones: [{ id: 'd1', name: 'ANA PÉREZ', activa: true, centro: null }] }] },
       cambios: [{ hacia: 'app', nombre: 'ANA PÉREZ', fecha: dia(1), antes: '1', ahora: 'N/T', por_que: 'hoja' },
         { hacia: 'hoja', nombre: 'LUIS GÓMEZ', fecha: dia(2), antes: '1', ahora: 'N/T APROB', por_que: 'día concedido en la app' }] } }
     await page.getByRole('dialog').getByRole('button', { name: 'Cerrar' }).click()
     await page.getByRole('button', { name: 'Google Sheets' }).click()
     await expect(v.getByText('cambiaría 2 celdas en Flota y 1 en esta hoja')).toBeVisible()
     await expect(v.getByText('Pestaña «12 A 26» (01/10 → 02/11): 72 de 73 personas')).toBeVisible()
-    await expect(v.getByText(/PERSONA NUEVA/)).toBeVisible()
     await expect(v.getByText(/1\.EXTRA \(1\)/)).toBeVisible()
     await expect(v.getByRole('cell', { name: 'día concedido en la app' })).toBeVisible()
+    const g = v.getByTestId('gente')
+    await expect(g.getByText('Entrarían en el cuadrante de la app: MANUEL POMBO.')).toBeVisible()
+    await expect(g.getByText(/Ficha nueva \(se haría.*MARCOS NUEVO/)).toBeVisible()
+    await expect(g.getByText('Saldrían del cuadrante: SARA VILA desde el 19/10 (se quitarían 7 días).')).toBeVisible()
+    await expect(g.getByText(/MELVIN ESPINOSA/)).toBeVisible()
+    await g.getByTestId('revisar').getByRole('button', { name: 'Es ANA PÉREZ' }).click()
+    await expect(g.getByText('Es ANA PÉREZ. Entra en la próxima sincronización.')).toBeVisible()
+    expect(emparejados).toEqual([{ center: 'NORTE', nombre: 'ANA PERES', eleccion: 'd1' }])
     await v.getByRole('button', { name: /Activar/ }).click()
     await expect(v.getByText('Activa', { exact: true })).toBeVisible()
     expect(modos).toEqual([{ center: 'NORTE', modo: 'activo' }])
+    // La hoja llega con un código antiguo: se avisa; y sacar otro código pide confirmación (18-10-2026).
+    estado = { ...estado, llave_vieja_en: new Date().toISOString() }
+    await page.getByRole('dialog').getByRole('button', { name: 'Cerrar' }).click()
+    await page.getByRole('button', { name: 'Google Sheets' }).click()
+    await expect(v.getByRole('alert')).toContainText('con un código antiguo y no se ha aceptado')
+    await v.getByRole('button', { name: 'Volver a sacar el script' }).click()
+    await expect(v.getByText(/El que tienes pegado en la hoja dejará de funcionar/)).toBeVisible()
+    await v.getByRole('button', { name: 'No', exact: true }).click()
+    await expect(v.getByRole('button', { name: 'Volver a sacar el script' })).toBeVisible()
     expect(fallos, fallos.join(' | ')).toHaveLength(0)
   })
 

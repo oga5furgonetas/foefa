@@ -89,6 +89,10 @@ def turno(t, did, fecha):
     return next((s for s in t.shifts.docs if s["driver_id"] == did and s["date"] == fecha), None)
 
 
+def persona(t, did):
+    return next((p for p in t[server._CUA_PERSONAS].docs if p["driver_id"] == did), {})
+
+
 def poner(t, did, fecha, cod, **extra):
     tipo = {"1": "trabaja", "EXTRA": "extra"}.get(cod, "libre")
     doc = turno(t, did, fecha)
@@ -300,18 +304,120 @@ async def test_lo_masivo_se_retiene_hasta_aceptarlo(nave):
 
 
 @pytest.mark.asyncio(loop_scope="session")
-async def test_los_nombres_que_no_casan_se_dicen_y_la_hoja_de_otro_centro_no_entra(nave):
+async def test_un_nombre_nuevo_tiene_ficha_y_entra_y_uno_parecido_se_pregunta(nave):
+    t = nave.t
     llave = await conectar()
     r = await sync(llave, pestana({"ANA PEREZ LOPEZ": SEMANA_ANA, "LUIS GOMEZ RIAL": SEMANA_LUIS,
-                                   "PERSONA DESCONOCIDA": SEMANA_ANA}), nave=nave)
-    assert nave.g[server._SYNC_COL].docs[0]["ultima"]["sin_ficha"] == ["PERSONA DESCONOCIDA"]
-    assert turno(nave.t, "d1", DIAS[0]) is not None
-    # Una hoja con la gente de otro centro no se usa.
+                                   "MARCOS NUEVO BARREIRO": SEMANA_LUIS,     # no se parece a nadie: ficha nueva
+                                   "SARA VILA OTERRO": SEMANA_ANA}), nave=nave)   # errata de Sara: se pregunta
+    gente = nave.g[server._SYNC_COL].docs[0]["ultima"]["personas"]
+    assert gente["fichas_nuevas"] == ["MARCOS NUEVO BARREIRO"]
+    nuevo = next(d for d in t.drivers.docs if d["name"] == "MARCOS NUEVO BARREIRO")
+    assert nuevo["center"] == "OGA5"
+    assert turno(t, nuevo["id"], DIAS[2])["cod"] == "1"              # sus días entran en la misma vuelta
+    assert persona(t, nuevo["id"])["en_cuadrante"] is True
+    assert sorted(gente["entran"]) == ["ANA PEREZ LOPEZ", "LUIS GOMEZ RIAL"]
+    assert [x["nombre"] for x in gente["revisar"]] == ["SARA VILA OTERRO"]
+    assert gente["revisar"][0]["opciones"][0]["id"] == "d3"
+    assert len([d for d in t.drivers.docs if "SARA" in d["name"]]) == 1   # no se duplica a Sara
+    # Se elige en el panel que es Sara: queda como alias y la siguiente vez casa sola.
+    await server.cuadrante_sync_emparejar({"center": "OGA5", "nombre": "SARA VILA OTERRO", "eleccion": "d3"}, OFI)
+    await sync(llave, pestana({"ANA PEREZ LOPEZ": SEMANA_ANA, "LUIS GOMEZ RIAL": SEMANA_LUIS,
+                               "MARCOS NUEVO BARREIRO": SEMANA_LUIS, "SARA VILA OTERRO": SEMANA_ANA}), nave=nave)
+    assert turno(t, "d3", DIAS[0])["cod"] == "1" and persona(t, "d3")["en_cuadrante"] is True
+    # Y un nombre que no es del cuadrante se aparta y no se vuelve a preguntar.
+    await server.cuadrante_sync_emparejar({"center": "OGA5", "nombre": "ANA PERES L", "eleccion": "__fuera__"}, OFI)
+    await sync(llave, pestana({"ANA PEREZ LOPEZ": SEMANA_ANA, "LUIS GOMEZ RIAL": SEMANA_LUIS,
+                               "ANA PERES L": SEMANA_ANA}), nave=nave)
+    assert nave.g[server._SYNC_COL].docs[0]["ultima"]["personas"]["revisar"] == []
+
+
+@pytest.mark.asyncio(loop_scope="session")
+async def test_quitar_a_alguien_de_la_hoja_lo_saca_desde_manana_y_si_vuelve_entra(nave):
+    t = nave.t
+    llave = await conectar()
+    tres = {"ANA PEREZ LOPEZ": SEMANA_ANA, "LUIS GOMEZ RIAL": SEMANA_LUIS, "SARA VILA OTERO": SEMANA_ANA}
+    await sync(llave, pestana(tres), nave=nave)
+    assert turno(t, "d3", DIAS[9])["cod"] == "1"                     # 21-10
+    sin_sara = {k: v for k, v in tres.items() if k != "SARA VILA OTERO"}
+    r = await sync(llave, pestana(sin_sara), nave=nave)
+    gente = nave.g[server._SYNC_COL].docs[0]["ultima"]["personas"]
+    assert gente["salen"] == [{"nombre": "SARA VILA OTERO", "desde": "2026-10-19", "por": "fuera", "dias": 7}]
+    p = persona(t, "d3")
+    assert (p["inactivo_desde"], p["inactivo_por"], p["en_cuadrante"]) == ("2026-10-19", "hoja", True)
+    assert turno(t, "d3", DIAS[6]) is not None                       # hoy y lo pasado se quedan
+    assert all(turno(t, "d3", f) is None for f in DIAS[7:])          # de mañana en adelante, fuera
+    assert r["escribir"] == []                                       # y no se toca la hoja
+    assert "salen 1" in r["mensaje"]
+    # Otra vuelta igual: no se mueve nada.
+    r = await sync(llave, pestana(sin_sara), nave=nave)
+    assert nave.g[server._SYNC_COL].docs[0]["ultima"]["personas"]["salen"] == []
+    # Vuelve a la hoja: vuelve al cuadrante con sus días.
+    await sync(llave, pestana(tres), nave=nave)
+    assert persona(t, "d3")["inactivo_desde"] is None
+    assert nave.g[server._SYNC_COL].docs[0]["ultima"]["personas"]["vuelven"] == ["SARA VILA OTERO"]
+    assert turno(t, "d3", DIAS[9])["cod"] == "1"
+
+
+@pytest.mark.asyncio(loop_scope="session")
+async def test_la_pestana_del_mes_que_viene_sin_alguien_lo_saca_desde_ese_dia(nave):
+    t = nave.t
+    llave = await conectar()
+    tres = {"ANA PEREZ LOPEZ": SEMANA_ANA, "LUIS GOMEZ RIAL": SEMANA_LUIS, "SARA VILA OTERO": SEMANA_ANA}
+    vieja = pestana(tres, nombre="OCTUBRE")
+    await sync(llave, vieja, nave=nave)
+    # Una pestaña nueva desde el 22 sin Sara (se va a final de mes).
+    del_22 = [(dt.date(2026, 10, 22) + dt.timedelta(days=i)).isoformat() for i in range(9)]   # 22-10 .. 30-10
+    nueva = pestana({"ANA PEREZ LOPEZ": ["1"] * 9, "LUIS GOMEZ RIAL": ["1"] * 9}, nombre="DESDE EL 22", dias=del_22)
+    await sync(llave, vieja, nueva, nave=nave)
+    assert persona(t, "d3")["inactivo_desde"] == DIAS[10]
+    assert turno(t, "d3", DIAS[9]) is not None and turno(t, "d3", DIAS[10]) is None
+
+
+@pytest.mark.asyncio(loop_scope="session")
+async def test_lo_que_no_toca_la_hoja(nave):
+    """Quien nunca estuvo en la hoja no sale (se dice); una salida puesta a mano en la app no la cambia la hoja."""
+    t = nave.t
+    t[server._CUA_PERSONAS].docs.append({"center": "OGA5", "driver_id": "d3", "en_cuadrante": True})
+    t[server._CUA_PERSONAS].docs.append({"center": "OGA5", "driver_id": "d2", "en_cuadrante": True,
+                                         "inactivo_desde": "2026-10-30"})
+    poner(t, "d3", DIAS[9], "1")
+    llave = await conectar()
+    await sync(llave, pestana({"ANA PEREZ LOPEZ": SEMANA_ANA, "LUIS GOMEZ RIAL": SEMANA_LUIS}), nave=nave)
+    gente = nave.g[server._SYNC_COL].docs[0]["ultima"]["personas"]
+    assert gente["en_app_no_en_hoja"] == ["SARA VILA OTERO"] and gente["salen"] == []
+    assert turno(t, "d3", DIAS[9])["cod"] == "1" and persona(t, "d3").get("inactivo_desde") is None
+    assert persona(t, "d2")["inactivo_desde"] == "2026-10-30"        # la puso la app: se queda
+
+
+@pytest.mark.asyncio(loop_scope="session")
+async def test_muchas_salidas_de_golpe_se_retienen_pero_los_dias_siguen(nave):
+    t = nave.t
+    for k in range(7):
+        t.drivers.docs.append({"id": f"p{k}", "name": f"PERSONA NUMERO {k}", "center": "OGA5", "active": True})
+    todos = {"ANA PEREZ LOPEZ": SEMANA_ANA, **{f"PERSONA NUMERO {k}": SEMANA_LUIS for k in range(7)}}
+    llave = await conectar()
+    await sync(llave, pestana(todos), nave=nave)
+    # La pestaña queda a medio hacer: solo Ana, que además cambia un día.
+    r = await sync(llave, pestana({"ANA PEREZ LOPEZ": ["N/T"] + SEMANA_ANA[1:]}), nave=nave)
+    assert "retenidas" in r["mensaje"]
+    assert turno(t, "d1", DIAS[0])["cod"] == "N/T"                   # los días siguen
+    assert all(persona(t, f"p{k}").get("inactivo_desde") is None for k in range(7))
+    assert turno(t, "p0", DIAS[10]) is not None
+    await server.cuadrante_sync_aceptar({"center": "OGA5"}, OFI)
+    await sync(llave, pestana({"ANA PEREZ LOPEZ": ["N/T"] + SEMANA_ANA[1:]}), nave=nave)
+    assert persona(t, "p0")["inactivo_desde"] == "2026-10-19" and turno(t, "p0", DIAS[10]) is None
+
+
+@pytest.mark.asyncio(loop_scope="session")
+async def test_la_hoja_de_otro_centro_no_entra(nave):
+    llave = await conectar()
     for k in range(6):
         nave.t.drivers.docs.append({"id": f"g{k}", "name": f"GENTE DE DGA {k}", "center": "DGA1", "active": True})
     r = await sync(llave, pestana({f"GENTE DE DGA {k}": ["1"] * 14 for k in range(6)}), nave=nave)
     assert not r["ok"] and "ninguna pestaña" in r["mensaje"]
     assert "DGA1" in nave.g[server._SYNC_COL].docs[0]["ultima"]["pestanas"][0]["motivo"]
+    assert not any(d["name"].startswith("GENTE") and d["center"] == "OGA5" for d in nave.t.drivers.docs)
 
 
 @pytest.mark.asyncio(loop_scope="session")
@@ -325,11 +431,18 @@ async def test_la_llave(nave):
     assert conf["db_name"] == server._current_db_name.get()
     estado = await server.cuadrante_sync_estado("OGA5", OFI)
     assert estado["conectado"] and "token_hash" not in estado and estado["modo"] == "activo"
-    # Volver a conectar hace otra llave: la de antes deja de valer.
+    # Volver a conectar hace otra llave: la de antes deja de valer, y si la hoja llega con ella el panel lo dice
+    # (18-10-2026: Dani pegó el código, sacó otro sin querer y la hoja dejó de entrar sin que se viera).
     nueva = await conectar()
     with pytest.raises(HTTPException) as e:
         await sync(llave, pestana({"ANA PEREZ LOPEZ": SEMANA_ANA}), nave=nave)
-    assert e.value.status_code == 401
+    assert e.value.status_code == 401 and "código antiguo" in e.value.detail
+    estado = await server.cuadrante_sync_estado("OGA5", OFI)
+    assert estado["llave_vieja_en"]
+    await sync(nueva, pestana({"ANA PEREZ LOPEZ": SEMANA_ANA}), nave=nave)        # la nueva sí entra
+    nueva2 = await conectar()                                                     # y al sacar otra, se limpia
+    assert (await server.cuadrante_sync_estado("OGA5", OFI))["llave_vieja_en"] is None
+    nueva = nueva2
     await server.cuadrante_sync_desconectar({"center": "OGA5"}, OFI)
     with pytest.raises(HTTPException) as e:
         await sync(nueva, pestana({"ANA PEREZ LOPEZ": SEMANA_ANA}), nave=nave)
