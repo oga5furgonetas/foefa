@@ -376,6 +376,12 @@ async def test_la_pestana_del_mes_que_viene_sin_alguien_lo_saca_desde_ese_dia(na
     await sync(llave, vieja, nueva, nave=nave)
     assert persona(t, "d3")["inactivo_desde"] == DIAS[10]
     assert turno(t, "d3", DIAS[9]) is not None and turno(t, "d3", DIAS[10]) is None
+    # Sigue trabajando hasta el 21: su ficha no se desactiva todavía. La víspera de irse, sí.
+    sara = next(d for d in t.drivers.docs if d["id"] == "d3")
+    assert sara["active"] is True
+    nave.hoy["d"] = DIAS[9]                                                       # 21-10
+    await sync(llave, vieja, nueva, nave=nave)
+    assert sara["active"] is False and sara["desactivada_por"] == "hoja"
 
 
 @pytest.mark.asyncio(loop_scope="session")
@@ -459,6 +465,30 @@ async def test_con_fichas_dobles_gana_lo_que_ya_se_decidio_y_la_del_cuadrante(na
     assert u["personas"]["entran"] == ["ANA PEREZ LOPEZ"]          # ni Manuel ni Luis «entran»: ya estaban
     assert u["personas"]["en_app_no_en_hoja"] == [] and u["personas"]["fichas_nuevas"] == []
     assert u["a_app"] == 14                                         # solo los días de Ana; los suyos, iguales
+
+
+@pytest.mark.asyncio(loop_scope="session")
+async def test_el_cuadrante_de_la_app_sale_como_la_hoja(nave):
+    """Dani, 18-10-2026, con la captura: «si están fuera, sácalos de aquí… que aparezca igual que la hoja» y «Nora
+    también aparece dos veces». En el orden de las filas de la hoja; sin la ficha fusionada; y sin quien la hoja sacó
+    en lo de hoy en adelante (en una semana pasada sí sale: es su historia)."""
+    t = nave.t
+    t.drivers.docs.append({"id": "n_vieja", "name": "LUIS GOMEZ RIAL", "center": "OGA5", "active": False,
+                           "merged_into": "d2", "status": "fusionada"})
+    t[server._CUA_PERSONAS].docs += [
+        {"center": "OGA5", "driver_id": "n_vieja", "en_cuadrante": True, "inactivo_desde": "2026-10-19",
+         "inactivo_por": "hoja"},
+        {"center": "OGA5", "driver_id": "d3", "en_cuadrante": True, "inactivo_desde": "2026-10-19",
+         "inactivo_por": "hoja"}]                                       # Sara: ya no está en la hoja
+    poner(t, "d3", DIAS[0], "1")
+    poner(t, "d3", "2026-10-06", "1")
+    llave = await conectar()
+    # En la hoja, Luis va antes que Ana (por orden alfabético de la ficha saldría Ana primero).
+    await sync(llave, pestana({"LUIS GOMEZ RIAL": SEMANA_LUIS, "ANA PEREZ LOPEZ": SEMANA_ANA}), nave=nave)
+    ahora = await server._cua_personas("OGA5", DIAS[0], DIAS[13])
+    assert [p["id"] for p in ahora] == ["d2", "d1"]
+    pasado = await server._cua_personas("OGA5", "2026-10-05", "2026-10-11")
+    assert "d3" in [p["id"] for p in pasado] and "n_vieja" not in [p["id"] for p in pasado]
 
 
 @pytest.mark.asyncio(loop_scope="session")

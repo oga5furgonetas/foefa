@@ -46612,11 +46612,24 @@ async def _cua_personas(center: str, desde: str, hasta: str) -> list:
     ids = explicitos if explicitos else set(con_turnos)
     fichas = {d["id"]: d for d in await db.drivers.find(
         {"id": {"$in": list(ids)}},
-        {"_id": 0, "id": 1, "name": 1, "active": 1, "contrato": 1}).to_list(5000)}
+        {"_id": 0, "id": 1, "name": 1, "active": 1, "contrato": 1, "merged_into": 1}).to_list(5000)}
+    # Con el cuadrante sincronizado con su Google Sheets (18-10-2026), la hoja dice quién está y en qué orden.
+    # Dani: «si están fuera, sácalos de aquí para que no me aparezcan… que aparezca igual que la hoja». Quien la
+    # hoja ha sacado y no está en ella ni un día no sale en lo de hoy en adelante (su historia, en lo pasado, sí),
+    # y el orden es el de las filas de la hoja.
+    sync = await db[_SYNC_BASE].find_one({"center": center}, {"_id": 0, "personas": 1, "orden": 1}) or {}
+    en_hoja = set(sync.get("personas") or [])
+    orden_hoja = sync.get("orden") or {}
+    vigente = hasta >= _dia_negocio()
     out = []
     for did in ids:
         p = conf.get(did) or {}
         if p.get("inactivo_desde") and p["inactivo_desde"] <= desde:
+            continue
+        # Una ficha fusionada no es nadie: sus días están ya en la que se conservó (salía Nora dos veces).
+        if (fichas.get(did) or {}).get("merged_into"):
+            continue
+        if en_hoja and vigente and p.get("inactivo_por") == "hoja" and did not in en_hoja:
             continue
         if p.get("en_cuadrante") is False and did not in con_turnos:
             continue
@@ -46641,7 +46654,8 @@ async def _cua_personas(center: str, desde: str, hasta: str) -> list:
             "entendido": _co.describir_reglas(reglas), "sin_entender": interp.get("sin_entender") or "",
             "reglas_fijas": fijos, "orden": p.get("orden"),
         })
-    out.sort(key=lambda x: (x["orden"] if isinstance(x.get("orden"), int) else 10 ** 6,
+    out.sort(key=lambda x: (orden_hoja.get(x["id"], 10 ** 6),
+                            x["orden"] if isinstance(x.get("orden"), int) else 10 ** 6,
                             _clave_nombre(x["nombre"])))
     return out
 
@@ -48627,6 +48641,8 @@ async def _sync_procesar(conf: dict, cuerpo: dict) -> dict:
                 ficha = ficha_de_id.get(did) or {}
                 desactiva = bool(borrar) and ficha.get("active") is not False and (
                     not ficha.get("center") or _cua_es_centro(ficha.get("center"), center))
+                # Quien sale el día 1 porque la pestaña del mes que viene ya no lo trae sigue trabajando hasta
+                # entonces: su ficha se desactiva ese día, no ahora (lo hace la sincronización de esa víspera).
                 gente["salen"].append({"nombre": nombre, "desde": deseado, "por": "fuera" if borrar else "amarillo",
                                        "dias": dias, "desactiva": desactiva})
             else:
@@ -48706,8 +48722,8 @@ async def _sync_procesar(conf: dict, cuerpo: dict) -> dict:
     cambio = _CuaCambio(center, yo, "Sincronizar con Google Sheets")
 
     # Fichas nuevas: se crean, entran en el cuadrante y sus días se planifican en esta misma vuelta.
+    creadas: dict = {}
     if nuevas:
-        creadas = {}
         for nombre in nuevas:
             ficha = await _cua_crear_conductor(center, nombre)
             creadas[nombre] = ficha
@@ -48749,11 +48765,7 @@ async def _sync_procesar(conf: dict, cuerpo: dict) -> dict:
         if campos:
             await _cua_guardar_persona(center, did, campos, yo, cambio)
         ficha = ficha_de_id.get(did) or {}
-        if borrar and ficha.get("active") is not False and (
-                not ficha.get("center") or _cua_es_centro(ficha.get("center"), center)):
-            await db.drivers.update_one({"id": did}, {"$set": {"active": False, "desactivada_por": "hoja",
-                                                               "desactivada_en": ahora}})
-        elif "inactivo_desde" in campos and campos["inactivo_desde"] is None and ficha.get("desactivada_por") == "hoja":
+        if "inactivo_desde" in campos and campos["inactivo_desde"] is None and campos["inactivo_desde"] is None and ficha.get("desactivada_por") == "hoja":
             # Vuelve a la hoja: su ficha vuelve a estar activa (solo si la desactivó la hoja, no la oficina).
             await db.drivers.update_one({"id": did}, {"$set": {"active": True},
                                                       "$unset": {"desactivada_por": "", "desactivada_en": ""}})
@@ -48764,6 +48776,20 @@ async def _sync_procesar(conf: dict, cuerpo: dict) -> dict:
             await db.shifts.delete_many(filtro)
             # Si vuelve, sus días tienen que entrar como nuevos, no como «quitados en la app».
             base = {k: v for k, v in base.items() if not (k.startswith(did + "|") and k.split("|")[-1] >= borrar)}
+    # La ficha se desactiva el día que se va (mañana como pronto), sea de esta vuelta o de una anterior; nunca la de
+    # quien se ha cambiado de centro, ni la que la oficina dejó activa a mano después.
+    for did, pa in personas_app.items():
+        nuevo = next((c for d, c, _ in plan_personas if d == did), {})
+        inact = nuevo.get("inactivo_desde", pa.get("inactivo_desde"))
+        por = nuevo.get("inactivo_por", pa.get("inactivo_por"))
+        ficha = ficha_de_id.get(did) or {}
+        sigue = any(f >= manana for f in presente.get(did, ()))
+        # `desactivada_por` ya puesto = ya lo hizo la hoja; si la oficina la reactivó a mano, se respeta.
+        if (por == "hoja" and inact and inact <= manana and not sigue
+                and ficha.get("active") is not False and not ficha.get("desactivada_por")
+                and (not ficha.get("center") or _cua_es_centro(ficha.get("center"), center))):
+            await db.drivers.update_one({"id": did}, {"$set": {"active": False, "desactivada_por": "hoja",
+                                                               "desactivada_en": ahora}})
     cambio.que = "Sincronizar con Google Sheets (%d celdas%s)" % (
         len(a_app) + len(max_app), ", %d personas" % len(plan_personas) if plan_personas else "")
     await cambio.guardar()
@@ -48797,11 +48823,19 @@ async def _sync_procesar(conf: dict, cuerpo: dict) -> dict:
     # La base, sin lo que ya no se sincroniza; y quién estaba en la hoja (para saber quién sale la próxima vez).
     # Una salida retenida sigue contando como «estaba»: si no, al día siguiente ya no se vería que se fue.
     personas = set(presente) | (antes_en_hoja if gente_retenida else set())
+    # El orden de la hoja: la fila de cada uno en la pestaña más reciente donde está. El cuadrante de la app sale
+    # en ese orden (Dani: «que aparezca igual que el cuadrante de la hoja»).
+    orden_hoja = {}
+    for i, p, casan, _, _ in sorted(usables, key=lambda u: (u[1]["fechas"][-1], u[0])):
+        for fila in p["filas"]:
+            d = casan.get(fila["nombre"]) or creadas.get(fila["nombre"])
+            if d:
+                orden_hoja[d["id"]] = fila["fila"]
     base = {k: v for k, v in base.items() if k.split("|")[-1] >= desde}
     base_max = {k: v for k, v in base_max.items() if k >= desde}
     await db[_SYNC_BASE].update_one({"center": center}, {"$set": {
         "center": center, "celdas": base, "maximas": base_max, "personas": sorted(personas),
-        "actualizado_en": ahora}}, upsert=True)
+        "orden": orden_hoja, "actualizado_en": ahora}}, upsert=True)
     r["aplicado"] = True
     if a_app or max_app or plan_personas:
         logger.info("Sync Google Sheets %s: %d celdas y %d máximas a la app, %d a la hoja, %d personas", center,
