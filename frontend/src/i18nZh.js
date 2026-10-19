@@ -164,6 +164,7 @@ export const ZH = {
   'vh.dispute': "争议报告",
   'nav.parking': "停车",
   'nav.dashboard': "仪表盘",
+  'nav.centroIA': "AI 中心",
   'nav.estadoFlota': "车队状况",
   'ef.salud.media': "平均状况",
   'ef.a.taller': "需维修",

@@ -19,6 +19,8 @@ const menu = layout.slice(ini, fin).replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\
 const enMenu = new Set([...menu.matchAll(/to: '\/panel(?:\/([a-z0-9-]+))?'/g)].map((m) => m[1] || 'dashboard'))
 // Del negocio de FlotaDSP, no de la flota del cliente: nunca se activa.
 enMenu.delete('tienda')
+// El Centro de IA es de la empresa dueña (la clave de IA la paga ella): no es un módulo que se active a un cliente.
+enMenu.delete('centro-ia')
 
 const bloque = server.slice(server.indexOf('MODULOS_PANEL = ['), server.indexOf('_MODULOS_CLAVES ='))
 const enCatalogo = new Set([...bloque.matchAll(/"clave": "([a-z0-9-]+)"/g)].map((m) => m[1]))

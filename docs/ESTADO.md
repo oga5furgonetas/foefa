@@ -1604,3 +1604,32 @@ hacemos en la app; el Sheet o viceversa». En **Cuadrante → botón «Google Sh
   `cuadrante_sync_base`), y ordena por la fila de la hoja (`orden` en la misma base). Medido a las 19:27: 75 en el
   cuadrante = 75 en la hoja, en su orden, sin dobles. La ficha de quien sale el día 1 por la pestaña nueva se
   desactiva ese día, no al detectarlo. Tests 36.
+
+## 19-10-2026: Centro de IA («como hablar con Claude, dentro de la app»)
+
+Dani: «añádeme en la app un centro de IA, así como tú, en el cual pueda hablar con ella y me resuelva cosas o haga
+cambios que le pida». Eligió **Claude Sonnet 5.5** y que lo usen **él y la oficina de su empresa** (cuentas `owner`;
+a las empresas cliente NO se les abre: la clave la paga él). Menú **Hoy → Centro de IA** (`/panel/centro-ia`).
+
+- **Piezas**: `backend/centro_ia.py` (instrucciones, 24 herramientas, el bucle con el modelo, precio) y en server.py
+  la sección «CENTRO DE IA» (conversaciones en la colección `centro_ia` de la empresa, lo gastado en `centro_ia_uso`
+  global, lo que apunta para programar en `centro_ia_notas_dev` global). Pantalla `panel/pages/CentroIA.jsx`.
+  SDK `anthropic==1.15.0`. Clave: secreto `ANTHROPIC_API_KEY` en Fly; sin ella la pantalla lo dice y no deja escribir.
+- **Cómo trabaja**: 12 herramientas de consulta (conductores, ficha completa, cuadrante con rutas/máxima/diferencia,
+  asignación del día, furgonetas, peticiones, refuerzos y días que no llegan, suspensiones, estado de la flota, fichas
+  dobles, sincronización con la hoja, inspecciones) y 11 de «proponer_» (celdas del cuadrante, máximas, asignación,
+  editar/activar ficha, fusionar fichas, resolver petición, refuerzo, suspender/levantar, acciones de flota del
+  asistente viejo). **Las propuestas no cambian nada**: salen como tarjeta con «Confirmar/Descartar»; al confirmar se
+  ejecutan con el usuario que confirma POR LAS MISMAS FUNCIONES DEL PANEL (mismos permisos y centros) y se le cuenta a
+  la IA el resultado para que siga. «nota_para_desarrollo» apunta lo que necesite programación (para Claude Code).
+- **Reglas del modelo que mandan**: `system` y herramientas FIJOS (la fecha, quién habla y el centro van en cada
+  mensaje, «[Contexto: …]»); historial de solo añadir, guardado tal cual (`to_dict()`); esfuerzo `medium`;
+  `fallbacks: "default"` (beta `server-side-fallback-2026-07-01`); caché automática. 14 vueltas como mucho por mensaje.
+- **Coste y frenos**: tope de 5 $/día por persona (`CENTRO_IA_TOPE_DIARIO_USD`), se ve en la pantalla; conversación
+  de más de 260 mensajes → empezar otra. Se procesa en segundo plano y la pantalla pregunta cada 1,5 s; «pensando»
+  más de 7 min = se cortó (reinicio) y deja seguir. Cada uno ve solo sus conversaciones; «archivar» no borra.
+- **Fusionar de verdad**: `_fusionar_fichas_completo` (lo del 18-10 con Álvaro, ahora en código): repunta TODO
+  (furgoneta del día, furgoneta fija, furgonetas fijas, móviles, persona del cuadrante, alias, suspensiones…), lo que
+  choca se queda el de la que se conserva y lo otro a `fusion_archivo`; no fusiona nombres que no se parecen.
+- Tests `test_centro_ia.py` (11, con una IA de mentira) y 2 de pantalla. La base de mentira ahora lee campos dentro
+  de listas (`slots.driver_id`) y entiende `array_filters`, como MongoDB.

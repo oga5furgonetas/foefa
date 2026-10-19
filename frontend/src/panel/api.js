@@ -22,6 +22,15 @@ export const getChat = (center, since) => api.get(`/chat/${center}`, { params: s
 export const postChat = (center, text) => api.post(`/chat/${center}`, { text })
 export const deleteChatMessage = (center, messageId) => api.delete(`/chat/${center}/${messageId}`)
 
+/* ── Centro de IA (19-10-2026): conversaciones con la IA que mira los datos y propone cambios ── */
+export const getCentroIAEstado = () => api.get('/centro-ia/estado')
+export const getConversacionesIA = () => api.get('/centro-ia/conversaciones')
+export const nuevaConversacionIA = () => api.post('/centro-ia/conversaciones', {})
+export const getConversacionIA = (id) => api.get(`/centro-ia/conversaciones/${id}`)
+export const mensajeIA = (id, texto, center) => api.post(`/centro-ia/conversaciones/${id}/mensaje`, { texto, center })
+export const propuestaIA = (id, pid, accion) => api.post(`/centro-ia/conversaciones/${id}/propuestas/${pid}`, { accion })
+export const archivarConversacionIA = (id) => api.post(`/centro-ia/conversaciones/${id}/archivar`, {})
+
 /* ── FlotaDSP AI: el asistente de cada centro ── */
 export const getAiHistorial = (center) => api.get('/ai/asistente/historial', { params: { center } })
 export const enviarMensajeIA = (mensaje, center) => api.post('/ai/asistente', { mensaje, center })

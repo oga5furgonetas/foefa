@@ -6,7 +6,7 @@ import {
   Settings, Shield, LogOut, Zap, Inbox, ChevronRight, ChevronDown, AlertTriangle, BookUser,
   Search, Sun, Moon, Contrast, MapPin, Mail, UserCircle2, Languages, ShieldAlert, Menu,
   CircleHelp, Briefcase, Store, UserCheck, ImagePlus, Loader2, Bell, BellOff, MessageCircle,
-  MessagesSquare, Euro, FileSpreadsheet, PackageX, TrendingUp, Clock, Route, HeartPulse,
+  MessagesSquare, Euro, FileSpreadsheet, PackageX, TrendingUp, Clock, Route, HeartPulse, Sparkles,
 } from 'lucide-react'
 import { aislarSesion, haySesionPrevia, volverASesionPrevia, getAdmin, isAuthed, isSuperAdmin, isCenterManager, logout, canSee, decodeToken, getVisibleCenters, SIEMPRE_VISIBLES, guardarAccesoFresco, esPlataforma, actualizarMiFoto } from './auth'
 import { getMe, contarPeticionesPendientes, contarCandidatosNuevos, contarConversacionesSinLeer, subirFotoAdmin } from './api'
@@ -71,6 +71,7 @@ const NAV_DEF = [
     { to: '/panel', labelKey: 'nav.dashboard', icon: LayoutDashboard, end: true },
     { to: '/panel/mi-dia', labelKey: 'nav.miDia', icon: Sun },
     { to: '/panel/chat', labelKey: 'nav.chat', icon: MessageCircle },
+    { to: '/panel/centro-ia', labelKey: 'nav.centroIA', icon: Sparkles },
   ]},
   { g: 'nav.g.fleet', gIcon: Truck, iconCls: 'text-emerald-400', iconBg: 'bg-emerald-500/10', items: [
     { to: '/panel/vehiculos', labelKey: 'nav.vehicles', icon: Truck },
@@ -544,6 +545,8 @@ export default function PanelLayout() {
   // ¿Es visible este item con los permisos + plan actuales?
   const itemVisible = (it) => {
     const k = keyOf(it.to)
+    // El Centro de IA (19-10-2026) es de la empresa dueña: la clave de IA la paga ella, no las empresas cliente.
+    if (k === 'centro-ia') return esPlataforma()
     if (!moduloOk(k)) return false
     if (k === 'vencimientos') return EXPIRY_KEYS.some((ek) => canSee(ek))
     // La tienda de ropa es del negocio de FlotaDSP, no de la flota del cliente.
@@ -580,6 +583,7 @@ export default function PanelLayout() {
   const routeAllowed = (k) => {
     // Pantallas propias del usuario, sin permiso que valga.
     if (k === 'perfil' || k === 'login' || k === 'portal-conductor') return true
+    if (k === 'centro-ia') return esPlataforma()
     if (!moduloOk(k)) return false
     // Y las de la operación diaria, de la MISMA lista que usa el menú: si el
     // menú la enseña, la ruta abre; si el menú la esconde, la ruta no abre.
@@ -976,7 +980,8 @@ export default function PanelLayout() {
         puedeVer={(k) => itemVisible({ to: k === 'dashboard' ? '/panel' : `/panel/${k}` })}
         idUsuario={admin?.id || admin?.sub} />
       <LiveNotifier center={center} centers={centers} ve={(k) => moduloOk(k) && (SIEMPRE_VISIBLES.has(k) || canSee(k))} />
-      <AsistenteBurbuja center={center} centers={centers} />
+      {/* En el Centro de IA la burbuja sobra (y en el móvil tapaba el botón de enviar). */}
+      {curKey !== 'centro-ia' && <AsistenteBurbuja center={center} centers={centers} />}
     </div>
   )
 }

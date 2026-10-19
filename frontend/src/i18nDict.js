@@ -193,6 +193,7 @@ export const DICT = {
   'vh.dispute':       { es: 'Parte de disputa', en: 'Dispute report', fr: 'Rapport de litige', de: 'Streitfall-Bericht', it: 'Rapporto di contestazione', pt: 'Relatório de disputa' },
   'nav.parking':      { es: 'Aparcamiento', en: 'Parking', fr: 'Stationnement', de: 'Parkplatz', it: 'Parcheggio', pt: 'Estacionamento' },
   'nav.dashboard':  { es: 'Dashboard',        en: 'Dashboard',     fr: 'Tableau de bord', de: 'Übersicht',       it: 'Dashboard',      pt: 'Dashboard' },
+  'nav.centroIA': { es: 'Centro de IA', en: 'AI centre', fr: 'Centre IA', de: 'KI-Zentrum', it: 'Centro IA', pt: 'Centro de IA' },
   'nav.estadoFlota': { es: 'Estado de la flota', en: 'Fleet health', fr: 'État de la flotte', de: 'Flottenzustand', it: 'Stato della flotta', pt: 'Estado da frota' },
   'ef.salud.media': { es: 'Salud media', en: 'Average health', fr: 'Santé moyenne', de: 'Durchschnittlicher Zustand', it: 'Salute media', pt: 'Saúde média' },
   'ef.a.taller':    { es: 'para taller', en: 'need the workshop', fr: "pour l'atelier", de: 'für die Werkstatt', it: "per l'officina", pt: 'para a oficina' },

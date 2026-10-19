@@ -49018,6 +49018,957 @@ async def cuadrante_sync_desconectar(data: dict = Body(...), user: dict = Depend
     return {"ok": True}
 
 
+# ── CENTRO DE IA (19-10-2026) ──────────────────────────────────────────────────
+# Dani: «añádeme en la app un centro de IA, así como tú, en el cual pueda hablar con ella y me resuelva cosas o
+# haga cambios que le pida». Elegido por él: Claude Sonnet 5.5, y lo usan él y la oficina de SU empresa (cuentas
+# `owner`): a las empresas cliente no se les abre, porque la clave de IA la paga él.
+#
+# Lo que no depende de la base (instrucciones, herramientas, bucle, coste) está en centro_ia.py. Aquí: las
+# conversaciones, lo que hace cada herramienta y la ejecución de lo que se confirma. Cada herramienta llama a la
+# MISMA función que la pantalla que ya hace eso, con el usuario que habla: mismas comprobaciones de permisos y de
+# centro. Los cambios nunca se hacen solos: la IA deja una propuesta y la persona la confirma con un botón.
+#
+# La conversación se procesa en segundo plano y la pantalla pregunta cada poco por cómo va: así un mensaje que
+# tarda (la IA consulta cinco cosas) no se corta, y si se recarga la página se sigue viendo.
+import centro_ia as _cia  # noqa: E402
+
+_CIA_COL = "centro_ia"                      # conversaciones, en la base de la empresa
+_CIA_USO = "centro_ia_uso"                  # lo gastado por persona y día (global)
+_CIA_NOTAS = "centro_ia_notas_dev"          # lo que la IA apunta para quien programa (global)
+_CIA_TOPE_USD = float(os.environ.get("CENTRO_IA_TOPE_DIARIO_USD", "5") or 5)
+_CIA_MAX_MENSAJES_API = 260                 # una conversación más larga se hace cara: se pide empezar otra
+_CIA_PENSANDO_MAX_S = 420                   # «pensando» más que esto = se cortó (reinicio del servidor)
+_cia_cliente_ = None
+
+
+def _cia_cliente():
+    global _cia_cliente_
+    if _cia_cliente_ is None:
+        key = os.environ.get("ANTHROPIC_API_KEY", "").strip()
+        if not key:
+            return None
+        import anthropic
+        _cia_cliente_ = anthropic.AsyncAnthropic(api_key=key, max_retries=2, timeout=240.0)
+    return _cia_cliente_
+
+
+def _cia_acceso(user: dict):
+    if not (user.get("sa") or user.get("account_type") == "owner"):
+        raise HTTPException(403, "El Centro de IA es solo para la oficina de la empresa")
+
+
+def _cia_quien(user: dict) -> str:
+    return str(user.get("sub") or user.get("id") or user.get("username") or "")
+
+
+def _cia_dia() -> str:
+    from zoneinfo import ZoneInfo
+    return datetime.now(ZoneInfo("Europe/Madrid")).strftime("%Y-%m-%d")
+
+
+async def _cia_gastado_hoy(user: dict) -> float:
+    d = await global_db[_CIA_USO].find_one({"org_id": user.get("org_id"), "user": _cia_quien(user),
+                                            "fecha": _cia_dia()}, {"_id": 0, "coste_usd": 1})
+    return float((d or {}).get("coste_usd") or 0)
+
+
+async def _cia_conv(cid: str, user: dict) -> dict:
+    conv = await db[_CIA_COL].find_one({"id": _texto_cuerpo(cid, 60), "user_id": _cia_quien(user),
+                                        "archivada": {"$ne": True}}, {"_id": 0})
+    if not conv:
+        raise HTTPException(404, "Esa conversación no existe")
+    return conv
+
+
+def _cia_salida(conv: dict) -> dict:
+    """La conversación para la pantalla: sin el historial interno de la API."""
+    return {k: conv.get(k) for k in ("id", "titulo", "creado_en", "actualizado_en", "estado", "vista",
+                                     "propuestas", "coste_usd")}
+
+
+def _cia_compacto(x, prof: int = 0):
+    """Para la IA: sin fotos ni enlaces, textos y listas acotados (cada token cuesta y nada de eso le sirve)."""
+    if isinstance(x, dict):
+        return {k: _cia_compacto(v, prof + 1) for k, v in x.items()
+                if not any(t in str(k).lower() for t in ("url", "foto", "photo", "image", "imagen", "hashed",
+                                                         "password", "token", "_id"))}
+    if isinstance(x, list):
+        return [_cia_compacto(v, prof + 1) for v in x[:40 if prof < 2 else 12]]
+    if isinstance(x, str):
+        return x[:400]
+    return x
+
+
+def _cia_fecha(v, que="la fecha") -> str:
+    try:
+        return date_cls.fromisoformat(_texto_cuerpo(v, 10)).isoformat()
+    except ValueError:
+        raise ValueError(f"Falta {que} o no va como AAAA-MM-DD")
+
+
+def _cia_dia_corto(f: str) -> str:
+    try:
+        d = date_cls.fromisoformat(f)
+    except ValueError:
+        return f
+    return "%s %s" % (("lun", "mar", "mié", "jue", "vie", "sáb", "dom")[d.weekday()], d.strftime("%d/%m"))
+
+
+async def _cia_ficha(did: str, user: dict) -> dict:
+    f = await db.drivers.find_one({"id": _texto_cuerpo(did, 80)}, {"_id": 0})
+    if not f:
+        raise ValueError("No existe ningún conductor con ese id (búscalo antes con buscar_conductores)")
+    if f.get("center") and not _user_can_see_center(user, f["center"]):
+        raise ValueError("No ves el centro de ese conductor")
+    return f
+
+
+# ── Herramientas de consulta ────────────────────────────────────────────────
+
+async def _cia_buscar_conductores(e: dict, user: dict):
+    centro = _texto_cuerpo(e.get("centro"), 30)
+    q = {"merged_into": {"$exists": False}, "status": {"$nin": ["deleted", "fusionada"]}}
+    q.update(_filtro_centro(user, centro or None))
+    if not e.get("incluir_bajas"):
+        q["active"] = {"$ne": False}
+    fichas = await db.drivers.find(q, {"_id": 0, "id": 1, "name": 1, "center": 1, "active": 1,
+                                       "transporter_id": 1}).to_list(5000)
+    palabras = _clave_nombre(e.get("texto") or "").split()
+    if palabras:
+        fichas = [f for f in fichas if all(p in _clave_nombre(f.get("name")) for p in palabras)]
+    fichas.sort(key=lambda f: _clave_nombre(f.get("name")))
+    return {"total": len(fichas), "conductores": [
+        {"id": f["id"], "nombre": f.get("name"), "centro": f.get("center"), "activa": f.get("active") is not False,
+         "id_reparto": bool(f.get("transporter_id"))} for f in fichas[:40]]}
+
+
+async def _cia_dobles_de(f: dict, user: dict) -> list:
+    clave = _clave_nombre(f.get("name"))
+    otras = await db.drivers.find({"id": {"$ne": f["id"]}, "merged_into": {"$exists": False},
+                                   "status": {"$nin": ["deleted", "fusionada"]}},
+                                  {"_id": 0, "id": 1, "name": 1, "center": 1, "active": 1}).to_list(5000)
+    return [{"id": o["id"], "nombre": o.get("name"), "centro": o.get("center"), "activa": o.get("active") is not False}
+            for o in otras if _clave_nombre(o.get("name")) == clave or _nombres_veredicto(f.get("name"), o.get("name")) == "si"][:5]
+
+
+async def _cia_ver_conductor(e: dict, user: dict):
+    f = await _cia_ficha(e.get("driver_id"), user)
+    did, hoy = f["id"], _dia_negocio()
+    hasta = (date_cls.fromisoformat(hoy) + timedelta(days=13)).isoformat()
+    turnos = await db.shifts.find({"driver_id": did, "date": {"$gte": hoy, "$lte": hasta}},
+                                  {"_id": 0, "date": 1, "cod": 1, "type": 1, "fijada": 1, "center": 1}).to_list(60)
+    manana = (date_cls.fromisoformat(hoy) + timedelta(days=1)).isoformat()
+    furgos = {}
+    async for a in db.daily_assignments.find({"date": {"$in": [hoy, manana]}, "slots.driver_id": did}, {"_id": 0}):
+        for s in a.get("slots") or []:
+            if s.get("driver_id") == did:
+                furgos[a["date"]] = s.get("vehicle_plate") or s.get("vehicle_id")
+    insp = await db.inspections.find({"driver_id": did, "deleted": {"$ne": True}},
+                                     {"_id": 0, "created_at": 1, "vehicle_id": 1, "analysis.severity": 1}) \
+        .sort("created_at", -1).to_list(3)
+    personas = await db[_CUA_PERSONAS].find({"driver_id": did}, {"_id": 0, "center": 1, "en_cuadrante": 1,
+                                                                 "inactivo_desde": 1, "tipo": 1, "nota": 1}).to_list(10)
+    pend = await db.shift_requests.count_documents({"driver_id": did, "status": "pendiente"})
+    susp = await db.suspensiones.find_one({"driver_id": did, "estado": "activa", "hasta": {"$gte": hoy}},
+                                          {"_id": 0, "id": 1, "desde": 1, "hasta": 1})
+    return {
+        "ficha": {"id": did, "nombre": f.get("name"), "centro": f.get("center"), "activa": f.get("active") is not False,
+                  "tiene_correo": bool(f.get("email")), "tiene_telefono": bool(f.get("phone") or f.get("telefono")),
+                  "id_reparto": bool(f.get("transporter_id")), "contrato": f.get("contrato") or "",
+                  "fusionada_en": f.get("merged_into"), "desactivada_por": f.get("desactivada_por")},
+        "en_cuadrante": personas,
+        "turnos_14_dias": {t["date"]: (_cua_cod_turno(t) + (" (candado)" if t.get("fijada") else "")) for t in
+                           sorted(turnos, key=lambda x: x["date"])},
+        "furgoneta": {"hoy": furgos.get(hoy), "mañana": furgos.get(manana)},
+        "ultimas_inspecciones": [{"fecha": str(i.get("created_at"))[:16], "vehicle_id": i.get("vehicle_id"),
+                                  "gravedad": (i.get("analysis") or {}).get("severity")} for i in insp],
+        "peticiones_pendientes": pend, "suspension": susp,
+        "posibles_fichas_dobles": await _cia_dobles_de(f, user),
+    }
+
+
+async def _cia_ver_cuadrante(e: dict, user: dict):
+    centro = _texto_cuerpo(e.get("centro"), 30)
+    desde, hasta = _cia_fecha(e.get("desde"), "desde"), _cia_fecha(e.get("hasta"), "hasta")
+    if (date_cls.fromisoformat(hasta) - date_cls.fromisoformat(desde)).days > 20:
+        raise ValueError("Como mucho 21 días de una vez")
+    r = await cuadrante_ver(centro, desde, hasta, user)
+    dias = [d for d in rango_iso(desde, hasta)]
+    filtro = _clave_nombre(e.get("nombre") or "")
+    filas, rutas = [], {d: 0 for d in dias}
+    for p in r["personas"]:
+        cods = []
+        for d in dias:
+            c = r["celdas"].get(f"{p['id']}|{d}") or {}
+            cod = c.get("cod") or ""
+            if cod == "1" and c.get("extra"):
+                cod = "EXTRA"
+            if cod in CODIGOS_QUE_SACAN_RUTA:
+                rutas[d] += 1
+            cods.append(cod + ("*" if c.get("fijada") else "") if cod else "-")
+        if not filtro or filtro in _clave_nombre(p["nombre"]):
+            filas.append({"id": p["id"], "nombre": p["nombre"], "codigos": cods,
+                          **({"se_va": p["inactivo_desde"]} if p.get("inactivo_desde") else {})})
+    por_dia = [{"fecha": d, "dia": _cia_dia_corto(d), "rutas": rutas[d], "maxima": r["maximas"].get(d),
+                "diferencia": (rutas[d] - r["maximas"][d]) if r["maximas"].get(d) is not None else None} for d in dias]
+    return {"centro": centro, "fechas": dias, "nota": "«*» = celda con candado; «-» = vacía",
+            "personas": filas[:90], "total_personas": len(r["personas"]), "por_dia": por_dia}
+
+
+def rango_iso(desde: str, hasta: str) -> list:
+    d, h = date_cls.fromisoformat(desde), date_cls.fromisoformat(hasta)
+    return [(d + timedelta(days=i)).isoformat() for i in range((h - d).days + 1)]
+
+
+async def _cia_ver_asignacion(e: dict, user: dict):
+    centro, fecha = _texto_cuerpo(e.get("centro"), 30), _cia_fecha(e.get("fecha"))
+    if not centro or not _user_can_see_center(user, centro):
+        raise ValueError("No ves ese centro")
+    docs = await get_daily_assignments(fecha, centro, user)
+    filas = []
+    for d in docs:
+        for s in d.get("slots") or []:
+            filas.append({"vehicle_id": s.get("vehicle_id"), "matricula": s.get("vehicle_plate"),
+                          "driver_id": s.get("driver_id") or "", "conductor": s.get("driver_name") or "",
+                          "ruta": s.get("route") or "", "inspeccion_hecha": bool(s.get("has_inspection"))})
+    return {"centro": centro, "fecha": fecha, "furgonetas": filas, "con_conductor": sum(1 for f in filas if f["driver_id"])}
+
+
+async def _cia_buscar_furgonetas(e: dict, user: dict):
+    centro = _texto_cuerpo(e.get("centro"), 30)
+    q = {"status": {"$ne": "deleted"}, **_filtro_centro(user, centro or None)}
+    vs = await db.vehicles.find(q, {"_id": 0, "id": 1, "license_plate": 1, "brand": 1, "model": 1, "status": 1,
+                                    "center": 1, "current_driver_id": 1}).to_list(3000)
+    t = _norm_plate(e.get("texto") or "")
+    tt = _clave_nombre(e.get("texto") or "")
+    if t:
+        vs = [v for v in vs if t in _norm_plate(v.get("license_plate")) or tt in _clave_nombre(
+            f"{v.get('brand') or ''} {v.get('model') or ''}")]
+    hoy = _dia_negocio()
+    hoy_de = {}
+    async for a in db.daily_assignments.find({"date": hoy}, {"_id": 0, "slots": 1}):
+        for s in a.get("slots") or []:
+            if s.get("vehicle_id") and s.get("driver_name"):
+                hoy_de[s["vehicle_id"]] = s["driver_name"]
+    fijos = {d["id"]: d.get("name") for d in await db.drivers.find(
+        {"id": {"$in": [v["current_driver_id"] for v in vs if v.get("current_driver_id")]}},
+        {"_id": 0, "id": 1, "name": 1}).to_list(3000)}
+    return {"total": len(vs), "furgonetas": [
+        {"id": v["id"], "matricula": v.get("license_plate"), "modelo": f"{v.get('brand') or ''} {v.get('model') or ''}".strip(),
+         "estado": v.get("status"), "centro": v.get("center"), "conductor_hoy": hoy_de.get(v["id"]),
+         "conductor_fijo": fijos.get(v.get("current_driver_id"))} for v in vs[:50]]}
+
+
+async def _cia_ver_peticiones(e: dict, user: dict):
+    centro = _texto_cuerpo(e.get("centro"), 30)
+    q = dict(_filtro_centro(user, centro or None))
+    estado = _texto_cuerpo(e.get("estado"), 20) or "pendiente"
+    if estado != "todas":
+        q["status"] = estado
+    filas = await db.shift_requests.find(q, {"_id": 0, "id": 1, "driver_id": 1, "driver_name": 1, "date": 1,
+                                             "type": 1, "status": 1, "motivo_label": 1, "note": 1, "center": 1,
+                                             "refuerzo_id": 1}).sort("date", 1).to_list(200)
+    return {"total": len(filas), "peticiones": [
+        {"id": p["id"], "conductor": p.get("driver_name"), "driver_id": p.get("driver_id"), "fecha": p.get("date"),
+         "dia": _cia_dia_corto(p.get("date") or ""), "tipo": p.get("type"), "estado": p.get("status"),
+         "motivo": p.get("motivo_label") or "", "nota": (p.get("note") or "")[:200], "centro": p.get("center"),
+         "de_refuerzo": bool(p.get("refuerzo_id"))} for p in filas[:80]]}
+
+
+async def _cia_ver_refuerzos(e: dict, user: dict):
+    centro = _texto_cuerpo(e.get("centro"), 30)
+    if not centro or not _user_can_see_center(user, centro):
+        raise ValueError("No ves ese centro")
+    return {"refuerzos": _cia_compacto((await listar_refuerzos(centro, user)).get("refuerzos")),
+            "dias_que_no_llegan": _cia_compacto(await refuerzos_faltas(centro, 14, user))}
+
+
+async def _cia_ver_suspensiones(e: dict, user: dict):
+    centro = _texto_cuerpo(e.get("centro"), 30)
+    if not centro or not _user_can_see_center(user, centro):
+        raise ValueError("No ves ese centro")
+    return _cia_compacto(await listar_suspensiones(centro, user))
+
+
+async def _cia_ver_estado_flota(e: dict, user: dict):
+    r = await estado_flota(_texto_cuerpo(e.get("centro"), 30), "peor", user)
+    return _cia_compacto({k: r.get(k) for k in ("salud_media", "evaluadas", "itv_vencida", "niveles", "en_taller",
+                                                 "furgonetas")})
+
+
+async def _cia_buscar_fichas_dobles(e: dict, user: dict):
+    """Personas con más de una ficha viva: mismo nombre (sin tildes ni mayúsculas) o el mismo según
+    `_nombres_veredicto`. Para cada una: con cuál entra (correo), cuál tiene turnos, furgoneta hoy y cuadrante."""
+    centro = _texto_cuerpo(e.get("centro"), 30)
+    q = {"merged_into": {"$exists": False}, "status": {"$nin": ["deleted", "fusionada"]},
+         **_filtro_centro(user, centro or None)}
+    fichas = await db.drivers.find(q, {"_id": 0, "id": 1, "name": 1, "center": 1, "active": 1, "email": 1,
+                                       "transporter_id": 1, "created_at": 1}).to_list(5000)
+    grupos, visto = [], set()
+    for i, a in enumerate(fichas):
+        if a["id"] in visto:
+            continue
+        g = [a]
+        for b in fichas[i + 1:]:
+            if b["id"] in visto:
+                continue
+            if _clave_nombre(a.get("name")) == _clave_nombre(b.get("name")) or \
+                    _nombres_veredicto(a.get("name"), b.get("name")) == "si":
+                g.append(b)
+        if len(g) > 1:
+            visto.update(x["id"] for x in g)
+            grupos.append(g)
+    hoy = _dia_negocio()
+    hasta = (date_cls.fromisoformat(hoy) + timedelta(days=30)).isoformat()
+    salida = []
+    for g in grupos[:25]:
+        filas = []
+        for f in g:
+            turnos = await db.shifts.count_documents({"driver_id": f["id"], "date": {"$gte": hoy, "$lte": hasta}})
+            hoy_furgo = await db.daily_assignments.count_documents({"date": hoy, "slots.driver_id": f["id"]})
+            insp = await db.inspections.count_documents({"driver_id": f["id"], "deleted": {"$ne": True}})
+            per = await db[_CUA_PERSONAS].count_documents({"driver_id": f["id"], "en_cuadrante": True})
+            filas.append({"id": f["id"], "nombre": f.get("name"), "centro": f.get("center"),
+                          "activa": f.get("active") is not False, "tiene_correo": bool(f.get("email")),
+                          "id_reparto": bool(f.get("transporter_id")), "creada": str(f.get("created_at") or "")[:10],
+                          "turnos_proximos_30_dias": turnos, "furgoneta_hoy": bool(hoy_furgo),
+                          "inspecciones": insp, "en_cuadrante": bool(per)})
+        salida.append(filas)
+    return {"grupos": salida, "total_grupos": len(grupos),
+            "consejo": "Normalmente se conserva la que tiene correo (con la que entra al portal) y se absorbe la otra."}
+
+
+async def _cia_ver_sincronizacion(e: dict, user: dict):
+    r = await cuadrante_sync_estado(_texto_cuerpo(e.get("centro"), 30), user)
+    u = r.get("ultima") or {}
+    return _cia_compacto({"conectada": r.get("conectado"), "modo": r.get("modo"), "hoja": r.get("hoja_nombre"),
+                          "ultima_vez": r.get("ultimo_contacto"), "mensaje": u.get("mensaje"), "error": u.get("error"),
+                          "pestanas": u.get("pestanas"), "personas": u.get("personas"),
+                          "codigos_desconocidos": u.get("codigos_desconocidos"), "cambios": (u.get("cambios") or [])[:20],
+                          "escritura_en_la_hoja": r.get("ultima_escritura"), "codigo_antiguo_en": r.get("llave_vieja_en")})
+
+
+async def _cia_ver_inspecciones(e: dict, user: dict):
+    dias = max(1, min(int(e.get("dias") or 7), 60))
+    desde = (datetime.now(timezone.utc) - timedelta(days=dias)).isoformat()
+    vq = {"status": {"$ne": "deleted"}, **_filtro_centro(user, _texto_cuerpo(e.get("centro"), 30) or None)}
+    vs = await db.vehicles.find(vq, {"_id": 0, "id": 1, "license_plate": 1}).to_list(5000)
+    if e.get("matricula"):
+        m = _norm_plate(e["matricula"])
+        vs = [v for v in vs if m in _norm_plate(v.get("license_plate"))]
+    placa = {v["id"]: v.get("license_plate") for v in vs}
+    q = {"deleted": {"$ne": True}, "created_at": {"$gte": desde}, "vehicle_id": {"$in": list(placa)}}
+    if e.get("driver_id"):
+        q["driver_id"] = _texto_cuerpo(e.get("driver_id"), 80)
+    filas = await db.inspections.find(q, {"_id": 0, "id": 1, "created_at": 1, "vehicle_id": 1, "driver_id": 1,
+                                          "analysis.severity": 1, "analysis.damages": 1}).sort("created_at", -1).to_list(60)
+    nombres = {d["id"]: d.get("name") for d in await db.drivers.find(
+        {"id": {"$in": list({i.get("driver_id") for i in filas if i.get("driver_id")})}},
+        {"_id": 0, "id": 1, "name": 1}).to_list(500)}
+    return {"dias": dias, "total": len(filas), "inspecciones": [
+        {"fecha": str(i.get("created_at"))[:16], "matricula": placa.get(i.get("vehicle_id")),
+         "conductor": nombres.get(i.get("driver_id")), "gravedad": (i.get("analysis") or {}).get("severity"),
+         "danos": len((i.get("analysis") or {}).get("damages") or [])} for i in filas[:40]]}
+
+
+async def _cia_nota_dev(e: dict, user: dict):
+    titulo = _texto_cuerpo(e.get("titulo"), 200).strip()
+    if not titulo:
+        raise ValueError("Falta el título")
+    nota = {"id": str(uuid.uuid4()), "org_id": user.get("org_id"), "db_name": _current_db_name.get(),
+            "por": user.get("name") or "", "titulo": titulo, "detalle": _texto_cuerpo(e.get("detalle"), 4000),
+            "en": datetime.now(timezone.utc).isoformat(), "estado": "nueva"}
+    await global_db[_CIA_NOTAS].insert_one(dict(nota))
+    return {"ok": True, "apuntado": titulo}
+
+
+# ── Propuestas: se preparan aquí y se ejecutan al confirmar ────────────────
+
+async def _cia_proponer(cid: str, tipo: str, datos: dict, titulo: str, lineas: list, aviso: str = "") -> dict:
+    pid = uuid.uuid4().hex[:8]
+    prop = {"id": pid, "tipo": tipo, "datos": datos, "titulo": titulo[:160], "lineas": [str(x)[:300] for x in lineas[:80]],
+            "aviso": aviso, "estado": "pendiente", "creada_en": datetime.now(timezone.utc).isoformat()}
+    await db[_CIA_COL].update_one({"id": cid}, {"$set": {f"propuestas.{pid}": prop},
+                                                "$push": {"vista": {"tipo": "propuesta", "id": pid,
+                                                                    "en": prop["creada_en"]}}})
+    return {"propuesta_id": pid, "estado": "preparada: falta que la persona la confirme con el botón",
+            "titulo": titulo, "resumen": lineas[:30], **({"aviso": aviso} if aviso else {})}
+
+
+async def _cia_p_cuadrante(e: dict, user: dict, cid: str):
+    centro = _cua_centro(e.get("centro"))
+    _cua_acceso(user, centro)
+    mapa = await _cua_mapa_codigos()
+    cambios, lineas, candados = [], [], 0
+    for x in (e.get("cambios") or [])[:300]:
+        did, f = _texto_cuerpo((x or {}).get("driver_id"), 80), _cia_fecha((x or {}).get("fecha"))
+        cod = _cm._cod(_texto_cuerpo((x or {}).get("codigo"), 20))
+        if cod and cod not in mapa and cod not in CODIGOS_CUADRANTE_DEF:
+            raise ValueError(f"El código «{cod}» no existe en el cuadrante")
+        ficha = await _cia_ficha(did, user)
+        antes = await db.shifts.find_one({"driver_id": did, "date": f}, {"_id": 0})
+        if (antes or {}).get("fijada") or (antes or {}).get("aprobado_req"):
+            candados += 1
+        cambios.append({"driver_id": did, "fecha": f, "cod": cod})
+        lineas.append("%s — %s: %s → %s%s" % (ficha.get("name"), _cia_dia_corto(f), _cua_cod_turno(antes) or "vacía",
+                                             cod or "vacía", " (tenía candado)" if (antes or {}).get("fijada") else ""))
+    if not cambios:
+        raise ValueError("No hay ningún cambio")
+    aviso = f"{candados} de estas celdas tenían candado o eran días concedidos." if candados else ""
+    return await _cia_proponer(cid, "cuadrante", {"center": centro, "cambios": cambios},
+                               f"Cuadrante de {centro}: {len(cambios)} {'cambio' if len(cambios) == 1 else 'cambios'}",
+                               [_texto_cuerpo(e.get("explicacion"), 300)] + lineas, aviso)
+
+
+async def _cia_p_maximas(e: dict, user: dict, cid: str):
+    centro = _cua_centro(e.get("centro"))
+    _cua_acceso(user, centro)
+    maximas, lineas = {}, []
+    for x in (e.get("maximas") or [])[:62]:
+        f = _cia_fecha((x or {}).get("fecha"))
+        n = int((x or {}).get("maximo"))
+        if not 0 <= n <= 999:
+            raise ValueError("Una máxima va de 0 a 999")
+        antes = await db.route_demand.find_one({"center": centro, "date": f}, {"_id": 0, "maximo": 1})
+        maximas[f] = n
+        lineas.append("%s: %s → %s" % (_cia_dia_corto(f), (antes or {}).get("maximo", "—"), n))
+    if not maximas:
+        raise ValueError("No hay ninguna máxima")
+    return await _cia_proponer(cid, "maximas", {"center": centro, "maximas": maximas},
+                               f"Máximas de {centro}", [_texto_cuerpo(e.get("explicacion"), 300)] + lineas)
+
+
+async def _cia_p_asignacion(e: dict, user: dict, cid: str):
+    centro, fecha = _texto_cuerpo(e.get("centro"), 30), _cia_fecha(e.get("fecha"))
+    if not centro or not _user_can_see_center(user, centro):
+        raise ValueError("No ves ese centro")
+    lineas, cambios = [], []
+    for x in (e.get("cambios") or [])[:80]:
+        vid, did = _texto_cuerpo((x or {}).get("vehicle_id"), 80), _texto_cuerpo((x or {}).get("driver_id"), 80)
+        v = await db.vehicles.find_one({"id": vid}, {"_id": 0, "id": 1, "license_plate": 1, "center": 1})
+        if not v:
+            raise ValueError("No existe esa furgoneta (búscala antes con buscar_furgonetas)")
+        nombre = (await _cia_ficha(did, user)).get("name") if did else ""
+        cambios.append({"vehicle_id": vid, "driver_id": did})
+        lineas.append("%s → %s" % (v.get("license_plate"), nombre or "sin conductor"))
+    if not cambios:
+        raise ValueError("No hay ningún cambio")
+    return await _cia_proponer(cid, "asignacion", {"center": centro, "fecha": fecha, "cambios": cambios},
+                               f"Asignación de {centro} del {_cia_dia_corto(fecha)}",
+                               [_texto_cuerpo(e.get("explicacion"), 300)] + lineas)
+
+
+_CIA_CAMPOS_FICHA = ("name", "phone", "email", "center", "transporter_id", "notes")
+
+
+async def _cia_p_editar(e: dict, user: dict, cid: str):
+    f = await _cia_ficha(e.get("driver_id"), user)
+    cambios = {k: _texto_cuerpo(v, 200).strip() for k, v in (e.get("cambios") or {}).items() if k in _CIA_CAMPOS_FICHA}
+    if not cambios:
+        raise ValueError("No hay nada que cambiar en la ficha")
+    if cambios.get("center") and not _user_can_see_center(user, cambios["center"]):
+        raise ValueError("No ves el centro al que lo quieres pasar")
+    lineas = ["%s: %s → %s" % (k, f.get(k) or "—", v or "—") for k, v in cambios.items()]
+    return await _cia_proponer(cid, "editar_conductor", {"driver_id": f["id"], "cambios": cambios},
+                               f"Ficha de {f.get('name')}", [_texto_cuerpo(e.get("explicacion"), 300)] + lineas)
+
+
+async def _cia_p_activar(e: dict, user: dict, cid: str):
+    f = await _cia_ficha(e.get("driver_id"), user)
+    activo = bool(e.get("activo"))
+    return await _cia_proponer(cid, "activar_conductor", {"driver_id": f["id"], "activo": activo},
+                               f"{'Activar' if activo else 'Desactivar'} la ficha de {f.get('name')}",
+                               [_texto_cuerpo(e.get("explicacion"), 300),
+                                "Desactivada: no entra al portal ni sale en las listas." if not activo else
+                                "Activa: vuelve a entrar al portal y a salir en las listas."])
+
+
+async def _cia_p_fusionar(e: dict, user: dict, cid: str):
+    buena = await _cia_ficha(e.get("conservar"), user)
+    otras = [await _cia_ficha(x, user) for x in (e.get("absorber") or [])[:5]]
+    if not otras or buena["id"] in [o["id"] for o in otras]:
+        raise ValueError("Di cuál se conserva y cuál o cuáles se absorben (distintas)")
+    for o in otras:
+        if _clave_nombre(o.get("name")) != _clave_nombre(buena.get("name")) and \
+                _nombres_veredicto(o.get("name"), buena.get("name")) not in ("si", "parcial"):
+            raise ValueError(f"«{o.get('name')}» y «{buena.get('name')}» no parecen la misma persona: no se fusionan "
+                             "por nombre tan distinto (si de verdad lo son, que lo haga la oficina en la ficha)")
+    lineas = [_texto_cuerpo(e.get("explicacion"), 300), f"Se queda: {buena.get('name')} ({buena['id'][:8]})"]
+    for o in otras:
+        n = await db.shifts.count_documents({"driver_id": o["id"]})
+        a = await db.daily_assignments.count_documents({"slots.driver_id": o["id"]})
+        i = await db.inspections.count_documents({"driver_id": o["id"]})
+        lineas.append(f"Pasa a ella: {o.get('name')} ({o['id'][:8]}) — {n} turnos, {a} asignaciones, {i} inspecciones")
+    return await _cia_proponer(cid, "fusionar", {"conservar": buena["id"], "absorber": [o["id"] for o in otras]},
+                               f"Fusionar las fichas de {buena.get('name')}", lineas,
+                               "Las fichas absorbidas quedan marcadas como fusionadas (no se borran) y lo que se "
+                               "sustituya se guarda en el archivo.")
+
+
+async def _cia_p_peticion(e: dict, user: dict, cid: str):
+    p = await db.shift_requests.find_one({"id": _texto_cuerpo(e.get("peticion_id"), 80)}, {"_id": 0})
+    if not p:
+        raise ValueError("No existe esa petición")
+    if p.get("center") and not _user_can_see_center(user, p["center"]):
+        raise ValueError("No ves el centro de esa petición")
+    decision = _texto_cuerpo(e.get("decision"), 10)
+    if decision not in ("aprobar", "rechazar"):
+        raise ValueError("La decisión es aprobar o rechazar")
+    motivo = _texto_cuerpo(e.get("motivo"), 300)
+    if decision == "rechazar" and not motivo.strip():
+        raise ValueError("Para rechazar hace falta un motivo (lo ve el conductor)")
+    return await _cia_proponer(cid, "peticion", {"id": p["id"], "decision": decision, "motivo": motivo},
+                               f"{decision.capitalize()} la petición de {p.get('driver_name')}",
+                               [f"{_cia_dia_corto(p.get('date') or '')}: día {p.get('type')} ({p.get('motivo_label') or ''})",
+                                *([f"Motivo para el conductor: {motivo}"] if motivo else [])])
+
+
+async def _cia_p_refuerzo(e: dict, user: dict, cid: str):
+    centro, fecha = _texto_cuerpo(e.get("centro"), 30), _cia_fecha(e.get("fecha"))
+    if not centro or not _user_can_see_center(user, centro):
+        raise ValueError("No ves ese centro")
+    plazas = int(e.get("plazas") or 0)
+    if not 1 <= plazas <= 20:
+        raise ValueError("Entre 1 y 20 plazas")
+    pueden = await _refuerzo_libres(centro, fecha)
+    return await _cia_proponer(cid, "refuerzo", {"center": centro, "date": fecha, "plazas": plazas,
+                                                 "nota": _texto_cuerpo(e.get("nota"), 300)},
+                               f"Pedir {plazas} de refuerzo en {centro} el {_cia_dia_corto(fecha)}",
+                               [f"Se avisará a {len(pueden)} personas que libran ese día y pueden trabajarlo.",
+                                *([f"Nota: {e.get('nota')}"] if e.get("nota") else [])],
+                               "Al confirmar les llega un aviso al móvil a esas personas.")
+
+
+async def _cia_p_suspension(e: dict, user: dict, cid: str):
+    f = await _cia_ficha(e.get("driver_id"), user)
+    desde, hasta = _cia_fecha(e.get("desde"), "desde"), _cia_fecha(e.get("hasta"), "hasta")
+    motivo = _texto_cuerpo(e.get("motivo"), 300)
+    return await _cia_proponer(cid, "suspension", {"driver_id": f["id"], "desde": desde, "hasta": hasta, "motivo": motivo},
+                               f"Suspender a {f.get('name')}",
+                               [f"Del {_cia_dia_corto(desde)} al {_cia_dia_corto(hasta)}", f"Motivo (solo oficina): {motivo}"])
+
+
+async def _cia_p_levantar(e: dict, user: dict, cid: str):
+    s = await db.suspensiones.find_one({"id": _texto_cuerpo(e.get("suspension_id"), 80)}, {"_id": 0})
+    if not s:
+        raise ValueError("No existe esa suspensión")
+    return await _cia_proponer(cid, "levantar", {"id": s["id"]}, f"Levantar la suspensión de {s.get('driver_name')}",
+                               [_texto_cuerpo(e.get("explicacion"), 300),
+                                f"Era del {_cia_dia_corto(s.get('desde') or '')} al {_cia_dia_corto(s.get('hasta') or '')}"])
+
+
+async def _cia_p_flota(e: dict, user: dict, cid: str):
+    tipo = _texto_cuerpo(e.get("tipo"), 40)
+    if tipo not in _IA_ASISTENTE_ACCIONES:
+        raise ValueError("Esa acción no existe")
+    centro = _texto_cuerpo(e.get("centro"), 30)
+    if not centro or not _user_can_see_center(user, centro):
+        raise ValueError("No ves ese centro")
+    campos = {k: v for k, v in (e.get("campos") or {}).items() if isinstance(k, str)}
+    return await _cia_proponer(cid, "flota", {"tipo": tipo, "center": centro, "campos": campos},
+                               tipo.replace("_", " ").capitalize() + f" ({centro})",
+                               [_texto_cuerpo(e.get("explicacion"), 300)] +
+                               [f"{k}: {v}" for k, v in campos.items()])
+
+
+_CIA_LEER = {
+    "buscar_conductores": _cia_buscar_conductores, "ver_conductor": _cia_ver_conductor,
+    "ver_cuadrante": _cia_ver_cuadrante, "ver_asignacion_dia": _cia_ver_asignacion,
+    "buscar_furgonetas": _cia_buscar_furgonetas, "ver_peticiones": _cia_ver_peticiones,
+    "ver_refuerzos": _cia_ver_refuerzos, "ver_suspensiones": _cia_ver_suspensiones,
+    "ver_estado_flota": _cia_ver_estado_flota, "buscar_fichas_dobles": _cia_buscar_fichas_dobles,
+    "ver_sincronizacion_hoja": _cia_ver_sincronizacion, "ver_inspecciones": _cia_ver_inspecciones,
+    "nota_para_desarrollo": _cia_nota_dev,
+}
+_CIA_PROPONER = {
+    "proponer_cambios_cuadrante": _cia_p_cuadrante, "proponer_maximas": _cia_p_maximas,
+    "proponer_asignacion": _cia_p_asignacion, "proponer_editar_conductor": _cia_p_editar,
+    "proponer_activar_conductor": _cia_p_activar, "proponer_fusionar_fichas": _cia_p_fusionar,
+    "proponer_resolver_peticion": _cia_p_peticion, "proponer_refuerzo": _cia_p_refuerzo,
+    "proponer_suspension": _cia_p_suspension, "proponer_levantar_suspension": _cia_p_levantar,
+    "proponer_accion_flota": _cia_p_flota,
+}
+
+
+async def _cia_herramienta(nombre: str, entrada: dict, user: dict, cid: str):
+    """Corre una herramienta. Un «no» del panel (sin permiso, no existe…) vuelve a la IA como ValueError, para que
+    se lo explique a la persona en vez de cortar la conversación."""
+    entrada = entrada if isinstance(entrada, dict) else {}
+    try:
+        if nombre in _CIA_LEER:
+            return await _CIA_LEER[nombre](entrada, user)
+        if nombre in _CIA_PROPONER:
+            return await _CIA_PROPONER[nombre](entrada, user, cid)
+    except HTTPException as e:
+        raise ValueError(str(e.detail))
+    except (TypeError, KeyError) as e:
+        raise ValueError(f"Faltan datos o no tienen la forma esperada ({e})")
+    raise ValueError("Esa herramienta no existe")
+
+
+# ── Ejecutar lo confirmado: con el usuario que confirma, por las funciones de siempre ──
+
+async def _cia_asignar(datos: dict, user: dict) -> dict:
+    await _require_plan_feature(user, "assignments")
+    center, fecha = datos["center"], datos["fecha"]
+    doc = await db.daily_assignments.find_one({"date": fecha, "center": center}, {"_id": 0}) or {}
+    slots = [dict(s) for s in (doc.get("slots") or [])]
+    for c in datos["cambios"]:
+        v = await db.vehicles.find_one({"id": c["vehicle_id"]}, {"_id": 0, "id": 1, "license_plate": 1}) or {}
+        nombre = ""
+        if c["driver_id"]:
+            nombre = (await db.drivers.find_one({"id": c["driver_id"]}, {"_id": 0, "name": 1}) or {}).get("name", "")
+            for s in slots:                                       # un conductor, una furgoneta ese día
+                if s.get("driver_id") == c["driver_id"] and s.get("vehicle_id") != c["vehicle_id"]:
+                    s["driver_id"], s["driver_name"] = "", ""
+        hueco = next((s for s in slots if s.get("vehicle_id") == c["vehicle_id"]), None)
+        if hueco is None:
+            hueco = {"vehicle_id": c["vehicle_id"], "vehicle_plate": v.get("license_plate", ""), "route": ""}
+            slots.append(hueco)
+        hueco["driver_id"], hueco["driver_name"] = c["driver_id"], nombre
+    limpios = [{"vehicle_id": s.get("vehicle_id", ""), "vehicle_plate": s.get("vehicle_plate", ""),
+                "driver_id": s.get("driver_id", "") or "", "driver_name": s.get("driver_name", "") or "",
+                "route": str(s.get("route") or "").strip().upper()[:24]} for s in slots]
+    ahora = datetime.now(timezone.utc).isoformat()
+    if doc:
+        await db.daily_assignments.update_one({"date": fecha, "center": center},
+                                              {"$set": {"slots": limpios, "updated_at": ahora}})
+    else:
+        await db.daily_assignments.insert_one({"id": str(uuid.uuid4()), "date": fecha, "center": center,
+                                               "slots": limpios, "created_at": ahora, "updated_at": ahora})
+    return {"ok": True, "furgonetas": len(datos["cambios"])}
+
+
+async def _cia_ejecutar(prop: dict, user: dict) -> dict:
+    t, d = prop["tipo"], prop["datos"]
+    if t == "cuadrante":
+        return await cuadrante_celdas({"center": d["center"], "cambios": d["cambios"]}, user)
+    if t == "maximas":
+        return await cuadrante_maximas({"center": d["center"], "maximas": d["maximas"]}, user)
+    if t == "asignacion":
+        return await _cia_asignar(d, user)
+    if t == "editar_conductor":
+        await _cia_ficha(d["driver_id"], user)
+        return await update_driver(d["driver_id"], dict(d["cambios"]), user)
+    if t == "activar_conductor":
+        await _cia_ficha(d["driver_id"], user)
+        r = await update_driver(d["driver_id"], {"active": bool(d["activo"])}, user)
+        return {"ok": True, "activa": bool(d["activo"]), **({"ficha": r} if isinstance(r, dict) else {})}
+    if t == "fusionar":
+        return await _fusionar_fichas_completo(d["conservar"], d["absorber"], user)
+    if t == "peticion":
+        return await resolve_shift_request(d["id"], {"action": d["decision"], "motivo": d.get("motivo") or ""}, user)
+    if t == "refuerzo":
+        return await crear_refuerzo({"center": d["center"], "date": d["date"], "plazas": d["plazas"],
+                                     "nota": d.get("nota") or ""}, user)
+    if t == "suspension":
+        return await crear_suspension(dict(d), user)
+    if t == "levantar":
+        return await levantar_suspension(d["id"], user)
+    if t == "flota":
+        return await ai_asistente_ejecutar(_IAAsistenteAccion(tipo=d["tipo"], campos=d["campos"], center=d["center"]),
+                                           user)
+    raise ValueError("Ese tipo de propuesta no existe")
+
+
+# ── Fusionar fichas dobles de verdad (18/19-10-2026) ─────────────────────────
+# /drivers/fusionar exige el mismo correo y se deja sitios (la furgoneta del día en la asignación sí, pero no
+# `vehicles.current_driver_id`, furgonetas fijas, móviles, la persona del cuadrante, el alias, las suspensiones ni
+# los días que tienen las dos fichas). Pasó con Álvaro Rodríguez: dos fichas, la furgoneta del día en la que no
+# usa y «no tiene furgoneta asignada». Aquí se repunta TODO; lo que choca se queda el de la ficha que se conserva y
+# lo otro va entero a `fusion_archivo`. Nada se borra del todo.
+async def _fusionar_fichas_completo(conservar: str, absorber: list, user: dict) -> dict:
+    buena = await db.drivers.find_one({"id": conservar}, {"_id": 0})
+    otras = await db.drivers.find({"id": {"$in": list(absorber)}}, {"_id": 0}).to_list(10)
+    if not buena or len(otras) != len(absorber):
+        raise ValueError("Alguna de las fichas ya no existe")
+    for f in [buena] + otras:
+        if f.get("center") and not _user_can_see_center(user, f["center"]):
+            raise ValueError("No ves el centro de alguna de esas fichas")
+    cid, nombre, ids = buena["id"], buena.get("name") or "", [o["id"] for o in otras]
+    lote, ahora = f"fusion-{cid[:8]}-{datetime.now(timezone.utc).strftime('%Y%m%d%H%M%S')}", datetime.now(timezone.utc).isoformat()
+
+    async def archivar(col, doc, motivo):
+        await db.fusion_archivo.insert_one({"lote": lote, "col": col, "motivo": motivo, "en": ahora,
+                                            "doc": {k: v for k, v in doc.items() if k != "_id"}})
+    n = {}
+    suyos = {s["date"] for s in await db.shifts.find({"driver_id": cid}, {"_id": 0, "date": 1}).to_list(10000)}
+    for s in await db.shifts.find({"driver_id": {"$in": ids}}, {"_id": 0}).to_list(10000):
+        if s["date"] in suyos:
+            await archivar("shifts", s, "fusion: el mismo día ya estaba en la ficha que se conserva")
+            await db.shifts.delete_one({"driver_id": s["driver_id"], "date": s["date"]})
+            n["turnos_repetidos_archivados"] = n.get("turnos_repetidos_archivados", 0) + 1
+        else:
+            await db.shifts.update_one({"driver_id": s["driver_id"], "date": s["date"]},
+                                       {"$set": {"driver_id": cid, "driver_name": nombre}})
+            suyos.add(s["date"])
+            n["turnos_movidos"] = n.get("turnos_movidos", 0) + 1
+    for col in ("inspections", "shift_requests", "incidents", "tienda_pedidos", "parking_assignments", "candidatos",
+                "suspensiones", "shift_blocks", _CUA_AJUSTES):
+        r = await db[col].update_many({"driver_id": {"$in": ids}}, {"$set": {"driver_id": cid}})
+        if r.modified_count:
+            n[col] = r.modified_count
+    r = await db.vehicles.update_many({"current_driver_id": {"$in": ids}}, {"$set": {"current_driver_id": cid}})
+    if r.modified_count:
+        n["furgoneta_fija"] = r.modified_count
+    r = await db.daily_assignments.update_many(
+        {"slots.driver_id": {"$in": ids}}, {"$set": {"slots.$[s].driver_id": cid, "slots.$[s].driver_name": nombre}},
+        array_filters=[{"s.driver_id": {"$in": ids}}])
+    if r.modified_count:
+        n["asignaciones_del_dia"] = r.modified_count
+    r = await db.vehicles.update_many({"mileage_history.driver_id": {"$in": ids}},
+                                      {"$set": {"mileage_history.$[m].driver_id": cid}},
+                                      array_filters=[{"m.driver_id": {"$in": ids}}])
+    if r.modified_count:
+        n["historial_km"] = r.modified_count
+    for col, clave in (("furgo_fijas", ()), ("moviles_de", ("center",)), (_CUA_PERSONAS, ("center",)),
+                       ("tienda_clientes", ()), ("driver_accounts", ()), ("reparto_avisos", ())):
+        for d in await db[col].find({"driver_id": {"$in": ids}}, {"_id": 0}).to_list(100):
+            filtro = {"driver_id": d["driver_id"], **{c: d.get(c) for c in clave}}
+            if await db[col].find_one({"driver_id": cid, **{c: d.get(c) for c in clave}}, {"_id": 0}):
+                await archivar(col, d, "fusion: la ficha que se conserva ya tenía la suya")
+                await db[col].delete_one(filtro)
+            else:
+                await db[col].update_one(filtro, {"$set": {"driver_id": cid}})
+            n[col] = n.get(col, 0) + 1
+    alias = (await db.app_meta.find_one({"_id": _ALIAS_DOC}) or {}).get("mapa") or {}
+    cambian = [k for k, v in alias.items() if v in ids]
+    if cambian:
+        await db.app_meta.update_one({"_id": _ALIAS_DOC}, {"$set": {"mapa": {**alias, **{k: cid for k in cambian}}}})
+        n["alias"] = len(cambian)
+    relleno = {}
+    for campo in ("phone", "telefono", "photo_url", "dni", "center", "driver_id", "transporter_id", "movil_personal",
+                  "contrato", "hire_date", "license_number", "license_expiry", "address"):
+        if buena.get(campo) in (None, ""):
+            v = next((o.get(campo) for o in otras if isinstance(o.get(campo), str) and o.get(campo).strip()), None)
+            if v:
+                relleno[campo] = v.strip()
+    for o in otras:
+        await archivar("drivers", o, "fusion: ficha absorbida (se marca, no se borra)")
+    if relleno:
+        await db.drivers.update_one({"id": cid}, {"$set": relleno})
+    await db.drivers.update_many({"id": {"$in": ids}}, {"$set": {
+        "merged_into": cid, "active": False, "status": "fusionada", "merged_at": ahora,
+        "merged_by": user.get("name") or "oficina"}})
+    if buena.get("active") is False:
+        await db.drivers.update_one({"id": cid}, {"$set": {"active": True}})
+    await _audit(user, "fusionar_fichas_completo", {"conservada": cid, "absorbidas": ids, "movido": n})
+    return {"ok": True, "conservada": nombre, "lote": lote, "movido": n, "rellenado": sorted(relleno)}
+
+
+# ── La conversación ──────────────────────────────────────────────────────────
+
+def _cia_contexto(user: dict, center: str) -> str:
+    hoy = date_cls.fromisoformat(_dia_negocio())
+    dias = ("lunes", "martes", "miércoles", "jueves", "viernes", "sábado", "domingo")
+    centros = ", ".join(user.get("allowed_centers") or []) or "todos los de la empresa"
+    return (f"[Contexto: hoy es {dias[hoy.weekday()]} {hoy.strftime('%d/%m/%Y')} ({hoy.isoformat()}); "
+            f"te habla {user.get('name') or 'la oficina'}; centro elegido en el panel: {center or 'ninguno'}; "
+            f"centros que puede ver: {centros}]")
+
+
+def _cia_error_amable(e: Exception) -> str:
+    try:
+        import anthropic
+    except ImportError:                                           # pragma: no cover
+        anthropic = None
+    if anthropic is not None:
+        if isinstance(e, anthropic.AuthenticationError):
+            return "La clave de la IA no es válida. Hay que revisarla en el servidor."
+        if isinstance(e, anthropic.RateLimitError):
+            return "La IA está saturada ahora mismo. Espera un minuto y vuelve a escribir."
+        if isinstance(e, anthropic.APIStatusError):
+            msg = str(getattr(e, "message", "") or "")
+            if "credit" in msg.lower() or "billing" in msg.lower():
+                return "La cuenta de la IA se ha quedado sin saldo. Hay que recargarla en Anthropic."
+            if e.status_code >= 500:
+                return "El servicio de la IA está fallando ahora mismo. Prueba otra vez en un rato."
+            return "La IA no ha aceptado la petición (%s). Si se repite, empieza otra conversación." % e.status_code
+        if isinstance(e, anthropic.APIConnectionError):
+            return "No se ha podido hablar con la IA (conexión). Prueba otra vez."
+    return "Algo ha fallado al pensar la respuesta. Prueba otra vez."
+
+
+async def _cia_correr(cid: str, user: dict):
+    """Un turno completo, en segundo plano. La pantalla va viendo los pasos y la respuesta al final."""
+    cliente = _cia_cliente()
+    ahora = lambda: datetime.now(timezone.utc).isoformat()  # noqa: E731
+    try:
+        conv = await db[_CIA_COL].find_one({"id": cid}, {"_id": 0, "api": 1})
+        api = list((conv or {}).get("api") or [])
+
+        async def al_paso(texto):
+            await db[_CIA_COL].update_one({"id": cid}, {"$push": {"vista": {"tipo": "paso", "texto": texto, "en": ahora()}},
+                                                        "$set": {"actualizado_en": ahora()}})
+
+        async def al_avanzar(mensajes, uso):
+            await db[_CIA_COL].update_one({"id": cid}, {"$set": {"api": mensajes, "actualizado_en": ahora()}})
+
+        async def ejecutar(nombre, entrada):
+            return await _cia_herramienta(nombre, entrada, user, cid)
+
+        r = await _cia.turno(cliente, api, ejecutar, al_paso, al_avanzar)
+        coste = _cia.coste_usd(r["uso"])
+        texto = r["texto"] or {
+            "rechazo": "No puedo ayudarte con eso.",
+            "tope": "He hecho muchas consultas seguidas y paro aquí para no gastar de más. Dime si sigo.",
+            "corte": "La respuesta era demasiado larga y se ha cortado. Pídemelo por partes.",
+        }.get(r["fin"], "Hecho.")
+        await db[_CIA_COL].update_one({"id": cid}, {
+            "$push": {"vista": {"tipo": "ia", "texto": texto, "en": ahora()}},
+            "$set": {"estado": "lista", "actualizado_en": ahora()}, "$inc": {"coste_usd": coste}})
+        await global_db[_CIA_USO].update_one(
+            {"org_id": user.get("org_id"), "user": _cia_quien(user), "fecha": _cia_dia()},
+            {"$inc": {"coste_usd": coste, "llamadas": 1, **{f"tokens.{k}": v for k, v in r["uso"].items()}},
+             "$set": {"nombre": user.get("name") or ""}}, upsert=True)
+    except Exception as e:                                       # noqa: BLE001
+        logger.exception("Centro de IA: %s", cid)
+        await db[_CIA_COL].update_one({"id": cid}, {
+            "$push": {"vista": {"tipo": "aviso", "texto": _cia_error_amable(e), "en": ahora()}},
+            "$set": {"estado": "lista", "actualizado_en": ahora()}})
+
+
+def _cia_lanzar(cid: str, user: dict):
+    tarea = asyncio.create_task(_cia_correr(cid, user))
+    _CIA_TAREAS.add(tarea)
+    tarea.add_done_callback(_CIA_TAREAS.discard)
+
+
+_CIA_TAREAS: set = set()
+
+
+async def _cia_destrabar(conv: dict) -> dict:
+    """«Pensando» desde hace demasiado = el servidor se reinició a medias: se deja escribir otra vez."""
+    if conv.get("estado") == "pensando":
+        try:
+            pasado = (datetime.now(timezone.utc) - datetime.fromisoformat(conv.get("actualizado_en"))).total_seconds()
+        except (TypeError, ValueError):
+            pasado = _CIA_PENSANDO_MAX_S + 1
+        if pasado > _CIA_PENSANDO_MAX_S:
+            aviso = {"tipo": "aviso", "texto": "Se cortó mientras pensaba. Vuelve a escribir lo último.",
+                     "en": datetime.now(timezone.utc).isoformat()}
+            await db[_CIA_COL].update_one({"id": conv["id"]}, {"$set": {"estado": "lista"}, "$push": {"vista": aviso}})
+            conv = {**conv, "estado": "lista", "vista": list(conv.get("vista") or []) + [aviso]}
+    return conv
+
+
+@api_router.get("/centro-ia/estado")
+async def cia_estado(user: dict = Depends(require_admin)):
+    _cia_acceso(user)
+    return {"configurada": bool(os.environ.get("ANTHROPIC_API_KEY", "").strip()), "modelo": "Claude Sonnet 5.5",
+            "gastado_hoy_usd": round(await _cia_gastado_hoy(user), 4), "tope_diario_usd": _CIA_TOPE_USD}
+
+
+@api_router.get("/centro-ia/conversaciones")
+async def cia_conversaciones(user: dict = Depends(require_admin)):
+    _cia_acceso(user)
+    filas = await db[_CIA_COL].find({"user_id": _cia_quien(user), "archivada": {"$ne": True}},
+                                    {"_id": 0, "id": 1, "titulo": 1, "actualizado_en": 1, "estado": 1}) \
+        .sort("actualizado_en", -1).to_list(60)
+    return {"conversaciones": filas}
+
+
+@api_router.post("/centro-ia/conversaciones")
+async def cia_nueva(user: dict = Depends(require_admin)):
+    _cia_acceso(user)
+    ahora = datetime.now(timezone.utc).isoformat()
+    conv = {"id": str(uuid.uuid4()), "user_id": _cia_quien(user), "user_name": user.get("name") or "",
+            "titulo": "Conversación nueva", "creado_en": ahora, "actualizado_en": ahora, "estado": "lista",
+            "api": [], "vista": [], "propuestas": {}, "coste_usd": 0.0}
+    await db[_CIA_COL].insert_one(dict(conv))
+    return _cia_salida(conv)
+
+
+@api_router.get("/centro-ia/conversaciones/{cid}")
+async def cia_ver(cid: str, user: dict = Depends(require_admin)):
+    _cia_acceso(user)
+    return _cia_salida(await _cia_destrabar(await _cia_conv(cid, user)))
+
+
+@api_router.post("/centro-ia/conversaciones/{cid}/mensaje")
+async def cia_mensaje(cid: str, data: dict = Body(...), user: dict = Depends(require_admin)):
+    _cia_acceso(user)
+    conv = await _cia_destrabar(await _cia_conv(cid, user))
+    if conv.get("estado") == "pensando":
+        raise HTTPException(409, "Todavía está pensando la respuesta anterior")
+    texto = _texto_cuerpo(data.get("texto"), 4000).strip()
+    if not texto:
+        raise HTTPException(400, "Escribe algo primero")
+    if not _cia_cliente():
+        raise HTTPException(503, "El Centro de IA todavía no tiene su clave de Anthropic puesta en el servidor")
+    if await _cia_gastado_hoy(user) >= _CIA_TOPE_USD:
+        raise HTTPException(429, "Hoy has llegado al tope de gasto del Centro de IA (%.2f $). Mañana se reinicia."
+                            % _CIA_TOPE_USD)
+    if len(conv.get("api") or []) > _CIA_MAX_MENSAJES_API:
+        raise HTTPException(400, "Esta conversación ya es muy larga (y cada mensaje sale más caro): empieza otra")
+    center = _texto_cuerpo(data.get("center"), 30)
+    ahora = datetime.now(timezone.utc).isoformat()
+    api = list(conv.get("api") or []) + [{"role": "user", "content": f"{_cia_contexto(user, center)}\n{texto}"}]
+    cambio = {"$set": {"api": api, "estado": "pensando", "actualizado_en": ahora},
+              "$push": {"vista": {"tipo": "usuario", "texto": texto, "en": ahora}}}
+    if conv.get("titulo") == "Conversación nueva":
+        cambio["$set"]["titulo"] = (texto[:70] + ("…" if len(texto) > 70 else ""))
+    await db[_CIA_COL].update_one({"id": conv["id"]}, cambio)
+    _cia_lanzar(conv["id"], user)
+    return {"ok": True}
+
+
+@api_router.post("/centro-ia/conversaciones/{cid}/propuestas/{pid}")
+async def cia_propuesta(cid: str, pid: str, data: dict = Body(...), user: dict = Depends(require_admin)):
+    """Confirmar o descartar lo que dejó preparado la IA. Se ejecuta con el usuario que confirma, por las mismas
+    funciones del panel; y se le cuenta a la IA cómo ha ido para que siga."""
+    _cia_acceso(user)
+    conv = await _cia_destrabar(await _cia_conv(cid, user))
+    prop = (conv.get("propuestas") or {}).get(_texto_cuerpo(pid, 20))
+    if not prop:
+        raise HTTPException(404, "Esa propuesta no existe")
+    if prop.get("estado") != "pendiente":
+        raise HTTPException(409, "Esa propuesta ya está %s" % prop.get("estado"))
+    if conv.get("estado") == "pensando":
+        raise HTTPException(409, "Espera a que termine de pensar")
+    accion = _texto_cuerpo(data.get("accion"), 12)
+    if accion not in ("confirmar", "descartar"):
+        raise HTTPException(400, "La acción es confirmar o descartar")
+    ahora = datetime.now(timezone.utc).isoformat()
+    clave = f"propuestas.{prop['id']}"
+    if accion == "descartar":
+        await db[_CIA_COL].update_one({"id": conv["id"]}, {
+            "$set": {f"{clave}.estado": "descartada", f"{clave}.resuelta_en": ahora, "actualizado_en": ahora},
+            "$push": {"api": {"role": "user", "content": f"[Descartado] {user.get('name') or 'La persona'} ha descartado "
+                                                         f"la propuesta {prop['id']} ({prop['titulo']}). No se ha hecho."}}})
+        return {"ok": True, "estado": "descartada"}
+    await db[_CIA_COL].update_one({"id": conv["id"]}, {"$set": {f"{clave}.estado": "ejecutando"}})
+    try:
+        resultado = _cia_compacto(await _cia_ejecutar(prop, user))
+        estado, nota = "hecha", f"Resultado: {json.dumps(resultado, ensure_ascii=False, default=str)[:3000]}"
+    except (HTTPException, ValueError) as e:
+        detalle = e.detail if isinstance(e, HTTPException) else str(e)
+        resultado, estado, nota = {"error": detalle}, "fallida", f"Ha FALLADO: {detalle}"
+    except Exception as e:                                       # noqa: BLE001
+        logger.exception("Centro de IA, ejecutar propuesta %s", prop["id"])
+        resultado, estado, nota = {"error": "error interno"}, "fallida", f"Ha FALLADO por un error interno ({type(e).__name__})"
+    await db[_CIA_COL].update_one({"id": conv["id"]}, {
+        "$set": {f"{clave}.estado": estado, f"{clave}.resultado": resultado, f"{clave}.resuelta_en": ahora,
+                 f"{clave}.por": user.get("name") or "", "estado": "pensando", "actualizado_en": ahora},
+        "$push": {"api": {"role": "user", "content": f"[Confirmado] {user.get('name') or 'La persona'} ha confirmado "
+                                                     f"la propuesta {prop['id']} ({prop['titulo']}). {nota}"}}})
+    await _audit(user, "centro_ia_confirmar", {"propuesta": prop["id"], "tipo": prop["tipo"], "estado": estado})
+    if _cia_cliente() and await _cia_gastado_hoy(user) < _CIA_TOPE_USD:
+        _cia_lanzar(conv["id"], user)                             # que la IA lo cuente y siga si hay más pasos
+    else:
+        await db[_CIA_COL].update_one({"id": conv["id"]}, {"$set": {"estado": "lista"}})
+    return {"ok": True, "estado": estado, "resultado": resultado}
+
+
+@api_router.post("/centro-ia/conversaciones/{cid}/archivar")
+async def cia_archivar(cid: str, user: dict = Depends(require_admin)):
+    """Quitarla de la lista. No se borra: se marca."""
+    _cia_acceso(user)
+    conv = await _cia_conv(cid, user)
+    await db[_CIA_COL].update_one({"id": conv["id"]}, {"$set": {"archivada": True}})
+    return {"ok": True}
+
+
 # ── LA HOJA: DIARIO Y DEBER HORAS ────────────────────────────────────────────
 # Dani, 30-09-2026: «nosotros usamos un Excel, que es mayor maniobrabilidad…
 # que si le clicas se expanda y sea un propio Excel con su diario, su mensual y

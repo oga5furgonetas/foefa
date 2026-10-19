@@ -12,7 +12,7 @@ import { simularApi, entrarComoAdmin } from './api-simulada.js'
    pantallas (divisiones por cero, listas indefinidas, `.map` de un undefined). */
 
 const PANEL = [
-  ['', 'Dashboard'], ['mi-dia', 'Mi día'], ['chat', 'Chat'],
+  ['', 'Dashboard'], ['mi-dia', 'Mi día'], ['chat', 'Chat'], ['centro-ia', 'Centro de IA'],
   ['vehiculos', 'Vehículos'], ['estado-flota', 'Estado de la flota'], ['inspecciones', 'Inspecciones'],
   ['revision', 'Revisión rápida'], ['origen-danos', 'Origen de daños'],
   ['vencimientos', 'Vencimientos'], ['aparcamiento', 'Aparcamiento'],
@@ -4158,5 +4158,74 @@ test.describe('Estado de la flota', () => {
     await expect(page).toHaveURL(/\/panel\/ordenes$/)
     await expect(page.locator('textarea')).toHaveValue(PARTE)
     expect(fallos).toEqual([])
+  })
+})
+
+/* CENTRO DE IA (19-10-2026). API simulada: se prueba la pantalla —preguntar, ver los pasos mientras piensa, la
+   respuesta con formato y confirmar una propuesta—; la IA y sus herramientas las prueba backend/tests/test_centro_ia.py. */
+test.describe('Centro de IA', () => {
+  const json = (body) => (route) => route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(body) })
+
+  test('se pregunta, se ven los pasos, contesta y una propuesta se confirma con un botón', async ({ page }) => {
+    const fallos = vigilar(page)
+    await entrarComoAdmin(page, { superAdmin: true })
+    await simularApi(page, 'vacio')
+    const enviados = []
+    const decididas = []
+    let conv = { id: 'c1', titulo: 'Conversación nueva', estado: 'lista', vista: [], propuestas: {}, coste_usd: 0 }
+    let vueltas = 0
+    await page.route(/\/api\/centro-ia\/estado/, json({ configurada: true, modelo: 'Claude Sonnet 5.5', gastado_hoy_usd: 0.12, tope_diario_usd: 5 }))
+    await page.route(/\/api\/centro-ia\/conversaciones$/, (route) => (route.request().method() === 'POST'
+      ? json(conv)(route) : json({ conversaciones: conv.vista.length ? [{ id: 'c1', titulo: conv.titulo, actualizado_en: new Date().toISOString() }] : [] })(route)))
+    await page.route(/\/api\/centro-ia\/conversaciones\/c1\/mensaje/, (route) => {
+      enviados.push(route.request().postDataJSON())
+      conv = { ...conv, titulo: 'Mañana nos piden 44', estado: 'pensando',
+        vista: [{ tipo: 'usuario', texto: 'Mañana nos piden 44' }, { tipo: 'paso', texto: 'Miro el cuadrante (NORTE, 20/10 → 20/10)' }] }
+      return json({ ok: true })(route)
+    })
+    await page.route(/\/api\/centro-ia\/conversaciones\/c1$/, (route) => {
+      vueltas += 1
+      if (conv.estado === 'pensando' && vueltas > 2) {
+        conv = { ...conv, estado: 'lista', vista: [...conv.vista,
+          { tipo: 'ia', texto: 'Mañana sacan ruta **48**: sobran 4.\n- Pongo N/T a cuatro que ya iban a 6 días seguidos.' },
+          { tipo: 'propuesta', id: 'p1' }],
+        propuestas: { p1: { id: 'p1', titulo: 'Cuadrante de NORTE: 4 cambios', estado: 'pendiente', aviso: '',
+          lineas: ['Amazon pide 44', 'ANA PÉREZ — mar 20/10: 1 → N/T'] } } }
+      }
+      return json(conv)(route)
+    })
+    await page.route(/\/api\/centro-ia\/conversaciones\/c1\/propuestas\/p1/, (route) => {
+      decididas.push(route.request().postDataJSON())
+      conv = { ...conv, propuestas: { p1: { ...conv.propuestas.p1, estado: 'hecha', por: 'Admin Test' } } }
+      return json({ ok: true, estado: 'hecha' })(route)
+    })
+    await page.goto('/panel/centro-ia', { waitUntil: 'domcontentloaded' })
+    const v = page.getByTestId('centro-ia')
+    await expect(v.getByRole('heading', { name: 'Centro de IA' })).toBeVisible({ timeout: 15000 })
+    await expect(v.getByText('Hoy: 0.12 $ de 5 $')).toBeVisible()
+    await expect(v.getByRole('button', { name: '¿Hay alguien con dos fichas en NORTE?' })).toBeVisible()
+    await v.getByLabel('Mensaje para la IA').fill('Mañana nos piden 44')
+    await v.getByLabel('Mensaje para la IA').press('Enter')
+    await expect(v.getByText('Miro el cuadrante (NORTE, 20/10 → 20/10)')).toBeVisible()
+    expect(enviados).toEqual([{ texto: 'Mañana nos piden 44', center: 'NORTE' }])
+    await expect(v.getByText('sobran 4.')).toBeVisible({ timeout: 10000 })
+    await expect(v.locator('b', { hasText: '48' })).toBeVisible()                        // la negrita se pinta
+    await expect(v.getByText('1 consulta')).toBeVisible()                                 // los pasos, plegados
+    const p = v.getByTestId('propuesta')
+    await expect(p.getByText('ANA PÉREZ — mar 20/10: 1 → N/T')).toBeVisible()
+    await p.getByRole('button', { name: 'Confirmar' }).click()
+    await expect(p.getByText('Hecho · Admin Test')).toBeVisible()
+    expect(decididas).toEqual([{ accion: 'confirmar' }])
+    expect(fallos, fallos.join(' | ')).toHaveLength(0)
+  })
+
+  test('una empresa cliente no lo ve en el menú ni puede abrirlo', async ({ page }) => {
+    const fallos = vigilar(page)
+    await entrarComoAdmin(page)
+    await simularApi(page, 'vacio')
+    await page.goto('/panel/centro-ia', { waitUntil: 'domcontentloaded' })
+    await expect(page).not.toHaveURL(/centro-ia/, { timeout: 15000 })
+    await expect(page.getByRole('link', { name: 'Centro de IA' })).toHaveCount(0)
+    expect(fallos, fallos.join(' | ')).toHaveLength(0)
   })
 })

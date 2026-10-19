@@ -12,8 +12,15 @@ _FALTA = object()
 
 
 def _leer(d, ruta):
-    """Un campo con puntos («filas.d1.nota»), como lo lee MongoDB."""
+    """Un campo con puntos («filas.d1.nota»), como lo lee MongoDB. Dentro de una lista de objetos
+    («slots.driver_id») devuelve la lista de lo que tiene cada uno, que es como compara MongoDB."""
     for trozo in ruta.split("."):
+        if isinstance(d, list):
+            vals = [x[trozo] for x in d if isinstance(x, dict) and trozo in x]
+            if not vals:
+                return _FALTA
+            d = vals
+            continue
         if not isinstance(d, dict) or trozo not in d:
             return _FALTA
         d = d[trozo]
@@ -106,6 +113,21 @@ def _casa(d, q):
     return True
 
 
+def _filtrado(d, u, array_filters):
+    """`$set` con `lista.$[x].campo` y `array_filters=[{"x.campo": …}]` (lo que usa fusionar fichas): solo los
+    elementos de la lista que cumplen el filtro."""
+    # Como MongoDB: qué elementos cumplen el filtro se decide ANTES de cambiar nada.
+    cambios = []
+    for k, v in u.get("$set", {}).items():
+        lista, _, resto = k.partition(".$[")
+        nombre, _, campo = resto.partition("].")
+        filtro = next((f for f in array_filters if any(c.startswith(nombre + ".") for c in f)), {})
+        sub = {c[len(nombre) + 1:]: w for c, w in filtro.items()}
+        cambios += [(el, campo, v) for el in (d.get(lista) or []) if isinstance(el, dict) and _casa(el, sub)]
+    for el, campo, v in cambios:
+        _poner(el, campo, v)
+
+
 def _proyecta(d, proyeccion):
     """Solo las proyecciones de EXCLUSIÓN ({campo: 0}): quitan lo que Mongo
     también quitaría (p. ej. la foto de entrega, que no viaja en la lista).
@@ -189,11 +211,14 @@ class Col:
             return SimpleNamespace(modified_count=0, matched_count=0, upserted_id="x")
         return SimpleNamespace(modified_count=0, matched_count=0, upserted_id=None)
 
-    async def update_many(self, q, u, **_):
+    async def update_many(self, q, u, array_filters=None, **_):
         n = 0
         for d in self.docs:
             if _casa(d, q):
-                self._aplica(d, u)
+                if array_filters:
+                    _filtrado(d, u, array_filters)
+                else:
+                    self._aplica(d, u)
                 n += 1
         return SimpleNamespace(modified_count=n, matched_count=n)
 
