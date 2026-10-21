@@ -47,6 +47,8 @@ export function Cuenta({ billing, recargar, toast, resaltarRegalo, merc }) {
   // Desde «entrar como» se VE el plan, pero pagar, cambiar o dar de baja es cosa del cliente
   // (el servidor lo rechaza): no se enseñan botones que solo pueden fallar.
   const suplantando = esSuplantacion()
+  // Cerrar sesión pide confirmación: quien probó la app en Google Play (20-10-2026) salía sin querer.
+  const [salir, setSalir] = useState(false)
   return (
     <div className="mx-auto max-w-md pb-6">
       <h1 className="font-display text-[24px] font-bold text-dark-50">{tx('Tu cuenta')}</h1>
@@ -97,10 +99,23 @@ export function Cuenta({ billing, recargar, toast, resaltarRegalo, merc }) {
           {tx('Tus datos y los de tus clientes son tuyos: la foto de la etiqueta se lee en tu móvil y los datos de los clientes se borran solos a los días que fijes en Ajustes. Los pagos los procesa Stripe: tu tarjeta no pasa por nosotros.')}</p>
         <p className="mt-2"><a href="/privacidad" className="text-brand-300">{tx('Privacidad')}</a> · <a href="/terminos" className="text-brand-300">{tx('Términos')}</a> · <a href={`mailto:${MARCA.correo}`} className="text-brand-300">{MARCA.correo}</a></p>
       </div>
-      <button onClick={() => { logout(); window.location.href = '/empezar' }}
-        className="mt-5 inline-flex w-full items-center justify-center gap-2 rounded-xl border border-dark-700 py-3 text-[14px] font-semibold text-dark-300">
-        <LogOut size={15} /> {tx('Cerrar sesión')}
-      </button>
+      {salir ? (
+        <div role="group" aria-label={tx('Cerrar sesión')} className="mt-5 rounded-2xl border border-dark-700 bg-dark-900 p-4">
+          <p className="text-[14.5px] font-semibold text-dark-50">{tx('¿Cerrar sesión en este móvil?')}</p>
+          <p className="mt-1 text-[12.5px] text-dark-400">{tx('Para volver a entrar te pedirá tu contraseña.')}</p>
+          <div className="mt-3 flex gap-2">
+            <button onClick={() => { logout(); window.location.href = '/empezar' }}
+              className="flex-1 rounded-xl bg-red-500/90 py-2.5 text-[14px] font-semibold text-white">{tx('Sí, cerrar sesión')}</button>
+            <button onClick={() => setSalir(false)} autoFocus
+              className="flex-1 rounded-xl border border-dark-700 py-2.5 text-[14px] font-semibold text-dark-200">{tx('Cancelar')}</button>
+          </div>
+        </div>
+      ) : (
+        <button onClick={() => setSalir(true)}
+          className="mt-5 inline-flex w-full items-center justify-center gap-2 rounded-xl border border-dark-700 py-3 text-[14px] font-semibold text-dark-300">
+          <LogOut size={15} /> {tx('Cerrar sesión')}
+        </button>
+      )}
     </div>
   )
 }

@@ -1818,6 +1818,29 @@ test('App · sin sesión arranca en Empezar: crear cuenta, entrar y probar a la 
   await expect(page.getByText('Gratis y sin límite hasta el 31 de diciembre · sin tarjeta')).toBeVisible()
 })
 
+/* LA PORTADA (21-10-2026): primero la app de reparto gratis con todo lo que hace; detrás, la IA y la empresa. */
+test('Portada · vende la app de reparto gratis primero, con la IA y la empresa detrás, y cambia de idioma', async ({ page }) => {
+  const fallos = vigilar(page)
+  await page.goto('/', { waitUntil: 'domcontentloaded' })
+  await expect(page.getByRole('heading', { level: 1 })).toContainText('La app de reparto gratis')
+  await expect(page).toHaveTitle(/La app de reparto gratis/)
+  // El alta del repartidor, arriba y sin tarjeta; el precio sale de lib/precios.js.
+  await expect(page.getByRole('link', { name: /Crear mi cuenta gratis/ }).first()).toHaveAttribute('href', '/registro?sector=autonomo&plan=autonomo')
+  await expect(page.getByText(/^(Gratis y sin límite hasta el 31 de diciembre|Gratis hasta 15 paradas al día) · sin tarjeta$/).first()).toBeVisible()
+  // Todas las funciones, la IA y la empresa con su panel (que dice que los datos son de ejemplo).
+  await expect(page.getByRole('heading', { name: 'Todo lo que hace por ti, gratis' })).toBeVisible()
+  await expect(page.getByText('Escanea un paquete y te dice en qué parada va')).toBeVisible()
+  await expect(page.getByRole('heading', { name: 'La IA que mira por tu flota' })).toBeVisible()
+  await expect(page.getByRole('heading', { name: '¿Tienes una empresa de reparto o una flota?' })).toBeVisible()
+  await expect(page.getByText('Vista del panel · datos de ejemplo')).toBeVisible()
+  await expect(page.getByRole('link', { name: /Crear cuenta de empresa/ })).toHaveAttribute('href', '/registro')
+  // El idioma que se elige aquí es el que luego tiene la app.
+  await page.getByLabel('Idioma / Language').selectOption('en')
+  await expect(page.getByRole('heading', { level: 1 })).toContainText('The free delivery app')
+  await expect(page.getByRole('heading', { name: 'Everything it does for you, free' })).toBeVisible()
+  expect(fallos).toEqual([])
+})
+
 test('Planes · el repartidor sale aparte con su precio fijo aunque el servidor no lo mande', async ({ page }) => {
   await page.route(/\/api\/billing\/planes/, (r) => r.fulfill({ json: { planes: [
     { clave: 'operacion', nombre: 'Esencial', para: 'Una delegación', por_vehiculo: 5, minimo_vehiculos: 10 }] } }))
@@ -1948,6 +1971,34 @@ test('Suscripción · el botón de pagar va a Stripe y la vuelta espera la activ
   await expect(page).toHaveURL(/pago=ok|\/ruta$/)
   expect(pedidos[0]).toMatchObject({ plan: 'autonomo' })
   await expect(page.getByText('Tarjeta añadida. Activando tu cuenta…')).toBeVisible()
+})
+
+/* LO QUE PIDIERON QUIENES PROBARON LA APP EN GOOGLE PLAY (20-10-2026): ver la contraseña al
+   escribirla y no cerrar sesión de un toque sin querer. */
+test('Comentarios de Play · el login deja ver la contraseña y cerrar sesión pide confirmación', async ({ page }) => {
+  await page.goto('/panel/login', { waitUntil: 'domcontentloaded' })
+  const clave = page.locator('input[type=password]')
+  await clave.fill('mi-clave')
+  await page.getByRole('button', { name: 'Mostrar contraseña' }).click()
+  await expect(page.locator('input[type=password]')).toHaveCount(0)
+  expect(await page.evaluate(() => [...document.querySelectorAll('input')].some((i) => i.value === 'mi-clave' && i.type === 'text'))).toBe(true)
+  await page.getByRole('button', { name: 'Ocultar contraseña' }).click()
+  await expect(page.locator('input[type=password]')).toHaveCount(1)
+
+  await entrarComoAdmin(page)
+  await simularApi(page, 'vacio')
+  await page.route(/\/api\/org\/billing/, (r) => r.fulfill({ json: { status: 'active', required: false, plan: 'autonomo', sector: 'autonomo', modulos: ['dashboard', 'reparto', 'configuracion'] } }))
+  await page.goto('/panel/reparto', { waitUntil: 'domcontentloaded' })
+  await expect(page).toHaveURL(/\/ruta/)
+  await page.getByRole('button', { name: 'Cuenta', exact: true }).click()
+  await page.getByRole('button', { name: 'Cerrar sesión' }).click()
+  await expect(page.getByText('¿Cerrar sesión en este móvil?')).toBeVisible()
+  await page.getByRole('button', { name: 'Cancelar', exact: true }).click()
+  await expect(page).toHaveURL(/\/ruta/)
+  await expect(page.getByText('¿Cerrar sesión en este móvil?')).toHaveCount(0)
+  await page.getByRole('button', { name: 'Cerrar sesión' }).click()
+  await page.getByRole('button', { name: 'Sí, cerrar sesión' }).click()
+  await expect(page).toHaveURL(/\/empezar/)
 })
 
 /* DENTRO DE LA APP DE PLAY STORE no se enseña el botón de pagar mientras la app
@@ -3131,13 +3182,15 @@ test.describe('Idiomas · la app de reparto sigue el idioma del móvil', () => {
 test('Portada en chino · /cn entera en chino, con la app del repartidor y su alta en chino', async ({ page }) => {
   const fallos = vigilar(page)
   await page.goto('/cn', { waitUntil: 'domcontentloaded' })
-  await expect(page.getByRole('heading', { level: 1 })).toContainText('你的车队')
-  await expect(page).toHaveTitle(/中文配送 App/)
+  await expect(page.getByRole('heading', { level: 1 })).toContainText('免费的送货应用')
+  await expect(page).toHaveTitle(/免费送货应用/)
   await expect(page.locator('html')).toHaveAttribute('lang', 'zh-CN')
-  await expect(page.getByRole('heading', { name: /用中文的配送 App/ })).toBeVisible()
-  await expect(page.getByText('管理后台目前提供西班牙语', { exact: false })).toBeVisible()   // no promete el panel en chino
+  await expect(page.getByRole('heading', { name: '它为你做的一切，全部免费' })).toBeVisible()
+  // En China se navega con Amap o Baidu, no con Google Maps, y no hay Google Play: el APK se descarga.
+  await expect(page.getByText('应用内语音导航到每个门口，也可用高德或百度地图')).toBeVisible()
+  await expect(page.getByRole('link', { name: /下载安卓应用/ })).toHaveAttribute('href', '/descargas/FDS-china.apk')
   await expect(page.getByRole('button', { name: '知道了' })).toBeVisible()                   // cookies en chino
-  await page.getByRole('link', { name: /开始免费试用/ }).click()
+  await page.getByRole('link', { name: /免费创建我的账号/ }).first().click()
   await expect(page).toHaveURL(/registro\?sector=autonomo/)
   await expect(page.getByText('12月31日前免费且不限 · 无需绑卡')).toBeVisible()
   expect(fallos).toEqual([])

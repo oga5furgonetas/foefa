@@ -639,7 +639,9 @@ Nada se había borrado (org `owner` sin `modulos`, usuario `dani` sin
    configurar. Telegram SÍ funciona (su config venía en los datos).
 4. Investigaciones de DNR y portal `/dnr/t/` de FlotaDSP: no recuperados
    (están en el commit raíz `cfed72b` si Dani los pide).
-5. Capturas para la portada (`ProductoReal.jsx` se oculta si no hay imágenes).
+5. ~~Capturas del panel para la portada~~: quitado el 21-10 (`ProductoReal.jsx` y su generador). Con los
+   datos simulados salían vacías («no hay órdenes», «este mes no vence nada»); la portada enseña el panel
+   con una vista de ejemplo que lo dice. Si se quieren, antes hay que llenar el escenario «lleno».
 6. **Valor**: falta la banca real de Dani (`VALOR_BANCA`, hoy 1000). Las tres
    claves están en Fly (desde `C:\Users\Usuario\.flota-odds.txt`, sin
    imprimirlas) y el escáner encendido (`VALOR_ESCANEAR=1`). Sin probar aún:
@@ -1633,3 +1635,32 @@ a las empresas cliente NO se les abre: la clave la paga él). Menú **Hoy → Ce
   choca se queda el de la que se conserva y lo otro a `fusion_archivo`; no fusiona nombres que no se parecen.
 - Tests `test_centro_ia.py` (11, con una IA de mentira) y 2 de pantalla. La base de mentira ahora lee campos dentro
   de listas (`slots.driver_id`) y entiende `array_filters`, como MongoDB.
+
+## 21-10-2026: portada nueva (la app de reparto gratis primero) y lo que pidieron los testers de Play
+
+Dani: «rehazme la portada: véndelo sobre todo como la app de reparto gratis con todas sus funciones; después la IA
+y lo de negocios con su dashboard». `pages/Landing.jsx` reescrita, en este orden:
+- Héroe «La app de reparto gratis que ordena tu ruta sola» con el vídeo de la app y dos capturas reales; botones
+  «Crear mi cuenta gratis» (`/registro?sector=autonomo&plan=autonomo`) y «Probarla ahora, sin registrarme» (demo).
+  La línea de precio sale de `lib/precios.js` (`promoGratis()`): el 01-01-2027 cambia sola a «gratis hasta 15 paradas».
+- Para quién (marcas por país, sin Amazon), cómo funciona, TODAS las funciones de la app agrupadas (al cargar, en la
+  ruta, en la puerta, tus cuentas), precio del repartidor con «Invita y gana», la IA (daños en 3D y el asistente
+  del panel, que prepara y tú confirmas), empresas (6 módulos + vista del panel con «datos de ejemplo»; «Desde 5 €
+  por vehículo» y demo del panel), preguntas y pie con idioma y tema.
+- **Cada frase tiene detrás una pantalla que existe** (comprobado en el código antes de escribirla). Lo que se quitó
+  por no ser cierto para todos: «la plantilla del día» (es de la flota DSP), «aviso antes de que caduquen» (es un
+  calendario), «qué furgoneta está peor» como pregunta al asistente (no lo sabe; sí las ITV y quién lleva qué).
+- Textos con `tx()` del diccionario de la app de reparto (7 idiomas, `textosRutaB.js`, comprobado por
+  `check-textos-ruta.mjs`, que ya lee Landing.jsx y sus listas). El idioma que se elige en la portada es el de la app.
+  En chino: Amap/Baidu en vez de Google Maps, sin Street View y el enlace al APK de China.
+- Fuera `landingTextos.js`, `landingZh.js`, `ProductoReal.jsx` y su generador de capturas (salían vacías).
+- `functions/index.js`: la portada con su título, og (la imagen de /repartidores), canonical, datos para Google y el
+  texto ya escrito dentro de #root, como `functions/repartidores.js` (de donde toma ventajas y preguntas). Sin caché
+  en el borde (`no-cache`), como dice `_headers` para «/».
+- Testers de Play (testerscommunity, 20-10): sin fallos; de sus sugerencias, hecho lo que faltaba y era real: el ojo
+  para ver la contraseña en `/panel/login` (el alta ya lo tenía), confirmar antes de cerrar sesión en Cuenta, y la
+  ficha de Play con palabras de búsqueda (`docs/PLAY_STORE.md`, «Ficha mejorada», para que Dani la pegue). Ya
+  existían: compartir («Comparte y gana»), primer uso guiado y «Mándanos una idea». No hecho: entrar con Google (pide
+  configurar OAuth en Google Cloud, cosa de Dani), valorar en Play (la app sigue en prueba cerrada) y confirmar al
+  salir con el botón atrás (en Android lo normal es salir).
+- Pruebas: humo «Portada · vende la app de reparto gratis primero…», «Comentarios de Play…» y la de `/cn` rehecha.

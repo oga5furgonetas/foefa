@@ -272,6 +272,64 @@ datos de los clientes se borran solos. Más en flotadsp.com/privacidad.
 
 **Categoría**: Empresa. **Etiquetas**: reparto, rutas, logística, flota.
 
+### Ficha mejorada (21-10-2026): para que la encuentren al buscar
+
+Lo pidieron quienes probaron la app (informe de testerscommunity del 20-10): textos con las palabras que
+busca la gente («ruta de reparto», «optimizada», «repartidor», «escanear paquetes», «navegación por voz») y
+capturas con una frase encima. Todo lo de abajo lo hace la app hoy (es lo mismo que dice la portada).
+«Gratis» va en la descripción larga y no en la corta ni en el nombre: Google no deja precio ni
+promociones en el nombre ni en el icono, y por prudencia tampoco se pone en la corta. **Cuando acabe la promoción
+(31-12-2026) hay que cambiar el párrafo PRECIO.**
+
+**Descripción corta** (76 de 80):
+Ruta de reparto optimizada: escanea paquetes y te guía con voz a cada puerta
+
+**Descripción larga** (2178 de 4000):
+
+```
+FDS es la app de reparto para repartidores: escanea los paquetes, la ruta se ordena sola y te guía con voz hasta cada puerta. Sirve con los paquetes de cualquier agencia, plataforma o súper, sin conectarse con ellos.
+
+CARGA LOS PAQUETES EN SEGUNDOS
+• Escanea o haz una foto a la etiqueta, sea de la empresa que sea: la dirección y el teléfono entran solos (la foto se lee en tu móvil).
+• Escanea seguidos todos los paquetes al cargar la furgoneta.
+• ¿Te dan una hoja con la lista? Una foto y entran todas las paradas. También puedes pegarla.
+• Busca las direcciones o díctalas con la voz.
+
+RUTA OPTIMIZADA
+• La ruta se ordena sola por tiempo, con el tráfico típico de cada hora y el horario de cada cliente.
+• Navegación por voz hasta cada puerta dentro de la app, o con Google Maps o Waze.
+• El mapa te sigue y recalcula si te desvías; ves la fachada de cada parada.
+• Las zonas de carga y descarga cerca de tus paradas, en el mapa.
+
+EN LA PUERTA
+• Manos libres en Android: di «entregado» y sigue conduciendo.
+• Dónde lo dejas (vecino, buzón, portería…), quién lo recoge y su firma con el dedo.
+• Recuerda la última vez en esa puerta: dónde lo dejaste y tu nota.
+• Avisa al cliente con tu hora de llegada.
+• Sin cobertura no pasa nada: se guarda y se envía al volver la red.
+• Escanea un paquete y te dice en qué parada va.
+
+TUS CUENTAS
+• Cuánto llevas ganado hoy y la gasolina.
+• El historial de cada día y tu semana frente a la anterior.
+• El mes entero en un Excel para la gestoría.
+
+PRECIO
+Gratis y sin límite hasta el 31 de diciembre de 2026, sin tarjeta. Después, gratis hasta 15 paradas al día, o sin tope por 9,99 € al mes o 99 € al año.
+
+PARA EMPRESAS
+Supermercados con reparto a domicilio, distribuidores y empresas de paquetería: panel de la oficina con los pedidos en el mapa, enlace de seguimiento para el cliente, vehículos, revisiones con foto e IA, taller y vencimientos.
+
+PRIVACIDAD
+Cada repartidor ve solo sus paradas. Si repartes para una empresa, tu ubicación solo se comparte durante la jornada que tú empiezas y terminas. Los datos de los clientes se borran solos a los días que tú fijes.
+
+En español, inglés, portugués, francés, italiano, alemán y chino.
+```
+
+**Frases para las capturas** (una por captura, arriba, letra grande): «Foto a la etiqueta: la dirección entra
+sola» · «La ruta se ordena sola» · «Te guía con voz hasta cada puerta» · «Di "entregado" y sigue conduciendo» ·
+«Lo que llevas ganado hoy».
+
 ### Fichas para Latinoamérica y Brasil (11-10-2026)
 
 En Play Console → Presencia en la tienda → Ficha principal → «Gestionar traducciones» → añadir

@@ -37,7 +37,8 @@ FlotaDSP. No hay ningún secreto escrito en el código: todo va por entorno.
   `whatsapp.py`, `analitica.py`, `fiabilidad.py`, `piezas.py`, `seguimiento.py`.
 - `frontend/` — React 18 + Vite + Tailwind. Panel en `src/panel/`, páginas
   públicas en `src/pages/`, portal del conductor en `src/pages/driver/`.
-  i18n en 6 idiomas (`src/i18n.jsx`; la portada en `src/pages/landingTextos.js`).
+  i18n en 6 idiomas (`src/i18n.jsx`); la app de reparto y la portada, con `tx()` de
+  `src/lib/idioma.js` (diccionario `src/lib/textosRuta*.js`, 7 idiomas).
 - `frontend/functions/` — Cloudflare Pages Functions (SEO de ofertas, sitemap,
   robots). La API la leen de la variable `API_URL` del proyecto de Pages.
 - `ai-service/` — microservicio opcional de visión (YOLO/SAM). Sin él, la IA

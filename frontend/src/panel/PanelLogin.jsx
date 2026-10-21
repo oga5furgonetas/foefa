@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { ArrowRight, Loader2 } from 'lucide-react'
+import { ArrowRight, Loader2, Eye, EyeOff } from 'lucide-react'
+import { tx } from '../lib/idioma'
 import { API_BASE } from '../services/api'
 import { saveSession, isAuthed, getToken, logout } from './auth'
 import { MARCA } from '../marca'
@@ -8,19 +9,31 @@ import { MARCA } from '../marca'
 /* Campo hecho a medida: etiqueta en microtipografía mono que se ilumina al
    enfocar, el vidrio del input se aclara, el anillo de foco emerge sin brusquedad. */
 function Field({ label, type = 'text', value, onChange, onEnter, autoFocus }) {
+  // El ojo de la contraseña: lo pidieron quienes probaron la app en Google Play (20-10-2026).
+  const [ver, setVer] = useState(false)
+  const clave = type === 'password'
   return (
     <label className="group block">
       <span className="mb-2 block font-mono text-[10px] font-semibold uppercase tracking-[0.22em] text-dark-500 transition-colors duration-300 group-focus-within:text-brand-400">
         {label}
       </span>
-      <input
-        type={type}
-        value={value}
-        onChange={(e) => onChange(e.target.value)}
-        onKeyDown={(e) => e.key === 'Enter' && onEnter?.()}
-        autoFocus={autoFocus}
-        className="w-full rounded-xl border border-white/[0.07] bg-white/[0.02] px-4 py-3 text-[15px] text-dark-50 caret-brand-400 placeholder:text-dark-500 transition-all duration-300 hover:border-white/[0.12] focus:border-brand-500/50 focus:bg-white/[0.045] focus:outline-none focus:ring-[3px] focus:ring-brand-500/15"
-      />
+      <span className="relative block">
+        <input
+          type={clave && ver ? 'text' : type}
+          value={value}
+          onChange={(e) => onChange(e.target.value)}
+          onKeyDown={(e) => e.key === 'Enter' && onEnter?.()}
+          autoFocus={autoFocus}
+          className={`w-full rounded-xl border border-white/[0.07] bg-white/[0.02] px-4 py-3 text-[15px] text-dark-50 caret-brand-400 placeholder:text-dark-500 transition-all duration-300 hover:border-white/[0.12] focus:border-brand-500/50 focus:bg-white/[0.045] focus:outline-none focus:ring-[3px] focus:ring-brand-500/15 ${clave ? 'pr-12' : ''}`}
+        />
+        {clave && (
+          <button type="button" onClick={() => setVer((v) => !v)} aria-pressed={ver}
+            aria-label={ver ? tx('Ocultar contraseña') : tx('Mostrar contraseña')} title={ver ? tx('Ocultar contraseña') : tx('Mostrar contraseña')}
+            className="absolute inset-y-0 right-0 flex w-12 items-center justify-center rounded-r-xl text-dark-400 transition-colors hover:text-dark-100 focus-visible:outline focus-visible:outline-2 focus-visible:outline-brand-400">
+            {ver ? <EyeOff size={17} /> : <Eye size={17} />}
+          </button>
+        )}
+      </span>
     </label>
   )
 }
