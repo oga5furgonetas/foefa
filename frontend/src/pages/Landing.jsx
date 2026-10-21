@@ -298,6 +298,8 @@ export default function Landing({ idioma: forzado = '' }) {
             <a href="#funciones" className="hidden text-[14px] font-medium text-[color:var(--ld-muted)] hover:text-[color:var(--ld-text)] md:inline">{tx('Funciones')}</a>
             <a href="#empresas" className="hidden text-[14px] font-medium text-[color:var(--ld-muted)] hover:text-[color:var(--ld-text)] md:inline">{tx('Para empresas')}</a>
             <a href="#precio" className="hidden text-[14px] font-medium text-[color:var(--ld-muted)] hover:text-[color:var(--ld-text)] sm:inline">{tx('Precio')}</a>
+            {/* El tablón de ofertas (Dani, 21-10-2026: «en la pantalla principal, al lado de Funciones»). Se ve también en el móvil. */}
+            <a href="/empleo" onClick={() => medirAccion('portada_empleo')} className="whitespace-nowrap px-1 text-[14px] font-medium text-[color:var(--ld-muted)] hover:text-[color:var(--ld-text)]">{tx('Empleo')}</a>
             <a href="/panel/login" className="whitespace-nowrap px-2 text-[14px] font-medium text-[color:var(--ld-muted)] hover:text-[color:var(--ld-text)]">{tx('Entrar')}</a>
             <a href={ALTA_REPARTIDOR} onClick={alta('menu')} className="whitespace-nowrap rounded-lg bg-gradient-to-br from-brand-400 to-brand-600 px-3.5 py-2 text-[13.5px] font-semibold text-[#04121a] hover:brightness-110">{tx('Empezar gratis')}</a>
           </div>
@@ -526,7 +528,7 @@ export default function Landing({ idioma: forzado = '' }) {
             <p className="text-[12px] font-semibold uppercase tracking-[0.14em] text-[color:var(--ld-dim)]">{tx('Producto')}</p>
             <ul className="mt-3 space-y-2 text-[14px]">
               {[['/repartidores', tx('App de reparto')], ['/planes', tx('Precios para empresas')], ['/guia-ruta-de-reparto', tx('Guía: cómo ordenar la ruta')],
-                ['/peritaje-tecnico', tx('Cómo funciona la IA de daños')], ['/contacto', tx('Contacto')], ['/panel/login', tx('Entrar')]].map(([h, k]) => (
+                ['/peritaje-tecnico', tx('Cómo funciona la IA de daños')], ['/empleo', tx('Ofertas de empleo')], ['/contacto', tx('Contacto')], ['/panel/login', tx('Entrar')]].map(([h, k]) => (
                 <li key={h}><a href={h} className="text-[color:var(--ld-muted)] hover:text-[color:var(--ld-text)]">{k}</a></li>
               ))}
             </ul>
