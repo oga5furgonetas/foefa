@@ -1664,3 +1664,14 @@ y lo de negocios con su dashboard». `pages/Landing.jsx` reescrita, en este orde
   configurar OAuth en Google Cloud, cosa de Dani), valorar en Play (la app sigue en prueba cerrada) y confirmar al
   salir con el botón atrás (en Android lo normal es salir).
 - Pruebas: humo «Portada · vende la app de reparto gratis primero…», «Comentarios de Play…» y la de `/cn` rehecha.
+
+## 21-10-2026: pestaña «Empleo» en la app de reparto
+
+Dani: «lo de flotadsp.com/empleo déjalo visible en la app, pon una pestaña que ponga Empleo para que les salga
+el tablón». `pages/EmpleoRuta.jsx`, quinta pestaña de `/ruta` (entre Historial y Ajustes): las ofertas abiertas de
+`GET /empleo/publicas` (las mismas que /empleo, sin sesión y con lista blanca de campos) con título, ciudad,
+jornada y sueldo; tocar una abre `/empleo/<slug>/<oferta>`, donde se apunta. Solo en cuentas de España
+(`billing.pais === 'es'`): los trabajos son en Galicia. Textos en 7 idiomas; prueba de humo «App · la pestaña Empleo…».
+- La tarjeta va sin el resumen a propósito: la descripción de las ofertas de **Vigo y A Coruña dice «en Santiago de
+  Compostela»** (copiada de la de Santiago) y las tres nombran a Amazon. Avisado a Dani; corregirlo es cambiar datos
+  de producción (Empleo → editar la oferta), con su OK.

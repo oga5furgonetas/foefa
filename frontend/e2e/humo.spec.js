@@ -2001,6 +2001,35 @@ test('Comentarios de Play · el login deja ver la contraseña y cerrar sesión p
   await expect(page).toHaveURL(/\/empezar/)
 })
 
+/* EL TABLÓN DE EMPLEO EN LA APP (21-10-2026): la pestaña «Empleo» enseña las ofertas de /empleo y cada una
+   lleva a su página para apuntarse. Solo en España: los trabajos son en Galicia. */
+test('App · la pestaña Empleo enseña las ofertas abiertas y solo sale en España', async ({ page }) => {
+  const fallos = vigilar(page)
+  await entrarComoAdmin(page)
+  await simularApi(page, 'vacio')
+  let pais = 'es'
+  await page.route(/\/api\/org\/billing/, (r) => r.fulfill({ json: { status: 'active', required: false, plan: 'autonomo', sector: 'autonomo', pais, modulos: ['dashboard', 'reparto', 'configuracion'] } }))
+  await page.route(/\/api\/empleo\/publicas/, (r) => r.fulfill({ json: { empresa: 'X', slug: 'x', ciudades: ['Vigo'], jornadas: ['Jornada Completa'], ofertas: [
+    { slug: 'reparto-vigo', titulo: 'Repartidor/a de Paquetería – Vigo', ciudad: 'Vigo', jornada: 'Jornada Completa', salario: '1500/2500',
+      resumen: 'Repartidor/a de Paquetería – Vigo Buscamos repartidores para reparto de paquetería.', url: '/empleo/x/reparto-vigo' }] } }))
+  await page.goto('/panel/reparto', { waitUntil: 'domcontentloaded' })
+  await expect(page).toHaveURL(/\/ruta/)
+  await page.getByRole('button', { name: 'Empleo', exact: true }).click()
+  await expect(page.getByRole('heading', { name: 'Ofertas de trabajo de reparto' })).toBeVisible()
+  const oferta = page.getByRole('link', { name: /Repartidor\/a de Paquetería – Vigo/ })
+  await expect(oferta).toHaveAttribute('href', '/empleo/x/reparto-vigo')
+  await expect(oferta).toContainText('1500/2500')
+  await expect(oferta).toContainText('Ver la oferta y apuntarme')
+  expect(fallos).toEqual([])
+
+  // Fuera de España, sin pestaña.
+  pais = 'mx'
+  await page.evaluate(() => sessionStorage.removeItem('ruta_tab'))
+  await page.reload({ waitUntil: 'domcontentloaded' })
+  await expect(page.getByRole('button', { name: 'Hoy', exact: true })).toBeVisible()
+  await expect(page.getByRole('button', { name: 'Empleo', exact: true })).toHaveCount(0)
+})
+
 /* DENTRO DE LA APP DE PLAY STORE no se enseña el botón de pagar mientras la app
    no esté en el programa de ofertas externas de Google. */
 test('Suscripción · dentro de la app no sale el botón de pagar sin el programa de Google', async ({ page }) => {

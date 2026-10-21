@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import {
   Route, History, Settings2, UserCircle2, Loader2, CheckCircle2, XCircle, Package, Euro, ChevronRight, ChevronDown, ArrowLeft,
-  MapPin, Phone, Camera, Clock, RotateCcw, FileSpreadsheet, X,
+  MapPin, Phone, Camera, Clock, RotateCcw, FileSpreadsheet, X, Briefcase,
 } from 'lucide-react'
 import MiRuta from './driver/MiRuta'
 import { Ajustes } from '../panel/pages/Reparto'
@@ -27,6 +27,7 @@ import { tx, useIdioma, txError, locale } from '../lib/idioma'
 import { invitar } from '../lib/compartir'
 import { getReferidos, mercEstado } from '../services/api'
 import Mercadillo from './mercadillo/Mercadillo'
+import EmpleoRuta from './EmpleoRuta'
 import { eurosRef, refCentActual, refPromoActiva, REF_PROMO_HASTA, fechaRefPromo } from '../lib/precios'
 
 /* ── LA APP DE QUIEN REPARTE SOLO (04-10-2026) ───────────────────────────────
@@ -36,8 +37,9 @@ import { eurosRef, refCentActual, refPromoActiva, REF_PROMO_HASTA, fechaRefPromo
    hecho, cómo se calcula la ruta y su cuenta. Sin vehículos, taller,
    inspecciones, equipo ni asistente de IA. Si entra al panel, se le trae aquí. */
 
+// «Empleo» (21-10-2026): el tablón de flotadsp.com/empleo. Solo en cuentas de España (ver EmpleoRuta.jsx).
 const PESTANAS = [
-  ['hoy', 'Hoy', Route], ['historial', 'Historial', History], ['ajustes', 'Ajustes', Settings2], ['cuenta', 'Cuenta', UserCircle2],
+  ['hoy', 'Hoy', Route], ['historial', 'Historial', History], ['empleo', 'Empleo', Briefcase], ['ajustes', 'Ajustes', Settings2], ['cuenta', 'Cuenta', UserCircle2],
 ]
 const euros = (n) => importe(n)
 
@@ -232,6 +234,8 @@ export default function RutaApp() {
     )
   }
 
+  // «Empleo» solo en España: las ofertas son de Galicia. Hasta que contesta /org/billing, sin ella.
+  const pestanas = PESTANAS.filter(([k]) => k !== 'empleo' || billing?.pais === 'es')
   return (
     <main className="app-ruta flex min-h-screen flex-col bg-dark-950 text-dark-100">
       {instalarPrimero && <PasoInstalar onListo={() => { olvidarRecienAlta(); setInstalarPrimero(false) }} />}
@@ -300,11 +304,12 @@ export default function RutaApp() {
             {tab === 'ajustes' && <div className="mx-auto max-w-md"><Ajustes conductores={[]} toast={toast} autonomo /></div>}
           </>}
         {tab === 'historial' && <Historial />}
+        {tab === 'empleo' && <EmpleoRuta />}
         {tab === 'cuenta' && <Cuenta billing={billing} recargar={recargar} toast={toast} resaltarRegalo={regaloNuevo} merc={merc} />}
       </div>
       <nav className="ruta-pestanas fixed inset-x-0 bottom-0 z-40 border-t border-dark-800 bg-dark-950/95 pb-[env(safe-area-inset-bottom)] backdrop-blur" aria-label={tx('Secciones')}>
-        <div className="mx-auto grid max-w-md grid-cols-4">
-          {PESTANAS.map(([k, t, I]) => (
+        <div className={`mx-auto grid max-w-md ${pestanas.length === 5 ? 'grid-cols-5' : 'grid-cols-4'}`}>
+          {pestanas.map(([k, t, I]) => (
             <button key={k} onClick={() => setTab(k)}
               className={`flex flex-col items-center gap-1 pb-2 pt-2 text-[11px] font-semibold transition-colors ${tab === k ? 'text-brand-200' : 'text-dark-500'}`}
               aria-current={tab === k ? 'page' : undefined}>
