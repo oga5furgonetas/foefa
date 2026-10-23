@@ -289,6 +289,15 @@ export default function RutaApp() {
         )}
         {tab === 'hoy' && !bloqueado && <OpinionRuta />}
         {tab === 'hoy' && <InstalarApp />}
+        {tab === 'hoy' && !esSuplantacion() && <AvisoManana toast={toast} />}
+        {(tab === 'hoy' || tab === 'ajustes') && bloqueado
+          ? <Muro billing={billing} toast={toast} recargar={recargar} irACuenta={() => setTab('cuenta')} />
+          : <>
+            {tab === 'hoy' && <MiRuta embebido onBack={() => {}} />}
+            {tab === 'ajustes' && <div className="mx-auto max-w-md"><Ajustes conductores={[]} toast={toast} autonomo /></div>}
+          </>}
+        {/* «Invita y gana», DEBAJO de la ruta (23-10-2026): encima del escáner distraía a quien aún no ha metido
+            su primer paquete; quien ya reparte lo ve al bajar, que es cuando lo comparte. */}
         {tab === 'hoy' && !esSuplantacion() && !bonoPendiente && (billing?.pais || 'es') !== 'cn' && (
           <div className="mx-auto mb-3 flex max-w-md items-center justify-between gap-3 rounded-2xl border border-emerald-400/30 bg-emerald-500/[.08] px-3.5 py-2.5">
             <button onClick={() => setTab('cuenta')} className="min-w-0 text-left text-[13px] leading-snug text-emerald-100">
@@ -298,13 +307,6 @@ export default function RutaApp() {
             <button onClick={invitar} className="shrink-0 rounded-xl bg-emerald-700 px-3 py-1.5 text-[12.5px] font-bold text-white">{tx('Invitar')}</button>
           </div>
         )}
-        {tab === 'hoy' && !esSuplantacion() && <AvisoManana toast={toast} />}
-        {(tab === 'hoy' || tab === 'ajustes') && bloqueado
-          ? <Muro billing={billing} toast={toast} recargar={recargar} irACuenta={() => setTab('cuenta')} />
-          : <>
-            {tab === 'hoy' && <MiRuta embebido onBack={() => {}} />}
-            {tab === 'ajustes' && <div className="mx-auto max-w-md"><Ajustes conductores={[]} toast={toast} autonomo /></div>}
-          </>}
         {tab === 'historial' && <Historial />}
         {tab === 'cuenta' && <Cuenta billing={billing} recargar={recargar} toast={toast} resaltarRegalo={regaloNuevo} merc={merc} />}
       </div>

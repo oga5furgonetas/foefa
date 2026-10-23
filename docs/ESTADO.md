@@ -1757,3 +1757,7 @@ Hecho:
   con el logo y el idioma en la primera fila (antes flotaba encima del formulario), campos más grandes, misma
   fuente que la app. Sin tocar textos ni comportamiento.
 - Pruebas de humo: `/iphone` en PUBLICAS y «iPhone · la guía de instalar y usar la app» (2).
+- (23-10, más tarde) «Invita y gana» pasa DEBAJO de la ruta en «Hoy» (encima del escáner distraía al que aún no ha
+  metido su primer paquete). La analítica guarda `so` (ios/android/otro) en cada evento, por el user-agent: para
+  saber cuánta gente viene de iPhone. Los 5 fallos de la batería completa del backend (3 de `test_valor_senales`,
+  que pasan solos) parecen de orden/flaky; los que tocan Telegram, copias y el vigilante pasan.

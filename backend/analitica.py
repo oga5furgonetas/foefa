@@ -141,6 +141,10 @@ def evento_desde(cuerpo, user_agent, claims, ahora):
         doc["nombre"] = nombre
     if cuerpo.get("disp") in DISPOSITIVOS:
         doc["disp"] = cuerpo["disp"]
+    # El sistema del móvil (23-10-2026): cuántos vienen de iPhone, que es donde la app se instala
+    # desde Safari y no desde una tienda. Sale del user-agent, no de lo que diga el cliente.
+    ua = user_agent or ""
+    doc["so"] = "ios" if re.search(r"iPhone|iPad|iPod", ua) else "android" if "Android" in ua else "otro"
     # «anuncio» = utm_content: el idioma/variante del anuncio (04-10-2026), para
     # saber qué país y qué creatividad traen altas.
     for campo in ("ref", "utm", "anuncio"):

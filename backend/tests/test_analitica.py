@@ -73,7 +73,7 @@ def test_no_se_guarda_persona_ni_ip():
         {"sid": "abcdef1234567890", "tipo": "vista", "ruta": "/panel/vehiculos",
          "ip": "1.2.3.4", "sub": "dani", "name": "Dani"},
         "Chrome", {"sub": "u1", "name": "Ana", "org_id": "oga5", "role": "admin"}, AHORA)
-    assert set(e) <= {"ts", "sid", "tipo", "seg", "ruta", "org", "disp", "ref", "utm", "anuncio", "nombre"}
+    assert set(e) <= {"ts", "sid", "tipo", "seg", "ruta", "org", "disp", "so", "ref", "utm", "anuncio", "nombre"}
     assert e["org"] == "oga5"
     # El idioma/variante del anuncio (utm_content) sí se guarda: dice qué anuncio trae altas.
     e3 = an.evento_desde({"sid": "abcdef1234567890", "tipo": "vista", "ruta": "/repartidores",
@@ -288,3 +288,15 @@ if __name__ == "__main__":
                 fallos += 1
                 print("FALLA", nombre, repr(ex))
     sys.exit(1 if fallos else 0)
+
+
+def test_el_evento_dice_si_viene_de_iphone_o_android():
+    """Para saber cuánta gente usa iPhone (allí la app se instala desde Safari)."""
+    from datetime import datetime, timezone
+    ahora = datetime.now(timezone.utc)
+    cuerpo = {"sid": "abcdefghijklmnop", "tipo": "vista", "ruta": "/empezar", "disp": "movil"}
+    ios = an.evento_desde(cuerpo, "Mozilla/5.0 (iPhone; CPU iPhone OS 17_5 like Mac OS X) Safari/604.1", None, ahora)
+    android = an.evento_desde(cuerpo, "Mozilla/5.0 (Linux; Android 14; Pixel 8) Chrome/129 Mobile", None, ahora)
+    pc = an.evento_desde(cuerpo, "Mozilla/5.0 (Windows NT 10.0) Chrome/129", None, ahora)
+    assert (ios["so"], android["so"], pc["so"]) == ("ios", "android", "otro")
+
