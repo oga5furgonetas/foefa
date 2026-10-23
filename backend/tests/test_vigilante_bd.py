@@ -5,7 +5,17 @@ Dos caídas de la base en ocho días sin que nadie se enterase hasta un día des
 Aquí se prueba la decisión (pura) y el aviso con Telegram cacheado y correo."""
 import asyncio
 
+import pytest
+
 import server
+
+
+@pytest.fixture(autouse=True)
+def _cache_limpia():
+    """La caché de Telegram es global: que ningún test deje un token de mentira a los demás."""
+    server._TG_CACHE.clear()
+    yield
+    server._TG_CACHE.clear()
 
 H = 3600.0
 

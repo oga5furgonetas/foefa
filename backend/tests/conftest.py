@@ -14,6 +14,7 @@ os.environ.setdefault("DB_NAME", "test_flota")
 os.environ.setdefault("GLOBAL_DB_NAME", "test_flota_global")
 os.environ.setdefault("ADMIN_USERNAME", "")   # sin seed de admins del arranque
 os.environ.setdefault("ADMIN_PASSWORD", "")
+os.environ.setdefault("VIGILANTE_BD", "0")   # el vigilante de la base no hace pings en las pruebas
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
