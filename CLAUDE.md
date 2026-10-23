@@ -43,6 +43,8 @@ FlotaDSP. No hay ningún secreto escrito en el código: todo va por entorno.
   robots). La API la leen de la variable `API_URL` del proyecto de Pages.
 - `ai-service/` — microservicio opcional de visión (YOLO/SAM). Sin él, la IA
   de daños usa Gemini.
+- `infra/mongo/` — el MongoDB de Flota en Fly (`flota-mongo`, solo red privada), desde el
+  23-10-2026; antes era un M0 de Atlas. Restaurar: `backend/scripts/restaurar_copia.py`.
 - `scripts/` — chequeos (`check-*.mjs`, `check_*.py`) y despliegue (`*.ps1`).
 - `tools/` — herramientas de mantenimiento (poda, código muerto, cadenas).
 

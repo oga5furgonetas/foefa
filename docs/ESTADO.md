@@ -1674,3 +1674,47 @@ de Funciones». Primero se puso como pestaña de la app de reparto y NO era eso:
 - Ojo con los datos de las ofertas: la descripción de **Vigo y A Coruña dice «en Santiago de Compostela»** (copiada
   de la de Santiago) y las tres nombran a Amazon. Avisado a Dani; corregirlo es cambiar datos de producción
   (Empleo → editar la oferta), con su OK.
+
+## 23-10-2026: Atlas suspendida por impago → la base de Flota vive ahora en Fly (`flota-mongo`)
+
+**Qué pasó.** «¿Por qué Flota no funciona?» (Dani, 23-10 11:15). `/api/health` daba `mongo_connected: false` y
+los logs «SSL handshake failed… TLSV1_ALERT_INTERNAL_ERROR» en los tres nodos; desde el PC, igual. Parecía la
+lista de IPs otra vez (15-10), pero NO: la organización de Atlas «Trafico's Org - 2026-05-26» (Project 0,
+cluster1 r5ruvvc, el M0 gratuito de Flota) estaba **SUSPENDED** por dos recibos SEPA devueltos (agosto $111.45 y
+septiembre $305.12) de un cluster de pago de la misma organización (el viejo de FlotaDSP, que seguía encendido:
+$175 solo en octubre). La suspensión se llevó el M0 gratis por delante. Dani: «no quiero pagar ese».
+
+**Qué se hizo.** Mover la base a un MongoDB nuestro en Fly, restaurando la copia diaria de R2:
+- `infra/mongo/fly.toml`: app `flota-mongo` (imagen oficial `mongo:7.0`, cdg, shared-cpu-1x 1 GB, volumen
+  `flota_mongo_data` de 3 GB en `/data/db`, fotos del volumen 7 días). **Sin servicios públicos**: solo por la
+  red privada de Fly (`flota-mongo.internal:27017`). Usuario `flota`, contraseña en los secretos
+  `MONGO_INITDB_ROOT_*` de esa app. Standalone: el servidor no usa transacciones ni change streams.
+  **Gotcha:** `mongod` necesita `--ipv6` además de `--bind_ip_all`; la red privada de Fly es solo IPv6 y sin
+  él da «connection refused». Coste ≈ 6 €/mes (Dani: «si son 6 euros lo usamos»).
+- `backend/scripts/restaurar_copia.py <copia.jsonl.gz> <fichero_con_url>`: inserta la copia por lotes y
+  cuadra colección a colección; se niega si el destino tiene datos (`--forzar` para repetir una prueba). Las
+  copias van sin `_id` y el servidor no usa ObjectId, así que da igual. Los índices los crea el servidor al
+  arrancar.
+- Se restauró `backups/flota_2026-10-22_0200_…` (la última: la de las 04:00 del 23 ya falló): 48 bases,
+  285 colecciones, 205.186 documentos, 11 s. **Perdido: lo que pasó el 22-10 durante el día** (altas, entregas,
+  cambios de cuadrante) hasta la suspensión. Se hizo desde la máquina `flota-backend` (tiene `COPIAS_CLAVE`,
+  pymongo y la red privada): `fly ssh sftp put` de la copia cifrada, `descifrar_copia.py`, `restaurar_copia.py`,
+  y borrado de los temporales.
+- `fly secrets set MONGO_URL=… -a flota-backend` (la cadena está en `C:\Users\Usuario\.flota-mongo-fly.txt`;
+  la vieja de Atlas, en `.flota-mongo-uri-atlas-viejo.txt`). Comprobado: health OK, demo-login, 10 vehículos de
+  la demo, 3 ofertas de empleo, y una copia manual a R2 (`POST /api/admin/backup-now` con el super-admin):
+  `flota_2026-10-23_0948_…`, 20 MB → la copia nocturna sigue funcionando con la base nueva.
+
+**Desde el PC** (scripts, auditoría): `fly proxy 27018:27017 -a flota-mongo` y la cadena del fichero con
+`flota-mongo.internal:27017` cambiado por `localhost:27018`. Funciona (probado).
+
+**Pendiente / avisos.**
+- Dani decide qué hacer con la organización suspendida de Atlas (pagar o dejar que la borren). Del FlotaDSP
+  viejo hay copia en Documents y 14 copias `backups/flotadsp_*` en R2. Si algún día paga, lo del 22-10 se
+  podría rescatar de allí (sería una fusión a mano, no está preparada).
+- La demo (`dsp_demo_noroeste.vehicle_damage_ledger`) tiene dos daños repetidos (`dn-v108`/`aleta`) y el índice
+  único `uniq_veh_panel_open` no se crea ahí (aviso al arrancar). Solo la demo; limpiar cuando toque.
+- **Nadie se entera cuando la base cae**: Fly mira `/api/vivo` (no toca Mongo) y el aviso de «backup fallido»
+  va por Telegram con la configuración… guardada en Mongo. Hace falta un vigilante fuera (que mire
+  `mongo_connected` en `/api/health` y avise al móvil). Propuesto a Dani, sin decidir.
+- Un solo nodo: si la máquina muere, se restaura la última copia (máximo un día perdido). Es lo acordado.

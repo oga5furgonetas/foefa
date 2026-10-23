@@ -1,0 +1,48 @@
+# El MongoDB de Flota, en Fly, al lado del servidor (23-10-2026).
+#
+# POR QUÉ. Atlas suspendió la organización donde vivía la base (dos recibos
+# devueltos de un cluster viejo que ya no se usaba) y se llevó por delante el
+# M0 gratuito de Flota. Dani no quiso pagar: la base se levantó aquí desde la
+# copia diaria de R2. Además el M0 tenía tope de 500 colecciones / 100 bases,
+# y Flota crea una base por empresa: con 1000 usuarios no cabía de ninguna
+# manera.
+#
+# CÓMO. La imagen oficial de MongoDB, un volumen para /data/db y SIN servicios
+# públicos: solo se llega por la red privada de Fly (flota-mongo.internal),
+# desde flota-backend. Usuario y contraseña van en secretos
+# (MONGO_INITDB_ROOT_USERNAME / MONGO_INITDB_ROOT_PASSWORD); la imagen los crea
+# la primera vez que arranca con el volumen vacío. Standalone, sin replica set:
+# el servidor no usa transacciones ni change streams (comprobado el 23-10).
+#
+# COPIAS. Las de siempre: el servidor sube cada noche a R2 una copia cifrada de
+# todas las bases (backup_database_to_r2). Y Fly hace una foto diaria del
+# volumen (snapshot_retention). Para restaurar: backend/scripts/restaurar_copia.py.
+#
+# Arrancar (desde infra/mongo):
+#   fly apps create flota-mongo
+#   fly volumes create flota_mongo_data -a flota-mongo -r cdg -s 3 -y
+#   fly secrets set -a flota-mongo MONGO_INITDB_ROOT_USERNAME=... MONGO_INITDB_ROOT_PASSWORD=...   (sin imprimirlos)
+#   fly deploy -a flota-mongo
+app = "flota-mongo"
+primary_region = "cdg"
+
+[build]
+  image = "mongo:7.0"
+
+[experimental]
+  # 1 GB de RAM: la caché de WiredTiger a 256 MB deja sitio al resto del proceso.
+  # --ipv6 es obligatorio: la red privada de Fly (flota-mongo.internal) es solo IPv6 y sin él mongod
+  # escucha únicamente en IPv4 (comprobado el 23-10: «connection refused» desde el servidor).
+  cmd = ["mongod", "--ipv6", "--bind_ip_all", "--wiredTigerCacheSizeGB", "0.25"]
+
+[mounts]
+  source = "flota_mongo_data"
+  destination = "/data/db"
+  snapshot_retention = 7
+
+[[vm]]
+  size = "shared-cpu-1x"
+  memory = "1gb"
+
+[[restart]]
+  policy = "always"
