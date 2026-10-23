@@ -1,0 +1,13 @@
+{
+ "palabras": 60,
+ "voces": {
+  "ximena": {
+   "voz": "es-ES-XimenaNeural",
+   "segundos": 23.21
+  },
+  "alvaro": {
+   "voz": "es-ES-AlvaroNeural",
+   "segundos": 22.37
+  }
+ }
+}

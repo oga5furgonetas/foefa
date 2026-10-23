@@ -1761,3 +1761,26 @@ Hecho:
   metido su primer paquete). La analítica guarda `so` (ios/android/otro) en cada evento, por el user-agent: para
   saber cuánta gente viene de iPhone. Los 5 fallos de la batería completa del backend (3 de `test_valor_senales`,
   que pasan solos) parecen de orden/flaky; los que tocan Telegram, copias y el vigilante pasan.
+
+## 23-10-2026 (tarde, 2): anuncios nuevos — spot v3, audio para Spotify e imágenes con la app real
+
+Dani: «más anuncios con buena interfaz y buenas imágenes; un anuncio para Spotify; un buen vídeo, nada básico ni
+cutre ni voz robótica». Hecho (todo con la app de verdad y la oferta de `lib/precios.js`; sin fotos de terceros
+salvo el archivo de Pexels ya licenciado, que solo cuenta el problema):
+- **Spot v3** (`scripts/spot-v3/{tarjetas.mjs,voz.py}` + `scripts/montar-spot-v3.mjs`): 36 s, gancho con
+  furgoneta y «¿Todavía ordenas la ruta a mano?», la app grabada por Playwright (`e2e/spot-v2.spec.js
+  --update-snapshots`) dentro de un móvil flotante con 4 títulos (foto a la etiqueta, ruta sola, voz, entregado),
+  oferta y cierre con QR a `/app?utm_source=video&utm_content=spot3`. Voz es-ES-Ximena frase a frase con la
+  música agachándose debajo; si Dani graba `s1..s5.mp3` en `docs/anuncios/reales/spot-v3/`, `voz.py` las usa.
+  Salida: `docs/anuncios/reales/salida/spot-v3-{9x16,4x5,1x1}.mp4` (el 1:1 lleva el vertical sobre fondo
+  desenfocado; recortar se comía los títulos).
+- **Spotify** (`scripts/spotify/voz.py`, mezcla con ffmpeg): `docs/anuncios/spotify/fds-spotify-30s-{ximena,alvaro}.mp3`
+  (29,8 s, 60 palabras, -16 LUFS, ≈0,7 MB), guion e instrucciones en `LEEME.md` (Ad Studio: 30 s, ≤65 palabras,
+  imagen 640×640 ≤200 KB). Subirlo y el presupuesto son de Dani.
+- **Imágenes** (`scripts/anuncio-app.mjs`): 4 tarjetas × (4:5, 9:16, 1:1 y 640 JPG para Spotify) en
+  `docs/anuncios/app/`, textos para Meta/TikTok en `TEXTOS.md`. Capturas reales de `public/capturas-ruta` y
+  `docs/capturas-ruta` dentro de un móvil.
+- Google Play: la prueba cerrada va por el día 13 de 14; mañana Dani puede «Solicitar acceso a producción».
+  Cuando Google apruebe, cambiar el APK por el enlace de Play (InstalarApp, /iphone no cambia).
+- Batería del backend tras apagar el vigilante en tests: 1348 pasan; fallan 3 de `test_valor_senales.py` que pasan
+  solas (contaminación entre pruebas del módulo Valor, anterior a hoy; pendiente de mirar cuando toque Valor).

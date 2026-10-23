@@ -1,0 +1,37 @@
+[
+ {
+  "n": 1,
+  "texto": "¿Repartes paquetes y todavía ordenas la ruta a mano?",
+  "fichero": "voz-1.mp3",
+  "dur": 4.13,
+  "humana": false
+ },
+ {
+  "n": 2,
+  "texto": "Con FDS, haces una foto a la etiqueta y la dirección entra sola.",
+  "fichero": "voz-2.mp3",
+  "dur": 5.11,
+  "humana": false
+ },
+ {
+  "n": 3,
+  "texto": "La app te ordena las paradas por tiempo y te lleva con voz hasta cada puerta.",
+  "fichero": "voz-3.mp3",
+  "dur": 5.14,
+  "humana": false
+ },
+ {
+  "n": 4,
+  "texto": "Gratis, sin tarjeta y sin límite hasta fin de año.",
+  "fichero": "voz-4.mp3",
+  "dur": 4.27,
+  "humana": false
+ },
+ {
+  "n": 5,
+  "texto": "FDS, la app de reparto gratis. Pruébala hoy.",
+  "fichero": "voz-5.mp3",
+  "dur": 5.18,
+  "humana": false
+ }
+]
