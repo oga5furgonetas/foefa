@@ -1718,3 +1718,42 @@ $175 solo en octubre). La suspensión se llevó el M0 gratis por delante. Dani: 
   va por Telegram con la configuración… guardada en Mongo. Hace falta un vigilante fuera (que mire
   `mongo_connected` en `/api/health` y avise al móvil). Propuesto a Dani, sin decidir.
 - Un solo nodo: si la máquina muere, se restaura la última copia (máximo un día perdido). Es lo acordado.
+
+## 23-10-2026 (tarde): la app de reparto a punto — vigilante de la base, iPhone, alta con el estilo de la app
+
+Dani: «céntrate en la app de reparto: que funcione todo perfecto, verifica que la publicidad funciona y que la app
+funciona, explica a los de iPhone cómo usarla, moderniza la app, mejora los problemas». Medido antes de tocar nada
+(scripts en el scratchpad, sobre la base ya restaurada):
+- **Errores de los usuarios** (`flota.client_errors`, 171 en 30 días): casi todos de septiembre y del panel viejo
+  (ya arreglados: `useOrden`, `Navigate`), caché envenenada tras despliegues (la repara `repairAssetCache`) y los
+  del navegador de Instagram/Facebook (`postMessage… Java object is gone`, `logLoginFormFocused`: son suyos, no
+  nuestros). En la app de reparto, **ninguno** en 14 días.
+- **Safari de iPhone** (Playwright WebKit, UA de iPhone, contra producción con la demo): 0 errores, sin desbordes;
+  sin cámara el escáner avisa y deja escribir el código. Lo que NO hay en iPhone: dictar direcciones y manos
+  libres (ya lo decía la app).
+- **Publicidad (Meta, cuenta 934137992742194):** la campaña que traía altas, «FDS Registros — Gratis 15 paradas —
+  ES (10-10)», **terminó el 15-10** (19 registros a 1,64 €). Desde entonces solo corre «Promoción del sitio web
+  continua» (visitas a 0,16 €, 217 en 9-22/10) que trae ~10-15 visitas/día y **0 altas**. Hay 3 borradores sin
+  publicar («Revisar y publicar (3)», uno de Tráfico con 35 €). En el servidor se ve igual: `facebook/gana10`
+  177 y 165 sesiones el 14 y 15-10, y nada de pago después; las altas del 17-10 son del correo `bono10` a los
+  candidatos. **TikTok**: la sesión del Ads Manager en el Chrome de Dani está cerrada (pide verificación), sin ver.
+  Relanzar la campaña de registros es gasto: lo decide Dani.
+- **Activación** (40 autónomos): 18 con alguna parada, 22 sin ninguna; el que más, 43. Opiniones del correo
+  «¿Qué te frenó?»: «no_ruta» y «no_supe».
+
+Hecho:
+- **Vigilante de la base** (`_vigilante_decide/_vigilante_ping/_vigilante_avisar`, `start_vigilante_bd`): ping a
+  Mongo cada minuto; a los 3 fallos seguidos avisa por Telegram (configuración cacheada en `_TG_CACHE`, porque
+  cuando Mongo cae no se puede leer) y por correo a `CORREO_CONTACTO`; recuerda cada 6 h y avisa cuando vuelve.
+  `_telegram_aviso` ahora delega en `_telegram_enviar(config, texto)`. `VIGILANTE_BD=0` lo apaga. Tests:
+  `test_vigilante_bd.py` (6).
+- **Guía de iPhone** `/iphone` (`pages/Iphone.jsx`, 7 idiomas): 4 pasos de Safari (abrir en Safari, Compartir,
+  «Añadir a pantalla de inicio», entrar), aviso si está en el navegador de Instagram/Facebook/TikTok, qué funciona y
+  qué no en iPhone. Enlazada desde Empezar (solo en iPhone), la pregunta «¿Tengo que instalar algo?» de la portada
+  y de /repartidores, y la tarjeta de instalar (`PasosIphone`). El dominio sale de `dominio()`, no escrito.
+- **Marca de la app**: `MARCA.app = 'FDS'`; Empezar y el alta llevan el logo y «FDS» (el panel sigue siendo
+  «Flota»).
+- **Alta modernizada** (`Registro.jsx`): colores de la app (botón cian de la marca en vez de naranja), tarjeta
+  con el logo y el idioma en la primera fila (antes flotaba encima del formulario), campos más grandes, misma
+  fuente que la app. Sin tocar textos ni comportamiento.
+- Pruebas de humo: `/iphone` en PUBLICAS y «iPhone · la guía de instalar y usar la app» (2).

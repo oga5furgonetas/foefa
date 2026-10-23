@@ -35,7 +35,7 @@ const PANEL = [
 
 const PUBLICAS = [
   ['/', 'Landing'], ['/login', 'Login'], ['/planes', 'Planes'], ['/invita?ref=ABCDE1', 'Landing de invitación'],
-  ['/registro', 'Registro'], ['/contacto', 'Contacto'],
+  ['/registro', 'Registro'], ['/contacto', 'Contacto'], ['/iphone', 'Guía de iPhone'],
   ['/security', 'Seguridad'], ['/peritaje-tecnico', 'Peritaje'],
   ['/verify', 'Verificador'], ['/privacidad', 'Privacidad'],
   ['/terminos', 'Términos'], ['/encargo', 'Encargo del tratamiento'], ['/cookies', 'Cookies'],
@@ -1974,6 +1974,35 @@ test('Suscripción · el botón de pagar va a Stripe y la vuelta espera la activ
   await expect(page).toHaveURL(/pago=ok|\/ruta$/)
   expect(pedidos[0]).toMatchObject({ plan: 'autonomo' })
   await expect(page.getByText('Tarjeta añadida. Activando tu cuenta…')).toBeVisible()
+})
+
+/* FDS EN IPHONE (23-10-2026): la guía con los pasos de Safari, enlazada desde Empezar (solo en iPhone),
+   la portada, /repartidores y la tarjeta de instalar. Nada de App Store. */
+test.describe('iPhone · la guía de instalar y usar la app', () => {
+  test.use({ userAgent: 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_5 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.5 Mobile/15E148 Safari/604.1' })
+  test('Empezar enlaza a /iphone y la guía tiene los 4 pasos de Safari y lo que no funciona', async ({ page }) => {
+    const fallos = vigilar(page)
+    await page.goto('/empezar', { waitUntil: 'domcontentloaded' })
+    await page.getByRole('link', { name: /iPhone\? Así se instala y se usa/ }).click()
+    await expect(page).toHaveURL(/\/iphone/)
+    await expect(page.getByRole('heading', { level: 1 })).toContainText('iPhone')
+    await expect(page.getByText('Pulsa Compartir')).toBeVisible()
+    await expect(page.getByText('Elige «Añadir a pantalla de inicio»')).toBeVisible()
+    await expect(page.getByText(/App Store/)).toBeVisible()
+    await expect(page.getByText('Dictar direcciones con la voz: en iPhone se escriben')).toBeVisible()
+    await expect(page.getByRole('link', { name: /Crear mi cuenta gratis/ })).toHaveAttribute('href', '/registro?sector=autonomo&plan=autonomo')
+    // En iPhone no se ofrece «Android».
+    await expect(page.getByText('¿Tienes Android?')).toHaveCount(0)
+    expect(fallos).toEqual([])
+  })
+  test('en Instagram avisa de salir al navegador', async ({ page, browser }) => {
+    const ctx = await browser.newContext({ userAgent: 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_5 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Mobile/15E148 Instagram 300.0' })
+    const p = await ctx.newPage()
+    await p.goto('/iphone', { waitUntil: 'domcontentloaded' })
+    await expect(p.getByText(/navegador de Instagram/)).toBeVisible()
+    await ctx.close()
+    await page.close()
+  })
 })
 
 /* LO QUE PIDIERON QUIENES PROBARON LA APP EN GOOGLE PLAY (20-10-2026): ver la contraseña al

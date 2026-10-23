@@ -434,19 +434,24 @@ export default function Registro() {
 
   return (
     <div style={wrap}>
-      <div style={{ position: 'absolute', top: 18, right: 18 }}>
-        {soloYo ? (
-          <select value={idiomaApp} onChange={(e) => cambiarIdioma(e.target.value)} style={sel} aria-label="Idioma / Language">
-            {Object.entries(IDIOMAS).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
-          </select>
-        ) : (
-          <select value={lang} onChange={(e) => setLang(e.target.value)} style={sel}>
-            {Object.entries(LANGS).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
-          </select>
-        )}
-      </div>
-
       <div style={{ ...card, maxWidth: 440 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 18 }}>
+          <a href={soloYo ? '/empezar' : '/'} style={{ display: 'flex', alignItems: 'center', gap: 10, color: '#eef1f6', textDecoration: 'none' }}>
+            <img src="/favicon.svg" alt="" width="34" height="34" style={{ borderRadius: 10 }} />
+            <b style={{ fontSize: 17 }}>{soloYo ? MARCA.app : MARCA.nombre}</b>
+          </a>
+          <div style={{ marginLeft: 'auto' }}>
+            {soloYo ? (
+              <select value={idiomaApp} onChange={(e) => cambiarIdioma(e.target.value)} style={sel} aria-label="Idioma / Language">
+                {Object.entries(IDIOMAS).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
+              </select>
+            ) : (
+              <select value={lang} onChange={(e) => setLang(e.target.value)} style={sel}>
+                {Object.entries(LANGS).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
+              </select>
+            )}
+          </div>
+        </div>
         {/* QUIEN REPARTE SOLO VE PRIMERO QUE ES GRATIS (10-10-2026). Medido: desde la app,
             «Repartir yo mismo» → este formulario → se iban sin enviarlo; lo primero que leían
             era «Repartidor 9,99 €/mes» y lo de gratis estaba en la letra pequeña. */}
@@ -606,10 +611,12 @@ export default function Registro() {
   )
 }
 
-const wrap = { minHeight: '100vh', background: 'radial-gradient(1100px 560px at 72% -12%,rgba(14,165,233,.10),transparent),#0b0d10', color: '#eef1f6', fontFamily: 'Inter Variable,Inter,system-ui,sans-serif', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24, position: 'relative' }
-const card = { width: '100%', maxWidth: 420, background: '#13161b', border: '1px solid rgba(255,255,255,.08)', borderRadius: 18, padding: '24px 22px' }
-const lbl = { display: 'block', fontSize: 12, color: '#8b94a3', margin: '12px 0 5px', fontWeight: 600 }
-const inp = { width: '100%', padding: '11px 12px', borderRadius: 10, border: '1px solid rgba(255,255,255,.12)', background: '#0e1116', color: '#eef1f6', fontSize: 16, boxSizing: 'border-box' }
+// ESTILO DE LA APP (23-10-2026): el alta es donde se decide la gente; iba en naranja y con el idioma flotando
+// encima del formulario. Ahora va con los colores de la app de reparto (cian de la marca sobre fondo oscuro).
+const wrap = { minHeight: '100vh', background: 'radial-gradient(900px 480px at 50% -10%,rgba(20,231,216,.10),transparent),#070a0e', color: '#eef1f6', fontFamily: 'inherit', display: 'flex', alignItems: 'flex-start', justifyContent: 'center', padding: '20px 16px 32px', position: 'relative' }
+const card = { width: '100%', maxWidth: 440, background: '#0f1318', border: '1px solid rgba(255,255,255,.08)', borderRadius: 22, padding: '20px 18px 22px', boxShadow: '0 30px 60px -40px rgba(0,0,0,.8)' }
+const lbl = { display: 'block', fontSize: 13, color: '#aeb7c4', margin: '14px 0 6px', fontWeight: 600 }
+const inp = { width: '100%', padding: '13px 14px', borderRadius: 14, border: '1px solid rgba(255,255,255,.12)', background: '#070a0e', color: '#eef1f6', fontSize: 16, boxSizing: 'border-box', outline: 'none' }
 const hint = { fontSize: 11, color: '#8b94a3', marginTop: 5 }
-const btn = { width: '100%', marginTop: 20, padding: 13, border: 'none', borderRadius: 11, background: 'linear-gradient(135deg,#fb923c,#ea6800)', color: '#fff', fontSize: 15, fontWeight: 800, cursor: 'pointer' }
-const sel = { background: '#13161b', color: '#e7ebf2', border: '1px solid rgba(255,255,255,.12)', borderRadius: 9, padding: '7px 10px', fontSize: 13, fontWeight: 600 }
+const btn = { width: '100%', marginTop: 20, padding: 15, border: 'none', borderRadius: 16, background: 'linear-gradient(135deg,#2ee8dc,#0ea5b7)', color: '#04121a', fontSize: 16.5, fontWeight: 800, cursor: 'pointer', boxShadow: '0 12px 30px -10px rgba(20,231,216,.6)' }
+const sel = { background: '#0f1318', color: '#e7ebf2', border: '1px solid rgba(255,255,255,.12)', borderRadius: 10, padding: '7px 10px', fontSize: 13, fontWeight: 600 }

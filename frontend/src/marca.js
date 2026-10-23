@@ -12,6 +12,8 @@
 
 export const MARCA = {
   nombre: 'Flota',
+  // La app de reparto (la de Google Play y la portada) se llama así; el panel de empresa sigue siendo «Flota».
+  app: 'FDS',
   // Lo que acompaña al nombre en la pestaña del navegador y al compartir.
   lema: 'Gestión de flotas con IA',
   // Cómo se llama al asistente dentro de la app («@flota, …»).

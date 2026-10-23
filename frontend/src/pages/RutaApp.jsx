@@ -10,6 +10,7 @@ import {
   getRepartoAjustes, getRepartoEntregasMes,
 } from '../panel/api'
 import { enAppPlay } from '../lib/enApp'
+import { MARCA } from '../marca'
 import { medirAccion } from '../lib/analitica'
 import { servicioPlay, comprasPlay } from '../lib/playBilling'
 import { enviarPendiente, olvidarPendiente } from '../lib/metaPixel'
@@ -258,8 +259,13 @@ export default function RutaApp() {
           {billing.days_left === 1 ? tx('Queda 1 día de prueba · Ver mi plan') : tx('Quedan {n} días de prueba · Ver mi plan', { n: billing.days_left })}
         </button>
       )}
+      {/* Cabecera de la app (23-10-2026): el logo y el nombre de la app de reparto, en todas las pestañas. */}
+      <header className="mx-auto flex w-full max-w-md items-center gap-2.5 px-4 pt-4">
+        <img src="/favicon.svg" alt="" width="30" height="30" className="rounded-lg" />
+        <b className="text-[15px] text-dark-50">{MARCA.app}</b>
+      </header>
       {/* Al cambiar de pestaña, el contenido entra con un fundido corto, como en una app. */}
-      <div key={tab} className="ruta-entra flex-1 px-4 pb-24 pt-4">
+      <div key={tab} className="ruta-entra flex-1 px-4 pb-24 pt-3">
         {/* PLAN GRATIS (10-10-2026): sin pagar ya no hay muro; se reparte con un tope de paradas al día. */}
         {tab === 'hoy' && !bloqueado && billing?.gratis?.activo && (
           <div className="mx-auto mb-3 flex max-w-md items-center justify-between gap-3 rounded-2xl border border-sky-500/30 bg-sky-500/10 px-3.5 py-2.5">

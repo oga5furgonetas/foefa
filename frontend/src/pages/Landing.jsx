@@ -476,6 +476,7 @@ export default function Landing({ idioma: forzado = '' }) {
                 {tx(q)} <span className="text-[color:var(--ld-accent)] transition group-open:rotate-45">+</span>
               </summary>
               <p className="mt-2.5 text-[15px] leading-relaxed text-[color:var(--ld-muted)]">
+                {q === '¿Tengo que instalar algo?' && <a href="/iphone" className="mb-1.5 block font-semibold text-[color:var(--ld-accent)] hover:underline">{tx('¿iPhone? Así se instala y se usa')} →</a>}
                 {r === 'pregunta_gratis'
                   ? (promo
                     ? tx('Gratis y sin límite hasta el 31 de diciembre, sin tarjeta. Después sigues gratis con hasta 15 paradas al día, o sin tope por 9,99 € al mes o 99 € al año. Cancelas cuando quieras desde la propia app.')

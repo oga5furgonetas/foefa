@@ -55,6 +55,7 @@ function PasosIphone() {
       <li>3. {tx('Elige «Añadir a pantalla de inicio».')}</li>
       <li className="pt-1 text-[12px] text-dark-400">{tx('En iPhone no se descarga de la App Store: se instala así, desde Safari, y funciona como una app.')}</li>
       <li className="text-[12px] text-dark-400">{tx('Al abrirla desde el icono, entra una vez con tu correo y tu contraseña.')}</li>
+      <li className="pt-1"><a href="/iphone" className="text-[13px] font-semibold text-brand-300">{tx('¿iPhone? Así se instala y se usa')} →</a></li>
     </ol>
   )
 }

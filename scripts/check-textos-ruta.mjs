@@ -15,7 +15,7 @@ const FICHEROS = [
   'pages/RegaloPagina.jsx', 'pages/RutaApp.jsx', 'pages/RutaCuenta.jsx', 'pages/SeguimientoPedido.jsx', 'lib/guia.js',
   'pages/Registro.jsx', 'legal/CookieBanner.jsx', 'pages/Repartidores.jsx', 'pages/PaseMovil.jsx', 'lib/compartir.js',
   'pages/driver/AntesPuerta.jsx', 'pages/driver/AjustesMovil.jsx', 'pages/OpinionRuta.jsx', 'pages/OpinionCorreo.jsx',
-  'pages/AvisoManana.jsx', 'pages/Landing.jsx',
+  'pages/AvisoManana.jsx', 'pages/Landing.jsx', 'pages/Iphone.jsx',
 ]
 // Nombres que llegan de datos (el plan del autónomo en Registro: tt(planInfo.name)).
 // y los métodos de cobro de lib/region.js (metodosCobro), que se pintan con tx(t).
@@ -23,7 +23,9 @@ const DE_DATOS = ['Repartidor', 'Bizum', 'Transferencia', '高德地图', '百�
 // Listas cuyos textos se traducen al pintarlos.
 const LISTAS = ['MOTIVOS', 'DONDE', 'NAVEGADORES', 'HUECOS', 'PESTANAS', 'GIROS', 'ORDINALES', 'OPCIONES', 'ESTADO', 'VENTAJAS',
   // La portada (/): lo que hace la app, la IA y lo de la empresa.
-  'PASOS_PORTADA', 'FUNCIONES_RUTA', 'PREGUNTAS_PORTADA', 'IA_PORTADA', 'MODULOS_EMPRESA']
+  'PASOS_PORTADA', 'FUNCIONES_RUTA', 'PREGUNTAS_PORTADA', 'IA_PORTADA', 'MODULOS_EMPRESA',
+  // La guía de iPhone (/iphone).
+  'PASOS', 'QUE_FUNCIONA']
 
 const usadas = new Set(DE_DATOS)
 const cadenas = (trozo) => [...trozo.matchAll(/'((?:\\'|[^'])*)'/g)].map((m) => m[1].replace(/\\'/g, "'"))

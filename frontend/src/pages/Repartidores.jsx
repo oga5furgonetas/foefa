@@ -243,6 +243,7 @@ export default function Repartidores() {
                   {tx(q)} <span className="text-brand-300 transition group-open:rotate-45">+</span>
                 </summary>
                 <p className="mt-2 text-[13.5px] leading-relaxed text-dark-300">{tx(r)}</p>
+                {q === '¿Tengo que instalar algo?' && <a href="/iphone" className="mt-1.5 block text-[13.5px] font-semibold text-brand-300">{tx('¿iPhone? Así se instala y se usa')} →</a>}
               </details>
             ))}
           </div>

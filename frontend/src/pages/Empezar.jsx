@@ -1,8 +1,9 @@
 import { useState } from 'react'
-import { Zap, Users, Building2, ArrowRight, ChevronDown, Check } from 'lucide-react'
+import { Users, Building2, ArrowRight, ChevronDown, Check, Apple } from 'lucide-react'
 import { MARCA } from '../marca'
 import { tx, useIdioma, IDIOMAS, cambiarIdioma, locale } from '../lib/idioma'
 import { medirAccion } from '../lib/analitica'
+import { esIphone } from '../lib/instalar'
 import { evento } from '../lib/metaPixel'
 import { PARADAS_GRATIS, promoGratis, fechaPromo } from '../lib/precios'
 
@@ -31,8 +32,8 @@ export default function Empezar() {
     <div className="flex min-h-screen flex-col bg-dark-950 px-5 py-8 text-dark-100">
       <div className="mx-auto flex w-full max-w-md flex-1 flex-col">
         <div className="mb-8 flex items-center gap-2.5">
-          <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-gradient-to-br from-brand-400 to-brand-600"><Zap size={18} className="text-white" /></div>
-          <b className="text-[17px] text-dark-50">{MARCA.nombre}</b>
+          <img src="/favicon.svg" alt="" width="36" height="36" className="rounded-xl" />
+          <b className="text-[17px] text-dark-50">{MARCA.app}</b>
           <select value={lang} onChange={(e) => cambiarIdioma(e.target.value)} aria-label="Idioma / Language"
             className="ml-auto rounded-lg border border-dark-700 bg-dark-900 px-2 py-1.5 text-[13px] text-dark-100">
             {Object.entries(IDIOMAS).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
@@ -62,6 +63,11 @@ export default function Empezar() {
           className="mt-5 flex w-full items-center justify-center rounded-2xl border border-dark-600 py-3.5 text-[15.5px] font-bold text-dark-100 active:scale-[.99]">
           {tx('Ya tengo cuenta')} · {tx('Entrar')}
         </a>
+        {esIphone() && (
+          <a href="/iphone" className="mt-3 flex items-center justify-center gap-1.5 text-[13.5px] font-semibold text-brand-300">
+            <Apple size={15} /> {tx('¿iPhone? Así se instala y se usa')}
+          </a>
+        )}
 
 
         <div className="mt-auto pt-8">
