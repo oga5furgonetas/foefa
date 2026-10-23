@@ -5,6 +5,7 @@ import seguimiento
 import reparto
 import whatsapp
 import analitica
+import activacion
 import ciclo_correos
 import campana_candidatos
 import mercadillo
@@ -39184,6 +39185,21 @@ async def analitica_evento(request: Request):
 
 
 _ANALITICA_TOPE = 150_000
+
+
+@api_router.get("/admin/activacion")
+async def admin_activacion(dias: int = 30, _=Depends(require_superadmin)):
+    """Activación de los repartidores autónomos (ver activacion.py): del alta al primer día de
+    reparto de verdad, por cuenta. «Día real» con la misma vara que el bono (_ref_uso_real)."""
+    dias = max(7, min(int(dias), 180))
+    ahora = datetime.now(timezone.utc)
+    cuentas = await activacion.recoger(global_db, lambda nombre: client[nombre], ahora, dias)
+    out = activacion.embudo(cuentas, ahora, dias, _ref_uso_real)
+    # Desde cuándo hay eventos de la app: los pasos «eventos» no pueden ver nada anterior (la base
+    # restaurada el 23-10-2026 arrancó sin la analítica anterior, que no va en las copias).
+    primero = await global_db.analitica_eventos.find_one({"ts": {"$type": "date"}}, {"_id": 0, "ts": 1}, sort=[("ts", 1)])
+    out["eventos_desde"] = primero["ts"].replace(tzinfo=timezone.utc).isoformat() if primero else None
+    return out
 
 
 @api_router.get("/admin/analitica")

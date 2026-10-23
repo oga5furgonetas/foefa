@@ -32,7 +32,24 @@ from collections import defaultdict
 from pymongo import MongoClient
 from pymongo.errors import BulkWriteError
 
+sys.path.insert(0, __file__.rsplit("/", 1)[0] if "/" in __file__ else __file__.rsplit("\\", 1)[0])
+from reparar_fechas_copia import campos_a_convertir  # noqa: E402
+
 LOTE = 500
+
+
+def con_fechas(d: dict) -> dict:
+    """Lo que la copia escribió como «2026-09-18 22:12:38.411000» (un datetime pasado por `str`)
+    vuelve a ser fecha de Mongo. Sin esto, la restauración del 23-10-2026 dejó 26.197 eventos de
+    analítica con `ts` en texto, invisibles para los informes y para el índice TTL
+    (reparar_fechas_copia.py los arregló después)."""
+    for ruta, fecha in campos_a_convertir(d):
+        partes = ruta.split(".")
+        sitio = d
+        for p in partes[:-1]:
+            sitio = sitio[p]
+        sitio[partes[-1]] = fecha
+    return d
 AJENAS = ("admin", "local", "config")
 
 
@@ -101,7 +118,7 @@ def main() -> int:
             if clave != lote_clave:
                 volcar()
                 lote_clave = clave
-            lote.append(o["d"])
+            lote.append(con_fechas(o["d"]))
             if len(lote) >= LOTE:
                 volcar()
                 if hechos % 20000 < LOTE:

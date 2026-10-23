@@ -3583,20 +3583,32 @@ test('Calculadora repartidor · calcula lo que queda al mes y lleva a la app', a
 })
 
 /* RECORRIDO DE BIENVENIDA (11-10-2026): la primera vez que el autónomo abre su ruta vacía. */
-/* LA PRIMERA VEZ (17-10-2026): una pregunta, «¿Tienes los paquetes delante?». Sí → la carga de paquetes; todavía
-   no → el ejemplo (y el aviso de mañana si el móvil lo admite) o los 3 pasos. Sale una vez. */
-test('Ruta · la primera vez pregunta si tiene los paquetes: sí abre la carga, todavía no ofrece el ejemplo', async ({ page }) => {
+/* LA PRIMERA VEZ (17-10 → 23-10-2026): «¿Tienes ya tus paradas de hoy?». Sí → «¿Cómo te llegan las paradas?» y
+   cada forma abre su herramienta (etiquetas → la carga; lista de WhatsApp → pegar); todavía no → el ejemplo (y el
+   aviso de mañana si el móvil lo admite) o los 3 pasos. Sale una vez. Sin paradas, el hueco vacío de la ruta enseña
+   las mismas formas (antes era una frase y el botón grande del ejemplo). */
+test('Ruta · la primera vez pregunta cómo le llegan las paradas y abre esa herramienta; todavía no ofrece el ejemplo', async ({ page }) => {
   const fallos = vigilar(page)
   await entrarRepartidor(page, { status: 'trial', days_left: 6, promo: { activa: true, hasta: '2026-12-31' } })
+  // El admin de la cuenta puede pegar listas (como en producción): salen las cuatro formas.
+  await page.route(/\/api\/reparto\/mi-ruta/, (r) => r.fulfill({ json: { activo: true, autonomo: true, puede_pegar: true, fecha: '2026-10-04', pedidos: [], jornada: {}, aviso_aceptado: true } }))
   await page.addInitScript(() => localStorage.removeItem('fds_tour_ruta'))
   let ejemplo = 0
   await page.route(/\/api\/reparto\/mis-pedidos\/ejemplo/, async (r) => { ejemplo += 1; await r.fulfill({ json: { ok: true, n: 3 } }) })
   await page.goto('/ruta', { waitUntil: 'domcontentloaded' })
   const hoja = page.getByRole('dialog', { name: 'Te damos la bienvenida a FDS' })
-  await expect(hoja.getByText('¿Tienes los paquetes delante?')).toBeVisible()
-  await hoja.getByRole('button', { name: 'Sí, cargarlos ahora' }).click()
+  await expect(hoja.getByText('¿Tienes ya tus paradas de hoy?')).toBeVisible()
+  await hoja.getByRole('button', { name: 'Sí, cargarlas ahora' }).click()
+  await expect(hoja.getByText('¿Cómo te llegan las paradas?')).toBeVisible()
+  await hoja.getByRole('button', { name: /Etiquetas en los paquetes/ }).click()
   await expect(page.getByRole('dialog', { name: 'Cargar paquetes' })).toBeVisible()
   expect(await page.evaluate(() => localStorage.getItem('fds_tour_ruta'))).toBe('1')
+  // Una lista de WhatsApp o Excel abre la caja de pegar.
+  await page.evaluate(() => localStorage.removeItem('fds_tour_ruta'))
+  await page.reload({ waitUntil: 'domcontentloaded' })
+  await hoja.getByRole('button', { name: 'Sí, cargarlas ahora' }).click()
+  await hoja.getByRole('button', { name: /Una lista en WhatsApp, Excel o correo/ }).click()
+  await expect(page.getByRole('dialog', { name: 'Pegar una lista de direcciones' })).toBeVisible()
   // Otra vez desde cero: «Todavía no» lleva al ejemplo y a los 3 pasos.
   await page.evaluate(() => localStorage.removeItem('fds_tour_ruta'))
   await page.reload({ waitUntil: 'domcontentloaded' })
@@ -3606,6 +3618,11 @@ test('Ruta · la primera vez pregunta si tiene los paquetes: sí abre la carga, 
   const pasos = page.getByRole('dialog', { name: 'Así funciona' })
   await expect(pasos.getByText('1. Mete tus paquetes')).toBeVisible()
   await pasos.getByRole('button', { name: 'Cerrar' }).click()
+  // Sin paradas, el hueco vacío es la acción misma: las formas de cargar, y la hoja en papel va a la foto de la hoja.
+  await expect(page.getByText('Carga tus paradas de hoy')).toBeVisible()
+  await page.getByRole('button', { name: /Una hoja de reparto en papel/ }).click()
+  await expect(page.getByRole('dialog', { name: 'Pegar una lista de direcciones' })).toBeVisible()
+  await expect(page.getByText('Pulsa «Foto de la hoja» y se leen todas las paradas de golpe.')).toBeVisible()
   await page.evaluate(() => localStorage.removeItem('fds_tour_ruta'))
   await page.reload({ waitUntil: 'domcontentloaded' })
   await hoja.getByRole('button', { name: 'Todavía no' }).click()

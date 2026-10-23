@@ -21,7 +21,7 @@ const FICHEROS = [
 // y los métodos de cobro de lib/region.js (metodosCobro), que se pintan con tx(t).
 const DE_DATOS = ['Repartidor', 'Bizum', 'Transferencia', '高德地图', '百度地图']
 // Listas cuyos textos se traducen al pintarlos.
-const LISTAS = ['MOTIVOS', 'DONDE', 'NAVEGADORES', 'HUECOS', 'PESTANAS', 'GIROS', 'ORDINALES', 'OPCIONES', 'ESTADO', 'VENTAJAS',
+const LISTAS = ['MOTIVOS', 'DONDE', 'NAVEGADORES', 'HUECOS', 'PESTANAS', 'GIROS', 'ORDINALES', 'OPCIONES', 'ESTADO', 'VENTAJAS', 'FORMAS',
   // La portada (/): lo que hace la app, la IA y lo de la empresa.
   'PASOS_PORTADA', 'FUNCIONES_RUTA', 'PREGUNTAS_PORTADA', 'IA_PORTADA', 'MODULOS_EMPRESA',
   // La guía de iPhone (/iphone).

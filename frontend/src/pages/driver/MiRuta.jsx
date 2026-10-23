@@ -2,7 +2,7 @@ import { Suspense, lazy, useCallback, useEffect, useRef, useState } from 'react'
 import {
   ArrowLeft, ScanLine, Camera, Loader2, Navigation, Phone, Check, X, Route, MapPin, Play, Square, Package,
   MessageCircle, Clock, Search, List, Pencil, ChevronDown, GripVertical, Map as MapaIcono, ArrowUp, ArrowDown, ArrowUpDown, Mic, ClipboardPaste, Trophy,
-  Eye, PenLine, RotateCcw, HelpCircle, Share2, FileUp, Gift, WifiOff, Plus,
+  Eye, PenLine, RotateCcw, HelpCircle, Share2, FileUp, Gift, WifiOff, Plus, FileText,
 } from 'lucide-react'
 import {
   repMiRuta, repZonasCarga, repEscanear, repEscanearLote, repLeerTicket, repNuevoPedido, repEstado, repOrdenar, repJornada, repPosicion,
@@ -612,9 +612,11 @@ export default function MiRuta({ onBack, embebido = false }) {
   }
   /* LA PRIMERA VEZ (17-10-2026). Antes salía solo el recorrido de 3 pasos y su botón grande era «Verlo en acción
      con 3 paradas de ejemplo»: de las 14 altas del anuncio del 14-10 casi todas fueron al ejemplo y una sola metió
-     una parada suya. Ahora, una pregunta: «¿Tienes los paquetes delante?». Sí → la carga de paquetes, foto tras
-     foto. Todavía no → el aviso de mañana a las 8 y, si quiere, el ejemplo. Los 3 pasos siguen en
-     «¿Cómo funciona?». Sale una vez (la misma marca que el recorrido). */
+     una parada suya. Ahora, una pregunta: «¿Tienes ya tus paradas de hoy?». Sí → «¿Cómo te llegan?» (23-10-2026:
+     antes iba directo a la foto de la etiqueta, y quien recibe la lista por WhatsApp o en una hoja no tenía camino;
+     la única respuesta a «¿qué te frenó?» fue «no supe cómo usarla») y cada forma abre su herramienta. Todavía no →
+     el aviso de mañana a las 8 y, si quiere, el ejemplo. Los 3 pasos siguen en «¿Cómo funciona?». Sale una vez
+     (la misma marca que el recorrido). */
   const TOUR = 'fds_tour_ruta'
   useEffect(() => {
     if (!embebido || !ruta?.autonomo || lista(ruta.pedidos).length) return     // solo en la app de quien reparte solo
@@ -627,6 +629,16 @@ export default function MiRuta({ onBack, embebido = false }) {
   async function quitarEjemplos() {
     setOcupado('ejemplo')
     try { await repQuitarEjemplos(); cargar(); setAviso(tx('Ejemplos quitados. Ya puedes cargar tus paquetes.')) } catch (e) { setAviso(txError(e, 'No se pudo quitar')) } finally { setOcupado('') }
+  }
+  /* La herramienta de cada forma de recibir las paradas (FORMAS): etiquetas → la carga foto tras foto; una hoja en
+     papel o una lista de WhatsApp/Excel → la caja de pegar (con la foto de la hoja); de una en una → a mano. Se
+     mide cuál eligen (`carga_*`): es lo que dice qué repartidores llegan y qué herramienta hay que mimar. */
+  function abrirForma(f) {
+    medirAccion(`carga_${f}`)
+    if (f === 'etiquetas') setCarga({ n: 0 })
+    else if (f === 'hoja') setPegar({ texto: '', n: null, nota: tx('Pulsa «Foto de la hoja» y se leen todas las paradas de golpe.') })
+    else if (f === 'lista') setPegar({ texto: '', n: null })
+    else setNuevo({ ...VACIO })
   }
   const editar = (p) => {
     setQuitando(false)
@@ -1198,25 +1210,30 @@ export default function MiRuta({ onBack, embebido = false }) {
         </div>
       )}
 
+      {/* EL HUECO VACÍO (23-10-2026): antes era una frase y un botón grande al ejemplo; ahora es la acción misma,
+          las cuatro formas de meter las paradas, y el ejemplo queda como enlace (quien va al ejemplo no suele
+          volver a lo suyo: 14-10). */}
       {pendientes.length === 0 && total === 0 && (
-        <div className="rounded-xl border border-dashed border-dark-700 px-4 py-5 text-center">
-          {ruta.autonomo && (
-            <button onClick={() => setTour(0)} className="mb-2 inline-flex items-center gap-1.5 text-[13px] font-semibold text-brand-300 underline underline-offset-2">
-              <HelpCircle size={15} /> {tx('¿Cómo funciona?')}
-            </button>
-          )}
-          <p className="text-[13px] text-dark-400">
-            {ruta.autonomo
-              ? tx('Escanea cada paquete o hazle una foto a la etiqueta: la dirección y el teléfono entran solos. Luego «Ordenar ruta».')
-              : tx('Escanea los bultos según los cargas y se irán poniendo aquí.')}
-          </p>
-          {ruta.autonomo && (
-            <button onClick={cargarEjemplo} disabled={ocupado === 'ejemplo'}
-              className="mt-3.5 inline-flex w-full items-center justify-center gap-2 rounded-xl border border-fuchsia-400/50 bg-fuchsia-500/10 py-3 text-[14px] font-bold text-fuchsia-200 disabled:opacity-60">
-              {ocupado === 'ejemplo' ? <Loader2 size={16} className="animate-spin" /> : <Play size={16} />} {tx('Verlo en acción con 3 paradas de ejemplo')}
-            </button>
-          )}
-        </div>
+        ruta.autonomo ? (
+          <div className="rounded-xl border border-dashed border-dark-700 px-3.5 py-4">
+            <p className="text-[15px] font-bold leading-tight text-dark-50">{tx('Carga tus paradas de hoy')}</p>
+            <p className="mt-0.5 text-[12.5px] text-dark-400">{tx('¿Cómo te llegan las paradas?')}</p>
+            <FormasDeCargar className="mt-3" compacto puedePegar={!!ruta.puede_pegar} onElegir={abrirForma} />
+            <div className="mt-3 flex flex-wrap items-center justify-center gap-x-4 gap-y-1.5 text-[12.5px] font-semibold">
+              <button onClick={() => setTour(0)} className="inline-flex items-center gap-1 text-brand-300 underline underline-offset-2">
+                <HelpCircle size={14} /> {tx('¿Cómo funciona?')}
+              </button>
+              <button onClick={cargarEjemplo} disabled={ocupado === 'ejemplo'}
+                className="inline-flex items-center gap-1 text-fuchsia-300 underline underline-offset-2 disabled:opacity-60">
+                {ocupado === 'ejemplo' ? <Loader2 size={14} className="animate-spin" /> : <Play size={14} />} {tx('Verlo en acción con 3 paradas de ejemplo')}
+              </button>
+            </div>
+          </div>
+        ) : (
+          <div className="rounded-xl border border-dashed border-dark-700 px-4 py-5 text-center">
+            <p className="text-[13px] text-dark-400">{tx('Escanea los bultos según los cargas y se irán poniendo aquí.')}</p>
+          </div>
+        )
       )}
       {pendientes.some((p) => p.ejemplo) && (
         <div className="mb-2 flex items-center justify-between gap-3 rounded-xl border border-fuchsia-400/30 bg-fuchsia-500/[.07] px-3 py-2">
@@ -1765,17 +1782,21 @@ export default function MiRuta({ onBack, embebido = false }) {
       {bienvenida && (
         <Hoja titulo={tx('Te damos la bienvenida a FDS')} onClose={() => setBienvenida(null)}>
           {bienvenida === 'inicio' ? (<>
-            <p className="text-[20px] font-extrabold leading-tight text-dark-50">{tx('¿Tienes los paquetes delante?')}</p>
-            <p className="mt-1.5 text-[14px] leading-snug text-dark-300">{tx('Haz una foto a la etiqueta de cada paquete: la dirección entra sola y la ruta se ordena sola.')}</p>
+            <p className="text-[20px] font-extrabold leading-tight text-dark-50">{tx('¿Tienes ya tus paradas de hoy?')}</p>
+            <p className="mt-1.5 text-[14px] leading-snug text-dark-300">{tx('En los paquetes, en una hoja o en una lista: la app las lee y ordena la ruta sola.')}</p>
             {ruta.bono && !ruta.bono.pagado && (
               <p className="mt-2 text-[13.5px] font-semibold text-amber-200">🎁 {tx('Tu primera ruta real te da {euros}.', { euros: eurosRef(ruta.bono.cent, locale()) })}</p>
             )}
-            <button onClick={() => { setBienvenida(null); medirAccion('bienvenida_cargar'); setCarga({ n: 0 }) }}
+            <button onClick={() => { setBienvenida('como'); medirAccion('bienvenida_cargar') }}
               className="mt-4 flex w-full items-center justify-center gap-2 rounded-xl bg-brand-500 py-3.5 text-[16px] font-bold text-brand-tinta">
-              <Camera size={19} /> {tx('Sí, cargarlos ahora')}
+              <Package size={19} /> {tx('Sí, cargarlas ahora')}
             </button>
             <button onClick={() => { setBienvenida('luego'); medirAccion('bienvenida_luego') }}
               className="mt-2 w-full rounded-xl border border-dark-700 py-3 text-[14.5px] font-semibold text-dark-100">{tx('Todavía no')}</button>
+          </>) : bienvenida === 'como' ? (<>
+            <p className="text-[20px] font-extrabold leading-tight text-dark-50">{tx('¿Cómo te llegan las paradas?')}</p>
+            <p className="mt-1.5 text-[14px] leading-snug text-dark-300">{tx('Elige una y te abro justo esa herramienta.')}</p>
+            <FormasDeCargar className="mt-4" puedePegar={!!ruta.puede_pegar} onElegir={(f) => { setBienvenida(null); abrirForma(f) }} />
           </>) : (<>
             <p className="text-[16px] font-bold leading-snug text-dark-50">{tx('Sin problema. Cuando cargues la furgoneta, abre la app y haz una foto a cada etiqueta.')}</p>
             {!avisoPedido && (
@@ -1799,6 +1820,34 @@ export default function MiRuta({ onBack, embebido = false }) {
 /* EL BONO DE BIENVENIDA: cuánto le falta para los 10 € de su primera ruta de verdad (20 entregas reales
    en 2 días distintos; lo cuenta el servidor con la misma vara que «Invita y gana»). Ganado, se celebra
    tres días y lleva a la cartera. */
+/* LAS FORMAS DE RECIBIR LAS PARADAS (23-10-2026): la pregunta de la primera vez y el hueco vacío de la ruta
+   enseñan las mismas cuatro, cada una con su herramienta (abrirForma). Sin «pegar» (no es el admin de la
+   cuenta) solo quedan las etiquetas y a mano. */
+const FORMAS = [
+  ['etiquetas', Camera, 'Etiquetas en los paquetes', 'Foto o escáner a cada etiqueta: dirección y teléfono entran solos.'],
+  ['hoja', FileText, 'Una hoja de reparto en papel', 'Hazle una foto: se leen todas las paradas de golpe.'],
+  ['lista', ClipboardPaste, 'Una lista en WhatsApp, Excel o correo', 'Cópiala y pégala: una parada por línea.'],
+  ['mano', PenLine, 'Me las dicen de una en una', 'Escríbelas a mano o díctalas por voz.'],
+]
+function FormasDeCargar({ onElegir, puedePegar, compacto = false, className = '' }) {
+  const formas = FORMAS.filter(([f]) => puedePegar || (f !== 'hoja' && f !== 'lista'))
+  return (
+    <div className={`flex flex-col gap-2 ${className}`}>
+      {formas.map(([f, Icono, titulo, detalle], i) => (
+        <button key={f} type="button" onClick={() => onElegir(f)}
+          className={`flex w-full items-center gap-3 rounded-xl border px-3 text-left ${compacto ? 'py-2.5' : 'py-3'} ${
+            i === 0 ? 'border-brand-400/60 bg-brand-500/10' : 'border-dark-700 bg-dark-900/40'}`}>
+          <Icono size={compacto ? 18 : 22} className={`shrink-0 ${i === 0 ? 'text-brand-300' : 'text-dark-300'}`} />
+          <span className="min-w-0">
+            <span className={`block font-bold leading-tight text-dark-50 ${compacto ? 'text-[14px]' : 'text-[15px]'}`}>{tx(titulo)}</span>
+            {!compacto && <span className="mt-0.5 block text-[12.5px] leading-snug text-dark-400">{tx(detalle)}</span>}
+          </span>
+        </button>
+      ))}
+    </div>
+  )
+}
+
 function Bono({ b, total, soloEjemplo, compacto = false }) {
   const euros = eurosRef(b.cent, locale())
   if (b.pagado) {

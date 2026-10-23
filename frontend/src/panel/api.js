@@ -603,6 +603,8 @@ export const postMensajeArchivo = (id, file, texto) => {
 }
 
 export const getAnalitica = (dias, seg) => api.get('/admin/analitica', { params: { dias, seg } })
+// Activacion de los repartidores: del alta al primer dia de reparto real, por cuenta (solo super-admin).
+export const getActivacion = (dias) => api.get('/admin/activacion', { params: { dias } })
 
 // Gastos: de que son las facturas y cuanto sale al mes. Solo super-admin: el
 // backend lo exige con `require_superadmin`, esto solo es la puerta.

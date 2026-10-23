@@ -1762,6 +1762,39 @@ Hecho:
   saber cuánta gente viene de iPhone. Los 5 fallos de la batería completa del backend (3 de `test_valor_senales`,
   que pasan solos) parecen de orden/flaky; los que tocan Telegram, copias y el vigilante pasan.
 
+## 23-10-2026 (tarde): primer uso guiado por «cómo te llegan las paradas» y embudo de activación
+
+Dani («¿qué puedes mejorar en la app, visible y en efectividad?» → «sí, empieza por el primer uso guiado y el
+embudo de activación»). Lo medido mandaba: 32 autónomos reales, 9 con paradas, 0 con un día de reparto real, 18 de
+31 no vuelven tras el alta, y la única respuesta a «¿qué te frenó?» fue «no supe cómo usarla». La app carga en 0,4 s:
+el problema no es la velocidad, es que el recién llegado no encuentra SU manera de meter las paradas.
+
+- **La primera vez** (`MiRuta.jsx`, hoja «Te damos la bienvenida a FDS»): «¿Tienes ya tus paradas de hoy?» → «Sí,
+  cargarlas ahora» abre **«¿Cómo te llegan las paradas?»** con cuatro formas (`FORMAS`), cada una con su herramienta
+  (`abrirForma`): etiquetas en los paquetes → la carga foto tras foto; una hoja de reparto en papel → la caja de pegar
+  con la nota de «Foto de la hoja»; una lista en WhatsApp/Excel/correo → pegar; «me las dicen de una en una» → a mano.
+  Antes el «Sí» iba directo a la foto de la etiqueta y quien recibe la lista por WhatsApp o en una hoja no tenía
+  camino. Sin `puede_pegar` (no es el admin de la cuenta) solo salen etiquetas y a mano. «Todavía no» sigue igual
+  (aviso de la mañana, ejemplo, 3 pasos). Se mide qué eligen: acciones `carga_etiquetas|hoja|lista|mano`.
+- **El hueco vacío de la ruta** ya no es una frase y el botón grande del ejemplo: es «Carga tus paradas de hoy» con
+  las mismas cuatro formas, y «¿Cómo funciona?» y el ejemplo quedan como enlaces (14-10: quien iba al ejemplo no
+  volvía a lo suyo). NO se autocarga el ejemplo por esa misma razón.
+- **Embudo de activación** (`backend/activacion.py`, `GET /api/admin/activacion?dias=`, solo super-admin; tarjeta
+  arriba en Negocio → «Cómo va el negocio», `panel/pages/Analitica.jsx`): por CUENTA, no por visita. Pasos: alta →
+  abren la app otro día → meten una parada suya → ordenan → navegan → entregan algo de verdad → **un día de reparto
+  real** (la misma vara que el bono, `_ref_uso_real`: direcciones distintas repartidas a lo largo del día). Cruza
+  `organizations` + `reparto_pedidos` de cada cuenta (sin `ejemplo`) con `analitica_eventos` que llevan `org`. Fuera
+  demos, la propia, pruebas por nombre y testers de Play (misma regla que `tools/metricas/usuarios_total.py`,
+  `filtrar_reales`). Dice dónde está la mayor caída y la serie por semana. Los pasos «·» salen de la medición anónima:
+  si el móvil la bloquea, van por debajo, nunca por encima. Tests: `backend/tests/test_activacion.py` (14).
+- Textos nuevos con sus 6 idiomas en `textosRutaB.js` y el portugués de Brasil en `textosBrasil.js`; `FORMAS` en las
+  listas de `check-textos-ruta.mjs`. Humo: «Ruta · la primera vez pregunta cómo le llegan las paradas…» rehecho.
+- De paso: el globo rojo de la tarjeta del mercadillo (`TarjetaMercadillo.jsx`) pasaba de `bg-red-500` a `bg-red-600`
+  para cumplir el 4,5:1 de `check-contraste` (era el único fallo).
+- **Qué mirar en una semana** (en la tarjeta): si «meten una parada suya» sube del 28 % (9/32) y qué forma eligen
+  (`carga_*` en las acciones de la analítica). Si la mayor caída sigue siendo alta → «abren otro día», lo siguiente
+  es la mañana siguiente (aviso/correo), no la pantalla.
+
 ## 23-10-2026 (tarde, 2): anuncios nuevos — spot v3, audio para Spotify e imágenes con la app real
 
 Dani: «más anuncios con buena interfaz y buenas imágenes; un anuncio para Spotify; un buen vídeo, nada básico ni
@@ -1784,3 +1817,21 @@ salvo el archivo de Pexels ya licenciado, que solo cuenta el problema):
   Cuando Google apruebe, cambiar el APK por el enlace de Play (InstalarApp, /iphone no cambia).
 - Batería del backend tras apagar el vigilante en tests: 1348 pasan; fallan 3 de `test_valor_senales.py` que pasan
   solas (contaminación entre pruebas del módulo Valor, anterior a hoy; pendiente de mirar cuando toque Valor).
+
+### Y de paso, el fallo de la restauración: las fechas de Mongo quedaron en TEXTO
+
+Al estrenar el embudo salían 0 en los pasos que vienen de la analítica. No era la app: la copia serializa con
+`json.dumps(..., default=str)`, así que cada `datetime` de Mongo se guardó como «2026-09-18 22:12:38.411000»
+(con espacio, como lo imprime Python) y `restaurar_copia.py` lo insertó tal cual. Resultado en producción:
+**65.026 documentos en 22 colecciones** con fechas en texto: `analitica_eventos.ts` (26.197; los informes de
+«Cómo va el negocio» solo veían lo de hoy y el TTL no borraba nada), `audit_requests.at` (27.311),
+`inspections.analyzed_at` (5.015), varios `expira_en` con índice TTL (candidatos, Cortex, WhatsApp, accesos de
+socio: así no caducaban nunca), `vehicles.updated_at`, `geo_rescate.en`, `dnr_investigaciones.*`, y la base
+`edge_os` entera. Las fechas que escribe la app (`created_at`, ISO con «T») no se tocaron.
+- `backend/scripts/reparar_fechas_copia.py` (en seco por defecto, `--aplicar` convierte): el patrón con espacio
+  identifica exactamente lo que ERA fecha. Aplicado el 23-10 a las 15:20; segunda pasada en seco: nada que
+  convertir. Comprobado: 26.312 eventos con `ts` fecha, 24.084 en 30 días, 925 de clientes con sesión.
+- `restaurar_copia.py` convierte ya al insertar (`con_fechas`), para que no vuelva a pasar. Tests en
+  `backend/tests/test_reparar_fechas_copia.py`.
+- El embudo real (30 días): 32 altas → 13 abren otro día → 9 meten parada → 9 navegan → 6 entregan → **0 día
+  real**. La mayor caída, 19 cuentas, es alta → volver otro día: la mañana siguiente sigue siendo la batalla.

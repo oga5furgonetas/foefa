@@ -27,7 +27,7 @@ export default function TarjetaMercadillo({ className = '' }) {
           {porRevisar > 0 ? `Tienes ${porRevisar} anuncio${porRevisar > 1 ? 's' : ''} por revisar` : sinLeer > 0 ? `Tienes ${sinLeer} mensaje${sinLeer > 1 ? 's' : ''} sin leer` : '¿Tienes algo que no usas? Véndelo o mira lo que venden los compañeros.'}
         </span>
       </span>
-      {(porRevisar || sinLeer) > 0 && <span className="flex h-6 min-w-6 items-center justify-center rounded-full bg-red-500 px-1.5 text-[12px] font-bold text-white">{porRevisar || sinLeer}</span>}
+      {(porRevisar || sinLeer) > 0 && <span className="flex h-6 min-w-6 items-center justify-center rounded-full bg-red-600 px-1.5 text-[12px] font-bold text-white">{porRevisar || sinLeer}</span>}
       <ChevronRight size={18} className="shrink-0 text-dark-500" />
     </a>
   )

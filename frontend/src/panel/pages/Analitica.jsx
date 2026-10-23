@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
-import { Loader2, Users, Eye, Building2, LogOut, Clock, UserPlus, Activity } from 'lucide-react'
-import { getAnalitica } from '../api'
+import { Loader2, Users, Eye, Building2, LogOut, Clock, UserPlus, Activity, Route } from 'lucide-react'
+import { getAnalitica, getActivacion } from '../api'
 
 /* Cómo va el negocio: cuánta gente entra, por dónde pasa y dónde se va.
 
@@ -122,6 +122,112 @@ function Embudo({ e }) {
   )
 }
 
+/* ACTIVACIÓN DE LOS REPARTIDORES (23-10-2026): del alta al primer día de reparto de verdad, por CUENTA
+   y no por visita. Es la cifra que manda (Dani, 18-10: «mil repartidores son 10.000 € al mes»: solo paga
+   quien la usa para trabajar). Medido a mano aquel día: de 31 cuentas, 18 no volvieron tras el alta y 0
+   hicieron un día real. Los pasos marcados con «·» salen de la medición anónima de la app, que un bloqueador
+   puede esconder: van por debajo de la realidad, nunca por encima. El servidor: backend/activacion.py. */
+function Activacion({ dias }) {
+  const [d, setD] = useState(null)
+  const [err, setErr] = useState('')
+  useEffect(() => {
+    let vivo = true
+    getActivacion(dias)
+      .then((r) => { if (vivo) { setD(r.data); setErr('') } })
+      .catch((e) => { if (vivo) setErr(e?.response?.data?.detail || 'No se ha podido cargar la activación') })
+    return () => { vivo = false }
+  }, [dias])
+  if (err) return <div className="rounded-xl border border-red-500/25 bg-red-500/[0.07] px-4 py-2.5 text-[13px] text-red-300">{err}</div>
+  if (!d) return null
+  const paso = (clave) => d.pasos.find((p) => p.clave === clave) || {}
+  const primero = paso('alta').n || 0
+  const real = paso('dia_real')
+  const semanas = (d.semanas || []).filter((s, i, arr) => s.altas > 0 || i >= arr.length - 2)
+  return (
+    <section className="rounded-xl border border-brand-500/20 bg-brand-500/[0.04] p-3.5" data-testid="activacion">
+      <div className="flex flex-wrap items-baseline justify-between gap-2">
+        <h2 className="flex items-center gap-1.5 text-[13px] font-semibold text-dark-100">
+          <Route size={14} /> Activación de repartidores: del alta al primer día de reparto real
+        </h2>
+        <span className="text-[11.5px] text-dark-500">{num(d.cuentas)} altas reales en {d.dias} días · por cuenta, no por visita</span>
+      </div>
+      {d.cuentas === 0 ? (
+        <p className="mt-2 text-[12.5px] text-dark-400">Ninguna alta de repartidor en este periodo (sin contar demos, pruebas ni testers de Play).</p>
+      ) : (
+        <>
+          <div className="mt-3 grid gap-2 sm:grid-cols-3">
+            <Tile icon={UserPlus} etiqueta="Altas reales" valor={num(d.cuentas)} pie="sin demos, pruebas ni testers" />
+            <Tile icon={Activity} etiqueta="Meten una parada suya" valor={pct(paso('parada').pct)} pie={`${num(paso('parada').n)} cuentas`} />
+            <Tile icon={Route} etiqueta="Un día de reparto real" valor={pct(real.pct)} pie={`${num(real.n)} cuentas`}
+              acento={real.n ? 'text-emerald-300' : 'text-amber-300'} />
+          </div>
+          <ul className="mt-3 space-y-1.5">
+            {d.pasos.map((p, i) => {
+              const ancho = primero ? Math.round((p.n / primero) * 100) : 0
+              const previo = i > 0 ? d.pasos[i - 1].n : null
+              const caida = previo != null ? previo - p.n : 0
+              return (
+                <li key={p.clave}>
+                  <div className="flex items-baseline justify-between gap-2 text-[12px]">
+                    <span className="text-dark-300">{p.etiqueta}{p.fuente === 'eventos' && <span className="text-dark-500"> ·</span>}</span>
+                    <span className="tabular-nums text-dark-200">
+                      {num(p.n)}
+                      {previo != null && previo > 0 && (
+                        <span className={caida > 0 ? 'ml-1.5 text-amber-300/80' : 'ml-1.5 text-emerald-300/80'}>
+                          {caida > 0 ? `−${num(caida)}` : 'sin caída'}
+                        </span>
+                      )}
+                    </span>
+                  </div>
+                  <div className="mt-0.5 h-1.5 overflow-hidden rounded-full bg-white/[0.05]">
+                    <div className="h-full rounded-full bg-gradient-to-r from-brand-400 to-brand-500" style={{ width: `${ancho}%` }} />
+                  </div>
+                </li>
+              )
+            })}
+          </ul>
+          {d.peor_caida && (
+            <p className="mt-2.5 text-[12.5px] text-amber-200/90">
+              Donde más se pierde: de «{d.peor_caida.de}» a «{d.peor_caida.a}» se caen {num(d.peor_caida.cuentas)} cuentas.
+            </p>
+          )}
+          {semanas.length > 1 && (
+            <div className="mt-3 overflow-x-auto">
+              <table className="w-full text-[12px]">
+                <thead>
+                  <tr className="text-left text-[11px] uppercase tracking-wider text-dark-500">
+                    <th className="py-1 pr-2 font-medium">Semana del</th>
+                    <th className="px-2 py-1 text-right font-medium">Altas</th>
+                    <th className="px-2 py-1 text-right font-medium">Con parada</th>
+                    <th className="px-2 py-1 text-right font-medium">Entregan</th>
+                    <th className="px-2 py-1 text-right font-medium">Día real</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {semanas.map((s) => (
+                    <tr key={s.semana} className="border-t border-white/[0.05] tabular-nums text-dark-200">
+                      <td className="py-1 pr-2 text-dark-300">{s.semana.slice(8, 10)}-{s.semana.slice(5, 7)}</td>
+                      <td className="px-2 py-1 text-right">{num(s.altas)}</td>
+                      <td className="px-2 py-1 text-right">{num(s.parada)}</td>
+                      <td className="px-2 py-1 text-right">{num(s.entrega)}</td>
+                      <td className={`px-2 py-1 text-right ${s.dia_real ? 'text-emerald-300' : ''}`}>{num(s.dia_real)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+          <p className="mt-2 text-[11.5px] leading-relaxed text-dark-500">
+            «·» = sale de la medición anónima de la app{d.eventos_desde ? ` (hay eventos desde el ${d.eventos_desde.slice(0, 10)}; lo anterior no se ve)` : ''};
+            si el móvil la bloquea, ese paso no se ve. Un día real son entregas a direcciones distintas repartidas a lo
+            largo del día: la misma vara que el bono de bienvenida.
+          </p>
+        </>
+      )}
+    </section>
+  )
+}
+
 export default function Analitica() {
   const [dias, setDias] = useState(30)
   const [seg, setSeg] = useState('externo')
@@ -183,6 +289,8 @@ export default function Analitica() {
           </button>
         ))}
       </div>
+
+      <Activacion dias={dias} />
 
       {err && <div className="rounded-xl border border-red-500/25 bg-red-500/[0.07] px-4 py-2.5 text-[13px] text-red-300">{err}</div>}
       {cargando && !d && <div className="flex items-center gap-2 py-16 text-dark-500"><Loader2 size={16} className="animate-spin" /> Cargando…</div>}
