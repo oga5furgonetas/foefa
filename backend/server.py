@@ -14781,14 +14781,14 @@ def _texto_resumen_largo(r: dict) -> str:
     return "\n".join(L)
 
 
-async def _telegram_aviso(texto: str) -> bool:
-    """Manda un texto al grupo de Telegram. False si no está configurado.
+# La última configuración de Telegram vista con la base viva: el vigilante de la base la usa
+# para avisar cuando Mongo NO contesta (leerla entonces es imposible).
+_TG_CACHE: dict = {}
 
-    Existía la misma llamada copiada en cinco sitios; cada copia con su propio
-    manejo de errores y sus propios olvidos.
-    """
+
+async def _telegram_enviar(config: Optional[dict], texto: str) -> bool:
+    """Manda un texto al grupo de Telegram con esa configuración. False si no vale o falla."""
     try:
-        config = await db.telegram_config.find_one({}, {"_id": 0})
         if not config or not config.get("enabled") or not config.get("bot_token"):
             return False
         import aiohttp as _ai
@@ -14803,6 +14803,23 @@ async def _telegram_aviso(texto: str) -> bool:
     except Exception as e:
         logger.warning(f"Telegram aviso: {e}")
         return False
+
+
+async def _telegram_aviso(texto: str) -> bool:
+    """Manda un texto al grupo de Telegram. False si no está configurado.
+
+    Existía la misma llamada copiada en cinco sitios; cada copia con su propio
+    manejo de errores y sus propios olvidos.
+    """
+    try:
+        config = await db.telegram_config.find_one({}, {"_id": 0})
+    except Exception as e:
+        logger.warning(f"Telegram aviso (config): {e}")
+        return False
+    if config:
+        _TG_CACHE.clear()
+        _TG_CACHE.update(config)
+    return await _telegram_enviar(config, texto)
 
 
 def _html_resumen(r: dict) -> str:
@@ -17989,6 +18006,112 @@ async def backup_database_to_r2() -> dict:
 async def trigger_backup(_=Depends(require_admin)):
     """Lanza un backup manual de la base de datos a R2."""
     return await backup_database_to_r2()
+
+
+# ── EL VIGILANTE DE LA BASE (23-10-2026) ──────────────────────────────────────
+# Dos veces en ocho días (15-10 y 22-10) la base dejó de contestar y nadie se
+# enteró hasta un día después: Fly solo mira /api/vivo (que no toca Mongo a
+# propósito) y el aviso de «copia fallida» va por Telegram con una configuración
+# que vive… en Mongo. Esto hace un ping cada minuto y, a los tres fallos
+# seguidos, avisa por Telegram (con la configuración cacheada en memoria) y por
+# correo a CORREO_CONTACTO (las claves de Resend/Brevo van por entorno). Repite el
+# aviso cada 6 h mientras siga caída y dice cuando vuelve. Nunca reinicia nada:
+# si Mongo no contesta, reiniciar el servidor no lo arregla (17-10-2026).
+_VIG_INTERVALO = 60          # segundos entre pings
+_VIG_FALLOS = 3              # pings fallidos seguidos antes de avisar
+_VIG_RECORDATORIO = 6 * 3600
+
+
+def _vigilante_decide(estado: dict, ok: bool, ahora: float) -> Optional[str]:
+    """Qué aviso toca ('caida', 'recordatorio', 'vuelta' o None) y deja `estado` al día.
+
+    Tres fallos seguidos son una caída (un ping suelto que falla no es nada: un
+    escalado o un corte de red de segundos). Un fallo aislado entre pings buenos
+    NO acumula: el contador se pone a cero con cada ping bueno.
+    """
+    if ok:
+        caida = bool(estado.get("caida_desde"))
+        estado.update(fallos=0, caida_desde=None, avisado_en=None)
+        return "vuelta" if caida else None
+    estado["fallos"] = estado.get("fallos", 0) + 1
+    if estado["fallos"] < _VIG_FALLOS:
+        return None
+    if not estado.get("caida_desde"):
+        estado["caida_desde"] = ahora
+    if estado.get("avisado_en") is None:
+        estado["avisado_en"] = ahora
+        return "caida"
+    if ahora - estado["avisado_en"] >= _VIG_RECORDATORIO:
+        estado["avisado_en"] = ahora
+        return "recordatorio"
+    return None
+
+
+def _vigilante_texto(tipo: str, estado: dict, error: str, ahora: float) -> tuple:
+    """(asunto, texto) del aviso, en claro y con lo que hay que mirar."""
+    desde = estado.get("caida_desde")
+    desde = ahora if desde is None else desde
+    minutos = int((ahora - desde) // 60)
+    if tipo == "vuelta":
+        return (f"✅ {MARCA}: la base de datos ha vuelto",
+                f"La base de datos vuelve a contestar. Estuvo caída unos {minutos} min.")
+    cabeza = "🚨" if tipo == "caida" else "⏰"
+    return (f"{cabeza} {MARCA}: la base de datos NO contesta ({minutos} min)",
+            f"El servidor está vivo pero MongoDB no contesta desde hace {minutos} min: "
+            f"nadie puede entrar, registrarse ni repartir.\nError: {error or '?'}\n"
+            "Qué mirar: fly logs -a flota-backend · fly status -a flota-mongo · "
+            "el Mongo está en Fly (app flota-mongo). Reiniciar el servidor no lo arregla.")
+
+
+async def _vigilante_ping() -> tuple:
+    """(ok, error). Con la base viva, refresca la configuración de Telegram cacheada."""
+    try:
+        await asyncio.wait_for(client.admin.command("ping"), timeout=8)
+    except Exception as e:                                        # noqa: BLE001
+        return False, f"{type(e).__name__}: {str(e)[:200]}"
+    try:
+        cfg = await db.telegram_config.find_one({}, {"_id": 0})
+        if cfg:
+            _TG_CACHE.clear()
+            _TG_CACHE.update(cfg)
+    except Exception:                                             # noqa: BLE001
+        pass
+    return True, ""
+
+
+async def _vigilante_avisar(tipo: str, estado: dict, error: str, ahora: float) -> None:
+    asunto, texto = _vigilante_texto(tipo, estado, error, ahora)
+    logger.error("vigilante de la base: %s — %s", tipo, texto.replace("\n", " · "))
+    enviado = await _telegram_enviar(dict(_TG_CACHE), f"<b>{asunto}</b>\n{texto}")
+    if CORREO_CONTACTO:
+        try:
+            html = "<p>" + texto.replace("\n", "<br>") + "</p>"
+            enviado = await _enviar_email(CORREO_CONTACTO, asunto, html, texto=texto) or enviado
+        except Exception as e:                                    # noqa: BLE001
+            logger.warning("vigilante de la base: correo: %s", e)
+    if not enviado:
+        logger.error("vigilante de la base: no hay por dónde avisar (ni Telegram cacheado ni correo)")
+
+
+@app.on_event("startup")
+async def start_vigilante_bd():
+    if os.environ.get("VIGILANTE_BD", "1") == "0":
+        return
+
+    async def _bucle():
+        estado: dict = {}
+        await asyncio.sleep(45)     # que arranque todo antes del primer ping
+        while True:
+            try:
+                ok, error = await _vigilante_ping()
+                tipo = _vigilante_decide(estado, ok, time.time())
+                if tipo:
+                    await _vigilante_avisar(tipo, estado, error, time.time())
+            except Exception as e:                                # noqa: BLE001
+                logger.warning("vigilante de la base: %s", e)
+            await asyncio.sleep(_VIG_INTERVALO)
+
+    asyncio.create_task(_bucle())
 
 
 @app.on_event("startup")
