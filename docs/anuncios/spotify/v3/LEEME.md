@@ -87,3 +87,21 @@ minutos), la categoría, el Canvas, los nombres con «—», «·» o paréntesi
 extensión de Claude en el Chrome de Dani (Meta también avisa de que «una extensión interfiere»). Dani lo envía
 desde el móvil. Al volver a la pantalla de revisión, Spotify vacía la dirección de facturación: rellenarla justo
 antes de «Enviar».
+
+### 24-10-2026, 14:15: diagnóstico del «Corrige los errores de validación»
+También falla desde Microsoft Edge (sin la extensión de Claude), así que la extensión no es la causa.
+Lo comprobado en el código de la página (Ads Manager, Next.js):
+- Al pulsar «Enviar» NO sale ninguna llamada a la API de anuncios (medido con el registro de tiempos del
+  navegador: solo telemetría y píxeles). El bloqueo es de la propia página.
+- Los editores de campaña, grupo y anuncio dan sus formularios válidos (sin errores), y el de facturación
+  también (`submitSucceeded: true`). Pero al enviar, la página marca CAMPAIGN, AD_SET y AD como `ERROR` y
+  enseña el mensaje genérico `I18N_ERROR_CAMPAIGN_PUBLISH_VALIDATION` (código `PUBLISH_VALIDATION_ERROR`).
+- La cuenta publicitaria está `ACTIVE`, «Requiere atención (0)», pero su dirección de facturación nunca se
+  ha llegado a guardar (`billingAddress` solo tiene el nombre, `billingType: UNSET`).
+- Descartado: hora de inicio (regla de 60 minutos), categoría, Canvas, nombres, fecha de fin, URL con o sin
+  parámetros, borrador nuevo desde cero.
+Siguiente paso: soporte de Spotify (chat de Ads Manager o ads-manager-support@spotify.com). Mensaje propuesto:
+«Hola. Ad account FDs (0332a42a-0ab8-43bf-8d25-4c4a697ac505), campaña en borrador a7d8c60e-0e0f-4913-9130-e90aa5ffd5c6.
+Al pulsar Enviar aparece "Corrige los errores de validación e inténtalo de nuevo" sin indicar ningún campo; no se
+envía ninguna petición a la API y los editores no muestran errores. Pasa en Chrome y en Edge, también con una
+campaña nueva. ¿Podéis ver qué bloquea la publicación? Gracias.»
