@@ -4,18 +4,14 @@ Dani: «sube el primer vídeo, es increíble y es lo que buscamos, el de Puck; p
 y «deja solo ese anuncio para que se anuncie en todos los sitios de Meta». Eligió la campaña de registros, que
 optimiza a altas, con **10 € al día**, y pausar todo lo demás.
 
-## Estado (24-10-2026, ~04:40)
-- **Hecho y publicado:** «Promoción del sitio web continua» desactivada. En los últimos 7 días había gastado
-  59,17 € en 426 visitas y ninguna alta.
-- **Guardado como borrador, sin publicar:** el anuncio de Puck y el presupuesto de 10 € al día. Meta no deja
-  publicar: «Tu método de pago está desactivado. Para seguir publicando anuncios, verifica tu método de pago»
-  (MasterCard ····6176; el PayPal sale verificado). Verificar la tarjeta es cosa de Dani: Facturación y pagos
-  → Verificar, con el código que manda el banco o la retención de 0,90 €.
-- Mientras tanto, «FDS Registros» sigue con el anuncio publicado de antes («Invita y gana 10 €») a 15 € al
-  día, si Meta lo está sirviendo con el pago así.
-- **Después de verificar:** abrir el anuncio y pulsar su «Publicar», y lo mismo en la campaña para los 10 €.
-  **No usar «Revisar y publicar (5)»:** publica también 3 borradores viejos, uno de ellos una campaña de
-  tráfico de 35 €.
+## Estado (24-10-2026, 07:20)
+- **Publicado.** Dani verificó la tarjeta y el anuncio de Puck se publicó desde su editor («1 anuncio se ha
+  actualizado»); queda «En proceso» mientras Meta lo revisa. El presupuesto de la campaña ya está en 10 € al día.
+- **Solo ese anuncio:** el otro anuncio activo del conjunto, «Nuevo anuncio de Clientes potenciales» (12 altas a
+  2,43 €), se ha apagado porque Dani pidió dejar solo el de Puck. Se enciende con su interruptor si hiciera falta.
+  «Nuevo anuncio de Tráfico» es un borrador sin publicar: no sale.
+- «Promoción del sitio web continua» sigue apagada (59 € en 7 días, 0 altas).
+- **No usar «Revisar y publicar (3)»:** son 3 borradores viejos, uno de ellos una campaña de tráfico de 35 €.
 
 ## Configuración
 - Cuenta 934137992742194. Campaña «FDS Registros — Gratis 15 paradas — ES (10-10-2026)» (52644178367939),

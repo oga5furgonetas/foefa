@@ -61,3 +61,19 @@ GEMINI_API_KEY=… py -3 scripts/spot-v5/voz_gemini.py --spotify Puck Achird Lao
 py -3 scripts/spot-v5/spotify.py Puck Achird Laomedeia                                  # pausas, mezcla y comprobación
 ```
 `spotify.py` se para si el MP3 final no cumple las normas de Spotify.
+
+## La campaña en Spotify Ads (24-10-2026)
+Cuenta publicitaria FDs. Campaña «FDS — Spotify audio (Puck) · registro (24-10)», objetivo tráfico del sitio web
+(clics; no hay píxel de Spotify). Grupo «España · 18-54 · móvil · audio Puck»: España, 18-54, idioma español,
+solo iPhone y Android, categoría Tecnología > Aplicaciones, música y pódcasts, ubicación automática.
+**15 € al día** (el mínimo de Spotify; el presupuesto total pide más de 250 €) del 24-10 07:25 al 31-10 23:59.
+Anuncio «Audio Puck 23 s · registro · audio3»: anunciante FDS, eslogan «Tu ruta, ordenada sola y gratis», botón
+**Registrarte**, URL `https://flotadsp.com/registro?sector=autonomo&plan=autonomo&utm_source=spotify&utm_content=audio3`,
+`fds-spotify-v3-puck.mp3`, `portada-640.jpg`, `logo-1024.png` (el favicon a 1024 px) y `canvas-puck-8s.mp4`
+(Canvas: 8 s del spot de Puck sin subtítulos, entrega → GRATIS → flotadsp.com, en bucle mientras suena).
+
+Gotchas del editor de Spotify: el campo de URL se come el «?» al escribir (poner el valor con el setter nativo
+del input y disparar `input`/`change`); si la hora de inicio ya pasó, «Presupuesto y fechas» queda en rojo; el
+borrador puede volver a una versión vieja (perdió nombre, idioma, dispositivos, fin, imágenes y audio una vez):
+revisar la pantalla «Revisar y enviar» antes de enviar. Para enviar, la facturación pide dirección postal,
+población, comunidad autónoma y código postal: datos de Dani.
