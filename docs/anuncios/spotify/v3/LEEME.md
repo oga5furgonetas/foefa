@@ -77,3 +77,13 @@ del input y disparar `input`/`change`); si la hora de inicio ya pasó, «Presupu
 borrador puede volver a una versión vieja (perdió nombre, idioma, dispositivos, fin, imágenes y audio una vez):
 revisar la pantalla «Revisar y enviar» antes de enviar. Para enviar, la facturación pide dirección postal,
 población, comunidad autónoma y código postal: datos de Dani.
+
+### 24-10-2026, tarde: no se pudo enviar desde el PC
+Hay dos borradores listos: «FDS Spotify audio Puck registro 24-10» (el primero) y «FDS Spotify audio Puck
+registro» (rehecho desde cero; categoría Tecnología > Programas informáticos, inicio 24-10 15:27, fin 31-10
+23:59). En los dos, «Enviar» responde «Corrige los errores de validación» sin decir cuáles y sin llamar al
+servidor (validación solo en el navegador). Descartado: la hora (la regla es que el inicio esté a más de 60
+minutos), la categoría, el Canvas, los nombres con «—», «·» o paréntesis y la fecha de fin. Sospecha: la
+extensión de Claude en el Chrome de Dani (Meta también avisa de que «una extensión interfiere»). Dani lo envía
+desde el móvil. Al volver a la pantalla de revisión, Spotify vacía la dirección de facturación: rellenarla justo
+antes de «Enviar».

@@ -1894,3 +1894,7 @@ registros a 10 € al día. Detalle y textos: `docs/anuncios/CAMPANA-24-10-SPOT5
   query string («BLOCKED: Cookie/query string data»): mirar la URL con zoom.
 - Spotify: el vídeo solo se sirve con la app en pantalla; el audio suena con el móvil bloqueado, que es como
   escucha un repartidor en la furgoneta. Recomendado empezar por el audio v3.
+- **24-10 tarde:** Meta publicado (anuncio de Puck en revisión, 10 €/día, solo ese anuncio; el otro de registros
+  apagado). Spotify: campaña lista pero el formulario de Spotify no deja enviar desde el Chrome con la extensión
+  de Claude («errores de validación» sin detalle); Dani la envía desde el móvil. Detalle en
+  `docs/anuncios/spotify/v3/LEEME.md`.
