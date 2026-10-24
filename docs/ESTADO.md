@@ -1851,3 +1851,26 @@ qué pulsar). Detalle y cómo subirlo: `docs/anuncios/reales/spot-v4/LEEME.md` y
   frase; el 3 hacía una caja por trozo). Salida en `docs/anuncios/reales/salida/spot-v4-*` (con y sin voz).
 - Spotify v2: la web dicha dos veces y deletreada + «toca este anuncio»; clic directo al alta con utm_source=spotify.
 - Subirlos y el presupuesto, Dani. La voz sigue siendo neuronal; con su voz grabada (s1..s6.mp3) se rehace en 2 min.
+
+## 24-10-2026 (madrugada): spot v5 y Spotify v3 (voz de Gemini, sonido medido)
+
+Dani sobre el v4: «mejorable: transiciones, imágenes de la app; busca una voz no robótica; cuida el volumen de los
+sonidos; sé meticuloso». Detalle, niveles y cómo subirlo: `docs/anuncios/reales/spot-v5/LEEME.md` y
+`docs/anuncios/spotify/v3/LEEME.md`. Vídeos en `docs/anuncios/reales/salida/spot-v5-*-{achird,puck,laomedeia}.mp4`
+(no van a git); Dani elige la voz de oído.
+- Día de reparto creíble: `scripts/spot-v5/ruta.py` → `frontend/e2e/fixtures/coruna-dia.json` (15 paradas reales
+  de A Coruña, OSRM, hora de cada parada). Grabación: `frontend/e2e/spot-v5.spec.js` (--update-snapshots).
+- Montaje `scripts/montar-spot-v5.mjs`: transiciones xfade encadenadas, píldora con la función arriba
+  (`scripts/spot-v5/capas.mjs`), 4x5 y 1x1 con la pantalla entera centrada (recortar dejaba fuera botones).
+- Voz: `scripts/spot-v5/voz_gemini.py` (gemini-3.8-flash-tts). **Gotchas:** lee en voz alta cualquier instrucción
+  o etiqueta («[alegre]», «Dilo cercano:»), no admite instrucción de sistema (400), devuelve WAV 24 kHz mono; las
+  frases se cortan por la combinación de pausas que mejor encaja con las sílabas (una coma puede durar más que
+  un punto). Subtítulos al tiempo real: `scripts/spot-v5/alinear.py` (faster-whisper «small»; el PyAV que trae
+  choca con el av instalado, por eso el audio se decodifica con ffmpeg). Pasarlo SIEMPRE después de voz_gemini.
+- Sonido: cada pieza a un nivel objetivo medido (LUFS/pico); voz -14, música 11-12 LU por debajo con sidechain,
+  efectos ~12 LU por debajo, máster -14 LUFS / -1 dBFS lineal. El montaje mide la mezcla y lo deja en
+  `mezcla-<voz>.json`.
+- Spotify v3: `scripts/spot-v5/spotify.py` alarga solo las pausas entre frases y mezcla con las normas de
+  Spotify (-16 LUFS ±1,5, pico real ≤ -2 dBTP, 0,5 s de silencio delante y detrás, MP3 44,1 kHz estéreo
+  192 kbps, ≤ 30 s); se para si el MP3 no cumple. URL de clic con `utm_content=audio3`.
+- Subirlos y el presupuesto: Dani. Voz humana sigue siendo mejor (todas las sintéticas son neuronales).

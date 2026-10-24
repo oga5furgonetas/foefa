@@ -1,0 +1,11 @@
+{
+ "voz": "Achird",
+ "duracion": 22.94,
+ "master_lufs": -16.4,
+ "pico_dbtp": -2.7,
+ "voz_momentanea_mediana": -16.5,
+ "musica_bajo_voz": -28.5,
+ "musica_lu_por_debajo": 12.0,
+ "musica_sola": -23.3,
+ "mb": 0.55
+}

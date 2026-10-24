@@ -1,0 +1,220 @@
+{
+ "voz": "Laomedeia",
+ "fin": 26.19,
+ "ganancias": {
+  "whoosh": -18,
+  "ding": -19,
+  "subida": -14.3,
+  "pop": -23,
+  "obturador": -10,
+  "musica": -7.9
+ },
+ "comprobacion": {
+  "master": {
+   "I": -14,
+   "pico": -1
+  },
+  "voz": -13.7,
+  "musicaBajoVoz": -26.1,
+  "musicaSola": -20.3,
+  "efectos": [
+   {
+    "n": "whoosh",
+    "t": 3.11,
+    "max": -26.6,
+    "bajoVoz": 12.9
+   },
+   {
+    "n": "whoosh",
+    "t": 6.536,
+    "max": -26.5,
+    "bajoVoz": 12.8
+   },
+   {
+    "n": "whoosh",
+    "t": 8.755999999999998,
+    "max": -26.6,
+    "bajoVoz": 12.9
+   },
+   {
+    "n": "whoosh",
+    "t": 10.575999999999999,
+    "max": -26.6,
+    "bajoVoz": 12.9
+   },
+   {
+    "n": "whoosh",
+    "t": 12.475999999999997,
+    "max": -26.6,
+    "bajoVoz": 12.9
+   },
+   {
+    "n": "whoosh",
+    "t": 14.995999999999997,
+    "max": -26.6,
+    "bajoVoz": 12.9
+   },
+   {
+    "n": "whoosh",
+    "t": 16.686,
+    "max": -26.6,
+    "bajoVoz": 12.9
+   },
+   {
+    "n": "whoosh",
+    "t": 19.796,
+    "max": -21.7,
+    "bajoVoz": 8.1
+   },
+   {
+    "n": "obturador",
+    "t": 3.87,
+    "max": -27.4,
+    "bajoVoz": 13.8
+   },
+   {
+    "n": "pop",
+    "t": 6.996,
+    "max": -27.1,
+    "bajoVoz": 13.4
+   },
+   {
+    "n": "pop",
+    "t": 15.919000078201293,
+    "max": -22.3,
+    "bajoVoz": 8.6
+   },
+   {
+    "n": "ding",
+    "t": 15.696,
+    "max": -22.3,
+    "bajoVoz": 8.6
+   },
+   {
+    "n": "subida",
+    "t": 18.526,
+    "max": -36.2,
+    "bajoVoz": 22.5
+   }
+  ]
+ },
+ "escenas": [
+  {
+   "id": "gancho",
+   "t0": 0,
+   "d": 3.48
+  },
+  {
+   "id": "camara",
+   "t0": 3.16,
+   "d": 1
+  },
+  {
+   "id": "form",
+   "t0": 3.92,
+   "d": 2.976
+  },
+  {
+   "id": "ordenar",
+   "t0": 6.596,
+   "d": 2.5
+  },
+  {
+   "id": "lista",
+   "t0": 8.836,
+   "d": 2.1
+  },
+  {
+   "id": "mapa",
+   "t0": 10.636,
+   "d": 2.2
+  },
+  {
+   "id": "navega",
+   "t0": 12.536,
+   "d": 2.8
+  },
+  {
+   "id": "entregado",
+   "t0": 15.076,
+   "d": 2
+  },
+  {
+   "id": "oferta",
+   "t0": 16.716,
+   "d": 3.47
+  },
+  {
+   "id": "cierre",
+   "t0": 19.826,
+   "d": 6.36
+  }
+ ],
+ "efectos": [
+  {
+   "nombre": "whoosh",
+   "t": 3.11,
+   "g": -18
+  },
+  {
+   "nombre": "whoosh",
+   "t": 6.536,
+   "g": -18
+  },
+  {
+   "nombre": "whoosh",
+   "t": 8.756,
+   "g": -18
+  },
+  {
+   "nombre": "whoosh",
+   "t": 10.576,
+   "g": -18
+  },
+  {
+   "nombre": "whoosh",
+   "t": 12.476,
+   "g": -18
+  },
+  {
+   "nombre": "whoosh",
+   "t": 14.996,
+   "g": -18
+  },
+  {
+   "nombre": "whoosh",
+   "t": 16.686,
+   "g": -18
+  },
+  {
+   "nombre": "whoosh",
+   "t": 19.796,
+   "g": -18
+  },
+  {
+   "nombre": "obturador",
+   "t": 3.87,
+   "g": -10
+  },
+  {
+   "nombre": "pop",
+   "t": 6.996,
+   "g": -23
+  },
+  {
+   "nombre": "pop",
+   "t": 15.919,
+   "g": -23
+  },
+  {
+   "nombre": "ding",
+   "t": 15.696,
+   "g": -19
+  },
+  {
+   "nombre": "subida",
+   "t": 18.526,
+   "g": -14.3
+  }
+ ]
+}

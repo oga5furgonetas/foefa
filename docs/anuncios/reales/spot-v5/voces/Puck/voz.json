@@ -1,0 +1,872 @@
+{
+ "voz": "Puck",
+ "modelo": "gemini-3.8-flash-tts",
+ "frases": [
+  {
+   "n": 1,
+   "leido": "¿Todavía ordenas la ruta a mano cada mañana?",
+   "visto": "¿Todavía ordenas la ruta a mano cada mañana?",
+   "fichero": "voces/Puck/f1.wav",
+   "dur": 2.33,
+   "palabras": [
+    {
+     "p": "¿Todavía",
+     "ini": 0.0,
+     "fin": 0.38
+    },
+    {
+     "p": "ordenas",
+     "ini": 0.38,
+     "fin": 0.86
+    },
+    {
+     "p": "la",
+     "ini": 0.86,
+     "fin": 0.98
+    },
+    {
+     "p": "ruta",
+     "ini": 0.98,
+     "fin": 1.26
+    },
+    {
+     "p": "a",
+     "ini": 1.26,
+     "fin": 1.36
+    },
+    {
+     "p": "mano",
+     "ini": 1.36,
+     "fin": 1.56
+    },
+    {
+     "p": "cada",
+     "ini": 1.56,
+     "fin": 1.74
+    },
+    {
+     "p": "mañana?",
+     "ini": 1.74,
+     "fin": 2.06
+    }
+   ],
+   "palabras_silabas": [
+    {
+     "p": "¿Todavía",
+     "ini": 0.04,
+     "fin": 0.434
+    },
+    {
+     "p": "ordenas",
+     "ini": 0.434,
+     "fin": 0.827
+    },
+    {
+     "p": "la",
+     "ini": 0.827,
+     "fin": 0.958
+    },
+    {
+     "p": "ruta",
+     "ini": 0.958,
+     "fin": 1.221
+    },
+    {
+     "p": "a",
+     "ini": 1.221,
+     "fin": 1.352
+    },
+    {
+     "p": "mano",
+     "ini": 1.352,
+     "fin": 1.614
+    },
+    {
+     "p": "cada",
+     "ini": 1.614,
+     "fin": 1.876
+    },
+    {
+     "p": "mañana?",
+     "ini": 1.876,
+     "fin": 2.27
+    }
+   ],
+   "alineado": {
+    "modelo": "faster-whisper small",
+    "casadas": 8,
+    "de": 8,
+    "desvio_silabas_medio": 0.048,
+    "desvio_silabas_max": 0.136,
+    "oido": "¿Todavía ordenas la ruta a mano cada mañana?"
+   }
+  },
+  {
+   "n": 2,
+   "leido": "Mira: le haces una foto a la etiqueta, y la dirección entra sola.",
+   "visto": "Mira: le haces una foto a la etiqueta, y la dirección entra sola.",
+   "fichero": "voces/Puck/f2.wav",
+   "dur": 3.45,
+   "palabras": [
+    {
+     "p": "Mira:",
+     "ini": 0.0,
+     "fin": 0.22
+    },
+    {
+     "p": "le",
+     "ini": 0.58,
+     "fin": 0.8
+    },
+    {
+     "p": "haces",
+     "ini": 0.8,
+     "fin": 1.0
+    },
+    {
+     "p": "una",
+     "ini": 1.0,
+     "fin": 1.16
+    },
+    {
+     "p": "foto",
+     "ini": 1.16,
+     "fin": 1.36
+    },
+    {
+     "p": "a",
+     "ini": 1.36,
+     "fin": 1.5
+    },
+    {
+     "p": "la",
+     "ini": 1.5,
+     "fin": 1.52
+    },
+    {
+     "p": "etiqueta,",
+     "ini": 1.52,
+     "fin": 2.0
+    },
+    {
+     "p": "y",
+     "ini": 2.14,
+     "fin": 2.36
+    },
+    {
+     "p": "la",
+     "ini": 2.36,
+     "fin": 2.44
+    },
+    {
+     "p": "dirección",
+     "ini": 2.44,
+     "fin": 2.8
+    },
+    {
+     "p": "entra",
+     "ini": 2.8,
+     "fin": 3.02
+    },
+    {
+     "p": "sola.",
+     "ini": 3.02,
+     "fin": 3.24
+    }
+   ],
+   "palabras_silabas": [
+    {
+     "p": "Mira:",
+     "ini": 0.04,
+     "fin": 0.319
+    },
+    {
+     "p": "le",
+     "ini": 0.319,
+     "fin": 0.459
+    },
+    {
+     "p": "haces",
+     "ini": 0.459,
+     "fin": 0.738
+    },
+    {
+     "p": "una",
+     "ini": 0.738,
+     "fin": 1.017
+    },
+    {
+     "p": "foto",
+     "ini": 1.017,
+     "fin": 1.296
+    },
+    {
+     "p": "a",
+     "ini": 1.296,
+     "fin": 1.436
+    },
+    {
+     "p": "la",
+     "ini": 1.436,
+     "fin": 1.575
+    },
+    {
+     "p": "etiqueta,",
+     "ini": 1.575,
+     "fin": 2.134
+    },
+    {
+     "p": "y",
+     "ini": 2.134,
+     "fin": 2.273
+    },
+    {
+     "p": "la",
+     "ini": 2.273,
+     "fin": 2.413
+    },
+    {
+     "p": "dirección",
+     "ini": 2.413,
+     "fin": 2.832
+    },
+    {
+     "p": "entra",
+     "ini": 2.832,
+     "fin": 3.111
+    },
+    {
+     "p": "sola.",
+     "ini": 3.111,
+     "fin": 3.39
+    }
+   ],
+   "alineado": {
+    "modelo": "faster-whisper small",
+    "casadas": 13,
+    "de": 13,
+    "desvio_silabas_medio": 0.113,
+    "desvio_silabas_max": 0.341,
+    "oido": "Mira, le haces una foto a la etiqueta, y la dirección entra sola."
+   }
+  },
+  {
+   "n": 3,
+   "leido": "Le das a ordenar, y tienes todas las paradas en orden, con la hora de cada una.",
+   "visto": "Le das a ordenar, y tienes todas las paradas en orden, con la hora de cada una.",
+   "fichero": "voces/Puck/f3.wav",
+   "dur": 3.78,
+   "palabras": [
+    {
+     "p": "Le",
+     "ini": 0.0,
+     "fin": 0.12
+    },
+    {
+     "p": "das",
+     "ini": 0.12,
+     "fin": 0.28
+    },
+    {
+     "p": "a",
+     "ini": 0.28,
+     "fin": 0.38
+    },
+    {
+     "p": "ordenar,",
+     "ini": 0.38,
+     "fin": 0.82
+    },
+    {
+     "p": "y",
+     "ini": 0.86,
+     "fin": 1.16
+    },
+    {
+     "p": "tienes",
+     "ini": 1.16,
+     "fin": 1.46
+    },
+    {
+     "p": "todas",
+     "ini": 1.46,
+     "fin": 1.72
+    },
+    {
+     "p": "las",
+     "ini": 1.72,
+     "fin": 1.8
+    },
+    {
+     "p": "paradas",
+     "ini": 1.8,
+     "fin": 2.1
+    },
+    {
+     "p": "en",
+     "ini": 2.1,
+     "fin": 2.24
+    },
+    {
+     "p": "orden,",
+     "ini": 2.24,
+     "fin": 2.44
+    },
+    {
+     "p": "con",
+     "ini": 2.7,
+     "fin": 2.96
+    },
+    {
+     "p": "la",
+     "ini": 2.96,
+     "fin": 3.1
+    },
+    {
+     "p": "hora",
+     "ini": 3.1,
+     "fin": 3.2
+    },
+    {
+     "p": "de",
+     "ini": 3.2,
+     "fin": 3.32
+    },
+    {
+     "p": "cada",
+     "ini": 3.32,
+     "fin": 3.46
+    },
+    {
+     "p": "una.",
+     "ini": 3.46,
+     "fin": 3.64
+    }
+   ],
+   "palabras_silabas": [
+    {
+     "p": "Le",
+     "ini": 0.04,
+     "fin": 0.176
+    },
+    {
+     "p": "das",
+     "ini": 0.176,
+     "fin": 0.313
+    },
+    {
+     "p": "a",
+     "ini": 0.313,
+     "fin": 0.449
+    },
+    {
+     "p": "ordenar,",
+     "ini": 0.449,
+     "fin": 0.858
+    },
+    {
+     "p": "y",
+     "ini": 0.858,
+     "fin": 0.994
+    },
+    {
+     "p": "tienes",
+     "ini": 0.994,
+     "fin": 1.267
+    },
+    {
+     "p": "todas",
+     "ini": 1.267,
+     "fin": 1.539
+    },
+    {
+     "p": "las",
+     "ini": 1.539,
+     "fin": 1.676
+    },
+    {
+     "p": "paradas",
+     "ini": 1.676,
+     "fin": 2.084
+    },
+    {
+     "p": "en",
+     "ini": 2.084,
+     "fin": 2.221
+    },
+    {
+     "p": "orden,",
+     "ini": 2.221,
+     "fin": 2.493
+    },
+    {
+     "p": "con",
+     "ini": 2.493,
+     "fin": 2.63
+    },
+    {
+     "p": "la",
+     "ini": 2.63,
+     "fin": 2.766
+    },
+    {
+     "p": "hora",
+     "ini": 2.766,
+     "fin": 3.039
+    },
+    {
+     "p": "de",
+     "ini": 3.039,
+     "fin": 3.175
+    },
+    {
+     "p": "cada",
+     "ini": 3.175,
+     "fin": 3.447
+    },
+    {
+     "p": "una.",
+     "ini": 3.447,
+     "fin": 3.72
+    }
+   ],
+   "alineado": {
+    "modelo": "faster-whisper small",
+    "casadas": 17,
+    "de": 17,
+    "desvio_silabas_medio": 0.123,
+    "desvio_silabas_max": 0.334,
+    "oido": "Le das a ordenar, y tienes todas las paradas en orden, con la hora de cada una."
+   }
+  },
+  {
+   "n": 4,
+   "leido": "Ves la ruta en el mapa, y te lleva con voz, puerta a puerta.",
+   "visto": "Ves la ruta en el mapa, y te lleva con voz, puerta a puerta.",
+   "fichero": "voces/Puck/f4.wav",
+   "dur": 3.43,
+   "palabras": [
+    {
+     "p": "Ves",
+     "ini": 0.0,
+     "fin": 0.16
+    },
+    {
+     "p": "la",
+     "ini": 0.16,
+     "fin": 0.26
+    },
+    {
+     "p": "ruta",
+     "ini": 0.26,
+     "fin": 0.46
+    },
+    {
+     "p": "en",
+     "ini": 0.46,
+     "fin": 0.54
+    },
+    {
+     "p": "el",
+     "ini": 0.54,
+     "fin": 0.6
+    },
+    {
+     "p": "mapa,",
+     "ini": 0.6,
+     "fin": 0.8
+    },
+    {
+     "p": "y",
+     "ini": 1.28,
+     "fin": 1.36
+    },
+    {
+     "p": "te",
+     "ini": 1.36,
+     "fin": 1.48
+    },
+    {
+     "p": "lleva",
+     "ini": 1.48,
+     "fin": 1.66
+    },
+    {
+     "p": "con",
+     "ini": 1.66,
+     "fin": 1.9
+    },
+    {
+     "p": "voz,",
+     "ini": 1.9,
+     "fin": 2.16
+    },
+    {
+     "p": "puerta",
+     "ini": 2.44,
+     "fin": 2.72
+    },
+    {
+     "p": "a",
+     "ini": 2.72,
+     "fin": 2.98
+    },
+    {
+     "p": "puerta.",
+     "ini": 2.98,
+     "fin": 3.12
+    }
+   ],
+   "palabras_silabas": [
+    {
+     "p": "Ves",
+     "ini": 0.04,
+     "fin": 0.215
+    },
+    {
+     "p": "la",
+     "ini": 0.215,
+     "fin": 0.391
+    },
+    {
+     "p": "ruta",
+     "ini": 0.391,
+     "fin": 0.741
+    },
+    {
+     "p": "en",
+     "ini": 0.741,
+     "fin": 0.916
+    },
+    {
+     "p": "el",
+     "ini": 0.916,
+     "fin": 1.092
+    },
+    {
+     "p": "mapa,",
+     "ini": 1.092,
+     "fin": 1.442
+    },
+    {
+     "p": "y",
+     "ini": 1.442,
+     "fin": 1.617
+    },
+    {
+     "p": "te",
+     "ini": 1.617,
+     "fin": 1.793
+    },
+    {
+     "p": "lleva",
+     "ini": 1.793,
+     "fin": 2.143
+    },
+    {
+     "p": "con",
+     "ini": 2.143,
+     "fin": 2.318
+    },
+    {
+     "p": "voz,",
+     "ini": 2.318,
+     "fin": 2.494
+    },
+    {
+     "p": "puerta",
+     "ini": 2.494,
+     "fin": 2.844
+    },
+    {
+     "p": "a",
+     "ini": 2.844,
+     "fin": 3.019
+    },
+    {
+     "p": "puerta.",
+     "ini": 3.019,
+     "fin": 3.37
+    }
+   ],
+   "alineado": {
+    "modelo": "faster-whisper small",
+    "casadas": 14,
+    "de": 14,
+    "desvio_silabas_medio": 0.23,
+    "desvio_silabas_max": 0.492,
+    "oido": "Ves la ruta en el mapa, y te lleva con voz, puerta a puerta."
+   }
+  },
+  {
+   "n": 5,
+   "leido": "Y lo mejor: es gratis, y sin tarjeta.",
+   "visto": "Y lo mejor: es gratis, y sin tarjeta.",
+   "fichero": "voces/Puck/f5.wav",
+   "dur": 2.276,
+   "palabras": [
+    {
+     "p": "Y",
+     "ini": 0.0,
+     "fin": 0.12
+    },
+    {
+     "p": "lo",
+     "ini": 0.12,
+     "fin": 0.2
+    },
+    {
+     "p": "mejor:",
+     "ini": 0.2,
+     "fin": 0.42
+    },
+    {
+     "p": "es",
+     "ini": 0.42,
+     "fin": 0.92
+    },
+    {
+     "p": "gratis,",
+     "ini": 0.92,
+     "fin": 1.5
+    },
+    {
+     "p": "y",
+     "ini": 1.5,
+     "fin": 1.64
+    },
+    {
+     "p": "sin",
+     "ini": 1.64,
+     "fin": 1.78
+    },
+    {
+     "p": "tarjeta.",
+     "ini": 1.78,
+     "fin": 2.2
+    }
+   ],
+   "palabras_silabas": [
+    {
+     "p": "Y",
+     "ini": 0.04,
+     "fin": 0.221
+    },
+    {
+     "p": "lo",
+     "ini": 0.221,
+     "fin": 0.403
+    },
+    {
+     "p": "mejor:",
+     "ini": 0.403,
+     "fin": 0.765
+    },
+    {
+     "p": "es",
+     "ini": 0.765,
+     "fin": 0.947
+    },
+    {
+     "p": "gratis,",
+     "ini": 0.947,
+     "fin": 1.309
+    },
+    {
+     "p": "y",
+     "ini": 1.309,
+     "fin": 1.491
+    },
+    {
+     "p": "sin",
+     "ini": 1.491,
+     "fin": 1.672
+    },
+    {
+     "p": "tarjeta.",
+     "ini": 1.672,
+     "fin": 2.216
+    }
+   ],
+   "alineado": {
+    "modelo": "faster-whisper small",
+    "casadas": 8,
+    "de": 8,
+    "desvio_silabas_medio": 0.146,
+    "desvio_silabas_max": 0.345,
+    "oido": "Y lo mejor es gratis y sin tarjeta."
+   }
+  },
+  {
+   "n": 6,
+   "leido": "Entra en flota de ese pe punto com, y en un minuto tienes tu cuenta.",
+   "visto": "Entra en flotadsp.com, y en un minuto tienes tu cuenta.",
+   "fichero": "voces/Puck/f6.wav",
+   "dur": 3.218,
+   "palabras": [
+    {
+     "p": "Entra",
+     "ini": 0.0,
+     "fin": 0.28
+    },
+    {
+     "p": "en",
+     "ini": 0.28,
+     "fin": 0.4
+    },
+    {
+     "p": "flota",
+     "ini": 0.4,
+     "fin": 0.66
+    },
+    {
+     "p": "de",
+     "ini": 0.66,
+     "fin": 0.8
+    },
+    {
+     "p": "ese",
+     "ini": 0.8,
+     "fin": 0.96
+    },
+    {
+     "p": "pe",
+     "ini": 0.96,
+     "fin": 1.16
+    },
+    {
+     "p": "punto",
+     "ini": 1.16,
+     "fin": 1.36
+    },
+    {
+     "p": "com,",
+     "ini": 1.36,
+     "fin": 1.64
+    },
+    {
+     "p": "y",
+     "ini": 2.1,
+     "fin": 2.14
+    },
+    {
+     "p": "en",
+     "ini": 2.14,
+     "fin": 2.22
+    },
+    {
+     "p": "un",
+     "ini": 2.22,
+     "fin": 2.32
+    },
+    {
+     "p": "minuto",
+     "ini": 2.32,
+     "fin": 2.62
+    },
+    {
+     "p": "tienes",
+     "ini": 2.62,
+     "fin": 2.82
+    },
+    {
+     "p": "tu",
+     "ini": 2.82,
+     "fin": 2.92
+    },
+    {
+     "p": "cuenta.",
+     "ini": 2.92,
+     "fin": 3.04
+    }
+   ],
+   "palabras_silabas": [
+    {
+     "p": "Entra",
+     "ini": 0.04,
+     "fin": 0.311
+    },
+    {
+     "p": "en",
+     "ini": 0.311,
+     "fin": 0.447
+    },
+    {
+     "p": "flota",
+     "ini": 0.447,
+     "fin": 0.718
+    },
+    {
+     "p": "de",
+     "ini": 0.718,
+     "fin": 0.853
+    },
+    {
+     "p": "ese",
+     "ini": 0.853,
+     "fin": 1.125
+    },
+    {
+     "p": "pe",
+     "ini": 1.125,
+     "fin": 1.26
+    },
+    {
+     "p": "punto",
+     "ini": 1.26,
+     "fin": 1.531
+    },
+    {
+     "p": "com,",
+     "ini": 1.531,
+     "fin": 1.667
+    },
+    {
+     "p": "y",
+     "ini": 1.667,
+     "fin": 1.802
+    },
+    {
+     "p": "en",
+     "ini": 1.802,
+     "fin": 1.938
+    },
+    {
+     "p": "un",
+     "ini": 1.938,
+     "fin": 2.073
+    },
+    {
+     "p": "minuto",
+     "ini": 2.073,
+     "fin": 2.48
+    },
+    {
+     "p": "tienes",
+     "ini": 2.48,
+     "fin": 2.751
+    },
+    {
+     "p": "tu",
+     "ini": 2.751,
+     "fin": 2.887
+    },
+    {
+     "p": "cuenta.",
+     "ini": 2.887,
+     "fin": 3.158
+    }
+   ],
+   "alineado": {
+    "modelo": "faster-whisper small",
+    "casadas": 15,
+    "de": 15,
+    "desvio_silabas_medio": 0.147,
+    "desvio_silabas_max": 0.433,
+    "oido": "Entra en flota de ese pe punto com, y en un minuto tienes tu cuenta."
+   }
+  }
+ ],
+ "silabas_por_segundo": 6.56,
+ "raras": []
+}
