@@ -2,11 +2,12 @@ import { Suspense, lazy, useCallback, useEffect, useRef, useState } from 'react'
 import {
   ArrowLeft, ScanLine, Camera, Loader2, Navigation, Phone, Check, X, Route, MapPin, Play, Square, Package,
   MessageCircle, Clock, Search, List, Pencil, ChevronDown, GripVertical, Map as MapaIcono, ArrowUp, ArrowDown, ArrowUpDown, Mic, ClipboardPaste, Trophy,
-  Eye, PenLine, RotateCcw, HelpCircle, Share2, FileUp, Gift, WifiOff, Plus, FileText, Mail,
+  Eye, PenLine, RotateCcw, HelpCircle, Share2, FileUp, Gift, WifiOff, Plus, FileText, Mail, CalendarClock, Lightbulb, History,
 } from 'lucide-react'
 import {
   repMiRuta, repZonasCarga, repEscanear, repEscanearLote, repLeerTicket, repNuevoPedido, repEstado, repOrdenar, repJornada, repPosicion,
   repMiOrden, repMiEditar, repMiQuitar, repEjemplo, repQuitarEjemplos, repPegarMiLista, repTrazado, repFachada, repGanancias,
+  repTraerPrevias, repMisMarcas, repMisDirecciones,
 } from '../../services/api'
 import { hoyLocal } from '../../lib/fecha'
 import { lista } from '../../lib/lista'
@@ -182,6 +183,30 @@ const clavePuerta = (p) => (p.lat != null ? `${Number(p.lat).toFixed(4)},${Numbe
 const aMin = (hhmm) => { const m = /^(\d{1,2}):(\d{2})$/.exec(hhmm || ''); return m ? Number(m[1]) * 60 + Number(m[2]) : null }
 
 const lee = (k, def) => { try { return localStorage.getItem(k) || def } catch { return def } }
+
+/* ENSEÑAR CADA COSA EN SU MOMENTO (25-10-2026). Dani: «enseña cómo utilizar las cosas, que tengan sentido, cuándo y
+   por qué». Un consejo al día como mucho, solo de lo que aún no usa y justo cuando le sirve; dice por qué y cómo, y
+   «Entendido» lo quita para siempre. `cuando` mira la ruta de verdad: nada de consejos que no vienen a cuento. */
+const CONSEJOS = [
+  { id: 'ordenar', cuando: (e) => e.pendientes >= 3 && !e.ordenada, boton: 'Ordenar ahora',
+    titulo: 'Deja que la app ponga el orden',
+    texto: 'Pulsa «Ordenar ruta»: pone las paradas en el orden que menos tarda, respeta el horario de cada cliente y te dice a qué hora llegas a cada una.' },
+  { id: 'hueco', cuando: (e) => e.pendientes >= 5 && e.entregados === 0 && !e.conHueco,
+    titulo: 'Apunta dónde va cada paquete',
+    texto: 'Al cargar, toca «¿Dónde va en la furgoneta?» en cada parada (delante, medio, detrás). Al llegar sabrás en qué hueco buscarlo sin revolver la carga.' },
+  { id: 'ir_con', cuando: (e) => e.entregados >= 3 && e.pendientes > 0 && e.nav === 'app',
+    titulo: '¿Prefieres Google Maps o Waze?',
+    texto: 'Elígelo en «Ir con», encima de la lista: cada parada se abrirá allí con la dirección puesta.' },
+]
+// El consejo de hoy: el mismo todo el día (no salta de uno a otro) y ninguno más tras «Entendido».
+function consejoDeHoy(fecha, estado) {
+  const [dia, id] = lee('consejo_hoy', '|').split('|')
+  if (dia === fecha) {
+    const c = CONSEJOS.find((x) => x.id === id)
+    return c && lee(`consejo_${c.id}`, '') !== 'visto' && c.cuando(estado) ? c : null
+  }
+  return CONSEJOS.find((c) => lee(`consejo_${c.id}`, '') !== 'visto' && c.cuando(estado)) || null
+}
 const guarda = (k, v) => { try { localStorage.setItem(k, v) } catch { /* modo privado: da igual */ } }
 const sinTildes = (s) => String(s || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase()
 const porOrden = (a, b) => (a.orden ?? 1e9) - (b.orden ?? 1e9)
@@ -190,7 +215,7 @@ const porOrden = (a, b) => (a.orden ?? 1e9) - (b.orden ?? 1e9)
    en Android lo tiene). Donde no existe, no sale el botón. */
 const Reconocedor = typeof window !== 'undefined' ? (window.SpeechRecognition || window.webkitSpeechRecognition) : null
 
-export default function MiRuta({ onBack, embebido = false }) {
+export default function MiRuta({ onBack, embebido = false, alTerminar = null }) {
   useIdioma()
   const [ruta, setRuta] = useState(null)
   const [err, setErr] = useState('')
@@ -217,6 +242,11 @@ export default function MiRuta({ onBack, embebido = false }) {
   const [tour, setTour] = useState(-1)               // recorrido de bienvenida: -1 cerrado, 0..2 el paso
   const [bienvenida, setBienvenida] = useState(null)  // la primera vez: null | 'inicio' | 'luego'
   const [anadir, setAnadir] = useState(false)          // la hoja de «Añadir paradas» (botón «+»)
+  // SU PROGRESO DE VERDAD (25-10-2026): entregas con la app y su mejor día (antes de hoy), para el récord y el
+  // resumen. Lo de hoy se cuenta aquí mismo con las paradas, así no hace falta preguntar tras cada entrega.
+  const [marcas, setMarcas] = useState(null)
+  const [previasNo, setPreviasNo] = useState(false)    // «Ahora no» a las paradas de otros días
+  const [, setConsejoVisto] = useState(0)              // sube al pulsar «Entendido»: se vuelve a mirar
   const [escuchando, setEscuchando] = useState(false)
   const reconocedor = useRef(null)
   const dirInput = useRef(null)
@@ -316,6 +346,22 @@ export default function MiRuta({ onBack, embebido = false }) {
     repMiRuta().then(({ data }) => { fijarPais(data?.pais); setRuta(aplicarCola(data, leerCola().filter(deMi))) })
       .catch((e) => setErr(txError(e, 'No se pudo cargar tu ruta')))
   }, [])
+  const conMarcas = !!ruta?.autonomo && !ruta?.prueba
+  useEffect(() => {
+    if (!conMarcas) return
+    repMisMarcas().then(({ data }) => setMarcas(data)).catch(() => setMarcas(null))
+  }, [conMarcas])
+  /* LO QUE QUEDÓ DE OTROS DÍAS (25-10-2026): la ruta es la del día y lo que no se entregó (o se cargó de noche)
+     dejaba de verse a las 00:00. Se ofrece traerlo; no se mueve nada sin que lo pida. */
+  async function traerPrevias() {
+    setOcupado('previas')
+    try {
+      const { data } = await repTraerPrevias()
+      cargar()
+      setAviso(data.traidas === 1 ? tx('1 parada pasada a hoy. Pulsa «Ordenar ruta» para ponerla en su sitio.')
+        : tx('{n} paradas pasadas a hoy. Pulsa «Ordenar ruta» para ponerlas en su sitio.', { n: data.traidas }))
+    } catch (e) { setAviso(txError(e, 'No se pudo')) } finally { setOcupado('') }
+  }
   // Manda lo guardado en el móvil: al volver la red, cada 20 s mientras quede algo y al pulsar «Enviar ahora».
   const enviandoCola = useRef(false)
   const vaciarColaEntregas = useCallback(async () => {
@@ -585,13 +631,19 @@ export default function MiRuta({ onBack, embebido = false }) {
     if (!hayHoja || tienePunto || textoDir.trim().length < 4) { setSugs([]); return undefined }
     const ctl = new AbortController()
     const t = setTimeout(async () => {
-      try {
-        const lista2 = await buscarDirecciones(textoDir, { cerca: yo || ruta?.base || null, pais: ruta?.pais || '', senal: ctl.signal })
-        if (!ctl.signal.aborted) setSugs(lista2)
-      } catch { /* sin servicio: se escribe la dirección entera y el servidor la sitúa */ }
+      /* LAS QUE YA CONOCE, PRIMERO (25-10-2026): de su propio historial, con su punto, el cliente y el teléfono de
+         la última vez. La queja más repetida de Circuit: «metemos las mismas paradas cada día y no las recuerda». */
+      const [suyas, otras] = await Promise.all([
+        ruta?.prueba ? [] : repMisDirecciones(textoDir).then((r) => lista(r.data?.direcciones).map((x) => ({ ...x, conocida: true }))).catch(() => []),
+        // Sin servicio: se escribe la dirección entera y el servidor la sitúa.
+        buscarDirecciones(textoDir, { cerca: yo || ruta?.base || null, pais: ruta?.pais || '', senal: ctl.signal }).catch(() => []),
+      ])
+      if (ctl.signal.aborted) return
+      const yaEstan = new Set(suyas.map((x) => sinTildes(x.direccion)))
+      setSugs([...suyas, ...otras.filter((x) => !yaEstan.has(sinTildes(x.direccion)))].slice(0, 6))
     }, 350)
     return () => { clearTimeout(t); ctl.abort() }
-  }, [textoDir, tienePunto, hayHoja, yo, ruta?.base, ruta?.pais])
+  }, [textoDir, tienePunto, hayHoja, yo, ruta?.base, ruta?.pais, ruta?.prueba])
   async function quitarParada() {
     if (!nuevo?.id) return
     if (!quitando) { setQuitando(true); return }
@@ -986,11 +1038,29 @@ export default function MiRuta({ onBack, embebido = false }) {
         </div>
       )}
 
+      {ruta.previas > 0 && !previasNo && lee(`previas_no_${ruta.fecha}`, '') !== '1' && (
+        <div data-testid="previas" className="mb-3 rounded-2xl border border-sky-400/40 bg-sky-500/[.08] px-3.5 py-3">
+          <p className="flex items-start gap-2 text-[13.5px] font-semibold leading-snug text-sky-100">
+            <CalendarClock size={17} className="mt-0.5 shrink-0" />
+            {ruta.previas === 1 ? tx('Tienes 1 parada sin entregar de otro día.')
+              : tx('Tienes {n} paradas sin entregar de días anteriores.', { n: ruta.previas })}
+          </p>
+          <div className="mt-2.5 flex gap-2">
+            <button onClick={traerPrevias} disabled={ocupado === 'previas'}
+              className="flex flex-1 items-center justify-center gap-2 rounded-xl bg-sky-400 py-2.5 text-[14px] font-bold text-[#04121a] disabled:opacity-50">
+              {ocupado === 'previas' && <Loader2 size={15} className="animate-spin" />} {tx('Pasarlas a hoy')}
+            </button>
+            <button onClick={() => { guarda(`previas_no_${ruta.fecha}`, '1'); setPreviasNo(true) }}
+              className="rounded-xl border border-sky-400/40 px-3.5 py-2.5 text-[13px] font-semibold text-sky-100">{tx('Ahora no')}</button>
+          </div>
+        </div>
+      )}
+
       {/* LA CABECERA DEL DÍA: lo primero que se ve. Cuánto llevas, cuánto
           queda, a qué hora acabas y si vas tarde respecto a lo previsto. */}
       {total > 0 && (
         <Cabecera fecha={ruta.fecha} hechos={hechos.length} total={total} entregados={entregados.length}
-          pendientes={pendientes.length} rr={ruta.ruta} retraso={retraso} cobrado={cobradoHoy}
+          pendientes={pendientes.length} rr={ruta.ruta} retraso={retraso} cobrado={cobradoHoy} mejor={marcas?.mejor || 0}
           dinero={dinero} onTarifa={ruta.autonomo && gan ? () => setTarifa({ parada: aEuros(gan.pago_parada), dia: aEuros(gan.pago_dia), km: aEuros(gan.coste_km) || (simboloMoneda() === '€' ? '0,12' : '') }) : null}
           onCompartir={entregados.length >= 5 && pendientes.length === 0 ? () => {
             const ini = ruta.jornada?.empezada ? new Date(ruta.jornada.empezada).getTime() : 0
@@ -1087,7 +1157,29 @@ export default function MiRuta({ onBack, embebido = false }) {
       )}
 
       {/* FIN DE LA RUTA: el resumen del día, como al cerrar un bloque. */}
-      {total > 0 && pendientes.length === 0 && <Resumen hechos={hechos} ruta={ruta.ruta} />}
+      {total > 0 && pendientes.length === 0 && <><Resumen hechos={hechos} ruta={ruta.ruta} marcas={marcas} />{alTerminar}</>}
+
+      {(() => {
+        const c = consejoDeHoy(ruta.fecha, { pendientes: pendientes.length, entregados: entregados.length, nav,
+          ordenada: !!ruta.ruta?.fin, conHueco: lista(ruta.pedidos).some((p) => p.hueco) })
+        if (!c) return null
+        if (lee('consejo_hoy', '') !== `${ruta.fecha}|${c.id}`) guarda('consejo_hoy', `${ruta.fecha}|${c.id}`)
+        const entendido = () => { guarda(`consejo_${c.id}`, 'visto'); medirAccion(`consejo_${c.id}`); setConsejoVisto((n) => n + 1) }
+        return (
+          <section data-testid="consejo" aria-label={tx('Consejo')} className="mt-3 rounded-2xl border border-amber-400/30 bg-amber-500/[.06] px-3.5 py-3">
+            <p className="flex items-center gap-2 text-[13.5px] font-bold text-amber-100"><Lightbulb size={16} className="shrink-0 text-amber-300" /> {tx(c.titulo)}</p>
+            <p className="mt-1 text-[13px] leading-snug text-dark-200">{tx(c.texto)}</p>
+            <div className="mt-2.5 flex gap-2">
+              {c.id === 'ordenar' && (
+                <button onClick={() => { entendido(); ordenar() }} disabled={ocupado === 'ordenar'}
+                  className="flex-1 rounded-xl bg-amber-400 py-2 text-[13.5px] font-bold text-[#1a1300] disabled:opacity-50">{tx(c.boton)}</button>
+              )}
+              <button onClick={entendido}
+                className={`rounded-xl border border-amber-400/40 px-3.5 py-2 text-[13px] font-semibold text-amber-100 ${c.id === 'ordenar' ? '' : 'flex-1'}`}>{tx('Entendido')}</button>
+            </div>
+          </section>
+        )
+      })()}
 
       {/* LA RUTA */}
       <div className="mb-2 mt-5 flex items-center justify-between gap-2">
@@ -1614,9 +1706,22 @@ export default function MiRuta({ onBack, embebido = false }) {
               <ul className="-mt-1 overflow-hidden rounded-xl border border-dark-700 bg-dark-900" aria-label={tx('Direcciones sugeridas')}>
                 {sugs.map((sg) => (
                   <li key={sg.direccion}>
-                    <button type="button" onClick={() => { setNuevo({ ...nuevo, direccion: sg.direccion, cp: sg.cp, localidad: sg.localidad, lat: sg.lat, lng: sg.lng }); setSugs([]) }}
+                    <button type="button" onClick={() => {
+                      // De su historial, también el cliente y el teléfono (sin pisar lo que ya haya escrito).
+                      setNuevo({ ...nuevo, direccion: sg.direccion, cp: sg.cp, localidad: sg.localidad, lat: sg.lat, lng: sg.lng,
+                        ...(sg.conocida ? { cliente: nuevo.cliente || sg.cliente || '', telefono: nuevo.telefono || sg.telefono || '' } : {}) })
+                      setSugs([])
+                    }}
                       className="flex w-full items-center gap-2 border-b border-dark-800 px-3 py-2.5 text-left text-[14px] text-dark-100 last:border-0 active:bg-dark-800">
-                      <MapPin size={15} className="shrink-0 text-brand-300" /> <span className="min-w-0 flex-1 truncate">{sg.direccion}</span>
+                      {sg.conocida ? <History size={15} className="shrink-0 text-emerald-300" /> : <MapPin size={15} className="shrink-0 text-brand-300" />}
+                      <span className="min-w-0 flex-1">
+                        <span className="block truncate">{sg.direccion}</span>
+                        {sg.conocida && (
+                          <span className="block truncate text-[11.5px] text-emerald-300">
+                            {tx('Ya estuviste aquí')} · {sg.veces === 1 ? tx('1 vez') : tx('{n} veces', { n: sg.veces })}{sg.cliente ? ` · ${sg.cliente}` : ''}
+                          </span>
+                        )}
+                      </span>
                     </button>
                   </li>
                 ))}
@@ -1956,7 +2061,7 @@ function Marco({ onBack, children, embebido }) {
    única parada no estaba en el mapa (la dirección no se encontró) y sin un punto no hay
    adónde guiar; el aviso quedaba abajo, debajo del mapa. Ahora lo dice aquí y lleva a
    corregirla: al escribirla salen sugerencias, y elegir una la sitúa. */
-function Cabecera({ fecha, hechos, total, entregados, pendientes, rr, retraso, cobrado, fueraHorario, onGuiar, onCorregir, dinero, onTarifa, onCompartir, onAnadir }) {
+function Cabecera({ fecha, hechos, total, entregados, pendientes, rr, retraso, cobrado, fueraHorario, onGuiar, onCorregir, dinero, onTarifa, onCompartir, onAnadir, mejor = 0 }) {
   const pct = total ? hechos / total : 0
   const R = 26
   const L = 2 * Math.PI * R
@@ -1984,7 +2089,10 @@ function Cabecera({ fecha, hechos, total, entregados, pendientes, rr, retraso, c
           </p>
           {pendientes > 0 && rr?.fin && (
             <p className="mt-0.5 flex flex-wrap items-center gap-x-1.5 text-[12.5px] text-dark-300">
-              <Clock size={12} className="text-brand-300" /> {tx('Acabas ≈')} <b className="text-dark-50">{rr.fin}</b>
+              <Clock size={12} className="text-brand-300" />
+              {/* De noche la ruta sale a su hora de salida (25-10-2026): que se vea, o las horas no se entienden. */}
+              {rr.programada && rr.salida ? <span>{tx('Sales a las {h}', { h: rr.salida })} ·</span> : null}
+              {tx('Acabas ≈')} <b className="text-dark-50">{rr.fin}</b>
               {rr.km ? <span>· {String(rr.km).replace('.', ',')} km</span> : null}
               {rr.minutos ? <span>· {minutosATexto(rr.minutos)}</span> : null}
             </p>
@@ -1995,6 +2103,10 @@ function Cabecera({ fecha, hechos, total, entregados, pendientes, rr, retraso, c
         <span className="rounded-full bg-emerald-500/15 px-2 py-0.5 font-semibold text-emerald-300">{entregados === 1 ? tx('1 hecha') : tx('{n} hechas', { n: entregados })}</span>
         {hechos - entregados > 0 && <span className="rounded-full bg-red-500/15 px-2 py-0.5 font-semibold text-red-300">{tx('{n} sin hacer', { n: hechos - entregados })}</span>}
         {cobrado > 0 && <span className="rounded-full bg-dark-800 px-2 py-0.5 text-dark-200">{tx('Cobrado')} {euros(cobrado)}</span>}
+        {/* Su récord, solo con datos suyos: más que cualquier día anterior y al menos 10. */}
+        {entregados >= 10 && entregados > mejor
+          ? <span data-testid="record" className="rounded-full bg-amber-400/20 px-2 py-0.5 font-bold text-amber-200">🏆 {tx('¡Récord de entregas!')}</span>
+          : mejor >= 10 && entregados > 0 && <span className="rounded-full bg-dark-800 px-2 py-0.5 text-dark-300">{tx('Tu récord: {n}', { n: mejor })}</span>}
         {pendientes > 0 && rr?.fin && (
           <span className="rounded-full bg-dark-800 px-2 py-0.5 text-dark-400">
             {rr.manual ? tx('tu orden') : rr.fuente === 'linea_recta' ? tx('por distancia') : rr.trafico ? tx('con tráfico típico') : tx('sin tráfico')}
@@ -2144,7 +2256,7 @@ function HuecoRejilla({ valor, onElegir, ocupado = false }) {
 
 /* El cierre del día: lo hecho, lo que no y lo cobrado por cada vía. Solo
    cuenta lo que hay en las paradas; nada inventado. */
-function Resumen({ hechos, ruta }) {
+function Resumen({ hechos, ruta, marcas = null }) {
   const ok = hechos.filter((p) => p.estado === 'entregado')
   const no = hechos.filter((p) => p.estado === 'fallido')
   const cobros = {}
@@ -2166,6 +2278,15 @@ function Resumen({ hechos, ruta }) {
             <p key={m} className="flex justify-between"><span className="text-dark-400">{NOMBRE[m] || m}</span><span>{euros(v)}</span></p>
           ))}
           <p className="mt-1 flex justify-between border-t border-dark-700 pt-1 font-bold"><span>{tx('Total')}</span><span>{euros(Object.values(cobros).reduce((a, b) => a + b, 0))}</span></p>
+        </div>
+      )}
+      {/* SU PROGRESO (25-10-2026): solo lo que ha hecho él, contado por el servidor; lo de hoy, con las paradas. */}
+      {marcas && (
+        <div data-testid="marcas" className="mt-3 space-y-0.5 text-[13px] text-dark-200">
+          {ok.length >= 10 && ok.length > (marcas.mejor || 0)
+            ? <p className="font-bold text-amber-200">🏆 {tx('Tu mejor día: nunca habías entregado tantas.')}</p>
+            : marcas.mejor > 0 && <p>{tx('Tu mejor día: {n} entregas.', { n: marcas.mejor })}</p>}
+          <p>{tx('Llevas {n} entregas con FDS.', { n: (marcas.total || 0) - (marcas.hoy || 0) + ok.length })}</p>
         </div>
       )}
       <button onClick={invitar}

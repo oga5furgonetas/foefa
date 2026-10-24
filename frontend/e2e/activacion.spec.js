@@ -107,13 +107,15 @@ test('Activación · un código que no vale NO promete días de más', async ({ 
   await expect(page.getByText(/Te ha invitado un compañero/)).toHaveCount(0)
 })
 
-test('Activación · quien ya la usa ve «¿Qué tal te va?» una vez, y su opinión se envía', async ({ page, context }) => {
+test('Activación · quien ya la usa ve «¿Qué tal te va?» al terminar la ruta, una vez, y su opinión se envía', async ({ page, context }) => {
   await preparar(page, context)
   let enviado = null
   await page.route(/\/api\/opinion\/estado/, (r) => r.fulfill({ json: { pedir: true } }))
   await page.route(/\/api\/opinion$/, async (r) => { enviado = r.request().postDataJSON(); await r.fulfill({ json: { ok: true } }) })
+  // 25-10-2026: se pregunta al TERMINAR la ruta (debajo del resumen), no al abrir «Hoy» para cargar.
   await page.route(/\/api\/reparto\/mi-ruta$/, (r) => r.fulfill({ json: {
-    activo: true, autonomo: true, empresa: '', fecha: '2026-10-05', ia_tickets: false, jornada: {}, aviso_aceptado: true, base: null, ruta: null, pedidos: [] } }))
+    activo: true, autonomo: true, empresa: '', fecha: '2026-10-05', ia_tickets: false, jornada: {}, aviso_aceptado: true, base: null, ruta: null,
+    pedidos: [{ id: 'h1', cliente: 'Bar Pepe', direccion: 'Rúa Real 5', estado: 'entregado', bultos: 1, orden: 1 }] } }))
   await page.goto('/ruta', { waitUntil: 'domcontentloaded' })
   await expect(page.getByText('¿Qué tal te va la app?')).toBeVisible()
   await page.getByRole('button', { name: '4', exact: true }).click()

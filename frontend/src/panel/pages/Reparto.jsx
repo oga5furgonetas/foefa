@@ -552,6 +552,7 @@ export function Ajustes({ conductores, toast, autonomo }) {
           <p className="text-[12px] text-dark-400">
             Se ordena por el TIEMPO que se tarda por carretera, contando el tráfico típico de cada hora, el rato en
             cada portal y el horario de cada cliente. Cada parada lleva su hora estimada de llegada.
+            {autonomo && ' Si ordenas de noche (de 22:00 a 6:00), la ruta sale a tu hora de salida y no «ahora».'}
           </p>
           <div className="flex flex-wrap items-center gap-x-5 gap-y-2 text-[13px] text-dark-200">
             <label className="flex items-center gap-2">Salida a las

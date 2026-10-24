@@ -263,6 +263,11 @@ export const repEjemplo = (desde) => api.post('/reparto/mis-pedidos/ejemplo', de
 // «Mi dinero hoy» (11-10-2026): la tarifa del autónomo, en céntimos.
 export const repGanancias = (datos) => api.put('/reparto/ganancias', datos)
 export const repQuitarEjemplos = () => api.post('/reparto/mis-pedidos/quitar-ejemplos')
+// 25-10-2026: lo que quedó sin entregar de otros días (se trae a hoy si lo pide) y su progreso de verdad.
+export const repTraerPrevias = () => api.post('/reparto/mi-ruta/traer-previas')
+export const repMisMarcas = () => api.get('/reparto/mis-marcas')
+// Las direcciones que ya conoce, de su historial, al escribir una parada.
+export const repMisDirecciones = (q) => api.get('/reparto/mis-direcciones', { params: { q } })
 // El aviso de la mañana (18-10-2026): a qué hora carga la furgoneta (de 5:00 a 11:30, de media en media hora).
 export const repAvisoManana = (hora) => api.post('/reparto/aviso-manana', { hora })
 export const repAvisoMananaVer = () => api.get('/reparto/aviso-manana')

@@ -2144,6 +2144,98 @@ async function rutaDeAna(page, pedidos, extra = {}) {
     activo: true, empresa: 'Súper', fecha: '2026-10-04', jornada: {}, aviso_aceptado: true, ruta: { fin: '10:40' }, pedidos, ...extra } }))
 }
 
+/* 25-10-2026: lo que quedó de otros días se trae a hoy si lo pide, de noche la ruta dice a qué hora sale, y el récord
+   y lo que lleva hecho salen de sus datos (el servidor cuenta; aquí solo se pinta). */
+const hechaHoy = (i) => ({ id: `h${i}`, cliente: `Cliente ${i}`, direccion: `Calle ${i}`, estado: 'entregado', bultos: 1, orden: i, cerrado_en: '2026-10-04T10:00:00Z' })
+
+test('Reparto · lo de otros días se trae a hoy, de noche dice a qué hora sale y celebra el récord de verdad', async ({ page }) => {
+  const fallos = vigilar(page)
+  const pedidos = [...Array.from({ length: 12 }, (_, i) => hechaHoy(i + 1)),
+    { id: 'p1', cliente: 'Bar Pepe', direccion: 'Rúa Real 5', estado: 'pendiente', bultos: 1, orden: 13, eta: '09:20', lat: 43.37, lng: -8.40 }]
+  await rutaDeAna(page, pedidos, { autonomo: true, previas: 3,
+    ruta: { fin: '09:40', minutos: 40, km: 9.5, trafico: true, programada: true, salida: '09:00' } })
+  let traidas = 0
+  await page.route(/\/api\/reparto\/mi-ruta\/traer-previas/, (r) => { traidas += 1; return r.fulfill({ json: { traidas: 3 } }) })
+  await page.route(/\/api\/reparto\/mis-marcas/, (r) => r.fulfill({ json: { total: 300, hoy: 12, dias: 9, semana: 3, mejor: 11, mejor_fecha: '2026-10-01', record_hoy: true } }))
+  await page.goto('/conductor?vista=ruta', { waitUntil: 'domcontentloaded' })
+  await expect(page.getByText('Sales a las 09:00 ·')).toBeVisible()
+  await expect(page.getByTestId('record')).toHaveText('🏆 ¡Récord de entregas!')
+  const previas = page.getByTestId('previas')
+  await expect(previas).toContainText('Tienes 3 paradas sin entregar de días anteriores.')
+  await previas.getByRole('button', { name: 'Pasarlas a hoy' }).click()
+  await expect.poll(() => traidas).toBe(1)
+  await expect(page.getByText('3 paradas pasadas a hoy. Pulsa «Ordenar ruta» para ponerlas en su sitio.')).toBeVisible()
+  expect(fallos).toEqual([])
+})
+
+test('Reparto · «Ahora no» a lo de otros días no mueve nada; con pocas entregas no hay récord', async ({ page }) => {
+  const pedidos = [...Array.from({ length: 3 }, (_, i) => hechaHoy(i + 1)),
+    { id: 'p1', cliente: 'Bar Pepe', direccion: 'Rúa Real 5', estado: 'pendiente', bultos: 1, orden: 4, eta: '17:20', lat: 43.37, lng: -8.40 }]
+  await rutaDeAna(page, pedidos, { autonomo: true, previas: 1, ruta: { fin: '17:40', minutos: 20, km: 3, trafico: true, salida: '17:00' } })
+  let traidas = 0
+  await page.route(/\/api\/reparto\/mi-ruta\/traer-previas/, (r) => { traidas += 1; return r.fulfill({ json: { traidas: 1 } }) })
+  await page.route(/\/api\/reparto\/mis-marcas/, (r) => r.fulfill({ json: { total: 50, hoy: 3, dias: 4, semana: 2, mejor: 30, mejor_fecha: '2026-10-01', record_hoy: false } }))
+  await page.goto('/conductor?vista=ruta', { waitUntil: 'domcontentloaded' })
+  await expect(page.getByTestId('previas')).toContainText('Tienes 1 parada sin entregar de otro día.')
+  await page.getByTestId('previas').getByRole('button', { name: 'Ahora no' }).click()
+  await expect(page.getByTestId('previas')).toHaveCount(0)
+  expect(traidas).toBe(0)
+  await expect(page.getByText('Sales a las')).toHaveCount(0)            // de día sale «ahora»: no se dice
+  await expect(page.getByTestId('record')).toHaveCount(0)
+  await expect(page.getByText('Tu récord: 30')).toBeVisible()
+})
+
+test('Reparto · un consejo cuando viene a cuento: «Ordenar ahora» ordena y no vuelve a salir', async ({ page }) => {
+  const fallos = vigilar(page)
+  const pend = (i) => ({ id: `p${i}`, cliente: `Cliente ${i}`, direccion: `Calle ${i}`, estado: 'pendiente', bultos: 1, lat: 43.37, lng: -8.40 })
+  await rutaDeAna(page, [pend(1), pend(2), pend(3)], { ruta: null })
+  let ordenadas = 0
+  await page.route(/\/api\/reparto\/mi-ruta\/ordenar/, (r) => { ordenadas += 1; return r.fulfill({ json: { ordenados: 3, ruta: { fin: '10:40' } } }) })
+  await page.goto('/conductor?vista=ruta', { waitUntil: 'domcontentloaded' })
+  const consejo = page.getByTestId('consejo')
+  await expect(consejo).toContainText('Deja que la app ponga el orden')
+  await consejo.getByRole('button', { name: 'Ordenar ahora' }).click()
+  await expect.poll(() => ordenadas).toBe(1)
+  await expect(page.getByTestId('consejo')).toHaveCount(0)
+  await page.reload()
+  await expect(page.getByText('3 por entregar')).toBeVisible()
+  await expect(page.getByTestId('consejo')).toHaveCount(0)               // «Entendido» es para siempre
+  expect(fallos).toEqual([])
+})
+
+test('Reparto · al escribir una dirección, primero las que ya conoce, y rellena cliente y teléfono', async ({ page }) => {
+  const fallos = vigilar(page)
+  await rutaDeAna(page, [], { autonomo: true, ruta: null })
+  let pedido = ''
+  await page.route(/\/api\/reparto\/mis-direcciones/, (r) => { pedido = new URL(r.request().url()).searchParams.get('q'); return r.fulfill({ json: { direcciones: [
+    { direccion: 'Rúa Real 5, A Coruña', cp: '15003', localidad: 'A Coruña', lat: 43.37, lng: -8.39, cliente: 'Bar Pepe', telefono: '600111222', veces: 3, ultima: '2026-10-02' }] } }) })
+  await page.route(/photon\.komoot\.io/, (r) => r.fulfill({ json: { features: [
+    { geometry: { coordinates: [-8.39, 43.37] }, properties: { street: 'Rúa Real', housenumber: '5', postcode: '15003', city: 'A Coruña', countrycode: 'ES' } },
+    { geometry: { coordinates: [-8.4, 43.36] }, properties: { street: 'Rúa Real', housenumber: '50', postcode: '15003', city: 'A Coruña', countrycode: 'ES' } }] } }))
+  await page.route(/\/api\/reparto\/mis-marcas/, (r) => r.fulfill({ json: { total: 0, hoy: 0, dias: 0, semana: 0, mejor: 0, mejor_fecha: null, record_hoy: false } }))
+  await page.goto('/conductor?vista=ruta', { waitUntil: 'domcontentloaded' })
+  await page.getByRole('button', { name: /Añadir un pedido sin código/ }).click()
+  await page.getByRole('dialog').getByPlaceholder('Dirección completa').fill('real 5')
+  const sugeridas = page.getByRole('dialog').getByRole('list', { name: 'Direcciones sugeridas' })
+  await expect(sugeridas.getByText('Ya estuviste aquí · 3 veces · Bar Pepe')).toBeVisible()
+  expect(pedido).toBe('real 5')
+  await sugeridas.getByRole('button', { name: /Ya estuviste aquí/ }).click()
+  const hoja = page.getByRole('dialog')
+  await expect(hoja.getByPlaceholder('Cliente', { exact: true })).toHaveValue('Bar Pepe')
+  await expect(hoja.getByPlaceholder('Teléfono', { exact: true })).toHaveValue('600111222')
+  await expect(hoja.getByText('Sitio encontrado en el mapa')).toBeVisible()
+  expect(fallos).toEqual([])
+})
+
+test('Reparto · al terminar, el resumen dice su mejor día y cuántas lleva con la app', async ({ page }) => {
+  await rutaDeAna(page, Array.from({ length: 6 }, (_, i) => hechaHoy(i + 1)), { autonomo: true })
+  await page.route(/\/api\/reparto\/mis-marcas/, (r) => r.fulfill({ json: { total: 140, hoy: 6, dias: 5, semana: 2, mejor: 40, mejor_fecha: '2026-10-01', record_hoy: false } }))
+  await page.goto('/conductor?vista=ruta', { waitUntil: 'domcontentloaded' })
+  const m = page.getByTestId('marcas')
+  await expect(m).toContainText('Tu mejor día: 40 entregas.')
+  await expect(m).toContainText('Llevas 140 entregas con FDS.')
+})
+
 test('Reparto · sin dictado en el navegador, el micro lleva al del teclado; un código con dirección la rellena', async ({ page }) => {
   const fallos = vigilar(page)
   await page.addInitScript(() => { delete window.SpeechRecognition; delete window.webkitSpeechRecognition })

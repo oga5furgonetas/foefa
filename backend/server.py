@@ -51487,6 +51487,20 @@ def _rep_ahora_local() -> tuple:
     return a.hour * 60 + a.minute, a.weekday()
 
 
+# DE NOCHE SE PLANIFICA PARA LA MAÑANA (25-10-2026). «Ordenar ruta» salía siempre «desde ahora»: quien prueba la app
+# o carga la furgoneta de noche veía entregas a las 00:18, 00:25… y un salto a las 10:00 (8 paradas en A Coruña:
+# «11 h 53 min»). De 22:00 a 5:59 la ruta sale a su hora de salida de Ajustes (9:00 si no la ha cambiado).
+_REP_NOCHE_DESDE, _REP_NOCHE_HASTA = 22 * 60, 6 * 60
+
+
+def _rep_salida_ahora(a: dict) -> tuple:
+    """(minuto de salida, ¿programada?) para ordenar AHORA la ruta de hoy del repartidor."""
+    ahora = _rep_ahora_local()[0]
+    if ahora >= _REP_NOCHE_DESDE or ahora < _REP_NOCHE_HASTA:
+        return (reparto.a_minutos((a or {}).get("hora_salida")) or 9 * 60), True
+    return ahora, False
+
+
 def _rep_parada(p: dict, a: dict) -> dict:
     bultos = int(p.get("bultos") or 1)
     return {"servicio": float(a.get("min_parada", 4)) + float(a.get("min_bulto", 1)) * max(0, bultos - 1),
@@ -51496,7 +51510,7 @@ def _rep_parada(p: dict, a: dict) -> dict:
 
 
 async def _rep_ordenar(fecha: str, conductor_id: str, origen, salida_min: Optional[int] = None,
-                       orden_fijo: Optional[list] = None) -> dict:
+                       orden_fijo: Optional[list] = None, programada: bool = False) -> dict:
     """Ordena la ruta de un conductor por TIEMPO y guarda la hora estimada de
     llegada a cada parada. Devuelve el resumen de la ruta.
 
@@ -51525,6 +51539,8 @@ async def _rep_ordenar(fecha: str, conductor_id: str, origen, salida_min: Option
     resumen = {"id": f"{fecha}_{conductor_id}", "fecha": fecha, "conductor_id": conductor_id,
                "salida": reparto.hm(salida_min), "paradas": len(pend), "sin_ubicar": len(sin),
                "trafico": a.get("trafico", True) is not False, "volver": bool(a.get("volver")),
+               # Sale a su hora de salida y no «ahora» (de noche): la app lo dice para que las horas se entiendan.
+               "programada": bool(programada),
                "calculada_en": datetime.now(timezone.utc).isoformat()}
     orden_ids, llegadas = [], {}
     if ubicadas and origen:
@@ -52057,6 +52073,14 @@ async def reparto_mi_ruta(user: dict = Depends(require_any_auth)):
                     p["antes"] = antes[p["id"]]
     except Exception as e:                                   # noqa: BLE001
         logger.warning(f"la última vez: {type(e).__name__}")
+    # PARADAS DE DÍAS ANTERIORES SIN CERRAR (25-10-2026): la ruta es la del día, y lo que se quedó sin entregar (o se
+    # cargó por la noche) desaparecía de «Hoy» a las 00:00. Se cuentan las de la última semana para ofrecer traerlas.
+    previas = 0
+    if autonomo and not user.get("demo"):
+        try:
+            previas = await db.reparto_pedidos.count_documents(_rep_filtro_previas(d["id"], f))
+        except Exception as e:                               # noqa: BLE001
+            logger.warning(f"paradas previas: {type(e).__name__}")
     j = await db.reparto_jornadas.find_one({"id": f"{d['id']}_{f}"}, {"_id": 0, "rastro": 0}) or {}
     aviso = await db.reparto_avisos.find_one({"driver_id": d["id"]}, {"_id": 0})
     ruta = await db.reparto_rutas.find_one({"id": f"{f}_{d['id']}"}, {"_id": 0})
@@ -52082,8 +52106,89 @@ async def reparto_mi_ruta(user: dict = Depends(require_any_auth)):
             # «Mi dinero hoy»: solo para quien reparte por su cuenta (a un conductor le paga su empresa).
             "ganancias": ({k: int(a.get(k) or 0) for k in ("pago_parada", "pago_dia", "coste_km")} if autonomo else None),
             "aviso_aceptado": bool(aviso),
+            "previas": previas,
             # La prueba sin cuenta: la app invita a crear la cuenta de verdad.
             "prueba": bool(user.get("demo")) and str(d["id"]).startswith("demo-a-")}
+
+
+REP_PREVIAS_DIAS = 7
+
+
+def _rep_filtro_previas(conductor_id: str, hoy: str) -> dict:
+    """Sus paradas de los últimos 7 días que siguen sin entregar ni cerrar (las de ejemplo no)."""
+    desde = (datetime.strptime(hoy, "%Y-%m-%d") - timedelta(days=REP_PREVIAS_DIAS)).strftime("%Y-%m-%d")
+    return {"conductor_id": conductor_id, "fecha": {"$gte": desde, "$lt": hoy},
+            "estado": {"$in": ["pendiente", "en_ruta"]}, "ejemplo": {"$ne": True}}
+
+
+@api_router.post("/reparto/mi-ruta/traer-previas")
+async def reparto_traer_previas(user: dict = Depends(require_any_auth)):
+    """Pasa a hoy las paradas de días anteriores que siguen sin cerrar. Solo quien reparte por su cuenta: las de un
+    conductor de empresa las reparte la oficina. Quedan sin orden: la app pide «Ordenar ruta» después."""
+    if user.get("demo") or not await _rep_es_autonomo(user):
+        raise HTTPException(403, "Solo para quien reparte por su cuenta")
+    d = await _rep_conductor(user)
+    f = _dia_negocio()
+    ps = await db.reparto_pedidos.find(_rep_filtro_previas(d["id"], f), {"_id": 0, "id": 1, "fecha": 1}).to_list(1000)
+    for p in ps:
+        await db.reparto_pedidos.update_one(
+            {"id": p["id"], "estado": {"$in": ["pendiente", "en_ruta"]}},
+            {"$set": {"fecha": f, "estado": "pendiente", "traida_de": p["fecha"]},
+             "$unset": {"orden": "", "eta": "", "tarde_min": "", "espera_min": ""}})
+    return {"traidas": len(ps)}
+
+
+@api_router.get("/reparto/mis-direcciones")
+async def reparto_mis_direcciones(q: str = "", user: dict = Depends(require_any_auth)):
+    """LAS DIRECCIONES QUE YA CONOCE (25-10-2026): al escribir una parada, las de SU historial que encajan con lo
+    escrito, con su punto exacto y el cliente y el teléfono de la última vez. Es la queja más repetida de Circuit
+    («metemos las mismas paradas cada día y no las recuerda»). Solo paradas de este repartidor de los últimos 180
+    días que llegaron a situarse en el mapa; las de ejemplo no."""
+    d = await _rep_conductor(user)
+    palabras = [w for w in reparto.clave_direccion(_texto_cuerpo(q, 120)).split() if len(w) >= 2]
+    if len("".join(palabras)) < 3:
+        return {"direcciones": []}
+    desde = (datetime.strptime(_dia_negocio(), "%Y-%m-%d") - timedelta(days=180)).strftime("%Y-%m-%d")
+    vistas: dict = {}
+    async for p in db.reparto_pedidos.find(
+            {"conductor_id": d["id"], "fecha": {"$gte": desde}, "ejemplo": {"$ne": True}, "lat": {"$ne": None}},
+            {"_id": 0, "direccion": 1, "cp": 1, "localidad": 1, "lat": 1, "lng": 1, "cliente": 1, "telefono": 1,
+             "fecha": 1}).sort("fecha", -1).limit(5000):
+        k = reparto.clave_direccion(p.get("direccion"))
+        if not k or not all(w in k for w in palabras):
+            continue
+        if k in vistas:
+            vistas[k]["veces"] += 1
+            continue
+        vistas[k] = {"direccion": p.get("direccion") or "", "cp": p.get("cp") or "", "localidad": p.get("localidad") or "",
+                     "lat": p.get("lat"), "lng": p.get("lng"), "cliente": p.get("cliente") or "",
+                     "telefono": p.get("telefono") or "", "ultima": p.get("fecha") or "", "veces": 1}
+    # Las más repetidas primero; a igualdad, la más reciente (dos pasadas: la ordenación de Python es estable).
+    orden = sorted(vistas.values(), key=lambda x: x["ultima"], reverse=True)
+    orden.sort(key=lambda x: -x["veces"])
+    return {"direcciones": orden[:4]}
+
+
+@api_router.get("/reparto/mis-marcas")
+async def reparto_mis_marcas(user: dict = Depends(require_any_auth)):
+    """Su progreso con la app (25-10-2026), para que lo vea: entregas totales, su mejor día y los días que lleva
+    repartiendo esta semana. Solo cuenta SUS paradas entregadas (las de ejemplo no): nada estimado ni inventado."""
+    d = await _rep_conductor(user)
+    f = _dia_negocio()
+    por_dia: dict = {}
+    async for p in db.reparto_pedidos.find({"conductor_id": d["id"], "estado": "entregado", "ejemplo": {"$ne": True}},
+                                           {"_id": 0, "fecha": 1}):
+        if p.get("fecha"):
+            por_dia[p["fecha"]] = por_dia.get(p["fecha"], 0) + 1
+    hoy = por_dia.get(f, 0)
+    antes = {k: v for k, v in por_dia.items() if k < f}
+    mejor_fecha, mejor = max(antes.items(), key=lambda kv: (kv[1], kv[0])) if antes else (None, 0)
+    lunes = (datetime.strptime(f, "%Y-%m-%d") - timedelta(days=datetime.strptime(f, "%Y-%m-%d").weekday())).strftime("%Y-%m-%d")
+    return {"total": sum(por_dia.values()), "hoy": hoy, "dias": len(por_dia),
+            "semana": sum(1 for k in por_dia if lunes <= k <= f),
+            "mejor": mejor, "mejor_fecha": mejor_fecha,
+            # Un récord de verdad: más que cualquier día anterior y al menos 10 (con 3 entregas no se celebra nada).
+            "record_hoy": hoy >= 10 and hoy > mejor}
 
 
 @api_router.post("/reparto/escanear")
@@ -52372,7 +52477,8 @@ async def reparto_mi_ordenar(data: dict = Body(...), user: dict = Depends(requir
         if pt:
             await db.reparto_pedidos.update_one({"id": p["id"]}, {"$set": {
                 "lat": pt[0], "lng": pt[1], "geo": pt[2] if len(pt) > 2 else "ok"}})
-    ruta = await _rep_ordenar(_dia_negocio(), d["id"], origen, salida_min=_rep_ahora_local()[0])
+    salida, programada = _rep_salida_ahora(a)
+    ruta = await _rep_ordenar(_dia_negocio(), d["id"], origen, salida_min=salida, programada=programada)
     return {"ordenados": ruta["paradas"], "ruta": ruta}
 
 
@@ -52510,8 +52616,10 @@ async def reparto_mi_orden(data: dict = Body(...), user: dict = Depends(require_
         {"_id": 0, "id": 1}).to_list(1000)}
     if not set(ids) <= mias:
         raise HTTPException(403, "Hay paradas que no son tuyas o ya están cerradas")
-    origen = reparto._punto(_dict_cuerpo(data.get("desde"))) or _rep_base(await _rep_ajustes())
-    ruta = await _rep_ordenar(f, d["id"], origen, salida_min=_rep_ahora_local()[0], orden_fijo=ids)
+    a = await _rep_ajustes()
+    origen = reparto._punto(_dict_cuerpo(data.get("desde"))) or _rep_base(a)
+    salida, programada = _rep_salida_ahora(a)
+    ruta = await _rep_ordenar(f, d["id"], origen, salida_min=salida, orden_fijo=ids, programada=programada)
     return {"ordenados": len(ids), "ruta": ruta}
 
 
@@ -52633,7 +52741,8 @@ async def reparto_mis_ejemplo(data: dict = Body(default={}), user: dict = Depend
                              user, "conductor", f, conductor=d, ubicar=False)
         await db.reparto_pedidos.update_one({"id": p["id"]}, {"$set": {"ejemplo": True}})
     try:
-        await _rep_ordenar(f, d["id"], pt, salida_min=_rep_ahora_local()[0])
+        salida, programada = _rep_salida_ahora(a)
+        await _rep_ordenar(f, d["id"], pt, salida_min=salida, programada=programada)
     except Exception as e:                                   # noqa: BLE001
         logger.warning(f"reparto: ejemplo sin ordenar: {type(e).__name__}")
     return {"ok": True, "n": len(_EJEMPLO_PARADAS)}

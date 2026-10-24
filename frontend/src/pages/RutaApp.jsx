@@ -293,13 +293,13 @@ export default function RutaApp() {
             <button onClick={verRegalo} aria-label={tx('Cerrar')} className="shrink-0 p-1 text-emerald-200/80"><X size={17} /></button>
           </div>
         )}
-        {tab === 'hoy' && !bloqueado && <OpinionRuta />}
         {tab === 'hoy' && <InstalarApp />}
         {tab === 'hoy' && !esSuplantacion() && <AvisoManana toast={toast} />}
         {(tab === 'hoy' || tab === 'ajustes') && bloqueado
           ? <Muro billing={billing} toast={toast} recargar={recargar} irACuenta={() => setTab('cuenta')} />
           : <>
-            {tab === 'hoy' && <MiRuta embebido onBack={() => {}} />}
+            {/* La opinión, al TERMINAR la ruta (25-10-2026): arriba de «Hoy» salía al ir a cargar la furgoneta. */}
+            {tab === 'hoy' && <MiRuta embebido onBack={() => {}} alTerminar={<OpinionRuta />} />}
             {tab === 'ajustes' && <div className="mx-auto max-w-md"><Ajustes conductores={[]} toast={toast} autonomo /></div>}
           </>}
         {/* «Invita y gana», DEBAJO de la ruta (23-10-2026): encima del escáner distraía a quien aún no ha metido

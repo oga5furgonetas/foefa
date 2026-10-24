@@ -1968,3 +1968,20 @@ TikTok de Puck ya estaban subidos ese día (el de TikTok sin descripción).
   Paquetería Madrid, Mercado Envíos CDMX, ML CDMX y Edo. Mex.).
 - LinkedIn: resumen de la página FlotaDSP publicado (se ve en «Acerca de»); el aviso de invitaciones aún lo daba
   por vacío (caché). Mandar las 50 invitaciones cuando se desbloquee (Dani dio luz verde).
+
+## 25-10-2026 (madrugada): autocrítica de la app de reparto y primeras mejoras
+Análisis completo en `docs/AUTOCRITICA-APP-25-10.md` (usada como repartidor nuevo en producción, datos de uso y
+mercado: Circuit/Spoke, Zeo, Xpedit, Routal). Hecho y desplegado:
+- **De noche se planifica para la mañana**: «Ordenar ruta», el orden a mano y el ejemplo salen de 22:00 a 5:59 a la
+  hora de salida de Ajustes (9:00 por defecto) y la ruta lo dice («Sales a las 9:00»): antes, a las 00:12, 8 paradas
+  en A Coruña daban «00:18, 00:25… 11 h 53 min». `_rep_salida_ahora`, campo `programada` en `reparto_rutas`.
+- **Paradas de días anteriores**: `previas` en `/reparto/mi-ruta` y `POST /reparto/mi-ruta/traer-previas` (solo quien
+  reparte por su cuenta; última semana; quedan sin orden y con `traida_de`). Aviso con «Pasarlas a hoy» / «Ahora no».
+- **Su progreso de verdad**: `GET /reparto/mis-marcas` (total, mejor día antes de hoy, días de la semana). Récord en la
+  cabecera (≥10 y más que cualquier día anterior), «Tu récord: N» y en el resumen «Tu mejor día…» y «Llevas N entregas».
+- **La opinión, al terminar la ruta** (debajo del resumen) y no arriba de «Hoy» al ir a cargar.
+- **Un consejo al día** (`CONSEJOS` en MiRuta): ordenar, dónde va cada paquete, Google Maps/Waze; solo cuando viene a
+  cuento y nunca otra vez tras «Entendido».
+- **Direcciones que ya conoce**: `GET /reparto/mis-direcciones?q=` (sus paradas situadas de los últimos 180 días que
+  encajan con lo escrito, con veces, cliente y teléfono); salen primero en las sugerencias al escribir una parada.
+- Tests: test_reparto_api (+4), humo «Reparto ·» (+5), activación ajustada a la opinión al terminar.

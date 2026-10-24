@@ -804,3 +804,96 @@ async def test_paradas_de_ejemplo_se_ponen_alrededor_y_se_quitan(base):
     real = await server.reparto_mis_pedidos({"direccion": "Rúa Real 5"}, ANA)
     assert (await server.reparto_mis_quitar_ejemplos(ANA))["quitadas"] == 3
     assert await server.db.reparto_pedidos.find_one({"id": real["id"]}) is not None
+
+
+# ─── 25-10-2026: de noche se planifica para la mañana, lo de ayer no se pierde y el progreso de verdad ───
+
+async def _org_autonomo(_id):
+    return {"id": "o1", "account_type": "dsp", "sector": "autonomo", "modulos": ["dashboard", "reparto", "configuracion"]}
+
+YO = {"sub": "a9", "role": "admin", "name": "Pepe", "org_id": "o1", "db_name": "dsp_x"}
+
+
+@pytest.mark.asyncio(loop_scope="session")
+async def test_de_noche_la_ruta_sale_a_su_hora_de_salida(base, monkeypatch):
+    """A las 00:12 ordenaba «desde ahora»: entregas a las 00:18 y 11 h 53 min para 8 paradas."""
+    await server.reparto_ajustes_put({"base_direccion": "Almacén", "hora_salida": "08:30"}, OFICINA)
+    await server.reparto_mis_pedidos({"direccion": "Avda Montero Ríos 12"}, ANA)
+    await server.reparto_mis_pedidos({"direccion": "Rúa Real 5"}, ANA)
+    for ahora, salida, programada in ((12, "08:30", True), (23 * 60, "08:30", True), (5 * 60 + 59, "08:30", True),
+                                      (6 * 60, "06:00", False), (17 * 60 + 5, "17:05", False)):
+        monkeypatch.setattr(server, "_rep_ahora_local", lambda a=ahora: (a, 6))
+        r = (await server.reparto_mi_ordenar({}, ANA))["ruta"]
+        assert (r["salida"], r["programada"]) == (salida, programada), ahora
+        assert all(p["eta"] >= salida for p in base.db["reparto_pedidos"].docs), ahora
+    # El orden a mano, igual.
+    monkeypatch.setattr(server, "_rep_ahora_local", lambda: (30, 6))
+    ids = [p["id"] for p in base.db["reparto_pedidos"].docs]
+    r = await server.reparto_mi_orden({"ids": ids}, ANA)
+    assert (r["ruta"]["salida"], r["ruta"]["programada"]) == ("08:30", True)
+
+
+@pytest.mark.asyncio(loop_scope="session")
+async def test_lo_que_quedo_sin_entregar_ayer_se_trae_a_hoy(base, monkeypatch):
+    monkeypatch.setattr(server, "get_org", _org_autonomo)
+    monkeypatch.setattr(server, "_dia_negocio", lambda: "2026-10-02")
+    a = await server.reparto_mis_pedidos({"direccion": "Rúa Real 5"}, YO)
+    b = await server.reparto_mis_pedidos({"direccion": "Avda Montero Ríos 12"}, YO)
+    c = await server.reparto_mis_pedidos({"direccion": "Avda Montero Ríos 12", "cliente": "Ya entregado"}, YO)
+    await server.reparto_estado(c["id"], {"estado": "entregado"}, YO)
+    viejo = await server.reparto_mis_pedidos({"direccion": "Rúa Real 5", "cliente": "Hace un mes"}, YO)
+    next(p for p in base.db["reparto_pedidos"].docs if p["id"] == viejo["id"])["fecha"] = "2026-09-01"
+    monkeypatch.setattr(server, "_dia_negocio", lambda: HOY)            # 03-10: un día después
+    r = await server.reparto_mi_ruta(YO)
+    assert r["previas"] == 2 and r["pedidos"] == []                     # ni la entregada ni la de hace un mes
+    assert (await server.reparto_traer_previas(YO)) == {"traidas": 2}
+    hoy = [p for p in base.db["reparto_pedidos"].docs if p["fecha"] == HOY]
+    assert {p["id"] for p in hoy} == {a["id"], b["id"]}
+    assert all(p["traida_de"] == "2026-10-02" and p.get("orden") is None and p["estado"] == "pendiente" for p in hoy)
+    assert (await server.reparto_mi_ruta(YO))["previas"] == 0
+    # Un conductor de empresa no se trae nada (sus paradas las reparte la oficina).
+    with pytest.raises(HTTPException) as e:
+        await server.reparto_traer_previas(ANA)
+    assert e.value.status_code == 403
+
+
+@pytest.mark.asyncio(loop_scope="session")
+async def test_mis_marcas_solo_con_entregas_de_verdad(base, monkeypatch):
+    monkeypatch.setattr(server, "get_org", _org_autonomo)
+    def entregadas(n, fecha, ejemplo=False):
+        for i in range(n):
+            base.db["reparto_pedidos"].docs.append({"id": f"{fecha}-{i}-{ejemplo}", "conductor_id": "a9", "fecha": fecha,
+                                                    "estado": "entregado", "ejemplo": ejemplo})
+    await server.reparto_mi_ruta(YO)                                     # da de alta su ficha de repartidor
+    entregadas(40, "2026-09-29"); entregadas(25, "2026-10-01"); entregadas(30, "2026-10-02", ejemplo=True)
+    base.db["reparto_pedidos"].docs.append({"id": "f", "conductor_id": "a9", "fecha": HOY, "estado": "fallido"})
+    entregadas(9, HOY)
+    m = await server.reparto_mis_marcas(YO)
+    # El 03-10-2026 es sábado: esta semana (desde el lunes 28-09) ha repartido el 29, el 1 y hoy.
+    assert (m["total"], m["hoy"], m["mejor"], m["mejor_fecha"], m["dias"], m["semana"], m["record_hoy"]) == \
+        (74, 9, 40, "2026-09-29", 3, 3, False)
+    entregadas(32, HOY)                                                  # 41 hoy: récord de verdad
+    m = await server.reparto_mis_marcas(YO)
+    assert m["record_hoy"] is True and m["hoy"] == 41
+
+
+@pytest.mark.asyncio(loop_scope="session")
+async def test_mis_direcciones_propone_las_suyas_con_su_punto(base, monkeypatch):
+    monkeypatch.setattr(server, "get_org", _org_autonomo)
+    await server.reparto_mi_ruta(YO)
+    docs = base.db["reparto_pedidos"].docs
+    docs += [
+        {"id": "x1", "conductor_id": "a9", "fecha": "2026-10-01", "direccion": "Rúa Real 5, A Coruña", "lat": 43.37, "lng": -8.39,
+         "cliente": "Bar Pepe", "telefono": "600111222", "estado": "entregado"},
+        {"id": "x2", "conductor_id": "a9", "fecha": "2026-10-02", "direccion": "rua real 5 a coruña", "lat": 43.37, "lng": -8.39,
+         "cliente": "Bar Pepe", "telefono": "600111222", "estado": "entregado"},
+        {"id": "x3", "conductor_id": "a9", "fecha": "2026-10-02", "direccion": "Rúa Real 50", "lat": None, "lng": None},  # sin situar
+        {"id": "x4", "conductor_id": "a9", "fecha": "2026-10-02", "direccion": "Rúa Real 7", "lat": 43.3, "lng": -8.3, "ejemplo": True},
+        {"id": "x5", "conductor_id": "otro", "fecha": "2026-10-02", "direccion": "Rúa Real 9", "lat": 43.3, "lng": -8.3},
+        {"id": "x6", "conductor_id": "a9", "fecha": "2025-01-02", "direccion": "Rúa Real 11", "lat": 43.3, "lng": -8.3},  # muy vieja
+    ]
+    r = (await server.reparto_mis_direcciones("real 5", YO))["direcciones"]
+    assert len(r) == 1 and r[0]["cliente"] == "Bar Pepe" and r[0]["veces"] == 2 and r[0]["lat"] == 43.37
+    assert {x["direccion"] for x in (await server.reparto_mis_direcciones("Real", YO))["direcciones"]} <= {
+        "Rúa Real 5, A Coruña", "rua real 5 a coruña"}
+    assert (await server.reparto_mis_direcciones("r", YO))["direcciones"] == []
