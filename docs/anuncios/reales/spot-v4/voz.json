@@ -1,0 +1,367 @@
+[
+ {
+  "n": 1,
+  "leido": "¿Todavía ordenas la ruta a mano cada mañana?",
+  "visto": "¿Todavía ordenas la ruta a mano cada mañana?",
+  "fichero": "voz-1.mp3",
+  "dur": 3.408,
+  "humana": false,
+  "palabras": [
+   {
+    "p": "Todavía",
+    "ini": 0.1,
+    "fin": 0.617
+   },
+   {
+    "p": "ordenas",
+    "ini": 0.629,
+    "fin": 1.025
+   },
+   {
+    "p": "la",
+    "ini": 1.038,
+    "fin": 1.158
+   },
+   {
+    "p": "ruta",
+    "ini": 1.17,
+    "fin": 1.458
+   },
+   {
+    "p": "a",
+    "ini": 1.47,
+    "fin": 1.518
+   },
+   {
+    "p": "mano",
+    "ini": 1.53,
+    "fin": 1.783
+   },
+   {
+    "p": "cada",
+    "ini": 1.795,
+    "fin": 1.999
+   },
+   {
+    "p": "mañana",
+    "ini": 2.011,
+    "fin": 2.552
+   }
+  ]
+ },
+ {
+  "n": 2,
+  "leido": "Hazle una foto a la etiqueta… y la dirección entra sola.",
+  "visto": "Hazle una foto a la etiqueta… y la dirección entra sola.",
+  "fichero": "voz-2.mp3",
+  "dur": 4.152,
+  "humana": false,
+  "palabras": [
+   {
+    "p": "Hazle",
+    "ini": 0.1,
+    "fin": 0.581
+   },
+   {
+    "p": "una",
+    "ini": 0.593,
+    "fin": 0.785
+   },
+   {
+    "p": "foto",
+    "ini": 0.797,
+    "fin": 1.086
+   },
+   {
+    "p": "a",
+    "ini": 1.098,
+    "fin": 1.134
+   },
+   {
+    "p": "la",
+    "ini": 1.146,
+    "fin": 1.266
+   },
+   {
+    "p": "etiqueta",
+    "ini": 1.278,
+    "fin": 1.819
+   },
+   {
+    "p": "y",
+    "ini": 1.987,
+    "fin": 2.011
+   },
+   {
+    "p": "la",
+    "ini": 2.023,
+    "fin": 2.119
+   },
+   {
+    "p": "dirección",
+    "ini": 2.131,
+    "fin": 2.612
+   },
+   {
+    "p": "entra",
+    "ini": 2.624,
+    "fin": 2.864
+   },
+   {
+    "p": "sola",
+    "ini": 2.876,
+    "fin": 3.309
+   }
+  ]
+ },
+ {
+  "n": 3,
+  "leido": "Pulsas ordenar, y la ruta se pone en orden, con la hora de cada parada.",
+  "visto": "Pulsas ordenar, y la ruta se pone en orden, con la hora de cada parada.",
+  "fichero": "voz-3.mp3",
+  "dur": 4.848,
+  "humana": false,
+  "palabras": [
+   {
+    "p": "Pulsas",
+    "ini": 0.1,
+    "fin": 0.533
+   },
+   {
+    "p": "ordenar",
+    "ini": 0.545,
+    "fin": 1.001
+   },
+   {
+    "p": "y",
+    "ini": 1.182,
+    "fin": 1.206
+   },
+   {
+    "p": "la",
+    "ini": 1.218,
+    "fin": 1.326
+   },
+   {
+    "p": "ruta",
+    "ini": 1.338,
+    "fin": 1.59
+   },
+   {
+    "p": "se",
+    "ini": 1.602,
+    "fin": 1.735
+   },
+   {
+    "p": "pone",
+    "ini": 1.747,
+    "fin": 2.047
+   },
+   {
+    "p": "en",
+    "ini": 2.059,
+    "fin": 2.167
+   },
+   {
+    "p": "orden",
+    "ini": 2.179,
+    "fin": 2.552
+   },
+   {
+    "p": "con",
+    "ini": 2.672,
+    "fin": 2.828
+   },
+   {
+    "p": "la",
+    "ini": 2.84,
+    "fin": 2.973
+   },
+   {
+    "p": "hora",
+    "ini": 2.985,
+    "fin": 3.177
+   },
+   {
+    "p": "de",
+    "ini": 3.189,
+    "fin": 3.273
+   },
+   {
+    "p": "cada",
+    "ini": 3.285,
+    "fin": 3.501
+   },
+   {
+    "p": "parada",
+    "ini": 3.513,
+    "fin": 3.994
+   }
+  ]
+ },
+ {
+  "n": 4,
+  "leido": "Y te lleva con voz hasta cada puerta.",
+  "visto": "Y te lleva con voz hasta cada puerta.",
+  "fichero": "voz-4.mp3",
+  "dur": 2.832,
+  "humana": false,
+  "palabras": [
+   {
+    "p": "Y",
+    "ini": 0.1,
+    "fin": 0.22
+   },
+   {
+    "p": "te",
+    "ini": 0.232,
+    "fin": 0.352
+   },
+   {
+    "p": "lleva",
+    "ini": 0.364,
+    "fin": 0.617
+   },
+   {
+    "p": "con",
+    "ini": 0.629,
+    "fin": 0.785
+   },
+   {
+    "p": "voz",
+    "ini": 0.797,
+    "fin": 1.038
+   },
+   {
+    "p": "hasta",
+    "ini": 1.05,
+    "fin": 1.266
+   },
+   {
+    "p": "cada",
+    "ini": 1.278,
+    "fin": 1.482
+   },
+   {
+    "p": "puerta",
+    "ini": 1.494,
+    "fin": 1.999
+   }
+  ]
+ },
+ {
+  "n": 5,
+  "leido": "Gratis. Y sin tarjeta.",
+  "visto": "Gratis. Y sin tarjeta.",
+  "fichero": "voz-5.mp3",
+  "dur": 3.576,
+  "humana": false,
+  "palabras": [
+   {
+    "p": "Gratis",
+    "ini": 0.1,
+    "fin": 0.809
+   },
+   {
+    "p": "Y",
+    "ini": 1.709,
+    "fin": 1.865
+   },
+   {
+    "p": "sin",
+    "ini": 1.877,
+    "fin": 2.093
+   },
+   {
+    "p": "tarjeta",
+    "ini": 2.105,
+    "fin": 2.718
+   }
+  ]
+ },
+ {
+  "n": 6,
+  "leido": "Entra en flota de ese pe punto com, y crea tu cuenta en un minuto.",
+  "visto": "Entra en flotadsp.com y crea tu cuenta en un minuto.",
+  "fichero": "voz-6.mp3",
+  "dur": 4.536,
+  "humana": false,
+  "palabras": [
+   {
+    "p": "Entra",
+    "ini": 0.1,
+    "fin": 0.497
+   },
+   {
+    "p": "en",
+    "ini": 0.509,
+    "fin": 0.629
+   },
+   {
+    "p": "flota",
+    "ini": 0.641,
+    "fin": 0.929
+   },
+   {
+    "p": "de",
+    "ini": 0.941,
+    "fin": 1.062
+   },
+   {
+    "p": "ese",
+    "ini": 1.074,
+    "fin": 1.266
+   },
+   {
+    "p": "pe",
+    "ini": 1.278,
+    "fin": 1.386
+   },
+   {
+    "p": "punto",
+    "ini": 1.398,
+    "fin": 1.711
+   },
+   {
+    "p": "com",
+    "ini": 1.723,
+    "fin": 2.011
+   },
+   {
+    "p": "y",
+    "ini": 2.203,
+    "fin": 2.251
+   },
+   {
+    "p": "crea",
+    "ini": 2.263,
+    "fin": 2.492
+   },
+   {
+    "p": "tu",
+    "ini": 2.504,
+    "fin": 2.612
+   },
+   {
+    "p": "cuenta",
+    "ini": 2.624,
+    "fin": 2.973
+   },
+   {
+    "p": "en",
+    "ini": 2.985,
+    "fin": 3.105
+   },
+   {
+    "p": "un",
+    "ini": 3.117,
+    "fin": 3.189
+   },
+   {
+    "p": "minuto",
+    "ini": 3.201,
+    "fin": 3.694
+   }
+  ]
+ }
+]

@@ -1835,3 +1835,19 @@ socio: así no caducaban nunca), `vehicles.updated_at`, `geo_rescate.en`, `dnr_i
   `backend/tests/test_reparar_fechas_copia.py`.
 - El embudo real (30 días): 32 altas → 13 abren otro día → 9 meten parada → 9 navegan → 6 entregan → **0 día
   real**. La mayor caída, 19 cuentas, es alta → volver otro día: la mañana siguiente sigue siendo la batalla.
+
+## 24-10-2026: spot v4 y Spotify v2 (rehechos: «parece una app del 2001»)
+
+Dani: el spot v3 (móvil pequeño con pantallazos) y el audio de Spotify sin decir dónde entrar no captan a nadie.
+Rehecho como funcionan los anuncios de apps en TikTok/Reels (gancho en 2 s, la app a pantalla completa haciendo
+el trabajo, cortes rápidos con el toque marcado, subtítulos palabra a palabra, oferta y cierre con dónde entrar y
+qué pulsar). Detalle y cómo subirlo: `docs/anuncios/reales/spot-v4/LEEME.md` y `docs/anuncios/spotify/v2/LEEME.md`.
+- Grabación: `frontend/e2e/spot-v4.spec.js` (solo con --update-snapshots) con el screencast de Chrome. **Gotcha:** el
+  screencast da fotogramas a tamaño CSS (393 px) aunque el contexto tenga deviceScaleFactor; con la bandera
+  `--force-device-scale-factor` los da a 1080 px. La foto de la etiqueta: `setInputFiles` en el input oculto del
+  diálogo «Añadir paradas» (con la jornada empezada, añadir va plegado en «+»).
+- Montaje: `scripts/montar-spot-v4.mjs` (+ `scripts/spot-v4/{etiqueta,capas}.mjs`, `voz.py` con los tiempos de
+  cada palabra, `sonido.py` con música y efectos propios). Subtítulos en ASS con BorderStyle 4 (una caja por
+  frase; el 3 hacía una caja por trozo). Salida en `docs/anuncios/reales/salida/spot-v4-*` (con y sin voz).
+- Spotify v2: la web dicha dos veces y deletreada + «toca este anuncio»; clic directo al alta con utm_source=spotify.
+- Subirlos y el presupuesto, Dani. La voz sigue siendo neuronal; con su voz grabada (s1..s6.mp3) se rehace en 2 min.

@@ -1,0 +1,327 @@
+{
+ "texto": "Repartidor, esto es para ti: FDS. Una app gratis que te ordena la ruta sola. Le haces una foto a la etiqueta, y te lleva con voz hasta cada puerta. Sin tarjeta, y sin límite hasta fin de año. Entra en flota de ese pe punto com. Flota, de, ese, pe, punto com. O toca este anuncio, y crea tu cuenta en un minuto.",
+ "dur": 24.888,
+ "palabras_n": 64,
+ "palabras": [
+  {
+   "p": "Repartidor",
+   "ini": 0.1,
+   "fin": 0.872
+  },
+  {
+   "p": "esto",
+   "ini": 1.031,
+   "fin": 1.289
+  },
+  {
+   "p": "es",
+   "ini": 1.301,
+   "fin": 1.411
+  },
+  {
+   "p": "para",
+   "ini": 1.424,
+   "fin": 1.632
+  },
+  {
+   "p": "ti",
+   "ini": 1.644,
+   "fin": 1.84
+  },
+  {
+   "p": "FDS",
+   "ini": 2.0,
+   "fin": 2.747
+  },
+  {
+   "p": "Una",
+   "ini": 3.616,
+   "fin": 3.947
+  },
+  {
+   "p": "app",
+   "ini": 3.959,
+   "fin": 4.082
+  },
+  {
+   "p": "gratis",
+   "ini": 4.094,
+   "fin": 4.535
+  },
+  {
+   "p": "que",
+   "ini": 4.548,
+   "fin": 4.658
+  },
+  {
+   "p": "te",
+   "ini": 4.67,
+   "fin": 4.768
+  },
+  {
+   "p": "ordena",
+   "ini": 4.78,
+   "fin": 5.111
+  },
+  {
+   "p": "la",
+   "ini": 5.124,
+   "fin": 5.222
+  },
+  {
+   "p": "ruta",
+   "ini": 5.234,
+   "fin": 5.516
+  },
+  {
+   "p": "sola",
+   "ini": 5.528,
+   "fin": 5.969
+  },
+  {
+   "p": "Le",
+   "ini": 6.827,
+   "fin": 7.072
+  },
+  {
+   "p": "haces",
+   "ini": 7.084,
+   "fin": 7.342
+  },
+  {
+   "p": "una",
+   "ini": 7.354,
+   "fin": 7.513
+  },
+  {
+   "p": "foto",
+   "ini": 7.526,
+   "fin": 7.795
+  },
+  {
+   "p": "a",
+   "ini": 7.807,
+   "fin": 7.844
+  },
+  {
+   "p": "la",
+   "ini": 7.856,
+   "fin": 7.967
+  },
+  {
+   "p": "etiqueta",
+   "ini": 7.979,
+   "fin": 8.543
+  },
+  {
+   "p": "y",
+   "ini": 8.69,
+   "fin": 8.726
+  },
+  {
+   "p": "te",
+   "ini": 8.739,
+   "fin": 8.837
+  },
+  {
+   "p": "lleva",
+   "ini": 8.849,
+   "fin": 9.094
+  },
+  {
+   "p": "con",
+   "ini": 9.106,
+   "fin": 9.278
+  },
+  {
+   "p": "voz",
+   "ini": 9.29,
+   "fin": 9.535
+  },
+  {
+   "p": "hasta",
+   "ini": 9.548,
+   "fin": 9.768
+  },
+  {
+   "p": "cada",
+   "ini": 9.78,
+   "fin": 9.989
+  },
+  {
+   "p": "puerta",
+   "ini": 10.001,
+   "fin": 10.491
+  },
+  {
+   "p": "Sin",
+   "ini": 11.325,
+   "fin": 11.655
+  },
+  {
+   "p": "tarjeta",
+   "ini": 11.668,
+   "fin": 12.182
+  },
+  {
+   "p": "y",
+   "ini": 12.342,
+   "fin": 12.391
+  },
+  {
+   "p": "sin",
+   "ini": 12.403,
+   "fin": 12.562
+  },
+  {
+   "p": "límite",
+   "ini": 12.575,
+   "fin": 12.991
+  },
+  {
+   "p": "hasta",
+   "ini": 13.003,
+   "fin": 13.236
+  },
+  {
+   "p": "fin",
+   "ini": 13.249,
+   "fin": 13.469
+  },
+  {
+   "p": "de",
+   "ini": 13.481,
+   "fin": 13.592
+  },
+  {
+   "p": "año",
+   "ini": 13.604,
+   "fin": 13.959
+  },
+  {
+   "p": "Entra",
+   "ini": 14.829,
+   "fin": 15.234
+  },
+  {
+   "p": "en",
+   "ini": 15.246,
+   "fin": 15.356
+  },
+  {
+   "p": "flota",
+   "ini": 15.369,
+   "fin": 15.663
+  },
+  {
+   "p": "de",
+   "ini": 15.675,
+   "fin": 15.798
+  },
+  {
+   "p": "ese",
+   "ini": 15.81,
+   "fin": 16.006
+  },
+  {
+   "p": "pe",
+   "ini": 16.018,
+   "fin": 16.141
+  },
+  {
+   "p": "punto",
+   "ini": 16.153,
+   "fin": 16.447
+  },
+  {
+   "p": "com",
+   "ini": 16.459,
+   "fin": 16.815
+  },
+  {
+   "p": "Flota",
+   "ini": 17.685,
+   "fin": 18.248
+  },
+  {
+   "p": "de",
+   "ini": 18.408,
+   "fin": 18.616
+  },
+  {
+   "p": "ese",
+   "ini": 18.751,
+   "fin": 19.094
+  },
+  {
+   "p": "pe",
+   "ini": 19.204,
+   "fin": 19.437
+  },
+  {
+   "p": "punto",
+   "ini": 19.584,
+   "fin": 19.903
+  },
+  {
+   "p": "com",
+   "ini": 19.915,
+   "fin": 20.258
+  },
+  {
+   "p": "O",
+   "ini": 21.141,
+   "fin": 21.324
+  },
+  {
+   "p": "toca",
+   "ini": 21.337,
+   "fin": 21.619
+  },
+  {
+   "p": "este",
+   "ini": 21.631,
+   "fin": 21.864
+  },
+  {
+   "p": "anuncio",
+   "ini": 21.876,
+   "fin": 22.378
+  },
+  {
+   "p": "y",
+   "ini": 22.501,
+   "fin": 22.55
+  },
+  {
+   "p": "crea",
+   "ini": 22.562,
+   "fin": 22.795
+  },
+  {
+   "p": "tu",
+   "ini": 22.807,
+   "fin": 22.918
+  },
+  {
+   "p": "cuenta",
+   "ini": 22.93,
+   "fin": 23.285
+  },
+  {
+   "p": "en",
+   "ini": 23.298,
+   "fin": 23.42
+  },
+  {
+   "p": "un",
+   "ini": 23.432,
+   "fin": 23.506
+  },
+  {
+   "p": "minuto",
+   "ini": 23.518,
+   "fin": 24.021
+  }
+ ]
+}
