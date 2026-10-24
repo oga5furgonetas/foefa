@@ -1933,7 +1933,8 @@ aún un día de reparto real. Se dan de alta de tarde/noche; la prueba de verdad
   repartidores ya estaba publicado allí ese mismo día.
 - **Telegram**: sin grupos útiles en España (estafas cripto o grupos donde solo escribe el dueño). Nada publicado.
 - **Facebook**: el perfil de Daniel tiene acciones restringidas hasta que confirme su identidad en el móvil; sin
-  eso no se puede publicar en los grupos. La página FDs ya tiene el reel de Puck.
+  eso no se puede publicar en los grupos. (Lo que parecía un reel de Puck en la página era el anuncio; el
+  reel orgánico se publicó esa misma noche, ver abajo.)
 Detalle y trucos de cada editor en la memoria `redes-sociales-fds`.
 
 ## 24-10-2026 (noche): que vuelvan por la mañana — entrar desde el correo y el correo a tiempo
