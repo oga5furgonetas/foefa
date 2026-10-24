@@ -1925,3 +1925,13 @@ Dani: «haz más visible los días que vamos por debajo… un apartado que sea p
 35 altas reales de autónomo en 10 días (14 hoy, casi todas del anuncio de Puck en Facebook móvil). 27 solo
 miraron el día del alta, 5 volvieron otro día, 2 metieron paradas y 1 entregó algo (2 paradas). Nadie ha hecho
 aún un día de reparto real. Se dan de alta de tarde/noche; la prueba de verdad es la mañana siguiente en la nave.
+
+### Redes (24-10, tarde) — Dani: «gestiona todas mis cuentas profesionales»
+- **X** (@FlotaDSP, Premium): bio, ubicación y web puestas; post fijado con el spot de Puck
+  (`utm_source=x&utm_content=spot5`) y post para empresas (`/planes`, `utm_content=empresas`).
+- **LinkedIn** (página FlotaDSP): post para empresas (`utm_source=linkedin&utm_content=empresas`). El spot de
+  repartidores ya estaba publicado allí ese mismo día.
+- **Telegram**: sin grupos útiles en España (estafas cripto o grupos donde solo escribe el dueño). Nada publicado.
+- **Facebook**: el perfil de Daniel tiene acciones restringidas hasta que confirme su identidad en el móvil; sin
+  eso no se puede publicar en los grupos. La página FDs ya tiene el reel de Puck.
+Detalle y trucos de cada editor en la memoria `redes-sociales-fds`.
