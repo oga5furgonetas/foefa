@@ -1898,3 +1898,30 @@ registros a 10 € al día. Detalle y textos: `docs/anuncios/CAMPANA-24-10-SPOT5
   apagado). Spotify: campaña lista pero el formulario de Spotify no deja enviar desde el Chrome con la extensión
   de Claude («errores de validación» sin detalle); Dani la envía desde el móvil. Detalle en
   `docs/anuncios/spotify/v3/LEEME.md`.
+
+## 24-10-2026 (tarde): «Trabajar más» en el portal del conductor
+
+Dani: «haz más visible los días que vamos por debajo… un apartado que sea pedir trabajar más… "hay 3 vacantes,
+¿la quieres? solicítala"; y si la aprobamos, que se queden como extra y tengan constancia de que son extra».
+- **Servidor** (`server.py`, bloque «TRABAJAR MÁS»): `GET /api/trabajar-mas` da al conductor las vacantes de los
+  próximos 14 días (días bajo la máxima del cuadrante, con `_maximas_y_ruta`, y refuerzos de la oficina) SOLO
+  si ese día libra (N/T, L) y la ley y su nota se lo permiten (`_extra_impedimentos`), más sus días extra
+  aprobados de los últimos 60 días con quién/cuándo se confirmó y si el cuadrante lo sigue diciendo
+  (`en_cuadrante`). `POST /api/trabajar-mas/{fecha}/solicitar` se apunta al refuerzo del día o abre uno
+  automático (`auto: True`, plazas = las que faltan, sin avisar a nadie) y sigue por `apuntarme_refuerzo`.
+  Si la oficina pide refuerzo ese día, el automático pasa a ser suyo y entonces sí avisa (a quien no lo pidió).
+  Al aprobar un extra, el aviso al móvil dice «✅ Día extra confirmado» y la celda queda EXTRA con candado.
+- **Portal**: tarjeta verde «¿Quieres trabajar más? · N vacantes» en el inicio cuando hay vacantes; sin ellas,
+  casilla «Trabajar más». Pantalla `TrabajarMas.jsx` (sustituye a `DiasExtra.jsx`): solicitar con nota,
+  retirar, y «Tus días extra» con insignia EXTRA y «Al final no puedo» (hasta el día antes).
+- **Panel** (Turnos → Refuerzos): el automático sale como «Lo abrió un conductor al solicitar una vacante» con
+  el botón «Avisar a todos los que libran».
+- Tests: 6 nuevos en `test_refuerzos.py` (16 en total) y 2 de humo nuevos. Suite: 1360 en verde; humo 206.
+- **Producción hoy:** OGA5 tiene máximas hasta el 02-11 y TODOS los días llegan (sobran 2-6), así que hoy no
+  sale ninguna vacante, que es lo correcto. DGA1 no tiene máximas. Saldrá sola cuando un día baje (bajas,
+  suspensiones) o la oficina pida refuerzo.
+
+### Uso de las altas nuevas (24-10, `tools/metricas/uso_altas.py`)
+35 altas reales de autónomo en 10 días (14 hoy, casi todas del anuncio de Puck en Facebook móvil). 27 solo
+miraron el día del alta, 5 volvieron otro día, 2 metieron paradas y 1 entregó algo (2 paradas). Nadie ha hecho
+aún un día de reparto real. Se dan de alta de tarde/noche; la prueba de verdad es la mañana siguiente en la nave.

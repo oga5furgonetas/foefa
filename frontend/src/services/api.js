@@ -192,9 +192,10 @@ export const marcarRespuestasVistas = (body) => api.post('/shift-requests/vistas
 // cambiar una petición que espera respuesta. La oficina recibe un aviso.
 export const cancelarMisPeticiones = (ids) => api.post('/shift-requests/mias/cancelar', { ids })
 export const cambiarMiPeticion = (body) => api.post('/shift-requests/mias/cambiar', body)
-// Días extra (18-10-2026): los refuerzos que pide la oficina para días que el conductor libra.
-export const getMisRefuerzos = () => api.get('/refuerzos/mios')
-export const apuntarmeRefuerzo = (id, nota) => api.post(`/refuerzos/${id}/apuntarme`, { nota })
+// Trabajar más (24-10-2026): las vacantes de los días que no llegan a la máxima (y los refuerzos que pide la
+// oficina) en los días que el conductor libra, y sus días extra ya confirmados.
+export const getTrabajarMas = () => api.get('/trabajar-mas')
+export const solicitarTrabajarMas = (fecha, nota) => api.post(`/trabajar-mas/${fecha}/solicitar`, { nota })
 export const desapuntarmeRefuerzo = (id) => api.post(`/refuerzos/${id}/desapuntarme`)
 // El conductor se cambia su propia contraseña. Antes tenía que decirle a la
 // oficina cuál quería, o sea contársela a otra persona.

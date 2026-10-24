@@ -260,7 +260,112 @@ async def test_los_dias_que_no_llegan_a_la_maxima(nave):
         (MAN, 3, 1, 2, 2, None)]
     rid = (await _crear(plazas=2))["refuerzo"]["id"]
     f = await server.refuerzos_faltas("OGA5", 14, OFI)
-    assert f["faltas"][0]["refuerzo"] == {"id": rid, "plazas": 2, "estado": "abierto", "aprobados": 0}
+    assert f["faltas"][0]["refuerzo"] == {"id": rid, "plazas": 2, "estado": "abierto", "auto": False, "aprobados": 0}
     with pytest.raises(HTTPException) as e:
         await server.refuerzos_faltas("Todos", 14, OFI)
     assert e.value.status_code == 400
+
+
+# ─── Trabajar más (24-10-2026): las vacantes de los días bajo la máxima, a la vista de quien libra ───────────────
+
+def _maximas(nave, **por_dia):
+    nave.t["route_demand"] = Col([{"center": "OGA5", "date": f, "maximo": m} for f, m in por_dia.items()])
+
+
+@pytest.mark.asyncio(loop_scope="session")
+async def test_trabajar_mas_solo_a_quien_libra_y_puede(nave):
+    _maximas(nave, **{MAN: 3, "2026-10-20": 1})
+    ana = await server.trabajar_mas(conductor("d1"))
+    # El lunes faltan 2 (máxima 3, en ruta Pepe); el martes llega. A Ana, que libra el lunes, le salen las 2.
+    assert [(v["date"], v["quedan"], v["mi_estado"], v["refuerzo_id"]) for v in ana["vacantes"]] == [(MAN, 2, None, None)]
+    assert (ana["plazas"], ana["dias"], ana["extras"]) == (2, 1, [])
+    # Ni a quien trabaja, está de vacaciones, de baja, con un día concedido, fuera del cuadrante, de baja en la
+    # empresa o en otra nave.
+    for did in ("d3", "d4", "d5", "d6", "d7", "d8", "d9"):
+        assert (await server.trabajar_mas(conductor(did)))["vacantes"] == [], did
+    # Luis libra, pero viene de 6 días seguidos: el lunes sería el 7.º. No se le enseña algo que no se le podría aprobar.
+    _trabaja(nave, "d2", ["2026-10-13", "2026-10-14", "2026-10-15", "2026-10-16", "2026-10-17", "2026-10-18"])
+    assert (await server.trabajar_mas(conductor("d2")))["vacantes"] == []
+    # Sin máximas puestas no hay vacantes que enseñar.
+    nave.t["route_demand"] = Col([])
+    assert (await server.trabajar_mas(conductor("d1")))["vacantes"] == []
+
+
+@pytest.mark.asyncio(loop_scope="session")
+async def test_solicitar_abre_un_refuerzo_sin_avisar_a_nadie(nave):
+    _maximas(nave, **{MAN: 3})
+    r = await server.solicitar_trabajar_mas(MAN, {"nota": "Puedo de mañana"}, conductor("d1"))
+    ref = nave.t.refuerzos.docs[0]
+    assert (ref["auto"], ref["plazas"], ref["avisados"], ref["estado"]) == (True, 2, 0, "abierto")
+    assert nave.conductores == []                                  # a nadie más le llega nada
+    q = r["peticion"]
+    assert (q["type"], q["status"], q["refuerzo_id"], q["note"]) == ("extra", "pendiente", ref["id"], "Puedo de mañana")
+    assert nave.oficina[-1].titulo == "🙋 Ana quiere trabajar el lunes 19/10"
+    # Luis solicita el mismo día: va al MISMO refuerzo, no abre otro.
+    await server.solicitar_trabajar_mas(MAN, {}, conductor("d2"))
+    assert len(nave.t.refuerzos.docs) == 1 and len(nave.t.shift_requests.docs) == 2
+    ana = await server.trabajar_mas(conductor("d1"))
+    assert [(v["mi_estado"], v["refuerzo_id"]) for v in ana["vacantes"]] == [("pendiente", ref["id"])]
+    assert (ana["plazas"], ana["dias"]) == (0, 0)                  # lo ya solicitado no cuenta como vacante nueva
+    # Nada se aprueba solo: el cuadrante sigue igual.
+    assert next(s for s in nave.t.shifts.docs if s["driver_id"] == "d1" and s["date"] == MAN)["cod"] == "N/T"
+
+
+@pytest.mark.asyncio(loop_scope="session")
+async def test_lo_que_no_se_puede_solicitar(nave):
+    _maximas(nave, **{MAN: 3, "2026-10-20": 1})
+    for did, fecha, codigo in (
+        ("d3", MAN, 409),                 # ese día trabaja
+        ("d4", MAN, 409),                 # de vacaciones
+        ("d1", "2026-10-20", 409),        # el martes está completo
+        ("d1", HOY, 409),                 # hoy ya está en marcha
+        ("d1", "2026-11-30", 409),        # demasiado lejos
+        ("d1", "19-10-2026", 400),
+    ):
+        with pytest.raises(HTTPException) as e:
+            await server.solicitar_trabajar_mas(fecha, {}, conductor(did))
+        assert e.value.status_code == codigo, (did, fecha)
+    _trabaja(nave, "d2", ["2026-10-13", "2026-10-14", "2026-10-15", "2026-10-16", "2026-10-17", "2026-10-18"])
+    with pytest.raises(HTTPException) as e:
+        await server.solicitar_trabajar_mas(MAN, {}, conductor("d2"))
+    assert e.value.status_code == 409 and "7 días seguidos" in e.value.detail
+    assert nave.t.refuerzos.docs == []                             # ninguno de esos ha abierto nada
+    with pytest.raises(HTTPException) as e:
+        await server.trabajar_mas({"sub": "a1", "role": "admin"})
+    assert e.value.status_code == 403                              # es del portal del conductor
+
+
+@pytest.mark.asyncio(loop_scope="session")
+async def test_aprobada_queda_como_extra_y_con_constancia(nave):
+    _maximas(nave, **{MAN: 2})                                     # falta 1
+    await server.solicitar_trabajar_mas(MAN, {}, conductor("d1"))
+    await server.solicitar_trabajar_mas(MAN, {}, conductor("d2"))
+    ana, luis = nave.t.shift_requests.docs
+    await server.resolve_shift_request(ana["id"], {"action": "aprobar"}, OFI)
+    turno = next(s for s in nave.t.shifts.docs if s["driver_id"] == "d1" and s["date"] == MAN)
+    assert (turno["cod"], turno["type"], turno["fijada"]) == ("EXTRA", "extra", True)
+    aviso = next(a for a in nave.conductores if a.ids == ["d1"])
+    assert aviso.titulo == "✅ Día extra confirmado: lunes 19/10" and "EXTRA" in aviso.cuerpo
+    assert nave.t.refuerzos.docs[0]["estado"] == "cubierto" and luis["status"] == "rechazado"
+    r = await server.trabajar_mas(conductor("d1"))
+    assert r["vacantes"] == []                                     # ya no es una vacante: es su día extra
+    [x] = r["extras"]
+    assert (x["date"], x["confirmado_por"], x["en_cuadrante"], x["puede_soltar"]) == (MAN, "Oficina", True, True)
+    assert (await server.trabajar_mas(conductor("d2")))["vacantes"] == []   # cubierto: a Luis ya no le sale
+    # Si la oficina cambia después la celda a mano, la constancia no miente.
+    turno.update(cod="1", type="trabaja")
+    assert (await server.trabajar_mas(conductor("d1")))["extras"][0]["en_cuadrante"] is False
+
+
+@pytest.mark.asyncio(loop_scope="session")
+async def test_la_oficina_hace_suyo_el_automatico_y_avisa(nave):
+    _maximas(nave, **{MAN: 3})
+    await server.solicitar_trabajar_mas(MAN, {}, conductor("d1"))
+    r = await _crear(plazas=2, nota="Ruta de tarde")
+    ref = nave.t.refuerzos.docs[0]
+    assert len(nave.t.refuerzos.docs) == 1 and (ref["auto"], ref["nota"], ref["creado_por"]) == (False, "Ruta de tarde", "Oficina")
+    # Se avisa a Luis, que libra; a Ana no, que ya lo había solicitado.
+    assert r["avisados"] == 1 and nave.conductores[-1].ids == ["d2"]
+    with pytest.raises(HTTPException) as e:                        # y ahora sí es de la oficina: uno por día
+        await _crear()
+    assert e.value.status_code == 409

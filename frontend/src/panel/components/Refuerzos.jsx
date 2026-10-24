@@ -8,7 +8,10 @@ import { lista } from '../../lib/lista'
    postulen, sin forzar a nadie… cómo nos llegaría y cómo lo aprobaríamos». La oficina publica el día y cuántos
    hacen falta; el servidor avisa SOLO a quien ese día libra según el cuadrante (N/T, L) y en su portal le sale
    «Días extra». Quien se apunta llega aquí (y a Peticiones) y se aprueba como cualquier día: entra en el
-   cuadrante como EXTRA con candado. Al cubrirse se cierra solo y a los demás se les dan las gracias. */
+   cuadrante como EXTRA con candado. Al cubrirse se cierra solo y a los demás se les dan las gracias.
+   Desde el 24-10-2026 los conductores ven solos las vacantes de los días que no llegan a la máxima («Trabajar
+   más»): quien solicita una abre un refuerzo AUTOMÁTICO sin avisar a nadie más. Aquí se ve como tal y, si se
+   quiere, se avisa con un clic a todos los que libran ese día (el refuerzo pasa a ser de la oficina). */
 
 const ESTADO = {
   abierto: { txt: 'Abierto', cls: 'bg-sky-500/15 text-sky-300' },
@@ -62,6 +65,11 @@ export default function Refuerzos({ center, puedeAprobar, onCambio }) {
       return false
     } finally { setOcupado('') }
   }
+
+  // Un refuerzo automático (lo abrió un conductor al solicitar una vacante) se convierte en uno de la oficina y se
+  // avisa a quien libra ese día y aún no lo ha solicitado.
+  const avisarTodos = (date, plazas) => hacer(`av-${date}`, () => crearRefuerzo({ center, date, plazas, nota: '' }),
+    ({ data }) => `Avisadas ${data.avisados} ${data.avisados === 1 ? 'persona que libra' : 'personas que libran'} ese día.`)
 
   const publicar = () => hacer('crear', () => crearRefuerzo({ center, ...nuevo, plazas: Number(nuevo.plazas) }),
     ({ data }) => `Publicado. Se ha avisado a ${data.avisados} ${data.avisados === 1 ? 'persona que libra' : 'personas que libran'} ese día.`)
@@ -127,7 +135,9 @@ export default function Refuerzos({ center, puedeAprobar, onCambio }) {
                   </span>
                   <span className="ml-auto">
                     {f.refuerzo ? (
-                      <span className="text-[12px] text-sky-300">Pedido: {f.refuerzo.aprobados}/{f.refuerzo.plazas} aprobados</span>
+                      <span className="text-[12px] text-sky-300">
+                        {f.refuerzo.auto ? 'Solicitado por conductores' : 'Pedido'}: {f.refuerzo.aprobados}/{f.refuerzo.plazas} aprobados
+                      </span>
                     ) : f.pueden ? (
                       <button onClick={() => lanzar([f])} disabled={!!ocupado}
                         className="flex items-center gap-1 rounded-lg bg-brand-500/15 px-2.5 py-1.5 text-xs font-semibold text-brand-300 hover:bg-brand-500/25 disabled:opacity-50">
@@ -198,8 +208,16 @@ export default function Refuerzos({ center, puedeAprobar, onCambio }) {
               </span>
             </div>
             <p className="mt-1 text-[12.5px] text-dark-400">
-              {r.nota ? <>«{r.nota}» · </> : null}avisadas {r.avisados} personas al publicarlo · hoy libran {r.libran_ahora}
+              {r.nota ? <>«{r.nota}» · </> : null}
+              {r.auto ? 'Lo abrió un conductor al solicitar una vacante (sin avisar a nadie más)' : `avisadas ${r.avisados} personas al publicarlo`}
+              {' '}· hoy libran {r.libran_ahora}
             </p>
+            {puedeAprobar && r.auto && r.estado === 'abierto' && (
+              <button onClick={() => avisarTodos(r.date, r.plazas)} disabled={!!ocupado}
+                className="mt-2 flex items-center gap-1.5 rounded-lg bg-brand-500/15 px-2.5 py-1.5 text-xs font-semibold text-brand-300 hover:bg-brand-500/25 disabled:opacity-50">
+                {ocupado === `av-${r.date}` ? <Loader2 size={13} className="animate-spin" /> : <Megaphone size={13} />} Avisar a todos los que libran
+              </button>
+            )}
             {puedeAprobar && r.estado !== 'anulado' && (
               <div className="mt-2 flex flex-wrap items-center gap-2 text-[12.5px]">
                 <span className="text-dark-400">Plazas:</span>

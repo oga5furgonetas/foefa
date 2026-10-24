@@ -1025,8 +1025,8 @@ test.describe('Portal del conductor · tus peticiones', () => {
 })
 
 /* REFUERZOS (18-10-2026): la oficina pide gente para un día y se apunta quien libra. Lo que se prueba es la pantalla:
-   publicar (y el aviso de a cuántos se ha avisado), aprobar a quien se apunta, y en el portal la casilla «Días extra»
-   con «Me apunto». Quién lo ve y qué pasa en el cuadrante lo prueba el servidor (backend/tests/test_refuerzos.py). */
+   publicar (y el aviso de a cuántos se ha avisado), aprobar a quien se apunta, y en el portal «Trabajar más»
+   con sus vacantes. Quién lo ve y qué pasa en el cuadrante lo prueba el servidor (backend/tests/test_refuerzos.py). */
 test.describe('Refuerzos', () => {
   const json = (body) => (route) => route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(body) })
   const iso = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
@@ -1105,8 +1105,9 @@ test.describe('Refuerzos', () => {
     expect(fallos, fallos.join(' | ')).toHaveLength(0)
   })
 
-  test('en el portal sale «Días extra» a quien libra y se apunta', async ({ page }) => {
-    const fallos = vigilar(page)
+  /* TRABAJAR MÁS (24-10-2026): las vacantes de los días bajo la máxima, a la vista en el inicio; se solicita una y
+     abajo queda la constancia de sus días EXTRA. Quién ve qué (solo quien libra y puede) lo prueba el servidor. */
+  const comoConductor = async (page) => {
     const exp = Math.floor(Date.now() / 1000) + 3600
     const b64 = (o) => Buffer.from(JSON.stringify(o)).toString('base64').replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '')
     const token = `${b64({ alg: 'HS256', typ: 'JWT' })}.${b64({ sub: 'd1', role: 'driver', name: 'ANA PÉREZ', exp })}.firma`
@@ -1115,39 +1116,54 @@ test.describe('Refuerzos', () => {
       localStorage.setItem('flota_driver', JSON.stringify({ id: 'd1', name: 'ANA PÉREZ', center: 'NORTE' }))
     }, token)
     await simularApi(page, 'vacio')
-    let mio = null
-    const apuntes = []
-    await page.route(/\/api\/refuerzos\/mios/, (route) => json({
-      refuerzos: [{ id: 'r1', date: dia(1), dia: 'lunes 19/10', center: 'NORTE', plazas: 2, quedan: 2, nota: 'Salida 9:00', mi_estado: mio }],
-      nuevos: mio ? 0 : 1 })(route))
-    await page.route(/\/api\/refuerzos\/r1\/apuntarme/, (route) => { apuntes.push(route.request().postDataJSON()); mio = 'pendiente'; return json({ ok: true })(route) })
+  }
+
+  test('en el portal salen las vacantes para trabajar más, se solicita y queda la constancia de EXTRA', async ({ page }) => {
+    const fallos = vigilar(page)
+    await comoConductor(page)
+    let pedido = false
+    const solicitudes = []
+    await page.route(/\/api\/trabajar-mas(\?|$)/, (route) => json({
+      plazas: pedido ? 1 : 3, dias: pedido ? 1 : 2,
+      vacantes: [
+        { date: dia(1), dia: 'lunes 19/10', quedan: 2, nota: '', refuerzo_id: pedido ? 'r1' : null, de_la_oficina: false, mi_estado: pedido ? 'pendiente' : null },
+        { date: dia(3), dia: 'miércoles 21/10', quedan: 1, nota: 'Ruta de tarde', refuerzo_id: 'r2', de_la_oficina: true, mi_estado: null }],
+      extras: [{ id: 'x1', date: dia(5), dia: 'viernes 23/10', center: 'NORTE', confirmado_por: 'Oficina', confirmado_en: '2026-10-18T19:40:00Z',
+        en_cuadrante: true, pasado: false, puede_soltar: true }] })(route))
+    await page.route(/\/api\/trabajar-mas\/[\d-]+\/solicitar/, (route) => {
+      solicitudes.push({ url: route.request().url(), body: route.request().postDataJSON() })
+      pedido = true
+      return json({ ok: true })(route)
+    })
     await page.goto('/conductor', { waitUntil: 'domcontentloaded' })
-    const casilla = page.getByRole('button', { name: /Días extra/ })
-    await expect(casilla).toBeVisible({ timeout: 15000 })
-    await expect(casilla).toContainText('Hacen falta el lunes 19/10')
-    await casilla.click()
-    const tarjeta = page.getByRole('region', { name: 'Refuerzo del lunes 19/10' })
-    await expect(tarjeta.getByText('NORTE · quedan 2 plazas')).toBeVisible()
-    await tarjeta.getByLabel('Nota para la oficina').fill('Puedo desde las 8')
-    await tarjeta.getByRole('button', { name: 'Me apunto' }).click()
-    await expect(tarjeta.getByText('Apuntado. La oficina te confirmará.')).toBeVisible()
-    expect(apuntes).toEqual([{ nota: 'Puedo desde las 8' }])
+    const tarjeta = page.getByTestId('trabajar-mas')
+    await expect(tarjeta).toBeVisible({ timeout: 15000 })
+    await expect(tarjeta).toContainText('3 vacantes')
+    await expect(tarjeta).toContainText('Nos falta gente en 2 días que libras.')
+    await tarjeta.click()
+    await expect(page.getByRole('heading', { name: 'Trabajar más' })).toBeVisible()
+    await expect(page.getByText('Hay 3 vacantes en 2 días que libras.')).toBeVisible()
+    const lunes = page.getByRole('region', { name: 'Vacante del lunes 19/10' })
+    await expect(lunes.getByText('2 vacantes')).toBeVisible()
+    await expect(page.getByRole('region', { name: 'Vacante del miércoles 21/10' }).getByText('Lo ha pedido la oficina')).toBeVisible()
+    await lunes.getByLabel('Nota para la oficina').fill('Puedo desde las 8')
+    await lunes.getByRole('button', { name: 'Solicitar este día' }).click()
+    await expect(lunes.getByText('Solicitado. La oficina te confirmará.')).toBeVisible()
+    expect(solicitudes).toEqual([{ url: expect.stringContaining(`/api/trabajar-mas/${dia(1)}/solicitar`), body: { nota: 'Puedo desde las 8' } }])
+    const extra = page.getByTestId('dias-extra')
+    await expect(extra.getByText('EXTRA', { exact: true })).toBeVisible()
+    await expect(extra).toContainText('Viernes 23/10')
+    await expect(extra).toContainText('Confirmado por Oficina')
+    await expect(extra.getByRole('button', { name: 'Al final no puedo' })).toBeVisible()
     expect(fallos, fallos.join(' | ')).toHaveLength(0)
   })
 
-  test('sin refuerzos para sus días libres, la casilla no sale', async ({ page }) => {
-    const exp = Math.floor(Date.now() / 1000) + 3600
-    const b64 = (o) => Buffer.from(JSON.stringify(o)).toString('base64').replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '')
-    const token = `${b64({ alg: 'HS256', typ: 'JWT' })}.${b64({ sub: 'd1', role: 'driver', name: 'ANA PÉREZ', exp })}.firma`
-    await page.addInitScript((tk) => {
-      localStorage.setItem('flota_driver_token', tk)
-      localStorage.setItem('flota_driver', JSON.stringify({ id: 'd1', name: 'ANA PÉREZ', center: 'NORTE' }))
-    }, token)
-    await simularApi(page, 'vacio')
-    await page.route(/\/api\/refuerzos\/mios/, (route) => json({ refuerzos: [], nuevos: 0 })(route))
+  test('sin vacantes en sus días libres, la tarjeta no sale', async ({ page }) => {
+    await comoConductor(page)
+    await page.route(/\/api\/trabajar-mas(\?|$)/, (route) => json({ vacantes: [], plazas: 0, dias: 0, extras: [] })(route))
     await page.goto('/conductor', { waitUntil: 'domcontentloaded' })
     await expect(page.getByText('Pedir días libres').first()).toBeVisible({ timeout: 15000 })
-    await expect(page.getByRole('button', { name: /Días extra/ })).toHaveCount(0)
+    await expect(page.getByTestId('trabajar-mas')).toHaveCount(0)
   })
 })
 

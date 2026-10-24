@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
-import { ClipboardCheck, CalendarDays, CalendarClock, CalendarPlus, LogOut, Lock, Ban, ShoppingBag, RefreshCw, Route, Gift, ArrowLeft, Store } from 'lucide-react'
-import { getPortalVehicles, getMyShifts, getMiFicha, guardarMiTelefono, tiendaEscaparate, repMiRuta, mercEstado, getMisRefuerzos, DRIVER_TOKEN_KEY } from '../../services/api'
+import { ClipboardCheck, CalendarDays, CalendarClock, CalendarPlus, LogOut, Lock, Ban, ShoppingBag, RefreshCw, Route, Gift, ArrowLeft, Store, ChevronRight } from 'lucide-react'
+import { getPortalVehicles, getMyShifts, getMiFicha, guardarMiTelefono, tiendaEscaparate, repMiRuta, mercEstado, getTrabajarMas, DRIVER_TOKEN_KEY } from '../../services/api'
 import { lista } from '../../lib/lista'
 import { medirSeccion } from '../../lib/analitica'
 import { vigilarVersion } from '../../lib/versionApp'
@@ -10,7 +10,7 @@ import InspectionDone from './InspectionDone'
 import MisTurnos from './MisTurnos'
 import MiClave from './MiClave'
 import PedirDias from './PedirDias'
-import DiasExtra from './DiasExtra'
+import TrabajarMas from './TrabajarMas'
 import Tienda from './Tienda'
 import MiRuta from './MiRuta'
 import DriverReferralWallet from './DriverReferralWallet'
@@ -154,7 +154,8 @@ export default function DriverPortal() {
   const [tieneTurnos, setTieneTurnos] = useState(false)
   // El mercadillo: la casilla sale solo si está abierto (lo decide el servidor), con los mensajes sin leer.
   const [merc, setMerc] = useState(null)
-  // Días extra (18-10-2026): refuerzos que pide la oficina para días que libra. La casilla sale solo si hay alguno.
+  // Trabajar más (24-10-2026): vacantes en días que libra (días bajo la máxima o refuerzos de la oficina) y sus
+  // días extra ya confirmados. Con vacantes sale una tarjeta grande arriba; sin ellas, una casilla.
   const [extra, setExtra] = useState(null)
   // Suspensión en curso o por venir (solo las fechas: el motivo es de la oficina).
   const [susp, setSusp] = useState(null)
@@ -269,7 +270,7 @@ export default function DriverPortal() {
       .then((r) => { setSinVer(lista(r.data?.sin_ver).length); setTieneTurnos(lista(r.data?.shifts).length > 0); setSusp(r.data?.suspension || null) })
       .catch(() => setSinVer(0))
     mercEstado().then((r) => setMerc(r.data?.visible ? r.data : null)).catch(() => setMerc(null))
-    getMisRefuerzos().then((r) => setExtra(r.data || null)).catch(() => setExtra(null))
+    getTrabajarMas().then((r) => setExtra(r.data || null)).catch(() => setExtra(null))
   }, [driver, vista])
 
   const login = (d) => {
@@ -300,7 +301,7 @@ export default function DriverPortal() {
 
   if (!driver) return <DriverLogin onLogin={login} />
   if (vista === 'dias') return <PedirDias onBack={() => setVista('inicio')} />
-  if (vista === 'extra') return <DiasExtra onBack={() => setVista('inicio')} />
+  if (vista === 'extra') return <TrabajarMas onBack={() => setVista('inicio')} />
   if (vista === 'turnos') return <MisTurnos onBack={() => setVista('inicio')} />
   if (vista === 'clave') return <MiClave onBack={() => setVista('inicio')} />
   if (vista === 'tienda') return <Tienda onBack={() => setVista('inicio')} />
@@ -328,6 +329,8 @@ export default function DriverPortal() {
       return !!JSON.parse(atob(t.split('.')[1].replace(/-/g, '+').replace(/_/g, '/'))).demo
     } catch { return false }
   })()
+  const extrasProximos = lista(extra?.extras).filter((x) => !x.pasado).length
+  const extraPendiente = lista(extra?.vacantes).some((v) => v.mi_estado === 'pendiente')
   // «Sábado, 17 de octubre»: solo la primera en mayúscula (con `capitalize` salía «17 De Octubre»).
   const hoy = (() => { const s = new Date().toLocaleDateString('es-ES', { weekday: 'long', day: 'numeric', month: 'long' }); return s.charAt(0).toUpperCase() + s.slice(1) })()
 
@@ -433,6 +436,28 @@ export default function DriverPortal() {
             </div>
           )}
 
+          {/* TRABAJAR MÁS, A LA VISTA (24-10-2026). Dani: «que le aparezca "hay 3 vacantes en varios días para
+              trabajar más, ¿la quieres? solicítala"». Solo sale con vacantes que puede pedir: días que libra y que
+              la ley le deja trabajar (lo decide el servidor). */}
+          {!esDemo && extra?.plazas > 0 && (
+            <button onClick={() => setVista('extra')} data-testid="trabajar-mas"
+              className="relative w-full rounded-2xl border border-emerald-400/50 bg-gradient-to-br from-emerald-500/[.16] to-emerald-500/[.05] p-4 text-left shadow-lg shadow-emerald-900/20 transition-all active:scale-[.99]">
+              <span className="absolute right-3 top-3 rounded-full bg-emerald-400/20 px-2 py-0.5 text-[10.5px] font-bold uppercase tracking-wider text-emerald-200">
+                {extra.plazas === 1 ? '1 vacante' : `${extra.plazas} vacantes`}
+              </span>
+              <CalendarPlus size={22} className="text-emerald-300" />
+              <span className="mt-2 block text-[16px] font-bold tracking-[-.01em] text-dark-50">¿Quieres trabajar más?</span>
+              <span className="mt-0.5 block pr-6 text-[12.5px] leading-snug text-dark-300">
+                {extra.dias === 1
+                  ? `Nos falta gente el ${lista(extra.vacantes).find((v) => !v.mi_estado)?.dia || 'día que libras'}, y ese día libras.`
+                  : `Nos falta gente en ${extra.dias} días que libras.`} Solicítalo y la oficina te confirma.
+              </span>
+              <span className="mt-2.5 inline-flex items-center gap-1 rounded-lg bg-emerald-500 px-3 py-1.5 text-[13px] font-bold text-dark-950">
+                Ver y solicitar <ChevronRight size={15} />
+              </span>
+            </button>
+          )}
+
           {!esDemo && <div className="mt-1 grid grid-cols-3 gap-2.5">
           <Casilla
             icono={CalendarDays}
@@ -450,13 +475,13 @@ export default function DriverPortal() {
             pronto={!tieneTurnos}
             onClick={() => setVista('turnos')}
           />
-          {!!extra?.refuerzos?.length && (
+          {/* Sin vacantes, «Trabajar más» sigue a un toque: ahí están lo que ha solicitado y sus días extra. */}
+          {extra && !(extra.plazas > 0) && (tieneTurnos || lista(extra.extras).length > 0) && (
             <Casilla
               icono={CalendarPlus}
-              titulo="Días extra"
-              detalle={extra.nuevos > 0 ? `Hacen falta el ${extra.refuerzos.find((x) => !x.mi_estado)?.dia || 'día que libras'}` : 'Lo que te has apuntado'}
-              aviso={extra.nuevos}
-              tono={extra.nuevos > 0 ? 'verde' : undefined}
+              titulo="Trabajar más"
+              detalle={extraPendiente ? 'Solicitado: esperando'
+                : extrasProximos ? `${extrasProximos} día${extrasProximos > 1 ? 's' : ''} extra` : 'Sin vacantes ahora'}
               onClick={() => setVista('extra')}
             />
           )}
