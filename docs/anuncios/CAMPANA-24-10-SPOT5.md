@@ -62,3 +62,13 @@ de paradas hasta el 31-12-2026).
 Arriba sale «La verificación obligatoria comienza el 2026-10-24: verifica y revela quién se beneficia de tus
 anuncios y quién los paga». Es la verificación del anunciante para Europa. Si Meta deja de servir anuncios en
 España por eso, la tiene que hacer Dani con sus datos.
+
+## 24-10-2026, noche: presupuesto a 20 € al día (Dani: «sube presupuesto»)
+- Campaña «FDS Registros — Gratis 15 paradas — ES (10-10-2026)»: de 10 a **20 € al día** (Meta: media 20 €,
+  máximo 35 € un día, 140 € a la semana). Publicado desde el editor de la campaña («Campaña actualizada»); los
+  3 borradores viejos de «Revisar y publicar (3)» siguen sin tocar. Últimos 30 días: 25 registros a 1,96 €.
+- El conjunto sigue acabando el **29-10**: ampliarlo es decisión de Dani (lo propuesto: mirar el lunes si los
+  arreglos de activación hacen que carguen paradas).
+- Ads Manager avisa: «Verificación obligatoria para mostrar anuncios: tus anuncios no se entregarán en
+  determinados lugares hasta que verifiques quién se beneficia y quién paga». Pide un **documento de identidad
+  oficial** (o los datos de la empresa): lo tiene que hacer Dani en Ads Manager → Verificar.

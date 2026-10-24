@@ -1957,3 +1957,14 @@ Redes (misma noche): reel de Puck publicado en la página FDs (Business Suite �
 Repartidores BCN, donde está la página). Facebook pide a Dani un **vídeo selfie desde la app del móvil**
 («actividad inusual»): hasta entonces ni el perfil ni la página pueden publicar o unirse a grupos. YouTube Short y
 TikTok de Puck ya estaban subidos ese día (el de TikTok sin descripción).
+
+### 24-10, noche (2): presupuesto, grupos y LinkedIn
+- Meta: campaña de registros a **20 €/día** (detalle en `docs/anuncios/CAMPANA-24-10-SPOT5.md`). Pendiente de Dani:
+  la verificación de anunciante de Meta (documento de identidad) y ampliar el fin del 29-10.
+- Facebook (Dani ya verificado): publicado el spot de Puck en REPARTIDOR DE PAQUETERIA (MX, 11,3 mil), Repartidores
+  de paquetería autónomos (MX, 11,9 mil) y Mensajeros Medellín (8,9 mil): los tres **pendientes de aprobación del
+  administrador**. No se publicó en Trabajo de repartidor España ni en Repartidores de Mercado Libre y Amazon
+  (prohíben la autopromoción), ni donde seguía pendiente la del 05-10/11-10 (Autónomos Transporte, Levante,
+  Paquetería Madrid, Mercado Envíos CDMX, ML CDMX y Edo. Mex.).
+- LinkedIn: resumen de la página FlotaDSP publicado (se ve en «Acerca de»); el aviso de invitaciones aún lo daba
+  por vacío (caché). Mandar las 50 invitaciones cuando se desbloquee (Dani dio luz verde).
