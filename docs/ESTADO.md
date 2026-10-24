@@ -1874,3 +1874,23 @@ sonidos; sé meticuloso». Detalle, niveles y cómo subirlo: `docs/anuncios/real
   Spotify (-16 LUFS ±1,5, pico real ≤ -2 dBTP, 0,5 s de silencio delante y detrás, MP3 44,1 kHz estéreo
   192 kbps, ≤ 30 s); se para si el MP3 no cumple. URL de clic con `utm_content=audio3`.
 - Subirlos y el presupuesto: Dani. Voz humana sigue siendo mejor (todas las sintéticas son neuronales).
+
+## 24-10-2026 (madrugada, 2): el spot de Puck en Meta (pendiente de verificar la tarjeta)
+
+Dani eligió el vídeo con la voz de Puck, solo ese anuncio, en todos los sitios de Meta, en la campaña de
+registros a 10 € al día. Detalle y textos: `docs/anuncios/CAMPANA-24-10-SPOT5.md`.
+- Publicado: «Promoción del sitio web continua» desactivada (59 € en 7 días, 426 visitas, 0 altas).
+- En borrador: el anuncio 52644270307539 de «FDS Registros» rehecho con los vídeos de Puck (9:16 y 4:5),
+  texto nuevo, enlace `/registro?…&utm_source=facebook&utm_content=spot5`, sin IA de Meta; y el presupuesto de
+  la campaña de 15 a 10 €/día. **Meta no deja publicar hasta que Dani verifique la tarjeta** (MasterCard
+  ····6176, «método de pago desactivado»). Después: «Publicar» dentro del anuncio y de la campaña, nunca
+  «Revisar y publicar (N)» (arrastra 3 borradores viejos, uno de tráfico a 35 €).
+- El conjunto acaba el 29-10. Ubicaciones Advantage+ ya estaban puestas. En campañas de clientes potenciales
+  no existe el botón «Registrarte»: va «Ver detalles».
+- Gotchas del editor (24-10): al crecer un cuadro de texto se mueve todo y el clic siguiente cae en otro
+  sitio (comprobar los valores con JS sobre los `textarea` del diálogo); la sección «Destino» sale con
+  `display:none` hasta que se sube el panel izquierdo hasta ella; los vídeos viejos se quitan desde la
+  bandeja de abajo del selector (al pasar el ratón sale una X); la extensión no deja leer por JS valores con
+  query string («BLOCKED: Cookie/query string data»): mirar la URL con zoom.
+- Spotify: el vídeo solo se sirve con la app en pantalla; el audio suena con el móvil bloqueado, que es como
+  escucha un repartidor en la furgoneta. Recomendado empezar por el audio v3.
