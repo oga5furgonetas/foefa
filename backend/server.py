@@ -7766,16 +7766,44 @@ async def crear_pase_movil(user: dict = Depends(get_current_user)):
     return {"pase": pase, "minutos": _PASE_MIN}
 
 
+# ENTRAR DESDE EL CORREO SIN CONTRASEÑA (24-10-2026). Medido: de 29 clics en los correos del ciclo que llevaban
+# a /ruta, solo 7 entraron. Quien se da de alta dentro del navegador de Facebook abre el correo de la mañana en
+# Gmail o en Chrome, donde no tiene la sesión, y caía en /empezar (crear cuenta): unos se iban y otros se daban
+# de alta OTRA vez. Cada correo del ciclo lleva su pase: el mismo mecanismo que el pase al móvil, pero dura
+# 72 h (un alta del viernes por la noche abre el correo del lunes) y admite unos pocos usos, porque los
+# antivirus del correo abren los enlaces antes que la persona. Solo se guarda su huella.
+_PASE_CORREO_HORAS = 72
+_PASE_CORREO_USOS = 5
+
+
+async def _pase_de_correo(org: dict) -> str:
+    """Un pase para entrar en la cuenta de quien reparte solo desde un correo. "" si no hay a quién."""
+    user = await global_db.admin_users.find_one({"org_id": org.get("id"), "disabled": {"$ne": True}},
+                                                {"_id": 0, "id": 1}) if org.get("id") else None
+    if not user:
+        return ""
+    pase = secrets.token_urlsafe(24)
+    ahora = datetime.now(timezone.utc)
+    await global_db.pases_movil.insert_one({
+        "huella": _huella_pase(pase), "admin_id": user["id"], "usado": False, "tipo": "correo", "usos": 0,
+        "creado": ahora.isoformat(), "expira": (ahora + timedelta(hours=_PASE_CORREO_HORAS)).isoformat()})
+    return pase
+
+
 @auth_router.post("/pase-movil/canjear", response_model=TokenResponse)
 async def canjear_pase_movil(data: dict, request: Request):
     rl_ip = f"ip:{_rl_key_ip(request)}"
     _rl_check(rl_ip)
     huella = _huella_pase(_texto_cuerpo(data.get("pase")))
     doc = await global_db.pases_movil.find_one({"huella": huella}, {"_id": 0})
-    valido = bool(doc) and not doc.get("usado") and doc.get("expira", "") > datetime.now(timezone.utc).isoformat()
-    # Se marca usado con la condición en la misma escritura: dos canjes a la vez, solo uno gana.
-    if valido:
+    valido = bool(doc) and doc.get("expira", "") > datetime.now(timezone.utc).isoformat()
+    if valido and doc.get("tipo") == "correo":
+        # El del correo sirve unas pocas veces; se cuenta con la condición en la misma escritura.
         valido = (await global_db.pases_movil.update_one(
+            {"huella": huella, "usos": {"$lt": _PASE_CORREO_USOS}}, {"$inc": {"usos": 1}})).modified_count == 1
+    elif valido:
+        # Se marca usado con la condición en la misma escritura: dos canjes a la vez, solo uno gana.
+        valido = not doc.get("usado") and (await global_db.pases_movil.update_one(
             {"huella": huella, "usado": False}, {"$set": {"usado": True}})).modified_count == 1
     user = await global_db.admin_users.find_one({"id": doc["admin_id"]}, {"_id": 0}) if valido else None
     if not user or user.get("disabled"):
@@ -21325,20 +21353,23 @@ async def _ciclo_enviar(org_id: str, clave: str, ahora: Optional[datetime] = Non
         if clave == "opinion":
             ref["opinion_url"] = _opinion_url(org_id)
             ref["regalo_cent"] = _regalo_total(org)        # «por cierto: tienes 10 € de regalo en tu cartera»
+        # Los enlaces a la app entran sin contraseña (ver _pase_de_correo): el correo se abre en otro navegador.
+        pase = await _pase_de_correo(org) if clave != "opinion" else ""
         # La marca del correo es la del REMITENTE («FDS <contacto@…>»), la que ve el
         # repartidor en la app; MARCA es la del panel de empresas.
         c = ciclo_correos.correo(clave, org, uso, ahora, marca=_email_remitente()[0], base=_PORTAL_BASE_FRONT,
                                  baja=baja, mensual=t["mensual"], anual=t["anual"],
                                  con_respuesta=bool(responder),
                                  promo_hasta=REP_GRATIS_HASTA if _rep_promo_activa() else "",
-                                 tope=REP_GRATIS_PARADAS_DIA, **ref)
+                                 tope=REP_GRATIS_PARADAS_DIA, pase=pase, **ref)
         ok = await _enviar_email(
             org["email"], c["asunto"], c["html"], responder_a=responder, texto=c["texto"],
             cabeceras={"List-Unsubscribe": f"<{baja}>",
                        "List-Unsubscribe-Post": "List-Unsubscribe=One-Click"})
         await global_db[_CORREOS_COL].insert_one({
             "id": str(uuid.uuid4()), "para": org["email"], "copia": [], "asunto": c["asunto"],
-            "cuerpo": c["texto"], "responder_a": responder, "por": f"ciclo:{clave}",
+            # La copia no guarda el pase: quien lea los correos enviados no puede entrar en la cuenta.
+            "cuerpo": c["texto"].replace(pase, "…") if pase else c["texto"], "responder_a": responder, "por": f"ciclo:{clave}",
             "org_id": org_id, "at": ahora.isoformat(), "ok": bool(ok)})
         if ok:
             await global_db.organizations.update_one(

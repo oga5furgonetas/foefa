@@ -10,7 +10,7 @@ haría alguien que lleva la app y se fija en cada alta:
     nombres REALES de los botones, y lo que de verdad pasa al acabar la prueba
     (el correo de antes decía «se cobra salvo cancelación» a quien no había
     metido ninguna tarjeta: era falso).
-  · «primer_dia» — entre 20 y 72 h después, SOLO si no ha cargado ninguna
+  · «primer_dia» — entre 8 y 72 h después, SOLO si no ha cargado ninguna
     parada suya (las de ejemplo no cuentan). Corto y personal: ¿te ayudo?
   · «casi_fin» — cuando quedan 2 días o menos de prueba. Lo que lleva hecho,
     cuándo acaba y que no se cobra nada solo.
@@ -51,7 +51,10 @@ CLAVES = ("bienvenida", "primer_dia", "casi_fin", "recordatorio", "invita", "bon
 IDIOMAS = ("es", "pt", "en", "br")
 SEPARACION = timedelta(hours=18)
 BIENVENIDA_HASTA = timedelta(hours=2)      # si falló al darse de alta, se reintenta hasta aquí
-PRIMER_DIA_DESDE = timedelta(hours=20)
+# 8 h y no 20 (24-10-2026): se dan de alta de 13 a 23 h, y con 20 h la mañana siguiente (de 7 a 9) nunca
+# llegaba: el correo salía la mañana de DESPUÉS, cuando ya se habían olvidado. Con 8 h, quien se apunta por la
+# tarde o la noche lo recibe al cargar la furgoneta al día siguiente.
+PRIMER_DIA_DESDE = timedelta(hours=8)
 PRIMER_DIA_HASTA = timedelta(hours=72)
 CASI_FIN_ANTES = timedelta(days=2)
 CASI_FIN_EDAD_MIN = timedelta(days=3)      # una prueba corta no recibe dos correos seguidos
@@ -732,15 +735,24 @@ def correo(clave: str, org: dict, uso: dict, ahora: datetime, *, marca: str, bas
            baja: str, mensual: float, anual: float, con_respuesta: bool,
            promo_hasta: str = "", tope: int = 15, ref_enlace: str = "", ref_cent: int = 250,
            ref_espana: bool = True, ref_min_cent: int = 6000, ref_promo_hasta: str = "",
-           bono_hasta: str = "", bono_cent: int = 1000, opinion_url: str = "", regalo_cent: int = 0) -> dict:
-    """{asunto, texto, html} del correo `clave` para esta cuenta."""
+           bono_hasta: str = "", bono_cent: int = 1000, opinion_url: str = "", regalo_cent: int = 0,
+           pase: str = "") -> dict:
+    """{asunto, texto, html} del correo `clave` para esta cuenta.
+
+    `pase` (24-10-2026): con él, los enlaces a la app entran sin contraseña (página /pase). El correo se
+    abre en Gmail o Chrome y la sesión se quedó en el navegador de Facebook donde se dio de alta: sin pase
+    caía en «crear cuenta». Va tras «#», que no viaja al servidor ni a la analítica."""
     if clave not in CLAVES:
         raise ValueError(clave)
     idioma = idioma_de(org)
     t = _T[idioma]
     utm = "utm_source=correo&utm_medium=email&utm_campaign=ciclo&utm_content=" + clave
-    ruta = f"{base}/ruta?{utm}"
-    cuenta = f"{base}/ruta?tab=cuenta&{utm}"
+    if pase:
+        ruta = f"{base}/pase?ir=ruta&{utm}#p={pase}"
+        cuenta = f"{base}/pase?ir=cuenta&{utm}#p={pase}"
+    else:
+        ruta = f"{base}/ruta?{utm}"
+        cuenta = f"{base}/ruta?tab=cuenta&{utm}"
     uso = uso or {}
     paradas, entregadas = int(uso.get("paradas") or 0), int(uso.get("entregadas") or 0)
     if paradas:

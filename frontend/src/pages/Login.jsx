@@ -11,6 +11,8 @@ export default function Login() {
   const [pass, setPass] = useState('')
   const [err, setErr] = useState('')
   const [busy, setBusy] = useState(false)
+  // Viene de su ruta (correo del ciclo, otro navegador): es un repartidor y entra con su correo (24-10-2026).
+  const rep = (new URLSearchParams(window.location.search).get('next') || '').startsWith('/ruta')
 
   async function submit() {
     setBusy(true); setErr('')
@@ -20,7 +22,7 @@ export default function Login() {
         body: JSON.stringify({ username: user.trim(), password: pass }),
       })
       const j = await r.json()
-      if (!r.ok || !j.access_token) { setErr(t('login.err')); setBusy(false); return }
+      if (!r.ok || !j.access_token) { setErr(t(rep ? 'login.rep.err' : 'login.err')); setBusy(false); return }
       // Una sola función guarda la sesión, y guarda TODO. Esta pantalla escribía
       // a mano un blob con solo name/role/id/account_type/slug: al panel le
       // faltaban `centers`, `allowed_centers`, `permissions` y `admin_role`, así
@@ -32,7 +34,7 @@ export default function Login() {
       // y no por dos): un enlace no puede mandar a nadie a otra página tras entrar.
       const next = new URLSearchParams(window.location.search).get('next') || ''
       window.location.href = next.startsWith('/') && !next.startsWith('//') && !next.includes('\\') ? next : '/panel'
-    } catch { setErr(t('login.err')); setBusy(false) }
+    } catch { setErr(t(rep ? 'login.rep.err' : 'login.err')); setBusy(false) }
   }
 
   return (
@@ -44,9 +46,10 @@ export default function Login() {
       </div>
       <div style={card}>
         <img src="/favicon.svg" alt="" width="40" height="40" style={{ display: 'block', margin: '0 auto 10px', borderRadius: 10 }} />
-        <h2 style={{ margin: '0 0 20px', textAlign: 'center', fontSize: 20 }}>{t('login.title')}</h2>
-        <label style={lbl}>{t('login.user')}</label>
-        <input style={inp} value={user} onChange={(e) => setUser(e.target.value)} autoComplete="username" />
+        <h2 style={{ margin: '0 0 20px', textAlign: 'center', fontSize: 20 }}>{t(rep ? 'login.rep.title' : 'login.title')}</h2>
+        <label style={lbl}>{t(rep ? 'login.rep.user' : 'login.user')}</label>
+        <input style={inp} value={user} onChange={(e) => setUser(e.target.value)} autoComplete="username"
+          type={rep ? 'email' : 'text'} inputMode={rep ? 'email' : undefined} />
         <label style={lbl}>{t('login.pass')}</label>
         <input style={inp} type="password" value={pass} onChange={(e) => setPass(e.target.value)}
           onKeyDown={(e) => e.key === 'Enter' && submit()} autoComplete="current-password" />
@@ -56,7 +59,7 @@ export default function Login() {
           <a href="/reset-password" style={{ color: '#8b94a3', fontSize: 13, textDecoration: 'none' }}>{t('login.forgot')}</a>
         </div>
         <div style={{ textAlign: 'center', marginTop: 12, color: '#8b94a3', fontSize: 13 }}>
-          {t('login.no')} <a href="/registro" style={{ color: '#0ea5e9', textDecoration: 'none', fontWeight: 600 }}>{t('login.create')}</a>
+          {t('login.no')} <a href={rep ? '/registro?sector=autonomo&plan=autonomo' : '/registro'} style={{ color: '#0ea5e9', textDecoration: 'none', fontWeight: 600 }}>{t(rep ? 'login.rep.create' : 'login.create')}</a>
         </div>
       </div>
     </div>

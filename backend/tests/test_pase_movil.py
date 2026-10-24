@@ -61,3 +61,37 @@ async def test_entrando_como_el_cliente_no_se_saca_pase(monkeypatch):
         with pytest.raises(server.HTTPException) as e:
             await server.crear_pase_movil(quien)
         assert e.value.status_code == 403
+
+
+# ── EL PASE DE LOS CORREOS (24-10-2026) ─────────────────────────────────────
+# El correo de la mañana se abre en Gmail o Chrome, sin la sesión del navegador de Facebook donde se dio de alta.
+
+@pytest.mark.asyncio(loop_scope="session")
+async def test_el_pase_del_correo_dura_72_h_y_aguanta_a_los_antivirus(monkeypatch):
+    g = _base(monkeypatch)
+    pase = await server._pase_de_correo({"id": "o1"})
+    assert pase and all(pase not in str(d) for d in g.pases_movil.docs)       # solo la huella
+    d = g.pases_movil.docs[0]
+    dura = datetime.fromisoformat(d["expira"]) - datetime.fromisoformat(d["creado"])
+    assert d["tipo"] == "correo" and dura == timedelta(hours=72)
+    # Los antivirus del correo abren el enlace antes que la persona: sirve unas pocas veces, no una sola.
+    for _ in range(server._PASE_CORREO_USOS):
+        s = await server.canjear_pase_movil({"pase": pase}, _req())
+        assert s.id == "a1" and s.access_token
+    with pytest.raises(server.HTTPException) as e:
+        await server.canjear_pase_movil({"pase": pase}, _req())
+    assert e.value.status_code == 401
+    # Caducado, no entra.
+    otro = await server._pase_de_correo({"id": "o1"})
+    g.pases_movil.docs[-1]["expira"] = (datetime.now(timezone.utc) - timedelta(minutes=1)).isoformat()
+    with pytest.raises(server.HTTPException):
+        await server.canjear_pase_movil({"pase": otro}, _req())
+
+
+@pytest.mark.asyncio(loop_scope="session")
+async def test_sin_usuario_activo_no_hay_pase(monkeypatch):
+    g = _base(monkeypatch)
+    assert await server._pase_de_correo({"id": "otra"}) == ""
+    g.admin_users.docs[0]["disabled"] = True
+    assert await server._pase_de_correo({"id": "o1"}) == ""
+    assert g.pases_movil.docs == []

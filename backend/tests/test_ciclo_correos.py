@@ -37,7 +37,7 @@ def test_primer_dia_solo_sin_paradas_y_en_su_ventana():
     env = {"bienvenida": {"at": (AHORA - timedelta(hours=24)).isoformat()}}
     assert cc.toca(_org(horas=24, ciclo_correos=env), {"paradas": 0}, AHORA) == "primer_dia"
     assert cc.toca(_org(horas=24, ciclo_correos=env), {"paradas": 3}, AHORA) == ""   # ya la usa
-    assert cc.toca(_org(horas=10, ciclo_correos=env), {"paradas": 0}, AHORA) == ""   # demasiado pronto
+    assert cc.toca(_org(horas=6, ciclo_correos=env), {"paradas": 0}, AHORA) == ""    # demasiado pronto
     # Pasó su momento: ya no es el del día siguiente, sino el recordatorio (desde el día 3, 11-10-2026).
     assert cc.toca(_org(horas=80, ciclo_correos=env), {"paradas": 0}, AHORA) == "recordatorio"
 
@@ -534,3 +534,47 @@ async def test_el_de_invita_sale_con_su_codigo_de_invitacion(mundo):
     org = next(o for o in mundo.g["organizations"].docs if o["id"] == "o9")
     assert org.get("ref_codigo") and f"/invita?ref={org['ref_codigo']}&utm_source=referido" in textos[0]
     assert not await server._ciclo_enviar("o9", "invita")                       # una sola vez
+
+
+@pytest.mark.asyncio(loop_scope="session")
+async def test_los_enlaces_entran_sin_contrasena_y_la_copia_no_guarda_el_pase(mundo):
+    """24-10-2026: de 29 clics en los correos hacia /ruta solo 7 entraban; el resto caía en «crear cuenta»."""
+    mundo.g["admin_users"].docs.append({"id": "u1", "org_id": "o1", "username": "pepe@x.es"})
+    mundo.g["pases_movil"] = Col([])
+    mundo.g["organizations"].docs.append(_org(horas=0.2))
+    html = {}
+
+    async def enviar(to, subject, h, responder_a="", copia=None, texto="", cabeceras=None):
+        html["h"], html["t"] = h, texto
+        return True
+    mundo.monkeypatch.setattr(server, "_enviar_email", enviar)
+    assert await server._ciclo_enviar("o1", "bienvenida", AHORA) is True
+    assert "/pase?ir=ruta&amp;utm_source=correo" in html["h"] or "/pase?ir=ruta&utm_source=correo" in html["h"]
+    assert "#p=" in html["t"] and "/ruta?utm_source" not in html["t"]
+    pase = html["t"].split("#p=")[1].split()[0].rstrip(").,")
+    copia = mundo.g["correos_enviados"].docs[-1]["cuerpo"]
+    assert pase not in copia and "#p=…" in copia
+    assert mundo.g["pases_movil"].docs[0]["tipo"] == "correo"
+
+
+def test_sin_pase_los_enlaces_de_siempre():
+    c = cc.correo("bienvenida", _org(), {}, AHORA, marca="FDS", base="https://x", baja="https://x/b",
+                  mensual=9.99, anual=99, con_respuesta=True)
+    assert "https://x/ruta?utm_source=correo" in c["texto"] and "/pase" not in c["texto"]
+    c = cc.correo("primer_dia", _org(horas=24), {}, AHORA, marca="FDS", base="https://x", baja="https://x/b",
+                  mensual=9.99, anual=99, con_respuesta=True, pase="abc123")
+    assert "https://x/pase?ir=ruta&utm_source=correo&utm_medium=email&utm_campaign=ciclo&utm_content=primer_dia#p=abc123" in c["texto"]
+
+
+def test_quien_se_apunta_por_la_noche_lo_recibe_a_la_manana_siguiente():
+    """24-10-2026: con 20 h de espera, el alta de las 21:00 no lo recibía al día siguiente a las 7-9, sino al otro."""
+    env = {"bienvenida": {"at": "x"}}
+    manana = AHORA                                            # lunes 8:00 de Madrid
+    for alta_madrid in (13, 18, 21, 23):                      # el domingo anterior, hora de Madrid
+        alta = manana.replace(hour=alta_madrid - 2) - timedelta(days=1)
+        org = _org(ciclo_correos=env, created_at=alta.isoformat())
+        assert cc.toca(org, {"paradas": 0}, manana) == "primer_dia", alta_madrid
+        assert "Ayer creaste tu cuenta" in _correo("primer_dia", org)["texto"]
+    # De madrugada (a la 1:00) no: le llegaría a las 6 h del alta; mejor la mañana de después.
+    org = _org(ciclo_correos=env, created_at=(manana - timedelta(hours=7)).isoformat())
+    assert cc.toca(org, {"paradas": 0}, manana) == ""

@@ -2,7 +2,7 @@ import { Suspense, lazy, useCallback, useEffect, useRef, useState } from 'react'
 import {
   ArrowLeft, ScanLine, Camera, Loader2, Navigation, Phone, Check, X, Route, MapPin, Play, Square, Package,
   MessageCircle, Clock, Search, List, Pencil, ChevronDown, GripVertical, Map as MapaIcono, ArrowUp, ArrowDown, ArrowUpDown, Mic, ClipboardPaste, Trophy,
-  Eye, PenLine, RotateCcw, HelpCircle, Share2, FileUp, Gift, WifiOff, Plus, FileText,
+  Eye, PenLine, RotateCcw, HelpCircle, Share2, FileUp, Gift, WifiOff, Plus, FileText, Mail,
 } from 'lucide-react'
 import {
   repMiRuta, repZonasCarga, repEscanear, repEscanearLote, repLeerTicket, repNuevoPedido, repEstado, repOrdenar, repJornada, repPosicion,
@@ -1799,6 +1799,10 @@ export default function MiRuta({ onBack, embebido = false }) {
             <FormasDeCargar className="mt-4" puedePegar={!!ruta.puede_pegar} onElegir={(f) => { setBienvenida(null); abrirForma(f) }} />
           </>) : (<>
             <p className="text-[16px] font-bold leading-snug text-dark-50">{tx('Sin problema. Cuando cargues la furgoneta, abre la app y haz una foto a cada etiqueta.')}</p>
+            {/* Que sepa que le llega y lo busque (24-10-2026): el correo de la mañana entra sin contraseña aunque lo abra en otro navegador. */}
+            <p className="mt-1.5 flex items-start gap-1.5 text-[13.5px] leading-snug text-dark-300">
+              <Mail size={15} className="mt-0.5 shrink-0 text-brand-300" /> {tx('Por la mañana te llega un correo con un botón para entrar directo a tu ruta, sin contraseña.')}
+            </p>
             {!avisoPedido && (
               <div className="mt-4">
                 <PedirAviso horaInicial={ruta.aviso_hora} onHecho={(r, hora) => { setBienvenida(null); setAviso(mensajeAviso(r, hora)) }} />

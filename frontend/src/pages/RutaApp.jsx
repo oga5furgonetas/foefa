@@ -224,7 +224,13 @@ export default function RutaApp() {
     })()
   }, [billing, restaurado, recargar])
 
-  if (!isAuthed()) { window.location.replace('/empezar'); return null }
+  /* SIN SESIÓN, A ENTRAR (24-10-2026). Llevaba a /empezar (crear cuenta): quien abría su ruta desde un correo o
+     desde otro navegador creía que no tenía cuenta y se iba, o se daba de alta otra vez. A /ruta solo llega
+     quien ya la tiene; el login vuelve aquí y enlaza a «Crear cuenta» para el que no. */
+  if (!isAuthed()) {
+    window.location.replace(`/login?next=${encodeURIComponent(`/ruta${window.location.search}`)}`)
+    return null
+  }
   if (mercAbierto) {
     return (
       <main className="app-ruta min-h-screen bg-dark-950">

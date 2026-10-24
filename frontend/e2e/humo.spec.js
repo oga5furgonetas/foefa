@@ -2601,6 +2601,38 @@ test('Alta · el pase del QR entra en la cuenta y quita el pase de la dirección
   expect(await page.evaluate(() => localStorage.getItem('flota_token'))).toBe('tok-pase')
 })
 
+/* EL CORREO ENTRA SIN CONTRASEÑA (24-10-2026): el pase va tras «#» y `ir` dice a dónde; las utm se quedan. */
+test('Correo · el enlace del correo entra con su pase y deja su ruta con las utm', async ({ page }) => {
+  await simularApi(page, 'vacio')
+  let pedido = null
+  await page.route(/\/api\/auth\/pase-movil\/canjear/, async (r) => {
+    pedido = r.request().postDataJSON()
+    await r.fulfill({ json: { access_token: 'tok-correo', role: 'admin', name: 'Rosa', id: 'a1', account_type: 'dsp', slug: 'rosa' } })
+  })
+  await page.route(/\/api\/org\/billing/, (r) => r.fulfill({ json: { ...BILLING_BASE, status: 'trial', days_left: 7 } }))
+  await page.goto('/pase?ir=ruta&utm_source=correo&utm_content=primer_dia#p=pase-del-correo', { waitUntil: 'domcontentloaded' })
+  await page.waitForURL('**/ruta?utm_source=correo&utm_content=primer_dia')
+  expect(pedido).toEqual({ pase: 'pase-del-correo' })
+  expect(await page.evaluate(() => localStorage.getItem('flota_token'))).toBe('tok-correo')
+})
+
+test('Correo · sin sesión, la ruta lleva a «Entra en FDS» con el correo y no a crear cuenta', async ({ page }) => {
+  await page.goto('/ruta?utm_source=correo', { waitUntil: 'domcontentloaded' })
+  await page.waitForURL(/\/login\?next=/)
+  expect(new URL(page.url()).searchParams.get('next')).toBe('/ruta?utm_source=correo')
+  await expect(page.getByRole('heading', { name: 'Entra en FDS' })).toBeVisible()
+  await expect(page.getByText('Tu correo')).toBeVisible()
+  await expect(page.getByRole('link', { name: 'Crear cuenta gratis' })).toHaveAttribute('href', '/registro?sector=autonomo&plan=autonomo')
+})
+
+test('Correo · un pase caducado dice qué pasa y ofrece entrar volviendo a la ruta', async ({ page }) => {
+  await page.route(/\/api\/auth\/pase-movil\/canjear/, (r) => r.fulfill({ status: 401, json: { detail: 'El enlace ha caducado. Entra con tu correo y tu contraseña.' } }))
+  await page.goto('/pase?ir=cuenta#p=viejo', { waitUntil: 'domcontentloaded' })
+  await expect(page.getByText('El enlace ha caducado. Entra con tu correo y tu contraseña.')).toBeVisible()
+  await expect(page.getByRole('link', { name: 'Entrar' })).toHaveAttribute('href', `/login?next=${encodeURIComponent('/ruta?tab=cuenta')}`)
+  expect(page.url()).not.toContain('viejo')
+})
+
 test.describe('Alta desde el navegador de TikTok (Android)', () => {
   test.use({ userAgent: 'Mozilla/5.0 (Linux; Android 14; SM-A546B Build/UP1A; wv) AppleWebKit/537.36 (KHTML, like Gecko) Version/4.0 Chrome/128.0 Mobile Safari/537.36 musical_ly_2023607030 BytedanceWebview/d8a21c6' })
   test('le dice dónde está y saca un pase para abrir Chrome, sin ofrecer el APK desde dentro', async ({ page }) => {

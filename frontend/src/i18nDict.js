@@ -16,6 +16,11 @@ export const DICT = {
   'login.err':     { es: 'Usuario o contraseña incorrectos', en: 'Wrong username or password', fr: 'Identifiant ou mot de passe incorrect', de: 'Benutzer oder Passwort falsch', it: 'Utente o password errati', pt: 'Utilizador ou palavra-passe incorretos' },
   'login.no':      { es: '¿No tienes cuenta?', en: 'No account?', fr: 'Pas de compte ?', de: 'Kein Konto?', it: 'Nessun account?', pt: 'Sem conta?' },
   'login.create':  { es: 'Crear empresa', en: 'Create company', fr: 'Créer une entreprise', de: 'Unternehmen erstellen', it: 'Crea azienda', pt: 'Criar empresa' },
+  // Quien llega desde su ruta (correo, otro navegador) es un repartidor: entra con su correo (24-10-2026).
+  'login.rep.title': { es: 'Entra en FDS', en: 'Log in to FDS', fr: 'Connexion à FDS', de: 'Bei FDS anmelden', it: 'Accedi a FDS', pt: 'Entra na FDS' },
+  'login.rep.user':  { es: 'Tu correo', en: 'Your email', fr: 'Ton e-mail', de: 'Deine E-Mail', it: 'La tua email', pt: 'O teu email' },
+  'login.rep.err':   { es: 'Correo o contraseña incorrectos', en: 'Wrong email or password', fr: 'E-mail ou mot de passe incorrect', de: 'E-Mail oder Passwort falsch', it: 'Email o password errati', pt: 'Email ou palavra-passe incorretos' },
+  'login.rep.create': { es: 'Crear cuenta gratis', en: 'Create a free account', fr: 'Créer un compte gratuit', de: 'Kostenloses Konto erstellen', it: 'Crea un account gratis', pt: 'Criar conta grátis' },
   'login.forgot':  { es: '¿Olvidaste tu contraseña?', en: 'Forgot your password?', fr: 'Mot de passe oublié ?', de: 'Passwort vergessen?', it: 'Password dimenticata?', pt: 'Esqueceste a palavra-passe?' },
   'cmdk.placeholder':      { es: 'Buscar módulo, matrícula o conductor…', en: 'Search module, plate or driver…', fr: 'Module, plaque ou chauffeur…', de: 'Modul, Kennzeichen oder Fahrer…', it: 'Modulo, targa o autista…', pt: 'Módulo, matrícula ou motorista…' },
   'cmdk.empty':            { es: 'Sin resultados', en: 'No results', fr: 'Aucun résultat', de: 'Keine Ergebnisse', it: 'Nessun risultato', pt: 'Sem resultados' },

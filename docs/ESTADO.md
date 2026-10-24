@@ -1935,3 +1935,24 @@ aún un día de reparto real. Se dan de alta de tarde/noche; la prueba de verdad
 - **Facebook**: el perfil de Daniel tiene acciones restringidas hasta que confirme su identidad en el móvil; sin
   eso no se puede publicar en los grupos. La página FDs ya tiene el reel de Puck.
 Detalle y trucos de cada editor en la memoria `redes-sociales-fds`.
+
+## 24-10-2026 (noche): que vuelvan por la mañana — entrar desde el correo y el correo a tiempo
+
+Medido en producción (analítica): de 29 clics en los correos del ciclo que iban a /ruta, solo 7 entraron; el resto
+caía en /empezar (crear cuenta) porque el correo se abre en Gmail/Chrome y la sesión se quedó en el navegador de
+Facebook donde se dieron de alta. Algunos se volvían a registrar. Arreglado:
+- **Pase en cada correo del ciclo** (`_pase_de_correo`, server.py): mismo mecanismo que el pase al móvil
+  (`pases_movil`, solo la huella), pero `tipo: "correo"`, 72 h y hasta 5 usos (los antivirus abren los enlaces).
+  Los enlaces van a `/pase?ir=ruta|cuenta&utm_…#p=<pase>`; el pase tras «#» no llega al servidor ni a la
+  analítica, y la copia en `correos_enviados` lo guarda tachado («…»). El de «opinión» no lleva pase.
+- **/ruta sin sesión → /login?next=/ruta…** (antes /empezar). El login, si viene de la ruta, dice «Entra en FDS»,
+  «Tu correo» y «Crear cuenta gratis» (claves `login.rep.*`).
+- **«primer_dia» a las 8 h y no a las 20 h** (`PRIMER_DIA_DESDE`): se dan de alta de 13 a 23 h y con 20 h la
+  mañana siguiente nunca cumplía; salía un día tarde.
+- En la bienvenida, quien pulsa «Todavía no» lee que por la mañana le llega un correo con botón para entrar directo.
+- Tests: test_pase_movil (+2), test_ciclo_correos (+3), humo «Correo ·» (+3).
+
+Redes (misma noche): reel de Puck publicado en la página FDs (Business Suite → Crear reel, también al grupo
+Repartidores BCN, donde está la página). Facebook pide a Dani un **vídeo selfie desde la app del móvil**
+(«actividad inusual»): hasta entonces ni el perfil ni la página pueden publicar o unirse a grupos. YouTube Short y
+TikTok de Puck ya estaban subidos ese día (el de TikTok sin descripción).
