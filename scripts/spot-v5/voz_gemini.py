@@ -150,7 +150,7 @@ def una_voz(voz):
         salida.append({'n': n, 'leido': leido, 'visto': visto, 'fichero': f'voces/{voz}/f{n}.wav', 'dur': round(d, 3), 'palabras': ws})
     # Sílabas por segundo de cada frase: si una se sale mucho de la media, el corte está mal.
     vel = [sum(silabas(w) for w in s['leido'].split()) / s['dur'] for s in salida]
-    media = sum(vel) / len(vel)
+    media = sum(vel) / max(len(vel), 1)
     raras = [s['n'] for s, v in zip(salida, vel) if abs(v - media) / media > 0.35]
     json.dump({'voz': voz, 'modelo': MODELO, 'frases': salida, 'silabas_por_segundo': round(media, 2), 'raras': raras},
               open(os.path.join(carpeta, 'voz.json'), 'w', encoding='utf-8'), ensure_ascii=False, indent=1)

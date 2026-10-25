@@ -897,3 +897,18 @@ async def test_mis_direcciones_propone_las_suyas_con_su_punto(base, monkeypatch)
     assert {x["direccion"] for x in (await server.reparto_mis_direcciones("Real", YO))["direcciones"]} <= {
         "Rúa Real 5, A Coruña", "rua real 5 a coruña"}
     assert (await server.reparto_mis_direcciones("r", YO))["direcciones"] == []
+
+
+@pytest.mark.asyncio(loop_scope="session")
+async def test_formas_de_codigo_sin_un_dato_de_nadie(base):
+    GS, RS = "\x1d", "\x1e"
+    crudo = f"[)>{RS}01{GS}MRW{GS}María López{GS}Calle Mayor 12{GS}15001 A Coruña{GS}612345678"
+    r = await server.reparto_formas_codigo({"formas": [crudo, crudo, "corto", 7], "pais": "ES"}, ANA)
+    assert r == {"ok": True, "guardadas": 2}
+    docs = base.globales["formas_codigo"].docs
+    assert len(docs) == 1
+    d = docs[0]
+    assert d["forma"] == "[)><RS>99<GS>aaa<GS>aaaaa aaaaa<GS>aaaaa aaaaa 99<GS>99999 a aaaaaa<GS>999999999"
+    assert d["veces"] == 2 and d["paises"] == ["es"]
+    # Ni una letra ni una cifra de la etiqueta: solo «a», «9» y los signos.
+    assert not set(d["forma"].replace("<GS>", "").replace("<RS>", "")) - set("a9 []()>|")

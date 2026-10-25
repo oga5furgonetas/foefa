@@ -51,7 +51,7 @@ def main():
         fila = ""
         for v in "ab":
             n = sum(1 for s in grupos[v] if paso in hechos[s])
-            pct = (100 * n / len(grupos[v])) if grupos[v] else 0
+            pct = 100 * n / max(len(grupos[v]), 1)   # sin visitas, n es 0: 0 %
             fila += f"{n:>7} ({pct:4.1f}%)"
         print(f"{paso:<17}{fila}")
 

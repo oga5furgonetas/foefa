@@ -24,7 +24,10 @@ export function useInstalar() {
   const [ocupado, setOcupado] = useState(false)
   const [fallo, setFallo] = useState(false)
   const [enlace, setEnlace] = useState('')
-  useEffect(() => alCambiarInstalable(setPuede), [])
+  useEffect(() => {
+    const dejarDeOir = alCambiarInstalable(setPuede)
+    return dejarDeOir   // la limpieza es a propósito: deja de avisar al salir
+  }, [])
   const iphone = esIphone()
   const android = !iphone && esAndroid()
   const interno = navegadorInterno()

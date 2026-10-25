@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { Zap, Loader2, ScanLine, Route, Navigation, MessageCircle, Camera, Check, ArrowRight, Mic, Wallet, FileText, ParkingSquare } from 'lucide-react'
+import { Zap, Loader2, Route, Navigation, MessageCircle, Camera, Check, ArrowRight, Mic, FileText } from 'lucide-react'
 import { MARCA } from '../marca'
 import { tx, useIdioma, IDIOMAS, cambiarIdioma, idioma, locale } from '../lib/idioma'
 import { medirAccion, varianteAB } from '../lib/analitica'
@@ -34,16 +34,15 @@ const paraQuienAqui = () => { const p = paisDelMovil(); return PARA_QUIEN[p] || 
    app (capturas reales) y se PRUEBA sin registrarse, con paradas de ejemplo;
    el alta viene después, cuando ya sabe lo que es. */
 
+/* PORTADA MÁS LIMPIA (25-10-2026, Dani): seis cosas, no nueve. Fuera la que repetía el escaneo; lo de las
+   ganancias y las zonas de carga sigue en la portada general (Landing). */
 const VENTAJAS = [
   [Camera, 'Escanea o haz una foto a la etiqueta, sea de la empresa que sea: la dirección y el teléfono entran solos'],
   [FileText, '¿Te dan una hoja con la lista? Una foto y entran todas las paradas'],
   [Route, 'La ruta se ordena sola por tiempo, con el tráfico típico'],
   [Navigation, 'Te guía con voz hasta cada puerta, dentro de la app'],
   [Mic, 'Manos libres en Android: di «entregado» y sigue conduciendo'],
-  [Wallet, 'Cuánto llevas ganado hoy y la gasolina, en tu moneda'],
   [MessageCircle, 'Avisa al cliente con tu hora de llegada'],
-  [ScanLine, 'Escanea los paquetes al cargar y sabes dónde va cada uno'],
-  [ParkingSquare, 'Las zonas de carga y descarga cerca de tus paradas, en el mapa'],
 ]
 
 const PREGUNTAS = [
@@ -134,7 +133,8 @@ export default function Repartidores() {
       <p className="mt-1 text-[11px] text-dark-500">{tx('Marcas de sus dueños, sin relación con ellas. Tú metes los paquetes y la app ordena la ruta.')}</p>
     </div>
   )
-  const textoGratis = (
+  // Con la promoción, el recuadro de arriba ya lo dice: debajo del botón no se repite.
+  const textoGratis = !promoGratis() && (
     <p className="mt-2 text-center text-[12.5px] text-dark-300">{invitacion && !promoGratis() ? tx('{n} días gratis · sin tarjeta · cancelas cuando quieras', { n: invitacion.dias }) : promoGratis() ? tx('Gratis y sin límite hasta el {fecha} · sin tarjeta', { fecha: fechaPromo(locale()) }) : tx('Gratis hasta {n} paradas al día · sin tarjeta', { n: PARADAS_GRATIS })}</p>
   )
   const alta = (enfocar) => (<>
@@ -189,8 +189,8 @@ export default function Repartidores() {
             <p className="text-[14.5px] font-bold leading-snug text-amber-200">🎁 {tx('Gratis y sin límite hasta el {fecha} · sin tarjeta', { fecha: fechaPromo(locale()) })}</p>
             {/* 17-10-2026: con la promoción, los dos premios (el bono por su primera ruta y el de invitar). */}
             {conInvita() && refPromoActiva() ? (<>
-              <p className="mt-0.5 text-[13.5px] leading-snug text-dark-200">💶 {tx('Gana {euros} con tu primera ruta real y {euros} por cada compañero que la use.', { euros: eurosRef(BONO_CENT, locale()) })} <span className="rounded-md bg-emerald-400/20 px-1.5 py-0.5 text-[11px] font-bold text-emerald-100">{tx('Promo hasta el {fecha}', { fecha: fechaRefPromo(locale()) })}</span></p>
-              <p className="mt-0.5 text-[11.5px] leading-snug text-dark-400">{tx('La primera ruta cuenta con 20 entregas en 2 días distintos.')}</p>
+              <p className="mt-0.5 text-[13.5px] leading-snug text-dark-200">💶 {tx('Gana {euros} con tu primera ruta real y {euros} por cada compañero que la use.', { euros: eurosRef(BONO_CENT, locale()) })}</p>
+              <p className="mt-0.5 text-[11.5px] leading-snug text-dark-400">{tx('Promo hasta el {fecha}', { fecha: fechaRefPromo(locale()) })} · {tx('La primera ruta cuenta con 20 entregas en 2 días distintos.')}</p>
             </>) : conInvita() && <p className="mt-0.5 text-[13.5px] leading-snug text-dark-200">💶 {tx('Gana {euros} por cada compañero que la use.', { euros: eurosRef(refCentActual(), locale()) })}</p>}
           </div>
         )}
@@ -218,9 +218,10 @@ export default function Repartidores() {
           {paraQuien}
           {capturasApp(false)}
         </>) : (<>
-          {paraQuien}
-          {alta(false)}
+          {/* 25-10-2026: el alta justo debajo del título; con quién sirve, después (antes la empujaba abajo). */}
+          <div className="mt-4">{alta(false)}</div>
           {probarBloque}
+          {paraQuien}
           {capturasApp(true)}
         </>)}
 
@@ -269,8 +270,6 @@ export default function Repartidores() {
           </a>
           <p className="mt-3 text-center text-[13px] text-dark-400">{tx('¿Ya tienes cuenta?')} <a href="/panel/login" className="font-semibold text-brand-300">{tx('Entrar')}</a></p>
         </section>
-
-        <div className="mt-6">{botonProbar}</div>
 
         <p className="mt-8 text-center text-[12px] text-dark-500">
           {/* LSSI art. 10: quién está detrás, a un clic desde la página que se comparte (10-10-2026:

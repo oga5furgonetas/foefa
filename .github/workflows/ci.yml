@@ -57,6 +57,8 @@ jobs:
         run: node scripts/check-envio-candidatura.mjs
       - name: Leer una etiqueta en cada pais (telefono, calle y CP de cada sitio)
         run: node scripts/check-leer-etiqueta.mjs
+      - name: Escanear el 2D de la etiqueta (SEUR/DPD, GLS, GS1) mete la parada sola
+        run: node scripts/check-escaneo-2d.mjs
       - name: Modulos por empresa (el menu y el catalogo cuadran)
         run: node scripts/check-modulos.mjs
       - name: Aviso de version nueva (no salta sin version nueva ni encadena recargas)

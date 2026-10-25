@@ -7,7 +7,7 @@ import {
 import {
   repMiRuta, repZonasCarga, repEscanear, repEscanearLote, repLeerTicket, repNuevoPedido, repEstado, repOrdenar, repJornada, repPosicion,
   repMiOrden, repMiEditar, repMiQuitar, repEjemplo, repQuitarEjemplos, repPegarMiLista, repTrazado, repFachada, repGanancias,
-  repTraerPrevias, repMisMarcas, repMisDirecciones,
+  repTraerPrevias, repMisMarcas, repMisDirecciones, repFormasCodigo,
 } from '../../services/api'
 import { hoyLocal } from '../../lib/fecha'
 import { lista } from '../../lib/lista'
@@ -16,7 +16,7 @@ import { origen } from '../../marca'
 import { leerTicketEnMovil, leerHojaEnMovil } from '../../lib/leerTicket'
 import { textoParaPegar, csvAPegar } from '../../lib/hojaReparto'
 import { lectorDeCodigos, leerCodigo } from '../../lib/codigos'
-import { datosDeCodigos } from '../../lib/codigoEtiqueta'
+import { datosDeCodigos, esCodigoSimple, formaCodigo } from '../../lib/codigoEtiqueta'
 import { buscarDirecciones } from '../../lib/direcciones'
 import { invitar } from '../../lib/compartir'
 import { medirAccion } from '../../lib/analitica'
@@ -70,6 +70,17 @@ const MOTIVOS = ['No había nadie', 'Dirección incorrecta', 'Rechazado', 'Fuera
 const DONDE = [['mano', 'En mano'], ['vecino', 'Al vecino'], ['buzon', 'En el buzón'], ['porteria', 'En portería o recepción'], ['seguro', 'En un lugar seguro']]
 const CON_QUIEN = ['mano', 'vecino', 'porteria']
 const VACIO = { codigo: '', cliente: '', telefono: '', direccion: '', contenido: '', bultos: 1, notas: '', horario: '', prioridad: false, cobrar: '', tipo: 'entrega', hueco: '' }
+
+/* LOS 2D QUE NO SE ENTIENDEN (25-10-2026): MRW, Nacex, CTT o Correos Express no publican qué llevan. De
+   un código largo que no ha dado la dirección se manda solo su forma (letras → «a», cifras → «9»), una vez
+   por forma: sin un dato de nadie, dice qué campos trae para aprender a leerlo. */
+const formasMandadas = new Set()
+function aprenderForma(valores, pais) {
+  const formas = valores.filter((v) => v.length >= 20 && !esCodigoSimple(v)).map(formaCodigo).filter((f) => !formasMandadas.has(f))
+  if (!formas.length) return
+  formas.forEach((f) => formasMandadas.add(f))
+  repFormasCodigo(formas.slice(0, 4), pais).catch(() => {})
+}
 
 /* El número para wa.me. En España, solo móviles (6 o 7 y nueve cifras): a
    un fijo no llega y un botón que abre WhatsApp para nada es peor que no
@@ -232,6 +243,7 @@ export default function MiRuta({ onBack, embebido = false, alTerminar = null }) 
   const [notaEntrega, setNotaEntrega] = useState('')
   const [entrega, setEntrega] = useState({ donde: '', recibe: '', firma: '', firmando: false })
   const [encontrado, setEncontrado] = useState(null)
+  const [anadida, setAnadida] = useState(null)   // la parada que acaba de entrar sola al escanear su etiqueta
   const [vista, setVista] = useState(() => lee('ruta_vista', 'lista'))
   const [nav, setNav] = useState(() => lee('ruta_nav2', 'app'))
   const [filtro, setFiltro] = useState('')
@@ -437,8 +449,9 @@ export default function MiRuta({ onBack, embebido = false, alTerminar = null }) 
     const valores = (Array.isArray(c) ? c : [c]).map((v) => String(v || '').trim()).filter(Boolean)
     if (!valores.length) return
     const datos = datosDeCodigos(valores, paisActual())
+    if (!datos.completa) aprenderForma(valores, paisActual())
     medirAccion(foto ? 'ruta_escaneo' : 'ruta_codigo')
-    setEscaner(false); setOcupado('buscar'); setAviso('')
+    setEscaner(false); setOcupado('buscar'); setAviso(''); setAnadida(null)
     try {
       // El paquete puede estar en la lista con cualquiera de sus códigos (la barra o el del bulto).
       let data = null
@@ -454,6 +467,25 @@ export default function MiRuta({ onBack, embebido = false, alTerminar = null }) 
         setCodigo('')
         cargar()
         return
+      }
+      /* LA ETIQUETA LO TRAE TODO (25-10-2026): SEUR/DPD, GLS o GS1 llevan en su código 2D la dirección exacta.
+         Dani: «nada más lo escaneas, se te añade a la lista, sin esperar a la foto». Se guarda ya y «Corregir» abre
+         la hoja; si el servidor no la acepta, la hoja de siempre con lo leído (el tope del plan gratis, su aviso). */
+      if (datos.completa) {
+        const { codigos, completa: _completa, ...campos } = datos
+        try {
+          const { data: p } = await repNuevoPedido({ ...VACIO, ...Object.fromEntries(Object.entries(campos).filter(([, v]) => v !== '' && v != null)),
+            codigo: codigo || datos.codigo, codigos, direccion: [datos.direccion, datos.cp, datos.localidad].filter(Boolean).join(', ') })
+          medirAccion('ruta_parada_nueva')
+          if (navigator.vibrate) navigator.vibrate(80)
+          setCodigo('')
+          if (carga) setCarga((n) => (n ? { ...n, n: n.n + 1 } : n))
+          setAnadida(p)
+          cargar()
+          return
+        } catch (e) {
+          if (e?.response?.status === 402) { setAviso(txError(e, 'No se pudo guardar')); return }
+        }
       }
       if (datos.direccion) {
         const { codigos: _c, completa: _completa, ...campos } = datos
@@ -538,7 +570,8 @@ export default function MiRuta({ onBack, embebido = false, alTerminar = null }) 
           const { codigos: _c, completa: _completa, ...campos } = datos
           return { codigos, datos: { ...Object.fromEntries(Object.entries(campos).filter(([, v]) => v !== '' && v != null)),
             codigo: datos.codigo || codigos[0] || '', de_ticket: true,
-            direccion: datos.direccion ? [datos.direccion, datos.cp, datos.localidad].filter(Boolean).join(', ') : '' } }
+            // Solo entra sola si el código trae calle Y dónde (CP, población o GPS); a medias, a revisar con su foto.
+            direccion: datos.completa ? [datos.direccion, datos.cp, datos.localidad].filter(Boolean).join(', ') : '' } }
         })
         try {
           const { data } = await repEscanearLote(paquetes)
@@ -567,6 +600,7 @@ export default function MiRuta({ onBack, embebido = false, alTerminar = null }) 
 
   async function escaneoSeguido(valores, foto) {
     const datos = datosDeCodigos(valores, paisActual())
+    if (!datos.completa) aprenderForma(valores, paisActual())
     medirAccion('ruta_escaneo')
     colaEscaneoRef.current.push({ valores, foto, datos })
     setSeguidos((s) => s ? ({ ...s, enCola: colaEscaneoRef.current.length, ultimo: tx('Paquete leído; guardando lote') }) : s)
@@ -1154,6 +1188,22 @@ export default function MiRuta({ onBack, embebido = false, alTerminar = null }) 
         <button onClick={() => setAviso('')} className="mt-3 w-full rounded-xl border border-dark-700 bg-dark-900 px-3.5 py-2.5 text-left text-[13px] text-dark-100">
           {aviso}
         </button>
+      )}
+
+      {anadida && (
+        <div role="status" className="mt-3 rounded-xl border border-emerald-500/40 bg-emerald-500/10 px-3.5 py-2.5 text-[13px] text-dark-100">
+          <p className="font-semibold text-emerald-300">✓ {tx('Añadida a tu ruta')}</p>
+          <p className="mt-0.5 truncate">{[anadida.cliente, anadida.direccion].filter(Boolean).join(' · ')}</p>
+          <div className="mt-2 flex gap-2">
+            <button onClick={() => { setAnadida(null); setEscaner(true) }} className="flex-1 rounded-lg bg-brand-500 py-2 text-[13px] font-bold text-brand-tinta">
+              {tx('Escanear otro')}
+            </button>
+            <button onClick={() => { editar(anadida); setAnadida(null) }} className="rounded-lg border border-dark-600 px-3 py-2 text-[13px] font-semibold text-dark-100">
+              {tx('Corregir')}
+            </button>
+            <button onClick={() => setAnadida(null)} aria-label={tx('Cerrar')} className="px-2 text-dark-400">✕</button>
+          </div>
+        </div>
       )}
 
       {/* FIN DE LA RUTA: el resumen del día, como al cerrar un bloque. */}

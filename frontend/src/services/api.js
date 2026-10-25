@@ -246,6 +246,7 @@ export const updateMileage = (vehicleId, km) =>
 export const repMiRuta = () => api.get('/reparto/mi-ruta')
 export const repEscanear = (codigo) => api.post('/reparto/escanear', Array.isArray(codigo) ? { codigos: codigo } : { codigo })
 export const repEscanearLote = (paquetes) => api.post('/reparto/escanear/lote', { paquetes }, { timeout: 30000 })
+export const repFormasCodigo = (formas, pais) => api.post('/reparto/formas-codigo', { formas, pais })
 export const repLeerTicket = (file) => {
   const fd = new FormData()
   fd.append('file', file)

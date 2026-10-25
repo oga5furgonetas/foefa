@@ -60,7 +60,7 @@ def test_quien_causa_los_golpes_se_ve(datos):
     por_conductor = Counter(insp[g["first_seen_inspection"]]["driver_id"] for g in datos["vehicle_damage_ledger"])
     top3 = sum(n for _, n in por_conductor.most_common(3))
     assert len(datos["vehicle_damage_ledger"]) >= 15
-    assert top3 / len(datos["vehicle_damage_ledger"]) > 0.3
+    assert top3 / max(len(datos["vehicle_damage_ledger"]), 1) > 0.3
 
 
 def test_lo_de_cada_manana_existe(datos):

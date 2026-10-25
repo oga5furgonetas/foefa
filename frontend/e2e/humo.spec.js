@@ -2242,10 +2242,11 @@ test('Reparto · sin dictado en el navegador, el micro lleva al del teclado; un 
   await rutaDeAna(page, [])
   await page.route(/\/api\/reparto\/escanear/, (r) => r.fulfill({ json: { encontrado: false, codigo: 'GLS123' } }))
   await page.goto('/conductor?vista=ruta', { waitUntil: 'domcontentloaded' })
-  await page.getByPlaceholder('o escribe el código').fill('GLS123|Rúa Real 5|15003 A Coruña|Marta|612345678')
+  // Solo la calle (sin CP ni población): se abre la hoja para completarla. Con todo, entraría sola (25-10-2026).
+  await page.getByPlaceholder('o escribe el código').fill('GLS123|Rúa Real 5|Marta|612345678')
   await page.getByRole('button', { name: 'Buscar', exact: true }).click()
   const hoja = page.getByRole('dialog')
-  await expect(hoja.getByPlaceholder('Dirección completa')).toHaveValue(/Rúa Real 5.*15003/)
+  await expect(hoja.getByPlaceholder('Dirección completa')).toHaveValue(/Rúa Real 5/)
   await hoja.getByRole('button', { name: 'Dictar la dirección' }).click()
   await expect(page.getByText('Toca la dirección y usa el micrófono de tu teclado 🎤 para dictarla.')).toBeVisible()
   await expect(hoja.getByPlaceholder('Dirección completa')).toBeFocused()

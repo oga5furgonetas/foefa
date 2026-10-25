@@ -1985,3 +1985,33 @@ mercado: Circuit/Spoke, Zeo, Xpedit, Routal). Hecho y desplegado:
 - **Direcciones que ya conoce**: `GET /reparto/mis-direcciones?q=` (sus paradas situadas de los últimos 180 días que
   encajan con lo escrito, con veces, cliente y teléfono); salen primero en las sugerencias al escribir una parada.
 - Tests: test_reparto_api (+4), humo «Reparto ·» (+5), activación ajustada a la opinión al terminar.
+
+## 25-10-2026 (mañana): escanear la etiqueta y la parada entra sola; portada de repartidores más limpia
+Dani: «si trabajas en MRW, GLS, Nacex, CTT y escaneas el paquete, que se añada a la lista sin esperar a la foto;
+verifica cuáles podemos escanear». Hecho, probado y desplegado:
+- **Escanear y ya**: si los códigos de la etiqueta traen calle Y dónde (`datosDeCodigos(...).completa`: CP, población o
+  GPS), la parada se guarda al momento (`POST /reparto/mis-pedidos`) y sale «✓ Añadida a tu ruta» con «Escanear otro» y
+  «Corregir» (abre la hoja con lo guardado). A medias, la hoja de siempre y la foto completa lo que falte. En «Escanear
+  seguidos» igual: solo entra sola la completa; la que trae solo la calle va a «revisar al acabar».
+- **Formatos por empresa** (`frontend/src/lib/codigoEtiqueta.js`, fuentes en su cabecera):
+  · DPD/SEUR (Geopost): Aztec ISO 15434 de la especificación «Geolabel» 6.0: calle, población, CP, empresa, contacto,
+    teléfono, número del portal, piso y GPS. `deGeopost`.
+  · GLS: el segundo DataMatrix «A|nombre|calle|población||teléfono|…» de su documentación ShipIT (sin CP). `deGLS`.
+  · GS1 «Scan4Transport» y QR con «|»: como ya estaba.
+  · **UPS: NO**. Su MaxiCode lleva la dirección, pero zxing solo lo lee «puro» (solo en el encuadre) y Chrome en
+    Android no lo trae; probado con la cámara simulada: con la barra 1Z o letra alrededor no lo encuentra. De UPS se
+    lee la barra 1Z y la dirección sale de la foto.
+  · **MRW, Nacex, CTT, Correos Express: sin verificar** (no publican qué llevan sus códigos). Para aprenderlo:
+    `POST /reparto/formas-codigo` guarda solo la FORMA de los 2D que no dan la dirección (letras → «a», cifras → «9»,
+    separadores <GS>/<RS>/<US>), en `formas_codigo` de la base global (`forma`, `veces`, `paises`). Mirarla cuando
+    haya escaneos reales y escribir el lector de cada una.
+  · OJO: los formatos son los publicados; no hay etiquetas reales de SEUR/GLS España en el repo para contrastar.
+- **Pruebas**: `scripts/check-escaneo-2d.mjs` (en CI) fabrica cada etiqueta con zxing y la lee con el mismo motor que
+  el móvil (modo «Plain», con separadores); `frontend/e2e/escaneo-real.spec.js` hace la cadena entera en el navegador
+  con el lector propio y la cámara simulada (un lienzo con los códigos y letra de etiqueta): SEUR/DPD y GLS entran
+  solas. `escanear-etiqueta.spec.js`: entra sola, «Corregir», y la incompleta abre la hoja y manda su forma.
+- **Portada /repartidores más limpia**: el alta justo debajo del título (en el móvil el botón se ve sin bajar; antes
+  lo empujaban las empresas), sin repetir «Gratis…» bajo el botón con la promoción, 6 ventajas en vez de 9 y un botón
+  «Probarla» menos al final. «Con quién sirve», debajo de «Probarla».
+- Pendiente aparte (no es de esto): la prueba móvil del candado del Cuadrante falla según la fecha (la celda queda bajo
+  la columna fija de nombres); hay tarea propuesta.

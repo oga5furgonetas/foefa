@@ -1790,6 +1790,7 @@ async def create_indexes():
         await _idx(global_db.stripe_events, "event_id", unique=True)
         await _idx(global_db.forensic_index, "content_hash", unique=True)
         await _idx(global_db.forensic_index, [("signed_at", -1)])
+        await _idx(global_db.formas_codigo, "forma", unique=True)
         # Cartera individual de conductores: el referido se vincula a la ficha
         # laboral concreta (empresa + conductor), no a la cartera del DSP.
         await _idx(global_db.driver_referidos, "codigo", unique=True)
@@ -52307,6 +52308,48 @@ async def reparto_escanear_lote(data: dict = Body(...), user: dict = Depends(req
         _rep_programar_ubicacion(fecha)
     return {"items": resultados, "nuevos": creados, "existentes": repetidos,
             "revisar": revisar, "limite": limite, "otro_conductor": otro_conductor}
+
+
+_FORMA_LETRA = re.compile(r"[^\W\d_]")
+_FORMA_CONTROL = re.compile(r"[\x00-\x08\x0b-\x1f\x7f]")
+_FORMA_SEPARADORES = {"\x1d": "<GS>", "\x1e": "<RS>", "\x1f": "<US>", "\x04": "<EOT>"}
+
+
+def _forma_codigo(valor) -> str:
+    """La FORMA de un código: letras → «a», cifras → «9»; signos y separadores, tal cual. No queda ningún
+    dato de nadie, pero se ve qué campos trae y en qué orden («a|aaaa|aaaaa 99|99999|…»)."""
+    s = re.sub(r"\d", "9", _FORMA_LETRA.sub("a", str(valor or "")[:300]))
+    return _FORMA_CONTROL.sub(lambda m: _FORMA_SEPARADORES.get(m.group(0), "<?>"), s).strip()
+
+
+@api_router.post("/reparto/formas-codigo")
+async def reparto_formas_codigo(data: dict = Body(...), user: dict = Depends(require_any_auth)):
+    """CÓDIGOS 2D QUE LA APP NO ENTIENDE (25-10-2026). MRW, Nacex, CTT o Correos Express no publican qué
+    llevan sus códigos. Cuando un repartidor escanea uno que no da la dirección, se guarda solo su forma
+    (`_forma_codigo`, rehecha aquí aunque el móvil ya la mande hecha), para aprender a leerlo con
+    etiquetas de verdad. Nunca falla hacia fuera: medir no puede estorbar al escanear."""
+    try:
+        _rl_public_action(f"fc:{user.get('sub')}", max_count=60, window_s=3600)
+    except HTTPException:
+        return {"ok": False, "guardadas": 0}
+    formas = data.get("formas") if isinstance(data.get("formas"), list) else []
+    pais = _texto_cuerpo(data.get("pais"), 4).lower() or "?"
+    ahora = datetime.now(timezone.utc).isoformat()
+    guardadas = 0
+    for v in formas[:4]:
+        forma = _forma_codigo(v)
+        if len(forma) < 12:
+            continue
+        try:
+            await global_db.formas_codigo.update_one(
+                {"forma": forma},
+                {"$inc": {"veces": 1}, "$set": {"ultima": ahora}, "$addToSet": {"paises": pais},
+                 "$setOnInsert": {"primera": ahora}},
+                upsert=True)
+            guardadas += 1
+        except Exception:                                        # noqa: BLE001
+            pass
+    return {"ok": True, "guardadas": guardadas}
 
 
 @api_router.post("/reparto/ticket")

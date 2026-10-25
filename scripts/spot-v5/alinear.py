@@ -75,7 +75,7 @@ def main():
             fr['palabras_silabas'] = viejas
             fr['palabras'] = nuevas
             fr['alineado'] = {'modelo': 'faster-whisper small', 'casadas': casadas, 'de': len(nuevas),
-                              'desvio_silabas_medio': round(sum(desv) / len(desv), 3),
+                              'desvio_silabas_medio': round(sum(desv) / max(len(desv), 1), 3),
                               'desvio_silabas_max': round(max(desv), 3), 'oido': oido}
             print(f"{voz:10s} f{fr['n']} casadas {casadas}/{len(nuevas)} · el reparto por sílabas se iba "
                   f"{fr['alineado']['desvio_silabas_medio']:.2f} s de media, {fr['alineado']['desvio_silabas_max']:.2f} máx · oído: {oido}")

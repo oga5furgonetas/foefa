@@ -18,7 +18,6 @@ export const BR = {
   'Manos libres en Android: di «entregado» y sigue conduciendo': 'Mãos livres no Android: diga «entregue» e continue dirigindo',
   'Cuánto llevas ganado hoy y la gasolina, en tu moneda': 'Quanto você já ganhou hoje e o combustível, na sua moeda',
   'Avisa al cliente con tu hora de llegada': 'Avise o cliente com o seu horário de chegada',
-  'Escanea los paquetes al cargar y sabes dónde va cada uno': 'Escaneie os pacotes ao carregar e saiba onde vai cada um',
   '¿Sirve con los paquetes de mi agencia?': 'Funciona com os pacotes da minha transportadora?',
   'Sí. Escaneas la etiqueta: si su código ya trae la dirección, entra sola; si no, la app la lee de la foto (y si no puede, la escribes tú). También puedes hacer una foto a tu hoja de reparto o pegar la lista. No necesita conectarse con tu agencia.': 'Sim. Você escaneia a etiqueta: se o código já traz o endereço, ele entra sozinho; se não, o app lê da foto (e se não conseguir, você digita). Também dá para tirar uma foto da sua folha de entregas ou colar a lista. Não precisa se conectar com a sua transportadora.',
   '¿Qué hacéis con mis datos y mi ubicación?': 'O que vocês fazem com os meus dados e a minha localização?',

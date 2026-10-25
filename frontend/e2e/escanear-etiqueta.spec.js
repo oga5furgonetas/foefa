@@ -59,21 +59,44 @@ async function preparar(page) {
   return { buscados, creados, lotes }
 }
 
-test('Escanear · una etiqueta con la barra y un 2D aparte (como GLS) rellena dirección y teléfono', async ({ page }) => {
+/* ESCANEAR Y YA ESTÁ (25-10-2026): si el 2D trae la dirección completa, la parada entra al momento, sin
+   abrir la hoja ni esperar a leer la foto; «Corregir» la abre con lo guardado. */
+test('Escanear · una etiqueta con la barra y un 2D aparte (como GLS) añade la parada sola', async ({ page }) => {
   const { buscados, creados } = await preparar(page)
+  await page.route(/\/api\/reparto\/mis-pedidos$/, async (r) => {
+    const b = r.request().postDataJSON(); creados.push(b); await r.fulfill({ json: { id: 'n1', ...b, estado: 'pendiente' } })
+  })
   await page.goto('/ruta', { waitUntil: 'domcontentloaded' })
   await page.getByRole('button', { name: 'Escanear', exact: true }).click()
   // La barra se ve primero; el 2D con la dirección, un instante después: tiene que leer los dos.
   await page.evaluate(() => { window.__ahora = ['ZX81234567'] })
   await page.waitForTimeout(120)
   await page.evaluate(() => { window.__ahora = ['ZX81234567', 'ES|28013|MADRID|MARIA LOPEZ|GRAN VIA 32|612345678'] })
-  await expect(page.getByRole('heading', { name: 'El código ZX81234567 no está en la lista' })).toBeVisible()
-  await expect(page.getByPlaceholder('Dirección completa')).toHaveValue('GRAN VIA 32, 28013, MADRID')
-  await expect(page.locator('input[value="612345678"]')).toBeVisible()
+  const hecho = page.getByRole('status').filter({ hasText: 'Añadida a tu ruta' })
+  await expect(hecho).toContainText('MARIA LOPEZ · GRAN VIA 32, 28013, MADRID')
   expect(buscados).toContain('ZX81234567')
-  await page.getByRole('button', { name: 'Añadir a mi ruta' }).click()
-  await expect.poll(() => creados.length).toBe(1)
-  expect(creados[0]).toMatchObject({ codigo: 'ZX81234567', telefono: '612345678', cliente: 'MARIA LOPEZ', de_ticket: true })
+  expect(creados).toHaveLength(1)
+  expect(creados[0]).toMatchObject({ codigo: 'ZX81234567', telefono: '612345678', cliente: 'MARIA LOPEZ', direccion: 'GRAN VIA 32, 28013, MADRID' })
+  await expect(page.getByRole('heading', { name: 'El código ZX81234567 no está en la lista' })).toHaveCount(0)
+  // «Corregir» abre la parada guardada para cambiarla.
+  await hecho.getByRole('button', { name: 'Corregir' }).click()
+  await expect(page.getByRole('heading', { name: 'Editar parada' })).toBeVisible()
+  await expect(page.getByPlaceholder('Dirección completa')).toHaveValue('GRAN VIA 32, 28013, MADRID')
+})
+
+test('Escanear · si el 2D solo trae la calle, se abre la hoja para completarla', async ({ page }) => {
+  const { creados } = await preparar(page)
+  const formas = []
+  await page.route(/\/api\/reparto\/formas-codigo$/, async (r) => { formas.push(r.request().postDataJSON()); await r.fulfill({ json: { ok: true } }) })
+  await page.goto('/ruta', { waitUntil: 'domcontentloaded' })
+  await page.getByRole('button', { name: 'Escanear', exact: true }).click()
+  await page.evaluate(() => { window.__ahora = ['ZX81234568', 'MARIA LOPEZ|GRAN VIA 32|612345678'] })
+  await expect(page.getByRole('heading', { name: 'El código ZX81234568 no está en la lista' })).toBeVisible()
+  await expect(page.getByPlaceholder('Dirección completa')).toHaveValue('GRAN VIA 32')
+  expect(creados).toHaveLength(0)
+  // Del 2D que no se entiende se manda solo su forma, sin un dato del cliente; la barra corta, ni eso.
+  await expect.poll(() => formas.length).toBe(1)
+  expect(formas[0]).toEqual({ formas: ['aaaaa aaaaa|aaaa aaa 99|999999999'], pais: 'es' })
 })
 
 test('Escanear seguidos · guarda la etiqueta completa en lote, evita repetidas y deja la incompleta para revisar', async ({ page }) => {

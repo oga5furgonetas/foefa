@@ -16,8 +16,24 @@
      código 2D): cada trozo se clasifica por su forma (teléfono, código postal, calle, población).
 
    Lo de GS1 sigue la norma; lo de ANSI y el resto no se ha probado con etiquetas reales de cada
-   empresa (no hay muestras en el repo): el repartidor SIEMPRE revisa la parada antes de guardarla, y
-   lo que no está en los códigos lo completa la foto (la misma imagen en la que se leyeron).
+   empresa (no hay muestras en el repo). Si los códigos traen calle Y dónde (`completa`), la parada se
+   guarda al escanear y el repartidor la corrige si hace falta (25-10-2026); si no, se abre la hoja y lo
+   que falte lo completa la foto (la misma imagen en la que se leyeron).
+
+   POR EMPRESA (25-10-2026), según lo que publican ellas mismas:
+   · DPD / SEUR (grupo Geopost): un Aztec con ISO 15434, especificación «Geolabel» 6.0 de DPD (30-10-2024,
+     cap. 2.2.24). Bloque «01»: CP, país en número, servicio, bulto (14), «GEOP», cuenta, día, referencia,
+     n/total, peso, Y/N, CALLE, POBLACIÓN, estado y empresa. Bloque «07 G03»: contacto, teléfonos y número
+     del portal en subcampos (US). Bloque «07 S08»: latitud y longitud del destinatario, si viene.
+   · GLS: el SEGUNDO DataMatrix, «A|nombre|calle con número|población|…|teléfono|…» (ejemplos de su
+     documentación ShipIT: «A|Hr. Test|Teststraße 42|Rostock-Brinckmansdorf|| 987654321| 1234567|»). El CP
+     no va ahí (va en el de rutas, cuyo formato no publican): la parada queda con calle y población.
+   · UPS: su MaxiCode lleva la dirección, pero el móvil no lo lee en una etiqueta real (zxing solo lo lee
+     «puro», solo en el encuadre, y el lector de Chrome en Android no lo trae): de UPS se lee la barra 1Z
+     y la dirección sale de la foto.
+   · MRW, Nacex, CTT, Correos Express: no publican qué llevan sus códigos; lo que lean pasa por la lectura
+     general de trozos. Probado con códigos generados y leídos con el MISMO motor que el móvil
+     (scripts/check-escaneo-2d.mjs) y con la cámara simulada (frontend/e2e/escaneo-real.spec.js).
 
    Sin React ni nada del navegador: lo ejecuta tal cual scripts/check-leer-etiqueta.mjs. */
 /* eslint-disable no-control-regex -- los separadores GS y RS de las etiquetas son caracteres de control a propósito */
@@ -25,6 +41,15 @@ import { interpretaTicket, telefonoDe } from './interpretaEtiqueta.js'
 
 const GS = '\x1d'
 const RS = '\x1e'
+const US = '\x1f'
+
+/* Algunos lectores dan los separadores invisibles «dibujados» (␝ ␞ ␟ ␄, el espacio como ␠, o «<GS>»):
+   zxing lo hace en su modo de texto «legible». Se devuelven a lo que son para que nada deje de leerse. */
+export function normalizaCodigo(v) {
+  return String(v || '')
+    .replace(/␝|<GS>/g, GS).replace(/␞|<RS>/g, RS).replace(/␟|<US>/g, US)
+    .replace(/␄|<EOT>/g, '\x04').replace(/␠/g, ' ')
+}
 
 /* ───────── GS1 ───────── */
 
@@ -94,6 +119,48 @@ function deGS1(c, pais) {
   return r
 }
 
+/* ───────── DPD / SEUR (Geopost): Aztec ISO 15434 ───────── */
+
+function deGeopost(texto, pais) {
+  const s = String(texto)
+  if (!s.startsWith('[)>')) return null
+  const bloques = s.split(RS).map((b) => b.split(GS))
+  const iso = bloques.find((b) => b[0] === '01' && /^0\d$/.test(b[1] || '') && /^[A-Z]{4}$/.test(b[6] || ''))
+  if (!iso || iso.length < 15) return null
+  const r = { cp: (iso[2] || '').trim(), codigo: (iso[5] || '').trim(), direccion: (iso[13] || '').trim(),
+    localidad: (iso[14] || '').trim(), cliente: (iso[16] || '').trim() }
+  const g = bloques.find((b) => b[0] === '07' && /^G\d\d$/.test(b[1] || ''))
+  if (g) {
+    // Destinatario: comentario, empresa 2, contacto, teléfono 1, teléfono 2, móvil, correo, número, línea 2.
+    const [, , contacto, tel1, tel2, movil, , numero, linea2] = (g[5] || '').split(US).map((x) => x.trim())
+    if (contacto) r.cliente = contacto
+    const tel = [movil, tel1, tel2].find(Boolean)
+    if (tel) r.telefono = telefonoDe(tel, pais) || tel.replace(/[^\d+]/g, '')
+    if (numero && r.direccion && !new RegExp(`\\b${numero.replace(/[^\w]/g, '')}\\b`).test(r.direccion)) r.direccion += ` ${numero}`
+    const resto = [linea2, (g[6] || '').trim()].filter(Boolean)
+    if (resto.length && r.direccion) r.direccion += `, ${resto.join(', ')}`
+  }
+  const gps = bloques.find((b) => b[0] === '07' && /^S08/.test(b[1] || ''))
+  if (gps) {
+    const lat = parseFloat(gps[2]); const lng = parseFloat(gps[3])
+    if (Number.isFinite(lat) && Number.isFinite(lng) && Math.abs(lat) <= 90 && Math.abs(lng) <= 180 && (lat || lng)) {
+      r.lat = lat; r.lng = lng
+    }
+  }
+  return r
+}
+
+/* ───────── GLS: el segundo DataMatrix, «A|nombre|calle|población|…» ───────── */
+
+function deGLS(texto, pais) {
+  const f = String(texto).split('|')
+  if (f[0] !== 'A' || f.length < 4 || !/\p{L}{2,}/u.test(f[2] || '')) return null
+  const r = { cliente: (f[1] || '').trim(), direccion: (f[2] || '').trim(), localidad: (f[3] || '').trim() }
+  const tel = f.slice(4).map((x) => x.trim()).find((x) => telefonoDe(x, pais))
+  if (tel) r.telefono = telefonoDe(tel, pais)
+  return r
+}
+
 /* ───────── ANSI MH10.8.3 (UPS, FedEx) ───────── */
 
 function deANSI(texto, pais) {
@@ -156,11 +223,17 @@ export function esCodigoSimple(v) {
   return s.length >= 4 && s.length <= 40 && !/[\x1d\x1e|;^~\s]/.test(s) && !/^https?:/i.test(s)
 }
 
+/* La FORMA de un código, sin un dato de nadie: letras → «a», cifras → «9», signos y separadores tal cual.
+   Con ella se aprende qué lleva el 2D de las empresas que no lo publican (POST /reparto/formas-codigo). */
+export function formaCodigo(v) {
+  return String(v || '').slice(0, 300).replace(/\p{L}/gu, 'a').replace(/\p{N}/gu, '9')
+}
+
 /* Todos los códigos leídos en la etiqueta → una parada.
    {codigo, codigos, cliente, telefono, direccion, cp, localidad, lat?, lng?, completa}
    `codigos`: los simples, por si el paquete ya está en la lista con otro de ellos. */
 export function datosDeCodigos(valores, pais = 'es') {
-  const lista = [...new Set((Array.isArray(valores) ? valores : [valores]).map((v) => String(v || '')).filter(Boolean))]
+  const lista = [...new Set((Array.isArray(valores) ? valores : [valores]).map(normalizaCodigo).filter(Boolean))]
   const out = { codigo: '', cliente: '', telefono: '', direccion: '', cp: '', localidad: '' }
   const poner = (r) => {
     if (!r) return
@@ -168,8 +241,10 @@ export function datosDeCodigos(valores, pais = 'es') {
   }
   // Por fiabilidad: primero lo que sigue una norma, después lo adivinado.
   for (const v of lista) { const c = camposGS1(v); if (c) poner(deGS1(c, pais)) }
+  for (const v of lista) poner(deGeopost(v, pais))
+  for (const v of lista) poner(deGLS(v, pais))
   for (const v of lista) poner(deANSI(v, pais))
-  for (const v of lista) if (!camposGS1(v) && !v.startsWith('[)>')) poner(deTrozos(v, pais))
+  for (const v of lista) if (!camposGS1(v) && !v.startsWith('[)>') && !deGLS(v, pais)) poner(deTrozos(v, pais))
   const simples = lista.filter(esCodigoSimple)
   if (!out.codigo) out.codigo = simples[0] || (lista.length === 1 && lista[0].length <= 60 ? lista[0] : '')
   out.codigos = [...new Set([out.codigo, ...simples].filter(Boolean))]
