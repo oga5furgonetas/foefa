@@ -4,8 +4,8 @@
   "description": "Reparto a domicilio y gestión de flota: escanea los paquetes, ordena la ruta por tiempo, llama o escribe al cliente y marca las entregas.",
   "start_url": "/app",
   "display": "standalone",
-  "background_color": "#070a0e",
-  "theme_color": "#070a0e",
+  "background_color": "#f7f6f3",
+  "theme_color": "#f7f6f3",
   "orientation": "portrait",
   "icons": [
     {

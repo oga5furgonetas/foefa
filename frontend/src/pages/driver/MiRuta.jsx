@@ -26,6 +26,7 @@ import { tx, useIdioma, locale, txError } from '../../lib/idioma'
 import { salirDeLaDemoDeReparto, decodeToken } from '../../panel/auth'
 import { eurosRef, fechaRefPromo } from '../../lib/precios'
 import AntesPuerta from './AntesPuerta'
+import { useAtras } from '../../lib/atras'
 import { PedirAviso, mensajeAviso } from '../AvisoManana'
 
 /* ── MI RUTA ────────────────────────────────────────────────────────────────
@@ -54,6 +55,23 @@ const guardarCola = (c) => {
 // (No «yo»: el componente ya tiene un estado `yo`, la posición, y lo taparía.)
 const cuentaActual = () => { const t = decodeToken() || {}; return `${t.org_id || ''}:${t.sub || ''}` }
 const deMi = (x) => x.quien === cuentaActual()
+
+/* LA ÚLTIMA RUTA, EN EL MÓVIL (25-10-2026). Al abrir la app salía una rueda hasta que contestaba el servidor y,
+   sin cobertura, «No se pudo cargar tu ruta»: lo que menos parece una app. Ahora sale al momento la ruta que
+   había (la de esta cuenta y de hoy) y la del servidor la sustituye en cuanto llega. Sin cuenta reconocible
+   (el portal de un conductor de empresa) o en la ruta de prueba, no se guarda. Al salir de la cuenta se borra
+   (panel/auth.js, logout). */
+export const COPIA_RUTA = 'fds_ruta_copia'
+const copiaDeHoy = () => {
+  try {
+    const c = JSON.parse(localStorage.getItem(COPIA_RUTA) || 'null')
+    return c && cuentaActual() !== ':' && c.quien === cuentaActual() && c.dia === hoyLocal() && c.data ? c : null
+  } catch { return null }
+}
+const guardarCopia = (data) => {
+  if (cuentaActual() === ':' || !data || data.prueba) return
+  try { localStorage.setItem(COPIA_RUTA, JSON.stringify({ quien: cuentaActual(), dia: hoyLocal(), en: Date.now(), data })) } catch { /* lleno o privado */ }
+}
 // Sin respuesta del servidor (o la de una pasarela caída): eso es no tener red, no un «no» del servidor.
 const sinRed = (e) => !e?.response || [502, 503, 504].includes(e.response.status)
 const aplicarCola = (r, cola) => {
@@ -228,7 +246,9 @@ const Reconocedor = typeof window !== 'undefined' ? (window.SpeechRecognition ||
 
 export default function MiRuta({ onBack, embebido = false, alTerminar = null }) {
   useIdioma()
-  const [ruta, setRuta] = useState(null)
+  const [ruta, setRuta] = useState(() => { const c = copiaDeHoy(); return c ? aplicarCola(c.data, leerCola().filter(deMi)) : null })
+  // La ruta que se ve es la guardada en el móvil y el servidor no contesta: se dice de cuándo es.
+  const [copiaSinRed, setCopiaSinRed] = useState(0)
   const [err, setErr] = useState('')
   const [aviso, setAviso] = useState('')
   const [escaner, setEscaner] = useState(false)
@@ -355,8 +375,12 @@ export default function MiRuta({ onBack, embebido = false, alTerminar = null }) 
   const [cola, setCola] = useState(() => leerCola().filter(deMi))
   const cargar = useCallback(() => {
     // Lo guardado sin cobertura y aún sin enviar se pinta encima de lo que dice el servidor.
-    repMiRuta().then(({ data }) => { fijarPais(data?.pais); setRuta(aplicarCola(data, leerCola().filter(deMi))) })
-      .catch((e) => setErr(txError(e, 'No se pudo cargar tu ruta')))
+    repMiRuta().then(({ data }) => { fijarPais(data?.pais); guardarCopia(data); setCopiaSinRed(0); setRuta(aplicarCola(data, leerCola().filter(deMi))) })
+      .catch((e) => {
+        const c = sinRed(e) ? copiaDeHoy() : null
+        if (c) setCopiaSinRed(c.en)
+        else setErr(txError(e, 'No se pudo cargar tu ruta'))
+      })
   }, [])
   const conMarcas = !!ruta?.autonomo && !ruta?.prueba
   useEffect(() => {
@@ -406,6 +430,11 @@ export default function MiRuta({ onBack, embebido = false, alTerminar = null }) 
     return () => { clearInterval(t); window.removeEventListener('online', vaciarColaEntregas) }
   }, [vaciarColaEntregas])
   useEffect(cargar, [cargar])
+  // Al volver la cobertura, la ruta del servidor sustituye a la guardada en el móvil.
+  useEffect(() => {
+    window.addEventListener('online', cargar)
+    return () => window.removeEventListener('online', cargar)
+  }, [cargar])
   // «Tirar para actualizar» (RutaApp) avisa con este evento.
   useEffect(() => {
     window.addEventListener('fds-recargar-ruta', cargar)
@@ -1108,6 +1137,13 @@ export default function MiRuta({ onBack, embebido = false, alTerminar = null }) 
           onAnadir={enMarcha ? () => { medirAccion('ruta_anadir'); setAnadir(true) } : null}
           onCorregir={!pendientes.some((p) => p.lat != null) && pendientes.some((p) => p.geo === 'no')
             ? () => editar(pendientes.find((p) => p.geo === 'no')) : null} />
+      )}
+
+      {copiaSinRed > 0 && (
+        <div role="status" className="mb-3 flex items-center gap-2 rounded-2xl border border-sky-400/40 bg-sky-500/10 px-3.5 py-2.5 text-[12.5px] leading-snug text-sky-100">
+          <WifiOff size={16} className="shrink-0" />
+          {tx('Sin conexión: es tu ruta de las {h}. Se pone al día sola al volver la cobertura.', { h: new Date(copiaSinRed).toLocaleTimeString(locale(), { hour: '2-digit', minute: '2-digit' }) })}
+        </div>
       )}
 
       {cola.length > 0 && (
@@ -2353,6 +2389,7 @@ function Resumen({ hechos, ruta, marcas = null }) {
 }
 
 function Hoja({ titulo, onClose, children }) {
+  useAtras(true, onClose)   // el «atrás» del móvil cierra la hoja, no la app
   return (
     <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/60" role="dialog" aria-modal="true" aria-label={titulo}>
       <div className="max-h-[92vh] w-full max-w-md overflow-y-auto rounded-t-3xl border border-dark-700 bg-dark-950 p-4 pb-8">
@@ -2384,6 +2421,7 @@ async function fotograma(v) {
 /* `seguido` (13-10-2026): la cámara no se cierra tras cada paquete; los que ya
    se han leído no se repiten y `estado` se enseña abajo («12 añadidos…»). */
 function Escaner({ onCodigo, onClose, seguido = false, estado = '' }) {
+  useAtras(true, onClose)
   const video = useRef(null)
   const [error, setError] = useState('')
   // Por referencia: si fuera dependencia del efecto, cada repintado de la

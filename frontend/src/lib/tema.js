@@ -35,6 +35,54 @@ export function elegirTema(t) {
   aplicarTema(t)
 }
 
+/* LA BARRA DE ARRIBA DEL MÓVIL, DEL COLOR DE LA APP (25-10-2026).
+   En la app de Play (una TWA de Chrome) y en la instalada desde la web, Android pinta la barra de estado con el
+   `theme-color` de la página. Con el #070a0e de la web salía NEGRA encima de la app del repartidor, que es
+   clara: es lo que más delataba que era una web. Mientras se está en la app, la barra (y el fondo de detrás,
+   que asoma al cargar) llevan el papel de la app; oscuro con el tema oscuro. */
+const PAPEL = { hibrido: '#f7f6f3', light: '#f3f6fa', dark: '#060a14' }
+export const colorDeLaApp = (t = temaGuardado()) => PAPEL[temaEfectivo(t)] || PAPEL.hibrido
+export const RUTAS_APP = /^\/(ruta|mercadillo)(\/|$)/
+
+export function pintarBarra(color) {
+  try {
+    let m = document.querySelector('meta[name="theme-color"]')
+    if (!m) { m = document.createElement('meta'); m.setAttribute('name', 'theme-color'); document.head.appendChild(m) }
+    const antes = m.getAttribute('content')
+    m.setAttribute('content', color)
+    return antes
+  } catch { return null }
+}
+
+const COLOR_WEB = '#070a0e'   // el de index.html, el de la web y el panel
+
+export function pintarApp() {
+  try {
+    const c = colorDeLaApp()
+    pintarBarra(c)
+    document.documentElement.style.backgroundColor = c
+    if (document.body) document.body.style.backgroundColor = c
+  } catch { /* sin documento */ }
+}
+
+/* Barra y fondo de la app ya, y cada vez que cambia el tema (Ajustes o el modo del móvil); al salir, los de la web. */
+export function vestirDeApp() {
+  pintarApp()
+  let obs = null
+  try {
+    obs = new MutationObserver(pintarApp)
+    obs.observe(document.documentElement, { attributes: true, attributeFilter: ['data-panel-theme'] })
+  } catch { /* sin observador: se queda con el del arranque */ }
+  return () => {
+    obs?.disconnect()
+    pintarBarra(COLOR_WEB)
+    try {
+      document.documentElement.style.backgroundColor = ''
+      if (document.body) document.body.style.backgroundColor = ''
+    } catch { /* sin documento */ }
+  }
+}
+
 export const letraGrande = () => { try { return localStorage.getItem(LETRA) === 'grande' } catch { return false } }
 
 export function aplicarLetra(grande = letraGrande()) {

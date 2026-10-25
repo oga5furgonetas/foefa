@@ -32,6 +32,34 @@ Dani: «Flota da nombre a otras cosas, no a reparto». La app de Play se llama
 **FDS** (`launcherName`/`app_name` en `android/`, versión 1.0.1 / code 2;
 `short_name` del manifest web). La marca de la web sigue siendo Flota.
 
+## Versión 1.0.3 (code 4): que no se note que es una web (25-10-2026)
+
+Dani: «que no se siga viendo como app web en el móvil; es la que vamos a subir a Play, debe ser perfecta».
+Comprobado antes de tocar nada: la web y los dos paquetes están verificados con Google (`assetlinks:check` →
+`linked: true` para `com.flotadsp.flota` con la huella de Play App Signing y para `.web` con la de subida), así
+que la app NO enseña barra de direcciones. Lo que la delataba estaba dentro, y se arregló:
+
+| Antes | Ahora |
+|---|---|
+| Barra de arriba del móvil negra (#070a0e) encima de la app clara | La web pone su `theme-color` al papel de la app (#f7f6f3; #060a14 con el tema oscuro). En una TWA verificada, Chrome pinta la barra con el `theme-color` de la página (commit de Chromium 71357f7) |
+| Pantalla de arranque y barra de abajo negras | `android/.../values/colors.xml` `fondo` = #F7F6F3, iconos oscuros (`windowLightStatusBar`, y `windowLightNavigationBar` en `values-v27`) |
+| «Atrás» del móvil cerraba la app con una hoja abierta | `lib/atras.js`: cada hoja, el escáner, la navegación, el día del historial y las pestañas meten una entrada en el historial; «atrás» las cierra y desde otra pestaña vuelve a «Hoy» |
+| Al abrir, /app recargaba la página entera hacia /ruta (dos cargas) | Cambio de pantalla dentro de la misma página (`<Navigate>`) |
+| Cargando: negro con un círculo naranja | El papel de la app con el cian de la marca |
+| Aviso de cookies y píxeles de Meta/TikTok dentro de la app | Ninguno dentro de la app instalada: «Seguridad de los datos» (no comparte con terceros) queda cierto |
+| Se ampliaba con dos dedos y al mantener pulsado un enlace salía el menú de Chrome | No, solo dentro de la app (`prepararModoApp`) |
+| Sin cobertura: el dinosaurio de Chrome | Service worker (`public/sw.js`): abre con la última versión guardada y la ruta guardada en el móvil, con «Sin conexión: es tu ruta de las HH:MM» |
+| Cada apertura volvía a preguntar por cada trozo de la app | Los trozos (con huella) salen del móvil; solo se guarda JS que llega como JS (el veneno del borde no entra) |
+
+Medido con la cámara lenta de Playwright (Pixel 5, CPU ×4, 4G de 150 ms), misma compilación con y sin el
+service worker: abrir la app la primera vez ~3,8 s; las siguientes **~0,6 s** (sin él, ~3,1 s). Al abrir ya no
+se bajan el mapa ni el mercadillo (−74 KB comprimidos, el 28 %): se cargan al usarlos.
+
+**Para subir:** `android/app/build/outputs/bundle/playRelease/app-play-release.aab` (firmado con la clave de
+subida, `jarsigner -verify` → «jar verified»). La de la web (`/descargas/FDS.apk`) ya es la 1.0.3. Lo que no
+se ha podido ver en un móvil físico: los colores de la pantalla de arranque y de la barra de abajo (no hay
+emulador con Chrome en el PC); lo de dentro de la web, sí, con pruebas (`e2e/app-nativa.spec.js`).
+
 ## Lo que ya está hecho
 
 | Qué | Dónde |

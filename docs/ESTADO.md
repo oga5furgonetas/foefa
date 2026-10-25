@@ -2026,3 +2026,14 @@ siguientes que sí y lo dice («En octubre ya no queda ningún día que pedir: l
 (cuadrante realizado). Te enseñamos noviembre.»); un mes sin días lo dice arriba con «Ver {mes} →». Verificado en
 producción como un conductor de OGA5 (escrituras cortadas): abre noviembre con 22 días para tocar. Test en humo
 («Portal del conductor · tus peticiones»).
+
+## 25-10-2026 (tarde): la app del repartidor, como app y no como web (Play 1.0.3)
+Todo en `docs/PLAY_STORE.md` → «Versión 1.0.3». Resumen: barra de arriba del color de la app (`theme-color`
+dinámico, lib/tema.js `vestirDeApp`), «atrás» que cierra hojas y vuelve a «Hoy» (lib/atras.js `useAtras`), /app sin
+recargar, sin cookies ni píxeles dentro de la app instalada (`yaEsApp` solo con nuestros paquetes android-app://),
+sin zoom ni menú del navegador en la app (`prepararModoApp`), service worker con la app y el logo en el móvil y
+pantalla «Sin conexión» propia (public/sw.js), la ruta guardada en el móvil (`fds_ruta_copia`, se borra al salir),
+y Ajustes/Cuenta/Mercadillo cargados al usarlos. AAB 1.0.3 (code 4) en
+`android/app/build/outputs/bundle/playRelease/app-play-release.aab`, falta que Dani lo suba. Pruebas:
+`frontend/e2e/app-nativa.spec.js`. Ojo: compilar Android necesita `ANDROID_HOME` (Sdk en AppData\Local\Android\Sdk).
+La app de China (WebView propio) NO se ha tocado: sigue con su barra oscura.

@@ -882,4 +882,5 @@ export const B = {
   "Añadida a tu ruta": ["Added to your route", "Adicionada à tua rota", "Ajouté à ta tournée", "Aggiunta al tuo percorso", "Zu deiner Route hinzugefügt", "已加入你的路线"],
   "Escanear otro": ["Scan another", "Digitalizar outro", "Scanner un autre", "Scansiona un altro", "Nächstes scannen", "再扫一个"],
   "Corregir": ["Fix", "Corrigir", "Corriger", "Correggi", "Korrigieren", "修改"],
+  "Sin conexión: es tu ruta de las {h}. Se pone al día sola al volver la cobertura.": ["No connection: this is your route from {h}. It updates itself when you're back online.", "Sem ligação: é a tua rota das {h}. Atualiza-se sozinha quando voltar a rede.", "Pas de connexion : c'est ta tournée de {h}. Elle se met à jour toute seule au retour du réseau.", "Nessuna connessione: è il tuo percorso delle {h}. Si aggiorna da solo quando torna la rete.", "Keine Verbindung: Das ist deine Route von {h}. Sie aktualisiert sich, sobald wieder Netz da ist.", "无网络：这是你 {h} 的路线，恢复网络后会自动更新。"],
 }

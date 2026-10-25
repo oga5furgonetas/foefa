@@ -4,6 +4,7 @@ import { Link } from 'react-router-dom'
 import { hayPixel, consentimiento, guardarConsentimiento, cargarPixel } from '../lib/metaPixel'
 import { tx, useIdioma } from '../lib/idioma'
 import { medirAccion } from '../lib/analitica'
+import { yaEsApp } from '../lib/instalar'
 
 // Sin píxel: banner informativo (solo almacenamiento estrictamente necesario,
 // guía AEPD: informar + permitir cerrar). Con píxeles (Meta, TikTok): consentimiento
@@ -24,6 +25,9 @@ export default function CookieBanner() {
        por telefono, que es lo que esa pantalla venia a evitar. Comprobado en
        staging: el banner tapaba los botones y bloqueaba el scroll. */
     if (typeof window !== 'undefined' && window.location.pathname.startsWith('/taller/')) return
+    // Ni en la app instalada (la de Play, la del APK o «añadir a inicio»): allí no hay píxeles (lib/metaPixel.js)
+    // y un aviso de cookies tapando la pantalla es lo más «web» que se puede ver en una app.
+    if (yaEsApp()) return
     if (!consentimiento()) setShow(true)
     else cargarPixel()
   }, [])

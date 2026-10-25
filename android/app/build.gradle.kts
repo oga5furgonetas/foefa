@@ -19,8 +19,8 @@ android {
         minSdk = 24
         // Play exige API 35 desde el 31-08-2025 y API 36 desde el 31-08-2026.
         targetSdk = 36
-        versionCode = 3
-        versionName = "1.0.2"
+        versionCode = 4
+        versionName = "1.0.3"
 
         // Lo que abre la app. /app lleva a cada uno a lo suyo (su ruta, su panel
         // o la pantalla de entrar).

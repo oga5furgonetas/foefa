@@ -1,10 +1,9 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { Suspense, lazy, useCallback, useEffect, useMemo, useState } from 'react'
 import {
   Route, History, Settings2, UserCircle2, Loader2, CheckCircle2, XCircle, Package, Euro, ChevronRight, ChevronDown, ArrowLeft,
   MapPin, Phone, Camera, Clock, RotateCcw, FileSpreadsheet, X,
 } from 'lucide-react'
 import MiRuta from './driver/MiRuta'
-import { Ajustes } from '../panel/pages/Reparto'
 import {
   getRepartoPedidos, getRepartoEstadisticas, getOrgBilling, canjearRegalo, misRegalos, playVerificar, editarRepartoPedido, fotoEntrega,
   getRepartoAjustes, getRepartoEntregasMes,
@@ -15,7 +14,6 @@ import { medirAccion } from '../lib/analitica'
 import { servicioPlay, comprasPlay } from '../lib/playBilling'
 import { enviarPendiente, olvidarPendiente } from '../lib/metaPixel'
 import { isAuthed, esSuplantacion, volverASuper, getAdmin, apuntarInicio } from '../panel/auth'
-import { Cuenta, Muro } from './RutaCuenta'
 import OpinionRuta from './OpinionRuta'
 import AvisoManana from './AvisoManana'
 import InstalarApp, { PasoInstalar } from './InstalarApp'
@@ -27,8 +25,18 @@ import { importe } from '../lib/region'
 import { tx, useIdioma, txError, locale } from '../lib/idioma'
 import { invitar } from '../lib/compartir'
 import { getReferidos, mercEstado } from '../services/api'
-import Mercadillo from './mercadillo/Mercadillo'
 import { eurosRef, refCentActual, refPromoActiva, REF_PROMO_HASTA, fechaRefPromo } from '../lib/precios'
+import { useAtras } from '../lib/atras'
+import { vestirDeApp } from '../lib/tema'
+
+/* LO QUE NO HACE FALTA PARA ABRIR LA APP, SE CARGA CUANDO SE USA (25-10-2026). «Ajustes» viene de la pantalla
+   de Reparto del panel, que arrastra el mapa entero (Leaflet); la cuenta trae el QR y el cobro, y el mercadillo
+   lo suyo: ~74 KB comprimidos (el 28 %) que se bajaban y se ejecutaban al abrir, aunque se fuera a «Hoy». */
+const Ajustes = lazy(() => import('../panel/pages/Reparto').then((m) => ({ default: m.Ajustes })))
+const Cuenta = lazy(() => import('./RutaCuenta').then((m) => ({ default: m.Cuenta })))
+const Muro = lazy(() => import('./RutaCuenta').then((m) => ({ default: m.Muro })))
+const Mercadillo = lazy(() => import('./mercadillo/Mercadillo'))
+const Cargando = () => <div className="flex justify-center py-16"><Loader2 className="animate-spin text-dark-500" /></div>
 
 /* ── LA APP DE QUIEN REPARTE SOLO (04-10-2026) ───────────────────────────────
    No es el panel de una empresa pequeña: es otro producto, como Circuit o
@@ -52,6 +60,13 @@ export default function RutaApp() {
     try { return sessionStorage.getItem('ruta_tab') || 'hoy' } catch { return 'hoy' }
   })
   useEffect(() => { try { sessionStorage.setItem('ruta_tab', tab) } catch { /* nada */ } }, [tab])
+  // Como en cualquier app de Android: desde otra pestaña, «atrás» vuelve a «Hoy» (y desde «Hoy», sale).
+  useAtras(tab !== 'hoy', () => setTab('hoy'))
+  // La barra de arriba del móvil y el fondo, del color de la app (lib/tema.js).
+  useEffect(() => {
+    const quitar = vestirDeApp()
+    return quitar   // al salir de la app, la barra y el fondo de la web
+  }, [])
 
   // El estado del pago manda qué se ve: sin pagar (o sin la tarjeta de la
   // prueba), «Hoy» y «Ajustes» enseñan el muro; historial y cuenta, siempre.
@@ -87,6 +102,7 @@ export default function RutaApp() {
     mercEstado().then(({ data }) => setMerc(data?.visible ? data : null)).catch(() => setMerc(null))
   }, [])
   useEffect(() => { verMerc() }, [verMerc])
+  useAtras(mercAbierto, () => { setMercAbierto(false); verMerc() })
   useEffect(() => {
     const abrir = () => setMercAbierto(true)
     window.addEventListener('fds-abrir-mercadillo', abrir)
@@ -234,7 +250,7 @@ export default function RutaApp() {
   if (mercAbierto) {
     return (
       <main className="app-ruta min-h-screen bg-dark-950">
-        <Mercadillo onBack={() => { setMercAbierto(false); verMerc() }} />
+        <Suspense fallback={<Cargando />}><Mercadillo onBack={() => { setMercAbierto(false); verMerc() }} /></Suspense>
       </main>
     )
   }
@@ -296,11 +312,11 @@ export default function RutaApp() {
         {tab === 'hoy' && <InstalarApp />}
         {tab === 'hoy' && !esSuplantacion() && <AvisoManana toast={toast} />}
         {(tab === 'hoy' || tab === 'ajustes') && bloqueado
-          ? <Muro billing={billing} toast={toast} recargar={recargar} irACuenta={() => setTab('cuenta')} />
+          ? <Suspense fallback={<Cargando />}><Muro billing={billing} toast={toast} recargar={recargar} irACuenta={() => setTab('cuenta')} /></Suspense>
           : <>
             {/* La opinión, al TERMINAR la ruta (25-10-2026): arriba de «Hoy» salía al ir a cargar la furgoneta. */}
             {tab === 'hoy' && <MiRuta embebido onBack={() => {}} alTerminar={<OpinionRuta />} />}
-            {tab === 'ajustes' && <div className="mx-auto max-w-md"><Ajustes conductores={[]} toast={toast} autonomo /></div>}
+            {tab === 'ajustes' && <div className="mx-auto max-w-md"><Suspense fallback={<Cargando />}><Ajustes conductores={[]} toast={toast} autonomo /></Suspense></div>}
           </>}
         {/* «Invita y gana», DEBAJO de la ruta (23-10-2026): encima del escáner distraía a quien aún no ha metido
             su primer paquete; quien ya reparte lo ve al bajar, que es cuando lo comparte. */}
@@ -314,7 +330,7 @@ export default function RutaApp() {
           </div>
         )}
         {tab === 'historial' && <Historial />}
-        {tab === 'cuenta' && <Cuenta billing={billing} recargar={recargar} toast={toast} resaltarRegalo={regaloNuevo} merc={merc} />}
+        {tab === 'cuenta' && <Suspense fallback={<Cargando />}><Cuenta billing={billing} recargar={recargar} toast={toast} resaltarRegalo={regaloNuevo} merc={merc} /></Suspense>}
       </div>
       <nav className="ruta-pestanas fixed inset-x-0 bottom-0 z-40 border-t border-dark-800 bg-dark-950/95 pb-[env(safe-area-inset-bottom)] backdrop-blur" aria-label={tx('Secciones')}>
         <div className="mx-auto grid max-w-md grid-cols-4">
@@ -353,6 +369,7 @@ function Historial() {
     getRepartoEstadisticas(30).then(({ data }) => setEst(data)).catch(() => setEst({ por_dia: [], error: true }))
   }, [])
   useEffect(() => { cargarEst() }, [cargarEst])
+  useAtras(!!dia, () => setDia(null))   // «atrás» desde un día vuelve a la lista
   if (dia) return <DiaHistorial fecha={dia} onVolver={() => setDia(null)} toast={toast} />
   if (!est) return <div className="flex justify-center py-16"><Loader2 className="animate-spin text-dark-500" /></div>
   const dias = lista(est.por_dia).filter((d) => d.total > 0).reverse()
@@ -508,6 +525,7 @@ function DiaHistorial({ fecha, onVolver, toast }) {
   const [datos, setDatos] = useState(null)
   const [abierta, setAbierta] = useState(null)
   const [prueba, setPrueba] = useState(null)
+  useAtras(!!prueba, () => setPrueba(null))
   const [moviendo, setMoviendo] = useState('')
   const cargar = useCallback(() => getRepartoPedidos(fecha).then(({ data }) => setDatos(data)).catch(() => setDatos({ pedidos: [] })), [fecha])
   useEffect(() => { cargar() }, [cargar])

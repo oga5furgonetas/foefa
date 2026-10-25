@@ -12,6 +12,7 @@ import {
 } from '../../lib/guia'
 import { importe } from '../../lib/region'
 import { tx, useIdioma, locale, txError, idioma } from '../../lib/idioma'
+import { useAtras } from '../../lib/atras'
 
 /* ── LA GUÍA DENTRO DE LA APP (04-10-2026) ───────────────────────────────────
    Dani: «yo quiero el navegador ya dentro, que coja la ruta y te vaya
@@ -79,6 +80,7 @@ const horaMas = (min) => {
 
 export default function Navegacion({ parada, numero, quedan, onSalir, onEntregar, onNoEntregar, onEntregarVoz, onDeshacer, enlaceFuera, nombreFuera = 'Google Maps' }) {
   useIdioma()
+  useAtras(true, onSalir)   // el «atrás» del móvil sale de la navegación, no de la app
   const [pos, setPos] = useState(null)          // {p:[lat,lng], rumbo}
   const [errPos, setErrPos] = useState('')
   const [guia, setGuia] = useState(null)        // {id, prep, pasos, metros, minutos, fuente}

@@ -349,6 +349,8 @@ export function logout() {
   localStorage.removeItem(ADMIN_KEY)
   localStorage.removeItem(ACCESO_KEY)
   localStorage.removeItem(INICIO_KEY)
+  // La copia de la ruta del repartidor (MiRuta, COPIA_RUTA): con direcciones y teléfonos de clientes.
+  localStorage.removeItem('fds_ruta_copia')
 }
 
 /* LA APP ARRANCA DIRECTA EN SU RUTA (11-10-2026). La app instalada abre /app, que mandaba a quien tiene

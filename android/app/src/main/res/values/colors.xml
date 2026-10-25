@@ -1,5 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <!-- El mismo fondo que la web (#070a0e): la pantalla de carga no da un salto. -->
-    <color name="fondo">#070A0E</color>
+    <!-- El papel de la app del repartidor (#F7F6F3, el mismo `theme-color` que pone la web en /ruta):
+         la pantalla de arranque, la barra de arriba y la de abajo del móvil son del color de la app, sin el
+         salto de negro a claro que delataba una web (25-10-2026; antes, #070A0E, el negro de la web). -->
+    <color name="fondo">#F7F6F3</color>
 </resources>

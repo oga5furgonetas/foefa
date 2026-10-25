@@ -41,13 +41,44 @@ export async function instalar() {
   return outcome   // 'accepted' | 'dismissed'
 }
 
-/* Ya se está usando como app (instalada, la de Play o la del APK). */
+/* Ya se está usando como app (instalada, la de Play o la del APK).
+   25-10-2026: la señal más fiable de la app de Play es que Android la abre con `android-app://<paquete>`
+   (web.dev); `display-mode` falla en Samsung Internet y Firefox. Pero solo con NUESTROS paquetes: un enlace
+   abierto desde WhatsApp o Telegram también llega como `android-app://` y eso es un navegador, no la app. El
+   referente solo existe en la primera página: se recuerda para el resto de la sesión (recargas incluidas). */
+const NUESTRA_APP = /^android-app:\/\/com\.flotadsp\.flota(\.web|\.cn)?\/?$/
+const MODO_APP = 'fds_modo_app'
 export function yaEsApp() {
   try {
-    return window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone === true
+    if (sessionStorage.getItem(MODO_APP) === '1') return true
+    const si = window.matchMedia('(display-mode: standalone)').matches || window.matchMedia('(display-mode: fullscreen)').matches
+      || window.navigator.standalone === true
       || /FDS(China|App)\//.test(navigator.userAgent)
-      || /^android-app:\/\//.test(document.referrer) || sessionStorage.getItem('flota_app') === '1'
+      || NUESTRA_APP.test(document.referrer) || sessionStorage.getItem('flota_app') === '1'
+    if (si) sessionStorage.setItem(MODO_APP, '1')
+    return si
   } catch { return false }
+}
+
+/* COMO UNA APP Y NO COMO UNA WEB (25-10-2026), solo dentro de la app instalada:
+   · no se amplía la pantalla entera con dos dedos (como ninguna app; la letra se agranda en Ajustes → «Letra
+     más grande»);
+   · mantener pulsado un enlace, una foto o un botón no saca el menú del navegador («Abrir en una pestaña nueva»,
+     «Descargar imagen»). En los campos se sigue pudiendo pegar, y el texto de las paradas, seleccionar. */
+export function prepararModoApp() {
+  if (typeof window === 'undefined' || !yaEsApp()) return
+  try {
+    document.documentElement.classList.add('modo-app')
+    const vp = document.querySelector('meta[name="viewport"]')
+    if (vp && !/maximum-scale/.test(vp.getAttribute('content') || '')) {
+      vp.setAttribute('content', `${vp.getAttribute('content')}, maximum-scale=1, user-scalable=no`)
+    }
+    document.addEventListener('contextmenu', (e) => {
+      const t = e.target
+      if (!t?.closest || t.closest('input, textarea, [contenteditable="true"]')) return
+      if (t.closest('a, img, button, [role="button"], video, canvas, svg')) e.preventDefault()
+    })
+  } catch { /* nada: sigue funcionando como web */ }
 }
 
 export function esIphone() {

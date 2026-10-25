@@ -10,6 +10,8 @@
    Purchase (regalo). Los que pasan fuera de la web (vuelta de Stripe) se dejan
    apuntados antes de salir y se mandan al volver. */
 
+import { yaEsApp } from './instalar'
+
 export const PIXEL_ID = String(import.meta.env.VITE_META_PIXEL_ID || '').trim()
 const CLAVE = 'cookie_consent'
 const PENDIENTE = 'meta_pendiente'
@@ -20,7 +22,11 @@ const PENDIENTE = 'meta_pendiente'
 export const TT_ID = String(import.meta.env.VITE_TIKTOK_PIXEL_ID || '').trim()
 const hayMeta = () => /^\d{8,20}$/.test(PIXEL_ID)
 const hayTT = () => /^[A-Z0-9]{10,30}$/i.test(TT_ID)
-export function hayPixel() { return hayMeta() || hayTT() }
+/* DENTRO DE LA APP INSTALADA, NINGUNO (25-10-2026). La app de Play (y la instalada desde la web) no lleva píxeles
+   de anuncios: lo que se mide para Meta y TikTok es la web, que es adonde llevan los anuncios. Así la app no
+   enseña el aviso de cookies (sin píxel solo queda el almacenamiento necesario, que no necesita permiso: LSSI
+   art. 22.2) y lo que se declara en «Seguridad de los datos» de Google Play es verdad: no comparte nada. */
+export function hayPixel() { return !yaEsApp() && (hayMeta() || hayTT()) }
 
 export function consentimiento() {
   try {

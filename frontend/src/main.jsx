@@ -1,6 +1,6 @@
 import React, { Suspense, lazy, useEffect } from 'react'
 import ReactDOM from 'react-dom/client'
-import { escucharInstalacion } from './lib/instalar'
+import { escucharInstalacion, prepararModoApp } from './lib/instalar'
 import { BrowserRouter, Route, Routes, useLocation, Navigate } from 'react-router-dom'
 /* Tipografía self-hosted (la CSP bloquea Google Fonts). Vite las sirve desde
    el propio dominio.
@@ -20,7 +20,7 @@ import '@fontsource/ibm-plex-mono/400.css'
 import '@fontsource/ibm-plex-mono/500.css'
 import '@fontsource/ibm-plex-mono/600.css'
 import { medirVista } from './lib/analitica'
-import { aplicarTema, aplicarLetra } from './lib/tema'
+import { aplicarTema, aplicarLetra, pintarApp, RUTAS_APP, colorDeLaApp } from './lib/tema'
 import { salirDeLaDemoDeReparto, inicioGuardado } from './panel/auth'
 
 /* Señal de vida para /arranque.js. Ese vigilante espera 10 s y, si esta marca
@@ -58,6 +58,8 @@ if (typeof Node === 'function' && Node.prototype) {
 // Y la letra grande de la app del repartidor.
 aplicarTema()
 aplicarLetra()
+// La app del repartidor, del color de la app desde el primer momento (barra de arriba incluida): sin negro mientras carga.
+if (RUTAS_APP.test(window.location.pathname)) pintarApp()
 import './index.css'
 import { ToastProvider } from './lib/toast'
 import { LangProvider } from './i18n'
@@ -355,15 +357,23 @@ function AppRedirect() {
     // Quien reparte por su cuenta, directo a su ruta (sin pasar por el panel).
     else if (localStorage.getItem('flota_token')) destino = inicioGuardado() || '/panel'
   } catch { /* sin almacenamiento */ }
-  window.location.replace(destino)
-  return null
+  /* SIN RECARGAR LA PÁGINA (25-10-2026). Era `window.location.replace(destino)`: cada vez que se abría la app,
+     la página se cargaba DOS veces (/app y luego la ruta), con su HTML y todo el JavaScript otra vez. En un
+     móvil normal con 4G eran segundos de más, lo que menos parece una app. Ahora es un cambio de pantalla
+     dentro de la misma página; si va a la ruta del repartidor, ya con su color. */
+  if (RUTAS_APP.test(destino)) pintarApp()
+  return <Navigate to={destino} replace />
 }
 
-/* Fallback mínimo mientras se descarga el chunk de la ruta (mismo fondo oscuro de la app) */
+/* Mientras se descarga el trozo de una pantalla. En la app del repartidor, con su papel (o el oscuro) y el cian
+   de la marca: el negro con un círculo naranja de antes era lo primero que se veía al abrir la app. */
 function RouteLoader() {
+  const app = RUTAS_APP.test(window.location.pathname)
+  const fondo = app ? colorDeLaApp() : '#0a0b0f'
+  const claro = app && fondo !== '#060a14'
   return (
-    <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#0a0b0f' }}>
-      <div style={{ width: 28, height: 28, border: '3px solid rgba(255,255,255,.1)', borderTopColor: '#f97316', borderRadius: '50%', animation: 'spin .8s linear infinite' }} />
+    <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', background: fondo }}>
+      <div style={{ width: 28, height: 28, border: `3px solid ${claro ? 'rgba(17,17,20,.1)' : 'rgba(255,255,255,.1)'}`, borderTopColor: '#0FC2BC', borderRadius: '50%', animation: 'spin .8s linear infinite' }} />
       <style>{'@keyframes spin{to{transform:rotate(360deg)}}'}</style>
     </div>
   )
@@ -380,6 +390,8 @@ function Medidor() {
 }
 
 escucharInstalacion()
+// Dentro de la app instalada: sin ampliar con dos dedos ni el menú del navegador al mantener pulsado (lib/instalar.js).
+prepararModoApp()
 
 ReactDOM.createRoot(document.getElementById('root')).render(
   <React.StrictMode>

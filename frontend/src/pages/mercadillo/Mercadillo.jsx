@@ -8,6 +8,7 @@ import {
   mercBuzon, mercConversacion, mercResponder, mercAvisosLeidos, mercDenunciar, mercAvisosMovil,
 } from '../../services/api'
 import { compressImage } from '../../lib/compressImage'
+import { useAtras } from '../../lib/atras'
 import { enablePush } from '../../lib/push'
 
 /* AVISOS AL MÓVIL (17-10-2026). Dani: «si quiere que le salte en el móvil, que reciba notificaciones». Lo elige
@@ -187,6 +188,7 @@ function Denunciar({ motivos, objetivo, onCerrar }) {
       setEstado('hecho')
     } catch (e) { setErr(texto(e, 'No se ha podido enviar. Inténtalo otra vez.')); setEstado('') }
   }
+  useAtras(true, onCerrar)
   return (
     <div role="dialog" aria-modal="true" aria-label="Denunciar" className="fixed inset-0 z-50 flex items-end justify-center bg-black/60 p-3 sm:items-center">
       <div className="w-full max-w-md rounded-3xl border border-dark-700 bg-dark-950 p-4">
