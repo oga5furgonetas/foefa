@@ -2015,3 +2015,14 @@ verifica cuáles podemos escanear». Hecho, probado y desplegado:
   «Probarla» menos al final. «Con quién sirve», debajo de «Probarla».
 - Pendiente aparte (no es de esto): la prueba móvil del candado del Cuadrante falla según la fecha (la celda queda bajo
   la columna fija de nombres); hay tarea propuesta.
+
+## 25-10-2026 (tarde): «Pedir días» se abría en un mes sin nada que pedir
+Dani: «he entrado en 2 cuentas y no me salía ningún día para pedir». No era el servidor: probado contra producción
+con 12 conductores de OGA5 (solo GET), `/shifts/mine` y `/shift-blocks/mios` contestan bien. Octubre tenía 0 días
+marcables (24 pasados y el resto bajo el bloqueo de OGA5 del 13/10 al 02/11, «cuadrante realizado») y noviembre 28,
+pero la pantalla abría siempre en el mes en curso, con el porqué en letra pequeña bajo el calendario.
+Arreglado en `PedirDias.jsx`: al cargar, si el mes en curso no tiene ningún día que marcar, abre el primero de los dos
+siguientes que sí y lo dice («En octubre ya no queda ningún día que pedir: la oficina lo ha cerrado hasta el 02/11
+(cuadrante realizado). Te enseñamos noviembre.»); un mes sin días lo dice arriba con «Ver {mes} →». Verificado en
+producción como un conductor de OGA5 (escrituras cortadas): abre noviembre con 22 días para tocar. Test en humo
+(«Portal del conductor · tus peticiones»).

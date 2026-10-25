@@ -991,6 +991,42 @@ test.describe('Portal del conductor · tus peticiones', () => {
     expect(fallos, fallos.join(' | ')).toHaveLength(0)
   })
 
+  /* 25-10-2026, Dani: «he entrado en 2 cuentas y no me salía ningún día para pedir». El mes en curso estaba
+     cerrado por la oficina hasta fin de mes y la pantalla se abría ahí, sin un solo día que tocar. */
+  test('si este mes ya no se puede pedir nada, se abre el siguiente y se dice por qué', async ({ page }) => {
+    const fallos = vigilar(page)
+    const exp = Math.floor(Date.now() / 1000) + 3600
+    const b64 = (o) => Buffer.from(JSON.stringify(o)).toString('base64').replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '')
+    const token = `${b64({ alg: 'HS256', typ: 'JWT' })}.${b64({ sub: 'd1', role: 'driver', name: 'ANA PÉREZ', exp })}.firma`
+    await page.addInitScript((tk) => {
+      localStorage.setItem('flota_driver_token', tk)
+      localStorage.setItem('flota_driver', JSON.stringify({ id: 'd1', name: 'ANA PÉREZ', center: 'NORTE' }))
+      localStorage.setItem('cookie_consent', '1')
+    }, token)
+    await simularApi(page, 'vacio')
+    const hoy = new Date(); hoy.setHours(12)
+    const finDeMes = iso(new Date(hoy.getFullYear(), hoy.getMonth() + 1, 0))
+    const MESES = ['enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio', 'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre']
+    const sig = new Date(hoy.getFullYear(), hoy.getMonth() + 1, 1)
+    await page.route(/\/api\/shifts\/mine/, json({ shifts: [], sin_ver: [], requests: [] }))
+    await page.route(/\/api\/shift-blocks\/mios/, json({ bloqueos: [
+      { id: 'b1', center: 'NORTE', driver_id: null, desde: dia(-12), hasta: finDeMes, motivo: 'cuadrante realizado' }] }))
+    await page.goto('/conductor', { waitUntil: 'domcontentloaded' })
+    await page.getByText('Pedir días libres').first().click()
+    await expect(page.getByText(`${MESES[sig.getMonth()]} ${sig.getFullYear()}`)).toBeVisible({ timeout: 15000 })
+    await expect(page.getByRole('status').filter({ hasText: 'ya no queda ningún día que pedir' })).toHaveText(
+      `En ${MESES[hoy.getMonth()]} ya no queda ningún día que pedir: la oficina lo ha cerrado hasta el ${finDeMes.slice(8, 10)}/${finDeMes.slice(5, 7)} (cuadrante realizado). Te enseñamos ${MESES[sig.getMonth()]}.`)
+    // El día 1 del mes siguiente ya se puede marcar.
+    await page.getByRole('button', { name: '1', exact: true }).click()
+    await expect(page.getByText('1 día seleccionado')).toBeVisible()
+    // Al volver al mes cerrado, lo dice arriba y deja pasar al siguiente.
+    await page.getByRole('button', { name: 'Mes anterior' }).click()
+    await expect(page.getByText('Este mes no queda ningún día que puedas pedir.')).toBeVisible()
+    await page.getByRole('button', { name: `Ver ${MESES[sig.getMonth()]} →` }).click()
+    await expect(page.getByText(`${MESES[sig.getMonth()]} ${sig.getFullYear()}`)).toBeVisible()
+    expect(fallos, fallos.join(' | ')).toHaveLength(0)
+  })
+
   /* La otra punta: la oficina aprueba con la bandeja abierta y, entretanto,
      quien lo pidió ha cancelado uno de los días. Ese día contesta 409; los
      demás se aprueban igual y se dice cuántos estaban cancelados (antes se

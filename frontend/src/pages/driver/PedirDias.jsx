@@ -353,6 +353,43 @@ export default function PedirDias({ onBack }) {
     return (datos?.bloqueos || []).find((b) => b.desde <= f && f <= b.hasta) || null
   }
 
+  /* Los días que se pueden marcar en un mes (con la misma regla que el calendario). */
+  const marcablesDelMes = (y, m) => {
+    let n = 0
+    for (let d = 1, total = new Date(y, m + 1, 0).getDate(); d <= total; d++) {
+      if (estadoDe(iso(new Date(y, m, d))) === 'libre_de_marcar') n += 1
+    }
+    return n
+  }
+  /* El cierre de la oficina que tapa lo que queda de ese mes, para decir POR QUÉ no hay días. */
+  const cierreDelMes = (y, m) => {
+    const fin = iso(new Date(y, m + 1, 0))
+    return (datos?.bloqueos || []).find((b) => b.hasta >= hoyIso && b.desde <= fin) || null
+  }
+  const ddmm = (f) => `${f.slice(8, 10)}/${f.slice(5, 7)}`
+
+  /* SE ABRE DONDE SE PUEDE PEDIR (25-10-2026). Dani entró con dos conductores y «no salía ningún día»: octubre
+     estaba entero pasado o cerrado por la oficina (bloqueo del 13/10 al 02/11) y noviembre, con 28 días libres,
+     quedaba detrás de la flecha, con el porqué en letra pequeña debajo. Al cargar la primera vez, si este mes no
+     tiene ningún día que marcar, se abre el primero de los dos siguientes que sí (ya están cargados) y se dice. */
+  const [mirado, setMirado] = useState(false)
+  const [saltado, setSaltado] = useState(null)   // {a: 'AAAA-MM', texto}
+  useEffect(() => {
+    if (!datos || mirado || editando) return
+    setMirado(true)
+    if (marcablesDelMes(ref.getFullYear(), ref.getMonth()) > 0) return
+    for (let k = 1; k <= 2; k++) {
+      const d = new Date(ref.getFullYear(), ref.getMonth() + k, 1)
+      if (marcablesDelMes(d.getFullYear(), d.getMonth()) === 0) continue
+      const b = cierreDelMes(ref.getFullYear(), ref.getMonth())
+      setSaltado({ a: iso(d).slice(0, 7), texto: `En ${MESES[ref.getMonth()]} ya no queda ningún día que pedir`
+        + (b ? `: la oficina lo ha cerrado hasta el ${ddmm(b.hasta)}${b.motivo ? ` (${b.motivo})` : ''}` : '')
+        + `. Te enseñamos ${MESES[d.getMonth()]}.` })
+      setRef(d)
+      return
+    }
+  }, [datos]) // eslint-disable-line react-hooks/exhaustive-deps
+
   const alternar = (f) => {
     if (estadoDe(f) !== 'libre_de_marcar') return
     setSel((s) => {
@@ -528,6 +565,26 @@ export default function PedirDias({ onBack }) {
               <ChevronRight size={16} />
             </button>
           </div>
+
+          {saltado && saltado.a === iso(ref).slice(0, 7) && (
+            <p role="status" className="mb-3 rounded-lg bg-sky-500/10 px-3 py-2 text-[12.5px] leading-relaxed text-sky-200">
+              {saltado.texto}
+            </p>
+          )}
+          {/* Un mes sin ningún día que marcar lo dice arriba, con el porqué y el paso al siguiente. */}
+          {datos && !editando && marcablesDelMes(ref.getFullYear(), ref.getMonth()) === 0 && (() => {
+            const b = cierreDelMes(ref.getFullYear(), ref.getMonth())
+            const sig = MESES[(ref.getMonth() + 1) % 12]
+            return (
+              <div className="mb-3 rounded-lg bg-amber-500/10 px-3 py-2.5 text-[12.5px] leading-relaxed text-amber-200">
+                <p className="font-semibold">Este mes no queda ningún día que puedas pedir.</p>
+                {b && <p className="mt-0.5">La oficina lo ha cerrado del {ddmm(b.desde)} al {ddmm(b.hasta)}{b.motivo ? `: ${b.motivo}` : ''}.</p>}
+                <button onClick={() => mover(1)} className="mt-1.5 font-semibold text-amber-100 underline underline-offset-2">
+                  Ver {sig} →
+                </button>
+              </div>
+            )
+          })()}
 
           <div className="grid grid-cols-7 gap-1">
             {DOW.map((d) => (
