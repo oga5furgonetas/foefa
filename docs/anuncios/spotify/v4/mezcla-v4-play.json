@@ -1,11 +1,11 @@
 {
  "voz": "Puck",
- "duracion": 26.62,
- "master_lufs": -16.2,
- "pico_dbtp": -2.8,
- "voz_momentanea_mediana": -17.0,
+ "duracion": 26.79,
+ "master_lufs": -16.3,
+ "pico_dbtp": -2.6,
+ "voz_momentanea_mediana": -16.7,
  "musica_bajo_voz": -28.1,
- "musica_lu_por_debajo": 11.2,
- "musica_sola": -23.8,
+ "musica_lu_por_debajo": 11.4,
+ "musica_sola": -25.1,
  "mb": 0.64
 }

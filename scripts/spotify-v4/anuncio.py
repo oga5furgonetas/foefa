@@ -9,7 +9,7 @@ Dani (Puck) y la misma mezcla medida que la v3 (scripts/spot-v5/spotify.py):
   · ahora: «No la busques en la tienda: entra en flotadsp.com (deletreada). Ahí creas tu cuenta
     e instalas la app». Es lo que pasa de verdad: tras el alta, la web ofrece «Instala FDS en tu móvil»
     (en Android, la descarga; en iPhone, añadirla desde Safari).
-  · play: para cuando la ficha de Play sea pública: «Búscala en Google Play: FDS. O entra en flotadsp.com».
+  · play: para cuando la ficha de Play sea pública: «Búscala en Google Play: FDS Reparto. O entra en flotadsp.com».
     Sirve también al iPhone (FDS no está en la App Store: la web).
 
     GEMINI_API_KEY=… py -3 scripts/spotify-v4/anuncio.py [ahora|play ...]
@@ -40,7 +40,8 @@ GUIONES = {
     'ahora': COMUN + ("No la busques en la tienda: entra en flota de ese pe punto com. "
                       "Te lo repito: flota, de, ese, pe, punto com. "
                       "Ahí creas tu cuenta, e instalas la app. O toca este anuncio."),
-    'play': COMUN + ("Búscala en Google Play: efe, de, ese. "
+    # «FDS Reparto» y no «FDS» a secas: la ficha se llama «FDS – Reparto y rutas», y «FDS» solo saca otras apps antes.
+    'play': COMUN + ("Búscala en Google Play: efe, de, ese, reparto. "
                      "O entra en flota de ese pe punto com: flota, de, ese, pe, punto com. "
                      "O toca este anuncio, y en un minuto tienes tu cuenta."),
 }
@@ -49,7 +50,7 @@ LLAMADA = ('No', 'Búscala')
 # Lo que tiene que entenderse sí o sí al oírlo (en la transcripción de Whisper, sin el guion).
 DEBE_OIRSE = {
     'ahora': [r'flota\s*(de\s*)?(ese|s)\s*(pe|p)|flotadsp', r'punto\s*com|\.com', r'tienda', r'cuenta', r'instal'],
-    'play': [r'google\s*play', r'flota\s*(de\s*)?(ese|s)\s*(pe|p)|flotadsp', r'punto\s*com|\.com'],
+    'play': [r'google\s*play', r'reparto\.?\s*o\s*entra|reparto', r'flota\s*(de\s*)?(ese|s)\s*(pe|p)|flotadsp', r'punto\s*com|\.com'],
 }
 
 

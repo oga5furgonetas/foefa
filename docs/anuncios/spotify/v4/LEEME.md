@@ -85,6 +85,23 @@ Arreglado el 26-10:
 
 Cuando FDS salga en Play, cambiar el audio por `fds-spotify-v4-play.mp3`.
 
+### 26-10-2026, más tarde: enviado
+Dani subió FDS 2.0.0 (AAB, versión 10) a la **prueba abierta** de Play: 177 países y el resto del mundo, enviada
+a revisión. La cuenta de servicio de la API puede subir pero no publicar (403 al confirmar), y la extensión de
+Chrome no sube más de 10 MB, así que el AAB lo sube Dani a mano.
+
+Con su permiso se envió el anuncio con:
+- **`fds-spotify-v4-play.mp3`** (26,8 s): «Búscala en Google Play: FDS Reparto. O entra en flotadsp.com…».
+  «FDS Reparto» y no «FDS» a secas, porque la ficha se llama «FDS – Reparto y rutas».
+- La URL con parámetros (`utm_content=audio4`).
+
+Spotify lo deja «procesando». El grupo sigue **en pausa**. Hay que reanudarlo SOLO cuando la ficha de Play sea
+pública (`play.google.com/store/apps/details?id=com.flotadsp.flota` deja de dar 404). Las fechas de la campaña
+acaban el 31-10: si Play tarda, alargarlas.
+
+Ojo con el editor de Spotify: al salir de «Revisar y enviar» sin enviar, se pierden los cambios pendientes y vuelve
+el anuncio publicado. Hay que rehacerlos antes de «Enviar».
+
 ## Rehacerlo
 
 ```
