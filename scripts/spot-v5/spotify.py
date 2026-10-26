@@ -65,19 +65,20 @@ def momentanea(f):
     return np.array(t[:len(m)]), np.array(m[:len(t)])
 
 
-def palabras_oidas(wav):
+def palabras_oidas(wav, texto=SPOTIFY):
     from faster_whisper import WhisperModel
     modelo = WhisperModel('small', device='cpu', compute_type='int8')
     segs, _ = modelo.transcribe(leer_audio(wav), language='es', word_timestamps=True, beam_size=5,
-                                initial_prompt=SPOTIFY)
+                                initial_prompt=texto)
     return [w for s in segs for w in s.words]
 
 
-def pausas_objetivo(voz_wav):
-    """[(inicio_silencio, fin_silencio, objetivo)] de cada frontera de frase."""
+def pausas_objetivo(voz_wav, texto=SPOTIFY, llamada=('Entra',)):
+    """[(inicio_silencio, fin_silencio, objetivo)] de cada frontera de frase. `llamada`: las palabras con las que
+    empieza la llamada a la acción (antes de ellas, 0,6 s)."""
     import difflib
-    guion = SPOTIFY.split()
-    oidas = palabras_oidas(voz_wav)
+    guion = texto.split()
+    oidas = palabras_oidas(voz_wav, texto)
     casa = {}
     for blk in difflib.SequenceMatcher(None, [norma(w) for w in guion], [norma(w.word) for w in oidas],
                                        autojunk=False).get_matching_blocks():
@@ -91,7 +92,7 @@ def pausas_objetivo(voz_wav):
         if not re.search(r'[.:?!]$', w):
             continue
         objetivo = 0.42 if w.endswith('.') else 0.32
-        if guion[i + 1] == 'Entra':
+        if guion[i + 1] in llamada:
             objetivo = 0.6
         # El silencio de la frontera: el que acaba justo antes de la palabra siguiente (si whisper la casó) o
         # el que empieza justo después de esta.
@@ -111,9 +112,9 @@ def pausas_objetivo(voz_wav):
     return fronteras, oidas
 
 
-def con_pausas(voz_wav, destino):
+def con_pausas(voz_wav, destino, texto=SPOTIFY, llamada=('Entra',)):
     x = leer_audio_24k(voz_wav)
-    fronteras, _ = pausas_objetivo(voz_wav)
+    fronteras, _ = pausas_objetivo(voz_wav, texto, llamada)
     trozos, pos, cambios = [], 0, []
     for a, b, obj, w in fronteras:
         dur = b - a
@@ -147,15 +148,18 @@ def recortar_bordes(wav, destino):
         'areverse,silenceremove=start_periods=1:start_threshold=-45dB:start_silence=0.04,areverse', destino])
 
 
-def una(voz):
-    tmp = os.path.join(SP, f'_tmp_{voz}')
+def una(voz, sp=SP, texto=SPOTIFY, nombre=None, llamada=('Entra',)):
+    """`nombre`: el de la locución (`<nombre>.wav` en `sp`) y del MP3 (`fds-spotify-<nombre>.mp3`). Sin él, los de
+    la v3 (`<voz>.wav` → `fds-spotify-v3-<voz>.mp3`). La v4 (scripts/spotify-v4/anuncio.py) pasa los suyos."""
+    nombre = nombre or voz
+    tmp = os.path.join(sp, f'_tmp_{nombre}')
     os.makedirs(tmp, exist_ok=True)
-    print(f'== {voz}')
-    crudo = os.path.join(SP, f'{voz}.wav')
+    print(f'== {nombre}')
+    crudo = os.path.join(sp, f'{nombre}.wav')
     recortada = os.path.join(tmp, 'recortada.wav')
     recortar_bordes(crudo, recortada)
     pausada = os.path.join(tmp, 'pausada.wav')
-    con_pausas(recortada, pausada)
+    con_pausas(recortada, pausada, texto, llamada)
     dv = float(subprocess.run(['ffprobe', '-v', 'error', '-show_entries', 'format=duration', '-of', 'csv=p=0', pausada],
                               capture_output=True, text=True).stdout)
     total = ANTES + dv + COLA
@@ -187,7 +191,7 @@ def una(voz):
     # Medio segundo de silencio delante y detrás, como pide Spotify.
     ms = int(SILENCIO * 1000)
     ff(['-i', mezcla, '-af', ln + f',aresample=44100,adelay={ms}:all=1,apad=pad_dur={SILENCIO}', master])
-    destino = os.path.join(SP, f'fds-spotify-v3-{voz.lower()}.mp3')
+    destino = os.path.join(sp, f'fds-spotify-v3-{voz.lower()}.mp3' if nombre == voz else f'fds-spotify-{nombre}.mp3')
     ff(['-i', master, '-c:a', 'libmp3lame', '-b:a', '192k', '-ar', '44100', '-ac', '2', destino])
     # Comprobación: misma ganancia de máster a cada pista para comparar.
     i_m, pico = medir(destino)
@@ -210,7 +214,7 @@ def una(voz):
          'voz_momentanea_mediana': round(voz_lu, 1), 'musica_bajo_voz': round(mus_lu, 1),
          'musica_lu_por_debajo': round(voz_lu - mus_lu, 1), 'musica_sola': mus_sola and round(mus_sola, 1),
          'mb': round(os.path.getsize(destino) / 1e6, 2)}
-    json.dump(r, open(os.path.join(SP, f'mezcla-{voz}.json'), 'w', encoding='utf-8'), ensure_ascii=False, indent=1)
+    json.dump(r, open(os.path.join(sp, f'mezcla-{nombre}.json'), 'w', encoding='utf-8'), ensure_ascii=False, indent=1)
     print(f"   {dur:.1f} s · máster {i_m} LUFS, pico {pico} dBTP · voz {voz_lu:.1f} · música bajo la voz "
           f"{mus_lu:.1f} ({voz_lu - mus_lu:.1f} LU por debajo) · música sola {r['musica_sola']} · {r['mb']} MB")
     for f in os.listdir(tmp):

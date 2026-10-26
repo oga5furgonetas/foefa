@@ -123,6 +123,9 @@ data class Direcciones(val direcciones: List<DireccionConocida> = emptyList())
 @Serializable
 data class Gratis(val activo: Boolean = false, val tope: Int? = null, val usadas: Int? = null)
 
+/** La oferta del plan del repartidor (de /billing/planes): `gratisHasta` «2026-12-31» mientras dure la promoción. */
+data class Oferta(val gratisHasta: String? = null, val paradasGratis: Int = 15)
+
 @Serializable
 data class Promo(val activa: Boolean = false, val hasta: String? = null)
 

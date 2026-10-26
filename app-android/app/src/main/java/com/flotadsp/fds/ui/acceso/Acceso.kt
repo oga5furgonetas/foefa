@@ -61,17 +61,36 @@ import com.flotadsp.fds.R
 import com.flotadsp.fds.data.ErrorApi
 import com.flotadsp.fds.ui.Acciones
 import kotlinx.coroutines.launch
+import androidx.compose.runtime.produceState
+import com.flotadsp.fds.data.Oferta
+import com.flotadsp.fds.ui.ESPANOL
+import java.time.LocalDate
+import java.time.format.DateTimeFormatter
 
 /* ENTRAR O CREAR LA CUENTA: lo primero que ve quien instala FDS. Nada de portada web: el logo, qué hace la app
    en una frase, y entrar. */
 @Composable
 fun Acceso(ref: String?) {
+    val app = LocalContext.current.applicationContext as FdsApp
     var paso by rememberSaveable { mutableStateOf("inicio") }
+    // La oferta, la misma que dicen la web y los anuncios (Spotify: «sin tarjeta y sin límite hasta fin de año»).
+    val oferta by produceState<Oferta?>(null) { value = runCatching { app.repo.oferta() }.getOrNull() }
     when (paso) {
         "entrar" -> Entrar(alVolver = { paso = "inicio" })
-        "alta" -> Alta(ref, alVolver = { paso = "inicio" })
-        else -> Inicio(alEntrar = { paso = "entrar" }, alCrear = { paso = "alta" })
+        "alta" -> Alta(ref, oferta, alVolver = { paso = "inicio" })
+        else -> Inicio(oferta, alEntrar = { paso = "entrar" }, alCrear = { paso = "alta" })
     }
+}
+
+/** El día hasta el que es gratis y sin límite («31 de diciembre»), si la promoción sigue. */
+private fun promoHasta(o: Oferta?): String? = o?.gratisHasta?.let { runCatching { LocalDate.parse(it) }.getOrNull() }
+    ?.takeIf { !LocalDate.now().isAfter(it) }?.format(DateTimeFormatter.ofPattern("d 'de' MMMM", ESPANOL))
+
+/** Lo que cuesta, con las mismas palabras que la web de registro. Sin red, lo que vale siempre. */
+private fun textoOferta(o: Oferta?): String {
+    val p = o?.paradasGratis ?: 15
+    return promoHasta(o)?.let { "Sin tarjeta. Gratis y sin límite hasta el $it; después, gratis hasta $p paradas al día." }
+        ?: "Sin tarjeta. Gratis hasta $p paradas al día; sin tope, el plan Repartidor."
 }
 
 @Composable
@@ -80,7 +99,7 @@ private fun Logo(tam: Int = 72) {
 }
 
 @Composable
-private fun Inicio(alEntrar: () -> Unit, alCrear: () -> Unit) {
+private fun Inicio(oferta: Oferta?, alEntrar: () -> Unit, alCrear: () -> Unit) {
     Column(Modifier.fillMaxSize().statusBarsPadding().navigationBarsPadding().padding(24.dp)) {
         Spacer(Modifier.weight(1f))
         Logo()
@@ -97,6 +116,14 @@ private fun Inicio(alEntrar: () -> Unit, alCrear: () -> Unit) {
                 Icon(Icons.Default.CheckCircle, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(20.dp))
                 Spacer(Modifier.width(10.dp))
                 Text(it, style = MaterialTheme.typography.bodyLarge)
+            }
+        }
+        promoHasta(oferta)?.let { hasta ->
+            Spacer(Modifier.height(14.dp))
+            Surface(color = MaterialTheme.colorScheme.primaryContainer, contentColor = MaterialTheme.colorScheme.onPrimaryContainer,
+                shape = MaterialTheme.shapes.small) {
+                Text("Gratis y sin límite hasta el $hasta · sin tarjeta", style = MaterialTheme.typography.titleSmall,
+                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp))
             }
         }
         Spacer(Modifier.weight(1.2f))
@@ -172,7 +199,7 @@ private fun Entrar(alVolver: () -> Unit) {
 }
 
 @Composable
-private fun Alta(ref: String?, alVolver: () -> Unit) {
+private fun Alta(ref: String?, oferta: Oferta?, alVolver: () -> Unit) {
     val ctx = LocalContext.current
     val repo = (ctx.applicationContext as FdsApp).repo
     val ambito = rememberCoroutineScope()
@@ -224,7 +251,7 @@ private fun Alta(ref: String?, alVolver: () -> Unit) {
         }
         Spacer(Modifier.height(10.dp))
         Surface(color = MaterialTheme.colorScheme.surfaceContainer, shape = MaterialTheme.shapes.small) {
-            Text("Sin tarjeta. Gratis hasta 15 paradas al día; sin tope, el plan Repartidor.", style = MaterialTheme.typography.bodySmall,
+            Text(textoOferta(oferta), style = MaterialTheme.typography.bodySmall,
                 modifier = Modifier.padding(12.dp))
         }
         Spacer(Modifier.height(24.dp))

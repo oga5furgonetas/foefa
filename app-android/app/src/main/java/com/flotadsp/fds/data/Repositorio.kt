@@ -14,7 +14,11 @@ import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.buildJsonArray
 import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.contentOrNull
+import kotlinx.serialization.json.intOrNull
+import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
+import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.put
 import java.io.File
 import java.time.Instant
@@ -66,6 +70,15 @@ class Repositorio(private val ctx: Context, val cuenta: Cuenta, val api: Api) {
         if (s.role != "admin") throw ErrorApi(403, "Esta app es para quien reparte por su cuenta. Si repartes para una empresa, entra en el portal de tu empresa.")
         cuenta.guardar(s, correo.trim().lowercase(Locale.ROOT))
         _pendientes.value = leerCola()
+    }
+
+    /** La oferta del plan del repartidor, la MISMA que enseñan la web y los anuncios (GET /billing/planes, público):
+     *  «gratis y sin límite hasta…» mientras dure la promoción, y las paradas gratis al día después. */
+    suspend fun oferta(): Oferta {
+        val planes = api.get("billing/planes").jsonObject["planes"]?.jsonArray.orEmpty()
+        val p = planes.map { it.jsonObject }.firstOrNull { it["clave"]?.jsonPrimitive?.contentOrNull == "autonomo" }
+        return Oferta(gratisHasta = p?.get("gratis_hasta")?.jsonPrimitive?.contentOrNull,
+            paradasGratis = p?.get("paradas_gratis")?.jsonPrimitive?.intOrNull ?: 15)
     }
 
     suspend fun crearCuenta(nombre: String, correo: String, clave: String, ref: String?) {
