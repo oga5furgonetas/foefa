@@ -50,16 +50,40 @@ se acortó la llamada.
 - **La app nativa (FDS 2.0.0)** dice lo mismo en su portada y en el alta. Lo saca de `/billing/planes`, igual que la web.
   Antes ponía «Gratis hasta 15 paradas al día», que contradecía al anuncio.
 
-## En Spotify Ads Manager (lo hace Dani)
+## En Spotify Ads Manager (visto el 26-10-2026)
 
-La campaña de la v3 sigue en borrador porque Spotify no deja enviarla («Corrige los errores de validación»; ver
-`../v3/LEEME.md`, pendiente de su soporte). Al desbloquearla:
+La campaña «FDS Spotify audio Puck registro» se llegó a publicar y estuvo sonando:
 
-1. En el anuncio, cambiar el audio por `fds-spotify-v4-ahora.mp3`.
-2. Cambiar la URL a la de arriba (`utm_content=audio4`).
-3. Dejar igual la imagen, el Canvas, el logo, el eslogan y el botón.
+| Dato | Valor |
+|---|---|
+| Fechas | del 24 al 31-10 |
+| Presupuesto | 15 €/día |
+| Gastado | 28,80 € |
+| Impresiones | 9.416 |
+| Alcance | 8.624 |
+| Clics | 38 (0,40 %) |
+| Escucha completa | 90 % |
 
-Cuando FDS salga en Play: subir `fds-spotify-v4-play.mp3` en su lugar.
+El grupo «Espana 18-54 movil audio Puck» está **en pausa**.
+
+El anuncio publicado tenía dos problemas:
+- Era el audio de la v3.
+- La URL de destino era `https://flotadsp.com/registro` A SECAS: el editor se comió el «?» y todo lo de detrás.
+
+Ese segundo fallo era el más grave. Quien tocaba llegaba a la página general de registro, que dice «Flota» (otra
+marca), pregunta «¿Qué vas a hacer con Flota?» con seis tipos de empresa y en «Repartir yo mismo» ponía «7 días
+gratis», justo después de oír «sin límite hasta fin de año». Con los parámetros, la página es la de FDS para quien
+reparte solo, con la misma oferta que el audio. Además, sin `utm_source` los 38 clics no se pueden atribuir.
+
+Arreglado el 26-10:
+- La tarjeta de la web ya no dice «7 días gratis»: dice la oferta vigente (`ofertaAutonomo` en `Registro.jsx`).
+  Desplegado.
+- En el editor del anuncio están el audio `fds-spotify-v4-ahora.mp3` y la URL con `sector`, `plan` y
+  `utm_content=audio4`. Se puso con el setter nativo del campo; Spotify lo enseña bien en «Revisar y enviar».
+  **Falta pulsar «Enviar».** Lo hace o lo autoriza Dani: vuelve a aceptar las condiciones de Spotify y el anuncio
+  pasa otra vez por revisión. El grupo sigue en pausa; reanudarlo es gasto y lo decide Dani.
+
+Cuando FDS salga en Play, cambiar el audio por `fds-spotify-v4-play.mp3`.
 
 ## Rehacerlo
 

@@ -70,7 +70,7 @@ const annualSave = (p, furgonetas) => precioMes(p, furgonetas) * (12 - MESES_ANU
    paquetería, y le falta el escaneo de tickets y la ruta. */
 const SECTORES = [
   { key: 'autonomo', icon: User, color: '#eab308', name: 'Repartir yo mismo',
-    sub: 'Tu furgoneta y tus paquetes: los escaneas o fotografías la etiqueta, la ruta se ordena sola, llamas o escribes al cliente desde cada parada y cobras si toca. 7 días gratis.' },
+    sub: 'Tu furgoneta y tus paquetes: los escaneas o fotografías la etiqueta, la ruta se ordena sola, llamas o escribes al cliente desde cada parada y cobras si toca.' },
   { key: 'dsp_amazon', icon: Package, color: '#fb923c', name: 'DSP de Amazon',
     sub: 'Plantilla del día, DNR diaria, horas (WHC), cuadrante y turnos, asignación de furgonetas, inspecciones con foto e IA, taller y vencimientos. Todo lo de una DSP, sin extensiones ni nada que toque los sistemas de Amazon.' },
   { key: 'mensajeria', icon: Send, color: '#f472b6', name: 'Mensajería y paquetería',
@@ -82,6 +82,12 @@ const SECTORES = [
   { key: 'otra', icon: Truck, color: '#a855f7', name: 'Otra flota',
     sub: 'Servicios técnicos, obra, alquiler…: vehículos, conductores, taller y vencimientos.' },
 ]
+
+/* Lo que cuesta repartir uno mismo, lo mismo que dicen la portada de repartidores, la app y los anuncios. Ponía
+   «7 días gratis» (la prueba de antes) mientras todo lo demás decía «gratis y sin límite hasta el 31 de diciembre». */
+const ofertaAutonomo = () => (promoGratis()
+  ? `Gratis y sin límite hasta el ${fechaPromo()}, sin tarjeta.`
+  : `Gratis hasta ${PARADAS_GRATIS} paradas al día, sin tarjeta.`)
 
 function SectorPicker({ onSelect }) {
   return (
@@ -98,7 +104,9 @@ function SectorPicker({ onSelect }) {
             <button key={s.key} onClick={() => onSelect(s.key)} style={{ textAlign: 'left', background: '#13161b', border: '1px solid rgba(255,255,255,.08)', borderRadius: 16, padding: '18px 18px', cursor: 'pointer', color: '#eef1f6' }}>
               <s.icon size={22} color={s.color} />
               <div style={{ fontWeight: 800, fontSize: 15, margin: '10px 0 4px' }}>{s.name}</div>
-              <div style={{ fontSize: 12.5, color: '#8b94a3', lineHeight: 1.5 }}>{s.sub}</div>
+              <div style={{ fontSize: 12.5, color: '#8b94a3', lineHeight: 1.5 }}>
+                {s.sub}{s.key === 'autonomo' && <> <b style={{ color: '#eab308' }}>{ofertaAutonomo()}</b></>}
+              </div>
             </button>
           ))}
         </div>
