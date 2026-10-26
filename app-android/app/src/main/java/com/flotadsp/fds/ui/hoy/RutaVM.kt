@@ -1,0 +1,134 @@
+package com.flotadsp.fds.ui.hoy
+
+import android.app.Application
+import androidx.lifecycle.AndroidViewModel
+import androidx.lifecycle.viewModelScope
+import com.flotadsp.fds.FdsApp
+import com.flotadsp.fds.data.ErrorApi
+import com.flotadsp.fds.data.MiRuta
+import com.flotadsp.fds.data.Parada
+import kotlinx.coroutines.channels.Channel
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.receiveAsFlow
+import kotlinx.coroutines.launch
+import kotlinx.serialization.json.JsonObject
+
+data class EstadoRuta(
+    val ruta: MiRuta? = null,
+    /** La ruta que se ve es la guardada en el móvil (sin red): de cuándo es. */
+    val guardadaEn: Long? = null,
+    val cargando: Boolean = true,
+    val refrescando: Boolean = false,
+    val error: String? = null,
+    val ocupado: String = "",
+) {
+    val paradas get() = ruta?.pedidos.orEmpty()
+    val pendientes get() = paradas.filter { it.pendiente }.sortedWith(compareBy<Parada>({ it.orden ?: Int.MAX_VALUE }, { it.cliente }))
+    val hechas get() = paradas.filter { !it.pendiente }.sortedByDescending { it.cerradoEn ?: "" }
+    val entregadas get() = paradas.count { it.estado == "entregado" }
+}
+
+/** Un aviso para la persona (abajo, como en cualquier app), con una acción opcional («Deshacer»). */
+data class Aviso(val texto: String, val accion: String? = null, val alPulsar: (() -> Unit)? = null)
+
+class RutaVM(app: Application) : AndroidViewModel(app) {
+    private val repo = (app as FdsApp).repo
+    private val _e = MutableStateFlow(EstadoRuta())
+    val estado: StateFlow<EstadoRuta> = _e
+    private val _avisos = Channel<Aviso>(Channel.BUFFERED)
+    val avisos = _avisos.receiveAsFlow()
+    val pendientesDeEnvio = repo.pendientes
+
+    init {
+        // Al momento, la ruta guardada en el móvil; después, la del servidor.
+        repo.rutaGuardada()?.let { (r, en) -> _e.value = EstadoRuta(ruta = r, guardadaEn = en, cargando = false) }
+        cargar()
+        viewModelScope.launch { repo.renovarSiToca() }
+    }
+
+    fun avisar(t: String) { _avisos.trySend(Aviso(t)) }
+
+    fun cargar(tirando: Boolean = false) {
+        viewModelScope.launch {
+            if (tirando) _e.value = _e.value.copy(refrescando = true)
+            try {
+                repo.vaciarCola()
+                val r = repo.miRuta()
+                _e.value = _e.value.copy(ruta = r, guardadaEn = null, cargando = false, refrescando = false, error = null)
+            } catch (e: ErrorApi) {
+                _e.value = if (_e.value.ruta != null && e.sinRed) {
+                    _e.value.copy(cargando = false, refrescando = false, guardadaEn = _e.value.guardadaEn ?: System.currentTimeMillis())
+                } else _e.value.copy(cargando = false, refrescando = false, error = e.message)
+                if (tirando && e.sinRed) avisar("Sin conexión: sigues con la ruta guardada en el móvil.")
+            }
+        }
+    }
+
+    /** Cambia el estado en pantalla al momento (como una app) y lo manda; sin red queda guardado. */
+    private fun marcar(p: Parada, estado: String, cuerpo: JsonObject, texto: String, conDeshacer: Boolean) {
+        val antes = _e.value.ruta ?: return
+        _e.value = _e.value.copy(ruta = antes.copy(pedidos = antes.pedidos.map {
+            if (it.id == p.id) it.copy(estado = estado, cerradoEn = java.time.Instant.now().toString()) else it
+        }))
+        viewModelScope.launch {
+            try {
+                val enviado = repo.cambiarEstado(p.id, estado, cuerpo)
+                val t = if (enviado) texto else "$texto Sin cobertura: se envía solo al volver la red."
+                _avisos.send(if (conDeshacer) Aviso(t, "Deshacer") { deshacer(p) } else Aviso(t))
+                if (enviado) refrescarSinRuido()
+            } catch (e: ErrorApi) {
+                _e.value = _e.value.copy(ruta = antes)
+                _avisos.send(Aviso(e.message ?: "No se ha podido guardar"))
+            }
+        }
+    }
+
+    fun entregar(p: Parada, cuerpo: JsonObject = JsonObject(emptyMap())) =
+        marcar(p, "entregado", cuerpo, "Entregado: ${p.cliente.ifBlank { p.direccion }}.", conDeshacer = true)
+
+    fun noEntregado(p: Parada, motivo: String, nota: String) = marcar(
+        p, "fallido", JsonObject(mapOf("motivo" to kotlinx.serialization.json.JsonPrimitive(motivo),
+            "nota" to kotlinx.serialization.json.JsonPrimitive(nota))), "Marcado como no entregado.", conDeshacer = true)
+
+    fun deshacer(p: Parada) = marcar(p, "pendiente", JsonObject(emptyMap()), "Vuelve a estar por entregar.", conDeshacer = false)
+
+    /** Se dice que se está ordenando desde que se toca (antes incluso de tener la ubicación). */
+    fun empezarAOrdenar(): Boolean {
+        if (_e.value.ocupado.isNotEmpty()) return false
+        _e.value = _e.value.copy(ocupado = "ordenar")
+        return true
+    }
+
+    fun ordenar(lat: Double?, lng: Double?) {
+        _e.value = _e.value.copy(ocupado = "ordenar")
+        viewModelScope.launch {
+            try {
+                val r = repo.ordenar(lat, lng)
+                val fin = r.ruta?.fin
+                avisar(if (fin != null) "Ruta ordenada: ${r.ordenados} paradas, acabas ≈ $fin." else "Ruta ordenada: ${r.ordenados} paradas.")
+                _e.value = _e.value.copy(ruta = repo.miRuta(), guardadaEn = null)
+            } catch (e: ErrorApi) {
+                avisar(if (e.sinRed) "Sin conexión: para ordenar la ruta hace falta red." else e.message ?: "No se ha podido ordenar")
+            } finally {
+                _e.value = _e.value.copy(ocupado = "")
+            }
+        }
+    }
+
+    fun quitar(p: Parada) {
+        viewModelScope.launch {
+            try {
+                repo.quitarParada(p.id)
+                avisar("Parada quitada de tu ruta.")
+                refrescarSinRuido()
+            } catch (e: ErrorApi) { avisar(e.message ?: "No se ha podido quitar") }
+        }
+    }
+
+    fun refrescarSinRuido() {
+        viewModelScope.launch {
+            runCatching { repo.miRuta() }.onSuccess { _e.value = _e.value.copy(ruta = it, guardadaEn = null, error = null) }
+        }
+    }
+}

@@ -1,0 +1,11 @@
+# Lo que se genera al compilar y lo firmado (el AAB/APK se sube a Play o se reparte; no va al repositorio).
+.gradle/
+.kotlin/
+build/
+app/build/
+local.properties
+salida/
+*.aab
+*.apk
+*.keystore
+*.jks

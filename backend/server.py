@@ -869,7 +869,8 @@ def create_token(user_id: str, role: str, name: str,
                  account_type: Optional[str] = None, centers: Optional[list] = None,
                  super_admin: bool = False, permissions: Optional[list] = None,
                  demo: bool = False, allowed_centers: Optional[list] = None,
-                 suplantado: bool = False, region: Optional[list] = None) -> str:
+                 suplantado: bool = False, region: Optional[list] = None,
+                 horas: Optional[int] = None) -> str:
     # El conductor entra en su portal una vez cada muchos dias: pedir dias libres
     # o mirar sus turnos no es algo diario. Con las 72 h del panel, el token le
     # caducaba entre visita y visita y la pantalla le soltaba
@@ -879,7 +880,11 @@ def create_token(user_id: str, role: str, name: str,
     # Se le da un mes. El riesgo es bajo: un token de conductor solo alcanza a
     # SUS datos —sus turnos, sus peticiones, su furgoneta del dia—, nunca al
     # panel ni a los datos de nadie mas.
-    horas = (24 * 30) if role == "driver" else JWT_EXPIRE_HOURS
+    #
+    # `horas` (25-10-2026): quien reparte por su cuenta tambien recibe un mes (_org_de_autonomo), por lo mismo
+    # y porque la app nativa de Android no puede echarle cada 72 h.
+    if horas is None:
+        horas = (24 * 30) if role == "driver" else JWT_EXPIRE_HOURS
     expires = datetime.now(timezone.utc) + timedelta(hours=horas)
     payload = {
         "sub": user_id,
@@ -5049,7 +5054,8 @@ async def register_dsp(data: RegisterRequest, request: Request):
             logger.warning(f"Email de bienvenida no enviado a {recipient}: {_ee}")
     token = create_token(user_id, "admin", org_name,
                          org_id=org_id, db_name=org["db_name"], account_type="dsp",
-                         centers=org.get("centers"))
+                         centers=org.get("centers"),
+                         horas=SESION_APP_HORAS if _org_de_autonomo(org) else None)
     return TokenResponse(access_token=token, role="admin", name=org_name, id=user_id,
                          account_type="dsp", hidden_modules=org_hidden_modules(org), slug=slug,
                          centers=org.get("centers"))
@@ -6838,15 +6844,25 @@ async def admin_login(data: LoginRequest, request: Request):
     return await _sesion_de_admin(user)
 
 
+SESION_APP_HORAS = 24 * 30
+
+
+def _org_de_autonomo(org: Optional[dict]) -> bool:
+    """La cuenta de quien reparte por su cuenta: una persona y su reparto, nada de nadie más."""
+    return bool(org) and ((org.get("plan") or "").lower() == "autonomo" or (org.get("sector") or "").lower() == "autonomo")
+
+
 async def _sesion_de_admin(user: dict) -> TokenResponse:
     """La sesión de un admin ya comprobado: la usan el login y el paso al móvil."""
     org = await get_org(user.get("org_id"))
     db_name = _tenant_db_name(org)
     account_type = (org or {}).get("account_type", "owner")
+    # El autónomo, un mes como los conductores (la app de Android la renueva con /auth/renovar al usarla).
+    horas = SESION_APP_HORAS if _org_de_autonomo(org) and not user.get("super_admin") else None
     token = create_token(user["id"], user["role"], user["name"],
                          org_id=user.get("org_id"), db_name=db_name, account_type=account_type,
                          centers=(org or {}).get("centers"), super_admin=bool(user.get("super_admin")),
-                         permissions=user.get("permissions"))
+                         permissions=user.get("permissions"), horas=horas)
     return TokenResponse(
         access_token=token,
         role=user["role"],
@@ -6862,6 +6878,65 @@ async def _sesion_de_admin(user: dict) -> TokenResponse:
         allowed_centers=user.get("allowed_centers"),
         admin_role=user.get("admin_role"),
     )
+
+
+def _sesion_propia_de_admin(user: dict) -> bool:
+    """Una sesión de admin de verdad: ni el super-admin, ni «entrar como», ni una demo."""
+    return user.get("role") == "admin" and not (user.get("imp") or user.get("demo") or user.get("sa"))
+
+
+@auth_router.post("/renovar", response_model=TokenResponse)
+async def renovar_sesion(user: dict = Depends(get_current_user)):
+    """LA APP DE ANDROID NO TE ECHA (25-10-2026). La app nativa del repartidor renueva su sesión al usarla, como
+    cualquier app: quien reparte cada día no vuelve a escribir su contraseña. Solo cuentas de quien reparte por
+    su cuenta (una persona); se vuelve a leer el usuario, así que una cuenta desactivada no se renueva."""
+    if not _sesion_propia_de_admin(user):
+        raise HTTPException(403, "Esta sesión no se renueva: entra otra vez con tu correo")
+    adm = await global_db.admin_users.find_one({"id": user.get("sub")}, {"_id": 0})
+    if not adm or adm.get("disabled"):
+        raise HTTPException(401, "Tu sesión ha caducado: entra otra vez")
+    if not _org_de_autonomo(await get_org(adm.get("org_id"))):
+        raise HTTPException(403, "Esta sesión no se renueva: entra otra vez con tu correo")
+    return await _sesion_de_admin(adm)
+
+
+@auth_router.post("/borrar-cuenta")
+async def borrar_cuenta(data: dict = Body(...), user: dict = Depends(get_current_user)):
+    """BORRAR LA CUENTA DESDE LA APP (25-10-2026). Google Play lo exige a toda app en la que se crea una cuenta.
+    Con la contraseña, la cuenta se desactiva al momento (ya no se puede entrar ni renovar la sesión) y queda
+    apuntada la petición de borrar sus datos, con aviso a la oficina por correo. Aquí no se borra nada: de un toque
+    (o con un móvil robado) no se pueden tirar los datos de nadie; los borra una persona, como mucho en 30 días."""
+    if not _sesion_propia_de_admin(user):
+        raise HTTPException(403, "Esta cuenta no se puede borrar desde aquí")
+    _rl_public_action(f"borrar:{user.get('sub')}", max_count=5, window_s=3600)
+    adm = await global_db.admin_users.find_one({"id": user.get("sub")}, {"_id": 0})
+    if not adm or adm.get("disabled"):
+        raise HTTPException(401, "Tu sesión ha caducado: entra otra vez")
+    if not verify_password(str(data.get("password") or ""), adm.get("hashed_password") or ""):
+        # 400 y no 401: la sesión es buena; con un 401 la app entiende «sesión caducada» y te saca (visto en el
+        # emulador: una contraseña mal escrita al borrar la cuenta cerraba la sesión).
+        raise HTTPException(400, "La contraseña no es correcta")
+    org = await get_org(adm.get("org_id"))
+    if not _org_de_autonomo(org):
+        raise HTTPException(403, "Una cuenta de empresa se da de baja escribiendo a la oficina")
+    ahora = datetime.now(timezone.utc).isoformat()
+    await global_db.admin_users.update_one({"id": adm["id"]}, {"$set": {"disabled": True, "baja_solicitada_en": ahora}})
+    await global_db.organizations.update_one({"id": org["id"]}, {"$set": {"baja_solicitada_en": ahora}})
+    await global_db.bajas_cuentas.insert_one({"org_id": org["id"], "usuario": adm.get("username") or "",
+                                              "nombre": org.get("name") or "", "pedida_en": ahora,
+                                              "estado_pago": org.get("status") or "", "borrada": False})
+    logger.info("Baja pedida desde la app: org %s", org["id"])
+    if CORREO_CONTACTO:
+        try:
+            await _enviar_email(
+                CORREO_CONTACTO, f"{MARCA}: petición de borrar una cuenta",
+                f"<p>Quien reparte con la cuenta <b>{html_escape(org.get('name') or '')}</b> "
+                f"({html_escape(adm.get('username') or '')}, org {org['id']}) ha pedido borrar su cuenta desde la app.</p>"
+                f"<p>La cuenta ya está desactivada. Falta borrar sus datos (como mucho en 30 días) y, si paga "
+                f"(estado: {html_escape(org.get('status') or '')}), cancelar el cobro.</p>")
+        except Exception:                                        # noqa: BLE001
+            logger.warning("Aviso de baja no enviado (org %s)", org["id"])
+    return {"ok": True}
 
 
 # =========================

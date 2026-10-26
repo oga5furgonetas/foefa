@@ -5,7 +5,7 @@
 > haz commit y `git push`. Una sola sesión trabajando a la vez: antes de
 > empezar, `git pull` y comprueba que nadie ha dejado nada a medias aquí.
 
-Última actualización: **14-10-2026** (promoción «Invita y gana 10 €», retirada desde 60 €, anuncio Meta en borrador).
+Última actualización: **26-10-2026** (app de Android nativa FDS 2.0.0 en `app-android/`, ver «Última sesión»).
 
 ## Qué es y dónde está
 
@@ -601,7 +601,29 @@ Nada se había borrado (org `owner` sin `modulos`, usuario `dani` sin
   `flotadsp.com`. Los códigos que solo contienen un identificador siguen
   necesitando OCR/revisión o una integración de datos de la empresa.
 
+## Última sesión — 25/26-10-2026: la app de Android NATIVA (FDS 2.0.0)
+
+- Dani rechazó la TWA («se ve y es una aplicación web»). Hecha la app nativa en `app-android/` (Kotlin + Compose,
+  mismo paquete y misma clave de subida que la FDS de Play: es una actualización). Todo en `docs/PLAY_STORE.md`,
+  sección «Versión 2.0.0»: qué hace, cómo compilar, cómo probar en el emulador y qué cambia en Play Console.
+- Backend: sesiones de 30 días para el autónomo, `POST /auth/renovar` y `POST /auth/borrar-cuenta` (desactiva y
+  apunta en `bajas_cuentas`; no borra datos). Contraseña mal → 400, NO 401 (la app entiende 401 como «sesión
+  caducada» y te saca). Pruebas en `backend/tests/test_sesion_app.py`. Arreglada de paso una prueba de correos
+  que dependía de la fecha real (`test_el_correo_del_bono_sale_de_verdad`) y 5 de Valor que fallaban solo en la
+  batería entera: calculaban «ahora» al importar y a los 15 min de batería sus señales salían caducadas (ahora
+  cada prueba lo calcula al empezar; comprobado atrasándolo 16 min).
+- Ficheros firmados en `app-android/salida/` (fuera de git): `FDS-2.0.0.aab` (Play) y `FDS-2.0.0.apk`
+  (`com.flotadsp.flota.web`, para instalar a mano).
+- Verificado en el emulador oficial de Android 14 contra el servidor real (en memoria) y con la versión R8.
+  **Falta**: probarla en un móvil físico, subir el AAB (Dani) y, cuando Dani la apruebe, cambiar la descarga de
+  la web (`frontend/public/descargas/FDS.apk`, hoy la TWA 1.0.3) por el APK nativo.
+
 ## Pendiente (por prioridad)
+
+-3. **App nativa (26-10)**: Dani la prueba en su móvil y sube `app-android/salida/FDS-2.0.0.aab` a Play
+   (Seguridad de los datos: cámara y ubicación; Eliminación de cuentas). **Cada «Borrar mi cuenta» pedido desde
+   la app** queda en `flota_global.bajas_cuentas` (`borrada: false`) con aviso por correo: hay que borrar sus
+   datos en 30 días como mucho. Falta una página web para pedir el borrado (Play la pide; hoy vale /privacidad).
 
 -2. **Reparto (03-10)**: antes de cobrar a una empresa de reparto, contrato de
    encargo art. 28 y política de privacidad (ver `docs/REPARTO.md`). La IA de

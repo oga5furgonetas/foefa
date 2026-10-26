@@ -21,6 +21,15 @@ EV1 = Evento("e1", "futbol", "LaLiga", "Betis", "Sevilla", AHORA + timedelta(hou
 ABIERTO = replace(PREPARTIDO, prob_minima=0.0)
 
 
+@pytest.fixture(autouse=True)
+def _ahora_de_cada_prueba():
+    """«Ahora» al EMPEZAR cada prueba, no al importar el fichero: en la batería entera (15 min) llegaba con un cuarto
+    de hora y las señales salían caducadas; solas pasaban (26-10-2026, comprobado atrasándolo 16 min)."""
+    global AHORA, EV1
+    AHORA = datetime.now(timezone.utc).replace(microsecond=0)
+    EV1 = Evento("e1", "futbol", "LaLiga", "Betis", "Sevilla", AHORA + timedelta(hours=2))
+
+
 def _c(casa, sel, cuota, ts, ev="e1"):
     return Cuota(ev, casa, "1x2", None, sel, cuota, ts, "prueba")
 

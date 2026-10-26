@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- El mismo logo en un solo color: los iconos temáticos de Android 13+ lo tiñen con los colores del fondo de pantalla. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <group
+        android:scaleX="1.15"
+        android:scaleY="1.15"
+        android:translateX="17.2"
+        android:translateY="17.2">
+        <path
+            android:fillColor="#FFFFFFFF"
+            android:pathData="M17.5,13 H21.5 A2.5,2.5 0 0 1 24,15.5 V48.5 A2.5,2.5 0 0 1 21.5,51 H17.5 A2.5,2.5 0 0 1 15,48.5 V15.5 A2.5,2.5 0 0 1 17.5,13 Z M17.5,13 H43.5 A2.5,2.5 0 0 1 46,15.5 V19.5 A2.5,2.5 0 0 1 43.5,22 H17.5 A2.5,2.5 0 0 1 15,19.5 V15.5 A2.5,2.5 0 0 1 17.5,13 Z M17.5,28.5 H33.5 A2.5,2.5 0 0 1 36,31 V34 A2.5,2.5 0 0 1 33.5,36.5 H17.5 A2.5,2.5 0 0 1 15,34 V31 A2.5,2.5 0 0 1 17.5,28.5 Z M39.5,32.5 A5,5 0 1 1 49.5,32.5 A5,5 0 1 1 39.5,32.5 Z" />
+    </group>
+</vector>

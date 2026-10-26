@@ -499,7 +499,10 @@ async def test_la_marca_es_la_del_remitente(mundo):
 @pytest.mark.asyncio(loop_scope="session")
 async def test_el_correo_del_bono_sale_de_verdad(mundo):
     """17-10-2026: la vuelta decía «bono» pero _ciclo_enviar lo volvía a mirar sin el bono y no salía ninguno."""
-    alta = (datetime.now(timezone.utc) - timedelta(days=9)).isoformat()
+    # Todo respecto a ese lunes, no a hoy: con «hace 9 días» de verdad, la prueba dejó de pasar al irse alejando la
+    # fecha fija (el 26-10 la cuenta ya no tenía la edad del bono ese lunes).
+    a_las_11 = datetime(2026, 10, 19, 9, 0, tzinfo=timezone.utc)                  # lunes, 11:00 en Madrid
+    alta = (a_las_11 - timedelta(days=9)).isoformat()
     mundo.g["organizations"].docs.append({
         "id": "o7", "name": "Juan", "sector": "autonomo", "plan": "autonomo", "status": "trial", "email": "juan@x.es",
         "pais": "es", "db_name": "dsp_o7", "created_at": alta, "zona_horaria": "Europe/Madrid",
@@ -507,7 +510,6 @@ async def test_el_correo_del_bono_sale_de_verdad(mundo):
         "ciclo_correos": {"bienvenida": {"at": alta}}})
     mundo.uso.update({"paradas": 2, "entregadas": 1, "entregadas_reales": 1})
     mundo.monkeypatch.setenv("CICLO_CORREOS", "1")
-    a_las_11 = datetime(2026, 10, 19, 9, 0, tzinfo=timezone.utc)                  # lunes, 11:00 en Madrid
     assert await server.ciclo_correos_vuelta(a_las_11) == {"bono": 1}
     assert mundo.enviados[-1].subject.startswith("10 € por tu primera ruta con ")
     assert "bono" in next(o for o in mundo.g["organizations"].docs if o["id"] == "o7")["ciclo_correos"]

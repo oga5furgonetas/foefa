@@ -9,6 +9,13 @@ from valor.registro import Registro
 AHORA = datetime.now(timezone.utc).replace(microsecond=0)
 
 
+@pytest.fixture(autouse=True)
+def _ahora_de_cada_prueba():
+    """«Ahora» al empezar cada prueba, no al importar: en la batería entera llegaba viejo (ver test_valor_senales)."""
+    global AHORA
+    AHORA = datetime.now(timezone.utc).replace(microsecond=0)
+
+
 def _c(casa, sel, cuota, ts, mercado="1x2"):
     return Cuota("e1", casa, mercado, None, sel, cuota, ts, "prueba")
 

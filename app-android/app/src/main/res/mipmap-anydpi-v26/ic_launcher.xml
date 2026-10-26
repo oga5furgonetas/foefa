@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Icono adaptativo: el sistema le pone la forma de cada móvil (círculo, gota, cuadrado). Con el PNG cuadrado de la
+     TWA, Android lo encogía dentro de un círculo blanco (visto en el emulador). -->
+<adaptive-icon xmlns:android="http://schemas.android.com/apk/res/android">
+    <background android:drawable="@color/icono_fondo" />
+    <foreground android:drawable="@drawable/ic_launcher_logo" />
+    <monochrome android:drawable="@drawable/ic_launcher_mono" />
+</adaptive-icon>

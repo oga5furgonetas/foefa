@@ -1,0 +1,88 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools">
+
+    <!-- Lo que pide la app y para qué (lo mismo se declara en Google Play):
+         · Internet: hablar con el servidor de FDS.
+         · Cámara: escanear la etiqueta del paquete y la foto de la entrega. Solo mientras se usa.
+         · Ubicación: ordenar la ruta desde donde estás. Solo con la app abierta (nunca en segundo plano). -->
+    <uses-permission android:name="android.permission.INTERNET" />
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+    <uses-permission android:name="android.permission.CAMERA" />
+    <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
+    <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
+    <uses-permission android:name="android.permission.VIBRATE" />
+    <!-- WorkManager (la cola de entregas sin red) trae un servicio en primer plano que la app no usa nunca: fuera,
+         para no declarar en Play un permiso que no se usa. Se queda lo que sí hace falta (reintentar tras reiniciar). -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" tools:node="remove" />
+
+    <uses-feature android:name="android.hardware.camera" android:required="false" />
+    <uses-feature android:name="android.hardware.location.gps" android:required="false" />
+
+    <!-- Abrir la navegación (Google Maps, Waze), llamar y WhatsApp: Android 11+ solo deja ver estas apps si se dice. -->
+    <queries>
+        <intent>
+            <action android:name="android.intent.action.VIEW" />
+            <data android:scheme="google.navigation" />
+        </intent>
+        <intent>
+            <action android:name="android.intent.action.VIEW" />
+            <data android:scheme="geo" />
+        </intent>
+        <intent>
+            <action android:name="android.intent.action.DIAL" />
+        </intent>
+        <package android:name="com.google.android.apps.maps" />
+        <package android:name="com.waze" />
+        <package android:name="com.whatsapp" />
+        <package android:name="com.whatsapp.w4b" />
+    </queries>
+
+    <application
+        android:name=".FdsApp"
+        android:allowBackup="false"
+        android:fullBackupContent="@xml/reglas_copia"
+        android:dataExtractionRules="@xml/reglas_extraccion"
+        android:icon="@mipmap/ic_launcher"
+        android:roundIcon="@mipmap/ic_launcher_round"
+        android:label="@string/app_name"
+        android:supportsRtl="true"
+        android:enableOnBackInvokedCallback="true"
+        android:theme="@style/Theme.FDS">
+
+        <!-- configChanges: al girar el móvil (soporte del coche) o cambiar a tema oscuro, la app NO se recrea; Compose se
+             recompone solo. Sin esto, girar cerraba el escáner y borraba la ficha a medio escribir (visto en el emulador). -->
+        <activity
+            android:name=".MainActivity"
+            android:exported="true"
+            android:launchMode="singleTask"
+            android:configChanges="orientation|screenSize|screenLayout|smallestScreenSize|keyboard|keyboardHidden|density|uiMode"
+            android:windowSoftInputMode="adjustResize"
+            android:theme="@style/Theme.FDS.Arranque">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+            <!-- Los enlaces de la app (el «abre tu ruta» de los correos) se abren aquí y no en el navegador. -->
+            <intent-filter android:autoVerify="true">
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="https" android:host="flotadsp.com" android:pathPrefix="/ruta" />
+                <data android:scheme="https" android:host="flotadsp.com" android:pathPrefix="/app" />
+            </intent-filter>
+        </activity>
+
+        <provider
+            android:name="androidx.core.content.FileProvider"
+            android:authorities="${applicationId}.fotos"
+            android:exported="false"
+            android:grantUriPermissions="true">
+            <meta-data
+                android:name="android.support.FILE_PROVIDER_PATHS"
+                android:resource="@xml/rutas_fotos" />
+        </provider>
+
+        <service android:name="androidx.work.impl.foreground.SystemForegroundService" tools:node="remove" />
+    </application>
+</manifest>

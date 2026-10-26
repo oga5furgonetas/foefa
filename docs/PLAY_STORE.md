@@ -60,6 +60,83 @@ subida, `jarsigner -verify` → «jar verified»). La de la web (`/descargas/FDS
 se ha podido ver en un móvil físico: los colores de la pantalla de arranque y de la barra de abajo (no hay
 emulador con Chrome en el PC); lo de dentro de la web, sí, con pruebas (`e2e/app-nativa.spec.js`).
 
+## Versión 2.0.0 (code 10): la app NATIVA (25/26-10-2026)
+
+Dani, al ver la 1.0.3: «se ve y es una aplicación web… quiero una aplicación Android real, hecha para Android y
+bien hecha». Desde la 2.0.0 la app de Play es **nativa** (Kotlin + Jetpack Compose, Material 3) en
+`app-android/`, con el **mismo paquete** (`com.flotadsp.flota`) y la **misma clave de subida**: en Play es una
+actualización de la FDS de siempre, no otra app. `android/` (la TWA) se queda para la variante de China.
+
+Es la app de quien reparte por su cuenta (autónomo): entrar o crear la cuenta, «Hoy» (siguiente parada,
+navegar con Google Maps o Waze, llamar, WhatsApp, entregado / no entregado con motivo, cobro con su forma de
+pago y foto), ordenar la ruta desde donde estás, mapa (OpenStreetMap), escáner continuo (barra y 2D; si el código
+no trae la dirección, la lee del texto de la etiqueta y abre la ficha para revisarla), historial, ajustes (navegar
+con, tema, salida, hora, país, volver a la base), cuenta (plan, invitar, soporte, cerrar sesión, **borrar la
+cuenta**). Sin cobertura: abre con la última ruta y lo entregado se envía solo al volver la red (WorkManager).
+Los conductores de empresa y la oficina siguen en la web.
+
+**Comprobado en un emulador Android 14 oficial contra el servidor real** (`pruebas/servidor_pruebas.py`: el
+`server.py` de verdad con una base en memoria) y con la versión **minificada con R8** (la que va a Play):
+alta, entrar, ruta, ordenar (con permiso de ubicación), mapa, entregar con cobro, no entregado, deshacer,
+entrega sin red con la app en segundo plano (llega al servidor ~5 s después de volver la red), escáner en vivo
+con la cámara virtual del emulador (etiqueta SEUR: entra sola; etiqueta de solo barra: OCR → ficha), girar el
+móvil con la ficha a medias, tema oscuro, ajustes (país y hora guardados en el servidor), cerrar sesión, borrar
+la cuenta. 7 pruebas de lectura de etiquetas con ML Kit en el propio emulador
+(`app/src/androidTest/.../LecturaEnElMovilTest.kt`) y 5 del lector en JVM. Lint sin errores.
+**No comprobado:** un móvil físico (cámara real, GPS real, rendimiento) ni la subida a Play.
+
+Fallos que salieron al probarla y están arreglados (que no vuelvan):
+- ML Kit devuelve `rawValue = null` en los 2D con tildes en Latin-1 (`TextoDelCodigo`: se leen los bytes).
+- Con la cámara denegada, hacer una foto cerraba la app (`SecurityException`): `ui/Foto.kt` pide el permiso antes.
+- La cámara seguía encendida al salir del escáner (va atada a la actividad: se suelta en `onDispose`).
+- La barra y el 2D de la misma etiqueta contaban como dos paquetes; con la etiqueta quieta, sumaba cada 6 s.
+- Girar el móvil cerraba el escáner y borraba la ficha (`configChanges` en el manifiesto).
+- Una contraseña mal escrita al borrar la cuenta cerraba la sesión (el servidor daba 401: ahora 400).
+- La cuenta salía de EE. UU. con el móvil en inglés: el país se toma de la SIM (y se cambia en Ajustes).
+- Cobros en euros para todos y Bizum fuera de España: moneda y formas de pago del país, como la web.
+- Botón «Escanear» e interruptores sin nombre para TalkBack; icono encogido en un círculo blanco (ahora adaptativo).
+
+**Ficheros** (en `app-android/salida/`, fuera de git):
+- `FDS-2.0.0.aab` → **lo que se sube a Play** (Producción o la prueba cerrada). Firmado con la clave de subida
+  (SHA-256 `5B:48:01:D5:…:73:44:61`). Play le da a cada móvil solo lo suyo (~21 MB en un móvil arm64).
+- `FDS-2.0.0.apk` → para instalar a mano o descargar de la web: paquete **`com.flotadsp.flota.web`** (como la
+  TWA de la web), solo procesadores de móvil (arm64 y armv7, 32 MB). Convive con la de Play y actualiza la que se
+  bajó de la web. Todavía NO está en `frontend/public/descargas/`: primero que Dani la pruebe en su móvil.
+
+**Compilar** (bash, en `app-android/`; el SDK y el JDK 17 como en «Cómo volver a compilar»):
+
+```bash
+export ANDROID_HOME='C:\Users\Usuario\AppData\Local\Android\Sdk'
+export JAVA_HOME='C:\Program Files\Microsoft\jdk-17.0.19.10-hotspot'
+export FLOTA_KEYSTORE='C:\Users\Usuario\.flota-android.keystore'
+export FLOTA_KEYSTORE_PASSWORD="$(tr -d '\r\n' < /c/Users/Usuario/.flota-android-keystore.txt)"
+./gradlew :app:bundleRelease                                   # el AAB de Play
+./gradlew :app:assembleRelease -PsoloMoviles -PparaWeb         # el APK para descargar
+```
+
+**Probar en el PC** (emulador oficial `FDS_Pixel`, Android 14, imagen `google_apis/x86_64`):
+`py -3 app-android/pruebas/servidor_pruebas.py` (puerto 8787, cuenta `prueba@fds.test` / `ruta-de-prueba-1`
+con 4 paradas en A Coruña; ojo: siembra el día en que arranca, reiniciarlo pasada la medianoche) y
+`./gradlew :app:installDebug -PapiUrl=http://10.0.2.2:8787/api/` (o `installPrueba`: la de Play con R8, firmada
+con la clave de depuración). `pruebas/emu.sh` toca y lee la pantalla por adb (`MSYS_NO_PATHCONV=1`).
+Para el escáner en vivo: `pruebas/cartel_etiqueta.py` hace el cartel, el emulador lo cuelga con
+`-virtualscene-poster wall=<png>` (o `adb emu virtualscene-image wall <png>`) y la cámara virtual se pone delante
+por gRPC (`setPhysicalModel`: posición `-1.407 0.32 4.277`, giro `0 -150 0`). Las pruebas en el emulador
+(`connectedDebugAndroidTest`) desinstalan la app de depuración: hay que volver a entrar.
+
+**En Play Console, para esta versión:**
+- Seguridad de los datos: ahora la app declara **cámara** (escanear y foto de la entrega; la foto de la entrega
+  SÍ se guarda: es la prueba de entrega) y **ubicación precisa** (opcional, solo con la app abierta, para ordenar
+  la ruta desde donde estás). Ver las respuestas al final.
+- **Eliminación de cuentas** (obligatorio si se crean cuentas en la app): en la app, Cuenta → «Borrar mi cuenta»
+  (con la contraseña; la cuenta queda desactivada al momento y la petición en `bajas_cuentas`, con aviso a
+  `CORREO_CONTACTO`). **Los datos los borra una persona en 30 días como mucho**: es tarea de Dani. Play pide
+  además un enlace web: hoy vale `https://flotadsp.com/privacidad` (apartado 6, por correo); mejor una página
+  propia que explique los dos caminos (pendiente, DECIDE DANI).
+- Permisos que verá Google: Internet, cámara, ubicación, vibrar, y los de WorkManager para reintentar tras
+  reiniciar el móvil (`WAKE_LOCK`, `RECEIVE_BOOT_COMPLETED`). El servicio en primer plano de WorkManager se quita
+  del manifiesto (no se usa).
+
 ## Lo que ya está hecho
 
 | Qué | Dónde |
@@ -420,8 +497,12 @@ Grátis e sem limite até 31 de dezembro, sem cartão. Depois, grátis até 15 p
   los clientes de la empresa que éste introduce; finalidad: funciones de la
   app; no se comparte; se borra según el plazo de la empresa (30 días por
   defecto).
-- Fotos: **Sí** (inspecciones de vehículos; la foto de la etiqueta se
-  procesa en el dispositivo y **no se recoge**).
+- Fotos: **Sí** (inspecciones de vehículos y, desde la app nativa 2.0.0, la
+  foto de la entrega que hace quien reparte, como prueba de entrega; la foto
+  y el vídeo de la etiqueta se leen en el dispositivo y **no se recogen**).
+- Cámara y ubicación en la app nativa (2.0.0): la cámara solo con el escáner
+  abierto o al hacer una foto; la ubicación solo al pulsar «Ordenar ruta»
+  (un punto, con la app abierta, nunca en segundo plano). Ambas opcionales.
 - Mensajes, audio, historial de navegación, contactos, calendario, archivos,
   salud, identificadores de dispositivo: **No**.
 - Datos cifrados en tránsito: **Sí** (HTTPS). El usuario puede pedir que se

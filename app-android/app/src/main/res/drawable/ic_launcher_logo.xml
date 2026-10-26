@@ -1,0 +1,48 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- El logo de la marca (frontend/public/favicon.svg, rejilla de 64) como capa delantera del icono adaptativo:
+     lienzo de 108 dp, centrado y dentro del círculo seguro de 66 dp (el punto más lejano queda a 29 dp del centro). -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:aapt="http://schemas.android.com/aapt"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <group
+        android:scaleX="1.15"
+        android:scaleY="1.15"
+        android:translateX="17.2"
+        android:translateY="17.2">
+        <path
+            android:fillColor="#F4F7FA"
+            android:pathData="M17.5,13 H21.5 A2.5,2.5 0 0 1 24,15.5 V48.5 A2.5,2.5 0 0 1 21.5,51 H17.5 A2.5,2.5 0 0 1 15,48.5 V15.5 A2.5,2.5 0 0 1 17.5,13 Z" />
+        <path
+            android:fillColor="#F4F7FA"
+            android:pathData="M17.5,13 H43.5 A2.5,2.5 0 0 1 46,15.5 V19.5 A2.5,2.5 0 0 1 43.5,22 H17.5 A2.5,2.5 0 0 1 15,19.5 V15.5 A2.5,2.5 0 0 1 17.5,13 Z" />
+        <path android:pathData="M17.5,28.5 H33.5 A2.5,2.5 0 0 1 36,31 V34 A2.5,2.5 0 0 1 33.5,36.5 H17.5 A2.5,2.5 0 0 1 15,34 V31 A2.5,2.5 0 0 1 17.5,28.5 Z">
+            <aapt:attr name="android:fillColor">
+                <gradient
+                    android:type="linear"
+                    android:startX="15"
+                    android:startY="28.5"
+                    android:endX="36"
+                    android:endY="36.5">
+                    <item android:offset="0" android:color="#14E7D8" />
+                    <item android:offset="1" android:color="#0AACD3" />
+                </gradient>
+            </aapt:attr>
+        </path>
+        <path android:pathData="M39.5,32.5 A5,5 0 1 1 49.5,32.5 A5,5 0 1 1 39.5,32.5 Z">
+            <aapt:attr name="android:fillColor">
+                <gradient
+                    android:type="linear"
+                    android:startX="39.5"
+                    android:startY="27.5"
+                    android:endX="49.5"
+                    android:endY="37.5">
+                    <item android:offset="0" android:color="#14E7D8" />
+                    <item android:offset="1" android:color="#0AACD3" />
+                </gradient>
+            </aapt:attr>
+        </path>
+    </group>
+</vector>

@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- La ventana es del color de la app desde el primer momento (sin destello negro ni blanco). -->
+    <style name="Theme.FDS" parent="android:Theme.Material.Light.NoActionBar">
+        <item name="android:windowBackground">@color/papel</item>
+        <item name="android:statusBarColor">@android:color/transparent</item>
+        <item name="android:navigationBarColor">@android:color/transparent</item>
+    </style>
+
+    <!-- Pantalla de arranque del sistema (Android 12+, y la misma en anteriores con core-splashscreen). -->
+    <style name="Theme.FDS.Arranque" parent="Theme.SplashScreen">
+        <item name="windowSplashScreenBackground">@color/papel</item>
+        <item name="windowSplashScreenAnimatedIcon">@drawable/arranque</item>
+        <item name="postSplashScreenTheme">@style/Theme.FDS</item>
+    </style>
+</resources>
