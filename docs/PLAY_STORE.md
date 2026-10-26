@@ -331,7 +331,10 @@ sin enseñar botón ni enlace), y la suscripción se contrata en la web.
 - Prueba cerrada Alpha: España, testers = grupo `fds-testers@googlegroups.com`
   (https://groups.google.com/g/fds-testers). Todo **enviado a revisión** el 04-10.
 - Cuenta del revisor de Google: org «Revisor Google», `status: active`,
-  `revisor_play: true` (no caduca).
+  `revisor_play: true` (no caduca). Usuario `dlvieites19+google@gmail.com`: hasta el 26-10 era
+  `lvieites19+google@…`, sin la «d», y sus correos iban a un buzón ajeno. Contraseña nueva del 26-10 en
+  `C:\Users\Usuario\.flota-revisor-google.txt`. La app nativa la pide en «Datos de inicio de sesión»
+  (antes «Acceso a la aplicación»): «Sí» + instrucciones. Con «No», Play no deja enviar a revisión.
 - Falta: 12 testers con la app instalada 14 días → «Solicitar acceso a producción».
 
 ## Resumen de lo que necesito de ti
