@@ -34,7 +34,10 @@ android {
         // El APK para descargar desde la web, solo con las librerías de los móviles (ML Kit trae las suyas para cada
         // procesador: con las cuatro, 67 MB; con estas dos, menos de la mitad). El AAB de Play va completo: Play
         // ya le da a cada móvil solo las suyas.   ./gradlew :app:assembleRelease -PsoloMoviles
-        if (project.hasProperty("soloMoviles")) ndk { abiFilters += listOf("arm64-v8a", "armeabi-v7a") }
+        // Con -PsoloMoviles=arm64, solo los de 64 bits (casi todos los móviles de hoy): ~21 MB, se puede mandar al móvil.
+        (project.findProperty("soloMoviles") as String?)?.let { v ->
+            ndk { abiFilters += if (v == "arm64") listOf("arm64-v8a") else listOf("arm64-v8a", "armeabi-v7a") }
+        }
         // Y con su propio paquete, como la TWA (`android/`, variante web): la de Play la firma Google con OTRA clave,
         // así que con el mismo paquete no se instala encima («App no instalada») ni se actualiza luego desde Play.
         // `com.flotadsp.flota.web` va firmada con la clave de subida, está en assetlinks.json y actualiza la que ya

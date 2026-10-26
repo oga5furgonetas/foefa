@@ -111,7 +111,8 @@ export JAVA_HOME='C:\Program Files\Microsoft\jdk-17.0.19.10-hotspot'
 export FLOTA_KEYSTORE='C:\Users\Usuario\.flota-android.keystore'
 export FLOTA_KEYSTORE_PASSWORD="$(tr -d '\r\n' < /c/Users/Usuario/.flota-android-keystore.txt)"
 ./gradlew :app:bundleRelease                                   # el AAB de Play
-./gradlew :app:assembleRelease -PsoloMoviles -PparaWeb         # el APK para descargar
+./gradlew :app:assembleRelease -PsoloMoviles -PparaWeb         # el APK para descargar (arm64 + armv7, 32 MB)
+./gradlew :app:assembleRelease -PsoloMoviles=arm64 -PparaWeb   # solo arm64 (21 MB): cabe para mandarlo al móvil
 ```
 
 **Probar en el PC** (emulador oficial `FDS_Pixel`, Android 14, imagen `google_apis/x86_64`):
