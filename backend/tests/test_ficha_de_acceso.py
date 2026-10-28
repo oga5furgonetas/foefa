@@ -42,6 +42,7 @@ def test_varias_activas_manda_la_mas_reciente_y_sin_activo_cuenta_como_activa():
 
 
 def test_el_login_y_la_subida_usan_la_regla():
-    assert "_ficha_por_correo(email)" in _fuente("driver_lookup")
+    assert "_elegir_ficha(fichas)" in _fuente("driver_lookup")
+    assert "driver_recovery_emails" in _fuente("driver_lookup")
     assert "_ficha_activa_de(" in _fuente("get_current_user")
     assert '"$in": list(mis_ids)' in _fuente("upload_inspection_photos")

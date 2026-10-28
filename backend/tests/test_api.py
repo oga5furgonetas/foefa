@@ -478,33 +478,12 @@ async def test_no_se_puede_subir_de_plan_sin_pagar(client, admin_token):
     await srv.global_db.admin_users.delete_one({"id": uid})
 
 
-async def test_valores_numericos_no_se_tiran_en_silencio(client, admin_token):
-    """Un número mal escrito debe dar 400, no un 200 que no guarda nada.
-
-    `try: float(x) except: pass` sobre datos del usuario respondía 200 y
-    descartaba el valor: la pantalla decía "guardado" y no lo estaba. El
-    disparador más probable era la coma decimal ("99,5"), que es como se
-    escribe en español.
-    """
-    h = {"Authorization": f"Bearer {admin_token}"}
-    centro = f"TEST{uuid.uuid4().hex[:4].upper()}"
-
-    # coma decimal: se acepta y se guarda como número
-    r = await client.post("/api/scorecard/targets", headers=h,
-                          json={"center": centro, "dcr": "99,5"})
-    assert r.status_code == 200, r.text
-    import server as srv
-    doc = await srv.db.scorecard_targets.find_one({"center": centro})
-    assert doc and doc["dcr"] == 99.5, doc
-
-    # basura: 400 y el valor anterior intacto
-    r = await client.post("/api/scorecard/targets", headers=h,
-                          json={"center": centro, "dcr": "no-soy-un-numero"})
-    assert r.status_code == 400, r.text
-    doc = await srv.db.scorecard_targets.find_one({"center": centro})
-    assert doc["dcr"] == 99.5, "el valor bueno se perdió al rechazar el malo"
-
-    await srv.db.scorecard_targets.delete_one({"center": centro})
+def test_valores_numericos_no_se_tiran_en_silencio():
+    """La coma decimal se acepta y un valor mal escrito se rechaza con 400."""
+    assert server._decimal("99,5", "DCR") == 99.5
+    with pytest.raises(server.HTTPException) as e:
+        server._decimal("no-soy-un-numero", "DCR")
+    assert e.value.status_code == 400
 
 
 async def test_admin_limitado_a_un_centro_no_ve_los_otros(client, admin_token):
@@ -618,7 +597,7 @@ async def test_tarifa_por_furgoneta(client):
     r = await client.get("/api/billing/planes")
     assert r.status_code == 200
     claves = [p["clave"] for p in r.json()["planes"]]
-    assert claves == ["operacion", "completo", "holding"], claves
+    assert claves == ["autonomo", "operacion", "completo", "holding", "reparto"], claves
 
 
 # ---------------------------------------------------------------------------

@@ -1554,7 +1554,10 @@ async def _ensure_tenant_indexes(db_name: str):
     await _idx(tdb.vehicles, "status")
     await _idx(tdb.drivers, "id")
     await _idx(tdb.drivers, "driver_id")
-    recovery = client[db_name].driver_recovery_emails
+    # `_BdSoloExistentes` también debe cubrir esta colección. Crear sus índices
+    # al arrancar creaba una colección vacía para cada empresa y agotaba el
+    # límite de Atlas; se crean al vincular el primer correo.
+    recovery = tdb.driver_recovery_emails
     await _idx(recovery, "driver_id", unique=True, name="recovery_un_correo_por_conductor")
     await _idx(recovery, "email_norm", unique=True, name="recovery_correo_unico")
     # EL CORREO ES LA LLAVE DEL PORTAL y no tenia indice ninguno: cada vez que
@@ -1793,11 +1796,14 @@ async def create_indexes():
         await _ensure_tenant_indexes(_DEFAULT_DB_NAME)
         # Índices globales (compartidos entre tenants)
         await _idx(global_db.admin_users, "username")
-        await _idx(global_db.driver_recovery_pending, "token_hash", unique=True,
-                   name="driver_recovery_token_unico")
-        await _idx(global_db.driver_recovery_pending, "expires_at", expireAfterSeconds=0)
-        await _idx(global_db.driver_recovery_email_claims, "email_norm", unique=True,
-                   name="driver_recovery_correo_global_unico")
+        global_collections = set(await global_db.list_collection_names())
+        if "driver_recovery_pending" in global_collections:
+            await _idx(global_db.driver_recovery_pending, "token_hash", unique=True,
+                       name="driver_recovery_token_unico")
+            await _idx(global_db.driver_recovery_pending, "expires_at", expireAfterSeconds=0)
+        if "driver_recovery_email_claims" in global_collections:
+            await _idx(global_db.driver_recovery_email_claims, "email_norm", unique=True,
+                       name="driver_recovery_correo_global_unico")
         await _idx(global_db.inbox_messages, [("created_at", -1)])
         await _idx(global_db.ls_webhook_events, "event_uid", unique=True)
         # Sin este unico, el `except DuplicateKeyError` del webhook de Stripe
@@ -7581,7 +7587,7 @@ async def driver_lookup(data: dict, request: Request):
     # physical tenant once to avoid treating aliases as distinct memberships.
     orgs = list({ _tenant_db_name(o): o for o in reversed(orgs) }.values())
     if not any(_tenant_db_name(o) == _DEFAULT_DB_NAME for o in orgs):
-        orgs.append({"id": OWNER_ORG_ID, "slug": "", "name": MARCA.nombre,
+        orgs.append({"id": OWNER_ORG_ID, "slug": "", "name": MARCA,
                      "account_type": "owner", "db_name": _DEFAULT_DB_NAME})
     matches = []
     for candidate in orgs:
@@ -11737,6 +11743,19 @@ async def driver_recovery_email_status(driver_id: str, _=Depends(require_admin))
             "pendiente": _correo_mascara(pending.get("email")) if pending else None}
 
 
+async def _ensure_driver_recovery_indexes(tdb):
+    """Crea índices al usar el flujo, sin colecciones vacías por empresa."""
+    await _idx(tdb.driver_recovery_emails, "driver_id", unique=True,
+               name="recovery_un_correo_por_conductor")
+    await _idx(tdb.driver_recovery_emails, "email_norm", unique=True,
+               name="recovery_correo_unico")
+    await _idx(global_db.driver_recovery_pending, "token_hash", unique=True,
+               name="driver_recovery_token_unico")
+    await _idx(global_db.driver_recovery_pending, "expires_at", expireAfterSeconds=0)
+    await _idx(global_db.driver_recovery_email_claims, "email_norm", unique=True,
+               name="driver_recovery_correo_global_unico")
+
+
 @api_router.post("/drivers/{driver_id}/recovery-email")
 async def driver_recovery_email_request(driver_id: str, data: dict, user: dict = Depends(require_admin)):
     driver = await db.drivers.find_one({"id": driver_id, "active": {"$ne": False}},
@@ -11754,6 +11773,7 @@ async def driver_recovery_email_request(driver_id: str, data: dict, user: dict =
          "email": {"$regex": f"^{re.escape(email)}$", "$options": "i"}}, {"_id": 0, "id": 1})
     if primary:
         raise HTTPException(409, "Ese correo ya identifica a otro conductor en esta empresa")
+    await _ensure_driver_recovery_indexes(db)
     claimed = await global_db.driver_recovery_email_claims.find_one({"email_norm": email})
     if claimed and not (claimed.get("org_id") == user.get("org_id") and claimed.get("driver_id") == driver_id):
         raise HTTPException(409, "Ese correo personal ya está vinculado a otra ficha")
@@ -11820,6 +11840,7 @@ async def driver_recovery_email_verify(data: dict, request: Request):
     if not driver or str(driver.get("email") or "").strip().lower() == pending["email_norm"]:
         await global_db.driver_recovery_pending.delete_one({"token_hash": token_hash})
         raise HTTPException(400, "No se puede verificar esa dirección para esta ficha")
+    await _ensure_driver_recovery_indexes(tdb)
     collision = await tdb.drivers.find_one(
         {"id": {"$ne": driver["id"]}, "active": {"$ne": False},
          "email": {"$regex": f"^{re.escape(pending['email_norm'])}$", "$options": "i"}},
