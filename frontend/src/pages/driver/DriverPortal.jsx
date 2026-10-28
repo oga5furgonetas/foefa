@@ -238,6 +238,15 @@ export default function DriverPortal() {
       setFaltaTel(!!r.data?.falta_telefono)
       // Distingue quien aún no tiene contraseña propia de quien ya la fijó.
       setTieneClave(r.data?.tiene_clave !== false)
+      // La oficina puede reiniciar las claves mientras el conductor conserva
+      // una sesión abierta. También en ese caso se exige el cambio antes de
+      // dejarle seguir usando el portal.
+      if (r.data?.configurar_cuenta && !driver.configurar_cuenta) {
+        const actualizado = { ...driver, configurar_cuenta: true }
+        localStorage.setItem(DRIVER_KEY, JSON.stringify(actualizado))
+        setDriver(actualizado)
+        setVista('clave')
+      }
     }).catch(() => {})
   }, [driver])
 

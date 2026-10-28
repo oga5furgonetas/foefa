@@ -189,9 +189,10 @@ export const contarCandidatosNuevos = (center) =>
   api.get('/empleo/candidatos/nuevos', { params: centerParam(center) })
 export const getDriverAccounts = () => api.get('/auth/driver-accounts')
 export const setDriverPassword = (driverId, password) => api.post('/auth/set-driver-password', { driver_id: driverId, password })
-/* Da acceso al portal a todos los que aun no lo tienen. Devuelve las claves
-   UNA vez: en la base solo queda el hash. */
-export const generarAccesosConductores = () => api.post('/auth/driver-accounts/generar')
+/* Aplica una contraseña temporal común a la plantilla activa; la API solo
+   devuelve recuentos y guarda el hash, nunca la contraseña en claro. */
+export const generarAccesosConductores = (password) =>
+  api.post('/auth/driver-accounts/generar', { password })
 export const deleteDriverAccount = (driverId) => api.delete(`/auth/driver-account/${driverId}`)
 
 /* ── Inspecciones ── */

@@ -623,12 +623,12 @@ function ScoringView({ center }) {
    conductores de estar bloqueados. Un aviso que miente gasta la confianza en
    todos los demas.
 
-   El botón genera una clave temporal distinta por conductor. La oficina la
-   entrega en privado; al entrar, cada conductor debe elegir una propia. Las
-   claves se ven UNA vez, porque en la base solo queda el hash. */
+   La oficina establece una contraseña temporal común; cada conductor la
+   cambia obligatoriamente en su primer acceso. */
 function AvisoAccesos({ list, onHecho }) {
   const [dando, setDando] = useState(false)
   const [confirmar, setConfirmar] = useState(false)
+  const [claveTemporal, setClaveTemporal] = useState('')
   const [hecho, setHecho] = useState(null)
   const [error, setError] = useState('')
 
@@ -648,9 +648,14 @@ function AvisoAccesos({ list, onHecho }) {
   }
 
   const dar = async () => {
+    if (claveTemporal.length < 8) {
+      setError('La contraseña temporal debe tener al menos 8 caracteres.')
+      return
+    }
     setDando(true); setError('')
     try {
-      const r = await generarAccesosConductores()
+      const r = await generarAccesosConductores(claveTemporal)
+      setClaveTemporal('')
       setHecho(r.data)
       onHecho()
     } catch (e) {
@@ -659,25 +664,14 @@ function AvisoAccesos({ list, onHecho }) {
     setDando(false)
   }
 
-  const bajarCsv = () => {
-    const filas = [['Nombre', 'Centro', 'Correo', 'Contraseña'],
-      ...hecho.accesos.map((a) => [a.nombre, a.centro || '', a.email, a.clave])]
-    const csv = filas.map((f) => f.map((c) => `"${String(c).replace(/"/g, '""')}"`).join(';')).join('\r\n')
-    // BOM: sin el, Excel abre las tildes rotas y parece que el fichero esta mal.
-    const url = URL.createObjectURL(new Blob(['﻿' + csv], { type: 'text/csv;charset=utf-8' }))
-    const a = document.createElement('a')
-    a.href = url; a.download = 'accesos-conductores.csv'; a.click()
-    URL.revokeObjectURL(url)
-  }
-
   if (hecho) {
     return (
       <div className="mb-4 rounded-xl border border-lime-500/30 bg-lime-500/5 p-4">
         <p className="text-sm font-semibold text-lime-300">
-          {hecho.creadas} {hecho.creadas === 1 ? 'conductor ya tiene' : 'conductores ya tienen'} clave temporal
+          {hecho.actualizadas} {hecho.actualizadas === 1 ? 'conductor ya tiene' : 'conductores ya tienen'} acceso temporal
         </p>
         <p className="mt-1 text-[12.5px] leading-relaxed text-amber-200">
-          Cada conductor entra con su correo de empresa y la clave temporal individual de su fila. Al entrar, el portal le pedirá crear una contraseña propia.
+          Todos entran con su correo de empresa y la contraseña temporal que acabas de establecer. El portal les obligará a crear una contraseña propia antes de continuar.
         </p>
         <p className="mt-1 text-[12.5px] leading-relaxed text-dark-400">{hecho.aviso}</p>
         {hecho.sin_email > 0 && (
@@ -689,27 +683,6 @@ function AvisoAccesos({ list, onHecho }) {
           <p className="mt-1 text-[12.5px] text-amber-300">
             {hecho.cuentas_inactivas} cuenta(s) desactivada(s) no se han cambiado. La oficina debe revisarlas.
           </p>
-        )}
-        {hecho.accesos.length > 0 && (
-          <>
-            <button onClick={bajarCsv}
-              className="mt-3 rounded-lg bg-lime-500/15 px-3 py-1.5 text-[12.5px] font-semibold text-lime-300 hover:bg-lime-500/25">
-              Descargar las claves (CSV)
-            </button>
-            <div className="mt-3 max-h-52 overflow-y-auto rounded-lg border border-dark-800">
-              <table className="w-full text-[12px]">
-                <tbody>
-                  {hecho.accesos.map((a) => (
-                    <tr key={a.driver_id} className="border-b border-dark-800/70 last:border-0">
-                      <td className="px-2 py-1 text-dark-300">{a.nombre}</td>
-                      <td className="px-2 py-1 text-dark-500">{a.email}</td>
-                      <td className="cifra px-2 py-1 font-semibold text-lime-300">{a.clave}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </>
         )}
       </div>
     )
@@ -724,16 +697,23 @@ function AvisoAccesos({ list, onHecho }) {
           Antes de seguir: esto cambia cómo entran
         </p>
         <ul className="mt-2 space-y-1 text-[12.5px] leading-relaxed text-dark-300">
-          <li>· Se asignará una clave temporal individual a cada conductor activo de toda la empresa que tenga correo.</li>
+          <li>· Se asignará la misma contraseña temporal a cada conductor activo de toda la empresa que tenga correo.</li>
           <li>· Las contraseñas actuales de las cuentas activas dejarán de funcionar. Las cuentas de acceso desactivadas no se tocarán.</li>
-          <li>· Al entrar, cada uno deberá crear una contraseña propia y podrá añadir un correo personal de recuperación.</li>
-          <li>· Descarga el CSV con las claves de toda la empresa y entrega cada una en privado.</li>
+          <li>· Al entrar con su correo de empresa, cada conductor tendrá que cambiarla obligatoriamente. Después podrá añadir un correo personal de recuperación.</li>
+          <li>· Cualquier persona que conozca la contraseña temporal podría entrar con el correo de un conductor hasta que este la cambie. Comunícala únicamente a los conductores.</li>
         </ul>
+        <label className="mt-3 block text-[12px] font-medium text-dark-300" htmlFor="clave-temporal-conductores">
+          Contraseña temporal común
+        </label>
+        <input id="clave-temporal-conductores" type="password" autoComplete="new-password"
+          value={claveTemporal} onChange={(e) => setClaveTemporal(e.target.value)}
+          placeholder="Escribe la contraseña temporal" minLength={8} maxLength={128}
+          className="mt-1 w-full max-w-sm rounded-lg border border-dark-700 bg-dark-950 px-3 py-2 text-sm text-dark-100 outline-none focus:border-amber-400" />
         <div className="mt-3 flex flex-wrap gap-2">
           <button onClick={dar} disabled={dando}
             className="flex items-center gap-1.5 rounded-lg bg-amber-500/20 px-3 py-2 text-[12.5px] font-semibold text-amber-100 hover:bg-amber-500/30 disabled:opacity-50">
             {dando ? <Loader2 size={13} className="animate-spin" /> : <Lock size={13} />}
-            {dando ? 'Creando…' : 'Generar claves temporales únicas'}
+            {dando ? 'Aplicando…' : 'Aplicar contraseña temporal a todos'}
           </button>
           <button onClick={() => setConfirmar(false)}
             className="px-3 py-2 text-[12.5px] text-dark-400 hover:text-dark-200">Dejarlo como está</button>
@@ -758,7 +738,7 @@ function AvisoAccesos({ list, onHecho }) {
       </span>
       <button onClick={() => setConfirmar(true)}
         className="rounded-lg bg-dark-800 px-2.5 py-1 font-semibold text-dark-200 hover:bg-dark-700">
-        Generar claves de acceso
+        Establecer contraseña temporal común
       </button>
       <button onClick={plegar} aria-label="Ocultar este aviso" className="rounded p-1 text-dark-500 hover:text-dark-300">
         <X size={13} />

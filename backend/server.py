@@ -819,6 +819,10 @@ class SetDriverPasswordRequest(BaseModel):
     password: str
 
 
+class DriverBulkPasswordRequest(BaseModel):
+    password: str = Field(min_length=8, max_length=128)
+
+
 class CreateAdminRequest(BaseModel):
     username: str
     password: str
@@ -8345,29 +8349,17 @@ async def list_driver_accounts(_admin: dict = Depends(require_admin)):
     return accounts
 
 
-# Sin i, l, 1, O, 0: estas claves se dictan por telefono y se copian a mano de
-# un papel. Una `l` que se lee como `1` es una llamada al despacho.
-_ALFA_CLAVE = "abcdefghjkmnpqrstuvwxyzABCDEFGHJKMNPQRSTUVWXYZ23456789"
-
-
-def _clave_conductor() -> str:
-    """Diez caracteres al azar, legibles a mano."""
-    return "".join(secrets.choice(_ALFA_CLAVE) for _ in range(10))
-
-
 @auth_router.post("/driver-accounts/generar")
-async def generar_accesos_conductores(_admin: dict = Depends(require_admin)):
-    """Asigna a cada conductor activo una clave temporal aleatoria y distinta.
+async def generar_accesos_conductores(data: DriverBulkPasswordRequest,
+                                      _admin: dict = Depends(require_admin)):
+    """Aplica una clave temporal indicada por la oficina a toda la empresa.
 
-    El primer acceso obliga a cambiarla. El panel lo confirma antes de llamar
-    aqui, y por eso las claves se devuelven y se pueden bajar en CSV una sola vez.
-
-    Existe porque hacerlo de uno en uno con `/set-driver-password` es inviable
-    con una plantilla entera recien importada de un Excel.
-
-    Las contraseñas anteriores de las cuentas activas se invalidan al ejecutar
-    esta acción. Las cuentas desactivadas se dejan intactas.
+    Nunca se guarda ni devuelve en claro. Las cuentas activas quedan obligadas
+    a elegir una clave propia en su siguiente acceso. Las cuentas desactivadas
+    permanecen desactivadas.
     """
+    if not data.password.strip():
+        raise HTTPException(400, "La contraseña temporal no puede estar vacía")
     conductores = await db.drivers.find(
         {"status": {"$ne": "deleted"}, "active": {"$ne": False}},
         {"_id": 0, "id": 1, "name": 1, "email": 1, "center": 1}
@@ -8375,8 +8367,9 @@ async def generar_accesos_conductores(_admin: dict = Depends(require_admin)):
     cuentas = {a["driver_id"]: a for a in await db.driver_accounts.find(
         {}, {"_id": 0, "driver_id": 1, "active": 1}).to_list(5000)}
 
-    nuevas, sin_email, regeneradas, omitidas_inactivas = [], 0, 0, 0
+    actualizadas, sin_email, omitidas_inactivas = 0, 0, 0
     ahora = datetime.now(timezone.utc).isoformat()
+    hash_temporal = hash_password(data.password)
     for c in conductores:
         email = (c.get("email") or "").strip().lower()
         if not email:
@@ -8384,47 +8377,39 @@ async def generar_accesos_conductores(_admin: dict = Depends(require_admin)):
             # el numero de altas no cuadra con la plantilla y no se sabe por que.
             sin_email += 1
             continue
-        clave = _clave_conductor()
         cuenta = cuentas.get(c["id"])
         if cuenta and not cuenta.get("active", True):
             omitidas_inactivas += 1
             continue
         if cuenta:
             await db.driver_accounts.update_one({"driver_id": c["id"]}, {"$set": {
-                "email": email, "hashed_password": hash_password(clave), "active": True,
+                "email": email, "hashed_password": hash_temporal, "active": True,
                 "creada_en_bloque": True, "must_change_password": True,
                 "password_temp_created_at": ahora,
             }})
-            regeneradas += 1
         else:
             try:
                 await db.driver_accounts.insert_one({
                     "id": str(uuid.uuid4()), "driver_id": c["id"], "email": email,
-                    "hashed_password": hash_password(clave), "active": True,
+                    "hashed_password": hash_temporal, "active": True,
                     "created_at": ahora, "creada_en_bloque": True,
                     "must_change_password": True,
                 })
             except DuplicateKeyError:
-                # Otra pestaña pudo crear la cuenta: no modificar su clave
-                # silenciosamente; se informa que debe volver a intentarse.
+                # Otra pestaña pudo crear la cuenta; no sobrescribirla a ciegas.
                 continue
-        nuevas.append({"driver_id": c["id"], "nombre": c.get("name") or email,
-                       "centro": c.get("center"), "email": email, "clave": clave})
+        actualizadas += 1
 
-    logger.info("Claves temporales de conductor generadas: %d total (%d regeneradas), %d sin email, %d cuentas inactivas",
-                len(nuevas), regeneradas, sin_email, omitidas_inactivas)
+    logger.info("Acceso temporal actualizado para %d conductores; %d sin email y %d cuentas inactivas",
+                actualizadas, sin_email, omitidas_inactivas)
     return {
-        "creadas": len(nuevas),
-        "regeneradas": regeneradas,
+        "actualizadas": actualizadas,
         "ya_tenian": len(cuentas),
         "sin_email": sin_email,
         "cuentas_inactivas": omitidas_inactivas,
-        # Las claves se ven UNA vez, igual que las llaves de partner: en la base
-        # solo queda el hash. Si se pierde una, se le pone otra desde su ficha.
-        "accesos": sorted(nuevas, key=lambda x: (x["centro"] or "", x["nombre"])),
-        "aviso": ("Apunta o descarga estas claves temporales ahora: no se pueden volver a ver. "
-                  "Las contraseñas anteriores de las cuentas activas quedan invalidadas. "
-                  "Cada conductor debe cambiar la suya al entrar. Entrégalas en privado."),
+        "aviso": ("La contraseña anterior de las cuentas activas queda invalidada. "
+                  "Todos comparten la contraseña temporal hasta cambiarla. "
+                  "El portal obliga a elegir una contraseña personal en el siguiente acceso."),
     }
 
 
@@ -10170,9 +10155,14 @@ async def portal_mi_ficha(user: dict = Depends(require_any_auth)):
     # contrasena" les pedia por tanto la ACTUAL, que no existe, asi que
     # devolvia siempre "la contrasena actual no es correcta". Con esto la
     # pantalla sabe si tiene que decir "crear" o "cambiar".
-    tiene = await db.driver_accounts.count_documents({"driver_id": user.get("sub")}, limit=1)
+    cuenta = await db.driver_accounts.find_one({"driver_id": user.get("sub")},
+                                                {"_id": 0, "must_change_password": 1,
+                                                 "creada_en_bloque": 1})
+    tiene = bool(cuenta)
     return {"falta_telefono": not tel, "nombre": d.get("name"),
-            "tiene_clave": bool(tiene)}
+            "tiene_clave": tiene,
+            "configurar_cuenta": bool(cuenta and (cuenta.get("must_change_password")
+                                                    or cuenta.get("creada_en_bloque")))}
 
 
 def _telefono_limpio(valor) -> str:
