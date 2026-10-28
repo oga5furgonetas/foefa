@@ -232,6 +232,18 @@ const SIN_UI_A_PROPOSITO = new Set([
   // Reseteo de contraseña de un admin: se hace a mano, va con require_admin
   // y filtrado por org_id (un admin no puede tocar cuentas de otro DSP).
   'POST /reset-admin-password',
+  // Operaciones reservadas a super-admin, ejecutadas desde consola antes de
+  // una campaña o reunión; no son acciones de empresa ni de usuario final.
+  'POST /admin/cartera/regalo',
+  'POST /admin/demo-comercial',
+  // Los recibe Stripe y el Apps Script de Google Sheets, fuera del frontend.
+  'POST /billing/stripe/suscripciones-webhook',
+  'POST /cuadrante/sync/hoja/hecho',
+  // La app Android consume estas rutas para renovar sesión y pedir la baja.
+  'POST /renovar',
+  'POST /borrar-cuenta',
+  // Endpoint antiguo del portal de conductor; el portal actual usa /trabajar-mas.
+  'GET /refuerzos/mios',
 ])
 
 const server = fs.readFileSync(path.join(RAIZ, 'backend', 'server.py'), 'utf8')
