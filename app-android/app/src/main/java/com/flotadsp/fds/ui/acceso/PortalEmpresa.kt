@@ -59,7 +59,7 @@ private fun PortalWeb(titulo: String, ruta: String, sesion: Sesion?, alCerrar: (
             IconButton(onClick = alCerrar) { Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Volver") }
             Text(titulo, style = MaterialTheme.typography.titleSmall)
         }
-        AndroidView(Modifier.fillMaxSize(), factory = { context ->
+        AndroidView(factory = { context ->
             WebView(context).apply {
                 web = this
                 settings.javaScriptEnabled = true
@@ -127,7 +127,7 @@ private fun PortalWeb(titulo: String, ruta: String, sesion: Sesion?, alCerrar: (
                 }
                 loadUrl(BuildConfig.WEB_URL + ruta)
             }
-        }, update = {}, onRelease = { view ->
+        }, modifier = Modifier.fillMaxSize(), update = {}, onRelease = { view ->
             fileCallback?.onReceiveValue(null)
             fileCallback = null
             view.stopLoading()
