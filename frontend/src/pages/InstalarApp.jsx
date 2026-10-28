@@ -8,6 +8,7 @@ import { tx, useIdioma } from '../lib/idioma'
 import { desdeChina } from '../lib/apiBase'
 import { crearPaseMovil } from '../panel/api'
 import { medirAccion } from '../lib/analitica'
+import GooglePlayBadge from '../components/GooglePlayBadge'
 
 /* En China no hay Google Play y casi ningún Android trae Chrome (sin él no
    se instala la web): allí se descarga la app de China (WebView propio). */
@@ -134,12 +135,13 @@ function Opciones({ ins, onInstalada }) {
   if (android) {
     return (
       <div className="space-y-2.5">
+        {!desdeChina() && <GooglePlayBadge onClick={() => medirAccion('instalar_google_play')} />}
         {puede && (
           <button onClick={async () => { medirAccion('instalar_pwa'); if (await instalar() === 'accepted') onInstalada() }} className={boton}>
             <Download size={17} /> {tx('Instalar la app')}
           </button>
         )}
-        <DescargarApk apk={apk} principal={!puede} />
+        <DescargarApk apk={apk} principal={false} />
       </div>
     )
   }

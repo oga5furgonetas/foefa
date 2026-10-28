@@ -2059,3 +2059,10 @@ y Ajustes/Cuenta/Mercadillo cargados al usarlos. AAB 1.0.3 (code 4) en
 `android/app/build/outputs/bundle/playRelease/app-play-release.aab`, falta que Dani lo suba. Pruebas:
 `frontend/e2e/app-nativa.spec.js`. Ojo: compilar Android necesita `ANDROID_HOME` (Sdk en AppData\Local\Android\Sdk).
 La app de China (WebView propio) NO se ha tocado: sigue con su barra oscura.
+
+## 28-10-2026: distintivo de Google Play
+La ficha pública de FDS ya está disponible en Google Play con el paquete `com.flotadsp.flota`:
+`https://play.google.com/store/apps/details?id=com.flotadsp.flota`. Se comprobó que la ficha responde
+públicamente (HTTP 200). La portada y la tarjeta de instalación para Android enlazan ahora a la ficha con
+el distintivo oficial de Google Play, localizado en los siete idiomas de la app; se mantiene como alternativa
+la descarga APK existente. En China no se muestra Google Play y se conserva la descarga específica de allí.

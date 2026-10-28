@@ -7,7 +7,7 @@ import {
 } from 'lucide-react'
 import { MARCA } from '../marca'
 import { tx, useIdioma, IDIOMAS, cambiarIdioma, idioma, locale } from '../lib/idioma'
-import { API_BASE } from '../lib/apiBase'
+import { API_BASE, desdeChina } from '../lib/apiBase'
 import { saveSession } from '../panel/auth'
 import { medirAccion } from '../lib/analitica'
 import { evento } from '../lib/metaPixel'
@@ -15,6 +15,8 @@ import { abrirDemoReparto } from '../lib/demoReparto'
 import { paisDelMovil } from '../lib/region'
 import { PARADAS_GRATIS, promoGratis, fechaPromo, eurosRef, refCentActual, refPromoActiva, fechaRefPromo, BONO_CENT } from '../lib/precios'
 import Landing3DShowcase from './Landing3DShowcase'
+import GooglePlayBadge from '../components/GooglePlayBadge'
+import { esAndroid } from '../lib/instalar'
 
 /* ── LA PORTADA (21-10-2026) ──────────────────────────────────────────────
    Dani: «cuando entra una persona nueva a la web, véndelo sobre todo como la
@@ -333,6 +335,11 @@ export default function Landing({ idioma: forzado = '' }) {
                 {probando ? <Loader2 size={16} className="animate-spin" /> : <Route size={16} />} {tx('Probarla ahora, sin registrarme')}
               </button>
             </div>
+            {esAndroid() && lang !== 'zh' && forzado !== 'zh' && !desdeChina() && (
+              <div className="mt-4">
+                <GooglePlayBadge onClick={() => medirAccion('portada_google_play')} />
+              </div>
+            )}
             <p className="mt-4 flex flex-wrap items-center gap-x-4 gap-y-1 text-[13px] text-[color:var(--ld-dim)]">
               <span className="inline-flex items-center gap-1.5"><Smartphone size={14} /> {tx('Android e iPhone, desde el navegador')}</span>
               <span className="inline-flex items-center gap-1.5"><Languages size={14} /> {tx('En 7 idiomas')}</span>
