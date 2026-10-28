@@ -1,8 +1,8 @@
-# Versiones FIJADAS a las que compilan con AGP 8.13.1 + compileSdk 36 en este PC (las AndroidX de 2026 piden
+# Versiones FIJADAS a las que compilan con AGP 8.13.2 + compileSdk 36 en este PC (las AndroidX de 2026 piden
 # AGP 9 y compileSdk 37, que no está instalado). Mismo stack que SpeedControl. Antes de subir alguna, mirar
 # %LOCALAPPDATA%\Android\Sdk\platforms.
 [versions]
-agp = "8.13.1"
+agp = "8.13.2"
 kotlin = "2.3.0"
 coreKtx = "1.17.0"
 activityCompose = "1.11.0"
