@@ -2,7 +2,7 @@
 usarla; y desde la app se puede pedir borrar la cuenta (Google Play lo exige). Sin Mongo: base de mentira."""
 from datetime import datetime, timezone
 
-import jwt
+from jose import jwt
 import pytest
 from fastapi import HTTPException
 
