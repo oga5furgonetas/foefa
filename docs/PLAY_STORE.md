@@ -114,7 +114,8 @@ no puede entrar. Los códigos vencidos se limpian con TTL en Mongo.
 
 El vínculo de correo personal y la resolución del tenant son cambios web/API. La app FDS abre ese portal web remoto,
 por lo que este cambio no requiere subir un AAB nuevo a Google Play. Los usuarios verán el flujo actualizado al
-abrir o recargar FDS cuando se publique el despliegue web/API. Los cambios nativos anteriores (2.1.0, code 11)
+abrir o recargar FDS; el despliegue web/API ya está publicado en flotadsp.com. Los cambios nativos anteriores
+(2.1.0, code 11)
 siguen necesitando compilar y publicar su propio AAB si aún no se han subido.
 
 `app-android/app/build.gradle.kts` queda en versionCode 11 / 2.1.0. Aún no se ha generado ni subido un AAB: este

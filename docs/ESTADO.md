@@ -2068,7 +2068,7 @@ el distintivo oficial de Google Play, localizado en los siete idiomas de la app;
 la descarga APK existente. En China no se muestra Google Play y se conserva la descarga específica de allí.
 
 ## 28-10-2026: acceso de empresa dentro de FDS y código por correo
-Preparado en local, todavía sin publicar. El portal de empresa se puede abrir dentro de FDS desde el enlace con slug
+Publicado en producción el 28-10-2026. El portal de empresa se puede abrir dentro de FDS desde el enlace con slug
 que genera el panel (Android App Links); desde la app se abre directamente la pantalla de correo. El acceso web
 general deja de pedir código de empresa: el correo encuentra la ficha en las organizaciones activas y el enlace con
 slug queda como pista opcional. La vista principal del portal usa la altura
@@ -2086,8 +2086,15 @@ Si la oficina aún no la vinculó, se mantiene el envío al correo de acceso y l
 vinculación. Un correo personal solo puede pertenecer a una ficha en el conjunto de empresas.
 Los OTP caducados tienen índice TTL. La interfaz del código está traducida en los siete idiomas.
 
-FDS queda con `versionCode 11` / `2.1.0`; el vínculo y login son cambios web/API y no modifican el APK. `py_compile`,
-checker de rutas, i18n, imports y hooks pasan; `npm run build` y ESLint acaban sin errores (warnings existentes).
-No se pudo ejecutar pytest: falta pytest y MongoDB local. En este PC Fly no tenía sesión iniciada; Cloudflare está
-autorizado. Desplegar backend primero, luego Pages; verificar el mail transaccional y el flujo real con un conductor
-de prueba. No dar el despliegue por listo hasta que Fly y Cloudflare estén comprobados en producción.
+FDS queda con `versionCode 11` / `2.1.0`; el vínculo y login son cambios web/API y no modifican el APK. Backend
+desplegado en Fly `flota-backend` (máquina `cdg`, versión 157); `/api/health` respondió `ok` y Mongo conectado.
+Frontend publicado en Cloudflare Pages `flota`: el script verificó que `flotadsp.com` sirve el bundle exacto compilado
+y calentó 277 recursos de edge. El envío de correo está configurado en Fly (Resend y Brevo presentes). No se usó
+ningún buzón de conductor real durante la verificación.
+
+CI de GitHub para el código del flujo: backend 1.398 tests pasaron y 1 se omitió; Playwright móvil/escritorio
+completó 551 tests y omitió 47. Se corrigió el checker de rutas para reconocer los consumidores externos de Android,
+Stripe y Apps Script; `node scripts/check-huerfanas.mjs` pasa localmente. La ejecución CI posterior a esa corrección
+está en curso. `py_compile`, build de producción y hooks pasan; ESLint conserva warnings ya existentes. La prueba
+post-deploy de pantallas autenticadas no pudo ejecutarse desde este PC porque falta Python en PATH y no hay una
+`SECRET_KEY` local; sí se verificaron el healthcheck, el estado de la máquina, Mongo y el bundle publicado.
