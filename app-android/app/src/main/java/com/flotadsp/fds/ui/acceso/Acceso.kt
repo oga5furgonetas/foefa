@@ -59,6 +59,7 @@ import com.flotadsp.fds.BuildConfig
 import com.flotadsp.fds.FdsApp
 import com.flotadsp.fds.R
 import com.flotadsp.fds.data.ErrorApi
+import com.flotadsp.fds.data.Sesion
 import com.flotadsp.fds.ui.Acciones
 import kotlinx.coroutines.launch
 import androidx.compose.runtime.produceState
@@ -70,16 +71,15 @@ import java.time.format.DateTimeFormatter
 /* ENTRAR O CREAR LA CUENTA: lo primero que ve quien instala FDS. Nada de portada web: el logo, qué hace la app
    en una frase, y entrar. */
 @Composable
-fun Acceso(ref: String?, empresaSlug: String? = null) {
+fun Acceso(ref: String?, alAbrirPortal: (Sesion) -> Unit) {
     val app = LocalContext.current.applicationContext as FdsApp
     var paso by rememberSaveable { mutableStateOf("inicio") }
     // La oferta, la misma que dicen la web y los anuncios (Spotify: «sin tarjeta y sin límite hasta fin de año»).
     val oferta by produceState<Oferta?>(null) { value = runCatching { app.repo.oferta() }.getOrNull() }
     when (paso) {
-        "entrar" -> Entrar(alVolver = { paso = "inicio" })
-        "empresa" -> PortalEmpresa(empresaSlug, alCerrar = { paso = "inicio" })
+        "entrar" -> Entrar(alVolver = { paso = "inicio" }, alAbrirPortal = alAbrirPortal)
         "alta" -> Alta(ref, oferta, alVolver = { paso = "inicio" })
-        else -> Inicio(oferta, alEntrar = { paso = "entrar" }, alCrear = { paso = "alta" }, alEmpresa = { paso = "empresa" })
+        else -> Inicio(oferta, alEntrar = { paso = "entrar" }, alCrear = { paso = "alta" })
     }
 }
 
@@ -100,7 +100,7 @@ private fun Logo(tam: Int = 72) {
 }
 
 @Composable
-private fun Inicio(oferta: Oferta?, alEntrar: () -> Unit, alCrear: () -> Unit, alEmpresa: () -> Unit) {
+private fun Inicio(oferta: Oferta?, alEntrar: () -> Unit, alCrear: () -> Unit) {
     Column(Modifier.fillMaxSize().statusBarsPadding().navigationBarsPadding().padding(24.dp)) {
         Spacer(Modifier.weight(1f))
         Logo()
@@ -131,7 +131,9 @@ private fun Inicio(oferta: Oferta?, alEntrar: () -> Unit, alCrear: () -> Unit, a
         Button(onClick = alCrear, modifier = Modifier.fillMaxWidth().height(56.dp)) { Text("Crear mi cuenta gratis") }
         Spacer(Modifier.height(10.dp))
         OutlinedButton(onClick = alEntrar, modifier = Modifier.fillMaxWidth().height(56.dp)) { Text("Ya tengo cuenta") }
-        TextButton(onClick = alEmpresa, modifier = Modifier.align(Alignment.CenterHorizontally)) { Text("Soy conductor de empresa") }
+        Spacer(Modifier.height(8.dp))
+        Text("Entra con el correo y la contraseña de tu cuenta. FDS abrirá el portal de empresa, conductor o reparto que te corresponde.",
+            style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
     }
 }
 
@@ -165,7 +167,7 @@ private fun CampoClave(valor: String, alCambiar: (String) -> Unit, etiqueta: Str
 }
 
 @Composable
-private fun Entrar(alVolver: () -> Unit) {
+private fun Entrar(alVolver: () -> Unit, alAbrirPortal: (Sesion) -> Unit) {
     val ctx = LocalContext.current
     val repo = (ctx.applicationContext as FdsApp).repo
     val ambito = rememberCoroutineScope()
@@ -177,7 +179,12 @@ private fun Entrar(alVolver: () -> Unit) {
         if (!trabajando && correo.isNotBlank() && clave.isNotBlank()) {
             trabajando = true; error = null
             ambito.launch {
-                try { repo.entrar(correo, clave) } catch (e: ErrorApi) {
+                try {
+                    val sesion = repo.entrar(correo, clave)
+                    if (sesion.app_destino == "conductor" || sesion.app_destino == "empresa") {
+                        alAbrirPortal(sesion)
+                    }
+                } catch (e: ErrorApi) {
                     error = if (e.sinRed) "Sin conexión. Revisa la red y vuelve a intentarlo." else e.message
                 } finally { trabajando = false }
             }
@@ -185,7 +192,7 @@ private fun Entrar(alVolver: () -> Unit) {
     }
     Column(Modifier.fillMaxSize().statusBarsPadding().imePadding().verticalScroll(rememberScrollState()).padding(horizontal = 24.dp, vertical = 8.dp)) {
         Cabecera("Entrar", alVolver)
-        OutlinedTextField(correo, { correo = it }, label = { Text("Tu correo") }, singleLine = true, modifier = Modifier.fillMaxWidth(),
+        OutlinedTextField(correo, { correo = it }, label = { Text("Correo o usuario") }, singleLine = true, modifier = Modifier.fillMaxWidth(),
             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Email, imeAction = ImeAction.Next))
         Spacer(Modifier.height(12.dp))
         CampoClave(clave, { clave = it }, "Contraseña", alListo = entrar)

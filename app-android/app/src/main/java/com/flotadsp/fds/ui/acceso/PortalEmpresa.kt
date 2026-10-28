@@ -21,16 +21,32 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import com.flotadsp.fds.BuildConfig
+import com.flotadsp.fds.data.Sesion
+import org.json.JSONArray
+import org.json.JSONObject
 
 /** Portal de empresa dentro de FDS. El correo identifica la empresa al iniciar sesión. */
 @Composable
 fun PortalEmpresa(slugInicial: String?, alCerrar: () -> Unit) {
     BackHandler(onBack = alCerrar)
-    PortalWeb(slug = slugInicial.orEmpty(), alCerrar = alCerrar)
+    PortalWeb(titulo = "Portal de conductor", ruta = "/conductor/#${Uri.encode(slugInicial.orEmpty())}",
+        sesion = null, alCerrar = alCerrar)
 }
 
 @Composable
-private fun PortalWeb(slug: String, alCerrar: () -> Unit) {
+fun PortalAcceso(sesion: Sesion, alCerrar: () -> Unit) {
+    val conductor = sesion.app_destino == "conductor"
+    BackHandler(onBack = alCerrar)
+    PortalWeb(
+        titulo = if (conductor) "Portal de conductor" else "Portal de empresa",
+        ruta = if (conductor) "/conductor/" else "/panel/login",
+        sesion = sesion,
+        alCerrar = alCerrar,
+    )
+}
+
+@Composable
+private fun PortalWeb(titulo: String, ruta: String, sesion: Sesion?, alCerrar: () -> Unit) {
     val ctx = LocalContext.current
     var fileCallback by remember { mutableStateOf<android.webkit.ValueCallback<Array<Uri>>?>(null) }
     val elegirArchivo = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->
@@ -41,7 +57,7 @@ private fun PortalWeb(slug: String, alCerrar: () -> Unit) {
     Column(Modifier.fillMaxSize().statusBarsPadding()) {
         Row(Modifier.fillMaxWidth().height(48.dp).padding(horizontal = 8.dp), verticalAlignment = Alignment.CenterVertically) {
             IconButton(onClick = alCerrar) { Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Volver") }
-            Text("Portal de empresa", style = MaterialTheme.typography.titleSmall)
+            Text(titulo, style = MaterialTheme.typography.titleSmall)
         }
         AndroidView(Modifier.fillMaxSize(), factory = { context ->
             WebView(context).apply {
@@ -52,6 +68,7 @@ private fun PortalWeb(slug: String, alCerrar: () -> Unit) {
                 settings.mixedContentMode = WebSettings.MIXED_CONTENT_NEVER_ALLOW
                 settings.allowFileAccess = false
                 settings.allowContentAccess = true
+                var sesionInyectada = false
                 webViewClient = object : WebViewClient() {
                     override fun shouldOverrideUrlLoading(view: WebView, request: WebResourceRequest): Boolean {
                         val uri = request.url
@@ -61,6 +78,42 @@ private fun PortalWeb(slug: String, alCerrar: () -> Unit) {
                             return true
                         }
                         return true
+                    }
+
+                    override fun onPageFinished(view: WebView, url: String) {
+                        val acceso = sesion ?: return
+                        if (sesionInyectada || Uri.parse(url).host != Uri.parse(BuildConfig.WEB_URL).host) return
+                        sesionInyectada = true
+                        val conductor = acceso.app_destino == "conductor"
+                        val datos = JSONObject()
+                        if (conductor) {
+                            datos.put("id", acceso.id)
+                            datos.put("name", acceso.name)
+                            datos.put("email", acceso.email.orEmpty())
+                            datos.put("center", acceso.center ?: JSONObject.NULL)
+                            datos.put("configurar_cuenta", acceso.configurar_cuenta)
+                        } else {
+                            datos.put("name", acceso.name)
+                            datos.put("role", acceso.role)
+                            datos.put("id", acceso.id)
+                            datos.put("account_type", acceso.account_type ?: JSONObject.NULL)
+                            datos.put("slug", acceso.slug ?: JSONObject.NULL)
+                            datos.put("super_admin", acceso.super_admin)
+                            datos.put("permissions", acceso.permissions?.let { JSONArray(it) } ?: JSONObject.NULL)
+                            datos.put("allowed_centers", acceso.allowed_centers?.let { JSONArray(it) } ?: JSONObject.NULL)
+                            datos.put("centers", acceso.centers?.let { JSONArray(it) } ?: JSONArray())
+                            datos.put("admin_role", acceso.admin_role ?: JSONObject.NULL)
+                        }
+                        val payload = JSONObject()
+                            .put("access_token", acceso.token)
+                            .put("data", datos)
+                        val jsPayload = JSONObject.quote(payload.toString())
+                        val js = if (conductor) {
+                            """(function(){const p=JSON.parse($jsPayload);localStorage.removeItem('flota_token');localStorage.removeItem('flota_admin');localStorage.setItem('flota_driver_token',p.access_token);localStorage.setItem('flota_driver',JSON.stringify(p.data));window.location.replace('/conductor/')})()"""
+                        } else {
+                            """(function(){const p=JSON.parse($jsPayload);localStorage.removeItem('flota_driver_token');localStorage.removeItem('flota_driver');localStorage.setItem('flota_token',p.access_token);localStorage.setItem('flota_admin',JSON.stringify(p.data));window.location.replace('/panel')})()"""
+                        }
+                        view.evaluateJavascript(js, null)
                     }
                 }
                 webChromeClient = object : WebChromeClient() {
@@ -72,7 +125,7 @@ private fun PortalWeb(slug: String, alCerrar: () -> Unit) {
                         return true
                     }
                 }
-                loadUrl("${BuildConfig.WEB_URL}/conductor/#${Uri.encode(slug)}")
+                loadUrl(BuildConfig.WEB_URL + ruta)
             }
         }, update = {}, onRelease = { view ->
             fileCallback?.onReceiveValue(null)

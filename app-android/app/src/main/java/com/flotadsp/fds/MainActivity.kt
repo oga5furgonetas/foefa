@@ -42,6 +42,7 @@ import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
 import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.flotadsp.fds.data.Parada
+import com.flotadsp.fds.data.Sesion
 import com.flotadsp.fds.etiqueta.Lectura
 import com.flotadsp.fds.ui.Region
 import com.flotadsp.fds.ui.TemaFds
@@ -59,6 +60,7 @@ import kotlinx.coroutines.launch
 class MainActivity : ComponentActivity() {
     private var ref by mutableStateOf<String?>(null)
     private var empresaSlug by mutableStateOf<String?>(null)
+    private var sesionPortal by mutableStateOf<Sesion?>(null)
 
     override fun onCreate(savedInstanceState: Bundle?) {
         val app = application as FdsApp
@@ -80,7 +82,9 @@ class MainActivity : ComponentActivity() {
             }
             TemaFds(tema) {
                 Surface(color = MaterialTheme.colorScheme.background, modifier = Modifier.fillMaxSize()) {
-                    Raiz(app, ref, empresaSlug, alCerrarEmpresa = { empresaSlug = null })
+                    Raiz(app, ref, empresaSlug, sesionPortal,
+                        alAbrirPortal = { sesionPortal = it },
+                        alCerrarEmpresa = { empresaSlug = null; sesionPortal = null })
                 }
             }
         }
@@ -104,10 +108,17 @@ class MainActivity : ComponentActivity() {
 }
 
 @Composable
-private fun Raiz(app: FdsApp, ref: String?, empresaSlug: String?, alCerrarEmpresa: () -> Unit) {
+private fun Raiz(app: FdsApp, ref: String?, empresaSlug: String?, sesionPortal: Sesion?,
+                 alAbrirPortal: (Sesion) -> Unit, alCerrarEmpresa: () -> Unit) {
     if (empresaSlug != null) {
         key(empresaSlug) {
             com.flotadsp.fds.ui.acceso.PortalEmpresa(empresaSlug.ifBlank { null }, alCerrarEmpresa)
+        }
+        return
+    }
+    if (sesionPortal != null) {
+        key(sesionPortal.token) {
+            com.flotadsp.fds.ui.acceso.PortalAcceso(sesionPortal, alCerrarEmpresa)
         }
         return
     }
@@ -115,7 +126,7 @@ private fun Raiz(app: FdsApp, ref: String?, empresaSlug: String?, alCerrarEmpres
     val cargada by app.cuenta.cargada.collectAsState()
     if (!cargada) return
     AnimatedContent(targetState = token != null, transitionSpec = { fadeIn() togetherWith fadeOut() }, label = "sesion") { dentro ->
-        if (dentro) Principal() else Acceso(ref)
+        if (dentro) Principal() else Acceso(ref, alAbrirPortal)
     }
 }
 

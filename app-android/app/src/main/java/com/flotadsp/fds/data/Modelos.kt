@@ -13,6 +13,17 @@ data class Sesion(
     val role: String = "",
     val name: String = "",
     val id: String = "",
+    val app_destino: String? = null,
+    val account_type: String? = null,
+    val slug: String? = null,
+    val center: String? = null,
+    val email: String? = null,
+    val configurar_cuenta: Boolean = false,
+    val super_admin: Boolean = false,
+    val permissions: List<String>? = null,
+    val allowed_centers: List<String>? = null,
+    val centers: List<String>? = null,
+    val admin_role: String? = null,
 )
 
 @Serializable

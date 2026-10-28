@@ -8,6 +8,7 @@ import androidx.datastore.preferences.preferencesDataStore
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.first
+import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.longOrNull
@@ -38,7 +39,17 @@ class Cuenta(private val ctx: Context) {
 
     suspend fun cargar() {
         val p = ctx.almacen.data.first()
-        _token.value = p[kToken]?.takeIf { !caducado(it) }
+        val guardado = p[kToken]?.takeIf { !caducado(it) }
+        val claims = guardado?.let { claims(it) }
+        val rol = claims?.get("role")?.jsonPrimitive?.contentOrNull
+        val destino = claims?.get("app_destino")?.jsonPrimitive?.contentOrNull
+        // Las versiones anteriores guardaban cualquier cuenta admin en la sesión nativa. Al actualizar, vuelve
+        // a pedir credenciales una vez y la API la enviará al portal que le corresponde.
+        val tokenDeReparto = guardado?.takeIf { rol == "admin" && destino == "reparto" }
+        if (guardado != null && tokenDeReparto == null) {
+            ctx.almacen.edit { it.remove(kToken) }
+        }
+        _token.value = tokenDeReparto
         _nombre.value = p[kNombre].orEmpty()
         _correo.value = p[kCorreo].orEmpty()
         _navegar.value = p[kNavegar] ?: "google"

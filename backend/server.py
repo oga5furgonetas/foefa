@@ -706,6 +706,11 @@ class LoginRequest(BaseModel):
     password: str
 
 
+class AppLoginRequest(BaseModel):
+    identifier: str
+    password: str
+
+
 class RegisterRequest(BaseModel):
     org_name: str          # nombre del DSP/empresa
     username: str          # usuario de acceso del dueño
@@ -849,6 +854,8 @@ class TokenResponse(BaseModel):
     permissions: Optional[list] = None
     allowed_centers: Optional[list] = None  # subset de centros que este admin puede ver
     admin_role: Optional[str] = None  # "center_manager" | "dispatcher" | None
+    app_destino: Optional[str] = None  # reparto | empresa | conductor (solo acceso unificado Android)
+    email: Optional[str] = None
 
 
 # =========================
@@ -875,7 +882,7 @@ def create_token(user_id: str, role: str, name: str,
                  super_admin: bool = False, permissions: Optional[list] = None,
                  demo: bool = False, allowed_centers: Optional[list] = None,
                  suplantado: bool = False, region: Optional[list] = None,
-                 horas: Optional[int] = None) -> str:
+                 horas: Optional[int] = None, app_destino: Optional[str] = None) -> str:
     # El conductor entra en su portal una vez cada muchos dias: pedir dias libres
     # o mirar sus turnos no es algo diario. Con las 72 h del panel, el token le
     # caducaba entre visita y visita y la pantalla le soltaba
@@ -916,6 +923,8 @@ def create_token(user_id: str, role: str, name: str,
         payload["db_name"] = db_name
     if account_type:
         payload["account_type"] = account_type
+    if app_destino:
+        payload["app_destino"] = app_destino
     if centers:
         payload["centers"] = centers
     if allowed_centers:
@@ -6866,6 +6875,51 @@ async def admin_login(data: LoginRequest, request: Request):
     return await _sesion_de_admin(user)
 
 
+@auth_router.post("/app-login")
+async def app_login(data: AppLoginRequest, request: Request):
+    """Acceso único de Android: clasifica solo después de validar la contraseña.
+
+    Las cuentas personales/empresa de oficina viven en admin_users; las cuentas
+    de conductores de empresa viven en driver_accounts. No se revela qué tipo
+    de cuenta existe para un identificador sin credenciales válidas.
+    """
+    identifier = str(data.identifier or "").strip()
+    if not identifier or len(identifier) > 254 or len(data.password or "") > 128:
+        raise HTTPException(status_code=401, detail="Correo/usuario o contraseña incorrectos")
+
+    admin = await _admin_por_usuario(identifier, {"_id": 0})
+    if admin:
+        rl_user = f"user:{identifier.lower()}"
+        rl_ip = f"ip:{_rl_key_ip(request)}"
+        _rl_check(rl_user)
+        _rl_check(rl_ip)
+        if admin.get("disabled") or not verify_password(data.password, admin.get("hashed_password") or ""):
+            await _rl_fail(rl_user, f"app login '{identifier}' (IP {_rl_key_ip(request)})")
+            await _rl_fail(rl_ip, f"app login '{identifier}' (IP {_rl_key_ip(request)})")
+            await asyncio.sleep(0.8)
+            raise HTTPException(status_code=401, detail="Correo/usuario o contraseña incorrectos")
+        _rl_ok(rl_user)
+        _rl_ok(rl_ip)
+        sesion = await _sesion_de_admin(admin)
+        org = await get_org(admin.get("org_id"))
+        salida = sesion.model_dump()
+        salida["app_destino"] = "reparto" if _org_de_autonomo(org) else "empresa"
+        return salida
+
+    try:
+        sesion = await driver_login(
+            DriverLoginRequest(email=identifier, password=data.password), request
+        )
+    except HTTPException as exc:
+        if exc.status_code in (429, 403):
+            raise
+        raise HTTPException(status_code=401, detail="Correo/usuario o contraseña incorrectos") from exc
+    salida = sesion.model_dump()
+    salida["app_destino"] = "conductor"
+    salida["email"] = identifier.lower()
+    return salida
+
+
 SESION_APP_HORAS = 24 * 30
 
 
@@ -6879,12 +6933,13 @@ async def _sesion_de_admin(user: dict) -> TokenResponse:
     org = await get_org(user.get("org_id"))
     db_name = _tenant_db_name(org)
     account_type = (org or {}).get("account_type", "owner")
+    app_destino = "reparto" if _org_de_autonomo(org) else "empresa"
     # El autónomo, un mes como los conductores (la app de Android la renueva con /auth/renovar al usarla).
     horas = SESION_APP_HORAS if _org_de_autonomo(org) and not user.get("super_admin") else None
     token = create_token(user["id"], user["role"], user["name"],
                          org_id=user.get("org_id"), db_name=db_name, account_type=account_type,
                          centers=(org or {}).get("centers"), super_admin=bool(user.get("super_admin")),
-                         permissions=user.get("permissions"), horas=horas)
+                         permissions=user.get("permissions"), horas=horas, app_destino=app_destino)
     return TokenResponse(
         access_token=token,
         role=user["role"],
@@ -6892,6 +6947,7 @@ async def _sesion_de_admin(user: dict) -> TokenResponse:
         id=user["id"],
         theme=user.get("theme"),
         account_type=account_type,
+        app_destino=app_destino,
         hidden_modules=org_hidden_modules(org),
         slug=(org or {}).get("slug"),
         centers=(org or {}).get("centers"),

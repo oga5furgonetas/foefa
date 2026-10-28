@@ -25,8 +25,8 @@ android {
         minSdk = 26
         targetSdk = 36
         // La TWA llegó a code 4 (1.0.3): la nativa empieza en 10.
-        versionCode = 11
-        versionName = "2.1.0"
+        versionCode = 12
+        versionName = "2.2.0"
         buildConfigField("String", "API_URL", "\"$apiUrl\"")
         buildConfigField("String", "WEB_URL", "\"https://flotadsp.com\"")
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"

@@ -122,6 +122,21 @@ siguen necesitando compilar y publicar su propio AAB si aún no se han subido.
 entorno no tiene JDK ni Android SDK. Antes de Play, compilar, ejecutar las pruebas API contra Mongo de test y probar
 el enlace de empresa, subida de fotos, contraseña y OTP en un móvil físico.
 
+## Preparación 2.2.0 (code 12): un acceso que abre el portal correcto (28-10-2026)
+
+En el inicio de FDS, «Ya tengo cuenta» usa un acceso Android unificado. La API valida primero las credenciales y
+solo entonces decide el destino: cuenta autónoma → reparto nativo; cuenta de oficina → panel móvil de empresa;
+conductor de empresa → portal del conductor dentro de FDS. El token de empresa/conductor se entrega a la WebView
+solo desde Android y se guarda en el almacenamiento local del dominio HTTPS; no viaja en la URL.
+El alta de cuenta sigue siendo para reparto autónomo. Los enlaces `/conductor/#<slug>` siguen abriendo el portal
+de empresa directamente mediante App Links.
+
+La API y el frontend web pueden desplegarse sin subir otra app. Para que este acceso unificado aparezca en la app
+instalada desde Google Play sí hace falta publicar el AAB `versionCode 12` / `versionName 2.2.0`. Este entorno
+no tiene JDK, Android SDK ni la clave de subida registrada en `FLOTA_KEYSTORE`; por tanto, aquí no se puede
+producir un AAB firmado y aceptable por Play. No sustituir ni regenerar la clave: compilar en un equipo con la
+clave de subida original y verificar el AAB antes de cargarlo.
+
 **Ficheros** (en `app-android/salida/`, fuera de git):
 - `FDS-2.0.0.aab` → **lo que se sube a Play** (Producción o la prueba cerrada). Firmado con la clave de subida
   (SHA-256 `5B:48:01:D5:…:73:44:61`). Play le da a cada móvil solo lo suyo (~21 MB en un móvil arm64).

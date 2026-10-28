@@ -64,12 +64,18 @@ class Repositorio(private val ctx: Context, val cuenta: Cuenta, val api: Api) {
 
     // ── Sesión ──────────────────────────────────────────────────────────────────────────────────────────────
 
-    suspend fun entrar(correo: String, clave: String) {
-        val r = api.post("auth/login", buildJsonObject { put("username", correo.trim()); put("password", clave) })
+    suspend fun entrar(correo: String, clave: String): Sesion {
+        val r = api.post("auth/app-login", buildJsonObject { put("identifier", correo.trim()); put("password", clave) })
         val s = leer<Sesion>(r)
-        if (s.role != "admin") throw ErrorApi(403, "Esta app es para quien reparte por su cuenta. Si repartes para una empresa, entra en el portal de tu empresa.")
-        cuenta.guardar(s, correo.trim().lowercase(Locale.ROOT))
-        _pendientes.value = leerCola()
+        when (s.app_destino) {
+            "reparto" -> {
+                cuenta.guardar(s, correo.trim().lowercase(Locale.ROOT))
+                _pendientes.value = leerCola()
+            }
+            "empresa", "conductor" -> Unit // La app abrirá el portal web correspondiente con esta sesión.
+            else -> throw ErrorApi(0, "El servidor no indicó a qué portal pertenece esta cuenta. Actualiza FDS.")
+        }
+        return s
     }
 
     /** La oferta del plan del repartidor, la MISMA que enseñan la web y los anuncios (GET /billing/planes, público):
