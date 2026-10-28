@@ -7,6 +7,7 @@ Cubren los contratos que más han dolido históricamente:
 - reset de contraseña sin enumeración de usuarios
 """
 import uuid
+import re
 from datetime import datetime, timedelta, timezone
 
 import pytest
@@ -237,13 +238,12 @@ async def test_no_se_expone_la_plantilla_de_conductores(client):
 
     Antes, GET /auth/conductor-list devolvía id+nombre+email+centro de TODA la
     plantilla sin token, y con ese id se pedía un JWT del conductor. Este test
-    fija que el nuevo camino solo responde por el email preguntado.
+    fija que el flujo nuevo exige un tenant válido y no descarga la plantilla.
     """
-    r = await client.post("/api/auth/driver-lookup", json={"email": "no.existe@x.com"})
-    assert r.status_code == 404
-    cuerpo = r.text.lower()
-    # El error no puede filtrar datos de otros conductores
-    assert "@" not in r.json().get("detail", "").replace("no.existe@x.com", "")
+    # La búsqueda global responde igual aunque el correo no esté registrado.
+    r = await client.post("/api/auth/driver-lookup", json={"email": "no.existe@x.com", "slug": "no-existe"})
+    assert r.status_code == 200
+    assert "access_token" not in r.json() and "name" not in r.json()
 
 
 async def test_driver_token_exige_email_correcto(client, admin_token):
@@ -256,15 +256,114 @@ async def test_driver_token_exige_email_correcto(client, admin_token):
     assert r.status_code == 200, r.text
     did = r.json()["id"]
 
-    # Sin email -> rechazado
+    # El endpoint de token directo está retirado; conocer el correo ya no basta.
     r = await client.post("/api/auth/driver-token", json={"driver_id": did})
-    assert r.status_code == 403, r.text
-    # Con email equivocado -> rechazado
+    assert r.status_code == 410, r.text
+    # Tampoco se puede canjear el id junto al email.
     r = await client.post("/api/auth/driver-token",
-                          json={"driver_id": did, "email": "otro@test.com"})
-    assert r.status_code == 403, r.text
+                          json={"driver_id": did, "email": f"sec_{did}@test.com"})
+    assert r.status_code == 410, r.text
 
 
+async def test_codigo_conductor_es_de_un_solo_uso_y_va_al_tenant(client, admin_token, monkeypatch):
+    """OTP sin enumeración, tenant incluido en el JWT y código consumible una vez."""
+    slug = f"test-otp-{uuid.uuid4().hex[:8]}"
+    org_id = f"org_{uuid.uuid4().hex}"
+    await server.global_db.organizations.insert_one({
+        "id": org_id, "slug": slug, "name": "Empresa OTP test",
+        "account_type": "owner", "db_name": server._DEFAULT_DB_NAME, "status": "active",
+    })
+    email = f"otp_{uuid.uuid4().hex[:8]}@example.test"
+    h = {"Authorization": f"Bearer {admin_token}"}
+    created = await client.post("/api/drivers", headers=h, json={
+        "name": "Conductor OTP test", "center": "OTP1", "email": email,
+    })
+    assert created.status_code == 200, created.text
+    driver_id = created.json()["id"]
+    correos = []
+
+    async def capturar_correo(to, subject, html, **kwargs):
+        correos.append((to, html))
+        return True
+
+    monkeypatch.setattr(server, "_enviar_email", capturar_correo)
+    try:
+        pedido = await client.post("/api/auth/driver-lookup", json={"email": email, "slug": slug})
+        assert pedido.status_code == 200
+        assert "access_token" not in pedido.json() and "name" not in pedido.json()
+        assert len(correos) == 1 and correos[0][0] == email
+        code = re.search(r">(\d{6})</strong>", correos[0][1]).group(1)
+
+        acceso = await client.post("/api/auth/driver-code/verify", json={
+            "email": email, "code": code, "slug": slug,
+        })
+        assert acceso.status_code == 200, acceso.text
+        claims = server.jwt.decode(acceso.json()["access_token"], server.SECRET_KEY,
+                                   algorithms=[server.JWT_ALGORITHM])
+        assert claims["org_id"] == org_id
+        assert claims["sub"] == driver_id
+
+        replay = await client.post("/api/auth/driver-code/verify", json={
+            "email": email, "code": code, "slug": slug,
+        })
+        assert replay.status_code == 401
+        desconocido = await client.post("/api/auth/driver-lookup", json={
+            "email": f"no_{email}", "slug": slug,
+        })
+        assert desconocido.status_code == 200
+        assert desconocido.json() == pedido.json()
+    finally:
+        await server.db.driver_login_codes.delete_many({"driver_id": driver_id})
+        await server.db.drivers.delete_one({"id": driver_id})
+        await server.global_db.organizations.delete_one({"id": org_id})
+
+
+async def test_codigo_de_acceso_va_al_correo_personal_verificado(client, admin_token, monkeypatch):
+    """El email laboral identifica la ficha; el OTP se envía al alias personal verificado."""
+    h = {"Authorization": f"Bearer {admin_token}"}
+    email_laboral = f"laboral_{uuid.uuid4().hex[:8]}@empresa.test"
+    email_personal = f"personal_{uuid.uuid4().hex[:8]}@gmail.test"
+    creado = await client.post("/api/drivers", headers=h, json={
+        "name": "Conductor correo recuperación", "center": "REC1", "email": email_laboral,
+    })
+    assert creado.status_code == 200, creado.text
+    driver_id = creado.json()["id"]
+    correos = []
+
+    async def capturar_correo(to, subject, html, **kwargs):
+        correos.append((to, subject, html, kwargs.get("texto", "")))
+        return True
+
+    monkeypatch.setattr(server, "_enviar_email", capturar_correo)
+    try:
+        pedido = await client.post(f"/api/drivers/{driver_id}/recovery-email", headers=h,
+                                   json={"email": email_personal})
+        assert pedido.status_code == 200, pedido.text
+        assert correos[-1][0] == email_personal
+        token = re.search(r"#([A-Za-z0-9_-]{30,100})", correos[-1][2]).group(1)
+
+        verificado = await client.post("/api/auth/driver-recovery/verify-link", json={"token": token})
+        assert verificado.status_code == 200, verificado.text
+        assert verificado.json()["email"] == server._correo_mascara(email_personal)
+
+        correos.clear()
+        lookup = await client.post("/api/auth/driver-lookup", json={"email": email_laboral})
+        assert lookup.status_code == 200
+        assert len(correos) == 1 and correos[0][0] == email_personal
+        code = re.search(r">(\d{6})</strong>", correos[0][2]).group(1)
+        acceso = await client.post("/api/auth/driver-code/verify", json={
+            "email": email_laboral, "code": code,
+        })
+        assert acceso.status_code == 200, acceso.text
+        claims = server.jwt.decode(acceso.json()["access_token"], server.SECRET_KEY,
+                                   algorithms=[server.JWT_ALGORITHM])
+        assert claims["sub"] == driver_id
+    finally:
+        await server.global_db.driver_recovery_pending.delete_many({"driver_id": driver_id})
+        await server.global_db.driver_recovery_email_claims.delete_many({"driver_id": driver_id})
+        await server.db.driver_recovery_emails.delete_many({"driver_id": driver_id})
+        await server.db.driver_login_codes.delete_many({"driver_id": driver_id})
+        await server.db.drivers.delete_one({"id": driver_id})
 async def test_flujo_completo_de_turnos(client, admin_token):
     """El módulo de turnos entero: demanda → cuadrante → solicitud → aprobación.
 

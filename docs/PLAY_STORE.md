@@ -96,6 +96,31 @@ Fallos que salieron al probarla y están arreglados (que no vuelvan):
 - Cobros en euros para todos y Bizum fuera de España: moneda y formas de pago del país, como la web.
 - Botón «Escanear» e interruptores sin nombre para TalkBack; icono encogido en un círculo blanco (ahora adaptativo).
 
+## Preparación 2.1.0 (code 11): portal de empresa dentro de FDS (28-10-2026)
+
+La app nativa conserva el acceso autónomo y añade una entrada de empresa. Los enlaces personalizados del panel
+(`flotadsp.com/conductor/#<slug>`) se verifican como App Links y abren el portal dentro de FDS. El acceso pide el
+email y el servidor busca la ficha entre las organizaciones activas; tras verificar el código enviado al correo,
+emite una sesión ligada a la empresa. El slug del enlace queda como pista opcional. La WebView mantiene navegación
+dentro de `flotadsp.com`, no permite contenido mixto ni acceso a archivos locales y abre el selector de imágenes del
+móvil para las fotos del portal.
+
+El inicio de sesión del conductor puede usar un código temporal por correo (10 minutos, un uso, cinco intentos,
+límite de solicitudes, tenant en el JWT) o contraseña. La oficina puede vincular un correo personal desde la ficha;
+el conductor confirma con un enlace de un solo uso, válido 24 horas. A partir de ahí, el OTP se envía al correo
+personal verificado aunque el conductor escriba su email laboral. Si el mismo email aparece en varias empresas, el
+sistema no elige una automáticamente. No se revela si una dirección existe y una ficha de baja o cuenta suspendida
+no puede entrar. Los códigos vencidos se limpian con TTL en Mongo.
+
+El vínculo de correo personal y la resolución del tenant son cambios web/API. La app FDS abre ese portal web remoto,
+por lo que este cambio no requiere subir un AAB nuevo a Google Play. Los usuarios verán el flujo actualizado al
+abrir o recargar FDS cuando se publique el despliegue web/API. Los cambios nativos anteriores (2.1.0, code 11)
+siguen necesitando compilar y publicar su propio AAB si aún no se han subido.
+
+`app-android/app/build.gradle.kts` queda en versionCode 11 / 2.1.0. Aún no se ha generado ni subido un AAB: este
+entorno no tiene JDK ni Android SDK. Antes de Play, compilar, ejecutar las pruebas API contra Mongo de test y probar
+el enlace de empresa, subida de fotos, contraseña y OTP en un móvil físico.
+
 **Ficheros** (en `app-android/salida/`, fuera de git):
 - `FDS-2.0.0.aab` → **lo que se sube a Play** (Producción o la prueba cerrada). Firmado con la clave de subida
   (SHA-256 `5B:48:01:D5:…:73:44:61`). Play le da a cada móvil solo lo suyo (~21 MB en un móvil arm64).

@@ -28,6 +28,7 @@ const PERMITIDO = [
   ['lib/apiBase.js', 'ennuestrodominio', 'regex tecnica del dominio donde se sirve la app (no es texto visible)'],
   ['lib/enApp.js', 'de_play', 'identificador tecnico del paquete de Play (no es texto visible)'],
   ['lib/instalar.js', 'nuestra_app', 'identificadores tecnicos de los paquetes de Android: Play, APK y China (no es texto visible)'],
+  ['components/GooglePlayBadge.jsx', 'play.google.com', 'destino del distintivo oficial de descarga en Google Play'],
   ['panel/components/TiendaPrendas.jsx', 'camiseta oga5', 'la tienda de ropa es del dueño (solo super-admin)'],
   // En el ALTA se pregunta a qué se dedica la empresa y una opción es ser DSP
   // de Amazon (lo pidió Dani el 03-10-2026): es nombrar al cliente del

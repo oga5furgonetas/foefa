@@ -11,8 +11,9 @@ export default function DriverLogin({ onLogin }) {
   const { t } = useT()
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
+  const [code, setCode] = useState('')
   const [showPassword, setShowPassword] = useState(false)
-  const [step, setStep] = useState('email') // 'email' | 'password'
+  const [step, setStep] = useState('email') // 'email' | 'code' | 'password'
   const [currentDriver, setCurrentDriver] = useState(null)
   const [busy, setBusy] = useState(false)
   const [orgName] = useState('')
@@ -39,19 +40,9 @@ export default function DriverLogin({ onLogin }) {
     if (!email) return toast.warning(t('dr.introEmail'))
     setBusy(true)
     try {
-      // Una sola pregunta al servidor, solo por ESTE email.
-      const r = await driverLookup(email.trim())
-      const d = r.data || {}
-      if (d.has_account) {
-        setCurrentDriver({ name: d.name, email: email.trim() })
-        setStep('password')
-      } else if (d.access_token) {
-        localStorage.setItem(DRIVER_TOKEN_KEY, d.access_token)
-        onLogin({ id: d.driver_id, name: d.name, email: email.trim(), center: d.center })
-        toast.success(`${t('dr.bienvenido')}, ${d.name}`)
-      } else {
-        toast.error(t('dr.eLogin'))
-      }
+      await driverLookup(email.trim())
+      setCurrentDriver({ email: email.trim() })
+      setStep('code')
     } catch (ex) {
       const msg = ex?.response?.data?.detail
       toast.error(typeof msg === 'string' ? msg : t('dr.eLogin'))
@@ -59,14 +50,35 @@ export default function DriverLogin({ onLogin }) {
     setBusy(false)
   }
 
+  const handleCodeSubmit = async () => {
+    if (!/^\d{6}$/.test(code.trim())) return toast.warning(t('dr.codeSixWarn'))
+    setBusy(true)
+    try {
+      const r = await api.post('/auth/driver-code/verify', { email: email.trim(), code: code.trim() })
+      const d = r.data || {}
+      localStorage.setItem(DRIVER_TOKEN_KEY, d.access_token)
+      onLogin({ id: d.id, name: d.name, email: email.trim(), center: d.center })
+      toast.success(`${t('dr.bienvenido')}, ${d.name}`)
+    } catch (ex) {
+      toast.error(ex?.response?.status === 429 ? (ex?.response?.data?.detail || t('dr.codeInvalid')) : t('dr.codeInvalid'))
+    } finally { setBusy(false) }
+  }
+
+  const handleResend = async () => {
+    setBusy(true)
+    try {
+      await driverLookup(email.trim())
+      setCode('')
+      toast.success(t('dr.codeSent'))
+    } catch (ex) { toast.error(ex?.response?.data?.detail || 'No se pudo solicitar otro código.') }
+    finally { setBusy(false) }
+  }
+
   const handlePasswordSubmit = async () => {
     if (!password) return toast.warning(t('dr.introPass'))
     setBusy(true)
     try {
-      /* El slug NO sobra: sin el, el backend busca la cuenta en la base por
-         defecto y un conductor de cualquier empresa que no sea la principal
-         se llevaba «contraseña incorrecta» con la suya buena. Sus hermanos
-         driverLookup y getDriverToken ya lo mandaban; este no. */
+      /* Slug opcional: el acceso por correo ya resuelve la empresa en backend. */
       const r = await api.post('/auth/driver-login',
         { email: email.trim(), password, slug: currentSlug() })
       if (r.data?.access_token) localStorage.setItem(DRIVER_TOKEN_KEY, r.data.access_token)
@@ -135,6 +147,7 @@ export default function DriverLogin({ onLogin }) {
                   autoFocus
                   autoComplete="email"
                 />
+                <p className="mt-1.5 text-xs leading-relaxed text-dark-500">{t('dr.recoveryHint')}</p>
               </div>
 
               <button
@@ -150,13 +163,47 @@ export default function DriverLogin({ onLogin }) {
           )}
 
           {/* Paso 2: contraseña */}
+          {step === 'code' && (
+            <div className="space-y-4">
+              <div className="rounded-xl bg-dark-800/60 px-4 py-3 text-sm text-dark-200">
+                <p>{t('dr.codeInfo')}</p>
+                <p className="mt-2 text-xs text-dark-400">Cuenta consultada: <strong className="break-all text-dark-200">{email}</strong></p>
+              </div>
+              <div>
+                <label className="label" htmlFor="driver-code">{t('dr.codeLabel')}</label>
+                <input id="driver-code" type="text" inputMode="numeric" pattern="[0-9]*" maxLength={6}
+                  className="input text-center text-xl tracking-[0.35em]" value={code}
+                  onChange={(e) => setCode(e.target.value.replace(/\D/g, '').slice(0, 6))}
+                  onKeyDown={(e) => e.key === 'Enter' && handleCodeSubmit()}
+                  autoComplete="one-time-code" autoFocus />
+              </div>
+              <button onClick={handleCodeSubmit} disabled={busy || code.length !== 6}
+                className="btn-primary flex w-full items-center justify-center gap-2 py-3 text-base">
+                {busy ? <><Loader2 size={16} className="animate-spin" /> {t('dr.verificando')}</> : <><LogIn size={16} /> Entrar</>}
+              </button>
+              <button type="button" onClick={() => { setStep('password'); setPassword('') }}
+                className="flex w-full items-center justify-center text-xs text-dark-400 hover:text-dark-200">
+                {t('dr.usePassword')}
+              </button>
+              <button type="button" disabled={busy} onClick={handleResend}
+                className="flex w-full items-center justify-center text-xs text-dark-500 hover:text-dark-300">
+                {t('dr.codeResend')}
+              </button>
+              <button type="button" onClick={() => { setStep('email'); setCode(''); setPassword(''); setCurrentDriver(null) }}
+                className="flex w-full items-center justify-center gap-1.5 text-xs text-dark-500 hover:text-dark-300">
+                <ArrowLeft size={12} /> Cambiar correo
+              </button>
+            </div>
+          )}
+
+          {/* Paso 2: contraseña */}
           {step === 'password' && (
             <div className="space-y-4">
               {/* Info del conductor */}
               <div className="rounded-xl bg-dark-800/60 px-4 py-3 flex items-center gap-3">
                 <Lock size={16} className="text-brand-400 shrink-0" />
                 <div>
-                  <div className="text-sm font-semibold text-dark-100">{currentDriver?.name}</div>
+                  <div className="text-sm font-semibold text-dark-100">{t('dr.passwordAccess')}</div>
                   <div className="text-xs text-dark-500">{email}</div>
                 </div>
               </div>

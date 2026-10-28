@@ -273,6 +273,7 @@ const SeguimientoPedido = lazy(() => import('./pages/SeguimientoPedido'))
 const RegaloPagina = lazy(() => import('./pages/RegaloPagina'))
 const Planes = lazy(() => import('./pages/Planes'))
 const DriverPortal = lazy(() => import('./pages/driver/DriverPortal'))
+const VerificarCorreoConductor = lazy(() => import('./pages/driver/VerificarCorreoConductor'))
 const PanelLogin = lazy(() => import('./panel/PanelLogin'))
 const PanelLayout = lazy(() => import('./panel/PanelLayout'))
 const PanelDashboard = lazy(() => import('./panel/pages/Dashboard'))
@@ -442,6 +443,7 @@ ReactDOM.createRoot(document.getElementById('root')).render(
               <Route path="/empleo/prioridad" element={<EmpleoPrioridad />} />
               <Route path="/t/:token" element={<TiendaPublica />} />
               <Route path="/taller/:token" element={<PortalTaller />} />
+              <Route path="/verificar-correo-conductor" element={<VerificarCorreoConductor />} />
               <Route path="/conductor" element={<DriverPortal />} />
               <Route path="/conductor/:slug" element={<DriverPortal />} />
 

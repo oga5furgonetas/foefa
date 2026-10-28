@@ -114,6 +114,7 @@ api.interceptors.response.use(
     if (status === 401 && enPortalConductor() && teniaSesion
       && !url.includes('/auth/driver-login')
       && !url.includes('/auth/driver-lookup')
+      && !url.includes('/auth/driver-code/verify')
       && !url.includes('/auth/change-my-password')) {
       localStorage.removeItem(DRIVER_TOKEN_KEY)
       localStorage.removeItem('flota_token')
@@ -141,7 +142,7 @@ export function currentSlug() {
   return new URLSearchParams(window.location.search).get('slug') || undefined
 }
 
-/* ── Auth conductor (scoped al DSP por slug) ────────────────────
+/* ── Auth conductor (tenant resuelto por email; slug opcional como pista) ─
    Se pregunta SOLO por el email tecleado. Antes el portal se descargaba la
    plantilla entera (nombre, email, centro e id de todos los conductores) sin
    autenticar y buscaba en local: eso filtraba datos personales de toda la

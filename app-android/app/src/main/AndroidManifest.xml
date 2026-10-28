@@ -71,6 +71,13 @@
                 <data android:scheme="https" android:host="flotadsp.com" android:pathPrefix="/ruta" />
                 <data android:scheme="https" android:host="flotadsp.com" android:pathPrefix="/app" />
             </intent-filter>
+            <!-- Los enlaces de empresa se abren en el portal integrado de FDS. -->
+            <intent-filter android:autoVerify="true">
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="https" android:host="flotadsp.com" android:pathPrefix="/conductor" />
+            </intent-filter>
         </activity>
 
         <provider

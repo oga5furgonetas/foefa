@@ -32,6 +32,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -57,6 +58,7 @@ import kotlinx.coroutines.launch
 
 class MainActivity : ComponentActivity() {
     private var ref by mutableStateOf<String?>(null)
+    private var empresaSlug by mutableStateOf<String?>(null)
 
     override fun onCreate(savedInstanceState: Bundle?) {
         val app = application as FdsApp
@@ -77,7 +79,9 @@ class MainActivity : ComponentActivity() {
                 )
             }
             TemaFds(tema) {
-                Surface(color = MaterialTheme.colorScheme.background, modifier = Modifier.fillMaxSize()) { Raiz(app, ref) }
+                Surface(color = MaterialTheme.colorScheme.background, modifier = Modifier.fillMaxSize()) {
+                    Raiz(app, ref, empresaSlug, alCerrarEmpresa = { empresaSlug = null })
+                }
             }
         }
     }
@@ -89,12 +93,24 @@ class MainActivity : ComponentActivity() {
 
     /** El enlace de invitación (…?ref=CODIGO) se guarda para el alta. */
     private fun leerEnlace(i: Intent?) {
-        i?.data?.getQueryParameter("ref")?.takeIf { it.isNotBlank() }?.let { ref = it }
+        val uri = i?.data ?: return
+        uri.getQueryParameter("ref")?.takeIf { it.isNotBlank() }?.let { ref = it }
+        if (uri.path?.startsWith("/conductor") == true) {
+            val slug = uri.fragment?.removePrefix("/")?.takeIf { it.matches(Regex("[a-zA-Z0-9-]{1,60}")) }
+                ?: uri.getQueryParameter("slug")?.takeIf { it.matches(Regex("[a-zA-Z0-9-]{1,60}")) }
+            empresaSlug = slug ?: ""
+        }
     }
 }
 
 @Composable
-private fun Raiz(app: FdsApp, ref: String?) {
+private fun Raiz(app: FdsApp, ref: String?, empresaSlug: String?, alCerrarEmpresa: () -> Unit) {
+    if (empresaSlug != null) {
+        key(empresaSlug) {
+            com.flotadsp.fds.ui.acceso.PortalEmpresa(empresaSlug.ifBlank { null }, alCerrarEmpresa)
+        }
+        return
+    }
     val token by app.cuenta.token.collectAsState()
     val cargada by app.cuenta.cargada.collectAsState()
     if (!cargada) return

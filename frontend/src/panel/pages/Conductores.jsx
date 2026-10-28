@@ -16,6 +16,7 @@ import {
 import {
   getDrivers, createDriver, updateDriver, deleteDriver, uploadDriverPhoto, programarTraslado, cancelarTraslado,
   getDriversScoring, getScoringLeaderboard, getDriverAccounts, setDriverPassword,
+  getDriverRecoveryEmail, setDriverRecoveryEmail, removeDriverRecoveryEmail,
   generarAccesosConductores,
   deleteDriverAccount,
   getDriversDuplicados, fusionarConductores, repasarFusiones,
@@ -1132,6 +1133,46 @@ function DriverModal({ driver, centers, centroInicial = '', hasAccount, onSave, 
   const [pwBusy, setPwBusy] = useState(false)
   const [pwErr, setPwErr] = useState('')
   const [pwOk, setPwOk] = useState('')
+  const [recoveryStatus, setRecoveryStatus] = useState(null)
+  const [recoveryValue, setRecoveryValue] = useState('')
+  const [recoveryBusy, setRecoveryBusy] = useState(false)
+  const [recoveryMessage, setRecoveryMessage] = useState('')
+  const [recoveryError, setRecoveryError] = useState('')
+
+  useEffect(() => {
+    if (!driver?.id) return
+    getDriverRecoveryEmail(driver.id)
+      .then(({ data }) => setRecoveryStatus(data))
+      .catch(() => setRecoveryStatus(null))
+  }, [driver?.id])
+
+  async function handleSetRecoveryEmail(e) {
+    e.preventDefault()
+    setRecoveryBusy(true); setRecoveryError(''); setRecoveryMessage('')
+    try {
+      const { data } = await setDriverRecoveryEmail(driver.id, recoveryValue.trim())
+      setRecoveryMessage(data.vinculado
+        ? `Ese correo ya estaba verificado (${data.email}).`
+        : `Enlace de verificación enviado a ${data.email}. Caduca en 24 horas.`)
+      setRecoveryValue('')
+      const status = await getDriverRecoveryEmail(driver.id)
+      setRecoveryStatus(status.data)
+    } catch (ex) {
+      setRecoveryError(ex?.response?.data?.detail || 'No se pudo enviar la verificación.')
+    } finally { setRecoveryBusy(false) }
+  }
+
+  async function handleRemoveRecoveryEmail() {
+    if (!confirm(`¿Desvincular el correo personal de ${driver.name}?`)) return
+    setRecoveryBusy(true); setRecoveryError(''); setRecoveryMessage('')
+    try {
+      await removeDriverRecoveryEmail(driver.id)
+      setRecoveryStatus({ vinculado: false, email: null, pendiente: null })
+      setRecoveryMessage('Correo personal desvinculado.')
+    } catch (ex) {
+      setRecoveryError(ex?.response?.data?.detail || 'No se pudo desvincular el correo.')
+    } finally { setRecoveryBusy(false) }
+  }
 
   async function handleSetPassword() {
     setPwErr(''); setPwOk('')
@@ -1289,6 +1330,33 @@ function DriverModal({ driver, centers, centroInicial = '', hasAccount, onSave, 
               </div>
 
               <CambioCentro driver={driver} centers={centers} onCambio={onAccountChange} />
+
+              <div className="mt-6 rounded-xl border border-dark-800 p-4">
+                <div className="flex items-center justify-between gap-3">
+                  <div>
+                    <h3 className="text-sm font-semibold text-dark-100">Correo personal de acceso</h3>
+                    <p className="mt-1 text-xs text-dark-500">
+                      Confirma esta dirección con el conductor por un canal fiable: quien verifique este correo podrá entrar en su ficha. El correo de empresa seguirá identificándola.
+                    </p>
+                  </div>
+                  {recoveryStatus?.vinculado && <span className="shrink-0 rounded-full bg-emerald-500/15 px-2.5 py-1 text-[10px] font-bold text-emerald-400">Verificado</span>}
+                </div>
+                {recoveryStatus?.email && <p className="mt-3 text-sm text-dark-200">{recoveryStatus.email}</p>}
+                {recoveryStatus?.pendiente && <p className="mt-3 text-xs text-amber-300">Pendiente de confirmar: {recoveryStatus.pendiente}</p>}
+                <form onSubmit={handleSetRecoveryEmail} className="mt-3 flex flex-col gap-2 sm:flex-row">
+                  <input className="input min-w-0 flex-1" type="email" required value={recoveryValue}
+                    onChange={e => setRecoveryValue(e.target.value)}
+                    placeholder="correo.personal@gmail.com" autoComplete="email" />
+                  <button type="submit" disabled={recoveryBusy || !recoveryValue.trim()}
+                    className="rounded-lg bg-brand-600 px-3 py-2 text-xs font-bold text-brand-tinta disabled:opacity-50">
+                    {recoveryBusy ? 'Enviando…' : recoveryStatus?.vinculado ? 'Cambiar correo' : 'Enviar verificación'}
+                  </button>
+                </form>
+                {recoveryStatus?.vinculado && <button type="button" onClick={handleRemoveRecoveryEmail} disabled={recoveryBusy}
+                  className="mt-2 text-xs text-red-400 hover:text-red-300 disabled:opacity-50">Desvincular correo personal</button>}
+                {recoveryMessage && <p className="mt-2 text-xs text-emerald-400">{recoveryMessage}</p>}
+                {recoveryError && <p className="mt-2 text-xs text-red-400">{recoveryError}</p>}
+              </div>
 
               {/* ── Acceso con contraseña ── */}
               {driver.email && (

@@ -5,7 +5,7 @@
 > haz commit y `git push`. Una sola sesión trabajando a la vez: antes de
 > empezar, `git pull` y comprueba que nadie ha dejado nada a medias aquí.
 
-Última actualización: **26-10-2026** (app de Android nativa FDS 2.0.0 en `app-android/`, ver «Última sesión»).
+Última actualización: **28-10-2026** (preparación local de FDS 2.1.0 y acceso seguro para conductores de empresa; ver «Última sesión»).
 
 ## Qué es y dónde está
 
@@ -2066,3 +2066,28 @@ La ficha pública de FDS ya está disponible en Google Play con el paquete `com.
 públicamente (HTTP 200). La portada y la tarjeta de instalación para Android enlazan ahora a la ficha con
 el distintivo oficial de Google Play, localizado en los siete idiomas de la app; se mantiene como alternativa
 la descarga APK existente. En China no se muestra Google Play y se conserva la descarga específica de allí.
+
+## 28-10-2026: acceso de empresa dentro de FDS y código por correo
+Preparado en local, todavía sin publicar. El portal de empresa se puede abrir dentro de FDS desde el enlace con slug
+que genera el panel (Android App Links); desde la app se abre directamente la pantalla de correo. El acceso web
+general deja de pedir código de empresa: el correo encuentra la ficha en las organizaciones activas y el enlace con
+slug queda como pista opcional. La vista principal del portal usa la altura
+dinámica y respeta las áreas seguras del móvil. FDS usa un WebView restringido a
+`flotadsp.com` y mantiene la subida de fotos mediante el selector del móvil. El acceso por correo ahora pide un OTP
+de seis cifras, con caducidad de 10 minutos, uso único, máximo de cinco intentos y límites por IP/correo; la respuesta
+de solicitud no confirma si el correo existe. Si el mismo correo aparece asociado a más de una organización, no se
+elige una al azar ni se emite código. La contraseña también se resuelve por email cuando no hay slug; si una clave
+coincide con más de una cuenta, el acceso se bloquea por ambigüedad. Las cuentas suspendidas y fichas de baja no
+pueden entrar. El token se emite con el tenant de la empresa. En Conductores, la oficina puede vincular un correo
+personal: se manda un enlace aleatorio, de un solo uso y 24 h; el conductor confirma con un botón. La dirección se
+guarda separada de la ficha laboral y enmascarada en el panel. Tras verificarla, el OTP llega al correo personal
+cuando el conductor introduce su correo laboral; también puede identificarse directamente por el correo personal.
+Si la oficina aún no la vinculó, se mantiene el envío al correo de acceso y la pantalla explica cómo pedir la
+vinculación. Un correo personal solo puede pertenecer a una ficha en el conjunto de empresas.
+Los OTP caducados tienen índice TTL. La interfaz del código está traducida en los siete idiomas.
+
+FDS queda con `versionCode 11` / `2.1.0`; el vínculo y login son cambios web/API y no modifican el APK. `py_compile`,
+checker de rutas, i18n, imports y hooks pasan; `npm run build` y ESLint acaban sin errores (warnings existentes).
+No se pudo ejecutar pytest: falta pytest y MongoDB local. En este PC Fly no tenía sesión iniciada; Cloudflare está
+autorizado. Desplegar backend primero, luego Pages; verificar el mail transaccional y el flujo real con un conductor
+de prueba. No dar el despliegue por listo hasta que Fly y Cloudflare estén comprobados en producción.

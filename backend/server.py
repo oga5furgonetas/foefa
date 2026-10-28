@@ -1554,6 +1554,9 @@ async def _ensure_tenant_indexes(db_name: str):
     await _idx(tdb.vehicles, "status")
     await _idx(tdb.drivers, "id")
     await _idx(tdb.drivers, "driver_id")
+    recovery = client[db_name].driver_recovery_emails
+    await _idx(recovery, "driver_id", unique=True, name="recovery_un_correo_por_conductor")
+    await _idx(recovery, "email_norm", unique=True, name="recovery_correo_unico")
     # EL CORREO ES LA LLAVE DEL PORTAL y no tenia indice ninguno: cada vez que
     # un conductor entra, Mongo recorria las 202 fichas enteras. Medido el
     # 22-08-2026 con la auditoria de datos.
@@ -1722,6 +1725,9 @@ async def _ensure_tenant_indexes(db_name: str):
     )
     await _idx(tdb.chat_messages, [("center", 1), ("created_at", -1)])
     await _idx(tdb.driver_accounts, "username")
+    # Los OTP se eliminan automáticamente al caducar; pueden quedar varios
+    # activos durante el reenvío para que el primer correo recibido siga valiendo.
+    await _idx(tdb.driver_login_codes, "expires_at", expireAfterSeconds=0)
     # `generar_accesos_conductores` capturaba DuplicateKeyError "por si dos
     # pestañas a la vez"... sobre una coleccion SIN indice unico, asi que nunca
     # saltaba: cinco pulsaciones a la vez dejaron 21 cuentas para un mismo
@@ -1787,6 +1793,11 @@ async def create_indexes():
         await _ensure_tenant_indexes(_DEFAULT_DB_NAME)
         # Índices globales (compartidos entre tenants)
         await _idx(global_db.admin_users, "username")
+        await _idx(global_db.driver_recovery_pending, "token_hash", unique=True,
+                   name="driver_recovery_token_unico")
+        await _idx(global_db.driver_recovery_pending, "expires_at", expireAfterSeconds=0)
+        await _idx(global_db.driver_recovery_email_claims, "email_norm", unique=True,
+                   name="driver_recovery_correo_global_unico")
         await _idx(global_db.inbox_messages, [("created_at", -1)])
         await _idx(global_db.ls_webhook_events, "event_uid", unique=True)
         # Sin este unico, el `except DuplicateKeyError` del webhook de Stripe
@@ -7522,8 +7533,8 @@ async def conductor_list_public(center: Optional[str] = None, slug: Optional[str
     Hasta hoy era publica: devolvia id, nombre, email y centro de TODA la
     plantilla a cualquiera sin token (datos personales de empleados), y con
     esos ids se podia pedir un JWT de cualquier conductor sin contrasena.
-    El portal del conductor ya no la usa: pregunta solo por su email en
-    /auth/driver-lookup.
+    El portal del conductor ya no la usa: /auth/driver-lookup solo solicita
+    un código temporal y no expone la plantilla.
     """
     await _set_tenant_by_slug(slug)
     query = {}
@@ -7548,96 +7559,158 @@ async def conductor_list_public(center: Optional[str] = None, slug: Optional[str
 
 @auth_router.post("/driver-lookup")
 async def driver_lookup(data: dict, request: Request):
-    """Login del conductor por email, SIN exponer la plantilla.
-
-    Sustituye al antiguo flujo (bajarse la lista entera de conductores al
-    navegador y buscar el email en local), que filtraba nombre, email, centro
-    e id de TODA la plantilla a cualquiera sin autenticar, y permitia pedir
-    un token con un id cualquiera.
-
-    Solo responde por el email preguntado, con limite de intentos por IP.
-    """
-    rl_ip = f"dlk:{_rl_key_ip(request)}"
-    now_ts = datetime.now(timezone.utc).timestamp()
-    _login_fails[rl_ip] = [t for t in _login_fails[rl_ip] if now_ts - t < _LOGIN_WINDOW_S]
-    if len(_login_fails[rl_ip]) >= 20:
-        raise HTTPException(status_code=429, detail="Demasiados intentos. Espera unos minutos.")
-    _login_fails[rl_ip].append(now_ts)
-
+    """Solicita un código por correo. La respuesta no revela si hay ficha."""
     email = str(data.get("email") or "").strip().lower()
-    if not email or "@" not in email:
-        raise HTTPException(status_code=400, detail="Email no valido")
-    org = await _set_tenant_by_slug(data.get("slug"))
+    slug = str(data.get("slug") or "").strip()
+    if not re.fullmatch(r"[^\s@]+@[^\s@]+\.[^\s@]+", email):
+        raise HTTPException(status_code=400, detail="Escribe un correo válido.")
+    ip = _rl_key_ip(request)
+    _rl_public_action(f"drv-code-ip:{ip}", 12, 900)
+    _rl_public_action(f"drv-code-email:{email}", 3, 900)
+    # Search only active/trial organizations. Never disclose the matching
+    # company before the user proves control of the registered mailbox.
+    orgs = await global_db.organizations.find(
+        {"status": {"$in": ["active", "trial"]}, "db_name": {"$exists": True}},
+        {"_id": 0, "id": 1, "slug": 1, "name": 1, "account_type": 1, "db_name": 1}
+    ).to_list(500)
+    if slug:
+        hinted = [o for o in orgs if o.get("slug") == slug]
+        if hinted:
+            orgs = hinted
+    # Several legacy org records can point at the owner database. Search each
+    # physical tenant once to avoid treating aliases as distinct memberships.
+    orgs = list({ _tenant_db_name(o): o for o in reversed(orgs) }.values())
+    if not any(_tenant_db_name(o) == _DEFAULT_DB_NAME for o in orgs):
+        orgs.append({"id": OWNER_ORG_ID, "slug": "", "name": MARCA.nombre,
+                     "account_type": "owner", "db_name": _DEFAULT_DB_NAME})
+    matches = []
+    for candidate in orgs:
+        tdb = client[_tenant_db_name(candidate)]
+        fichas = await tdb.drivers.find(
+            {"email": {"$regex": f"^{re.escape(email)}$", "$options": "i"}, "active": {"$ne": False}},
+            {"_id": 0, "id": 1, "name": 1, "center": 1, "active": 1, "created_at": 1}
+        ).to_list(20)
+        driver = _elegir_ficha(fichas)
+        recovery_match = await tdb.driver_recovery_emails.find_one(
+            {"email_norm": email, "verified_at": {"$exists": True}})
+        if recovery_match:
+            recovery_driver = await tdb.drivers.find_one(
+                {"id": recovery_match.get("driver_id"), "active": {"$ne": False}},
+                {"_id": 0, "id": 1, "name": 1, "center": 1, "active": 1, "created_at": 1})
+            if recovery_driver and (not driver or recovery_driver["id"] != driver["id"]):
+                # If an address identifies two different people in one tenant,
+                # fail closed rather than choosing whichever Mongo returns first.
+                if driver:
+                    logger.warning("Email de acceso coincide con correo laboral y personal de dos fichas")
+                    driver = None
+                    recovery_driver = None
+                else:
+                    driver = recovery_driver
+        if not driver:
+            continue
+        account = await tdb.driver_accounts.find_one({"driver_id": driver["id"]})
+        if not account or account.get("active", True):
+            destination = email
+            linked = await tdb.driver_recovery_emails.find_one(
+                {"driver_id": driver["id"], "verified_at": {"$exists": True}},
+                {"_id": 0, "email": 1, "email_norm": 1})
+            if linked and email != linked.get("email_norm"):
+                destination = linked.get("email") or linked.get("email_norm")
+            matches.append((candidate, driver, destination))
+    # Multiple companies on one mailbox are ambiguous: do not guess a tenant
+    # or send codes that could log the user into an unintended organization.
+    if len(matches) == 1:
+        org, driver, destination = matches[0]
+        _rl_public_action(f"drv-code-org:{org.get('id')}:{email}", 3, 900)
+        # Una cuenta suspendida no puede saltarse el bloqueo mediante OTP. Las
+        # cuentas activas pueden elegir contraseña o código temporal por correo.
+        tdb = client[_tenant_db_name(org)]
+        code = f"{secrets.randbelow(1_000_000):06d}"
+        code_hash = hashlib.sha256(f"{SECRET_KEY}:{code}".encode()).hexdigest()
+        now = datetime.now(timezone.utc)
+        guardado = await tdb.driver_login_codes.insert_one(
+            {"driver_id": driver["id"], "email": email, "destination_email": destination,
+             "code_hash": code_hash,
+             "created_at": now, "expires_at": now + timedelta(minutes=10), "attempts": 0})
+        enviado = await _enviar_email(
+            destination, "Tu código para entrar en Flota",
+            f"<p>Tu código de acceso es <strong style='font-size:24px;letter-spacing:4px'>{code}</strong>.</p><p>Caduca en 10 minutos. Si no lo has pedido, ignora este correo.</p>",
+            texto=f"Tu código de acceso es {code}. Caduca en 10 minutos.")
+        if not enviado:
+            await tdb.driver_login_codes.delete_one({"_id": guardado.inserted_id})
+            logger.error("No se pudo enviar código de acceso al conductor")
+    elif len(matches) > 1:
+        logger.warning("Email de acceso asociado a varias empresas; se requiere resolver la asignación")
+    return {"message": "Si el correo está habilitado para el portal, recibirás un código de acceso en unos minutos."}
 
-    driver = await _ficha_por_correo(email)
-    if driver and driver.get("active") is False:
-        raise HTTPException(status_code=403, detail=(
-            "Tu ficha está dada de baja. Pide a tu responsable que la active "
-            "(Conductores, en el panel) y vuelve a entrar."))
-    if not driver:
-        # Mismo mensaje siempre: no confirmamos si el email existe o no.
-        raise HTTPException(status_code=404, detail="No encontramos ese email. Contacta con tu responsable de flota.")
 
-    cuenta = await db.driver_accounts.find_one({"driver_id": driver["id"], "active": True})
-    if cuenta:
-        # Tiene contrasena: no damos token aqui, solo decimos que la pida.
-        return {"has_account": True, "name": driver.get("name", "")}
-
+@auth_router.post("/driver-code/verify")
+async def driver_code_verify(data: dict, request: Request):
+    email = str(data.get("email") or "").strip().lower()
+    code = str(data.get("code") or "").strip()
+    slug = str(data.get("slug") or "").strip()
+    if not re.fullmatch(r"[^\s@]+@[^\s@]+\.[^\s@]+", email) or not re.fullmatch(r"\d{6}", code):
+        raise HTTPException(status_code=400, detail="El código no es válido o ha caducado. Solicita uno nuevo.")
+    ip = _rl_key_ip(request)
+    _rl_public_action(f"drv-verify-ip:{ip}", 30, 900)
+    _rl_public_action(f"drv-verify-email:{email}", 10, 900)
+    now = datetime.now(timezone.utc)
+    expected = hashlib.sha256(f"{SECRET_KEY}:{code}".encode()).hexdigest()
+    orgs = await global_db.organizations.find(
+        {"status": {"$in": ["active", "trial"]}, "db_name": {"$exists": True}},
+        {"_id": 0, "id": 1, "slug": 1, "name": 1, "account_type": 1, "db_name": 1}
+    ).to_list(500)
+    orgs = list({ _tenant_db_name(o): o for o in reversed(orgs) }.values())
+    if not any(_tenant_db_name(o) == _DEFAULT_DB_NAME for o in orgs):
+        orgs.append({"id": OWNER_ORG_ID, "slug": "", "name": MARCA.nombre,
+                     "account_type": "owner", "db_name": _DEFAULT_DB_NAME})
+    matched = []
+    for candidate in orgs:
+        if slug and candidate.get("slug") != slug:
+            continue
+        tdb = client[_tenant_db_name(candidate)]
+        records = await tdb.driver_login_codes.find({"email": email, "expires_at": {"$gt": now},
+                                                       "attempts": {"$lt": 5}}).to_list(10)
+        record = next((r for r in records if secrets.compare_digest(r.get("code_hash", ""), expected)), None)
+        if not record:
+            if records:
+                await tdb.driver_login_codes.update_many(
+                    {"email": email, "expires_at": {"$gt": now}, "attempts": {"$lt": 5}},
+                    {"$inc": {"attempts": 1}})
+            continue
+        driver = await tdb.drivers.find_one({"id": record.get("driver_id"), "active": {"$ne": False}},
+                                             {"_id": 0, "id": 1, "name": 1, "center": 1, "email": 1})
+        account = await tdb.driver_accounts.find_one({"driver_id": record.get("driver_id")})
+        if not driver or (account and not account.get("active", True)):
+            await tdb.driver_login_codes.delete_one({"_id": record["_id"]})
+            continue
+        email_laboral = str(driver.get("email") or "").strip().lower()
+        recovery = await tdb.driver_recovery_emails.find_one(
+            {"driver_id": driver["id"], "verified_at": {"$exists": True}},
+            {"_id": 0, "email_norm": 1})
+        identidad_valida = email == email_laboral or email == (recovery or {}).get("email_norm")
+        destination = str(record.get("destination_email") or email).strip().lower()
+        destino_valido = destination == email or destination == (recovery or {}).get("email_norm")
+        if identidad_valida and destino_valido:
+            matched.append((candidate, tdb, driver, record))
+    if len(matched) != 1:
+        raise HTTPException(status_code=401, detail="El código no es válido o ha caducado. Solicita uno nuevo.")
+    org, tdb, driver, record = matched[0]
+    # Consume before issuing a session so the code cannot be replayed.
+    consumed = await tdb.driver_login_codes.delete_one({"_id": record["_id"], "code_hash": expected,
+                                                        "expires_at": {"$gt": now}, "attempts": {"$lt": 5}})
+    if not consumed.deleted_count:
+        raise HTTPException(status_code=401, detail="El código no es válido o ha caducado. Solicita uno nuevo.")
     token = create_token(driver["id"], "driver", driver.get("name", ""),
                          org_id=(org or {}).get("id"), db_name=_tenant_db_name(org),
                          account_type=(org or {}).get("account_type"))
-    logger.info(f"Portal conductor (lookup): {driver.get('name')} ({driver['id']})")
-    return {"has_account": False, "access_token": token, "token_type": "bearer",
-            "name": driver.get("name", ""), "center": driver.get("center", ""),
-            "driver_id": driver["id"]}
+    return {"access_token": token, "token_type": "bearer", "role": "driver",
+            "name": driver.get("name", ""), "id": driver["id"], "center": driver.get("center")}
 
 
 @auth_router.post("/driver-token")
 async def driver_token_by_id(data: dict, request: Request):
-    # Límite por IP: 20 tokens/5min — frena enumeración masiva de conductores
-    rl_ip = f"dtok:{_rl_key_ip(request)}"
-    now_ts = datetime.now(timezone.utc).timestamp()
-    _login_fails[rl_ip] = [t for t in _login_fails[rl_ip] if now_ts - t < _LOGIN_WINDOW_S]
-    if len(_login_fails[rl_ip]) >= 20:
-        raise HTTPException(status_code=429, detail="Demasiados intentos. Espera unos minutos.")
-    _login_fails[rl_ip].append(now_ts)
-    return await _driver_token_impl(data)
-
-
-async def _driver_token_impl(data: dict):
-    """Genera JWT para el portal conductor (login por email sin contraseña).
-    El portal ya valida que el email existe en la BD pública — aquí solo emitimos el token.
-    Si el conductor tiene una cuenta con contraseña, se rechaza el acceso sin contraseña."""
-    driver_id = data.get("driver_id")
-    if not driver_id:
-        raise HTTPException(status_code=400, detail="driver_id requerido")
-    org = await _set_tenant_by_slug(data.get("slug"))   # scope al DSP del conductor
-    driver = await db.drivers.find_one({"id": driver_id}, {"_id": 0})
-    if not driver:
-        raise HTTPException(status_code=404, detail="Conductor no encontrado")
-    # Defensa en profundidad: un id suelto ya no basta. Hay que aportar el email
-    # del conductor y tiene que coincidir. Asi, aunque alguien consiguiera un id,
-    # no puede canjearlo por un token.
-    email_dado = str(data.get("email") or "").strip().lower()
-    email_real = str(driver.get("email") or "").strip().lower()
-    if not email_dado or email_dado != email_real:
-        raise HTTPException(status_code=403, detail="Datos de acceso incorrectos")
-    # Seguridad: si el conductor tiene contraseña configurada, debe usarla
-    account = await db.driver_accounts.find_one({"driver_id": driver_id, "active": True})
-    if account:
-        raise HTTPException(status_code=403, detail="Este conductor tiene contraseña. Usa tu email y contraseña para acceder.")
-    token = create_token(driver_id, "driver", driver.get("name", ""),
-                         org_id=(org or {}).get("id"), db_name=_tenant_db_name(org),
-                         account_type=(org or {}).get("account_type"))
-    logger.info(f"Portal conductor token: {driver.get('name')} ({driver_id})")
-    return {
-        "access_token": token,
-        "token_type": "bearer",
-        "role": "driver",
-        "name": driver.get("name", ""),
-        "id": driver_id,
-        "center": driver.get("center")
-    }
+    raise HTTPException(status_code=410, detail="Este acceso ya no está disponible. Solicita un código por correo.")
 
 
 @auth_router.post("/driver-login", response_model=TokenResponse)
@@ -7651,23 +7724,49 @@ async def driver_login(data: DriverLoginRequest, request: Request):
     # sintoma era cruel: el paso del email reconocia al conductor (ese si iba
     # al DSP bueno) y el de la contraseña le decia que era incorrecta. Con la
     # suya buena, y para siempre.
-    org = await _set_tenant_by_slug(data.slug)
     # El correo se guarda en minusculas; tecleado en el movil llega como llega.
     correo = data.email.strip().lower()
-    account = await db.driver_accounts.find_one(
-        {"email": {"$regex": f"^{re.escape(correo)}$", "$options": "i"}}, {"_id": 0})
-    if not account or not verify_password(data.password, account["hashed_password"]):
+    if data.slug:
+        org = await _set_tenant_by_slug(data.slug)
+        candidates = [(org, db)]
+    else:
+        orgs = await global_db.organizations.find(
+            {"status": {"$in": ["active", "trial"]}, "db_name": {"$exists": True}},
+            {"_id": 0, "id": 1, "slug": 1, "name": 1, "account_type": 1, "db_name": 1}
+        ).to_list(500)
+        orgs = list({ _tenant_db_name(o): o for o in reversed(orgs) }.values())
+        if not any(_tenant_db_name(o) == _DEFAULT_DB_NAME for o in orgs):
+            orgs.append({"id": OWNER_ORG_ID, "slug": "", "name": MARCA.nombre,
+                         "account_type": "owner", "db_name": _DEFAULT_DB_NAME})
+        candidates = [(o, client[_tenant_db_name(o)]) for o in orgs]
+    valid_accounts = []
+    for candidate_org, candidate_db in candidates:
+        candidate_account = await candidate_db.driver_accounts.find_one(
+            {"email": {"$regex": f"^{re.escape(correo)}$", "$options": "i"}}, {"_id": 0})
+        if not candidate_account:
+            recovery = await candidate_db.driver_recovery_emails.find_one(
+                {"email_norm": correo, "verified_at": {"$exists": True}},
+                {"_id": 0, "driver_id": 1})
+            if recovery:
+                candidate_account = await candidate_db.driver_accounts.find_one(
+                    {"driver_id": recovery["driver_id"]}, {"_id": 0})
+        if candidate_account and verify_password(data.password, candidate_account.get("hashed_password", "")):
+            valid_accounts.append((candidate_org, candidate_db, candidate_account))
+    if len(valid_accounts) != 1:
         await _rl_fail(rl_key, f"conductor '{data.email}' (IP {_rl_key_ip(request)})")
         await _rl_fail(rl_ip, f"conductor '{data.email}' (IP {_rl_key_ip(request)})")
         await asyncio.sleep(0.8)
         raise HTTPException(status_code=401, detail="Email o contraseña incorrectos")
+    org, candidate_db, account = valid_accounts[0]
     _rl_ok(rl_key)
     _rl_ok(rl_ip)
 
     if not account.get("active", True):
         raise HTTPException(status_code=403, detail="Cuenta desactivada")
 
-    driver = await db.drivers.find_one({"id": account["driver_id"]}, {"_id": 0})
+    driver = await candidate_db.drivers.find_one({"id": account["driver_id"]}, {"_id": 0})
+    if not driver or driver.get("active") is False:
+        raise HTTPException(status_code=403, detail="Ficha de conductor desactivada")
     driver_name = driver["name"] if driver else account["email"]
     driver_center = driver.get("center") if driver else None
 
@@ -8245,10 +8344,8 @@ def _clave_conductor() -> str:
 async def generar_accesos_conductores(_admin: dict = Depends(require_admin)):
     """Pone contraseña a los conductores que todavia no tienen.
 
-    OJO A LO QUE ESTO CAMBIA. Un conductor SIN cuenta entra al portal
-    escribiendo solo su correo: `driver-lookup` le da el token alli mismo. Al
-    ponerle contraseña eso DEJA DE VALER — sin su clave ya no entra—, asi que
-    si las claves no se reparten, la nave se queda sin portal al dia siguiente.
+    Los conductores sin cuenta de contraseña entran con un código temporal
+    enviado al correo de su ficha; quienes ya tienen cuenta usan su contraseña.
     El panel lo confirma antes de llamar aqui, y por eso las claves se
     devuelven y se pueden bajar en CSV.
 
@@ -10039,9 +10136,8 @@ async def portal_mi_ficha(user: dict = Depends(require_any_auth)):
     if not d:
         return {"falta_telefono": False}
     tel = (d.get("phone") or d.get("telefono") or "").strip()
-    # Y si tiene contrasena propia o entra solo con el correo. Al portal se
-    # entra HOY sin contrasena -`_driver_token_impl`, login por email-, y
-    # `driver_accounts` esta vacia: ninguno tiene. La pantalla de "cambiar
+    # Y si tiene contrasena propia o entra con código temporal por correo. La
+    # pantalla de "cambiar
     # contrasena" les pedia por tanto la ACTUAL, que no existe, asi que
     # devolvia siempre "la contrasena actual no es correcta". Con esto la
     # pantalla sabe si tiene que decir "crear" o "cambiar".
@@ -11612,8 +11708,152 @@ async def get_drivers(center: Optional[str] = None, user: dict = Depends(require
     return drivers
 
 
+def _correo_mascara(email: str) -> str:
+    local, _, dominio = str(email or "").partition("@")
+    if not local or not dominio:
+        return ""
+    visible = local[:1]
+    return f"{visible}{'•' * min(max(len(local) - 1, 3), 8)}@{dominio}"
+
+
+async def _limpiar_correo_personal_conductor(driver_id: str, org_id):
+    db_name = _current_db_name.get()
+    row = await db.driver_recovery_emails.find_one_and_delete({"driver_id": driver_id})
+    if row:
+        await global_db.driver_recovery_email_claims.delete_one({
+            "email_norm": row.get("email_norm"), "org_id": org_id,
+            "db_name": db_name, "driver_id": driver_id})
+    await global_db.driver_recovery_pending.delete_many({"db_name": db_name, "driver_id": driver_id})
+
+
+@api_router.get("/drivers/{driver_id}/recovery-email")
+async def driver_recovery_email_status(driver_id: str, _=Depends(require_admin)):
+    row = await db.driver_recovery_emails.find_one({"driver_id": driver_id}, {"_id": 0})
+    pending = await global_db.driver_recovery_pending.find_one(
+        {"db_name": _current_db_name.get(), "driver_id": driver_id,
+         "expires_at": {"$gt": datetime.now(timezone.utc)}}, {"_id": 0, "email": 1})
+    return {"vinculado": bool(row and row.get("verified_at")),
+            "email": _correo_mascara(row.get("email")) if row and row.get("verified_at") else None,
+            "pendiente": _correo_mascara(pending.get("email")) if pending else None}
+
+
+@api_router.post("/drivers/{driver_id}/recovery-email")
+async def driver_recovery_email_request(driver_id: str, data: dict, user: dict = Depends(require_admin)):
+    driver = await db.drivers.find_one({"id": driver_id, "active": {"$ne": False}},
+                                        {"_id": 0, "id": 1, "email": 1, "name": 1})
+    if not driver:
+        raise HTTPException(404, "Conductor no encontrado o dado de baja")
+    email = str(data.get("email") or "").strip().lower()
+    if not re.fullmatch(r"[^\s@]+@[^\s@]+\.[^\s@]+", email):
+        raise HTTPException(400, "Escribe un correo personal válido")
+    laboral = str(driver.get("email") or "").strip().lower()
+    if email == laboral:
+        raise HTTPException(400, "El correo personal debe ser distinto del correo de empresa")
+    primary = await db.drivers.find_one(
+        {"id": {"$ne": driver_id}, "active": {"$ne": False},
+         "email": {"$regex": f"^{re.escape(email)}$", "$options": "i"}}, {"_id": 0, "id": 1})
+    if primary:
+        raise HTTPException(409, "Ese correo ya identifica a otro conductor en esta empresa")
+    claimed = await global_db.driver_recovery_email_claims.find_one({"email_norm": email})
+    if claimed and not (claimed.get("org_id") == user.get("org_id") and claimed.get("driver_id") == driver_id):
+        raise HTTPException(409, "Ese correo personal ya está vinculado a otra ficha")
+    current = await db.driver_recovery_emails.find_one({"driver_id": driver_id})
+    if current and current.get("email_norm") == email and current.get("verified_at"):
+        return {"ok": True, "vinculado": True, "email": _correo_mascara(email)}
+
+    token = secrets.token_urlsafe(32)
+    token_hash = hashlib.sha256(f"{SECRET_KEY}:{token}".encode()).hexdigest()
+    ahora = datetime.now(timezone.utc)
+    expira = ahora + timedelta(hours=24)
+    db_name = _current_db_name.get()
+    await global_db.driver_recovery_pending.delete_many({"db_name": db_name, "driver_id": driver_id})
+    await global_db.driver_recovery_pending.insert_one({
+        "token_hash": token_hash, "org_id": user.get("org_id"), "db_name": db_name,
+        "driver_id": driver_id, "email": email, "email_norm": email,
+        "requested_by": user.get("sub"), "created_at": ahora, "expires_at": expira,
+    })
+    # Keep the one-time token in the URL fragment: browsers do not send it to
+    # the web server or include it in referrer headers.
+    link = f"{_PORTAL_BASE_FRONT}/verificar-correo-conductor#{_url_quote(token)}"
+    nombre = html_escape(driver.get("name") or "conductor")
+    enviado = await _enviar_email(
+        email, "Verifica tu correo personal para Flota",
+        f"<p>Hola {nombre}.</p><p>La oficina ha indicado este correo como tu correo personal de acceso.</p><p><a href='{html_escape(link)}'>Verificar correo personal</a></p><p>El enlace caduca en 24 horas. Si no esperabas este mensaje, ignóralo.</p>",
+        texto=f"Verifica tu correo personal para el portal de conductor: {link}\nCaduca en 24 horas.")
+    if not enviado:
+        await global_db.driver_recovery_pending.delete_one({"token_hash": token_hash})
+        raise HTTPException(503, "No se pudo enviar el correo de verificación. Comprueba el servicio de correo e inténtalo de nuevo.")
+    return {"ok": True, "pendiente": True, "email": _correo_mascara(email)}
+
+
+@api_router.delete("/drivers/{driver_id}/recovery-email")
+async def driver_recovery_email_remove(driver_id: str, user: dict = Depends(require_admin)):
+    db_name = _current_db_name.get()
+    await global_db.driver_recovery_pending.delete_many({"db_name": db_name, "driver_id": driver_id})
+    row = await db.driver_recovery_emails.find_one_and_delete({"driver_id": driver_id})
+    if row:
+        await global_db.driver_recovery_email_claims.delete_one({
+            "email_norm": row.get("email_norm"), "org_id": user.get("org_id"), "driver_id": driver_id})
+    return {"ok": True}
+
+
+@auth_router.post("/driver-recovery/verify-link")
+async def driver_recovery_email_verify(data: dict, request: Request):
+    token = str(data.get("token") or "").strip()
+    if not re.fullmatch(r"[A-Za-z0-9_-]{30,100}", token):
+        raise HTTPException(400, "El enlace no es válido o ha caducado")
+    token_hash = hashlib.sha256(f"{SECRET_KEY}:{token}".encode()).hexdigest()
+    now = datetime.now(timezone.utc)
+    pending = await global_db.driver_recovery_pending.find_one(
+        {"token_hash": token_hash, "expires_at": {"$gt": now}}, {"_id": 0})
+    if not pending:
+        raise HTTPException(400, "El enlace no es válido o ha caducado. Pide a la oficina que lo envíe de nuevo.")
+    org = await global_db.organizations.find_one({"id": pending.get("org_id")}, {"_id": 0, "status": 1, "account_type": 1})
+    es_owner = pending.get("org_id") == OWNER_ORG_ID or (
+        not pending.get("org_id") and pending.get("db_name") == _DEFAULT_DB_NAME)
+    if not es_owner and (not org or org.get("status") not in ("active", "trial")):
+        await global_db.driver_recovery_pending.delete_one({"token_hash": token_hash})
+        raise HTTPException(403, "La empresa ya no tiene acceso activo")
+    tdb = client[pending["db_name"]]
+    driver = await tdb.drivers.find_one({"id": pending["driver_id"], "active": {"$ne": False}},
+                                         {"_id": 0, "id": 1, "email": 1})
+    if not driver or str(driver.get("email") or "").strip().lower() == pending["email_norm"]:
+        await global_db.driver_recovery_pending.delete_one({"token_hash": token_hash})
+        raise HTTPException(400, "No se puede verificar esa dirección para esta ficha")
+    collision = await tdb.drivers.find_one(
+        {"id": {"$ne": driver["id"]}, "active": {"$ne": False},
+         "email": {"$regex": f"^{re.escape(pending['email_norm'])}$", "$options": "i"}},
+        {"_id": 0, "id": 1})
+    if collision:
+        await global_db.driver_recovery_pending.delete_one({"token_hash": token_hash})
+        raise HTTPException(409, "Ese correo ya identifica a otra ficha")
+    claim = {"email_norm": pending["email_norm"], "org_id": pending.get("org_id"),
+             "db_name": pending["db_name"], "driver_id": pending["driver_id"], "verified_at": now}
+    previous = await tdb.driver_recovery_emails.find_one({"driver_id": pending["driver_id"]},
+                                                          {"_id": 0, "email_norm": 1})
+    try:
+        await global_db.driver_recovery_email_claims.insert_one(claim)
+    except DuplicateKeyError:
+        existing = await global_db.driver_recovery_email_claims.find_one({"email_norm": pending["email_norm"]})
+        if not existing or existing.get("org_id") != pending.get("org_id") or existing.get("driver_id") != pending["driver_id"]:
+            raise HTTPException(409, "Ese correo personal ya está vinculado a otra ficha")
+    await tdb.driver_recovery_emails.update_one(
+        {"driver_id": pending["driver_id"]},
+        {"$set": {"driver_id": pending["driver_id"], "email": pending["email"],
+                   "email_norm": pending["email_norm"], "verified_at": now,
+                   "verified_by": "mailbox_link"}}, upsert=True)
+    if previous and previous.get("email_norm") != pending["email_norm"]:
+        await global_db.driver_recovery_email_claims.delete_one({
+            "email_norm": previous["email_norm"], "org_id": pending.get("org_id"),
+            "driver_id": pending["driver_id"]})
+    consumed = await global_db.driver_recovery_pending.delete_one({"token_hash": token_hash, "expires_at": {"$gt": now}})
+    if not consumed.deleted_count:
+        raise HTTPException(400, "El enlace ya se utilizó o ha caducado")
+    return {"ok": True, "email": _correo_mascara(pending["email"])}
+
+
 @api_router.patch("/drivers/{driver_id}")
-async def update_driver(driver_id: str, data: dict, _=Depends(require_admin)):
+async def update_driver(driver_id: str, data: dict, user=Depends(require_admin)):
     _DRIVER_ALLOWED = {
         "name","email","phone","center","notes","photo_url","active","dni",
         "license_number","license_expiry","address","emergency_contact",
@@ -11693,6 +11933,8 @@ async def update_driver(driver_id: str, data: dict, _=Depends(require_admin)):
         raise HTTPException(409, "Ese correo ya lo tiene otro conductor activo.")
     if result.matched_count == 0:
         raise HTTPException(status_code=404, detail="Conductor no encontrado")
+    if data.get("active") is False:
+        await _limpiar_correo_personal_conductor(driver_id, user.get("org_id"))
     return {"success": True}
 
 
@@ -25618,6 +25860,7 @@ async def delete_driver(driver_id: str, user=Depends(require_admin)):
     )
     if result.matched_count == 0:
         raise HTTPException(status_code=404, detail="Conductor no encontrado")
+    await _limpiar_correo_personal_conductor(driver_id, user.get("org_id"))
     await _audit(user, "driver_delete", {"driver_id": driver_id})
     return {"success": True}
 
@@ -25670,12 +25913,14 @@ async def put_vehicle(vehicle_id: str, data: dict, _=Depends(require_admin)):
 
 
 @api_router.put("/drivers/{driver_id}")
-async def put_driver(driver_id: str, data: dict, _=Depends(require_admin)):
+async def put_driver(driver_id: str, data: dict, user=Depends(require_admin)):
     data.pop("_id", None)
     data.pop("id", None)
     result = await db.drivers.update_one({"id": driver_id}, {"$set": data})
     if result.matched_count == 0:
         raise HTTPException(status_code=404, detail="Conductor no encontrado")
+    if data.get("active") is False:
+        await _limpiar_correo_personal_conductor(driver_id, user.get("org_id"))
     return {"success": True}
 
 

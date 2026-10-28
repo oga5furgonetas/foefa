@@ -70,15 +70,16 @@ import java.time.format.DateTimeFormatter
 /* ENTRAR O CREAR LA CUENTA: lo primero que ve quien instala FDS. Nada de portada web: el logo, qué hace la app
    en una frase, y entrar. */
 @Composable
-fun Acceso(ref: String?) {
+fun Acceso(ref: String?, empresaSlug: String? = null) {
     val app = LocalContext.current.applicationContext as FdsApp
     var paso by rememberSaveable { mutableStateOf("inicio") }
     // La oferta, la misma que dicen la web y los anuncios (Spotify: «sin tarjeta y sin límite hasta fin de año»).
     val oferta by produceState<Oferta?>(null) { value = runCatching { app.repo.oferta() }.getOrNull() }
     when (paso) {
         "entrar" -> Entrar(alVolver = { paso = "inicio" })
+        "empresa" -> PortalEmpresa(empresaSlug, alCerrar = { paso = "inicio" })
         "alta" -> Alta(ref, oferta, alVolver = { paso = "inicio" })
-        else -> Inicio(oferta, alEntrar = { paso = "entrar" }, alCrear = { paso = "alta" })
+        else -> Inicio(oferta, alEntrar = { paso = "entrar" }, alCrear = { paso = "alta" }, alEmpresa = { paso = "empresa" })
     }
 }
 
@@ -99,7 +100,7 @@ private fun Logo(tam: Int = 72) {
 }
 
 @Composable
-private fun Inicio(oferta: Oferta?, alEntrar: () -> Unit, alCrear: () -> Unit) {
+private fun Inicio(oferta: Oferta?, alEntrar: () -> Unit, alCrear: () -> Unit, alEmpresa: () -> Unit) {
     Column(Modifier.fillMaxSize().statusBarsPadding().navigationBarsPadding().padding(24.dp)) {
         Spacer(Modifier.weight(1f))
         Logo()
@@ -130,6 +131,7 @@ private fun Inicio(oferta: Oferta?, alEntrar: () -> Unit, alCrear: () -> Unit) {
         Button(onClick = alCrear, modifier = Modifier.fillMaxWidth().height(56.dp)) { Text("Crear mi cuenta gratis") }
         Spacer(Modifier.height(10.dp))
         OutlinedButton(onClick = alEntrar, modifier = Modifier.fillMaxWidth().height(56.dp)) { Text("Ya tengo cuenta") }
+        TextButton(onClick = alEmpresa, modifier = Modifier.align(Alignment.CenterHorizontally)) { Text("Soy conductor de empresa") }
     }
 }
 

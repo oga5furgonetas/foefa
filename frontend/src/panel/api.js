@@ -103,6 +103,9 @@ export const getDriversScoring = (month, year) => api.get('/scoring/drivers', { 
 export const getScoringLeaderboard = (month, year) => api.get('/scoring/leaderboard', { params: { ...(month ? { month } : {}), ...(year ? { year } : {}) } })
 export const createDriver = (data, params) => api.post('/drivers', data, { params })
 export const updateDriver = (id, data) => api.patch(`/drivers/${id}`, data)
+export const getDriverRecoveryEmail = (id) => api.get(`/drivers/${id}/recovery-email`)
+export const setDriverRecoveryEmail = (id, email) => api.post(`/drivers/${id}/recovery-email`, { email })
+export const removeDriverRecoveryEmail = (id) => api.delete(`/drivers/${id}/recovery-email`)
 // Cambio de centro programado: la ficha pasa a `centro` el día `desde` (lo
 // aplica el servidor ese día; si ya ha llegado, en el acto).
 export const programarTraslado = (id, centro, desde) => api.post(`/drivers/${id}/traslado`, { centro, desde })

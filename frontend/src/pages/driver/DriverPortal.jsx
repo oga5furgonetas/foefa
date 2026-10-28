@@ -128,7 +128,8 @@ function Casilla({ icono: Icono, titulo, detalle, onClick, pronto, aviso, tono }
    17-10-2026: «para que no sea muy cargante»). Ahora es una casilla más y aquí está todo: enlace, saldo y cobro. */
 function PantallaCartera({ onBack }) {
   return (
-    <div className="min-h-screen bg-dark-950 px-4 py-6">
+    <div className="min-h-[100dvh] bg-dark-950 px-4 py-6"
+      style={{ paddingTop: 'max(1.5rem, env(safe-area-inset-top))', paddingBottom: 'max(1.5rem, env(safe-area-inset-bottom))' }}>
       <div className="mx-auto max-w-md">
         <button onClick={onBack} className="mb-5 flex items-center gap-1.5 text-[13px] text-dark-400">
           <ArrowLeft size={15} /> Volver
@@ -335,7 +336,8 @@ export default function DriverPortal() {
   const hoy = (() => { const s = new Date().toLocaleDateString('es-ES', { weekday: 'long', day: 'numeric', month: 'long' }); return s.charAt(0).toUpperCase() + s.slice(1) })()
 
   return (
-    <div className="min-h-screen bg-dark-950 px-4 py-6">
+    <div className="min-h-[100dvh] bg-dark-950 px-4 py-6"
+      style={{ paddingTop: 'max(1.5rem, env(safe-area-inset-top))', paddingBottom: 'max(1.5rem, env(safe-area-inset-bottom))' }}>
       <div className="mx-auto max-w-md">
         <header className="mb-6 flex items-start justify-between gap-3">
           <div className="min-w-0">
