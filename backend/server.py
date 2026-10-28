@@ -11773,7 +11773,6 @@ async def driver_recovery_email_request(driver_id: str, data: dict, user: dict =
          "email": {"$regex": f"^{re.escape(email)}$", "$options": "i"}}, {"_id": 0, "id": 1})
     if primary:
         raise HTTPException(409, "Ese correo ya identifica a otro conductor en esta empresa")
-    await _ensure_driver_recovery_indexes(db)
     claimed = await global_db.driver_recovery_email_claims.find_one({"email_norm": email})
     if claimed and not (claimed.get("org_id") == user.get("org_id") and claimed.get("driver_id") == driver_id):
         raise HTTPException(409, "Ese correo personal ya está vinculado a otra ficha")
@@ -11781,6 +11780,7 @@ async def driver_recovery_email_request(driver_id: str, data: dict, user: dict =
     if current and current.get("email_norm") == email and current.get("verified_at"):
         return {"ok": True, "vinculado": True, "email": _correo_mascara(email)}
 
+    await _ensure_driver_recovery_indexes(db)
     token = secrets.token_urlsafe(32)
     token_hash = hashlib.sha256(f"{SECRET_KEY}:{token}".encode()).hexdigest()
     ahora = datetime.now(timezone.utc)
@@ -11840,7 +11840,6 @@ async def driver_recovery_email_verify(data: dict, request: Request):
     if not driver or str(driver.get("email") or "").strip().lower() == pending["email_norm"]:
         await global_db.driver_recovery_pending.delete_one({"token_hash": token_hash})
         raise HTTPException(400, "No se puede verificar esa dirección para esta ficha")
-    await _ensure_driver_recovery_indexes(tdb)
     collision = await tdb.drivers.find_one(
         {"id": {"$ne": driver["id"]}, "active": {"$ne": False},
          "email": {"$regex": f"^{re.escape(pending['email_norm'])}$", "$options": "i"}},
@@ -11848,6 +11847,7 @@ async def driver_recovery_email_verify(data: dict, request: Request):
     if collision:
         await global_db.driver_recovery_pending.delete_one({"token_hash": token_hash})
         raise HTTPException(409, "Ese correo ya identifica a otra ficha")
+    await _ensure_driver_recovery_indexes(tdb)
     claim = {"email_norm": pending["email_norm"], "org_id": pending.get("org_id"),
              "db_name": pending["db_name"], "driver_id": pending["driver_id"], "verified_at": now}
     previous = await tdb.driver_recovery_emails.find_one({"driver_id": pending["driver_id"]},

@@ -1210,6 +1210,7 @@ export default function Cuadrante() {
                                 wd(f) === 6 ? COLUMNA_DOMINGO : f === hoy ? 'bg-amber-400/[0.06]' : ''} ${
                                 wd(f) === 0 ? 'border-l border-dark-600' : ''}`}>
                                 <button onClick={(e) => pulsarCelda(e, p, f)}
+                                  style={{ scrollMarginRight: '5rem' }}
                                   title={`${p.nombre} · ${DIA[wd(f)]} ${fmt(f)} · ${cod || 'sin poner'}${c?.hora ? ` (${c.hora})` : ''}${
                                     c?.extra ? ' · DÍA EXTRA' : ''}${c?.fijada ? ' · fijada a mano' : ''}${c?.otro_centro ? ` · en ${c.otro_centro}` : ''}${
                                     c?.propuesta ? ` · antes: ${c.antes || 'vacío'}` : ''}${septimo ? ' · 7º DÍA SEGUIDO' : ''}`}
