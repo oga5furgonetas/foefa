@@ -175,6 +175,11 @@ private fun Entrar(alVolver: () -> Unit, alAbrirPortal: (Sesion) -> Unit) {
     var clave by remember { mutableStateOf("") }
     var error by remember { mutableStateOf<String?>(null) }
     var trabajando by remember { mutableStateOf(false) }
+    var codigoVisible by rememberSaveable { mutableStateOf(false) }
+    if (codigoVisible) {
+        CodigoConductorNativo(alVolver = { codigoVisible = false }, alAbrirPortal = alAbrirPortal)
+        return
+    }
     val entrar = {
         if (!trabajando && correo.isNotBlank() && clave.isNotBlank()) {
             trabajando = true; error = null
@@ -201,9 +206,65 @@ private fun Entrar(alVolver: () -> Unit, alAbrirPortal: (Sesion) -> Unit) {
         Button(onClick = entrar, enabled = !trabajando && correo.isNotBlank() && clave.isNotBlank(), modifier = Modifier.fillMaxWidth().height(56.dp)) {
             if (trabajando) CircularProgressIndicator(Modifier.size(22.dp), strokeWidth = 2.dp, color = MaterialTheme.colorScheme.onPrimary) else Text("Entrar")
         }
-        TextButton(onClick = { Acciones.abrirWeb(ctx, "${BuildConfig.WEB_URL}/login") }, modifier = Modifier.align(Alignment.CenterHorizontally)) {
-            Text("¿Has olvidado la contraseña?")
+        TextButton(onClick = { codigoVisible = true }, modifier = Modifier.align(Alignment.CenterHorizontally)) {
+            Text("Entrar con un código en mi correo personal")
         }
+    }
+}
+
+@Composable
+private fun CodigoConductorNativo(alVolver: () -> Unit, alAbrirPortal: (Sesion) -> Unit) {
+    val app = LocalContext.current.applicationContext as FdsApp
+    val scope = rememberCoroutineScope()
+    var correo by rememberSaveable { mutableStateOf("") }
+    var codigo by rememberSaveable { mutableStateOf("") }
+    var solicitado by rememberSaveable { mutableStateOf(false) }
+    var error by remember { mutableStateOf<String?>(null) }
+    var mensaje by remember { mutableStateOf<String?>(null) }
+    var ocupado by remember { mutableStateOf(false) }
+    fun emailValido(valor: String) = Regex("^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$").matches(valor.trim())
+    Column(Modifier.fillMaxSize().statusBarsPadding().imePadding().verticalScroll(rememberScrollState()).padding(horizontal = 24.dp, vertical = 8.dp)) {
+        Cabecera("Entrar con código", alVolver)
+        Text("Usa el correo personal que vinculaste en tu cuenta. El código se enviará a ese correo, no al buzón de empresa.", style = MaterialTheme.typography.bodyMedium)
+        Spacer(Modifier.height(14.dp))
+        OutlinedTextField(correo, { correo = it; error = null }, label = { Text("Tu correo personal") }, singleLine = true,
+            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Email, imeAction = ImeAction.Next), modifier = Modifier.fillMaxWidth())
+        if (solicitado) {
+            Spacer(Modifier.height(12.dp))
+            Text("Si ese correo está vinculado a una cuenta, recibirás un código de 6 cifras. Puede tardar unos minutos.", style = MaterialTheme.typography.bodySmall)
+            OutlinedTextField(codigo, { codigo = it.filter(Char::isDigit).take(6); error = null }, label = { Text("Código de 6 cifras") }, singleLine = true,
+                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number, imeAction = ImeAction.Done), modifier = Modifier.fillMaxWidth())
+        }
+        mensaje?.let { Text(it, color = MaterialTheme.colorScheme.primary) }
+        error?.let { Text(it, color = MaterialTheme.colorScheme.error) }
+        Spacer(Modifier.height(16.dp))
+        Button(onClick = {
+            ocupado = true; error = null; mensaje = null
+            scope.launch {
+                try {
+                    if (!solicitado) {
+                        app.repo.solicitarCodigoConductor(correo)
+                        solicitado = true
+                        mensaje = "Solicitud enviada. Mira la bandeja y el spam del correo personal."
+                    } else {
+                        val sesion = app.repo.entrarConCodigoConductor(correo, codigo)
+                        alAbrirPortal(sesion)
+                    }
+                } catch (e: ErrorApi) { error = e.message }
+                finally { ocupado = false }
+            }
+        }, enabled = !ocupado && emailValido(correo) && (!solicitado || codigo.length == 6), modifier = Modifier.fillMaxWidth().height(54.dp)) {
+            if (ocupado) CircularProgressIndicator(Modifier.size(20.dp), strokeWidth = 2.dp)
+            else Text(if (!solicitado) "Enviar código" else "Entrar")
+        }
+        if (solicitado) TextButton(onClick = {
+            ocupado = true; error = null
+            scope.launch {
+                try { app.repo.solicitarCodigoConductor(correo); codigo = ""; mensaje = "Hemos solicitado otro código." }
+                catch (e: ErrorApi) { error = e.message }
+                finally { ocupado = false }
+            }
+        }, enabled = !ocupado, modifier = Modifier.align(Alignment.CenterHorizontally)) { Text("Reenviar código") }
     }
 }
 

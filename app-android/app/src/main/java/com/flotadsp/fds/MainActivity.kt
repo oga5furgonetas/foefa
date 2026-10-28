@@ -83,7 +83,7 @@ class MainActivity : ComponentActivity() {
             TemaFds(tema) {
                 Surface(color = MaterialTheme.colorScheme.background, modifier = Modifier.fillMaxSize()) {
                     Raiz(app, ref, empresaSlug, sesionPortal,
-                        alAbrirPortal = { sesionPortal = it },
+                        alAbrirPortal = { if (it.app_destino == "empresa") sesionPortal = it },
                         alCerrarEmpresa = { empresaSlug = null; sesionPortal = null })
                 }
             }
@@ -123,10 +123,15 @@ private fun Raiz(app: FdsApp, ref: String?, empresaSlug: String?, sesionPortal: 
         return
     }
     val token by app.cuenta.token.collectAsState()
+    val destino by app.cuenta.destino.collectAsState()
     val cargada by app.cuenta.cargada.collectAsState()
     if (!cargada) return
     AnimatedContent(targetState = token != null, transitionSpec = { fadeIn() togetherWith fadeOut() }, label = "sesion") { dentro ->
-        if (dentro) Principal() else Acceso(ref, alAbrirPortal)
+        if (dentro && destino == "conductor") {
+            com.flotadsp.fds.ui.acceso.PortalConductorNativo(
+                alCerrar = { app.ambito.launch { app.repo.salir() } },
+            )
+        } else if (dentro) Principal() else Acceso(ref, alAbrirPortal)
     }
 }
 

@@ -1,0 +1,357 @@
+package com.flotadsp.fds.ui.acceso
+
+import android.content.Context
+import android.graphics.Bitmap
+import android.graphics.BitmapFactory
+import android.graphics.Matrix
+import android.net.Uri
+import android.media.ExifInterface
+import androidx.activity.compose.BackHandler
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.CameraAlt
+import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material.icons.filled.DirectionsCar
+import androidx.compose.material.icons.filled.LocalGasStation
+import androidx.compose.material.icons.filled.Speed
+import androidx.compose.material3.Button
+import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.FilterChip
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Slider
+import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
+import androidx.compose.material3.TopAppBar
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateMapOf
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.unit.dp
+import androidx.core.content.FileProvider
+import com.flotadsp.fds.FdsApp
+import com.flotadsp.fds.data.ArchivoMultipart
+import com.flotadsp.fds.data.ErrorApi
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import kotlinx.serialization.json.JsonArray
+import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.buildJsonArray
+import kotlinx.serialization.json.contentOrNull
+import kotlinx.serialization.json.jsonArray
+import kotlinx.serialization.json.jsonObject
+import kotlinx.serialization.json.jsonPrimitive
+import kotlinx.serialization.json.put
+import kotlinx.serialization.json.JsonPrimitive
+import java.io.ByteArrayOutputStream
+import java.io.File
+
+private data class CapturaPendiente(val clave: String, val archivo: File, val uri: Uri)
+private data class PuntoRevision(val id: String, val titulo: String)
+private val ANGULOS = listOf("frontal" to "Frontal", "trasera" to "Trasera", "lateral_izq" to "Lateral izquierdo", "lateral_der" to "Lateral derecho")
+private val PUNTOS = listOf(
+    PuntoRevision("neumaticos", "Neumáticos"), PuntoRevision("luces", "Luces"),
+    PuntoRevision("chapa", "Chapa y carrocería"), PuntoRevision("puertas", "Puertas"),
+    PuntoRevision("espejos", "Espejos"), PuntoRevision("interior", "Interior"),
+    PuntoRevision("combustible", "Combustible"), PuntoRevision("limpieza", "Limpieza"),
+)
+
+@Composable
+fun AuditoriaConductorNativa(alVolver: () -> Unit, alCompletar: () -> Unit) {
+    val ctx = LocalContext.current
+    val app = ctx.applicationContext as FdsApp
+    val scope = rememberCoroutineScope()
+    var paso by remember { mutableIntStateOf(0) }
+    var cargando by remember { mutableStateOf(true) }
+    var enviando by remember { mutableStateOf(false) }
+    var vehiculos by remember { mutableStateOf<JsonArray>(JsonArray(emptyList())) }
+    var asignado by remember { mutableStateOf<String?>(null) }
+    var yaInspeccionada by remember { mutableStateOf(false) }
+    var puedeAuditar by remember { mutableStateOf(true) }
+    var motivo by remember { mutableStateOf("") }
+    var vehiculo by remember { mutableStateOf<String?>(null) }
+    var matricula by remember { mutableStateOf("") }
+    var error by remember { mutableStateOf<String?>(null) }
+    val fotos = remember { mutableStateMapOf<String, ByteArray>() }
+    val checklist = remember { mutableStateMapOf<String, String>() }
+    var combustible by remember { mutableStateOf<Int?>(null) }
+    var rueda by remember { mutableStateOf<String?>(null) }
+    var notas by remember { mutableStateOf("") }
+    var km by remember { mutableStateOf<Int?>(null) }
+    var kmManual by remember { mutableStateOf("") }
+    var kmMin by remember { mutableStateOf<Int?>(null) }
+    var kmMax by remember { mutableStateOf<Int?>(null) }
+    var kmActual by remember { mutableStateOf<Int?>(null) }
+    var kmDias by remember { mutableStateOf(1) }
+    var procesando by remember { mutableStateOf<String?>(null) }
+    var captura by remember { mutableStateOf<CapturaPendiente?>(null) }
+    var confirmarSalida by remember { mutableStateOf(false) }
+
+    androidx.compose.runtime.LaunchedEffect(Unit) {
+        try {
+            val r = app.repo.vehiculosPortal()
+            puedeAuditar = r["puede_auditar"]?.jsonPrimitive?.contentOrNull != "false"
+            motivo = r["motivo"]?.jsonPrimitive?.contentOrNull.orEmpty()
+            vehiculos = r["vehicles"]?.jsonArray ?: JsonArray(emptyList())
+            val a = app.repo.vehiculoAsignado()
+            val v = a["vehicle"]?.takeUnless { it is kotlinx.serialization.json.JsonNull }?.jsonObject
+            asignado = v?.get("id")?.jsonPrimitive?.contentOrNull
+            yaInspeccionada = a["already_inspected"]?.jsonPrimitive?.contentOrNull == "true"
+        } catch (e: ErrorApi) { error = e.message }
+        finally { cargando = false }
+    }
+
+    val camera = rememberLauncherForActivityResult(ActivityResultContracts.TakePicture()) { ok ->
+        val item = captura
+        captura = null
+        if (item == null) return@rememberLauncherForActivityResult
+        if (!ok) { item.archivo.delete(); error = "No se hizo la foto. Puedes intentarlo de nuevo."; return@rememberLauncherForActivityResult }
+        scope.launch {
+            procesando = item.clave
+            error = null
+            try {
+                val jpg = withContext(Dispatchers.IO) { comprimirFoto(ctx, item.uri) }
+                when {
+                    item.clave in ANGULOS.map { it.first } -> {
+                        try {
+                            val validacion = app.repo.validarFotoInspeccion(vehiculo.orEmpty(), item.clave, jpg)
+                            if (validacion["valid"]?.jsonPrimitive?.contentOrNull == "false") {
+                                error = validacion["reason"]?.jsonPrimitive?.contentOrNull ?: "Foto no válida. Repite la foto de ${item.clave}."
+                            } else fotos[item.clave] = jpg
+                        } catch (e: ErrorApi) {
+                            // La IA falla en abierto; un fallo de servicio no debe borrar una foto válida.
+                            fotos[item.clave] = jpg
+                            error = "La foto se guardó; no se pudo verificar ahora."
+                        }
+                    }
+                    item.clave == "odometro" -> {
+                        fotos[item.clave] = jpg
+                        val lectura = app.repo.leerOdometroInspeccion(vehiculo.orEmpty(), jpg)
+                        val aceptada = lectura["aceptada"]?.jsonPrimitive?.contentOrNull == "true"
+                        kmActual = lectura["current_mileage"]?.jsonPrimitive?.contentOrNull?.toIntOrNull()
+                        kmMin = lectura["manual_min"]?.jsonPrimitive?.contentOrNull?.toIntOrNull()
+                        kmMax = lectura["manual_max"]?.jsonPrimitive?.contentOrNull?.toIntOrNull()
+                        kmDias = lectura["dias"]?.jsonPrimitive?.contentOrNull?.toIntOrNull() ?: 1
+                        km = if (aceptada) lectura["km"]?.jsonPrimitive?.contentOrNull?.toIntOrNull() else null
+                        if (!aceptada) error = lectura["motivo"]?.jsonPrimitive?.contentOrNull ?: "No se pudieron leer los kilómetros. Revisa la foto y escribe el valor dentro del rango indicado."
+                    }
+                    else -> fotos[item.clave] = jpg
+                }
+            } catch (e: ErrorApi) { error = e.message }
+            catch (_: Exception) { error = "No se pudo procesar la foto. Inténtalo de nuevo." }
+            finally { item.archivo.delete(); procesando = null }
+        }
+    }
+
+    fun hacerFoto(clave: String) {
+        try {
+            val dir = File(ctx.cacheDir, "fotos").apply { mkdirs() }
+            val archivo = File.createTempFile("auditoria_${clave}_", ".jpg", dir)
+            val uri = FileProvider.getUriForFile(ctx, "${ctx.packageName}.fotos", archivo)
+            captura = CapturaPendiente(clave, archivo, uri)
+            camera.launch(uri)
+        } catch (_: Exception) { error = "No se pudo abrir la cámara. Comprueba que tienes una aplicación de cámara instalada." }
+    }
+
+    BackHandler { if (paso > 0) paso-- else alVolver() }
+    Scaffold(topBar = { TopAppBar(
+        title = { Text("Auditoría · ${paso + 1} de 3") },
+        navigationIcon = { IconButton(onClick = { if (paso > 0) paso-- else alVolver() }) { Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Volver") } },
+    ) }) { inset ->
+        Column(Modifier.fillMaxSize().padding(inset).verticalScroll(rememberScrollState()).padding(20.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
+            error?.let { Text(it, color = MaterialTheme.colorScheme.error) }
+            if (cargando) { CircularProgressIndicator() }
+            else if (!puedeAuditar) {
+                Text(if (motivo == "suspendido") "Hoy no tienes turno asignado." else "Hoy no tienes una furgoneta asignada en el cuadrante. Habla con tu coordinador antes de salir.", style = MaterialTheme.typography.bodyLarge)
+                Button(onClick = alVolver, modifier = Modifier.fillMaxWidth()) { Text("Volver al inicio") }
+            } else when (paso) {
+                0 -> {
+                    Text("Elige la furgoneta de hoy", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
+                    if (vehiculos.isEmpty()) Text("No hay vehículos disponibles para tu cuenta. Si hoy te corresponde uno, consulta con la oficina.")
+                    vehiculos.forEach { el ->
+                        val o = el.jsonObject
+                        val id = o["id"]?.jsonPrimitive?.contentOrNull.orEmpty()
+                        val placa = o["license_plate"]?.jsonPrimitive?.contentOrNull ?: "Vehículo"
+                        val marca = listOf("brand", "model").mapNotNull { k -> o[k]?.jsonPrimitive?.contentOrNull?.takeIf { it.isNotBlank() } }.joinToString(" ")
+                        Card(onClick = { vehiculo = id; matricula = placa; paso = 1; error = null }, colors = CardDefaults.cardColors(containerColor = if (id == asignado) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceVariant)) {
+                            Row(Modifier.fillMaxWidth().padding(16.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(14.dp)) {
+                                Icon(Icons.Default.DirectionsCar, contentDescription = null)
+                                Column(Modifier.weight(1f)) { Text(placa, fontWeight = FontWeight.Bold); Text(marca, style = MaterialTheme.typography.bodySmall) }
+                                if (id == asignado && yaInspeccionada) Text("Enviada hoy", color = MaterialTheme.colorScheme.primary, style = MaterialTheme.typography.labelSmall)
+                            }
+                        }
+                    }
+                }
+                1 -> {
+                    Text(matricula, style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
+                    Text("Haz las cuatro fotos del vehículo, el cuentakilómetros y el indicador de combustible.")
+                    ANGULOS.forEach { (id, label) -> CapturaCard(label, fotos[id] != null, procesando == id) { hacerFoto(id) } }
+                    CapturaCard("Cuentakilómetros", fotos["odometro"] != null, procesando == "odometro") { hacerFoto("odometro") }
+                    if (km == null && kmMin != null && kmMax != null) {
+                        Text("La foto no dio una lectura fiable. Indica los kilómetros reales (entre ${kmMin} y ${kmMax}; último registro ${kmActual ?: 0}, hace ${kmDias} días).", style = MaterialTheme.typography.bodySmall)
+                        OutlinedTextField(kmManual, { kmManual = it.filter(Char::isDigit).take(7) }, label = { Text("Kilómetros") }, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number), modifier = Modifier.fillMaxWidth())
+                    } else if (km != null) Text("Kilometraje leído: $km km", color = MaterialTheme.colorScheme.primary)
+                    CapturaCard("Foto del combustible", fotos["combustible"] != null, procesando == "combustible") { hacerFoto("combustible") }
+                    Text("¿Cuánto combustible queda?")
+                    Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) { listOf(10, 25, 50, 75, 100).forEach { v -> FilterChip(selected = combustible == v, onClick = { combustible = v }, label = { Text(if (v == 10) "Reserva" else if (v == 100) "Lleno" else "$v%") }) } }
+                    val kmFinal = km ?: kmManual.toIntOrNull()
+                    val kmValido = kmFinal != null && kmFinal > 0 && (kmMin == null || kmFinal >= kmMin!!) && (kmMax == null || kmFinal <= kmMax!!)
+                    Button(onClick = { paso = 2; error = null }, enabled = fotos.keys.containsAll(ANGULOS.map { it.first }) && fotos["odometro"] != null && kmValido && fotos["combustible"] != null && combustible != null && procesando == null, modifier = Modifier.fillMaxWidth().height(52.dp)) { Text("Continuar · checklist") }
+                }
+                else -> {
+                    Text("Revisa el estado", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
+                    Text("Si marcas un elemento como malo o dañado, adjunta una foto para dejar constancia.", style = MaterialTheme.typography.bodySmall)
+                    PUNTOS.forEach { punto ->
+                        Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)) {
+                            Column(Modifier.fillMaxWidth().padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                                Text(punto.titulo, fontWeight = FontWeight.SemiBold)
+                                Row(horizontalArrangement = Arrangement.spacedBy(5.dp)) {
+                                    listOf("ok" to "OK", "regular" to "Regular", "malo" to "Malo", "danado" to "Daño").forEach { (id, label) ->
+                                        FilterChip(selected = checklist[punto.id] == id, onClick = { checklist[punto.id] = id }, label = { Text(label) })
+                                    }
+                                }
+                                if (checklist[punto.id] in listOf("malo", "danado")) CapturaCard("Foto del daño${if (fotos["check_${punto.id}"] != null) " · lista" else " · obligatoria"}", fotos["check_${punto.id}"] != null, procesando == "check_${punto.id}") { hacerFoto("check_${punto.id}") }
+                            }
+                        }
+                    }
+                    Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)) {
+                        Column(Modifier.fillMaxWidth().padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                            Text("Rueda de repuesto", fontWeight = FontWeight.SemiBold)
+                            Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) { listOf("si" to "Sí", "no" to "No", "no_se" to "No he podido verlo").forEach { (v, t) -> FilterChip(selected = rueda == v, onClick = { rueda = v }, label = { Text(t) }) } }
+                            CapturaCard("Foto de la rueda (opcional)", fotos["check_rueda_repuesto"] != null, procesando == "check_rueda_repuesto") { hacerFoto("check_rueda_repuesto") }
+                        }
+                    }
+                    OutlinedTextField(notas, { notas = it }, label = { Text("Notas (opcional)") }, minLines = 2, modifier = Modifier.fillMaxWidth())
+                    val faltaFotoDanio = checklist.any { (id, v) -> v in listOf("malo", "danado") && fotos["check_$id"] == null }
+                    Button(onClick = {
+                        val fotosEnviar = buildList {
+                            ANGULOS.forEachIndexed { i, (id, _) -> fotos[id]?.let { add(ArchivoMultipart("files", "angle_${i}_$id.jpg", it)) } }
+                            fotos["odometro"]?.let { add(ArchivoMultipart("files", "odometro.jpg", it)) }
+                            fotos["combustible"]?.let { add(ArchivoMultipart("files", "combustible.jpg", it)) }
+                            fotos.filterKeys { it.startsWith("check_") }.forEach { (id, bytes) -> add(ArchivoMultipart("files", "checklist_${id.removePrefix("check_")}.jpg", bytes)) }
+                        }
+                        val notasJson = buildJsonObject {
+                            put("checklist", buildJsonObject { checklist.forEach { (k, v) -> put(k, v) } })
+                            put("notes", notas)
+                            put("driver_name", app.cuenta.nombre.value)
+                            put("center", app.cuenta.centro.value)
+                            put("odometer_km", km ?: kmManual.toIntOrNull() ?: 0)
+                            put("odometer_manual", km == null)
+                            put("combustible_pct", combustible ?: 0)
+                            put("checklist_photo_items", buildJsonArray {
+                                fotos.keys.filter { it.startsWith("check_") }.forEach { k ->
+                                    val id = k.removePrefix("check_")
+                                    val label = PUNTOS.firstOrNull { it.id == id }?.titulo ?: "Rueda de repuesto"
+                                    add(JsonPrimitive(label))
+                                }
+                            })
+                            put("rueda_repuesto", rueda.orEmpty())
+                            put("rueda_repuesto_foto", fotos.containsKey("check_rueda_repuesto"))
+                        }.toString()
+                        enviando = true; error = null
+                        scope.launch {
+                            try {
+                                var intento = 0
+                                while (true) {
+                                    intento++
+                                    try { app.repo.subirInspeccion(vehiculo.orEmpty(), notasJson, fotosEnviar); break }
+                            catch (e: ErrorApi) { if ((e.estado in 400..499) || intento >= 3) throw e; kotlinx.coroutines.delay(2500L * intento) }
+                                }
+                                alCompletar()
+                            } catch (e: ErrorApi) { error = e.message }
+                            catch (_: Exception) { error = "No se pudo enviar la inspección. Las fotos siguen guardadas en esta pantalla; vuelve a intentarlo con conexión." }
+                            finally { enviando = false }
+                        }
+                    }, enabled = !enviando && procesando == null && rueda != null && !faltaFotoDanio && fotos.keys.containsAll(ANGULOS.map { it.first }) && fotos["odometro"] != null && fotos["combustible"] != null && combustible != null && (km ?: kmManual.toIntOrNull())?.let { it > 0 && (kmMin == null || it >= kmMin!!) && (kmMax == null || it <= kmMax!!) } == true, modifier = Modifier.fillMaxWidth().height(54.dp)) {
+                        if (enviando) CircularProgressIndicator(Modifier.size(20.dp), strokeWidth = 2.dp) else Text("Enviar auditoría")
+                    }
+                }
+            }
+            TextButton(onClick = { confirmarSalida = true }, modifier = Modifier.fillMaxWidth()) { Text("Salir de la auditoría") }
+            Spacer(Modifier.height(20.dp))
+        }
+    }
+    if (confirmarSalida) AlertDialog(
+        onDismissRequest = { confirmarSalida = false },
+        title = { Text("¿Salir de la auditoría?") },
+        text = { Text("Las fotos aún no se han enviado. Si sales, se descartarán y tendrás que empezar de nuevo.") },
+        confirmButton = { TextButton(onClick = { confirmarSalida = false; alVolver() }) { Text("Salir y descartar") } },
+        dismissButton = { TextButton(onClick = { confirmarSalida = false }) { Text("Seguir revisando") } },
+    )
+}
+
+@Composable
+private fun CapturaCard(titulo: String, lista: Boolean, procesando: Boolean, alHacer: () -> Unit) {
+    Card(onClick = alHacer, enabled = !procesando, colors = CardDefaults.cardColors(containerColor = if (lista) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceVariant)) {
+        Row(Modifier.fillMaxWidth().padding(14.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+            if (procesando) CircularProgressIndicator(Modifier.size(20.dp), strokeWidth = 2.dp)
+            else Icon(if (lista) Icons.Default.CheckCircle else Icons.Default.CameraAlt, contentDescription = null)
+            Text(titulo, modifier = Modifier.weight(1f), fontWeight = FontWeight.Medium)
+            if (lista) Text("Repetir", style = MaterialTheme.typography.labelSmall)
+        }
+    }
+}
+
+private suspend fun comprimirFoto(context: Context, uri: Uri): ByteArray = withContext(Dispatchers.IO) {
+    val options = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+    context.contentResolver.openInputStream(uri)?.use { BitmapFactory.decodeStream(it, null, options) }
+        ?: error("No se pudo leer la imagen")
+    var sample = 1
+    while (options.outWidth / sample > 1280 || options.outHeight / sample > 1280) sample *= 2
+    val bitmap = context.contentResolver.openInputStream(uri)?.use {
+        BitmapFactory.decodeStream(it, null, BitmapFactory.Options().apply { inSampleSize = sample })
+    } ?: error("No se pudo procesar la imagen")
+    var orientada: Bitmap? = null
+    try {
+        val orientacion = context.contentResolver.openInputStream(uri)?.use { ExifInterface(it).getAttributeInt(
+            ExifInterface.TAG_ORIENTATION, ExifInterface.ORIENTATION_NORMAL,
+        ) } ?: ExifInterface.ORIENTATION_NORMAL
+        val grados = when (orientacion) {
+            ExifInterface.ORIENTATION_ROTATE_90 -> 90f
+            ExifInterface.ORIENTATION_ROTATE_180 -> 180f
+            ExifInterface.ORIENTATION_ROTATE_270 -> 270f
+            else -> 0f
+        }
+        val imagen = if (grados == 0f) bitmap else {
+            orientada = Bitmap.createBitmap(bitmap, 0, 0, bitmap.width, bitmap.height, Matrix().apply { postRotate(grados) }, true)
+            orientada!!
+        }
+        ByteArrayOutputStream().use { out ->
+            check(imagen.compress(Bitmap.CompressFormat.JPEG, 78, out)) { "No se pudo codificar la imagen" }
+            out.toByteArray()
+        }
+    } finally {
+        orientada?.takeIf { it !== bitmap }?.recycle()
+        bitmap.recycle()
+    }
+}

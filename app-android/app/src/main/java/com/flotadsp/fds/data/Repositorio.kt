@@ -72,10 +72,28 @@ class Repositorio(private val ctx: Context, val cuenta: Cuenta, val api: Api) {
                 cuenta.guardar(s, correo.trim().lowercase(Locale.ROOT))
                 _pendientes.value = leerCola()
             }
-            "empresa", "conductor" -> Unit // La app abrirá el portal web correspondiente con esta sesión.
+            "conductor" -> {
+                cuenta.guardar(s, correo.trim().lowercase(Locale.ROOT))
+                _pendientes.value = leerCola()
+            }
+            "empresa" -> Unit // La app abre el panel de oficina con esta sesión en memoria.
             else -> throw ErrorApi(0, "El servidor no indicó a qué portal pertenece esta cuenta. Actualiza FDS.")
         }
         return s
+    }
+
+    suspend fun solicitarCodigoConductor(correo: String) {
+        api.post("auth/driver-lookup", buildJsonObject { put("email", correo.trim().lowercase(Locale.ROOT)) })
+    }
+
+    suspend fun entrarConCodigoConductor(correo: String, codigo: String): Sesion {
+        val s = leer<Sesion>(api.post("auth/driver-code/verify", buildJsonObject {
+            put("email", correo.trim().lowercase(Locale.ROOT)); put("code", codigo.trim())
+        }))
+        val conductor = s.copy(app_destino = "conductor")
+        cuenta.guardar(conductor, correo.trim().lowercase(Locale.ROOT))
+        _pendientes.value = leerCola()
+        return conductor
     }
 
     /** La oferta del plan del repartidor, la MISMA que enseñan la web y los anuncios (GET /billing/planes, público):
@@ -104,6 +122,9 @@ class Repositorio(private val ctx: Context, val cuenta: Cuenta, val api: Api) {
 
     /** La sesión dura un mes y se renueva al usar la app: quien reparte cada día no vuelve a entrar. */
     suspend fun renovarSiToca() {
+        // La renovación automática es para cuentas autónomas; los conductores de empresa
+        // usan su sesión del portal y no deben llamar al endpoint de administradores.
+        if (cuenta.destino.value != "reparto") return
         val t = cuenta.token.value ?: return
         if (Cuenta.quedan(t) > 25L * 86400) return
         runCatching { cuenta.guardar(leer<Sesion>(api.post("auth/renovar"))) }
@@ -120,6 +141,60 @@ class Repositorio(private val ctx: Context, val cuenta: Cuenta, val api: Api) {
         withContext(Dispatchers.IO) { fCola.delete() }
         _pendientes.value = emptyList()
     }
+
+    suspend fun cambiarClaveConductor(actual: String, nueva: String) {
+        api.post("auth/change-my-password", buildJsonObject {
+            put("current_password", actual)
+            put("new_password", nueva)
+        })
+    }
+
+    suspend fun estadoCorreoRecuperacion(): JsonObject =
+        api.get("portal/mi-correo-personal").jsonObject
+
+    suspend fun solicitarCorreoRecuperacion(correo: String): JsonObject =
+        api.post("portal/mi-correo-personal", buildJsonObject { put("email", correo.trim()) }).jsonObject
+
+    suspend fun vehiculosPortal(): JsonObject = api.get("vehicles/portal").jsonObject
+    suspend fun vehiculoAsignado(): JsonObject = api.get("auth/me/assigned-vehicle").jsonObject
+    suspend fun fichaConductor(): JsonObject = api.get("portal/mi-ficha").jsonObject
+    suspend fun guardarTelefonoConductor(telefono: String) {
+        api.post("portal/mi-telefono", buildJsonObject { put("telefono", telefono) })
+    }
+    suspend fun validarFotoInspeccion(vehicleId: String, zona: String, bytes: ByteArray): JsonObject =
+        api.postMultipart("inspections/validate-photo", mapOf("vehicle_id" to vehicleId, "expected_zone" to zona),
+            listOf(ArchivoMultipart("file", "check.jpg", bytes))).jsonObject
+    suspend fun leerOdometroInspeccion(vehicleId: String, bytes: ByteArray): JsonObject =
+        api.postMultipart("vehicles/$vehicleId/odometer-photo", emptyMap(),
+            listOf(ArchivoMultipart("file", "odometro.jpg", bytes))).jsonObject
+    suspend fun subirInspeccion(vehicleId: String, notas: String, fotos: List<ArchivoMultipart>): JsonObject =
+        api.postMultipart("inspections/upload", mapOf(
+            "vehicle_id" to vehicleId,
+            "driver_id" to cuenta.quien(),
+            "notes" to notas,
+        ), fotos).jsonObject
+    suspend fun turnosConductor(desde: String, hasta: String): JsonObject =
+        api.get("shifts/mine", mapOf("desde" to desde, "hasta" to hasta)).jsonObject
+    suspend fun bloqueosConductor(): JsonObject = api.get("shift-blocks/mios").jsonObject
+    suspend fun solicitarDiaConductor(fecha: String, tipo: String, motivo: String, nota: String): JsonObject =
+        api.post("shift-requests", buildJsonObject {
+            put("date", fecha); put("type", tipo); put("motivo", motivo); put("note", nota)
+        }).jsonObject
+    suspend fun marcarRespuestasTurnosVistas(ids: List<String>) {
+        if (ids.isEmpty()) return
+        api.post("shift-requests/vistas", buildJsonObject { put("ids", buildJsonArray { ids.forEach { add(kotlinx.serialization.json.JsonPrimitive(it)) } }) })
+    }
+    suspend fun trabajarMasConductor(): JsonObject = api.get("trabajar-mas").jsonObject
+    suspend fun solicitarDiaExtra(fecha: String, nota: String): JsonObject =
+        api.post("trabajar-mas/$fecha/solicitar", buildJsonObject { put("nota", nota) }).jsonObject
+    suspend fun retirarSolicitudExtra(refuerzoId: String) { api.post("refuerzos/$refuerzoId/desapuntarme") }
+    suspend fun cancelarDiaExtra(id: String): JsonObject =
+        api.post("shift-requests/mias/cancelar", buildJsonObject {
+            put("ids", buildJsonArray { add(kotlinx.serialization.json.JsonPrimitive(id)) })
+        }).jsonObject
+    suspend fun referidosConductor(): JsonObject = api.get("conductor/referidos").jsonObject
+    suspend fun retirarReferidosConductor(titular: String, metodo: String, destino: String): JsonObject =
+        api.post("conductor/referidos/retirar", buildJsonObject { put("titular", titular); put("metodo", metodo); put("destino", destino) }).jsonObject
 
     // ── La ruta ─────────────────────────────────────────────────────────────────────────────────────────────
 

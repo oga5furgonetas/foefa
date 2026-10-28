@@ -21,6 +21,9 @@ class Cuenta(private val ctx: Context) {
     private val kToken = stringPreferencesKey("token")
     private val kNombre = stringPreferencesKey("nombre")
     private val kCorreo = stringPreferencesKey("correo")
+    private val kCentro = stringPreferencesKey("centro")
+    private val kDestino = stringPreferencesKey("destino")
+    private val kConfigurarCuenta = androidx.datastore.preferences.core.booleanPreferencesKey("configurar_cuenta")
     private val kNavegar = stringPreferencesKey("navegar")
     private val kTema = stringPreferencesKey("tema")
 
@@ -30,6 +33,12 @@ class Cuenta(private val ctx: Context) {
     val nombre: StateFlow<String> = _nombre
     private val _correo = MutableStateFlow("")
     val correo: StateFlow<String> = _correo
+    private val _centro = MutableStateFlow("")
+    val centro: StateFlow<String> = _centro
+    private val _destino = MutableStateFlow<String?>(null)
+    val destino: StateFlow<String?> = _destino
+    private val _configurarCuenta = MutableStateFlow(false)
+    val configurarCuenta: StateFlow<Boolean> = _configurarCuenta
     private val _navegar = MutableStateFlow("google")
     val navegar: StateFlow<String> = _navegar
     private val _tema = MutableStateFlow("sistema")
@@ -42,16 +51,24 @@ class Cuenta(private val ctx: Context) {
         val guardado = p[kToken]?.takeIf { !caducado(it) }
         val claims = guardado?.let { claims(it) }
         val rol = claims?.get("role")?.jsonPrimitive?.contentOrNull
-        val destino = claims?.get("app_destino")?.jsonPrimitive?.contentOrNull
+        val destinoToken = claims?.get("app_destino")?.jsonPrimitive?.contentOrNull
+        // Los tokens de conductor no incluyen app_destino; se conserva el destino validado
+        // que devolvió /auth/app-login junto a la sesión guardada.
+        val destino = p[kDestino] ?: destinoToken
         // Las versiones anteriores guardaban cualquier cuenta admin en la sesión nativa. Al actualizar, vuelve
         // a pedir credenciales una vez y la API la enviará al portal que le corresponde.
-        val tokenDeReparto = guardado?.takeIf { rol == "admin" && destino == "reparto" }
-        if (guardado != null && tokenDeReparto == null) {
-            ctx.almacen.edit { it.remove(kToken) }
+        val tokenValido = guardado?.takeIf {
+            (rol == "admin" && destino == "reparto") || (rol == "driver" && destino == "conductor")
         }
-        _token.value = tokenDeReparto
+        if (guardado != null && tokenValido == null) {
+            ctx.almacen.edit { it.remove(kToken); it.remove(kDestino); it.remove(kConfigurarCuenta); it.remove(kCentro) }
+        }
+        _token.value = tokenValido
+        _destino.value = if (tokenValido != null) destino else null
+        _configurarCuenta.value = tokenValido != null && p[kConfigurarCuenta] == true
         _nombre.value = p[kNombre].orEmpty()
         _correo.value = p[kCorreo].orEmpty()
+        _centro.value = p[kCentro].orEmpty()
         _navegar.value = p[kNavegar] ?: "google"
         _tema.value = p[kTema] ?: "sistema"
         _cargada.value = true
@@ -60,17 +77,31 @@ class Cuenta(private val ctx: Context) {
     suspend fun guardar(s: Sesion, correo: String? = null) {
         ctx.almacen.edit {
             it[kToken] = s.token
+            s.app_destino?.let { destino -> it[kDestino] = destino }
+            it[kConfigurarCuenta] = s.configurar_cuenta
             it[kNombre] = s.name
+            it[kCentro] = s.center.orEmpty()
             if (correo != null) it[kCorreo] = correo
         }
         _token.value = s.token
+        _destino.value = s.app_destino ?: claims(s.token)?.get("app_destino")?.jsonPrimitive?.contentOrNull
+        _configurarCuenta.value = s.configurar_cuenta
         _nombre.value = s.name
+        _centro.value = s.center.orEmpty()
         if (correo != null) _correo.value = correo
     }
 
     suspend fun cerrar() {
-        ctx.almacen.edit { it.remove(kToken) }
+        ctx.almacen.edit { it.remove(kToken); it.remove(kDestino); it.remove(kConfigurarCuenta); it.remove(kCentro) }
         _token.value = null
+        _destino.value = null
+        _configurarCuenta.value = false
+        _centro.value = ""
+    }
+
+    suspend fun marcarCuentaConfigurada() {
+        ctx.almacen.edit { it[kConfigurarCuenta] = false }
+        _configurarCuenta.value = false
     }
 
     suspend fun elegirNavegador(v: String) { ctx.almacen.edit { it[kNavegar] = v }; _navegar.value = v }

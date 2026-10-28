@@ -20,6 +20,7 @@ import okhttp3.HttpUrl
 import okhttp3.HttpUrl.Companion.toHttpUrl
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
+import okhttp3.MultipartBody
 import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
 import okhttp3.Response
@@ -78,6 +79,20 @@ class Api(
     suspend fun put(ruta: String, cuerpo: JsonElement): JsonElement =
         llamar(Request.Builder().url(url(ruta)).put(cuerpo.toString().toRequestBody(TIPO_JSON)))
 
+    suspend fun postMultipart(
+        ruta: String,
+        campos: Map<String, String>,
+        archivos: List<ArchivoMultipart>,
+    ): JsonElement {
+        val cuerpo = MultipartBody.Builder().setType(MultipartBody.FORM).apply {
+            campos.forEach { (k, v) -> addFormDataPart(k, v) }
+            archivos.forEach { f ->
+                addFormDataPart(f.campo, f.nombre, f.bytes.toRequestBody("image/jpeg".toMediaType()))
+            }
+        }.build()
+        return llamar(Request.Builder().url(url(ruta)).post(cuerpo))
+    }
+
     private suspend fun llamar(b: Request.Builder): JsonElement = withContext(Dispatchers.IO) {
         token()?.let { b.header("Authorization", "Bearer $it") }
         b.header("Accept", "application/json")
@@ -122,6 +137,8 @@ class Api(
         }
     }
 }
+
+data class ArchivoMultipart(val campo: String, val nombre: String, val bytes: ByteArray)
 
 private suspend fun Call.ejecutar(): Response = suspendCancellableCoroutine { c ->
     enqueue(object : Callback {
