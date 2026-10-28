@@ -623,12 +623,10 @@ function ScoringView({ center }) {
    conductores de estar bloqueados. Un aviso que miente gasta la confianza en
    todos los demas.
 
-   Y el boton no es inocuo: al ponerles contraseña DEJAN de poder entrar solo
-   con el correo. Si las claves no se reparten, la nave se queda sin portal a
-   la mañana siguiente. Por eso hay un paso de confirmacion que lo dice con
-   todas las letras, y por eso las claves se pueden bajar en CSV: se ven UNA
-   vez, porque en la base solo queda el hash. */
-function AvisoAccesos({ list, accounts, onHecho }) {
+   El botón genera una clave temporal distinta por conductor. La oficina la
+   entrega en privado; al entrar, cada conductor debe elegir una propia. Las
+   claves se ven UNA vez, porque en la base solo queda el hash. */
+function AvisoAccesos({ list, onHecho }) {
   const [dando, setDando] = useState(false)
   const [confirmar, setConfirmar] = useState(false)
   const [hecho, setHecho] = useState(null)
@@ -637,9 +635,8 @@ function AvisoAccesos({ list, accounts, onHecho }) {
   // Plegarlo es cosa de quien mira: se recuerda en este navegador y vuelve si
   // cambia el número (hay gente nueva sin contraseña).
   const [plegado, setPlegado] = useState(false)
-  const sinAcceso = list.filter((d) => !accounts.includes(d.id))
-  const sinCorreo = sinAcceso.filter((d) => !(d.email || '').trim()).length
-  const conCorreo = sinAcceso.length - sinCorreo
+  const sinCorreo = list.filter((d) => !(d.email || '').trim()).length
+  const conCorreo = list.length - sinCorreo
 
   const claveAviso = `aviso_accesos_${conCorreo}`
   useEffect(() => {
@@ -677,16 +674,20 @@ function AvisoAccesos({ list, accounts, onHecho }) {
     return (
       <div className="mb-4 rounded-xl border border-lime-500/30 bg-lime-500/5 p-4">
         <p className="text-sm font-semibold text-lime-300">
-          {hecho.creadas} {hecho.creadas === 1 ? 'conductor ya tiene' : 'conductores ya tienen'} contraseña
+          {hecho.creadas} {hecho.creadas === 1 ? 'conductor ya tiene' : 'conductores ya tienen'} clave temporal
         </p>
         <p className="mt-1 text-[12.5px] leading-relaxed text-amber-200">
-          Desde ahora la necesitan para entrar: con el correo solo ya no les vale.
-          Repártelas antes de que lo intenten.
+          Cada conductor entra con su correo de empresa y la clave temporal individual de su fila. Al entrar, el portal le pedirá crear una contraseña propia.
         </p>
         <p className="mt-1 text-[12.5px] leading-relaxed text-dark-400">{hecho.aviso}</p>
         {hecho.sin_email > 0 && (
           <p className="mt-1 text-[12.5px] text-amber-300">
             {hecho.sin_email} se han quedado fuera por no tener correo. Ponles uno en su ficha y vuelve a pulsar.
+          </p>
+        )}
+        {hecho.cuentas_inactivas > 0 && (
+          <p className="mt-1 text-[12.5px] text-amber-300">
+            {hecho.cuentas_inactivas} cuenta(s) desactivada(s) no se han cambiado. La oficina debe revisarlas.
           </p>
         )}
         {hecho.accesos.length > 0 && (
@@ -723,15 +724,16 @@ function AvisoAccesos({ list, accounts, onHecho }) {
           Antes de seguir: esto cambia cómo entran
         </p>
         <ul className="mt-2 space-y-1 text-[12.5px] leading-relaxed text-dark-300">
-          <li>· Ahora esos {conCorreo} entran escribiendo solo su correo.</li>
-          <li>· Al ponerles contraseña, <span className="font-semibold text-amber-200">eso deja de valer</span>: sin su clave no entran.</li>
-          <li>· Las claves se ven una sola vez. Descárgalas y repártelas el mismo día.</li>
+          <li>· Se asignará una clave temporal individual a cada conductor activo de toda la empresa que tenga correo.</li>
+          <li>· Las contraseñas actuales de las cuentas activas dejarán de funcionar. Las cuentas de acceso desactivadas no se tocarán.</li>
+          <li>· Al entrar, cada uno deberá crear una contraseña propia y podrá añadir un correo personal de recuperación.</li>
+          <li>· Descarga el CSV con las claves de toda la empresa y entrega cada una en privado.</li>
         </ul>
         <div className="mt-3 flex flex-wrap gap-2">
           <button onClick={dar} disabled={dando}
             className="flex items-center gap-1.5 rounded-lg bg-amber-500/20 px-3 py-2 text-[12.5px] font-semibold text-amber-100 hover:bg-amber-500/30 disabled:opacity-50">
             {dando ? <Loader2 size={13} className="animate-spin" /> : <Lock size={13} />}
-            {dando ? 'Creando…' : 'Lo entiendo, poner contraseña'}
+            {dando ? 'Creando…' : 'Generar claves temporales únicas'}
           </button>
           <button onClick={() => setConfirmar(false)}
             className="px-3 py-2 text-[12.5px] text-dark-400 hover:text-dark-200">Dejarlo como está</button>
@@ -748,15 +750,15 @@ function AvisoAccesos({ list, accounts, onHecho }) {
     <div className="mb-3 flex flex-wrap items-center gap-x-3 gap-y-2 rounded-xl border border-dark-800 bg-dark-900/60 px-3 py-2 text-[12.5px]">
       <Lock size={13} className="shrink-0 text-dark-500" />
       <span className="min-w-0 flex-1 text-dark-300">
-        <span className="font-semibold text-dark-200">{conCorreo}</span> {conCorreo === 1 ? 'entra' : 'entran'} al portal solo con su correo
+        La operación de claves afecta a toda la empresa
         {sinCorreo > 0 && <> · <span className="text-amber-300">{sinCorreo} sin correo</span></>}
         <span className="ml-1.5 cursor-help text-dark-500"
-          title={'Es lo más cómodo, pero cualquiera que sepa su correo entraría por ellos. Con contraseña, sin su clave no entran.'
+          title={'Las claves se generan individualmente. Al hacerlo, las contraseñas anteriores de las cuentas activas se invalidan.'
             + (sinCorreo > 0 ? ` Los ${sinCorreo} sin correo no pueden entrar de ninguna forma hasta ponérselo en su ficha.` : '')}>(?)</span>
       </span>
       <button onClick={() => setConfirmar(true)}
         className="rounded-lg bg-dark-800 px-2.5 py-1 font-semibold text-dark-200 hover:bg-dark-700">
-        Poner contraseña
+        Generar claves de acceso
       </button>
       <button onClick={plegar} aria-label="Ocultar este aviso" className="rounded p-1 text-dark-500 hover:text-dark-300">
         <X size={13} />
@@ -1070,7 +1072,7 @@ Cancelar: es otra persona, crear una ficha nueva.`)) {
                 </div>
               </div>
             : <>
-                <AvisoAccesos list={list} accounts={accounts} onHecho={load} />
+                <AvisoAccesos list={list} onHecho={load} />
                 {centers.length > 1 && list.some(sinCentro) && (
                   <div className="mb-3 flex flex-wrap items-center gap-x-2 gap-y-1 rounded-xl border border-amber-500/25 bg-amber-500/[0.06] px-3 py-2 text-[12.5px] text-amber-200">
                     <AlertCircle size={13} className="shrink-0" />

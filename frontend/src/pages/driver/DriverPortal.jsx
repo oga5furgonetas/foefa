@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { ClipboardCheck, CalendarDays, CalendarClock, CalendarPlus, LogOut, Lock, Ban, ShoppingBag, RefreshCw, Route, Gift, ArrowLeft, Store, ChevronRight } from 'lucide-react'
+import { ClipboardCheck, CalendarDays, CalendarClock, CalendarPlus, LogOut, Lock, Mail, Ban, ShoppingBag, RefreshCw, Route, Gift, ArrowLeft, Store, ChevronRight } from 'lucide-react'
 import { getPortalVehicles, getMyShifts, getMiFicha, guardarMiTelefono, tiendaEscaparate, repMiRuta, mercEstado, getTrabajarMas, DRIVER_TOKEN_KEY } from '../../services/api'
 import { lista } from '../../lib/lista'
 import { medirSeccion } from '../../lib/analitica'
@@ -9,6 +9,7 @@ import InspectionFlow from './InspectionFlow'
 import InspectionDone from './InspectionDone'
 import MisTurnos from './MisTurnos'
 import MiClave from './MiClave'
+import MiCorreoPersonal from './MiCorreoPersonal'
 import PedirDias from './PedirDias'
 import TrabajarMas from './TrabajarMas'
 import Tienda from './Tienda'
@@ -193,6 +194,9 @@ export default function DriverPortal() {
     const v = new URLSearchParams(window.location.search).get('vista')
     return v === 'ruta' || v === 'mercadillo' || v === 'extra' ? v : 'inicio'
   })
+  useEffect(() => {
+    if (driver?.configurar_cuenta) setVista('clave')
+  }, [driver])
   // «Mi ruta» solo sale en empresas que reparten así; lo decide el servidor.
   const [reparto, setReparto] = useState(null)
   useEffect(() => {
@@ -232,8 +236,7 @@ export default function DriverPortal() {
     if (!driver) return
     getMiFicha().then((r) => {
       setFaltaTel(!!r.data?.falta_telefono)
-      // Al portal se entra con el correo: casi ninguno tiene contrasena, y a
-      // ese la entrada del menu tiene que decirle CREAR, no cambiar.
+      // Distingue quien aún no tiene contraseña propia de quien ya la fijó.
       setTieneClave(r.data?.tiene_clave !== false)
     }).catch(() => {})
   }, [driver])
@@ -277,6 +280,7 @@ export default function DriverPortal() {
   const login = (d) => {
     localStorage.setItem(DRIVER_KEY, JSON.stringify(d))
     setDriver(d)
+    setVista(d.configurar_cuenta ? 'clave' : 'inicio')
   }
   const logout = () => {
     // Salir de la demo devuelve la sesión real del conductor, si la había.
@@ -304,7 +308,16 @@ export default function DriverPortal() {
   if (vista === 'dias') return <PedirDias onBack={() => setVista('inicio')} />
   if (vista === 'extra') return <TrabajarMas onBack={() => setVista('inicio')} />
   if (vista === 'turnos') return <MisTurnos onBack={() => setVista('inicio')} />
-  if (vista === 'clave') return <MiClave onBack={() => setVista('inicio')} />
+  if (vista === 'clave') return <MiClave obligatoria={!!driver.configurar_cuenta}
+    onBack={() => {
+      if (driver.configurar_cuenta) {
+        const actualizado = { ...driver, configurar_cuenta: false }
+        localStorage.setItem(DRIVER_KEY, JSON.stringify(actualizado))
+        setDriver(actualizado)
+        setVista('correo')
+      } else setVista('inicio')
+    }} />
+  if (vista === 'correo') return <MiCorreoPersonal onBack={() => setVista('inicio')} />
   if (vista === 'tienda') return <Tienda onBack={() => setVista('inicio')} />
   if (vista === 'cartera') return <PantallaCartera onBack={() => setVista('inicio')} />
   if (vista === 'mercadillo') return <Mercadillo onBack={() => setVista('inicio')} />
@@ -523,6 +536,12 @@ export default function DriverPortal() {
             titulo={tieneClave ? 'Cambiar mi contraseña' : 'Crear mi contraseña'}
             detalle={tieneClave ? null : 'Entras con el correo'}
             onClick={() => setVista('clave')}
+          />
+          <Casilla
+            icono={Mail}
+            titulo="Correo de recuperación"
+            detalle="Añade un correo personal para recibir códigos"
+            onClick={() => setVista('correo')}
           />
           </div>}
         </div>

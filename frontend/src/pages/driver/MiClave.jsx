@@ -7,17 +7,15 @@ import { changeMyPassword, getMiFicha } from '../../services/api'
    Antes esto solo lo podía hacer un admin, así que un conductor que quisiera
    cambiarla tenía que pedírselo a la oficina y decirle cuál quería — es decir,
    contarle su contraseña a otra persona. Ahora se la pone él y nadie más la ve. */
-export default function MiClave({ onBack }) {
-  /* CREAR NO ES CAMBIAR. Al portal se entra con el correo y ya: `driver_accounts`
-     estaba VACIA, o sea que ninguno de los 140 tenia contrasena. Esta pantalla
-     les pedia igualmente la ACTUAL y devolvia siempre «la contrasena actual no
-     es correcta» — una pantalla que no podia funcionar para nadie. El servidor
-     dice si la tiene (`tiene_clave`) y aqui solo se pinta lo que toca. */
+export default function MiClave({ onBack, obligatoria = false }) {
+  /* CREAR NO ES CAMBIAR. Quien entra con código o con una clave temporal puede
+     no tener aún una contraseña propia; el servidor devuelve si tiene cuenta
+     (`tiene_clave`) y esta pantalla le pide solo lo que necesita. */
   const [tieneClave, setTieneClave] = useState(null)
   useEffect(() => {
     getMiFicha().then((r) => setTieneClave(!!r.data?.tiene_clave)).catch(() => setTieneClave(true))
   }, [])
-  const creando = tieneClave === false
+  const creando = tieneClave === false || obligatoria
 
   const [actual, setActual] = useState('')
   const [nueva, setNueva] = useState('')
@@ -46,15 +44,19 @@ export default function MiClave({ onBack }) {
   return (
     <div className="min-h-screen bg-dark-950 px-4 py-6">
       <div className="mx-auto max-w-md">
-        <button onClick={onBack} className="mb-5 flex items-center gap-1.5 text-[13px] text-dark-400">
-          <ArrowLeft size={15} /> Volver
-        </button>
+        {!obligatoria && (
+          <button onClick={onBack} className="mb-5 flex items-center gap-1.5 text-[13px] text-dark-400">
+            <ArrowLeft size={15} /> Volver
+          </button>
+        )}
 
         <h1 className="font-display text-[22px] font-bold tracking-[-.02em] text-dark-50">
-          {creando ? 'Crear mi contraseña' : 'Cambiar mi contraseña'}
+          {obligatoria ? 'Elige tu contraseña personal' : creando ? 'Crear mi contraseña' : 'Cambiar mi contraseña'}
         </h1>
         <p className="mt-1 text-[13px] leading-relaxed text-dark-500">
-          {creando
+          {obligatoria
+            ? 'Has entrado con un acceso temporal. Elige ahora una contraseña propia, que solo tú conozcas.'
+            : creando
             ? 'Ahora entras solo con tu correo. Ponte una contraseña y a partir de la próxima vez te la pedirá también a ti — y solo a ti: nadie de la oficina la ve.'
             : 'Ponte la que quieras, mínimo 6 caracteres. Nadie de la oficina la va a ver.'}
         </p>
@@ -65,12 +67,14 @@ export default function MiClave({ onBack }) {
               <Check size={16} /> {creando ? 'Contraseña creada' : 'Contraseña cambiada'}
             </p>
             <p className="mt-1.5 text-[13px] leading-relaxed text-emerald-200/80">
-              {creando
+              {obligatoria
+                ? 'La próxima vez entra con tu correo de empresa y la contraseña que acabas de crear.'
+                : creando
                 ? 'La próxima vez entra con tu correo y esta contraseña. El correo no cambia.'
                 : 'La próxima vez entra con la nueva. Tu email no cambia.'}
             </p>
             <button onClick={onBack} className="mt-4 w-full rounded-xl bg-dark-800 py-2.5 text-[14px] font-semibold text-dark-100">
-              Volver al inicio
+              {obligatoria ? 'Continuar con correo de recuperación' : 'Volver al inicio'}
             </button>
           </div>
         ) : (

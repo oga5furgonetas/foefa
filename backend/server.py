@@ -834,6 +834,7 @@ class TokenResponse(BaseModel):
     role: str
     name: str
     id: str
+    configurar_cuenta: Optional[bool] = None
     center: Optional[str] = None
     theme: Optional[str] = None
     account_type: Optional[str] = None
@@ -7711,7 +7712,9 @@ async def driver_code_verify(data: dict, request: Request):
                          org_id=(org or {}).get("id"), db_name=_tenant_db_name(org),
                          account_type=(org or {}).get("account_type"))
     return {"access_token": token, "token_type": "bearer", "role": "driver",
-            "name": driver.get("name", ""), "id": driver["id"], "center": driver.get("center")}
+            "name": driver.get("name", ""), "id": driver["id"], "center": driver.get("center"),
+            "configurar_cuenta": (not account or bool(account.get("must_change_password")
+                                                    or account.get("creada_en_bloque")))}
 
 
 @auth_router.post("/driver-token")
@@ -7789,7 +7792,8 @@ async def driver_login(data: DriverLoginRequest, request: Request):
         role="driver",
         name=driver_name,
         id=account["driver_id"],
-        center=driver_center
+        center=driver_center,
+        configurar_cuenta=bool(account.get("must_change_password") or account.get("creada_en_bloque")),
     )
 
 
@@ -8202,20 +8206,23 @@ async def change_my_password(data: dict, user: dict = Depends(get_current_user))
     if user.get("role") == "driver":
         cuenta = await db.driver_accounts.find_one({"driver_id": user["sub"]})
         if cuenta:
-            if not verify_password(current, cuenta["hashed_password"]):
+            temporal = bool(cuenta.get("must_change_password") or cuenta.get("creada_en_bloque"))
+            if not temporal and not verify_password(current, cuenta["hashed_password"]):
                 await asyncio.sleep(0.8)
                 raise HTTPException(status_code=401,
                                     detail="La contraseña actual no es correcta")
             await db.driver_accounts.update_one(
                 {"driver_id": user["sub"]},
                 {"$set": {"hashed_password": hash_password(new),
-                          "password_changed_at": datetime.now(timezone.utc).isoformat()}})
+                          "password_changed_at": datetime.now(timezone.utc).isoformat()},
+                 "$unset": {"must_change_password": "", "creada_en_bloque": ""}})
             logger.info("Conductor %s cambió su contraseña", user["sub"][:8])
             return {"success": True}
 
         # NO TIENE NINGUNA: la esta CREANDO, y pedirle la anterior es pedirle
-        # algo que no existe. Al portal se entra por correo, sin contrasena, y
-        # `driver_accounts` estaba vacia entera: esta pantalla devolvia "la
+        # algo que no existe. Si ha entrado con su codigo de un solo uso, puede
+        # crear la contraseña sin inventarse una anterior. `driver_accounts`
+        # estaba vacia entera: esta pantalla devolvia "la
         # contrasena actual no es correcta" a los 140, siempre.
         # Se puede crear sin la anterior porque quien la crea YA esta dentro
         # con su sesion, y porque hasta hoy bastaba el correo para entrar:
@@ -8291,7 +8298,8 @@ async def set_driver_password(
     if existing:
         await db.driver_accounts.update_one(
             {"driver_id": data.driver_id},
-            {"$set": {"hashed_password": hashed, "active": True}}
+            {"$set": {"hashed_password": hashed, "active": True,
+                      "must_change_password": True}}
         )
         logger.info(f"Password reseteado para conductor {data.driver_id}")
     else:
@@ -8301,6 +8309,7 @@ async def set_driver_password(
             "email": driver["email"],
             "hashed_password": hashed,
             "active": True,
+            "must_change_password": True,
             "created_at": datetime.now(timezone.utc).isoformat()
         })
         logger.info(f"Cuenta creada para conductor {data.driver_id} ({driver['email']})")
@@ -8348,29 +8357,27 @@ def _clave_conductor() -> str:
 
 @auth_router.post("/driver-accounts/generar")
 async def generar_accesos_conductores(_admin: dict = Depends(require_admin)):
-    """Pone contraseña a los conductores que todavia no tienen.
+    """Asigna a cada conductor activo una clave temporal aleatoria y distinta.
 
-    Los conductores sin cuenta de contraseña entran con un código temporal
-    enviado al correo de su ficha; quienes ya tienen cuenta usan su contraseña.
-    El panel lo confirma antes de llamar aqui, y por eso las claves se
-    devuelven y se pueden bajar en CSV.
+    El primer acceso obliga a cambiarla. El panel lo confirma antes de llamar
+    aqui, y por eso las claves se devuelven y se pueden bajar en CSV una sola vez.
 
     Existe porque hacerlo de uno en uno con `/set-driver-password` es inviable
     con una plantilla entera recien importada de un Excel.
 
-    A los que YA tienen cuenta no se les toca: regenerar una clave que alguien
-    esta usando le echa del portal a mitad de ruta, y esto se pulsa sin pensar.
+    Las contraseñas anteriores de las cuentas activas se invalidan al ejecutar
+    esta acción. Las cuentas desactivadas se dejan intactas.
     """
     conductores = await db.drivers.find(
-        {"status": {"$ne": "deleted"}}, {"_id": 0, "id": 1, "name": 1, "email": 1, "center": 1}
+        {"status": {"$ne": "deleted"}, "active": {"$ne": False}},
+        {"_id": 0, "id": 1, "name": 1, "email": 1, "center": 1}
     ).to_list(5000)
-    con_cuenta = {a["driver_id"] for a in await db.driver_accounts.find(
-        {}, {"_id": 0, "driver_id": 1}).to_list(5000)}
+    cuentas = {a["driver_id"]: a for a in await db.driver_accounts.find(
+        {}, {"_id": 0, "driver_id": 1, "active": 1}).to_list(5000)}
 
-    nuevas, sin_email, ahora = [], 0, datetime.now(timezone.utc).isoformat()
+    nuevas, sin_email, regeneradas, omitidas_inactivas = [], 0, 0, 0
+    ahora = datetime.now(timezone.utc).isoformat()
     for c in conductores:
-        if c["id"] in con_cuenta:
-            continue
         email = (c.get("email") or "").strip().lower()
         if not email:
             # Sin correo no hay con que entrar. Se cuentan y se dicen: si no,
@@ -8378,30 +8385,46 @@ async def generar_accesos_conductores(_admin: dict = Depends(require_admin)):
             sin_email += 1
             continue
         clave = _clave_conductor()
-        try:
-            await db.driver_accounts.insert_one({
-                "id": str(uuid.uuid4()), "driver_id": c["id"], "email": email,
-                "hashed_password": hash_password(clave), "active": True,
-                "created_at": ahora, "creada_en_bloque": True,
-            })
-        except DuplicateKeyError:
-            # Dos pestañas a la vez. La cuenta existe: no es un fallo.
+        cuenta = cuentas.get(c["id"])
+        if cuenta and not cuenta.get("active", True):
+            omitidas_inactivas += 1
             continue
+        if cuenta:
+            await db.driver_accounts.update_one({"driver_id": c["id"]}, {"$set": {
+                "email": email, "hashed_password": hash_password(clave), "active": True,
+                "creada_en_bloque": True, "must_change_password": True,
+                "password_temp_created_at": ahora,
+            }})
+            regeneradas += 1
+        else:
+            try:
+                await db.driver_accounts.insert_one({
+                    "id": str(uuid.uuid4()), "driver_id": c["id"], "email": email,
+                    "hashed_password": hash_password(clave), "active": True,
+                    "created_at": ahora, "creada_en_bloque": True,
+                    "must_change_password": True,
+                })
+            except DuplicateKeyError:
+                # Otra pestaña pudo crear la cuenta: no modificar su clave
+                # silenciosamente; se informa que debe volver a intentarse.
+                continue
         nuevas.append({"driver_id": c["id"], "nombre": c.get("name") or email,
                        "centro": c.get("center"), "email": email, "clave": clave})
 
-    logger.info("Accesos de conductor generados en bloque: %d nuevos, %d sin email",
-                len(nuevas), sin_email)
+    logger.info("Claves temporales de conductor generadas: %d total (%d regeneradas), %d sin email, %d cuentas inactivas",
+                len(nuevas), regeneradas, sin_email, omitidas_inactivas)
     return {
         "creadas": len(nuevas),
-        "ya_tenian": len(con_cuenta),
+        "regeneradas": regeneradas,
+        "ya_tenian": len(cuentas),
         "sin_email": sin_email,
+        "cuentas_inactivas": omitidas_inactivas,
         # Las claves se ven UNA vez, igual que las llaves de partner: en la base
         # solo queda el hash. Si se pierde una, se le pone otra desde su ficha.
         "accesos": sorted(nuevas, key=lambda x: (x["centro"] or "", x["nombre"])),
-        "aviso": ("Apunta o descarga estas claves ahora: no se pueden volver a ver. "
-                  "Desde este momento estos conductores NECESITAN su clave para "
-                  "entrar; con el correo solo ya no les vale."),
+        "aviso": ("Apunta o descarga estas claves temporales ahora: no se pueden volver a ver. "
+                  "Las contraseñas anteriores de las cuentas activas quedan invalidadas. "
+                  "Cada conductor debe cambiar la suya al entrar. Entrégalas en privado."),
     }
 
 
@@ -11743,6 +11766,13 @@ async def driver_recovery_email_status(driver_id: str, _=Depends(require_admin))
             "pendiente": _correo_mascara(pending.get("email")) if pending else None}
 
 
+@api_router.get("/portal/mi-correo-personal")
+async def portal_mi_correo_personal(user: dict = Depends(require_any_auth)):
+    if user.get("role") != "driver":
+        raise HTTPException(403, "Solo conductores")
+    return await driver_recovery_email_status(user["sub"], user)
+
+
 async def _ensure_driver_recovery_indexes(tdb):
     """Crea índices al usar el flujo, sin colecciones vacías por empresa."""
     await _idx(tdb.driver_recovery_emails, "driver_id", unique=True,
@@ -11798,12 +11828,21 @@ async def driver_recovery_email_request(driver_id: str, data: dict, user: dict =
     nombre = html_escape(driver.get("name") or "conductor")
     enviado = await _enviar_email(
         email, "Verifica tu correo personal para Flota",
-        f"<p>Hola {nombre}.</p><p>La oficina ha indicado este correo como tu correo personal de acceso.</p><p><a href='{html_escape(link)}'>Verificar correo personal</a></p><p>El enlace caduca en 24 horas. Si no esperabas este mensaje, ignóralo.</p>",
+        f"<p>Hola {nombre}.</p><p>Se ha solicitado vincular esta dirección como tu correo personal de acceso.</p><p><a href='{html_escape(link)}'>Verificar correo personal</a></p><p>El enlace caduca en 24 horas. Si no esperabas este mensaje, ignóralo.</p>",
         texto=f"Verifica tu correo personal para el portal de conductor: {link}\nCaduca en 24 horas.")
     if not enviado:
         await global_db.driver_recovery_pending.delete_one({"token_hash": token_hash})
         raise HTTPException(503, "No se pudo enviar el correo de verificación. Comprueba el servicio de correo e inténtalo de nuevo.")
     return {"ok": True, "pendiente": True, "email": _correo_mascara(email)}
+
+
+@api_router.post("/portal/mi-correo-personal")
+async def portal_solicitar_correo_personal(data: dict, request: Request,
+                                            user: dict = Depends(require_any_auth)):
+    if user.get("role") != "driver":
+        raise HTTPException(403, "Solo conductores")
+    _rl_public_action(f"drv-recovery:{user['sub']}:{_rl_key_ip(request)}", 3, 3600)
+    return await driver_recovery_email_request(user["sub"], data, user)
 
 
 @api_router.delete("/drivers/{driver_id}/recovery-email")

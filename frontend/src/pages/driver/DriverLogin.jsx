@@ -50,6 +50,12 @@ export default function DriverLogin({ onLogin }) {
     setBusy(false)
   }
 
+  const handleContinue = () => {
+    if (!email.trim()) return toast.warning(t('dr.introEmail'))
+    setCurrentDriver({ email: email.trim() })
+    setStep('password')
+  }
+
   const handleCodeSubmit = async () => {
     if (!/^\d{6}$/.test(code.trim())) return toast.warning(t('dr.codeSixWarn'))
     setBusy(true)
@@ -57,7 +63,8 @@ export default function DriverLogin({ onLogin }) {
       const r = await api.post('/auth/driver-code/verify', { email: email.trim(), code: code.trim() })
       const d = r.data || {}
       localStorage.setItem(DRIVER_TOKEN_KEY, d.access_token)
-      onLogin({ id: d.id, name: d.name, email: email.trim(), center: d.center })
+      onLogin({ id: d.id, name: d.name, email: email.trim(), center: d.center,
+        configurar_cuenta: !!d.configurar_cuenta })
       toast.success(`${t('dr.bienvenido')}, ${d.name}`)
     } catch (ex) {
       toast.error(ex?.response?.status === 429 ? (ex?.response?.data?.detail || t('dr.codeInvalid')) : t('dr.codeInvalid'))
@@ -86,6 +93,7 @@ export default function DriverLogin({ onLogin }) {
         ...currentDriver,
         name: r.data?.name || currentDriver.name,
         center: r.data?.center || currentDriver.center,
+        configurar_cuenta: !!r.data?.configurar_cuenta,
       })
       toast.success(`${t('dr.bienvenido')}, ${r.data?.name || currentDriver.name}`)
     } catch (ex) {
@@ -142,7 +150,7 @@ export default function DriverLogin({ onLogin }) {
                   className="input"
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
-                  onKeyDown={(e) => e.key === 'Enter' && handleEmailSubmit()}
+                  onKeyDown={(e) => e.key === 'Enter' && handleContinue()}
                   placeholder={t('dr.emailPh')}
                   autoFocus
                   autoComplete="email"
@@ -151,13 +159,17 @@ export default function DriverLogin({ onLogin }) {
               </div>
 
               <button
-                onClick={handleEmailSubmit}
+                onClick={handleContinue}
                 disabled={busy || !email}
                 className="btn-primary flex w-full items-center justify-center gap-2 py-3 text-base"
               >
                 {busy
                   ? <><Loader2 size={16} className="animate-spin" /> {t('dr.verificando')}</>
                   : <><LogIn size={16} /> {t('dr.continuar')}</>}
+              </button>
+              <button type="button" disabled={busy} onClick={handleEmailSubmit}
+                className="flex w-full items-center justify-center text-xs text-dark-400 hover:text-dark-200">
+                {t('dr.getEmailCode')}
               </button>
             </div>
           )}
@@ -239,6 +251,11 @@ export default function DriverLogin({ onLogin }) {
                 {busy
                   ? <><Loader2 size={16} className="animate-spin" /> {t('dr.verificando')}</>
                   : <><LogIn size={16} /> {t('dr.acceder')}</>}
+              </button>
+
+              <button type="button" disabled={busy} onClick={handleEmailSubmit}
+                className="flex w-full items-center justify-center text-xs text-dark-400 hover:text-dark-200">
+                {t('dr.getEmailCode')}
               </button>
 
               <button
