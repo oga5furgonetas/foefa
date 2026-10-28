@@ -7668,7 +7668,7 @@ async def driver_code_verify(data: dict, request: Request):
     ).to_list(500)
     orgs = list({ _tenant_db_name(o): o for o in reversed(orgs) }.values())
     if not any(_tenant_db_name(o) == _DEFAULT_DB_NAME for o in orgs):
-        orgs.append({"id": OWNER_ORG_ID, "slug": "", "name": MARCA.nombre,
+        orgs.append({"id": OWNER_ORG_ID, "slug": "", "name": MARCA,
                      "account_type": "owner", "db_name": _DEFAULT_DB_NAME})
     matched = []
     for candidate in orgs:
@@ -7742,7 +7742,7 @@ async def driver_login(data: DriverLoginRequest, request: Request):
         ).to_list(500)
         orgs = list({ _tenant_db_name(o): o for o in reversed(orgs) }.values())
         if not any(_tenant_db_name(o) == _DEFAULT_DB_NAME for o in orgs):
-            orgs.append({"id": OWNER_ORG_ID, "slug": "", "name": MARCA.nombre,
+            orgs.append({"id": OWNER_ORG_ID, "slug": "", "name": MARCA,
                          "account_type": "owner", "db_name": _DEFAULT_DB_NAME})
         candidates = [(o, client[_tenant_db_name(o)]) for o in orgs]
     valid_accounts = []
