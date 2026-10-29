@@ -5692,11 +5692,11 @@ def _app_android_web() -> Optional[dict]:
 #   fly secrets set -a flota-backend APP_ANDROID_MIN="2.2.5"
 # al entrar (app-login) o renovar la sesión, una app anterior recibe 426 con el aviso y el enlace. Sin la variable no
 # se bloquea a nadie. No se corta a mitad de ruta: las llamadas del reparto no miran la versión (se perderían entregas).
-_MSG_APP_VIEJA = ("Hay una versión nueva de FDS. Actualízala en Google Play (o en flotadsp.com/app si la instalaste desde",
+_MSG_APP_VIEJA = ("Hay una versión nueva de FDS. Actualízala en Google Play (o en flotadsp.com/app si la instalaste desde"
                   " la web) y vuelve a entrar.")
 
 def _version_tupla(v: str) -> tuple:
-    return tuple(int(x) for x in re.findall(r"d+", v or "")[:4])
+    return tuple(int(x) for x in re.findall(r"\d+", v or "")[:4])
 
 
 def _app_android_vieja(headers) -> bool:
@@ -7045,7 +7045,7 @@ def _sesion_propia_de_admin(user: dict) -> bool:
 
 
 @auth_router.post("/renovar", response_model=TokenResponse)
-async def renovar_sesion(request: Request, user: dict = Depends(get_current_user)):
+async def renovar_sesion(user: dict = Depends(get_current_user), request: Request = None):
     """LA APP DE ANDROID NO TE ECHA (25-10-2026). La app nativa del repartidor renueva su sesión al usarla, como
     cualquier app: quien reparte cada día no vuelve a escribir su contraseña. Solo cuentas de quien reparte por
     su cuenta (una persona) y, desde el 29-10-2026, la del conductor de empresa; se vuelve a leer el usuario, así
