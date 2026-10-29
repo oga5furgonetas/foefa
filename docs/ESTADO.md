@@ -914,6 +914,20 @@ a las 7:51, 12:51 y 19:51). Programados en Metricool dos posts de LinkedIn (04-1
 Instagram y YouTube esperan a que la web se despliegue con `frontend/public/redes/` (imágenes y vídeos en español, 30 MB):
 **Dani: mezclar `claude/trusting-feynman-0tfz62` en `main` (es fast-forward, ya lleva main) y desplegar la web.**
 
+## 29-10-2026 (noche, 3): informe de producto, mercado y estrategia
+
+Dani: «actúa como el mejor del mundo: verifica la APK, la página, qué mejorar para autónomos, para nosotros (OGA5,
+DGA1) y para empresas con repartidores; qué añadir, qué quitar, el mercado, cómo viralizarnos». Escrito en
+**`docs/ESTRATEGIA-29-10.md`** (va un escalón por encima de `ESTUDIO_APP.md`, no lo repite). Lo que salió de usar la
+web y las demos en producción desde un móvil emulado, y que no estaba en ninguna nota: **el píxel de Meta NO está
+cargado en la web de producción** (`typeof window.fbq === "undefined"`, aviso de cookies en modo informativo: el
+comando de despliegue de «Cómo desplegar» no lleva `VITE_META_PIXEL_ID`; `desplegar.yml` sí lo cose); dos marcas
+(FDS y Flota) en el mismo dominio; el título «Flota — Gestión de flotas con IA» en `/empezar`, `/planes`, la ruta y
+el panel; «Oferta fundador · quedan 10 de 10 plazas» en `/planes`; el cartel de cookies tapando un tercio del móvil
+sin píxel. Nada tocado en el código ni desplegado: solo este informe. La app nativa no se pudo ejecutar aquí.
+Las decisiones que pide están en su §11 (una marca o dos, Amazon A-G, una sola oferta, anuncios, Reparto para
+empresas como prioridad de ventas, cobro en la app, Valor fuera del repo, DeCA).
+
 ## Pendiente (por prioridad)
 
 -6. **El anuncio con la voz de Dani (29-10 noche, 2)**: montado en `docs/anuncios/spot-dani/salida/`. Falta:
