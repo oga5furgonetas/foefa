@@ -189,7 +189,7 @@ export default function Repartidores() {
             <p className="text-[14.5px] font-bold leading-snug text-amber-200">🎁 {tx('Gratis y sin límite hasta el {fecha} · sin tarjeta', { fecha: fechaPromo(locale()) })}</p>
             {/* 17-10-2026: con la promoción, los dos premios (el bono por su primera ruta y el de invitar). */}
             {conInvita() && refPromoActiva() ? (<>
-              <p className="mt-0.5 text-[13.5px] leading-snug text-dark-200">💶 {tx('Gana {euros} con tu primera ruta real y {euros} por cada compañero que la use.', { euros: eurosRef(BONO_CENT, locale()) })}</p>
+              <p className="mt-0.5 text-[13.5px] leading-snug text-dark-200">💶 {tx('Gana {bono} con tu primera ruta real y {euros} por cada compañero que la use.', { bono: eurosRef(BONO_CENT, locale()), euros: eurosRef(refCentActual(), locale()) })}</p>
               <p className="mt-0.5 text-[11.5px] leading-snug text-dark-400">{tx('Promo hasta el {fecha}', { fecha: fechaRefPromo(locale()) })} · {tx('La primera ruta cuenta con 20 entregas en 2 días distintos.')}</p>
             </>) : conInvita() && <p className="mt-0.5 text-[13.5px] leading-snug text-dark-200">💶 {tx('Gana {euros} por cada compañero que la use.', { euros: eurosRef(refCentActual(), locale()) })}</p>}
           </div>

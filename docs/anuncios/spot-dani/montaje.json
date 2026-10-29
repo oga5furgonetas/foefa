@@ -1,0 +1,215 @@
+{
+ "voz": "voz-dani.flac",
+ "musicaPropia": false,
+ "inicioVoz": 1.7,
+ "fin": 32.18,
+ "ganancias": {
+  "whoosh": -18,
+  "ding": -19,
+  "subida": -14.3,
+  "pop": -23,
+  "bip": 7,
+  "musica": -8.9
+ },
+ "escenas": [
+  {
+   "id": "gancho",
+   "t0": 0,
+   "d": 1.9
+  },
+  {
+   "id": "pregunta1",
+   "t0": 1.6,
+   "d": 3.3
+  },
+  {
+   "id": "pregunta2",
+   "t0": 4.62,
+   "d": 3.46,
+   "vel": 1.25
+  },
+  {
+   "id": "interesa",
+   "t0": 7.78,
+   "d": 1.12
+  },
+  {
+   "id": "logo",
+   "t0": 8.86,
+   "d": 1.74
+  },
+  {
+   "id": "mapa1",
+   "t0": 10.3,
+   "d": 2.15,
+   "vel": 0.85
+  },
+  {
+   "id": "panel",
+   "t0": 12.15,
+   "d": 2.07
+  },
+  {
+   "id": "escanea",
+   "t0": 13.94,
+   "d": 3.44,
+   "vel": 1.704
+  },
+  {
+   "id": "ordenar",
+   "t0": 17.1,
+   "d": 2.94,
+   "vel": 1
+  },
+  {
+   "id": "zonas",
+   "t0": 19.78,
+   "d": 2.14,
+   "vel": 1
+  },
+  {
+   "id": "navega",
+   "t0": 21.62,
+   "d": 1.74,
+   "vel": 2.3
+  },
+  {
+   "id": "entregado",
+   "t0": 23.1,
+   "d": 2.2,
+   "vel": 1.242
+  },
+  {
+   "id": "cambio",
+   "t0": 24.94,
+   "d": 1.68
+  },
+  {
+   "id": "cierre",
+   "t0": 26.26,
+   "d": 5.92
+  }
+ ],
+ "efectos": [
+  {
+   "nombre": "whoosh",
+   "t": 1.54,
+   "g": -18
+  },
+  {
+   "nombre": "whoosh",
+   "t": 4.55,
+   "g": -18
+  },
+  {
+   "nombre": "whoosh",
+   "t": 7.72,
+   "g": -18
+  },
+  {
+   "nombre": "whoosh",
+   "t": 10.24,
+   "g": -18
+  },
+  {
+   "nombre": "whoosh",
+   "t": 12.09,
+   "g": -18
+  },
+  {
+   "nombre": "whoosh",
+   "t": 13.87,
+   "g": -18
+  },
+  {
+   "nombre": "whoosh",
+   "t": 17.03,
+   "g": -18
+  },
+  {
+   "nombre": "whoosh",
+   "t": 19.7,
+   "g": -18
+  },
+  {
+   "nombre": "whoosh",
+   "t": 21.56,
+   "g": -18
+  },
+  {
+   "nombre": "whoosh",
+   "t": 23.02,
+   "g": -18
+  },
+  {
+   "nombre": "whoosh",
+   "t": 24.91,
+   "g": -18
+  },
+  {
+   "nombre": "whoosh",
+   "t": 26.23,
+   "g": -18
+  },
+  {
+   "nombre": "pop",
+   "t": 15.882,
+   "g": -23
+  },
+  {
+   "nombre": "bip",
+   "t": 15.016,
+   "g": 7
+  },
+  {
+   "nombre": "bip",
+   "t": 16.803,
+   "g": 7
+  },
+  {
+   "nombre": "pop",
+   "t": 17.6,
+   "g": -23
+  },
+  {
+   "nombre": "pop",
+   "t": 20.23,
+   "g": -23
+  },
+  {
+   "nombre": "pop",
+   "t": 24.192,
+   "g": -23
+  },
+  {
+   "nombre": "pop",
+   "t": 0.12,
+   "g": -23
+  },
+  {
+   "nombre": "whoosh",
+   "t": 7.63,
+   "g": -18
+  },
+  {
+   "nombre": "ding",
+   "t": 24.645,
+   "g": -19
+  },
+  {
+   "nombre": "subida",
+   "t": 24.96,
+   "g": -14.3
+  },
+  {
+   "nombre": "pop",
+   "t": 30.11,
+   "g": -23
+  },
+  {
+   "nombre": "subida",
+   "t": 0.45,
+   "g": -14.3
+  }
+ ]
+}

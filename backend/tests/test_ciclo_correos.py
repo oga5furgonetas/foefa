@@ -511,7 +511,7 @@ async def test_el_correo_del_bono_sale_de_verdad(mundo):
     mundo.uso.update({"paradas": 2, "entregadas": 1, "entregadas_reales": 1})
     mundo.monkeypatch.setenv("CICLO_CORREOS", "1")
     assert await server.ciclo_correos_vuelta(a_las_11) == {"bono": 1}
-    assert mundo.enviados[-1].subject.startswith("10 € por tu primera ruta con ")
+    assert mundo.enviados[-1].subject.startswith(f"{server._BONO_CENT // 100} € por tu primera ruta con ")
     assert "bono" in next(o for o in mundo.g["organizations"].docs if o["id"] == "o7")["ciclo_correos"]
     assert await server.ciclo_correos_vuelta(a_las_11 + timedelta(hours=1)) == {}  # una sola vez
 
