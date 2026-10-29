@@ -1036,8 +1036,32 @@ nada, revísalo»), **fusionado en `main` (fast-forward hasta 9a0b95d), subido y
   winget (no había; las pruebas lo necesitan).
 - Capturas en `docs/capturas-29-10/` (web y emulador; `LEEME.md` dice cuál es cuál).
 
+## Última sesión — 29-10-2026 (noche, 5): revisión a fondo de la app del autónomo
+
+Dani: «utiliza toda la potencia para revisar la app… la de repartidor autónomo… sin falsos positivos». Hecho y
+entregado en **`docs/REVISION-APP-AUTONOMO-29-10.md`**, con 16 capturas de la app nativa en
+`docs/capturas-autonomo-29-10/` (emulador, compilación debug de esta sesión contra `servidor_pruebas.py`, cuenta
+`prueba@fds.test`). Se leyó la nativa entera (31 ficheros Kotlin), la web del autónomo (`MiRuta.jsx`, `Navegacion.jsx`,
+`RutaApp.jsx`, `RutaCuenta.jsx` y las pequeñas) y las rutas `/reparto/*`, `/billing/*`, `/referidos`, `/opinion` del
+servidor; cada hallazgo lleva captura o `fichero:línea`. Lo más gordo:
+- **En la nativa no se puede pagar**: el plan es solo texto (`Pestanas.kt:405-412`); cuando acabe la promoción (31-12)
+  el tope de 15 paradas no tendrá botón. El servidor ya está listo (`/billing/play/verificar`, productos
+  `repartidor_mensual`/`repartidor_anual`, Stripe).
+- De noche la cabecera dice «Acabas ≈ 09:24» sin «Sales a las 09:00» (`HoyPantalla.kt:291` ignora `salida`/`programada`).
+- La tarifa de «Mi dinero hoy» no se puede poner desde la app (sin `PUT /reparto/ganancias`).
+- 21 funciones de la web que faltan en la nativa (tabla en el informe), todas con el servidor listo: ficha con qué
+  lleva/horario/hueco, buscar, reordenar a mano, firma, historial con hora/prueba/semana/Excel, mapa con punto azul y
+  zonas, ver la puerta, cartera, contraseña, idea, aviso de la mañana, pegar lista, idiomas…
+- Propuesta en tres tandas (la 1 antes del 31-12), qué no hacer (traducir ahora, mercadillo, navegador propio antes
+  que el pago) y lo no verificado (productos en Play Console, aviso FCM de punta a punta, Navegar en móvil real).
+No se tocó código de la app ni del servidor en esta sesión: solo el informe, las capturas y este fichero.
+
 ## Pendiente (por prioridad)
 
+-8. **La app nativa del autónomo al nivel de la web antes del 31-12 (29-10 noche, 5)**: tanda 1 de
+   `docs/REVISION-APP-AUTONOMO-29-10.md` → pagar dentro de la app (Play Billing en la de Play, Stripe en la `.web`),
+   cabecera con «Sales a las» y retraso, tarifa de «Mi dinero hoy», ficha con qué lleva/horario/hueco, historial con
+   hora/prueba/semana/Excel, buscar, reordenar a mano y firma. Lo decide Dani.
 -7. **La 2.3.0 PUBLICADA en Google Play (29-10 23:42, producción, 178 países) y `APP_ANDROID_MIN="2.3.0"` PUESTA en Fly
    (30-10 01:00, desde el PC, Dani: «ponla tú»)**. Verificado en producción: `/api/health` ok; `/api/auth/app-login` con
    `X-FDS-App: android-2.2.5` → **426** con el aviso de actualizar; con `android-2.3.0` o sin cabecera → 401 normal. Todo
