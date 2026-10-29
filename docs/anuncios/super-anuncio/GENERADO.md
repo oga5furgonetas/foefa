@@ -154,3 +154,20 @@ las bloquea la política de red del entorno de esta sesión (todo lo que no sea 
 
 En git solo van los másteres que se suben (9:16 B y A, 4:5, 16:9 y el 9:16 del gancho «112»); el 1:1, los «sin voz» y las
 demás variantes del gancho se regeneran con `node scripts/montar-spot-ruta.mjs` (ver `salida/.gitignore`).
+
+## Para la sesión siguiente (con red y clave): la voz nueva de España y el mapa real
+
+Comprobado el 29-10 a las 14:20: la API de Gemini (`generativelanguage.googleapis.com`) SÍ se alcanza desde el
+entorno; lo que falta es `GEMINI_API_KEY` como secreto del entorno (la clave está en el PC de Dani en
+`C:\Users\Usuario\.flota-gemini.txt` y en Fly). Las teselas de OSM, Artlist y Bing siguen bloqueadas en ESTA
+sesión: si Dani ya añadió los dominios, la política se aplica al abrir una sesión nueva (no se recarga en caliente).
+Orden de trabajo para esa sesión:
+1. `cd frontend && npm ci && npx vite build && npx playwright test spot-ruta --project=escritorio --update-snapshots`
+   (con red, el mapa es el real de OSM; sin red, el callejero esquemático) y copiar `test-results/spot-ruta` fuera.
+2. Voz: copiar `scripts/spot-v5/voz_gemini.py` a `scripts/spot-ruta/voz_gemini.py`, poner en `FRASES` las 8 del
+   guion (`GUION.md` §4; la última con las dos variantes, B y A), salida en `docs/anuncios/super-anuncio/voces/<voz>/`,
+   y probar Puck, Achird y alguna más; `alinear.py` para los tiempos de palabra. Elegir de oído acento de España.
+3. En `scripts/montar-spot-ruta.mjs`: leer `voz.json` de esa carpeta, `INICIO` con 8 frases (gancho=1, escanea=2,
+   ordenar=3, mapa=4, navega=5, entregado=6, manana=7, cierre=8) y el gancho «112» con su frase 1.
+4. Si hay red a Artlist, bajar los 5 clips a `clips/plano-N.mp4` (enlaces arriba): el montaje los usa solos.
+5. `node scripts/montar-spot-ruta.mjs` y `GANCHO=25 …` y `GANCHO=112 …`; mirar fotogramas; subir (SUBIR.md).
