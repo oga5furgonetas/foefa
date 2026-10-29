@@ -661,6 +661,13 @@ Era una carrera de la propia prueba: pulsaba Ctrl+Z al ver salir la petición de
 la respuesta con el `cambio_id` (mandaba `c2` en vez de `c3`). Arreglada: espera a «Guardado: 4 celdas.», que sale
 en el mismo render que apila el id. Las 10 pruebas del Cuadrante, 3 veces con 4 workers en escritorio y móvil: 60 de 60.
 
+Más tarde, la misma sesión: **`docs/ESTUDIO_APP.md`**, el estudio de la app del repartidor que pidió Dani (qué es hoy,
+lo medido y dicho, diagnóstico, 41 propuestas por impacto y esfuerzo, reestructuración y plan por fases), hecho con
+tres lecturas completas (app nativa, servidor y portal web, notas). Dos arreglos que salieron de él ya están en
+`main`: el CI pasa la prueba de contrato app↔API (61 llamadas) en cada cambio, y «cambiar contraseña» contesta 400
+y no 401 con la actual errónea, porque la app cierra la sesión ante cualquier 401 y echaba al conductor que se
+equivocaba al teclearla (**pendiente de desplegar el backend**).
+
 Lo que NO se ha hecho: compilar la app Android aquí (`dl.google.com`, de donde sale el SDK, lo bloquea el proxy
 del contenedor); la 2.2.3 de la mañana sigue siendo la buena. Nada desplegado: el backend solo cambia en un test;
 la web sí tiene cambios visibles (las tres fichas de ayuda y los tres textos con color real), así que **toca
@@ -687,9 +694,11 @@ desplegar la web** la próxima vez desde el PC.
 
 ## Pendiente (por prioridad)
 
--4. **CI y web (29-10 tarde)**: ver en verde el run del CI de GitHub del commit de cierre; desplegar la web desde el
-   PC (fichas de ayuda y colores; el backend no cambia); decidir qué hacer con las cuatro rutas heredadas sin
-   consumidor (`SIN_UI_A_PROPOSITO` en `scripts/check-huerfanas.mjs`): engancharlas o borrarlas.
+-4. **Desplegar y decidir (29-10 tarde)**: desplegar el backend (el 400 de «cambiar contraseña», dd5a9d3) y la web
+   (fichas de ayuda y colores) desde el PC; leer `docs/ESTUDIO_APP.md` y decidir lo de su apartado 6 (público de los
+   anuncios, cómo se cobra en la app antes del 31-12, OSRM propio, Gemini de pago, las cuatro rutas heredadas).
+   La fase 0 del estudio (servidor: optimizador en un hilo, índices, borrado diario, rastro fuera) no necesita
+   recompilar la app.
 
 -3b. **Comprobado el 29-10 a las 13:15 (hora de Dani)**: `POST /auth/app-login` está en producción (contesta 422 sin
    cuerpo). El backend desplegado lleva el acceso unificado de la app; la 2.2.3 puede entrar contra producción.
