@@ -147,3 +147,6 @@ las bloquea la política de red del entorno de esta sesión (todo lo que no sea 
    Dani grabada (6-8 frases con el móvil). Con cualquiera de las tres, el montaje se rehace solo.
 3. **Los clips de Artlist** (gancho y cierre en vídeo en vez de fotograma): red a `cms-toolkit-artifacts.artlist.io`
    y `mcp.artlist.io`, o bajarlos a mano a `clips/plano-1.mp4` … `clips/plano-9.mp4`.
+
+En git solo van los másteres que se suben (9:16 B y A, 4:5, 16:9 y el 9:16 del gancho «112»); el 1:1, los «sin voz» y las
+demás variantes del gancho se regeneran con `node scripts/montar-spot-ruta.mjs` (ver `salida/.gitignore`).
