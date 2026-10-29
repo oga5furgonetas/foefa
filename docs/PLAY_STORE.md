@@ -178,6 +178,46 @@ por gRPC (`setPhysicalModel`: posición `-1.407 0.32 4.277`, giro `0 -150 0`). L
   reiniciar el móvil (`WAKE_LOCK`, `RECEIVE_BOOT_COMPLETED`). El servicio en primer plano de WorkManager se quita
   del manifiesto (no se usa).
 
+## Versión 2.2.5 (code 17): la app se actualiza sola, la cola no pierde entregas y lo de la fase 1 del estudio (29-10-2026, noche)
+
+Lo que pidió Dani: «que la app se actualice sola o les pida la actualización». Dos caminos, porque hay dos apps:
+- **La de Play** (`com.flotadsp.flota`): In-App Updates de Google Play (`app-update-ktx 2.1.0`,
+  `app-android/.../Actualizacion.kt`). Al abrir la app y cada vez que vuelve a primer plano pregunta a Play; si hay
+  versión nueva, Play enseña su diálogo, la descarga en segundo plano y FDS avisa abajo «Actualización descargada ·
+  Reiniciar». Si la versión se publica en Play Console con **prioridad 4 o 5** (en «Crear versión» → «Prioridad de
+  actualización in-app»), se actualiza a pantalla completa antes de dejar seguir. Solo funciona con la app instalada
+  desde Play (en la prueba abierta también) y con la versión nueva ya aprobada por Play.
+- **La de la web** (`com.flotadsp.flota.web`, el APK de `flotadsp.com/app`): Play no la conoce. Al abrirse pregunta
+  `GET /app/version` y, si el servidor anuncia una más nueva, avisa «Hay una versión nueva de FDS (2.2.5) ·
+  Descargar» y abre `flotadsp.com/app`. **El servidor solo lo anuncia si se le dice**: al subir el APK nuevo a la
+  web, `fly secrets set -a flota-backend APP_ANDROID_WEB="17 2.2.5"` (code y nombre de `build.gradle.kts`). Sin la
+  variable, nadie recibe el aviso: así nunca se manda a descargar una versión que aún no está en la web. Android no
+  deja instalar nada sin que la persona lo acepte, así que lo demás (descargar, «instalar») lo hace ella.
+
+El resto de la 2.2.5 (fase 1 de `docs/ESTUDIO_APP.md`): la cola sin cobertura reintenta en orden si el servidor
+contesta 5xx/408/429 y avisa si rechaza una entrega; «Volver a por entregar» pregunta antes; una parada cerrada no
+se edita; «He olvidado mi contraseña»; la sesión caducada se explica y la del conductor de empresa se renueva sola;
+paradas de otros días («Traer a hoy»), bono de bienvenida y «Hoy llevas X €» para quien reparte por su cuenta; «la
+última vez en esa puerta»; WhatsApp con hora estimada y enlace de seguimiento; foto de la entrega derecha (EXIF);
+mapa con el camino por las calles y sin recentrarse; en el portal del conductor, cerrar sesión con pregunta, vuelta
+al escáner tras revisar, teléfono precargado y navegador/tema en «Mi cuenta». Detalle en ESTADO.md (29-10 noche).
+
+**Compilarla** (PC de casa de Dani, como la 2.2.4; el CI de GitHub ya la compila en cada cambio de `main`, job «App
+Android», que es el primer aviso si algo no compila):
+
+```powershell
+cd C:\Users\dlvie\foefa\app-android
+git pull
+.\gradlew.bat :app:testDebugUnitTest :app:lintDebug
+.\gradlew.bat :app:bundleRelease                                   # app\build\outputs\bundle\release\app-release.aab
+.\gradlew.bat :app:assembleRelease -PsoloMoviles=arm64 -PparaWeb   # app\build\outputs\apk\release\app-release.apk
+```
+
+Probar el APK en el móvil antes de subir el AAB: entrar, una entrega con foto (sale derecha), «Volver a por
+entregar» (pregunta), «He olvidado mi contraseña» (dice que te manda el enlace), y en el portal del conductor cerrar
+sesión (pregunta). El aviso de actualización de la web se prueba poniendo en Fly `APP_ANDROID_WEB="99 9.9.9"` un
+momento (y quitándolo).
+
 ## Versión 2.2.4 (code 16): la pantalla de elegir contraseña dice por qué no deja seguir (29-10-2026, tarde)
 
 Dani probó la 2.2.3 en su móvil con un conductor de OGA5 y la contraseña temporal común de la plantilla: entró

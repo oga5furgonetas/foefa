@@ -11,6 +11,7 @@ import kotlinx.coroutines.withContext
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.builtins.ListSerializer
 import kotlinx.serialization.json.JsonElement
+import kotlinx.serialization.json.JsonNull
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.buildJsonArray
 import kotlinx.serialization.json.buildJsonObject
@@ -33,6 +34,10 @@ data class Pendiente(
     val estado: String,
     val cuerpo: JsonObject,
     val hechoEn: String,
+    /** Cómo se llama la parada, para decírselo a la persona si el servidor lo rechaza (29-10-2026). */
+    val nombre: String = "",
+    /** Veces que el servidor ha contestado mal (5xx): tras MAX_INTENTOS se avisa y se deja de insistir. */
+    val intentos: Int = 0,
 )
 
 @Serializable
@@ -50,6 +55,11 @@ class Repositorio(private val ctx: Context, val cuenta: Cuenta, val api: Api) {
 
     private val _pendientes = MutableStateFlow<List<Pendiente>>(emptyList())
     val pendientes: StateFlow<List<Pendiente>> = _pendientes
+    /** Lo que el servidor ha rechazado al vaciar la cola, para avisar (se vacía al leerlo). */
+    private val _rechazos = MutableStateFlow<List<String>>(emptyList())
+    fun tomarRechazos(): List<String> = _rechazos.value.also { _rechazos.value = emptyList() }
+    /** Una clave de sesión para la analítica anónima (muere con el proceso, como la pestaña en la web). */
+    private val sidAnalitica = java.util.UUID.randomUUID().toString().replace("-", "").take(24)
 
     /** Dónde reparte: el país de la SIM y, sin SIM, el de la red; el idioma del móvil, lo último. Un móvil en inglés
      *  con SIM española es de España: con el idioma, la cuenta salía de EE. UU. (visto en el emulador) y ni los
@@ -86,6 +96,26 @@ class Repositorio(private val ctx: Context, val cuenta: Cuenta, val api: Api) {
         api.post("auth/driver-lookup", buildJsonObject { put("email", correo.trim().lowercase(Locale.ROOT)) })
     }
 
+    /** «He olvidado mi contraseña» (29-10-2026): el servidor manda un enlace al correo de la cuenta si existe
+     *  (siempre contesta bien, sin decir si existe). Solo para cuentas de quien reparte por su cuenta; un conductor
+     *  de empresa entra con el código de su correo personal. */
+    suspend fun recuperarClave(correo: String) {
+        api.post("auth/forgot-password", buildJsonObject { put("email", correo.trim().lowercase(Locale.ROOT)) })
+    }
+
+    /** La versión que hay para descargar de la web, o null si el servidor no anuncia ninguna (público). */
+    suspend fun versionWeb(): VersionApp? =
+        api.get("app/version").jsonObject["web"]?.takeUnless { it is JsonNull }?.let { leer<VersionApp>(it) }
+
+    /** Una pantalla vista, para la analítica propia y anónima (la misma que la web): nunca falla hacia fuera. */
+    suspend fun vista(ruta: String) {
+        runCatching {
+            api.post("analitica/evento", buildJsonObject {
+                put("sid", sidAnalitica); put("tipo", "vista"); put("ruta", ruta); put("disp", "movil")
+            })
+        }
+    }
+
     suspend fun entrarConCodigoConductor(correo: String, codigo: String): Sesion {
         val s = leer<Sesion>(api.post("auth/driver-code/verify", buildJsonObject {
             put("email", correo.trim().lowercase(Locale.ROOT)); put("code", codigo.trim())
@@ -120,14 +150,18 @@ class Repositorio(private val ctx: Context, val cuenta: Cuenta, val api: Api) {
         cuenta.guardar(leer<Sesion>(r), c)
     }
 
-    /** La sesión dura un mes y se renueva al usar la app: quien reparte cada día no vuelve a entrar. */
+    /** La sesión dura un mes y se renueva al usar la app: quien reparte cada día no vuelve a entrar. Desde el
+     *  29-10-2026 también la del conductor de empresa (auth/renovar la renueva con su ficha, si sigue activa). */
     suspend fun renovarSiToca() {
-        // La renovación automática es para cuentas autónomas; los conductores de empresa
-        // usan su sesión del portal y no deben llamar al endpoint de administradores.
-        if (cuenta.destino.value != "reparto") return
+        val destino = cuenta.destino.value
+        if (destino != "reparto" && destino != "conductor") return
         val t = cuenta.token.value ?: return
         if (Cuenta.quedan(t) > 25L * 86400) return
-        runCatching { cuenta.guardar(leer<Sesion>(api.post("auth/renovar"))) }
+        runCatching {
+            val s = leer<Sesion>(api.post("auth/renovar"))
+            // La renovación no trae a qué portal va: se conserva el de la sesión que se renueva.
+            cuenta.guardar(if (s.app_destino == null) s.copy(app_destino = destino) else s)
+        }
     }
 
     suspend fun salir() {
@@ -223,30 +257,36 @@ class Repositorio(private val ctx: Context, val cuenta: Cuenta, val api: Api) {
         return r.copy(pedidos = r.pedidos.map { p -> ult[p.id]?.let { p.copy(estado = it.estado, cerradoEn = it.hechoEn) } ?: p })
     }
 
-    /** Entregado / no entregado. Sin red se guarda y se manda solo después: devuelve false en ese caso. */
-    suspend fun cambiarEstado(id: String, estado: String, cuerpo: JsonObject): Boolean {
+    /** Entregado / no entregado. Sin red (o con el servidor caído) se guarda y se manda solo después: devuelve
+     *  false en ese caso. Si ya hay algo de esa parada esperando a salir, esto va DETRÁS, en orden: mandarlo ahora
+     *  adelantaría al cambio anterior y el servidor acabaría con el estado viejo (29-10-2026). */
+    suspend fun cambiarEstado(id: String, estado: String, cuerpo: JsonObject, nombre: String = ""): Boolean {
         val hechoEn = Instant.now().toString()
         val todo = JsonObject(cuerpo + ("estado" to kotlinx.serialization.json.JsonPrimitive(estado)) +
             ("hecho_en" to kotlinx.serialization.json.JsonPrimitive(hechoEn)))
-        return try {
-            api.post("reparto/pedidos/$id/estado", todo)
-            true
-        } catch (e: ErrorApi) {
-            if (!e.sinRed) throw e
-            candado.withLock {
-                guardarCola(_pendientes.value + Pendiente(cuenta.quien(), id, estado, todo, hechoEn))
+        val yaEspera = _pendientes.value.any { it.quien == cuenta.quien() && it.id == id }
+        if (!yaEspera) {
+            try {
+                api.post("reparto/pedidos/$id/estado", todo)
+                return true
+            } catch (e: ErrorApi) {
+                if (!e.reintentable) throw e
             }
-            EnvioWorker.programar(ctx)
-            false
         }
+        candado.withLock {
+            guardarCola(_pendientes.value + Pendiente(cuenta.quien(), id, estado, todo, hechoEn, nombre))
+        }
+        EnvioWorker.programar(ctx)
+        return false
     }
 
-    /** Manda lo guardado sin red. Devuelve (enviados, rechazados por el servidor). */
+    /** Manda lo guardado sin red, en orden. Devuelve (enviados, rechazados por el servidor); los rechazos quedan
+     *  en `tomarRechazos()` para avisar a la persona. */
     suspend fun vaciarCola(): Pair<Int, Int> = candado.withLock {
         var enviados = 0
         var rechazados = 0
         val quedan = _pendientes.value.toMutableList()
-        val it = quedan.iterator()
+        val it = quedan.listIterator()
         while (it.hasNext()) {
             val p = it.next()
             if (p.quien != cuenta.quien()) continue
@@ -254,8 +294,15 @@ class Repositorio(private val ctx: Context, val cuenta: Cuenta, val api: Api) {
                 api.post("reparto/pedidos/${p.id}/estado", p.cuerpo)
                 enviados += 1
             } catch (e: ErrorApi) {
-                if (e.sinRed || e.estado == 401) break
-                rechazados += 1        // ya no existe o ya no es suya: no se reintenta
+                // Sin red o sesión caducada: se para y se sigue más tarde, en orden. Un servidor que contesta mal
+                // (5xx, 408, 429) también, pero contando: el que lo hace MAX_INTENTOS veces ya no es un apagón.
+                val contesta = e.estado >= 400 && e.estado != 401
+                if (e.estado == 401 || (e.reintentable && (!contesta || p.intentos < MAX_INTENTOS))) {
+                    if (contesta) { it.set(p.copy(intentos = p.intentos + 1)); guardarCola(quedan.toList()) }
+                    break
+                }
+                rechazados += 1        // ya no existe, ya no es suya, o el servidor no lo acepta: se avisa y fuera
+                _rechazos.value = _rechazos.value + "No se ha podido guardar ${p.nombre.ifBlank { "una parada" }}: ${e.message}"
             }
             it.remove()
             guardarCola(quedan.toList())
@@ -274,6 +321,13 @@ class Repositorio(private val ctx: Context, val cuenta: Cuenta, val api: Api) {
 
     suspend fun ordenar(lat: Double?, lng: Double?): Ordenado = leer(
         api.post("reparto/mi-ruta/ordenar", buildJsonObject { if (lat != null && lng != null) { put("lat", lat); put("lng", lng) } }))
+
+    /** Las paradas de días anteriores sin cerrar pasan a hoy (solo quien reparte por su cuenta). Devuelve cuántas. */
+    suspend fun traerPrevias(): Int = api.post("reparto/mi-ruta/traer-previas").jsonObject["traidas"]?.jsonPrimitive?.intOrNull ?: 0
+
+    /** El camino por las calles de lo que queda, para el mapa: [[lat, lng], …] (recto si no hay servidor de rutas). */
+    suspend fun trazado(lat: Double?, lng: Double?): Trazado = leer(
+        api.post("reparto/mi-ruta/trazado", buildJsonObject { if (lat != null && lng != null) put("desde", buildJsonObject { put("lat", lat); put("lng", lng) }) }))
 
     suspend fun ordenAMano(ids: List<String>) {
         api.post("reparto/mi-ruta/orden", buildJsonObject {
@@ -322,5 +376,7 @@ class Repositorio(private val ctx: Context, val cuenta: Cuenta, val api: Api) {
 
     companion object {
         fun hoy(): String = java.time.LocalDate.now().toString()
+        /** Reintentos de un envío que el servidor contesta mal (5xx) antes de darlo por rechazado y avisar. */
+        const val MAX_INTENTOS = 12
     }
 }

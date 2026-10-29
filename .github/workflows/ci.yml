@@ -128,8 +128,27 @@ jobs:
       # acceso unificado y destino, turnos, trabajar más, auditoría, referidos, cuenta, y la ruta del autónomo.
       # Hasta el 29-10-2026 esto solo se pasaba a mano en el PC: un cambio en una ruta podía dejar la app de Play
       # sin entrar y el CI en verde.
-      - name: Contrato app Android ↔ API (las 61 llamadas de FDS contra el servidor real en memoria)
+      - name: Contrato app Android ↔ API (las llamadas de FDS contra el servidor real en memoria)
         run: |
           python app-android/pruebas/servidor_pruebas.py > servidor_pruebas.log 2>&1 &
           for i in $(seq 1 60); do curl -sf http://127.0.0.1:8787/api/health > /dev/null && break; sleep 1; done
           python app-android/pruebas/api_conductor.py || { tail -20 servidor_pruebas.log; exit 1; }
+
+  android:
+    name: App Android (compila y pasa sus tests unitarios)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: gradle/actions/setup-gradle@v4
+      # Hasta el 29-10-2026 la app solo se compilaba en el PC de Dani: un cambio en Kotlin que no compilaba no lo
+      # paraba nadie hasta el siguiente `gradlew`. Aquí se compila la variante de depuración (sin la clave de
+      # firma, que no está en el repositorio) y se pasan los tests unitarios (LectorEtiquetaTest).
+      - name: Compilar la app y pasar sus tests unitarios
+        working-directory: app-android
+        run: |
+          chmod +x gradlew
+          ./gradlew --no-daemon --console=plain :app:testDebugUnitTest :app:assembleDebug

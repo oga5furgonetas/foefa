@@ -71,15 +71,15 @@ import java.time.format.DateTimeFormatter
 /* ENTRAR O CREAR LA CUENTA: lo primero que ve quien instala FDS. Nada de portada web: el logo, qué hace la app
    en una frase, y entrar. */
 @Composable
-fun Acceso(ref: String?, alAbrirPortal: (Sesion) -> Unit) {
+fun Acceso(ref: String?, alAbrirPortal: (Sesion) -> Unit, aviso: String? = null) {
     val app = LocalContext.current.applicationContext as FdsApp
     var paso by rememberSaveable { mutableStateOf("inicio") }
     // La oferta, la misma que dicen la web y los anuncios (Spotify: «sin tarjeta y sin límite hasta fin de año»).
     val oferta by produceState<Oferta?>(null) { value = runCatching { app.repo.oferta() }.getOrNull() }
     when (paso) {
-        "entrar" -> Entrar(alVolver = { paso = "inicio" }, alAbrirPortal = alAbrirPortal)
+        "entrar" -> Entrar(aviso, alVolver = { paso = "inicio" }, alAbrirPortal = alAbrirPortal)
         "alta" -> Alta(ref, oferta, alVolver = { paso = "inicio" })
-        else -> Inicio(oferta, alEntrar = { paso = "entrar" }, alCrear = { paso = "alta" })
+        else -> Inicio(oferta, aviso, alEntrar = { paso = "entrar" }, alCrear = { paso = "alta" })
     }
 }
 
@@ -99,10 +99,22 @@ private fun Logo(tam: Int = 72) {
     Image(painterResource(R.drawable.logo), contentDescription = "FDS", modifier = Modifier.size(tam.dp).clip(RoundedCornerShape((tam / 4.5).dp)))
 }
 
+/** Un aviso arriba (la sesión ha caducado, por ejemplo), para que se entienda por qué se está otra vez aquí. */
 @Composable
-private fun Inicio(oferta: Oferta?, alEntrar: () -> Unit, alCrear: () -> Unit) {
+private fun Aviso(texto: String?) {
+    if (texto == null) return
+    Surface(color = MaterialTheme.colorScheme.secondaryContainer, contentColor = MaterialTheme.colorScheme.onSecondaryContainer,
+        shape = MaterialTheme.shapes.small, modifier = Modifier.fillMaxWidth()) {
+        Text(texto, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp))
+    }
+    Spacer(Modifier.height(16.dp))
+}
+
+@Composable
+private fun Inicio(oferta: Oferta?, aviso: String?, alEntrar: () -> Unit, alCrear: () -> Unit) {
     Column(Modifier.fillMaxSize().statusBarsPadding().navigationBarsPadding().padding(24.dp)) {
         Spacer(Modifier.weight(1f))
+        Aviso(aviso)
         Logo()
         Spacer(Modifier.height(24.dp))
         Text("Tu ruta de reparto, ordenada sola.", style = MaterialTheme.typography.headlineMedium)
@@ -168,7 +180,7 @@ internal fun CampoClave(valor: String, alCambiar: (String) -> Unit, etiqueta: St
 }
 
 @Composable
-private fun Entrar(alVolver: () -> Unit, alAbrirPortal: (Sesion) -> Unit) {
+private fun Entrar(aviso: String?, alVolver: () -> Unit, alAbrirPortal: (Sesion) -> Unit) {
     val ctx = LocalContext.current
     val repo = (ctx.applicationContext as FdsApp).repo
     val ambito = rememberCoroutineScope()
@@ -177,8 +189,13 @@ private fun Entrar(alVolver: () -> Unit, alAbrirPortal: (Sesion) -> Unit) {
     var error by remember { mutableStateOf<String?>(null) }
     var trabajando by remember { mutableStateOf(false) }
     var codigoVisible by rememberSaveable { mutableStateOf(false) }
+    var recuperarVisible by rememberSaveable { mutableStateOf(false) }
     if (codigoVisible) {
         CodigoConductorNativo(alVolver = { codigoVisible = false }, alAbrirPortal = alAbrirPortal)
+        return
+    }
+    if (recuperarVisible) {
+        RecuperarClave(correo, alVolver = { recuperarVisible = false }, alCodigo = { recuperarVisible = false; codigoVisible = true })
         return
     }
     val entrar = {
@@ -198,6 +215,7 @@ private fun Entrar(alVolver: () -> Unit, alAbrirPortal: (Sesion) -> Unit) {
     }
     Column(Modifier.fillMaxSize().statusBarsPadding().imePadding().verticalScroll(rememberScrollState()).padding(horizontal = 24.dp, vertical = 8.dp)) {
         Cabecera("Entrar", alVolver)
+        Aviso(aviso)
         OutlinedTextField(correo, { correo = it }, label = { Text("Correo o usuario") }, singleLine = true, modifier = Modifier.fillMaxWidth(),
             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Email, imeAction = ImeAction.Next))
         Spacer(Modifier.height(12.dp))
@@ -210,6 +228,52 @@ private fun Entrar(alVolver: () -> Unit, alAbrirPortal: (Sesion) -> Unit) {
         TextButton(onClick = { codigoVisible = true }, modifier = Modifier.align(Alignment.CenterHorizontally)) {
             Text("Entrar con un código en mi correo personal")
         }
+        TextButton(onClick = { recuperarVisible = true }, modifier = Modifier.align(Alignment.CenterHorizontally)) {
+            Text("He olvidado mi contraseña")
+        }
+    }
+}
+
+/** «He olvidado mi contraseña» (29-10-2026). Quien reparte por su cuenta recibe un enlace en su correo; a un
+ *  conductor de empresa su contraseña se la pone la oficina, y entra con el código de su correo personal. */
+@Composable
+private fun RecuperarClave(correoInicial: String, alVolver: () -> Unit, alCodigo: () -> Unit) {
+    val app = LocalContext.current.applicationContext as FdsApp
+    val ambito = rememberCoroutineScope()
+    var correo by rememberSaveable { mutableStateOf(correoInicial) }
+    var enviado by rememberSaveable { mutableStateOf(false) }
+    var error by remember { mutableStateOf<String?>(null) }
+    var trabajando by remember { mutableStateOf(false) }
+    val valido = Regex("^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$").matches(correo.trim())
+    Column(Modifier.fillMaxSize().statusBarsPadding().imePadding().verticalScroll(rememberScrollState()).padding(horizontal = 24.dp, vertical = 8.dp)) {
+        Cabecera("Recuperar la contraseña", alVolver)
+        if (enviado) {
+            Text("Si ${correo.trim()} tiene una cuenta de repartidor, te hemos mandado un enlace para crear una contraseña nueva. Mira también el spam.",
+                style = MaterialTheme.typography.bodyLarge)
+            Spacer(Modifier.height(20.dp))
+            Button(onClick = alVolver, modifier = Modifier.fillMaxWidth().height(56.dp)) { Text("Volver a entrar") }
+        } else {
+            Text("Escribe el correo de tu cuenta y te mandamos un enlace para crear una contraseña nueva.", style = MaterialTheme.typography.bodyLarge)
+            Spacer(Modifier.height(14.dp))
+            OutlinedTextField(correo, { correo = it; error = null }, label = { Text("Tu correo") }, singleLine = true, modifier = Modifier.fillMaxWidth(),
+                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Email, imeAction = ImeAction.Done))
+            error?.let { Spacer(Modifier.height(10.dp)); Text(it, color = MaterialTheme.colorScheme.error) }
+            Spacer(Modifier.height(20.dp))
+            Button(onClick = {
+                trabajando = true; error = null
+                ambito.launch {
+                    try { app.repo.recuperarClave(correo); enviado = true } catch (e: ErrorApi) {
+                        error = if (e.sinRed) "Sin conexión. Revisa la red y vuelve a intentarlo." else e.message
+                    } finally { trabajando = false }
+                }
+            }, enabled = !trabajando && valido, modifier = Modifier.fillMaxWidth().height(56.dp)) {
+                if (trabajando) CircularProgressIndicator(Modifier.size(22.dp), strokeWidth = 2.dp, color = MaterialTheme.colorScheme.onPrimary) else Text("Mandarme el enlace")
+            }
+        }
+        Spacer(Modifier.height(16.dp))
+        Text("¿Eres conductor de una empresa? Tu contraseña te la da la oficina. Si vinculaste tu correo personal, puedes entrar con un código.",
+            style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        TextButton(onClick = alCodigo, modifier = Modifier.align(Alignment.CenterHorizontally)) { Text("Entrar con un código en mi correo personal") }
     }
 }
 

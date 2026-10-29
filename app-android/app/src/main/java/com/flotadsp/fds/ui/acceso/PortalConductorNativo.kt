@@ -23,6 +23,7 @@ import androidx.compose.material.icons.filled.MailOutline
 import androidx.compose.material.icons.filled.Phone
 import androidx.compose.material.icons.filled.Route
 import androidx.compose.material.icons.filled.Logout
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -32,6 +33,9 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SegmentedButton
+import androidx.compose.material3.SegmentedButtonDefaults
+import androidx.compose.material3.SingleChoiceSegmentedButtonRow
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
@@ -71,6 +75,18 @@ fun PortalConductorNativo(alCerrar: () -> Unit) {
     val obligatoria by app.cuenta.configurarCuenta.collectAsState()
     var pantalla by rememberSaveable { mutableStateOf("inicio") }
     var aviso by rememberSaveable { mutableStateOf<String?>(null) }
+    // Cerrar sesión pregunta antes (29-10-2026): el icono está arriba a la derecha y un toque de más dejaba al
+    // conductor fuera, a escribir otra vez la contraseña que a lo mejor no se sabe.
+    var confirmarSalir by remember { mutableStateOf(false) }
+    val salir = { confirmarSalir = true }
+    LaunchedEffect(pantalla) { app.repo.vista("/conductor/p/$pantalla") }
+    if (confirmarSalir) AlertDialog(
+        onDismissRequest = { confirmarSalir = false },
+        title = { Text("¿Cerrar sesión?") },
+        text = { Text("Para volver a entrar necesitarás tu correo y tu contraseña.") },
+        confirmButton = { TextButton(onClick = { confirmarSalir = false; alCerrar() }) { Text("Cerrar sesión") } },
+        dismissButton = { TextButton(onClick = { confirmarSalir = false }) { Text("Seguir dentro") } },
+    )
 
     if (obligatoria) {
         CambiarClaveConductor(obligatoria = true, alVolver = {}, alGuardada = {
@@ -100,7 +116,7 @@ fun PortalConductorNativo(alCerrar: () -> Unit) {
             alCambiarClave = { pantalla = "clave" },
             alCorreo = { pantalla = "correo" },
             alTelefono = { pantalla = "telefono" },
-            alCerrar = alCerrar,
+            alCerrar = salir,
         )
         else -> {
             val vm: RutaVM = viewModel()
@@ -113,7 +129,7 @@ fun PortalConductorNativo(alCerrar: () -> Unit) {
                 alExtras = { pantalla = "extras" },
                 alReferidos = { pantalla = "referidos" },
                 alCuenta = { pantalla = "cuenta" },
-                alCerrar = alCerrar,
+                alCerrar = salir,
                 aviso = aviso,
             )
         }
@@ -239,7 +255,9 @@ private fun AccesoConductorCard(icono: androidx.compose.ui.graphics.vector.Image
 
 private sealed interface CapaRutaConductor {
     data class Escaner(val vuelta: VueltaDeRevisar? = null) : CapaRutaConductor
-    data class Ficha(val inicial: Lectura? = null, val editar: Parada? = null) : CapaRutaConductor
+    /** `desdeEscaner`: al cerrar la ficha se vuelve al escáner, que sigue con el mismo escaneo (como en la cuenta
+     *  de reparto; hasta el 29-10-2026 el conductor de empresa caía en «Hoy» y tenía que volver a abrirlo). */
+    data class Ficha(val inicial: Lectura? = null, val editar: Parada? = null, val desdeEscaner: Boolean = false) : CapaRutaConductor
 }
 
 @Composable
@@ -259,14 +277,18 @@ private fun RutaConductorNativa(vm: RutaVM, alVolver: () -> Unit) {
             pais = pais,
             vuelta = actual.vuelta,
             alCerrar = { cambios -> capa = null; if (cambios) vm.refrescarSinRuido() },
-            alRevisar = { lectura -> capa = CapaRutaConductor.Ficha(inicial = lectura) },
+            alRevisar = { lectura -> capa = CapaRutaConductor.Ficha(inicial = lectura, desdeEscaner = true) },
         )
         is CapaRutaConductor.Ficha -> FichaParada(
             pais = pais,
             cerca = cerca,
             inicial = actual.inicial,
             editar = actual.editar,
-            alCerrar = { guardada -> if (guardada) vm.refrescarSinRuido(); capa = null },
+            alCerrar = { guardada ->
+                if (guardada) vm.refrescarSinRuido()
+                if (guardada && !actual.desdeEscaner) vm.avisar(if (actual.editar != null) "Cambios guardados." else "Añadida a tu ruta.")
+                capa = if (actual.desdeEscaner) CapaRutaConductor.Escaner(VueltaDeRevisar(guardada)) else null
+            },
         )
         null -> HoyPantalla(
             vm = vm,
@@ -281,15 +303,36 @@ private fun RutaConductorNativa(vm: RutaVM, alVolver: () -> Unit) {
 @Composable
 private fun CuentaConductorNativa(alVolver: () -> Unit, alCambiarClave: () -> Unit,
                                   alCorreo: () -> Unit, alTelefono: () -> Unit, alCerrar: () -> Unit) {
+    val app = LocalContext.current.applicationContext as FdsApp
+    val ambito = rememberCoroutineScope()
+    val navegar by app.cuenta.navegar.collectAsState()
+    val tema by app.cuenta.tema.collectAsState()
     Scaffold(topBar = { TopAppBar(
         title = { Text("Mi cuenta") },
         navigationIcon = { IconButton(onClick = alVolver) { Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Volver") } },
     ) }) { inset ->
-        Column(Modifier.fillMaxSize().padding(inset).padding(20.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        Column(Modifier.fillMaxSize().padding(inset).verticalScroll(rememberScrollState()).padding(20.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
             AccesoConductorCard(Icons.Default.Lock, "Cambiar contraseña", "Solo tú conoces tu contraseña", alCambiarClave)
             AccesoConductorCard(Icons.Default.MailOutline, "Correo personal de recuperación", "Recibe ahí la verificación de tu cuenta", alCorreo)
             AccesoConductorCard(Icons.Default.Phone, "Teléfono de contacto", "La oficina puede localizarte si hay una incidencia", alTelefono)
-            Spacer(Modifier.weight(1f))
+            // Los mismos ajustes que tiene la cuenta de reparto (29-10-2026): el conductor de empresa con «Mi ruta»
+            // también navega, y el tema es del móvil, no de la cuenta.
+            Spacer(Modifier.height(8.dp))
+            Text("Navegar con", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            SingleChoiceSegmentedButtonRow(Modifier.fillMaxWidth()) {
+                listOf("google" to "Google Maps", "waze" to "Waze").forEachIndexed { i, (k, t) ->
+                    SegmentedButton(selected = navegar == k, onClick = { ambito.launch { app.cuenta.elegirNavegador(k) } },
+                        shape = SegmentedButtonDefaults.itemShape(i, 2)) { Text(t) }
+                }
+            }
+            Text("Aspecto", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            SingleChoiceSegmentedButtonRow(Modifier.fillMaxWidth()) {
+                listOf("sistema" to "Automático", "claro" to "Claro", "oscuro" to "Oscuro").forEachIndexed { i, (k, t) ->
+                    SegmentedButton(selected = tema == k, onClick = { ambito.launch { app.cuenta.elegirTema(k) } },
+                        shape = SegmentedButtonDefaults.itemShape(i, 3)) { Text(t) }
+                }
+            }
+            Spacer(Modifier.height(16.dp))
             TextButton(onClick = alCerrar, modifier = Modifier.fillMaxWidth()) { Text("Cerrar sesión") }
         }
     }
@@ -302,6 +345,12 @@ private fun TelefonoConductorNativo(alVolver: () -> Unit, alGuardado: () -> Unit
     var telefono by rememberSaveable { mutableStateOf("") }
     var error by remember { mutableStateOf<String?>(null) }
     var guardando by remember { mutableStateOf(false) }
+    // El que ya tiene en su ficha, para corregirlo y no escribirlo de cero (29-10-2026).
+    LaunchedEffect(Unit) {
+        if (telefono.isBlank()) runCatching { app.repo.fichaConductor() }.onSuccess { f ->
+            telefono = (f["telefono"] ?: f["phone"])?.jsonPrimitive?.contentOrNull.orEmpty()
+        }
+    }
     Scaffold(topBar = { TopAppBar(
         title = { Text("Teléfono de contacto") },
         navigationIcon = { IconButton(onClick = alVolver) { Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Volver") } },

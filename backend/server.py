@@ -5673,6 +5673,24 @@ async def change_plan(data: dict = Body(...), user: dict = Depends(require_admin
 # Se activa poniendo los secretos en Fly: LS_WEBHOOK_SECRET y las URLs de checkout
 # LS_CHECKOUT_STARTER / LS_CHECKOUT_PRO / LS_CHECKOUT_FLOTA.
 
+# LA VERSIÓN DE LA APP QUE SE DESCARGA DE LA WEB (29-10-2026). La app instalada fuera de Play (paquete
+# com.flotadsp.flota.web) no tiene tienda que la actualice: pregunta aquí al abrirse. La de Play se actualiza con
+# la propia tienda (In-App Updates, app-android/.../Actualizacion.kt). Se pone a mano al subir el APK nuevo a la web:
+#   fly secrets set -a flota-backend APP_ANDROID_WEB="17 2.2.5"    (code y nombre, los de build.gradle.kts)
+# Sin la variable no se avisa a nadie: nunca se manda a descargar una versión que aún no está en la web.
+def _app_android_web() -> Optional[dict]:
+    v = (os.environ.get("APP_ANDROID_WEB") or "").split()
+    if len(v) != 2 or not v[0].isdigit() or not re.fullmatch(r"[0-9][0-9.]{0,15}", v[1]):
+        return None
+    return {"code": int(v[0]), "nombre": v[1]}
+
+
+@api_router.get("/app/version")
+async def app_version():
+    """Público: la app de Android lo pregunta al abrirse. `web` es la que hay para descargar de la web, o null."""
+    return {"web": _app_android_web()}
+
+
 @api_router.get("/billing/planes")
 async def billing_planes():
     """Tarifas vigentes. PUBLICO: lo lee la página de precios, que no tiene sesión.
@@ -6998,7 +7016,21 @@ def _sesion_propia_de_admin(user: dict) -> bool:
 async def renovar_sesion(user: dict = Depends(get_current_user)):
     """LA APP DE ANDROID NO TE ECHA (25-10-2026). La app nativa del repartidor renueva su sesión al usarla, como
     cualquier app: quien reparte cada día no vuelve a escribir su contraseña. Solo cuentas de quien reparte por
-    su cuenta (una persona); se vuelve a leer el usuario, así que una cuenta desactivada no se renueva."""
+    su cuenta (una persona) y, desde el 29-10-2026, la del conductor de empresa; se vuelve a leer el usuario, así
+    que una cuenta desactivada no se renueva."""
+    if user.get("role") == "driver" and not user.get("demo") and not user.get("imp"):
+        # El conductor de empresa (29-10-2026): la misma sesión que le dio app-login, mientras su cuenta y su
+        # ficha sigan activas (se vuelven a leer, como con el autónomo). Antes solo se renovaba la del autónomo y
+        # el conductor volvía a escribir la contraseña cada 30 días.
+        cuenta = await db.driver_accounts.find_one({"driver_id": user.get("sub")}, {"_id": 0})
+        d = await db.drivers.find_one({"id": user.get("sub")}, {"_id": 0, "id": 1, "name": 1, "center": 1, "active": 1})
+        if not cuenta or not cuenta.get("active", True) or not d or d.get("active") is False:
+            raise HTTPException(401, "Tu sesión ha caducado: entra otra vez")
+        org = await get_org(user.get("org_id")) if user.get("org_id") else None
+        token = create_token(d["id"], "driver", d.get("name") or "", org_id=(org or {}).get("id"),
+                             db_name=_tenant_db_name(org), account_type=(org or {}).get("account_type"))
+        return TokenResponse(access_token=token, role="driver", name=d.get("name") or "", id=d["id"], center=d.get("center"),
+                             configurar_cuenta=bool(cuenta.get("must_change_password") or cuenta.get("creada_en_bloque")))
     if not _sesion_propia_de_admin(user):
         raise HTTPException(403, "Esta sesión no se renueva: entra otra vez con tu correo")
     adm = await global_db.admin_users.find_one({"id": user.get("sub")}, {"_id": 0})

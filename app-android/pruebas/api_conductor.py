@@ -210,6 +210,19 @@ def main():
     r = c.get("/reparto/mi-ruta")
     ok(r.status_code == 200 and "activo" in r.json(), f"mi-ruta contesta ({r.status_code}): activo={r.json().get('activo')}")
 
+    print("La sesión del conductor se renueva sola (auth/renovar, 29-10-2026) y la analítica acepta una vista de la app")
+    r = c.post("/auth/renovar")
+    d = r.json() if r.status_code == 200 else {}
+    ok(r.status_code == 200 and d.get("access_token") and d.get("role") == "driver" and d.get("id") == driver_id,
+       f"renovar -> token nuevo del mismo conductor ({r.status_code})")
+    r = c.post("/analitica/evento", json={"sid": "pruebaandroid0001", "tipo": "vista", "ruta": "/conductor/p/inicio", "disp": "movil"},
+               headers={"User-Agent": "FDS-Android/prueba (Android 14)"})
+    ok(r.status_code == 200 and r.json().get("ok") is True, f"analitica/evento ok ({r.status_code}: {r.text[:80]})")
+    r = c.post("/auth/forgot-password", json={"email": "nadie-en-absoluto@fds.test"})
+    ok(r.status_code == 200 and r.json().get("success") is True, f"forgot-password contesta bien sin decir si existe ({r.status_code})")
+    r = c.get("/app/version")
+    ok(r.status_code == 200 and "web" in r.json(), f"app/version trae web (la instalada fuera de Play pregunta aquí) ({r.status_code})")
+
     print("El autónomo (lo de siempre): app-login -> reparto, mi-ruta con sus paradas, renovar")
     c.headers.pop("Authorization", None)
     r = c.post("/auth/app-login", json={"identifier": AUTONOMO[0], "password": AUTONOMO[1]})
@@ -219,8 +232,37 @@ def main():
     d = c.get("/reparto/mi-ruta").json()
     ok(bool(d.get("activo")) and len(d.get("pedidos", [])) == 4, f"mi-ruta: {len(d.get('pedidos', []))} paradas")
     ok(all(k in d["pedidos"][0] for k in ("id", "direccion", "estado", "lat", "lng")), "cada parada trae id, direccion, estado, lat, lng")
+    ok(all(k in d for k in ("bono", "previas", "ganancias", "jornada")), "mi-ruta trae bono, previas, ganancias y jornada (los lee la 2.2.5)")
+    ok(isinstance(d.get("previas"), int) and isinstance(d.get("ganancias"), dict) and "pago_parada" in d["ganancias"],
+       f"previas es un número y ganancias trae pago_parada ({d.get('previas')}, {d.get('ganancias')})")
     r = c.post("/auth/renovar")
     ok(r.status_code == 200 and r.json().get("access_token"), "auth/renovar devuelve token")
+
+    print("Una parada de principio a fin, como la hace la app: escanear, crear, entregar, deshacer, quitar")
+    r = c.post("/reparto/escanear", json={"codigos": ["FDSPRUEBA00000001"]})
+    ok(r.status_code == 200 and r.json().get("encontrado") is False, f"escanear un código que no está -> encontrado false ({r.status_code})")
+    r = c.post("/reparto/mis-pedidos", json={"direccion": "Rúa Real 5, 15003 A Coruña", "cliente": "Prueba PC", "telefono": "612345678",
+                                             "bultos": 1, "tipo": "entrega", "prioridad": False, "cobrar": "", "notas": ""})
+    ok(r.status_code == 200 and r.json().get("id"), f"mis-pedidos crea la parada ({r.status_code}: {r.text[:100]})")
+    pid = r.json().get("id", "")
+    r = c.post("/reparto/escanear", json={"codigos": ["FDSPRUEBA00000001"]})
+    ok(r.status_code == 200, f"escanear otra vez contesta ({r.status_code})")
+    hecho = "2026-01-01T00:00:00Z"   # fuera de las últimas 12 h: el servidor pone la hora de ahora, no revienta
+    r = c.post(f"/reparto/pedidos/{pid}/estado", json={"estado": "entregado", "hecho_en": hecho, "donde": "porteria", "nota": "prueba"})
+    ok(r.status_code == 200 and r.json().get("estado") == "entregado" and r.json().get("cerrado_en"), f"entregado con hecho_en ({r.status_code}: {r.text[:100]})")
+    r = c.post(f"/reparto/pedidos/{pid}/estado", json={"estado": "pendiente"})
+    ok(r.status_code == 200 and r.json().get("estado") == "pendiente", f"deshacer -> pendiente ({r.status_code})")
+    r = c.post(f"/reparto/pedidos/{pid}/estado", json={"estado": "fallido", "motivo": "No había nadie", "nota": ""})
+    ok(r.status_code == 200 and r.json().get("motivo") == "No había nadie", f"no entregado con motivo ({r.status_code})")
+    r = c.post(f"/reparto/mis-pedidos/{pid}/editar", json={"cliente": "Otro"})
+    ok(r.status_code == 409, f"editar una parada cerrada -> 409 (la app ya no lo ofrece) ({r.status_code})")
+    r = c.post(f"/reparto/pedidos/{pid}/estado", json={"estado": "pendiente"})
+    r = c.post(f"/reparto/mis-pedidos/{pid}/quitar")
+    ok(r.status_code == 200, f"quitar la parada ({r.status_code})")
+    r = c.post("/reparto/mi-ruta/trazado", json={})
+    ok(r.status_code == 200 and "linea" in r.json(), f"trazado trae linea ({r.status_code})")
+    r = c.post("/reparto/mi-ruta/traer-previas")
+    ok(r.status_code == 200 and isinstance(r.json().get("traidas"), int), f"traer-previas contesta traidas ({r.status_code})")
     r = c.get("/billing/planes")
     ok(r.status_code == 200 and any(p.get("clave") == "autonomo" for p in r.json().get("planes", [])), "billing/planes trae el plan autonomo")
     r = c.get("/org/billing")

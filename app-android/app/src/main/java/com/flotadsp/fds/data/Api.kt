@@ -37,7 +37,11 @@ val JSON = Json {
 }
 
 /** Un fallo del servidor con su mensaje para la persona (el `detail` de FastAPI), o sin red (`sinRed`). */
-class ErrorApi(val estado: Int, mensaje: String, val sinRed: Boolean = false) : Exception(mensaje)
+class ErrorApi(val estado: Int, mensaje: String, val sinRed: Boolean = false) : Exception(mensaje) {
+    /** Merece volver a intentarlo más tarde, en orden: sin red, o el servidor caído o saturado (5xx, 408, 429).
+     *  Hasta el 29-10-2026 un 500 del servidor tiraba la entrega guardada en el móvil sin avisar. */
+    val reintentable: Boolean get() = sinRed || estado == 408 || estado == 429 || estado in 500..599
+}
 
 /** Lo que manda el servidor, como modelo de la app. Si no encaja (un servidor más nuevo que la app), un ErrorApi que
  *  la pantalla enseña, no una excepción sin capturar que cierra la app. */
@@ -97,6 +101,8 @@ class Api(
         token()?.let { b.header("Authorization", "Bearer $it") }
         b.header("Accept", "application/json")
         b.header("X-FDS-App", "android-${BuildConfig.VERSION_NAME}")
+        // El sistema sale del User-Agent en el servidor (analítica: cuántos vienen de Android); el de OkHttp no lo dice.
+        b.header("User-Agent", "FDS-Android/${BuildConfig.VERSION_NAME} (Android ${android.os.Build.VERSION.RELEASE})")
         val r = try {
             http.newCall(b.build()).ejecutar()
         } catch (e: IOException) {

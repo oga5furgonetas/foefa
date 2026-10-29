@@ -57,7 +57,7 @@ async def test_renovar_solo_el_autonomo_y_con_la_cuenta_activa(base):
     assert r.id == "u1" and 29 < _dias(r.access_token) <= 30
     # La de una empresa, «entrar como» o una demo, no.
     jefe = _claims((await server._sesion_de_admin(await base["admin_users"].find_one({"id": "u2"}, {"_id": 0}))).access_token)
-    for u in (jefe, {**ana, "imp": True}, {**ana, "demo": True}, {**ana, "role": "driver"}):
+    for u in (jefe, {**ana, "imp": True}, {**ana, "demo": True}):
         with pytest.raises(HTTPException) as e:
             await server.renovar_sesion(u)
         assert e.value.status_code == 403
@@ -65,6 +65,29 @@ async def test_renovar_solo_el_autonomo_y_con_la_cuenta_activa(base):
     await base["admin_users"].update_one({"id": "u1"}, {"$set": {"disabled": True}})
     with pytest.raises(HTTPException) as e:
         await server.renovar_sesion(ana)
+    assert e.value.status_code == 401
+
+
+@pytest.mark.asyncio(loop_scope="session")
+async def test_renovar_la_del_conductor_de_empresa_con_su_ficha_activa(base, monkeypatch):
+    """29-10-2026: la app nativa del conductor también renueva sola; antes volvía a pedir la contraseña cada mes."""
+    tenant = Db()
+    tenant["driver_accounts"] = Col([{"driver_id": "d1", "email": "pepe@empresa.es", "active": True, "must_change_password": False}])
+    tenant["drivers"] = Col([{"id": "d1", "name": "Pepe", "center": "OGA5", "active": True}])
+    monkeypatch.setattr(server, "db", tenant)
+    pepe = {"sub": "d1", "role": "driver", "name": "Pepe", "org_id": "o2", "db_name": "dsp_o2"}
+    r = await server.renovar_sesion(pepe)
+    c = _claims(r.access_token)
+    assert r.role == "driver" and r.id == "d1" and r.center == "OGA5" and r.configurar_cuenta is False
+    assert c["sub"] == "d1" and c["role"] == "driver" and c["org_id"] == "o2" and c["db_name"] == "dsp_o2"
+    # Un conductor sin cuenta (o con la ficha de baja) no se renueva: a entrar otra vez.
+    for malo in ({**pepe, "sub": "nadie"}, {**pepe, "demo": True}):
+        with pytest.raises(HTTPException) as e:
+            await server.renovar_sesion(malo)
+        assert e.value.status_code in (401, 403)
+    await tenant["drivers"].update_one({"id": "d1"}, {"$set": {"active": False}})
+    with pytest.raises(HTTPException) as e:
+        await server.renovar_sesion(pepe)
     assert e.value.status_code == 401
 
 

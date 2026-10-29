@@ -60,6 +60,10 @@ data class Parada(
     @SerialName("entrega_nota") val entregaNota: String? = null,
     val ejemplo: Boolean = false,
     val escaneos: Int = 0,
+    /** El enlace de seguimiento del cliente (token de /s/…), para el WhatsApp. */
+    val seguimiento: String? = null,
+    /** La última vez en esa puerta (dónde se dejó, la nota, o que no se pudo y por qué). */
+    val antes: Antes? = null,
 ) {
     val pendiente get() = estado == "pendiente" || estado == "en_ruta"
     val ubicada get() = lat != null && lng != null
@@ -83,6 +87,38 @@ data class ResumenRuta(
 data class Base(val direccion: String? = null, val lat: Double? = null, val lng: Double? = null)
 
 @Serializable
+data class Antes(val fecha: String = "", val estado: String = "", val nota: String = "", val donde: String = "", val motivo: String = "")
+
+/** El bono de bienvenida de quien reparte por su cuenta: `objetivo` entregas en `diasObjetivo` días antes de `limite`. */
+@Serializable
+data class Bono(
+    val cent: Int = 0,
+    val pagado: Boolean = false,
+    val nuevo: Boolean = false,
+    val limite: String? = null,
+    val objetivo: Int = 20,
+    @SerialName("dias_objetivo") val diasObjetivo: Int = 2,
+    val entregas: Int = 0,
+    val dias: Int = 0,
+    val revisar: Boolean = false,
+)
+
+/** La tarifa de quien reparte por su cuenta, en céntimos: por parada entregada y por día con entregas. */
+@Serializable
+data class Ganancias(
+    @SerialName("pago_parada") val pagoParada: Int = 0,
+    @SerialName("pago_dia") val pagoDia: Int = 0,
+    @SerialName("coste_km") val costeKm: Int = 0,
+)
+
+/** La versión de la app que hay para descargar de la web (GET /app/version → `web`), para la instalada fuera de Play. */
+@Serializable
+data class VersionApp(val code: Int = 0, val nombre: String = "")
+
+@Serializable
+data class Trazado(val linea: List<List<Double>> = emptyList(), val fuente: String? = null, val km: Double? = null, val minutos: Int? = null)
+
+@Serializable
 data class MiRuta(
     val activo: Boolean = false,
     val autonomo: Boolean = false,
@@ -94,6 +130,10 @@ data class MiRuta(
     val ruta: ResumenRuta? = null,
     val base: Base? = null,
     val prueba: Boolean = false,
+    val bono: Bono? = null,
+    /** Paradas de los últimos días sin cerrar, que se pueden traer a hoy. */
+    val previas: Int = 0,
+    val ganancias: Ganancias? = null,
 )
 
 @Serializable

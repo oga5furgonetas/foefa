@@ -27,6 +27,8 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.List
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Call
+import androidx.compose.material.icons.filled.CardGiftcard
+import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.automirrored.filled.Chat
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
@@ -56,6 +58,7 @@ import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.SnackbarResult
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.material3.pulltorefresh.PullToRefreshBox
@@ -78,6 +81,7 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import com.flotadsp.fds.data.Bono
 import com.flotadsp.fds.data.Parada
 import com.flotadsp.fds.ui.Acciones
 import com.flotadsp.fds.ui.LocalExtra
@@ -107,6 +111,12 @@ fun HoyPantalla(
     var entregando by remember { mutableStateOf<Parada?>(null) }
     var fallando by remember { mutableStateOf<Parada?>(null) }
     val prefijo = e.ruta?.prefijo ?: "34"
+    val empresa = e.ruta?.takeIf { !it.autonomo }?.empresa.orEmpty()
+
+    LaunchedEffect(Unit) { vm.vista("/ruta") }
+    // El camino por las calles, al abrir el mapa y cuando cambia lo que queda.
+    val clavePendientes = e.pendientes.joinToString(",") { "${it.id}:${it.orden}" }
+    LaunchedEffect(verMapa, clavePendientes) { if (verMapa && e.pendientes.size >= 2) vm.cargarTrazado() }
 
     LaunchedEffect(Unit) {
         vm.avisos.collect { a ->
@@ -178,7 +188,7 @@ fun HoyPantalla(
             when {
                 e.cargando && e.ruta == null -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { CircularProgressIndicator() }
                 e.ruta == null -> SinRuta(e.error ?: "No se ha podido cargar tu ruta.") { vm.cargar() }
-                verMapa -> MapaRuta(e.pendientes, e.ruta?.base, alTocar = { abierta = it }, modifier = Modifier.fillMaxSize())
+                verMapa -> MapaRuta(e.pendientes, e.ruta?.base, trazado = e.trazado, alTocar = { abierta = it }, modifier = Modifier.fillMaxSize())
                 else -> LazyColumn(
                     contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 4.dp, bottom = 104.dp),
                     verticalArrangement = Arrangement.spacedBy(10.dp),
@@ -188,6 +198,9 @@ fun HoyPantalla(
                     if (e.guardadaEn != null || pendientesEnvio.isNotEmpty()) {
                         item { SinCobertura(e.guardadaEn, pendientesEnvio.size) }
                     }
+                    val previas = e.ruta?.previas ?: 0
+                    if (previas > 0) item(key = "previas") { Previas(previas, alTraer = { vm.traerPrevias() }) }
+                    e.ruta?.bono?.takeIf { !it.pagado || it.nuevo }?.let { b -> item(key = "bono") { BonoCard(b) } }
                     if (e.paradas.isEmpty()) {
                         item { Vacia(alEscanear, alAnadir) }
                     } else if (e.pendientes.isEmpty()) {
@@ -199,7 +212,7 @@ fun HoyPantalla(
                                 p = sig, numero = sig.orden ?: 1,
                                 alNavegar = { Acciones.navegar(ctx, sig, navegarCon) },
                                 alLlamar = { Acciones.llamar(ctx, sig.telefono) },
-                                alWhatsapp = { Acciones.whatsapp(ctx, sig.telefono, prefijo, "Hola, soy tu repartidor: llego en unos minutos con tu pedido.") },
+                                alWhatsapp = { Acciones.whatsapp(ctx, sig.telefono, prefijo, textoWhatsapp(sig, empresa)) },
                                 alEntregar = { entregarRapido(sig) },
                                 alFallar = { fallando = sig },
                                 alAbrir = { abierta = sig },
@@ -226,7 +239,7 @@ fun HoyPantalla(
 
     abierta?.let { p ->
         ParadaHoja(
-            p = p, prefijo = prefijo, navegarCon = navegarCon,
+            p = p, prefijo = prefijo, navegarCon = navegarCon, empresa = empresa,
             alCerrar = { abierta = null },
             alEntregar = { abierta = null; entregando = p },
             alFallar = { abierta = null; fallando = p },
@@ -280,6 +293,13 @@ private fun Resumen(e: EstadoRuta, ocupado: Boolean, alOrdenar: () -> Unit) {
                     Text(partes.joinToString(" · "), style = MaterialTheme.typography.bodyMedium.merge(TextoNumero),
                         color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
+                // «Mi dinero hoy» (solo quien reparte por su cuenta y ha puesto su tarifa): lo entregado por su
+                // precio por parada, más el día si ha entregado algo. En céntimos, como lo manda el servidor.
+                e.ruta?.ganancias?.let { g ->
+                    val cent = e.entregadas * g.pagoParada + (if (e.entregadas > 0) g.pagoDia else 0)
+                    if (cent > 0) Text("Hoy llevas ${Region.importe(cent / 100.0)}", style = MaterialTheme.typography.bodyMedium.merge(TextoNumero),
+                        color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
             }
         }
         if (e.pendientes.size >= 2) {
@@ -311,6 +331,42 @@ private fun SinCobertura(guardadaEn: Long?, pendientes: Int) {
                     else -> "$pendientes cambios guardados en el móvil: se envían solos al volver la red."
                 })
             }, style = MaterialTheme.typography.bodyMedium)
+        }
+    }
+}
+
+/** Paradas de días anteriores sin cerrar (29-10-2026): la ruta es la del día y lo que quedó se iba de «Hoy». */
+@Composable
+private fun Previas(n: Int, alTraer: () -> Unit) {
+    Surface(color = MaterialTheme.colorScheme.secondaryContainer, contentColor = MaterialTheme.colorScheme.onSecondaryContainer, shape = MaterialTheme.shapes.medium) {
+        Row(Modifier.fillMaxWidth().padding(14.dp), verticalAlignment = Alignment.CenterVertically) {
+            Icon(Icons.Default.History, contentDescription = null)
+            Spacer(Modifier.width(12.dp))
+            Text(if (n == 1) "1 parada de otro día sigue sin cerrar." else "$n paradas de otros días siguen sin cerrar.",
+                style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f))
+            TextButton(onClick = alTraer) { Text("Traer a hoy") }
+        }
+    }
+}
+
+/** El bono de bienvenida de quien reparte por su cuenta: cuánto le falta, o que ya lo tiene. */
+@Composable
+private fun BonoCard(b: Bono) {
+    val euros = Region.importe(b.cent / 100.0)
+    Surface(color = MaterialTheme.colorScheme.tertiaryContainer, contentColor = MaterialTheme.colorScheme.onTertiaryContainer, shape = MaterialTheme.shapes.medium) {
+        Row(Modifier.fillMaxWidth().padding(14.dp), verticalAlignment = Alignment.CenterVertically) {
+            Icon(Icons.Default.CardGiftcard, contentDescription = null)
+            Spacer(Modifier.width(12.dp))
+            Column {
+                Text(if (b.pagado) "Bono de bienvenida conseguido: $euros en tu cartera." else "Bono de bienvenida: $euros por tu primera ruta de verdad.",
+                    style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold)
+                if (!b.pagado) Text(
+                    when {
+                        b.revisar -> "Lo estamos revisando: te avisamos en cuanto esté."
+                        else -> "${b.objetivo} entregas en ${b.diasObjetivo} días distintos" + (b.limite?.let { " antes del ${it.takeLast(2)}/${it.substring(5, 7)}" } ?: "") +
+                            ". Llevas ${b.entregas} ${if (b.entregas == 1) "entrega" else "entregas"} en ${b.dias} ${if (b.dias == 1) "día" else "días"}."
+                    }, style = MaterialTheme.typography.bodySmall.merge(TextoNumero))
+            }
         }
     }
 }
@@ -400,6 +456,7 @@ private fun Siguiente(
                     Text(p.cliente.ifBlank { p.direccion }, style = MaterialTheme.typography.titleLarge, maxLines = 2, overflow = TextOverflow.Ellipsis)
                     if (p.cliente.isNotBlank()) Text(p.direccion, style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     if (p.notas.isNotBlank()) Text(p.notas, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    p.antes?.let { Text(textoAntes(it), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.secondary) }
                     Spacer(Modifier.height(6.dp))
                     Etiquetas(p)
                 }

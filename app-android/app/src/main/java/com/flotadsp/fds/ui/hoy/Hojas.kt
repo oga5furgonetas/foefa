@@ -3,6 +3,7 @@ package com.flotadsp.fds.ui.hoy
 import android.content.Context
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
+import android.graphics.Matrix
 import android.net.Uri
 import android.util.Base64
 import androidx.compose.foundation.Image
@@ -59,6 +60,9 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.core.content.FileProvider
+import androidx.exifinterface.media.ExifInterface
+import com.flotadsp.fds.BuildConfig
+import com.flotadsp.fds.data.Antes
 import com.flotadsp.fds.data.Parada
 import com.flotadsp.fds.ui.Acciones
 import com.flotadsp.fds.ui.LocalExtra
@@ -75,13 +79,37 @@ import java.io.File
 private val DONDE = listOf("mano" to "En mano", "vecino" to "Al vecino", "buzon" to "En el buzón", "porteria" to "En portería", "seguro" to "En un lugar seguro")
 private val MOTIVOS = listOf("No había nadie", "Dirección incorrecta", "Rechazado", "Fuera de horario", "Otro")
 
+/** El WhatsApp al cliente, como en la web (29-10-2026): con la hora estimada y el enlace de seguimiento, que no
+ *  lleva datos personales. Sin hora ni enlace, el mensaje de siempre. */
+fun textoWhatsapp(p: Parada, empresa: String): String {
+    val quien = if (empresa.isNotBlank()) "el repartidor de $empresa" else "tu repartidor"
+    val que = if (p.tipo == "recogida") "a hacer la recogida" else "con tu pedido"
+    val cuando = p.eta?.takeIf { it.isNotBlank() }?.let { ", llegada aproximada a las $it" } ?: ""
+    val enlace = p.seguimiento?.takeIf { it.isNotBlank() }?.let { " Puedes seguirlo aquí: ${BuildConfig.WEB_URL}/s/$it" } ?: ""
+    return "Hola, soy $quien. Voy de camino $que$cuando.$enlace"
+}
+
+/** «La última vez (12/10): en portería», o por qué no se pudo. */
+fun textoAntes(a: Antes): String {
+    val f = a.fecha.takeIf { it.length == 10 }?.let { "${it.substring(8, 10)}/${it.substring(5, 7)}" } ?: a.fecha
+    val donde = DONDE.firstOrNull { it.first == a.donde }?.second?.lowercase()
+    val que = when {
+        a.estado == "fallido" -> "no se pudo" + (a.motivo.takeIf { it.isNotBlank() }?.let { ": $it" } ?: "")
+        donde != null && a.nota.isNotBlank() -> "$donde · ${a.nota}"
+        donde != null -> donde
+        else -> a.nota
+    }
+    return "La última vez ($f): $que"
+}
+
 @Composable
 fun ParadaHoja(
-    p: Parada, prefijo: String, navegarCon: String,
+    p: Parada, prefijo: String, navegarCon: String, empresa: String = "",
     alCerrar: () -> Unit, alEntregar: () -> Unit, alFallar: () -> Unit, alDeshacer: () -> Unit, alEditar: () -> Unit, alQuitar: () -> Unit,
 ) {
     val ctx = LocalContext.current
     var quitar by remember { mutableStateOf(false) }
+    var deshacer by remember { mutableStateOf(false) }
     ModalBottomSheet(onDismissRequest = alCerrar, sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)) {
         Column(Modifier.padding(horizontal = 20.dp).padding(bottom = 20.dp).navigationBarsPadding().verticalScroll(rememberScrollState())) {
             Text(p.cliente.ifBlank { "Parada" }, style = MaterialTheme.typography.headlineSmall)
@@ -99,6 +127,7 @@ fun ParadaHoja(
                 p.hueco.takeIf { it.isNotBlank() }?.let { "En la furgoneta: $it" },
                 if (p.ventanaDesde != null) "Horario: de ${p.ventanaDesde} a ${p.ventanaHasta}" else null,
                 p.motivo?.takeIf { it.isNotBlank() && p.estado == "fallido" }?.let { "Motivo: $it" },
+                p.antes?.takeIf { p.pendiente }?.let { textoAntes(it) },
             )
             if (datos.isNotEmpty()) {
                 Spacer(Modifier.height(12.dp))
@@ -112,7 +141,7 @@ fun ParadaHoja(
                 FilledTonalButton(onClick = { Acciones.llamar(ctx, p.telefono) }, enabled = p.telefono.isNotBlank(), modifier = Modifier.height(50.dp)) {
                     Icon(Icons.Default.Call, contentDescription = "Llamar")
                 }
-                FilledTonalButton(onClick = { Acciones.whatsapp(ctx, p.telefono, prefijo, "Hola, soy tu repartidor: llego en unos minutos con tu pedido.") },
+                FilledTonalButton(onClick = { Acciones.whatsapp(ctx, p.telefono, prefijo, textoWhatsapp(p, empresa)) },
                     enabled = p.telefono.isNotBlank(), modifier = Modifier.height(50.dp)) {
                     Icon(Icons.AutoMirrored.Filled.Chat, contentDescription = "WhatsApp")
                 }
@@ -131,14 +160,17 @@ fun ParadaHoja(
                     }
                 }
             } else {
-                OutlinedButton(onClick = alDeshacer, modifier = Modifier.fillMaxWidth().height(50.dp)) {
+                // Una entregada vuelve atrás con pregunta: se borra su prueba de entrega (29-10-2026). Una no
+                // entregada no tiene nada que perder.
+                OutlinedButton(onClick = { if (p.estado == "entregado") deshacer = true else alDeshacer() }, modifier = Modifier.fillMaxWidth().height(50.dp)) {
                     Icon(Icons.AutoMirrored.Filled.Undo, contentDescription = null); Spacer(Modifier.width(6.dp)); Text("Volver a «por entregar»")
                 }
             }
             Spacer(Modifier.height(8.dp))
             HorizontalDivider()
             Row {
-                TextButton(onClick = alEditar) { Icon(Icons.Default.Edit, contentDescription = null); Spacer(Modifier.width(6.dp)); Text("Editar") }
+                // Cerrada no se edita (el servidor solo deja cambiar la nota): primero «Volver a por entregar».
+                if (p.pendiente) TextButton(onClick = alEditar) { Icon(Icons.Default.Edit, contentDescription = null); Spacer(Modifier.width(6.dp)); Text("Editar") }
                 if (p.pendiente) {
                     TextButton(onClick = { quitar = true }, colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.error)) {
                         Icon(Icons.Default.Delete, contentDescription = null); Spacer(Modifier.width(6.dp)); Text("Quitar de la ruta")
@@ -154,6 +186,15 @@ fun ParadaHoja(
             text = { Text("${p.cliente.ifBlank { p.direccion }} sale de tu ruta de hoy.") },
             confirmButton = { TextButton(onClick = { quitar = false; alQuitar() }) { Text("Quitar") } },
             dismissButton = { TextButton(onClick = { quitar = false }) { Text("Cancelar") } },
+        )
+    }
+    if (deshacer) {
+        AlertDialog(
+            onDismissRequest = { deshacer = false },
+            title = { Text("¿Volver a «por entregar»?") },
+            text = { Text("Se borra la prueba de entrega de ${p.cliente.ifBlank { p.direccion }}: la foto, dónde se dejó, quién lo recogió y la hora.") },
+            confirmButton = { TextButton(onClick = { deshacer = false; alDeshacer() }) { Text("Volver atrás") } },
+            dismissButton = { TextButton(onClick = { deshacer = false }) { Text("Cancelar") } },
         )
     }
 }
@@ -266,13 +307,22 @@ private fun fotoNueva(ctx: Context): Uri {
     return FileProvider.getUriForFile(ctx, "${ctx.packageName}.fotos", f)
 }
 
-/** La foto de la entrega en un JPEG pequeño (el servidor admite hasta 300 KB en base64) y su miniatura. */
+/** La foto de la entrega en un JPEG pequeño (el servidor admite hasta 300 KB en base64) y su miniatura. Derecha:
+ *  la cámara guarda muchas fotos giradas y lo dice en el EXIF, que al recomprimir se pierde; sin girarla aquí, la
+ *  oficina y el cliente la veían tumbada (29-10-2026; la auditoría ya lo hacía). */
 private fun comprimir(ctx: Context, uri: Uri): Pair<String, Bitmap>? = runCatching {
     val opc = BitmapFactory.Options().apply { inJustDecodeBounds = true }
     ctx.contentResolver.openInputStream(uri)?.use { BitmapFactory.decodeStream(it, null, opc) }
     var muestra = 1
     while (maxOf(opc.outWidth, opc.outHeight) / muestra > 1600) muestra *= 2
-    val bmp = ctx.contentResolver.openInputStream(uri)?.use { BitmapFactory.decodeStream(it, null, BitmapFactory.Options().apply { inSampleSize = muestra }) } ?: return null
+    val leida = ctx.contentResolver.openInputStream(uri)?.use { BitmapFactory.decodeStream(it, null, BitmapFactory.Options().apply { inSampleSize = muestra }) } ?: return null
+    val grados = when (ctx.contentResolver.openInputStream(uri)?.use { ExifInterface(it).getAttributeInt(ExifInterface.TAG_ORIENTATION, ExifInterface.ORIENTATION_NORMAL) }) {
+        ExifInterface.ORIENTATION_ROTATE_90 -> 90f
+        ExifInterface.ORIENTATION_ROTATE_180 -> 180f
+        ExifInterface.ORIENTATION_ROTATE_270 -> 270f
+        else -> 0f
+    }
+    val bmp = if (grados == 0f) leida else Bitmap.createBitmap(leida, 0, 0, leida.width, leida.height, Matrix().apply { postRotate(grados) }, true)
     val escala = minOf(1f, 1280f / maxOf(bmp.width, bmp.height))
     val chica = if (escala < 1f) Bitmap.createScaledBitmap(bmp, (bmp.width * escala).toInt(), (bmp.height * escala).toInt(), true) else bmp
     var calidad = 75

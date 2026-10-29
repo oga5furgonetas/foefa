@@ -13,7 +13,10 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.toArgb
@@ -36,9 +39,13 @@ import org.osmdroid.views.overlay.Polyline
 /* EL MAPA DE LA RUTA (OpenStreetMap, el mismo que la web): cada parada por entregar con su número, en orden,
    unidas por una línea; tocar una abre su ficha. Las teselas se guardan en la caché de la app. */
 @Composable
-fun MapaRuta(paradas: List<Parada>, base: Base?, alTocar: (Parada) -> Unit, modifier: Modifier = Modifier) {
+fun MapaRuta(paradas: List<Parada>, base: Base?, trazado: List<Pair<Double, Double>> = emptyList(), alTocar: (Parada) -> Unit, modifier: Modifier = Modifier) {
     val ctx = LocalContext.current
     val ubicadas = paradas.filter { it.ubicada }
+    // Se encuadra la ruta cuando CAMBIAN las paradas, no a cada repintado: hasta el 29-10-2026 cualquier cambio de
+    // estado (un aviso abajo, el trazado que llega) volvía a centrar el mapa y no dejaba acercarse a una calle.
+    val clave = ubicadas.joinToString(",") { "${it.id}:${it.orden}" }
+    var encuadrada by remember { mutableStateOf("") }
     val cian = MaterialTheme.colorScheme.primary.toArgb()
     val tinta = MaterialTheme.colorScheme.onPrimary.toArgb()
     val mapa = remember {
@@ -64,9 +71,11 @@ fun MapaRuta(paradas: List<Parada>, base: Base?, alTocar: (Parada) -> Unit, modi
             m.overlays.clear()
             val puntos = ubicadas.map { GeoPoint(it.lat!!, it.lng!!) }
             if (puntos.size >= 2) {
+                // Por las calles si el servidor lo ha dado; si no, de parada a parada en línea recta.
+                val camino = if (trazado.size >= 2) trazado.map { GeoPoint(it.first, it.second) } else puntos
                 m.overlays.add(Polyline(m).apply {
-                    setPoints(puntos)
-                    outlinePaint.color = cian; outlinePaint.strokeWidth = 8f; outlinePaint.alpha = 170
+                    setPoints(camino)
+                    outlinePaint.color = cian; outlinePaint.strokeWidth = if (camino === puntos) 6f else 9f; outlinePaint.alpha = 170
                 })
             }
             ubicadas.forEachIndexed { i, p ->
@@ -83,10 +92,13 @@ fun MapaRuta(paradas: List<Parada>, base: Base?, alTocar: (Parada) -> Unit, modi
                     position = GeoPoint(b.lat, b.lng); title = "Tu base"; setAnchor(Marker.ANCHOR_CENTER, Marker.ANCHOR_BOTTOM)
                 })
             }
-            when {
-                puntos.size >= 2 -> m.post { m.zoomToBoundingBox(BoundingBox.fromGeoPointsSafe(puntos).increaseByScale(1.3f), false) }
-                puntos.size == 1 -> { m.controller.setZoom(16.0); m.controller.setCenter(puntos[0]) }
-                else -> { m.controller.setZoom(6.0); m.controller.setCenter(GeoPoint(40.4, -3.7)) }
+            if (encuadrada != clave) {
+                encuadrada = clave
+                when {
+                    puntos.size >= 2 -> m.post { m.zoomToBoundingBox(BoundingBox.fromGeoPointsSafe(puntos).increaseByScale(1.3f), false) }
+                    puntos.size == 1 -> { m.controller.setZoom(16.0); m.controller.setCenter(puntos[0]) }
+                    else -> { m.controller.setZoom(6.0); m.controller.setCenter(GeoPoint(40.4, -3.7)) }
+                }
             }
             m.invalidate()
         })

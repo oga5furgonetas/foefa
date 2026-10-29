@@ -16,6 +16,7 @@ import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
+import androidx.compose.ui.Alignment
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.filled.Person
@@ -61,6 +62,7 @@ class MainActivity : ComponentActivity() {
     private var ref by mutableStateOf<String?>(null)
     private var empresaSlug by mutableStateOf<String?>(null)
     private var sesionPortal by mutableStateOf<Sesion?>(null)
+    private lateinit var actualizacion: Actualizacion
 
     override fun onCreate(savedInstanceState: Bundle?) {
         val app = application as FdsApp
@@ -70,6 +72,9 @@ class MainActivity : ComponentActivity() {
         arranque.setKeepOnScreenCondition { !app.cuenta.cargada.value }
         lifecycleScope.launch { app.cuenta.cargar() }
         leerEnlace(intent)
+        // Antes de que la actividad arranque del todo (el lanzador de Play se registra en onCreate).
+        actualizacion = Actualizacion(this)
+        lifecycleScope.launch { actualizacion.comprobarEnLaWeb(app.repo) }
         setContent {
             val tema by app.cuenta.tema.collectAsState()
             val noche = when (tema) { "oscuro" -> true; "claro" -> false; else -> isSystemInDarkTheme() }
@@ -82,12 +87,25 @@ class MainActivity : ComponentActivity() {
             }
             TemaFds(tema) {
                 Surface(color = MaterialTheme.colorScheme.background, modifier = Modifier.fillMaxSize()) {
-                    Raiz(app, ref, empresaSlug, sesionPortal,
-                        alAbrirPortal = { if (it.app_destino == "empresa") sesionPortal = it },
-                        alCerrarEmpresa = { empresaSlug = null; sesionPortal = null })
+                    Box(Modifier.fillMaxSize()) {
+                        Raiz(app, ref, empresaSlug, sesionPortal,
+                            alAbrirPortal = { if (it.app_destino == "empresa") sesionPortal = it },
+                            alCerrarEmpresa = { empresaSlug = null; sesionPortal = null })
+                        AvisoActualizacion(actualizacion, Modifier.align(Alignment.BottomCenter))
+                    }
                 }
             }
         }
+    }
+
+    override fun onResume() {
+        super.onResume()
+        actualizacion.comprobar()
+    }
+
+    override fun onDestroy() {
+        actualizacion.soltar()
+        super.onDestroy()
     }
 
     override fun onNewIntent(intent: Intent) {
@@ -125,13 +143,18 @@ private fun Raiz(app: FdsApp, ref: String?, empresaSlug: String?, sesionPortal: 
     val token by app.cuenta.token.collectAsState()
     val destino by app.cuenta.destino.collectAsState()
     val cargada by app.cuenta.cargada.collectAsState()
+    // La sesión caducó (un 401 del servidor): se vuelve a «entrar» y se DICE por qué. Hasta el 29-10-2026 el aviso
+    // se emitía y nadie lo escuchaba: la app saltaba a la pantalla de entrar sin explicación.
+    var caducada by remember { mutableStateOf(false) }
+    LaunchedEffect(Unit) { app.caducada.collect { caducada = true } }
+    LaunchedEffect(token) { if (token != null) caducada = false }
     if (!cargada) return
     AnimatedContent(targetState = token != null, transitionSpec = { fadeIn() togetherWith fadeOut() }, label = "sesion") { dentro ->
         if (dentro && destino == "conductor") {
             com.flotadsp.fds.ui.acceso.PortalConductorNativo(
                 alCerrar = { app.ambito.launch { app.repo.salir() } },
             )
-        } else if (dentro) Principal() else Acceso(ref, alAbrirPortal)
+        } else if (dentro) Principal() else Acceso(ref, alAbrirPortal, aviso = if (caducada) "Tu sesión ha caducado: entra otra vez." else null)
     }
 }
 

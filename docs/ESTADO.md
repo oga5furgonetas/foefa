@@ -673,6 +673,53 @@ del contenedor); la 2.2.3 de la mañana sigue siendo la buena. Nada desplegado: 
 la web sí tiene cambios visibles (las tres fichas de ayuda y los tres textos con color real), así que **toca
 desplegar la web** la próxima vez desde el PC.
 
+## Última sesión — 29-10-2026 (noche): fase 0 del estudio en el servidor, y FDS 2.2.5 que se actualiza sola
+
+Dani: «corrige todo y ponlo todo perfecto sin falsos positivos» (lo del estudio) y, después, «que la app se
+actualice sola o les pida la actualización». Dos commits en `main`, los dos con el CI en verde hasta donde se pudo
+comprobar aquí (ver abajo lo que decide el CI).
+
+**Servidor (fase 0 del estudio, commit 6249c61, run 339 del CI en verde; FALTA DESPLEGAR):**
+- Optimizador de rutas en un hilo (`asyncio.to_thread`): medido, con 60 paradas tardaba casi 4 s y con 80, 6 s, y
+  paraba TODAS las peticiones mientras tanto. Con más de 50 paradas, la mitad de evaluaciones
+  (`reparto.presupuesto_evaluaciones`): mismo orden hasta 60, un 2 % peor con 80, en una cuarta parte del tiempo.
+- Índices de las colecciones del reparto (no tenían ninguno), limpieza de datos de clientes sola cada 6 h por
+  todas las empresas (`_bucle_reparto_limpieza`, late en `/admin/latidos`), `/reparto/posicion` guarda solo la
+  última posición (el recorrido no lo leía nadie; los guardados se quitan en la limpieza; el aviso de ubicación de
+  la web lo dice así en 7 idiomas), «entrar como» no escribe en el reparto salvo los ajustes (403 con explicación),
+  una sola fecha de promoción (`check-promo.mjs` en el CI) y la cartera tapa el IBAN/teléfono al resolver.
+- Tests nuevos para todo eso; 1.377 del backend en verde, 26 checkers, contrato de la app.
+
+**App FDS 2.2.5 (code 17), SIN COMPILAR AQUÍ (el SDK no se puede bajar en este contenedor); la compila el CI:**
+- **Se actualiza sola**: la de Play con In-App Updates (Play pregunta, descarga en segundo plano y un aviso
+  «Reiniciar»; si en Play Console se publica con prioridad 4-5, a pantalla completa). La instalada desde la web
+  (`.web`) pregunta a `GET /app/version` y, si el servidor anuncia una más nueva (`APP_ANDROID_WEB="17 2.2.5"` en
+  Fly, que se pone A MANO al subir el APK a la web), avisa con «Descargar» → `flotadsp.com/app`. Android no deja
+  instalar nada sin que la persona lo acepte: eso es lo máximo que una app puede hacer.
+- La cola sin cobertura ya no tira una entrega si el servidor contesta 5xx/408/429: la guarda y la reintenta en
+  orden (hasta 12 veces si el servidor contesta mal); si la rechaza de verdad (404/403), lo dice en pantalla. Dos
+  cambios de la misma parada salen en orden.
+- «Volver a por entregar» de una entregada pregunta antes (borra la prueba de entrega); una parada cerrada ya no
+  ofrece «Editar» (el servidor contestaba 409).
+- «He olvidado mi contraseña» en la pantalla de entrar (`auth/forgot-password`, para cuentas de reparto; al
+  conductor de empresa le explica que es la oficina o el código del correo personal).
+- Sesión caducada: se dice por qué se vuelve a «entrar» (antes la app saltaba sin explicación). La sesión del
+  conductor de empresa también se renueva sola (`auth/renovar` acepta `role: driver`, test en `test_sesion_app`).
+- Para quien reparte por su cuenta: paradas de otros días sin cerrar («Traer a hoy»), el bono de bienvenida (cuánto
+  le falta) y «Hoy llevas X €» con su tarifa. En todas: «La última vez (12/10): en portería» en la siguiente parada y
+  en la ficha; WhatsApp con la hora estimada y el enlace de seguimiento, como la web; la foto de la entrega sale
+  derecha (EXIF); el mapa pinta el camino por las calles y ya no se recentra a cada aviso.
+- Portal del conductor: cerrar sesión pregunta; tras revisar una etiqueta se vuelve al escáner; el teléfono sale
+  precargado; navegador y tema en «Mi cuenta». Analítica: la app manda vistas (`/ruta`, `/conductor/p/…`) con
+  User-Agent de Android.
+- Contrato app↔API ampliado (80 comprobaciones: estado con `hecho_en`, escanear, crear/quitar parada, trazado,
+  previas, renovar del conductor, forgot-password, app/version, analítica) y un test unitario de la app
+  (`TextosHojaTest`). **El CI compila la app** (job «App Android»: `testDebugUnitTest` + `assembleDebug` en Ubuntu).
+
+**Lo que decide el CI**: el job «App Android» es nuevo y es la primera vez que la app se compila fuera de un PC. Si
+sale en rojo, el log dice qué (SDK o un error de Kotlin); el compilador independiente (`kotlinc`, sin Android) no
+señaló ningún error de sintaxis en los 12 ficheros tocados, pero no resuelve las librerías.
+
 ## 29-10-2026 (mañana): FDS 2.2.3 compilada por primera vez, probada y firmada (PC de Winiw)
 
 - El repo se clonó en este PC (`C:\Users\Winiw Delivery\Documents\foefa`). Las versiones 2.1.0 → 2.2.3 de la app
@@ -694,11 +741,19 @@ desplegar la web** la próxima vez desde el PC.
 
 ## Pendiente (por prioridad)
 
--4. **Desplegar y decidir (29-10 tarde)**: desplegar el backend (el 400 de «cambiar contraseña», dd5a9d3) y la web
-   (fichas de ayuda y colores) desde el PC; leer `docs/ESTUDIO_APP.md` y decidir lo de su apartado 6 (público de los
-   anuncios, cómo se cobra en la app antes del 31-12, OSRM propio, Gemini de pago, las cuatro rutas heredadas).
-   La fase 0 del estudio (servidor: optimizador en un hilo, índices, borrado diario, rastro fuera) no necesita
-   recompilar la app.
+-5. **FDS 2.2.5 (29-10 noche)**: mirar el job «App Android» del CI en `main`. Si está en verde, en el PC de casa
+   (`C:\Users\dlvie\foefa\app-android`): `git pull`, los tres `gradlew` de PLAY_STORE.md → «Versión 2.2.5», probar
+   el APK en el móvil (entrar, una entrega con foto, «Volver a por entregar», «He olvidado mi contraseña», y en el
+   portal del conductor cerrar sesión con pregunta) y subir el AAB 17 a la prueba abierta. Al subir el APK a la web:
+   `fly secrets set -a flota-backend APP_ANDROID_WEB="17 2.2.5"` (si no, nadie recibe el aviso de descargar).
+   Si el CI está en rojo en ese job, el log dice qué: arreglarlo antes de compilar.
+
+-4. **Desplegar y decidir (29-10 noche)**: desplegar el backend (fase 0 del estudio + `auth/renovar` del conductor +
+   `/app/version`; hasta que esté, la 2.2.5 funciona igual pero sin esas tres cosas) y la web (página de planes,
+   aviso de ubicación, fichas de ayuda y colores) desde el PC; leer `docs/ESTUDIO_APP.md` y decidir lo de su
+   apartado 6 (público de los anuncios, cómo se cobra en la app antes del 31-12, OSRM propio, Gemini de pago, las
+   cuatro rutas heredadas). Fase 0 HECHA (29-10 noche); fase 1 en la 2.2.5 salvo FCM (avisos push) y los textos a
+   `strings.xml`.
 
 -3b. **Comprobado el 29-10 a las 13:15 (hora de Dani)**: `POST /auth/app-login` está en producción (contesta 422 sin
    cuerpo). El backend desplegado lleva el acceso unificado de la app; la 2.2.3 puede entrar contra producción.

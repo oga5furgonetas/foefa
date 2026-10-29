@@ -22,6 +22,8 @@ data class EstadoRuta(
     val refrescando: Boolean = false,
     val error: String? = null,
     val ocupado: String = "",
+    /** El camino por las calles de lo que queda (para el mapa); vacío = tramos rectos. */
+    val trazado: List<Pair<Double, Double>> = emptyList(),
 ) {
     val paradas get() = ruta?.pedidos.orEmpty()
     val pendientes get() = paradas.filter { it.pendiente }.sortedWith(compareBy<Parada>({ it.orden ?: Int.MAX_VALUE }, { it.cliente }))
@@ -49,11 +51,15 @@ class RutaVM(app: Application) : AndroidViewModel(app) {
 
     fun avisar(t: String) { _avisos.trySend(Aviso(t)) }
 
+    /** Una pantalla vista, para la analítica anónima (como la web): no bloquea ni falla. */
+    fun vista(ruta: String) { viewModelScope.launch { repo.vista(ruta) } }
+
     fun cargar(tirando: Boolean = false) {
         viewModelScope.launch {
             if (tirando) _e.value = _e.value.copy(refrescando = true)
             try {
                 repo.vaciarCola()
+                repo.tomarRechazos().forEach { avisar(it) }
                 val r = repo.miRuta()
                 _e.value = _e.value.copy(ruta = r, guardadaEn = null, cargando = false, refrescando = false, error = null)
             } catch (e: ErrorApi) {
@@ -73,7 +79,7 @@ class RutaVM(app: Application) : AndroidViewModel(app) {
         }))
         viewModelScope.launch {
             try {
-                val enviado = repo.cambiarEstado(p.id, estado, cuerpo)
+                val enviado = repo.cambiarEstado(p.id, estado, cuerpo, p.cliente.ifBlank { p.direccion })
                 val t = if (enviado) texto else "$texto Sin cobertura: se envía solo al volver la red."
                 _avisos.send(if (conDeshacer) Aviso(t, "Deshacer") { deshacer(p) } else Aviso(t))
                 if (enviado) refrescarSinRuido()
@@ -129,6 +135,25 @@ class RutaVM(app: Application) : AndroidViewModel(app) {
     fun refrescarSinRuido() {
         viewModelScope.launch {
             runCatching { repo.miRuta() }.onSuccess { _e.value = _e.value.copy(ruta = it, guardadaEn = null, error = null) }
+        }
+    }
+
+    /** Las paradas de días anteriores sin cerrar, a hoy (quedan sin orden: después, «Ordenar ruta»). */
+    fun traerPrevias() {
+        viewModelScope.launch {
+            try {
+                val n = repo.traerPrevias()
+                avisar(if (n == 1) "1 parada traída a hoy. Pulsa «Ordenar ruta»." else "$n paradas traídas a hoy. Pulsa «Ordenar ruta».")
+                refrescarSinRuido()
+            } catch (e: ErrorApi) { avisar(if (e.sinRed) "Sin conexión: para traer paradas hace falta red." else e.message ?: "No se ha podido") }
+        }
+    }
+
+    /** El camino por las calles para el mapa; si no se puede, se queda con los tramos rectos. */
+    fun cargarTrazado(lat: Double? = null, lng: Double? = null) {
+        viewModelScope.launch {
+            val t = runCatching { repo.trazado(lat, lng) }.getOrNull() ?: return@launch
+            _e.value = _e.value.copy(trazado = t.linea.mapNotNull { if (it.size >= 2) it[0] to it[1] else null })
         }
     }
 }
