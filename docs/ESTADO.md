@@ -699,8 +699,10 @@ desplegar la web** la próxima vez desde el PC.
    letras y no decía por qué; y vio «Abrir mi ruta», que en una flota de Amazon no pinta nada. Las dos cosas van en la
    **2.2.4 (code 16)** (ojo y aviso en los campos de contraseña; la ruta solo si la empresa reparte con la app),
    **compilada y firmada esa misma tarde en el PC de casa de Dani** (`C:\Users\dlvie\foefa`; cómo, en PLAY_STORE.md →
-   «Versión 2.2.4»): tests, lint, AAB y APK en verde. Lo demás lo probó y va: auditoría, turnos, trabajar más, invita y
-   gana. Falta: probar el APK 2.2.4 en el móvil, entrar con la cuenta de oficina y subir el AAB (code 16) a Play.
+   «Versión 2.2.4»): tests, lint, AAB y APK en verde, firma verificada con `jarsigner`. **Probada en su móvil: correcto**
+   (contraseña con ojo y aviso, sin «Abrir mi ruta», y lo de antes: auditoría, turnos, trabajar más, invita y gana).
+   Los ficheros están en `C:\Users\dlvie\Downloads\FDS-2.2.4-code16.aab` y `FDS-2.2.4.apk`. Falta confirmar la subida
+   del AAB (code 16) a Play y lo que diga la revisión.
 
 -3. **App nativa (29-10)**: Dani instala `app-android/salida/FDS-2.2.4.apk` en su móvil, la prueba (entrar como
    conductor de empresa: turnos, auditoría con fotos, trabajar más; y como autónomo) y sube
