@@ -798,6 +798,11 @@ una tarea creada desde dentro de una sesión no tiene el repo con push ni conect
 pantalla de tareas programadas de claude.ai** con repo + Metricool (`docs/anuncios/redes/TAREA.md`). Dani enlazó en
 Metricool TikTok, Instagram, LinkedIn y YouTube. Las piezas están en `frontend/public/redes/` (URL pública
 flotadsp.com/redes/… en cuanto se despliegue la web).
+**21:45:** Metricool conectado a la sesión de la nube (sin pasar por «Programadas»: en esta organización las tareas no
+admiten conectores, así que la tarea «Redes FDS» DESPIERTA esa misma sesión, que ya tiene Metricool, el repo y Artlist,
+a las 7:51, 12:51 y 19:51). Programados en Metricool dos posts de LinkedIn (04-11 y 11-11, 11:00, empresas). TikTok,
+Instagram y YouTube esperan a que la web se despliegue con `frontend/public/redes/` (imágenes y vídeos en español, 30 MB):
+**Dani: mezclar `claude/trusting-feynman-0tfz62` en `main` (es fast-forward, ya lleva main) y desplegar la web.**
 
 ## Pendiente (por prioridad)
 
