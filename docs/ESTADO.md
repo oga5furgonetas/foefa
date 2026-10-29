@@ -963,6 +963,19 @@ sin píxel. Nada tocado en el código ni desplegado: solo este informe. La app n
 Las decisiones que pide están en su §11 (una marca o dos, Amazon A-G, una sola oferta, anuncios, Reparto para
 empresas como prioridad de ventas, cobro en la app, Valor fuera del repo, DeCA).
 
+## Última sesión — 30-10-2026 (00:10, PC de Dani, bucle de redes): la 2.3.0 en Play y primera ronda con la app en la tienda
+
+- La **2.3.0 está publicada en Google Play** (producción, 178 países, desde el 29-10 23:42) y `APP_ANDROID_MIN="2.3.0"` puesta en
+  Fly y verificada (una 2.2.x recibe 426 con el aviso de actualizar al entrar). Detalle en el pendiente -7.
+- Ronda de redes desde el PC (detalle en `docs/anuncios/redes/REGISTRO-PC.md`, sección 30-10 00:10): Metricool completo
+  hasta el 06-11 (YouTube del jueves 05-11 y TikTok/Instagram del 06-11 añadidos); X programado hasta el J 06-11;
+  11 intervenciones (3 con app), un ofrecimiento público a una micro-creadora de reparto (@monicareal63, TikTok) y dos
+  comentarios en YouTube como @FlotaDSP. El bucle sigue cada 4 h mientras el PC esté encendido.
+- Para Dani: (1) Instagram avisó de «alguien está intentando iniciar sesión» (29-10 ~21:30; probablemente Metricool):
+  comprobarlo; (2) hay un anuncio de pago de la página de Facebook «FDs» con el pago rechazado: no es de la sesión (regla
+  de no gastar), lo decide él; (3) si quiere la actualización in-app a pantalla completa, la prioridad solo se fija por la
+  API de Play (`PLAY_SERVICE_ACCOUNT_JSON` + `app-release.yml`).
+
 ## Última sesión — 29-10-2026 (noche, 4): FDS en todo, fuera Valor y China, cookies, una sola app que se publica sola, y avisos al móvil
 
 Dani: «quita las apuestas y lo de China, unifica todo a FDS; arregla lo de cookies; lo de 3 apps, unificar: cuando

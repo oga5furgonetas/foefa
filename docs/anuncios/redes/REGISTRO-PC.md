@@ -119,3 +119,38 @@ está en producción en Play (no sale en búsquedas) y no tiene reseñas: pendie
 - Repartidores con todas las funciones: comprobado en el código y en `/api/billing/planes` de producción (promo hasta
   31-12-2026 → sin tope de paradas ni bloqueo por tarjeta). Enviada a Dani la captura real de una notificación de FDS
   (`docs/capturas-29-10/emulador-03-notificacion.png`). Cron de comprobación de Play borrado (ya no hace falta).
+
+## 30-10-2026 (00:10 – 00:50) — ronda del bucle de 4 h (primera con la app ya en Play)
+
+### Metricool (marca 7741371)
+Ya estaba todo hasta el 05-11 (TikTok 18:00, Instagram 12:00, YouTube 30-10 y 02-11, LinkedIn 04-11 y 11-11). Añadido:
+| Red | Cuándo | Pieza | Notas |
+|---|---|---|---|
+| YouTube | J 05-11 19:00 | `tiktok-es-cobro.mp4` | Short «Cobros en mano y cuentas a boli… se acabó», utm `post_cobro`, IA sí (id 410646601) |
+| TikTok | V 06-11 18:00 | `funciones-9x16.png` | sustituye al sketch FDS-3 (no está en el PC); texto del calendario del 06-11; comentario fijado «¿qué consejo darías a uno que empieza mañana?» (410646617) |
+| Instagram | V 06-11 12:00 | `funciones-9x16.png` | mismo texto, publicación (410646632) |
+
+### X (@FlotaDSP)
+- El post del J 30-10 ya salió anoche a las 21:48; V 31-10 → X 05-11 estaban programados. **Programado J 06-11 7:30** («Primer día repartiendo: no te sepas la zona, sábete el orden…», sin enlace). Verificado en «Will send on Fri, Nov 6, 2026 at 7:30 AM».
+- Ojo con el botón Reply: pulsado por referencia (ref) NO envía; hay que pulsarlo por coordenadas. Las tres respuestas de hoy están comprobadas en el perfil («with replies»).
+
+### Ronda de conversación (lo nuestro primero; proporción con app 3 de 11)
+| Hora | Red | Hilo | Qué se dijo | App |
+|---|---|---|---|---|
+| 00:16 | X | @lorenzobillares contestó a nuestra respuesta de ayer («yo también soy repartidor, llegan cosas de pena y nos obligan a sacarlos») | el cliente no ve que llega así a la nave; foto al bulto al salir y al entregar; cuídate | no |
+| 00:19 | X | @kevincrestt (7,3K vistas; «lo bueno de comprar tanto es que el repartidor viene a primera hora, vacía media furgoneta») | humor desde el otro lado: la mejor parada del día, se carga lo tuyo lo último | no |
+| 00:22 | X | @ArinGora (cliente: el repartidor marcó ausente sin bajar) | no tiene defensa y nos hace daño; a 150 paradas hay apps de empresa que obligan a marcar «ausente»; un WhatsApp de «llego en 5 min» arregla casi todo | no |
+| 00:28 | TikTok | @laryrepartidor contestó a nuestro comentario de ayer («hacer la doble ruta si le compensa») | chapeau; cuídate la espalda | no |
+| 00:31 | TikTok | @soylastefa «Hoy me puse en los zapatos de un repartidor» (4.108 ❤, 256 comentarios) → respuesta a AnthonyS, que pide orientación para empezar | plantilla 4 (orden de carga, el que no abre a las 9 abre a las 14, aparca una vez para tres) | no |
+| 00:32 | TikTok | mismo vídeo, comentario general | el que carga ordenado llega el primero a casa; gracias por enseñar el lado de dentro | no |
+| 00:36 | TikTok | @monicareal63 «No aceptes una ruta sin preguntar esto» (2.936 ❤) | dos preguntas más: recogidas y cuándo pagan; neto por hora con paradas, tarifa, km y gasolina | no (la función, sin nombre) |
+| 00:38 | TikTok | **seguida @monicareal63** (repartidora autónoma en Madrid, 4.894 seguidores, 10 años en el sector) | — | — |
+| 00:40 | TikTok | @monicareal63 «¿Está pensando en hacerse autónomo en el reparto?» (hace 2 d) → **ofrecimiento público a micro-creadora** | somos FDS, equipo pequeño de España; ¿la pruebas una semana y cuentas en vídeo qué le falta, sin filtros? sin pago ni condiciones; está en Google Play | sí |
+| 00:44 | YouTube | Por Tu Cuenta «¿Cuánto gana DE VERDAD un repartidor en España en 2026?» (732 vistas, 0 comentarios: el nuestro es el primero) | restar gasolina, seguro, cuota y desgaste antes de mirar la factura; ejemplo de la calculadora (100 paradas → ~7 €/h, orientativo) + flotadsp.com/calculadora-repartidor | sí |
+| 00:47 | YouTube | Alejandro Casallas «Así es trabajar como repartidor de furgoneta en España» (8,7K) | lo que vale es la carga: apuntar qué va en cada hueco, aparcar una vez para tres portales; calculadlo con gasolina y cuota | no |
+| 00:49 | Instagram | notificaciones de @flotadsp | solo me gusta y seguidores; sin comentarios. Aviso de Instagram «alguien está intentando iniciar sesión» (hace 3 h; probablemente el enlace de Metricool): que lo mire Dani | — |
+| 00:50 | Facebook | notificaciones | solo reacciones a reels de la página; en los grupos, solo anuncios de empleo. **Hay un anuncio de pago de la página «FDs» (de Dani) con el pago rechazado** («Urgente: tus anuncios no se están publicando…»): no es de esta sesión, no se toca; Dani decide | — |
+
+Totales: X 3 respuestas (0 con app); TikTok 5 comentarios (1 con app, el ofrecimiento) + 1 seguida; YouTube 2 (1 con app);
+Instagram 0; Facebook 0. Con app: 3 de 11 (justo la proporción). Reddit no se intentó (bloqueado). Sin pieza nueva: quedan
+piezas sin usar (`invita-9x16.png`, carrusel C, X-* para el 07-11 en adelante) y sigue faltando el sketch FDS-4 del 08-11.
