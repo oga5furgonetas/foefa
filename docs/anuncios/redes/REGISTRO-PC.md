@@ -83,7 +83,6 @@ Instagram 0 (nada que contestar); Facebook 0. Proporción con app: 3 de 11.
 ### 29-10 23:30 — bono de bienvenida a 25 €
 - Dani: «súbelo a 25». El código ya lo tenía (`precios.js` BONO_CENT=2500, `server.py` _BONO_CENT=2500, fusión de
   `sweet-brown` 19:50). REDES.md apartado 3 y el post del L 10-11 pasan a 25 € (invita y gana sigue en 10 €/2,50 €).
-  Web redesplegada (`6b19bb8f.flota-2fg.pages.dev`, chequeos y build en verde). **Backend en producción: no
-  verificado** que pague 25 € (`/api/app/version` da 404, así que lo desplegado es anterior al código de hoy).
+  Web redesplegada (`6b19bb8f.flota-2fg.pages.dev`, chequeos y build en verde). Backend desplegado a las 23:35 (release v168) y **verificado**: `/api/billing/planes` devuelve `bono_cent: 2500`.
 - Nada de lo programado hasta el 05-11 menciona el bono. A partir de ahora la sesión del PC lleva las redes en
   bucle de 4 h (pasos 2-6).

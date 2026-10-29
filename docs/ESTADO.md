@@ -929,6 +929,10 @@ Dani: «eres el community manager de FDS, trabajas desde mi PC» (prompt de `doc
   (03-11). Faltan piezas para el 06-11 y 08-11 (sketches FDS-3/FDS-4) y otra para el 11-11.
 - Visto en @FlotaDSP dos posts de hoy que no son de la sesión; uno nombra a Amazon/SEUR/GLS/MRW (contra la regla). No se toca.
 - Remote Control: el modo automático no deja activarlo desde la sesión; Dani lo enciende desde la barra.
+- **23:35: backend DESPLEGADO con el bono de 25 €** (release v168 de `flota-backend`, imagen de `main` 6949400; el primer
+  `fly deploy --remote-only` construyó la imagen y dio 504 al crear la release, se reintentó con `--image`). Verificado:
+  `/api/billing/planes` → `bono_cent: 2500`, `/api/app/version` → 200. La web también lleva 25 € (desplegada 23:28).
+  Las v165-v167 de esta noche son de otras sesiones y no llevaban el bono (producción no devolvía `bono_cent`).
 
 ## Pendiente (por prioridad)
 
