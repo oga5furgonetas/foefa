@@ -11,7 +11,8 @@ oír aquí**: hay que mirarlo en Artlist antes de montar. Plan: «AI Suite 16500
 |---|---|---|
 | Imagen de referencia (2 variantes, 9:16, 2K) | Nano Banana Pro | 320 |
 | Locución de prueba (8 frases, español) | ElevenLabs Eleven v3, voz «Alberto Rodríguez» | 66 |
-| 5 planos de vídeo (ver abajo) | Veo 3.1 (2 con referencia) + Veo 3.1 Fast (3) | 4.000 (pendiente de que Dani apruebe) |
+| 5 planos de vídeo (ver abajo) | Veo 3.1 (2 con referencia) + Veo 3.1 Fast (3) | 4.000 (aprobados por Dani, generados) |
+| Locución de prueba 2, con el texto corregido tras la revisión (las dos frases finales) | misma voz | 70 |
 
 Precios medidos para decidir: Veo 3.1 1080p, 4 s = 1.000 y 6 s = 1.500; Veo 3.1 Fast, 4 s = 500 y 6 s = 750;
 Kling 2.5 Turbo Pro, 5 s = 750; Seedance 2.5 1080p, 6 s = 6.000 (descartado). Nano Banana Pro: 160 por imagen.
@@ -28,13 +29,22 @@ de ninguna empresa. Si falla, se regenera (160 créditos) antes de hacer los ví
 
 ## Los 5 planos de vídeo (9:16, 1080p, sin audio)
 
-| Plano del guion | Modelo | Duración | Créditos | Estado |
+| Plano del guion | Modelo | Duración | Créditos | Descarga |
 |---|---|---|---|---|
-| 1 · la pila y la libreta | Veo 3.1 Fast (texto a vídeo) | 4 s | 500 | pendiente de aprobar |
-| 2 · ¿por dónde empiezas? | Veo 3.1 con la imagen de referencia | 4 s | 1.000 | pendiente de aprobar |
-| 3 · el móvil hacia la etiqueta | Veo 3.1 Fast | 4 s | 500 | pendiente de aprobar |
-| 7a · la furgoneta por la ciudad | Veo 3.1 Fast | 4 s | 500 | pendiente de aprobar |
-| 9 · la furgoneta vacía | Veo 3.1 con la imagen de referencia | 6 s | 1.500 | pendiente de aprobar |
+| 1 · la pila y la libreta | Veo 3.1 Fast | 4 s | 500 | [video-c5266866](https://mcp.artlist.io/mcp/download?u=https%3A%2F%2Fcms-toolkit-artifacts.artlist.io%2Fcontent%2F-t-e-x-t_-t-o_-v-i-d-e-o-v1%2Fmedia__1%2Fvideo-c5266866-d5d0-42ae-b572-1a32b0fdc8f5.mp4%3FExpires%3D2108638993%26Key-Pair-Id%3DK2ZDLYDZI2R1DF%26Signature%3DOFXFqtd1~o~tpACzg-P~rSVUFTNuIxhq0tLFPpaHz-ZP0UETqHQzq~ufpWs9AZMX88ct3mhTahe8Pc6N9KC-n8BBZ9y8Lwenvai9VlgV-PJ2gbJ2DmkV9dAFpno4q99TjPdqVVKWYnYWL74S~xrtQwY7nzB44yKtldEcDGWcJdhXuY5oTRsRiUODGI1OB27NznywKTyZnxuCmHlo8E6sXJaQohDZtAdGfk2nKiTQ2mFbaLre7oHtyp0mUpdwPPsv54myb3qkFyEvcIyAsMHtHGCqnLnVEfWkzNKR2IcqoK-N04ZTRcqoNz-aZd6NVhHuWS1-NARVUnpJGl9Qo5MJ9w__&name=video-c5266866-d5d0-42ae-b572-1a32b0fdc8f5.mp4) |
+| 2 · ¿por dónde empiezas? | Veo 3.1 con la referencia (variante 0) | 4 s | 1.000 | [video-5921a70b](https://mcp.artlist.io/mcp/download?u=https%3A%2F%2Fcms-toolkit-artifacts.artlist.io%2Fcontent%2F-e-x-t-e-r-n-a-l_-i-m-a-g-e_-t-o_-v-i-d-e-o-v1%2Fmedia__3%2Fvideo-5921a70b-07bc-4248-9bcd-d42c4d2818f6.mp4%3FExpires%3D2108638935%26Key-Pair-Id%3DK2ZDLYDZI2R1DF%26Signature%3DQxRZFAWEekJgz6VyRYjn9S4bmoLWFdVH6XjR7phDSe0hD4DtuZmq3cTTuZKpqkzsrTUY2HQlamez3Y8aCQq~I9rt4wNGRsikGFPPwGdV8gmsu0xi1e~-9NbbflL91ubn3Sy1wpIezRXTWIDhg3i6A5WsSNEXP72DxXjQbspdtyF-1L46N6Y7oppFEdp6K1MgOGXNYeESv63RFx9SVwwh5fJXZbjlNaGwa~FFloAzbunaP4dSgKkHMZTMI-xI5rWSyfe2j1AMi8cXaXRU6vo8VFgt8N8SHgm7GNyCu1W~J0SYZQIOZ75TMkgwjmVGHtdhXGkNClYWU2hoe4YPu8vxQw__&name=video-5921a70b-07bc-4248-9bcd-d42c4d2818f6.mp4) |
+| 3 · el móvil hacia la etiqueta | Veo 3.1 Fast | 4 s | 500 | [video-aebf46fd](https://mcp.artlist.io/mcp/download?u=https%3A%2F%2Fcms-toolkit-artifacts.artlist.io%2Fcontent%2F-t-e-x-t_-t-o_-v-i-d-e-o-v1%2Fmedia__5%2Fvideo-aebf46fd-adf3-45f7-9104-e4605568f7ad.mp4%3FExpires%3D2108638932%26Key-Pair-Id%3DK2ZDLYDZI2R1DF%26Signature%3Dxqu7A6PRpHLKQMFi0kW9eoZkq7bi3Bv2d5o5Sg-c8jA3SgeMKjQei8c2PHk~s7qg4hJU4ka9ZSeEiRZGAu6dM5GgtRh3rIRChdGGf5jNHbt8j2sMw8oY-ZIGUfrQAk1jhL9ovZ-~U16yXNpDv0QsesUfgIUIYWb6RMyIV2OyFLVT~Q~kIaPhVeosayP5K4Xd3XEPr95p7WsB1SXOy7KW7W8jpG-caVgSfBg3UR84DMkrQYSq2sPBIGW5pWiXFuaJvS7qc6dJXfvCbMen6P~QjumdPoB9Nc45VhRCNxUHG6YA79zw0nXwomUCj6LSQSbWt2ZcBq75Tkj-clHCdUIJGg__&name=video-aebf46fd-adf3-45f7-9104-e4605568f7ad.mp4) |
+| 7a · la furgoneta por la ciudad | Veo 3.1 Fast | 4 s | 500 | [video-5cc19a00](https://mcp.artlist.io/mcp/download?u=https%3A%2F%2Fcms-toolkit-artifacts.artlist.io%2Fcontent%2F-t-e-x-t_-t-o_-v-i-d-e-o-v1%2Fmedia__1%2Fvideo-5cc19a00-becd-48a8-bc86-95cbc0dae72a.mp4%3FExpires%3D2108638932%26Key-Pair-Id%3DK2ZDLYDZI2R1DF%26Signature%3DgaMOE9j6IPcP7jsXvQ4fwn7bxPUhwXHPyeCzQPt-6Y6fxY-dol~1LRGI60lzGq0LYdDAAsA8-PoWOFFLvBK7BrxwRVqz7iY7YAWjAY-zaNwApuqw1aNdQgGJuyAV1ZLfNpDljtE8L8HsXGgb6utqO3O22Lh~gRKtz5L0mJCxV5s-4g3sL1sCjiVieLEr0Cn2JmJSXNJ0y~ut4QXkHfd~P-mYpjVfKpobnMLG--YrtsdH-j5sjk3~o1HtApR3vdnnR1FzQMhPpddFwFt~31gz94WtEsie6cWFQAPM~EY8q3n1nAFV4BBHKlJUhh4ojn8H~IY9qAawyhg-oR8EMmDOvA__&name=video-5cc19a00-becd-48a8-bc86-95cbc0dae72a.mp4) |
+| 9 · la furgoneta vacía | Veo 3.1 con la referencia (variante 0) | 6 s | 1.500 | [video-1650f2a9](https://mcp.artlist.io/mcp/download?u=https%3A%2F%2Fcms-toolkit-artifacts.artlist.io%2Fcontent%2F-e-x-t-e-r-n-a-l_-i-m-a-g-e_-t-o_-v-i-d-e-o-v1%2Fmedia__5%2Fvideo-1650f2a9-3b16-47af-a31f-6e59c765117b.mp4%3FExpires%3D2108638937%26Key-Pair-Id%3DK2ZDLYDZI2R1DF%26Signature%3Df98JGEf7~NQH55XWF-xBmAMKDK6~m8qK25gNPGnPINxQd8yZ2z3IwWd-RvvcYZvuA6oClRUavPA7zVJ8M0Ci59UuWlAjokkg4~z0lh6tZXJG8jSKlyKUhTcr4OMvf6A9u5mJaUtw8uOi7-uyW3vEN9TDD-qxbnfO9nhzXtKp6oR7EzlouH1imVagDfHs1ErbOYuN5wvuHOx4iMMon2iHsByFH7oVhjOn~DJrmXO6k2d65Zn1dX5P0hLUVO~gZ-L1P3Mec9YR4RTd~Q4jqmxgg6VFMN9QT5MBBSDr3TR~qcoi4~5XJUdDY0mBnR5MTt0dKT~9LK2vTgiZwHmCBzSdPA__&name=video-1650f2a9-3b16-47af-a31f-6e59c765117b.mp4) |
+
+Generados el 29-10 a las 13:00 con los prompts de ENTONCES (prohibiciones dentro del prompt, «labios contando» y «mano
+en la nuca» en el plano 2, «reflejo en la pantalla» en el 7a). La revisión independiente los corrigió después:
+los prompts buenos para repetir un plano son los de `GUION.md` §5.2 y §5.4. Desde aquí solo se ha podido ver un
+fotograma del plano 1 (cajas marrones lisas, etiquetas en blanco, sin texto: bien). Lo que mirar en cada uno, en
+Artlist: ni una letra ni logotipo; manos bien (planos 1 y 3); que en el 2 y el 9 sea el mismo hombre que en la
+referencia y que no mueva la boca; que en el 7a no se vea una interfaz inventada en el móvil. En los planos 2 y 9 la
+referencia entró como imagen de arranque (`image_url`): si el 9 empieza en la nave en vez de en la calle a mediodía,
+se repite pasando la referencia dos veces (variantes 0 y 1) para forzar el modo «referencias».
 
 Por qué así: solo los planos donde se ve la cara (2 y 9) necesitan la referencia para que sea el mismo hombre; los
 de manos, furgoneta y cabina salen igual de bien con el modelo rápido a mitad de precio. Los prompts exactos son los
@@ -45,8 +55,12 @@ de `GUION.md` §5.4 con la biblia de §5.2 delante y el negativo de §5.2 en «n
 Voz de prueba generada con Artlist (voz «Alberto Rodríguez», acento latinoamericano: en Artlist **no hay voz
 masculina con acento de España**). Sirve para montar y medir tiempos, **no para publicar en España**: la voz final es
 Puck (Gemini TTS, `scripts/spot-v5/voz_gemini.py`, la que eligió Dani) o la de Dani grabada.
-- Generación `01a187b9-f9ce-77ca-8a98-6201667a497c`, **24 s** (encaja con los 25 s del guion sin acelerar nada):
+- Voz 1 (texto antes de la revisión; ya no es el guion): `01a187b9-f9ce-77ca-8a98-6201667a497c`, 24 s:
   https://mcp.artlist.io/mcp/download?u=https%3A%2F%2Fcms-toolkit-artifacts.artlist.io%2Fcontent%2F-t-e-x-t_-t-o_-s-p-e-e-c-h-v1%2Fmedia__2%2F-t-e-x-t_-t-o_-s-p-e-e-c-h-ddd96ef0-70b8-4b19-a02b-95b9e4a48f1b.mp3%3FExpires%3D2108638528%26Key-Pair-Id%3DK2ZDLYDZI2R1DF%26Signature%3DPUwgeXHwq2SuJK~PFQoeR8KS1GNtl8~4567XKj0gG84j8IlZ1mgysiq5AReqknApFXmanXXj3QzjUdyccPsQhvGaLqvSbTnLP-rhO4LA637MSzHsU5mW4Jg8n0EijeGq6-6imblK-uSa1bWm-yYIY96z8GS4wUxnLYXRpCYq5dgR7SCOs7qnlGskgpB5acmjx7PTlgxw0-w-C6L5Ht9d18pItouuDYWWM1BClFuZxGu1Dnb4GtmOFxhz4vAKwuDro-TR343acUZFXVi38lrNjqNTLYKWzci-jiJ9TL5~nrJld78bYw~nmb5MOD6flO7bNnzjNREcQtY~46BECc3wMA__&name=-t-e-x-t_-t-o_-s-p-e-e-c-h-ddd96ef0-70b8-4b19-a02b-95b9e4a48f1b.mp3
+- **Voz 2, la buena para montar** (texto final de `GUION.md` §4, con las DOS frases de cierre seguidas: la de la
+  salida B y, tras una pausa, la de la salida A; se corta la que no toque): `01a187c3-561a-7833-92ef-05fa41cccd77`,
+  **25 s**:
+  https://mcp.artlist.io/mcp/download?u=https%3A%2F%2Fcms-toolkit-artifacts.artlist.io%2Fcontent%2F-t-e-x-t_-t-o_-s-p-e-e-c-h-v1%2Fmedia__5%2F-t-e-x-t_-t-o_-s-p-e-e-c-h-caaa69a7-ca6f-40f6-a96b-cd872a6f630c.mp3%3FExpires%3D2108639199%26Key-Pair-Id%3DK2ZDLYDZI2R1DF%26Signature%3DNnFRF9O6jbWyW~yQRYfiLkV4vn9zU5S3b13wkTfM5clbLJqyreRRTYWMA4Xp9NuoK5wfKSlyEnzKQZu0ruFN0SkcDgKMFn4Vz7aCwraIhHTjLh~zgsZAKupFoHAqslpcad9yh6GfZ1HmyU7Ksgae8sVxrDIATaHWHEORp9nHoY4oBEPGYrEEkOFTXTTj1LgKtVYuwp~-jU3sS0JqUZzVengER9WIb-G0tJgWIW4eHHZW4M6kFbKoCE-UdOIr-Fsirhh9eu-STblATGblncAAEmMTGRp-8WRSkpTWKm7dAobKLcsfk3zVgVhYuVHqOS0xrplHWWhmugnGjbLjLFd1hQ__&name=-t-e-x-t_-t-o_-s-p-e-e-c-h-caaa69a7-ca6f-40f6-a96b-cd872a6f630c.mp3
 
 ## Música (catálogo de Artlist, con licencia del plan; se descarga al montar, no antes)
 
@@ -77,7 +91,7 @@ anuncio) y que acabe bien en seco. Si ninguna, buscar «urban hip hop instrument
 
 ## Lo que falta para tener el anuncio
 
-1. Dani aprueba los 4.000 créditos (o cambia el reparto de modelos) y se generan los 5 planos; se miran en Artlist.
+1. Dani mira los 5 planos y la referencia en Artlist (lista de arriba) y repite el que falle con los prompts corregidos.
 2. Las 5 pantallas reales (GUION.md §6): grabadas en la nave o con el montaje del spot v5.
 3. Montaje (GUION.md §4, §7 y §8): planos de IA + pantallas + voz (Puck o Dani) + subtítulos + música + efectos +
    tarjeta final con `qr-play-fds-spot.png`. Tres ganchos, 9:16 / 4:5 / 1:1 (/ 16:9).

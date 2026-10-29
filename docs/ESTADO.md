@@ -703,16 +703,26 @@ para que se mandaran los prompts directamente.
 - **Artlist (cuenta de Dani, plan AI Suite 16500)**: hecha la imagen de referencia del repartidor y la furgoneta
   (Nano Banana Pro, 2 variantes, 320 créditos) y una locución de prueba de 24 s (voz «Alberto Rodríguez», acento
   latinoamericano: Artlist no tiene voz masculina de España; la final sigue siendo Puck o Dani). Los 5 planos de vídeo
-  (Veo 3.1 con referencia para los dos con cara, Veo 3.1 Fast para manos/furgoneta/cabina) cuestan **4.000 créditos y
-  esperan la aprobación de Dani**. Música y efectos elegidos del catálogo con enlaces. Todo en
+  (Veo 3.1 con referencia para los dos con cara, Veo 3.1 Fast para manos/furgoneta/cabina) **generados con la
+  aprobación de Dani (4.000 créditos)**; segunda locución con el texto final (70). Música y efectos elegidos del
+  catálogo con enlaces. Todo en
   `docs/anuncios/super-anuncio/GENERADO.md`. **Ojo**: desde este contenedor no se puede descargar ni ver nada de
   Artlist (la red de la sesión bloquea artlist.io e imgix.net): Dani lo mira en Artlist o se añaden esos dominios al
   entorno.
+- **Revisión independiente del guion** (un agente aparte, sin el contexto de la sesión): 12 hallazgos, todos
+  metidos. Los que cambian algo de verdad: el visor del escáner es la cámara, así que las etiquetas de la grabación
+  van impresas sin marca; la voz dice «foto o escaneo» (escanear solo mete la dirección con SEUR/DPD y GLS);
+  «empieza gratis» y no «gratis» (desde el 01-01 el gratis es hasta 15 paradas y el anuncio enseña 112); en el móvil
+  la voz manda al botón («Toca y crea tu cuenta») y el QR/«escanea y descárgala» solo donde se escanea desde otro
+  aparato; la frase de «ordenar» recortada (iba a 3,7 palabras/s); fuera el reloj 07:41; navegación grabada con «Esta
+  app» y la voz encendida (el spec del v5 la apaga); los ganchos se deciden por retención a 3 s con ≥2.000
+  impresiones, no por altas a 3 días; `docs/anuncios/artlist/GUION.md` corregido («entregado con prueba», botón «Ver
+  detalles») y apuntando a este como versión mantenida.
 
 ## Pendiente (por prioridad)
 
--5. **Anuncio «La ruta hecha» (29-10 noche)**: Dani aprueba los 4.000 créditos de Artlist (o cambia modelos) y se
-   generan los 5 planos; mira la imagen de referencia y la voz en Artlist; graba las 5 pantallas reales (GUION.md §6);
+-5. **Anuncio «La ruta hecha» (29-10 noche)**: Dani mira en Artlist los 5 planos generados, la referencia y la voz 2
+   (enlaces en GENERADO.md) y repite lo que falle; graba las 5 pantallas reales (GUION.md §6, etiquetas sin marca);
    montaje con Puck o su voz; tres ganchos; subir (GUION.md §10). Ficheros: `docs/anuncios/super-anuncio/`.
 
 
