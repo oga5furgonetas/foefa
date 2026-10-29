@@ -115,3 +115,25 @@ async def test_una_sola_cuenta_sigue_igual(base):
     assert (await _entrar("solo-una-1")).id == "f-activa"
     with pytest.raises(HTTPException):
         await _entrar("lo-que-sea-1")
+
+
+@pytest.mark.asyncio(loop_scope="session")
+async def test_un_reset_de_la_oficina_posterior_a_la_propia_si_abre(base):
+    """La oficina pone una temporal nueva a quien ya tenía la suya: tiene que entrar con la temporal nueva
+    (es más nueva que la propia), y la temporal VIEJA de la otra cuenta sigue sin valer."""
+    base["driver_accounts"].docs[1].update(hashed_password=server.hash_password("mi-clave-propia-1"),
+                                            password_changed_at="2026-10-29T16:00:00+00:00")
+    for k in ("must_change_password", "creada_en_bloque"):
+        base["driver_accounts"].docs[1].pop(k)
+    with pytest.raises(HTTPException):
+        await _entrar(TEMPORAL)
+    oficina = {"sub": "a1", "role": "admin", "name": "Oficina", "org_id": "o1", "db_name": "dsp_o1"}
+    await server.set_driver_password(server.SetDriverPasswordRequest(driver_id="f-activa", password="reset-oficina-1"), oficina)
+    # Las dos cuentas llevan la temporal nueva, con su hora.
+    assert all(server.verify_password("reset-oficina-1", c["hashed_password"]) and c.get("password_temp_created_at")
+               for c in base["driver_accounts"].docs)
+    s = await _entrar("reset-oficina-1")
+    assert s.id == "f-activa" and s.configurar_cuenta is True
+    with pytest.raises(HTTPException):
+        await _entrar("mi-clave-propia-1")                 # la propia la ha sustituido la oficina
+

@@ -7848,17 +7848,19 @@ async def driver_token_by_id(data: dict, request: Request):
 def _cuentas_que_cuadran(cuentas: list, password: str) -> list:
     """De las cuentas de un mismo correo (una por ficha), las que abre esta contraseña, la mejor primero.
 
-    Si la persona ya se puso una propia en alguna (`password_changed_at`), las temporales de las demas
-    dejan de abrir: la temporal era la misma para todas y ya no es suya. Primero la que cambio la persona
-    y, si hay varias, la mas reciente.
+    Si la persona ya se puso una propia en alguna (`password_changed_at`), las temporales ANTERIORES de las
+    demas dejan de abrir: la temporal era la misma para todas y ya no es suya. Una temporal puesta DESPUES
+    por la oficina (reset: `password_temp_created_at` mas nuevo) si abre, que para eso la ha puesto.
+    Primero la que cambio la persona y, si hay varias, la mas reciente.
     """
-    propia = any(c.get("password_changed_at") for c in cuentas)
+    ultima_propia = max((str(c.get("password_changed_at") or "") for c in cuentas), default="")
     validas = []
     for c in cuentas:
         if not verify_password(password, c.get("hashed_password", "")):
             continue
         temporal = bool(c.get("must_change_password") or c.get("creada_en_bloque"))
-        if propia and temporal:
+        puesta = str(c.get("password_temp_created_at") or c.get("created_at") or "")
+        if temporal and ultima_propia and puesta <= ultima_propia:
             continue
         validas.append(c)
     return sorted(validas, key=lambda c: (bool(c.get("password_changed_at")),
@@ -8466,12 +8468,18 @@ async def set_driver_password(
 
     existing = await db.driver_accounts.find_one({"driver_id": data.driver_id})
     hashed = hash_password(data.password)
+    ahora = datetime.now(timezone.utc).isoformat()
+    # Con su hora y en TODAS las cuentas del mismo correo (la persona con dos fichas tiene dos): el login
+    # solo deja usar una temporal mas nueva que la contraseña propia que se hubiera puesto (29-10-2026).
+    correo = str(driver.get("email") or "").strip().lower()
+    mias = {"$or": [{"driver_id": data.driver_id},
+                    {"email": {"$regex": f"^{re.escape(correo)}$", "$options": "i"}}]}
 
     if existing:
-        await db.driver_accounts.update_one(
-            {"driver_id": data.driver_id},
+        await db.driver_accounts.update_many(
+            mias,
             {"$set": {"hashed_password": hashed, "active": True,
-                      "must_change_password": True}}
+                      "must_change_password": True, "password_temp_created_at": ahora}}
         )
         logger.info(f"Password reseteado para conductor {data.driver_id}")
     else:
@@ -8482,7 +8490,8 @@ async def set_driver_password(
             "hashed_password": hashed,
             "active": True,
             "must_change_password": True,
-            "created_at": datetime.now(timezone.utc).isoformat()
+            "password_temp_created_at": ahora,
+            "created_at": ahora
         })
         logger.info(f"Cuenta creada para conductor {data.driver_id} ({driver['email']})")
 
@@ -8561,7 +8570,7 @@ async def generar_accesos_conductores(data: DriverBulkPasswordRequest,
                     "id": str(uuid.uuid4()), "driver_id": c["id"], "email": email,
                     "hashed_password": hash_temporal, "active": True,
                     "created_at": ahora, "creada_en_bloque": True,
-                    "must_change_password": True,
+                    "must_change_password": True, "password_temp_created_at": ahora,
                 })
             except DuplicateKeyError:
                 # Otra pestaña pudo crear la cuenta; no sobrescribirla a ciegas.

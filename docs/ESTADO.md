@@ -736,8 +736,12 @@ bloque se crearon una por ficha, las dos con la misma temporal). El login entrab
 «Ficha de conductor desactivada»). Arreglado en el servidor (commit de esta nota): el login mira TODAS las cuentas
 del correo y entra por la que abre, prefiriendo la de la ficha activa; una vez que la persona tiene contraseña
 propia en una, la temporal de las otras deja de valer; y cambiarla escribe en todas las cuentas del mismo correo.
-Tests en `test_cuentas_duplicadas.py`. **Mientras no se despliegue**: a los tres les vale su contraseña TEMPORAL
-(sigue en la otra cuenta); tras 5 intentos fallidos hay 5 minutos de bloqueo. Al desplegar, les entra la nueva.
+Tests en `test_cuentas_duplicadas.py`. Desplegado a las 20:00: desde entonces les entra la contraseña que se
+pusieron (la ÚLTIMA, si la cambiaron varias veces) y la temporal YA NO (muchos siguen probando la temporal: de ahí
+los avisos de después de las 20:00). Tras 5 intentos fallidos, 5 minutos de bloqueo. Y a las 21:40 (commit de esta
+nota, **FALTA DESPLEGAR**): una temporal que ponga la oficina DESPUÉS (reset en la ficha) sí abre, porque lleva su hora
+(`password_temp_created_at`) y es más nueva que la propia; el reset de la oficina escribe en todas las cuentas del
+mismo correo. Sin esto, resetear desde el panel a quien ya tenía contraseña propia no servía de nada.
 
 **Web DESPLEGADA el 29-10 a las 20:40** (wrangler desde el PC, con `npx.cmd`): página de planes, aviso de ubicación,
 fichas de ayuda, colores y los km a mano de la auditoría. **App 2.2.5 firmada por GitHub a las 21:14** (ver Pendiente
