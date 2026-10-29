@@ -5,7 +5,7 @@
 > haz commit y `git push`. Una sola sesión trabajando a la vez: antes de
 > empezar, `git pull` y comprueba que nadie ha dejado nada a medias aquí.
 
-Última actualización: **29-10-2026 (noche, 3)** (el despliegue del bono de 25 € por GitHub Actions volvió a parar en la guardia: faltan los 3 secretos; el anuncio con la voz de Dani está listo para subir con la lista de clics en `docs/anuncios/spot-dani/SUBIR.md`; ver «Última sesión»). Antes, noche 2: (el anuncio con la VOZ DE DANI y el mapa real de A Coruña, montado en `docs/anuncios/spot-dani/salida/`; ver «Última sesión»). Antes, noche: (anuncio «La ruta hecha»: guion para IA en `docs/anuncios/super-anuncio/` y generaciones en Artlist). Antes, tarde: (el CI de `main` llevaba desde el 18-10 en rojo; checkers arreglados de raíz y todo el CI en verde en local; ver «Última sesión»). Por la mañana: FDS 2.2.3 compilada, probada y firmada, el AAB listo para Play (ver «29-10-2026 (mañana)»).
+Última actualización: **29-10-2026 (noche, 3)** (**el bono de 25 € DESPLEGADO** desde el PC de casa de Dani, backend a Fly y web a Pages, a las ~16:50-16:55 hora de España; Actions sigue sin los 3 secretos; el anuncio con la voz de Dani listo para subir con la lista de clics en `docs/anuncios/spot-dani/SUBIR.md`; ver «Última sesión»). Antes, noche 2: (el anuncio con la VOZ DE DANI y el mapa real de A Coruña, montado en `docs/anuncios/spot-dani/salida/`; ver «Última sesión»). Antes, noche: (anuncio «La ruta hecha»: guion para IA en `docs/anuncios/super-anuncio/` y generaciones en Artlist). Antes, tarde: (el CI de `main` llevaba desde el 18-10 en rojo; checkers arreglados de raíz y todo el CI en verde en local; ver «Última sesión»). Por la mañana: FDS 2.2.3 compilada, probada y firmada, el AAB listo para Play (ver «29-10-2026 (mañana)»).
 
 ## Qué es y dónde está
 
@@ -781,6 +781,21 @@ business.facebook.com y ads.tiktok.com, y no hay ningún PC enlazado por Remote 
   comprueba solo que `/api/health` contesta con Mongo y que la web sirve el bundle nuevo.
   Comprobación final en cualquiera de los dos: abrir https://flotadsp.com/repartidores y leer **«Gana 25 € con tu
   primera ruta real»**. Si sigue diciendo 10 €, no publicar el anuncio.
+- **DESPLEGADO desde el PC de casa de Dani** (`C:\Users\dlvie\foefa`, usuario `dlvie`; tiene git, node, python y
+  `fly`, no tiene `wrangler` ni el fichero del token). Dani lo hizo a mano, paso a paso, con la sesión dictando y él
+  pegando la salida (desde la nube no se llega ni a Fly ni a Cloudflare):
+  - rama `claude/pensive-goodall-zthly3` (commit 328a64f), `fly deploy --remote-only -a flota-backend --strategy
+    immediate --ha=false` desde `backend/`: «Visit your newly deployed app at https://flota-backend.fly.dev/» (~16:50
+    hora de España). Aviso inofensivo al final: «DNS verification failed: expected 1 AAAA records…, got 0».
+  - web: `Set-ExecutionPolicy -Scope Process Bypass` (npm.ps1 estaba bloqueado), `npm ci`, `npm run build` con
+    `VITE_API_URL=https://flota-backend.fly.dev/api`, `VITE_META_PIXEL_ID=1317231944812644` y
+    `VITE_TIKTOK_PIXEL_ID=DB2AIGBC77U04C8M31L0`, `sellar-build.mjs` (sello `index-PsS75fih.js`), `npx wrangler login`
+    (OAuth en el navegador) y `npx wrangler pages deploy dist --project-name flota --branch main --commit-dirty=true`:
+    «Deployment complete! https://8f7c3de7.flota-2fg.pages.dev» (15:55 UTC, 16:55 hora de España). 260 ficheros subidos.
+  - Con eso el PC de casa queda logueado en Fly (cuenta nueva) y en Cloudflare: desde ahí también se despliega. Lo que
+    NO tiene: `despliegue.local.json` (los `.ps1` pedirían el destino) ni el fichero del token de Fly.
+  - Verificación visual (https://flotadsp.com/repartidores → «Gana 25 € con tu primera ruta real» y
+    https://flota-backend.fly.dev/api/health → `status ok`, `mongo_connected true`): pendiente de que Dani lo confirme a ojo (la sesión en la nube no llega a producción).
 - **El anuncio, listo para subir con la lista exacta de clics**: `docs/anuncios/spot-dani/SUBIR.md` (nuevo). Por
   plataforma: fichero, texto, enlace con `utm_content=spotdani`, el orden de clics y qué marcar («Contenido generado
   por IA»). Presupuesto propuesto, **pendiente del sí de Dani**: 10 €/día en TikTok y 10 €/día en Meta (Android →
@@ -835,11 +850,10 @@ España): «utilízame este audio y móntame el vídeo acorde al audio»; y «me
 ## Pendiente (por prioridad)
 
 -5. **El anuncio con la voz de Dani (29-10 noche, 2)**: montado en `docs/anuncios/spot-dani/salida/`. Falta:
-   (1) **desplegar el bono de 25 €** — SIGUE SIN DESPLEGAR (29-10 noche, 3: el run 3 de `desplegar.yml` paró en la
-   guardia por los 3 secretos). Dani: o pone `FLY_API_TOKEN`, `CLOUDFLARE_API_TOKEN` y `CLOUDFLARE_ACCOUNT_ID` en
-   Settings → Secrets → Actions y relanza «Desplegar producción» sobre `claude/pensive-goodall-zthly3`, o ejecuta
-   `scripts\deploy-backend.ps1` y `deploy-frontend.ps1` en su PC desde esa rama. Comprobar en
-   https://flotadsp.com/repartidores «Gana 25 € con tu primera ruta real» ANTES de publicar nada;
+   (1) ~~desplegar el bono de 25 €~~ **DESPLEGADO el 29-10 a las ~16:55 (hora de España) desde el PC de casa** (backend
+   y web; ver «Última sesión»). Queda: que Dani confirme a ojo «Gana 25 € con tu primera ruta real» en
+   https://flotadsp.com/repartidores (pendiente). Para la próxima vez sin PC: los 3 secretos de Actions
+   (`FLY_API_TOKEN`, `CLOUDFLARE_API_TOKEN`, `CLOUDFLARE_ACCOUNT_ID`) siguen sin poner;
    (2) publicar con `docs/anuncios/spot-dani/SUBIR.md` (lista de clics por plataforma, presupuesto 10 €/día TikTok +
    10 €/día Meta pendiente de su sí, campañas en pausa hasta confirmar): TikTok y Meta el 9:16 B (+ 4:5 en feed),
    Spotify a mano con el `-30s`, YouTube el 16:9 y el 9:16 con QR; medir a los 3 y 7 días;
