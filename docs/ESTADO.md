@@ -716,9 +716,10 @@ comprobar aquí (ver abajo lo que decide el CI).
   previas, renovar del conductor, forgot-password, app/version, analítica) y un test unitario de la app
   (`TextosHojaTest`). **El CI compila la app** (job «App Android»: `testDebugUnitTest` + `assembleDebug` en Ubuntu).
 
-**Lo que decide el CI**: el job «App Android» es nuevo y es la primera vez que la app se compila fuera de un PC. Si
-sale en rojo, el log dice qué (SDK o un error de Kotlin); el compilador independiente (`kotlinc`, sin Android) no
-señaló ningún error de sintaxis en los 12 ficheros tocados, pero no resuelve las librerías.
+**Veredicto del CI (run 340, commit 87ed7cc)**: el job «App Android» compiló la 2.2.5 en Ubuntu en 5 min 30 s
+(`BUILD SUCCESSFUL`, sin un solo aviso del compilador de Kotlin) y pasó los dos tests unitarios; el backend en verde
+con las 80 comprobaciones del contrato. Es la primera vez que la app se compila fuera de un PC: desde ahora, un
+cambio en Kotlin que no compile se ve en `main` sin esperar al `gradlew` de Dani.
 
 ## 29-10-2026 (mañana): FDS 2.2.3 compilada por primera vez, probada y firmada (PC de Winiw)
 
@@ -741,12 +742,11 @@ señaló ningún error de sintaxis en los 12 ficheros tocados, pero no resuelve 
 
 ## Pendiente (por prioridad)
 
--5. **FDS 2.2.5 (29-10 noche)**: mirar el job «App Android» del CI en `main`. Si está en verde, en el PC de casa
+-5. **FDS 2.2.5 (29-10 noche), compilada en verde por el CI (run 340)**: en el PC de casa
    (`C:\Users\dlvie\foefa\app-android`): `git pull`, los tres `gradlew` de PLAY_STORE.md → «Versión 2.2.5», probar
    el APK en el móvil (entrar, una entrega con foto, «Volver a por entregar», «He olvidado mi contraseña», y en el
    portal del conductor cerrar sesión con pregunta) y subir el AAB 17 a la prueba abierta. Al subir el APK a la web:
    `fly secrets set -a flota-backend APP_ANDROID_WEB="17 2.2.5"` (si no, nadie recibe el aviso de descargar).
-   Si el CI está en rojo en ese job, el log dice qué: arreglarlo antes de compilar.
 
 -4. **Desplegar y decidir (29-10 noche)**: desplegar el backend (fase 0 del estudio + `auth/renovar` del conductor +
    `/app/version`; hasta que esté, la 2.2.5 funciona igual pero sin esas tres cosas) y la web (página de planes,
