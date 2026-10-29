@@ -96,3 +96,36 @@ anuncio) y que acabe bien en seco. Si ninguna, buscar «urban hip hop instrument
 3. Montaje (GUION.md §4, §7 y §8): planos de IA + pantallas + voz (Puck o Dani) + subtítulos + música + efectos +
    tarjeta final con `qr-play-fds-spot.png`. Tres ganchos, 9:16 / 4:5 / 1:1 (/ 16:9).
 4. Subir (GUION.md §10) y mirar a los 3 días.
+
+## El vídeo montado (29-10, tarde): `salida/spot-ruta-*.mp4`
+
+Dani: «hazlo todo, móntalo todo y dame el resultado» y después «nada de letras encima de la app; un anuncio potente,
+que un repartidor sienta que necesita la app». Montado aquí, en el contenedor, con lo que había a mano:
+- **La app, grabada de verdad** (`frontend/e2e/spot-ruta.spec.js`, screencast de Chrome a 1080 px): escanear dos
+  paquetes (bip → «Añadida a tu ruta»), foto a la etiqueta, ordenar con la hora de cada parada, el mapa con las
+  zonas de carga y descarga encendiéndose, la guía parada a parada y la entrega con foto. Las etiquetas escaneadas
+  son códigos Aztec «Geolabel» fabricados sin marca de nadie; los consejos amarillos de la app van ocultos.
+  **Mapa**: sin red no hay teselas de OpenStreetMap, así que la grabación pinta un callejero esquemático propio
+  (manzanas, calles, parques). En el PC de Dani, con red, sale el mapa real de OSM: basta volver a grabar.
+- **Tratamiento** (`scripts/montar-spot-ruta.mjs` + `scripts/spot-ruta/capas.mjs`): la app dentro de un móvil
+  limpio sobre el fondo de marca, el titular de cada escena en su franja arriba (cian + blanco, Archivo 900), sin
+  subtítulos ni píldoras encima de la pantalla; anillo en cada toque; transiciones encadenadas; sonido medido
+  (voz -14 LUFS, música agachada bajo la voz, bip del escáner sintetizado, máster -14 LUFS / -1 dBTP).
+- **Gancho y pago emocional**: los fotogramas de los planos de Artlist (`stills/`), con movimiento lento. Los
+  vídeos no se pudieron descargar aquí; cuando estén en `clips/plano-1.mp4` y `clips/plano-9.mp4`, el montaje los
+  usa solos en lugar de los fotogramas.
+- **Voz**: Puck (las 6 frases grabadas el 24-10 para el v5, con sus tiempos de palabra), porque aquí no hay red
+  para generar otra: «¿Todavía ordenas la ruta a mano cada mañana?» → foto a la etiqueta → ordenar con la hora →
+  mapa y voz → «es gratis y sin tarjeta» → «entra en flotadsp.com». Es el gancho 3 del guion (el que ya convierte
+  en Meta). El gancho «112 paquetes» sale con `GANCHO=112` (solo texto, sin voz en el gancho).
+
+| Fichero | Para |
+|---|---|
+| `spot-ruta-9x16-B.mp4` | TikTok, Reels, Historias (cierre «toca el botón») |
+| `spot-ruta-9x16-A-qr.mp4` | YouTube Shorts con enlace a Play, pantallas de la nave, flyer (cierre con QR) |
+| `spot-ruta-4x5-B.mp4` · `spot-ruta-1x1-B.mp4` | feed de Facebook e Instagram |
+| `spot-ruta-16x9-A-qr.mp4` | YouTube in-stream, tele |
+| `spot-ruta-9x16-B-sin-voz.mp4` | la prueba «sin voz» del guion |
+
+Rehacerlo: `cd frontend && npx vite build && npx playwright test spot-ruta --project=escritorio --update-snapshots &&
+node ../scripts/spot-ruta/capas.mjs && cd .. && node scripts/montar-spot-ruta.mjs`.

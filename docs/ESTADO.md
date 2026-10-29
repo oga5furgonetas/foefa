@@ -709,6 +709,19 @@ para que se mandaran los prompts directamente.
   `docs/anuncios/super-anuncio/GENERADO.md`. **Ojo**: desde este contenedor no se puede descargar ni ver nada de
   Artlist (la red de la sesión bloquea artlist.io e imgix.net): Dani lo mira en Artlist o se añaden esos dominios al
   entorno.
+- **El anuncio, MONTADO** (Dani: «hazlo todo, móntalo todo y dame el resultado»; después: «nada de letras
+  encima de la app, actúa como el top del marketing»): `docs/anuncios/super-anuncio/salida/spot-ruta-*.mp4`
+  (9:16 B para TikTok/Reels, 9:16 A con QR, 4:5, 1:1, 16:9 y sin voz; 27,8 s; máster -14 LUFS). La app grabada
+  de verdad con `frontend/e2e/spot-ruta.spec.js` (escanear dos paquetes con códigos Aztec sin marca → «Añadida a
+  tu ruta», foto a la etiqueta, ordenar con la hora, el mapa con las zonas de carga y descarga encendiéndose, la
+  guía y la entrega con foto; sin consejos; sin red no hay teselas de OSM, así que la grabación pinta un
+  callejero esquemático propio: en el PC de Dani sale el mapa real al regrabar). Montaje `scripts/montar-spot-ruta.mjs`
+  + capas `scripts/spot-ruta/capas.mjs`: la app dentro de un móvil limpio sobre el fondo de marca, el titular de
+  cada escena en su franja arriba (nada encima de la pantalla, sin subtítulos), anillos en los toques, gancho y
+  pago emocional con los fotogramas de los planos de Artlist (los vídeos no se pudieron bajar; en `clips/` el
+  montaje los usa solos), voz de Puck (las 6 frases del v5, las únicas disponibles sin red: gancho «¿Todavía
+  ordenas la ruta a mano?», el que convierte), oferta «Empieza gratis», cierre B «toca el botón» / A con QR.
+  Variante `GANCHO=112` (solo texto en el gancho). Detalle y cómo rehacerlo: GENERADO.md.
 - **Revisión independiente del guion** (un agente aparte, sin el contexto de la sesión): 12 hallazgos, todos
   metidos. Los que cambian algo de verdad: el visor del escáner es la cámara, así que las etiquetas de la grabación
   van impresas sin marca; la voz dice «foto o escaneo» (escanear solo mete la dirección con SEUR/DPD y GLS);
@@ -721,8 +734,11 @@ para que se mandaran los prompts directamente.
 
 ## Pendiente (por prioridad)
 
--5. **Anuncio «La ruta hecha» (29-10 noche)**: Dani mira en Artlist los 5 planos generados, la referencia y la voz 2
-   (enlaces en GENERADO.md) y repite lo que falle; graba las 5 pantallas reales (GUION.md §6, etiquetas sin marca);
+-5. **Anuncio «La ruta hecha» (29-10 noche)**: el vídeo está montado (`docs/anuncios/super-anuncio/salida/`). Para
+   la versión definitiva: (1) bajar los 5 clips de Artlist a `super-anuncio/clips/` como `plano-1.mp4`… y
+   regrabar en el PC con red (mapa real de OSM); (2) si se quiere la voz del guion nuevo («112 paquetes»,
+   «empieza gratis»), generarla con Puck (`scripts/spot-v5/voz_gemini.py`) y cambiar las FRASES; (3) subir
+   (GUION.md §10) y medir. Dani mira en Artlist los 5 planos, la referencia y la voz 2 y repite lo que falle;
    montaje con Puck o su voz; tres ganchos; subir (GUION.md §10). Ficheros: `docs/anuncios/super-anuncio/`.
 
 
