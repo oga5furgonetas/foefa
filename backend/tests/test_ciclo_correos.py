@@ -580,3 +580,71 @@ def test_quien_se_apunta_por_la_noche_lo_recibe_a_la_manana_siguiente():
     # De madrugada (a la 1:00) no: le llegaría a las 6 h del alta; mejor la mañana de después.
     org = _org(ciclo_correos=env, created_at=(manana - timedelta(hours=7)).isoformat())
     assert cc.toca(org, {"paradas": 0}, manana) == ""
+
+
+# ── «bono25» (29-10-2026): tu primera ruta ahora vale 25 € ──────────────────────────────────────
+MEDIODIA = datetime(2026, 10, 30, 11, 0, tzinfo=timezone.utc)      # 12:00 en Madrid, viernes
+
+
+def test_bono25_a_quien_reparte_solo_con_el_bono_pendiente_y_sin_primera_ruta():
+    base = dict(sector="autonomo", email="p@x.es", status="trial")
+    sin = {"paradas": 0, "entregadas": 0, "entregadas_reales": 0}
+    assert cc.toca_bono25(dict(base), sin, MEDIODIA, True)
+    assert cc.toca_bono25(dict(base, status="active", created_at="2026-07-01T00:00:00+00:00"), sin, MEDIODIA, True)   # vieja
+    assert cc.toca_bono25(dict(base, ciclo_correos={"bono": {"at": "2026-10-17T08:00:00+00:00"}}), sin, MEDIODIA, True)
+    assert not cc.toca_bono25(dict(base), sin, MEDIODIA, False)                                          # ya cobró o caducó
+    assert not cc.toca_bono25(dict(base), {"paradas": 40, "entregadas": 25, "entregadas_reales": 20}, MEDIODIA, True)
+    assert not cc.toca_bono25(dict(base, ciclo_correos={"bono25": {"at": "2026-10-29T10:00:00+00:00"}}), sin, MEDIODIA, True)
+    assert not cc.toca_bono25(dict(base, correos_baja=True), sin, MEDIODIA, True)
+    assert not cc.toca_bono25(dict(base, status="cancelled"), sin, MEDIODIA, True)
+    assert not cc.toca_bono25(dict(base, demo=True), sin, MEDIODIA, True)
+    assert not cc.toca_bono25(dict(base, sector="empresa", plan="pro"), sin, MEDIODIA, True)
+    assert not cc.toca_bono25(dict(base, email=""), sin, MEDIODIA, True)
+    # Nunca a menos de 18 h de otro correo del ciclo, y solo de día (de 9 a 21 de su hora).
+    assert not cc.toca_bono25(dict(base, ciclo_correos={"opinion": {"at": (MEDIODIA - timedelta(hours=5)).isoformat()}}), sin, MEDIODIA, True)
+    assert not cc.toca_bono25(dict(base), sin, MEDIODIA.replace(hour=22), True)                           # 23:00 en Madrid
+    assert cc.toca_bono25(dict(base, zona_horaria="America/Mexico_City"), sin, MEDIODIA.replace(hour=16), True)   # 10:00 allí
+
+
+@pytest.mark.parametrize("idioma,pais,frases", [
+    ("es", "es", ("¡Enhorabuena! Tu primera ruta con FDS ahora vale 25 €", "20 entregas de verdad en 2 días distintos",
+                  "Tienes hasta el 19 de noviembre", "Bizum o transferencia", "puntúala en Google Play", "Contéstame con una línea")),
+    ("es", "mx", ("ahora vale 25 €", "PayPal")),
+    ("pt", "pt", ("Parabéns! A tua primeira rota com a FDS vale agora 25 €", "Tens até 19 de novembro", "avalia-a no Google Play")),
+    ("en", "gb", ("Congratulations! Your first route with FDS is now worth 25 €", "You have until 19 November", "rate it on Google Play")),
+    ("br", "br", ("Parabéns! Sua primeira rota com o FDS agora vale 25 €", "Você tem até 19 de novembro", "avalie no Google Play")),
+])
+def test_correo_bono25_dice_lo_que_es_verdad_y_lleva_play_y_qr(idioma, pais, frases):
+    org = _org(horas=24 * 9, pais=pais, idioma="pt" if idioma == "br" else idioma, name="Ana Mar")
+    play = "https://play.google.com/store/apps/details?id=com.flotadsp.flota&referrer=utm_source%3Dcorreo"
+    c = cc.correo("bono25", org, {"paradas": 0, "entregadas": 0, "entregadas_reales": 0}, MEDIODIA, marca="FDS",
+                  base="https://flotadsp.com", baja="https://b", mensual=9.99, anual=99, con_respuesta=True,
+                  bono_hasta="2026-12-31", bono_cent=2500, bono_limite="2026-11-19", ref_cent=1000,
+                  ref_espana=pais == "es", pase="PASE", play_url=play, qr_url="https://flotadsp.com/qr-play-correo.png")
+    todo = c["asunto"] + "\n" + c["texto"]
+    for f in frases:
+        assert f in todo, f
+    assert "Ana" in c["texto"] and "Ana Mar" not in c["texto"]            # el nombre de pila
+    assert play in c["texto"] and "/pase?ir=ruta" in c["texto"] and "#p=PASE" in c["texto"]
+    assert "10 €" in c["texto"] and "31 de dici" not in c["texto"]        # su fecha límite, no la de la promoción
+    h = c["html"]
+    assert h.count(_html_escape(play)) >= 2                                # el botón de Play y el enlace para valorarla
+    assert 'src="https://flotadsp.com/qr-play-correo.png"' in h and "Google Play" in h
+    assert "https://b" in h and "List-Unsubscribe" not in h               # la baja va en el pie (la cabecera la pone el servidor)
+    # Sin QR (p. ej. en pruebas sin web) el correo sigue entero.
+    sin_qr = cc.correo("bono25", org, {}, MEDIODIA, marca="FDS", base="https://flotadsp.com", baja="https://b",
+                       mensual=9.99, anual=99, con_respuesta=True, bono_hasta="2026-12-31", bono_cent=2500,
+                       bono_limite="2026-11-19", play_url=play)["html"]
+    assert "<img" not in sin_qr and _html_escape(play) in sin_qr
+
+
+def test_correo_bono25_sin_datos_del_servidor_no_inventa():
+    """Sin enlace de Play ni fecha propia: la ficha de Play y el fin de la promoción (nunca un hueco)."""
+    c = cc.correo("bono25", _org(horas=24), {}, MEDIODIA, marca="FDS", base="https://x", baja="https://b",
+                  mensual=9.99, anual=99, con_respuesta=True, bono_hasta="2026-12-31", bono_cent=2500)
+    assert cc.PLAY_URL in c["texto"] and "31 de diciembre" in c["texto"] and "{" not in c["texto"]
+
+
+def _html_escape(s):
+    import html
+    return html.escape(s)

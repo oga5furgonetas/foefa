@@ -780,6 +780,17 @@ España): «utilízame este audio y móntame el vídeo acorde al audio»; y «me
   en el directorio de claude.ai que lo harían desde una sesión nueva: «TikTok for Business» (oficial: crea campañas,
   grupos y anuncios) y «Adspirer Social Ads» (Meta Ads e Instagram, y TikTok). Spotify Ad Studio no tiene conector
   ni API: se sube a mano con `super-anuncio/SUBIR.md` y `spot-dani-9x16-B-30s.mp4`.
+- **Correo «tu primera ruta ahora vale 25 €»** (Dani: «a todos los que se han registrado y no han completado
+  ninguna ruta, un correo: enhorabuena, gana 25 €, completa tu primera ruta; el enlace de Google Play, un QR, que
+  la usen, que nos den feedback y nos puntúen»): clave `bono25` del ciclo de correos (`backend/ciclo_correos.py`:
+  `toca_bono25`, textos en es/pt/en/br, HTML con dos botones —abrir la ruta sin contraseña y Google Play— y el QR
+  `flotadsp.com/qr-play-correo.png`), y la campaña en `server.py` (`_campana_bono25_vuelta`, bucle cada 15 min):
+  a TODA cuenta de quien reparte solo con el bono pendiente y menos de 20 entregas de verdad, tenga la edad que
+  tenga, una vez, de 9 a 21 de su hora, con baja de un clic, nunca a menos de 18 h de otro correo del ciclo, dentro
+  de la cuota del día (Brevo 280; con Resend solo, dejando los 15 de reserva) y 40 por tanda. **Sale sola al
+  desplegar** (`CAMPANA_BONO25=0` la apaga). Dice su fecha límite real (30 días desde el alta o desde el 17-10),
+  cómo se gana, cómo se cobra, pide una línea de respuesta y la valoración en Play. Tests:
+  `tests/test_campana_bono25.py` y los nuevos de `test_ciclo_correos.py`; 1.388 en verde.
 - Lo que NO se pudo desde aquí (sigue igual): bajar los clips de Artlist y la voz de Gemini (ya no hace falta: la
   voz es la de Dani).
 
@@ -787,7 +798,9 @@ España): «utilízame este audio y móntame el vídeo acorde al audio»; y «me
 
 -5. **El anuncio con la voz de Dani (29-10 noche, 2)**: montado en `docs/anuncios/spot-dani/salida/`. Falta:
    (1) **desplegar el bono de 25 €**: Dani pone los 3 secretos en GitHub y se relanza `desplegar.yml` (o ejecuta
-   `scripts\deploy-backend.ps1` y `deploy-frontend.ps1` en su PC); (2) publicar: conectar «TikTok for Business» y
+   `scripts\deploy-backend.ps1` y `deploy-frontend.ps1` en su PC). Al desplegar el backend arranca sola la
+   campaña `bono25` (el correo a los ~100 registrados sin primera ruta; mirar el latido `campana_bono25` y
+   `correos_enviados` con `por: ciclo:bono25`); (2) publicar: conectar «TikTok for Business» y
    «Adspirer Social Ads» en claude.ai y, en sesión nueva, crear las campañas con el 9:16 B y los enlaces de
    SUBIR.md; Spotify a mano con el `-30s`; YouTube el 16:9 con QR; medir;
    (3) opcional, para afinar: bajar los 5 clips de Artlist a `super-anuncio/clips/` (`plano-1.mp4`,

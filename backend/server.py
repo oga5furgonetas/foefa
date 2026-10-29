@@ -21846,6 +21846,7 @@ async def start_ciclo_correos():
     asyncio.create_task(_bucle_ciclo_correos())
     asyncio.create_task(_bucle_aviso_manana())
     asyncio.create_task(_bucle_campana_bono())
+    asyncio.create_task(_bucle_campana_bono25())
 
 
 # ── AVISO DE LA MAÑANA (11-10-2026) ─────────────────────────────────────────
@@ -22113,6 +22114,124 @@ async def _bucle_campana_bono():
         except Exception as e:                                   # noqa: BLE001
             logger.error("Campaña bono10: %s", e)
         await asyncio.sleep(20 * 60)
+
+
+# ── CAMPAÑA «TU PRIMERA RUTA AHORA VALE 25 €» (29-10-2026) ──────────────────
+# Dani: «a todos los que se han registrado y no han completado ninguna ruta, un correo: enhorabuena, gana 25 €,
+# completa tu primera ruta; el enlace de Google Play o un QR; que la usen, que nos den feedback y nos puntúen».
+# Es un correo del ciclo (clave «bono25»: una vez por cuenta, con baja de un clic, de 9 a 21 de su hora, nunca a
+# menos de 18 h de otro del ciclo) pero a TODAS las cuentas de quien reparte solo que aún pueden ganar el bono y
+# no han hecho su primera ruta, tengan la edad que tengan (el ciclo normal solo mira las de los últimos 30 días).
+# Sale solo al arrancar el backend con el bono de 25 € desplegado; CAMPANA_BONO25=0 lo apaga.
+_PLAY_URL = "https://play.google.com/store/apps/details?id=com.flotadsp.flota"
+_PLAY_URL_CORREO = _PLAY_URL + "&referrer=utm_source%3Dcorreo%26utm_medium%3Demail%26utm_campaign%3Dbono25"
+_CAMPANA_BONO25_POR_VUELTA = 40        # por tanda (cada 15 min): no vacía la cuota del día de golpe
+
+
+def _campana_bono25_activa() -> bool:
+    return os.environ.get("CAMPANA_BONO25", "1").strip() == "1"
+
+
+async def _campana_bono25_pendientes(ahora: Optional[datetime] = None) -> list:
+    """[(org, uso, bono)] de quien le toca hoy, las altas más recientes primero."""
+    ahora = ahora or datetime.now(timezone.utc)
+    orgs = await global_db.organizations.find(
+        {"$or": [{"sector": "autonomo"}, {"plan": "autonomo"}], "email": {"$nin": ["", None]},
+         "correos_baja": {"$ne": True}, "demo": {"$ne": True}, "ciclo_correos.bono25": {"$exists": False}},
+        {"_id": 0}).to_list(5000)
+    fuera = []
+    for org in orgs:
+        b = _bono_resumen(org, ahora)
+        if not b or b["pagado"]:
+            continue
+        uso = await _ciclo_uso(org)
+        if ciclo_correos.toca_bono25(org, uso, ahora, True):
+            fuera.append((org, uso, b))
+    fuera.sort(key=lambda x: str(x[0].get("created_at") or ""), reverse=True)
+    return fuera
+
+
+async def _campana_bono25_enviar(org: dict, uso: dict, b: dict, ahora: datetime) -> bool:
+    """Manda «bono25» a esa cuenta. Las mismas guardas que _ciclo_enviar: la misma persona con dos cuentas no
+    recibe dos seguidos, se marca ANTES de mandar y, si no sale, se desmarca para la siguiente tanda."""
+    try:
+        reciente = (ahora - ciclo_correos.SEPARACION).isoformat()
+        if await global_db[_CORREOS_COL].find_one(
+                {"para": org["email"], "por": {"$regex": "^ciclo:"}, "ok": True, "at": {"$gte": reciente},
+                 "org_id": {"$ne": org["id"]}}, {"_id": 0, "id": 1}):
+            return False
+        marca = "ciclo_correos.bono25"
+        r = await global_db.organizations.update_one(
+            {"id": org["id"], marca: {"$exists": False}}, {"$set": {marca: {"at": ahora.isoformat()}}})
+        if not r.modified_count:
+            return False
+        responder = await _ciclo_responder_a()
+        t = PLAN_TARIFAS["autonomo"]
+        baja = _baja_url(org["id"])
+        pase = await _pase_de_correo(org)
+        c = ciclo_correos.correo("bono25", org, uso, ahora, marca=_email_remitente()[0], base=_PORTAL_BASE_FRONT,
+                                 baja=baja, mensual=t["mensual"], anual=t["anual"], con_respuesta=bool(responder),
+                                 promo_hasta=REP_GRATIS_HASTA if _rep_promo_activa() else "", tope=REP_GRATIS_PARADAS_DIA,
+                                 pase=pase, bono_hasta=_REF_PROMO_HASTA_DIA, bono_cent=b["cent"], bono_limite=b["limite"],
+                                 ref_cent=_ref_importe(org), ref_espana=_ref_en_espana(org),
+                                 play_url=_PLAY_URL_CORREO, qr_url=f"{_PORTAL_BASE_FRONT}/qr-play-correo.png")
+        ok = await _enviar_email(
+            org["email"], c["asunto"], c["html"], responder_a=responder, texto=c["texto"],
+            cabeceras={"List-Unsubscribe": f"<{baja}>", "List-Unsubscribe-Post": "List-Unsubscribe=One-Click"})
+        await global_db[_CORREOS_COL].insert_one({
+            "id": str(uuid.uuid4()), "para": org["email"], "copia": [], "asunto": c["asunto"],
+            "cuerpo": c["texto"].replace(pase, "…") if pase else c["texto"], "responder_a": responder,
+            "por": "ciclo:bono25", "org_id": org["id"], "at": ahora.isoformat(), "ok": bool(ok)})
+        if ok:
+            await global_db.organizations.update_one(
+                {"id": org["id"]}, {"$set": {f"{marca}.ok": True, f"{marca}.idioma": c["idioma"]}})
+        else:
+            await global_db.organizations.update_one({"id": org["id"]}, {"$unset": {marca: ""}})
+        return bool(ok)
+    except Exception as e:                                       # noqa: BLE001
+        logger.error("campaña bono25 (%s): %s", org.get("id"), e)
+        return False
+
+
+async def _campana_bono25_vuelta(ahora: Optional[datetime] = None) -> int:
+    """Una tanda: a quien le toque, dentro de la cuota del día (por Brevo si lo hay; si no, dejando a Resend
+    lo que necesitan los correos de la app). Devuelve cuántos salieron."""
+    if not _campana_bono25_activa():
+        return 0
+    ahora = ahora or datetime.now(timezone.utc)
+    proveedores = _email_proveedores()
+    if not proveedores:
+        return 0
+    hoy = ahora.date().isoformat()
+    de_la_campana = await global_db[_CORREOS_COL].count_documents({"at": {"$gte": hoy}, "por": "ciclo:bono25"})
+    if "brevo" in proveedores:
+        cupo = _CAMPANA_BREVO_TOPE_DIA - 20 - de_la_campana
+    else:
+        del_dia = await global_db[_CORREOS_COL].count_documents({"at": {"$gte": hoy}, "ok": True})
+        cupo = _CAMPANA_BONO_TOPE_DIA - _CAMPANA_BONO_RESERVA - del_dia
+    cupo = min(cupo, _CAMPANA_BONO25_POR_VUELTA)
+    if cupo <= 0:
+        return 0
+    n = 0
+    for org, uso, b in (await _campana_bono25_pendientes(ahora))[:cupo]:
+        if await _campana_bono25_enviar(org, uso, b, ahora):
+            n += 1
+    return n
+
+
+async def _bucle_campana_bono25():
+    await asyncio.sleep(240)
+    while True:
+        try:
+            if os.environ.get("RESEND_API_KEY") or os.environ.get("BREVO_API_KEY"):
+                n = await _campana_bono25_vuelta()
+                if n:
+                    logger.info("campaña bono25: %s correos", n)
+                await _latido("campana_bono25", enviados=n, cada_min=15, activa=_campana_bono25_activa(), error=None)
+        except Exception as e:                                   # noqa: BLE001
+            logger.error("Campaña bono25: %s", e)
+            await _latido("campana_bono25", error=str(e)[:200], cada_min=15)
+        await asyncio.sleep(15 * 60)
 
 
 # ── EMPLEO: OFERTAS Y CANDIDATOS ─────────────────────────────────────────────
