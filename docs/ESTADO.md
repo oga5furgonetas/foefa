@@ -5,7 +5,7 @@
 > haz commit y `git push`. Una sola sesión trabajando a la vez: antes de
 > empezar, `git pull` y comprueba que nadie ha dejado nada a medias aquí.
 
-Última actualización: **29-10-2026 (noche, 2)** (el anuncio con la VOZ DE DANI y el mapa real de A Coruña, montado en `docs/anuncios/spot-dani/salida/`; ver «Última sesión»). Antes, noche: (anuncio «La ruta hecha»: guion para IA en `docs/anuncios/super-anuncio/` y generaciones en Artlist). Antes, tarde: (el CI de `main` llevaba desde el 18-10 en rojo; checkers arreglados de raíz y todo el CI en verde en local; ver «Última sesión»). Por la mañana: FDS 2.2.3 compilada, probada y firmada, el AAB listo para Play (ver «29-10-2026 (mañana)»).
+Última actualización: **29-10-2026 (noche, 3)** (el despliegue del bono de 25 € por GitHub Actions volvió a parar en la guardia: faltan los 3 secretos; el anuncio con la voz de Dani está listo para subir con la lista de clics en `docs/anuncios/spot-dani/SUBIR.md`; ver «Última sesión»). Antes, noche 2: (el anuncio con la VOZ DE DANI y el mapa real de A Coruña, montado en `docs/anuncios/spot-dani/salida/`; ver «Última sesión»). Antes, noche: (anuncio «La ruta hecha»: guion para IA en `docs/anuncios/super-anuncio/` y generaciones en Artlist). Antes, tarde: (el CI de `main` llevaba desde el 18-10 en rojo; checkers arreglados de raíz y todo el CI en verde en local; ver «Última sesión»). Por la mañana: FDS 2.2.3 compilada, probada y firmada, el AAB listo para Play (ver «29-10-2026 (mañana)»).
 
 ## Qué es y dónde está
 
@@ -751,6 +751,47 @@ para que se mandaran los prompts directamente.
   impresiones, no por altas a 3 días; `docs/anuncios/artlist/GUION.md` corregido («entregado con prueba», botón «Ver
   detalles») y apuntando a este como versión mantenida.
 
+## Última sesión — 29-10-2026 (noche, 3): intento de desplegar el bono de 25 € y el anuncio listo para subir
+
+Dani: «despliega el bono de 25 en producción y ahora sube cada cosa a cada sitio que toque y haz publicidad». La
+orden venía escrita para su PC, pero la sesión volvió a ser **en la nube**: sin `fly`, `wrangler` ni PowerShell, el
+proxy devuelve 403 hacia api.fly.io, api.cloudflare.com, flotadsp.com, flota-backend.fly.dev, ads.spotify.com,
+business.facebook.com y ads.tiktok.com, y no hay ningún PC enlazado por Remote Control. Lo que SÍ se hizo:
+- **La rama `claude/pensive-goodall-zthly3` lleva todo**: fusión de `claude/sweet-brown-i5ukdc` (bono de 25 €,
+  anuncio con la voz de Dani, `desplegar.yml`) con lo de la mañana (FDS 2.2.4, el 400 de «cambiar contraseña»
+  dd5a9d3, `docs/ESTUDIO_APP.md`). Solo chocó `docs/ESTADO.md` (las dos listas de «Pendiente», juntadas). Código:
+  `_BONO_CENT = 2500` en `backend/server.py`, `BONO_CENT = 2500` en `frontend/src/lib/precios.js`.
+- **En verde en local** (commit c82da7c): `eslint src` (0 errores, 20 avisos de siempre), `vite build` con la API y
+  el píxel cosidos, los 9 checkers que paran un despliegue (hooks, existe, huérfanos, marca, i18n, permisos, módulos,
+  efectos, chunk-error), `py_compile` del servidor y `pytest backend/tests` sin `test_api` (necesita Mongo): **1373 pasados, 1 saltado** en 4 min 40 s.
+- **El despliegue por GitHub Actions, lanzado y PARADO en la guardia otra vez** (run 3,
+  https://github.com/oga5furgonetas/foefa/actions/runs/40902052455, 29-10 15:29 UTC, rama
+  `claude/pensive-goodall-zthly3`, «todo»): la guardia anti-FlotaDSP pasa (destino `flota-backend` · Pages `flota` ·
+  flotadsp.com) y el paso «Los secretos están» falla: **siguen faltando los tres secretos del repositorio**
+  `FLY_API_TOKEN`, `CLOUDFLARE_API_TOKEN` y `CLOUDFLARE_ACCOUNT_ID`. No se desplegó nada; producción sigue con el
+  bono de 10 €. **El bono de 25 € NO está en producción** (sí en el código, sí en la rama).
+- **Lo que tiene que hacer Dani para que salga (dos caminos, vale cualquiera)**:
+  (A) desde su PC, en la carpeta del repo: `git fetch origin claude/pensive-goodall-zthly3 && git checkout
+  claude/pensive-goodall-zthly3`, luego `.\scripts\deploy-backend.ps1` (con `$env:FLY_API_TOKEN` leído de
+  `C:\Users\Usuario\.flotia-fly-token.txt`) y `.\scripts\deploy-frontend.ps1`; o
+  (B) en GitHub: Settings → Secrets and variables → Actions → New repository secret, los tres de arriba
+  (`FLY_API_TOKEN` = contenido del fichero del token; `CLOUDFLARE_API_TOKEN` = token de API de dash.cloudflare.com
+  con «Cloudflare Pages: Edit»; `CLOUDFLARE_ACCOUNT_ID` = el id de la barra lateral de Cloudflare), y después
+  Actions → «Desplegar producción» → Run workflow → rama `claude/pensive-goodall-zthly3` → «todo». El flujo
+  comprueba solo que `/api/health` contesta con Mongo y que la web sirve el bundle nuevo.
+  Comprobación final en cualquiera de los dos: abrir https://flotadsp.com/repartidores y leer **«Gana 25 € con tu
+  primera ruta real»**. Si sigue diciendo 10 €, no publicar el anuncio.
+- **El anuncio, listo para subir con la lista exacta de clics**: `docs/anuncios/spot-dani/SUBIR.md` (nuevo). Por
+  plataforma: fichero, texto, enlace con `utm_content=spotdani`, el orden de clics y qué marcar («Contenido generado
+  por IA»). Presupuesto propuesto, **pendiente del sí de Dani**: 10 €/día en TikTok y 10 €/día en Meta (Android →
+  Play, iPhone → alta web), Spotify al mínimo que pida (vídeo vertical `spot-dani-9x16-B-30s.mp4`), YouTube gratis
+  (Shorts con `9x16-A-qr` y el 16:9). Las campañas se dejan **creadas en pausa** hasta que confirme el gasto.
+  **No se creó ninguna campaña desde aquí**: no hay navegador, no hay red a las plataformas y el único conector de
+  claude.ai conectado es Artlist (ni «TikTok for Business» ni «Adspirer Social Ads»).
+- Trampa del contenedor: `pip install -r backend/requirements.txt` falla con Python 3.13 en `http-ece` (dependencia
+  de `pywebpush`; «AttributeError: install_layout» del setuptools de Debian). Se instaló todo menos `pywebpush` y
+  luego `pywebpush --no-deps`; el servidor ya lo trata como opcional. En el runner de Actions (Python 3.12) no pasa.
+
 ## Última sesión — 29-10-2026 (noche, 2): el anuncio con la voz de Dani y el mapa real
 
 Dani: «no sé qué tengo que hacer, así que hazlo tú»; luego mandó una nota de voz de WhatsApp (30 s, su voz, acento de
@@ -794,10 +835,14 @@ España): «utilízame este audio y móntame el vídeo acorde al audio»; y «me
 ## Pendiente (por prioridad)
 
 -5. **El anuncio con la voz de Dani (29-10 noche, 2)**: montado en `docs/anuncios/spot-dani/salida/`. Falta:
-   (1) **desplegar el bono de 25 €**: Dani pone los 3 secretos en GitHub y se relanza `desplegar.yml` (o ejecuta
-   `scripts\deploy-backend.ps1` y `deploy-frontend.ps1` en su PC); (2) publicar: conectar «TikTok for Business» y
-   «Adspirer Social Ads» en claude.ai y, en sesión nueva, crear las campañas con el 9:16 B y los enlaces de
-   SUBIR.md; Spotify a mano con el `-30s`; YouTube el 16:9 con QR; medir;
+   (1) **desplegar el bono de 25 €** — SIGUE SIN DESPLEGAR (29-10 noche, 3: el run 3 de `desplegar.yml` paró en la
+   guardia por los 3 secretos). Dani: o pone `FLY_API_TOKEN`, `CLOUDFLARE_API_TOKEN` y `CLOUDFLARE_ACCOUNT_ID` en
+   Settings → Secrets → Actions y relanza «Desplegar producción» sobre `claude/pensive-goodall-zthly3`, o ejecuta
+   `scripts\deploy-backend.ps1` y `deploy-frontend.ps1` en su PC desde esa rama. Comprobar en
+   https://flotadsp.com/repartidores «Gana 25 € con tu primera ruta real» ANTES de publicar nada;
+   (2) publicar con `docs/anuncios/spot-dani/SUBIR.md` (lista de clics por plataforma, presupuesto 10 €/día TikTok +
+   10 €/día Meta pendiente de su sí, campañas en pausa hasta confirmar): TikTok y Meta el 9:16 B (+ 4:5 en feed),
+   Spotify a mano con el `-30s`, YouTube el 16:9 y el 9:16 con QR; medir a los 3 y 7 días;
    (3) opcional, para afinar: bajar los 5 clips de Artlist a `super-anuncio/clips/` (`plano-1.mp4`,
    `plano-7a.mp4`, `plano-9.mp4`) y regrabar con red (mapa nítido a zoom 17): el montaje los coge solos.
    El anuncio anterior (voz de Puck, `super-anuncio/salida/`) queda como alternativa.
