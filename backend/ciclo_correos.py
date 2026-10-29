@@ -956,7 +956,13 @@ def _html_bono25(cuerpo, firma, boton, enlace, boton_play, play_url, qr_url, qr_
     def enlaces(texto, color):
         return re.sub(r"(https?://[^\s<]+)", r'<a href="\1" style="color:%s">\1</a>' % color, texto)
 
-    esc = enlaces(_html.escape(cuerpo), "#0369a1").replace("\n", "<br>")
+    # En el HTML las dos direcciones largas (el pase y Google Play) se enseñan cortas: el texto plano las lleva
+    # enteras, pero en pantalla una URL de 120 caracteres parte el párrafo (y Gmail la corta).
+    esc = _html.escape(cuerpo)
+    for url, corto in ((enlace, "flotadsp.com"), (play_url, "play.google.com")):
+        if url:
+            esc = esc.replace(_html.escape(url), f'<a href="{_html.escape(url)}" style="color:#0369a1">{corto}</a>')
+    esc = enlaces(esc, "#0369a1").replace("\n", "<br>")
     qr = ""
     if qr_url:
         qr = (f'<p style="margin:0 0 22px"><img src="{_html.escape(qr_url)}" width="150" height="150" alt="QR Google Play" '
