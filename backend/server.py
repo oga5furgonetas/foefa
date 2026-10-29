@@ -8269,7 +8269,10 @@ async def change_my_password(data: dict, user: dict = Depends(get_current_user))
             temporal = bool(cuenta.get("must_change_password") or cuenta.get("creada_en_bloque"))
             if not temporal and not verify_password(current, cuenta["hashed_password"]):
                 await asyncio.sleep(0.8)
-                raise HTTPException(status_code=401,
+                # 400 y no 401: la app de Android cierra la sesión ante cualquier 401 con token (como hizo la web
+                # hasta que se le puso la excepción), y un conductor que se equivocaba al teclear su
+                # contraseña actual se veía fuera de la app. Lo mismo que ya se hizo en borrar-cuenta.
+                raise HTTPException(status_code=400,
                                     detail="La contraseña actual no es correcta")
             await db.driver_accounts.update_one(
                 {"driver_id": user["sub"]},
@@ -8310,7 +8313,7 @@ async def change_my_password(data: dict, user: dict = Depends(get_current_user))
     doc = await global_db.admin_users.find_one({"id": user["sub"]})
     if not doc or not verify_password(current, doc["hashed_password"]):
         await asyncio.sleep(0.8)
-        raise HTTPException(status_code=401, detail="La contraseña actual no es correcta")
+        raise HTTPException(status_code=400, detail="La contraseña actual no es correcta")  # 400, no 401: ver arriba
     await global_db.admin_users.update_one(
         {"id": user["sub"]},
         {"$set": {"hashed_password": hash_password(new)}}

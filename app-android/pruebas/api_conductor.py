@@ -190,7 +190,9 @@ def main():
            f"POST deja la verificación pendiente: {d}")
     otra = CLAVE_NUEVA if clave == CONDUCTOR[1] else CONDUCTOR[1]
     r = c.post("/auth/change-my-password", json={"current_password": "mal", "new_password": otra})
-    ok(r.status_code == 401, f"cambiar con la actual mal -> 401 ({r.status_code})")
+    # 400 y no 401 (29-10-2026): la app cierra la sesión ante cualquier 401 con token, y teclear mal la
+    # contraseña actual echaba al conductor de la app.
+    ok(r.status_code == 400, f"cambiar con la actual mal -> 400, no 401 ({r.status_code})")
     r = c.post("/auth/change-my-password", json={"current_password": clave, "new_password": otra})
     ok(r.status_code == 200, f"cambiar contraseña 200 ({r.status_code})")
     r = c.post("/auth/app-login", json={"identifier": CONDUCTOR[0], "password": otra})

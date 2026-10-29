@@ -39,7 +39,8 @@ api.interceptors.request.use((config) => {
 })
 
 // Sesión expirada/inválida dentro del panel → limpiar y volver al login.
-// OJO: change-my-password devuelve 401 cuando la contraseña actual es errónea
+// OJO: change-my-password devolvía 401 cuando la contraseña actual era errónea (desde el 29-10-2026 es 400,
+// por la app nativa; la excepción se queda por si vuelve)
 // (no es un problema de sesión), por eso se excluye.
 /* `detail` SIEMPRE TEXTO. Hay 186 sitios que pintan
    `error.response.data.detail` tal cual, y FastAPI no siempre manda texto: un
