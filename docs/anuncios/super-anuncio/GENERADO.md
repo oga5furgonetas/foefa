@@ -129,6 +129,10 @@ que un repartidor sienta que necesita la app». Montado aquí, en el contenedor,
 
 Rehacerlo: `cd frontend && npx vite build && npx playwright test spot-ruta --project=escritorio --update-snapshots &&
 node ../scripts/spot-ruta/capas.mjs && cd .. && node scripts/montar-spot-ruta.mjs`.
+**Ojo**: la grabación vive en `frontend/test-results/spot-ruta/` y Playwright BORRA `test-results/` al empezar
+cualquier otra prueba (`npx playwright test humo`, por ejemplo): si se van a correr pruebas, copiar antes la carpeta a
+otro sitio y montar con `GRAB=<carpeta> node scripts/montar-spot-ruta.mjs`. Ganchos: `GANCHO=mano` (Puck, por
+defecto), `GANCHO=112` y `GANCHO=25` (solo texto en el gancho).
 
 ## Lo que Dani pidió después y este entorno NO puede hacer (29-10, 13:50)
 
