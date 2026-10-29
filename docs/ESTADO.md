@@ -722,6 +722,17 @@ para que se mandaran los prompts directamente.
   montaje los usa solos), voz de Puck (las 6 frases del v5, las únicas disponibles sin red: gancho «¿Todavía
   ordenas la ruta a mano?», el que convierte), oferta «Empieza gratis», cierre B «toca el botón» / A con QR.
   Variante `GANCHO=112` (solo texto en el gancho). Detalle y cómo rehacerlo: GENERADO.md.
+- **Bono de bienvenida a 25 €** (Dani, 29-10: «si completan su primera ruta le damos 25 €; la app que te ayuda a
+  repartir y además te paga»): `BONO_CENT = 2500` (precios.js), `_BONO_CENT = 2500` (server.py, ya no va atado al
+  premio por invitar, que sigue en 10 €), Términos («25 €»), la frase de la portada con dos cantidades
+  («Gana {bono} con tu primera ruta real y {euros} por cada compañero»; clave nueva en textosRutaB.js, 7 idiomas),
+  tests (test_referidos usa `server._BONO_CENT`; activacion y humo esperan 25 €). **Sin desplegar**: hay que subir
+  backend y web antes de que corra un anuncio que lo prometa. La campaña de correo del 17-10 sigue diciendo 10 €
+  (ya enviada). El anuncio lleva la tarjeta «+25 € con tu primera ruta · 20 entregas en 2 días · hasta el 31-12».
+- **Listo para subir** (`docs/anuncios/super-anuncio/SUBIR.md`): TikTok, Meta, Spotify y YouTube con ficheros,
+  textos, enlaces directos a Google Play con `referrer` por plataforma (y la alternativa del alta web, que sí mide
+  el píxel), pasos, presupuesto y qué medir. Desde esta sesión no hay acceso al Chrome de Dani (ni extensión ni
+  Remote Control): publicar lo pulsa él.
 - **Revisión independiente del guion** (un agente aparte, sin el contexto de la sesión): 12 hallazgos, todos
   metidos. Los que cambian algo de verdad: el visor del escáner es la cámara, así que las etiquetas de la grabación
   van impresas sin marca; la voz dice «foto o escaneo» (escanear solo mete la dirección con SEUR/DPD y GLS);

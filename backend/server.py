@@ -55259,7 +55259,9 @@ def _ref_promo_datos() -> dict:
 # _REF_VENTANA_DIAS días (a las cuentas de antes del 17-10 se les cuentan desde el 17-10). Una vez por cuenta,
 # a la misma cartera que los premios por invitar (se retira desde _REF_RETIRADA_MIN). Si la cuenta se dio de
 # alta desde la misma red que otra que ya lo cobró, no se paga solo: queda para revisar.
-_BONO_CENT = _REF_PROMO_CENT
+# 29-10-2026, Dani: el bono de bienvenida sube a 25 € («la app que te ayuda a repartir y te paga 25 € por tu primera
+# ruta»); el premio por invitar sigue en _REF_PROMO_CENT. Los Términos y precios.js dicen lo mismo.
+_BONO_CENT = 2500
 _BONO_DESDE = datetime(2026, 10, 16, 22, 0, tzinfo=timezone.utc)      # 17-10-2026 00:00 en Madrid
 
 

@@ -58,13 +58,20 @@ const manana = base(`<div class="velo"></div><div class="g"><h1>Mañana sales<br
 `)
 
 // La oferta (sin fecha): empieza gratis · sin tarjeta · Android e iPhone.
-const oferta = base(`<div class="c"><div class="pill">Empieza<br>gratis</div><div class="l">sin tarjeta</div><div class="l2">Te registras y empiezas ya</div><div class="l3">Android e iPhone</div></div>`, `
-  .c { position:absolute; left:90px; right:90px; top:520px; padding:70px 40px 64px; border-radius:56px; text-align:center;
+// La oferta (29-10, Dani): gratis, sin tarjeta, y el bono de bienvenida: 25 € al completar la primera ruta
+// (20 entregas en 2 días, hasta el 31-12; está en los Términos y en precios.js / server.py).
+const oferta = base(`<div class="c"><div class="pill">Empieza<br>gratis</div><div class="l">sin tarjeta</div>
+  <div class="bono"><span class="e">+25 €</span><span class="b">con tu primera ruta</span></div>
+  <div class="l2">20 entregas en 2 días · hasta el 31 de diciembre</div><div class="l3">Android e iPhone</div></div>`, `
+  .c { position:absolute; left:90px; right:90px; top:440px; padding:66px 40px 60px; border-radius:56px; text-align:center;
        background: rgba(7,10,14,.74); border:2px solid rgba(20,231,216,.45); box-shadow: 0 50px 120px rgba(0,0,0,.6), 0 0 120px rgba(20,231,216,.18) }
-  .pill { display:inline-block; background:#FFD43B; color:#1a1300; font-weight:900; font-size:132px; line-height:.95; letter-spacing:-.03em; border-radius:40px; padding:30px 54px; transform:rotate(-3deg); box-shadow:0 24px 70px rgba(255,212,59,.35) }
-  .l { margin-top:48px; font-weight:900; font-size:78px; letter-spacing:-.02em }
-  .l2 { margin-top:14px; font-weight:700; font-size:40px; color:#c9f3f1 }
-  .l3 { margin-top:26px; display:inline-block; font-weight:800; font-size:32px; color:#04121a; background:#14e7d8; border-radius:999px; padding:12px 26px }
+  .pill { display:inline-block; background:#FFD43B; color:#1a1300; font-weight:900; font-size:120px; line-height:.95; letter-spacing:-.03em; border-radius:40px; padding:26px 50px; transform:rotate(-3deg); box-shadow:0 24px 70px rgba(255,212,59,.35) }
+  .l { margin-top:44px; font-weight:900; font-size:72px; letter-spacing:-.02em }
+  .bono { margin-top:34px; display:flex; flex-direction:column; align-items:center; gap:6px; padding:26px 20px 24px; border-radius:34px; background:rgba(20,231,216,.12); border:2px solid rgba(20,231,216,.5) }
+  .bono .e { font-weight:900; font-size:118px; line-height:1; letter-spacing:-.04em; color:#14e7d8 }
+  .bono .b { font-weight:900; font-size:52px; letter-spacing:-.02em; color:#fff }
+  .l2 { margin-top:22px; font-weight:700; font-size:34px; color:#c9f3f1 }
+  .l3 { margin-top:22px; display:inline-block; font-weight:800; font-size:32px; color:#04121a; background:#14e7d8; border-radius:999px; padding:12px 26px }
 `)
 
 // Cierre B (móvil: TikTok, Reels, feed): la web, qué pulsar, Play pequeño.

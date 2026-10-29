@@ -114,7 +114,7 @@ export const REF_CENT = 250
    primera ruta de verdad (20 entregas en 2 días; lo cuenta el servidor en /reparto/mi-ruta → `bono`). */
 export const REF_PROMO_CENT = 1000
 export const REF_PROMO_HASTA = '2026-12-31'
-export const BONO_CENT = 1000
+export const BONO_CENT = 2500   // 29-10-2026, Dani: 25 € con la primera ruta (antes 10 €); server.py _BONO_CENT y los Términos igual
 export const refPromoActiva = (hoy = new Date()) => hoy <= new Date(`${REF_PROMO_HASTA}T23:59:59`)
 export const refCentActual = () => (refPromoActiva() ? REF_PROMO_CENT : REF_CENT)
 /* «31 de octubre» en el idioma de la pantalla. */

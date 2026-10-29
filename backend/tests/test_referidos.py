@@ -305,13 +305,13 @@ async def test_bono_de_bienvenida_por_la_primera_ruta_real_y_una_sola_vez(mundo)
     _entregas(mundo, 8)                                             # otro día: 20 en 2 días
     b = await server._bono_estado(o1, "c1")
     assert b["pagado"] is True and b.get("nuevo") is True
-    assert o1["bono_pagado"] is True and o1["cartera_saldo"] == 1000 and o1["cartera_ganado"] == 1000
+    assert o1["bono_pagado"] is True and o1["cartera_saldo"] == server._BONO_CENT and o1["cartera_ganado"] == server._BONO_CENT
     mov = mundo.g["cartera_movimientos"].docs[-1]
-    assert mov["tipo"] == "bienvenida" and mov["importe"] == 1000 and mov["org_id"] == "o1"
+    assert mov["tipo"] == "bienvenida" and mov["importe"] == server._BONO_CENT and mov["org_id"] == "o1"
     b = await server._bono_estado(o1, "c1")                          # una sola vez
     assert b["pagado"] is True and not b.get("nuevo") and o1["cartera_saldo"] == 1000
     assert len(mundo.g["cartera_movimientos"].docs) == 1
-    assert (await server.referidos_mios(YO))["bono"] == {"cent": 1000, "pagado": True, "pagado_en": o1["bono_pagado_en"]}
+    assert (await server.referidos_mios(YO))["bono"] == {"cent": server._BONO_CENT, "pagado": True, "pagado_en": o1["bono_pagado_en"]}
 
 
 @pytest.mark.asyncio(loop_scope="session")
