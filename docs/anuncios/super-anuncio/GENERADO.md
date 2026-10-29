@@ -57,7 +57,7 @@ masculina con acento de España**). Sirve para montar y medir tiempos, **no para
 Puck (Gemini TTS, `scripts/spot-v5/voz_gemini.py`, la que eligió Dani) o la de Dani grabada.
 - Voz 1 (texto antes de la revisión; ya no es el guion): `01a187b9-f9ce-77ca-8a98-6201667a497c`, 24 s:
   https://mcp.artlist.io/mcp/download?u=https%3A%2F%2Fcms-toolkit-artifacts.artlist.io%2Fcontent%2F-t-e-x-t_-t-o_-s-p-e-e-c-h-v1%2Fmedia__2%2F-t-e-x-t_-t-o_-s-p-e-e-c-h-ddd96ef0-70b8-4b19-a02b-95b9e4a48f1b.mp3%3FExpires%3D2108638528%26Key-Pair-Id%3DK2ZDLYDZI2R1DF%26Signature%3DPUwgeXHwq2SuJK~PFQoeR8KS1GNtl8~4567XKj0gG84j8IlZ1mgysiq5AReqknApFXmanXXj3QzjUdyccPsQhvGaLqvSbTnLP-rhO4LA637MSzHsU5mW4Jg8n0EijeGq6-6imblK-uSa1bWm-yYIY96z8GS4wUxnLYXRpCYq5dgR7SCOs7qnlGskgpB5acmjx7PTlgxw0-w-C6L5Ht9d18pItouuDYWWM1BClFuZxGu1Dnb4GtmOFxhz4vAKwuDro-TR343acUZFXVi38lrNjqNTLYKWzci-jiJ9TL5~nrJld78bYw~nmb5MOD6flO7bNnzjNREcQtY~46BECc3wMA__&name=-t-e-x-t_-t-o_-s-p-e-e-c-h-ddd96ef0-70b8-4b19-a02b-95b9e4a48f1b.mp3
-- **Voz 2, la buena para montar** (texto final de `GUION.md` §4, con las DOS frases de cierre seguidas: la de la
+- **Voz 2** (acento latinoamericano, NO vale para España; texto final de `GUION.md` §4, con las DOS frases de cierre seguidas: la de la
   salida B y, tras una pausa, la de la salida A; se corta la que no toque): `01a187c3-561a-7833-92ef-05fa41cccd77`,
   **25 s**:
   https://mcp.artlist.io/mcp/download?u=https%3A%2F%2Fcms-toolkit-artifacts.artlist.io%2Fcontent%2F-t-e-x-t_-t-o_-s-p-e-e-c-h-v1%2Fmedia__5%2F-t-e-x-t_-t-o_-s-p-e-e-c-h-caaa69a7-ca6f-40f6-a96b-cd872a6f630c.mp3%3FExpires%3D2108639199%26Key-Pair-Id%3DK2ZDLYDZI2R1DF%26Signature%3DNnFRF9O6jbWyW~yQRYfiLkV4vn9zU5S3b13wkTfM5clbLJqyreRRTYWMA4Xp9NuoK5wfKSlyEnzKQZu0ruFN0SkcDgKMFn4Vz7aCwraIhHTjLh~zgsZAKupFoHAqslpcad9yh6GfZ1HmyU7Ksgae8sVxrDIATaHWHEORp9nHoY4oBEPGYrEEkOFTXTTj1LgKtVYuwp~-jU3sS0JqUZzVengER9WIb-G0tJgWIW4eHHZW4M6kFbKoCE-UdOIr-Fsirhh9eu-STblATGblncAAEmMTGRp-8WRSkpTWKm7dAobKLcsfk3zVgVhYuVHqOS0xrplHWWhmugnGjbLjLFd1hQ__&name=-t-e-x-t_-t-o_-s-p-e-e-c-h-caaa69a7-ca6f-40f6-a96b-cd872a6f630c.mp3
@@ -129,3 +129,21 @@ que un repartidor sienta que necesita la app». Montado aquí, en el contenedor,
 
 Rehacerlo: `cd frontend && npx vite build && npx playwright test spot-ruta --project=escritorio --update-snapshots &&
 node ../scripts/spot-ruta/capas.mjs && cd .. && node scripts/montar-spot-ruta.mjs`.
+
+## Lo que Dani pidió después y este entorno NO puede hacer (29-10, 13:50)
+
+Dani: «quiero el mapa real de la aplicación, que se vea bien y tenga sentido» y «acento de España». Las dos cosas
+las bloquea la política de red del entorno de esta sesión (todo lo que no sea npm/PyPI/GitHub da 403):
+1. **Mapa real**: la app pinta el mapa de OpenStreetMap desde `tile.openstreetmap.org`; aquí no se puede descargar,
+   por eso la grabación lleva un callejero esquemático. Arreglo: añadir `tile.openstreetmap.org` (y `a.`, `b.`,
+   `c.tile.openstreetmap.org`) a los dominios permitidos del entorno (menú del entorno en la barra de título →
+   Edit → Network access → Allowed domains; https://code.claude.com/docs/en/cloud-environments#network-access) y
+   regrabar: `cd frontend && npx playwright test spot-ruta --project=escritorio --update-snapshots && cd .. &&
+   node scripts/montar-spot-ruta.mjs`. O regrabar en el PC de Dani, donde hay red (mismos comandos).
+2. **Voz con acento de España**: el vídeo lleva a Puck (Gemini TTS, la voz que Dani eligió el 24-10, grabada
+   entonces). Artlist no tiene ninguna voz de España. Para generar otra hacen falta, o bien `GEMINI_API_KEY` como
+   secreto del entorno (`scripts/spot-v5/voz_gemini.py`, cambiando FRASES por las de `GUION.md` §4), o bien red a
+   `speech.platform.bing.com` (edge-tts, voces es-ES Álvaro/Elvira, `scripts/spot-v4/voz.py`), o bien la voz de
+   Dani grabada (6-8 frases con el móvil). Con cualquiera de las tres, el montaje se rehace solo.
+3. **Los clips de Artlist** (gancho y cierre en vídeo en vez de fotograma): red a `cms-toolkit-artifacts.artlist.io`
+   y `mcp.artlist.io`, o bajarlos a mano a `clips/plano-1.mp4` … `clips/plano-9.mp4`.
