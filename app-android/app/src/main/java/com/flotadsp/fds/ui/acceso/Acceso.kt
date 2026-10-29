@@ -150,8 +150,9 @@ private fun Cabecera(titulo: String, alVolver: () -> Unit) {
     Spacer(Modifier.height(20.dp))
 }
 
+/** Campo de contraseña con el ojo para verla. Lo usan la entrada y la pantalla de elegir contraseña del conductor. */
 @Composable
-private fun CampoClave(valor: String, alCambiar: (String) -> Unit, etiqueta: String, alListo: () -> Unit) {
+internal fun CampoClave(valor: String, alCambiar: (String) -> Unit, etiqueta: String, alListo: () -> Unit) {
     var ver by remember { mutableStateOf(false) }
     OutlinedTextField(
         valor, alCambiar, label = { Text(etiqueta) }, singleLine = true, modifier = Modifier.fillMaxWidth(),

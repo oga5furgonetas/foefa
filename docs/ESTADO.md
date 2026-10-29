@@ -693,9 +693,17 @@ desplegar la web** la próxima vez desde el PC.
 -3b. **Comprobado el 29-10 a las 13:15 (hora de Dani)**: `POST /auth/app-login` está en producción (contesta 422 sin
    cuerpo). El backend desplegado lleva el acceso unificado de la app; la 2.2.3 puede entrar contra producción.
 
--3. **App nativa (29-10)**: Dani instala `app-android/salida/FDS-2.2.3.apk` en su móvil, la prueba (entrar como
+-3a. **App nativa, primera prueba en móvil real (29-10 tarde)**: Dani entró en la 2.2.3 con un conductor de OGA5 (bien:
+   el servidor le llevó al portal del conductor) y se atascó en «Elige tu contraseña»: el botón seguía gris con tres
+   letras y no decía por qué; y vio «Abrir mi ruta», que en una flota de Amazon no pinta nada. Las dos cosas van en la
+   **2.2.4 (code 16)** (ojo y aviso en los campos de contraseña; la ruta solo si la empresa reparte con la app), que hay
+   que **compilar y firmar en el PC de Winiw** (ver PLAY_STORE.md → «Versión 2.2.4»). Lo demás lo probó y va: auditoría,
+   turnos, trabajar más, invita y gana. Falta entrar con la cuenta de oficina. Hasta que la 2.2.4 pase esa prueba, no
+   se sube nada a Play.
+
+-3. **App nativa (29-10)**: Dani instala `app-android/salida/FDS-2.2.4.apk` en su móvil, la prueba (entrar como
    conductor de empresa: turnos, auditoría con fotos, trabajar más; y como autónomo) y sube
-   `app-android/salida/FDS-2.2.3.aab` a Play (code 15). Lo de abajo sigue valiendo:
+   `app-android/salida/FDS-2.2.4.aab` a Play (code 16). Lo de abajo sigue valiendo:
    Dani la prueba en su móvil y sube el AAB a Play
    (Seguridad de los datos: cámara y ubicación; Eliminación de cuentas). **Cada «Borrar mi cuenta» pedido desde
    la app** queda en `flota_global.bajas_cuentas` (`borrada: false`) con aviso por correo: hay que borrar sus

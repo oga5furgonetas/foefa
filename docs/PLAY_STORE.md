@@ -178,6 +178,34 @@ por gRPC (`setPhysicalModel`: posición `-1.407 0.32 4.277`, giro `0 -150 0`). L
   reiniciar el móvil (`WAKE_LOCK`, `RECEIVE_BOOT_COMPLETED`). El servicio en primer plano de WorkManager se quita
   del manifiesto (no se usa).
 
+## Versión 2.2.4 (code 16): la pantalla de elegir contraseña dice por qué no deja seguir (29-10-2026, tarde)
+
+Dani probó la 2.2.3 en su móvil con un conductor de OGA5 y la contraseña temporal común de la plantilla: entró
+(el primer intento dio «incorrecta», casi seguro el bloqueo de 5 minutos tras varios intentos mal tecleados; tras
+reinstalar y teclearla bien, entró) y se quedó atascado en «Elige tu contraseña»: con tres letras en cada campo el
+botón «Guardar y continuar» seguía gris sin decir nada, y los campos no dejaban ver lo escrito. La regla era correcta
+(6 caracteres o más y las dos iguales), la pantalla no la explicaba.
+
+Cambios, solo en la app (`app-android/`), sin tocar servidor ni web:
+- Los tres campos de contraseña de esa pantalla (y de «Cambiar contraseña») usan el campo con el ojo de la pantalla
+  de entrada (`CampoClave`, que pasa de `private` a `internal` en `Acceso.kt`).
+- Debajo de los campos sale el motivo por el que el botón está apagado: «Faltan N: la contraseña tiene que tener 6
+  caracteres o más», «Las dos contraseñas no coinciden» o «Escribe también tu contraseña actual».
+- La tarjeta «Mi ruta» del portal del conductor solo sale cuando el servidor dice que la empresa reparte con la app
+  (`activo` en `reparto/mi-ruta`), como ya hacía el portal web. En OGA5, DGA1 y DGA2 (reparto para Amazon) no
+  sale: Dani la vio y no tenía sentido allí.
+- `versionCode 16` / `versionName 2.2.4` (el 15 queda sin subir: no se reutiliza).
+
+Probado por Dani en su móvil con la 2.2.3 (29-10, tarde), con ese conductor: auditoría del vehículo bien, Mis turnos
+bien, Trabajar más contesta «no hay vacantes disponibles» (correcto si hoy no hay), Invita y gana bien. Queda por
+probar la entrada con la cuenta de oficina (panel de empresa dentro de FDS).
+
+**Pendiente: compilar y firmar en el PC de Winiw** (como la 2.2.3, ver abajo: `.\gradlew.bat :app:bundleRelease` y
+`:app:assembleRelease -PsoloMoviles -PparaWeb`), pasar `:app:testDebugUnitTest :app:lintDebug`, instalar el APK en el
+móvil de Dani y seguir la prueba donde se quedó: elegir contraseña → Mis turnos → pedir día y trabajar más →
+auditoría con foto → cerrar sesión y entrar con la cuenta de oficina. Escrito sin compilador a mano (el contenedor
+no llega al SDK): si Gradle protesta, el error estará en `PortalConductorNativo.kt`, función `CambiarClaveConductor`.
+
 ## Versión 2.2.3 (code 15): la que se sube, compilada y firmada el 29-10-2026
 
 Las versiones 2.1.0, 2.2.1 y 2.2.3 se escribieron desde un entorno sin JDK ni SDK: nunca se habían compilado. El

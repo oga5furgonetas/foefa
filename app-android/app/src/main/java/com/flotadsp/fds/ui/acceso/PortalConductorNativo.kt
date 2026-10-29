@@ -48,7 +48,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.flotadsp.fds.FdsApp
@@ -158,7 +157,10 @@ private fun InicioConductorNativo(
             verticalArrangement = Arrangement.spacedBy(16.dp),
         ) {
             aviso?.let { Text(it, color = MaterialTheme.colorScheme.primary, style = MaterialTheme.typography.bodyMedium) }
-            Card(
+            // «Mi ruta» solo en empresas que reparten con la app: lo dice el servidor (`activo` en reparto/mi-ruta),
+            // igual que el portal web. En una flota que reparte para Amazon (OGA5, DGA1, DGA2) la ruta va por otro
+            // lado y esta tarjeta solo confundía (Dani, 29-10-2026, probando la 2.2.3 en su móvil).
+            if (estadoRuta.ruta?.activo == true) Card(
                 onClick = alRuta,
                 colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer),
             ) {
@@ -167,13 +169,8 @@ private fun InicioConductorNativo(
                     Text("Mi ruta", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold,
                         color = MaterialTheme.colorScheme.onPrimaryContainer)
                     Text(
-                        when {
-                            estadoRuta.cargando -> "Cargando la ruta de hoy…"
-                            estadoRuta.error != null -> "No se ha podido cargar. Toca para volver a intentarlo."
-                            estadoRuta.ruta?.activo != true -> "Hoy no hay una ruta activa asignada."
-                            pendientes == 0 -> "No tienes entregas pendientes."
-                            else -> "$pendientes ${if (pendientes == 1) "entrega pendiente" else "entregas pendientes"}"
-                        },
+                        if (pendientes == 0) "No tienes entregas pendientes."
+                        else "$pendientes ${if (pendientes == 1) "entrega pendiente" else "entregas pendientes"}",
                         style = MaterialTheme.typography.bodyLarge,
                         color = MaterialTheme.colorScheme.onPrimaryContainer,
                     )
@@ -344,12 +341,18 @@ private fun CambiarClaveConductor(obligatoria: Boolean, alVolver: () -> Unit, al
         Column(Modifier.fillMaxSize().padding(inset).padding(24.dp).verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(14.dp)) {
             Text(if (obligatoria) "Hola, ${nombre.substringBefore(' ').ifBlank { "conductor" }}. Este acceso temporal solo sirve para entrar una vez." else "La contraseña nueva debe tener al menos 6 caracteres.",
                 style = MaterialTheme.typography.bodyLarge)
-            if (!obligatoria) OutlinedTextField(actual, { actual = it }, label = { Text("Contraseña actual") }, singleLine = true,
-                visualTransformation = PasswordVisualTransformation(), modifier = Modifier.fillMaxWidth())
-            OutlinedTextField(nueva, { nueva = it; error = null }, label = { Text("${if (obligatoria) "Tu contraseña" else "Nueva contraseña"} (6 caracteres o más)") },
-                singleLine = true, visualTransformation = PasswordVisualTransformation(), modifier = Modifier.fillMaxWidth())
-            OutlinedTextField(repetir, { repetir = it; error = null }, label = { Text("Repite la contraseña") }, singleLine = true,
-                visualTransformation = PasswordVisualTransformation(), modifier = Modifier.fillMaxWidth())
+            if (!obligatoria) CampoClave(actual, { actual = it; error = null }, "Contraseña actual") {}
+            CampoClave(nueva, { nueva = it; error = null }, "${if (obligatoria) "Tu contraseña" else "Nueva contraseña"} (6 caracteres o más)") {}
+            CampoClave(repetir, { repetir = it; error = null }, "Repite la contraseña") {}
+            // Por qué el botón sigue apagado. Sin esto, con tres letras escritas se quedaba gris sin decir nada y
+            // parecía roto (Dani, 29-10-2026, probando la 2.2.3 en su móvil).
+            val pista = when {
+                nueva.isNotEmpty() && nueva.length < 6 -> "Faltan ${6 - nueva.length}: la contraseña tiene que tener 6 caracteres o más."
+                nueva.length >= 6 && repetir.isNotEmpty() && !nueva.startsWith(repetir) -> "Las dos contraseñas no coinciden."
+                !obligatoria && nueva.length >= 6 && nueva == repetir && actual.isBlank() -> "Escribe también tu contraseña actual."
+                else -> null
+            }
+            pista?.let { Text(it, color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodyMedium) }
             error?.let { Text(it, color = MaterialTheme.colorScheme.error) }
             Button(
                 onClick = {
