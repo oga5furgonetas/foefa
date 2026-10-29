@@ -11,8 +11,12 @@ plugins {
 // LA APP NATIVA DE FDS (25-10-2026). Sustituye en Google Play a la TWA de `android/` con el MISMO paquete
 // (`com.flotadsp.flota`) y la misma clave de firma: es una actualización de la misma app, no otra.
 // La clave nunca va en el repositorio: ruta y contraseña por variables de entorno (docs/PLAY_STORE.md).
-val ksPath = System.getenv("FLOTA_KEYSTORE")
+// Sin variables, se busca en la carpeta del usuario (~/.flota-android.keystore y ~/.flota-android-keystore.txt, como
+// dice docs/PLAY_STORE.md): así la contraseña no pasa por la línea de órdenes ni por ningún log.
+val casa = File(System.getProperty("user.home"))
+val ksPath = System.getenv("FLOTA_KEYSTORE") ?: casa.resolve(".flota-android.keystore").path
 val ksPass = System.getenv("FLOTA_KEYSTORE_PASSWORD")
+    ?: casa.resolve(".flota-android-keystore.txt").takeIf { it.isFile }?.readText()?.trim()
 // Para probar contra un servidor simulado: ./gradlew assembleDebug -PapiUrl=http://10.0.2.2:8787/api/
 val apiUrl = (project.findProperty("apiUrl") as String?) ?: "https://flota-backend.fly.dev/api/"
 
@@ -139,6 +143,7 @@ dependencies {
     implementation(libs.androidx.compose.material3)
     implementation(libs.androidx.compose.material.icons)
     implementation(libs.androidx.datastore.preferences)
+    implementation(libs.androidx.exifinterface)
     implementation(libs.androidx.work)
     implementation(libs.androidx.camera.camera2)
     implementation(libs.androidx.camera.lifecycle)

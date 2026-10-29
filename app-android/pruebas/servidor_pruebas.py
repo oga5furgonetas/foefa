@@ -46,7 +46,11 @@ async def _nada(*a, **k):
     return None
 
 server._ensure_tenant_indexes = _nada
-server._enviar_email = lambda *a, **k: _nada()
+server._ensure_driver_recovery_indexes = _nada     # la base de mentira no tiene índices (vínculo del correo personal)
+async def _enviado(*a, **k):
+    return True
+
+server._enviar_email = lambda *a, **k: _enviado()      # «enviado» sin mandar nada: el vínculo del correo personal lo exige
 
 # Las direcciones de la ruta de prueba, con su punto (el buscador de verdad no hace falta para probar la app).
 PUNTOS = {
@@ -108,6 +112,54 @@ async def sembrar():
         })
     t["reparto_pedidos"] = Col(docs)
     print(f"Cuenta de prueba: {PRUEBA_CORREO} / {PRUEBA_CLAVE} · {len(docs)} paradas para {hoy}")
+    await sembrar_empresa(hoy)
+
+
+# ── UNA EMPRESA CON UN CONDUCTOR (29-10-2026): para probar el portal NATIVO del conductor de empresa ────────────
+# La misma app, entrando con el correo y la contraseña de un conductor de empresa (`/auth/app-login` → destino
+# «conductor»): ruta del día, auditoría de la furgoneta (le toca hoy según el cuadrante), turnos del mes (trabaja
+# entre semana, libra el finde y mañana), una vacante para mañana (hay máxima y falta gente) y un refuerzo abierto
+# por la oficina dentro de tres días, «Invita y gana», contraseña, correo personal y teléfono.
+CONDUCTOR_CORREO = "conductor@fds.test"
+CONDUCTOR_CLAVE = "turno-de-prueba-1"
+
+
+async def sembrar_empresa(hoy):
+    from datetime import date as date_cls
+    g = bases["flota_global"]
+    org_id, driver_id, veh_id = "o-empresa", "d-conductor", "v-furgo-1"
+    ahora = datetime.now(timezone.utc).isoformat()
+    g["organizations"].docs.append({
+        "id": org_id, "name": "Empresa de prueba", "slug": "empresa", "plan": "flota", "sector": "reparto",
+        "db_name": "dsp_empresa", "account_type": "dsp", "status": "active", "pais": "es", "zona_horaria": "Europe/Madrid",
+        "centers": ["OGA5"], "modulos": [], "created_at": ahora,
+    })
+    t = bases["dsp_empresa"]
+    t["drivers"] = Col([{"id": driver_id, "name": "Conductora de Prueba", "center": "OGA5", "email": CONDUCTOR_CORREO,
+                         "phone": "600000099", "active": True, "status": "active", "created_at": ahora}])
+    t["driver_accounts"] = Col([{"id": "da-1", "driver_id": driver_id, "email": CONDUCTOR_CORREO,
+                                 "hashed_password": server.hash_password(CONDUCTOR_CLAVE), "active": True, "created_at": ahora}])
+    t["vehicles"] = Col([{"id": veh_id, "license_plate": "1234 KLM", "brand": "Mercedes", "model": "Vito", "status": "active",
+                          "center": "OGA5", "mileage": 48210, "mileage_history": [], "created_at": ahora, "updated_at": ahora}])
+    t["daily_assignments"] = Col([{"id": "da-hoy", "date": hoy, "center": "OGA5",
+                                   "slots": [{"driver_id": driver_id, "driver_name": "Conductora de Prueba", "vehicle_id": veh_id, "route": "CA_A1"}]}])
+    d0 = date_cls.fromisoformat(hoy)
+    manana = (d0 + timedelta(days=1)).isoformat()
+    turnos = []
+    for i in range(-10, 35):
+        d = d0 + timedelta(days=i)
+        f = d.isoformat()
+        libre = d.weekday() >= 5 or f == manana
+        turnos.append({"id": f"s-{f}", "driver_id": driver_id, "driver_name": "Conductora de Prueba", "center": "OGA5", "date": f,
+                       "type": "libre" if libre else "trabaja", "cod": "L" if libre else "1"})
+    t["shifts"] = Col(turnos)
+    t["shift_requests"] = Col([])
+    # Mañana hay máxima de 5 y nadie más en ruta: falta gente → vacante que puede solicitar (libra ese día).
+    t["route_demand"] = Col([{"center": "OGA5", "date": manana, "maximo": 5}])
+    t["refuerzos"] = Col([{"id": "r-oficina", "center": "OGA5", "date": (d0 + timedelta(days=3)).isoformat(), "plazas": 2,
+                           "nota": "Pico de volumen: hacen falta dos más", "estado": "abierto", "avisados": 0, "auto": False,
+                           "creado_por": "Oficina", "creado_en": ahora}])
+    print(f"Conductor de empresa: {CONDUCTOR_CORREO} / {CONDUCTOR_CLAVE} · furgoneta 1234 KLM asignada hoy, libra {manana}")
 
 
 if __name__ == "__main__":

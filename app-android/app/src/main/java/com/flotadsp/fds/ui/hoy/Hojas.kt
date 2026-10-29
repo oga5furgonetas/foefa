@@ -22,14 +22,14 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Call
-import androidx.compose.material.icons.filled.Chat
+import androidx.compose.material.icons.automirrored.filled.Chat
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Navigation
 import androidx.compose.material.icons.filled.PhotoCamera
-import androidx.compose.material.icons.filled.Undo
+import androidx.compose.material.icons.automirrored.filled.Undo
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -114,7 +114,7 @@ fun ParadaHoja(
                 }
                 FilledTonalButton(onClick = { Acciones.whatsapp(ctx, p.telefono, prefijo, "Hola, soy tu repartidor: llego en unos minutos con tu pedido.") },
                     enabled = p.telefono.isNotBlank(), modifier = Modifier.height(50.dp)) {
-                    Icon(Icons.Default.Chat, contentDescription = "WhatsApp")
+                    Icon(Icons.AutoMirrored.Filled.Chat, contentDescription = "WhatsApp")
                 }
             }
             Spacer(Modifier.height(10.dp))
@@ -132,7 +132,7 @@ fun ParadaHoja(
                 }
             } else {
                 OutlinedButton(onClick = alDeshacer, modifier = Modifier.fillMaxWidth().height(50.dp)) {
-                    Icon(Icons.Default.Undo, contentDescription = null); Spacer(Modifier.width(6.dp)); Text("Volver a «por entregar»")
+                    Icon(Icons.AutoMirrored.Filled.Undo, contentDescription = null); Spacer(Modifier.width(6.dp)); Text("Volver a «por entregar»")
                 }
             }
             Spacer(Modifier.height(8.dp))

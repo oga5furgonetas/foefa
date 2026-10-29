@@ -129,7 +129,7 @@ object LectorEtiqueta {
             direccion = direccion.replaceFirst(Regex("^(direcci[oó]n|domicilio|dir\\.?|endere[cç]o|address)\\s*[:.-]?\\s*", I), "").trim()
             val conNumero = Regex("^(.+?\\b\\d{1,4}[A-Z]?\\b)(.*)$", I).find(direccion)
             val basura = conNumero != null && Regex("^\\s+(?:[A-Z]{1,4}\\s+){1,2}\\d{1,4}\\s*$", I).matches(conNumero.groupValues[2])
-            out.direccion = if (basura) conNumero!!.groupValues[1] else direccion
+            out.direccion = if (basura) conNumero.groupValues[1] else direccion
             val sig = lineas.getOrElse(iVia + 1) { "" }
             if (SIGUE.containsMatchIn(sig) && telefonoDe(sig, pais).isEmpty()) out.direccion += ", $sig"
         }

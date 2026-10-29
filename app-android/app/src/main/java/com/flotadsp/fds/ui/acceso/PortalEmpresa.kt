@@ -109,9 +109,9 @@ private fun PortalWeb(titulo: String, ruta: String, sesion: Sesion?, alCerrar: (
                             .put("data", datos)
                         val jsPayload = JSONObject.quote(payload.toString())
                         val js = if (conductor) {
-                            """(function(){const p=JSON.parse($jsPayload);localStorage.removeItem('flota_token');localStorage.removeItem('flota_admin');localStorage.setItem('flota_driver_token',p.access_token);localStorage.setItem('flota_driver',JSON.stringify(p.data));window.location.replace('/conductor/')})()"""
+                            """(function(){const p=JSON.parse($jsPayload);localStorage.removeItem('flota_token');localStorage.removeItem('flota_admin');localStorage.removeItem('flota_acceso');localStorage.removeItem('flota_sesion_previa');localStorage.setItem('flota_driver_token',p.access_token);localStorage.setItem('flota_driver',JSON.stringify(p.data));window.location.replace('/conductor/')})()"""
                         } else {
-                            """(function(){const p=JSON.parse($jsPayload);localStorage.removeItem('flota_driver_token');localStorage.removeItem('flota_driver');localStorage.setItem('flota_token',p.access_token);localStorage.setItem('flota_admin',JSON.stringify(p.data));window.location.replace('/panel')})()"""
+                            """(function(){const p=JSON.parse($jsPayload);localStorage.removeItem('flota_driver_token');localStorage.removeItem('flota_driver');localStorage.removeItem('flota_acceso');localStorage.removeItem('flota_sesion_previa');localStorage.setItem('flota_token',p.access_token);localStorage.setItem('flota_admin',JSON.stringify(p.data));window.location.replace('/panel')})()"""
                         }
                         view.evaluateJavascript(js, null)
                     }

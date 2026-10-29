@@ -178,6 +178,62 @@ por gRPC (`setPhysicalModel`: posición `-1.407 0.32 4.277`, giro `0 -150 0`). L
   reiniciar el móvil (`WAKE_LOCK`, `RECEIVE_BOOT_COMPLETED`). El servicio en primer plano de WorkManager se quita
   del manifiesto (no se usa).
 
+## Versión 2.2.3 (code 15): la que se sube, compilada y firmada el 29-10-2026
+
+Las versiones 2.1.0, 2.2.1 y 2.2.3 se escribieron desde un entorno sin JDK ni SDK: nunca se habían compilado. El
+29-10 se compiló por primera vez en el PC de Winiw (Android Studio y su SDK ya estaban), se pasaron las pruebas y se
+generó el AAB con la clave de subida. **Lo que hay que subir a Play: `app-android/salida/FDS-2.2.3.aab`** (35 MB,
+firmado con la clave de subida `5B:48:01:D5…73:44:61`, comprobado con `jarsigner -verify`). `versionCode 15` /
+`versionName 2.2.3` (el 12, 13 y 14 ya estaban registrados en Play Console: no se reutilizan). Al lado,
+`salida/FDS-2.2.3.apk` (paquete `com.flotadsp.flota.web`, arm64 + armv7) para instalar a mano en un móvil.
+
+Lo arreglado antes de firmar (todo en `app-android/`, commit del 29-10):
+- **Mis turnos**: el día de suspensión se pintaba como «sin turno» (la app miraba `type == "susp"` y el servidor
+  manda `cod == "SUSP"`, como lee la web); y el diálogo de confirmación decía la fecha en crudo («2026-11-02») en
+  vez de «2 de noviembre».
+- **Auditoría del vehículo**: abría la cámara del sistema sin pedir el permiso de cámara. Como la app lo declara
+  (lo usa el escáner), Android lo exige: un conductor de empresa que nunca hubiera usado el escáner no podía hacer
+  ni una foto (fallaba con «No se pudo abrir la cámara»). Ahora lo pide antes, como ya hacía la ficha de entrega
+  (`ui/Foto.kt`). De paso, `androidx.exifinterface` en vez de `android.media.ExifInterface` (lo pedía lint).
+- **Portal de empresa dentro de FDS**: al inyectar la sesión en la web, borra también `flota_acceso` y la sesión
+  previa, como hace el login web (`saveSession` en `frontend/src/panel/auth.js`); si no, un resto de la sesión
+  anterior ganaba al token nuevo hasta que `/auth/me` contestara.
+- **Firma sin variables**: `build.gradle.kts` busca la clave en `~/.flota-android.keystore` y la contraseña en
+  `~/.flota-android-keystore.txt` si no vienen por `FLOTA_KEYSTORE*`. En este PC son
+  `C:\Users\Winiw Delivery\…`; en el de Dani, `C:\Users\Usuario\…`. La contraseña no pasa por la línea de
+  órdenes ni por ningún log.
+- Avisos del compilador fuera (`Locale("es","ES")` obsoleto, iconos `AutoMirrored`, `!!` de más).
+
+Comprobado el 29-10:
+- `./gradlew :app:testDebugUnitTest :app:lintDebug`: 5 pruebas en verde; lint 0 errores (51 avisos: versiones
+  fijadas a propósito, `UseKtx`, el `javaScriptEnabled` del portal, que hace falta).
+- **El contrato app ↔ API, con el servidor real** (`app-android/pruebas/api_conductor.py` contra
+  `servidor_pruebas.py`, que ahora siembra también una empresa con un conductor: `conductor@fds.test` /
+  `turno-de-prueba-1`, furgoneta 1234 KLM asignada hoy, libra mañana, un refuerzo abierto por la oficina): 61
+  comprobaciones en verde. Son las mismas llamadas, cuerpos y campos que usa la app nativa: acceso unificado y
+  destino, turnos (shifts/mine, bloqueos, pedir día, vistas), trabajar más (vacantes, solicitar, retirar,
+  cancelar), auditoría (furgoneta de hoy, validar foto, cuentakilómetros con rango a mano, subir la inspección
+  entera y el 409 al repetir), Invita y gana, teléfono, correo personal, cambio de contraseña, código por correo,
+  y lo del autónomo (ruta, renovar, planes, ajustes, estadísticas).
+- **No comprobado**: un móvil físico ni el emulador. En el PC de Winiw el emulador no arranca (falta el driver de
+  hipervisor de Android o la «Plataforma de hipervisor de Windows»: se activa en «Características de Windows»,
+  con permisos de administrador y reinicio). Antes de Producción: instalar `salida/FDS-2.2.3.apk` en un móvil y
+  pasar el portal de empresa (entrar, turnos, auditoría con fotos, trabajar más) y el autónomo.
+
+Compilar en el PC de Winiw (`app-android/`, desde el panel de Terminal de la app de Claude o desde PowerShell;
+en este PC el daemon de Gradle no arranca desde las herramientas de la sesión, sí desde una terminal normal):
+
+```powershell
+$env:JAVA_HOME = 'C:\Program Files\Android\Android Studio\jbr'        # JDK 21 de Android Studio
+$env:ANDROID_HOME = 'C:\Users\Winiw Delivery\AppData\Local\Android\Sdk'
+.\gradlew.bat :app:bundleRelease                                   # salida: app/build/outputs/bundle/release/
+.\gradlew.bat :app:assembleRelease -PsoloMoviles -PparaWeb         # el APK para la web (com.flotadsp.flota.web)
+```
+
+Probar sin emulador: `backend\.venv\Scripts\python app-android\pruebas\servidor_pruebas.py` en una ventana y
+`backend\.venv\Scripts\python app-android\pruebas\api_conductor.py` en otra (el venv se creó el 29-10 con
+`requirements.txt` + `tzdata` + `segno`).
+
 ## Lo que ya está hecho
 
 | Qué | Dónde |

@@ -1,11 +1,13 @@
 package com.flotadsp.fds.ui.acceso
 
+import android.Manifest
 import android.content.Context
+import android.content.pm.PackageManager
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.graphics.Matrix
 import android.net.Uri
-import android.media.ExifInterface
+import androidx.exifinterface.media.ExifInterface
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -57,10 +59,12 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
+import androidx.core.content.ContextCompat
 import androidx.core.content.FileProvider
 import com.flotadsp.fds.FdsApp
 import com.flotadsp.fds.data.ArchivoMultipart
 import com.flotadsp.fds.data.ErrorApi
+import com.flotadsp.fds.ui.SIN_CAMARA
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -173,14 +177,28 @@ fun AuditoriaConductorNativa(alVolver: () -> Unit, alCompletar: () -> Unit) {
         }
     }
 
+    fun abrirCamara(item: CapturaPendiente) {
+        try { camera.launch(item.uri) } catch (_: Exception) {
+            captura = null; item.archivo.delete()
+            error = "No se pudo abrir la cámara. Comprueba que tienes una aplicación de cámara instalada."
+        }
+    }
+    // La app declara el permiso de cámara (lo usa el escáner) y, entonces, Android no deja abrir la cámara del sistema
+    // sin él: se pide antes, como en ui/Foto.kt. Sin esto, un conductor que nunca usó el escáner no podía hacer ni una foto.
+    val permisoCamara = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { ok ->
+        val item = captura
+        if (item == null) return@rememberLauncherForActivityResult
+        if (ok) abrirCamara(item) else { captura = null; item.archivo.delete(); error = SIN_CAMARA }
+    }
     fun hacerFoto(clave: String) {
-        try {
+        val item = try {
             val dir = File(ctx.cacheDir, "fotos").apply { mkdirs() }
             val archivo = File.createTempFile("auditoria_${clave}_", ".jpg", dir)
-            val uri = FileProvider.getUriForFile(ctx, "${ctx.packageName}.fotos", archivo)
-            captura = CapturaPendiente(clave, archivo, uri)
-            camera.launch(uri)
-        } catch (_: Exception) { error = "No se pudo abrir la cámara. Comprueba que tienes una aplicación de cámara instalada." }
+            CapturaPendiente(clave, archivo, FileProvider.getUriForFile(ctx, "${ctx.packageName}.fotos", archivo))
+        } catch (_: Exception) { error = "No se pudo preparar la foto. Inténtalo de nuevo."; return }
+        captura = item
+        if (ContextCompat.checkSelfPermission(ctx, Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED) abrirCamara(item)
+        else permisoCamara.launch(Manifest.permission.CAMERA)
     }
 
     BackHandler { if (paso > 0) paso-- else alVolver() }
@@ -342,10 +360,8 @@ private suspend fun comprimirFoto(context: Context, uri: Uri): ByteArray = withC
             ExifInterface.ORIENTATION_ROTATE_270 -> 270f
             else -> 0f
         }
-        val imagen = if (grados == 0f) bitmap else {
-            orientada = Bitmap.createBitmap(bitmap, 0, 0, bitmap.width, bitmap.height, Matrix().apply { postRotate(grados) }, true)
-            orientada!!
-        }
+        val imagen = if (grados == 0f) bitmap else
+            Bitmap.createBitmap(bitmap, 0, 0, bitmap.width, bitmap.height, Matrix().apply { postRotate(grados) }, true).also { orientada = it }
         ByteArrayOutputStream().use { out ->
             check(imagen.compress(Bitmap.CompressFormat.JPEG, 78, out)) { "No se pudo codificar la imagen" }
             out.toByteArray()

@@ -27,7 +27,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.List
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Call
-import androidx.compose.material.icons.filled.Chat
+import androidx.compose.material.icons.automirrored.filled.Chat
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.CloudOff
@@ -413,7 +413,7 @@ private fun Siguiente(
                     Icon(Icons.Default.Call, contentDescription = "Llamar")
                 }
                 FilledTonalButton(onClick = alWhatsapp, enabled = p.telefono.isNotBlank(), modifier = Modifier.height(52.dp)) {
-                    Icon(Icons.Default.Chat, contentDescription = "WhatsApp")
+                    Icon(Icons.AutoMirrored.Filled.Chat, contentDescription = "WhatsApp")
                 }
             }
             Spacer(Modifier.height(8.dp))

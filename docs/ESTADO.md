@@ -5,7 +5,7 @@
 > haz commit y `git push`. Una sola sesión trabajando a la vez: antes de
 > empezar, `git pull` y comprueba que nadie ha dejado nada a medias aquí.
 
-Última actualización: **28-10-2026** (preparación local de FDS 2.1.0 y acceso seguro para conductores de empresa; ver «Última sesión»).
+Última actualización: **29-10-2026** (FDS 2.2.3 compilada, probada y firmada: el AAB listo para Play; ver «Última sesión — 29-10-2026»).
 
 ## Qué es y dónde está
 
@@ -618,9 +618,31 @@ Nada se había borrado (org `owner` sin `modulos`, usuario `dani` sin
   **Falta**: probarla en un móvil físico, subir el AAB (Dani) y, cuando Dani la apruebe, cambiar la descarga de
   la web (`frontend/public/descargas/FDS.apk`, hoy la TWA 1.0.3) por el APK nativo.
 
+## Última sesión — 29-10-2026: FDS 2.2.3 compilada por primera vez, probada y firmada (PC de Winiw)
+
+- El repo se clonó en este PC (`C:\Users\Winiw Delivery\Documents\foefa`). Las versiones 2.1.0 → 2.2.3 de la app
+  nativa nunca se habían compilado (se escribieron sin JDK ni SDK). Aquí compilan: Android Studio + SDK estaban.
+- **`app-android/salida/FDS-2.2.3.aab` es lo que se sube a Play** (`versionCode 15`), firmado con la clave de subida
+  (Dani pasó `.flota-android.keystore` y su contraseña; están en `C:\Users\Winiw Delivery\`, fuera de git). Al lado,
+  `FDS-2.2.3.apk` (paquete `.web`, arm64+armv7) para instalar a mano o para `/descargas/FDS.apk` cuando Dani la
+  apruebe. Todo lo arreglado y comprobado, en `docs/PLAY_STORE.md` → «Versión 2.2.3».
+- Arreglos reales que salieron al leer el código y cruzarlo con el servidor: la suspensión no se pintaba en «Mis
+  turnos» (campo `cod`, no `type`), la auditoría no pedía el permiso de cámara (sin él, Android no abre la cámara
+  del sistema: no se podía hacer ni una foto), y el portal de empresa dentro de FDS no limpiaba `flota_acceso`.
+- Nuevo: `app-android/pruebas/api_conductor.py` (61 comprobaciones del contrato app ↔ API contra el servidor real
+  en memoria; `servidor_pruebas.py` siembra ahora también una empresa con un conductor). `backend/.venv` creado.
+- **No probado en móvil ni emulador** (sin acelerador de hardware en este PC). **Pendiente de Dani**: instalar el APK
+  en su móvil, pasar el portal de empresa y el autónomo, y subir el AAB.
+- Gradle en este PC: solo desde una terminal normal (PowerShell o el panel de Terminal de la app), no desde las
+  herramientas de la sesión de Claude (su daemon no puede abrir la conexión local). Cómo, en PLAY_STORE.md.
+- Aparte: `docs/anuncios/artlist/` (guion del vídeo para Artlist con QR a la ficha de Play, QR en PNG y SVG).
+
 ## Pendiente (por prioridad)
 
--3. **App nativa (26-10)**: Dani la prueba en su móvil y sube `app-android/salida/FDS-2.0.0.aab` a Play
+-3. **App nativa (29-10)**: Dani instala `app-android/salida/FDS-2.2.3.apk` en su móvil, la prueba (entrar como
+   conductor de empresa: turnos, auditoría con fotos, trabajar más; y como autónomo) y sube
+   `app-android/salida/FDS-2.2.3.aab` a Play (code 15). Lo de abajo sigue valiendo:
+   Dani la prueba en su móvil y sube el AAB a Play
    (Seguridad de los datos: cámara y ubicación; Eliminación de cuentas). **Cada «Borrar mi cuenta» pedido desde
    la app** queda en `flota_global.bajas_cuentas` (`borrada: false`) con aviso por correo: hay que borrar sus
    datos en 30 días como mucho. Falta una página web para pedir el borrado (Play la pide; hoy vale /privacidad).

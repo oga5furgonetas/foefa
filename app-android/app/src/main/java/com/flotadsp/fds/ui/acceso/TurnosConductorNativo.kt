@@ -52,6 +52,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import com.flotadsp.fds.FdsApp
 import com.flotadsp.fds.data.ErrorApi
+import com.flotadsp.fds.ui.ESPANOL
 import kotlinx.coroutines.launch
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonObject
@@ -62,7 +63,6 @@ import kotlinx.serialization.json.jsonPrimitive
 import java.time.LocalDate
 import java.time.YearMonth
 import java.time.format.DateTimeFormatter
-import java.util.Locale
 
 @Composable
 fun TurnosConductorNativo(alVolver: () -> Unit) {
@@ -119,7 +119,7 @@ fun TurnosConductorNativo(alVolver: () -> Unit) {
         runCatching { val o = b.jsonObject; seleccion >= campo(o, "desde") && seleccion <= campo(o, "hasta") }.getOrDefault(false)
     }?.jsonObject
     val suspensionSel = suspendido?.let { runCatching { seleccion >= campo(it, "desde") && seleccion <= campo(it, "hasta") }.getOrDefault(false) } == true
-    val esLibre = campoSeguro(turnoSel, "type") == "libre"
+    val esLibre = tipoTurno(turnoSel) == "libre"
     val status = campoSeguro(peticionSel, "status")
     val puedePedir = fechaSel >= hoy && status.isBlank() && !suspensionSel && bloqueoSel == null && !esLibre
 
@@ -134,7 +134,7 @@ fun TurnosConductorNativo(alVolver: () -> Unit) {
                 Column(Modifier.fillMaxWidth().padding(12.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         IconButton(onClick = { mes = periodo.minusMonths(1).toString() }, enabled = YearMonth.parse(mes).isAfter(YearMonth.from(hoy).minusMonths(2))) { Icon(Icons.Default.ChevronLeft, contentDescription = "Mes anterior") }
-                        Text(periodo.atDay(1).format(DateTimeFormatter.ofPattern("MMMM yyyy", Locale("es", "ES"))).replaceFirstChar { it.titlecase(Locale("es", "ES")) }, Modifier.weight(1f), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                        Text(periodo.atDay(1).format(DateTimeFormatter.ofPattern("MMMM yyyy", ESPANOL)).replaceFirstChar { it.titlecase(ESPANOL) }, Modifier.weight(1f), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
                         IconButton(onClick = { mes = periodo.plusMonths(1).toString() }, enabled = YearMonth.parse(mes).isBefore(YearMonth.from(hoy).plusMonths(3))) { Icon(Icons.Default.ChevronRight, contentDescription = "Mes siguiente") }
                     }
                     Row(horizontalArrangement = Arrangement.spacedBy(3.dp)) { listOf("L", "M", "X", "J", "V", "S", "D").forEach { Text(it, Modifier.weight(1f), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant) } }
@@ -146,7 +146,7 @@ fun TurnosConductorNativo(alVolver: () -> Unit) {
                                 if (d == null) Spacer(Modifier.weight(1f).aspectRatio(1f)) else {
                                     val key = d.toString()
                                     val turno = mapaTurnos[key]?.jsonObject
-                                    val tipo = campoSeguro(turno, "type")
+                                    val tipo = tipoTurno(turno)
                                     val pet = mapaPeticiones[key]?.jsonObject
                                     val estado = campoSeguro(pet, "status")
                                     val elegido = seleccion == key
@@ -173,8 +173,8 @@ fun TurnosConductorNativo(alVolver: () -> Unit) {
             }
             if (cargando) CircularProgressIndicator()
             else {
-                Text(fechaSel.format(DateTimeFormatter.ofPattern("EEEE d MMMM", Locale("es", "ES")).withLocale(Locale("es", "ES"))).replaceFirstChar { it.titlecase(Locale("es", "ES")) }, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
-                val textoTurno = when (campoSeguro(turnoSel, "type")) {
+                Text(fechaSel.format(DateTimeFormatter.ofPattern("EEEE d MMMM", ESPANOL).withLocale(ESPANOL)).replaceFirstChar { it.titlecase(ESPANOL) }, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+                val textoTurno = when (tipoTurno(turnoSel)) {
                     "trabaja" -> "Tienes turno de trabajo${campoSeguro(turnoSel, "cod").takeIf { it.isNotBlank() }?.let { " · $it" } ?: ""}."
                     "extra" -> "Tienes un turno extra confirmado."
                     "libre" -> "Tienes el día libre."
@@ -210,7 +210,7 @@ fun TurnosConductorNativo(alVolver: () -> Unit) {
     }
     confirmar?.let { fecha -> AlertDialog(
         onDismissRequest = { confirmar = null }, title = { Text("Enviar solicitud") },
-        text = { Text("Pedirás el día ${fecha.format(DateTimeFormatter.ofPattern("d 'de' MMMM", Locale("es", "ES")))} por ${motivoLabel(motivo)}. La oficina tendrá que aprobarlo.") },
+        text = { Text("Pedirás el día ${diaLargo(fecha)} por ${motivoLabel(motivo)}. La oficina tendrá que aprobarlo.") },
         confirmButton = { TextButton(onClick = {
             confirmar = null; enviando = true; error = null; aviso = null
             scope.launch {
@@ -235,5 +235,10 @@ private fun LeyendaTurno(texto: String, color: Color) {
 }
 
 private fun campo(obj: JsonObject, clave: String): String = obj[clave]?.jsonPrimitive?.contentOrNull.orEmpty()
+/** El tipo del día como lo pinta la web: `type` (trabaja / libre / extra) y, si el código es SUSP, «susp». */
+private fun tipoTurno(turno: JsonObject?): String = if (campoSeguro(turno, "cod") == "SUSP") "susp" else campoSeguro(turno, "type")
+private fun diaLargo(fecha: String): String = runCatching {
+    LocalDate.parse(fecha).format(DateTimeFormatter.ofPattern("d 'de' MMMM", ESPANOL))
+}.getOrDefault(fecha)
 fun campoSeguro(obj: JsonObject?, clave: String): String = obj?.let { runCatching { campo(it, clave) }.getOrDefault("") }.orEmpty()
 private fun motivoLabel(id: String): String = when (id) { "asuntos" -> "asuntos propios"; "medico" -> "médico"; "familia" -> "un asunto familiar"; "viaje" -> "un viaje"; else -> "otro motivo" }
