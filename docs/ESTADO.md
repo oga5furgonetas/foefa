@@ -5,7 +5,7 @@
 > haz commit y `git push`. Una sola sesión trabajando a la vez: antes de
 > empezar, `git pull` y comprueba que nadie ha dejado nada a medias aquí.
 
-Última actualización: **29-10-2026 (noche)** (anuncio «La ruta hecha»: guion para IA en `docs/anuncios/super-anuncio/` y primeras generaciones en Artlist; ver «Última sesión»). Antes, tarde: (el CI de `main` llevaba desde el 18-10 en rojo; checkers arreglados de raíz y todo el CI en verde en local; ver «Última sesión»). Por la mañana: FDS 2.2.3 compilada, probada y firmada, el AAB listo para Play (ver «29-10-2026 (mañana)»).
+Última actualización: **29-10-2026 (noche, 2)** (el anuncio con la VOZ DE DANI y el mapa real de A Coruña, montado en `docs/anuncios/spot-dani/salida/`; ver «Última sesión»). Antes, noche: (anuncio «La ruta hecha»: guion para IA en `docs/anuncios/super-anuncio/` y generaciones en Artlist). Antes, tarde: (el CI de `main` llevaba desde el 18-10 en rojo; checkers arreglados de raíz y todo el CI en verde en local; ver «Última sesión»). Por la mañana: FDS 2.2.3 compilada, probada y firmada, el AAB listo para Play (ver «29-10-2026 (mañana)»).
 
 ## Qué es y dónde está
 
@@ -743,14 +743,39 @@ para que se mandaran los prompts directamente.
   impresiones, no por altas a 3 días; `docs/anuncios/artlist/GUION.md` corregido («entregado con prueba», botón «Ver
   detalles») y apuntando a este como versión mantenida.
 
+## Última sesión — 29-10-2026 (noche, 2): el anuncio con la voz de Dani y el mapa real
+
+Dani: «no sé qué tengo que hacer, así que hazlo tú»; luego mandó una nota de voz de WhatsApp (30 s, su voz, acento de
+España): «utilízame este audio y móntame el vídeo acorde al audio»; y «mete lo de los 25 euros como gancho inicial».
+- **El anuncio nuevo, MONTADO**: `docs/anuncios/spot-dani/salida/spot-dani-*.mp4` (9:16 B «toca el botón» 32,2 s;
+  9:16 A con QR; 4:5; 16:9; 1:1 (no versionado); y `9x16-B-30s` para Spotify, 30,0 s justos sin el gancho). Qué dice
+  y qué se ve, segundo a segundo, y cómo rehacerlo: `docs/anuncios/spot-dani/LEEME.md`. La voz manda el tiempo
+  (`voz.json`: transcrita con whisper small vía sherpa-onnx en el contenedor, cortada por los silencios); gancho
+  «¿Quieres 25 € gratis? Te los damos por tu primera ruta con la app» (1,7 s, antes de la voz); las dos preguntas
+  sobre los planos de Artlist y la app; «Esto te interesa»; logo «Flota DSP»; la app en el móvil (mapa, panel de
+  empresa para «el control de flotas», escanear, ordenar, zonas, voz, entregado); «Forma parte del cambio»; cierre
+  con flotadsp.com, «+25 € con tu primera ruta», botón y Play; el lema «Cada entrega cuenta.» entra cuando lo dice.
+  Montaje `scripts/montar-spot-dani.mjs`, capas `scripts/spot-dani/capas.mjs`, voz limpia `voz-dani.flac`
+  (-16 LUFS) y la nota original `fuente-dani-whatsapp.mp3`.
+- **El mapa REAL de A Coruña sin red** (Dani: «quiero el mapa de la app y que se vea bien; si no, el anuncio es una
+  mierda»): `scripts/spot-ruta/teselas.py` saca las teselas de `docs/play-store/captura-4-oficina-mapa.png` (la
+  captura del panel, con OSM de verdad a 2x): georreferencia por los 12 marcadores de la demo (error < 1 px), limpia
+  marcadores/líneas/controles, amplía por reflejo, superresolución ×2/×4 con FSRCNN (modelo público de GitHub,
+  clonado de solo lectura; sin él, Lanczos + enfoque) y corta zooms 13-17. `e2e/spot-ruta.spec.js` las sirve
+  (`TESELAS=`) en vez de las de OSM; el esquemático queda de reserva. A zoom 17 (navegación) se nota que viene de
+  zoom 14; con red real la grabación sale nítida sin tocar nada. Mapa limpio: `super-anuncio/mapa-coruna.{jpg,json}`.
+- Lo que NO se pudo desde aquí (sigue igual): bajar los clips de Artlist, la voz de Gemini (sin `GEMINI_API_KEY`
+  en el entorno; ya no hace falta: la voz es la de Dani), publicar en TikTok/Meta/Spotify (sin navegador). Dani
+  añade secretos/dominios en el menú del entorno → Edit (sesión nueva) o sube los vídeos él con SUBIR.md.
+
 ## Pendiente (por prioridad)
 
--5. **Anuncio «La ruta hecha» (29-10 noche)**: el vídeo está montado (`docs/anuncios/super-anuncio/salida/`). Para
-   la versión definitiva: (1) bajar los 5 clips de Artlist a `super-anuncio/clips/` como `plano-1.mp4`… y
-   regrabar en el PC con red (mapa real de OSM); (2) si se quiere la voz del guion nuevo («112 paquetes»,
-   «empieza gratis»), generarla con Puck (`scripts/spot-v5/voz_gemini.py`) y cambiar las FRASES; (3) subir
-   (GUION.md §10) y medir. Dani mira en Artlist los 5 planos, la referencia y la voz 2 y repite lo que falle;
-   montaje con Puck o su voz; tres ganchos; subir (GUION.md §10). Ficheros: `docs/anuncios/super-anuncio/`.
+-5. **El anuncio con la voz de Dani (29-10 noche, 2)**: montado en `docs/anuncios/spot-dani/salida/`. Falta:
+   (1) **desplegar el bono de 25 €** (backend + web) antes de que corra; (2) subirlo (Dani, con
+   `super-anuncio/SUBIR.md`: TikTok y Meta el 9:16 B, Spotify el `-30s`, YouTube el 16:9 con QR) y medir;
+   (3) opcional, para afinar: bajar los 5 clips de Artlist a `super-anuncio/clips/` (`plano-1.mp4`,
+   `plano-7a.mp4`, `plano-9.mp4`) y regrabar con red (mapa nítido a zoom 17): el montaje los coge solos.
+   El anuncio anterior (voz de Puck, `super-anuncio/salida/`) queda como alternativa.
 
 
 -4. **CI y web (29-10 tarde)**: ver en verde el run del CI de GitHub del commit de cierre; desplegar la web desde el

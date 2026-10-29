@@ -1,0 +1,124 @@
+{
+ "fuente": "WhatsApp Audio 2026-10-29 at 15.20.58 (Dani), 30,07 s; transcrito con whisper small (sherpa-onnx), cortes en los silencios",
+ "frases": [
+  {
+   "id": "pregunta1",
+   "ini": 0.0,
+   "fin": 2.92,
+   "texto": "¿Trabajas repartiendo paquetes, comida o haciendo mensajería?",
+   "oido": "¿Trabaja repartiendo paquetes, comida o haciendo mensajería?"
+  },
+  {
+   "id": "pregunta2",
+   "ini": 2.92,
+   "fin": 6.08,
+   "texto": "¿Eres autónomo o formas parte de una empresa de reparto?",
+   "oido": "¿Eres autónomo o formas parte de una empresa de reparto?"
+  },
+  {
+   "id": "interesa",
+   "ini": 6.08,
+   "fin": 7.16,
+   "texto": "Esto te interesa.",
+   "oido": "Esto te interesa."
+  },
+  {
+   "id": "llega",
+   "ini": 7.16,
+   "fin": 8.6,
+   "texto": "Llega Flota DSP,",
+   "oido": "Llega Flota de CP"
+  },
+  {
+   "id": "app",
+   "ini": 8.6,
+   "fin": 11.92,
+   "texto": "la aplicación pensada para los repartidores",
+   "oido": "la aplicación pensada para los repartidores y el control de flotas."
+  },
+  {
+   "id": "flotas",
+   "ini": 10.45,
+   "fin": 11.92,
+   "texto": "y el control de flotas.",
+   "oido": "(parte de la frase anterior)"
+  },
+  {
+   "id": "musica",
+   "ini": 11.92,
+   "fin": 12.24,
+   "texto": "(pausa)",
+   "oido": "[Música]"
+  },
+  {
+   "id": "organizar",
+   "ini": 12.24,
+   "fin": 15.4,
+   "texto": "Una solución digital para ayudarte a organizar mejor el trabajo",
+   "oido": "una solución digital para ayudarte a organizar mejor el trabajo."
+  },
+  {
+   "id": "eficiente",
+   "ini": 15.4,
+   "fin": 18.08,
+   "texto": "y gestionar el reparto de forma más eficiente.",
+   "oido": "y gestionar el reparto de forma más eficiente."
+  },
+  {
+   "id": "cuenta",
+   "ini": 18.08,
+   "fin": 19.92,
+   "texto": "Da igual si trabajas por tu cuenta",
+   "oido": "Da igual si trabajas por tu cuenta."
+  },
+  {
+   "id": "empresa",
+   "ini": 19.92,
+   "fin": 21.4,
+   "texto": "o trabajas para una empresa.",
+   "oido": "o trabajas para una empresa."
+  },
+  {
+   "id": "evoluciona",
+   "ini": 21.4,
+   "fin": 23.24,
+   "texto": "El reparto evoluciona y tú puedes",
+   "oido": "El reparto evoluciona y tú puedes..."
+  },
+  {
+   "id": "cambio",
+   "ini": 23.24,
+   "fin": 24.32,
+   "texto": "formar parte del cambio.",
+   "oido": "formar parte del campo."
+  },
+  {
+   "id": "descubre",
+   "ini": 24.56,
+   "fin": 27.44,
+   "texto": "Descubre Flota DSP en flotadsp.com.",
+   "oido": "Descubre flota dsp en flotadsp.com"
+  },
+  {
+   "id": "marca",
+   "ini": 27.44,
+   "fin": 28.36,
+   "texto": "Flota DSP.",
+   "oido": "Flota de CP"
+  },
+  {
+   "id": "lema",
+   "ini": 28.36,
+   "fin": 29.28,
+   "texto": "Cada entrega",
+   "oido": "Cada intriga..."
+  },
+  {
+   "id": "lema2",
+   "ini": 29.28,
+   "fin": 30.03,
+   "texto": "cuenta.",
+   "oido": "cuenta."
+  }
+ ]
+}

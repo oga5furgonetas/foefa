@@ -215,7 +215,15 @@ test('grabar la app para el anuncio «La ruta hecha»', async ({ page, context }
     base: null, ruta: ordenada ? { fin: DIA.fin, minutos: DIA.trazado.minutos, km: DIA.trazado.km, trafico: true } : null, pedidos,
     ganancias: { pago_parada: 180, pago_dia: 0, coste_km: 12 } } }))
 
-  await page.route(/tile\.openstreetmap\.org\/\d+\/\d+\/\d+\.png/, (r) => { const m = r.request().url().match(/\/(\d+)\/(\d+)\/(\d+)\.png/); return r.fulfill({ status: 200, contentType: 'image/svg+xml', body: tileSvg(+m[1], +m[2], +m[3]) }) })
+  // Teselas: las del mapa REAL de A Coruña si están generadas (scripts/spot-ruta/teselas.py, variable TESELAS);
+  // si falta alguna (o no hay carpeta), el callejero esquemático.
+  const TESELAS = process.env.TESELAS || path.join(process.cwd(), 'test-results', 'teselas')
+  await page.route(/tile\.openstreetmap\.org\/\d+\/\d+\/\d+\.png/, (r) => {
+    const m = r.request().url().match(/\/(\d+)\/(\d+)\/(\d+)\.png/)
+    const real = path.join(TESELAS, m[1], m[2], `${m[3]}.jpg`)
+    if (fs.existsSync(real)) return r.fulfill({ status: 200, contentType: 'image/jpeg', body: fs.readFileSync(real) })
+    return r.fulfill({ status: 200, contentType: 'image/svg+xml', body: tileSvg(+m[1], +m[2], +m[3]) })
+  })
   await page.goto('/ruta', { waitUntil: 'domcontentloaded' })
   await page.getByRole('button', { name: 'Solo necesarias' }).click({ timeout: 2000 }).catch(() => {})
   await expect(page.getByRole('button', { name: /Ordenar ruta/ }).first()).toBeVisible({ timeout: 15000 })
