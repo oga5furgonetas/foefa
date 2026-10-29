@@ -690,6 +690,14 @@ desplegar la web** la próxima vez desde el PC.
    PC (fichas de ayuda y colores; el backend no cambia); decidir qué hacer con las cuatro rutas heredadas sin
    consumidor (`SIN_UI_A_PROPOSITO` en `scripts/check-huerfanas.mjs`): engancharlas o borrarlas.
 
+-3b. **OJO, antes de probar el APK contra producción (29-10 tarde)**: la ruta `POST /auth/app-login`, la que usa
+   «Ya tengo cuenta» en la app nativa, entró en `server.py` el 28-10 a las 20:28 (commit c206123), DESPUÉS del
+   último despliegue del backend que consta aquí (versión 157, 28-10 por la tarde). Si nadie desplegó después, la
+   app no puede entrar en producción (404) aunque el AAB esté perfecto. Comprobar desde el PC:
+   `curl -s -o NUL -w "%{http_code}" -X POST https://flota-backend.fly.dev/api/auth/app-login -H "Content-Type: application/json" -d "{\"identifier\":\"x\",\"password\":\"x\"}"`
+   → 401 = desplegada; 404 = falta desplegar (`fly deploy`, ver «Cómo desplegar»). Desde esta sesión no se pudo
+   mirar: el proxy del contenedor no deja llegar a flota-backend.fly.dev.
+
 -3. **App nativa (29-10)**: Dani instala `app-android/salida/FDS-2.2.3.apk` en su móvil, la prueba (entrar como
    conductor de empresa: turnos, auditoría con fotos, trabajar más; y como autónomo) y sube
    `app-android/salida/FDS-2.2.3.aab` a Play (code 15). Lo de abajo sigue valiendo:
