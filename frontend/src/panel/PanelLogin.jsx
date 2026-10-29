@@ -1,3 +1,4 @@
+import { useTitulo } from '../lib/titulo'
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { ArrowRight, Loader2, Eye, EyeOff } from 'lucide-react'
@@ -39,6 +40,7 @@ function Field({ label, type = 'text', value, onChange, onEnter, autoFocus }) {
 }
 
 export default function PanelLogin() {
+  useTitulo('Entrar')
   const nav = useNavigate()
   const [user, setUser] = useState('')
   const [pass, setPass] = useState('')

@@ -59,7 +59,7 @@ export function Cuenta({ billing, recargar, toast, resaltarRegalo, merc }) {
           {!enApp && b.status === 'suspended' && b.pago_proveedor === 'stripe' && b.stripe_status !== 'canceled'
             ? <BotonPortal toast={toast} texto={tx('Revisar mi tarjeta y pagar')} principal />
             // Durante la promoción no hay nada que pagar: no se ofrece suscribirse.
-            : !enApp && !b.suscrito && !conPlay(b) && !b.promo?.activa && <><Suscribirse b={b} precios={precios} toast={toast} />{b.pais === 'cn' && <PagoUnAno precio={precios.anual} toast={toast} />}</>}
+            : !enApp && !b.suscrito && !conPlay(b) && !b.promo?.activa && <Suscribirse b={b} precios={precios} toast={toast} />}
           {enApp && !b.suscrito && !conPlay(b) && !b.promo?.activa && b.play?.listo && <PagarConPlay b={b} toast={toast} recargar={recargar} />}
           {conPlay(b) && <GestionarPlay b={b} />}
           {!enApp && b.suscrito && <Gestionar b={b} precios={precios} toast={toast} recargar={recargar} />}
@@ -67,7 +67,7 @@ export function Cuenta({ billing, recargar, toast, resaltarRegalo, merc }) {
           {!enApp && b.regalos && <Regalar precios={b.regalos} toast={toast} resaltar={resaltarRegalo} />}
         </>
       )}
-      {!suplantando && (b?.pais || 'es') !== 'cn' && <Invitar toast={toast} />}
+      {!suplantando && <Invitar toast={toast} />}
       {merc && (
         <button type="button" onClick={() => window.dispatchEvent(new Event('fds-abrir-mercadillo'))}
           className="mt-4 flex w-full items-center gap-3 rounded-3xl border border-dark-700 bg-dark-900 p-4 text-left">
@@ -320,35 +320,6 @@ function Estado({ b, precios }) {
 /* Elegir mensual o anual y meter la tarjeta en Stripe. Lo que se dice del
    primer cobro sale del servidor (`cobro_al_suscribir`): fin de la prueba o
    del regalo si quedan más de 48 h; si no, hoy. */
-/* EN CHINA, EL AÑO DE UNA VEZ (04-10-2026). Allí se paga con Alipay o WeChat
-   Pay, que no admiten cobros mensuales automáticos: se paga el año entero en
-   un solo pago (lo mismo que un regalo para uno mismo, que la app canjea sola
-   al volver). Qué métodos salen lo decide Stripe según lo activado en la
-   cuenta: el texto no promete Alipay si no está. */
-function PagoUnAno({ precio, toast }) {
-  const [yendo, setYendo] = useState(false)
-  async function pagar() {
-    setYendo(true)
-    try {
-      const { data } = await comprarRegalo(12, true)
-      if (data?.url) { apuntarParaLaVuelta('Purchase', { value: precio, currency: 'EUR', content_name: 'año' }); window.location.href = data.url; return }
-    } catch (e) {
-      toast?.error?.(txError(e, 'No se pudo abrir el pago'))
-    }
-    setYendo(false)
-  }
-  return (
-    <section className="mt-4 rounded-3xl border border-dark-700 bg-dark-900 p-4">
-      <h2 className="text-[16px] font-bold text-dark-50">{tx('O paga el año de una vez')}</h2>
-      <p className="mt-1 text-[12.5px] leading-snug text-dark-400">{tx('Sin suscripción ni cobros automáticos: pagas {precio} hoy y tienes la app un año. En el pago salen los métodos disponibles (tarjeta y, si están activos, Alipay o WeChat Pay).', { precio: euros(precio) })}</p>
-      <button onClick={pagar} disabled={yendo}
-        className="mt-3 flex w-full items-center justify-center gap-2 rounded-2xl border border-brand-400/50 py-3.5 text-[15px] font-bold text-brand-200 disabled:opacity-60">
-        {yendo ? <Loader2 size={17} className="animate-spin" /> : <CreditCard size={17} />} {tx('Pagar 1 año')}
-      </button>
-    </section>
-  )
-}
-
 export function Suscribirse({ b, precios, toast, titulo }) {
   const [anual, setAnual] = useState(false)
   const [yendo, setYendo] = useState(false)
@@ -725,7 +696,6 @@ export function Muro({ billing, toast, recargar, irACuenta }) {
       ) : (
         <>
           <Suscribirse b={b} precios={precios} toast={toast} titulo={empezar ? tx('Elige cómo quieres pagar después') : tx('Elige tu plan')} />
-          {b.pais === 'cn' && <PagoUnAno precio={precios.anual} toast={toast} />}
         </>
       )}
       <Canjear toast={toast} recargar={recargar} />

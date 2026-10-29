@@ -67,13 +67,6 @@ const GUION = {
     'Sprachführung bis zu jeder Tür.',
     'Zugestellt. Weiter.',
     'Erstelle dein kostenloses Konto: sieben Tage ohne Karte. FDS, auf flotadsp punkt com.'] },
-  zh: { voz: 'zh-CN-YunxiNeural', frases: [
-    '还在手动排路线吗？',
-    '拍一下面单，地址自动录入。',
-    '路线自动排好。',
-    '中文语音导航到每个门口。',
-    '已送达，下一站。',
-    '免费创建账号，七天免绑卡。FDS，flotadsp 点 com。'] },
 }
 
 /* Los otros ganchos (e2e/video-ganchos.spec.js): una promesa concreta cada uno. */

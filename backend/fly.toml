@@ -7,6 +7,8 @@ primary_region = "cdg"
 
 [env]
   DB_NAME = "flota"
+  # La marca (29-10-2026): FDS en todo (correos, PDF, textos del servidor). Un secreto MARCA_NOMBRE mandaría sobre esto.
+  MARCA_NOMBRE = "FDS"
   # CORS_ORIGINS eliminado a propósito: el código aplica lista blanca segura por defecto.
   # Para ampliar dominios sin tocar código: flyctl secrets set CORS_ORIGINS="https://tu-dominio.com,..."
   PUBLIC_BASE_URL = "https://flota-backend.fly.dev"

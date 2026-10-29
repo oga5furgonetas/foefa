@@ -132,120 +132,6 @@ test.describe('Páginas públicas', () => {
   }
 })
 
-/* VALOR es SOLO del super-admin. Quien no lo es no la ve en el menú (ni en el
-   de escritorio ni en el del móvil) y, si escribe la dirección, se le echa.
-   El servidor además contesta 403: eso lo prueba backend/tests/test_valor_acceso.py. */
-test.describe('Valor, solo super-admin', () => {
-  const hace = (min) => new Date(Date.now() - min * 60000).toISOString()
-  const OPORTUNIDAD = {
-    id: 7, evento_id: 'e1', mercado: '1x2', linea: null, seleccion: 'local', casa: 'gamdom',
-    cuota: 2.3, prob_justa: 0.46, ev: 0.058, importe: 40, importe_max: 40, ya_apostado: 0, en_vivo: 0,
-    fallo: 'casa lenta', fuente: 'oddspapi',
-    motivos: ['CASA LENTA: pinnacle ha bajado esta cuota de 2.30 a 2.10 en 25 min.'], avisos: [],
-    local: 'Betis', visitante: 'Sevilla', liga: 'LaLiga', inicio: '2030-01-01T19:00:00+00:00',
-    estado: 'valida', motivo: '', detectada: hace(2), ts_cuota: hace(2), ts_referencia: hace(2),
-    valida_hasta: new Date(Date.now() + 8 * 60000).toISOString(),
-    detalle: { referencias: { pinnacle: 2.1 }, otras: { 'codere.es': 2.05 },
-               por_metodo: { proporcional: 0.47, shin: 0.46 } },
-  }
-  const CADUCADA = {
-    ...OPORTUNIDAD, id: 8, casa: 'codere.es', local: 'Getafe', visitante: 'Osasuna', estado: 'caducada',
-    motivo: 'Sus cuotas tienen más de 10 min: ya no se sabe si siguen ahí.', ts_cuota: hace(30),
-    valida_hasta: hace(20),
-  }
-
-  test('quien no es super-admin no la ve y la ruta le echa', async ({ page }) => {
-    const fallos = vigilar(page)
-    await entrarComoAdmin(page)
-    await simularApi(page, 'vacio')
-    await page.goto('/panel/vehiculos', { waitUntil: 'domcontentloaded' })
-    await expect.poll(() => tieneContenido(page), { timeout: 15000 }).toBe(true)
-    await expect(page.locator('a[href="/panel/valor"]')).toHaveCount(0)
-
-    await page.goto('/panel/valor', { waitUntil: 'domcontentloaded' })
-    await expect.poll(() => new URL(page.url()).pathname, { timeout: 15000 }).not.toBe('/panel/valor')
-    await expect(page.getByText('Métele')).toHaveCount(0)
-    expect(fallos, fallos.join(' | ')).toHaveLength(0)
-  })
-
-  test('el super-admin la ve, la abre y lee la orden', async ({ page }) => {
-    const fallos = vigilar(page)
-    await entrarComoAdmin(page, { superAdmin: true })
-    await simularApi(page, 'vacio')
-    await page.route('**/api/valor/oportunidades**', (route) => route.fulfill({
-      status: 200, contentType: 'application/json',
-      body: JSON.stringify({ banca: 1000, items: new URL(route.request().url()).searchParams.get('vivo') ? [] : [OPORTUNIDAD, CADUCADA] }),
-    }))
-    await page.route('**/api/valor/reglas', (route) => route.fulfill({
-      status: 200, contentType: 'application/json',
-      body: JSON.stringify({ actuales: { prob_minima: 0.6, cuota_minima: 1.7 }, por_defecto: { prob_minima: 0.6, cuota_minima: 1.7 },
-        elegidas: false, horas: 24, simulacion: [0.6, 0.55, 0.5].flatMap((p, i) => [[1.7, 1.5], [1.6, 1.6], [1.55, 1.55], [1.5, 1.5]]
-          .map(([c, su], j) => ({ prob_minima: p, cuota_minima: c, cuota_suelo: su, senales: 10 * i + j + 1 }))) }),
-    }))
-    await page.route('**/api/valor/casi', (route) => route.fulfill({
-      status: 200, contentType: 'application/json',
-      body: JSON.stringify({ items: [{ ...OPORTUNIDAD, id: 9, casa: 'gamdom', local: 'Fresno State', visitante: 'Rice',
-        mercado: 'handicap', linea: -14.5, seleccion: 'visitante', cuota: 1.75, prob_justa: 0.588, ev: 0.028,
-        avisos: ['Sale el 59 % de las veces; tu mínimo es el 60 %.'] }] }),
-    }))
-    await page.goto('/panel/vehiculos', { waitUntil: 'domcontentloaded' })
-    await expect.poll(() => tieneContenido(page), { timeout: 15000 }).toBe(true)
-    const entrada = page.locator('a[href="/panel/valor"]').first()
-    await expect(entrada).toBeAttached()
-
-    await page.goto('/panel/valor', { waitUntil: 'domcontentloaded' })
-    await expect(page.getByText(/Métele\s*40 €\s*a que gana Betis en/)).toBeVisible({ timeout: 15000 })
-    await expect(page.getByRole('button', { name: 'Buscar ahora' })).toBeVisible()
-    // «Lo más cerca»: dice por qué no vale y no deja apostarla.
-    await expect(page.getByText('Lo más cerca (no cumple tus reglas)')).toBeVisible()
-    const casi = page.locator('li', { hasText: 'Fresno State' })
-    await expect(casi.getByText('NO RECOMENDADA')).toBeVisible()
-    await expect(casi.getByText('Sale el 59 % de las veces; tu mínimo es el 60 %.')).toBeVisible()
-    await expect(casi.getByText(/Rice \+14,5 de hándicap/)).toBeVisible()
-    await expect(casi.getByRole('button')).toHaveCount(0)
-    await expect(page.getByText('DESTACADA')).toBeVisible()
-    await expect(page.getByText('50/50 · 46 %').first()).toBeVisible()          // prob. 0,46: se dice claro
-    await expect(page.getByText(/VÁLIDA · \d+ min más/)).toBeVisible()
-    await expect(page.getByText('CASA LENTA', { exact: true }).first()).toBeVisible()
-    // Entre 2 y 9: los datos de arriba se fechan al CARGAR el fichero, y con la
-    // batería entera esta prueba llega a correr un minuto o más tarde (salía
-    // «hace 3 min» y fallaba en falso; sola pasaba siempre).
-    await expect(page.getByText(/datos hace [2-9] min/).first()).toBeVisible()
-    // La caducada sigue a la vista, marcada, sin «Métele» ni botón.
-    await expect(page.getByText('CADUCADA', { exact: true })).toBeVisible()
-    await expect(page.getByText(/No apostar\./)).toBeVisible()
-    const tarjetaCaducada = page.locator('article', { hasText: 'Getafe' })
-    await expect(tarjetaCaducada.getByText(/Métele/)).toHaveCount(0)
-    await expect(tarjetaCaducada.getByRole('button', { name: 'La he metido' })).toHaveCount(0)
-    // «La he metido»: la ventana trae la cuota y el importe detectados.
-    await page.getByRole('button', { name: 'La he metido' }).click()
-    const dialogo = page.getByRole('dialog', { name: 'Apuntar la apuesta' })
-    await expect(dialogo).toBeVisible()
-    await expect(dialogo.locator('input').first()).toHaveValue('2,30')
-    await expect(dialogo.locator('input').nth(1)).toHaveValue('40')
-    await dialogo.locator('input').first().fill('2,10')
-    await expect(dialogo.getByText(/ya no hay ventaja/)).toBeVisible()
-    await page.keyboard.press('Escape')
-    await expect(dialogo).toHaveCount(0)
-    for (const pest of ['Mis apuestas', 'Aprendizaje', 'Datos']) {
-      await page.getByRole('button', { name: new RegExp(`^${pest}`) }).click()
-    }
-    await expect(page.getByText('Tus casas')).toBeVisible()
-    // Tus reglas: 3 × 3 con lo que habría salido, y la tuya marcada.
-    await expect(page.getByText('Tus reglas', { exact: true })).toBeVisible()
-    await expect(page.getByText('(la tuya)')).toBeVisible()
-    await expect(page.getByRole('button', { name: 'Usar estas' })).toBeDisabled()
-    // Con los datos de arriba: 60 % y «desde 1,70*» → 1; 60 % y «desde 1,55» → 3.
-    await expect(page.getByRole('button', { name: '1', exact: true })).toHaveAttribute('aria-pressed', 'true')
-    await page.getByRole('button', { name: '3', exact: true }).click()
-    await expect(page.getByRole('button', { name: '3', exact: true })).toHaveAttribute('aria-pressed', 'true')
-    await expect(page.getByRole('button', { name: '1', exact: true })).toHaveAttribute('aria-pressed', 'false')
-    await expect(page.getByRole('button', { name: 'Usar estas' })).toBeEnabled()
-    expect(new URL(page.url()).pathname).toBe('/panel/valor')
-    expect(fallos, fallos.join(' | ')).toHaveLength(0)
-  })
-})
-
 /* FURGONETAS FIJAS (pestaña de la Plantilla del día): la tabla de conductores
    con su principal, la nota de responsabilidad y la fila de aparcamiento. */
 test.describe('Furgonetas fijas', () => {
@@ -3350,81 +3236,21 @@ test.describe('App · dentro de la app (Play o el APK) no se ofrece instalar', (
   })
 })
 
-test.describe('Idiomas · la app de reparto sigue el idioma del móvil', () => {
-  test.use({ locale: 'zh-CN' })
-  test('móvil en chino: Empezar y la ruta salen en chino, y se puede volver al español', async ({ page }) => {
-    const fallos = vigilar(page)
-    await page.goto('/empezar', { waitUntil: 'domcontentloaded' })
-    await expect(page.getByRole('heading', { name: '你的配送路线，自动排好。' })).toBeVisible()
-    await expect(page.getByRole('link', { name: /免费创建我的账号/ })).toBeVisible()
-    await page.getByRole('combobox', { name: /Idioma/ }).selectOption('es')
-    await expect(page.getByRole('heading', { name: 'Tu ruta de reparto, ordenada sola.' })).toBeVisible()
-    await page.getByRole('combobox', { name: /Idioma/ }).selectOption('zh')
-    await entrarRepartidor(page, { status: 'active', plan: 'autonomo', days_left: 0 })
-    await page.goto('/ruta', { waitUntil: 'domcontentloaded' })
-    await expect(page.getByRole('button', { name: '今天', exact: true })).toBeVisible()
-    await expect(page.getByRole('button', { name: '设置', exact: true })).toBeVisible()
-    await page.getByRole('button', { name: '账号', exact: true }).click()
-    await expect(page.getByText('你的账号')).toBeVisible()
-    expect(fallos).toEqual([])
-  })
-  test('móvil en chino: el alta del repartidor sale en chino y no promete «sin tarjeta»', async ({ page }) => {
-    await page.goto('/empezar', { waitUntil: 'domcontentloaded' })
-    await page.getByRole('link', { name: /免费创建我的账号/ }).click()
-    await expect(page).toHaveURL(/sector=autonomo/)
-    // Lo primero, que es gratis (10-10-2026), y en chino.
-    await expect(page.getByText('12月31日前免费且不限 · 无需绑卡')).toBeVisible()
-    await expect(page.getByText('免费 · 无需绑卡 · 今天 0 欧元')).toBeVisible()
-    await expect(page.getByText(/sin tarjeta/)).toHaveCount(0)
-    await expect(page.getByRole('link', { name: '隐私政策' })).toHaveAttribute('href', '/privacidad')
-    await expect(page.getByRole('button', { name: /以配送员套餐创建账号/ })).toBeVisible()
-    // PIPL: consentimiento aparte para tratar los datos fuera de China.
-    await page.getByPlaceholder('Pepe').fill('李师傅')
-    await page.getByPlaceholder('tu@correo.com').fill('li@example.cn')
-    await page.locator('input[type=password]').first().fill('12345678')
-    // Quien reparte solo no repite la contraseña (un campo menos en el móvil) y puede verla.
-    await expect(page.locator('input[type=password]')).toHaveCount(1)
-    await page.getByRole('button', { name: '显示密码' }).click()
-    await expect(page.locator('input[type=password]')).toHaveCount(0)
-    await page.getByRole('checkbox').first().check()
-    await expect(page.getByText(/传输至中国境外/)).toBeVisible()
-    await page.getByRole('button', { name: /以配送员套餐创建账号/ }).click()
-    await expect(page.getByText('在中国使用本应用，需要你同意在中国境外处理你的数据。')).toBeVisible()
-  })
-})
-
-test('Portada en chino · /cn entera en chino, con la app del repartidor y su alta en chino', async ({ page }) => {
-  const fallos = vigilar(page)
-  await page.goto('/cn', { waitUntil: 'domcontentloaded' })
-  await expect(page.getByRole('heading', { level: 1 })).toContainText('免费的送货应用')
-  await expect(page).toHaveTitle(/免费送货应用/)
-  await expect(page.locator('html')).toHaveAttribute('lang', 'zh-CN')
-  await expect(page.getByRole('heading', { name: '它为你做的一切，全部免费' })).toBeVisible()
-  // En China se navega con Amap o Baidu, no con Google Maps, y no hay Google Play: el APK se descarga.
-  await expect(page.getByText('应用内语音导航到每个门口，也可用高德或百度地图')).toBeVisible()
-  await expect(page.getByRole('link', { name: /下载安卓应用/ })).toHaveAttribute('href', '/descargas/FDS-china.apk')
-  await expect(page.getByRole('button', { name: '知道了' })).toBeVisible()                   // cookies en chino
-  await page.getByRole('link', { name: /免费创建我的账号/ }).first().click()
-  await expect(page).toHaveURL(/registro\?sector=autonomo/)
-  await expect(page.getByText('12月31日前免费且不限 · 无需绑卡')).toBeVisible()
-  expect(fallos).toEqual([])
-})
-
 test.describe('Idiomas · errores del servidor en la app de ruta', () => {
-  test.use({ locale: 'zh-CN' })
+  test.use({ locale: 'pt-PT' })
   test('el aviso de pago del servidor sale traducido, y un 422 no rompe la pantalla', async ({ page }) => {
     const fallos = vigilar(page)
     await entrarRepartidor(page, { status: 'active', plan: 'autonomo', days_left: 0 })
     await page.route(/\/api\/reparto\/mi-ruta$/, (r) => r.fulfill({ status: 402,
       json: { detail: 'Tu prueba gratis ha terminado. Suscríbete en «Cuenta» para seguir repartiendo.' } }))
     await page.goto('/ruta', { waitUntil: 'domcontentloaded' })
-    await expect(page.getByText('免费试用已结束。请在「账号」中订阅以继续配送。')).toBeVisible()
+    await expect(page.getByText('O seu teste grátis terminou. Subscreva em «Conta» para continuar a entregar.')).toBeVisible()
     await page.unroute(/\/api\/reparto\/mi-ruta$/)
     await page.route(/\/api\/reparto\/mi-ruta$/, (r) => r.fulfill({ status: 422,
       json: { detail: [{ loc: ['body', 'x'], msg: 'field required', type: 'value_error' }] } }))
     await page.reload({ waitUntil: 'domcontentloaded' })
     await expect(page.getByText('x: field required')).toBeVisible()   // services/api.js lo aplana
-    await expect(page.getByRole('button', { name: '今天', exact: true })).toBeVisible()
+    await expect(page.getByRole('button', { name: 'Hoje', exact: true })).toBeVisible()
     expect(fallos.filter((f) => !/402|422/.test(f))).toEqual([])
   })
 })
@@ -3455,78 +3281,6 @@ test.describe('Reparto · en México se cobra en pesos', () => {
     await expect.poll(() => estados.length).toBe(1)
     expect(estados[0]).toMatchObject({ estado: 'entregado', metodo: 'transferencia' })
     expect(fallos).toEqual([])
-  })
-})
-
-test('Idiomas · el panel en chino: diccionario y frases fijas de las pantallas', async ({ page }) => {
-  const fallos = vigilar(page)
-  await simularApi(page, 'lleno')
-  await entrarComoAdmin(page)
-  await page.addInitScript(() => { localStorage.setItem('cookie_consent', '1'); localStorage.setItem('flota_lang', 'zh') })
-  await page.goto('/panel/vehiculos', { waitUntil: 'domcontentloaded' })
-  await expect(page.getByText('添加车辆').first()).toBeVisible()          // frase fija (traductorZh)
-  await page.goto('/panel/asignacion', { waitUntil: 'domcontentloaded' })
-  await expect(page.getByText('添加一行').first()).toBeVisible()          // t('asgn.add.row')
-  await expect(page.getByText('Añadir fila')).toHaveCount(0)
-  expect(fallos).toEqual([])
-})
-
-test.describe('Reparto · en China', () => {
-  test.use({ locale: 'zh-CN' })
-  test('navega con Amap/Baidu, avisa por SMS y cobra en yuanes', async ({ page }) => {
-    const fallos = vigilar(page)
-    const b64 = (o) => btoa(JSON.stringify(o)).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '')
-    const token = `${b64({ alg: 'HS256' })}.${b64({ sub: 'd1', role: 'driver', name: 'LI', exp: Math.floor(Date.now() / 1000) + 3600 })}.x`
-    await page.addInitScript((t) => {
-      localStorage.setItem('flota_driver_token', t)
-      localStorage.setItem('flota_driver', JSON.stringify({ id: 'd1', name: 'LI' }))
-      localStorage.setItem('cookie_consent', '1')
-      localStorage.setItem('ruta_nav2', 'google')            // lo de otro país no vale aquí
-    }, token)
-    await simularApi(page, 'vacio')
-    await page.route(/\/api\/reparto\/mi-ruta$/, (r) => r.fulfill({ json: {
-      activo: true, empresa: '', fecha: '2026-10-04', jornada: {}, aviso_aceptado: true, pais: 'cn', prefijo: '86',
-      pedidos: [{ id: 'p1', cliente: '王记超市', direccion: '上海市黄浦区南京东路 100 号', telefono: '138 0013 8000', estado: 'pendiente', bultos: 1, orden: 1, cobrar: 88, lat: 31.2397, lng: 121.4998 }] } }))
-    await page.goto('/conductor?vista=ruta', { waitUntil: 'domcontentloaded' })
-    const sel = page.getByLabel('导航应用')
-    await expect(sel).toHaveValue('app')
-    await expect(sel.locator('option')).toHaveText(['本应用', '高德地图', '百度地图'])
-    await sel.selectOption('amap')
-    await expect(page.getByRole('link', { name: /出发/ }).first()).toHaveAttribute('href', /uri\.amap\.com\/navigation\?to=121\.4998,31\.2397,.*coordinate=wgs84/)
-    await expect(page.getByRole('link', { name: /短信/ })).toHaveAttribute('href', /^sms:13800138000\?&body=/)
-    await expect(page.getByRole('link', { name: /WhatsApp/ })).toHaveCount(0)
-    await expect(page.getByText(/代收.*¥88\.00/).first()).toBeVisible()
-    expect(fallos).toEqual([])
-  })
-})
-
-test('Cobro · en China se ofrece pagar el año de una vez y a la vuelta se canjea solo', async ({ page }) => {
-  const fallos = vigilar(page)
-  await entrarRepartidor(page, { status: 'trial', days_left: 7, pais: 'cn', falta_tarjeta: true })
-  const pedidos = []
-  await page.route(/\/api\/billing\/regalos$/, async (r) => {
-    if (r.request().method() === 'POST') { pedidos.push(r.request().postDataJSON()); await r.fulfill({ json: { url: '/ruta?regalo_propio=r1', id: 'r1' } }) }
-    else await r.fulfill({ json: { regalos: [{ id: 'r1', meses: 12, estado: 'pagado', codigo: 'ABCDEFGH' }] } })
-  })
-  const canjes = []
-  await page.route(/\/api\/billing\/regalos\/canjear/, async (r) => { canjes.push(r.request().postDataJSON()); await r.fulfill({ json: { ok: true, mensaje: 'Regalo aplicado' } }) })
-  await page.goto('/ruta', { waitUntil: 'domcontentloaded' })
-  await page.getByRole('button', { name: 'Cuenta', exact: true }).click()
-  await expect(page.getByRole('heading', { name: 'O paga el año de una vez' })).toBeVisible()
-  await page.getByRole('button', { name: 'Pagar 1 año' }).click()
-  await expect.poll(() => pedidos.length).toBe(1)
-  expect(pedidos[0]).toEqual({ meses: 12, para_mi: true })
-  await expect.poll(() => canjes.length).toBe(1)
-  expect(canjes[0]).toEqual({ codigo: 'ABCDEFGH' })
-  expect(fallos).toEqual([])
-})
-
-test.describe('App · en China se descarga la app (sin Play ni Chrome)', () => {
-  test.use({ locale: 'zh-CN', timezoneId: 'Asia/Shanghai', userAgent: UA_ANDROID })
-  test('la tarjeta de instalar ofrece el APK de China', async ({ page }) => {
-    await entrarRepartidor(page, { status: 'active', plan: 'autonomo', days_left: 0 })
-    await page.goto('/ruta', { waitUntil: 'domcontentloaded' })
-    await expect(page.getByRole('link', { name: '下载安卓应用' })).toHaveAttribute('href', '/descargas/FDS-china.apk')
   })
 })
 

@@ -5,7 +5,7 @@ import { simularApi, entrarComoAdmin } from './api-simulada.js'
 
 /* ────────────────────────────────────────────────────────────────────────────
    Capturas de la APP DEL REPARTIDOR, una tanda por idioma, para la portada
-   (/cn enseña las de chino) y los anuncios. Igual que capturas.spec.js: es la
+   y los anuncios. Igual que capturas.spec.js: es la
    app de verdad con la API simulada, no maquetas; si cambia una pantalla se
    relanza y se rehacen.
 
@@ -14,7 +14,6 @@ import { simularApi, entrarComoAdmin } from './api-simulada.js'
    ──────────────────────────────────────────────────────────────────────────── */
 
 const IDIOMAS = {
-  zh: { locale: 'zh-CN', clientes: ['王记超市', '李女士', 'Farmacia Sol', '陈先生'] },
   es: { locale: 'es-ES', clientes: ['Bar Pepe', 'Lucía M.', 'Farmacia Sol', 'Kiosko Luz'] },
 }
 

@@ -8,7 +8,7 @@ import { mkdirSync } from 'node:fs'
 
 const aqui = join(dirname(fileURLToPath(import.meta.url)), '..', '..', 'tools', 'anuncios')
 const docs = join(aqui, '..', '..', 'docs', 'anuncios')
-const idiomas = process.argv.slice(2).length ? process.argv.slice(2) : ['es', 'en', 'pt', 'fr', 'it', 'de', 'zh']
+const idiomas = process.argv.slice(2).length ? process.argv.slice(2) : ['es', 'en', 'pt', 'fr', 'it', 'de']
 const b = await chromium.launch()
 const p = await b.newPage({ viewport: { width: 1100, height: 2000 } })
 for (const lang of idiomas) {

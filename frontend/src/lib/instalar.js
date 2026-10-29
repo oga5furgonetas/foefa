@@ -46,14 +46,14 @@ export async function instalar() {
    (web.dev); `display-mode` falla en Samsung Internet y Firefox. Pero solo con NUESTROS paquetes: un enlace
    abierto desde WhatsApp o Telegram también llega como `android-app://` y eso es un navegador, no la app. El
    referente solo existe en la primera página: se recuerda para el resto de la sesión (recargas incluidas). */
-const NUESTRA_APP = /^android-app:\/\/com\.flotadsp\.flota(\.web|\.cn)?\/?$/
+const NUESTRA_APP = /^android-app:\/\/com\.flotadsp\.flota(\.web)?\/?$/
 const MODO_APP = 'fds_modo_app'
 export function yaEsApp() {
   try {
     if (sessionStorage.getItem(MODO_APP) === '1') return true
     const si = window.matchMedia('(display-mode: standalone)').matches || window.matchMedia('(display-mode: fullscreen)').matches
       || window.navigator.standalone === true
-      || /FDS(China|App)\//.test(navigator.userAgent)
+      || /FDSApp\//.test(navigator.userAgent)
       || NUESTRA_APP.test(document.referrer) || sessionStorage.getItem('flota_app') === '1'
     if (si) sessionStorage.setItem(MODO_APP, '1')
     return si
@@ -93,7 +93,7 @@ export const esAndroid = () => /Android/i.test((typeof navigator !== 'undefined'
    Chrome ni «Añadir a inicio». Devuelve el nombre para decírselo, o ''. */
 export function navegadorInterno() {
   const ua = (typeof navigator !== 'undefined' && navigator.userAgent) || ''
-  if (/FDS(China|App)\//.test(ua)) return ''
+  if (/FDSApp\//.test(ua)) return ''
   if (/musical_ly|Bytedance|TikTok|trill_/i.test(ua)) return 'TikTok'
   if (/Instagram/i.test(ua)) return 'Instagram'
   if (/FBAN|FBAV|FB_IAB|FBIOS/i.test(ua)) return 'Facebook'

@@ -1,3 +1,4 @@
+import { useTitulo } from '../lib/titulo'
 import { useState } from 'react'
 import { Users, Building2, ArrowRight, ChevronDown, Check, Apple } from 'lucide-react'
 import { MARCA } from '../marca'
@@ -25,6 +26,7 @@ const OPCIONES_EMPRESA = [
 ]
 
 export default function Empezar() {
+  useTitulo(tx('Empezar'))
   const lang = useIdioma()
   const [empresa, setEmpresa] = useState(false)
 

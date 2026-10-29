@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { Zap, Loader2, Route, Navigation, MessageCircle, Camera, Check, ArrowRight, Mic, FileText } from 'lucide-react'
+import { Loader2, Route, Navigation, MessageCircle, Camera, Check, ArrowRight, Mic, FileText } from 'lucide-react'
 import { MARCA } from '../marca'
 import { tx, useIdioma, IDIOMAS, cambiarIdioma, idioma, locale } from '../lib/idioma'
 import { medirAccion, varianteAB } from '../lib/analitica'
@@ -9,8 +9,8 @@ import AltaRapida from './AltaRapida'
 import { PARADAS_GRATIS, promoGratis, fechaPromo, eurosRef, refCentActual, refPromoActiva, fechaRefPromo, BONO_CENT } from '../lib/precios'
 import { paisDelMovil } from '../lib/region'
 import { abrirDemoReparto } from '../lib/demoReparto'
-/* «Invita y gana»: en España por Bizum; en Latinoamérica por PayPal. En China no hay (por la hora del móvil). */
-const conInvita = () => { try { return !/^Asia\/(Shanghai|Chongqing|Harbin|Urumqi|Hong_Kong|Macau)$/.test(Intl.DateTimeFormat().resolvedOptions().timeZone) } catch { return true } }
+/* «Invita y gana»: en España por Bizum; en Latinoamérica por PayPal. */
+const conInvita = () => true
 /* Con quién reparte la gente en cada país (11-10-2026): quien llega de México tiene que ver lo suyo. */
 const PARA_QUIEN = {
   es: ['Paquetería', 'Amazon', 'MRW', 'Nacex', 'Tipsa', 'Glovo', 'Súper a domicilio'],
@@ -98,8 +98,8 @@ export default function Repartidores() {
   const [version] = useState(versionDe)
   const [verAlta, setVerAlta] = useState(false)
   useMedirInteres()
-  const capturas = idioma() === 'zh' ? 'zh' : 'es'
-  const video = ['es', 'en', 'pt', 'fr', 'it', 'de', 'zh'].includes(idioma()) ? idioma() : 'es'
+  const capturas = 'es'
+  const video = ['es', 'en', 'pt', 'fr', 'it', 'de'].includes(idioma()) ? idioma() : 'es'
 
   async function probar() {
     medirAccion('rep_probar')
@@ -167,7 +167,7 @@ export default function Repartidores() {
     <div className="min-h-screen bg-dark-950 px-5 pb-10 pt-6 text-dark-100">
       <div className="mx-auto max-w-md">
         <div className="mb-4 flex items-center gap-2.5">
-          <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-gradient-to-br from-brand-400 to-brand-600"><Zap size={18} className="text-white" /></div>
+          <img src="/favicon.svg" alt="" width="36" height="36" className="rounded-xl" />
           <b className="text-[17px] text-dark-50">FDS</b>
           <select value={lang} onChange={(e) => cambiarIdioma(e.target.value)} aria-label="Idioma / Language"
             className="ml-auto rounded-lg border border-dark-700 bg-dark-900 px-2 py-1.5 text-[13px] text-dark-100">

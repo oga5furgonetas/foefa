@@ -5,16 +5,12 @@ import {
   alCambiarInstalable, sePuedeInstalar, instalar, yaEsApp, esIphone, esAndroid, navegadorInterno, enlaceChrome,
 } from '../lib/instalar'
 import { tx, useIdioma } from '../lib/idioma'
-import { desdeChina } from '../lib/apiBase'
 import { crearPaseMovil } from '../panel/api'
 import { medirAccion } from '../lib/analitica'
 import GooglePlayBadge from '../components/GooglePlayBadge'
 
-/* En China no hay Google Play y casi ningún Android trae Chrome (sin él no
-   se instala la web): allí se descarga la app de China (WebView propio). */
-export const APK_CHINA = '/descargas/FDS-china.apk'
-/* Fuera de China, mientras Play está en prueba cerrada: la misma app de Play con
-   paquete propio (android/, variante «web»). Abre Chrome con la sesión que ya hay. */
+/* La app nativa con paquete propio (`com.flotadsp.flota.web`, app-android/): la misma que la de Play, para quien
+   no pasa por Google Play. La firma el CI (app-release.yml) y la cose el despliegue de la web en /descargas. */
 export const APK_ANDROID = '/descargas/FDS.apk'
 
 /* Lo que necesitan la tarjeta y el paso de después del alta: qué móvil es, si
@@ -32,7 +28,7 @@ export function useInstalar() {
   const iphone = esIphone()
   const android = !iphone && esAndroid()
   const interno = navegadorInterno()
-  const apk = android && desdeChina() ? APK_CHINA : APK_ANDROID
+  const apk = APK_ANDROID
   async function abrirFuera() {
     setOcupado(true)
     medirAccion('instalar_abrir_fuera')
@@ -135,7 +131,7 @@ function Opciones({ ins, onInstalada }) {
   if (android) {
     return (
       <div className="space-y-2.5">
-        {!desdeChina() && <GooglePlayBadge onClick={() => medirAccion('instalar_google_play')} />}
+        <GooglePlayBadge onClick={() => medirAccion('instalar_google_play')} />
         {puede && (
           <button onClick={async () => { medirAccion('instalar_pwa'); if (await instalar() === 'accepted') onInstalada() }} className={boton}>
             <Download size={17} /> {tx('Instalar la app')}

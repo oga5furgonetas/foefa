@@ -25,9 +25,8 @@ const PATRON = /flotadsp|\bamazon\b|\bcortex\b|\bdsps?\b|\bdnr\b|scorecard|\bwin
 /* Menciones legítimas: [fichero, trozo de la línea, por qué]. */
 const PERMITIDO = [
   ['pages/Repartidores.jsx', "['paquetería', '", 'portada de repartidores: a quien sirve en cada pais (uso descriptivo; la propia pagina avisa de que son marcas ajenas, sin relacion)'],
-  ['lib/apiBase.js', 'ennuestrodominio', 'regex tecnica del dominio donde se sirve la app (no es texto visible)'],
   ['lib/enApp.js', 'de_play', 'identificador tecnico del paquete de Play (no es texto visible)'],
-  ['lib/instalar.js', 'nuestra_app', 'identificadores tecnicos de los paquetes de Android: Play, APK y China (no es texto visible)'],
+  ['lib/instalar.js', 'nuestra_app', 'identificadores tecnicos de los paquetes de Android: Play y APK (no es texto visible)'],
   ['components/GooglePlayBadge.jsx', 'play.google.com', 'destino del distintivo oficial de descarga en Google Play'],
   ['panel/components/TiendaPrendas.jsx', 'camiseta oga5', 'la tienda de ropa es del dueño (solo super-admin)'],
   // En el ALTA se pregunta a qué se dedica la empresa y una opción es ser DSP
@@ -59,7 +58,6 @@ const PERMITIDO = [
   ['panel/ayudaFichas.js', 'amazon rellena la columna dsc', 'ficha de ayuda de la DNR diaria'],
   ['panel/PanelLayout.jsx', "'nav.dnr'", 'entrada de menu de la DNR diaria'],
   ['i18nDict.js', "'nav.dnr'", 'nombre del menu de la DNR diaria'],
-  ['i18nZh.js', "'nav.dnr'", 'nombre del menu de la DNR diaria, en chino'],
 ]
 
 function ficheros(dir, out = []) {

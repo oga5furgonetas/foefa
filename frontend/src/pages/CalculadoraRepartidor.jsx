@@ -1,5 +1,5 @@
 import { useMemo, useRef, useState } from 'react'
-import { Zap, ArrowRight, Calculator } from 'lucide-react'
+import { ArrowRight, Calculator } from 'lucide-react'
 import { medirAccion } from '../lib/analitica'
 import { promoGratis } from '../lib/precios'
 
@@ -52,7 +52,7 @@ export default function CalculadoraRepartidor() {
     <div className="min-h-screen bg-dark-950 px-5 pb-12 pt-6 text-dark-100">
       <div className="mx-auto max-w-xl">
         <a href="/repartidores?utm_source=calculadora&utm_medium=cabecera" className="mb-5 flex items-center gap-2.5">
-          <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-gradient-to-br from-brand-400 to-brand-600"><Zap size={18} className="text-white" /></span>
+          <img src="/favicon.svg" alt="" width="36" height="36" className="rounded-xl" />
           <b className="text-[17px] text-dark-50">FDS</b>
         </a>
         <p className="text-[12.5px] font-bold uppercase tracking-[0.14em] text-brand-300">Para repartidores autónomos</p>

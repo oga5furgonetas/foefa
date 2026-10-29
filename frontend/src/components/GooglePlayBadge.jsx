@@ -1,6 +1,6 @@
 import { idioma, tx } from '../lib/idioma'
 
-const BADGE_LANG = { es: 'es', en: 'en', pt: 'pt', fr: 'fr', it: 'it', de: 'de', zh: 'zh' }
+const BADGE_LANG = { es: 'es', en: 'en', pt: 'pt', fr: 'fr', it: 'it', de: 'de' }
 export const GOOGLE_PLAY_URL = 'https://play.google.com/store/apps/details?id=com.flotadsp.flota'
 
 export default function GooglePlayBadge({ onClick, className = '' }) {

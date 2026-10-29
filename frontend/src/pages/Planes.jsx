@@ -1,6 +1,7 @@
+import { useTitulo } from '../lib/titulo'
 import { useEffect, useState } from 'react'
 import { LANGS, useT } from '../i18n'
-import { Check, Zap, ArrowRight } from 'lucide-react'
+import { Check, ArrowRight } from 'lucide-react'
 import { API_BASE } from '../lib/apiBase'
 import { medirAccion } from '../lib/analitica'
 import { MARCA } from '../marca'
@@ -59,7 +60,7 @@ function FounderOffer() {
       <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'space-between', gap: 20 }}>
         <div style={{ minWidth: 260, flex: '1 1 320px' }}>
           <div style={{ display: 'inline-flex', alignItems: 'center', gap: 6, background: 'rgba(245,158,11,.15)', borderRadius: 99, padding: '4px 12px', fontSize: 11, fontWeight: 800, color: '#fbbf24', letterSpacing: '.08em', textTransform: 'uppercase', marginBottom: 12 }}>
-            ⭐ Oferta fundador {slots ? `· quedan ${slots.left} de ${slots.total} plazas` : '· plazas limitadas'}
+            ⭐ Oferta fundador {slots && slots.left < slots.total ? `· quedan ${slots.left} de ${slots.total} plazas` : '· plazas limitadas'}
           </div>
           <h2 style={{ margin: '0 0 8px', fontSize: 24, fontWeight: 900, lineHeight: 1.2 }}>
             El plan Pro a <span style={{ color: '#fbbf24' }}>6 € por vehículo, congelado 24 meses</span>
@@ -103,6 +104,7 @@ function FounderOffer() {
 }
 
 export default function Planes() {
+  useTitulo('Planes y precios')
   const { lang, setLang } = useT()
   const [billing, setBilling] = useState('monthly') // 'monthly' | 'annual'
   /* El visitante escribe cuántos vehículos tiene y ve SU precio, ya con el
@@ -140,26 +142,24 @@ export default function Planes() {
   const pct = descuentoVolumen(furgonetas, tramos)
 
   return (
-    <div style={{ minHeight: '100vh', background: 'radial-gradient(1100px 560px at 72% -12%,rgba(14,165,233,.10),transparent),#0b0d10', color: '#eef1f6', fontFamily: 'Inter Variable,Inter,system-ui,sans-serif', padding: '20px 16px 80px' }}>
+    <div style={{ minHeight: '100vh', background: 'radial-gradient(1100px 560px at 72% -12%,rgba(20,231,216,.10),transparent),#0b0d10', color: '#eef1f6', fontFamily: 'Inter Variable,Inter,system-ui,sans-serif', padding: '20px 16px 80px' }}>
       <div style={{ maxWidth: 1100, margin: '0 auto' }}>
 
         <nav style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 48 }}>
           <a href="/" style={{ display: 'flex', alignItems: 'center', gap: 10, textDecoration: 'none', color: '#eef1f6' }}>
-            <div style={{ width: 32, height: 32, borderRadius: 9, background: 'linear-gradient(135deg,#fb923c,#ea6800)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-              <Zap size={17} color="white" />
-            </div>
+            <img src="/favicon.svg" alt="" width="32" height="32" style={{ borderRadius: 9 }} />
             <b style={{ fontSize: 16 }}>{MARCA.nombre}</b>
           </a>
           <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
             <select value={lang} onChange={(e) => setLang(e.target.value)} style={{ background: '#13161b', color: '#e7ebf2', border: '1px solid rgba(255,255,255,.12)', borderRadius: 9, padding: '6px 10px', fontSize: 13 }}>
               {Object.entries(LANGS).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
             </select>
-            <a href="/panel/login" style={{ color: '#8b94a3', fontSize: 13, textDecoration: 'none' }}>Acceder</a>
+            <a href="/panel/login" style={{ color: '#8b94a3', fontSize: 13, textDecoration: 'none' }}>Entrar</a>
           </div>
         </nav>
 
         <div style={{ textAlign: 'center', marginBottom: 32 }}>
-          <div style={{ display: 'inline-flex', alignItems: 'center', gap: 6, background: 'rgba(14,165,233,.12)', border: '1px solid rgba(14,165,233,.3)', borderRadius: 20, padding: '4px 14px', fontSize: 12, fontWeight: 700, color: '#38bdf8', marginBottom: 16, letterSpacing: '.06em', textTransform: 'uppercase' }}>
+          <div style={{ display: 'inline-flex', alignItems: 'center', gap: 6, background: 'rgba(20,231,216,.12)', border: '1px solid rgba(20,231,216,.3)', borderRadius: 20, padding: '4px 14px', fontSize: 12, fontWeight: 700, color: '#14E7D8', marginBottom: 16, letterSpacing: '.06em', textTransform: 'uppercase' }}>
             ✨ 14 días gratis · sin tarjeta
           </div>
           <h1 style={{ fontSize: 'clamp(28px,5vw,44px)', fontWeight: 900, margin: '0 0 12px', lineHeight: 1.1 }}>
@@ -190,7 +190,7 @@ export default function Planes() {
           <div style={{ ...tarjeta, borderRadius: 16, display: 'flex', alignItems: 'center', gap: 14, flexWrap: 'wrap', justifyContent: 'center', padding: '14px 22px' }}>
             <label htmlFor="flota" style={{ fontSize: 14, color: '#cbd5e1', fontWeight: 600 }}>¿Cuántos vehículos tienes?</label>
             <input id="flota" type="range" min="5" max="400" step="5" value={furgonetas}
-              onChange={(e) => setFurgonetas(Number(e.target.value))} style={{ width: 220, accentColor: '#fb923c' }} />
+              onChange={(e) => setFurgonetas(Number(e.target.value))} style={{ width: 220, accentColor: '#14E7D8' }} />
             <input type="number" min="1" max="5000" value={furgonetas} aria-label="Número de vehículos"
               onChange={(e) => setFurgonetas(Math.max(1, Math.min(5000, Number(e.target.value) || 1)))}
               style={{ width: 80, background: '#0b0d10', border: '1px solid rgba(255,255,255,.14)', borderRadius: 10, padding: '8px 10px', color: '#eef1f6', fontSize: 15, fontWeight: 800, textAlign: 'center' }} />
@@ -343,7 +343,7 @@ export default function Planes() {
           {complementos.map((c) => (
             <div key={c.clave} style={{ ...tarjeta, borderRadius: 16, padding: '16px 18px' }}>
               <div style={{ fontSize: 14, fontWeight: 800, marginBottom: 4 }}>{c.nombre}</div>
-              <div style={{ fontSize: 13, fontWeight: 700, color: '#fb923c', marginBottom: 6 }}>{c.precio}</div>
+              <div style={{ fontSize: 13, fontWeight: 700, color: '#14E7D8', marginBottom: 6 }}>{c.precio}</div>
               <div style={{ fontSize: 12.5, color: '#8b94a3', lineHeight: 1.5 }}>{c.que}</div>
             </div>
           ))}
@@ -377,7 +377,7 @@ export default function Planes() {
 
         <div style={{ marginTop: 40, textAlign: 'center' }}>
           <p style={{ color: '#64748b', fontSize: 13 }}>
-            Precios sin IVA. ¿Dudas? <a href="/contacto" style={{ color: '#0ea5e9', textDecoration: 'none' }}>Contacta con nosotros</a>.
+            Precios sin IVA. ¿Dudas? <a href="/contacto" style={{ color: '#0FC2BC', textDecoration: 'none' }}>Contacta con nosotros</a>.
           </p>
           {/* LSSI art. 10: el aviso legal accesible desde cada página pública. */}
           <p style={{ color: '#64748b', fontSize: 12, marginTop: 8 }}>

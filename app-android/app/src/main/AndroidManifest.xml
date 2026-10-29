@@ -12,6 +12,8 @@
     <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
     <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
     <uses-permission android:name="android.permission.VIBRATE" />
+    <!-- Avisos (29-10-2026): turno aprobado, vacante de refuerzo, inspección pendiente, la ruta de la mañana. En Android 13+ se pide. -->
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     <!-- WorkManager (la cola de entregas sin red) trae un servicio en primer plano que la app no usa nunca: fuera,
          para no declarar en Play un permiso que no se usa. Se queda lo que sí hace falta (reintentar tras reiniciar). -->
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" tools:node="remove" />
@@ -89,6 +91,13 @@
                 android:name="android.support.FILE_PROVIDER_PATHS"
                 android:resource="@xml/rutas_fotos" />
         </provider>
+
+        <!-- Avisos al instante (FCM), solo si la app se compila con su proyecto de Firebase (Fcm.kt). -->
+        <service android:name=".FdsMessaging" android:exported="false">
+            <intent-filter>
+                <action android:name="com.google.firebase.MESSAGING_EVENT" />
+            </intent-filter>
+        </service>
 
         <service android:name="androidx.work.impl.foreground.SystemForegroundService" tools:node="remove" />
     </application>

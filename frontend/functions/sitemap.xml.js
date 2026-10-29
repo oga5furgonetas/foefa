@@ -17,7 +17,7 @@ const xml = (s) => String(s || '')
   .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
 
 const FIJAS = [
-  ['/', '1.0'], ['/repartidores', '1.0'], ['/calculadora-repartidor', '0.9'], ['/guia-ruta-de-reparto', '0.9'], ['/guia-rota-de-entregas', '0.8'], ['/guia-ganar-mas-repartidor', '0.8'], ['/guia-ganhar-mais-entregador', '0.7'], ['/guia-mas-de-10-paradas', '0.8'], ['/guia-mais-de-10-paradas', '0.7'], ['/cn', '0.8'], ['/planes', '0.9'], ['/registro', '0.8'], ['/peritaje-tecnico', '0.7'],
+  ['/', '1.0'], ['/repartidores', '1.0'], ['/calculadora-repartidor', '0.9'], ['/guia-ruta-de-reparto', '0.9'], ['/guia-rota-de-entregas', '0.8'], ['/guia-ganar-mas-repartidor', '0.8'], ['/guia-ganhar-mais-entregador', '0.7'], ['/guia-mas-de-10-paradas', '0.8'], ['/guia-mais-de-10-paradas', '0.7'], ['/planes', '0.9'], ['/registro', '0.8'], ['/peritaje-tecnico', '0.7'],
   ['/contacto', '0.6'], ['/security', '0.5'], ['/empleo', '0.6'],
   ['/privacidad', '0.2'], ['/terminos', '0.2'], ['/encargo', '0.2'], ['/prueba-reparto', '0.6'], ['/empezar', '0.5'], ['/cookies', '0.2'], ['/aviso-legal', '0.2'],
 ]

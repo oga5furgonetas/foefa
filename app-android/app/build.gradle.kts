@@ -19,6 +19,13 @@ val ksPass = System.getenv("FLOTA_KEYSTORE_PASSWORD")
     ?: casa.resolve(".flota-android-keystore.txt").takeIf { it.isFile }?.readText()?.trim()
 // Para probar contra un servidor simulado: ./gradlew assembleDebug -PapiUrl=http://10.0.2.2:8787/api/
 val apiUrl = (project.findProperty("apiUrl") as String?) ?: "https://flota-backend.fly.dev/api/"
+// Avisos al instante (FCM): los cuatro datos del proyecto de Firebase, por propiedad (-PfcmAppId=…) o por entorno
+// (FDS_FCM_APP_ID…; en el CI, secretos). Vacíos, la app no arranca Firebase y avisa por sondeo (Fcm.kt).
+fun fcm(prop: String, env: String) = (project.findProperty(prop) as String?) ?: System.getenv(env) ?: ""
+val fcmAppId = fcm("fcmAppId", "FDS_FCM_APP_ID")
+val fcmApiKey = fcm("fcmApiKey", "FDS_FCM_API_KEY")
+val fcmProjectId = fcm("fcmProjectId", "FDS_FCM_PROJECT_ID")
+val fcmSenderId = fcm("fcmSenderId", "FDS_FCM_SENDER_ID")
 
 android {
     namespace = "com.flotadsp.fds"
@@ -29,10 +36,14 @@ android {
         minSdk = 26
         targetSdk = 36
         // La TWA llegó a code 4 (1.0.3): la nativa empieza en 10.
-        versionCode = 17
-        versionName = "2.2.5"
+        versionCode = 18
+        versionName = "2.3.0"
         buildConfigField("String", "API_URL", "\"$apiUrl\"")
         buildConfigField("String", "WEB_URL", "\"https://flotadsp.com\"")
+        buildConfigField("String", "FCM_APP_ID", "\"$fcmAppId\"")
+        buildConfigField("String", "FCM_API_KEY", "\"$fcmApiKey\"")
+        buildConfigField("String", "FCM_PROJECT_ID", "\"$fcmProjectId\"")
+        buildConfigField("String", "FCM_SENDER_ID", "\"$fcmSenderId\"")
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables { useSupportLibrary = true }
         // El APK para descargar desde la web, solo con las librerías de los móviles (ML Kit trae las suyas para cada
@@ -157,6 +168,7 @@ dependencies {
     implementation(libs.osmdroid)
     implementation(libs.play.location)
     implementation(libs.play.app.update)
+    implementation(libs.firebase.messaging)
     debugImplementation(libs.androidx.compose.ui.tooling)
 
     testImplementation(libs.junit)

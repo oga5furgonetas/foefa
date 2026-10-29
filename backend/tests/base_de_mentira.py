@@ -50,6 +50,10 @@ class Cursor:
         self.docs = docs
 
     def sort(self, *a, **k):
+        """Como Mongo: sort("campo", -1) o sort([("campo", 1), …]). Hasta el 29-10-2026 no ordenaba nada."""
+        claves = a[0] if a and isinstance(a[0], list) else ([(a[0], a[1] if len(a) > 1 else 1)] if a else [])
+        for campo, sentido in reversed(claves):
+            self.docs.sort(key=lambda d: (d.get(campo) is None, d.get(campo) or ""), reverse=sentido < 0)
         return self
 
     def skip(self, n):

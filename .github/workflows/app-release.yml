@@ -5,8 +5,15 @@
 #   FLOTA_KEYSTORE_PASSWORD   su contraseña (la de ~/.flota-android-keystore.txt)
 # build.gradle.kts busca la clave en esas dos rutas de la carpeta del usuario: aquí se recrean en el runner y se
 # borran al acabar. Sin los secretos compila igual, pero SIN FIRMAR (no vale para Play; sirve para ver que compila).
-# Los ficheros salen como artefacto del run (pestaña del run → Artifacts → FDS-x.y.z): el AAB se sube a Play
-# Console a mano y el APK a la web. Se lanza a mano (Run workflow) o solo al tocar app-android/ en main.
+# Los ficheros salen como artefacto del run (pestaña del run → Artifacts → FDS-x.y.z). Se lanza a mano (Run workflow)
+# o solo al tocar app-android/ en main. Y desde el 29-10-2026, SOLO A LOS DOS SITIOS (Dani: «cuando mejoremos la app
+# se lance lo propio a la web y a Play»):
+#   · Google Play: con el secreto PLAY_SERVICE_ACCOUNT_JSON (la cuenta de servicio de Play Console, el JSON entero),
+#     el AAB sube a la pista de prueba abierta; el paso a producción sigue siendo un botón en Play Console.
+#   · La web: al acabar se lanza «Desplegar producción» (solo la web), que coge este APK y lo deja en /descargas/FDS.apk
+#     y le dice al servidor la versión (APP_ANDROID_WEB) para que la app instalada desde la web avise de actualizar.
+#   · Avisos al instante (FCM): con los secretos FDS_FCM_APP_ID, FDS_FCM_API_KEY, FDS_FCM_PROJECT_ID y
+#     FDS_FCM_SENDER_ID (del proyecto de Firebase) la app los lleva cosidos; sin ellos, avisa por sondeo.
 name: App Android (release)
 
 on:
@@ -19,6 +26,14 @@ jobs:
   release:
     name: AAB para Play y APK para la web
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      actions: write
+    env:
+      FDS_FCM_APP_ID: ${{ secrets.FDS_FCM_APP_ID }}
+      FDS_FCM_API_KEY: ${{ secrets.FDS_FCM_API_KEY }}
+      FDS_FCM_PROJECT_ID: ${{ secrets.FDS_FCM_PROJECT_ID }}
+      FDS_FCM_SENDER_ID: ${{ secrets.FDS_FCM_SENDER_ID }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-java@v5
@@ -30,7 +45,9 @@ jobs:
         env:
           KS_B64: ${{ secrets.FLOTA_KEYSTORE_B64 }}
           KS_PASS: ${{ secrets.FLOTA_KEYSTORE_PASSWORD }}
+          PLAY_JSON: ${{ secrets.PLAY_SERVICE_ACCOUNT_JSON }}
         run: |
+          if [ -n "$PLAY_JSON" ]; then echo "play=si" >> "$GITHUB_ENV"; else echo "play=no" >> "$GITHUB_ENV"; echo "Sin PLAY_SERVICE_ACCOUNT_JSON: el AAB se sube a Play a mano."; fi
           if [ -z "$KS_B64" ] || [ -z "$KS_PASS" ]; then
             echo "Sin FLOTA_KEYSTORE_B64 / FLOTA_KEYSTORE_PASSWORD: se compila SIN FIRMAR (no vale para Play)."
             echo "firmado=no" >> "$GITHUB_ENV"
@@ -78,6 +95,22 @@ jobs:
           name: FDS-${{ env.version }}
           path: salida/
           retention-days: 30
+      - name: A Google Play (prueba abierta), con el mapa de R8 para leer los errores
+        if: env.firmado == 'si' && env.play == 'si'
+        uses: r0adkll/upload-google-play@v1.1.3
+        with:
+          serviceAccountJsonPlainText: ${{ secrets.PLAY_SERVICE_ACCOUNT_JSON }}
+          packageName: com.flotadsp.flota
+          releaseFiles: app-android/app/build/outputs/bundle/release/app-release.aab
+          track: beta
+          status: completed
+          inAppUpdatePriority: 3
+          mappingFile: app-android/app/build/outputs/mapping/release/mapping.txt
+      - name: La web, con este APK (lanza «Desplegar producción», solo la web)
+        if: env.firmado == 'si' && github.event_name == 'push'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh workflow run desplegar.yml --ref main -f que=web
       - name: Borrar la clave del runner
         if: always()
         run: rm -f "$HOME/.flota-android.keystore" "$HOME/.flota-android-keystore.txt"

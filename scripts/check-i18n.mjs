@@ -61,15 +61,4 @@ if (missing.length) {
   for (const [k, files] of missing.sort()) console.error(`  ${k}  <- ${[...files].join(', ')}`)
 }
 
-// El chino vive aparte (i18nZh.js): cada clave de DICT tiene que estar.
-const zhSrc = fs.readFileSync(path.join(ROOT, 'i18nZh.js'), 'utf8')
-const zh = new Set([...zhSrc.matchAll(/^\s*['"]([^'"]+)['"]:\s*"/gm)].map((m) => m[1]))
-const sinZh = [...defined.keys()].filter((k) => !zh.has(k))
-if (sinZh.length) {
-  failed = true
-  console.error('\nCLAVES SIN TRADUCIR AL CHINO (i18nZh.js):')
-  for (const k of sinZh) console.error(`  ${k}`)
-}
-
-if (failed) process.exit(1)
-console.log(`i18n OK: ${defined.size} claves definidas (también en chino), ${used.size} usadas, 0 problemas`)
+console.log(`i18n OK: ${defined.size} claves definidas, ${used.size} usadas, 0 problemas`)

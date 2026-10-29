@@ -1,3 +1,4 @@
+import { useTitulo } from '../lib/titulo'
 import { useState } from 'react'
 import { enAppPlay } from '../lib/enApp'
 import { evento } from '../lib/metaPixel'
@@ -10,8 +11,7 @@ import { saveSession } from '../panel/auth'
 import { marcarRecienAlta } from '../lib/instalar'
 import { useT, LANGS } from '../i18n'
 import { tx, useIdioma, IDIOMAS, cambiarIdioma, locale } from '../lib/idioma'
-import { desdeChina } from '../lib/apiBase'
-import { Check, Zap, Package, ShoppingCart, Warehouse, Truck, User, Send } from 'lucide-react'
+import { Check, Package, ShoppingCart, Warehouse, Truck, User, Send } from 'lucide-react'
 import { MARCA, dominio } from '../marca'
 import { sugerenciaCorreo } from '../lib/correo'
 import { PLANES_EMPRESA, PLAN_REPARTO, MESES_ANUAL, PARADAS_GRATIS, promoGratis, fechaPromo, precioMes as precioMesPlan, eur,
@@ -94,7 +94,7 @@ function SectorPicker({ onSelect }) {
     <div style={{ minHeight: '100vh', background: 'radial-gradient(1100px 560px at 72% -12%,rgba(14,165,233,.10),transparent),#0b0d10', color: '#eef1f6', fontFamily: 'Inter Variable,Inter,system-ui,sans-serif', padding: '24px 16px 60px' }}>
       <div style={{ maxWidth: 760, margin: '0 auto' }}>
         <a href="/" style={{ display: 'inline-flex', alignItems: 'center', gap: 8, textDecoration: 'none', color: '#eef1f6', marginBottom: 36 }}>
-          <div style={{ width: 30, height: 30, borderRadius: 8, background: 'linear-gradient(135deg,#fb923c,#ea6800)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><Zap size={15} color="white" /></div>
+          <img src="/favicon.svg" alt="" width="30" height="30" style={{ borderRadius: 8 }} />
           <b style={{ fontSize: 15 }}>{MARCA.nombre}</b>
         </a>
         <h1 style={{ fontSize: 'clamp(24px,4vw,34px)', fontWeight: 900, margin: '0 0 8px', textAlign: 'center' }}>¿Qué vas a hacer con {MARCA.nombre}?</h1>
@@ -136,7 +136,7 @@ function PlanPicker({ onSelect, furgonetas, setFurgonetas, repartidores, setRepa
         {/* Nav */}
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 40 }}>
           <a href="/" style={{ display: 'flex', alignItems: 'center', gap: 8, textDecoration: 'none', color: '#eef1f6' }}>
-            <div style={{ width: 30, height: 30, borderRadius: 8, background: 'linear-gradient(135deg,#fb923c,#ea6800)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><Zap size={15} color="white" /></div>
+            <img src="/favicon.svg" alt="" width="30" height="30" style={{ borderRadius: 8 }} />
             <b style={{ fontSize: 15 }}>{MARCA.nombre}</b>
           </a>
           <select value={lang} onChange={(e) => setLang(e.target.value)} style={sel}>
@@ -272,6 +272,7 @@ function PlanPicker({ onSelect, furgonetas, setFurgonetas, repartidores, setRepa
 
 /* ── Formulario de registro (paso 2) ── */
 export default function Registro() {
+  useTitulo(tx('Crear mi cuenta'))
   const { t, lang, setLang } = useT()
   // Quien reparte solo sigue el idioma de su app (7 idiomas, chino incluido).
   const idiomaApp = useIdioma()
@@ -303,8 +304,6 @@ export default function Registro() {
   const [err, setErr] = useState('')
   const [busy, setBusy] = useState(false)
   const [accept, setAccept] = useState(false)
-  // China (PIPL): consentimiento APARTE para tratar los datos fuera de China.
-  const [transfer, setTransfer] = useState(false)
   // Un nombre que no da letras (chino, árabe…) no deja identificador: se
   // propone uno para que nadie se atasque en «la URL debe tener 3 letras».
   const [sufijo] = useState(() => `empresa-${Math.random().toString(36).slice(2, 6)}`)
@@ -346,7 +345,6 @@ export default function Registro() {
   const yearSave = annualSave(planInfo, nUnid)
 
   function onOrg(v) { setOrg(v); if (!slugTouched) setSlug(slugify(v) || (v.trim() ? sufijo : '')) }
-  const china = regionDelMovil().pais === 'cn' || desdeChina()
 
   const soloYo = sector === 'autonomo'
   // Los textos que ve quien reparte solo, en el idioma de su app; el alta de
@@ -373,7 +371,6 @@ export default function Registro() {
     if (pass.length < 8) return setErr(tt('La contraseña debe tener al menos 8 caracteres.'))
     if (!soloYo && pass !== pass2) return setErr(tt('Las contraseñas no coinciden.'))
     if (!accept) return setErr(tt('Debes aceptar los Términos y la Política de Privacidad para continuar.'))
-    if (china && !transfer) return setErr(tx('Para usar la app desde China hace falta tu consentimiento para tratar tus datos fuera de China.'))
     setBusy(true)
     try {
       const r = await fetch(`${API_BASE}/auth/register`, {
@@ -386,7 +383,6 @@ export default function Registro() {
           // Desde la app de Play no se pide tarjeta con Stripe (Google cobra con lo suyo).
           desde_app: enAppPlay(),
           ...regionDelMovil(),
-          ...(china ? { acepta_transferencia: transfer } : {}),
         }),
       })
       const j = await r.json()
@@ -473,8 +469,8 @@ export default function Registro() {
                 ? tt('Después, gratis hasta {n} paradas al día, o sin tope por {precio} €/mes.', { n: PARADAS_GRATIS, precio: displayPrice.toFixed(2).replace('.', ',') })
                 : tt('Sin tope: {precio} €/mes, y los {n} primeros días ya van sin tope.', { precio: displayPrice.toFixed(2).replace('.', ','), n: diasPrueba })}
             </div>
-            {/* 17-10-2026: el bono, también aquí, que es donde se decide (en China no hay cómo pagarlo). */}
-            {refPromoActiva() && !china && (
+            {/* 17-10-2026: el bono, también aquí, que es donde se decide. */}
+            {refPromoActiva() && (
               <div data-testid="registro-bono" style={{ fontSize: 13.5, fontWeight: 700, color: '#fcd34d', marginTop: 9, lineHeight: 1.35 }}>
                 🎁 {tt('Y {euros} para ti con tu primera ruta real (20 entregas en 2 días), hasta el {fecha}.', { euros: eurosRef(BONO_CENT, locale()), fecha: fechaRefPromo(locale()) })}
               </div>
@@ -589,13 +585,6 @@ export default function Registro() {
                 n: diasPrueba, plan: tt(planInfo.name), precio: precioFijo ? displayPrice.toFixed(2).replace('.', ',') : displayPrice })}
           </span>
         </label>
-
-        {china && (
-          <label style={{ display: 'flex', alignItems: 'flex-start', gap: 8, marginTop: 10, fontSize: 12, color: '#8b94a3', lineHeight: 1.5, cursor: 'pointer' }}>
-            <input type="checkbox" checked={transfer} onChange={(e) => setTransfer(e.target.checked)} style={{ marginTop: 2 }} />
-            <span>{tx('Acepto que mis datos personales y los que introduzca de mis clientes se traten fuera de China, en la Unión Europea, para prestar el servicio. Quién los trata, para qué y cómo ejercer mis derechos está en la Política de Privacidad.')}</span>
-          </label>
-        )}
 
         <button
           style={{ ...btn, opacity: busy ? .6 : 1, cursor: busy ? 'wait' : 'pointer' }}

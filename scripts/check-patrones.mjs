@@ -58,15 +58,6 @@ const REVISADOS = new Map([
    'datos, asi que len(puntos) == len(datos) y ya se sabe que no es cero.'],
   ['scripts/conciliar_diarios.py:division-sin-guard',
    'Dentro de `if v:`. Y es un script de analisis que se lanza a mano, no codigo servido.'],
-  // Valor (26-09-2026), las tres miradas con su bloque delante:
-  ['backend/valor/registro.py:division-sin-guard',
-   '`clv_medio`: la guarda va en la misma linea (`if con_clv else None`).'],
-  ['backend/valor/nucleo/margen.py:division-sin-guard',
-   '`aditivo` solo recibe mercados COMPLETOS (todas las selecciones de RESULTADOS, 2 o 3 ' +
-   'cuotas): el detector y `cierre_justo` descartan antes el mercado al que le falta una.'],
-  ['backend/valor/nucleo/detector.py:division-sin-guard',
-   '`_media(otras, …)` va despues de `if not otras: continue`; y con un dict vacio el ' +
-   '`next(iter(...))` de la primera linea cortaria antes de dividir.'],
   // ── ESTADOS DE CORTEX EN EL CLIENTE ───────────────────────────────────
   ['frontend/src/panel/pages/PackageIntel.jsx:estado-cortex-en-el-cliente',
    'Mirado el 04-09-2026. No clasifica: son los botones de filtro y el valor viaja ' +

@@ -150,7 +150,7 @@ PUBLIC_BASE_URL = os.environ.get("PUBLIC_BASE_URL", "").rstrip("/")
 # de las variables de entorno. Los valores por defecto son neutros a proposito:
 # un correo que dice «localhost» se nota en la primera prueba; uno que dice el
 # dominio de otra empresa, no.
-MARCA = os.environ.get("MARCA_NOMBRE", "Flota").strip() or "Flota"
+MARCA = os.environ.get("MARCA_NOMBRE", "FDS").strip() or "FDS"
 MARCA_IA = "%s IA" % MARCA
 # Donde vive el panel (la web). Con el se montan los enlaces de los correos, del
 # portal del conductor, del taller y de empleo.
@@ -1792,6 +1792,8 @@ async def _ensure_tenant_indexes(db_name: str):
     await _idx(tdb.reparto_pedidos, [("fecha", 1), ("conductor_id", 1)])
     await _idx(tdb.reparto_pedidos, [("fecha", 1), ("codigo", 1)])
     await _idx(tdb.reparto_pedidos, [("conductor_id", 1), ("estado", 1)])
+    await _idx(tdb.avisos_movil, [("user_id", 1), ("creado_en", -1)])
+    await _idx(tdb.avisos_movil, [("user_id", 1), ("leido_en", 1)])
     await _idx(tdb.reparto_jornadas, "id")
     await _idx(tdb.reparto_jornadas, "fecha")
     await _idx(tdb.reparto_rutas, "id")
@@ -7763,7 +7765,7 @@ async def driver_lookup(data: dict, request: Request):
              "code_hash": code_hash,
              "created_at": now, "expires_at": now + timedelta(minutes=10), "attempts": 0})
         enviado = await _enviar_email(
-            destination, "Tu código para entrar en Flota",
+            destination, f"Tu código para entrar en {MARCA}",
             f"<p>Tu código de acceso es <strong style='font-size:24px;letter-spacing:4px'>{code}</strong>.</p><p>Caduca en 10 minutos. Si no lo has pedido, ignora este correo.</p>",
             texto=f"Tu código de acceso es {code}. Caduca en 10 minutos.")
         if not enviado:
@@ -16058,6 +16060,157 @@ async def push_center_event(center, title, body, url, exclude_id=None):
         logger.debug(f"push_center_event: {e}")
 
 
+# ── AVISOS AL MÓVIL (29-10-2026): la bandeja de cada persona + web push + FCM ───────────────────────────────────
+# Dani (18-10): «mejor notificación de la propia app que WhatsApp»; (29-10): «si le apruebo días a alguien que tiene
+# la app, que le salte la notificación; y si hay un día que puedan solicitar trabajar».
+# Hasta hoy el turno aprobado, la vacante de refuerzo, la inspección pendiente y el aviso de la mañana del autónomo
+# salían SOLO por web push, que la app nativa de Play no recibe. Ahora cada aviso:
+#   1. se GUARDA en la bandeja de la persona (`avisos_movil`, en la base de su empresa): la app la lee al abrir y cada
+#      15 min en segundo plano (GET /avisos/mios) y enseña lo nuevo como notificación;
+#   2. sale por web push (la web, como siempre);
+#   3. sale por FCM al instante si está configurado: `FCM_SERVICE_ACCOUNT_JSON` en Fly (la cuenta de servicio del
+#      proyecto de Firebase, en JSON) y la app compilada con su proyecto (secretos FDS_FCM_* del CI). Sin eso, el 1 basta.
+# Los móviles se apuntan en `global_db.push_tokens` (con token de FCM o sin él): así el aviso de la mañana sabe qué
+# cuentas tienen la app aunque no tengan web push.
+
+_FCM_CRED: dict = {}
+
+
+def _fcm_configurado() -> bool:
+    return bool(os.environ.get("FCM_SERVICE_ACCOUNT_JSON", "").strip())
+
+
+def _fcm_credencial():
+    """(info, credencial) de la cuenta de servicio de Firebase, o (None, None) si no está configurada."""
+    if not _fcm_configurado():
+        return None, None
+    if "cred" not in _FCM_CRED:
+        from google.oauth2 import service_account
+        info = json.loads(os.environ["FCM_SERVICE_ACCOUNT_JSON"])
+        _FCM_CRED["info"] = info
+        _FCM_CRED["cred"] = service_account.Credentials.from_service_account_info(
+            info, scopes=["https://www.googleapis.com/auth/firebase.messaging"])
+    return _FCM_CRED["info"], _FCM_CRED["cred"]
+
+
+async def _fcm_enviar_token(token: str, datos: dict) -> Optional[int]:
+    """Un aviso a un móvil por FCM (HTTP v1, solo datos: la app pinta la notificación). Devuelve el código HTTP."""
+    info, cred = _fcm_credencial()
+    if not cred:
+        return None
+    import httpx as _httpx
+    if not cred.valid:
+        from google.auth.transport.requests import Request as _GReq
+        await asyncio.get_running_loop().run_in_executor(_executor, cred.refresh, _GReq())
+    async with _httpx.AsyncClient(timeout=10) as c:
+        r = await c.post(f"https://fcm.googleapis.com/v1/projects/{info['project_id']}/messages:send",
+                         headers={"Authorization": f"Bearer {cred.token}"},
+                         json={"message": {"token": token, "android": {"priority": "high"},
+                                           "data": {k: str(v) for k, v in datos.items()}}})
+    return r.status_code
+
+
+async def _fcm_enviar(docs: list) -> int:
+    """FCM a los móviles de las personas de esos avisos (uno por persona). Los tokens que Google ya no reconoce
+    (400, 404) se borran."""
+    if not (_fcm_configurado() and docs):
+        return 0
+    por_usuario = {d["user_id"]: d for d in docs}
+    try:
+        tokens = await global_db.push_tokens.find(
+            {"user_id": {"$in": list(por_usuario)}, "token": {"$nin": [None, ""]}}, {"_id": 0}).to_list(1000)
+    except Exception:
+        return 0
+    enviados = 0
+    for t in tokens:
+        d = por_usuario.get(t.get("user_id"))
+        if not d:
+            continue
+        try:
+            codigo = await _fcm_enviar_token(t["token"], {k: d[k] for k in ("id", "titulo", "cuerpo", "url", "creado_en")})
+        except Exception as e:                                       # noqa: BLE001
+            logger.debug("fcm: %s", e)
+            continue
+        if codigo in (400, 404):
+            await global_db.push_tokens.delete_one({"token": t["token"]})
+        elif codigo and codigo < 300:
+            enviados += 1
+    return enviados
+
+
+async def _avisar_usuarios(user_ids: list, titulo: str, cuerpo: str, url: str = "/conductor", coleccion=None) -> int:
+    """Un aviso a esas personas por TODOS los caminos: su bandeja (la app la lee), web push y FCM.
+    `coleccion`: la bandeja de otra empresa, cuando no se está en su contexto (el bucle de la mañana)."""
+    ids = [i for i in dict.fromkeys(user_ids or []) if i]
+    if not ids:
+        return 0
+    ahora = datetime.now(timezone.utc).isoformat()
+    col = coleccion if coleccion is not None else db.avisos_movil
+    docs = [{"id": str(uuid.uuid4()), "user_id": i, "titulo": (titulo or "")[:80], "cuerpo": (cuerpo or "")[:300],
+             "url": url or "/conductor", "creado_en": ahora, "leido_en": None} for i in ids]
+    try:
+        await col.insert_many([dict(d) for d in docs])
+    except Exception as e:                                           # noqa: BLE001
+        logger.debug("avisos_movil: %s", e)
+    try:
+        await send_web_push_to_users(ids, titulo, cuerpo, url)
+    except Exception as e:                                           # noqa: BLE001
+        logger.debug("web push: %s", e)
+    try:
+        await _fcm_enviar(docs)
+    except Exception as e:                                           # noqa: BLE001
+        logger.debug("fcm: %s", e)
+    return len(docs)
+
+
+@api_router.get("/avisos/mios")
+async def avisos_mios(desde: Optional[str] = None, user: dict = Depends(require_any_auth)):
+    """La bandeja de quien pregunta (conductor de empresa o quien reparte solo), lo más nuevo primero.
+    `desde`: solo lo posterior a esa fecha ISO (la app guarda la del último que enseñó). Máximo 50."""
+    q = {"user_id": user.get("sub")}
+    if desde:
+        q["creado_en"] = {"$gt": str(desde)[:40]}
+    items = await db.avisos_movil.find(q, {"_id": 0}).sort("creado_en", -1).limit(50).to_list(50)
+    sin_leer = await db.avisos_movil.count_documents({"user_id": user.get("sub"), "leido_en": None})
+    return {"avisos": items, "sin_leer": sin_leer}
+
+
+@api_router.post("/avisos/leidos")
+async def avisos_leidos(data: dict, user: dict = Depends(require_any_auth)):
+    """Marca leídos los `ids` dados (o todos los de la persona si no se dan)."""
+    ids = [str(i) for i in _lista_cuerpo(data.get("ids"), 200) if i]
+    q = {"user_id": user.get("sub"), "leido_en": None}
+    if ids:
+        q["id"] = {"$in": ids}
+    r = await db.avisos_movil.update_many(q, {"$set": {"leido_en": datetime.now(timezone.utc).isoformat()}})
+    return {"ok": True, "leidos": getattr(r, "modified_count", 0)}
+
+
+@api_router.post("/push/fcm-token")
+async def push_fcm_token(data: dict, user: dict = Depends(require_any_auth)):
+    """La app nativa apunta este móvil: con el token de FCM (aviso al instante) o sin él (`token` vacío: la app
+    pregunta por su bandeja cada 15 min). Devuelve si el servidor tiene FCM configurado."""
+    token = _texto_cuerpo(data.get("token"), 4096) or None
+    doc = {"user_id": user.get("sub"), "role": user.get("role"), "org_id": user.get("org_id"),
+           "db_name": user.get("db_name"), "plataforma": _texto_cuerpo(data.get("plataforma"), 40) or "android",
+           "app": _texto_cuerpo(data.get("app"), 40), "token": token,
+           "updated_at": datetime.now(timezone.utc).isoformat()}
+    clave = {"token": token} if token else {"user_id": user.get("sub"), "token": None}
+    await global_db.push_tokens.update_one(clave, {"$set": doc}, upsert=True)
+    return {"ok": True, "fcm": _fcm_configurado()}
+
+
+@api_router.post("/push/fcm-token/quitar")
+async def push_fcm_token_quitar(data: dict, user: dict = Depends(require_any_auth)):
+    """Al cerrar sesión en el móvil: fuera sus registros (el token dado, o todos los de la persona)."""
+    token = _texto_cuerpo(data.get("token"), 4096)
+    q = {"user_id": user.get("sub")}
+    if token:
+        q["token"] = token
+    await global_db.push_tokens.delete_many(q)
+    return {"ok": True}
+
+
 # ─── QUIEN ESTA CONECTADO Y MENSAJES PRIVADOS ──────────────────────────────
 # El chat de la nave es una sala abierta; esto es lo otro que hace falta para
 # que la oficina no tenga que llamar por telefono: ver quien esta delante de la
@@ -18981,7 +19134,7 @@ async def _send_inspection_reminders():
             for i in done:
                 pending.pop(i.get("driver_id"), None)
             for did, plate in pending.items():
-                asyncio.create_task(send_web_push_to_users(
+                asyncio.create_task(_avisar_usuarios(
                     [did], "📸 Inspección pendiente",
                     f"Recuerda hacer las fotos de la furgoneta {plate} antes de salir.",
                     url="/conductor"))
@@ -22008,12 +22161,13 @@ _AVISO_MANANA_BONO = {
 
 async def _aviso_manana_vuelta(ahora: Optional[datetime] = None) -> int:
     """Una vuelta: manda el aviso a quien le toca AHORA. Devuelve cuántos se mandaron."""
-    if not _push_enabled:
+    # Sin web push configurado solo tiene sentido si hay móviles con la app apuntados (bandeja y FCM).
+    if not _push_enabled and not await global_db.push_tokens.count_documents({}):
         return 0
     from zoneinfo import ZoneInfo
     ahora = ahora or datetime.now(timezone.utc)
     desde = (ahora - timedelta(days=AVISO_MANANA_DIAS)).isoformat()
-    con_aviso = set(await global_db.push_subscriptions.distinct("org_id"))
+    con_aviso = set(await global_db.push_subscriptions.distinct("org_id")) | set(await global_db.push_tokens.distinct("org_id"))
     if not con_aviso:
         return 0
     orgs = await global_db.organizations.find(
@@ -22043,8 +22197,10 @@ async def _aviso_manana_vuelta(ahora: Optional[datetime] = None) -> int:
             b = _bono_resumen(org, ahora)
             if b and not b["pagado"]:
                 cuerpo = _AVISO_MANANA_BONO[idioma].format(euros=ciclo_correos._euros(b["cent"] / 100, idioma))
-            usuarios = await global_db.push_subscriptions.distinct("user_id", {"org_id": org["id"]})
-            await send_web_push_to_users(usuarios, titulo, cuerpo, url="/ruta?utm_source=push&utm_content=manana")
+            usuarios = list(set(await global_db.push_subscriptions.distinct("user_id", {"org_id": org["id"]}))
+                            | set(await global_db.push_tokens.distinct("user_id", {"org_id": org["id"]})))
+            await _avisar_usuarios(usuarios, titulo, cuerpo, url="/ruta?utm_source=push&utm_content=manana",
+                                   coleccion=client[_tenant_db_name(org)].avisos_movil)
             mandados += 1
         except Exception as e:                                   # noqa: BLE001
             logger.warning("aviso de la mañana (%s): %s", org.get("id"), e)
@@ -32279,11 +32435,11 @@ async def resolve_shift_request(req_id: str, data: dict = Body(...),
     try:
         # Un día de más aprobado se dice como lo que es (Dani, 24-10-2026: «que tengan constancia de que son extra»).
         if new_status == "aprobado" and req.get("type") == "extra":
-            await send_web_push_to_users(
+            await _avisar_usuarios(
                 [req["driver_id"]], f"✅ Día extra confirmado: {_refuerzo_dia(req['date'])}",
                 motivo or "Ya está en tus turnos como EXTRA. Lo tienes en «Trabajar más».", "/conductor?vista=extra")
         else:
-            await send_web_push_to_users(
+            await _avisar_usuarios(
                 [req["driver_id"]],
                 f"Tu petición del {req['date']}: {'aprobada' if new_status == 'aprobado' else 'rechazada'}",
                 motivo or ("Ya puedes verlo en tus turnos." if new_status == "aprobado" else ""),
@@ -32698,7 +32854,7 @@ async def _refuerzo_recalcular(rid: str) -> None:
                           "motivo_respuesta": _REFUERZO_GRACIAS, "visto_at": None}})
             if res.modified_count:
                 try:
-                    await send_web_push_to_users([q["driver_id"]], f"Refuerzo del {_refuerzo_dia(q['date'])}: cubierto",
+                    await _avisar_usuarios([q["driver_id"]], f"Refuerzo del {_refuerzo_dia(q['date'])}: cubierto",
                                                  _REFUERZO_GRACIAS, "/conductor")
                 except Exception as e:                           # noqa: BLE001
                     logger.debug("Push refuerzo cubierto: %s", e)
@@ -32773,7 +32929,7 @@ async def crear_refuerzo(data: dict = Body(...), admin: dict = Depends(require_a
         await db.refuerzos.insert_one(dict(doc))
     if libres:
         try:
-            await send_web_push_to_users(
+            await _avisar_usuarios(
                 list(libres), f"📣 {_refuerzo_dia(fecha)}: hacen falta {plazas} en {center}",
                 "Libras ese día. Si te apetece trabajar, solicítalo en «Trabajar más». Es voluntario.", "/conductor?vista=extra")
         except Exception as e:                                   # noqa: BLE001
@@ -32872,7 +33028,7 @@ async def anular_refuerzo(rid: str, admin: dict = Depends(require_admin)):
                       "motivo_respuesta": _REFUERZO_ANULADO, "visto_at": None}})
         if res.modified_count:
             try:
-                await send_web_push_to_users([q["driver_id"]], f"Refuerzo del {_refuerzo_dia(q['date'])}: ya no hace falta",
+                await _avisar_usuarios([q["driver_id"]], f"Refuerzo del {_refuerzo_dia(q['date'])}: ya no hace falta",
                                              _REFUERZO_ANULADO, "/conductor")
             except Exception as e:                               # noqa: BLE001
                 logger.debug("Push refuerzo anulado: %s", e)
@@ -51164,374 +51320,6 @@ async def deber_horas_importar(file: UploadFile = File(...), center: str = Form(
     await db[_CUA_DEBER].insert_many(docs)
     await _audit(user, "deber_horas_importado", {"center": center, "filas": len(docs)})
     return {**resumen, "guardado": True}
-
-
-# =========================
-# VALOR — apuestas con ventaja. PRIVADO: solo Dani.
-# =========================
-# El motor vive en backend/valor/ (su README explica el método). Aquí solo la
-# puerta y el escáner. Nada de esto toca los datos de la flota:
-#   · la base es un SQLite en el volumen de Fly, dentro de PRIVADO_DIR, que
-#     /uploads se niega a servir (ver _UploadsSinPrivado). No va a Mongo, así
-#     que tampoco viaja en las copias de la base ni la ve ninguna empresa;
-#   · cada endpoint pasa por require_valor, más estricto que require_superadmin;
-#   · el escáner solo arranca con VALOR_ESCANEAR=1, y avisa por su propio
-#     Telegram (VALOR_TELEGRAM_*), nunca por el grupo de la flota.
-import threading as _threading  # noqa: E402
-
-VALOR_DB = os.environ.get("VALOR_DB", "").strip() or str(PRIVADO_DIR / "valor.db")
-# La conexión de SQLite no admite dos hilos a la vez: las peticiones van de una
-# en una por aquí. El escáner tiene su propia conexión (SQLite cruza las dos).
-_VALOR_LOCK = _threading.Lock()
-_VALOR_REG = None
-_VALOR_ESTADO = {"escaneando": False, "fuentes": [], "fuentes_detalle": [], "ultima_vuelta": None, "ultimo_error": None,
-                 # «Buscar ahora»: cuándo se pidió y cuándo terminó la búsqueda.
-                 "busqueda_pedida": None, "busqueda_hecha": None}
-_VALOR_BUSCAR_CADA = timedelta(minutes=10)
-_VALOR_DUENO_TTL = 60.0
-_VALOR_DUENO_CACHE: dict = {}
-
-
-def _valor_banca() -> float:
-    try:
-        return float(os.environ.get("VALOR_BANCA", "1000"))
-    except ValueError:
-        return 1000.0
-
-
-async def _valor_es_el_dueno(uid: str) -> bool:
-    """¿Es este usuario, AHORA en la base, el super-admin de SUPERADMIN_USERNAME?
-
-    Sin SUPERADMIN_USERNAME no entra nadie: una puerta sin dueño se cierra.
-    """
-    esperado = os.environ.get("SUPERADMIN_USERNAME", "").strip()
-    if not uid or not esperado:
-        return False
-    ahora = time.time()
-    hit = _VALOR_DUENO_CACHE.get(uid)
-    if hit and hit[0] > ahora:
-        return hit[1]
-    u = await global_db.admin_users.find_one(
-        {"id": uid}, {"_id": 0, "username": 1, "super_admin": 1, "disabled": 1})
-    ok = (bool(u) and bool(u.get("super_admin")) and not u.get("disabled")
-          and u.get("username") == esperado)
-    if len(_VALOR_DUENO_CACHE) > 100:
-        _VALOR_DUENO_CACHE.clear()
-    _VALOR_DUENO_CACHE[uid] = (ahora + _VALOR_DUENO_TTL, ok)
-    return ok
-
-
-async def require_valor(user: dict = Depends(require_superadmin)) -> dict:
-    """Valor es SOLO de Dani. Hacen falta las tres cosas a la vez:
-      · la marca de super-admin en el token (require_superadmin, como Gastos);
-      · una sesión de persona: ni la demo, ni el token de mantenimiento, ni
-        mirando la cuenta de una empresa (ese token lleva TU id, sin la marca);
-      · y que en la base, ahora, ese usuario sea el de SUPERADMIN_USERNAME.
-    Si algún día otra cuenta acabara con la marca de super-admin, vería Gastos
-    y el panel de negocio; esto no. Mismo 403 en todos los casos: la respuesta
-    no dice cuál de las tres ha fallado."""
-    if (user.get("demo") or user.get("imp") or user.get("role") != "admin"
-            or user.get("sub") == "maintenance-claude"
-            or not await _valor_es_el_dueno(str(user.get("sub") or ""))):
-        raise HTTPException(status_code=403, detail="Acceso solo para el super-admin")
-    return user
-
-
-def _valor_registro():
-    global _VALOR_REG
-    if _VALOR_REG is None:
-        from valor.registro import Registro
-        Path(VALOR_DB).parent.mkdir(parents=True, exist_ok=True)
-        _VALOR_REG = Registro(VALOR_DB)
-        # WAL: el escáner escribe mientras la pantalla lee, sin bloquearse.
-        _VALOR_REG.db.execute("PRAGMA journal_mode=WAL")
-    return _VALOR_REG
-
-
-async def _valor(fn):
-    """fn(registro) fuera del bucle de eventos (SQLite es de disco) y de uno en uno."""
-    def hacer():
-        with _VALOR_LOCK:
-            return fn(_valor_registro())
-    return await asyncio.get_running_loop().run_in_executor(None, hacer)
-
-
-def _valor_finito(x):
-    """JSON no admite infinito: un segmento con UN solo aviso tiene margen
-    infinito y tumbaba /aprendizaje con un 500 (json.dumps(allow_nan=False))."""
-    return x if isinstance(x, (int, float)) and x == x and abs(x) != float("inf") else None
-
-
-@api_router.get("/valor/estado")
-async def valor_estado(_: dict = Depends(require_valor)):
-    """Si el escáner está leyendo, de dónde, las reglas con las que filtra, lo
-    que hay en juego (exposición) y lo que ha gastado y dado cada fuente."""
-    banca = _valor_banca()
-
-    def leer(r):
-        return r.resultado_de_hoy(), r.exposicion(banca), r.uso_por_fuente(30)
-    hoy, expo, uso = await _valor(leer)
-    freno = float(os.environ.get("VALOR_FRENO_DIA", "0.06")) * banca
-    # Qué claves de fuentes hay puestas: sí o no, nunca el valor.
-    claves = {"the_odds_api": bool(os.environ.get("ODDS_API_KEY", "").strip()),
-              "oddspapi": bool(os.environ.get("ODDSPAPI_KEY", "").strip()),
-              "api_football": bool(os.environ.get("APISPORTS_KEY", "").strip())}
-    return {**_VALOR_ESTADO, "claves": claves, "banca": banca, "resultado_hoy": round(hoy, 2),
-            "freno_dia": round(freno, 2), "frenado": -hoy >= freno > 0,
-            "freno_usado": round(max(0.0, -hoy) / freno, 4) if freno > 0 else None,
-            "exposicion": expo, "uso": uso,
-            **_VALOR_REGLAS_POR_DEFECTO(), **(await _valor(lambda r: r.reglas()))}
-
-
-@api_router.get("/valor/oportunidades")
-async def valor_oportunidades(vivo: bool = False, _: dict = Depends(require_valor)):
-    """Las señales de la última hora (en vivo, del último minuto), cada una
-    con su estado: VÁLIDA, CADUCADA o CAMBIADA. Las que ya no valen siguen a
-    la vista, marcadas, en vez de desaparecer sin más."""
-    banca = _valor_banca()
-    items = await _valor(lambda r: r.vigentes(vivo, 1 if vivo else 60, banca=banca))
-    return {"banca": banca, "ahora": datetime.now(timezone.utc).isoformat(), "items": items}
-
-
-@api_router.get("/valor/oportunidades/{op_id}/historial")
-async def valor_historial(op_id: int, _: dict = Depends(require_valor)):
-    """Las cuotas LEÍDAS de esa selección (su casa y las referencias). Nada inventado."""
-    h = await _valor(lambda r: r.historial_senal(op_id))
-    if h is None:
-        raise HTTPException(status_code=404, detail="Esa señal no existe")
-    return h
-
-
-_VALOR_REGLAS_POR_DEFECTO = lambda: {  # noqa: E731
-    "prob_minima": float(os.environ.get("VALOR_PROB_MINIMA", "0.60")),
-    "cuota_minima": float(os.environ.get("VALOR_CUOTA_MINIMA", "1.70")),
-    "cuota_suelo": float(os.environ.get("VALOR_CUOTA_MINIMA_VALOR", "1.50"))}
-_VALOR_PROBS = (0.60, 0.55, 0.50)
-# (cuota mínima, suelo). La de siempre: desde 1,70, y de 1,50 a 1,69 solo con
-# +5 %. Las otras, «desde X y punto» (lo que pidió Dani el 27-09: desde 1,55).
-_VALOR_CUOTAS = ((1.70, 1.50), (1.60, 1.60), (1.55, 1.55), (1.50, 1.50))
-
-
-@api_router.get("/valor/reglas")
-async def valor_reglas(_: dict = Depends(require_valor)):
-    """Las reglas que se usan (acierto y cuota mínimos) y cuántas apuestas
-    habrían salido en las últimas 24 h con cada combinación, con lo leído de
-    verdad. El resto de filtros (+2 % de ventaja, datos frescos, referencia,
-    desvío, escalera, topes de dinero) no se tocan desde aquí."""
-    combis = [(p, c, su) for p in _VALOR_PROBS for c, su in _VALOR_CUOTAS]
-
-    def leer(r):
-        return r.reglas(), r.simula_reglas(combis, 24)
-    suyas, sim = await _valor(leer)
-    return {"actuales": {**_VALOR_REGLAS_POR_DEFECTO(), **suyas}, "por_defecto": _VALOR_REGLAS_POR_DEFECTO(),
-            "elegidas": bool(suyas), "simulacion": sim, "horas": 24}
-
-
-@api_router.post("/valor/reglas")
-async def valor_pon_reglas(data: dict = Body(...), _: dict = Depends(require_valor)):
-    if data.get("por_defecto") is True:
-        await _valor(lambda r: r.pon_ajuste("reglas", {}))
-        return {"actuales": _VALOR_REGLAS_POR_DEFECTO()}
-    prob = _decimal(data.get("prob_minima"), "El acierto mínimo", minimo=0.40, maximo=0.80)
-    cuota = _decimal(data.get("cuota_minima"), "La cuota mínima", minimo=1.30, maximo=3.00)
-    suelo = _decimal(data.get("cuota_suelo"), "La cuota más baja", defecto=cuota, minimo=1.30, maximo=3.00)
-    if suelo > cuota:
-        raise HTTPException(status_code=400, detail="La cuota más baja no puede pasar de la mínima")
-    valor = {"prob_minima": round(prob, 4), "cuota_minima": round(cuota, 2), "cuota_suelo": round(suelo, 2)}
-    await _valor(lambda r: r.pon_ajuste("reglas", valor))
-    return {"actuales": valor}
-
-
-@api_router.get("/valor/casi")
-async def valor_casi(_: dict = Depends(require_valor)):
-    """Lo que más se acercó sin cumplir las reglas. NO son recomendaciones:
-    cada una dice qué regla no cumple (en `avisos[0]`)."""
-    return {"items": await _valor(lambda r: r.casi_recientes(4, 12))}
-
-
-@api_router.post("/valor/buscar")
-async def valor_buscar(_: dict = Depends(require_valor)):
-    """«Buscar ahora»: el escáner lee en cuanto pueda (segundos), sin esperar
-    su turno pero sin pasarse del cupo. Una vez cada 10 minutos como mucho: con
-    250 peticiones al mes, darle diez veces seguidas se comería un día entero."""
-    if not _VALOR_ESTADO.get("escaneando"):
-        raise HTTPException(status_code=409, detail="El buscador está apagado")
-    ahora = datetime.now(timezone.utc)
-    antes = _VALOR_ESTADO.get("busqueda_pedida")
-    if antes and ahora - datetime.fromisoformat(antes) < _VALOR_BUSCAR_CADA:
-        falta = _VALOR_BUSCAR_CADA - (ahora - datetime.fromisoformat(antes))
-        raise HTTPException(status_code=429, detail="Ya se buscó hace poco: espera %d min" % (
-            max(1, round(falta.total_seconds() / 60))))
-    _VALOR_ESTADO["busqueda_pedida"] = ahora.isoformat()
-    return {"pedida": _VALOR_ESTADO["busqueda_pedida"]}
-
-
-@api_router.get("/valor/casas")
-async def valor_casas(_: dict = Depends(require_valor)):
-    """Dónde apuestas y qué casas ha visto el buscador esta semana."""
-    from valor.registro import CASAS_DANI, CASAS_ESPANA
-
-    def leer(r):
-        return {"apostables": r.casas_apostables(), "vistas": r.casas_vistas(7),
-                "sugeridas": sorted(set(CASAS_ESPANA) | set(CASAS_DANI)),
-                "elegidas": r.ajuste("casas_apostables", None) is not None}
-    return await _valor(leer)
-
-
-@api_router.post("/valor/casas")
-async def valor_pon_casas(data: dict = Body(...), _: dict = Depends(require_valor)):
-    """Las casas donde se te pueden recomendar apuestas. «*» = todas."""
-    bruto = data.get("casas")
-    if bruto == "*":
-        valor = "*"
-    else:
-        valor = sorted({_texto_cuerpo(x, 40).lower() for x in _lista_cuerpo(bruto, 60) if _texto_cuerpo(x, 40)})
-        if not valor:
-            raise HTTPException(status_code=400, detail="Elige al menos una casa (o todas)")
-    await _valor(lambda r: r.pon_ajuste("casas_apostables", valor))
-    return {"apostables": None if valor == "*" else valor}
-
-
-@api_router.get("/valor/seguras")
-async def valor_seguras(_: dict = Depends(require_valor)):
-    return {"items": await _valor(lambda r: r.seguras_vigentes(5))}
-
-
-@api_router.get("/valor/apuestas")
-async def valor_apuestas(_: dict = Depends(require_valor)):
-    return await _valor(lambda r: {"items": r.apuestas(), "balance": r.balance()})
-
-
-@api_router.post("/valor/apuestas")
-async def valor_apostar(data: dict = Body(...), _: dict = Depends(require_valor)):
-    """«La he metido»: la cuota y el importe reales pueden no ser los sugeridos."""
-    try:
-        op_id = int(str(data.get("oportunidad_id")))
-    except (TypeError, ValueError):
-        raise HTTPException(status_code=400, detail="Falta la apuesta")
-    cuota = (None if data.get("cuota") in (None, "")
-             else _decimal(data.get("cuota"), "La cuota", minimo=1.01, maximo=1000))
-    importe = (None if data.get("importe") in (None, "")
-               else _decimal(data.get("importe"), "El importe", minimo=0.01, maximo=1_000_000))
-    limitada = data.get("limitada") is True
-    aun_caducada = data.get("aun_caducada") is True
-    from valor.registro import SenalCaducada
-
-    def apuntar(r):
-        try:
-            return r.apuesta_desde_oportunidad(op_id, cuota, importe, limitada=limitada,
-                                               aun_caducada=aun_caducada)
-        except KeyError:
-            return None
-        except SenalCaducada as e:
-            return e
-    nuevo = await _valor(apuntar)
-    if nuevo is None:
-        raise HTTPException(status_code=404, detail="Esa apuesta ya no está")
-    if isinstance(nuevo, SenalCaducada):
-        # 409: la señal existe pero ya no vale. Se puede apuntar igualmente
-        # confirmándolo (aun_caducada), y queda marcada como fuera de plazo.
-        raise HTTPException(status_code=409, detail=str(nuevo) or "Esa señal ya no vale")
-    return {"id": nuevo}
-
-
-@api_router.post("/valor/apuestas/manual")
-async def valor_apostar_a_mano(data: dict = Body(...), _: dict = Depends(require_valor)):
-    """Una apuesta que no vino de un aviso: «100 € a Sevilla gana, Bet365, 1,85»."""
-    descripcion = _texto_cuerpo(data.get("descripcion"), 200)
-    casa = _texto_cuerpo(data.get("casa"), 40)
-    if not descripcion or not casa:
-        raise HTTPException(status_code=400, detail="Pon qué has apostado y en qué casa")
-    cuota = _decimal(data.get("cuota"), "La cuota", minimo=1.01, maximo=1000)
-    importe = _decimal(data.get("importe"), "El importe", minimo=0.01, maximo=1_000_000)
-    return {"id": await _valor(lambda r: r.apuesta_manual(descripcion, casa, cuota, importe))}
-
-
-@api_router.post("/valor/apuestas/{apuesta_id}/resultado")
-async def valor_resultado(apuesta_id: int, data: dict = Body(...), _: dict = Depends(require_valor)):
-    resultado = _texto_cuerpo(data.get("resultado"), 20)
-    if resultado not in ("ganada", "perdida", "nula", "pendiente"):
-        raise HTTPException(status_code=400, detail="Resultado: ganada, perdida, nula o pendiente")
-
-    def liquidar(r):
-        if r.db.execute("SELECT 1 FROM apuestas WHERE id=?", (apuesta_id,)).fetchone() is None:
-            return False
-        r.liquida(apuesta_id, resultado)
-        return True
-    if not await _valor(liquidar):
-        raise HTTPException(status_code=404, detail="Esa apuesta no existe")
-    return {"ok": True}
-
-
-@api_router.get("/valor/aprendizaje")
-async def valor_aprendizaje(_: dict = Depends(require_valor)):
-    from valor import aprendizaje as _aprende
-
-    def leer(r):
-        segs = []
-        for s in _aprende.segmentos(r):
-            d = s.dict()
-            d["clv_medio"], d["margen"] = _valor_finito(d["clv_medio"]), _valor_finito(d["margen"])
-            segs.append(d)
-        return segs, _aprende.resumen(r), _aprende.limitaciones(r)
-    segs, resumen, limites = await _valor(leer)
-    return {"minimo": _aprende.MINIMO, "segmentos": segs, "resumen": resumen, "limitaciones": limites}
-
-
-def _valor_aviso():
-    """Avisos al móvil por un bot PROPIO de Valor. Sin las dos variables, nada."""
-    token = os.environ.get("VALOR_TELEGRAM_TOKEN", "").strip()
-    chat = os.environ.get("VALOR_TELEGRAM_CHAT", "").strip()
-    if not (token and chat):
-        return None
-    import httpx as _httpx
-    cli = _httpx.Client(timeout=10)
-
-    def enviar(texto: str) -> None:
-        cli.post(f"https://api.telegram.org/bot{token}/sendMessage",
-                 json={"chat_id": chat, "text": texto}).raise_for_status()
-    return enviar
-
-
-def _valor_bucle():
-    """El escáner, en su hilo. Una vuelta que falla (una API que cambia su
-    respuesta, la red) se apunta y el bucle sigue: si se cayera el hilo, la
-    pantalla se quedaría vacía sin que nadie supiera por qué."""
-    from valor.escaner import Escaner
-    from valor.registro import Registro
-    try:
-        Path(VALOR_DB).parent.mkdir(parents=True, exist_ok=True)
-        esc = Escaner(Registro(VALOR_DB), _valor_banca(), aviso=_valor_aviso())
-    except Exception as e:                                   # noqa: BLE001
-        logger.exception("Valor: el escáner no ha podido arrancar")
-        _VALOR_ESTADO["ultimo_error"] = "no ha arrancado: %s" % type(e).__name__
-        return
-    _VALOR_ESTADO.update(escaneando=True, fuentes=[f.nombre for f in esc.fuentes])
-    logger.info("Valor: escáner en marcha con %s", ", ".join(_VALOR_ESTADO["fuentes"]) or "NINGUNA fuente")
-    while True:
-        pedida = _VALOR_ESTADO.get("busqueda_pedida")
-        forzar = bool(pedida) and (_VALOR_ESTADO.get("busqueda_hecha") or "") < pedida
-        try:
-            if esc.vuelta(forzar=forzar) is not None:
-                _VALOR_ESTADO["ultima_vuelta"] = datetime.now(timezone.utc).isoformat()
-                _VALOR_ESTADO["ultimo_error"] = None
-        except Exception as e:                               # noqa: BLE001
-            logger.exception("Valor: vuelta fallida")
-            _VALOR_ESTADO["ultimo_error"] = type(e).__name__
-        if forzar:
-            _VALOR_ESTADO["busqueda_hecha"] = datetime.now(timezone.utc).isoformat()
-        _VALOR_ESTADO["fuentes_detalle"] = [{"nombre": n, **d} for n, d in esc.estado.items()]
-        # 30 s entre vueltas, pero mirando cada 2 s si han pulsado «Buscar ahora».
-        for _ in range(15):
-            if (_VALOR_ESTADO.get("busqueda_pedida") or "") > (_VALOR_ESTADO.get("busqueda_hecha") or ""):
-                break
-            time.sleep(2)
-
-
-@app.on_event("startup")
-async def _valor_arranca_escaner():
-    if os.environ.get("VALOR_ESCANEAR") == "1":
-        _threading.Thread(target=_valor_bucle, name="valor-escaner", daemon=True).start()
 
 
 # =========================================================================

@@ -1,3 +1,4 @@
+import { useTitulo } from '../lib/titulo'
 import { Suspense, lazy, useCallback, useEffect, useMemo, useState } from 'react'
 import {
   Route, History, Settings2, UserCircle2, Loader2, CheckCircle2, XCircle, Package, Euro, ChevronRight, ChevronDown, ArrowLeft,
@@ -51,6 +52,7 @@ const PESTANAS = [
 const euros = (n) => importe(n)
 
 export default function RutaApp() {
+  useTitulo(tx('Mi ruta'))
   useIdioma()
   const toast = useToast()
   const [tab, setTab] = useState(() => {

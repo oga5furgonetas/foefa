@@ -1,4 +1,4 @@
-# Flota — gestión de flotas con IA
+# FDS — la app de reparto y el panel de tu flota
 
 > **Sesión nueva: lee primero `docs/ESTADO.md`** (qué está hecho, qué falta,
 > credenciales, cómo desplegar y reglas). Al acabar, actualízalo y `git push`.
@@ -50,7 +50,8 @@ FlotaDSP. No hay ningún secreto escrito en el código: todo va por entorno.
 
 ## La marca
 
-Un solo sitio: `frontend/src/marca.js` (nombre, lema, IA, correo) y
+**FDS en todo** desde el 29-10-2026 (Dani: «unifica todo a FDS»): web, panel, app, correos y PDF. «Flota»
+queda solo como nombre interno del repo y de la infraestructura (`flota-backend`, `flota-mongo`). Un solo sitio: `frontend/src/marca.js` (nombre, lema, IA, correo) y
 `MARCA_NOMBRE` en el backend. `scripts/check-marca.mjs` falla si un texto
 visible nombra otra plataforma o la marca escrita a mano. El logo es
 `frontend/public/favicon.svg`; los PNG salen de él con

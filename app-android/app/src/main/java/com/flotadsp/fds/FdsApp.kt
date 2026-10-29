@@ -28,6 +28,7 @@ class FdsApp : Application() {
             ambito.launch { cuenta.cerrar(); _caducada.tryEmit(Unit) }
         })
         repo = Repositorio(this, cuenta, api)
+        Fcm.iniciar(this)
         // El mapa (OpenStreetMap) pide que cada app se identifique y guarda sus teselas en la caché de la app.
         Configuration.getInstance().apply {
             userAgentValue = "FDS-Android/${BuildConfig.VERSION_NAME} (contacto: flotadsp.com)"

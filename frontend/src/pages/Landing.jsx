@@ -7,7 +7,7 @@ import {
 } from 'lucide-react'
 import { MARCA } from '../marca'
 import { tx, useIdioma, IDIOMAS, cambiarIdioma, idioma, locale } from '../lib/idioma'
-import { API_BASE, desdeChina } from '../lib/apiBase'
+import { API_BASE } from '../lib/apiBase'
 import { saveSession } from '../panel/auth'
 import { medirAccion } from '../lib/analitica'
 import { evento } from '../lib/metaPixel'
@@ -32,8 +32,8 @@ import { esAndroid } from '../lib/instalar'
    Los textos van por tx() —el mismo diccionario de la app del repartidor, en
    siete idiomas— y el idioma que se elija aquí es el que tendrá la app. */
 
-/* «Invita y gana»: España por Bizum, Latinoamérica por PayPal; en China no hay. */
-const conInvita = () => { try { return !/^Asia\/(Shanghai|Chongqing|Harbin|Urumqi|Hong_Kong|Macau)$/.test(Intl.DateTimeFormat().resolvedOptions().timeZone) } catch { return true } }
+/* «Invita y gana»: España por Bizum, Latinoamérica por PayPal. */
+const conInvita = () => true
 
 /* Con quién reparte la gente de cada país (como en /repartidores). Marcas de sus dueños, sin relación. */
 const PARA_QUIEN = {
@@ -135,8 +135,8 @@ function Seccion({ id, eyebrow, titulo, sub, children, className = '' }) {
 
 /* El móvil del héroe: el vídeo de la app de verdad (el de los anuncios, mudo y en bucle) y dos capturas reales. */
 function Moviles() {
-  const capturas = idioma() === 'zh' ? 'zh' : 'es'
-  const video = ['es', 'en', 'pt', 'fr', 'it', 'de', 'zh'].includes(idioma()) ? idioma() : 'es'
+  const capturas = 'es'
+  const video = ['es', 'en', 'pt', 'fr', 'it', 'de'].includes(idioma()) ? idioma() : 'es'
   return (
     <div className="relative mx-auto flex w-full max-w-[460px] items-end justify-center gap-3 sm:gap-4">
       <img src={`/capturas-ruta/${capturas}/2-mapa.webp`} alt="" width="390" height="844" loading="lazy"
@@ -244,16 +244,14 @@ function PrecioRepartidor() {
   )
 }
 
-export default function Landing({ idioma: forzado = '' }) {
+export default function Landing() {
   const lang = useIdioma()
-  // /cn: la portada en chino.
-  useEffect(() => { if (forzado && forzado !== idioma()) cambiarIdioma(forzado) }, [forzado])
   // El título va con el texto ya traducido: las traducciones llegan después del primer pintado.
   const titulo = tx('FDS · La app de reparto gratis: ruta ordenada, escáner y navegación')
   useEffect(() => {
     const antes = document.title
     document.title = titulo
-    try { document.documentElement.lang = lang === 'zh' ? 'zh-CN' : lang } catch { /* nada */ }
+    try { document.documentElement.lang = lang } catch { /* nada */ }
     return () => { document.title = antes }
   }, [titulo, lang])
   const [tema, setTema] = useState(() => { try { return localStorage.getItem('ld_theme') || 'dark' } catch { return 'dark' } })
@@ -335,22 +333,15 @@ export default function Landing({ idioma: forzado = '' }) {
                 {probando ? <Loader2 size={16} className="animate-spin" /> : <Route size={16} />} {tx('Probarla ahora, sin registrarme')}
               </button>
             </div>
-            {esAndroid() && lang !== 'zh' && forzado !== 'zh' && !desdeChina() && (
+            {esAndroid() && (
               <div className="mt-4">
                 <GooglePlayBadge onClick={() => medirAccion('portada_google_play')} />
               </div>
             )}
             <p className="mt-4 flex flex-wrap items-center gap-x-4 gap-y-1 text-[13px] text-[color:var(--ld-dim)]">
               <span className="inline-flex items-center gap-1.5"><Smartphone size={14} /> {tx('Android e iPhone, desde el navegador')}</span>
-              <span className="inline-flex items-center gap-1.5"><Languages size={14} /> {tx('En 7 idiomas')}</span>
+              <span className="inline-flex items-center gap-1.5"><Languages size={14} /> {tx('En 6 idiomas')}</span>
             </p>
-            {/* En China no hay Google Play: la app de Android para allí se descarga (variante china, ver docs/ESTADO.md). */}
-            {lang === 'zh' && (
-              <a href="/descargas/FDS-china.apk" download onClick={() => medirAccion('portada_apk_china')}
-                className="mt-3 inline-flex items-center gap-1.5 text-[13.5px] font-semibold text-[color:var(--ld-accent)] underline-offset-4 hover:underline">
-                {tx('Descargar la app de Android (APK, sin Google Play)')} <ArrowRight size={14} />
-              </a>
-            )}
             {errProbar && <p role="alert" className="mt-3 text-[13px] text-[color:var(--ld-warn)]">{errProbar}</p>}
           </div>
           <Moviles />
@@ -406,7 +397,7 @@ export default function Landing({ idioma: forzado = '' }) {
           ))}
         </div>
         <p className="mt-6 text-[14px] text-[color:var(--ld-muted)]">
-          {tx('Y además: modo claro u oscuro, letra más grande y la app en español, inglés, portugués, francés, italiano, alemán o chino.')}
+          {tx('Y además: modo claro u oscuro, letra más grande y la app en español, inglés, portugués, francés, italiano o alemán.')}
         </p>
       </Seccion>
 
@@ -521,7 +512,7 @@ export default function Landing({ idioma: forzado = '' }) {
             <p className="mt-3 max-w-xs text-[13px] leading-relaxed text-[color:var(--ld-dim)]">{tx('La app de reparto gratis y el panel para tu flota.')}</p>
             <div className="mt-5 flex items-center gap-2">
               <label htmlFor="ld-idioma" className="sr-only">Idioma / Language</label>
-              <select id="ld-idioma" value={lang} onChange={(e) => { const v = e.target.value; cambiarIdioma(v); if (forzado && v !== forzado) window.location.href = '/' }}
+              <select id="ld-idioma" value={lang} onChange={(e) => cambiarIdioma(e.target.value)}
                 className="rounded-lg border border-[color:var(--ld-border-strong)] bg-[color:var(--ld-surface)] px-2.5 py-1.5 text-[13px] text-[color:var(--ld-text)]">
                 {Object.entries(IDIOMAS).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
               </select>

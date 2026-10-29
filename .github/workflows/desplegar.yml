@@ -160,6 +160,22 @@ jobs:
           node ../scripts/sellar-build.mjs
           grep -o 'assets/v2/index-[A-Za-z0-9_-]*\.js' dist/index.html | head -1 > ../bundle.txt
           echo "bundle: $(cat ../bundle.txt)"
+      - name: El APK de la app nativa, el último que firmó app-release.yml (29-10-2026)
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -e
+          run_id=$(gh run list --workflow app-release.yml --branch main --status success --limit 1 --json databaseId -q '.[0].databaseId' || true)
+          if [ -z "$run_id" ]; then echo "::warning::sin ningún run de app-release en verde: la web sale con el APK que hay en el repo"; exit 0; fi
+          gh run download "$run_id" --dir apk-descargado
+          apk=$(find apk-descargado -name 'FDS-*.apk' ! -name '*SIN-FIRMAR*' | head -1)
+          if [ -z "$apk" ]; then echo "::warning::el run $run_id no trae un APK firmado: la web sale con el del repo"; exit 0; fi
+          mkdir -p frontend/dist/descargas && cp "$apk" frontend/dist/descargas/FDS.apk
+          aab=$(find apk-descargado -name 'FDS-*-code*.aab' | head -1)
+          code=$(basename "$aab" | sed -n 's/.*-code\([0-9]*\).*/\1/p')
+          ver=$(basename "$apk" | sed -n 's/^FDS-\(.*\)\.apk$/\1/p')
+          echo "APP_WEB=$code $ver" >> "$GITHUB_ENV"
+          echo "APK $ver (code $code) del run $run_id → /descargas/FDS.apk"
       - name: wrangler pages deploy (rama main = producción)
         working-directory: frontend
         env:
@@ -191,3 +207,16 @@ jobs:
             echo "vuelta $vuelta: $mal assets sin propagar; espero 10 s"; sleep 10
           done
           echo "::warning::$mal assets siguen volviendo como HTML; las defensas del cliente los curan, pero conviene mirarlo"
+      - uses: superfly/flyctl-actions/setup-flyctl@master
+        if: env.APP_WEB != ''
+      - name: El servidor anuncia la versión del APK de la web (APP_ANDROID_WEB), si cambió
+        if: env.APP_WEB != ''
+        env:
+          FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
+        run: |
+          if [ -z "$FLY_API_TOKEN" ]; then echo "::warning::sin FLY_API_TOKEN: APP_ANDROID_WEB no se actualiza (fly secrets set -a $FLY_APP APP_ANDROID_WEB=\"$APP_WEB\")"; exit 0; fi
+          actual=$(curl -sS --max-time 20 "$BACKEND/api/app/version" || true)
+          code="${APP_WEB%% *}"
+          if echo "$actual" | grep -q "\"code\": *$code\b"; then echo "el servidor ya anuncia el code $code"; exit 0; fi
+          flyctl secrets set -a "$FLY_APP" APP_ANDROID_WEB="$APP_WEB"
+          echo "APP_ANDROID_WEB=$APP_WEB"

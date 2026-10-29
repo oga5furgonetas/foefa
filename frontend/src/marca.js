@@ -11,13 +11,14 @@
    dominio propio de cada cliente, sin compilar otra vez. */
 
 export const MARCA = {
-  nombre: 'Flota',
-  // La app de reparto (la de Google Play y la portada) se llama así; el panel de empresa sigue siendo «Flota».
+  // 29-10-2026, Dani: «unifica todo a FDS». Una sola marca en la web, el panel, la app y los correos.
+  nombre: 'FDS',
+  // La app de reparto (la de Google Play y la portada): el mismo nombre.
   app: 'FDS',
   // Lo que acompaña al nombre en la pestaña del navegador y al compartir.
-  lema: 'Gestión de flotas con IA',
+  lema: 'La app de reparto y el panel de tu flota',
   // Cómo se llama al asistente dentro de la app («@flota, …»).
-  ia: 'Flota IA',
+  ia: 'FDS IA',
   // Correo de contacto (03-10-2026, Dani). Cloudflare Email Routing lo
   // reenvía al Gmail de Dani: el MX de flotadsp.com apunta a Cloudflare.
   correo: 'contacto@flotadsp.com',

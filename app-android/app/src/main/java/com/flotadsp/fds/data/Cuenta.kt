@@ -26,6 +26,7 @@ class Cuenta(private val ctx: Context) {
     private val kConfigurarCuenta = androidx.datastore.preferences.core.booleanPreferencesKey("configurar_cuenta")
     private val kNavegar = stringPreferencesKey("navegar")
     private val kTema = stringPreferencesKey("tema")
+    private val kUltimoAviso = stringPreferencesKey("ultimo_aviso")
 
     private val _token = MutableStateFlow<String?>(null)
     val token: StateFlow<String?> = _token
@@ -92,7 +93,7 @@ class Cuenta(private val ctx: Context) {
     }
 
     suspend fun cerrar() {
-        ctx.almacen.edit { it.remove(kToken); it.remove(kDestino); it.remove(kConfigurarCuenta); it.remove(kCentro) }
+        ctx.almacen.edit { it.remove(kToken); it.remove(kDestino); it.remove(kConfigurarCuenta); it.remove(kCentro); it.remove(kUltimoAviso) }
         _token.value = null
         _destino.value = null
         _configurarCuenta.value = false
@@ -106,6 +107,10 @@ class Cuenta(private val ctx: Context) {
 
     suspend fun elegirNavegador(v: String) { ctx.almacen.edit { it[kNavegar] = v }; _navegar.value = v }
     suspend fun elegirTema(v: String) { ctx.almacen.edit { it[kTema] = v }; _tema.value = v }
+
+    /** Hasta qué aviso (su `creado_en`) se ha enseñado ya como notificación (AvisosWorker, Fcm). */
+    suspend fun ultimoAviso(): String? = ctx.almacen.data.first()[kUltimoAviso]
+    suspend fun guardarUltimoAviso(v: String) { ctx.almacen.edit { it[kUltimoAviso] = v } }
 
     /** Para que dos cuentas en el mismo móvil no compartan la ruta guardada ni lo pendiente de enviar. */
     fun quien(): String = _token.value?.let { claims(it)?.get("sub")?.jsonPrimitive?.content } ?: ""

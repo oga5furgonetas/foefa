@@ -1,6 +1,10 @@
 package com.flotadsp.fds.ui.acceso
 
+import android.Manifest
+import android.os.Build
 import androidx.activity.compose.BackHandler
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -20,10 +24,12 @@ import androidx.compose.material.icons.filled.CalendarMonth
 import androidx.compose.material.icons.filled.CardGiftcard
 import androidx.compose.material.icons.automirrored.filled.Logout
 import androidx.compose.material.icons.filled.MailOutline
+import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material.icons.filled.Phone
 import androidx.compose.material.icons.filled.Route
 import androidx.compose.material.icons.filled.Logout
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Badge
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -55,6 +61,9 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.flotadsp.fds.FdsApp
+import com.flotadsp.fds.Fcm
+import com.flotadsp.fds.data.AvisosWorker
+import com.flotadsp.fds.ui.Notificaciones
 import com.flotadsp.fds.data.ErrorApi
 import com.flotadsp.fds.data.Parada
 import com.flotadsp.fds.etiqueta.Lectura
@@ -70,8 +79,9 @@ import kotlinx.serialization.json.jsonPrimitive
 
 /** Entrada nativa del portal de conductor de empresa. Cada acción usa el token de esa ficha. */
 @Composable
-fun PortalConductorNativo(alCerrar: () -> Unit) {
-    val app = LocalContext.current.applicationContext as FdsApp
+fun PortalConductorNativo(alCerrar: () -> Unit, abrir: String? = null, alAbierto: () -> Unit = {}) {
+    val ctx = LocalContext.current
+    val app = ctx.applicationContext as FdsApp
     val obligatoria by app.cuenta.configurarCuenta.collectAsState()
     var pantalla by rememberSaveable { mutableStateOf("inicio") }
     var aviso by rememberSaveable { mutableStateOf<String?>(null) }
@@ -80,6 +90,18 @@ fun PortalConductorNativo(alCerrar: () -> Unit) {
     var confirmarSalir by remember { mutableStateOf(false) }
     val salir = { confirmarSalir = true }
     LaunchedEffect(pantalla) { app.repo.vista("/conductor/p/$pantalla") }
+    // AVISOS (29-10-2026): el permiso (Android 13+), la comprobación cada 15 min aunque la app esté cerrada y este
+    // móvil apuntado en el servidor (con token de FCM si la app lo lleva). Y cuántos hay sin leer, para la tarjeta.
+    val pedirAvisos = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { }
+    var sinLeer by remember { mutableStateOf(0) }
+    LaunchedEffect(Unit) {
+        if (Build.VERSION.SDK_INT >= 33 && !Notificaciones.permitidas(ctx)) pedirAvisos.launch(Manifest.permission.POST_NOTIFICATIONS)
+        AvisosWorker.programar(ctx)
+        app.repo.registrarMovil(Fcm.token())
+    }
+    LaunchedEffect(pantalla) { if (pantalla == "inicio") runCatching { app.repo.avisos() }.onSuccess { sinLeer = it.sin_leer } }
+    // Un aviso tocado en la barra de notificaciones abre lo que toca.
+    LaunchedEffect(abrir) { if (abrir != null) { pantalla = destinoDeAviso(abrir); alAbierto() } }
     if (confirmarSalir) AlertDialog(
         onDismissRequest = { confirmarSalir = false },
         title = { Text("¿Cerrar sesión?") },
@@ -100,6 +122,7 @@ fun PortalConductorNativo(alCerrar: () -> Unit) {
             alVolver = { pantalla = "inicio" },
             alCompletar = { pantalla = "inicio"; aviso = "Auditoría enviada correctamente." },
         )
+        "avisos" -> AvisosConductorNativo(alVolver = { pantalla = "inicio" }, alAbrir = { a -> pantalla = destinoDeAviso(a.url, a.titulo).takeIf { it != "avisos" } ?: "avisos" })
         "turnos" -> TurnosConductorNativo(alVolver = { pantalla = "inicio" })
         "extras" -> ExtrasConductorNativos(alVolver = { pantalla = "inicio" })
         "referidos" -> ReferidosConductorNativo(alVolver = { pantalla = "inicio" })
@@ -129,6 +152,8 @@ fun PortalConductorNativo(alCerrar: () -> Unit) {
                 alExtras = { pantalla = "extras" },
                 alReferidos = { pantalla = "referidos" },
                 alCuenta = { pantalla = "cuenta" },
+                alAvisos = { pantalla = "avisos" },
+                sinLeer = sinLeer,
                 alCerrar = salir,
                 aviso = aviso,
             )
@@ -146,6 +171,8 @@ private fun InicioConductorNativo(
     alExtras: () -> Unit,
     alReferidos: () -> Unit,
     alCuenta: () -> Unit,
+    alAvisos: () -> Unit,
+    sinLeer: Int,
     alCerrar: () -> Unit,
     aviso: String?,
 ) {
@@ -173,6 +200,20 @@ private fun InicioConductorNativo(
             verticalArrangement = Arrangement.spacedBy(16.dp),
         ) {
             aviso?.let { Text(it, color = MaterialTheme.colorScheme.primary, style = MaterialTheme.typography.bodyMedium) }
+            // La bandeja de avisos (29-10-2026): turnos aprobados, vacantes para trabajar más, inspección pendiente.
+            Card(onClick = alAvisos, colors = CardDefaults.cardColors(containerColor = if (sinLeer > 0) MaterialTheme.colorScheme.primaryContainer
+                else MaterialTheme.colorScheme.surfaceContainerLowest)) {
+                Row(Modifier.fillMaxWidth().padding(18.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(14.dp)) {
+                    Icon(Icons.Default.Notifications, contentDescription = null,
+                        tint = if (sinLeer > 0) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.primary)
+                    Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
+                        Text(if (sinLeer > 0) "Tienes $sinLeer ${if (sinLeer == 1) "aviso nuevo" else "avisos nuevos"}" else "Avisos", fontWeight = FontWeight.SemiBold)
+                        Text("Turnos aprobados, vacantes para trabajar más y lo que te pida la oficina",
+                            style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
+                    if (sinLeer > 0) Badge { Text("$sinLeer") }
+                }
+            }
             // «Mi ruta» solo en empresas que reparten con la app: lo dice el servidor (`activo` en reparto/mi-ruta),
             // igual que el portal web. En una flota que reparte para Amazon (OGA5, DGA1, DGA2) la ruta va por otro
             // lado y esta tarjeta solo confundía (Dani, 29-10-2026, probando la 2.2.3 en su móvil).

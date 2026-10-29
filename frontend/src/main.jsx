@@ -283,7 +283,6 @@ const PanelVencimientos = lazy(() => import('./panel/pages/Vencimientos'))
 const PanelRevision = lazy(() => import('./panel/pages/RevisionRapida'))
 const PanelNegocio = lazy(() => import('./panel/pages/Negocio'))
 const PanelGastos = lazy(() => import('./panel/pages/Gastos'))
-const PanelValor = lazy(() => import('./panel/pages/Valor'))
 const PanelAnalitica = lazy(() => import('./panel/pages/Analitica'))
 const PanelPerfil = lazy(() => import('./panel/pages/Perfil'))
 const PanelInspecciones = lazy(() => import('./panel/pages/Inspecciones'))
@@ -405,8 +404,6 @@ ReactDOM.createRoot(document.getElementById('root')).render(
           <Suspense fallback={<RouteLoader />}>
             <Routes>
               <Route path="/" element={<Landing />} />
-              <Route path="/cn" element={<Landing idioma="zh" />} />
-              <Route path="/zh" element={<Landing idioma="zh" />} />
               <Route path="/login" element={<Login />} />
               <Route path="/reset-password" element={<ResetPassword />} />
               <Route path="/registro" element={<Registro />} />
@@ -487,7 +484,6 @@ ReactDOM.createRoot(document.getElementById('root')).render(
                 <Route path="admin" element={<PanelNegocio />} />
                 <Route path="analitica" element={<PanelAnalitica />} />
                 <Route path="gastos" element={<PanelGastos />} />
-                <Route path="valor" element={<PanelValor />} />
                 <Route path="usuarios" element={<PanelUsuarios />} />
                 <Route path="perfil" element={<PanelPerfil />} />
                 <Route path="portal-conductor" element={<PanelPortalConductor />} />

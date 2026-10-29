@@ -122,6 +122,8 @@ async def sembrar():
 # por la oficina dentro de tres días, «Invita y gana», contraseña, correo personal y teléfono.
 CONDUCTOR_CORREO = "conductor@fds.test"
 CONDUCTOR_CLAVE = "turno-de-prueba-1"
+OFICINA_CORREO = "oficina@fds.test"
+OFICINA_CLAVE = "oficina-de-prueba-1"
 
 
 async def sembrar_empresa(hoy):
@@ -133,6 +135,11 @@ async def sembrar_empresa(hoy):
         "id": org_id, "name": "Empresa de prueba", "slug": "empresa", "plan": "flota", "sector": "reparto",
         "db_name": "dsp_empresa", "account_type": "dsp", "status": "active", "pais": "es", "zona_horaria": "Europe/Madrid",
         "centers": ["OGA5"], "modulos": [], "created_at": ahora,
+    })
+    # La oficina de esa empresa (29-10-2026): para aprobar peticiones y abrir refuerzos y ver el aviso llegar a la app.
+    g["admin_users"].docs.append({
+        "id": "u-oficina", "username": OFICINA_CORREO, "email": OFICINA_CORREO, "name": "Oficina de prueba", "role": "admin",
+        "org_id": org_id, "hashed_password": server.hash_password(OFICINA_CLAVE), "created_at": ahora,
     })
     t = bases["dsp_empresa"]
     t["drivers"] = Col([{"id": driver_id, "name": "Conductora de Prueba", "center": "OGA5", "email": CONDUCTOR_CORREO,
@@ -160,6 +167,7 @@ async def sembrar_empresa(hoy):
                            "nota": "Pico de volumen: hacen falta dos más", "estado": "abierto", "avisados": 0, "auto": False,
                            "creado_por": "Oficina", "creado_en": ahora}])
     print(f"Conductor de empresa: {CONDUCTOR_CORREO} / {CONDUCTOR_CLAVE} · furgoneta 1234 KLM asignada hoy, libra {manana}")
+    print(f"Oficina de esa empresa: {OFICINA_CORREO} / {OFICINA_CLAVE}")
 
 
 if __name__ == "__main__":

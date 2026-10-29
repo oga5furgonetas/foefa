@@ -6,7 +6,7 @@ import {
   Settings, Shield, LogOut, Zap, Inbox, ChevronRight, ChevronDown, AlertTriangle, BookUser,
   Search, Sun, Moon, Contrast, MapPin, Mail, UserCircle2, Languages, ShieldAlert, Menu,
   CircleHelp, Briefcase, Store, UserCheck, ImagePlus, Loader2, Bell, BellOff, MessageCircle,
-  MessagesSquare, Euro, FileSpreadsheet, PackageX, TrendingUp, Clock, Route, HeartPulse, Sparkles,
+  MessagesSquare, Euro, FileSpreadsheet, PackageX, Clock, Route, HeartPulse, Sparkles,
 } from 'lucide-react'
 import { aislarSesion, haySesionPrevia, volverASesionPrevia, getAdmin, isAuthed, isSuperAdmin, isCenterManager, logout, canSee, decodeToken, getVisibleCenters, SIEMPRE_VISIBLES, guardarAccesoFresco, esPlataforma, actualizarMiFoto } from './auth'
 import { getMe, contarPeticionesPendientes, contarCandidatosNuevos, contarConversacionesSinLeer, subirFotoAdmin } from './api'
@@ -23,6 +23,7 @@ import { usePlan } from '../lib/usePlan'
 import { voces } from '../lib/sector'
 import { vigilarVersion, recargarCuandoNadieMira } from '../lib/versionApp'
 import { MARCA } from '../marca'
+import { tituloDe } from '../lib/titulo'
 import { aplicarTema } from '../lib/tema'
 
 const keyOf = (to) => (to === '/panel' ? 'dashboard' : to.split('/').pop())
@@ -312,6 +313,13 @@ export default function PanelLayout() {
   const loc = useLocation()
   const admin = getAdmin()
   const { lang, setLang, t } = useT()
+  // El título de la pestaña: la pantalla donde estás · la marca (29-10-2026). Antes, todas decían lo mismo.
+  useEffect(() => {
+    const actual = [...NAV_DEF.flatMap((g) => g.items), ...PALETTE_EXTRA]
+      .filter((it) => loc.pathname === it.to || (it.to !== '/panel' && loc.pathname.startsWith(it.to + '/')))
+      .sort((a, b) => b.to.length - a.to.length)[0]
+    document.title = tituloDe(t(actual ? actual.labelKey : 'nav.dashboard'))
+  }, [loc.pathname, t])
   const { limits, modulos, billing } = usePlan()
   const vz = voces(billing?.sector)
   // Quien reparte solo no tiene panel de empresa: tiene su app (/ruta).
@@ -591,7 +599,7 @@ export default function PanelLayout() {
     if (k === 'vencimientos') return EXPIRY_KEYS.some((ek) => canSee(ek))
     if (k === 'ordenes') return canSee('talleres')
     if (k === 'estado-flota') return canSee('vehiculos')
-    if (k === 'admin' || k === 'bandeja' || k === 'analitica' || k === 'gastos' || k === 'valor') return sa
+    if (k === 'admin' || k === 'bandeja' || k === 'analitica' || k === 'gastos') return sa
     if (k === 'tienda' && !esPlataforma()) return false
     if (k === 'usuarios') return sa || cm
     return canSee(k)
@@ -741,14 +749,6 @@ export default function PanelLayout() {
               className={({ isActive }) => `nav-item ${isActive ? 'nav-item-active' : ''}`}
             >
               <Euro size={16} /> Gastos
-            </NavLink>
-          )}
-          {showAdmin && (
-            <NavLink
-              to="/panel/valor"
-              className={({ isActive }) => `nav-item ${isActive ? 'nav-item-active' : ''}`}
-            >
-              <TrendingUp size={16} /> Valor
             </NavLink>
           )}
           {showAdmin && (

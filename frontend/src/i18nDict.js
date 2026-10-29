@@ -3,7 +3,6 @@
    portada del anuncio y en la app del repartidor, que no los usan. Ahora i18n.jsx los pide la primera vez
    que una pantalla llama a useT(), y esa pantalla espera (Suspense) hasta tenerlos. Las comprobaciones
    (check-i18n, check-marca, i18n-muertas) leen ESTE fichero. */
-export { ZH } from './i18nZh'
 
 // Diccionarios. Clave → texto por idioma. Fallback a inglés y luego a la clave.
 export const DICT = {

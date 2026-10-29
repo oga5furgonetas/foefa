@@ -28,13 +28,6 @@ const ESC = {
     cierre: ['GRATIS 7 días', 'FDS · flotadsp.com'],
     botonNav: 'Empezar a navegar', botonNuevo: 'Añadir un pedido sin código',
   },
-  zh: {
-    locale: 'zh-CN',
-    mas: '更多添加方式', clientes: ['王记超市', '李女士', 'Farmacia Sol', '陈先生'],
-    rotulos: ['还在手动排路线？', '拍面单，地址自动录入', '路线按时间自动排好', '中文语音导航到每个门口', '已送达，下一站。'],
-    cierre: ['免费7天', 'FDS · flotadsp.com/cn'],
-    botonNav: '开始导航', botonNuevo: '添加无单号订单',
-  },
   en: {
     locale: 'en-GB',
     mas: 'More ways to add', clientes: ["Pepe's Bar", 'Lucy M.', 'Sun Pharmacy', 'Luz Kiosk'],

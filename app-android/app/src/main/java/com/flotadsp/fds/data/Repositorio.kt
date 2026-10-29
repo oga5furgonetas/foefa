@@ -165,6 +165,8 @@ class Repositorio(private val ctx: Context, val cuenta: Cuenta, val api: Api) {
     }
 
     suspend fun salir() {
+        runCatching { api.post("push/fcm-token/quitar") }   // que los avisos no sigan llegando a este móvil (29-10-2026)
+        AvisosWorker.parar(ctx)
         cuenta.cerrar()
         withContext(Dispatchers.IO) { fCopia.delete() }   // direcciones y teléfonos de clientes: fuera del móvil
     }
@@ -229,6 +231,26 @@ class Repositorio(private val ctx: Context, val cuenta: Cuenta, val api: Api) {
     suspend fun referidosConductor(): JsonObject = api.get("conductor/referidos").jsonObject
     suspend fun retirarReferidosConductor(titular: String, metodo: String, destino: String): JsonObject =
         api.post("conductor/referidos/retirar", buildJsonObject { put("titular", titular); put("metodo", metodo); put("destino", destino) }).jsonObject
+
+    // ── Avisos al móvil (29-10-2026) ────────────────────────────────────────────────────────────────────────
+
+    /** La bandeja de avisos de esta persona (los más nuevos primero); `desde`: solo lo posterior a esa fecha ISO. */
+    suspend fun avisos(desde: String? = null): Avisos =
+        leer(api.get("avisos/mios", if (desde.isNullOrBlank()) emptyMap() else mapOf("desde" to desde)))
+
+    suspend fun avisosLeidos(ids: List<String>) {
+        if (ids.isEmpty()) return
+        api.post("avisos/leidos", buildJsonObject { put("ids", buildJsonArray { ids.forEach { add(kotlinx.serialization.json.JsonPrimitive(it)) } }) })
+    }
+
+    /** Apunta este móvil para los avisos: con el token de FCM (al instante) o sin él (la app pregunta cada 15 min). */
+    suspend fun registrarMovil(token: String?) {
+        runCatching {
+            api.post("push/fcm-token", buildJsonObject {
+                put("token", token.orEmpty()); put("plataforma", "android"); put("app", com.flotadsp.fds.BuildConfig.VERSION_NAME)
+            })
+        }
+    }
 
     // ── La ruta ─────────────────────────────────────────────────────────────────────────────────────────────
 

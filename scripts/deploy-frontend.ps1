@@ -35,6 +35,26 @@ if ($d.tiktok_pixel) { $env:VITE_TIKTOK_PIXEL_ID = $d.tiktok_pixel } else { Writ
 npm run build
 if ($LASTEXITCODE -ne 0) { throw "la compilacion ha fallado, no se despliega nada" }
 
+# EL APK DE LA APP NATIVA (29-10-2026): el ultimo que firmo GitHub (app-release.yml), si `gh` esta instalado y con
+# sesion; si no, se queda el que hay en el repo (frontend/public/descargas/FDS.apk) y se avisa. El servidor anuncia
+# la version con APP_ANDROID_WEB (lo pone desplegar.yml; a mano: fly secrets set -a flota-backend APP_ANDROID_WEB="17 2.2.5").
+$gh = Get-Command gh -ErrorAction SilentlyContinue
+if ($gh) {
+  Write-Host "==> Buscando el ultimo APK firmado por GitHub..."
+  $runId = (& gh run list --workflow app-release.yml --branch main --status success --limit 1 --json databaseId -q ".[0].databaseId" 2>$null)
+  if ($runId) {
+    $tmp = Join-Path $env:TEMP "fds-apk-$runId"
+    if (Test-Path $tmp) { Remove-Item -Recurse -Force $tmp }
+    & gh run download $runId --dir $tmp 2>$null
+    $apk = Get-ChildItem -Path $tmp -Recurse -Filter "FDS-*.apk" | Where-Object { $_.Name -notlike "*SIN-FIRMAR*" } | Select-Object -First 1
+    if ($apk) {
+      New-Item -ItemType Directory -Force (Join-Path "dist" "descargas") | Out-Null
+      Copy-Item $apk.FullName (Join-Path "dist" "descargas\FDS.apk") -Force
+      Write-Host "    APK $($apk.Name) del run $runId -> /descargas/FDS.apk"
+    } else { Write-Host "    (el run $runId no trae un APK firmado: se queda el del repo)" -ForegroundColor Yellow }
+  } else { Write-Host "    (ningun run de app-release en verde: se queda el APK del repo)" -ForegroundColor Yellow }
+} else { Write-Host "    (sin gh: se queda el APK del repo; instala GitHub CLI para coser el ultimo)" -ForegroundColor Yellow }
+
 # EL SELLO DE LA COMPILACION. La app lo pide cada pocos minutos y avisa si el
 # suyo ya no es el ultimo: sin esto, una pestaña abierta desde hace horas sigue
 # enseñando lo de antes SIN fallar, que es peor que un error.

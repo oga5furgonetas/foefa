@@ -48,12 +48,15 @@ desde PowerShell 5.1 el pipe mete un BOM en el nombre y falla.
 ## Cómo desplegar
 
 ```
-# backend (desde backend/)
-fly deploy --remote-only -a flota-backend --strategy immediate --ha=false
-# web (desde frontend/)
-VITE_API_URL=https://flota-backend.fly.dev/api npx vite build
-node ../scripts/sellar-build.mjs
-npx wrangler pages deploy dist --project-name flota --branch main --commit-dirty=true
+# Desde el PC (PowerShell, en la raíz del repo). Leen despliegue.local.json: el destino Y el píxel de Meta.
+.\scripts\deploy-backend.ps1
+.\scripts\deploy-frontend.ps1
+# O desde GitHub: Actions → «Desplegar producción» → Run workflow (todo / backend / web), con los 3 secretos.
+# A MANO solo si no queda otra, y la web SIEMPRE con el píxel: sin VITE_META_PIXEL_ID sale sin medir los anuncios
+# (así estuvo la de producción el 29-10: fbq no existía). Desde frontend/:
+#   VITE_API_URL=https://flota-backend.fly.dev/api VITE_META_PIXEL_ID=1317231944812644 npx vite build
+#   node ../scripts/sellar-build.mjs && npx wrangler pages deploy dist --project-name flota --branch main --commit-dirty=true
+# Backend a mano (desde backend/): fly deploy --remote-only -a flota-backend --strategy immediate --ha=false
 ```
 
 Antes de desplegar, lo de CLAUDE.md («Antes de dar algo por bueno»): checks,
@@ -944,7 +947,71 @@ sin píxel. Nada tocado en el código ni desplegado: solo este informe. La app n
 Las decisiones que pide están en su §11 (una marca o dos, Amazon A-G, una sola oferta, anuncios, Reparto para
 empresas como prioridad de ventas, cobro en la app, Valor fuera del repo, DeCA).
 
+## Última sesión — 29-10-2026 (noche, 4): FDS en todo, fuera Valor y China, cookies, una sola app que se publica sola, y avisos al móvil
+
+Dani: «quita las apuestas y lo de China, unifica todo a FDS; arregla lo de cookies; lo de 3 apps, unificar: cuando
+mejoremos la app que se lance a la web y a Play; para nosotros, si apruebo días a alguien que tiene la app que le
+salte notificación, o si hay un día que puedan solicitar trabajar; después corrige lo que consideres, dame imágenes
+y hacemos el deploy». Todo en la rama **`fds-unificacion`** (worktree `.claude/worktrees/fds-unificacion`: la sesión
+de redes trabajaba a la vez en el checkout principal). **SIN fusionar en `main` ni desplegar**: lo decide Dani (ver
+«Pendiente», -7).
+
+- **Valor (apuestas), fuera**: `backend/valor/`, sus 10 tests, `panel/pages/Valor.jsx`, las rutas `/api/valor/*`, el
+  hilo del escáner, el menú (escritorio y móvil) y su prueba de humo. La base `edge_os` de Mongo y el SQLite del
+  volumen de Fly NO se han tocado (son datos de Dani; los borra él si quiere).
+- **China, fuera**: la TWA `android/` entera (con ella, las tres apps pasan a UNA: `app-android/`), `FDS-china.apk`,
+  `/cn` y `/zh`, el chino de los dos diccionarios (`i18nZh`, `i18nZhLit`, `traductorZh`; `textosRuta` A/B/C
+  recortados de 6 a 5 idiomas: 1.130 entradas), Amap/Baidu en la ruta, el consentimiento PIPL del alta, la sección 9 de
+  la política, el desvío de `apiBase.js`, el pago del año de una vez de `RutaCuenta`, capturas y vídeos `zh` y sus
+  pruebas e2e. En el servidor queda dormido el código de `pais == "cn"` (PIPL, Amap): no molesta y sus tests siguen.
+- **FDS en todo**: `marca.js` (nombre FDS, lema «La app de reparto y el panel de tu flota», IA «FDS IA»), `index.html`
+  (título, descripción, og), `og.png` nuevo (lo genera `frontend/e2e/capturas-29-10.mjs`), el servidor
+  (`MARCA_NOMBRE` por defecto FDS, también en `fly.toml`; el correo del código de entrada), `/planes` con el logo y el
+  cian de la marca, «Entrar» y sin «quedan 10 de 10 plazas» (el contador solo sale cuando alguien ha reservado), y el
+  rayo de «Flota» sustituido por el logo en /repartidores, /registro y la calculadora. **Título por pantalla**
+  (`lib/titulo.js`: `useTitulo`, `tituloDe`): Planes, Empezar, Registro, Seguimiento, Ruta, Entrar y cada pantalla del
+  panel («Vehículos · FDS»). Antes casi todas decían «Flota — Gestión de flotas con IA».
+- **Cookies**: sin píxel no sale NADA (LSSI 22.2: solo almacenamiento necesario); con píxel, una hoja de dos líneas
+  pegada abajo con «Solo necesarias» y «Aceptar» iguales (antes, una ventana en medio con cuatro líneas que tapaba un
+  tercio del móvil). Y «Cómo desplegar» (arriba) ya dice cómo desplegar con el píxel.
+- **Una sola app que se publica sola**: `app-release.yml` sube el AAB a la prueba abierta de Play si existe el secreto
+  `PLAY_SERVICE_ACCOUNT_JSON` (la cuenta de servicio de Play Console, el JSON entero) y, al acabar, lanza «Desplegar
+  producción» solo para la web; `desplegar.yml` (web) coge el último APK firmado, lo deja en `/descargas/FDS.apk` y
+  pone `APP_ANDROID_WEB` en Fly si cambió (con `FLY_API_TOKEN`); `deploy-frontend.ps1` hace lo mismo desde el PC si
+  `gh` está instalado y con sesión. Sin esos secretos todo sigue como hasta ahora (a mano) y lo dice en el log.
+- **Avisos al móvil** (lo que pidió Dani): en el servidor, bandeja por persona (`avisos_movil` en la base de la
+  empresa, con índices) + web push + FCM opcional; `_avisar_usuarios(...)` sustituye a `send_web_push_to_users` en los
+  seis sitios del conductor (petición de día aprobada o rechazada, día extra confirmado, vacante de refuerzo, refuerzo
+  cubierto o anulado, inspección pendiente) y en el aviso de la mañana del autónomo, que ahora también cuenta a quien
+  tiene la app sin web push. Rutas nuevas: `GET /avisos/mios?desde=`, `POST /avisos/leidos`, `POST /push/fcm-token` y
+  `/push/fcm-token/quitar`; tests en `test_avisos_movil.py`. En la app (**2.3.0, code 18**): permiso de
+  notificaciones (Android 13+), `AvisosWorker` cada 15 min aunque esté cerrada (lo nuevo sale como notificación y
+  tocarla abre la pantalla que toca: turnos, trabajar más, auditoría), tarjeta «Tienes N avisos nuevos» en el inicio
+  del conductor y la pantalla «Avisos»; FCM al instante SOLO si se compila con los cuatro datos del proyecto de
+  Firebase (secretos `FDS_FCM_APP_ID`, `FDS_FCM_API_KEY`, `FDS_FCM_PROJECT_ID`, `FDS_FCM_SENDER_ID`) y el servidor
+  lleva `FCM_SERVICE_ACCOUNT_JSON`; sin ellos, el sondeo basta (el mismo aviso con el mismo id: nunca sale dos veces).
+  El autónomo recibe lo mismo (el aviso de la mañana). `servidor_pruebas.py` siembra ahora una oficina
+  (`oficina@fds.test` / `oficina-de-prueba-1`) para aprobar peticiones y abrir refuerzos en las pruebas.
+- **Comprobado en este PC**: los 26 checkers en verde (contraste incluido), ESLint 0 errores, `vite build`, Playwright
+  humo en escritorio 206/206 (dos fallaron en la tanda y pasaron aisladas: una era texto chino, corregida; la otra,
+  «App · quien reparte solo…», una carrera), el contrato app↔API en verde con las 7 comprobaciones de avisos, **la app
+  compilada con Gradle aquí (`testDebugUnitTest` + `assembleDebug`) e instalada en el emulador de Android Studio
+  contra `servidor_pruebas.py`**: entrar como conductor, la tarjeta «Tienes 1 aviso nuevo» al abrir la oficina de
+  prueba un refuerzo, la bandeja y la notificación. Backend: `pytest` 1.267 en verde en la tanda entera (12 min 47 s en este PC; el único rojo era un test nuevo
+  de avisos, porque `Cursor.sort` de la base de mentira no ordenaba nada: ahora ordena como Mongo, y 129 repetidas en verde). Python 3.12 instalado en este PC con
+  winget (no había; las pruebas lo necesitan).
+- Capturas en `docs/capturas-29-10/` (web y emulador; `LEEME.md` dice cuál es cuál).
+
 ## Pendiente (por prioridad)
+
+-7. **Fusionar `fds-unificacion` en `main` y desplegar (29-10 noche, lo decide Dani)**: desde `main`,
+   `git merge fds-unificacion`, y `.\scripts\deploy-backend.ps1` + `.\scripts\deploy-frontend.ps1` (o Actions →
+   «Desplegar producción» con los 3 secretos). Al entrar `app-android/` en `main`, `app-release.yml` firma la
+   **2.3.0 (code 18)**: subir el AAB a la prueba abierta (o poner `PLAY_SERVICE_ACCOUNT_JSON` y sube solo) y el APK a
+   la web (lo hace el despliegue de la web si hay `gh` o `FLY_API_TOKEN`; si no, a mano:
+   `fly secrets set -a flota-backend APP_ANDROID_WEB="18 2.3.0"`). Opcional, avisos al instante: proyecto de Firebase →
+   4 secretos `FDS_FCM_*` en GitHub y `FCM_SERVICE_ACCOUNT_JSON` en Fly. Después, probar con un conductor real:
+   aprobarle un día y ver que le llega al móvil.
 
 -6. **El anuncio con la voz de Dani (29-10 noche, 2)**: montado en `docs/anuncios/spot-dani/salida/`. Falta:
    (1) **desplegar el bono de 25 €**: Dani pone los 3 secretos en GitHub y se relanza `desplegar.yml` (o ejecuta

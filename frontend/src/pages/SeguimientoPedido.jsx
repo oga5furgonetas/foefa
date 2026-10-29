@@ -1,3 +1,4 @@
+import { useTitulo } from '../lib/titulo'
 import { useEffect, useState } from 'react'
 import { useParams } from 'react-router-dom'
 import { Loader2, Package, CheckCircle2, Clock, XCircle, Truck } from 'lucide-react'
@@ -18,6 +19,7 @@ const ESTADO = {
 }
 
 export default function SeguimientoPedido() {
+  useTitulo(tx('Tu pedido'))
   useIdioma()
   const { token } = useParams()
   const [d, setD] = useState(null)

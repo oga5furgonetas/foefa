@@ -1,0 +1,42 @@
+{
+  "01-portada-movil": {
+    "ruta": "/",
+    "titulo": "FDS · La app de reparto gratis: ruta ordenada, escáner y navegación"
+  },
+  "02-planes-movil": {
+    "ruta": "/planes",
+    "titulo": "Planes y precios · FDS"
+  },
+  "03-empezar-movil": {
+    "ruta": "/empezar",
+    "titulo": "Empezar · FDS"
+  },
+  "04-cookies-movil": {
+    "ruta": "/repartidores",
+    "titulo": "FDS — La app de reparto y el panel de tu flota"
+  },
+  "05-panel-login-movil": {
+    "ruta": "/panel/login",
+    "titulo": "Entrar · FDS"
+  },
+  "06-panel-movil": {
+    "ruta": "/panel",
+    "titulo": "Dashboard · FDS"
+  },
+  "07-vehiculos-movil": {
+    "ruta": "/panel/vehiculos",
+    "titulo": "Vehículos · FDS"
+  },
+  "08-portada-escritorio": {
+    "ruta": "/",
+    "titulo": "FDS · La app de reparto gratis: ruta ordenada, escáner y navegación"
+  },
+  "09-planes-escritorio": {
+    "ruta": "/planes",
+    "titulo": "Planes y precios · FDS"
+  },
+  "10-panel-escritorio": {
+    "ruta": "/panel",
+    "titulo": "Dashboard · FDS"
+  }
+}

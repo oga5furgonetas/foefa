@@ -145,27 +145,9 @@ const SIN_ZONAS = []
 /* Con qué navega cada uno: Google Maps o Waze. Se recuerda en el móvil. */
 /* «En la app» guía aquí dentro (Navegacion.jsx); los otros dos abren su app. */
 const NAVEGADORES = [['app', 'Esta app'], ['google', 'Google Maps'], ['waze', 'Waze']]
-/* En China Google Maps y Waze no funcionan: allí se navega con Amap (高德) o
-   Baidu (百度). Los dos abren su app con el destino puesto y aceptan las
-   coordenadas del GPS tal cual (WGS-84), así que el punto no se desplaza. */
-const NAVEGADORES_CHINA = [['app', 'Esta app'], ['amap', '高德地图'], ['baidu', '百度地图']]
-// Por el PAÍS de la cuenta, no por el idioma: quien habla chino y reparte en
-// España necesita Google Maps (Amap y Baidu solo cubren China).
-export const enChina = (pais) => pais === 'cn'
-const nombreNavegador = (nav) => ({ google: 'Google Maps', waze: 'Waze', amap: '高德地图', baidu: '百度地图' }[nav] || 'Google Maps')
+const nombreNavegador = (nav) => ({ google: 'Google Maps', waze: 'Waze' }[nav] || 'Google Maps')
 const Navegacion = lazy(() => import('./Navegacion'))
 function navegar(p, nav) {
-  const nombre = encodeURIComponent(p.cliente || p.direccion || '')
-  if (nav === 'amap') {
-    return p.lat != null
-      ? `https://uri.amap.com/navigation?to=${p.lng},${p.lat},${nombre}&mode=car&coordinate=wgs84&callnative=1`
-      : `https://uri.amap.com/search?keyword=${encodeURIComponent(p.direccion || '')}&callnative=1`
-  }
-  if (nav === 'baidu') {
-    return p.lat != null
-      ? `https://api.map.baidu.com/direction?destination=latlng:${p.lat},${p.lng}|name:${nombre}&coord_type=wgs84&mode=driving&output=html&src=flota`
-      : `https://api.map.baidu.com/geocoder?address=${encodeURIComponent(p.direccion || '')}&output=html&src=flota`
-  }
   if (nav === 'waze') {
     return p.lat != null
       ? `https://waze.com/ul?ll=${p.lat},${p.lng}&navigate=yes`
@@ -285,13 +267,9 @@ export default function MiRuta({ onBack, embebido = false, alTerminar = null }) 
   useEffect(() => guarda('ruta_vista', vista), [vista])
   useEffect(() => guarda('ruta_nav2', nav), [nav])
   // La app de navegación de fuera: la elegida, o la del país si guía esta app.
-  const fuera = nav === 'app' ? (enChina(ruta?.pais) ? 'amap' : 'google') : nav
-  // Lo elegido en otro país no vale aquí (Google en China, Amap fuera): se vuelve a esta app.
-  useEffect(() => {
-    if (!ruta) return
-    const china = enChina(ruta.pais)
-    if ((china && ['google', 'waze'].includes(nav)) || (!china && ['amap', 'baidu'].includes(nav))) setNav('app')
-  }, [ruta, nav])
+  const fuera = nav === 'app' ? 'google' : nav
+  // Un navegador guardado que ya no existe (los de China, 29-10-2026): se vuelve a esta app.
+  useEffect(() => { if (['amap', 'baidu'].includes(nav)) setNav('app') }, [nav])
   const [guiando, setGuiando] = useState(null)       // id de la parada a la que se guía; null = sin guía
   // 10-10-2026: se mide cuándo EMPIEZA a navegar (no cada parada), para el embudo del alta.
   const guiandoAntes = useRef(null)
@@ -1335,7 +1313,7 @@ export default function MiRuta({ onBack, embebido = false, alTerminar = null }) 
             {tx('Ir con')}
             <select value={nav} onChange={(e) => setNav(e.target.value)} aria-label={tx('Navegador')}
               className="rounded-lg border border-dark-700 bg-dark-900 px-1.5 py-1 text-[12.5px] text-dark-100">
-              {(enChina(ruta.pais) ? NAVEGADORES_CHINA : NAVEGADORES).map(([k, t]) => <option key={k} value={k}>{tx(t)}</option>)}
+              {NAVEGADORES.map(([k, t]) => <option key={k} value={k}>{tx(t)}</option>)}
             </select>
           </label>}
         </div>
@@ -1371,7 +1349,7 @@ export default function MiRuta({ onBack, embebido = false, alTerminar = null }) 
               {tx('{n} sin situar en el mapa todavía (la dirección no se ha encontrado o se está buscando).', { n: pendientes.filter((p) => p.lat == null).length })}
             </p>
           )}
-          {!enChina(ruta.pais) && enlaceVarias(pendientes) && (
+          {enlaceVarias(pendientes) && (
             <a href={enlaceVarias(pendientes)} target="_blank" rel="noreferrer"
               className="mt-2 flex w-full items-center justify-center gap-2 rounded-xl border border-sky-500/50 bg-sky-500/10 py-3 text-[14px] font-bold text-sky-200">
               <Navigation size={16} /> {tx('Las próximas {n} paradas en Google Maps', { n: Math.min(4, pendientes.filter((p) => p.lat != null).length) })}
@@ -1465,7 +1443,7 @@ export default function MiRuta({ onBack, embebido = false, alTerminar = null }) 
                   <button onClick={() => setGuiando(p.id)} aria-label={`${tx('Ir a')} ${p.cliente || p.direccion}`}
                     className="flex w-12 shrink-0 items-center justify-center border-l border-dark-800 text-brand-300"><Navigation size={17} /></button>
                 ) : (
-                  <a href={navegar(p, nav === 'app' ? (enChina(ruta.pais) ? 'amap' : 'google') : nav)} target="_blank" rel="noreferrer" aria-label={`${tx('Ir a')} ${p.cliente || p.direccion}`}
+                  <a href={navegar(p, nav === 'app' ? 'google' : nav)} target="_blank" rel="noreferrer" aria-label={`${tx('Ir a')} ${p.cliente || p.direccion}`}
                     className="flex w-12 shrink-0 items-center justify-center border-l border-dark-800 text-dark-300"><Navigation size={17} /></a>
                 )}
               </div>
@@ -1499,8 +1477,8 @@ export default function MiRuta({ onBack, embebido = false, alTerminar = null }) 
                     <Package size={12} /> {p.hueco ? tx('En la furgoneta: {sitio}', { sitio: tx(p.hueco) }) : tx('¿Dónde va en la furgoneta?')}
                   </button>
                   {/* VER LA PUERTA antes de llegar: solo si la dirección está situada en su portal
-                      (no «aproximada», que es solo la calle) y fuera de China (sin Street View). */}
-                  {p.lat != null && p.geo !== 'aprox' && ruta.pais !== 'cn' && <VerPuerta p={p} />}
+                      (no «aproximada», que es solo la calle). */}
+                  {p.lat != null && p.geo !== 'aprox' && <VerPuerta p={p} />}
                   <button onClick={() => editar(p)} aria-label={`${tx('Editar parada')}: ${p.cliente || p.direccion}`}
                     className="inline-flex items-center gap-1 rounded-lg border border-dark-700 px-2 py-1 text-[12px] font-semibold text-dark-200">
                     <Pencil size={12} /> {tx('Editar')}
@@ -1513,7 +1491,7 @@ export default function MiRuta({ onBack, embebido = false, alTerminar = null }) 
                 <button onClick={() => setGuiando(p.id)}
                   className={`flex flex-col items-center gap-0.5 rounded-xl py-2 text-[11px] ${esSiguiente ? 'bg-brand-500 font-bold text-brand-tinta' : 'border border-dark-700 text-dark-200'}`}><Navigation size={16} /> {tx('Ir')}</button>
               ) : (
-                <a href={navegar(p, nav === 'app' ? (enChina(ruta.pais) ? 'amap' : 'google') : nav)} target="_blank" rel="noreferrer"
+                <a href={navegar(p, nav === 'app' ? 'google' : nav)} target="_blank" rel="noreferrer"
                   className={`flex flex-col items-center gap-0.5 rounded-xl py-2 text-[11px] ${esSiguiente ? 'bg-brand-500 font-bold text-brand-tinta' : 'border border-dark-700 text-dark-200'}`}><Navigation size={16} /> {tx('Ir')}</a>
               )}
               {p.telefono
@@ -2118,7 +2096,7 @@ export function ElegirNavegador() {
       <span className="flex items-center gap-1.5"><Navigation size={15} /> {tx('Navegar con')}</span>
       <select value={nav} onChange={(e) => setNav(e.target.value)} aria-label={tx('Navegador')}
         className="rounded-xl border border-dark-700 bg-dark-950 px-3 py-2 text-[14px] text-dark-50">
-        {(enChina(paisActual()) ? NAVEGADORES_CHINA : NAVEGADORES).map(([k, t]) => <option key={k} value={k}>{tx(t)}</option>)}
+        {NAVEGADORES.map(([k, t]) => <option key={k} value={k}>{tx(t)}</option>)}
       </select>
     </label>
   )

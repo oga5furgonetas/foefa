@@ -60,6 +60,20 @@ def main():
     c.headers["Authorization"] = f"Bearer {s['access_token']}"
     driver_id = s["id"]
 
+    print("Avisos al móvil (push/fcm-token, avisos/mios, avisos/leidos), como AvisosWorker y el portal (29-10-2026)")
+    r = c.post("/push/fcm-token", json={"token": "", "plataforma": "android", "app": "prueba-pc"})
+    ok(r.status_code == 200 and r.json().get("ok") is True and "fcm" in r.json(), f"el móvil se apunta sin token ({r.status_code}, fcm={r.json().get('fcm')})")
+    r = c.get("/avisos/mios")
+    ok(r.status_code == 200 and isinstance(r.json().get("avisos"), list) and isinstance(r.json().get("sin_leer"), int), "la bandeja trae avisos y sin_leer")
+    r = c.get("/avisos/mios", params={"desde": "2000-01-01T00:00:00+00:00"})
+    ok(r.status_code == 200, "la bandeja con desde")
+    r = c.post("/avisos/leidos", json={"ids": []})
+    ok(r.status_code == 200 and r.json().get("ok") is True, "marcar leídos (sin ids: todos)")
+    r = c.post("/push/fcm-token/quitar", json={})
+    ok(r.status_code == 200 and r.json().get("ok") is True, "quitar el móvil al cerrar sesión")
+    r = c.post("/push/fcm-token", json={"token": "", "plataforma": "android", "app": "prueba-pc"})
+    ok(r.status_code == 200, "y se vuelve a apuntar")
+
     print("Contraseña mal: 401 con detail (la app lo enseña como error)")
     r = c.post("/auth/app-login", json={"identifier": CONDUCTOR[0], "password": "mal"})
     ok(r.status_code == 401 and "detail" in r.json(), f"401 con detail ({r.status_code})")

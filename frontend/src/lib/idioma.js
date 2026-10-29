@@ -25,10 +25,10 @@ function cargarTextos() {
    móvil está en un idioma que no tenemos, inglés. */
 
 export const IDIOMAS = {
-  es: 'Español', en: 'English', pt: 'Português', fr: 'Français', it: 'Italiano', de: 'Deutsch', zh: '中文',
+  es: 'Español', en: 'English', pt: 'Português', fr: 'Français', it: 'Italiano', de: 'Deutsch',
 }
 // Para la voz de la navegación y las fechas.
-export const LOCALES = { es: 'es-ES', en: 'en-GB', pt: 'pt-PT', fr: 'fr-FR', it: 'it-IT', de: 'de-DE', zh: 'zh-CN' }
+export const LOCALES = { es: 'es-ES', en: 'en-GB', pt: 'pt-PT', fr: 'fr-FR', it: 'it-IT', de: 'de-DE' }
 
 const CLAVE = 'fds_idioma'
 

@@ -1,4 +1,10 @@
-# La app de Android de Flota (Play Store)
+# La app de Android de FDS (Play Store)
+
+> **29-10-2026**: la TWA (`android/`, incluida la variante de China) ya no existe: la única app es la nativa de
+> `app-android/`. **Versión 2.3.0 (code 18)**: avisos al móvil (bandeja, notificación cada 15 min aunque esté cerrada,
+> FCM opcional con los secretos `FDS_FCM_*`), permiso de notificaciones en Android 13+, y la publicación automática
+> (`app-release.yml` → Play con `PLAY_SERVICE_ACCOUNT_JSON`; la web con `desplegar.yml`). Lo de abajo es historia
+> (la TWA) y la nativa desde la 2.0.0.
 
 Preparada el 03-10-2026 para que un autónomo (o cualquier repartidor o
 empresa) instale Flota desde Play Store. Carpeta `android/` del repo.

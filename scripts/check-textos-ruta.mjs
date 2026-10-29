@@ -1,6 +1,6 @@
 // Comprueba las traducciones de la app de reparto (src/lib/textosRuta*.js):
 // - cada tx('…') literal de las pantallas tiene entrada,
-// - cada entrada trae los 6 idiomas, sin huecos,
+// - cada entrada trae los 5 idiomas (en, pt, fr, it, de), sin huecos,
 // - las variables {x} de cada traducción son las mismas que las del español,
 // - no sobran entradas que ya no usa nadie.
 // Los textos que llegan a tx() desde una lista (motivos, huecos, pestañas…)
@@ -19,7 +19,7 @@ const FICHEROS = [
 ]
 // Nombres que llegan de datos (el plan del autónomo en Registro: tt(planInfo.name)).
 // y los métodos de cobro de lib/region.js (metodosCobro), que se pintan con tx(t).
-const DE_DATOS = ['Repartidor', 'Bizum', 'Transferencia', '高德地图', '百度地图']
+const DE_DATOS = ['Repartidor', 'Bizum', 'Transferencia']
 // Listas cuyos textos se traducen al pintarlos.
 const LISTAS = ['MOTIVOS', 'DONDE', 'NAVEGADORES', 'HUECOS', 'PESTANAS', 'GIROS', 'ORDINALES', 'OPCIONES', 'ESTADO', 'VENTAJAS', 'FORMAS',
   // La portada (/): lo que hace la app, la IA y lo de la empresa.
@@ -70,7 +70,7 @@ const vars = (t) => [...t.matchAll(/\{(\w+)\}/g)].map((m) => m[1]).sort().join('
 const fallos = []
 for (const k of usadas) if (!(k in dic)) fallos.push(`falta traducir: «${k}»`)
 for (const [k, l] of Object.entries(dic)) {
-  if (!Array.isArray(l) || l.length !== 6 || l.some((x) => typeof x !== 'string' || !x.trim())) fallos.push(`incompleta: «${k}»`)
+  if (!Array.isArray(l) || l.length !== 5 || l.some((x) => typeof x !== 'string' || !x.trim())) fallos.push(`incompleta: «${k}»`)
   else l.forEach((x, i) => { if (vars(x) !== vars(k)) fallos.push(`variables distintas (${i}): «${k}» → «${x}»`) })
 }
 dobles.forEach((k) => fallos.push(`repetida en A y B: «${k}»`))
@@ -88,5 +88,5 @@ if (fallos.length) {
   console.error(fallos.join('\n'))
   process.exit(1)
 }
-console.log(`textos de ruta: ${usadas.size} usados, ${Object.keys(dic).length} traducidos a 6 idiomas`)
+console.log(`textos de ruta: ${usadas.size} usados, ${Object.keys(dic).length} traducidos a 5 idiomas`)
 

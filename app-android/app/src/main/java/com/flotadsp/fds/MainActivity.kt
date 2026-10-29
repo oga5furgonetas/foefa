@@ -1,12 +1,16 @@
 package com.flotadsp.fds
 
+import android.Manifest
 import android.content.Intent
 import android.graphics.Color
+import android.os.Build
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.SystemBarStyle
 import androidx.activity.compose.BackHandler
+import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.fadeIn
@@ -62,6 +66,8 @@ class MainActivity : ComponentActivity() {
     private var ref by mutableStateOf<String?>(null)
     private var empresaSlug by mutableStateOf<String?>(null)
     private var sesionPortal by mutableStateOf<Sesion?>(null)
+    // El aviso tocado en la barra de notificaciones (29-10-2026): su enlace, hasta que la pantalla lo atiende.
+    private var abrirAviso by mutableStateOf<String?>(null)
     private lateinit var actualizacion: Actualizacion
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -88,7 +94,7 @@ class MainActivity : ComponentActivity() {
             TemaFds(tema) {
                 Surface(color = MaterialTheme.colorScheme.background, modifier = Modifier.fillMaxSize()) {
                     Box(Modifier.fillMaxSize()) {
-                        Raiz(app, ref, empresaSlug, sesionPortal,
+                        Raiz(app, ref, empresaSlug, sesionPortal, abrirAviso, alAvisoAbierto = { abrirAviso = null },
                             alAbrirPortal = { if (it.app_destino == "empresa") sesionPortal = it },
                             alCerrarEmpresa = { empresaSlug = null; sesionPortal = null })
                         AvisoActualizacion(actualizacion, Modifier.align(Alignment.BottomCenter))
@@ -115,6 +121,7 @@ class MainActivity : ComponentActivity() {
 
     /** El enlace de invitación (…?ref=CODIGO) se guarda para el alta. */
     private fun leerEnlace(i: Intent?) {
+        i?.getStringExtra(com.flotadsp.fds.ui.Notificaciones.EXTRA_URL)?.let { abrirAviso = it }
         val uri = i?.data ?: return
         uri.getQueryParameter("ref")?.takeIf { it.isNotBlank() }?.let { ref = it }
         if (uri.path?.startsWith("/conductor") == true) {
@@ -126,8 +133,8 @@ class MainActivity : ComponentActivity() {
 }
 
 @Composable
-private fun Raiz(app: FdsApp, ref: String?, empresaSlug: String?, sesionPortal: Sesion?,
-                 alAbrirPortal: (Sesion) -> Unit, alCerrarEmpresa: () -> Unit) {
+private fun Raiz(app: FdsApp, ref: String?, empresaSlug: String?, sesionPortal: Sesion?, abrirAviso: String?,
+                 alAvisoAbierto: () -> Unit, alAbrirPortal: (Sesion) -> Unit, alCerrarEmpresa: () -> Unit) {
     if (empresaSlug != null) {
         key(empresaSlug) {
             com.flotadsp.fds.ui.acceso.PortalEmpresa(empresaSlug.ifBlank { null }, alCerrarEmpresa)
@@ -153,8 +160,9 @@ private fun Raiz(app: FdsApp, ref: String?, empresaSlug: String?, sesionPortal: 
         if (dentro && destino == "conductor") {
             com.flotadsp.fds.ui.acceso.PortalConductorNativo(
                 alCerrar = { app.ambito.launch { app.repo.salir() } },
+                abrir = abrirAviso, alAbierto = alAvisoAbierto,
             )
-        } else if (dentro) Principal() else Acceso(ref, alAbrirPortal, aviso = if (caducada) "Tu sesión ha caducado: entra otra vez." else null)
+        } else if (dentro) Principal(abrirAviso, alAvisoAbierto) else Acceso(ref, alAbrirPortal, aviso = if (caducada) "Tu sesión ha caducado: entra otra vez." else null)
     }
 }
 
@@ -166,13 +174,24 @@ private sealed interface Capa {
 }
 
 @Composable
-private fun Principal() {
-    val app = androidx.compose.ui.platform.LocalContext.current.applicationContext as FdsApp
+private fun Principal(abrir: String?, alAbierto: () -> Unit) {
+    val ctx = androidx.compose.ui.platform.LocalContext.current
+    val app = ctx.applicationContext as FdsApp
     val ruta: RutaVM = viewModel()
+    // Los avisos (la ruta de la mañana, el bono) también para quien reparte por su cuenta (29-10-2026): permiso en
+    // Android 13+, la comprobación cada 15 min y este móvil apuntado en el servidor.
+    val pedirAvisos = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { }
+    LaunchedEffect(Unit) {
+        if (Build.VERSION.SDK_INT >= 33 && !com.flotadsp.fds.ui.Notificaciones.permitidas(ctx)) pedirAvisos.launch(Manifest.permission.POST_NOTIFICATIONS)
+        com.flotadsp.fds.data.AvisosWorker.programar(ctx)
+        app.repo.registrarMovil(Fcm.token())
+    }
     val navegar by app.cuenta.navegar.collectAsState()
     val estado by ruta.estado.collectAsState()
     var pestana by rememberSaveable { mutableStateOf("hoy") }
     var capa by remember { mutableStateOf<Capa?>(null) }
+    // Un aviso tocado en la barra de notificaciones: a «Hoy», con la ruta al día.
+    LaunchedEffect(abrir) { if (abrir != null) { pestana = "hoy"; capa = null; ruta.refrescarSinRuido(); alAbierto() } }
     val paisMovil = remember { app.repo.paisDelMovil() ?: "es" }
     val pais = estado.ruta?.pais?.takeIf { it.isNotBlank() } ?: paisMovil
     LaunchedEffect(pais) { Region.pais = pais }      // la moneda de los cobros, la del país de la ruta
