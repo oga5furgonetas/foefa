@@ -46,8 +46,11 @@ jobs:
           KS_B64: ${{ secrets.FLOTA_KEYSTORE_B64 }}
           KS_PASS: ${{ secrets.FLOTA_KEYSTORE_PASSWORD }}
           PLAY_JSON: ${{ secrets.PLAY_SERVICE_ACCOUNT_JSON }}
+          HAY_CF: ${{ secrets.CLOUDFLARE_API_TOKEN != '' && secrets.CLOUDFLARE_ACCOUNT_ID != '' }}
         run: |
           if [ -n "$PLAY_JSON" ]; then echo "play=si" >> "$GITHUB_ENV"; else echo "play=no" >> "$GITHUB_ENV"; echo "Sin PLAY_SERVICE_ACCOUNT_JSON: el AAB se sube a Play a mano."; fi
+          # La web solo se lanza si «Desplegar producción» tiene con qué (sin los secretos de Cloudflare pararía en rojo).
+          if [ "$HAY_CF" = "true" ]; then echo "web=si" >> "$GITHUB_ENV"; else echo "web=no" >> "$GITHUB_ENV"; echo "Sin CLOUDFLARE_API_TOKEN / CLOUDFLARE_ACCOUNT_ID: la web no se lanza sola; el APK queda como artefacto."; fi
           if [ -z "$KS_B64" ] || [ -z "$KS_PASS" ]; then
             echo "Sin FLOTA_KEYSTORE_B64 / FLOTA_KEYSTORE_PASSWORD: se compila SIN FIRMAR (no vale para Play)."
             echo "firmado=no" >> "$GITHUB_ENV"
@@ -107,7 +110,7 @@ jobs:
           inAppUpdatePriority: 3
           mappingFile: app-android/app/build/outputs/mapping/release/mapping.txt
       - name: La web, con este APK (lanza «Desplegar producción», solo la web)
-        if: env.firmado == 'si' && github.event_name == 'push'
+        if: env.firmado == 'si' && env.web == 'si' && github.event_name == 'push'
         env:
           GH_TOKEN: ${{ github.token }}
         run: gh workflow run desplegar.yml --ref main -f que=web
