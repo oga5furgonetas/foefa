@@ -200,9 +200,13 @@ export default function InspectionFlow({ driver, vehicles, onComplete, onLogout,
 
   // Km definitivos: los de la foto, o los tecleados a mano si la foto no valió.
   const odoManualNum = parseInt(String(odoManual).replace(/\D/g, ''), 10)
-  const odoManualValido = odoBloqueado && odoLimites
+  // Sin límites del servidor (el lector no contestó: red, caída, tiempo agotado) se admite cualquier km creíble y
+  // lo juzga el servidor al subir la auditoría (`odometer_rejected` si no cuadra, para que lo vea la oficina).
+  // Hasta el 29-10-2026 sin límites no salía el campo y el conductor no podía seguir ni a mano.
+  const odoLim = odoLimites || { min: 0, max: 999999, dias: 1, actual: 0 }
+  const odoManualValido = odoBloqueado
     && Number.isFinite(odoManualNum)
-    && odoManualNum >= odoLimites.min && odoManualNum <= odoLimites.max
+    && odoManualNum >= odoLim.min && odoManualNum <= odoLim.max
   const odoKmFinal = odoKm > 0 ? odoKm : (odoManualValido ? odoManualNum : null)
 
   const handleChecklistPhoto = async (itemId, e) => {
@@ -549,22 +553,25 @@ export default function InspectionFlow({ driver, vehicles, onComplete, onLogout,
                       </button>
                     )}
 
-                    {/* A mano SOLO cuando la foto no ha servido, y con tope. */}
-                    {odoBloqueado && odoLimites && (
+                    {/* A mano SOLO cuando la foto no ha servido: con el tope del servidor si contestó, y si no, lo que
+                        marque el cuadro (el servidor lo juzga al subir). */}
+                    {odoBloqueado && (
                       <div className="mt-3 border-t border-amber-500/20 pt-2.5">
                         <p className="text-[10px] font-bold uppercase tracking-wider text-amber-400/80">
                           O escribe los km a mano
                         </p>
                         <p className="mt-0.5 text-[10px] leading-snug text-amber-300/70">
-                          Esta furgoneta tenía <b>{odoLimites.actual.toLocaleString()} km</b>.
-                          {' '}Solo se admite entre {odoLimites.min.toLocaleString()} y{' '}
-                          {odoLimites.max.toLocaleString()} km
-                          {odoLimites.dias > 1 ? ` (${odoLimites.dias} días sin registrar)` : ''}.
+                          {odoLimites ? (<>
+                            Esta furgoneta tenía <b>{odoLimites.actual.toLocaleString()} km</b>.
+                            {' '}Solo se admite entre {odoLimites.min.toLocaleString()} y{' '}
+                            {odoLimites.max.toLocaleString()} km
+                            {odoLimites.dias > 1 ? ` (${odoLimites.dias} días sin registrar)` : ''}.
+                          </>) : 'El lector no ha contestado: escribe los km que marca el cuadro. La oficina los revisará.'}
                         </p>
                         <input
                           type="tel" inputMode="numeric" value={odoManual}
                           onChange={(e) => setOdoManual(e.target.value.replace(/\D/g, '').slice(0, 7))}
-                          placeholder={`${odoLimites.actual.toLocaleString()}`}
+                          placeholder={odoLimites ? `${odoLimites.actual.toLocaleString()}` : 'km del cuadro'}
                           className={`mt-2 w-full rounded-lg border-2 bg-dark-900/60 px-3 py-2.5 text-center text-lg font-black tabular-nums text-dark-50 outline-none ${
                             odoManual === '' ? 'border-amber-500/30'
                               : odoManualValido ? 'border-emerald-500/60' : 'border-red-500/60'
@@ -572,9 +579,9 @@ export default function InspectionFlow({ driver, vehicles, onComplete, onLogout,
                         />
                         {odoManual !== '' && !odoManualValido && (
                           <p className="mt-1.5 text-[10px] font-semibold leading-snug text-red-300">
-                            {odoManualNum < odoLimites.min
-                              ? `No puede ser menor que los ${odoLimites.min.toLocaleString()} km que ya tiene registrados.`
-                              : `Son demasiados km de golpe. El máximo es ${odoLimites.max.toLocaleString()}.`}
+                            {odoManualNum < odoLim.min
+                              ? `No puede ser menor que los ${odoLim.min.toLocaleString()} km que ya tiene registrados.`
+                              : `Son demasiados km de golpe. El máximo es ${odoLim.max.toLocaleString()}.`}
                             {' '}Si de verdad marca eso, avisa a tu responsable.
                           </p>
                         )}

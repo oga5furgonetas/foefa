@@ -716,6 +716,17 @@ comprobar aquí (ver abajo lo que decide el CI).
   previas, renovar del conductor, forgot-password, app/version, analítica) y un test unitario de la app
   (`TextosHojaTest`). **El CI compila la app** (job «App Android»: `testDebugUnitTest` + `assembleDebug` en Ubuntu).
 
+**Aviso de un conductor (29-10, 18:20): «No deja subir los kms ni la IA ni manual»** (auditoría del vehículo).
+Causa encontrada leyendo el código: la lectura del cuadro con IA hace dos pasadas en el servidor y puede pasar de
+30 s; la app cortaba a los 30 s («sin conexión») y el campo de escribir los km a mano SOLO salía cuando el servidor
+había contestado con su rango. Sin respuesta, ni IA ni manual: el conductor no podía seguir. En la web pasaba lo
+mismo si la lectura fallaba por red (el campo manual exigía los límites). Arreglado en los dos sitios: las subidas
+de fotos esperan hasta 120 s, y los km a mano se pueden escribir siempre que la foto no haya dado un número (con el
+rango del servidor si lo dio; si no, cualquier km creíble, que el servidor juzga al subir la auditoría y deja en
+`odometer_rejected` para la oficina si no cuadra). Va en la 2.2.5 (app) y en la web (FALTA DESPLEGAR). Si en ese
+caso concreto el rango sí llegó y los km reales están por debajo de lo registrado, lo que falla es el km de la
+ficha de esa furgoneta: lo corrige la oficina desde el panel.
+
 **Veredicto del CI (run 340, commit 87ed7cc)**: el job «App Android» compiló la 2.2.5 en Ubuntu en 5 min 30 s
 (`BUILD SUCCESSFUL`, sin un solo aviso del compilador de Kotlin) y pasó los dos tests unitarios; el backend en verde
 con las 80 comprobaciones del contrato. Es la primera vez que la app se compila fuera de un PC: desde ahora, un

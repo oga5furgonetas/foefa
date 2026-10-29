@@ -202,6 +202,11 @@ paradas de otros días («Traer a hoy»), bono de bienvenida y «Hoy llevas X �
 mapa con el camino por las calles y sin recentrarse; en el portal del conductor, cerrar sesión con pregunta, vuelta
 al escáner tras revisar, teléfono precargado y navegador/tema en «Mi cuenta». Detalle en ESTADO.md (29-10 noche).
 
+Y el aviso de un conductor del 29-10 (18:20), «no deja subir los kms ni la IA ni manual»: la lectura del cuadro
+con IA puede tardar más de 30 s y la app cortaba antes; sin respuesta no salía el campo de escribir los km. Ahora las
+subidas de fotos esperan hasta 120 s y los km se escriben a mano siempre que la foto no haya dado un número.
+
+
 **Compilarla** (PC de casa de Dani, como la 2.2.4; el CI de GitHub ya la compila en cada cambio de `main`, job «App
 Android», que es el primer aviso si algo no compila):
 

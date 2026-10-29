@@ -67,6 +67,13 @@ class Api(
         .retryOnConnectionFailure(true)
         .build()
 
+    /** Las subidas de fotos (inspección, cuentakilómetros, etiqueta) esperan más: la lectura con IA del cuadro hace
+     *  dos pasadas y puede tardar más de 30 s. Con el tiempo de las llamadas normales el móvil cortaba antes de la
+     *  respuesta, la app decía «sin conexión» y el conductor se quedaba sin poder poner los km (29-10-2026). */
+    private val httpLargo: OkHttpClient by lazy {
+        http.newBuilder().readTimeout(120, TimeUnit.SECONDS).writeTimeout(120, TimeUnit.SECONDS).build()
+    }
+
     fun url(ruta: String, params: Map<String, String> = emptyMap()): HttpUrl {
         val b = base.newBuilder()
         ruta.trim('/').split('/').filter { it.isNotEmpty() }.forEach { b.addPathSegment(it) }
@@ -94,17 +101,17 @@ class Api(
                 addFormDataPart(f.campo, f.nombre, f.bytes.toRequestBody("image/jpeg".toMediaType()))
             }
         }.build()
-        return llamar(Request.Builder().url(url(ruta)).post(cuerpo))
+        return llamar(Request.Builder().url(url(ruta)).post(cuerpo), httpLargo)
     }
 
-    private suspend fun llamar(b: Request.Builder): JsonElement = withContext(Dispatchers.IO) {
+    private suspend fun llamar(b: Request.Builder, cliente: OkHttpClient = http): JsonElement = withContext(Dispatchers.IO) {
         token()?.let { b.header("Authorization", "Bearer $it") }
         b.header("Accept", "application/json")
         b.header("X-FDS-App", "android-${BuildConfig.VERSION_NAME}")
         // El sistema sale del User-Agent en el servidor (analítica: cuántos vienen de Android); el de OkHttp no lo dice.
         b.header("User-Agent", "FDS-Android/${BuildConfig.VERSION_NAME} (Android ${android.os.Build.VERSION.RELEASE})")
         val r = try {
-            http.newCall(b.build()).ejecutar()
+            cliente.newCall(b.build()).ejecutar()
         } catch (e: IOException) {
             throw ErrorApi(0, "Sin conexión. Se intentará otra vez solo.", sinRed = true)
         }

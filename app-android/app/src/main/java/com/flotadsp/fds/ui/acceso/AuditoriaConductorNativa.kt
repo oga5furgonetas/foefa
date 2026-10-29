@@ -160,14 +160,22 @@ fun AuditoriaConductorNativa(alVolver: () -> Unit, alCompletar: () -> Unit) {
                     }
                     item.clave == "odometro" -> {
                         fotos[item.clave] = jpg
-                        val lectura = app.repo.leerOdometroInspeccion(vehiculo.orEmpty(), jpg)
-                        val aceptada = lectura["aceptada"]?.jsonPrimitive?.contentOrNull == "true"
-                        kmActual = lectura["current_mileage"]?.jsonPrimitive?.contentOrNull?.toIntOrNull()
-                        kmMin = lectura["manual_min"]?.jsonPrimitive?.contentOrNull?.toIntOrNull()
-                        kmMax = lectura["manual_max"]?.jsonPrimitive?.contentOrNull?.toIntOrNull()
-                        kmDias = lectura["dias"]?.jsonPrimitive?.contentOrNull?.toIntOrNull() ?: 1
-                        km = if (aceptada) lectura["km"]?.jsonPrimitive?.contentOrNull?.toIntOrNull() else null
-                        if (!aceptada) error = lectura["motivo"]?.jsonPrimitive?.contentOrNull ?: "No se pudieron leer los kilómetros. Revisa la foto y escribe el valor dentro del rango indicado."
+                        // Si el lector no contesta (sin red, el servidor tarda, un error), la foto se queda y los km se
+                        // escriben a mano. Hasta el 29-10-2026 el campo de escribirlos solo salía con la respuesta del
+                        // servidor: un conductor avisó de que «no deja subir los km ni la IA ni manual».
+                        val lectura = try { app.repo.leerOdometroInspeccion(vehiculo.orEmpty(), jpg) } catch (e: ErrorApi) { null }
+                        if (lectura == null) {
+                            km = null; kmMin = null; kmMax = null
+                            error = "No se ha podido leer el cuentakilómetros ahora mismo. Escribe los kilómetros que marca el cuadro."
+                        } else {
+                            val aceptada = lectura["aceptada"]?.jsonPrimitive?.contentOrNull == "true"
+                            kmActual = lectura["current_mileage"]?.jsonPrimitive?.contentOrNull?.toIntOrNull()
+                            kmMin = lectura["manual_min"]?.jsonPrimitive?.contentOrNull?.toIntOrNull()
+                            kmMax = lectura["manual_max"]?.jsonPrimitive?.contentOrNull?.toIntOrNull()
+                            kmDias = lectura["dias"]?.jsonPrimitive?.contentOrNull?.toIntOrNull() ?: 1
+                            km = if (aceptada) lectura["km"]?.jsonPrimitive?.contentOrNull?.toIntOrNull() else null
+                            if (!aceptada) error = lectura["motivo"]?.jsonPrimitive?.contentOrNull ?: "No se pudieron leer los kilómetros. Revisa la foto y escribe el valor dentro del rango indicado."
+                        }
                     }
                     else -> fotos[item.clave] = jpg
                 }
@@ -235,15 +243,18 @@ fun AuditoriaConductorNativa(alVolver: () -> Unit, alCompletar: () -> Unit) {
                     Text("Haz las cuatro fotos del vehículo, el cuentakilómetros y el indicador de combustible.")
                     ANGULOS.forEach { (id, label) -> CapturaCard(label, fotos[id] != null, procesando == id) { hacerFoto(id) } }
                     CapturaCard("Cuentakilómetros", fotos["odometro"] != null, procesando == "odometro") { hacerFoto("odometro") }
-                    if (km == null && kmMin != null && kmMax != null) {
-                        Text("La foto no dio una lectura fiable. Indica los kilómetros reales (entre ${kmMin} y ${kmMax}; último registro ${kmActual ?: 0}, hace ${kmDias} días).", style = MaterialTheme.typography.bodySmall)
+                    // A mano siempre que la foto no haya dado un número: con el rango del servidor si lo dio, y si no
+                    // (el lector no contestó) cualquier km creíble, que el servidor juzga al subir la auditoría.
+                    if (km == null && fotos["odometro"] != null) {
+                        Text(if (kmMin != null && kmMax != null) "La foto no dio una lectura fiable. Indica los kilómetros reales (entre ${kmMin} y ${kmMax}; último registro ${kmActual ?: 0}, hace ${kmDias} días)."
+                            else "El lector no ha contestado: escribe los kilómetros que marca el cuadro. La oficina los revisa.", style = MaterialTheme.typography.bodySmall)
                         OutlinedTextField(kmManual, { kmManual = it.filter(Char::isDigit).take(7) }, label = { Text("Kilómetros") }, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number), modifier = Modifier.fillMaxWidth())
                     } else if (km != null) Text("Kilometraje leído: $km km", color = MaterialTheme.colorScheme.primary)
                     CapturaCard("Foto del combustible", fotos["combustible"] != null, procesando == "combustible") { hacerFoto("combustible") }
                     Text("¿Cuánto combustible queda?")
                     Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) { listOf(10, 25, 50, 75, 100).forEach { v -> FilterChip(selected = combustible == v, onClick = { combustible = v }, label = { Text(if (v == 10) "Reserva" else if (v == 100) "Lleno" else "$v%") }) } }
                     val kmFinal = km ?: kmManual.toIntOrNull()
-                    val kmValido = kmFinal != null && kmFinal > 0 && (kmMin == null || kmFinal >= kmMin!!) && (kmMax == null || kmFinal <= kmMax!!)
+                    val kmValido = kmFinal != null && kmFinal > 0 && kmFinal < 1_000_000 && (kmMin == null || kmFinal >= kmMin!!) && (kmMax == null || kmFinal <= kmMax!!)
                     Button(onClick = { paso = 2; error = null }, enabled = fotos.keys.containsAll(ANGULOS.map { it.first }) && fotos["odometro"] != null && kmValido && fotos["combustible"] != null && combustible != null && procesando == null, modifier = Modifier.fillMaxWidth().height(52.dp)) { Text("Continuar · checklist") }
                 }
                 else -> {
