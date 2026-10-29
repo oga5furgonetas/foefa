@@ -1069,8 +1069,33 @@ servidor; cada hallazgo lleva captura o `fichero:línea`. Lo más gordo:
   que el pago) y lo no verificado (productos en Play Console, aviso FCM de punta a punta, Navegar en móvil real).
 No se tocó código de la app ni del servidor en esta sesión: solo el informe, las capturas y este fichero.
 
+## 30-10-2026 (madrugada): lo que de verdad necesita un repartidor, con fuentes, y qué hace FDS
+
+Dani: «piensa como repartidor o busca foros… de qué se quejan y qué le podríamos facilitar», «carga y descarga en el
+mapa, carreteras cortadas, atascos reales», «reestructurar la app, tamaños, colores, más opciones… sin falsos
+positivos». Entregado en **`docs/NECESIDADES-REPARTIDOR-30-10.md`**. Fuentes leídas el 29/30-10: Forocoches (3 hilos),
+Meneame (hilo de un repartidor con diez años, 173 comentarios, 2021), COPE (repartidora: «pagan por paquete
+entregado, no por ausencia»), UOC/HBR (20 % de fallos a la primera) y PCA Predict (15 € por fallo), encuesta de
+Scandit, prensa sobre multas, ZBE (68 ciudades), robos de furgonetas y DeCA, reseñas de Spoke y Zeo, y las fuentes
+de datos de tráfico (DGT NAP DATEX II gratis, Madrid informo, TomTom 2.500 incidencias/mes gratis, OSRM
+`osrm-customize`). Diez necesidades ordenadas por dinero; la primera es **no fallar la entrega**, y hoy FDS no la
+ataca: el WhatsApp es manual (`Hojas.kt:84`) y el enlace de seguimiento es de solo lectura (`server.py:52414`).
+Propuestas con lo que tenemos (`fichero:línea`) y esfuerzo: el enlace del cliente con «¿estarás?», dónde dejarlo,
+código del portal y franja; el registro del intento (hora, llamada, espera) que defiende al repartidor; la app
+aprende la puerta exacta al entregar (hoy el estado no guarda posición, `server.py:52938`); «dónde aparqué»; «aparca
+una vez y entrega 4 a pie»; C/D con horario en la parada; ZBE con fuente y fecha; cortes de la DGT y atascos de TomTom
+en el mapa y «reordenar desde aquí» (hoy el tráfico es un factor por franjas, `reparto.py:285`); orden de carga y
+hueco automático; fallidas en el dinero; pausa de comida; baños en el mapa; DeCA si aplica; y la app: siguiente
+parada lo primero, dos modos (cargando / en ruta), pestañas Hoy · Mapa · Dinero · Yo, números más grandes, batería y
+datos mínimos. Qué no hacer: decir «tráfico en tiempo real» sin velocidades reales, what3words, WhatsApp API sin
+medir coste, bloquear nada por GPS. Tres tandas (A en noviembre). No se tocó código.
+
 ## Pendiente (por prioridad)
 
+-9. **Necesidades reales del repartidor (30-10 madrugada)**: tanda A de `docs/NECESIDADES-REPARTIDOR-30-10.md` →
+   el enlace del cliente con «¿estarás?», dónde dejarlo, código del portal y franja; registro del intento; la app
+   aprende la puerta; «dónde aparqué»; cortes de la DGT en el mapa y «reordenar desde aquí»; fallidas en el dinero;
+   la siguiente parada lo primero. Lo decide Dani.
 -8. **La app nativa del autónomo al nivel de la web antes del 31-12 (29-10 noche, 5)**: tanda 1 de
    `docs/REVISION-APP-AUTONOMO-29-10.md` → pagar dentro de la app (Play Billing en la de Play, Stripe en la `.web`),
    cabecera con «Sales a las» y retraso, tarifa de «Mi dinero hoy», ficha con qué lleva/horario/hueco, historial con
