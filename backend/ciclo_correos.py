@@ -70,7 +70,7 @@ INVITA_ENTREGAS = 10                       # entregas suyas (no de ejemplo) para
 BONO_DESDE = datetime(2026, 10, 16, 22, 0, tzinfo=timezone.utc)   # 17-10-2026 00:00 en Madrid: nace el bono
 BONO_ENTREGAS = 20                         # las del bono (las mismas que «Invita y gana»)
 CON_BONO = ("bienvenida", "primer_dia", "recordatorio")   # correos que llevan el párrafo del bono
-BONO25_ESTADOS = ("trial", "active")      # «bono25»: cuentas vivas (no canceladas ni suspendidas)
+BONO25_FUERA = ("deleted", "baja", "cancelado", "cancelled", "canceled", "suspended")   # «bono25»: a todos menos estos
 PLAY_URL = "https://play.google.com/store/apps/details?id=com.flotadsp.flota"   # la ficha de FDS en Google Play
 OPINION_DESDE = timedelta(days=5)          # «opinion», a los 5 días de darse de alta…
 OPINION_HASTA = timedelta(days=30)         # …y no más tarde (ya no se acuerda de la app)
@@ -196,14 +196,15 @@ def toca(org: dict, uso: dict, ahora: datetime, promo: bool = False, bono: bool 
 
 
 def toca_bono25(org: dict, uso: dict, ahora: datetime, bono_pendiente: bool) -> bool:
-    """¿Le toca el correo «tu primera ruta ahora vale 25 €»? A quien reparte solo, con correo, sin baja, con la
-    cuenta viva, que todavía puede ganar el bono (`bono_pendiente`, lo decide el servidor) y no ha hecho su
-    primera ruta (menos de 20 entregas de verdad). Una vez; nunca a menos de 18 h de otro correo del ciclo;
-    de 9 a 21 de su hora."""
+    """¿Le toca el correo «tu primera ruta ahora vale 25 €»? A TODO el que creó una cuenta para repartir solo
+    (Dani, 29-10: «a los 100; enviar a 5 y dejar a 1 no tendría sentido»), con correo, sin baja, con la cuenta no
+    borrada ni cancelada, que todavía puede ganar el bono (`bono_pendiente`, lo decide el servidor) y no ha hecho
+    su primera ruta (menos de 20 entregas de verdad). Una vez; nunca a menos de 18 h de otro correo del ciclo
+    (se le manda al día siguiente, no se le salta); de 9 a 21 de su hora."""
     o = org or {}
     if not ((o.get("sector") == "autonomo" or o.get("plan") == "autonomo") and o.get("email")
             and not o.get("correos_baja") and not o.get("demo")
-            and str(o.get("status") or "trial") in BONO25_ESTADOS):
+            and str(o.get("status") or "").lower() not in BONO25_FUERA):
         return False
     if not bono_pendiente or _reales(uso) >= BONO_ENTREGAS:
         return False

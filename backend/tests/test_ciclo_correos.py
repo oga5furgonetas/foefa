@@ -597,6 +597,10 @@ def test_bono25_a_quien_reparte_solo_con_el_bono_pendiente_y_sin_primera_ruta():
     assert not cc.toca_bono25(dict(base, ciclo_correos={"bono25": {"at": "2026-10-29T10:00:00+00:00"}}), sin, MEDIODIA, True)
     assert not cc.toca_bono25(dict(base, correos_baja=True), sin, MEDIODIA, True)
     assert not cc.toca_bono25(dict(base, status="cancelled"), sin, MEDIODIA, True)
+    assert not cc.toca_bono25(dict(base, status="baja"), sin, MEDIODIA, True)
+    # Con la prueba acabada o un estado raro también: creó la cuenta para repartir y el bono sigue vivo.
+    assert cc.toca_bono25(dict(base, status="expired"), sin, MEDIODIA, True)
+    assert cc.toca_bono25(dict(base, status=""), sin, MEDIODIA, True)
     assert not cc.toca_bono25(dict(base, demo=True), sin, MEDIODIA, True)
     assert not cc.toca_bono25(dict(base, sector="empresa", plan="pro"), sin, MEDIODIA, True)
     assert not cc.toca_bono25(dict(base, email=""), sin, MEDIODIA, True)

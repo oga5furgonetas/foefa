@@ -22210,10 +22210,14 @@ async def _campana_bono25_vuelta(ahora: Optional[datetime] = None) -> int:
         del_dia = await global_db[_CORREOS_COL].count_documents({"at": {"$gte": hoy}, "ok": True})
         cupo = _CAMPANA_BONO_TOPE_DIA - _CAMPANA_BONO_RESERVA - del_dia
     cupo = min(cupo, _CAMPANA_BONO25_POR_VUELTA)
+    pendientes = await _campana_bono25_pendientes(ahora)
+    # Que se vea en los logs de Fly cuántos quedan: a nadie se le deja fuera, solo se reparte por días si la
+    # cuota no da para todos (Resend: 100 al día entre todos los correos; Brevo: 300).
+    logger.info("campaña bono25: %s pendientes ahora, cupo de esta tanda %s", len(pendientes), max(cupo, 0))
     if cupo <= 0:
         return 0
     n = 0
-    for org, uso, b in (await _campana_bono25_pendientes(ahora))[:cupo]:
+    for org, uso, b in pendientes[:cupo]:
         if await _campana_bono25_enviar(org, uso, b, ahora):
             n += 1
     return n
@@ -22227,7 +22231,8 @@ async def _bucle_campana_bono25():
                 n = await _campana_bono25_vuelta()
                 if n:
                     logger.info("campaña bono25: %s correos", n)
-                await _latido("campana_bono25", enviados=n, cada_min=15, activa=_campana_bono25_activa(), error=None)
+                quedan = len(await _campana_bono25_pendientes()) if _campana_bono25_activa() else 0
+                await _latido("campana_bono25", enviados=n, quedan=quedan, cada_min=15, activa=_campana_bono25_activa(), error=None)
         except Exception as e:                                   # noqa: BLE001
             logger.error("Campaña bono25: %s", e)
             await _latido("campana_bono25", error=str(e)[:200], cada_min=15)
