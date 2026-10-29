@@ -932,6 +932,22 @@ Dani: «eres el community manager de FDS, trabajas desde mi PC» (prompt de `doc
   (03-11). Faltan piezas para el 06-11 y 08-11 (sketches FDS-3/FDS-4) y otra para el 11-11.
 - Visto en @FlotaDSP dos posts de hoy que no son de la sesión; uno nombra a Amazon/SEUR/GLS/MRW (contra la regla). No se toca.
 - Remote Control: el modo automático no deja activarlo desde la sesión; Dani lo enciende desde la barra.
+- **23:35: backend DESPLEGADO con el bono de 25 €** (release v168 de `flota-backend`, imagen de `main` 6949400; el primer
+  `fly deploy --remote-only` construyó la imagen y dio 504 al crear la release, se reintentó con `--image`). Verificado:
+  `/api/billing/planes` → `bono_cent: 2500`, `/api/app/version` → 200. La web también lleva 25 € (desplegada 23:28).
+  Las v165-v167 de esta noche son de otras sesiones y no llevaban el bono (producción no devolvía `bono_cent`).
+- **00:30, canales nuevos y Play**: 2 comentarios en YouTube como @FlotaDSP, 2 ofrecimientos públicos a creadores de TikTok;
+  Reddit bloqueado por el navegador de Claude. **Play Console**: la app sigue en prueba abierta, producción inactiva, 0 reseñas
+  (39 adquisiciones, 26 dispositivos activos en 28 d). Dani: «sube la 2.2.5». Hecho: 178 países en el canal de producción y
+  el borrador de producción abierto para editar; el AAB (`app-android/salida/FDS-2.2.5-code17.aab`, bajado del artefacto del
+  run 40938703587 a `Downloads/FDS-2.2.5/`) **no se puede subir desde la sesión** (el puente del navegador limita a 10 MB):
+  lo arrastra Dani a la caja «Subir» del borrador; después, notas, prioridad de actualización 5 y enviar a revisión.
+- **«Que a las viejas les diga actualiza»** (Dani): commit c39bbf2, `APP_ANDROID_MIN` en el servidor. Toda app desde la 2.0.0
+  manda `X-FDS-App: android-<versión>` y enseña el `detail` en la pantalla de entrar (`Acceso.kt`): con
+  `fly secrets set -a flota-backend APP_ANDROID_MIN="2.2.5"`, al entrar o renovar sesión una app más vieja recibe 426
+  «Hay una versión nueva de FDS. Actualízala en Google Play…». No corta a mitad de ruta (el reparto no mira la versión).
+  **Ponerla SOLO cuando la 2.2.5 esté publicada en Play** (si no, a los de la prueba abierta con 2.2.4 se les bloquea sin
+  tener nada que instalar). Tests en `test_app_version.py`; aquí no hay Python: los pasa el CI. Sin desplegar aún.
 
 ## 29-10-2026 (noche, 3): informe de producto, mercado y estrategia
 

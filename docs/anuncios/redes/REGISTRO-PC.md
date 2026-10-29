@@ -83,7 +83,20 @@ Instagram 0 (nada que contestar); Facebook 0. Proporción con app: 3 de 11.
 ### 29-10 23:30 — bono de bienvenida a 25 €
 - Dani: «súbelo a 25». El código ya lo tenía (`precios.js` BONO_CENT=2500, `server.py` _BONO_CENT=2500, fusión de
   `sweet-brown` 19:50). REDES.md apartado 3 y el post del L 10-11 pasan a 25 € (invita y gana sigue en 10 €/2,50 €).
-  Web redesplegada (`6b19bb8f.flota-2fg.pages.dev`, chequeos y build en verde). **Backend en producción: no
-  verificado** que pague 25 € (`/api/app/version` da 404, así que lo desplegado es anterior al código de hoy).
+  Web redesplegada (`6b19bb8f.flota-2fg.pages.dev`, chequeos y build en verde). Backend desplegado a las 23:35 (release v168) y **verificado**: `/api/billing/planes` devuelve `bono_cent: 2500`.
 - Nada de lo programado hasta el 05-11 menciona el bono. A partir de ahora la sesión del PC lleva las redes en
   bucle de 4 h (pasos 2-6).
+
+### 29-10 23:45 – 00:20 — canales nuevos (Dani: «viralízate, conéctate a cada sitio»)
+| Hora | Red | Dónde | Qué se dijo | App |
+|---|---|---|---|---|
+| 00:02 | YouTube | «la REALIDAD de trabajar en reparto en España» (Geshh, 160K vistas) | tres cosas que quitan una hora al día (orden de carga, aparcar una vez, avisar antes); «hicimos una app gratis para esto (FDS)» | sí, de pasada |
+| 00:06 | YouTube | «Un día en la vida de un repartidor» (Javier Lucena, 24K) | dos móviles en la mano = multa; manos libres por voz; FDS | sí, de pasada |
+| 00:12 | TikTok | @impar.uve «Que opináis?» (hace 1 d) | ofrecimiento público: probar la app y contar en un vídeo qué le falta, sin pagos | sí |
+| 00:16 | TikTok | @unecuatorianoenes «¿Cuántos paquetes entrega un repartidor?» (hace 2 d) | mismo ofrecimiento, otro texto | sí |
+| 00:08 | Google Play | Consola, FDS – Reparto y rutas | **0 reseñas; producción INACTIVA (prueba abierta)**; 39 adquisiciones y 26 dispositivos activos en 28 días. Nada que contestar | — |
+| 00:00 | Reddit | — | **bloqueado por las restricciones del navegador de Claude** («site not allowed»): no se puede usar desde esta sesión | — |
+
+Los comentarios en YouTube salen como @FlotaDSP (canal con sesión en Chrome). Loop de 4 h recreado con estos canales
+(YouTube 2-3 por ronda, un ofrecimiento a creador por ronda, lo nuestro primero). Lo que más frena la viralidad: la app no
+está en producción en Play (no sale en búsquedas) y no tiene reseñas: pendiente de Dani (subir el AAB 17 y pedir producción).

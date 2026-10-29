@@ -5687,6 +5687,35 @@ def _app_android_web() -> Optional[dict]:
     return {"code": int(v[0]), "nombre": v[1]}
 
 
+# LA APP VIEJA TIENE QUE ACTUALIZAR (29-10-2026, Dani: «cuando entren, que les diga actualiza»). Toda app desde la
+# 2.0.0 manda `X-FDS-App: android-<versión>` y enseña el `detail` del servidor en la pantalla de entrar. Con
+#   fly secrets set -a flota-backend APP_ANDROID_MIN="2.2.5"
+# al entrar (app-login) o renovar la sesión, una app anterior recibe 426 con el aviso y el enlace. Sin la variable no
+# se bloquea a nadie. No se corta a mitad de ruta: las llamadas del reparto no miran la versión (se perderían entregas).
+_MSG_APP_VIEJA = ("Hay una versión nueva de FDS. Actualízala en Google Play (o en flotadsp.com/app si la instalaste desde",
+                  " la web) y vuelve a entrar.")
+
+def _version_tupla(v: str) -> tuple:
+    return tuple(int(x) for x in re.findall(r"d+", v or "")[:4])
+
+
+def _app_android_vieja(headers) -> bool:
+    """True si la app que llama es Android y más vieja que APP_ANDROID_MIN (o si no es Android, o no hay mínimo: False)."""
+    minimo = (os.environ.get("APP_ANDROID_MIN") or "").strip()
+    if not re.fullmatch(r"[0-9][0-9.]{0,15}", minimo):
+        return False
+    cabecera = (headers.get("x-fds-app") or headers.get("X-FDS-App") or "").strip()
+    if not cabecera.startswith("android-"):
+        return False
+    actual = _version_tupla(cabecera[len("android-"):])
+    return bool(actual) and actual < _version_tupla(minimo)
+
+
+def _exigir_app_al_dia(request: Optional[Request]) -> None:
+    if request is not None and _app_android_vieja(request.headers):
+        raise HTTPException(status_code=426, detail=_MSG_APP_VIEJA)
+
+
 @api_router.get("/app/version")
 async def app_version():
     """Público: la app de Android lo pregunta al abrirse. `web` es la que hay para descargar de la web, o null."""
@@ -6934,6 +6963,7 @@ async def app_login(data: AppLoginRequest, request: Request):
     de conductores de empresa viven en driver_accounts. No se revela qué tipo
     de cuenta existe para un identificador sin credenciales válidas.
     """
+    _exigir_app_al_dia(request)
     identifier = str(data.identifier or "").strip()
     if not identifier or len(identifier) > 254 or len(data.password or "") > 128:
         raise HTTPException(status_code=401, detail="Correo/usuario o contraseña incorrectos")
@@ -7015,11 +7045,12 @@ def _sesion_propia_de_admin(user: dict) -> bool:
 
 
 @auth_router.post("/renovar", response_model=TokenResponse)
-async def renovar_sesion(user: dict = Depends(get_current_user)):
+async def renovar_sesion(request: Request, user: dict = Depends(get_current_user)):
     """LA APP DE ANDROID NO TE ECHA (25-10-2026). La app nativa del repartidor renueva su sesión al usarla, como
     cualquier app: quien reparte cada día no vuelve a escribir su contraseña. Solo cuentas de quien reparte por
     su cuenta (una persona) y, desde el 29-10-2026, la del conductor de empresa; se vuelve a leer el usuario, así
     que una cuenta desactivada no se renueva."""
+    _exigir_app_al_dia(request)
     if user.get("role") == "driver" and not user.get("demo") and not user.get("imp"):
         # El conductor de empresa (29-10-2026): la misma sesión que le dio app-login, mientras su cuenta y su
         # ficha sigan activas (se vuelven a leer, como con el autónomo). Antes solo se renovaba la del autónomo y
