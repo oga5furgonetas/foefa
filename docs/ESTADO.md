@@ -727,6 +727,18 @@ rango del servidor si lo dio; si no, cualquier km creíble, que el servidor juzg
 caso concreto el rango sí llegó y los km reales están por debajo de lo registrado, lo que falla es el km de la
 ficha de esa furgoneta: lo corrige la oficina desde el panel.
 
+**Aviso de Dani (29-10, 19:40): Karim, Xenxo y Gago «han cambiado la contraseña y ahora les da incorrecta».**
+Causa, leyendo el código (sin acceso a la base desde aquí): una persona con DOS fichas del mismo correo (la
+importación las duplicaba; hay fichas de baja y activas) tiene DOS cuentas en `driver_accounts` (las cuentas en
+bloque se crearon una por ficha, las dos con la misma temporal). El login entraba por la primera cuenta del correo
+(`find_one`), la sesión pasaba a la ficha ACTIVA (`_ficha_activa_de`) y «cambiar contraseña» escribía por
+`driver_id` en la OTRA cuenta. La nueva no abría; la temporal sí (y si la primera cuenta era la de la ficha de baja,
+«Ficha de conductor desactivada»). Arreglado en el servidor (commit de esta nota): el login mira TODAS las cuentas
+del correo y entra por la que abre, prefiriendo la de la ficha activa; una vez que la persona tiene contraseña
+propia en una, la temporal de las otras deja de valer; y cambiarla escribe en todas las cuentas del mismo correo.
+Tests en `test_cuentas_duplicadas.py`. **Mientras no se despliegue**: a los tres les vale su contraseña TEMPORAL
+(sigue en la otra cuenta); tras 5 intentos fallidos hay 5 minutos de bloqueo. Al desplegar, les entra la nueva.
+
 **Veredicto del CI (run 340, commit 87ed7cc)**: el job «App Android» compiló la 2.2.5 en Ubuntu en 5 min 30 s
 (`BUILD SUCCESSFUL`, sin un solo aviso del compilador de Kotlin) y pasó los dos tests unitarios; el backend en verde
 con las 80 comprobaciones del contrato. Es la primera vez que la app se compila fuera de un PC: desde ahora, un

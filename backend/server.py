@@ -7845,6 +7845,27 @@ async def driver_token_by_id(data: dict, request: Request):
     raise HTTPException(status_code=410, detail="Este acceso ya no está disponible. Solicita un código por correo.")
 
 
+def _cuentas_que_cuadran(cuentas: list, password: str) -> list:
+    """De las cuentas de un mismo correo (una por ficha), las que abre esta contraseña, la mejor primero.
+
+    Si la persona ya se puso una propia en alguna (`password_changed_at`), las temporales de las demas
+    dejan de abrir: la temporal era la misma para todas y ya no es suya. Primero la que cambio la persona
+    y, si hay varias, la mas reciente.
+    """
+    propia = any(c.get("password_changed_at") for c in cuentas)
+    validas = []
+    for c in cuentas:
+        if not verify_password(password, c.get("hashed_password", "")):
+            continue
+        temporal = bool(c.get("must_change_password") or c.get("creada_en_bloque"))
+        if propia and temporal:
+            continue
+        validas.append(c)
+    return sorted(validas, key=lambda c: (bool(c.get("password_changed_at")),
+                                          str(c.get("password_changed_at") or c.get("created_at") or "")),
+                  reverse=True)
+
+
 @auth_router.post("/driver-login", response_model=TokenResponse)
 async def driver_login(data: DriverLoginRequest, request: Request):
     rl_key = f"drv:{data.email.lower().strip()}"
@@ -7873,16 +7894,32 @@ async def driver_login(data: DriverLoginRequest, request: Request):
         candidates = [(o, client[_tenant_db_name(o)]) for o in orgs]
     valid_accounts = []
     for candidate_org, candidate_db in candidates:
-        candidate_account = await candidate_db.driver_accounts.find_one(
-            {"email": {"$regex": f"^{re.escape(correo)}$", "$options": "i"}}, {"_id": 0})
-        if not candidate_account:
+        # TODAS las cuentas con ese correo, no la primera (29-10-2026). Una persona con dos fichas (la
+        # importacion las duplicaba) tiene dos cuentas con el mismo correo: `find_one` devolvia siempre la
+        # misma, y la contraseña que acababa de ponerse estaba en la OTRA (cambiarla escribe por `driver_id`,
+        # y la sesion va con la ficha activa). Karim, Xenxo y Gago, el 29-10: «he cambiado la contraseña y
+        # ahora da incorrecta». Entra la cuenta cuya contraseña cuadra (_cuenta_que_cuadra).
+        cuentas = await candidate_db.driver_accounts.find(
+            {"email": {"$regex": f"^{re.escape(correo)}$", "$options": "i"}}, {"_id": 0}).to_list(20)
+        if not cuentas:
             recovery = await candidate_db.driver_recovery_emails.find_one(
                 {"email_norm": correo, "verified_at": {"$exists": True}},
                 {"_id": 0, "driver_id": 1})
             if recovery:
-                candidate_account = await candidate_db.driver_accounts.find_one(
-                    {"driver_id": recovery["driver_id"]}, {"_id": 0})
-        if candidate_account and verify_password(data.password, candidate_account.get("hashed_password", "")):
+                cuentas = await candidate_db.driver_accounts.find(
+                    {"driver_id": recovery["driver_id"]}, {"_id": 0}).to_list(1)
+        validas = _cuentas_que_cuadran(cuentas, data.password)
+        candidate_account = validas[0] if validas else None
+        if len(validas) > 1:
+            # Entre varias que abren, la de la ficha ACTIVA: si no, se entraba por la de baja y el login
+            # contestaba «Ficha de conductor desactivada» a alguien que esta de alta (mismo caso).
+            ids = [c.get("driver_id") for c in validas]
+            fichas = {f["id"]: f for f in await candidate_db.drivers.find(
+                {"id": {"$in": ids}}, {"_id": 0, "id": 1, "active": 1, "created_at": 1}).to_list(20)}
+            mejor = _elegir_ficha([fichas[i] for i in ids if i in fichas])
+            if mejor:
+                candidate_account = next((c for c in validas if c.get("driver_id") == mejor["id"]), candidate_account)
+        if candidate_account:
             valid_accounts.append((candidate_org, candidate_db, candidate_account))
     if len(valid_accounts) != 1:
         await _rl_fail(rl_key, f"conductor '{data.email}' (IP {_rl_key_ip(request)})")
@@ -8328,6 +8365,14 @@ async def change_my_password(data: dict, user: dict = Depends(get_current_user))
 
     if user.get("role") == "driver":
         cuenta = await db.driver_accounts.find_one({"driver_id": user["sub"]})
+        # LA MISMA PERSONA PUEDE TENER VARIAS CUENTAS (una por ficha duplicada, mismo correo), y la sesion va
+        # con la ficha activa mientras el login entro por otra. La contraseña nueva se escribe en TODAS las
+        # del mismo correo (29-10-2026): si no, el login la buscaba en la que no se habia tocado.
+        d = await db.drivers.find_one({"id": user["sub"]}, {"_id": 0, "email": 1})
+        correo = ((cuenta or {}).get("email") or (d or {}).get("email") or "").strip().lower()
+        por_correo = {"email": {"$regex": f"^{re.escape(correo)}$", "$options": "i"}} if correo else None
+        if not cuenta and por_correo:
+            cuenta = await db.driver_accounts.find_one(por_correo)
         if cuenta:
             temporal = bool(cuenta.get("must_change_password") or cuenta.get("creada_en_bloque"))
             if not temporal and not verify_password(current, cuenta["hashed_password"]):
@@ -8337,8 +8382,9 @@ async def change_my_password(data: dict, user: dict = Depends(get_current_user))
                 # contraseña actual se veía fuera de la app. Lo mismo que ya se hizo en borrar-cuenta.
                 raise HTTPException(status_code=400,
                                     detail="La contraseña actual no es correcta")
-            await db.driver_accounts.update_one(
-                {"driver_id": user["sub"]},
+            mias = {"$or": [{"driver_id": user["sub"]}] + ([por_correo] if por_correo else [])}
+            await db.driver_accounts.update_many(
+                mias,
                 {"$set": {"hashed_password": hash_password(new),
                           "password_changed_at": datetime.now(timezone.utc).isoformat()},
                  "$unset": {"must_change_password": "", "creada_en_bloque": ""}})
