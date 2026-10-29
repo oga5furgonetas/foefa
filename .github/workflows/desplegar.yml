@@ -113,7 +113,7 @@ jobs:
           pytest backend/tests -q
 
   backend:
-    name: Backend → Fly (${{ env.FLY_APP }})
+    name: Backend → Fly (flota-backend)
     needs: comprobar
     if: ${{ inputs.que != 'web' }}
     runs-on: ubuntu-latest
@@ -136,7 +136,7 @@ jobs:
           echo "::error::el backend no contesta ok con Mongo tras el despliegue"; exit 1
 
   web:
-    name: Web → Cloudflare Pages (${{ env.PAGES_PROYECTO }})
+    name: Web → Cloudflare Pages (flota)
     needs: comprobar
     if: ${{ inputs.que != 'backend' }}
     runs-on: ubuntu-latest
