@@ -1038,7 +1038,15 @@ nada, revísalo»), **fusionado en `main` (fast-forward hasta 9a0b95d), subido y
 
 ## Pendiente (por prioridad)
 
--7. **La 2.3.0 a Google Play (29-10 noche, Dani)**: subir `C:\Users\dlvie\Downloads\FDS-2.3.0-code18.aab` a la
+-7. **La 2.3.0 a Google Play: ENVIADA A REVISIÓN (30-10 00:35, desde el PC)**. Dani subió el AAB 18 (2.3.0) al borrador de
+   producción; la sesión quitó el bundle 10 (2.0.0) del borrador (sigue en la biblioteca de artefactos), nombre «2.3.0»,
+   notas en es-ES (cámara, ruta por tiempo, sin cobertura, 25 € de bienvenida, invita y gana, actualización in-app) y envió
+   los 3 cambios a revisión (lanzamiento completo + 178 países). Única advertencia: sin símbolos nativos (no bloquea). La
+   **prioridad de actualización in-app no se puede fijar desde la consola** (solo por la API de Play Developer,
+   `inAppUpdatePriority` en `edits.tracks`): si Dani la quiere, va en `app-release.yml` cuando exista `PLAY_SERVICE_ACCOUNT_JSON`.
+   Revisión de Google: hasta 7 días. **Cuando esté publicada**: `fly secrets set -a flota-backend APP_ANDROID_MIN="2.3.0"` para
+   que las 2.2.x pidan actualizar al entrar. De lo de abajo sigue pendiente lo opcional:
+   (antes) subir `C:\Users\dlvie\Downloads\FDS-2.3.0-code18.aab` a la
    prueba abierta en Play Console (o a producción si la 2.2.4 ya salió); texto de novedades: «Avisos en el móvil:
    turnos aprobados, vacantes para trabajar más e inspección pendiente, aunque la app esté cerrada. Una sola marca:
    FDS.». Luego, con un conductor real: aprobarle un día y ver que le salta. Opcional: (1) para que el AAB suba solo,

@@ -100,3 +100,13 @@ Instagram 0 (nada que contestar); Facebook 0. Proporción con app: 3 de 11.
 Los comentarios en YouTube salen como @FlotaDSP (canal con sesión en Chrome). Loop de 4 h recreado con estos canales
 (YouTube 2-3 por ronda, un ofrecimiento a creador por ronda, lo nuestro primero). Lo que más frena la viralidad: la app no
 está en producción en Play (no sale en búsquedas) y no tiene reseñas: pendiente de Dani (subir el AAB 17 y pedir producción).
+
+### 30-10 00:25 – 00:35 — la 2.3.0 enviada a revisión en Google Play
+- Dani subió el AAB 18 (2.3.0) al borrador de producción (la sesión no puede: tope de 10 MB del puente del navegador).
+- En el borrador estaba también el bundle 10 (2.0.0): retirado del borrador (queda en la biblioteca; nada borrado). Un primer
+  intento retiró el 18 por error de fila; se volvió a añadir desde «Añadir de la biblioteca» y se retiró el 10.
+- Nombre «2.3.0», notas es-ES con la oferta de REDES.md §3 (25 € de bienvenida, gratis hasta 31-12-2026). Advertencia única:
+  símbolos nativos no subidos (no bloquea). Guardado y **«Enviar 3 cambios a revisión»** confirmado: en «Resumen de
+  publicación» aparece «Cambios en revisión»: 2.3.0 lanzamiento completo, +177 países y «resto del mundo».
+- La prioridad in-app (4-5 → pantalla completa) no existe en la consola web, solo por API. Pendiente de Dani:
+  `APP_ANDROID_MIN="2.3.0"` en Fly cuando la 2.3.0 esté publicada. Hasta que Google apruebe, la app sigue sin salir en Play.
