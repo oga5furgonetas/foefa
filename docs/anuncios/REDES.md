@@ -164,13 +164,13 @@ yo»). Como @FlotaDSP o la cuenta de TikTok: «la hicimos nosotros».
 
 ## 8. Calendario: 14 días listos (del 30-10 al 12-11)
 
-Hora: X por la mañana (7:30-8:30, antes de cargar) o 21:00; TikTok a las 20:00; Facebook página 13:00.
+Hora: X por la mañana (7:30-8:30, antes de cargar) o 21:00; TikTok a las 18:00 (pico según Metricool; antes se decía 20:00); Instagram y Facebook página a las 12:00.
 Las piezas de vídeo y foto ya existen (`docs/videos/`, `docs/anuncios/tiktok-fotos/`, `reales/salida/tiktok/`,
 `reales/salida/spot-v5-*-puck-web.mp4` en el PC de Dani) y las nuevas del 29-10 en `docs/anuncios/redes/` (tres
 carruseles y cuatro tarjetas para X, textos en `redes/TEXTO.md`, generador `scripts/redes-fotos.mjs`). Dani no graba
 vídeos (29-10): el material lo hace la sesión, una pieza nueva por ronda cuando haga falta.
 
-| Día | X (@FlotaDSP) | TikTok (20:00) | Facebook página |
+| Día | X (@FlotaDSP) | TikTok (18:00) e Instagram (12:00) | Facebook página |
 |---|---|---|---|
 | J 30-10 | ¿Cuánto tardas cada mañana en ordenar la ruta? Nosotros, 40 minutos con 60 paquetes y una libreta. Por eso hicimos FDS: foto a la etiqueta, la dirección entra sola y las paradas se ordenan por tiempo. Gratis y sin límite hasta el 31-12. | Sketch FDS-1 «¿Aún repartes a ojo?» · «¿Tú también repartes a ojo? Foto a la etiqueta → ruta ordenada → voz hasta la puerta. Gratis hasta el 31-12, enlace en el perfil» · comentario fijado: «¿Cuántas paradas haces un día normal? Nos sirve para saber para quién vale» | Texto largo de `app/TEXTOS.md` + `app/1-ruta-sola-4x5.png` |
 | V 31-10 | [imagen `redes/X-primer-dia.png`] Lo que nadie te cuenta al empezar a repartir: 1) el orden de carga importa más que el de la ruta; 2) el que no abre a las 9 abre a las 14; 3) aparca una vez para tres entregas. ¿Cuál añadirías? (sin enlace) | Carrusel «5 trucos para acabar antes la ruta» (`tiktok-fotos/1-portada…7-la-app`, texto de su `TEXTO.md`) | — |

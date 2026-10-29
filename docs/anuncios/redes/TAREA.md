@@ -1,21 +1,22 @@
 # La tarea programada «Redes FDS»
 
-## Cómo se crea (Dani, desde claude.ai)
+## Cómo está montada (29-10-2026, noche)
 
-Las tareas creadas desde DENTRO de una sesión no llevan ni el repositorio ni los conectores: se probó dos veces
-el 29-10 (la sesión que abrían clonaba el repo pero no podía hacer push, y no veía ningún conector), así que esa
-tarea se borró. Hay que crearla desde la pantalla de tareas programadas de claude.ai con:
-
-- **Entorno:** el de Flota en la nube. **Repositorio:** `oga5furgonetas/foefa`. **Conector:** Metricool.
-- **Horario:** 7:51, 12:51 y 19:51 hora de Madrid (`CRON_TZ=Europe/Madrid 51 7,12,19 * * *`).
-- **Instrucciones:** el texto corto de abajo, tal cual.
-- **Avisos al móvil:** solo con novedades.
-
-## Texto corto para la tarea (copiar tal cual)
-
-```
-Eres el community manager de FDS, la app gratuita de reparto de Flota. Ponte en la rama claude/trusting-feynman-0tfz62 (git fetch origin && git checkout claude/trusting-feynman-0tfz62 && git pull origin claude/trusting-feynman-0tfz62), lee docs/anuncios/redes/TAREA.md y haz la ronda exactamente como dice ahí, con el conector Metricool. Al acabar, apunta la ronda en el Registro de docs/anuncios/REDES.md y haz push a esa misma rama. Nunca publiques como un usuario anónimo, nunca inventes cifras, y sin conector no publiques nada.
-```
+- Las tareas que abren una sesión NUEVA no sirven: esa sesión no tiene el repo con permiso de push y, en esta
+  organización, tampoco se le pueden pasar conectores (probado tres veces el 29-10). Por eso la tarea **despierta la
+  sesión en la nube que ya tiene Metricool, el repo y Artlist** (`session_016pE6fk3GgMPorT2VC6UMhQ`) tres veces al día:
+  7:51, 12:51 y 19:51 hora de Madrid (`CRON_TZ=Europe/Madrid 51 7,12,19 * * *`). Dani no tiene que crear nada en
+  «Programadas».
+- Metricool: marca `7741371`, zona horaria `Europe/Madrid`. Enlazado el 29-10 por Dani: TikTok Business `flotadsp`,
+  Instagram `flotadsp`, LinkedIn (página FlotaDSP) y YouTube. **X no** (en Metricool es de pago); **Facebook** aún no.
+- Mejores horas según Metricool (29-10): TikTok 10:00, 12:00 y 18:00 (el pico de la tarde es a las 18:00, no a las
+  20:00); por eso TikTok se programa a las **18:00**. Instagram a las **12:00**. LinkedIn los martes por la mañana.
+- Las imágenes se sirven en `https://flotadsp.com/redes/<fichero>.png` solo cuando la web se despliega con
+  `frontend/public/redes/` (rama mezclada en `main` y `wrangler pages deploy`). Hasta entonces Metricool las rechaza
+  («Failed to normalize media») y solo se puede programar LinkedIn (texto + enlace). Los vídeos de `docs/videos/` no
+  tienen URL pública: para TikTok y YouTube hay que copiarlos también a `frontend/public/redes/` (o subirlos a mano a
+  Metricool) antes de programarlos.
+- Para pararla: desde una sesión, «desactiva la tarea programada Redes FDS», o en «Programadas» de claude.ai.
 
 ## La ronda, paso a paso (esto es lo que sigue la sesión que abre la tarea)
 
@@ -31,17 +32,18 @@ Eres el community manager de FDS, la app gratuita de reparto de Flota. Ponte en 
    LinkedIn página FlotaDSP, YouTube FlotaDSP. **X no está** (en Metricool es de pago): los posts de X del
    calendario se saltan salvo que la sesión tenga un conector de X. **Facebook** (página FDs): solo si Dani la
    enlaza en Metricool; mientras, se salta.
-3. **Qué toca en cada ronda** (hora de Madrid). Antes de nada, mira lo ya programado (la herramienta de
-   publicaciones programadas de Metricool) y el Registro de REDES.md para no duplicar.
+3. **Qué toca en cada ronda** (hora de Madrid). Antes de nada, mira lo ya programado (getScheduledPosts, de hoy a
+   tres semanas vista) y el Registro de REDES.md para no duplicar. Lo mejor es dejar programados los 7 días
+   siguientes en cada ronda, no una pieza por ronda: cada ronda rellena los huecos de la semana que viene.
    - **7:51** → LinkedIn si es martes (texto del apartado 8 de REDES.md, enlace a /planes con utm). YouTube si es
      jueves o domingo: un Short con un vídeo de `docs/videos/` (`shorts-es*.mp4`, `tiktok-es*.mp4`) y la
      descripción de `docs/anuncios/tiktok/DESCRIPCION.txt` o del calendario, con «flotadsp.com/repartidores» y utm
      de youtube. Si la herramienta deja leer y responder comentarios de nuestras publicaciones, contéstalos con las
      plantillas del apartado 7 (nunca el mismo texto dos veces; nunca discutir).
-   - **12:51** → Instagram a las 13:00: la pieza del día del calendario (un carrusel de imágenes va como publicación
+   - **12:51** → Instagram a las 12:00 del día siguiente (o de hoy si aún no ha pasado): la pieza del día del calendario (un carrusel de imágenes va como publicación
      de varias fotos; un vídeo, como reel), con el texto y hashtags de TEXTO.md o del calendario. Facebook página
      igual, si está enlazada.
-   - **19:51** → TikTok a las 20:00: la pieza del día del calendario (vídeo, o carrusel en modo foto con sus
+   - **19:51** → TikTok a las 18:00 del día siguiente: la pieza del día del calendario (vídeo, o carrusel en modo foto con sus
      imágenes en orden), texto y hashtags de TEXTO.md o del calendario, y el comentario fijado si lo hay.
    - **Imágenes:** URL pública `https://flotadsp.com/redes/<fichero>.png` (comprueba con `curl -sI` que da 200; si
      da 404 la web aún no se ha desplegado con ellas: intenta subir el fichero de `frontend/public/redes/`
