@@ -1038,7 +1038,13 @@ nada, revísalo»), **fusionado en `main` (fast-forward hasta 9a0b95d), subido y
 
 ## Pendiente (por prioridad)
 
--7. **La 2.3.0 a Google Play: ENVIADA A REVISIÓN (30-10 00:35, desde el PC)**. Dani subió el AAB 18 (2.3.0) al borrador de
+-7. **La 2.3.0 PUBLICADA en Google Play (29-10 23:42, producción, 178 países) y `APP_ANDROID_MIN="2.3.0"` PUESTA en Fly
+   (30-10 01:00, desde el PC, Dani: «ponla tú»)**. Verificado en producción: `/api/health` ok; `/api/auth/app-login` con
+   `X-FDS-App: android-2.2.5` → **426** con el aviso de actualizar; con `android-2.3.0` o sin cabecera → 401 normal. Todo
+   repartidor tiene todas las funciones: la promoción (`REP_GRATIS_HASTA` 2026-12-31) hace que `_rep_sin_ilimitado` sea
+   False para todos (sin tope de paradas) y `_falta_tarjeta` solo actúa con `prueba_con_tarjeta` (apagado): ningún 402
+   para el plan Repartidor hasta el 31-12. Lo de abajo queda como historia:
+   (antes) ENVIADA A REVISIÓN (30-10 00:35, desde el PC). Dani subió el AAB 18 (2.3.0) al borrador de
    producción; la sesión quitó el bundle 10 (2.0.0) del borrador (sigue en la biblioteca de artefactos), nombre «2.3.0»,
    notas en es-ES (cámara, ruta por tiempo, sin cobertura, 25 € de bienvenida, invita y gana, actualización in-app) y envió
    los 3 cambios a revisión (lanzamiento completo + 178 países). Única advertencia: sin símbolos nativos (no bloquea). La

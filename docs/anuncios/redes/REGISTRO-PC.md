@@ -110,3 +110,12 @@ está en producción en Play (no sale en búsquedas) y no tiene reseñas: pendie
   publicación» aparece «Cambios en revisión»: 2.3.0 lanzamiento completo, +177 países y «resto del mundo».
 - La prioridad in-app (4-5 → pantalla completa) no existe en la consola web, solo por API. Pendiente de Dani:
   `APP_ANDROID_MIN="2.3.0"` en Fly cuando la 2.3.0 esté publicada. Hasta que Google apruebe, la app sigue sin salir en Play.
+
+### 30-10 00:55 – 01:05 — la 2.3.0 ya está en Google Play; APP_ANDROID_MIN puesta
+- Play Console: «2.3.0 · Disponible en Google Play · publicada 29 oct 23:42», producción activa, 178 países (Google la
+  aprobó en minutos). Ya sale en la tienda: a partir de ahora los anuncios pueden enlazar a Play sin la prueba abierta.
+- Dani: «ponla tú» → `fly secrets set -a flota-backend APP_ANDROID_MIN="2.3.0"` (release automática). Verificado:
+  login con `android-2.2.5` → 426 «Hay una versión nueva de FDS. Actualízala en Google Play…»; `android-2.3.0` → 401 normal.
+- Repartidores con todas las funciones: comprobado en el código y en `/api/billing/planes` de producción (promo hasta
+  31-12-2026 → sin tope de paradas ni bloqueo por tarjeta). Enviada a Dani la captura real de una notificación de FDS
+  (`docs/capturas-29-10/emulador-03-notificacion.png`). Cron de comprobación de Play borrado (ya no hace falta).
