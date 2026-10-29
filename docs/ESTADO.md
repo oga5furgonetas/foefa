@@ -766,15 +766,30 @@ España): «utilízame este audio y móntame el vídeo acorde al audio»; y «me
   clonado de solo lectura; sin él, Lanczos + enfoque) y corta zooms 13-17. `e2e/spot-ruta.spec.js` las sirve
   (`TESELAS=`) en vez de las de OSM; el esquemático queda de reserva. A zoom 17 (navegación) se nota que viene de
   zoom 14; con red real la grabación sale nítida sin tocar nada. Mapa limpio: `super-anuncio/mapa-coruna.{jpg,json}`.
-- Lo que NO se pudo desde aquí (sigue igual): bajar los clips de Artlist, la voz de Gemini (sin `GEMINI_API_KEY`
-  en el entorno; ya no hace falta: la voz es la de Dani), publicar en TikTok/Meta/Spotify (sin navegador). Dani
-  añade secretos/dominios en el menú del entorno → Edit (sesión nueva) o sube los vídeos él con SUBIR.md.
+- **Desplegar desde GitHub** (Dani: «despliega el bono de 25 en producción»; desde la nube no se llega a Fly ni a
+  Cloudflare): `.github/workflows/desplegar.yml`, a mano (Actions → «Desplegar producción» → Run workflow, eligiendo
+  rama y qué: todo/backend/web). Hace lo mismo que los .ps1 del PC: guardia anti-FlotaDSP, lint + build + checkers +
+  pytest con Mongo, `flyctl deploy` a `flota-backend` y /api/health, web compilada con la API y el píxel de Meta
+  (`1317231944812644`) cosidos, `wrangler pages deploy --project-name flota --branch main`, comprobación de que
+  producción sirve el bundle nuevo y calentado del edge. **Se lanzó (run 2 del 29-10, 15:18 UTC) y PARÓ en la
+  guardia: faltan los tres secretos del repositorio** `FLY_API_TOKEN` (contenido de
+  `C:\Users\Usuario\.flotia-fly-token.txt`), `CLOUDFLARE_API_TOKEN` (token de API con «Cloudflare Pages: Edit») y
+  `CLOUDFLARE_ACCOUNT_ID`. En cuanto Dani los ponga (Settings → Secrets and variables → Actions), se relanza y
+  despliega. Mientras, el bono de 25 € NO está en producción (sí en el código).
+- **Publicar los anuncios**: desde esta sesión no hay navegador ni red a Meta/TikTok/Spotify. Sí existen conectores
+  en el directorio de claude.ai que lo harían desde una sesión nueva: «TikTok for Business» (oficial: crea campañas,
+  grupos y anuncios) y «Adspirer Social Ads» (Meta Ads e Instagram, y TikTok). Spotify Ad Studio no tiene conector
+  ni API: se sube a mano con `super-anuncio/SUBIR.md` y `spot-dani-9x16-B-30s.mp4`.
+- Lo que NO se pudo desde aquí (sigue igual): bajar los clips de Artlist y la voz de Gemini (ya no hace falta: la
+  voz es la de Dani).
 
 ## Pendiente (por prioridad)
 
 -5. **El anuncio con la voz de Dani (29-10 noche, 2)**: montado en `docs/anuncios/spot-dani/salida/`. Falta:
-   (1) **desplegar el bono de 25 €** (backend + web) antes de que corra; (2) subirlo (Dani, con
-   `super-anuncio/SUBIR.md`: TikTok y Meta el 9:16 B, Spotify el `-30s`, YouTube el 16:9 con QR) y medir;
+   (1) **desplegar el bono de 25 €**: Dani pone los 3 secretos en GitHub y se relanza `desplegar.yml` (o ejecuta
+   `scripts\deploy-backend.ps1` y `deploy-frontend.ps1` en su PC); (2) publicar: conectar «TikTok for Business» y
+   «Adspirer Social Ads» en claude.ai y, en sesión nueva, crear las campañas con el 9:16 B y los enlaces de
+   SUBIR.md; Spotify a mano con el `-30s`; YouTube el 16:9 con QR; medir;
    (3) opcional, para afinar: bajar los 5 clips de Artlist a `super-anuncio/clips/` (`plano-1.mp4`,
    `plano-7a.mp4`, `plano-9.mp4`) y regrabar con red (mapa nítido a zoom 17): el montaje los coge solos.
    El anuncio anterior (voz de Puck, `super-anuncio/salida/`) queda como alternativa.
