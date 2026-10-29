@@ -65,7 +65,7 @@ const S = [
   { id: 'logo', tipo: 'tarjeta', t0: A(F('llega').ini), png: path.join(CAPAS, 'logo.png'), tr: ['zoomin', 0.3] },
   // El mapa ya pintado (justo después del toque hay un fotograma en blanco mientras carga) y a cámara lenta, para
   // que acabe justo antes del toque de las zonas, que es la escena siguiente.
-  { id: 'mapa1', tipo: 'app', t0: A(F('app').ini), a: M.mapa.t + 0.1, vel: 0.85, fx: 540, fy: 900, z0: 1.0, z1: 1.07, tit: path.join(CAPAS, 'titulo-ruta.png'), tr: ['smoothleft', 0.3] },
+  { id: 'mapa1', tipo: 'app', t0: A(F('app').ini), a: M.mapa.t + 0.1, vel: 0.85, fx: 540, fy: 1500, z0: 1.0, z1: 1.07, tit: path.join(CAPAS, 'titulo-ruta.png'), tr: ['smoothleft', 0.3] },
   { id: 'panel', tipo: 'panel', t0: A(F('flotas').ini), tit: path.join(CAPAS, 'titulo-flota.png'), tr: ['slideup', 0.28] },
   { id: 'escanea', tipo: 'app', t0: A(F('organizar').ini), a: M.visor.t - 0.05, hasta: M.bip2.t + 0.9, fx: 540, fy: 1000, z0: 1.0, z1: 1.05, toques: ['tap_otro'], bips: ['bip1', 'bip2'], tit: path.join(CAPAS_RUTA, 'titulo-escaneo.png'), tr: ['slideup', 0.28] },
   { id: 'ordenar', tipo: 'app', t0: A(F('eficiente').ini), a: M.tap_ordenar.t - 0.5, vel: 1, fx: 540, fy: 1100, z0: 1.0, z1: 1.04, toques: ['tap_ordenar'], tit: path.join(CAPAS_RUTA, 'titulo-ordenar.png'), tr: ['smoothup', 0.26] },
