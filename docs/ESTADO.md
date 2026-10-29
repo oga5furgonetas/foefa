@@ -5,7 +5,7 @@
 > haz commit y `git push`. Una sola sesión trabajando a la vez: antes de
 > empezar, `git pull` y comprueba que nadie ha dejado nada a medias aquí.
 
-Última actualización: **29-10-2026 (noche, 3)** (fusionadas en `main` dos sesiones de la noche: la del servidor y la app 2.2.5 —sección «(noche): fase 0…»— y la del anuncio con la VOZ DE DANI y el mapa real de A Coruña, montado en `docs/anuncios/spot-dani/salida/`; ver «Última sesión»). Antes, noche: (anuncio «La ruta hecha»: guion para IA en `docs/anuncios/super-anuncio/` y generaciones en Artlist). Antes, tarde: (el CI de `main` llevaba desde el 18-10 en rojo; checkers arreglados de raíz y todo el CI en verde en local; ver «Última sesión»). Por la mañana: FDS 2.2.3 compilada, probada y firmada, el AAB listo para Play (ver «29-10-2026 (mañana)»).
+Última actualización: **29-10-2026 (noche, 4)**: FDS en todo, fuera Valor y China, avisos al móvil, app 2.3.0; fusionado en `main`, desplegado y verificado (ver «Última sesión — 29-10-2026 (noche, 4)»). Anterior: **29-10-2026 (noche, 3)** (fusionadas en `main` dos sesiones de la noche: la del servidor y la app 2.2.5 —sección «(noche): fase 0…»— y la del anuncio con la VOZ DE DANI y el mapa real de A Coruña, montado en `docs/anuncios/spot-dani/salida/`; ver «Última sesión»). Antes, noche: (anuncio «La ruta hecha»: guion para IA en `docs/anuncios/super-anuncio/` y generaciones en Artlist). Antes, tarde: (el CI de `main` llevaba desde el 18-10 en rojo; checkers arreglados de raíz y todo el CI en verde en local; ver «Última sesión»). Por la mañana: FDS 2.2.3 compilada, probada y firmada, el AAB listo para Play (ver «29-10-2026 (mañana)»).
 
 ## Qué es y dónde está
 
@@ -968,9 +968,27 @@ empresas como prioridad de ventas, cobro en la app, Valor fuera del repo, DeCA).
 Dani: «quita las apuestas y lo de China, unifica todo a FDS; arregla lo de cookies; lo de 3 apps, unificar: cuando
 mejoremos la app que se lance a la web y a Play; para nosotros, si apruebo días a alguien que tiene la app que le
 salte notificación, o si hay un día que puedan solicitar trabajar; después corrige lo que consideres, dame imágenes
-y hacemos el deploy». Todo en la rama **`fds-unificacion`** (worktree `.claude/worktrees/fds-unificacion`: la sesión
-de redes trabajaba a la vez en el checkout principal). **SIN fusionar en `main` ni desplegar**: lo decide Dani (ver
-«Pendiente», -7).
+y hacemos el deploy». Hecho en la rama `fds-unificacion` (worktree `.claude/worktrees/fds-unificacion`, porque la sesión
+de redes trabajaba a la vez en el checkout principal) y, con el sí de Dani («haz lo que tengas que hacer, no rompas
+nada, revísalo»), **fusionado en `main` (fast-forward hasta 9a0b95d), subido y DESPLEGADO** el 29-10 a las 23:05:
+- Antes de fusionar, con `main` ya dentro de la rama: 26 checkers, ESLint, `vite build`, Playwright entero (escritorio y
+  móvil: 533 pasadas, 45 omitidas, 0 fallos), `pytest` entero (**1.270 en verde**, 13 min 42 s), contrato app↔API, Gradle.
+- **Tres fallos que venían de `main`** (commit c39bbf2 de esta tarde, APP_ANDROID_MIN; el CI de `main` estaba en rojo
+  en #356 y #357): la versión se leía con `re.findall(r"d+")` sin la barra (nunca bloqueaba a nadie), el aviso del 426
+  era una tupla (una coma de más) y `renovar_sesion(request, user)` rompía sus tests. Arreglados (9a0b95d) y
+  comprobados contra el servidor de pruebas con `APP_ANDROID_MIN=2.3.0`: `android-2.2.5` → 426 con el texto,
+  `android-2.3.0` y sin cabecera → 200. En producción NO está puesta `APP_ANDROID_MIN` (lo decide Dani).
+- **Backend desplegado** (`fly deploy --remote-only`, segundo intento: el primero falló con un 403 del constructor
+  Depot de Fly, pasajero) con los secretos `MARCA_NOMBRE=FDS` y `APP_ANDROID_WEB="18 2.3.0"`. Verificado:
+  `/api/health` ok con Mongo, `/api/app/version` → `{"web":{"code":18,"nombre":"2.3.0"}}`, las rutas nuevas
+  contestan 401 sin sesión, `/api/valor/*` → 404.
+- **Web desplegada** (build con `VITE_META_PIXEL_ID` y el **APK 2.3.0 cosido en `/descargas/FDS.apk`**, 21,7 MB; sello
+  `index-DLEdKkAK.js`; edge calentado: 276 ficheros). Verificado en flotadsp.com: título «FDS — …», «Dashboard · FDS»,
+  «Planes y precios · FDS», «Entrar» y «plazas limitadas» en /planes, `og.png` nuevo, `/cn` fuera del sitemap.
+- **La app 2.3.0 (code 18) compilada y firmada en este PC** con la clave de subida: `FDS-2.3.0-code18.aab` (35,5 MB,
+  `jarsigner`: jar verified) y `FDS-2.3.0.apk` (`com.flotadsp.flota.web`, `apksigner` ok), en
+  `C:\Users\dlvie\Downloads\` y en `app-android/salida/` del worktree. El CI (`app-release.yml` #4) firma la misma
+  versión como artefacto.
 
 - **Valor (apuestas), fuera**: `backend/valor/`, sus 10 tests, `panel/pages/Valor.jsx`, las rutas `/api/valor/*`, el
   hilo del escáner, el menú (escritorio y móvil) y su prueba de humo. La base `edge_os` de Mongo y el SQLite del
@@ -1020,14 +1038,15 @@ de redes trabajaba a la vez en el checkout principal). **SIN fusionar en `main` 
 
 ## Pendiente (por prioridad)
 
--7. **Fusionar `fds-unificacion` en `main` y desplegar (29-10 noche, lo decide Dani)**: desde `main`,
-   `git merge fds-unificacion`, y `.\scripts\deploy-backend.ps1` + `.\scripts\deploy-frontend.ps1` (o Actions →
-   «Desplegar producción» con los 3 secretos). Al entrar `app-android/` en `main`, `app-release.yml` firma la
-   **2.3.0 (code 18)**: subir el AAB a la prueba abierta (o poner `PLAY_SERVICE_ACCOUNT_JSON` y sube solo) y el APK a
-   la web (lo hace el despliegue de la web si hay `gh` o `FLY_API_TOKEN`; si no, a mano:
-   `fly secrets set -a flota-backend APP_ANDROID_WEB="18 2.3.0"`). Opcional, avisos al instante: proyecto de Firebase →
-   4 secretos `FDS_FCM_*` en GitHub y `FCM_SERVICE_ACCOUNT_JSON` en Fly. Después, probar con un conductor real:
-   aprobarle un día y ver que le llega al móvil.
+-7. **La 2.3.0 a Google Play (29-10 noche, Dani)**: subir `C:\Users\dlvie\Downloads\FDS-2.3.0-code18.aab` a la
+   prueba abierta en Play Console (o a producción si la 2.2.4 ya salió); texto de novedades: «Avisos en el móvil:
+   turnos aprobados, vacantes para trabajar más e inspección pendiente, aunque la app esté cerrada. Una sola marca:
+   FDS.». Luego, con un conductor real: aprobarle un día y ver que le salta. Opcional: (1) para que el AAB suba solo,
+   el secreto `PLAY_SERVICE_ACCOUNT_JSON` en GitHub (en Fly ya existe `GOOGLE_PLAY_CUENTA_SERVICIO`: si esa cuenta
+   tiene permiso de «Publicar en pistas de prueba» en Play Console, vale la misma); (2) para que la web se despliegue
+   sola desde GitHub, `FLY_API_TOKEN`, `CLOUDFLARE_API_TOKEN` y `CLOUDFLARE_ACCOUNT_ID`; (3) avisos al instante:
+   proyecto de Firebase → 4 secretos `FDS_FCM_*` en GitHub y `FCM_SERVICE_ACCOUNT_JSON` en Fly (sin esto, cada 15 min);
+   (4) `APP_ANDROID_MIN` en Fly cuando quiera obligar a actualizar (hoy no está puesta).
 
 -6. **El anuncio con la voz de Dani (29-10 noche, 2)**: montado en `docs/anuncios/spot-dani/salida/`. Falta:
    (1) **desplegar el bono de 25 €**: Dani pone los 3 secretos en GitHub y se relanza `desplegar.yml` (o ejecuta
