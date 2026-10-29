@@ -1,7 +1,10 @@
-# Solo se versionan los másteres que se suben (9:16 B y A, 4:5, 16:9 y el 9:16 del gancho «112»). El resto
+# Solo se versionan los másteres que se suben (9:16 B y A, 4:5, 16:9 y el 9:16 de los ganchos «112» y «25»). El resto
 # (1:1, sin voz y las demás variantes del gancho) se regenera con `node scripts/montar-spot-ruta.mjs`.
 *-1x1-*.mp4
 *-sin-voz*.mp4
 spot-ruta-16x9-A-qr-112.mp4
 spot-ruta-4x5-B-112.mp4
 spot-ruta-9x16-A-qr-112.mp4
+spot-ruta-16x9-A-qr-25.mp4
+spot-ruta-4x5-B-25.mp4
+spot-ruta-9x16-A-qr-25.mp4

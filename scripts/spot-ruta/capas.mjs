@@ -49,6 +49,14 @@ const gancho112 = base(`<div class="velo"></div><div class="g"><div class="n">11
   h1 { margin-top:26px; font-weight:900; font-size:112px; line-height:.98; letter-spacing:-.035em; text-shadow: 0 8px 40px rgba(0,0,0,.6) }
 `)
 
+// El gancho «dinero» (29-10, Dani: «empezar con ¿quieres 25 € gratis?; captar la atención y que vean el vídeo»).
+// Con la condición a la vista, que es lo que lo hace verdad y lo que Meta no tumba.
+const gancho25 = base(`<div class="velo"></div><div class="g"><div class="n">¿Quieres<br>25 €?</div><h1>Te los damos<br>por tu primera ruta.</h1></div>`, `
+  .velo { position:absolute; left:0; right:0; top:560px; bottom:0; background: linear-gradient(180deg, transparent, rgba(0,0,0,.74) 45%, rgba(0,0,0,.9)) }
+  .g { position:absolute; left:70px; right:100px; top:880px }
+  .n { font-weight:900; font-size:176px; line-height:.92; letter-spacing:-.05em; color:#FFD43B; text-shadow: 0 10px 40px rgba(0,0,0,.6) }
+  h1 { margin-top:34px; font-weight:900; font-size:92px; line-height:1.0; letter-spacing:-.035em; text-shadow: 0 8px 40px rgba(0,0,0,.6) }
+`)
 // El pago emocional, sobre el plano del repartidor.
 const manana = base(`<div class="velo"></div><div class="g"><h1>Mañana sales<br>con la ruta <em>hecha.</em></h1></div>`, `
   .velo { position:absolute; left:0; right:0; top:560px; bottom:0; background: linear-gradient(180deg, transparent, rgba(0,0,0,.70) 45%, rgba(0,0,0,.88)) }
@@ -153,6 +161,7 @@ const pinta = async (nombre, html) => {
 }
 for (const [k, t] of Object.entries(PILDORAS)) await pinta(`pildora-${k}.png`, pildora(t))
 await pinta('gancho-112.png', gancho112)
+await pinta('gancho-25.png', gancho25)
 await pinta('manana.png', manana)
 await pinta('oferta.png', oferta)
 await pinta('cierre-B.png', cierreB)

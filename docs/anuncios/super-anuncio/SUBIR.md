@@ -11,8 +11,8 @@ pulsas tú; es gasto.
    (`docs/ESTADO.md` → «Cómo desplegar») ANTES de que corra un anuncio que lo promete. Condiciones (Términos):
    20 entregas a direcciones distintas, en 2 días distintos, dentro de los primeros 30 días; alta hasta el 31-12;
    una vez por persona.
-2. Los vídeos: `salida/spot-ruta-9x16-B.mp4` (móvil), `spot-ruta-4x5-B.mp4` (feed), `spot-ruta-16x9-A-qr.mp4`
-   (YouTube/pantallas). Si se regraba con el mapa real y la voz de España (GENERADO.md), sustituir por los nuevos.
+2. Los vídeos: `salida/spot-ruta-9x16-B-25.mp4` (móvil, gancho del dinero), `spot-ruta-9x16-B.mp4` (gancho «a
+   mano»), `spot-ruta-4x5-B.mp4` (feed), `spot-ruta-16x9-A-qr.mp4` (YouTube/pantallas). Si se regraba con el mapa real y la voz de España (GENERADO.md), sustituir por los nuevos.
 
 ## Enlaces (con atribución)
 
@@ -28,6 +28,22 @@ pulsas tú; es gasto.
   `https://flotadsp.com/registro?sector=autonomo&plan=autonomo&utm_source=facebook&utm_content=rutahecha`
   (TikTok: `utm_source=tiktok`). Tras el alta, la web ofrece instalar la app.
   Recomendación: **dos conjuntos**: Android → Play directo; iPhone y escritorio → alta web. Se comparan a los 7 días.
+
+## El orden que pidió Dani: primero el dinero, luego el vídeo, luego la descarga
+
+`salida/spot-ruta-9x16-B-25.mp4` abre con «¿Quieres 25 €? Te los damos por tu primera ruta.» y sigue igual (la app,
+la oferta con el bono y el cierre). Es el que se sube PRIMERO; el de «¿Todavía ordenas la ruta a mano?» y el de
+«112 paquetes» van en el mismo conjunto como segundo y tercer anuncio, y a los 3 días se queda el de mejor tasa de
+enganche a 3 s (≥2.000 impresiones por anuncio). El texto del anuncio también abre con el dinero:
+
+> **Meta (dinero primero)**: ¿Quieres 25 €? Completa tu primera ruta con FDS y son tuyos. Foto o escaneo a la
+> etiqueta y la dirección entra sola; pulsa ordenar y tienes la ruta hecha, con la hora de cada parada; te lleva con
+> voz hasta cada puerta. Empieza gratis y sin tarjeta. 20 entregas en 2 días, hasta el 31 de diciembre.
+> **TikTok (≤100)**: ¿Quieres 25 €? Son tuyos con tu primera ruta en FDS. La ruta se hace sola. Empieza gratis.
+
+Lo que no se dice: «25 € gratis» a secas ni «te pagamos por repartir». La condición (primera ruta: 20 entregas
+en 2 días) va siempre al lado del importe; así es verdad, Meta no lo tumba por «ingresos prometidos» y nadie se
+siente engañado al cobrar.
 
 ## Textos (verdades: todo lo que dicen lo hace la app hoy; el bono, al desplegar)
 

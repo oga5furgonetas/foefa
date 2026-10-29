@@ -56,8 +56,8 @@ const vd = (n) => voz[n - 1].dur
 // toques = anillos, et = píldora). 'tarjeta': capa sobre fondo.
 const toqueEntrega = M.tap_hacer_foto ? 'tap_hacer_foto' : 'tap_sin_foto'
 const S = [
-  GANCHO === '112'
-    ? { id: 'gancho', tipo: 'still', still: 'plano-1-furgoneta-llena.jpg', clip: 'plano-1.mp4', capa: path.join(CAPAS, 'gancho-112.png'), d: 2.6, kb: [1.0, 1.1], tr: ['zoomin', 0.32] }
+  GANCHO !== 'mano'
+    ? { id: 'gancho', tipo: 'still', still: 'plano-1-furgoneta-llena.jpg', clip: 'plano-1.mp4', capa: path.join(CAPAS, `gancho-${GANCHO}.png`), d: GANCHO === '25' ? 2.9 : 2.6, kb: [1.0, 1.1], tr: ['zoomin', 0.32] }
     : { id: 'gancho', tipo: 'still', still: 'plano-1-furgoneta-llena.jpg', clip: 'plano-1.mp4', capa: path.join(V4, 'gancho.png'), d: +(vd(1) + 0.65).toFixed(2), kb: [1.0, 1.1], tr: ['zoomin', 0.32] },
   { id: 'escanea', tipo: 'app', a: M.visor.t - 0.05, hasta: M.bip2.t + 1.0, dMax: 3.4, fx: 540, fy: 1000, z0: 1.0, z1: 1.05, toques: ['tap_otro'], bips: ['bip1', 'bip2'], tit: 'escaneo', tr: ['slideup', 0.28] },
   { id: 'foto', tipo: 'app', a: M.leido.t - 0.05, hasta: M.lista3.t + 0.4, dMax: 2.0, fx: 540, fy: 760, z0: 1.0, z1: 1.05, toques: ['tap_anadir'], tit: 'escaneo', tr: ['slideup', 0.3] },
@@ -169,7 +169,7 @@ unir(clips, unido)
 
 // ── Subtítulos palabra a palabra (frases 2-4, sobre la app) ─────────────────────────────────────
 const INICIO = { 1: T.gancho + 0.3, 2: T.escanea + 0.15, 3: T.ordenar + 0.12, 4: T.mapa + 0.1, 5: T.oferta + 0.3, 6: T.cierre + 0.35 }
-if (GANCHO === '112') delete INICIO[1]
+if (GANCHO !== 'mano') delete INICIO[1]   // el gancho de texto va sin voz
 const ass = (t) => { const h = Math.floor(t / 3600); const m = Math.floor((t % 3600) / 60); const s = (t % 60).toFixed(2).padStart(5, '0'); return `${h}:${String(m).padStart(2, '0')}:${s}` }
 let eventos = ''
 for (const n of [2, 3, 4]) {
@@ -292,7 +292,7 @@ const v = (base, nombre, args) => {
   console.log('→', path.relative(RAIZ, dest), (fs.statSync(dest).size / 1e6).toFixed(1), 'MB')
 }
 const columna = (an, al) => ['-filter_complex', `[0:v]split[a][b];[a]scale=${an}:${al}:force_original_aspect_ratio=increase,crop=${an}:${al},boxblur=40:3,eq=brightness=-0.3:saturation=0.9[bg];[b]scale=-2:${al}[fg];[bg][fg]overlay=(W-w)/2:0,format=yuv420p[v]`, '-map', '[v]', '-map', '0:a']
-const suf = GANCHO === '112' ? '-112' : ''
+const suf = GANCHO === 'mano' ? '' : `-${GANCHO}`
 v(finalB, `9x16-B${suf}`, [])
 v(finalA, `9x16-A-qr${suf}`, [])
 v(finalB, `4x5-B${suf}`, columna(1080, 1350))
