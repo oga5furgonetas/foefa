@@ -739,6 +739,13 @@ propia en una, la temporal de las otras deja de valer; y cambiarla escribe en to
 Tests en `test_cuentas_duplicadas.py`. **Mientras no se despliegue**: a los tres les vale su contraseña TEMPORAL
 (sigue en la otra cuenta); tras 5 intentos fallidos hay 5 minutos de bloqueo. Al desplegar, les entra la nueva.
 
+**Backend DESPLEGADO el 29-10 a las 20:00 (4d2e1b4, run 343 del CI en verde)** desde el PC de casa de Dani. Costó
+tres intentos: la copia del PC estaba en la rama `claude/pensive-goodall-zthly3` (la del spot de Spotify), `git pull`
+decía «Already up to date» y Depot subía la misma imagen (`CACHED [6/7] COPY . .`). Desde entonces el PC está en
+`main`: antes de cada despliegue, `git checkout main` y `git pull`, y mirar que `git log -1` sea el commit que toca.
+Comprobación: `curl.exe -s https://flota-backend.fly.dev/api/app/version` → `{"web":null}`. **Falta la web**
+(`npx.cmd`, no `npx`: PowerShell bloquea los `.ps1`) y la app 2.2.5.
+
 **Veredicto del CI (run 340, commit 87ed7cc)**: el job «App Android» compiló la 2.2.5 en Ubuntu en 5 min 30 s
 (`BUILD SUCCESSFUL`, sin un solo aviso del compilador de Kotlin) y pasó los dos tests unitarios; el backend en verde
 con las 80 comprobaciones del contrato. Es la primera vez que la app se compila fuera de un PC: desde ahora, un
@@ -771,9 +778,9 @@ cambio en Kotlin que no compile se ve en `main` sin esperar al `gradlew` de Dani
    portal del conductor cerrar sesión con pregunta) y subir el AAB 17 a la prueba abierta. Al subir el APK a la web:
    `fly secrets set -a flota-backend APP_ANDROID_WEB="17 2.2.5"` (si no, nadie recibe el aviso de descargar).
 
--4. **Desplegar y decidir (29-10 noche)**: desplegar el backend (fase 0 del estudio + `auth/renovar` del conductor +
-   `/app/version`; hasta que esté, la 2.2.5 funciona igual pero sin esas tres cosas) y la web (página de planes,
-   aviso de ubicación, fichas de ayuda y colores) desde el PC; leer `docs/ESTUDIO_APP.md` y decidir lo de su
+-4. **Desplegar y decidir (29-10 noche)**: backend DESPLEGADO (4d2e1b4, 20:00). Falta la web (página de planes,
+   aviso de ubicación, fichas de ayuda y colores, y los km a mano de la auditoría) desde el PC con `npx.cmd`;
+   leer `docs/ESTUDIO_APP.md` y decidir lo de su
    apartado 6 (público de los anuncios, cómo se cobra en la app antes del 31-12, OSRM propio, Gemini de pago, las
    cuatro rutas heredadas). Fase 0 HECHA (29-10 noche); fase 1 en la 2.2.5 salvo FCM (avisos push) y los textos a
    `strings.xml`.
