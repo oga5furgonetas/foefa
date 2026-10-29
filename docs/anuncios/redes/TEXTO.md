@@ -1,5 +1,8 @@
 # Piezas para las redes (29-10-2026): textos de cada una
 
+Las imágenes están en `frontend/public/redes/` y, cuando la web se despliega, en **https://flotadsp.com/redes/<fichero>**
+(por ejemplo https://flotadsp.com/redes/A-1-portada.png): es la URL que se le da a Metricool. Los vídeos siguen en `docs/videos/`.
+
 Se generan con `cd frontend && node ../scripts/redes-fotos.mjs` (desde la nube vale con el Playwright del sistema).
 Fondos: los de Pexels de `tiktok-fotos/fondos` (solo enseñan el oficio; nadie «usa» FDS en ellos). Si en
 `redes/fondos/` están `furgoneta-amanecer.jpg`, `interior-paquetes.jpg` y `libreta-salpicadero.jpg`, el script

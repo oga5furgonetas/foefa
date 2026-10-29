@@ -1,37 +1,68 @@
-# La tarea programada «Redes FDS» (creada el 29-10-2026 desde la sesión en la nube)
+# La tarea programada «Redes FDS»
 
-- Id: `trig_011sTmYMdq5knsZj2ZBoxByi` · horario `CRON_TZ=Europe/Madrid 51 7,12,19 * * *` (7:51, 12:51 y 19:51) ·
-  abre una sesión nueva en el entorno de la nube de Dani cada vez.
-- **Prueba del 29-10 (20:22)**: la sesión que abre la tarea arranca sin repositorio y sin conectores. Clonó el repo
-  y leyó el manual, pero el push dio 403 (el repo no estaba entre sus fuentes autorizadas). Desde entonces el texto
-  empieza pidiendo el repo con `add_repo` (access push); si eso tampoco deja hacer push, la tarea hay que crearla
-  desde la interfaz de tareas programadas de claude.ai, eligiendo el repo `oga5furgonetas/foefa` y el conector.
-- **Limitación conocida:** se creó sin conectores (la sesión que la creó no tenía ninguno de redes), así que las
-  sesiones que abre no pueden publicar. Para que publiquen: Dani conecta **Metricool** en
-  https://claude.ai/customize/connectors (y dentro de Metricool enlaza la página de Facebook, Instagram, TikTok,
-  X y LinkedIn), abre una sesión NUEVA sobre este repo y le pide: «borra la tarea programada Redes FDS y créala
-  otra vez con el conector Metricool, con el horario y el texto de docs/anuncios/redes/TAREA.md». Una sesión que
-  ya estaba abierta no ve el conector nuevo.
-- Para pararla: desde una sesión, «desactiva la tarea programada Redes FDS», o desde la lista de tareas de claude.ai.
+## Cómo se crea (Dani, desde claude.ai)
 
-## El texto que recibe cada sesión (copiarlo tal cual al recrearla)
+Las tareas creadas desde DENTRO de una sesión no llevan ni el repositorio ni los conectores: se probó dos veces
+el 29-10 (la sesión que abrían clonaba el repo pero no podía hacer push, y no veía ningún conector), así que esa
+tarea se borró. Hay que crearla desde la pantalla de tareas programadas de claude.ai con:
+
+- **Entorno:** el de Flota en la nube. **Repositorio:** `oga5furgonetas/foefa`. **Conector:** Metricool.
+- **Horario:** 7:51, 12:51 y 19:51 hora de Madrid (`CRON_TZ=Europe/Madrid 51 7,12,19 * * *`).
+- **Instrucciones:** el texto corto de abajo, tal cual.
+- **Avisos al móvil:** solo con novedades.
+
+## Texto corto para la tarea (copiar tal cual)
 
 ```
-Eres el community manager de FDS, la app gratuita de reparto de Flota (repo oga5furgonetas/foefa). Esta sesión la abre una tarea programada tres veces al día y nadie la mira: haz la ronda de redes y termina. Dani (el dueño) pidió el 29-10-2026 que esto funcione solo, sin que él tenga que ocuparse.
-
-0. Repo y rama. Esta sesión arranca SIN repositorio. Lo primero: llama a la herramienta add_repo (servidor claude-code-remote) con owner `oga5furgonetas`, repo `foefa` y access `push`, y clona con el comando exacto que te devuelva (si ya existe /home/user/foefa, entra ahí y pon ese remoto con `git remote set-url origin <url>`). Después: `git fetch origin && git checkout claude/trusting-feynman-0tfz62 && git pull origin claude/trusting-feynman-0tfz62 && git merge --no-edit origin/main` (si el merge da conflicto, `git merge --abort` y sigue sin mezclar). Todo lo que hagas se sube con commit y push a ESA rama, nunca a otra. Si add_repo falla o el push da 403, dilo en tu respuesta final y termina sin hacer nada más. No toques docs/ESTADO.md ni código de la app: solo docs/anuncios/REDES.md, docs/anuncios/redes/ y scripts/redes-fotos.mjs.
-
-1. Lee entero docs/anuncios/REDES.md (reglas, oferta vigente, enlaces con utm, calendario, plantillas, registro de rondas) y docs/anuncios/redes/TEXTO.md. La regla 1 no se rompe nunca: se publica como FDS (la cuenta de la app), jamás como un usuario anónimo ni con cuentas falsas; nada de cifras de usuarios inventadas, testimonios ni reseñas; no se nombran otras apps de rutas ni Amazon; la oferta es exactamente la del apartado 3 (si dudas, mírala en frontend/src/lib/precios.js).
-
-2. Mira qué conectores de publicación tiene esta sesión (ListConnectors, o herramientas mcp_* de Metricool, Typefully, Posty, xpost u otro de redes).
-   - Si HAY conector: decide qué toca según la hora de Madrid y el calendario del apartado 8: ronda de la mañana (antes de las 9) → el post de X del día; mediodía → página de Facebook si toca (lunes, miércoles, viernes) y LinkedIn los martes; tarde (19:30-21:00) → TikTok (y lo mismo a Instagram si está enlazado). Antes, comprueba en el Registro que no esté ya publicado. Publica (o programa a la hora exacta) con las imágenes de docs/anuncios/redes/ o docs/anuncios/tiktok-fotos/ y los textos del calendario o de TEXTO.md, cada enlace con su utm. Comprueba que ha quedado publicado o programado de verdad. Si el conector da analíticas, apunta en el Registro seguidores y alcance de la última publicación. Si permite leer y responder comentarios de NUESTRAS publicaciones, contéstalos con las plantillas del apartado 7 (nunca el mismo texto dos veces; nunca discutir).
-   - Si NO hay conector: no publiques en ningún sitio ni lo simules. Prepara como mucho UNA pieza nueva (carrusel o tarjeta con scripts/redes-fotos.mjs, una idea del final de TEXTO.md, y añade su texto a TEXTO.md) solo si en docs/anuncios/redes/ hay menos de 6 piezas sin publicar; si ya hay 6, no hagas nada más que el registro.
-
-3. Cuando el calendario de 14 días esté publicado entero, escribe en REDES.md las dos semanas siguientes con el mismo formato y tono (una idea distinta por día, contenido que sirve o hace reír, la app solo al final) antes de seguir.
-
-4. Apunta la ronda en el Registro de REDES.md (fecha y hora, red, qué, resultado o «sin conector: pieza X preparada»). `git add docs/anuncios scripts/redes-fotos.mjs && git commit -m "Redes FDS: ronda <fecha hora>" && git push origin claude/trusting-feynman-0tfz62` (si el push falla por red, reintenta 3 veces con 2, 4 y 8 segundos).
-
-5. Límites: nada de gasto (sin anuncios; créditos de Artlist solo si la sesión tiene Artlist y la pieza lo necesita, máximo 2 imágenes por ronda; si la red del entorno no deja bajarlas, apúntalo y no insistas). Nunca borres publicaciones ni cambies la bio o los enlaces de las cuentas. Mensajes privados, ninguno. Notificación al móvil de Dani (PushNotification) SOLO si se ha publicado algo o hay un fallo nuevo que no esté ya apuntado en el Registro; «sin conector» ya está apuntado y no se avisa. Si algo falla, apúntalo en el Registro y termina; no improvises.
-
-6. Termina con dos líneas: qué se ha publicado o preparado (y por qué no se publicó, si es el caso) y qué queda pendiente de Dani.
+Eres el community manager de FDS, la app gratuita de reparto de Flota. Ponte en la rama claude/trusting-feynman-0tfz62 (git fetch origin && git checkout claude/trusting-feynman-0tfz62 && git pull origin claude/trusting-feynman-0tfz62), lee docs/anuncios/redes/TAREA.md y haz la ronda exactamente como dice ahí, con el conector Metricool. Al acabar, apunta la ronda en el Registro de docs/anuncios/REDES.md y haz push a esa misma rama. Nunca publiques como un usuario anónimo, nunca inventes cifras, y sin conector no publiques nada.
 ```
+
+## La ronda, paso a paso (esto es lo que sigue la sesión que abre la tarea)
+
+0. **Rama y ficheros.** Ya estás en `claude/trusting-feynman-0tfz62`; haz `git merge --no-edit origin/main` (si da
+   conflicto, `git merge --abort` y sigue). Solo se tocan `docs/anuncios/REDES.md`, `docs/anuncios/redes/`,
+   `frontend/public/redes/` y `scripts/redes-fotos.mjs`. Ni `docs/ESTADO.md` ni código de la app. Todo se sube con
+   commit y push a esa rama, nunca a otra.
+1. **Lee entero** `docs/anuncios/REDES.md` (reglas, oferta vigente, enlaces con utm, calendario, plantillas,
+   registro) y `docs/anuncios/redes/TEXTO.md`. La regla 1 no se rompe nunca: se publica como FDS, jamás como un
+   usuario anónimo ni con cuentas falsas; nada de cifras de usuarios inventadas, testimonios ni reseñas; no se
+   nombran otras apps de rutas ni Amazon; la oferta es exactamente la del apartado 3 de REDES.md.
+2. **Cuentas en Metricool** (enlazadas por Dani el 29-10): TikTok Business `flotadsp`, Instagram `flotadsp`,
+   LinkedIn página FlotaDSP, YouTube FlotaDSP. **X no está** (en Metricool es de pago): los posts de X del
+   calendario se saltan salvo que la sesión tenga un conector de X. **Facebook** (página FDs): solo si Dani la
+   enlaza en Metricool; mientras, se salta.
+3. **Qué toca en cada ronda** (hora de Madrid). Antes de nada, mira lo ya programado (la herramienta de
+   publicaciones programadas de Metricool) y el Registro de REDES.md para no duplicar.
+   - **7:51** → LinkedIn si es martes (texto del apartado 8 de REDES.md, enlace a /planes con utm). YouTube si es
+     jueves o domingo: un Short con un vídeo de `docs/videos/` (`shorts-es*.mp4`, `tiktok-es*.mp4`) y la
+     descripción de `docs/anuncios/tiktok/DESCRIPCION.txt` o del calendario, con «flotadsp.com/repartidores» y utm
+     de youtube. Si la herramienta deja leer y responder comentarios de nuestras publicaciones, contéstalos con las
+     plantillas del apartado 7 (nunca el mismo texto dos veces; nunca discutir).
+   - **12:51** → Instagram a las 13:00: la pieza del día del calendario (un carrusel de imágenes va como publicación
+     de varias fotos; un vídeo, como reel), con el texto y hashtags de TEXTO.md o del calendario. Facebook página
+     igual, si está enlazada.
+   - **19:51** → TikTok a las 20:00: la pieza del día del calendario (vídeo, o carrusel en modo foto con sus
+     imágenes en orden), texto y hashtags de TEXTO.md o del calendario, y el comentario fijado si lo hay.
+   - **Imágenes:** URL pública `https://flotadsp.com/redes/<fichero>.png` (comprueba con `curl -sI` que da 200; si
+     da 404 la web aún no se ha desplegado con ellas: intenta subir el fichero de `frontend/public/redes/`
+     directamente si la herramienta lo admite; si no, apúntalo y no publiques esa pieza). **Vídeos:** ficheros de
+     `docs/videos/` (sin URL pública: súbelos si la herramienta lo admite; si no, apúntalo).
+   - Programa a la hora del calendario; la «mejor hora» de Metricool solo para moverla dentro de ±1 h.
+   - **Si no hay conector:** no publiques en ningún sitio ni lo simules. Prepara como mucho UNA pieza nueva
+     (`cd frontend && node ../scripts/redes-fotos.mjs` con una idea del final de TEXTO.md, y su texto en TEXTO.md)
+     solo si hay menos de 6 piezas sin publicar.
+4. **Lunes a las 7:51:** analíticas de la semana anterior por red (seguidores, alcance, visitas al perfil) con la
+   herramienta de analíticas de Metricool, y las altas por `utm_source` si tienes `MONGO_URL` (no la tendrás:
+   entonces solo lo de Metricool). Apúntalo en el Registro.
+5. **Cuando el calendario de 14 días esté publicado entero**, escribe en REDES.md las dos semanas siguientes con el
+   mismo formato y tono (una idea distinta por día, contenido que sirve o hace reír, la app solo al final).
+6. **Registro, commit y push.** Una línea en el Registro de REDES.md (fecha y hora, red, qué, resultado).
+   `git add docs/anuncios frontend/public/redes scripts/redes-fotos.mjs && git commit -m "Redes FDS: ronda <fecha hora>" && git push origin claude/trusting-feynman-0tfz62`
+   (si el push falla por red, 3 reintentos con 2, 4 y 8 segundos).
+7. **Límites.** Nada de gasto: sin anuncios; créditos de Artlist solo si la sesión tiene Artlist y la pieza lo
+   necesita, máximo 2 imágenes por ronda (si la red del entorno no deja bajarlas, apúntalo y no insistas). Nunca
+   borres publicaciones ni cambies la bio o los enlaces de las cuentas. Mensajes privados, ninguno. Aviso al móvil
+   de Dani SOLO si se ha publicado algo o hay un fallo nuevo que no esté ya en el Registro. Si algo falla,
+   apúntalo y termina; no improvises.
+8. **Termina con dos líneas:** qué se ha publicado o preparado (y por qué no, si es el caso) y qué queda
+   pendiente de Dani.

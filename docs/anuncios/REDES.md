@@ -35,6 +35,10 @@ quien critica. Admitir fallos («si una etiqueta no la lee, la escribes tú») d
 | LinkedIn | página FlotaDSP | Flota para empresas (no FDS), un post por semana | Navegador o Metricool/Typefully |
 | YouTube Shorts | la cuenta de Dani | Donde se suben los mismos vídeos de TikTok | Navegador |
 
+**Metricool (29-10, enlazado por Dani):** TikTok Business `flotadsp`, Instagram `flotadsp`, LinkedIn página FlotaDSP y
+YouTube FlotaDSP. X no (en Metricool es de pago) y la página de Facebook aún no. Es el conector con el que publica la
+tarea programada (`redes/TAREA.md`).
+
 **Lo que no existe:** ningún conector permite buscar hilos ajenos y responder en X, TikTok o Facebook. Eso solo
 se hace con el navegador de Dani con sus sesiones abiertas (como se hizo el 24-10: «gestiona todas mis cuentas
 profesionales», memoria `redes-sociales-fds`). Desde una sesión en la nube se puede PUBLICAR (con un conector) y
@@ -203,29 +207,30 @@ segunda semana sobre «quién causa los golpes» (revisión rápida de daños, p
 1. **Para las rondas de respuestas** (X, TikTok, grupos de Facebook): una sesión en su PC con Claude en Chrome y
    las sesiones abiertas, y decirle «haz la ronda de redes de `docs/anuncios/REDES.md`». Desde la nube no se
    llega a su navegador.
-2. **Para publicar el calendario desde la nube:** conectar **Metricool** (claude.ai → Personalizar → Conectores;
-   dentro de Metricool se enlazan la página de Facebook, Instagram, TikTok, X y LinkedIn) y abrir una sesión nueva.
-   Alternativa solo para X y LinkedIn: Typefully.
+2. **Para publicar el calendario desde la nube:** Metricool ya está enlazado con TikTok, Instagram, LinkedIn y
+   YouTube (29-10). Falta: conectar Metricool en claude.ai → Personalizar → Conectores, crear la tarea programada
+   desde claude.ai (`redes/TAREA.md`), enlazar la página de Facebook en Metricool y desplegar la web para que las
+   imágenes de `frontend/public/redes/` tengan URL pública. X: Typefully, si se quiere.
 3. **Red del entorno de la nube**: permitir `cms-toolkit-artifacts.artlist.io` y `ai-toolkit-generations.imgix.net`
    (menú del entorno → Edit → Network access → Allowed domains) para que las fotos generadas en Artlist se puedan
    bajar desde aquí. Mientras tanto, las tres del 29-10 se guardan a mano (ver `redes/TEXTO.md`).
 4. Facebook: que el perfil y la página puedan publicar (la verificación por vídeo selfie que pedía el 24-10).
 
-## 11. Modo autónomo: la tarea programada «Redes FDS» (29-10-2026)
+## 11. Modo autónomo: la tarea programada «Redes FDS»
 
 Dani (29-10, noche): «que tengas tu propia programación: hace 3 horas que no subo nada a TikTok, me autopido una
-pieza, la genero y la subo; que yo no me tenga que preocupar de nada». Por eso existe una **tarea programada en la
-nube** que abre una sesión nueva tres veces al día (7:51, 12:51 y 19:51, hora de Madrid) sobre este repo y hace la
-ronda sola: lee este manual, mira qué toca según el calendario y la hora, publica o programa con el conector de
-publicación que tenga la sesión, prepara una pieza nueva si hace falta, apunta la ronda en el Registro y hace push
-a la rama `claude/trusting-feynman-0tfz62` (todo lo de redes vive ahí hasta que Dani lo mezcle en `main`).
+pieza, la genero y la subo; que yo no me tenga que preocupar de nada». La **tarea programada** abre una sesión
+nueva tres veces al día (7:51, 12:51 y 19:51, hora de Madrid) sobre este repo y hace la ronda sola: lee este
+manual y `redes/TAREA.md`, mira qué toca según el calendario y la hora, publica o programa con Metricool, prepara
+una pieza nueva si hace falta, apunta la ronda en el Registro y hace push a la rama `claude/trusting-feynman-0tfz62`
+(todo lo de redes vive ahí hasta que Dani lo mezcle en `main`). Cómo se crea (desde claude.ai, con el repo y el
+conector; las creadas desde una sesión no sirven), el texto y la ronda paso a paso: `redes/TAREA.md`.
 
-Lo que la tarea NO puede hacer sola y por qué:
-- **Publicar sin conector.** La tarea se creó sin conectores (la sesión que la creó no tenía ninguno de redes):
-  hasta que Dani conecte Metricool (o Posty/xpost/Typefully) y una sesión NUEVA la vuelva a crear con ese conector
-  (cómo, en `redes/TAREA.md`), la ronda solo prepara piezas (como mucho 6 sin publicar) y lo deja apuntado. No simula nada.
-- **Responder en hilos ajenos de X, TikTok o Facebook.** Ningún conector lo permite; eso sigue siendo una sesión en
-  el PC de Dani con Claude en Chrome (apartado 12), aunque sea una vez por semana.
+Lo que la tarea NO hace y por qué:
+- **X**: Metricool solo lo da en plan de pago. Los posts de X del calendario quedan escritos para una sesión en el
+  PC (apartado 12) o para cuando haya conector de X (Typefully).
+- **Responder en hilos ajenos de X, TikTok o Facebook.** Ningún conector lo permite; sigue siendo una sesión en el
+  PC de Dani con Claude en Chrome (apartado 12), aunque sea una vez por semana.
 - **Gastar**: ni anuncios ni créditos de Artlist más allá de 2 imágenes por ronda. Nunca borra publicaciones ni toca
   la bio o los enlaces de las cuentas. Mensajes privados, ninguno.
 
@@ -245,3 +250,4 @@ Lo que la tarea NO puede hacer sola y por qué:
 |---|---|---|---|---|
 | 29-10 | (nube) | — | Sesión en la nube sin acceso a las cuentas: solo este manual, el calendario y las plantillas. Nada publicado. | Pendiente: Dani conecta Metricool o abre sesión en el PC |
 | 29-10 noche | (nube) | — | Piezas nuevas: carruseles A, B y C y 4 tarjetas para X (`redes/`, textos en `redes/TEXTO.md`). Tres fondos generados en Artlist (en la cuenta de Dani; la red de la nube no deja bajarlos). Tarea programada «Redes FDS» creada (3 rondas al día). Nada publicado: sin conector. | Dani: conectar Metricool y avisar para recrear la tarea con él |
+| 29-10 21:30 | (nube) | — | Dos pruebas de la tarea creada desde la sesión: la sesión que abre no tiene el repo con permiso de push ni conectores → tarea borrada; hay que crearla desde claude.ai (`redes/TAREA.md`). Dani enlazó en Metricool TikTok Business, Instagram, LinkedIn y YouTube (X, de pago; Facebook, pendiente). Piezas movidas a `frontend/public/redes/` para tener URL pública. | Dani: conectar Metricool en claude.ai, crear la tarea desde claude.ai, desplegar la web |

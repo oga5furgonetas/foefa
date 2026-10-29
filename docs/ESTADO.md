@@ -785,7 +785,11 @@ para X/LinkedIn) en claude.ai → Conectores y avisar (la tarea programada se re
 Más tarde esa noche (Dani: «sé autónomo, que yo no me tenga que preocupar»): piezas nuevas en `docs/anuncios/redes/`
 (3 carruseles + 4 tarjetas para X, `scripts/redes-fotos.mjs`, textos en `redes/TEXTO.md`), 3 fondos generados en
 Artlist (480 créditos; no bajables desde la nube: la red del entorno bloquea el CDN de Artlist) y **tarea programada
-«Redes FDS»** (3 rondas al día) que trabaja sobre la rama `claude/trusting-feynman-0tfz62`; sin conector solo prepara.
+«Redes FDS»** (3 rondas al día) sobre la rama `claude/trusting-feynman-0tfz62`. Probada dos veces: la sesión que abre
+una tarea creada desde dentro de una sesión no tiene el repo con push ni conectores → borrada; **se crea desde la
+pantalla de tareas programadas de claude.ai** con repo + Metricool (`docs/anuncios/redes/TAREA.md`). Dani enlazó en
+Metricool TikTok, Instagram, LinkedIn y YouTube. Las piezas están en `frontend/public/redes/` (URL pública
+flotadsp.com/redes/… en cuanto se despliegue la web).
 
 ## Pendiente (por prioridad)
 

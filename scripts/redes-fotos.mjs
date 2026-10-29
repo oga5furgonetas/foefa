@@ -1,7 +1,7 @@
 // PIEZAS PARA LAS REDES DE FDS (29-10-2026): contenido que no parece anuncio y que se guarda y se
 // comparte. Tres carruseles para el modo foto de TikTok (valen para Instagram y la página de Facebook)
 // y tarjetas 16:9 para X. La app solo sale en la última diapositiva, con quiénes somos.
-//   cd frontend && node ../scripts/redes-fotos.mjs      → docs/anuncios/redes/*.png
+//   cd frontend && node ../scripts/redes-fotos.mjs      → frontend/public/redes/*.png (URL pública: flotadsp.com/redes/<fichero>)
 // Playwright: el de frontend/node_modules si está; si no, el instalado en el sistema (sesión en la nube).
 // Fondos: docs/anuncios/redes/fondos/*.jpg (generados con Artlist, sin personas); si falta alguno, los de
 // Pexels de tiktok-fotos/fondos. Zonas que tapa TikTok: arriba ~170 px, abajo ~420 px, derecha ~150 px.
@@ -20,11 +20,12 @@ function cargaPlaywright() {
 }
 const { chromium } = cargaPlaywright()
 
-const SALIDA = path.join(RAIZ, 'docs', 'anuncios', 'redes')
+const SALIDA = path.join(RAIZ, 'frontend', 'public', 'redes')   // se sirve en flotadsp.com/redes/ para que Metricool pueda cogerlas
+const FONDOS = path.join(RAIZ, 'docs', 'anuncios', 'redes', 'fondos')
 fs.mkdirSync(SALIDA, { recursive: true })
 const b64 = (f, tipo) => `data:${tipo};base64,${fs.readFileSync(f).toString('base64')}`
 const fondo = (nombre, alternativa) => {
-  const propio = path.join(SALIDA, 'fondos', nombre)
+  const propio = path.join(FONDOS, nombre)
   if (fs.existsSync(propio)) return b64(propio, 'image/jpeg')
   return b64(path.join(RAIZ, 'docs', 'anuncios', 'tiktok-fotos', 'fondos', alternativa), 'image/jpeg')
 }
