@@ -888,6 +888,32 @@ España): «utilízame este audio y móntame el vídeo acorde al audio»; y «me
 - Lo que NO se pudo desde aquí (sigue igual): bajar los clips de Artlist y la voz de Gemini (ya no hace falta: la
   voz es la de Dani).
 
+## 29-10-2026 (noche, sesión en la nube): redes de FDS, el manual del community manager
+
+Dani: «coge mi Twitter, mi TikTok y mi Facebook y haz de manager: busca hilos, métete en conversaciones, que nos
+conozcan y descarguen la app». Desde la nube no hay acceso a ninguna cuenta (sin conector de redes y sin su
+navegador), así que no se publicó nada. Hecho: **`docs/anuncios/REDES.md`**, el manual que sigue cualquier sesión
+que haga una ronda: la regla (siempre como FDS o como Dani, nunca como usuario anónimo: práctica desleal en la UE y
+baneo en las plataformas), la oferta exacta que se puede decir, los enlaces con utm, la ronda diaria con topes,
+las búsquedas por red, 10 plantillas de respuesta, el calendario de 14 días con los textos escritos (X, TikTok,
+Facebook, LinkedIn) sobre las piezas que ya existen, la medición y el registro de rondas.
+Lo que hace falta de Dani: (1) para responder en hilos, una sesión en su PC con Claude en Chrome («haz la ronda de
+redes de docs/anuncios/REDES.md»); (2) para publicar el calendario desde la nube, conectar Metricool (o Typefully
+para X/LinkedIn) en claude.ai → Conectores y avisar (la tarea programada se recrea con el conector).
+Más tarde esa noche (Dani: «sé autónomo, que yo no me tenga que preocupar»): piezas nuevas en `docs/anuncios/redes/`
+(3 carruseles + 4 tarjetas para X, `scripts/redes-fotos.mjs`, textos en `redes/TEXTO.md`), 3 fondos generados en
+Artlist (480 créditos; no bajables desde la nube: la red del entorno bloquea el CDN de Artlist) y **tarea programada
+«Redes FDS»** (3 rondas al día) sobre la rama `claude/trusting-feynman-0tfz62`. Probada dos veces: la sesión que abre
+una tarea creada desde dentro de una sesión no tiene el repo con push ni conectores → borrada; **se crea desde la
+pantalla de tareas programadas de claude.ai** con repo + Metricool (`docs/anuncios/redes/TAREA.md`). Dani enlazó en
+Metricool TikTok, Instagram, LinkedIn y YouTube. Las piezas están en `frontend/public/redes/` (URL pública
+flotadsp.com/redes/… en cuanto se despliegue la web).
+**21:45:** Metricool conectado a la sesión de la nube (sin pasar por «Programadas»: en esta organización las tareas no
+admiten conectores, así que la tarea «Redes FDS» DESPIERTA esa misma sesión, que ya tiene Metricool, el repo y Artlist,
+a las 7:51, 12:51 y 19:51). Programados en Metricool dos posts de LinkedIn (04-11 y 11-11, 11:00, empresas). TikTok,
+Instagram y YouTube esperan a que la web se despliegue con `frontend/public/redes/` (imágenes y vídeos en español, 30 MB):
+**Dani: mezclar `claude/trusting-feynman-0tfz62` en `main` (es fast-forward, ya lleva main) y desplegar la web.**
+
 ## Pendiente (por prioridad)
 
 -6. **El anuncio con la voz de Dani (29-10 noche, 2)**: montado en `docs/anuncios/spot-dani/salida/`. Falta:
