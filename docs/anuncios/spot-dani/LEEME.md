@@ -62,10 +62,12 @@ cd frontend && node ../scripts/spot-dani/capas.mjs                      # las ca
 GRAB=/tmp/grab node scripts/montar-spot-dani.mjs                        # BONO=0 → la variante sin el gancho de los 25 €
 ```
 
-La voz: `voz-dani.flac` es la nota de voz limpia (paso alto a 85 Hz, reducción de ruido suave, un poco de presencia
-a 3 kHz, compresión 2,5:1 y -16 LUFS). La música es la sintetizada del spot v4 (`../reales/spot-v4/musica.wav`), que
-se agacha bajo la voz (compresor lateral); efectos: whoosh en cada corte, bip del escáner, pop en cada toque, campana
-al entregar, subida antes del cierre. Máster a -14 LUFS / -1 dBTP (lo que piden TikTok, Meta y YouTube).
+La voz: `voz-dani.flac` es la nota de voz tal cual, con un toque (paso alto a 55 Hz, un poco de presencia a 3 kHz,
+compresión suave 1,8:1 y -16 LUFS). **La nota ya trae su música, sin derechos**, así que el montaje NO le mezcla la
+nuestra (Dani, 29-10: «hay dos pistas mezcladas; quita nuestra música»); `MUSICA=1` la volvería a poner. Efectos:
+una subida bajo el gancho (para que no vaya en silencio hasta que entra la voz), whoosh en cada corte, bip del
+escáner, pop en cada toque, campana al entregar, subida antes del cierre. Máster a -14 LUFS / -1 dBTP (lo que piden
+TikTok, Meta y YouTube).
 
 ## Antes de subirlo
 

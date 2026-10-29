@@ -755,8 +755,10 @@ España): «utilízame este audio y móntame el vídeo acorde al audio»; y «me
   sobre los planos de Artlist y la app; «Esto te interesa»; logo «Flota DSP»; la app en el móvil (mapa, panel de
   empresa para «el control de flotas», escanear, ordenar, zonas, voz, entregado); «Forma parte del cambio»; cierre
   con flotadsp.com, «+25 € con tu primera ruta», botón y Play; el lema «Cada entrega cuenta.» entra cuando lo dice.
-  Montaje `scripts/montar-spot-dani.mjs`, capas `scripts/spot-dani/capas.mjs`, voz limpia `voz-dani.flac`
-  (-16 LUFS) y la nota original `fuente-dani-whatsapp.mp3`.
+  Montaje `scripts/montar-spot-dani.mjs`, capas `scripts/spot-dani/capas.mjs`, voz `voz-dani.flac` (-16 LUFS,
+  casi sin tocar) y la nota original `fuente-dani-whatsapp.mp3`. La nota YA TRAE su música (sin derechos): el
+  montaje no mezcla la nuestra (Dani: «hay dos pistas mezcladas, quita nuestra música»); solo efectos y una subida
+  bajo el gancho.
 - **El mapa REAL de A Coruña sin red** (Dani: «quiero el mapa de la app y que se vea bien; si no, el anuncio es una
   mierda»): `scripts/spot-ruta/teselas.py` saca las teselas de `docs/play-store/captura-4-oficina-mapa.png` (la
   captura del panel, con OSM de verdad a 2x): georreferencia por los 12 marcadores de la demo (error < 1 px), limpia

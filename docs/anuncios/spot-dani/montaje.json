@@ -1,5 +1,6 @@
 {
  "voz": "voz-dani.flac",
+ "musicaPropia": false,
  "inicioVoz": 1.7,
  "fin": 32.18,
  "ganancias": {
@@ -204,6 +205,11 @@
    "nombre": "pop",
    "t": 30.11,
    "g": -23
+  },
+  {
+   "nombre": "subida",
+   "t": 0.45,
+   "g": -14.3
   }
  ]
 }

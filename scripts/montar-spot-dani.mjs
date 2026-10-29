@@ -5,7 +5,7 @@
 //   · planos de ambiente: los fotogramas de Artlist (o los clips, si están en super-anuncio/clips/),
 //   · la app grabada por e2e/spot-ruta.spec.js, ahora con el MAPA REAL de A Coruña (scripts/spot-ruta/teselas.py),
 //   · el panel de empresa (docs/play-store/captura-4-oficina-mapa.png) para «el control de flotas»,
-//   · sonido medido: voz a -16 LUFS, música que se agacha bajo la voz, efectos, máster a -14 LUFS / -1 dBTP.
+//   · sonido medido: la nota de voz (que ya trae su música) a -16 LUFS, efectos, máster a -14 LUFS / -1 dBTP.
 //   GRAB=<grabación> VOZ=<wav limpio> node scripts/montar-spot-dani.mjs  → docs/anuncios/spot-dani/salida/spot-dani-*.mp4
 import { execFileSync, spawnSync } from 'child_process'
 import fs from 'fs'
@@ -26,6 +26,9 @@ const SALIDA = path.join(SD, 'salida')
 const GRAB = process.env.GRAB || path.join(RAIZ, 'frontend', 'test-results', 'spot-ruta')
 const VOZ = process.env.VOZ || path.join(SD, 'voz-dani.flac')
 const BONO = process.env.BONO !== '0'                   // BONO=0: sin el gancho de los 25 € (empieza con la voz)
+// La nota de voz de Dani YA LLEVA su música (sin derechos); mezclarle la nuestra encima sonaba a dos pistas (Dani,
+// 29-10: «quita nuestra música»). MUSICA=1 la vuelve a poner, por si algún día la voz viene limpia.
+const MUSICA = process.env.MUSICA === '1'
 fs.mkdirSync(SALIDA, { recursive: true })
 const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'spotdani-'))
 const run = (args, cwd) => execFileSync('ffmpeg', ['-y', '-v', 'error', '-nostdin', ...args], { stdio: 'inherit', cwd })
@@ -208,6 +211,7 @@ const eEnt = S.find((e) => e.id === 'entregado')
 fx('ding', T.entregado + Math.min(eEnt.d - 0.5, (M.entregado.t - eEnt.a) / (eEnt.vel || 1) + 0.15))
 fx('subida', T.cierre - 1.3)
 fx('pop', A(F('lema').ini) + 0.05)
+if (BONO && !MUSICA) fx('subida', VO - 1.25)             // sin música propia, el gancho no va en silencio: una subida hasta la voz
 
 const mezcla = (salida, video) => {
   const aIn = ['-i', video, '-i', VOZ, '-i', path.join(V4, 'musica.wav')]
@@ -215,10 +219,15 @@ const mezcla = (salida, video) => {
   efectos.forEach((e, k) => { aIn.push('-i', e.f); const ms = Math.round(e.t * 1000); fil.push(`[${i}:a]aresample=48000,aformat=channel_layouts=stereo,volume=${e.g}dB,adelay=${ms}|${ms}[e${k}]`); i++ })
   const msVoz = Math.round(VO * 1000)
   let fc = fil.join(';') + ';'
-  fc += `[1:a]aresample=48000,aformat=channel_layouts=stereo,adelay=${msVoz}|${msVoz}[voz];[voz]asplit=2[vz1][vz2];`
-  fc += `[2:a]aresample=48000,aformat=channel_layouts=stereo,apad,atrim=duration=${FIN},volume=${G.musica}dB,afade=t=in:st=0:d=0.25,afade=t=out:st=${(FIN - 1.8).toFixed(2)}:d=1.8[mus];`
   fc += `${efectos.map((_, k) => `[e${k}]`).join('')}amix=inputs=${efectos.length}:normalize=0[sfx];`
-  fc += `[mus][vz2]sidechaincompress=threshold=0.05:ratio=2.2:attack=40:release=500:makeup=1[musd];[vz1][musd][sfx]amix=inputs=3:normalize=0[pre]`
+  if (MUSICA) {
+    fc += `[1:a]aresample=48000,aformat=channel_layouts=stereo,adelay=${msVoz}|${msVoz}[voz];[voz]asplit=2[vz1][vz2];`
+    fc += `[2:a]aresample=48000,aformat=channel_layouts=stereo,apad,atrim=duration=${FIN},volume=${G.musica}dB,afade=t=in:st=0:d=0.25,afade=t=out:st=${(FIN - 1.8).toFixed(2)}:d=1.8[mus];`
+    fc += `[mus][vz2]sidechaincompress=threshold=0.05:ratio=2.2:attack=40:release=500:makeup=1[musd];[vz1][musd][sfx]amix=inputs=3:normalize=0[pre]`
+  } else {
+    // Solo la nota de voz (con su música) y los efectos.
+    fc += `[1:a]aresample=48000,aformat=channel_layouts=stereo,adelay=${msVoz}|${msVoz}[voz];[voz][sfx]amix=inputs=2:normalize=0[pre]`
+  }
   const crudo = path.join(tmp, `crudo-${path.basename(salida)}.wav`)
   run([...aIn, '-filter_complex', fc, '-map', '[pre]', '-t', String(FIN), '-c:a', 'pcm_s16le', crudo])
   const m = leeErr(['-i', crudo, '-af', 'loudnorm=I=-14:TP=-1:LRA=11:print_format=json'])
@@ -257,5 +266,5 @@ v(finalB, '1x1-B', columna(1080, 1080))
 v(finalA, '16x9-A-qr', columna(1920, 1080))
 // Spotify (vídeo de 30 s como máximo): desde que empieza la voz, 30,0 s justos.
 if (BONO) v(finalB, '9x16-B-30s', ['-ss', String(T.pregunta1), '-t', '30'])
-fs.writeFileSync(path.join(SD, `montaje${suf}.json`), JSON.stringify({ voz: path.basename(VOZ), inicioVoz: VO, fin: FIN, ganancias: G, escenas: S.map(({ id, t0, d, vel }) => ({ id, t0, d, vel })), efectos: efectos.map(({ nombre, t, g }) => ({ nombre, t: +t.toFixed(3), g })) }, null, 1))
+fs.writeFileSync(path.join(SD, `montaje${suf}.json`), JSON.stringify({ voz: path.basename(VOZ), musicaPropia: MUSICA, inicioVoz: VO, fin: FIN, ganancias: G, escenas: S.map(({ id, t0, d, vel }) => ({ id, t0, d, vel })), efectos: efectos.map(({ nombre, t, g }) => ({ nombre, t: +t.toFixed(3), g })) }, null, 1))
 fs.rmSync(tmp, { recursive: true, force: true })
