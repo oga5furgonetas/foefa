@@ -294,7 +294,7 @@ async def test_bono_de_bienvenida_por_la_primera_ruta_real_y_una_sola_vez(mundo)
     o1 = mundo.g["organizations"].docs[0]
     o1["created_at"] = _iso(-2)
     b = await server._bono_estado(o1, "c1")
-    assert b["pagado"] is False and b["cent"] == 1000 and b["hasta"] == "2026-12-31" and b["entregas"] == 0
+    assert b["pagado"] is False and b["cent"] == server._BONO_CENT and b["hasta"] == "2026-12-31" and b["entregas"] == 0
     assert b["objetivo"] == 20 and b["dias_objetivo"] == 2
     _entregas(mundo, 30, ejemplo=True)                              # las de ejemplo no cuentan
     _entregas(mundo, 12, fecha=_dia(-1))
@@ -309,7 +309,7 @@ async def test_bono_de_bienvenida_por_la_primera_ruta_real_y_una_sola_vez(mundo)
     mov = mundo.g["cartera_movimientos"].docs[-1]
     assert mov["tipo"] == "bienvenida" and mov["importe"] == server._BONO_CENT and mov["org_id"] == "o1"
     b = await server._bono_estado(o1, "c1")                          # una sola vez
-    assert b["pagado"] is True and not b.get("nuevo") and o1["cartera_saldo"] == 1000
+    assert b["pagado"] is True and not b.get("nuevo") and o1["cartera_saldo"] == server._BONO_CENT
     assert len(mundo.g["cartera_movimientos"].docs) == 1
     assert (await server.referidos_mios(YO))["bono"] == {"cent": server._BONO_CENT, "pagado": True, "pagado_en": o1["bono_pagado_en"]}
 
