@@ -31,6 +31,11 @@ haría alguien que lleva la app y se fija en cada alta:
     ayuda y luego se le pregunta). Se contesta con un clic: cada opción es un enlace a la página
     /opinion, que pide confirmar con «Enviar» (los antivirus del correo abren los enlaces y eso no
     puede contar como respuesta). Lo que conteste le llega a Dani.
+  · «bono25» (29-10-2026, Dani: «a todos los que se han registrado y no han completado ninguna ruta, un correo:
+    enhorabuena, gana 25 €, completa tu primera ruta; el enlace de Google Play, un QR, que nos puntúen») —
+    UNA vez, a toda cuenta de quien reparte solo que aún puede ganar el bono y no ha hecho su primera ruta,
+    tenga la edad que tenga (no pasa por `toca`: lo decide `toca_bono25`). Lleva el enlace y el QR de Google
+    Play, hasta cuándo puede ganarlo, pide una línea de respuesta y la valoración en Play.
 
 Reglas que no se rompen:
   · Uno por persona y clave, nunca dos (el servidor lo marca ANTES de mandar).
@@ -45,7 +50,7 @@ import html as _html
 import re
 from datetime import datetime, timedelta, timezone
 
-CLAVES = ("bienvenida", "primer_dia", "casi_fin", "recordatorio", "invita", "bono", "opinion")
+CLAVES = ("bienvenida", "primer_dia", "casi_fin", "recordatorio", "invita", "bono", "opinion", "bono25")
 # «br» es el portugués de Brasil (11-10-2026): mismos datos que «pt», escrito para allí (você, celular,
 # paradas, pacotes). Sin él, a un brasileño le llegaba «telemóvel», «paragens» y «morada».
 IDIOMAS = ("es", "pt", "en", "br")
@@ -65,6 +70,8 @@ INVITA_ENTREGAS = 10                       # entregas suyas (no de ejemplo) para
 BONO_DESDE = datetime(2026, 10, 16, 22, 0, tzinfo=timezone.utc)   # 17-10-2026 00:00 en Madrid: nace el bono
 BONO_ENTREGAS = 20                         # las del bono (las mismas que «Invita y gana»)
 CON_BONO = ("bienvenida", "primer_dia", "recordatorio")   # correos que llevan el párrafo del bono
+BONO25_FUERA = ("deleted", "baja", "cancelado", "cancelled", "canceled", "suspended")   # «bono25»: a todos menos estos
+PLAY_URL = "https://play.google.com/store/apps/details?id=com.flotadsp.flota"   # la ficha de FDS en Google Play
 OPINION_DESDE = timedelta(days=5)          # «opinion», a los 5 días de darse de alta…
 OPINION_HASTA = timedelta(days=30)         # …y no más tarde (ya no se acuerda de la app)
 NOTAS = (5, 4, 3, 2, 1)                    # las respuestas de un clic de quien la usa
@@ -188,6 +195,28 @@ def toca(org: dict, uso: dict, ahora: datetime, promo: bool = False, bono: bool 
     return ""
 
 
+def toca_bono25(org: dict, uso: dict, ahora: datetime, bono_pendiente: bool) -> bool:
+    """¿Le toca el correo «tu primera ruta ahora vale 25 €»? A TODO el que creó una cuenta para repartir solo
+    (Dani, 29-10: «a los 100; enviar a 5 y dejar a 1 no tendría sentido»), con correo, sin baja, con la cuenta no
+    borrada ni cancelada, que todavía puede ganar el bono (`bono_pendiente`, lo decide el servidor) y no ha hecho
+    su primera ruta (menos de 20 entregas de verdad). Una vez; nunca a menos de 18 h de otro correo del ciclo
+    (se le manda al día siguiente, no se le salta); de 9 a 21 de su hora."""
+    o = org or {}
+    if not ((o.get("sector") == "autonomo" or o.get("plan") == "autonomo") and o.get("email")
+            and not o.get("correos_baja") and not o.get("demo")
+            and str(o.get("status") or "").lower() not in BONO25_FUERA):
+        return False
+    if not bono_pendiente or _reales(uso) >= BONO_ENTREGAS:
+        return False
+    enviados = o.get("ciclo_correos") or {}
+    if "bono25" in enviados:
+        return False
+    ultimos = [u for u in (_fecha((v or {}).get("at")) for v in enviados.values()) if u]
+    if ultimos and ahora - max(ultimos) < SEPARACION:
+        return False
+    return en_su_dia(o, ahora)
+
+
 # ── LOS TEXTOS ──────────────────────────────────────────────────────────────
 # En texto plano con {marcas}; el HTML sale de aquí mismo (escapado), así el
 # correo y su versión en texto dicen exactamente lo mismo.
@@ -260,6 +289,25 @@ _T = {
             "3. «Montar ruta y empezar»: te ordena las paradas y te guía con voz.\n\n"
             "Tu enlace para invitar: {invita}\n\n"
             "{ayuda_corta}"),
+        "bono25": (
+            "¡Enhorabuena! Tu primera ruta con {marca} ahora vale {bono_euros}",
+            "Hola {nombre}:\n\n"
+            "Te diste de alta en {marca} y todavía no has hecho tu primera ruta con la app. Buena noticia: ahora "
+            "vale {bono_euros}. Es nuestra forma de darte las gracias por probarla con tu reparto de verdad.\n\n"
+            "Cómo se gana:\n"
+            "1. Abre la app ({ruta}) o descárgala en Google Play: {play}\n"
+            "2. «Cargar paquetes: uno tras otro» y una foto a cada etiqueta (o escanea su código): la dirección "
+            "entra sola.\n"
+            "3. «Montar ruta y empezar»: te ordena las paradas y te guía con voz hasta cada puerta.\n\n"
+            "Con 20 entregas de verdad en 2 días distintos, los {bono_euros} van a tu cartera y los cobras por "
+            "{cobro}. Tienes hasta el {bono_limite}. Y si un compañero se registra con tu enlace (pestaña "
+            "«Cuenta») y hace lo mismo, {euros} más para ti.\n\n"
+            "{progreso}"
+            "Si la app te sirve, puntúala en Google Play ({valorar}): nos ayuda a que la conozcan más "
+            "repartidores.\n\n"
+            "{ayuda_corta}"),
+        "play": "Descargar en Google Play",
+        "qr_pie": "¿Lo lees en el ordenador? Escanea el código con el móvil y la tienes.",
         "bono_linea": ("Y un regalo: hasta el {bono_hasta}, te damos {bono_euros} cuando hagas tus primeras 20 entregas "
                        "de verdad con la app (en 2 días distintos), y {euros} más por cada compañero que invites y "
                        "haga lo mismo."),
@@ -289,7 +337,7 @@ _T = {
         "firma": "Daniel, de {marca}",
         "baja": "¿No quieres más correos como este? Date de baja aquí: {baja}",
         "boton": {"bienvenida": "Abrir la app", "primer_dia": "Cargar mi primera ruta", "casi_fin": "Ver mi cuenta",
-                  "recordatorio": "Cargar mi ruta", "invita": "Ver mi enlace y mi QR", "bono": "Cargar mi ruta"},
+                  "recordatorio": "Cargar mi ruta", "invita": "Ver mi enlace y mi QR", "bono": "Cargar mi ruta", "bono25": "Abrir mi ruta"},
     },
     "pt": {
         "bienvenida": (
@@ -360,6 +408,24 @@ _T = {
             "3. «Montar rota e começar»: ordena as paragens e guia-te por voz.\n\n"
             "O teu link para convidar: {invita}\n\n"
             "{ayuda_corta}"),
+        "bono25": (
+            "Parabéns! A tua primeira rota com a {marca} vale agora {bono_euros}",
+            "Olá {nombre}:\n\n"
+            "Criaste a tua conta na {marca} e ainda não fizeste a tua primeira rota com a app. Boa notícia: agora "
+            "vale {bono_euros}. É a nossa forma de agradecer que a experimentes com a tua distribuição a sério.\n\n"
+            "Como se ganha:\n"
+            "1. Abre a app ({ruta}) ou descarrega-a no Google Play: {play}\n"
+            "2. «Carregar volumes: um após outro» e uma foto a cada etiqueta (ou lê o seu código): a morada "
+            "entra sozinha.\n"
+            "3. «Montar rota e começar»: ordena as paragens e guia-te por voz até cada porta.\n\n"
+            "Com 20 entregas a sério em 2 dias diferentes, os {bono_euros} vão para a tua carteira e recebes por "
+            "{cobro}. Tens até {bono_limite}. E se um colega se registar com o teu link (separador «Conta») e "
+            "fizer o mesmo, mais {euros} para ti.\n\n"
+            "{progreso}"
+            "Se a app te serve, avalia-a no Google Play ({valorar}): ajuda-nos a chegar a mais estafetas.\n\n"
+            "{ayuda_corta}"),
+        "play": "Descarregar no Google Play",
+        "qr_pie": "A ler no computador? Lê o código com o telemóvel e já a tens.",
         "bono_linea": ("E um presente: até {bono_hasta}, damos-te {bono_euros} quando fizeres as tuas primeiras 20 entregas "
                        "a sério com a app (em 2 dias diferentes), e {euros} por cada colega que convidares e faça o mesmo."),
         "progreso": "Já levas {n} entregas que contam.\n\n",
@@ -387,7 +453,7 @@ _T = {
         "baja": "Não queres mais e-mails como este? Cancela aqui: {baja}",
         "boton": {"bienvenida": "Abrir a app", "primer_dia": "Carregar a minha primeira rota", "casi_fin": "Ver a minha conta",
                   "recordatorio": "Carregar a minha rota", "invita": "Ver o meu link e o meu QR",
-                  "bono": "Carregar a minha rota"},
+                  "bono": "Carregar a minha rota", "bono25": "Abrir a minha rota"},
     },
     "en": {
         "bienvenida": (
@@ -458,6 +524,24 @@ _T = {
             "3. «Build route and start»: it orders your stops and guides you by voice.\n\n"
             "Your invite link: {invita}\n\n"
             "{ayuda_corta}"),
+        "bono25": (
+            "Congratulations! Your first route with {marca} is now worth {bono_euros}",
+            "Hi {nombre},\n\n"
+            "You signed up for {marca} and haven't done your first route with the app yet. Good news: it is now "
+            "worth {bono_euros}. It's our way of saying thanks for trying it on your real deliveries.\n\n"
+            "How to earn it:\n"
+            "1. Open the app ({ruta}) or get it on Google Play: {play}\n"
+            "2. «Load parcels: one after another» and snap each label (or scan its code): the address goes in "
+            "by itself.\n"
+            "3. «Build route and start»: it orders your stops and guides you by voice to every door.\n\n"
+            "With 20 real deliveries on 2 different days, the {bono_euros} go to your wallet and you get paid by "
+            "{cobro}. You have until {bono_limite}. And if a colleague signs up with your link («Account» tab) "
+            "and does the same, {euros} more for you.\n\n"
+            "{progreso}"
+            "If the app works for you, rate it on Google Play ({valorar}): it helps more couriers find it.\n\n"
+            "{ayuda_corta}"),
+        "play": "Get it on Google Play",
+        "qr_pie": "Reading this on a computer? Scan the code with your phone.",
         "bono_linea": ("And a gift: until {bono_hasta}, you get {bono_euros} when you make your first 20 real deliveries "
                        "with the app (on 2 different days), plus {euros} for every colleague you invite who does the same."),
         "progreso": "You already have {n} deliveries that count.\n\n",
@@ -484,7 +568,7 @@ _T = {
         "firma": "Daniel, {marca}",
         "baja": "Don't want emails like this? Unsubscribe here: {baja}",
         "boton": {"bienvenida": "Open the app", "primer_dia": "Load my first route", "casi_fin": "See my account",
-                  "recordatorio": "Load my route", "invita": "See my link and QR code", "bono": "Load my route"},
+                  "recordatorio": "Load my route", "invita": "See my link and QR code", "bono": "Load my route", "bono25": "Open my route"},
     },
 }
 
@@ -560,6 +644,24 @@ _T["br"] = {
         "3. «Montar rota e começar»: o app organiza as paradas e te guia por voz.\n\n"
         "Seu link para convidar: {invita}\n\n"
         "{ayuda_corta}"),
+    "bono25": (
+        "Parabéns! Sua primeira rota com o {marca} agora vale {bono_euros}",
+        "Olá {nombre}:\n\n"
+        "Você criou sua conta no {marca} e ainda não fez sua primeira rota com o app. Boa notícia: agora vale "
+        "{bono_euros}. É o nosso jeito de agradecer por testar com as suas entregas de verdade.\n\n"
+        "Como ganhar:\n"
+        "1. Abra o app ({ruta}) ou baixe no Google Play: {play}\n"
+        "2. «Carregar pacotes: um atrás do outro» e uma foto de cada etiqueta (ou leia o código): o endereço "
+        "entra sozinho.\n"
+        "3. «Montar rota e começar»: o app organiza as paradas e te guia por voz até cada porta.\n\n"
+        "Com 20 entregas de verdade em 2 dias diferentes, os {bono_euros} vão para a sua carteira e você recebe "
+        "por {cobro}. Você tem até {bono_limite}. E se um colega se cadastrar com o seu link (aba «Conta») e "
+        "fizer o mesmo, mais {euros} para você.\n\n"
+        "{progreso}"
+        "Se o app te ajuda, avalie no Google Play ({valorar}): isso ajuda mais entregadores a conhecerem.\n\n"
+        "{ayuda_corta}"),
+    "play": "Baixar no Google Play",
+    "qr_pie": "Lendo no computador? Leia o código com o celular e pronto.",
     "bono_linea": ("E um presente: até {bono_hasta}, você ganha {bono_euros} quando fizer suas primeiras 20 entregas "
                    "de verdade com o app (em 2 dias diferentes), e mais {euros} por cada colega que convidar e fizer o mesmo."),
     "progreso": "Você já tem {n} entregas que contam.\n\n",
@@ -584,7 +686,7 @@ _T["br"] = {
     "firma": "Daniel, do {marca}",
     "baja": "Não quer mais e-mails como este? Cancele aqui: {baja}",
     "boton": {"bienvenida": "Abrir o app", "primer_dia": "Carregar minha primeira rota", "casi_fin": "Ver minha conta",
-              "recordatorio": "Carregar minha rota", "invita": "Ver meu link e meu QR", "bono": "Carregar minha rota"},
+              "recordatorio": "Carregar minha rota", "invita": "Ver meu link e meu QR", "bono": "Carregar minha rota", "bono25": "Abrir minha rota"},
 }
 
 # ¿QUÉ TAL TE VA? (17-10-2026) — «opinion». {opciones} son los enlaces de un clic (en el HTML, botones).
@@ -736,7 +838,7 @@ def correo(clave: str, org: dict, uso: dict, ahora: datetime, *, marca: str, bas
            promo_hasta: str = "", tope: int = 15, ref_enlace: str = "", ref_cent: int = 250,
            ref_espana: bool = True, ref_min_cent: int = 6000, ref_promo_hasta: str = "",
            bono_hasta: str = "", bono_cent: int = 1000, opinion_url: str = "", regalo_cent: int = 0,
-           pase: str = "") -> dict:
+           pase: str = "", play_url: str = "", qr_url: str = "", bono_limite: str = "") -> dict:
     """{asunto, texto, html} del correo `clave` para esta cuenta.
 
     `pase` (24-10-2026): con él, los enlaces a la app entran sin contraseña (página /pase). El correo se
@@ -784,6 +886,11 @@ def correo(clave: str, org: dict, uso: dict, ahora: datetime, *, marca: str, bas
     datos["bono_euros"] = _euros(bono_cent / 100, idioma)
     reales = _reales(uso)
     datos["progreso"] = t["progreso"].format(n=reales) if 0 < reales < BONO_ENTREGAS else ""
+    # «bono25» (29-10-2026): el enlace de Google Play (con su atribución), que también sirve para valorarla,
+    # y hasta cuándo puede ganar el bono ESTA cuenta (30 días desde el alta o desde que nació el bono).
+    play_url = play_url or PLAY_URL
+    datos["play"] = datos["valorar"] = play_url
+    datos["bono_limite"] = _dia_mes(bono_limite, idioma) if bono_limite else datos["bono_hasta"]
     # «Ayer» solo si fue ayer: «primer_dia» puede salir hasta 72 h después (17-10-2026, tras la caída del
     # 15 al 17, a los del 14 les iba a llegar «Ayer creaste tu cuenta» tres días más tarde).
     datos["cuando"] = t["cuando"][0] if ahora - alta < timedelta(hours=48) else t["cuando"][1]
@@ -834,8 +941,48 @@ def correo(clave: str, org: dict, uso: dict, ahora: datetime, *, marca: str, bas
     enlace = cuenta if clave in ("casi_fin", "invita") else ruta
     if clave == "bono" and not bono_hasta:
         raise ValueError("el correo del bono necesita bono_hasta")
+    if clave == "bono25":
+        return {"asunto": asunto, "texto": texto, "idioma": idioma,
+                "html": _html_bono25(cuerpo, firma, t["boton"][clave], enlace, t["play"], play_url, qr_url, t["qr_pie"], pie)}
     return {"asunto": asunto, "texto": texto, "idioma": idioma,
             "html": _html_de(cuerpo, firma, t["boton"][clave], enlace, pie)}
+
+
+def _html_bono25(cuerpo, firma, boton, enlace, boton_play, play_url, qr_url, qr_pie, pie):
+    """El del bono de 25 € (29-10-2026): el mismo aspecto sobrio, con dos botones (abrir la ruta y Google Play)
+    y, si hay, el QR de Play debajo para quien lo lee en el ordenador. Las imágenes remotas las bloquean muchos
+    clientes: el texto y los botones dicen lo mismo sin ella."""
+    import re
+
+    def enlaces(texto, color):
+        return re.sub(r"(https?://[^\s<]+)", r'<a href="\1" style="color:%s">\1</a>' % color, texto)
+
+    # En el HTML las dos direcciones largas (el pase y Google Play) se enseñan cortas: el texto plano las lleva
+    # enteras, pero en pantalla una URL de 120 caracteres parte el párrafo (y Gmail la corta).
+    esc = _html.escape(cuerpo)
+    for url, corto in ((enlace, "flotadsp.com"), (play_url, "play.google.com")):
+        if url:
+            esc = esc.replace(_html.escape(url), f'<a href="{_html.escape(url)}" style="color:#0369a1">{corto}</a>')
+    esc = enlaces(esc, "#0369a1").replace("\n", "<br>")
+    qr = ""
+    if qr_url:
+        qr = (f'<p style="margin:0 0 22px"><img src="{_html.escape(qr_url)}" width="150" height="150" alt="QR Google Play" '
+              'style="display:block;border:1px solid #e5e7eb;border-radius:8px"><span style="display:block;margin-top:6px;'
+              f'color:#6b7280;font-size:12px">{_html.escape(qr_pie)}</span></p>')
+    return (
+        '<div style="font-family:-apple-system,Segoe UI,Inter,Arial,sans-serif;font-size:15px;'
+        'line-height:1.6;color:#111827;max-width:560px">'
+        f'{esc}'
+        f'<p style="margin:22px 0 12px"><a href="{_html.escape(enlace)}" style="display:inline-block;'
+        'background:#0369a1;color:#fff;text-decoration:none;padding:12px 20px;border-radius:8px;'
+        f'font-weight:700">{_html.escape(boton)}</a></p>'
+        f'<p style="margin:0 0 18px"><a href="{_html.escape(play_url)}" style="display:inline-block;'
+        'border:1px solid #0369a1;color:#0369a1;text-decoration:none;padding:11px 20px;border-radius:8px;'
+        f'font-weight:700">{_html.escape(boton_play)}</a></p>'
+        f'{qr}'
+        f'<p style="margin:0">{_html.escape(firma)}</p>'
+        '<p style="margin:28px 0 0;color:#6b7280;font-size:12px">'
+        f'{enlaces(_html.escape(pie), "#6b7280")}</p></div>')
 
 
 def _html_opinion(cuerpo, opciones, firma, pie):

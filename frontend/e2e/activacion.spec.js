@@ -74,7 +74,7 @@ test('Activación · invitar a un compañero: tu enlace con código, tu progreso
   const texto = decodeURIComponent(abierto.split('text=')[1])
   expect(texto).toContain('/invita?ref=ABC123&utm_source=referido&utm_medium=compartir&utm_campaign=rep_invitar')
   expect(texto).toContain('gratis y sin límite hasta el 31 de diciembre')
-  expect(texto).toContain('Y tú ganas 10 € con tu primera ruta real (20 entregas en 2 días).')
+  expect(texto).toContain('Y tú ganas 25 € con tu primera ruta real (20 entregas en 2 días).')
   expect(texto).toContain('gano 10 €')
 })
 

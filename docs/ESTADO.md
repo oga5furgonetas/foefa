@@ -5,7 +5,7 @@
 > haz commit y `git push`. Una sola sesión trabajando a la vez: antes de
 > empezar, `git pull` y comprueba que nadie ha dejado nada a medias aquí.
 
-Última actualización: **29-10-2026 (tarde)** (el CI de `main` llevaba desde el 18-10 en rojo; checkers arreglados de raíz y todo el CI en verde en local; ver «Última sesión»). Por la mañana: FDS 2.2.3 compilada, probada y firmada, el AAB listo para Play (ver «29-10-2026 (mañana)»).
+Última actualización: **29-10-2026 (noche, 3)** (fusionadas en `main` dos sesiones de la noche: la del servidor y la app 2.2.5 —sección «(noche): fase 0…»— y la del anuncio con la VOZ DE DANI y el mapa real de A Coruña, montado en `docs/anuncios/spot-dani/salida/`; ver «Última sesión»). Antes, noche: (anuncio «La ruta hecha»: guion para IA en `docs/anuncios/super-anuncio/` y generaciones en Artlist). Antes, tarde: (el CI de `main` llevaba desde el 18-10 en rojo; checkers arreglados de raíz y todo el CI en verde en local; ver «Última sesión»). Por la mañana: FDS 2.2.3 compilada, probada y firmada, el AAB listo para Play (ver «29-10-2026 (mañana)»).
 
 ## Qué es y dónde está
 
@@ -778,7 +778,128 @@ cambio en Kotlin que no compile se ve en `main` sin esperar al `gradlew` de Dani
   herramientas de la sesión de Claude (su daemon no puede abrir la conexión local). Cómo, en PLAY_STORE.md.
 - Aparte: `docs/anuncios/artlist/` (guion del vídeo para Artlist con QR a la ficha de Play, QR en PNG y SVG).
 
+## Última sesión — 29-10-2026 (noche): el anuncio «La ruta hecha», guion para IA y generado en Artlist
+
+Dani: «créame un guion para pasárselo a una IA y que me cree un súper anuncio… que se anuncie FDS con el QR de Google
+Play; lo que vende es la parte de repartidor: escaneas el código del pedido, te da la dirección y se añade la parada,
+las cargas y descargas, pasas de repartir de memoria a que la app te lo monta». Después conectó Artlist a la sesión
+para que se mandaran los prompts directamente.
+- **Guion completo**: `docs/anuncios/super-anuncio/GUION.md`. 25 s, 9:16: gancho «112 paquetes. ¿Por dónde
+  empiezas?» (1,5 s) → la app REAL a pantalla completa 15 s (escanear → añadida; ordenar con la hora de cada parada;
+  zonas de carga y descarga; voz; entregado con prueba) → «Mañana sales con la ruta hecha» → tarjeta con QR a Play.
+  Diez ideas estudiadas y puntuadas (§3), plano a plano con voz y sonido (§4), prompts en inglés para la IA de vídeo
+  con biblia visual, referencias y negativos (§5), pantallas reales (§6), voz/subtítulos/niveles (§7), tarjeta y QR
+  (§8), versiones de 30/15/6 s y tres ganchos A/B (§9), textos y URLs para subirlo (§10), lista previa (§11).
+  Reglas que cumple: solo lo que la app hace hoy (tabla §2 con la pantalla que lo demuestra), sin marcas ajenas, sin
+  fecha en la oferta, nadie de IA habla a cámara, la app nunca la pinta la IA.
+- **QR nuevo** `qr-play-fds-spot.{png,svg}` con `utm_campaign=spot_ia` (el de Artlist lleva `artlist_fds`): en Play
+  Console → Adquisición se distinguen.
+- **Artlist (cuenta de Dani, plan AI Suite 16500)**: hecha la imagen de referencia del repartidor y la furgoneta
+  (Nano Banana Pro, 2 variantes, 320 créditos) y una locución de prueba de 24 s (voz «Alberto Rodríguez», acento
+  latinoamericano: Artlist no tiene voz masculina de España; la final sigue siendo Puck o Dani). Los 5 planos de vídeo
+  (Veo 3.1 con referencia para los dos con cara, Veo 3.1 Fast para manos/furgoneta/cabina) **generados con la
+  aprobación de Dani (4.000 créditos)**; segunda locución con el texto final (70). Música y efectos elegidos del
+  catálogo con enlaces. Todo en
+  `docs/anuncios/super-anuncio/GENERADO.md`. **Ojo**: desde este contenedor no se puede descargar ni ver nada de
+  Artlist (la red de la sesión bloquea artlist.io e imgix.net): Dani lo mira en Artlist o se añaden esos dominios al
+  entorno.
+- **El anuncio, MONTADO** (Dani: «hazlo todo, móntalo todo y dame el resultado»; después: «nada de letras
+  encima de la app, actúa como el top del marketing»): `docs/anuncios/super-anuncio/salida/spot-ruta-*.mp4`
+  (9:16 B para TikTok/Reels, 9:16 A con QR, 4:5, 1:1, 16:9 y sin voz; 27,8 s; máster -14 LUFS). La app grabada
+  de verdad con `frontend/e2e/spot-ruta.spec.js` (escanear dos paquetes con códigos Aztec sin marca → «Añadida a
+  tu ruta», foto a la etiqueta, ordenar con la hora, el mapa con las zonas de carga y descarga encendiéndose, la
+  guía y la entrega con foto; sin consejos; sin red no hay teselas de OSM, así que la grabación pinta un
+  callejero esquemático propio: en el PC de Dani sale el mapa real al regrabar). Montaje `scripts/montar-spot-ruta.mjs`
+  + capas `scripts/spot-ruta/capas.mjs`: la app dentro de un móvil limpio sobre el fondo de marca, el titular de
+  cada escena en su franja arriba (nada encima de la pantalla, sin subtítulos), anillos en los toques, gancho y
+  pago emocional con los fotogramas de los planos de Artlist (los vídeos no se pudieron bajar; en `clips/` el
+  montaje los usa solos), voz de Puck (las 6 frases del v5, las únicas disponibles sin red: gancho «¿Todavía
+  ordenas la ruta a mano?», el que convierte), oferta «Empieza gratis», cierre B «toca el botón» / A con QR.
+  Variante `GANCHO=112` (solo texto en el gancho). Detalle y cómo rehacerlo: GENERADO.md.
+- **Bono de bienvenida a 25 €** (Dani, 29-10: «si completan su primera ruta le damos 25 €; la app que te ayuda a
+  repartir y además te paga»): `BONO_CENT = 2500` (precios.js), `_BONO_CENT = 2500` (server.py, ya no va atado al
+  premio por invitar, que sigue en 10 €), Términos («25 €»), la frase de la portada con dos cantidades
+  («Gana {bono} con tu primera ruta real y {euros} por cada compañero»; clave nueva en textosRutaB.js, 7 idiomas),
+  tests (test_referidos usa `server._BONO_CENT`; activacion y humo esperan 25 €). **Sin desplegar**: hay que subir
+  backend y web antes de que corra un anuncio que lo prometa. La campaña de correo del 17-10 sigue diciendo 10 €
+  (ya enviada). El anuncio lleva la tarjeta «+25 € con tu primera ruta · 20 entregas en 2 días · hasta el 31-12».
+- **Listo para subir** (`docs/anuncios/super-anuncio/SUBIR.md`): TikTok, Meta, Spotify y YouTube con ficheros,
+  textos, enlaces directos a Google Play con `referrer` por plataforma (y la alternativa del alta web, que sí mide
+  el píxel), pasos, presupuesto y qué medir. Desde esta sesión no hay acceso al Chrome de Dani (ni extensión ni
+  Remote Control): publicar lo pulsa él.
+- **Revisión independiente del guion** (un agente aparte, sin el contexto de la sesión): 12 hallazgos, todos
+  metidos. Los que cambian algo de verdad: el visor del escáner es la cámara, así que las etiquetas de la grabación
+  van impresas sin marca; la voz dice «foto o escaneo» (escanear solo mete la dirección con SEUR/DPD y GLS);
+  «empieza gratis» y no «gratis» (desde el 01-01 el gratis es hasta 15 paradas y el anuncio enseña 112); en el móvil
+  la voz manda al botón («Toca y crea tu cuenta») y el QR/«escanea y descárgala» solo donde se escanea desde otro
+  aparato; la frase de «ordenar» recortada (iba a 3,7 palabras/s); fuera el reloj 07:41; navegación grabada con «Esta
+  app» y la voz encendida (el spec del v5 la apaga); los ganchos se deciden por retención a 3 s con ≥2.000
+  impresiones, no por altas a 3 días; `docs/anuncios/artlist/GUION.md` corregido («entregado con prueba», botón «Ver
+  detalles») y apuntando a este como versión mantenida.
+
+## Última sesión — 29-10-2026 (noche, 2): el anuncio con la voz de Dani y el mapa real
+
+Dani: «no sé qué tengo que hacer, así que hazlo tú»; luego mandó una nota de voz de WhatsApp (30 s, su voz, acento de
+España): «utilízame este audio y móntame el vídeo acorde al audio»; y «mete lo de los 25 euros como gancho inicial».
+- **El anuncio nuevo, MONTADO**: `docs/anuncios/spot-dani/salida/spot-dani-*.mp4` (9:16 B «toca el botón» 32,2 s;
+  9:16 A con QR; 4:5; 16:9; 1:1 (no versionado); y `9x16-B-30s` para Spotify, 30,0 s justos sin el gancho). Qué dice
+  y qué se ve, segundo a segundo, y cómo rehacerlo: `docs/anuncios/spot-dani/LEEME.md`. La voz manda el tiempo
+  (`voz.json`: transcrita con whisper small vía sherpa-onnx en el contenedor, cortada por los silencios); gancho
+  «¿Quieres 25 € gratis? Te los damos por tu primera ruta con la app» (1,7 s, antes de la voz); las dos preguntas
+  sobre los planos de Artlist y la app; «Esto te interesa»; logo «Flota DSP»; la app en el móvil (mapa, panel de
+  empresa para «el control de flotas», escanear, ordenar, zonas, voz, entregado); «Forma parte del cambio»; cierre
+  con flotadsp.com, «+25 € con tu primera ruta», botón y Play; el lema «Cada entrega cuenta.» entra cuando lo dice.
+  Montaje `scripts/montar-spot-dani.mjs`, capas `scripts/spot-dani/capas.mjs`, voz `voz-dani.flac` (-16 LUFS,
+  casi sin tocar) y la nota original `fuente-dani-whatsapp.mp3`. La nota YA TRAE su música (sin derechos): el
+  montaje no mezcla la nuestra (Dani: «hay dos pistas mezcladas, quita nuestra música»); solo efectos y una subida
+  bajo el gancho.
+- **El mapa REAL de A Coruña sin red** (Dani: «quiero el mapa de la app y que se vea bien; si no, el anuncio es una
+  mierda»): `scripts/spot-ruta/teselas.py` saca las teselas de `docs/play-store/captura-4-oficina-mapa.png` (la
+  captura del panel, con OSM de verdad a 2x): georreferencia por los 12 marcadores de la demo (error < 1 px), limpia
+  marcadores/líneas/controles, amplía por reflejo, superresolución ×2/×4 con FSRCNN (modelo público de GitHub,
+  clonado de solo lectura; sin él, Lanczos + enfoque) y corta zooms 13-17. `e2e/spot-ruta.spec.js` las sirve
+  (`TESELAS=`) en vez de las de OSM; el esquemático queda de reserva. A zoom 17 (navegación) se nota que viene de
+  zoom 14; con red real la grabación sale nítida sin tocar nada. Mapa limpio: `super-anuncio/mapa-coruna.{jpg,json}`.
+- **Desplegar desde GitHub** (Dani: «despliega el bono de 25 en producción»; desde la nube no se llega a Fly ni a
+  Cloudflare): `.github/workflows/desplegar.yml`, a mano (Actions → «Desplegar producción» → Run workflow, eligiendo
+  rama y qué: todo/backend/web). Hace lo mismo que los .ps1 del PC: guardia anti-FlotaDSP, lint + build + checkers +
+  pytest con Mongo, `flyctl deploy` a `flota-backend` y /api/health, web compilada con la API y el píxel de Meta
+  (`1317231944812644`) cosidos, `wrangler pages deploy --project-name flota --branch main`, comprobación de que
+  producción sirve el bundle nuevo y calentado del edge. **Se lanzó (run 2 del 29-10, 15:18 UTC) y PARÓ en la
+  guardia: faltan los tres secretos del repositorio** `FLY_API_TOKEN` (contenido de
+  `C:\Users\Usuario\.flotia-fly-token.txt`), `CLOUDFLARE_API_TOKEN` (token de API con «Cloudflare Pages: Edit») y
+  `CLOUDFLARE_ACCOUNT_ID`. En cuanto Dani los ponga (Settings → Secrets and variables → Actions), se relanza y
+  despliega. Mientras, el bono de 25 € NO está en producción (sí en el código).
+- **Publicar los anuncios**: desde esta sesión no hay navegador ni red a Meta/TikTok/Spotify. Sí existen conectores
+  en el directorio de claude.ai que lo harían desde una sesión nueva: «TikTok for Business» (oficial: crea campañas,
+  grupos y anuncios) y «Adspirer Social Ads» (Meta Ads e Instagram, y TikTok). Spotify Ad Studio no tiene conector
+  ni API: se sube a mano con `super-anuncio/SUBIR.md` y `spot-dani-9x16-B-30s.mp4`.
+- **Correo «tu primera ruta ahora vale 25 €»** (Dani: «a todos los que se han registrado y no han completado
+  ninguna ruta, un correo: enhorabuena, gana 25 €, completa tu primera ruta; el enlace de Google Play, un QR, que
+  la usen, que nos den feedback y nos puntúen»): clave `bono25` del ciclo de correos (`backend/ciclo_correos.py`:
+  `toca_bono25`, textos en es/pt/en/br, HTML con dos botones —abrir la ruta sin contraseña y Google Play— y el QR
+  `flotadsp.com/qr-play-correo.png`), y la campaña en `server.py` (`_campana_bono25_vuelta`, bucle cada 15 min):
+  a TODA cuenta de quien reparte solo con el bono pendiente y menos de 20 entregas de verdad, tenga la edad que
+  tenga, una vez, de 9 a 21 de su hora, con baja de un clic, nunca a menos de 18 h de otro correo del ciclo, dentro
+  de la cuota del día (Brevo 280; con Resend solo, dejando los 15 de reserva) y 40 por tanda. **Sale sola al
+  desplegar** (`CAMPANA_BONO25=0` la apaga). Dice su fecha límite real (30 días desde el alta o desde el 17-10),
+  cómo se gana, cómo se cobra, pide una línea de respuesta y la valoración en Play. Tests:
+  `tests/test_campana_bono25.py` y los nuevos de `test_ciclo_correos.py`; 1.388 en verde.
+- Lo que NO se pudo desde aquí (sigue igual): bajar los clips de Artlist y la voz de Gemini (ya no hace falta: la
+  voz es la de Dani).
+
 ## Pendiente (por prioridad)
+
+-6. **El anuncio con la voz de Dani (29-10 noche, 2)**: montado en `docs/anuncios/spot-dani/salida/`. Falta:
+   (1) **desplegar el bono de 25 €**: Dani pone los 3 secretos en GitHub y se relanza `desplegar.yml` (o ejecuta
+   `scripts\deploy-backend.ps1` y `deploy-frontend.ps1` en su PC). Al desplegar el backend arranca sola la
+   campaña `bono25` (el correo a los ~100 registrados sin primera ruta; mirar el latido `campana_bono25` y
+   `correos_enviados` con `por: ciclo:bono25`); (2) publicar: conectar «TikTok for Business» y
+   «Adspirer Social Ads» en claude.ai y, en sesión nueva, crear las campañas con el 9:16 B y los enlaces de
+   SUBIR.md; Spotify a mano con el `-30s`; YouTube el 16:9 con QR; medir;
+   (3) opcional, para afinar: bajar los 5 clips de Artlist a `super-anuncio/clips/` (`plano-1.mp4`,
+   `plano-7a.mp4`, `plano-9.mp4`) y regrabar con red (mapa nítido a zoom 17): el montaje los coge solos.
+   El anuncio anterior (voz de Puck, `super-anuncio/salida/`) queda como alternativa.
 
 -5. **FDS 2.2.5 FIRMADA POR GITHUB (29-10, 21:22)**: el workflow `app-release.yml` (run 3) la compiló y firmó con la
    clave de subida (secretos `FLOTA_KEYSTORE_B64` y `FLOTA_KEYSTORE_PASSWORD`, puestos por Dani); el AAB verificado
@@ -791,9 +912,9 @@ cambio en Kotlin que no compile se ve en `main` sin esperar al `gradlew` de Dani
    «He olvidado mi contraseña», cerrar sesión con pregunta), sube el AAB 17 a la prueba abierta de Play Console y
    el APK a la web (`/descargas/FDS.apk`); al subir el APK, `fly secrets set -a flota-backend APP_ANDROID_WEB="17 2.2.5"`.
 
--4. **Desplegar y decidir (29-10 noche)**: backend DESPLEGADO (4d2e1b4, 20:00). Falta la web (página de planes,
-   aviso de ubicación, fichas de ayuda y colores, y los km a mano de la auditoría) desde el PC con `npx.cmd`;
-   leer `docs/ESTUDIO_APP.md` y decidir lo de su
+-4. **Desplegar y decidir (29-10 noche)**: backend DESPLEGADO (4d2e1b4, 20:00) y web DESPLEGADA (20:40). Pendiente
+   de desplegar el backend otra vez con bb77d93 (reset de la oficina) y con lo de la rama del anuncio fusionada en
+   `main` (bono 25 € y la campaña `bono25`, que SALE SOLA al arrancar: ver -6). Leer `docs/ESTUDIO_APP.md` y decidir lo de su
    apartado 6 (público de los anuncios, cómo se cobra en la app antes del 31-12, OSRM propio, Gemini de pago, las
    cuatro rutas heredadas). Fase 0 HECHA (29-10 noche); fase 1 en la 2.2.5 salvo FCM (avisos push) y los textos a
    `strings.xml`.

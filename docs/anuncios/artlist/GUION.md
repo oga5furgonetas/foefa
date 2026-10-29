@@ -9,6 +9,9 @@ imprimir en la furgoneta, el almacén o un flyer). Los dos abren:
 `https://play.google.com/store/apps/details?id=com.flotadsp.flota&referrer=utm_source%3Dqr%26utm_medium%3Dvideo%26utm_campaign%3Dartlist_fds`
 (el `referrer` hace que en Play Console → Adquisición se vea cuántas instalaciones vienen del QR del vídeo).
 
+> **Versión mantenida de la tarjeta, el QR, las versiones cortas, los ganchos y la prueba:**
+> `../super-anuncio/GUION.md` §8-§10 (29-10, tarde). Si este fichero y aquel difieren, manda aquel.
+
 ---
 
 ## 1. A quién le hablamos y qué le duele
@@ -19,7 +22,7 @@ imprimir en la furgoneta, el almacén o un flyer). Los dos abren:
 - **Qué le duele** (lo que dicen en los grupos de Facebook y en las encuestas del 17-10): ordenar la ruta a ojo cada
   mañana, apuntar direcciones a mano, perder cobertura en garajes y naves, y acabar tarde.
 - **Qué le da FDS, y es verdad**: foto o escaneo a la etiqueta y la dirección entra sola; la ruta se ordena por tiempo
-  con el tráfico; te lleva con Google Maps o Waze parada a parada; funciona sin cobertura; entregado en un toque.
+  con el tráfico; te lleva con Google Maps o Waze parada a parada; funciona sin cobertura; entregado con prueba (son dos toques: no decir «en un toque»).
 - **Oferta** (sin fecha): gratis, sin tarjeta. Punto. El plan sin tope existe, pero el anuncio no vende plan: vende
   «mañana sales con la ruta hecha».
 
@@ -94,7 +97,7 @@ Video. La voz dice «Escanea y descárgala».
 
 **Salida B (sin QR)**: para TikTok, Reels y Shorts en el móvil. Misma tarjeta pero el QR se sustituye por el
 distintivo de Google Play a lo grande y la frase «Búscala en Google Play: FDS» + «flotadsp.com/app». La voz dice
-«Descárgala en Google Play». Y el enlace del anuncio apunta a la ficha de Play (en Meta, botón «Instalar»).
+«Descárgala en Google Play». Y el enlace del anuncio apunta a la ficha de Play (en YouTube; en Meta la campaña que convierte es la de registros, botón «Ver detalles» y alta web).
 
 iPhone: la URL corta vale para ambos (abre la app web en iPhone); el QR es solo Android, y se dice en el flyer.
 

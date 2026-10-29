@@ -226,7 +226,7 @@ function PrecioRepartidor() {
             <Gift size={17} className="mt-0.5 shrink-0 text-[color:var(--ld-accent)]" />
             <span>
               {promo && refPromoActiva()
-                ? tx('Gana {euros} con tu primera ruta real y {euros} por cada compañero que la use.', { euros: eurosRef(BONO_CENT, locale()) })
+                ? tx('Gana {bono} con tu primera ruta real y {euros} por cada compañero que la use.', { bono: eurosRef(BONO_CENT, locale()), euros: eurosRef(refCentActual(), locale()) })
                 : tx('Gana {euros} por cada compañero que la use.', { euros: eurosRef(refCentActual(), locale()) })}
               {promo && refPromoActiva() && (
                 <span className="mt-0.5 block text-[12.5px] text-[color:var(--ld-dim)]">

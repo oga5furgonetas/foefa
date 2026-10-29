@@ -194,7 +194,7 @@ export const BR = {
   'El móvil no ha dado permiso para avisos. Puedes activarlo en los ajustes del navegador.': 'O celular não deu permissão para avisos. Você pode ativar nas configurações do navegador.',
   'No se han podido activar los avisos en este móvil.': 'Não foi possível ativar os avisos neste celular.',
   // El bono de bienvenida (17-10-2026)
-  'Gana {euros} con tu primera ruta real y {euros} por cada compañero que la use.': 'Ganhe {euros} com sua primeira rota de verdade e {euros} por cada colega que usar o app.',
+  'Gana {bono} con tu primera ruta real y {euros} por cada compañero que la use.': 'Ganhe {bono} com sua primeira rota de verdade e {euros} por cada colega que usar o app.',
   'La primera ruta cuenta con 20 entregas en 2 días distintos.': 'A primeira rota conta com 20 entregas em 2 dias diferentes.',
   '{euros} por tu primera ruta real': '{euros} pela sua primeira rota de verdade',
   'Haz {n} entregas con la app en {d} días distintos y son tuyos. Hasta el {fecha}.': 'Faça {n} entregas com o app em {d} dias diferentes e eles são seus. Até {fecha}.',

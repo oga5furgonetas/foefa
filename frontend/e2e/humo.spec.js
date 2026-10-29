@@ -3670,8 +3670,8 @@ test.describe('Portada de repartidores desde México', () => {
     await expect(page.getByText('Mercado Libre', { exact: true })).toBeVisible()
     await expect(page.getByText('Estafeta', { exact: true })).toBeVisible()
     await expect(page.getByText('MRW', { exact: true })).toHaveCount(0)
-    // Con la promoción (hasta el 31-12-2026), 10 € por su primera ruta y 10 € por compañero; después, 2,50 €.
-    await expect(page.getByText(/Gana (10 € con tu primera ruta real y 10 €|2[,.]50 €) por cada compañero/).first()).toBeVisible()
+    // Con la promoción (hasta el 31-12-2026), 25 € por su primera ruta (29-10) y 10 € por compañero; después, 2,50 €.
+    await expect(page.getByText(/Gana (25 € con tu primera ruta real y 10 €|2[,.]50 €) por cada compañero/).first()).toBeVisible()
     // Español de allí: «toma una foto», no «haz una foto» (lib/idioma.js, aLatam).
     await expect(page.getByText(/^Toma una foto a la etiqueta/).first()).toBeVisible()
     await expect(page.getByText(/Haz una foto a la etiqueta/)).toHaveCount(0)

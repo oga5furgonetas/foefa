@@ -1,0 +1,8 @@
+{
+ "escala_px_por_mercator": 8387982.374035608,
+ "ox": -3996780.2601215662,
+ "oy": -3069755.7678308263,
+ "ancho": 2728,
+ "alto": 1568,
+ "nota": "px = escala*mercator + o; mercator en [0,1] (web mercator). Zoom nativo 15 (256 px por tesela)."
+}

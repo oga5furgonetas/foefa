@@ -1,0 +1,193 @@
+name: Desplegar producción
+
+# DESPLIEGUE A PRODUCCIÓN DESDE GITHUB (29-10-2026). Hasta hoy se desplegaba solo desde el PC de Dani con
+# scripts/deploy-backend.ps1 y deploy-frontend.ps1. Este flujo hace lo mismo desde un runner de GitHub, para
+# cuando no hay PC a mano (p. ej. una sesión en la nube, que no llega a Fly ni a Cloudflare). Se lanza a mano
+# (Actions → «Desplegar producción» → Run workflow) o con la API, eligiendo la rama.
+#
+# Lo que necesita, en Settings → Secrets and variables → Actions:
+#   Secrets: FLY_API_TOKEN (el del fichero .flotia-fly-token.txt del PC), CLOUDFLARE_API_TOKEN (token de API de
+#            Cloudflare con permiso «Cloudflare Pages: Edit») y CLOUDFLARE_ACCOUNT_ID (el id de la cuenta).
+#   Si falta alguno, el primer trabajo PARA y dice cuál, sin tocar nada.
+#
+# Las mismas reglas que los scripts del PC:
+#   · nunca sobre infraestructura de FlotaDSP (fly.toml con app flotadsp-* o el proyecto de Pages flotadsp-v2);
+#   · nada se despliega en rojo: lint, build, checkers y tests antes;
+#   · la web se compila con la API y el píxel de Meta cosidos (sin VITE_META_PIXEL_ID se desplegaría sin píxel);
+#   · «--branch main» en Pages (si no, wrangler dice Success y la web no cambia);
+#   · después, se comprueba que producción sirve lo compilado y se calienta el edge pidiendo cada asset.
+on:
+  workflow_dispatch:
+    inputs:
+      que:
+        description: 'Qué desplegar'
+        type: choice
+        options: [todo, backend, web]
+        default: todo
+
+env:
+  FLY_APP: flota-backend
+  PAGES_PROYECTO: flota
+  WEB: https://flotadsp.com
+  BACKEND: https://flota-backend.fly.dev
+  META_PIXEL_ID: '1317231944812644'
+
+jobs:
+  guardia:
+    name: Guardia (destino y secretos)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: El destino no es FlotaDSP
+        run: |
+          set -e
+          if grep -Eq '^app[[:space:]]*=[[:space:]]*"[^"]*flotadsp' backend/fly.toml; then
+            echo "::error::backend/fly.toml apunta a una app de FlotaDSP. No se despliega."; exit 1; fi
+          app=$(grep -E '^app[[:space:]]*=' backend/fly.toml | head -1 | sed -E 's/.*"([^"]+)".*/\1/')
+          [ "$app" = "$FLY_APP" ] || { echo "::error::fly.toml dice app=$app y este flujo despliega $FLY_APP"; exit 1; }
+          case "$PAGES_PROYECTO" in flotadsp*|*flotadsp-v2*) echo "::error::proyecto de Pages de FlotaDSP"; exit 1;; esac
+          echo "destino: Fly $FLY_APP · Pages $PAGES_PROYECTO · $WEB"
+      - name: Los secretos están
+        env:
+          HAY_FLY: ${{ secrets.FLY_API_TOKEN != '' }}
+          HAY_CF: ${{ secrets.CLOUDFLARE_API_TOKEN != '' }}
+          HAY_CF_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID != '' }}
+          QUE: ${{ inputs.que }}
+        run: |
+          faltan=""
+          if [ "$QUE" != "web" ] && [ "$HAY_FLY" != "true" ]; then faltan="$faltan FLY_API_TOKEN"; fi
+          if [ "$QUE" != "backend" ] && [ "$HAY_CF" != "true" ]; then faltan="$faltan CLOUDFLARE_API_TOKEN"; fi
+          if [ "$QUE" != "backend" ] && [ "$HAY_CF_ID" != "true" ]; then faltan="$faltan CLOUDFLARE_ACCOUNT_ID"; fi
+          if [ -n "$faltan" ]; then
+            echo "::error::Faltan estos secretos del repositorio:$faltan. Se añaden en Settings → Secrets and variables → Actions → New repository secret. FLY_API_TOKEN es el contenido de C:\\Users\\Usuario\\.flotia-fly-token.txt; CLOUDFLARE_API_TOKEN se crea en dash.cloudflare.com → Mi perfil → Tokens de API (plantilla «Editar Cloudflare Workers» o permiso «Cloudflare Pages: Edit»); CLOUDFLARE_ACCOUNT_ID está en la barra lateral del panel de Cloudflare."
+            exit 1
+          fi
+          echo "secretos: ok"
+
+  comprobar:
+    name: Nada se despliega en rojo
+    needs: guardia
+    runs-on: ubuntu-latest
+    services:
+      mongo:
+        image: mongo:7
+        ports: ['27017:27017']
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: pip
+          cache-dependency-path: backend/requirements.txt
+      - name: Frontend · dependencias, lint y build
+        working-directory: frontend
+        run: |
+          npm ci
+          npm run lint
+          npm run build
+      - name: Checkers (los que paran un despliegue)
+        run: |
+          node scripts/check-hooks.mjs
+          node scripts/check-existe.mjs
+          node scripts/check-huerfanos.mjs
+          node scripts/check-marca.mjs
+          node scripts/check-i18n.mjs
+          node scripts/check-permisos.mjs
+          node scripts/check-modulos.mjs
+          node scripts/check-efectos.mjs
+          node scripts/check-chunk-error.mjs
+      - name: Backend · sintaxis y tests
+        env:
+          SECRET_KEY: test-secret-key-only-for-tests
+          MONGO_URL: mongodb://localhost:27017
+          DB_NAME: test_flota
+          GLOBAL_DB_NAME: test_flota_global
+        run: |
+          python -m py_compile backend/server.py
+          pip install -r backend/requirements.txt pytest pytest-asyncio
+          pytest backend/tests -q
+
+  backend:
+    name: Backend → Fly (flota-backend)
+    needs: comprobar
+    if: ${{ inputs.que != 'web' }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: superfly/flyctl-actions/setup-flyctl@master
+      - name: fly deploy
+        working-directory: backend
+        env:
+          FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
+        run: flyctl deploy --remote-only -a "$FLY_APP" --strategy immediate --ha=false
+      - name: El backend contesta y tiene Mongo
+        run: |
+          for i in $(seq 1 12); do
+            resp=$(curl -sS --max-time 20 "$BACKEND/api/health" || true)
+            echo "$resp"
+            if echo "$resp" | grep -q '"status":"ok"' && echo "$resp" | grep -q '"mongo_connected":true'; then echo "backend ok"; exit 0; fi
+            sleep 10
+          done
+          echo "::error::el backend no contesta ok con Mongo tras el despliegue"; exit 1
+
+  web:
+    name: Web → Cloudflare Pages (flota)
+    needs: comprobar
+    if: ${{ inputs.que != 'backend' }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - name: Compilar con la API y el píxel cosidos
+        working-directory: frontend
+        env:
+          VITE_API_URL: ${{ env.BACKEND }}/api
+          VITE_META_PIXEL_ID: ${{ env.META_PIXEL_ID }}
+          VITE_TIKTOK_PIXEL_ID: ${{ vars.TIKTOK_PIXEL_ID }}
+        run: |
+          npm ci
+          node ../scripts/check-hooks.mjs
+          npm run build
+          node ../scripts/sellar-build.mjs
+          grep -o 'assets/v2/index-[A-Za-z0-9_-]*\.js' dist/index.html | head -1 > ../bundle.txt
+          echo "bundle: $(cat ../bundle.txt)"
+      - name: wrangler pages deploy (rama main = producción)
+        working-directory: frontend
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: npx wrangler pages deploy dist --project-name "$PAGES_PROYECTO" --branch main --commit-dirty=true
+      - name: Producción sirve lo compilado
+        run: |
+          local=$(cat bundle.txt)
+          for i in $(seq 1 18); do
+            remoto=$(curl -sS --max-time 25 -H 'Cache-Control: no-cache' "$WEB/?nocache=$(date +%s%N)" | grep -o 'assets/v2/index-[A-Za-z0-9_-]*\.js' | head -1 || true)
+            echo "intento $i: la web sirve ${remoto:-nada} (local $local)"
+            [ "$remoto" = "$local" ] && { echo "web ok"; exit 0; }
+            sleep 5
+          done
+          echo "::error::la web sigue sirviendo un bundle viejo (¿falta --branch main?)"; exit 1
+      - name: Calentar el edge (cada asset, y que ninguno vuelva como HTML)
+        working-directory: frontend
+        run: |
+          mal=0
+          for vuelta in 1 2 3 4; do
+            mal=0
+            while IFS= read -r f; do
+              ruta="${f#dist/}"
+              tipo=$(curl -sS -o /dev/null --max-time 25 -w '%{content_type}' "$WEB/$ruta" || echo fallo)
+              case "$tipo" in text/html*|fallo) mal=$((mal+1)); echo "  aún no: $ruta ($tipo)";; esac
+            done < <(find dist/assets -type f \( -name '*.js' -o -name '*.css' \))
+            [ "$mal" -eq 0 ] && { echo "edge caliente"; exit 0; }
+            echo "vuelta $vuelta: $mal assets sin propagar; espero 10 s"; sleep 10
+          done
+          echo "::warning::$mal assets siguen volviendo como HTML; las defensas del cliente los curan, pero conviene mirarlo"
