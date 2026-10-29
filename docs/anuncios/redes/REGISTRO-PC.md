@@ -79,3 +79,11 @@ Instagram 0 (nada que contestar); Facebook 0. Proporción con app: 3 de 11.
   los pide el 30-10, 03-11, 06-11 y 08-11. Sustituidos el 30-10 y el 03-11 (arriba); para el 06-11 y 08-11 hará
   falta otra pieza o que Dani copie esos mp4 a `frontend/public/redes/`.
 - `tiktok-es.mp4` está programado el 30-10; el calendario lo repetía el 11-11: ese día habrá que cambiarlo.
+
+### 29-10 23:30 — bono de bienvenida a 25 €
+- Dani: «súbelo a 25». El código ya lo tenía (`precios.js` BONO_CENT=2500, `server.py` _BONO_CENT=2500, fusión de
+  `sweet-brown` 19:50). REDES.md apartado 3 y el post del L 10-11 pasan a 25 € (invita y gana sigue en 10 €/2,50 €).
+  Web redesplegada (`6b19bb8f.flota-2fg.pages.dev`, chequeos y build en verde). **Backend en producción: no
+  verificado** que pague 25 € (`/api/app/version` da 404, así que lo desplegado es anterior al código de hoy).
+- Nada de lo programado hasta el 05-11 menciona el bono. A partir de ahora la sesión del PC lleva las redes en
+  bucle de 4 h (pasos 2-6).
