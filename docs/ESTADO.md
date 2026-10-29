@@ -770,6 +770,19 @@ cambio en Kotlin que no compile se ve en `main` sin esperar al `gradlew` de Dani
   herramientas de la sesión de Claude (su daemon no puede abrir la conexión local). Cómo, en PLAY_STORE.md.
 - Aparte: `docs/anuncios/artlist/` (guion del vídeo para Artlist con QR a la ficha de Play, QR en PNG y SVG).
 
+## 29-10-2026 (noche, sesión en la nube): redes de FDS, el manual del community manager
+
+Dani: «coge mi Twitter, mi TikTok y mi Facebook y haz de manager: busca hilos, métete en conversaciones, que nos
+conozcan y descarguen la app». Desde la nube no hay acceso a ninguna cuenta (sin conector de redes y sin su
+navegador), así que no se publicó nada. Hecho: **`docs/anuncios/REDES.md`**, el manual que sigue cualquier sesión
+que haga una ronda: la regla (siempre como FDS o como Dani, nunca como usuario anónimo: práctica desleal en la UE y
+baneo en las plataformas), la oferta exacta que se puede decir, los enlaces con utm, la ronda diaria con topes,
+las búsquedas por red, 10 plantillas de respuesta, el calendario de 14 días con los textos escritos (X, TikTok,
+Facebook, LinkedIn) sobre las piezas que ya existen, la medición y el registro de rondas.
+Lo que hace falta de Dani: (1) para responder en hilos, una sesión en su PC con Claude en Chrome («haz la ronda de
+redes de docs/anuncios/REDES.md»); (2) para publicar el calendario desde la nube, conectar Metricool (o Typefully
+para X/LinkedIn) en claude.ai → Conectores y abrir sesión nueva; (3) tres vídeos a cámara (Guion A).
+
 ## Pendiente (por prioridad)
 
 -5. **FDS 2.2.5 (29-10 noche), compilada en verde por el CI (run 340)**: en el PC de casa
