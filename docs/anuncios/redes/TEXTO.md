@@ -11,7 +11,7 @@ Fondos: los de Pexels de `tiktok-fotos/fondos` (solo enseñan el oficio; nadie �
 los usa: son tres fotos SIN personas generadas el 29-10 en la cuenta de Artlist de Dani (Nano Banana Pro, 9:16:
 furgoneta blanca al amanecer con la puerta abierta; interior con paquetes; libreta con direcciones en el
 salpicadero). Desde la nube no se pudieron bajar (la red del entorno bloquea `cms-toolkit-artifacts.artlist.io`
-y `ai-toolkit-generations.imgix.net`): se guardan a mano con esos nombres, a 1080×1920, y se vuelve a ejecutar.
+y `ai-toolkit-generations.imgix.net`): se guardan a mano con esos nombres, a 1080×1920, y se vuelve a ejecutar. **Hecho el 29-10 por la noche desde el PC** (bajadas con el conector de Artlist, recortadas a 1080×1920; las piezas de `frontend/public/redes/` ya llevan estos fondos).
 
 Enlace en TikTok: no se puede poner en la descripción; va «enlace en el perfil». En X y Facebook, el enlace del
 apartado 4 de `REDES.md` con su `utm_content`.

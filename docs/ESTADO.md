@@ -914,6 +914,22 @@ a las 7:51, 12:51 y 19:51). Programados en Metricool dos posts de LinkedIn (04-1
 Instagram y YouTube esperan a que la web se despliegue con `frontend/public/redes/` (imágenes y vídeos en español, 30 MB):
 **Dani: mezclar `claude/trusting-feynman-0tfz62` en `main` (es fast-forward, ya lleva main) y desplegar la web.**
 
+## Última sesión — 29-10-2026 (noche, PC de Dani): web desplegada con las piezas de redes, semana programada y primera ronda
+
+Dani: «eres el community manager de FDS, trabajas desde mi PC» (prompt de `docs/anuncios/redes/PROMPT-PC.md`). Hecho:
+- **`main` lleva la rama de redes** (`claude/trusting-feynman-0tfz62`, fast-forward) y la **web está desplegada** con
+  `frontend/public/redes/` (chequeos, eslint y build en verde; `flotadsp.com/redes/…` → 200). Fondos de Artlist
+  bajados y piezas regeneradas (`redes/fondos/`, `scripts/redes-fotos.mjs`; Playwright necesitó
+  `npx.cmd playwright install chromium` en este PC).
+- **Metricool**: 15 publicaciones programadas del 30-10 al 05-11 (TikTok 18:00, Instagram 12:00, YouTube Shorts jueves y
+  domingo 19:00) además de los 2 de LinkedIn que ya estaban. **X**: publicado el post del jueves y programados 6 (31-10 →
+  05-11, 7:30). **Ronda**: X 3 respuestas + 6 seguidos, TikTok 8 comentarios; Instagram y Facebook sin nada que contestar.
+  Todo, con hilo y texto, en **`docs/anuncios/redes/REGISTRO-PC.md`** (la sesión del PC escribe ahí, la de la nube en REDES.md).
+- Sustituciones: el sketch FDS-1 y el spot v5 no están en este PC → `tiktok-es.mp4` (30-10) e imagen «¿Y si lo hace la app?»
+  (03-11). Faltan piezas para el 06-11 y 08-11 (sketches FDS-3/FDS-4) y otra para el 11-11.
+- Visto en @FlotaDSP dos posts de hoy que no son de la sesión; uno nombra a Amazon/SEUR/GLS/MRW (contra la regla). No se toca.
+- Remote Control: el modo automático no deja activarlo desde la sesión; Dani lo enciende desde la barra.
+
 ## Pendiente (por prioridad)
 
 -6. **El anuncio con la voz de Dani (29-10 noche, 2)**: montado en `docs/anuncios/spot-dani/salida/`. Falta:
