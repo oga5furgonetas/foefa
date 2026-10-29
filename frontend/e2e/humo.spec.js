@@ -736,6 +736,11 @@ test.describe('Cuadrante', () => {
     }, 'N/T\tBAJA\n1.EXTRA\tV\n')
     await expect.poll(() => pedidos.length).toBe(3)
     expect(pedidos[2][1]).toHaveLength(4)
+    // La respuesta del pegado trae el `cambio_id` que Ctrl+Z manda en `solo_si`: hay que esperar a que la hoja
+    // la haya APLICADO («Guardado: 4 celdas.» sale en el mismo render que apila el c3), no solo a ver salir la
+    // petición. El 29-10-2026, con la máquina cargada, el Ctrl+Z llegó antes que la respuesta y mandó `c2` (dos
+    // veces seguidas en la batería; aislada, la prueba pasaba siempre).
+    await expect(page.getByText('Guardado: 4 celdas.')).toBeVisible()
     // Ctrl+Z: deshace lo último de ESTA hoja, y solo si sigue siendo lo último.
     await page.keyboard.press('Control+z')
     await expect.poll(() => pedidos.length).toBe(4)

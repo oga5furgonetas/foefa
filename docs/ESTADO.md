@@ -623,8 +623,9 @@ Nada se había borrado (org `owner` sin `modulos`, usuario `dani` sin
 Dani preguntó por dónde íbamos y pidió «todo perfecto, sin falsos positivos». Lo primero que salió: **ningún run del
 CI de GitHub en `main` estaba en verde desde al menos el 18-10**. Los del 18 al 24-10 ni arrancaban (morían a los
 3 s), y los del 28 y 29-10 pasaban el backend y las E2E pero caían en los checkers del frontend. La nota del 28-10
-decía «el CI está en curso»: no, estaba en rojo. Trabajo hecho en este contenedor (Linux), rama
-`claude/focused-gauss-4177i9` (esta sesión no puede subir a `main`): **Dani la fusiona o me dice que suba a `main`**.
+decía «el CI está en curso»: no, estaba en rojo. Trabajo hecho en este contenedor (Linux) y **subido a `main`**
+con el permiso de Dani (349780f y el commit de cierre). Al cerrar, el run 328 del CI de GitHub tenía el backend
+en verde y el frontend en las E2E (ESLint y build pasados); el run del commit de cierre dice la última palabra.
 
 Los checkers, arreglados de raíz (el fallo del checker, no el síntoma):
 - `check-huerfanas`: no leía `app-android` (Kotlin ni sus pruebas), así que acusaba a `POST /app-login` de huérfana.
@@ -653,7 +654,11 @@ propósito (cambiar dependencias de un efecto cambia comportamiento).
 
 Comprobado aquí, en el orden del CI: los 24 checkers del frontend en verde; ESLint 0 errores; `vite build`;
 `py_compile` y los 8 `check_*.py`; `pytest` 1.373 pasados y 1 omitido (sin `test_api.py`: aquí no hay Mongo; en
-el CI ese job ya pasaba); Playwright completo, escritorio y móvil: EN CURSO al cerrar este commit (230 de ~550 en verde, y UN fallo repetido en «Cuadrante › la hoja: escribir, pegar de Excel, Ctrl+Z», que cayó mientras las capturas de pantalla competían por la CPU; se investiga y se apunta aquí en el siguiente commit).
+el CI ese job ya pasaba); Playwright completo, escritorio y móvil: 550 pasadas, 47 omitidas y 1 fallo repetido en «Cuadrante › la hoja: escribir, pegar de
+Excel, Ctrl+Z», que cayó las dos veces mientras las capturas de pantalla competían por la CPU y aislada pasaba 4 de 4.
+Era una carrera de la propia prueba: pulsaba Ctrl+Z al ver salir la petición de pegar, antes de que la hoja aplicara
+la respuesta con el `cambio_id` (mandaba `c2` en vez de `c3`). Arreglada: espera a «Guardado: 4 celdas.», que sale
+en el mismo render que apila el id. Las 10 pruebas del Cuadrante, 3 veces con 4 workers en escritorio y móvil: 60 de 60.
 
 Lo que NO se ha hecho: compilar la app Android aquí (`dl.google.com`, de donde sale el SDK, lo bloquea el proxy
 del contenedor); la 2.2.3 de la mañana sigue siendo la buena. Nada desplegado: el backend solo cambia en un test;
@@ -681,9 +686,9 @@ desplegar la web** la próxima vez desde el PC.
 
 ## Pendiente (por prioridad)
 
--4. **CI y rama (29-10 tarde)**: fusionar `claude/focused-gauss-4177i9` en `main` (o decirme que suba) y ver el
-   run de GitHub en verde; desplegar la web (fichas de ayuda y colores); decidir qué hacer con las cuatro rutas
-   heredadas sin consumidor (`SIN_UI_A_PROPOSITO` en `scripts/check-huerfanas.mjs`): engancharlas o borrarlas.
+-4. **CI y web (29-10 tarde)**: ver en verde el run del CI de GitHub del commit de cierre; desplegar la web desde el
+   PC (fichas de ayuda y colores; el backend no cambia); decidir qué hacer con las cuatro rutas heredadas sin
+   consumidor (`SIN_UI_A_PROPOSITO` en `scripts/check-huerfanas.mjs`): engancharlas o borrarlas.
 
 -3. **App nativa (29-10)**: Dani instala `app-android/salida/FDS-2.2.3.apk` en su móvil, la prueba (entrar como
    conductor de empresa: turnos, auditoría con fotos, trabajar más; y como autónomo) y sube
