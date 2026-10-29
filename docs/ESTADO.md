@@ -776,9 +776,11 @@ cambio en Kotlin que no compile se ve en `main` sin esperar al `gradlew` de Dani
 
 ## Pendiente (por prioridad)
 
--5. **FDS 2.2.5 FIRMADA POR GITHUB (29-10, 21:14)**: el workflow `app-release.yml` (run 2) la compiló y firmó con la
-   clave de subida (secretos `FLOTA_KEYSTORE_B64` y `FLOTA_KEYSTORE_PASSWORD`, puestos por Dani), `jarsigner` en
-   verde. Artefacto `FDS-2.2.5` del run https://github.com/oga5furgonetas/foefa/actions/runs/40936881074
+-5. **FDS 2.2.5 FIRMADA POR GITHUB (29-10, 21:22)**: el workflow `app-release.yml` (run 3) la compiló y firmó con la
+   clave de subida (secretos `FLOTA_KEYSTORE_B64` y `FLOTA_KEYSTORE_PASSWORD`, puestos por Dani); el AAB verificado
+   con `jarsigner` y el APK con `apksigner` (v2/v3: a `jarsigner` un APK con minSdk 26 le parece «unsigned» aunque
+   esté bien; el run 2 lo decía y no fallaba, ahora el run falla si falta la firma). Artefacto `FDS-2.2.5` del run
+   https://github.com/oga5furgonetas/foefa/actions/runs/40938703587
    (`FDS-2.2.5-code17.aab` para Play y `FDS-2.2.5.apk` para la web; caduca el 28-11). Ya NO hace falta Gradle en el
    PC: cada cambio en `app-android/` en `main` produce el artefacto solo. Falta: Dani baja el zip, prueba el APK en
    el móvil (entrar, una auditoría con foto del cuentakilómetros, una entrega con foto, «Volver a por entregar»,
