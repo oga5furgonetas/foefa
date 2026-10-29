@@ -1,0 +1,83 @@
+# LA APP FIRMADA, HECHA POR GITHUB (29-10-2026). Hasta hoy el AAB de Play y el APK de la web solo salían del PC de
+# Dani (SDK + clave de subida). Aquí los produce el CI con la MISMA clave, guardada como secretos cifrados del
+# repositorio (Settings → Secrets and variables → Actions):
+#   FLOTA_KEYSTORE_B64        el fichero ~/.flota-android.keystore en base64
+#   FLOTA_KEYSTORE_PASSWORD   su contraseña (la de ~/.flota-android-keystore.txt)
+# build.gradle.kts busca la clave en esas dos rutas de la carpeta del usuario: aquí se recrean en el runner y se
+# borran al acabar. Sin los secretos compila igual, pero SIN FIRMAR (no vale para Play; sirve para ver que compila).
+# Los ficheros salen como artefacto del run (pestaña del run → Artifacts → FDS-x.y.z): el AAB se sube a Play
+# Console a mano y el APK a la web. Se lanza a mano (Run workflow) o solo al tocar app-android/ en main.
+name: App Android (release)
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths: ['app-android/**']
+
+jobs:
+  release:
+    name: AAB para Play y APK para la web
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: gradle/actions/setup-gradle@v4
+      - name: La clave de subida, desde los secretos (nunca en el código ni en el log)
+        env:
+          KS_B64: ${{ secrets.FLOTA_KEYSTORE_B64 }}
+          KS_PASS: ${{ secrets.FLOTA_KEYSTORE_PASSWORD }}
+        run: |
+          if [ -z "$KS_B64" ] || [ -z "$KS_PASS" ]; then
+            echo "Sin FLOTA_KEYSTORE_B64 / FLOTA_KEYSTORE_PASSWORD: se compila SIN FIRMAR (no vale para Play)."
+            echo "firmado=no" >> "$GITHUB_ENV"
+          else
+            printf '%s' "$KS_B64" | base64 -d > "$HOME/.flota-android.keystore"
+            printf '%s' "$KS_PASS" > "$HOME/.flota-android-keystore.txt"
+            chmod 600 "$HOME/.flota-android.keystore" "$HOME/.flota-android-keystore.txt"
+            echo "firmado=si" >> "$GITHUB_ENV"
+          fi
+      - name: La versión, de build.gradle.kts
+        run: |
+          V=$(sed -n 's/.*versionName = "\(.*\)".*/\1/p' app-android/app/build.gradle.kts | head -1)
+          C=$(sed -n 's/.*versionCode = \([0-9]*\).*/\1/p' app-android/app/build.gradle.kts | head -1)
+          echo "version=$V" >> "$GITHUB_ENV"
+          echo "code=$C" >> "$GITHUB_ENV"
+          echo "Versión $V (code $C)"
+      - name: Tests unitarios y lint
+        working-directory: app-android
+        run: |
+          chmod +x gradlew
+          ./gradlew --no-daemon --console=plain :app:testDebugUnitTest :app:lintDebug
+      - name: AAB para Play (completo) y APK para la web (arm64, paquete .web)
+        working-directory: app-android
+        run: |
+          ./gradlew --no-daemon --console=plain :app:bundleRelease
+          ./gradlew --no-daemon --console=plain :app:assembleRelease -PsoloMoviles=arm64 -PparaWeb
+      # El AAB va firmado como un jar (jarsigner lo entiende). El APK, con el esquema v2/v3 de Android (con minSdk 26
+      # AGP ya no añade la firma v1): a jarsigner le parece «unsigned» aunque esté bien; lo mira apksigner.
+      - name: Comprobar la firma (el run falla si alguno no está firmado)
+        if: env.firmado == 'si'
+        run: |
+          jarsigner -verify app-android/app/build/outputs/bundle/release/app-release.aab | grep -q "jar verified" && echo "AAB: jar verified."
+          APKSIGNER=$(ls -d "$ANDROID_HOME"/build-tools/*/apksigner | sort -V | tail -1)
+          "$APKSIGNER" verify --print-certs app-android/app/build/outputs/apk/release/app-release.apk | grep -i "SHA-256\|Verified\|verif" | head -4
+          "$APKSIGNER" verify app-android/app/build/outputs/apk/release/app-release.apk && echo "APK: firmado (apksigner)."
+      - name: Nombrar los ficheros como en docs/PLAY_STORE.md
+        run: |
+          S=""; [ "$firmado" = "no" ] && S="-SIN-FIRMAR"
+          mkdir -p salida
+          cp app-android/app/build/outputs/bundle/release/app-release*.aab "salida/FDS-${version}-code${code}${S}.aab"
+          cp app-android/app/build/outputs/apk/release/app-release*.apk "salida/FDS-${version}${S}.apk"
+          ls -la salida
+      - uses: actions/upload-artifact@v4
+        with:
+          name: FDS-${{ env.version }}
+          path: salida/
+          retention-days: 30
+      - name: Borrar la clave del runner
+        if: always()
+        run: rm -f "$HOME/.flota-android.keystore" "$HOME/.flota-android-keystore.txt"

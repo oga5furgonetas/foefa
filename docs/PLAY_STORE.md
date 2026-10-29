@@ -178,6 +178,23 @@ por gRPC (`setPhysicalModel`: posición `-1.407 0.32 4.277`, giro `0 -150 0`). L
   reiniciar el móvil (`WAKE_LOCK`, `RECEIVE_BOOT_COMPLETED`). El servicio en primer plano de WorkManager se quita
   del manifiesto (no se usa).
 
+## La app firmada la hace GitHub (29-10-2026, noche): `.github/workflows/app-release.yml`
+
+Dani no quiere pegar más comandos y desde la nube no se puede compilar (el SDK no se descarga) ni firmar (la clave
+no sale del PC). Así que la firma la hace el CI de GitHub con la MISMA clave de subida, guardada como dos secretos
+cifrados del repositorio (GitHub → el repo → Settings → Secrets and variables → Actions → New repository secret):
+
+- `FLOTA_KEYSTORE_B64`: el fichero `C:\Users\dlvie\.flota-android.keystore` en base64. En PowerShell, esto lo
+  copia al portapapeles: `[Convert]::ToBase64String([IO.File]::ReadAllBytes("C:\Users\dlvie\.flota-android.keystore")) | Set-Clipboard`
+- `FLOTA_KEYSTORE_PASSWORD`: la contraseña (`Get-Content "C:\Users\dlvie\.flota-android-keystore.txt" | Set-Clipboard`).
+
+Con los secretos puestos, el workflow (a mano con «Run workflow», o solo al tocar `app-android/` en `main`) pasa
+tests y lint, compila el AAB completo y el APK `.web` (arm64), comprueba la firma con `jarsigner` y deja los dos
+como artefacto del run (`FDS-x.y.z`): el AAB se sube a Play Console y el APK a la web. Sin los secretos compila
+igual pero SIN FIRMAR (nombres con `-SIN-FIRMAR`; no valen para Play). La clave se borra del runner al acabar. Si
+la clave de subida se viera comprometida, se cambia en Play Console (Play App Signing guarda la de firma real).
+
+
 ## Versión 2.2.5 (code 17): la app se actualiza sola, la cola no pierde entregas y lo de la fase 1 del estudio (29-10-2026, noche)
 
 Lo que pidió Dani: «que la app se actualice sola o les pida la actualización». Dos caminos, porque hay dos apps:

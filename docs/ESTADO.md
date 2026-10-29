@@ -736,8 +736,16 @@ bloque se crearon una por ficha, las dos con la misma temporal). El login entrab
 «Ficha de conductor desactivada»). Arreglado en el servidor (commit de esta nota): el login mira TODAS las cuentas
 del correo y entra por la que abre, prefiriendo la de la ficha activa; una vez que la persona tiene contraseña
 propia en una, la temporal de las otras deja de valer; y cambiarla escribe en todas las cuentas del mismo correo.
-Tests en `test_cuentas_duplicadas.py`. **Mientras no se despliegue**: a los tres les vale su contraseña TEMPORAL
-(sigue en la otra cuenta); tras 5 intentos fallidos hay 5 minutos de bloqueo. Al desplegar, les entra la nueva.
+Tests en `test_cuentas_duplicadas.py`. Desplegado a las 20:00: desde entonces les entra la contraseña que se
+pusieron (la ÚLTIMA, si la cambiaron varias veces) y la temporal YA NO (muchos siguen probando la temporal: de ahí
+los avisos de después de las 20:00). Tras 5 intentos fallidos, 5 minutos de bloqueo. Y a las 21:40 (commit de esta
+nota, **FALTA DESPLEGAR**): una temporal que ponga la oficina DESPUÉS (reset en la ficha) sí abre, porque lleva su hora
+(`password_temp_created_at`) y es más nueva que la propia; el reset de la oficina escribe en todas las cuentas del
+mismo correo. Sin esto, resetear desde el panel a quien ya tenía contraseña propia no servía de nada.
+
+**Web DESPLEGADA el 29-10 a las 20:40** (wrangler desde el PC, con `npx.cmd`): página de planes, aviso de ubicación,
+fichas de ayuda, colores y los km a mano de la auditoría. **App 2.2.5 firmada por GitHub a las 21:14** (ver Pendiente
+-5). Dani pidió que no dependiera más de comandos en su PC; Remote Control no sirve con Windows desde la nube.
 
 **Backend DESPLEGADO el 29-10 a las 20:00 (4d2e1b4, run 343 del CI en verde)** desde el PC de casa de Dani. Costó
 tres intentos: la copia del PC estaba en la rama `claude/pensive-goodall-zthly3` (la del spot de Spotify), `git pull`
@@ -793,11 +801,16 @@ flotadsp.com/redes/… en cuanto se despliegue la web).
 
 ## Pendiente (por prioridad)
 
--5. **FDS 2.2.5 (29-10 noche), compilada en verde por el CI (run 340)**: en el PC de casa
-   (`C:\Users\dlvie\foefa\app-android`): `git pull`, los tres `gradlew` de PLAY_STORE.md → «Versión 2.2.5», probar
-   el APK en el móvil (entrar, una entrega con foto, «Volver a por entregar», «He olvidado mi contraseña», y en el
-   portal del conductor cerrar sesión con pregunta) y subir el AAB 17 a la prueba abierta. Al subir el APK a la web:
-   `fly secrets set -a flota-backend APP_ANDROID_WEB="17 2.2.5"` (si no, nadie recibe el aviso de descargar).
+-5. **FDS 2.2.5 FIRMADA POR GITHUB (29-10, 21:22)**: el workflow `app-release.yml` (run 3) la compiló y firmó con la
+   clave de subida (secretos `FLOTA_KEYSTORE_B64` y `FLOTA_KEYSTORE_PASSWORD`, puestos por Dani); el AAB verificado
+   con `jarsigner` y el APK con `apksigner` (v2/v3: a `jarsigner` un APK con minSdk 26 le parece «unsigned» aunque
+   esté bien; el run 2 lo decía y no fallaba, ahora el run falla si falta la firma). Artefacto `FDS-2.2.5` del run
+   https://github.com/oga5furgonetas/foefa/actions/runs/40938703587
+   (`FDS-2.2.5-code17.aab` para Play y `FDS-2.2.5.apk` para la web; caduca el 28-11). Ya NO hace falta Gradle en el
+   PC: cada cambio en `app-android/` en `main` produce el artefacto solo. Falta: Dani baja el zip, prueba el APK en
+   el móvil (entrar, una auditoría con foto del cuentakilómetros, una entrega con foto, «Volver a por entregar»,
+   «He olvidado mi contraseña», cerrar sesión con pregunta), sube el AAB 17 a la prueba abierta de Play Console y
+   el APK a la web (`/descargas/FDS.apk`); al subir el APK, `fly secrets set -a flota-backend APP_ANDROID_WEB="17 2.2.5"`.
 
 -4. **Desplegar y decidir (29-10 noche)**: backend DESPLEGADO (4d2e1b4, 20:00). Falta la web (página de planes,
    aviso de ubicación, fichas de ayuda y colores, y los km a mano de la auditoría) desde el PC con `npx.cmd`;
