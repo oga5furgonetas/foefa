@@ -122,3 +122,12 @@ jobs:
           DB_NAME: test_flota
           GLOBAL_DB_NAME: test_flota_global
         run: pytest backend/tests -q
+      # Lo que la app nativa de Android le pide al servidor, contra el server.py real con una base en memoria:
+      # acceso unificado y destino, turnos, trabajar más, auditoría, referidos, cuenta, y la ruta del autónomo.
+      # Hasta el 29-10-2026 esto solo se pasaba a mano en el PC: un cambio en una ruta podía dejar la app de Play
+      # sin entrar y el CI en verde.
+      - name: Contrato app Android ↔ API (las 61 llamadas de FDS contra el servidor real en memoria)
+        run: |
+          python app-android/pruebas/servidor_pruebas.py > servidor_pruebas.log 2>&1 &
+          for i in $(seq 1 60); do curl -sf http://127.0.0.1:8787/api/health > /dev/null && break; sleep 1; done
+          python app-android/pruebas/api_conductor.py || { tail -20 servidor_pruebas.log; exit 1; }
