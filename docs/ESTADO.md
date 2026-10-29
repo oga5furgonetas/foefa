@@ -5,7 +5,7 @@
 > haz commit y `git push`. Una sola sesión trabajando a la vez: antes de
 > empezar, `git pull` y comprueba que nadie ha dejado nada a medias aquí.
 
-Última actualización: **29-10-2026 (tarde)** (el CI de `main` llevaba desde el 18-10 en rojo; checkers arreglados de raíz y todo el CI en verde en local; ver «Última sesión»). Por la mañana: FDS 2.2.3 compilada, probada y firmada, el AAB listo para Play (ver «29-10-2026 (mañana)»).
+Última actualización: **29-10-2026 (noche)** (anuncio «La ruta hecha»: guion para IA en `docs/anuncios/super-anuncio/` y primeras generaciones en Artlist; ver «Última sesión»). Antes, tarde: (el CI de `main` llevaba desde el 18-10 en rojo; checkers arreglados de raíz y todo el CI en verde en local; ver «Última sesión»). Por la mañana: FDS 2.2.3 compilada, probada y firmada, el AAB listo para Play (ver «29-10-2026 (mañana)»).
 
 ## Qué es y dónde está
 
@@ -684,7 +684,37 @@ desplegar la web** la próxima vez desde el PC.
   herramientas de la sesión de Claude (su daemon no puede abrir la conexión local). Cómo, en PLAY_STORE.md.
 - Aparte: `docs/anuncios/artlist/` (guion del vídeo para Artlist con QR a la ficha de Play, QR en PNG y SVG).
 
+## Última sesión — 29-10-2026 (noche): el anuncio «La ruta hecha», guion para IA y generado en Artlist
+
+Dani: «créame un guion para pasárselo a una IA y que me cree un súper anuncio… que se anuncie FDS con el QR de Google
+Play; lo que vende es la parte de repartidor: escaneas el código del pedido, te da la dirección y se añade la parada,
+las cargas y descargas, pasas de repartir de memoria a que la app te lo monta». Después conectó Artlist a la sesión
+para que se mandaran los prompts directamente.
+- **Guion completo**: `docs/anuncios/super-anuncio/GUION.md`. 25 s, 9:16: gancho «112 paquetes. ¿Por dónde
+  empiezas?» (1,5 s) → la app REAL a pantalla completa 15 s (escanear → añadida; ordenar con la hora de cada parada;
+  zonas de carga y descarga; voz; entregado con prueba) → «Mañana sales con la ruta hecha» → tarjeta con QR a Play.
+  Diez ideas estudiadas y puntuadas (§3), plano a plano con voz y sonido (§4), prompts en inglés para la IA de vídeo
+  con biblia visual, referencias y negativos (§5), pantallas reales (§6), voz/subtítulos/niveles (§7), tarjeta y QR
+  (§8), versiones de 30/15/6 s y tres ganchos A/B (§9), textos y URLs para subirlo (§10), lista previa (§11).
+  Reglas que cumple: solo lo que la app hace hoy (tabla §2 con la pantalla que lo demuestra), sin marcas ajenas, sin
+  fecha en la oferta, nadie de IA habla a cámara, la app nunca la pinta la IA.
+- **QR nuevo** `qr-play-fds-spot.{png,svg}` con `utm_campaign=spot_ia` (el de Artlist lleva `artlist_fds`): en Play
+  Console → Adquisición se distinguen.
+- **Artlist (cuenta de Dani, plan AI Suite 16500)**: hecha la imagen de referencia del repartidor y la furgoneta
+  (Nano Banana Pro, 2 variantes, 320 créditos) y una locución de prueba de 24 s (voz «Alberto Rodríguez», acento
+  latinoamericano: Artlist no tiene voz masculina de España; la final sigue siendo Puck o Dani). Los 5 planos de vídeo
+  (Veo 3.1 con referencia para los dos con cara, Veo 3.1 Fast para manos/furgoneta/cabina) cuestan **4.000 créditos y
+  esperan la aprobación de Dani**. Música y efectos elegidos del catálogo con enlaces. Todo en
+  `docs/anuncios/super-anuncio/GENERADO.md`. **Ojo**: desde este contenedor no se puede descargar ni ver nada de
+  Artlist (la red de la sesión bloquea artlist.io e imgix.net): Dani lo mira en Artlist o se añaden esos dominios al
+  entorno.
+
 ## Pendiente (por prioridad)
+
+-5. **Anuncio «La ruta hecha» (29-10 noche)**: Dani aprueba los 4.000 créditos de Artlist (o cambia modelos) y se
+   generan los 5 planos; mira la imagen de referencia y la voz en Artlist; graba las 5 pantallas reales (GUION.md §6);
+   montaje con Puck o su voz; tres ganchos; subir (GUION.md §10). Ficheros: `docs/anuncios/super-anuncio/`.
+
 
 -4. **CI y web (29-10 tarde)**: ver en verde el run del CI de GitHub del commit de cierre; desplegar la web desde el
    PC (fichas de ayuda y colores; el backend no cambia); decidir qué hacer con las cuatro rutas heredadas sin
