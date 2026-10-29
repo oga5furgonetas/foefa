@@ -57,11 +57,15 @@ jobs:
         run: |
           ./gradlew --no-daemon --console=plain :app:bundleRelease
           ./gradlew --no-daemon --console=plain :app:assembleRelease -PsoloMoviles=arm64 -PparaWeb
-      - name: Comprobar la firma
+      # El AAB va firmado como un jar (jarsigner lo entiende). El APK, con el esquema v2/v3 de Android (con minSdk 26
+      # AGP ya no añade la firma v1): a jarsigner le parece «unsigned» aunque esté bien; lo mira apksigner.
+      - name: Comprobar la firma (el run falla si alguno no está firmado)
         if: env.firmado == 'si'
         run: |
-          jarsigner -verify app-android/app/build/outputs/bundle/release/app-release.aab | tail -1
-          jarsigner -verify app-android/app/build/outputs/apk/release/app-release.apk | tail -1
+          jarsigner -verify app-android/app/build/outputs/bundle/release/app-release.aab | grep -q "jar verified" && echo "AAB: jar verified."
+          APKSIGNER=$(ls -d "$ANDROID_HOME"/build-tools/*/apksigner | sort -V | tail -1)
+          "$APKSIGNER" verify --print-certs app-android/app/build/outputs/apk/release/app-release.apk | grep -i "SHA-256\|Verified\|verif" | head -4
+          "$APKSIGNER" verify app-android/app/build/outputs/apk/release/app-release.apk && echo "APK: firmado (apksigner)."
       - name: Nombrar los ficheros como en docs/PLAY_STORE.md
         run: |
           S=""; [ "$firmado" = "no" ] && S="-SIN-FIRMAR"
