@@ -365,8 +365,8 @@ export default function Planes() {
           <div>
             <div style={{ fontSize: 12, fontWeight: 700, color: '#eab308', textTransform: 'uppercase', letterSpacing: '.08em', marginBottom: 4 }}>¿Repartes tú solo?</div>
             <div style={{ fontSize: 15, color: '#cbd5e1' }}>
-              La app de ruta para quien reparte por su cuenta: {promoGratis()
-                ? <><b>gratis y sin límite hasta el {fechaPromo()}</b>, sin tarjeta. Después, gratis hasta {autonomo.paradas_gratis || PARADAS_GRATIS} paradas al día; sin tope, {eur(autonomo.mensual)}€ al mes o {eur(autonomo.anual)}€ al año.</>
+              La app de ruta para quien reparte por su cuenta: {('gratis_hasta' in autonomo ? !!autonomo.gratis_hasta : promoGratis())
+                ? <><b>gratis y sin límite hasta el {fechaPromo('es-ES', autonomo.gratis_hasta || undefined)}</b>, sin tarjeta. Después, gratis hasta {autonomo.paradas_gratis || PARADAS_GRATIS} paradas al día; sin tope, {eur(autonomo.mensual)}€ al mes o {eur(autonomo.anual)}€ al año.</>
                 : <><b>gratis hasta {autonomo.paradas_gratis || PARADAS_GRATIS} paradas al día</b>, sin tarjeta. Sin tope, {eur(autonomo.mensual)}€ al mes o {eur(autonomo.anual)}€ al año.</>}
             </div>
           </div>

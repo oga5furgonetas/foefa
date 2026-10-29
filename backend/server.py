@@ -1036,6 +1036,15 @@ async def get_current_user(
         else:
             _region_actual.set(await _region_de_org(payload.get("org_id")))
     if (request.method not in ("GET", "HEAD", "OPTIONS") and "/api/reparto/" in request.url.path
+            and payload.get("imp") and not request.url.path.endswith("/api/reparto/ajustes")):
+        # «Entrar como» (29-10-2026): el dueño del producto dentro de la cuenta de un
+        # cliente ya no veía los datos de sus clientes (_rep_ve_datos); tampoco los
+        # escribe: ni pedidos, ni entregas, ni jornadas en su nombre. Lo único que
+        # queda abierto son los ajustes (base, zonas, horario), que es lo que se
+        # configura ayudando a alguien por teléfono. Mirado ruta a ruta: ninguna otra
+        # escritura del reparto tiene sentido hecha por nosotros.
+        raise HTTPException(status_code=403, detail=_REP_SOLO_MIRAR)
+    if (request.method not in ("GET", "HEAD", "OPTIONS") and "/api/reparto/" in request.url.path
             and not payload.get("demo") and not payload.get("imp") and payload.get("org_id")):
         org_pago = await get_org(payload.get("org_id"))
         # PLAN GRATIS (10-10-2026): al acabar la prueba o dejar de pagar, la app del repartidor
@@ -1776,6 +1785,18 @@ async def _ensure_tenant_indexes(db_name: str):
     await _idx(tdb.workshops, "categories")
     await _idx(tdb.plantillas_diarias, "id")
     await _idx(tdb.plantillas_diarias, [("center", 1), ("uploaded_at", -1)])
+    # Reparto (29-10-2026): hasta hoy sin un solo índice. Todo lo del día va por
+    # fecha (+ conductor), el escaneo busca por fecha+codigo, el historial del
+    # conductor por conductor+estado y el resto por id.
+    await _idx(tdb.reparto_pedidos, "id")
+    await _idx(tdb.reparto_pedidos, [("fecha", 1), ("conductor_id", 1)])
+    await _idx(tdb.reparto_pedidos, [("fecha", 1), ("codigo", 1)])
+    await _idx(tdb.reparto_pedidos, [("conductor_id", 1), ("estado", 1)])
+    await _idx(tdb.reparto_jornadas, "id")
+    await _idx(tdb.reparto_jornadas, "fecha")
+    await _idx(tdb.reparto_rutas, "id")
+    await _idx(tdb.reparto_rutas, "fecha")
+    await _idx(tdb.reparto_avisos, "driver_id")
     await _idx(tdb.plantillas_compartidas, "id", unique=True)
     await _idx(tdb.furgo_fijas, "driver_id", unique=True)
     await _idx(tdb.furgo_fijas, "principal")
@@ -1849,6 +1870,11 @@ async def create_indexes():
         # Analitica propia y anonima: 180 dias y fuera.
         await _idx(global_db.analitica_eventos, "ts", expireAfterSeconds=180 * 24 * 3600)
         await _idx(global_db.analitica_eventos, [("sid", 1), ("ts", 1)])
+        # Enlaces de seguimiento del reparto: el token es la única llave; `caduca`
+        # (YYYY-MM-DD) es por lo que los borra la limpieza. Y el código de invitación.
+        await _idx(global_db.reparto_enlaces, "token", unique=True)
+        await _idx(global_db.reparto_enlaces, "caduca")
+        await _idx(global_db.organizations, "ref_codigo", sparse=True)
         # Crear índices en BDs de DSPs ya existentes (por si arrancamos con DSPs sin índices)
         orgs = await global_db.organizations.find(
             {"account_type": "dsp", "db_name": {"$exists": True}}, {"db_name": 1}
@@ -5744,6 +5770,11 @@ async def billing_planes():
         "desde_empresa": EMPRESA_DESDE_VEHICULO,
         "descuentos_volumen": [{"desde": d, "pct": pct} for d, pct in sorted(DESCUENTOS_VOLUMEN)],
         "complementos": COMPLEMENTOS,
+        # Las promociones, desde aquí (29-10-2026): la web y la app las pintan con esto y
+        # solo usan sus constantes (precios.js) mientras no ha contestado el servidor.
+        "gratis_hasta": REP_GRATIS_HASTA if _rep_promo_activa() else None,
+        "ref_promo_hasta": _REF_PROMO_HASTA_DIA if _ref_promo_activa() else None,
+        "ref_promo_cent": _REF_PROMO_CENT, "bono_cent": _BONO_CENT,
     }
 
 
@@ -15742,6 +15773,8 @@ async def start_itv_whatsapp_scheduler():
     # Y que avise si algun bucle se ha muerto. Un latido que hay que ir a mirar
     # no lo mira nadie.
     asyncio.create_task(_bucle_aviso("bucles_vivos", "resumen_diario", avisar_bucles_muertos))
+    # Los datos de clientes del reparto caducan aunque nadie abra la oficina.
+    asyncio.create_task(_bucle_reparto_limpieza())
 
 
 @api_router.post("/whatsapp/avisar-itv")
@@ -51568,8 +51601,9 @@ async def _rep_portal_activo(user: dict, a: dict) -> bool:
 
 
 async def _rep_limpiar(user: dict):
-    """Borra los datos personales de los pedidos viejos y los rastros de
-    ubicación pasados. Una vez por hora y empresa, al abrir la pantalla."""
+    """Borra los datos personales de los pedidos viejos y las jornadas pasadas
+    (con su última posición). Una vez por hora y empresa: al abrir la pantalla
+    de la oficina y, desde el 29-10-2026, también sola (_bucle_reparto_limpieza)."""
     clave = user.get("db_name") or "_"
     ahora = time.time()
     if ahora - _REP_LIMPIEZA.get(clave, 0) < 3600:
@@ -51588,9 +51622,53 @@ async def _rep_limpiar(user: dict):
                       "vista": None, "anonimizado": True}})
         lim_rastro = (hoy - timedelta(days=reparto.DIAS_RASTRO)).strftime("%Y-%m-%d")
         await db.reparto_jornadas.delete_many({"fecha": {"$lt": lim_rastro}})
+        # Los recorridos que se guardaron hasta el 29-10-2026 (ya no se guardan, ver
+        # /reparto/posicion) se quitan de las jornadas que quedan.
+        await db.reparto_jornadas.update_many({"rastro": {"$exists": True}}, {"$unset": {"rastro": ""}})
         await global_db.reparto_enlaces.delete_many({"caduca": {"$lt": hoy.strftime("%Y-%m-%d")}})
     except Exception as e:                                   # noqa: BLE001
         logger.warning(f"reparto: limpieza fallida: {e}")
+
+
+_REP_LIMPIEZA_CADA_MIN = 6 * 60
+
+
+async def _bucle_reparto_limpieza():
+    """La limpieza de arriba sin que nadie abra la oficina (29-10-2026).
+
+    Hasta hoy solo corría al abrir la lista de pedidos: una empresa que deja de
+    usar el reparto, o un autónomo que solo usa el móvil, se quedaba con los
+    datos de sus clientes para siempre, en contra de lo que dicen las condiciones
+    (reparto.DIAS_CONSERVAR). Cada 6 horas, empresa por empresa y en su zona
+    horaria; `_rep_limpiar` no repite dentro de la misma hora, así que abrir la
+    oficina a la vez no hace nada dos veces. Late en `GET /admin/latidos`.
+    """
+    await asyncio.sleep(120)      # que arranque el resto primero
+    while True:
+        try:
+            hechas = await _rep_limpiar_todas()
+            await _latido("reparto_limpieza", empresas=hechas, cada_min=_REP_LIMPIEZA_CADA_MIN, error=None)
+        except Exception as e:                               # noqa: BLE001
+            logger.error("Bucle de limpieza del reparto: %s", e)
+            await _latido("reparto_limpieza", error=str(e)[:200], cada_min=_REP_LIMPIEZA_CADA_MIN)
+        await asyncio.sleep(_REP_LIMPIEZA_CADA_MIN * 60)
+
+
+async def _rep_limpiar_todas() -> int:
+    """Una pasada de limpieza por todas las empresas, cada una en su base y su
+    zona horaria. Devuelve cuántas ha hecho (lo prueba test_reparto_api)."""
+    hechas = 0
+    orgs = await global_db.organizations.find(
+        {}, {"_id": 0, "id": 1, "db_name": 1, "account_type": 1}).to_list(5000)
+    for org in orgs:
+        try:
+            set_current_org_db(_tenant_db_name(org))
+            _region_actual.set(await _region_de_org(org.get("id")))
+            await _rep_limpiar({"db_name": _tenant_db_name(org)})
+            hechas += 1
+        except Exception as e:                               # noqa: BLE001
+            logger.warning(f"reparto: limpieza de {org.get('db_name')}: {e}")
+    return hechas
 
 
 async def _rep_es_autonomo(user: dict) -> bool:
@@ -51991,8 +52069,13 @@ async def _rep_ordenar(fecha: str, conductor_id: str, origen, salida_min: Option
                  "fin": fin_m, "minutos": round(fin_m - salida_min), "tarde": round(tarde_m)}
             resumen["manual"] = True
         else:
-            r = reparto.optimiza_por_tiempo(seg, paradas, salida_min,
-                                            dia_semana=dia, con_trafico=resumen["trafico"], volver=volver)
+            # En un HILO (29-10-2026): con 60 paradas tarda casi 4 s y con 80, 6 s, y en el
+            # bucle principal eso paraba TODAS las peticiones del servidor mientras tanto.
+            # Con muchas paradas, menos evaluaciones (reparto.presupuesto_evaluaciones).
+            r = await asyncio.to_thread(
+                reparto.optimiza_por_tiempo, seg, paradas, salida_min,
+                dia_semana=dia, con_trafico=resumen["trafico"], volver=volver,
+                presupuesto_evaluaciones=reparto.presupuesto_evaluaciones(len(paradas)))
         km, prev = 0.0, 0
         for k, i in enumerate(r["orden"]):
             orden_ids.append(ubicadas[i]["id"])
@@ -53247,7 +53330,7 @@ async def reparto_jornada(data: dict = Body(...), user: dict = Depends(require_a
         await db.reparto_jornadas.update_one(
             {"id": jid},
             {"$set": {"empezada": ahora, "terminada": None, "nombre": d.get("name") or ""},
-             "$setOnInsert": {"id": jid, "driver_id": d["id"], "fecha": f, "rastro": []}},
+             "$setOnInsert": {"id": jid, "driver_id": d["id"], "fecha": f}},
             upsert=True)
         return {"empezada": ahora, "terminada": None}
     if accion == "terminar":
@@ -53264,10 +53347,12 @@ async def reparto_posicion(data: dict = Body(...), user: dict = Depends(require_
         raise HTTPException(400, "Posición no válida")
     f = _dia_negocio()
     ahora = datetime.now(timezone.utc).isoformat()
+    # Solo la ÚLTIMA posición (29-10-2026). Hasta hoy se guardaba además el recorrido
+    # entero (hasta 2.000 puntos por jornada) y no lo leía nadie: la oficina solo ve
+    # dónde está cada uno ahora. Datos de ubicación que no se usan no se guardan.
     r = await db.reparto_jornadas.update_one(
         {"id": f"{d['id']}_{f}", "empezada": {"$ne": None}, "terminada": None},
-        {"$set": {"ultima": {"lat": pt[0], "lng": pt[1], "at": ahora}},
-         "$push": {"rastro": {"$each": [[round(pt[0], 5), round(pt[1], 5), ahora]], "$slice": -2000}}})
+        {"$set": {"ultima": {"lat": pt[0], "lng": pt[1], "at": ahora}}})
     if not r.matched_count:
         # Sin jornada abierta no se guarda NADA: ni siquiera la última.
         raise HTTPException(409, "No tienes la jornada empezada")
@@ -53613,6 +53698,8 @@ def _stripe_detalle_sub(sub: dict) -> dict:
 # «Entrar como» (token `imp`): la plataforma VE la cuenta del cliente, pero la tarjeta,
 # el plan, la baja, el correo y la contraseña solo los toca el propio cliente. Antes
 # decía «Solo la propia empresa» y Dani (06-10) no sabía qué le pasaba al pulsar.
+_REP_SOLO_MIRAR = ("Estás dentro como la plataforma: el reparto solo se mira. Los pedidos, las entregas "
+                   "y la jornada los hace la propia empresa; los ajustes sí puedes cambiarlos")
 _SOLO_EL_CLIENTE = ("Estás dentro como la plataforma: la tarjeta, el plan, la baja, el correo "
                     "y la contraseña solo los puede cambiar el propio cliente desde su cuenta")
 
@@ -54027,7 +54114,10 @@ _DRIVER_REF_RETIRADA_MIN = 6000
 _REF_PROMO_CENT = 1000
 # 17-10-2026 (Dani): la promoción se alarga hasta el 31-12-2026 y se añade el bono de bienvenida (_bono_estado).
 _REF_PROMO_HASTA_DIA = "2026-12-31"
-_REF_PROMO_HASTA = datetime(2026, 12, 31, 23, 0, tzinfo=timezone.utc)   # 01-01-2027 00:00 en Madrid (CET)
+# Hasta ese día INCLUIDO en hora de Madrid: las 00:00 del día siguiente (CET, UTC+1) son las
+# 23:00 UTC del propio día. Sale de la fecha de arriba para que haya UNA sola que cambiar
+# (29-10-2026); scripts/check-promo.mjs comprueba que la web (precios.js) lleva la misma.
+_REF_PROMO_HASTA = datetime.fromisoformat(_REF_PROMO_HASTA_DIA).replace(hour=23, tzinfo=timezone.utc)
 
 
 def _ref_promo_activa(ahora: Optional[datetime] = None) -> bool:
@@ -55627,7 +55717,14 @@ async def _retirada_resolver(rid: str, user: dict, estado: str, motivo: str = ""
         {"$set": {"estado": estado, "resuelta": ahora, "por": user.get("sub"), "motivo": motivo}})
     if not getattr(res, "modified_count", 0):
         raise HTTPException(409, "Esa retirada ya no está pendiente")
-    return await global_db.cartera_retiradas.find_one({"id": rid}, {"_id": 0})
+    r = await global_db.cartera_retiradas.find_one({"id": rid}, {"_id": 0}) or {}
+    # Resuelta, el IBAN, el teléfono del Bizum o el correo de PayPal ya no hacen falta
+    # enteros (29-10-2026): se dejan tapados (•••• 1234), que basta para casar el pago
+    # con el extracto. Si hiciera falta otra vez, se le pide al conductor.
+    if r.get("destino"):
+        await global_db.cartera_retiradas.update_one(
+            {"id": rid}, {"$set": {"destino": _tapar_destino(r["destino"])}})
+    return r
 
 
 @api_router.post("/admin/cartera/retiradas/{rid}/pagada")

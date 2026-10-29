@@ -126,8 +126,9 @@ export const eurosRef = (cent = REF_CENT, loc = 'es-ES') => {
   } catch { return `${(cent / 100).toFixed(2).replace('.', ',')} €` }
 }
 export const promoGratis = (hoy = new Date()) => hoy <= new Date(`${GRATIS_SIN_LIMITE_HASTA}T23:59:59`)
-/* «31 de diciembre» en el idioma de la pantalla (se le pasa locale() para no importar idioma aquí). */
-export const fechaPromo = (loc = 'es-ES') => new Date(`${GRATIS_SIN_LIMITE_HASTA}T12:00:00`)
+/* «31 de diciembre» en el idioma de la pantalla (se le pasa locale() para no importar idioma aquí).
+   `dia`: la fecha que manda el servidor (`gratis_hasta` en /billing/planes) cuando ya ha contestado. */
+export const fechaPromo = (loc = 'es-ES', dia = GRATIS_SIN_LIMITE_HASTA) => new Date(`${dia}T12:00:00`)
   .toLocaleDateString(loc, { day: 'numeric', month: 'long' })
 
 /* Pagando un año se pagan 10 meses: dos salen gratis. */

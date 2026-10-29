@@ -81,6 +81,7 @@ admin). Opcionales: `GEMINI_API_KEY`, R2 (`R2_*`), correo (`RESEND_API_KEY`,
 ```
 node scripts/check-existe.mjs && node scripts/check-huerfanos.mjs && node scripts/check-marca.mjs
 node scripts/check-i18n.mjs && node scripts/check-permisos.mjs && node scripts/check-modulos.mjs
+node scripts/check-promo.mjs
 cd frontend && npx eslint src && npx vite build
 python -m pytest backend/tests -q --ignore=backend/tests/test_api.py   # test_api necesita Mongo
 cd frontend && npx playwright test humo --project=escritorio         # todas las pantallas, API simulada

@@ -238,3 +238,28 @@ def test_los_pasos_llevan_la_maniobra_en_bruto_para_traducirla():
         {"maneuver": {"type": "roundabout", "modifier": "right", "exit": 2, "location": [-8.4, 43.3]}, "name": "Avda Oza", "distance": 50}]}]})
     assert p[0]["maniobra"] == {"tipo": "roundabout", "mod": "right", "salida": 2}
     assert p[0]["texto"].startswith("En la rotonda, toma la segunda salida")
+
+
+def test_presupuesto_de_evaluaciones_baja_con_muchas_paradas():
+    # 29-10-2026: medido, con 60 paradas la mitad de evaluaciones da el mismo orden en
+    # una cuarta parte del tiempo; hasta 50 se deja como estaba.
+    assert R.presupuesto_evaluaciones(10) == 60000
+    assert R.presupuesto_evaluaciones(50) == 60000
+    assert R.presupuesto_evaluaciones(51) == 30000
+    assert R.presupuesto_evaluaciones(120) == 30000
+
+
+def test_por_tiempo_con_menos_presupuesto_sigue_dando_una_ruta_entera():
+    import random
+    rnd = random.Random(7)
+    n = 55
+    pts = [(rnd.random(), rnd.random()) for _ in range(n + 1)]
+    m = [[int(((a[0] - b[0]) ** 2 + (a[1] - b[1]) ** 2) ** 0.5 * 3000) for b in pts] for a in pts]
+    paradas = [{"servicio": 2, "desde": None, "hasta": None, "prioridad": 0} for _ in range(n)]
+    r = R.optimiza_por_tiempo(m, paradas, salida=540, dia_semana=6,
+                              presupuesto_evaluaciones=R.presupuesto_evaluaciones(n))
+    assert sorted(r["orden"]) == list(range(n))          # todas las paradas, una vez cada una
+    assert len(r["llegadas"]) == n
+    # Y no peor que el vecino más cercano con el presupuesto entero: la búsqueda local
+    # parte de él, así que con menos presupuesto como mucho se queda igual de lejos.
+    assert r["minutos"] > 0

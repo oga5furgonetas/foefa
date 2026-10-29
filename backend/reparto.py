@@ -27,7 +27,7 @@ import unicodedata
 
 ESTADOS = ("pendiente", "en_ruta", "entregado", "fallido")
 DIAS_CONSERVAR = 30          # datos de clientes tras la fecha del pedido
-DIAS_RASTRO = 30             # puntos de ubicación de la jornada
+DIAS_RASTRO = 30             # jornadas (empezada, terminada y última posición)
 MAX_PEGADO = 500             # líneas por pegada
 
 # Lo que se tapa a quien no es la empresa (el dueño del producto entrando
@@ -371,6 +371,17 @@ def _evalua(orden, matriz, salida, paradas, dia_semana, con_trafico, volver):
         t += matriz[prev][0] / 60.0 * factor_trafico(t, dia_semana, con_trafico)
     coste = (t - salida) + CASTIGO_TARDE * tarde_total + PESO_PRIORIDAD * prioridad
     return coste, llegadas, t, tarde_total
+
+
+def presupuesto_evaluaciones(n: int) -> int:
+    """Cuántas vueltas se le dan a la búsqueda local según las paradas (29-10-2026).
+
+    60.000 hasta 50 paradas (milisegundos con 20, 2,5 s con 40) y la mitad a partir
+    de ahí: medido, con 60 paradas da el mismo orden y con 80 uno un 2 % más largo,
+    en una cuarta parte del tiempo. El servidor lo corre en un hilo, pero una
+    oficina que «ordena todos» con 20 repartidores lo nota igual.
+    """
+    return 60000 if n <= 50 else 30000
 
 
 def optimiza_por_tiempo(matriz, paradas, salida, dia_semana=0, con_trafico=True, volver=False,

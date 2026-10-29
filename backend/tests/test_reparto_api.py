@@ -215,6 +215,8 @@ async def test_ubicacion_solo_en_jornada_y_con_aviso(base):
     assert e.value.status_code == 428
     await server.reparto_jornada({"accion": "empezar", "acepto_aviso": True}, ANA)
     await server.reparto_posicion({"lat": 43.37, "lng": -8.40}, ANA)
+    j = base.db["reparto_jornadas"].docs[0]
+    assert j["ultima"]["lat"] == 43.37 and "rastro" not in j     # solo la última posición (29-10-2026)
     vivo = await server.reparto_vivo(OFICINA)
     assert vivo["conductores"][0]["conductor_id"] == "d1"
     assert (await server.reparto_vivo(DUENO_COMO_EMPRESA))["conductores"] == []
@@ -250,11 +252,58 @@ async def test_los_datos_personales_se_borran_solos(base):
                                             "telefono": "600", "direccion": "Real 5", "lat": 1, "lng": 1,
                                             "zona": "Centro", "estado": "entregado"})
     base.db["reparto_jornadas"].docs.append({"id": "j", "fecha": "2026-08-01", "rastro": [[1, 1, "x"]]})
+    base.db["reparto_jornadas"].docs.append({"id": "j2", "fecha": HOY, "rastro": [[1, 1, "x"]], "ultima": {"lat": 1}})
     await server.reparto_pedidos("2026-08-01", OFICINA)
     p = base.db["reparto_pedidos"].docs[0]
     assert p["cliente"] is None and p["direccion"] is None and p["anonimizado"]
     assert p["zona"] == "Centro" and p["estado"] == "entregado"
-    assert base.db["reparto_jornadas"].docs == []
+    # La jornada vieja fuera; a la de hoy se le quita el recorrido que se guardó antes del 29-10-2026.
+    assert base.db["reparto_jornadas"].docs == [{"id": "j2", "fecha": HOY, "ultima": {"lat": 1}}]
+
+
+@pytest.mark.asyncio(loop_scope="session")
+async def test_la_limpieza_corre_sola_por_todas_las_empresas(base):
+    """29-10-2026: hasta hoy solo limpiaba al abrir la lista de la oficina; un autónomo que
+    solo usa el móvil se quedaba con los datos de sus clientes para siempre."""
+    base.globales["organizations"] = Col([{"id": "o1", "db_name": "dsp_x", "account_type": "dsp"},
+                                          {"id": "o2", "db_name": "dsp_y", "account_type": "dsp"}])
+    base.db["reparto_pedidos"].docs.append({"id": "viejo", "fecha": "2026-08-01", "cliente": "Marta",
+                                            "telefono": "600", "direccion": "Real 5", "estado": "entregado"})
+    assert await server._rep_limpiar_todas() == 2
+    p = base.db["reparto_pedidos"].docs[0]
+    assert p["cliente"] is None and p["telefono"] is None and p["anonimizado"]
+    # Dentro de la misma hora no repite (y la cuenta sigue siendo por empresas pasadas).
+    assert await server._rep_limpiar_todas() == 2
+
+
+@pytest.mark.asyncio(loop_scope="session")
+async def test_el_dueno_entrando_como_la_empresa_no_escribe_en_el_reparto(base, monkeypatch):
+    """29-10-2026: «entrar como» mira, no escribe: ni pedidos, ni entregas, ni jornadas en nombre
+    del cliente (somos encargados, art. 28 RGPD). Los ajustes sí, que es ayudar por teléfono."""
+    from fastapi.security import HTTPAuthorizationCredentials
+
+    async def admin(_sub):
+        return True, None, None, None
+    monkeypatch.setattr(server, "_admin_cacheado", admin)
+    token = server.create_token("a1", "admin", "Dani", org_id="o1", db_name="dsp_x", account_type="dsp",
+                                suplantado=True)
+    cred = HTTPAuthorizationCredentials(scheme="Bearer", credentials=token)
+
+    def peticion(metodo, ruta):
+        return SimpleNamespace(method=metodo, url=SimpleNamespace(path=ruta), headers={}, client=None)
+    for metodo, ruta in (("POST", "/api/reparto/pedidos"), ("POST", "/api/reparto/pegar"),
+                         ("POST", "/api/reparto/pedidos/p1/estado"), ("POST", "/api/reparto/jornada"),
+                         ("DELETE", "/api/reparto/pedidos/p1"), ("PUT", "/api/reparto/ganancias")):
+        with pytest.raises(HTTPException) as e:
+            await server.get_current_user(peticion(metodo, ruta), cred)
+        assert e.value.status_code == 403 and "solo se mira" in e.value.detail, ruta
+    assert (await server.get_current_user(peticion("GET", "/api/reparto/pedidos"), cred))["imp"] is True
+    assert (await server.get_current_user(peticion("PUT", "/api/reparto/ajustes"), cred))["imp"] is True
+    # Y la propia empresa escribe como siempre.
+    propio = server.create_token("a1", "admin", "Oficina", org_id="o1", db_name="dsp_x", account_type="dsp")
+    u = await server.get_current_user(peticion("POST", "/api/reparto/pedidos"),
+                                      HTTPAuthorizationCredentials(scheme="Bearer", credentials=propio))
+    assert u["sub"] == "a1" and not u.get("imp")
 
 
 @pytest.mark.asyncio(loop_scope="session")

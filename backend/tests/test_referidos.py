@@ -251,6 +251,9 @@ async def test_retirar_el_saldo_y_que_la_plataforma_lo_pague_o_lo_rechace(mundo,
     r = await server.cartera_retirar({"titular": "Pepe Pérez", "metodo": "iban", "destino": "ES91 2100 0418 4502 0005 1332"}, YO)
     await server.admin_retirada_pagada(r["retirada"]["id"], SUPER)
     assert mundo.g["cartera_retiradas"].docs[-1]["estado"] == "pagada" and o1["cartera_saldo"] == 0
+    # Resueltas, el IBAN y el teléfono quedan tapados en la base (29-10-2026): solo los últimos cuatro.
+    assert mundo.g["cartera_retiradas"].docs[-1]["destino"] == "•••• 1332"
+    assert mundo.g["cartera_retiradas"].docs[0]["destino"] == "•••• 5678"
     assert any(a.startswith("Te hemos pagado 60") for _, a in correos)
     mis = await server.referidos_mios(YO)
     assert sorted(x["estado"] for x in mis["retiradas"]) == ["pagada", "rechazada"]

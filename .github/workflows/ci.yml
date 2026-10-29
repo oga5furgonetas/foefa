@@ -79,6 +79,8 @@ jobs:
         run: node scripts/check-tests-huerfanos.mjs
       - name: Ningun texto visible nombra otra plataforma ni la marca escrita a mano
         run: node scripts/check-marca.mjs
+      - name: Las promociones tienen una sola fecha y un solo importe (servidor = web)
+        run: node scripts/check-promo.mjs
 
   backend:
     name: Backend (sintaxis + contratos + tests de API)

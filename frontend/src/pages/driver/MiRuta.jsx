@@ -1962,7 +1962,7 @@ export default function MiRuta({ onBack, embebido = false, alTerminar = null }) 
             <p className="flex gap-2"><MapPin size={16} className="mt-0.5 shrink-0 text-brand-300" />
               {tx('Mientras tengas la jornada empezada, la oficina de tu empresa verá en el mapa por dónde vas, para organizar el reparto y avisar a los clientes.')}</p>
             <p>{tx('Solo se comparte desde que pulses «Empezar jornada» hasta que pulses «Terminar». Fuera de la jornada no se guarda nada.')}</p>
-            <p>{tx('El recorrido se borra a los 30 días. Lo ve solo tu empresa, que es la responsable de estos datos; puedes pedirle acceso o explicaciones cuando quieras.')}</p>
+            <p>{tx('Solo se guarda tu última posición mientras la jornada está empezada, y se borra a los 30 días; el recorrido no se guarda. Lo ve solo tu empresa, que es la responsable de estos datos; puedes pedirle acceso o explicaciones cuando quieras.')}</p>
           </div>
           <button onClick={() => jornada('empezar', true)} disabled={ocupado === 'jornada'}
             className="mt-4 w-full rounded-xl bg-brand-500 py-3 text-[15px] font-bold text-brand-tinta">
