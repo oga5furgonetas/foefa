@@ -781,7 +781,11 @@ las búsquedas por red, 10 plantillas de respuesta, el calendario de 14 días co
 Facebook, LinkedIn) sobre las piezas que ya existen, la medición y el registro de rondas.
 Lo que hace falta de Dani: (1) para responder en hilos, una sesión en su PC con Claude en Chrome («haz la ronda de
 redes de docs/anuncios/REDES.md»); (2) para publicar el calendario desde la nube, conectar Metricool (o Typefully
-para X/LinkedIn) en claude.ai → Conectores y abrir sesión nueva; (3) tres vídeos a cámara (Guion A).
+para X/LinkedIn) en claude.ai → Conectores y avisar (la tarea programada se recrea con el conector).
+Más tarde esa noche (Dani: «sé autónomo, que yo no me tenga que preocupar»): piezas nuevas en `docs/anuncios/redes/`
+(3 carruseles + 4 tarjetas para X, `scripts/redes-fotos.mjs`, textos en `redes/TEXTO.md`), 3 fondos generados en
+Artlist (480 créditos; no bajables desde la nube: la red del entorno bloquea el CDN de Artlist) y **tarea programada
+«Redes FDS»** (3 rondas al día) que trabaja sobre la rama `claude/trusting-feynman-0tfz62`; sin conector solo prepara.
 
 ## Pendiente (por prioridad)
 

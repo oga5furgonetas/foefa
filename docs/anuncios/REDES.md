@@ -162,25 +162,26 @@ yo»). Como @FlotaDSP o la cuenta de TikTok: «la hicimos nosotros».
 
 Hora: X por la mañana (7:30-8:30, antes de cargar) o 21:00; TikTok a las 20:00; Facebook página 13:00.
 Las piezas de vídeo y foto ya existen (`docs/videos/`, `docs/anuncios/tiktok-fotos/`, `reales/salida/tiktok/`,
-`reales/salida/spot-v5-*-puck-web.mp4` en el PC de Dani). Lo que de verdad movería la aguja y no existe: **tres vídeos
-de Dani a cámara** (Guion A de `reales/GUIONES.md`, 30 s, móvil en vertical). Se piden abajo.
+`reales/salida/spot-v5-*-puck-web.mp4` en el PC de Dani) y las nuevas del 29-10 en `docs/anuncios/redes/` (tres
+carruseles y cuatro tarjetas para X, textos en `redes/TEXTO.md`, generador `scripts/redes-fotos.mjs`). Dani no graba
+vídeos (29-10): el material lo hace la sesión, una pieza nueva por ronda cuando haga falta.
 
 | Día | X (@FlotaDSP) | TikTok (20:00) | Facebook página |
 |---|---|---|---|
 | J 30-10 | ¿Cuánto tardas cada mañana en ordenar la ruta? Nosotros, 40 minutos con 60 paquetes y una libreta. Por eso hicimos FDS: foto a la etiqueta, la dirección entra sola y las paradas se ordenan por tiempo. Gratis y sin límite hasta el 31-12. | Sketch FDS-1 «¿Aún repartes a ojo?» · «¿Tú también repartes a ojo? Foto a la etiqueta → ruta ordenada → voz hasta la puerta. Gratis hasta el 31-12, enlace en el perfil» · comentario fijado: «¿Cuántas paradas haces un día normal? Nos sirve para saber para quién vale» | Texto largo de `app/TEXTOS.md` + `app/1-ruta-sola-4x5.png` |
-| V 31-10 | Lo que nadie te cuenta al empezar a repartir: 1) el orden de carga importa más que el de la ruta; 2) el que no abre a las 9 abre a las 14; 3) aparca una vez para tres entregas. ¿Cuál añadirías? (sin enlace) | Carrusel «5 trucos para acabar antes la ruta» (`tiktok-fotos/1-portada…7-la-app`, texto de su `TEXTO.md`) | — |
+| V 31-10 | [imagen `redes/X-primer-dia.png`] Lo que nadie te cuenta al empezar a repartir: 1) el orden de carga importa más que el de la ruta; 2) el que no abre a las 9 abre a las 14; 3) aparca una vez para tres entregas. ¿Cuál añadirías? (sin enlace) | Carrusel «5 trucos para acabar antes la ruta» (`tiktok-fotos/1-portada…7-la-app`, texto de su `TEXTO.md`) | — |
 | S 01-11 | Pregunta a quien reparte: ¿cuántas paradas haces un día normal? En Flex 40-60, en paquetería 100-150. Lo preguntamos porque el plan gratis de FDS da 15 al día para siempre y queremos saber para quién vale. | `tiktok-es-llama.mp4` · «Te llama el cliente y tú buscando el paquete 😅 Cada parada con su bulto y su WhatsApp con un toque. Gratis hasta el 31-12, enlace en el perfil» | — |
-| D 02-11 | «¿Y dónde está el truco?» nos preguntan. Ninguno: hasta el 31-12 gratis sin límite; después gratis hasta 15 paradas al día, y quien reparte 100 paga 9,99 €/mes. Lo decimos ya para que nadie se lleve sorpresas. Somos un equipo pequeño y la app es nuestra. | Sketch FDS-2 «POV: primer día repartiendo» · «Primer día: no te sepas la zona, sábete el orden. Enlace en el perfil» | — |
+| D 02-11 | [imagen `redes/X-truco.png`] «¿Y dónde está el truco?» nos preguntan. Ninguno: hasta el 31-12 gratis sin límite; después gratis hasta 15 paradas al día, y quien reparte 100 paga 9,99 €/mes. Lo decimos ya para que nadie se lleve sorpresas. Somos un equipo pequeño y la app es nuestra. | Carrusel A «Lo que nadie te cuenta del primer día» (`redes/A-1…A-7`, texto en `redes/TEXTO.md`) | — |
 | L 03-11 | Te llama el cliente y estás buscando su paquete entre 80. En FDS cada parada tiene su bulto, su teléfono y un botón de WhatsApp («llego en 10 min»). Hecho por quien ha pasado por eso. | Spot v5 (voz de Puck) 9:16 · «La ruta se ordena sola. Gratis y sin límite hasta el 31-12, sin tarjeta. Android e iPhone, enlace en el perfil» | «¿Dónde está el truco?» (texto del domingo, versión larga) + `app/2-voz-4x5.png` |
-| M 04-11 | Si eres autónomo y repartes, ¿sabes cuánto ganas por hora después de la gasolina? Hicimos una calculadora gratis, sin registro: [calculadora, utm_content=calculadora] | `tiktok-es-cobro.mp4` · «Cobros en mano y cuentas a boli… se acabó: importe, forma de pago y foto en la misma app. Gratis hasta el 31-12» | — |
-| X 05-11 | Manos libres en Android: dices «entregado» y «siguiente» sin soltar el volante. Lo hicimos porque mirar el móvil con la furgoneta en marcha es multa y es peligroso. | `tiktok-fotos/imagen-suelta.png` (modo foto) · texto de `TEXTO.md` «¿Cuánto tardas cada mañana…?» | Calculadora (texto del martes) + `tiktok-fotos/funciones-4x5.png` |
+| M 04-11 | [imagen `redes/X-cuanto-gana.png`] Si eres autónomo y repartes, ¿sabes cuánto ganas por hora después de la gasolina? Hicimos una calculadora gratis, sin registro: [calculadora, utm_content=calculadora] | `tiktok-es-cobro.mp4` · «Cobros en mano y cuentas a boli… se acabó: importe, forma de pago y foto en la misma app. Gratis hasta el 31-12» | — |
+| X 05-11 | [imagen `redes/X-manos-libres.png`] Manos libres en Android: dices «entregado» y «siguiente» sin soltar el volante. Lo hicimos porque mirar el móvil con la furgoneta en marcha es multa y es peligroso. | Carrusel B «7 frases que todo repartidor ha oído» (`redes/B-1…B-9`, texto en `redes/TEXTO.md`) | Calculadora (texto del martes) + `tiktok-fotos/funciones-4x5.png` |
 | J 06-11 | Primer día repartiendo: no te sepas la zona, sábete el orden. Foto a cada etiqueta al cargar, ordena por tiempo y empieza por la más lejana si vuelves a la nave. Y si algo no lo lee la app, lo escribes tú: no es magia. | Sketch FDS-3 «Repartidores de paquetería: esto os interesa» · «Foto a la etiqueta y la ruta se ordena sola. Gratis hasta el 31-12, enlace en el perfil» | — |
 | V 07-11 | Contrarreembolso: cobras 23,40 en efectivo, lo anotas en un papel, pierdes el papel. FDS apunta importe, forma de pago y foto; al acabar el día, cuentas claras. Gratis hasta el 31-12. | `shorts-es.mp4` · «Así se ve una ruta de 30 paradas ordenada en 10 segundos. Enlace en el perfil» | Cobros (texto de hoy) + `app/4-entregado-4x5.png` |
 | S 08-11 | Repartidores de Latinoamérica: la app funciona en cualquier país y «Mi dinero hoy» sale en vuestra moneda (en Brasil, Pix). Si la probáis en vuestra ciudad, decidnos qué le falta allí. | Sketch FDS-4 «Lo que nadie te cuenta al empezar a repartir» · «Tres cosas que nadie te dice el primer día 👇 (en comentarios). Enlace en el perfil» · comentario fijado con los tres consejos | — |
-| D 09-11 | Sin cobertura en el garaje del polígono: la app abre con tu ruta guardada y lo entregado se envía al volver la red. Detalle pequeño, mañanas enteras salvadas. | `tiktok-fotos/funciones-9x16.png` (modo foto) · «Todo lo que hace FDS en una imagen. Lo que falte, pídelo en comentarios» | — |
+| D 09-11 | Sin cobertura en el garaje del polígono: la app abre con tu ruta guardada y lo entregado se envía al volver la red. Detalle pequeño, mañanas enteras salvadas. | Carrusel C «¿Cuánto gana de verdad un repartidor autónomo?» (`redes/C-1…C-6`, texto en `redes/TEXTO.md`) | — |
 | L 10-11 | Invita y gana: por cada compañero que se registre con tu enlace y haga su primera ruta real (20 entregas en 2 días), 10 € a tu cartera hasta el 31-12 (después 2,50 €). Él, 10 € de bienvenida. Bizum o PayPal. Condiciones: [invita] | `tiktok-fotos/invita-9x16.png` · «10 € por cada compañero que la use de verdad, hasta el 31-12. Condiciones en el enlace del perfil» | Invita y gana (texto de hoy) + `tiktok-fotos/invita-4x5.png` |
 | M 11-11 | ¿Qué le falta a una app de reparto para que la uses de verdad? Contestad aquí: lo que más se repita, lo hacemos. Las dos últimas cosas que pidieron los repartidores ya están: paradas de días anteriores y direcciones que ya conoces. | `tiktok-es.mp4` (el original) · «¿Todavía ordenas la ruta a mano? 🚚 Gratis hasta el 31-12, enlace en el perfil» | — |
-| X 12-11 | Resumen honesto de las dos semanas: N altas nuevas, lo que arreglamos, lo que pedisteis. Construimos en público. (N sale de `tools/metricas/usuarios_total.py`; sin cifra real, no se publica) | **Dani a cámara (Guion A)** si lo ha grabado; si no, repetir el que mejor haya ido con otro gancho | Resumen honesto + `portada/app-iphone.png` |
+| X 12-11 | Resumen honesto de las dos semanas: N altas nuevas, lo que arreglamos, lo que pedisteis. Construimos en público. (N sale de `tools/metricas/usuarios_total.py`; sin cifra real, no se publica) | La pieza nueva de la semana (ideas al final de `redes/TEXTO.md`) o la que mejor haya ido, con otro gancho | Resumen honesto + `portada/app-iphone.png` |
 
 LinkedIn (página FlotaDSP, martes 04-11 y 11-11), para empresas con flota: «Inspección diaria con foto y daños
 detectados por IA, ITV/seguro/renting avisados, cuadrante con motor, portal del conductor. Sin instalar nada en
@@ -205,11 +206,30 @@ segunda semana sobre «quién causa los golpes» (revisión rápida de daños, p
 2. **Para publicar el calendario desde la nube:** conectar **Metricool** (claude.ai → Personalizar → Conectores;
    dentro de Metricool se enlazan la página de Facebook, Instagram, TikTok, X y LinkedIn) y abrir una sesión nueva.
    Alternativa solo para X y LinkedIn: Typefully.
-3. **Tres vídeos a cámara** (Guion A, 30 s, vertical, junto a la furgoneta). Es lo único que no puedo hacer y
-   lo que más confianza da.
+3. **Red del entorno de la nube**: permitir `cms-toolkit-artifacts.artlist.io` y `ai-toolkit-generations.imgix.net`
+   (menú del entorno → Edit → Network access → Allowed domains) para que las fotos generadas en Artlist se puedan
+   bajar desde aquí. Mientras tanto, las tres del 29-10 se guardan a mano (ver `redes/TEXTO.md`).
 4. Facebook: que el perfil y la página puedan publicar (la verificación por vídeo selfie que pedía el 24-10).
 
-## 11. Para la sesión que ejecute una ronda (PC con Chrome)
+## 11. Modo autónomo: la tarea programada «Redes FDS» (29-10-2026)
+
+Dani (29-10, noche): «que tengas tu propia programación: hace 3 horas que no subo nada a TikTok, me autopido una
+pieza, la genero y la subo; que yo no me tenga que preocupar de nada». Por eso existe una **tarea programada en la
+nube** que abre una sesión nueva tres veces al día (7:51, 12:51 y 19:51, hora de Madrid) sobre este repo y hace la
+ronda sola: lee este manual, mira qué toca según el calendario y la hora, publica o programa con el conector de
+publicación que tenga la sesión, prepara una pieza nueva si hace falta, apunta la ronda en el Registro y hace push
+a la rama `claude/trusting-feynman-0tfz62` (todo lo de redes vive ahí hasta que Dani lo mezcle en `main`).
+
+Lo que la tarea NO puede hacer sola y por qué:
+- **Publicar sin conector.** La tarea se creó sin conectores (la sesión que la creó no tenía ninguno de redes):
+  hasta que Dani conecte Metricool (o Posty/xpost/Typefully) y una sesión NUEVA la vuelva a crear con ese conector
+  (cómo, en `redes/TAREA.md`), la ronda solo prepara piezas (como mucho 6 sin publicar) y lo deja apuntado. No simula nada.
+- **Responder en hilos ajenos de X, TikTok o Facebook.** Ningún conector lo permite; eso sigue siendo una sesión en
+  el PC de Dani con Claude en Chrome (apartado 12), aunque sea una vez por semana.
+- **Gastar**: ni anuncios ni créditos de Artlist más allá de 2 imágenes por ronda. Nunca borra publicaciones ni toca
+  la bio o los enlaces de las cuentas. Mensajes privados, ninguno.
+
+## 12. Para la sesión que ejecute una ronda (PC con Chrome)
 
 1. `git pull`; leer este fichero entero y el último «Registro».
 2. Comprobar en cada red que la cuenta no está restringida (TikTok Studio, X → notificaciones, Facebook → estado
@@ -224,3 +244,4 @@ segunda semana sobre «quién causa los golpes» (revisión rápida de daños, p
 | Fecha | Red | Hilo o publicación | Qué se dijo | Resultado |
 |---|---|---|---|---|
 | 29-10 | (nube) | — | Sesión en la nube sin acceso a las cuentas: solo este manual, el calendario y las plantillas. Nada publicado. | Pendiente: Dani conecta Metricool o abre sesión en el PC |
+| 29-10 noche | (nube) | — | Piezas nuevas: carruseles A, B y C y 4 tarjetas para X (`redes/`, textos en `redes/TEXTO.md`). Tres fondos generados en Artlist (en la cuenta de Dani; la red de la nube no deja bajarlos). Tarea programada «Redes FDS» creada (3 rondas al día). Nada publicado: sin conector. | Dani: conectar Metricool y avisar para recrear la tarea con él |
