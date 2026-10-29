@@ -216,8 +216,9 @@ $env:JAVA_HOME = 'C:\Program Files\Android\Android Studio\jbr'; $env:ANDROID_HOM
 ```
 
 Firma verificada (`jarsigner -verify`: jar verified) y **probada por Dani en su móvil el 29-10 por la tarde: correcto**.
-Los ficheros: `C:\Users\dlvie\Downloads\FDS-2.2.4-code16.aab` (lo que se sube a Play) y `FDS-2.2.4.apk`. Queda subir el
-AAB a Play Console y anotar aquí lo que diga la revisión.
+Los ficheros: `C:\Users\dlvie\Downloads\FDS-2.2.4-code16.aab` y `FDS-2.2.4.apk`. **Subido a Play Console el 29-10 por la
+tarde: pista «Prueba abierta», versión 16 (2.2.4), «Iniciar lanzamiento completo», en revisión**, sin ningún aviso al
+subir (ni 16 KB, ni permisos). Publicación gestionada desactivada: al aprobarse se publica sola en esa pista.
 
 ## Versión 2.2.3 (code 15): la que se sube, compilada y firmada el 29-10-2026
 

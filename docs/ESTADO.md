@@ -701,8 +701,9 @@ desplegar la web** la próxima vez desde el PC.
    **compilada y firmada esa misma tarde en el PC de casa de Dani** (`C:\Users\dlvie\foefa`; cómo, en PLAY_STORE.md →
    «Versión 2.2.4»): tests, lint, AAB y APK en verde, firma verificada con `jarsigner`. **Probada en su móvil: correcto**
    (contraseña con ojo y aviso, sin «Abrir mi ruta», y lo de antes: auditoría, turnos, trabajar más, invita y gana).
-   Los ficheros están en `C:\Users\dlvie\Downloads\FDS-2.2.4-code16.aab` y `FDS-2.2.4.apk`. Falta confirmar la subida
-   del AAB (code 16) a Play y lo que diga la revisión.
+   Los ficheros están en `C:\Users\dlvie\Downloads\FDS-2.2.4-code16.aab` y `FDS-2.2.4.apk`. **AAB 16 (2.2.4) subido
+   a la prueba abierta y en revisión** el 29-10 por la tarde, sin avisos al subir (publicación gestionada desactivada:
+   al aprobarse sale solo). Falta: ver el resultado de la revisión y, cuando toque, pedir el paso a producción.
 
 -3. **App nativa (29-10)**: Dani instala `app-android/salida/FDS-2.2.4.apk` en su móvil, la prueba (entrar como
    conductor de empresa: turnos, auditoría con fotos, trabajar más; y como autónomo) y sube
