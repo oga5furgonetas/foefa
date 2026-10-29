@@ -1044,7 +1044,7 @@ nada, revísalo»), **fusionado en `main` (fast-forward hasta 9a0b95d), subido y
    los 3 cambios a revisión (lanzamiento completo + 178 países). Única advertencia: sin símbolos nativos (no bloquea). La
    **prioridad de actualización in-app no se puede fijar desde la consola** (solo por la API de Play Developer,
    `inAppUpdatePriority` en `edits.tracks`): si Dani la quiere, va en `app-release.yml` cuando exista `PLAY_SERVICE_ACCOUNT_JSON`.
-   Revisión de Google: hasta 7 días. **Cuando esté publicada**: `fly secrets set -a flota-backend APP_ANDROID_MIN="2.3.0"` para
+   Revisión de Google: hasta 7 días. **Cuando esté publicada** (Dani, 30-10 00:40: «ponla tú»; la sesión del PC lo mira cada 2 h): `fly secrets set -a flota-backend APP_ANDROID_MIN="2.3.0"` para
    que las 2.2.x pidan actualizar al entrar. De lo de abajo sigue pendiente lo opcional:
    (antes) subir `C:\Users\dlvie\Downloads\FDS-2.3.0-code18.aab` a la
    prueba abierta en Play Console (o a producción si la 2.2.4 ya salió); texto de novedades: «Avisos en el móvil:
