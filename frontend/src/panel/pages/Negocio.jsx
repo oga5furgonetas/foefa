@@ -8,7 +8,7 @@ import { Activity,
   LogIn, Trash2, Database, BrainCircuit, ExternalLink, RefreshCw, Megaphone,
   Play, Pause, Plus, Star, Eye, MousePointerClick, Tag, Save,
   Receipt, Upload, Check, Undo2, Building, Coins, LayoutGrid, X, Mail, Wallet, Copy,
-  ArrowLeft, Store, MessageSquare, Crown, HeartPulse, ChevronRight,
+  ArrowLeft, Store, MessageSquare, Crown, HeartPulse,
 } from 'lucide-react'
 import {
   getAdminOverview, getAdminOrgs, getLeads, updateOrg, impersonateOrg, deleteOrg,

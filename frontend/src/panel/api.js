@@ -62,7 +62,6 @@ export const chatToChecklist = (center, messageId, body = {}) =>
 export const getDashboardStats = (center) => api.get('/stats/dashboard', { params: centerParam(center) })
 export const getDamageCosts = (center) => api.get('/stats/damage-costs', { params: centerParam(center) })
 export const getStatsHoy = (center) => api.get('/stats/hoy', { params: centerParam(center) })
-export const getAttention = () => api.get('/stats/attention')
 
 /* ── Vehículos / Flota ── */
 export const getOnboarding = () => api.get('/onboarding')
@@ -71,8 +70,6 @@ export const getOnboarding = () => api.get('/onboarding')
 export const getVehicles = (center, estado) =>
   api.get('/vehicles', { params: { ...centerParam(center), ...(estado ? { estado } : {}) } })
 export const createVehicle = (body) => api.post('/vehicles', body)
-export const getVehicle = (id) => api.get(`/vehicles/${id}`)
-export const getVehicleHistory = (id) => api.get(`/vehicles/${id}/history`)
 export const getLastInspections = (center) => api.get('/vehicles/last-inspections', { params: centerParam(center) })
 export const getSpareWheels = () => api.get('/vehicles/spare-wheel')
 export const getVehicleDriver = (id) => api.get(`/vehicles/${id}/driver`)
@@ -97,8 +94,6 @@ export const deleteVehicle = (vehicleId) => api.delete(`/vehicles/${vehicleId}`)
 
 /* ── Conductores ── */
 export const getDrivers = (center) => api.get('/drivers', { params: centerParam(center) })
-export const getDriverRanking = () => api.get('/drivers/ranking')
-export const getDriverScore = (id) => api.get(`/drivers/${id}/score`)
 export const getDriversScoring = (month, year) => api.get('/scoring/drivers', { params: { ...(month ? { month } : {}), ...(year ? { year } : {}) } })
 export const getScoringLeaderboard = (month, year) => api.get('/scoring/leaderboard', { params: { ...(month ? { month } : {}), ...(year ? { year } : {}) } })
 export const createDriver = (data, params) => api.post('/drivers', data, { params })
@@ -205,7 +200,6 @@ export const getReviewQueue = (center) => api.get('/inspections/review-queue', {
 export const getAiDatasetStats = () => api.get('/ai-dataset/stats')
 // Como de bien lo esta haciendo la IA, medido con las validaciones humanas.
 export const autoexamenIA = () => api.get('/ai/autoexamen')
-export const modeloIA = () => api.get('/ai/modelo')
 export const entrenarModeloIA = () => api.post('/ai/modelo/entrenar')
 /* Lo que la IA ha aprendido sobre si misma: en que piezas se calla y por que.
    Existe para que el filtro no sea una caja negra. */
@@ -256,7 +250,6 @@ export const getMaintenanceAlerts = () => api.get('/alerts/maintenance')
 export const getRentingAlerts = () => api.get('/alerts/renting')
 
 /* ── Renting / Casas de alquiler ── */
-export const getRentals = () => api.get('/rentals')
 export const getRentalsNearby = (lat, lng, maxKm = 80) =>
   api.get('/rentals/nearby', { params: { lat, lng, max_km: maxKm } })
 
@@ -301,7 +294,6 @@ export const responderConversacion = (tel, texto) =>
   api.post(`/whatsapp/conversaciones/${encodeURIComponent(tel)}/responder`, { texto })
 export const contarConversacionesSinLeer = () => api.get('/whatsapp/conversaciones/no-leidas')
 export const crearPlantillasWhatsapp = () => api.post('/whatsapp/plantillas/crear')
-export const avisarItvWhatsapp = () => api.post('/whatsapp/avisar-itv')
 export const getTelegramConfig = () => api.get('/telegram/config')
 export const getOrgBilling = () => api.get('/org/billing')
 export const getBillingUso = () => api.get('/billing/uso')
@@ -347,7 +339,6 @@ export const setShiftSettings = (center, min_cobertura) => api.post('/shifts/set
 // Cuadrante pegado desde Sheets: mas fiable que el Excel porque lo que se ve es
 // lo que entra, sin depender de donde este cada cosa en el fichero.
 export const importShiftsPegado = (body) => api.post('/shifts/import-pegado', body, { timeout: 120000 })
-export const getAliasNombres = () => api.get('/shifts/alias-nombres')
 export const setAliasNombres = (mapa) => api.put('/shifts/alias-nombres', { mapa })
 
 // Bloqueos: dias en los que no se pueden pedir libres.
@@ -698,7 +689,6 @@ export const adminRetiradas = (estado = 'pendiente') => api.get('/admin/cartera/
 export const adminReferidosConductores = () => api.get('/admin/cartera/conductores')
 export const adminRetiradaPagada = (id) => api.post(`/admin/cartera/retiradas/${id}/pagada`)
 export const adminRetiradaRechazar = (id, body) => api.post(`/admin/cartera/retiradas/${id}/rechazar`, body)
-export const forgotPassword = (email) => api.post('/auth/forgot-password', { email })
 
 /* ── Package Intelligence Center (Cortex) ── */
 
@@ -787,21 +777,16 @@ export const getWhcEstado = () => api.get('/whc/estado')
    WhatsApp ya escrito. El texto y el `wa.me` los arma el backend. */
 
 // ── Aparcamiento: plano por centro + trazabilidad diaria ──
-export const parkingLayout = (center) => api.get('/parking/layout', { params: { center } })
 export const parkingSaveLayout = (body) => api.put('/parking/layout', body)
 export const parkingState = (center, day) => api.get('/parking/state', { params: { center, day } })
 export const parkingAssign = (body) => api.post('/parking/assign', body)
-export const parkingReport = (body) => api.post('/parking/report', body)
 export const parkingResolve = (body) => api.post('/parking/resolve', body)
-export const parkingLastKnown = (center) => api.get('/parking/last-known', { params: { center } })
 export const parkingZoneImage = (formData) => api.post('/parking/zone-image', formData)
 
 /* Cuadre del debrief. `center` se manda crudo, como el resto del panel: el
    backend filtra por regex porque el centro esta guardado de cuatro formas
    distintas (gotcha 6). */
 /* Daños abiertos que aun no han ido al taller. */
-export const getDanosPendientes = (params) =>
-  api.get('/work-orders/danos-pendientes', { params })
 /* Las furgonetas que no estan trabajando, con los dias que llevan paradas. */
 export const getFurgonetasParadas = (center) =>
   api.get('/work-orders/paradas', { params: centerParam(center) })
@@ -837,8 +822,6 @@ export const descargarInformeFlota = (params) =>
    enseñarlo: parece que la furgoneta no tiene bolsas. */
 export const fijarBolsas = (vehicleId, bags, note) =>
   api.post(`/vehicles/${encodeURIComponent(vehicleId)}/bags/set`, { bags, note })
-export const gastarBolsas = (vehicleId, used, note) =>
-  api.post(`/vehicles/${encodeURIComponent(vehicleId)}/bags/consume`, { used, note })
 
 export const descargarInformeFlotaPdf = (params) =>
   api.get('/reports/fleet-pdf', { params, responseType: 'blob' })

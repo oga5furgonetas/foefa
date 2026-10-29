@@ -341,7 +341,6 @@ function Autoexamen({ datos, total, alRevisar, recargar }) {
      parte de los daños que EXISTEN. Son dos preguntas distintas: dividir las
      dos entre el total de revisiones daba números que no significaban nada
      —y hundía a la pieza que acierta todo lo que dice pero no ve mucho—. */
-  const pct = (k, den) => (den ? Math.round((100 * (datos.global?.[k] || 0)) / den) : null)
   /* Porcentajes como se escriben en español: «63,3 %». Antes la misma tarjeta
      decía «63.3%», «0,764» y «90 %». */
   const conSigno = (v) => (v == null || v === '' ? '—'

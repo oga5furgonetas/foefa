@@ -1,12 +1,10 @@
 import { useState } from 'react'
-import { useNavigate } from 'react-router-dom'
 import { API_BASE } from '../services/api'
 import { saveSession } from '../panel/auth'
 import { useT, LANGS } from '../i18n'
 
 export default function Login() {
   const { t, lang, setLang } = useT()
-  const nav = useNavigate()
   const [user, setUser] = useState('')
   const [pass, setPass] = useState('')
   const [err, setErr] = useState('')

@@ -104,7 +104,7 @@ export default function OpinionCorreo() {
                 <div className="mt-2 space-y-2" role="radiogroup" aria-label={tx('¿Qué te frenó?')}>
                   {MOTIVOS.map(([k, texto_]) => (
                     <button key={k} type="button" role="radio" aria-checked={motivo === k} onClick={() => setMotivo(k)}
-                      className={`flex w-full items-center rounded-2xl border px-4 py-3 text-left text-[15px] font-semibold ${motivo === k ? 'border-brand-400 bg-brand-500/15 text-brand-100' : 'border-dark-700 text-dark-100'}`}>
+                      className={`flex w-full items-center rounded-2xl border px-4 py-3 text-left text-[15px] font-semibold ${motivo === k ? 'border-brand-400 bg-brand-500/15 text-brand-200' : 'border-dark-700 text-dark-100'}`}>
                       {tx(texto_)}
                     </button>
                   ))}

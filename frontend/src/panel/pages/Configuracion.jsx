@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { useT } from '../../i18n'
-import { Loader2, Plus, Building, Send, CreditCard, Check, Copy, ExternalLink, BellRing, Pencil, Trash2, Clock, MessageCircle } from 'lucide-react'
+import { Loader2, Plus, Building, Send, CreditCard, Check, BellRing, Pencil, Trash2, Clock, MessageCircle } from 'lucide-react'
 import { stripePortal } from '../api'
 import { getOrgCenters, addOrgCenter, getTelegramConfig,
   getWhatsappEstado, getWhatsappPendientes, marcarWhatsappHecho, setWhatsappConfig, probarWhatsapp, crearPlantillasWhatsapp, getOrgBilling, getBillingUso, listarDestinatarios, guardarDestinatario, borrarDestinatario, enviarResumenDiario, getHorariosAvisos, setHorariosAvisos } from '../api'
@@ -9,24 +9,6 @@ import { lista } from '../../lib/lista'
 import { getAdmin, isSuperAdmin } from '../auth'
 import { usePlan } from '../../lib/usePlan'
 import { voces, esReparto } from '../../lib/sector'
-
-function CopyRow({ label, url }) {
-  const { t } = useT()
-  const [copied, setCopied] = useState(false)
-  return (
-    <div>
-      {label && <div className="mb-1 text-xs font-medium text-dark-400">{label}</div>}
-      <div className="flex gap-2">
-        <input readOnly value={url} className="input flex-1 font-mono text-xs" onFocus={(e) => e.target.select()} />
-        <button onClick={() => { navigator.clipboard?.writeText(url).catch(() => {}); setCopied(true); setTimeout(() => setCopied(false), 1500) }}
-          className="btn-secondary flex items-center gap-1.5 whitespace-nowrap text-sm">
-          {copied ? <><Check size={14} /> {t('portal.copied')}</> : <><Copy size={14} /> {t('portal.copy')}</>}
-        </button>
-        <a href={url} target="_blank" rel="noreferrer" className="btn-ghost px-2" title="Abrir"><ExternalLink size={15} /></a>
-      </div>
-    </div>
-  )
-}
 
 /* ────────────────────────────────────────────────────────────────────────────
    QUIÉN RECIBE EL RESUMEN DE CADA CENTRO

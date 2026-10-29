@@ -74,7 +74,7 @@ export default function ChecklistOperativo() {
     setData(next)
     try {
       await toggleChecklistItem({ center, date, shift, item_id: item.id, done: !item.done })
-    } catch (e) {
+    } catch {
       setErr('No se pudo actualizar.'); load()
     }
   }

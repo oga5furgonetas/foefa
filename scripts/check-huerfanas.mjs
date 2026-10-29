@@ -239,11 +239,20 @@ const SIN_UI_A_PROPOSITO = new Set([
   // Los recibe Stripe y el Apps Script de Google Sheets, fuera del frontend.
   'POST /billing/stripe/suscripciones-webhook',
   'POST /cuadrante/sync/hoja/hecho',
-  // La app Android consume estas rutas para renovar sesión y pedir la baja.
-  'POST /renovar',
-  'POST /borrar-cuenta',
   // Endpoint antiguo del portal de conductor; el portal actual usa /trabajar-mas.
   'GET /refuerzos/mios',
+  // Heredadas de FlotaDSP sin pantalla en Flota desde que nació (comprobado el
+  // 29-10-2026: ninguna pantalla, app ni script las llama; sus envolturas de
+  // api.js nunca se usaron y se borraron ese día). Se quedan hasta que Dani
+  // decida engancharlas o borrarlas.
+  'GET /stats/attention',
+  'POST /parking/report',
+  // Daños abiertos sin orden de taller: sin pantalla; «Estado de la flota» (17-10)
+  // responde a lo mismo con fotos. La piden solo los smoke de backend/scripts.
+  'GET /work-orders/danos-pendientes',
+  // Ranking de conductores por daños: la pantalla de Conductores usa desde la
+  // vista unificada /scoring/leaderboard. La pide solo el smoke de empresa nueva.
+  'GET /drivers/ranking',
 ])
 
 const server = fs.readFileSync(path.join(RAIZ, 'backend', 'server.py'), 'utf8')
@@ -261,13 +270,16 @@ while ((m = re.exec(server)) !== null) {
 
 /* Todo lo que puede llamar a la API: panel, portal, app Flutter, scripts y
    los propios tests. Se concatena y se busca dentro. */
-const EXT = new Set(['.js', '.jsx', '.ts', '.tsx', '.dart', '.mjs', '.py'])
+const EXT = new Set(['.js', '.jsx', '.ts', '.tsx', '.dart', '.mjs', '.py', '.kt'])
 const consumidores = []
 function recorrer(dir) {
   let entradas
   try { entradas = fs.readdirSync(dir, { withFileTypes: true }) } catch { return }
   for (const e of entradas) {
     if (e.name === 'node_modules' || e.name === '__pycache__' || e.name === 'dist') continue
+    // Este mismo fichero no cuenta: sus comentarios nombran rutas (`/app-login`,
+    // `/renovar`…) y, leyéndose a sí mismo, las daba por consumidas.
+    if (e.name === 'check-huerfanas.mjs') continue
     const p = path.join(dir, e.name)
     if (e.isDirectory()) recorrer(p)
     else if (EXT.has(path.extname(e.name))) {
@@ -279,7 +291,11 @@ function recorrer(dir) {
 // `flotadsp_app/lib`, una carpeta que no existe: sus 23 rutas (`/drivers/ranking`,
 // `/inspections/vehicle/…`, `/alerts/maintenance`…) no contaban como consumidas
 // y una de ellas se podia haber borrado por "huerfana" dejando la app sin datos.
-for (const sub of ['frontend/src', 'frontend/src', 'mobile/lib', 'scripts', 'backend/tests']) {
+// `app-android/app/src` es la app nativa de Android (Kotlin) y `app-android/pruebas`
+// su prueba del contrato con la API: desde el 28-10-2026 llaman a rutas que no usa
+// ninguna pantalla web (`auth/app-login`, `auth/renovar`, `auth/borrar-cuenta`).
+// Sin leerlas, el CI de main estuvo en rojo acusando a `/app-login` de huérfana.
+for (const sub of ['frontend/src', 'mobile/lib', 'app-android/app/src', 'app-android/pruebas', 'scripts', 'backend/tests']) {
   recorrer(path.join(RAIZ, ...sub.split('/')))
 }
 
@@ -296,11 +312,21 @@ try { apiTexto = fs.readFileSync(apiJs, 'utf8') } catch { /* sin api.js no hay n
 if (apiTexto) {
   const resto = consumidores.filter((t) => t !== apiTexto).join('\n')
   const podadas = []
+  /* Una envoltura podada se va ENTERA, con sus lineas de continuacion (las
+     indentadas que siguen). Hasta el 29-10-2026 solo se quitaba la primera
+     linea, y la segunda —`api.get('/work-orders/danos-pendientes', …)`— se
+     quedaba contando como consumidor de una ruta que nadie llamaba. */
+  let podando = false
   apiTexto = apiTexto.split('\n').filter((linea) => {
     const m = linea.match(/^export (?:const|function|async function) (\w+)/)
-    if (!m) return true
+    if (!m) {
+      if (podando && /^\s/.test(linea)) return false
+      podando = false
+      return true
+    }
     const vivo = new RegExp(`\\b${m[1]}\\b`).test(resto)
     if (!vivo) podadas.push(m[1])
+    podando = !vivo
     return vivo
   }).join('\n')
   const idx = consumidores.findIndex((t) => t.startsWith(apiTexto.slice(0, 200)) || t.includes('export const getVehicles'))

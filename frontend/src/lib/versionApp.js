@@ -19,7 +19,7 @@ function bundleActual() {
       .map((x) => x.getAttribute('src'))
       .find((x) => /\/index-[^/]+\.js$/.test(x || ''))
     return s ? s.split('/').pop() : ''
-  } catch (_) { return '' }
+  } catch { return '' }
 }
 
 /**
@@ -54,7 +54,7 @@ export function vigilarVersion(alHaberNueva, cadaMs = 5 * 60 * 1000) {
       // Falso positivo: `parado` solo pasa de false a true, nunca vuelve atras.
       // eslint-disable-next-line require-atomic-updates
       if (j.bundle !== mio) { estado.parado = true; alHaberNueva(j) }
-    } catch (_) { /* sin red: se vuelve a mirar en la siguiente vuelta */ }
+    } catch { /* sin red: se vuelve a mirar en la siguiente vuelta */ }
   }
 
   const t = setInterval(mirar, cadaMs)

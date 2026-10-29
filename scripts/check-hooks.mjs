@@ -16,8 +16,11 @@
  */
 import fs from 'node:fs'
 import path from 'node:path'
+import { fileURLToPath } from 'node:url'
 
-const RAIZ = path.join(path.dirname(new URL(import.meta.url).pathname.slice(1)), '..')
+// fileURLToPath y no `pathname.slice(1)`: el slice quitaba la barra de Windows (/C:/…),
+// pero en Linux se comía la raíz (home/user/…, relativo) y el CI de Ubuntu moría con ENOENT.
+const RAIZ = path.join(path.dirname(fileURLToPath(import.meta.url)), '..')
 const problemas = []
 
 /** Los componentes de React: funciones con mayúscula que devuelven JSX. */

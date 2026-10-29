@@ -61,7 +61,6 @@ function DistBadge({ km }) {
 /* Banner de asistencia en carretera */
 function RoadsideBanner({ roadside, provider }) {
   const { t } = useT()
-  const [expanded, setExpanded] = useState(false)
   if (!roadside) return null
 
   const hasPhone = !!roadside.phone
@@ -320,7 +319,7 @@ export default function Talleres() {
     try {
       const r = await getWorkshopsNearby(lat, lng, { provider, category })
       setResult(r.data)
-    } catch (e) {
+    } catch {
       setErr(t('ws.load.err'))
     } finally { setLoading(false) }
   }, [])

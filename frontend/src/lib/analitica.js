@@ -21,13 +21,13 @@ function sid() {
   try {
     const guardado = sessionStorage.getItem(CLAVE)
     if (guardado) { memoria = guardado; return memoria }
-  } catch (_) { /* sin almacén: la sesión dura lo que dure esta pestaña */ }
+  } catch { /* sin almacén: la sesión dura lo que dure esta pestaña */ }
   let v = ''
   const bytes = new Uint8Array(16)
-  try { crypto.getRandomValues(bytes) } catch (_) { for (let i = 0; i < 16; i++) bytes[i] = Math.floor(Math.random() * 256) }
+  try { crypto.getRandomValues(bytes) } catch { for (let i = 0; i < 16; i++) bytes[i] = Math.floor(Math.random() * 256) }
   for (const b of bytes) v += LETRAS[b % LETRAS.length]
   memoria = v
-  try { sessionStorage.setItem(CLAVE, v) } catch (_) { /* da igual: vale la de memoria */ }
+  try { sessionStorage.setItem(CLAVE, v) } catch { /* da igual: vale la de memoria */ }
   return v
 }
 
@@ -71,7 +71,7 @@ function token() {
     if (t) return t
     const d = JSON.parse(localStorage.getItem('flota_driver') || 'null')
     if (d && d.access_token) return d.access_token
-  } catch (_) { /* almacén bloqueado: se manda sin token */ }
+  } catch { /* almacén bloqueado: se manda sin token */ }
   return null
 }
 
@@ -88,7 +88,7 @@ function origen() {
       const h = new URL(ref).hostname
       if (h && h !== window.location.hostname) fuera.ref = h.toLowerCase()
     }
-  } catch (_) { /* sin referrer no pasa nada */ }
+  } catch { /* sin referrer no pasa nada */ }
   return fuera
 }
 
@@ -101,7 +101,7 @@ function mandar(cuerpo) {
       body: JSON.stringify({ sid: sid(), disp: dispositivo(), ...origen(), ...cuerpo }),
       keepalive: true,
     }).catch(() => {})
-  } catch (_) { /* medir nunca puede tumbar una pantalla */ }
+  } catch { /* medir nunca puede tumbar una pantalla */ }
 }
 
 let ultima = null

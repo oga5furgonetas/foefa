@@ -51,7 +51,7 @@ export async function enablePush() {
     }
     await api.post('/push/subscribe', { subscription: sub.toJSON() })
     return 'ok'
-  } catch (e) {
+  } catch {
     return 'error'
   }
 }

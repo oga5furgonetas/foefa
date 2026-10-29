@@ -1,5 +1,4 @@
 import { useEffect, useRef, useState } from 'react'
-import { useNavigate } from 'react-router-dom'
 import { Sparkles, Send, Loader2, X, Check, Car, UserPlus, FileText, Paperclip, UserX, Wrench, AlertTriangle, Pencil, UserCog, Hammer } from 'lucide-react'
 import { getAiHistorial, enviarMensajeIA, ejecutarAccionIA, subirFichasTecnicasIA, confirmarFichasTecnicasIA } from './api'
 import { getAdmin } from './auth'
@@ -147,7 +146,6 @@ function Tarjeta({ t }) {
 }
 
 export default function AsistenteBurbuja({ center, centers }) {
-  const navigate = useNavigate()
   // Quien habla se ve de un vistazo: el logo cuando contesta la IA y la foto
   // de perfil cuando escribe la persona. Sin foto, sus iniciales.
   const yo = getAdmin()

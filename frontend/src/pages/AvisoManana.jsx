@@ -89,7 +89,7 @@ export function PedirAviso({ horaInicial, onHecho, textoBoton }) {
         {HORAS_CARGA.map((h) => (
           <button key={h} type="button" role="radio" aria-checked={hora === h} onClick={() => setHora(h)}
             className={`rounded-lg border py-2 text-[13.5px] font-semibold tabular-nums ${hora === h
-              ? 'border-brand-400 bg-brand-500/20 text-brand-100' : 'border-dark-700 text-dark-200'}`}>
+              ? 'border-brand-400 bg-brand-500/20 text-brand-200' : 'border-dark-700 text-dark-200'}`}>
             {etiqueta(h)}
           </button>
         ))}

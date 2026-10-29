@@ -133,7 +133,7 @@ export default function Aparcamiento() {
   const [draft, setDraft] = useState(null)
   const [drag, setDrag] = useState(null)
   const [snapOn, setSnapOn] = useState(true)        // imán de alineación
-  const [histN, setHistN] = useState(0)             // fuerza re-render de botones undo/redo
+  const [, setHistN] = useState(0)             // fuerza re-render de botones undo/redo
   const histRef = useRef({ past: [], future: [] })  // historial de deshacer
   const lastSnapRef = useRef(0)
   // Arrastrar vehículo → plaza
@@ -602,7 +602,7 @@ export default function Aparcamiento() {
                   <div className="grid h-full w-full place-items-center transition-transform duration-100"
                     style={{ transform: `translate(${pan.x}px, ${pan.y}px) scale(${zoom})`, transformOrigin: 'center' }}>
                     {zone && zBox.w > 0 && (() => {
-                      const z = zone, zi = zIdx, ac = zAc
+                      const z = zone, zi = zIdx
                       return (
                         <div className="relative overflow-hidden rounded-2xl border shadow-[0_24px_70px_-20px_rgba(0,0,0,.85)]"
                           style={{ width: zBox.w, height: zBox.h,

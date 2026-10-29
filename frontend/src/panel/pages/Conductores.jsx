@@ -432,7 +432,6 @@ function ScoringView({ center }) {
   // El PODIO solo admite elegibles para el premio (≥35% de días asignados):
   // nadie gana el mes con 3 días buenos. La lista completa muestra a todos.
   const top3     = ranked.filter(s => s.prize_eligible !== false).slice(0, 3)
-  const rest     = ranked.slice(3)
 
   const stats = lb?.center_stats?.[activeCtr] || {}
 
@@ -748,7 +747,7 @@ function AvisoAccesos({ list, onHecho }) {
 }
 
 
-function TablaConductores({ list, accounts, onAbrir, t }) {
+function TablaConductores({ list, accounts, onAbrir }) {
   const [orden, setOrden] = useState({ col: 'name', asc: true })
 
   const filas = useMemo(() => {
@@ -1062,7 +1061,7 @@ Cancelar: es otra persona, crear una ficha nueva.`)) {
                     </span>
                   </div>
                 )}
-                <TablaConductores list={list} accounts={accounts} onAbrir={(d) => setModal({ driver: d })} t={t} />
+                <TablaConductores list={list} accounts={accounts} onAbrir={(d) => setModal({ driver: d })} />
               </>
       )}
 

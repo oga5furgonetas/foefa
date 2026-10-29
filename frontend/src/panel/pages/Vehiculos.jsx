@@ -208,18 +208,6 @@ function EditableField({ label, value, onSave, type = 'text', icon, mono, childr
   )
 }
 
-function ReadField({ label, icon, children }) {
-  return (
-    <div className="flex items-start gap-2.5 rounded-xl px-3 py-2.5">
-      {icon && <span className="mt-0.5 shrink-0 text-dark-500">{icon}</span>}
-      <div className="min-w-0 flex-1">
-        <div className="mb-0.5 text-[10px] font-medium uppercase tracking-wider text-dark-500">{label}</div>
-        <div className="text-sm font-medium text-dark-100">{children || <span className="text-dark-500">—</span>}</div>
-      </div>
-    </div>
-  )
-}
-
 /* ── Taller modal ── */
 const TALLER_SEV = [
   { value: 'leve',     label: 'Leve',     cls: 'text-yellow-400' },
@@ -1121,7 +1109,7 @@ function VehicleDetail({ vehicle: initVehicle, onClose, onSaved }) {
                   { key: 'oil',       label: 'Aceite',              Icon: Droplets,  color: 'amber'   },
                   { key: 'ruedas',    label: 'Ruedas',              Icon: CircleDot, color: 'sky'     },
                   { key: 'pastillas', label: 'Pastillas de freno',  Icon: Disc,      color: 'rose'    },
-                ].map(({ key, label, Icon, color }) => {
+                ].map(({ key, label, Icon }) => {
                   const item = maintenance?.[key]
                   const overdue  = item?.overdue
                   const warning  = item?.warning
@@ -2862,7 +2850,7 @@ export default function Vehiculos() {
      propia celda: license_plate, model, center, mileage, itv_date y status. */
   const { orden: ordenTabla, pulsar: pulsarTabla, ordenar: ordenarTabla } = useOrden()
   const { center, centers } = useOutletContext()
-  const { t, lang } = useT()
+  const { t } = useT()
   const { limits } = usePlan()
   const [vehicles, setVehicles] = useState(null)
   const [lastInsp, setLastInsp] = useState({})

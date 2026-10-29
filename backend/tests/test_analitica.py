@@ -277,6 +277,17 @@ def test_el_contador_de_cada_segmento_no_depende_del_filtro():
     assert todos["resumen"]["sesiones"] == 3
 
 
+def test_el_evento_dice_si_viene_de_iphone_o_android():
+    """Para saber cuánta gente usa iPhone (allí la app se instala desde Safari)."""
+    from datetime import datetime, timezone
+    ahora = datetime.now(timezone.utc)
+    cuerpo = {"sid": "abcdefghijklmnop", "tipo": "vista", "ruta": "/empezar", "disp": "movil"}
+    ios = an.evento_desde(cuerpo, "Mozilla/5.0 (iPhone; CPU iPhone OS 17_5 like Mac OS X) Safari/604.1", None, ahora)
+    android = an.evento_desde(cuerpo, "Mozilla/5.0 (Linux; Android 14; Pixel 8) Chrome/129 Mobile", None, ahora)
+    pc = an.evento_desde(cuerpo, "Mozilla/5.0 (Windows NT 10.0) Chrome/129", None, ahora)
+    assert (ios["so"], android["so"], pc["so"]) == ("ios", "android", "otro")
+
+
 if __name__ == "__main__":
     fallos = 0
     for nombre, f in sorted(globals().items()):
@@ -288,15 +299,3 @@ if __name__ == "__main__":
                 fallos += 1
                 print("FALLA", nombre, repr(ex))
     sys.exit(1 if fallos else 0)
-
-
-def test_el_evento_dice_si_viene_de_iphone_o_android():
-    """Para saber cuánta gente usa iPhone (allí la app se instala desde Safari)."""
-    from datetime import datetime, timezone
-    ahora = datetime.now(timezone.utc)
-    cuerpo = {"sid": "abcdefghijklmnop", "tipo": "vista", "ruta": "/empezar", "disp": "movil"}
-    ios = an.evento_desde(cuerpo, "Mozilla/5.0 (iPhone; CPU iPhone OS 17_5 like Mac OS X) Safari/604.1", None, ahora)
-    android = an.evento_desde(cuerpo, "Mozilla/5.0 (Linux; Android 14; Pixel 8) Chrome/129 Mobile", None, ahora)
-    pc = an.evento_desde(cuerpo, "Mozilla/5.0 (Windows NT 10.0) Chrome/129", None, ahora)
-    assert (ios["so"], android["so"], pc["so"]) == ("ios", "android", "otro")
-

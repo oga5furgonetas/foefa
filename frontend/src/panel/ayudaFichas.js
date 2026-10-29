@@ -63,6 +63,15 @@ export const AYUDA = {
     ],
     ojo: 'Lo que descarta NO lo ve el candidato: si supiera que respuesta le deja fuera, contestaria eso. Y los datos se borran solos a los 12 meses; si alguien pide que los quites antes, la papelera de su tarjeta lo hace de verdad.',
   },
+  reparto: {
+    que: 'Los pedidos de hoy de quien reparte su propia mercancía: quién lleva cada uno, en qué orden y por dónde va.',
+    pasos: [
+      'Mete los pedidos: a mano, con «Pegar la lista del día» desde tu programa, o los escanea el conductor al cargar.',
+      '«Repartir por zonas» da cada pedido al conductor de su zona y «Ordenar rutas» pone las paradas en orden.',
+      'En el mapa ves por dónde va cada uno; cada pedido lleva su enlace de seguimiento para el cliente.',
+    ],
+    ojo: 'Sin almacén puesto la ruta no tiene de dónde salir: es lo primero. La ubicación de los conductores solo existe mientras tienen la jornada empezada.',
+  },
   asignacion: {
     que: 'Qué furgoneta lleva cada conductor hoy.',
     pasos: [
@@ -128,6 +137,15 @@ export const AYUDA = {
     estado: 'Poco usada: 8 mensajes en total y el último hace más de un mes.',
   },
 
+  'centro-ia': {
+    que: 'Hablar con la app como con un compañero: pregúntale por los datos y pídele cambios, que ella propone y tú confirmas.',
+    pasos: [
+      'Elige el centro arriba si la pregunta es de uno, y escribe como se lo dirías a una persona.',
+      'Mientras piensa ves los pasos que va dando; si cierras la página, al volver sigue ahí.',
+      'Cuando propone un cambio, «Confirmar» lo aplica y «Descartar» lo tira: nunca cambia nada sola.',
+    ],
+    ojo: 'Solo la ven las cuentas de la plataforma, no las empresas cliente. Tiene un tope de gasto al día por persona, y se ve arriba lo gastado hoy.',
+  },
   // ── Flota ──────────────────────────────────────────────────────────────
   vehiculos: {
     que: 'La ficha de cada furgoneta: estado, papeles, daños y su gemelo en 3D.',
@@ -137,6 +155,15 @@ export const AYUDA = {
       'El visor 3D pinta los daños abiertos sobre la carrocería.',
     ],
     ojo: 'Las furgonetas de baja no salen en los listados. Están en su propia pestaña, y no cuentan en ningún contador.',
+  },
+  'estado-flota': {
+    que: 'Saber qué furgoneta mandar primero al taller, con la foto de su peor golpe.',
+    pasos: [
+      'Arriba, la salud de toda la flota y cuántas hay en cada nivel; toca un número para quedarte solo con esas.',
+      'Debajo van de la peor a la mejor. Toca una: el dibujo con las zonas tocadas, las fotos de la última inspección y cada daño con la suya.',
+      '«Mandar al taller» abre en Órdenes el parte ya redactado.',
+    ],
+    ojo: 'Las que ya están en el taller no se mandan otra vez. La nota sale de las inspecciones: sin una reciente, «sin datos».',
   },
   revision: {
     que: 'Validar lo que la IA ve en las fotos, para que aprenda. Es lo único que la hace mejorar.',

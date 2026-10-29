@@ -16,10 +16,12 @@
      · que un `build.json` ausente (index.html con 200) o roto no avise;
      · que la recarga automatica no se encadene: una cada diez minutos.
 */
-import { pathToFileURL } from 'node:url'
+import { fileURLToPath, pathToFileURL } from 'node:url'
 import path from 'node:path'
 
-const RAIZ = path.join(path.dirname(new URL(import.meta.url).pathname.slice(1)), '..')
+// fileURLToPath y no `pathname.slice(1)`: el slice quitaba la barra de Windows (/C:/…),
+// pero en Linux se comía la raíz (home/user/…, relativo) y el CI de Ubuntu moría con ENOENT.
+const RAIZ = path.join(path.dirname(fileURLToPath(import.meta.url)), '..')
 let fallos = 0
 const ok = (c, msg) => { if (!c) { console.error('FALLO:', msg); fallos++ } }
 

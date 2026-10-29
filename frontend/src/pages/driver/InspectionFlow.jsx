@@ -189,7 +189,7 @@ export default function InspectionFlow({ driver, vehicles, onComplete, onLogout,
         toast.error(d.servicio_caido ? '⚠️ Lector no disponible — pon los km a mano'
                                      : '❌ Los km no se han podido leer')
       }
-    } catch (err) {
+    } catch {
       // Un fallo de red NO puede colar una auditoría sin km.
       setOdoPhoto(blob); setOdoBloqueado(true); setOdoServicioCaido(true)
       setOdoError(t('dr.lectorCaido'))

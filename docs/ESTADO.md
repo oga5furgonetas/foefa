@@ -5,7 +5,7 @@
 > haz commit y `git push`. Una sola sesión trabajando a la vez: antes de
 > empezar, `git pull` y comprueba que nadie ha dejado nada a medias aquí.
 
-Última actualización: **29-10-2026** (FDS 2.2.3 compilada, probada y firmada: el AAB listo para Play; ver «Última sesión — 29-10-2026»).
+Última actualización: **29-10-2026 (tarde)** (el CI de `main` llevaba desde el 18-10 en rojo; checkers arreglados de raíz y todo el CI en verde en local; ver «Última sesión»). Por la mañana: FDS 2.2.3 compilada, probada y firmada, el AAB listo para Play (ver «29-10-2026 (mañana)»).
 
 ## Qué es y dónde está
 
@@ -618,7 +618,49 @@ Nada se había borrado (org `owner` sin `modulos`, usuario `dani` sin
   **Falta**: probarla en un móvil físico, subir el AAB (Dani) y, cuando Dani la apruebe, cambiar la descarga de
   la web (`frontend/public/descargas/FDS.apk`, hoy la TWA 1.0.3) por el APK nativo.
 
-## Última sesión — 29-10-2026: FDS 2.2.3 compilada por primera vez, probada y firmada (PC de Winiw)
+## Última sesión — 29-10-2026 (tarde): el CI de `main` llevaba desde el 18-10 en rojo; checkers sin falsos positivos
+
+Dani preguntó por dónde íbamos y pidió «todo perfecto, sin falsos positivos». Lo primero que salió: **ningún run del
+CI de GitHub en `main` estaba en verde desde al menos el 18-10**. Los del 18 al 24-10 ni arrancaban (morían a los
+3 s), y los del 28 y 29-10 pasaban el backend y las E2E pero caían en los checkers del frontend. La nota del 28-10
+decía «el CI está en curso»: no, estaba en rojo. Trabajo hecho en este contenedor (Linux), rama
+`claude/focused-gauss-4177i9` (esta sesión no puede subir a `main`): **Dani la fusiona o me dice que suba a `main`**.
+
+Los checkers, arreglados de raíz (el fallo del checker, no el síntoma):
+- `check-huerfanas`: no leía `app-android` (Kotlin ni sus pruebas), así que acusaba a `POST /app-login` de huérfana.
+  Al arreglarlo salieron tres bugs más suyos: escaneaba `frontend/src` DOS veces y la poda de envolturas de `api.js`
+  solo limpiaba una copia; las envolturas de dos líneas solo perdían la primera (la segunda, con la ruta, seguía
+  contando); y se leía a sí mismo (sus comentarios nombran rutas y las daba por consumidas). Con eso afloraron
+  **cuatro rutas heredadas sin ningún consumidor real**: `GET /stats/attention`, `POST /parking/report`,
+  `GET /work-orders/danos-pendientes` y `GET /drivers/ranking` (las dos últimas solo las piden los smoke de
+  `backend/scripts`). Van en `SIN_UI_A_PROPOSITO` con su motivo, sin borrar nada del servidor: **Dani decide** si se
+  enganchan o se borran. Las 15 envolturas de `api.js` que no usaba ninguna pantalla, fuera.
+- `check-importados`: el limpiador era una cadena de sustituciones y daba cuatro avisos en falso (una regex con
+  un número impar de acentos graves se tragaba 120 líneas y la definición de `Pasos`; `\B(` de una regex parecía
+  `B(`; «en la lista (como DEMO2001)» de un párrafo JSX parecía `lista(`; el parámetro `tx` de guia.js parecía
+  el `tx` de idioma.js sin importar). Reescrito como recorrido carácter a carácter con pila de modos (código,
+  etiqueta, texto JSX, plantilla, regex) y con los parámetros de función como nombres disponibles. Probado con un
+  fichero trampa: caza los dos fallos reales (`useOrden(` y `<ThOrden` sin importar) y ninguno falso.
+- `check-version-app`, `check-hooks` y `sellar-build`: `pathname.slice(1)` (apaño para Windows) en Linux se comía
+  la raíz y el CI de Ubuntu moría con ENOENT. Ahora `fileURLToPath`, que vale en los dos.
+
+Lo que señalaban, arreglado: `.text-pink-300` en el híbrido (paridad con el modo día); fichas de ayuda de
+`centro-ia`, `estado-flota` y `reparto` (escritas leyendo cada pantalla); `text-brand-100`, que no existe en la
+paleta, → `text-brand-200` en Mercadillo, AvisoManana y OpinionCorreo; y un test de `test_analitica.py` debajo del
+`if __name__` que nunca corría. ESLint: las 26 variables sin usar, fuera (`catch` sin variable, dos `useNavigate`
+sin usar, los componentes muertos `CopyRow` y `ReadField`, etc.); los 20 avisos de `exhaustive-deps` se quedan a
+propósito (cambiar dependencias de un efecto cambia comportamiento).
+
+Comprobado aquí, en el orden del CI: los 24 checkers del frontend en verde; ESLint 0 errores; `vite build`;
+`py_compile` y los 8 `check_*.py`; `pytest` 1.373 pasados y 1 omitido (sin `test_api.py`: aquí no hay Mongo; en
+el CI ese job ya pasaba); Playwright completo, escritorio y móvil: EN CURSO al cerrar este commit (230 de ~550 en verde, y UN fallo repetido en «Cuadrante › la hoja: escribir, pegar de Excel, Ctrl+Z», que cayó mientras las capturas de pantalla competían por la CPU; se investiga y se apunta aquí en el siguiente commit).
+
+Lo que NO se ha hecho: compilar la app Android aquí (`dl.google.com`, de donde sale el SDK, lo bloquea el proxy
+del contenedor); la 2.2.3 de la mañana sigue siendo la buena. Nada desplegado: el backend solo cambia en un test;
+la web sí tiene cambios visibles (las tres fichas de ayuda y los tres textos con color real), así que **toca
+desplegar la web** la próxima vez desde el PC.
+
+## 29-10-2026 (mañana): FDS 2.2.3 compilada por primera vez, probada y firmada (PC de Winiw)
 
 - El repo se clonó en este PC (`C:\Users\Winiw Delivery\Documents\foefa`). Las versiones 2.1.0 → 2.2.3 de la app
   nativa nunca se habían compilado (se escribieron sin JDK ni SDK). Aquí compilan: Android Studio + SDK estaban.
@@ -638,6 +680,10 @@ Nada se había borrado (org `owner` sin `modulos`, usuario `dani` sin
 - Aparte: `docs/anuncios/artlist/` (guion del vídeo para Artlist con QR a la ficha de Play, QR en PNG y SVG).
 
 ## Pendiente (por prioridad)
+
+-4. **CI y rama (29-10 tarde)**: fusionar `claude/focused-gauss-4177i9` en `main` (o decirme que suba) y ver el
+   run de GitHub en verde; desplegar la web (fichas de ayuda y colores); decidir qué hacer con las cuatro rutas
+   heredadas sin consumidor (`SIN_UI_A_PROPOSITO` en `scripts/check-huerfanas.mjs`): engancharlas o borrarlas.
 
 -3. **App nativa (29-10)**: Dani instala `app-android/salida/FDS-2.2.3.apk` en su móvil, la prueba (entrar como
    conductor de empresa: turnos, auditoría con fotos, trabajar más; y como autónomo) y sube

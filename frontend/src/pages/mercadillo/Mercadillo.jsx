@@ -124,7 +124,7 @@ export function Foto({ id, className = '', alt = '' }) {
 function Chip({ activo, children, onClick }) {
   return (
     <button type="button" onClick={onClick} aria-pressed={activo}
-      className={`shrink-0 rounded-full border px-3 py-1.5 text-[13px] font-semibold ${activo ? 'border-brand-400 bg-brand-500/15 text-brand-100' : 'border-dark-700 text-dark-300'}`}>
+      className={`shrink-0 rounded-full border px-3 py-1.5 text-[13px] font-semibold ${activo ? 'border-brand-400 bg-brand-500/15 text-brand-200' : 'border-dark-700 text-dark-300'}`}>
       {children}
     </button>
   )
@@ -204,7 +204,7 @@ function Denunciar({ motivos, objetivo, onCerrar }) {
             <div className="mt-3 space-y-1.5" role="radiogroup" aria-label="Motivo">
               {Object.entries(motivos || {}).map(([k, v]) => (
                 <button key={k} type="button" role="radio" aria-checked={motivo === k} onClick={() => setMotivo(k)}
-                  className={`flex w-full rounded-xl border px-3 py-2.5 text-left text-[14px] font-semibold ${motivo === k ? 'border-brand-400 bg-brand-500/15 text-brand-100' : 'border-dark-700 text-dark-100'}`}>
+                  className={`flex w-full rounded-xl border px-3 py-2.5 text-left text-[14px] font-semibold ${motivo === k ? 'border-brand-400 bg-brand-500/15 text-brand-200' : 'border-dark-700 text-dark-100'}`}>
                   {v}
                 </button>
               ))}
