@@ -14,7 +14,8 @@
   interfiera con Amazon). Dani lo usa también para **su propia flota**
   (reparto para Amazon, centros OGA5, DGA1, DGA2).
 - Código: `C:\Users\Usuario\Downloads\flotia` (la carpeta NO se renombró),
-  rama `main`, repo privado **github.com/oga5furgonetas/foefa**.
+  rama `main`, repo privado **github.com/oga5furgonetas/foefa**. Desde el 29-10 también en el PC de casa de Dani
+  (usuario `dlvie`): `C:\Users\dlvie\foefa`, con Android Studio, git y la clave de firma de la app en `C:\Users\dlvie\`.
 - Web: **https://flotadsp.com** (y www → 301). La sirve el Worker de Cloudflare
   `flota-dominio` (`infra/web-dominio/`), que reenvía al proyecto de Pages
   `flota` (https://flota-2fg.pages.dev). Ver el porqué en `infra/web-dominio/worker.js`.
@@ -696,10 +697,10 @@ desplegar la web** la próxima vez desde el PC.
 -3a. **App nativa, primera prueba en móvil real (29-10 tarde)**: Dani entró en la 2.2.3 con un conductor de OGA5 (bien:
    el servidor le llevó al portal del conductor) y se atascó en «Elige tu contraseña»: el botón seguía gris con tres
    letras y no decía por qué; y vio «Abrir mi ruta», que en una flota de Amazon no pinta nada. Las dos cosas van en la
-   **2.2.4 (code 16)** (ojo y aviso en los campos de contraseña; la ruta solo si la empresa reparte con la app), que hay
-   que **compilar y firmar en el PC de Winiw** (ver PLAY_STORE.md → «Versión 2.2.4»). Lo demás lo probó y va: auditoría,
-   turnos, trabajar más, invita y gana. Falta entrar con la cuenta de oficina. Hasta que la 2.2.4 pase esa prueba, no
-   se sube nada a Play.
+   **2.2.4 (code 16)** (ojo y aviso en los campos de contraseña; la ruta solo si la empresa reparte con la app),
+   **compilada y firmada esa misma tarde en el PC de casa de Dani** (`C:\Users\dlvie\foefa`; cómo, en PLAY_STORE.md →
+   «Versión 2.2.4»): tests, lint, AAB y APK en verde. Lo demás lo probó y va: auditoría, turnos, trabajar más, invita y
+   gana. Falta: probar el APK 2.2.4 en el móvil, entrar con la cuenta de oficina y subir el AAB (code 16) a Play.
 
 -3. **App nativa (29-10)**: Dani instala `app-android/salida/FDS-2.2.4.apk` en su móvil, la prueba (entrar como
    conductor de empresa: turnos, auditoría con fotos, trabajar más; y como autónomo) y sube

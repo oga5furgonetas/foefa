@@ -200,11 +200,23 @@ Probado por Dani en su móvil con la 2.2.3 (29-10, tarde), con ese conductor: au
 bien, Trabajar más contesta «no hay vacantes disponibles» (correcto si hoy no hay), Invita y gana bien. Queda por
 probar la entrada con la cuenta de oficina (panel de empresa dentro de FDS).
 
-**Pendiente: compilar y firmar en el PC de Winiw** (como la 2.2.3, ver abajo: `.\gradlew.bat :app:bundleRelease` y
-`:app:assembleRelease -PsoloMoviles -PparaWeb`), pasar `:app:testDebugUnitTest :app:lintDebug`, instalar el APK en el
-móvil de Dani y seguir la prueba donde se quedó: elegir contraseña → Mis turnos → pedir día y trabajar más →
-auditoría con foto → cerrar sesión y entrar con la cuenta de oficina. Escrito sin compilador a mano (el contenedor
-no llega al SDK): si Gradle protesta, el error estará en `PortalConductorNativo.kt`, función `CambiarClaveConductor`.
+**Compilada el 29-10 por la tarde en el PC de casa de Dani** (usuario `dlvie`): `:app:testDebugUnitTest :app:lintDebug`,
+`:app:bundleRelease` y `:app:assembleRelease -PsoloMoviles=arm64 -PparaWeb` en verde. Ese PC compila desde entonces:
+proyecto clonado con git en `C:\Users\dlvie\foefa`, Android Studio con el SDK en `%LOCALAPPDATA%\Android\Sdk` (Gradle
+bajó solo la plataforma 36 y las build-tools 35), JDK el de Android Studio (`C:\Program Files\Android\Android Studio\jbr`)
+y la clave de subida con su contraseña en `C:\Users\dlvie\` (donde `build.gradle.kts` las busca). En PowerShell:
+
+```powershell
+cd C:\Users\dlvie\foefa\app-android
+git pull
+$env:JAVA_HOME = 'C:\Program Files\Android\Android Studio\jbr'; $env:ANDROID_HOME = "$env:LOCALAPPDATA\Android\Sdk"
+.\gradlew.bat :app:testDebugUnitTest :app:lintDebug
+.\gradlew.bat :app:bundleRelease                                   # app\build\outputs\bundle\release\app-release.aab
+.\gradlew.bat :app:assembleRelease -PsoloMoviles=arm64 -PparaWeb   # app\build\outputs\apk\release\app-release.apk
+```
+
+Pendiente al cerrar la sesión: verificar la firma (`jarsigner -verify`), probar el APK en el móvil (contraseña con ojo y
+aviso, sin «Abrir mi ruta», entrar con la cuenta de oficina) y subir el AAB (code 16) a Play.
 
 ## Versión 2.2.3 (code 15): la que se sube, compilada y firmada el 29-10-2026
 
