@@ -1331,6 +1331,11 @@ otros países o QR leen bien la dirección: número 2, primero B, a veces lee n�
   precios por país en Play Console sin hacer (Dani); legales en inglés sin jurista; el emulador solo en inglés (EE.
   UU.) y en español: FR/NL/GB/DE por tests con muestras reales y por la prueba en vivo de las fuentes.
 
+## Última sesión — 30-10-2026 (16:20, PC de Dani): los cinco anuncios EN/PT/FR/IT/DE de Meta pasan del enlace de Play al web
+
+- Dani: «Sí, cámbialos». Enlace `/repartidores?…utm_content=rutahecha_xx` en los cinco, guardados sin publicar y verificados.
+  Con el ES nuevo, seis cambios esperan el clic de Publicar de Dani (cuenta aún inactiva por pago).
+
 ## Última sesión — 30-10-2026 (15:30, PC de Dani): el anuncio en español de Meta repuesto como conjunto «ES (España)»
 
 - Dani: «¿has quitado el anuncio en español de Facebook? ponlo de nuevo». Era el conjunto que convertí a EN a las 11:30. Nuevo

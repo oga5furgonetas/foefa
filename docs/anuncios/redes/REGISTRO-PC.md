@@ -349,3 +349,15 @@ El conjunto «España · 20-55 · reparto · registro» (60 registros, 75,98 €
   de Play: hay que cambiarlos a la web (`/repartidores?…utm_content=rutahecha_xx`) o no entregarán. No verificado por qué DE/FR/PT
   salen «Activa» con 0 € (puede que Dani pulsara Publicar).
 - Queda en **borrador** (la cuenta sigue inactiva por pago): Dani pulsa «Publicar» (hay 9 cambios pendientes en «Revisar y publicar»).
+
+## 30-10-2026 (15:35 – 16:20) — Dani: «Sí, cámbialos» (los enlaces de Play de los cinco anuncios de Meta)
+
+Anuncios EN (52648299575339), PT (52648512622939), IT (52648514792539), FR (52648514792139) y DE (52648514792339): el enlace
+pasa de Google Play a `https://flotadsp.com/repartidores?utm_source=facebook&utm_medium=cpc&utm_campaign=ruta_hecha&utm_content=rutahecha_xx`.
+Guardados como «cambios sin publicar» (pie «Se han guardado todos los cambios»), sin errores; verificado recargando cada anuncio
+y mirando el final del enlace. **Dani pulsa Publicar** («Revisar y publicar» tiene ahora los seis conjuntos: ES nuevo + cinco enlaces).
+- Trucos: en Meta, poner la URL con el setter de JS NO se guarda (al recargar vuelve la de Play); hay que teclearla en el campo
+  (triple clic por coordenadas, Ctrl+A, escribir). **Chrome autocompleta el final del enlace con el anterior** (al IT le puso
+  `rutahecha_pt` al pulsar Tab): escribir, pulsar Escape y salir del campo con un clic, no con Tab; luego comprobar el final.
+  Pulsar el campo por referencia abre el menú lateral. La sección «Destino» se renderiza solo al hacer scroll con la rueda hasta
+  ella (con `scrollIntoView` el campo mide 0). Aviso «Funcionamiento incorrecto de la extensión del navegador»: Aceptar y seguir.
