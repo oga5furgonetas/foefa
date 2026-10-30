@@ -1,0 +1,1 @@
+Escanea, ordena la ruta, navega y entrega. Para repartidores independientes.

@@ -15,6 +15,7 @@ import { enAppPlay } from '../lib/enApp'
 import { lista } from '../lib/lista'
 import { tx, useIdioma, locale, IDIOMAS, idioma, cambiarIdioma, txError } from '../lib/idioma'
 import { refCentActual, refPromoActiva, REF_PROMO_HASTA, REF_PROMO_CENT, fechaRefPromo } from '../lib/precios'
+import { importeEn } from '../lib/region'
 import { invitar, enlaceInvitar } from '../lib/compartir'
 import { getReferidos, retirarCartera } from '../services/api'
 import { IdeaRuta } from './OpinionRuta'
@@ -31,6 +32,10 @@ import { AvisoCuenta } from './AvisoManana'
    «te avisaremos» que no esté hecho. */
 
 const euros = (n) => `${Number(n || 0).toFixed(2).replace('.', ',').replace(',00', '')} €`
+/* El plan, en la moneda de la cuenta (30-10-2026): /org/billing manda `precios` con su `moneda` («$9.99» en EE. UU.).
+   Los regalos y el saldo de «invita y gana» siguen en euros: son de España. */
+let monedaPlan = 'EUR'
+const enMoneda = (n) => importeEn(n, monedaPlan)
 const fecha = (iso) => {
   if (!iso) return ''
   const d = new Date(iso)
@@ -44,6 +49,7 @@ export function Cuenta({ billing, recargar, toast, resaltarRegalo, merc }) {
   const enApp = enAppPlay()
   const b = billing || {}
   const precios = b.precios || { mensual: 9.99, anual: 99 }
+  monedaPlan = precios.moneda || 'EUR'
   // Desde «entrar como» se VE el plan, pero pagar, cambiar o dar de baja es cosa del cliente
   // (el servidor lo rechaza): no se enseñan botones que solo pueden fallar.
   const suplantando = esSuplantacion()
@@ -253,7 +259,7 @@ function Acceso({ toast, soloVer }) {
 
 /* La tarjeta del plan: en qué punto estás y qué va a pasar, con fechas. */
 function Estado({ b, precios }) {
-  const intervalo = b.stripe_intervalo === 'anual' ? `${euros(precios.anual)}${tx('/año')}` : `${euros(precios.mensual)}${tx('/mes')}`
+  const intervalo = b.stripe_intervalo === 'anual' ? `${enMoneda(precios.anual)}${tx('/año')}` : `${enMoneda(precios.mensual)}${tx('/mes')}`
   let chip = [tx('Prueba gratis'), 'bg-sky-500/15 text-sky-200']
   let linea = ''
   if (b.status === 'trial') {
@@ -299,7 +305,7 @@ function Estado({ b, precios }) {
   if (b.promo?.activa && !b.suscrito && !conPlay(b) && b.pago_proveedor !== 'regalo') {
     chip = [tx('Gratis sin límite'), 'bg-emerald-500/15 text-emerald-300']
     linea = tx('Hasta el {fecha} no tienes tope de paradas ni pagas nada. Después, gratis hasta {n} paradas al día, o sin tope por {precio}.', {
-      fecha: fecha(`${b.promo.hasta}T12:00:00`), n: g?.tope || 15, precio: `${euros(precios.mensual)}${tx('/mes')}` })
+      fecha: fecha(`${b.promo.hasta}T12:00:00`), n: g?.tope || 15, precio: `${enMoneda(precios.mensual)}${tx('/mes')}` })
   }
   return (
     <section className="overflow-hidden rounded-3xl border border-brand-400/30 bg-gradient-to-br from-brand-500/[.16] via-dark-900 to-dark-900 p-5 shadow-lg shadow-black/20">
@@ -323,7 +329,7 @@ function Estado({ b, precios }) {
 export function Suscribirse({ b, precios, toast, titulo }) {
   const [anual, setAnual] = useState(false)
   const [yendo, setYendo] = useState(false)
-  const precio = anual ? tx('{precio} al año', { precio: euros(precios.anual) }) : tx('{precio} al mes', { precio: euros(precios.mensual) })
+  const precio = anual ? tx('{precio} al año', { precio: enMoneda(precios.anual) }) : tx('{precio} al mes', { precio: enMoneda(precios.mensual) })
   async function ir() {
     setYendo(true)
     try {
@@ -342,7 +348,7 @@ export function Suscribirse({ b, precios, toast, titulo }) {
     <section className="mt-4 rounded-3xl border border-dark-700 bg-dark-900 p-4">
       <h2 className="text-[15px] font-bold text-dark-50">{titulo || tx('Suscribirte')}</h2>
       <div className="mt-3 grid grid-cols-2 gap-2" role="radiogroup" aria-label={tx('Plan')}>
-        {[[false, tx('Mensual'), `${euros(precios.mensual)}`, tx('/mes'), ''], [true, tx('Anual'), `${euros(precios.anual)}`, tx('/año'), `${euros(precios.anual / 12)}${tx('/mes')} · ${tx('2 meses gratis')}`]].map(([v, t, p, per, extra]) => (
+        {[[false, tx('Mensual'), `${enMoneda(precios.mensual)}`, tx('/mes'), ''], [true, tx('Anual'), `${enMoneda(precios.anual)}`, tx('/año'), `${enMoneda(precios.anual / 12)}${tx('/mes')} · ${tx('2 meses gratis')}`]].map(([v, t, p, per, extra]) => (
           <button key={t} role="radio" aria-checked={anual === v} onClick={() => setAnual(v)}
             className={`relative rounded-2xl border-2 p-3 text-left transition ${anual === v ? 'border-brand-400 bg-brand-500/10' : 'border-dark-700 bg-dark-950'}`}>
             {v && <span className="absolute -top-2.5 right-2 rounded-full bg-amber-400 px-2 py-0.5 text-[10px] font-extrabold text-amber-950">{tx('AHORRA')}</span>}
@@ -391,10 +397,10 @@ function Gestionar({ b, precios, toast, recargar }) {
     setOcupado('')
   }
   const explica = enPrueba
-    ? tx('No se cobra nada ahora. Al acabar la prueba se cobran {precio}.', { precio: aAnual ? tx('{precio} al año', { precio: euros(precios.anual) }) : tx('{precio} al mes', { precio: euros(precios.mensual) }) })
+    ? tx('No se cobra nada ahora. Al acabar la prueba se cobran {precio}.', { precio: aAnual ? tx('{precio} al año', { precio: enMoneda(precios.anual) }) : tx('{precio} al mes', { precio: enMoneda(precios.mensual) }) })
     : aAnual
-      ? tx('Se cobran ahora {precio} menos la parte que no has usado de este mes, y luego cada año.', { precio: euros(precios.anual) })
-      : tx('No se cobra nada ahora: lo que no has usado del año se descuenta de los próximos meses ({precio} al mes).', { precio: euros(precios.mensual) })
+      ? tx('Se cobran ahora {precio} menos la parte que no has usado de este mes, y luego cada año.', { precio: enMoneda(precios.anual) })
+      : tx('No se cobra nada ahora: lo que no has usado del año se descuenta de los próximos meses ({precio} al mes).', { precio: enMoneda(precios.mensual) })
   return (
     <section className="mt-4 rounded-3xl border border-dark-700 bg-dark-900 p-4">
       <h2 className="text-[15px] font-bold text-dark-50">{tx('Tu suscripción')}</h2>
@@ -413,7 +419,7 @@ function Gestionar({ b, precios, toast, recargar }) {
           className="mt-3 flex w-full items-center justify-between rounded-2xl border border-dark-700 bg-dark-950 px-4 py-3 text-left">
           <span>
             <span className="block text-[14px] font-semibold text-dark-50">{aAnual ? tx('Pasar al plan anual') : tx('Pasar al plan mensual')}</span>
-            <span className="block text-[12px] text-dark-400">{aAnual ? `${euros(precios.anual)}${tx('/año')} · ${tx('2 meses gratis')}` : `${euros(precios.mensual)}${tx('/mes')}`}</span>
+            <span className="block text-[12px] text-dark-400">{aAnual ? `${enMoneda(precios.anual)}${tx('/año')} · ${tx('2 meses gratis')}` : `${enMoneda(precios.mensual)}${tx('/mes')}`}</span>
           </span>
           {aAnual && <Sparkles size={18} className="text-amber-300" />}
         </button>
@@ -661,6 +667,7 @@ export function Muro({ billing, toast, recargar, irACuenta }) {
   const enApp = enAppPlay()
   const b = billing || {}
   const precios = b.precios || { mensual: 9.99, anual: 99 }
+  monedaPlan = precios.moneda || 'EUR'
   const empezar = b.falta_tarjeta
   return (
     <div className="mx-auto max-w-md">
@@ -680,7 +687,7 @@ export function Muro({ billing, toast, recargar, irACuenta }) {
         {empezar && (
           <ul className="mx-auto mt-3 max-w-[300px] space-y-1.5 text-left text-[13px] text-dark-200">
             <li className="flex gap-2"><Check size={15} className="mt-0.5 shrink-0 text-emerald-400" /> {tx('Hoy: 0 €')}</li>
-            <li className="flex gap-2"><Check size={15} className="mt-0.5 shrink-0 text-emerald-400" /> {tx('El {fecha}: {mes} o {ano}', { fecha: fecha(b.cobro_al_suscribir || b.trial_ends), mes: `${euros(precios.mensual)}${tx('/mes')}`, ano: `${euros(precios.anual)}${tx('/año')}` })}</li>
+            <li className="flex gap-2"><Check size={15} className="mt-0.5 shrink-0 text-emerald-400" /> {tx('El {fecha}: {mes} o {ano}', { fecha: fecha(b.cobro_al_suscribir || b.trial_ends), mes: `${enMoneda(precios.mensual)}${tx('/mes')}`, ano: `${enMoneda(precios.anual)}${tx('/año')}` })}</li>
             <li className="flex gap-2"><Check size={15} className="mt-0.5 shrink-0 text-emerald-400" /> {tx('Cancela antes y no pagas nada')}</li>
           </ul>
         )}

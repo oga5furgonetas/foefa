@@ -1,5 +1,7 @@
 package com.flotadsp.fds
 
+import com.flotadsp.fds.ui.tx
+
 import android.Manifest
 import android.content.Intent
 import android.graphics.Color
@@ -225,8 +227,8 @@ private fun Principal(abrir: String?, alAbierto: () -> Unit) {
         bottomBar = {
             NavigationBar(containerColor = MaterialTheme.colorScheme.surfaceContainerLow) {
                 listOf(
-                    Triple("hoy", "Hoy", Icons.Default.Route), Triple("historial", "Historial", Icons.Default.History),
-                    Triple("ajustes", "Ajustes", Icons.Default.Settings), Triple("cuenta", "Cuenta", Icons.Default.Person),
+                    Triple("hoy", tx("Hoy"), Icons.Default.Route), Triple("historial", tx("Historial"), Icons.Default.History),
+                    Triple("ajustes", tx("Ajustes"), Icons.Default.Settings), Triple("cuenta", tx("Cuenta"), Icons.Default.Person),
                 ).forEach { (k, t, i) ->
                     NavigationBarItem(selected = pestana == k, onClick = { pestana = k }, icon = { Icon(i, contentDescription = null) }, label = { Text(t) })
                 }

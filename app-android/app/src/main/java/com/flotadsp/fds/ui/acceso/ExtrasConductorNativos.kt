@@ -1,5 +1,7 @@
 package com.flotadsp.fds.ui.acceso
 
+import com.flotadsp.fds.ui.patronFecha
+import com.flotadsp.fds.ui.tx
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -78,20 +80,20 @@ fun ExtrasConductorNativos(alVolver: () -> Unit) {
     BackHandler(onBack = alVolver)
 
     Scaffold(topBar = { TopAppBar(
-        title = { Text("Trabajar más") },
-        navigationIcon = { androidx.compose.material3.IconButton(onClick = alVolver) { androidx.compose.material3.Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Volver") } },
+        title = { Text(tx("Trabajar más")) },
+        navigationIcon = { androidx.compose.material3.IconButton(onClick = alVolver) { androidx.compose.material3.Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = tx("Volver")) } },
     ) }) { inset ->
         Column(Modifier.fillMaxSize().padding(inset).verticalScroll(rememberScrollState()).padding(18.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-            Text("Solicita un turno extra en los días que la empresa necesita refuerzo. La oficina confirma cada solicitud.", style = MaterialTheme.typography.bodyMedium)
+            Text(tx("Solicita un turno extra en los días que la empresa necesita refuerzo. La oficina confirma cada solicitud."), style = MaterialTheme.typography.bodyMedium)
             aviso?.let { Text(it, color = MaterialTheme.colorScheme.primary) }
             error?.let { Text(it, color = MaterialTheme.colorScheme.error) }
             if (datos == null) CircularProgressIndicator()
             else if (vacantes.isEmpty()) {
                 Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)) {
-                    Text("Ahora mismo no hay vacantes disponibles para ti.", Modifier.padding(16.dp))
+                    Text(tx("Ahora mismo no hay vacantes disponibles para ti."), Modifier.padding(16.dp))
                 }
             } else {
-                Text("Vacantes", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                Text(tx("Vacantes"), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
                 vacantes.forEach { entry ->
                     val v = entry.jsonObject
                     val fecha = campoSeguro(v, "date")
@@ -107,19 +109,19 @@ fun ExtrasConductorNativos(alVolver: () -> Unit) {
                             }
                             campoSeguro(v, "nota").takeIf { it.isNotBlank() }?.let { Text("Nota de oficina: $it", style = MaterialTheme.typography.bodySmall) }
                             if (estado == "pendiente") {
-                                Text("La oficina te confirmará si queda aprobado.", color = MaterialTheme.colorScheme.tertiary)
+                                Text(tx("La oficina te confirmará si queda aprobado."), color = MaterialTheme.colorScheme.tertiary)
                                 val refuerzo = campoSeguro(v, "refuerzo_id")
-                                if (refuerzo.isNotBlank()) TextButton(onClick = { confirmar = refuerzo to "retirar" }, enabled = ocupado == null) { Text("Retirar solicitud") }
+                                if (refuerzo.isNotBlank()) TextButton(onClick = { confirmar = refuerzo to "retirar" }, enabled = ocupado == null) { Text(tx("Retirar solicitud")) }
                             } else if (estado.isBlank()) {
-                                OutlinedTextField(notas[fecha].orEmpty(), { value -> if (value.length <= 200) notas = notas + (fecha to value) }, label = { Text("Nota para la oficina (opcional)") }, modifier = Modifier.fillMaxWidth())
-                                Button(onClick = { confirmar = fecha to "pedir" }, enabled = ocupado == null, modifier = Modifier.fillMaxWidth().height(48.dp)) { Text("Solicitar turno extra") }
+                                OutlinedTextField(notas[fecha].orEmpty(), { value -> if (value.length <= 200) notas = notas + (fecha to value) }, label = { Text(tx("Nota para la oficina (opcional)")) }, modifier = Modifier.fillMaxWidth())
+                                Button(onClick = { confirmar = fecha to "pedir" }, enabled = ocupado == null, modifier = Modifier.fillMaxWidth().height(48.dp)) { Text(tx("Solicitar turno extra")) }
                             }
                         }
                     }
                 }
             }
             if (extras.isNotEmpty()) {
-                Text("Turnos extra confirmados", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                Text(tx("Turnos extra confirmados"), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
                 extras.forEach { entry ->
                     val x = entry.jsonObject
                     Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.tertiaryContainer)) {
@@ -127,7 +129,7 @@ fun ExtrasConductorNativos(alVolver: () -> Unit) {
                             Text("${fechaBonita(campoSeguro(x, "date"))} · EXTRA", fontWeight = FontWeight.Bold)
                             Text(if (campoSeguro(x, "en_cuadrante") == "false") "La oficina ha cambiado el cuadrante después de confirmarlo. Consúltalo antes de desplazarte." else "Turno extra confirmado.", style = MaterialTheme.typography.bodySmall)
                             val id = campoSeguro(x, "id")
-                            if (campoSeguro(x, "puede_soltar") == "true" && id.isNotBlank()) TextButton(onClick = { confirmar = id to "cancelar" }, enabled = ocupado == null) { Text("Avisar que no puedo ir") }
+                            if (campoSeguro(x, "puede_soltar") == "true" && id.isNotBlank()) TextButton(onClick = { confirmar = id to "cancelar" }, enabled = ocupado == null) { Text(tx("Avisar que no puedo ir")) }
                         }
                     }
                 }
@@ -156,11 +158,11 @@ fun ExtrasConductorNativos(alVolver: () -> Unit) {
                 } catch (e: ErrorApi) { error = e.message }
                 finally { ocupado = null }
             }
-        }) { Text("Confirmar") } },
-        dismissButton = { TextButton(onClick = { confirmar = null }) { Text("Volver") } },
+        }) { Text(tx("Confirmar")) } },
+        dismissButton = { TextButton(onClick = { confirmar = null }) { Text(tx("Volver")) } },
     ) }
 }
 
 private fun fechaBonita(fecha: String): String = runCatching {
-    LocalDate.parse(fecha).format(DateTimeFormatter.ofPattern("EEEE d 'de' MMMM", Locale.forLanguageTag("es-ES"))).replaceFirstChar { it.titlecase(Locale.forLanguageTag("es-ES")) }
+    LocalDate.parse(fecha).format(DateTimeFormatter.ofPattern("EEEE d 'de' MMMM", com.flotadsp.fds.ui.LOCALE_APP)).replaceFirstChar { it.titlecase(com.flotadsp.fds.ui.LOCALE_APP) }
 }.getOrDefault(fecha)

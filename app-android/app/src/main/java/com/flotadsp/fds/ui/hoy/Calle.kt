@@ -2,6 +2,7 @@ package com.flotadsp.fds.ui.hoy
 
 import com.flotadsp.fds.data.Incidencia
 import com.flotadsp.fds.data.Parada
+import com.flotadsp.fds.ui.tx
 import java.text.Normalizer
 
 /* LO QUE PIDE LA CALLE (30-10-2026, docs/NECESIDADES-REPARTIDOR-30-10.md): los cálculos pequeños de la pantalla
@@ -56,10 +57,13 @@ object Calle {
         return Math.round(Math.sqrt(x * x + y * y) * 6371000).toInt()
     }
 
-    /** «180 m» hasta el kilómetro; después «1,4 km» (y «508 km» si el GPS dice una barbaridad). */
-    fun distancia(metros: Int): String = when {
+    /** «180 m» hasta el kilómetro; después «1,4 km» (y «508 km» si el GPS dice una barbaridad). En millas (EE. UU.,
+     *  Reino Unido): «530 ft» hasta un décimo de milla y después «0.4 mi». Los números, en el idioma de la app. */
+    fun distancia(metros: Int, millas: Boolean = false, locale: java.util.Locale = java.util.Locale("es")): String = when {
+        millas && metros < 161 -> "${Math.round(metros * 3.28084)} ft"
+        millas -> "%.1f mi".format(locale, metros / 1609.344)
         metros < 1000 -> "$metros m"
-        metros < 10000 -> "%.1f km".format(java.util.Locale("es"), metros / 1000.0)
+        metros < 10000 -> "%.1f km".format(locale, metros / 1000.0)
         else -> "${Math.round(metros / 1000.0)} km"
     }
 
@@ -85,8 +89,11 @@ object Calle {
     /** Dónde está una incidencia, en una línea: «AC-12 · pk 2,0 · A Coruña · a 0,4 km de la parada 3». */
     fun dondeIncidencia(i: Incidencia): String = listOfNotNull(
         i.carretera.takeIf { it.isNotBlank() },
-        i.pk.takeIf { it.isNotBlank() }?.let { "pk $it" },
+        i.pk.takeIf { it.isNotBlank() }?.let { tx("pk") + " $it" },
         i.municipio.takeIf { it.isNotBlank() },
-        i.distanciaKm?.let { d -> "a ${"%.1f".format(java.util.Locale("es"), d)} km" + (i.parada?.let { " de la parada $it" } ?: " de tu ruta") },
+        i.distanciaKm?.let { d ->
+            val km = "%.1f".format(java.util.Locale("es"), d)
+            if (i.parada != null) tx("a {km} km de la parada {n}", "km" to km, "n" to i.parada) else tx("a {km} km de tu ruta", "km" to km)
+        },
     ).joinToString(" · ")
 }

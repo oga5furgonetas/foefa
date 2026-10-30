@@ -6,9 +6,12 @@ import { tx, useIdioma, txError, locale } from '../lib/idioma'
 import { medirAccion } from '../lib/analitica'
 import { evento, eventoUnaVez } from '../lib/metaPixel'
 import { leerRef } from '../lib/referido'
-import { regionDelMovil } from '../lib/region'
+import { regionDelMovil, paisDelMovil, precioRepartidor, importeEn } from '../lib/region'
 import { enAppPlay } from '../lib/enApp'
 import { PARADAS_GRATIS, promoGratis, fechaPromo } from '../lib/precios'
+
+/* El precio del plan al mes en la moneda del país de quien se da de alta (30-10-2026): «$9.99», «MX$149». */
+const precioPlanMes = () => { const pr = precioRepartidor(paisDelMovil() || 'es'); return importeEn(pr.mensual, pr.moneda) }
 import { marcarRecienAlta } from '../lib/instalar'
 import { sugerenciaCorreo } from '../lib/correo'
 
@@ -111,8 +114,8 @@ export default function AltaRapida({ dias = 7, enfocar = false }) {
           {/* Decía «al finalizar se cobra… salvo cancelación» con «sin tarjeta» al lado: sin tarjeta no se
               cobra nada (06-10-2026). La misma frase que el alta de /registro, ya traducida. */}
           {' '}{promoGratis()
-            ? tx('Gratis y sin límite hasta el {fecha}. Después sigues gratis con hasta {p} paradas al día; sin tarjeta no se cobra nunca. Sin tope: plan {plan} ({precio} €/mes).', { fecha: fechaPromo(locale()), p: PARADAS_GRATIS, plan: tx('Repartidor'), precio: '9,99' })
-            : tx('{n} días sin tope y gratis. Después sigues gratis con hasta {p} paradas al día; sin tarjeta no se cobra nunca. Sin tope: plan {plan} ({precio} €/mes).', { n: dias, p: PARADAS_GRATIS, plan: tx('Repartidor'), precio: '9,99' })}
+            ? tx('Gratis y sin límite hasta el {fecha}. Después sigues gratis con hasta {p} paradas al día; sin tarjeta no se cobra nunca. Sin tope: plan {plan} ({precio}/mes).', { fecha: fechaPromo(locale()), p: PARADAS_GRATIS, plan: tx('Repartidor'), precio: precioPlanMes() })
+            : tx('{n} días sin tope y gratis. Después sigues gratis con hasta {p} paradas al día; sin tarjeta no se cobra nunca. Sin tope: plan {plan} ({precio}/mes).', { n: dias, p: PARADAS_GRATIS, plan: tx('Repartidor'), precio: precioPlanMes() })}
         </span>
       </label>
       {err && <p role="alert" className="text-[13px] text-red-300">{err}</p>}

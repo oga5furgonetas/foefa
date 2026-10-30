@@ -1,5 +1,6 @@
 package com.flotadsp.fds.ui.acceso
 
+import com.flotadsp.fds.ui.tx
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.Arrangement
@@ -64,7 +65,8 @@ import com.flotadsp.fds.ui.Acciones
 import kotlinx.coroutines.launch
 import androidx.compose.runtime.produceState
 import com.flotadsp.fds.data.Oferta
-import com.flotadsp.fds.ui.ESPANOL
+import com.flotadsp.fds.ui.LOCALE_APP
+import com.flotadsp.fds.ui.patronFecha
 import java.time.LocalDate
 import java.time.format.DateTimeFormatter
 
@@ -85,7 +87,7 @@ fun Acceso(ref: String?, alAbrirPortal: (Sesion) -> Unit, aviso: String? = null)
 
 /** El día hasta el que es gratis y sin límite («31 de diciembre»), si la promoción sigue. */
 private fun promoHasta(o: Oferta?): String? = o?.gratisHasta?.let { runCatching { LocalDate.parse(it) }.getOrNull() }
-    ?.takeIf { !LocalDate.now().isAfter(it) }?.format(DateTimeFormatter.ofPattern("d 'de' MMMM", ESPANOL))
+    ?.takeIf { !LocalDate.now().isAfter(it) }?.format(DateTimeFormatter.ofPattern(patronFecha("d 'de' MMMM"), LOCALE_APP))
 
 /** Lo que cuesta, con las mismas palabras que la web de registro. Sin red, lo que vale siempre. */
 private fun textoOferta(o: Oferta?): String {
@@ -117,7 +119,7 @@ private fun Inicio(oferta: Oferta?, aviso: String?, alEntrar: () -> Unit, alCrea
         Aviso(aviso)
         Logo()
         Spacer(Modifier.height(24.dp))
-        Text("Tu ruta de reparto, ordenada sola.", style = MaterialTheme.typography.headlineMedium)
+        Text(tx("Tu ruta de reparto, ordenada sola."), style = MaterialTheme.typography.headlineMedium)
         Spacer(Modifier.height(12.dp))
         listOf(
             "Escanea los paquetes: la dirección entra sola.",
@@ -135,16 +137,16 @@ private fun Inicio(oferta: Oferta?, aviso: String?, alEntrar: () -> Unit, alCrea
             Spacer(Modifier.height(14.dp))
             Surface(color = MaterialTheme.colorScheme.primaryContainer, contentColor = MaterialTheme.colorScheme.onPrimaryContainer,
                 shape = MaterialTheme.shapes.small) {
-                Text("Gratis y sin límite hasta el $hasta · sin tarjeta", style = MaterialTheme.typography.titleSmall,
+                Text(tx("Gratis y sin límite hasta el {fecha} · sin tarjeta", "fecha" to hasta), style = MaterialTheme.typography.titleSmall,
                     modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp))
             }
         }
         Spacer(Modifier.weight(1.2f))
-        Button(onClick = alCrear, modifier = Modifier.fillMaxWidth().height(56.dp)) { Text("Crear mi cuenta gratis") }
+        Button(onClick = alCrear, modifier = Modifier.fillMaxWidth().height(56.dp)) { Text(tx("Crear mi cuenta gratis")) }
         Spacer(Modifier.height(10.dp))
-        OutlinedButton(onClick = alEntrar, modifier = Modifier.fillMaxWidth().height(56.dp)) { Text("Ya tengo cuenta") }
+        OutlinedButton(onClick = alEntrar, modifier = Modifier.fillMaxWidth().height(56.dp)) { Text(tx("Ya tengo cuenta")) }
         Spacer(Modifier.height(8.dp))
-        Text("Entra con el correo y la contraseña de tu cuenta. FDS abrirá el portal de empresa, conductor o reparto que te corresponde.",
+        Text(tx("Entra con el correo y la contraseña de tu cuenta. FDS abrirá el portal de empresa, conductor o reparto que te corresponde."),
             style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
     }
 }
@@ -153,7 +155,7 @@ private fun Inicio(oferta: Oferta?, aviso: String?, alEntrar: () -> Unit, alCrea
 private fun Cabecera(titulo: String, alVolver: () -> Unit) {
     BackHandler(onBack = alVolver)
     Row(verticalAlignment = Alignment.CenterVertically) {
-        IconButton(onClick = alVolver) { Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Volver") }
+        IconButton(onClick = alVolver) { Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = tx("Volver")) }
     }
     Spacer(Modifier.height(8.dp))
     Logo(56)
@@ -216,20 +218,20 @@ private fun Entrar(aviso: String?, alVolver: () -> Unit, alAbrirPortal: (Sesion)
     Column(Modifier.fillMaxSize().statusBarsPadding().imePadding().verticalScroll(rememberScrollState()).padding(horizontal = 24.dp, vertical = 8.dp)) {
         Cabecera("Entrar", alVolver)
         Aviso(aviso)
-        OutlinedTextField(correo, { correo = it }, label = { Text("Correo o usuario") }, singleLine = true, modifier = Modifier.fillMaxWidth(),
+        OutlinedTextField(correo, { correo = it }, label = { Text(tx("Correo o usuario")) }, singleLine = true, modifier = Modifier.fillMaxWidth(),
             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Email, imeAction = ImeAction.Next))
         Spacer(Modifier.height(12.dp))
         CampoClave(clave, { clave = it }, "Contraseña", alListo = entrar)
         error?.let { Spacer(Modifier.height(10.dp)); Text(it, color = MaterialTheme.colorScheme.error) }
         Spacer(Modifier.height(20.dp))
         Button(onClick = entrar, enabled = !trabajando && correo.isNotBlank() && clave.isNotBlank(), modifier = Modifier.fillMaxWidth().height(56.dp)) {
-            if (trabajando) CircularProgressIndicator(Modifier.size(22.dp), strokeWidth = 2.dp, color = MaterialTheme.colorScheme.onPrimary) else Text("Entrar")
+            if (trabajando) CircularProgressIndicator(Modifier.size(22.dp), strokeWidth = 2.dp, color = MaterialTheme.colorScheme.onPrimary) else Text(tx("Entrar"))
         }
         TextButton(onClick = { codigoVisible = true }, modifier = Modifier.align(Alignment.CenterHorizontally)) {
-            Text("Entrar con un código en mi correo personal")
+            Text(tx("Entrar con un código en mi correo personal"))
         }
         TextButton(onClick = { recuperarVisible = true }, modifier = Modifier.align(Alignment.CenterHorizontally)) {
-            Text("He olvidado mi contraseña")
+            Text(tx("He olvidado mi contraseña"))
         }
     }
 }
@@ -248,14 +250,14 @@ private fun RecuperarClave(correoInicial: String, alVolver: () -> Unit, alCodigo
     Column(Modifier.fillMaxSize().statusBarsPadding().imePadding().verticalScroll(rememberScrollState()).padding(horizontal = 24.dp, vertical = 8.dp)) {
         Cabecera("Recuperar la contraseña", alVolver)
         if (enviado) {
-            Text("Si ${correo.trim()} tiene una cuenta de repartidor, te hemos mandado un enlace para crear una contraseña nueva. Mira también el spam.",
+            Text(tx("Si {correo} tiene una cuenta de repartidor, te hemos mandado un enlace para crear una contraseña nueva. Mira también el spam.", "correo" to correo.trim()),
                 style = MaterialTheme.typography.bodyLarge)
             Spacer(Modifier.height(20.dp))
-            Button(onClick = alVolver, modifier = Modifier.fillMaxWidth().height(56.dp)) { Text("Volver a entrar") }
+            Button(onClick = alVolver, modifier = Modifier.fillMaxWidth().height(56.dp)) { Text(tx("Volver a entrar")) }
         } else {
-            Text("Escribe el correo de tu cuenta y te mandamos un enlace para crear una contraseña nueva.", style = MaterialTheme.typography.bodyLarge)
+            Text(tx("Escribe el correo de tu cuenta y te mandamos un enlace para crear una contraseña nueva."), style = MaterialTheme.typography.bodyLarge)
             Spacer(Modifier.height(14.dp))
-            OutlinedTextField(correo, { correo = it; error = null }, label = { Text("Tu correo") }, singleLine = true, modifier = Modifier.fillMaxWidth(),
+            OutlinedTextField(correo, { correo = it; error = null }, label = { Text(tx("Tu correo")) }, singleLine = true, modifier = Modifier.fillMaxWidth(),
                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Email, imeAction = ImeAction.Done))
             error?.let { Spacer(Modifier.height(10.dp)); Text(it, color = MaterialTheme.colorScheme.error) }
             Spacer(Modifier.height(20.dp))
@@ -267,13 +269,13 @@ private fun RecuperarClave(correoInicial: String, alVolver: () -> Unit, alCodigo
                     } finally { trabajando = false }
                 }
             }, enabled = !trabajando && valido, modifier = Modifier.fillMaxWidth().height(56.dp)) {
-                if (trabajando) CircularProgressIndicator(Modifier.size(22.dp), strokeWidth = 2.dp, color = MaterialTheme.colorScheme.onPrimary) else Text("Mandarme el enlace")
+                if (trabajando) CircularProgressIndicator(Modifier.size(22.dp), strokeWidth = 2.dp, color = MaterialTheme.colorScheme.onPrimary) else Text(tx("Mandarme el enlace"))
             }
         }
         Spacer(Modifier.height(16.dp))
-        Text("¿Eres conductor de una empresa? Tu contraseña te la da la oficina. Si vinculaste tu correo personal, puedes entrar con un código.",
+        Text(tx("¿Eres conductor de una empresa? Tu contraseña te la da la oficina. Si vinculaste tu correo personal, puedes entrar con un código."),
             style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-        TextButton(onClick = alCodigo, modifier = Modifier.align(Alignment.CenterHorizontally)) { Text("Entrar con un código en mi correo personal") }
+        TextButton(onClick = alCodigo, modifier = Modifier.align(Alignment.CenterHorizontally)) { Text(tx("Entrar con un código en mi correo personal")) }
     }
 }
 
@@ -290,14 +292,14 @@ private fun CodigoConductorNativo(alVolver: () -> Unit, alAbrirPortal: (Sesion) 
     fun emailValido(valor: String) = Regex("^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$").matches(valor.trim())
     Column(Modifier.fillMaxSize().statusBarsPadding().imePadding().verticalScroll(rememberScrollState()).padding(horizontal = 24.dp, vertical = 8.dp)) {
         Cabecera("Entrar con código", alVolver)
-        Text("Usa el correo personal que vinculaste en tu cuenta. El código se enviará a ese correo, no al buzón de empresa.", style = MaterialTheme.typography.bodyMedium)
+        Text(tx("Usa el correo personal que vinculaste en tu cuenta. El código se enviará a ese correo, no al buzón de empresa."), style = MaterialTheme.typography.bodyMedium)
         Spacer(Modifier.height(14.dp))
-        OutlinedTextField(correo, { correo = it; error = null }, label = { Text("Tu correo personal") }, singleLine = true,
+        OutlinedTextField(correo, { correo = it; error = null }, label = { Text(tx("Tu correo personal")) }, singleLine = true,
             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Email, imeAction = ImeAction.Next), modifier = Modifier.fillMaxWidth())
         if (solicitado) {
             Spacer(Modifier.height(12.dp))
-            Text("Si ese correo está vinculado a una cuenta, recibirás un código de 6 cifras. Puede tardar unos minutos.", style = MaterialTheme.typography.bodySmall)
-            OutlinedTextField(codigo, { codigo = it.filter(Char::isDigit).take(6); error = null }, label = { Text("Código de 6 cifras") }, singleLine = true,
+            Text(tx("Si ese correo está vinculado a una cuenta, recibirás un código de 6 cifras. Puede tardar unos minutos."), style = MaterialTheme.typography.bodySmall)
+            OutlinedTextField(codigo, { codigo = it.filter(Char::isDigit).take(6); error = null }, label = { Text(tx("Código de 6 cifras")) }, singleLine = true,
                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number, imeAction = ImeAction.Done), modifier = Modifier.fillMaxWidth())
         }
         mensaje?.let { Text(it, color = MaterialTheme.colorScheme.primary) }
@@ -310,7 +312,7 @@ private fun CodigoConductorNativo(alVolver: () -> Unit, alAbrirPortal: (Sesion) 
                     if (!solicitado) {
                         app.repo.solicitarCodigoConductor(correo)
                         solicitado = true
-                        mensaje = "Solicitud enviada. Mira la bandeja y el spam del correo personal."
+                        mensaje = tx("Solicitud enviada. Mira la bandeja y el spam del correo personal.")
                     } else {
                         val sesion = app.repo.entrarConCodigoConductor(correo, codigo)
                         alAbrirPortal(sesion)
@@ -320,16 +322,16 @@ private fun CodigoConductorNativo(alVolver: () -> Unit, alAbrirPortal: (Sesion) 
             }
         }, enabled = !ocupado && emailValido(correo) && (!solicitado || codigo.length == 6), modifier = Modifier.fillMaxWidth().height(54.dp)) {
             if (ocupado) CircularProgressIndicator(Modifier.size(20.dp), strokeWidth = 2.dp)
-            else Text(if (!solicitado) "Enviar código" else "Entrar")
+            else Text(if (!solicitado) tx("Enviar código") else tx("Entrar"))
         }
         if (solicitado) TextButton(onClick = {
             ocupado = true; error = null
             scope.launch {
-                try { app.repo.solicitarCodigoConductor(correo); codigo = ""; mensaje = "Hemos solicitado otro código." }
+                try { app.repo.solicitarCodigoConductor(correo); codigo = ""; mensaje = tx("Hemos solicitado otro código.") }
                 catch (e: ErrorApi) { error = e.message }
                 finally { ocupado = false }
             }
-        }, enabled = !ocupado, modifier = Modifier.align(Alignment.CenterHorizontally)) { Text("Reenviar código") }
+        }, enabled = !ocupado, modifier = Modifier.align(Alignment.CenterHorizontally)) { Text(tx("Reenviar código")) }
     }
 }
 
@@ -346,10 +348,10 @@ private fun Alta(ref: String?, oferta: Oferta?, alVolver: () -> Unit) {
     var trabajando by remember { mutableStateOf(false) }
     val crear = {
         error = when {
-            nombre.isBlank() -> "Dinos tu nombre."
-            !Regex("^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$").matches(correo.trim()) -> "Escribe un correo válido."
-            clave.length < 8 -> "La contraseña debe tener al menos 8 caracteres."
-            !acepto -> "Para continuar, acepta los Términos y la Política de Privacidad."
+            nombre.isBlank() -> tx("Dinos tu nombre.")
+            !Regex("^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$").matches(correo.trim()) -> tx("Escribe un correo válido.")
+            clave.length < 8 -> tx("La contraseña debe tener al menos 8 caracteres.")
+            !acepto -> tx("Para continuar, acepta los Términos y la Política de Privacidad.")
             else -> null
         }
         if (error == null && !trabajando) {
@@ -363,9 +365,9 @@ private fun Alta(ref: String?, oferta: Oferta?, alVolver: () -> Unit) {
     }
     Column(Modifier.fillMaxSize().statusBarsPadding().imePadding().verticalScroll(rememberScrollState()).padding(horizontal = 24.dp, vertical = 8.dp)) {
         Cabecera("Crea tu cuenta gratis", alVolver)
-        OutlinedTextField(nombre, { nombre = it }, label = { Text("Tu nombre") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+        OutlinedTextField(nombre, { nombre = it }, label = { Text(tx("Tu nombre")) }, singleLine = true, modifier = Modifier.fillMaxWidth())
         Spacer(Modifier.height(12.dp))
-        OutlinedTextField(correo, { correo = it }, label = { Text("Tu correo") }, singleLine = true, modifier = Modifier.fillMaxWidth(),
+        OutlinedTextField(correo, { correo = it }, label = { Text(tx("Tu correo")) }, singleLine = true, modifier = Modifier.fillMaxWidth(),
             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Email, imeAction = ImeAction.Next))
         Spacer(Modifier.height(12.dp))
         CampoClave(clave, { clave = it }, "Contraseña (8 caracteres o más)", alListo = crear)
@@ -373,16 +375,16 @@ private fun Alta(ref: String?, oferta: Oferta?, alVolver: () -> Unit) {
         Row(Modifier.fillMaxWidth().toggleable(acepto, role = Role.Checkbox) { acepto = it }.padding(vertical = 4.dp),
             verticalAlignment = Alignment.CenterVertically) {
             Checkbox(checked = acepto, onCheckedChange = null, modifier = Modifier.padding(end = 8.dp))
-            Text("Acepto los Términos y la Política de Privacidad", style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f))
+            Text(tx("Acepto los Términos y la Política de Privacidad"), style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f))
         }
         Row(Modifier.padding(start = 40.dp), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-            TextButton(onClick = { Acciones.abrirWeb(ctx, "${BuildConfig.WEB_URL}/terminos") }) { Text("Términos") }
-            TextButton(onClick = { Acciones.abrirWeb(ctx, "${BuildConfig.WEB_URL}/privacidad") }) { Text("Privacidad") }
+            TextButton(onClick = { Acciones.abrirWeb(ctx, "${BuildConfig.WEB_URL}/terminos") }) { Text(tx("Términos")) }
+            TextButton(onClick = { Acciones.abrirWeb(ctx, "${BuildConfig.WEB_URL}/privacidad") }) { Text(tx("Privacidad")) }
         }
         error?.let { Spacer(Modifier.height(6.dp)); Text(it, color = MaterialTheme.colorScheme.error) }
         Spacer(Modifier.height(16.dp))
         Button(onClick = crear, enabled = !trabajando, modifier = Modifier.fillMaxWidth().height(56.dp)) {
-            if (trabajando) CircularProgressIndicator(Modifier.size(22.dp), strokeWidth = 2.dp, color = MaterialTheme.colorScheme.onPrimary) else Text("Crear mi cuenta")
+            if (trabajando) CircularProgressIndicator(Modifier.size(22.dp), strokeWidth = 2.dp, color = MaterialTheme.colorScheme.onPrimary) else Text(tx("Crear mi cuenta"))
         }
         Spacer(Modifier.height(10.dp))
         Surface(color = MaterialTheme.colorScheme.surfaceContainer, shape = MaterialTheme.shapes.small) {

@@ -1,5 +1,7 @@
 package com.flotadsp.fds.data
 
+import com.flotadsp.fds.ui.tx
+
 import android.content.Context
 import android.telephony.TelephonyManager
 import kotlinx.coroutines.Dispatchers
@@ -87,7 +89,7 @@ class Repositorio(private val ctx: Context, val cuenta: Cuenta, val api: Api) {
                 _pendientes.value = leerCola()
             }
             "empresa" -> Unit // La app abre el panel de oficina con esta sesión en memoria.
-            else -> throw ErrorApi(0, "El servidor no indicó a qué portal pertenece esta cuenta. Actualiza FDS.")
+            else -> throw ErrorApi(0, tx("El servidor no indicó a qué portal pertenece esta cuenta. Actualiza FDS."))
         }
         return s
     }

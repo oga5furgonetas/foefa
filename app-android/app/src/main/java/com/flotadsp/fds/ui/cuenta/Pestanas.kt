@@ -1,5 +1,6 @@
 package com.flotadsp.fds.ui.cuenta
 
+import com.flotadsp.fds.ui.tx
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -87,7 +88,8 @@ import com.flotadsp.fds.data.Referidos
 import com.flotadsp.fds.ui.Acciones
 import com.flotadsp.fds.ui.LocalExtra
 import com.flotadsp.fds.ui.TextoNumero
-import com.flotadsp.fds.ui.ESPANOL
+import com.flotadsp.fds.ui.LOCALE_APP
+import com.flotadsp.fds.ui.patronFecha
 import com.flotadsp.fds.ui.hoy.Fila
 import kotlinx.coroutines.launch
 import kotlinx.serialization.json.JsonPrimitive
@@ -102,7 +104,7 @@ import java.time.format.DateTimeFormatter
 import java.util.Locale
 
 private fun dia(f: String): String = runCatching {
-    LocalDate.parse(f).format(DateTimeFormatter.ofPattern("EEEE d 'de' MMMM", ESPANOL)).replaceFirstChar { it.uppercase() }
+    LocalDate.parse(f).format(DateTimeFormatter.ofPattern(patronFecha("EEEE d 'de' MMMM"), LOCALE_APP)).replaceFirstChar { it.uppercase() }
 }.getOrDefault(f)
 
 // ── HISTORIAL ───────────────────────────────────────────────────────────────────────────────────────────────
@@ -117,7 +119,7 @@ fun HistorialPantalla() {
         runCatching { repo.estadisticas(30) }.onSuccess { est = it }.onFailure { error = (it as? ErrorApi)?.message ?: "No se ha podido cargar" }
     }
     abierto?.let { f -> DiaPantalla(f) { abierto = null }; return }
-    Scaffold(topBar = { TopAppBar(title = { Text("Historial") }) }, containerColor = MaterialTheme.colorScheme.background) { pad ->
+    Scaffold(topBar = { TopAppBar(title = { Text(tx("Historial")) }) }, containerColor = MaterialTheme.colorScheme.background) { pad ->
         val e = est
         when {
             e == null && error == null -> Box(Modifier.padding(pad).fillMaxSize(), contentAlignment = Alignment.Center) { CircularProgressIndicator() }
@@ -132,7 +134,7 @@ fun HistorialPantalla() {
                     }
                 }
                 val dias = e.porDia.filter { it.total > 0 }.sortedByDescending { it.fecha }
-                if (dias.isEmpty()) item { Text("Aún no hay días con paradas.", style = MaterialTheme.typography.bodyLarge, modifier = Modifier.padding(8.dp)) }
+                if (dias.isEmpty()) item { Text(tx("Aún no hay días con paradas."), style = MaterialTheme.typography.bodyLarge, modifier = Modifier.padding(8.dp)) }
                 items(dias, key = { it.fecha }) { d -> DiaFila(d) { abierto = d.fecha } }
             }
         }
@@ -153,7 +155,7 @@ private fun DiaFila(d: DiaEstadistica, alTocar: () -> Unit) {
         Row(Modifier.fillMaxWidth().padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
             Column(Modifier.weight(1f)) {
                 Text(dia(d.fecha), style = MaterialTheme.typography.titleMedium)
-                Text("${d.entregados} de ${d.total} entregadas${if (d.fallidos > 0) " · ${d.fallidos} sin entregar" else ""}",
+                Text(tx("{a} de {b} entregadas", "a" to d.entregados, "b" to d.total) + (if (d.fallidos > 0) " · " + tx("{n} sin entregar", "n" to d.fallidos) else ""),
                     style = MaterialTheme.typography.bodyMedium.merge(TextoNumero), color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
             Icon(Icons.Default.ChevronRight, contentDescription = null)
@@ -168,7 +170,7 @@ private fun DiaPantalla(fecha: String, alVolver: () -> Unit) {
     BackHandler(onBack = alVolver)
     LaunchedEffect(fecha) { paradas = runCatching { repo.paradasDelDia(fecha) }.getOrDefault(emptyList()) }
     Scaffold(
-        topBar = { TopAppBar(title = { Text(dia(fecha)) }, navigationIcon = { IconButton(onClick = alVolver) { Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Volver") } }) },
+        topBar = { TopAppBar(title = { Text(dia(fecha)) }, navigationIcon = { IconButton(onClick = alVolver) { Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = tx("Volver")) } }) },
         containerColor = MaterialTheme.colorScheme.background,
     ) { pad ->
         val ps = paradas
@@ -210,15 +212,15 @@ fun AjustesPantalla(alGuardar: () -> Unit = {}) {
             pais = a["pais"]?.jsonPrimitive?.contentOrNull.orEmpty()
             pagoParada = deCent(a["pago_parada"]?.jsonPrimitive?.intOrNull)
             pagoDia = deCent(a["pago_dia"]?.jsonPrimitive?.intOrNull)
-            costeKm = deCent(a["coste_km"]?.jsonPrimitive?.intOrNull)
-        }.onFailure { mensaje = "Sin conexión: los ajustes de la ruta se cargan con red." }
+            costeKm = deCent(a["coste_km"]?.jsonPrimitive?.intOrNull?.let { if (Region.unidades == "mi") Math.round(it * Region.KM_POR_MILLA).toInt() else it })   // en millas se enseña por milla
+        }.onFailure { mensaje = tx("Sin conexión: los ajustes de la ruta se cargan con red.") }
     }
     // Los países donde funciona, con sus husos, como los da el servidor (ordenados por nombre).
     val paises = remember(ajustes) {
         runCatching {
             ajustes?.get("paises")?.jsonObject?.map { (k, v) ->
                 Triple(k, v.jsonObject["nombre"]?.jsonPrimitive?.contentOrNull ?: k, v.jsonObject["zonas"]?.jsonArray?.mapNotNull { it.jsonPrimitive.contentOrNull }.orEmpty())
-            }?.sortedWith(compareBy(java.text.Collator.getInstance(ESPANOL)) { it.second })   // «Bélgica» antes que «Brasil»
+            }?.sortedWith(compareBy(java.text.Collator.getInstance(LOCALE_APP)) { it.second })   // «Bélgica» antes que «Brasil»
         }.getOrNull().orEmpty()
     }
     if (eligiendoHora) {
@@ -226,15 +228,15 @@ fun AjustesPantalla(alGuardar: () -> Unit = {}) {
         val reloj = rememberTimePickerState(initialHour = h.coerceIn(0, 23), initialMinute = m.coerceIn(0, 59), is24Hour = true)
         AlertDialog(
             onDismissRequest = { eligiendoHora = false },
-            title = { Text("Hora de salida") },
+            title = { Text(tx("Hora de salida")) },
             text = { TimePicker(reloj) },
-            confirmButton = { TextButton(onClick = { salida = "%02d:%02d".format(reloj.hour, reloj.minute); eligiendoHora = false }) { Text("Aceptar") } },
-            dismissButton = { TextButton(onClick = { eligiendoHora = false }) { Text("Cancelar") } },
+            confirmButton = { TextButton(onClick = { salida = "%02d:%02d".format(reloj.hour, reloj.minute); eligiendoHora = false }) { Text(tx("Aceptar")) } },
+            dismissButton = { TextButton(onClick = { eligiendoHora = false }) { Text(tx("Cancelar")) } },
         )
     }
-    Scaffold(topBar = { TopAppBar(title = { Text("Ajustes") }) }, containerColor = MaterialTheme.colorScheme.background) { pad ->
+    Scaffold(topBar = { TopAppBar(title = { Text(tx("Ajustes")) }) }, containerColor = MaterialTheme.colorScheme.background) { pad ->
         Column(Modifier.padding(pad).verticalScroll(rememberScrollState()).padding(16.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
-            Seccion("Navegar con") {
+            Seccion(tx("Navegar con")) {
                 SingleChoiceSegmentedButtonRow(Modifier.fillMaxWidth()) {
                     listOf("google" to "Google Maps", "waze" to "Waze").forEachIndexed { i, (k, t) ->
                         SegmentedButton(selected = navegar == k, onClick = { ambito.launch { app.cuenta.elegirNavegador(k) } },
@@ -242,19 +244,19 @@ fun AjustesPantalla(alGuardar: () -> Unit = {}) {
                     }
                 }
             }
-            Seccion("Aspecto") {
+            Seccion(tx("Aspecto")) {
                 SingleChoiceSegmentedButtonRow(Modifier.fillMaxWidth()) {
-                    listOf("sistema" to "Automático", "claro" to "Claro", "oscuro" to "Oscuro").forEachIndexed { i, (k, t) ->
+                    listOf("sistema" to tx("Automático"), "claro" to tx("Claro"), "oscuro" to tx("Oscuro")).forEachIndexed { i, (k, t) ->
                         SegmentedButton(selected = tema == k, onClick = { ambito.launch { app.cuenta.elegirTema(k) } },
                             shape = SegmentedButtonDefaults.itemShape(i, 3)) { Text(t) }
                     }
                 }
             }
-            Seccion("Tu ruta") {
-                OutlinedTextField(base, { base = it }, label = { Text("Desde dónde sales (nave, almacén o casa)") }, modifier = Modifier.fillMaxWidth())
+            Seccion(tx("Tu ruta")) {
+                OutlinedTextField(base, { base = it }, label = { Text(tx("Desde dónde sales (nave, almacén o casa)")) }, modifier = Modifier.fillMaxWidth())
                 Spacer(Modifier.height(8.dp))
                 // Con el reloj de Android: en el teclado de números de muchos móviles no hay «:» para escribir «09:00».
-                CampoElegir("Hora de salida", salida, alPulsar = { eligiendoHora = true })
+                CampoElegir(tx("Hora de salida"), salida, alPulsar = { eligiendoHora = true })
                 if (paises.isNotEmpty()) {
                     Spacer(Modifier.height(6.dp))
                     ElegirPais(pais, paises) { pais = it }
@@ -262,7 +264,7 @@ fun AjustesPantalla(alGuardar: () -> Unit = {}) {
                 Spacer(Modifier.height(6.dp))
                 Row(Modifier.fillMaxWidth().toggleable(volver, role = Role.Switch) { volver = it }.padding(vertical = 4.dp),
                     verticalAlignment = Alignment.CenterVertically) {
-                    Text("Volver a la base al acabar", style = MaterialTheme.typography.bodyLarge, modifier = Modifier.weight(1f))
+                    Text(tx("Volver a la base al acabar"), style = MaterialTheme.typography.bodyLarge, modifier = Modifier.weight(1f))
                     Switch(checked = volver, onCheckedChange = null)
                 }
                 Spacer(Modifier.height(8.dp))
@@ -282,39 +284,39 @@ fun AjustesPantalla(alGuardar: () -> Unit = {}) {
                             }
                             app.repo.guardarAjustes(a, cambios)
                             ajustes = app.repo.ajustes()
-                            mensaje = "Guardado."
+                            mensaje = tx("Guardado.")
                             alGuardar()
                         } catch (e: ErrorApi) { mensaje = e.message } finally { guardando = false }
                     }
-                }, enabled = ajustes != null && !guardando, modifier = Modifier.fillMaxWidth()) { Text("Guardar") }
+                }, enabled = ajustes != null && !guardando, modifier = Modifier.fillMaxWidth()) { Text(tx("Guardar")) }
                 mensaje?.let { Text(it, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.padding(top = 6.dp)) }
             }
-            Seccion("Mi dinero hoy") {
-                Text("Pon cómo te pagan y en «Hoy» verás cuánto llevas ganado y lo que pierdes con cada entrega que no sale.",
+            Seccion(tx("Mi dinero hoy")) {
+                Text(tx("Pon cómo te pagan y en «Hoy» verás cuánto llevas ganado y lo que pierdes con cada entrega que no sale."),
                     style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 Spacer(Modifier.height(8.dp))
-                OutlinedTextField(pagoParada, { pagoParada = it }, label = { Text("Te pagan por cada entrega (${Region.simbolo})") }, singleLine = true,
+                OutlinedTextField(pagoParada, { pagoParada = it }, label = { Text(tx("Te pagan por cada entrega ({moneda})", "moneda" to Region.simbolo)) }, singleLine = true,
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal), modifier = Modifier.fillMaxWidth())
                 Spacer(Modifier.height(6.dp))
-                OutlinedTextField(pagoDia, { pagoDia = it }, label = { Text("Fijo por día, si te pagan así (${Region.simbolo})") }, singleLine = true,
+                OutlinedTextField(pagoDia, { pagoDia = it }, label = { Text(tx("Fijo por día, si te pagan así ({moneda})", "moneda" to Region.simbolo)) }, singleLine = true,
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal), modifier = Modifier.fillMaxWidth())
                 Spacer(Modifier.height(6.dp))
-                OutlinedTextField(costeKm, { costeKm = it }, label = { Text("Gasolina por km (${Region.simbolo})") }, singleLine = true,
+                OutlinedTextField(costeKm, { costeKm = it }, label = { Text(if (Region.unidades == "mi") tx("Gasolina por milla ({moneda})", "moneda" to Region.simbolo) else tx("Gasolina por km ({moneda})", "moneda" to Region.simbolo)) }, singleLine = true,
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal), modifier = Modifier.fillMaxWidth())
                 Spacer(Modifier.height(8.dp))
                 Button(onClick = {
                     guardandoTarifa = true; mensajeTarifa = null
                     ambito.launch {
                         try {
-                            app.repo.guardarGanancias(aCent(pagoParada), aCent(pagoDia), aCent(costeKm))
-                            mensajeTarifa = "Guardado: lo verás en «Hoy»."
+                            app.repo.guardarGanancias(aCent(pagoParada), aCent(pagoDia), if (Region.unidades == "mi") Math.round(aCent(costeKm) / Region.KM_POR_MILLA).toInt() else aCent(costeKm))
+                            mensajeTarifa = tx("Guardado: lo verás en «Hoy».")
                             alGuardar()
                         } catch (e: ErrorApi) { mensajeTarifa = e.message } finally { guardandoTarifa = false }
                     }
-                }, enabled = ajustes != null && !guardandoTarifa, modifier = Modifier.fillMaxWidth()) { Text("Guardar la tarifa") }
+                }, enabled = ajustes != null && !guardandoTarifa, modifier = Modifier.fillMaxWidth()) { Text(tx("Guardar la tarifa")) }
                 mensajeTarifa?.let { Text(it, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.padding(top = 6.dp)) }
             }
-            Text("La ruta se ordena por el tiempo que se tarda por carretera, contando el tráfico típico de cada hora, el rato en cada portal y el horario de cada cliente.",
+            Text(tx("La ruta se ordena por el tiempo que se tarda por carretera, contando el tráfico típico de cada hora, el rato en cada portal y el horario de cada cliente."),
                 style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
     }
@@ -337,11 +339,11 @@ private fun CampoElegir(etiqueta: String, valor: String, alPulsar: () -> Unit) {
 @Composable
 private fun ElegirPais(pais: String, paises: List<Triple<String, String, List<String>>>, alElegir: (String) -> Unit) {
     var abierto by remember { mutableStateOf(false) }
-    CampoElegir("País donde repartes", paises.firstOrNull { it.first == pais }?.second ?: pais.uppercase(Locale.ROOT), alPulsar = { abierto = true })
+    CampoElegir(tx("País donde repartes"), paises.firstOrNull { it.first == pais }?.second ?: pais.uppercase(Locale.ROOT), alPulsar = { abierto = true })
     if (abierto) {
         AlertDialog(
             onDismissRequest = { abierto = false },
-            title = { Text("País donde repartes") },
+            title = { Text(tx("País donde repartes")) },
             text = {
                 LazyColumn(Modifier.heightIn(max = 440.dp)) {
                     items(paises, key = { it.first }) { (k, nombre, _) ->
@@ -354,7 +356,7 @@ private fun ElegirPais(pais: String, paises: List<Triple<String, String, List<St
                     }
                 }
             },
-            confirmButton = { TextButton(onClick = { abierto = false }) { Text("Cerrar") } },
+            confirmButton = { TextButton(onClick = { abierto = false }) { Text(tx("Cerrar")) } },
         )
     }
 }
@@ -372,7 +374,7 @@ private fun Seccion(titulo: String, contenido: @Composable () -> Unit) {
 
 /** La tarifa: «1,10» ↔ 110 céntimos. Lo que no es un número, 0. */
 internal fun aCent(t: String): Int = ((t.replace(',', '.').trim().toDoubleOrNull() ?: 0.0) * 100).roundToInt().coerceAtLeast(0)
-internal fun deCent(c: Int?): String = if (c == null || c <= 0) "" else "%.2f".format(ESPANOL, c / 100.0)
+internal fun deCent(c: Int?): String = if (c == null || c <= 0) "" else "%.2f".format(LOCALE_APP, c / 100.0)
 
 // ── CUENTA ──────────────────────────────────────────────────────────────────────────────────────────────────
 
@@ -391,7 +393,7 @@ fun CuentaPantalla() {
         plan = runCatching { app.repo.plan() }.getOrNull()
         ref = runCatching { app.repo.referidos() }.getOrNull()
     }
-    Scaffold(topBar = { TopAppBar(title = { Text("Cuenta") }) }, containerColor = MaterialTheme.colorScheme.background) { pad ->
+    Scaffold(topBar = { TopAppBar(title = { Text(tx("Cuenta")) }) }, containerColor = MaterialTheme.colorScheme.background) { pad ->
         Column(Modifier.padding(pad).verticalScroll(rememberScrollState()).padding(16.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
             Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLowest), shape = MaterialTheme.shapes.large,
                 modifier = Modifier.fillMaxWidth()) {
@@ -404,17 +406,17 @@ fun CuentaPantalla() {
             }
             Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer), shape = MaterialTheme.shapes.large) {
                 Column(Modifier.padding(18.dp)) {
-                    Text("Invita a un compañero", style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.onPrimaryContainer)
+                    Text(tx("Invita a un compañero"), style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.onPrimaryContainer)
                     val r = ref
                     if (r != null && r.porInvitado > 0) {
-                        Text("Ganas ${"%.2f".format(ESPANOL, r.porInvitado / 100.0)} € por cada uno que la use de verdad (20 entregas en 2 días). Invitados: ${r.invitados} · ya la usan: ${r.premiados}.",
+                        Text(tx("Ganas {x} por cada uno que la use de verdad (20 entregas en 2 días). Invitados: {n} · ya la usan: {m}.", "x" to "${"%.2f".format(LOCALE_APP, r.porInvitado / 100.0)} €", "n" to r.invitados, "m" to r.premiados),
                             style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onPrimaryContainer)
                     }
                     Spacer(Modifier.height(10.dp))
                     Button(onClick = {
                         val enlace = "${BuildConfig.WEB_URL}/invita?${ref?.codigo?.takeIf { it.isNotBlank() }?.let { "ref=$it&" } ?: ""}utm_source=referido&utm_medium=app_android"
                         Acciones.compartir(ctx, "Uso FDS para ordenar mi ruta de reparto y navegar parada a parada. Pruébala: $enlace")
-                    }) { Icon(Icons.Default.Share, contentDescription = null); Spacer(Modifier.width(8.dp)); Text("Compartir mi enlace") }
+                    }) { Icon(Icons.Default.Share, contentDescription = null); Spacer(Modifier.width(8.dp)); Text(tx("Compartir mi enlace")) }
                 }
             }
             Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLowest), shape = MaterialTheme.shapes.large) {
@@ -435,22 +437,22 @@ fun CuentaPantalla() {
         }
     }
     if (salir) {
-        AlertDialog(onDismissRequest = { salir = false }, title = { Text("¿Cerrar sesión?") },
-            text = { Text("Para volver a entrar necesitarás tu correo y tu contraseña.") },
-            confirmButton = { TextButton(onClick = { salir = false; ambito.launch { app.repo.salir() } }) { Text("Cerrar sesión") } },
-            dismissButton = { TextButton(onClick = { salir = false }) { Text("Cancelar") } })
+        AlertDialog(onDismissRequest = { salir = false }, title = { Text(tx("¿Cerrar sesión?")) },
+            text = { Text(tx("Para volver a entrar necesitarás tu correo y tu contraseña.")) },
+            confirmButton = { TextButton(onClick = { salir = false; ambito.launch { app.repo.salir() } }) { Text(tx("Cerrar sesión")) } },
+            dismissButton = { TextButton(onClick = { salir = false }) { Text(tx("Cancelar")) } })
     }
     if (borrar) BorrarCuenta(alCerrar = { borrar = false })
 }
 
 private fun textoPlan(p: Plan?): String = when {
-    p == null -> "Cargando tu plan…"
+    p == null -> tx("Cargando tu plan…")
     p.promo?.activa == true && p.gratis?.activo != true ->
         p.promo.hasta?.let { "Gratis y sin límite hasta el ${dia(it).substringAfter(' ')}." } ?: "Gratis y sin límite durante la promoción."
-    p.status == "active" -> "Plan sin tope de paradas: activo."
-    p.gratis?.activo == true -> "Plan gratis: hasta ${p.gratis.tope ?: 15} paradas nuevas al día."
+    p.status == "active" -> tx("Plan sin tope de paradas: activo.")
+    p.gratis?.activo == true -> tx("Plan gratis: hasta {n} paradas nuevas al día.", "n" to (p.gratis.tope ?: 15))
     p.status == "trial" && p.diasQuedan != null -> "Prueba gratis: ${if (p.diasQuedan == 1) "queda 1 día" else "quedan ${p.diasQuedan} días"}."
-    else -> "Plan Repartidor."
+    else -> tx("Plan Repartidor.")
 }
 
 @Composable
@@ -472,12 +474,12 @@ private fun BorrarCuenta(alCerrar: () -> Unit) {
     var trabajando by remember { mutableStateOf(false) }
     AlertDialog(
         onDismissRequest = alCerrar,
-        title = { Text("Borrar tu cuenta") },
+        title = { Text(tx("Borrar tu cuenta")) },
         text = {
             Column {
-                Text("Tu cuenta se desactiva ahora mismo y borramos tus datos (tus rutas y las de tus clientes) en un plazo máximo de 30 días. No se puede deshacer.")
+                Text(tx("Tu cuenta se desactiva ahora mismo y borramos tus datos (tus rutas y las de tus clientes) en un plazo máximo de 30 días. No se puede deshacer."))
                 Spacer(Modifier.height(12.dp))
-                OutlinedTextField(clave, { clave = it }, label = { Text("Tu contraseña") }, singleLine = true,
+                OutlinedTextField(clave, { clave = it }, label = { Text(tx("Tu contraseña")) }, singleLine = true,
                     visualTransformation = PasswordVisualTransformation(), keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password))
                 error?.let { Text(it, color = MaterialTheme.colorScheme.error, modifier = Modifier.padding(top = 6.dp)) }
             }
@@ -488,8 +490,8 @@ private fun BorrarCuenta(alCerrar: () -> Unit) {
                 ambito.launch {
                     try { app.repo.borrarCuenta(clave) } catch (e: ErrorApi) { error = e.message } finally { trabajando = false }
                 }
-            }, enabled = clave.isNotBlank() && !trabajando) { Text("Borrar mi cuenta", color = MaterialTheme.colorScheme.error) }
+            }, enabled = clave.isNotBlank() && !trabajando) { Text(tx("Borrar mi cuenta"), color = MaterialTheme.colorScheme.error) }
         },
-        dismissButton = { TextButton(onClick = alCerrar) { Text("Cancelar") } },
+        dismissButton = { TextButton(onClick = alCerrar) { Text(tx("Cancelar")) } },
     )
 }

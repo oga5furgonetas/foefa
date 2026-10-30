@@ -1,5 +1,6 @@
 package com.flotadsp.fds.ui.hoy
 
+import com.flotadsp.fds.ui.tx
 import android.app.Application
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
@@ -76,7 +77,7 @@ class RutaVM(app: Application) : AndroidViewModel(app) {
                 _e.value = if (_e.value.ruta != null && e.sinRed) {
                     _e.value.copy(cargando = false, refrescando = false, guardadaEn = _e.value.guardadaEn ?: System.currentTimeMillis())
                 } else _e.value.copy(cargando = false, refrescando = false, error = e.message)
-                if (tirando && e.sinRed) avisar("Sin conexión: sigues con la ruta guardada en el móvil.")
+                if (tirando && e.sinRed) avisar(tx("Sin conexión: sigues con la ruta guardada en el móvil."))
             }
         }
     }
@@ -175,7 +176,7 @@ class RutaVM(app: Application) : AndroidViewModel(app) {
         viewModelScope.launch {
             try {
                 repo.quitarParada(p.id)
-                avisar("Parada quitada de tu ruta.")
+                avisar(tx("Parada quitada de tu ruta."))
                 refrescarSinRuido()
             } catch (e: ErrorApi) { avisar(e.message ?: "No se ha podido quitar") }
         }

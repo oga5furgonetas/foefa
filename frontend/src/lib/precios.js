@@ -134,6 +134,16 @@ export const fechaPromo = (loc = 'es-ES', dia = GRATIS_SIN_LIMITE_HASTA) => new 
 /* Pagando un año se pagan 10 meses: dos salen gratis. */
 export const MESES_ANUAL = 10
 
+/* EL PLAN REPARTIDOR FUERA DEL EURO (30-10-2026, docs/EXPANSION-INTERNACIONAL-30-10.md §5): [al mes, al año] por
+   moneda, PROPUESTA; la misma tabla que PRECIOS_REPARTIDOR en server.py, que manda (/billing/planes?pais=xx y
+   /org/billing traen `precios` con su `moneda`); esto pinta mientras no contesta. Sin moneda en la tabla, dólares. */
+export const PRECIOS_REPARTIDOR = {
+  EUR: [9.99, 99], USD: [9.99, 99], GBP: [8.99, 89], CHF: [9.9, 99],
+  MXN: [149, 1490], BRL: [39.9, 399], COP: [29900, 299000], CLP: [7990, 79900], PEN: [29.9, 299],
+  UYU: [349, 3490], CRC: [4990, 49900], GTQ: [59, 590], DOP: [499, 4990], BOB: [59, 590],
+  PYG: [59900, 599000], HNL: [199, 1990], NIO: [299, 2990], CNY: [69, 690],
+}
+
 export const eur = (n) => (Number.isInteger(n) ? n.toLocaleString('es-ES') : n.toLocaleString('es-ES', { minimumFractionDigits: 2, maximumFractionDigits: 2 }))
 
 export const COMPLEMENTOS = [

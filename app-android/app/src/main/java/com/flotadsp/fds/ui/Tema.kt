@@ -102,6 +102,18 @@ val TextoNumero = TextStyle(fontFeatureSettings = "tnum")
     aunque el móvil esté en otro idioma. */
 val ESPANOL: java.util.Locale = java.util.Locale.forLanguageTag("es-ES")
 
+/** Desde el 30-10-2026 la app habla el idioma del móvil (Idioma): las fechas y los números de las pantallas van con
+ *  este; ESPANOL queda para lo que es de España (los euros de «invita y gana»). */
+val LOCALE_APP: java.util.Locale get() = Idioma.locale
+
+/** El patrón de una fecha escrito para el español («EEEE, d 'de' MMMM») en los demás idiomas: sin el «de» y, en
+ *  alemán, con el punto del día («Freitag, 30. Oktober»). */
+fun patronFecha(es: String): String = when (Idioma.actual) {
+    "es" -> es
+    "de" -> es.replace(" 'de' ", ". ")
+    else -> es.replace(" 'de' ", " ")
+}
+
 /** El país de la ruta (llega con mi-ruta) y, con él, la moneda de lo que se cobra en la puerta, como en la web
  *  (frontend/src/lib/region.js): un repartidor de México cobra pesos, no euros. Es estado de Compose: cuando llega
  *  la ruta, los importes se vuelven a pintar en su moneda. */
@@ -122,6 +134,17 @@ object Region {
 
     fun importe(v: Double): String = java.text.NumberFormat.getCurrencyInstance(locale).apply { currency = moneda }.format(v)
     val simbolo: String get() = moneda.getSymbol(locale)
+
+    /** Millas en EE. UU. y Reino Unido (y Liberia y Birmania), km en el resto: como el servidor (`unidades` en
+     *  mi-ruta) y la web (30-10-2026). Los km se guardan siempre en km; solo cambia lo que se enseña y se escribe. */
+    val unidades: String get() = if (pais in setOf("us", "gb", "lr", "mm")) "mi" else "km"
+    const val KM_POR_MILLA = 1.609344
+    /** «3,1 km» o «1.9 mi», con los números del idioma de la app. */
+    fun distancia(km: Double, decimales: Int = 1): String {
+        val millas = unidades == "mi"
+        val f = java.text.NumberFormat.getNumberInstance(Idioma.locale).apply { maximumFractionDigits = decimales; minimumFractionDigits = 0 }
+        return "${f.format(if (millas) km / KM_POR_MILLA else km)} ${if (millas) "mi" else "km"}"
+    }
 
     /** Cómo puede pagar el cliente en la puerta: Bizum solo existe en España y Pix en Brasil (como la web). */
     val metodosCobro: List<Pair<String, String>>

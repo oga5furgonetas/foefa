@@ -22,7 +22,7 @@ import { buscarDirecciones } from '../../lib/direcciones'
 import { invitar } from '../../lib/compartir'
 import { medirAccion } from '../../lib/analitica'
 import { compartirDia } from '../../lib/compartirDia'
-import { fijarPais, importe, simboloMoneda, metodosCobro, paisActual } from '../../lib/region'
+import { fijarPais, importe, simboloMoneda, metodosCobro, paisActual, distancia, unidades, KM_POR_MILLA } from '../../lib/region'
 import { tx, useIdioma, locale, txError } from '../../lib/idioma'
 import { salirDeLaDemoDeReparto, decodeToken } from '../../panel/auth'
 import { eurosRef, fechaRefPromo } from '../../lib/precios'
@@ -1130,7 +1130,8 @@ export default function MiRuta({ onBack, embebido = false, alTerminar = null }) 
   async function guardarTarifa() {
     setOcupado('tarifa')
     try {
-      await repGanancias({ pago_parada: aCent(tarifa.parada), pago_dia: aCent(tarifa.dia), coste_km: aCent(tarifa.km) })
+      // En millas se escribe por milla y se guarda por km (30-10-2026).
+      await repGanancias({ pago_parada: aCent(tarifa.parada), pago_dia: aCent(tarifa.dia), coste_km: unidades() === 'mi' ? Math.round(aCent(tarifa.km) / KM_POR_MILLA) : aCent(tarifa.km) })
       medirAccion('ruta_tarifa')
       setTarifa(null); cargar()
     } catch (e) { setAviso(txError(e, 'No se pudo guardar')) } finally { setOcupado('') }
@@ -1193,7 +1194,7 @@ export default function MiRuta({ onBack, embebido = false, alTerminar = null }) 
       {total > 0 && (
         <Cabecera fecha={ruta.fecha} hechos={hechos.length} total={total} entregados={entregados.length}
           pendientes={pendientes.length} rr={ruta.ruta} retraso={retraso} cobrado={cobradoHoy} mejor={marcas?.mejor || 0}
-          dinero={dinero} onTarifa={ruta.autonomo && gan ? () => setTarifa({ parada: aEuros(gan.pago_parada), dia: aEuros(gan.pago_dia), km: aEuros(gan.coste_km) || (simboloMoneda() === '€' ? '0,12' : '') }) : null}
+          dinero={dinero} onTarifa={ruta.autonomo && gan ? () => setTarifa({ parada: aEuros(gan.pago_parada), dia: aEuros(gan.pago_dia), km: aEuros(unidades() === 'mi' ? Math.round(gan.coste_km * KM_POR_MILLA) : gan.coste_km) || (simboloMoneda() === '€' ? '0,12' : '') }) : null}
           onCompartir={entregados.length >= 5 && pendientes.length === 0 ? () => {
             const ini = ruta.jornada?.empezada ? new Date(ruta.jornada.empezada).getTime() : 0
             const fin = ruta.jornada?.terminada ? new Date(ruta.jornada.terminada).getTime() : Date.now()
@@ -1427,7 +1428,7 @@ export default function MiRuta({ onBack, embebido = false, alTerminar = null }) 
           </Suspense>
           <p className="mt-1.5 flex flex-wrap items-center gap-x-2 text-[12px] text-dark-400">
             {trazado?.fuente === 'carreteras'
-              ? <><span className="inline-block h-1 w-5 rounded bg-sky-600" /> {tx('Por las calles:')} <b className="text-dark-200">{String(trazado.km).replace('.', ',')} km</b> · {tx('{t} conduciendo (sin contar paradas)', { t: minutosATexto(trazado.minutos) })}</>
+              ? <><span className="inline-block h-1 w-5 rounded bg-sky-600" /> {tx('Por las calles:')} <b className="text-dark-200">{distancia(trazado.km)}</b> · {tx('{t} conduciendo (sin contar paradas)', { t: minutosATexto(trazado.minutos) })}</>
               : trazado ? tx('Sin servidor de rutas ahora: rayas rectas entre paradas.') : tx('Calculando el recorrido…')}
           </p>
           <label className="mt-1.5 flex flex-wrap items-center gap-x-2 gap-y-1 text-[12px] text-dark-300">
@@ -1747,14 +1748,14 @@ export default function MiRuta({ onBack, embebido = false, alTerminar = null }) 
           <p className="mb-3 text-[13px] text-dark-400">{tx('Pon cómo te pagan y la app te dice cuánto llevas ganado hoy, la gasolina y lo que te queda limpio.')}</p>
           {[['parada', tx('Te pagan por cada entrega ({moneda})', { moneda: simboloMoneda() }), simboloMoneda() === '€' ? '1,10' : '0'],
             ['dia', tx('Fijo por día, si te pagan así ({moneda})', { moneda: simboloMoneda() }), '0'],
-            ['km', tx('Gasolina por km ({moneda})', { moneda: simboloMoneda() }), simboloMoneda() === '€' ? '0,12' : '0']].map(([k, t, ej]) => (
+            ['km', tx(unidades() === 'mi' ? 'Gasolina por milla ({moneda})' : 'Gasolina por km ({moneda})', { moneda: simboloMoneda() }), simboloMoneda() === '€' ? '0,12' : '0']].map(([k, t, ej]) => (
             <label key={k} className="mb-2.5 block">
               <span className="mb-1 block text-[13px] font-semibold text-dark-200">{t}</span>
               <input className={inp} inputMode="decimal" value={tarifa[k]} placeholder={ej}
                 onChange={(e) => setTarifa({ ...tarifa, [k]: e.target.value.replace(/[^0-9.,]/g, '') })} />
             </label>
           ))}
-          <p className="mb-3 text-[12px] text-dark-500">{simboloMoneda() === '€' ? tx('Una furgoneta diésel gasta unos 0,10–0,15 € por km. Solo lo ves tú.') : tx('Pon lo que gasta tu vehículo por km. Solo lo ves tú.')}</p>
+          <p className="mb-3 text-[12px] text-dark-500">{simboloMoneda() === '€' ? tx('Una furgoneta diésel gasta unos 0,10–0,15 € por km. Solo lo ves tú.') : tx(unidades() === 'mi' ? 'Pon lo que gasta tu vehículo por milla. Solo lo ves tú.' : 'Pon lo que gasta tu vehículo por km. Solo lo ves tú.')}</p>
           <button onClick={guardarTarifa} disabled={ocupado === 'tarifa' || (!aCent(tarifa.parada) && !aCent(tarifa.dia))}
             className="w-full rounded-xl bg-brand-500 py-3 text-[15px] font-bold text-brand-tinta disabled:opacity-40">
             {ocupado === 'tarifa' ? tx('Guardando…') : tx('Guardar')}
@@ -2284,7 +2285,7 @@ function Cabecera({ fecha, hechos, total, entregados, pendientes, rr, retraso, c
               {/* De noche la ruta sale a su hora de salida (25-10-2026): que se vea, o las horas no se entienden. */}
               {rr.programada && rr.salida ? <span>{tx('Sales a las {h}', { h: rr.salida })} ·</span> : null}
               {tx('Acabas ≈')} <b className="text-dark-50">{rr.fin}</b>
-              {rr.km ? <span>· {String(rr.km).replace('.', ',')} km</span> : null}
+              {rr.km ? <span>· {distancia(rr.km)}</span> : null}
               {rr.minutos ? <span>· {minutosATexto(rr.minutos)}</span> : null}
             </p>
           )}
@@ -2513,7 +2514,7 @@ function Resumen({ hechos, ruta, marcas = null }) {
       </button>
       <p className="mt-3 text-[12px] text-dark-400">
         {durMin > 0 && <>{tx('De la primera a la última parada: {t}.', { t: minutosATexto(durMin) })} </>}
-        {ruta?.km ? <>{tx('Ruta planificada: {km} km.', { km: ruta.km })}</> : null}
+        {ruta?.km ? <>{tx('Ruta planificada: {d}.', { d: distancia(ruta.km) })}</> : null}
       </p>
       {no.length > 0 && <p className="mt-1 text-[12px] text-dark-400">{tx('Las no hechas siguen en «hechos hoy» con su motivo.')}</p>}
     </div>

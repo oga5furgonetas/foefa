@@ -5,7 +5,7 @@
 > haz commit y `git push`. Una sola sesión trabajando a la vez: antes de
 > empezar, `git pull` y comprueba que nadie ha dejado nada a medias aquí.
 
-Última actualización: **30-10-2026 (madrugada, 2)**: la tanda A de lo que pide la calle HECHA en servidor, web y app nativa, y el mapa que responde (iconos en vectores e interacciones, Dani: «mejora los emoticonos e interacciones con el mapa»); nada desplegado, lo decide Dani (ver «Última sesión — 30-10-2026 (madrugada, 2)»). Anterior: **29-10-2026 (noche, 4)**: FDS en todo, fuera Valor y China, avisos al móvil, app 2.3.0; fusionado en `main`, desplegado y verificado (ver «Última sesión — 29-10-2026 (noche, 4)»). Anterior: **29-10-2026 (noche, 3)** (fusionadas en `main` dos sesiones de la noche: la del servidor y la app 2.2.5 —sección «(noche): fase 0…»— y la del anuncio con la VOZ DE DANI y el mapa real de A Coruña, montado en `docs/anuncios/spot-dani/salida/`; ver «Última sesión»). Antes, noche: (anuncio «La ruta hecha»: guion para IA en `docs/anuncios/super-anuncio/` y generaciones en Artlist). Antes, tarde: (el CI de `main` llevaba desde el 18-10 en rojo; checkers arreglados de raíz y todo el CI en verde en local; ver «Última sesión»). Por la mañana: FDS 2.2.3 compilada, probada y firmada, el AAB listo para Play (ver «29-10-2026 (mañana)»).
+Última actualización: **30-10-2026 (madrugada, 3)**: FDS preparada para fuera de España: la app nativa en el idioma del móvil (en, pt, fr, it, de), el plan en la moneda del país, millas en EE. UU. y Reino Unido, la ficha de Play en 7 idiomas y el informe por mercados `docs/EXPANSION-INTERNACIONAL-30-10.md`; nada desplegado (ver «Última sesión — 30-10-2026 (madrugada, 3)»). Anterior: **30-10-2026 (madrugada, 2)**: la tanda A de lo que pide la calle HECHA en servidor, web y app nativa, y el mapa que responde (iconos en vectores e interacciones, Dani: «mejora los emoticonos e interacciones con el mapa»); nada desplegado, lo decide Dani (ver «Última sesión — 30-10-2026 (madrugada, 2)»). Anterior: **29-10-2026 (noche, 4)**: FDS en todo, fuera Valor y China, avisos al móvil, app 2.3.0; fusionado en `main`, desplegado y verificado (ver «Última sesión — 29-10-2026 (noche, 4)»). Anterior: **29-10-2026 (noche, 3)** (fusionadas en `main` dos sesiones de la noche: la del servidor y la app 2.2.5 —sección «(noche): fase 0…»— y la del anuncio con la VOZ DE DANI y el mapa real de A Coruña, montado en `docs/anuncios/spot-dani/salida/`; ver «Última sesión»). Antes, noche: (anuncio «La ruta hecha»: guion para IA en `docs/anuncios/super-anuncio/` y generaciones en Artlist). Antes, tarde: (el CI de `main` llevaba desde el 18-10 en rojo; checkers arreglados de raíz y todo el CI en verde en local; ver «Última sesión»). Por la mañana: FDS 2.2.3 compilada, probada y firmada, el AAB listo para Play (ver «29-10-2026 (mañana)»).
 
 ## Qué es y dónde está
 
@@ -1168,8 +1168,51 @@ se le metió una posición falsa en A Coruña con `cmd location providers`. «Ir
 apps: no probado en un móvil real. **Nada desplegado**: ni backend ni web ni app (la de Play es la 2.3.0; la nativa
 nueva pediría 2.4.0 y pasar por `app-release.yml`).
 
+## Última sesión — 30-10-2026 (madrugada, 3): FDS preparada para fuera de España
+
+Dani: «prepara la aplicación para expandirla… Europa, Alemania, Francia, Estados Unidos, Latinoamérica… con toda la
+legislación de allí… cómo funcionan las cargas y descargas… que si alguien la descarga en Estados Unidos se le
+descargue en inglés… y cuando pague, pague en dólares». Entregado en **`docs/EXPANSION-INTERNACIONAL-30-10.md`**
+(qué había, qué se ha hecho, qué falta por país con fuentes: ZFE/Umweltzonen/ULEZ/ZTL, Hoy No Circula, pico y placa,
+restricción vehicular, rodízio, horas de conducción, dónde dejar el paquete, pagos, IVA/OSS/SAT/sales tax, LGPD/CCPA,
+Play, feeds de datos por país y precio por moneda) y en código, **sin desplegar**:
+- **Servidor**: `MONEDA_PAIS`, `PAISES_MILLAS`, `PRECIOS_REPARTIDOR` (el plan por moneda, PROPUESTA editable desde
+  `plan_catalog.precios_repartidor`); `/org/billing` trae `precios` con `moneda` y `unidades`; `/billing/planes?pais=xx`
+  trae `precios_repartidor`; `mi-ruta` trae `unidades` y `moneda`; Stripe Checkout con `locale: "auto"` (con
+  `currency_options` en los Price, Checkout cobra en la moneda del cliente sin tocar código). Tests:
+  `backend/tests/test_expansion.py` (3).
+- **Web**: `region.js` (`importeEn`, `precioRepartidor`, `unidades`, `distancia`, `KM_POR_MILLA`), `precios.js`
+  (`PRECIOS_REPARTIDOR`); la portada, «Empezar» y el alta rápida dicen el precio en la moneda del país de quien mira
+  («$9.99/mes», «MX$149»); Cuenta en la moneda de la cuenta; km de la ruta en millas en EE. UU. y Reino Unido;
+  «Gasolina por milla» (se guarda por km). 12 textos nuevos en 6 idiomas.
+- **App nativa** (debug compilada; en Play sigue la 2.3.0): `ui/Idioma.kt` (`tx()` como la web; idioma del móvil al
+  arrancar, inglés si no lo tenemos; palabras de Latinoamérica y Brasil), `scripts/nativa-idioma.mjs` (envuelve los
+  textos en `tx()`, genera `ui/Traducciones.kt` desde el diccionario de la web + `app-android/traducciones-nativa.json`
+  (211 propios), y `--comprobar` falla si algún texto se queda sin sus 5 idiomas); 325 textos; ~95 plantillas pasadas a
+  mano; fechas con `LOCALE_APP`/`patronFecha`; millas en la cabecera y en la tarifa; `Calle.distancia` en pies/millas.
+  Visto en el emulador con el sistema en inglés: `docs/capturas-30-10/app-en-*.png` (Hoy, mapa, tarjeta de parada,
+  ajustes, cuenta). Quedan en español las plantillas con variables de las pantallas del conductor de empresa
+  (portal, turnos, auditoría, referidos, extras, avisos: ~36 líneas).
+- **Ficha de Play** en 7 idiomas lista para pegar: `app-android/play-listing/` (es-ES, es-419, en-US, pt-BR, fr-FR, de-DE, it-IT).
+- Verificado: `check-textos-ruta`, los 7 checkers, ESLint, `vite build`, Playwright `calle` (2), `escanear-etiqueta`
+  (6) y `humo` (206, con una expectativa actualizada: «Ruta planificada: 9,5 km.» con coma), `pytest test_expansion`,
+  `nativa-idioma --comprobar`, Gradle unit tests + `assembleDebug`.
+- **No verificado**: los feeds de datos extranjeros solo localizados (no conectados); las normas de circulación leídas
+  en prensa y portales oficiales, no en el texto legal; los precios por moneda son propuesta; la nativa solo se ha visto
+  en inglés (no en fr/de/it/pt); los umbrales fiscales salen de guías, los confirma el gestor. El emulador del PC de
+  casa tiene `adb emu geo fix` roto: posición falsa con `cmd location providers` (Trampas).
+
 ## Pendiente (por prioridad)
 
+-10. **Fuera de España (30-10 madrugada, 3)**: lo de hoy está hecho y sin desplegar. Siguiente, por orden de
+   `docs/EXPANSION-INTERNACIONAL-30-10.md` §11: (B) feeds de cortes y zonas de Francia (Bison Futé + BNZFE), Reino Unido
+   (National Highways + ULEZ), Países Bajos (NDW) y EE. UU. (WZDx) con la `fuente` en pantalla, y las restricciones por
+   placa de CDMX, Bogotá, Santiago y São Paulo como aviso con enlace oficial; (C) cobrar: `currency_options` en los dos
+   Price de Stripe, Stripe Tax, decidir los precios de §5 en el panel de negocio, Play Billing (tarjeta «Tanda 1») y
+   precios por país en Play Console, trámite del SAT antes de vender en México, OSS al pasar los 10.000 € en la UE;
+   (D) política de privacidad, términos y cookies en inglés (y luego fr/de/it/pt) con revisión jurídica; (E) las
+   plantillas del conductor de empresa en la nativa; (F) capturas por idioma y la ficha de Play pegada en cada idioma.
+   Lo decide Dani.
 -9. **Necesidades reales del repartidor (30-10 madrugada)**: la tanda A de `docs/NECESIDADES-REPARTIDOR-30-10.md`
    está HECHA (30-10 madrugada, 2) en servidor, web y nativa, SIN desplegar. Falta: (1) desplegar backend + web
    (`scripts\deploy-backend.ps1` y `deploy-frontend.ps1`) y probar en producción el enlace del cliente y la DGT con

@@ -1,5 +1,6 @@
 package com.flotadsp.fds.ui.hoy
 
+import com.flotadsp.fds.ui.tx
 import android.content.Context
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
@@ -77,8 +78,8 @@ import kotlinx.serialization.json.JsonPrimitive
 import java.io.ByteArrayOutputStream
 import java.io.File
 
-private val DONDE = listOf("mano" to "En mano", "vecino" to "Al vecino", "buzon" to "En el buzón", "porteria" to "En portería", "seguro" to "En un lugar seguro")
-private val MOTIVOS = listOf("No había nadie", "Dirección incorrecta", "Rechazado", "Fuera de horario", "Otro")
+private val DONDE = listOf("mano" to tx("En mano"), "vecino" to tx("Al vecino"), "buzon" to tx("En el buzón"), "porteria" to tx("En portería"), "seguro" to tx("En un lugar seguro"))
+private val MOTIVOS = listOf(tx("No había nadie"), tx("Dirección incorrecta"), tx("Rechazado"), tx("Fuera de horario"), tx("Otro"))
 
 /** El WhatsApp al cliente, como en la web (29-10-2026): con la hora estimada y el enlace de seguimiento, que no
  *  lleva datos personales. Sin hora ni enlace, el mensaje de siempre. */
@@ -91,17 +92,17 @@ fun textoWhatsapp(p: Parada, empresa: String): String {
 }
 
 /** EL CLIENTE TE AYUDA ANTES DE LLEGAR (30-10-2026): «No estará · Al vecino · Portal: 1234», como en la web. */
-private val DEJAR_CLIENTE = mapOf("buzon" to "En el buzón", "porteria" to "En portería o recepción", "vecino" to "Al vecino",
-    "seguro" to "En un lugar seguro", "punto_recogida" to "En un punto de recogida")
+private val DEJAR_CLIENTE = mapOf("buzon" to tx("En el buzón"), "porteria" to tx("En portería o recepción"), "vecino" to tx("Al vecino"),
+    "seguro" to tx("En un lugar seguro"), "punto_recogida" to tx("En un punto de recogida"))
 
 fun textoClienteDice(c: ClienteDice): String {
     val partes = mutableListOf<String>()
     when {
-        c.estare == "si" -> partes += "Estará en casa"
-        c.estare == "no" -> partes += "No estará" + (DEJAR_CLIENTE[c.dejar]?.let { " · $it" } ?: "")
-        c.franja != null && c.franja.size == 2 -> partes += "Mejor de ${c.franja[0]} a ${c.franja[1]}"
+        c.estare == "si" -> partes += tx("Estará en casa")
+        c.estare == "no" -> partes += tx("No estará") + (DEJAR_CLIENTE[c.dejar]?.let { " · $it" } ?: "")
+        c.franja != null && c.franja.size == 2 -> partes += tx("Mejor de {a} a {b}", "a" to c.franja[0], "b" to c.franja[1])
     }
-    if (c.portal.isNotBlank()) partes += "Portal: ${c.portal}"
+    if (c.portal.isNotBlank()) partes += tx("Portal") + ": ${c.portal}"
     if (c.nota.isNotBlank()) partes += "«${c.nota}»"
     return partes.joinToString(" · ")
 }
@@ -111,12 +112,12 @@ fun textoAntes(a: Antes): String {
     val f = a.fecha.takeIf { it.length == 10 }?.let { "${it.substring(8, 10)}/${it.substring(5, 7)}" } ?: a.fecha
     val donde = DONDE.firstOrNull { it.first == a.donde }?.second?.lowercase()
     val que = when {
-        a.estado == "fallido" -> "no se pudo" + (a.motivo.takeIf { it.isNotBlank() }?.let { ": $it" } ?: "")
+        a.estado == "fallido" -> tx("no se pudo") + (a.motivo.takeIf { it.isNotBlank() }?.let { ": $it" } ?: "")
         donde != null && a.nota.isNotBlank() -> "$donde · ${a.nota}"
         donde != null -> donde
         else -> a.nota
     }
-    return "La última vez ($f): $que"
+    return tx("La última vez ({f}): {que}", "f" to f, "que" to que)
 }
 
 @Composable
@@ -156,14 +157,14 @@ fun ParadaHoja(
             Spacer(Modifier.height(16.dp))
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 Button(onClick = { Acciones.navegar(ctx, p, navegarCon) }, modifier = Modifier.weight(1f).height(50.dp)) {
-                    Icon(Icons.Default.Navigation, contentDescription = null); Spacer(Modifier.width(6.dp)); Text("Navegar")
+                    Icon(Icons.Default.Navigation, contentDescription = null); Spacer(Modifier.width(6.dp)); Text(tx("Navegar"))
                 }
                 FilledTonalButton(onClick = { alApuntar("llamada"); Acciones.llamar(ctx, p.telefono) }, enabled = p.telefono.isNotBlank(), modifier = Modifier.height(50.dp)) {
-                    Icon(Icons.Default.Call, contentDescription = "Llamar")
+                    Icon(Icons.Default.Call, contentDescription = tx("Llamar"))
                 }
                 FilledTonalButton(onClick = { alApuntar("whatsapp"); Acciones.whatsapp(ctx, p.telefono, prefijo, textoWhatsapp(p, empresa)) },
                     enabled = p.telefono.isNotBlank(), modifier = Modifier.height(50.dp)) {
-                    Icon(Icons.AutoMirrored.Filled.Chat, contentDescription = "WhatsApp")
+                    Icon(Icons.AutoMirrored.Filled.Chat, contentDescription = tx("WhatsApp"))
                 }
             }
             Spacer(Modifier.height(10.dp))
@@ -172,28 +173,28 @@ fun ParadaHoja(
                     OutlinedButton(onClick = alFallar, modifier = Modifier.weight(1f).height(54.dp),
                         contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 8.dp),
                         colors = ButtonDefaults.outlinedButtonColors(contentColor = MaterialTheme.colorScheme.error)) {
-                        Text("No entregado", maxLines = 1)
+                        Text(tx("No entregado"), maxLines = 1)
                     }
                     Button(onClick = alEntregar, modifier = Modifier.weight(1.2f).height(54.dp),
                         colors = ButtonDefaults.buttonColors(containerColor = LocalExtra.current.entregado, contentColor = LocalExtra.current.enEntregado)) {
-                        Icon(Icons.Default.Check, contentDescription = null); Spacer(Modifier.width(4.dp)); Text("Entregado")
+                        Icon(Icons.Default.Check, contentDescription = null); Spacer(Modifier.width(4.dp)); Text(tx("Entregado"))
                     }
                 }
             } else {
                 // Una entregada vuelve atrás con pregunta: se borra su prueba de entrega (29-10-2026). Una no
                 // entregada no tiene nada que perder.
                 OutlinedButton(onClick = { if (p.estado == "entregado") deshacer = true else alDeshacer() }, modifier = Modifier.fillMaxWidth().height(50.dp)) {
-                    Icon(Icons.AutoMirrored.Filled.Undo, contentDescription = null); Spacer(Modifier.width(6.dp)); Text("Volver a «por entregar»")
+                    Icon(Icons.AutoMirrored.Filled.Undo, contentDescription = null); Spacer(Modifier.width(6.dp)); Text(tx("Volver a «por entregar»"))
                 }
             }
             Spacer(Modifier.height(8.dp))
             HorizontalDivider()
             Row {
                 // Cerrada no se edita (el servidor solo deja cambiar la nota): primero «Volver a por entregar».
-                if (p.pendiente) TextButton(onClick = alEditar) { Icon(Icons.Default.Edit, contentDescription = null); Spacer(Modifier.width(6.dp)); Text("Editar") }
+                if (p.pendiente) TextButton(onClick = alEditar) { Icon(Icons.Default.Edit, contentDescription = null); Spacer(Modifier.width(6.dp)); Text(tx("Editar")) }
                 if (p.pendiente) {
                     TextButton(onClick = { quitar = true }, colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.error)) {
-                        Icon(Icons.Default.Delete, contentDescription = null); Spacer(Modifier.width(6.dp)); Text("Quitar de la ruta")
+                        Icon(Icons.Default.Delete, contentDescription = null); Spacer(Modifier.width(6.dp)); Text(tx("Quitar de la ruta"))
                     }
                 }
             }
@@ -202,19 +203,19 @@ fun ParadaHoja(
     if (quitar) {
         AlertDialog(
             onDismissRequest = { quitar = false },
-            title = { Text("¿Quitar esta parada?") },
-            text = { Text("${p.cliente.ifBlank { p.direccion }} sale de tu ruta de hoy.") },
-            confirmButton = { TextButton(onClick = { quitar = false; alQuitar() }) { Text("Quitar") } },
-            dismissButton = { TextButton(onClick = { quitar = false }) { Text("Cancelar") } },
+            title = { Text(tx("¿Quitar esta parada?")) },
+            text = { Text(tx("{n} sale de tu ruta de hoy.", "n" to p.cliente.ifBlank { p.direccion })) },
+            confirmButton = { TextButton(onClick = { quitar = false; alQuitar() }) { Text(tx("Quitar")) } },
+            dismissButton = { TextButton(onClick = { quitar = false }) { Text(tx("Cancelar")) } },
         )
     }
     if (deshacer) {
         AlertDialog(
             onDismissRequest = { deshacer = false },
-            title = { Text("¿Volver a «por entregar»?") },
-            text = { Text("Se borra la prueba de entrega de ${p.cliente.ifBlank { p.direccion }}: la foto, dónde se dejó, quién lo recogió y la hora.") },
-            confirmButton = { TextButton(onClick = { deshacer = false; alDeshacer() }) { Text("Volver atrás") } },
-            dismissButton = { TextButton(onClick = { deshacer = false }) { Text("Cancelar") } },
+            title = { Text(tx("¿Volver a «por entregar»?")) },
+            text = { Text(tx("Se borra la prueba de entrega de {n}: la foto, dónde se dejó, quién lo recogió y la hora.", "n" to p.cliente.ifBlank { p.direccion })) },
+            confirmButton = { TextButton(onClick = { deshacer = false; alDeshacer() }) { Text(tx("Volver atrás")) } },
+            dismissButton = { TextButton(onClick = { deshacer = false }) { Text(tx("Cancelar")) } },
         )
     }
 }
@@ -246,36 +247,36 @@ fun EntregaHoja(p: Parada, alCerrar: () -> Unit, alConfirmar: (JsonObject) -> Un
     val falta = p.porCobrar && metodo.isEmpty()
     ModalBottomSheet(onDismissRequest = alCerrar, sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)) {
         Column(Modifier.padding(horizontal = 20.dp).padding(bottom = 20.dp).navigationBarsPadding().verticalScroll(rememberScrollState())) {
-            Text("Entregar", style = MaterialTheme.typography.headlineSmall)
+            Text(tx("Entregar"), style = MaterialTheme.typography.headlineSmall)
             Text(p.cliente.ifBlank { p.direccion }, style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
             if (p.porCobrar) {
                 Spacer(Modifier.height(16.dp))
-                Text("Cobro de ${Region.importe(p.cobrar ?: 0.0)}: ¿cómo ha pagado?", style = MaterialTheme.typography.titleMedium)
+                Text(tx("Cobro de {x}: ¿cómo ha pagado?", "x" to Region.importe(p.cobrar ?: 0.0)), style = MaterialTheme.typography.titleMedium)
                 FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     Region.metodosCobro.forEach { (k, t) -> FilterChip(selected = metodo == k, onClick = { metodo = k }, label = { Text(t) }) }
                 }
-                OutlinedTextField(importe, { importe = it }, label = { Text("Importe cobrado") }, singleLine = true,
+                OutlinedTextField(importe, { importe = it }, label = { Text(tx("Importe cobrado")) }, singleLine = true,
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal), modifier = Modifier.fillMaxWidth())
             }
             Spacer(Modifier.height(16.dp))
-            Text("¿Dónde lo has dejado? (opcional)", style = MaterialTheme.typography.titleMedium)
+            Text(tx("¿Dónde lo has dejado? (opcional)"), style = MaterialTheme.typography.titleMedium)
             FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 DONDE.forEach { (k, t) -> FilterChip(selected = donde == k, onClick = { donde = if (donde == k) "" else k }, label = { Text(t) }) }
             }
             if (donde in setOf("mano", "vecino", "porteria")) {
-                OutlinedTextField(recibe, { recibe = it }, label = { Text("¿Quién lo recoge?") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+                OutlinedTextField(recibe, { recibe = it }, label = { Text(tx("¿Quién lo recoge?")) }, singleLine = true, modifier = Modifier.fillMaxWidth())
             }
             Spacer(Modifier.height(8.dp))
-            OutlinedTextField(nota, { nota = it }, label = { Text("Nota (opcional)") }, modifier = Modifier.fillMaxWidth())
+            OutlinedTextField(nota, { nota = it }, label = { Text(tx("Nota (opcional)")) }, modifier = Modifier.fillMaxWidth())
             Spacer(Modifier.height(12.dp))
             Row(verticalAlignment = Alignment.CenterVertically) {
                 OutlinedButton(onClick = hacerFoto, enabled = !preparando) {
                     Icon(Icons.Default.PhotoCamera, contentDescription = null); Spacer(Modifier.width(6.dp))
-                    Text(if (foto == null) "Foto de la entrega" else "Repetir la foto")
+                    Text(if (foto == null) tx("Foto de la entrega") else tx("Repetir la foto"))
                 }
                 Spacer(Modifier.width(12.dp))
                 if (preparando) CircularProgressIndicator(Modifier.size(24.dp), strokeWidth = 2.dp)
-                miniatura?.let { Image(it.asImageBitmap(), contentDescription = "Foto de la entrega", contentScale = ContentScale.Crop, modifier = Modifier.size(56.dp)) }
+                miniatura?.let { Image(it.asImageBitmap(), contentDescription = tx("Foto de la entrega"), contentScale = ContentScale.Crop, modifier = Modifier.size(56.dp)) }
             }
             Text(avisoFoto ?: "La foto, del paquete en la puerta: sin personas.", style = MaterialTheme.typography.bodySmall,
                 color = if (avisoFoto != null) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant)
@@ -297,7 +298,7 @@ fun EntregaHoja(p: Parada, alCerrar: () -> Unit, alConfirmar: (JsonObject) -> Un
                 enabled = !falta && !preparando,
                 modifier = Modifier.fillMaxWidth().height(56.dp),
                 colors = ButtonDefaults.buttonColors(containerColor = LocalExtra.current.entregado, contentColor = LocalExtra.current.enEntregado),
-            ) { Icon(Icons.Default.Check, contentDescription = null); Spacer(Modifier.width(6.dp)); Text(if (falta) "Elige cómo ha pagado" else "Confirmar la entrega") }
+            ) { Icon(Icons.Default.Check, contentDescription = null); Spacer(Modifier.width(6.dp)); Text(if (falta) tx("Elige cómo ha pagado") else tx("Confirmar la entrega")) }
         }
     }
 }
@@ -308,16 +309,16 @@ fun NoEntregadoHoja(alCerrar: () -> Unit, alConfirmar: (String, String) -> Unit)
     var nota by remember { mutableStateOf("") }
     ModalBottomSheet(onDismissRequest = alCerrar, sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)) {
         Column(Modifier.padding(horizontal = 20.dp).padding(bottom = 20.dp).navigationBarsPadding()) {
-            Text("No entregado", style = MaterialTheme.typography.headlineSmall)
+            Text(tx("No entregado"), style = MaterialTheme.typography.headlineSmall)
             Spacer(Modifier.height(12.dp))
-            Text("¿Qué ha pasado?", style = MaterialTheme.typography.titleMedium)
+            Text(tx("¿Qué ha pasado?"), style = MaterialTheme.typography.titleMedium)
             FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 MOTIVOS.forEach { m -> FilterChip(selected = motivo == m, onClick = { motivo = m }, label = { Text(m) }) }
             }
-            OutlinedTextField(nota, { nota = it }, label = { Text("Nota (opcional)") }, modifier = Modifier.fillMaxWidth())
+            OutlinedTextField(nota, { nota = it }, label = { Text(tx("Nota (opcional)")) }, modifier = Modifier.fillMaxWidth())
             Spacer(Modifier.height(16.dp))
             Button(onClick = { alConfirmar(motivo, nota.trim()) }, enabled = motivo.isNotEmpty(), modifier = Modifier.fillMaxWidth().height(54.dp),
-                colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)) { Text("Marcar como no entregado") }
+                colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)) { Text(tx("Marcar como no entregado")) }
         }
     }
 }

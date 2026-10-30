@@ -1,5 +1,6 @@
 package com.flotadsp.fds.ui.hoy
 
+import com.flotadsp.fds.ui.tx
 import android.Manifest
 import android.content.Context
 import android.content.pm.PackageManager
@@ -72,6 +73,8 @@ import com.flotadsp.fds.data.Incidencia
 import com.flotadsp.fds.data.Parada
 import com.flotadsp.fds.data.ZonaZbe
 import com.flotadsp.fds.ui.Acciones
+import com.flotadsp.fds.ui.Idioma
+import com.flotadsp.fds.ui.Region
 import org.osmdroid.events.MapEventsReceiver
 import org.osmdroid.events.MapListener
 import org.osmdroid.events.ScrollEvent
@@ -318,11 +321,11 @@ fun MapaRuta(
         // Arriba a la izquierda: lo que hay que saber (sin ubicar, la DGT, la ZBE); un toque lleva allí.
         Column(Modifier.align(Alignment.TopStart).padding(10.dp).widthIn(max = 250.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
             if (ubicadas.size < paradas.size) {
-                Etiqueta("${paradas.size - ubicadas.size} sin ubicar: edítalas para corregir la dirección",
+                Etiqueta(tx("{n} sin ubicar: edítalas para corregir la dirección", "n" to (paradas.size - ubicadas.size)),
                     MaterialTheme.colorScheme.surfaceContainerHigh, MaterialTheme.colorScheme.onSurface) {}
             }
             if (incidencias.isNotEmpty()) {
-                Etiqueta("DGT · ${incidencias.size} ${if (incidencias.size == 1) "incidencia cerca" else "incidencias cerca"}", Color(0xFFFEF3C7), Color(0xFF92400E)) {
+                Etiqueta("DGT · ${incidencias.size} ${if (incidencias.size == 1) tx("incidencia cerca") else tx("incidencias cerca")}", Color(0xFFFEF3C7), Color(0xFF92400E)) {
                     val i = incidencias.first()
                     ubicacion.disableFollowLocation(); mapa.controller.animateTo(GeoPoint(i.lat, i.lng))
                     tocado = Tocado.Inc(i)
@@ -339,15 +342,15 @@ fun MapaRuta(
         }
         // Arriba a la derecha: seguirme, centrar la ruta y el zoom (a algunos les cuesta el pellizco con guantes).
         Column(Modifier.align(Alignment.TopEnd).padding(10.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            BotonMapa(Icons.Default.MyLocation, if (siguiendo) "Dejar de seguirme" else "Seguirme", activo = siguiendo) { seguir() }
-            BotonMapa(Icons.Default.CenterFocusStrong, "Centrar la ruta") {
+            BotonMapa(Icons.Default.MyLocation, if (siguiendo) tx("Dejar de seguirme") else tx("Seguirme"), activo = siguiendo) { seguir() }
+            BotonMapa(Icons.Default.CenterFocusStrong, tx("Centrar la ruta")) {
                 ubicacion.disableFollowLocation(); siguiendo = false
                 encuadra(mapa, ubicadas.map { GeoPoint(it.lat!!, it.lng!!) }, animar = true)
             }
-            BotonMapa(Icons.Default.Add, "Acercar") { mapa.controller.zoomIn() }
-            BotonMapa(Icons.Default.Remove, "Alejar") { mapa.controller.zoomOut() }
+            BotonMapa(Icons.Default.Add, tx("Acercar")) { mapa.controller.zoomIn() }
+            BotonMapa(Icons.Default.Remove, tx("Alejar")) { mapa.controller.zoomOut() }
         }
-        Text("© OpenStreetMap", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
+        Text(tx("© OpenStreetMap"), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
             modifier = Modifier.align(Alignment.BottomStart).padding(8.dp))
 
         // La tarjeta de lo tocado, encima del botón de escanear.
@@ -361,7 +364,7 @@ fun MapaRuta(
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Text(tituloDe(t), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, maxLines = 2,
                             overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
-                        IconButton(onClick = { tocado = null }) { Icon(Icons.Default.Close, contentDescription = "Cerrar") }
+                        IconButton(onClick = { tocado = null }) { Icon(Icons.Default.Close, contentDescription = tx("Cerrar")) }
                     }
                     when (t) {
                         is Tocado.Una -> TarjetaParada(t.p, enZbe = t.p.id in enZbe, navegarCon = navegarCon, alAbrir = { alTocar(t.p); tocado = null })
@@ -380,8 +383,8 @@ private fun tituloDe(t: Tocado): String = when (t) {
     is Tocado.Una -> (t.p.orden?.let { "$it · " } ?: "") + t.p.cliente.ifBlank { t.p.direccion }
     is Tocado.Inc -> t.i.que.replaceFirstChar { it.uppercase() }
     is Tocado.Zona -> "ZBE ${t.z.nombre}"
-    Tocado.LaFurgo -> "Tu furgoneta"
-    is Tocado.Punto -> "¿Dejar aquí la furgoneta?"
+    Tocado.LaFurgo -> tx("Tu furgoneta")
+    is Tocado.Punto -> tx("¿Dejar aquí la furgoneta?")
 }
 
 private fun encuadra(m: MapView, puntos: List<GeoPoint>, animar: Boolean) {
@@ -415,13 +418,13 @@ private fun TarjetaParada(p: Parada, enZbe: Boolean, navegarCon: String, alAbrir
     // La hora prevista va en los chips de Etiquetas cuando está pendiente; aquí solo si ya está hecha.
     val detalle = listOfNotNull(
         p.direccion.takeIf { p.cliente.isNotBlank() && it.isNotBlank() }, p.eta?.takeIf { !p.pendiente }?.let { "≈ $it" },
-        "${p.bultos} ${if (p.bultos == 1) "bulto" else "bultos"}",
+        "${p.bultos} ${if (p.bultos == 1) tx("bulto") else tx("bultos")}",
     ).joinToString(" · ")
     Text(detalle, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 2, overflow = TextOverflow.Ellipsis)
     if (!p.pendiente) {
         val cuando = Calle.hora(p.cerradoEn).takeIf { it.isNotBlank() }?.let { " · $it" } ?: ""
         val motivo = p.motivo?.takeIf { it.isNotBlank() }?.let { " · $it" } ?: ""
-        Text(if (p.estado == "fallido") "No entregado$cuando$motivo" else "Entregado$cuando",
+        Text(if (p.estado == "fallido") tx("No entregado") + cuando + motivo else tx("Entregado") + cuando,
             style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold,
             color = if (p.estado == "fallido") MaterialTheme.colorScheme.error else Color(0xFF15803D), modifier = Modifier.padding(top = 2.dp))
     } else {
@@ -429,21 +432,21 @@ private fun TarjetaParada(p: Parada, enZbe: Boolean, navegarCon: String, alAbrir
         Etiquetas(p, enZbe)
     }
     p.clienteDice?.let { c ->
-        Text("El cliente dice: ${textoClienteDice(c)}", style = MaterialTheme.typography.bodySmall, color = Color(0xFF065F46),
+        Text(tx("El cliente dice: {t}", "t" to textoClienteDice(c)), style = MaterialTheme.typography.bodySmall, color = Color(0xFF065F46),
             modifier = Modifier.padding(top = 4.dp, end = 8.dp))
     }
     Row(Modifier.padding(top = 8.dp, end = 8.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
         if (p.pendiente) {
             Button(onClick = { Acciones.navegar(ctx, p, navegarCon) }, modifier = Modifier.weight(1f)) {
-                Icon(Icons.Default.Navigation, contentDescription = null, modifier = Modifier.size(18.dp)); Spacer(Modifier.width(6.dp)); Text("Ir")
+                Icon(Icons.Default.Navigation, contentDescription = null, modifier = Modifier.size(18.dp)); Spacer(Modifier.width(6.dp)); Text(tx("Ir"))
             }
             if (p.telefono.isNotBlank()) {
                 FilledTonalButton(onClick = { Acciones.llamar(ctx, p.telefono) }, modifier = Modifier.weight(1f)) {
-                    Icon(Icons.Default.Call, contentDescription = null, modifier = Modifier.size(18.dp)); Spacer(Modifier.width(6.dp)); Text("Llamar")
+                    Icon(Icons.Default.Call, contentDescription = null, modifier = Modifier.size(18.dp)); Spacer(Modifier.width(6.dp)); Text(tx("Llamar"))
                 }
             }
         }
-        FilledTonalButton(onClick = alAbrir, modifier = Modifier.weight(1f)) { Text("Abrir") }
+        FilledTonalButton(onClick = alAbrir, modifier = Modifier.weight(1f)) { Text(tx("Abrir")) }
     }
 }
 
@@ -451,11 +454,11 @@ private fun TarjetaParada(p: Parada, enZbe: Boolean, navegarCon: String, alAbrir
 private fun TarjetaIncidencia(i: Incidencia) {
     val ctx = LocalContext.current
     Text(Calle.dondeIncidencia(i), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
-    Text("DGT (datos abiertos): cortes y obras declarados, no el tráfico en tiempo real.", style = MaterialTheme.typography.bodySmall,
+    Text(tx("DGT (datos abiertos): cortes y obras declarados, no el tráfico en tiempo real."), style = MaterialTheme.typography.bodySmall,
         color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(top = 2.dp, end = 8.dp))
     Row(Modifier.padding(top = 8.dp, end = 8.dp)) {
         FilledTonalButton(onClick = { Acciones.abrirWeb(ctx, "https://www.google.com/maps/search/?api=1&query=${i.lat},${i.lng}") }, modifier = Modifier.weight(1f)) {
-            Icon(Icons.Default.OpenInNew, contentDescription = null, modifier = Modifier.size(18.dp)); Spacer(Modifier.width(6.dp)); Text("Ver en Google Maps")
+            Icon(Icons.Default.OpenInNew, contentDescription = null, modifier = Modifier.size(18.dp)); Spacer(Modifier.width(6.dp)); Text(tx("Ver en Google Maps"))
         }
     }
 }
@@ -464,12 +467,12 @@ private fun TarjetaIncidencia(i: Incidencia) {
 private fun TarjetaZbe(z: ZonaZbe) {
     val ctx = LocalContext.current
     if (z.descripcion.isNotBlank()) Text(z.descripcion, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(end = 8.dp))
-    if (z.etiquetas.isNotEmpty()) Text("Etiquetas que cita la DGT: ${z.etiquetas.joinToString(", ")}", style = MaterialTheme.typography.bodySmall,
+    if (z.etiquetas.isNotEmpty()) Text(tx("Etiquetas que cita la DGT") + ": ${z.etiquetas.joinToString(", ")}", style = MaterialTheme.typography.bodySmall,
         color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(top = 2.dp))
-    if (z.version.isNotBlank()) Text("ZBE según la DGT, a ${z.version}", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+    if (z.version.isNotBlank()) Text(tx("ZBE según la DGT, a") + " ${z.version}", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
     if (z.url.isNotBlank()) Row(Modifier.padding(top = 8.dp, end = 8.dp)) {
         FilledTonalButton(onClick = { Acciones.abrirWeb(ctx, z.url) }, modifier = Modifier.weight(1f)) {
-            Icon(Icons.Default.OpenInNew, contentDescription = null, modifier = Modifier.size(18.dp)); Spacer(Modifier.width(6.dp)); Text("Más información")
+            Icon(Icons.Default.OpenInNew, contentDescription = null, modifier = Modifier.size(18.dp)); Spacer(Modifier.width(6.dp)); Text(tx("Más información"))
         }
     }
 }
@@ -477,22 +480,22 @@ private fun TarjetaZbe(z: ZonaZbe) {
 @Composable
 private fun TarjetaFurgo(f: Furgo, yo: GeoPoint?, alQuitar: () -> Unit) {
     val ctx = LocalContext.current
-    Text(yo?.let { "A ${Calle.distancia(Calle.metros(it.latitude, it.longitude, f.lat, f.lng))} de ti, en línea recta." } ?: "Donde la dejaste al bajarte.",
+    Text(yo?.let { tx("A {d} de ti, en línea recta.", "d" to Calle.distancia(Calle.metros(it.latitude, it.longitude, f.lat, f.lng), Region.unidades == "mi", Idioma.locale)) } ?: tx("Donde la dejaste al bajarte."),
         style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
     Row(Modifier.padding(top = 8.dp, end = 8.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
         Button(onClick = { Acciones.irAPie(ctx, f.lat, f.lng) }, modifier = Modifier.weight(1f)) {
-            Icon(Icons.Default.DirectionsWalk, contentDescription = null, modifier = Modifier.size(18.dp)); Spacer(Modifier.width(6.dp)); Text("Volver a pie")
+            Icon(Icons.Default.DirectionsWalk, contentDescription = null, modifier = Modifier.size(18.dp)); Spacer(Modifier.width(6.dp)); Text(tx("Volver a pie"))
         }
-        TextButton(onClick = alQuitar) { Text("Quitar") }
+        TextButton(onClick = alQuitar) { Text(tx("Quitar")) }
     }
 }
 
 @Composable
 private fun TarjetaPunto(alAparcar: () -> Unit) {
-    Text("Para volver a ella a pie sin dar vueltas. Se queda solo en este móvil.", style = MaterialTheme.typography.bodyMedium,
+    Text(tx("Para volver a ella a pie sin dar vueltas. Se queda solo en este móvil."), style = MaterialTheme.typography.bodyMedium,
         color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(end = 8.dp))
     Row(Modifier.padding(top = 8.dp, end = 8.dp)) {
-        Button(onClick = alAparcar, modifier = Modifier.weight(1f)) { Text("Aparcada aquí") }
+        Button(onClick = alAparcar, modifier = Modifier.weight(1f)) { Text(tx("Aparcada aquí")) }
     }
 }
 

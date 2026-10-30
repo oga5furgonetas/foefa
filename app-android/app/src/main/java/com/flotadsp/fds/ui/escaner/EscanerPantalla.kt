@@ -1,5 +1,6 @@
 package com.flotadsp.fds.ui.escaner
 
+import com.flotadsp.fds.ui.tx
 import android.Manifest
 import android.app.Activity
 import android.content.Context
@@ -147,7 +148,7 @@ fun EscanerPantalla(
             Column(Modifier.fillMaxSize().padding(32.dp), verticalArrangement = Arrangement.Center, horizontalAlignment = Alignment.CenterHorizontally) {
                 Icon(Icons.Default.PhotoCamera, contentDescription = null, tint = Color.White, modifier = Modifier.size(48.dp))
                 Spacer(Modifier.height(16.dp))
-                Text("Para escanear hace falta la cámara", style = MaterialTheme.typography.titleLarge, color = Color.White, textAlign = TextAlign.Center)
+                Text(tx("Para escanear hace falta la cámara"), style = MaterialTheme.typography.titleLarge, color = Color.White, textAlign = TextAlign.Center)
                 Spacer(Modifier.height(8.dp))
                 Text(
                     if (bloqueado) "Actívala en Permisos › Cámara. Solo se usa mientras escaneas y las imágenes no salen del móvil."
@@ -158,7 +159,7 @@ fun EscanerPantalla(
                 Button(onClick = {
                     if (bloqueado) ctx.startActivity(Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.fromParts("package", ctx.packageName, null)))
                     else pedir.launch(Manifest.permission.CAMERA)
-                }) { Text(if (bloqueado) "Abrir los permisos" else "Permitir la cámara") }
+                }) { Text(if (bloqueado) tx("Abrir los permisos") else tx("Permitir la cámara")) }
             }
         }
         Arriba(alCerrar = cerrar, linterna = permiso)
@@ -170,9 +171,9 @@ fun EscanerPantalla(
 private fun Arriba(alCerrar: () -> Unit, linterna: Boolean) {
     Row(Modifier.fillMaxWidth().statusBarsPadding().padding(8.dp), verticalAlignment = Alignment.CenterVertically) {
         IconButton(onClick = alCerrar, colors = IconButtonDefaults.iconButtonColors(contentColor = Color.White)) {
-            Icon(Icons.Default.Close, contentDescription = "Cerrar el escáner")
+            Icon(Icons.Default.Close, contentDescription = tx("Cerrar el escáner"))
         }
-        Text("Apunta a la etiqueta", color = Color.White, style = MaterialTheme.typography.titleMedium, modifier = Modifier.weight(1f))
+        Text(tx("Apunta a la etiqueta"), color = Color.White, style = MaterialTheme.typography.titleMedium, modifier = Modifier.weight(1f))
         if (linterna) Linterna()
     }
 }
@@ -213,10 +214,10 @@ private fun Abajo(e: EstadoEscaner, alTerminar: () -> Unit, modifier: Modifier) 
             }
             Spacer(Modifier.height(12.dp))
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Text("${e.anadidas} ${if (e.anadidas == 1) "añadida" else "añadidas"} · ${e.yaEstaban} ${if (e.yaEstaban == 1) "ya estaba" else "ya estaban"}",
+                Text("${e.anadidas} ${if (e.anadidas == 1) tx("añadida") else tx("añadidas")} · ${e.yaEstaban} ${if (e.yaEstaban == 1) tx("ya estaba") else tx("ya estaban")}",
                     style = MaterialTheme.typography.bodyMedium,
                     color = Color.White.copy(alpha = .8f), modifier = Modifier.weight(1f))
-                Button(onClick = alTerminar) { Text("Listo") }
+                Button(onClick = alTerminar) { Text(tx("Listo")) }
             }
         }
     }

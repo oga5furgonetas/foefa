@@ -1,5 +1,6 @@
 package com.flotadsp.fds.ui.parada
 
+import com.flotadsp.fds.ui.tx
 import android.content.Context
 import android.net.Uri
 import androidx.activity.compose.BackHandler
@@ -89,8 +90,8 @@ import java.io.File
 
 /* Los atajos del horario (30-10-2026): «Cierra a las 14:00» es lo que un repartidor con diez años de oficio hacía a
    mano (primero los comercios, luego la ruta). Y los seis huecos de la furgoneta, como en la web. */
-private val ATAJOS_HORARIO = listOf("Mañana (9-14)" to "de 9 a 14", "Tarde (16-20)" to "de 16 a 20", "Cierra a las 14:00" to "de 8 a 14")
-private val HUECOS = listOf("Delante · izq", "Delante · der", "Medio · izq", "Medio · der", "Detrás · izq", "Detrás · der")
+private val ATAJOS_HORARIO = listOf(tx("Mañana (9-14)") to "de 9 a 14", tx("Tarde (16-20)") to "de 16 a 20", tx("Cierra a las 14:00") to "de 8 a 14")
+private val HUECOS = listOf(tx("Delante · izq"), tx("Delante · der"), tx("Medio · izq"), tx("Medio · der"), tx("Detrás · izq"), tx("Detrás · der"))
 
 /** Una dirección sugerida: de las suyas (ya estuvo allí) o del buscador de OpenStreetMap. */
 data class Sugerencia(val direccion: String, val cp: String, val localidad: String, val lat: Double?, val lng: Double?,
@@ -135,7 +136,7 @@ fun FichaParada(
             // Del escáner sin nada legible (la barra sola y la letra fuera del encuadre): decirlo, no «revisa lo leído».
             inicial.direccion.isBlank() && inicial.cliente.isBlank() && inicial.telefono.isBlank() ->
                 "El código no trae la dirección y no se ha podido leer de la etiqueta. Escríbela, o pulsa «Leer la etiqueta con una foto» con la etiqueta entera en la foto."
-            else -> "Revisa lo leído de la etiqueta antes de guardar."
+            else -> tx("Revisa lo leído de la etiqueta antes de guardar.")
         })
     }
     BackHandler { alCerrar(false) }
@@ -209,7 +210,7 @@ fun FichaParada(
         topBar = {
             TopAppBar(
                 title = { Text(when { editar != null -> "Editar parada"; inicial != null -> "Revisa la parada"; else -> "Nueva parada" }) },
-                navigationIcon = { IconButton(onClick = { alCerrar(false) }) { Icon(Icons.Default.Close, contentDescription = "Cerrar") } },
+                navigationIcon = { IconButton(onClick = { alCerrar(false) }) { Icon(Icons.Default.Close, contentDescription = tx("Cerrar")) } },
             )
         },
         containerColor = MaterialTheme.colorScheme.background,
@@ -218,7 +219,7 @@ fun FichaParada(
             if (editar == null) {
                 OutlinedButton(onClick = hacerFoto, enabled = !leyendo, modifier = Modifier.fillMaxWidth().height(50.dp)) {
                     if (leyendo) CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp) else Icon(Icons.Default.DocumentScanner, contentDescription = null)
-                    Spacer(Modifier.width(8.dp)); Text(if (leyendo) "Leyendo la etiqueta…" else "Leer la etiqueta con una foto")
+                    Spacer(Modifier.width(8.dp)); Text(if (leyendo) tx("Leyendo la etiqueta…") else tx("Leer la etiqueta con una foto"))
                 }
                 Spacer(Modifier.height(12.dp))
             }
@@ -230,7 +231,7 @@ fun FichaParada(
             }
             OutlinedTextField(
                 value = direccion, onValueChange = { direccion = it; elegida = false; punto = null },
-                label = { Text("Dirección") }, placeholder = { Text("Calle, número y población") },
+                label = { Text(tx("Dirección")) }, placeholder = { Text(tx("Calle, número y población")) },
                 leadingIcon = { Icon(Icons.Default.Place, contentDescription = null) },
                 keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Sentences),
                 modifier = Modifier.fillMaxWidth(),
@@ -252,7 +253,7 @@ fun FichaParada(
                                     Column(Modifier.weight(1f)) {
                                         Text(s.direccion, style = MaterialTheme.typography.bodyLarge)
                                         if (s.veces > 0) {
-                                            Text("Ya estuviste aquí · ${s.veces} ${if (s.veces == 1) "vez" else "veces"}${s.cliente.takeIf { it.isNotBlank() }?.let { " · $it" } ?: ""}",
+                                            Text(tx("Ya estuviste aquí") + " · ${s.veces} ${if (s.veces == 1) tx("vez") else tx("veces")}${s.cliente.takeIf { it.isNotBlank() }?.let { " · $it" } ?: ""}",
                                                 style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.secondary)
                                         }
                                     }
@@ -263,53 +264,53 @@ fun FichaParada(
                 }
             }
             Spacer(Modifier.height(10.dp))
-            OutlinedTextField(cliente, { cliente = it }, label = { Text("Cliente") }, singleLine = true,
+            OutlinedTextField(cliente, { cliente = it }, label = { Text(tx("Cliente")) }, singleLine = true,
                 keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Words), modifier = Modifier.fillMaxWidth())
             Spacer(Modifier.height(10.dp))
-            OutlinedTextField(telefono, { telefono = it }, label = { Text("Teléfono") }, singleLine = true,
+            OutlinedTextField(telefono, { telefono = it }, label = { Text(tx("Teléfono")) }, singleLine = true,
                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Phone), modifier = Modifier.fillMaxWidth())
             Spacer(Modifier.height(10.dp))
-            OutlinedTextField(notas, { notas = it }, label = { Text("Notas (portal, piso…)") }, modifier = Modifier.fillMaxWidth())
+            OutlinedTextField(notas, { notas = it }, label = { Text(tx("Notas (portal, piso…)")) }, modifier = Modifier.fillMaxWidth())
             Spacer(Modifier.height(10.dp))
-            OutlinedTextField(contenido, { contenido = it }, label = { Text("Qué lleva (opcional)") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+            OutlinedTextField(contenido, { contenido = it }, label = { Text(tx("Qué lleva (opcional)")) }, singleLine = true, modifier = Modifier.fillMaxWidth())
             Spacer(Modifier.height(10.dp))
             // El horario del cliente: la ruta lo respeta y avisa si se llega tarde. Con atajos: un toque en vez de escribirlo.
-            OutlinedTextField(horario, { horario = it }, label = { Text("Horario del cliente (ej. de 10 a 12)") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+            OutlinedTextField(horario, { horario = it }, label = { Text(tx("Horario del cliente (ej. de 10 a 12)")) }, singleLine = true, modifier = Modifier.fillMaxWidth())
             FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 ATAJOS_HORARIO.forEach { (t, h) -> FilterChip(selected = horario == h, onClick = { horario = if (horario == h) "" else h }, label = { Text(t) }) }
             }
             Spacer(Modifier.height(10.dp))
-            Text("¿Dónde va en la furgoneta? (opcional)", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Text(tx("¿Dónde va en la furgoneta? (opcional)"), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
             FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 HUECOS.forEach { h -> FilterChip(selected = hueco == h, onClick = { hueco = if (hueco == h) "" else h }, label = { Text(h) }) }
             }
             Spacer(Modifier.height(14.dp))
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Text("Bultos", style = MaterialTheme.typography.bodyLarge, modifier = Modifier.weight(1f))
-                FilledTonalIconButton(onClick = { if (bultos > 1) bultos -= 1 }) { Icon(Icons.Default.Remove, contentDescription = "Uno menos") }
+                Text(tx("Bultos"), style = MaterialTheme.typography.bodyLarge, modifier = Modifier.weight(1f))
+                FilledTonalIconButton(onClick = { if (bultos > 1) bultos -= 1 }) { Icon(Icons.Default.Remove, contentDescription = tx("Uno menos")) }
                 Text("$bultos", style = MaterialTheme.typography.titleLarge.merge(TextoNumero), modifier = Modifier.padding(horizontal = 14.dp))
-                FilledTonalIconButton(onClick = { if (bultos < 99) bultos += 1 }) { Icon(Icons.Default.Add, contentDescription = "Uno más") }
+                FilledTonalIconButton(onClick = { if (bultos < 99) bultos += 1 }) { Icon(Icons.Default.Add, contentDescription = tx("Uno más")) }
             }
             Spacer(Modifier.height(10.dp))
             SingleChoiceSegmentedButtonRow(Modifier.fillMaxWidth()) {
-                listOf("entrega" to "Entrega", "recogida" to "Recogida").forEachIndexed { i, (k, t) ->
+                listOf("entrega" to tx("Entrega"), "recogida" to tx("Recogida")).forEachIndexed { i, (k, t) ->
                     SegmentedButton(selected = tipo == k, onClick = { tipo = k }, shape = SegmentedButtonDefaults.itemShape(i, 2)) { Text(t) }
                 }
             }
             Spacer(Modifier.height(10.dp))
-            OutlinedTextField(cobrar, { cobrar = it }, label = { Text("A cobrar (${Region.simbolo}, opcional)") }, singleLine = true,
+            OutlinedTextField(cobrar, { cobrar = it }, label = { Text(tx("A cobrar ({moneda}, opcional)", "moneda" to Region.simbolo)) }, singleLine = true,
                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal), modifier = Modifier.fillMaxWidth())
             Spacer(Modifier.height(6.dp))
             Row(Modifier.fillMaxWidth().toggleable(urgente, role = Role.Switch) { urgente = it }.padding(vertical = 4.dp),
                 verticalAlignment = Alignment.CenterVertically) {
-                Text("Urgente", style = MaterialTheme.typography.bodyLarge, modifier = Modifier.weight(1f))
+                Text(tx("Urgente"), style = MaterialTheme.typography.bodyLarge, modifier = Modifier.weight(1f))
                 Switch(checked = urgente, onCheckedChange = null)
             }
             error?.let { Spacer(Modifier.height(8.dp)); Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodyMedium) }
             Spacer(Modifier.height(16.dp))
             Button(onClick = ::guardar, enabled = !guardando, modifier = Modifier.fillMaxWidth().height(56.dp)) {
                 if (guardando) CircularProgressIndicator(Modifier.size(20.dp), strokeWidth = 2.dp, color = MaterialTheme.colorScheme.onPrimary)
-                else Text(if (editar != null) "Guardar cambios" else "Añadir a mi ruta")
+                else Text(if (editar != null) tx("Guardar cambios") else tx("Añadir a mi ruta"))
             }
             Spacer(Modifier.height(24.dp))
         }

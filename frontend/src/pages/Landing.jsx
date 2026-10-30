@@ -12,7 +12,7 @@ import { saveSession } from '../panel/auth'
 import { medirAccion } from '../lib/analitica'
 import { evento } from '../lib/metaPixel'
 import { abrirDemoReparto } from '../lib/demoReparto'
-import { paisDelMovil } from '../lib/region'
+import { paisDelMovil, precioRepartidor, importeEn } from '../lib/region'
 import { PARADAS_GRATIS, promoGratis, fechaPromo, eurosRef, refCentActual, refPromoActiva, fechaRefPromo, BONO_CENT } from '../lib/precios'
 import Landing3DShowcase from './Landing3DShowcase'
 import GooglePlayBadge from '../components/GooglePlayBadge'
@@ -202,15 +202,22 @@ function VistaPanel() {
   )
 }
 
+/* El precio del plan en la moneda del país de quien mira (30-10-2026): «$9.99/mes» en EE. UU., «MX$149» en México. */
+const precioPlan = () => {
+  const pr = precioRepartidor(paisDelMovil() || 'es')
+  return { mes: importeEn(pr.mensual, pr.moneda), anio: importeEn(pr.anual, pr.moneda) }
+}
+
 /* El precio para quien reparte: sale de lib/precios.js, así que la promoción caduca sola en la portada. */
 function PrecioRepartidor() {
   const promo = promoGratis()
+  const { mes, anio } = precioPlan()
   const lineas = promo
     ? [tx('Gratis y sin límite hasta el {fecha}', { fecha: fechaPromo(locale()) }),
-      tx('Después, gratis hasta {n} paradas al día, o sin tope por 9,99 €/mes', { n: PARADAS_GRATIS }),
+      tx('Después, gratis hasta {n} paradas al día, o sin tope por {mes}/mes', { n: PARADAS_GRATIS, mes }),
       tx('Sin tarjeta: te registras y empiezas ya')]
     : [tx('Gratis para siempre hasta {n} paradas al día', { n: PARADAS_GRATIS }),
-      tx('Sin tope: 9,99 €/mes o 99 €/año, con 7 días de prueba'),
+      tx('Sin tope: {mes}/mes o {anio}/año, con 7 días de prueba', { mes, anio }),
       tx('Cancelas cuando quieras desde la app'),
       tx('Sin tarjeta: la prueba empieza ya y hoy no pagas nada')]
   return (
@@ -477,8 +484,8 @@ export default function Landing() {
                 {q === '¿Tengo que instalar algo?' && <a href="/iphone" className="mb-1.5 block font-semibold text-[color:var(--ld-accent)] hover:underline">{tx('¿iPhone? Así se instala y se usa')} →</a>}
                 {r === 'pregunta_gratis'
                   ? (promo
-                    ? tx('Gratis y sin límite hasta el 31 de diciembre, sin tarjeta. Después sigues gratis con hasta 15 paradas al día, o sin tope por 9,99 € al mes o 99 € al año. Cancelas cuando quieras desde la propia app.')
-                    : tx('Gratis para siempre hasta 15 paradas al día, sin tarjeta. Sin tope: 9,99 € al mes o 99 € al año, y los 7 primeros días van sin tope. Cancelas cuando quieras desde la propia app.'))
+                    ? tx('Gratis y sin límite hasta el 31 de diciembre, sin tarjeta. Después sigues gratis con hasta 15 paradas al día, o sin tope por {mes} al mes o {anio} al año. Cancelas cuando quieras desde la propia app.', precioPlan())
+                    : tx('Gratis para siempre hasta 15 paradas al día, sin tarjeta. Sin tope: {mes} al mes o {anio} al año, y los 7 primeros días van sin tope. Cancelas cuando quieras desde la propia app.', precioPlan()))
                   : tx(r)}
               </p>
             </details>

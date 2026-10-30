@@ -2325,7 +2325,7 @@ test('Reparto · la ruta del repartidor: siguiente, furgoneta, Waze, orden a man
   await expect(resumen.getByText('Ruta terminada')).toBeVisible()
   await expect(resumen.getByText('Bizum')).toBeVisible()
   await expect(resumen.getByText('12,00 €').first()).toBeVisible()
-  await expect(resumen.getByText('Ruta planificada: 9.5 km.')).toBeVisible()
+  await expect(resumen.getByText('Ruta planificada: 9,5 km.')).toBeVisible()
   expect(fallos).toEqual([])
 })
 
@@ -4267,3 +4267,4 @@ test.describe('Centro de IA', () => {
     expect(fallos, fallos.join(' | ')).toHaveLength(0)
   })
 })
+

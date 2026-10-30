@@ -35,14 +35,14 @@ object Acciones {
             try {
                 ctx.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse("geo:0,0?q=${Uri.encode(destino)}")).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
             } catch (_: ActivityNotFoundException) {
-                Toast.makeText(ctx, "No hay ninguna app de mapas en el móvil.", Toast.LENGTH_LONG).show()
+                Toast.makeText(ctx, tx("No hay ninguna app de mapas en el móvil."), Toast.LENGTH_LONG).show()
             }
         }
     }
 
     fun llamar(ctx: Context, telefono: String) {
         runCatching { ctx.startActivity(Intent(Intent.ACTION_DIAL, Uri.parse("tel:$telefono")).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) }
-            .onFailure { Toast.makeText(ctx, "Este móvil no puede llamar.", Toast.LENGTH_LONG).show() }
+            .onFailure { Toast.makeText(ctx, tx("Este móvil no puede llamar."), Toast.LENGTH_LONG).show() }
     }
 
     /** WhatsApp al cliente, con el prefijo del país si el número no lo trae. */
@@ -51,7 +51,7 @@ object Acciones {
         try {
             ctx.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse("https://wa.me/$num?text=${Uri.encode(texto)}")).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
         } catch (_: ActivityNotFoundException) {
-            Toast.makeText(ctx, "WhatsApp no está instalado.", Toast.LENGTH_LONG).show()
+            Toast.makeText(ctx, tx("WhatsApp no está instalado."), Toast.LENGTH_LONG).show()
         }
     }
 
@@ -76,7 +76,7 @@ object Acciones {
         val maps = Intent(Intent.ACTION_VIEW, Uri.parse("google.navigation:q=$lat,$lng&mode=w")).setPackage("com.google.android.apps.maps")
         val cualquiera = Intent(Intent.ACTION_VIEW, Uri.parse("geo:$lat,$lng?q=$lat,$lng(Tu furgoneta)"))
         try { ctx.startActivity(maps) } catch (_: ActivityNotFoundException) {
-            try { ctx.startActivity(cualquiera) } catch (_: ActivityNotFoundException) { Toast.makeText(ctx, "No hay ninguna app de mapas en el móvil.", Toast.LENGTH_LONG).show() }
+            try { ctx.startActivity(cualquiera) } catch (_: ActivityNotFoundException) { Toast.makeText(ctx, tx("No hay ninguna app de mapas en el móvil."), Toast.LENGTH_LONG).show() }
         }
     }
 

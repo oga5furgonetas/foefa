@@ -4,6 +4,7 @@ import android.app.Application
 import com.flotadsp.fds.data.Api
 import com.flotadsp.fds.data.Cuenta
 import com.flotadsp.fds.data.Repositorio
+import com.flotadsp.fds.ui.Idioma
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -28,6 +29,8 @@ class FdsApp : Application() {
             ambito.launch { cuenta.cerrar(); _caducada.tryEmit(Unit) }
         })
         repo = Repositorio(this, cuenta, api)
+        // El idioma de la app: el del móvil, con las palabras de Latinoamérica o Brasil si toca (30-10-2026).
+        Idioma.arrancar(pais = repo.paisDelMovil())
         Fcm.iniciar(this)
         // El mapa (OpenStreetMap) pide que cada app se identifique y guarda sus teselas en la caché de la app.
         Configuration.getInstance().apply {

@@ -1,4 +1,5 @@
 import { locale, idioma } from './idioma'
+import { PRECIOS_REPARTIDOR } from './precios'
 
 /* La región del móvil para el alta: su zona horaria (así «hoy» y las horas de
    llegada salen en su hora) y, como pista del país, la región de su idioma
@@ -57,6 +58,40 @@ export function importe(n) {
 
 export function simboloMoneda() {
   try { return formato().formatToParts(0).find((x) => x.type === 'currency')?.value || '€' } catch { return '€' }
+}
+
+/* FUERA DE ESPAÑA (30-10-2026, docs/EXPANSION-INTERNACIONAL-30-10.md). */
+
+/* Un importe en una moneda concreta, con los números del idioma: el plan («$9.99», «9,99 €», «MX$149»). */
+export function importeEn(n, moneda) {
+  const v = Number(n || 0)
+  try {
+    return new Intl.NumberFormat(localeNumeros(), { style: 'currency', currency: moneda || 'EUR', minimumFractionDigits: Number.isInteger(v) ? 0 : 2 })
+      .format(v).replace(/[\u00a0\u202f]/g, ' ')
+  } catch { return `${v} ${moneda || 'EUR'}` }
+}
+
+/* El plan Repartidor en la moneda de un país: lo que manda el servidor (`precios` con `moneda`) y, mientras no
+   contesta, la tabla de lib/precios.js. Sin precio en su moneda, en dólares. */
+export function precioRepartidor(pais, servidor = null) {
+  if (servidor?.moneda && servidor.mensual != null) return { moneda: servidor.moneda, mensual: servidor.mensual, anual: servidor.anual }
+  const moneda = PRECIOS_REPARTIDOR[MONEDAS[pais]] ? MONEDAS[pais] : 'USD'
+  const [mensual, anual] = PRECIOS_REPARTIDOR[moneda]
+  return { moneda, mensual, anual }
+}
+
+/* Millas en EE. UU. y Reino Unido (y Liberia y Birmania); km en el resto. El servidor lo dice con la ruta
+   (`unidades`) y aquí sale del país. Los km se guardan siempre en km: solo cambia lo que se enseña y se escribe. */
+const MILLAS = new Set(['us', 'gb', 'lr', 'mm'])
+export const KM_POR_MILLA = 1.609344
+export const unidades = () => (MILLAS.has(paisRuta) ? 'mi' : 'km')
+/** «3,1 km» o «1.9 mi», con los números del idioma. */
+export function distancia(km, decimales = 1) {
+  const millas = unidades() === 'mi'
+  const v = (Number(km) || 0) / (millas ? KM_POR_MILLA : 1)
+  try {
+    return new Intl.NumberFormat(localeNumeros(), { style: 'unit', unit: millas ? 'mile' : 'kilometer', unitDisplay: 'short', maximumFractionDigits: decimales }).format(v)
+  } catch { return `${v.toFixed(decimales).replace('.', ',')} ${millas ? 'mi' : 'km'}` }
 }
 
 /* Cómo puede pagar el cliente en la puerta: Bizum solo existe en España y Pix en Brasil. */

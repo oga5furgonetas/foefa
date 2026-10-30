@@ -1,5 +1,6 @@
 package com.flotadsp.fds.ui.acceso
 
+import com.flotadsp.fds.ui.tx
 import android.Manifest
 import android.content.Context
 import android.content.pm.PackageManager
@@ -212,18 +213,18 @@ fun AuditoriaConductorNativa(alVolver: () -> Unit, alCompletar: () -> Unit) {
     BackHandler { if (paso > 0) paso-- else alVolver() }
     Scaffold(topBar = { TopAppBar(
         title = { Text("Auditoría · ${paso + 1} de 3") },
-        navigationIcon = { IconButton(onClick = { if (paso > 0) paso-- else alVolver() }) { Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Volver") } },
+        navigationIcon = { IconButton(onClick = { if (paso > 0) paso-- else alVolver() }) { Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = tx("Volver")) } },
     ) }) { inset ->
         Column(Modifier.fillMaxSize().padding(inset).verticalScroll(rememberScrollState()).padding(20.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
             error?.let { Text(it, color = MaterialTheme.colorScheme.error) }
             if (cargando) { CircularProgressIndicator() }
             else if (!puedeAuditar) {
                 Text(if (motivo == "suspendido") "Hoy no tienes turno asignado." else "Hoy no tienes una furgoneta asignada en el cuadrante. Habla con tu coordinador antes de salir.", style = MaterialTheme.typography.bodyLarge)
-                Button(onClick = alVolver, modifier = Modifier.fillMaxWidth()) { Text("Volver al inicio") }
+                Button(onClick = alVolver, modifier = Modifier.fillMaxWidth()) { Text(tx("Volver al inicio")) }
             } else when (paso) {
                 0 -> {
-                    Text("Elige la furgoneta de hoy", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
-                    if (vehiculos.isEmpty()) Text("No hay vehículos disponibles para tu cuenta. Si hoy te corresponde uno, consulta con la oficina.")
+                    Text(tx("Elige la furgoneta de hoy"), style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
+                    if (vehiculos.isEmpty()) Text(tx("No hay vehículos disponibles para tu cuenta. Si hoy te corresponde uno, consulta con la oficina."))
                     vehiculos.forEach { el ->
                         val o = el.jsonObject
                         val id = o["id"]?.jsonPrimitive?.contentOrNull.orEmpty()
@@ -233,14 +234,14 @@ fun AuditoriaConductorNativa(alVolver: () -> Unit, alCompletar: () -> Unit) {
                             Row(Modifier.fillMaxWidth().padding(16.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(14.dp)) {
                                 Icon(Icons.Default.DirectionsCar, contentDescription = null)
                                 Column(Modifier.weight(1f)) { Text(placa, fontWeight = FontWeight.Bold); Text(marca, style = MaterialTheme.typography.bodySmall) }
-                                if (id == asignado && yaInspeccionada) Text("Enviada hoy", color = MaterialTheme.colorScheme.primary, style = MaterialTheme.typography.labelSmall)
+                                if (id == asignado && yaInspeccionada) Text(tx("Enviada hoy"), color = MaterialTheme.colorScheme.primary, style = MaterialTheme.typography.labelSmall)
                             }
                         }
                     }
                 }
                 1 -> {
                     Text(matricula, style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
-                    Text("Haz las cuatro fotos del vehículo, el cuentakilómetros y el indicador de combustible.")
+                    Text(tx("Haz las cuatro fotos del vehículo, el cuentakilómetros y el indicador de combustible."))
                     ANGULOS.forEach { (id, label) -> CapturaCard(label, fotos[id] != null, procesando == id) { hacerFoto(id) } }
                     CapturaCard("Cuentakilómetros", fotos["odometro"] != null, procesando == "odometro") { hacerFoto("odometro") }
                     // A mano siempre que la foto no haya dado un número: con el rango del servidor si lo dio, y si no
@@ -248,18 +249,18 @@ fun AuditoriaConductorNativa(alVolver: () -> Unit, alCompletar: () -> Unit) {
                     if (km == null && fotos["odometro"] != null) {
                         Text(if (kmMin != null && kmMax != null) "La foto no dio una lectura fiable. Indica los kilómetros reales (entre ${kmMin} y ${kmMax}; último registro ${kmActual ?: 0}, hace ${kmDias} días)."
                             else "El lector no ha contestado: escribe los kilómetros que marca el cuadro. La oficina los revisa.", style = MaterialTheme.typography.bodySmall)
-                        OutlinedTextField(kmManual, { kmManual = it.filter(Char::isDigit).take(7) }, label = { Text("Kilómetros") }, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number), modifier = Modifier.fillMaxWidth())
+                        OutlinedTextField(kmManual, { kmManual = it.filter(Char::isDigit).take(7) }, label = { Text(tx("Kilómetros")) }, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number), modifier = Modifier.fillMaxWidth())
                     } else if (km != null) Text("Kilometraje leído: $km km", color = MaterialTheme.colorScheme.primary)
                     CapturaCard("Foto del combustible", fotos["combustible"] != null, procesando == "combustible") { hacerFoto("combustible") }
-                    Text("¿Cuánto combustible queda?")
+                    Text(tx("¿Cuánto combustible queda?"))
                     Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) { listOf(10, 25, 50, 75, 100).forEach { v -> FilterChip(selected = combustible == v, onClick = { combustible = v }, label = { Text(if (v == 10) "Reserva" else if (v == 100) "Lleno" else "$v%") }) } }
                     val kmFinal = km ?: kmManual.toIntOrNull()
                     val kmValido = kmFinal != null && kmFinal > 0 && kmFinal < 1_000_000 && (kmMin == null || kmFinal >= kmMin!!) && (kmMax == null || kmFinal <= kmMax!!)
-                    Button(onClick = { paso = 2; error = null }, enabled = fotos.keys.containsAll(ANGULOS.map { it.first }) && fotos["odometro"] != null && kmValido && fotos["combustible"] != null && combustible != null && procesando == null, modifier = Modifier.fillMaxWidth().height(52.dp)) { Text("Continuar · checklist") }
+                    Button(onClick = { paso = 2; error = null }, enabled = fotos.keys.containsAll(ANGULOS.map { it.first }) && fotos["odometro"] != null && kmValido && fotos["combustible"] != null && combustible != null && procesando == null, modifier = Modifier.fillMaxWidth().height(52.dp)) { Text(tx("Continuar · checklist")) }
                 }
                 else -> {
-                    Text("Revisa el estado", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
-                    Text("Si marcas un elemento como malo o dañado, adjunta una foto para dejar constancia.", style = MaterialTheme.typography.bodySmall)
+                    Text(tx("Revisa el estado"), style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
+                    Text(tx("Si marcas un elemento como malo o dañado, adjunta una foto para dejar constancia."), style = MaterialTheme.typography.bodySmall)
                     PUNTOS.forEach { punto ->
                         Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)) {
                             Column(Modifier.fillMaxWidth().padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -275,12 +276,12 @@ fun AuditoriaConductorNativa(alVolver: () -> Unit, alCompletar: () -> Unit) {
                     }
                     Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)) {
                         Column(Modifier.fillMaxWidth().padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                            Text("Rueda de repuesto", fontWeight = FontWeight.SemiBold)
+                            Text(tx("Rueda de repuesto"), fontWeight = FontWeight.SemiBold)
                             Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) { listOf("si" to "Sí", "no" to "No", "no_se" to "No he podido verlo").forEach { (v, t) -> FilterChip(selected = rueda == v, onClick = { rueda = v }, label = { Text(t) }) } }
                             CapturaCard("Foto de la rueda (opcional)", fotos["check_rueda_repuesto"] != null, procesando == "check_rueda_repuesto") { hacerFoto("check_rueda_repuesto") }
                         }
                     }
-                    OutlinedTextField(notas, { notas = it }, label = { Text("Notas (opcional)") }, minLines = 2, modifier = Modifier.fillMaxWidth())
+                    OutlinedTextField(notas, { notas = it }, label = { Text(tx("Notas (opcional)")) }, minLines = 2, modifier = Modifier.fillMaxWidth())
                     val faltaFotoDanio = checklist.any { (id, v) -> v in listOf("malo", "danado") && fotos["check_$id"] == null }
                     Button(onClick = {
                         val fotosEnviar = buildList {
@@ -322,20 +323,20 @@ fun AuditoriaConductorNativa(alVolver: () -> Unit, alCompletar: () -> Unit) {
                             finally { enviando = false }
                         }
                     }, enabled = !enviando && procesando == null && rueda != null && !faltaFotoDanio && fotos.keys.containsAll(ANGULOS.map { it.first }) && fotos["odometro"] != null && fotos["combustible"] != null && combustible != null && (km ?: kmManual.toIntOrNull())?.let { it > 0 && (kmMin == null || it >= kmMin!!) && (kmMax == null || it <= kmMax!!) } == true, modifier = Modifier.fillMaxWidth().height(54.dp)) {
-                        if (enviando) CircularProgressIndicator(Modifier.size(20.dp), strokeWidth = 2.dp) else Text("Enviar auditoría")
+                        if (enviando) CircularProgressIndicator(Modifier.size(20.dp), strokeWidth = 2.dp) else Text(tx("Enviar auditoría"))
                     }
                 }
             }
-            TextButton(onClick = { confirmarSalida = true }, modifier = Modifier.fillMaxWidth()) { Text("Salir de la auditoría") }
+            TextButton(onClick = { confirmarSalida = true }, modifier = Modifier.fillMaxWidth()) { Text(tx("Salir de la auditoría")) }
             Spacer(Modifier.height(20.dp))
         }
     }
     if (confirmarSalida) AlertDialog(
         onDismissRequest = { confirmarSalida = false },
-        title = { Text("¿Salir de la auditoría?") },
-        text = { Text("Las fotos aún no se han enviado. Si sales, se descartarán y tendrás que empezar de nuevo.") },
-        confirmButton = { TextButton(onClick = { confirmarSalida = false; alVolver() }) { Text("Salir y descartar") } },
-        dismissButton = { TextButton(onClick = { confirmarSalida = false }) { Text("Seguir revisando") } },
+        title = { Text(tx("¿Salir de la auditoría?")) },
+        text = { Text(tx("Las fotos aún no se han enviado. Si sales, se descartarán y tendrás que empezar de nuevo.")) },
+        confirmButton = { TextButton(onClick = { confirmarSalida = false; alVolver() }) { Text(tx("Salir y descartar")) } },
+        dismissButton = { TextButton(onClick = { confirmarSalida = false }) { Text(tx("Seguir revisando")) } },
     )
 }
 
@@ -346,7 +347,7 @@ private fun CapturaCard(titulo: String, lista: Boolean, procesando: Boolean, alH
             if (procesando) CircularProgressIndicator(Modifier.size(20.dp), strokeWidth = 2.dp)
             else Icon(if (lista) Icons.Default.CheckCircle else Icons.Default.CameraAlt, contentDescription = null)
             Text(titulo, modifier = Modifier.weight(1f), fontWeight = FontWeight.Medium)
-            if (lista) Text("Repetir", style = MaterialTheme.typography.labelSmall)
+            if (lista) Text(tx("Repetir"), style = MaterialTheme.typography.labelSmall)
         }
     }
 }

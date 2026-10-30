@@ -25,7 +25,7 @@ fun rememberHacerFoto(uri: Uri, alAvisar: (String) -> Unit, alHacer: (Boolean) -
     val avisar by rememberUpdatedState(alAvisar)
     val camara = rememberLauncherForActivityResult(ActivityResultContracts.TakePicture(), alHacer)
     val abrir = {
-        try { camara.launch(uri) } catch (_: ActivityNotFoundException) { avisar("Este móvil no tiene una app de cámara para hacer la foto.") }
+        try { camara.launch(uri) } catch (_: ActivityNotFoundException) { avisar(tx("Este móvil no tiene una app de cámara para hacer la foto.")) }
     }
     val permiso = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { ok -> if (ok) abrir() else avisar(SIN_CAMARA) }
     return remember(uri) {

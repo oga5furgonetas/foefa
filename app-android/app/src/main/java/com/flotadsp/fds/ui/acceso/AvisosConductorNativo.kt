@@ -1,5 +1,6 @@
 package com.flotadsp.fds.ui.acceso
 
+import com.flotadsp.fds.ui.tx
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -38,7 +39,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.flotadsp.fds.FdsApp
 import com.flotadsp.fds.data.Aviso
-import com.flotadsp.fds.ui.ESPANOL
+import com.flotadsp.fds.ui.LOCALE_APP
 import java.time.OffsetDateTime
 import java.time.format.DateTimeFormatter
 
@@ -62,8 +63,8 @@ fun AvisosConductorNativo(alVolver: () -> Unit, alAbrir: (Aviso) -> Unit) {
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("Avisos") },
-                navigationIcon = { IconButton(onClick = alVolver) { Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Volver") } },
+                title = { Text(tx("Avisos")) },
+                navigationIcon = { IconButton(onClick = alVolver) { Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = tx("Volver")) } },
             )
         },
         containerColor = MaterialTheme.colorScheme.background,
@@ -74,15 +75,15 @@ fun AvisosConductorNativo(alVolver: () -> Unit, alAbrir: (Aviso) -> Unit) {
                 verticalArrangement = Arrangement.Center) {
                 Text(error.orEmpty(), style = MaterialTheme.typography.bodyLarge)
                 Spacer(Modifier.height(16.dp))
-                Button(onClick = { intento++ }) { Text("Reintentar") }
+                Button(onClick = { intento++ }) { Text(tx("Reintentar")) }
             }
             l == null -> Box(Modifier.fillMaxSize().padding(pad), contentAlignment = Alignment.Center) { CircularProgressIndicator() }
             l.isEmpty() -> Column(Modifier.fillMaxSize().padding(pad).padding(32.dp), horizontalAlignment = Alignment.CenterHorizontally,
                 verticalArrangement = Arrangement.Center) {
                 Icon(Icons.Default.NotificationsNone, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
                 Spacer(Modifier.height(12.dp))
-                Text("Sin avisos todavía", style = MaterialTheme.typography.titleMedium)
-                Text("Aquí verás los turnos que te aprueben, las vacantes para trabajar más y lo que te pida la oficina.",
+                Text(tx("Sin avisos todavía"), style = MaterialTheme.typography.titleMedium)
+                Text(tx("Aquí verás los turnos que te aprueben, las vacantes para trabajar más y lo que te pida la oficina."),
                     style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
             else -> LazyColumn(
@@ -111,7 +112,7 @@ fun AvisosConductorNativo(alVolver: () -> Unit, alAbrir: (Aviso) -> Unit) {
 /** «29 oct, 18:20» en la hora del móvil; si la fecha no se entiende, tal cual. */
 internal fun fechaDeAviso(iso: String): String = runCatching {
     OffsetDateTime.parse(iso).atZoneSameInstant(java.time.ZoneId.systemDefault())
-        .format(DateTimeFormatter.ofPattern("d MMM, HH:mm", ESPANOL))
+        .format(DateTimeFormatter.ofPattern("d MMM, HH:mm", LOCALE_APP))
 }.getOrDefault(iso)
 
 /** A qué pantalla del portal lleva un aviso, por su título o por su enlace (el mismo que usa la web). */

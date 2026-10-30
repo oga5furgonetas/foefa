@@ -1,5 +1,6 @@
 package com.flotadsp.fds.ui.acceso
 
+import com.flotadsp.fds.ui.tx
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
@@ -52,7 +53,8 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import com.flotadsp.fds.FdsApp
 import com.flotadsp.fds.data.ErrorApi
-import com.flotadsp.fds.ui.ESPANOL
+import com.flotadsp.fds.ui.LOCALE_APP
+import com.flotadsp.fds.ui.patronFecha
 import kotlinx.coroutines.launch
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonObject
@@ -124,8 +126,8 @@ fun TurnosConductorNativo(alVolver: () -> Unit) {
     val puedePedir = fechaSel >= hoy && status.isBlank() && !suspensionSel && bloqueoSel == null && !esLibre
 
     Scaffold(topBar = { TopAppBar(
-        title = { Text("Mis turnos") },
-        navigationIcon = { IconButton(onClick = alVolver) { Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Volver") } },
+        title = { Text(tx("Mis turnos")) },
+        navigationIcon = { IconButton(onClick = alVolver) { Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = tx("Volver")) } },
     ) }) { inset ->
         Column(Modifier.fillMaxSize().padding(inset).verticalScroll(rememberScrollState()).padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
             aviso?.let { Text(it, color = MaterialTheme.colorScheme.primary) }
@@ -133,9 +135,9 @@ fun TurnosConductorNativo(alVolver: () -> Unit) {
             Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)) {
                 Column(Modifier.fillMaxWidth().padding(12.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
-                        IconButton(onClick = { mes = periodo.minusMonths(1).toString() }, enabled = YearMonth.parse(mes).isAfter(YearMonth.from(hoy).minusMonths(2))) { Icon(Icons.Default.ChevronLeft, contentDescription = "Mes anterior") }
-                        Text(periodo.atDay(1).format(DateTimeFormatter.ofPattern("MMMM yyyy", ESPANOL)).replaceFirstChar { it.titlecase(ESPANOL) }, Modifier.weight(1f), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
-                        IconButton(onClick = { mes = periodo.plusMonths(1).toString() }, enabled = YearMonth.parse(mes).isBefore(YearMonth.from(hoy).plusMonths(3))) { Icon(Icons.Default.ChevronRight, contentDescription = "Mes siguiente") }
+                        IconButton(onClick = { mes = periodo.minusMonths(1).toString() }, enabled = YearMonth.parse(mes).isAfter(YearMonth.from(hoy).minusMonths(2))) { Icon(Icons.Default.ChevronLeft, contentDescription = tx("Mes anterior")) }
+                        Text(periodo.atDay(1).format(DateTimeFormatter.ofPattern("MMMM yyyy", LOCALE_APP)).replaceFirstChar { it.titlecase(LOCALE_APP) }, Modifier.weight(1f), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                        IconButton(onClick = { mes = periodo.plusMonths(1).toString() }, enabled = YearMonth.parse(mes).isBefore(YearMonth.from(hoy).plusMonths(3))) { Icon(Icons.Default.ChevronRight, contentDescription = tx("Mes siguiente")) }
                     }
                     Row(horizontalArrangement = Arrangement.spacedBy(3.dp)) { listOf("L", "M", "X", "J", "V", "S", "D").forEach { Text(it, Modifier.weight(1f), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant) } }
                     val huecos = periodo.atDay(1).dayOfWeek.value - 1
@@ -173,7 +175,7 @@ fun TurnosConductorNativo(alVolver: () -> Unit) {
             }
             if (cargando) CircularProgressIndicator()
             else {
-                Text(fechaSel.format(DateTimeFormatter.ofPattern("EEEE d MMMM", ESPANOL).withLocale(ESPANOL)).replaceFirstChar { it.titlecase(ESPANOL) }, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+                Text(fechaSel.format(DateTimeFormatter.ofPattern("EEEE d MMMM", LOCALE_APP).withLocale(LOCALE_APP)).replaceFirstChar { it.titlecase(LOCALE_APP) }, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
                 val textoTurno = when (tipoTurno(turnoSel)) {
                     "trabaja" -> "Tienes turno de trabajo${campoSeguro(turnoSel, "cod").takeIf { it.isNotBlank() }?.let { " · $it" } ?: ""}."
                     "extra" -> "Tienes un turno extra confirmado."
@@ -183,33 +185,33 @@ fun TurnosConductorNativo(alVolver: () -> Unit) {
                 }
                 Text(textoTurno)
                 when (status) {
-                    "pendiente" -> Text("Solicitud pendiente de respuesta.", color = MaterialTheme.colorScheme.tertiary)
-                    "aprobado" -> Text("Solicitud aprobada.", color = MaterialTheme.colorScheme.primary)
-                    "rechazado" -> Text("Solicitud rechazada.", color = MaterialTheme.colorScheme.error)
+                    "pendiente" -> Text(tx("Solicitud pendiente de respuesta."), color = MaterialTheme.colorScheme.tertiary)
+                    "aprobado" -> Text(tx("Solicitud aprobada."), color = MaterialTheme.colorScheme.primary)
+                    "rechazado" -> Text(tx("Solicitud rechazada."), color = MaterialTheme.colorScheme.error)
                 }
                 bloqueoSel?.let { Text("No puedes solicitar este día: ${campoSeguro(it, "motivo").ifBlank { "bloqueado por la oficina" }}", color = MaterialTheme.colorScheme.error) }
-                if (suspensionSel) Text("Este día está dentro de una suspensión.", color = MaterialTheme.colorScheme.error)
+                if (suspensionSel) Text(tx("Este día está dentro de una suspensión."), color = MaterialTheme.colorScheme.error)
                 if (puedePedir) {
-                    Text("Solicitar un cambio", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
-                    Text("La oficina revisará la solicitud. No se aprueba automáticamente.", style = MaterialTheme.typography.bodySmall)
+                    Text(tx("Solicitar un cambio"), style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
+                    Text(tx("La oficina revisará la solicitud. No se aprueba automáticamente."), style = MaterialTheme.typography.bodySmall)
                     FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                         listOf("asuntos" to "Asuntos propios", "medico" to "Médico", "familia" to "Familia", "viaje" to "Viaje", "otro" to "Otro").forEach { (id, label) ->
                             FilterChip(selected = motivo == id, onClick = { motivo = id }, label = { Text(label) })
                         }
                     }
-                    OutlinedTextField(nota, { if (it.length <= 300) nota = it }, label = { Text("Explica brevemente el motivo (obligatorio)") }, minLines = 2, modifier = Modifier.fillMaxWidth())
+                    OutlinedTextField(nota, { if (it.length <= 300) nota = it }, label = { Text(tx("Explica brevemente el motivo (obligatorio)")) }, minLines = 2, modifier = Modifier.fillMaxWidth())
                     Button(onClick = { confirmar = seleccion }, enabled = !enviando && nota.trim().length >= 4, modifier = Modifier.fillMaxWidth().height(50.dp)) {
-                        if (enviando) CircularProgressIndicator(Modifier.height(20.dp)) else Text("Solicitar día libre")
+                        if (enviando) CircularProgressIndicator(Modifier.height(20.dp)) else Text(tx("Solicitar día libre"))
                     }
                 } else if (fechaSel >= hoy && status.isBlank() && (esLibre || suspensionSel || bloqueoSel != null)) {
-                    Text("No se puede solicitar este día desde aquí.", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Text(tx("No se puede solicitar este día desde aquí."), color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
             }
             Spacer(Modifier.height(18.dp))
         }
     }
     confirmar?.let { fecha -> AlertDialog(
-        onDismissRequest = { confirmar = null }, title = { Text("Enviar solicitud") },
+        onDismissRequest = { confirmar = null }, title = { Text(tx("Enviar solicitud")) },
         text = { Text("Pedirás el día ${diaLargo(fecha)} por ${motivoLabel(motivo)}. La oficina tendrá que aprobarlo.") },
         confirmButton = { TextButton(onClick = {
             confirmar = null; enviando = true; error = null; aviso = null
@@ -221,8 +223,8 @@ fun TurnosConductorNativo(alVolver: () -> Unit) {
                 } catch (e: ErrorApi) { error = e.message }
                 finally { enviando = false }
             }
-        }) { Text("Enviar") } },
-        dismissButton = { TextButton(onClick = { confirmar = null }) { Text("Revisar") } },
+        }) { Text(tx("Enviar")) } },
+        dismissButton = { TextButton(onClick = { confirmar = null }) { Text(tx("Revisar")) } },
     ) }
 }
 
@@ -238,7 +240,7 @@ private fun campo(obj: JsonObject, clave: String): String = obj[clave]?.jsonPrim
 /** El tipo del día como lo pinta la web: `type` (trabaja / libre / extra) y, si el código es SUSP, «susp». */
 private fun tipoTurno(turno: JsonObject?): String = if (campoSeguro(turno, "cod") == "SUSP") "susp" else campoSeguro(turno, "type")
 private fun diaLargo(fecha: String): String = runCatching {
-    LocalDate.parse(fecha).format(DateTimeFormatter.ofPattern("d 'de' MMMM", ESPANOL))
+    LocalDate.parse(fecha).format(DateTimeFormatter.ofPattern(patronFecha("d 'de' MMMM"), LOCALE_APP))
 }.getOrDefault(fecha)
 fun campoSeguro(obj: JsonObject?, clave: String): String = obj?.let { runCatching { campo(it, clave) }.getOrDefault("") }.orEmpty()
 private fun motivoLabel(id: String): String = when (id) { "asuntos" -> "asuntos propios"; "medico" -> "médico"; "familia" -> "un asunto familiar"; "viaje" -> "un viaje"; else -> "otro motivo" }

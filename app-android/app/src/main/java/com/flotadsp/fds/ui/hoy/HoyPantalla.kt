@@ -1,5 +1,6 @@
 package com.flotadsp.fds.ui.hoy
 
+import com.flotadsp.fds.ui.tx
 import android.Manifest
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -92,7 +93,8 @@ import com.flotadsp.fds.ui.Acciones
 import com.flotadsp.fds.ui.LocalExtra
 import com.flotadsp.fds.ui.Region
 import com.flotadsp.fds.ui.TextoNumero
-import com.flotadsp.fds.ui.ESPANOL
+import com.flotadsp.fds.ui.LOCALE_APP
+import com.flotadsp.fds.ui.patronFecha
 import kotlinx.coroutines.launch
 import java.time.LocalDate
 import java.time.LocalTime
@@ -162,7 +164,7 @@ fun HoyPantalla(
             TopAppBar(
                 title = {
                     Column {
-                        Text("Hoy", style = MaterialTheme.typography.titleLarge)
+                        Text(tx("Hoy"), style = MaterialTheme.typography.titleLarge)
                         Text(fechaLarga(e.ruta?.fecha), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
                 },
@@ -173,7 +175,7 @@ fun HoyPantalla(
                                 contentDescription = if (verMapa) "Ver la lista" else "Ver el mapa")
                         }
                     }
-                    IconButton(onClick = alAnadir) { Icon(Icons.Default.Add, contentDescription = "Añadir una parada") }
+                    IconButton(onClick = alAnadir) { Icon(Icons.Default.Add, contentDescription = tx("Añadir una parada")) }
                 },
                 scrollBehavior = barra,
                 colors = TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.background,
@@ -190,7 +192,7 @@ fun HoyPantalla(
             ) {
                 Icon(Icons.Default.QrCodeScanner, contentDescription = null)
                 Spacer(Modifier.width(12.dp))
-                Text("Escanear")
+                Text(tx("Escanear"))
             }
         },
         snackbarHost = { SnackbarHost(avisos) },
@@ -214,7 +216,7 @@ fun HoyPantalla(
                         Resumen(e, ocupado = e.ocupado == "ordenar", alOrdenar = ordenar, furgo = furgo,
                             alAparcar = { ambito.launch {
                                 val p = Acciones.dondeEstoy(ctx)
-                                if (p == null) vm.avisar("No llega la ubicación del móvil: dale permiso a la app.") else app.cuenta.aparcar(p.first, p.second)
+                                if (p == null) vm.avisar(tx("No llega la ubicación del móvil: dale permiso a la app.")) else app.cuenta.aparcar(p.first, p.second)
                             } },
                             alQuitarFurgo = { ambito.launch { app.cuenta.quitarFurgo() } },
                             alIrAPie = { furgo?.let { Acciones.irAPie(ctx, it.lat, it.lng) } })
@@ -245,18 +247,18 @@ fun HoyPantalla(
                     }
                     val resto = e.pendientes.drop(1)
                     if (resto.isNotEmpty()) {
-                        item { Titulo("Por entregar · ${resto.size}") }
+                        item { Titulo(tx("Por entregar") + " · ${resto.size}") }
                         // EL BUSCADOR (30-10-2026): con muchas paradas y un cliente al teléfono, encontrarlo por su nombre, la
                         // calle, el teléfono o el código, como la web a partir de 5 paradas.
                         if (e.pendientes.size > 5) item(key = "buscar") {
-                            OutlinedTextField(buscar, { buscar = it }, singleLine = true, placeholder = { Text("Buscar cliente, calle, teléfono…") },
+                            OutlinedTextField(buscar, { buscar = it }, singleLine = true, placeholder = { Text(tx("Buscar cliente, calle, teléfono…")) },
                                 leadingIcon = { Icon(Icons.Default.Search, contentDescription = null) }, modifier = Modifier.fillMaxWidth())
                         }
                         // Sin ordenar todavía, el número es su puesto en la lista (la siguiente es la 1). Si la ruta ya está
                         // ordenada, la que se añade después no se inventa un número: espera a «Ordenar ruta».
                         val hayOrden = e.pendientes.any { it.orden != null }
                         val visibles = resto.withIndex().filter { Calle.coincide(it.value, buscar) }
-                        if (visibles.isEmpty()) item { Text("Nada con «$buscar» en las paradas pendientes.", style = MaterialTheme.typography.bodyMedium, modifier = Modifier.padding(8.dp)) }
+                        if (visibles.isEmpty()) item { Text(tx("Nada con «{q}» en las paradas pendientes.", "q" to buscar), style = MaterialTheme.typography.bodyMedium, modifier = Modifier.padding(8.dp)) }
                         items(visibles, key = { it.value.id }) { iv ->
                             val p = iv.value
                             Fila(p, numero = p.orden ?: (if (hayOrden) null else iv.index + 2), enZbe = e.zbe?.paradas?.containsKey(p.id) == true, alTocar = { abierta = p })
@@ -293,7 +295,7 @@ fun HoyPantalla(
 /** El día de la RUTA (el del servidor, en la zona de la cuenta), no el del reloj del móvil: pasada la medianoche o
  *  con el móvil en otro huso, la cabecera decía un día y la lista era de otro (visto en el emulador). */
 private fun fechaLarga(fecha: String?): String =
-    (fecha?.let { runCatching { LocalDate.parse(it) }.getOrNull() } ?: LocalDate.now()).format(DateTimeFormatter.ofPattern("EEEE, d 'de' MMMM", ESPANOL)).replaceFirstChar { it.uppercase() }
+    (fecha?.let { runCatching { LocalDate.parse(it) }.getOrNull() } ?: LocalDate.now()).format(DateTimeFormatter.ofPattern(patronFecha("EEEE, d 'de' MMMM"), LOCALE_APP)).replaceFirstChar { it.uppercase() }
 
 @Composable
 private fun Titulo(t: String) {
@@ -314,7 +316,7 @@ private fun Resumen(
     Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLowest), shape = MaterialTheme.shapes.large) {
       Column(Modifier.padding(16.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically) {
-            Box(contentAlignment = Alignment.Center, modifier = Modifier.size(64.dp).semantics { contentDescription = "$hechas de $total hechas" }) {
+            Box(contentAlignment = Alignment.Center, modifier = Modifier.size(64.dp).semantics { contentDescription = tx("{a} de {b} hechas", "a" to hechas, "b" to total) }) {
                 CircularProgressIndicator(
                     progress = { if (total == 0) 0f else hechas / total.toFloat() },
                     modifier = Modifier.size(64.dp), strokeWidth = 6.dp, strokeCap = StrokeCap.Round,
@@ -325,28 +327,28 @@ private fun Resumen(
             Spacer(Modifier.width(16.dp))
             Column(Modifier.weight(1f)) {
                 val q = e.pendientes.size
-                Text(when (q) { 0 -> if (total == 0) "Sin paradas todavía" else "Todo entregado"; 1 -> "Queda 1 parada"; else -> "Quedan $q paradas" },
+                Text(when (q) { 0 -> if (total == 0) tx("Sin paradas todavía") else tx("Todo entregado"); 1 -> tx("Queda 1 parada"); else -> tx("Quedan {n} paradas", "n" to q) },
                     style = MaterialTheme.typography.titleMedium)
                 val r = e.ruta?.ruta
                 // LA CABECERA COMPLETA (30-10-2026): de noche la ruta sale a la hora de salida, y sin «Sales a las» las horas
                 // no se entendían («Acabas ≈ 09:24» a las 23:31). Y los minutos, y con qué se calculó.
                 val partes = listOfNotNull(
-                    r?.salida?.takeIf { r.programada == true }?.let { "Sales a las $it" },
-                    r?.fin?.let { "Acabas ≈ $it" },
-                    r?.km?.takeIf { it > 0 }?.let { "${"%.1f".format(ESPANOL, it)} km" },
+                    r?.salida?.takeIf { r.programada == true }?.let { tx("Sales a las {h}", "h" to it) },
+                    r?.fin?.let { tx("Acabas ≈") + " $it" },
+                    r?.km?.takeIf { it > 0 }?.let { Region.distancia(it) },
                     r?.minutos?.takeIf { it > 0 }?.let { m -> if (m >= 60) "${m / 60} h ${m % 60} min" else "$m min" },
                 )
                 if (partes.isNotEmpty() && q > 0) {
                     Text(partes.joinToString(" · "), style = MaterialTheme.typography.bodyMedium.merge(TextoNumero),
                         color = MaterialTheme.colorScheme.onSurfaceVariant)
                     val como = when {
-                        r?.manual == true -> "tu orden"
-                        r?.fuente == "linea_recta" -> "por distancia"
-                        r?.trafico == true -> "con tráfico típico"
-                        r?.fin != null -> "sin tráfico"
+                        r?.manual == true -> tx("tu orden")
+                        r?.fuente == "linea_recta" -> tx("por distancia")
+                        r?.trafico == true -> tx("con tráfico típico")
+                        r?.fin != null -> tx("sin tráfico")
                         else -> null
                     }
-                    val aviso = listOfNotNull(como, retraso.takeIf { it > 5 }?.let { "vas $it min por detrás" }).joinToString(" · ")
+                    val aviso = listOfNotNull(como, retraso.takeIf { it > 5 }?.let { tx("vas {n} min por detrás", "n" to it) }).joinToString(" · ")
                     if (aviso.isNotEmpty()) Text(aviso, style = MaterialTheme.typography.bodySmall,
                         color = if (retraso > 5) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant)
                 }
@@ -358,8 +360,8 @@ private fun Resumen(
                     val fallidas = e.hechas.count { it.estado == "fallido" }
                     val perdido = fallidas * g.pagoParada
                     if (cent > 0 || perdido > 0) Text(
-                        listOfNotNull("Hoy llevas ${Region.importe(cent / 100.0)}",
-                            perdido.takeIf { it > 0 }?.let { "$fallidas sin entregar = ${Region.importe(it / 100.0)} sin cobrar" }).joinToString(" · "),
+                        listOfNotNull(tx("Hoy llevas {x}", "x" to Region.importe(cent / 100.0)),
+                            perdido.takeIf { it > 0 }?.let { tx("{n} sin entregar = {euros} sin cobrar", "n" to fallidas, "euros" to Region.importe(it / 100.0)) }).joinToString(" · "),
                         style = MaterialTheme.typography.bodyMedium.merge(TextoNumero), color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
             }
@@ -368,7 +370,7 @@ private fun Resumen(
             // REORDENAR DESDE AQUÍ (30-10-2026): con más de 15 min de retraso, un toque recalcula desde donde estás.
             Spacer(Modifier.height(10.dp))
             OutlinedButton(onClick = alOrdenar, enabled = !ocupado, modifier = Modifier.fillMaxWidth().height(44.dp)) {
-                Icon(Icons.Default.Route, contentDescription = null, modifier = Modifier.size(18.dp)); Spacer(Modifier.width(8.dp)); Text("Reordenar desde aquí")
+                Icon(Icons.Default.Route, contentDescription = null, modifier = Modifier.size(18.dp)); Spacer(Modifier.width(8.dp)); Text(tx("Reordenar desde aquí"))
             }
         }
         if (e.pendientes.isNotEmpty()) {
@@ -376,12 +378,12 @@ private fun Resumen(
             Spacer(Modifier.height(10.dp))
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 if (furgo == null) {
-                    TextButton(onClick = alAparcar) { Icon(Icons.Default.LocalShipping, contentDescription = null, modifier = Modifier.size(18.dp)); Spacer(Modifier.width(6.dp)); Text("Aparcada aquí") }
+                    TextButton(onClick = alAparcar) { Icon(Icons.Default.LocalShipping, contentDescription = null, modifier = Modifier.size(18.dp)); Spacer(Modifier.width(6.dp)); Text(tx("Aparcada aquí")) }
                 } else {
                     FilledTonalButton(onClick = alIrAPie, modifier = Modifier.weight(1f)) {
-                        Icon(Icons.Default.LocalShipping, contentDescription = null, modifier = Modifier.size(18.dp)); Spacer(Modifier.width(6.dp)); Text("Volver a la furgoneta a pie")
+                        Icon(Icons.Default.LocalShipping, contentDescription = null, modifier = Modifier.size(18.dp)); Spacer(Modifier.width(6.dp)); Text(tx("Volver a la furgoneta a pie"))
                     }
-                    TextButton(onClick = alQuitarFurgo) { Text("Quitar") }
+                    TextButton(onClick = alQuitarFurgo) { Text(tx("Quitar")) }
                 }
             }
         }
@@ -391,7 +393,7 @@ private fun Resumen(
                 if (ocupado) CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp)
                 else Icon(Icons.Default.Route, contentDescription = null, modifier = Modifier.size(18.dp))
                 Spacer(Modifier.width(8.dp))
-                Text(if (ocupado) "Ordenando por tiempo…" else "Ordenar ruta")
+                Text(if (ocupado) tx("Ordenando por tiempo…") else tx("Ordenar ruta"))
             }
         }
       }
@@ -405,13 +407,13 @@ private fun SinCobertura(guardadaEn: Long?, pendientes: Int) {
         Row(Modifier.fillMaxWidth().padding(14.dp), verticalAlignment = Alignment.CenterVertically) {
             Icon(Icons.Default.CloudOff, contentDescription = null)
             Spacer(Modifier.width(12.dp))
-            val hora = guardadaEn?.let { java.text.SimpleDateFormat("HH:mm", ESPANOL).format(java.util.Date(it)) }
+            val hora = guardadaEn?.let { java.text.SimpleDateFormat("HH:mm", LOCALE_APP).format(java.util.Date(it)) }
             Text(buildString {
-                if (hora != null) append("Sin conexión: es tu ruta de las $hora. ")
+                if (hora != null) append(tx("Sin conexión: es tu ruta de las {h}.", "h" to hora) + " ")
                 append(when (pendientes) {
-                    0 -> "Se pone al día sola al volver la red."
-                    1 -> "1 cambio guardado en el móvil: se envía solo al volver la red."
-                    else -> "$pendientes cambios guardados en el móvil: se envían solos al volver la red."
+                    0 -> tx("Se pone al día sola al volver la red.")
+                    1 -> tx("1 cambio guardado en el móvil: se envía solo al volver la red.")
+                    else -> tx("{n} cambios guardados en el móvil: se envían solos al volver la red.", "n" to pendientes)
                 })
             }, style = MaterialTheme.typography.bodyMedium)
         }
@@ -425,9 +427,9 @@ private fun Previas(n: Int, alTraer: () -> Unit) {
         Row(Modifier.fillMaxWidth().padding(14.dp), verticalAlignment = Alignment.CenterVertically) {
             Icon(Icons.Default.History, contentDescription = null)
             Spacer(Modifier.width(12.dp))
-            Text(if (n == 1) "1 parada de otro día sigue sin cerrar." else "$n paradas de otros días siguen sin cerrar.",
+            Text(if (n == 1) tx("1 parada de otro día sigue sin cerrar.") else tx("{n} paradas de otros días siguen sin cerrar.", "n" to n),
                 style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f))
-            TextButton(onClick = alTraer) { Text("Traer a hoy") }
+            TextButton(onClick = alTraer) { Text(tx("Traer a hoy")) }
         }
     }
 }
@@ -441,13 +443,15 @@ private fun BonoCard(b: Bono) {
             Icon(Icons.Default.CardGiftcard, contentDescription = null)
             Spacer(Modifier.width(12.dp))
             Column {
-                Text(if (b.pagado) "Bono de bienvenida conseguido: $euros en tu cartera." else "Bono de bienvenida: $euros por tu primera ruta de verdad.",
+                Text(if (b.pagado) tx("Bono de bienvenida conseguido: {euros} en tu cartera.", "euros" to euros) else tx("Bono de bienvenida: {euros} por tu primera ruta de verdad.", "euros" to euros),
                     style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold)
                 if (!b.pagado) Text(
                     when {
-                        b.revisar -> "Lo estamos revisando: te avisamos en cuanto esté."
-                        else -> "${b.objetivo} entregas en ${b.diasObjetivo} días distintos" + (b.limite?.let { " antes del ${it.takeLast(2)}/${it.substring(5, 7)}" } ?: "") +
-                            ". Llevas ${b.entregas} ${if (b.entregas == 1) "entrega" else "entregas"} en ${b.dias} ${if (b.dias == 1) "día" else "días"}."
+                        b.revisar -> tx("Lo estamos revisando: te avisamos en cuanto esté.")
+                        else -> tx("{n} entregas en {d} días distintos", "n" to b.objetivo, "d" to b.diasObjetivo) +
+                            (b.limite?.let { " " + tx("antes del {f}", "f" to "${it.takeLast(2)}/${it.substring(5, 7)}") } ?: "") + ". " +
+                            tx("Llevas {n} {e} en {d} {dd}.", "n" to b.entregas, "e" to (if (b.entregas == 1) tx("entrega") else tx("entregas")),
+                                "d" to b.dias, "dd" to (if (b.dias == 1) tx("día") else tx("días")))
                     }, style = MaterialTheme.typography.bodySmall.merge(TextoNumero))
             }
         }
@@ -460,17 +464,17 @@ private fun Vacia(alEscanear: () -> Unit, alAnadir: () -> Unit) {
         Column(Modifier.fillMaxWidth().padding(24.dp), horizontalAlignment = Alignment.CenterHorizontally) {
             Icon(Icons.Default.Inventory2, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(48.dp))
             Spacer(Modifier.height(12.dp))
-            Text("Carga tus paradas de hoy", style = MaterialTheme.typography.titleLarge)
+            Text(tx("Carga tus paradas de hoy"), style = MaterialTheme.typography.titleLarge)
             Spacer(Modifier.height(6.dp))
-            Text("Escanea la etiqueta de cada paquete: si su código trae la dirección, la parada entra sola. Si no, la lee de la foto.",
+            Text(tx("Escanea la etiqueta de cada paquete: si su código trae la dirección, la parada entra sola. Si no, la lee de la foto."),
                 style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
             Spacer(Modifier.height(18.dp))
             Button(onClick = alEscanear, modifier = Modifier.fillMaxWidth().height(52.dp)) {
-                Icon(Icons.Default.QrCodeScanner, contentDescription = null); Spacer(Modifier.width(8.dp)); Text("Escanear paquetes")
+                Icon(Icons.Default.QrCodeScanner, contentDescription = null); Spacer(Modifier.width(8.dp)); Text(tx("Escanear paquetes"))
             }
             Spacer(Modifier.height(8.dp))
             OutlinedButton(onClick = alAnadir, modifier = Modifier.fillMaxWidth().height(52.dp)) {
-                Icon(Icons.Default.Add, contentDescription = null); Spacer(Modifier.width(8.dp)); Text("Escribir una dirección")
+                Icon(Icons.Default.Add, contentDescription = null); Spacer(Modifier.width(8.dp)); Text(tx("Escribir una dirección"))
             }
         }
     }
@@ -482,8 +486,8 @@ private fun Terminada(entregadas: Int, total: Int) {
     Surface(color = MaterialTheme.colorScheme.tertiaryContainer, shape = MaterialTheme.shapes.large) {
         Column(Modifier.fillMaxWidth().padding(20.dp)) {
             Icon(Icons.Default.Check, contentDescription = null, tint = x.entregado)
-            Text("Ruta terminada", style = MaterialTheme.typography.titleLarge, color = MaterialTheme.colorScheme.onTertiaryContainer)
-            Text("$entregadas de $total entregadas hoy.", style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onTertiaryContainer)
+            Text(tx("Ruta terminada"), style = MaterialTheme.typography.titleLarge, color = MaterialTheme.colorScheme.onTertiaryContainer)
+            Text(tx("{a} de {b} entregadas hoy.", "a" to entregadas, "b" to total), style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onTertiaryContainer)
         }
     }
 }
@@ -505,13 +509,13 @@ fun Etiquetas(p: Parada, enZbe: Boolean = false) {
     val x = LocalExtra.current
     FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
         p.eta?.let { Chip("≈ $it", MaterialTheme.colorScheme.secondaryContainer, MaterialTheme.colorScheme.onSecondaryContainer) }
-        if (p.porCobrar) Chip("Cobrar ${Region.importe(p.cobrar ?: 0.0)}", x.cobrar, x.enCobrar)
-        if (p.prioridad) Chip("Urgente", MaterialTheme.colorScheme.errorContainer, MaterialTheme.colorScheme.onErrorContainer)
-        if (p.bultos > 1) Chip("${p.bultos} bultos", MaterialTheme.colorScheme.surfaceVariant, MaterialTheme.colorScheme.onSurfaceVariant)
-        if (!p.ubicada && p.pendiente) Chip("Sin ubicar", MaterialTheme.colorScheme.surfaceVariant, MaterialTheme.colorScheme.onSurfaceVariant)
+        if (p.porCobrar) Chip(tx("Cobrar") + " ${Region.importe(p.cobrar ?: 0.0)}", x.cobrar, x.enCobrar)
+        if (p.prioridad) Chip(tx("Urgente"), MaterialTheme.colorScheme.errorContainer, MaterialTheme.colorScheme.onErrorContainer)
+        if (p.bultos > 1) Chip("${p.bultos} " + tx("bultos"), MaterialTheme.colorScheme.surfaceVariant, MaterialTheme.colorScheme.onSurfaceVariant)
+        if (!p.ubicada && p.pendiente) Chip(tx("Sin ubicar"), MaterialTheme.colorScheme.surfaceVariant, MaterialTheme.colorScheme.onSurfaceVariant)
         // LA PUERTA APRENDIDA, el retraso y la ZBE (30-10-2026).
-        if (p.geo == "puerta" && p.pendiente) Chip("Puerta conocida", x.entregado.copy(alpha = 0.15f), MaterialTheme.colorScheme.onSurface)
-        if ((p.tardeMin ?: 0) > 0 && p.pendiente) Chip("llega ${p.tardeMin} min tarde", MaterialTheme.colorScheme.errorContainer, MaterialTheme.colorScheme.onErrorContainer)
+        if (p.geo == "puerta" && p.pendiente) Chip(tx("Puerta conocida"), x.entregado.copy(alpha = 0.15f), MaterialTheme.colorScheme.onSurface)
+        if ((p.tardeMin ?: 0) > 0 && p.pendiente) Chip(tx("llega {n} min tarde", "n" to p.tardeMin), MaterialTheme.colorScheme.errorContainer, MaterialTheme.colorScheme.onErrorContainer)
         if (enZbe && p.pendiente) Chip("ZBE", MaterialTheme.colorScheme.tertiaryContainer, MaterialTheme.colorScheme.onTertiaryContainer)
     }
 }
@@ -535,7 +539,7 @@ private fun Siguiente(
         border = androidx.compose.foundation.BorderStroke(2.dp, MaterialTheme.colorScheme.primary),
     ) {
         Column(Modifier.padding(16.dp)) {
-            Text("SIGUIENTE PARADA", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.secondary)
+            Text(tx("Siguiente parada").uppercase(LOCALE_APP), style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.secondary)
             Spacer(Modifier.height(8.dp))
             Row(Modifier.clickable(onClick = alAbrir), verticalAlignment = Alignment.Top) {
                 Numero(numero, grande = true)
@@ -547,7 +551,7 @@ private fun Siguiente(
                     p.antes?.let { Text(textoAntes(it), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.secondary) }
                     // EL CLIENTE TE AYUDA ANTES DE LLEGAR (30-10-2026): lo que contestó en su enlace, en la parada.
                     p.clienteDice?.let { textoClienteDice(it) }?.takeIf { it.isNotBlank() }?.let {
-                        Text("El cliente dice: $it", style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.tertiary)
+                        Text(tx("El cliente dice: {t}", "t" to it), style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.tertiary)
                     }
                     Spacer(Modifier.height(6.dp))
                     Etiquetas(p, enZbe)
@@ -556,13 +560,13 @@ private fun Siguiente(
             Spacer(Modifier.height(14.dp))
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 Button(onClick = alNavegar, modifier = Modifier.weight(1f).height(52.dp)) {
-                    Icon(Icons.Default.Navigation, contentDescription = null); Spacer(Modifier.width(6.dp)); Text("Navegar")
+                    Icon(Icons.Default.Navigation, contentDescription = null); Spacer(Modifier.width(6.dp)); Text(tx("Navegar"))
                 }
                 FilledTonalButton(onClick = alLlamar, enabled = p.telefono.isNotBlank(), modifier = Modifier.height(52.dp)) {
-                    Icon(Icons.Default.Call, contentDescription = "Llamar")
+                    Icon(Icons.Default.Call, contentDescription = tx("Llamar"))
                 }
                 FilledTonalButton(onClick = alWhatsapp, enabled = p.telefono.isNotBlank(), modifier = Modifier.height(52.dp)) {
-                    Icon(Icons.AutoMirrored.Filled.Chat, contentDescription = "WhatsApp")
+                    Icon(Icons.AutoMirrored.Filled.Chat, contentDescription = tx("WhatsApp"))
                 }
             }
             Spacer(Modifier.height(8.dp))
@@ -570,11 +574,11 @@ private fun Siguiente(
                 OutlinedButton(onClick = alFallar, modifier = Modifier.weight(1f).height(56.dp),
                     contentPadding = PaddingValues(horizontal = 8.dp),
                     colors = ButtonDefaults.outlinedButtonColors(contentColor = MaterialTheme.colorScheme.error)) {
-                    Text("No entregado", maxLines = 1)
+                    Text(tx("No entregado"), maxLines = 1)
                 }
                 Button(onClick = alEntregar, modifier = Modifier.weight(1.2f).height(56.dp),
                     colors = ButtonDefaults.buttonColors(containerColor = x.entregado, contentColor = x.enEntregado)) {
-                    Icon(Icons.Default.Check, contentDescription = null); Spacer(Modifier.width(4.dp)); Text("Entregado")
+                    Icon(Icons.Default.Check, contentDescription = null); Spacer(Modifier.width(4.dp)); Text(tx("Entregado"))
                 }
             }
         }
@@ -597,7 +601,7 @@ fun Fila(p: Parada, numero: Int?, enZbe: Boolean = false, alTocar: () -> Unit) {
                 if (!p.pendiente) {
                     // Con la hora (30-10-2026): «Entregado · 11:02», como en la web.
                     val hora = Calle.hora(p.cerradoEn).takeIf { it.isNotBlank() }?.let { " · $it" } ?: ""
-                    Text(if (p.estado == "entregado") "Entregado$hora" else "No entregado$hora${p.motivo?.let { " · $it" } ?: ""}",
+                    Text(if (p.estado == "entregado") tx("Entregado") + hora else tx("No entregado") + hora + (p.motivo?.let { " · $it" } ?: ""),
                         style = MaterialTheme.typography.labelMedium,
                         color = if (p.estado == "entregado") LocalExtra.current.entregado else MaterialTheme.colorScheme.error)
                 }
@@ -611,7 +615,7 @@ private fun Hechas(hechas: List<Parada>, alTocar: (Parada) -> Unit) {
     var abierto by rememberSaveable { mutableStateOf(false) }
     Column {
         Row(Modifier.fillMaxWidth().clickable { abierto = !abierto }.padding(vertical = 10.dp, horizontal = 4.dp), verticalAlignment = Alignment.CenterVertically) {
-            Text("HECHAS HOY · ${hechas.size}", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant,
+            Text(tx("HECHAS HOY") + " · ${hechas.size}", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier.weight(1f))
             Icon(if (abierto) Icons.Default.ExpandLess else Icons.Default.ExpandMore, contentDescription = if (abierto) "Ocultar" else "Ver")
         }
@@ -628,6 +632,6 @@ private fun SinRuta(error: String, alReintentar: () -> Unit) {
         Spacer(Modifier.height(12.dp))
         Text(error, style = MaterialTheme.typography.bodyLarge)
         Spacer(Modifier.height(16.dp))
-        Button(onClick = alReintentar) { Text("Reintentar") }
+        Button(onClick = alReintentar) { Text(tx("Reintentar")) }
     }
 }

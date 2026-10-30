@@ -5242,6 +5242,53 @@ def _zona_valida(tz) -> Optional[str]:
         return None
 
 
+# LA MONEDA Y LAS UNIDADES DE CADA PAÍS (30-10-2026, expansión; docs/EXPANSION-INTERNACIONAL-30-10.md): lo que se
+# cobra en la puerta y lo que cuesta el plan van en la moneda del país, y en EE. UU. y Reino Unido (y Liberia y
+# Birmania) las distancias en millas. La misma tabla que frontend/src/lib/region.js y ui/Tema.kt de la nativa.
+MONEDA_PAIS = {
+    "es": "EUR", "mx": "MXN", "ar": "ARS", "co": "COP", "cl": "CLP", "pe": "PEN", "ve": "VES", "ec": "USD", "bo": "BOB",
+    "py": "PYG", "uy": "UYU", "cr": "CRC", "pa": "USD", "gt": "GTQ", "hn": "HNL", "sv": "USD", "ni": "NIO", "do": "DOP",
+    "pr": "USD", "cu": "CUP", "br": "BRL", "cn": "CNY", "pt": "EUR", "fr": "EUR", "it": "EUR", "de": "EUR", "ie": "EUR",
+    "be": "EUR", "nl": "EUR", "at": "EUR", "ad": "EUR", "gb": "GBP", "ch": "CHF", "us": "USD",
+}
+PAISES_MILLAS = {"us", "gb", "lr", "mm"}
+# EL PLAN REPARTIDOR EN CADA MONEDA: (al mes, al año). PROPUESTA del 30-10-2026 (§5 del informe): en euros, dólares y
+# francos el mismo número; en libras un poco menos; en Latinoamérica según lo que allí cuesta la competencia y se
+# cobra por entrega. Se puede pisar sin desplegar desde el panel de negocio (plan_catalog.precios_repartidor). En
+# euros manda PLAN_TARIFAS["autonomo"] (lo editable de siempre). Sin moneda conocida, en dólares.
+PRECIOS_REPARTIDOR = {
+    "EUR": (9.99, 99), "USD": (9.99, 99), "GBP": (8.99, 89), "CHF": (9.90, 99),
+    "MXN": (149, 1490), "BRL": (39.90, 399), "COP": (29900, 299000), "CLP": (7990, 79900), "PEN": (29.90, 299),
+    "UYU": (349, 3490), "CRC": (4990, 49900), "GTQ": (59, 590), "DOP": (499, 4990), "BOB": (59, 590),
+    "PYG": (59900, 599000), "HNL": (199, 1990), "NIO": (299, 2990), "CNY": (69, 690),
+}
+
+
+def _moneda_de(pais) -> str:
+    return MONEDA_PAIS.get((pais or "es").lower(), "EUR")
+
+
+def _unidades_de(pais) -> str:
+    return "mi" if (pais or "").lower() in PAISES_MILLAS else "km"
+
+
+def _precios_repartidor(pais, tarifa_eur=None, catalogo=None) -> dict:
+    """El plan Repartidor en la moneda del país: {moneda, mensual, anual}."""
+    tabla = dict(PRECIOS_REPARTIDOR)
+    for k, v in ((catalogo or {}).get("precios_repartidor") or {}).items():
+        try:
+            tabla[str(k).upper()] = (float(v[0]), float(v[1]))
+        except (TypeError, ValueError, IndexError, KeyError):
+            continue
+    moneda = _moneda_de(pais)
+    if moneda == "EUR" and tarifa_eur:
+        return {"moneda": "EUR", "mensual": tarifa_eur["mensual"], "anual": tarifa_eur["anual"]}
+    if moneda not in tabla:
+        moneda = "USD"
+    mensual, anual = tabla[moneda]
+    return {"moneda": moneda, "mensual": mensual, "anual": anual}
+
+
 def _region_alta(tz, pais) -> tuple:
     """(pais, zona) para una cuenta nueva: la zona del móvil si es válida; el
     país, el que mande la app si lo conocemos, o el que toca a esa zona."""
@@ -5399,7 +5446,9 @@ async def org_billing(user: dict = Depends(get_current_user)):
     b["cobro_al_suscribir"] = _stripe_inicio_cobro(o)
     if _es_repartidor(o):
         t = PLAN_TARIFAS["autonomo"]
-        b["precios"] = {"mensual": t["mensual"], "anual": t["anual"]}
+        # En la moneda del país de la cuenta (30-10-2026): «$9.99», «MX$149»; en euros, la tarifa editable.
+        b["precios"] = _precios_repartidor(b["pais"], t, await _catalogo_planes())
+        b["unidades"] = _unidades_de(b["pais"])
         b["regalos"] = {str(m): v / 100 for m, v in _REGALO_PRECIOS.items()}
         # Google Play (dentro de la app): qué productos y con qué cuenta ligar la compra.
         b["play"] = {"listo": _play_listo(), "productos": _PLAY_PRODUCTOS, "paquete": _PLAY_PAQUETE,
@@ -5723,7 +5772,7 @@ async def app_version():
 
 
 @api_router.get("/billing/planes")
-async def billing_planes():
+async def billing_planes(pais: str = ""):
     """Tarifas vigentes. PUBLICO: lo lee la página de precios, que no tiene sesión.
 
     Sale del catálogo (global_db.plan_catalog), editable desde el panel de
@@ -5814,6 +5863,8 @@ async def billing_planes():
         })
     return {
         "moneda": cat.get("moneda", "EUR"),
+        # El plan Repartidor en la moneda del país del visitante (30-10-2026): ?pais=mx -> pesos.
+        "precios_repartidor": _precios_repartidor(pais, PLAN_TARIFAS["autonomo"], cat),
         "descuento_anual_meses": cat.get("descuento_anual_meses", 2),
         "planes": planes,
         "desde_empresa": EMPRESA_DESDE_VEHICULO,
@@ -52708,7 +52759,8 @@ async def reparto_mi_ruta(user: dict = Depends(require_any_auth)):
             # A qué hora le llega el aviso de la mañana (lo elige él; sin elegir, las 8).
             "aviso_hora": ("%02d:%02d" % _aviso_hora(org)) if autonomo else None,
             "puede_pegar": autonomo and user.get("role") == "admin",
-            "pais": _region_actual.get()[0], "prefijo": PAISES_REPARTO.get(_region_actual.get()[0], {}).get("prefijo", "34"), "fecha": f, "pedidos": ps, "base": a.get("base"), "ruta": ruta, "autonomo": autonomo,
+            "pais": _region_actual.get()[0], "prefijo": PAISES_REPARTO.get(_region_actual.get()[0], {}).get("prefijo", "34"),
+            "unidades": _unidades_de(_region_actual.get()[0]), "moneda": _moneda_de(_region_actual.get()[0]), "fecha": f, "pedidos": ps, "base": a.get("base"), "ruta": ruta, "autonomo": autonomo,
             "ia_tickets": await _rep_ia_activa(a, user),
             "jornada": {"empezada": j.get("empezada"), "terminada": j.get("terminada")},
             # «Mi dinero hoy»: solo para quien reparte por su cuenta (a un conductor le paga su empresa).
@@ -53876,7 +53928,7 @@ async def stripe_suscripcion(data: dict = Body(default={}), user: dict = Depends
         "line_items": [{"price": price, "quantity": cantidad}],
         "client_reference_id": org["id"],
         "customer_email": org.get("email") or user.get("email") or None,
-        "locale": "es",
+        "locale": "auto",   # el idioma del cliente (30-10-2026); la moneda, la suya si el Price la tiene
         "allow_promotion_codes": True,
         # Quien reparte solo vuelve a su app, no al panel.
         "success_url": f"{_PORTAL_BASE_FRONT}/{'ruta' if org.get('sector') == 'autonomo' else 'panel'}?pago=ok",

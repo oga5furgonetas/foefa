@@ -1,5 +1,6 @@
 package com.flotadsp.fds.ui.acceso
 
+import com.flotadsp.fds.ui.tx
 import android.content.Intent
 import android.net.Uri
 import android.webkit.WebChromeClient
@@ -56,7 +57,7 @@ private fun PortalWeb(titulo: String, ruta: String, sesion: Sesion?, alCerrar: (
     BackHandler(onBack = { if (web?.canGoBack() == true) web?.goBack() else alCerrar() })
     Column(Modifier.fillMaxSize().statusBarsPadding()) {
         Row(Modifier.fillMaxWidth().height(48.dp).padding(horizontal = 8.dp), verticalAlignment = Alignment.CenterVertically) {
-            IconButton(onClick = alCerrar) { Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Volver") }
+            IconButton(onClick = alCerrar) { Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = tx("Volver")) }
             Text(titulo, style = MaterialTheme.typography.titleSmall)
         }
         AndroidView(factory = { context ->

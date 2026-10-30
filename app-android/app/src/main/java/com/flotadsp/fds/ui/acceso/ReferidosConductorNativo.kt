@@ -1,5 +1,6 @@
 package com.flotadsp.fds.ui.acceso
 
+import com.flotadsp.fds.ui.tx
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -83,8 +84,8 @@ fun ReferidosConductorNativo(alVolver: () -> Unit) {
     val enlace = d?.let { campoSeguro(it, "enlace") }.orEmpty()
 
     Scaffold(topBar = { TopAppBar(
-        title = { Text("Invita y gana") },
-        navigationIcon = { IconButton(onClick = alVolver) { Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Volver") } },
+        title = { Text(tx("Invita y gana")) },
+        navigationIcon = { IconButton(onClick = alVolver) { Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = tx("Volver")) } },
     ) }) { inset ->
         Column(Modifier.fillMaxSize().padding(inset).verticalScroll(rememberScrollState()).padding(18.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
             if (cargando) CircularProgressIndicator()
@@ -93,7 +94,7 @@ fun ReferidosConductorNativo(alVolver: () -> Unit) {
                 Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer)) {
                     Column(Modifier.fillMaxWidth().padding(18.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                         Icon(Icons.Default.CardGiftcard, contentDescription = null, tint = MaterialTheme.colorScheme.onPrimaryContainer)
-                        Text("Comparte FDS con otros repartidores", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onPrimaryContainer)
+                        Text(tx("Comparte FDS con otros repartidores"), style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onPrimaryContainer)
                         val pago = campoSeguro(it, "por_invitado").toIntOrNull() ?: 0
                         Text("Ganas ${euros(pago)} si se registran con tu enlace y completan ${campoSeguro(it, "entregas_cartera").ifBlank { "20" }} entregas reales en ${campoSeguro(it, "dias_distintos").ifBlank { "2" }} días distintos, dentro de ${campoSeguro(it, "ventana_dias").ifBlank { "30" }} días.", color = MaterialTheme.colorScheme.onPrimaryContainer)
                         val promo = campoSeguro(it, "promo_hasta")
@@ -101,13 +102,13 @@ fun ReferidosConductorNativo(alVolver: () -> Unit) {
                         Button(onClick = {
                             if (enlace.isNotBlank()) Acciones.compartir(ctx, "Estoy usando FDS para organizar repartos. Pruébala: $enlace\n\nSi te registras con mi enlace y completas ${campoSeguro(it, "entregas_cartera").ifBlank { "20" }} entregas reales en varios días, puedo ganar ${euros(pago)}. Es una invitación personal, no vinculada a mi empresa.")
                         }, enabled = enlace.isNotBlank(), modifier = Modifier.fillMaxWidth()) {
-                            Icon(Icons.Default.Share, contentDescription = null); Text("  Compartir mi enlace")
+                            Icon(Icons.Default.Share, contentDescription = null); Text(tx("  Compartir mi enlace"))
                         }
                     }
                 }
                 Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)) {
                     Column(Modifier.fillMaxWidth().padding(18.dp), verticalArrangement = Arrangement.spacedBy(7.dp)) {
-                        Text("Tu cartera personal", style = MaterialTheme.typography.titleMedium)
+                        Text(tx("Tu cartera personal"), style = MaterialTheme.typography.titleMedium)
                         Text(euros(saldo), style = MaterialTheme.typography.headlineLarge, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
                         Text("${campoSeguro(it, "invitados")} invitados · ${campoSeguro(it, "premiados")} válidos", style = MaterialTheme.typography.bodyMedium)
                         Text("Saldo mínimo para retirar: ${euros(min)}. Se revisa cada solicitud antes de realizar el pago.", style = MaterialTheme.typography.bodySmall)
@@ -118,7 +119,7 @@ fun ReferidosConductorNativo(alVolver: () -> Unit) {
                 }
                 val retiradas = it["retiradas"]?.jsonArray ?: JsonArray(emptyList())
                 if (retiradas.isNotEmpty()) {
-                    Text("Solicitudes anteriores", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+                    Text(tx("Solicitudes anteriores"), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
                     retiradas.take(10).forEach { r ->
                         val o = r.jsonObject
                         Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)) {
@@ -137,10 +138,10 @@ fun ReferidosConductorNativo(alVolver: () -> Unit) {
     }
     if (dialogo) AlertDialog(
         onDismissRequest = { if (!enviando) dialogo = false },
-        title = { Text("Solicitar pago") },
+        title = { Text(tx("Solicitar pago")) },
         text = { Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            Text("Elige cómo cobrar. Los datos los recibe únicamente la oficina que procesa el pago.")
-            OutlinedTextField(titular, { titular = it }, label = { Text("Nombre y apellidos del titular") }, singleLine = true)
+            Text(tx("Elige cómo cobrar. Los datos los recibe únicamente la oficina que procesa el pago."))
+            OutlinedTextField(titular, { titular = it }, label = { Text(tx("Nombre y apellidos del titular")) }, singleLine = true)
             Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) { metodos.forEach { m -> FilterChip(selected = metodo == m, onClick = { metodo = m }, label = { Text(when (m) { "iban" -> "Transferencia"; else -> m.replaceFirstChar(Char::uppercase) }) }) } }
             OutlinedTextField(destino, { destino = it }, label = { Text(when (metodo) { "bizum" -> "Móvil de Bizum"; "iban" -> "IBAN"; else -> "Correo de PayPal" }) }, singleLine = true)
             error?.let { Text(it, color = MaterialTheme.colorScheme.error) }
@@ -154,8 +155,8 @@ fun ReferidosConductorNativo(alVolver: () -> Unit) {
                 } catch (e: ErrorApi) { error = e.message }
                 finally { enviando = false }
             }
-        }, enabled = !enviando && titular.trim().length >= 5 && metodo.isNotBlank() && destino.isNotBlank()) { if (enviando) CircularProgressIndicator() else Text("Enviar solicitud") } },
-        dismissButton = { TextButton(onClick = { dialogo = false }) { Text("Cancelar") } },
+        }, enabled = !enviando && titular.trim().length >= 5 && metodo.isNotBlank() && destino.isNotBlank()) { if (enviando) CircularProgressIndicator() else Text(tx("Enviar solicitud")) } },
+        dismissButton = { TextButton(onClick = { dialogo = false }) { Text(tx("Cancelar")) } },
     )
 }
 
