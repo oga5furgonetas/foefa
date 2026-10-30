@@ -1,0 +1,103 @@
+# FDS en el App Store de Apple (iPhone)
+
+> Dani (30-10-2026): «¿cómo hacemos ahora para ponerla en Apple? Móntala y después dime los pasos y la ponemos».
+> Montada el 30-10-2026. Lo que hace falta de Dani está en «Pasos de Dani»; lo técnico, debajo.
+
+## Qué es la app de iPhone
+
+La **misma web** del repartidor (`frontend/`, la de flotadsp.com) envuelta con **Capacitor** en una app nativa de
+iPhone (`frontend/ios/`): abre directamente en la app del repartidor (`/ruta`), con la cámara para escanear y leer
+etiquetas, la ubicación para ordenar la ruta y el mapa, y todo lo demás tal cual está en la web. No es la app
+nativa de Android (esa es Kotlin, en `app-android/`): en iPhone se va por el camino corto para estar en la tienda
+cuanto antes; cuando tenga usuarios se decide si merece una nativa.
+
+Lo que la app de iPhone NO lleva (y por qué):
+- **Comprar el plan**: Apple obliga a usar su pago dentro de la app (regla 3.1.1, con el 15-30 % de comisión) y
+  rechaza las apps que llevan a pagar fuera. Hasta tener el pago de Apple hecho, dentro del iPhone no se vende nada
+  (la cuenta se ve, el plan se contrata en la web). Ahora mismo es gratis hasta el 31-12, así que no se nota.
+- **Avisos al móvil (push)**: la web los manda por Web Push, que dentro de la app de iPhone no funciona. Hace falta
+  APNs (certificado de Apple + plugin): tanda 2.
+- **Manos libres por voz**: Safari dentro de la app no tiene reconocimiento de voz. La app lo esconde sola.
+- Botón de Google Play, «instalar la app» y los pasos de «añadir a pantalla de inicio»: dentro de la app no salen.
+
+Desde Windows **no se puede compilar para iPhone** (hace falta Xcode, solo en Mac). Lo compila un Mac de GitHub:
+`.github/workflows/app-ios.yml` compila siempre para el simulador (sin firma: si está en verde, el proyecto está
+bien) y, cuando están los secretos de Apple, archiva, firma y **sube a App Store Connect** (TestFlight). El paso a
+revisión y a la tienda es un botón en App Store Connect. Cada subida lleva el número de build del run (único, como
+pide Apple) y la versión `APP_VERSION` del workflow (2.4.1).
+
+## Pasos de Dani (una vez)
+
+1. **Cuenta de desarrollador de Apple** (99 $/año): https://developer.apple.com/programs/enroll/ con tu Apple ID.
+   Como persona física va en 1-2 días; como empresa pide número D-U-N-S y tarda semanas. Para empezar, persona
+   física (se puede pasar a empresa después).
+2. **El identificador de la app**: en https://developer.apple.com/account → Certificates, Identifiers & Profiles →
+   Identifiers → «+» → App IDs → App → Description `FDS`, Bundle ID **explícito** `com.flotadsp.fds`. Sin
+   capacidades extra (se añaden cuando haga falta: push).
+3. **La clave de la API de App Store Connect** (para que GitHub pueda firmar y subir): en
+   https://appstoreconnect.apple.com → Users and Access → Integrations → App Store Connect API → «+» → nombre
+   `GitHub`, acceso **Admin** (hace falta para que Xcode cree los certificados). Apunta el **Issuer ID** (arriba),
+   el **Key ID** y **descarga el .p8** (solo se puede bajar UNA vez).
+4. **El Team ID**: https://developer.apple.com/account → Membership details → Team ID (10 letras y números).
+5. **Los cuatro secretos en GitHub**: https://github.com/oga5furgonetas/foefa/settings/secrets/actions → New
+   repository secret: `APPLE_TEAM_ID`, `ASC_KEY_ID`, `ASC_ISSUER_ID` y `ASC_API_KEY_P8` (abre el .p8 con el bloc
+   de notas y pega TODO el contenido, con las líneas BEGIN y END).
+6. **La app en App Store Connect**: My Apps → «+» → New App: plataforma iOS, nombre **FDS**, idioma principal
+   Español (España), Bundle ID `com.flotadsp.fds`, SKU `fds`, acceso completo.
+7. **Lanzar la subida**: en GitHub → Actions → «App iPhone (App Store)» → Run workflow. En 15-20 minutos el build
+   aparece en App Store Connect → TestFlight (puede tardar unos minutos más en «procesarse»). Instálala en tu iPhone
+   con la app TestFlight para probarla.
+8. **La ficha** (App Store Connect → la app → App Store → la versión 2.4.1):
+   - Nombre `FDS` · Subtítulo (30 letras) `Ruta de reparto y entregas` · Categoría Business (secundaria Navigation).
+   - Descripción: la de Play, `app-android/play-listing/es-ES/full.txt` (y las de en-US, pt-BR, fr-FR, it-IT, de-DE
+     para esos idiomas). Palabras clave (100 letras): `reparto,repartidor,ruta,entregas,paquetes,mensajería,escanear,
+     etiqueta,navegación`. Texto promocional (170): el `short.txt`.
+   - URL de soporte `https://flotadsp.com` · URL de privacidad `https://flotadsp.com/privacidad`.
+   - **Capturas**: obligatorias de iPhone 6,7" (1290×2796) o 6,9" (1320×2868); con TestFlight en tu iPhone, captura
+     Hoy, el mapa, una parada, Ajustes y Cuenta (como las de Play). Al ser solo iPhone no pide las de iPad.
+   - **App Privacy** (cuestionario): se recogen Ubicación precisa (función de la app), Correo (cuenta), Fotos o
+     vídeos (contenido que sube el usuario: etiquetas), Identificadores de usuario (cuenta), Datos de uso (analítica
+     propia, no vinculada). Nada para publicidad ni se vende a terceros. Clasificación de edad: 4+.
+   - **Información de revisión**: Apple entra con una cuenta de prueba: crea una en la web (p. ej. `apple@flotadsp.com`
+     con unas paradas de ejemplo cargadas) y pon usuario y contraseña ahí, con una nota: «App para repartidores
+     autónomos: escanea paquetes, ordena la ruta y navega. Para probar: entrar y pulsar "Verlo en acción con 3
+     paradas de ejemplo". No hay compras dentro de la app.»
+   - Selecciona el build de TestFlight, «Guardar» y **«Enviar a revisión»**. La primera revisión suele tardar 1-3 días.
+9. Cada vez que se toque `frontend/` en `main`, el workflow vuelve a compilar y, con los secretos, sube otro build;
+   para publicarlo, en App Store Connect se crea la versión nueva, se elige el build y se envía a revisión.
+
+## Por si la revisión pone pegas (lo típico)
+
+- «Minimum functionality / es una web» (4.2): la app escanea con la cámara, usa la ubicación, funciona sin red
+  (cola de entregas) y guía con voz: explicarlo en las notas de revisión si lo dicen.
+- «Pagos fuera de la app» (3.1.1): dentro del iPhone no hay ningún botón de pagar ni enlace a pagar (ver arriba).
+- «Falta Sign in with Apple» (4.8): solo lo exigen si la app ofrece entrar con Google/Facebook; FDS entra con correo
+  y contraseña, así que no aplica.
+- Permisos: cada uno lleva su explicación en `Info.plist` (cámara, fotos, ubicación mientras se usa, micrófono).
+- Cifrado: `ITSAppUsesNonExemptEncryption = false` (solo HTTPS), para que no pida el cuestionario de exportación.
+
+## Lo técnico (dónde está cada cosa)
+
+- `frontend/capacitor.config.json`: `appId com.flotadsp.fds`, `appName FDS`, la web compilada en `dist`, fondo y
+  barra de estado del color de la app, pantalla de arranque sin rueda.
+- `frontend/ios/App/`: el proyecto de Xcode que genera Capacitor (`npx cap add ios`). Tocado a mano: `Info.plist`
+  (permisos, solo vertical, sin cifrado, región es), `project.pbxproj` (solo iPhone, versión 2.4.1), los iconos
+  (`Assets.xcassets`, generados con `node scripts/generar-iconos-ios.mjs` desde `public/favicon.svg`: icono de
+  1024 sin transparencia y pantalla de arranque de 2732). `App/App/public` (la web copiada) y `Pods` no van a git.
+- `frontend/src/lib/plataforma.js`: `esAppNativa()` / `esAppIOS()` (Capacitor deja `window.Capacitor` solo dentro
+  de la app), `arrancarEnLaApp()` (de `/` a `/ruta` al abrir) y `barraNativa()` (la barra de estado a juego con el
+  tema, con el plugin StatusBar). `lib/instalar.js` da la app por instalada dentro de la nativa (sin «instalar»);
+  `RutaCuenta.jsx` esconde la compra en iOS.
+- El servidor admite el origen `capacitor://localhost` en CORS siempre (`server.py`): sin eso el iPhone no podría
+  ni entrar.
+- Para compilar en local hace falta un Mac: `cd frontend && npm ci && VITE_API_URL=https://flota-backend.fly.dev/api
+  npm run build && npx cap sync ios && npx cap open ios` (abre Xcode; con tu cuenta de Apple en Xcode → firma
+  automática → Product → Archive → Distribute).
+
+## Tanda 2 (cuando esté en la tienda)
+
+- Avisos al móvil con APNs (`@capacitor/push-notifications` + certificado/clave APNs en el servidor).
+- El pago de Apple (StoreKit, suscripción mensual y anual) o, en la UE, el enlace externo con las condiciones del
+  DMA; mientras, el plan se contrata en la web.
+- Compartir la ubicación en segundo plano para «Seguirme» con la pantalla apagada (hoy, solo con la app abierta).
+- Capturas por idioma y la ficha en en/pt/fr/it/de (las de Play valen).

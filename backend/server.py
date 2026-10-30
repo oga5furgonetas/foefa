@@ -17214,6 +17214,10 @@ _DEFAULT_CORS = ",".join([
 ])
 cors_origins_raw = os.environ.get("CORS_ORIGINS", _DEFAULT_CORS)
 cors_origins = [o.strip() for o in cors_origins_raw.split(",") if o.strip()]
+# LA APP DE IPHONE (30-10-2026): la web envuelta con Capacitor se sirve desde `capacitor://localhost` y llama a la API
+# desde ahí; sin este origen el iPhone no podría ni entrar. Siempre, se ponga lo que se ponga en CORS_ORIGINS.
+if cors_origins != ["*"] and "capacitor://localhost" not in cors_origins:
+    cors_origins.append("capacitor://localhost")
 # Si alguien explícitamente quiere abrirlo, usar wildcard. Si no, credenciales activas.
 use_credentials = cors_origins != ["*"]
 logger.info(f"CORS allow_origins={cors_origins} credentials={use_credentials}")

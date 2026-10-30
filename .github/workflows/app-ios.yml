@@ -1,0 +1,119 @@
+# LA APP DE IPHONE, HECHA POR GITHUB (30-10-2026, Dani: «cómo hacemos ahora para ponerla en Apple… móntala»).
+# Es la misma web (frontend/) envuelta con Capacitor (frontend/ios/): desde Windows no se puede compilar para iPhone,
+# así que la compila un Mac de GitHub. Dos partes:
+#   1. SIEMPRE: compila para el simulador, sin firma. Si esto está en verde, el proyecto de Xcode está bien.
+#   2. CON LOS SECRETOS DE APPLE (Settings → Secrets and variables → Actions): archiva, firma y SUBE a App Store Connect
+#      (sale en TestFlight y, desde ahí, se manda a revisión en appstoreconnect.apple.com). Hacen falta:
+#        APPLE_TEAM_ID        el Team ID de la cuenta de desarrollador (developer.apple.com → Membership, 10 letras)
+#        ASC_KEY_ID           el Key ID de una clave de la API de App Store Connect (Users and Access → Integrations)
+#        ASC_ISSUER_ID        el Issuer ID de esa misma pantalla
+#        ASC_API_KEY_P8       el contenido entero del fichero AuthKey_XXXX.p8 (solo se puede bajar una vez)
+#      Con la clave, Xcode crea y renueva él solo los certificados y perfiles (cloud signing): no hay que subir nada más.
+# Se lanza a mano (Run workflow) o al tocar frontend/ (sin los tests) o este fichero en main. Los pasos de Dani están
+# en docs/APP_STORE.md.
+name: App iPhone (App Store)
+
+on:
+  workflow_dispatch:
+    inputs:
+      subir:
+        description: "Subir a App Store Connect (si hay secretos)"
+        type: boolean
+        default: true
+  push:
+    branches: [main]
+    paths: ['frontend/ios/**', 'frontend/capacitor.config.json', 'frontend/src/**', 'frontend/public/**', 'frontend/package.json', '.github/workflows/app-ios.yml']
+
+concurrency:
+  group: app-ios-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  iphone:
+    name: Compilar (y subir a Apple si hay clave)
+    runs-on: macos-15
+    timeout-minutes: 60
+    env:
+      APP_VERSION: "2.4.1"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - name: La web, apuntando a la API de producción
+        working-directory: frontend
+        env:
+          VITE_API_URL: https://flota-backend.fly.dev/api
+        run: |
+          npm ci
+          npm run build
+          npx cap sync ios
+      - name: CocoaPods
+        working-directory: frontend/ios/App
+        run: pod install
+      - name: Xcode
+        run: |
+          sudo xcode-select -s /Applications/Xcode.app
+          xcodebuild -version
+      - name: "1. Compila para el simulador (sin firma): el proyecto está bien"
+        working-directory: frontend/ios/App
+        run: |
+          set -o pipefail
+          xcodebuild -workspace App.xcworkspace -scheme App -configuration Debug \
+            -sdk iphonesimulator -destination 'generic/platform=iOS Simulator' \
+            CODE_SIGNING_ALLOWED=NO MARKETING_VERSION="$APP_VERSION" CURRENT_PROJECT_VERSION="${{ github.run_number }}" \
+            build | tail -40
+      - name: ¿Hay clave de Apple?
+        id: apple
+        env:
+          TEAM: ${{ secrets.APPLE_TEAM_ID }}
+          KEY: ${{ secrets.ASC_KEY_ID }}
+          ISSUER: ${{ secrets.ASC_ISSUER_ID }}
+          P8: ${{ secrets.ASC_API_KEY_P8 }}
+          SUBIR: ${{ github.event_name == 'push' || inputs.subir }}
+        run: |
+          if [ -n "$TEAM" ] && [ -n "$KEY" ] && [ -n "$ISSUER" ] && [ -n "$P8" ] && [ "$SUBIR" = "true" ]; then
+            echo "si=true" >> "$GITHUB_OUTPUT"; echo "Con clave: se archiva, se firma y se sube."
+          else
+            echo "si=false" >> "$GITHUB_OUTPUT"; echo "Sin clave de Apple (o sin pedir subir): solo se comprueba que compila."
+          fi
+      - name: "2. Archiva, firma y sube a App Store Connect"
+        if: steps.apple.outputs.si == 'true'
+        working-directory: frontend/ios/App
+        env:
+          TEAM: ${{ secrets.APPLE_TEAM_ID }}
+          KEY: ${{ secrets.ASC_KEY_ID }}
+          ISSUER: ${{ secrets.ASC_ISSUER_ID }}
+          P8: ${{ secrets.ASC_API_KEY_P8 }}
+        run: |
+          set -o pipefail
+          mkdir -p "$HOME/.private_keys"
+          printf '%s\n' "$P8" > "$HOME/.private_keys/AuthKey_$KEY.p8"
+          cat > ExportOptions.plist <<EOF
+          <?xml version="1.0" encoding="UTF-8"?>
+          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+          <plist version="1.0"><dict>
+            <key>method</key><string>app-store-connect</string>
+            <key>destination</key><string>upload</string>
+            <key>teamID</key><string>$TEAM</string>
+            <key>signingStyle</key><string>automatic</string>
+            <key>uploadSymbols</key><true/>
+            <key>manageAppVersionAndBuildNumber</key><false/>
+          </dict></plist>
+          EOF
+          xcodebuild -workspace App.xcworkspace -scheme App -configuration Release \
+            -destination 'generic/platform=iOS' -archivePath "$PWD/build/App.xcarchive" \
+            DEVELOPMENT_TEAM="$TEAM" MARKETING_VERSION="$APP_VERSION" CURRENT_PROJECT_VERSION="${{ github.run_number }}" \
+            -allowProvisioningUpdates -allowProvisioningDeviceRegistration \
+            -authenticationKeyPath "$HOME/.private_keys/AuthKey_$KEY.p8" -authenticationKeyID "$KEY" -authenticationKeyIssuerID "$ISSUER" \
+            archive | tail -40
+          xcodebuild -exportArchive -archivePath "$PWD/build/App.xcarchive" -exportOptionsPlist ExportOptions.plist \
+            -exportPath "$PWD/build/export" \
+            -allowProvisioningUpdates \
+            -authenticationKeyPath "$HOME/.private_keys/AuthKey_$KEY.p8" -authenticationKeyID "$KEY" -authenticationKeyIssuerID "$ISSUER" | tail -40
+          echo "Subida a App Store Connect: FDS $APP_VERSION (build ${{ github.run_number }}). En unos minutos sale en TestFlight."
+      - name: Borrar la clave del runner
+        if: always()
+        run: rm -rf "$HOME/.private_keys"

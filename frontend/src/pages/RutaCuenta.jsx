@@ -12,6 +12,7 @@ import { evento, apuntarParaLaVuelta } from '../lib/metaPixel'
 import { getAdmin, logout, esSuplantacion } from '../panel/auth'
 import { MARCA, origen } from '../marca'
 import { enAppPlay } from '../lib/enApp'
+import { esAppIOS } from '../lib/plataforma'
 import { lista } from '../lib/lista'
 import { tx, useIdioma, locale, IDIOMAS, idioma, cambiarIdioma, txError } from '../lib/idioma'
 import { refCentActual, refPromoActiva, REF_PROMO_HASTA, REF_PROMO_CENT, fechaRefPromo } from '../lib/precios'
@@ -47,6 +48,9 @@ export function Cuenta({ billing, recargar, toast, resaltarRegalo, merc }) {
   const lang = useIdioma()
   const admin = getAdmin()
   const enApp = enAppPlay()
+  // En la app de iPhone no se vende nada (Apple exige su pago dentro de la app, regla 3.1.1): ni suscribirse, ni regalos,
+  // ni el portal de la tarjeta; el plan se lleva desde la web. Ver docs/APP_STORE.md.
+  const enIOS = esAppIOS()
   const b = billing || {}
   const precios = b.precios || { mensual: 9.99, anual: 99 }
   monedaPlan = precios.moneda || 'EUR'
@@ -62,15 +66,15 @@ export function Cuenta({ billing, recargar, toast, resaltarRegalo, merc }) {
       {!billing ? <Loader2 className="mx-auto my-10 animate-spin text-dark-500" /> : suplantando ? <Estado b={b} precios={precios} /> : (
         <>
           <Estado b={b} precios={precios} />
-          {!enApp && b.status === 'suspended' && b.pago_proveedor === 'stripe' && b.stripe_status !== 'canceled'
+          {!enApp && !enIOS && b.status === 'suspended' && b.pago_proveedor === 'stripe' && b.stripe_status !== 'canceled'
             ? <BotonPortal toast={toast} texto={tx('Revisar mi tarjeta y pagar')} principal />
             // Durante la promoción no hay nada que pagar: no se ofrece suscribirse.
-            : !enApp && !b.suscrito && !conPlay(b) && !b.promo?.activa && <Suscribirse b={b} precios={precios} toast={toast} />}
+            : !enApp && !enIOS && !b.suscrito && !conPlay(b) && !b.promo?.activa && <Suscribirse b={b} precios={precios} toast={toast} />}
           {enApp && !b.suscrito && !conPlay(b) && !b.promo?.activa && b.play?.listo && <PagarConPlay b={b} toast={toast} recargar={recargar} />}
           {conPlay(b) && <GestionarPlay b={b} />}
-          {!enApp && b.suscrito && <Gestionar b={b} precios={precios} toast={toast} recargar={recargar} />}
+          {!enApp && !enIOS && b.suscrito && <Gestionar b={b} precios={precios} toast={toast} recargar={recargar} />}
           <Canjear toast={toast} recargar={recargar} />
-          {!enApp && b.regalos && <Regalar precios={b.regalos} toast={toast} resaltar={resaltarRegalo} />}
+          {!enApp && !enIOS && b.regalos && <Regalar precios={b.regalos} toast={toast} resaltar={resaltarRegalo} />}
         </>
       )}
       {!suplantando && <Invitar toast={toast} />}
@@ -665,6 +669,9 @@ function TarjetaRegalo({ r, nuevo, toast }) {
 export function Muro({ billing, toast, recargar, irACuenta }) {
   useIdioma()
   const enApp = enAppPlay()
+  // En la app de iPhone no se vende nada (Apple exige su pago dentro de la app, regla 3.1.1): ni suscribirse, ni regalos,
+  // ni el portal de la tarjeta; el plan se lleva desde la web. Ver docs/APP_STORE.md.
+  const enIOS = esAppIOS()
   const b = billing || {}
   const precios = b.precios || { mensual: 9.99, anual: 99 }
   monedaPlan = precios.moneda || 'EUR'
@@ -696,7 +703,7 @@ export function Muro({ billing, toast, recargar, irACuenta }) {
         b.status === 'suspended' && b.pago_proveedor === 'stripe' && b.stripe_status !== 'canceled'
           ? <p className="mt-4 rounded-2xl border border-dark-700 bg-dark-900 p-4 text-center text-[13px] text-dark-300">{tx('Revisa el pago de tu suscripción.')}</p>
           : <PagarConPlay b={b} toast={toast} recargar={recargar} titulo={empezar ? tx('Elige cómo quieres pagar después') : tx('Elige tu plan')} />
-      ) : b.status === 'suspended' && b.pago_proveedor === 'stripe' && b.stripe_status !== 'canceled' ? (
+      ) : enIOS ? null : b.status === 'suspended' && b.pago_proveedor === 'stripe' && b.stripe_status !== 'canceled' ? (
         // Pago fallido con la suscripción viva: se arregla la tarjeta, no se
         // contrata otra (saldrían dos cobros).
         <BotonPortal toast={toast} texto={tx('Revisar mi tarjeta y pagar')} principal />

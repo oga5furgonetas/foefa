@@ -3,6 +3,8 @@
    en `panel_theme`, y `panel_theme_elegido` marca que lo eligió alguien a mano (lo demás es basura del código
    viejo). La app del repartidor lo elige en Ajustes y añade 'auto', que sigue al móvil: oscuro si el móvil está
    en modo oscuro. «Letra más grande» (`fds_letra`) sube un 15 % los textos de la app (index.css, data-letra). */
+import { barraNativa } from './plataforma'
+
 const CLAVE = 'panel_theme'
 const ELEGIDO = 'panel_theme_elegido'
 const LETRA = 'fds_letra'
@@ -50,6 +52,7 @@ export function pintarBarra(color) {
     if (!m) { m = document.createElement('meta'); m.setAttribute('name', 'theme-color'); document.head.appendChild(m) }
     const antes = m.getAttribute('content')
     m.setAttribute('content', color)
+    barraNativa(color)   // la barra de estado del iPhone, a juego (solo dentro de la app de iPhone)
     return antes
   } catch { return null }
 }
