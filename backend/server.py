@@ -3,6 +3,7 @@ import fiabilidad
 import piezas
 import seguimiento
 import reparto
+import trafico
 import whatsapp
 import analitica
 import activacion
@@ -5268,6 +5269,16 @@ def _moneda_de(pais) -> str:
     return MONEDA_PAIS.get((pais or "es").lower(), "EUR")
 
 
+def _idioma_org(org) -> str:
+    """El idioma en que se le habla a una cuenta desde el servidor (avisos al móvil): el que eligió en la app; si no
+    consta, el de su país (ciclo_correos); portugués de Brasil cuenta como portugués."""
+    i = str((org or {}).get("idioma") or "").lower()[:2]
+    if i in ("es", "en", "pt", "fr", "it", "de"):
+        return i
+    j = ciclo_correos.idioma_de(org or {})
+    return "pt" if j == "br" else j
+
+
 def _unidades_de(pais) -> str:
     return "mi" if (pais or "").lower() in PAISES_MILLAS else "km"
 
@@ -5730,7 +5741,20 @@ async def change_plan(data: dict = Body(...), user: dict = Depends(require_admin
 #   fly secrets set -a flota-backend APP_ANDROID_WEB="17 2.2.5"    (code y nombre, los de build.gradle.kts)
 # Sin la variable no se avisa a nadie: nunca se manda a descargar una versión que aún no está en la web.
 def _app_android_web() -> Optional[dict]:
-    v = (os.environ.get("APP_ANDROID_WEB") or "").split()
+    return _version_anunciada("APP_ANDROID_WEB")
+
+
+# LA VERSIÓN PUBLICADA EN GOOGLE PLAY (30-10-2026, Dani: «que al entrar les salte "actualización disponible" con un botón a
+# Google Play»). La app de Play ya se entera por la propia tienda, pero esto hace que el aviso salte también cuando Play
+# aún no se lo ha dicho al móvil. Se pone CUANDO LA VERSIÓN YA ESTÁ PUBLICADA (si no, el botón llevaría a una ficha sin
+# actualización):
+#   fly secrets set -a flota-backend APP_ANDROID_PLAY="20 2.4.1"
+def _app_android_play() -> Optional[dict]:
+    return _version_anunciada("APP_ANDROID_PLAY")
+
+
+def _version_anunciada(variable: str) -> Optional[dict]:
+    v = (os.environ.get(variable) or "").split()
     if len(v) != 2 or not v[0].isdigit() or not re.fullmatch(r"[0-9][0-9.]{0,15}", v[1]):
         return None
     return {"code": int(v[0]), "nombre": v[1]}
@@ -5767,8 +5791,12 @@ def _exigir_app_al_dia(request: Optional[Request]) -> None:
 
 @api_router.get("/app/version")
 async def app_version():
-    """Público: la app de Android lo pregunta al abrirse. `web` es la que hay para descargar de la web, o null."""
-    return {"web": _app_android_web()}
+    """Público: la app de Android lo pregunta al abrirse. `web` es la que hay para descargar de la web, `play` la publicada
+    en Google Play (o null) y `min` la mínima que admite el servidor (APP_ANDROID_MIN, o null): con una más vieja, el aviso
+    de actualizar no se puede cerrar."""
+    minimo = (os.environ.get("APP_ANDROID_MIN") or "").strip()
+    return {"web": _app_android_web(), "play": _app_android_play(),
+            "min": minimo if re.fullmatch(r"[0-9][0-9.]{0,15}", minimo) else None}
 
 
 @api_router.get("/billing/planes")
@@ -51462,7 +51490,8 @@ async def _rep_ubicar(direccion, cp="", localidad="", base=None) -> Optional[tup
     pide su norma de uso. Solo sale la DIRECCIÓN, nunca el nombre ni el
     teléfono del cliente. Si no se encuentra, el pedido se queda sin punto y
     va al final de la ruta: no se inventa un sitio."""
-    d = str(direccion or "").strip()
+    # Sin piso ni puerta (30-10-2026): «Rúa Real 2, 1º B» se busca como «Rúa Real 2» (reparto.direccion_para_buscar).
+    d = reparto.direccion_para_buscar(direccion) or str(direccion or "").strip()
     extra = [x for x in (str(cp or "").strip(), str(localidad or "").strip())
              if x and reparto.norm(x) not in reparto.norm(d)]
     consulta = ", ".join([d] + extra)
@@ -52041,7 +52070,8 @@ async def _rep_trazado(puntos: list) -> dict:
         ruta = (j.get("routes") or [None])[0] if j.get("code") == "Ok" else None
         geo = ((ruta or {}).get("geometry") or {}).get("coordinates")
         if isinstance(geo, list) and len(geo) >= 2:
-            salida = {"linea": reparto.aligera_linea([[c[1], c[0]] for c in geo if isinstance(c, list) and len(c) == 2]),
+            # A 4 m entre puntos (antes 12): en las curvas se veían las cuerdas al ampliar el mapa (30-10-2026).
+            salida = {"linea": reparto.aligera_linea([[c[1], c[0]] for c in geo if isinstance(c, list) and len(c) == 2], metros=4),
                       "fuente": "carreteras", "km": round((ruta.get("distance") or 0) / 1000, 1),
                       "minutos": round((ruta.get("duration") or 0) / 60)}
     if salida["fuente"] == "carreteras":      # lo fallido no se guarda: el siguiente intento vuelve a preguntar
@@ -52266,6 +52296,8 @@ async def reparto_ajustes_put(data: dict = Body(...), user: dict = Depends(requi
     nuevo["hora_salida"] = reparto.hm(hs) if hs is not None else "09:00"
     nuevo["volver"] = bool(data.get("volver"))
     nuevo["trafico"] = data.get("trafico") is not False
+    # La placa (30-10-2026): para decir si HOY le toca restricción (rodízio, Hoy No Circula…). Opcional.
+    nuevo["placa"] = re.sub(r"[^A-Z0-9]", "", _texto_cuerpo(data.get("placa"), 16).upper())[:12]
     # La tarifa se cambia en su propia pantalla (PUT /reparto/ganancias): guardar los ajustes no la borra.
     for k in ("pago_parada", "pago_dia", "coste_km"):
         nuevo[k] = int(a.get(k) or 0)
@@ -52541,11 +52573,12 @@ async def seguimiento_respuesta(token: str, request: Request, data: dict = Body(
     await tdb.reparto_pedidos.update_one({"id": p["id"]}, {"$set": cambios})
     # Al repartidor, por todos los caminos (la bandeja de la app, web push y FCM).
     if p.get("conductor_id"):
-        org = await global_db.organizations.find_one({"db_name": e["db_name"]}, {"_id": 0, "sector": 1}) or {}
+        org = await global_db.organizations.find_one({"db_name": e["db_name"]}, {"_id": 0, "sector": 1, "idioma": 1, "pais": 1, "zona_horaria": 1}) or {}
         url = "/ruta" if org.get("sector") == "autonomo" else "/conductor?vista=ruta"
+        idioma = _idioma_org(org)
         try:
-            await _avisar_usuarios([p["conductor_id"]], "El cliente ha contestado",
-                                   reparto.texto_respuesta(r, p.get("cliente") or p.get("direccion") or ""),
+            await _avisar_usuarios([p["conductor_id"]], reparto.T_CLIENTE_CONTESTO.get(idioma, reparto.T_CLIENTE_CONTESTO["es"]),
+                                   reparto.texto_respuesta(r, p.get("cliente") or p.get("direccion") or "", idioma),
                                    url=url, coleccion=tdb.avisos_movil)
         except Exception as ex:                                  # noqa: BLE001
             logger.warning(f"respuesta del cliente: aviso no enviado: {type(ex).__name__}")
@@ -53030,7 +53063,7 @@ async def reparto_ticket(file: UploadFile = File(...), user: dict = Depends(requ
     if len(datos) < 200:
         raise HTTPException(400, "La foto ha llegado vacía")
     try:
-        leido = await _gemini_extract(_rep_cliente_ia(), _modelo_ia(), reparto.PROMPT_TICKET, datos)
+        leido = await _gemini_extract(_rep_cliente_ia(), _modelo_ia(), reparto.prompt_ticket(_region_actual.get()[0]), datos)
     except Exception as e:                                   # noqa: BLE001
         logger.warning(f"reparto: ticket ilegible por la IA: {type(e).__name__}")
         raise HTTPException(503, "La IA no ha podido leer el ticket ahora. Escribe la dirección a mano.")
@@ -53311,6 +53344,209 @@ _DGT_ZBE_CADA = 24 * 3600              # las ZBE cambian con las ordenanzas, no 
 _DGT_CACHE: dict = {"incidencias": None, "incidencias_en": 0.0, "publicado": "", "zbe": None, "zbe_en": 0.0}
 _DGT_LOCK = asyncio.Lock()
 
+# LO QUE DICE LA CALLE EN CADA PAÍS (30-10-2026, backend/trafico.py): cada fuente abierta se baja al servidor, se guarda
+# en memoria un rato y se filtra a la ruta. Sin respuesta, lo último que hubo (y `fresco` en False, que la pantalla
+# dice «no se han podido cargar»); sin fuente para ese país o esa zona, `aplica: False` y no se enseña nada.
+_FUENTES: dict = {}
+_FUENTES_LOCKS: dict = {}
+
+
+async def _fuente(clave: str, url: str, cada: int, parse, gz: bool = False, timeout: int = 40, post: Optional[dict] = None,
+                  bajar=None):
+    """(datos, fresco): lo que publica `url` pasado por `parse(bytes)`, de memoria si tiene menos de `cada` s. Con `bajar`
+    (una corrutina que recibe el cliente HTTP y devuelve lo crudo), la descarga la hace ella (varias URL, por ejemplo)."""
+    h = _FUENTES.get(clave)
+    if h and time.time() - h["en"] < cada:
+        return h["datos"], h["ok"]
+    lock = _FUENTES_LOCKS.setdefault(clave, asyncio.Lock())
+    async with lock:
+        h = _FUENTES.get(clave)
+        if h and time.time() - h["en"] < cada:
+            return h["datos"], h["ok"]
+        datos = None
+        try:
+            import httpx as _httpx
+            async with _httpx.AsyncClient(timeout=timeout, follow_redirects=True, headers={
+                    "User-Agent": f"{MARCA}/1.0 (reparto; {CORREO_CONTACTO})",
+                    "Accept": "application/json, application/xml, text/xml;q=0.9, */*;q=0.5"}) as c:
+                if bajar is not None:
+                    datos = parse(await bajar(c))
+                else:
+                    r = await (c.post(url, data=post) if post is not None else c.get(url))
+                    if r.status_code == 200:
+                        crudo = r.content
+                        if gz or url.endswith(".gz"):
+                            import gzip
+                            crudo = gzip.decompress(crudo)
+                        datos = parse(crudo)
+                    else:
+                        logger.warning(f"fuente {clave}: contesta {r.status_code}")
+        except Exception as e:                                   # noqa: BLE001
+            logger.warning(f"fuente {clave}: {type(e).__name__}")
+        if datos is not None:
+            if len(_FUENTES) > 400:
+                _FUENTES.clear()
+            _FUENTES[clave] = {"en": time.time(), "datos": datos, "ok": True}
+            return datos, True
+        _FUENTES[clave] = {"en": time.time() - cada + 60, "datos": h["datos"] if h else None, "ok": False}   # se reintenta en un minuto
+        return (h["datos"] if h else None), False
+
+
+async def _autobahn() -> tuple:
+    """Obras y cortes de todas las Autobahnen (30-10-2026): la lista de autopistas y, por cada una, `roadworks` y `closure`
+    (8 descargas a la vez, unos 7 s en total; media hora en memoria). Si falla más de un 5 %, se queda lo anterior."""
+    async def bajar(c):
+        r = await c.get(trafico.URL_AUTOBAHN)
+        r.raise_for_status()
+        roads = [str(x) for x in (r.json().get("roads") or [])]
+        if not roads:
+            raise ValueError("sin autopistas")
+        sem = asyncio.Semaphore(8)
+        datos = {s: [] for s in trafico.SERVICIOS_AUTOBAHN}
+        fallos = 0
+
+        async def una(road, servicio):
+            nonlocal fallos
+            async with sem:
+                try:
+                    rr = await c.get(trafico.URL_AUTOBAHN_SERVICIO.format(road=road, servicio=servicio))
+                    rr.raise_for_status()
+                    datos[servicio].extend(rr.json().get(servicio) or [])
+                except Exception:                                   # noqa: BLE001
+                    fallos += 1
+        await asyncio.gather(*(una(road, s) for road in roads for s in trafico.SERVICIOS_AUTOBAHN))
+        if fallos > len(roads) * len(trafico.SERVICIOS_AUTOBAHN) * 0.05:
+            raise ValueError(f"{fallos} descargas fallidas")
+        return datos
+    return await _fuente("autobahn", trafico.URL_AUTOBAHN, 1800, lambda d: trafico.incidencias_autobahn(d, "Autobahn"),
+                         timeout=60, bajar=bajar)
+
+
+async def _incidencias_pais(pais: str, ps: list) -> tuple:
+    """(incidencias, nombre de la fuente, publicado, fresco, aplica) de la fuente que vale en ese país."""
+    f = trafico.fuente_incidencias(pais)
+    if f == "tfl":
+        # TfL solo cubre el Gran Londres: fuera, no hay fuente (y no se dice «ninguna cerca»).
+        if not trafico.toca_caja(reparto.caja_de(ps, 0.06), trafico.CAJA_LONDRES):
+            return [], None, "", True, False
+        d, ok = await _fuente("tfl", trafico.URL_TFL, 600, lambda b: trafico.incidencias_tfl(b, "TfL"))
+        return d or [], "TfL", "", ok, True
+    if f == "autobahn":
+        d, ok = await _autobahn()
+        return d or [], "Autobahn", "", ok, True
+    if f == "dgt":
+        items, publicado, fresco = await _dgt_incidencias()
+        return items, "DGT", publicado, fresco, True
+    if f == "bison":
+        d, ok = await _fuente("bison", trafico.URL_BISON, 300, lambda b: trafico.incidencias_datex(b, "bison"))
+        return (d or ([], ""))[0], "Bison Futé", (d or ([], ""))[1], ok, True
+    if f == "ndw":
+        d, ok = await _fuente("ndw", trafico.URL_NDW_ACTUAL, 300, lambda b: trafico.incidencias_datex(b, "ndw"), gz=True)
+        return (d or ([], ""))[0], "NDW", (d or ([], ""))[1], ok, True
+    if f == "wzdx":
+        feeds = trafico.feeds_wzdx_para(reparto.caja_de(ps, 0.06))
+        if not feeds:
+            return [], None, "", True, False
+        items, fresco, nombres = [], True, []
+        for estado, nombre, url, _caja in feeds:
+            d, ok = await _fuente(f"wzdx:{estado}", url, 900, lambda b, n=nombre: trafico.incidencias_wzdx(b, f"WZDx · {n}"))
+            items += d or []
+            fresco = fresco and ok
+            nombres.append(nombre)
+        return items, "WZDx · " + ", ".join(nombres), "", fresco, True
+    return [], None, "", True, False
+
+
+async def _bnzfe() -> tuple:
+    """Las ZFE de Francia: la base nacional (el fichero del día lo dice el catálogo de data.gouv.fr)."""
+    def url_de(b):
+        d = json.loads(b)
+        return [r["url"] for r in d.get("resources") or [] if r.get("title") == "aires.geojson"][0]
+    url, _ = await _fuente("bnzfe-url", trafico.URL_BNZFE_DATASET, 86400, url_de)
+    if not url:
+        return [], False
+    return await _fuente("bnzfe", url, 86400, trafico.zonas_bnzfe)
+
+
+async def _gla() -> tuple:
+    zonas, fresco = [], True
+    for capa, tipo in trafico.CAPAS_GLA:
+        z, ok = await _fuente(f"gla-{capa}", trafico.URL_GLA.format(capa=capa), 86400, lambda b, t=tipo: trafico.zonas_gla(b, t))
+        zonas += z or []
+        fresco = fresco and ok
+    return zonas, fresco
+
+
+async def _cache_guardar(clave: str, datos) -> None:
+    """Una copia en Mongo (global, `trafico_cache`) de lo que costó descargar, por si la fuente deja de contestar."""
+    try:
+        await global_db["trafico_cache"].update_one(
+            {"_id": clave}, {"$set": {"datos": datos, "cuando": datetime.now(timezone.utc).isoformat()}}, upsert=True)
+    except Exception as e:                                           # noqa: BLE001
+        logger.warning(f"trafico_cache: no se pudo guardar {clave}: {type(e).__name__}")
+
+
+async def _cache_leer(clave: str, maximo_s: int):
+    """La copia guardada si tiene menos de `maximo_s` segundos; si no, None."""
+    try:
+        d = await global_db["trafico_cache"].find_one({"_id": clave})
+        cuando = datetime.fromisoformat(str(d.get("cuando"))) if d else None
+    except Exception:                                                # noqa: BLE001
+        return None
+    if not d or not cuando or (datetime.now(timezone.utc) - cuando).total_seconds() > maximo_s:
+        return None
+    return d.get("datos")
+
+
+async def _osm_zonas(caja, tipo: str) -> tuple:
+    """Las zonas de bajas emisiones de OpenStreetMap en la caja de la ruta (Overpass, un día en memoria por zona). Si
+    Overpass no contesta (pasa a menudo: 502 a plena carga), vale la última copia guardada en Mongo, de hasta 60 días:
+    las zonas cambian poco y es mejor que «no se han podido comprobar»."""
+    if not caja:
+        return [], True
+    s, w, n, e = (round(caja[0], 1) - 0.1, round(caja[1], 1) - 0.1, round(caja[2], 1) + 0.1, round(caja[3], 1) + 0.1)
+    clave = f"osm:{s},{w},{n},{e}"
+    consulta = trafico.CONSULTA_OSM.format(s=s, w=w, n=n, e=e)
+    for url in trafico.URLS_OVERPASS:
+        z, ok = await _fuente(clave, url, 86400, lambda b, t=tipo: trafico.zonas_osm(b, t), post={"data": consulta})
+        if ok:
+            await _cache_guardar(clave, z)
+            return z, True
+    guardadas = await _cache_leer(clave, 60 * 86400)
+    if guardadas is not None:
+        return guardadas, True
+    return z or [], False
+
+
+async def _zonas_pais(pais: str, ps: list) -> tuple:
+    """(zonas, nombre de la fuente, fresco, aplica) de las fuentes que valen en ese país."""
+    fuentes = trafico.fuentes_zonas(pais)
+    if not fuentes:
+        return [], None, True, False
+    zonas, fresco, nombres = [], True, []
+    for f in fuentes:
+        if f == "dgt":
+            z, ok = await _dgt_zbe()
+            z = [{**x, "tipo": "ZBE", "fuente": "dgt"} for x in (z or [])]
+            nombres.append("DGT")
+        elif f == "bnzfe":
+            z, ok = await _bnzfe()
+            nombres.append("BNZFE")
+        elif f == "ndw":
+            z, ok = await _fuente("ndw-zonas", trafico.URL_NDW_ZONAS, 86400, trafico.zonas_ndw, gz=True)
+            nombres.append("NDW")
+        elif f == "gla":
+            z, ok = await _gla()
+            nombres.append("TfL")
+        elif f == "osm":
+            z, ok = await _osm_zonas(reparto.caja_de(ps, 0.05), trafico.tipo_zona(pais))
+            nombres.append("OpenStreetMap")
+        else:
+            continue
+        zonas += z or []
+        fresco = fresco and ok
+    return zonas, " + ".join(nombres), fresco, True
+
 
 async def _dgt_descargar(url: str, timeout: int = 25) -> Optional[str]:
     import httpx as _httpx
@@ -53395,28 +53631,45 @@ async def _rep_paradas_pendientes_situadas(conductor_id: str) -> list:
 
 @api_router.get("/reparto/mi-ruta/incidencias")
 async def reparto_mi_incidencias(user: dict = Depends(require_any_auth)):
-    """Cortes, obras, accidentes y retenciones de la DGT cerca de las paradas que le quedan hoy."""
+    """Cortes, obras, accidentes y retenciones cerca de las paradas que le quedan hoy, de la fuente abierta de su
+    país (DGT, Bison Futé, NDW, WZDx…; backend/trafico.py), y los avisos de restricción por placa de su ciudad.
+    Sin fuente para ese país o esa zona, `aplica: False` y la pantalla no enseña nada («ninguna cerca de tu ruta»
+    en Lyon con datos de la DGT sería un falso positivo)."""
     d = await _rep_conductor(user)
+    pais, zona = _region_actual.get()
     ps = await _rep_paradas_pendientes_situadas(d["id"])
     if not ps:
-        return {"incidencias": [], "fuente": "DGT", "publicado": "", "incompleto": False}
-    items, publicado, fresco = await _dgt_incidencias()
-    return {"incidencias": reparto.incidencias_cerca(items, ps), "fuente": "DGT", "publicado": publicado,
-            "incompleto": not fresco}
+        return {"incidencias": [], "fuente": None, "publicado": "", "incompleto": False,
+                "aplica": bool(trafico.fuente_incidencias(pais)), "avisos": []}
+    items, fuente, publicado, fresco, aplica = await _incidencias_pais(pais, ps)
+    avisos = []
+    if trafico.hay_normas(pais):
+        from zoneinfo import ZoneInfo
+        try:
+            ahora_local = datetime.now(ZoneInfo(zona))
+        except Exception:                                        # noqa: BLE001
+            ahora_local = datetime.now()
+        a = await _rep_ajustes()
+        avisos = trafico.normas_hoy(pais, ps, ahora_local, (a or {}).get("placa") or "")
+    return {"incidencias": reparto.incidencias_cerca(items, ps) if items else [], "fuente": fuente, "publicado": publicado,
+            "incompleto": not fresco, "aplica": aplica, "avisos": avisos}
 
 
 @api_router.get("/reparto/mi-ruta/zbe")
 async def reparto_mi_zbe(user: dict = Depends(require_any_auth)):
     """Las zonas de bajas emisiones (las que publica la DGT, con la descripción del ayuntamiento) que tocan
-    la ruta de hoy, y qué paradas caen dentro de cada una."""
+    la ruta de hoy, y qué paradas caen dentro de cada una. Fuera de España, las de su país (ZFE de Francia, ZES
+    de Países Bajos, ULEZ/LEZ de Londres, Umweltzonen de OpenStreetMap…; backend/trafico.py); sin fuente, nada."""
     d = await _rep_conductor(user)
+    pais = _region_actual.get()[0]
+    tipo = trafico.tipo_zona(pais)
     ps = await _rep_paradas_pendientes_situadas(d["id"])
     if not ps:
-        return {"zonas": [], "paradas": {}, "fuente": "DGT", "incompleto": False}
-    zonas, fresco = await _dgt_zbe()
-    cerca = reparto.zbe_cerca(zonas, ps)
+        return {"zonas": [], "paradas": {}, "fuente": None, "incompleto": False, "aplica": bool(trafico.fuentes_zonas(pais)), "tipo": tipo}
+    zonas, fuente, fresco, aplica = await _zonas_pais(pais, ps)
+    cerca = reparto.zbe_cerca(zonas, ps) if zonas else []
     return {"zonas": [{k: v for k, v in z.items() if k != "caja"} for z in cerca[:20]],
-            "paradas": reparto.zbe_de_paradas(cerca, ps), "fuente": "DGT", "incompleto": not fresco}
+            "paradas": reparto.zbe_de_paradas(cerca, ps), "fuente": fuente, "incompleto": not fresco, "aplica": aplica, "tipo": tipo}
 
 
 @api_router.post("/reparto/mi-ruta/navegar")
@@ -53945,7 +54198,20 @@ async def stripe_suscripcion(data: dict = Body(default={}), user: dict = Depends
     inicio = _stripe_inicio_cobro(org)
     if inicio:
         cuerpo["subscription_data"]["trial_end"] = int(_fecha_utc(inicio).timestamp())
-    sesion = await _stripe_req("POST", "/checkout/sessions", _stripe_formulario(cuerpo))
+    # EL COBRO EN LA MONEDA DEL PAÍS (30-10-2026): «$9.99» en EE. UU., «MX$149» en México, lo que la app enseña. Vale
+    # si los dos Price de Stripe llevan esa moneda en `currency_options` (scripts/stripe_monedas.py); si Stripe la
+    # rechaza, la sesión sale en euros, como hasta hoy, y queda en el registro.
+    moneda = _moneda_de(org.get("pais"))
+    if moneda != "EUR" and moneda in PRECIOS_REPARTIDOR and _es_repartidor(org):
+        cuerpo["currency"] = moneda.lower()
+    try:
+        sesion = await _stripe_req("POST", "/checkout/sessions", _stripe_formulario(cuerpo))
+    except HTTPException:
+        if not cuerpo.get("currency"):
+            raise
+        logger.warning("Stripe no acepta la moneda %s para %s: la sesión sale en euros", cuerpo["currency"], org.get("id"))
+        cuerpo.pop("currency", None)
+        sesion = await _stripe_req("POST", "/checkout/sessions", _stripe_formulario(cuerpo))
     await _audit(user, "stripe_checkout", {"plan": plan, "anual": anual, "cantidad": cantidad})
     return {"url": sesion.get("url"), "id": sesion.get("id")}
 

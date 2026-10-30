@@ -139,7 +139,7 @@ fun TurnosConductorNativo(alVolver: () -> Unit) {
                         Text(periodo.atDay(1).format(DateTimeFormatter.ofPattern("MMMM yyyy", LOCALE_APP)).replaceFirstChar { it.titlecase(LOCALE_APP) }, Modifier.weight(1f), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
                         IconButton(onClick = { mes = periodo.plusMonths(1).toString() }, enabled = YearMonth.parse(mes).isBefore(YearMonth.from(hoy).plusMonths(3))) { Icon(Icons.Default.ChevronRight, contentDescription = tx("Mes siguiente")) }
                     }
-                    Row(horizontalArrangement = Arrangement.spacedBy(3.dp)) { listOf("L", "M", "X", "J", "V", "S", "D").forEach { Text(it, Modifier.weight(1f), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant) } }
+                    Row(horizontalArrangement = Arrangement.spacedBy(3.dp)) { java.time.DayOfWeek.entries.map { it.getDisplayName(java.time.format.TextStyle.NARROW, LOCALE_APP).uppercase(LOCALE_APP) }.forEach { Text(it, Modifier.weight(1f), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant) } }
                     val huecos = periodo.atDay(1).dayOfWeek.value - 1
                     val celdas = List(huecos) { null } + dias
                     celdas.chunked(7).forEach { semana ->
@@ -177,11 +177,11 @@ fun TurnosConductorNativo(alVolver: () -> Unit) {
             else {
                 Text(fechaSel.format(DateTimeFormatter.ofPattern("EEEE d MMMM", LOCALE_APP).withLocale(LOCALE_APP)).replaceFirstChar { it.titlecase(LOCALE_APP) }, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
                 val textoTurno = when (tipoTurno(turnoSel)) {
-                    "trabaja" -> "Tienes turno de trabajo${campoSeguro(turnoSel, "cod").takeIf { it.isNotBlank() }?.let { " · $it" } ?: ""}."
-                    "extra" -> "Tienes un turno extra confirmado."
-                    "libre" -> "Tienes el día libre."
-                    "susp" -> "Día bloqueado por suspensión."
-                    else -> "No hay turno publicado para este día."
+                    "trabaja" -> tx("Tienes turno de trabajo{cod}.", "cod" to (campoSeguro(turnoSel, "cod").takeIf { it.isNotBlank() }?.let { " · $it" } ?: ""))
+                    "extra" -> tx("Tienes un turno extra confirmado.")
+                    "libre" -> tx("Tienes el día libre.")
+                    "susp" -> tx("Día bloqueado por suspensión.")
+                    else -> tx("No hay turno publicado para este día.")
                 }
                 Text(textoTurno)
                 when (status) {
@@ -189,13 +189,13 @@ fun TurnosConductorNativo(alVolver: () -> Unit) {
                     "aprobado" -> Text(tx("Solicitud aprobada."), color = MaterialTheme.colorScheme.primary)
                     "rechazado" -> Text(tx("Solicitud rechazada."), color = MaterialTheme.colorScheme.error)
                 }
-                bloqueoSel?.let { Text("No puedes solicitar este día: ${campoSeguro(it, "motivo").ifBlank { "bloqueado por la oficina" }}", color = MaterialTheme.colorScheme.error) }
+                bloqueoSel?.let { Text(tx("No puedes solicitar este día: {m}", "m" to campoSeguro(it, "motivo").ifBlank { tx("bloqueado por la oficina") }), color = MaterialTheme.colorScheme.error) }
                 if (suspensionSel) Text(tx("Este día está dentro de una suspensión."), color = MaterialTheme.colorScheme.error)
                 if (puedePedir) {
                     Text(tx("Solicitar un cambio"), style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
                     Text(tx("La oficina revisará la solicitud. No se aprueba automáticamente."), style = MaterialTheme.typography.bodySmall)
                     FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                        listOf("asuntos" to "Asuntos propios", "medico" to "Médico", "familia" to "Familia", "viaje" to "Viaje", "otro" to "Otro").forEach { (id, label) ->
+                        listOf("asuntos" to tx("Asuntos propios"), "medico" to tx("Médico"), "familia" to tx("Familia"), "viaje" to tx("Viaje"), "otro" to tx("Otro")).forEach { (id, label) ->
                             FilterChip(selected = motivo == id, onClick = { motivo = id }, label = { Text(label) })
                         }
                     }
@@ -212,13 +212,13 @@ fun TurnosConductorNativo(alVolver: () -> Unit) {
     }
     confirmar?.let { fecha -> AlertDialog(
         onDismissRequest = { confirmar = null }, title = { Text(tx("Enviar solicitud")) },
-        text = { Text("Pedirás el día ${diaLargo(fecha)} por ${motivoLabel(motivo)}. La oficina tendrá que aprobarlo.") },
+        text = { Text(tx("Pedirás el día {d} por {m}. La oficina tendrá que aprobarlo.", "d" to diaLargo(fecha), "m" to motivoLabel(motivo))) },
         confirmButton = { TextButton(onClick = {
             confirmar = null; enviando = true; error = null; aviso = null
             scope.launch {
                 try {
                     app.repo.solicitarDiaConductor(fecha, "libre", motivo, nota.trim())
-                    aviso = "Solicitud enviada. La oficina te confirmará la respuesta aquí."
+                    aviso = tx("Solicitud enviada. La oficina te confirmará la respuesta aquí.")
                     nota = ""; cargar()
                 } catch (e: ErrorApi) { error = e.message }
                 finally { enviando = false }
@@ -243,4 +243,4 @@ private fun diaLargo(fecha: String): String = runCatching {
     LocalDate.parse(fecha).format(DateTimeFormatter.ofPattern(patronFecha("d 'de' MMMM"), LOCALE_APP))
 }.getOrDefault(fecha)
 fun campoSeguro(obj: JsonObject?, clave: String): String = obj?.let { runCatching { campo(it, clave) }.getOrDefault("") }.orEmpty()
-private fun motivoLabel(id: String): String = when (id) { "asuntos" -> "asuntos propios"; "medico" -> "médico"; "familia" -> "un asunto familiar"; "viaje" -> "un viaje"; else -> "otro motivo" }
+private fun motivoLabel(id: String): String = when (id) { "asuntos" -> tx("asuntos propios"); "medico" -> tx("médico"); "familia" -> tx("un asunto familiar"); "viaje" -> tx("un viaje"); else -> tx("otro motivo") }

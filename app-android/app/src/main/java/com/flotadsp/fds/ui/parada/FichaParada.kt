@@ -90,7 +90,7 @@ import java.io.File
 
 /* Los atajos del horario (30-10-2026): «Cierra a las 14:00» es lo que un repartidor con diez años de oficio hacía a
    mano (primero los comercios, luego la ruta). Y los seis huecos de la furgoneta, como en la web. */
-private val ATAJOS_HORARIO = listOf(tx("Mañana (9-14)") to "de 9 a 14", tx("Tarde (16-20)") to "de 16 a 20", tx("Cierra a las 14:00") to "de 8 a 14")
+private val ATAJOS_HORARIO = listOf(tx("Mañana (9-14)") to "9-14", tx("Tarde (16-20)") to "16-20", tx("Cierra a las 14:00") to "8-14")
 private val HUECOS = listOf(tx("Delante · izq"), tx("Delante · der"), tx("Medio · izq"), tx("Medio · der"), tx("Detrás · izq"), tx("Detrás · der"))
 
 /** Una dirección sugerida: de las suyas (ya estuvo allí) o del buscador de OpenStreetMap. */
@@ -122,7 +122,7 @@ fun FichaParada(
     var urgente by remember { mutableStateOf(editar?.prioridad ?: false) }
     // Qué lleva, el horario del cliente y el hueco en la furgoneta (30-10-2026): la web ya los tenía y aquí faltaban.
     var contenido by remember { mutableStateOf(editar?.contenido ?: "") }
-    var horario by remember { mutableStateOf(editar?.ventanaDesde?.let { "de $it a ${editar.ventanaHasta}" } ?: "") }
+    var horario by remember { mutableStateOf(editar?.ventanaDesde?.let { "$it-${editar.ventanaHasta}" } ?: "") }
     var hueco by remember { mutableStateOf(editar?.hueco ?: "") }
     var punto by remember { mutableStateOf(inicial?.takeIf { it.lat != null }?.let { Sugerencia("", it.cp, it.localidad, it.lat, it.lng) }) }
     var sugerencias by remember { mutableStateOf<List<Sugerencia>>(emptyList()) }
@@ -135,7 +135,7 @@ fun FichaParada(
             inicial == null || editar != null -> null
             // Del escáner sin nada legible (la barra sola y la letra fuera del encuadre): decirlo, no «revisa lo leído».
             inicial.direccion.isBlank() && inicial.cliente.isBlank() && inicial.telefono.isBlank() ->
-                "El código no trae la dirección y no se ha podido leer de la etiqueta. Escríbela, o pulsa «Leer la etiqueta con una foto» con la etiqueta entera en la foto."
+                tx("El código no trae la dirección y no se ha podido leer de la etiqueta. Escríbela, o pulsa «Leer la etiqueta con una foto» con la etiqueta entera en la foto.")
             else -> tx("Revisa lo leído de la etiqueta antes de guardar.")
         })
     }
@@ -163,7 +163,7 @@ fun FichaParada(
             leyendo = false
             val l = texto?.let { LectorEtiqueta.leerTexto(it, pais) }
             if (l == null || (l.direccion.isBlank() && l.telefono.isBlank() && l.cliente.isBlank())) {
-                aviso = "No se ha podido leer la etiqueta. Prueba con más luz y la etiqueta recta, o escríbelo."
+                aviso = tx("No se ha podido leer la etiqueta. Prueba con más luz y la etiqueta recta, o escríbelo.")
                 return@launch
             }
             if (l.direccion.isNotBlank()) {
@@ -171,12 +171,12 @@ fun FichaParada(
             }
             if (cliente.isBlank()) cliente = l.cliente
             if (telefono.isBlank() && (l.telefonoRotulado || !Regex("\\b[A-Z]{1,4}\\d{6,}\\b", RegexOption.IGNORE_CASE).containsMatchIn(texto))) telefono = l.telefono
-            aviso = "Revisa lo leído de la etiqueta antes de guardar."
+            aviso = tx("Revisa lo leído de la etiqueta antes de guardar.")
         }
     }
 
     fun guardar() {
-        if (direccion.trim().length < 4) { error = "Escribe la dirección: calle, número y población."; return }
+        if (direccion.trim().length < 4) { error = tx("Escribe la dirección: calle, número y población."); return }
         guardando = true; error = null
         ambito.launch {
             val c = buildMap<String, JsonElement> {
@@ -201,7 +201,7 @@ fun FichaParada(
                 if (editar != null) repo.editarParada(editar.id, JsonObject(c)) else repo.nuevaParada(JsonObject(c))
                 alCerrar(true)
             } catch (e: ErrorApi) {
-                error = if (e.sinRed) "Sin conexión: para guardar una parada nueva hace falta red." else e.message
+                error = if (e.sinRed) tx("Sin conexión: para guardar una parada nueva hace falta red.") else e.message
             } finally { guardando = false }
         }
     }
@@ -209,7 +209,7 @@ fun FichaParada(
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text(when { editar != null -> "Editar parada"; inicial != null -> "Revisa la parada"; else -> "Nueva parada" }) },
+                title = { Text(when { editar != null -> tx("Editar parada"); inicial != null -> tx("Revisa la parada"); else -> tx("Nueva parada") }) },
                 navigationIcon = { IconButton(onClick = { alCerrar(false) }) { Icon(Icons.Default.Close, contentDescription = tx("Cerrar")) } },
             )
         },

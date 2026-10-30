@@ -1,0 +1,150 @@
+[
+ {
+  "$type": "Tfl.Api.Presentation.Entities.RoadDisruption, Tfl.Api.Presentation.Entities",
+  "id": "TIMS-237029",
+  "url": "/Road/All/Disruption/TIMS-237029",
+  "point": "[-0.068023,51.598213]",
+  "severity": "Minimal",
+  "ordinal": 19,
+  "category": "Works",
+  "subCategory": "Utility works",
+  "comments": "[A1010] High Road (Both directions) at the junction of Lansdowne Road - Lane restrictions in place to facilitate emergency UKPN works. ",
+  "currentUpdate": "Traffic is flowing well.",
+  "currentUpdateDateTime": "2026-10-30T09:43:58Z",
+  "corridorIds": [
+   "a10"
+  ],
+  "startDateTime": "2026-10-26T14:30:00Z",
+  "endDateTime": "2026-10-30T18:00:00Z",
+  "lastModifiedTime": "2026-10-30T09:43:58Z",
+  "levelOfInterest": "Medium",
+  "location": "[A1010] HIGH ROAD (N17 ) (Haringey)",
+  "status": "Active",
+  "geography": {
+   "type": "Point",
+   "coordinates": [
+    -0.068023,
+    51.598213
+   ],
+   "crs": {
+    "type": "name",
+    "properties": {
+     "name": "EPSG:4326"
+    }
+   }
+  },
+  "isProvisional": false,
+  "hasClosures": false
+ },
+ {
+  "$type": "Tfl.Api.Presentation.Entities.RoadDisruption, Tfl.Api.Presentation.Entities",
+  "id": "TIMS-237244",
+  "url": "/Road/All/Disruption/TIMS-237244",
+  "point": "[-0.288326,51.46768]",
+  "severity": "Minimal",
+  "ordinal": 34,
+  "category": "Collisions",
+  "subCategory": "Vehicle collision",
+  "comments": "[A316] Lower Richmond Road (Both directions) at the junction of [A316] Lower Mortlake Road - The pavement is obstructed by a vehicle.",
+  "currentUpdate": "Traffic is flowing well.",
+  "currentUpdateDateTime": "2026-10-30T07:03:25Z",
+  "corridorIds": [
+   "a316"
+  ],
+  "startDateTime": "2026-10-29T16:16:53Z",
+  "endDateTime": "2026-10-29T23:59:59Z",
+  "lastModifiedTime": "2026-10-30T09:30:48Z",
+  "levelOfInterest": "Medium",
+  "location": "[A316] LOWER RICHMOND ROAD (TW9 ) (Richmond upon Thames)",
+  "status": "Active",
+  "geography": {
+   "type": "Point",
+   "coordinates": [
+    -0.288326,
+    51.46768
+   ],
+   "crs": {
+    "type": "name",
+    "properties": {
+     "name": "EPSG:4326"
+    }
+   }
+  },
+  "isProvisional": false,
+  "hasClosures": false
+ },
+ {
+  "$type": "Tfl.Api.Presentation.Entities.RoadDisruption, Tfl.Api.Presentation.Entities",
+  "id": "TIMS-237277",
+  "url": "/Road/All/Disruption/TIMS-237277",
+  "point": "[0.061275,51.495166]",
+  "severity": "Minimal",
+  "ordinal": 20,
+  "category": "Weather",
+  "subCategory": "Fog",
+  "comments": "[A2204] Ferry Approach (All approaches) at the junction of [A206] Woolwich Ferry Roundabout - The ferry is suspended due to fog ",
+  "currentUpdate": "Use an alternative route. Traffic is flowing well on diversion.",
+  "currentUpdateDateTime": "2026-10-30T08:00:37Z",
+  "corridorIds": [
+   "a205"
+  ],
+  "startDateTime": "2026-10-30T05:55:49Z",
+  "endDateTime": "2026-10-30T23:59:59Z",
+  "lastModifiedTime": "2026-10-30T09:58:33Z",
+  "levelOfInterest": "Medium",
+  "location": "[A2204] FERRY APPROACH (SE18 ) (Greenwich)",
+  "status": "Active",
+  "geography": {
+   "type": "Point",
+   "coordinates": [
+    0.061275,
+    51.495166
+   ],
+   "crs": {
+    "type": "name",
+    "properties": {
+     "name": "EPSG:4326"
+    }
+   }
+  },
+  "isProvisional": false,
+  "hasClosures": false
+ },
+ {
+  "$type": "Tfl.Api.Presentation.Entities.RoadDisruption, Tfl.Api.Presentation.Entities",
+  "id": "TIMS-233025",
+  "url": "/Road/All/Disruption/TIMS-233025",
+  "point": "[-0.013941,51.456742]",
+  "severity": "No impact",
+  "ordinal": 73,
+  "category": "Works",
+  "subCategory": "TfL works",
+  "comments": "[A21] Lewisham High Street (Southbound) between [B236] Ladywell Road and Longbridge Way - There are lane restrictions in place from 1st October 2026  to 27th October 2026 between Longbridge Way and Ladywell Road to facilitate junction improvements.",
+  "currentUpdate": "Delays are possible.",
+  "currentUpdateDateTime": "2026-10-30T01:41:43Z",
+  "corridorIds": [
+   "a21"
+  ],
+  "startDateTime": "2026-10-05T07:00:00Z",
+  "endDateTime": "2026-11-05T23:59:00Z",
+  "lastModifiedTime": "2026-10-30T01:41:43Z",
+  "levelOfInterest": "Low",
+  "location": "[A21] LEWISHAM HIGH STREET (SE13 ) (Lewisham)",
+  "status": "Active Long Term",
+  "geography": {
+   "type": "Point",
+   "coordinates": [
+    -0.013941,
+    51.456742
+   ],
+   "crs": {
+    "type": "name",
+    "properties": {
+     "name": "EPSG:4326"
+    }
+   }
+  },
+  "isProvisional": false,
+  "hasClosures": false
+ }
+]

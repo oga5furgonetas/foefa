@@ -96,11 +96,14 @@ fun ReferidosConductorNativo(alVolver: () -> Unit) {
                         Icon(Icons.Default.CardGiftcard, contentDescription = null, tint = MaterialTheme.colorScheme.onPrimaryContainer)
                         Text(tx("Comparte FDS con otros repartidores"), style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onPrimaryContainer)
                         val pago = campoSeguro(it, "por_invitado").toIntOrNull() ?: 0
-                        Text("Ganas ${euros(pago)} si se registran con tu enlace y completan ${campoSeguro(it, "entregas_cartera").ifBlank { "20" }} entregas reales en ${campoSeguro(it, "dias_distintos").ifBlank { "2" }} días distintos, dentro de ${campoSeguro(it, "ventana_dias").ifBlank { "30" }} días.", color = MaterialTheme.colorScheme.onPrimaryContainer)
-                        val promo = campoSeguro(it, "promo_hasta")
-                        if (promo.isNotBlank()) Text("Promoción hasta $promo: ${euros(campoSeguro(it, "promo_cent").toIntOrNull() ?: pago)} por invitación elegible.", color = MaterialTheme.colorScheme.onPrimaryContainer)
+                        Text(tx("Ganas {x} si se registran con tu enlace y completan {e} entregas reales en {d} días distintos, dentro de {v} días.", "x" to euros(pago), "e" to campoSeguro(it, "entregas_cartera").ifBlank { "20" }, "d" to campoSeguro(it, "dias_distintos").ifBlank { "2" }, "v" to campoSeguro(it, "ventana_dias").ifBlank { "30" }), color = MaterialTheme.colorScheme.onPrimaryContainer)
+                        val promo = campoSeguro(it, "promo_hasta").let { iso ->
+                            runCatching { java.time.LocalDate.parse(iso).format(java.time.format.DateTimeFormatter.ofPattern(
+                                com.flotadsp.fds.ui.patronFecha("d 'de' MMMM"), com.flotadsp.fds.ui.LOCALE_APP)) }.getOrDefault(iso)
+                        }
+                        if (promo.isNotBlank()) Text(tx("Promoción hasta {f}: {x} por invitación elegible.", "f" to promo, "x" to euros(campoSeguro(it, "promo_cent").toIntOrNull() ?: pago)), color = MaterialTheme.colorScheme.onPrimaryContainer)
                         Button(onClick = {
-                            if (enlace.isNotBlank()) Acciones.compartir(ctx, "Estoy usando FDS para organizar repartos. Pruébala: $enlace\n\nSi te registras con mi enlace y completas ${campoSeguro(it, "entregas_cartera").ifBlank { "20" }} entregas reales en varios días, puedo ganar ${euros(pago)}. Es una invitación personal, no vinculada a mi empresa.")
+                            if (enlace.isNotBlank()) Acciones.compartir(ctx, tx("Estoy usando FDS para organizar repartos. Pruébala: {enlace}\n\nSi te registras con mi enlace y completas {e} entregas reales en varios días, puedo ganar {x}. Es una invitación personal, no vinculada a mi empresa.", "enlace" to enlace, "e" to campoSeguro(it, "entregas_cartera").ifBlank { "20" }, "x" to euros(pago)))
                         }, enabled = enlace.isNotBlank(), modifier = Modifier.fillMaxWidth()) {
                             Icon(Icons.Default.Share, contentDescription = null); Text(tx("  Compartir mi enlace"))
                         }
@@ -110,10 +113,10 @@ fun ReferidosConductorNativo(alVolver: () -> Unit) {
                     Column(Modifier.fillMaxWidth().padding(18.dp), verticalArrangement = Arrangement.spacedBy(7.dp)) {
                         Text(tx("Tu cartera personal"), style = MaterialTheme.typography.titleMedium)
                         Text(euros(saldo), style = MaterialTheme.typography.headlineLarge, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
-                        Text("${campoSeguro(it, "invitados")} invitados · ${campoSeguro(it, "premiados")} válidos", style = MaterialTheme.typography.bodyMedium)
-                        Text("Saldo mínimo para retirar: ${euros(min)}. Se revisa cada solicitud antes de realizar el pago.", style = MaterialTheme.typography.bodySmall)
+                        Text(tx("{a} invitados · {b} válidos", "a" to campoSeguro(it, "invitados"), "b" to campoSeguro(it, "premiados")), style = MaterialTheme.typography.bodyMedium)
+                        Text(tx("Saldo mínimo para retirar: {x}. Se revisa cada solicitud antes de realizar el pago.", "x" to euros(min)), style = MaterialTheme.typography.bodySmall)
                         Button(onClick = { dialogo = true; metodo = metodos.firstOrNull().orEmpty() }, enabled = saldo >= min && !isPendiente(it), modifier = Modifier.fillMaxWidth()) {
-                            Text(if (isPendiente(it)) "Retirada pendiente" else "Solicitar retirada")
+                            Text(if (isPendiente(it)) tx("Retirada pendiente") else tx("Solicitar retirada"))
                         }
                     }
                 }
@@ -143,7 +146,7 @@ fun ReferidosConductorNativo(alVolver: () -> Unit) {
             Text(tx("Elige cómo cobrar. Los datos los recibe únicamente la oficina que procesa el pago."))
             OutlinedTextField(titular, { titular = it }, label = { Text(tx("Nombre y apellidos del titular")) }, singleLine = true)
             Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) { metodos.forEach { m -> FilterChip(selected = metodo == m, onClick = { metodo = m }, label = { Text(when (m) { "iban" -> "Transferencia"; else -> m.replaceFirstChar(Char::uppercase) }) }) } }
-            OutlinedTextField(destino, { destino = it }, label = { Text(when (metodo) { "bizum" -> "Móvil de Bizum"; "iban" -> "IBAN"; else -> "Correo de PayPal" }) }, singleLine = true)
+            OutlinedTextField(destino, { destino = it }, label = { Text(when (metodo) { "bizum" -> tx("Móvil de Bizum"); "iban" -> "IBAN"; else -> tx("Correo de PayPal") }) }, singleLine = true)
             error?.let { Text(it, color = MaterialTheme.colorScheme.error) }
         } },
         confirmButton = { TextButton(onClick = {
@@ -151,7 +154,7 @@ fun ReferidosConductorNativo(alVolver: () -> Unit) {
             scope.launch {
                 try {
                     app.repo.retirarReferidosConductor(titular, metodo, destino)
-                    dialogo = false; aviso = "Solicitud enviada. La revisarán y te avisarán por correo."; titular = ""; destino = ""; cargar()
+                    dialogo = false; aviso = tx("Solicitud enviada. La revisarán y te avisarán por correo."); titular = ""; destino = ""; cargar()
                 } catch (e: ErrorApi) { error = e.message }
                 finally { enviando = false }
             }

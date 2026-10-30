@@ -86,13 +86,19 @@ object Calle {
         else -> 0xFF475569
     }
 
+    /** Lo que pasa llega en español del servidor para todas las fuentes («carretera cortada (obras)»): se traduce por partes. */
+    fun queIncidencia(que: String): String {
+        val m = Regex("^(.+?) \\((.+)\\)$").find(que) ?: return tx(que)
+        return "${tx(m.groupValues[1])} (${tx(m.groupValues[2])})"
+    }
+
     /** Dónde está una incidencia, en una línea: «AC-12 · pk 2,0 · A Coruña · a 0,4 km de la parada 3». */
     fun dondeIncidencia(i: Incidencia): String = listOfNotNull(
         i.carretera.takeIf { it.isNotBlank() },
         i.pk.takeIf { it.isNotBlank() }?.let { tx("pk") + " $it" },
         i.municipio.takeIf { it.isNotBlank() },
         i.distanciaKm?.let { d ->
-            val km = "%.1f".format(java.util.Locale("es"), d)
+            val km = "%.1f".format(com.flotadsp.fds.ui.Idioma.locale, d)
             if (i.parada != null) tx("a {km} km de la parada {n}", "km" to km, "n" to i.parada) else tx("a {km} km de tu ruta", "km" to km)
         },
     ).joinToString(" · ")

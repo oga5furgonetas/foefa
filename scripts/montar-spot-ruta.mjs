@@ -18,11 +18,16 @@ const RAIZ = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
 const V4 = path.join(RAIZ, 'docs', 'anuncios', 'reales', 'spot-v4')
 const V5 = path.join(RAIZ, 'docs', 'anuncios', 'reales', 'spot-v5')
 const SA = path.join(RAIZ, 'docs', 'anuncios', 'super-anuncio')
-const CAPAS = path.join(SA, 'capas')
+// IDIOMA=en|pt|fr|it|de (30-10, docs/anuncios/internacional/): el mismo montaje con la app grabada en ese idioma
+// (grab/<idioma>), las capas de capas/<idioma>, la voz de Artlist de voces/<idioma> y la salida en salida/.
+const IDIOMA = process.env.IDIOMA || 'es'
+const INT = path.join(RAIZ, 'docs', 'anuncios', 'internacional')
+const SUF_ID = IDIOMA === 'es' ? '' : `-${IDIOMA}`
+const CAPAS = IDIOMA === 'es' ? path.join(SA, 'capas') : path.join(INT, 'capas', IDIOMA)
 const STILLS = path.join(SA, 'stills')
 const CLIPS = path.join(SA, 'clips')          // los vídeos de Artlist, si Dani los deja aquí (plano-1.mp4, plano-2.mp4…)
-const SALIDA = path.join(SA, 'salida')
-const GRAB = process.env.GRAB || path.join(RAIZ, 'frontend', 'test-results', 'spot-ruta')
+const SALIDA = IDIOMA === 'es' ? path.join(SA, 'salida') : path.join(INT, 'salida')
+const GRAB = process.env.GRAB || (IDIOMA === 'es' ? path.join(RAIZ, 'frontend', 'test-results', 'spot-ruta') : path.join(INT, 'grab', IDIOMA))
 const VOZ = process.env.VOZ || 'Puck'
 const GANCHO = process.env.GANCHO || 'mano'   // 'mano' (voz de Puck) | '112' (solo texto)
 fs.mkdirSync(SALIDA, { recursive: true })
@@ -47,7 +52,8 @@ run(['-f', 'concat', '-safe', '0', '-i', path.join(tmp, 'frames.txt'), '-vf', `f
 console.log('marcas:', Object.entries(M).map(([k, v]) => `${k}@${v.t.toFixed(2)}`).join(' '))
 
 // ── La voz ───────────────────────────────────────────────────────────────────────────────────────
-const voz = JSON.parse(fs.readFileSync(path.join(V5, 'voces', VOZ, 'voz.json'), 'utf8')).frases
+const VOZDIR = IDIOMA === 'es' ? V5 : INT
+const voz = JSON.parse(fs.readFileSync(IDIOMA === 'es' ? path.join(V5, 'voces', VOZ, 'voz.json') : path.join(INT, 'voces', IDIOMA, 'voz.json'), 'utf8')).frases
 const vd = (n) => voz[n - 1].dur
 
 // ── Escenas ──────────────────────────────────────────────────────────────────────────────────────
@@ -58,11 +64,12 @@ const toqueEntrega = M.tap_hacer_foto ? 'tap_hacer_foto' : 'tap_sin_foto'
 const S = [
   GANCHO !== 'mano'
     ? { id: 'gancho', tipo: 'still', still: 'plano-1-furgoneta-llena.jpg', clip: 'plano-1.mp4', capa: path.join(CAPAS, `gancho-${GANCHO}.png`), d: GANCHO === '25' ? 2.9 : 2.6, kb: [1.0, 1.1], tr: ['zoomin', 0.32] }
-    : { id: 'gancho', tipo: 'still', still: 'plano-1-furgoneta-llena.jpg', clip: 'plano-1.mp4', capa: path.join(V4, 'gancho.png'), d: +(vd(1) + 0.65).toFixed(2), kb: [1.0, 1.1], tr: ['zoomin', 0.32] },
+    : { id: 'gancho', tipo: 'still', still: 'plano-1-furgoneta-llena.jpg', clip: 'plano-1.mp4', capa: IDIOMA === 'es' ? path.join(V4, 'gancho.png') : path.join(CAPAS, 'gancho-mano.png'), d: +(vd(1) + 0.65).toFixed(2), kb: [1.0, 1.1], tr: ['zoomin', 0.32] },
   { id: 'escanea', tipo: 'app', a: M.visor.t - 0.05, hasta: M.bip2.t + 1.0, dMax: 3.4, fx: 540, fy: 1000, z0: 1.0, z1: 1.05, toques: ['tap_otro'], bips: ['bip1', 'bip2'], tit: 'escaneo', tr: ['slideup', 0.28] },
   { id: 'foto', tipo: 'app', a: M.leido.t - 0.05, hasta: M.lista3.t + 0.4, dMax: 2.0, fx: 540, fy: 760, z0: 1.0, z1: 1.05, toques: ['tap_anadir'], tit: 'escaneo', tr: ['slideup', 0.3] },
   { id: 'ordenar', tipo: 'app', a: M.tap_ordenar.t - 0.4, d: 2.5, fx: 540, fy: 1100, z0: 1.0, z1: 1.04, toques: ['tap_ordenar'], tit: 'ordenar', tr: ['smoothup', 0.26] },
-  { id: 'lista', tipo: 'app', a: M.baja_lista.t + 0.1, d: 1.8, vel: 1.6, fx: 540, fy: 1170, z0: 1.0, z1: 1.0, tr: ['smoothleft', 0.3] },
+  // La lista dura lo que haga falta para que la frase 3 (acelerada como mucho un 20 %) acabe antes del mapa.
+  { id: 'lista', tipo: 'app', a: M.baja_lista.t + 0.1, d: Math.max(1.8, +(vd(3) / 1.2 - 1.62).toFixed(2)), vel: 1.6, fx: 540, fy: 1170, z0: 1.0, z1: 1.0, tr: ['smoothleft', 0.3] },
   { id: 'mapa', tipo: 'app', a: (M.tap_zonas || M.mapa).t - 0.9, d: 2.9, fx: 540, fy: 930, z0: 1.0, z1: 1.06, toques: M.tap_zonas ? ['tap_zonas'] : [], tit: 'zonas', tr: ['zoomin', 0.3] },
   { id: 'navega', tipo: 'app', a: M.navegacion.t + 0.25, d: 2.6, vel: 2.3, fx: 540, fy: 880, z0: 1.0, z1: 1.08, tit: 'voz', tr: ['slideup', 0.26] },
   { id: 'entregado', tipo: 'app', a: M.tap_entregado.t + 0.35, hasta: M.entregado.t + 1.6, dMax: 2.6, fx: 540, fy: 1600, z0: 1.0, z1: 1.03, toques: [toqueEntrega], tit: 'entregado', tr: ['circleopen', 0.36] },
@@ -226,8 +233,14 @@ console.log('ganancias (dB):', JSON.stringify(G))
 
 const vozLista = []
 for (const n of Object.keys(INICIO).map(Number)) {
-  const src = path.join(V5, voz[n - 1].fichero)
-  const pre = 'highpass=f=80,equalizer=f=3000:t=q:w=1.2:g=1.5,acompressor=threshold=-22dB:ratio=2.5:attack=8:release=120:makeup=1'
+  const src = path.join(VOZDIR, voz[n - 1].fichero)
+  // Que una frase no pise a la siguiente (las voces de otros idiomas son más largas que las de Puck): si no cabe
+  // hasta el inicio de la siguiente, se acelera hasta un 20 %; si aun así no cabe, se avisa.
+  const sig = Object.keys(INICIO).map(Number).filter((m) => m > n).sort((a, b) => a - b)[0]
+  const hueco = sig ? INICIO[sig] - INICIO[n] - 0.2 : Infinity
+  const ritmo = voz[n - 1].dur > hueco ? Math.min(1.2, voz[n - 1].dur / hueco) : 1
+  if (voz[n - 1].dur / ritmo > hueco + 0.01) console.log(`AVISO: la frase ${n} (${voz[n - 1].dur}s) no cabe en ${hueco.toFixed(2)}s ni a x${ritmo.toFixed(2)}`)
+  const pre = `highpass=f=80,equalizer=f=3000:t=q:w=1.2:g=1.5,acompressor=threshold=-22dB:ratio=2.5:attack=8:release=120:makeup=1${ritmo > 1 ? `,atempo=${ritmo.toFixed(3)}` : ''}`
   const m = leeErr(['-i', src, '-af', `${pre},loudnorm=I=-16:TP=-2:LRA=7:print_format=json`])
   const j = JSON.parse(m.slice(m.lastIndexOf('{'), m.lastIndexOf('}') + 1))
   const dst = path.join(tmp, `voz${n}.wav`)
@@ -287,7 +300,7 @@ fs.copyFileSync(unidoA, path.join(tmp, 'con-subs-A.mp4'))
 const finalA = path.join(tmp, 'final-A.mp4'); mezcla(true, finalA, path.join(tmp, 'con-subs-A.mp4'))
 
 const v = (base, nombre, args) => {
-  const dest = path.join(SALIDA, `spot-ruta-${nombre}.mp4`)
+  const dest = path.join(SALIDA, `spot-ruta-${nombre}${SUF_ID}.mp4`)
   run(['-i', base, ...args, '-c:v', 'libx264', '-preset', 'medium', '-crf', '19', '-pix_fmt', 'yuv420p', '-c:a', 'copy', '-movflags', '+faststart', dest])
   console.log('→', path.relative(RAIZ, dest), (fs.statSync(dest).size / 1e6).toFixed(1), 'MB')
 }
@@ -299,5 +312,5 @@ v(finalB, `4x5-B${suf}`, columna(1080, 1350))
 v(finalB, `1x1-B${suf}`, columna(1080, 1080))
 v(finalA, `16x9-A-qr${suf}`, columna(1920, 1080))
 v(mudoB, `9x16-B-sin-voz${suf}`, [])
-fs.writeFileSync(path.join(SA, `montaje${suf}.json`), JSON.stringify({ voz: VOZ, gancho: GANCHO, fin: FIN, ganancias: G, escenas: S.map(({ id, t0, d, vel }) => ({ id, t0, d, vel })), efectos: efectos.map(({ nombre, t, g }) => ({ nombre, t: +t.toFixed(3), g })) }, null, 1))
+fs.writeFileSync(path.join(IDIOMA === 'es' ? SA : INT, `montaje${suf}${SUF_ID}.json`), JSON.stringify({ voz: IDIOMA === 'es' ? VOZ : IDIOMA, gancho: GANCHO, fin: FIN, ganancias: G, escenas: S.map(({ id, t0, d, vel }) => ({ id, t0, d, vel })), efectos: efectos.map(({ nombre, t, g }) => ({ nombre, t: +t.toFixed(3), g })) }, null, 1))
 fs.rmSync(tmp, { recursive: true, force: true })

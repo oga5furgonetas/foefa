@@ -33,12 +33,16 @@ object LectorEtiqueta {
             "carrera|cra\\.?|kr\\.?|diagonal|dg\\.?|transversal|tv\\.|autopista|jir[oó]n|jr\\.?|pasaje|psje\\.?|calzada|calz\\.?|" +
             "privada|priv\\.?|cerrada|andador|boulevard|bulevar|blvd\\.?|prolongaci[oó]n|prol\\.?|rodovia|rod\\.?|alameda|al\\.|" +
             "travessa|largo|pra[cç]a|street|st\\.|avenue|ave\\.?|road|rd\\.|drive|dr\\.|lane|ln\\.|rue|chemin|via|viale|piazza|corso|" +
-            "stra(ss|ß)e|str\\.|weg|platz|allee|ladeira)[\\s,]+", I)
+            "stra(ss|ß)e|str\\.|weg|platz|allee|ladeira|impasse|all[ée]e|place|cours|quai|route|r[ée]sidence|lotissement|gasse|damm|ufer|" +
+            "steig|straat|gracht|laan|plein|kade|dijk|singel|court|ct\\.|terrace|circle|cir\\.|parkway|pkwy|highway|hwy|close|crescent|" +
+            "gardens|grove|square|sq\\.|mews|vicolo|piazzale|lungomare|praceta)[\\s,]+", I)
 
     private val SIGUE = Regex(
-        "^(\\d+\\s*[ºª°%o]|bajo|entlo|piso|puerta|esc\\.?|portal|apto\\.?|apt\\.?|apartamento|depto\\.?|dpto\\.?|departamento|" +
-            "int\\.?|interior|casa|bloco|torre|col\\.?|colonia|fracc\\.?|fraccionamiento|barrio|bairro|b[º°]\\.?|villa|" +
-            "urbanizaci[oó]n|conjunto|sector)(?=[\\s,.:]|$)", I)
+        "^(\\d+\\s*[ºª°%o]|\\d+(?:er|e|ème|st|nd|rd|th)\\b|\\d+\\.\\s*(?:og|stock|etage)|bajo|entlo|piso|puerta|esc\\.?|portal|apto\\.?|apt\\.?|" +
+            "apartamento|depto\\.?|dpto\\.?|departamento|int\\.?|interior|casa|bloco|torre|col\\.?|colonia|fracc\\.?|fraccionamiento|barrio|" +
+            "bairro|b[º°]\\.?|villa|urbanizaci[oó]n|conjunto|sector|[ée]tage|[ée]tg\\.?|b[âa]t\\.?|b[âa]timent|r[ée]sidence|flat|floor|fl\\.?|" +
+            "unit|suite|ste\\.?|stock|og|wohnung|whg\\.?|andar|sala|lote|mz\\.?|manzana|edif\\.?|edificio|house|apartment|appartement|" +
+            "appt\\.?|room|rm\\.?)(?=[\\s,.:]|$)", I)
 
     private class TelPais(val pref: String, val largos: List<Int>, val inicio: Regex? = null)
 
@@ -51,7 +55,9 @@ object LectorEtiqueta {
         "py" to TelPais("595", listOf(9, 10)), "bo" to TelPais("591", listOf(8)), "gt" to TelPais("502", listOf(8)),
         "cr" to TelPais("506", listOf(8)), "pa" to TelPais("507", listOf(7, 8)), "do" to TelPais("1", listOf(10)),
         "fr" to TelPais("33", listOf(9, 10)), "it" to TelPais("39", listOf(9, 10)), "de" to TelPais("49", listOf(10, 11)),
-        "gb" to TelPais("44", listOf(10, 11)),
+        "gb" to TelPais("44", listOf(10, 11)), "nl" to TelPais("31", listOf(9)), "be" to TelPais("32", listOf(8, 9)),
+        "ch" to TelPais("41", listOf(9)), "at" to TelPais("43", listOf(9, 10, 11, 12, 13)), "ie" to TelPais("353", listOf(9)),
+        "ad" to TelPais("376", listOf(6, 9)),
     )
 
     private val CP_PAIS = mapOf(
@@ -61,6 +67,13 @@ object LectorEtiqueta {
         "mx" to Regex("\\b(\\d{5})\\b"), "us" to Regex("\\b(\\d{5})(?:-\\d{4})?\\b"), "pe" to Regex("\\b(\\d{5})\\b"),
         "fr" to Regex("\\b(\\d{5})\\b"), "it" to Regex("\\b(\\d{5})\\b"), "de" to Regex("\\b(\\d{5})\\b"),
         "ar" to Regex("\\b([A-Z]\\d{4}[A-Z]{3})\\b"),
+        "gb" to Regex("\\b([A-Z]{1,2}\\d[A-Z\\d]?\\s?\\d[A-Z]{2})\\b", I), "nl" to Regex("\\b(\\d{4}\\s?[A-Z]{2})\\b"),
+        "ie" to Regex("\\b([A-Z]\\d{2}\\s?[A-Z0-9]{4})\\b"), "be" to Regex("\\b(\\d{4})\\b"), "ch" to Regex("\\b(\\d{4})\\b"),
+        "at" to Regex("\\b(\\d{4})\\b"), "ad" to Regex("\\b(AD\\d{3})\\b"), "cl" to Regex("\\b(\\d{7})\\b"), "co" to Regex("\\b(\\d{6})\\b"),
+        "uy" to Regex("\\b(\\d{5})\\b"), "py" to Regex("\\b(\\d{4})\\b"), "cr" to Regex("\\b(\\d{5})\\b"), "pa" to Regex("\\b(\\d{4})\\b"),
+        "gt" to Regex("\\b(\\d{5})\\b"), "do" to Regex("\\b(\\d{5})\\b"), "ve" to Regex("\\b(\\d{4})\\b"), "ec" to Regex("\\b(\\d{6})\\b"),
+        "hn" to Regex("\\b(\\d{5})\\b"), "ni" to Regex("\\b(\\d{5})\\b"), "sv" to Regex("\\b(\\d{4})\\b"), "cu" to Regex("\\b(\\d{5})\\b"),
+        "cn" to Regex("\\b(\\d{6})\\b"),
     )
     private val CP_CON_RETULO = Regex("\\b(?:c\\.?\\s?p\\.?|cep|c[oó]digo postal|zip|postal)\\s*[:.-]?\\s*([A-Z]?\\d{4,7}(?:-\\d{3,4})?[A-Z]{0,3})\\b", I)
 
@@ -96,6 +109,18 @@ object LectorEtiqueta {
         return ""
     }
 
+    /** EL NÚMERO Y EL PISO (30-10-2026, como la web): el OCR junta «2 1º B» en «21º B» o se come el «º» («2 1 B»). Con dos o
+     *  tres cifras pegadas a «º/ª/°» la última es el piso («21º B» → «2, 1º B»); «2 1 B» y «2 1º B» se escriben como lo que son. */
+    fun arreglaPiso(d: String): String {
+        var s = Regex("\\b(\\d{1,3})(\\d)\\s*([ºª°])\\s*([A-Za-z]{1,4})?(?=[\\s,.]|$)").replace(d) { m ->
+            val a = m.groupValues[1]; val b = m.groupValues[2]; val puerta = m.groupValues[4]
+            if ((a + b).toInt() > 12) "$a, ${b}º" + (if (puerta.isNotEmpty()) " ${puerta.uppercase()}" else "") else m.value
+        }
+        s = Regex("\\b(\\d{1,4})\\s+(\\d{1,2})\\s*([A-Ha-h])\\s*$").replace(s) { m -> "${m.groupValues[1]}, ${m.groupValues[2]}º ${m.groupValues[3].uppercase()}" }
+        s = Regex("\\b(\\d{1,4})\\s+(\\d{1,2})\\s*[ºª°]").replace(s) { m -> "${m.groupValues[1]}, ${m.groupValues[2]}º" }
+        return s.replace(Regex("\\s+,"), ",")
+    }
+
     /** Del texto leído (OCR de la foto) a parada. Lo que no se encuentra se deja vacío: se revisa antes de guardar. */
     fun leerTexto(texto: String, pais: String = "es"): Lectura {
         val lineas = texto.split(Regex("\\r?\\n")).map { it.replace(Regex("\\s+"), " ").trim() }.filter { it.isNotEmpty() }
@@ -129,7 +154,7 @@ object LectorEtiqueta {
             direccion = direccion.replaceFirst(Regex("^(direcci[oó]n|domicilio|dir\\.?|endere[cç]o|address)\\s*[:.-]?\\s*", I), "").trim()
             val conNumero = Regex("^(.+?\\b\\d{1,4}[A-Z]?\\b)(.*)$", I).find(direccion)
             val basura = conNumero != null && Regex("^\\s+(?:[A-Z]{1,4}\\s+){1,2}\\d{1,4}\\s*$", I).matches(conNumero.groupValues[2])
-            out.direccion = if (basura) conNumero.groupValues[1] else direccion
+            out.direccion = arreglaPiso(if (basura) conNumero.groupValues[1] else direccion)
             val sig = lineas.getOrElse(iVia + 1) { "" }
             if (SIGUE.containsMatchIn(sig) && telefonoDe(sig, pais).isEmpty()) out.direccion += ", $sig"
         }

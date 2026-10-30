@@ -40,22 +40,37 @@ const desescapa = (s) => s.replace(/\\(["\\$nt])/g, (_, c) => ({ '"': '"', '\\':
 // Lo que se traduce: tiene alguna minúscula (no es una clave ni una sigla) y no es una plantilla con $.
 const traducible = (lit) => /[a-záéíóúñü]/.test(lit) && !lit.includes('$')
 
-const LIT = String.raw`"((?:[^"\\]|\\.)*)"`
-// Cada patrón dice en qué grupo está el literal y cómo queda envuelto.
+// Un literal de UNA línea: sin esto, dos comillas en líneas distintas se tomaban por un texto (LectorEtiqueta.kt, 30-10-2026).
+const LIT = String.raw`"((?:[^"\\\r\n]|\\.)*)"`
+// Una frase de verdad (con espacio, acento o puntuación): para los patrones genéricos (asignaciones, `?:`, `->`,
+// `if … else`), donde un literal de una palabra puede ser una clave y no un texto.
+const frase = (lit) => traducible(lit) && /[\s.:…¿¡áéíóúñÁÉÍÓÚÑ]/.test(lit)
+// Cada patrón dice en qué grupo está el literal y cómo queda envuelto (`lit` 0 = varios literales, los decide `rep`).
 const PATRONES = [
   { re: new RegExp(String.raw`\bText\(${LIT}`, 'g'), lit: 1, rep: (g) => `Text(tx("${g[1]}")` },
   { re: new RegExp(String.raw`\bcontentDescription = ${LIT}`, 'g'), lit: 1, rep: (g) => `contentDescription = tx("${g[1]}")` },
   { re: new RegExp(String.raw`Toast\.makeText\(([^,()]+), ${LIT}`, 'g'), lit: 2, rep: (g) => `Toast.makeText(${g[1]}, tx("${g[2]}")` },
-  { re: new RegExp(String.raw`\b(Titulo|avisar|Chip|Aviso)\(${LIT}`, 'g'), lit: 2, rep: (g) => `${g[1]}(tx("${g[2]}")` },
+  { re: new RegExp(String.raw`\b(Titulo|avisar|Chip|Aviso|Cabecera|Seccion|Etiqueta)\(${LIT}`, 'g'), lit: 2, rep: (g) => `${g[1]}(tx("${g[2]}")` },
+  // Dato("12", "entregas en 30 días"), ErrorApi(0, "…"), CampoClave(clave, { clave = it }, "Contraseña", …).
+  { re: new RegExp(String.raw`\b(Dato|ErrorApi)\(([^,()]+), ${LIT}`, 'g'), lit: 3, rep: (g) => `${g[1]}(${g[2]}, tx("${g[3]}")` },
+  { re: new RegExp(String.raw`\bCampoClave\(([^,()]+), (\{[^{}]*\}), ${LIT}`, 'g'), lit: 3, rep: (g) => `CampoClave(${g[1]}, ${g[2]}, tx("${g[3]}")` },
+  // error = "…", mensaje = "…", `?: "…"` (lo que se dice si no hay otra cosa), `-> "…"` (ramas de un when),
+  // `if (…) "a" else "b"`: solo frases de verdad.
+  { re: new RegExp(String.raw`(\b(?:error|mensaje|aviso|avisoFuera|avisoFoto|texto|titulo|detalle|mensajeTarifa|fallo|estadoTexto)\s*=\s*)${LIT}`, 'g'),
+    lit: 2, fuerte: true, rep: (g) => `${g[1]}tx("${g[2]}")` },
+  { re: new RegExp(String.raw`(\?:\s*)${LIT}`, 'g'), lit: 2, fuerte: true, rep: (g) => `${g[1]}tx("${g[2]}")` },
+  { re: new RegExp(String.raw`(->\s*)${LIT}`, 'g'), lit: 2, fuerte: true, rep: (g) => `${g[1]}tx("${g[2]}")` },
+  { re: new RegExp(String.raw`(\)\s*)${LIT}(\s+else\b)`, 'g'), lit: 2, fuerte: true, rep: (g) => `${g[1]}tx("${g[2]}")${g[3]}` },
+  { re: new RegExp(String.raw`(\belse\s+)${LIT}`, 'g'), lit: 2, fuerte: true, rep: (g) => `${g[1]}tx("${g[2]}")` },
 ]
 
 function envuelve(ruta) {
   let t = readFileSync(ruta, 'utf8')
   const antes = t
-  for (const { re, lit, rep } of PATRONES) {
+  for (const { re, lit, rep, fuerte } of PATRONES) {
     t = t.replace(re, (...m) => {
       const g = m.slice(0, -2)   // los grupos (m[0] es el texto entero); fuera offset y cadena
-      return traducible(g[lit]) ? rep(g) : g[0]
+      return (fuerte ? frase(g[lit]) : traducible(g[lit])) ? rep(g) : g[0]
     })
   }
   if (t !== antes) {
@@ -73,6 +88,26 @@ function clavesDe(ruta) {
   const r = new Set()
   for (const m of t.matchAll(new RegExp(String.raw`\btx\(${LIT}`, 'g'))) r.add(desescapa(m[1]))
   return r
+}
+
+/** Los mensajes del servidor que la web traduce (textosRutaC.js) y que server.py sigue diciendo. */
+async function mensajesServidor() {
+  const mod = await import(pathToFileURL(join(RAIZ, 'frontend', 'src', 'lib', 'textosRutaC.js')).href)
+  const servidor = readFileSync(join(RAIZ, 'backend', 'server.py'), 'utf8')
+  return Object.keys(mod.C).filter((k) => servidor.includes(`"${k}"`))
+}
+
+/** Las palabras del `que` de las incidencias: las tuplas ("clase", "qué") de reparto.py y trafico.py, por partes. */
+function vocabularioIncidencias() {
+  const r = new Set()
+  for (const f of ['reparto.py', 'trafico.py']) {
+    const t = readFileSync(join(RAIZ, 'backend', f), 'utf8')
+    for (const m of t.matchAll(/\("(?:corte|obras|aviso|accidente|obstaculo|meteo|retencion|otro)", "([^"]+)"\)/g)) {
+      const p = /^(.+?) \((.+)\)$/.exec(m[1])
+      for (const k of p ? [p[1], p[2]] : [m[1]]) r.add(k)
+    }
+  }
+  return [...r].sort()
 }
 
 async function diccionarioWeb() {
@@ -97,6 +132,12 @@ if (generar || comprobar) {
   try { propias = JSON.parse(readFileSync(PROPIAS, 'utf8')) } catch { /* aún no existe */ }
   const claves = new Map()   // clave -> ficheros
   for (const f of ficheros) for (const k of clavesDe(f)) claves.set(k, [...(claves.get(k) || []), relative(RAIZ, f)])
+  // Los mensajes del servidor (30-10-2026): los que la web traduce en textosRutaC.js y server.py dice de verdad, para que
+  // la app nativa los enseñe en el idioma del móvil (Api.kt pasa el `detail` por tx()).
+  for (const k of await mensajesServidor()) if (!claves.has(k)) claves.set(k, ['backend/server.py'])
+  // Lo que pasa en la carretera (30-10-2026): el servidor manda el `que` de cada incidencia en español («carretera
+  // cortada (obras)») y la app lo traduce por partes (Calle.queIncidencia): sus palabras van también a Traducciones.kt.
+  for (const k of vocabularioIncidencias()) if (!claves.has(k)) claves.set(k, ['backend/reparto.py'])
   const faltan = []
   const filas = []
   for (const k of [...claves.keys()].sort()) {

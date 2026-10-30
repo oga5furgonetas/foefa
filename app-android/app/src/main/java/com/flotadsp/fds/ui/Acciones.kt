@@ -74,7 +74,7 @@ object Acciones {
     /** DÓNDE APARQUÉ (30-10-2026): el camino a pie hasta la furgoneta, en Google Maps o en la app de mapas que haya. */
     fun irAPie(ctx: Context, lat: Double, lng: Double) {
         val maps = Intent(Intent.ACTION_VIEW, Uri.parse("google.navigation:q=$lat,$lng&mode=w")).setPackage("com.google.android.apps.maps")
-        val cualquiera = Intent(Intent.ACTION_VIEW, Uri.parse("geo:$lat,$lng?q=$lat,$lng(Tu furgoneta)"))
+        val cualquiera = Intent(Intent.ACTION_VIEW, Uri.parse("geo:$lat,$lng?q=$lat,$lng(${Uri.encode(tx("Tu furgoneta"))})"))
         try { ctx.startActivity(maps) } catch (_: ActivityNotFoundException) {
             try { ctx.startActivity(cualquiera) } catch (_: ActivityNotFoundException) { Toast.makeText(ctx, tx("No hay ninguna app de mapas en el móvil."), Toast.LENGTH_LONG).show() }
         }

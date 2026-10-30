@@ -107,22 +107,41 @@ partes**, la **página de pago de Stripe en español** (`locale: "es"`), **las p
 (`testDebugUnitTest` + `assembleDebug`), y la nativa en el emulador con el sistema en inglés (capturas
 `docs/capturas-30-10/app-en-*.png`).
 
+## 2b. Lo hecho el 30-10 a mediodía (Dani: «si no hay DGT en los otros países, algo que se adecue a esos países»)
+
+`backend/trafico.py` (puro, con tests sobre muestras reales en `backend/tests/muestras/`) y `_fuente()` en `server.py`:
+cortes y obras de Bison Futé (FR), NDW (NL) y WZDx (15 feeds estatales de EE. UU. comprobados uno a uno); zonas ZFE
+(BNZFE), milieuzones/ZES (NDW), ULEZ/LEZ (GLA) y las de OSM (DE, IT, BE, AT, PT, CH, IE, AD) con `incompleto` si
+Overpass no contesta; avisos por placa (rodízio, Hoy No Circula, pico y placa de Quito y San José; Bogotá, Medellín
+y Santiago con enlace) con la matrícula guardada en Ajustes. Stripe cobra en la moneda del país (`currency` en
+Checkout, `currency_options` con `backend/scripts/stripe_monedas.py`). Etiquetas y QR: el piso bien leído y los
+formatos de 13 países; el buscador recibe la dirección sin piso. La nativa enseña los mensajes del servidor en el
+idioma del móvil. Verificado con una cuenta de Seattle en el emulador (`docs/capturas-30-10/app-us-*.png`) y
+Playwright `e2e/fuera.spec.js`. Detalle en ESTADO.md («30-10-2026 (mediodía)»).
+
+## 2c. Lo hecho el 30-10 a mediodía (2): Reino Unido y Alemania con fuente, correos en fr/it/de, «Actualización disponible»
+
+TfL (Gran Londres) y la API de la Autobahn GmbH (Alemania, autopistas) en `trafico.py`; las zonas de OSM con copia en
+Mongo por si Overpass no contesta; los correos del ciclo (bienvenida, primer día, recordatorio, invita, bono,
+opinión) en francés, italiano y alemán (`ciclo_correos.py`); el vocabulario de la carretera y los mensajes del
+servidor en la app nativa en el idioma del móvil; y el aviso de actualizar al entrar (FDS 2.4.1, code 20).
+
 ## 3. Lo que falta, mercado por mercado
 
 | | Idioma | Moneda del plan | Unidades | Cortes y obras en el mapa | Zonas / restricciones | Pago | Impuestos | Legal |
 |---|---|---|---|---|---|---|---|---|
-| Portugal | ✓ pt | EUR ✓ | km | ✗ (no hay feed nacional abierto comparable) | ZER Lisboa: sin datos abiertos verificados | Stripe EUR ✓ | OSS si > 10 k€ | legal en pt ✗ |
-| Francia | ✓ fr | EUR ✓ | km | Bison Futé DATEX II, gratis sin login (red nacional) | ZFE: base nacional (BNZFE) en data.gouv.fr | Stripe EUR ✓ | OSS | legal en fr ✗ |
-| Alemania | ✓ de | EUR ✓ | km | Mobilithek (DATEX II, con registro) | Umweltzonen: GeoPackage del UBA + OSM | Stripe EUR ✓ | OSS | legal en de ✗ |
-| Italia | ✓ it | EUR ✓ | km | ✗ (sin feed nacional abierto encontrado) | Area B/C Milán y ZTL por ciudad, sin dato abierto nacional | Stripe EUR ✓ | OSS | legal en it ✗ |
-| Países Bajos / Bélgica | en/fr/de | EUR ✓ | km | NDW open data (DATEX II) | milieuzones en OSM | Stripe EUR | OSS | ✗ |
-| Reino Unido / Irlanda | ✓ en | GBP / EUR (tabla) | **millas ✓** (GB) | National Highways (clave gratis, 10 llamadas/min) | ULEZ/LEZ: GeoJSON del London Datastore; CAZ por ciudad | Stripe GBP (currency_options) | IVA UK digital | ✗ |
-| Estados Unidos | ✓ en | USD ✓ (tabla) | **millas ✓** | WZDx (40 feeds, obras) + 511 por estado (clave gratis) | sin LEZ; peaje de congestión NYC | Stripe USD / Play | sales tax por estado al pasar umbral | política en inglés ✗ |
-| México | ✓ es-419 | MXN ✓ (tabla) | km | ✗ | Hoy No Circula (placa, contingencias) | Stripe MXN / Play | IVA 16 % con registro en el SAT | ✗ |
-| Colombia | ✓ es-419 | COP ✓ (tabla) | km | ✗ | pico y placa (Bogotá: carga > 20 años) | Play / Stripe | a verificar | ✗ |
-| Chile | ✓ es-419 | CLP ✓ (tabla) | km | ✗ | restricción vehicular (sello verde, mayo–agosto) | Play / Stripe | a verificar | ✗ |
+| Portugal | ✓ pt | EUR ✓ | km | ✗ (sin feed abierto) | **ZER por OSM ✓** (30-10 mediodía) | Stripe EUR ✓ | OSS si > 10 k€ | legal en pt ✗ |
+| Francia | ✓ fr | EUR ✓ | km | **Bison Futé ✓** (DATEX II, 30-10 mediodía) | **ZFE ✓** (BNZFE, con la regla Crit'Air del día) | Stripe EUR ✓ | OSS | legal en fr ✗ |
+| Alemania | ✓ de | EUR ✓ | km | **API de la Autobahn ✓** (autopistas; las calles no tienen feed abierto) | **Umweltzonen por OSM ✓** (con copia en Mongo) | Stripe EUR ✓ | OSS | legal en de ✗ |
+| Italia | ✓ it | EUR ✓ | km | ✗ (sin feed nacional abierto) | **ZTL por OSM ✓** | Stripe EUR ✓ | OSS | legal en it ✗ |
+| Países Bajos / Bélgica | en/fr/de | EUR ✓ | km | **NDW ✓** (Países Bajos) | **milieuzones y ZES ✓** (NDW); Bélgica por OSM ✓ | Stripe EUR | OSS | ✗ |
+| Reino Unido / Irlanda | ✓ en | GBP / EUR (tabla) | **millas ✓** (GB) | **TfL ✓** (Gran Londres; fuera, National Highways pide clave) | **ULEZ + LEZ ✓** (GLA); Irlanda por OSM ✓ | **Stripe GBP ✓** (currency_options) | IVA UK digital | legal en inglés ✓ (cortesía, sin jurista) |
+| Estados Unidos | ✓ en | USD ✓ (tabla) | **millas ✓** | **WZDx ✓** (15 feeds estatales sin clave) | sin LEZ | **Stripe USD ✓** / Play | sales tax por estado al pasar umbral | legal en inglés ✓ (cortesía, sin jurista) |
+| México | ✓ es-419 | MXN ✓ (tabla) | km | ✗ | **Hoy No Circula ✓** (aviso por placa, con el engomado) | **Stripe MXN ✓** / Play | IVA 16 % con registro en el SAT | ✗ |
+| Colombia | ✓ es-419 | COP ✓ (tabla) | km | ✗ | pico y placa: aviso con el enlace oficial (cambia por temporada) | Play / **Stripe COP ✓** | a verificar | ✗ |
+| Chile | ✓ es-419 | CLP ✓ (tabla) | km | ✗ | restricción vehicular: aviso con el enlace oficial (mayo–agosto) | Play / **Stripe CLP ✓** | a verificar | ✗ |
 | Argentina | ✓ es-419 | USD (sin precio fijo en ARS por la inflación) | km | BA Data «Tránsito» (con credenciales) | — | Play | a verificar | ✗ |
-| Brasil | ✓ pt-BR + Pix | BRL ✓ (tabla) | km | ✗ | rodízio y ZMRC São Paulo | Play / Stripe | a verificar | LGPD ✗ |
+| Brasil | ✓ pt-BR + Pix | BRL ✓ (tabla) | km | ✗ | **rodízio de São Paulo ✓** (aviso por placa) | Play / **Stripe BRL ✓** | a verificar | LGPD ✗ |
 
 ## 4. Mercado por mercado: cómo se reparte y qué le pasa a la app
 

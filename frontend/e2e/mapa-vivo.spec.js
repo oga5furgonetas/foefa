@@ -39,7 +39,7 @@ test('Mapa en vivo · el recorrido se recalcula desde donde estás cuando avanza
   await expect(page.getByText('Por las calles:')).toBeVisible()
   await expect(page.getByRole('button', { name: 'Seguirme' })).toBeVisible()
   expect(desdes.length).toBe(1)
-  expect(desdes[0]).toEqual({ lat: 43.3636, lng: -8.4118 })
+  expect(desdes[0]).toMatchObject({ lat: 43.3636, lng: -8.4118 })   // desde el 30-10 va también la precisión del GPS
 
   // Un tembleque del GPS (unos metros) no recalcula nada.
   await context.setGeolocation({ latitude: 43.36362, longitude: -8.41178 })

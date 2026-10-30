@@ -1,7 +1,12 @@
-import LegalLayout from './LegalLayout'
+import LegalLayout, { legalEnIngles } from './LegalLayout'
+import TermsEn from './en/TermsEn'
+import { useIdioma } from '../lib/idioma'
 import { COMPANY } from './config'
 
 export default function Terminos() {
+  useIdioma()
+  // Fuera de España (30-10-2026): la traducción de cortesía al inglés; el español es la versión que vale.
+  if (legalEnIngles()) return <TermsEn />
   return (
     <LegalLayout title="Términos y Condiciones de Uso">
       <p>Al registrarte o usar {COMPANY.brand} (en adelante, "el Servicio"), aceptas estas condiciones. Si no estás de acuerdo, no uses el Servicio.</p>

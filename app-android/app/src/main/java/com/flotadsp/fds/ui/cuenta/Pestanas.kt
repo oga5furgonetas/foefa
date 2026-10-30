@@ -116,7 +116,7 @@ fun HistorialPantalla() {
     var error by remember { mutableStateOf<String?>(null) }
     var abierto by remember { mutableStateOf<String?>(null) }
     LaunchedEffect(Unit) {
-        runCatching { repo.estadisticas(30) }.onSuccess { est = it }.onFailure { error = (it as? ErrorApi)?.message ?: "No se ha podido cargar" }
+        runCatching { repo.estadisticas(30) }.onSuccess { est = it }.onFailure { error = (it as? ErrorApi)?.message ?: tx("No se ha podido cargar") }
     }
     abierto?.let { f -> DiaPantalla(f) { abierto = null }; return }
     Scaffold(topBar = { TopAppBar(title = { Text(tx("Historial")) }) }, containerColor = MaterialTheme.colorScheme.background) { pad ->
@@ -128,8 +128,8 @@ fun HistorialPantalla() {
                 item {
                     Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLowest), shape = MaterialTheme.shapes.large) {
                         Row(Modifier.fillMaxWidth().padding(18.dp)) {
-                            Dato("${e.entregados}", if (e.entregados == 1) "entrega en 30 días" else "entregas en 30 días", Modifier.weight(1f))
-                            Dato(e.tasa?.let { "$it %" } ?: "—", "entregadas a la primera", Modifier.weight(1f))
+                            Dato("${e.entregados}", if (e.entregados == 1) tx("entrega en 30 días") else tx("entregas en 30 días"), Modifier.weight(1f))
+                            Dato(e.tasa?.let { "$it %" } ?: "—", tx("entregadas a la primera"), Modifier.weight(1f))
                         }
                     }
                 }
@@ -194,6 +194,7 @@ fun AjustesPantalla(alGuardar: () -> Unit = {}) {
     var salida by remember { mutableStateOf("09:00") }
     var volver by remember { mutableStateOf(false) }
     var pais by remember { mutableStateOf("") }
+    var placa by remember { mutableStateOf("") }
     // «Mi dinero hoy» (30-10-2026): la tarifa en euros con coma, como la web; se guarda en céntimos (PUT /reparto/ganancias).
     var pagoParada by remember { mutableStateOf("") }
     var pagoDia by remember { mutableStateOf("") }
@@ -210,6 +211,7 @@ fun AjustesPantalla(alGuardar: () -> Unit = {}) {
             salida = a["hora_salida"]?.jsonPrimitive?.contentOrNull ?: "09:00"
             volver = a["volver"]?.jsonPrimitive?.booleanOrNull ?: false
             pais = a["pais"]?.jsonPrimitive?.contentOrNull.orEmpty()
+            placa = a["placa"]?.jsonPrimitive?.contentOrNull.orEmpty()
             pagoParada = deCent(a["pago_parada"]?.jsonPrimitive?.intOrNull)
             pagoDia = deCent(a["pago_dia"]?.jsonPrimitive?.intOrNull)
             costeKm = deCent(a["coste_km"]?.jsonPrimitive?.intOrNull?.let { if (Region.unidades == "mi") Math.round(it * Region.KM_POR_MILLA).toInt() else it })   // en millas se enseña por milla
@@ -261,6 +263,11 @@ fun AjustesPantalla(alGuardar: () -> Unit = {}) {
                     Spacer(Modifier.height(6.dp))
                     ElegirPais(pais, paises) { pais = it }
                 }
+                // LA PLACA (30-10-2026): en las ciudades con restricción por placa (São Paulo, CDMX, Quito, San José…) Hoy dice
+                // si le toca. Opcional; solo la matrícula.
+                Spacer(Modifier.height(8.dp))
+                OutlinedTextField(placa, { placa = it.uppercase(Locale.ROOT).take(12) }, label = { Text(tx("Matrícula / placa (opcional)")) }, singleLine = true,
+                    supportingText = { Text(tx("Para avisarte de las restricciones por placa (rodízio, Hoy No Circula, pico y placa).")) }, modifier = Modifier.fillMaxWidth())
                 Spacer(Modifier.height(6.dp))
                 Row(Modifier.fillMaxWidth().toggleable(volver, role = Role.Switch) { volver = it }.padding(vertical = 4.dp),
                     verticalAlignment = Alignment.CenterVertically) {
@@ -274,7 +281,7 @@ fun AjustesPantalla(alGuardar: () -> Unit = {}) {
                     ambito.launch {
                         try {
                             val cambios = mutableMapOf<String, kotlinx.serialization.json.JsonElement>("base_direccion" to JsonPrimitive(base.trim()),
-                                "hora_salida" to JsonPrimitive(salida.trim()), "volver" to JsonPrimitive(volver))
+                                "hora_salida" to JsonPrimitive(salida.trim()), "volver" to JsonPrimitive(volver), "placa" to JsonPrimitive(placa.trim().uppercase(Locale.ROOT)))
                             if (pais.isNotEmpty()) {
                                 // Con el país, su huso: el del móvil si es de ese país; si no, el principal del país.
                                 val zonas = paises.firstOrNull { it.first == pais }?.third.orEmpty()
@@ -336,10 +343,19 @@ private fun CampoElegir(etiqueta: String, valor: String, alPulsar: () -> Unit) {
 }
 
 /** El país donde reparte: con él se leen los teléfonos de las etiquetas y se buscan las direcciones de su zona. */
+/** El nombre del país en el idioma de la app (Android los tiene todos); si no lo sabe, el que manda el servidor. */
+internal fun nombrePais(codigo: String, delServidor: String = ""): String =
+    Locale("", codigo.uppercase(Locale.ROOT)).getDisplayCountry(LOCALE_APP).takeIf { it.isNotBlank() && it != codigo.uppercase(Locale.ROOT) }
+        ?: delServidor.ifBlank { codigo.uppercase(Locale.ROOT) }
+
 @Composable
-private fun ElegirPais(pais: String, paises: List<Triple<String, String, List<String>>>, alElegir: (String) -> Unit) {
+private fun ElegirPais(pais: String, paisesServidor: List<Triple<String, String, List<String>>>, alElegir: (String) -> Unit) {
     var abierto by remember { mutableStateOf(false) }
-    CampoElegir(tx("País donde repartes"), paises.firstOrNull { it.first == pais }?.second ?: pais.uppercase(Locale.ROOT), alPulsar = { abierto = true })
+    val paises = remember(paisesServidor) {
+        paisesServidor.map { Triple(it.first, nombrePais(it.first, it.second), it.third) }
+            .sortedWith(compareBy(java.text.Collator.getInstance(LOCALE_APP)) { it.second })
+    }
+    CampoElegir(tx("País donde repartes"), paises.firstOrNull { it.first == pais }?.second ?: nombrePais(pais), alPulsar = { abierto = true })
     if (abierto) {
         AlertDialog(
             onDismissRequest = { abierto = false },
@@ -398,7 +414,7 @@ fun CuentaPantalla() {
             Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLowest), shape = MaterialTheme.shapes.large,
                 modifier = Modifier.fillMaxWidth()) {
                 Column(Modifier.fillMaxWidth().padding(18.dp)) {
-                    Text(nombre.ifBlank { "Tu cuenta" }, style = MaterialTheme.typography.titleLarge)
+                    Text(nombre.ifBlank { tx("Tu cuenta") }, style = MaterialTheme.typography.titleLarge)
                     if (correo.isNotBlank()) Text(correo, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     Spacer(Modifier.height(10.dp))
                     Text(textoPlan(plan), style = MaterialTheme.typography.bodyLarge)
@@ -415,21 +431,21 @@ fun CuentaPantalla() {
                     Spacer(Modifier.height(10.dp))
                     Button(onClick = {
                         val enlace = "${BuildConfig.WEB_URL}/invita?${ref?.codigo?.takeIf { it.isNotBlank() }?.let { "ref=$it&" } ?: ""}utm_source=referido&utm_medium=app_android"
-                        Acciones.compartir(ctx, "Uso FDS para ordenar mi ruta de reparto y navegar parada a parada. Pruébala: $enlace")
+                        Acciones.compartir(ctx, tx("Uso FDS para ordenar mi ruta de reparto y navegar parada a parada. Pruébala: {enlace}", "enlace" to enlace))
                     }) { Icon(Icons.Default.Share, contentDescription = null); Spacer(Modifier.width(8.dp)); Text(tx("Compartir mi enlace")) }
                 }
             }
             Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLowest), shape = MaterialTheme.shapes.large) {
                 Column {
-                    Opcion(Icons.Default.Mail, "Escribir a soporte") { Acciones.abrirWeb(ctx, "mailto:contacto@flotadsp.com?subject=FDS%20Android") }
+                    Opcion(Icons.Default.Mail, tx("Escribir a soporte")) { Acciones.abrirWeb(ctx, "mailto:contacto@flotadsp.com?subject=FDS%20Android") }
                     HorizontalDivider()
-                    Opcion(Icons.Default.Shield, "Privacidad") { Acciones.abrirWeb(ctx, "${BuildConfig.WEB_URL}/privacidad") }
+                    Opcion(Icons.Default.Shield, tx("Privacidad")) { Acciones.abrirWeb(ctx, "${BuildConfig.WEB_URL}/privacidad") }
                     HorizontalDivider()
-                    Opcion(Icons.Default.Description, "Términos") { Acciones.abrirWeb(ctx, "${BuildConfig.WEB_URL}/terminos") }
+                    Opcion(Icons.Default.Description, tx("Términos")) { Acciones.abrirWeb(ctx, "${BuildConfig.WEB_URL}/terminos") }
                     HorizontalDivider()
-                    Opcion(Icons.AutoMirrored.Filled.Logout, "Cerrar sesión") { salir = true }
+                    Opcion(Icons.AutoMirrored.Filled.Logout, tx("Cerrar sesión")) { salir = true }
                     HorizontalDivider()
-                    Opcion(Icons.Default.DeleteForever, "Borrar mi cuenta", peligro = true) { borrar = true }
+                    Opcion(Icons.Default.DeleteForever, tx("Borrar mi cuenta"), peligro = true) { borrar = true }
                 }
             }
             Text("FDS ${BuildConfig.VERSION_NAME}", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -448,10 +464,10 @@ fun CuentaPantalla() {
 private fun textoPlan(p: Plan?): String = when {
     p == null -> tx("Cargando tu plan…")
     p.promo?.activa == true && p.gratis?.activo != true ->
-        p.promo.hasta?.let { "Gratis y sin límite hasta el ${dia(it).substringAfter(' ')}." } ?: "Gratis y sin límite durante la promoción."
+        p.promo.hasta?.let { tx("Gratis y sin límite hasta el {f}.", "f" to dia(it).substringAfter(' ')) } ?: tx("Gratis y sin límite durante la promoción.")
     p.status == "active" -> tx("Plan sin tope de paradas: activo.")
     p.gratis?.activo == true -> tx("Plan gratis: hasta {n} paradas nuevas al día.", "n" to (p.gratis.tope ?: 15))
-    p.status == "trial" && p.diasQuedan != null -> "Prueba gratis: ${if (p.diasQuedan == 1) "queda 1 día" else "quedan ${p.diasQuedan} días"}."
+    p.status == "trial" && p.diasQuedan != null -> tx("Prueba gratis: {q}.", "q" to (if (p.diasQuedan == 1) tx("queda 1 día") else tx("quedan {n} días", "n" to p.diasQuedan)))
     else -> tx("Plan Repartidor.")
 }
 

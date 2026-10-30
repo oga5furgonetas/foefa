@@ -36,8 +36,8 @@ android {
         minSdk = 26
         targetSdk = 36
         // La TWA llegó a code 4 (1.0.3): la nativa empieza en 10.
-        versionCode = 18
-        versionName = "2.3.0"
+        versionCode = 20
+        versionName = "2.4.1"
         buildConfigField("String", "API_URL", "\"$apiUrl\"")
         buildConfigField("String", "WEB_URL", "\"https://flotadsp.com\"")
         buildConfigField("String", "FCM_APP_ID", "\"$fcmAppId\"")

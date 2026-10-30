@@ -1,4 +1,6 @@
-import LegalLayout from './LegalLayout'
+import LegalLayout, { legalEnIngles } from './LegalLayout'
+import ProcessingEn from './en/ProcessingEn'
+import { useIdioma } from '../lib/idioma'
 import { COMPANY, PROCESSORS } from './config'
 
 /* CONTRATO DE ENCARGO DEL TRATAMIENTO (art. 28.3 RGPD), como anexo de los
@@ -8,6 +10,9 @@ import { COMPANY, PROCESSORS } from './config'
    los términos; no hace falta firmarlo aparte (art. 28.9 admite el formato
    electrónico). */
 export default function Encargo() {
+  useIdioma()
+  // Fuera de España (30-10-2026): la traducción de cortesía al inglés; el español es la versión que vale.
+  if (legalEnIngles()) return <ProcessingEn />
   return (
     <LegalLayout title="Acuerdo de Encargo del Tratamiento" lastUpdate="2026-10-03">
       <p>Este acuerdo forma parte de los <a href="/terminos">Términos y Condiciones</a> y se acepta con ellos al crear la cuenta. Regula el tratamiento de datos personales que {COMPANY.brand} realiza <strong>por cuenta del cliente</strong>, conforme al artículo 28 del Reglamento (UE) 2016/679 (RGPD) y a la Ley Orgánica 3/2018 (LOPDGDD).</p>

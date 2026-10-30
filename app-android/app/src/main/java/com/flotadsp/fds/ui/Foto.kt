@@ -13,7 +13,7 @@ import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.ui.platform.LocalContext
 import androidx.core.content.ContextCompat
 
-const val SIN_CAMARA = "Sin permiso de cámara no se puede hacer la foto. Actívalo en Ajustes › Aplicaciones › FDS › Permisos."
+val SIN_CAMARA: String get() = tx("Sin permiso de cámara no se puede hacer la foto. Actívalo en Ajustes › Aplicaciones › FDS › Permisos.")
 
 /* HACER UNA FOTO CON LA CÁMARA DEL MÓVIL (25-10-2026).
    La app declara el permiso de cámara (lo usa el escáner) y, entonces, Android NO deja abrir la cámara del sistema

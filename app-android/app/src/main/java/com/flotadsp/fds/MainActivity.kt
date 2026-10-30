@@ -82,7 +82,7 @@ class MainActivity : ComponentActivity() {
         leerEnlace(intent)
         // Antes de que la actividad arranque del todo (el lanzador de Play se registra en onCreate).
         actualizacion = Actualizacion(this)
-        lifecycleScope.launch { actualizacion.comprobarEnLaWeb(app.repo) }
+        lifecycleScope.launch { actualizacion.comprobarEnElServidor(app.repo) }
         setContent {
             val tema by app.cuenta.tema.collectAsState()
             val noche = when (tema) { "oscuro" -> true; "claro" -> false; else -> isSystemInDarkTheme() }
@@ -100,6 +100,7 @@ class MainActivity : ComponentActivity() {
                             alAbrirPortal = { if (it.app_destino == "empresa") sesionPortal = it },
                             alCerrarEmpresa = { empresaSlug = null; sesionPortal = null })
                         AvisoActualizacion(actualizacion, Modifier.align(Alignment.BottomCenter))
+                        DialogoActualizacion(actualizacion)
                     }
                 }
             }
@@ -164,7 +165,7 @@ private fun Raiz(app: FdsApp, ref: String?, empresaSlug: String?, sesionPortal: 
                 alCerrar = { app.ambito.launch { app.repo.salir() } },
                 abrir = abrirAviso, alAbierto = alAvisoAbierto,
             )
-        } else if (dentro) Principal(abrirAviso, alAvisoAbierto) else Acceso(ref, alAbrirPortal, aviso = if (caducada) "Tu sesión ha caducado: entra otra vez." else null)
+        } else if (dentro) Principal(abrirAviso, alAvisoAbierto) else Acceso(ref, alAbrirPortal, aviso = if (caducada) tx("Tu sesión ha caducado: entra otra vez.") else null)
     }
 }
 
@@ -215,7 +216,7 @@ private fun Principal(abrir: String?, alAbierto: () -> Unit) {
             FichaParada(pais = pais, cerca = cerca, inicial = c.inicial, editar = c.editar, alCerrar = { guardada ->
                 if (guardada) ruta.refrescarSinRuido()
                 // Desde el escáner, el aviso lo da el propio escáner (y suma la añadida); si no, abajo en «Hoy».
-                if (guardada && !c.desdeEscaner) ruta.avisar(if (c.editar != null) "Cambios guardados." else "Añadida a tu ruta.")
+                if (guardada && !c.desdeEscaner) ruta.avisar(if (c.editar != null) tx("Cambios guardados.") else tx("Añadida a tu ruta."))
                 capa = if (c.desdeEscaner) Capa.Escaner(VueltaDeRevisar(guardada)) else null
             })
             return

@@ -290,7 +290,7 @@ def test_las_zbe_de_la_dgt_se_leen_y_dicen_que_paradas_caen_dentro():
     assert len(z["poligonos"]) == 1 and len(z["poligonos"][0]) == 4 and z["caja"] == (43.368, -8.406, 43.37, -8.404)
     dentro = {"id": "a", "lat": 43.3690, "lng": -8.4050}
     fuera = {"id": "b", "lat": 43.3750, "lng": -8.4050}
-    assert R.zbe_de_paradas(zonas, [dentro, fuera]) == {"a": {"id": "15001_A Coruña - Marina", "nombre": "A Coruña - Marina"}}
+    assert R.zbe_de_paradas(zonas, [dentro, fuera]) == {"a": {"id": "15001_A Coruña - Marina", "nombre": "A Coruña - Marina", "tipo": "ZBE"}}
     assert R.zbe_cerca(zonas, [fuera]) == zonas and R.zbe_cerca(zonas, [{"id": "c", "lat": 42.0, "lng": -8.0}]) == []
     assert R.punto_en_poligono(43.369, -8.405, z["poligonos"][0]) and not R.punto_en_poligono(43.371, -8.405, z["poligonos"][0])
 
@@ -314,6 +314,41 @@ async def test_los_endpoints_de_la_dgt_filtran_a_las_paradas_de_hoy(base, monkey
     assert r["fuente"] == "DGT" and r["incompleto"] is False and [i["carretera"] for i in r["incidencias"]] == ["N-550"]
     z = await server.reparto_mi_zbe(ANA)
     assert z["incompleto"] is True and z["zonas"][0]["nombre"] == "A Coruña - Marina" and "caja" not in z["zonas"][0]
-    assert z["paradas"] == {p["id"]: {"id": "15001_A Coruña - Marina", "nombre": "A Coruña - Marina"}}
+    assert z["paradas"] == {p["id"]: {"id": "15001_A Coruña - Marina", "nombre": "A Coruña - Marina", "tipo": "ZBE"}}
     # Lo de otro repartidor no cuenta.
     assert (await server.reparto_mi_incidencias(LUIS))["incidencias"] == []
+    assert r["aplica"] is True and z["aplica"] is True and r["avisos"] == [] and z["tipo"] == "ZBE"
+    assert z["zonas"][0]["tipo"] == "ZBE" and z["zonas"][0]["fuente"] == "dgt"
+    # FUERA DE ESPAÑA (30-10-2026): lo de la DGT no vale. Donde no hay fuente abierta (cortes en Italia, zonas en
+    # EE. UU.) se dice (`aplica: False`), sin «ninguna cerca» que engañe; en EE. UU. una ruta en Nueva York, sin feed
+    # WZDx abierto, tampoco. Alemania tiene la API de la Autobahn (aquí, simulada y vacía) y Reino Unido, TfL, que solo
+    # cubre el Gran Londres: con las paradas en A Coruña no aplica.
+    server._region_actual.set(("it", "Europe/Rome"))
+    try:
+        it = await server.reparto_mi_incidencias(ANA)
+        assert it == {"incidencias": [], "fuente": None, "publicado": "", "incompleto": False, "aplica": False, "avisos": []}
+    finally:
+        server._region_actual.set(("es", "Europe/Madrid"))
+
+    async def autobahn_vacia():
+        return [], True
+    monkeypatch.setattr(server, "_autobahn", autobahn_vacia)
+    server._region_actual.set(("de", "Europe/Berlin"))
+    try:
+        de = await server.reparto_mi_incidencias(ANA)
+        assert de == {"incidencias": [], "fuente": "Autobahn", "publicado": "", "incompleto": False, "aplica": True, "avisos": []}
+    finally:
+        server._region_actual.set(("es", "Europe/Madrid"))
+    server._region_actual.set(("gb", "Europe/London"))
+    try:
+        gb = await server.reparto_mi_incidencias(ANA)
+        assert gb["aplica"] is False and gb["fuente"] is None and gb["incidencias"] == []
+    finally:
+        server._region_actual.set(("es", "Europe/Madrid"))
+    server._region_actual.set(("us", "America/New_York"))
+    try:
+        us = await server.reparto_mi_incidencias(ANA)        # las paradas están en A Coruña: ningún feed las toca
+        assert us["aplica"] is False and us["fuente"] is None and us["incidencias"] == []
+        assert (await server.reparto_mi_zbe(ANA)) == {"zonas": [], "paradas": {}, "fuente": None, "incompleto": False, "aplica": False, "tipo": "LEZ"}
+    finally:
+        server._region_actual.set(("es", "Europe/Madrid"))

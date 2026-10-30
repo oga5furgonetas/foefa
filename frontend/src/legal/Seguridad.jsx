@@ -1,10 +1,15 @@
-import LegalLayout from './LegalLayout'
+import LegalLayout, { legalEnIngles } from './LegalLayout'
+import SecurityEn from './en/SecurityEn'
+import { useIdioma } from '../lib/idioma'
 import { COMPANY, PROCESSORS } from './config'
 
 /* Trust center. REGLA DE ORO: aquí solo se afirma lo que es verdad HOY y se
    puede demostrar (código, infra o CI). Nada aspiracional: cada línea de esta
    página es una promesa comercial. */
 export default function Seguridad() {
+  useIdioma()
+  // Fuera de España (30-10-2026): la traducción de cortesía al inglés; el español es la versión que vale.
+  if (legalEnIngles()) return <SecurityEn />
   return (
     <LegalLayout title="Seguridad">
       <p>

@@ -105,9 +105,8 @@ class Repositorio(private val ctx: Context, val cuenta: Cuenta, val api: Api) {
         api.post("auth/forgot-password", buildJsonObject { put("email", correo.trim().lowercase(Locale.ROOT)) })
     }
 
-    /** La versión que hay para descargar de la web, o null si el servidor no anuncia ninguna (público). */
-    suspend fun versionWeb(): VersionApp? =
-        api.get("app/version").jsonObject["web"]?.takeUnless { it is JsonNull }?.let { leer<VersionApp>(it) }
+    /** Las versiones que anuncia el servidor (la de la web, la de Play y la mínima), público. */
+    suspend fun versiones(): VersionesApp = leer<VersionesApp>(api.get("app/version"))
 
     /** Una pantalla vista, para la analítica propia y anónima (la misma que la web): nunca falla hacia fuera. */
     suspend fun vista(ruta: String) {
@@ -326,7 +325,7 @@ class Repositorio(private val ctx: Context, val cuenta: Cuenta, val api: Api) {
                     break
                 }
                 rechazados += 1        // ya no existe, ya no es suya, o el servidor no lo acepta: se avisa y fuera
-                _rechazos.value = _rechazos.value + "No se ha podido guardar ${p.nombre.ifBlank { "una parada" }}: ${e.message}"
+                _rechazos.value = _rechazos.value + tx("No se ha podido guardar {n}: {e}", "n" to p.nombre.ifBlank { tx("una parada") }, "e" to e.message)
             }
             it.remove()
             guardarCola(quedan.toList())

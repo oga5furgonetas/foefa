@@ -1,0 +1,58 @@
+{
+ "voz": "Jon - Warm & Grounded Storyteller",
+ "modelo": "Artlist (Eleven v3)",
+ "settings": {
+  "language": "Italian"
+ },
+ "frases": [
+  {
+   "n": 1,
+   "leido": "Ordini ancora il giro a mano ogni mattina?",
+   "visto": "Ordini ancora il giro a mano ogni mattina?",
+   "fichero": "voces/it/f1.mp3",
+   "dur": 2.769,
+   "palabras": []
+  },
+  {
+   "n": 2,
+   "leido": "Guarda: fai una foto all'etichetta, e l'indirizzo entra da solo.",
+   "visto": "Guarda: fai una foto all'etichetta, e l'indirizzo entra da solo.",
+   "fichero": "voces/it/f2.mp3",
+   "dur": 4.676,
+   "palabras": []
+  },
+  {
+   "n": 3,
+   "leido": "Premi ordina, e hai tutte le fermate in ordine, con l'ora di ognuna.",
+   "visto": "Premi ordina, e hai tutte le fermate in ordine, con l'ora di ognuna.",
+   "fichero": "voces/it/f3.mp3",
+   "dur": 4.441,
+   "palabras": []
+  },
+  {
+   "n": 4,
+   "leido": "Vedi il giro sulla mappa, e ti guida con la voce, porta a porta.",
+   "visto": "Vedi il giro sulla mappa, e ti guida con la voce, porta a porta.",
+   "fichero": "voces/it/f4.mp3",
+   "dur": 4.441,
+   "palabras": []
+  },
+  {
+   "n": 5,
+   "leido": "E la cosa migliore: è gratis, e senza carta.",
+   "visto": "E la cosa migliore: è gratis, e senza carta.",
+   "fichero": "voces/it/f5.mp3",
+   "dur": 3.474,
+   "palabras": []
+  },
+  {
+   "n": 6,
+   "leido": "Entra su flota D S P punto com, e in un minuto hai il tuo account.",
+   "visto": "Entra su flotadsp.com, e in un minuto hai il tuo account.",
+   "fichero": "voces/it/f6.mp3",
+   "dur": 4.911,
+   "palabras": []
+  }
+ ],
+ "spotify_dur": 25.469
+}

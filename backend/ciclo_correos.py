@@ -53,7 +53,7 @@ from datetime import datetime, timedelta, timezone
 CLAVES = ("bienvenida", "primer_dia", "casi_fin", "recordatorio", "invita", "bono", "opinion", "bono25")
 # «br» es el portugués de Brasil (11-10-2026): mismos datos que «pt», escrito para allí (você, celular,
 # paradas, pacotes). Sin él, a un brasileño le llegaba «telemóvel», «paragens» y «morada».
-IDIOMAS = ("es", "pt", "en", "br")
+IDIOMAS = ("es", "pt", "en", "br", "fr", "it", "de")
 SEPARACION = timedelta(hours=18)
 BIENVENIDA_HASTA = timedelta(hours=2)      # si falló al darse de alta, se reintenta hasta aquí
 # 8 h y no 20 (24-10-2026): se dan de alta de 13 a 23 h, y con 20 h la mañana siguiente (de 7 a 9) nunca
@@ -80,6 +80,8 @@ MOTIVOS = ("no_ruta", "no_supe", "otra_app", "empresa", "otro")   # y las de qui
 _PAISES_PT = {"pt", "br", "ao", "mz", "cv"}
 _PAISES_ES = {"es", "mx", "ar", "co", "cl", "pe", "ve", "ec", "bo", "py", "uy", "cr", "pa",
               "gt", "hn", "sv", "ni", "do", "pr", "cu", "gq"}
+# Sin idioma elegido, el del país (30-10-2026): Bélgica y Luxemburgo en francés, Suiza y Austria en alemán; el resto, inglés.
+_PAISES_POR_IDIOMA = {"fr": {"fr", "be", "lu", "mc"}, "it": {"it", "sm"}, "de": {"de", "at", "ch", "li"}}
 
 
 def _fecha(v):
@@ -111,6 +113,9 @@ def idioma_de(org: dict) -> str:
         return "br" if brasil else "pt"
     if not pais or pais in _PAISES_ES:
         return "es"
+    for idioma, paises in _PAISES_POR_IDIOMA.items():
+        if pais in paises:
+            return idioma
     return "en"
 
 
@@ -570,6 +575,354 @@ _T = {
         "boton": {"bienvenida": "Open the app", "primer_dia": "Load my first route", "casi_fin": "See my account",
                   "recordatorio": "Load my route", "invita": "See my link and QR code", "bono": "Load my route", "bono25": "Open my route"},
     },
+    "fr": {
+        "bienvenida": (
+            "Votre compte {marca} est prêt : voici comment charger votre première tournée",
+            "Bonjour {nombre},\n\n"
+            "{intro}"
+            "Votre première tournée en 3 étapes :\n"
+            "1. Ouvrez l’app : {ruta}\n"
+            "   Sur le téléphone, «Installer l’app» la met sur votre écran d’accueil.\n"
+            "2. Touchez «Charger les colis : l’un après l’autre» et prenez en photo l’étiquette de chaque colis. "
+            "L’adresse s’inscrit toute seule ; si l’une d’elles ne se lit pas, tapez-la.\n"
+            "3. Touchez «Créer la tournée et commencer» : l’app ordonne vos arrêts et vous mène à chaque porte.\n\n"
+            "Pas de colis sous la main ? Dans l’app, «Le voir en action avec 3 arrêts d’exemple».\n\n"
+            "{ayuda}"),
+        "primer_dia": (
+            "Un coup de main pour votre première tournée ?",
+            "Bonjour {nombre},\n\n"
+            "Vous avez créé votre compte {marca} {cuando} et vous n’avez encore chargé aucun arrêt. "
+            "Si vous êtes resté bloqué, le plus rapide :\n\n"
+            "1. Ouvrez {ruta}\n"
+            "2. «Charger les colis : l’un après l’autre» et une photo de chaque étiquette.\n"
+            "3. «Créer la tournée et commencer».\n\n"
+            "Pas de colis aujourd’hui ? Dans l’app, «Le voir en action avec 3 arrêts d’exemple».\n\n"
+            "{plazo}\n\n"
+            "{ayuda_corta}"),
+        "casi_fin": (
+            "Il vous reste {quedan} jours d’essai sur {marca}",
+            "Bonjour {nombre},\n\n"
+            "{hecho}"
+            "Votre essai gratuit se termine le {fin}. Rien n’est prélevé tout seul : pour continuer, ouvrez l’app, "
+            "onglet «Compte», et choisissez {mes} par mois ou {anio} par an. Sinon, vous ne payez rien.\n\n"
+            "Compte : {cuenta}\n\n"
+            "{ayuda_corta}"),
+        "recordatorio": (
+            "Vous livrez cette semaine ? Votre tournée prête en 2 minutes",
+            "Bonjour {nombre},\n\n"
+            "Il y a quelques jours vous avez créé votre compte {marca} et vous n’avez encore chargé aucun colis. "
+            "Quand vous aurez la tournée devant vous, c’est aussi rapide que ça :\n\n"
+            "1. Ouvrez {ruta}\n"
+            "2. «Charger les colis : l’un après l’autre» et une photo de chaque étiquette : l’adresse s’inscrit toute seule.\n"
+            "3. «Créer la tournée et commencer» : l’app ordonne vos arrêts par temps de trajet et vous guide à la voix.\n\n"
+            "Et deux choses qui font gagner du temps : «Mains libres» (sur Android, vous dites \"livré\" et vous "
+            "continuez à rouler) et «Mon argent aujourd’hui» (ce que vous avez gagné et ce qui part en carburant).\n\n"
+            "{plazo}\n\n"
+            "{ayuda_corta}"),
+        "invita": (
+            "{entregadas} livraisons avec {marca} : vous la passez à un collègue ?",
+            "Bonjour {nombre},\n\n"
+            "Vous en êtes déjà à {entregadas} livraisons avec {marca}. Si vous connaissez un autre livreur à qui elle "
+            "pourrait servir, envoyez-lui votre lien :\n\n"
+            "{invita}\n\n"
+            "Quand il s’inscrit et fait 20 livraisons sur 2 jours différents (dans son premier mois), vous gagnez {euros} "
+            "pour chacun. {promo_ref}Vous êtes payé par {cobro}. Votre lien, votre QR et les conditions sont dans l’app, "
+            "onglet «Compte» : {cuenta}\n\n"
+            "{ayuda_invita}"),
+        "cobro_es": "Bizum ou virement",
+        "promo_ref": "C’est {euros} pour chaque collègue qui s’inscrit avec votre lien jusqu’au {promo_hasta} (promotion). ",
+        "bono": (
+            "{bono_euros} pour votre première tournée avec {marca}",
+            "Bonjour {nombre},\n\n"
+            "Jusqu’au {bono_hasta}, nous avons un cadeau pour que vous essayiez {marca} sur votre vraie tournée :\n\n"
+            "· {bono_euros} pour vous quand vous faites vos 20 premières vraies livraisons avec l’app, sur 2 jours différents.\n"
+            "· {euros} de plus pour chaque collègue qui s’inscrit avec votre lien et fait de même.\n\n"
+            "{progreso}"
+            "Vous êtes payé par {cobro}. Quand vous aurez les colis devant vous :\n"
+            "1. Ouvrez {ruta}\n"
+            "2. «Charger les colis : l’un après l’autre» et une photo de chaque étiquette : l’adresse s’inscrit toute seule.\n"
+            "3. «Créer la tournée et commencer» : l’app ordonne vos arrêts et vous guide à la voix.\n\n"
+            "Votre lien pour inviter : {invita}\n\n"
+            "{ayuda_corta}"),
+        "bono25": (
+            "Félicitations ! Votre première tournée avec {marca} vaut maintenant {bono_euros}",
+            "Bonjour {nombre},\n\n"
+            "Vous vous êtes inscrit sur {marca} et vous n’avez pas encore fait votre première tournée avec l’app. Bonne "
+            "nouvelle : elle vaut maintenant {bono_euros}. C’est notre façon de vous remercier de l’essayer sur vos vraies "
+            "livraisons.\n\n"
+            "Comment la gagner :\n"
+            "1. Ouvrez l’app ({ruta}) ou téléchargez-la sur Google Play : {play}\n"
+            "2. «Charger les colis : l’un après l’autre» et une photo de chaque étiquette (ou scannez son code) : "
+            "l’adresse s’inscrit toute seule.\n"
+            "3. «Créer la tournée et commencer» : l’app ordonne vos arrêts et vous guide à la voix jusqu’à chaque porte.\n\n"
+            "Avec 20 vraies livraisons sur 2 jours différents, les {bono_euros} vont dans votre portefeuille et vous êtes "
+            "payé par {cobro}. Vous avez jusqu’au {bono_limite}. Et si un collègue s’inscrit avec votre lien (onglet "
+            "«Compte») et fait de même, {euros} de plus pour vous.\n\n"
+            "{progreso}"
+            "Si l’app vous sert, notez-la sur Google Play ({valorar}) : ça aide d’autres livreurs à la trouver.\n\n"
+            "{ayuda_corta}"),
+        "play": "Télécharger sur Google Play",
+        "qr_pie": "Vous lisez ceci sur un ordinateur ? Scannez le code avec votre téléphone.",
+        "bono_linea": ("Et un cadeau : jusqu’au {bono_hasta}, vous recevez {bono_euros} quand vous faites vos 20 premières "
+                       "vraies livraisons avec l’app (sur 2 jours différents), plus {euros} pour chaque collègue que vous "
+                       "invitez et qui fait de même."),
+        "progreso": "Vous avez déjà {n} livraisons qui comptent.\n\n",
+        "cuando": ("hier", "il y a quelques jours"),
+        "ayuda_invita": "Il manque quelque chose à l’app pour vos livraisons ? Répondez-moi en une ligne et je regarde.",
+        "ayuda_invita_sin": "Merci de l’utiliser.",
+        "cobro_fuera": "PayPal",
+        "hecho_si": "Ces jours-ci vous avez chargé {paradas} arrêts{entregas}.\n\n",
+        "entregas": " et livré {n}",
+        "hecho_no": "Vous n’avez encore chargé aucun arrêt : il est encore temps de l’essayer sur votre vraie tournée ({ruta}).\n\n",
+        "ayuda": "Si quelque chose ne marche pas ou s’il vous manque quelque chose, répondez à cet e-mail : c’est moi qui le lis.",
+        "ayuda_sin": "Conseil : faites un premier essai avec 3 ou 4 colis avant de partir ; en deux minutes vous saurez si elle vous convient.",
+        "ayuda_corta": "Qu’est-ce qui vous a freiné, ou qu’est-ce qui manque ? Répondez-moi en une ligne et je regarde.",
+        "ayuda_corta_sin": "Pas de colis sous la main ? Dans l’app, vous pouvez la voir fonctionner avec 3 arrêts d’exemple.",
+        "intro": (
+            "Votre compte est prêt. Vous avez {dias} jours gratuits et nous n’avons pas demandé de carte : à la fin de "
+            "l’essai, rien n’est prélevé tout seul. Pour continuer, c’est vous qui choisissez ({mes} par mois ou {anio} par an).\n\n"),
+        "plazo": "Il vous reste {quedan} jours d’essai.",
+        "plazo_promo": "Rappel : c’est gratuit et sans limite jusqu’au {promo}.",
+        "intro_promo": (
+            "Votre compte est prêt. C’est gratuit et sans limite jusqu’au {promo}, et nous n’avons pas demandé de carte. "
+            "Ensuite vous restez gratuit avec jusqu’à {tope} arrêts par jour ; sans limite, {mes} par mois ou {anio} par an, "
+            "seulement si vous le voulez.\n\n"),
+        "firma": "Daniel, {marca}",
+        "baja": "Vous ne voulez plus d’e-mails comme celui-ci ? Désinscrivez-vous ici : {baja}",
+        "boton": {"bienvenida": "Ouvrir l’app", "primer_dia": "Charger ma première tournée", "casi_fin": "Voir mon compte",
+                  "recordatorio": "Charger ma tournée", "invita": "Voir mon lien et mon QR", "bono": "Charger ma tournée", "bono25": "Ouvrir ma tournée"},
+    },
+    "it": {
+        "bienvenida": (
+            "Il tuo account {marca} è pronto: ecco come caricare il tuo primo percorso",
+            "Ciao {nombre},\n\n"
+            "{intro}"
+            "Il tuo primo percorso in 3 passi:\n"
+            "1. Apri l’app: {ruta}\n"
+            "   Sul telefono, «Installa l’app» la mette nella schermata iniziale.\n"
+            "2. Tocca «Carica i pacchi: uno dopo l’altro» e fai una foto all’etichetta di ogni pacco. "
+            "L’indirizzo entra da solo; se uno non si legge, lo scrivi.\n"
+            "3. Tocca «Crea percorso e inizia»: ordina le fermate e ti porta a ogni porta.\n\n"
+            "Nessun pacco a portata di mano? Nell’app, «Vedilo in azione con 3 fermate di esempio».\n\n"
+            "{ayuda}"),
+        "primer_dia": (
+            "Ti aiuto con il tuo primo percorso?",
+            "Ciao {nombre},\n\n"
+            "Hai creato il tuo account {marca} {cuando} e non hai ancora caricato nessuna fermata. "
+            "Se ti sei bloccato, la via più rapida è:\n\n"
+            "1. Apri {ruta}\n"
+            "2. «Carica i pacchi: uno dopo l’altro» e una foto a ogni etichetta.\n"
+            "3. «Crea percorso e inizia».\n\n"
+            "Oggi niente pacchi? Nell’app, «Vedilo in azione con 3 fermate di esempio».\n\n"
+            "{plazo}\n\n"
+            "{ayuda_corta}"),
+        "casi_fin": (
+            "Ti restano {quedan} giorni di prova su {marca}",
+            "Ciao {nombre},\n\n"
+            "{hecho}"
+            "La tua prova gratuita finisce il {fin}. Non si addebita niente da solo: se vuoi continuare, apri l’app, "
+            "scheda «Account», e scegli {mes} al mese o {anio} all’anno. Altrimenti non paghi nulla.\n\n"
+            "Account: {cuenta}\n\n"
+            "{ayuda_corta}"),
+        "recordatorio": (
+            "Consegni questa settimana? Il tuo percorso pronto in 2 minuti",
+            "Ciao {nombre},\n\n"
+            "Qualche giorno fa hai creato il tuo account {marca} e non hai ancora inserito nessun pacco. "
+            "Quando avrai il giro davanti, è così veloce:\n\n"
+            "1. Apri {ruta}\n"
+            "2. «Carica i pacchi: uno dopo l’altro» e una foto a ogni etichetta: l’indirizzo entra da solo.\n"
+            "3. «Crea percorso e inizia»: ordina le fermate per tempo e ti guida con la voce.\n\n"
+            "E due cose che ti fanno risparmiare tempo: «Mani libere» (su Android dici \"consegnato\" e continui a "
+            "guidare) e «I miei soldi oggi» (quanto hai guadagnato e quanto se ne va in carburante).\n\n"
+            "{plazo}\n\n"
+            "{ayuda_corta}"),
+        "invita": (
+            "{entregadas} consegne con {marca}: la passi a un collega?",
+            "Ciao {nombre},\n\n"
+            "Sei già a {entregadas} consegne con {marca}. Se conosci un altro corriere a cui può servire, "
+            "mandagli il tuo link:\n\n"
+            "{invita}\n\n"
+            "Quando si registra e fa 20 consegne in 2 giorni diversi (nel suo primo mese), guadagni {euros} per "
+            "ciascuno. {promo_ref}Lo ricevi con {cobro}. Il tuo link, il tuo QR e le condizioni sono nell’app, "
+            "scheda «Account»: {cuenta}\n\n"
+            "{ayuda_invita}"),
+        "cobro_es": "Bizum o bonifico",
+        "promo_ref": "Sono {euros} per ogni collega che si registra con il tuo link fino al {promo_hasta} (promozione). ",
+        "bono": (
+            "{bono_euros} per il tuo primo percorso con {marca}",
+            "Ciao {nombre},\n\n"
+            "Fino al {bono_hasta} abbiamo un regalo perché tu provi {marca} sul tuo giro vero:\n\n"
+            "· {bono_euros} per te quando fai le tue prime 20 consegne vere con l’app, in 2 giorni diversi.\n"
+            "· {euros} in più per ogni collega che si registra con il tuo link e fa lo stesso.\n\n"
+            "{progreso}"
+            "Lo ricevi con {cobro}. Quando avrai i pacchi davanti:\n"
+            "1. Apri {ruta}\n"
+            "2. «Carica i pacchi: uno dopo l’altro» e una foto a ogni etichetta: l’indirizzo entra da solo.\n"
+            "3. «Crea percorso e inizia»: ordina le fermate e ti guida con la voce.\n\n"
+            "Il tuo link per invitare: {invita}\n\n"
+            "{ayuda_corta}"),
+        "bono25": (
+            "Complimenti! Il tuo primo percorso con {marca} ora vale {bono_euros}",
+            "Ciao {nombre},\n\n"
+            "Ti sei registrato su {marca} e non hai ancora fatto il tuo primo percorso con l’app. Buona notizia: ora "
+            "vale {bono_euros}. È il nostro modo di ringraziarti per provarla sulle tue consegne vere.\n\n"
+            "Come si guadagna:\n"
+            "1. Apri l’app ({ruta}) o scaricala da Google Play: {play}\n"
+            "2. «Carica i pacchi: uno dopo l’altro» e una foto a ogni etichetta (o scansiona il codice): l’indirizzo "
+            "entra da solo.\n"
+            "3. «Crea percorso e inizia»: ordina le fermate e ti guida con la voce fino a ogni porta.\n\n"
+            "Con 20 consegne vere in 2 giorni diversi, i {bono_euros} vanno nel tuo portafoglio e li ricevi con "
+            "{cobro}. Hai tempo fino al {bono_limite}. E se un collega si registra con il tuo link (scheda "
+            "«Account») e fa lo stesso, {euros} in più per te.\n\n"
+            "{progreso}"
+            "Se l’app ti serve, valutala su Google Play ({valorar}): aiuta altri corrieri a trovarla.\n\n"
+            "{ayuda_corta}"),
+        "play": "Scarica da Google Play",
+        "qr_pie": "Lo leggi dal computer? Inquadra il codice con il telefono.",
+        "bono_linea": ("E un regalo: fino al {bono_hasta}, ricevi {bono_euros} quando fai le tue prime 20 consegne vere "
+                       "con l’app (in 2 giorni diversi), più {euros} per ogni collega che inviti e che fa lo stesso."),
+        "progreso": "Hai già {n} consegne che contano.\n\n",
+        "cuando": ("ieri", "qualche giorno fa"),
+        "ayuda_invita": "Manca qualcosa all’app per le tue consegne? Rispondimi con una riga e ci guardo.",
+        "ayuda_invita_sin": "Grazie per usarla.",
+        "cobro_fuera": "PayPal",
+        "hecho_si": "In questi giorni hai caricato {paradas} fermate{entregas}.\n\n",
+        "entregas": " e consegnato {n}",
+        "hecho_no": "Non hai ancora caricato nessuna fermata: sei ancora in tempo per provarla sul tuo giro vero ({ruta}).\n\n",
+        "ayuda": "Se qualcosa non funziona o ti manca qualcosa, rispondi a questa e-mail: la leggo io.",
+        "ayuda_sin": "Consiglio: fai la prima prova con 3 o 4 pacchi prima di partire; in due minuti vedi se ti serve.",
+        "ayuda_corta": "Cosa ti ha frenato, o cosa manca? Rispondimi con una riga e ci guardo.",
+        "ayuda_corta_sin": "Nessun pacco a portata di mano? Nell’app puoi vederla funzionare con 3 fermate di esempio.",
+        "intro": (
+            "Il tuo account è pronto. Hai {dias} giorni gratis e non ti abbiamo chiesto la carta, quindi alla fine "
+            "della prova non si addebita niente da solo. Se vuoi continuare, lo scegli tu ({mes} al mese o {anio} all’anno).\n\n"),
+        "plazo": "Ti restano {quedan} giorni di prova.",
+        "plazo_promo": "Ricorda: è gratis e senza limiti fino al {promo}.",
+        "intro_promo": (
+            "Il tuo account è pronto. È gratis e senza limiti fino al {promo}, e non ti abbiamo chiesto la carta. "
+            "Dopo resti gratis con fino a {tope} fermate al giorno; senza limiti, {mes} al mese o {anio} all’anno, "
+            "solo se vuoi.\n\n"),
+        "firma": "Daniel, {marca}",
+        "baja": "Non vuoi più e-mail come questa? Cancellati qui: {baja}",
+        "boton": {"bienvenida": "Apri l’app", "primer_dia": "Carica il mio primo percorso", "casi_fin": "Vedi il mio account",
+                  "recordatorio": "Carica il mio percorso", "invita": "Vedi il mio link e il mio QR", "bono": "Carica il mio percorso", "bono25": "Apri il mio percorso"},
+    },
+    "de": {
+        "bienvenida": (
+            "Dein {marca}-Konto ist bereit: So lädst du deine erste Route",
+            "Hallo {nombre},\n\n"
+            "{intro}"
+            "Deine erste Route in 3 Schritten:\n"
+            "1. Öffne die App: {ruta}\n"
+            "   Auf dem Handy legt «App installieren» sie auf den Startbildschirm.\n"
+            "2. Tippe auf «Pakete laden: eins nach dem anderen» und fotografiere das Etikett jedes Pakets. "
+            "Die Adresse trägt sich von selbst ein; lässt sich eine nicht lesen, tippst du sie ein.\n"
+            "3. Tippe auf «Route erstellen und starten»: Die App ordnet deine Stopps und führt dich zu jeder Tür.\n\n"
+            "Keine Pakete zur Hand? In der App: «Mit 3 Beispielstopps in Aktion sehen».\n\n"
+            "{ayuda}"),
+        "primer_dia": (
+            "Soll ich dir bei deiner ersten Route helfen?",
+            "Hallo {nombre},\n\n"
+            "Du hast dein {marca}-Konto {cuando} erstellt und noch keinen Stopp geladen. "
+            "Falls du hängen geblieben bist, geht es am schnellsten so:\n\n"
+            "1. Öffne {ruta}\n"
+            "2. «Pakete laden: eins nach dem anderen» und ein Foto von jedem Etikett.\n"
+            "3. «Route erstellen und starten».\n\n"
+            "Heute keine Pakete? In der App: «Mit 3 Beispielstopps in Aktion sehen».\n\n"
+            "{plazo}\n\n"
+            "{ayuda_corta}"),
+        "casi_fin": (
+            "Dir bleiben noch {quedan} Testtage bei {marca}",
+            "Hallo {nombre},\n\n"
+            "{hecho}"
+            "Dein kostenloser Test endet am {fin}. Es wird nichts automatisch abgebucht: Wenn du weitermachen willst, "
+            "öffne die App, Reiter «Konto», und wähle {mes} im Monat oder {anio} im Jahr. Sonst zahlst du nichts.\n\n"
+            "Konto: {cuenta}\n\n"
+            "{ayuda_corta}"),
+        "recordatorio": (
+            "Lieferst du diese Woche? Deine Route in 2 Minuten fertig",
+            "Hallo {nombre},\n\n"
+            "Vor ein paar Tagen hast du dein {marca}-Konto erstellt und noch kein Paket geladen. "
+            "Wenn du die Route vor dir hast, geht es so schnell:\n\n"
+            "1. Öffne {ruta}\n"
+            "2. «Pakete laden: eins nach dem anderen» und ein Foto von jedem Etikett: Die Adresse trägt sich von selbst ein.\n"
+            "3. «Route erstellen und starten»: Die App ordnet deine Stopps nach Fahrzeit und führt dich per Sprache.\n\n"
+            "Und zwei Dinge, die Zeit sparen: «Freisprechen» (auf Android sagst du \"zugestellt\" und fährst weiter) "
+            "und «Mein Geld heute» (was du verdient hast und was für Sprit draufgeht).\n\n"
+            "{plazo}\n\n"
+            "{ayuda_corta}"),
+        "invita": (
+            "{entregadas} Zustellungen mit {marca}: Gibst du sie an einen Kollegen weiter?",
+            "Hallo {nombre},\n\n"
+            "Du hast schon {entregadas} Zustellungen mit {marca} gemacht. Wenn du einen anderen Fahrer kennst, dem sie "
+            "helfen könnte, schick ihm deinen Link:\n\n"
+            "{invita}\n\n"
+            "Wenn er sich registriert und 20 Zustellungen an 2 verschiedenen Tagen macht (in seinem ersten Monat), "
+            "bekommst du {euros} für jeden. {promo_ref}Ausgezahlt wird per {cobro}. Dein Link, dein QR-Code und die "
+            "Bedingungen stehen in der App, Reiter «Konto»: {cuenta}\n\n"
+            "{ayuda_invita}"),
+        "cobro_es": "Bizum oder Überweisung",
+        "promo_ref": "Es sind {euros} für jeden Kollegen, der sich bis zum {promo_hasta} mit deinem Link registriert (Aktion). ",
+        "bono": (
+            "{bono_euros} für deine erste Route mit {marca}",
+            "Hallo {nombre},\n\n"
+            "Bis zum {bono_hasta} haben wir ein Geschenk, damit du {marca} auf deiner echten Route ausprobierst:\n\n"
+            "· {bono_euros} für dich, wenn du deine ersten 20 echten Zustellungen mit der App machst, an 2 verschiedenen Tagen.\n"
+            "· {euros} mehr für jeden Kollegen, der sich mit deinem Link registriert und dasselbe macht.\n\n"
+            "{progreso}"
+            "Ausgezahlt wird per {cobro}. Wenn du die Pakete vor dir hast:\n"
+            "1. Öffne {ruta}\n"
+            "2. «Pakete laden: eins nach dem anderen» und ein Foto von jedem Etikett: Die Adresse trägt sich von selbst ein.\n"
+            "3. «Route erstellen und starten»: Die App ordnet deine Stopps und führt dich per Sprache.\n\n"
+            "Dein Einladungslink: {invita}\n\n"
+            "{ayuda_corta}"),
+        "bono25": (
+            "Glückwunsch! Deine erste Route mit {marca} ist jetzt {bono_euros} wert",
+            "Hallo {nombre},\n\n"
+            "Du hast dich bei {marca} registriert und deine erste Route mit der App noch nicht gemacht. Gute Nachricht: "
+            "Sie ist jetzt {bono_euros} wert. So sagen wir Danke, dass du sie auf deinen echten Zustellungen ausprobierst.\n\n"
+            "So bekommst du sie:\n"
+            "1. Öffne die App ({ruta}) oder hol sie dir bei Google Play: {play}\n"
+            "2. «Pakete laden: eins nach dem anderen» und ein Foto von jedem Etikett (oder scanne den Code): Die Adresse "
+            "trägt sich von selbst ein.\n"
+            "3. «Route erstellen und starten»: Die App ordnet deine Stopps und führt dich per Sprache bis zu jeder Tür.\n\n"
+            "Mit 20 echten Zustellungen an 2 verschiedenen Tagen landen die {bono_euros} in deinem Guthaben, ausgezahlt "
+            "per {cobro}. Du hast Zeit bis zum {bono_limite}. Und wenn sich ein Kollege mit deinem Link registriert "
+            "(Reiter «Konto») und dasselbe macht, gibt es {euros} mehr für dich.\n\n"
+            "{progreso}"
+            "Wenn dir die App hilft, bewerte sie bei Google Play ({valorar}): So finden sie mehr Fahrer.\n\n"
+            "{ayuda_corta}"),
+        "play": "Bei Google Play laden",
+        "qr_pie": "Liest du das am Computer? Scanne den Code mit dem Handy.",
+        "bono_linea": ("Und ein Geschenk: Bis zum {bono_hasta} bekommst du {bono_euros}, wenn du deine ersten 20 echten "
+                       "Zustellungen mit der App machst (an 2 verschiedenen Tagen), plus {euros} für jeden eingeladenen "
+                       "Kollegen, der dasselbe macht."),
+        "progreso": "Du hast schon {n} Zustellungen, die zählen.\n\n",
+        "cuando": ("gestern", "vor ein paar Tagen"),
+        "ayuda_invita": "Fehlt der App etwas für deine Zustellungen? Antworte mir mit einer Zeile, ich schaue es mir an.",
+        "ayuda_invita_sin": "Danke, dass du sie nutzt.",
+        "cobro_fuera": "PayPal",
+        "hecho_si": "In diesen Tagen hast du {paradas} Stopps geladen{entregas}.\n\n",
+        "entregas": " und {n} zugestellt",
+        "hecho_no": "Du hast noch keinen Stopp geladen: Du kannst sie noch auf deiner echten Route ausprobieren ({ruta}).\n\n",
+        "ayuda": "Wenn etwas nicht funktioniert oder dir etwas fehlt, antworte auf diese E-Mail: Ich lese sie selbst.",
+        "ayuda_sin": "Tipp: Mach den ersten Versuch mit 3 oder 4 Paketen, bevor du losfährst; in zwei Minuten siehst du, ob sie dir hilft.",
+        "ayuda_corta": "Was hat dich gebremst, oder was fehlt? Antworte mir mit einer Zeile, ich schaue es mir an.",
+        "ayuda_corta_sin": "Keine Pakete zur Hand? In der App kannst du sie mit 3 Beispielstopps laufen sehen.",
+        "intro": (
+            "Dein Konto ist bereit. Du hast {dias} Tage gratis und wir haben keine Karte verlangt: Am Ende des Tests "
+            "wird nichts automatisch abgebucht. Wenn du weitermachen willst, entscheidest du ({mes} im Monat oder {anio} im Jahr).\n\n"),
+        "plazo": "Dir bleiben noch {quedan} Testtage.",
+        "plazo_promo": "Zur Erinnerung: Bis zum {promo} ist alles gratis und ohne Limit.",
+        "intro_promo": (
+            "Dein Konto ist bereit. Bis zum {promo} ist alles gratis und ohne Limit, und wir haben keine Karte verlangt. "
+            "Danach bleibst du gratis mit bis zu {tope} Stopps am Tag; ohne Limit für {mes} im Monat oder {anio} im Jahr, "
+            "nur wenn du willst.\n\n"),
+        "firma": "Daniel, {marca}",
+        "baja": "Keine E-Mails wie diese mehr? Hier abmelden: {baja}",
+        "boton": {"bienvenida": "App öffnen", "primer_dia": "Meine erste Route laden", "casi_fin": "Mein Konto ansehen",
+                  "recordatorio": "Meine Route laden", "invita": "Meinen Link und QR ansehen", "bono": "Meine Route laden", "bono25": "Meine Route öffnen"},
+    },
 }
 
 
@@ -770,6 +1123,67 @@ _OPINION = {
         "motivos": {"no_ruta": "Ainda não tive entregas", "no_supe": "Não entendi como colocar os pacotes",
                     "otra_app": "Já uso outro app", "empresa": "Minha empresa não deixa", "otro": "Outra coisa"},
     },
+    "fr": {
+        "opinion_usa": (
+            "Comment ça se passe avec {marca} ? (un clic pour répondre)",
+            "Bonjour {nombre},\n\n"
+            "Vous en êtes à {paradas} arrêts avec {marca} et j’aimerais savoir comment ça se passe. Quelle note lui "
+            "donnez-vous ? Touchez-en une :\n\n{opciones}\n\n"
+            "Et s’il manque quelque chose ou si quelque chose vous gêne, dites-le-moi : je le lis moi-même et je corrige. "
+            "Vous pouvez simplement répondre à cet e-mail."),
+        "opinion_frena": (
+            "Qu’est-ce qui vous a freiné avec {marca} ? (un clic pour répondre)",
+            "Bonjour {nombre},\n\n"
+            "Il y a quelques jours vous avez créé votre compte {marca} et vous n’avez pas encore chargé de tournée. "
+            "Pas de souci, mais ça m’aiderait beaucoup de savoir pourquoi. Touchez ce qui correspond le mieux :\n\n{opciones}\n\n"
+            "Ça me suffit. Si vous voulez m’en dire plus, répondez à cet e-mail : c’est moi qui le lis."),
+        "notas": ("J’adore", "Bien", "Correct", "Moyen", "Mauvais"),
+        "regalo_linea": ("Au fait : nous avons ajouté {regalo} dans votre portefeuille {marca}, en cadeau, pour que vous "
+                         "voyiez que c’est sérieux. Vous le trouverez dans l’app, onglet Compte."),
+        "motivos": {"no_ruta": "Je n’ai pas encore eu de livraisons", "no_supe": "Je n’ai pas su comment ajouter les colis",
+                    "otra_app": "J’utilise déjà une autre app", "empresa": "Mon entreprise ne le permet pas",
+                    "otro": "Autre chose"},
+    },
+    "it": {
+        "opinion_usa": (
+            "Come va con {marca}? (si risponde con un clic)",
+            "Ciao {nombre},\n\n"
+            "Sei a {paradas} fermate con {marca} e mi piacerebbe sapere come va. Che voto le dai? "
+            "Toccane uno:\n\n{opciones}\n\n"
+            "E se manca qualcosa o qualcosa ti intralcia, dimmelo: lo leggo io e lo sistemo. Puoi rispondere a questa e-mail."),
+        "opinion_frena": (
+            "Cosa ti ha frenato con {marca}? (si risponde con un clic)",
+            "Ciao {nombre},\n\n"
+            "Qualche giorno fa hai creato il tuo account {marca} e non hai ancora caricato nessun percorso. Non fa niente, "
+            "ma mi aiuterebbe molto sapere perché. Tocca quello che somiglia di più:\n\n{opciones}\n\n"
+            "Mi basta questo. Se vuoi raccontarmi di più, rispondi a questa e-mail: la leggo io."),
+        "notas": ("La adoro", "Bene", "Normale", "Così così", "Male"),
+        "regalo_linea": ("A proposito: ti abbiamo regalato {regalo} nel tuo portafoglio {marca}, per farti vedere che "
+                         "facciamo sul serio. Lo trovi nell’app, nella scheda Account."),
+        "motivos": {"no_ruta": "Non ho ancora avuto consegne", "no_supe": "Non ho capito come inserire i pacchi",
+                    "otra_app": "Uso già un’altra app", "empresa": "La mia azienda non me lo permette", "otro": "Altro"},
+    },
+    "de": {
+        "opinion_usa": (
+            "Wie läuft es mit {marca}? (ein Klick zum Antworten)",
+            "Hallo {nombre},\n\n"
+            "Du bist bei {paradas} Stopps mit {marca} und ich würde gern wissen, wie es läuft. Welche Note gibst du ihr? "
+            "Tippe auf eine:\n\n{opciones}\n\n"
+            "Und wenn etwas fehlt oder stört, sag es mir: Ich lese es selbst und behebe es. Du kannst einfach auf diese "
+            "E-Mail antworten."),
+        "opinion_frena": (
+            "Was hat dich bei {marca} gebremst? (ein Klick zum Antworten)",
+            "Hallo {nombre},\n\n"
+            "Vor ein paar Tagen hast du dein {marca}-Konto erstellt und noch keine Route geladen. Kein Problem, aber es "
+            "würde mir sehr helfen zu wissen, warum. Tippe auf das, was am besten passt:\n\n{opciones}\n\n"
+            "Das reicht mir. Wenn du mir mehr erzählen willst, antworte auf diese E-Mail: Ich lese sie selbst."),
+        "notas": ("Super", "Gut", "Okay", "Geht so", "Schlecht"),
+        "regalo_linea": ("Übrigens: Wir haben dir {regalo} in dein {marca}-Guthaben gelegt, als Geschenk, damit du siehst, "
+                         "dass es ernst gemeint ist. Du findest es in der App im Reiter Konto."),
+        "motivos": {"no_ruta": "Ich hatte noch keine Zustellungen", "no_supe": "Ich wusste nicht, wie ich die Pakete eingebe",
+                    "otra_app": "Ich nutze schon eine andere App", "empresa": "Meine Firma erlaubt es nicht",
+                    "otro": "Etwas anderes"},
+    },
 }
 for _i, _d in _OPINION.items():
     _T[_i].update(_d)
@@ -804,6 +1218,12 @@ _MESES = {
            "outubro", "novembro", "dezembro"),
     "en": ("January", "February", "March", "April", "May", "June", "July", "August", "September",
            "October", "November", "December"),
+    "fr": ("janvier", "février", "mars", "avril", "mai", "juin", "juillet", "août", "septembre",
+           "octobre", "novembre", "décembre"),
+    "it": ("gennaio", "febbraio", "marzo", "aprile", "maggio", "giugno", "luglio", "agosto", "settembre",
+           "ottobre", "novembre", "dicembre"),
+    "de": ("Januar", "Februar", "März", "April", "Mai", "Juni", "Juli", "August", "September",
+           "Oktober", "November", "Dezember"),
 }
 
 
@@ -816,7 +1236,11 @@ def _dia_mes(iso, idioma):
     if not m:
         return ""
     dia, mes = int(m.group(3)), _MESES[idioma][int(m.group(2)) - 1]
-    return f"{dia} {mes}" if idioma == "en" else f"{dia} de {mes}"
+    if idioma in ("en", "fr", "it"):
+        return f"{dia} {mes}"
+    if idioma == "de":
+        return f"{dia}. {mes}"
+    return f"{dia} de {mes}"
 
 
 def _fin_legible(org):

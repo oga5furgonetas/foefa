@@ -154,7 +154,10 @@ def test_a_quien_no_se_le_escribe(cambio):
 @pytest.mark.parametrize("org,idioma", [
     ({"idioma": "pt", "pais": "es"}, "pt"), ({"pais": "pt"}, "pt"), ({"pais": "br"}, "br"), ({"idioma": "pt", "pais": "br"}, "br"),
     ({"pais": "pt", "zona_horaria": "America/Sao_Paulo"}, "br"), ({"idioma": "pt", "pais": "pt"}, "pt"),
-    ({"pais": "mx"}, "es"), ({}, "es"), ({"pais": "fr"}, "en"), ({"idioma": "fr", "pais": "fr"}, "en"),
+    ({"pais": "mx"}, "es"), ({}, "es"), ({"pais": "nl"}, "en"), ({"idioma": "en", "pais": "fr"}, "en"),
+    # Francés, italiano y alemán (30-10-2026): el elegido en la app o, si no, el del país.
+    ({"pais": "fr"}, "fr"), ({"idioma": "fr", "pais": "fr"}, "fr"), ({"pais": "be"}, "fr"), ({"pais": "it"}, "it"),
+    ({"pais": "de"}, "de"), ({"pais": "ch"}, "de"), ({"idioma": "de", "pais": "us"}, "de"), ({"idioma": "it", "pais": "es"}, "it"),
 ])
 def test_idioma(org, idioma):
     assert cc.idioma_de(org) == idioma
@@ -319,21 +322,23 @@ def test_sin_buzon_de_respuesta_no_pide_contestar():
 
 
 def _diccionario_app():
-    """Claves (español) y traducciones (en, pt) de los textos de la app."""
+    """Claves (español) y traducciones (en, pt, fr, it, de) de los textos de la app."""
     raiz = Path(__file__).resolve().parents[2] / "frontend" / "src" / "lib"
-    es, en, pt = set(), set(), set()
+    es, en, pt, fr, it, de = set(), set(), set(), set(), set(), set()
     pt_de = {}
+    lit = r'"((?:[^"\\]|\\.)*)"'
     for f in raiz.glob("textosRuta*.js"):
-        for m in re.finditer(r'^\s*"((?:[^"\\]|\\.)+)":\s*\["((?:[^"\\]|\\.)*)",\s*"((?:[^"\\]|\\.)*)"',
+        for m in re.finditer(r'^\s*"((?:[^"\\]|\\.)+)":\s*\[' + r",\s*".join([lit] * 5),
                              f.read_text(encoding="utf-8"), re.M):
             es.add(m.group(1)); en.add(m.group(2)); pt.add(m.group(3)); pt_de[m.group(1)] = m.group(3)
+            fr.add(m.group(4)); it.add(m.group(5)); de.add(m.group(6))
     # En Brasil la app enseña textosBrasil.js y, lo que no está ahí, el portugués de siempre.
     br_dic = {}
     for m in re.finditer(r"^\s*'((?:[^'\\]|\\.)+)':\s*\n?\s*'((?:[^'\\]|\\.)*)'",
                          (raiz / "textosBrasil.js").read_text(encoding="utf-8"), re.M):
         br_dic[m.group(1)] = m.group(2)
     br = set(br_dic.values()) | {v for k, v in pt_de.items() if k not in br_dic}
-    return {"es": es, "en": en, "pt": pt, "br": br}
+    return {"es": es, "en": en, "pt": pt, "br": br, "fr": fr, "it": it, "de": de}
 
 
 @pytest.mark.parametrize("idioma", cc.IDIOMAS)
@@ -344,8 +349,8 @@ def test_primer_dia_con_promocion_no_cuenta_dias_de_prueba(idioma):
     con = cc.correo("primer_dia", org, {}, AHORA, marca="FDS", base="https://flotadsp.com", baja="https://api.x/b",
                     mensual=9.99, anual=99, con_respuesta=True, promo_hasta="2026-12-31")["texto"]
     sin = _correo("primer_dia", org)["texto"]
-    assert "31" in con and not re.search(r"\b[0-9]+ (días|dias|trial days)", con)
-    assert re.search(r"\b[0-9]+ (días|dias|trial days)", sin)          # sin promoción, como siempre
+    assert "31" in con and not re.search(r"\b[0-9]+ (días|dias|trial days|jours|giorni|Testtage)", con)
+    assert re.search(r"\b[0-9]+ (días|dias|trial days|jours|giorni|Testtage)", sin)          # sin promoción, como siempre
 
 
 def test_en_latinoamerica_celular_y_toca_y_en_espana_movil_y_pulsa():

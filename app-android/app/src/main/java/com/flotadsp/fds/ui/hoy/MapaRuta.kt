@@ -126,6 +126,8 @@ sealed class Tocado {
 fun MapaRuta(
     paradas: List<Parada>, base: Base?, trazado: List<Pair<Double, Double>> = emptyList(), hechas: List<Parada> = emptyList(),
     incidencias: List<Incidencia> = emptyList(), zbe: List<ZonaZbe> = emptyList(), enZbe: Set<String> = emptySet(),
+    /** La fuente de los cortes de ese país (DGT, Bison Futé, NDW, WZDx…) y el tipo de zona (ZBE, ZFE, ULEZ…), del servidor. */
+    fuente: String = "", tipoZona: String = "ZBE",
     furgo: Furgo? = null, navegarCon: String = "google",
     alTocar: (Parada) -> Unit, alAparcarEn: (Double, Double) -> Unit = { _, _ -> }, alQuitarFurgo: () -> Unit = {},
     modifier: Modifier = Modifier,
@@ -228,7 +230,7 @@ fun MapaRuta(
                     Calle.centroide(pol)?.let { c ->
                         m.overlays.add(Marker(m).apply {
                             position = GeoPoint(c.first, c.second)
-                            icon = BitmapDrawable(m.resources, icono("zbe") { etiquetaZbe(m.context) })
+                            icon = BitmapDrawable(m.resources, icono("zbe:${z.tipo}") { etiquetaZbe(m.context, z.tipo.ifBlank { tipoZona }) })
                             setAnchor(Marker.ANCHOR_CENTER, Marker.ANCHOR_CENTER)
                             infoWindow = null
                             setOnMarkerClickListener { _, _ -> tocado = Tocado.Zona(z); true }
@@ -240,15 +242,20 @@ fun MapaRuta(
             if (puntos.size >= 2) {
                 // Por las calles si el servidor lo ha dado; si no, de parada a parada en línea recta.
                 val camino = if (trazado.size >= 2) trazado.map { GeoPoint(it.first, it.second) } else puntos
+                // Como un navegador (30-10-2026, Dani: «la línea se ve un poco mal»): un borde azul oscuro fino y la
+                // línea azul encima, con las puntas y las esquinas redondas y en dp (antes, píxeles y borde blanco,
+                // que sobre las calles blancas del mapa no se veía y dejaba una salchicha plana).
+                val d = m.context.dp()
+                val porCalles = camino !== puntos
                 m.overlays.add(Polyline(m).apply {
                     setPoints(camino)
-                    outlinePaint.color = BLANCO; outlinePaint.strokeWidth = if (camino === puntos) 10f else 13f; outlinePaint.alpha = 230
+                    outlinePaint.set(trazo(AZUL_OSCURO, (if (porCalles) 8f else 5.5f) * d)); outlinePaint.alpha = 140
                     infoWindow = null
                 })
                 m.overlays.add(Polyline(m).apply {
                     setPoints(camino)
-                    outlinePaint.color = cian; outlinePaint.strokeWidth = if (camino === puntos) 6f else 9f; outlinePaint.alpha = 200
-                    if (camino === puntos) outlinePaint.pathEffect = DashPathEffect(floatArrayOf(18f, 14f), 0f)
+                    outlinePaint.set(trazo(AZUL_RUTA, (if (porCalles) 4.5f else 3f) * d))
+                    if (!porCalles) outlinePaint.pathEffect = DashPathEffect(floatArrayOf(10f * d, 8f * d), 0f)
                     infoWindow = null
                 })
             }
@@ -325,14 +332,14 @@ fun MapaRuta(
                     MaterialTheme.colorScheme.surfaceContainerHigh, MaterialTheme.colorScheme.onSurface) {}
             }
             if (incidencias.isNotEmpty()) {
-                Etiqueta("DGT · ${incidencias.size} ${if (incidencias.size == 1) tx("incidencia cerca") else tx("incidencias cerca")}", Color(0xFFFEF3C7), Color(0xFF92400E)) {
+                Etiqueta("${fuente.substringBefore(" · ").ifBlank { "DGT" }} · ${incidencias.size} ${if (incidencias.size == 1) tx("incidencia cerca") else tx("incidencias cerca")}", Color(0xFFFEF3C7), Color(0xFF92400E)) {
                     val i = incidencias.first()
                     ubicacion.disableFollowLocation(); mapa.controller.animateTo(GeoPoint(i.lat, i.lng))
                     tocado = Tocado.Inc(i)
                 }
             }
             zbe.firstOrNull()?.let { z ->
-                Etiqueta("ZBE · ${z.nombre}", Color(0xFFEDE9FE), Color(0xFF6D28D9)) {
+                Etiqueta("${z.tipo.ifBlank { tipoZona }} · ${z.nombre}", Color(0xFFEDE9FE), Color(0xFF6D28D9)) {
                     Calle.centroide(z.poligonos.firstOrNull().orEmpty())?.let { c ->
                         ubicacion.disableFollowLocation(); mapa.controller.animateTo(GeoPoint(c.first, c.second))
                     }
@@ -367,9 +374,9 @@ fun MapaRuta(
                         IconButton(onClick = { tocado = null }) { Icon(Icons.Default.Close, contentDescription = tx("Cerrar")) }
                     }
                     when (t) {
-                        is Tocado.Una -> TarjetaParada(t.p, enZbe = t.p.id in enZbe, navegarCon = navegarCon, alAbrir = { alTocar(t.p); tocado = null })
-                        is Tocado.Inc -> TarjetaIncidencia(t.i)
-                        is Tocado.Zona -> TarjetaZbe(t.z)
+                        is Tocado.Una -> TarjetaParada(t.p, enZbe = if (t.p.id in enZbe) tipoZona else "", navegarCon = navegarCon, alAbrir = { alTocar(t.p); tocado = null })
+                        is Tocado.Inc -> TarjetaIncidencia(t.i, fuente)
+                        is Tocado.Zona -> TarjetaZbe(t.z, tipoZona)
                         Tocado.LaFurgo -> furgo?.let { f -> TarjetaFurgo(f, ubicacion.myLocation, alQuitar = { alQuitarFurgo(); tocado = null }) }
                         is Tocado.Punto -> TarjetaPunto { alAparcarEn(t.lat, t.lng); tocado = null }
                     }
@@ -381,8 +388,8 @@ fun MapaRuta(
 
 private fun tituloDe(t: Tocado): String = when (t) {
     is Tocado.Una -> (t.p.orden?.let { "$it · " } ?: "") + t.p.cliente.ifBlank { t.p.direccion }
-    is Tocado.Inc -> t.i.que.replaceFirstChar { it.uppercase() }
-    is Tocado.Zona -> "ZBE ${t.z.nombre}"
+    is Tocado.Inc -> Calle.queIncidencia(t.i.que).replaceFirstChar { it.uppercase() }
+    is Tocado.Zona -> "${t.z.tipo.ifBlank { "ZBE" }} ${t.z.nombre}"
     Tocado.LaFurgo -> tx("Tu furgoneta")
     is Tocado.Punto -> tx("¿Dejar aquí la furgoneta?")
 }
@@ -413,7 +420,7 @@ private fun Etiqueta(texto: String, fondo: Color, tinta: Color, alPulsar: () -> 
 }
 
 @Composable
-private fun TarjetaParada(p: Parada, enZbe: Boolean, navegarCon: String, alAbrir: () -> Unit) {
+private fun TarjetaParada(p: Parada, enZbe: String, navegarCon: String, alAbrir: () -> Unit) {
     val ctx = LocalContext.current
     // La hora prevista va en los chips de Etiquetas cuando está pendiente; aquí solo si ya está hecha.
     val detalle = listOfNotNull(
@@ -451,10 +458,11 @@ private fun TarjetaParada(p: Parada, enZbe: Boolean, navegarCon: String, alAbrir
 }
 
 @Composable
-private fun TarjetaIncidencia(i: Incidencia) {
+private fun TarjetaIncidencia(i: Incidencia, fuente: String) {
     val ctx = LocalContext.current
+    if (i.texto.isNotBlank()) Text(i.texto, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.padding(end = 8.dp))
     Text(Calle.dondeIncidencia(i), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
-    Text(tx("DGT (datos abiertos): cortes y obras declarados, no el tráfico en tiempo real."), style = MaterialTheme.typography.bodySmall,
+    Text(tx("{f}: cortes y obras declarados, no el tráfico en tiempo real.", "f" to fuente.ifBlank { "DGT" }), style = MaterialTheme.typography.bodySmall,
         color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(top = 2.dp, end = 8.dp))
     Row(Modifier.padding(top = 8.dp, end = 8.dp)) {
         FilledTonalButton(onClick = { Acciones.abrirWeb(ctx, "https://www.google.com/maps/search/?api=1&query=${i.lat},${i.lng}") }, modifier = Modifier.weight(1f)) {
@@ -464,12 +472,13 @@ private fun TarjetaIncidencia(i: Incidencia) {
 }
 
 @Composable
-private fun TarjetaZbe(z: ZonaZbe) {
+private fun TarjetaZbe(z: ZonaZbe, tipoZona: String) {
     val ctx = LocalContext.current
+    val fuente = mapOf("dgt" to "DGT", "bnzfe" to "BNZFE (data.gouv.fr)", "ndw" to "NDW", "gla" to "TfL", "osm" to "OpenStreetMap")[z.fuente] ?: z.fuente.ifBlank { "DGT" }
     if (z.descripcion.isNotBlank()) Text(z.descripcion, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(end = 8.dp))
-    if (z.etiquetas.isNotEmpty()) Text(tx("Etiquetas que cita la DGT") + ": ${z.etiquetas.joinToString(", ")}", style = MaterialTheme.typography.bodySmall,
+    if (z.etiquetas.isNotEmpty()) Text(tx("Etiquetas") + ": ${z.etiquetas.joinToString(", ")}", style = MaterialTheme.typography.bodySmall,
         color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(top = 2.dp))
-    if (z.version.isNotBlank()) Text(tx("ZBE según la DGT, a") + " ${z.version}", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+    if (z.version.isNotBlank()) Text(tx("Según {f}, a {v}", "f" to fuente, "v" to z.version), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
     if (z.url.isNotBlank()) Row(Modifier.padding(top = 8.dp, end = 8.dp)) {
         FilledTonalButton(onClick = { Acciones.abrirWeb(ctx, z.url) }, modifier = Modifier.weight(1f)) {
             Icon(Icons.Default.OpenInNew, contentDescription = null, modifier = Modifier.size(18.dp)); Spacer(Modifier.width(6.dp)); Text(tx("Más información"))
@@ -532,6 +541,13 @@ private class ProveedorFused(ctx: Context) : IMyLocationProvider {
 
 private const val BLANCO = -1
 private val NOCHE = 0xFF0F172A.toInt()
+private val AZUL_RUTA = 0xFF3B82F6.toInt()
+private val AZUL_OSCURO = 0xFF1E3A8A.toInt()
+
+/** El trazo de la línea de la ruta: suave, con las puntas y las esquinas redondas. */
+private fun trazo(color: Int, grosor: Float) = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+    this.color = color; style = Paint.Style.STROKE; strokeWidth = grosor; strokeJoin = Paint.Join.ROUND; strokeCap = Paint.Cap.ROUND
+}
 private val MORADO = 0xFF7C3AED.toInt()
 private val VERDE = 0xFF059669.toInt()
 private val VERDE_HECHA = 0xFF16A34A.toInt()
@@ -710,11 +726,13 @@ private fun puntoAzul(ctx: Context, flecha: Boolean): Bitmap {
 }
 
 /** La etiqueta «ZBE» del centro de una zona de bajas emisiones. */
-private fun etiquetaZbe(ctx: Context): Bitmap {
+private fun etiquetaZbe(ctx: Context, texto: String = "ZBE"): Bitmap {
     val d = ctx.dp()
-    val (bmp, c) = lienzo(ctx, 40f, 22f)
-    val caja = RectF(2f * d, 2f * d, 38f * d, 20f * d)
+    val tipo = letra(BLANCO, 10f * d)
+    val ancho = (tipo.measureText(texto) / d + 16f).coerceIn(40f, 120f)
+    val (bmp, c) = lienzo(ctx, ancho + 4f, 22f)
+    val caja = RectF(2f * d, 2f * d, (ancho + 2f) * d, 20f * d)
     c.drawRoundRect(caja, 9f * d, 9f * d, borde(d, grosor = 1.5f)); c.drawRoundRect(caja, 9f * d, 9f * d, pintura(MORADO))
-    c.texto("ZBE", 20f * d, 11f * d, letra(BLANCO, 10f * d))
+    c.texto(texto, (ancho + 4f) / 2 * d, 11f * d, tipo)
     return bmp
 }

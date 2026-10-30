@@ -5,20 +5,39 @@ import pytest
 import server
 
 
+NADA = {"web": None, "play": None, "min": None}
+
+
 @pytest.mark.asyncio(loop_scope="session")
 async def test_sin_variable_no_se_anuncia_nada(monkeypatch):
-    monkeypatch.delenv("APP_ANDROID_WEB", raising=False)
-    assert await server.app_version() == {"web": None}
+    for v in ("APP_ANDROID_WEB", "APP_ANDROID_PLAY", "APP_ANDROID_MIN"):
+        monkeypatch.delenv(v, raising=False)
+    assert await server.app_version() == NADA
 
 
 @pytest.mark.asyncio(loop_scope="session")
 async def test_con_variable_se_anuncia_code_y_nombre(monkeypatch):
+    for v in ("APP_ANDROID_PLAY", "APP_ANDROID_MIN"):
+        monkeypatch.delenv(v, raising=False)
     monkeypatch.setenv("APP_ANDROID_WEB", "17 2.2.5")
-    assert await server.app_version() == {"web": {"code": 17, "nombre": "2.2.5"}}
+    assert await server.app_version() == {**NADA, "web": {"code": 17, "nombre": "2.2.5"}}
     # Mal escrita (sin code, o con texto): como si no estuviera, nunca un 500 en algo que abre cada móvil.
     for mala in ("2.2.5", "diecisiete 2.2.5", "17 dos", "17 2.2.5 extra"):
         monkeypatch.setenv("APP_ANDROID_WEB", mala)
-        assert await server.app_version() == {"web": None}, mala
+        assert await server.app_version() == NADA, mala
+
+
+@pytest.mark.asyncio(loop_scope="session")
+async def test_la_de_play_y_la_minima_van_aparte(monkeypatch):
+    """El aviso de actualizar de la app (30-10-2026): la de Play se anuncia cuando Dani la pone (ya publicada) y la mínima
+    hace que el aviso no se pueda cerrar; cada una mal escrita cae a null sin tocar a las otras."""
+    monkeypatch.delenv("APP_ANDROID_WEB", raising=False)
+    monkeypatch.setenv("APP_ANDROID_PLAY", "20 2.4.1")
+    monkeypatch.setenv("APP_ANDROID_MIN", "2.4.0")
+    assert await server.app_version() == {"web": None, "play": {"code": 20, "nombre": "2.4.1"}, "min": "2.4.0"}
+    monkeypatch.setenv("APP_ANDROID_MIN", "dos punto cuatro")
+    monkeypatch.setenv("APP_ANDROID_PLAY", "2.4.1")
+    assert await server.app_version() == NADA
 
 
 def test_app_vieja_solo_con_minimo_y_cabecera_android(monkeypatch):

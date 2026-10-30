@@ -92,8 +92,8 @@ private fun promoHasta(o: Oferta?): String? = o?.gratisHasta?.let { runCatching 
 /** Lo que cuesta, con las mismas palabras que la web de registro. Sin red, lo que vale siempre. */
 private fun textoOferta(o: Oferta?): String {
     val p = o?.paradasGratis ?: 15
-    return promoHasta(o)?.let { "Sin tarjeta. Gratis y sin límite hasta el $it; después, gratis hasta $p paradas al día." }
-        ?: "Sin tarjeta. Gratis hasta $p paradas al día; sin tope, el plan Repartidor."
+    return promoHasta(o)?.let { tx("Sin tarjeta. Gratis y sin límite hasta el {fecha}; después, gratis hasta {p} paradas al día.", "fecha" to it, "p" to p) }
+        ?: tx("Sin tarjeta. Gratis hasta {p} paradas al día; sin tope, el plan Repartidor.", "p" to p)
 }
 
 @Composable
@@ -122,10 +122,10 @@ private fun Inicio(oferta: Oferta?, aviso: String?, alEntrar: () -> Unit, alCrea
         Text(tx("Tu ruta de reparto, ordenada sola."), style = MaterialTheme.typography.headlineMedium)
         Spacer(Modifier.height(12.dp))
         listOf(
-            "Escanea los paquetes: la dirección entra sola.",
-            "La ruta se ordena por tiempo, con el tráfico.",
-            "Navega con Google Maps o Waze y marca cada entrega.",
-            "Funciona sin cobertura: lo hecho se envía al volver la red.",
+            tx("Escanea los paquetes: la dirección entra sola."),
+            tx("La ruta se ordena por tiempo, con el tráfico."),
+            tx("Navega con Google Maps o Waze y marca cada entrega."),
+            tx("Funciona sin cobertura: lo hecho se envía al volver la red."),
         ).forEach {
             Row(Modifier.padding(vertical = 4.dp), verticalAlignment = Alignment.Top) {
                 Icon(Icons.Default.CheckCircle, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(20.dp))
@@ -175,7 +175,7 @@ internal fun CampoClave(valor: String, alCambiar: (String) -> Unit, etiqueta: St
         keyboardActions = KeyboardActions(onDone = { alListo() }),
         trailingIcon = {
             IconButton(onClick = { ver = !ver }) {
-                Icon(if (ver) Icons.Default.VisibilityOff else Icons.Default.Visibility, contentDescription = if (ver) "Ocultar la contraseña" else "Ver la contraseña")
+                Icon(if (ver) Icons.Default.VisibilityOff else Icons.Default.Visibility, contentDescription = if (ver) tx("Ocultar la contraseña") else tx("Ver la contraseña"))
             }
         },
     )
@@ -210,18 +210,18 @@ private fun Entrar(aviso: String?, alVolver: () -> Unit, alAbrirPortal: (Sesion)
                         alAbrirPortal(sesion)
                     }
                 } catch (e: ErrorApi) {
-                    error = if (e.sinRed) "Sin conexión. Revisa la red y vuelve a intentarlo." else e.message
+                    error = if (e.sinRed) tx("Sin conexión. Revisa la red y vuelve a intentarlo.") else e.message
                 } finally { trabajando = false }
             }
         }
     }
     Column(Modifier.fillMaxSize().statusBarsPadding().imePadding().verticalScroll(rememberScrollState()).padding(horizontal = 24.dp, vertical = 8.dp)) {
-        Cabecera("Entrar", alVolver)
+        Cabecera(tx("Entrar"), alVolver)
         Aviso(aviso)
         OutlinedTextField(correo, { correo = it }, label = { Text(tx("Correo o usuario")) }, singleLine = true, modifier = Modifier.fillMaxWidth(),
             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Email, imeAction = ImeAction.Next))
         Spacer(Modifier.height(12.dp))
-        CampoClave(clave, { clave = it }, "Contraseña", alListo = entrar)
+        CampoClave(clave, { clave = it }, tx("Contraseña"), alListo = entrar)
         error?.let { Spacer(Modifier.height(10.dp)); Text(it, color = MaterialTheme.colorScheme.error) }
         Spacer(Modifier.height(20.dp))
         Button(onClick = entrar, enabled = !trabajando && correo.isNotBlank() && clave.isNotBlank(), modifier = Modifier.fillMaxWidth().height(56.dp)) {
@@ -248,7 +248,7 @@ private fun RecuperarClave(correoInicial: String, alVolver: () -> Unit, alCodigo
     var trabajando by remember { mutableStateOf(false) }
     val valido = Regex("^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$").matches(correo.trim())
     Column(Modifier.fillMaxSize().statusBarsPadding().imePadding().verticalScroll(rememberScrollState()).padding(horizontal = 24.dp, vertical = 8.dp)) {
-        Cabecera("Recuperar la contraseña", alVolver)
+        Cabecera(tx("Recuperar la contraseña"), alVolver)
         if (enviado) {
             Text(tx("Si {correo} tiene una cuenta de repartidor, te hemos mandado un enlace para crear una contraseña nueva. Mira también el spam.", "correo" to correo.trim()),
                 style = MaterialTheme.typography.bodyLarge)
@@ -265,7 +265,7 @@ private fun RecuperarClave(correoInicial: String, alVolver: () -> Unit, alCodigo
                 trabajando = true; error = null
                 ambito.launch {
                     try { app.repo.recuperarClave(correo); enviado = true } catch (e: ErrorApi) {
-                        error = if (e.sinRed) "Sin conexión. Revisa la red y vuelve a intentarlo." else e.message
+                        error = if (e.sinRed) tx("Sin conexión. Revisa la red y vuelve a intentarlo.") else e.message
                     } finally { trabajando = false }
                 }
             }, enabled = !trabajando && valido, modifier = Modifier.fillMaxWidth().height(56.dp)) {
@@ -291,7 +291,7 @@ private fun CodigoConductorNativo(alVolver: () -> Unit, alAbrirPortal: (Sesion) 
     var ocupado by remember { mutableStateOf(false) }
     fun emailValido(valor: String) = Regex("^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$").matches(valor.trim())
     Column(Modifier.fillMaxSize().statusBarsPadding().imePadding().verticalScroll(rememberScrollState()).padding(horizontal = 24.dp, vertical = 8.dp)) {
-        Cabecera("Entrar con código", alVolver)
+        Cabecera(tx("Entrar con código"), alVolver)
         Text(tx("Usa el correo personal que vinculaste en tu cuenta. El código se enviará a ese correo, no al buzón de empresa."), style = MaterialTheme.typography.bodyMedium)
         Spacer(Modifier.height(14.dp))
         OutlinedTextField(correo, { correo = it; error = null }, label = { Text(tx("Tu correo personal")) }, singleLine = true,
@@ -358,19 +358,19 @@ private fun Alta(ref: String?, oferta: Oferta?, alVolver: () -> Unit) {
             trabajando = true
             ambito.launch {
                 try { repo.crearCuenta(nombre, correo, clave, ref) } catch (e: ErrorApi) {
-                    error = if (e.sinRed) "Sin conexión. Revisa la red y vuelve a intentarlo." else e.message
+                    error = if (e.sinRed) tx("Sin conexión. Revisa la red y vuelve a intentarlo.") else e.message
                 } finally { trabajando = false }
             }
         }
     }
     Column(Modifier.fillMaxSize().statusBarsPadding().imePadding().verticalScroll(rememberScrollState()).padding(horizontal = 24.dp, vertical = 8.dp)) {
-        Cabecera("Crea tu cuenta gratis", alVolver)
+        Cabecera(tx("Crea tu cuenta gratis"), alVolver)
         OutlinedTextField(nombre, { nombre = it }, label = { Text(tx("Tu nombre")) }, singleLine = true, modifier = Modifier.fillMaxWidth())
         Spacer(Modifier.height(12.dp))
         OutlinedTextField(correo, { correo = it }, label = { Text(tx("Tu correo")) }, singleLine = true, modifier = Modifier.fillMaxWidth(),
             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Email, imeAction = ImeAction.Next))
         Spacer(Modifier.height(12.dp))
-        CampoClave(clave, { clave = it }, "Contraseña (8 caracteres o más)", alListo = crear)
+        CampoClave(clave, { clave = it }, tx("Contraseña (8 caracteres o más)"), alListo = crear)
         Spacer(Modifier.height(8.dp))
         Row(Modifier.fillMaxWidth().toggleable(acepto, role = Role.Checkbox) { acepto = it }.padding(vertical = 4.dp),
             verticalAlignment = Alignment.CenterVertically) {

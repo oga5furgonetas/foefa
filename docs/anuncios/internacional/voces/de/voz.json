@@ -1,0 +1,58 @@
+{
+ "voz": "Susi - Effortless and Confident",
+ "modelo": "Artlist (Eleven v3)",
+ "settings": {
+  "language": "German"
+ },
+ "frases": [
+  {
+   "n": 1,
+   "leido": "Sortierst du deine Tour noch jeden Morgen von Hand?",
+   "visto": "Sortierst du deine Tour noch jeden Morgen von Hand?",
+   "fichero": "voces/de/f1.mp3",
+   "dur": 2.586,
+   "palabras": []
+  },
+  {
+   "n": 2,
+   "leido": "Schau: Etikett fotografieren, und die Adresse trägt sich selbst ein.",
+   "visto": "Schau: Etikett fotografieren, und die Adresse trägt sich selbst ein.",
+   "fichero": "voces/de/f2.mp3",
+   "dur": 4.833,
+   "palabras": []
+  },
+  {
+   "n": 3,
+   "leido": "Tipp auf Sortieren: alle Stopps in Reihenfolge, mit Uhrzeit.",
+   "visto": "Tipp auf Sortieren: alle Stopps in Reihenfolge, mit Uhrzeit.",
+   "fichero": "voces/de/f3.mp3",
+   "dur": 4.598,
+   "palabras": []
+  },
+  {
+   "n": 4,
+   "leido": "Die Tour auf der Karte, und sie führt dich per Sprache von Tür zu Tür.",
+   "visto": "Die Tour auf der Karte, und sie führt dich per Sprache von Tür zu Tür.",
+   "fichero": "voces/de/f4.mp3",
+   "dur": 4.441,
+   "palabras": []
+  },
+  {
+   "n": 5,
+   "leido": "Und das Beste: es ist gratis, und ohne Karte.",
+   "visto": "Und das Beste: es ist gratis, und ohne Karte.",
+   "fichero": "voces/de/f5.mp3",
+   "dur": 3.631,
+   "palabras": []
+  },
+  {
+   "n": 6,
+   "leido": "Geh auf flota D S P punkt com, und in einer Minute hast du dein Konto.",
+   "visto": "Geh auf flotadsp.com, und in einer Minute hast du dein Konto.",
+   "fichero": "voces/de/f6.mp3",
+   "dur": 5.564,
+   "palabras": []
+  }
+ ],
+ "spotify_dur": 31.948
+}
