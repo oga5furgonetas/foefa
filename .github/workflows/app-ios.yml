@@ -130,10 +130,14 @@ jobs:
             <key>manageAppVersionAndBuildNumber</key><false/>
           </dict></plist>
           EOF
+          # CODE_SIGN_IDENTITY="Apple Distribution": sin eso, el archivado pide un perfil de DESARROLLO, que necesita un
+          # iPhone registrado («Your team has no devices»); con la identidad de distribución, Xcode crea el perfil de App
+          # Store él solo con la clave (30-10-2026, run 41088867006).
           xcodebuild -workspace App.xcworkspace -scheme App -configuration Release \
             -destination 'generic/platform=iOS' -archivePath "$PWD/build/App.xcarchive" \
-            DEVELOPMENT_TEAM="$TEAM" MARKETING_VERSION="$APP_VERSION" CURRENT_PROJECT_VERSION="${{ github.run_number }}" \
-            -allowProvisioningUpdates -allowProvisioningDeviceRegistration \
+            DEVELOPMENT_TEAM="$TEAM" CODE_SIGN_STYLE=Automatic CODE_SIGN_IDENTITY="Apple Distribution" \
+            MARKETING_VERSION="$APP_VERSION" CURRENT_PROJECT_VERSION="${{ github.run_number }}" \
+            -allowProvisioningUpdates \
             -authenticationKeyPath "$HOME/.private_keys/AuthKey_$KEY.p8" -authenticationKeyID "$KEY" -authenticationKeyIssuerID "$ISSUER" \
             archive | tail -40
           xcodebuild -exportArchive -archivePath "$PWD/build/App.xcarchive" -exportOptionsPlist ExportOptions.plist \
