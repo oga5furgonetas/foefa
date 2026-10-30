@@ -545,7 +545,7 @@ html[data-panel-theme='hibrido'] main {
   --dk-200: 48 48 54;
   --dk-300: 64 64 72;
   --dk-400: 96 96 106;
-  --dk-500: 110 110 120;
+  --dk-500: 104 104 111;  /* 30-10-2026: 110 110 120 daba 4,43:1 sobre el fondo crema (barra de la app de ruta) */
   --dk-600: 128 128 138;
   --dk-700: 210 209 205; /* bordes */
   --dk-800: 233 232 228; /* rellenos suaves */
