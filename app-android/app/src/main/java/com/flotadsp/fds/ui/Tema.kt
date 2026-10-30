@@ -128,9 +128,10 @@ object Region {
     )
     private val moneda: java.util.Currency
         get() = runCatching { java.util.Currency.getInstance(MONEDAS[pais] ?: "EUR") }.getOrElse { java.util.Currency.getInstance("EUR") }
-    /** Los números como en el país (es-MX «$250.00», es-AR «$ 250,00»); Brasil, en portugués. */
+    /** Los números con el idioma de la app y el país de la ruta (30-10-2026): en-US «$9.99», es-MX «$250.00»,
+     *  es-AR «$ 250,00», fr-FR «9,99 €». Antes era siempre español, y un móvil en inglés veía «US$9.99». */
     private val locale: java.util.Locale
-        get() = when (pais) { "es" -> ESPANOL; "br" -> java.util.Locale.forLanguageTag("pt-BR"); else -> java.util.Locale.forLanguageTag("es-${pais.uppercase()}") }
+        get() = java.util.Locale.forLanguageTag("${Idioma.actual}-${pais.uppercase()}")
 
     fun importe(v: Double): String = java.text.NumberFormat.getCurrencyInstance(locale).apply { currency = moneda }.format(v)
     val simbolo: String get() = moneda.getSymbol(locale)

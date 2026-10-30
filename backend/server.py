@@ -3,6 +3,7 @@ import fiabilidad
 import piezas
 import seguimiento
 import reparto
+import trafico
 import whatsapp
 import analitica
 import activacion
@@ -5266,6 +5267,16 @@ PRECIOS_REPARTIDOR = {
 
 def _moneda_de(pais) -> str:
     return MONEDA_PAIS.get((pais or "es").lower(), "EUR")
+
+
+def _idioma_org(org) -> str:
+    """El idioma en que se le habla a una cuenta desde el servidor (avisos al móvil): el que eligió en la app; si no
+    consta, el de su país (ciclo_correos); portugués de Brasil cuenta como portugués."""
+    i = str((org or {}).get("idioma") or "").lower()[:2]
+    if i in ("es", "en", "pt", "fr", "it", "de"):
+        return i
+    j = ciclo_correos.idioma_de(org or {})
+    return "pt" if j == "br" else j
 
 
 def _unidades_de(pais) -> str:
@@ -51462,7 +51473,8 @@ async def _rep_ubicar(direccion, cp="", localidad="", base=None) -> Optional[tup
     pide su norma de uso. Solo sale la DIRECCIÓN, nunca el nombre ni el
     teléfono del cliente. Si no se encuentra, el pedido se queda sin punto y
     va al final de la ruta: no se inventa un sitio."""
-    d = str(direccion or "").strip()
+    # Sin piso ni puerta (30-10-2026): «Rúa Real 2, 1º B» se busca como «Rúa Real 2» (reparto.direccion_para_buscar).
+    d = reparto.direccion_para_buscar(direccion) or str(direccion or "").strip()
     extra = [x for x in (str(cp or "").strip(), str(localidad or "").strip())
              if x and reparto.norm(x) not in reparto.norm(d)]
     consulta = ", ".join([d] + extra)
@@ -52267,6 +52279,8 @@ async def reparto_ajustes_put(data: dict = Body(...), user: dict = Depends(requi
     nuevo["hora_salida"] = reparto.hm(hs) if hs is not None else "09:00"
     nuevo["volver"] = bool(data.get("volver"))
     nuevo["trafico"] = data.get("trafico") is not False
+    # La placa (30-10-2026): para decir si HOY le toca restricción (rodízio, Hoy No Circula…). Opcional.
+    nuevo["placa"] = re.sub(r"[^A-Z0-9]", "", _texto_cuerpo(data.get("placa"), 16).upper())[:12]
     # La tarifa se cambia en su propia pantalla (PUT /reparto/ganancias): guardar los ajustes no la borra.
     for k in ("pago_parada", "pago_dia", "coste_km"):
         nuevo[k] = int(a.get(k) or 0)
@@ -52542,11 +52556,12 @@ async def seguimiento_respuesta(token: str, request: Request, data: dict = Body(
     await tdb.reparto_pedidos.update_one({"id": p["id"]}, {"$set": cambios})
     # Al repartidor, por todos los caminos (la bandeja de la app, web push y FCM).
     if p.get("conductor_id"):
-        org = await global_db.organizations.find_one({"db_name": e["db_name"]}, {"_id": 0, "sector": 1}) or {}
+        org = await global_db.organizations.find_one({"db_name": e["db_name"]}, {"_id": 0, "sector": 1, "idioma": 1, "pais": 1, "zona_horaria": 1}) or {}
         url = "/ruta" if org.get("sector") == "autonomo" else "/conductor?vista=ruta"
+        idioma = _idioma_org(org)
         try:
-            await _avisar_usuarios([p["conductor_id"]], "El cliente ha contestado",
-                                   reparto.texto_respuesta(r, p.get("cliente") or p.get("direccion") or ""),
+            await _avisar_usuarios([p["conductor_id"]], reparto.T_CLIENTE_CONTESTO.get(idioma, reparto.T_CLIENTE_CONTESTO["es"]),
+                                   reparto.texto_respuesta(r, p.get("cliente") or p.get("direccion") or "", idioma),
                                    url=url, coleccion=tdb.avisos_movil)
         except Exception as ex:                                  # noqa: BLE001
             logger.warning(f"respuesta del cliente: aviso no enviado: {type(ex).__name__}")
@@ -53031,7 +53046,7 @@ async def reparto_ticket(file: UploadFile = File(...), user: dict = Depends(requ
     if len(datos) < 200:
         raise HTTPException(400, "La foto ha llegado vacía")
     try:
-        leido = await _gemini_extract(_rep_cliente_ia(), _modelo_ia(), reparto.PROMPT_TICKET, datos)
+        leido = await _gemini_extract(_rep_cliente_ia(), _modelo_ia(), reparto.prompt_ticket(_region_actual.get()[0]), datos)
     except Exception as e:                                   # noqa: BLE001
         logger.warning(f"reparto: ticket ilegible por la IA: {type(e).__name__}")
         raise HTTPException(503, "La IA no ha podido leer el ticket ahora. Escribe la dirección a mano.")
@@ -53312,6 +53327,138 @@ _DGT_ZBE_CADA = 24 * 3600              # las ZBE cambian con las ordenanzas, no 
 _DGT_CACHE: dict = {"incidencias": None, "incidencias_en": 0.0, "publicado": "", "zbe": None, "zbe_en": 0.0}
 _DGT_LOCK = asyncio.Lock()
 
+# LO QUE DICE LA CALLE EN CADA PAÍS (30-10-2026, backend/trafico.py): cada fuente abierta se baja al servidor, se guarda
+# en memoria un rato y se filtra a la ruta. Sin respuesta, lo último que hubo (y `fresco` en False, que la pantalla
+# dice «no se han podido cargar»); sin fuente para ese país o esa zona, `aplica: False` y no se enseña nada.
+_FUENTES: dict = {}
+_FUENTES_LOCKS: dict = {}
+
+
+async def _fuente(clave: str, url: str, cada: int, parse, gz: bool = False, timeout: int = 40, post: Optional[dict] = None):
+    """(datos, fresco): lo que publica `url` pasado por `parse(bytes)`, de memoria si tiene menos de `cada` s."""
+    h = _FUENTES.get(clave)
+    if h and time.time() - h["en"] < cada:
+        return h["datos"], h["ok"]
+    lock = _FUENTES_LOCKS.setdefault(clave, asyncio.Lock())
+    async with lock:
+        h = _FUENTES.get(clave)
+        if h and time.time() - h["en"] < cada:
+            return h["datos"], h["ok"]
+        datos = None
+        try:
+            import httpx as _httpx
+            async with _httpx.AsyncClient(timeout=timeout, follow_redirects=True, headers={
+                    "User-Agent": f"{MARCA}/1.0 (reparto; {CORREO_CONTACTO})",
+                    "Accept": "application/json, application/xml, text/xml;q=0.9, */*;q=0.5"}) as c:
+                r = await (c.post(url, data=post) if post is not None else c.get(url))
+            if r.status_code == 200:
+                crudo = r.content
+                if gz or url.endswith(".gz"):
+                    import gzip
+                    crudo = gzip.decompress(crudo)
+                datos = parse(crudo)
+            else:
+                logger.warning(f"fuente {clave}: contesta {r.status_code}")
+        except Exception as e:                                   # noqa: BLE001
+            logger.warning(f"fuente {clave}: {type(e).__name__}")
+        if datos is not None:
+            if len(_FUENTES) > 400:
+                _FUENTES.clear()
+            _FUENTES[clave] = {"en": time.time(), "datos": datos, "ok": True}
+            return datos, True
+        _FUENTES[clave] = {"en": time.time() - cada + 60, "datos": h["datos"] if h else None, "ok": False}   # se reintenta en un minuto
+        return (h["datos"] if h else None), False
+
+
+async def _incidencias_pais(pais: str, ps: list) -> tuple:
+    """(incidencias, nombre de la fuente, publicado, fresco, aplica) de la fuente que vale en ese país."""
+    f = trafico.fuente_incidencias(pais)
+    if f == "dgt":
+        items, publicado, fresco = await _dgt_incidencias()
+        return items, "DGT", publicado, fresco, True
+    if f == "bison":
+        d, ok = await _fuente("bison", trafico.URL_BISON, 300, lambda b: trafico.incidencias_datex(b, "bison"))
+        return (d or ([], ""))[0], "Bison Futé", (d or ([], ""))[1], ok, True
+    if f == "ndw":
+        d, ok = await _fuente("ndw", trafico.URL_NDW_ACTUAL, 300, lambda b: trafico.incidencias_datex(b, "ndw"), gz=True)
+        return (d or ([], ""))[0], "NDW", (d or ([], ""))[1], ok, True
+    if f == "wzdx":
+        feeds = trafico.feeds_wzdx_para(reparto.caja_de(ps, 0.06))
+        if not feeds:
+            return [], None, "", True, False
+        items, fresco, nombres = [], True, []
+        for estado, nombre, url, _caja in feeds:
+            d, ok = await _fuente(f"wzdx:{estado}", url, 900, lambda b, n=nombre: trafico.incidencias_wzdx(b, f"WZDx · {n}"))
+            items += d or []
+            fresco = fresco and ok
+            nombres.append(nombre)
+        return items, "WZDx · " + ", ".join(nombres), "", fresco, True
+    return [], None, "", True, False
+
+
+async def _bnzfe() -> tuple:
+    """Las ZFE de Francia: la base nacional (el fichero del día lo dice el catálogo de data.gouv.fr)."""
+    def url_de(b):
+        d = json.loads(b)
+        return [r["url"] for r in d.get("resources") or [] if r.get("title") == "aires.geojson"][0]
+    url, _ = await _fuente("bnzfe-url", trafico.URL_BNZFE_DATASET, 86400, url_de)
+    if not url:
+        return [], False
+    return await _fuente("bnzfe", url, 86400, trafico.zonas_bnzfe)
+
+
+async def _gla() -> tuple:
+    zonas, fresco = [], True
+    for capa, tipo in trafico.CAPAS_GLA:
+        z, ok = await _fuente(f"gla-{capa}", trafico.URL_GLA.format(capa=capa), 86400, lambda b, t=tipo: trafico.zonas_gla(b, t))
+        zonas += z or []
+        fresco = fresco and ok
+    return zonas, fresco
+
+
+async def _osm_zonas(caja, tipo: str) -> tuple:
+    """Las zonas de bajas emisiones de OpenStreetMap en la caja de la ruta (Overpass, un día en memoria por zona)."""
+    if not caja:
+        return [], True
+    s, w, n, e = (round(caja[0], 1) - 0.1, round(caja[1], 1) - 0.1, round(caja[2], 1) + 0.1, round(caja[3], 1) + 0.1)
+    clave = f"osm:{s},{w},{n},{e}"
+    consulta = trafico.CONSULTA_OSM.format(s=s, w=w, n=n, e=e)
+    for url in trafico.URLS_OVERPASS:
+        z, ok = await _fuente(clave, url, 86400, lambda b, t=tipo: trafico.zonas_osm(b, t), post={"data": consulta})
+        if ok:
+            return z, True
+    return z or [], False
+
+
+async def _zonas_pais(pais: str, ps: list) -> tuple:
+    """(zonas, nombre de la fuente, fresco, aplica) de las fuentes que valen en ese país."""
+    fuentes = trafico.fuentes_zonas(pais)
+    if not fuentes:
+        return [], None, True, False
+    zonas, fresco, nombres = [], True, []
+    for f in fuentes:
+        if f == "dgt":
+            z, ok = await _dgt_zbe()
+            z = [{**x, "tipo": "ZBE", "fuente": "dgt"} for x in (z or [])]
+            nombres.append("DGT")
+        elif f == "bnzfe":
+            z, ok = await _bnzfe()
+            nombres.append("BNZFE")
+        elif f == "ndw":
+            z, ok = await _fuente("ndw-zonas", trafico.URL_NDW_ZONAS, 86400, trafico.zonas_ndw, gz=True)
+            nombres.append("NDW")
+        elif f == "gla":
+            z, ok = await _gla()
+            nombres.append("TfL")
+        elif f == "osm":
+            z, ok = await _osm_zonas(reparto.caja_de(ps, 0.05), trafico.tipo_zona(pais))
+            nombres.append("OpenStreetMap")
+        else:
+            continue
+        zonas += z or []
+        fresco = fresco and ok
+    return zonas, " + ".join(nombres), fresco, True
+
 
 async def _dgt_descargar(url: str, timeout: int = 25) -> Optional[str]:
     import httpx as _httpx
@@ -53396,34 +53543,45 @@ async def _rep_paradas_pendientes_situadas(conductor_id: str) -> list:
 
 @api_router.get("/reparto/mi-ruta/incidencias")
 async def reparto_mi_incidencias(user: dict = Depends(require_any_auth)):
-    """Cortes, obras, accidentes y retenciones de la DGT cerca de las paradas que le quedan hoy. FUERA DE
-    ESPAÑA (30-10-2026): lo que publica la DGT no vale, y se dice con `aplica: False` (la pantalla no enseña
-    nada; «ninguna cerca de tu ruta» en Lyon sería un falso positivo)."""
+    """Cortes, obras, accidentes y retenciones cerca de las paradas que le quedan hoy, de la fuente abierta de su
+    país (DGT, Bison Futé, NDW, WZDx…; backend/trafico.py), y los avisos de restricción por placa de su ciudad.
+    Sin fuente para ese país o esa zona, `aplica: False` y la pantalla no enseña nada («ninguna cerca de tu ruta»
+    en Lyon con datos de la DGT sería un falso positivo)."""
     d = await _rep_conductor(user)
-    if _region_actual.get()[0] != "es":
-        return {"incidencias": [], "fuente": None, "publicado": "", "incompleto": False, "aplica": False}
+    pais, zona = _region_actual.get()
     ps = await _rep_paradas_pendientes_situadas(d["id"])
     if not ps:
-        return {"incidencias": [], "fuente": "DGT", "publicado": "", "incompleto": False, "aplica": True}
-    items, publicado, fresco = await _dgt_incidencias()
-    return {"incidencias": reparto.incidencias_cerca(items, ps), "fuente": "DGT", "publicado": publicado,
-            "incompleto": not fresco, "aplica": True}
+        return {"incidencias": [], "fuente": None, "publicado": "", "incompleto": False,
+                "aplica": bool(trafico.fuente_incidencias(pais)), "avisos": []}
+    items, fuente, publicado, fresco, aplica = await _incidencias_pais(pais, ps)
+    avisos = []
+    if trafico.hay_normas(pais):
+        from zoneinfo import ZoneInfo
+        try:
+            ahora_local = datetime.now(ZoneInfo(zona))
+        except Exception:                                        # noqa: BLE001
+            ahora_local = datetime.now()
+        a = await _rep_ajustes()
+        avisos = trafico.normas_hoy(pais, ps, ahora_local, (a or {}).get("placa") or "")
+    return {"incidencias": reparto.incidencias_cerca(items, ps) if items else [], "fuente": fuente, "publicado": publicado,
+            "incompleto": not fresco, "aplica": aplica, "avisos": avisos}
 
 
 @api_router.get("/reparto/mi-ruta/zbe")
 async def reparto_mi_zbe(user: dict = Depends(require_any_auth)):
     """Las zonas de bajas emisiones (las que publica la DGT, con la descripción del ayuntamiento) que tocan
-    la ruta de hoy, y qué paradas caen dentro de cada una. Fuera de España, nada (`aplica: False`)."""
+    la ruta de hoy, y qué paradas caen dentro de cada una. Fuera de España, las de su país (ZFE de Francia, ZES
+    de Países Bajos, ULEZ/LEZ de Londres, Umweltzonen de OpenStreetMap…; backend/trafico.py); sin fuente, nada."""
     d = await _rep_conductor(user)
-    if _region_actual.get()[0] != "es":
-        return {"zonas": [], "paradas": {}, "fuente": None, "incompleto": False, "aplica": False}
+    pais = _region_actual.get()[0]
+    tipo = trafico.tipo_zona(pais)
     ps = await _rep_paradas_pendientes_situadas(d["id"])
     if not ps:
-        return {"zonas": [], "paradas": {}, "fuente": "DGT", "incompleto": False, "aplica": True}
-    zonas, fresco = await _dgt_zbe()
-    cerca = reparto.zbe_cerca(zonas, ps)
+        return {"zonas": [], "paradas": {}, "fuente": None, "incompleto": False, "aplica": bool(trafico.fuentes_zonas(pais)), "tipo": tipo}
+    zonas, fuente, fresco, aplica = await _zonas_pais(pais, ps)
+    cerca = reparto.zbe_cerca(zonas, ps) if zonas else []
     return {"zonas": [{k: v for k, v in z.items() if k != "caja"} for z in cerca[:20]],
-            "paradas": reparto.zbe_de_paradas(cerca, ps), "fuente": "DGT", "incompleto": not fresco, "aplica": True}
+            "paradas": reparto.zbe_de_paradas(cerca, ps), "fuente": fuente, "incompleto": not fresco, "aplica": aplica, "tipo": tipo}
 
 
 @api_router.post("/reparto/mi-ruta/navegar")
@@ -53952,7 +54110,20 @@ async def stripe_suscripcion(data: dict = Body(default={}), user: dict = Depends
     inicio = _stripe_inicio_cobro(org)
     if inicio:
         cuerpo["subscription_data"]["trial_end"] = int(_fecha_utc(inicio).timestamp())
-    sesion = await _stripe_req("POST", "/checkout/sessions", _stripe_formulario(cuerpo))
+    # EL COBRO EN LA MONEDA DEL PAÍS (30-10-2026): «$9.99» en EE. UU., «MX$149» en México, lo que la app enseña. Vale
+    # si los dos Price de Stripe llevan esa moneda en `currency_options` (scripts/stripe_monedas.py); si Stripe la
+    # rechaza, la sesión sale en euros, como hasta hoy, y queda en el registro.
+    moneda = _moneda_de(org.get("pais"))
+    if moneda != "EUR" and moneda in PRECIOS_REPARTIDOR and _es_repartidor(org):
+        cuerpo["currency"] = moneda.lower()
+    try:
+        sesion = await _stripe_req("POST", "/checkout/sessions", _stripe_formulario(cuerpo))
+    except HTTPException:
+        if not cuerpo.get("currency"):
+            raise
+        logger.warning("Stripe no acepta la moneda %s para %s: la sesión sale en euros", cuerpo["currency"], org.get("id"))
+        cuerpo.pop("currency", None)
+        sesion = await _stripe_req("POST", "/checkout/sessions", _stripe_formulario(cuerpo))
     await _audit(user, "stripe_checkout", {"plan": plan, "anual": anual, "cantidad": cantidad})
     return {"url": sesion.get("url"), "id": sesion.get("id")}
 

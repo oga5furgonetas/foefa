@@ -141,7 +141,8 @@ class Api(
                     .joinToString(". ").ifBlank { null }
                 else -> null
             }
-            return m ?: when (codigo) {
+            // En el idioma del móvil (30-10-2026): los mensajes del servidor están en Traducciones.kt; lo que no, tal cual.
+            return m?.let { tx(it) } ?: when (codigo) {
                 401 -> tx("Tu sesión ha caducado: entra otra vez.")
                 403 -> tx("No tienes permiso para esto.")
                 404 -> tx("Ya no existe.")

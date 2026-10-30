@@ -221,10 +221,18 @@ Lo que lleva (detalle en ESTADO.md, 30-10 madrugada 2 y 3, y 30-10 mañana):
   con retraso; las fallidas en «Mi dinero hoy»; atajos del horario (se guardan como «9-14», que el servidor lee en
   cualquier idioma); buscador a partir de 5 paradas; la hora en las hechas; la tarifa en Ajustes.
 - **La app en el idioma del móvil** (`ui/Idioma.kt`, `ui/Traducciones.kt` generado por `scripts/nativa-idioma.mjs`):
-  538 textos en inglés, portugués, francés, italiano y alemán (español de Latinoamérica y portugués de Brasil con sus
+  599 textos (con los 54 mensajes del servidor) en inglés, portugués, francés, italiano y alemán (español de Latinoamérica y portugués de Brasil con sus
   palabras); fechas con el idioma; millas en EE. UU. y Reino Unido; el plan en la moneda del país. Lo que no se
   traduce a propósito: lo que escribe el servidor (motivos, estados de las retiradas), «Google Maps», los patrones
   de fecha y las unidades.
+- **Fuera de España, con las fuentes de cada país** (30-10 mediodía; `backend/trafico.py`): cortes y obras de Bison
+  Futé (Francia), NDW (Países Bajos) y WZDx (15 estados de EE. UU., sin clave); zonas ZFE (Francia, base BNZFE),
+  milieuzones y ZES (Países Bajos), ULEZ y LEZ (Londres) y Umweltzonen, ZTL, LEZ y ZER por OSM (Alemania, Italia,
+  Bélgica, Austria, Portugal, Suiza, Irlanda, Andorra), cada una con su nombre y su fuente en la etiqueta del mapa;
+  aviso de placa (rodízio, Hoy No Circula, pico y placa) con la matrícula guardada en Ajustes; donde no hay fuente
+  abierta la app no dice nada. El piso bien leído en etiquetas y QR («21º B» → «2, 1º B») y los formatos de 13
+  países. Los mensajes del servidor en el idioma del móvil (antes salían en español). El bono de bienvenida siempre en
+  euros. El pago, en la moneda del país (Stripe `currency_options`).
 
 **Compilarla** (PC de casa de Dani; el CI la compila y firma también en cada cambio de `app-android/` en `main`):
 
@@ -239,7 +247,8 @@ git pull
 Novedades para Play Console en 7 idiomas: `app-android/play-listing/NOVEDADES-2.4.0.md`. Probar el APK en el móvil
 antes de subir el AAB: el mapa (tocar una parada, mantener pulsado, «Seguirme»), una entrega (que la posición llegue
 al servidor: la siguiente vez en esa dirección sale «Puerta conocida»), y con el móvil en inglés o francés que no
-quede nada en español en Hoy, el mapa, la ficha, Ajustes y Cuenta.
+quede nada en español en Hoy, el mapa, la ficha, Ajustes y Cuenta; y con una cuenta de fuera (país Estados Unidos o
+Francia en Ajustes) que el mapa diga «WZDx» o «Bison Futé» y no «DGT», y que no salga «ZBE» donde no la hay.
 
 ## Versión 2.2.5 (code 17): la app se actualiza sola, la cola no pierde entregas y lo de la fase 1 del estudio (29-10-2026, noche)
 

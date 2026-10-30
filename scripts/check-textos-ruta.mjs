@@ -18,6 +18,8 @@ const FICHEROS = [
   'pages/AvisoManana.jsx', 'pages/Landing.jsx', 'pages/Iphone.jsx',
   // Lo que pide la calle (30-10-2026): lo que dice el cliente y el mapa con lo de la DGT.
   'pages/driver/ClienteDice.jsx', 'panel/components/MapaReparto.jsx',
+  // Los ajustes de la ruta que ve quien reparte por su cuenta (30-10-2026): la parte con tx() de la pantalla del panel.
+  'panel/pages/Reparto.jsx',
 ]
 // Nombres que llegan de datos (el plan del autónomo en Registro: tt(planInfo.name)).
 // y los métodos de cobro de lib/region.js (metodosCobro), que se pintan con tx(t).

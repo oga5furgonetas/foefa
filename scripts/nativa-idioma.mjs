@@ -90,6 +90,13 @@ function clavesDe(ruta) {
   return r
 }
 
+/** Los mensajes del servidor que la web traduce (textosRutaC.js) y que server.py sigue diciendo. */
+async function mensajesServidor() {
+  const mod = await import(pathToFileURL(join(RAIZ, 'frontend', 'src', 'lib', 'textosRutaC.js')).href)
+  const servidor = readFileSync(join(RAIZ, 'backend', 'server.py'), 'utf8')
+  return Object.keys(mod.C).filter((k) => servidor.includes(`"${k}"`))
+}
+
 async function diccionarioWeb() {
   const todo = {}
   for (const letra of ['A', 'B', 'C']) {
@@ -112,6 +119,9 @@ if (generar || comprobar) {
   try { propias = JSON.parse(readFileSync(PROPIAS, 'utf8')) } catch { /* aún no existe */ }
   const claves = new Map()   // clave -> ficheros
   for (const f of ficheros) for (const k of clavesDe(f)) claves.set(k, [...(claves.get(k) || []), relative(RAIZ, f)])
+  // Los mensajes del servidor (30-10-2026): los que la web traduce en textosRutaC.js y server.py dice de verdad, para que
+  // la app nativa los enseñe en el idioma del móvil (Api.kt pasa el `detail` por tx()).
+  for (const k of await mensajesServidor()) if (!claves.has(k)) claves.set(k, ['backend/server.py'])
   const faltan = []
   const filas = []
   for (const k of [...claves.keys()].sort()) {

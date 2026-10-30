@@ -27,6 +27,26 @@ class LectorEtiquetaTest {
 
     @Test fun etiquetasDeCadaPais() {
         val casos = listOf(
+            // EL NÚMERO Y EL PISO (30-10-2026): «2 1º B» leído como «21º B» o «2 1 B».
+            Triple("es", "Cliente: Marta Río\nRúa Real 21º B\n15003 A Coruña\n698 112 233",
+                mapOf("direccion" to "Rúa Real 2, 1º B", "cp" to "15003", "localidad" to "A Coruña", "telefono" to "698112233")),
+            Triple("es", "Avenida de Mahía 2 1 B\n15220 Bertamiráns\n600 000 000",
+                mapOf("direccion" to "Avenida de Mahía 2, 1º B", "cp" to "15220", "localidad" to "Bertamiráns")),
+            Triple("es", "C/ Mayor 2 1º B\n28013 Madrid", mapOf("direccion" to "C/ Mayor 2, 1º B", "cp" to "28013", "localidad" to "Madrid")),
+            Triple("es", "Plaza Mayor 12º\n28012 Madrid", mapOf("direccion" to "Plaza Mayor 12º", "cp" to "28012")),
+            // OTROS PAÍSES (30-10-2026).
+            Triple("gb", "Deliver to: Jane Doe\n12 High Street\nFlat 3\nLondon\nSW1A 1AA\nPhone: 020 7946 0958",
+                mapOf("direccion" to "12 High Street, Flat 3", "cp" to "SW1A 1AA", "localidad" to "London", "telefono" to "02079460958", "cliente" to "Jane Doe")),
+            Triple("fr", "Destinataire : Marie Dupont\n12 rue de la Paix\n2e étage\n75002 Paris\nTél : 06 12 34 56 78",
+                mapOf("direccion" to "12 rue de la Paix, 2e étage", "cp" to "75002", "localidad" to "Paris", "telefono" to "0612345678")),
+            Triple("de", "Lieferadresse: Hans Müller\nHauptstraße 12\n2. OG\n10115 Berlin\nTel. 030 1234567",
+                mapOf("direccion" to "Hauptstraße 12, 2. OG", "cp" to "10115", "localidad" to "Berlin", "telefono" to "0301234567")),
+            Triple("nl", "Keizersgracht 123\n1015 CJ Amsterdam\n06 12345678",
+                mapOf("direccion" to "Keizersgracht 123", "cp" to "1015 CJ", "localidad" to "Amsterdam", "telefono" to "612345678")),
+            Triple("it", "Destinatario: Luca Bianchi\nVia Roma 12\n00184 Roma\n+39 333 123 4567",
+                mapOf("direccion" to "Via Roma 12", "cp" to "00184", "localidad" to "Roma", "telefono" to "3331234567", "cliente" to "Luca Bianchi")),
+            Triple("co", "Destinatario: Ana Gómez\nCarrera 7 # 32-16 Apto 501\nBogotá 110311\nCel: 310 555 1234",
+                mapOf("direccion" to "Carrera 7 # 32-16 Apto 501", "cp" to "110311", "localidad" to "Bogotá", "telefono" to "3105551234")),
             Triple("es", "SEUR\nDestinatario: María López García\nC/ Mayor 12\n3º B\n15001 A Coruña\nTel: 612 345 678\nPedido: AB123456",
                 mapOf("telefono" to "612345678", "direccion" to "C/ Mayor 12, 3º B", "cp" to "15001", "localidad" to "A Coruña", "cliente" to "María López García", "codigo" to "AB123456")),
             Triple("es", "Cliente: Pepe Pérez\nRúa do Vilar 5\n15705 Santiago\n+34 981 55 44 33",
@@ -76,6 +96,8 @@ class LectorEtiquetaTest {
         comprobar("ANSI", LectorEtiqueta.datosDeCodigos(listOf(
             "[)>${RS}01${GS}96841706672${GS}840${GS}001${GS}1Z12345675${GS}UPSN${GS}12345E${GS}089${GS}${GS}1/1${GS}10.1${GS}Y${GS}634 MAIN ST${GS}YORK${GS}PA$RS$EOT"), "us"),
             mapOf("direccion" to "634 MAIN ST", "cp" to "84170", "localidad" to "YORK, PA"))
+        comprobar("GS1 Reino Unido (legible)", LectorEtiqueta.datosDeCodigos(listOf("(4302)12 High Street(4305)London(420)SW1A1AA(4308)+442079460958"), "gb"),
+            mapOf("direccion" to "12 High Street", "localidad" to "London", "cp" to "SW1A1AA", "telefono" to "2079460958", "completa" to true))
         comprobar("solo la barra", LectorEtiqueta.datosDeCodigos(listOf("ZX81234567"), "es"), mapOf("codigo" to "ZX81234567", "direccion" to "", "completa" to false))
         comprobar("EAN", LectorEtiqueta.datosDeCodigos(listOf("8412345678905"), "es"), mapOf("codigo" to "8412345678905", "direccion" to ""))
         val g = LectorEtiqueta.geoGS1("13042030003562950000")!!

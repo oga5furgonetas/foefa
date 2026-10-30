@@ -1238,6 +1238,13 @@
     "Segna come non consegnato",
     "Als nicht zugestellt markieren"
   ],
+  "Matrícula / placa (opcional)": [
+    "Vehicle plate (optional)",
+    "Matrícula (opcional)",
+    "Plaque du véhicule (facultatif)",
+    "Targa (facoltativa)",
+    "Kennzeichen (optional)"
+  ],
   "Mes anterior": [
     "Previous month",
     "Mês anterior",
@@ -2694,6 +2701,13 @@
     "{a} invités · {b} valides",
     "{a} invitati · {b} validi",
     "{a} eingeladen · {b} gültig"
+  ],
+  "{f}: cortes y obras declarados, no el tráfico en tiempo real.": [
+    "{f}: declared closures and roadworks, not real-time traffic.",
+    "{f}: cortes e obras declarados, não o trânsito em tempo real.",
+    "{f} : fermetures et travaux déclarés, pas le trafic en temps réel.",
+    "{f}: chiusure e lavori dichiarati, non il traffico in tempo reale.",
+    "{f}: gemeldete Sperrungen und Baustellen, kein Echtzeitverkehr."
   ],
   "{n} cambios guardados en el móvil: se envían solos al volver la red.": [
     "{n} changes saved on the phone: they are sent by themselves when the network is back.",

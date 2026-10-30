@@ -28,6 +28,7 @@ import { salirDeLaDemoDeReparto, decodeToken } from '../../panel/auth'
 import { eurosRef, fechaRefPromo } from '../../lib/precios'
 import AntesPuerta from './AntesPuerta'
 import ClienteDice, { textoClienteDice } from './ClienteDice'
+import { queIncidencia } from '../../panel/components/MapaReparto'
 import { useAtras } from '../../lib/atras'
 import { PedirAviso, mensajeAviso } from '../AvisoManana'
 
@@ -184,6 +185,17 @@ const posicionAhora = () => new Promise((ok) => {
 // Lo que se guarda va en forma neutra («9-14»: el servidor la lee igual que «de 9 a 14») y vale en cualquier idioma.
 const ATAJOS_HORARIO = [['Mañana (9-14)', '9-14'], ['Tarde (16-20)', '16-20'], ['Cierra a las 14:00', '8-14']]
 const FURGO = 'fds_furgo'
+// El ejemplo de «pegar la lista», con direcciones de su país (30-10-2026).
+const EJEMPLO_DIRECCIONES = {
+  es: 'Calle Mayor 3, 28013 Madrid\nAvenida de la Constitución 12, Sevilla', en: '123 Main St, Springfield, IL 62704\n45 Oak Ave Apt 2B, Austin, TX 78701',
+  us: '123 Main St, Springfield, IL 62704\n45 Oak Ave Apt 2B, Austin, TX 78701', gb: '12 High Street, London SW1A 1AA\n3 Station Road, Manchester M1 1AA',
+  mx: 'Av. Insurgentes Sur 1602, Col. Crédito Constructor, 03940 CDMX\nCalle Hidalgo 245 Int. 3, Col. Centro, 64000 Monterrey',
+  br: 'Rua das Flores, 123 - Apto 45, 01310-100 São Paulo\nAv. Brasil 2000, 20040-002 Rio de Janeiro', fr: '12 rue de la Paix, 75002 Paris\n8 avenue Jean Jaurès, 69007 Lyon',
+  de: 'Hauptstraße 12, 10115 Berlin\nBahnhofstraße 3, 80335 München', it: 'Via Roma 12, 00184 Roma\nCorso Buenos Aires 5, 20124 Milano',
+  pt: 'Rua Augusta 12, 1100-053 Lisboa\nRua de Santa Catarina 8, 4000-442 Porto', co: 'Carrera 7 # 32-16 Apto 501, Bogotá\nCalle 10 # 43-12, Medellín',
+  ar: 'Av. Corrientes 1234, C1043AAZ Buenos Aires\nSan Martín 456, Córdoba', cl: 'Av. Providencia 1234, Providencia, Santiago\nCalle Prat 56, Valparaíso',
+  pe: 'Av. Larco 345, Miraflores, Lima 15074', nl: 'Keizersgracht 123, 1015 CJ Amsterdam\nCoolsingel 40, 3011 AD Rotterdam',
+}
 
 /* Las próximas paradas de golpe en Google Maps: hasta 3 intermedias y la
    cuarta de destino (más no lo abren todos los móviles). Waze no admite
@@ -368,12 +380,12 @@ export default function MiRuta({ onBack, embebido = false, alTerminar = null }) 
   /* LO QUE DICE LA DGT (30-10-2026): cortes y obras cerca de la ruta, con el mapa abierto; las ZBE que tocan la
      ruta, siempre (cada parada dentro lleva su chip). El servidor lo guarda en memoria: pedirlo es barato. */
   useEffect(() => {
-    if (vista !== 'mapa' || !firmaRuta) return undefined
+    if (!firmaRuta || ruta?.prueba) return undefined
     let vivo = true
     repIncidencias().then(({ data }) => { if (vivo) setIncidencias(Array.isArray(data?.incidencias) ? data : { incidencias: [], incompleto: true }) })
       .catch(() => { if (vivo) setIncidencias({ incidencias: [], incompleto: true }) })
     return () => { vivo = false }
-  }, [vista, firmaRuta])
+  }, [firmaRuta, ruta?.prueba])
   useEffect(() => {
     if (!firmaRuta || ruta?.prueba) return undefined
     let vivo = true
@@ -1419,12 +1431,14 @@ export default function MiRuta({ onBack, embebido = false, alTerminar = null }) 
           <Suspense fallback={<div className="flex h-[420px] items-center justify-center rounded-xl border border-dark-700"><Loader2 className="animate-spin text-dark-500" /></div>}>
             <MapaReparto alto={420} base={yo ? null : ruta.base} yo={yo} trazado={trazado} zonas={verZonas ? zonas?.zonas || SIN_ZONAS : SIN_ZONAS}
               incidencias={incidencias?.incidencias || SIN_ZONAS} zbe={zbe?.zonas || SIN_ZONAS} furgo={furgo} onAccion={accionMapa}
+              fuente={incidencias?.fuente || ''} tipoZona={zbe?.tipo || 'ZBE'}
               paradas={lista(ruta.pedidos).map((p, i) => ({
                 id: p.id, lat: p.lat, lng: p.lng, estado: p.estado, motivo: p.motivo, orden: p.orden, color: '#0ea5e9', grande: siguiente?.id === p.id,
                 etiqueta: p.orden ?? i + 1, titulo: p.cliente || p.direccion, sub: p.eta ? `≈ ${p.eta} · ${p.direccion}` : p.direccion,
                 // Lo que enseña la ventana al tocar la chincheta (30-10-2026).
                 telefono: p.telefono || '', tipo: p.tipo, prioridad: !!p.prioridad, cobrar: p.cobrar > 0 ? euros(p.cobrar) : null,
-                puerta: p.geo === 'puerta', zbe: zbe?.paradas?.[p.id]?.nombre || null, dice: p.cliente_dice ? textoClienteDice(p.cliente_dice) : null,
+                puerta: p.geo === 'puerta', zbe: zbe?.paradas?.[p.id]?.nombre || null, zbeTipo: zbe?.paradas?.[p.id]?.tipo || zbe?.tipo || 'ZBE',
+                dice: p.cliente_dice ? textoClienteDice(p.cliente_dice) : null,
               }))} />
           </Suspense>
           <p className="mt-1.5 flex flex-wrap items-center gap-x-2 text-[12px] text-dark-400">
@@ -1443,20 +1457,31 @@ export default function MiRuta({ onBack, embebido = false, alTerminar = null }) 
               </span>
             )}
           </label>
-          {/* LO QUE DICE LA DGT (30-10-2026): cortes y obras cerca, y las ZBE que tocan la ruta. Real, con su fuente.
-              Fuera de España el servidor contesta `aplica: false` y no se dice nada (ni «ninguna cerca»). */}
+          {/* LO QUE DICE LA CALLE (30-10-2026): cortes y obras cerca y las zonas de bajas emisiones que tocan la ruta, de
+              la fuente abierta de cada país (DGT, Bison Futé, NDW, WZDx; ZBE, ZFE, ULEZ, Umweltzone…), con su fuente.
+              Donde no hay fuente, el servidor contesta `aplica: false` y no se dice nada (ni «ninguna cerca»). */}
           {incidencias?.aplica !== false && <p data-testid="dgt" className="mt-1.5 flex flex-wrap items-center gap-x-1.5 text-[12px] text-dark-300">
-            <AlertTriangle size={13} className="shrink-0 text-amber-300" /> {tx('Cortes y obras (DGT)')}:{' '}
+            <AlertTriangle size={13} className="shrink-0 text-amber-300" /> {tx('Cortes y obras')}{incidencias?.fuente ? ` (${incidencias.fuente.split(' · ')[0]})` : ''}:{' '}
             <span className="text-dark-400">
               {incidencias == null ? '…' : incidencias.incidencias.length
-                ? `${incidencias.incidencias.length === 1 ? tx('1 cerca de tu ruta') : tx('{n} cerca de tu ruta', { n: incidencias.incidencias.length })} · ${incidencias.incidencias[0].que} · ${incidencias.incidencias[0].carretera}${incidencias.incidencias[0].parada ? ` · ${tx('a {km} km de la parada {n}', { km: String(incidencias.incidencias[0].distancia_km).replace('.', ','), n: incidencias.incidencias[0].parada })}` : ''}`
+                ? `${incidencias.incidencias.length === 1 ? tx('1 cerca de tu ruta') : tx('{n} cerca de tu ruta', { n: incidencias.incidencias.length })} · ${queIncidencia(incidencias.incidencias[0].que)}${incidencias.incidencias[0].carretera ? ` · ${incidencias.incidencias[0].carretera}` : ''}${incidencias.incidencias[0].parada ? ` · ${tx('a {km} km de la parada {n}', { km: String(incidencias.incidencias[0].distancia_km).replace('.', ','), n: incidencias.incidencias[0].parada })}` : ''}`
                 : tx('ninguna cerca de tu ruta')}
               {incidencias?.incompleto ? ` ${tx('(no se han podido cargar)')}` : ''}
             </span>
           </p>}
+          {/* RESTRICCIONES POR PLACA (30-10-2026): rodízio, Hoy No Circula, pico y placa… Lo que dice la norma de hoy
+              en su ciudad y, si puso su placa en Ajustes, si le toca; donde la regla cambia por temporada, el enlace. */}
+          {incidencias?.avisos?.map((a) => (
+            <p key={`${a.ciudad}-${a.titulo}`} data-testid="norma"
+              className={`mt-1.5 rounded-lg px-2.5 py-1.5 text-[12px] leading-snug ${a.hoy === true ? 'bg-red-500/15 text-red-100' : a.hoy === false && a.digitos?.length ? 'bg-emerald-500/10 text-emerald-100' : 'bg-amber-500/10 text-amber-100'}`}>
+              <b>{a.ciudad} · {a.titulo}:</b> {a.texto}
+              {a.hoy === true ? <b> {tx('Hoy tu placa no puede circular.')}</b> : a.hoy === false && a.digitos?.length ? ` ${tx('Tu placa sí puede circular hoy.')}` : ''}
+              {' '}<a href={a.url} target="_blank" rel="noreferrer" className="underline">{tx('Fuente oficial')}</a>
+            </p>
+          ))}
           {zbe?.zonas?.length > 0 && (
             <p data-testid="zbe" className="mt-1 text-[12px] leading-snug text-violet-200">
-              {tx('Zonas de bajas emisiones (DGT)')}: {zbe.zonas.map((z) => z.nombre).join(', ')}
+              {tx('Zonas de bajas emisiones')}{zbe.fuente ? ` (${zbe.fuente})` : ''}: {zbe.zonas.map((z) => z.nombre).join(', ')}
               {Object.keys(zbe.paradas || {}).length ? ` · ${Object.keys(zbe.paradas).length === 1 ? tx('1 parada dentro') : tx('{n} paradas dentro', { n: Object.keys(zbe.paradas).length })}` : ''}
               {zbe.zonas[0].descripcion ? ` · ${zbe.zonas[0].descripcion}` : ''}
             </p>
@@ -1535,7 +1560,7 @@ export default function MiRuta({ onBack, embebido = false, alTerminar = null }) 
               {juntas > 1 && <span className="rounded bg-sky-500/15 px-1.5 font-semibold text-sky-300">{tx('{n} paradas en esta puerta', { n: juntas })}</span>}
               {/* LA PUERTA APRENDIDA y la ZBE (30-10-2026): el pin es donde se entregó la última vez; la parada cae en una zona de bajas emisiones. */}
               {p.geo === 'puerta' && <span className="rounded bg-emerald-500/15 px-1.5 font-semibold text-emerald-300">{tx('Puerta conocida')}</span>}
-              {zbe?.paradas?.[p.id] && <span className="rounded bg-violet-500/15 px-1.5 font-bold text-violet-300" title={zbe.paradas[p.id].nombre}>ZBE</span>}
+              {zbe?.paradas?.[p.id] && <span className="rounded bg-violet-500/15 px-1.5 font-bold text-violet-300" title={zbe.paradas[p.id].nombre}>{zbe.paradas[p.id].tipo || zbe.tipo || 'ZBE'}</span>}
             </>
           )
           const hayEtiquetas = p.ejemplo || p.prioridad || p.tipo === 'recogida' || p.cobrar > 0 || p.ventana_desde || p.tarde_min > 0 || juntas > 1 || p.geo === 'puerta' || !!zbe?.paradas?.[p.id]
@@ -1784,7 +1809,7 @@ export default function MiRuta({ onBack, embebido = false, alTerminar = null }) 
           {pegar.nota && <p role="status" className="mb-2 text-[12.5px] text-amber-200/90">{pegar.nota}</p>}
           <textarea className={`${inp} h-40 font-mono text-[13px]`} value={pegar.texto} aria-label={tx('Lista de direcciones')}
             onChange={(e) => setPegar({ texto: e.target.value, n: null, nota: pegar.nota })}
-            placeholder={'Calle Mayor 3, 28013 Madrid\nAvenida de la Constitución 12, Sevilla'} />
+            placeholder={EJEMPLO_DIRECCIONES[ruta?.pais] || EJEMPLO_DIRECCIONES.en} />
           {pegar.n == null ? (
             <button onClick={() => pegarLista(false)} disabled={pegar.texto.trim().length < 5 || ocupado === 'pegar'}
               className="mt-3 w-full rounded-xl bg-brand-500 py-3 text-[15px] font-bold text-brand-tinta disabled:opacity-40">

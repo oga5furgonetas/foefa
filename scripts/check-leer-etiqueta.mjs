@@ -19,6 +19,46 @@ const { datosDeCodigos, geoGS1 } = await import(pathToFileURL(resolve('frontend/
 const { paradasDeHoja, textoParaPegar, csvAPegar } = await import(pathToFileURL(resolve('frontend/src/lib/hojaReparto.js')).href)
 
 const CASOS = [
+  // EL NÚMERO Y EL PISO (30-10-2026): «2 1º B» leído como «21º B» o «2 1 B».
+  ['es', `Cliente: Marta Río
+Rúa Real 21º B
+15003 A Coruña
+698 112 233`, { direccion: 'Rúa Real 2, 1º B', cp: '15003', localidad: 'A Coruña', telefono: '698112233' }],
+  ['es', `Avenida de Mahía 2 1 B
+15220 Bertamiráns
+600 000 000`, { direccion: 'Avenida de Mahía 2, 1º B', cp: '15220', localidad: 'Bertamiráns' }],
+  ['es', `C/ Mayor 2 1º B
+28013 Madrid`, { direccion: 'C/ Mayor 2, 1º B', cp: '28013', localidad: 'Madrid' }],
+  ['es', `Plaza Mayor 12º
+28012 Madrid`, { direccion: 'Plaza Mayor 12º', cp: '28012' }],
+  // OTROS PAÍSES (30-10-2026): Reino Unido, Francia, Alemania, Países Bajos, Italia, Colombia.
+  ['gb', `Deliver to: Jane Doe
+12 High Street
+Flat 3
+London
+SW1A 1AA
+Phone: 020 7946 0958`, { direccion: '12 High Street, Flat 3', cp: 'SW1A 1AA', localidad: 'London', telefono: '02079460958', cliente: 'Jane Doe' }],
+  ['fr', `Destinataire : Marie Dupont
+12 rue de la Paix
+2e étage
+75002 Paris
+Tél : 06 12 34 56 78`, { direccion: '12 rue de la Paix, 2e étage', cp: '75002', localidad: 'Paris', telefono: '0612345678' }],
+  ['de', `Lieferadresse: Hans Müller
+Hauptstraße 12
+2. OG
+10115 Berlin
+Tel. 030 1234567`, { direccion: 'Hauptstraße 12, 2. OG', cp: '10115', localidad: 'Berlin', telefono: '0301234567' }],
+  ['nl', `Keizersgracht 123
+1015 CJ Amsterdam
+06 12345678`, { direccion: 'Keizersgracht 123', cp: '1015 CJ', localidad: 'Amsterdam', telefono: '612345678' }],
+  ['it', `Destinatario: Luca Bianchi
+Via Roma 12
+00184 Roma
++39 333 123 4567`, { direccion: 'Via Roma 12', cp: '00184', localidad: 'Roma', telefono: '3331234567', cliente: 'Luca Bianchi' }],
+  ['co', `Destinatario: Ana Gómez
+Carrera 7 # 32-16 Apto 501
+Bogotá 110311
+Cel: 310 555 1234`, { direccion: 'Carrera 7 # 32-16 Apto 501', cp: '110311', localidad: 'Bogotá', telefono: '3105551234' }],
   ['es', `SEUR
 Destinatario: María López García
 C/ Mayor 12
@@ -105,6 +145,8 @@ if (telefonoDe('Tel 0612 345 6789', 'xx') !== '06123456789') fallos.push('país 
    la Gran Vía de Madrid pasadas por la fórmula del conversor de GS1 (github.com/gs1/geocode). */
 const GS = '\x1d'
 const CODIGOS = [
+  ['GS1 Reino Unido (legible)', 'gb', ['(4302)12 High Street(4305)London(420)SW1A1AA(4308)+442079460958'],
+    { direccion: '12 High Street', localidad: 'London', cp: 'SW1A1AA', telefono: '2079460958', completa: true }],
   ['GS1 DataMatrix (Scan4Transport)', 'es',
     [`0038412345000000001742028013${GS}4301Maria Lopez${GS}4302Gran Via 32 3B${GS}4305Madrid${GS}4308+34612345678${GS}430913042030003562950000`],
     { codigo: '384123450000000017', cliente: 'Maria Lopez', telefono: '612345678', direccion: 'Gran Via 32 3B', cp: '28013', localidad: 'Madrid', lat: 40.4203, lng: -3.705, completa: true }],

@@ -89,7 +89,7 @@ const enlace = (href, texto, clase = '', accion = '') => `<a href="${esc(href)}"
 
 function popupParada(p, hecho, conAcciones) {
   const chips = []
-  if (p.zbe) chips.push(chip('ZBE', '#ede9fe', '#6d28d9'))
+  if (p.zbe) chips.push(chip(p.zbeTipo || 'ZBE', '#ede9fe', '#6d28d9'))
   if (p.puerta) chips.push(chip(tx('Puerta conocida'), '#d1fae5', '#065f46'))
   if (p.tipo === 'recogida') chips.push(chip(tx('RECOGIDA'), '#ede9fe', '#6d28d9'))
   if (p.cobrar) chips.push(chip(`${tx('COBRAR')} ${p.cobrar}`, '#d1fae5', '#065f46'))
@@ -106,19 +106,27 @@ function popupParada(p, hecho, conAcciones) {
     ]) : '')
 }
 
-function popupIncidencia(i) {
+/* Lo que pasa («carretera cortada (obras)») llega en español del servidor, para todas las fuentes: se traduce por partes. */
+export function queIncidencia(que) {
+  const m = /^(.+?) \((.+)\)$/.exec(String(que || ''))
+  return m ? `${tx(m[1])} (${tx(m[2])})` : tx(String(que || ''))
+}
+const FUENTE_ZONA = { dgt: 'DGT', bnzfe: 'BNZFE (data.gouv.fr)', ndw: 'NDW', gla: 'TfL', osm: 'OpenStreetMap' }
+
+function popupIncidencia(i, fuente) {
   const sitio = [i.carretera, i.pk && `${tx('pk')} ${i.pk}`, i.municipio].filter(Boolean).join(' · ')
   const dist = i.distancia_km != null && (i.parada ? tx('a {km} km de la parada {n}', { km: km(i.distancia_km), n: i.parada }) : tx('a {km} km de tu ruta', { km: km(i.distancia_km) }))
   const desde = i.desde && fecha(i.desde)
-  const que = String(i.que || '')
+  const que = queIncidencia(i.que)
   return `<b>${esc(que.charAt(0).toUpperCase() + que.slice(1))}</b>` +
-    [sitio, dist, desde && `${tx('Desde el')} ${desde}`, 'DGT'].filter(Boolean).map((t) => `<div class="fds-sub">${esc(t)}</div>`).join('') +
+    [i.texto, sitio, dist, desde && `${tx('Desde el')} ${desde}`, fuente].filter(Boolean).map((t) => `<div class="fds-sub">${esc(t)}</div>`).join('') +
     acciones([enlace(`https://www.google.com/maps/search/?api=1&query=${i.lat},${i.lng}`, tx('Ver en Google Maps'), 'fds-ir')])
 }
 
-function popupZbe(z) {
-  return `<b>ZBE ${esc(z.nombre || '')}</b>` +
-    [z.descripcion, z.etiquetas?.length && `${tx('Etiquetas que cita la DGT')}: ${z.etiquetas.join(', ')}`, z.version && `${tx('ZBE según la DGT, a')} ${z.version}`]
+function popupZbe(z, tipoZona) {
+  const fuente = FUENTE_ZONA[z.fuente] || z.fuente || 'DGT'
+  return `<b>${esc(z.tipo || tipoZona)} ${esc(z.nombre || '')}</b>` +
+    [z.descripcion, z.etiquetas?.length && `${tx('Etiquetas')}: ${z.etiquetas.join(', ')}`, z.version && tx('Según {f}, a {v}', { f: fuente, v: z.version })]
       .filter(Boolean).map((t) => `<div class="fds-sub">${esc(t)}</div>`).join('') +
     (z.url ? acciones([enlace(z.url, tx('Más información'), 'fds-ir')]) : '')
 }
@@ -175,7 +183,7 @@ function encuadrar(m, puntos) {
    la furgoneta. Ninguna de las tres cuenta para encuadrar. `onAccion(accion, dato)`: lo que se toca en las ventanas
    (navegar | llamar | abrir con la parada; aparcar con {lat,lng}; quitar_furgo); sin ella, las ventanas solo informan. */
 export default function MapaReparto({ paradas = [], base = null, vivos = [], alto = 380, trazado = null, yo = null, zonas = [],
-  incidencias = [], zbe = [], furgo = null, onAccion = null }) {
+  incidencias = [], zbe = [], furgo = null, onAccion = null, fuente = '', tipoZona = 'ZBE' }) {
   useIdioma()
   const caja = useRef(null)
   const mapa = useRef(null)
@@ -337,15 +345,17 @@ export default function MapaReparto({ paradas = [], base = null, vivos = [], alt
     if (!mapa.current || !capaZbe.current) return
     capaZbe.current.clearLayers()
     zbe.forEach((z) => {
-      const texto = popupZbe(z)
+      const texto = popupZbe(z, tipoZona)
+      const etiqueta = esc(z.tipo || tipoZona)
       ;(z.poligonos || []).forEach((pol) => {
         if (!pol?.length) return
         L.polygon(pol, { color: '#7c3aed', weight: 2, dashArray: '6 4', fillColor: '#7c3aed', fillOpacity: 0.08 }).bindPopup(texto, POP).addTo(capaZbe.current)
-        const icono = L.divIcon({ className: '', html: '<div style="width:34px;height:18px;border-radius:9px;background:#7c3aed;color:#fff;font:800 10px/18px system-ui,sans-serif;text-align:center;border:1.5px solid #fff;box-shadow:0 1px 3px rgba(0,0,0,.4)">ZBE</div>', iconSize: [34, 18], iconAnchor: [17, 9], popupAnchor: [0, -8] })
+        // La etiqueta mide lo que mide su texto («ZBE», «Umweltzone»): sin tamaño fijo, centrada con la transformación.
+        const icono = L.divIcon({ className: '', html: `<div style="display:inline-block;transform:translate(-50%,-50%);padding:0 7px;height:18px;border-radius:9px;background:#7c3aed;color:#fff;font:800 10px/18px system-ui,sans-serif;white-space:nowrap;border:1.5px solid #fff;box-shadow:0 1px 3px rgba(0,0,0,.4)">${etiqueta}</div>`, iconSize: null, iconAnchor: [0, 0], popupAnchor: [0, -8] })
         L.marker(centroide(pol), { icon: icono, zIndexOffset: -900 }).bindPopup(texto, POP).addTo(capaZbe.current)
       })
     })
-  }, [zbe])
+  }, [zbe, tipoZona])
 
   useEffect(() => {
     if (!mapa.current || !capaInc.current) return
@@ -354,10 +364,10 @@ export default function MapaReparto({ paradas = [], base = null, vivos = [], alt
       if (i.lat == null) return
       const color = COLOR_INC[i.clase] || COLOR_INC.otro
       const icono = L.divIcon({ className: '', html: svgIncidencia(i.clase), iconSize: [28, 28], iconAnchor: [14, 14], popupAnchor: [0, -13] })
-      L.marker([i.lat, i.lng], { icon: icono, zIndexOffset: 600, title: i.que || '' }).bindPopup(popupIncidencia(i), POP).addTo(capaInc.current)
+      L.marker([i.lat, i.lng], { icon: icono, zIndexOffset: 600, title: queIncidencia(i.que) }).bindPopup(popupIncidencia(i, fuente), POP).addTo(capaInc.current)
       if (i.lat2 != null) L.polyline([[i.lat, i.lng], [i.lat2, i.lng2]], { color, weight: 4, opacity: 0.7, dashArray: '2 6', interactive: false }).addTo(capaInc.current)
     })
-  }, [incidencias])
+  }, [incidencias, fuente])
 
   useEffect(() => {
     if (!mapa.current || !capaFurgo.current) return
@@ -405,8 +415,8 @@ export default function MapaReparto({ paradas = [], base = null, vivos = [], alt
       {(zonas.length > 0 || incidencias.length > 0 || zbe.length > 0) && (
         <div className="absolute right-2.5 top-2.5 z-[1100] flex flex-wrap justify-end gap-1" role="group" aria-label={tx('Capas del mapa')}>
           {zonas.length > 0 && capaBoton('cd', `C/D ${zonas.length}`, 'text-violet-700')}
-          {incidencias.length > 0 && capaBoton('dgt', `DGT ${incidencias.length}`, 'text-amber-700')}
-          {zbe.length > 0 && capaBoton('zbe', `ZBE ${zbe.length}`, 'text-violet-700')}
+          {incidencias.length > 0 && capaBoton('dgt', `${(fuente || 'DGT').split(' · ')[0].split(' + ')[0]} ${incidencias.length}`, 'text-amber-700')}
+          {zbe.length > 0 && capaBoton('zbe', `${tipoZona} ${zbe.length}`, 'text-violet-700')}
         </div>
       )}
       {/* Tras mover o ampliar el mapa, un toque lo devuelve a la ruta entera. */}

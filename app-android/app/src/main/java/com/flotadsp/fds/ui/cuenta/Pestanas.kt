@@ -194,6 +194,7 @@ fun AjustesPantalla(alGuardar: () -> Unit = {}) {
     var salida by remember { mutableStateOf("09:00") }
     var volver by remember { mutableStateOf(false) }
     var pais by remember { mutableStateOf("") }
+    var placa by remember { mutableStateOf("") }
     // «Mi dinero hoy» (30-10-2026): la tarifa en euros con coma, como la web; se guarda en céntimos (PUT /reparto/ganancias).
     var pagoParada by remember { mutableStateOf("") }
     var pagoDia by remember { mutableStateOf("") }
@@ -210,6 +211,7 @@ fun AjustesPantalla(alGuardar: () -> Unit = {}) {
             salida = a["hora_salida"]?.jsonPrimitive?.contentOrNull ?: "09:00"
             volver = a["volver"]?.jsonPrimitive?.booleanOrNull ?: false
             pais = a["pais"]?.jsonPrimitive?.contentOrNull.orEmpty()
+            placa = a["placa"]?.jsonPrimitive?.contentOrNull.orEmpty()
             pagoParada = deCent(a["pago_parada"]?.jsonPrimitive?.intOrNull)
             pagoDia = deCent(a["pago_dia"]?.jsonPrimitive?.intOrNull)
             costeKm = deCent(a["coste_km"]?.jsonPrimitive?.intOrNull?.let { if (Region.unidades == "mi") Math.round(it * Region.KM_POR_MILLA).toInt() else it })   // en millas se enseña por milla
@@ -261,6 +263,11 @@ fun AjustesPantalla(alGuardar: () -> Unit = {}) {
                     Spacer(Modifier.height(6.dp))
                     ElegirPais(pais, paises) { pais = it }
                 }
+                // LA PLACA (30-10-2026): en las ciudades con restricción por placa (São Paulo, CDMX, Quito, San José…) Hoy dice
+                // si le toca. Opcional; solo la matrícula.
+                Spacer(Modifier.height(8.dp))
+                OutlinedTextField(placa, { placa = it.uppercase(Locale.ROOT).take(12) }, label = { Text(tx("Matrícula / placa (opcional)")) }, singleLine = true,
+                    supportingText = { Text(tx("Para avisarte de las restricciones por placa (rodízio, Hoy No Circula, pico y placa).")) }, modifier = Modifier.fillMaxWidth())
                 Spacer(Modifier.height(6.dp))
                 Row(Modifier.fillMaxWidth().toggleable(volver, role = Role.Switch) { volver = it }.padding(vertical = 4.dp),
                     verticalAlignment = Alignment.CenterVertically) {
@@ -274,7 +281,7 @@ fun AjustesPantalla(alGuardar: () -> Unit = {}) {
                     ambito.launch {
                         try {
                             val cambios = mutableMapOf<String, kotlinx.serialization.json.JsonElement>("base_direccion" to JsonPrimitive(base.trim()),
-                                "hora_salida" to JsonPrimitive(salida.trim()), "volver" to JsonPrimitive(volver))
+                                "hora_salida" to JsonPrimitive(salida.trim()), "volver" to JsonPrimitive(volver), "placa" to JsonPrimitive(placa.trim().uppercase(Locale.ROOT)))
                             if (pais.isNotEmpty()) {
                                 // Con el país, su huso: el del móvil si es de ese país; si no, el principal del país.
                                 val zonas = paises.firstOrNull { it.first == pais }?.third.orEmpty()
@@ -336,10 +343,19 @@ private fun CampoElegir(etiqueta: String, valor: String, alPulsar: () -> Unit) {
 }
 
 /** El país donde reparte: con él se leen los teléfonos de las etiquetas y se buscan las direcciones de su zona. */
+/** El nombre del país en el idioma de la app (Android los tiene todos); si no lo sabe, el que manda el servidor. */
+internal fun nombrePais(codigo: String, delServidor: String = ""): String =
+    Locale("", codigo.uppercase(Locale.ROOT)).getDisplayCountry(LOCALE_APP).takeIf { it.isNotBlank() && it != codigo.uppercase(Locale.ROOT) }
+        ?: delServidor.ifBlank { codigo.uppercase(Locale.ROOT) }
+
 @Composable
-private fun ElegirPais(pais: String, paises: List<Triple<String, String, List<String>>>, alElegir: (String) -> Unit) {
+private fun ElegirPais(pais: String, paisesServidor: List<Triple<String, String, List<String>>>, alElegir: (String) -> Unit) {
     var abierto by remember { mutableStateOf(false) }
-    CampoElegir(tx("País donde repartes"), paises.firstOrNull { it.first == pais }?.second ?: pais.uppercase(Locale.ROOT), alPulsar = { abierto = true })
+    val paises = remember(paisesServidor) {
+        paisesServidor.map { Triple(it.first, nombrePais(it.first, it.second), it.third) }
+            .sortedWith(compareBy(java.text.Collator.getInstance(LOCALE_APP)) { it.second })
+    }
+    CampoElegir(tx("País donde repartes"), paises.firstOrNull { it.first == pais }?.second ?: nombrePais(pais), alPulsar = { abierto = true })
     if (abierto) {
         AlertDialog(
             onDismissRequest = { abierto = false },

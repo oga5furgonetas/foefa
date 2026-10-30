@@ -29,6 +29,9 @@ from base_de_mentira import Col, Db  # noqa: E402
 
 PRUEBA_CORREO = "prueba@fds.test"
 PRUEBA_CLAVE = "ruta-de-prueba-1"
+# Un repartidor de Seattle (30-10-2026): millas, dólares, WZDx en vez de DGT, sin ZBE; el móvil en inglés lo pinta todo en inglés.
+USA_CORREO = "usa@fds.test"
+USA_CLAVE = "ruta-de-prueba-1"
 
 
 class Bases(dict):
@@ -57,6 +60,9 @@ PUNTOS = {
     "sinfónica de galicia 8": (43.363889, -8.409899), "emilia pardo bazán 14": (43.363999, -8.407109),
     "marcial del adalid 5": (43.36219, -8.407002), "san andrés 30": (43.3713, -8.4007), "real 5": (43.3712, -8.3990),
     "montero ríos 12": (43.3690, -8.4050), "mayor 12": (43.3700, -8.3980), "del villar 12": (42.8805, -8.5450),
+    # Seattle (30-10-2026)
+    "86 pike st": (47.6097, -122.3422), "400 broad st": (47.6205, -122.3493), "1124 pike st": (47.6141, -122.3289),
+    "305 harrison st": (47.6218, -122.3515),
 }
 
 
@@ -184,7 +190,48 @@ async def sembrar():
     t["reparto_ajustes"] = Col([{"id": "ajustes", "min_parada": 4, "min_bulto": 1, "hora_salida": "09:00", "volver": False, "trafico": True,
                                  "pago_parada": 110, "pago_dia": 0, "coste_km": 12}])
     print(f"Cuenta de prueba: {PRUEBA_CORREO} / {PRUEBA_CLAVE} · {len(docs)} paradas para {hoy}")
+    await sembrar_usa(hoy)
     await sembrar_empresa(hoy)
+
+
+async def sembrar_usa(hoy):
+    """Un repartidor de Seattle: cuenta en EE. UU. (millas, dólares), cuatro paradas en el centro, una con cobro."""
+    g = bases["flota_global"]
+    org_id, user_id = "o-usa", "u-usa"
+    g["organizations"].docs.append({
+        "id": org_id, "name": "Seattle Courier", "slug": "usa", "plan": "autonomo", "sector": "autonomo", "idioma": "en",
+        "db_name": "dsp_usa", "account_type": "dsp", "status": "trial", "pais": "us", "zona_horaria": "America/Los_Angeles",
+        "trial_ends": (datetime.now(timezone.utc) + timedelta(days=20)).isoformat(), "modulos": ["reparto", "configuracion"],
+        "created_at": datetime.now(timezone.utc).isoformat(),
+    })
+    g["admin_users"].docs.append({
+        "id": user_id, "username": USA_CORREO, "email": USA_CORREO, "name": "Seattle Courier", "role": "admin",
+        "org_id": org_id, "hashed_password": server.hash_password(USA_CLAVE), "created_at": datetime.now(timezone.utc).isoformat(),
+    })
+    t = bases["dsp_usa"]
+    t["drivers"] = Col([{"id": user_id, "name": "Seattle Courier", "active": True, "autonomo": True}])
+    paradas = [
+        ("Pike Place Fish", "86 Pike St, Seattle, WA 98101", "2065550123", 0, 1),
+        ("Maria L.", "400 Broad St, Seattle, WA 98109", "2065550124", 24.5, 2),
+        ("Capitol Deli", "1124 Pike St, Seattle, WA 98101", "", 0, 1),
+        ("J. Park", "305 Harrison St, Seattle, WA 98109", "2065550126", 0, 1),
+    ]
+    docs = []
+    for i, (cli, dirc, tel, cobrar, bultos) in enumerate(paradas):
+        lat, lng = await ubicar(dirc)
+        docs.append({
+            "id": str(uuid.uuid4()), "fecha": hoy, "codigo": f"1Z9{1000 + i}", "codigos": [], "cliente": cli, "telefono": tel,
+            "direccion": dirc, "cp": dirc.rsplit(" ", 1)[-1], "localidad": "Seattle, WA", "contenido": "", "notas": "", "bultos": bultos, "escaneos": 1,
+            "ventana_desde": None, "ventana_hasta": None, "tipo": "entrega", "cobrar": cobrar, "hueco": "", "prioridad": False,
+            "zona": "", "conductor_id": user_id, "conductor_nombre": "Seattle Courier", "estado": "pendiente", "orden": None,
+            "origen": "escaneo", "lat": lat, "lng": lng, "geo": "ok", "creado_por": "usa",
+            "creado_en": datetime.now(timezone.utc).isoformat(),
+        })
+    docs[0]["cliente_dice"] = {"estare": "si", "dejar": "", "franja": None, "portal": "4521", "nota": "Ring twice", "cuando": datetime.now(timezone.utc).isoformat()}
+    t["reparto_pedidos"] = Col(docs)
+    t["reparto_ajustes"] = Col([{"id": "ajustes", "min_parada": 4, "min_bulto": 1, "hora_salida": "09:00", "volver": False, "trafico": True,
+                                 "pago_parada": 300, "pago_dia": 0, "coste_km": 12, "placa": "ABC1234"}])
+    print(f"Cuenta de EE. UU.: {USA_CORREO} / {USA_CLAVE} · {len(docs)} paradas en Seattle")
 
 
 # ── UNA EMPRESA CON UN CONDUCTOR (29-10-2026): para probar el portal NATIVO del conductor de empresa ────────────

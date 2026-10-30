@@ -72,7 +72,7 @@ class RutaVM(app: Application) : AndroidViewModel(app) {
                 repo.tomarRechazos().forEach { avisar(it) }
                 val r = repo.miRuta()
                 _e.value = _e.value.copy(ruta = r, guardadaEn = null, cargando = false, refrescando = false, error = null)
-                if (!r.prueba && r.pedidos.any { it.pendiente }) cargarZbe()
+                if (!r.prueba && r.pedidos.any { it.pendiente }) { cargarZbe(); cargarIncidencias() }
             } catch (e: ErrorApi) {
                 _e.value = if (_e.value.ruta != null && e.sinRed) {
                     _e.value.copy(cargando = false, refrescando = false, guardadaEn = _e.value.guardadaEn ?: System.currentTimeMillis())

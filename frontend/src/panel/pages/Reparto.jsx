@@ -17,7 +17,7 @@ import { getAdmin } from '../auth'
 import { origen } from '../../marca'
 import QRCode from 'qrcode'
 import { usePlan } from '../../lib/usePlan'
-import { IDIOMAS, idioma, cambiarIdioma, useIdioma, tx } from '../../lib/idioma'
+import { IDIOMAS, idioma, cambiarIdioma, useIdioma, tx, locale } from '../../lib/idioma'
 import MiRuta, { ElegirNavegador } from '../../pages/driver/MiRuta'
 import AjustesMovil from '../../pages/driver/AjustesMovil'
 import { fijarPais, importe, simboloMoneda } from '../../lib/region'
@@ -451,6 +451,11 @@ function Ventana({ titulo, onClose, children }) {
 }
 
 /* ── ZONAS Y AJUSTES ─────────────────────────────────────────────────────── */
+/* El nombre de un país en el idioma de la app (30-10-2026): el servidor los manda en español. */
+function nombrePais(codigo, delServidor) {
+  try { return new Intl.DisplayNames([locale()], { type: 'region' }).of(codigo.toUpperCase()) || delServidor } catch { return delServidor || codigo }
+}
+
 export function Ajustes({ conductores, toast, autonomo }) {
   const lang = useIdioma()
   const [a, setA] = useState(null)
@@ -473,12 +478,12 @@ export function Ajustes({ conductores, toast, autonomo }) {
         base_direccion: a.base_direccion, zonas: a.zonas, ia_tickets: !!a.ia_tickets,
         dias_conservar: a.dias_conservar, portal: a.portal !== false,
         hora_salida: a.hora_salida, min_parada: a.min_parada, min_bulto: a.min_bulto,
-        volver: !!a.volver, trafico: a.trafico !== false,
+        volver: !!a.volver, trafico: a.trafico !== false, placa: a.placa || '',
         ...(a.pais ? { pais: a.pais, zona_horaria: a.zona_horaria } : {}),
       })
       setA({ ...a, base: data.base, portal_activo: data.portal_activo })
-      toast.success('Guardado')
-    } catch (e) { toast.error(e?.response?.data?.detail || 'No se pudo guardar') } finally { setGuardando(false) }
+      toast.success(tx('Guardado'))
+    } catch (e) { toast.error(e?.response?.data?.detail || tx('No se pudo guardar')) } finally { setGuardando(false) }
   }
 
   return (
@@ -486,14 +491,15 @@ export function Ajustes({ conductores, toast, autonomo }) {
       <div className="space-y-4">
         {a.paises && (
           <section className="rounded-xl border border-dark-700 bg-dark-900 p-4">
-            <h2 className="mb-1 text-[14px] font-bold text-dark-50">País y hora</h2>
-            <p className="mb-2 text-[12px] text-dark-400">Las direcciones se buscan en este país y las horas de llegada van en esta zona horaria.</p>
+            <h2 className="mb-1 text-[14px] font-bold text-dark-50">{tx('País y hora')}</h2>
+            <p className="mb-2 text-[12px] text-dark-400">{tx('Las direcciones se buscan en este país y las horas de llegada van en esta zona horaria.')}</p>
             <div className="grid gap-2 sm:grid-cols-2">
-              <select className={inp} aria-label="País" value={a.pais || 'es'}
+              <select className={inp} aria-label={tx('País')} value={a.pais || 'es'}
                 onChange={(e) => setA({ ...a, pais: e.target.value, zona_horaria: (a.paises[e.target.value]?.zonas || [])[0] })}>
-                {Object.entries(a.paises).sort((x, y) => x[1].nombre.localeCompare(y[1].nombre, 'es')).map(([k, v]) => <option key={k} value={k}>{v.nombre}</option>)}
+                {/* El nombre de cada país en el idioma de la app (el servidor los manda en español; 30-10-2026). */}
+                {Object.entries(a.paises).map(([k, v]) => [k, nombrePais(k, v.nombre)]).sort((x, y) => x[1].localeCompare(y[1], locale())).map(([k, n]) => <option key={k} value={k}>{n}</option>)}
               </select>
-              <select className={inp} aria-label="Zona horaria" value={a.zona_horaria || ''}
+              <select className={inp} aria-label={tx('Zona horaria')} value={a.zona_horaria || ''}
                 onChange={(e) => setA({ ...a, zona_horaria: e.target.value })}>
                 {(a.paises[a.pais || 'es']?.zonas || []).map((z) => <option key={z} value={z}>{z.split('/').pop().replace(/_/g, ' ')}</option>)}
               </select>
@@ -514,11 +520,11 @@ export function Ajustes({ conductores, toast, autonomo }) {
           </section>
         )}
         <section className="rounded-xl border border-dark-700 bg-dark-900 p-4">
-          <h2 className="mb-1 flex items-center gap-1.5 text-[14px] font-bold text-dark-50"><MapPin size={15} /> {autonomo ? 'Desde dónde sales' : 'Almacén o tienda'}</h2>
-          <p className="mb-2 text-[12px] text-dark-400">{autonomo ? 'Tu nave, almacén o casa: la ruta se ordena desde aquí (o desde donde estés al pulsar «Montar ruta»).' : 'De aquí salen las rutas: se ordenan empezando por el punto más cercano a esta dirección.'}</p>
+          <h2 className="mb-1 flex items-center gap-1.5 text-[14px] font-bold text-dark-50"><MapPin size={15} /> {autonomo ? tx('Desde dónde sales') : 'Almacén o tienda'}</h2>
+          <p className="mb-2 text-[12px] text-dark-400">{autonomo ? tx('Tu nave, almacén o casa: la ruta se ordena desde aquí (o desde donde estés al pulsar «Montar ruta»).') : 'De aquí salen las rutas: se ordenan empezando por el punto más cercano a esta dirección.'}</p>
           <input className={inp} value={a.base_direccion} onChange={(e) => setA({ ...a, base_direccion: e.target.value })}
-            placeholder="Avda. de Montero Ríos 1, 15001 A Coruña" />
-          {a.base?.lat != null && <p className="mt-1 text-[11px] text-emerald-300">Ubicado en el mapa ✓</p>}
+            placeholder={autonomo ? tx('Calle, número y población') : 'Avda. de Montero Ríos 1, 15001 A Coruña'} />
+          {a.base?.lat != null && <p className="mt-1 text-[11px] text-emerald-300">{tx('Ubicado en el mapa')} ✓</p>}
         </section>
 
         {!autonomo && <section className="rounded-xl border border-dark-700 bg-dark-900 p-4">
@@ -548,30 +554,36 @@ export function Ajustes({ conductores, toast, autonomo }) {
         </section>}
 
         <section className="space-y-3 rounded-xl border border-dark-700 bg-dark-900 p-4">
-          <h2 className="text-[14px] font-bold text-dark-50">Cómo se calcula la ruta</h2>
+          <h2 className="text-[14px] font-bold text-dark-50">{tx('Cómo se calcula la ruta')}</h2>
           <p className="text-[12px] text-dark-400">
-            Se ordena por el TIEMPO que se tarda por carretera, contando el tráfico típico de cada hora, el rato en
-            cada portal y el horario de cada cliente. Cada parada lleva su hora estimada de llegada.
-            {autonomo && ' Si ordenas de noche (de 22:00 a 6:00), la ruta sale a tu hora de salida y no «ahora».'}
+            {tx('Se ordena por el TIEMPO que se tarda por carretera, contando el tráfico típico de cada hora, el rato en cada portal y el horario de cada cliente. Cada parada lleva su hora estimada de llegada.')}
+            {autonomo && ` ${tx('Si ordenas de noche (de 22:00 a 6:00), la ruta sale a tu hora de salida y no «ahora».')}`}
           </p>
           <div className="flex flex-wrap items-center gap-x-5 gap-y-2 text-[13px] text-dark-200">
-            <label className="flex items-center gap-2">Salida a las
+            <label className="flex items-center gap-2">{tx('Salida a las')}
               <input type="time" style={{ width: 110 }} className="rounded-lg border border-dark-700 bg-dark-900 px-2 py-1 text-dark-100"
                 value={a.hora_salida || '09:00'} onChange={(e) => setA({ ...a, hora_salida: e.target.value })} /></label>
-            <label className="flex items-center gap-2">Minutos en cada parada
+            <label className="flex items-center gap-2">{tx('Minutos en cada parada')}
               <input type="number" min="1" max="30" style={{ width: 64 }} className="rounded-lg border border-dark-700 bg-dark-900 px-2 py-1 text-dark-100"
                 value={a.min_parada ?? 4} onChange={(e) => setA({ ...a, min_parada: e.target.value })} /></label>
-            <label className="flex items-center gap-2">+ por cada bulto de más
+            <label className="flex items-center gap-2">{tx('+ por cada bulto de más')}
               <input type="number" min="0" max="10" style={{ width: 64 }} className="rounded-lg border border-dark-700 bg-dark-900 px-2 py-1 text-dark-100"
                 value={a.min_bulto ?? 1} onChange={(e) => setA({ ...a, min_bulto: e.target.value })} /></label>
           </div>
           <label className="flex items-center gap-2.5 text-[13px] text-dark-200">
             <input type="checkbox" checked={a.trafico !== false} onChange={(e) => setA({ ...a, trafico: e.target.checked })} />
-            Contar el tráfico típico de cada hora (horas punta de mañana, mediodía y tarde)
+            {tx('Contar el tráfico típico de cada hora (horas punta de mañana, mediodía y tarde)')}
           </label>
           <label className="flex items-center gap-2.5 text-[13px] text-dark-200">
             <input type="checkbox" checked={!!a.volver} onChange={(e) => setA({ ...a, volver: e.target.checked })} />
-            La ruta termina volviendo al almacén
+            {tx('La ruta termina volviendo al almacén')}
+          </label>
+          {/* LA PLACA (30-10-2026): en las ciudades con restricción por placa (São Paulo, CDMX, Quito, San José…) la ruta
+              dice si HOY le toca. Opcional; solo se guarda la matrícula, nada más del vehículo. */}
+          <label className="flex flex-wrap items-center gap-2 text-[13px] text-dark-200">{tx('Matrícula / placa del vehículo (opcional)')}
+            <input type="text" maxLength={12} style={{ width: 130 }} placeholder="1234 ABC" className="rounded-lg border border-dark-700 bg-dark-900 px-2 py-1 uppercase text-dark-100"
+              value={a.placa || ''} onChange={(e) => setA({ ...a, placa: e.target.value.toUpperCase() })} />
+            <span className="text-[12px] text-dark-500">{tx('Para avisarte de las restricciones por placa (rodízio, Hoy No Circula, pico y placa).')}</span>
           </label>
         </section>
 
@@ -595,18 +607,18 @@ export function Ajustes({ conductores, toast, autonomo }) {
           </label>}
           <label className="block text-[13px] text-dark-200">
             <span className="flex flex-wrap items-center gap-2">
-              <b>Borrar los datos de los clientes a los</b>
+              <b>{tx('Borrar los datos de los clientes a los')}</b>
               <input type="number" min="1" max="90" style={{ width: 80 }}
                 className="rounded-lg border border-dark-700 bg-dark-900 px-2 py-1 text-[13px] text-dark-100 focus:border-brand-500 focus:outline-none"
                 value={a.dias_conservar ?? 30} onChange={(e) => setA({ ...a, dias_conservar: e.target.value })} />
-              <b>días</b>
+              <b>{tx('días')}</b>
             </span>
-            <span className="mt-1 block text-[12px] text-dark-400">Pasado ese plazo se borran nombre, teléfono, dirección y contenido; quedan los números para las estadísticas.</span>
+            <span className="mt-1 block text-[12px] text-dark-400">{tx('Pasado ese plazo se borran nombre, teléfono, dirección y contenido; quedan los números para las estadísticas.')}</span>
           </label>
         </section>
 
         <button className={btnP} onClick={guardar} disabled={guardando}>
-          {guardando && <Loader2 size={14} className="animate-spin" />} Guardar ajustes
+          {guardando && <Loader2 size={14} className="animate-spin" />} {tx('Guardar ajustes')}
         </button>
       </div>
 

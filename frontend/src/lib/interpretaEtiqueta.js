@@ -13,10 +13,10 @@
    Sin imports a propósito: así lo ejecuta tal cual scripts/check-leer-etiqueta.mjs con etiquetas de
    cada país (gotcha 40: probar lo que corre, no una copia). */
 
-export const VIA = new RegExp(String.raw`(^|\s)(c\/|cl\.?|calle|r[uú]a|r\/|avda\.?|av\.?|avenida|plaza|praza|pza\.?|paseo|p[ºo]\.?|traves[ií]a|trav\.?|camino|carretera|ctra\.?|lugar|lg\.?|urb\.?|urbanizaci[oó]n|ronda|glorieta|pol[ií]gono|pol\.?|estrada|camiño|rueiro|bloque|carrera|cra\.?|kr\.?|diagonal|dg\.?|transversal|tv\.|autopista|jir[oó]n|jr\.?|pasaje|psje\.?|calzada|calz\.?|privada|priv\.?|cerrada|andador|boulevard|bulevar|blvd\.?|prolongaci[oó]n|prol\.?|rodovia|rod\.?|alameda|al\.|travessa|largo|pra[cç]a|street|st\.|avenue|ave\.?|road|rd\.|drive|dr\.|lane|ln\.|rue|chemin|via|viale|piazza|corso|stra(ss|ß)e|str\.|weg|platz|allee|ladeira)[\s,]+`, 'i')
+export const VIA = new RegExp(String.raw`(^|\s)(c\/|cl\.?|calle|r[uú]a|r\/|avda\.?|av\.?|avenida|plaza|praza|pza\.?|paseo|p[ºo]\.?|traves[ií]a|trav\.?|camino|carretera|ctra\.?|lugar|lg\.?|urb\.?|urbanizaci[oó]n|ronda|glorieta|pol[ií]gono|pol\.?|estrada|camiño|rueiro|bloque|carrera|cra\.?|kr\.?|diagonal|dg\.?|transversal|tv\.|autopista|jir[oó]n|jr\.?|pasaje|psje\.?|calzada|calz\.?|privada|priv\.?|cerrada|andador|boulevard|bulevar|blvd\.?|prolongaci[oó]n|prol\.?|rodovia|rod\.?|alameda|al\.|travessa|largo|pra[cç]a|street|st\.|avenue|ave\.?|road|rd\.|drive|dr\.|lane|ln\.|rue|chemin|via|viale|piazza|corso|stra(ss|ß)e|str\.|weg|platz|allee|ladeira|impasse|all[ée]e|place|cours|quai|route|r[ée]sidence|lotissement|gasse|damm|ufer|steig|straat|gracht|laan|plein|kade|dijk|singel|court|ct\.|terrace|circle|cir\.|parkway|pkwy|highway|hwy|close|crescent|gardens|grove|square|sq\.|mews|vicolo|piazzale|lungomare|praceta)[\s,]+`, 'i')
 
 // Lo que va en la línea siguiente y es parte de la dirección: piso, puerta, apartamento, colonia, barrio.
-const SIGUE = /^(\d+\s*[ºª°%o]|bajo|entlo|piso|puerta|esc\.?|portal|apto\.?|apt\.?|apartamento|depto\.?|dpto\.?|departamento|int\.?|interior|casa|bloco|torre|col\.?|colonia|fracc\.?|fraccionamiento|barrio|bairro|b[º°]\.?|villa|urbanizaci[oó]n|conjunto|sector)(?=[\s,.:]|$)/i
+const SIGUE = /^(\d+\s*[ºª°%o]|\d+(?:er|e|ème|st|nd|rd|th)\b|\d+\.\s*(?:og|stock|etage)|bajo|entlo|piso|puerta|esc\.?|portal|apto\.?|apt\.?|apartamento|depto\.?|dpto\.?|departamento|int\.?|interior|casa|bloco|torre|col\.?|colonia|fracc\.?|fraccionamiento|barrio|bairro|b[º°]\.?|villa|urbanizaci[oó]n|conjunto|sector|[ée]tage|[ée]tg\.?|b[âa]t\.?|b[âa]timent|r[ée]sidence|flat|floor|fl\.?|unit|suite|ste\.?|stock|og|wohnung|whg\.?|andar|sala|lote|mz\.?|manzana|edif\.?|edificio|house|apartment|appartement|appt\.?|room|rm\.?)(?=[\s,.:]|$)/i
 
 // Teléfono: [prefijo del país, largos válidos sin prefijo, primera cifra válida (opcional)].
 const TEL_PAIS = {
@@ -24,7 +24,8 @@ const TEL_PAIS = {
   ar: ['54', [10]], co: ['57', [10], /^(3|60)/], cl: ['56', [9]], pe: ['51', [9], /^9/], us: ['1', [10], /^[2-9]/],
   ec: ['593', [9, 10]], ve: ['58', [10]], uy: ['598', [8, 9]], py: ['595', [9, 10]], bo: ['591', [8]],
   gt: ['502', [8]], cr: ['506', [8]], pa: ['507', [7, 8]], do: ['1', [10]], fr: ['33', [9, 10]], it: ['39', [9, 10]],
-  de: ['49', [10, 11]], gb: ['44', [10, 11]],
+  de: ['49', [10, 11]], gb: ['44', [10, 11]], nl: ['31', [9]], be: ['32', [8, 9]], ch: ['41', [9]], at: ['43', [9, 10, 11, 12, 13]],
+  ie: ['353', [9]], ad: ['376', [6, 9]],
 }
 
 // Código postal: una forma propia (sola vale) o, si es solo cifras corrientes, detrás de «CP», «C.P.», «CEP»…
@@ -34,6 +35,10 @@ const CP_PAIS = {
   br: /\b(\d{5}-\d{3}|\d{8})\b/,
   mx: /\b(\d{5})\b/, us: /\b(\d{5})(?:-\d{4})?\b/, pe: /\b(\d{5})\b/, fr: /\b(\d{5})\b/, it: /\b(\d{5})\b/, de: /\b(\d{5})\b/,
   ar: /\b([A-Z]\d{4}[A-Z]{3})\b/,
+  gb: /\b([A-Z]{1,2}\d[A-Z\d]?\s?\d[A-Z]{2})\b/i, nl: /\b(\d{4}\s?[A-Z]{2})\b/, ie: /\b([A-Z]\d{2}\s?[A-Z0-9]{4})\b/,
+  be: /\b(\d{4})\b/, ch: /\b(\d{4})\b/, at: /\b(\d{4})\b/, ad: /\b(AD\d{3})\b/, cl: /\b(\d{7})\b/, co: /\b(\d{6})\b/, uy: /\b(\d{5})\b/, py: /\b(\d{4})\b/,
+  cr: /\b(\d{5})\b/, pa: /\b(\d{4})\b/, gt: /\b(\d{5})\b/, do: /\b(\d{5})\b/, ve: /\b(\d{4})\b/, ec: /\b(\d{6})\b/, hn: /\b(\d{5})\b/, ni: /\b(\d{5})\b/,
+  sv: /\b(\d{4})\b/, cu: /\b(\d{5})\b/, cn: /\b(\d{6})\b/,
 }
 const CP_CON_RETULO = /\b(?:c\.?\s?p\.?|cep|c[oó]digo postal|zip|postal)\s*[:.-]?\s*([A-Z]?\d{4,7}(?:-\d{3,4})?[A-Z]{0,3})\b/i
 
@@ -62,6 +67,20 @@ export function telefonoDe(texto, pais = 'es') {
     if (largos.includes(d.length) && (!inicio || inicio.test(d))) return d
   }
   return ''
+}
+
+/* EL NÚMERO Y EL PISO (30-10-2026; Dani: «número 2, primero B, hay veces que lee número 21»). El OCR junta cifras
+   separadas por poco espacio («2 1º B» → «21º B») o se come el «º» («2 1 B»). Un piso 13 o más es rarísimo en un
+   reparto: con dos o tres cifras pegadas a «º/ª/°» se separa la última como piso («21º B» → «2, 1º B»); «2 1 B»
+   (número, piso sin «º», puerta) y «2 1º B» se escriben como lo que son, con la coma que el buscador de direcciones
+   entiende (el servidor quita el piso al buscar: reparto.direccion_para_buscar). */
+export function arreglaPiso(d) {
+  let s = String(d || '')
+  s = s.replace(/\b(\d{1,3})(\d)\s*([ºª°])\s*([A-Za-z]{1,4})?(?=[\s,.]|$)/g, (m, a, b, o, puerta) =>
+    (parseInt(a + b, 10) > 12 ? `${a}, ${b}º${puerta ? ` ${puerta.toUpperCase()}` : ''}` : m))
+  s = s.replace(/\b(\d{1,4})\s+(\d{1,2})\s*([A-H])\s*$/i, (m, n, piso, puerta) => `${n}, ${piso}º ${puerta.toUpperCase()}`)
+  s = s.replace(/\b(\d{1,4})\s+(\d{1,2})\s*([ºª°])/g, '$1, $2º')
+  return s.replace(/\s+,/g, ',')
 }
 
 export function interpretaTicket(texto, pais = 'es') {
@@ -104,7 +123,7 @@ export function interpretaTicket(texto, pais = 'es') {
     // «AZ 00»); «# 32-16 Apto 501», «, 2º Esq», «- Apto 45» o «3B» son parte de la dirección.
     const direccionConNumero = direccion.match(/^(.+?\b\d{1,4}[A-Z]?\b)(.*)$/i)
     const basura = direccionConNumero && /^\s+(?:[A-Z]{1,4}\s+){1,2}\d{1,4}\s*$/i.test(direccionConNumero[2])
-    out.direccion = basura ? direccionConNumero[1] : direccion
+    out.direccion = arreglaPiso(basura ? direccionConNumero[1] : direccion)
     // El piso, el apartamento o la colonia suelen ir en la línea siguiente («2º B», «Depto 4», «Col. Centro»).
     // El OCR lee a veces «3º» como «3%» o «3o».
     const sig = lineas[iVia + 1] || ''

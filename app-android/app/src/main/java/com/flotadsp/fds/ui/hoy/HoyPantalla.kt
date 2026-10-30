@@ -204,6 +204,7 @@ fun HoyPantalla(
                 e.ruta == null -> SinRuta(e.error ?: tx("No se ha podido cargar tu ruta.")) { vm.cargar() }
                 verMapa -> MapaRuta(e.pendientes, e.ruta?.base, trazado = e.trazado, hechas = e.paradas.filter { !it.pendiente },
                     incidencias = e.incidencias?.incidencias.orEmpty(), zbe = e.zbe?.zonas.orEmpty(), enZbe = e.zbe?.paradas?.keys.orEmpty(),
+                    fuente = e.incidencias?.fuente.orEmpty(), tipoZona = e.zbe?.tipo ?: "ZBE",
                     furgo = furgo, navegarCon = navegarCon, alTocar = { abierta = it },
                     alAparcarEn = { lat, lng -> ambito.launch { app.cuenta.aparcar(lat, lng) } },
                     alQuitarFurgo = { ambito.launch { app.cuenta.quitarFurgo() } }, modifier = Modifier.fillMaxSize())
@@ -235,7 +236,7 @@ fun HoyPantalla(
                     e.pendientes.firstOrNull()?.let { sig ->
                         item(key = "sig-${sig.id}") {
                             Siguiente(
-                                p = sig, numero = sig.orden ?: 1, enZbe = e.zbe?.paradas?.containsKey(sig.id) == true,
+                                p = sig, numero = sig.orden ?: 1, enZbe = e.zbe?.paradas?.get(sig.id)?.tipo.orEmpty(),
                                 alNavegar = { Acciones.navegar(ctx, sig, navegarCon) },
                                 alLlamar = { vm.apuntar(sig, "llamada"); Acciones.llamar(ctx, sig.telefono) },
                                 alWhatsapp = { vm.apuntar(sig, "whatsapp"); Acciones.whatsapp(ctx, sig.telefono, prefijo, textoWhatsapp(sig, empresa)) },
@@ -261,7 +262,7 @@ fun HoyPantalla(
                         if (visibles.isEmpty()) item { Text(tx("Nada con «{q}» en las paradas pendientes.", "q" to buscar), style = MaterialTheme.typography.bodyMedium, modifier = Modifier.padding(8.dp)) }
                         items(visibles, key = { it.value.id }) { iv ->
                             val p = iv.value
-                            Fila(p, numero = p.orden ?: (if (hayOrden) null else iv.index + 2), enZbe = e.zbe?.paradas?.containsKey(p.id) == true, alTocar = { abierta = p })
+                            Fila(p, numero = p.orden ?: (if (hayOrden) null else iv.index + 2), enZbe = e.zbe?.paradas?.get(p.id)?.tipo.orEmpty(), alTocar = { abierta = p })
                         }
                     }
                     if (e.hechas.isNotEmpty()) {
@@ -309,6 +310,7 @@ private fun Resumen(
     /** DÓNDE APARQUÉ (30-10-2026): el punto de la furgoneta, y el camino a pie hasta ella. */
     furgo: Furgo? = null, alAparcar: () -> Unit = {}, alQuitarFurgo: () -> Unit = {}, alIrAPie: () -> Unit = {},
 ) {
+    val ctx = LocalContext.current
     val total = e.paradas.size
     val hechas = e.hechas.size
     // EL RETRASO (30-10-2026): la hora prevista de la siguiente parada frente a la de ahora, solo con la ruta de hoy.
@@ -363,6 +365,25 @@ private fun Resumen(
                         listOfNotNull(tx("Hoy llevas {x}", "x" to Region.importe(cent / 100.0)),
                             perdido.takeIf { it > 0 }?.let { if (fallidas == 1) tx("1 sin entregar = {euros} sin cobrar", "euros" to Region.importe(it / 100.0)) else tx("{n} sin entregar = {euros} sin cobrar", "n" to fallidas, "euros" to Region.importe(it / 100.0)) }).joinToString(" · "),
                         style = MaterialTheme.typography.bodyMedium.merge(TextoNumero), color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+            }
+        }
+        // RESTRICCIONES POR PLACA (30-10-2026): rodízio, Hoy No Circula, pico y placa… lo que dice la norma de hoy en su
+        // ciudad y, si puso la placa en Ajustes, si le toca; donde la regla cambia por temporada, el enlace oficial.
+        e.incidencias?.avisos?.forEach { a ->
+            Spacer(Modifier.height(10.dp))
+            val (fondo, tinta) = when {
+                a.hoy == true -> MaterialTheme.colorScheme.errorContainer to MaterialTheme.colorScheme.onErrorContainer
+                a.hoy == false && a.digitos.isNotEmpty() -> LocalExtra.current.entregado.copy(alpha = 0.15f) to MaterialTheme.colorScheme.onSurface
+                else -> MaterialTheme.colorScheme.tertiaryContainer to MaterialTheme.colorScheme.onTertiaryContainer
+            }
+            Surface(color = fondo, contentColor = tinta, shape = MaterialTheme.shapes.medium, onClick = { if (a.url.isNotBlank()) Acciones.abrirWeb(ctx, a.url) }) {
+                Column(Modifier.padding(12.dp)) {
+                    Text("${a.ciudad} · ${a.titulo}", style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Bold)
+                    Text(a.texto, style = MaterialTheme.typography.bodySmall)
+                    if (a.hoy == true) Text(tx("Hoy tu placa no puede circular."), style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Bold)
+                    else if (a.hoy == false && a.digitos.isNotEmpty()) Text(tx("Tu placa sí puede circular hoy."), style = MaterialTheme.typography.bodySmall)
+                    if (a.url.isNotBlank()) Text(tx("Fuente oficial"), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.primary)
                 }
             }
         }
@@ -437,7 +458,8 @@ private fun Previas(n: Int, alTraer: () -> Unit) {
 /** El bono de bienvenida de quien reparte por su cuenta: cuánto le falta, o que ya lo tiene. */
 @Composable
 private fun BonoCard(b: Bono) {
-    val euros = Region.importe(b.cent / 100.0)
+    // Siempre en euros, como la web (eurosRef): el bono lo paga FDS en euros sea cual sea el país de la cuenta (30-10-2026).
+    val euros = "${"%.2f".format(LOCALE_APP, b.cent / 100.0)} €"
     Surface(color = MaterialTheme.colorScheme.tertiaryContainer, contentColor = MaterialTheme.colorScheme.onTertiaryContainer, shape = MaterialTheme.shapes.medium) {
         Row(Modifier.fillMaxWidth().padding(14.dp), verticalAlignment = Alignment.CenterVertically) {
             Icon(Icons.Default.CardGiftcard, contentDescription = null)
@@ -505,7 +527,7 @@ private fun Numero(n: Int?, grande: Boolean = false, hecho: Boolean = false) {
 }
 
 @Composable
-fun Etiquetas(p: Parada, enZbe: Boolean = false) {
+fun Etiquetas(p: Parada, enZbe: String = "") {
     val x = LocalExtra.current
     FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
         p.eta?.let { Chip("≈ $it", MaterialTheme.colorScheme.secondaryContainer, MaterialTheme.colorScheme.onSecondaryContainer) }
@@ -516,7 +538,7 @@ fun Etiquetas(p: Parada, enZbe: Boolean = false) {
         // LA PUERTA APRENDIDA, el retraso y la ZBE (30-10-2026).
         if (p.geo == "puerta" && p.pendiente) Chip(tx("Puerta conocida"), x.entregado.copy(alpha = 0.15f), MaterialTheme.colorScheme.onSurface)
         if ((p.tardeMin ?: 0) > 0 && p.pendiente) Chip(tx("llega {n} min tarde", "n" to p.tardeMin), MaterialTheme.colorScheme.errorContainer, MaterialTheme.colorScheme.onErrorContainer)
-        if (enZbe && p.pendiente) Chip("ZBE", MaterialTheme.colorScheme.tertiaryContainer, MaterialTheme.colorScheme.onTertiaryContainer)
+        if (enZbe.isNotBlank() && p.pendiente) Chip(enZbe, MaterialTheme.colorScheme.tertiaryContainer, MaterialTheme.colorScheme.onTertiaryContainer)
     }
 }
 
@@ -529,7 +551,7 @@ private fun Chip(t: String, fondo: androidx.compose.ui.graphics.Color, tinta: an
 
 @Composable
 private fun Siguiente(
-    p: Parada, numero: Int, enZbe: Boolean = false,
+    p: Parada, numero: Int, enZbe: String = "",
     alNavegar: () -> Unit, alLlamar: () -> Unit, alWhatsapp: () -> Unit, alEntregar: () -> Unit, alFallar: () -> Unit, alAbrir: () -> Unit,
 ) {
     val x = LocalExtra.current
@@ -586,7 +608,7 @@ private fun Siguiente(
 }
 
 @Composable
-fun Fila(p: Parada, numero: Int?, enZbe: Boolean = false, alTocar: () -> Unit) {
+fun Fila(p: Parada, numero: Int?, enZbe: String = "", alTocar: () -> Unit) {
     Surface(onClick = alTocar, color = MaterialTheme.colorScheme.surfaceContainerLowest, shape = MaterialTheme.shapes.medium) {
         Row(Modifier.fillMaxWidth().padding(14.dp), verticalAlignment = Alignment.CenterVertically) {
             Numero(numero, hecho = !p.pendiente)
@@ -597,7 +619,7 @@ fun Fila(p: Parada, numero: Int?, enZbe: Boolean = false, alTocar: () -> Unit) {
                     Text(p.direccion, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant,
                         maxLines = 1, overflow = TextOverflow.Ellipsis)
                 }
-                if (p.pendiente && (p.eta != null || p.porCobrar || p.prioridad || !p.ubicada || p.geo == "puerta" || enZbe || (p.tardeMin ?: 0) > 0)) { Spacer(Modifier.height(4.dp)); Etiquetas(p, enZbe) }
+                if (p.pendiente && (p.eta != null || p.porCobrar || p.prioridad || !p.ubicada || p.geo == "puerta" || enZbe.isNotBlank() || (p.tardeMin ?: 0) > 0)) { Spacer(Modifier.height(4.dp)); Etiquetas(p, enZbe) }
                 if (!p.pendiente) {
                     // Con la hora (30-10-2026): «Entregado · 11:02», como en la web.
                     val hora = Calle.hora(p.cerradoEn).takeIf { it.isNotBlank() }?.let { " · $it" } ?: ""

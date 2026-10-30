@@ -106,23 +106,39 @@ data class Incidencia(
     val id: String = "", val clase: String = "", val que: String = "", val gravedad: String = "", val carretera: String = "",
     val pk: String = "", val municipio: String = "", val lat: Double, val lng: Double, val lat2: Double? = null, val lng2: Double? = null,
     @SerialName("distancia_km") val distanciaKm: Double? = null, val parada: Int? = null,
+    /** Lo que escribe el gestor de la vía, en su idioma (Bison Futé, NDW, WZDx); la DGT no lo trae. */
+    val texto: String = "",
 )
 
 @Serializable
-data class Incidencias(val incidencias: List<Incidencia> = emptyList(), val publicado: String = "", val incompleto: Boolean = false)
+data class Incidencias(
+    val incidencias: List<Incidencia> = emptyList(), val publicado: String = "", val incompleto: Boolean = false,
+    /** La fuente de ese país (DGT, Bison Futé, NDW, WZDx…), o nada si no hay (30-10-2026); `aplica` dice si hay fuente. */
+    val fuente: String? = null, val aplica: Boolean = true,
+    /** Las restricciones por placa de la ciudad de la ruta (rodízio, Hoy No Circula, pico y placa…). */
+    val avisos: List<AvisoPlaca> = emptyList(),
+)
+
+/** Una restricción por placa para hoy: `hoy` true si la placa de Ajustes no puede circular, false si puede, null si no se sabe. */
+@Serializable
+data class AvisoPlaca(val ciudad: String = "", val titulo: String = "", val texto: String = "", val url: String = "", val hoy: Boolean? = null,
+                 val digitos: List<String> = emptyList())
 
 @Serializable
 data class ZonaZbe(
     val id: String = "", val ciudad: String = "", val nombre: String = "", val descripcion: String = "", val estado: String = "",
     val url: String = "", val version: String = "", val etiquetas: List<String> = emptyList(),
     val poligonos: List<List<List<Double>>> = emptyList(),
+    /** ZBE, ZFE, ULEZ, LEZ, ZES, Umweltzone, ZTL… y de dónde sale (dgt, bnzfe, ndw, gla, osm). */
+    val tipo: String = "ZBE", val fuente: String = "",
 )
 
 @Serializable
-data class ZonaParada(val id: String = "", val nombre: String = "")
+data class ZonaParada(val id: String = "", val nombre: String = "", val tipo: String = "ZBE")
 
 @Serializable
-data class Zbe(val zonas: List<ZonaZbe> = emptyList(), val paradas: Map<String, ZonaParada> = emptyMap(), val incompleto: Boolean = false)
+data class Zbe(val zonas: List<ZonaZbe> = emptyList(), val paradas: Map<String, ZonaParada> = emptyMap(), val incompleto: Boolean = false,
+               val fuente: String? = null, val aplica: Boolean = true, val tipo: String = "ZBE")
 
 /** DÓNDE APARQUÉ (30-10-2026): el punto de la furgoneta al bajarse; vive solo en el móvil. */
 @Serializable

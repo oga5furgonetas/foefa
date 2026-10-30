@@ -113,6 +113,40 @@ def distancia_km(a, b) -> float:
     return 2 * r * math.asin(min(1.0, math.sqrt(h)))
 
 
+# EL PISO FUERA DEL BUSCADOR (30-10-2026; Dani: «número 2, primero B, hay veces que lee número 21»). Nominatim y
+# Photon no entienden «2 1º B»: con el piso y la puerta dentro de la consulta, unas veces no encontraban nada y otras
+# leían «21». Aquí se busca solo la calle con su número (y la población): lo demás se queda en la parada, no en la
+# consulta. Vale para los formatos de cada país: «Apt 4B» (EE. UU.), «Apto 45» (Brasil), «Int. 3» (México), «2e
+# étage» (Francia), «2. OG» (Alemania), «Flat 3» (Reino Unido); y «Carrera 7 # 32-16» (Colombia) se queda entero,
+# porque ahí el «#» es el número.
+_PISO_RE = re.compile(
+    r"(?:^|[\s,])(?:\d{1,3}\s*[ºª°]|\d+(?:er|e|ème|st|nd|rd|th)\b|\d+\.\s*(?:og|stock|etage)|piso|planta|pta\.?|puerta|esc\.?|escalera|bajo|bj\.?|entlo\.?|"
+    r"entresuelo|[áa]tico|s[óo]tano|izq\.?|izda\.?|dcha\.?|der\.?|dcho\.?|ctro\.?|apto\.?|apt\.?|apartamento|apartment|appt\.?|depto\.?|dpto\.?|"
+    r"departamento|int\.?|interior|bloque|blq\.?|torre|unit|suite|ste\.?|floor|fl\.?|flat|local|oficina|of\.?|room|rm\.?|[ée]tage|[ée]tg\.?|"
+    r"b[âa]t\.?|b[âa]timent|stock|og|wohnung|whg\.?|andar|sala|edif\.?|edificio|portal)(?=[\s,.:]|$)", re.I)
+
+
+def direccion_para_buscar(direccion) -> str:
+    """«Rúa Real 2, 1º B» → «Rúa Real 2»; «123 Main St Apt 4B, Springfield» → «123 Main St, Springfield»;
+    «Rua das Flores, 123 - Apto 45, Bairro X» → «Rua das Flores, 123, Bairro X». Cada trozo (por comas) se corta
+    donde empieza el piso; un trozo que solo era piso desaparece."""
+    partes = []
+    for trozo in re.split(r"\s*[,;]\s*|\s+-\s+", str(direccion or "")):
+        s = trozo.strip()
+        if not s:
+            continue
+        m = _PISO_RE.search(s)
+        if m:
+            s = s[:m.start()].strip(" ,.-")
+        # «2 1 B» (el OCR se comió el «º»): número, piso y puerta → solo el número.
+        s = re.sub(r"\b(\d{1,4})\s+\d{1,2}\s*[A-Ha-h]$", r"\1", s).strip()
+        # Una letra suelta tras el número («2 B») es la puerta, no parte del número; «2B» pegado se queda.
+        s = re.sub(r"\b(\d{1,4})\s+[A-Ha-h]$", r"\1", s).strip()
+        if s:
+            partes.append(s)
+    return ", ".join(partes)
+
+
 def clave_direccion(texto) -> str:
     """La misma puerta escrita de dos maneras («Rúa Real 22, A Coruña» y «rua real 22 a coruña») da la misma
     clave: sin acentos, en minúscula y solo letras y cifras."""
@@ -606,19 +640,33 @@ def caducado(pedido: dict, hoy_iso: str, dias: int = DIAS_CONSERVAR) -> bool:
 
 
 # ── LEER EL TICKET CON IA ─────────────────────────────────────────────────────
-PROMPT_TICKET = """Eres un lector de tickets y etiquetas de reparto en España.
+PROMPT_TICKET = """Eres un lector de tickets y etiquetas de reparto en {pais}.
 En la imagen hay un ticket de caja, un albarán o una etiqueta pegada a una caja.
 Saca SOLO lo que se lee; si algo no está, déjalo vacío. No inventes nada.
 Devuelve exactamente este JSON:
-{"codigo": "número del código de barras o del pedido/ticket, solo dígitos y letras",
+{{"codigo": "número del código de barras o del pedido/ticket, solo dígitos y letras",
  "cliente": "nombre del cliente o negocio de destino",
  "telefono": "teléfono de contacto",
- "direccion": "calle, número, piso y puerta",
+ "direccion": "calle y número; si hay piso o puerta, después de una coma (ej. 'Rúa Real 2, 1º B'); nunca juntes el número con el piso",
  "cp": "código postal",
  "localidad": "población",
  "contenido": "qué lleva, resumido (p. ej. '3 cajas, 2 packs de agua, leche')",
  "bultos": número de bultos si se indica o 1,
- "notas": "horario o indicaciones de entrega si las hay"}"""
+ "notas": "horario o indicaciones de entrega si las hay"}}"""
+
+NOMBRES_PAIS_PROMPT = {
+    "es": "España", "mx": "México", "ar": "Argentina", "co": "Colombia", "cl": "Chile", "pe": "Perú", "ve": "Venezuela", "ec": "Ecuador",
+    "bo": "Bolivia", "py": "Paraguay", "uy": "Uruguay", "cr": "Costa Rica", "pa": "Panamá", "gt": "Guatemala", "hn": "Honduras",
+    "sv": "El Salvador", "ni": "Nicaragua", "do": "República Dominicana", "pr": "Puerto Rico", "cu": "Cuba", "br": "Brasil", "cn": "China",
+    "pt": "Portugal", "fr": "Francia", "it": "Italia", "de": "Alemania", "gb": "Reino Unido", "ie": "Irlanda", "be": "Bélgica",
+    "nl": "Países Bajos", "ch": "Suiza", "at": "Austria", "ad": "Andorra", "us": "Estados Unidos",
+}
+
+
+def prompt_ticket(pais: str = "es") -> str:
+    """El prompt de la etiqueta para el país de la cuenta (30-10-2026): la IA sabe así qué forma tienen los
+    teléfonos, los códigos postales y las direcciones («123 Main St», «Hauptstraße 12»)."""
+    return PROMPT_TICKET.format(pais=NOMBRES_PAIS_PROMPT.get((pais or "es").lower(), "el país del repartidor"))
 
 
 def limpia_ticket(d) -> dict:
@@ -901,17 +949,38 @@ def respuesta_cliente(data) -> tuple:
     return r, ""
 
 
-def texto_respuesta(r: dict, quien: str = "") -> str:
-    """Lo que se le dice al repartidor: «Lucía M.: no estará, déjalo en portería · portal 1234»."""
+# El aviso al móvil del repartidor, en el idioma de su cuenta (30-10-2026): un repartidor de EE. UU. no recibe un
+# aviso en español. Mismas claves que DEJAR_CLIENTE.
+T_CLIENTE_CONTESTO = {"es": "El cliente ha contestado", "en": "The customer has replied", "pt": "O cliente respondeu",
+                      "fr": "Le client a répondu", "it": "Il cliente ha risposto", "de": "Der Kunde hat geantwortet"}
+_T_RESPUESTA = {
+    "es": {"si": "estará en casa", "no": "no estará: déjalo {d}", "franja": "mejor de {a} a {b}", "portal": "portal: {p}", "donde": "donde diga",
+           "buzon": "en el buzón", "porteria": "en portería", "vecino": "a un vecino", "seguro": "en un lugar seguro", "punto_recogida": "en un punto de recogida"},
+    "en": {"si": "will be at home", "no": "will be out: leave it {d}", "franja": "better between {a} and {b}", "portal": "door code: {p}", "donde": "where they say",
+           "buzon": "in the mailbox", "porteria": "with the doorman or reception", "vecino": "with a neighbour", "seguro": "in a safe place", "punto_recogida": "at a pickup point"},
+    "pt": {"si": "estará em casa", "no": "não estará: deixe {d}", "franja": "melhor das {a} às {b}", "portal": "código da porta: {p}", "donde": "onde disser",
+           "buzon": "na caixa do correio", "porteria": "na portaria", "vecino": "com um vizinho", "seguro": "num lugar seguro", "punto_recogida": "num ponto de recolha"},
+    "fr": {"si": "sera chez lui", "no": "sera absent : déposez-le {d}", "franja": "plutôt entre {a} et {b}", "portal": "code : {p}", "donde": "où il l’indique",
+           "buzon": "dans la boîte aux lettres", "porteria": "à la loge ou à l’accueil", "vecino": "chez un voisin", "seguro": "dans un endroit sûr", "punto_recogida": "dans un point relais"},
+    "it": {"si": "sarà in casa", "no": "non ci sarà: lascialo {d}", "franja": "meglio dalle {a} alle {b}", "portal": "codice portone: {p}", "donde": "dove indica",
+           "buzon": "nella cassetta della posta", "porteria": "in portineria", "vecino": "a un vicino", "seguro": "in un posto sicuro", "punto_recogida": "in un punto di ritiro"},
+    "de": {"si": "ist zu Hause", "no": "ist nicht da: {d} abstellen", "franja": "besser zwischen {a} und {b}", "portal": "Türcode: {p}", "donde": "wo angegeben",
+           "buzon": "im Briefkasten", "porteria": "beim Pförtner oder Empfang", "vecino": "beim Nachbarn", "seguro": "an einem sicheren Ort", "punto_recogida": "an einer Abholstation"},
+}
+
+
+def texto_respuesta(r: dict, quien: str = "", idioma: str = "es") -> str:
+    """Lo que se le dice al repartidor: «Lucía M.: no estará: déjalo en portería · portal: 1234», en su idioma."""
+    T = _T_RESPUESTA.get(idioma) or _T_RESPUESTA["es"]
     partes = []
     if r.get("estare") == "si":
-        partes.append("estará en casa")
+        partes.append(T["si"])
     elif r.get("estare") == "no":
-        partes.append("no estará: déjalo " + DEJAR_CLIENTE.get(r.get("dejar") or "", "donde diga"))
+        partes.append(T["no"].format(d=T.get(r.get("dejar") or "", T["donde"])))
     elif r.get("franja"):
-        partes.append(f"mejor de {r['franja'][0]} a {r['franja'][1]}")
+        partes.append(T["franja"].format(a=r["franja"][0], b=r["franja"][1]))
     if r.get("portal"):
-        partes.append(f"portal: {r['portal']}")
+        partes.append(T["portal"].format(p=r["portal"]))
     if r.get("nota"):
         partes.append(f"«{r['nota']}»")
     texto = " · ".join(partes)
@@ -1177,6 +1246,6 @@ def zbe_de_paradas(zonas, paradas) -> dict:
             if not en_caja(q[0], q[1], z["caja"]):
                 continue
             if any(punto_en_poligono(q[0], q[1], pol) for pol in z["poligonos"]):
-                out[p["id"]] = {"id": z["id"], "nombre": z["nombre"]}
+                out[p["id"]] = {"id": z["id"], "nombre": z["nombre"], "tipo": z.get("tipo") or "ZBE"}
                 break
     return out

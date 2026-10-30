@@ -5,7 +5,7 @@
 > haz commit y `git push`. Una sola sesión trabajando a la vez: antes de
 > empezar, `git pull` y comprueba que nadie ha dejado nada a medias aquí.
 
-Última actualización: **30-10-2026 (mañana)**: «arréglalo todo y, sin bugs ni falsos positivos, despliega y saca el AAB»: hecho. La nativa entera en 5 idiomas (538 textos), la DGT solo en España, la línea de la ruta como un navegador, páginas legales en inglés, scripts de despliegue para este PC; verificado todo; **FDS 2.4.0 (code 19) compilada y firmada** en `C:\Users\dlvie\Downloads\`; web (bundle `index-DwjWrQSV.js`, APK 2.4.0 en `/descargas/FDS.apk`, 21,8 MB) y backend (`/api/health` ok, `/api/app/version` → 19 / 2.4.0 con `APP_ANDROID_WEB="19 2.4.0"`, el endpoint nuevo contesta 401 sin sesión), a las 09:25-09:35 del 30-10. (ver «Última sesión — 30-10-2026 (mañana)»). Anterior: **30-10-2026 (madrugada, 3)**: FDS preparada para fuera de España: la app nativa en el idioma del móvil (en, pt, fr, it, de), el plan en la moneda del país, millas en EE. UU. y Reino Unido, la ficha de Play en 7 idiomas y el informe por mercados `docs/EXPANSION-INTERNACIONAL-30-10.md`; nada desplegado (ver «Última sesión — 30-10-2026 (madrugada, 3)»). Anterior: **30-10-2026 (madrugada, 2)**: la tanda A de lo que pide la calle HECHA en servidor, web y app nativa, y el mapa que responde (iconos en vectores e interacciones, Dani: «mejora los emoticonos e interacciones con el mapa»); nada desplegado, lo decide Dani (ver «Última sesión — 30-10-2026 (madrugada, 2)»). Anterior: **29-10-2026 (noche, 4)**: FDS en todo, fuera Valor y China, avisos al móvil, app 2.3.0; fusionado en `main`, desplegado y verificado (ver «Última sesión — 29-10-2026 (noche, 4)»). Anterior: **29-10-2026 (noche, 3)** (fusionadas en `main` dos sesiones de la noche: la del servidor y la app 2.2.5 —sección «(noche): fase 0…»— y la del anuncio con la VOZ DE DANI y el mapa real de A Coruña, montado en `docs/anuncios/spot-dani/salida/`; ver «Última sesión»). Antes, noche: (anuncio «La ruta hecha»: guion para IA en `docs/anuncios/super-anuncio/` y generaciones en Artlist). Antes, tarde: (el CI de `main` llevaba desde el 18-10 en rojo; checkers arreglados de raíz y todo el CI en verde en local; ver «Última sesión»). Por la mañana: FDS 2.2.3 compilada, probada y firmada, el AAB listo para Play (ver «29-10-2026 (mañana)»).
+Última actualización: **30-10-2026 (mediodía)**: «si no hay DGT en los otros países, algo que se adecue a esos países… que el pago, la moneda y todo tenga sentido… y que las etiquetas lean bien el piso»: hecho. Cortes y obras de Bison Futé (FR), NDW (NL) y WZDx (EE. UU.), zonas ZFE/ULEZ/LEZ/milieuzone/Umweltzone/ZTL por país, restricciones por placa en Latinoamérica, Stripe en la moneda del país, el piso leído bien en etiquetas y QR de 13 países, y los mensajes del servidor en el idioma del móvil en la nativa. **FDS 2.4.0 (code 19) recompilada y firmada**; SIN desplegar: el modo auto bloqueó `deploy-frontend.ps1` y `deploy-backend.ps1` las dos veces («Production Deploy»); los lanza Dani (ver Pendiente -12) y hasta entonces producción sigue con lo de las 09:35 (sin fuentes de otros países). El AAB y el APK nuevos (firmados, 11:00) están en `C:\Users\dlvie\Downloads\FDS-2.4.0-code19.aab` y `FDS-2.4.0.apk` (ver «Última sesión — 30-10-2026 (mediodía)»). Anterior: **30-10-2026 (mañana)**: «arréglalo todo y, sin bugs ni falsos positivos, despliega y saca el AAB»: hecho. La nativa entera en 5 idiomas (538 textos), la DGT solo en España, la línea de la ruta como un navegador, páginas legales en inglés, scripts de despliegue para este PC; verificado todo; **FDS 2.4.0 (code 19) compilada y firmada** en `C:\Users\dlvie\Downloads\`; web (bundle `index-DwjWrQSV.js`, APK 2.4.0 en `/descargas/FDS.apk`, 21,8 MB) y backend (`/api/health` ok, `/api/app/version` → 19 / 2.4.0 con `APP_ANDROID_WEB="19 2.4.0"`, el endpoint nuevo contesta 401 sin sesión), a las 09:25-09:35 del 30-10. (ver «Última sesión — 30-10-2026 (mañana)»). Anterior: **30-10-2026 (madrugada, 3)**: FDS preparada para fuera de España: la app nativa en el idioma del móvil (en, pt, fr, it, de), el plan en la moneda del país, millas en EE. UU. y Reino Unido, la ficha de Play en 7 idiomas y el informe por mercados `docs/EXPANSION-INTERNACIONAL-30-10.md`; nada desplegado (ver «Última sesión — 30-10-2026 (madrugada, 3)»). Anterior: **30-10-2026 (madrugada, 2)**: la tanda A de lo que pide la calle HECHA en servidor, web y app nativa, y el mapa que responde (iconos en vectores e interacciones, Dani: «mejora los emoticonos e interacciones con el mapa»); nada desplegado, lo decide Dani (ver «Última sesión — 30-10-2026 (madrugada, 2)»). Anterior: **29-10-2026 (noche, 4)**: FDS en todo, fuera Valor y China, avisos al móvil, app 2.3.0; fusionado en `main`, desplegado y verificado (ver «Última sesión — 29-10-2026 (noche, 4)»). Anterior: **29-10-2026 (noche, 3)** (fusionadas en `main` dos sesiones de la noche: la del servidor y la app 2.2.5 —sección «(noche): fase 0…»— y la del anuncio con la VOZ DE DANI y el mapa real de A Coruña, montado en `docs/anuncios/spot-dani/salida/`; ver «Última sesión»). Antes, noche: (anuncio «La ruta hecha»: guion para IA en `docs/anuncios/super-anuncio/` y generaciones en Artlist). Antes, tarde: (el CI de `main` llevaba desde el 18-10 en rojo; checkers arreglados de raíz y todo el CI en verde en local; ver «Última sesión»). Por la mañana: FDS 2.2.3 compilada, probada y firmada, el AAB listo para Play (ver «29-10-2026 (mañana)»).
 
 ## Qué es y dónde está
 
@@ -1270,14 +1270,83 @@ Dani: «Arréglalo todo y cuando esté sin bugs ni falsos positivos lo despliega
   páginas legales en inglés son traducción de cortesía sin jurista; `aligera_linea` a 4 m no se ha medido en una ruta
   de 80 paradas (tope 4000 puntos, intacto); el AAB no se ha subido a Play (lo sube Dani; el CI lo firma también).
 
+## Última sesión — 30-10-2026 (mediodía, PC de Dani): fuera de España con las fuentes de cada país, la placa, el pago en la moneda y el piso bien leído
+
+Dani: «si no hay DGT en los otros países, para los otros idiomas, debería haber algo que se adecue a esos países, o
+incluso que nos dé más funciones… verifícame que todas las aplicaciones en los otros países funcionen correctamente,
+el sistema de pago, la moneda… que si un tío es de Estados Unidos le funcione como debe de ser en Estados Unidos, no
+que le aparezca algo de España ni se le mezcle nada… no me crees bugs nuevos» y «verifica también que etiquetas de
+otros países o QR leen bien la dirección: número 2, primero B, a veces lee número 21». Hecho sobre `main`:
+- **Fuentes de cada país** (`backend/trafico.py`, nuevo y puro; en `server.py` `_fuente()` descarga con caché por URL
+  y candado, `_incidencias_pais()` y `_zonas_pais()` eligen por el país de la cuenta; `tests/test_trafico.py` con
+  muestras REALES recortadas en `tests/muestras/`). Todo abierto y sin clave, comprobado en vivo el 30-10:
+  - Cortes y obras: España DGT (como estaba); Francia **Bison Futé** (DATEX II v2, red nacional, 4.469 registros);
+    Países Bajos **NDW** (`actueel_beeld.xml.gz`, DATEX v3, 1.341 incidencias; 30 cerca de Ámsterdam); EE. UU.
+    **WZDx** con 15 feeds estatales sin clave probados uno a uno (MN, MD, MO, AZ, HI, WA, KY, KS, DE, LA, ID, IN,
+    NH/VT/ME, MS, ND; se eligen por la caja del estado donde caen las paradas; Seattle: 287 obras de WSDOT, 24 cerca).
+    Sin feed abierto (Reino Unido pide clave en National Highways; Alemania, Italia, Portugal, Latinoamérica): el
+    servidor contesta `aplica: false` y la app NO dice nada (ni «ninguna cerca»: eso era el falso positivo).
+  - Zonas: Francia **ZFE** (base nacional BNZFE en data.gouv.fr, con la regla Crit'Air del día en francés); Países
+    Bajos milieuzones y **ZES** (`emissiezones.xml.gz`); Londres **ULEZ + LEZ** (capas ArcGIS del GLA, 43.000 puntos
+    simplificados); Alemania, Italia, Bélgica, Austria, Portugal, Suiza, Irlanda y Andorra por **OSM**
+    (`boundary=low_emission_zone`, Overpass con dos servidores; si no contesta, `incompleto: true` y la app dice que
+    no se han podido comprobar). Cada país con su nombre: ZBE, ZFE, Milieuzone, LEZ, Umweltzone, ZTL, ZER.
+  - Restricciones por placa (`normas_hoy`): rodízio de São Paulo, Hoy No Circula de CDMX (con el engomado), pico y
+    placa de Quito y de San José; Bogotá, Medellín y Santiago solo con el enlace oficial (cambian por temporada). La
+    cuenta guarda la placa (Ajustes, web y nativa: «Matrícula / placa (opcional)») y Hoy dice «Hoy tu placa no puede
+    circular» o «sí puede», con la fuente.
+  - Respuestas: `/reparto/mi-ruta/incidencias` → `{incidencias, fuente, publicado, incompleto, aplica, avisos}`;
+    `/zbe` → `{zonas (tipo, fuente), paradas, fuente, incompleto, aplica, tipo}`. La web (`MapaReparto`, `MiRuta`) y la
+    nativa (`MapaRuta`, `HoyPantalla`) pintan la fuente de verdad («WZDx · 24 cerca», «Bison Futé…») y el tipo de
+    zona, y traducen el `que` por partes (`queIncidencia`).
+- **El pago en la moneda del país**: Checkout de Stripe manda `currency` (USD, GBP, MXN, BRL, COP, CLP…) cuando el
+  país de la cuenta no es de euro y hay precio en `PRECIOS_REPARTIDOR`; si Stripe lo rechaza, se reintenta en euros.
+  Los `currency_options` de los dos Price se ponen con `backend/scripts/stripe_monedas.py` desde Fly (lee las claves
+  del entorno, nunca escritas; `--aplicar` para ponerlas). Todavía SIN aplicar: el script viaja en la imagen de Fly y se ejecuta después del despliegue del backend (`fly ssh console -a flota-backend -C "python scripts/stripe_monedas.py"` para ver y `--aplicar` para poner); mientras, Checkout pide la moneda y, si el Price no la tiene, Stripe la rechaza y el servidor reintenta en euros (probado en el test, no contra Stripe).
+- **Etiquetas y QR de otros países, y el piso** (`frontend/src/lib/interpretaEtiqueta.js` y
+  `etiqueta/LectorEtiqueta.kt`, iguales): `arreglaPiso` («Rúa Real 21º B» → «Rúa Real 2, 1º B»; «2 1 B» → «2, 1º B»);
+  vías, pisos, teléfonos y códigos postales de FR, DE, NL, GB, IE, BE, CH, AT, AD, IT, PT y 15 países de
+  Latinoamérica; el buscador recibe la dirección SIN piso ni puerta (`reparto.direccion_para_buscar` en
+  `_rep_ubicar`: antes «2, 1º B» confundía a Nominatim) y la IA de la foto va con el país de la cuenta
+  (`reparto.prompt_ticket`). 10 casos nuevos en `check-leer-etiqueta` (23 etiquetas de 13 países) y en
+  `LectorEtiquetaTest`.
+- **Que no se mezcle nada**: nombres de país en el idioma de la app (`Intl.DisplayNames` en la web,
+  `Locale.getDisplayCountry` en la nativa, lista ordenada con `Collator`); `Region.locale` de la nativa = idioma de la
+  app + país de la cuenta (números y fechas de allí); el aviso «el cliente contestó» en el idioma de la cuenta
+  (`reparto.T_CLIENTE_CONTESTO`, `texto_respuesta`); **la nativa enseña los mensajes del servidor en el idioma del
+  móvil** (`Api.kt` pasa el `detail` por `tx()`; `nativa-idioma.mjs` mete en `Traducciones.kt` los 54 mensajes del
+  servidor que la web ya traducía; 599 textos); el bono de bienvenida siempre en euros en la nativa, como en la web
+  (salía «$25.00» en EE. UU. y FDS lo paga en euros); el diccionario web con el texto nuevo de «Di cómo ha pagado…
+  Pix» (se había quedado atrás); la dirección de ejemplo de «pegar la lista» por país.
+- **Para probarlo**: `app-android/pruebas/servidor_pruebas.py` siembra también una cuenta de Seattle
+  (`usa@fds.test` / `ruta-de-prueba-1`, 4 paradas, una con cobro, placa, tarifa en dólares); Playwright
+  `frontend/e2e/fuera.spec.js` (un repartidor de Seattle con el navegador en inglés: inglés, millas, dólares, WZDx,
+  sin DGT ni ZBE; portada en dólares y legales en inglés).
+- **Verificado**: los 7 checkers + `check-textos-ruta` (1.142 usados, 1.251 traducidos, sin avisos de «ya no dice») + `check-leer-etiqueta` (23 etiquetas de 13 países y 7 por sus códigos), ESLint (0 errores), `vite build`, Playwright `calle` + `escanear-etiqueta` + `fuera` (10) y `humo` (206) en escritorio; `pytest` entero: **1.295 en verde** (12 min); Gradle `testDebugUnitTest` (17, 0 fallos) + `lintDebug` (0 errores) + `bundleRelease` + `assembleRelease -PsoloMoviles=arm64 -PparaWeb` (el AAB «jar verified», el APK con el MISMO certificado CN=Flota que el servido por la mañana: `apksigner`); `nativa-idioma --comprobar` (599); las fuentes EN VIVO (`prueba_fuentes.py` contra internet: Bison Futé 403 vigentes y la ZFE de París con 2 paradas dentro; NDW 1.341 incidencias, 30 cerca de Ámsterdam, y la ZE de Ámsterdam; ULEZ + LEZ del GLA; WSDOT 287 obras, 24 cerca de Seattle; Hoy No Circula calculado para CDMX; Overpass dio 502 → `incompleto`); el emulador con el sistema en inglés y la cuenta de Seattle: Hoy (inglés, «Collect $24.50», «2 parcels»), el mapa («WZDx · 24 incidents nearby» con las obras de la I-5 pintadas y la línea nueva), Ajustes («Country where you deliver: United States», la placa, «Paid per delivery ($)»), Cuenta, y salir/entrar tres veces, también pasando por el portal del conductor (una vez la ruta no cargó hasta reiniciar la app; no se repitió en dos intentos más). Capturas en `docs/capturas-30-10/app-us-*.png`.
+- **No verificado / límites honestos**: cortes en Reino Unido, Alemania e Italia (no hay feed abierto sin clave:
+  National Highways la da gratis, pedirla); las zonas por OSM dependen de que Overpass conteste (el 30-10 dio 502
+  varias veces: la app lo dice como «no se han podido comprobar»); las restricciones por placa de Bogotá, Medellín y
+  Santiago solo con enlace; los correos de la mañana (`ciclo_correos`) para fr/it/de salen en inglés; Play Billing y
+  precios por país en Play Console sin hacer (Dani); legales en inglés sin jurista; el emulador solo en inglés (EE.
+  UU.) y en español: FR/NL/GB/DE por tests con muestras reales y por la prueba en vivo de las fuentes.
+
 ## Pendiente (por prioridad)
 
+-12. **30-10 mediodía**: fuera de España con las fuentes de cada país HECHO, verificado y compilado; **SIN desplegar**:
+   el modo auto bloqueó los dos scripts de despliegue («Production Deploy»). Falta: (0) Dani, desde la raíz del repo:
+   `.\scripts\deploy-frontend.ps1` (cose el APK nuevo de `app-android\app\build\outputs\apk\release\`) y
+   `.\scripts\deploy-backend.ps1`; después, las monedas en los dos Price de Stripe:
+   `fly ssh console -a flota-backend -C "python scripts/stripe_monedas.py --aplicar"` (primero sin `--aplicar` para ver);
+   (1) subir el AAB nuevo (`FDS-2.4.0-code19.aab`, recompilado a mediodía: el de las 09:14 no lleva esto) a Play Console; (2) pedir
+   la clave gratis de National Highways (Reino Unido) y meter su feed en `trafico.py`; (3) Play Billing y precios por
+   país en Play Console; (4) legales en fr/de/it/pt con jurista; (5) los correos de la mañana en fr/it/de; (6) si
+   Overpass falla mucho, guardar las zonas OSM en Mongo una vez al día. Lo decide Dani.
 -11. **30-10 mañana**: lo de arriba HECHO y desplegado; falta que Dani suba `FDS-2.4.0-code19.aab` a Play Console
    (producción; novedades en `play-listing/NOVEDADES-2.4.0.md`) y, cuando esté publicada, `fly secrets set -a
    flota-backend APP_ANDROID_MIN="2.4.0"` si quiere obligar a actualizar. Siguen pendientes las tandas B-F de -10 (feeds
    de otros países, Stripe `currency_options`/Play Billing, páginas legales en fr/de/it/pt con jurista, capturas por
    idioma y la ficha de Play pegada en cada idioma).
--10. **Fuera de España (30-10 madrugada, 3)**: lo de hoy está hecho y sin desplegar. Siguiente, por orden de
+-10. **Fuera de España (30-10 madrugada, 3)**: lo de la madrugada se desplegó por la mañana; (B) y los `currency_options` de (C) están HECHOS a mediodía (ver -12). Siguiente, por orden de
    `docs/EXPANSION-INTERNACIONAL-30-10.md` §11: (B) feeds de cortes y zonas de Francia (Bison Futé + BNZFE), Reino Unido
    (National Highways + ULEZ), Países Bajos (NDW) y EE. UU. (WZDx) con la `fuente` en pantalla, y las restricciones por
    placa de CDMX, Bogotá, Santiago y São Paulo como aviso con enlace oficial; (C) cobrar: `currency_options` en los dos
