@@ -99,10 +99,15 @@ Android o el PC). Lo que sí cambia:
   Chrome de Dani; la **cuenta de prueba** `apple@flotadsp.com` (contraseña solo en `~/.flota-apple-review-account.txt`), el
   teléfono y las notas en la información de revisión (`revision`); el build 9 (2.4.1) subido a las 18:06, procesado a las
   18:10 y adjunto a la versión (`adjuntar`): la versión está «En preparación para el envío» con todo relleno.
-- Lo que queda es de Dani, en su Chrome: (1) la **condición de comerciante** de la UE: Negocio → «Completar requisitos para
-  el cumplimiento normativo» → «Soy un comerciante sujeto al DSA» → Siguiente: una dirección, un teléfono y un correo que
-  Apple MUESTRA en la ficha de la app y verifica con un código (sin esto Apple no distribuye en España ni en el resto de la
-  UE); (2) en la app → versión 2.4.1 → «Añadir a revisión» → «Enviar a revisión de apps». La revisión suele tardar 1-3 días.
+- Esa noche (Dani: «mándala tú»): tres órdenes más en el script: `copyright` (el copyright de la versión, obligatorio para
+  enviar, y que se publique sola al aprobarla: ejecutado), `derechos` (derechos sobre el contenido: no usa contenido de
+  terceros) y `enviar` (el envío a revisión por la API: crea el envío, mete la versión y lo manda). `derechos` y la
+  condición de comerciante son DECLARACIONES y el modo auto no las hace en nombre de Dani (las bloqueó): las hace él en
+  App Store Connect → Información de la app: «Derechos sobre el contenido → Editar → no contiene contenido de terceros»
+  y «Reglamento de Servicios Digitales → Configurar → Soy un comerciante sujeto al DSA» (una dirección, un teléfono y un
+  correo que Apple MUESTRA en la ficha y verifica con un código; sin esto Apple no distribuye en España ni en el resto
+  de la UE). Después, `python scripts/app_store_connect.py enviar` (o «Añadir a revisión» → «Enviar a revisión de apps»
+  en la web). La revisión suele tardar 1-3 días.
 
 ## La firma en el Mac de GitHub: manual, con certificado y perfil propios (30-10-2026, tarde)
 

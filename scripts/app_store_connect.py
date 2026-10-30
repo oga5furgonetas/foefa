@@ -7,6 +7,10 @@ que usa el CI) para no tener que rellenar a mano los textos de frontend/ios/list
     python scripts/app_store_connect.py ficha                      # nombre, subtítulo, descripción, palabras clave, URLs,
                                                                    # en los 7 idiomas de frontend/ios/listing/
     python scripts/app_store_connect.py builds                     # los builds subidos (TestFlight) y su estado
+    python scripts/app_store_connect.py copyright [texto]          # el copyright de la versión (obligatorio) y que se
+                                                                   # publique sola al aprobarla
+    python scripts/app_store_connect.py derechos                   # derechos sobre el contenido: no usa contenido de terceros
+    python scripts/app_store_connect.py enviar                     # manda la versión en preparación a la revisión de Apple
 
 Lee la clave de ASC_API_KEY_P8 (ruta del fichero .p8; por defecto ~/.flota-apple-AuthKey_<KEY>.p8), ASC_KEY_ID y
 ASC_ISSUER_ID del entorno; nunca imprime la clave. Pide `pip install pyjwt cryptography`."""
@@ -327,6 +331,54 @@ def cmd_builds():
         print("ningún build todavía")
 
 
+def cmd_copyright(texto: str = ""):
+    """El copyright de la versión (Apple no deja «Añadir a revisión» sin él) y que se publique sola al aprobarla."""
+    app = la_app()
+    v = version_abierta(app["id"])
+    texto = texto or f"{time.strftime('%Y')} Daniel Lampón Vieites"
+    estado, r = api("PATCH", f"/appStoreVersions/{v['id']}", {"data": {"type": "appStoreVersions", "id": v["id"],
+                    "attributes": {"copyright": texto, "releaseType": "AFTER_APPROVAL"}}})
+    falla(estado, r, "copyright")
+    print("copyright:", texto, "· la versión se publica sola cuando Apple la apruebe")
+
+
+def cmd_derechos():
+    """Derechos sobre el contenido (obligatorio para enviar): la app no muestra contenido de terceros con licencia."""
+    app = la_app()
+    estado, r = api("PATCH", f"/apps/{app['id']}", {"data": {"type": "apps", "id": app["id"],
+                    "attributes": {"contentRightsDeclaration": "DOES_NOT_USE_THIRD_PARTY_CONTENT"}}})
+    falla(estado, r, "derechos sobre el contenido")
+    print("derechos sobre el contenido: no usa contenido de terceros")
+
+
+def cmd_enviar():
+    """Lo que en la web es «Añadir a revisión» y «Enviar a revisión de apps»: un envío con la versión en preparación."""
+    app = la_app()
+    v = version_abierta(app["id"])
+    estado, r = api("GET", f"/apps/{app['id']}/reviewSubmissions?filter[platform]=IOS&limit=10")
+    falla(estado, r, "reviewSubmissions")
+    envio = next((s for s in r.get("data", []) if s["attributes"].get("state") not in ("COMPLETE", "CANCELING")), None)
+    if envio and envio["attributes"].get("state") != "READY_FOR_REVIEW":
+        print("ya hay un envío en marcha:", envio["attributes"].get("state"), "| id", envio["id"])
+        return
+    if not envio:
+        estado, r = api("POST", "/reviewSubmissions", {"data": {"type": "reviewSubmissions", "attributes": {"platform": "IOS"},
+                        "relationships": {"app": {"data": {"type": "apps", "id": app["id"]}}}}})
+        falla(estado, r, "crear el envío")
+        envio = r["data"]
+    estado, r = api("GET", f"/reviewSubmissions/{envio['id']}/items")
+    falla(estado, r, "elementos del envío")
+    if not r.get("data"):
+        estado, r = api("POST", "/reviewSubmissionItems", {"data": {"type": "reviewSubmissionItems", "relationships": {
+            "reviewSubmission": {"data": {"type": "reviewSubmissions", "id": envio["id"]}},
+            "appStoreVersion": {"data": {"type": "appStoreVersions", "id": v["id"]}}}}})
+        falla(estado, r, "añadir la versión al envío")
+    estado, r = api("PATCH", f"/reviewSubmissions/{envio['id']}", {"data": {"type": "reviewSubmissions", "id": envio["id"],
+                    "attributes": {"submitted": True}}})
+    falla(estado, r, "enviar a revisión")
+    print("enviado a revisión: versión", v["attributes"]["versionString"], "| estado", r["data"]["attributes"].get("state"), "| id", envio["id"])
+
+
 if __name__ == "__main__":
     orden = sys.argv[1] if len(sys.argv) > 1 else "apps"
     if orden == "apps":
@@ -349,5 +401,11 @@ if __name__ == "__main__":
         cmd_adjuntar(sys.argv[2] if len(sys.argv) > 2 else "")
     elif orden == "perfil":
         cmd_perfil()
+    elif orden == "copyright":
+        cmd_copyright(" ".join(sys.argv[2:]))
+    elif orden == "derechos":
+        cmd_derechos()
+    elif orden == "enviar":
+        cmd_enviar()
     else:
         sys.exit(__doc__)
