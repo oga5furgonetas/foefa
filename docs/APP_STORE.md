@@ -99,6 +99,24 @@ Android o el PC). Lo que sí cambia:
   Apps: Ley de Servicios Digitales; sin eso Apple no distribuye en la UE), el cuestionario de **App Privacy** (no tiene
   API) y la **cuenta de prueba** para la revisión; y pulsar «Enviar a revisión».
 
+## La firma en el Mac de GitHub: manual, con certificado y perfil propios (30-10-2026, tarde)
+
+La firma automática con la clave de la API no sirve sin un iPhone registrado en la cuenta: al archivar, Xcode pide un
+perfil de desarrollo y falla con «Your team has no devices» (y si se le fuerza la identidad de distribución,
+«conflicting provisioning settings»). Así que se firma a mano, como hacen los CI de verdad:
+- `python scripts/app_store_connect.py certificado`: crea la clave privada y la CSR en el PC, Apple firma el certificado
+  **Apple Distribution** por la API y queda `~/.flota-apple-dist.p12` (contraseña en `~/.flota-apple-dist-p12.txt`,
+  base64 en `~/.flota-apple-dist.p12.b64`). Apple admite 2-3 certificados de distribución por equipo: no repetir sin
+  borrar el anterior en developer.apple.com → Certificates.
+- `python scripts/app_store_connect.py perfil`: el perfil **FDS App Store** (App Store, `com.flotadsp.fds`, con ese
+  certificado) en `~/.flota-apple-FDS-App-Store.mobileprovision` (+ `.b64`). Caducan el 30-10-2027.
+- Tres secretos más en GitHub: `IOS_DIST_P12_B64` (el `.p12.b64`), `IOS_DIST_P12_PASSWORD` (el `.txt`) e
+  `IOS_PROFILE_B64` (el `.mobileprovision.b64`). El target App lleva en Release `CODE_SIGN_STYLE = Manual`,
+  `Apple Distribution` y ese perfil (`project.pbxproj`); el workflow importa el certificado en un llavero propio,
+  instala el perfil, archiva y exporta con `signingStyle manual` y sube con la clave de la API.
+- Hecho ese día desde la API, sin Xcode: certificado `652QMHW2NZ` y perfil `61c5577a-…`. Los secretos del certificado
+  los tuvo que meter Dani (el modo auto bloqueó escribirlos desde aquí).
+
 ## Por si la revisión pone pegas (lo típico)
 
 - «Minimum functionality / es una web» (4.2): la app escanea con la cámara, usa la ubicación, funciona sin red

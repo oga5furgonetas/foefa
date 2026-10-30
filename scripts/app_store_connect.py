@@ -14,6 +14,7 @@ import json
 import os
 import sys
 import time
+import urllib.parse
 import urllib.request
 from pathlib import Path
 
@@ -240,6 +241,66 @@ def cmd_revision(telefono: str = ""):
     print("información de revisión puesta (contacto, cuenta de prueba", usuario, "y notas)", "+ teléfono" if telefono else "· SIN teléfono todavía")
 
 
+def cmd_certificado():
+    """El certificado «Apple Distribution» del equipo, hecho desde aquí (30-10-2026): clave privada + CSR en este PC,
+    Apple firma el certificado por la API, y se guarda un .p12 (con contraseña generada) para que el Mac de GitHub lo
+    importe. Apple deja 2-3 certificados de distribución por equipo: NO repetir sin borrar el anterior."""
+    import base64, datetime, secrets
+    from cryptography import x509
+    from cryptography.hazmat.primitives import hashes, serialization
+    from cryptography.hazmat.primitives.asymmetric import rsa
+    from cryptography.hazmat.primitives.serialization import pkcs12
+    from cryptography.x509.oid import NameOID
+    casa = Path.home()
+    p12 = casa / ".flota-apple-dist.p12"
+    if p12.exists():
+        sys.exit(f"ya hay un certificado en {p12}: si hace falta otro, bórralo antes (y el de Apple)")
+    clave = rsa.generate_private_key(public_exponent=65537, key_size=2048)
+    csr = (x509.CertificateSigningRequestBuilder()
+           .subject_name(x509.Name([x509.NameAttribute(NameOID.COMMON_NAME, "FDS"), x509.NameAttribute(NameOID.COUNTRY_NAME, "ES")]))
+           .sign(clave, hashes.SHA256()))
+    csr_pem = csr.public_bytes(serialization.Encoding.PEM).decode()
+    estado, r = api("POST", "/certificates", {"data": {"type": "certificates", "attributes": {"certificateType": "DISTRIBUTION", "csrContent": csr_pem}}})
+    falla(estado, r, "crear el certificado")
+    at = r["data"]["attributes"]
+    cert = x509.load_der_x509_certificate(base64.b64decode(at["certificateContent"]))
+    contrasena = secrets.token_urlsafe(18)
+    datos = pkcs12.serialize_key_and_certificates(b"FDS", clave, cert, None, serialization.BestAvailableEncryption(contrasena.encode()))
+    p12.write_bytes(datos)
+    (casa / ".flota-apple-dist.p12.b64").write_text(base64.b64encode(datos).decode(), encoding="utf-8")
+    (casa / ".flota-apple-dist-p12.txt").write_text(contrasena + "\n", encoding="utf-8")
+    print("certificado", r["data"]["id"], at.get("name"), "caduca", at.get("expirationDate"), "· p12 en", p12, "(contraseña en .flota-apple-dist-p12.txt)")
+
+
+def cmd_perfil():
+    """El perfil de aprovisionamiento de App Store para com.flotadsp.fds con el certificado de distribución del equipo;
+    se guarda en ~/.flota-apple-FDS-App-Store.mobileprovision (y en .b64 para el secreto de GitHub)."""
+    import base64
+    estado, r = api("GET", f"/bundleIds?filter[identifier]={BUNDLE}")
+    falla(estado, r, "bundleIds")
+    if not r["data"]:
+        sys.exit("no existe el App ID " + BUNDLE)
+    bundle_id = r["data"][0]["id"]
+    estado, r = api("GET", "/certificates?filter[certificateType]=DISTRIBUTION")
+    falla(estado, r, "certificates")
+    certs = [c["id"] for c in r["data"]]
+    if not certs:
+        sys.exit("no hay certificado de distribución: primero `certificado`")
+    nombre = "FDS App Store"
+    estado, r = api("GET", f"/profiles?filter[name]={urllib.parse.quote(nombre)}")
+    for p in (r.get("data") or []) if estado == 200 else []:
+        api("DELETE", f"/profiles/{p['id']}")   # se rehace con los certificados de ahora
+    estado, r = api("POST", "/profiles", {"data": {"type": "profiles", "attributes": {"name": nombre, "profileType": "IOS_APP_STORE"},
+                                                     "relationships": {"bundleId": {"data": {"type": "bundleIds", "id": bundle_id}},
+                                                                       "certificates": {"data": [{"type": "certificates", "id": c} for c in certs]}}}})
+    falla(estado, r, "crear el perfil")
+    at = r["data"]["attributes"]
+    casa = Path.home()
+    (casa / ".flota-apple-FDS-App-Store.mobileprovision").write_bytes(base64.b64decode(at["profileContent"]))
+    (casa / ".flota-apple-FDS-App-Store.mobileprovision.b64").write_text(at["profileContent"], encoding="utf-8")
+    print("perfil", at.get("name"), at.get("uuid"), "caduca", at.get("expirationDate"), "· guardado en", casa / ".flota-apple-FDS-App-Store.mobileprovision")
+
+
 def cmd_builds():
     app = la_app()
     estado, r = api("GET", f"/builds?filter[app]={app['id']}&sort=-uploadedDate&limit=10")
@@ -267,5 +328,9 @@ if __name__ == "__main__":
         cmd_edad()
     elif orden == "revision":
         cmd_revision(sys.argv[2] if len(sys.argv) > 2 else "")
+    elif orden == "certificado":
+        cmd_certificado()
+    elif orden == "perfil":
+        cmd_perfil()
     else:
         sys.exit(__doc__)
