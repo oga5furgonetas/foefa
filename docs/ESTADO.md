@@ -1331,6 +1331,14 @@ otros países o QR leen bien la dirección: número 2, primero B, a veces lee n�
   precios por país en Play Console sin hacer (Dani); legales en inglés sin jurista; el emulador solo en inglés (EE.
   UU.) y en español: FR/NL/GB/DE por tests con muestras reales y por la prueba en vivo de las fuentes.
 
+## Última sesión — 30-10-2026 (14:45, PC de Dani, bucle de redes): ronda de las 14:00; X programado hasta el L 09-11
+
+- Metricool completo hasta el 09-11; X programado el L 09-11 (sin cobertura en el garaje). Ronda: 5 comentarios en TikTok (es,
+  fr, it; el francés con ofrecimiento público a @jordan.blnc), 2 en YouTube, 2 cuentas seguidas en X. Detalle en
+  `docs/anuncios/redes/REGISTRO-PC.md` (30-10, 14:00).
+- Para Dani: la publicación aprobada en el grupo «Repartidores Paquetería Madrid» dice «7 días gratis» (oferta vieja; la
+  vigente es gratis sin límite hasta el 31-12): corregirla desde su perfil. Instagram está sin sesión en el Chrome del PC 1.
+
 ## Última sesión — 30-10-2026 (13:50, PC de Dani, Chrome del PC 1): los anuncios «La ruta hecha» en 5 idiomas montados en Meta, Spotify Ads y TikTok Ads, en borrador
 
 - Dani: «revísame el anuncio en inglés de Facebook… crea anuncios para varios idiomas y haz lo propio para Spotify Ads + TikTok».

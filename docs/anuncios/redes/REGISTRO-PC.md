@@ -295,3 +295,41 @@ crf 24, 6,5-7,3 MB). **Nada publicado: todo queda en borrador y lo lanza Dani** 
   «Salir del modo de edición en masa» y usar «Continuar»).
 - **No verificado**: que los borradores pasen la revisión de cada plataforma al publicarlos; las voces de oído. Pendiente de Dani:
   pagos de Meta y Spotify, saldo y teléfono de TikTok, y pulsar Publicar / Enviar / Publicar todo cuando quiera lanzar.
+
+## 30-10-2026 (14:00 – 14:45) — ronda del bucle de 4 h (desde el Chrome del PC 1 de Dani)
+
+### Metricool (marca 7741371)
+Completo hasta el L 09-11 en las tres redes (TikTok 18:00 e Instagram 12:00 cada día; YouTube J 30-10, L 02-11, J 05-11 y
+L 09-11; LinkedIn M 04-11 y M 11-11). Nada que añadir. Ojo para la próxima: el domingo 01-11 y el 08-11 no tienen Short
+(los hay el lunes siguiente); si se quiere cumplir «jueves y domingo» a rajatabla, mover o duplicar con otro vídeo.
+
+### X (@FlotaDSP)
+- Hoy sin post pendiente (el del 30-10 salió ayer); V 31-10 → D 08-11 ya programados. **Programado L 09-11 7:30** («Sin
+  cobertura en el garaje del polígono: la app abre con tu ruta guardada y lo entregado se envía solo al volver la red…»,
+  sin enlace ni imagen). Mismo truco que la ronda anterior: el primer texto se pierde al fijar la fecha; se vuelve a escribir
+  en el cuadro ya con la fecha y se pulsa Schedule. Verificado en «Scheduled» («Will send on Mon, Nov 9, 2026 at 7:30 AM»).
+- Notificaciones: me gusta de Blacksark (+2), goraarin, Cristina C. y Kevin Crestt a nuestras respuestas; Kevin Crestt nos sigue.
+  Nada que contestar.
+- Seguidas: **@informacionlog** (Información Logística) y **@todotransport** (TodoTransporte).
+- Búsquedas en español («repartidor furgoneta», «soy repartidor») e inglés («delivery driver», «multi-drop», «van driver»):
+  solo clientes quejándose de empresas, un post patrocinado de la UNED y el hilo de Lorenzobillares que ya contestamos hace 12 h
+  (es una queja contra una empresa de reparto: no se insiste). 0 respuestas nuevas.
+
+### Ronda de conversación (lo nuestro primero)
+| Hora | Red | Hilo | Qué se dijo | App |
+|---|---|---|---|---|
+| 14:10 | TikTok | Actividad: .impar.uve dio me gusta a dos comentarios nuestros (hace 1 h) | sin respuesta | — |
+| 14:13 | TikTok | @unecuatorianoenes «Un día entero repartiendo paquetes en Madrid» (hace 6 d, 605 ❤) | ya comentado por nosotros hace 15 h; se pasa | — |
+| 14:17 | TikTok | **@latindriver27** «¿Cuánto debe cobrar un repartidor?» (hace 16 h, 918 ❤, 131 comentarios) | la cifra del mes engaña: dividir por las horas reales desde la carga a las 6:30 y quitar la gasolina; el que aguanta es porque sabe ordenar la furgoneta, no porque corra | no (verificado) |
+| 14:20 | TikTok | **@quienescifu** «La Merche hoy no quiere chamba» (hace 21 h, 783 ❤; furgoneta que no arranca, en Alemania) | humor: la Merche se ha puesto en huelga antes que tú; cuando arranque, que sea con la carga en orden de parada | no (verificado) |
+| 14:24 | TikTok | **@jordan.blnc** (Francia) «Je vous montre comment je m'organise avant de partir livrer» (29-09, 2.222 ❤, 55 comentarios) | en francés: la tournée se gagne au chargement; «on a fait une appli gratuite… on est FDS»; **ofrecimiento público** a que la pruebe en una tournée real y diga qué falta en Francia, sans contrepartie | sí (verificado) |
+| 14:28 | TikTok | **@hidia98** DIA ON ROUTE (Italia) «Tour del furgone» (hace 3 h, 58 ❤) | en italiano: ogni pacco al suo posto prima di partire è metà del giro; ¿ordenas por calle o por horario de apertura? | no (verificado) |
+| 14:32 | TikTok | @laryrepartidor «Día 131 trabajando como autónomo en reparto» (hace 2 d, 53 ❤) | el bloque de cajas grandes es el bueno; lo que castiga es el de 60 sobres en 60 portales; ánimo por el día 131 | no (verificado) |
+| 14:36 | YouTube | Emet «Trabajando un día como REPARTIDOR DE AMAZON» (389K vistas, hace 2 a, 503 comentarios) | sobre el comentario de millonariosonline1040 (180 paradas en 8 h): el tiempo se gana antes, con la furgoneta cargada en orden de entrega | no (verificado) |
+| 14:40 | YouTube | Con L de Latino «Día de Reparto Amazon España Ep. 5» (3,4K vistas, hace 1 a) | el que empieza tarda el doble ordenando a mano; «por eso hicimos FDS, app gratis de reparto…»; que diga qué le falta | sí (verificado) |
+| 14:42 | Instagram | — | **sin sesión en este Chrome** (pantalla de login; no se inicia sesión) | — |
+| 14:44 | Facebook | notificaciones | un administrador aprobó hace 2 h la publicación de Dani en «Repartidores Paquetería Madrid» (aún sin comentarios). **Ojo**: el texto dice «7 días gratis y no pide tarjeta» y la tarjeta del enlace «GRATIS y sin límite hasta el 31-12»: es la oferta vieja, que la corrija Dani (es su perfil, no la toco). Además 10 avisos «No se ha podido subir el vídeo» (hace 1 h) y reacciones a un reel «Built for speed. Driven by passion…» de la página FDs que no es de esta sesión (no verificado quién lo subió). Facebook pide crear una clave de acceso (passkey): cerrado sin tocar | — |
+
+Sin pieza nueva. Totales: X 0 respuestas + 2 seguidas; TikTok 5 comentarios (1 con app, el ofrecimiento en francés); YouTube 2
+(1 con app); Instagram 0 (sin sesión); Facebook 0 (nada que contestar). Con app: 2 de 7. Reddit no se intentó (bloqueado).
+La búsqueda en portugués en TikTok sigue devolviendo vídeos en español (cuenta región ES).
