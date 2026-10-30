@@ -1331,6 +1331,13 @@ otros países o QR leen bien la dirección: número 2, primero B, a veces lee n�
   precios por país en Play Console sin hacer (Dani); legales en inglés sin jurista; el emulador solo en inglés (EE.
   UU.) y en español: FR/NL/GB/DE por tests con muestras reales y por la prueba en vivo de las fuentes.
 
+## Última sesión — 30-10-2026 (15:30, PC de Dani): el anuncio en español de Meta repuesto como conjunto «ES (España)»
+
+- Dani: «¿has quitado el anuncio en español de Facebook? ponlo de nuevo». Era el conjunto que convertí a EN a las 11:30. Nuevo
+  conjunto «FDS · Ruta hecha · ES (España)» con vídeo, textos y enlace web en español, en borrador: Dani pulsa Publicar.
+- Hallazgo: Meta no admite el enlace a Google Play con objetivo tráfico (#1487810); los conjuntos EN/PT/FR/IT/DE llevan ese
+  enlace y hay que pasarlos a la web. Detalle en `docs/anuncios/redes/REGISTRO-PC.md` (30-10, 15:00).
+
 ## Última sesión — 30-10-2026 (14:45, PC de Dani, bucle de redes): ronda de las 14:00; X programado hasta el L 09-11
 
 - Metricool completo hasta el 09-11; X programado el L 09-11 (sin cobertura en el garaje). Ronda: 5 comentarios en TikTok (es,

@@ -333,3 +333,19 @@ L 09-11; LinkedIn M 04-11 y M 11-11). Nada que añadir. Ojo para la próxima: el
 Sin pieza nueva. Totales: X 0 respuestas + 2 seguidas; TikTok 5 comentarios (1 con app, el ofrecimiento en francés); YouTube 2
 (1 con app); Instagram 0 (sin sesión); Facebook 0 (nada que contestar). Con app: 2 de 7. Reddit no se intentó (bloqueado).
 La búsqueda en portugués en TikTok sigue devolviendo vídeos en español (cuenta región ES).
+
+## 30-10-2026 (15:00 – 15:30) — Dani: «¿has quitado el anuncio en español de Facebook? Me traía bastantes clientes, ponlo de nuevo»
+
+Sí: el conjunto que Dani tenía en español (ahora «FDS · Ruta hecha · EN (UK, IE, US)», id 52648299574539; llevaba 32 clics y
+3,30 € cuando lo toqué a las 11:30) lo convertí al inglés al «revisar el anuncio en inglés». Repuesto como conjunto nuevo en la
+misma campaña: **«FDS · Ruta hecha · ES (España)»** (id 52648537418339, duplicado del EN sin recomendaciones), ubicación España,
+sin límite de idioma, anuncio **«FDS · Ruta hecha · ES»** (52648537418139) con el vídeo español `spot-ruta-9x16-B.mp4` del 29-10
+(copia de subida `internacional/salida/subir/fds-ruta-hecha-9x16-es.mp4`, 6,4 MB), texto/título/descripción de `textos.json` → es
+(«¿Repartes paquetes? Foto o escaneo a la etiqueta…», «Tu ruta de reparto, hecha sola», «Empieza gratis · 25 € con tu primera ruta»),
+botón «Registrarse», enlace `https://flotadsp.com/repartidores?utm_source=facebook&utm_medium=cpc&utm_campaign=ruta_hecha&utm_content=rutahecha_es`.
+El conjunto «España · 20-55 · reparto · registro» (60 registros, 75,98 €) no lo toqué y sigue activo.
+- **Hallazgo**: Meta rechaza el enlace a Google Play en una campaña de tráfico (#1487810: «solo puede incluirse la URL de la
+  aplicación con el objetivo de instalaciones»). Es la causa del #1487194 del EN. Los conjuntos EN/PT/FR/IT/DE siguen con el enlace
+  de Play: hay que cambiarlos a la web (`/repartidores?…utm_content=rutahecha_xx`) o no entregarán. No verificado por qué DE/FR/PT
+  salen «Activa» con 0 € (puede que Dani pulsara Publicar).
+- Queda en **borrador** (la cuenta sigue inactiva por pago): Dani pulsa «Publicar» (hay 9 cambios pendientes en «Revisar y publicar»).
