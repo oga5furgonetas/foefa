@@ -361,3 +361,34 @@ y mirando el final del enlace. **Dani pulsa Publicar** («Revisar y publicar» t
   `rutahecha_pt` al pulsar Tab): escribir, pulsar Escape y salir del campo con un clic, no con Tab; luego comprobar el final.
   Pulsar el campo por referencia abre el menú lateral. La sección «Destino» se renderiza solo al hacer scroll con la rueda hasta
   ella (con `scrollIntoView` el campo mide 0). Aviso «Funcionamiento incorrecto de la extensión del navegador»: Aceptar y seguir.
+
+## 30-10-2026 (18:05 – 18:55) — ronda del bucle de 4 h (Chrome del PC 1)
+
+### Metricool (marca 7741371)
+Sin huecos: TikTok e Instagram cada día hasta el L 09-11, YouTube 30-10/02-11/05-11/09-11, LinkedIn 04-11 y 11-11. Nada añadido.
+
+### X (@FlotaDSP)
+- Hoy sin post pendiente; V 31-10 → L 09-11 ya programados. **Programado M 10-11 7:30**: «Invita y gana: por cada compañero que se
+  registre con tu enlace y haga su primera ruta real (20 entregas en 2 días), 10 € a tu cartera hasta el 31-12 (después 2,50 €). Él,
+  25 € de bienvenida. Bizum o PayPal. Condiciones: …/invita?utm_source=x…utm_content=invita». Verificado en Scheduled.
+- Notificaciones: Margarita ha compartido nuestro post («…gana 25 € por solo ordenar tu ruta»); el resto, me gusta ya vistos.
+- Seguidas: **@LogisticsSpain** (Logistics & Automation Spain) y **@Transporte3** (Revista Transporte 3).
+- Búsqueda en español (-links -replies): clientes y vecinos quejándose, nada de repartidores. 0 respuestas.
+
+### Ronda de conversación (lo nuestro primero)
+| Hora | Red | Hilo | Qué se dijo | App |
+|---|---|---|---|---|
+| 18:12 | TikTok | Actividad | nada nuevo desde las 14:00 | — |
+| 18:16 | TikTok | **@derfitnessbote** (Alemania) «Pakete wie Weihnachten!» (hace 1 d, 252 ❤) | en alemán: los días de furgoneta hasta el techo se ganan al cargar; últimas paradas al fondo, primera hora a mano | no (verificado) |
+| 18:20 | TikTok | @aaaaaaaaaaaaaaa67895 Jesús Alberto «Parte 1 trabajando como repartidor» (17-10, bici/comida) | no se comenta: comida en bici y preguntas sobre cuentas sin papeles; no es nuestro público | — |
+| 18:24 | TikTok | **@nikoenrutadetemu0** (Arequipa, Perú) «Comenzando desde cero: mis primeros 300 paquetes» (27-07, 204 ❤, 35 comentarios, serie Día 1) | **ofrecimiento público a micro-creador**: consejo de carga + «hicimos una app gratis… somos FDS… funciona en Perú, dinero del día en soles»; que la pruebe en una ruta real y cuente qué falta; sin pagos | sí (verificado) |
+| 18:31 | TikTok | **@two.tickets_please** Poppy & Luke (Colchester, UK) «A day tagging along with Luke… 200+ parcels» (10-10, 584 ❤) | en inglés: de 103 a 200 paradas el salto está en la furgoneta, no en conducir más rápido; «having someone ride along is the real cheat code» | no (verificado) |
+| 18:38 | YouTube | Javier Lucena «Un día en la vida de un repartidor de Amazon» (24K) | ya tenía un comentario nuestro de hace 18 h (de otra sesión); se pasa | — |
+| 18:42 | YouTube | **Alfy Tavarez** «Día en la vida de un repartidor de Amazon en USA» (65K vistas, 102 comentarios) | sobre el comentario de pabloruedafuentes4241 (25 paradas/hora): el trabajo se gana en el muelle; cargar en orden de parada vale más que correr | no (verificado) |
+| 18:47 | YouTube | **R0naldo_0fici4l** «Un día siendo repartidor de Amazón» (hace 3 d, 268 vistas, 0 comentarios; reparte para pagar un tratamiento y volver al fútbol) | ánimo + consejo: cargar en orden de entrega y aparcar una vez para 3-4 portales | no (verificado) |
+| 18:52 | Facebook | notificaciones | 34 reacciones al reel «Built for speed…» de la página (no es de esta sesión) y más avisos «No se ha podido subir el vídeo»; la publicación del grupo sigue sin comentarios. En «Repartidores Paquetería Madrid» la única «pregunta» nueva (Maxime Déramé, hace 6 h) es la promo de otra app de rutas preguntando cómo preparamos la ruta: no se entra (regla: ni nombrar ni discutir); el resto, ofertas de trabajo | — |
+| — | Instagram | — | sin sesión en este Chrome (igual que a las 14:00) | — |
+
+Totales: X 0 respuestas + 2 seguidas; TikTok 3 (1 con app: el ofrecimiento); YouTube 2 (0 con app). Con app: 1 de 5. Sin pieza
+nueva. Reddit no se intentó. Ojo: el grupo de pestañas de Chrome se perdió dos veces a mitad de ronda (hay que volver a abrir con
+`navigate`), y la sesión de TikTok es la misma (FlotaDSP).
