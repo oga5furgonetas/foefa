@@ -5,7 +5,7 @@
 > haz commit y `git push`. Una sola sesión trabajando a la vez: antes de
 > empezar, `git pull` y comprueba que nadie ha dejado nada a medias aquí.
 
-Última actualización: **30-10-2026 (madrugada, 3)**: FDS preparada para fuera de España: la app nativa en el idioma del móvil (en, pt, fr, it, de), el plan en la moneda del país, millas en EE. UU. y Reino Unido, la ficha de Play en 7 idiomas y el informe por mercados `docs/EXPANSION-INTERNACIONAL-30-10.md`; nada desplegado (ver «Última sesión — 30-10-2026 (madrugada, 3)»). Anterior: **30-10-2026 (madrugada, 2)**: la tanda A de lo que pide la calle HECHA en servidor, web y app nativa, y el mapa que responde (iconos en vectores e interacciones, Dani: «mejora los emoticonos e interacciones con el mapa»); nada desplegado, lo decide Dani (ver «Última sesión — 30-10-2026 (madrugada, 2)»). Anterior: **29-10-2026 (noche, 4)**: FDS en todo, fuera Valor y China, avisos al móvil, app 2.3.0; fusionado en `main`, desplegado y verificado (ver «Última sesión — 29-10-2026 (noche, 4)»). Anterior: **29-10-2026 (noche, 3)** (fusionadas en `main` dos sesiones de la noche: la del servidor y la app 2.2.5 —sección «(noche): fase 0…»— y la del anuncio con la VOZ DE DANI y el mapa real de A Coruña, montado en `docs/anuncios/spot-dani/salida/`; ver «Última sesión»). Antes, noche: (anuncio «La ruta hecha»: guion para IA en `docs/anuncios/super-anuncio/` y generaciones en Artlist). Antes, tarde: (el CI de `main` llevaba desde el 18-10 en rojo; checkers arreglados de raíz y todo el CI en verde en local; ver «Última sesión»). Por la mañana: FDS 2.2.3 compilada, probada y firmada, el AAB listo para Play (ver «29-10-2026 (mañana)»).
+Última actualización: **30-10-2026 (mañana)**: «arréglalo todo y, sin bugs ni falsos positivos, despliega y saca el AAB»: hecho. La nativa entera en 5 idiomas (538 textos), la DGT solo en España, la línea de la ruta como un navegador, páginas legales en inglés, scripts de despliegue para este PC; verificado todo; **FDS 2.4.0 (code 19) compilada y firmada** en `C:\Users\dlvie\Downloads\`; web (bundle `index-DwjWrQSV.js`, APK 2.4.0 en `/descargas/FDS.apk`, 21,8 MB) y backend (`/api/health` ok, `/api/app/version` → 19 / 2.4.0 con `APP_ANDROID_WEB="19 2.4.0"`, el endpoint nuevo contesta 401 sin sesión), a las 09:25-09:35 del 30-10. (ver «Última sesión — 30-10-2026 (mañana)»). Anterior: **30-10-2026 (madrugada, 3)**: FDS preparada para fuera de España: la app nativa en el idioma del móvil (en, pt, fr, it, de), el plan en la moneda del país, millas en EE. UU. y Reino Unido, la ficha de Play en 7 idiomas y el informe por mercados `docs/EXPANSION-INTERNACIONAL-30-10.md`; nada desplegado (ver «Última sesión — 30-10-2026 (madrugada, 3)»). Anterior: **30-10-2026 (madrugada, 2)**: la tanda A de lo que pide la calle HECHA en servidor, web y app nativa, y el mapa que responde (iconos en vectores e interacciones, Dani: «mejora los emoticonos e interacciones con el mapa»); nada desplegado, lo decide Dani (ver «Última sesión — 30-10-2026 (madrugada, 2)»). Anterior: **29-10-2026 (noche, 4)**: FDS en todo, fuera Valor y China, avisos al móvil, app 2.3.0; fusionado en `main`, desplegado y verificado (ver «Última sesión — 29-10-2026 (noche, 4)»). Anterior: **29-10-2026 (noche, 3)** (fusionadas en `main` dos sesiones de la noche: la del servidor y la app 2.2.5 —sección «(noche): fase 0…»— y la del anuncio con la VOZ DE DANI y el mapa real de A Coruña, montado en `docs/anuncios/spot-dani/salida/`; ver «Última sesión»). Antes, noche: (anuncio «La ruta hecha»: guion para IA en `docs/anuncios/super-anuncio/` y generaciones en Artlist). Antes, tarde: (el CI de `main` llevaba desde el 18-10 en rojo; checkers arreglados de raíz y todo el CI en verde en local; ver «Última sesión»). Por la mañana: FDS 2.2.3 compilada, probada y firmada, el AAB listo para Play (ver «29-10-2026 (mañana)»).
 
 ## Qué es y dónde está
 
@@ -1221,8 +1221,54 @@ Play, feeds de datos por país y precio por moneda) y en código, **sin desplega
   en inglés (no en fr/de/it/pt); los umbrales fiscales salen de guías, los confirma el gestor. El emulador del PC de
   casa tiene `adb emu geo fix` roto: posición falsa con `cmd location providers` (Trampas).
 
+## Última sesión — 30-10-2026 (mañana): arreglado todo, verificado, desplegado y la 2.4.0 lista para Play
+
+Dani: «Arréglalo todo y cuando esté sin bugs ni falsos positivos lo despliegas para obtener la app aab» y, a mitad,
+«la línea de la ruta se ve un poco mal, ¿la puedes hacer algo mejor?». Hecho sobre `main` en el PC de casa:
+- **Revisión de los dos commits de la madrugada** (37ee898 y 391f683: servidor, web y nativa, diff entero leído): sin
+  bugs de lógica. Lo que sí había y se ha arreglado:
+  - **La DGT fuera de España**: `/reparto/mi-ruta/incidencias` y `/zbe` contestaban «ninguna cerca de tu ruta» a un
+    repartidor de Lyon (un falso positivo). Ahora, si el país de la cuenta no es `es`, contestan `aplica: false` y la
+    web no pinta la línea (la nativa no enseña la etiqueta porque no hay nada). Test en `test_necesidades_repartidor`.
+  - **La nativa seguía con ~270 textos en español** (avisos, errores de la API, la auditoría, turnos, extras, invita y
+    gana, la hoja de la parada, el WhatsApp al cliente, ajustes, cuenta, notificaciones…). `scripts/nativa-idioma.mjs
+    --envolver` coge ahora también `error = "…"`, `?: "…"`, las ramas `-> "…"`, `if … "a" else "b"`, `Dato(`, `ErrorApi(`,
+    `CampoClave(`, `Seccion(`, `Cabecera(`; las plantillas con `$` pasadas a mano a `tx("… {n}", "n" to x)`; 193
+    textos nuevos en `traducciones-nativa.json` (405 propios; 538 en total con los de la web, `--comprobar` en verde).
+    El WhatsApp al cliente usa las mismas claves que la web («el repartidor», «con su pedido», «Puede seguirlo aquí:»).
+    Lo que queda sin traducir a propósito: lo que escribe el servidor (motivos, estados), «Google Maps», patrones de
+    fecha, unidades. El envolvedor cogía literales de dos líneas (rompió `LectorEtiqueta.kt`, restaurado) y patrones de
+    formato («%.1f km»): arreglado el script (literal de una línea) y deshecho a mano.
+  - **La línea de la ruta** (web y nativa): borde azul oscuro fino + línea azul, puntas y esquinas redondas, en dp
+    (antes píxeles y borde blanco invisible sobre las calles blancas: una salchicha plana), y el servidor manda la
+    geometría casi completa (`aligera_linea` a 4 m, antes 12: se veían las cuerdas en las curvas).
+  - **Los atajos del horario** se guardan en forma neutra («9-14», `reparto.lee_ventana` lo lee igual que «de 9 a 14»)
+    para que valgan en cualquier idioma (web y nativa; test `calle.spec` actualizado).
+  - **Páginas legales en inglés** (`frontend/src/legal/en/`: privacidad, términos, cookies, aviso legal, encargo,
+    seguridad y contacto): salen cuando la app no está en español, con la nota de que el español es la versión que
+    vale; los encargados llevan `purposeEn`/`countryEn`. Sin revisión jurídica (como el español).
+  - **Scripts de despliegue** (`deploy-backend.ps1`, `deploy-frontend.ps1`): buscan el Python del usuario en cualquier
+    PC; sin `SECRET_KEY` el de backend mira `/api/health` en vez de decir «producción rota»; sin `gh` (este PC no lo
+    tiene) la web cose el APK compilado aquí (`app-release.apk` de menos de un día).
+  - Pequeños: `Calle.dondeIncidencia` con los números del idioma; «Tu furgoneta» en el mapa de Google traducido;
+    `Acciones.irAPie` con el texto codificado; `TextosHojaTest` con el WhatsApp nuevo.
+- **FDS 2.4.0 (code 19)**: `build.gradle.kts`; `docs/PLAY_STORE.md` → «Versión 2.4.0»; novedades para Play Console en
+  7 idiomas en `app-android/play-listing/NOVEDADES-2.4.0.md`.
+- **Verificado**: los 7 checkers + `check-textos-ruta`, ESLint (0 errores), `vite build`, Playwright `calle` +
+  `escanear-etiqueta` (8) y `humo` (206) en escritorio; `pytest` entero: 1283 en verde (16 min en este PC); Gradle `testDebugUnitTest` + `lintDebug` +
+  `assembleDebug`; `nativa-idioma --comprobar` (538); el emulador con el sistema en francés (Hoy, mapa, tarjeta de parada, Ajustes, Cuenta, salir/entrar, portal del conductor de empresa, turnos, trabajar más, invita y gana) y de vuelta en español; capturas en `docs/capturas-30-10/app-fr-*.png`.
+- **Desplegado**: web (bundle `index-DwjWrQSV.js`, APK 2.4.0 en `/descargas/FDS.apk`, 21,8 MB) y backend (`/api/health` ok, `/api/app/version` → 19 / 2.4.0 con `APP_ANDROID_WEB="19 2.4.0"`, el endpoint nuevo contesta 401 sin sesión), a las 09:25-09:35 del 30-10.
+- **No verificado**: la nativa en pt/it/de solo por el diccionario (en el emulador se vio en francés y en español); las
+  páginas legales en inglés son traducción de cortesía sin jurista; `aligera_linea` a 4 m no se ha medido en una ruta
+  de 80 paradas (tope 4000 puntos, intacto); el AAB no se ha subido a Play (lo sube Dani; el CI lo firma también).
+
 ## Pendiente (por prioridad)
 
+-11. **30-10 mañana**: lo de arriba HECHO y desplegado; falta que Dani suba `FDS-2.4.0-code19.aab` a Play Console
+   (producción; novedades en `play-listing/NOVEDADES-2.4.0.md`) y, cuando esté publicada, `fly secrets set -a
+   flota-backend APP_ANDROID_MIN="2.4.0"` si quiere obligar a actualizar. Siguen pendientes las tandas B-F de -10 (feeds
+   de otros países, Stripe `currency_options`/Play Billing, páginas legales en fr/de/it/pt con jurista, capturas por
+   idioma y la ficha de Play pegada en cada idioma).
 -10. **Fuera de España (30-10 madrugada, 3)**: lo de hoy está hecho y sin desplegar. Siguiente, por orden de
    `docs/EXPANSION-INTERNACIONAL-30-10.md` §11: (B) feeds de cortes y zonas de Francia (Bison Futé + BNZFE), Reino Unido
    (National Highways + ULEZ), Países Bajos (NDW) y EE. UU. (WZDx) con la `fuente` en pantalla, y las restricciones por
