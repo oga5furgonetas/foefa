@@ -213,6 +213,33 @@ def cmd_edad():
     print("clasificación por edades: sin contenido sensible (4+)")
 
 
+def cmd_revision(telefono: str = ""):
+    """Lo que ve el equipo de revisión: contacto, la cuenta de prueba (de ~/.flota-apple-review-account.txt) y las notas."""
+    app = la_app()
+    v = version_abierta(app["id"])
+    fichero = Path.home() / ".flota-apple-review-account.txt"
+    usuario, clave = fichero.read_text(encoding="utf-8").splitlines()[:2]
+    notas = ("App para repartidores autónomos: escanea los paquetes (cámara), ordena la ruta por tiempo y guía parada a parada. "
+             "Para probar: entrar con la cuenta de prueba y, en la pantalla de la ruta, pulsar «Verlo en acción con 3 paradas de "
+             "ejemplo» (carga una ruta de muestra). No hay compras dentro de la app: el plan de pago se contrata solo en la web.\n\n"
+             "App for independent couriers: scan parcel labels (camera), sort the route by driving time and navigate stop by stop. "
+             "To test: log in with the demo account and tap \"See it in action with 3 sample stops\" on the route screen. "
+             "There are no in-app purchases: the paid plan is only sold on the website.")
+    attrs = {"contactFirstName": "Daniel", "contactLastName": "Lampon Vieites", "contactEmail": "dlvieites19@gmail.com",
+             "demoAccountName": usuario, "demoAccountPassword": clave, "demoAccountRequired": True, "notes": notas}
+    if telefono:
+        attrs["contactPhone"] = telefono
+    estado, r = api("GET", f"/appStoreVersions/{v['id']}/appStoreReviewDetail")
+    if estado == 200 and r.get("data"):
+        rid = r["data"]["id"]
+        estado, r = api("PATCH", f"/appStoreReviewDetails/{rid}", {"data": {"type": "appStoreReviewDetails", "id": rid, "attributes": attrs}})
+    else:
+        estado, r = api("POST", "/appStoreReviewDetails", {"data": {"type": "appStoreReviewDetails", "attributes": attrs,
+                                                                     "relationships": {"appStoreVersion": {"data": {"type": "appStoreVersions", "id": v["id"]}}}}})
+    falla(estado, r, "información de revisión")
+    print("información de revisión puesta (contacto, cuenta de prueba", usuario, "y notas)", "+ teléfono" if telefono else "· SIN teléfono todavía")
+
+
 def cmd_builds():
     app = la_app()
     estado, r = api("GET", f"/builds?filter[app]={app['id']}&sort=-uploadedDate&limit=10")
@@ -238,5 +265,7 @@ if __name__ == "__main__":
         cmd_capturas()
     elif orden == "edad":
         cmd_edad()
+    elif orden == "revision":
+        cmd_revision(sys.argv[2] if len(sys.argv) > 2 else "")
     else:
         sys.exit(__doc__)
