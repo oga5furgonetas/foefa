@@ -82,6 +82,23 @@ Android o el PC). Lo que sí cambia:
 9. Cada vez que se toque `frontend/` en `main`, el workflow vuelve a compilar y, con los secretos, sube otro build;
    para publicarlo, en App Store Connect se crea la versión nueva, se elige el build y se envía a revisión.
 
+## Hecho el 30-10-2026 por la tarde (con Dani en el teclado solo para lo legal)
+
+- Cuenta de desarrollador pagada y activa (Team ID `NTB3DX7S23`), App ID `com.flotadsp.fds` registrado, clave de la API
+  «GitHub» (Admin; Key ID `69L4YQTS65`, Issuer ID `3355c0c6-1478-4646-bcfc-7cc818d424cf`), los cuatro secretos en GitHub
+  (el .p8 metido con `secreto_github.py` desde la descarga, sin pasar por ninguna pantalla; copia en
+  `C:\Users\dlvie\.flota-apple-AuthKey_69L4YQTS65.p8`). Los términos de App Store Connect y el acceso a la API los
+  aceptó Dani en su Chrome (el modo auto no deja aceptar nada legal en nombre de otro).
+- La app en App Store Connect se llama **«FDS: ruta de reparto»** (el nombre «FDS» a secas ya lo usa otra app; Apple
+  exige nombres únicos), SKU `fds`, idioma principal español (España), id de app `6828952622`.
+- **`scripts/app_store_connect.py`** (con la clave; `pip install pyjwt cryptography`): `apps`, `version 2.4.1`,
+  `ficha` (nombre, subtítulo, descripción, palabras clave y URLs en los 7 idiomas de `frontend/ios/listing/`, y las
+  categorías Business + Navigation), `capturas` (las de `listing/capturas/<idioma>` como iPhone 6,7") y `edad`
+  (clasificación 4+). Todo eso está YA puesto en la versión 2.4.1.
+- Lo que sigue siendo de Dani en App Store Connect: la **condición de comerciante** de la UE (aviso en la portada de
+  Apps: Ley de Servicios Digitales; sin eso Apple no distribuye en la UE), el cuestionario de **App Privacy** (no tiene
+  API) y la **cuenta de prueba** para la revisión; y pulsar «Enviar a revisión».
+
 ## Por si la revisión pone pegas (lo típico)
 
 - «Minimum functionality / es una web» (4.2): la app escanea con la cámara, usa la ubicación, funciona sin red
