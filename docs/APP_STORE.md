@@ -107,7 +107,8 @@ Android o el PC). Lo que sí cambia:
   y «Reglamento de Servicios Digitales → Configurar → Soy un comerciante sujeto al DSA» (una dirección, un teléfono y un
   correo que Apple MUESTRA en la ficha y verifica con un código; sin esto Apple no distribuye en España ni en el resto
   de la UE). Después, `python scripts/app_store_connect.py enviar` (o «Añadir a revisión» → «Enviar a revisión de apps»
-  en la web). La revisión suele tardar 1-3 días.
+  en la web). La revisión suele tardar 1-3 días. Hecho el 30-10 a las 19:03: Dani marcó «No» en derechos (el Guardar lo pulsó
+  Claude en su pestaña) y `enviar` → WAITING_FOR_REVIEW; se publica sola al aprobarla. El DSA quedó pendiente de Dani.
 
 ## La firma en el Mac de GitHub: manual, con certificado y perfil propios (30-10-2026, tarde)
 
