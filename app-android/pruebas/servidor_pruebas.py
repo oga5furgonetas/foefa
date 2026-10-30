@@ -76,6 +76,67 @@ async def matriz(puntos):
 
 server._rep_matriz = matriz
 
+# LO QUE DICE LA DGT (30-10-2026), sin salir a internet: dos incidencias cerca de la ruta de prueba y la ZBE de A
+# Coruña (el fichero real de nap.dgt.es si está descargado en el PC, %LOCALAPPDATA%\Temp\fds-emu\zbe_coruna.xml;
+# si no, un polígono de prueba junto a la Marina).
+INCIDENCIAS = [
+    {"id": "p1", "clase": "obras", "que": "carril cortado (obras)", "gravedad": "baja", "carretera": "AC-12", "pk": "2.1",
+     "municipio": "A Coruña", "provincia": "A Coruña", "lat": 43.3585, "lng": -8.4045, "lat2": 43.3570, "lng2": -8.4020,
+     "desde": "2026-10-28T08:00:00+01:00"},
+    {"id": "p2", "clase": "corte", "que": "calzada cortada (obras)", "gravedad": "alta", "carretera": "N-550", "pk": "12.1",
+     "municipio": "Culleredo", "provincia": "A Coruña", "lat": 43.3520, "lng": -8.4080, "lat2": 43.3500, "lng2": -8.4100,
+     "desde": "2026-10-29T07:00:00+01:00"},
+]
+ZBE_PRUEBA = """<?xml version="1.0" encoding="UTF-8"?>
+<payload xmlns:com="http://levelC/schema/3/common" xmlns:loc="http://levelC/schema/3/locationReferencing"
+ xmlns:conz="http://levelC/schema/3/controlledZone" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
+ <conz:controlledZoneTable><conz:controlledZone id="15001_A Coruña - Marina (prueba)">
+  <conz:name><com:values><com:value lang="ES">A Coruña - Marina</com:value></com:values></conz:name>
+  <conz:controlledZoneDescription><com:values><com:value lang="ES">Carga y descarga de 6h a 11h.</com:value></com:values></conz:controlledZoneDescription>
+  <conz:controlledZoneRecordVersionTime>2023-10-25T08:12:19.611Z</conz:controlledZoneRecordVersionTime><conz:status>active</conz:status>
+  <loc:openlrPolygonCorners>
+   <loc:openlrCoordinates><loc:latitude>43.3680</loc:latitude><loc:longitude>-8.3960</loc:longitude></loc:openlrCoordinates>
+   <loc:openlrCoordinates><loc:latitude>43.3705</loc:latitude><loc:longitude>-8.3960</loc:longitude></loc:openlrCoordinates>
+   <loc:openlrCoordinates><loc:latitude>43.3705</loc:latitude><loc:longitude>-8.3920</loc:longitude></loc:openlrCoordinates>
+   <loc:openlrCoordinates><loc:latitude>43.3680</loc:latitude><loc:longitude>-8.3920</loc:longitude></loc:openlrCoordinates>
+  </loc:openlrPolygonCorners>
+ </conz:controlledZone></conz:controlledZoneTable></payload>"""
+
+
+def _zbe_prueba() -> list:
+    fichero = Path(os.environ.get("LOCALAPPDATA", "")) / "Temp" / "fds-emu" / "zbe_coruna.xml"
+    if fichero.exists():
+        try:
+            zonas = server.reparto.zbe_datex(fichero.read_text(encoding="utf-8"), ciudad="ACoruña")
+            if zonas:
+                return zonas
+        except Exception:                                    # noqa: BLE001
+            pass
+    return server.reparto.zbe_datex(ZBE_PRUEBA, ciudad="ACoruña")
+
+
+def _dentro_de_la_zbe() -> tuple:
+    """Un punto dentro de la primera ZBE (para una parada de prueba que caiga dentro): el centro del polígono si
+    cae dentro; si no, cerca de una esquina."""
+    z = _zbe_prueba()[0]
+    pol = z["poligonos"][0]
+    centro = (sum(p[0] for p in pol) / len(pol), sum(p[1] for p in pol) / len(pol))
+    if server.reparto.punto_en_poligono(centro[0], centro[1], pol):
+        return centro
+    a, b, c = pol[0], pol[1], pol[2]
+    return ((a[0] + b[0] + c[0]) / 3, (a[1] + b[1] + c[1]) / 3)
+
+
+async def dgt_incidencias():
+    return INCIDENCIAS, "2026-10-30T08:00:00+01:00", True
+
+
+async def dgt_zbe():
+    return _zbe_prueba(), True
+
+server._dgt_incidencias = dgt_incidencias
+server._dgt_zbe = dgt_zbe
+
 
 async def sembrar():
     g = bases["flota_global"]
@@ -93,11 +154,15 @@ async def sembrar():
     t = bases["dsp_prueba"]
     t["drivers"] = Col([{"id": user_id, "name": "Repartidor de prueba", "active": True, "autonomo": True}])
     hoy = server._dia_negocio()
+    # La quinta parada cae dentro de la ZBE (30-10-2026): se ve el chip «ZBE» y el polígono en el mapa.
+    marina = _dentro_de_la_zbe()
+    PUNTOS["avenida da mariña 8"] = marina
     paradas = [
         ("Farmacia Sol", "Rúa Sinfónica de Galicia 8, 15004 A Coruña", "", 0, 1),
         ("Lucía M.", "Rúa Emilia Pardo Bazán 14, 15005 A Coruña", "600000002", 24.5, 1),
         ("Bar Pepe", "Rúa Marcial del Adalid 5, 15005 A Coruña", "600000001", 0, 2),
         ("Kiosko Luz", "Rúa San Andrés 30, 15003 A Coruña", "", 0, 1),
+        ("Café Marina", "Avenida da Mariña 8, 15001 A Coruña", "600000005", 0, 1),
     ]
     docs = []
     for i, (cli, dirc, tel, cobrar, bultos) in enumerate(paradas):
@@ -110,7 +175,14 @@ async def sembrar():
             "origen": "escaneo", "lat": lat, "lng": lng, "geo": "ok", "creado_por": "prueba",
             "creado_en": datetime.now(timezone.utc).isoformat(),
         })
+    # Lo que pide la calle (30-10-2026), para verlo en la app: Lucía contestó en su enlace; en Kiosko Luz ya se entregó
+    # otra vez y el pin es la puerta aprendida; y la tarifa puesta, para «Hoy llevas» y las fallidas sin cobrar.
+    docs[1]["cliente_dice"] = {"estare": "no", "dejar": "porteria", "franja": None, "portal": "1234", "nota": "2º izq, el timbre no va",
+                               "cuando": datetime.now(timezone.utc).isoformat()}
+    docs[3]["geo"] = "puerta"
     t["reparto_pedidos"] = Col(docs)
+    t["reparto_ajustes"] = Col([{"id": "ajustes", "min_parada": 4, "min_bulto": 1, "hora_salida": "09:00", "volver": False, "trafico": True,
+                                 "pago_parada": 110, "pago_dia": 0, "coste_km": 12}])
     print(f"Cuenta de prueba: {PRUEBA_CORREO} / {PRUEBA_CLAVE} · {len(docs)} paradas para {hoy}")
     await sembrar_empresa(hoy)
 

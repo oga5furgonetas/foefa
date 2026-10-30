@@ -3,11 +3,12 @@ import {
   ArrowLeft, ScanLine, Camera, Loader2, Navigation, Phone, Check, X, Route, MapPin, Play, Square, Package,
   MessageCircle, Clock, Search, List, Pencil, ChevronDown, GripVertical, Map as MapaIcono, ArrowUp, ArrowDown, ArrowUpDown, Mic, ClipboardPaste, Trophy,
   Eye, PenLine, RotateCcw, HelpCircle, Share2, FileUp, Gift, WifiOff, Plus, FileText, Mail, CalendarClock, Lightbulb, History,
+  AlertTriangle, CarFront,
 } from 'lucide-react'
 import {
   repMiRuta, repZonasCarga, repEscanear, repEscanearLote, repLeerTicket, repNuevoPedido, repEstado, repOrdenar, repJornada, repPosicion,
   repMiOrden, repMiEditar, repMiQuitar, repEjemplo, repQuitarEjemplos, repPegarMiLista, repTrazado, repFachada, repGanancias,
-  repTraerPrevias, repMisMarcas, repMisDirecciones, repFormasCodigo,
+  repTraerPrevias, repMisMarcas, repMisDirecciones, repFormasCodigo, repIncidencias, repZbe,
 } from '../../services/api'
 import { hoyLocal } from '../../lib/fecha'
 import { lista } from '../../lib/lista'
@@ -26,6 +27,7 @@ import { tx, useIdioma, locale, txError } from '../../lib/idioma'
 import { salirDeLaDemoDeReparto, decodeToken } from '../../panel/auth'
 import { eurosRef, fechaRefPromo } from '../../lib/precios'
 import AntesPuerta from './AntesPuerta'
+import ClienteDice, { textoClienteDice } from './ClienteDice'
 import { useAtras } from '../../lib/atras'
 import { PedirAviso, mensajeAviso } from '../AvisoManana'
 
@@ -173,9 +175,14 @@ const metrosEntre = (a, b) => {
 const posicionAhora = () => new Promise((ok) => {
   if (!('geolocation' in navigator)) { ok(null); return }
   navigator.geolocation.getCurrentPosition(
-    (pos) => ok({ lat: pos.coords.latitude, lng: pos.coords.longitude }),
+    (pos) => ok({ lat: pos.coords.latitude, lng: pos.coords.longitude, precision: pos.coords.accuracy }),
     () => ok(null), { timeout: 8000, maximumAge: 60000 })
 })
+
+/* ATAJOS DEL HORARIO DEL CLIENTE (30-10-2026): un toque en vez de escribirlo. «Cierra a las 14:00» es lo que un
+   repartidor con diez años de oficio hacía a mano: primero los comercios, luego la ruta normal. */
+const ATAJOS_HORARIO = [['Mañana (9-14)', 'de 9 a 14'], ['Tarde (16-20)', 'de 16 a 20'], ['Cierra a las 14:00', 'de 8 a 14']]
+const FURGO = 'fds_furgo'
 
 /* Las próximas paradas de golpe en Google Maps: hasta 3 intermedias y la
    cuarta de destino (más no lo abren todos los móviles). Waze no admite
@@ -253,6 +260,14 @@ export default function MiRuta({ onBack, embebido = false, alTerminar = null }) 
   const [huecoDe, setHuecoDe] = useState(null)       // la parada a la que se le dice dónde va
   const [pegar, setPegar] = useState(null)           // null | {texto, n}
   const [tarifa, setTarifa] = useState(null)         // «Mi dinero hoy»: null | {parada, dia, km} (texto en €)
+  /* LO QUE PIDE LA CALLE (30-10-2026, docs/NECESIDADES-REPARTIDOR-30-10.md): cortes y obras de la DGT y zonas de
+     bajas emisiones cerca de la ruta; dónde dejaste la furgoneta; y el registro del intento en cada parada (a qué
+     hora llegaste, llamaste y escribiste), que va con «Entregado» o «No entregado» y defiende al repartidor. */
+  const [incidencias, setIncidencias] = useState(null)   // null | {incidencias, publicado, incompleto}
+  const [zbe, setZbe] = useState(null)                   // null | {zonas, paradas, incompleto}
+  const [furgo, setFurgo] = useState(() => { try { const f = JSON.parse(localStorage.getItem(FURGO) || 'null'); return f && Date.now() - f.t < 12 * 3600000 ? f : null } catch { return null } })
+  const intentos = useRef({})                            // {id de parada: {llegada, llamada, whatsapp, llamadas}}
+  const posEntrega = useRef(null)                        // {lat, lng, precision, t}: la posición del móvil al ir a entregar
   const [tour, setTour] = useState(-1)               // recorrido de bienvenida: -1 cerrado, 0..2 el paso
   const [bienvenida, setBienvenida] = useState(null)  // la primera vez: null | 'inicio' | 'luego'
   const [anadir, setAnadir] = useState(false)          // la hoja de «Añadir paradas» (botón «+»)
@@ -305,7 +320,7 @@ export default function MiRuta({ onBack, embebido = false, alTerminar = null }) 
   useEffect(() => {
     if (vista !== 'mapa' || !('geolocation' in navigator)) return undefined
     const id = navigator.geolocation.watchPosition((pos) => {
-      const nuevo = { lat: pos.coords.latitude, lng: pos.coords.longitude }
+      const nuevo = { lat: pos.coords.latitude, lng: pos.coords.longitude, precision: pos.coords.accuracy }
       ultimaPos.current = nuevo
       setYo((a) => (!a || metrosEntre(a, nuevo) > 8 ? nuevo : a))
       const o = origenTrazado.current
@@ -349,6 +364,28 @@ export default function MiRuta({ onBack, embebido = false, alTerminar = null }) 
     setVerZonas(v)
     try { localStorage.setItem('ruta_zonas_carga', v ? '1' : '0') } catch { /* sin almacenamiento */ }
   }
+  /* LO QUE DICE LA DGT (30-10-2026): cortes y obras cerca de la ruta, con el mapa abierto; las ZBE que tocan la
+     ruta, siempre (cada parada dentro lleva su chip). El servidor lo guarda en memoria: pedirlo es barato. */
+  useEffect(() => {
+    if (vista !== 'mapa' || !firmaRuta) return undefined
+    let vivo = true
+    repIncidencias().then(({ data }) => { if (vivo) setIncidencias(Array.isArray(data?.incidencias) ? data : { incidencias: [], incompleto: true }) })
+      .catch(() => { if (vivo) setIncidencias({ incidencias: [], incompleto: true }) })
+    return () => { vivo = false }
+  }, [vista, firmaRuta])
+  useEffect(() => {
+    if (!firmaRuta || ruta?.prueba) return undefined
+    let vivo = true
+    repZbe().then(({ data }) => { if (vivo) setZbe(Array.isArray(data?.zonas) ? data : null) }).catch(() => { if (vivo) setZbe(null) })
+    return () => { vivo = false }
+  }, [firmaRuta, ruta?.prueba])
+  // DÓNDE APARQUÉ: con la furgoneta marcada, la posición sigue (solo aquí) para decir a cuántos metros está.
+  useEffect(() => {
+    if (!furgo || vista === 'mapa' || !('geolocation' in navigator)) return undefined
+    const id = navigator.geolocation.watchPosition((pos) => setYo({ lat: pos.coords.latitude, lng: pos.coords.longitude }),
+      () => {}, { enableHighAccuracy: true, maximumAge: 10000, timeout: 20000 })
+    return () => navigator.geolocation.clearWatch(id)
+  }, [furgo, vista])
 
   const [cola, setCola] = useState(() => leerCola().filter(deMi))
   const cargar = useCallback(() => {
@@ -794,14 +831,66 @@ export default function MiRuta({ onBack, embebido = false, alTerminar = null }) 
     }
   }
 
+  /* EL REGISTRO DEL INTENTO (30-10-2026): a qué hora se llegó (lo dice la guía), se llamó y se escribió; con
+     «No entregado» va al servidor y el cliente ve en su enlace que se llamó y se esperó. Y LA PUERTA APRENDIDA: la
+     posición del móvil al ir a entregar, que el servidor guarda si es precisa y usa la próxima vez. */
+  function apuntar(p, que) {
+    const i = intentos.current[p.id] || (intentos.current[p.id] = { llamadas: 0 })
+    i[que] = new Date().toISOString()
+    if (que === 'llamada') i.llamadas += 1
+  }
+  function pedirPosicionEntrega() {
+    if (!('geolocation' in navigator)) return
+    navigator.geolocation.getCurrentPosition(
+      (pos) => { posEntrega.current = { lat: pos.coords.latitude, lng: pos.coords.longitude, precision: pos.coords.accuracy, t: Date.now() } },
+      () => {}, { enableHighAccuracy: true, timeout: 6000, maximumAge: 20000 })
+  }
+  function extrasDeLaCalle(p, estado) {
+    const r = {}
+    const i = intentos.current[p.id]
+    if (i && (i.llegada || i.llamada || i.whatsapp)) {
+      const primero = [i.llegada, i.llamada, i.whatsapp].filter(Boolean).sort()[0]
+      r.intento = { ...i, espera_s: Math.max(0, Math.min(3600, Math.round((Date.now() - new Date(primero).getTime()) / 1000))) }
+    }
+    const pos = posEntrega.current || ultimaPos.current
+    if (estado === 'entregado' && pos && (!pos.t || Date.now() - pos.t < 120000) && pos.precision != null) {
+      r.posicion = { lat: pos.lat, lng: pos.lng, precision: pos.precision }
+    }
+    return r
+  }
+  /* DÓNDE APARQUÉ (30-10-2026): el punto de la furgoneta al bajarte, para volver sin dar vueltas. Se queda en el
+     móvil (no se envía) y se olvida a las 12 horas. */
+  async function aparcarAqui(punto) {
+    // Con un punto (mantener pulsado el mapa), ahí; si no, donde está el móvil.
+    const p = punto?.lat != null ? punto : await posicionAhora()
+    if (!p) { setAviso(tx('No llega la ubicación del móvil.')); return }
+    const f = { lat: p.lat, lng: p.lng, t: Date.now() }
+    setFurgo(f); guarda(FURGO, JSON.stringify(f))
+  }
+  function quitarFurgo() { setFurgo(null); try { localStorage.removeItem(FURGO) } catch { /* nada */ } }
+  /* EL MAPA QUE RESPONDE (30-10-2026): lo que se toca en las ventanas del mapa. Ir, llamar y abrir una parada;
+     dejar la furgoneta donde se mantuvo pulsado; quitarla. */
+  function accionMapa(accion, dato) {
+    const p = dato?.id ? lista(ruta.pedidos).find((x) => x.id === dato.id) : null
+    if (accion === 'navegar' && p) {
+      if (nav === 'app' && p.lat != null) setGuiando(p.id)
+      else window.open(navegar(p, nav === 'app' ? 'google' : nav), '_blank', 'noopener')
+    } else if (accion === 'abrir' && p) {
+      setAbierta(p.id)
+      setTimeout(() => document.getElementById(`parada-${p.id}`)?.scrollIntoView({ behavior: 'smooth', block: 'center' }), 150)
+    } else if (accion === 'llamar' && p) apuntar(p, 'llamada')
+    else if (accion === 'aparcar' && dato?.lat != null) aparcarAqui(dato)
+    else if (accion === 'quitar_furgo') quitarFurgo()
+  }
+
   async function marcar(p, estado, motivo, pago, extra) {
     // Con importe a cobrar, antes de dar por entregado hay que decir cómo pagó.
     if (estado === 'entregado' && p.cobrar > 0 && !pago) { setCobro(p); return }
     // Y después, la prueba de entrega (foto y/o nota), que se puede saltar.
-    if (estado === 'entregado' && !extra) { setCobro(null); setPrueba({ p, pago: pago || null }); setNotaEntrega(''); setEntrega({ donde: '', recibe: '', firma: '', firmando: false }); return }
+    if (estado === 'entregado' && !extra) { pedirPosicionEntrega(); setCobro(null); setPrueba({ p, pago: pago || null }); setNotaEntrega(''); setEntrega({ donde: '', recibe: '', firma: '', firmando: false }); return }
     setOcupado(p.id)
     try {
-      const como = await enviarOGuardar(p, estado, motivo, { ...(pago || {}), ...(extra || {}) })
+      const como = await enviarOGuardar(p, estado, motivo, { ...(pago || {}), ...(extra || {}), ...extrasDeLaCalle(p, estado) })
       medirAccion(estado === 'entregado' ? 'ruta_entregado' : 'ruta_no_entregado')
       setFallo(null); setCobro(null); setPrueba(null); setAbierta(null)
       setDeshacer({ p, estado })
@@ -1027,7 +1116,9 @@ export default function MiRuta({ onBack, embebido = false, alTerminar = null }) 
     const neto = bruto - gasolina
     const empezo = ruta?.jornada?.empezada ? new Date(ruta.jornada.empezada).getTime() : 0
     const horas = empezo ? (Date.now() - empezo) / 3600000 : 0
-    dinero = { bruto, gasolina, neto, porHora: horas >= 0.25 ? neto / horas : null }
+    // LAS FALLIDAS EN EL DINERO (30-10-2026): lo que no se cobra por no entregar; es lo que hace querer el enlace del cliente.
+    const fallidas = hechos.length - entregados.length
+    dinero = { bruto, gasolina, neto, porHora: horas >= 0.25 ? neto / horas : null, fallidas, perdido: (fallidas * gan.pago_parada) / 100 }
   }
   const aEuros = (c) => (c ? String(c / 100).replace('.', ',') : '')
   // «2.500» o «1,500» (miles, como se escribe en Colombia, Chile o Argentina) son 2500 y 1500, no 2,5.
@@ -1111,6 +1202,8 @@ export default function MiRuta({ onBack, embebido = false, alTerminar = null }) 
               .catch(() => setAviso(tx('No se pudo preparar la imagen')))
           } : null}
           fueraHorario={pendientes.filter((p) => p.tarde_min > 0).length}
+          onReordenar={retraso > 15 && pendientes.length > 1 && ocupado !== 'ordenar' ? ordenar : null}
+          furgo={furgo} yo={yo} onAparcar={ruta.autonomo || embebido ? aparcarAqui : null} onQuitarFurgo={quitarFurgo}
           onGuiar={nav === 'app' && pendientes.some((p) => p.lat != null) ? () => setGuiando(pendientes.find((p) => p.lat != null).id) : null}
           onAnadir={enMarcha ? () => { medirAccion('ruta_anadir'); setAnadir(true) } : null}
           onCorregir={!pendientes.some((p) => p.lat != null) && pendientes.some((p) => p.geo === 'no')
@@ -1323,9 +1416,13 @@ export default function MiRuta({ onBack, embebido = false, alTerminar = null }) 
         <div className="mb-3">
           <Suspense fallback={<div className="flex h-[420px] items-center justify-center rounded-xl border border-dark-700"><Loader2 className="animate-spin text-dark-500" /></div>}>
             <MapaReparto alto={420} base={yo ? null : ruta.base} yo={yo} trazado={trazado} zonas={verZonas ? zonas?.zonas || SIN_ZONAS : SIN_ZONAS}
+              incidencias={incidencias?.incidencias || SIN_ZONAS} zbe={zbe?.zonas || SIN_ZONAS} furgo={furgo} onAccion={accionMapa}
               paradas={lista(ruta.pedidos).map((p, i) => ({
-                lat: p.lat, lng: p.lng, estado: p.estado, orden: p.orden, color: '#0ea5e9', grande: siguiente?.id === p.id,
+                id: p.id, lat: p.lat, lng: p.lng, estado: p.estado, motivo: p.motivo, orden: p.orden, color: '#0ea5e9', grande: siguiente?.id === p.id,
                 etiqueta: p.orden ?? i + 1, titulo: p.cliente || p.direccion, sub: p.eta ? `≈ ${p.eta} · ${p.direccion}` : p.direccion,
+                // Lo que enseña la ventana al tocar la chincheta (30-10-2026).
+                telefono: p.telefono || '', tipo: p.tipo, prioridad: !!p.prioridad, cobrar: p.cobrar > 0 ? euros(p.cobrar) : null,
+                puerta: p.geo === 'puerta', zbe: zbe?.paradas?.[p.id]?.nombre || null, dice: p.cliente_dice ? textoClienteDice(p.cliente_dice) : null,
               }))} />
           </Suspense>
           <p className="mt-1.5 flex flex-wrap items-center gap-x-2 text-[12px] text-dark-400">
@@ -1344,6 +1441,23 @@ export default function MiRuta({ onBack, embebido = false, alTerminar = null }) 
               </span>
             )}
           </label>
+          {/* LO QUE DICE LA DGT (30-10-2026): cortes y obras cerca, y las ZBE que tocan la ruta. Real, con su fuente. */}
+          <p data-testid="dgt" className="mt-1.5 flex flex-wrap items-center gap-x-1.5 text-[12px] text-dark-300">
+            <AlertTriangle size={13} className="shrink-0 text-amber-300" /> {tx('Cortes y obras (DGT)')}:{' '}
+            <span className="text-dark-400">
+              {incidencias == null ? '…' : incidencias.incidencias.length
+                ? `${incidencias.incidencias.length === 1 ? tx('1 cerca de tu ruta') : tx('{n} cerca de tu ruta', { n: incidencias.incidencias.length })} · ${incidencias.incidencias[0].que} · ${incidencias.incidencias[0].carretera}${incidencias.incidencias[0].parada ? ` · ${tx('a {km} km de la parada {n}', { km: String(incidencias.incidencias[0].distancia_km).replace('.', ','), n: incidencias.incidencias[0].parada })}` : ''}`
+                : tx('ninguna cerca de tu ruta')}
+              {incidencias?.incompleto ? ` ${tx('(no se han podido cargar)')}` : ''}
+            </span>
+          </p>
+          {zbe?.zonas?.length > 0 && (
+            <p data-testid="zbe" className="mt-1 text-[12px] leading-snug text-violet-200">
+              {tx('Zonas de bajas emisiones (DGT)')}: {zbe.zonas.map((z) => z.nombre).join(', ')}
+              {Object.keys(zbe.paradas || {}).length ? ` · ${Object.keys(zbe.paradas).length === 1 ? tx('1 parada dentro') : tx('{n} paradas dentro', { n: Object.keys(zbe.paradas).length })}` : ''}
+              {zbe.zonas[0].descripcion ? ` · ${zbe.zonas[0].descripcion}` : ''}
+            </p>
+          )}
           {pendientes.some((p) => p.lat == null) && (
             <p className="mt-1 text-[12px] text-amber-200/90">
               {tx('{n} sin situar en el mapa todavía (la dirección no se ha encontrado o se está buscando).', { n: pendientes.filter((p) => p.lat == null).length })}
@@ -1416,12 +1530,15 @@ export default function MiRuta({ onBack, embebido = false, alTerminar = null }) 
               {p.ventana_desde && <span className="rounded bg-dark-800 px-1.5 text-dark-300">{tx('Horario')} {p.ventana_desde}–{p.ventana_hasta}</span>}
               {p.tarde_min > 0 && <span className="rounded bg-red-500/15 px-1.5 text-red-300">{tx('llega {n} min tarde', { n: p.tarde_min })}</span>}
               {juntas > 1 && <span className="rounded bg-sky-500/15 px-1.5 font-semibold text-sky-300">{tx('{n} paradas en esta puerta', { n: juntas })}</span>}
+              {/* LA PUERTA APRENDIDA y la ZBE (30-10-2026): el pin es donde se entregó la última vez; la parada cae en una zona de bajas emisiones. */}
+              {p.geo === 'puerta' && <span className="rounded bg-emerald-500/15 px-1.5 font-semibold text-emerald-300">{tx('Puerta conocida')}</span>}
+              {zbe?.paradas?.[p.id] && <span className="rounded bg-violet-500/15 px-1.5 font-bold text-violet-300" title={zbe.paradas[p.id].nombre}>ZBE</span>}
             </>
           )
-          const hayEtiquetas = p.ejemplo || p.prioridad || p.tipo === 'recogida' || p.cobrar > 0 || p.ventana_desde || p.tarde_min > 0 || juntas > 1
+          const hayEtiquetas = p.ejemplo || p.prioridad || p.tipo === 'recogida' || p.cobrar > 0 || p.ventana_desde || p.tarde_min > 0 || juntas > 1 || p.geo === 'puerta' || !!zbe?.paradas?.[p.id]
           if (!esSiguiente && abierta !== p.id) {
             return (
-              <div key={p.id} className="flex items-stretch gap-1 rounded-2xl border border-dark-800 bg-dark-900/70">
+              <div key={p.id} id={`parada-${p.id}`} className="flex items-stretch gap-1 rounded-2xl border border-dark-800 bg-dark-900/70">
                 <button onClick={() => setAbierta(p.id)} aria-label={`${tx('Ver la parada {n}', { n: p.orden ?? i + 1 })}: ${p.cliente || p.direccion}`}
                   className="flex min-w-0 flex-1 items-center gap-3 px-3 py-2.5 text-left">
                   <span className="flex h-7 min-w-7 items-center justify-center rounded-full border border-brand-400/50 px-1.5 text-[12.5px] font-bold text-brand-200">{p.orden ?? i + 1}</span>
@@ -1450,7 +1567,7 @@ export default function MiRuta({ onBack, embebido = false, alTerminar = null }) 
             )
           }
           return (
-          <div key={p.id} className={`rounded-2xl border p-3.5 ${esSiguiente ? 'border-brand-400/70 bg-gradient-to-b from-brand-500/[.12] to-dark-900 shadow-lg shadow-black/20' : 'border-dark-600 bg-dark-900'}`}>
+          <div key={p.id} id={`parada-${p.id}`} className={`rounded-2xl border p-3.5 ${esSiguiente ? 'border-brand-400/70 bg-gradient-to-b from-brand-500/[.12] to-dark-900 shadow-lg shadow-black/20' : 'border-dark-600 bg-dark-900'}`}>
             <div className="mb-2 flex items-center justify-between">
               <p className={`text-[11px] font-bold uppercase tracking-wider ${esSiguiente ? 'text-brand-300' : 'text-dark-400'}`}>{esSiguiente ? tx('Siguiente parada') : tx('Parada {n}', { n: p.orden ?? i + 1 })}</p>
               {!esSiguiente && <button onClick={() => setAbierta(null)} className="text-[12px] font-semibold text-dark-400">{tx('Plegar')}</button>}
@@ -1471,6 +1588,7 @@ export default function MiRuta({ onBack, embebido = false, alTerminar = null }) 
                   {p.lat == null && ` · ${tx('sin ubicar en el mapa')}`}{p.geo === 'aprox' && ` · ${tx('ubicación aproximada (la calle)')}`}{p.notas && ` · ${p.notas}`}
                 </p>
                 <AntesPuerta a={p.antes} className="mt-1.5" />
+                <ClienteDice d={p.cliente_dice} className="mt-1.5" />
                 <div className="mt-1.5 flex flex-wrap gap-1.5">
                   <button onClick={() => setHuecoDe(p)}
                     className={`inline-flex items-center gap-1 rounded-lg px-2 py-1 text-[12px] font-semibold ${p.hueco ? 'bg-sky-500/15 text-sky-200' : 'border border-dashed border-dark-700 text-dark-400'}`}>
@@ -1495,7 +1613,7 @@ export default function MiRuta({ onBack, embebido = false, alTerminar = null }) 
                   className={`flex flex-col items-center gap-0.5 rounded-xl py-2 text-[11px] ${esSiguiente ? 'bg-brand-500 font-bold text-brand-tinta' : 'border border-dark-700 text-dark-200'}`}><Navigation size={16} /> {tx('Ir')}</a>
               )}
               {p.telefono
-                ? <a href={`tel:${p.telefono}`} className="flex flex-col items-center gap-0.5 rounded-xl border border-dark-700 py-2 text-[11px] text-dark-200"><Phone size={16} /> {tx('Llamar')}</a>
+                ? <a href={`tel:${p.telefono}`} onClick={() => apuntar(p, 'llamada')} className="flex flex-col items-center gap-0.5 rounded-xl border border-dark-700 py-2 text-[11px] text-dark-200"><Phone size={16} /> {tx('Llamar')}</a>
                 : <span className="flex flex-col items-center gap-0.5 rounded-xl border border-dark-800 py-2 text-[11px] text-dark-600"><Phone size={16} /> {tx('Sin teléfono')}</span>}
               {ruta.pais === 'cn' ? (p.telefono
                 ? <a href={`sms:${p.telefono.replace(/[^\d+]/g, '')}?&body=${encodeURIComponent(mensaje(p, ruta.empresa))}`}
@@ -1503,6 +1621,7 @@ export default function MiRuta({ onBack, embebido = false, alTerminar = null }) 
                 : <span className="flex flex-col items-center gap-0.5 rounded-xl border border-dark-800 py-2 text-[11px] text-dark-600"><MessageCircle size={16} /> —</span>)
               : movilWhatsApp(p.telefono, ruta.pais, ruta.prefijo)
                 ? <a href={`https://wa.me/${movilWhatsApp(p.telefono, ruta.pais, ruta.prefijo)}?text=${encodeURIComponent(mensaje(p, ruta.empresa))}`} target="_blank" rel="noreferrer"
+                    onClick={() => apuntar(p, 'whatsapp')}
                     className="flex flex-col items-center gap-0.5 rounded-xl border border-emerald-600/50 py-2 text-[11px] text-emerald-300"><MessageCircle size={16} /> WhatsApp</a>
                 : <span className="flex flex-col items-center gap-0.5 rounded-xl border border-dark-800 py-2 text-[11px] text-dark-600"><MessageCircle size={16} /> —</span>}
             </div>
@@ -1683,7 +1802,8 @@ export default function MiRuta({ onBack, embebido = false, alTerminar = null }) 
             quedan={pendientes.length} onSalir={() => setGuiando(null)}
             onEntregar={(p) => marcar(p, 'entregado')} onNoEntregar={(p) => setFallo(p)}
             onEntregarVoz={(p) => marcar(p, 'entregado', undefined, undefined, {})} onDeshacer={deshacer ? deshacerUltima : null}
-            enlaceFuera={(p) => navegar(p, fuera)} nombreFuera={nombreNavegador(fuera)} />
+            enlaceFuera={(p) => navegar(p, fuera)} nombreFuera={nombreNavegador(fuera)}
+            onLlegar={(p) => { apuntar(p, 'llegada'); pedirPosicionEntrega() }} />
         </Suspense>
       )}
 
@@ -1796,6 +1916,12 @@ export default function MiRuta({ onBack, embebido = false, alTerminar = null }) 
             <input className={inp} placeholder={tx('Teléfono')} inputMode="tel" value={nuevo.telefono} onChange={(e) => setNuevo({ ...nuevo, telefono: e.target.value })} />
             <input className={inp} placeholder={tx('Qué lleva')} value={nuevo.contenido} onChange={(e) => setNuevo({ ...nuevo, contenido: e.target.value })} />
             <input className={inp} placeholder={tx('Horario del cliente (ej. de 10 a 12)')} value={nuevo.horario || ''} onChange={(e) => setNuevo({ ...nuevo, horario: e.target.value })} />
+            <div className="-mt-0.5 flex flex-wrap gap-1.5" data-testid="atajos-horario">
+              {ATAJOS_HORARIO.map(([t, h]) => (
+                <button key={t} type="button" onClick={() => setNuevo({ ...nuevo, horario: nuevo.horario === h ? '' : h })} aria-pressed={nuevo.horario === h}
+                  className={`rounded-full border px-2.5 py-1 text-[12px] font-semibold ${nuevo.horario === h ? 'border-brand-400 bg-brand-500/15 text-brand-200' : 'border-dark-700 text-dark-300'}`}>{tx(t)}</button>
+              ))}
+            </div>
             <div className="grid grid-cols-2 gap-2">
               <input className={inp} inputMode="decimal" placeholder={tx('A cobrar ({moneda})', { moneda: simboloMoneda() })} value={nuevo.cobrar || ''} onChange={(e) => setNuevo({ ...nuevo, cobrar: e.target.value })} />
               <select className={inp} value={nuevo.tipo || 'entrega'} onChange={(e) => setNuevo({ ...nuevo, tipo: e.target.value })} aria-label={tx('Tipo de parada')}>
@@ -2125,7 +2251,8 @@ function Marco({ onBack, children, embebido }) {
    única parada no estaba en el mapa (la dirección no se encontró) y sin un punto no hay
    adónde guiar; el aviso quedaba abajo, debajo del mapa. Ahora lo dice aquí y lleva a
    corregirla: al escribirla salen sugerencias, y elegir una la sitúa. */
-function Cabecera({ fecha, hechos, total, entregados, pendientes, rr, retraso, cobrado, fueraHorario, onGuiar, onCorregir, dinero, onTarifa, onCompartir, onAnadir, mejor = 0 }) {
+function Cabecera({ fecha, hechos, total, entregados, pendientes, rr, retraso, cobrado, fueraHorario, onGuiar, onCorregir, dinero, onTarifa, onCompartir, onAnadir, mejor = 0,
+  onReordenar = null, furgo = null, yo = null, onAparcar = null, onQuitarFurgo = null }) {
   const pct = total ? hechos / total : 0
   const R = 26
   const L = 2 * Math.PI * R
@@ -2179,6 +2306,13 @@ function Cabecera({ fecha, hechos, total, entregados, pendientes, rr, retraso, c
         {fueraHorario > 0 && <span className="rounded-full bg-red-500/15 px-2 py-0.5 text-red-300">{tx('{n} fuera de su horario', { n: fueraHorario })}</span>}
         {pendientes > 0 && retraso > 5 && <span className="rounded-full bg-amber-500/15 px-2 py-0.5 font-semibold text-amber-300">{tx('Vas {t} por detrás de lo previsto', { t: minutosATexto(retraso) })}</span>}
       </div>
+      {/* REORDENAR DESDE AQUÍ (30-10-2026): con más de 15 min de retraso, un toque recalcula desde donde estás. */}
+      {onReordenar && (
+        <button onClick={onReordenar} data-testid="reordenar"
+          className="mt-2.5 flex w-full items-center justify-center gap-2 rounded-xl border border-amber-400/50 bg-amber-500/10 py-2.5 text-[13.5px] font-bold text-amber-100">
+          <Route size={15} /> {tx('Reordenar desde aquí')}
+        </button>
+      )}
       {dinero && (
         <button onClick={onTarifa} aria-label={tx('Mi dinero hoy')}
           className="mt-3 flex w-full items-center justify-between gap-2 rounded-2xl border border-emerald-400/30 bg-emerald-500/[.08] px-3 py-2 text-left">
@@ -2187,6 +2321,7 @@ function Cabecera({ fecha, hechos, total, entregados, pendientes, rr, retraso, c
             <span className="block text-[12.5px] text-dark-300">
               {tx('Llevas {a} · gasolina ≈ {b}', { a: euros(dinero.bruto), b: euros(dinero.gasolina) })}
               {dinero.porHora != null ? ` · ${tx('{c}/hora', { c: euros(dinero.porHora) })}` : ''}
+              {dinero.fallidas > 0 ? ` · ${dinero.fallidas === 1 ? tx('1 sin entregar = {euros} sin cobrar', { euros: euros(dinero.perdido) }) : tx('{n} sin entregar = {euros} sin cobrar', { n: dinero.fallidas, euros: euros(dinero.perdido) })}` : ''}
             </span>
           </span>
           <span className="shrink-0 text-right">
@@ -2219,6 +2354,25 @@ function Cabecera({ fecha, hechos, total, entregados, pendientes, rr, retraso, c
             <button type="button" onClick={onAnadir} aria-label={tx('Añadir paradas')}
               className={`flex items-center justify-center gap-1.5 rounded-2xl border border-brand-400/60 text-[15px] font-bold text-brand-200 ${onGuiar ? 'w-14 shrink-0' : 'flex-1 py-3.5'}`}>
               <Plus size={onGuiar ? 24 : 19} strokeWidth={2.5} /> {!onGuiar && tx('Añadir paradas')}
+            </button>
+          )}
+        </div>
+      )}
+      {/* DÓNDE APARQUÉ (30-10-2026): el punto de la furgoneta al bajarte; los metros mientras andas; un toque
+          abre el camino a pie. Se queda en el móvil, no se envía. */}
+      {(onAparcar || furgo) && pendientes > 0 && (
+        <div className="mt-2.5 flex items-center gap-2 text-[12.5px]">
+          {furgo ? (<>
+            <a href={`https://www.google.com/maps/dir/?api=1&destination=${furgo.lat},${furgo.lng}&travelmode=walking`} target="_blank" rel="noreferrer" data-testid="furgo"
+              className="inline-flex min-w-0 flex-1 items-center gap-1.5 rounded-xl border border-dark-700 bg-dark-900 px-3 py-2 font-semibold text-dark-100">
+              <CarFront size={15} className="shrink-0 text-brand-300" />
+              <span className="truncate">{yo?.lat != null ? tx('Furgoneta a {m} m', { m: Math.round(metrosEntre(yo, furgo)) }) : tx('Furgoneta aparcada')}</span>
+            </a>
+            <button type="button" onClick={onQuitarFurgo} className="shrink-0 rounded-xl border border-dark-700 px-3 py-2 text-dark-300">{tx('Quitar')}</button>
+          </>) : (
+            <button type="button" onClick={onAparcar} data-testid="aparcar"
+              className="inline-flex items-center gap-1.5 rounded-xl border border-dashed border-dark-600 px-3 py-2 font-semibold text-dark-300">
+              <CarFront size={15} /> {tx('Aparcada aquí')}
             </button>
           )}
         </div>

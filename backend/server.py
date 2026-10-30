@@ -48,7 +48,7 @@ import asyncio
 import os
 import csv
 import io
-from urllib.parse import quote as _url_quote, urlencode as _url_encode
+from urllib.parse import quote as _url_quote, unquote as _url_unquote, urlencode as _url_encode
 from html import escape as html_escape
 import json
 import uuid
@@ -51742,6 +51742,24 @@ async def _rep_nombre_conductor(cid: str) -> str:
     return d.get("name") or ""
 
 
+async def _rep_puerta_aprendida(conductor_id: str, direccion: str) -> Optional[tuple]:
+    """LA APP APRENDE LA PUERTA (30-10-2026): dónde entregó este repartidor la última vez en esa misma
+    dirección (lo que marcó su móvil al pulsar «Entregado», si era preciso y estaba cerca de lo buscado).
+    Solo lo suyo y de los últimos 180 días; sin eso, se busca la dirección como siempre."""
+    k = reparto.clave_direccion(direccion)
+    if not k or not conductor_id:
+        return None
+    desde = (datetime.strptime(_dia_negocio(), "%Y-%m-%d") - timedelta(days=180)).strftime("%Y-%m-%d")
+    async for p in db.reparto_pedidos.find(
+            {"conductor_id": conductor_id, "fecha": {"$gte": desde}, "puerta_lat": {"$ne": None}},
+            {"_id": 0, "direccion": 1, "puerta_lat": 1, "puerta_lng": 1}).sort("fecha", -1).limit(2000):
+        kp = reparto.clave_direccion(p.get("direccion"))
+        # La misma calle y número con o sin la población detrás («montero rios 12» y «montero rios 12 a coruna»).
+        if p.get("puerta_lng") is not None and kp and (kp == k or kp.startswith(k + " ") or k.startswith(kp + " ")):
+            return (p["puerta_lat"], p["puerta_lng"])
+    return None
+
+
 async def _rep_nuevo(datos: dict, user: dict, origen: str, fecha: str,
                      conductor: Optional[dict] = None, ubicar: bool = True,
                      _ajustes_cache: Optional[dict] = None, _cupo_comprobado: bool = False,
@@ -51796,8 +51814,11 @@ async def _rep_nuevo(datos: dict, user: dict, origen: str, fecha: str,
         if cid:
             p["conductor_id"], p["conductor_nombre"] = cid, await _rep_nombre_conductor(cid)
     pt = reparto._punto(datos)
+    aprendida = await _rep_puerta_aprendida(conductor["id"], direccion) if (conductor and not pt and ubicar) else None
     if pt:
         p["lat"], p["lng"], p["geo"] = pt[0], pt[1], "manual"
+    elif aprendida:
+        p["lat"], p["lng"], p["geo"] = aprendida[0], aprendida[1], "puerta"
     elif ubicar:
         pt = await _rep_ubicar(direccion, cp, p["localidad"], _rep_base(a))
         if pt:
@@ -52433,7 +52454,51 @@ async def seguimiento_publico(token: str, request: Request):
             "eta": p.get("eta"), "franja": [p.get("ventana_desde"), p.get("ventana_hasta")]
             if p.get("ventana_desde") else None, "paradas_antes": antes, "tipo": p.get("tipo") or "entrega",
             # Dónde quedó (sin nombres ni fotos): «Entregado: en el buzón».
-            "dejado": reparto.DONDE_ENTREGA.get(p.get("entrega_donde") or "") if p.get("estado") == "entregado" else None}
+            "dejado": reparto.DONDE_ENTREGA.get(p.get("entrega_donde") or "") if p.get("estado") == "entregado" else None,
+            # EL CLIENTE TE AYUDA ANTES DE LLEGAR (30-10-2026): lo que contestó, y si aún puede contestar.
+            "respuesta": p.get("cliente_dice"), "puede_contestar": p.get("estado") in ("pendiente", "en_ruta"),
+            # El registro del intento cuando no se pudo entregar: que vea que se llamó y se esperó.
+            "intento": (p.get("intento") or None) if p.get("estado") == "fallido" else None}
+
+
+@api_router.post("/seguimiento/{token}/respuesta")
+async def seguimiento_respuesta(token: str, request: Request, data: dict = Body(...)):
+    """EL CLIENTE TE AYUDA ANTES DE LLEGAR (30-10-2026). Al repartidor le pagan por paquete entregado y una
+    de cada cinco entregas falla a la primera (docs/NECESIDADES-REPARTIDOR-30-10.md). En el enlace que ya le
+    llega por WhatsApp, el cliente dice si estará, dónde dejarlo si no, el código del portal y una franja; lo
+    que diga entra en la parada (la franja, en la ventana que la ruta ya respeta) y le salta un aviso al
+    repartidor. Sin datos personales nuevos: solo lo que el cliente escribe, y se borra con el pedido."""
+    _rl_public_action(f"segr:{_rl_key_ip(request)}", max_count=40, window_s=3600)
+    if not re.fullmatch(r"[A-Za-z0-9_-]{16,40}", token or ""):
+        raise HTTPException(404, "Enlace no válido")
+    e = await global_db.reparto_enlaces.find_one({"token": token}, {"_id": 0})
+    if not e or (e.get("caduca") or "") < _dia_negocio():
+        raise HTTPException(404, "Este enlace ha caducado")
+    tdb = client[e["db_name"]]
+    p = await tdb.reparto_pedidos.find_one({"id": e["pedido_id"]}, {"_id": 0, "entrega_foto": 0, "entrega_firma": 0})
+    if not p:
+        raise HTTPException(404, "Este enlace ha caducado")
+    if p.get("estado") not in ("pendiente", "en_ruta"):
+        raise HTTPException(409, "Este pedido ya está cerrado")
+    r, error = reparto.respuesta_cliente(_dict_cuerpo(data))
+    if error:
+        raise HTTPException(400, error)
+    r["cuando"] = datetime.now(timezone.utc).isoformat()
+    cambios = {"cliente_dice": r}
+    if r.get("franja"):
+        cambios["ventana_desde"], cambios["ventana_hasta"] = r["franja"]
+    await tdb.reparto_pedidos.update_one({"id": p["id"]}, {"$set": cambios})
+    # Al repartidor, por todos los caminos (la bandeja de la app, web push y FCM).
+    if p.get("conductor_id"):
+        org = await global_db.organizations.find_one({"db_name": e["db_name"]}, {"_id": 0, "sector": 1}) or {}
+        url = "/ruta" if org.get("sector") == "autonomo" else "/conductor?vista=ruta"
+        try:
+            await _avisar_usuarios([p["conductor_id"]], "El cliente ha contestado",
+                                   reparto.texto_respuesta(r, p.get("cliente") or p.get("direccion") or ""),
+                                   url=url, coleccion=tdb.avisos_movil)
+        except Exception as ex:                                  # noqa: BLE001
+            logger.warning(f"respuesta del cliente: aviso no enviado: {type(ex).__name__}")
+    return {"ok": True, "cliente_dice": r}
 
 
 @api_router.get("/reparto/estadisticas")
@@ -52696,15 +52761,20 @@ async def reparto_mis_direcciones(q: str = "", user: dict = Depends(require_any_
     async for p in db.reparto_pedidos.find(
             {"conductor_id": d["id"], "fecha": {"$gte": desde}, "ejemplo": {"$ne": True}, "lat": {"$ne": None}},
             {"_id": 0, "direccion": 1, "cp": 1, "localidad": 1, "lat": 1, "lng": 1, "cliente": 1, "telefono": 1,
-             "fecha": 1}).sort("fecha", -1).limit(5000):
+             "fecha": 1, "puerta_lat": 1, "puerta_lng": 1}).sort("fecha", -1).limit(5000):
         k = reparto.clave_direccion(p.get("direccion"))
         if not k or not all(w in k for w in palabras):
             continue
+        con_puerta = p.get("puerta_lat") is not None and p.get("puerta_lng") is not None
         if k in vistas:
             vistas[k]["veces"] += 1
+            # LA PUERTA APRENDIDA (30-10-2026): si una vez anterior guardó la puerta de verdad, ese es el punto.
+            if con_puerta and not vistas[k]["puerta"]:
+                vistas[k].update({"lat": p["puerta_lat"], "lng": p["puerta_lng"], "puerta": True})
             continue
         vistas[k] = {"direccion": p.get("direccion") or "", "cp": p.get("cp") or "", "localidad": p.get("localidad") or "",
-                     "lat": p.get("lat"), "lng": p.get("lng"), "cliente": p.get("cliente") or "",
+                     "lat": p["puerta_lat"] if con_puerta else p.get("lat"), "lng": p["puerta_lng"] if con_puerta else p.get("lng"),
+                     "puerta": con_puerta, "cliente": p.get("cliente") or "",
                      "telefono": p.get("telefono") or "", "ultima": p.get("fecha") or "", "veces": 1}
     # Las más repetidas primero; a igualdad, la más reciente (dos pasadas: la ordenación de Python es estable).
     orden = sorted(vistas.values(), key=lambda x: x["ultima"], reverse=True)
@@ -52987,6 +53057,17 @@ async def reparto_estado(pid: str, data: dict = Body(...), user: dict = Depends(
         if not firma.startswith("data:image/png;base64,") or len(firma) > 100000:
             raise HTTPException(400, "La firma tiene que ser una imagen pequeña")
         cambios["entrega_firma"] = firma
+    # EL REGISTRO DEL INTENTO (30-10-2026): cuándo llegó, si llamó y escribió, cuánto esperó. Defiende al
+    # repartidor ante un «ausente» y al cliente ante el que no llama; el enlace de seguimiento lo enseña.
+    intento = reparto.sanea_intento(data.get("intento"))
+    if intento:
+        cambios["intento"] = intento
+    # LA APP APRENDE LA PUERTA (30-10-2026): la posición del móvil al entregar, si es precisa y está cerca de
+    # lo que se buscó. La próxima vez en esa dirección el pin es la puerta de verdad (polígonos, pueblos sin
+    # número, bloques con varias entradas), sin pedirle nada a nadie.
+    puerta = reparto.puerta_valida(data.get("posicion"), p.get("lat"), p.get("lng")) if e == "entregado" else None
+    if puerta:
+        cambios.update({"puerta_lat": puerta[0], "puerta_lng": puerta[1], "puerta_precision": puerta[2]})
     if e != "entregado":
         cambios.update({"entrega_foto": None, "entrega_nota": cambios.get("entrega_nota"), "entrega_firma": None,
                         "entrega_donde": None, "entrega_recibe": None})
@@ -53162,6 +53243,128 @@ async def reparto_mi_zonas_carga(user: dict = Depends(require_any_auth)):
     # Solo las que quedan cerca de alguna parada (a menos de ~300 m).
     cerca = [z for z in zonas if any(abs(z["lat"] - p["lat"]) <= margen and abs(z["lng"] - p["lng"]) <= margen * 1.4 for p in ps)]
     return {"zonas": cerca[:300], "incompleto": incompleto, "fuente": "OpenStreetMap"}
+
+
+# ── LO QUE DICE LA DGT (30-10-2026): cortes y obras, y las zonas de bajas emisiones ────────────────────────
+# El Punto de Acceso Nacional (nap.dgt.es) publica, gratis y sin registro, las incidencias activas de la red de
+# carreteras en DATEX II (unos 3,6 MB, cada pocos minutos) y las zonas de bajas emisiones de 46 ciudades con
+# sus polígonos. Se descargan en el servidor, se guardan en memoria un rato y se filtran a la caja de la ruta
+# de cada repartidor. Lo que se pinta es lo que la DGT dice: nada de «tráfico en tiempo real» que no lo sea
+# (docs/NECESIDADES-REPARTIDOR-30-10.md, 3.1 y 2.5).
+_DGT_INCIDENCIAS_URL = os.environ.get("DGT_INCIDENCIAS_URL",
+                                      "https://nap.dgt.es/datex2/v3/dgt/SituationPublication/datex2_v37.xml")
+_DGT_ZBE_URL = os.environ.get("DGT_ZBE_URL", "https://nap.dgt.es/datex2/v3/dgt/zbe/ControledZonePublication/")
+_DGT_INCIDENCIAS_CADA = 300            # segundos: la DGT publica cada pocos minutos
+_DGT_ZBE_CADA = 24 * 3600              # las ZBE cambian con las ordenanzas, no cada día
+_DGT_CACHE: dict = {"incidencias": None, "incidencias_en": 0.0, "publicado": "", "zbe": None, "zbe_en": 0.0}
+_DGT_LOCK = asyncio.Lock()
+
+
+async def _dgt_descargar(url: str, timeout: int = 25) -> Optional[str]:
+    import httpx as _httpx
+    try:
+        async with _httpx.AsyncClient(timeout=timeout, follow_redirects=True, headers={
+                "User-Agent": f"{MARCA}/1.0 (reparto; {CORREO_CONTACTO})"}) as c:
+            r = await c.get(url)
+            if r.status_code != 200:
+                logger.warning(f"DGT: {url.rsplit('/', 1)[-1] or url} contesta {r.status_code}")
+                return None
+            return r.text
+    except Exception as e:                                       # noqa: BLE001
+        logger.warning(f"DGT: sin respuesta de {url.split('/')[2]}: {type(e).__name__}")
+        return None
+
+
+async def _dgt_incidencias() -> tuple:
+    """(incidencias, publicado, fresco): la lista de la DGT, de memoria si tiene menos de 5 minutos. Sin
+    respuesta, lo último que hubo (y `fresco` en False, para decirlo)."""
+    def vale():
+        return _DGT_CACHE["incidencias"] is not None and time.time() - _DGT_CACHE["incidencias_en"] < _DGT_INCIDENCIAS_CADA
+    if vale():
+        return _DGT_CACHE["incidencias"], _DGT_CACHE["publicado"], True
+    async with _DGT_LOCK:
+        if vale():
+            return _DGT_CACHE["incidencias"], _DGT_CACHE["publicado"], True
+        xml = await _dgt_descargar(_DGT_INCIDENCIAS_URL)
+        if xml:
+            try:
+                items, publicado = reparto.incidencias_datex(xml)
+                _DGT_CACHE.update({"incidencias": items, "incidencias_en": time.time(), "publicado": publicado})
+                return items, publicado, True
+            except Exception as e:                               # noqa: BLE001
+                logger.warning(f"DGT: incidencias ilegibles: {type(e).__name__}")
+        _DGT_CACHE["incidencias_en"] = time.time() - _DGT_INCIDENCIAS_CADA + 60      # se reintenta en un minuto
+        return _DGT_CACHE["incidencias"] or [], _DGT_CACHE["publicado"], False
+
+
+async def _dgt_zbe() -> tuple:
+    """(zonas, fresco): las ZBE de todas las ciudades que publica la DGT, de memoria si tienen menos de un día."""
+    def vale():
+        return _DGT_CACHE["zbe"] is not None and time.time() - _DGT_CACHE["zbe_en"] < _DGT_ZBE_CADA
+    if vale():
+        return _DGT_CACHE["zbe"], True
+    async with _DGT_LOCK:
+        if vale():
+            return _DGT_CACHE["zbe"], True
+        indice = await _dgt_descargar(_DGT_ZBE_URL)
+        ficheros = sorted(set(re.findall(r'href="([A-Za-z0-9_%.-]+\.xml)"', indice or "")))
+        if not ficheros:
+            _DGT_CACHE["zbe_en"] = time.time() - _DGT_ZBE_CADA + 600
+            return _DGT_CACHE["zbe"] or [], False
+        cerrojo = asyncio.Semaphore(6)
+        fallos = [0]
+
+        async def una(f: str) -> list:
+            async with cerrojo:
+                xml = await _dgt_descargar(_DGT_ZBE_URL + f)
+            if not xml:
+                fallos[0] += 1
+                return []
+            try:
+                return reparto.zbe_datex(xml, ciudad=_url_unquote(f[:-4]))
+            except Exception as e:                               # noqa: BLE001
+                fallos[0] += 1
+                logger.warning(f"DGT: ZBE de {f} ilegible: {type(e).__name__}")
+                return []
+        zonas = [z for lista in await asyncio.gather(*(una(f) for f in ficheros)) for z in lista]
+        if zonas:
+            _DGT_CACHE.update({"zbe": zonas, "zbe_en": time.time()})
+        else:
+            _DGT_CACHE["zbe_en"] = time.time() - _DGT_ZBE_CADA + 600
+        return zonas or (_DGT_CACHE["zbe"] or []), fallos[0] == 0
+
+
+async def _rep_paradas_pendientes_situadas(conductor_id: str) -> list:
+    return await db.reparto_pedidos.find(
+        {"fecha": _dia_negocio(), "conductor_id": conductor_id, "estado": {"$in": ["pendiente", "en_ruta"]},
+         "lat": {"$ne": None}, "lng": {"$ne": None}},
+        {"_id": 0, "id": 1, "lat": 1, "lng": 1, "orden": 1}).to_list(500)
+
+
+@api_router.get("/reparto/mi-ruta/incidencias")
+async def reparto_mi_incidencias(user: dict = Depends(require_any_auth)):
+    """Cortes, obras, accidentes y retenciones de la DGT cerca de las paradas que le quedan hoy."""
+    d = await _rep_conductor(user)
+    ps = await _rep_paradas_pendientes_situadas(d["id"])
+    if not ps:
+        return {"incidencias": [], "fuente": "DGT", "publicado": "", "incompleto": False}
+    items, publicado, fresco = await _dgt_incidencias()
+    return {"incidencias": reparto.incidencias_cerca(items, ps), "fuente": "DGT", "publicado": publicado,
+            "incompleto": not fresco}
+
+
+@api_router.get("/reparto/mi-ruta/zbe")
+async def reparto_mi_zbe(user: dict = Depends(require_any_auth)):
+    """Las zonas de bajas emisiones (las que publica la DGT, con la descripción del ayuntamiento) que tocan
+    la ruta de hoy, y qué paradas caen dentro de cada una."""
+    d = await _rep_conductor(user)
+    ps = await _rep_paradas_pendientes_situadas(d["id"])
+    if not ps:
+        return {"zonas": [], "paradas": {}, "fuente": "DGT", "incompleto": False}
+    zonas, fresco = await _dgt_zbe()
+    cerca = reparto.zbe_cerca(zonas, ps)
+    return {"zonas": [{k: v for k, v in z.items() if k != "caja"} for z in cerca[:20]],
+            "paradas": reparto.zbe_de_paradas(cerca, ps), "fuente": "DGT", "incompleto": not fresco}
 
 
 @api_router.post("/reparto/mi-ruta/navegar")

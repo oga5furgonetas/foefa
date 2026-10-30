@@ -858,3 +858,325 @@ def zonas_de_overpass(j: dict, limite: int = 400) -> list:
         if len(out) >= limite:
             break
     return out
+
+
+# ══ LO QUE PIDE LA CALLE (30-10-2026) ════════════════════════════════════════
+# De docs/NECESIDADES-REPARTIDOR-30-10.md: al repartidor le pagan por paquete entregado y una de cada cinco
+# entregas falla a la primera. Lo de aquí es lo que se puede probar sin base de datos: lo que contesta el
+# cliente en su enlace, el registro del intento, la puerta aprendida y lo que publica la DGT (cortes, obras y
+# zonas de bajas emisiones, en DATEX II).
+import xml.etree.ElementTree as _ET  # noqa: E402
+
+DEJAR_CLIENTE = {"buzon": "en el buzón", "porteria": "en portería", "vecino": "a un vecino",
+                 "seguro": "en un lugar seguro", "punto_recogida": "en un punto de recogida"}
+ESTARE = ("si", "no", "franja")
+_ISO_RE = re.compile(r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}")
+
+
+def _corto(v, n: int) -> str:
+    """Texto del cliente: sin saltos ni caracteres de control, en una línea y corto."""
+    t = "".join(ch for ch in str(v or "") if ch == " " or (ch.isprintable() and ch not in "\r\n\t"))
+    return re.sub(r"\s+", " ", t).strip()[:n]
+
+
+def respuesta_cliente(data) -> tuple:
+    """Lo que contesta el cliente en su enlace → (lo que se guarda, error). Nada que él no diga: si no
+    estará, dónde dejarlo; si da una franja, de qué hora a qué hora; el código del portal y una nota."""
+    d = data if isinstance(data, dict) else {}
+    estare = _corto(d.get("estare"), 10).lower()
+    if estare not in ESTARE:
+        return None, "Di si estarás, si no estarás, o a qué hora"
+    r = {"estare": estare, "dejar": "", "franja": None,
+         "portal": _corto(d.get("portal"), 120), "nota": _corto(d.get("nota"), 200)}
+    if estare == "no":
+        dejar = _corto(d.get("dejar"), 20).lower()
+        if dejar not in DEJAR_CLIENTE:
+            return None, "Di dónde dejarlo: buzón, portería, vecino, lugar seguro o punto de recogida"
+        r["dejar"] = dejar
+    if estare == "franja":
+        a, b = a_minutos(d.get("franja_desde")), a_minutos(d.get("franja_hasta"))
+        if a is None or b is None or b <= a:
+            return None, "La franja va de una hora a otra posterior"
+        r["franja"] = [hm(a), hm(b)]
+    return r, ""
+
+
+def texto_respuesta(r: dict, quien: str = "") -> str:
+    """Lo que se le dice al repartidor: «Lucía M.: no estará, déjalo en portería · portal 1234»."""
+    partes = []
+    if r.get("estare") == "si":
+        partes.append("estará en casa")
+    elif r.get("estare") == "no":
+        partes.append("no estará: déjalo " + DEJAR_CLIENTE.get(r.get("dejar") or "", "donde diga"))
+    elif r.get("franja"):
+        partes.append(f"mejor de {r['franja'][0]} a {r['franja'][1]}")
+    if r.get("portal"):
+        partes.append(f"portal: {r['portal']}")
+    if r.get("nota"):
+        partes.append(f"«{r['nota']}»")
+    texto = " · ".join(partes)
+    return f"{quien}: {texto}" if quien else texto
+
+
+def sanea_intento(d) -> "dict | None":
+    """El registro del intento que manda la app: cuándo llegó, si llamó y escribió, cuánto esperó. Solo
+    fechas con forma de fecha y números con tope; sin nada de eso, nada."""
+    if not isinstance(d, dict):
+        return None
+    out = {}
+    for k in ("llegada", "llamada", "whatsapp"):
+        v = str(d.get(k) or "").strip()[:40]
+        out[k] = v if _ISO_RE.match(v) else None
+    try:
+        out["espera_s"] = max(0, min(3600, int(float(d.get("espera_s") or 0))))
+    except (TypeError, ValueError):
+        out["espera_s"] = 0
+    try:
+        out["llamadas"] = max(0, min(20, int(float(d.get("llamadas") or 0))))
+    except (TypeError, ValueError):
+        out["llamadas"] = 0
+    if not any(out[k] for k in ("llegada", "llamada", "whatsapp")) and not out["espera_s"]:
+        return None
+    return out
+
+
+def puerta_valida(pos, lat, lng, precision_max: float = 50.0, metros_max: float = 300.0):
+    """La posición del móvil al pulsar «Entregado», si vale como puerta: precisa (hasta 50 m) y cerca de lo
+    que se buscó (hasta 300 m; sin punto buscado, vale). (lat, lng, precisión) o None."""
+    if not isinstance(pos, dict):
+        return None
+    p = _punto(pos)
+    if not p:
+        return None
+    try:
+        prec = float(pos.get("precision")) if pos.get("precision") is not None else 9999.0
+    except (TypeError, ValueError):
+        prec = 9999.0
+    if prec != prec or prec > precision_max:
+        return None
+    if lat is not None and lng is not None and distancia_km((lat, lng), p) * 1000 > metros_max:
+        return None
+    return (round(p[0], 6), round(p[1], 6), round(prec, 1))
+
+
+def caja_de(puntos, margen: float = 0.0):
+    """La caja (s, w, n, e) que envuelve unos puntos {lat, lng}, con un margen en grados. None sin puntos."""
+    ps = [q for q in (_punto(p) for p in puntos) if q]
+    if not ps:
+        return None
+    return (min(p[0] for p in ps) - margen, min(p[1] for p in ps) - margen,
+            max(p[0] for p in ps) + margen, max(p[1] for p in ps) + margen)
+
+
+def en_caja(lat, lng, caja) -> bool:
+    return bool(caja) and caja[0] <= lat <= caja[2] and caja[1] <= lng <= caja[3]
+
+
+def punto_en_poligono(lat, lng, poligono) -> bool:
+    """Trazado de rayo: dentro si el rayo hacia el este corta un número impar de lados. `poligono`: [[lat, lng]…]."""
+    n = len(poligono)
+    if n < 3:
+        return False
+    dentro = False
+    j = n - 1
+    for i in range(n):
+        yi, xi = poligono[i][0], poligono[i][1]
+        yj, xj = poligono[j][0], poligono[j][1]
+        if (yi > lat) != (yj > lat):
+            x = (xj - xi) * (lat - yi) / ((yj - yi) or 1e-12) + xi
+            if lng < x:
+                dentro = not dentro
+        j = i
+    return dentro
+
+
+# ── DATEX II de la DGT: incidencias (cortes y obras) y zonas de bajas emisiones ──
+def _local(tag) -> str:
+    return tag.rsplit("}", 1)[-1] if isinstance(tag, str) else ""
+
+
+def _hijo_texto(el, nombre: str) -> str:
+    """El texto del primer descendiente con ese nombre (sin espacio de nombres)."""
+    for x in el.iter():
+        if _local(x.tag) == nombre and x.text and x.text.strip():
+            return x.text.strip()
+    return ""
+
+
+def _valor_de(el, nombre: str) -> str:
+    """El `com:value` de dentro del primer descendiente con ese nombre (los textos van en listas de valores)."""
+    for x in el.iter():
+        if _local(x.tag) == nombre:
+            return _hijo_texto(x, "value")
+    return ""
+
+
+def _punto_de(el):
+    try:
+        return (float(_hijo_texto(el, "latitude")), float(_hijo_texto(el, "longitude")))
+    except ValueError:
+        return None
+
+
+_INC_GESTION = {
+    "roadClosed": ("corte", "carretera cortada"), "carriagewayClosures": ("corte", "calzada cortada"),
+    "intermittentShortTermClosures": ("corte", "cortes intermitentes"), "laneClosures": ("obras", "carril cortado"),
+    "singleAlternateLineTraffic": ("obras", "paso alternativo"), "narrowLanes": ("obras", "carriles estrechos"),
+    "lanesDeviated": ("obras", "desvío de carriles"), "newRoadworksLayout": ("obras", "obras: nuevo trazado"),
+    "doNotUseSpecifiedLanesOrCarriageways": ("obras", "carriles cerrados"), "contraflow": ("obras", "contraflujo"),
+    "useOfSpecifiedLanesOrCarriagewaysAllowed": ("aviso", "carriles habilitados"),
+}
+_INC_CAUSA = {
+    "roadMaintenance": ("obras", "obras"), "accident": ("accidente", "accidente"),
+    "vehicleObstruction": ("obstaculo", "vehículo parado"), "obstruction": ("obstaculo", "obstáculo en la vía"),
+    "environmentalObstruction": ("obstaculo", "obstáculo (desprendimiento, inundación…)"),
+    "infrastructureDamageObstruction": ("obstaculo", "daños en la vía"), "poorEnvironment": ("meteo", "meteorología"),
+    "abnormalTraffic": ("retencion", "retención"),
+}
+_INC_TIPO = {
+    "AbnormalTraffic": ("retencion", "retención"), "SpeedManagement": ("aviso", "límite de velocidad"),
+    "GeneralObstruction": ("obstaculo", "obstáculo"), "VehicleObstruction": ("obstaculo", "vehículo parado"),
+    "PoorEnvironmentConditions": ("meteo", "meteorología"),
+    "NonWeatherRelatedRoadConditions": ("obstaculo", "estado de la vía"),
+    "GeneralInstructionOrMessageToRoadUsers": ("aviso", "aviso"),
+    "RoadOrCarriagewayOrLaneManagement": ("obras", "restricción"),
+}
+_GRAVEDAD = {"highest": "alta", "high": "alta", "medium": "media", "low": "baja", "lowest": "baja"}
+_XSI_TYPE = "{http://www.w3.org/2001/XMLSchema-instance}type"
+
+
+def incidencias_datex(xml) -> tuple:
+    """Las incidencias activas de la DGT (DATEX II v3, perfil RTTI de nap.dgt.es) → ([{…}], publicado). Cada
+    registro con su clase (corte, obras, accidente, obstáculo, retención, meteo, aviso), qué pasa en español,
+    la carretera, el punto kilométrico, el municipio, su punto (y el final si es un tramo) y desde cuándo."""
+    raiz = _ET.fromstring(xml if isinstance(xml, (bytes, bytearray)) else str(xml).encode("utf-8"))
+    publicado = _hijo_texto(raiz, "publicationTime")[:32]
+    out = []
+    for sit in raiz.iter():
+        if _local(sit.tag) != "situation":
+            continue
+        grav_sit = _hijo_texto(sit, "overallSeverity")
+        for rec in sit:
+            if _local(rec.tag) != "situationRecord":
+                continue
+            tipo = (rec.get(_XSI_TYPE) or "").split(":")[-1]
+            gestion = [x.text.strip() for x in rec.iter()
+                       if _local(x.tag) == "roadOrCarriagewayOrLaneManagementType" and x.text]
+            causa = _hijo_texto(rec, "causeType")
+            clase, que = "otro", "incidencia"
+            if gestion and gestion[0] in _INC_GESTION:
+                clase, que = _INC_GESTION[gestion[0]]
+                # Un corte manda sobre la causa, pero la causa se dice: «carretera cortada (obras)».
+                if clase == "corte" and causa in _INC_CAUSA:
+                    que = f"{que} ({_INC_CAUSA[causa][1]})"
+            elif causa in _INC_CAUSA:
+                clase, que = _INC_CAUSA[causa]
+            elif tipo in _INC_TIPO:
+                clase, que = _INC_TIPO[tipo]
+            desde_el = next((x for x in rec.iter() if _local(x.tag) == "from"), None)
+            hasta_el = next((x for x in rec.iter() if _local(x.tag) == "to"), None)
+            puntos = [q for q in (_punto_de(pc) for pc in rec.iter() if _local(pc.tag) == "pointCoordinates") if q]
+            if not puntos:
+                continue
+            # En un tramo, el marcador va al principio («from»; la DGT escribe antes el «to»).
+            a = (_punto_de(desde_el) if desde_el is not None else None) or puntos[0]
+            b = (_punto_de(hasta_el) if hasta_el is not None else None) or (puntos[1] if len(puntos) > 1 else None)
+            if b and abs(b[0] - a[0]) < 1e-6 and abs(b[1] - a[1]) < 1e-6:
+                b = None
+            grav = _hijo_texto(rec, "severity") or grav_sit
+            donde = desde_el if desde_el is not None else rec       # el pk y el municipio, del punto del marcador
+            out.append({
+                "id": (rec.get("id") or sit.get("id") or "")[:20], "clase": clase, "que": que,
+                "gravedad": _GRAVEDAD.get(grav, ""),
+                "carretera": _hijo_texto(rec, "roadName")[:40], "pk": _hijo_texto(donde, "kilometerPoint")[:12],
+                "municipio": _hijo_texto(donde, "municipality")[:60], "provincia": _hijo_texto(donde, "province")[:40],
+                "lat": round(a[0], 6), "lng": round(a[1], 6),
+                "lat2": round(b[0], 6) if b else None, "lng2": round(b[1], 6) if b else None,
+                "desde": _hijo_texto(rec, "overallStartTime")[:32],
+            })
+    return out, publicado
+
+
+def incidencias_cerca(items, paradas, margen: float = 0.06, limite: int = 60) -> list:
+    """Las incidencias dentro de la caja de las paradas (± margen en grados, unos 6 km), con la distancia a la
+    parada más cercana y el número de esa parada. Las más cercanas primero."""
+    caja = caja_de(paradas, margen)
+    if not caja:
+        return []
+    ps = [(p, q) for p, q in ((p, _punto(p)) for p in paradas) if q]
+    out = []
+    for it in items:
+        if not en_caja(it["lat"], it["lng"], caja):
+            continue
+        cerca = min(ps, key=lambda x: distancia_km(x[1], (it["lat"], it["lng"])))
+        out.append({**it, "distancia_km": round(distancia_km(cerca[1], (it["lat"], it["lng"])), 1),
+                    "parada": cerca[0].get("orden")})
+    out.sort(key=lambda x: x["distancia_km"])
+    return out[:limite]
+
+
+def zbe_datex(xml, ciudad: str = "") -> list:
+    """Las zonas de bajas emisiones de una ciudad (DATEX II ControlledZoneTablePublication de la DGT) →
+    [{id, ciudad, nombre, descripcion, estado, url, version, etiquetas, negado, poligonos, caja}]. La
+    descripción es la que escribe el ayuntamiento («Carga y descarga de 6h a 11h»): se enseña tal cual."""
+    raiz = _ET.fromstring(xml if isinstance(xml, (bytes, bytearray)) else str(xml).encode("utf-8"))
+    out = []
+    for z in raiz.iter():
+        if _local(z.tag) != "controlledZone":
+            continue
+        poligonos = []
+        for esquinas in z.iter():
+            if _local(esquinas.tag) != "openlrPolygonCorners":
+                continue
+            pol = []
+            for c in esquinas:
+                if _local(c.tag) == "openlrCoordinates":
+                    q = _punto_de(c)
+                    if q:
+                        pol.append([round(q[0], 6), round(q[1], 6)])
+            if len(pol) >= 3:
+                poligonos.append(pol)
+        if not poligonos:
+            continue
+        etiquetas = []
+        for cond in z.iter():
+            if _local(cond.tag) == "conditions" and _hijo_texto(cond, "type") == "stickerCondition":
+                v = _hijo_texto(cond, "value")[:8]
+                if v and v not in etiquetas:
+                    etiquetas.append(v)
+        todos = [pt for pol in poligonos for pt in pol]
+        out.append({
+            "id": (z.get("id") or "")[:80], "ciudad": ciudad[:40], "nombre": _valor_de(z, "name")[:80],
+            "descripcion": _valor_de(z, "controlledZoneDescription")[:300],
+            "estado": _hijo_texto(z, "status")[:20], "url": _hijo_texto(z, "urlForFurtherInformation")[:200],
+            "version": _hijo_texto(z, "controlledZoneRecordVersionTime")[:10], "etiquetas": etiquetas,
+            "negado": any(_local(x.tag) == "negate" and (x.text or "").strip() == "true" for x in z.iter()),
+            "poligonos": poligonos,
+            "caja": (min(p[0] for p in todos), min(p[1] for p in todos), max(p[0] for p in todos), max(p[1] for p in todos)),
+        })
+    return out
+
+
+def zbe_cerca(zonas, paradas, margen: float = 0.02) -> list:
+    """Las zonas cuya caja toca la caja de las paradas (± margen en grados, unos 2 km)."""
+    caja = caja_de(paradas, margen)
+    if not caja:
+        return []
+    return [z for z in zonas if not (z["caja"][2] < caja[0] or z["caja"][0] > caja[2]
+                                     or z["caja"][3] < caja[1] or z["caja"][1] > caja[3])]
+
+
+def zbe_de_paradas(zonas, paradas) -> dict:
+    """{id de parada: {id, nombre}} de la primera zona en la que cae cada parada."""
+    out = {}
+    for p in paradas:
+        q = _punto(p)
+        if not q:
+            continue
+        for z in zonas:
+            if not en_caja(q[0], q[1], z["caja"]):
+                continue
+            if any(punto_en_poligono(q[0], q[1], pol) for pol in z["poligonos"]):
+                out[p["id"]] = {"id": z["id"], "nombre": z["nombre"]}
+                break
+    return out

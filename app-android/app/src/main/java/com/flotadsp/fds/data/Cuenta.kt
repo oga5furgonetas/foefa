@@ -27,6 +27,7 @@ class Cuenta(private val ctx: Context) {
     private val kNavegar = stringPreferencesKey("navegar")
     private val kTema = stringPreferencesKey("tema")
     private val kUltimoAviso = stringPreferencesKey("ultimo_aviso")
+    private val kFurgo = stringPreferencesKey("furgo")
 
     private val _token = MutableStateFlow<String?>(null)
     val token: StateFlow<String?> = _token
@@ -46,6 +47,9 @@ class Cuenta(private val ctx: Context) {
     val tema: StateFlow<String> = _tema
     private val _cargada = MutableStateFlow(false)
     val cargada: StateFlow<Boolean> = _cargada
+    /** DÓNDE APARQUÉ (30-10-2026): el punto de la furgoneta; se olvida a las 12 horas. Solo en el móvil. */
+    private val _furgo = MutableStateFlow<Furgo?>(null)
+    val furgo: StateFlow<Furgo?> = _furgo
 
     suspend fun cargar() {
         val p = ctx.almacen.data.first()
@@ -72,8 +76,18 @@ class Cuenta(private val ctx: Context) {
         _centro.value = p[kCentro].orEmpty()
         _navegar.value = p[kNavegar] ?: "google"
         _tema.value = p[kTema] ?: "sistema"
+        _furgo.value = p[kFurgo]?.let { runCatching { JSON.decodeFromString(Furgo.serializer(), it) }.getOrNull() }
+            ?.takeIf { System.currentTimeMillis() - it.en < 12 * 3600_000L }
         _cargada.value = true
     }
+
+    suspend fun aparcar(lat: Double, lng: Double) {
+        val f = Furgo(lat, lng, System.currentTimeMillis())
+        ctx.almacen.edit { it[kFurgo] = JSON.encodeToString(Furgo.serializer(), f) }
+        _furgo.value = f
+    }
+
+    suspend fun quitarFurgo() { ctx.almacen.edit { it.remove(kFurgo) }; _furgo.value = null }
 
     suspend fun guardar(s: Sesion, correo: String? = null) {
         ctx.almacen.edit {

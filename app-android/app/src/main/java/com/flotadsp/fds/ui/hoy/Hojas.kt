@@ -63,6 +63,7 @@ import androidx.core.content.FileProvider
 import androidx.exifinterface.media.ExifInterface
 import com.flotadsp.fds.BuildConfig
 import com.flotadsp.fds.data.Antes
+import com.flotadsp.fds.data.ClienteDice
 import com.flotadsp.fds.data.Parada
 import com.flotadsp.fds.ui.Acciones
 import com.flotadsp.fds.ui.LocalExtra
@@ -89,6 +90,22 @@ fun textoWhatsapp(p: Parada, empresa: String): String {
     return "Hola, soy $quien. Voy de camino $que$cuando.$enlace"
 }
 
+/** EL CLIENTE TE AYUDA ANTES DE LLEGAR (30-10-2026): «No estará · Al vecino · Portal: 1234», como en la web. */
+private val DEJAR_CLIENTE = mapOf("buzon" to "En el buzón", "porteria" to "En portería o recepción", "vecino" to "Al vecino",
+    "seguro" to "En un lugar seguro", "punto_recogida" to "En un punto de recogida")
+
+fun textoClienteDice(c: ClienteDice): String {
+    val partes = mutableListOf<String>()
+    when {
+        c.estare == "si" -> partes += "Estará en casa"
+        c.estare == "no" -> partes += "No estará" + (DEJAR_CLIENTE[c.dejar]?.let { " · $it" } ?: "")
+        c.franja != null && c.franja.size == 2 -> partes += "Mejor de ${c.franja[0]} a ${c.franja[1]}"
+    }
+    if (c.portal.isNotBlank()) partes += "Portal: ${c.portal}"
+    if (c.nota.isNotBlank()) partes += "«${c.nota}»"
+    return partes.joinToString(" · ")
+}
+
 /** «La última vez (12/10): en portería», o por qué no se pudo. */
 fun textoAntes(a: Antes): String {
     val f = a.fecha.takeIf { it.length == 10 }?.let { "${it.substring(8, 10)}/${it.substring(5, 7)}" } ?: a.fecha
@@ -106,6 +123,8 @@ fun textoAntes(a: Antes): String {
 fun ParadaHoja(
     p: Parada, prefijo: String, navegarCon: String, empresa: String = "",
     alCerrar: () -> Unit, alEntregar: () -> Unit, alFallar: () -> Unit, alDeshacer: () -> Unit, alEditar: () -> Unit, alQuitar: () -> Unit,
+    /** El registro del intento (30-10-2026): «llamada» o «whatsapp» al pulsarlos. */
+    alApuntar: (String) -> Unit = {},
 ) {
     val ctx = LocalContext.current
     var quitar by remember { mutableStateOf(false) }
@@ -128,6 +147,7 @@ fun ParadaHoja(
                 if (p.ventanaDesde != null) "Horario: de ${p.ventanaDesde} a ${p.ventanaHasta}" else null,
                 p.motivo?.takeIf { it.isNotBlank() && p.estado == "fallido" }?.let { "Motivo: $it" },
                 p.antes?.takeIf { p.pendiente }?.let { textoAntes(it) },
+                p.clienteDice?.let { textoClienteDice(it) }?.takeIf { it.isNotBlank() }?.let { "El cliente dice: $it" },
             )
             if (datos.isNotEmpty()) {
                 Spacer(Modifier.height(12.dp))
@@ -138,10 +158,10 @@ fun ParadaHoja(
                 Button(onClick = { Acciones.navegar(ctx, p, navegarCon) }, modifier = Modifier.weight(1f).height(50.dp)) {
                     Icon(Icons.Default.Navigation, contentDescription = null); Spacer(Modifier.width(6.dp)); Text("Navegar")
                 }
-                FilledTonalButton(onClick = { Acciones.llamar(ctx, p.telefono) }, enabled = p.telefono.isNotBlank(), modifier = Modifier.height(50.dp)) {
+                FilledTonalButton(onClick = { alApuntar("llamada"); Acciones.llamar(ctx, p.telefono) }, enabled = p.telefono.isNotBlank(), modifier = Modifier.height(50.dp)) {
                     Icon(Icons.Default.Call, contentDescription = "Llamar")
                 }
-                FilledTonalButton(onClick = { Acciones.whatsapp(ctx, p.telefono, prefijo, textoWhatsapp(p, empresa)) },
+                FilledTonalButton(onClick = { alApuntar("whatsapp"); Acciones.whatsapp(ctx, p.telefono, prefijo, textoWhatsapp(p, empresa)) },
                     enabled = p.telefono.isNotBlank(), modifier = Modifier.height(50.dp)) {
                     Icon(Icons.AutoMirrored.Filled.Chat, contentDescription = "WhatsApp")
                 }

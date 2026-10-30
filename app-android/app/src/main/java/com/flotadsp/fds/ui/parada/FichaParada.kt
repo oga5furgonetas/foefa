@@ -5,6 +5,7 @@ import android.net.Uri
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -28,6 +29,7 @@ import androidx.compose.material.icons.filled.DocumentScanner
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.FilledTonalIconButton
+import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -85,6 +87,11 @@ import okhttp3.HttpUrl.Companion.toHttpUrl
 import okhttp3.Request
 import java.io.File
 
+/* Los atajos del horario (30-10-2026): «Cierra a las 14:00» es lo que un repartidor con diez años de oficio hacía a
+   mano (primero los comercios, luego la ruta). Y los seis huecos de la furgoneta, como en la web. */
+private val ATAJOS_HORARIO = listOf("Mañana (9-14)" to "de 9 a 14", "Tarde (16-20)" to "de 16 a 20", "Cierra a las 14:00" to "de 8 a 14")
+private val HUECOS = listOf("Delante · izq", "Delante · der", "Medio · izq", "Medio · der", "Detrás · izq", "Detrás · der")
+
 /** Una dirección sugerida: de las suyas (ya estuvo allí) o del buscador de OpenStreetMap. */
 data class Sugerencia(val direccion: String, val cp: String, val localidad: String, val lat: Double?, val lng: Double?,
                       val cliente: String = "", val telefono: String = "", val veces: Int = 0)
@@ -112,6 +119,10 @@ fun FichaParada(
     var cobrar by remember { mutableStateOf(editar?.cobrar?.takeIf { it > 0 }?.let { "%.2f".format(it).replace('.', ',') } ?: "") }
     var tipo by remember { mutableStateOf(editar?.tipo ?: "entrega") }
     var urgente by remember { mutableStateOf(editar?.prioridad ?: false) }
+    // Qué lleva, el horario del cliente y el hueco en la furgoneta (30-10-2026): la web ya los tenía y aquí faltaban.
+    var contenido by remember { mutableStateOf(editar?.contenido ?: "") }
+    var horario by remember { mutableStateOf(editar?.ventanaDesde?.let { "de $it a ${editar.ventanaHasta}" } ?: "") }
+    var hueco by remember { mutableStateOf(editar?.hueco ?: "") }
     var punto by remember { mutableStateOf(inicial?.takeIf { it.lat != null }?.let { Sugerencia("", it.cp, it.localidad, it.lat, it.lng) }) }
     var sugerencias by remember { mutableStateOf<List<Sugerencia>>(emptyList()) }
     var elegida by remember { mutableStateOf(editar != null || inicial?.completa == true) }
@@ -173,6 +184,7 @@ fun FichaParada(
                 put("notas", JsonPrimitive(notas.trim())); put("bultos", JsonPrimitive(bultos))
                 put("cobrar", JsonPrimitive(cobrar.replace(',', '.').trim())); put("tipo", JsonPrimitive(tipo))
                 put("prioridad", JsonPrimitive(urgente))
+                put("contenido", JsonPrimitive(contenido.trim())); put("horario", JsonPrimitive(horario.trim())); put("hueco", JsonPrimitive(hueco))
                 punto?.let { s ->
                     if (s.lat != null && s.lng != null) { put("lat", JsonPrimitive(s.lat)); put("lng", JsonPrimitive(s.lng)) }
                     if (s.cp.isNotBlank()) put("cp", JsonPrimitive(s.cp))
@@ -182,10 +194,6 @@ fun FichaParada(
                     if (inicial.codigo.isNotBlank()) put("codigo", JsonPrimitive(inicial.codigo))
                     if (inicial.codigos.isNotEmpty()) put("codigos", JsonArray(inicial.codigos.map { JsonPrimitive(it) }))
                     put("de_ticket", JsonPrimitive(true))
-                }
-                if (editar != null) {
-                    put("contenido", JsonPrimitive(editar.contenido)); put("hueco", JsonPrimitive(editar.hueco))
-                    put("horario", JsonPrimitive(if (editar.ventanaDesde != null) "de ${editar.ventanaDesde} a ${editar.ventanaHasta}" else ""))
                 }
             }
             try {
@@ -261,7 +269,20 @@ fun FichaParada(
             OutlinedTextField(telefono, { telefono = it }, label = { Text("Teléfono") }, singleLine = true,
                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Phone), modifier = Modifier.fillMaxWidth())
             Spacer(Modifier.height(10.dp))
-            OutlinedTextField(notas, { notas = it }, label = { Text("Notas (portal, piso, horario…)") }, modifier = Modifier.fillMaxWidth())
+            OutlinedTextField(notas, { notas = it }, label = { Text("Notas (portal, piso…)") }, modifier = Modifier.fillMaxWidth())
+            Spacer(Modifier.height(10.dp))
+            OutlinedTextField(contenido, { contenido = it }, label = { Text("Qué lleva (opcional)") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+            Spacer(Modifier.height(10.dp))
+            // El horario del cliente: la ruta lo respeta y avisa si se llega tarde. Con atajos: un toque en vez de escribirlo.
+            OutlinedTextField(horario, { horario = it }, label = { Text("Horario del cliente (ej. de 10 a 12)") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+            FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                ATAJOS_HORARIO.forEach { (t, h) -> FilterChip(selected = horario == h, onClick = { horario = if (horario == h) "" else h }, label = { Text(t) }) }
+            }
+            Spacer(Modifier.height(10.dp))
+            Text("¿Dónde va en la furgoneta? (opcional)", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                HUECOS.forEach { h -> FilterChip(selected = hueco == h, onClick = { hueco = if (hueco == h) "" else h }, label = { Text(h) }) }
+            }
             Spacer(Modifier.height(14.dp))
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text("Bultos", style = MaterialTheme.typography.bodyLarge, modifier = Modifier.weight(1f))

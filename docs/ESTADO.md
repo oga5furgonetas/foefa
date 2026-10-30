@@ -5,7 +5,7 @@
 > haz commit y `git push`. Una sola sesión trabajando a la vez: antes de
 > empezar, `git pull` y comprueba que nadie ha dejado nada a medias aquí.
 
-Última actualización: **29-10-2026 (noche, 4)**: FDS en todo, fuera Valor y China, avisos al móvil, app 2.3.0; fusionado en `main`, desplegado y verificado (ver «Última sesión — 29-10-2026 (noche, 4)»). Anterior: **29-10-2026 (noche, 3)** (fusionadas en `main` dos sesiones de la noche: la del servidor y la app 2.2.5 —sección «(noche): fase 0…»— y la del anuncio con la VOZ DE DANI y el mapa real de A Coruña, montado en `docs/anuncios/spot-dani/salida/`; ver «Última sesión»). Antes, noche: (anuncio «La ruta hecha»: guion para IA en `docs/anuncios/super-anuncio/` y generaciones en Artlist). Antes, tarde: (el CI de `main` llevaba desde el 18-10 en rojo; checkers arreglados de raíz y todo el CI en verde en local; ver «Última sesión»). Por la mañana: FDS 2.2.3 compilada, probada y firmada, el AAB listo para Play (ver «29-10-2026 (mañana)»).
+Última actualización: **30-10-2026 (madrugada, 2)**: la tanda A de lo que pide la calle HECHA en servidor, web y app nativa, y el mapa que responde (iconos en vectores e interacciones, Dani: «mejora los emoticonos e interacciones con el mapa»); nada desplegado, lo decide Dani (ver «Última sesión — 30-10-2026 (madrugada, 2)»). Anterior: **29-10-2026 (noche, 4)**: FDS en todo, fuera Valor y China, avisos al móvil, app 2.3.0; fusionado en `main`, desplegado y verificado (ver «Última sesión — 29-10-2026 (noche, 4)»). Anterior: **29-10-2026 (noche, 3)** (fusionadas en `main` dos sesiones de la noche: la del servidor y la app 2.2.5 —sección «(noche): fase 0…»— y la del anuncio con la VOZ DE DANI y el mapa real de A Coruña, montado en `docs/anuncios/spot-dani/salida/`; ver «Última sesión»). Antes, noche: (anuncio «La ruta hecha»: guion para IA en `docs/anuncios/super-anuncio/` y generaciones en Artlist). Antes, tarde: (el CI de `main` llevaba desde el 18-10 en rojo; checkers arreglados de raíz y todo el CI en verde en local; ver «Última sesión»). Por la mañana: FDS 2.2.3 compilada, probada y firmada, el AAB listo para Play (ver «29-10-2026 (mañana)»).
 
 ## Qué es y dónde está
 
@@ -1090,16 +1090,98 @@ parada lo primero, dos modos (cargando / en ruta), pestañas Hoy · Mapa · Dine
 datos mínimos. Qué no hacer: decir «tráfico en tiempo real» sin velocidades reales, what3words, WhatsApp API sin
 medir coste, bloquear nada por GPS. Tres tandas (A en noviembre). No se tocó código.
 
+## Última sesión — 30-10-2026 (madrugada, 2): lo que pide la calle, HECHO en servidor, web y app; y el mapa que responde
+
+Dani: «haz todo lo que consideres necesario y después dame imágenes de qué has implementado y cómo se vería» y, a
+media sesión, «mejora los emoticonos e interacciones con el mapa». Hecha la **tanda A de
+`docs/NECESIDADES-REPARTIDOR-30-10.md`** en los tres sitios, **sin desplegar** (lo decide Dani). Capturas en
+**`docs/capturas-30-10/`**: `web-01…10` (la web del repartidor y el enlace del cliente con la API simulada,
+`frontend/e2e/capturas-30-10.mjs`) y `app-…` (el emulador, compilación debug contra `servidor_pruebas.py`).
+
+**Servidor** (`backend/reparto.py`, sección «LO QUE PIDE LA CALLE»; `backend/server.py`):
+- El cliente contesta en su enlace: `POST /seguimiento/{token}/respuesta` (¿estarás? sí / no + dónde dejarlo / otra
+  hora + franja; código del portal; nota). Limitado por ritmo (`segr:`), solo mientras la parada está pendiente y el
+  enlace vivo. Se guarda en `cliente_dice`, la franja pasa a `ventana_desde/hasta` y el repartidor recibe el aviso
+  «El cliente ha contestado» (`_avisar_usuarios`, también a `avisos_movil`). El `GET /seguimiento/{token}` devuelve
+  `respuesta`, `puede_contestar` e `intento`.
+- El registro del intento, que defiende al repartidor: el estado admite `intento` (llegada, llamada, whatsapp,
+  espera_s ≤ 1 h, llamadas; `reparto.sanea_intento`); si falla, el cliente ve «El repartidor llamó a las X y esperó N min».
+- La puerta aprendida: al entregar, el estado admite `posicion`; con precisión ≤ 50 m y a ≤ 300 m de la geocodificación
+  (`reparto.puerta_valida`) se guardan `puerta_lat/lng/precision`, y la próxima parada en la misma dirección (misma
+  `clave_direccion`, tolerante al sufijo de ciudad) nace ahí con `geo: "puerta"` (`_rep_puerta_aprendida`);
+  `mis-direcciones` la prefiere.
+- La DGT, gratis y sin registro (Punto de Acceso Nacional, DATEX II v3.7): `GET /reparto/mi-ruta/incidencias` (cortes,
+  obras, retenciones, accidentes, meteo cerca de las paradas pendientes, con carretera, pk, municipio, tramo y «a X km
+  de la parada N»; caché 5 min; `reparto.incidencias_datex` / `incidencias_cerca`) y `GET /reparto/mi-ruta/zbe` (los
+  polígonos de las ZBE de las ciudades de las paradas y qué paradas caen dentro; caché 24 h; `zbe_datex` /
+  `zbe_de_paradas`). En pantalla NUNCA dice «tráfico en tiempo real»: son cortes y obras declarados.
+- Tests: `backend/tests/test_necesidades_repartidor.py` (10 nuevos) y la tanda entera: 1280 en verde (11 min aquí).
+
+**Web del repartidor** (`MiRuta.jsx`, `SeguimientoPedido.jsx` reescrito, `Navegacion.jsx`, `ClienteDice.jsx` nuevo,
+`panel/components/MapaReparto.jsx`, `services/api.js`, `textosRutaB.js`):
+- El enlace del cliente: «¿Estarás en casa?» (Sí / No estaré + dónde / Otra hora + franja 07–21 h), portal, «Gracias.
+  El repartidor ya lo sabe» con «Cambiar»; si no se pudo entregar, el intento. En la ruta, «El cliente dice: …» en la
+  tarjeta y al llegar navegando.
+- Se apunta la llegada (auto, por voz y con el botón), la llamada y el WhatsApp; la posición al entregar; chips
+  «Puerta conocida» y «ZBE»; «Vas N min por detrás» y «Reordenar desde aquí» (> 15 min); «Mi dinero hoy» con «N sin
+  entregar = X sin cobrar»; «Aparcada aquí» / «Furgoneta a N m» / «Quitar» (solo en el móvil, 12 h); atajos de
+  horario al editar (Mañana, Tarde, Cierra a las 14:00); la DGT y las ZBE bajo el mapa con su fuente.
+- **El mapa que responde** (lo que pidió Dani a media sesión): iconos en SVG, los mismos que la nativa y **sin emojis**
+  (cada móvil pintaba el suyo; la furgoneta era un emoji): chincheta con el número (la siguiente, más grande y
+  latiendo; borde morado si cae en una ZBE; globo verde si el cliente contestó), ✓ / ✕ en las hechas, disco rojo con
+  barra (corte), triángulo (accidente / obstáculo), rombo ámbar (obras), coche (retención), nube (meteo), «i» (aviso),
+  furgoneta, nave (almacén) y la etiqueta «ZBE» en el centro de cada polígono. **Tocar abre una ventana**: parada (hora,
+  dirección, chips, lo que dijo el cliente y **Ir / Llamar / Abrir**, que lleva a su tarjeta), incidencia (qué, dónde,
+  desde cuándo, «Ver en Google Maps»), ZBE (descripción del ayuntamiento, etiquetas que cita la DGT, «Más
+  información»), furgoneta («a N m», «Volver a pie», «Quitar») y carga y descarga. **Mantener pulsado** el mapa (o
+  botón derecho; en iOS se mide el dedo quieto, que no manda `contextmenu`) → «¿Dejar aquí la furgoneta?». Capas
+  **C/D · DGT · ZBE** que se apagan arriba a la derecha. El mapa ya no se repinta cuando se mueve el punto azul (antes
+  cerraba la ventana abierta). En el panel de la empresa (`Reparto.jsx`) las ventanas solo informan (sin `onAccion`).
+- 12 textos nuevos en los 6 idiomas; `check-textos-ruta` en verde; ESLint 0 errores; `vite build` ok; Playwright
+  `calle.spec.js` (2, con las ventanas, el mantener pulsado y las capas) y `escanear-etiqueta` (6) en verde.
+
+**App nativa** (`app-android/`; compilación debug instalada en el emulador; **en Play sigue la 2.3.0**):
+- `ui/hoy/Calle.kt` (sin Android dentro, con tests): retraso, buscador sin acentos, hora, centroide, metros,
+  distancia («180 m» / «1,4 km»), forma y color de cada incidencia, «dónde está» en una línea.
+- Hoy: «Sales a las · Acabas ≈ · km · min», «vas N min por detrás» y «Reordenar desde aquí»; «Hoy llevas … · N sin
+  entregar = X sin cobrar»; «Aparcada aquí» / «Volver a la furgoneta a pie» / «Quitar» (DataStore, 12 h); buscador con
+  más de 5 paradas; «Entregado · HH:mm» en las hechas; chips ZBE / Puerta conocida / «llega N min tarde»; «El cliente
+  dice» en la siguiente y en la hoja; llamar y WhatsApp apuntan el intento; al entregar van la posición (3,5 s como
+  mucho) y el intento.
+- Ficha de la parada con qué lleva, horario (con atajos) y hueco; Ajustes con «Mi dinero hoy» (por parada, por día,
+  coste por km → `PUT /reparto/ganancias`); Historial «1 entrega» en singular.
+- **El mapa** (`ui/hoy/MapaRuta.kt` reescrito, osmdroid): los mismos iconos dibujados a mano (Canvas, en dp), las
+  hechas con ✓ / ✕, **punto azul con flecha** (proveedor «fused» de Google, `ProveedorFused`, no el GPS en bruto de
+  osmdroid), **Seguirme / Centrar la ruta / + / −** arriba a la derecha, chips «DGT · N incidencias cerca» y «ZBE ·
+  nombre» arriba a la izquierda (un toque lleva allí y abre su tarjeta), **tarjeta abajo al tocar** cualquier cosa
+  (parada con dirección, chips, lo que dijo el cliente y Ir / Llamar / Abrir; incidencia con «Ver en Google Maps»;
+  ZBE con «Más información»; furgoneta con «A N m de ti», «Volver a pie» y «Quitar»), **mantener pulsado** → «¿Dejar
+  aquí la furgoneta?». Fuera las burbujas de osmdroid. La tarjeta queda encima del botón «Escanear».
+- Tests: `CalleTest` (4) y `MapaTest` (5) en verde; Gradle `testDebugUnitTest` + `assembleDebug` ok;
+  `app-android/pruebas/api_conductor.py` contra `servidor_pruebas.py` (sembrado con la ZBE real de A Coruña, dos
+  incidencias, «el cliente dice», la puerta conocida y la tarifa): «Todo en verde».
+
+**No verificado / límites (sin falsos positivos)**: el feed real de la DGT se probó en local (el XML de 3,6 MB con
+506 situaciones y las 46 ZBE) y en los tests con el XML guardado, no contra producción; en el emulador la DGT y la ZBE
+las sirve `servidor_pruebas.py`. El emulador tenía la ubicación en Madrid y `adb emu geo fix` no llega (ver Trampas):
+se le metió una posición falsa en A Coruña con `cmd location providers`. «Ir», «Llamar» y «Volver a pie» abren otras
+apps: no probado en un móvil real. **Nada desplegado**: ni backend ni web ni app (la de Play es la 2.3.0; la nativa
+nueva pediría 2.4.0 y pasar por `app-release.yml`).
+
 ## Pendiente (por prioridad)
 
--9. **Necesidades reales del repartidor (30-10 madrugada)**: tanda A de `docs/NECESIDADES-REPARTIDOR-30-10.md` →
-   el enlace del cliente con «¿estarás?», dónde dejarlo, código del portal y franja; registro del intento; la app
-   aprende la puerta; «dónde aparqué»; cortes de la DGT en el mapa y «reordenar desde aquí»; fallidas en el dinero;
-   la siguiente parada lo primero. Lo decide Dani.
--8. **La app nativa del autónomo al nivel de la web antes del 31-12 (29-10 noche, 5)**: tanda 1 de
-   `docs/REVISION-APP-AUTONOMO-29-10.md` → pagar dentro de la app (Play Billing en la de Play, Stripe en la `.web`),
-   cabecera con «Sales a las» y retraso, tarifa de «Mi dinero hoy», ficha con qué lleva/horario/hueco, historial con
-   hora/prueba/semana/Excel, buscar, reordenar a mano y firma. Lo decide Dani.
+-9. **Necesidades reales del repartidor (30-10 madrugada)**: la tanda A de `docs/NECESIDADES-REPARTIDOR-30-10.md`
+   está HECHA (30-10 madrugada, 2) en servidor, web y nativa, SIN desplegar. Falta: (1) desplegar backend + web
+   (`scripts\deploy-backend.ps1` y `deploy-frontend.ps1`) y probar en producción el enlace del cliente y la DGT con
+   datos reales; (2) compilar y subir a Play la nativa (2.4.0) con el mapa nuevo, la ficha y la tarifa; (3) tanda B del
+   informe (orden de carga y hueco automático, pausa de comida, baños en el mapa, dos modos cargando / en ruta,
+   pestañas Hoy · Mapa · Dinero · Yo, atascos de TomTom si se quiere pagar la clave). Lo decide Dani.
+-8. **La app nativa del autónomo al nivel de la web antes del 31-12 (29-10 noche, 5)**: de la tanda 1 de
+   `docs/REVISION-APP-AUTONOMO-29-10.md` ya están (30-10 madrugada, 2): cabecera con «Sales a las» y el retraso, la
+   tarifa de «Mi dinero hoy», la ficha con qué lleva / horario / hueco, buscar, la hora en el historial y el mapa con
+   punto azul y tarjetas. Queda: **pagar dentro de la app** (Play Billing en la de Play, Stripe en la `.web`; tarjeta
+   propuesta «Tanda 1: pagar dentro de la app nativa»), historial con prueba / semana / Excel, reordenar a mano y
+   firma. Lo decide Dani.
 -7. **La 2.3.0 PUBLICADA en Google Play (29-10 23:42, producción, 178 países) y `APP_ANDROID_MIN="2.3.0"` PUESTA en Fly
    (30-10 01:00, desde el PC, Dani: «ponla tú»)**. Verificado en producción: `/api/health` ok; `/api/auth/app-login` con
    `X-FDS-App: android-2.2.5` → **426** con el aviso de actualizar; con `android-2.3.0` o sin cabecera → 401 normal. Todo
@@ -1235,6 +1317,11 @@ medir coste, bloquear nada por GPS. Tres tandas (A en noviembre). No se tocó c�
 
 ## Trampas conocidas
 
+- **El emulador del PC de casa (30-10)**: `adb -s emulator-5554 emu geo fix …` falla («could not connect to TCP port
+  5554»: el emulador no expone la consola) y el AVD tiene la ubicación en Madrid. Lo que sí funciona para ponerle una
+  posición: `adb shell appops set com.android.shell android:mock_location allow`, `adb shell cmd location providers
+  add-test-provider gps`, `… set-test-provider-enabled gps true`, `… set-test-provider-location gps --location
+  43.3650,-8.4060 --accuracy 5` (la cogen el GPS y el «fused»; se comprueba con `dumpsys location | grep "last location"`).
 - FastAPI de esta versión registra las rutas al arrancar: para listarlas,
   pedir `/openapi.json` al servidor en marcha (en LOCAL y con `API_DOCS=1`;
   en producción está cerrado a propósito), no `server.app.routes`.

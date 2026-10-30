@@ -71,6 +71,27 @@ object Acciones {
         runCatching { v?.vibrate(VibrationEffect.createOneShot(ms, VibrationEffect.DEFAULT_AMPLITUDE)) }
     }
 
+    /** DÓNDE APARQUÉ (30-10-2026): el camino a pie hasta la furgoneta, en Google Maps o en la app de mapas que haya. */
+    fun irAPie(ctx: Context, lat: Double, lng: Double) {
+        val maps = Intent(Intent.ACTION_VIEW, Uri.parse("google.navigation:q=$lat,$lng&mode=w")).setPackage("com.google.android.apps.maps")
+        val cualquiera = Intent(Intent.ACTION_VIEW, Uri.parse("geo:$lat,$lng?q=$lat,$lng(Tu furgoneta)"))
+        try { ctx.startActivity(maps) } catch (_: ActivityNotFoundException) {
+            try { ctx.startActivity(cualquiera) } catch (_: ActivityNotFoundException) { Toast.makeText(ctx, "No hay ninguna app de mapas en el móvil.", Toast.LENGTH_LONG).show() }
+        }
+    }
+
+    /** La posición con su precisión en metros, en 3,5 s como mucho: para la puerta aprendida al entregar (30-10-2026).
+     *  Sin permiso o sin GPS, null, y la entrega sale igual. */
+    @SuppressLint("MissingPermission")
+    suspend fun posicionPrecisa(ctx: Context): Triple<Double, Double, Float>? = withTimeoutOrNull(3500) {
+        runCatching {
+            val c = LocationServices.getFusedLocationProviderClient(ctx)
+            val l = c.getCurrentLocation(Priority.PRIORITY_HIGH_ACCURACY, CancellationTokenSource().token).await()
+                ?: c.lastLocation.await()
+            l?.let { Triple(it.latitude, it.longitude, if (it.hasAccuracy()) it.accuracy else 9999f) }
+        }.getOrNull()
+    }
+
     /** Dónde está el móvil ahora (solo si dio permiso), en 6 s como mucho; si no, null (se ordena desde su base). */
     @SuppressLint("MissingPermission")
     suspend fun dondeEstoy(ctx: Context): Pair<Double, Double>? = withTimeoutOrNull(6000) {

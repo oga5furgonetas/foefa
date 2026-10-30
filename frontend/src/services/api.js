@@ -286,6 +286,9 @@ export const repZonasCarga = () => api.get('/reparto/mi-ruta/zonas-carga')
 // Desde dónde y hacia dónde abrir Street View para ver la puerta de una parada.
 export const repFachada = (id) => api.get(`/reparto/pedidos/${id}/fachada`)
 export const repNavegar = (id, desde) => api.post('/reparto/mi-ruta/navegar', { id, desde })
+// LO QUE DICE LA DGT (30-10-2026): cortes y obras, y las zonas de bajas emisiones, cerca de la ruta de hoy.
+export const repIncidencias = () => api.get('/reparto/mi-ruta/incidencias')
+export const repZbe = () => api.get('/reparto/mi-ruta/zbe')
 
 /* EL MERCADILLO DE REPARTIDORES (17-10-2026). Lo usan el portal del conductor (su sesión) y la app del
    autónomo o la página /mercadillo (la de la cuenta): `tokenActual()` elige cuál por la ruta. */

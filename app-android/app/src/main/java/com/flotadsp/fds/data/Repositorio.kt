@@ -351,6 +351,15 @@ class Repositorio(private val ctx: Context, val cuenta: Cuenta, val api: Api) {
     suspend fun trazado(lat: Double?, lng: Double?): Trazado = leer(
         api.post("reparto/mi-ruta/trazado", buildJsonObject { if (lat != null && lng != null) put("desde", buildJsonObject { put("lat", lat); put("lng", lng) }) }))
 
+    /** Lo que dice la DGT cerca de la ruta de hoy (30-10-2026): cortes y obras, y zonas de bajas emisiones. */
+    suspend fun incidencias(): Incidencias = leer(api.get("reparto/mi-ruta/incidencias"))
+    suspend fun zbe(): Zbe = leer(api.get("reparto/mi-ruta/zbe"))
+
+    /** La tarifa de «Mi dinero hoy», en céntimos de su moneda (PUT /reparto/ganancias, como la web). */
+    suspend fun guardarGanancias(pagoParada: Int, pagoDia: Int, costeKm: Int) {
+        api.put("reparto/ganancias", buildJsonObject { put("pago_parada", pagoParada); put("pago_dia", pagoDia); put("coste_km", costeKm) })
+    }
+
     suspend fun ordenAMano(ids: List<String>) {
         api.post("reparto/mi-ruta/orden", buildJsonObject {
             put("ids", buildJsonArray { ids.forEach { add(kotlinx.serialization.json.JsonPrimitive(it)) } })

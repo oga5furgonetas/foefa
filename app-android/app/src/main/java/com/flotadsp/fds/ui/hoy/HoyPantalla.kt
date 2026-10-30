@@ -9,6 +9,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -20,7 +21,6 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -40,6 +40,8 @@ import androidx.compose.material.icons.filled.Map
 import androidx.compose.material.icons.filled.Navigation
 import androidx.compose.material.icons.filled.QrCodeScanner
 import androidx.compose.material.icons.filled.Route
+import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.filled.LocalShipping
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
@@ -51,6 +53,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarDuration
 import androidx.compose.material3.SnackbarHost
@@ -81,7 +84,9 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import com.flotadsp.fds.FdsApp
 import com.flotadsp.fds.data.Bono
+import com.flotadsp.fds.data.Furgo
 import com.flotadsp.fds.data.Parada
 import com.flotadsp.fds.ui.Acciones
 import com.flotadsp.fds.ui.LocalExtra
@@ -90,6 +95,7 @@ import com.flotadsp.fds.ui.TextoNumero
 import com.flotadsp.fds.ui.ESPANOL
 import kotlinx.coroutines.launch
 import java.time.LocalDate
+import java.time.LocalTime
 import java.time.format.DateTimeFormatter
 import java.util.Locale
 
@@ -104,9 +110,12 @@ fun HoyPantalla(
     val e by vm.estado.collectAsState()
     val pendientesEnvio by vm.pendientesDeEnvio.collectAsState()
     val ctx = LocalContext.current
+    val app = ctx.applicationContext as FdsApp
+    val furgo by app.cuenta.furgo.collectAsState()
     val avisos = remember { SnackbarHostState() }
     val ambito = rememberCoroutineScope()
     var verMapa by rememberSaveable { mutableStateOf(false) }
+    var buscar by rememberSaveable { mutableStateOf("") }
     var abierta by remember { mutableStateOf<Parada?>(null) }
     var entregando by remember { mutableStateOf<Parada?>(null) }
     var fallando by remember { mutableStateOf<Parada?>(null) }
@@ -116,7 +125,10 @@ fun HoyPantalla(
     LaunchedEffect(Unit) { vm.vista("/ruta") }
     // El camino por las calles, al abrir el mapa y cuando cambia lo que queda.
     val clavePendientes = e.pendientes.joinToString(",") { "${it.id}:${it.orden}" }
-    LaunchedEffect(verMapa, clavePendientes) { if (verMapa && e.pendientes.size >= 2) vm.cargarTrazado() }
+    LaunchedEffect(verMapa, clavePendientes) {
+        if (verMapa && e.pendientes.size >= 2) vm.cargarTrazado()
+        if (verMapa) vm.cargarIncidencias()      // lo que dice la DGT, con el mapa abierto (30-10-2026)
+    }
 
     LaunchedEffect(Unit) {
         vm.avisos.collect { a ->
@@ -188,13 +200,25 @@ fun HoyPantalla(
             when {
                 e.cargando && e.ruta == null -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { CircularProgressIndicator() }
                 e.ruta == null -> SinRuta(e.error ?: "No se ha podido cargar tu ruta.") { vm.cargar() }
-                verMapa -> MapaRuta(e.pendientes, e.ruta?.base, trazado = e.trazado, alTocar = { abierta = it }, modifier = Modifier.fillMaxSize())
+                verMapa -> MapaRuta(e.pendientes, e.ruta?.base, trazado = e.trazado, hechas = e.paradas.filter { !it.pendiente },
+                    incidencias = e.incidencias?.incidencias.orEmpty(), zbe = e.zbe?.zonas.orEmpty(), enZbe = e.zbe?.paradas?.keys.orEmpty(),
+                    furgo = furgo, navegarCon = navegarCon, alTocar = { abierta = it },
+                    alAparcarEn = { lat, lng -> ambito.launch { app.cuenta.aparcar(lat, lng) } },
+                    alQuitarFurgo = { ambito.launch { app.cuenta.quitarFurgo() } }, modifier = Modifier.fillMaxSize())
                 else -> LazyColumn(
                     contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 4.dp, bottom = 104.dp),
                     verticalArrangement = Arrangement.spacedBy(10.dp),
                     modifier = Modifier.fillMaxSize(),
                 ) {
-                    item { Resumen(e, ocupado = e.ocupado == "ordenar", alOrdenar = ordenar) }
+                    item {
+                        Resumen(e, ocupado = e.ocupado == "ordenar", alOrdenar = ordenar, furgo = furgo,
+                            alAparcar = { ambito.launch {
+                                val p = Acciones.dondeEstoy(ctx)
+                                if (p == null) vm.avisar("No llega la ubicación del móvil: dale permiso a la app.") else app.cuenta.aparcar(p.first, p.second)
+                            } },
+                            alQuitarFurgo = { ambito.launch { app.cuenta.quitarFurgo() } },
+                            alIrAPie = { furgo?.let { Acciones.irAPie(ctx, it.lat, it.lng) } })
+                    }
                     if (e.guardadaEn != null || pendientesEnvio.isNotEmpty()) {
                         item { SinCobertura(e.guardadaEn, pendientesEnvio.size) }
                     }
@@ -209,10 +233,10 @@ fun HoyPantalla(
                     e.pendientes.firstOrNull()?.let { sig ->
                         item(key = "sig-${sig.id}") {
                             Siguiente(
-                                p = sig, numero = sig.orden ?: 1,
+                                p = sig, numero = sig.orden ?: 1, enZbe = e.zbe?.paradas?.containsKey(sig.id) == true,
                                 alNavegar = { Acciones.navegar(ctx, sig, navegarCon) },
-                                alLlamar = { Acciones.llamar(ctx, sig.telefono) },
-                                alWhatsapp = { Acciones.whatsapp(ctx, sig.telefono, prefijo, textoWhatsapp(sig, empresa)) },
+                                alLlamar = { vm.apuntar(sig, "llamada"); Acciones.llamar(ctx, sig.telefono) },
+                                alWhatsapp = { vm.apuntar(sig, "whatsapp"); Acciones.whatsapp(ctx, sig.telefono, prefijo, textoWhatsapp(sig, empresa)) },
                                 alEntregar = { entregarRapido(sig) },
                                 alFallar = { fallando = sig },
                                 alAbrir = { abierta = sig },
@@ -222,11 +246,20 @@ fun HoyPantalla(
                     val resto = e.pendientes.drop(1)
                     if (resto.isNotEmpty()) {
                         item { Titulo("Por entregar · ${resto.size}") }
+                        // EL BUSCADOR (30-10-2026): con muchas paradas y un cliente al teléfono, encontrarlo por su nombre, la
+                        // calle, el teléfono o el código, como la web a partir de 5 paradas.
+                        if (e.pendientes.size > 5) item(key = "buscar") {
+                            OutlinedTextField(buscar, { buscar = it }, singleLine = true, placeholder = { Text("Buscar cliente, calle, teléfono…") },
+                                leadingIcon = { Icon(Icons.Default.Search, contentDescription = null) }, modifier = Modifier.fillMaxWidth())
+                        }
                         // Sin ordenar todavía, el número es su puesto en la lista (la siguiente es la 1). Si la ruta ya está
                         // ordenada, la que se añade después no se inventa un número: espera a «Ordenar ruta».
                         val hayOrden = e.pendientes.any { it.orden != null }
-                        itemsIndexed(resto, key = { _, p -> p.id }) { i, p ->
-                            Fila(p, numero = p.orden ?: (if (hayOrden) null else i + 2), alTocar = { abierta = p })
+                        val visibles = resto.withIndex().filter { Calle.coincide(it.value, buscar) }
+                        if (visibles.isEmpty()) item { Text("Nada con «$buscar» en las paradas pendientes.", style = MaterialTheme.typography.bodyMedium, modifier = Modifier.padding(8.dp)) }
+                        items(visibles, key = { it.value.id }) { iv ->
+                            val p = iv.value
+                            Fila(p, numero = p.orden ?: (if (hayOrden) null else iv.index + 2), enZbe = e.zbe?.paradas?.containsKey(p.id) == true, alTocar = { abierta = p })
                         }
                     }
                     if (e.hechas.isNotEmpty()) {
@@ -246,6 +279,7 @@ fun HoyPantalla(
             alDeshacer = { abierta = null; vm.deshacer(p) },
             alEditar = { abierta = null; alEditar(p) },
             alQuitar = { abierta = null; vm.quitar(p) },
+            alApuntar = { vm.apuntar(p, it) },
         )
     }
     entregando?.let { p ->
@@ -268,9 +302,15 @@ private fun Titulo(t: String) {
 }
 
 @Composable
-private fun Resumen(e: EstadoRuta, ocupado: Boolean, alOrdenar: () -> Unit) {
+private fun Resumen(
+    e: EstadoRuta, ocupado: Boolean, alOrdenar: () -> Unit,
+    /** DÓNDE APARQUÉ (30-10-2026): el punto de la furgoneta, y el camino a pie hasta ella. */
+    furgo: Furgo? = null, alAparcar: () -> Unit = {}, alQuitarFurgo: () -> Unit = {}, alIrAPie: () -> Unit = {},
+) {
     val total = e.paradas.size
     val hechas = e.hechas.size
+    // EL RETRASO (30-10-2026): la hora prevista de la siguiente parada frente a la de ahora, solo con la ruta de hoy.
+    val retraso = if (e.ruta?.fecha == LocalDate.now().toString()) Calle.retraso(e.pendientes.firstOrNull()?.eta, LocalTime.now().let { "%02d:%02d".format(it.hour, it.minute) }) else 0
     Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLowest), shape = MaterialTheme.shapes.large) {
       Column(Modifier.padding(16.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically) {
@@ -288,17 +328,60 @@ private fun Resumen(e: EstadoRuta, ocupado: Boolean, alOrdenar: () -> Unit) {
                 Text(when (q) { 0 -> if (total == 0) "Sin paradas todavía" else "Todo entregado"; 1 -> "Queda 1 parada"; else -> "Quedan $q paradas" },
                     style = MaterialTheme.typography.titleMedium)
                 val r = e.ruta?.ruta
-                val partes = listOfNotNull(r?.fin?.let { "Acabas ≈ $it" }, r?.km?.takeIf { it > 0 }?.let { "${"%.1f".format(ESPANOL, it)} km" })
+                // LA CABECERA COMPLETA (30-10-2026): de noche la ruta sale a la hora de salida, y sin «Sales a las» las horas
+                // no se entendían («Acabas ≈ 09:24» a las 23:31). Y los minutos, y con qué se calculó.
+                val partes = listOfNotNull(
+                    r?.salida?.takeIf { r.programada == true }?.let { "Sales a las $it" },
+                    r?.fin?.let { "Acabas ≈ $it" },
+                    r?.km?.takeIf { it > 0 }?.let { "${"%.1f".format(ESPANOL, it)} km" },
+                    r?.minutos?.takeIf { it > 0 }?.let { m -> if (m >= 60) "${m / 60} h ${m % 60} min" else "$m min" },
+                )
                 if (partes.isNotEmpty() && q > 0) {
                     Text(partes.joinToString(" · "), style = MaterialTheme.typography.bodyMedium.merge(TextoNumero),
                         color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    val como = when {
+                        r?.manual == true -> "tu orden"
+                        r?.fuente == "linea_recta" -> "por distancia"
+                        r?.trafico == true -> "con tráfico típico"
+                        r?.fin != null -> "sin tráfico"
+                        else -> null
+                    }
+                    val aviso = listOfNotNull(como, retraso.takeIf { it > 5 }?.let { "vas $it min por detrás" }).joinToString(" · ")
+                    if (aviso.isNotEmpty()) Text(aviso, style = MaterialTheme.typography.bodySmall,
+                        color = if (retraso > 5) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant)
                 }
                 // «Mi dinero hoy» (solo quien reparte por su cuenta y ha puesto su tarifa): lo entregado por su
                 // precio por parada, más el día si ha entregado algo. En céntimos, como lo manda el servidor.
+                // LAS FALLIDAS EN EL DINERO (30-10-2026): lo que no se cobra por no entregar, que se vea.
                 e.ruta?.ganancias?.let { g ->
                     val cent = e.entregadas * g.pagoParada + (if (e.entregadas > 0) g.pagoDia else 0)
-                    if (cent > 0) Text("Hoy llevas ${Region.importe(cent / 100.0)}", style = MaterialTheme.typography.bodyMedium.merge(TextoNumero),
-                        color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    val fallidas = e.hechas.count { it.estado == "fallido" }
+                    val perdido = fallidas * g.pagoParada
+                    if (cent > 0 || perdido > 0) Text(
+                        listOfNotNull("Hoy llevas ${Region.importe(cent / 100.0)}",
+                            perdido.takeIf { it > 0 }?.let { "$fallidas sin entregar = ${Region.importe(it / 100.0)} sin cobrar" }).joinToString(" · "),
+                        style = MaterialTheme.typography.bodyMedium.merge(TextoNumero), color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+            }
+        }
+        if (retraso > 15 && e.pendientes.size > 1) {
+            // REORDENAR DESDE AQUÍ (30-10-2026): con más de 15 min de retraso, un toque recalcula desde donde estás.
+            Spacer(Modifier.height(10.dp))
+            OutlinedButton(onClick = alOrdenar, enabled = !ocupado, modifier = Modifier.fillMaxWidth().height(44.dp)) {
+                Icon(Icons.Default.Route, contentDescription = null, modifier = Modifier.size(18.dp)); Spacer(Modifier.width(8.dp)); Text("Reordenar desde aquí")
+            }
+        }
+        if (e.pendientes.isNotEmpty()) {
+            // DÓNDE APARQUÉ (30-10-2026): el punto de la furgoneta al bajarte; un toque abre el camino a pie. Solo en el móvil.
+            Spacer(Modifier.height(10.dp))
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                if (furgo == null) {
+                    TextButton(onClick = alAparcar) { Icon(Icons.Default.LocalShipping, contentDescription = null, modifier = Modifier.size(18.dp)); Spacer(Modifier.width(6.dp)); Text("Aparcada aquí") }
+                } else {
+                    FilledTonalButton(onClick = alIrAPie, modifier = Modifier.weight(1f)) {
+                        Icon(Icons.Default.LocalShipping, contentDescription = null, modifier = Modifier.size(18.dp)); Spacer(Modifier.width(6.dp)); Text("Volver a la furgoneta a pie")
+                    }
+                    TextButton(onClick = alQuitarFurgo) { Text("Quitar") }
                 }
             }
         }
@@ -410,21 +493,26 @@ private fun Numero(n: Int?, grande: Boolean = false, hecho: Boolean = false) {
     val tam = if (grande) 40.dp else 32.dp
     Box(contentAlignment = Alignment.Center, modifier = Modifier.size(tam).background(
         if (hecho) MaterialTheme.colorScheme.surfaceVariant else MaterialTheme.colorScheme.primary, CircleShape)) {
-        Text(n?.toString() ?: "·", style = (if (grande) MaterialTheme.typography.titleMedium else MaterialTheme.typography.labelLarge).merge(TextoNumero),
+        // Números más grandes (30-10-2026): se buscan con la caja en la mano, al sol.
+        Text(n?.toString() ?: "·", style = (if (grande) MaterialTheme.typography.titleLarge else MaterialTheme.typography.titleMedium).merge(TextoNumero),
             fontWeight = FontWeight.Bold,
             color = if (hecho) MaterialTheme.colorScheme.onSurfaceVariant else MaterialTheme.colorScheme.onPrimary)
     }
 }
 
 @Composable
-fun Etiquetas(p: Parada) {
+fun Etiquetas(p: Parada, enZbe: Boolean = false) {
     val x = LocalExtra.current
-    Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+    FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
         p.eta?.let { Chip("≈ $it", MaterialTheme.colorScheme.secondaryContainer, MaterialTheme.colorScheme.onSecondaryContainer) }
         if (p.porCobrar) Chip("Cobrar ${Region.importe(p.cobrar ?: 0.0)}", x.cobrar, x.enCobrar)
         if (p.prioridad) Chip("Urgente", MaterialTheme.colorScheme.errorContainer, MaterialTheme.colorScheme.onErrorContainer)
         if (p.bultos > 1) Chip("${p.bultos} bultos", MaterialTheme.colorScheme.surfaceVariant, MaterialTheme.colorScheme.onSurfaceVariant)
         if (!p.ubicada && p.pendiente) Chip("Sin ubicar", MaterialTheme.colorScheme.surfaceVariant, MaterialTheme.colorScheme.onSurfaceVariant)
+        // LA PUERTA APRENDIDA, el retraso y la ZBE (30-10-2026).
+        if (p.geo == "puerta" && p.pendiente) Chip("Puerta conocida", x.entregado.copy(alpha = 0.15f), MaterialTheme.colorScheme.onSurface)
+        if ((p.tardeMin ?: 0) > 0 && p.pendiente) Chip("llega ${p.tardeMin} min tarde", MaterialTheme.colorScheme.errorContainer, MaterialTheme.colorScheme.onErrorContainer)
+        if (enZbe && p.pendiente) Chip("ZBE", MaterialTheme.colorScheme.tertiaryContainer, MaterialTheme.colorScheme.onTertiaryContainer)
     }
 }
 
@@ -437,7 +525,7 @@ private fun Chip(t: String, fondo: androidx.compose.ui.graphics.Color, tinta: an
 
 @Composable
 private fun Siguiente(
-    p: Parada, numero: Int,
+    p: Parada, numero: Int, enZbe: Boolean = false,
     alNavegar: () -> Unit, alLlamar: () -> Unit, alWhatsapp: () -> Unit, alEntregar: () -> Unit, alFallar: () -> Unit, alAbrir: () -> Unit,
 ) {
     val x = LocalExtra.current
@@ -457,8 +545,12 @@ private fun Siguiente(
                     if (p.cliente.isNotBlank()) Text(p.direccion, style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     if (p.notas.isNotBlank()) Text(p.notas, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     p.antes?.let { Text(textoAntes(it), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.secondary) }
+                    // EL CLIENTE TE AYUDA ANTES DE LLEGAR (30-10-2026): lo que contestó en su enlace, en la parada.
+                    p.clienteDice?.let { textoClienteDice(it) }?.takeIf { it.isNotBlank() }?.let {
+                        Text("El cliente dice: $it", style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.tertiary)
+                    }
                     Spacer(Modifier.height(6.dp))
-                    Etiquetas(p)
+                    Etiquetas(p, enZbe)
                 }
             }
             Spacer(Modifier.height(14.dp))
@@ -490,7 +582,7 @@ private fun Siguiente(
 }
 
 @Composable
-fun Fila(p: Parada, numero: Int?, alTocar: () -> Unit) {
+fun Fila(p: Parada, numero: Int?, enZbe: Boolean = false, alTocar: () -> Unit) {
     Surface(onClick = alTocar, color = MaterialTheme.colorScheme.surfaceContainerLowest, shape = MaterialTheme.shapes.medium) {
         Row(Modifier.fillMaxWidth().padding(14.dp), verticalAlignment = Alignment.CenterVertically) {
             Numero(numero, hecho = !p.pendiente)
@@ -501,9 +593,11 @@ fun Fila(p: Parada, numero: Int?, alTocar: () -> Unit) {
                     Text(p.direccion, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant,
                         maxLines = 1, overflow = TextOverflow.Ellipsis)
                 }
-                if (p.pendiente && (p.eta != null || p.porCobrar || p.prioridad || !p.ubicada)) { Spacer(Modifier.height(4.dp)); Etiquetas(p) }
+                if (p.pendiente && (p.eta != null || p.porCobrar || p.prioridad || !p.ubicada || p.geo == "puerta" || enZbe || (p.tardeMin ?: 0) > 0)) { Spacer(Modifier.height(4.dp)); Etiquetas(p, enZbe) }
                 if (!p.pendiente) {
-                    Text(if (p.estado == "entregado") "Entregado" else "No entregado${p.motivo?.let { " · $it" } ?: ""}",
+                    // Con la hora (30-10-2026): «Entregado · 11:02», como en la web.
+                    val hora = Calle.hora(p.cerradoEn).takeIf { it.isNotBlank() }?.let { " · $it" } ?: ""
+                    Text(if (p.estado == "entregado") "Entregado$hora" else "No entregado$hora${p.motivo?.let { " · $it" } ?: ""}",
                         style = MaterialTheme.typography.labelMedium,
                         color = if (p.estado == "entregado") LocalExtra.current.entregado else MaterialTheme.colorScheme.error)
                 }

@@ -78,6 +78,8 @@ import com.flotadsp.fds.FdsApp
 import com.flotadsp.fds.data.Ajustes
 import com.flotadsp.fds.data.DiaEstadistica
 import com.flotadsp.fds.data.ErrorApi
+import com.flotadsp.fds.ui.Region
+import kotlin.math.roundToInt
 import com.flotadsp.fds.data.Estadisticas
 import com.flotadsp.fds.data.Parada
 import com.flotadsp.fds.data.Plan
@@ -91,6 +93,7 @@ import kotlinx.coroutines.launch
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.booleanOrNull
 import kotlinx.serialization.json.contentOrNull
+import kotlinx.serialization.json.intOrNull
 import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
@@ -123,7 +126,7 @@ fun HistorialPantalla() {
                 item {
                     Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLowest), shape = MaterialTheme.shapes.large) {
                         Row(Modifier.fillMaxWidth().padding(18.dp)) {
-                            Dato("${e.entregados}", "entregas en 30 días", Modifier.weight(1f))
+                            Dato("${e.entregados}", if (e.entregados == 1) "entrega en 30 días" else "entregas en 30 días", Modifier.weight(1f))
                             Dato(e.tasa?.let { "$it %" } ?: "—", "entregadas a la primera", Modifier.weight(1f))
                         }
                     }
@@ -189,6 +192,12 @@ fun AjustesPantalla(alGuardar: () -> Unit = {}) {
     var salida by remember { mutableStateOf("09:00") }
     var volver by remember { mutableStateOf(false) }
     var pais by remember { mutableStateOf("") }
+    // «Mi dinero hoy» (30-10-2026): la tarifa en euros con coma, como la web; se guarda en céntimos (PUT /reparto/ganancias).
+    var pagoParada by remember { mutableStateOf("") }
+    var pagoDia by remember { mutableStateOf("") }
+    var costeKm by remember { mutableStateOf("") }
+    var guardandoTarifa by remember { mutableStateOf(false) }
+    var mensajeTarifa by remember { mutableStateOf<String?>(null) }
     var eligiendoHora by remember { mutableStateOf(false) }
     var guardando by remember { mutableStateOf(false) }
     var mensaje by remember { mutableStateOf<String?>(null) }
@@ -199,6 +208,9 @@ fun AjustesPantalla(alGuardar: () -> Unit = {}) {
             salida = a["hora_salida"]?.jsonPrimitive?.contentOrNull ?: "09:00"
             volver = a["volver"]?.jsonPrimitive?.booleanOrNull ?: false
             pais = a["pais"]?.jsonPrimitive?.contentOrNull.orEmpty()
+            pagoParada = deCent(a["pago_parada"]?.jsonPrimitive?.intOrNull)
+            pagoDia = deCent(a["pago_dia"]?.jsonPrimitive?.intOrNull)
+            costeKm = deCent(a["coste_km"]?.jsonPrimitive?.intOrNull)
         }.onFailure { mensaje = "Sin conexión: los ajustes de la ruta se cargan con red." }
     }
     // Los países donde funciona, con sus husos, como los da el servidor (ordenados por nombre).
@@ -277,6 +289,31 @@ fun AjustesPantalla(alGuardar: () -> Unit = {}) {
                 }, enabled = ajustes != null && !guardando, modifier = Modifier.fillMaxWidth()) { Text("Guardar") }
                 mensaje?.let { Text(it, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.padding(top = 6.dp)) }
             }
+            Seccion("Mi dinero hoy") {
+                Text("Pon cómo te pagan y en «Hoy» verás cuánto llevas ganado y lo que pierdes con cada entrega que no sale.",
+                    style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Spacer(Modifier.height(8.dp))
+                OutlinedTextField(pagoParada, { pagoParada = it }, label = { Text("Te pagan por cada entrega (${Region.simbolo})") }, singleLine = true,
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal), modifier = Modifier.fillMaxWidth())
+                Spacer(Modifier.height(6.dp))
+                OutlinedTextField(pagoDia, { pagoDia = it }, label = { Text("Fijo por día, si te pagan así (${Region.simbolo})") }, singleLine = true,
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal), modifier = Modifier.fillMaxWidth())
+                Spacer(Modifier.height(6.dp))
+                OutlinedTextField(costeKm, { costeKm = it }, label = { Text("Gasolina por km (${Region.simbolo})") }, singleLine = true,
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal), modifier = Modifier.fillMaxWidth())
+                Spacer(Modifier.height(8.dp))
+                Button(onClick = {
+                    guardandoTarifa = true; mensajeTarifa = null
+                    ambito.launch {
+                        try {
+                            app.repo.guardarGanancias(aCent(pagoParada), aCent(pagoDia), aCent(costeKm))
+                            mensajeTarifa = "Guardado: lo verás en «Hoy»."
+                            alGuardar()
+                        } catch (e: ErrorApi) { mensajeTarifa = e.message } finally { guardandoTarifa = false }
+                    }
+                }, enabled = ajustes != null && !guardandoTarifa, modifier = Modifier.fillMaxWidth()) { Text("Guardar la tarifa") }
+                mensajeTarifa?.let { Text(it, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.padding(top = 6.dp)) }
+            }
             Text("La ruta se ordena por el tiempo que se tarda por carretera, contando el tráfico típico de cada hora, el rato en cada portal y el horario de cada cliente.",
                 style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
@@ -332,6 +369,10 @@ private fun Seccion(titulo: String, contenido: @Composable () -> Unit) {
         }
     }
 }
+
+/** La tarifa: «1,10» ↔ 110 céntimos. Lo que no es un número, 0. */
+internal fun aCent(t: String): Int = ((t.replace(',', '.').trim().toDoubleOrNull() ?: 0.0) * 100).roundToInt().coerceAtLeast(0)
+internal fun deCent(c: Int?): String = if (c == null || c <= 0) "" else "%.2f".format(ESPANOL, c / 100.0)
 
 // ── CUENTA ──────────────────────────────────────────────────────────────────────────────────────────────────
 

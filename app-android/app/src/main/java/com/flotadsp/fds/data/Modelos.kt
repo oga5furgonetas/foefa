@@ -64,6 +64,10 @@ data class Parada(
     val seguimiento: String? = null,
     /** La última vez en esa puerta (dónde se dejó, la nota, o que no se pudo y por qué). */
     val antes: Antes? = null,
+    /** Lo que contestó el cliente en su enlace (30-10-2026): si estará, dónde dejarlo, el portal, una franja. */
+    @SerialName("cliente_dice") val clienteDice: ClienteDice? = null,
+    /** Minutos que se llega tarde a su horario, según la ruta ordenada. */
+    @SerialName("tarde_min") val tardeMin: Int? = null,
 ) {
     val pendiente get() = estado == "pendiente" || estado == "en_ruta"
     val ubicada get() = lat != null && lng != null
@@ -81,6 +85,8 @@ data class ResumenRuta(
     val trafico: Boolean? = null,
     val fuente: String? = null,
     val programada: Boolean? = null,
+    /** El orden lo puso el repartidor a mano («A mano» en la web). */
+    val manual: Boolean? = null,
 )
 
 @Serializable
@@ -88,6 +94,39 @@ data class Base(val direccion: String? = null, val lat: Double? = null, val lng:
 
 @Serializable
 data class Antes(val fecha: String = "", val estado: String = "", val nota: String = "", val donde: String = "", val motivo: String = "")
+
+/** EL CLIENTE TE AYUDA ANTES DE LLEGAR (30-10-2026): lo que contestó en su enlace. Mismas claves que el servidor. */
+@Serializable
+data class ClienteDice(val estare: String = "", val dejar: String = "", val franja: List<String>? = null, val portal: String = "", val nota: String = "")
+
+/* LO QUE DICE LA DGT CERCA DE LA RUTA (30-10-2026): cortes, obras, accidentes y retenciones (GET /reparto/mi-ruta/incidencias)
+   y las zonas de bajas emisiones con sus polígonos y qué paradas caen dentro (GET /reparto/mi-ruta/zbe). */
+@Serializable
+data class Incidencia(
+    val id: String = "", val clase: String = "", val que: String = "", val gravedad: String = "", val carretera: String = "",
+    val pk: String = "", val municipio: String = "", val lat: Double, val lng: Double, val lat2: Double? = null, val lng2: Double? = null,
+    @SerialName("distancia_km") val distanciaKm: Double? = null, val parada: Int? = null,
+)
+
+@Serializable
+data class Incidencias(val incidencias: List<Incidencia> = emptyList(), val publicado: String = "", val incompleto: Boolean = false)
+
+@Serializable
+data class ZonaZbe(
+    val id: String = "", val ciudad: String = "", val nombre: String = "", val descripcion: String = "", val estado: String = "",
+    val url: String = "", val version: String = "", val etiquetas: List<String> = emptyList(),
+    val poligonos: List<List<List<Double>>> = emptyList(),
+)
+
+@Serializable
+data class ZonaParada(val id: String = "", val nombre: String = "")
+
+@Serializable
+data class Zbe(val zonas: List<ZonaZbe> = emptyList(), val paradas: Map<String, ZonaParada> = emptyMap(), val incompleto: Boolean = false)
+
+/** DÓNDE APARQUÉ (30-10-2026): el punto de la furgoneta al bajarse; vive solo en el móvil. */
+@Serializable
+data class Furgo(val lat: Double, val lng: Double, val en: Long)
 
 /** El bono de bienvenida de quien reparte por su cuenta: `objetivo` entregas en `diasObjetivo` días antes de `limite`. */
 @Serializable

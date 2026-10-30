@@ -7,6 +7,7 @@ import {
 } from 'lucide-react'
 import { repNavegar } from '../../services/api'
 import AntesPuerta from './AntesPuerta'
+import ClienteDice from './ClienteDice'
 import {
   prepararLinea, proyectar, situarPasos, proximoPaso, textoDistancia, distanciaHablada, metrosEntre, rumbo as rumboEntre, textoPaso,
 } from '../../lib/guia'
@@ -78,7 +79,9 @@ const horaMas = (min) => {
   return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`
 }
 
-export default function Navegacion({ parada, numero, quedan, onSalir, onEntregar, onNoEntregar, onEntregarVoz, onDeshacer, enlaceFuera, nombreFuera = 'Google Maps' }) {
+/* `onLlegar` (30-10-2026): se avisa a la ruta cuando se llega a la parada (solo o con «Ya he llegado»), para el
+   registro del intento (a qué hora se llegó) y para pedir la posición de la puerta. */
+export default function Navegacion({ parada, numero, quedan, onSalir, onEntregar, onNoEntregar, onEntregarVoz, onDeshacer, enlaceFuera, nombreFuera = 'Google Maps', onLlegar = null }) {
   useIdioma()
   useAtras(true, onSalir)   // el «atrás» del móvil sale de la navegación, no de la app
   const [pos, setPos] = useState(null)          // {p:[lat,lng], rumbo}
@@ -187,6 +190,7 @@ export default function Navegacion({ parada, numero, quedan, onSalir, onEntregar
     const { hecho, fuera } = proyectar(guia.prep, pos.p)
     if (llegado !== parada.id && (metrosEntre(pos.p, destino) < LLEGADA_M || (guia.prep.total - hecho < 25 && fuera < FUERA_M))) {
       setLlegado(parada.id)
+      onLlegar?.(parada)
       habla(`${tx('Has llegado a {destino}.', { destino: parada.cliente || tx('la parada') })}${parada.hueco ? ` ${tx('Va {sitio}.', { sitio: tx(parada.hueco).replace('·', '') })}` : ''}`)
       if (navigator.vibrate) navigator.vibrate([80, 60, 80])
       return
@@ -237,7 +241,7 @@ export default function Navegacion({ parada, numero, quedan, onSalir, onEntregar
     if (orden === 'repite') { if (paso) decir(`${textoPaso(paso, tx)}.`); return }
     if (orden === 'deshacer') { if (onDeshacer) { onDeshacer(); habla(tx('Deshecho.')) } return }
     if (!parada) return
-    if (orden === 'llegado') { setLlegado(parada.id); habla(tx('Has llegado')); return }
+    if (orden === 'llegado') { setLlegado(parada.id); onLlegar?.(parada); habla(tx('Has llegado')); return }
     if (orden === 'entregado') { (onEntregarVoz || onEntregar)(parada); habla(tx('Hecho. Si no era, di «deshacer».')); return }
     if (orden === 'no_entregado') { onNoEntregar(parada); return }
     if (orden === 'llamar') {
@@ -330,6 +334,7 @@ export default function Navegacion({ parada, numero, quedan, onSalir, onEntregar
             </div>
             {(parada.notas || parada.contenido) && <p className="mt-1.5 text-[13px] text-dark-400">{[parada.contenido, parada.notas].filter(Boolean).join(' · ')}</p>}
             <AntesPuerta a={parada.antes} className="mt-1.5" />
+            <ClienteDice d={parada.cliente_dice} className="mt-1.5" />
             <div className="mt-3 grid grid-cols-[auto_1fr_2fr] gap-2">
               {parada.telefono
                 ? <a href={`tel:${parada.telefono}`} aria-label={tx('Llamar')} className="flex items-center justify-center rounded-xl border border-dark-600 px-4 text-dark-100"><Phone size={18} /></a>
@@ -361,7 +366,7 @@ export default function Navegacion({ parada, numero, quedan, onSalir, onEntregar
                 ? <a href={`tel:${parada.telefono}`} className="flex items-center justify-center gap-1 rounded-xl border border-dark-700 py-2.5 text-dark-100"><Phone size={15} /> {tx('Llamar')}</a>
                 : <span className="flex items-center justify-center rounded-xl border border-dark-800 py-2.5 text-dark-600">{tx('Sin teléfono')}</span>}
               <a href={enlaceFuera(parada)} target="_blank" rel="noreferrer" className="flex items-center justify-center gap-1 rounded-xl border border-dark-700 py-2.5 text-dark-100"><Navigation size={15} /> {nombreFuera}</a>
-              <button onClick={() => { setLlegado(parada.id); if (navigator.vibrate) navigator.vibrate(60) }}
+              <button onClick={() => { setLlegado(parada.id); onLlegar?.(parada); if (navigator.vibrate) navigator.vibrate(60) }}
                 className="rounded-xl border border-emerald-600/50 py-2.5 font-semibold text-emerald-300">{tx('Ya he llegado')}</button>
             </div>
             <p className="mt-2 text-center text-[10.5px] text-dark-500">{tx('Tu ubicación se usa para guiarte y no se guarda.')}</p>

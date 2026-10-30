@@ -16,12 +16,14 @@ const FICHEROS = [
   'pages/Registro.jsx', 'legal/CookieBanner.jsx', 'pages/Repartidores.jsx', 'pages/PaseMovil.jsx', 'lib/compartir.js',
   'pages/driver/AntesPuerta.jsx', 'pages/driver/AjustesMovil.jsx', 'pages/OpinionRuta.jsx', 'pages/OpinionCorreo.jsx',
   'pages/AvisoManana.jsx', 'pages/Landing.jsx', 'pages/Iphone.jsx',
+  // Lo que pide la calle (30-10-2026): lo que dice el cliente y el mapa con lo de la DGT.
+  'pages/driver/ClienteDice.jsx', 'panel/components/MapaReparto.jsx',
 ]
 // Nombres que llegan de datos (el plan del autónomo en Registro: tt(planInfo.name)).
 // y los métodos de cobro de lib/region.js (metodosCobro), que se pintan con tx(t).
 const DE_DATOS = ['Repartidor', 'Bizum', 'Transferencia']
 // Listas cuyos textos se traducen al pintarlos.
-const LISTAS = ['MOTIVOS', 'DONDE', 'NAVEGADORES', 'HUECOS', 'PESTANAS', 'GIROS', 'ORDINALES', 'OPCIONES', 'ESTADO', 'VENTAJAS', 'FORMAS',
+const LISTAS = ['MOTIVOS', 'DONDE', 'NAVEGADORES', 'HUECOS', 'PESTANAS', 'GIROS', 'ORDINALES', 'OPCIONES', 'ESTADO', 'VENTAJAS', 'FORMAS', 'DEJAR', 'ATAJOS_HORARIO',
   // La portada (/): lo que hace la app, la IA y lo de la empresa.
   'PASOS_PORTADA', 'FUNCIONES_RUTA', 'PREGUNTAS_PORTADA', 'IA_PORTADA', 'MODULOS_EMPRESA',
   // La guía de iPhone (/iphone).
