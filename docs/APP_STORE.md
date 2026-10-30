@@ -26,11 +26,27 @@ bien) y, cuando están los secretos de Apple, archiva, firma y **sube a App Stor
 revisión y a la tienda es un botón en App Store Connect. Cada subida lleva el número de build del run (único, como
 pide Apple) y la versión `APP_VERSION` del workflow (2.4.1).
 
+## Sin iPhone (Dani no tiene): qué cambia
+
+Nada de lo de abajo necesita un iPhone: el alta, la clave y la app en App Store Connect son páginas web (desde el
+Android o el PC). Lo que sí cambia:
+- **Apple ID**: si no tienes, se crea en https://appleid.apple.com (la verificación en dos pasos puede ir por SMS al
+  número del Android). Con ese Apple ID se hace el alta de desarrollador en la web.
+- **Probarla**: el Mac de GitHub la arranca en un simulador de iPhone en cada compilación y guarda la pantalla
+  (artefacto «iphone-simulador» del run), así se ve que abre de verdad; la cámara y la ubicación no se pueden probar
+  en el simulador. Para una prueba real antes de enviarla a revisión, un iPhone prestado 10 minutos (algún repartidor
+  de OGA5/DGA1 lo tendrá): se instala desde TestFlight con un **enlace público** (App Store Connect → TestFlight →
+  External Testing → Public link; Apple revisa el build para pruebas externas en menos de un día) sin dar de alta a nadie.
+- **Las capturas de la ficha** ya están hechas desde la propia app a tamaño de iPhone 6,7" (1290×2796):
+  `frontend/ios/listing/capturas/es-ES` y `en-US` (se regeneran con `node e2e/capturas-app-store.mjs <carpeta> es|en`
+  con `vite preview --port 4174` en marcha). Apple las admite en JPEG.
+
 ## Pasos de Dani (una vez)
 
-1. **Cuenta de desarrollador de Apple** (99 $/año): https://developer.apple.com/programs/enroll/ con tu Apple ID.
-   Como persona física va en 1-2 días; como empresa pide número D-U-N-S y tarda semanas. Para empezar, persona
-   física (se puede pasar a empresa después).
+1. **Cuenta de desarrollador de Apple** (99 $/año): https://developer.apple.com/programs/enroll/ con tu Apple ID
+   (desde cualquier navegador; con iPhone también vale la app «Apple Developer»). Como persona física va en horas o
+   1-2 días; como empresa pide número D-U-N-S y tarda semanas. Para empezar, persona física (se puede pasar a
+   empresa después). Pide foto del DNI y el pago.
 2. **El identificador de la app**: en https://developer.apple.com/account → Certificates, Identifiers & Profiles →
    Identifiers → «+» → App IDs → App → Description `FDS`, Bundle ID **explícito** `com.flotadsp.fds`. Sin
    capacidades extra (se añaden cuando haga falta: push).
