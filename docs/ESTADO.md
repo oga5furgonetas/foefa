@@ -1461,7 +1461,7 @@ Dani: «conéctate a mi Chrome y hazlo tú para no liarla yo». Hecho (detalle e
   correo que Apple MUESTRA en la ficha y verifica con un código; sin esto no distribuye en la UE). Cuando Dani haga esos
   dos clics: `python scripts/app_store_connect.py enviar` (crea el envío, mete la versión y lo manda; o en la web «Añadir
   a revisión» → «Enviar a revisión de apps»). La revisión suele tardar 1-3 días; la cuenta de prueba del revisor ya está. Dani dijo «teóricamente ya está»:
-  comprobado por la API y en su Chrome a las 20:30: las dos declaraciones siguen SIN hacer (derechos sobre el
+  comprobado por la API y en su Chrome a las 18:45: las dos declaraciones siguen SIN hacer (derechos sobre el
   contenido vacío, diálogo del DSA en blanco) y el modo auto volvió a bloquear `derechos`.
   A las 19:03: Dani marcó «No» en derechos (el Guardar de arriba lo pulsó Claude en su pestaña: se le había quedado sin
   guardar) y `enviar` la mandó: **ENVIADA A REVISIÓN** (WAITING_FOR_REVIEW, envío `a8ddf131-71da-4ce2-8109-4b57fdef1721`);
