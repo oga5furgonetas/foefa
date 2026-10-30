@@ -772,3 +772,15 @@ html[data-letra='grande'] .app-ruta .text-\[19px\] { font-size: 22px; }
 html[data-letra='grande'] .app-ruta .text-\[20px\] { font-size: 23px; }
 html[data-letra='grande'] .app-ruta .text-\[21px\] { font-size: 24px; }
 html[data-letra='grande'] .app-ruta .text-\[22px\] { font-size: 25.5px; }
+
+/* EL IPHONE (30-10-2026): dentro de la app de iPhone (y de la web añadida a la pantalla de inicio) la página va por
+   debajo de la barra de estado. Se deja arriba el hueco que dice el sistema (en Android es 0 y no cambia nada), y lo
+   que va fijo o pegado arriba (el selector de idioma de entrar, el tirón de recargar, cabeceras) baja lo mismo. Abajo
+   ya lo hace la barra de pestañas con pb-[env(safe-area-inset-bottom)]. */
+@supports (padding-top: env(safe-area-inset-top)) {
+  html.modo-app body { padding-top: env(safe-area-inset-top); }
+  html.modo-app .fixed.top-0, html.modo-app .sticky.top-0, html.modo-app .absolute.top-0 { top: env(safe-area-inset-top); }
+  html.modo-app .fixed.top-2, html.modo-app .absolute.top-2 { top: calc(0.5rem + env(safe-area-inset-top)); }
+  html.modo-app .fixed.top-3, html.modo-app .absolute.top-3 { top: calc(0.75rem + env(safe-area-inset-top)); }
+  html.modo-app .fixed.top-4, html.modo-app .absolute.top-4 { top: calc(1rem + env(safe-area-inset-top)); }
+}

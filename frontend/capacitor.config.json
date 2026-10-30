@@ -1,0 +1,24 @@
+{
+  "appId": "com.flotadsp.fds",
+  "appName": "FDS",
+  "webDir": "dist",
+  "backgroundColor": "#070a0e",
+  "ios": {
+    "contentInset": "automatic",
+    "backgroundColor": "#070a0e",
+    "preferredContentMode": "mobile",
+    "appendUserAgent": "FDSApp/2.4.1 (iOS)"
+  },
+  "plugins": {
+    "SplashScreen": {
+      "launchAutoHide": true,
+      "launchShowDuration": 400,
+      "backgroundColor": "#070a0e",
+      "showSpinner": false
+    },
+    "StatusBar": {
+      "overlaysWebView": true,
+      "style": "DARK"
+    }
+  }
+}

@@ -1,0 +1,1 @@
+livraison,livreur,tournée,colis,scanner,étiquette,navigation,chauffeur,itinéraire,coursier,arrêts

@@ -1,0 +1,1 @@
+reparto,repartidor,ruta,entregas,paquetes,mensajería,escanear,etiqueta,navegación,furgoneta,autónomo

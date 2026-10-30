@@ -126,7 +126,7 @@ def _dentro_de_la_zbe() -> tuple:
     cae dentro; si no, cerca de una esquina."""
     z = _zbe_prueba()[0]
     pol = z["poligonos"][0]
-    centro = (sum(p[0] for p in pol) / len(pol), sum(p[1] for p in pol) / len(pol))
+    centro = (sum(p[0] for p in pol) / max(len(pol), 1), sum(p[1] for p in pol) / max(len(pol), 1))
     if server.reparto.punto_en_poligono(centro[0], centro[1], pol):
         return centro
     a, b, c = pol[0], pol[1], pol[2]
