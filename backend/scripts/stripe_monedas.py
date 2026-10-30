@@ -8,7 +8,8 @@ la clave escrita:
     fly ssh console -a flota-backend -C "python scripts/stripe_monedas.py"            # enseña lo que hay y lo que pondría
     fly ssh console -a flota-backend -C "python scripts/stripe_monedas.py --aplicar"  # lo pone
 
-Lee STRIPE_SECRET_KEY, STRIPE_PRICE_AUTONOMO y STRIPE_PRICE_AUTONOMO_ANNUAL del entorno. No imprime la clave. Las
+Lee STRIPE_SECRET_KEY, STRIPE_PRICE_AUTONOMO y STRIPE_PRICE_AUTONOMO_ANNUAL del entorno. No imprime la clave. Stripe solo
+devuelve `currency_options` si se pide con `expand[]` (sin eso parecía que no se ponían, 30-10). Las
 monedas que Stripe rechace se dicen y se saltan (la app sigue cobrando esas cuentas en euros).
 """
 import os
@@ -51,7 +52,7 @@ def main():
         if not pid:
             print(f"{nombre}: falta {var}")
             continue
-        estado, p = pide(clave, "GET", f"/prices/{pid}")
+        estado, p = pide(clave, "GET", f"/prices/{pid}?expand[]=currency_options")
         if estado != 200:
             print(f"{nombre}: Stripe contesta {estado} al leer el Price")
             continue
@@ -67,7 +68,7 @@ def main():
                 print(f"  {moneda}: {valor} ok")
             else:
                 print(f"  {moneda}: Stripe no lo acepta ({estado}): {(r.get('error') or {}).get('message', '')[:120]}")
-        estado, p = pide(clave, "GET", f"/prices/{pid}")
+        estado, p = pide(clave, "GET", f"/prices/{pid}?expand[]=currency_options")
         print(f"  {nombre} queda con: {sorted((p.get('currency_options') or {}).keys())}")
 
 
