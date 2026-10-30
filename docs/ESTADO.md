@@ -969,8 +969,7 @@ empresas como prioridad de ventas, cobro en la app, Valor fuera del repo, DeCA).
   `docs/anuncios/internacional/` (`TEXTOS.md`): la app grabada en en/pt/fr/it/de, rótulos y tarjetas traducidos, voz nativa
   de Artlist, y el audio de Spotify a norma en los 5 idiomas; textos de Meta por idioma. Scripts: `spot-ruta.spec.js`
   (`SPOT_LOCALE`), `spot-ruta/capas.mjs` y `montar-spot-ruta.mjs` (`IDIOMA=xx`), `spot-ruta/{voces,spotify}-internacional.mjs`.
-- Para Dani: escuchar las voces (no verificadas de oído), confirmar que el bono de 25 € se paga fuera de España (si no,
-  quitarlo de `textos.json` → oferta y volver a montar), rehacer la portada de Spotify por idioma. ffmpeg ya está en este PC (winget).
+- Para Dani: escuchar las voces (no verificadas de oído), rehacer la portada de Spotify por idioma. ffmpeg ya está en este PC (winget).
 
 ## Última sesión — 30-10-2026 (08:00, PC de Dani, bucle de redes): TikTok vuelve a publicar; programado hasta el D 09-11
 

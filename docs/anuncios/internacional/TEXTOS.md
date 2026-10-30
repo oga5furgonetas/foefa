@@ -42,9 +42,8 @@ Python, que no hay en este PC.
 tú o alguien nativo; si una no convence, cambiarla es una generación más (unos 10-70 créditos de Artlist).
 
 ## Lo que hay que comprobar antes de subir fuera de España
-1. **El bono de 25 €** se enseña en la oferta de todos los idiomas. REDES.md §3 dice «Bizum en España, PayPal fuera»
-   para «Invita y gana»; confirma que el bono de bienvenida también se paga fuera de España (PayPal) o quita la
-   tarjeta del bono en esos idiomas (`textos.json` → `oferta`, y volver a montar).
+1. **El bono de 25 €** se enseña en la oferta de todos los idiomas: Dani confirmó el 30-10 que se paga también fuera de
+   España (PayPal), así que se queda.
 2. **La página de alta y la web** están en los 6 idiomas (`docs/EXPANSION-INTERNACIONAL-30-10.md` §1). Las
    **páginas legales** estaban solo en español y, desde la 2.4.0, también en inglés: en pt/fr/it/de el usuario
    firma unos términos que no están en su idioma.

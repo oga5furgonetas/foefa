@@ -260,6 +260,6 @@ Hecho en `docs/anuncios/internacional/` (léeme: `TEXTOS.md`; fuente única: `te
 - Textos de Meta (principal, corto, título, descripción, botón, enlace con `utm_content=rutahecha_xx`) y ficha de Spotify.
 - Artlist: 40 generaciones de voz (unos 700 créditos del plan; no es gasto nuevo). **ffmpeg instalado con winget** en este PC
   (`Gyan.FFmpeg`, la ruta que ya buscaba `cierre-video-promo.mjs`).
-- **No verificado**: el acento y la naturalidad de las voces (no puedo oírlas); que el bono de 25 € se pague fuera de España.
+- **No verificado**: el acento y la naturalidad de las voces (no puedo oírlas); el bono de 25 € fuera de España lo confirmó Dani a las 11:05: «se paga fuera», se queda.
   Pendiente de Dani: escucharlas, decidir lo del bono fuera, rehacer la portada de Spotify en cada idioma, y versiones
   pt-BR y en-US si quiere Brasil y EE. UU.
