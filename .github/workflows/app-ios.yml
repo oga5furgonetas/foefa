@@ -62,9 +62,36 @@ jobs:
         run: |
           set -o pipefail
           xcodebuild -workspace App.xcworkspace -scheme App -configuration Debug \
-            -sdk iphonesimulator -destination 'generic/platform=iOS Simulator' \
+            -sdk iphonesimulator -destination 'generic/platform=iOS Simulator' -derivedDataPath "$PWD/build/sim" \
             CODE_SIGNING_ALLOWED=NO MARKETING_VERSION="$APP_VERSION" CURRENT_PROJECT_VERSION="${{ github.run_number }}" \
             build | tail -40
+      # Dani no tiene iPhone (30-10-2026): el Mac arranca la app en un simulador de iPhone y guarda lo que se ve al abrirla
+      # (artefacto «iphone-simulador»). Si la pantalla sale, la app de verdad abre; lo que no se prueba aquí son la cámara
+      # y la ubicación, que el simulador no tiene.
+      - name: "1b. La arranca en un simulador de iPhone y guarda la pantalla"
+        working-directory: frontend/ios/App
+        run: |
+          APP=$(find "$PWD/build/sim/Build/Products" -name "App.app" -maxdepth 2 | head -1)
+          echo "app: $APP"
+          UDID=$(xcrun simctl list devices available -j | python3 -c "import json,sys; d=json.load(sys.stdin)['devices']; ds=[x for k,v in d.items() if 'iOS' in k for x in v if x['name'] in ('iPhone 16 Pro Max','iPhone 16 Pro','iPhone 16','iPhone 15 Pro','iPhone 15')]; print(ds[0]['udid'] if ds else '')")
+          [ -n "$UDID" ] || { echo "sin simulador de iPhone disponible"; xcrun simctl list devices available | head -30; exit 0; }
+          xcrun simctl boot "$UDID" || true
+          xcrun simctl bootstatus "$UDID" -b
+          xcrun simctl install "$UDID" "$APP"
+          xcrun simctl launch "$UDID" com.flotadsp.fds
+          sleep 12
+          mkdir -p "$PWD/build/capturas"
+          xcrun simctl io "$UDID" screenshot "$PWD/build/capturas/iphone-arranque.png"
+          sleep 6
+          xcrun simctl io "$UDID" screenshot "$PWD/build/capturas/iphone-arranque-2.png"
+          xcrun simctl shutdown "$UDID" || true
+          ls -la "$PWD/build/capturas"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: iphone-simulador
+          path: frontend/ios/App/build/capturas/
+          if-no-files-found: ignore
+          retention-days: 30
       - name: ¿Hay clave de Apple?
         id: apple
         env:
