@@ -301,6 +301,21 @@ def cmd_perfil():
     print("perfil", at.get("name"), at.get("uuid"), "caduca", at.get("expirationDate"), "· guardado en", casa / ".flota-apple-FDS-App-Store.mobileprovision")
 
 
+def cmd_adjuntar(numero: str = ""):
+    """Adjunta a la versión en preparación el build procesado (el más nuevo, o el de ese número de build)."""
+    app = la_app()
+    v = version_abierta(app["id"])
+    estado, r = api("GET", f"/builds?filter[app]={app['id']}&filter[processingState]=VALID&sort=-uploadedDate&limit=10")
+    falla(estado, r, "builds")
+    builds = [b for b in r.get("data", []) if not numero or b["attributes"].get("version") == numero]
+    if not builds:
+        sys.exit("no hay ningún build procesado" + (f" con el número {numero}" if numero else ""))
+    b = builds[0]
+    estado, r = api("PATCH", f"/appStoreVersions/{v['id']}/relationships/build", {"data": {"type": "builds", "id": b["id"]}})
+    falla(estado, r, "adjuntar el build")
+    print("build", b["attributes"].get("version"), "(", b["attributes"].get("uploadedDate"), ") adjuntado a la versión", v["attributes"]["versionString"])
+
+
 def cmd_builds():
     app = la_app()
     estado, r = api("GET", f"/builds?filter[app]={app['id']}&sort=-uploadedDate&limit=10")
@@ -330,6 +345,8 @@ if __name__ == "__main__":
         cmd_revision(sys.argv[2] if len(sys.argv) > 2 else "")
     elif orden == "certificado":
         cmd_certificado()
+    elif orden == "adjuntar":
+        cmd_adjuntar(sys.argv[2] if len(sys.argv) > 2 else "")
     elif orden == "perfil":
         cmd_perfil()
     else:

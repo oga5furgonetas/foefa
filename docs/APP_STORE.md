@@ -117,6 +117,8 @@ perfil de desarrollo y falla con «Your team has no devices» (y si se le fuerza
 - Hecho ese día desde la API, sin Xcode: certificado `652QMHW2NZ` y perfil `61c5577a-…`. Los secretos del certificado
   los tuvo que meter Dani (el modo auto bloqueó escribirlos desde aquí).
 
+- **Xcode 26**: desde octubre de 2026 Apple solo admite builds hechos con el SDK de iOS 26; el workflow elige el Xcode 26 más nuevo del Mac de GitHub (`/Applications/Xcode_26*.app`). Con todo eso, el build 2.4.1 subió el 30-10 por la tarde; `python scripts/app_store_connect.py builds` dice cuándo está procesado y `adjuntar` lo pone en la versión.
+
 ## Por si la revisión pone pegas (lo típico)
 
 - «Minimum functionality / es una web» (4.2): la app escanea con la cámara, usa la ubicación, funciona sin red
