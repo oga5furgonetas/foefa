@@ -154,3 +154,40 @@ Ya estaba todo hasta el 05-11 (TikTok 18:00, Instagram 12:00, YouTube 30-10 y 02
 Totales: X 3 respuestas (0 con app); TikTok 5 comentarios (1 con app, el ofrecimiento) + 1 seguida; YouTube 2 (1 con app);
 Instagram 0; Facebook 0. Con app: 3 de 11 (justo la proporción). Reddit no se intentó (bloqueado). Sin pieza nueva: quedan
 piezas sin usar (`invita-9x16.png`, carrusel C, X-* para el 07-11 en adelante) y sigue faltando el sketch FDS-4 del 08-11.
+
+## 30-10-2026 (04:10 – 04:50) — ronda del bucle de 4 h
+
+### Metricool (marca 7741371)
+Los 7 días (hasta el V 06-11) ya estaban completos. Para no dejar hueco a la siguiente ronda, añadido el sábado:
+| Red | Cuándo | Pieza | Notas |
+|---|---|---|---|
+| TikTok | S 07-11 18:00 | `shorts-es.mp4` | «De 30 etiquetas a una ruta ordenada en 10 segundos ⏱️…» (texto nuevo, no el del Short de YouTube del 30-10); comentario fijado «¿Cuánto tardas tú en ordenar la ruta por la mañana?»; marca propia + IA (410775414) |
+| Instagram | S 07-11 12:00 | `shorts-es.mp4` | reel, mismo texto, IA sí (410775431) |
+
+### X (@FlotaDSP)
+- Programados V 31-10 → V 06-11 ya estaban. **Programado S 07-11 7:30** (contrarreembolso: «…apuntado en un papel… y el papel desaparece», enlace repartidores `utm_content=post_cobro`, sin imagen: no hay tarjeta X-* para ese día). Verificado en «Will send on Sat, Nov 7, 2026 at 7:30 AM».
+- La cuenta tiene ya la marca azul (aviso «Your account is now verified», hace 16 h).
+
+### Ronda de conversación (lo nuestro primero)
+| Hora | Red | Hilo | Qué se dijo | App |
+|---|---|---|---|---|
+| 04:12 | X | @ArinGora contestó a lo nuestro («entiendo que sea complicado; le esperé abajo; ahora pongo punto de entrega») | bajar tú ya es más de lo que hace la mayoría; el punto de entrega es buena solución para los dos | no |
+| 04:14 | X | @kevincrestt contestó («desde el otro lado tiene todo el sentido, win-win») y **nos siguió** | la furgoneta se carga al revés de como se reparte; gracias por el follow | no |
+| 04:20 | X | búsquedas «repartidor», «paquetería/furgoneta + reparto» (recientes, es) | a las 4 de la mañana solo hay sucesos y LatAm; el único hilo útil (@Murillo_fuenla, paquete «en reparto» desde las 7) ya lo contestamos hace 7 h. Sin más respuestas | — |
+| 04:23 | X | **seguida @DeRepartidores** (Asociación de Repartidores Autónomos de Cataluña) | — | — |
+| 04:27 | TikTok | AnthonyS contestó a nuestro consejo en el vídeo de @soylastefa («lo tomo muy en cuenta») | mucha suerte; el primer día no te compares con nadie | no |
+| 04:30 | TikTok | @latindriver27 «¿Cuánto debe cobrar un repartidor?» (hace 8 h, 493 ❤, 64 comentarios) | la cifra del mes engaña: lo que cuenta es lo que queda por hora; restar gasolina, cuota y desgaste; «hicimos una calculadora gratis» | sí, **retenido por TikTok** (ver abajo) |
+| 04:38 | TikTok | @bruselasinfiltro «Repartir paquetería en España no es como lo pintan» (11,7K ❤) → respuesta a Frank Cárdenas («¿buen precio por paquete a un autónomo?») | los números de la calculadora (1,10 €/parada, 100 paradas, 22 días → 7,19 €/h, orientativo) | no, **retenido** |
+| 04:41 | TikTok | mismo vídeo, comentario general (corto, sin cifras) | la mitad de la jornada se decide en cómo cargas | no, **retenido** |
+| 04:46 | YouTube | Jeremias Savedra «Trabajando repartiendo paquetes en España, ¿merece la pena?» (hace 2 d, 83 vistas, 1,55K suscriptores) → **ofrecimiento público a micro-creador** | somos FDS, equipo pequeño de España; ¿la llevas una semana en la furgo y cuentas en vídeo qué le falta, lo malo también? sin pago ni condiciones; en Google Play buscando FDS | sí (publicado como @FlotaDSP, verificado) |
+| 04:49 | YouTube | Un Ecuatoriano en España «Un día entero trabajando como repartidor» (hace 4 d, 108 vistas, 0 comentarios: el nuestro es el primero) | aparcar una vez para tres portales; en 120 paradas son 40 maniobras menos | no (verificado) |
+| 04:51 | Instagram | notificaciones | nada nuevo (sigue el aviso de inicio de sesión de hace 7 h) | — |
+| 04:52 | Facebook | notificaciones | nada nuevo; sigue el anuncio con el pago rechazado (no se toca) | — |
+
+**TikTok retiene los comentarios**: desde las 04:30 `api/comment/publish` devuelve 200 pero el comentario no aparece (ni
+recargando, ni el corto sin cifras ni enlace). El de AnthonyS (04:27) sí entró. Probable límite temporal por volumen de
+comentarios de la cuenta (unos 30 en 30 h): **en la siguiente ronda, comprobar con un comentario y, si sigue, dejar TikTok
+reposar 24 h**. Ojo: el comentario a Frank se reenvió dos veces (clic + Enter); si TikTok los libera, puede salir duplicado.
+
+Totales publicados: X 2 respuestas (0 con app) + 1 seguida; TikTok 1 (0 con app) + 3 retenidos; YouTube 2 (1 con app, el
+ofrecimiento); Instagram 0; Facebook 0. Con app: 1 de 5 publicados. Reddit no se intentó (bloqueado). Sin pieza nueva.

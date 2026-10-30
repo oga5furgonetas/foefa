@@ -963,6 +963,14 @@ sin píxel. Nada tocado en el código ni desplegado: solo este informe. La app n
 Las decisiones que pide están en su §11 (una marca o dos, Amazon A-G, una sola oferta, anuncios, Reparto para
 empresas como prioridad de ventas, cobro en la app, Valor fuera del repo, DeCA).
 
+## Última sesión — 30-10-2026 (04:10, PC de Dani, bucle de redes): ronda de madrugada; TikTok retiene comentarios
+
+- Metricool: añadido el S 07-11 (TikTok 18:00 e Instagram 12:00, `shorts-es.mp4`); X programado hasta el S 07-11.
+- 5 intervenciones publicadas (X 2, TikTok 1, YouTube 2) y ofrecimiento público a otro micro-creador (Jeremias Savedra,
+  YouTube). Kevin Crestt (7,3K vistas en su hilo) nos siguió en X. Detalle en `docs/anuncios/redes/REGISTRO-PC.md`.
+- **TikTok retiene nuestros comentarios desde las 04:30** (200 en la API, pero no aparecen): probable límite por volumen.
+  La siguiente ronda prueba con uno y, si sigue, deja TikTok 24 h. Lo demás (X, YouTube, Metricool) va normal.
+
 ## Última sesión — 30-10-2026 (00:10, PC de Dani, bucle de redes): la 2.3.0 en Play y primera ronda con la app en la tienda
 
 - La **2.3.0 está publicada en Google Play** (producción, 178 países, desde el 29-10 23:42) y `APP_ANDROID_MIN="2.3.0"` puesta en
