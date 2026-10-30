@@ -969,6 +969,9 @@ empresas como prioridad de ventas, cobro en la app, Valor fuera del repo, DeCA).
   carrusel C lo había puesto alguien a las 07:55 (no esta sesión). X programado hasta el D 08-11 (post de Latinoamérica).
 - **TikTok ya publica otra vez**: el comentario de prueba salió y se ve tras recargar. 7 intervenciones (X 1, TikTok 4,
   YouTube 2; 2 con app) y seguida Cadena de Suministro en X. Detalle en `docs/anuncios/redes/REGISTRO-PC.md`.
+- 09:10, Dani: «sigue así; incluso puedes buscarlo en otros idiomas dado que estamos para más sitios» → regla añadida al
+  paso 4 de `docs/anuncios/redes/PROMPT-PC.md` (buscar en en/pt/it/fr/de y LatAm, contestar en el idioma del hilo) y primera
+  pasada: 3 comentarios en TikTok (Reino Unido, Alemania, México; 1 con app). X en otros idiomas no dio nada útil.
 - Siguen pendientes de Dani: aviso de inicio de sesión de Instagram y anuncio de Facebook con el pago rechazado.
 
 ## Última sesión — 30-10-2026 (04:10, PC de Dani, bucle de redes): ronda de madrugada; TikTok retiene comentarios

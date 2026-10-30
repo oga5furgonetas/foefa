@@ -234,3 +234,14 @@ salió duplicado): no verificado.
 Totales publicados: X 1 respuesta (0 con app) + 1 seguida; TikTok 4 (1 con app); YouTube 2 (1 con app); Instagram 0;
 Facebook 0. Con app: 2 de 7. Reddit no se intentó (bloqueado). Sin pieza nueva (quedan sin usar: carrusel C ya programado,
 `invita-9x16.png` ya programado; faltan tarjetas X-* del 08-11 en adelante y el sketch FDS-4).
+
+### 30-10 08:50 – 09:10 — Dani: «sigue así; incluso puedes buscarlo en otros idiomas dado que estamos para más sitios»
+- Regla nueva escrita en `PROMPT-PC.md` (paso 4): cada ronda busca también en pt, en, it, fr, de y español de LatAm y contesta en el idioma del hilo.
+- X en portugués, inglés e italiano (recientes): solo clientes quejándose de empresas, política y anuncios de trabajo; nada útil. Notificaciones: me gusta de Songokurious, David y Cristina C. a nuestras respuestas.
+- TikTok (la cuenta es región ES: la búsqueda en portugués devuelve vídeos en español; la de inglés sí funciona):
+| Hora | Red | Hilo | Qué se dijo | App |
+|---|---|---|---|---|
+| 09:00 | TikTok | @ndouble.1 (Nottingham) «Should we get less multi-drops??» (1.448 ❤, 95 comentarios) | en inglés: los multi-drop solo se aguantan si la furgoneta va cargada en orden de parada; saber en qué balda va cada bulto antes de salir | no (visible) |
+| 09:03 | TikTok | @jst_mate.o (español repartiendo en Berlín) «Día 5: repartidor en Alemania» (525 ❤) | patios interiores con tres portales y nombres en el timbre; ¿cuántas paradas salen por allí? | no (visible) |
+| 09:08 | TikTok | @toporingo87 (Ciudad de México) «183 paquetes, 151 paradas, ruta al 100 % antes de las 3:30» (16,7K ❤, 478 comentarios) | dividir la zona en cuadrantes vale igual en CDMX que en Madrid; «hicimos una app gratis que hace justo eso… Mi dinero hoy en pesos; somos FDS»; que digan qué falta en México | sí (visible) |
+- Descartados: @juanfraaanjf (2021, viejo) y @boxdeliverysl (Murcia 2024, solo quejas de clientes). Con app: 1 de 3.
