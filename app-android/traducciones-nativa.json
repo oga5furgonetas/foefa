@@ -97,12 +97,33 @@
     "Ingrandisci",
     "Vergrößern"
   ],
+  "Actualiza para tener las mejoras y que todo siga funcionando.": [
+    "Update to get the improvements and keep everything working.",
+    "Atualiza para ter as melhorias e que tudo continue a funcionar.",
+    "Mettez à jour pour profiter des améliorations et que tout continue de fonctionner.",
+    "Aggiorna per avere le novità e perché tutto continui a funzionare.",
+    "Aktualisiere, um die Verbesserungen zu bekommen und damit alles weiter funktioniert."
+  ],
   "Actualización de FDS descargada.": [
     "FDS update downloaded.",
     "Atualização do FDS transferida.",
     "Mise à jour de FDS téléchargée.",
     "Aggiornamento di FDS scaricato.",
     "FDS-Update heruntergeladen."
+  ],
+  "Actualización disponible": [
+    "Update available",
+    "Atualização disponível",
+    "Mise à jour disponible",
+    "Aggiornamento disponibile",
+    "Update verfügbar"
+  ],
+  "Actualizar en Google Play": [
+    "Update on Google Play",
+    "Atualizar no Google Play",
+    "Mettre à jour sur Google Play",
+    "Aggiorna su Google Play",
+    "In Google Play aktualisieren"
   ],
   "Actívala en Permisos › Cámara. Solo se usa mientras escaneas y las imágenes no salen del móvil.": [
     "Turn it on in Permissions › Camera. It is only used while you scan, and the images never leave your phone.",
@@ -461,6 +482,13 @@
     "Smetti di seguirmi",
     "Nicht mehr folgen"
   ],
+  "Descargar la nueva": [
+    "Download the new one",
+    "Transferir a nova",
+    "Télécharger la nouvelle",
+    "Scarica la nuova",
+    "Neue Version laden"
+  ],
   "Desde dónde sales (nave, almacén o casa)": [
     "Where you start from (depot, warehouse or home)",
     "De onde sais (armazém, depósito ou casa)",
@@ -734,6 +762,13 @@
     "Questa rete non raggiunge il server (un Wi-Fi che chiede di registrarsi?).",
     "Dieses Netz erreicht den Server nicht (ein WLAN mit Anmeldeseite?)."
   ],
+  "Esta versión ya no sirve: hace falta actualizar para seguir.": [
+    "This version no longer works: you need to update to continue.",
+    "Esta versão já não serve: é preciso atualizar para continuar.",
+    "Cette version ne fonctionne plus : il faut mettre à jour pour continuer.",
+    "Questa versione non funziona più: devi aggiornare per continuare.",
+    "Diese Version funktioniert nicht mehr: Zum Weitermachen musst du aktualisieren."
+  ],
   "Este día está dentro de una suspensión.": [
     "This day falls within a suspension.",
     "Este dia está dentro de uma suspensão.",
@@ -768,6 +803,13 @@
     "Expliquez brièvement le motif (obligatoire)",
     "Spiega brevemente il motivo (obbligatorio)",
     "Erkläre kurz den Grund (Pflicht)"
+  ],
+  "FDS {v} ya está lista.": [
+    "FDS {v} is ready.",
+    "O FDS {v} já está pronto.",
+    "FDS {v} est prête.",
+    "FDS {v} è pronta.",
+    "FDS {v} ist da."
   ],
   "Faltan {n}: la contraseña tiene que tener 6 caracteres o más.": [
     "{n} more needed: the password must be 6 characters or more.",
@@ -922,6 +964,13 @@
     "Une nouvelle version de FDS est disponible ({v}).",
     "C’è una nuova versione di FDS ({v}).",
     "Es gibt eine neue Version von FDS ({v})."
+  ],
+  "Hay una versión nueva de FDS.": [
+    "There is a new version of FDS.",
+    "Há uma versão nova do FDS.",
+    "Une nouvelle version de FDS est disponible.",
+    "C'è una nuova versione di FDS.",
+    "Es gibt eine neue Version von FDS."
   ],
   "Haz las cuatro fotos del vehículo, el cuentakilómetros y el indicador de combustible.": [
     "Take the four photos of the vehicle, the odometer and the fuel gauge.",
@@ -1755,6 +1804,13 @@
     "Renvoyer le code",
     "Reinvia codice",
     "Code erneut senden"
+  ],
+  "Reiniciar": [
+    "Restart",
+    "Reiniciar",
+    "Redémarrer",
+    "Riavvia",
+    "Neu starten"
   ],
   "Repetir": [
     "Retry",

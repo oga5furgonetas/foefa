@@ -1,7 +1,7 @@
 # La app de Android de FDS (Play Store)
 
 > **29-10-2026**: la TWA (`android/`, incluida la variante de China) ya no existe: la única app es la nativa de
-> `app-android/`. **Versión 2.4.0 (code 19), 30-10-2026**: el mapa que responde, lo que pide la calle, la app en el idioma
+> `app-android/`. **Versión 2.4.1 (code 20), 30-10-2026 mediodía** (la 2.4.0 se subió por la mañana y Play no admite dos con el mismo código; esta lleva las fuentes de cada país, el piso bien leído y el aviso de actualizar). Antes, **versión 2.4.0 (code 19), 30-10-2026**: el mapa que responde, lo que pide la calle, la app en el idioma
 > del móvil (en, pt, fr, it, de), millas y moneda del país (ver abajo). **Versión 2.3.0 (code 18)**: avisos al móvil (bandeja, notificación cada 15 min aunque esté cerrada,
 > FCM opcional con los secretos `FDS_FCM_*`), permiso de notificaciones en Android 13+, y la publicación automática
 > (`app-release.yml` → Play con `PLAY_SERVICE_ACCOUNT_JSON`; la web con `desplegar.yml`). Lo de abajo es historia
@@ -201,6 +201,31 @@ como artefacto del run (`FDS-x.y.z`): el AAB se sube a Play Console y el APK a l
 igual pero SIN FIRMAR (nombres con `-SIN-FIRMAR`; no valen para Play). La clave se borra del runner al acabar. Si
 la clave de subida se viera comprometida, se cambia en Play Console (Play App Signing guarda la de firma real).
 
+
+## Versión 2.4.1 (code 20): las fuentes de cada país, el piso bien leído y «Actualización disponible» (30-10-2026, mediodía)
+
+Dani subió la 2.4.0 (code 19) a Play por la mañana; lo hecho a mediodía (fuera de España con las fuentes de cada
+país, las etiquetas, los mensajes del servidor en el idioma del móvil) no cabía en ella, así que va en la **2.4.1
+(code 20)**. Y lo que pidió después: «que a los que tengan la app antigua, al entrar, les salte "actualización
+disponible" con un botón que los lleve a Google Play».
+- **El aviso de actualizar** (`app-android/.../Actualizacion.kt`): al abrir la app, si hay una versión más nueva, un
+  diálogo en el centro, «Actualización disponible», con «Actualizar en Google Play» (la de Play) o «Descargar la
+  nueva» (la instalada desde la web) y «Ahora no». Sale una vez por arranque, hasta que actualice. La de Play se
+  entera por la propia tienda (In-App Updates) y, además, por el servidor: **cuando la 2.4.1 esté publicada en Play**,
+  `fly secrets set -a flota-backend APP_ANDROID_PLAY="20 2.4.1"` (si se pone antes, el botón llevaría a una ficha sin
+  actualización). «Actualizar» abre la actualización de Play a pantalla completa (descarga, instala y reinicia sin
+  salir de la app); si Play no la ofrece, la ficha en la tienda. Con `APP_ANDROID_MIN="2.4.1"` el aviso no se puede
+  cerrar (solo cuando Play ya la ofrece: si no, la persona se quedaría fuera). La de la web sigue con
+  `APP_ANDROID_WEB="20 2.4.1"` (se pone al desplegar la web con el APK nuevo).
+- **Reino Unido y Alemania con fuente** (`backend/trafico.py`): cortes y obras de TfL en el Gran Londres (fuera de
+  Londres no hay fuente abierta: National Highways pide clave) y de la API de la Autobahn GmbH en Alemania (solo
+  autopistas). Las zonas de OSM (Umweltzonen, ZTL, LEZ, ZER) se guardan en Mongo por si Overpass no contesta.
+- Lo demás de mediodía (fuentes de FR/NL/EE. UU., zonas por país, placa, Stripe en la moneda del país, el piso en las
+  etiquetas, los mensajes del servidor y el vocabulario de la carretera en el idioma del móvil, el bono en euros) está
+  en ESTADO.md («30-10-2026 (mediodía)»).
+
+Novedades para Play Console en 7 idiomas: `app-android/play-listing/NOVEDADES-2.4.1.md`. Se compila igual que la 2.4.0
+(abajo); el AAB y el APK firmados quedaron en `C:\Users\dlvie\Downloads\FDS-2.4.1-code20.aab` y `FDS-2.4.1.apk`.
 
 ## Versión 2.4.0 (code 19): lo que pide la calle, el mapa que responde y la app en el idioma del móvil (30-10-2026)
 

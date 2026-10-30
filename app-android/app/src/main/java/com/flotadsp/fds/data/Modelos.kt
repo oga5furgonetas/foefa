@@ -170,6 +170,10 @@ data class Ganancias(
 @Serializable
 data class VersionApp(val code: Int = 0, val nombre: String = "")
 
+/** Lo que anuncia el servidor (GET /app/version): la versión que hay en la web, la publicada en Play y la mínima que exige. */
+@Serializable
+data class VersionesApp(val web: VersionApp? = null, val play: VersionApp? = null, val min: String? = null)
+
 @Serializable
 data class Trazado(val linea: List<List<Double>> = emptyList(), val fuente: String? = null, val km: Double? = null, val minutos: Int? = null)
 

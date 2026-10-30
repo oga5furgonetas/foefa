@@ -1,0 +1,409 @@
+{
+ "roadworks": [
+  {
+   "identifier": "2023-000357--vi-bs.2026-08-10_11-00-00-000.devi-zus.2024-10-01_00-00-00-000.f.de13",
+   "icon": "123",
+   "isBlocked": "false",
+   "future": false,
+   "extent": "49.38191589297737,7.002339290843191,49.41258498396637,6.993871225155498",
+   "point": "49.38191589297737,7.002339290843191",
+   "startLcPosition": "8",
+   "display_type": "ROADWORKS",
+   "subtitle": " Saarbrücken -> Trier",
+   "title": "A1 | Saarbrücken - Eppelborn",
+   "startTimestamp": "2026-08-10T11:00:00+02:00",
+   "coordinate": {
+    "lat": 49.38191589297737,
+    "long": 7.002339290843191
+   },
+   "description": [
+    "Zeitraum dieser Bauphase:",
+    "Beginn: 10.08.26 um 11:00 Uhr",
+    "Ende: 21.11.26 um 20:00 Uhr",
+    "(Ende der Gesamtmaßnahme: 21.11.26)",
+    "",
+    "A1: Saarbrücken -> Trier, zwischen 3.6 km hinter AK Saarbrücken und 0.3 km vor AS Eppelborn",
+    "",
+    "Länge: 4.87 km | Maximale Durchfahrtsbreite: 3.25 m",
+    "",
+    "A1 Arbeiten an Schutzeinrichtungen A.05226.00"
+   ],
+   "footer": [],
+   "geometry": {
+    "type": "LineString",
+    "coordinates": [
+     [
+      7.002339291,
+      49.381915893
+     ],
+     [
+      7.0025404,
+      49.382234101
+     ],
+     [
+      7.0030646,
+      49.383050301
+     ],
+     [
+      7.003294,
+      49.383371301
+     ],
+     [
+      7.0036121,
+      49.383786701
+     ],
+     [
+      7.0037842,
+      49.384000601
+     ],
+     [
+      6.9965622,
+      49.412641901
+     ],
+     [
+      6.9960326,
+      49.412589801
+     ],
+     [
+      6.9954422,
+      49.412557501
+     ],
+     [
+      6.9948881,
+      49.412549201
+     ],
+     [
+      6.9941228,
+      49.412565501
+     ],
+     [
+      6.993871225,
+      49.412584984
+     ]
+    ]
+   }
+  },
+  {
+   "identifier": "2023-000357--vi-bs.2026-05-15_10-00-00-000.devi-zus.2024-10-01_00-00-00-000.f.de11",
+   "icon": "123",
+   "isBlocked": "false",
+   "future": false,
+   "extent": "49.360892582884006,7.014729654845527,49.37578028183097,7.000565432789543",
+   "point": "49.360892582884006,7.014729654845527",
+   "startLcPosition": "8",
+   "display_type": "ROADWORKS",
+   "subtitle": " Saarbrücken -> Trier",
+   "title": "A1 | Saarbrücken - Illingen",
+   "startTimestamp": "2026-05-15T10:00:00+02:00",
+   "coordinate": {
+    "lat": 49.360892582884006,
+    "long": 7.014729654845527
+   },
+   "description": [
+    "Zeitraum dieser Bauphase:",
+    "Beginn: 15.05.26 um 10:00 Uhr",
+    "Ende: 21.11.26 um 17:00 Uhr",
+    "(Ende der Gesamtmaßnahme: 21.11.26)",
+    "",
+    "A1: Saarbrücken -> Trier, zwischen 0.8 km hinter AK Saarbrücken und 0.9 km vor AS Illingen",
+    "",
+    "Länge: 2.1 km | Maximale Durchfahrtsbreite: 7.5 m",
+    "",
+    "A1 Arbeiten an Schutzeinrichtungen A.05226.00"
+   ],
+   "footer": [],
+   "geometry": {
+    "type": "LineString",
+    "coordinates": [
+     [
+      7.014729655,
+      49.360892583
+     ],
+     [
+      7.0146386,
+      49.360936401
+     ],
+     [
+      7.0141312,
+      49.361178301
+     ],
+     [
+      7.0136141,
+      49.361368901
+     ],
+     [
+      7.0129259,
+      49.361605901
+     ],
+     [
+      7.0122255,
+      49.361848201
+     ],
+     [
+      7.0007578,
+      49.373202701
+     ],
+     [
+      7.0006716,
+      49.373760401
+     ],
+     [
+      7.0006104,
+      49.374292201
+     ],
+     [
+      7.0005687,
+      49.374991101
+     ],
+     [
+      7.0005604,
+      49.375523201
+     ],
+     [
+      7.000565433,
+      49.375780282
+     ]
+    ]
+   }
+  },
+  {
+   "identifier": "2026-055825--vi-bs.2026-11-02_08-00-00-000_017.de0",
+   "icon": "warnkegel",
+   "isBlocked": "false",
+   "future": true,
+   "extent": "49.4142677921822,6.987487530146063,49.45513824086953,6.981270596376356",
+   "point": "49.4142677921822,6.987487530146063",
+   "startLcPosition": "10",
+   "display_type": "SHORT_TERM_ROADWORKS",
+   "subtitle": " Saarbrücken -> Trier",
+   "title": "A1 | Eppelborn - Tholey",
+   "coordinate": {
+    "lat": 49.4142677921822,
+    "long": 6.987487530146063
+   },
+   "description": [
+    "Die Baustelle ist zu folgenden Zeiträumen gültig:",
+    "02.11.26 von 08:00 bis 17:00 Uhr",
+    "03.11.26 von 08:00 bis 17:00 Uhr",
+    "",
+    "A1: Saarbrücken -> Trier, zwischen 0.2 km hinter AS Eppelborn und 0.4 km vor AS Tholey",
+    "",
+    "Länge: 5.49 km | Maximale Durchfahrtsbreite: 7 m",
+    "",
+    "A1 von Schellenbach (Parkplatz) Grünpflege Fa. Haubert"
+   ],
+   "footer": [],
+   "geometry": {
+    "type": "LineString",
+    "coordinates": [
+     [
+      6.98748753,
+      49.414267792
+     ],
+     [
+      6.9873423,
+      49.414306701
+     ],
+     [
+      6.9868023,
+      49.414438401
+     ],
+     [
+      6.9861439,
+      49.414561801
+     ],
+     [
+      6.9853865,
+      49.414667801
+     ],
+     [
+      6.9844566,
+      49.414799001
+     ],
+     [
+      6.9812463,
+      49.453717401
+     ],
+     [
+      6.9812126,
+      49.454010301
+     ],
+     [
+      6.9811958,
+      49.454315601
+     ],
+     [
+      6.9812042,
+      49.454601801
+     ],
+     [
+      6.9812295,
+      49.454913901
+     ],
+     [
+      6.981270596,
+      49.455138241
+     ]
+    ]
+   }
+  }
+ ],
+ "closure": [
+  {
+   "identifier": "2025-038997--vi-fbm.2026-03-08_00-00-00-000.devi-zus.2026-02-23_07-00-00-000.de18",
+   "icon": "448",
+   "isBlocked": "false",
+   "future": false,
+   "extent": "53.379451177367756,10.013654937338053,53.377631200596205,10.018326072658278",
+   "point": "53.379451177367756,10.013654937338053",
+   "startLcPosition": "1000",
+   "display_type": "CLOSURE_ENTRY_EXIT",
+   "subtitle": " Horster Dreieck/A7 (aus Richtung Seevetal-Hittfeld)",
+   "title": "A7, Horster Dreieck bis AS Thieshope, OPA Grundsinstandsetzung km 17,7 bis km 23,5",
+   "startTimestamp": "2026-03-08T00:00:00+01:00",
+   "coordinate": {
+    "lat": 53.379451177367756,
+    "long": 10.013654937338053
+   },
+   "description": [
+    "Zeitraum dieser Bauphase:",
+    "Beginn: 08.03.26 um 00:00 Uhr",
+    "Ende: 28.11.26 um 00:00 Uhr",
+    "(Ende der Gesamtmaßnahme: 28.11.26)",
+    "",
+    "Abfahrt von der A1: Horster Dreieck/A7 (aus Richtung Seevetal-Hittfeld)",
+    "",
+    "Länge: konnte nicht ermittelt werden",
+    "",
+    "A7, Horster Dreieck bis AS Thieshope, OPA Grundsinstandsetzung km 17,7 bis km 23,5"
+   ],
+   "footer": [],
+   "geometry": {
+    "type": "LineString",
+    "coordinates": [
+     [
+      10.013654937,
+      53.379451177
+     ],
+     [
+      10.0150514,
+      53.379150901
+     ],
+     [
+      10.0155042,
+      53.379039201
+     ],
+     [
+      10.0159299,
+      53.378909001
+     ],
+     [
+      10.0163752,
+      53.378745601
+     ],
+     [
+      10.0167695,
+      53.378583401
+     ],
+     [
+      10.0171846,
+      53.378388601
+     ],
+     [
+      10.0175196,
+      53.378199701
+     ],
+     [
+      10.0177717,
+      53.378037401
+     ],
+     [
+      10.0180145,
+      53.377864901
+     ],
+     [
+      10.018326073,
+      53.377631201
+     ]
+    ]
+   }
+  },
+  {
+   "identifier": "2024-054366--vi-fbm.2026-11-14_02-00-00-000.devi-zus.2026-03-16_21-30-00-000.de14",
+   "icon": "250",
+   "isBlocked": "false",
+   "future": true,
+   "extent": "53.50567904115348,10.08147918174787,53.50698761178352,10.080990319372903",
+   "point": "53.50567904115348,10.08147918174787",
+   "startLcPosition": "1",
+   "display_type": "CLOSURE",
+   "subtitle": " Geesthacht -> Hamburg",
+   "title": "A1 | Hamburg-Allermöhe - Hamburg-Südost",
+   "coordinate": {
+    "lat": 53.50567904115348,
+    "long": 10.08147918174787
+   },
+   "description": [
+    "Die Baustelle ist zu folgenden Zeiträumen gültig:",
+    "14.11.26 03:00 bis zum 15.11.26 23:00 Uhr.",
+    "(Ende der Gesamtmaßnahme: 01.01.31)",
+    "",
+    "A25: Geesthacht -> Hamburg, zwischen 3.1 km hinter AS Hamburg-Allermöhe und AD Hamburg-Südost",
+    "",
+    "Länge: konnte nicht ermittelt werden",
+    "",
+    "A1, Norderelbbrücke, Ersatzneubau 12-streifige Erweiterung ( GST siehe Baustelleninfomationen )"
+   ],
+   "footer": [],
+   "geometry": {
+    "type": "LineString",
+    "coordinates": [
+     [
+      10.081479182,
+      53.505679041
+     ],
+     [
+      10.0814247,
+      53.505756101
+     ],
+     [
+      10.0813718,
+      53.505836201
+     ],
+     [
+      10.081315,
+      53.505934901
+     ],
+     [
+      10.0812699,
+      53.506017101
+     ],
+     [
+      10.0812086,
+      53.506151001
+     ],
+     [
+      10.0811443,
+      53.506335701
+     ],
+     [
+      10.0811087,
+      53.506458501
+     ],
+     [
+      10.0810739,
+      53.506599701
+     ],
+     [
+      10.0810397,
+      53.506760401
+     ],
+     [
+      10.080990319,
+      53.506987612
+     ]
+    ]
+   }
+  }
+ ]
+}

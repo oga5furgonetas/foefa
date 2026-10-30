@@ -82,7 +82,7 @@ class MainActivity : ComponentActivity() {
         leerEnlace(intent)
         // Antes de que la actividad arranque del todo (el lanzador de Play se registra en onCreate).
         actualizacion = Actualizacion(this)
-        lifecycleScope.launch { actualizacion.comprobarEnLaWeb(app.repo) }
+        lifecycleScope.launch { actualizacion.comprobarEnElServidor(app.repo) }
         setContent {
             val tema by app.cuenta.tema.collectAsState()
             val noche = when (tema) { "oscuro" -> true; "claro" -> false; else -> isSystemInDarkTheme() }
@@ -100,6 +100,7 @@ class MainActivity : ComponentActivity() {
                             alAbrirPortal = { if (it.app_destino == "empresa") sesionPortal = it },
                             alCerrarEmpresa = { empresaSlug = null; sesionPortal = null })
                         AvisoActualizacion(actualizacion, Modifier.align(Alignment.BottomCenter))
+                        DialogoActualizacion(actualizacion)
                     }
                 }
             }

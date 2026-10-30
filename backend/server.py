@@ -5741,7 +5741,20 @@ async def change_plan(data: dict = Body(...), user: dict = Depends(require_admin
 #   fly secrets set -a flota-backend APP_ANDROID_WEB="17 2.2.5"    (code y nombre, los de build.gradle.kts)
 # Sin la variable no se avisa a nadie: nunca se manda a descargar una versión que aún no está en la web.
 def _app_android_web() -> Optional[dict]:
-    v = (os.environ.get("APP_ANDROID_WEB") or "").split()
+    return _version_anunciada("APP_ANDROID_WEB")
+
+
+# LA VERSIÓN PUBLICADA EN GOOGLE PLAY (30-10-2026, Dani: «que al entrar les salte "actualización disponible" con un botón a
+# Google Play»). La app de Play ya se entera por la propia tienda, pero esto hace que el aviso salte también cuando Play
+# aún no se lo ha dicho al móvil. Se pone CUANDO LA VERSIÓN YA ESTÁ PUBLICADA (si no, el botón llevaría a una ficha sin
+# actualización):
+#   fly secrets set -a flota-backend APP_ANDROID_PLAY="20 2.4.1"
+def _app_android_play() -> Optional[dict]:
+    return _version_anunciada("APP_ANDROID_PLAY")
+
+
+def _version_anunciada(variable: str) -> Optional[dict]:
+    v = (os.environ.get(variable) or "").split()
     if len(v) != 2 or not v[0].isdigit() or not re.fullmatch(r"[0-9][0-9.]{0,15}", v[1]):
         return None
     return {"code": int(v[0]), "nombre": v[1]}
@@ -5778,8 +5791,12 @@ def _exigir_app_al_dia(request: Optional[Request]) -> None:
 
 @api_router.get("/app/version")
 async def app_version():
-    """Público: la app de Android lo pregunta al abrirse. `web` es la que hay para descargar de la web, o null."""
-    return {"web": _app_android_web()}
+    """Público: la app de Android lo pregunta al abrirse. `web` es la que hay para descargar de la web, `play` la publicada
+    en Google Play (o null) y `min` la mínima que admite el servidor (APP_ANDROID_MIN, o null): con una más vieja, el aviso
+    de actualizar no se puede cerrar."""
+    minimo = (os.environ.get("APP_ANDROID_MIN") or "").strip()
+    return {"web": _app_android_web(), "play": _app_android_play(),
+            "min": minimo if re.fullmatch(r"[0-9][0-9.]{0,15}", minimo) else None}
 
 
 @api_router.get("/billing/planes")
@@ -53334,8 +53351,10 @@ _FUENTES: dict = {}
 _FUENTES_LOCKS: dict = {}
 
 
-async def _fuente(clave: str, url: str, cada: int, parse, gz: bool = False, timeout: int = 40, post: Optional[dict] = None):
-    """(datos, fresco): lo que publica `url` pasado por `parse(bytes)`, de memoria si tiene menos de `cada` s."""
+async def _fuente(clave: str, url: str, cada: int, parse, gz: bool = False, timeout: int = 40, post: Optional[dict] = None,
+                  bajar=None):
+    """(datos, fresco): lo que publica `url` pasado por `parse(bytes)`, de memoria si tiene menos de `cada` s. Con `bajar`
+    (una corrutina que recibe el cliente HTTP y devuelve lo crudo), la descarga la hace ella (varias URL, por ejemplo)."""
     h = _FUENTES.get(clave)
     if h and time.time() - h["en"] < cada:
         return h["datos"], h["ok"]
@@ -53350,15 +53369,18 @@ async def _fuente(clave: str, url: str, cada: int, parse, gz: bool = False, time
             async with _httpx.AsyncClient(timeout=timeout, follow_redirects=True, headers={
                     "User-Agent": f"{MARCA}/1.0 (reparto; {CORREO_CONTACTO})",
                     "Accept": "application/json, application/xml, text/xml;q=0.9, */*;q=0.5"}) as c:
-                r = await (c.post(url, data=post) if post is not None else c.get(url))
-            if r.status_code == 200:
-                crudo = r.content
-                if gz or url.endswith(".gz"):
-                    import gzip
-                    crudo = gzip.decompress(crudo)
-                datos = parse(crudo)
-            else:
-                logger.warning(f"fuente {clave}: contesta {r.status_code}")
+                if bajar is not None:
+                    datos = parse(await bajar(c))
+                else:
+                    r = await (c.post(url, data=post) if post is not None else c.get(url))
+                    if r.status_code == 200:
+                        crudo = r.content
+                        if gz or url.endswith(".gz"):
+                            import gzip
+                            crudo = gzip.decompress(crudo)
+                        datos = parse(crudo)
+                    else:
+                        logger.warning(f"fuente {clave}: contesta {r.status_code}")
         except Exception as e:                                   # noqa: BLE001
             logger.warning(f"fuente {clave}: {type(e).__name__}")
         if datos is not None:
@@ -53370,9 +53392,48 @@ async def _fuente(clave: str, url: str, cada: int, parse, gz: bool = False, time
         return (h["datos"] if h else None), False
 
 
+async def _autobahn() -> tuple:
+    """Obras y cortes de todas las Autobahnen (30-10-2026): la lista de autopistas y, por cada una, `roadworks` y `closure`
+    (8 descargas a la vez, unos 7 s en total; media hora en memoria). Si falla más de un 5 %, se queda lo anterior."""
+    async def bajar(c):
+        r = await c.get(trafico.URL_AUTOBAHN)
+        r.raise_for_status()
+        roads = [str(x) for x in (r.json().get("roads") or [])]
+        if not roads:
+            raise ValueError("sin autopistas")
+        sem = asyncio.Semaphore(8)
+        datos = {s: [] for s in trafico.SERVICIOS_AUTOBAHN}
+        fallos = 0
+
+        async def una(road, servicio):
+            nonlocal fallos
+            async with sem:
+                try:
+                    rr = await c.get(trafico.URL_AUTOBAHN_SERVICIO.format(road=road, servicio=servicio))
+                    rr.raise_for_status()
+                    datos[servicio].extend(rr.json().get(servicio) or [])
+                except Exception:                                   # noqa: BLE001
+                    fallos += 1
+        await asyncio.gather(*(una(road, s) for road in roads for s in trafico.SERVICIOS_AUTOBAHN))
+        if fallos > len(roads) * len(trafico.SERVICIOS_AUTOBAHN) * 0.05:
+            raise ValueError(f"{fallos} descargas fallidas")
+        return datos
+    return await _fuente("autobahn", trafico.URL_AUTOBAHN, 1800, lambda d: trafico.incidencias_autobahn(d, "Autobahn"),
+                         timeout=60, bajar=bajar)
+
+
 async def _incidencias_pais(pais: str, ps: list) -> tuple:
     """(incidencias, nombre de la fuente, publicado, fresco, aplica) de la fuente que vale en ese país."""
     f = trafico.fuente_incidencias(pais)
+    if f == "tfl":
+        # TfL solo cubre el Gran Londres: fuera, no hay fuente (y no se dice «ninguna cerca»).
+        if not trafico.toca_caja(reparto.caja_de(ps, 0.06), trafico.CAJA_LONDRES):
+            return [], None, "", True, False
+        d, ok = await _fuente("tfl", trafico.URL_TFL, 600, lambda b: trafico.incidencias_tfl(b, "TfL"))
+        return d or [], "TfL", "", ok, True
+    if f == "autobahn":
+        d, ok = await _autobahn()
+        return d or [], "Autobahn", "", ok, True
     if f == "dgt":
         items, publicado, fresco = await _dgt_incidencias()
         return items, "DGT", publicado, fresco, True
@@ -53416,8 +53477,31 @@ async def _gla() -> tuple:
     return zonas, fresco
 
 
+async def _cache_guardar(clave: str, datos) -> None:
+    """Una copia en Mongo (global, `trafico_cache`) de lo que costó descargar, por si la fuente deja de contestar."""
+    try:
+        await global_db["trafico_cache"].update_one(
+            {"_id": clave}, {"$set": {"datos": datos, "cuando": datetime.now(timezone.utc).isoformat()}}, upsert=True)
+    except Exception as e:                                           # noqa: BLE001
+        logger.warning(f"trafico_cache: no se pudo guardar {clave}: {type(e).__name__}")
+
+
+async def _cache_leer(clave: str, maximo_s: int):
+    """La copia guardada si tiene menos de `maximo_s` segundos; si no, None."""
+    try:
+        d = await global_db["trafico_cache"].find_one({"_id": clave})
+        cuando = datetime.fromisoformat(str(d.get("cuando"))) if d else None
+    except Exception:                                                # noqa: BLE001
+        return None
+    if not d or not cuando or (datetime.now(timezone.utc) - cuando).total_seconds() > maximo_s:
+        return None
+    return d.get("datos")
+
+
 async def _osm_zonas(caja, tipo: str) -> tuple:
-    """Las zonas de bajas emisiones de OpenStreetMap en la caja de la ruta (Overpass, un día en memoria por zona)."""
+    """Las zonas de bajas emisiones de OpenStreetMap en la caja de la ruta (Overpass, un día en memoria por zona). Si
+    Overpass no contesta (pasa a menudo: 502 a plena carga), vale la última copia guardada en Mongo, de hasta 60 días:
+    las zonas cambian poco y es mejor que «no se han podido comprobar»."""
     if not caja:
         return [], True
     s, w, n, e = (round(caja[0], 1) - 0.1, round(caja[1], 1) - 0.1, round(caja[2], 1) + 0.1, round(caja[3], 1) + 0.1)
@@ -53426,7 +53510,11 @@ async def _osm_zonas(caja, tipo: str) -> tuple:
     for url in trafico.URLS_OVERPASS:
         z, ok = await _fuente(clave, url, 86400, lambda b, t=tipo: trafico.zonas_osm(b, t), post={"data": consulta})
         if ok:
+            await _cache_guardar(clave, z)
             return z, True
+    guardadas = await _cache_leer(clave, 60 * 86400)
+    if guardadas is not None:
+        return guardadas, True
     return z or [], False
 
 

@@ -20,6 +20,7 @@ Fuentes (todas abiertas y sin clave; bajadas y leídas el 30-10-2026, muestras r
     CDMX, pico y placa de Quito, restricción de San José) calculadas para hoy y, si se sabe la placa, para esa placa;
     Bogotá, Medellín y Santiago cambian cada temporada: solo el aviso con el enlace oficial.
 """
+import hashlib
 import json
 import math
 import re
@@ -34,8 +35,8 @@ FUENTES = {
     "fr": {"incidencias": "bison", "zonas": ("bnzfe",), "tipo_zona": "ZFE"},
     "nl": {"incidencias": "ndw", "zonas": ("ndw",), "tipo_zona": "Milieuzone"},
     "us": {"incidencias": "wzdx", "zonas": (), "tipo_zona": ""},
-    "gb": {"incidencias": None, "zonas": ("gla", "osm"), "tipo_zona": "LEZ"},
-    "de": {"incidencias": None, "zonas": ("osm",), "tipo_zona": "Umweltzone"},
+    "gb": {"incidencias": "tfl", "zonas": ("gla", "osm"), "tipo_zona": "LEZ"},
+    "de": {"incidencias": "autobahn", "zonas": ("osm",), "tipo_zona": "Umweltzone"},
     "it": {"incidencias": None, "zonas": ("osm",), "tipo_zona": "ZTL"},
     "be": {"incidencias": None, "zonas": ("osm",), "tipo_zona": "LEZ"},
     "at": {"incidencias": None, "zonas": ("osm",), "tipo_zona": "LEZ"},
@@ -45,7 +46,7 @@ FUENTES = {
     "ad": {"incidencias": None, "zonas": ("osm",), "tipo_zona": "LEZ"},
 }
 NOMBRES_FUENTE = {"dgt": "DGT", "bison": "Bison Futé", "ndw": "NDW", "wzdx": "WZDx", "bnzfe": "BNZFE (data.gouv.fr)",
-                  "gla": "TfL / GLA", "osm": "OpenStreetMap"}
+                  "gla": "TfL / GLA", "osm": "OpenStreetMap", "tfl": "TfL", "autobahn": "Autobahn"}
 
 URL_BISON = "http://tipi.bison-fute.gouv.fr/bison-fute-ouvert/publicationsDIR/Evenementiel-DIR/grt/RRN/content.xml"
 URL_NDW_ACTUAL = "https://opendata.ndw.nu/actueel_beeld.xml.gz"
@@ -54,6 +55,15 @@ URL_BNZFE_DATASET = "https://www.data.gouv.fr/api/1/datasets/base-nationale-cons
 URL_GLA = "https://gis.london.gov.uk/arcgis/rest/services/apps/Air_Quality_map_service_01/MapServer/{capa}/query?where=1%3D1&outFields=*&f=geojson"
 CAPAS_GLA = ((4, "ULEZ"), (6, "LEZ"))
 URLS_OVERPASS = ("https://overpass-api.de/api/interpreter", "https://overpass.kumi.systems/api/interpreter")
+# Reino Unido (30-10-2026): Transport for London publica sus cortes y obras abiertos y sin clave (Road/all/Disruption);
+# solo cubre el Gran Londres (National Highways, el resto de Inglaterra, pide clave). Escocia cerró sus RSS.
+URL_TFL = "https://api.tfl.gov.uk/Road/all/Disruption"
+CAJA_LONDRES = (51.25, -0.55, 51.72, 0.35)
+# Alemania (30-10-2026): la API abierta de la Autobahn GmbH (obras y cortes de cada autopista, sin clave). Solo autopistas:
+# las calles de las ciudades no tienen feed abierto nacional (Mobilithek pide registro).
+URL_AUTOBAHN = "https://verkehr.autobahn.de/o/autobahn/"
+URL_AUTOBAHN_SERVICIO = "https://verkehr.autobahn.de/o/autobahn/{road}/services/{servicio}"
+SERVICIOS_AUTOBAHN = ("roadworks", "closure")
 
 # Los feeds WZDx que contestaron sin clave el 30-10-2026 (de los 43 del registro oficial, data.transportation.gov),
 # con la caja aproximada del estado: solo se baja el feed de la zona donde está la ruta.
@@ -457,11 +467,14 @@ def zonas_osm(j, tipo_defecto: str = "LEZ") -> list:
 
 
 # ── EE. UU.: Work Zone Data Exchange (GeoJSON, v4) ──────────────────────────────────────────────────────────
+def toca_caja(caja, zona) -> bool:
+    """¿La caja (s, w, n, e) de la ruta toca la zona (s, w, n, e)?"""
+    return bool(caja) and not (zona[2] < caja[0] or zona[0] > caja[2] or zona[3] < caja[1] or zona[1] > caja[3])
+
+
 def feeds_wzdx_para(caja) -> list:
     """Los feeds cuyo estado toca la caja (s, w, n, e) de la ruta."""
-    if not caja:
-        return []
-    return [f for f in WZDX_FEEDS if not (f[3][2] < caja[0] or f[3][0] > caja[2] or f[3][3] < caja[1] or f[3][1] > caja[3])]
+    return [f for f in WZDX_FEEDS if toca_caja(caja, f[3])] if caja else []
 
 
 def incidencias_wzdx(geojson, fuente: str, ahora=None) -> list:
@@ -503,6 +516,89 @@ def incidencias_wzdx(geojson, fuente: str, ahora=None) -> list:
             "lat": round(a[0], 6), "lng": round(a[1], 6), "lat2": round(b[0], 6) if b else None, "lng2": round(b[1], 6) if b else None,
             "desde": str(p.get("start_date") or "")[:32], "texto": str(cd.get("description") or "")[:200], "fuente": fuente,
         })
+    return out
+
+
+# ── Reino Unido: Transport for London ──────────────────────────────────────────────────────────────────────────────────
+_TFL_CLASE = {"Works": ("obras", "obras"), "Collisions": ("accidente", "accidente"), "Hazards": ("obstaculo", "obstáculo en la vía"),
+              "Weather": ("meteo", "meteorología"), "Asset issues": ("aviso", "incidencia"), "Traffic": ("retencion", "retención")}
+_TFL_GRAVEDAD = {"Serious": "alta", "Severe": "alta", "Moderate": "media"}
+
+
+def incidencias_tfl(j, fuente: str = "TfL", ahora=None) -> list:
+    """Los cortes y obras de TfL (Road/all/Disruption): lo vigente y con algún impacto, con su calle y su distrito."""
+    d = json.loads(j) if isinstance(j, (str, bytes, bytearray)) else (j or [])
+    ahora = ahora or datetime.now(timezone.utc)
+    out = []
+    for x in d if isinstance(d, list) else []:
+        if str(x.get("severity") or "") == "No impact":
+            continue
+        if str(x.get("status") or "").lower().startswith(("finished", "closed", "cancel")):
+            continue
+        if not vigente(x.get("startDateTime"), x.get("endDateTime"), ahora):
+            continue
+        g = x.get("geography") or {}
+        cs = g.get("coordinates") if g.get("type") == "Point" else None
+        if not cs or len(cs) < 2:
+            continue
+        clase, que = _TFL_CLASE.get(str(x.get("category") or ""), ("aviso", "incidencia"))
+        if x.get("hasClosures"):
+            clase, que = "corte", ("carretera cortada (obras)" if clase == "obras" else "carretera cortada")
+        sitio = str(x.get("location") or "")
+        via = re.match(r"\s*\[([^\]]+)\]", sitio)
+        parentesis = re.findall(r"\(([^()]*)\)", sitio)
+        calle = re.sub(r"\[[^\]]*\]|\([^()]*\)", "", sitio).strip().title()
+        carretera = " ".join(p for p in ((via.group(1) if via else ""), calle) if p)
+        out.append({
+            "id": str(x.get("id") or "")[:40], "clase": clase, "que": que, "gravedad": _TFL_GRAVEDAD.get(str(x.get("severity") or ""), ""),
+            "carretera": carretera[:40], "pk": "", "municipio": (parentesis[-1].strip() if parentesis else "")[:40], "provincia": "",
+            "lat": round(float(cs[1]), 6), "lng": round(float(cs[0]), 6), "lat2": None, "lng2": None,
+            "desde": str(x.get("startDateTime") or "")[:32], "texto": str(x.get("comments") or x.get("currentUpdate") or "")[:200],
+            "fuente": fuente,
+        })
+    return out
+
+
+# ── Alemania: la API de la Autobahn GmbH ───────────────────────────────────────────────────────────────────────────────
+_AUTOBAHN_TIPO = {"ROADWORKS": ("obras", "obras"), "SHORT_TERM_ROADWORKS": ("obras", "obras"), "LONG_TERM_ROADWORKS": ("obras", "obras"),
+                  "CLOSURE": ("corte", "carretera cortada"), "CLOSURE_ENTRY_EXIT": ("corte", "acceso cerrado")}
+
+
+def incidencias_autobahn(datos, fuente: str = "Autobahn", ahora=None) -> list:
+    """Obras (`roadworks`) y cortes (`closure`) de todas las autopistas juntas, sin las futuras. Cada una con su autopista,
+    el tramo y el sentido, y el final del tramo si lo dan."""
+    d = json.loads(datos) if isinstance(datos, (str, bytes, bytearray)) else (datos or {})
+    ahora = ahora or datetime.now(timezone.utc)
+    out = []
+    for servicio in SERVICIOS_AUTOBAHN:
+        for x in d.get(servicio) or []:
+            if str(x.get("future")).lower() == "true" or not vigente(x.get("startTimestamp"), None, ahora):
+                continue
+            c = x.get("coordinate") or {}
+            try:
+                lat, lng = float(c.get("lat")), float(c.get("long"))
+            except (TypeError, ValueError):
+                continue
+            clase, que = _AUTOBAHN_TIPO.get(str(x.get("display_type") or "").upper(),
+                                            ("corte", "carretera cortada") if servicio == "closure" else ("obras", "obras"))
+            if str(x.get("isBlocked")).lower() == "true":
+                clase, que = "corte", ("carretera cortada (obras)" if servicio == "roadworks" else "carretera cortada")
+            titulo = str(x.get("title") or "")
+            carretera, sep, tramo = titulo.partition("|")
+            if not sep:
+                carretera, _, tramo = titulo.partition(",")
+            texto = " · ".join(t for t in (tramo.strip(), str(x.get("subtitle") or "").strip()) if t)
+            g = x.get("geometry") or {}
+            cs = g.get("coordinates") if g.get("type") == "LineString" else None
+            fin = cs[-1] if cs and len(cs) > 1 and isinstance(cs[-1], (list, tuple)) and len(cs[-1]) >= 2 else None
+            ident = str(x.get("identifier") or f"{titulo}|{x.get('startTimestamp')}")
+            out.append({
+                "id": servicio[:2] + "-" + hashlib.sha1(ident.encode("utf-8")).hexdigest()[:14], "clase": clase, "que": que,
+                "gravedad": "alta" if clase == "corte" else "", "carretera": carretera.strip()[:40], "pk": "", "municipio": "",
+                "provincia": "", "lat": round(lat, 6), "lng": round(lng, 6),
+                "lat2": round(float(fin[1]), 6) if fin else None, "lng2": round(float(fin[0]), 6) if fin else None,
+                "desde": str(x.get("startTimestamp") or "")[:32], "texto": texto[:200], "fuente": fuente,
+            })
     return out
 
 

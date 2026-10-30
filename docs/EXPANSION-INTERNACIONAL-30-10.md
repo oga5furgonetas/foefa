@@ -119,16 +119,23 @@ formatos de 13 países; el buscador recibe la dirección sin piso. La nativa ens
 idioma del móvil. Verificado con una cuenta de Seattle en el emulador (`docs/capturas-30-10/app-us-*.png`) y
 Playwright `e2e/fuera.spec.js`. Detalle en ESTADO.md («30-10-2026 (mediodía)»).
 
+## 2c. Lo hecho el 30-10 a mediodía (2): Reino Unido y Alemania con fuente, correos en fr/it/de, «Actualización disponible»
+
+TfL (Gran Londres) y la API de la Autobahn GmbH (Alemania, autopistas) en `trafico.py`; las zonas de OSM con copia en
+Mongo por si Overpass no contesta; los correos del ciclo (bienvenida, primer día, recordatorio, invita, bono,
+opinión) en francés, italiano y alemán (`ciclo_correos.py`); el vocabulario de la carretera y los mensajes del
+servidor en la app nativa en el idioma del móvil; y el aviso de actualizar al entrar (FDS 2.4.1, code 20).
+
 ## 3. Lo que falta, mercado por mercado
 
 | | Idioma | Moneda del plan | Unidades | Cortes y obras en el mapa | Zonas / restricciones | Pago | Impuestos | Legal |
 |---|---|---|---|---|---|---|---|---|
 | Portugal | ✓ pt | EUR ✓ | km | ✗ (sin feed abierto) | **ZER por OSM ✓** (30-10 mediodía) | Stripe EUR ✓ | OSS si > 10 k€ | legal en pt ✗ |
 | Francia | ✓ fr | EUR ✓ | km | **Bison Futé ✓** (DATEX II, 30-10 mediodía) | **ZFE ✓** (BNZFE, con la regla Crit'Air del día) | Stripe EUR ✓ | OSS | legal en fr ✗ |
-| Alemania | ✓ de | EUR ✓ | km | ✗ (Mobilithek pide registro) | **Umweltzonen por OSM ✓** | Stripe EUR ✓ | OSS | legal en de ✗ |
+| Alemania | ✓ de | EUR ✓ | km | **API de la Autobahn ✓** (autopistas; las calles no tienen feed abierto) | **Umweltzonen por OSM ✓** (con copia en Mongo) | Stripe EUR ✓ | OSS | legal en de ✗ |
 | Italia | ✓ it | EUR ✓ | km | ✗ (sin feed nacional abierto) | **ZTL por OSM ✓** | Stripe EUR ✓ | OSS | legal en it ✗ |
 | Países Bajos / Bélgica | en/fr/de | EUR ✓ | km | **NDW ✓** (Países Bajos) | **milieuzones y ZES ✓** (NDW); Bélgica por OSM ✓ | Stripe EUR | OSS | ✗ |
-| Reino Unido / Irlanda | ✓ en | GBP / EUR (tabla) | **millas ✓** (GB) | ✗ (National Highways da clave gratis: pedirla) | **ULEZ + LEZ ✓** (GLA); Irlanda por OSM ✓ | **Stripe GBP ✓** (currency_options) | IVA UK digital | legal en inglés ✓ (cortesía, sin jurista) |
+| Reino Unido / Irlanda | ✓ en | GBP / EUR (tabla) | **millas ✓** (GB) | **TfL ✓** (Gran Londres; fuera, National Highways pide clave) | **ULEZ + LEZ ✓** (GLA); Irlanda por OSM ✓ | **Stripe GBP ✓** (currency_options) | IVA UK digital | legal en inglés ✓ (cortesía, sin jurista) |
 | Estados Unidos | ✓ en | USD ✓ (tabla) | **millas ✓** | **WZDx ✓** (15 feeds estatales sin clave) | sin LEZ | **Stripe USD ✓** / Play | sales tax por estado al pasar umbral | legal en inglés ✓ (cortesía, sin jurista) |
 | México | ✓ es-419 | MXN ✓ (tabla) | km | ✗ | **Hoy No Circula ✓** (aviso por placa, con el engomado) | **Stripe MXN ✓** / Play | IVA 16 % con registro en el SAT | ✗ |
 | Colombia | ✓ es-419 | COP ✓ (tabla) | km | ✗ | pico y placa: aviso con el enlace oficial (cambia por temporada) | Play / **Stripe COP ✓** | a verificar | ✗ |

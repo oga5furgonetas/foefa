@@ -97,6 +97,19 @@ async function mensajesServidor() {
   return Object.keys(mod.C).filter((k) => servidor.includes(`"${k}"`))
 }
 
+/** Las palabras del `que` de las incidencias: las tuplas ("clase", "qué") de reparto.py y trafico.py, por partes. */
+function vocabularioIncidencias() {
+  const r = new Set()
+  for (const f of ['reparto.py', 'trafico.py']) {
+    const t = readFileSync(join(RAIZ, 'backend', f), 'utf8')
+    for (const m of t.matchAll(/\("(?:corte|obras|aviso|accidente|obstaculo|meteo|retencion|otro)", "([^"]+)"\)/g)) {
+      const p = /^(.+?) \((.+)\)$/.exec(m[1])
+      for (const k of p ? [p[1], p[2]] : [m[1]]) r.add(k)
+    }
+  }
+  return [...r].sort()
+}
+
 async function diccionarioWeb() {
   const todo = {}
   for (const letra of ['A', 'B', 'C']) {
@@ -122,6 +135,9 @@ if (generar || comprobar) {
   // Los mensajes del servidor (30-10-2026): los que la web traduce en textosRutaC.js y server.py dice de verdad, para que
   // la app nativa los enseñe en el idioma del móvil (Api.kt pasa el `detail` por tx()).
   for (const k of await mensajesServidor()) if (!claves.has(k)) claves.set(k, ['backend/server.py'])
+  // Lo que pasa en la carretera (30-10-2026): el servidor manda el `que` de cada incidencia en español («carretera
+  // cortada (obras)») y la app lo traduce por partes (Calle.queIncidencia): sus palabras van también a Traducciones.kt.
+  for (const k of vocabularioIncidencias()) if (!claves.has(k)) claves.set(k, ['backend/reparto.py'])
   const faltan = []
   const filas = []
   for (const k of [...claves.keys()].sort()) {

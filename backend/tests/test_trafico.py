@@ -137,6 +137,55 @@ def test_restricciones_por_placa():
 
 
 def test_fuentes_por_pais():
-    assert T.fuente_incidencias("es") == "dgt" and T.fuente_incidencias("fr") == "bison" and T.fuente_incidencias("de") is None
+    assert T.fuente_incidencias("es") == "dgt" and T.fuente_incidencias("fr") == "bison" and T.fuente_incidencias("de") == "autobahn"
     assert T.fuentes_zonas("gb") == ("gla", "osm") and T.fuentes_zonas("us") == () and T.tipo_zona("de") == "Umweltzone"
     assert T.hay_normas("mx") and not T.hay_normas("fr")
+
+
+# ── Reino Unido (TfL) y Alemania (Autobahn), 30-10-2026 ────────────────────────────────────────────────────────────────
+
+def test_tfl_londres_solo_lo_vigente_y_con_impacto():
+    """Muestra real del 30-10-2026 (4 avisos de TfL): se quedan las obras y el aviso meteorológico vigentes; fuera el
+    «No impact» y el accidente que acabó la víspera. Calle con su número de carretera y el distrito."""
+    j = muestra("tfl_disruptions.json")
+    inc = T.incidencias_tfl(j, "TfL", AHORA)
+    ids = {i["id"]: i for i in inc}
+    assert set(ids) == {"TIMS-237029", "TIMS-237277"}
+    obras = ids["TIMS-237029"]
+    assert (obras["clase"], obras["que"], obras["carretera"], obras["municipio"]) == ("obras", "obras", "A1010 High Road", "Haringey")
+    assert ids["TIMS-237277"]["que"] == "meteorología" and ids["TIMS-237277"]["clase"] == "meteo"
+    for i in inc:
+        assert i["fuente"] == "TfL" and 51.2 < i["lat"] < 51.8 and -0.6 < i["lng"] < 0.4 and i["texto"] and i["desde"]
+    # Con un corte declarado, es un corte; grave, con su gravedad.
+    d = json.loads(j)
+    d[0]["hasClosures"] = True
+    d[0]["severity"] = "Serious"
+    corte = T.incidencias_tfl(d, "TfL", AHORA)[0]
+    assert (corte["clase"], corte["que"], corte["gravedad"]) == ("corte", "carretera cortada (obras)", "alta")
+    # Pasada su fecha, desaparece.
+    assert T.incidencias_tfl(j, "TfL", datetime(2026, 12, 1, tzinfo=timezone.utc)) == []
+
+
+def test_autobahn_obras_y_cortes_sin_las_futuras():
+    """Muestra real (A1 y A7): dos obras en marcha, un acceso cerrado y dos avisos futuros que no se enseñan."""
+    inc = T.incidencias_autobahn(muestra("autobahn_a1.json"), "Autobahn", AHORA)
+    assert len(inc) == 3 and len({i["id"] for i in inc}) == 3
+    obras = [i for i in inc if i["clase"] == "obras"]
+    assert len(obras) == 2 and all(i["carretera"] == "A1" and i["que"] == "obras" and i["lat2"] is not None for i in obras)
+    assert "Saarbrücken - Eppelborn" in obras[0]["texto"] and "Saarbrücken -> Trier" in obras[0]["texto"]
+    corte = [i for i in inc if i["clase"] == "corte"][0]
+    assert (corte["que"], corte["carretera"], corte["gravedad"]) == ("acceso cerrado", "A7", "alta")
+    assert "Horster Dreieck" in corte["texto"] and corte["desde"].startswith("2026-03-08")
+    # Una obra que corta del todo la autopista es un corte.
+    d = json.loads(muestra("autobahn_a1.json"))
+    d["roadworks"][0]["isBlocked"] = "true"
+    assert T.incidencias_autobahn(d, "Autobahn", AHORA)[0]["que"] == "carretera cortada (obras)"
+
+
+def test_tfl_solo_vale_en_el_gran_londres():
+    assert T.toca_caja((51.50, -0.15, 51.55, -0.05), T.CAJA_LONDRES)         # Westminster
+    assert not T.toca_caja((53.45, -2.30, 53.50, -2.20), T.CAJA_LONDRES)     # Mánchester
+    assert not T.toca_caja(None, T.CAJA_LONDRES)
+    assert T.fuente_incidencias("gb") == "tfl" and T.fuente_incidencias("de") == "autobahn"
+    assert T.fuente_incidencias("it") is None and T.fuente_incidencias("pt") is None
+

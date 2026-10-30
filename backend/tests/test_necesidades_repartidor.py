@@ -319,13 +319,30 @@ async def test_los_endpoints_de_la_dgt_filtran_a_las_paradas_de_hoy(base, monkey
     assert (await server.reparto_mi_incidencias(LUIS))["incidencias"] == []
     assert r["aplica"] is True and z["aplica"] is True and r["avisos"] == [] and z["tipo"] == "ZBE"
     assert z["zonas"][0]["tipo"] == "ZBE" and z["zonas"][0]["fuente"] == "dgt"
-    # FUERA DE ESPAÑA (30-10-2026): lo de la DGT no vale. Donde no hay fuente abierta (cortes en Alemania, zonas en
+    # FUERA DE ESPAÑA (30-10-2026): lo de la DGT no vale. Donde no hay fuente abierta (cortes en Italia, zonas en
     # EE. UU.) se dice (`aplica: False`), sin «ninguna cerca» que engañe; en EE. UU. una ruta en Nueva York, sin feed
-    # WZDx abierto, tampoco.
+    # WZDx abierto, tampoco. Alemania tiene la API de la Autobahn (aquí, simulada y vacía) y Reino Unido, TfL, que solo
+    # cubre el Gran Londres: con las paradas en A Coruña no aplica.
+    server._region_actual.set(("it", "Europe/Rome"))
+    try:
+        it = await server.reparto_mi_incidencias(ANA)
+        assert it == {"incidencias": [], "fuente": None, "publicado": "", "incompleto": False, "aplica": False, "avisos": []}
+    finally:
+        server._region_actual.set(("es", "Europe/Madrid"))
+
+    async def autobahn_vacia():
+        return [], True
+    monkeypatch.setattr(server, "_autobahn", autobahn_vacia)
     server._region_actual.set(("de", "Europe/Berlin"))
     try:
         de = await server.reparto_mi_incidencias(ANA)
-        assert de == {"incidencias": [], "fuente": None, "publicado": "", "incompleto": False, "aplica": False, "avisos": []}
+        assert de == {"incidencias": [], "fuente": "Autobahn", "publicado": "", "incompleto": False, "aplica": True, "avisos": []}
+    finally:
+        server._region_actual.set(("es", "Europe/Madrid"))
+    server._region_actual.set(("gb", "Europe/London"))
+    try:
+        gb = await server.reparto_mi_incidencias(ANA)
+        assert gb["aplica"] is False and gb["fuente"] is None and gb["incidencias"] == []
     finally:
         server._region_actual.set(("es", "Europe/Madrid"))
     server._region_actual.set(("us", "America/New_York"))
