@@ -181,7 +181,8 @@ const posicionAhora = () => new Promise((ok) => {
 
 /* ATAJOS DEL HORARIO DEL CLIENTE (30-10-2026): un toque en vez de escribirlo. «Cierra a las 14:00» es lo que un
    repartidor con diez años de oficio hacía a mano: primero los comercios, luego la ruta normal. */
-const ATAJOS_HORARIO = [['Mañana (9-14)', 'de 9 a 14'], ['Tarde (16-20)', 'de 16 a 20'], ['Cierra a las 14:00', 'de 8 a 14']]
+// Lo que se guarda va en forma neutra («9-14»: el servidor la lee igual que «de 9 a 14») y vale en cualquier idioma.
+const ATAJOS_HORARIO = [['Mañana (9-14)', '9-14'], ['Tarde (16-20)', '16-20'], ['Cierra a las 14:00', '8-14']]
 const FURGO = 'fds_furgo'
 
 /* Las próximas paradas de golpe en Google Maps: hasta 3 intermedias y la
@@ -1442,8 +1443,9 @@ export default function MiRuta({ onBack, embebido = false, alTerminar = null }) 
               </span>
             )}
           </label>
-          {/* LO QUE DICE LA DGT (30-10-2026): cortes y obras cerca, y las ZBE que tocan la ruta. Real, con su fuente. */}
-          <p data-testid="dgt" className="mt-1.5 flex flex-wrap items-center gap-x-1.5 text-[12px] text-dark-300">
+          {/* LO QUE DICE LA DGT (30-10-2026): cortes y obras cerca, y las ZBE que tocan la ruta. Real, con su fuente.
+              Fuera de España el servidor contesta `aplica: false` y no se dice nada (ni «ninguna cerca»). */}
+          {incidencias?.aplica !== false && <p data-testid="dgt" className="mt-1.5 flex flex-wrap items-center gap-x-1.5 text-[12px] text-dark-300">
             <AlertTriangle size={13} className="shrink-0 text-amber-300" /> {tx('Cortes y obras (DGT)')}:{' '}
             <span className="text-dark-400">
               {incidencias == null ? '…' : incidencias.incidencias.length
@@ -1451,7 +1453,7 @@ export default function MiRuta({ onBack, embebido = false, alTerminar = null }) 
                 : tx('ninguna cerca de tu ruta')}
               {incidencias?.incompleto ? ` ${tx('(no se han podido cargar)')}` : ''}
             </span>
-          </p>
+          </p>}
           {zbe?.zonas?.length > 0 && (
             <p data-testid="zbe" className="mt-1 text-[12px] leading-snug text-violet-200">
               {tx('Zonas de bajas emisiones (DGT)')}: {zbe.zonas.map((z) => z.nombre).join(', ')}

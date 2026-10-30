@@ -1,5 +1,6 @@
 package com.flotadsp.fds.ui.escaner
 
+import com.flotadsp.fds.ui.tx
 import android.app.Application
 import android.graphics.Bitmap
 import androidx.lifecycle.AndroidViewModel
@@ -92,12 +93,12 @@ class EscanerVM(app: Application) : AndroidViewModel(app) {
                     if (hace != null && hace < 3000) return@launch
                     if (p != null && hace == null) contados[p.id] = System.currentTimeMillis()
                     _e.value = _e.value.copy(yaEstaban = _e.value.yaEstaban + (if (hace == null) 1 else 0), ultimo = Resultado("ya",
-                        "Ya estaba${p?.orden?.let { ": parada $it" } ?: ""} · ${p?.cliente?.ifBlank { p.direccion } ?: ""}"))
+                        tx("Ya estaba") + (p?.orden?.let { ": " + tx("parada") + " $it" } ?: "") + " · ${p?.cliente?.ifBlank { p.direccion } ?: ""}"))
                 } else if (l.completa) {
                     val nueva = repo.nuevaParada(cuerpo(l))
                     contados[nueva.id] = System.currentTimeMillis()
                     _e.value = _e.value.copy(anadidas = _e.value.anadidas + 1, ultimo = Resultado("nueva",
-                        "Añadida: ${listOf(l.direccion, l.localidad).filter { it.isNotBlank() }.joinToString(", ")}"))
+                        tx("Añadida: {d}", "d" to listOf(l.direccion, l.localidad).filter { it.isNotBlank() }.joinToString(", "))))
                 } else {
                     // Lo que el código no dice, de la foto de la etiqueta (sin pisar lo que sí venía en el código).
                     val leido = fotograma?.let { runCatching { ocr.process(InputImage.fromBitmap(it, giro)).await().text }.getOrNull() }
@@ -115,7 +116,7 @@ class EscanerVM(app: Application) : AndroidViewModel(app) {
             } catch (e: ErrorApi) {
                 codigos.forEach { vistos.remove(it) }      // que se pueda volver a intentar
                 _e.value = _e.value.copy(ultimo = Resultado("error",
-                    if (e.sinRed) "Sin conexión: para meter paradas nuevas hace falta red." else e.message ?: "No se ha podido"))
+                    if (e.sinRed) tx("Sin conexión: para meter paradas nuevas hace falta red.") else e.message ?: tx("No se ha podido")))
             } finally {
                 _e.value = _e.value.copy(trabajando = false)
             }
@@ -137,7 +138,7 @@ class EscanerVM(app: Application) : AndroidViewModel(app) {
         vistos.replaceAll { _, _ -> ahora }
         pausado = false
         _e.value = _e.value.copy(revisar = null, trabajando = false)
-        if (guardada) _e.value = _e.value.copy(anadidas = _e.value.anadidas + 1, ultimo = Resultado("nueva", "Añadida a tu ruta."))
+        if (guardada) _e.value = _e.value.copy(anadidas = _e.value.anadidas + 1, ultimo = Resultado("nueva", tx("Añadida a tu ruta.")))
     }
 
     override fun onCleared() { ocr.close() }

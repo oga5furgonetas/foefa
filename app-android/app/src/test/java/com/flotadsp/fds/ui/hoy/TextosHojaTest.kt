@@ -12,13 +12,13 @@ class TextosHojaTest {
     @Test
     fun whatsapp_con_hora_y_enlace_de_seguimiento() {
         val t = textoWhatsapp(parada.copy(eta = "11:20", seguimiento = "abc123"), empresa = "Súper Lola")
-        assertThat(t).isEqualTo("Hola, soy el repartidor de Súper Lola. Voy de camino con tu pedido, llegada aproximada a las 11:20. Puedes seguirlo aquí: https://flotadsp.com/s/abc123")
+        assertThat(t).isEqualTo("Hola, soy el repartidor de Súper Lola. Voy de camino con su pedido, llegada aproximada a las 11:20. Puede seguirlo aquí: https://flotadsp.com/s/abc123")
     }
 
     @Test
     fun whatsapp_sin_hora_ni_enlace_es_el_mensaje_de_siempre() {
-        assertThat(textoWhatsapp(parada, empresa = "")).isEqualTo("Hola, soy tu repartidor. Voy de camino con tu pedido.")
-        assertThat(textoWhatsapp(parada.copy(tipo = "recogida"), empresa = "")).isEqualTo("Hola, soy tu repartidor. Voy de camino a hacer la recogida.")
+        assertThat(textoWhatsapp(parada, empresa = "")).isEqualTo("Hola, soy el repartidor. Voy de camino con su pedido.")
+        assertThat(textoWhatsapp(parada.copy(tipo = "recogida"), empresa = "")).isEqualTo("Hola, soy el repartidor. Voy de camino a hacer la recogida.")
     }
 
     @Test

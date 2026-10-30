@@ -121,7 +121,7 @@ fun PortalConductorNativo(alCerrar: () -> Unit, abrir: String? = null, alAbierto
     when (pantalla) {
         "auditoria" -> AuditoriaConductorNativa(
             alVolver = { pantalla = "inicio" },
-            alCompletar = { pantalla = "inicio"; aviso = "Auditoría enviada correctamente." },
+            alCompletar = { pantalla = "inicio"; aviso = tx("Auditoría enviada correctamente.") },
         )
         "avisos" -> AvisosConductorNativo(alVolver = { pantalla = "inicio" }, alAbrir = { a -> pantalla = destinoDeAviso(a.url, a.titulo).takeIf { it != "avisos" } ?: "avisos" })
         "turnos" -> TurnosConductorNativo(alVolver = { pantalla = "inicio" })
@@ -183,7 +183,7 @@ private fun InicioConductorNativo(
             TopAppBar(
                 title = {
                     Column {
-                        Text("Hola, ${nombre.substringBefore(' ').ifBlank { "conductor" }}", fontWeight = FontWeight.SemiBold)
+                        Text(tx("Hola, {n}", "n" to nombre.substringBefore(' ').ifBlank { tx("conductor") }), fontWeight = FontWeight.SemiBold)
                         Text(tx("Portal de conductor"), style = MaterialTheme.typography.labelMedium,
                             color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
@@ -208,7 +208,7 @@ private fun InicioConductorNativo(
                     Icon(Icons.Default.Notifications, contentDescription = null,
                         tint = if (sinLeer > 0) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.primary)
                     Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
-                        Text(if (sinLeer > 0) "Tienes $sinLeer ${if (sinLeer == 1) "aviso nuevo" else "avisos nuevos"}" else "Avisos", fontWeight = FontWeight.SemiBold)
+                        Text(if (sinLeer == 1) tx("Tienes 1 aviso nuevo") else if (sinLeer > 1) tx("Tienes {n} avisos nuevos", "n" to sinLeer) else tx("Avisos"), fontWeight = FontWeight.SemiBold)
                         Text(tx("Turnos aprobados, vacantes para trabajar más y lo que te pida la oficina"),
                             style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
@@ -227,8 +227,8 @@ private fun InicioConductorNativo(
                     Text(tx("Mi ruta"), style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold,
                         color = MaterialTheme.colorScheme.onPrimaryContainer)
                     Text(
-                        if (pendientes == 0) "No tienes entregas pendientes."
-                        else "$pendientes ${if (pendientes == 1) "entrega pendiente" else "entregas pendientes"}",
+                        if (pendientes == 0) tx("No tienes entregas pendientes.")
+                        else if (pendientes == 1) tx("1 entrega pendiente") else tx("{n} entregas pendientes", "n" to pendientes),
                         style = MaterialTheme.typography.bodyLarge,
                         color = MaterialTheme.colorScheme.onPrimaryContainer,
                     )
@@ -251,29 +251,29 @@ private fun InicioConductorNativo(
 
             AccesoConductorCard(
                 icono = Icons.Default.CalendarMonth,
-                titulo = "Mis turnos y días libres",
-                detalle = "Consulta el calendario y solicita un cambio",
+                titulo = tx("Mis turnos y días libres"),
+                detalle = tx("Consulta el calendario y solicita un cambio"),
                 alPulsar = alTurnos,
             )
 
             AccesoConductorCard(
                 icono = Icons.Default.CalendarMonth,
-                titulo = "Trabajar más",
-                detalle = "Vacantes y turnos extra confirmados",
+                titulo = tx("Trabajar más"),
+                detalle = tx("Vacantes y turnos extra confirmados"),
                 alPulsar = alExtras,
             )
 
             AccesoConductorCard(
                 icono = Icons.Default.CardGiftcard,
-                titulo = "Invita y gana",
-                detalle = "Comparte tu enlace y consulta tu cartera",
+                titulo = tx("Invita y gana"),
+                detalle = tx("Comparte tu enlace y consulta tu cartera"),
                 alPulsar = alReferidos,
             )
 
             AccesoConductorCard(
                 icono = Icons.Default.Lock,
-                titulo = "Mi cuenta",
-                detalle = "Contraseña y correo personal de recuperación",
+                titulo = tx("Mi cuenta"),
+                detalle = tx("Contraseña y correo personal de recuperación"),
                 alPulsar = alCuenta,
             )
         }
@@ -328,7 +328,7 @@ private fun RutaConductorNativa(vm: RutaVM, alVolver: () -> Unit) {
             editar = actual.editar,
             alCerrar = { guardada ->
                 if (guardada) vm.refrescarSinRuido()
-                if (guardada && !actual.desdeEscaner) vm.avisar(if (actual.editar != null) "Cambios guardados." else "Añadida a tu ruta.")
+                if (guardada && !actual.desdeEscaner) vm.avisar(if (actual.editar != null) tx("Cambios guardados.") else tx("Añadida a tu ruta."))
                 capa = if (actual.desdeEscaner) CapaRutaConductor.Escaner(VueltaDeRevisar(guardada)) else null
             },
         )
@@ -354,9 +354,9 @@ private fun CuentaConductorNativa(alVolver: () -> Unit, alCambiarClave: () -> Un
         navigationIcon = { IconButton(onClick = alVolver) { Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = tx("Volver")) } },
     ) }) { inset ->
         Column(Modifier.fillMaxSize().padding(inset).verticalScroll(rememberScrollState()).padding(20.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-            AccesoConductorCard(Icons.Default.Lock, "Cambiar contraseña", "Solo tú conoces tu contraseña", alCambiarClave)
-            AccesoConductorCard(Icons.Default.MailOutline, "Correo personal de recuperación", "Recibe ahí la verificación de tu cuenta", alCorreo)
-            AccesoConductorCard(Icons.Default.Phone, "Teléfono de contacto", "La oficina puede localizarte si hay una incidencia", alTelefono)
+            AccesoConductorCard(Icons.Default.Lock, tx("Cambiar contraseña"), tx("Solo tú conoces tu contraseña"), alCambiarClave)
+            AccesoConductorCard(Icons.Default.MailOutline, tx("Correo personal de recuperación"), tx("Recibe ahí la verificación de tu cuenta"), alCorreo)
+            AccesoConductorCard(Icons.Default.Phone, tx("Teléfono de contacto"), tx("La oficina puede localizarte si hay una incidencia"), alTelefono)
             // Los mismos ajustes que tiene la cuenta de reparto (29-10-2026): el conductor de empresa con «Mi ruta»
             // también navega, y el tema es del móvil, no de la cuenta.
             Spacer(Modifier.height(8.dp))
@@ -426,21 +426,21 @@ private fun CambiarClaveConductor(obligatoria: Boolean, alVolver: () -> Unit, al
     var guardando by remember { mutableStateOf(false) }
     val nombre = app.cuenta.nombre.collectAsState().value
     Scaffold(topBar = { TopAppBar(
-        title = { Text(if (obligatoria) "Elige tu contraseña" else "Cambiar contraseña") },
+        title = { Text(if (obligatoria) tx("Elige tu contraseña") else tx("Cambiar contraseña")) },
         navigationIcon = if (obligatoria) ({}) else ({ IconButton(onClick = alVolver) { Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = tx("Volver")) } }),
     ) }) { inset ->
         Column(Modifier.fillMaxSize().padding(inset).padding(24.dp).verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(14.dp)) {
-            Text(if (obligatoria) "Hola, ${nombre.substringBefore(' ').ifBlank { "conductor" }}. Este acceso temporal solo sirve para entrar una vez." else "La contraseña nueva debe tener al menos 6 caracteres.",
+            Text(if (obligatoria) tx("Hola, {n}. Este acceso temporal solo sirve para entrar una vez.", "n" to nombre.substringBefore(' ').ifBlank { tx("conductor") }) else tx("La contraseña nueva debe tener al menos 6 caracteres."),
                 style = MaterialTheme.typography.bodyLarge)
-            if (!obligatoria) CampoClave(actual, { actual = it; error = null }, "Contraseña actual") {}
-            CampoClave(nueva, { nueva = it; error = null }, "${if (obligatoria) "Tu contraseña" else "Nueva contraseña"} (6 caracteres o más)") {}
-            CampoClave(repetir, { repetir = it; error = null }, "Repite la contraseña") {}
+            if (!obligatoria) CampoClave(actual, { actual = it; error = null }, tx("Contraseña actual")) {}
+            CampoClave(nueva, { nueva = it; error = null }, (if (obligatoria) tx("Tu contraseña") else tx("Nueva contraseña")) + " " + tx("(6 caracteres o más)")) {}
+            CampoClave(repetir, { repetir = it; error = null }, tx("Repite la contraseña")) {}
             // Por qué el botón sigue apagado. Sin esto, con tres letras escritas se quedaba gris sin decir nada y
             // parecía roto (Dani, 29-10-2026, probando la 2.2.3 en su móvil).
             val pista = when {
-                nueva.isNotEmpty() && nueva.length < 6 -> "Faltan ${6 - nueva.length}: la contraseña tiene que tener 6 caracteres o más."
-                nueva.length >= 6 && repetir.isNotEmpty() && !nueva.startsWith(repetir) -> "Las dos contraseñas no coinciden."
-                !obligatoria && nueva.length >= 6 && nueva == repetir && actual.isBlank() -> "Escribe también tu contraseña actual."
+                nueva.isNotEmpty() && nueva.length < 6 -> tx("Faltan {n}: la contraseña tiene que tener 6 caracteres o más.", "n" to 6 - nueva.length)
+                nueva.length >= 6 && repetir.isNotEmpty() && !nueva.startsWith(repetir) -> tx("Las dos contraseñas no coinciden.")
+                !obligatoria && nueva.length >= 6 && nueva == repetir && actual.isBlank() -> tx("Escribe también tu contraseña actual.")
                 else -> null
             }
             pista?.let { Text(it, color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodyMedium) }
@@ -462,7 +462,7 @@ private fun CambiarClaveConductor(obligatoria: Boolean, alVolver: () -> Unit, al
                 modifier = Modifier.fillMaxWidth().height(54.dp),
             ) {
                 if (guardando) CircularProgressIndicator(Modifier.size(20.dp), strokeWidth = 2.dp)
-                else Text(if (obligatoria) "Guardar y continuar" else "Guardar contraseña")
+                else Text(if (obligatoria) tx("Guardar y continuar") else tx("Guardar contraseña"))
             }
         }
     }
@@ -486,8 +486,8 @@ private fun CorreoRecuperacionConductor(alVolver: () -> Unit) {
                 ?.takeIf { estado["vinculado"]?.jsonPrimitive?.contentOrNull == "true" }
             correoPendiente = estado["pendiente"]?.jsonPrimitive?.contentOrNull
             mensaje = when {
-                correoVerificado != null -> "Tu correo ${correoVerificado} está verificado."
-                correoPendiente != null -> "Hay una verificación pendiente para ${correoPendiente}. Revisa ese correo personal."
+                correoVerificado != null -> tx("Tu correo {c} está verificado.", "c" to correoVerificado)
+                correoPendiente != null -> tx("Hay una verificación pendiente para {c}. Revisa ese correo personal.", "c" to correoPendiente)
                 else -> null
             }
         } catch (e: ErrorApi) {
@@ -517,10 +517,10 @@ private fun CorreoRecuperacionConductor(alVolver: () -> Unit) {
                             if (r["vinculado"]?.jsonPrimitive?.contentOrNull == "true") {
                                 correoVerificado = r["email"]?.jsonPrimitive?.contentOrNull
                                 correoPendiente = null
-                                mensaje = "Ese correo ya está verificado."
+                                mensaje = tx("Ese correo ya está verificado.")
                             } else {
                                 correoPendiente = r["email"]?.jsonPrimitive?.contentOrNull
-                                mensaje = "Te hemos enviado un enlace a ${correoPendiente.orEmpty()}. Ábrelo desde tu correo personal para confirmar."
+                                mensaje = tx("Te hemos enviado un enlace a {c}. Ábrelo desde tu correo personal para confirmar.", "c" to correoPendiente.orEmpty())
                             }
                             correo = ""
                         } catch (e: ErrorApi) { error = e.message }

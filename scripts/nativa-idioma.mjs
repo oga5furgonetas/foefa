@@ -40,22 +40,37 @@ const desescapa = (s) => s.replace(/\\(["\\$nt])/g, (_, c) => ({ '"': '"', '\\':
 // Lo que se traduce: tiene alguna minúscula (no es una clave ni una sigla) y no es una plantilla con $.
 const traducible = (lit) => /[a-záéíóúñü]/.test(lit) && !lit.includes('$')
 
-const LIT = String.raw`"((?:[^"\\]|\\.)*)"`
-// Cada patrón dice en qué grupo está el literal y cómo queda envuelto.
+// Un literal de UNA línea: sin esto, dos comillas en líneas distintas se tomaban por un texto (LectorEtiqueta.kt, 30-10-2026).
+const LIT = String.raw`"((?:[^"\\\r\n]|\\.)*)"`
+// Una frase de verdad (con espacio, acento o puntuación): para los patrones genéricos (asignaciones, `?:`, `->`,
+// `if … else`), donde un literal de una palabra puede ser una clave y no un texto.
+const frase = (lit) => traducible(lit) && /[\s.:…¿¡áéíóúñÁÉÍÓÚÑ]/.test(lit)
+// Cada patrón dice en qué grupo está el literal y cómo queda envuelto (`lit` 0 = varios literales, los decide `rep`).
 const PATRONES = [
   { re: new RegExp(String.raw`\bText\(${LIT}`, 'g'), lit: 1, rep: (g) => `Text(tx("${g[1]}")` },
   { re: new RegExp(String.raw`\bcontentDescription = ${LIT}`, 'g'), lit: 1, rep: (g) => `contentDescription = tx("${g[1]}")` },
   { re: new RegExp(String.raw`Toast\.makeText\(([^,()]+), ${LIT}`, 'g'), lit: 2, rep: (g) => `Toast.makeText(${g[1]}, tx("${g[2]}")` },
-  { re: new RegExp(String.raw`\b(Titulo|avisar|Chip|Aviso)\(${LIT}`, 'g'), lit: 2, rep: (g) => `${g[1]}(tx("${g[2]}")` },
+  { re: new RegExp(String.raw`\b(Titulo|avisar|Chip|Aviso|Cabecera|Seccion|Etiqueta)\(${LIT}`, 'g'), lit: 2, rep: (g) => `${g[1]}(tx("${g[2]}")` },
+  // Dato("12", "entregas en 30 días"), ErrorApi(0, "…"), CampoClave(clave, { clave = it }, "Contraseña", …).
+  { re: new RegExp(String.raw`\b(Dato|ErrorApi)\(([^,()]+), ${LIT}`, 'g'), lit: 3, rep: (g) => `${g[1]}(${g[2]}, tx("${g[3]}")` },
+  { re: new RegExp(String.raw`\bCampoClave\(([^,()]+), (\{[^{}]*\}), ${LIT}`, 'g'), lit: 3, rep: (g) => `CampoClave(${g[1]}, ${g[2]}, tx("${g[3]}")` },
+  // error = "…", mensaje = "…", `?: "…"` (lo que se dice si no hay otra cosa), `-> "…"` (ramas de un when),
+  // `if (…) "a" else "b"`: solo frases de verdad.
+  { re: new RegExp(String.raw`(\b(?:error|mensaje|aviso|avisoFuera|avisoFoto|texto|titulo|detalle|mensajeTarifa|fallo|estadoTexto)\s*=\s*)${LIT}`, 'g'),
+    lit: 2, fuerte: true, rep: (g) => `${g[1]}tx("${g[2]}")` },
+  { re: new RegExp(String.raw`(\?:\s*)${LIT}`, 'g'), lit: 2, fuerte: true, rep: (g) => `${g[1]}tx("${g[2]}")` },
+  { re: new RegExp(String.raw`(->\s*)${LIT}`, 'g'), lit: 2, fuerte: true, rep: (g) => `${g[1]}tx("${g[2]}")` },
+  { re: new RegExp(String.raw`(\)\s*)${LIT}(\s+else\b)`, 'g'), lit: 2, fuerte: true, rep: (g) => `${g[1]}tx("${g[2]}")${g[3]}` },
+  { re: new RegExp(String.raw`(\belse\s+)${LIT}`, 'g'), lit: 2, fuerte: true, rep: (g) => `${g[1]}tx("${g[2]}")` },
 ]
 
 function envuelve(ruta) {
   let t = readFileSync(ruta, 'utf8')
   const antes = t
-  for (const { re, lit, rep } of PATRONES) {
+  for (const { re, lit, rep, fuerte } of PATRONES) {
     t = t.replace(re, (...m) => {
       const g = m.slice(0, -2)   // los grupos (m[0] es el texto entero); fuera offset y cadena
-      return traducible(g[lit]) ? rep(g) : g[0]
+      return (fuerte ? frase(g[lit]) : traducible(g[lit])) ? rep(g) : g[0]
     })
   }
   if (t !== antes) {

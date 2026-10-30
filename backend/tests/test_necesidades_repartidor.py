@@ -317,3 +317,12 @@ async def test_los_endpoints_de_la_dgt_filtran_a_las_paradas_de_hoy(base, monkey
     assert z["paradas"] == {p["id"]: {"id": "15001_A Coruña - Marina", "nombre": "A Coruña - Marina"}}
     # Lo de otro repartidor no cuenta.
     assert (await server.reparto_mi_incidencias(LUIS))["incidencias"] == []
+    assert r["aplica"] is True and z["aplica"] is True
+    # FUERA DE ESPAÑA (30-10-2026): lo de la DGT no vale y se dice (`aplica`), sin «ninguna cerca» que engañe.
+    server._region_actual.set(("fr", "Europe/Paris"))
+    try:
+        fr = await server.reparto_mi_incidencias(ANA)
+        assert fr == {"incidencias": [], "fuente": None, "publicado": "", "incompleto": False, "aplica": False}
+        assert (await server.reparto_mi_zbe(ANA)) == {"zonas": [], "paradas": {}, "fuente": None, "incompleto": False, "aplica": False}
+    finally:
+        server._region_actual.set(("es", "Europe/Madrid"))

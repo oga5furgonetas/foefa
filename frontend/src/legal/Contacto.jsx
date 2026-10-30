@@ -1,6 +1,8 @@
 import { useState } from 'react'
 import { Loader2, Send, CheckCircle2, Mail } from 'lucide-react'
-import LegalLayout from './LegalLayout'
+import LegalLayout, { legalEnIngles } from './LegalLayout'
+import ContactEn from './en/ContactEn'
+import { useIdioma } from '../lib/idioma'
 import { COMPANY } from './config'
 import { API_BASE } from '../services/api'
 
@@ -13,7 +15,7 @@ export default function Contacto() {
   async function submit(e) {
     e?.preventDefault()
     setErr('')
-    if (!form.email || !form.email.includes('@')) return setErr('Pon un email válido')
+    if (!form.email || !form.email.includes('@')) return setErr(legalEnIngles() ? 'Enter a valid email' : 'Pon un email válido')
     setBusy(true)
     try {
       // El backend admite name/company/email/plan (lo usamos como "asunto - resumen del mensaje")
@@ -24,9 +26,12 @@ export default function Contacto() {
       })
       if (!r.ok) throw new Error('lead failed')
       setDone(true)
-    } catch { setErr('No se pudo enviar el mensaje. Inténtalo de nuevo o escríbenos directamente al email.') } finally { setBusy(false) }
+    } catch { setErr(legalEnIngles() ? 'The message could not be sent. Try again or email us directly.' : 'No se pudo enviar el mensaje. Inténtalo de nuevo o escríbenos directamente al email.') } finally { setBusy(false) }
   }
 
+  useIdioma()
+  // Fuera de España (30-10-2026): la misma página en inglés, con este mismo formulario.
+  if (legalEnIngles()) return <ContactEn form={form} setForm={setForm} busy={busy} done={done} err={err} submit={submit} />
   return (
     <LegalLayout title="Contacto">
       {done ? (

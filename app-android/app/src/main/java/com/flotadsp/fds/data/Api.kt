@@ -1,5 +1,6 @@
 package com.flotadsp.fds.data
 
+import com.flotadsp.fds.ui.tx
 import com.flotadsp.fds.BuildConfig
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.suspendCancellableCoroutine
@@ -48,7 +49,7 @@ class ErrorApi(val estado: Int, mensaje: String, val sinRed: Boolean = false) : 
 inline fun <reified T> leer(el: JsonElement): T = try {
     JSON.decodeFromJsonElement<T>(el)
 } catch (_: SerializationException) {
-    throw ErrorApi(0, "El servidor ha contestado algo que esta versión no entiende. Actualiza la app.")
+    throw ErrorApi(0, tx("El servidor ha contestado algo que esta versión no entiende. Actualiza la app."))
 }
 
 private val TIPO_JSON = "application/json; charset=utf-8".toMediaType()
@@ -113,7 +114,7 @@ class Api(
         val r = try {
             cliente.newCall(b.build()).ejecutar()
         } catch (e: IOException) {
-            throw ErrorApi(0, "Sin conexión. Se intentará otra vez solo.", sinRed = true)
+            throw ErrorApi(0, tx("Sin conexión. Se intentará otra vez solo."), sinRed = true)
         }
         r.use { resp ->
             val texto = resp.body?.string().orEmpty()
@@ -125,7 +126,7 @@ class Api(
             // Una wifi que pide registrarse (almacenes, bares) contesta con su página en HTML y un 200: es como no
             // tener red (la entrega queda guardada y sale sola), no un motivo para que la app se cierre.
             try { JSON.parseToJsonElement(texto) } catch (_: SerializationException) {
-                throw ErrorApi(resp.code, "Esta red no deja llegar al servidor (¿una wifi que pide registrarse?).", sinRed = true)
+                throw ErrorApi(resp.code, tx("Esta red no deja llegar al servidor (¿una wifi que pide registrarse?)."), sinRed = true)
             }
         }
     }
@@ -141,11 +142,11 @@ class Api(
                 else -> null
             }
             return m ?: when (codigo) {
-                401 -> "Tu sesión ha caducado: entra otra vez."
-                403 -> "No tienes permiso para esto."
-                404 -> "Ya no existe."
-                in 500..599 -> "El servidor no contesta ahora. Inténtalo en un momento."
-                else -> "No se ha podido hacer ($codigo)."
+                401 -> tx("Tu sesión ha caducado: entra otra vez.")
+                403 -> tx("No tienes permiso para esto.")
+                404 -> tx("Ya no existe.")
+                in 500..599 -> tx("El servidor no contesta ahora. Inténtalo en un momento.")
+                else -> tx("No se ha podido hacer ({n}).", "n" to codigo)
             }
         }
     }

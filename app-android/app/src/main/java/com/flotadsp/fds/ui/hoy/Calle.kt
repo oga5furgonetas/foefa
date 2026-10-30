@@ -92,7 +92,7 @@ object Calle {
         i.pk.takeIf { it.isNotBlank() }?.let { tx("pk") + " $it" },
         i.municipio.takeIf { it.isNotBlank() },
         i.distanciaKm?.let { d ->
-            val km = "%.1f".format(java.util.Locale("es"), d)
+            val km = "%.1f".format(com.flotadsp.fds.ui.Idioma.locale, d)
             if (i.parada != null) tx("a {km} km de la parada {n}", "km" to km, "n" to i.parada) else tx("a {km} km de tu ruta", "km" to km)
         },
     ).joinToString(" · ")

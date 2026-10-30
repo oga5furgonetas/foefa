@@ -172,7 +172,7 @@ fun HoyPantalla(
                     if (e.paradas.isNotEmpty()) {
                         IconButton(onClick = { verMapa = !verMapa }) {
                             Icon(if (verMapa) Icons.AutoMirrored.Filled.List else Icons.Default.Map,
-                                contentDescription = if (verMapa) "Ver la lista" else "Ver el mapa")
+                                contentDescription = if (verMapa) tx("Ver la lista") else tx("Ver el mapa"))
                         }
                     }
                     IconButton(onClick = alAnadir) { Icon(Icons.Default.Add, contentDescription = tx("Añadir una parada")) }
@@ -201,7 +201,7 @@ fun HoyPantalla(
         PullToRefreshBox(isRefreshing = e.refrescando, onRefresh = { vm.cargar(tirando = true) }, modifier = Modifier.padding(pad).fillMaxSize()) {
             when {
                 e.cargando && e.ruta == null -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { CircularProgressIndicator() }
-                e.ruta == null -> SinRuta(e.error ?: "No se ha podido cargar tu ruta.") { vm.cargar() }
+                e.ruta == null -> SinRuta(e.error ?: tx("No se ha podido cargar tu ruta.")) { vm.cargar() }
                 verMapa -> MapaRuta(e.pendientes, e.ruta?.base, trazado = e.trazado, hechas = e.paradas.filter { !it.pendiente },
                     incidencias = e.incidencias?.incidencias.orEmpty(), zbe = e.zbe?.zonas.orEmpty(), enZbe = e.zbe?.paradas?.keys.orEmpty(),
                     furgo = furgo, navegarCon = navegarCon, alTocar = { abierta = it },
@@ -361,7 +361,7 @@ private fun Resumen(
                     val perdido = fallidas * g.pagoParada
                     if (cent > 0 || perdido > 0) Text(
                         listOfNotNull(tx("Hoy llevas {x}", "x" to Region.importe(cent / 100.0)),
-                            perdido.takeIf { it > 0 }?.let { tx("{n} sin entregar = {euros} sin cobrar", "n" to fallidas, "euros" to Region.importe(it / 100.0)) }).joinToString(" · "),
+                            perdido.takeIf { it > 0 }?.let { if (fallidas == 1) tx("1 sin entregar = {euros} sin cobrar", "euros" to Region.importe(it / 100.0)) else tx("{n} sin entregar = {euros} sin cobrar", "n" to fallidas, "euros" to Region.importe(it / 100.0)) }).joinToString(" · "),
                         style = MaterialTheme.typography.bodyMedium.merge(TextoNumero), color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
             }

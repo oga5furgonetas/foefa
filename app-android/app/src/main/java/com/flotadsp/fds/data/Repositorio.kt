@@ -326,7 +326,7 @@ class Repositorio(private val ctx: Context, val cuenta: Cuenta, val api: Api) {
                     break
                 }
                 rechazados += 1        // ya no existe, ya no es suya, o el servidor no lo acepta: se avisa y fuera
-                _rechazos.value = _rechazos.value + "No se ha podido guardar ${p.nombre.ifBlank { "una parada" }}: ${e.message}"
+                _rechazos.value = _rechazos.value + tx("No se ha podido guardar {n}: {e}", "n" to p.nombre.ifBlank { tx("una parada") }, "e" to e.message)
             }
             it.remove()
             guardarCola(quedan.toList())

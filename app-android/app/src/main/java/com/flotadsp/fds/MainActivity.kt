@@ -164,7 +164,7 @@ private fun Raiz(app: FdsApp, ref: String?, empresaSlug: String?, sesionPortal: 
                 alCerrar = { app.ambito.launch { app.repo.salir() } },
                 abrir = abrirAviso, alAbierto = alAvisoAbierto,
             )
-        } else if (dentro) Principal(abrirAviso, alAvisoAbierto) else Acceso(ref, alAbrirPortal, aviso = if (caducada) "Tu sesión ha caducado: entra otra vez." else null)
+        } else if (dentro) Principal(abrirAviso, alAvisoAbierto) else Acceso(ref, alAbrirPortal, aviso = if (caducada) tx("Tu sesión ha caducado: entra otra vez.") else null)
     }
 }
 
@@ -215,7 +215,7 @@ private fun Principal(abrir: String?, alAbierto: () -> Unit) {
             FichaParada(pais = pais, cerca = cerca, inicial = c.inicial, editar = c.editar, alCerrar = { guardada ->
                 if (guardada) ruta.refrescarSinRuido()
                 // Desde el escáner, el aviso lo da el propio escáner (y suma la añadida); si no, abajo en «Hoy».
-                if (guardada && !c.desdeEscaner) ruta.avisar(if (c.editar != null) "Cambios guardados." else "Añadida a tu ruta.")
+                if (guardada && !c.desdeEscaner) ruta.avisar(if (c.editar != null) tx("Cambios guardados.") else tx("Añadida a tu ruta."))
                 capa = if (c.desdeEscaner) Capa.Escaner(VueltaDeRevisar(guardada)) else null
             })
             return

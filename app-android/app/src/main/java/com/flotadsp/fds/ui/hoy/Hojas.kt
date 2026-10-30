@@ -84,11 +84,11 @@ private val MOTIVOS = listOf(tx("No había nadie"), tx("Dirección incorrecta"),
 /** El WhatsApp al cliente, como en la web (29-10-2026): con la hora estimada y el enlace de seguimiento, que no
  *  lleva datos personales. Sin hora ni enlace, el mensaje de siempre. */
 fun textoWhatsapp(p: Parada, empresa: String): String {
-    val quien = if (empresa.isNotBlank()) "el repartidor de $empresa" else "tu repartidor"
-    val que = if (p.tipo == "recogida") "a hacer la recogida" else "con tu pedido"
-    val cuando = p.eta?.takeIf { it.isNotBlank() }?.let { ", llegada aproximada a las $it" } ?: ""
-    val enlace = p.seguimiento?.takeIf { it.isNotBlank() }?.let { " Puedes seguirlo aquí: ${BuildConfig.WEB_URL}/s/$it" } ?: ""
-    return "Hola, soy $quien. Voy de camino $que$cuando.$enlace"
+    val quien = if (empresa.isNotBlank()) tx("el repartidor de {empresa}", "empresa" to empresa) else tx("el repartidor")
+    val que = if (p.tipo == "recogida") tx("a hacer la recogida") else tx("con su pedido")
+    val cuando = p.eta?.takeIf { it.isNotBlank() }?.let { tx(", llegada aproximada a las {hora}", "hora" to it) } ?: ""
+    val enlace = p.seguimiento?.takeIf { it.isNotBlank() }?.let { " " + tx("Puede seguirlo aquí:") + " ${BuildConfig.WEB_URL}/s/$it" } ?: ""
+    return tx("Hola, soy {quien}. Voy de camino {que}", "quien" to quien, "que" to que) + "$cuando.$enlace"
 }
 
 /** EL CLIENTE TE AYUDA ANTES DE LLEGAR (30-10-2026): «No estará · Al vecino · Portal: 1234», como en la web. */
@@ -140,15 +140,15 @@ fun ParadaHoja(
             Spacer(Modifier.height(8.dp))
             Etiquetas(p)
             val datos = listOfNotNull(
-                p.telefono.takeIf { it.isNotBlank() }?.let { "Teléfono: $it" },
-                p.codigo.takeIf { it.isNotBlank() }?.let { "Código: $it" },
-                p.contenido.takeIf { it.isNotBlank() }?.let { "Lleva: $it" },
-                p.notas.takeIf { it.isNotBlank() }?.let { "Notas: $it" },
-                p.hueco.takeIf { it.isNotBlank() }?.let { "En la furgoneta: $it" },
-                if (p.ventanaDesde != null) "Horario: de ${p.ventanaDesde} a ${p.ventanaHasta}" else null,
-                p.motivo?.takeIf { it.isNotBlank() && p.estado == "fallido" }?.let { "Motivo: $it" },
+                p.telefono.takeIf { it.isNotBlank() }?.let { tx("Teléfono: {x}", "x" to it) },
+                p.codigo.takeIf { it.isNotBlank() }?.let { tx("Código: {x}", "x" to it) },
+                p.contenido.takeIf { it.isNotBlank() }?.let { tx("Lleva: {x}", "x" to it) },
+                p.notas.takeIf { it.isNotBlank() }?.let { tx("Notas: {x}", "x" to it) },
+                p.hueco.takeIf { it.isNotBlank() }?.let { tx("En la furgoneta: {x}", "x" to it) },
+                if (p.ventanaDesde != null) tx("Horario: de {a} a {b}", "a" to p.ventanaDesde, "b" to p.ventanaHasta) else null,
+                p.motivo?.takeIf { it.isNotBlank() && p.estado == "fallido" }?.let { tx("Motivo: {x}", "x" to it) },
                 p.antes?.takeIf { p.pendiente }?.let { textoAntes(it) },
-                p.clienteDice?.let { textoClienteDice(it) }?.takeIf { it.isNotBlank() }?.let { "El cliente dice: $it" },
+                p.clienteDice?.let { textoClienteDice(it) }?.takeIf { it.isNotBlank() }?.let { tx("El cliente dice: {t}", "t" to it) },
             )
             if (datos.isNotEmpty()) {
                 Spacer(Modifier.height(12.dp))
@@ -278,7 +278,7 @@ fun EntregaHoja(p: Parada, alCerrar: () -> Unit, alConfirmar: (JsonObject) -> Un
                 if (preparando) CircularProgressIndicator(Modifier.size(24.dp), strokeWidth = 2.dp)
                 miniatura?.let { Image(it.asImageBitmap(), contentDescription = tx("Foto de la entrega"), contentScale = ContentScale.Crop, modifier = Modifier.size(56.dp)) }
             }
-            Text(avisoFoto ?: "La foto, del paquete en la puerta: sin personas.", style = MaterialTheme.typography.bodySmall,
+            Text(avisoFoto ?: tx("La foto, del paquete en la puerta: sin personas."), style = MaterialTheme.typography.bodySmall,
                 color = if (avisoFoto != null) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant)
             Spacer(Modifier.height(18.dp))
             Button(

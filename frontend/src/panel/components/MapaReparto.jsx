@@ -291,9 +291,10 @@ export default function MapaReparto({ paradas = [], base = null, vivos = [], alt
     })
     const conCalles = trazado?.fuente === 'carreteras' && trazado.linea?.length > 1
     if (conCalles) {
-      // Como un navegador: borde blanco y línea gruesa encima, por debajo de las paradas.
-      L.polyline(trazado.linea, { color: '#ffffff', weight: 9, opacity: 0.95, lineCap: 'round', lineJoin: 'round', interactive: false }).addTo(capa.current)
-      L.polyline(trazado.linea, { color: '#0284c7', weight: 5.5, opacity: 1, lineCap: 'round', lineJoin: 'round', interactive: false }).addTo(capa.current)
+      // Como un navegador: un borde azul oscuro fino y la línea azul encima, por debajo de las paradas. Antes iba
+      // con borde blanco, que sobre las calles blancas del mapa no se veía y dejaba una salchicha plana (30-10-2026).
+      L.polyline(trazado.linea, { color: '#1e3a8a', weight: 9, opacity: 0.55, lineCap: 'round', lineJoin: 'round', interactive: false }).addTo(capa.current)
+      L.polyline(trazado.linea, { color: '#3b82f6', weight: 5, opacity: 1, lineCap: 'round', lineJoin: 'round', interactive: false }).addTo(capa.current)
     } else {
       Object.entries(porConductor).forEach(([color, lista]) => {
         const linea = lista.sort((a, b) => a[0] - b[0]).map((x) => x[1])

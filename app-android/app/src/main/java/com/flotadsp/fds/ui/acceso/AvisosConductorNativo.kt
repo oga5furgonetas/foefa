@@ -58,7 +58,7 @@ fun AvisosConductorNativo(alVolver: () -> Unit, alAbrir: (Aviso) -> Unit) {
             lista = r.avisos
             val sinLeer = r.avisos.filter { it.leido_en == null }.map { it.id }
             runCatching { app.repo.avisosLeidos(sinLeer) }
-        }.onFailure { error = it.message ?: "No se han podido cargar los avisos." }
+        }.onFailure { error = it.message ?: tx("No se han podido cargar los avisos.") }
     }
     Scaffold(
         topBar = {

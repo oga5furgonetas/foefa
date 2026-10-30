@@ -52041,7 +52041,8 @@ async def _rep_trazado(puntos: list) -> dict:
         ruta = (j.get("routes") or [None])[0] if j.get("code") == "Ok" else None
         geo = ((ruta or {}).get("geometry") or {}).get("coordinates")
         if isinstance(geo, list) and len(geo) >= 2:
-            salida = {"linea": reparto.aligera_linea([[c[1], c[0]] for c in geo if isinstance(c, list) and len(c) == 2]),
+            # A 4 m entre puntos (antes 12): en las curvas se veían las cuerdas al ampliar el mapa (30-10-2026).
+            salida = {"linea": reparto.aligera_linea([[c[1], c[0]] for c in geo if isinstance(c, list) and len(c) == 2], metros=4),
                       "fuente": "carreteras", "km": round((ruta.get("distance") or 0) / 1000, 1),
                       "minutos": round((ruta.get("duration") or 0) / 60)}
     if salida["fuente"] == "carreteras":      # lo fallido no se guarda: el siguiente intento vuelve a preguntar
@@ -53395,28 +53396,34 @@ async def _rep_paradas_pendientes_situadas(conductor_id: str) -> list:
 
 @api_router.get("/reparto/mi-ruta/incidencias")
 async def reparto_mi_incidencias(user: dict = Depends(require_any_auth)):
-    """Cortes, obras, accidentes y retenciones de la DGT cerca de las paradas que le quedan hoy."""
+    """Cortes, obras, accidentes y retenciones de la DGT cerca de las paradas que le quedan hoy. FUERA DE
+    ESPAÑA (30-10-2026): lo que publica la DGT no vale, y se dice con `aplica: False` (la pantalla no enseña
+    nada; «ninguna cerca de tu ruta» en Lyon sería un falso positivo)."""
     d = await _rep_conductor(user)
+    if _region_actual.get()[0] != "es":
+        return {"incidencias": [], "fuente": None, "publicado": "", "incompleto": False, "aplica": False}
     ps = await _rep_paradas_pendientes_situadas(d["id"])
     if not ps:
-        return {"incidencias": [], "fuente": "DGT", "publicado": "", "incompleto": False}
+        return {"incidencias": [], "fuente": "DGT", "publicado": "", "incompleto": False, "aplica": True}
     items, publicado, fresco = await _dgt_incidencias()
     return {"incidencias": reparto.incidencias_cerca(items, ps), "fuente": "DGT", "publicado": publicado,
-            "incompleto": not fresco}
+            "incompleto": not fresco, "aplica": True}
 
 
 @api_router.get("/reparto/mi-ruta/zbe")
 async def reparto_mi_zbe(user: dict = Depends(require_any_auth)):
     """Las zonas de bajas emisiones (las que publica la DGT, con la descripción del ayuntamiento) que tocan
-    la ruta de hoy, y qué paradas caen dentro de cada una."""
+    la ruta de hoy, y qué paradas caen dentro de cada una. Fuera de España, nada (`aplica: False`)."""
     d = await _rep_conductor(user)
+    if _region_actual.get()[0] != "es":
+        return {"zonas": [], "paradas": {}, "fuente": None, "incompleto": False, "aplica": False}
     ps = await _rep_paradas_pendientes_situadas(d["id"])
     if not ps:
-        return {"zonas": [], "paradas": {}, "fuente": "DGT", "incompleto": False}
+        return {"zonas": [], "paradas": {}, "fuente": "DGT", "incompleto": False, "aplica": True}
     zonas, fresco = await _dgt_zbe()
     cerca = reparto.zbe_cerca(zonas, ps)
     return {"zonas": [{k: v for k, v in z.items() if k != "caja"} for z in cerca[:20]],
-            "paradas": reparto.zbe_de_paradas(cerca, ps), "fuente": "DGT", "incompleto": not fresco}
+            "paradas": reparto.zbe_de_paradas(cerca, ps), "fuente": "DGT", "incompleto": not fresco, "aplica": True}
 
 
 @api_router.post("/reparto/mi-ruta/navegar")

@@ -30,7 +30,7 @@ import org.json.JSONObject
 @Composable
 fun PortalEmpresa(slugInicial: String?, alCerrar: () -> Unit) {
     BackHandler(onBack = alCerrar)
-    PortalWeb(titulo = "Portal de conductor", ruta = "/conductor/#${Uri.encode(slugInicial.orEmpty())}",
+    PortalWeb(titulo = tx("Portal de conductor"), ruta = "/conductor/#${Uri.encode(slugInicial.orEmpty())}",
         sesion = null, alCerrar = alCerrar)
 }
 
@@ -39,7 +39,7 @@ fun PortalAcceso(sesion: Sesion, alCerrar: () -> Unit) {
     val conductor = sesion.app_destino == "conductor"
     BackHandler(onBack = alCerrar)
     PortalWeb(
-        titulo = if (conductor) "Portal de conductor" else "Portal de empresa",
+        titulo = if (conductor) tx("Portal de conductor") else tx("Portal de empresa"),
         ruta = if (conductor) "/conductor/" else "/panel/login",
         sesion = sesion,
         alCerrar = alCerrar,

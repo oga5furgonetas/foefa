@@ -1,5 +1,6 @@
 package com.flotadsp.fds
 
+import com.flotadsp.fds.ui.tx
 import androidx.activity.ComponentActivity
 import androidx.activity.result.ActivityResultLauncher
 import androidx.activity.result.IntentSenderRequest
@@ -92,8 +93,8 @@ class Actualizacion(private val activity: ComponentActivity) {
 fun AvisoActualizacion(a: Actualizacion, modifier: Modifier = Modifier) {
     val ctx = LocalContext.current
     val texto = when {
-        a.lista -> "Actualización de FDS descargada."
-        a.enLaWeb != null -> "Hay una versión nueva de FDS (${a.enLaWeb})."
+        a.lista -> tx("Actualización de FDS descargada.")
+        a.enLaWeb != null -> tx("Hay una versión nueva de FDS ({v}).", "v" to a.enLaWeb)
         else -> return
     }
     Surface(color = MaterialTheme.colorScheme.inverseSurface, contentColor = MaterialTheme.colorScheme.inverseOnSurface,

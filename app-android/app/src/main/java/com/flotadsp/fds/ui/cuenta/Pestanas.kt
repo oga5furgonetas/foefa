@@ -116,7 +116,7 @@ fun HistorialPantalla() {
     var error by remember { mutableStateOf<String?>(null) }
     var abierto by remember { mutableStateOf<String?>(null) }
     LaunchedEffect(Unit) {
-        runCatching { repo.estadisticas(30) }.onSuccess { est = it }.onFailure { error = (it as? ErrorApi)?.message ?: "No se ha podido cargar" }
+        runCatching { repo.estadisticas(30) }.onSuccess { est = it }.onFailure { error = (it as? ErrorApi)?.message ?: tx("No se ha podido cargar") }
     }
     abierto?.let { f -> DiaPantalla(f) { abierto = null }; return }
     Scaffold(topBar = { TopAppBar(title = { Text(tx("Historial")) }) }, containerColor = MaterialTheme.colorScheme.background) { pad ->
@@ -128,8 +128,8 @@ fun HistorialPantalla() {
                 item {
                     Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLowest), shape = MaterialTheme.shapes.large) {
                         Row(Modifier.fillMaxWidth().padding(18.dp)) {
-                            Dato("${e.entregados}", if (e.entregados == 1) "entrega en 30 días" else "entregas en 30 días", Modifier.weight(1f))
-                            Dato(e.tasa?.let { "$it %" } ?: "—", "entregadas a la primera", Modifier.weight(1f))
+                            Dato("${e.entregados}", if (e.entregados == 1) tx("entrega en 30 días") else tx("entregas en 30 días"), Modifier.weight(1f))
+                            Dato(e.tasa?.let { "$it %" } ?: "—", tx("entregadas a la primera"), Modifier.weight(1f))
                         }
                     }
                 }
@@ -398,7 +398,7 @@ fun CuentaPantalla() {
             Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLowest), shape = MaterialTheme.shapes.large,
                 modifier = Modifier.fillMaxWidth()) {
                 Column(Modifier.fillMaxWidth().padding(18.dp)) {
-                    Text(nombre.ifBlank { "Tu cuenta" }, style = MaterialTheme.typography.titleLarge)
+                    Text(nombre.ifBlank { tx("Tu cuenta") }, style = MaterialTheme.typography.titleLarge)
                     if (correo.isNotBlank()) Text(correo, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     Spacer(Modifier.height(10.dp))
                     Text(textoPlan(plan), style = MaterialTheme.typography.bodyLarge)
@@ -415,21 +415,21 @@ fun CuentaPantalla() {
                     Spacer(Modifier.height(10.dp))
                     Button(onClick = {
                         val enlace = "${BuildConfig.WEB_URL}/invita?${ref?.codigo?.takeIf { it.isNotBlank() }?.let { "ref=$it&" } ?: ""}utm_source=referido&utm_medium=app_android"
-                        Acciones.compartir(ctx, "Uso FDS para ordenar mi ruta de reparto y navegar parada a parada. Pruébala: $enlace")
+                        Acciones.compartir(ctx, tx("Uso FDS para ordenar mi ruta de reparto y navegar parada a parada. Pruébala: {enlace}", "enlace" to enlace))
                     }) { Icon(Icons.Default.Share, contentDescription = null); Spacer(Modifier.width(8.dp)); Text(tx("Compartir mi enlace")) }
                 }
             }
             Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLowest), shape = MaterialTheme.shapes.large) {
                 Column {
-                    Opcion(Icons.Default.Mail, "Escribir a soporte") { Acciones.abrirWeb(ctx, "mailto:contacto@flotadsp.com?subject=FDS%20Android") }
+                    Opcion(Icons.Default.Mail, tx("Escribir a soporte")) { Acciones.abrirWeb(ctx, "mailto:contacto@flotadsp.com?subject=FDS%20Android") }
                     HorizontalDivider()
-                    Opcion(Icons.Default.Shield, "Privacidad") { Acciones.abrirWeb(ctx, "${BuildConfig.WEB_URL}/privacidad") }
+                    Opcion(Icons.Default.Shield, tx("Privacidad")) { Acciones.abrirWeb(ctx, "${BuildConfig.WEB_URL}/privacidad") }
                     HorizontalDivider()
-                    Opcion(Icons.Default.Description, "Términos") { Acciones.abrirWeb(ctx, "${BuildConfig.WEB_URL}/terminos") }
+                    Opcion(Icons.Default.Description, tx("Términos")) { Acciones.abrirWeb(ctx, "${BuildConfig.WEB_URL}/terminos") }
                     HorizontalDivider()
-                    Opcion(Icons.AutoMirrored.Filled.Logout, "Cerrar sesión") { salir = true }
+                    Opcion(Icons.AutoMirrored.Filled.Logout, tx("Cerrar sesión")) { salir = true }
                     HorizontalDivider()
-                    Opcion(Icons.Default.DeleteForever, "Borrar mi cuenta", peligro = true) { borrar = true }
+                    Opcion(Icons.Default.DeleteForever, tx("Borrar mi cuenta"), peligro = true) { borrar = true }
                 }
             }
             Text("FDS ${BuildConfig.VERSION_NAME}", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -448,10 +448,10 @@ fun CuentaPantalla() {
 private fun textoPlan(p: Plan?): String = when {
     p == null -> tx("Cargando tu plan…")
     p.promo?.activa == true && p.gratis?.activo != true ->
-        p.promo.hasta?.let { "Gratis y sin límite hasta el ${dia(it).substringAfter(' ')}." } ?: "Gratis y sin límite durante la promoción."
+        p.promo.hasta?.let { tx("Gratis y sin límite hasta el {f}.", "f" to dia(it).substringAfter(' ')) } ?: tx("Gratis y sin límite durante la promoción.")
     p.status == "active" -> tx("Plan sin tope de paradas: activo.")
     p.gratis?.activo == true -> tx("Plan gratis: hasta {n} paradas nuevas al día.", "n" to (p.gratis.tope ?: 15))
-    p.status == "trial" && p.diasQuedan != null -> "Prueba gratis: ${if (p.diasQuedan == 1) "queda 1 día" else "quedan ${p.diasQuedan} días"}."
+    p.status == "trial" && p.diasQuedan != null -> tx("Prueba gratis: {q}.", "q" to (if (p.diasQuedan == 1) tx("queda 1 día") else tx("quedan {n} días", "n" to p.diasQuedan)))
     else -> tx("Plan Repartidor.")
 }
 

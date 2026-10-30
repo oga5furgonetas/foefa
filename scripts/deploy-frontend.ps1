@@ -54,6 +54,19 @@ if ($gh) {
     } else { Write-Host "    (el run $runId no trae un APK firmado: se queda el del repo)" -ForegroundColor Yellow }
   } else { Write-Host "    (ningun run de app-release en verde: se queda el APK del repo)" -ForegroundColor Yellow }
 } else { Write-Host "    (sin gh: se queda el APK del repo; instala GitHub CLI para coser el ultimo)" -ForegroundColor Yellow }
+# SIN gh (el PC de casa de Dani, 30-10-2026): si en este PC se acaba de compilar el APK de la web (paquete .web, firmado),
+# se cose ese; es lo que se hace cuando el AAB tambien sale de aqui. El del repo es el de reserva.
+$apkLocal = Join-Path $raiz "app-android\app\build\outputs\apk\release\app-release.apk"
+if (-not (Test-Path (Join-Path "dist" "descargas\FDS.apk")) -or -not $gh) {
+  if (Test-Path $apkLocal) {
+    $horas = ((Get-Date) - (Get-Item $apkLocal).LastWriteTime).TotalHours
+    if ($horas -lt 24) {
+      New-Item -ItemType Directory -Force (Join-Path "dist" "descargas") | Out-Null
+      Copy-Item $apkLocal (Join-Path "dist" "descargas\FDS.apk") -Force
+      Write-Host "    APK compilado en este PC (hace $([math]::Round($horas, 1)) h) -> /descargas/FDS.apk"
+    } else { Write-Host "    (el APK compilado en este PC tiene mas de un dia: no se cose)" -ForegroundColor Yellow }
+  }
+}
 
 # EL SELLO DE LA COMPILACION. La app lo pide cada pocos minutos y avisa si el
 # suyo ya no es el ultimo: sin esto, una pestaña abierta desde hace horas sigue
@@ -82,7 +95,9 @@ $verif = $LASTEXITCODE
 # pantalla de Incorporaciones salia vacia porque su endpoint daba 500.
 Write-Host ""
 Write-Host "==> Comprobando que las pantallas devuelven datos..."
-$py = "C:\Users\Usuario\AppData\Local\Programs\Python\Python312\python.exe"
+# El Python 3.12 del usuario (el PC de Winiw, el de casa de Dani: 30-10-2026) o, si no, el del PATH.
+$py = Join-Path $env:LOCALAPPDATA "Programs\Python\Python312\python.exe"
+if (-not (Test-Path $py)) { $py = "C:\Users\Usuario\AppData\Local\Programs\Python\Python312\python.exe" }
 if (-not (Test-Path $py)) { $py = "python" }
 & $py (Join-Path $PSScriptRoot "humo.py") $d.backend
 if ($LASTEXITCODE -ne 0) {

@@ -1,8 +1,13 @@
-import LegalLayout from './LegalLayout'
+import LegalLayout, { legalEnIngles } from './LegalLayout'
+import CookiesEn from './en/CookiesEn'
+import { useIdioma } from '../lib/idioma'
 import { COMPANY } from './config'
 import { hayPixel } from '../lib/metaPixel'
 
 export default function Cookies() {
+  useIdioma()
+  // Fuera de España (30-10-2026): la traducción de cortesía al inglés; el español es la versión que vale.
+  if (legalEnIngles()) return <CookiesEn />
   return (
     <LegalLayout title="Política de Cookies">
       <h2>1. ¿Qué son las cookies?</h2>

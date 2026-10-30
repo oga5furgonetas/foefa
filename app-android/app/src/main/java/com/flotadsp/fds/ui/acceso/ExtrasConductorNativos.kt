@@ -103,11 +103,11 @@ fun ExtrasConductorNativos(alVolver: () -> Unit) {
                             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                                 androidx.compose.material3.Icon(Icons.Default.CalendarMonth, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
                                 Column(Modifier.weight(1f)) {
-                                    Text(campoSeguro(v, "dia").ifBlank { fechaBonita(fecha) }, fontWeight = FontWeight.Bold)
-                                    Text(if (estado == "pendiente") "Solicitud pendiente" else "${campoSeguro(v, "quedan").ifBlank { "1" }} plaza(s) disponible(s)", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                    Text(fechaBonita(fecha).takeIf { it != fecha } ?: campoSeguro(v, "dia").ifBlank { fecha }, fontWeight = FontWeight.Bold)
+                                    Text(if (estado == "pendiente") tx("Solicitud pendiente") else tx("{n} plaza(s) disponible(s)", "n" to campoSeguro(v, "quedan").ifBlank { "1" }), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                                 }
                             }
-                            campoSeguro(v, "nota").takeIf { it.isNotBlank() }?.let { Text("Nota de oficina: $it", style = MaterialTheme.typography.bodySmall) }
+                            campoSeguro(v, "nota").takeIf { it.isNotBlank() }?.let { Text(tx("Nota de oficina: {n}", "n" to it), style = MaterialTheme.typography.bodySmall) }
                             if (estado == "pendiente") {
                                 Text(tx("La oficina te confirmará si queda aprobado."), color = MaterialTheme.colorScheme.tertiary)
                                 val refuerzo = campoSeguro(v, "refuerzo_id")
@@ -127,7 +127,7 @@ fun ExtrasConductorNativos(alVolver: () -> Unit) {
                     Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.tertiaryContainer)) {
                         Column(Modifier.fillMaxWidth().padding(15.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                             Text("${fechaBonita(campoSeguro(x, "date"))} · EXTRA", fontWeight = FontWeight.Bold)
-                            Text(if (campoSeguro(x, "en_cuadrante") == "false") "La oficina ha cambiado el cuadrante después de confirmarlo. Consúltalo antes de desplazarte." else "Turno extra confirmado.", style = MaterialTheme.typography.bodySmall)
+                            Text(if (campoSeguro(x, "en_cuadrante") == "false") tx("La oficina ha cambiado el cuadrante después de confirmarlo. Consúltalo antes de desplazarte.") else tx("Turno extra confirmado."), style = MaterialTheme.typography.bodySmall)
                             val id = campoSeguro(x, "id")
                             if (campoSeguro(x, "puede_soltar") == "true" && id.isNotBlank()) TextButton(onClick = { confirmar = id to "cancelar" }, enabled = ocupado == null) { Text(tx("Avisar que no puedo ir")) }
                         }
@@ -139,8 +139,8 @@ fun ExtrasConductorNativos(alVolver: () -> Unit) {
     }
     confirmar?.let { (clave, accion) -> AlertDialog(
         onDismissRequest = { confirmar = null },
-        title = { Text(when (accion) { "pedir" -> "Solicitar turno"; "retirar" -> "Retirar solicitud"; else -> "Cancelar turno extra" }) },
-        text = { Text(when (accion) { "pedir" -> "La oficina recibirá tu solicitud para el ${fechaBonita(clave)}."; "retirar" -> "La solicitud pendiente se retirará."; else -> "Se avisará a la oficina de que no puedes ir al turno extra." }) },
+        title = { Text(when (accion) { "pedir" -> tx("Solicitar turno"); "retirar" -> tx("Retirar solicitud"); else -> tx("Cancelar turno extra") }) },
+        text = { Text(when (accion) { "pedir" -> tx("La oficina recibirá tu solicitud para el {f}.", "f" to fechaBonita(clave)); "retirar" -> tx("La solicitud pendiente se retirará."); else -> tx("Se avisará a la oficina de que no puedes ir al turno extra.") }) },
         confirmButton = { TextButton(onClick = {
             confirmar = null; ocupado = clave; error = null; aviso = null
             scope.launch {
@@ -152,8 +152,8 @@ fun ExtrasConductorNativos(alVolver: () -> Unit) {
                         else -> resultado = app.repo.cancelarDiaExtra(clave)
                     }
                     val noPudo = resultado?.get("no")?.let { runCatching { it.jsonArray.firstOrNull()?.jsonObject?.get("motivo")?.jsonPrimitive?.contentOrNull }.getOrNull() }
-                    if (!noPudo.isNullOrBlank()) error = "No se ha podido completar: $noPudo"
-                    else aviso = when (accion) { "pedir" -> "Solicitud enviada a la oficina."; "retirar" -> "Solicitud retirada."; else -> "Aviso enviado a la oficina." }
+                    if (!noPudo.isNullOrBlank()) error = tx("No se ha podido completar: {e}", "e" to noPudo)
+                    else aviso = when (accion) { "pedir" -> tx("Solicitud enviada a la oficina."); "retirar" -> tx("Solicitud retirada."); else -> tx("Aviso enviado a la oficina.") }
                     cargar()
                 } catch (e: ErrorApi) { error = e.message }
                 finally { ocupado = null }
@@ -164,5 +164,5 @@ fun ExtrasConductorNativos(alVolver: () -> Unit) {
 }
 
 private fun fechaBonita(fecha: String): String = runCatching {
-    LocalDate.parse(fecha).format(DateTimeFormatter.ofPattern("EEEE d 'de' MMMM", com.flotadsp.fds.ui.LOCALE_APP)).replaceFirstChar { it.titlecase(com.flotadsp.fds.ui.LOCALE_APP) }
+    LocalDate.parse(fecha).format(DateTimeFormatter.ofPattern(com.flotadsp.fds.ui.patronFecha("EEEE d 'de' MMMM"), com.flotadsp.fds.ui.LOCALE_APP)).replaceFirstChar { it.titlecase(com.flotadsp.fds.ui.LOCALE_APP) }
 }.getOrDefault(fecha)

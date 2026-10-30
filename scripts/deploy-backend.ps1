@@ -39,8 +39,25 @@ try {
 
 Write-Host ""
 Write-Host "==> Comprobando que las pantallas siguen contestando..."
-$py = "C:\Users\Usuario\AppData\Local\Programs\Python\Python312\python.exe"
+# El Python 3.12 del usuario (el PC de Winiw, el de casa de Dani: 30-10-2026) o, si no, el del PATH.
+$py = Join-Path $env:LOCALAPPDATA "Programs\Python\Python312\python.exe"
+if (-not (Test-Path $py)) { $py = "C:\Users\Usuario\AppData\Local\Programs\Python\Python312\python.exe" }
 if (-not (Test-Path $py)) { $py = "python" }
+# humo.py firma una sesion de mantenimiento con SECRET_KEY: sin ella en el entorno (el PC de casa no la tiene,
+# 30-10-2026) no puede probar las pantallas, y decir «PRODUCCION ESTA ROTA» seria mentira. Entonces se mira
+# /api/health (la API en pie y con Mongo) y se dice que las pantallas quedan sin probar.
+if (-not $env:SECRET_KEY) {
+  Write-Host "    (sin SECRET_KEY en el entorno: las pantallas no se pueden probar desde aqui; se mira /api/health)" -ForegroundColor Yellow
+  try { $salud = Invoke-RestMethod -Uri "$($d.backend)/api/health" -TimeoutSec 60 } catch { $salud = $null }
+  if (-not $salud -or "$($salud.status)" -ne "ok") {
+    Write-Host ""
+    Write-Host "PRODUCCION NO CONTESTA /api/health. Mira los logs (fly logs) y vuelve a desplegar." -ForegroundColor Red
+    exit 1
+  }
+  Write-Host ""
+  Write-Host "OK - backend desplegado y /api/health contesta: $($salud | ConvertTo-Json -Compress)"
+  exit 0
+}
 & $py (Join-Path $PSScriptRoot "humo.py") $d.backend
 if ($LASTEXITCODE -ne 0) {
   Write-Host ""

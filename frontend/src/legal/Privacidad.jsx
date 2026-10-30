@@ -1,7 +1,12 @@
-import LegalLayout from './LegalLayout'
+import LegalLayout, { legalEnIngles } from './LegalLayout'
+import PrivacyEn from './en/PrivacyEn'
+import { useIdioma } from '../lib/idioma'
 import { COMPANY, PROCESSORS } from './config'
 
 export default function Privacidad() {
+  useIdioma()
+  // Fuera de España (30-10-2026): la traducción de cortesía al inglés; el español es la versión que vale.
+  if (legalEnIngles()) return <PrivacyEn />
   return (
     <LegalLayout title="Política de Privacidad">
       <p>En {COMPANY.brand} tratamos los datos personales conforme al Reglamento (UE) 2016/679 (RGPD) y la legislación nacional aplicable. Esta política explica qué datos recogemos, para qué los usamos, con quién los compartimos y cómo puedes ejercer tus derechos.</p>

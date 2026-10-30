@@ -126,24 +126,24 @@ class RutaVM(app: Application) : AndroidViewModel(app) {
                 }
                 val enviado = repo.cambiarEstado(p.id, estado, JsonObject(cuerpo + extras), p.cliente.ifBlank { p.direccion })
                 if (estado != "pendiente") intentos.remove(p.id)
-                val t = if (enviado) texto else "$texto Sin cobertura: se envía solo al volver la red."
+                val t = if (enviado) texto else "$texto " + tx("Sin cobertura: se envía solo al volver la red.")
                 _avisos.send(if (conDeshacer) Aviso(t, "Deshacer") { deshacer(p) } else Aviso(t))
                 if (enviado) refrescarSinRuido()
             } catch (e: ErrorApi) {
                 _e.value = _e.value.copy(ruta = antes)
-                _avisos.send(Aviso(e.message ?: "No se ha podido guardar"))
+                _avisos.send(Aviso(e.message ?: tx("No se ha podido guardar")))
             }
         }
     }
 
     fun entregar(p: Parada, cuerpo: JsonObject = JsonObject(emptyMap())) =
-        marcar(p, "entregado", cuerpo, "Entregado: ${p.cliente.ifBlank { p.direccion }}.", conDeshacer = true)
+        marcar(p, "entregado", cuerpo, tx("Entregado: {n}.", "n" to p.cliente.ifBlank { p.direccion }), conDeshacer = true)
 
     fun noEntregado(p: Parada, motivo: String, nota: String) = marcar(
         p, "fallido", JsonObject(mapOf("motivo" to kotlinx.serialization.json.JsonPrimitive(motivo),
-            "nota" to kotlinx.serialization.json.JsonPrimitive(nota))), "Marcado como no entregado.", conDeshacer = true)
+            "nota" to kotlinx.serialization.json.JsonPrimitive(nota))), tx("Marcado como no entregado."), conDeshacer = true)
 
-    fun deshacer(p: Parada) = marcar(p, "pendiente", JsonObject(emptyMap()), "Vuelve a estar por entregar.", conDeshacer = false)
+    fun deshacer(p: Parada) = marcar(p, "pendiente", JsonObject(emptyMap()), tx("Vuelve a estar por entregar."), conDeshacer = false)
 
     /** Lo que dice la DGT (30-10-2026): sin red o sin DGT, nada (no se avisa: es un extra del mapa). */
     fun cargarZbe() { viewModelScope.launch { runCatching { repo.zbe() }.onSuccess { _e.value = _e.value.copy(zbe = it) } } }
@@ -162,10 +162,10 @@ class RutaVM(app: Application) : AndroidViewModel(app) {
             try {
                 val r = repo.ordenar(lat, lng)
                 val fin = r.ruta?.fin
-                avisar(if (fin != null) "Ruta ordenada: ${r.ordenados} paradas, acabas ≈ $fin." else "Ruta ordenada: ${r.ordenados} paradas.")
+                avisar(if (fin != null) tx("Ruta ordenada: {n} paradas, acabas ≈ {fin}.", "n" to r.ordenados, "fin" to fin) else tx("Ruta ordenada: {n} paradas.", "n" to r.ordenados))
                 _e.value = _e.value.copy(ruta = repo.miRuta(), guardadaEn = null)
             } catch (e: ErrorApi) {
-                avisar(if (e.sinRed) "Sin conexión: para ordenar la ruta hace falta red." else e.message ?: "No se ha podido ordenar")
+                avisar(if (e.sinRed) tx("Sin conexión: para ordenar la ruta hace falta red.") else e.message ?: tx("No se ha podido ordenar"))
             } finally {
                 _e.value = _e.value.copy(ocupado = "")
             }
@@ -178,7 +178,7 @@ class RutaVM(app: Application) : AndroidViewModel(app) {
                 repo.quitarParada(p.id)
                 avisar(tx("Parada quitada de tu ruta."))
                 refrescarSinRuido()
-            } catch (e: ErrorApi) { avisar(e.message ?: "No se ha podido quitar") }
+            } catch (e: ErrorApi) { avisar(e.message ?: tx("No se ha podido quitar")) }
         }
     }
 
@@ -193,9 +193,9 @@ class RutaVM(app: Application) : AndroidViewModel(app) {
         viewModelScope.launch {
             try {
                 val n = repo.traerPrevias()
-                avisar(if (n == 1) "1 parada traída a hoy. Pulsa «Ordenar ruta»." else "$n paradas traídas a hoy. Pulsa «Ordenar ruta».")
+                avisar(if (n == 1) tx("1 parada traída a hoy. Pulsa «Ordenar ruta».") else tx("{n} paradas traídas a hoy. Pulsa «Ordenar ruta».", "n" to n))
                 refrescarSinRuido()
-            } catch (e: ErrorApi) { avisar(if (e.sinRed) "Sin conexión: para traer paradas hace falta red." else e.message ?: "No se ha podido") }
+            } catch (e: ErrorApi) { avisar(if (e.sinRed) tx("Sin conexión: para traer paradas hace falta red.") else e.message ?: tx("No se ha podido")) }
         }
     }
 

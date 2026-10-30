@@ -151,8 +151,8 @@ fun EscanerPantalla(
                 Text(tx("Para escanear hace falta la cámara"), style = MaterialTheme.typography.titleLarge, color = Color.White, textAlign = TextAlign.Center)
                 Spacer(Modifier.height(8.dp))
                 Text(
-                    if (bloqueado) "Actívala en Permisos › Cámara. Solo se usa mientras escaneas y las imágenes no salen del móvil."
-                    else "Solo se usa mientras escaneas y las imágenes no salen del móvil.",
+                    if (bloqueado) tx("Actívala en Permisos › Cámara. Solo se usa mientras escaneas y las imágenes no salen del móvil.")
+                    else tx("Solo se usa mientras escaneas y las imágenes no salen del móvil."),
                     color = Color.White.copy(alpha = .8f), textAlign = TextAlign.Center,
                 )
                 Spacer(Modifier.height(24.dp))
@@ -193,7 +193,7 @@ private fun Linterna() {
     var encendida by remember { mutableStateOf(false) }
     IconButton(onClick = { encendida = !encendida; camaraActual?.cameraControl?.enableTorch(encendida) },
         colors = IconButtonDefaults.iconButtonColors(contentColor = Color.White)) {
-        Icon(if (encendida) Icons.Default.FlashOn else Icons.Default.FlashOff, contentDescription = if (encendida) "Apagar la linterna" else "Encender la linterna")
+        Icon(if (encendida) Icons.Default.FlashOn else Icons.Default.FlashOff, contentDescription = if (encendida) tx("Apagar la linterna") else tx("Encender la linterna"))
     }
 }
 
@@ -206,7 +206,7 @@ private fun Abajo(e: EstadoEscaner, alTerminar: () -> Unit, modifier: Modifier) 
                 if (e.trabajando) { CircularProgressIndicator(Modifier.height(18.dp).width(18.dp), strokeWidth = 2.dp, color = Color.White); Spacer(Modifier.width(10.dp)) }
                 val u = e.ultimo
                 Text(
-                    when { e.trabajando -> "Leyendo la etiqueta…"; u != null -> u.texto; else -> "Pasa las etiquetas una tras otra: cada paquete entra en tu ruta." },
+                    when { e.trabajando -> tx("Leyendo la etiqueta…"); u != null -> u.texto; else -> tx("Pasa las etiquetas una tras otra: cada paquete entra en tu ruta.") },
                     style = MaterialTheme.typography.bodyLarge, fontWeight = if (u != null) FontWeight.SemiBold else FontWeight.Normal,
                     color = when (u?.tipo) { "nueva" -> Color(0xFF6EE7B7); "error" -> Color(0xFFFCA5A5); else -> Color.White },
                     modifier = Modifier.weight(1f),

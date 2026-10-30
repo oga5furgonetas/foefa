@@ -23,8 +23,8 @@ object Notificaciones {
     fun canal(ctx: Context) {
         val nm = ctx.getSystemService(NotificationManager::class.java)
         if (nm.getNotificationChannel(CANAL) == null) {
-            nm.createNotificationChannel(NotificationChannel(CANAL, "Avisos", NotificationManager.IMPORTANCE_HIGH).apply {
-                description = "Turnos aprobados, vacantes para trabajar más, inspección pendiente y la ruta del día"
+            nm.createNotificationChannel(NotificationChannel(CANAL, tx("Avisos"), NotificationManager.IMPORTANCE_HIGH).apply {
+                description = tx("Turnos aprobados, vacantes para trabajar más, inspección pendiente y la ruta del día")
             })
         }
     }

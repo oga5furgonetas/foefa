@@ -1,7 +1,12 @@
-import LegalLayout from './LegalLayout'
+import LegalLayout, { legalEnIngles } from './LegalLayout'
+import LegalNoticeEn from './en/LegalNoticeEn'
+import { useIdioma } from '../lib/idioma'
 import { COMPANY } from './config'
 
 export default function AvisoLegal() {
+  useIdioma()
+  // Fuera de España (30-10-2026): la traducción de cortesía al inglés; el español es la versión que vale.
+  if (legalEnIngles()) return <LegalNoticeEn />
   return (
     <LegalLayout title="Aviso Legal">
       <p>De conformidad con el artículo 10 de la Ley 34/2002, de Servicios de la Sociedad de la Información y Comercio Electrónico (LSSI-CE), se facilita la siguiente información sobre el titular del sitio web <strong>{COMPANY.website}</strong>:</p>

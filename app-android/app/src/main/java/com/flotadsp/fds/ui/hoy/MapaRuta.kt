@@ -240,15 +240,20 @@ fun MapaRuta(
             if (puntos.size >= 2) {
                 // Por las calles si el servidor lo ha dado; si no, de parada a parada en línea recta.
                 val camino = if (trazado.size >= 2) trazado.map { GeoPoint(it.first, it.second) } else puntos
+                // Como un navegador (30-10-2026, Dani: «la línea se ve un poco mal»): un borde azul oscuro fino y la
+                // línea azul encima, con las puntas y las esquinas redondas y en dp (antes, píxeles y borde blanco,
+                // que sobre las calles blancas del mapa no se veía y dejaba una salchicha plana).
+                val d = m.context.dp()
+                val porCalles = camino !== puntos
                 m.overlays.add(Polyline(m).apply {
                     setPoints(camino)
-                    outlinePaint.color = BLANCO; outlinePaint.strokeWidth = if (camino === puntos) 10f else 13f; outlinePaint.alpha = 230
+                    outlinePaint.set(trazo(AZUL_OSCURO, (if (porCalles) 8f else 5.5f) * d)); outlinePaint.alpha = 140
                     infoWindow = null
                 })
                 m.overlays.add(Polyline(m).apply {
                     setPoints(camino)
-                    outlinePaint.color = cian; outlinePaint.strokeWidth = if (camino === puntos) 6f else 9f; outlinePaint.alpha = 200
-                    if (camino === puntos) outlinePaint.pathEffect = DashPathEffect(floatArrayOf(18f, 14f), 0f)
+                    outlinePaint.set(trazo(AZUL_RUTA, (if (porCalles) 4.5f else 3f) * d))
+                    if (!porCalles) outlinePaint.pathEffect = DashPathEffect(floatArrayOf(10f * d, 8f * d), 0f)
                     infoWindow = null
                 })
             }
@@ -532,6 +537,13 @@ private class ProveedorFused(ctx: Context) : IMyLocationProvider {
 
 private const val BLANCO = -1
 private val NOCHE = 0xFF0F172A.toInt()
+private val AZUL_RUTA = 0xFF3B82F6.toInt()
+private val AZUL_OSCURO = 0xFF1E3A8A.toInt()
+
+/** El trazo de la línea de la ruta: suave, con las puntas y las esquinas redondas. */
+private fun trazo(color: Int, grosor: Float) = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+    this.color = color; style = Paint.Style.STROKE; strokeWidth = grosor; strokeJoin = Paint.Join.ROUND; strokeCap = Paint.Cap.ROUND
+}
 private val MORADO = 0xFF7C3AED.toInt()
 private val VERDE = 0xFF059669.toInt()
 private val VERDE_HECHA = 0xFF16A34A.toInt()
