@@ -263,3 +263,35 @@ Hecho en `docs/anuncios/internacional/` (léeme: `TEXTOS.md`; fuente única: `te
 - **No verificado**: el acento y la naturalidad de las voces (no puedo oírlas); el bono de 25 € fuera de España lo confirmó Dani a las 11:05: «se paga fuera», se queda.
   Pendiente de Dani: escucharlas, decidir lo del bono fuera, rehacer la portada de Spotify en cada idioma, y versiones
   pt-BR y en-US si quiere Brasil y EE. UU.
+
+## 30-10-2026 (11:20 – 13:50) — Dani: «revísame el anuncio en inglés de Facebook… crea anuncios para varios idiomas y haz lo propio para Spotify Ads + TikTok»
+
+Todo desde el Chrome del PC 1 de Dani (los vídeos salen de este PC: `docs/anuncios/internacional/salida/subir/fds-ruta-hecha-9x16-xx.mp4`,
+crf 24, 6,5-7,3 MB). **Nada publicado: todo queda en borrador y lo lanza Dani** (regla: el gasto es su clic).
+- **Meta** (cuenta 934137992742194, campaña «New Tráfico Campaign»): el anuncio EN que colgó Dani llevaba el vídeo y el
+  texto principal en español y el inglés metido en el título → arreglado (vídeo EN, texto/título/descripción de `TEXTOS.md`,
+  botón «Registrarse», enlace a Play con `referrer=utm_source=facebook&utm_medium=cpc&utm_campaign=ruta_hecha_en`) y el conjunto
+  pasa de España/islas de EE. UU. a Reino Unido + Irlanda + EE. UU. con idioma inglés («FDS · Ruta hecha · EN (UK, IE, US)»).
+  Nuevos conjuntos PT (Portugal), FR (Francia), IT (Italia) y DE (Alemania), cada uno con su vídeo, textos, idioma y enlace
+  `ruta_hecha_xx`. **Bloqueo**: la cuenta publicitaria está inactiva por pago (#1885009) y el anuncio EN marca el error de
+  permisos #1487194 (seguramente lo mismo): Dani tiene que arreglar el pago y después «Publicar».
+- **Spotify Ads**: campaña «FDS · Ruta hecha · internacional (EN PT FR IT DE)» (objetivo tráfico web) con cinco conjuntos
+  EN·Reino Unido, PT·Portugal, FR·Francia, IT·Italia, DE·Alemania a 15 €/día (mínimo), idioma del anuncio = idioma del conjunto
+  (si no, da error), audio `spotify/fds-spotify-xx.mp3`, logo `logo-1024.png` de portada y acompañante, botón «Learn more»,
+  enlace `https://flotadsp.com/registro?sector=autonomo&plan=autonomo&utm_source=spotify&utm_content=audio_xx`. Sin errores en el
+  árbol; **no se ha pulsado Enviar**. Bloqueo: los anuncios de Spotify están pausados por un pago fallido. La portada por idioma
+  sigue siendo la española (pendiente de Dani).
+- **TikTok Ads** (campaña borrador «FDS · Ruta hecha · internacional (EN PT FR IT DE)», objetivo tráfico, id 1880473270357154):
+  los cinco vídeos en la biblioteca de creatividades y cinco grupos a 20 €/día: «EN · Reino Unido, Irlanda, EE. UU.» (inglés),
+  «PT · Portugal» (portugués), «FR · Francia» (francés), «IT · Italia» (italiano), «DE · Alemania» (alemán); cada uno con su
+  anuncio «FDS · XX · Ruta hecha»: vídeo del idioma, texto ≤ 100 caracteres de `textos.json` (el francés recortado a 100),
+  enlace a Play con `utm_campaign=ruta_hecha_xx`, botón dinámico. Guardado con «Salir → Quedarme/borrador»; **no «Publicar todo»**.
+  Bloqueo: saldo 0,00 € y TikTok pide verificar el teléfono. La sugerencia de subir el presupuesto a 34,43 € NO se aplicó.
+- Trucos que han hecho falta (para la próxima): en Meta el input de archivo solo existe al pulsar «Subir» (parchear
+  `HTMLInputElement.prototype.click` para que se quede en el DOM); en Spotify y TikTok el campo de URL se rellena con el setter
+  nativo + eventos `input/change` (al teclear se pierde el «?» o se pega al valor anterior); en TikTok el texto del anuncio y la URL
+  son `ks-text-field` con shadow DOM, los vídeos se cambian con «Editar selecciones → Biblioteca → buscar 9x16-xx», y hay que
+  quitar el vídeo anterior de la bandeja; pulsar en el nombre de un grupo del árbol a veces activa la edición en masa (salir con
+  «Salir del modo de edición en masa» y usar «Continuar»).
+- **No verificado**: que los borradores pasen la revisión de cada plataforma al publicarlos; las voces de oído. Pendiente de Dani:
+  pagos de Meta y Spotify, saldo y teléfono de TikTok, y pulsar Publicar / Enviar / Publicar todo cuando quiera lanzar.

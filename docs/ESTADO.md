@@ -1331,6 +1331,16 @@ otros países o QR leen bien la dirección: número 2, primero B, a veces lee n�
   precios por país en Play Console sin hacer (Dani); legales en inglés sin jurista; el emulador solo en inglés (EE.
   UU.) y en español: FR/NL/GB/DE por tests con muestras reales y por la prueba en vivo de las fuentes.
 
+## Última sesión — 30-10-2026 (13:50, PC de Dani, Chrome del PC 1): los anuncios «La ruta hecha» en 5 idiomas montados en Meta, Spotify Ads y TikTok Ads, en borrador
+
+- Dani: «revísame el anuncio en inglés de Facebook… crea anuncios para varios idiomas y haz lo propio para Spotify Ads + TikTok».
+  El EN de Meta llevaba vídeo y texto en español: arreglado. Meta tiene 5 conjuntos (EN/PT/FR/IT/DE) sin publicar; Spotify una
+  campaña con 5 conjuntos sin enviar; TikTok una campaña borrador con 5 grupos a 20 €/día sin «Publicar todo». Detalle y trucos
+  de cada plataforma en `docs/anuncios/redes/REGISTRO-PC.md` (30-10, 11:20).
+- **Nada lanzado** (regla: el gasto es clic de Dani) y además las tres cuentas están bloqueadas: Meta inactiva por pago (#1885009),
+  Spotify pausado por pago fallido, TikTok con saldo 0 € y teléfono sin verificar. Pendiente de Dani: pagar, verificar y pulsar
+  Publicar / Enviar / Publicar todo. La portada de Spotify por idioma sigue en español.
+
 ## Última sesión — 30-10-2026 (mediodía, 2, PC de Dani): la 2.4.1, «Actualización disponible», TfL y Autobahn, correos en fr/it/de
 
 Dani: «arréglalo» (lo que quedaba sin cubrir) y «el 2.4.0 es el que subí antes, ¿no actualizaste nada en este?»; y a
