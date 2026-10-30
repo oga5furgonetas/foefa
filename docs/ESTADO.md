@@ -1433,13 +1433,14 @@ Dani: «¿cómo hacemos ahora para ponerla en Apple? Móntala y después dime lo
 - **Verificado**: ESLint (0 errores), `check-existe` / `check-huerfanos` / `check-marca`, `vite build` apuntando a
   la API de producción y `cap sync ios` (la web entra en el proyecto); Playwright `humo` + `calle` + `fuera` en
   escritorio (una de Suspensiones falló una vez y pasó al repetirla); el Mac de GitHub (run 41078504835, 15:12-15:15Z) la COMPILÓ para el simulador en verde al primer intento (web, CocoaPods, Xcode y xcodebuild sin firma); la subida a App Store Connect quedó saltada porque aún no hay secretos de Apple, como está previsto.
+- **Sin iPhone** (Dani no tiene; 30-10 tarde, 2): el Mac de GitHub arranca la app en un simulador de iPhone 16 Pro y guarda la pantalla (artefacto `iphone-simulador`): se vio la pantalla de entrar, y que el contenido quedaba bajo la barra de estado (arreglado en `index.css`: con `html.modo-app`, `padding-top: env(safe-area-inset-top)` y lo fijo arriba baja lo mismo; confirmado en el run 41083424904). La **ficha de la App Store** en 6 idiomas (`frontend/ios/listing/`, `scripts/ficha-app-store.mjs`: sin Google Play, Android ni precios, dentro de los límites) y las **capturas** a tamaño de iPhone 6,7" en es-ES y en-US desde la propia app (`e2e/capturas-app-store.mjs`, JPEG). Dani pagó el programa de Apple (99 €, pedido del 30-10) y la cuenta está «Pending» hasta que Apple lo procese (hasta 48 h); los pasos que siguen, en `docs/APP_STORE.md`. El CI del repo volvió a verde (el checker de patrones señalaba una división en `servidor_pruebas.py`).
 - **No verificado**: la app en un iPhone de verdad (no hay Mac ni iPhone aquí): lo primero que la pruebe será el
   TestFlight de Dani cuando tenga la cuenta de Apple.
 
 ## Pendiente (por prioridad)
 
--14. **La app de iPhone (30-10 tarde)**: montada y compilando en el CI; para ponerla en la App Store faltan los pasos de
-   Dani de `docs/APP_STORE.md`: cuenta de desarrollador de Apple (99 $/año), el App ID `com.flotadsp.fds`, la clave de
+-14. **La app de iPhone (30-10 tarde)**: montada, compilando y arrancando en el simulador del CI, con ficha y capturas hechas; Dani ya pagó la cuenta de
+   desarrollador (pendiente de que Apple la active). Faltan los pasos de `docs/APP_STORE.md`: el App ID `com.flotadsp.fds`, la clave de
    la API de App Store Connect, los cuatro secretos en GitHub, lanzar el workflow, la ficha (capturas de iPhone 6,7",
    App Privacy, cuenta de prueba para la revisión) y «Enviar a revisión». Tanda 2: APNs, el pago de Apple, ubicación en
    segundo plano. Lo decide Dani.
