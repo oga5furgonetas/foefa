@@ -963,6 +963,14 @@ sin píxel. Nada tocado en el código ni desplegado: solo este informe. La app n
 Las decisiones que pide están en su §11 (una marca o dos, Amazon A-G, una sola oferta, anuncios, Reparto para
 empresas como prioridad de ventas, cobro en la app, Valor fuera del repo, DeCA).
 
+## Última sesión — 30-10-2026 (08:00, PC de Dani, bucle de redes): TikTok vuelve a publicar; programado hasta el D 09-11
+
+- Metricool: añadido el D 09-11 (TikTok e Instagram con `invita-9x16.png`, YouTube con `tiktok-es.mp4`). El D 08-11 con el
+  carrusel C lo había puesto alguien a las 07:55 (no esta sesión). X programado hasta el D 08-11 (post de Latinoamérica).
+- **TikTok ya publica otra vez**: el comentario de prueba salió y se ve tras recargar. 7 intervenciones (X 1, TikTok 4,
+  YouTube 2; 2 con app) y seguida Cadena de Suministro en X. Detalle en `docs/anuncios/redes/REGISTRO-PC.md`.
+- Siguen pendientes de Dani: aviso de inicio de sesión de Instagram y anuncio de Facebook con el pago rechazado.
+
 ## Última sesión — 30-10-2026 (04:10, PC de Dani, bucle de redes): ronda de madrugada; TikTok retiene comentarios
 
 - Metricool: añadido el S 07-11 (TikTok 18:00 e Instagram 12:00, `shorts-es.mp4`); X programado hasta el S 07-11.

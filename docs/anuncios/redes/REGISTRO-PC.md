@@ -191,3 +191,46 @@ reposar 24 h**. Ojo: el comentario a Frank se reenvió dos veces (clic + Enter);
 
 Totales publicados: X 2 respuestas (0 con app) + 1 seguida; TikTok 1 (0 con app) + 3 retenidos; YouTube 2 (1 con app, el
 ofrecimiento); Instagram 0; Facebook 0. Con app: 1 de 5 publicados. Reddit no se intentó (bloqueado). Sin pieza nueva.
+
+## 30-10-2026 (08:00 – 08:40) — ronda del bucle de 4 h
+
+### Metricool (marca 7741371)
+Los 7 días estaban completos hasta el S 07-11. Alguien (creado a las 07:55, usuario de Dani; no es de esta sesión) había
+añadido ya el **D 08-11 con el carrusel C** en TikTok e Instagram (410876098 / 410876132): el calendario lo tenía el 09-11,
+se respeta. Para no dejar hueco, añadido el domingo siguiente:
+| Red | Cuándo | Pieza | Notas |
+|---|---|---|---|
+| TikTok | D 09-11 18:00 | `invita-9x16.png` | «Invita y gana 💶 … 10 € a tu cartera … Él se lleva 25 € de bienvenida» (texto nuevo, oferta de REDES.md §3); comentario fijado «¿Tienes un compañero que todavía ordena la ruta a mano?…»; marca propia (410884328) |
+| Instagram | D 09-11 12:00 | `invita-9x16.png` | mismo texto, publicación (410884395) |
+| YouTube | D 09-11 19:00 | `tiktok-es.mp4` | Short «La ruta se ordena sola con una foto a la etiqueta», utm `post_ruta`, IA sí (410884421) |
+
+### X (@FlotaDSP)
+- Hoy no había post pendiente (el del 30-10 salió ayer); V 31-10 → S 07-11 ya programados. **Programado D 08-11 7:30**
+  (Latinoamérica: «funciona en cualquier país y “Mi dinero hoy” sale en vuestra moneda (en Brasil, Pix)», enlace repartidores
+  `utm_content=post_latam`). Ojo: en `/compose/post` el primer tecleo se perdió al abrir el calendario; hubo que volver a
+  escribir el texto en el cuadro de inicio (ya con la fecha puesta) y pulsar Schedule. Verificado en la lista de programados.
+
+### Ronda de conversación (lo nuestro primero)
+| Hora | Red | Hilo | Qué se dijo | App |
+|---|---|---|---|---|
+| 08:13 | X | notificaciones | nada nuevo desde las 04:10 | — |
+| 08:18 | X | @David77811756 («soy repartidor muchos años, el repartidor no sabe qué hay en las cajas», hilo de un paquete manipulado) | el repartidor ve una caja cerrada y precintada; cada vez más compañeros hacen foto al cargar y al entregar | no |
+| 08:20 | X | **seguida @cadesum** (Cadena de Suministro, medio del sector) | — | — |
+| 08:21 | X | @00sslashers (cliente, queja contra una empresa concreta, ya contestada por su cuenta de ayuda) | no se contesta (sería meterse en una queja ajena) | — |
+| 08:25 | TikTok | Actividad: laryrepartidor contestó «Gracias bro» a lo nuestro; SOFIA TORREZ y AnthonyS dieron me gusta | sin respuesta (no hace falta) | — |
+| 08:29 | TikTok | **prueba**: @amazon_espana_19 «Un día como repartidor en Pamplona» (13-10, 573 ❤) | aparcar una vez para varios portales e ir andando con el sobre es lo que más ahorra en ciudad | no. **Publicado y visible tras recargar: TikTok ha soltado los comentarios** |
+| 08:33 | TikTok | @eljuanitoesp «Latinos en España trabajando de repartidores de paquetería» (hace 5 d, 5.966 ❤, 74 comentarios) → respuesta a kevinpadilla440 (reembolsos sin cambio) | avisar por WhatsApp con el importe exacto y apuntar cada cobro con foto; al final del día sin discusiones | no (la función, sin nombre) |
+| 08:34 | TikTok | mismo vídeo, comentario general | falta una: cuatro pisos sin ascensor y «es para mi vecino» | no |
+| 08:36 | TikTok | @emilianaxel «Cuánto gano repartiendo paquetería en Madrid» (2025-11, 32,2K ❤, 1.911 comentarios) | la cifra por paquete engaña, lo que cuenta es lo que queda por hora; «hicimos una calculadora gratis, sin registro (somos FDS)» | sí |
+| 08:39 | YouTube | Elmer mk «Un día de repartidor de paquetes» (hace 1 a, 4,9K vistas, 11 comentarios) | los bultos sueltos en el suelo de la furgo son minutos perdidos; apuntar el hueco de cada paquete y ordenar antes de arrancar | no (verificado) |
+| 08:43 | YouTube | Agustín Álvarez «Un día trabajando… y por qué lo dejo» (hace 2 a, 169K vistas, 564 comentarios) | lo que quema es el tiempo muerto (buscar el paquete, ordenar a mano, cobros en papel); «por eso hicimos FDS, app gratis de reparto»; que nos digan qué le falta | sí (verificado) |
+| 08:45 | Instagram | notificaciones | nada nuevo (sigue el aviso de inicio de sesión, ahora «hace 11 h») | — |
+| 08:46 | Facebook | notificaciones y feed de grupos | nada nuevo; en los grupos solo ventas de coches y anuncios de rutas. Sigue el anuncio de la página con el pago rechazado (no se toca) | — |
+
+Sin ofrecimiento nuevo a micro-creador esta ronda (los dos de ayer, @monicareal63 y Jeremias Savedra, siguen sin contestar;
+no se insiste). Pendiente de comprobar si TikTok publicó también los 3 retenidos de las 04:30 (y si el de Frank Cárdenas
+salió duplicado): no verificado.
+
+Totales publicados: X 1 respuesta (0 con app) + 1 seguida; TikTok 4 (1 con app); YouTube 2 (1 con app); Instagram 0;
+Facebook 0. Con app: 2 de 7. Reddit no se intentó (bloqueado). Sin pieza nueva (quedan sin usar: carrusel C ya programado,
+`invita-9x16.png` ya programado; faltan tarjetas X-* del 08-11 en adelante y el sketch FDS-4).
