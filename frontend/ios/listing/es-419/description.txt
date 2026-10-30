@@ -1,0 +1,17 @@
+FDS es la app del repartidor independiente: la ruta ordenada, la navegación, el cliente avisado y lo que ganas, todo en el celular y sin pelearte con hojas de papel.
+
+QUÉ HACE POR TI
+• Escanea la etiqueta de cada paquete (código o foto) y la parada entra sola: dirección, teléfono y bultos.
+• Ordena la ruta por el tiempo real que se tarda, con el tráfico típico de cada hora y el horario de cada cliente.
+• Navega parada a parada con voz, dentro de la app o con Google Maps y Waze.
+• Llama o manda WhatsApp al cliente con un toque; la app anota la hora a la que llegaste, llamaste y esperaste.
+• El cliente recibe un enlace y te contesta: si estará, dónde dejarlo, el código del portón.
+• Prueba de entrega con foto, firma y quién lo recibió; cobro contra entrega en efectivo, tarjeta o transferencia, en la moneda de tu país.
+• Dónde estacionaste: marca la camioneta y vuelve a ella a pie sin dar vueltas.
+• Mi dinero hoy: lo que llevas ganado, la gasolina y lo que pierdes con cada entrega que no sale.
+• Funciona sin señal: los cambios se guardan en el celular y se envían solos al volver la red.
+
+PARA QUIÉN
+Repartidores independientes y pequeñas empresas de reparto, mensajería, comida, farmacia, flores, muebles… cualquiera que salga con una camioneta o un auto y tenga que entregar en orden.
+
+También en la web: la misma cuenta funciona en el celular y en la computadora.
