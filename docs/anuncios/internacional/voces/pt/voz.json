@@ -1,0 +1,58 @@
+{
+ "voz": "Jon - Warm & Grounded Storyteller",
+ "modelo": "Artlist (Eleven v3)",
+ "settings": {
+  "language": "Portuguese"
+ },
+ "frases": [
+  {
+   "n": 1,
+   "leido": "Ainda organizas a rota à mão todas as manhãs?",
+   "visto": "Ainda organizas a rota à mão todas as manhãs?",
+   "fichero": "voces/pt/f1.mp3",
+   "dur": 2.926,
+   "palabras": []
+  },
+  {
+   "n": 2,
+   "leido": "Olha: tiras uma foto à etiqueta, e a morada entra sozinha.",
+   "visto": "Olha: tiras uma foto à etiqueta, e a morada entra sozinha.",
+   "fichero": "voces/pt/f2.mp3",
+   "dur": 4.127,
+   "palabras": []
+  },
+  {
+   "n": 3,
+   "leido": "Ordenar, e tens as paragens em ordem, com a hora de cada uma.",
+   "visto": "Ordenar, e tens as paragens em ordem, com a hora de cada uma.",
+   "fichero": "voces/pt/f3.mp3",
+   "dur": 4.676,
+   "palabras": []
+  },
+  {
+   "n": 4,
+   "leido": "Vês a rota no mapa, e leva-te por voz, porta a porta.",
+   "visto": "Vês a rota no mapa, e leva-te por voz, porta a porta.",
+   "fichero": "voces/pt/f4.mp3",
+   "dur": 4.362,
+   "palabras": []
+  },
+  {
+   "n": 5,
+   "leido": "E o melhor: é grátis, e sem cartão.",
+   "visto": "E o melhor: é grátis, e sem cartão.",
+   "fichero": "voces/pt/f5.mp3",
+   "dur": 2.691,
+   "palabras": []
+  },
+  {
+   "n": 6,
+   "leido": "Entra em flota D S P ponto com, e num minuto tens a tua conta.",
+   "visto": "Entra em flotadsp.com, e num minuto tens a tua conta.",
+   "fichero": "voces/pt/f6.mp3",
+   "dur": 4.676,
+   "palabras": []
+  }
+ ],
+ "spotify_dur": 28.186
+}

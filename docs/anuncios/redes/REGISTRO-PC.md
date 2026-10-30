@@ -245,3 +245,21 @@ Facebook 0. Con app: 2 de 7. Reddit no se intentó (bloqueado). Sin pieza nueva 
 | 09:03 | TikTok | @jst_mate.o (español repartiendo en Berlín) «Día 5: repartidor en Alemania» (525 ❤) | patios interiores con tres portales y nombres en el timbre; ¿cuántas paradas salen por allí? | no (visible) |
 | 09:08 | TikTok | @toporingo87 (Ciudad de México) «183 paquetes, 151 paradas, ruta al 100 % antes de las 3:30» (16,7K ❤, 478 comentarios) | dividir la zona en cuadrantes vale igual en CDMX que en Madrid; «hicimos una app gratis que hace justo eso… Mi dinero hoy en pesos; somos FDS»; que digan qué falta en México | sí (visible) |
 - Descartados: @juanfraaanjf (2021, viejo) y @boxdeliverysl (Murcia 2024, solo quejas de clientes). Con app: 1 de 3.
+
+## 30-10-2026 (09:40 – 11:00) — Dani: «anuncios para Meta y Spotify en todos los idiomas de la app»
+
+Hecho en `docs/anuncios/internacional/` (léeme: `TEXTOS.md`; fuente única: `textos.json`):
+- **Vídeo «La ruta hecha» en en, pt, fr, it y de**: la app grabada en cada idioma (el guion de Playwright ahora busca
+  los botones con el diccionario de la app, `SPOT_LOCALE`), rótulos/oferta/cierre traducidos (`capas/<idioma>/`,
+  `IDIOMA=xx node ../scripts/spot-ruta/capas.mjs`) y voz nativa de Artlist (Eleven v3: Christopher en/fr, Jon pt/it, Susi de),
+  montado con `IDIOMA=xx node scripts/montar-spot-ruta.mjs` → `salida/spot-ruta-{9x16-B,4x5-B,1x1-B,9x16-A-qr,16x9-A-qr,9x16-B-sin-voz}-xx.mp4`
+  (no se versionan). En español se queda el del 29-10. Sin subtítulos encima de la app (regla de Dani del 29-10): el texto
+  va en los rótulos y tarjetas; la voz de Artlist no da tiempos por palabra.
+- **Spotify en 5 idiomas**: `spotify/fds-spotify-xx.mp3` a -16 LUFS, pico ≤ -2 dBTP, 25-29,5 s (`spotify-internacional.mjs`).
+  El alemán salía a 32 s: se acortó el texto y va acelerado un 12 %.
+- Textos de Meta (principal, corto, título, descripción, botón, enlace con `utm_content=rutahecha_xx`) y ficha de Spotify.
+- Artlist: 40 generaciones de voz (unos 700 créditos del plan; no es gasto nuevo). **ffmpeg instalado con winget** en este PC
+  (`Gyan.FFmpeg`, la ruta que ya buscaba `cierre-video-promo.mjs`).
+- **No verificado**: el acento y la naturalidad de las voces (no puedo oírlas); que el bono de 25 € se pague fuera de España.
+  Pendiente de Dani: escucharlas, decidir lo del bono fuera, rehacer la portada de Spotify en cada idioma, y versiones
+  pt-BR y en-US si quiere Brasil y EE. UU.

@@ -1,0 +1,58 @@
+{
+ "voz": "Christopher - Gentle and Trustworthy",
+ "modelo": "Artlist (Eleven v3)",
+ "settings": {
+  "language": "English"
+ },
+ "frases": [
+  {
+   "n": 1,
+   "leido": "Still sorting your route by hand every morning?",
+   "visto": "Still sorting your route by hand every morning?",
+   "fichero": "voces/en/f1.mp3",
+   "dur": 2.194,
+   "palabras": []
+  },
+  {
+   "n": 2,
+   "leido": "Look: take a photo of the label, and the address fills itself in.",
+   "visto": "Look: take a photo of the label, and the address fills itself in.",
+   "fichero": "voces/en/f2.mp3",
+   "dur": 3.788,
+   "palabras": []
+  },
+  {
+   "n": 3,
+   "leido": "Tap sort, and every stop is in order, with a time for each one.",
+   "visto": "Tap sort, and every stop is in order, with a time for each one.",
+   "fichero": "voces/en/f3.mp3",
+   "dur": 3.709,
+   "palabras": []
+  },
+  {
+   "n": 4,
+   "leido": "See the route on the map, and it guides you by voice, door to door.",
+   "visto": "See the route on the map, and it guides you by voice, door to door.",
+   "fichero": "voces/en/f4.mp3",
+   "dur": 3.866,
+   "palabras": []
+  },
+  {
+   "n": 5,
+   "leido": "And the best part: it's free, with no card.",
+   "visto": "And the best part: it's free, with no card.",
+   "fichero": "voces/en/f5.mp3",
+   "dur": 2.847,
+   "palabras": []
+  },
+  {
+   "n": 6,
+   "leido": "Go to flota D S P dot com, and in a minute you've got your account.",
+   "visto": "Go to flotadsp.com, and in a minute you've got your account.",
+   "fichero": "voces/en/f6.mp3",
+   "dur": 4.911,
+   "palabras": []
+  }
+ ],
+ "spotify_dur": 24.451
+}

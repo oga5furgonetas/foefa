@@ -1,0 +1,178 @@
+{
+ "voz": "fr",
+ "gancho": "mano",
+ "fin": 29.82,
+ "ganancias": {
+  "whoosh": -18,
+  "ding": -19,
+  "subida": -14.3,
+  "pop": -23,
+  "obturador": -10,
+  "bip": 7,
+  "musica": -7.9
+ },
+ "escenas": [
+  {
+   "id": "gancho",
+   "t0": 0,
+   "d": 3.08
+  },
+  {
+   "id": "escanea",
+   "t0": 2.76,
+   "d": 3.4,
+   "vel": 1.631
+  },
+  {
+   "id": "foto",
+   "t0": 5.88,
+   "d": 2,
+   "vel": 2.205
+  },
+  {
+   "id": "ordenar",
+   "t0": 7.58,
+   "d": 2.5
+  },
+  {
+   "id": "lista",
+   "t0": 9.82,
+   "d": 1.8,
+   "vel": 1.6
+  },
+  {
+   "id": "mapa",
+   "t0": 11.32,
+   "d": 2.9
+  },
+  {
+   "id": "navega",
+   "t0": 13.92,
+   "d": 2.6,
+   "vel": 2.3
+  },
+  {
+   "id": "entregado",
+   "t0": 16.26,
+   "d": 2.6,
+   "vel": 1.279
+  },
+  {
+   "id": "manana",
+   "t0": 18.5,
+   "d": 2.3
+  },
+  {
+   "id": "oferta",
+   "t0": 20.44,
+   "d": 3.85
+  },
+  {
+   "id": "cierre",
+   "t0": 23.93,
+   "d": 5.89
+  }
+ ],
+ "efectos": [
+  {
+   "nombre": "whoosh",
+   "t": 2.71,
+   "g": -18
+  },
+  {
+   "nombre": "whoosh",
+   "t": 5.81,
+   "g": -18
+  },
+  {
+   "nombre": "whoosh",
+   "t": 7.52,
+   "g": -18
+  },
+  {
+   "nombre": "whoosh",
+   "t": 9.74,
+   "g": -18
+  },
+  {
+   "nombre": "whoosh",
+   "t": 11.26,
+   "g": -18
+  },
+  {
+   "nombre": "whoosh",
+   "t": 13.86,
+   "g": -18
+  },
+  {
+   "nombre": "whoosh",
+   "t": 16.18,
+   "g": -18
+  },
+  {
+   "nombre": "whoosh",
+   "t": 18.47,
+   "g": -18
+  },
+  {
+   "nombre": "whoosh",
+   "t": 20.41,
+   "g": -18
+  },
+  {
+   "nombre": "whoosh",
+   "t": 23.9,
+   "g": -18
+  },
+  {
+   "nombre": "pop",
+   "t": 4.686,
+   "g": -23
+  },
+  {
+   "nombre": "bip",
+   "t": 3.816,
+   "g": 7
+  },
+  {
+   "nombre": "bip",
+   "t": 5.497,
+   "g": 7
+  },
+  {
+   "nombre": "pop",
+   "t": 6.998,
+   "g": -23
+  },
+  {
+   "nombre": "pop",
+   "t": 7.98,
+   "g": -23
+  },
+  {
+   "nombre": "pop",
+   "t": 12.22,
+   "g": -23
+  },
+  {
+   "nombre": "pop",
+   "t": 17.344,
+   "g": -23
+  },
+  {
+   "nombre": "obturador",
+   "t": 5.9,
+   "g": -10
+  },
+  {
+   "nombre": "ding",
+   "t": 17.759,
+   "g": -19
+  },
+  {
+   "nombre": "subida",
+   "t": 22.63,
+   "g": -14.3
+  }
+ ]
+}

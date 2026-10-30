@@ -963,6 +963,15 @@ sin píxel. Nada tocado en el código ni desplegado: solo este informe. La app n
 Las decisiones que pide están en su §11 (una marca o dos, Amazon A-G, una sola oferta, anuncios, Reparto para
 empresas como prioridad de ventas, cobro en la app, Valor fuera del repo, DeCA).
 
+## Última sesión — 30-10-2026 (mañana, PC de Dani): el anuncio «La ruta hecha» y el de Spotify en los 6 idiomas de la app
+
+- Dani: «anuncios para Meta y Spotify en todos los idiomas… voz en el idioma nativo». Todo en
+  `docs/anuncios/internacional/` (`TEXTOS.md`): la app grabada en en/pt/fr/it/de, rótulos y tarjetas traducidos, voz nativa
+  de Artlist, y el audio de Spotify a norma en los 5 idiomas; textos de Meta por idioma. Scripts: `spot-ruta.spec.js`
+  (`SPOT_LOCALE`), `spot-ruta/capas.mjs` y `montar-spot-ruta.mjs` (`IDIOMA=xx`), `spot-ruta/{voces,spotify}-internacional.mjs`.
+- Para Dani: escuchar las voces (no verificadas de oído), confirmar que el bono de 25 € se paga fuera de España (si no,
+  quitarlo de `textos.json` → oferta y volver a montar), rehacer la portada de Spotify por idioma. ffmpeg ya está en este PC (winget).
+
 ## Última sesión — 30-10-2026 (08:00, PC de Dani, bucle de redes): TikTok vuelve a publicar; programado hasta el D 09-11
 
 - Metricool: añadido el D 09-11 (TikTok e Instagram con `invita-9x16.png`, YouTube con `tiktok-es.mp4`). El D 08-11 con el

@@ -10,12 +10,17 @@ import { createRequire } from 'module'
 const req = createRequire(path.join(process.cwd(), 'package.json'))
 const { chromium } = req('@playwright/test')
 const RAIZ = path.resolve(process.cwd(), '..')
-const SALIDA = path.join(RAIZ, 'docs', 'anuncios', 'super-anuncio', 'capas')
+// IDIOMA=en|pt|fr|it|de (30-10): las mismas capas con los textos de docs/anuncios/internacional/textos.json, en
+// docs/anuncios/internacional/capas/<idioma>/ (y un gancho «a mano» propio, que en español es el gancho.png del v4).
+const IDIOMA = process.env.IDIOMA || 'es'
+const TX = IDIOMA === 'es' ? null : JSON.parse(fs.readFileSync(path.join(RAIZ, 'docs', 'anuncios', 'internacional', 'textos.json'), 'utf8'))[IDIOMA]
+if (IDIOMA !== 'es' && !TX) throw new Error(`textos.json no tiene el idioma ${IDIOMA}`)
+const SALIDA = TX ? path.join(RAIZ, 'docs', 'anuncios', 'internacional', 'capas', IDIOMA) : path.join(RAIZ, 'docs', 'anuncios', 'super-anuncio', 'capas')
 fs.mkdirSync(SALIDA, { recursive: true })
 const b64 = (p) => fs.readFileSync(p).toString('base64')
 const LOGO = 'data:image/svg+xml;base64,' + b64(path.join(RAIZ, 'frontend', 'public', 'favicon.svg'))
 const QR = 'data:image/png;base64,' + b64(path.join(RAIZ, 'docs', 'anuncios', 'super-anuncio', 'qr-play-fds-spot.png'))
-const PLAY = 'data:image/png;base64,' + b64(path.join(RAIZ, 'frontend', 'public', 'google-play-badges', 'es.png'))
+const PLAY = 'data:image/png;base64,' + b64(path.join(RAIZ, 'frontend', 'public', 'google-play-badges', `${TX ? TX.badge : 'es'}.png`))
 const ARCHIVO = 'data:font/woff2;base64,' + b64(path.join(RAIZ, 'frontend', 'node_modules', '@fontsource-variable', 'archivo', 'files', 'archivo-latin-wght-normal.woff2'))
 
 const base = (cuerpo, extra = '', w = 1080, h = 1920) => `<!doctype html><html><head><meta charset="utf-8"><style>
@@ -57,8 +62,20 @@ const gancho25 = base(`<div class="velo"></div><div class="g"><div class="n">¿Q
   .n { font-weight:900; font-size:176px; line-height:.92; letter-spacing:-.05em; color:#FFD43B; text-shadow: 0 10px 40px rgba(0,0,0,.6) }
   h1 { margin-top:34px; font-weight:900; font-size:92px; line-height:1.0; letter-spacing:-.035em; text-shadow: 0 8px 40px rgba(0,0,0,.6) }
 `)
+// El gancho «a mano» en otros idiomas (en español es docs/anuncios/reales/spot-v4/gancho.png): la etiqueta del
+// público, la pregunta en tres líneas y las palabras clave en amarillo, como el del v4.
+const GM = TX ? TX.gancho : null
+const ganchoMano = GM && base(`<div class="velo"></div><div class="g"><div class="tag">📦 ${GM.tag.toUpperCase()}</div>
+  <h1>${[GM.l1, GM.l2, GM.l3].filter(Boolean).join('<br>')}<br><em>${GM.em}</em>${GM.fin}</h1></div>`, `
+  .velo { position:absolute; left:0; right:0; top:700px; bottom:0; background: linear-gradient(180deg, transparent, rgba(0,0,0,.72) 40%, rgba(0,0,0,.9)) }
+  .g { position:absolute; left:70px; right:80px; top:1000px }
+  .tag { display:inline-block; font-weight:900; font-size:30px; letter-spacing:.12em; color:#04121a; background:#14e7d8; border-radius:14px; padding:14px 26px; margin-bottom:34px }
+  h1 { font-weight:900; font-size:${GM.l3 ? 104 : 112}px; line-height:1.0; letter-spacing:-.035em; text-shadow: 0 8px 40px rgba(0,0,0,.6) }
+  h1 em { font-style:normal; color:#1a1300; background:#FFD43B; padding:0 18px; border-radius:18px; box-decoration-break:clone; -webkit-box-decoration-break:clone }
+`)
 // El pago emocional, sobre el plano del repartidor.
-const manana = base(`<div class="velo"></div><div class="g"><h1>Mañana sales<br>con la ruta <em>hecha.</em></h1></div>`, `
+const MN = TX ? TX.manana : { l1: 'Mañana sales', l2: 'con la ruta', em: 'hecha.' }
+const manana = base(`<div class="velo"></div><div class="g"><h1>${MN.l1}<br>${MN.l2} <em>${MN.em}</em></h1></div>`, `
   .velo { position:absolute; left:0; right:0; top:560px; bottom:0; background: linear-gradient(180deg, transparent, rgba(0,0,0,.70) 45%, rgba(0,0,0,.88)) }
   .g { position:absolute; left:70px; right:100px; top:1010px }
   h1 { font-weight:900; font-size:108px; line-height:1.0; letter-spacing:-.035em; text-shadow: 0 8px 40px rgba(0,0,0,.6) }
@@ -68,9 +85,10 @@ const manana = base(`<div class="velo"></div><div class="g"><h1>Mañana sales<br
 // La oferta (sin fecha): empieza gratis · sin tarjeta · Android e iPhone.
 // La oferta (29-10, Dani): gratis, sin tarjeta, y el bono de bienvenida: 25 € al completar la primera ruta
 // (20 entregas en 2 días, hasta el 31-12; está en los Términos y en precios.js / server.py).
-const oferta = base(`<div class="c"><div class="pill">Empieza<br>gratis</div><div class="l">sin tarjeta</div>
-  <div class="bono"><span class="e">+25 €</span><span class="b">con tu primera ruta</span></div>
-  <div class="l2">20 entregas en 2 días · hasta el 31 de diciembre</div><div class="l3">Android e iPhone</div></div>`, `
+const OF = TX ? TX.oferta : { pill: 'Empieza<br>gratis', l: 'sin tarjeta', e: '+25 €', b: 'con tu primera ruta', l2: '20 entregas en 2 días · hasta el 31 de diciembre', l3: 'Android e iPhone' }
+const oferta = base(`<div class="c"><div class="pill">${OF.pill}</div><div class="l">${OF.l}</div>
+  <div class="bono"><span class="e">${OF.e}</span><span class="b">${OF.b}</span></div>
+  <div class="l2">${OF.l2}</div><div class="l3">${OF.l3}</div></div>`, `
   .c { position:absolute; left:90px; right:90px; top:440px; padding:66px 40px 60px; border-radius:56px; text-align:center;
        background: rgba(7,10,14,.74); border:2px solid rgba(20,231,216,.45); box-shadow: 0 50px 120px rgba(0,0,0,.6), 0 0 120px rgba(20,231,216,.18) }
   .pill { display:inline-block; background:#FFD43B; color:#1a1300; font-weight:900; font-size:120px; line-height:.95; letter-spacing:-.03em; border-radius:40px; padding:26px 50px; transform:rotate(-3deg); box-shadow:0 24px 70px rgba(255,212,59,.35) }
@@ -83,12 +101,13 @@ const oferta = base(`<div class="c"><div class="pill">Empieza<br>gratis</div><di
 `)
 
 // Cierre B (móvil: TikTok, Reels, feed): la web, qué pulsar, Play pequeño.
+const CB = TX ? TX.cierreB : { t: 'Tu cuenta gratis,<br>en un minuto', boton: 'Toca el botón de abajo', play: 'o en iPhone, desde la web' }
 const cierreB = base(`<div class="c">
   <div class="marca"><img src="${LOGO}" alt=""><b>FDS</b></div>
-  <div class="t">Tu cuenta gratis,<br>en un minuto</div>
+  <div class="t">${CB.t}</div>
   <div class="web">flotadsp.com</div>
-  <div class="boton">Toca el botón de abajo <span>👇</span></div>
-  <div class="play"><img src="${PLAY}" alt=""><span>o en iPhone, desde la web</span></div>
+  <div class="boton">${CB.boton} <span>👇</span></div>
+  <div class="play"><img src="${PLAY}" alt=""><span>${CB.play}</span></div>
 </div>`, `
   .c { position:absolute; left:70px; right:70px; top:380px; text-align:center }
   .marca { display:flex; align-items:center; justify-content:center; gap:22px }
@@ -104,13 +123,14 @@ const cierreB = base(`<div class="c">
 `)
 
 // Cierre A (QR: YouTube en ordenador, tele, pantallas de la nave, flyer): el QR grande y quieto.
+const CA = TX ? TX.cierreA : { t: 'Empieza gratis. Sin tarjeta.', s: 'Escanea y descárgala' }
 const cierreA = base(`<div class="c">
   <div class="marca"><img src="${LOGO}" alt=""><b>FDS</b></div>
-  <div class="t">Empieza gratis. Sin tarjeta.</div>
+  <div class="t">${CA.t}</div>
   <div class="qr"><img src="${QR}" alt=""></div>
   <div class="play"><img src="${PLAY}" alt=""></div>
   <div class="web">flotadsp.com/app</div>
-  <div class="s">Escanea y descárgala</div>
+  <div class="s">${CA.s}</div>
 </div>`, `
   .c { position:absolute; left:70px; right:70px; top:300px; text-align:center }
   .marca { display:flex; align-items:center; justify-content:center; gap:20px }
@@ -128,7 +148,7 @@ const cierreA = base(`<div class="c">
 // ── El móvil y los titulares (29-10, tarde): nada de letras encima de la app ────────────────────────────────
 // La app va dentro de un móvil limpio (pantalla 972×1728 en 54,330; el borde inferior se funde con el fondo) y el
 // mensaje de cada escena va en una franja APARTE, arriba. Así la pantalla se ve entera y limpia.
-const TITULOS = {
+const TITULOS = TX ? TX.titulos : {
   escaneo: ['Foto o escaneo:', 'la dirección entra sola'],
   ordenar: ['Ruta ordenada,', 'con la hora de cada parada'],
   zonas: ['Zonas de carga y descarga,', 'en el mapa'],
@@ -159,9 +179,11 @@ const pinta = async (nombre, html) => {
   await p.screenshot({ path: path.join(SALIDA, nombre), omitBackground: true })
   console.log('ok', nombre)
 }
-for (const [k, t] of Object.entries(PILDORAS)) await pinta(`pildora-${k}.png`, pildora(t))
-await pinta('gancho-112.png', gancho112)
-await pinta('gancho-25.png', gancho25)
+if (!TX) {
+  for (const [k, t] of Object.entries(PILDORAS)) await pinta(`pildora-${k}.png`, pildora(t))
+  await pinta('gancho-112.png', gancho112)
+  await pinta('gancho-25.png', gancho25)
+} else await pinta('gancho-mano.png', ganchoMano)
 await pinta('manana.png', manana)
 await pinta('oferta.png', oferta)
 await pinta('cierre-B.png', cierreB)

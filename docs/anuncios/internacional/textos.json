@@ -1,0 +1,513 @@
+{
+  "_": "Anuncio «La ruta hecha» y anuncio de Spotify en los 6 idiomas de la app (30-10-2026). Una sola fuente: de aquí salen las capas (scripts/spot-ruta/capas.mjs), la voz (Artlist), el montaje y TEXTOS.md. La voz 'leido' es lo que se lee (la web deletreada); 'visto' lo que se ve.",
+  "es": {
+    "nombre": "Español (España)",
+    "locale": "es-ES",
+    "badge": "es",
+    "voz": "Puck (Gemini, la de Dani, 24-10): docs/anuncios/reales/spot-v5/voces/Puck",
+    "spotify_existente": "docs/anuncios/spotify/v4/fds-spotify-v4-play.mp3",
+    "gancho": {
+      "tag": "Repartidores",
+      "l1": "¿Todavía",
+      "l2": "ordenas",
+      "l3": "la ruta",
+      "em": "a mano",
+      "fin": "?"
+    },
+    "frases": [
+      "¿Todavía ordenas la ruta a mano cada mañana?",
+      "Mira: le haces una foto a la etiqueta, y la dirección entra sola.",
+      "Le das a ordenar, y tienes todas las paradas en orden, con la hora de cada una.",
+      "Ves la ruta en el mapa, y te lleva con voz, puerta a puerta.",
+      "Y lo mejor: es gratis, y sin tarjeta.",
+      "Entra en flotadsp.com, y en un minuto tienes tu cuenta."
+    ],
+    "titulos": {
+      "escaneo": [
+        "Foto o escaneo:",
+        "la dirección entra sola"
+      ],
+      "ordenar": [
+        "Ruta ordenada,",
+        "con la hora de cada parada"
+      ],
+      "zonas": [
+        "Zonas de carga y descarga,",
+        "en el mapa"
+      ],
+      "voz": [
+        "Te lleva con voz,",
+        "parada a parada"
+      ],
+      "entregado": [
+        "Entregado,",
+        "con prueba"
+      ]
+    },
+    "manana": {
+      "l1": "Mañana sales",
+      "l2": "con la ruta",
+      "em": "hecha."
+    },
+    "oferta": {
+      "pill": "Empieza<br>gratis",
+      "l": "sin tarjeta",
+      "e": "+25 €",
+      "b": "con tu primera ruta",
+      "l2": "20 entregas en 2 días · hasta el 31 de diciembre",
+      "l3": "Android e iPhone"
+    },
+    "cierreB": {
+      "t": "Tu cuenta gratis,<br>en un minuto",
+      "boton": "Toca el botón de abajo",
+      "play": "o en iPhone, desde la web"
+    },
+    "cierreA": {
+      "t": "Empieza gratis. Sin tarjeta.",
+      "s": "Escanea y descárgala"
+    },
+    "spotify": "Oye, repartidor. Esto es para ti: FDS. La app gratis que te ordena la ruta sola. Le haces una foto a la etiqueta, y te lleva con voz hasta cada puerta. Sin tarjeta, y sin límite hasta fin de año. Búscala en Google Play: FDS. O entra en flotadsp.com: F-L-O-T-A-D-S-P punto com. O toca este anuncio, y en un minuto tienes tu cuenta.",
+    "meta": {
+      "principal": "¿Repartes paquetes? Foto o escaneo a la etiqueta y la dirección entra sola. Pulsa ordenar y tienes la ruta hecha, con la hora de cada parada y las zonas de carga y descarga en el mapa. Te lleva con voz hasta cada puerta. Y al completar tu primera ruta, 25 € en tu cartera. Sirve igual si repartes para una agencia, una plataforma o un súper. Empieza gratis y sin tarjeta.",
+      "corto": "¿Todavía ordenas la ruta a mano? Foto a la etiqueta, la ruta se hace sola y te lleva con voz hasta cada puerta. Empieza gratis, sin tarjeta.",
+      "titulo": "Tu ruta de reparto, hecha sola",
+      "descripcion": "Empieza gratis · 25 € con tu primera ruta",
+      "boton": "Registrarte"
+    },
+    "spotify_ficha": {
+      "eslogan": "Tu ruta, ordenada sola y gratis",
+      "boton": "Registrarte",
+      "portada": "FDS · La app de reparto gratis · flotadsp.com · Toca y crea tu cuenta en 1 minuto"
+    }
+  },
+  "en": {
+    "nombre": "English (UK)",
+    "locale": "en-GB",
+    "badge": "en",
+    "voz": {
+      "id": 224905,
+      "nombre": "Christopher - Gentle and Trustworthy",
+      "settings": {
+        "language": "English"
+      }
+    },
+    "gancho": {
+      "tag": "Couriers",
+      "l1": "Still sorting",
+      "l2": "your route",
+      "l3": "",
+      "em": "by hand",
+      "fin": "?"
+    },
+    "frases": [
+      "Still sorting your route by hand every morning?",
+      "Look: take a photo of the label, and the address fills itself in.",
+      "Tap sort, and every stop is in order, with a time for each one.",
+      "See the route on the map, and it guides you by voice, door to door.",
+      "And the best part: it's free, with no card.",
+      "Go to flotadsp.com, and in a minute you've got your account."
+    ],
+    "leido6": "Go to flota D S P dot com, and in a minute you've got your account.",
+    "titulos": {
+      "escaneo": [
+        "Photo or scan:",
+        "the address fills itself in"
+      ],
+      "ordenar": [
+        "Route sorted,",
+        "with a time for every stop"
+      ],
+      "zonas": [
+        "Loading bays,",
+        "on the map"
+      ],
+      "voz": [
+        "Voice guidance,",
+        "stop by stop"
+      ],
+      "entregado": [
+        "Delivered,",
+        "with proof"
+      ]
+    },
+    "manana": {
+      "l1": "Tomorrow you leave",
+      "l2": "with the route",
+      "em": "done."
+    },
+    "oferta": {
+      "pill": "Start<br>free",
+      "l": "no card needed",
+      "e": "+€25",
+      "b": "with your first route",
+      "l2": "20 deliveries in 2 days · until 31 December",
+      "l3": "Android and iPhone"
+    },
+    "cierreB": {
+      "t": "Your free account,<br>in a minute",
+      "boton": "Tap the button below",
+      "play": "or on iPhone, from the web"
+    },
+    "cierreA": {
+      "t": "Start free. No card.",
+      "s": "Scan and download it"
+    },
+    "spotify": "Hey, courier. This one's for you: FDS. The free app that sorts your route for you. Take a photo of the label, and it guides you by voice to every door. No card, and no limits until the end of the year. Find it on Google Play: FDS. Or go to flotadsp.com: F-L-O-T-A-D-S-P dot com. Or tap this ad, and in a minute you've got your account.",
+    "meta": {
+      "principal": "Delivering parcels? Photo or scan the label and the address fills itself in. Tap sort and your route is done, with a time for every stop and loading bays on the map. It guides you by voice to every door. And when you complete your first route, €25 in your wallet. Works whether you deliver for a courier company, a platform or a supermarket. Start free, no card needed.",
+      "corto": "Still sorting your route by hand? Photo the label, the route sorts itself and it guides you by voice to every door. Start free, no card.",
+      "titulo": "Your delivery route, sorted for you",
+      "descripcion": "Start free · €25 with your first route",
+      "boton": "Sign up"
+    },
+    "spotify_ficha": {
+      "eslogan": "Your route, sorted for you and free",
+      "boton": "Sign up",
+      "portada": "FDS · The free delivery app · flotadsp.com · Tap and create your account in 1 minute"
+    }
+  },
+  "pt": {
+    "nombre": "Português (Portugal)",
+    "locale": "pt-PT",
+    "badge": "pt",
+    "voz": {
+      "id": 224980,
+      "nombre": "Jon - Warm & Grounded Storyteller",
+      "settings": {
+        "language": "Portuguese"
+      }
+    },
+    "gancho": {
+      "tag": "Estafetas",
+      "l1": "Ainda",
+      "l2": "organizas",
+      "l3": "a rota",
+      "em": "à mão",
+      "fin": "?"
+    },
+    "frases": [
+      "Ainda organizas a rota à mão todas as manhãs?",
+      "Olha: tiras uma foto à etiqueta, e a morada entra sozinha.",
+      "Ordenar, e tens as paragens em ordem, com a hora de cada uma.",
+      "Vês a rota no mapa, e leva-te por voz, porta a porta.",
+      "E o melhor: é grátis, e sem cartão.",
+      "Entra em flotadsp.com, e num minuto tens a tua conta."
+    ],
+    "leido6": "Entra em flota D S P ponto com, e num minuto tens a tua conta.",
+    "titulos": {
+      "escaneo": [
+        "Foto ou leitura:",
+        "a morada entra sozinha"
+      ],
+      "ordenar": [
+        "Rota ordenada,",
+        "com a hora de cada paragem"
+      ],
+      "zonas": [
+        "Zonas de cargas e descargas,",
+        "no mapa"
+      ],
+      "voz": [
+        "Leva-te por voz,",
+        "paragem a paragem"
+      ],
+      "entregado": [
+        "Entregue,",
+        "com prova"
+      ]
+    },
+    "manana": {
+      "l1": "Amanhã sais",
+      "l2": "com a rota",
+      "em": "feita."
+    },
+    "oferta": {
+      "pill": "Começa<br>grátis",
+      "l": "sem cartão",
+      "e": "+25 €",
+      "b": "com a tua primeira rota",
+      "l2": "20 entregas em 2 dias · até 31 de dezembro",
+      "l3": "Android e iPhone"
+    },
+    "cierreB": {
+      "t": "A tua conta grátis,<br>num minuto",
+      "boton": "Toca no botão abaixo",
+      "play": "ou no iPhone, pela web"
+    },
+    "cierreA": {
+      "t": "Começa grátis. Sem cartão.",
+      "s": "Lê o código e descarrega"
+    },
+    "spotify": "Olá, estafeta. Isto é para ti: FDS. A app grátis que te ordena a rota sozinha. Tiras uma foto à etiqueta, e leva-te por voz até cada porta. Sem cartão, e sem limite até ao fim do ano. Procura no Google Play: FDS. Ou entra em flotadsp.com: F-L-O-T-A-D-S-P ponto com. Ou toca neste anúncio, e num minuto tens a tua conta.",
+    "meta": {
+      "principal": "Entregas encomendas? Foto ou leitura da etiqueta e a morada entra sozinha. Carregas em ordenar e tens a rota feita, com a hora de cada paragem e as zonas de cargas e descargas no mapa. Leva-te por voz até cada porta. E ao completares a tua primeira rota, 25 € na tua carteira. Serve igual se entregas para uma transportadora, uma plataforma ou um supermercado. Começa grátis e sem cartão.",
+      "corto": "Ainda organizas a rota à mão? Foto à etiqueta, a rota faz-se sozinha e leva-te por voz até cada porta. Começa grátis, sem cartão.",
+      "titulo": "A tua rota de entregas, feita sozinha",
+      "descripcion": "Começa grátis · 25 € com a tua primeira rota",
+      "boton": "Registar"
+    },
+    "spotify_ficha": {
+      "eslogan": "A tua rota, ordenada sozinha e grátis",
+      "boton": "Registar",
+      "portada": "FDS · A app de entregas grátis · flotadsp.com · Toca e cria a tua conta em 1 minuto"
+    }
+  },
+  "fr": {
+    "nombre": "Français (France)",
+    "locale": "fr-FR",
+    "badge": "fr",
+    "voz": {
+      "id": 224905,
+      "nombre": "Christopher - Gentle and Trustworthy",
+      "settings": {
+        "language": "French"
+      }
+    },
+    "gancho": {
+      "tag": "Livreurs",
+      "l1": "Tu organises",
+      "l2": "encore",
+      "l3": "ta tournée",
+      "em": "à la main",
+      "fin": " ?"
+    },
+    "frases": [
+      "Tu organises encore ta tournée à la main chaque matin ?",
+      "Regarde : tu prends l'étiquette en photo, et l'adresse se remplit toute seule.",
+      "Tu appuies sur trier, et toutes les étapes sont dans l'ordre, avec l'heure de chacune.",
+      "Tu vois la tournée sur la carte, et elle te guide à la voix, porte à porte.",
+      "Et le meilleur : c'est gratuit, et sans carte.",
+      "Va sur flotadsp.com, et en une minute tu as ton compte."
+    ],
+    "leido6": "Va sur flota D S P point com, et en une minute tu as ton compte.",
+    "titulos": {
+      "escaneo": [
+        "Photo ou scan :",
+        "l'adresse se remplit seule"
+      ],
+      "ordenar": [
+        "Tournée triée,",
+        "avec l'heure de chaque arrêt"
+      ],
+      "zonas": [
+        "Aires de livraison,",
+        "sur la carte"
+      ],
+      "voz": [
+        "Guidage vocal,",
+        "arrêt par arrêt"
+      ],
+      "entregado": [
+        "Livré,",
+        "avec preuve"
+      ]
+    },
+    "manana": {
+      "l1": "Demain tu pars",
+      "l2": "avec la tournée",
+      "em": "prête."
+    },
+    "oferta": {
+      "pill": "C'est<br>gratuit",
+      "l": "sans carte",
+      "e": "+25 €",
+      "b": "avec ta première tournée",
+      "l2": "20 livraisons en 2 jours · jusqu'au 31 décembre",
+      "l3": "Android et iPhone"
+    },
+    "cierreB": {
+      "t": "Ton compte gratuit,<br>en une minute",
+      "boton": "Touche le bouton en bas",
+      "play": "ou sur iPhone, depuis le web"
+    },
+    "cierreA": {
+      "t": "Commence gratuitement. Sans carte.",
+      "s": "Scanne et télécharge-la"
+    },
+    "spotify": "Hé, livreur. C'est pour toi : FDS. L'appli gratuite qui organise ta tournée toute seule. Tu prends l'étiquette en photo, et elle te guide à la voix jusqu'à chaque porte. Sans carte, et sans limite jusqu'à la fin de l'année. Cherche-la sur Google Play : FDS. Ou va sur flotadsp.com : F-L-O-T-A-D-S-P point com. Ou touche cette pub, et en une minute tu as ton compte.",
+    "meta": {
+      "principal": "Tu livres des colis ? Photo ou scan de l'étiquette et l'adresse se remplit toute seule. Appuie sur trier et ta tournée est prête, avec l'heure de chaque arrêt et les aires de livraison sur la carte. Elle te guide à la voix jusqu'à chaque porte. Et quand tu termines ta première tournée, 25 € dans ton portefeuille. Ça marche aussi bien si tu livres pour un transporteur, une plateforme ou un supermarché. Commence gratuitement et sans carte.",
+      "corto": "Tu organises encore ta tournée à la main ? Photo de l'étiquette, la tournée se fait toute seule et elle te guide à la voix jusqu'à chaque porte. Commence gratuitement, sans carte.",
+      "titulo": "Ta tournée de livraison, prête toute seule",
+      "descripcion": "Commence gratuitement · 25 € avec ta première tournée",
+      "boton": "S'inscrire"
+    },
+    "spotify_ficha": {
+      "eslogan": "Ta tournée, organisée toute seule et gratuite",
+      "boton": "S'inscrire",
+      "portada": "FDS · L'appli de livraison gratuite · flotadsp.com · Touche et crée ton compte en 1 minute"
+    }
+  },
+  "it": {
+    "nombre": "Italiano",
+    "locale": "it-IT",
+    "badge": "it",
+    "voz": {
+      "id": 224980,
+      "nombre": "Jon - Warm & Grounded Storyteller",
+      "settings": {
+        "language": "Italian"
+      }
+    },
+    "gancho": {
+      "tag": "Corrieri",
+      "l1": "Ordini",
+      "l2": "ancora",
+      "l3": "il giro",
+      "em": "a mano",
+      "fin": "?"
+    },
+    "frases": [
+      "Ordini ancora il giro a mano ogni mattina?",
+      "Guarda: fai una foto all'etichetta, e l'indirizzo entra da solo.",
+      "Premi ordina, e hai tutte le fermate in ordine, con l'ora di ognuna.",
+      "Vedi il giro sulla mappa, e ti guida con la voce, porta a porta.",
+      "E la cosa migliore: è gratis, e senza carta.",
+      "Entra su flotadsp.com, e in un minuto hai il tuo account."
+    ],
+    "leido6": "Entra su flota D S P punto com, e in un minuto hai il tuo account.",
+    "titulos": {
+      "escaneo": [
+        "Foto o scansione:",
+        "l'indirizzo entra da solo"
+      ],
+      "ordenar": [
+        "Giro ordinato,",
+        "con l'ora di ogni fermata"
+      ],
+      "zonas": [
+        "Aree di carico e scarico,",
+        "sulla mappa"
+      ],
+      "voz": [
+        "Ti guida con la voce,",
+        "fermata per fermata"
+      ],
+      "entregado": [
+        "Consegnato,",
+        "con prova"
+      ]
+    },
+    "manana": {
+      "l1": "Domani esci",
+      "l2": "con il giro",
+      "em": "fatto."
+    },
+    "oferta": {
+      "pill": "Inizia<br>gratis",
+      "l": "senza carta",
+      "e": "+25 €",
+      "b": "con il tuo primo giro",
+      "l2": "20 consegne in 2 giorni · fino al 31 dicembre",
+      "l3": "Android e iPhone"
+    },
+    "cierreB": {
+      "t": "Il tuo account gratis,<br>in un minuto",
+      "boton": "Tocca il pulsante qui sotto",
+      "play": "o su iPhone, dal web"
+    },
+    "cierreA": {
+      "t": "Inizia gratis. Senza carta.",
+      "s": "Scansiona e scaricala"
+    },
+    "spotify": "Ehi, corriere. Questo è per te: FDS. L'app gratis che ti ordina il giro da sola. Fai una foto all'etichetta, e ti guida con la voce fino a ogni porta. Senza carta, e senza limiti fino a fine anno. Cercala su Google Play: FDS. O entra su flotadsp.com: F-L-O-T-A-D-S-P punto com. O tocca questo annuncio, e in un minuto hai il tuo account.",
+    "meta": {
+      "principal": "Consegni pacchi? Foto o scansione dell'etichetta e l'indirizzo entra da solo. Premi ordina e il giro è fatto, con l'ora di ogni fermata e le aree di carico e scarico sulla mappa. Ti guida con la voce fino a ogni porta. E quando completi il tuo primo giro, 25 € nel tuo portafoglio. Vale lo stesso se consegni per un corriere, una piattaforma o un supermercato. Inizia gratis e senza carta.",
+      "corto": "Ordini ancora il giro a mano? Foto all'etichetta, il giro si fa da solo e ti guida con la voce fino a ogni porta. Inizia gratis, senza carta.",
+      "titulo": "Il tuo giro di consegne, fatto da solo",
+      "descripcion": "Inizia gratis · 25 € con il tuo primo giro",
+      "boton": "Iscriviti"
+    },
+    "spotify_ficha": {
+      "eslogan": "Il tuo giro, ordinato da solo e gratis",
+      "boton": "Iscriviti",
+      "portada": "FDS · L'app di consegne gratis · flotadsp.com · Tocca e crea il tuo account in 1 minuto"
+    }
+  },
+  "de": {
+    "nombre": "Deutsch",
+    "locale": "de-DE",
+    "badge": "de",
+    "voz": {
+      "id": 224922,
+      "nombre": "Susi - Effortless and Confident",
+      "settings": {
+        "language": "German"
+      }
+    },
+    "gancho": {
+      "tag": "Zusteller",
+      "l1": "Sortierst du",
+      "l2": "die Tour noch",
+      "l3": "",
+      "em": "von Hand",
+      "fin": "?"
+    },
+    "frases": [
+      "Sortierst du deine Tour noch jeden Morgen von Hand?",
+      "Schau: Etikett fotografieren, und die Adresse trägt sich selbst ein.",
+      "Tipp auf Sortieren: alle Stopps in Reihenfolge, mit Uhrzeit.",
+      "Die Tour auf der Karte, und sie führt dich per Sprache von Tür zu Tür.",
+      "Und das Beste: es ist gratis, und ohne Karte.",
+      "Geh auf flotadsp.com, und in einer Minute hast du dein Konto."
+    ],
+    "leido6": "Geh auf flota D S P punkt com, und in einer Minute hast du dein Konto.",
+    "titulos": {
+      "escaneo": [
+        "Foto oder Scan:",
+        "Adresse kommt von selbst"
+      ],
+      "ordenar": [
+        "Tour sortiert,",
+        "mit Uhrzeit für jeden Stopp"
+      ],
+      "zonas": [
+        "Ladezonen,",
+        "auf der Karte"
+      ],
+      "voz": [
+        "Sprachführung,",
+        "Stopp für Stopp"
+      ],
+      "entregado": [
+        "Zugestellt,",
+        "mit Nachweis"
+      ]
+    },
+    "manana": {
+      "l1": "Morgen startest du",
+      "l2": "mit fertiger",
+      "em": "Tour."
+    },
+    "oferta": {
+      "pill": "Gratis<br>starten",
+      "l": "ohne Karte",
+      "e": "+25 €",
+      "b": "mit deiner ersten Tour",
+      "l2": "20 Zustellungen in 2 Tagen · bis 31. Dezember",
+      "l3": "Android und iPhone"
+    },
+    "cierreB": {
+      "t": "Dein Gratis-Konto,<br>in einer Minute",
+      "boton": "Tipp auf den Button unten",
+      "play": "oder am iPhone, über die Website"
+    },
+    "cierreA": {
+      "t": "Gratis starten. Ohne Karte.",
+      "s": "Scannen und laden"
+    },
+    "spotify": "Hey, Zusteller. Das ist für dich: FDS. Die Gratis-App, die deine Tour von selbst sortiert. Etikett fotografieren, und sie führt dich per Sprache bis zu jeder Tür. Ohne Karte, ohne Limit bis Jahresende. Such sie bei Google Play: FDS. Oder geh auf flotadsp.com: F-L-O-T-A-D-S-P punkt com. Oder tipp auf diese Anzeige: in einer Minute hast du dein Konto.",
+    "meta": {
+      "principal": "Du stellst Pakete zu? Foto oder Scan vom Etikett und die Adresse trägt sich von selbst ein. Tipp auf Sortieren und deine Tour ist fertig, mit Uhrzeit für jeden Stopp und den Ladezonen auf der Karte. Sie führt dich per Sprache bis zu jeder Tür. Und wenn du deine erste Tour abschließt, 25 € in deinem Wallet. Egal, ob du für einen Paketdienst, eine Plattform oder einen Supermarkt fährst. Gratis starten, ohne Karte.",
+      "corto": "Sortierst du die Tour noch von Hand? Etikett fotografieren, die Tour macht sich von selbst und sie führt dich per Sprache bis zu jeder Tür. Gratis starten, ohne Karte.",
+      "titulo": "Deine Zustelltour, fertig sortiert",
+      "descripcion": "Gratis starten · 25 € mit deiner ersten Tour",
+      "boton": "Registrieren"
+    },
+    "spotify_ficha": {
+      "eslogan": "Deine Tour, von selbst sortiert und gratis",
+      "boton": "Registrieren",
+      "portada": "FDS · Die Gratis-Zustell-App · flotadsp.com · Tippen und in 1 Minute dein Konto anlegen"
+    }
+  }
+}

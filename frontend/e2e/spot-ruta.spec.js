@@ -4,6 +4,18 @@ import path from 'path'
 import { createRequire } from 'node:module'
 import { pathToFileURL } from 'node:url'
 import { simularApi, entrarComoAdmin } from './api-simulada.js'
+import { A as TXA } from '../src/lib/textosRutaA.js'
+import { B as TXB } from '../src/lib/textosRutaB.js'
+import { C as TXC } from '../src/lib/textosRutaC.js'
+
+// Los botones se buscan por su texto en el idioma de SPOT_LOCALE (30-10): T() traduce la clave en español con el
+// diccionario de la app (textosRuta*.js, orden en/pt/fr/it/de); rx() la convierte en expresión regular.
+const DIC = { ...TXA, ...TXB, ...TXC }
+const IDX = { en: 0, pt: 1, fr: 2, it: 3, de: 4 }[(process.env.SPOT_LOCALE || 'es').slice(0, 2)]
+const T = (s) => (IDX === undefined ? s : (DIC[s] && DIC[s][IDX]) || s)
+const esc = (s) => s.replace(/[.*+?^{}()|[\]\\]|\$/g, '\\$&')
+const rx = (s, exacta = false) => new RegExp(exacta ? `^${esc(T(s))}$` : esc(T(s)))
+const rxSin = (s) => new RegExp(esc(T(s).replace(/\{n\}\s*/, '')))
 
 /* MATERIAL DE LA APP PARA EL ANUNCIO «LA RUTA HECHA» (29-10-2026, docs/anuncios/super-anuncio/GUION.md).
    Como el spot v5 (un día de reparto creíble: 15 paradas reales de A Coruña, fixtures/coruna-dia.json), más lo
@@ -88,7 +100,9 @@ const tileSvg = (z, x, y) => {
 }
 
 test.use({
-  timezoneId: 'Europe/Madrid', locale: 'es-ES', viewport: { width: ANCHO, height: 852 },
+  // SPOT_LOCALE (30-10): la app se graba en el idioma del navegador (en-GB, pt-PT, fr-FR, it-IT, de-DE) para los
+  // anuncios de otros países (docs/anuncios/internacional/); SPOT_SALIDA deja cada grabación en su carpeta.
+  timezoneId: 'Europe/Madrid', locale: process.env.SPOT_LOCALE || 'es-ES', viewport: { width: ANCHO, height: 852 },
   hasTouch: true, video: 'off', launchOptions: { args: [`--force-device-scale-factor=${DSF}`] },
 })
 
@@ -225,8 +239,8 @@ test('grabar la app para el anuncio «La ruta hecha»', async ({ page, context }
     return r.fulfill({ status: 200, contentType: 'image/svg+xml', body: tileSvg(+m[1], +m[2], +m[3]) })
   })
   await page.goto('/ruta', { waitUntil: 'domcontentloaded' })
-  await page.getByRole('button', { name: 'Solo necesarias' }).click({ timeout: 2000 }).catch(() => {})
-  await expect(page.getByRole('button', { name: /Ordenar ruta/ }).first()).toBeVisible({ timeout: 15000 })
+  await page.getByRole('button', { name: T('Solo necesarias') }).click({ timeout: 2000 }).catch(() => {})
+  await expect(page.getByRole('button', { name: rx('Ordenar ruta') }).first()).toBeVisible({ timeout: 15000 })
   await page.waitForTimeout(1200)
 
   const cdp = await context.newCDPSession(page)
@@ -245,67 +259,67 @@ test('grabar la app para el anuncio «La ruta hecha»', async ({ page, context }
 
   // 1. ESCANEAR: dos paquetes seguidos, y la parada entra sola.
   const abrirAnadir = async () => {
-    const directo = page.getByRole('button', { name: 'Escanear', exact: true })
+    const directo = page.getByRole('button', { name: T('Escanear'), exact: true })
     if (await directo.count() && await directo.first().isVisible().catch(() => false)) return directo.first()
-    await toque(page.getByRole('button', { name: 'Añadir paradas' }).first(), 'tap_mas')
+    await toque(page.getByRole('button', { name: T('Añadir paradas') }).first(), 'tap_mas')
     await page.waitForTimeout(700)
-    return page.getByRole('dialog', { name: 'Añadir paradas' }).getByRole('button', { name: 'Escanear', exact: true })
+    return page.getByRole('dialog', { name: T('Añadir paradas') }).getByRole('button', { name: T('Escanear'), exact: true })
   }
   await toque(await abrirAnadir(), 'tap_escanear')
-  const visor = page.getByRole('dialog', { name: 'Escanear' })
+  const visor = page.getByRole('dialog', { name: T('Escanear') })
   await expect(visor).toBeVisible({ timeout: 10000 })
   marca('visor')
   await page.waitForTimeout(900)
   await page.evaluate(() => { window.__etq = 0 })
-  const anadida = page.getByRole('status').filter({ hasText: 'Añadida a tu ruta' })
+  const anadida = page.getByRole('status').filter({ hasText: T('Añadida a tu ruta') })
   await expect(anadida).toContainText('Elena F.', { timeout: 20000 })
   marca('bip1')
   await page.waitForTimeout(1300)
   await page.evaluate(() => { window.__etq = -1 })
-  await toque(page.getByRole('button', { name: 'Escanear otro' }), 'tap_otro')
+  await toque(page.getByRole('button', { name: T('Escanear otro') }), 'tap_otro')
   await page.waitForTimeout(500)
   await page.evaluate(() => { window.__etq = 1 })
   await expect(anadida).toContainText('Ferretería', { timeout: 20000 })
   marca('bip2')
   await page.waitForTimeout(1400)
   // Cerrar la tarjeta de «Añadida» y el visor: la lista con las dos paradas nuevas.
-  await page.getByRole('button', { name: 'Cerrar' }).last().click({ timeout: 3000 }).catch(() => {})
+  await page.getByRole('button', { name: T('Cerrar') }).last().click({ timeout: 3000 }).catch(() => {})
   await page.waitForTimeout(300)
-  if (await visor.isVisible().catch(() => false)) await visor.getByRole('button', { name: 'Cerrar' }).first().click({ timeout: 3000 }).catch(() => {})
+  if (await visor.isVisible().catch(() => false)) await visor.getByRole('button', { name: T('Cerrar') }).first().click({ timeout: 3000 }).catch(() => {})
   await page.waitForTimeout(300)
-  const hojaAbierta = page.getByRole('dialog', { name: 'Añadir paradas' })
-  if (await hojaAbierta.isVisible().catch(() => false)) await hojaAbierta.getByRole('button', { name: 'Cerrar' }).first().click({ timeout: 3000 }).catch(() => {})
+  const hojaAbierta = page.getByRole('dialog', { name: T('Añadir paradas') })
+  if (await hojaAbierta.isVisible().catch(() => false)) await hojaAbierta.getByRole('button', { name: T('Cerrar') }).first().click({ timeout: 3000 }).catch(() => {})
   await page.evaluate(() => window.scrollTo({ top: 0, behavior: 'instant' }))
   marca('lista_escaneo')
   await page.waitForTimeout(1400)
 
   // 2. FOTO a la etiqueta → se rellena el pedido (como en el v5).
-  await toque(page.getByRole('button', { name: 'Añadir paradas' }).first(), 'tap_mas2')
+  await toque(page.getByRole('button', { name: T('Añadir paradas') }).first(), 'tap_mas2')
   await page.waitForTimeout(800)
-  const hoja = page.getByRole('dialog', { name: 'Añadir paradas' })
-  const boton = hoja.getByText('Foto etiqueta').first()
+  const hoja = page.getByRole('dialog', { name: T('Añadir paradas') })
+  const boton = hoja.getByText(T('Foto etiqueta')).first()
   const bb = await boton.boundingBox()
   if (bb) marca('tap_foto', { x: Math.round((bb.x + bb.width / 2) * DSF), y: Math.round((bb.y + bb.height / 2) * DSF) })
   await page.waitForTimeout(250)
   await hoja.locator('input[type="file"][capture="environment"]').first().setInputFiles(ETIQUETA)
   marca('foto')
-  await expect(page.getByRole('button', { name: /Añadir a mi ruta/ })).toBeVisible({ timeout: 15000 })
+  await expect(page.getByRole('button', { name: rx('Añadir a mi ruta') })).toBeVisible({ timeout: 15000 })
   await page.waitForTimeout(200)
   marca('leido')
   await page.waitForTimeout(1800)
   await toque(page.getByRole('checkbox').last(), 'tap_revisar').catch((e) => console.log('sin casilla', e.message.slice(0, 80)))
   await page.waitForTimeout(500)
-  await toque(page.getByRole('button', { name: /Añadir a mi ruta/ }), 'tap_anadir')
+  await toque(page.getByRole('button', { name: rx('Añadir a mi ruta') }), 'tap_anadir')
   await page.waitForTimeout(1500)
   marca('lista3')
   await page.waitForTimeout(900)
 
   // 3. ORDENAR ruta.
   await page.evaluate(() => window.scrollTo({ top: 0, behavior: 'instant' }))
-  await toque(page.getByRole('button', { name: /Ordenar ruta/ }).first(), 'tap_ordenar')
+  await toque(page.getByRole('button', { name: rx('Ordenar ruta') }).first(), 'tap_ordenar')
   await page.waitForTimeout(400)
   marca('ordenando')
-  await expect(page.getByText(/Ruta ordenada por tiempo/)).toBeVisible({ timeout: 10000 })
+  await expect(page.getByText(rx('Ruta ordenada por tiempo'))).toBeVisible({ timeout: 10000 })
   marca('ordenada')
   await page.evaluate(() => window.scrollTo({ top: 0, behavior: 'instant' }))
   await page.waitForTimeout(1400)
@@ -317,7 +331,7 @@ test('grabar la app para el anuncio «La ruta hecha»', async ({ page, context }
   await page.waitForTimeout(500)
 
   // 4. El MAPA y las zonas de carga y descarga.
-  const mapa = page.getByRole('button', { name: /^Mapa$/ }).first()
+  const mapa = page.getByRole('button', { name: rx('Mapa', true) }).first()
   if (await mapa.count()) {
     await toque(mapa, 'tap_mapa')
     await page.waitForTimeout(500)
@@ -326,10 +340,10 @@ test('grabar la app para el anuncio «La ruta hecha»', async ({ page, context }
     await page.evaluate(() => window.scrollBy(0, 120))
     marca('mapa')
     await page.waitForTimeout(1800)
-    const zonas = page.getByRole('checkbox', { name: /Zonas de carga y descarga/ }).first()
+    const zonas = page.getByRole('checkbox', { name: rx('Zonas de carga y descarga') }).first()
     if (await zonas.count()) {
       await toque(zonas, 'tap_zonas')
-      await expect(page.getByText(/cerca de tus paradas/)).toBeVisible({ timeout: 8000 }).catch(() => {})
+      await expect(page.getByText(rxSin('{n} cerca de tus paradas'))).toBeVisible({ timeout: 8000 }).catch(() => {})
       marca('zonas')
       await page.waitForTimeout(2600)
     } else { console.log('sin casilla de zonas'); marca('zonas') ; await page.waitForTimeout(1500) }
@@ -338,7 +352,7 @@ test('grabar la app para el anuncio «La ruta hecha»', async ({ page, context }
   }
 
   // 5. La GUÍA, parada a parada.
-  await toque(page.getByRole('button', { name: 'Empezar a navegar' }).first(), 'tap_navegar')
+  await toque(page.getByRole('button', { name: T('Empezar a navegar') }).first(), 'tap_navegar')
   await context.setGeolocation({ latitude: 43.36361, longitude: -8.41181 })
   const nav = page.getByRole('dialog')
   await expect(nav.getByTestId('guia-texto')).toBeVisible({ timeout: 15000 })
@@ -355,18 +369,18 @@ test('grabar la app para el anuncio «La ruta hecha»', async ({ page, context }
   await page.waitForTimeout(800)
 
   // 6. ENTREGADO, con prueba (foto).
-  await toque(nav.getByRole('button', { name: /^Entregado$/ }), 'tap_entregado').catch(() => {})
+  await toque(nav.getByRole('button', { name: rx('Entregado', true) }), 'tap_entregado').catch(() => {})
   await page.waitForTimeout(900)
   marca('prueba')
-  const dondeBtn = page.getByRole('button', { name: /En mano|Al vecino|Portería|Buzón|Puerta/ }).first()
+  const dondeBtn = page.getByRole('button', { name: new RegExp(['En mano', 'Al vecino', 'En portería o recepción', 'En el buzón'].map((s) => esc(T(s))).join('|')) }).first()
   if (await dondeBtn.count()) { await toque(dondeBtn, 'tap_donde').catch(() => {}); await page.waitForTimeout(500) }
   const inputFoto = page.locator('input[type="file"][capture="environment"]').last()
-  const lab = page.getByText('Hacer foto y entregar').first()
+  const lab = page.getByText(T('Hacer foto y entregar')).first()
   const lb = await lab.boundingBox().catch(() => null)
   if (lb) marca('tap_hacer_foto', { x: Math.round((lb.x + lb.width / 2) * DSF), y: Math.round((lb.y + lb.height / 2) * DSF) })
   await page.waitForTimeout(300)
-  if (await inputFoto.count()) await inputFoto.setInputFiles(FOTO_ENTREGA).catch(async (e) => { console.log('sin input foto', e.message.slice(0, 80)); await page.getByRole('button', { name: /^Entregar sin foto$/ }).click().catch(() => {}) })
-  else await page.getByRole('button', { name: /^Entregar sin foto$/ }).click().catch(() => {})
+  if (await inputFoto.count()) await inputFoto.setInputFiles(FOTO_ENTREGA).catch(async (e) => { console.log('sin input foto', e.message.slice(0, 80)); await page.getByRole('button', { name: rx('Entregar sin foto', true) }).click().catch(() => {}) })
+  else await page.getByRole('button', { name: rx('Entregar sin foto', true) }).click().catch(() => {})
   marca('entregado')
   await page.waitForTimeout(2400)
   marca('fin')

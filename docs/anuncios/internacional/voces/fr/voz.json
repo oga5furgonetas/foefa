@@ -1,0 +1,58 @@
+{
+ "voz": "Christopher - Gentle and Trustworthy",
+ "modelo": "Artlist (Eleven v3)",
+ "settings": {
+  "language": "French"
+ },
+ "frases": [
+  {
+   "n": 1,
+   "leido": "Tu organises encore ta tournée à la main chaque matin ?",
+   "visto": "Tu organises encore ta tournée à la main chaque matin ?",
+   "fichero": "voces/fr/f1.mp3",
+   "dur": 2.429,
+   "palabras": []
+  },
+  {
+   "n": 2,
+   "leido": "Regarde : tu prends l'étiquette en photo, et l'adresse se remplit toute seule.",
+   "visto": "Regarde : tu prends l'étiquette en photo, et l'adresse se remplit toute seule.",
+   "fichero": "voces/fr/f2.mp3",
+   "dur": 4.206,
+   "palabras": []
+  },
+  {
+   "n": 3,
+   "leido": "Tu appuies sur trier, et toutes les étapes sont dans l'ordre, avec l'heure de chacune.",
+   "visto": "Tu appuies sur trier, et toutes les étapes sont dans l'ordre, avec l'heure de chacune.",
+   "fichero": "voces/fr/f3.mp3",
+   "dur": 4.049,
+   "palabras": []
+  },
+  {
+   "n": 4,
+   "leido": "Tu vois la tournée sur la carte, et elle te guide à la voix, porte à porte.",
+   "visto": "Tu vois la tournée sur la carte, et elle te guide à la voix, porte à porte.",
+   "fichero": "voces/fr/f4.mp3",
+   "dur": 3.553,
+   "palabras": []
+  },
+  {
+   "n": 5,
+   "leido": "Et le meilleur : c'est gratuit, et sans carte.",
+   "visto": "Et le meilleur : c'est gratuit, et sans carte.",
+   "fichero": "voces/fr/f5.mp3",
+   "dur": 3.004,
+   "palabras": []
+  },
+  {
+   "n": 6,
+   "leido": "Va sur flota D S P point com, et en une minute tu as ton compte.",
+   "visto": "Va sur flotadsp.com, et en une minute tu as ton compte.",
+   "fichero": "voces/fr/f6.mp3",
+   "dur": 4.441,
+   "palabras": []
+  }
+ ],
+ "spotify_dur": 26.749
+}

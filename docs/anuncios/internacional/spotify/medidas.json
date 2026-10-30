@@ -1,0 +1,42 @@
+{
+ "de": {
+  "voz_s": 31.95,
+  "acelerada": 1.121,
+  "total_s": 29.5,
+  "lufs": -16.3,
+  "pico_dbtp": -4.1,
+  "mb": 0.71
+ },
+ "en": {
+  "voz_s": 24.45,
+  "acelerada": 1,
+  "total_s": 25.45,
+  "lufs": -16.2,
+  "pico_dbtp": -3.9,
+  "mb": 0.61
+ },
+ "fr": {
+  "voz_s": 26.75,
+  "acelerada": 1,
+  "total_s": 27.75,
+  "lufs": -16.2,
+  "pico_dbtp": -4.6,
+  "mb": 0.67
+ },
+ "it": {
+  "voz_s": 25.47,
+  "acelerada": 1,
+  "total_s": 26.47,
+  "lufs": -16.1,
+  "pico_dbtp": -4.4,
+  "mb": 0.64
+ },
+ "pt": {
+  "voz_s": 28.19,
+  "acelerada": 1,
+  "total_s": 29.19,
+  "lufs": -16.3,
+  "pico_dbtp": -4,
+  "mb": 0.7
+ }
+}
