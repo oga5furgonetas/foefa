@@ -48,6 +48,17 @@ Hashtags: #repartidorautonomo #autonomos #repartidor #paqueteria #mensajeria #re
 Comentario fijado: «¿Tus números son muy distintos? Dilos aquí (sin nombres de empresas) y ajustamos el ejemplo.»
 En X y Facebook el enlace es el de la calculadora: `flotadsp.com/calculadora-repartidor?utm_source=<red>&utm_medium=organico&utm_campaign=rep_comunidad&utm_content=calculadora`.
 
+## Carrusel D · Cómo cargar la furgoneta para no volverte loco (`D-1-portada` … `D-7-cierre`, 30-10)
+Modo foto (7 imágenes) · Instagram · página de Facebook. `utm_content=carrusel_carga`. Sin fecha aún: para el primer
+hueco de TikTok/Instagram a partir del 10-11 (la sesión del PC o la de la nube lo programan cuando esté desplegado).
+
+> Cómo cargar la furgoneta para no volverte loco 📦 Cinco reglas que ahorran una hora al día (la 4 casi nadie la hace).
+> ¿Cuál añadirías? 👇 Y el orden lo pone la app: foto a la etiqueta y cada bulto con su zona de carga. Gratis hasta el
+> 31 de diciembre, enlace en el perfil.
+
+Hashtags: #repartidor #repartidores #furgoneta #paqueteria #mensajeria #reparto #trucos #carga
+Comentario fijado: «¿Cómo cargas tú: por calles, por tamaño o como cae? Sin vergüenza, que todos hemos empezado igual.»
+
 ## Tarjetas 16:9 para X (van con el post del calendario de `REDES.md`)
 | Fichero | Post | Enlace |
 |---|---|---|
@@ -55,9 +66,11 @@ En X y Facebook el enlace es el de la calculadora: `flotadsp.com/calculadora-rep
 | `X-truco.png` | D 02-11 «¿Y dónde está el truco?» | repartidores, `utm_content=post_truco` |
 | `X-cuanto-gana.png` | M 04-11 «¿Sabes cuánto ganas por hora?» | calculadora |
 | `X-manos-libres.png` | X 05-11 «Manos libres en Android» | repartidores, `utm_content=post_manos_libres` |
+| `X-latam.png` | S 08-11 «Repartidores de Latinoamérica» | repartidores, `utm_content=post_latam` |
+| `X-sin-cobertura.png` | D 09-11 «Sin cobertura en el garaje del polígono» | repartidores, `utm_content=post_sin_cobertura` |
+| `X-invita.png` | L 10-11 «Invita y gana» | invita, `utm_content=invita` |
 
 ## Ideas para las piezas siguientes (misma plantilla, una por ronda)
-- «Cómo cargar la furgoneta para no volverte loco» (5 pasos; cierre: la app te dice el orden).
 - «5 cosas que mirar antes de firmar con una agencia de reparto» (sin nombres de empresas; cierre: calculadora).
 - «Lo que cuesta de verdad una furgoneta de reparto al mes» (ejemplo orientativo; cierre: calculadora).
 - «Mensajes que puedes mandar al cliente antes de llegar» (3 plantillas; cierre: el WhatsApp con un toque).

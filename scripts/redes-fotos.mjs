@@ -190,7 +190,28 @@ const X = [
   ['X-cuanto-gana', tarjeta('Autónomos del reparto', '¿Cuánto gana de verdad un repartidor autónomo?', [['2.420 €', '100 paradas × 1,10 € × 22 días facturados'], ['− 996 €', 'gasóleo, desgaste y gastos fijos'], ['1.424 €', 'al mes antes de impuestos: 7,19 € la hora']], 'Ejemplo orientativo · calculadora gratis: flotadsp.com/calculadora-repartidor')],
 ]
 
-const PIEZAS = [...A, ...B, ...C, ...X.map(([n, h]) => [n, h, 1600, 900])]
+/* ── D. Cómo cargar la furgoneta para no volverte loco (30-10) ───────────────────────── */
+const CARGA = [
+  ['📋', 'Ordena antes de cargar', 'Primero el orden de la ruta, luego la furgoneta. Cargar y ordenar después es hacerlo dos veces.'],
+  ['🔄', 'Al revés', 'Lo último que entregas, al fondo. Lo de la primera hora, a mano de la puerta.'],
+  ['🧱', 'Por tramos, no por tamaño', 'Un hueco o una balda por cada diez paradas. El paquete grande no va abajo por ser grande.'],
+  ['✍️', 'Apunta el hueco', 'Una letra en la etiqueta o en la app: dónde va cada bulto. 150 paquetes sin hueco son 150 búsquedas.'],
+  ['🔍', 'Lo frágil y lo urgente, a la vista', 'Franjas horarias y cristal, donde los veas nada más abrir la puerta.'],
+]
+const D = [
+  ['D-1-portada', portada(fondoInterior, 'Antes de arrancar', 'Cómo cargar la furgoneta para <span class="resalta">no volverte loco</span>', 'Cinco reglas que ahorran una hora al día')],
+  ...CARGA.map((p, i) => [`D-${i + 2}`, punto(p, i, 'Guárdalo para mañana')]),
+  ['D-7-cierre', cierre('¿Y el orden? <span style="color:var(--marca)">Lo pone la app</span>', 'Foto a la etiqueta, la ruta se ordena por tiempo y cada bulto tiene su zona de carga.')],
+]
+
+/* ── Tarjetas para X de la segunda semana (08-11 en adelante) ─────────────────────────── */
+const X2 = [
+  ['X-latam', tarjeta('Repartidores de Latinoamérica', 'Funciona en cualquier país. «Mi dinero hoy», en tu moneda', [['🇲🇽', 'Pesos, soles, pesos colombianos o reales: lo que llevas ganado hoy, en lo tuyo.'], ['🇧🇷', 'En Brasil, Pix. Paradas de ejemplo en tu ciudad para probarla sin cuenta.'], ['💬', 'Si algo no funciona en tu zona, dilo y lo arreglamos.']], 'Gratis y sin límite hasta el 31 de diciembre')],
+  ['X-sin-cobertura', tarjeta('Garaje del polígono, sin cobertura', 'La app abre igual. Con tu ruta guardada', [['📴', 'Sin red, abre con la última ruta y sigues entregando.'], ['📤', 'Lo entregado se envía solo cuando vuelve la cobertura.'], ['⏱️', 'Detalle pequeño, mañanas enteras salvadas.']], 'Android e iPhone')],
+  ['X-invita', tarjeta('Invita y gana', '10 € por cada compañero que la use de verdad', [['1', 'Le pasas tu enlace desde la app.'], ['2', 'Hace su primera ruta real: 20 entregas en 2 días.'], ['3', 'Tú, 10 € a tu cartera (Bizum o PayPal). Él, 25 € de bienvenida.']], 'Promoción hasta el 31 de diciembre · condiciones en flotadsp.com/invita')],
+]
+
+const PIEZAS = [...A, ...B, ...C, ...D, ...X.map(([n, h]) => [n, h, 1600, 900]), ...X2.map(([n, h]) => [n, h, 1600, 900])]
 const nav = await chromium.launch()
 const pag = await nav.newPage({ viewport: { width: 1080, height: 1920 }, deviceScaleFactor: 1 })
 for (const [nombre, html, ancho = 1080, alto = 1920] of PIEZAS) {
