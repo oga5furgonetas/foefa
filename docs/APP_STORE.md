@@ -95,9 +95,14 @@ Android o el PC). Lo que sí cambia:
   `ficha` (nombre, subtítulo, descripción, palabras clave y URLs en los 7 idiomas de `frontend/ios/listing/`, y las
   categorías Business + Navigation), `capturas` (las de `listing/capturas/<idioma>` como iPhone 6,7") y `edad`
   (clasificación 4+). Todo eso está YA puesto en la versión 2.4.1.
-- Lo que sigue siendo de Dani en App Store Connect: la **condición de comerciante** de la UE (aviso en la portada de
-  Apps: Ley de Servicios Digitales; sin eso Apple no distribuye en la UE), el cuestionario de **App Privacy** (no tiene
-  API) y la **cuenta de prueba** para la revisión; y pulsar «Enviar a revisión».
+- Esa misma tarde: el cuestionario de **App Privacy** publicado y el precio (gratis) y la disponibilidad (175 países) en el
+  Chrome de Dani; la **cuenta de prueba** `apple@flotadsp.com` (contraseña solo en `~/.flota-apple-review-account.txt`), el
+  teléfono y las notas en la información de revisión (`revision`); el build 9 (2.4.1) subido a las 18:06, procesado a las
+  18:10 y adjunto a la versión (`adjuntar`): la versión está «En preparación para el envío» con todo relleno.
+- Lo que queda es de Dani, en su Chrome: (1) la **condición de comerciante** de la UE: Negocio → «Completar requisitos para
+  el cumplimiento normativo» → «Soy un comerciante sujeto al DSA» → Siguiente: una dirección, un teléfono y un correo que
+  Apple MUESTRA en la ficha de la app y verifica con un código (sin esto Apple no distribuye en España ni en el resto de la
+  UE); (2) en la app → versión 2.4.1 → «Añadir a revisión» → «Enviar a revisión de apps». La revisión suele tardar 1-3 días.
 
 ## La firma en el Mac de GitHub: manual, con certificado y perfil propios (30-10-2026, tarde)
 
@@ -117,7 +122,7 @@ perfil de desarrollo y falla con «Your team has no devices» (y si se le fuerza
 - Hecho ese día desde la API, sin Xcode: certificado `652QMHW2NZ` y perfil `61c5577a-…`. Los secretos del certificado
   los tuvo que meter Dani (el modo auto bloqueó escribirlos desde aquí).
 
-- **Xcode 26**: desde octubre de 2026 Apple solo admite builds hechos con el SDK de iOS 26; el workflow elige el Xcode 26 más nuevo del Mac de GitHub (`/Applications/Xcode_26*.app`). Con todo eso, el build 2.4.1 subió el 30-10 por la tarde; `python scripts/app_store_connect.py builds` dice cuándo está procesado y `adjuntar` lo pone en la versión.
+- **Xcode 26**: desde octubre de 2026 Apple solo admite builds hechos con el SDK de iOS 26; el workflow elige el Xcode 26 más nuevo del Mac de GitHub (`/Applications/Xcode_26*.app`). Con todo eso, el build 9 (2.4.1) subió el 30-10 a las 18:06 (run 41094495278) y Apple lo procesó en cuatro minutos; `python scripts/app_store_connect.py builds` dice cuándo está procesado y `adjuntar` lo pone en la versión (hecho ese día).
 
 ## Por si la revisión pone pegas (lo típico)
 
