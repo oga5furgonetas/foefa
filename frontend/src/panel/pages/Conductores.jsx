@@ -11,13 +11,13 @@ import {
   Loader2, Search, Plus, X, Pencil, Trash2, UserCheck, FileSpreadsheet, Phone, Mail, IdCard, Car,
   MapPin, FileText, Building2, Save, Camera, Trophy, TrendingUp, TrendingDown, Minus, Flame,
   BarChart2, ChevronDown, ChevronUp, AlertCircle, Lock, LockOpen, Eye, EyeOff, ShieldCheck,
-  Share2, Smartphone, ArrowRightLeft,
+  Share2, Smartphone, ArrowRightLeft, KeyRound,
 } from 'lucide-react'
 import {
   getDrivers, createDriver, updateDriver, deleteDriver, uploadDriverPhoto, programarTraslado, cancelarTraslado,
   getDriversScoring, getScoringLeaderboard, getDriverAccounts, setDriverPassword,
   getDriverRecoveryEmail, setDriverRecoveryEmail, removeDriverRecoveryEmail,
-  generarAccesosConductores,
+  generarAccesosConductores, getContrasenaInicial, setContrasenaInicial,
   deleteDriverAccount,
   getDriversDuplicados, fusionarConductores, repasarFusiones,
 } from '../api'
@@ -747,6 +747,96 @@ function AvisoAccesos({ list, onHecho }) {
 }
 
 
+/* LA CONTRASEÑA INICIAL DE LOS NUEVOS (30-10-2026, Dani: «que cada vez que creemos una cuenta tenga por
+   defecto una contraseña y, cuando entren, les salte cambiarla; hoy se la he tenido que poner yo a mano»).
+   La define la oficina una vez; cada conductor que se da de alta con correo (uno a uno o importando) entra
+   la primera vez con ella y la app le obliga a elegir la suya. El servidor guarda solo el hash: aquí nunca
+   se enseña, solo si la hay, desde cuándo y quién la puso. Sin permiso o sin respuesta, no se pinta nada. */
+function ContrasenaInicial() {
+  const [estado, setEstado] = useState(null) // { definida, desde, por }
+  const [editar, setEditar] = useState(false)
+  const [clave, setClave] = useState('')
+  const [ocupado, setOcupado] = useState(false)
+  const [error, setError] = useState('')
+  const [aviso, setAviso] = useState('')
+
+  useEffect(() => {
+    getContrasenaInicial().then(({ data }) => setEstado(data)).catch(() => setEstado(null))
+  }, [])
+
+  async function guardar() {
+    if (clave.length < 8) { setError('La contraseña inicial debe tener al menos 8 caracteres.'); return }
+    setOcupado(true); setError(''); setAviso('')
+    try {
+      const { data } = await setContrasenaInicial(clave)
+      setEstado(data); setClave(''); setEditar(false)
+      setAviso('Guardada. Cada conductor nuevo con correo entrará con ella la primera vez y tendrá que cambiarla.')
+    } catch (e) {
+      setError(e?.response?.data?.detail || 'No se pudo guardar. Reintenta.')
+    }
+    setOcupado(false)
+  }
+
+  async function quitar() {
+    if (!window.confirm('¿Quitar la contraseña inicial? Los conductores nuevos ya no tendrán acceso hasta que les pongas una a mano.')) return
+    setOcupado(true); setError(''); setAviso('')
+    try {
+      const { data } = await setContrasenaInicial('')
+      setEstado(data); setAviso('Quitada.')
+    } catch (e) {
+      setError(e?.response?.data?.detail || 'No se pudo quitar. Reintenta.')
+    }
+    setOcupado(false)
+  }
+
+  if (!estado) return null
+  const desde = estado.desde
+    ? new Date(estado.desde).toLocaleDateString('es-ES', { day: '2-digit', month: '2-digit', year: 'numeric' })
+    : ''
+  return (
+    <div className="mb-3 rounded-xl border border-dark-800 bg-dark-900/60 px-3 py-2 text-[12.5px]">
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
+        <KeyRound size={13} className="shrink-0 text-dark-500" />
+        <span className="min-w-0 flex-1 text-dark-300">
+          Contraseña inicial de los conductores nuevos:{' '}
+          {estado.definida
+            ? <span className="text-lime-300">definida{desde ? ` desde el ${desde}` : ''}{estado.por ? ` por ${estado.por}` : ''}</span>
+            : <span className="text-amber-300">sin definir</span>}
+          <span className="ml-1.5 cursor-help text-dark-500"
+            title="Cada conductor que des de alta con correo (uno a uno o importando) entra la primera vez con esta contraseña y la app le obliga a elegir la suya. Aquí nunca se enseña: el servidor solo guarda el hash.">(?)</span>
+        </span>
+        {!editar && (
+          <button onClick={() => { setEditar(true); setAviso('') }}
+            className="rounded-lg bg-dark-800 px-2.5 py-1 font-semibold text-dark-200 hover:bg-dark-700">
+            {estado.definida ? 'Cambiarla' : 'Definirla'}
+          </button>
+        )}
+        {!editar && estado.definida && (
+          <button onClick={quitar} disabled={ocupado}
+            className="px-2 py-1 text-dark-400 hover:text-dark-200 disabled:opacity-50">Quitarla</button>
+        )}
+      </div>
+      {editar && (
+        <div className="mt-2 flex flex-wrap items-center gap-2">
+          <input type="password" autoComplete="new-password" value={clave} onChange={(e) => setClave(e.target.value)}
+            onKeyDown={(e) => { if (e.key === 'Enter') guardar() }}
+            placeholder="Contraseña inicial (mínimo 8 caracteres)" minLength={8} maxLength={128}
+            aria-label="Contraseña inicial de los conductores nuevos"
+            className="w-full max-w-xs rounded-lg border border-dark-700 bg-dark-950 px-3 py-1.5 text-sm text-dark-100 outline-none focus:border-brand-400" />
+          <button onClick={guardar} disabled={ocupado} className="btn-primary flex items-center gap-1.5 px-3 py-1.5 text-[12.5px]">
+            {ocupado ? <Loader2 size={13} className="animate-spin" /> : <Lock size={13} />} Guardar
+          </button>
+          <button onClick={() => { setEditar(false); setClave(''); setError('') }}
+            className="px-2 py-1 text-dark-400 hover:text-dark-200">Cancelar</button>
+        </div>
+      )}
+      {error && <p className="mt-1.5 text-[12px] text-red-300">{error}</p>}
+      {aviso && <p className="mt-1.5 text-[12px] text-lime-300">{aviso}</p>}
+    </div>
+  )
+}
+
+
 function TablaConductores({ list, accounts, onAbrir }) {
   const [orden, setOrden] = useState({ col: 'name', asc: true })
 
@@ -1051,6 +1141,7 @@ Cancelar: es otra persona, crear una ficha nueva.`)) {
                 </div>
               </div>
             : <>
+                <ContrasenaInicial />
                 <AvisoAccesos list={list} onHecho={load} />
                 {centers.length > 1 && list.some(sinCentro) && (
                   <div className="mb-3 flex flex-wrap items-center gap-x-2 gap-y-1 rounded-xl border border-amber-500/25 bg-amber-500/[0.06] px-3 py-2 text-[12.5px] text-amber-200">

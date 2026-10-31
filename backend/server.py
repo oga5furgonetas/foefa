@@ -829,6 +829,11 @@ class DriverBulkPasswordRequest(BaseModel):
     password: str = Field(min_length=8, max_length=128)
 
 
+class ContrasenaInicialRequest(BaseModel):
+    """La contraseña inicial de los conductores nuevos de la empresa; vacía o ausente = quitarla."""
+    password: Optional[str] = Field(default=None, max_length=128)
+
+
 class CreateAdminRequest(BaseModel):
     username: str
     password: str
@@ -8638,6 +8643,67 @@ async def list_driver_accounts(_admin: dict = Depends(require_admin)):
     return accounts
 
 
+# LA CONTRASEÑA INICIAL DE LOS CONDUCTORES NUEVOS (30-10-2026, Dani: «que cada vez que creemos una cuenta tenga por
+# defecto una contraseña y, cuando entren, les salte cambiarla; hoy se la he tenido que poner yo a mano a un conductor»).
+# La oficina la define UNA vez por empresa y el servidor guarda solo el hash (`organizations.contrasena_inicial_hash`):
+# cada conductor que se da de alta con correo y sin contraseña propia —de uno en uno o importando— recibe una cuenta con
+# ese hash y `must_change_password`, así que entra la primera vez con ella y el portal o la app le obligan a elegir la
+# suya (el mismo camino que la temporal en bloque: _cuentas_que_cuadran, configurar_cuenta). Sin correo no hay cuenta,
+# como siempre: no habría con qué entrar.
+async def _org_de_admin(admin: dict) -> Optional[dict]:
+    """La empresa de quien está en el panel: la suya o, sin org_id (la base por defecto), la del dueño."""
+    if admin.get("org_id"):
+        return await get_org(admin["org_id"])
+    return await global_db.organizations.find_one({"account_type": "owner"}, {"_id": 0})
+
+
+async def _contrasena_inicial(admin: dict) -> Optional[dict]:
+    """La contraseña inicial de la empresa de `admin`, si la tiene: {"hash", "desde", "por"}; si no, None."""
+    org = await _org_de_admin(admin)
+    h = (org or {}).get("contrasena_inicial_hash")
+    if not h:
+        return None
+    return {"hash": h, "desde": org.get("contrasena_inicial_desde"), "por": org.get("contrasena_inicial_por")}
+
+
+def _cuenta_inicial(driver_id: str, email: str, hash_inicial: str, ahora: str) -> dict:
+    """La cuenta de un conductor nuevo con la contraseña inicial de la empresa: temporal, a cambiar al entrar."""
+    return {"id": str(uuid.uuid4()), "driver_id": driver_id, "email": str(email).strip().lower(),
+            "hashed_password": hash_inicial, "active": True, "created_at": ahora,
+            "must_change_password": True, "password_temp_created_at": ahora, "contrasena_inicial": True}
+
+
+@auth_router.get("/driver-accounts/contrasena-inicial")
+async def ver_contrasena_inicial(admin: dict = Depends(require_admin)):
+    """Si la empresa tiene contraseña inicial para los conductores nuevos: solo si la hay, desde cuándo y quién (nunca cuál)."""
+    c = await _contrasena_inicial(admin)
+    return {"definida": bool(c), "desde": (c or {}).get("desde"), "por": (c or {}).get("por")}
+
+
+@auth_router.put("/driver-accounts/contrasena-inicial")
+async def poner_contrasena_inicial(data: ContrasenaInicialRequest, admin: dict = Depends(require_admin)):
+    """Define la contraseña inicial de los conductores nuevos (o la quita, con la contraseña vacía). Solo se guarda el hash."""
+    if admin.get("demo"):
+        raise HTTPException(403, "En la demo no se cambia")
+    org = await _org_de_admin(admin)
+    if not org:
+        raise HTTPException(400, "Tu usuario no está asociado a ninguna empresa")
+    clave = (data.password or "").strip()
+    if not clave:
+        await global_db.organizations.update_one({"id": org["id"]}, {"$unset": {
+            "contrasena_inicial_hash": "", "contrasena_inicial_desde": "", "contrasena_inicial_por": ""}})
+        logger.info("Contraseña inicial de conductores quitada por %s", admin.get("name"))
+        return {"definida": False, "desde": None, "por": None}
+    if len(clave) < 8:
+        raise HTTPException(400, "La contraseña inicial debe tener al menos 8 caracteres")
+    ahora = datetime.now(timezone.utc).isoformat()
+    por = admin.get("name") or admin.get("username") or ""
+    await global_db.organizations.update_one({"id": org["id"]}, {"$set": {
+        "contrasena_inicial_hash": hash_password(clave), "contrasena_inicial_desde": ahora, "contrasena_inicial_por": por}})
+    logger.info("Contraseña inicial de conductores definida por %s", por)
+    return {"definida": True, "desde": ahora, "por": por}
+
+
 @auth_router.post("/driver-accounts/generar")
 async def generar_accesos_conductores(data: DriverBulkPasswordRequest,
                                       _admin: dict = Depends(require_admin)):
@@ -11411,6 +11477,13 @@ async def create_driver(data: DriverCreate, nueva: bool = False,
             "created_at": datetime.now(timezone.utc).isoformat()
         })
         logger.info(f"Conductor y cuenta creados: {driver.email}")
+    elif driver.email:
+        # Sin contraseña propia: la inicial de la empresa, si la hay (la cambia en su primera entrada).
+        inicial = await _contrasena_inicial(admin)
+        if inicial:
+            await db.driver_accounts.insert_one(_cuenta_inicial(
+                driver.id, driver.email, inicial["hash"], datetime.now(timezone.utc).isoformat()))
+            logger.info("Conductor creado con la contraseña inicial de la empresa: %s", driver.email)
 
     return driver
 
@@ -11860,8 +11933,26 @@ async def drivers_importar(file: UploadFile = File(...), center: str = Form(""),
             # resto entra igual (`ordered=False`). Se cuenta lo que entro.
             metidos = int((e.details or {}).get("nInserted") or 0)
             saltados = saltados + [None] * (len(nuevos) - metidos)
-    logger.info("Conductores importados: %d nuevos, %d ya estaban", metidos, len(saltados))
-    return {"importados": metidos, "ya_estaban": len(saltados),
+    # La contraseña inicial de la empresa, a los que han entrado y tienen correo (ver _contrasena_inicial).
+    con_acceso = 0
+    inicial = await _contrasena_inicial(user) if metidos else None
+    if inicial:
+        if metidos == len(nuevos):
+            entrados = {d["id"] for d in nuevos}
+        else:
+            entrados = {x["id"] async for x in db.drivers.find(
+                {"id": {"$in": [d["id"] for d in nuevos]}}, {"_id": 0, "id": 1})}
+        cuentas = [_cuenta_inicial(d["id"], d["email"], inicial["hash"], ahora)
+                   for d in nuevos if d.get("email") and d["id"] in entrados]
+        if cuentas:
+            try:
+                await db.driver_accounts.insert_many(cuentas, ordered=False)
+                con_acceso = len(cuentas)
+            except BulkWriteError as e:
+                con_acceso = int((e.details or {}).get("nInserted") or 0)
+    logger.info("Conductores importados: %d nuevos, %d ya estaban, %d con la contraseña inicial",
+                metidos, len(saltados), con_acceso)
+    return {"importados": metidos, "ya_estaban": len(saltados), "con_acceso": con_acceso,
             "no_leidas": len(r["saltadas"]), "fuera_seleccion": fuera_seleccion,
             "nombres": [d["name"] for d in nuevos][:50]}
 

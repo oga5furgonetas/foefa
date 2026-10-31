@@ -188,6 +188,10 @@ export const setDriverPassword = (driverId, password) => api.post('/auth/set-dri
    devuelve recuentos y guarda el hash, nunca la contraseña en claro. */
 export const generarAccesosConductores = (password) =>
   api.post('/auth/driver-accounts/generar', { password })
+/* La contraseña inicial de los conductores NUEVOS (30-10-2026): la define la oficina una vez; el servidor solo
+   dice si la hay (nunca cuál) y guarda el hash. Vacía = quitarla. */
+export const getContrasenaInicial = () => api.get('/auth/driver-accounts/contrasena-inicial')
+export const setContrasenaInicial = (password) => api.put('/auth/driver-accounts/contrasena-inicial', { password })
 export const deleteDriverAccount = (driverId) => api.delete(`/auth/driver-account/${driverId}`)
 
 /* ── Inspecciones ── */
