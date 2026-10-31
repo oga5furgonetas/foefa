@@ -329,9 +329,9 @@ servilleta (la prueba fotográfica que evita la franquicia del renting) está de
 | Los despliegues del PC miran el CI de GitHub antes de subir nada (`-SinCI` a sabiendas) | `scripts/ci-verde.ps1`, los dos `deploy-*.ps1` | `d0076db` |
 | El flujo de iPhone ya no se compila (ni sube una build a Apple) con cada texto de la web | `app-ios.yml` | `d0076db` |
 | Peritaje solo de la propia inspección para un conductor; baja de push solo de la propia; recuperación de contraseña a 8 como el alta (servidor y web en 6 idiomas) | `server.py`, `ResetPassword.jsx`, `i18nDict.js` | `d0076db` |
-| Dependencias de la web sin avisos (`npm audit fix`) y del backend al día (fastapi/starlette, pymongo, aiohttp, Pillow, python-multipart), con los 1.365 tests pasados en un entorno aparte | `package-lock.json`, `requirements.txt` | _(ver ESTADO: tanda 2)_ |
-| El texto para contestar a Apple, listo para pegar | `docs/APP_STORE.md` | este commit |
-| Medidor de producción desde un móvil emulado | `frontend/e2e/medir-produccion.mjs` | este commit |
+| Dependencias de la web sin avisos (`npm audit fix`) y del backend al día (fastapi/starlette, pymongo, aiohttp, Pillow, python-multipart), con los 1.365 tests pasados en un entorno aparte | `requirements.txt`, `package.json` (+axios fijo en 1.17.0: 1.21 rompe los POST) | `292a55f`, `05c2b75` |
+| El texto para contestar a Apple, listo para pegar | `docs/APP_STORE.md` | `292a55f` |
+| Medidor de producción desde un móvil emulado | `frontend/e2e/medir-produccion.mjs` | `292a55f` |
 
 ### Lo que solo puede hacer Dani (una hora en total, por orden)
 
