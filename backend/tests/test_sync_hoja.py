@@ -540,3 +540,81 @@ async def test_no_se_llama_dos_veces_seguidas(nave):
     with pytest.raises(HTTPException) as e:
         await sync(llave, pestana({"ANA PEREZ LOPEZ": SEMANA_ANA}))
     assert e.value.status_code == 429
+
+
+# ── El borrador (31-10-2026) ─────────────────────────────────────────────────
+
+def _conf(nave):
+    return nave.g[server._SYNC_COL].docs[0]
+
+
+@pytest.mark.asyncio(loop_scope="session")
+async def test_el_borrador_no_toca_esas_fechas_y_al_marcarlo_definitivo_manda_la_app(nave):
+    """Dani: «voy a hacer el cuadrante de noviembre y quiero que aparezca en el Sheets cuando lo marque definitivo,
+    por si cambio algo mientras lo estoy haciendo»."""
+    t = nave.t
+    llave = await conectar()
+    p = pestana({"ANA PEREZ LOPEZ": SEMANA_ANA, "LUIS GOMEZ RIAL": SEMANA_LUIS}, maximas={DIAS[7]: 48})
+    await sync(llave, p, nave=nave)
+    # La segunda semana (19-10 a 25-10) se hace en la app, en borrador.
+    r = await server.cuadrante_sync_borrador({"center": "OGA5", "desde": DIAS[7], "hasta": DIAS[13]}, OFI)
+    assert r["borrador"]["desde"] == DIAS[7] and r["borrador"]["por"] == "Oficina"
+    assert (await server.cuadrante_sync_estado("OGA5", OFI))["borrador"]["hasta"] == DIAS[13]
+    # En la app: Luis pasa a V el 20 (borrador) y Ana a V el 13 (fuera del borrador: va a la hoja como siempre).
+    poner(t, "d2", DIAS[8], "V")
+    poner(t, "d1", DIAS[1], "V")
+    # En la hoja, a la vez: Ana a N/T el 21 (dentro del borrador: no entra) y la máxima del 19 a 44 (tampoco).
+    p2 = pestana({"ANA PEREZ LOPEZ": ["N/T" if i == 9 else c for i, c in enumerate(SEMANA_ANA)],
+                  "LUIS GOMEZ RIAL": SEMANA_LUIS}, maximas={DIAS[7]: 44})
+    r = await sync(llave, p2, nave=nave)
+    assert [(x["col"], x["valor"]) for x in r["escribir"]] == [(col_de(DIAS[1]), "V")]
+    assert turno(t, "d1", DIAS[9])["cod"] == "1" and turno(t, "d2", DIAS[8])["cod"] == "V"
+    assert t.route_demand.docs[0]["maximo"] == 48
+    ultima = _conf(nave)["ultima"]
+    assert ultima["en_borrador"] == 14 and "Borrador en Flota del 19/10 al 25/10" in r["mensaje"]
+    # Se marca definitivo: la siguiente vuelta pasa el borrador entero a la hoja aunque sean muchas celdas, y donde
+    # la hoja también cambió (Ana el 21) manda la app.
+    r = await server.cuadrante_sync_definitivo({"center": "OGA5"}, OFI)
+    assert r["definitivo"]["desde"] == DIAS[7] and _conf(nave)["forzar_una_vez"] is True
+    assert "borrador" not in _conf(nave)
+    for i in range(7, 14):                                   # toda la semana de Luis cambia en la app
+        poner(t, "d2", DIAS[i], "V")
+    # En la hoja, mientras: Luis el 24 a N/T (cambiaron las dos: manda la app) y el 25 vacío (la hoja no lo tenía).
+    p3 = pestana({"ANA PEREZ LOPEZ": ["N/T" if i == 9 else c for i, c in enumerate(SEMANA_ANA)],
+                  "LUIS GOMEZ RIAL": [("N/T" if i == 12 else None if i == 13 else c) for i, c in enumerate(SEMANA_LUIS)]},
+                 maximas={DIAS[7]: 44})
+    r = await sync(llave, p3, nave=nave)
+    escritas = {(x["fila"], x["col"]): x for x in r["escribir"]}
+    luis = fila_de(p3, "LUIS GOMEZ RIAL")
+    assert all((luis, col_de(DIAS[i])) in escritas for i in range(7, 14)), sorted(escritas)
+    assert escritas[(luis, col_de(DIAS[12]))]["valor"] == "V" and "definitivo" in escritas[(luis, col_de(DIAS[12]))]["nota"]
+    assert escritas[(luis, col_de(DIAS[13]))]["valor"] == "V"     # vaciada en la hoja con base: va igual, como siempre
+    assert turno(t, "d2", DIAS[12])["cod"] == "V"
+    # Lo que solo cambió la hoja (Ana el 21, la máxima del 19) entra en la app: la app no lo había tocado.
+    assert turno(t, "d1", DIAS[9])["cod"] == "N/T"
+    assert t.route_demand.docs[0]["maximo"] == 44
+    assert r["ok"] and not _conf(nave)["forzar_una_vez"] and "definitivo" not in _conf(nave)
+
+
+@pytest.mark.asyncio(loop_scope="session")
+async def test_el_borrador_se_valida_y_se_puede_quitar(nave):
+    with pytest.raises(HTTPException) as e:
+        await server.cuadrante_sync_borrador({"center": "OGA5", "desde": DIAS[0], "hasta": DIAS[6]}, OFI)
+    assert e.value.status_code == 404                        # sin hoja conectada
+    await conectar()
+    with pytest.raises(HTTPException) as e:
+        await server.cuadrante_sync_borrador({"center": "OGA5", "desde": DIAS[6], "hasta": DIAS[0]}, OFI)
+    assert e.value.status_code == 400
+    with pytest.raises(HTTPException) as e:
+        await server.cuadrante_sync_borrador({"center": "OGA5", "desde": DIAS[0], "hasta": "2027-03-01"}, OFI)
+    assert e.value.status_code == 400
+    with pytest.raises(HTTPException) as e:
+        await server.cuadrante_sync_definitivo({"center": "OGA5"}, OFI)
+    assert e.value.status_code == 400                        # nada que marcar
+    await server.cuadrante_sync_borrador({"center": "OGA5", "desde": DIAS[0], "hasta": DIAS[6]}, OFI)
+    assert (await server.cuadrante_sync_estado("OGA5", OFI))["borrador"]
+    r = await server.cuadrante_sync_borrador({"center": "OGA5", "quitar": True}, OFI)
+    assert r["borrador"] is None and not (await server.cuadrante_sync_estado("OGA5", OFI)).get("borrador")
+    with pytest.raises(HTTPException) as e:
+        await server.cuadrante_sync_borrador({"center": "OGA5", "desde": DIAS[0], "hasta": DIAS[6]}, SIN_CUADRANTE)
+    assert e.value.status_code == 403

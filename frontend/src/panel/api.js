@@ -401,6 +401,10 @@ export const modoSyncHoja = (center, modo) => api.post('/cuadrante/sync/modo', {
 export const aceptarSyncHoja = (center) => api.post('/cuadrante/sync/aceptar', { center })
 export const desconectarSyncHoja = (center) => api.post('/cuadrante/sync/desconectar', { center })
 export const emparejarSyncHoja = (center, nombre, eleccion) => api.post('/cuadrante/sync/emparejar', { center, nombre, eleccion })
+/* Borrador (31-10-2026): un periodo que se hace en la app sin que la hoja se entere hasta «Marcar definitivo». */
+export const borradorSyncHoja = (center, desde, hasta) => api.post('/cuadrante/sync/borrador', { center, desde, hasta })
+export const quitarBorradorSyncHoja = (center) => api.post('/cuadrante/sync/borrador', { center, quitar: true })
+export const definitivoSyncHoja = (center) => api.post('/cuadrante/sync/definitivo', { center })
 export const cuadranteExportar = (center, desde, hasta) =>
   api.get('/cuadrante/exportar', { params: { center, desde, hasta }, responseType: 'blob', timeout: 120000 })
 export function cuadranteImportar(file, center, confirmar, crearFichas, emparejar, forzarCentro) {

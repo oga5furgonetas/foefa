@@ -12000,6 +12000,23 @@ async def _repuntar_conductor(absorber: list, conservar: str, nombre: str) -> di
         array_filters=[{"m.driver_id": {"$in": absorber}}])
     if r.modified_count:
         movidos["vehicles.mileage_history"] = r.modified_count
+    # La persona del cuadrante (tipo «solo findes», patrón, nota, apodos…) va con la ficha que se conserva
+    # (31-10-2026: se quedaba en la absorbida y había que volver a ponerla). Si la conservada ya tiene la suya en ese
+    # centro, se le completa lo que le falte y la otra se quita: una por centro y persona.
+    for p in await db[_CUA_PERSONAS].find({"driver_id": {"$in": absorber}}, {"_id": 0}).to_list(500):
+        filtro = {"center": p.get("center"), "driver_id": p["driver_id"]}
+        mia = await db[_CUA_PERSONAS].find_one({"center": p.get("center"), "driver_id": conservar}, {"_id": 0})
+        if not mia:
+            await db[_CUA_PERSONAS].update_one(filtro, {"$set": {"driver_id": conservar}})
+        else:
+            faltan = {k: v for k, v in p.items()
+                      if k in ("tipo", "patron", "nota", "apodos", "reglas_fijas", "alta_desde", "orden")
+                      and v and not mia.get(k)}
+            if faltan:
+                await db[_CUA_PERSONAS].update_one({"center": p.get("center"), "driver_id": conservar},
+                                                   {"$set": faltan})
+            await db[_CUA_PERSONAS].delete_one(filtro)
+        movidos["cuadrante_personas.driver_id"] = movidos.get("cuadrante_personas.driver_id", 0) + 1
     return movidos
 
 
@@ -49465,10 +49482,17 @@ async def cuadrante_importar(file: UploadFile = File(...), center: str = Form(..
             guardadas += 1
     for i in range(0, len(ops), 500):
         await _bulk_turnos(ops[i:i + 500])
+    # LO ELEGIDO EN LA APP MANDA (31-10-2026, Dani: «estoy cansado de cambiar a cada uno que solo trabaja findes;
+    # ¿eso se desactualiza solo?»). Se desactualizaba AQUÍ: cada importación reescribía el tipo de todos con lo que
+    # dice la hoja (nombre en azul = empresa, el resto «normal») y pisaba el «solo finde» o el patrón puestos en la
+    # app. Ahora el tipo y el patrón de la hoja solo entran a quien no tiene tipo elegido.
+    elegidos = {p["driver_id"]: p for p in await db[_CUA_PERSONAS].find(
+        {"center": center}, {"_id": 0, "driver_id": 1, "tipo": 1}).to_list(5000)}
     for f, drv in emparejadas:
-        campos = {"en_cuadrante": True, "tipo": f["tipo"] if f["tipo"] in _cm.TIPOS else "normal",
-                  "patron": f.get("patron"), "inactivo_desde": f.get("inactivo_desde"),
-                  "alta_desde": f.get("alta_desde")}
+        campos = {"en_cuadrante": True, "inactivo_desde": f.get("inactivo_desde"), "alta_desde": f.get("alta_desde")}
+        if not (elegidos.get(drv["id"]) or {}).get("tipo"):
+            campos["tipo"] = f["tipo"] if f["tipo"] in _cm.TIPOS else "normal"
+            campos["patron"] = f.get("patron")
         if f.get("orden") is not None:
             campos["orden"] = f["orden"]
         await _cua_guardar_persona(center, drv["id"], campos, user, cambio)
@@ -49525,6 +49549,7 @@ _SYNC_POR_QUE = {
     "app": "cambiado en la app",
     "quitado": "quitado en la app",
     "maxima": "máxima cambiada en la app",
+    "definitivo": "cuadrante marcado definitivo en la app",
 }
 
 
@@ -49779,6 +49804,11 @@ def _sync_mensaje(r: dict) -> str:
         extra.append("%d salidas o fichas nuevas retenidas por ser demasiadas de golpe: acéptalas en Flota"
                      % gente["retenidas"])
     cola = (" Gente: " + ", ".join(extra) + ".") if extra else ""
+    if r.get("en_borrador"):
+        b = r.get("borrador") or {}
+        corta = lambda s: f"{str(s)[8:10]}/{str(s)[5:7]}" if s else "?"            # noqa: E731
+        cola += (" Borrador en Flota del %s al %s: %d celdas de esas fechas no se tocan hasta marcarlo definitivo."
+                 % (corta(b.get("desde")), corta(b.get("hasta")), r["en_borrador"]))
     if r["modo"] == "prueba":
         return ("Modo prueba, no se ha tocado nada: cambiaría %d celdas en Flota y %d en esta hoja.%s Actívalo en "
                 "Flota → Cuadrante → Google Sheets." % (n_app, n_hoja, cola))
@@ -49804,6 +49834,14 @@ async def _sync_procesar(conf: dict, cuerpo: dict) -> dict:
     Más de 5 salidas u 8 fichas nuevas de golpe (una pestaña nueva a medio hacer) se retienen hasta aceptarlas."""
     center = conf["center"]
     modo = conf.get("modo") or "prueba"
+    # EL BORRADOR (31-10-2026, Dani: «voy a hacer el cuadrante de noviembre y quiero que aparezca en el Sheets cuando
+    # lo marque definitivo, por si cambio algo mientras lo estoy haciendo»). Mientras un periodo está en borrador,
+    # sus celdas y sus máximas no van ni vienen. Al marcarlo definitivo (`definitivo`, con `forzar_una_vez`), la
+    # siguiente vuelta lo pasa entero a la hoja y, donde la hoja también hubiera cambiado, manda la app.
+    borrador = conf.get("borrador") or {}
+    b_desde, b_hasta = str(borrador.get("desde") or ""), str(borrador.get("hasta") or "")
+    definitivo = conf.get("definitivo") or {}
+    d_desde, d_hasta = str(definitivo.get("desde") or ""), str(definitivo.get("hasta") or "")
     hoy = _cua_hoy()
     desde = (hoy - timedelta(days=_SYNC_ANTES)).isoformat()
     hasta = (hoy + timedelta(days=_SYNC_DESPUES)).isoformat()
@@ -49815,7 +49853,8 @@ async def _sync_procesar(conf: dict, cuerpo: dict) -> dict:
          "desde": desde, "hasta": hasta, "pestanas": [], "saltadas": [], "sin_ficha": [], "ambiguos": [],
          "a_app": 0, "a_app_cambia": 0, "a_hoja": 0, "a_hoja_cambia": 0, "conflictos": 0, "maximas_app": 0,
          "maximas_hoja": 0, "protegidas": 0, "codigos_desconocidos": {}, "cambios": [], "retenido": False,
-         "aplicado": False, "error": None, "escribir": [],
+         "aplicado": False, "error": None, "escribir": [], "en_borrador": 0,
+         "borrador": {"desde": b_desde, "hasta": b_hasta} if b_desde else None,
          "personas": {"entran": [], "fichas_nuevas": [], "salen": [], "vuelven": [], "en_app_no_en_hoja": [],
                       "revisar": [], "retenidas": 0}}
     gente = r["personas"]
@@ -49934,6 +49973,9 @@ async def _sync_procesar(conf: dict, cuerpo: dict) -> dict:
         a_app, a_hoja = [], []
         for (did, f), h in sorted(hoja.items(), key=lambda kv: (kv[0][1], kv[1]["nombre"])):
             clave = f"{did}|{f}"
+            if b_desde and b_desde <= f <= b_hasta:
+                r["en_borrador"] += 1                    # se está haciendo en la app: ni va ni viene hasta «definitivo»
+                continue
             doc = actuales.get((did, f))
             if doc and not _cua_es_centro(doc.get("center"), center):
                 continue                                 # ese día lo lleva otro centro
@@ -49959,6 +50001,15 @@ async def _sync_procesar(conf: dict, cuerpo: dict) -> dict:
                 if (ap == "libre" and tipo_s in ("trabaja", "extra")) or (ap == "extra" and tipo_s == "libre"):
                     prot = "aprobado"
             accion, por_que = _sync_decide(S, A, B, prot)
+            if d_desde and d_desde <= f <= d_hasta:
+                # El borrador se marcó definitivo: en esas fechas manda la app. Donde las dos cambiaron, o donde nunca
+                # coincidieron (la pestaña del mes nuevo, recién hecha copiando la de antes con sus códigos viejos), la
+                # hoja se pone como la app (una celda que la app no tiene se vacía); una celda que la hoja nunca tuvo se
+                # rellena. Lo que SOLO cambió la hoja (la app no lo tocó desde la última vez) entra como siempre.
+                if accion == "a_app" and por_que in ("conflicto", "primera", "nuevo"):
+                    accion, por_que = "a_hoja", "definitivo"
+                elif accion == "nada" and A and not S and B is None:
+                    accion, por_que = "a_hoja", "definitivo"
             if accion == "igual":
                 base[clave] = S
             elif accion == "nada":
@@ -50052,6 +50103,8 @@ async def _sync_procesar(conf: dict, cuerpo: dict) -> dict:
         if isinstance(d.get("maximo"), (int, float)):
             demanda[d["date"]] = int(d["maximo"])
     for f, (i, p) in fuente.items():
+        if b_desde and b_desde <= f <= b_hasta:
+            continue                                     # en borrador: tampoco las máximas
         S = p["maximas"].get(f)
         A, B = demanda.get(f), base_max.get(f)
         acc = _sync_decide_maxima(S, A, B)
@@ -50257,6 +50310,8 @@ async def cuadrante_sync_hoja(request: Request):
                        "hoja_id": _texto_cuerpo(cuerpo.get("hoja_id"), 120) or conf.get("hoja_id")}}
     if r.get("aplicado"):
         cambio["$set"]["forzar_una_vez"] = False
+        if conf.get("definitivo"):
+            cambio["$unset"] = {"definitivo": ""}        # ya pasó a la hoja: la próxima vuelta decide como siempre
     if r.get("error") or r.get("retenido") or r.get("a_app") or r.get("a_hoja") or r.get("maximas_app") \
             or r.get("maximas_hoja"):
         cambio["$push"] = {"historial": {"$each": [{k: guardar.get(k) for k in (
@@ -50291,7 +50346,8 @@ def _sync_salida(conf: Optional[dict]) -> dict:
     if not conf or conf.get("revocado"):
         return {"conectado": False}
     out = {k: conf.get(k) for k in ("modo", "creado_en", "creado_por", "hoja_nombre", "hoja_id", "ultimo_contacto",
-                                    "ultima", "ultima_escritura", "forzar_una_vez", "llave_vieja_en")}
+                                    "ultima", "ultima_escritura", "forzar_una_vez", "llave_vieja_en", "borrador",
+                                    "definitivo")}
     out["historial"] = list(reversed(conf.get("historial") or []))[:15]
     out["conectado"] = True
     out["hoja_url"] = ("https://docs.google.com/spreadsheets/d/%s/edit" % conf["hoja_id"]
@@ -50356,6 +50412,54 @@ async def cuadrante_sync_aceptar(data: dict = Body(...), user: dict = Depends(re
         raise HTTPException(404, "Esta hoja no está conectada")
     await _audit(user, "cuadrante_sync_aceptar", {"center": center})
     return {"ok": True}
+
+
+@api_router.post("/cuadrante/sync/borrador")
+async def cuadrante_sync_borrador(data: dict = Body(...), user: dict = Depends(require_admin)):
+    """Un periodo que se hace en la app sin que la hoja se entere (Dani, 31-10-2026: «voy a hacer el cuadrante de
+    noviembre y quiero que aparezca en el Sheets cuando lo marque definitivo, por si cambio algo mientras»). Hasta
+    «Marcar definitivo», la sincronización no toca esas fechas en ningún sentido. `quitar`: deja el borrador sin
+    pasar nada (la siguiente vuelta decide celda a celda, como siempre)."""
+    center = _sync_puede(user, data.get("center"))
+    filtro = {"db_name": _current_db_name.get(), "center": center, "revocado": False}
+    if not await global_db[_SYNC_COL].find_one(filtro, {"_id": 0, "id": 1}):
+        raise HTTPException(404, "Esta hoja no está conectada")
+    if data.get("quitar"):
+        await global_db[_SYNC_COL].update_one(filtro, {"$unset": {"borrador": ""}})
+        await _audit(user, "cuadrante_sync_borrador_quitar", {"center": center})
+        return {"ok": True, "borrador": None}
+    desde, hasta = _cua_fecha(data.get("desde"), "Desde"), _cua_fecha(data.get("hasta"), "Hasta")
+    if hasta < desde:
+        raise HTTPException(400, "El final del borrador es anterior al principio")
+    if (date_cls.fromisoformat(hasta) - date_cls.fromisoformat(desde)).days > 92:
+        raise HTTPException(400, "Como mucho tres meses de borrador")
+    borrador = {"desde": desde, "hasta": hasta, "desde_en": datetime.now(timezone.utc).isoformat(),
+                "por": user.get("name") or user.get("username") or ""}
+    await global_db[_SYNC_COL].update_one(filtro, {"$set": {"borrador": borrador}})
+    await _audit(user, "cuadrante_sync_borrador", {"center": center, "desde": desde, "hasta": hasta})
+    return {"ok": True, "borrador": borrador}
+
+
+@api_router.post("/cuadrante/sync/definitivo")
+async def cuadrante_sync_definitivo(data: dict = Body(...), user: dict = Depends(require_admin)):
+    """El borrador se da por bueno: la siguiente sincronización lo pasa entero a la hoja (sin el tope de 80 celdas)
+    y, donde la hoja también hubiera cambiado en esas fechas, manda la app."""
+    center = _sync_puede(user, data.get("center"))
+    filtro = {"db_name": _current_db_name.get(), "center": center, "revocado": False}
+    conf = await global_db[_SYNC_COL].find_one(filtro, {"_id": 0, "borrador": 1})
+    if not conf:
+        raise HTTPException(404, "Esta hoja no está conectada")
+    b = conf.get("borrador") or {}
+    if not b.get("desde"):
+        raise HTTPException(400, "No hay ningún borrador que marcar")
+    definitivo = {"desde": b["desde"], "hasta": b["hasta"], "en": datetime.now(timezone.utc).isoformat(),
+                  "por": user.get("name") or user.get("username") or ""}
+    await global_db[_SYNC_COL].update_one(filtro, {"$set": {"definitivo": definitivo, "forzar_una_vez": True},
+                                                   "$unset": {"borrador": ""}})
+    await _audit(user, "cuadrante_sync_definitivo", {"center": center, "desde": b["desde"], "hasta": b["hasta"]})
+    return {"ok": True, "definitivo": definitivo,
+            "aviso": "La hoja lo recibe en la próxima sincronización: en 10 minutos como mucho, o ahora mismo "
+                     "desde el menú «Flota → Sincronizar ahora» de la hoja."}
 
 
 @api_router.post("/cuadrante/sync/emparejar")
