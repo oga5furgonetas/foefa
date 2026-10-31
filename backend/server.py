@@ -8493,8 +8493,31 @@ async def change_my_password(data: dict, user: dict = Depends(get_current_user))
         if not cuenta and por_correo:
             cuenta = await db.driver_accounts.find_one(por_correo)
         if cuenta:
-            temporal = bool(cuenta.get("must_change_password") or cuenta.get("creada_en_bloque"))
-            if not temporal and not verify_password(current, cuenta["hashed_password"]):
+            # La actual se comprueba contra TODAS las cuentas del correo (31-10-2026, Junior Alexander: «la contraseña es
+            # incorrecta al cambiarla»): entró con la contraseña que vive en la cuenta de su ficha VIEJA (de antes del
+            # arreglo del 29-10 las dos cuentas iban por separado), la sesión va con la ficha activa, y aquí se miraba
+            # solo la cuenta de la activa, que tenía otra. Vale la que abra cualquiera de las suyas, o que alguna sea
+            # temporal (la temporal no pide la anterior).
+            # Todas las suyas: las del mismo id de conductor (al fusionar dos fichas, las dos cuentas quedan con el
+            # id de la que se conserva: `find_one` devolvía una cualquiera) y las del mismo correo.
+            mismas = {"$or": [{"driver_id": user["sub"]}] + ([por_correo] if por_correo else [])}
+            suyas = [cuenta] + [c for c in await db.driver_accounts.find(mismas).to_list(20) if c.get("id") != cuenta.get("id")]
+            # Temporal VIGENTE: más nueva que la última contraseña propia (la misma regla que el login); una temporal
+            # vieja que se quedó en la otra cuenta no exime de saber la actual.
+            ultima_propia = max((str(c.get("password_changed_at") or "") for c in suyas), default="")
+
+            def _temporal_vigente(c: dict) -> bool:
+                if not (c.get("must_change_password") or c.get("creada_en_bloque")):
+                    return False
+                puesta = str(c.get("password_temp_created_at") or c.get("created_at") or "")
+                return not ultima_propia or puesta > ultima_propia
+            temporal = any(_temporal_vigente(c) for c in suyas)
+            abre = bool(current) and bool(_cuentas_que_cuadran(suyas, current))
+            if not temporal and not abre:
+                logger.warning("Cambio de contraseña rechazado: conductor %s, %d cuenta(s) [%s], actual %s",
+                               user["sub"][:8], len(suyas),
+                               ", ".join("%s%s" % (c.get("driver_id", "?")[:8], " temporal" if (c.get("must_change_password") or c.get("creada_en_bloque")) else "") for c in suyas),
+                               "vacía" if not current else "no abre ninguna")
                 await asyncio.sleep(0.8)
                 # 400 y no 401: la app de Android cierra la sesión ante cualquier 401 con token (como hizo la web
                 # hasta que se le puso la excepción), y un conductor que se equivocaba al teclear su

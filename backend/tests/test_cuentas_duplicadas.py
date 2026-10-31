@@ -137,3 +137,47 @@ async def test_un_reset_de_la_oficina_posterior_a_la_propia_si_abre(base):
     with pytest.raises(HTTPException):
         await _entrar("mi-clave-propia-1")                 # la propia la ha sustituido la oficina
 
+
+
+@pytest.mark.asyncio(loop_scope="session")
+async def test_la_actual_vale_aunque_viva_en_la_cuenta_de_la_ficha_vieja(base):
+    """31-10-2026, Junior Alexander: «no le deja entrar, le dice que la contraseña es incorrecta (al cambiarla)».
+    Su contraseña de verdad estaba en la cuenta de la ficha vieja (de antes del arreglo del 29-10); la de la ficha
+    activa tenía otra. Entraba (el login mira todas), pero cambiarla miraba solo la de la ficha activa: 400."""
+    base["driver_accounts"].docs[0].update(hashed_password=server.hash_password("la-de-junior-1"),
+                                            password_changed_at="2026-10-28T10:00:00+00:00")
+    base["driver_accounts"].docs[1].update(hashed_password=server.hash_password("otra-vieja-de-oficina"),
+                                            password_changed_at="2026-10-20T10:00:00+00:00")
+    for c in base["driver_accounts"].docs:
+        for k in ("must_change_password", "creada_en_bloque"):
+            c.pop(k, None)
+    base["drivers"].docs[0]["active"] = True          # las DOS fichas activas (como Junior): el login entra por la vieja
+    s = await _entrar("la-de-junior-1")
+    assert s.configurar_cuenta is False
+    yo = {"sub": "f-activa", "role": "driver", "org_id": "o1", "db_name": "dsp_o1"}
+    with pytest.raises(HTTPException) as e:
+        await server.change_my_password({"current_password": "ni-idea", "new_password": "junior-nueva-1"}, yo)
+    assert e.value.status_code == 400
+    r = await server.change_my_password({"current_password": "la-de-junior-1", "new_password": "junior-nueva-1"}, yo)
+    assert r == {"success": True}
+    assert all(server.verify_password("junior-nueva-1", c["hashed_password"]) for c in base["driver_accounts"].docs)
+    assert (await _entrar("junior-nueva-1")).id == "f-activa"
+
+
+@pytest.mark.asyncio(loop_scope="session")
+async def test_tras_fusionar_las_dos_cuentas_llevan_el_mismo_id_y_la_actual_vale_igual(base):
+    """Fusionar fichas repunta `driver_accounts.driver_id` a la ficha conservada: la persona tiene UNA ficha y DOS
+    cuentas con el mismo id. `find_one` daba una cualquiera y, si era la del hash viejo, «la actual no es correcta»."""
+    base["driver_accounts"].docs[0].update(driver_id="f-activa", hashed_password=server.hash_password("la-de-siempre-1"),
+                                            password_changed_at="2026-10-28T10:00:00+00:00")
+    base["driver_accounts"].docs[1].update(hashed_password=server.hash_password("un-hash-viejo"),
+                                            password_changed_at="2026-10-20T10:00:00+00:00")
+    for c in base["driver_accounts"].docs:
+        for k in ("must_change_password", "creada_en_bloque"):
+            c.pop(k, None)
+    assert (await _entrar("la-de-siempre-1")).id == "f-activa"
+    yo = {"sub": "f-activa", "role": "driver", "org_id": "o1", "db_name": "dsp_o1"}
+    r = await server.change_my_password({"current_password": "la-de-siempre-1", "new_password": "la-nueva-de-hoy-1"}, yo)
+    assert r == {"success": True}
+    assert all(server.verify_password("la-nueva-de-hoy-1", c["hashed_password"]) for c in base["driver_accounts"].docs)
+    assert (await _entrar("la-nueva-de-hoy-1")).id == "f-activa"
