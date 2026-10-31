@@ -1331,6 +1331,12 @@ otros países o QR leen bien la dirección: número 2, primero B, a veces lee n�
   precios por país en Play Console sin hacer (Dani); legales en inglés sin jurista; el emulador solo en inglés (EE.
   UU.) y en español: FR/NL/GB/DE por tests con muestras reales y por la prueba en vivo de las fuentes.
 
+## Última sesión — 31-10-2026 (17:05, PC de Dani, bucle de redes): una ronda por los seis disparos acumulados; X programado hasta el X 11-11
+
+- Metricool sin huecos hasta el 09-11; X programado el X 11-11 («¿qué le falta a una app de reparto?»). Ronda: 3 comentarios en
+  TikTok (es, fr, fr; el español es un ofrecimiento público a TuPaqueteDiario, Granada), 2 en YouTube. Detalle en
+  `docs/anuncios/redes/REGISTRO-PC.md` (31-10, 16:10).
+
 ## Última sesión — 30-10-2026 (18:55, PC de Dani, bucle de redes): ronda de las 18:00; X programado hasta el M 10-11
 
 - Metricool sin huecos hasta el 09-11; X programado el M 10-11 (Invita y gana). Ronda: 3 comentarios en TikTok (de, es, en; el
