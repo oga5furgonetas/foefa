@@ -9,10 +9,12 @@
 #   .\scripts\deploy-frontend.ps1
 #   .\scripts\deploy-frontend.ps1 -ForzarApk   # coser a sabiendas un APK mas viejo que el de produccion (volver atras)
 #   .\scripts\deploy-frontend.ps1 -SinApk      # desplegar aunque no haya ningun APK que coser (la descarga quedaria rota)
+#   .\scripts\deploy-frontend.ps1 -SinCI       # sin mirar el CI de GitHub (01-11-2026: por defecto, nada se despliega en rojo)
 # -----------------------------------------------------------------
 param(
     [switch]$ForzarApk,
-    [switch]$SinApk
+    [switch]$SinApk,
+    [switch]$SinCI
 )
 $ErrorActionPreference = "Stop"
 $ProgressPreference = "SilentlyContinue"   # sin la barra de progreso Invoke-WebRequest baja el APK de produccion en segundos
@@ -20,7 +22,10 @@ $ProgressPreference = "SilentlyContinue"   # sin la barra de progreso Invoke-Web
 
 $raiz = Join-Path $PSScriptRoot ".."
 . (Join-Path $PSScriptRoot "destino.ps1")
+. (Join-Path $PSScriptRoot "ci-verde.ps1")
 $d = Get-Destino -Requiere pages, web, backend
+Write-Host "==> Mirando el CI de GitHub..."
+Assert-CiVerde -Raiz $raiz -SinCI:$SinCI
 
 $nodeExe = Join-Path $env:ProgramFiles "nodejs\node.exe"
 if (-not (Test-Path $nodeExe)) { $nodeExe = "node" }

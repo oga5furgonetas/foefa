@@ -20,9 +20,13 @@ on:
         description: "Subir a App Store Connect (si hay secretos)"
         type: boolean
         default: true
+  # SOLO al tocar el envoltorio de iOS o a mano (01-11-2026). Antes se compilaba con CUALQUIER cambio de la web
+  # (frontend/src/**, frontend/public/**): cada texto corregido era un run de macOS (el runner más caro de GitHub) y
+  # una compilación subida a App Store Connect que nadie había pedido. La web que lleva dentro se actualiza cuando se
+  # lanza a mano, que es cuando de verdad se va a enviar a revisión.
   push:
     branches: [main]
-    paths: ['frontend/ios/**', 'frontend/capacitor.config.json', 'frontend/src/**', 'frontend/public/**', 'frontend/package.json', '.github/workflows/app-ios.yml']
+    paths: ['frontend/ios/**', 'frontend/capacitor.config.json', '.github/workflows/app-ios.yml']
 
 concurrency:
   group: app-ios-${{ github.ref }}

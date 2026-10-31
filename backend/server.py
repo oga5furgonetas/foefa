@@ -7390,8 +7390,9 @@ async def reset_password(data: dict, request: Request):
     _rl_public_action(f"rp:{_rl_key_ip(request)}", max_count=10, window_s=900)
     token = _texto_cuerpo(data.get("token"))
     new = data.get("new_password") or ""
-    if len(new) < 6:
-        raise HTTPException(status_code=400, detail="La contraseña debe tener al menos 6 caracteres")
+    # Los mismos 8 que pide el alta (01-11-2026): la recuperación era la puerta floja (6).
+    if len(new) < 8:
+        raise HTTPException(status_code=400, detail="La contraseña debe tener al menos 8 caracteres")
     if not token:
         raise HTTPException(status_code=400, detail="Enlace inválido")
 
@@ -14205,15 +14206,18 @@ async def sign_inspection(inspection_id: str, data: SignInspectionRequest, reque
 
 
 @api_router.get("/inspections/{inspection_id}/forensic")
-async def get_forensic_status(inspection_id: str, _=Depends(require_any_auth)):
-    """Estado de firma de una inspección. Sin secretos: NO devuelve payload completo."""
+async def get_forensic_status(inspection_id: str, user: dict = Depends(require_any_auth)):
+    """Estado de firma de una inspección. Sin secretos: NO devuelve payload completo.
+
+    La oficina ve cualquiera de su empresa; un conductor, solo las SUYAS (01-11-2026: antes cualquier conductor
+    podía preguntar por cualquier inspección de la empresa con solo conocer su id)."""
     # FIX (bug S1.A): incluir 'id' en projection para que find_one no devuelva {} en docs
     # sin campos forensic_*. Sin esto, /forensic devolvía 404 para inspecciones no firmadas.
     insp = await db.inspections.find_one(
-        {"id": inspection_id}, {"_id": 0, "id": 1, "forensic_signed": 1, "forensic_hash": 1,
+        {"id": inspection_id}, {"_id": 0, "id": 1, "driver_id": 1, "forensic_signed": 1, "forensic_hash": 1,
                                 "forensic_signed_at": 1, "forensic_signed_by": 1}
     )
-    if not insp:
+    if not insp or (user.get("role") != "admin" and insp.get("driver_id") != user.get("sub")):
         raise HTTPException(status_code=404, detail="Inspección no encontrada")
     if not insp.get("forensic_signed"):
         return {"signed": False}
@@ -16228,7 +16232,8 @@ async def push_subscribe(data: dict, user: dict = Depends(require_any_auth)):
 async def push_unsubscribe(data: dict, user: dict = Depends(require_any_auth)):
     ep = _texto_cuerpo(data.get("endpoint"))
     if ep:
-        await global_db.push_subscriptions.delete_one({"endpoint": ep})
+        # Solo la propia (01-11-2026): con el endpoint de otra persona se le quitaban sus avisos.
+        await global_db.push_subscriptions.delete_one({"endpoint": ep, "user_id": user.get("sub")})
     return {"ok": True}
 
 
