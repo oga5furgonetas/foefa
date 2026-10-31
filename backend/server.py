@@ -7782,8 +7782,18 @@ async def conductor_list_public(center: Optional[str] = None, slug: Optional[str
     esos ids se podia pedir un JWT de cualquier conductor sin contrasena.
     El portal del conductor ya no la usa: /auth/driver-lookup solo solicita
     un código temporal y no expone la plantilla.
+
+    LA EMPRESA ES LA DEL TOKEN (01-11-2026). `slug` quedó de cuando esto era público, y con sesión
+    de admin cambiaba de base sin mirar de quién era: cualquier cuenta (las de prueba se crean
+    solas) podía listar la plantilla —nombre y correo— de OTRA empresa con solo saber su slug, que
+    es público (/empleo/<slug>, /auth/org/<slug>). Solo el super-admin puede mirar otra empresa.
     """
-    await _set_tenant_by_slug(slug)
+    if slug and not _admin.get("sa"):
+        propia = await get_org(_admin.get("org_id"))
+        if (propia or {}).get("slug") != slug:
+            raise HTTPException(status_code=403, detail="Esa empresa no es la tuya")
+    if slug:
+        await _set_tenant_by_slug(slug)
     query = {}
     if center and center != "Todos":
         if not re.match(r'^[A-Za-z0-9_\-]{1,30}$', center):
