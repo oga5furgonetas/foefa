@@ -1487,8 +1487,32 @@ código ni en el repo (CLAUDE.md: ningún secreto escrito), lo escribe la oficin
   - *Resultado* (misma simulación): 12 personas → nadie sin finde libre, racha máxima 2, de 4 a 6 días de finde
     cada uno, 1,8 s. 60 personas → de 26 a 3 sin finde libre, de 46 a 18 s, 0 extras y 0 déficit. Tests:
     `tests/test_cuadrante_findes.py` (5) y los 50 del motor de siempre. pytest entero: 1353 passed in 745.23s (0:12:25).
+  - *Después (31-10 tarde)*: rachas de 3 y 4 findes a 60 y 200 (cuenta de los 1.304). Dani: «sigo viendo 1 libra 3
+    findes seguidos y otro ninguno» → lo que ve es el motor VIEJO (el nuevo no está desplegado). Medido con 60 personas
+    IDÉNTICAS y máxima 40 (el peor caso, todo simétrico): 3 de 60 sin finde libre y una racha de 4, y eso NO cambia con
+    más peso (probado: tramos por fin de semana trabajado además de por día; vista de 2 semanas: se va del tiempo
+    por semana, 45/4 s, y devuelve basura; las dos cosas juntas, igual). Es estructural: con la ley de 6 seguidos y
+    5+2, quien trabaja sábado Y domingo no puede librar el finde siguiente, así que la rotación exige partir findes,
+    y el cálculo semana a semana (viendo una) deja a unos pocos encadenados. Con 12 personas sale perfecto. Lo
+    siguiente, si en las propuestas reales (75-80 personas, menos simétricas) sigue pasando: un reparto PREVIO de a
+    quién «le toca» librar cada finde (ronda por historial) que entre al motor como premio fuerte esa semana y como
+    «parte el finde» la anterior; o más tiempo por semana con vista de 2.
   - *Pendiente*: que Dani lo vea en una propuesta real de OGA5/DGA1 («Proponer» en el cuadrante) y diga si el reparto
     le cuadra; si quiere que la semana en curso también se reordene, bajar `PESO_CAMBIO_SEMANA_1`.
+- **La pestaña NOVIEMBRE de la hoja, hecha por Claude en el Chrome de empresa de Dani** (31-10, 16:40-17:00; la
+  hoja «SEPTIEMBRE Y OCTUBRE», id `1DoUiK2ut49iXFOE4WS7NSenc-O8J-hk0FeAqe2dN_kU`, pestañas DIARIO, «12 A 26», ahora
+  NOVIEMBRE, y «deber horas»). Dani: «el Sheets no tiene más hojas hacia la derecha… ¿lo puedes hacer tú?». Duplicada
+  «12 A 26», renombrada, título A1 «CUADRANTE OGA5 — del 01-11-2026 al 30-11-2026», fila 3 letras desde D (el 1 es
+  domingo) y fila 4 del 1 al 30, cuerpo y máximas vaciados, columnas AG-AI (días 31, 1, 2 de la copia) eliminadas,
+  notas quitadas. Tropiezos que conviene saber: (1) «12 A 26» tiene OCULTAS las columnas C-Z (días pasados), la copia
+  también, y lo que se escribe en el nombre de celda «C3» cae en la primera visible (AA): hay que mostrarlas antes
+  (flecha entre B y AA); (2) un Delete sobre un rango con columnas ocultas no las vacía; (3) con la sincronización
+  ACTIVA, la copia vacía con fechas de octubre fue «la pestaña que llega más tarde» para esos días y el script le
+  devolvió las celdas protegidas de la app (N/T APROB, BAJA) con sus notas: se vació otra vez con las fechas ya de
+  noviembre y lo que queda son las celdas protegidas REALES de noviembre (días concedidos y bajas), que es lo
+  correcto; (4) RUTAS/DIFERENCIA en la hoja son números, no fórmulas (la pestaña vino del Excel de la app): vaciados.
+  Las letras de la fila 3 perdieron el centrado (cosmético).
+
 - **Google Sheets: borrador y «Marcar definitivo»** (Dani: «voy a hacer el cuadrante de noviembre y quiero que se
   actualice en el Sheets y aparezca cuando marque el cuadrante, algo tipo marcar definitivo, por si quiero cambiar
   algo mientras lo estoy haciendo»). Hasta ahora la sincronización era continua (cada 10 min y al editar) y cada

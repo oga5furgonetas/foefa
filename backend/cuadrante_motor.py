@@ -86,7 +86,7 @@ hacían ninguno. Ahora:
         crecientes, como los extras), contando los días de finde de las 4 semanas
         de antes (`findes_recientes`): los días de finde se igualan entre todos,
         y quien viene de trabajar muchos descansa antes;
-      - trabajar dos findes seguidos cuesta 12, tres seguidos 36 más y cuatro 60 más (contando los
+      - trabajar dos findes seguidos cuesta 12, tres seguidos 60 más y cuatro 200 más (contando los
         findes de antes del periodo: `findes_previos`): las rachas se cortan.
     Un «finde trabajado» es trabajar el sábado o el domingo; un finde LIBRE, los
     dos días libres. Solo a quien no tiene el horario marcado (patrón, días que
@@ -97,7 +97,7 @@ extra 900 (cubrir con un 6º día sigue ganando siempre a dejar la ruta). La
 cuenta de lo que puede acompañar a ese extra: mover una celda de la semana en
 curso 70 (las siguientes 3: ahí sí se reordenan los findes), perder dos libres
 seguidos 2, el reparto de extras hasta 24, el de días de finde hasta 24, las
-rachas de findes hasta 108 y el descanso por racha hasta 12: 1.140, por debajo
+rachas de findes hasta 272 y el descanso por racha hasta 12: 1.304, por debajo
 de 2.000. Así nunca sale más barato quedarse corto que repartir (lo cazó una
 prueba con pesos más altos: el motor prefería dejar un día a +1).
 
@@ -153,14 +153,14 @@ PESO_RACHA = 2.0                 # libra antes quien lleva más días seguidos (
 PESO_JUNTOS = 400.0              # que dos personas (pareja) libren y trabajen los mismos días: preferencia, cede ante cubrir rutas
 PESO_CAMBIO_SEMANA_1 = 70.0      # mover una celda ya puesta de la semana en curso: más que cualquier desempate
 PESO_CAMBIO_DESPUES = 3.0        # ... y de las semanas siguientes: los findes sí se pueden reordenar ahí
-# Reparto justo: desempates, ver la cuenta de los 1.140 en la cabecera.
+# Reparto justo: desempates, ver la cuenta de los 1.304 en la cabecera.
 PESO_EXTRA_REPETIDO = 8.0
 TOPE_REPETIDOS = 3
 PESO_FINDE_DIA = 3.0             # el n-ésimo día de finde de una persona cuesta n × esto (contando las 4 semanas de antes)
 TOPE_FINDE_DIAS = 8              # ... hasta aquí (24 como mucho por día)
 PESO_FINDES_SEGUIDOS = 12.0      # trabajar dos findes seguidos
-PESO_FINDES_TRES = 36.0          # ... tres seguidos, esto más
-PESO_FINDES_CUATRO = 60.0        # ... y cuatro seguidos, esto más todavía
+PESO_FINDES_TRES = 60.0          # ... tres seguidos, esto más
+PESO_FINDES_CUATRO = 200.0       # ... y cuatro seguidos, esto más todavía (casi nunca, salvo que no haya otra)
 
 TIPOS = ("normal", "empresa", "finde", "inactivo")
 
