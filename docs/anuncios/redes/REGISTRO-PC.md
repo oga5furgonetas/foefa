@@ -472,3 +472,39 @@ sale mejor en italiano, alemán, inglés y portugués (Brasil).
 (2) de ahora en adelante los carruseles de TikTok van en JPEG (si se regeneran con `redes-fotos.mjs`, convertir con ffmpeg);
 (3) lo de siempre: Publicar en Meta (seis cambios) y el pago, TikTok Ads (saldo y teléfono), Spotify (Enviar), el «7 días gratis»
 del grupo de Facebook, Instagram sin sesión.
+
+## 01-11-2026 (00:10 – 00:45) — ronda del bucle de 4 h (Chrome del PC 1, «Browser 2»)
+
+### Metricool (marca 7741371)
+Sin huecos hasta el M 10-11 (TikTok 18:00 e Instagram 12:00 cada día, YouTube 02/05/09-11 19:00, LinkedIn 04 y 11-11 11:00). Los
+carruseles de TikTok ya van en JPEG (verificado en la lista: `.jpeg` de static.metricool.com). Nada añadido. Nota: el calendario de
+REDES.md tiene los días de la semana corridos un día (el 01-11-2026 es domingo, no sábado); los Shorts siguen la pauta de las
+rondas anteriores (02, 05 y 09-11), y no hay vídeo nuevo que no repita uno ya subido al canal.
+
+### X (@FlotaDSP)
+- El post del 31-10 salió a las 7:30 (aviso «Your scheduled post was published»). D 01-11 → X 11-11 programados; el J 12-11 sigue
+  pendiente de la cifra real de altas (sin Python en este PC para `usuarios_total.py`; mejor el 11-11).
+- Notificaciones: nada nuevo (todo visto). Dos búsquedas en español (-links, en directo): noticias, política, un accidente en Mérida
+  (no se entra) y un hilo de inmigración (no se entra). 0 respuestas, 0 seguidas.
+
+### Ronda de conversación (lo nuestro primero)
+| Hora | Red | Hilo | Qué se dijo | App |
+|---|---|---|---|---|
+| 00:14 | TikTok | Actividad | **Florin the Delivery Driver respondió al ofrecimiento de ayer: «Sound interesting, DM me»** y dio me gusta; AnthonyS, lebiglivreur y Mónica dieron me gusta a comentarios nuestros; 352 me gusta al vídeo del 30-10. Sigue el aviso de la promoción del 30/10 (no es de esta sesión) | — |
+| 00:19 | TikTok | **Florin** (@florinthedeliverydriver), respuesta bajo su «DM me» | en público, sin mensaje privado (regla): «we keep everything public, no DMs: the app is called FDS, the link is in our profile… free with no limit until 31 December, no card. Try it on one real day, farms included, and post here what it got wrong or what's missing» | sí (verificado) |
+| 00:24 | X | notificaciones y búsquedas | nada que contestar | — |
+| 00:28 | YouTube | Studio → comentarios sin responder | ninguno | — |
+| 00:30 | YouTube | Jeremias Savedra «Trabajando repartiendo paquetes en España ¿Merece la pena?» (107 vistas) | ya tenía comentario nuestro de hace 1 día (otra sesión); se pasa | — |
+| 00:32 | YouTube | **FelixPress** «¡Soy conductor asociado…! ¿Cómo funciona el trabajo con la Fiorino?» (523 vistas en 9 h, Ribeirão Preto, doblado al español) | en portugués: la Fiorino tiene el espacio justo, cargar en el orden de la ruta (últimas paradas al fondo, primera hora a mano); ¿cuántas paradas da un día normal? | no (verificado) |
+| 00:36 | YouTube | **Renan** «#242 Every Parcel Has Its Place… Until It Doesn't» (129 vistas, Reino Unido, serie diaria) | en inglés: el paquete que «tenía su sitio» y acaba bajo la balda cuesta diez minutos en una carretera así; últimas paradas atrás, primera hora junto a la puerta, lo frágil en el suelo | no (verificado) |
+| 00:40 | TikTok | **@.nikkolorenzo** «POV primo giorno da corriere notturno di Milano» (hace 4 d, 2.307 ❤) | en italiano: turno nocturno solo locker = sin porteros, sin «pasa mañana», sin doble fila; la única ruta donde el orden lo decides tú y no el tráfico | no (verificado) |
+| 00:44 | TikTok | **@eddyentregas** (Brasil) «vem separar a rota comigo» (10-21, 158 ❤) | en portugués: separar la ruta antes de salir es donde se gana el día; «a gente é da FDS… app grátis (foto na etiqueta e a rota sai ordenada, funciona no Brasil); se testar numa rota real, conta aqui o que faltou» | sí (verificado) |
+| 00:46 | TikTok | **@soyginaa** (Francia) «La purge annuelle des livreurs» (10-20, 2.377 ❤, humor sobre el pico de Navidad) | en francés: el camión hasta el techo se gana al cargar; los que solo hacen «pro» tienen la planque, pero el pico llega para todos | no (verificado) |
+| 00:48 | TikTok | **@javi030426** (España) «¿Qué no puede faltar en una jornada de trabajo?» (9-11, 211 ❤) | en español: el bocadillo aplastado es patrimonio del oficio; añado cargador de mechero y boli; ¿cargas por orden de parada o según sale de nave? | no (verificado) |
+| 00:50 | Facebook | notificaciones y feed de grupos | 64 me gusta nuevos en una publicación de la página (no es de esta sesión), el aviso de pago de Meta sigue; en los grupos solo respuestas a ofertas de empleo. Nada que contestar | — |
+| — | Instagram | — | sin sesión | — |
+
+Totales: X 0 respuestas, 0 seguidas; TikTok 5 (2 con app: la respuesta a Florin y el de Eddy); YouTube 2 (0 con app). Con app: 2 de 7.
+Sin pieza nueva. Reddit no se intentó. Truco de TikTok: tras pulsar el cuadro de comentario por referencia, el PRIMER `type` se
+pierde y el segundo entra; comprobar siempre con `.public-DraftEditor-content` antes de enviar (la flecha de la respuesta a un
+comentario baja al crecer el cuadro: 1273,517 con 284 caracteres).

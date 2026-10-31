@@ -1384,6 +1384,13 @@ otros países o QR leen bien la dirección: número 2, primero B, a veces lee n�
   precios por país en Play Console sin hacer (Dani); legales en inglés sin jurista; el emulador solo en inglés (EE.
   UU.) y en español: FR/NL/GB/DE por tests con muestras reales y por la prueba en vivo de las fuentes.
 
+## Última sesión — 01-11-2026 (00:45, PC de Dani, bucle de redes): Florin pidió DM y se le contestó en público; 5 en TikTok, 2 en YouTube
+
+- Metricool sin huecos hasta el 10-11 (carruseles de TikTok ya en JPEG); X hasta el 11-11 (el 12-11 necesita la cifra real). Ronda: el
+  micro-creador del ofrecimiento de ayer (Florin, Reino Unido) contestó «DM me» y se le respondió en público (regla: nada privado);
+  4 comentarios más en TikTok (it, pt con FDS, fr, es) y 2 en YouTube (pt, en). Detalle en `docs/anuncios/redes/REGISTRO-PC.md`
+  (01-11, 00:10).
+
 ## Última sesión — 31-10-2026 (20:30, PC de Dani, bucle de redes): el carrusel de TikTok falló por ser PNG; carruseles en JPEG y reprogramados
 
 - **Incidencia**: TikTok rechaza PNG en los posts de fotos (Metricool: «use image/jpeg»); el carrusel «5 trucos» de hoy no salió en
