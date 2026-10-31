@@ -9,7 +9,7 @@ import {
   getCuadrante, cuadranteCeldas, cuadranteMaximas, cuadranteConfig, cuadrantePersona,
   cuadrantePersonaNueva, cuadranteFichas, cuadranteNota, cuadranteAjuste, cuadranteAjusteBorrar,
   cuadranteProponer, cuadranteAceptar, cuadranteDescartar, cuadranteDeshacer, cuadranteEstudio,
-  cuadranteExportar, cuadranteImportar,
+  cuadranteExportar, cuadranteImportar, getSyncHoja,
 } from '../api'
 import { lista } from '../../lib/lista'
 import { hoyLocal } from '../../lib/fecha'
@@ -795,6 +795,14 @@ export default function Cuadrante() {
   const [importar, setImportar] = useState(false)
   const [hojaAbierta, setHojaAbierta] = useState(false)
   const [sheets, setSheets] = useState(false)
+  // Si hay un borrador en la sincronización con la hoja, el botón lo dice (31-10-2026): lo que se cambia en esas
+  // fechas no va a la hoja hasta marcarlo definitivo, y conviene verlo sin abrir el diálogo.
+  const [borradorHoja, setBorradorHoja] = useState(null)
+  useEffect(() => {
+    if (noCenter) { setBorradorHoja(null); return }
+    getSyncHoja(center).then(({ data }) => setBorradorHoja(data?.conectado ? data.borrador || null : null))
+      .catch(() => setBorradorHoja(null))
+  }, [center, sheets, noCenter])
   const [ocupado, setOcupado] = useState('')
   const [maxEdit, setMaxEdit] = useState({})
   const [refEdit, setRefEdit] = useState({})
@@ -1124,6 +1132,12 @@ export default function Cuadrante() {
                   <button onClick={() => setSheets(true)}
                     className="flex items-center gap-1.5 rounded-lg border border-dark-700 px-2.5 py-1 text-xs text-dark-300 hover:bg-dark-800">
                     <RefreshCw size={13} /> Google Sheets
+                    {borradorHoja && (
+                      <span className="rounded bg-amber-500/20 px-1.5 py-0.5 text-[10px] font-bold uppercase text-amber-200"
+                        title={`Borrador del ${String(borradorHoja.desde).slice(8, 10)}/${String(borradorHoja.desde).slice(5, 7)} al ${String(borradorHoja.hasta).slice(8, 10)}/${String(borradorHoja.hasta).slice(5, 7)}: esas fechas no van a la hoja hasta marcarlo definitivo`}>
+                        borrador
+                      </span>
+                    )}
                   </button>
                 </div>
               </div>

@@ -829,6 +829,11 @@ class DriverBulkPasswordRequest(BaseModel):
     password: str = Field(min_length=8, max_length=128)
 
 
+class ContrasenaInicialRequest(BaseModel):
+    """La contraseña inicial de los conductores nuevos de la empresa; vacía o ausente = quitarla."""
+    password: Optional[str] = Field(default=None, max_length=128)
+
+
 class CreateAdminRequest(BaseModel):
     username: str
     password: str
@@ -8638,6 +8643,67 @@ async def list_driver_accounts(_admin: dict = Depends(require_admin)):
     return accounts
 
 
+# LA CONTRASEÑA INICIAL DE LOS CONDUCTORES NUEVOS (30-10-2026, Dani: «que cada vez que creemos una cuenta tenga por
+# defecto una contraseña y, cuando entren, les salte cambiarla; hoy se la he tenido que poner yo a mano a un conductor»).
+# La oficina la define UNA vez por empresa y el servidor guarda solo el hash (`organizations.contrasena_inicial_hash`):
+# cada conductor que se da de alta con correo y sin contraseña propia —de uno en uno o importando— recibe una cuenta con
+# ese hash y `must_change_password`, así que entra la primera vez con ella y el portal o la app le obligan a elegir la
+# suya (el mismo camino que la temporal en bloque: _cuentas_que_cuadran, configurar_cuenta). Sin correo no hay cuenta,
+# como siempre: no habría con qué entrar.
+async def _org_de_admin(admin: dict) -> Optional[dict]:
+    """La empresa de quien está en el panel: la suya o, sin org_id (la base por defecto), la del dueño."""
+    if admin.get("org_id"):
+        return await get_org(admin["org_id"])
+    return await global_db.organizations.find_one({"account_type": "owner"}, {"_id": 0})
+
+
+async def _contrasena_inicial(admin: dict) -> Optional[dict]:
+    """La contraseña inicial de la empresa de `admin`, si la tiene: {"hash", "desde", "por"}; si no, None."""
+    org = await _org_de_admin(admin)
+    h = (org or {}).get("contrasena_inicial_hash")
+    if not h:
+        return None
+    return {"hash": h, "desde": org.get("contrasena_inicial_desde"), "por": org.get("contrasena_inicial_por")}
+
+
+def _cuenta_inicial(driver_id: str, email: str, hash_inicial: str, ahora: str) -> dict:
+    """La cuenta de un conductor nuevo con la contraseña inicial de la empresa: temporal, a cambiar al entrar."""
+    return {"id": str(uuid.uuid4()), "driver_id": driver_id, "email": str(email).strip().lower(),
+            "hashed_password": hash_inicial, "active": True, "created_at": ahora,
+            "must_change_password": True, "password_temp_created_at": ahora, "contrasena_inicial": True}
+
+
+@auth_router.get("/driver-accounts/contrasena-inicial")
+async def ver_contrasena_inicial(admin: dict = Depends(require_admin)):
+    """Si la empresa tiene contraseña inicial para los conductores nuevos: solo si la hay, desde cuándo y quién (nunca cuál)."""
+    c = await _contrasena_inicial(admin)
+    return {"definida": bool(c), "desde": (c or {}).get("desde"), "por": (c or {}).get("por")}
+
+
+@auth_router.put("/driver-accounts/contrasena-inicial")
+async def poner_contrasena_inicial(data: ContrasenaInicialRequest, admin: dict = Depends(require_admin)):
+    """Define la contraseña inicial de los conductores nuevos (o la quita, con la contraseña vacía). Solo se guarda el hash."""
+    if admin.get("demo"):
+        raise HTTPException(403, "En la demo no se cambia")
+    org = await _org_de_admin(admin)
+    if not org:
+        raise HTTPException(400, "Tu usuario no está asociado a ninguna empresa")
+    clave = (data.password or "").strip()
+    if not clave:
+        await global_db.organizations.update_one({"id": org["id"]}, {"$unset": {
+            "contrasena_inicial_hash": "", "contrasena_inicial_desde": "", "contrasena_inicial_por": ""}})
+        logger.info("Contraseña inicial de conductores quitada por %s", admin.get("name"))
+        return {"definida": False, "desde": None, "por": None}
+    if len(clave) < 8:
+        raise HTTPException(400, "La contraseña inicial debe tener al menos 8 caracteres")
+    ahora = datetime.now(timezone.utc).isoformat()
+    por = admin.get("name") or admin.get("username") or ""
+    await global_db.organizations.update_one({"id": org["id"]}, {"$set": {
+        "contrasena_inicial_hash": hash_password(clave), "contrasena_inicial_desde": ahora, "contrasena_inicial_por": por}})
+    logger.info("Contraseña inicial de conductores definida por %s", por)
+    return {"definida": True, "desde": ahora, "por": por}
+
+
 @auth_router.post("/driver-accounts/generar")
 async def generar_accesos_conductores(data: DriverBulkPasswordRequest,
                                       _admin: dict = Depends(require_admin)):
@@ -11411,6 +11477,13 @@ async def create_driver(data: DriverCreate, nueva: bool = False,
             "created_at": datetime.now(timezone.utc).isoformat()
         })
         logger.info(f"Conductor y cuenta creados: {driver.email}")
+    elif driver.email:
+        # Sin contraseña propia: la inicial de la empresa, si la hay (la cambia en su primera entrada).
+        inicial = await _contrasena_inicial(admin)
+        if inicial:
+            await db.driver_accounts.insert_one(_cuenta_inicial(
+                driver.id, driver.email, inicial["hash"], datetime.now(timezone.utc).isoformat()))
+            logger.info("Conductor creado con la contraseña inicial de la empresa: %s", driver.email)
 
     return driver
 
@@ -11860,8 +11933,26 @@ async def drivers_importar(file: UploadFile = File(...), center: str = Form(""),
             # resto entra igual (`ordered=False`). Se cuenta lo que entro.
             metidos = int((e.details or {}).get("nInserted") or 0)
             saltados = saltados + [None] * (len(nuevos) - metidos)
-    logger.info("Conductores importados: %d nuevos, %d ya estaban", metidos, len(saltados))
-    return {"importados": metidos, "ya_estaban": len(saltados),
+    # La contraseña inicial de la empresa, a los que han entrado y tienen correo (ver _contrasena_inicial).
+    con_acceso = 0
+    inicial = await _contrasena_inicial(user) if metidos else None
+    if inicial:
+        if metidos == len(nuevos):
+            entrados = {d["id"] for d in nuevos}
+        else:
+            entrados = {x["id"] async for x in db.drivers.find(
+                {"id": {"$in": [d["id"] for d in nuevos]}}, {"_id": 0, "id": 1})}
+        cuentas = [_cuenta_inicial(d["id"], d["email"], inicial["hash"], ahora)
+                   for d in nuevos if d.get("email") and d["id"] in entrados]
+        if cuentas:
+            try:
+                await db.driver_accounts.insert_many(cuentas, ordered=False)
+                con_acceso = len(cuentas)
+            except BulkWriteError as e:
+                con_acceso = int((e.details or {}).get("nInserted") or 0)
+    logger.info("Conductores importados: %d nuevos, %d ya estaban, %d con la contraseña inicial",
+                metidos, len(saltados), con_acceso)
+    return {"importados": metidos, "ya_estaban": len(saltados), "con_acceso": con_acceso,
             "no_leidas": len(r["saltadas"]), "fuera_seleccion": fuera_seleccion,
             "nombres": [d["name"] for d in nuevos][:50]}
 
@@ -11909,6 +12000,23 @@ async def _repuntar_conductor(absorber: list, conservar: str, nombre: str) -> di
         array_filters=[{"m.driver_id": {"$in": absorber}}])
     if r.modified_count:
         movidos["vehicles.mileage_history"] = r.modified_count
+    # La persona del cuadrante (tipo «solo findes», patrón, nota, apodos…) va con la ficha que se conserva
+    # (31-10-2026: se quedaba en la absorbida y había que volver a ponerla). Si la conservada ya tiene la suya en ese
+    # centro, se le completa lo que le falte y la otra se quita: una por centro y persona.
+    for p in await db[_CUA_PERSONAS].find({"driver_id": {"$in": absorber}}, {"_id": 0}).to_list(500):
+        filtro = {"center": p.get("center"), "driver_id": p["driver_id"]}
+        mia = await db[_CUA_PERSONAS].find_one({"center": p.get("center"), "driver_id": conservar}, {"_id": 0})
+        if not mia:
+            await db[_CUA_PERSONAS].update_one(filtro, {"$set": {"driver_id": conservar}})
+        else:
+            faltan = {k: v for k, v in p.items()
+                      if k in ("tipo", "patron", "nota", "apodos", "reglas_fijas", "alta_desde", "orden")
+                      and v and not mia.get(k)}
+            if faltan:
+                await db[_CUA_PERSONAS].update_one({"center": p.get("center"), "driver_id": conservar},
+                                                   {"$set": faltan})
+            await db[_CUA_PERSONAS].delete_one(filtro)
+        movidos["cuadrante_personas.driver_id"] = movidos.get("cuadrante_personas.driver_id", 0) + 1
     return movidos
 
 
@@ -47956,6 +48064,10 @@ async def _cua_entrada(center: str, desde: str, hasta: str, colchon=None, permit
     celdas, bloqueadas, extras_ahora = {}, [], set()
     extras_prev: dict = {}
     findes_prev: dict = {}
+    # Qué findes de las 4 semanas de antes trabajó cada uno (sábado o domingo), por sábado: el motor corta
+    # las rachas de findes seguidos contando también los de antes del periodo (31-10-2026).
+    sabados_prev = [ini - timedelta(days=ini.weekday() + 2 + 7 * i) for i in range(3, -1, -1)]
+    findes_prev_sab: dict = {}
     async for s in db.shifts.find({"driver_id": {"$in": list(ids)}, "date": {"$gte": desde_stats, "$lte": fin_ext}},
                                   {"_id": 0}):
         did, f = s["driver_id"], s["date"]
@@ -47978,6 +48090,8 @@ async def _cua_entrada(center: str, desde: str, hasta: str, colchon=None, permit
                 extras_prev[did] = extras_prev.get(did, 0) + 1
             if date_cls.fromisoformat(f).weekday() >= 5 and cod in _cm.TRABAJO:
                 findes_prev[did] = findes_prev.get(did, 0) + 1
+                dia = date_cls.fromisoformat(f)
+                findes_prev_sab.setdefault(did, set()).add(dia - timedelta(days=dia.weekday() - 5))
     # Lo concedido a un conductor (pedido desde su portal) no lo mueve nadie.
     for k in await _cua_aprobados(ids, desde, fin_ext):
         bloqueadas.append(k)
@@ -48012,6 +48126,7 @@ async def _cua_entrada(center: str, desde: str, hasta: str, colchon=None, permit
                 c[k] = r[k]
         c["extras_recientes"] = extras_prev.get(p["id"], 0)
         c["findes_recientes"] = findes_prev.get(p["id"], 0)
+        c["findes_previos"] = [1 if s in findes_prev_sab.get(p["id"], set()) else 0 for s in sabados_prev]
         conductores.append(c)
     entrada = {"fecha_inicio": desde, "fecha_fin": hasta, "colchon": colchon,
                "permitir_extra": permitir_extra, "maximas": maximas, "conductores": conductores,
@@ -49367,10 +49482,17 @@ async def cuadrante_importar(file: UploadFile = File(...), center: str = Form(..
             guardadas += 1
     for i in range(0, len(ops), 500):
         await _bulk_turnos(ops[i:i + 500])
+    # LO ELEGIDO EN LA APP MANDA (31-10-2026, Dani: «estoy cansado de cambiar a cada uno que solo trabaja findes;
+    # ¿eso se desactualiza solo?»). Se desactualizaba AQUÍ: cada importación reescribía el tipo de todos con lo que
+    # dice la hoja (nombre en azul = empresa, el resto «normal») y pisaba el «solo finde» o el patrón puestos en la
+    # app. Ahora el tipo y el patrón de la hoja solo entran a quien no tiene tipo elegido.
+    elegidos = {p["driver_id"]: p for p in await db[_CUA_PERSONAS].find(
+        {"center": center}, {"_id": 0, "driver_id": 1, "tipo": 1}).to_list(5000)}
     for f, drv in emparejadas:
-        campos = {"en_cuadrante": True, "tipo": f["tipo"] if f["tipo"] in _cm.TIPOS else "normal",
-                  "patron": f.get("patron"), "inactivo_desde": f.get("inactivo_desde"),
-                  "alta_desde": f.get("alta_desde")}
+        campos = {"en_cuadrante": True, "inactivo_desde": f.get("inactivo_desde"), "alta_desde": f.get("alta_desde")}
+        if not (elegidos.get(drv["id"]) or {}).get("tipo"):
+            campos["tipo"] = f["tipo"] if f["tipo"] in _cm.TIPOS else "normal"
+            campos["patron"] = f.get("patron")
         if f.get("orden") is not None:
             campos["orden"] = f["orden"]
         await _cua_guardar_persona(center, drv["id"], campos, user, cambio)
@@ -49427,6 +49549,7 @@ _SYNC_POR_QUE = {
     "app": "cambiado en la app",
     "quitado": "quitado en la app",
     "maxima": "máxima cambiada en la app",
+    "definitivo": "cuadrante marcado definitivo en la app",
 }
 
 
@@ -49681,6 +49804,11 @@ def _sync_mensaje(r: dict) -> str:
         extra.append("%d salidas o fichas nuevas retenidas por ser demasiadas de golpe: acéptalas en Flota"
                      % gente["retenidas"])
     cola = (" Gente: " + ", ".join(extra) + ".") if extra else ""
+    if r.get("en_borrador"):
+        b = r.get("borrador") or {}
+        corta = lambda s: f"{str(s)[8:10]}/{str(s)[5:7]}" if s else "?"            # noqa: E731
+        cola += (" Borrador en Flota del %s al %s: %d celdas de esas fechas no se tocan hasta marcarlo definitivo."
+                 % (corta(b.get("desde")), corta(b.get("hasta")), r["en_borrador"]))
     if r["modo"] == "prueba":
         return ("Modo prueba, no se ha tocado nada: cambiaría %d celdas en Flota y %d en esta hoja.%s Actívalo en "
                 "Flota → Cuadrante → Google Sheets." % (n_app, n_hoja, cola))
@@ -49706,6 +49834,14 @@ async def _sync_procesar(conf: dict, cuerpo: dict) -> dict:
     Más de 5 salidas u 8 fichas nuevas de golpe (una pestaña nueva a medio hacer) se retienen hasta aceptarlas."""
     center = conf["center"]
     modo = conf.get("modo") or "prueba"
+    # EL BORRADOR (31-10-2026, Dani: «voy a hacer el cuadrante de noviembre y quiero que aparezca en el Sheets cuando
+    # lo marque definitivo, por si cambio algo mientras lo estoy haciendo»). Mientras un periodo está en borrador,
+    # sus celdas y sus máximas no van ni vienen. Al marcarlo definitivo (`definitivo`, con `forzar_una_vez`), la
+    # siguiente vuelta lo pasa entero a la hoja y, donde la hoja también hubiera cambiado, manda la app.
+    borrador = conf.get("borrador") or {}
+    b_desde, b_hasta = str(borrador.get("desde") or ""), str(borrador.get("hasta") or "")
+    definitivo = conf.get("definitivo") or {}
+    d_desde, d_hasta = str(definitivo.get("desde") or ""), str(definitivo.get("hasta") or "")
     hoy = _cua_hoy()
     desde = (hoy - timedelta(days=_SYNC_ANTES)).isoformat()
     hasta = (hoy + timedelta(days=_SYNC_DESPUES)).isoformat()
@@ -49717,7 +49853,8 @@ async def _sync_procesar(conf: dict, cuerpo: dict) -> dict:
          "desde": desde, "hasta": hasta, "pestanas": [], "saltadas": [], "sin_ficha": [], "ambiguos": [],
          "a_app": 0, "a_app_cambia": 0, "a_hoja": 0, "a_hoja_cambia": 0, "conflictos": 0, "maximas_app": 0,
          "maximas_hoja": 0, "protegidas": 0, "codigos_desconocidos": {}, "cambios": [], "retenido": False,
-         "aplicado": False, "error": None, "escribir": [],
+         "aplicado": False, "error": None, "escribir": [], "en_borrador": 0,
+         "borrador": {"desde": b_desde, "hasta": b_hasta} if b_desde else None,
          "personas": {"entran": [], "fichas_nuevas": [], "salen": [], "vuelven": [], "en_app_no_en_hoja": [],
                       "revisar": [], "retenidas": 0}}
     gente = r["personas"]
@@ -49836,6 +49973,9 @@ async def _sync_procesar(conf: dict, cuerpo: dict) -> dict:
         a_app, a_hoja = [], []
         for (did, f), h in sorted(hoja.items(), key=lambda kv: (kv[0][1], kv[1]["nombre"])):
             clave = f"{did}|{f}"
+            if b_desde and b_desde <= f <= b_hasta:
+                r["en_borrador"] += 1                    # se está haciendo en la app: ni va ni viene hasta «definitivo»
+                continue
             doc = actuales.get((did, f))
             if doc and not _cua_es_centro(doc.get("center"), center):
                 continue                                 # ese día lo lleva otro centro
@@ -49861,6 +50001,15 @@ async def _sync_procesar(conf: dict, cuerpo: dict) -> dict:
                 if (ap == "libre" and tipo_s in ("trabaja", "extra")) or (ap == "extra" and tipo_s == "libre"):
                     prot = "aprobado"
             accion, por_que = _sync_decide(S, A, B, prot)
+            if d_desde and d_desde <= f <= d_hasta:
+                # El borrador se marcó definitivo: en esas fechas manda la app. Donde las dos cambiaron, o donde nunca
+                # coincidieron (la pestaña del mes nuevo, recién hecha copiando la de antes con sus códigos viejos), la
+                # hoja se pone como la app (una celda que la app no tiene se vacía); una celda que la hoja nunca tuvo se
+                # rellena. Lo que SOLO cambió la hoja (la app no lo tocó desde la última vez) entra como siempre.
+                if accion == "a_app" and por_que in ("conflicto", "primera", "nuevo"):
+                    accion, por_que = "a_hoja", "definitivo"
+                elif accion == "nada" and A and not S and B is None:
+                    accion, por_que = "a_hoja", "definitivo"
             if accion == "igual":
                 base[clave] = S
             elif accion == "nada":
@@ -49954,6 +50103,8 @@ async def _sync_procesar(conf: dict, cuerpo: dict) -> dict:
         if isinstance(d.get("maximo"), (int, float)):
             demanda[d["date"]] = int(d["maximo"])
     for f, (i, p) in fuente.items():
+        if b_desde and b_desde <= f <= b_hasta:
+            continue                                     # en borrador: tampoco las máximas
         S = p["maximas"].get(f)
         A, B = demanda.get(f), base_max.get(f)
         acc = _sync_decide_maxima(S, A, B)
@@ -50159,6 +50310,8 @@ async def cuadrante_sync_hoja(request: Request):
                        "hoja_id": _texto_cuerpo(cuerpo.get("hoja_id"), 120) or conf.get("hoja_id")}}
     if r.get("aplicado"):
         cambio["$set"]["forzar_una_vez"] = False
+        if conf.get("definitivo"):
+            cambio["$unset"] = {"definitivo": ""}        # ya pasó a la hoja: la próxima vuelta decide como siempre
     if r.get("error") or r.get("retenido") or r.get("a_app") or r.get("a_hoja") or r.get("maximas_app") \
             or r.get("maximas_hoja"):
         cambio["$push"] = {"historial": {"$each": [{k: guardar.get(k) for k in (
@@ -50193,7 +50346,8 @@ def _sync_salida(conf: Optional[dict]) -> dict:
     if not conf or conf.get("revocado"):
         return {"conectado": False}
     out = {k: conf.get(k) for k in ("modo", "creado_en", "creado_por", "hoja_nombre", "hoja_id", "ultimo_contacto",
-                                    "ultima", "ultima_escritura", "forzar_una_vez", "llave_vieja_en")}
+                                    "ultima", "ultima_escritura", "forzar_una_vez", "llave_vieja_en", "borrador",
+                                    "definitivo")}
     out["historial"] = list(reversed(conf.get("historial") or []))[:15]
     out["conectado"] = True
     out["hoja_url"] = ("https://docs.google.com/spreadsheets/d/%s/edit" % conf["hoja_id"]
@@ -50258,6 +50412,54 @@ async def cuadrante_sync_aceptar(data: dict = Body(...), user: dict = Depends(re
         raise HTTPException(404, "Esta hoja no está conectada")
     await _audit(user, "cuadrante_sync_aceptar", {"center": center})
     return {"ok": True}
+
+
+@api_router.post("/cuadrante/sync/borrador")
+async def cuadrante_sync_borrador(data: dict = Body(...), user: dict = Depends(require_admin)):
+    """Un periodo que se hace en la app sin que la hoja se entere (Dani, 31-10-2026: «voy a hacer el cuadrante de
+    noviembre y quiero que aparezca en el Sheets cuando lo marque definitivo, por si cambio algo mientras»). Hasta
+    «Marcar definitivo», la sincronización no toca esas fechas en ningún sentido. `quitar`: deja el borrador sin
+    pasar nada (la siguiente vuelta decide celda a celda, como siempre)."""
+    center = _sync_puede(user, data.get("center"))
+    filtro = {"db_name": _current_db_name.get(), "center": center, "revocado": False}
+    if not await global_db[_SYNC_COL].find_one(filtro, {"_id": 0, "id": 1}):
+        raise HTTPException(404, "Esta hoja no está conectada")
+    if data.get("quitar"):
+        await global_db[_SYNC_COL].update_one(filtro, {"$unset": {"borrador": ""}})
+        await _audit(user, "cuadrante_sync_borrador_quitar", {"center": center})
+        return {"ok": True, "borrador": None}
+    desde, hasta = _cua_fecha(data.get("desde"), "Desde"), _cua_fecha(data.get("hasta"), "Hasta")
+    if hasta < desde:
+        raise HTTPException(400, "El final del borrador es anterior al principio")
+    if (date_cls.fromisoformat(hasta) - date_cls.fromisoformat(desde)).days > 92:
+        raise HTTPException(400, "Como mucho tres meses de borrador")
+    borrador = {"desde": desde, "hasta": hasta, "desde_en": datetime.now(timezone.utc).isoformat(),
+                "por": user.get("name") or user.get("username") or ""}
+    await global_db[_SYNC_COL].update_one(filtro, {"$set": {"borrador": borrador}})
+    await _audit(user, "cuadrante_sync_borrador", {"center": center, "desde": desde, "hasta": hasta})
+    return {"ok": True, "borrador": borrador}
+
+
+@api_router.post("/cuadrante/sync/definitivo")
+async def cuadrante_sync_definitivo(data: dict = Body(...), user: dict = Depends(require_admin)):
+    """El borrador se da por bueno: la siguiente sincronización lo pasa entero a la hoja (sin el tope de 80 celdas)
+    y, donde la hoja también hubiera cambiado en esas fechas, manda la app."""
+    center = _sync_puede(user, data.get("center"))
+    filtro = {"db_name": _current_db_name.get(), "center": center, "revocado": False}
+    conf = await global_db[_SYNC_COL].find_one(filtro, {"_id": 0, "borrador": 1})
+    if not conf:
+        raise HTTPException(404, "Esta hoja no está conectada")
+    b = conf.get("borrador") or {}
+    if not b.get("desde"):
+        raise HTTPException(400, "No hay ningún borrador que marcar")
+    definitivo = {"desde": b["desde"], "hasta": b["hasta"], "en": datetime.now(timezone.utc).isoformat(),
+                  "por": user.get("name") or user.get("username") or ""}
+    await global_db[_SYNC_COL].update_one(filtro, {"$set": {"definitivo": definitivo, "forzar_una_vez": True},
+                                                   "$unset": {"borrador": ""}})
+    await _audit(user, "cuadrante_sync_definitivo", {"center": center, "desde": b["desde"], "hasta": b["hasta"]})
+    return {"ok": True, "definitivo": definitivo,
+            "aviso": "La hoja lo recibe en la próxima sincronización: en 10 minutos como mucho, o ahora mismo "
+                     "desde el menú «Flota → Sincronizar ahora» de la hoja."}
 
 
 @api_router.post("/cuadrante/sync/emparejar")

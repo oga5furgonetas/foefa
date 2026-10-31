@@ -99,3 +99,17 @@ def test_hay_un_repaso_para_lo_que_quedo_atras():
     src = _fuente("drivers_fusiones_repasar")
     assert "merged_into" in src
     assert "_repuntar_conductor" in src
+
+
+def test_la_persona_del_cuadrante_tambien_va_con_la_ficha_que_se_conserva():
+    """31-10-2026 (Dani: «estoy cansado de cambiar a cada uno que solo trabaja findes»): el tipo, el patrón y la nota
+    del cuadrante estaban colgados de la ficha absorbida y se perdían al fusionar."""
+    src = _fuente("_repuntar_conductor")
+    assert "_CUA_PERSONAS" in src and "cuadrante_personas.driver_id" in src
+    assert src.count("array_filters=[") == 2
+
+
+def test_importar_no_pisa_el_tipo_elegido_en_la_app():
+    """La importación reescribía el tipo de todos con el de la hoja (azul = empresa, el resto normal)."""
+    src = _fuente("cuadrante_importar")
+    assert "elegidos" in src and 'if not (elegidos.get(drv["id"]) or {}).get("tipo"):' in src

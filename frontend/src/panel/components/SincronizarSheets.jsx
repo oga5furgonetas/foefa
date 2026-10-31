@@ -1,9 +1,11 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import {
   Loader2, Copy, Check, AlertTriangle, ExternalLink, Play, Pause, Link2Off, RefreshCw, ArrowRight, UserPlus, UserMinus,
+  PenLine, CheckCircle2,
 } from 'lucide-react'
 import {
   getSyncHoja, conectarSyncHoja, modoSyncHoja, aceptarSyncHoja, desconectarSyncHoja, emparejarSyncHoja,
+  borradorSyncHoja, quitarBorradorSyncHoja, definitivoSyncHoja,
 } from '../api'
 import { lista } from '../../lib/lista'
 import { fechaHoraLocal } from '../../lib/fecha'
@@ -118,6 +120,87 @@ const POR_QUE = {
   primera: 'la hoja (primera vez)', hoja: 'cambiado en la hoja', nuevo: 'nuevo en la hoja',
   conflicto: 'cambiado en los dos: manda la hoja',
 }
+
+/* EL BORRADOR (31-10-2026, Dani: «voy a hacer el cuadrante de noviembre y quiero que aparezca en el Sheets cuando lo
+   marque definitivo, por si cambio algo mientras lo estoy haciendo»). Un periodo que se trabaja en la app: en esas
+   fechas la sincronización no toca nada en ningún sentido hasta «Marcar definitivo»; entonces lo pasa entero a la
+   hoja (sin el tope de 80 celdas) y, donde la hoja también hubiera cambiado, manda la app. */
+function Borrador({ center, estado, hacer, ocupado }) {
+  const mesQueViene = useMemo(() => {
+    const h = new Date()
+    const ini = new Date(h.getFullYear(), h.getMonth() + 1, 1)
+    const fin = new Date(h.getFullYear(), h.getMonth() + 2, 0)
+    const iso = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+    return { desde: iso(ini), hasta: iso(fin) }
+  }, [])
+  const [desde, setDesde] = useState(mesQueViene.desde)
+  const [hasta, setHasta] = useState(mesQueViene.hasta)
+  const [confirmar, setConfirmar] = useState(false)
+  const b = estado.borrador
+  const d = estado.definitivo
+  const fecha = (s) => (s ? `${String(s).slice(8, 10)}/${String(s).slice(5, 7)}` : '')
+  return (
+    <div className="rounded-xl border border-dark-800 bg-dark-900/60 p-3" data-testid="sync-borrador">
+      <p className="flex items-center gap-1.5 font-semibold text-dark-100"><PenLine size={14} /> Hacer un cuadrante en borrador</p>
+      {b ? (
+        <>
+          <p className="mt-1">
+            <b className="text-amber-200">Borrador del {fecha(b.desde)} al {fecha(b.hasta)}</b>
+            {b.desde_en ? ` (desde el ${fechaHoraLocal(b.desde_en)}${b.por ? `, ${b.por}` : ''})` : ''}.
+            Lo que cambies aquí en esas fechas no va a la hoja, y lo que cambien en la hoja no entra, hasta que lo marques definitivo.
+          </p>
+          <div className="mt-2 flex flex-wrap items-center gap-2">
+            {confirmar ? (
+              <span className="flex flex-wrap items-center gap-2 text-[12px] text-amber-200">
+                ¿Pasarlo a la hoja? En la próxima sincronización (10 minutos como mucho, o ya desde «Flota → Sincronizar ahora» en la hoja) escribe esas fechas enteras; donde la hoja también hubiera cambiado, manda lo de aquí.
+                <button onClick={() => hacer('definitivo', async () => { await definitivoSyncHoja(center); setConfirmar(false) })} disabled={!!ocupado}
+                  className="rounded-lg bg-emerald-500/20 px-3 py-1.5 text-xs font-bold text-emerald-200 hover:bg-emerald-500/30 disabled:opacity-50">
+                  {ocupado === 'definitivo' ? 'Marcando…' : 'Sí, definitivo'}
+                </button>
+                <button onClick={() => setConfirmar(false)} className="text-dark-400 hover:text-dark-200">No</button>
+              </span>
+            ) : (
+              <>
+                <button onClick={() => setConfirmar(true)} disabled={!!ocupado}
+                  className="flex items-center gap-1.5 rounded-lg bg-emerald-500/20 px-3 py-1.5 text-xs font-bold text-emerald-200 hover:bg-emerald-500/30 disabled:opacity-50">
+                  <CheckCircle2 size={13} /> Marcar definitivo
+                </button>
+                <button onClick={() => hacer('borrador', () => quitarBorradorSyncHoja(center))} disabled={!!ocupado}
+                  className="rounded-lg border border-dark-700 px-3 py-1.5 text-xs text-dark-300 hover:bg-dark-800 disabled:opacity-50">
+                  Quitar el borrador sin pasar nada
+                </button>
+              </>
+            )}
+          </div>
+        </>
+      ) : (
+        <>
+          <p className="mt-1 text-dark-400">
+            Elige las fechas que vas a montar aquí (por ejemplo, el mes que viene): hasta que lo marques definitivo, la hoja no se entera.
+            Al marcarlo, en la hoja ve a «Flota → Sincronizar ahora» o espera 10 minutos.
+          </p>
+          <div className="mt-2 flex flex-wrap items-center gap-2">
+            <input type="date" value={desde} onChange={(e) => setDesde(e.target.value)} aria-label="Borrador desde"
+              className="rounded-lg border border-dark-700 bg-dark-950 px-2 py-1 text-xs text-dark-100" />
+            <span className="text-dark-500">a</span>
+            <input type="date" value={hasta} onChange={(e) => setHasta(e.target.value)} aria-label="Borrador hasta"
+              className="rounded-lg border border-dark-700 bg-dark-950 px-2 py-1 text-xs text-dark-100" />
+            <button onClick={() => hacer('borrador', () => borradorSyncHoja(center, desde, hasta))} disabled={!!ocupado || !desde || !hasta}
+              className="flex items-center gap-1.5 rounded-lg bg-dark-800 px-3 py-1.5 text-xs font-semibold text-dark-200 hover:bg-dark-700 disabled:opacity-50">
+              {ocupado === 'borrador' ? <Loader2 size={13} className="animate-spin" /> : <PenLine size={13} />} Empezar el borrador
+            </button>
+          </div>
+        </>
+      )}
+      {d && !b && (
+        <p className="mt-2 text-[12px] text-emerald-300">
+          Marcado definitivo del {fecha(d.desde)} al {fecha(d.hasta)} ({fechaHoraLocal(d.en)}): la hoja lo recibe en la próxima sincronización.
+        </p>
+      )}
+    </div>
+  )
+}
+
 
 export default function SincronizarSheets({ center }) {
   const [estado, setEstado] = useState(null)
@@ -304,6 +387,8 @@ export default function SincronizarSheets({ center }) {
               )}
             </div>
           )}
+
+          <Borrador center={center} estado={estado} hacer={hacer} ocupado={ocupado} />
 
           <div className="flex flex-wrap items-center gap-2">
             {activa ? (

@@ -392,3 +392,36 @@ Sin huecos: TikTok e Instagram cada día hasta el L 09-11, YouTube 30-10/02-11/0
 Totales: X 0 respuestas + 2 seguidas; TikTok 3 (1 con app: el ofrecimiento); YouTube 2 (0 con app). Con app: 1 de 5. Sin pieza
 nueva. Reddit no se intentó. Ojo: el grupo de pestañas de Chrome se perdió dos veces a mitad de ronda (hay que volver a abrir con
 `navigate`), y la sesión de TikTok es la misma (FlotaDSP).
+
+## 31-10-2026 (16:10 – 17:05) — ronda del bucle de 4 h (Chrome del PC 1)
+
+Los seis disparos del bucle de la noche y la mañana (22:00 → 14:00) llegaron juntos a las 16:10 (el PC estuvo sin atender):
+se hace UNA ronda, no seis.
+
+### Metricool (marca 7741371)
+Sin huecos hasta el L 09-11 (hoy: Instagram del carrusel «5 trucos» publicado a las 12:00; TikTok a las 18:00). Nada añadido.
+
+### X (@FlotaDSP)
+- El post de hoy (31-10, `X-primer-dia.png`) salió a las 7:30 (aviso «Your scheduled post was published»). D 01-11 → M 10-11 ya
+  programados. **Programado X 11-11 7:30**: «¿Qué le falta a una app de reparto para que la uses de verdad? Contestad aquí: lo que
+  más se repita, lo hacemos. Las dos últimas cosas que pidieron los repartidores ya están: paradas de días anteriores y
+  direcciones que ya conoces.» (sin enlace). Verificado en Scheduled.
+- Notificaciones: me gusta y 2 reposts (Patata, Adrianaftdemocracia) a un post con enlace a Play que no es de esta sesión;
+  Alberto Muñoz Cabanes dio me gusta a una respuesta nuestra de otra sesión. Nada que contestar. Sin respuestas ni seguidas nuevas
+  (búsquedas hechas ayer: solo clientes).
+
+### Ronda de conversación (lo nuestro primero)
+| Hora | Red | Hilo | Qué se dijo | App |
+|---|---|---|---|---|
+| 16:25 | TikTok | @gajazesl (Barcelona, hace 3 d) | es un anuncio de flota buscando autónomos («¿cuánto pagan por paquete?»): no se comenta | — |
+| 16:30 | TikTok | **@l_obo__** TuPaqueteDiario (Granada) «Hoy el reparto vino completito» (02-07, 63 ❤, vídeos largos de reparto real) | **ofrecimiento público a micro-creador**: furgo de sustitución, 40 grados, callejuela y patos; «la tarjeta que te hizo perderte lo arreglamos en nuestra app gratis… somos FDS»; que la pruebe en una ruta de Granada y lo cuente, sin pagos | sí (verificado) |
+| 16:36 | TikTok | **@lebiglivreur** (Metz) «Ça vous arrive d'enchaîner comme ça aussi?» (25-07, 1.759 ❤, 63 comentarios; dobles tournées) | en francés: enchaîner deux tournées tient si la deuxième est triée antes; «ce sont les heures qui appellent les heures» | no (verificado) |
+| 16:42 | TikTok | **@lelivreurnormand** «La journée typique d'un livreur sous un beau soleil» (01-06, 1.441 ❤; rural, Alençon) | en francés: tournée rurale = peu de points, beaucoup de km, l'ordre des villages est tout; au moins on se gare où on veut | no (verificado) |
+| 16:50 | YouTube | Geshh «La realidad de trabajar en Amazon España» (160K) | ya tenía comentario nuestro de hace 1 día (otra sesión); se pasa | — |
+| 16:55 | YouTube | **Ricardo Mogollón** «Un día como repartidor en Galicia» (294 vistas, Lugo, ayudante por un día) | ruta rural: el orden de los pueblos lo es todo y la cobertura va y viene; Casa Remedios apuntada para comer | no (verificado) |
+| 17:00 | YouTube | **Midrak** «Fui repartidor de Amazon (lo que aprendí y nadie dice)» (3,8K vistas, 22 comentarios) | sobre davidss12327 (tres apps distintas): lo que quema es el móvil en la mano en cada parada; una sola pantalla con ruta y teléfono y la furgoneta cargada en orden | no (verificado) |
+| 17:03 | Facebook | notificaciones | un reel nuevo de la página FDs (hace 14 h, 9 me gusta; no es de esta sesión), aviso de Meta «tus anuncios no se están publicando porque no hemos podido procesar tu último pago» (23 h) y «tu anuncio para FDs está programado o en circulación» (Dani publicó algo). Nada que contestar; la publicación del grupo sigue sin comentarios (visto ayer) | — |
+| — | Instagram | — | sin sesión en este Chrome | — |
+
+Totales: X 0 respuestas, 0 seguidas; TikTok 3 (1 con app: el ofrecimiento); YouTube 2 (0 con app). Con app: 1 de 5. Sin pieza
+nueva. Reddit no se intentó.
