@@ -37,15 +37,31 @@ function Assert-CiVerde {
     $token = Get-TokenGitHub
     if (-not $token) { throw "No hay token de GitHub en el credential manager de git: no se puede mirar el CI (o -SinCI a sabiendas)." }
     $cab = @{ Authorization = "Bearer $token"; Accept = "application/vnd.github+json"; "User-Agent" = "fds-ci-verde/1.0" }
-    try {
-        $r = Invoke-RestMethod -Uri "https://api.github.com/repos/$Repo/actions/workflows/$Flujo/runs?head_sha=$sha&per_page=1" -Headers $cab -TimeoutSec 30
-    } catch {
-        throw "No se ha podido consultar el CI de GitHub: $($_.Exception.Message) (o -SinCI a sabiendas)."
-    }
+    # HEAD puede no tener run (un commit solo de documentos con «[skip ci]»): se busca hacia atras el ultimo commit
+    # que si lo tenga, y se exige que lo que hay por encima sean SOLO documentos (docs/ y *.md).
+    Push-Location $Raiz
+    try { $shas = @(git rev-list --max-count=15 HEAD 2>$null) } finally { Pop-Location }
     $run = $null
-    if ($r.workflow_runs -and $r.workflow_runs.Count -gt 0) { $run = $r.workflow_runs[0] }
-    if (-not $run) { throw "El commit $($sha.Substring(0,7)) no tiene ningun run del CI en GitHub: haz push y espera a que acabe (o -SinCI a sabiendas)." }
-    if ($run.status -ne "completed") { throw "El CI del commit $($sha.Substring(0,7)) todavia esta '$($run.status)': espera a que acabe ($($run.html_url)) (o -SinCI a sabiendas)." }
-    if ($run.conclusion -ne "success") { throw "EL CI DEL COMMIT $($sha.Substring(0,7)) ESTA EN ROJO ($($run.conclusion)): no se despliega. Mira $($run.html_url) (o -SinCI a sabiendas)." }
-    Write-Host "    CI verde para $($sha.Substring(0,7)) ($($run.html_url))"
+    $base = $null
+    foreach ($s in $shas) {
+        try {
+            $r = Invoke-RestMethod -Uri "https://api.github.com/repos/$Repo/actions/workflows/$Flujo/runs?head_sha=$s&per_page=1" -Headers $cab -TimeoutSec 30
+        } catch {
+            throw "No se ha podido consultar el CI de GitHub: $($_.Exception.Message) (o -SinCI a sabiendas)."
+        }
+        if ($r.workflow_runs -and $r.workflow_runs.Count -gt 0) { $run = $r.workflow_runs[0]; $base = $s; break }
+    }
+    if (-not $run) { throw "Ninguno de los ultimos $($shas.Count) commits tiene un run del CI en GitHub: haz push y espera a que acabe (o -SinCI a sabiendas)." }
+    if ($base -ne $sha) {
+        Push-Location $Raiz
+        try { $cambiados = @(git diff --name-only $base HEAD 2>$null) } finally { Pop-Location }
+        $noDocs = @($cambiados | Where-Object { $_ -notmatch '^docs/' -and $_ -notmatch '\.md$' })
+        if ($noDocs.Count -gt 0) {
+            throw "HEAD ($($sha.Substring(0,7))) no tiene run del CI y, desde el ultimo que lo tiene ($($base.Substring(0,7))), hay cambios que no son documentos: $($noDocs -join ', '). Haz push sin [skip ci] y espera al CI (o -SinCI a sabiendas)."
+        }
+        Write-Host "    (HEAD $($sha.Substring(0,7)) no tiene run; el ultimo con CI es $($base.Substring(0,7)) y por encima solo hay documentos)"
+    }
+    if ($run.status -ne "completed") { throw "El CI del commit $($base.Substring(0,7)) todavia esta '$($run.status)': espera a que acabe ($($run.html_url)) (o -SinCI a sabiendas)." }
+    if ($run.conclusion -ne "success") { throw "EL CI DEL COMMIT $($base.Substring(0,7)) ESTA EN ROJO ($($run.conclusion)): no se despliega. Mira $($run.html_url) (o -SinCI a sabiendas)." }
+    Write-Host "    CI verde para $($base.Substring(0,7)) ($($run.html_url))"
 }

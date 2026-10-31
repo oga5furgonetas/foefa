@@ -233,6 +233,26 @@ def _dia_negocio():
     except Exception:
         return datetime.now(timezone.utc).strftime("%Y-%m-%d")
 
+
+def _rango_dia_negocio(dia: str = None) -> dict:
+    """Filtro de Mongo para «created_at de ESE día de negocio» sobre marcas ISO guardadas en UTC: desde las 00:00
+    locales de ese día hasta las 00:00 locales del siguiente, las dos pasadas a UTC.
+
+    Sustituye al `{"$regex": f"^{today}"}` de toda la vida, que comparaba la FECHA UTC de la marca con el día LOCAL:
+    entre las 00:00 y la 01:00 de Madrid (02:00 en verano) la marca aún dice «ayer» y la inspección de hoy no era de
+    hoy (la app dejaba repetirla y `already_inspected` salía False). Lo delató la prueba de contrato del CI, que
+    fallaba cada noche a esa hora (01-11-2026). Las marcas van como `datetime.now(timezone.utc).isoformat()` y se
+    comparan como texto: el mismo formato hasta el segundo, así que `$gte`/`$lt` ordenan bien.
+    """
+    try:
+        from zoneinfo import ZoneInfo
+        tz = ZoneInfo(_region_actual.get()[1])
+    except Exception:                                            # noqa: BLE001
+        tz = timezone.utc
+    inicio = datetime.fromisoformat(dia or _dia_negocio()).replace(tzinfo=tz)
+    fin = inicio + timedelta(days=1)
+    return {"$gte": inicio.astimezone(timezone.utc).isoformat(), "$lt": fin.astimezone(timezone.utc).isoformat()}
+
 # =========================
 # DATABASE
 # =========================
@@ -8112,7 +8132,7 @@ async def get_my_assigned_vehicle(user: dict = Depends(get_current_user)):
                     insp = await db.inspections.find_one(
                         {"deleted": {"$ne": True}, "vehicle_id": slot["vehicle_id"],
                          "driver_id": {"$in": list(mis_ids)},
-                         "created_at": {"$regex": f"^{today}"}},
+                         "created_at": _rango_dia_negocio(today)},
                         {"_id": 0, "id": 1}
                     )
                     return {
@@ -12469,7 +12489,7 @@ async def upload_inspection_photos(
         dup = await db.inspections.find_one({
             "deleted": {"$ne": True}, "vehicle_id": vehicle_id,
             "driver_id": driver_id or user.get("sub"),
-            "created_at": {"$regex": f"^{today}"}
+            "created_at": _rango_dia_negocio(today)
         }, {"_id": 0, "id": 1})
         if dup:
             raise HTTPException(
