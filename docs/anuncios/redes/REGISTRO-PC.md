@@ -425,3 +425,50 @@ Sin huecos hasta el L 09-11 (hoy: Instagram del carrusel «5 trucos» publicado 
 
 Totales: X 0 respuestas, 0 seguidas; TikTok 3 (1 con app: el ofrecimiento); YouTube 2 (0 con app). Con app: 1 de 5. Sin pieza
 nueva. Reddit no se intentó.
+
+## 31-10-2026 (20:10 – 20:30) — ronda del bucle de 4 h (Chrome del PC 1, «Browser 2»)
+
+Ojo: hay DOS Chrome conectados a la extensión; el «Browser 1» (en uso por defecto) no tiene sesión de X. Las sesiones
+(X, TikTok, YouTube, Facebook) están en el «Browser 2»: `list_connected_browsers` + `select_browser`. Instagram sigue sin sesión.
+
+### Metricool (marca 7741371) — INCIDENCIA y arreglo
+- **El carrusel «5 trucos» de TikTok de hoy (18:00) NO salió**: error de Metricool «The 'image/png' type is not allowed, use
+  'image/jpeg', 'image/jpg' or 'image/webp'». TikTok no admite PNG en los posts de fotos (Instagram sí: el mismo carrusel salió a las
+  12:00). Los carruseles de TikTok del 02-11 (A), 05-11 (B) y 08-11 (C) iban a fallar igual.
+- Arreglo: los 29 PNG de los carruseles pasados a JPEG con ffmpeg (`frontend/public/redes/*.jpg`, commit 96992bb). Desplegar la web
+  (`deploy-frontend.ps1`) lo **denegó el modo auto** (producción), así que las URL públicas son las de GitHub
+  (`https://raw.githubusercontent.com/oga5furgonetas/foefa/main/frontend/public/redes/<fichero>.jpg`; el repo es público). Metricool
+  copia la imagen a su CDN, así que da igual de dónde venga.
+- Actualizados con JPEG (mismo texto, misma hora): TikTok 02-11 (id nuevo 412403634), 05-11 (412403643), 08-11 (412403669). El de
+  «5 trucos» **reprogramado el M 10-11 18:00** en TikTok (412403690; era el único hueco). Resto sin cambios; sin huecos hasta el 10-11.
+- Cuando Dani despliegue la web, `flotadsp.com/redes/*.jpg` también servirá; hasta entonces devuelve el index (SPA).
+
+### X (@FlotaDSP)
+- D 01-11 → X 11-11 programados (verificado en Scheduled, once posts a las 7:30). El siguiente del calendario (J 12-11, «Resumen
+  honesto», pide N real de `tools/metricas/usuarios_total.py`): sin cifra no se programa; mejor hacerlo el 11-11 con el dato fresco.
+- Notificaciones: nada nuevo que contestar (solo «Recent post from» de una cuenta seguida). Sin respuestas ni seguidas nuevas.
+
+### Ronda de conversación (lo nuestro primero)
+| Hora | Red | Hilo | Qué se dijo | App |
+|---|---|---|---|---|
+| 20:13 | TikTok | Actividad | respuestas de ayer a comentarios nuestros: laryrepartidor («Así es jjjj», «Gracias bro»), Fitnessbote («Danke🤣👍🏻»), AnthonyS («Gracias, lo tomo muy en cuenta»); me gusta de lebiglivreur y de Mónica (reparte logística) al ofrecimiento. Aviso del sistema: «la promoción que creaste el 30/10/2026 ha finalizado» (una promoción de TikTok; no es de esta sesión, no verificado quién) | — |
+| 20:15 | TikTok | **AnthonyS** (@anthsuriel04, empieza a repartir) en el vídeo de @soylastefa | respuesta a su «gracias»: apuntar al acabar qué portales costaron; a los cinco días ya sabes dónde se va el tiempo | no (verificado) |
+| 20:18 | TikTok | @alvarocancino_ «Primera vez trabajando en reparto» (Chile) | ya tenía comentario nuestro de hace 1 día; se pasa | — |
+| 20:19 | TikTok | **@mccrew.pov** (Italia) «Com'è andata a voi durante i primi giorni di lavoro?» (10-23, 292 comentarios) | en italiano: las primeras salidas al 40 % sirven para aprender a cargar en orden de paradas; cuando pasan al 100 % y los pueblos cambian, es lo único que queda igual | no (verificado) |
+| 20:21 | TikTok | **@florinthedeliverydriver** «170 stops. 251 parcels. Farms, highways and heat. Full day with me» (7-19, 1 comentario; serie de días completos) | **ofrecimiento público a micro-creador**, en inglés: «we're FDS, a small team from Spain that built a free delivery app…»; que lo pruebe un día real y diga qué falta; sin pagos | sí (verificado) |
+| 20:23 | TikTok | **@norainzustellung** Nora (Alemania) «Arbeitstag als Postbotin» (hace 1 d, 1.356 ❤, sátira del horario) | en alemán: la hora de «Sie waren leider nicht anzutreffen» es la más cara del día, porque mañana hay que volver | no (verificado) |
+| 20:25 | YouTube | **GEO PARRA** «Repartidor de SHEIN y TEMU por un día: $7.50 por paquete» (hace 10 min, 156 vistas; LatAm) | la cuenta del final: por pieza suena bien hasta dividir por horas reales y gasolina; con 90 paquetes, cargar en orden y agrupar por colonia es una hora menos | no (verificado) |
+| 20:26 | YouTube | Agustin Alvarez «Un día trabajando… y por qué lo dejo» (169K) | ya tenía comentario nuestro; se pasa | — |
+| 20:27 | YouTube | **Kevin Plata** «Cómo repartir paquetes… por primera vez» (7,8K vistas, tutorial en español desde EE. UU.) | consejos de primera semana: mirar el bloque entero y cargar en orden de entrega; en edificios, estacionar una vez y bajar 3-4 paquetes | no (verificado) |
+| 20:28 | TikTok | **@casal.queentrega** Casal que Entrega (Brasil) «Bora de Rotinha no Sábado?!» (8-2; 80 paradas en 2 h; alguien pregunta «como se organiza?») | en portugués: no hay código mágico, numerar los paquetes en el orden de la ruta antes de salir y cargar con los últimos al fondo | no (verificado) |
+| 20:29 | Facebook | notificaciones y grupo «Repartidores Paquetería Madrid» | nada nuevo (mismos avisos de ayer: pago de Meta pendiente, reel de la página). En el grupo solo ofertas de trabajo, una asesoría y un alquiler de cuenta de otra plataforma: nada que contestar | — |
+| — | Instagram | — | sin sesión en ninguno de los dos Chrome | — |
+
+Totales: X 0 respuestas, 0 seguidas; TikTok 5 (1 con app: el ofrecimiento a Florin); YouTube 2 (0 con app). Con app: 1 de 7.
+Sin pieza nueva. Reddit no se intentó. Búsquedas de TikTok en español: casi todo anuncios de flotas buscando autónomos; lo real
+sale mejor en italiano, alemán, inglés y portugués (Brasil).
+
+**Para Dani**: (1) desplegar la web cuando pueda (`.\scripts\deploy-frontend.ps1`) para que `flotadsp.com/redes/*.jpg` exista;
+(2) de ahora en adelante los carruseles de TikTok van en JPEG (si se regeneran con `redes-fotos.mjs`, convertir con ffmpeg);
+(3) lo de siempre: Publicar en Meta (seis cambios) y el pago, TikTok Ads (saldo y teléfono), Spotify (Enviar), el «7 días gratis»
+del grupo de Facebook, Instagram sin sesión.

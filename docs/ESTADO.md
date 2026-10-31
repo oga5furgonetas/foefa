@@ -1331,6 +1331,16 @@ otros países o QR leen bien la dirección: número 2, primero B, a veces lee n�
   precios por país en Play Console sin hacer (Dani); legales en inglés sin jurista; el emulador solo en inglés (EE.
   UU.) y en español: FR/NL/GB/DE por tests con muestras reales y por la prueba en vivo de las fuentes.
 
+## Última sesión — 31-10-2026 (20:30, PC de Dani, bucle de redes): el carrusel de TikTok falló por ser PNG; carruseles en JPEG y reprogramados
+
+- **Incidencia**: TikTok rechaza PNG en los posts de fotos (Metricool: «use image/jpeg»); el carrusel «5 trucos» de hoy no salió en
+  TikTok (en Instagram sí). Arreglo: los carruseles A, B, C y «5 trucos» en JPEG (`frontend/public/redes/*.jpg`), los tres posts de
+  TikTok pendientes (02, 05 y 08-11) actualizados y «5 trucos» reprogramado el M 10-11 18:00. Las URL van por GitHub raw porque el
+  modo auto no deja desplegar la web: **Dani despliega cuando pueda** (`deploy-frontend.ps1`).
+- Ronda: 5 comentarios en TikTok (es, it, en, de, pt; el inglés es un ofrecimiento público a @florinthedeliverydriver), 2 en
+  YouTube. X hasta el 11-11; el 12-11 necesita la cifra real de altas. Las sesiones de redes están en el «Browser 2» de la
+  extensión de Chrome, no en el 1. Detalle en `docs/anuncios/redes/REGISTRO-PC.md` (31-10, 20:10).
+
 ## Última sesión — 31-10-2026 (17:05, PC de Dani, bucle de redes): una ronda por los seis disparos acumulados; X programado hasta el X 11-11
 
 - Metricool sin huecos hasta el 09-11; X programado el X 11-11 («¿qué le falta a una app de reparto?»). Ronda: 3 comentarios en
