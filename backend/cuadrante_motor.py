@@ -74,20 +74,61 @@ hacían ninguno. Ahora:
     el 3º algo más… y los extras que ya hizo en las 4 semanas anteriores cuentan
     igual (`extras_recientes`). Se reparten solos entre quien menos lleva, SIN
     dejar nunca un día corto por repartir (el reparto solo desempata);
-  · cada día de fin de semana cuesta 0,2 por cada día de finde trabajado en las
-    4 semanas anteriores (`findes_recientes`, tope 5): los findes rotan. Es poco
-    a propósito, menos que mover una celda ya puesta: rota al rellenar semanas
-    nuevas, no desordena lo que ya estaba hecho.
-Los dos son DESEMPATES. La cuenta que lo garantiza: un extra cuesta 90, mover
-una celda hasta 3, perder dos libres seguidos 2, el reparto de extras hasta 3 y
-el de findes hasta 1: 99, por debajo de los 100 de la primera ruta que falta.
-Así nunca sale más barato quedarse corto que repartir (lo cazó una prueba con
-pesos más altos: el motor prefería dejar un día a +1).
+  · LOS FINES DE SEMANA SE REPARTEN (31-10-2026, Dani: «la misma persona tiene
+    3 findes seguidos libres y otro no pilla un finde libre en 3 semanas»). Hasta
+    entonces el único término de findes era un desempate de 0,2 por día de finde
+    trabajado en las 4 semanas ANTERIORES: dentro del periodo que se calcula no
+    había nada que repartiera los findes ni cortara las rachas, y como las celdas
+    vacías son todas iguales, el cálculo dejaba libre el finde siempre a los
+    mismos (una simulación de 12 personas y 4 semanas dejaba a 5 sin ningún finde
+    libre). Ahora, para cada persona normal:
+      - el n-ésimo día de finde que trabaja cuesta más que el anterior (tramos
+        crecientes, como los extras), contando los días de finde de las 4 semanas
+        de antes (`findes_recientes`): los días de finde se igualan entre todos,
+        y quien viene de trabajar muchos descansa antes;
+      - trabajar dos findes seguidos cuesta 12, tres seguidos 36 más y cuatro 60 más (contando los
+        findes de antes del periodo: `findes_previos`): las rachas se cortan.
+    Un «finde trabajado» es trabajar el sábado o el domingo; un finde LIBRE, los
+    dos días libres. Solo a quien no tiene el horario marcado (patrón, días que
+    no, nº de días propio): a esos lo suyo ya está dicho.
+Todos son DESEMPATES. Para que quepan sin dejar nunca un día corto, los pesos
+grandes van ×20 y el extra ×10: la primera ruta que falta cuesta 2.000 y un
+extra 900 (cubrir con un 6º día sigue ganando siempre a dejar la ruta). La
+cuenta de lo que puede acompañar a ese extra: mover una celda de la semana en
+curso 70 (las siguientes 3: ahí sí se reordenan los findes), perder dos libres
+seguidos 2, el reparto de extras hasta 24, el de días de finde hasta 24, las
+rachas de findes hasta 108 y el descanso por racha hasta 12: 1.140, por debajo
+de 2.000. Así nunca sale más barato quedarse corto que repartir (lo cazó una
+prueba con pesos más altos: el motor prefería dejar un día a +1).
+
+UNA SOLA DECISIÓN (31-10-2026). Antes el cálculo iba en dos fases: primero el
+plan de 5 días (aceptando días cortos) y después los extras encima. La primera
+fase no sabía si luego cabrían los extras: con los findes repartidos dejaba a
+dos personas con jueves y viernes libres tras seis días seguidos, nadie podía
+hacer ese viernes como 6º día y el día se quedaba a +1 habiendo gente. Ahora la
+primera pasada decide TODO, extras incluidos (cuestan 900: solo donde hagan
+falta), y la segunda solo elige qué día de los 6 es el extra (el plan de 5 días
+que mejor sale de dentro de lo decidido: suele ser el día que antes no se
+trabajaba, que es lo que se marca en rosa).
+
+SEMANA A SEMANA (31-10-2026). El periodo entero de una vez (60 personas, 4
+semanas) se iba a los 45 segundos de tope por fase y, con los findes en la
+cuenta, se quedaba sin terminar y devolvía un cuadrante malo. Ahora
+`generar_cuadrante` corta el periodo en semanas de lunes a domingo y las
+calcula en orden: cada semana ve las anteriores ya decididas (sus días cuentan
+para los 6 seguidos, los findes y los extras recientes), así que los findes
+rotan solos —quien trabajó el finde pasado paga más este— y cada cálculo son
+7 días (segundos, no minutos). Cada semana se calcula VIENDO TAMBIÉN LA
+SIGUIENTE (se compromete solo la primera): con la ley de 6 seguidos, quien
+trabaja sábado y domingo no puede librar el finde siguiente sin una semana de 4
+días, así que librar un finde exige haber partido el anterior (solo el sábado o
+solo el domingo), y eso hay que verlo venir.
 """
 from __future__ import annotations
 
 import datetime as dt
 import math
+import re
 from typing import Any, Dict, List, Optional, Tuple
 
 # ── LOS CÓDIGOS ──────────────────────────────────────────────────────────────
@@ -101,18 +142,25 @@ DE_TRABAJO = {"1", "T", "X"}
 DE_LIBRE = {"N/T", "L"}
 LIBRE = "N/T"
 
-# Pesos (los del modelo original).
-TRAMOS_FALTA = [(1, 100.0), (1, 150.0), (1, 400.0), (1, 500.0), (None, 1500.0)]
-PESO_SOBRA = 3000.0
-PESO_EXTRA = 90.0
-PESO_SEMANA_CORTA = 1000.0
+# Pesos (los del modelo original, ×20 desde el 31-10-2026 —el extra ×10— para que quepan los desempates: ver la
+# cuenta de los 1.068 en la cabecera).
+TRAMOS_FALTA = [(1, 2000.0), (1, 3000.0), (1, 8000.0), (1, 10000.0), (None, 30000.0)]
+PESO_SOBRA = 60000.0
+PESO_EXTRA = 900.0
+PESO_SEMANA_CORTA = 20000.0
 PREMIO_LIBRES_JUNTOS = 2.0
 PESO_RACHA = 2.0                 # libra antes quien lleva más días seguidos (por día de racha previa, decae en los 4 primeros días)
-PESO_JUNTOS = 40.0               # que dos personas (pareja) libren y trabajen los mismos días: preferencia, cede ante cubrir rutas
-# Reparto justo: desempates, ver la cuenta de los 99 en la cabecera.
-PESO_EXTRA_REPETIDO = 1.0
+PESO_JUNTOS = 400.0              # que dos personas (pareja) libren y trabajen los mismos días: preferencia, cede ante cubrir rutas
+PESO_CAMBIO_SEMANA_1 = 70.0      # mover una celda ya puesta de la semana en curso: más que cualquier desempate
+PESO_CAMBIO_DESPUES = 3.0        # ... y de las semanas siguientes: los findes sí se pueden reordenar ahí
+# Reparto justo: desempates, ver la cuenta de los 1.140 en la cabecera.
+PESO_EXTRA_REPETIDO = 8.0
 TOPE_REPETIDOS = 3
-PESO_FINDE_RECIENTE = 0.2       # por día de finde trabajado en las 4 semanas de antes (tope 5)
+PESO_FINDE_DIA = 3.0             # el n-ésimo día de finde de una persona cuesta n × esto (contando las 4 semanas de antes)
+TOPE_FINDE_DIAS = 8              # ... hasta aquí (24 como mucho por día)
+PESO_FINDES_SEGUIDOS = 12.0      # trabajar dos findes seguidos
+PESO_FINDES_TRES = 36.0          # ... tres seguidos, esto más
+PESO_FINDES_CUATRO = 60.0        # ... y cuatro seguidos, esto más todavía
 
 TIPOS = ("normal", "empresa", "finde", "inactivo")
 
@@ -188,11 +236,13 @@ class _Programa:
                     integrality=np.array(self.entera),
                     bounds=Bounds(np.array(self.lb, dtype=float), np.array(self.ub, dtype=float)),
                     constraints=[restr] if restr is not None else None,
-                    options={"time_limit": float(segundos), "mip_rel_gap": 1e-6})
+                    # 1e-3 (31-10-2026): los desempates no necesitan la milésima y HiGHS acaba 3 veces antes.
+                    options={"time_limit": float(segundos), "mip_rel_gap": 1e-3})
 
 
-def generar_cuadrante(entrada: Dict[str, Any]) -> Dict[str, Any]:
-    """
+def _generar_tramo(entrada: Dict[str, Any]) -> Dict[str, Any]:
+    """Un tramo de una semana (o el periodo entero si cabe en una): ver generar_cuadrante.
+
     entrada = {
       "fecha_inicio": "2026-09-30",     # primer día que se puede cambiar (normalmente mañana)
       "fecha_fin":    "2026-10-12",
@@ -216,6 +266,7 @@ def generar_cuadrante(entrada: Dict[str, Any]) -> Dict[str, Any]:
     "faltan_conductores"}.
     """
     ini, fin = _d(entrada["fecha_inicio"]), _d(entrada["fecha_fin"])
+    inicio_periodo = _d(entrada.get("inicio_periodo") or entrada["fecha_inicio"])   # la semana en curso es la primera del PERIODO
     if fin < ini:
         raise ValueError("La fecha de fin es anterior a la de inicio")
     if (fin - ini).days > 62:
@@ -284,6 +335,9 @@ def generar_cuadrante(entrada: Dict[str, Any]) -> Dict[str, Any]:
         return None
 
     fijos = {(c["id"], d): fijo(c, d) for c in conductores for d in todos}
+    # Los findes que toca el cálculo: cada sábado con él o su domingo dentro del periodo (y el domingo suelto del
+    # principio, con su sábado en el historial).
+    sabados = sorted({d - dt.timedelta(d.weekday() - 5) for d in plan if d.weekday() >= 5})
 
     def racha_previa(c) -> int:
         """Días seguidos trabajados justo antes del periodo (0 si libró ayer)."""
@@ -327,8 +381,8 @@ def generar_cuadrante(entrada: Dict[str, Any]) -> Dict[str, Any]:
                 if fijos[c["id"], d] is None:
                     k = m.var()
                     xv[c["id"], d] = k
-                    if fase == 2 and base[c["id"], d] == 1:
-                        m.lb[k] = 1.0               # la fase 2 solo añade días extra
+                    if base is not None and base[c["id"], d] == 0:
+                        m.ub[k] = 0.0               # el marcado solo quita: de lo decidido, el plan de 5 días
 
         def suma(pares, que=0):
             """Σ de celdas -> (coeficientes, constante). que=0 trabaja, 1 ruta."""
@@ -378,13 +432,60 @@ def generar_cuadrante(entrada: Dict[str, Any]) -> Dict[str, Any]:
         extras_sem = {}
         for c in conductores:
             cid, tipo = c["id"], c.get("tipo") or "normal"
-            # Los findes rotan: cuanto más findes lleva, algo más cuesta ponerle otro.
-            fr = min(5, int(c.get("findes_recientes") or 0))
-            if fr:
-                for d in plan:
-                    k = xv.get((cid, d))
-                    if k is not None and d.weekday() >= 5:
-                        m.c[k] += PESO_FINDE_RECIENTE * fr
+            # ── Los fines de semana se reparten (solo a quien no tiene el horario marcado) ──
+            if descanso_prioritario(c):
+                # El n-ésimo día de finde cuesta más que el anterior, contando los de las 4 semanas de antes:
+                # tramos crecientes y el cálculo llena primero los baratos, así que se igualan entre todos.
+                dias_finde = [xv[cid, d] for d in plan if d.weekday() >= 5 and (cid, d) in xv]
+                if dias_finde:
+                    previos = int(c.get("findes_recientes") or 0)
+                    tramos = [m.var(0, 1, entera=False,
+                                    coste=PESO_FINDE_DIA * min(TOPE_FINDE_DIAS, previos + i))
+                              for i in range(len(dias_finde))]
+                    c1 = {k: 1 for k in dias_finde}
+                    for y in tramos:
+                        c1[y] = -1
+                    m.restr(c1, 0, 0)
+                # Trabajar findes seguidos cuesta (dos: 6; tres: 6 más). Un finde «trabajado» es trabajar el
+                # sábado o el domingo. Los de antes del periodo entran como constantes (`findes_previos`).
+                findes_w = []                                   # [(coef, cte)] de cada finde, en orden
+                for s in sabados:
+                    coef_w, cte_w = {}, 0
+                    for d in (s, s + dt.timedelta(1)):
+                        if d in todos:
+                            k = xv.get((cid, d))
+                            if k is not None:
+                                coef_w[k] = 1
+                            else:
+                                cte_w = max(cte_w, fijos[cid, d][0])
+                    if coef_w:
+                        w = m.var(0, 1, entera=False)           # w >= cada día: 1 si trabaja alguno
+                        for k in coef_w:
+                            m.restr({w: 1, k: -1}, 0, math.inf)
+                        if cte_w:
+                            m.lb[w] = 1.0
+                        findes_w.append(({w: 1}, 0))
+                    else:
+                        findes_w.append(({}, min(1, cte_w)))
+                previos_w = [int(bool(v)) for v in (c.get("findes_previos") or [])][-3:]
+                cadena = [({}, v) for v in previos_w] + findes_w
+                for i in range(1, len(cadena)):
+                    for largo, peso in ((2, PESO_FINDES_SEGUIDOS), (3, PESO_FINDES_TRES), (4, PESO_FINDES_CUATRO)):
+                        if i - largo + 1 < 0:
+                            continue
+                        trozo = cadena[i - largo + 1:i + 1]
+                        coef = {}
+                        cte = 0
+                        for cf, ct in trozo:
+                            for k, v in cf.items():
+                                coef[k] = coef.get(k, 0) + v
+                            cte += ct
+                        if not coef:
+                            continue                            # todo decidido: nada que repartir
+                        r = m.var(0, 1, entera=False, coste=peso)
+                        c1 = dict(coef)
+                        c1[r] = -1
+                        m.restr(c1, -math.inf, (largo - 1) - cte)   # Σw - r <= largo-1-cte  ->  r >= Σw+cte-(largo-1)
             # Quien lleva más días seguidos libra antes (desempate suave: el tope de 6 sigue siendo ley).
             r0 = racha0.get(cid, 0)
             if r0:
@@ -446,7 +547,7 @@ def generar_cuadrante(entrada: Dict[str, Any]) -> Dict[str, Any]:
                 if k is None:
                     continue
                 v = cur(cid, d)
-                w = 3.0 if (d - ini).days < 7 else 1.0
+                w = PESO_CAMBIO_SEMANA_1 if (d - inicio_periodo).days < 7 else PESO_CAMBIO_DESPUES
                 if v in DE_TRABAJO:
                     m.c[k] -= w                  # w·(1 - x): la constante no cambia nada
                     m.constante += w
@@ -491,10 +592,12 @@ def generar_cuadrante(entrada: Dict[str, Any]) -> Dict[str, Any]:
         estado = "Optimal" if res.status == 0 else ("TimeLimit" if res.status == 1 else str(res.message))
         return estado, valores, xv
 
-    estado, base, _ = construir(1, None)
-    final = base
     if permitir_extra:
-        estado, final, _ = construir(2, base)
+        estado, final, _ = construir(2, None)       # una sola decisión, extras incluidos
+        _, base, _ = construir(1, final)            # y de ahí, el plan de 5 días: lo que sobra es el extra
+    else:
+        estado, final, _ = construir(1, None)
+        base = final
 
     # ── La marca de día extra (el rosa) ──────────────────────────────────────
     # Un día que ya se trabajaba y se sigue trabajando se queda con su marca,
@@ -579,6 +682,86 @@ def generar_cuadrante(entrada: Dict[str, Any]) -> Dict[str, Any]:
     faltan_c = math.ceil((n_extra + deficit_total) / por_persona - 1e-9) if por_persona else 0
     return {"estado": estado, "celdas": out, "resumen_dias": resumen, "avisos": avisos,
             "extras": n_extra, "deficit": deficit_total, "faltan_conductores": max(0, faltan_c)}
+
+
+_AVISO_EXTRAS = "días EXTRA (6º día de la semana)"
+SEMANAS_VISTA = 1                # cuántas semanas más se ven al calcular cada una (se compromete solo la primera)
+
+
+def generar_cuadrante(entrada: Dict[str, Any]) -> Dict[str, Any]:
+    """El cuadrante del periodo, semana a semana (lunes a domingo), cada una viendo las anteriores ya decididas.
+
+    Misma entrada y misma salida que siempre (ver _generar_tramo). Entre semana y semana se actualiza el
+    historial de cada persona: los días de finde trabajados (`findes_recientes`, `findes_previos`) y los
+    extras hechos (`extras_recientes`), así que el reparto justo sigue de una semana a la siguiente.
+    """
+    ini, fin = _d(entrada["fecha_inicio"]), _d(entrada["fecha_fin"])
+    if fin < ini:
+        raise ValueError("La fecha de fin es anterior a la de inicio")
+    if (fin - ini).days > 62:
+        raise ValueError("Como mucho dos meses de una vez")
+    lunes = sorted({d - dt.timedelta(d.weekday()) for d in (ini + dt.timedelta(i) for i in range((fin - ini).days + 1))})
+    if len(lunes) == 1:
+        return _generar_tramo(dict(entrada, inicio_periodo=ini.isoformat()))
+
+    celdas = {k: _cod(v) for k, v in (entrada.get("celdas") or {}).items()}
+    extras_ya = set(entrada.get("extras") or [])
+    conductores = [dict(c) for c in (entrada.get("conductores") or []) if c.get("id")]
+    dsem = int(entrada.get("dias_semana", 5))
+    # El tope de tiempo es del PERIODO: cada semana se lleva su parte (y al menos 8 s).
+    segundos = max(8.0, float(entrada.get("segundos", 60)) / len(lunes))
+    out: Dict[str, Any] = {}
+    resumen, avisos, estados = [], [], []
+    for l in lunes:
+        a, b = max(l, ini), min(l + dt.timedelta(6), fin)
+        b_vista = min(l + dt.timedelta(6 + 7 * SEMANAS_VISTA), fin)
+        tramo = dict(entrada, fecha_inicio=a.isoformat(), fecha_fin=b_vista.isoformat(), inicio_periodo=ini.isoformat(),
+                     celdas=celdas, extras=sorted(extras_ya), conductores=conductores, segundos=segundos)
+        r = _generar_tramo(tramo)
+        estados.append(r["estado"])
+        comprometidos = {(a + dt.timedelta(i)).isoformat() for i in range((b - a).days + 1)}
+        fechas_txt = {f"{_d(f):%d/%m}" for f in comprometidos}
+        resumen.extend(x for x in r["resumen_dias"] if x["fecha"] in comprometidos)
+        for x in r["avisos"]:
+            m_f = re.search(r"\d\d/\d\d", x)
+            if _AVISO_EXTRAS not in x and (m_f is None or m_f.group(0) in fechas_txt):
+                avisos.append(x)
+        for k, v in r["celdas"].items():
+            if k.split("|")[1] not in comprometidos:
+                continue                                        # la semana vista se vuelve a calcular en su turno
+            out[k] = v
+            celdas[k] = v["valor"]
+            if v["extra"]:
+                extras_ya.add(k)
+            else:
+                extras_ya.discard(k)
+        # El historial de cada persona, con esta semana ya decidida, para la siguiente.
+        sab, dom = l + dt.timedelta(5), l + dt.timedelta(6)
+        finde_entero = sab >= ini and dom <= fin
+        nuevos = []
+        for c in conductores:
+            c = dict(c)
+            cid = c["id"]
+            dias = [d for d in (sab, dom) if ini <= d <= fin and celdas.get(f"{cid}|{d}", "") in TRABAJO]
+            c["findes_recientes"] = int(c.get("findes_recientes") or 0) + len(dias)
+            if finde_entero:
+                c["findes_previos"] = ([int(bool(x)) for x in (c.get("findes_previos") or [])] + [1 if dias else 0])[-4:]
+            c["extras_recientes"] = int(c.get("extras_recientes") or 0) + sum(
+                1 for i in range(7) if (l + dt.timedelta(i)) >= a and (l + dt.timedelta(i)) <= b
+                and out.get(f"{cid}|{l + dt.timedelta(i)}", {}).get("extra"))
+            nuevos.append(c)
+        conductores = nuevos
+
+    n_extra = sum(1 for v in out.values() if v["extra"])
+    deficit = sum(max(0, r["objetivo"] - r["planificadas"] - r["refuerzo"]) for r in resumen)
+    if n_extra:
+        avisos.append(f"{n_extra} {_AVISO_EXTRAS} para llegar a +{int(entrada.get('colchon', 2))}. "
+                      "Si ese día sobra gente, se pueden quitar.")
+    por_persona = dsem * ((fin - ini).days + 1) / 7.0
+    faltan_c = math.ceil((n_extra + deficit) / por_persona - 1e-9) if por_persona else 0
+    estado = "Optimal" if all(e == "Optimal" for e in estados) else next(e for e in estados if e != "Optimal")
+    return {"estado": estado, "celdas": out, "resumen_dias": resumen, "avisos": avisos,
+            "extras": n_extra, "deficit": deficit, "faltan_conductores": max(0, faltan_c)}
 
 
 def rachas(celdas: Dict[str, str], ids: List[str], desde, hasta) -> Dict[str, int]:
