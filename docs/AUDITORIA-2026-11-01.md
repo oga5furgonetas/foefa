@@ -108,6 +108,15 @@ HSTS/nosniff/DENY; CORS cerrado a la web propia (+ `capitalor://localhost` para 
   (`candidatos.dni`), y los CV van a R2 con URL pública permanente (`R2_PUBLIC_URL/cv/...`). El volumen de Fly va
   cifrado en reposo, pero el acceso por enlace no caduca nunca. Es el punto 7 de «Pendiente» de ESTADO desde
   septiembre, y sigue abierto (ver §5, R2).
+- 🔴 **Bug de medianoche en «la inspección de hoy» (arreglado en las dos comprobaciones que importan)**: las marcas
+  `created_at` se guardan en UTC y el día de negocio va en hora local, pero 15 sitios comparaban la FECHA UTC de la
+  marca con el día local (`{"$regex": f"^{today}"}`): entre las 00:00 y la 01:00 de Madrid (02:00 en verano) la
+  inspección recién subida «no era de hoy»: la app dejaba repetirla y `already_inspected` salía False. Lo delató la
+  prueba de contrato del CI, que falló en los cuatro runs de esta noche entre las 00:06 y las 00:34 (hora de Madrid)
+  y había pasado a las 23:52. Arreglado con `_rango_dia_negocio()` (el tramo del día local pasado a UTC) en
+  `assigned-vehicle` y en `inspections/upload`, con 3 tests; **quedan 13 sitios con el mismo patrón** (informes por
+  día, salud de la flota, calendario: líneas 15448-29463 de `server.py`) que hay que pasar al rango en una tanda
+  aparte, con sus tests.
 - 🟢 Tokens de conductor: todos los `create_token` llevan `db_name` (revisados los 8 sitios); el único sin empresa es
   el de mantenimiento, que cae en la base del dueño a propósito.
 
@@ -330,6 +339,7 @@ servilleta (la prueba fotográfica que evita la franquicia del renting) está de
 | El flujo de iPhone ya no se compila (ni sube una build a Apple) con cada texto de la web | `app-ios.yml` | `d0076db` |
 | Peritaje solo de la propia inspección para un conductor; baja de push solo de la propia; recuperación de contraseña a 8 como el alta (servidor y web en 6 idiomas) | `server.py`, `ResetPassword.jsx`, `i18nDict.js` | `d0076db` |
 | Dependencias de la web sin avisos (`npm audit fix`) y del backend al día (fastapi/starlette, pymongo, aiohttp, Pillow, python-multipart), con los 1.365 tests pasados en un entorno aparte | `requirements.txt`, `package.json` (+axios fijo en 1.17.0: 1.21 rompe los POST) | `292a55f`, `05c2b75` |
+| El bug de medianoche de «la inspección de hoy» (repetible entre las 00:00 y la 01:00; el CI fallaba cada noche a esa hora), con 3 tests; el candado del CI admite un commit de solo documentos encima | `server.py` (`_rango_dia_negocio`), `ci-verde.ps1` | `49aaa82` |
 | El texto para contestar a Apple, listo para pegar | `docs/APP_STORE.md` | `292a55f` |
 | Medidor de producción desde un móvil emulado | `frontend/e2e/medir-produccion.mjs` | `292a55f` |
 
