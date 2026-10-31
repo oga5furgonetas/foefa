@@ -11,7 +11,16 @@
 
 ## Cómo se ha hecho (método)
 
-_(se rellena al cerrar)_
+Una sola sesión, del 31-10 a las 23:1x al 01-11 por la madrugada, desde el PC de casa de Dani (sin Mongo, sin
+Docker, sin `gh`). Orden: chequeos automáticos leídos de verdad (no por el color) → inventario y lectura del
+backend (los 649 endpoints por AST; los 64 públicos uno a uno; el núcleo de sesiones; escáner de riesgos sobre
+los 585 autenticados) → web (lint, build, 206 pruebas de pantalla, cabeceras y rendimiento en producción desde un
+móvil emulado) → app Android (manifiesto, dependencias y los 7 ficheros que importan) e iOS (App Store Connect) →
+infraestructura (Fly, Mongo, Cloudflare, GitHub) → cifras reales en las consolas de Dani (Play, Search Console,
+Meta) → mercado (lo que cambia respecto al informe del 29-10, con búsquedas de hoy) → arreglar lo que se podía
+arreglar sin desplegar, con test, y subirlo. Cada hallazgo dice cómo se comprobó; lo que no se pudo comprobar está
+marcado. Lo que el modo auto de Claude no dejó hacer (ejecutar el MongoDB descargado, Lighthouse, `fly ssh`, crear
+variables en GitHub) se dice donde toca y pasa a la lista de Dani.
 
 ## 1. Entorno y chequeos automáticos
 
@@ -102,8 +111,6 @@ HSTS/nosniff/DENY; CORS cerrado a la web propia (+ `capitalor://localhost` para 
 - 🟢 Tokens de conductor: todos los `create_token` llevan `db_name` (revisados los 8 sitios); el único sin empresa es
   el de mantenimiento, que cae en la base del dueño a propósito.
 
-_(sigue: §3 web, §4 app, §5 infraestructura, §6 uso real, §7 mercado, §8 veredicto)_
-
 ## 3. Web y panel (`frontend/`)
 
 **Cómo se ha mirado.** ESLint (0 errores, 21 avisos revisados uno a uno), `vite build`, la prueba de humo de
@@ -151,7 +158,33 @@ Veredicto de rendimiento: bien (LCP por debajo de 2,5 s en todas, sin saltos de 
 La 2.4.2 corrió en el emulador esta noche (aviso de actualización, auditoría con fotos). Lo que NO se ha podido:
 un móvil físico.
 
-_(hallazgos: ver más abajo, se completan en el siguiente bloque)_
+**Lo que está bien.** Permisos mínimos y explicados (cámara, ubicación solo en uso, sin ubicación en segundo
+plano, `FOREGROUND_SERVICE` quitado a propósito); `allowBackup=false` y la sesión fuera de la copia de Google; token
+en el almacén privado y renovado solo al usar la app; la cola de entregas sin red va en orden, con reintentos
+exponenciales por WorkManager y aviso a la persona cuando el servidor rechaza algo (12 reintentos ante 5xx);
+detecta las wifis cautivas (HTML con 200) como «sin red»; R8 activado; firma v2/v3 comprobada en el CI; la
+actualización in-app (Play) y por aviso (web) funcionan (probado anoche en el emulador); FCM opcional, con la
+bandeja cada 15 min como respaldo; analítica anónima con sesión que muere con el proceso.
+
+**Hallazgos.**
+
+- 🔴 **La app de iPhone (2.4.1, build 9) está RECHAZADA por Apple desde el 31-10 a las 18:18** («Guideline 2.1 —
+  Information Needed»), y ESTADO decía «enviada, nada pendiente hasta que Apple conteste». Apple pide un vídeo
+  grabado en un iPhone físico (con el borrado de cuenta), cuentas de prueba de cada tipo, descripción, servicios
+  externos y diferencias por región. Lo que hay que contestar está escrito, listo para pegar, en
+  `docs/APP_STORE.md` → «RECHAZADA la 2.4.1». Dani no tiene iPhone: el vídeo lo tiene que grabar alguien con uno.
+- 🟡 **Sin medición de fallos**: no hay Crashlytics, Sentry ni equivalente (confirmado en `build.gradle.kts`); lo
+  único son los «Android vitals» de Play (hoy 0 fallos en ~25 móviles, poco dato). El servidor sí registra los
+  errores de la web (`/client-error`), pero un fallo de Kotlin muere en silencio. Con 25 móviles se puede vivir;
+  con 500 no.
+- 🟡 **El 75 % de la base instalada seguía en el code 3** (la TWA del 4-10, canal alfa) según ESTADO del 30-10: Play
+  solo los actualiza si están en la misma pista. Comprobar en Play Console → Estadísticas → por versión que la
+  2.4.2 llega a todos; si no, pedirles reinstalar.
+- 🟡 **Contraseña de conductor: mínimo 6 caracteres** en el portal web, en la app y en el panel (7 sitios
+  coherentes entre sí); el alta de empresa pide 8 y, desde hoy, la recuperación también. Subir a 8 a los
+  conductores es un cambio de producto (7 textos en 6 idiomas + Kotlin): decisión de Dani.
+- 🟢 Sin `cleartext` en release (HTTP solo en la variante de pruebas), sin claves en el código (FCM y API entran al
+  compilar), `queries` del manifiesto solo para Maps/Waze/WhatsApp/llamar.
 
 ## 5. Infraestructura y operación (Fly, Mongo, Cloudflare, GitHub)
 
@@ -184,6 +217,199 @@ _(hallazgos: ver más abajo, se completan en el siguiente bloque)_
 
 ## 6. Uso real en producción (agregados, sin datos personales)
 
+**Sin acceso a la base desde este PC** (el Mongo de Fly es de red privada y la cadena está en el PC de Winiw), lo
+medido sale de las consolas de Dani (leídas en su Chrome, solo lectura) y de la última medición con base del 23-10.
+
+- **Google Play** (consola, 4-30 oct): móviles con la app instalada **de 1 a ~25** en el mes (España la mayoría;
+  Lituania ~3, Francia y Turquía testimoniales); **0 fallos y 0 ANR** en 28 días; **0 valoraciones**; la 2.4.2
+  publicada ayer con 18 descargas en sus primeras horas.
+- **Google (Search Console, 90 días)**: 117 clics, 1.040 impresiones, posición media 7,9, CTR 11 %. De los 117
+  clics, 41 son la marca («flotadsp», «flota dsp») y casi todo lo demás son ofertas de empleo locales («repartidor
+  vigo», «empleo ourense»). «ruta de reparto»: 6 impresiones, 0 clics. Las guías SEO (`/guia-*`) no aparecen.
+  Google trae ~1 visita al día y ninguna de alguien buscando el producto.
+- **Meta Ads** (gestor, 1 may → 31 oct): **la cuenta está RESTRINGIDA por un pago fallido: los anuncios no se
+  publican**. Gasto visible: **358,88 €** en 12 campañas. La única que trajo altas medibles: «FDS Registros — Gratis
+  15 paradas» (10-10): **69 registros a 1,34 €** (92,32 €). «Promoción del sitio web»: 1.014 visitas a 0,14 €
+  (141,55 €) sin registros atribuidos; «Alta 7 días gratis»: 364 visitas (56,56 €); «Lead ES+PT»: 1 lead a 10,96 €.
+  TikTok (PLAN-1000): 203 € y 0 altas. Total visible ≈ 560 € más bonos (25 €/10 €) y lo que haya en otras cuentas o
+  plataformas: Dani habla de 1.000-2.000 €; la diferencia no la veo desde aquí.
+- **Embudo** (PLAN-1000, 23-10, la última medición con base): 32 autónomos reales + 2 empresas de mensajería; de 32:
+  13 vuelven otro día → 9 meten paradas suyas → 6 entregan algo → **0 hacen un día real de reparto**. 18 de 32 no
+  vuelven nunca tras el día del alta. Hoy Dani habla de «100 personas»: no lo he podido contar (Negocio → «Cómo va el
+  negocio» lo da en un clic).
+- **Facturación: 0 €** en 5-6 meses (dato de Dani). Lo único que ha entrado por caja es la tienda de ropa de la
+  propia nave.
+- **Lo que no he podido medir**: usuarios activos de verdad (DAU/WAU), retención por cohorte, uso por pantalla en
+  OGA5 (la flota de Dani, el único cliente real), tiempos de respuesta por endpoint. Lo da `tools/metricas/` donde
+  haya `MONGO_URL`, o `/api/admin/activacion` con sesión de super-admin.
+
 ## 7. Mercado, competencia y crecimiento
 
+Esto NO repite `docs/ESTRATEGIA-29-10.md` (402 líneas, de hace tres días, con fuentes: sigue valiendo casi entero).
+Va a lo que ha cambiado y a lo que aquella no decía.
+
+**Comprobado hoy (fuentes en §9).**
+- Precios de referencia 2026: Fleetio 4-7 $/vehículo/mes; Whip Around 5 $ (Standard) y 9 $ (Pro); el software de
+  inspección de flotas se mueve entre 3 y 50 $/vehículo/mes; WeProov (Francia, el más parecido en «inspección con
+  foto + IA») no publica precio (packs de créditos; terceros lo sitúan en 25-75 $/mes); Pulpo (antes Pulpomatic,
+  Madrid, 14 países, ronda de 8,1 M€) «desde 5 $» sin base clara. **El precio de Flota (5/9 €) está en mercado: el
+  precio no es el problema.**
+- DeCA: es para el transporte PÚBLICO de mercancías (por cuenta ajena) y exime a los vehículos de hasta 2 t de MMA;
+  el reparto por cuenta propia y los autónomos con furgoneta pequeña casi seguro quedan fuera. La idea «DeCA desde la
+  ruta» (A5 del 29-10) se cae salvo que la gestoría diga lo contrario.
+- Conversión de referencia 2026: prueba gratis sin tarjeta 4-6 % («bien») a 10-15 % («muy bien»); con tarjeta ~30 %;
+  freemium 3-5 % de los activos; 90-180 días hasta el primer pago. **La cuenta del autónomo no sale a este tamaño:**
+  100 cuentas × 5 % × 9,99 € = 50 €/mes, y hoy hay 0 días reales de reparto. El B2C es embudo, no caja.
+- Amazon DSP en España: no hay cifra pública de cuántas DSP hay; Amazon tiene ~4.800 empleados fijos en España y
+  en 2025 metió 300 furgonetas Stellantis y 100 eléctricas en la red de socios; una DSP tiene 20-40 furgonetas y
+  30-70 conductores (folleto de Amazon). Hera cobra en EE. UU. 9 $/conductor/mes por lo que Flota ya hace.
+- Ventas en SaaS vertical: los primeros 10-30 clientes los cierra el fundador en persona, y «cada conversación es
+  investigación» (consenso de las fuentes de 2026; ninguna da un atajo).
+
+**Lo que la auditoría añade al informe del 29-10 (el «siguiente nivel»).**
+
+1. **Dani tiene una ventaja que ninguna app de rutas tiene: ES una DSP.** 68 conductores en el cuadrante de OGA5,
+   tres naves, furgonetas de renting, golpes, ITV, altas y bajas cada semana. Flota existe porque resuelve SU
+   operación. Eso es exactamente lo que un dueño de DSP, de una mensajería o de una flota de furgonetas compra:
+   «lo uso yo cada día con 68 personas» vale más que cualquier anuncio. Hoy ese argumento no aparece en ninguna
+   página ni en ningún correo.
+2. **La necesidad que ya existe y que nadie está cobrando: los golpes del renting.** Al devolver una furgoneta de
+   renting o alquiler, la franquicia por daños va de 1.250 a 2.000 € por vehículo (National, 2026) y la empresa de
+   alquiler cobra por «matriz de daños» salvo que el cliente pruebe que el daño ya estaba. Una DSP con 30 furgonetas
+   rota flota cada 3-4 años: cada devolución sin fotos fechadas es dinero. Flota ya tiene inspección con foto, IA de
+   daños, «quién causa los golpes» y peritaje con cadena de custodia (`/verify`): es el único módulo con un
+   **retorno en euros calculable** (una franquicia evitada paga más de 10 años de Pro de esa furgoneta). Se vende
+   como «la prueba que te ahorra la franquicia», no como «gestión de flotas con IA».
+3. **El uso diario viene de la obligación, no de la motivación.** Lo que hace que 68 conductores abran la app cada
+   mañana en OGA5 es que la inspección es OBLIGATORIA para coger la furgoneta (y la oficina lo ve). Ese es el
+   mecanismo de retención: el jefe de nave exige la foto; el conductor la hace; la oficina tiene la prueba. En el
+   autónomo no hay jefe, y por eso nadie vuelve. Primero clientes con jefe.
+4. **Un solo producto en la calle: Flota para empresas con furgonetas (DSP, mensajería, reparto, servicio
+   técnico).** FDS (autónomo) se queda viva, gratis, sin anuncios ni más desarrollo: es la puerta de entrada de los
+   conductores que un día cambien de empresa y el escaparate en Play. Reparto (súper/distribución) solo si un
+   cliente lo pide con contrato delante.
+5. **Vender a mano, de uno en uno, con Dani delante.** Diez conversaciones con dueños de DSP y de mensajerías que
+   Dani conoce (las naves de al lado, los grupos de WhatsApp de DSP, el delivery partner manager de Amazon que lo
+   conoce), demo de 15 minutos con SUS datos (importar su Excel de furgonetas y conductores en la llamada), 45 días
+   gratis con objetivos escritos, precio congelado 24 meses. Sin anuncios hasta tener 3 de pago. Es lo que dicen
+   todas las fuentes de 2026 sobre SaaS vertical, y lo que un fundador que es del sector hace mejor que nadie.
+6. **Lo que hay que arreglar ANTES de la primera llamada** (porque la primera pregunta de un dueño de DSP será «¿y
+   mis datos?»): el plan A-G de Amazon (abierto desde el 24-09), las fotos y CV en un bucket público de otra cuenta
+   (§5), «Always Use HTTPS», vigilancia que avise, copias probadas, y la fuga de plantilla que cerré esta noche.
+   Nada de eso lo ve un cliente; todo lo pregunta.
+
 ## 8. Veredicto, lo arreglado y el plan priorizado
+
+### El veredicto, sin adornos
+
+**Técnica.** El producto está mucho mejor hecho de lo que cabría esperar de cinco semanas y 489 commits: 1.365
+tests, 206 pruebas de pantalla, 10 checkers propios, aislamiento por empresa cuidado en cada endpoint sin sesión,
+límites por IP en todo lo público, webhooks firmados e idempotentes, una app nativa correcta. He encontrado y
+cerrado UNA fuga real entre empresas (nombre y correo de la plantilla), un retroceso posible del APK de la web, la
+web en claro por http, y dependencias con avisos de seguridad; y he encontrado sin poder cerrar desde aquí: la
+vigilancia que no vigila, las fotos y los CV en un bucket público de otra cuenta, una sola máquina sin réplica, y
+un rechazo de Apple que llevaba un día sin que nadie lo viera. **Nada de esto explica los 0 €.**
+
+**Negocio.** Los 0 € no son un problema de producto ni de precio. Son de a quién se vende y cómo. El dinero y el
+tiempo se han ido a captar repartidores autónomos de uno en uno con anuncios (1,34 € por alta en el mejor caso,
+0 días reales de reparto, 0 pagos) para un producto de 9,99 €/mes que compite con Spoke y Circuit, mientras el
+producto que Dani usa cada día con 68 personas (Flota) no tiene ni una página de venta, ni una llamada hecha a un
+dueño de DSP, ni el argumento «lo uso yo» escrito en ningún sitio. En el repo hay cuatro productos y medio; la
+calle solo ha visto el más débil. Y el único módulo con un retorno en euros que un cliente puede calcular en una
+servilleta (la prueba fotográfica que evita la franquicia del renting) está dentro, sin nombre y sin precio propio.
+
+### Lo arreglado esta noche (todo subido a `main`, nada desplegado en producción salvo los secretos de la 2.4.2)
+
+| Qué | Dónde | Commit |
+|---|---|---|
+| La web ya no puede retroceder al APK 1.0.3: la versión se lee del propio APK y los despliegues (PC y GitHub) se niegan a coser uno más viejo que el de producción; el APK viejo, fuera del repo | `scripts/apk_version.py`, `deploy-frontend.ps1`, `desplegar.yml`, 6 tests | `1228e82` |
+| CI de `main` en verde otra vez (llevaba en rojo desde las 19:24) | `cuadrante_motor.py` | `3e03a1c` |
+| **Fuga entre empresas cerrada** (`/auth/conductor-list` con slug ajeno), con test de API | `server.py`, `test_api.py` | `91f9028` |
+| Siempre HTTPS: el Worker redirige `http://` y manda HSTS; la web también (pendiente de desplegar) | `infra/web-dominio/worker.js`, `_headers` | `9b7cd23` |
+| Los despliegues del PC miran el CI de GitHub antes de subir nada (`-SinCI` a sabiendas) | `scripts/ci-verde.ps1`, los dos `deploy-*.ps1` | `d0076db` |
+| El flujo de iPhone ya no se compila (ni sube una build a Apple) con cada texto de la web | `app-ios.yml` | `d0076db` |
+| Peritaje solo de la propia inspección para un conductor; baja de push solo de la propia; recuperación de contraseña a 8 como el alta (servidor y web en 6 idiomas) | `server.py`, `ResetPassword.jsx`, `i18nDict.js` | `d0076db` |
+| Dependencias de la web sin avisos (`npm audit fix`) y del backend al día (fastapi/starlette, pymongo, aiohttp, Pillow, python-multipart), con los 1.365 tests pasados en un entorno aparte | `package-lock.json`, `requirements.txt` | _(ver ESTADO: tanda 2)_ |
+| El texto para contestar a Apple, listo para pegar | `docs/APP_STORE.md` | este commit |
+| Medidor de producción desde un móvil emulado | `frontend/e2e/medir-produccion.mjs` | este commit |
+
+### Lo que solo puede hacer Dani (una hora en total, por orden)
+
+1. **Cloudflare → flotadsp.com → SSL/TLS → Edge Certificates → «Always Use HTTPS» ON y HSTS ON** (2 minutos). El
+   Worker ya redirige en el repo, pero hasta que se despliegue la web/Worker, el panel de Cloudflare es lo que vale.
+2. **GitHub → Settings → Secrets and variables → Actions → Variables**: `BACKEND_URL = https://flota-backend.fly.dev`
+   y `FRONTEND_URL = https://flotadsp.com` (1 minuto). Desde ese momento GitHub mira producción cada hora y manda
+   correo si cae. (Mejor aún: UptimeRobot gratis con aviso al móvil, 10 minutos.)
+3. **Meta**: pagar lo pendiente o cerrar la cuenta de anuncios. Hoy está restringida y no publica nada; si la
+   decisión es parar los anuncios (recomendado), que sea una decisión y no un impago.
+4. **Apple**: grabar el vídeo en un iPhone (alguien de confianza con TestFlight), crear dos cuentas de prueba, pegar
+   las notas de `docs/APP_STORE.md` y reenviar. O decidir que iPhone espera (recomendado: espera hasta tener
+   clientes de pago; la web funciona en iPhone).
+5. **Desplegar** lo de esta noche cuando quiera (backend y web): `.\scripts\deploy-backend.ps1` y
+   `.\scripts\deploy-frontend.ps1` (ahora exigen CI verde y árbol limpio). O decirme «despliega» y lo hago.
+6. **Amazon, plan A-G** (`docs/REVISION_LEGAL.md`): sí o no. Lleva abierto desde el 24-09 y bloquea vender Flota a
+   cualquier DSP.
+7. **R2**: crear un bucket en SU cuenta de Cloudflare con dominio propio (`fotos.flotadsp.com`), mover los objetos y
+   cambiar `R2_*` en Fly; después, enlaces firmados desde la API. Un fin de semana con alguien que lo haya hecho (o
+   yo con su sesión de Cloudflare delante). Hasta entonces, quien tenga un enlace a una foto o a un CV lo abre para
+   siempre.
+8. **Dejar una cuenta de super-admin de solo lectura para auditar** (o un pase de 72 h cuando toque): sin eso
+   nadie puede medir uso real desde fuera del PC de Winiw.
+
+### El plan (lo que yo haría, en este orden, con sus puertas)
+
+**Semana 1-2 — cerrar la casa y la primera llamada.**
+- Desplegar lo de esta noche. Variables de uptime. HTTPS. Decidir Amazon. Restaurar una copia de seguridad en una
+  base `prueba_*` y contar documentos (si esto falla, nada más importa).
+- Escribir en UNA página (`/flota` o `/empresas`) lo que Flota hace para una DSP/mensajería contado por quien la usa
+  con 68 conductores: inspección obligatoria con foto cada mañana, golpes con quién y cuánto, prueba para el
+  renting, cuadrante que se hace solo, vencimientos, incorporaciones. Precio: 9 €/furgoneta, 45 días, congelado 24
+  meses a los 10 primeros. Sin «IA» en el titular.
+- Lista de 20 nombres: dueños de DSP y mensajerías que Dani conoce o puede conocer en una semana (naves vecinas,
+  grupos de WhatsApp de DSP, proveedores de renting, el DPM de Amazon). Diez llamadas. Objetivo: 3 demos.
+- **Puerta:** si en dos semanas no hay 3 demos agendadas, el problema es la red de contactos y hay que buscar canal
+  (asociaciones de transportistas, el proveedor de renting como prescriptor), no producto.
+
+**Semana 3-6 — tres pilotos.**
+- Cada piloto: importar SU Excel en la llamada, sus conductores dentro el lunes, inspección obligatoria desde el
+  primer día (el jefe la exige), un informe el viernes con lo que la app ha visto (fotos, golpes nuevos,
+  vencimientos). Soporte por WhatsApp de Dani.
+- Producto SOLO lo que los pilotos pidan y esté a un día de trabajo. Lo demás, no.
+- **Puerta:** 3 pilotos con inspecciones diarias reales a las 4 semanas. Si no, el uso diario no está y hay que
+  entender por qué antes de vender a nadie más.
+
+**Semana 7-12 — cobrar.**
+- Convertir los pilotos a pago (Stripe ya está): objetivo 3 clientes × 20 furgonetas × 9 € = 540 €/mes. Es poco
+  dinero y es el primer dinero: vale más que 1.000 altas.
+- Con 3 de pago: caso de éxito con cifras (franquicias evitadas, golpes atribuidos, horas de cuadrante), nota de
+  prensa local, y entonces sí, anuncios dirigidos a dueños de flotas (LinkedIn/Meta, 15 €/día) con la página nueva.
+- Técnica en paralelo (sin tocar lo que funciona): crash reporting en la nativa, R2 propio con enlaces firmados,
+  segunda máquina de Fly (`--ha`), `python-jose` → `PyJWT`, partir `server.py` por dominios cuando haya que tocar
+  un dominio entero.
+
+**Qué NO hacer (hasta tener 3 clientes de pago).** Anuncios al autónomo. Más idiomas, más países, más pantallas.
+iPhone. Tienda, mercadillo, casas, Valor (fuera del repo cuando haya un hueco). Bonos de 25 €. Promociones
+superpuestas. Cualquier cosa que no venga de un piloto.
+
+**Las tres cifras que mandan.** Empresas en piloto con inspecciones diarias reales (0 → 3). Euros facturados
+(0 → 540 €/mes). Conductores de empresa que abren la app cada día laborable (68 de OGA5 → 150).
+
+## 9. Fuentes consultadas el 01-11-2026
+
+- Fleetio / Whip Around: [Capterra Whip Around pricing](https://www.capterra.com/p/148935/Whip-Around/pricing/),
+  [PricingSaaS](https://pricingsaas.com/companies/whiparound), [SelectHub](https://www.selecthub.com/p/fleet-maintenance-software/whip-around/),
+  [G2 Fleetio vs Whip Around](https://g2.com/compare/fleetio-vs-whip-around-whip-around)
+- WeProov: [Capterra](https://www.capterra.com/p/186215/WeProov/), [Softwarefinder](https://softwarefinder.com/fleet-management-software/weproov),
+  [WeProov Fleet](https://www.weproov.com/en/weproov-fleet-inspection-app); guía de precios de inspección 2026: [Heavy Vehicle Inspection](https://mail.heavyvehicleinspection.com/blog/post/fleet-inspection-software-buyers-guide)
+- Pulpo (Pulpomatic): [Capterra ES](https://www.capterra.es/software/173091/pulpomatic), [ronda de 8,13 M€](https://marketing4ecommerce.net/ronda-financiacion-pulpo/)
+- DeCA: [Veritas Gestión](https://veritasgestion.com/?p=7976), [GA_P guía](https://ga-p.com/publicaciones/guia-para-no-perderte-con-el-nuevo-deca/),
+  [trans.info: arranque con polémica](https://trans.info/es/el-deca-arranca-con-polemica-transportistas-denuncian-costes-fallos-tecnicos-y-cargas-administrativas-impropias-508207)
+- Franquicias de alquiler de furgonetas: [National Tarragona](https://www.nationalcar.com/es/oficinas-de-alquiler-de-autos/es/estacion-ave-de-camp-de-tarragona-e5wt.html),
+  [National Reus](https://www.nationalcar.com/es/oficinas-de-alquiler-de-autos/es/reus-train-station-e5wx.html), [Consumo: objeciones a daños](https://portal-cec.consumo.gob.es/sites/default/files/plantillas/Objeciones_en_los_Danos.doc)
+- Conversión SaaS 2026: [ChartMogul Conversion Report](https://chartmogul.com/reports/saas-conversion-report/), [Arcade (OpenView 2026)](https://www.arcade.software/post/free-trial-conversion-playbook-2026),
+  [Userpilot](https://userpilot.com/blog/free-trial-conversion-rate/)
+- Ventas fundador en SaaS vertical: [SaaStr](https://www.saastr.com/the-biggest-challenge-with-vertical-saas-your-sales-team-has-to-be-domain-experts),
+  [Causo H1 2026](https://hub.causo.ai/guides/h1-2026-founder-led-sales-report), [Close](https://close.com/resources-and-guides/saas-sales-book)
+- Amazon DSP España: [DPL News / El Economista](https://dplnews.com/?p=11044), [Stellantis 300 furgonetas (10-2025)](https://www.media.stellantis.com/es-es/corporate/press/mas-de-300-furgonetas-stellantis-pro-one-se-incorporan-a-la-red-de-reparto-de-amazon-en-espana),
+  [Amazon 100 eléctricas](https://www.hibridosyelectricos.com/furgonetas/amazon-utilizara-100-furgonetas-electricas-entrega-ultima-milla-espana_35952_102.html), [Espacio Furgo](https://www.espaciofurgo.com/quieres-emprender-con-amazon-y-convertirte-en-socio-de-entrega-dsp-en-espana/)
+- Vulnerabilidades: `pip-audit` (PyPI Advisory DB) y `npm audit` (GitHub Advisory DB), ejecutados el 01-11-2026.

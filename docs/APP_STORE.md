@@ -159,6 +159,60 @@ perfil de desarrollo y falla con «Your team has no devices» (y si se le fuerza
   npm run build && npx cap sync ios && npx cap open ios` (abre Xcode; con tu cuenta de Apple en Xcode → firma
   automática → Product → Archive → Distribute).
 
+## RECHAZADA la 2.4.1 (Apple, 31-10-2026 a las 18:18): qué piden y qué contestar
+
+Visto en App Store Connect el 01-11 durante la auditoría (nadie lo había mirado): **«2.1.0 Performance: App
+Completeness — Guideline 2.1 Information Needed»**. No es un fallo de la app: Apple pide MÁS INFORMACIÓN antes de
+revisarla, y lo pide a toda app nueva. Enviada el 30-10 a las 19:02 por el usuario de API del CI (build 9, 2.4.1).
+Ojo: hasta hoy cada push que tocaba la web compilaba y SUBÍA otra build a App Store Connect (`app-ios.yml` se
+lanzaba con `frontend/src/**`); desde el 01-11 solo se lanza a mano o al tocar `frontend/ios/**`.
+
+Lo que hay que meter en **App Store Connect → la versión → Información para el equipo de revisión → Notas**, y
+volver a enviar («Volver a enviar a revisión de apps» en el envío rechazado):
+
+1. **Un vídeo grabado en un iPhone físico** con el iOS más reciente: abrir la app, entrar (o la demo), escanear una
+   etiqueta, ordenar la ruta, marcar una entrega con foto, **y borrar la cuenta** (Cuenta → Borrar mi cuenta: Apple
+   lo exige y lo graba). Dani no tiene iPhone: lo graba alguien de confianza con TestFlight (la build 9 sirve), o se
+   compra/presta uno un día. Sin este vídeo no la revisan.
+2. **Una cuenta de prueba para el revisor** (usuario y contraseña en «Información de inicio de sesión»), de cada
+   tipo de cuenta que exista en la app: repartidor autónomo y conductor de empresa. Las crea Dani en producción
+   (`/registro` con sector autónomo; un conductor en una empresa de prueba) y NO se borran mientras dure la revisión.
+3. Pegar en Notas (en inglés) el texto de abajo, rellenando los huecos.
+
+```
+PURPOSE AND AUDIENCE
+FDS is a delivery-route app for self-employed parcel couriers and for the drivers of small delivery companies in
+Spain, Portugal and Latin America. The courier scans the parcel labels (or photographs the paper delivery sheet),
+the app geocodes the addresses and orders the route by time windows and distance, guides stop by stop (voice,
+hands-free), records proof of delivery (photo, signature, cash-on-delivery) and shows the day's earnings.
+Company drivers use the same app for their daily vehicle inspection with photos and to see their shifts.
+
+HOW TO ACCESS
+- Self-employed courier: tap "Probar sin registrarme" on the first screen (no account needed; a demo route with
+  8 stops in the reviewer's city is created), or log in with: user <USUARIO_PRUEBA_AUTONOMO> / password <CLAVE>.
+- Company driver: log in with: <CORREO_CONDUCTOR_PRUEBA> / password <CLAVE> (company "<NOMBRE EMPRESA PRUEBA>").
+- Account deletion: Cuenta → "Borrar mi cuenta" (asks for the password; deletes the account and its data).
+- Registration: "Crear cuenta" → name, e-mail, password (free plan, no card).
+
+EXTERNAL SERVICES
+Our own API (https://flota-backend.fly.dev), OpenStreetMap/Photon/Nominatim and CartoCiudad (geocoding and maps),
+OSRM (route times), Google ML Kit (on-device barcode and text recognition), Firebase Cloud Messaging (push,
+Android only), Stripe (payments, on the web only; nothing is sold inside the iOS app), Google Gemini (reads the
+text of a photographed delivery sheet; no personal data is stored by the provider).
+
+REGIONAL DIFFERENCES
+The app works the same in every region. Currency and traffic/road-work feeds follow the country of the route
+(Spain: DGT; other countries: none or public feeds). No feature is region-locked.
+
+NO REGULATED CONTENT
+No regulated industry, no third-party protected material, no user-generated public content (deliveries are
+visible only to the courier and, for company drivers, to their own company).
+
+RECORDING
+The attached video was recorded on <MODELO DE IPHONE>, iOS <VERSIÓN>, and shows launch, demo route, scanning,
+delivery with photo, registration, login and account deletion.
+```
+
 ## Tanda 2 (cuando esté en la tienda)
 
 - Avisos al móvil con APNs (`@capacitor/push-notifications` + certificado/clave APNs en el servidor).
