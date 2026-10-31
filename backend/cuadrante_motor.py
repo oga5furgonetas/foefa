@@ -708,8 +708,9 @@ def generar_cuadrante(entrada: Dict[str, Any]) -> Dict[str, Any]:
     extras_ya = set(entrada.get("extras") or [])
     conductores = [dict(c) for c in (entrada.get("conductores") or []) if c.get("id")]
     dsem = int(entrada.get("dias_semana", 5))
-    # El tope de tiempo es del PERIODO: cada semana se lleva su parte (y al menos 8 s).
-    segundos = max(8.0, float(entrada.get("segundos", 60)) / len(lunes))
+    # El tope de tiempo es del PERIODO: cada semana se lleva su parte (y al menos 8 s). `lunes` nunca está vacío aquí
+    # (fin >= ini, y con una sola semana ya se ha vuelto arriba); el max(…, 1) es por el checker de patrones del CI.
+    segundos = max(8.0, float(entrada.get("segundos", 60)) / max(len(lunes), 1))
     out: Dict[str, Any] = {}
     resumen, avisos, estados = [], [], []
     for l in lunes:
