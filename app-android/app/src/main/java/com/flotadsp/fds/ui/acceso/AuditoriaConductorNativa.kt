@@ -182,8 +182,16 @@ fun AuditoriaConductorNativa(alVolver: () -> Unit, alCompletar: () -> Unit) {
                 }
             } catch (e: ErrorApi) { error = e.message }
             // Lo que dice comprimirFoto («No se pudo leer la imagen»…) se enseña; cualquier otra cosa, el genérico.
-            catch (e: IllegalStateException) { error = e.message?.takeIf { it.isNotBlank() } ?: tx("No se pudo procesar la foto. Inténtalo de nuevo.") }
-            catch (_: Exception) { error = tx("No se pudo procesar la foto. Inténtalo de nuevo.") }
+            catch (e: IllegalStateException) {
+                android.util.Log.w("FDS", "Foto de auditoría (${item.clave})", e)
+                error = e.message?.takeIf { it.isNotBlank() } ?: tx("No se pudo procesar la foto. Inténtalo de nuevo.")
+            }
+            catch (e: Exception) {
+                // En el registro (adb logcat, etiqueta FDS) queda la excepción de verdad: sin esto, el 31-10-2026 no
+                // había forma de saber por qué fallaba la foto en el móvil de un conductor.
+                android.util.Log.w("FDS", "Foto de auditoría (${item.clave})", e)
+                error = tx("No se pudo procesar la foto. Inténtalo de nuevo.")
+            }
             finally { item.archivo.delete(); procesando = null }
         }
     }

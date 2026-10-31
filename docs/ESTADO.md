@@ -1470,8 +1470,29 @@ Dani, 19:40, con capturas de la oficina (Tipsa): «Benjamín no puede subir audi
   `test_cuentas_duplicadas.py` (+2: 9 pasan). SALIDA PARA HOY (sin esperar el despliegue): la oficina les pone una
   contraseña temporal en el panel (Conductores → ficha → Establecer contraseña: va a TODAS sus cuentas y las marca
   temporales) y entran con ella; al cambiarla no se les pide la anterior.
-- **Despliegue**: el backend con el arreglo del cambio de contraseña se despliega en cuanto Dani lo autorice (el app
-  release lo lanza GitHub solo).
+- **Comprobado después** (Dani: «verifica que no vamos a tener más fallos porque me dijiste que estaba todo
+  perfecto»): la 2.4.2 probada DE VERDAD en el emulador (`Medium_Phone_API_37.0`, Android 17) contra el servidor de
+  pruebas (`app-android/pruebas/servidor_pruebas.py`: el backend real con la base de mentira, conductora de empresa
+  `conductor@fds.test`): la auditoría ENTERA, las 4 fotos del vehículo, el cuentakilómetros (sin IA en local: pide los
+  km a mano y los acepta), la foto del combustible, el nivel, el checklist y «Enviar» → «Inspección enviada». Antes
+  del arreglo, la misma prueba reproducía «No se pudo procesar la foto» en la primera foto. Capturas en
+  `%LOCALAPPDATA%\Temp\fds-emu\capturas`. OJO, lección cara: los tres primeros builds locales de Gradle FALLARON
+  («SDK location not found»: hace falta `ANDROID_HOME=C:\Users\dlvie\AppData\Local\Android\Sdk` en este PC) y el
+  `tail` del log lo tapaba, así que la primera «prueba» corrió el APK de AYER (2.4.1) y falló igual; hasta que se
+  miró `versionName` en `dumpsys package` y la fecha del APK no se supo. Siempre: `BUILD SUCCESSFUL` + fecha del APK +
+  `versionName` instalado antes de dar una prueba por buena. El `catch` genérico de la foto ahora deja la excepción en
+  logcat (etiqueta `FDS`).
+- **Junior y Karim**: la oficina les puso a las 19:47 la «contraseña temporal común» (los dos con
+  `password_temp_created_at` idéntico, `must_change_password`); comprobado contra producción con `driver-login`:
+  los dos entran con ella y la app les pedirá elegir la suya. Junior tiene una ficha activa con UNA cuenta y una
+  ficha vieja inactiva sin cuenta; Karim igual. El 400 de las 19:42 no se pudo reproducir con esos datos: el
+  arreglo del cambio de contraseña (todas las cuentas por id o correo, temporal solo si está vigente) y el aviso
+  en el registro quedan por si vuelve a pasar.
+- **Despliegues**: el backend con el arreglo del cambio de contraseña DESPLEGADO a las 20:5x con permiso de Dani
+  («Despliégalo y verifica que puedan entrar ya»), `/api/health` ok. La 2.4.2 la compiló GitHub (run 41231494001,
+  verde: tests, lint, AAB `FDS-2.4.2` como artefacto, subida a la PRUEBA ABIERTA de Play y la web con el APK).
+  Falta: Dani la pasa a PRODUCCIÓN en Play Console (promocionar desde la prueba abierta) y, cuando Play la sirva,
+  `fly secrets set -a flota-backend APP_ANDROID_WEB="21 2.4.2" APP_ANDROID_PLAY="21 2.4.2"`.
 
 ## Última sesión — 30/31-10-2026 (noche, PC de Dani): la contraseña inicial de los conductores nuevos
 
@@ -1615,7 +1636,7 @@ Dani: «conéctate a mi Chrome y hazlo tú para no liarla yo». Hecho (detalle e
 
 ## Pendiente (por prioridad)
 
--16. **31-10 noche**: la 2.4.2 (fotos de la auditoría) la compila GitHub; Dani la sube a producción en Play y pone `APP_ANDROID_WEB`/`APP_ANDROID_PLAY` a "21 2.4.2" cuando Play la sirva. El backend con el cambio de contraseña arreglado, pendiente de desplegar con permiso. Junior y Karim: temporal desde el panel mientras tanto.
+-16. **31-10 noche**: la 2.4.2 (fotos de la auditoría) la compila GitHub; Dani la sube a producción en Play y pone `APP_ANDROID_WEB`/`APP_ANDROID_PLAY` a "21 2.4.2" cuando Play la sirva. Backend desplegado; la 2.4.2 verificada en el emulador con la auditoría entera; Junior y Karim entran con la temporal de la oficina.
 -15. **Contraseña inicial de los conductores nuevos (30/31-10 noche)**: hecha y desplegada; Dani la define en el panel (Conductores → Definirla). **Reparto de findes en el cuadrante**: hecho en el motor y probado con la simulación (ver «noche»). **Sheets: borrador y definitivo** y **el tipo «solo findes» ya no se pierde** (31-10 tarde): hechos. DESPLEGADO el 31-10 por la tarde. Falta que Dani defina la contraseña inicial en el panel, vea una propuesta real del cuadrante y haga noviembre en borrador (la pestaña NOVIEMBRE de la hoja ya existe).
 -14. **La app de iPhone (30-10 tarde)**: EN APP STORE CONNECT con todo puesto, el build 9 (2.4.1) adjunto y el copyright (ver «tarde, 2 → Noche»). ENVIADA A REVISIÓN el 30-10 a las 19:03 (`enviar`; se publica sola al aprobarla, 1-3 días; si Apple pide cambios, Revisión de apps en App Store Connect). La condición de comerciante del DSA la hizo Dani (Negocio → Cumplimiento: Activo). Nada pendiente hasta que Apple conteste. Tanda 2: APNs, el pago de Apple, ubicación en segundo plano. Lo decide Dani.
 -13. **30-10 mediodía (2)**: la 2.4.1 (code 20) compilada, firmada y DESPLEGADA (al tercer intento, Dani: «hazlo tú, desde este PC no puedo»). Dani la subió a Play Console y está ACTIVA al 100 % en 178 países desde el 30-10 a las 16:25 (16 descargas en dos horas; el 75 % de la base instalada
