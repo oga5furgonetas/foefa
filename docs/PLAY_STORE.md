@@ -202,6 +202,20 @@ igual pero SIN FIRMAR (nombres con `-SIN-FIRMAR`; no valen para Play). La clave 
 la clave de subida se viera comprometida, se cambia en Play Console (Play App Signing guarda la de firma real).
 
 
+## El APK de la web nunca retrocede (01-11-2026): `scripts/apk_version.py`
+
+Hasta el 31-10-2026 la web se desplegaba con el APK «de reserva» del repo (`frontend/public/descargas/FDS.apk`) cuando
+no había `gh` ni un APK local de menos de 24 h: y ese fichero era la 1.0.3 (code 4). Con el servidor anunciando la 21,
+la app instalada desde la web habría pedido «actualizar» y se habría bajado la 1.0.3. Ya no hay ningún APK en el repo.
+
+Lo que hacen `scripts/deploy-frontend.ps1` y el trabajo `web` de `desplegar.yml`, por este orden: el último APK firmado
+por GitHub (`app-release.yml`); si no, el compilado en el PC (`app-android/app/build/outputs/apk/release/app-release.apk`)
+siempre que sea el paquete `com.flotadsp.flota.web`, esté firmado y lleve el `versionCode` de `build.gradle.kts`; si no,
+EL QUE YA SIRVE PRODUCCIÓN (se baja de `/descargas/FDS.apk` y se recose). Sea cual sea, nunca uno más viejo que el de
+producción ni que el que anuncia `/api/app/version` (`-ForzarApk` en el script y `forzar_apk` en el flujo, para volver
+atrás a sabiendas; `-SinApk` si no hay ninguno en ningún sitio: la descarga quedaría rota). La versión se lee del propio
+fichero, no del nombre: `python scripts/apk_version.py FICHERO.apk [--campo code|nombre|paquete|firmado|sha256|bytes]`.
+
 ## Versión 2.4.1 (code 20): las fuentes de cada país, el piso bien leído y «Actualización disponible» (30-10-2026, mediodía)
 
 Dani subió la 2.4.0 (code 19) a Play por la mañana; lo hecho a mediodía (fuera de España con las fuentes de cada
