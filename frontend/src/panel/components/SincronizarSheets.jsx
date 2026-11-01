@@ -1,11 +1,11 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import {
   Loader2, Copy, Check, AlertTriangle, ExternalLink, Play, Pause, Link2Off, RefreshCw, ArrowRight, UserPlus, UserMinus,
-  PenLine, CheckCircle2,
+  PenLine, CheckCircle2, Palette,
 } from 'lucide-react'
 import {
   getSyncHoja, conectarSyncHoja, modoSyncHoja, aceptarSyncHoja, desconectarSyncHoja, emparejarSyncHoja,
-  borradorSyncHoja, quitarBorradorSyncHoja, definitivoSyncHoja,
+  borradorSyncHoja, quitarBorradorSyncHoja, definitivoSyncHoja, repintarSyncHoja, quitarRepintarSyncHoja,
 } from '../api'
 import { lista } from '../../lib/lista'
 import { fechaHoraLocal } from '../../lib/fecha'
@@ -202,6 +202,53 @@ function Borrador({ center, estado, hacer, ocupado }) {
 }
 
 
+/* PINTAR LA HOJA COMO AQUÍ (01-11-2026, Dani: «no está utilizando la misma caligrafía ni colores ni escrituras para
+   todo»). Lo que la app escribió antes de saber pintar, o lo tecleado a mano con el mismo texto, se vuelve a escribir
+   en la próxima sincronización con la letra (el 1 en negrita, BAJA en rojo…) y el fondo de su código, sin cambiar
+   ningún valor. Lo tecleado con otro texto («1 extra», «BACKUP») se queda como está. */
+function Pintar({ center, estado, hacer, ocupado }) {
+  const esteMes = useMemo(() => {
+    const h = new Date()
+    const iso = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+    return { desde: iso(new Date(h.getFullYear(), h.getMonth(), 1)), hasta: iso(new Date(h.getFullYear(), h.getMonth() + 1, 0)) }
+  }, [])
+  const [desde, setDesde] = useState(esteMes.desde)
+  const [hasta, setHasta] = useState(esteMes.hasta)
+  const p = estado.repintar
+  const fecha = (s) => (s ? `${String(s).slice(8, 10)}/${String(s).slice(5, 7)}` : '')
+  return (
+    <div className="rounded-xl border border-dark-800 bg-dark-900/60 p-3" data-testid="sync-pintar">
+      <p className="flex items-center gap-1.5 font-semibold text-dark-100"><Palette size={14} /> Pintar la hoja como aquí</p>
+      {p ? (
+        <p className="mt-1 flex flex-wrap items-center gap-2">
+          <b className="text-amber-200">Pendiente: del {fecha(p.desde)} al {fecha(p.hasta)}</b>
+          <span className="text-dark-400">en la próxima sincronización (10 minutos como mucho, o ya desde «Flota → Sincronizar ahora» en la hoja).</span>
+          <button onClick={() => hacer('pintar', () => quitarRepintarSyncHoja(center))} disabled={!!ocupado} className="text-dark-400 hover:text-dark-200">
+            Cancelar
+          </button>
+        </p>
+      ) : (
+        <>
+          <p className="mt-1 text-dark-400">
+            Vuelve a escribir las celdas de esas fechas que ya coinciden con la letra y el color de su código (el 1 en negrita, BAJA en rojo, N/T en crema…), sin cambiar ningún valor. Lo tecleado a mano con otro texto («1 extra») se queda como está.
+          </p>
+          <div className="mt-2 flex flex-wrap items-center gap-2">
+            <input type="date" value={desde} onChange={(e) => setDesde(e.target.value)} aria-label="Pintar desde"
+              className="rounded-lg border border-dark-700 bg-dark-950 px-2 py-1 text-xs text-dark-100" />
+            <span className="text-dark-500">a</span>
+            <input type="date" value={hasta} onChange={(e) => setHasta(e.target.value)} aria-label="Pintar hasta"
+              className="rounded-lg border border-dark-700 bg-dark-950 px-2 py-1 text-xs text-dark-100" />
+            <button onClick={() => hacer('pintar', () => repintarSyncHoja(center, desde, hasta))} disabled={!!ocupado || !desde || !hasta}
+              className="flex items-center gap-1.5 rounded-lg bg-dark-800 px-3 py-1.5 text-xs font-semibold text-dark-200 hover:bg-dark-700 disabled:opacity-50">
+              {ocupado === 'pintar' ? <Loader2 size={13} className="animate-spin" /> : <Palette size={13} />} Pintar en la próxima sincronización
+            </button>
+          </div>
+        </>
+      )}
+    </div>
+  )
+}
+
 export default function SincronizarSheets({ center }) {
   const [estado, setEstado] = useState(null)
   const [nueva, setNueva] = useState(null)          // {llave, script} recién hecha: se enseña una vez
@@ -389,6 +436,7 @@ export default function SincronizarSheets({ center }) {
           )}
 
           <Borrador center={center} estado={estado} hacer={hacer} ocupado={ocupado} />
+          <Pintar center={center} estado={estado} hacer={hacer} ocupado={ocupado} />
 
           <div className="flex flex-wrap items-center gap-2">
             {activa ? (

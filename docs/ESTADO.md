@@ -914,6 +914,32 @@ contentarme [...] No quiero falsos positivos ni soluciones por decir». El infor
     fuerza una vez). Test `test_lo_que_la_app_rellena_donde_la_hoja_esta_en_blanco_va_a_la_hoja_de_hoy_en_adelante`
     (la semana futura hecha en la app llega a la hoja; el 15, pasado y en blanco, no; la vuelta siguiente «todo
     igual»); el caso puro `("", "1", None) → nada` se queda como está. DESPLEGADO a las 13:46.
+  · **Dani (13:5x), con NOVIEMBRE ya recibiendo celdas: «fíjate cómo es el cuadrante del domingo y cómo se está
+    escribiendo: no está utilizando la misma caligrafía ni colores ni escrituras para todo, ¿por qué?» y «cuando
+    termines con lo de los colores, termina de volcar el mensual».** Medido en su hoja con el menú de Sheets: sus
+    celdas son Calibri 10 (el 1 en negrita, N/T normal) y las que escribía la app salían Arial 11 normal con el 1 a
+    la derecha: el script solo ponía valor, fondo y nota, y una celda en blanco toma la letra por defecto de la hoja.
+    Y la app le mandaba 300 celdas por vuelta (el script escribía celda a celda, 9 llamadas por celda): las 2.086 del
+    definitivo de noviembre eran siete vueltas de 10 minutos. Hecho:
+    · cada celda escrita lleva `letra` (`_sync_letra_hoja`: negrita para 1 / EXTRA / SUSP / BAJA / N/D / N/P / S /
+      BKP, letra roja para BAJA / N/D / N/P / S, gris para V) y `col_nombre`; el script copia familia y tamaño de la
+      celda del NOMBRE de esa fila (vale para la hoja de cualquier empresa), pone negrita y color y alinea a la
+      izquierda. La nota solo cuando la app pisa algo que la hoja tenía (rellenar un blanco, 2.000 celdas, no la lleva).
+    · el script escribe por tramos de columnas seguidas de cada fila (`setValues`, `setBackgrounds`,
+      `setFontWeights`, `setFontColors`…; `escribeUna` celda a celda solo si en el tramo hay una fórmula) y el servidor
+      manda hasta `_SYNC_ESCRIBE_TOPE` = 3.000 por vuelta: un mes entero de una vez.
+    · **«Pintar la hoja como aquí»** (cuadro de Google Sheets del panel, `POST /cuadrante/sync/repintar` con desde /
+      hasta o `quitar`; `conf.repintar`): en la próxima vuelta, las celdas de esas fechas que ya coinciden se vuelven a
+      escribir con su letra y su fondo, sin cambiar valores ni notas, SOLO donde la celda pone exactamente lo que la
+      app escribiría (`_sync_mismo_texto` con el `crudo` que ahora guarda el lector: «1 extra» o «BACKUP» tecleados se
+      quedan). Si no cabe en la vuelta, queda pendiente; hecho, se quita solo. Para lo que la app escribió antes de
+      saber pintar (los N/T APROB en blanco, las 300 celdas Arial 11 de las 13:53).
+    Tests: la letra por código; el extra aprobado lleva letra y `col_nombre`; rellenar un blanco va sin nota; el
+    repintado (6 de 7 celdas: el BACKUP a mano se queda), con su mensaje, la validación y el anular; el lector guarda
+    `crudo`. El script sigue parseando (`new Function`); eslint y build de la web. OJO: el script de la hoja hay que
+    VOLVER A PEGARLO (lleva la escritura nueva): «Volver a sacar el script» en el panel (llave nueva, empieza en
+    prueba), pegar en Extensiones → Apps Script, guardar (los disparadores ya existen: no hace falta «instalar») y
+    poner el modo activo; hasta entonces el script viejo sigue escribiendo celda a celda en Arial 11.
 - **EL DÍA EN UNA TARJETA (la mitad del punto 10), web (01-11, 11:1x → 11:2x; worktree `tarjeta-dia`)**: la imagen de
   «Comparte tu día» (`lib/compartirDia.js`) lleva ahora, además de paradas, tiempo y km, lo que un repartidor enseña a
   otro: «{p} % a la primera» (entregadas entre entregadas más fallidas), «{c}/hora limpio» (solo con tarifa puesta:
@@ -2017,6 +2043,11 @@ Dani: «conéctate a mi Chrome y hazlo tú para no liarla yo». Hecho (detalle e
    DESPLEGADOS a las 13:46 con los colores. «B/V» (Iago Barreiro 01/11) sigue sin saberse qué es (preguntado). Y, de
    13:2x: Dani tiene noviembre hecho en FDS y un BORRADOR del 03/11 al 30/11 desde las 13:22: cuando pulse «Marcar
    definitivo» la hoja lo recibe entero; la primera vuelta tras el despliegue puede pedir «Aceptar estos cambios».
+   Y de 13:5x: Dani marcó definitivo a las 13:53 (2.086 celdas, a 300 por vuelta con el script viejo) y vio que la
+   app escribía con otra letra. Hechos con tests la letra, el volcado por tramos (un mes de una vez) y «Pintar la hoja
+   como aquí». FALTA: desplegar backend + web (con permiso), VOLVER A PEGAR el script en su hoja (llave nueva →
+   Apps Script → guardar → modo activo), «Flota → Sincronizar ahora» (vuelca lo que queda de una vez) y «Pintar la
+   hoja como aquí» del 01/11 al 30/11 para arreglar lo escrito en Arial 11 y los N/T APROB sin fondo.
 -24. **01-11 mediodía, los colores de su hoja en el cuadrante**: HECHO (rejilla, sincronización, Excel), con tests.
    Falta: desplegar backend + web (con permiso de Dani) y, en su hoja, «Flota → Sincronizar ahora» para ver los
    colores en NOVIEMBRE. Si quiere también la letra roja de BAJA / N/D / N/P desde la app, hay que ampliar el script

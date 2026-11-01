@@ -101,7 +101,7 @@ def test_las_grafias_de_la_hoja_son_el_mismo_codigo():
 
 def test_codigos_hora_y_extra():
     ana = por_nombre(cx.leer_mensual(hoja()))["ANA PEREZ"]["celdas"]
-    assert ana["2026-09-28"] == {"cod": "V", "hora": "05:43", "extra": False}
+    assert ana["2026-09-28"] == {"cod": "V", "hora": "05:43", "extra": False, "crudo": "V (05:43)"}
     assert ana["2026-09-29"]["cod"] == "1" and ana["2026-09-29"]["extra"] is True
     assert ana["2026-10-12"]["extra"] is False    # un 1 de otro color no es extra
 
