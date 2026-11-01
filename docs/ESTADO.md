@@ -657,7 +657,11 @@ contentarme [...] No quiero falsos positivos ni soluciones por decir». El infor
   caducó y solo Dani puede entrar. Lo que Apple pidió y cómo contestar está en `docs/APP_STORE.md` («RECHAZADA la
   2.4.1» y «El mensaje para Responder»). Y lo que faltaba de verdad: la web (lo que lleva dentro la app de iPhone)
   NO tenía «Borrar mi cuenta» (la de Android sí): hecho en `c5ad1d9` (Cuenta → Borrar mi cuenta, con contraseña,
-  6 idiomas); desplegar la web con ello y lanzar a mano «App iPhone (App Store)» para la build 10 antes de reenviar.
+  6 idiomas). La web con ello DESPLEGADA a la 01:2x (CI `c5ad1d9` verde, con el candado activo: bundle
+  `index-B76wSgm9.js`), y «App iPhone (App Store)» LANZADO a mano por la API a la 01:2x (subir=true): cuando acabe
+  (~15 min) sale la build 10 en App Store Connect con el «Borrar mi cuenta». Para reenviar a Apple faltan: entrar
+  Dani en App Store Connect, el vídeo en un iPhone físico (guion en APP_STORE.md), cuentas de prueba, y pegar las
+  notas y el mensaje de APP_STORE.md con la build 10 seleccionada.
 - Dani (01-11): los ~25 móviles con la app de Play son los conductores de OGA5. Y su idea sobre la estrategia: «ir
   escogiendo gente por ahí y de ahí hacer nombre, y con nombre es más fácil exponerse a empresas».
 
