@@ -248,6 +248,9 @@ export const updateMileage = (vehicleId, km) =>
 export const repMiRuta = () => api.get('/reparto/mi-ruta')
 export const repEscanear = (codigo) => api.post('/reparto/escanear', Array.isArray(codigo) ? { codigos: codigo } : { codigo })
 export const repEscanearLote = (paquetes) => api.post('/reparto/escanear/lote', { paquetes }, { timeout: 30000 })
+// La carga guiada (01-11-2026): el escaneo con la ruta ya ordenada, para meter el paquete en su hueco; y marcar a mano.
+export const repEscanearCarga = (codigos) => api.post('/reparto/escanear', { codigos, carga: true })
+export const repMiCargado = (id, cargado) => api.post('/reparto/mi-ruta/cargado', { id, cargado })
 export const repFormasCodigo = (formas, pais) => api.post('/reparto/formas-codigo', { formas, pais })
 export const repLeerTicket = (file) => {
   const fd = new FormData()

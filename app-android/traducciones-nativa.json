@@ -139,6 +139,13 @@
     "Al momento non ci sono turni disponibili per te.",
     "Im Moment gibt es keine freien Schichten für dich."
   ],
+  "Al avanzar, te dice la siguiente parada: dirección, hora, lo que dijo el cliente, el hueco, el cobro y la nota.": [
+    "As you move on, it tells you the next stop: address, time, what the customer said, the slot, the payment and the note.",
+    "Ao avançar, diz-te a próxima paragem: morada, hora, o que disse o cliente, o lugar, a cobrança e a nota.",
+    "En avançant, il t’annonce le prochain arrêt : adresse, heure, ce qu’a dit le client, l’emplacement, le paiement et la note.",
+    "Quando avanzi, ti dice la prossima fermata: indirizzo, ora, cosa ha detto il cliente, il posto, il pagamento e la nota.",
+    "Beim Weiterfahren sagt sie dir den nächsten Stopp: Adresse, Uhrzeit, was der Kunde gesagt hat, den Platz, die Nachnahme und den Hinweis."
+  ],
   "Alejar": [
     "Zoom out",
     "Afastar",
@@ -293,6 +300,13 @@
     "Elimina il tuo account",
     "Dein Konto löschen"
   ],
+  "Briefing por voz": [
+    "Voice briefing",
+    "Briefing por voz",
+    "Briefing vocal",
+    "Briefing vocale",
+    "Sprach-Briefing"
+  ],
   "Calle, número y población": [
     "Street, number and town",
     "Rua, número e localidade",
@@ -320,6 +334,13 @@
     "Chargement de votre formule…",
     "Caricamento del tuo piano…",
     "Dein Tarif wird geladen …"
+  ],
+  "Cargo la furgoneta por": [
+    "I load the van through",
+    "Carrego a carrinha pela",
+    "Je charge la camionnette par",
+    "Carico il furgone dalla",
+    "Ich belade den Transporter durch"
   ],
   "Cerrar el escáner": [
     "Close the scanner",
@@ -1686,6 +1707,13 @@
     "Fermata tolta dal tuo giro.",
     "Stopp aus deiner Route entfernt."
   ],
+  "Pasa cada paquete por la cámara: te digo en qué hueco va.": [
+    "Hold each parcel up to the camera: I’ll tell you which slot it goes in.",
+    "Passa cada embalagem pela câmara: digo-te em que lugar vai.",
+    "Passe chaque colis devant la caméra : je te dis dans quel emplacement il va.",
+    "Passa ogni pacco davanti alla fotocamera: ti dico in quale posto va.",
+    "Halte jedes Paket vor die Kamera: Ich sage dir, in welchen Platz es kommt."
+  ],
   "Pasa las etiquetas una tras otra: cada paquete entra en tu ruta.": [
     "Scan the labels one after another: each parcel goes into your route.",
     "Passa as etiquetas uma a seguir à outra: cada encomenda entra na tua rota.",
@@ -2007,6 +2035,13 @@
     "Pas de connexion : les réglages de la tournée se chargent avec le réseau.",
     "Senza connessione: le impostazioni del giro si caricano con la rete.",
     "Keine Verbindung: Die Routeneinstellungen laden mit Netz."
+  ],
+  "Sin conexión: para cargar hace falta red.": [
+    "No connection: loading needs a network.",
+    "Sem ligação: para carregar é precisa rede.",
+    "Pas de connexion : pour charger, il faut du réseau.",
+    "Nessuna connessione: per caricare serve la rete.",
+    "Keine Verbindung: Zum Beladen braucht es Netz."
   ],
   "Sin conexión: para guardar una parada nueva hace falta red.": [
     "No connection: saving a new stop needs network.",
@@ -2490,6 +2525,13 @@
     "Revenir en arrière",
     "Torna indietro",
     "Zurück"
+  ],
+  "Voz": [
+    "Voice",
+    "Voz",
+    "Voix",
+    "Voce",
+    "Sprache"
   ],
   "Vuelve a estar por entregar.": [
     "Back to pending delivery.",

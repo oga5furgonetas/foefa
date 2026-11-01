@@ -41,6 +41,10 @@ en los últimos 50 metros (el portal, el cliente), después (el dinero y la prue
 ## 2. Las doce cosas, por orden de impacto partido por esfuerzo
 
 ### 1. Carga guiada: la furgoneta se organiza sola mientras escaneas (3-4 días)
+> **HECHA el 01-11-2026 (madrugada), en web y nativa, sin desplegar** (ver `ESTADO.md`). Lo que difiere de lo de abajo: el
+> hueco es solo por posición (sin «bultos grandes al suelo» ni «prioridad delante»), y el aviso de «qué mover» al
+> reordenar no existe (las zonas son gruesas: lo normal es que nada cambie de fila).
+
 - **Qué es.** En la nave, al escanear cada paquete, FDS le asigna un hueco (las 6 zonas que ya existen: delante/medio/
   detrás × izquierda/derecha) según la POSICIÓN que ese paquete tendrá en la ruta: lo último que se entrega va al
   fondo, lo primero junto a la puerta (LIFO). La pantalla enseña el dibujo de la furgoneta con el número de paquetes
@@ -56,6 +60,10 @@ en los últimos 50 metros (el portal, el cliente), después (el dinero y la prue
 - **Quién lo tiene.** Spoke, a medias (Package Finder: te dice dónde dejaste cada paquete, no te dice dónde ponerlo).
 
 ### 2. El briefing de la parada, por voz, 300 metros antes (2-3 días)
+> **HECHO el 01-11-2026 (madrugada), en web y nativa, sin desplegar** (ver `ESTADO.md`). Salta al cambiar la siguiente
+> parada (al dar la anterior por hecha, o al ordenar), no a 300 m por GPS: se oye antes de arrancar y funciona sin red.
+> La variante por distancia queda como mejora.
+
 - **Qué es.** Al acercarte (GPS a 300 m), una frase de 15-30 s: «Calle Real 12, 3.º B. El cliente dice que está hasta
   las seis; portal 4321; la última vez entraste por la puerta de atrás; deja en el buzón si no está. Paquete en
   delante-izquierda». Manos libres, sin tocar nada.

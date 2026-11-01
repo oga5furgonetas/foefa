@@ -86,6 +86,7 @@ import com.flotadsp.fds.data.Parada
 import com.flotadsp.fds.data.Plan
 import com.flotadsp.fds.data.Referidos
 import com.flotadsp.fds.ui.Acciones
+import com.flotadsp.fds.ui.Voz
 import com.flotadsp.fds.ui.LocalExtra
 import com.flotadsp.fds.ui.TextoNumero
 import com.flotadsp.fds.ui.LOCALE_APP
@@ -189,10 +190,12 @@ fun AjustesPantalla(alGuardar: () -> Unit = {}) {
     val ambito = rememberCoroutineScope()
     val navegar by app.cuenta.navegar.collectAsState()
     val tema by app.cuenta.tema.collectAsState()
+    val voz by app.cuenta.voz.collectAsState()
     var ajustes by remember { mutableStateOf<Ajustes?>(null) }
     var base by remember { mutableStateOf("") }
     var salida by remember { mutableStateOf("09:00") }
     var volver by remember { mutableStateOf(false) }
+    var cargaPor by remember { mutableStateOf("traseras") }
     var pais by remember { mutableStateOf("") }
     var placa by remember { mutableStateOf("") }
     // «Mi dinero hoy» (30-10-2026): la tarifa en euros con coma, como la web; se guarda en céntimos (PUT /reparto/ganancias).
@@ -210,6 +213,7 @@ fun AjustesPantalla(alGuardar: () -> Unit = {}) {
             base = runCatching { a["base"]?.jsonObject?.get("direccion")?.jsonPrimitive?.contentOrNull }.getOrNull().orEmpty()
             salida = a["hora_salida"]?.jsonPrimitive?.contentOrNull ?: "09:00"
             volver = a["volver"]?.jsonPrimitive?.booleanOrNull ?: false
+            cargaPor = a["carga_por"]?.jsonPrimitive?.contentOrNull ?: "traseras"
             pais = a["pais"]?.jsonPrimitive?.contentOrNull.orEmpty()
             placa = a["placa"]?.jsonPrimitive?.contentOrNull.orEmpty()
             pagoParada = deCent(a["pago_parada"]?.jsonPrimitive?.intOrNull)
@@ -254,6 +258,19 @@ fun AjustesPantalla(alGuardar: () -> Unit = {}) {
                     }
                 }
             }
+            // EL BRIEFING POR VOZ (01-11-2026): como la guía por voz de la web; también dice el hueco al cargar.
+            Seccion(tx("Voz")) {
+                Row(Modifier.fillMaxWidth().toggleable(voz, role = Role.Switch) { v -> ambito.launch { app.cuenta.elegirVoz(v); if (!v) Voz.callar() } }.padding(vertical = 4.dp),
+                    verticalAlignment = Alignment.CenterVertically) {
+                    Column(Modifier.weight(1f)) {
+                        Text(tx("Briefing por voz"), style = MaterialTheme.typography.bodyLarge)
+                        Text(tx("Al avanzar, te dice la siguiente parada: dirección, hora, lo que dijo el cliente, el hueco, el cobro y la nota."),
+                            style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
+                    Spacer(Modifier.width(8.dp))
+                    Switch(checked = voz, onCheckedChange = null)
+                }
+            }
             Seccion(tx("Tu ruta")) {
                 OutlinedTextField(base, { base = it }, label = { Text(tx("Desde dónde sales (nave, almacén o casa)")) }, modifier = Modifier.fillMaxWidth())
                 Spacer(Modifier.height(8.dp))
@@ -274,6 +291,15 @@ fun AjustesPantalla(alGuardar: () -> Unit = {}) {
                     Text(tx("Volver a la base al acabar"), style = MaterialTheme.typography.bodyLarge, modifier = Modifier.weight(1f))
                     Switch(checked = volver, onCheckedChange = null)
                 }
+                // LA CARGA GUIADA (01-11-2026): por dónde se carga decide qué fila de la furgoneta es la de la puerta.
+                Spacer(Modifier.height(10.dp))
+                Text(tx("Cargo la furgoneta por"), style = MaterialTheme.typography.bodyLarge)
+                Spacer(Modifier.height(6.dp))
+                SingleChoiceSegmentedButtonRow(Modifier.fillMaxWidth()) {
+                    listOf("traseras" to tx("Puertas traseras"), "lateral" to tx("Puerta lateral")).forEachIndexed { i, (k, t) ->
+                        SegmentedButton(selected = cargaPor == k, onClick = { cargaPor = k }, shape = SegmentedButtonDefaults.itemShape(i, 2)) { Text(t) }
+                    }
+                }
                 Spacer(Modifier.height(8.dp))
                 Button(onClick = {
                     val a = ajustes ?: return@Button
@@ -281,7 +307,7 @@ fun AjustesPantalla(alGuardar: () -> Unit = {}) {
                     ambito.launch {
                         try {
                             val cambios = mutableMapOf<String, kotlinx.serialization.json.JsonElement>("base_direccion" to JsonPrimitive(base.trim()),
-                                "hora_salida" to JsonPrimitive(salida.trim()), "volver" to JsonPrimitive(volver), "placa" to JsonPrimitive(placa.trim().uppercase(Locale.ROOT)))
+                                "hora_salida" to JsonPrimitive(salida.trim()), "volver" to JsonPrimitive(volver), "carga_por" to JsonPrimitive(cargaPor), "placa" to JsonPrimitive(placa.trim().uppercase(Locale.ROOT)))
                             if (pais.isNotEmpty()) {
                                 // Con el país, su huso: el del móvil si es de ese país; si no, el principal del país.
                                 val zonas = paises.firstOrNull { it.first == pais }?.third.orEmpty()

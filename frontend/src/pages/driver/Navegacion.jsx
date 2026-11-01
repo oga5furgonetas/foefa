@@ -14,6 +14,7 @@ import {
 import { importe } from '../../lib/region'
 import { tx, useIdioma, locale, txError, idioma } from '../../lib/idioma'
 import { useAtras } from '../../lib/atras'
+import { decir } from '../../lib/voz'
 
 /* ── LA GUÍA DENTRO DE LA APP (04-10-2026) ───────────────────────────────────
    Dani: «yo quiero el navegador ya dentro, que coja la ruta y te vaya
@@ -58,20 +59,6 @@ export function ordenDeVoz(texto, lengua = 'es') {
   const t = sinAcentos(texto)
   if (!t || t.split(/\s+/).length > 4) return null
   return ((ORDENES[lengua] || ORDENES.es).find(([, re]) => re.test(t)) || [null])[0]
-}
-
-function decir(texto) {
-  try {
-    const s = window.speechSynthesis
-    if (!s || !texto) return
-    s.cancel()
-    const u = new SpeechSynthesisUtterance(texto)
-    u.lang = locale()
-    const base = locale().slice(0, 2).toLowerCase()
-    const v = s.getVoices().find((x) => (x.lang || '').toLowerCase().startsWith(base))
-    if (v) u.voice = v
-    s.speak(u)
-  } catch { /* sin voz en este móvil: se sigue viendo */ }
 }
 
 const horaMas = (min) => {

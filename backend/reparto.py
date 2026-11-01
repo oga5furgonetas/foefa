@@ -28,6 +28,24 @@ import unicodedata
 ESTADOS = ("pendiente", "en_ruta", "entregado", "fallido")
 DIAS_CONSERVAR = 30          # datos de clientes tras la fecha del pedido
 DIAS_RASTRO = 30             # jornadas (empezada, terminada y última posición)
+
+# LA FURGONETA POR HUECOS (01-11-2026): seis zonas, de la más accesible a la menos cuando se carga por las puertas
+# traseras. Al ordenar la ruta, cada parada recibe el hueco que le toca por su posición: lo primero que se entrega,
+# junto a la puerta por la que se carga; lo último, al fondo. Los nombres son los que la app ya enseña y traduce.
+HUECOS = ("Detrás · izq", "Detrás · der", "Medio · izq", "Medio · der", "Delante · izq", "Delante · der")
+CARGA_POR = ("traseras", "lateral")
+
+
+def hueco_sugerido(posicion: int, total: int, carga_por: str = "traseras") -> str:
+    """El hueco de la parada `posicion` (0 = la primera) de `total`: los tercios de la ruta son las filas (la primera
+    fila es la de la puerta por la que se carga: detrás con las puertas traseras, delante con la lateral) y las
+    mitades de cada tercio, izquierda y derecha. Zonas gruesas a propósito: al reordenar, casi nada se mueve."""
+    if total <= 0 or posicion < 0:
+        return ""
+    k = min(5, posicion * 6 // total)
+    if carga_por == "lateral":
+        k = (2 - k // 2) * 2 + k % 2
+    return HUECOS[k]
 MAX_PEGADO = 500             # líneas por pegada
 
 # Lo que se tapa a quien no es la empresa (el dueño del producto entrando

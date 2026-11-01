@@ -34,6 +34,10 @@
         <intent>
             <action android:name="android.intent.action.DIAL" />
         </intent>
+        <!-- El motor de voz (TextToSpeech) del briefing y la carga guiada (01-11-2026): sin esto, en Android 11+ no se ve. -->
+        <intent>
+            <action android:name="android.intent.action.TTS_SERVICE" />
+        </intent>
         <package android:name="com.google.android.apps.maps" />
         <package android:name="com.waze" />
         <package android:name="com.whatsapp" />

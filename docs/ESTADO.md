@@ -589,7 +589,7 @@ Nada se había borrado (org `owner` sin `modulos`, usuario `dani` sin
     (piden empresa china); Web Push no llega en China (va por FCM); revisión
     por un abogado del texto PIPL.
 
-## Última sesión — 01-11-2026 (madrugada, PC de Dani): el APK de la web ya no puede retroceder; empieza la auditoría completa
+## Última sesión — 01-11-2026 (madrugada, PC de Dani): el APK de la web ya no puede retroceder; la auditoría completa; la carga guiada y el briefing por voz
 
 Dani (31-10, 23:1x, desde el móvil): «Haz todo lo que consideres para que vaya todo lo mejor posible. De hecho, cuando
 termines esto, hazme una auditoría ultra completa, revisando todo, absolutamente todo. No quiero que saltes nada, ni
@@ -675,6 +675,48 @@ contentarme [...] No quiero falsos positivos ni soluciones por decir». El infor
   con FDS» (sin ACTION_SEND).
 - Dani (01-11): los ~25 móviles con la app de Play son los conductores de OGA5. Y su idea sobre la estrategia: «ir
   escogiendo gente por ahí y de ahí hacer nombre, y con nombre es más fácil exponerse a empresas».
+- **CARGA GUIADA Y BRIEFING POR VOZ, hechos en web y nativa (01-11, 02:0x → 02:5x; Dani: «Carga y briefing», los dos
+  primeros de `docs/SIGUIENTE-NIVEL-01-11.md`)**. SIN desplegar (la web espera la orden de Dani; la nativa, una versión
+  nueva en Play). Lo que hay:
+  · **Servidor** (`reparto.py`, `server.py`): al ordenar la ruta, cada parada ubicada recibe su hueco de la furgoneta por su
+    POSICIÓN (`reparto.hueco_sugerido`: los tercios de la ruta son las filas y las mitades de cada tercio, izquierda y
+    derecha; la fila de la puerta primero: detrás con las puertas traseras, delante con la lateral, según el ajuste
+    nuevo `carga_por` de `/reparto/ajustes`, que `mi-ruta` devuelve en `ruta.carga_por`). El hueco puesto a mano manda
+    (`hueco_manual`; vaciarlo lo devuelve a automático). `/reparto/escanear` con `carga: true` marca la parada como
+    cargada (`cargado_en`) SIN contar bultos y contesta cuántas van; `POST /reparto/mi-ruta/cargado` marca o desmarca a
+    mano (404 si la parada no es tuya). 2 tests nuevos en `backend/tests/test_reparto_carga.py` (zonas, orden, manual,
+    escaneo en modo carga, lateral); 1.370 tests del backend en verde (14 min aquí) (sin `test_api.py`: necesita Mongo).
+  · **Web**: `pages/driver/CargaGuiada.jsx` (la furgoneta por huecos con cuántos paquetes van en cada uno y cuántos están
+    cargados; «Escanear para cargar» con el escáner seguido, o escribir el código; el hueco del último en grande y por
+    voz; la «Lista por hueco» con una casilla por paquete para quien carga sin escanear; «Salir (n faltan)»), el botón
+    «Cargar la furgoneta» bajo la cabecera de la ruta (solo con la ruta ordenada y paquetes aún fuera), el altavoz en
+    la tarjeta de la siguiente parada y EL BRIEFING AUTOMÁTICO (`lib/briefing.js`: dirección, hasta qué hora, lo que
+    dijo el cliente, el hueco, los bultos, el cobro y la nota, en una frase): se dice al ordenar y cada vez que cambia la
+    siguiente parada; nunca al abrir la pantalla. La voz está en `lib/voz.js` (la guía de `Navegacion.jsx` usa la misma;
+    la preferencia es la de siempre, `guia_voz`; el briefing va EN COLA para no pisar la maniobra de la guía). 35
+    textos nuevos en 5 idiomas (`textosRutaB.js`); `CargaGuiada.jsx` y `lib/briefing.js` entran en
+    `check-textos-ruta`. Prueba de humo `e2e/carga-guiada.spec.js` (2 casos × escritorio y móvil: ordenar y oír la
+    primera, escanear un código y uno ajeno, marcar a mano, entregar y oír la siguiente; con la voz apagada no se
+    habla, y con la puerta lateral la fila de delante va primero; la voz del navegador se apunta en vez de hablarse).
+    ESLint 0 errores, `vite build` y los 26 checkers de Node del CI en verde. Capturas reales de las tres pantallas en
+    `docs/bocetos/carga-guiada-01-11/` (las hace `frontend/e2e/capturas-carga-01-11.mjs` con la API simulada).
+  · **Nativa (Android)**: `ui/Voz.kt` (TextToSpeech de Android; lo dicho antes de que arranque el motor sale al estar
+    listo; `<queries>` del TTS en el manifiesto, obligatorio en Android 11+), `ui/hoy/Briefing.kt` y `ui/hoy/Carga.kt`
+    (puros; `BriefingTest` 3 casos y `CargaTest` 2, en verde), `ui/hoy/CargaPantalla.kt` (furgoneta o lista; casillas;
+    «Escanear para cargar»), el escáner en MODO CARGA (`EscanerVM.tratarCarga`: nunca crea paradas; el hueco en grande
+    abajo y por voz; «No es de tu ruta de hoy.»; `Capa.Carga` en `MainActivity`, y al cerrar el escáner se vuelve a la
+    furgoneta), la tarjeta «Cargar la furgoneta» en Hoy, el altavoz de la siguiente parada, el briefing en `RutaVM`
+    (observa el estado: al ordenar y al cambiar la siguiente; nunca al abrir) y, en Ajustes, «Voz › Briefing por voz»
+    (`Cuenta.voz`, encendido de serie) y «Cargo la furgoneta por» (puertas traseras / puerta lateral → `carga_por`).
+    `Parada` trae `cargado_en` y `horario`; `ResumenRuta`, `carga_por`. 6 textos solo de la nativa en
+    `traducciones-nativa.json`; `Traducciones.kt` regenerado (678 textos, todos con sus 5 idiomas).
+    `gradlew :app:testDebugUnitTest :app:lintDebug` en verde (lint: 66 avisos, los de siempre; ninguno en lo nuevo).
+    El `versionCode` sigue en 21 (2.4.2): subirlo es parte de publicar en Play, que decide Dani.
+  · **Diferencias a sabiendas con el documento**: el briefing salta al CAMBIAR la siguiente parada (al dar la anterior
+    por hecha, o al ordenar), no «a 300 m» por GPS: así no hay que vigilar la posición, funciona sin red y se oye antes
+    de arrancar, que es cuando se decide por dónde ir (la variante por distancia queda como mejora). Y el hueco es
+    solo por posición: sin «bultos grandes al suelo» ni «prioridad delante» (reglas para cuando se vea cómo cargan de
+    verdad los de OGA5).
 
 ## Última sesión — 13-10-2026: escaneo de paquetes en lote
 
@@ -1762,6 +1804,12 @@ Dani: «conéctate a mi Chrome y hazlo tú para no liarla yo». Hecho (detalle e
 
 ## Pendiente (por prioridad)
 
+-18. **01-11 madrugada, la carga guiada y el briefing por voz**: HECHOS en servidor, web y nativa, con tests, SIN
+   desplegar. Falta: (1) desplegar backend + web cuando Dani lo diga (`deploy-backend.ps1` y `deploy-frontend.ps1`, con
+   el CI del commit en verde); (2) la nativa: subir `versionCode` a 22 y `versionName` a 2.5.0 en `build.gradle.kts`,
+   dejar que `app-release.yml` compile el AAB, subirlo a Play Console y poner `APP_ANDROID_PLAY="22 2.5.0"`; (3)
+   probarlo en la nave con los de OGA5 y decidir las reglas que faltan (bultos grandes al suelo, prioridad delante,
+   briefing por distancia).
 -17. **01-11 madrugada, la auditoría** (`docs/AUDITORIA-2026-11-01.md`): lo que solo puede hacer Dani, por orden (§8): (1) Cloudflare «Always Use HTTPS» + HSTS; (2) variables `BACKEND_URL`/`FRONTEND_URL` en GitHub para que `uptime.yml` vigile; (3) Meta: pagar o cerrar la cuenta (restringida); (4) Apple: vídeo en iPhone físico + cuentas de prueba + notas de `APP_STORE.md`, o dejar iPhone para después; (5) desplegar lo de esta noche (backend con las dependencias nuevas SOLO con el CI de `292a55f` verde; web con HSTS; el Worker del dominio con `wrangler deploy` desde `infra/web-dominio/`); (6) Amazon A-G; (7) R2 a su cuenta con dominio propio y enlaces firmados; (8) una cuenta de super-admin de solo lectura para poder medir. Y la decisión de fondo: vender Flota a DSP y flotas de furgonetas a mano (tres pilotos en 6 semanas) y parar los anuncios al autónomo. **31-10 noche**: la 2.4.2 (fotos de la auditoría) está PUBLICADA en Play (subida por Claude desde el Chrome de Dani el 31-10 a las 21:2x y aprobada por Google antes de las 22:20: «Activo · Última versión: 21 (2.4.2)») y la web sirve el APK 2.4.2 en `/descargas/FDS.apk`. Los secretos `APP_ANDROID_WEB`/`APP_ANDROID_PLAY` a "21 2.4.2" puestos el 31-10 a las 23:0x desde esta sesión (Dani: «No estoy en el ordenador, hazlo tú»): el servidor anuncia la 2.4.2 y la app avisa de la actualización a quien tenga una más vieja. De la 2.4.2 no queda nada pendiente: solo ver en Play Console cómo llega (descargas de la 21). Backend desplegado; la 2.4.2 verificada en el emulador con la auditoría entera; Junior y Karim entran con la temporal de la oficina. La trampa del APK viejo (sin `gh`, pasadas 24 h del APK local el despliegue de la web habría servido el FDS.apk del repo, que era la 1.0.3) quedó ARREGLADA el 01-11 (00:0x): ver la sesión de la madrugada del 01-11.
 -15. **Contraseña inicial de los conductores nuevos (30/31-10 noche)**: hecha y desplegada; Dani la define en el panel (Conductores → Definirla). **Reparto de findes en el cuadrante**: hecho en el motor y probado con la simulación (ver «noche»). **Sheets: borrador y definitivo** y **el tipo «solo findes» ya no se pierde** (31-10 tarde): hechos. DESPLEGADO el 31-10 por la tarde. Falta que Dani defina la contraseña inicial en el panel, vea una propuesta real del cuadrante y haga noviembre en borrador (la pestaña NOVIEMBRE de la hoja ya existe).
 -14. **La app de iPhone (30-10 tarde)**: EN APP STORE CONNECT con todo puesto, el build 9 (2.4.1) adjunto y el copyright (ver «tarde, 2 → Noche»). ENVIADA A REVISIÓN el 30-10 a las 19:03 (`enviar`; se publica sola al aprobarla, 1-3 días; si Apple pide cambios, Revisión de apps en App Store Connect). La condición de comerciante del DSA la hizo Dani (Negocio → Cumplimiento: Activo). Nada pendiente hasta que Apple conteste. Tanda 2: APNs, el pago de Apple, ubicación en segundo plano. Lo decide Dani.

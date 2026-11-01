@@ -9,6 +9,8 @@ import com.flotadsp.fds.FdsApp
 import com.flotadsp.fds.data.ErrorApi
 import com.flotadsp.fds.etiqueta.Lectura
 import com.flotadsp.fds.etiqueta.LectorEtiqueta
+import com.flotadsp.fds.ui.Voz
+import com.flotadsp.fds.ui.hoy.Briefing
 import com.google.mlkit.vision.common.InputImage
 import com.google.mlkit.vision.text.TextRecognition
 import com.google.mlkit.vision.text.latin.TextRecognizerOptions
@@ -34,6 +36,10 @@ data class EstadoEscaner(
     val trabajando: Boolean = false,
     /** Etiqueta sin la dirección completa en sus códigos: se abre la ficha para revisarla (la foto ya leída). */
     val revisar: Lectura? = null,
+    /** En modo carga (01-11-2026): cuántas paradas van ya en la furgoneta, y el hueco del último paquete. */
+    val cargados: Int? = null,
+    val total: Int? = null,
+    val hueco: String? = null,
 )
 
 /* ESCANEAR SEGUIDO, COMO UN LECTOR DE ALMACÉN (25-10-2026). La cámara no se cierra: se juntan los códigos de una
@@ -55,6 +61,10 @@ class EscanerVM(app: Application) : AndroidViewModel(app) {
      *  y al volver de la ficha se abría sola (visto en el emulador: un segundo OCR con la ficha ya abierta). */
     private var pausado = false
     var pais: String = "es"
+    /** «carga» (01-11-2026): con la ruta ordenada, cada paquete escaneado se marca como metido y se dice su hueco. */
+    var modo: String = ""
+        private set
+    private val cuenta = (app as FdsApp).cuenta
 
     init {
         // El OCR tarda en arrancar la primera vez (25 s en el emulador, sin GPU; bastante menos en un móvil): se
@@ -85,6 +95,7 @@ class EscanerVM(app: Application) : AndroidViewModel(app) {
         _e.value = _e.value.copy(trabajando = true)
         viewModelScope.launch {
             val l = LectorEtiqueta.datosDeCodigos(codigos, pais)
+            if (modo == "carga") { tratarCarga(codigos, l.codigos.ifEmpty { codigos }); return@launch }
             try {
                 val esc = repo.escanear(l.codigos.ifEmpty { codigos })
                 if (esc.encontrado) {
@@ -123,10 +134,37 @@ class EscanerVM(app: Application) : AndroidViewModel(app) {
         }
     }
 
+    /* LA CARGA GUIADA (01-11-2026): el segundo escaneo, ya con la ruta ordenada y el paquete en la mano para meterlo en
+       la furgoneta. El servidor lo marca como cargado (sin contar bultos) y contesta cuántos van; aquí se enseña el hueco
+       en grande y se dice por voz. Lo que no es de la ruta de hoy se dice y no cuenta; nunca se crea una parada. */
+    private suspend fun tratarCarga(codigos: List<String>, limpios: List<String>) {
+        try {
+            val esc = repo.escanearCarga(limpios)
+            val p = esc.pedido
+            if (!esc.encontrado || p == null) {
+                _e.value = _e.value.copy(ultimo = Resultado("error", tx("No es de tu ruta de hoy.")))
+                return
+            }
+            val hace = yaContada(p.id)
+            if (hace != null && hace < 3000) return
+            contados[p.id] = System.currentTimeMillis()
+            _e.value = _e.value.copy(cargados = esc.cargados ?: _e.value.cargados, total = esc.total ?: _e.value.total, hueco = p.hueco,
+                ultimo = Resultado("carga", tx("Parada {n}", "n" to (p.orden ?: "–")) + " · " + p.cliente.ifBlank { p.direccion }))
+            if (cuenta.voz.value) Voz.decir(getApplication(), if (p.hueco.isNotBlank()) Briefing.huecoHablado(p.hueco) else tx("Sin hueco"))
+        } catch (e: ErrorApi) {
+            codigos.forEach { vistos.remove(it) }      // que se pueda volver a intentar
+            _e.value = _e.value.copy(ultimo = Resultado("error",
+                if (e.sinRed) tx("Sin conexión: para cargar hace falta red.") else e.message ?: tx("No se ha podido")))
+        } finally {
+            _e.value = _e.value.copy(trabajando = false)
+        }
+    }
+
     fun revisada() { pausado = true; _e.value = _e.value.copy(revisar = null) }
 
     /** Un escaneo nuevo (desde «Hoy»): sin lo del anterior. El ViewModel vive con la app, no con la pantalla. */
-    fun empezar() {
+    fun empezar(modo: String = "") {
+        this.modo = modo
         vistos.clear(); contados.clear(); pausado = false
         _e.value = EstadoEscaner()
     }

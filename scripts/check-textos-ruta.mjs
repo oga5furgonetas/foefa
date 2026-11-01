@@ -20,6 +20,8 @@ const FICHEROS = [
   'pages/driver/ClienteDice.jsx', 'panel/components/MapaReparto.jsx',
   // Los ajustes de la ruta que ve quien reparte por su cuenta (30-10-2026): la parte con tx() de la pantalla del panel.
   'panel/pages/Reparto.jsx',
+  // La carga guiada y el briefing por voz (01-11-2026).
+  'pages/driver/CargaGuiada.jsx', 'lib/briefing.js',
 ]
 // Nombres que llegan de datos (el plan del autónomo en Registro: tt(planInfo.name)).
 // y los métodos de cobro de lib/region.js (metodosCobro), que se pintan con tx(t).

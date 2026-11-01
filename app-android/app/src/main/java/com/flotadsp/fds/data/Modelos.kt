@@ -42,6 +42,9 @@ data class Parada(
     val tipo: String = "entrega",
     val cobrar: Double? = null,
     val hueco: String = "",
+    /** LA CARGA GUIADA (01-11-2026): cuándo se metió en la furgoneta (null = aún fuera). Y el horario escrito a mano. */
+    @SerialName("cargado_en") val cargadoEn: String? = null,
+    val horario: String = "",
     val prioridad: Boolean = false,
     val estado: String = "pendiente",
     val orden: Int? = null,
@@ -72,6 +75,7 @@ data class Parada(
     val pendiente get() = estado == "pendiente" || estado == "en_ruta"
     val ubicada get() = lat != null && lng != null
     val porCobrar get() = (cobrar ?: 0.0) > 0.0
+    val cargada get() = !cargadoEn.isNullOrBlank()
 }
 
 @Serializable
@@ -87,6 +91,8 @@ data class ResumenRuta(
     val programada: Boolean? = null,
     /** El orden lo puso el repartidor a mano («A mano» en la web). */
     val manual: Boolean? = null,
+    /** Por dónde se carga la furgoneta (01-11-2026): «traseras» o «lateral»; decide qué fila es la de la puerta. */
+    @SerialName("carga_por") val cargaPor: String? = null,
 )
 
 @Serializable
@@ -196,7 +202,13 @@ data class MiRuta(
 )
 
 @Serializable
-data class Escaneo(val encontrado: Boolean = false, val codigo: String = "", val pedido: Parada? = null)
+data class Escaneo(val encontrado: Boolean = false, val codigo: String = "", val pedido: Parada? = null,
+                   /** En modo carga (01-11-2026): cuántas paradas van ya en la furgoneta, de cuántas. */
+                   val cargados: Int? = null, val total: Int? = null)
+
+/** POST /reparto/mi-ruta/cargado (01-11-2026): marcar a mano una parada como cargada, o quitarle la marca. */
+@Serializable
+data class Cargados(val ok: Boolean = true, val cargados: Int = 0, val total: Int = 0)
 
 @Serializable
 data class Ordenado(val ordenados: Int = 0, val ruta: ResumenRuta? = null)

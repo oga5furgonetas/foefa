@@ -3,7 +3,7 @@ import {
   ArrowLeft, ScanLine, Camera, Loader2, Navigation, Phone, Check, X, Route, MapPin, Play, Square, Package,
   MessageCircle, Clock, Search, List, Pencil, ChevronDown, GripVertical, Map as MapaIcono, ArrowUp, ArrowDown, ArrowUpDown, Mic, ClipboardPaste, Trophy,
   Eye, PenLine, RotateCcw, HelpCircle, Share2, FileUp, Gift, WifiOff, Plus, FileText, Mail, CalendarClock, Lightbulb, History,
-  AlertTriangle, CarFront,
+  AlertTriangle, CarFront, Truck, Volume2,
 } from 'lucide-react'
 import {
   repMiRuta, repZonasCarga, repEscanear, repEscanearLote, repLeerTicket, repNuevoPedido, repEstado, repOrdenar, repJornada, repPosicion,
@@ -31,6 +31,9 @@ import ClienteDice, { textoClienteDice } from './ClienteDice'
 import { queIncidencia } from '../../panel/components/MapaReparto'
 import { useAtras } from '../../lib/atras'
 import { PedirAviso, mensajeAviso } from '../AvisoManana'
+import CargaGuiada from './CargaGuiada'
+import { decir, vozActiva } from '../../lib/voz'
+import { textoBriefing } from '../../lib/briefing'
 
 /* ── MI RUTA ────────────────────────────────────────────────────────────────
    Lo que hace el repartidor al cargar: escanea el código de la caja. Si el
@@ -606,6 +609,26 @@ export default function MiRuta({ onBack, embebido = false, alTerminar = null }) 
   // «Cargar paquetes»: una foto tras otra, y al acabar «Montar ruta».
   const [carga, setCarga] = useState(null)   // null | {n}
 
+  /* LA CARGA GUIADA Y EL BRIEFING POR VOZ (01-11-2026). Con la ruta ordenada, «Cargar la furgoneta» abre la pantalla que
+     dice en qué hueco va cada paquete al escanearlo (el servidor se lo puso a cada parada al ordenar). Y cada vez que
+     cambia la siguiente parada (se hizo la anterior, o se acaba de ordenar) se dice en una frase lo que hay que saber:
+     dirección, hora, lo que dijo el cliente, el hueco, el cobro y la nota. Nunca al abrir la pantalla: el repartidor
+     ya la ve. Misma preferencia que la guía por voz («guia_voz»). */
+  const [cargaGuiada, setCargaGuiada] = useState(false)
+  const briefingDe = useRef(null)            // id de la parada ya dicha; null = aún no se ha visto la ruta
+  const briefingTrasOrdenar = useRef(false)  // acaba de ordenarse: se dice la primera aunque sea la misma de antes
+  useEffect(() => {
+    const sig = ruta?.activo ? lista(ruta.pedidos).filter((p) => !['entregado', 'fallido'].includes(p.estado)).sort(porOrden)[0] : null
+    const id = sig?.id || null
+    const antes = briefingDe.current
+    const trasOrdenar = briefingTrasOrdenar.current
+    briefingDe.current = id
+    briefingTrasOrdenar.current = false
+    if (!id || !ruta?.ruta?.fin) return
+    if (!trasOrdenar && (antes === null || antes === id)) return
+    if (vozActiva()) decir(textoBriefing(sig), { cola: true })
+  }, [ruta])
+
   /* ESCANEAR SEGUIDOS (13-10-2026). Con 80 paquetes, abrir la cámara, revisar
      y guardar cada uno es lo que hacía abandonar. Ahora la cámara no se cierra:
      el paquete cuya etiqueta trae en sus códigos la dirección completa entra
@@ -927,6 +950,7 @@ export default function MiRuta({ onBack, embebido = false, alTerminar = null }) 
         setAviso(rr?.fin
           ? `${tx('Ruta ordenada por tiempo: {paradas}, acabas ≈ {fin}', { paradas, fin: rr.fin })}${rr.fuente === 'linea_recta' ? ` ${tx('(sin servidor de rutas: calculada por distancia)')}` : ''}`
           : tx('Ruta ordenada: {paradas}', { paradas }))
+        briefingTrasOrdenar.current = true
         cargar()
       } catch (e) {
         setAviso(txError(e, 'No se pudo ordenar'))
@@ -1370,6 +1394,17 @@ export default function MiRuta({ onBack, embebido = false, alTerminar = null }) 
           </div>
         )}
       </div>
+      {/* LA CARGA GUIADA (01-11-2026): con la ruta ordenada y paquetes aún fuera de la furgoneta. */}
+      {!reordenar && !!ruta.ruta?.fin && pendientes.some((p) => !p.cargado_en) && (
+        <button onClick={() => setCargaGuiada(true)}
+          className="mb-2 flex w-full items-center gap-3 rounded-2xl border border-emerald-500/40 bg-emerald-500/10 px-3.5 py-3 text-left">
+          <Truck size={20} className="shrink-0 text-emerald-300" />
+          <span className="min-w-0 flex-1">
+            <span className="block text-[14px] font-bold text-emerald-100">{tx('Cargar la furgoneta')}</span>
+            <span className="block text-[12.5px] text-dark-300">{tx('Escanea y te digo dónde va')} · {tx('{a} de {b} cargados', { a: pendientes.filter((p) => p.cargado_en).length, b: pendientes.length })}</span>
+          </span>
+        </button>
+      )}
       {/* CAMBIAR EL ORDEN A MANO: el repartidor conoce la zona mejor que nadie. */}
       {reordenar && (
         <div className="rounded-2xl border border-brand-400/40 bg-dark-900 p-3">
@@ -1598,6 +1633,10 @@ export default function MiRuta({ onBack, embebido = false, alTerminar = null }) 
           <div key={p.id} id={`parada-${p.id}`} className={`rounded-2xl border p-3.5 ${esSiguiente ? 'border-brand-400/70 bg-gradient-to-b from-brand-500/[.12] to-dark-900 shadow-lg shadow-black/20' : 'border-dark-600 bg-dark-900'}`}>
             <div className="mb-2 flex items-center justify-between">
               <p className={`text-[11px] font-bold uppercase tracking-wider ${esSiguiente ? 'text-brand-300' : 'text-dark-400'}`}>{esSiguiente ? tx('Siguiente parada') : tx('Parada {n}', { n: p.orden ?? i + 1 })}</p>
+              {esSiguiente && (
+                <button onClick={() => decir(textoBriefing(p))} aria-label={tx('Escuchar la siguiente parada')} title={tx('Escuchar la siguiente parada')}
+                  className="rounded-lg p-1 text-brand-300 hover:bg-dark-800"><Volume2 size={16} /></button>
+              )}
               {!esSiguiente && <button onClick={() => setAbierta(null)} className="text-[12px] font-semibold text-dark-400">{tx('Plegar')}</button>}
             </div>
             <div className="flex items-start gap-3">
@@ -1851,6 +1890,9 @@ export default function MiRuta({ onBack, embebido = false, alTerminar = null }) 
       )}
 
       {escaner && <Escaner onCodigo={buscar} onClose={() => setEscaner(false)} />}
+      {cargaGuiada && (
+        <CargaGuiada pedidos={pendientes} cargaPor={ruta.ruta?.carga_por} Escaner={Escaner} onClose={() => setCargaGuiada(false)} onCambio={cargar} />
+      )}
       {seguidos?.abierto && (
         <Escaner seguido onCodigo={escaneoSeguido} onClose={cerrarSeguidos}
           estado={seguidos.nuevos + seguidos.yaEstaban + seguidos.revisar.length === 0 ? '' : [tx('{n} añadidos', { n: seguidos.nuevos }),

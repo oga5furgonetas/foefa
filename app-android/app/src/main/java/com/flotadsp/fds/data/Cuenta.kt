@@ -28,6 +28,7 @@ class Cuenta(private val ctx: Context) {
     private val kTema = stringPreferencesKey("tema")
     private val kUltimoAviso = stringPreferencesKey("ultimo_aviso")
     private val kFurgo = stringPreferencesKey("furgo")
+    private val kVoz = androidx.datastore.preferences.core.booleanPreferencesKey("voz")
 
     private val _token = MutableStateFlow<String?>(null)
     val token: StateFlow<String?> = _token
@@ -50,6 +51,9 @@ class Cuenta(private val ctx: Context) {
     /** DÓNDE APARQUÉ (30-10-2026): el punto de la furgoneta; se olvida a las 12 horas. Solo en el móvil. */
     private val _furgo = MutableStateFlow<Furgo?>(null)
     val furgo: StateFlow<Furgo?> = _furgo
+    /** EL BRIEFING POR VOZ (01-11-2026): si la app habla (la siguiente parada, el hueco al cargar). Encendido de serie. */
+    private val _voz = MutableStateFlow(true)
+    val voz: StateFlow<Boolean> = _voz
 
     suspend fun cargar() {
         val p = ctx.almacen.data.first()
@@ -76,6 +80,7 @@ class Cuenta(private val ctx: Context) {
         _centro.value = p[kCentro].orEmpty()
         _navegar.value = p[kNavegar] ?: "google"
         _tema.value = p[kTema] ?: "sistema"
+        _voz.value = p[kVoz] ?: true
         _furgo.value = p[kFurgo]?.let { runCatching { JSON.decodeFromString(Furgo.serializer(), it) }.getOrNull() }
             ?.takeIf { System.currentTimeMillis() - it.en < 12 * 3600_000L }
         _cargada.value = true
@@ -121,6 +126,7 @@ class Cuenta(private val ctx: Context) {
 
     suspend fun elegirNavegador(v: String) { ctx.almacen.edit { it[kNavegar] = v }; _navegar.value = v }
     suspend fun elegirTema(v: String) { ctx.almacen.edit { it[kTema] = v }; _tema.value = v }
+    suspend fun elegirVoz(v: Boolean) { ctx.almacen.edit { it[kVoz] = v }; _voz.value = v }
 
     /** Hasta qué aviso (su `creado_en`) se ha enseñado ya como notificación (AvisosWorker, Fcm). */
     suspend fun ultimoAviso(): String? = ctx.almacen.data.first()[kUltimoAviso]

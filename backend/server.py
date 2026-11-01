@@ -51925,6 +51925,7 @@ async def _rep_ajustes() -> dict:
     a.setdefault("hora_salida", "09:00")
     a.setdefault("volver", False)
     a.setdefault("trafico", True)
+    a.setdefault("carga_por", "traseras")      # la carga guiada (01-11-2026): puertas traseras o puerta lateral
     # «Mi dinero hoy» (11-10-2026), en céntimos: 0 = sin poner.
     a.setdefault("pago_parada", 0)
     a.setdefault("pago_dia", 0)
@@ -52425,7 +52426,7 @@ async def _rep_ordenar(fecha: str, conductor_id: str, origen, salida_min: Option
     pend = await db.reparto_pedidos.find(
         {"fecha": fecha, "conductor_id": conductor_id, "estado": {"$in": ["pendiente", "en_ruta"]}},
         {"_id": 0, "id": 1, "lat": 1, "lng": 1, "bultos": 1, "ventana_desde": 1,
-         "ventana_hasta": 1, "prioridad": 1}).to_list(1000)
+         "ventana_hasta": 1, "prioridad": 1, "hueco_manual": 1}).to_list(1000)
     hechos = await db.reparto_pedidos.count_documents(
         {"fecha": fecha, "conductor_id": conductor_id, "estado": {"$in": ["entregado", "fallido"]}})
     ubicadas = [p for p in pend if reparto._punto(p)]
@@ -52487,15 +52488,32 @@ async def _rep_ordenar(fecha: str, conductor_id: str, origen, salida_min: Option
     if orden_fijo:
         pos = {pid: k for k, pid in enumerate(orden_fijo)}
         sin = sorted(sin, key=lambda p: pos.get(p["id"], 10 ** 6))
+    # LA CARGA GUIADA (01-11-2026): con el orden decidido, cada parada ubicada recibe su hueco de la furgoneta
+    # (reparto.hueco_sugerido), salvo que el repartidor lo haya puesto a mano. Las sin ubicar no van en la cuenta.
+    por_id = {p["id"]: p for p in pend}
+    carga_por = a.get("carga_por") if a.get("carga_por") in reparto.CARGA_POR else "traseras"
+    resumen["carga_por"] = carga_por
     for n, pid in enumerate(orden_ids + [p["id"] for p in sin]):
         l = llegadas.get(pid)
-        await db.reparto_pedidos.update_one({"id": pid}, {"$set": {
-            "orden": hechos + n + 1,
-            "eta": reparto.hm(l["eta"]) if l else None,
-            "tarde_min": l["tarde"] if l else 0,
-            "espera_min": l["espera"] if l else 0}})
+        cambios = {"orden": hechos + n + 1,
+                   "eta": reparto.hm(l["eta"]) if l else None,
+                   "tarde_min": l["tarde"] if l else 0,
+                   "espera_min": l["espera"] if l else 0}
+        if n < len(orden_ids) and not (por_id.get(pid) or {}).get("hueco_manual"):
+            cambios["hueco"] = reparto.hueco_sugerido(n, len(orden_ids), carga_por)
+            cambios["hueco_auto"] = True
+        await db.reparto_pedidos.update_one({"id": pid}, {"$set": cambios})
     await db.reparto_rutas.replace_one({"id": resumen["id"]}, dict(resumen), upsert=True)
     return resumen
+
+
+async def _rep_cargados(conductor_id: str, fecha: str):
+    """Cuántas paradas pendientes de hoy están ya en la furgoneta, y cuántas son (la carga guiada)."""
+    filtro = {"fecha": fecha, "conductor_id": conductor_id, "estado": {"$in": ["pendiente", "en_ruta"]}}
+    total = await db.reparto_pedidos.count_documents(filtro)
+    # Con $exists además de $nin: un campo que no está no cuenta como cargado (en Mongo y en la base de mentira).
+    cargados = await db.reparto_pedidos.count_documents({**filtro, "cargado_en": {"$exists": True, "$nin": [None, ""]}})
+    return cargados, total
 
 
 # ── OFICINA ───────────────────────────────────────────────────────────────────
@@ -52560,6 +52578,8 @@ async def reparto_ajustes_put(data: dict = Body(...), user: dict = Depends(requi
     nuevo["hora_salida"] = reparto.hm(hs) if hs is not None else "09:00"
     nuevo["volver"] = bool(data.get("volver"))
     nuevo["trafico"] = data.get("trafico") is not False
+    # Por dónde se carga la furgoneta (01-11-2026): decide qué fila es la de la puerta en la carga guiada.
+    nuevo["carga_por"] = data["carga_por"] if data.get("carga_por") in reparto.CARGA_POR else (a.get("carga_por") or "traseras")
     # La placa (30-10-2026): para decir si HOY le toca restricción (rodízio, Hoy No Circula…). Opcional.
     nuevo["placa"] = re.sub(r"[^A-Z0-9]", "", _texto_cuerpo(data.get("placa"), 16).upper())[:12]
     # La tarifa se cambia en su propia pantalla (PUT /reparto/ganancias): guardar los ajustes no la borra.
@@ -53172,6 +53192,15 @@ async def reparto_escanear(data: dict = Body(...), user: dict = Depends(require_
     cambios = {"conductor_id": d["id"], "conductor_nombre": d.get("name") or ""}
     if not p.get("conductor_id"):
         cambios["orden"] = None
+    # EN MODO CARGA (01-11-2026): el segundo escaneo, ya con la ruta ordenada y el paquete en la mano para meterlo
+    # en la furgoneta. No cuenta como bulto: marca la parada como cargada y dice cuántas van.
+    carga = bool(data.get("carga"))
+    if carga:
+        cambios["cargado_en"] = datetime.now(timezone.utc).isoformat()
+        await db.reparto_pedidos.update_one({"id": p["id"]}, {"$set": cambios})
+        p.update(cambios)
+        cargados, total = await _rep_cargados(d["id"], f)
+        return {"encontrado": True, "pedido": p, "cargados": cargados, "total": total}
     await db.reparto_pedidos.update_one({"id": p["id"]}, {"$set": cambios, "$inc": {"escaneos": 1}})
     p.update(cambios)
     p["escaneos"] = int(p.get("escaneos") or 0) + 1
@@ -53495,6 +53524,22 @@ async def reparto_mi_ordenar(data: dict = Body(...), user: dict = Depends(requir
     salida, programada = _rep_salida_ahora(a)
     ruta = await _rep_ordenar(_dia_negocio(), d["id"], origen, salida_min=salida, programada=programada)
     return {"ordenados": ruta["paradas"], "ruta": ruta}
+
+
+@api_router.post("/reparto/mi-ruta/cargado")
+async def reparto_mi_cargado(data: dict = Body(...), user: dict = Depends(require_any_auth)):
+    """La carga guiada (01-11-2026): marcar una parada como ya metida en la furgoneta, o quitarle la marca, desde la
+    lista por huecos. Escaneando no hace falta: /reparto/escanear con `carga: true` lo hace solo."""
+    d = await _rep_conductor(user)
+    data = _dict_cuerpo(data)
+    p = await db.reparto_pedidos.find_one({"id": _texto_cuerpo(data.get("id"), 60), "fecha": _dia_negocio()},
+                                          {"_id": 0, "id": 1, "conductor_id": 1})
+    if not p or p.get("conductor_id") != d["id"]:
+        raise HTTPException(404, "Esa parada no es de tu ruta de hoy")
+    marca = datetime.now(timezone.utc).isoformat() if data.get("cargado") is not False else None
+    await db.reparto_pedidos.update_one({"id": p["id"]}, {"$set": {"cargado_en": marca}})
+    cargados, total = await _rep_cargados(d["id"], _dia_negocio())
+    return {"ok": True, "cargados": cargados, "total": total}
 
 
 @api_router.post("/reparto/mi-ruta/trazado")
@@ -53997,6 +54042,9 @@ async def reparto_mi_editar(pid: str, data: dict = Body(...), user: dict = Depen
     cambios = {}
     if "hueco" in data:
         cambios["hueco"] = _texto_cuerpo(data.get("hueco"), 40)
+        # A mano manda sobre lo automático (01-11-2026): al reordenar no se le cambia; vaciarlo lo libera.
+        cambios["hueco_manual"] = bool(cambios["hueco"])
+        cambios["hueco_auto"] = False
     if "notas" in data:
         cambios["notas"] = _texto_cuerpo(data.get("notas"), 200)
     abierto = p.get("estado") in ("pendiente", "en_ruta")

@@ -338,6 +338,16 @@ class Repositorio(private val ctx: Context, val cuenta: Cuenta, val api: Api) {
             put("codigos", buildJsonArray { codigos.forEach { add(kotlinx.serialization.json.JsonPrimitive(it)) } })
         }))
 
+    /** LA CARGA GUIADA (01-11-2026): el escaneo con la ruta ya ordenada (no cuenta bultos: marca la parada como metida
+     *  en la furgoneta y dice cuántas van), y marcar o desmarcar a mano desde la lista por hueco. */
+    suspend fun escanearCarga(codigos: List<String>): Escaneo =
+        leer(api.post("reparto/escanear", buildJsonObject {
+            put("codigos", buildJsonArray { codigos.forEach { add(kotlinx.serialization.json.JsonPrimitive(it)) } })
+            put("carga", true)
+        }))
+    suspend fun cargado(id: String, cargado: Boolean): Cargados =
+        leer(api.post("reparto/mi-ruta/cargado", buildJsonObject { put("id", id); put("cargado", cargado) }))
+
     suspend fun nuevaParada(datos: JsonObject): Parada = leer(api.post("reparto/mis-pedidos", datos))
     suspend fun editarParada(id: String, datos: JsonObject) { api.post("reparto/mis-pedidos/$id/editar", datos) }
     suspend fun quitarParada(id: String) { api.post("reparto/mis-pedidos/$id/quitar") }
