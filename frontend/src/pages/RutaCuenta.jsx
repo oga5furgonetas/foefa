@@ -5,7 +5,7 @@ import {
 import QRCode from 'qrcode'
 import {
   stripeSuscripcion, stripePortal, stripeCambiarPlan, comprarRegalo, misRegalos, canjearRegalo, playVerificar,
-  getMe, setMyEmail, changeMyPassword, pedirEnlaceClave,
+  getMe, setMyEmail, changeMyPassword, pedirEnlaceClave, borrarMiCuenta,
 } from '../panel/api'
 import { servicioPlay, detallesPlay, pagarConPlay } from '../lib/playBilling'
 import { evento, apuntarParaLaVuelta } from '../lib/metaPixel'
@@ -126,6 +126,60 @@ export function Cuenta({ billing, recargar, toast, resaltarRegalo, merc }) {
           <LogOut size={15} /> {tx('Cerrar sesión')}
         </button>
       )}
+      {/* Borrar la cuenta desde la app (01-11-2026): Google Play y Apple lo exigen a toda app en la que se crea una
+          cuenta. La app de Android lo tenía (auth/borrar-cuenta); la web, que es lo que lleva dentro la de iPhone, no:
+          Apple lo graba en el vídeo de revisión. Desde «entrar como» no se enseña: el servidor lo rechazaría. */}
+      {!suplantando && <BorrarMiCuenta toast={toast} />}
+    </div>
+  )
+}
+
+/* BORRAR MI CUENTA. Con la contraseña: la cuenta se desactiva al momento (ya no se puede entrar) y la oficina borra los
+   datos en 30 días como mucho; es lo que hace el servidor, y es lo que se dice. Una cuenta de empresa no se borra desde
+   aquí (el servidor contesta por qué). */
+function BorrarMiCuenta({ toast }) {
+  const [abierto, setAbierto] = useState(false)
+  const [clave, setClave] = useState('')
+  const [busy, setBusy] = useState(false)
+  const [err, setErr] = useState('')
+  const borrar = async () => {
+    if (!clave) return setErr(tx('Escribe tu contraseña actual.'))
+    setBusy(true); setErr('')
+    try {
+      await borrarMiCuenta(clave)
+      toast?.success?.(tx('Cuenta borrada. Tus datos se eliminan en 30 días como mucho.'))
+      logout(); window.location.href = '/empezar'
+    } catch (e) {
+      setErr(txError(e, tx('No se ha podido borrar la cuenta. Inténtalo otra vez.')))
+      setBusy(false)
+    }
+  }
+  if (!abierto) {
+    return (
+      <button onClick={() => setAbierto(true)}
+        className="mt-3 w-full rounded-xl py-2.5 text-[13px] font-semibold text-dark-500 hover:text-red-300">
+        {tx('Borrar mi cuenta')}
+      </button>
+    )
+  }
+  return (
+    <div role="group" aria-label={tx('Borrar mi cuenta')} className="mt-3 rounded-2xl border border-red-900/60 bg-dark-900 p-4">
+      <p className="text-[14.5px] font-semibold text-dark-50">{tx('¿Borrar tu cuenta?')}</p>
+      <p className="mt-1 text-[12.5px] text-dark-400">
+        {tx('Dejarás de poder entrar al momento y tus datos (paradas, clientes, historial) se eliminan en 30 días como mucho. No se puede deshacer.')}
+      </p>
+      <input type="password" value={clave} onChange={(e) => setClave(e.target.value)} autoComplete="current-password"
+        placeholder={tx('Tu contraseña actual')} aria-label={tx('Tu contraseña actual')}
+        className="mt-3 w-full rounded-xl border border-dark-700 bg-dark-950 px-3 py-2.5 text-[14px] text-dark-50" />
+      {err && <p className="mt-2 text-[12.5px] text-red-300" role="alert">{err}</p>}
+      <div className="mt-3 flex gap-2">
+        <button onClick={borrar} disabled={busy}
+          className="flex-1 rounded-xl bg-red-500/90 py-2.5 text-[14px] font-semibold text-white disabled:opacity-60">
+          {busy ? <Loader2 size={15} className="mx-auto animate-spin" /> : tx('Sí, borrar mi cuenta')}
+        </button>
+        <button onClick={() => { setAbierto(false); setClave(''); setErr('') }}
+          className="flex-1 rounded-xl border border-dark-700 py-2.5 text-[14px] font-semibold text-dark-200">{tx('Cancelar')}</button>
+      </div>
     </div>
   )
 }

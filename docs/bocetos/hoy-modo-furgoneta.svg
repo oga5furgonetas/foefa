@@ -1,0 +1,103 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 820 760" width="820" height="760" font-family="Inter, Segoe UI, Arial, sans-serif">
+  <defs>
+    <clipPath id="pantalla"><rect x="30" y="30" width="360" height="700" rx="36"/></clipPath>
+    <clipPath id="pantalla2"><rect x="430" y="30" width="360" height="700" rx="36"/></clipPath>
+    <pattern id="calles" width="60" height="60" patternUnits="userSpaceOnUse">
+      <rect width="60" height="60" fill="#111827"/>
+      <path d="M0 30 H60 M30 0 V60" stroke="#1f2937" stroke-width="6"/>
+      <path d="M0 30 H60 M30 0 V60" stroke="#374151" stroke-width="1"/>
+    </pattern>
+  </defs>
+  <rect width="820" height="760" fill="#0b0d10"/>
+  <text x="30" y="20" fill="#9ca3af" font-size="12">Boceto 01-11-2026 · «Hoy» en modo furgoneta (izquierda) y la carga guiada (derecha). No es la app: es lo que propongo.</text>
+
+  <!-- ─── PANTALLA 1: HOY ─── -->
+  <g clip-path="url(#pantalla)">
+    <rect x="30" y="30" width="360" height="700" fill="url(#calles)"/>
+    <!-- ruta -->
+    <path d="M60 640 C 120 560, 90 470, 160 430 S 260 360, 250 300 S 330 230, 350 170" fill="none" stroke="#38bdf8" stroke-width="5" stroke-linecap="round" opacity="0.9"/>
+    <circle cx="250" cy="300" r="9" fill="#22c55e" stroke="#0b0d10" stroke-width="3"/>
+    <circle cx="160" cy="430" r="9" fill="#22c55e" stroke="#0b0d10" stroke-width="3"/>
+    <circle cx="350" cy="170" r="9" fill="#f59e0b" stroke="#0b0d10" stroke-width="3"/>
+    <circle cx="300" cy="245" r="13" fill="#38bdf8" stroke="#0b0d10" stroke-width="3"/>
+    <text x="300" y="250" font-size="12" font-weight="700" fill="#0b0d10" text-anchor="middle">38</text>
+    <!-- furgoneta (tú) -->
+    <circle cx="60" cy="640" r="11" fill="#e5e7eb" stroke="#0b0d10" stroke-width="3"/>
+    <polygon points="60,623 54,636 66,636" fill="#0b0d10"/>
+    <!-- anillo del día -->
+    <circle cx="350" cy="80" r="26" fill="#0f172a" stroke="#1f2937" stroke-width="6"/>
+    <circle cx="350" cy="80" r="26" fill="none" stroke="#22c55e" stroke-width="6" stroke-dasharray="54 110" transform="rotate(-90 350 80)"/>
+    <text x="350" y="78" font-size="12" font-weight="800" fill="#f9fafb" text-anchor="middle">37/112</text>
+    <text x="350" y="92" font-size="9" fill="#9ca3af" text-anchor="middle">fin 17:40</text>
+    <!-- estado -->
+    <rect x="46" y="56" width="140" height="28" rx="14" fill="#0f172a" stroke="#1f2937"/>
+    <text x="116" y="75" font-size="12" fill="#e5e7eb" text-anchor="middle">11:24 · 9 fallidas 0</text>
+    <!-- tarjeta siguiente parada -->
+    <rect x="42" y="430" width="336" height="236" rx="22" fill="#0f172a" stroke="#1f2937" stroke-width="1.5"/>
+    <rect x="42" y="430" width="336" height="8" rx="4" fill="#38bdf8"/>
+    <text x="60" y="462" font-size="11" font-weight="700" fill="#38bdf8" letter-spacing="1">SIGUIENTE · 38 DE 112</text>
+    <rect x="286" y="448" width="78" height="22" rx="11" fill="#f59e0b22" stroke="#f59e0b"/>
+    <text x="325" y="463" font-size="11" font-weight="700" fill="#fbbf24" text-anchor="middle">hasta 12:00</text>
+    <text x="60" y="492" font-size="22" font-weight="800" fill="#f9fafb">Rúa Real 12, 3.º B</text>
+    <text x="60" y="512" font-size="13" fill="#9ca3af">A Coruña · 4 min · 1,1 km</text>
+    <rect x="60" y="526" width="150" height="24" rx="12" fill="#1f2937"/>
+    <text x="135" y="542" font-size="12" font-weight="700" fill="#e5e7eb" text-anchor="middle">🚐 Delante · izquierda</text>
+    <rect x="218" y="526" width="140" height="24" rx="12" fill="#1f2937"/>
+    <text x="288" y="542" font-size="12" fill="#e5e7eb" text-anchor="middle">2 bultos · frágil</text>
+    <rect x="60" y="560" width="298" height="30" rx="10" fill="#052e16" stroke="#166534"/>
+    <text x="74" y="580" font-size="12" fill="#86efac">💬 Cliente: «estoy hasta las 13, portal 4321»</text>
+    <!-- botones -->
+    <rect x="60" y="602" width="140" height="50" rx="14" fill="#1f2937" stroke="#374151"/>
+    <text x="130" y="633" font-size="15" font-weight="800" fill="#f9fafb" text-anchor="middle">🧭 Navegar</text>
+    <rect x="214" y="602" width="144" height="50" rx="14" fill="#22c55e"/>
+    <text x="286" y="633" font-size="15" font-weight="800" fill="#052e16" text-anchor="middle">✓ Entregado</text>
+    <!-- briefing -->
+    <rect x="42" y="372" width="336" height="44" rx="14" fill="#0f172acc" stroke="#38bdf8" stroke-dasharray="4 3"/>
+    <text x="58" y="390" font-size="11" font-weight="700" fill="#38bdf8">🔊 A 300 m, por voz:</text>
+    <text x="58" y="406" font-size="11" fill="#cbd5e1">«Rúa Real 12. Portal 4321. La última vez, puerta de atrás. Delante-izq.»</text>
+    <!-- barra inferior -->
+    <rect x="30" y="676" width="360" height="54" fill="#0b0d10"/>
+    <g font-size="10" fill="#9ca3af" text-anchor="middle">
+      <text x="75" y="716" fill="#38bdf8" font-weight="700">Hoy</text>
+      <text x="165" y="716">Lista</text>
+      <text x="255" y="716">Dinero</text>
+      <text x="345" y="716">Cuenta</text>
+    </g>
+    <rect x="52" y="686" width="46" height="4" rx="2" fill="#38bdf8"/>
+  </g>
+  <rect x="30" y="30" width="360" height="700" rx="36" fill="none" stroke="#374151" stroke-width="3"/>
+
+  <!-- ─── PANTALLA 2: CARGA GUIADA ─── -->
+  <g clip-path="url(#pantalla2)">
+    <rect x="430" y="30" width="360" height="700" fill="#0b0d10"/>
+    <text x="450" y="70" font-size="11" font-weight="700" fill="#38bdf8" letter-spacing="1">CARGA · 07:12 · 112 PAQUETES</text>
+    <text x="450" y="98" font-size="20" font-weight="800" fill="#f9fafb">Escanea y te digo dónde va</text>
+    <text x="450" y="118" font-size="12" fill="#9ca3af">La ruta ya está ordenada: lo último al fondo, lo primero a la puerta.</text>
+    <!-- furgoneta vista desde arriba -->
+    <rect x="470" y="150" width="280" height="300" rx="28" fill="#111827" stroke="#374151" stroke-width="2"/>
+    <rect x="490" y="135" width="240" height="30" rx="10" fill="#1f2937"/>
+    <text x="610" y="155" font-size="11" fill="#9ca3af" text-anchor="middle">cabina</text>
+    <g font-size="12" font-weight="700" text-anchor="middle">
+      <rect x="486" y="176" width="120" height="82" rx="12" fill="#1e3a8a"/><text x="546" y="206" fill="#bfdbfe">Delante · izq</text><text x="546" y="230" fill="#f9fafb" font-size="20">18</text>
+      <rect x="614" y="176" width="120" height="82" rx="12" fill="#1e3a8a"/><text x="674" y="206" fill="#bfdbfe">Delante · der</text><text x="674" y="230" fill="#f9fafb" font-size="20">19</text>
+      <rect x="486" y="266" width="120" height="82" rx="12" fill="#172554"/><text x="546" y="296" fill="#93c5fd">Medio · izq</text><text x="546" y="320" fill="#f9fafb" font-size="20">19</text>
+      <rect x="614" y="266" width="120" height="82" rx="12" fill="#172554"/><text x="674" y="296" fill="#93c5fd">Medio · der</text><text x="674" y="320" fill="#f9fafb" font-size="20">19</text>
+      <rect x="486" y="356" width="120" height="82" rx="12" fill="#0f172a" stroke="#1e3a8a"/><text x="546" y="386" fill="#64748b">Detrás · izq</text><text x="546" y="410" fill="#f9fafb" font-size="20">18</text>
+      <rect x="614" y="356" width="120" height="82" rx="12" fill="#0f172a" stroke="#1e3a8a"/><text x="674" y="386" fill="#64748b">Detrás · der</text><text x="674" y="410" fill="#f9fafb" font-size="20">19</text>
+    </g>
+    <text x="610" y="470" font-size="11" fill="#9ca3af" text-anchor="middle">puertas ↑ (lo de delante se entrega primero)</text>
+    <!-- último escaneado -->
+    <rect x="450" y="490" width="320" height="86" rx="18" fill="#0f172a" stroke="#22c55e" stroke-width="2"/>
+    <text x="466" y="514" font-size="11" font-weight="700" fill="#22c55e">ESCANEADO · 97 de 112</text>
+    <text x="466" y="538" font-size="16" font-weight="800" fill="#f9fafb">Rúa Real 12 · parada 38</text>
+    <text x="466" y="560" font-size="14" fill="#e5e7eb">→ Delante · izquierda</text>
+    <rect x="664" y="520" width="92" height="40" rx="12" fill="#1e3a8a"/>
+    <text x="710" y="546" font-size="14" font-weight="800" fill="#bfdbfe" text-anchor="middle">DEL·IZQ</text>
+    <!-- botones -->
+    <rect x="450" y="596" width="320" height="52" rx="14" fill="#22c55e"/>
+    <text x="610" y="628" font-size="15" font-weight="800" fill="#052e16" text-anchor="middle">📷 Seguir escaneando</text>
+    <rect x="450" y="658" width="320" height="44" rx="14" fill="#1f2937"/>
+    <text x="610" y="686" font-size="13" font-weight="700" fill="#e5e7eb" text-anchor="middle">Salir con la ruta hecha (faltan 15)</text>
+  </g>
+  <rect x="430" y="30" width="360" height="700" rx="36" fill="none" stroke="#374151" stroke-width="3"/>
+</svg>

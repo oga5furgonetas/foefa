@@ -32,7 +32,7 @@ export default function ResetPassword() {
   }
 
   async function saveNewPassword() {
-    if (pass.length < 6) return setErr(t('reset.min'))
+    if (pass.length < 8) return setErr(t('reset.min'))   // los mismos 8 que el alta y el servidor (01-11-2026)
     if (pass !== pass2) return setErr(t('reset.mismatch'))
     setBusy(true); setErr('')
     try {

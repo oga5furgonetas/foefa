@@ -24,10 +24,19 @@ const ORIGEN = 'https://flota-2fg.pages.dev'
 const API = 'https://flota-backend.fly.dev'
 const CANONICO = 'flotadsp.com'
 
+// Un año de HSTS: el navegador que haya entrado una vez por https no vuelve a probar http.
+const HSTS = 'max-age=31536000; includeSubDomains'
+
 export default {
   async fetch(request) {
     const url = new URL(request.url)
-    if (url.hostname !== CANONICO) {
+    // SIEMPRE HTTPS (01-11-2026). La auditoría vio que http://flotadsp.com servía la web entera, login incluido,
+    // sin redirigir: Cloudflare solo lo redirige si «Always Use HTTPS» está encendido en el panel, y no lo estaba.
+    // Aquí se redirige pase lo que pase con ese ajuste. El esquema real del visitante va en `CF-Visitor`.
+    let esquema = url.protocol
+    try { esquema = (JSON.parse(request.headers.get('CF-Visitor') || '{}').scheme || esquema.replace(':', '')) + ':' } catch {}
+    if (esquema === 'http:' || url.hostname !== CANONICO) {
+      url.protocol = 'https:'
       url.hostname = CANONICO
       return Response.redirect(url.toString(), 301)
     }
@@ -47,11 +56,9 @@ export default {
       redirect: 'manual',
     })
     const loc = r.headers.get('Location')
-    if (loc && loc.startsWith(ORIGEN)) {
-      const h = new Headers(r.headers)
-      h.set('Location', `https://${CANONICO}${loc.slice(ORIGEN.length)}`)
-      return new Response(r.body, { status: r.status, statusText: r.statusText, headers: h })
-    }
-    return r
+    const h = new Headers(r.headers)
+    if (loc && loc.startsWith(ORIGEN)) h.set('Location', `https://${CANONICO}${loc.slice(ORIGEN.length)}`)
+    if (!h.has('Strict-Transport-Security')) h.set('Strict-Transport-Security', HSTS)
+    return new Response(r.body, { status: r.status, statusText: r.statusText, headers: h })
   },
 }

@@ -59,6 +59,7 @@ import com.flotadsp.fds.ui.cuenta.CuentaPantalla
 import com.flotadsp.fds.ui.cuenta.HistorialPantalla
 import com.flotadsp.fds.ui.escaner.EscanerPantalla
 import com.flotadsp.fds.ui.escaner.VueltaDeRevisar
+import com.flotadsp.fds.ui.hoy.CargaPantalla
 import com.flotadsp.fds.ui.hoy.HoyPantalla
 import com.flotadsp.fds.ui.hoy.RutaVM
 import com.flotadsp.fds.ui.parada.FichaParada
@@ -172,8 +173,10 @@ private fun Raiz(app: FdsApp, ref: String?, empresaSlug: String?, sesionPortal: 
 /** Lo que tapa las pestañas: el escáner o la ficha de una parada. */
 private sealed interface Capa {
     /** `vuelta`: null si se abre desde «Hoy»; si no, de vuelta de revisar una etiqueta (sigue el mismo escaneo). */
-    data class Escaner(val vuelta: VueltaDeRevisar? = null) : Capa
+    data class Escaner(val vuelta: VueltaDeRevisar? = null, val modo: String = "") : Capa
     data class Ficha(val inicial: Lectura? = null, val editar: Parada? = null, val desdeEscaner: Boolean = false) : Capa
+    /** LA CARGA GUIADA (01-11-2026): la furgoneta por huecos; desde ella, el escáner en modo carga. */
+    data object Carga : Capa
 }
 
 @Composable
@@ -207,8 +210,8 @@ private fun Principal(abrir: String?, alAbierto: () -> Unit) {
 
     when (val c = capa) {
         is Capa.Escaner -> {
-            EscanerPantalla(pais = pais, vuelta = c.vuelta,
-                alCerrar = { cambios -> capa = null; if (cambios) ruta.refrescarSinRuido() },
+            EscanerPantalla(pais = pais, vuelta = c.vuelta, modo = c.modo,
+                alCerrar = { cambios -> capa = if (c.modo == "carga") Capa.Carga else null; if (cambios) ruta.refrescarSinRuido() },
                 alRevisar = { l -> capa = Capa.Ficha(inicial = l, desdeEscaner = true) })
             return
         }
@@ -219,6 +222,10 @@ private fun Principal(abrir: String?, alAbierto: () -> Unit) {
                 if (guardada && !c.desdeEscaner) ruta.avisar(if (c.editar != null) tx("Cambios guardados.") else tx("Añadida a tu ruta."))
                 capa = if (c.desdeEscaner) Capa.Escaner(VueltaDeRevisar(guardada)) else null
             })
+            return
+        }
+        is Capa.Carga -> {
+            CargaPantalla(vm = ruta, alEscanear = { capa = Capa.Escaner(modo = "carga") }, alCerrar = { capa = null })
             return
         }
         null -> Unit
@@ -247,6 +254,7 @@ private fun Principal(abrir: String?, alAbierto: () -> Unit) {
                     alEscanear = { capa = Capa.Escaner() },
                     alAnadir = { capa = Capa.Ficha() },
                     alEditar = { p -> capa = Capa.Ficha(editar = p) },
+                    alCargar = { capa = Capa.Carga },
                 )
             }
         }

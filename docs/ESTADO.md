@@ -5,7 +5,7 @@
 > haz commit y `git push`. Una sola sesión trabajando a la vez: antes de
 > empezar, `git pull` y comprueba que nadie ha dejado nada a medias aquí.
 
-Última actualización: **30/31-10-2026 (noche)**: CONTRASEÑA INICIAL de los conductores nuevos (Dani: «que cada vez que creemos una cuenta tenga por defecto una y al entrar les salte cambiarla»): ajuste por empresa en el panel (Conductores → «Contraseña inicial de los conductores nuevos»), solo el hash en `organizations`; el alta y la importación con correo crean la cuenta con ella y `must_change_password`. DESPLEGADO el 31-10 a las 16:58 (backend, `deploy-backend.ps1`: /api/health ok, Mongo conectado) y a las 17:00 (panel, `deploy-frontend.ps1`: producción sirve el bundle local, 277 assets con su tipo), con el permiso explícito de Dani; comprobado después: `/api/app/version` contesta y las rutas nuevas (`contrasena-inicial`, `sync/borrador`, `sync/definitivo`) existen y piden sesión (401). Dani define la contraseña inicial en el panel (Conductores → Definirla). Apple: la 2.4.1 sigue «Esperando revisión». Y el MOTOR DEL CUADRANTE reparte los fines de semana (Dani: «la misma persona 3 findes seguidos libres y otro sin finde libre en 3 semanas»): calcula semana a semana viendo la siguiente, el n-ésimo día de finde cuesta más, las rachas de findes trabajando penalizan (2, 3, 4 seguidos) y una sola decisión con los extras; de 5/12 personas sin finde libre a 0, y 3 veces más rápido (`backend/scripts/simular_findes.py`). Además (31-10 tarde): BORRADOR / MARCAR DEFINITIVO en la sincronización con Google Sheets (Dani: «voy a hacer el cuadrante de noviembre y quiero que aparezca en el Sheets cuando lo marque definitivo»), y arreglado por qué se perdía el tipo «solo findes» de una persona: la importación de la hoja lo reescribía y fusionar fichas no lo traspasaba. DESPLEGADO el 31-10 por la tarde con el permiso de Dani («Tienes mi permiso, hazlo todo bien y con cuidado»). pytest entero: 1353 passed in 745.23s (0:12:25). (ver «Última sesión — 30/31-10-2026 (noche)»). Anterior: **30-10-2026 (tarde, 2)**: la app de iPhone está EN APP STORE CONNECT: cuenta de Apple de Dani activa, App ID, clave de la API, app «FDS: ruta de reparto» con la ficha en 7 idiomas, capturas, edad 4+, privacidad publicada, precio gratis en 175 países, cuenta de prueba y contacto para la revisión; certificado y perfil de distribución hechos por la API y firma manual en el Mac de GitHub. El build 2.4.1 SUBIÓ a App Store Connect a las 18:06 (run 41094495278 del workflow, tras tres intentos: perfil de desarrollo sin iPhone, identidad forzada con firma automática, y el SDK: Apple exige Xcode 26); Apple lo procesó en cuatro minutos (build 9, VALID, 18:10) y `app_store_connect.py adjuntar` lo dejó ADJUNTO a la versión 2.4.1 («En preparación para el envío»). Por la noche, Dani: «mándala tú»: el copyright puesto por la API (`copyright`, obligatorio; la versión se publica sola al aprobarla), pero «Añadir a revisión» pide dos DECLARACIONES que el modo auto no hace en nombre de Dani (las bloqueó por la API): en App Store Connect → Información de la app (abierta en su Chrome), «Derechos sobre el contenido» (no usa contenido de terceros) y «Reglamento de Servicios Digitales → Configurar» (comerciante: dirección, teléfono y correo públicos). Dani marcó los derechos («No») y el Guardar de arriba lo pulsó Claude en su pestaña; a las 19:03 `enviar`: la 2.4.1 ESTÁ EN REVISIÓN (WAITING_FOR_REVIEW, envío `a8ddf131`; se publica sola al aprobarla, 1-3 días). La condición de comerciante (DSA) la hizo Dani esa misma noche: en Negocio → Cumplimiento, «Reglamento de Servicios Digitales · 27 países · Activo». NADA pendiente en Apple salvo esperar la revisión. GOOGLE PLAY (Dani: «¿por qué no está la 2.4.1?»): la 2.4.1 (code 20) está ACTIVA en producción desde las 16:25 y en la prueba abierta desde las 13:27 (178 países, 16 descargas): no ha fallado nada. El 75 % de la base instalada sigue en el code 3 (la TWA del 4-10, canal Alpha): Play los va actualizando solo en las horas siguientes (esa app no manda `X-FDS-App`, así que `APP_ANDROID_MIN` no la bloquea). Dani vio «2.2.4» al bajarla de Play: el code 16 nunca estuvo en producción, así que es la APK de la web (paquete `.web`, convive con la de Play) o la caché de la tienda; se comprueba en Play → Acerca de esta app → Versión. `APP_ANDROID_PLAY="20 2.4.1"` lo puso Dani con `fly secrets set` esa misma noche (el modo auto lo bloquea desde aquí): el servidor ya anuncia la de Play. (ver «Última sesión — 30-10-2026 (tarde, 2)»). Anterior: **30-10-2026 (tarde)**: Dani: «¿cómo la ponemos en Apple? Móntala y dime los pasos». La app de iPhone está MONTADA: la web envuelta con Capacitor (`frontend/ios/`), compilada por el Mac de GitHub (`app-ios.yml`); con los cuatro secretos de Apple sube sola a App Store Connect. Los pasos de Dani (cuenta de desarrollador, clave de la API, ficha, revisión) en `docs/APP_STORE.md`. el Mac de GitHub (run 41078504835, 15:12-15:15Z) la COMPILÓ para el simulador en verde al primer intento (web, CocoaPods, Xcode y xcodebuild sin firma); la subida a App Store Connect quedó saltada porque aún no hay secretos de Apple, como está previsto. (ver «Última sesión — 30-10-2026 (tarde)»). Anterior: **30-10-2026 (mediodía, 2)**: Dani había subido la 2.4.0 (code 19) a Play por la mañana, así que lo de mediodía sale como **FDS 2.4.1 (code 20)**, con lo que pidió después: «que a los que tengan la app antigua, al entrar, les salte actualización disponible con un botón a Google Play». Además: cortes y obras de TfL (Gran Londres) y de la API de la Autobahn (Alemania), las zonas de OSM con copia en Mongo, los correos del ciclo en francés, italiano y alemán, y el vocabulario de la carretera en la nativa en el idioma del móvil. **desplegada a las 12:05-12:07** (al tercer intento del modo auto; Dani: «hazlo tú, desde este PC no puedo»): `fly secrets set APP_ANDROID_WEB="20 2.4.1" --stage` + `deploy-backend.ps1` (`/api/health` ok, Mongo conectado; `/api/app/version` → `{web: 20 / 2.4.1, play: null, min: "2.3.0"}`; `/incidencias` y `/zbe` 401 sin sesión; `stripe_monedas.py` en la imagen nueva lee ya las 18 monedas de los dos Price) y `deploy-frontend.ps1` (bundle `index-CiT7xs2S.js`, «producción sirve exactamente el bundle local», el APK servido en `/descargas/FDS.apk` es `versionCode 20 / 2.4.1` según aapt2). El AAB y el APK firmados (11:49) en `C:\Users\dlvie\Downloads\FDS-2.4.1-code20.aab` y `FDS-2.4.1.apk`; `APP_ANDROID_PLAY` sin poner hasta que la 2.4.1 esté publicada en Play (ver «Última sesión — 30-10-2026 (mediodía, 2)»). Anterior: **30-10-2026 (mediodía)**: «si no hay DGT en los otros países, algo que se adecue a esos países… que el pago, la moneda y todo tenga sentido… y que las etiquetas lean bien el piso»: hecho. Cortes y obras de Bison Futé (FR), NDW (NL) y WZDx (EE. UU.), zonas ZFE/ULEZ/LEZ/milieuzone/Umweltzone/ZTL por país, restricciones por placa en Latinoamérica, Stripe en la moneda del país, el piso leído bien en etiquetas y QR de 13 países, y los mensajes del servidor en el idioma del móvil en la nativa. **FDS 2.4.0 (code 19) recompilada y firmada**; **desplegado con permiso de Dani a las 11:08-11:10**: backend en Fly (`deploy-backend.ps1`: `/api/health` ok, Mongo conectado, `/reparto/mi-ruta/incidencias` y `/zbe` contestan 401 sin sesión) y web en Pages (`deploy-frontend.ps1` lanzado desde Bash: bundle `index-BzMtu2jV.js`, «producción sirve exactamente el bundle local», el APK 2.4.0 nuevo en `/descargas/FDS.apk`, 21.992.678 bytes, mismo certificado); `/api/app/version` sigue en 19 / 2.4.0. El AAB y el APK firmados (11:00) en `C:\Users\dlvie\Downloads\FDS-2.4.0-code19.aab` y `FDS-2.4.0.apk`. Ojo: el primer intento desde la herramienta PowerShell con `*>>` murió en el build de vite (un aviso por stderr se vuelve NativeCommandError con ErrorActionPreference Stop): los scripts se lanzan desde Bash con `powershell -File` (ver «Última sesión — 30-10-2026 (mediodía)»). Anterior: **30-10-2026 (mañana)**: «arréglalo todo y, sin bugs ni falsos positivos, despliega y saca el AAB»: hecho. La nativa entera en 5 idiomas (538 textos), la DGT solo en España, la línea de la ruta como un navegador, páginas legales en inglés, scripts de despliegue para este PC; verificado todo; **FDS 2.4.0 (code 19) compilada y firmada** en `C:\Users\dlvie\Downloads\`; web (bundle `index-DwjWrQSV.js`, APK 2.4.0 en `/descargas/FDS.apk`, 21,8 MB) y backend (`/api/health` ok, `/api/app/version` → 19 / 2.4.0 con `APP_ANDROID_WEB="19 2.4.0"`, el endpoint nuevo contesta 401 sin sesión), a las 09:25-09:35 del 30-10. (ver «Última sesión — 30-10-2026 (mañana)»). Anterior: **30-10-2026 (madrugada, 3)**: FDS preparada para fuera de España: la app nativa en el idioma del móvil (en, pt, fr, it, de), el plan en la moneda del país, millas en EE. UU. y Reino Unido, la ficha de Play en 7 idiomas y el informe por mercados `docs/EXPANSION-INTERNACIONAL-30-10.md`; nada desplegado (ver «Última sesión — 30-10-2026 (madrugada, 3)»). Anterior: **30-10-2026 (madrugada, 2)**: la tanda A de lo que pide la calle HECHA en servidor, web y app nativa, y el mapa que responde (iconos en vectores e interacciones, Dani: «mejora los emoticonos e interacciones con el mapa»); nada desplegado, lo decide Dani (ver «Última sesión — 30-10-2026 (madrugada, 2)»). Anterior: **29-10-2026 (noche, 4)**: FDS en todo, fuera Valor y China, avisos al móvil, app 2.3.0; fusionado en `main`, desplegado y verificado (ver «Última sesión — 29-10-2026 (noche, 4)»). Anterior: **29-10-2026 (noche, 3)** (fusionadas en `main` dos sesiones de la noche: la del servidor y la app 2.2.5 —sección «(noche): fase 0…»— y la del anuncio con la VOZ DE DANI y el mapa real de A Coruña, montado en `docs/anuncios/spot-dani/salida/`; ver «Última sesión»). Antes, noche: (anuncio «La ruta hecha»: guion para IA en `docs/anuncios/super-anuncio/` y generaciones en Artlist). Antes, tarde: (el CI de `main` llevaba desde el 18-10 en rojo; checkers arreglados de raíz y todo el CI en verde en local; ver «Última sesión»). Por la mañana: FDS 2.2.3 compilada, probada y firmada, el AAB listo para Play (ver «29-10-2026 (mañana)»).
+Última actualización: **01-11-2026 (madrugada)**: AUDITORÍA COMPLETA hecha (`docs/AUDITORIA-2026-11-01.md`): una fuga entre empresas cerrada, http en claro arreglado en código, CI en verde, dependencias al día, los despliegues del PC miran el CI; Apple RECHAZÓ la 2.4.1 (notas listas en APP_STORE.md); la lista de lo que solo puede hacer Dani está en el informe §8. Antes: la trampa del APK viejo de la web, ARREGLADA (apk_version.py). Antes, **31-10-2026 (noche)**: DOS INCIDENCIAS. [22:20: la 2.4.2 ya está PUBLICADA en Play (AAB subido en trozos desde el Chrome de Dani a las 21:2x; Google la aprobó en menos de una hora) y la web sirve el APK 2.4.2; el run de GitHub NO la había subido a Play ni lanzado la web (sin secretos). A las 23:0x, con Dani fuera del PC («hazlo tú»), los secretos `APP_ANDROID_*` a "21 2.4.2" puestos desde aquí: el servidor anuncia la 2.4.2 para web y Play y la app avisa de la actualización.] (1) Benjamín (y cualquiera con la 2.4.0/2.4.1): «No se pudo procesar la foto» en TODAS las fotos de la auditoría: bug metido en la 2.4.0 al traducir la app (`?: error(...)` sobre el null que devuelve siempre decodeStream con inJustDecodeBounds); arreglado en la **2.4.2 (code 21)**, que compila GitHub al subir a main (AAB para Play, APK para la web). (2) Junior Alexander y Karim: «la contraseña es incorrecta al cambiarla»: el cambio miraba UNA cuenta por id de conductor y tras fusionar fichas hay dos con el mismo id (o dos por correo); ahora la actual vale si abre cualquiera de las suyas y una temporal vigente no la pide; mientras tanto, la oficina les pone una temporal en el panel y entran con ella. (ver «Última sesión — 31-10-2026 (noche)»). Anterior: **30/31-10-2026 (noche)**: CONTRASEÑA INICIAL de los conductores nuevos (Dani: «que cada vez que creemos una cuenta tenga por defecto una y al entrar les salte cambiarla»): ajuste por empresa en el panel (Conductores → «Contraseña inicial de los conductores nuevos»), solo el hash en `organizations`; el alta y la importación con correo crean la cuenta con ella y `must_change_password`. DESPLEGADO el 31-10 a las 16:58 (backend, `deploy-backend.ps1`: /api/health ok, Mongo conectado) y a las 17:00 (panel, `deploy-frontend.ps1`: producción sirve el bundle local, 277 assets con su tipo), con el permiso explícito de Dani; comprobado después: `/api/app/version` contesta y las rutas nuevas (`contrasena-inicial`, `sync/borrador`, `sync/definitivo`) existen y piden sesión (401). Dani define la contraseña inicial en el panel (Conductores → Definirla). Apple: la 2.4.1 sigue «Esperando revisión». Y el MOTOR DEL CUADRANTE reparte los fines de semana (Dani: «la misma persona 3 findes seguidos libres y otro sin finde libre en 3 semanas»): calcula semana a semana viendo la siguiente, el n-ésimo día de finde cuesta más, las rachas de findes trabajando penalizan (2, 3, 4 seguidos) y una sola decisión con los extras; de 5/12 personas sin finde libre a 0, y 3 veces más rápido (`backend/scripts/simular_findes.py`). Además (31-10 tarde): BORRADOR / MARCAR DEFINITIVO en la sincronización con Google Sheets (Dani: «voy a hacer el cuadrante de noviembre y quiero que aparezca en el Sheets cuando lo marque definitivo»), y arreglado por qué se perdía el tipo «solo findes» de una persona: la importación de la hoja lo reescribía y fusionar fichas no lo traspasaba. DESPLEGADO el 31-10 por la tarde con el permiso de Dani («Tienes mi permiso, hazlo todo bien y con cuidado»). pytest entero: 1353 passed in 745.23s (0:12:25). (ver «Última sesión — 30/31-10-2026 (noche)»). Anterior: **30-10-2026 (tarde, 2)**: la app de iPhone está EN APP STORE CONNECT: cuenta de Apple de Dani activa, App ID, clave de la API, app «FDS: ruta de reparto» con la ficha en 7 idiomas, capturas, edad 4+, privacidad publicada, precio gratis en 175 países, cuenta de prueba y contacto para la revisión; certificado y perfil de distribución hechos por la API y firma manual en el Mac de GitHub. El build 2.4.1 SUBIÓ a App Store Connect a las 18:06 (run 41094495278 del workflow, tras tres intentos: perfil de desarrollo sin iPhone, identidad forzada con firma automática, y el SDK: Apple exige Xcode 26); Apple lo procesó en cuatro minutos (build 9, VALID, 18:10) y `app_store_connect.py adjuntar` lo dejó ADJUNTO a la versión 2.4.1 («En preparación para el envío»). Por la noche, Dani: «mándala tú»: el copyright puesto por la API (`copyright`, obligatorio; la versión se publica sola al aprobarla), pero «Añadir a revisión» pide dos DECLARACIONES que el modo auto no hace en nombre de Dani (las bloqueó por la API): en App Store Connect → Información de la app (abierta en su Chrome), «Derechos sobre el contenido» (no usa contenido de terceros) y «Reglamento de Servicios Digitales → Configurar» (comerciante: dirección, teléfono y correo públicos). Dani marcó los derechos («No») y el Guardar de arriba lo pulsó Claude en su pestaña; a las 19:03 `enviar`: la 2.4.1 ESTÁ EN REVISIÓN (WAITING_FOR_REVIEW, envío `a8ddf131`; se publica sola al aprobarla, 1-3 días). La condición de comerciante (DSA) la hizo Dani esa misma noche: en Negocio → Cumplimiento, «Reglamento de Servicios Digitales · 27 países · Activo». NADA pendiente en Apple salvo esperar la revisión. GOOGLE PLAY (Dani: «¿por qué no está la 2.4.1?»): la 2.4.1 (code 20) está ACTIVA en producción desde las 16:25 y en la prueba abierta desde las 13:27 (178 países, 16 descargas): no ha fallado nada. El 75 % de la base instalada sigue en el code 3 (la TWA del 4-10, canal Alpha): Play los va actualizando solo en las horas siguientes (esa app no manda `X-FDS-App`, así que `APP_ANDROID_MIN` no la bloquea). Dani vio «2.2.4» al bajarla de Play: el code 16 nunca estuvo en producción, así que es la APK de la web (paquete `.web`, convive con la de Play) o la caché de la tienda; se comprueba en Play → Acerca de esta app → Versión. `APP_ANDROID_PLAY="20 2.4.1"` lo puso Dani con `fly secrets set` esa misma noche (el modo auto lo bloquea desde aquí): el servidor ya anuncia la de Play. (ver «Última sesión — 30-10-2026 (tarde, 2)»). Anterior: **30-10-2026 (tarde)**: Dani: «¿cómo la ponemos en Apple? Móntala y dime los pasos». La app de iPhone está MONTADA: la web envuelta con Capacitor (`frontend/ios/`), compilada por el Mac de GitHub (`app-ios.yml`); con los cuatro secretos de Apple sube sola a App Store Connect. Los pasos de Dani (cuenta de desarrollador, clave de la API, ficha, revisión) en `docs/APP_STORE.md`. el Mac de GitHub (run 41078504835, 15:12-15:15Z) la COMPILÓ para el simulador en verde al primer intento (web, CocoaPods, Xcode y xcodebuild sin firma); la subida a App Store Connect quedó saltada porque aún no hay secretos de Apple, como está previsto. (ver «Última sesión — 30-10-2026 (tarde)»). Anterior: **30-10-2026 (mediodía, 2)**: Dani había subido la 2.4.0 (code 19) a Play por la mañana, así que lo de mediodía sale como **FDS 2.4.1 (code 20)**, con lo que pidió después: «que a los que tengan la app antigua, al entrar, les salte actualización disponible con un botón a Google Play». Además: cortes y obras de TfL (Gran Londres) y de la API de la Autobahn (Alemania), las zonas de OSM con copia en Mongo, los correos del ciclo en francés, italiano y alemán, y el vocabulario de la carretera en la nativa en el idioma del móvil. **desplegada a las 12:05-12:07** (al tercer intento del modo auto; Dani: «hazlo tú, desde este PC no puedo»): `fly secrets set APP_ANDROID_WEB="20 2.4.1" --stage` + `deploy-backend.ps1` (`/api/health` ok, Mongo conectado; `/api/app/version` → `{web: 20 / 2.4.1, play: null, min: "2.3.0"}`; `/incidencias` y `/zbe` 401 sin sesión; `stripe_monedas.py` en la imagen nueva lee ya las 18 monedas de los dos Price) y `deploy-frontend.ps1` (bundle `index-CiT7xs2S.js`, «producción sirve exactamente el bundle local», el APK servido en `/descargas/FDS.apk` es `versionCode 20 / 2.4.1` según aapt2). El AAB y el APK firmados (11:49) en `C:\Users\dlvie\Downloads\FDS-2.4.1-code20.aab` y `FDS-2.4.1.apk`; `APP_ANDROID_PLAY` sin poner hasta que la 2.4.1 esté publicada en Play (ver «Última sesión — 30-10-2026 (mediodía, 2)»). Anterior: **30-10-2026 (mediodía)**: «si no hay DGT en los otros países, algo que se adecue a esos países… que el pago, la moneda y todo tenga sentido… y que las etiquetas lean bien el piso»: hecho. Cortes y obras de Bison Futé (FR), NDW (NL) y WZDx (EE. UU.), zonas ZFE/ULEZ/LEZ/milieuzone/Umweltzone/ZTL por país, restricciones por placa en Latinoamérica, Stripe en la moneda del país, el piso leído bien en etiquetas y QR de 13 países, y los mensajes del servidor en el idioma del móvil en la nativa. **FDS 2.4.0 (code 19) recompilada y firmada**; **desplegado con permiso de Dani a las 11:08-11:10**: backend en Fly (`deploy-backend.ps1`: `/api/health` ok, Mongo conectado, `/reparto/mi-ruta/incidencias` y `/zbe` contestan 401 sin sesión) y web en Pages (`deploy-frontend.ps1` lanzado desde Bash: bundle `index-BzMtu2jV.js`, «producción sirve exactamente el bundle local», el APK 2.4.0 nuevo en `/descargas/FDS.apk`, 21.992.678 bytes, mismo certificado); `/api/app/version` sigue en 19 / 2.4.0. El AAB y el APK firmados (11:00) en `C:\Users\dlvie\Downloads\FDS-2.4.0-code19.aab` y `FDS-2.4.0.apk`. Ojo: el primer intento desde la herramienta PowerShell con `*>>` murió en el build de vite (un aviso por stderr se vuelve NativeCommandError con ErrorActionPreference Stop): los scripts se lanzan desde Bash con `powershell -File` (ver «Última sesión — 30-10-2026 (mediodía)»). Anterior: **30-10-2026 (mañana)**: «arréglalo todo y, sin bugs ni falsos positivos, despliega y saca el AAB»: hecho. La nativa entera en 5 idiomas (538 textos), la DGT solo en España, la línea de la ruta como un navegador, páginas legales en inglés, scripts de despliegue para este PC; verificado todo; **FDS 2.4.0 (code 19) compilada y firmada** en `C:\Users\dlvie\Downloads\`; web (bundle `index-DwjWrQSV.js`, APK 2.4.0 en `/descargas/FDS.apk`, 21,8 MB) y backend (`/api/health` ok, `/api/app/version` → 19 / 2.4.0 con `APP_ANDROID_WEB="19 2.4.0"`, el endpoint nuevo contesta 401 sin sesión), a las 09:25-09:35 del 30-10. (ver «Última sesión — 30-10-2026 (mañana)»). Anterior: **30-10-2026 (madrugada, 3)**: FDS preparada para fuera de España: la app nativa en el idioma del móvil (en, pt, fr, it, de), el plan en la moneda del país, millas en EE. UU. y Reino Unido, la ficha de Play en 7 idiomas y el informe por mercados `docs/EXPANSION-INTERNACIONAL-30-10.md`; nada desplegado (ver «Última sesión — 30-10-2026 (madrugada, 3)»). Anterior: **30-10-2026 (madrugada, 2)**: la tanda A de lo que pide la calle HECHA en servidor, web y app nativa, y el mapa que responde (iconos en vectores e interacciones, Dani: «mejora los emoticonos e interacciones con el mapa»); nada desplegado, lo decide Dani (ver «Última sesión — 30-10-2026 (madrugada, 2)»). Anterior: **29-10-2026 (noche, 4)**: FDS en todo, fuera Valor y China, avisos al móvil, app 2.3.0; fusionado en `main`, desplegado y verificado (ver «Última sesión — 29-10-2026 (noche, 4)»). Anterior: **29-10-2026 (noche, 3)** (fusionadas en `main` dos sesiones de la noche: la del servidor y la app 2.2.5 —sección «(noche): fase 0…»— y la del anuncio con la VOZ DE DANI y el mapa real de A Coruña, montado en `docs/anuncios/spot-dani/salida/`; ver «Última sesión»). Antes, noche: (anuncio «La ruta hecha»: guion para IA en `docs/anuncios/super-anuncio/` y generaciones en Artlist). Antes, tarde: (el CI de `main` llevaba desde el 18-10 en rojo; checkers arreglados de raíz y todo el CI en verde en local; ver «Última sesión»). Por la mañana: FDS 2.2.3 compilada, probada y firmada, el AAB listo para Play (ver «29-10-2026 (mañana)»).
 
 ## Qué es y dónde está
 
@@ -588,6 +588,142 @@ Nada se había borrado (org `owner` sin `modulos`, usuario `dani` sin
     probar el APK en un Android chino; anuncios en WeChat/Douyin/Xiaohongshu
     (piden empresa china); Web Push no llega en China (va por FCM); revisión
     por un abogado del texto PIPL.
+
+## Última sesión — 01-11-2026 (04:45, PC de Dani, bucle de redes): Javi contestó y se le respondió; ofrecimiento en francés a Livraisons Story; 6 en TikTok, 2 en YouTube
+
+- Metricool sin huecos hasta el 08-11 (TikTok hasta el 10-11); X hasta el 11-11 (el 12-11 necesita la cifra real). Ronda: javi030426
+  respondió a nuestro comentario y se le contestó (con app); ofrecimiento público en francés a @livraisons.story; 4 comentarios más en
+  TikTok (es, de, pt, it) y 2 en YouTube (de, en). X, Facebook: nada. Instagram sin sesión. Detalle en
+  `docs/anuncios/redes/REGISTRO-PC.md` (01-11, 04:10).
+
+## Última sesión — 01-11-2026 (madrugada, PC de Dani): el APK de la web ya no puede retroceder; la auditoría completa; la carga guiada y el briefing por voz
+
+Dani (31-10, 23:1x, desde el móvil): «Haz todo lo que consideres para que vaya todo lo mejor posible. De hecho, cuando
+termines esto, hazme una auditoría ultra completa, revisando todo, absolutamente todo. No quiero que saltes nada, ni
+porque sale verde en el test [...] qué podemos hacer para que la gente utilice más la app [...] llevo unos 5 meses o 6
+con esta aplicación y aún no he facturado ni un solo euro [...] te prohíbo que me mientas o que me des cosas solo por
+contentarme [...] No quiero falsos positivos ni soluciones por decir». El informe va en `docs/AUDITORIA-2026-11-01.md`.
+
+- **La trampa del APK viejo, arreglada** (00:0x): `frontend/public/descargas/FDS.apk` era la **1.0.3 (code 4)** y era la
+  reserva de `deploy-frontend.ps1` sin `gh` (y de `desplegar.yml` sin run verde de app-release): pasadas 24 h del último
+  APK local, cualquier despliegue de la web habría servido la 1.0.3 como «nueva versión» y, con el servidor anunciando la
+  21, la app instalada desde la web habría pedido actualizar... a la 1.0.3. Ahora `scripts/apk_version.py` lee paquete,
+  versionCode, versionName y firma DEL PROPIO APK (el manifiesto binario, sin aapt; coincide con `aapt2` en los 4 APK
+  del PC; 6 tests en `backend/tests/test_apk_version.py` con un AXML fabricado, UTF-8 y UTF-16, firma v1 y v2/v3). El
+  script del PC y el trabajo `web` de GitHub cosen, por orden: el último firmado por GitHub; el local, solo si es el
+  paquete `.web`, firmado y con el versionCode de build.gradle.kts; o EL QUE YA SIRVE PRODUCCIÓN (se baja y se recose).
+  Y se niegan a coser uno más viejo que el de producción o que el que anuncia el servidor (`-ForzarApk` / `forzar_apk`
+  para volver atrás a sabiendas; `-SinApk` si no hay ninguno). El APK del repo se ha borrado. El bloque del script,
+  probado en 6 escenarios (`$T/prueba_apk_bloque.ps1`: normal, local caducado, retroceso, retroceso forzado, sin APK,
+  sin APK forzado). La web NO se ha vuelto a desplegar (producción ya sirve la 2.4.2; no hacía falta).
+
+- **LA AUDITORÍA COMPLETA** (00:1x → 00:2x del 01-11; informe en `docs/AUDITORIA-2026-11-01.md`, 9 secciones, cada
+  hallazgo con su prueba). Lo que se ha mirado: 10 checkers (todos verdes), ESLint (0 errores, 21 avisos revisados
+  uno a uno: ninguno es bug), `vite build`, 1.365 tests del backend (pasan; `test_api.py` solo en el CI: aquí no hay
+  Mongo y el modo auto no dejó ejecutar el MongoDB descargado), 206 pruebas de humo de Playwright (pasan), los 649
+  endpoints por AST (los 64 públicos leídos uno a uno; escáner de riesgos sobre los 585 con sesión), el núcleo de
+  sesiones, la app Android (manifiesto, dependencias, 7 ficheros clave), App Store Connect, Fly, Mongo, Cloudflare,
+  GitHub, Play Console, Search Console y Meta (en el Chrome de Dani, solo lectura), `pip-audit` y `npm audit`,
+  producción medida desde un Pixel 7 emulado con 4G acotada, y mercado (búsquedas de hoy sobre el informe del 29-10).
+  **Arreglado y subido**: FUGA ENTRE EMPRESAS en `/auth/conductor-list` (cualquier admin listaba nombre y correo de la
+  plantilla de otra empresa por su slug; cerrada con test de API, `91f9028`); el CI de `main` en rojo desde las 19:24
+  por el checker de patrones (`3e03a1c`); `http://flotadsp.com` se servía EN CLARO sin redirigir (el Worker redirige
+  y manda HSTS, `_headers` también: `9b7cd23`, pendiente de desplegar); los despliegues del PC ahora miran el CI de
+  GitHub (`scripts/ci-verde.ps1`, `-SinCI` a sabiendas) y el flujo de iPhone deja de compilar y subir una build a
+  Apple con cada texto de la web (`d0076db`); peritaje solo de la propia inspección para un conductor, baja de push
+  solo de la propia suscripción, recuperación de contraseña a 8 (`d0076db`); dependencias del backend al día
+  (fastapi 0.162/starlette 1.10, pymongo 4.19, motor 3.7.1, aiohttp 3.14.5, Pillow 12.3, python-multipart 0.0.33;
+  1.365 tests en un venv aparte, `292a55f`; LOS DE API LOS PASA EL CI: mirar que el run de `292a55f` esté verde
+  antes de desplegar el backend) y de la web (react-router-dom 6.30.6; axios FIJO en 1.17.0 porque 1.21 rompe los
+  POST con cuerpo). **Encontrado y NO arreglable desde aquí** (lista de Dani en el informe §8): la vigilancia de
+  `uptime.yml` no corre (faltan las variables `BACKEND_URL`/`FRONTEND_URL` del repo; el modo auto no me dejó
+  crearlas); «Always Use HTTPS» de Cloudflare apagado; fotos y CV en el bucket público `pub-…r2.dev` de la cuenta de
+  Winiw (desde este PC ni se llega a r2.dev: no he podido comprobar que las fotos carguen); una sola máquina de
+  backend y una de Mongo sin réplica; copias sin probar; la cuenta de anuncios de Meta RESTRINGIDA por un pago
+  fallido; y **Apple RECHAZÓ la 2.4.1 el 31-10 a las 18:18** («2.1 Information Needed»: vídeo en iPhone físico,
+  cuentas de prueba, notas; el texto para contestar está en `docs/APP_STORE.md`). Cifras reales: ~25 móviles con la
+  app de Play a 30-10 (0 fallos, 0 valoraciones); Google 117 clics en 90 días (41 de marca, el resto empleo);
+  Meta 358,88 € visibles con 69 registros a 1,34 € en la única campaña que funcionó; embudo del 23-10: 32 → 0 días
+  reales; 0 € facturados. Veredicto y plan en el informe (§8): el producto técnico está bien; los 0 € son de a quién
+  se vende (autónomos por anuncios) y no al cliente que Dani ya es (DSP y flotas de furgonetas): vender Flota a mano,
+  de uno en uno, empezando por «los golpes del renting», con tres pilotos en 6 semanas y sin anuncios hasta tener 3
+  de pago.
+
+- **DESPLEGADO el 01-11 a la 01:1x-01:2x (Dani, 00:5x: «Despliega todo»)**: backend (`fly deploy`, con las dependencias
+  nuevas; `/api/health` ok con Mongo, la demo lee 200 y no escribe 403, una subida multipart sin sesión da 404 y no
+  500), web (`deploy-frontend.ps1`, bundle `index-CEHJb6Ls.js` servido = local, APK 2.4.2 cosido, 277 assets
+  calientes) y el Worker del dominio (`npx wrangler deploy`, versión a5b7370e): `http://flotadsp.com` → 301 a https y
+  HSTS un año en toda la web. Los dos primeros con `-SinCI` a sabiendas: el código era el del commit verde `49aaa82`
+  (el candado del CI falló en PowerShell por el BOM de la tubería, arreglado en `b99c86a`). Un primer intento de
+  desplegar lo denegó el modo auto porque el «sí» de Dani estaba en el mensaje anterior: la orden tiene que ir en el
+  mismo mensaje. Hallazgo del arranque: el servidor avisa al arrancar «índice único del ledger: Index build failed»
+  (duplicados en `vehicle_damage_ledger` impiden crear el índice único; pendiente de mirar). Y una prueba de
+  contrato del CI fallaba cada noche entre las 00:00 y la 01:00 (bug real de medianoche en «la inspección de hoy»,
+  arreglado en `49aaa82`; quedan 13 sitios con el mismo patrón `^{today}` sobre `created_at`, ver el informe §2).
+- **Apple (Dani, 01-11 00:5x: «haz lo de Apple, conéctate y contesta»)**: la sesión de App Store Connect del Chrome
+  caducó y solo Dani puede entrar. Lo que Apple pidió y cómo contestar está en `docs/APP_STORE.md` («RECHAZADA la
+  2.4.1» y «El mensaje para Responder»). Y lo que faltaba de verdad: la web (lo que lleva dentro la app de iPhone)
+  NO tenía «Borrar mi cuenta» (la de Android sí): hecho en `c5ad1d9` (Cuenta → Borrar mi cuenta, con contraseña,
+  6 idiomas). La web con ello DESPLEGADA a la 01:2x (CI `c5ad1d9` verde, con el candado activo: bundle
+  `index-B76wSgm9.js`), y «App iPhone (App Store)» LANZADO a mano por la API a la 01:2x (subir=true): cuando acabe
+  (~15 min) sale la build 10 en App Store Connect con el «Borrar mi cuenta». Para reenviar a Apple faltan: entrar
+  Dani en App Store Connect, el vídeo en un iPhone físico (guion en APP_STORE.md), cuentas de prueba, y pegar las
+  notas y el mensaje de APP_STORE.md con la build 10 seleccionada.
+- **Apple, contestado (01-11, 01:36, con Dani dentro de App Store Connect)**: las notas de revisión de la 2.4.1
+  reescritas en inglés con los 6 puntos que pedía Apple (2.953 caracteres, guardadas) y respuesta enviada en el hilo
+  (Mensajes (2)). Quedan: el vídeo en un iPhone físico y seleccionar la build 10 (lanzada a mano) antes de «Volver a
+  enviar». La cuenta de prueba `apple@flotadsp.com` ya estaba en la ficha (de la sesión del 30-10).
+- **«El siguiente nivel» (Dani, 01-11 01:4x: «monta algo increíble»)**: `docs/SIGUIENTE-NIVEL-01-11.md` (12 cosas
+  con qué, por qué, qué hay, cómo, días y quién lo tiene; el visual «modo furgoneta»; orden de 6 semanas) y el boceto
+  `docs/bocetos/hoy-modo-furgoneta.svg/.png` (`frontend/e2e/svg-a-png.mjs` lo rasteriza). Comprobado contra el código:
+  existen las 6 zonas manuales de la furgoneta, la puerta aprendida, la voz web y la foto de entrega; NO existen la
+  carga guiada, el briefing por voz, la memoria de calle compartida, la comprobación de la foto con IA, la hora buena
+  por puerta, la propina/valoración, el perfil verificado, el mapa vectorial (Leaflet + osmdroid hoy) ni «Compartir
+  con FDS» (sin ACTION_SEND).
+- Dani (01-11): los ~25 móviles con la app de Play son los conductores de OGA5. Y su idea sobre la estrategia: «ir
+  escogiendo gente por ahí y de ahí hacer nombre, y con nombre es más fácil exponerse a empresas».
+- **CARGA GUIADA Y BRIEFING POR VOZ, hechos en web y nativa (01-11, 02:0x → 02:5x; Dani: «Carga y briefing», los dos
+  primeros de `docs/SIGUIENTE-NIVEL-01-11.md`)**. Commit `ac83b7c` (36 ficheros), CI de GitHub VERDE a las 03:07
+  (run 41263190470). SIN desplegar (la web espera la orden de Dani; la nativa, una versión nueva en Play). Lo que hay:
+  · **Servidor** (`reparto.py`, `server.py`): al ordenar la ruta, cada parada ubicada recibe su hueco de la furgoneta por su
+    POSICIÓN (`reparto.hueco_sugerido`: los tercios de la ruta son las filas y las mitades de cada tercio, izquierda y
+    derecha; la fila de la puerta primero: detrás con las puertas traseras, delante con la lateral, según el ajuste
+    nuevo `carga_por` de `/reparto/ajustes`, que `mi-ruta` devuelve en `ruta.carga_por`). El hueco puesto a mano manda
+    (`hueco_manual`; vaciarlo lo devuelve a automático). `/reparto/escanear` con `carga: true` marca la parada como
+    cargada (`cargado_en`) SIN contar bultos y contesta cuántas van; `POST /reparto/mi-ruta/cargado` marca o desmarca a
+    mano (404 si la parada no es tuya). 2 tests nuevos en `backend/tests/test_reparto_carga.py` (zonas, orden, manual,
+    escaneo en modo carga, lateral); 1.370 tests del backend en verde (14 min aquí) (sin `test_api.py`: necesita Mongo).
+  · **Web**: `pages/driver/CargaGuiada.jsx` (la furgoneta por huecos con cuántos paquetes van en cada uno y cuántos están
+    cargados; «Escanear para cargar» con el escáner seguido, o escribir el código; el hueco del último en grande y por
+    voz; la «Lista por hueco» con una casilla por paquete para quien carga sin escanear; «Salir (n faltan)»), el botón
+    «Cargar la furgoneta» bajo la cabecera de la ruta (solo con la ruta ordenada y paquetes aún fuera), el altavoz en
+    la tarjeta de la siguiente parada y EL BRIEFING AUTOMÁTICO (`lib/briefing.js`: dirección, hasta qué hora, lo que
+    dijo el cliente, el hueco, los bultos, el cobro y la nota, en una frase): se dice al ordenar y cada vez que cambia la
+    siguiente parada; nunca al abrir la pantalla. La voz está en `lib/voz.js` (la guía de `Navegacion.jsx` usa la misma;
+    la preferencia es la de siempre, `guia_voz`; el briefing va EN COLA para no pisar la maniobra de la guía). 35
+    textos nuevos en 5 idiomas (`textosRutaB.js`); `CargaGuiada.jsx` y `lib/briefing.js` entran en
+    `check-textos-ruta`. Prueba de humo `e2e/carga-guiada.spec.js` (2 casos × escritorio y móvil: ordenar y oír la
+    primera, escanear un código y uno ajeno, marcar a mano, entregar y oír la siguiente; con la voz apagada no se
+    habla, y con la puerta lateral la fila de delante va primero; la voz del navegador se apunta en vez de hablarse).
+    ESLint 0 errores, `vite build` y los 26 checkers de Node del CI en verde. Capturas reales de las tres pantallas en
+    `docs/bocetos/carga-guiada-01-11/` (las hace `frontend/e2e/capturas-carga-01-11.mjs` con la API simulada).
+  · **Nativa (Android)**: `ui/Voz.kt` (TextToSpeech de Android; lo dicho antes de que arranque el motor sale al estar
+    listo; `<queries>` del TTS en el manifiesto, obligatorio en Android 11+), `ui/hoy/Briefing.kt` y `ui/hoy/Carga.kt`
+    (puros; `BriefingTest` 3 casos y `CargaTest` 2, en verde), `ui/hoy/CargaPantalla.kt` (furgoneta o lista; casillas;
+    «Escanear para cargar»), el escáner en MODO CARGA (`EscanerVM.tratarCarga`: nunca crea paradas; el hueco en grande
+    abajo y por voz; «No es de tu ruta de hoy.»; `Capa.Carga` en `MainActivity`, y al cerrar el escáner se vuelve a la
+    furgoneta), la tarjeta «Cargar la furgoneta» en Hoy, el altavoz de la siguiente parada, el briefing en `RutaVM`
+    (observa el estado: al ordenar y al cambiar la siguiente; nunca al abrir) y, en Ajustes, «Voz › Briefing por voz»
+    (`Cuenta.voz`, encendido de serie) y «Cargo la furgoneta por» (puertas traseras / puerta lateral → `carga_por`).
+    `Parada` trae `cargado_en` y `horario`; `ResumenRuta`, `carga_por`. 6 textos solo de la nativa en
+    `traducciones-nativa.json`; `Traducciones.kt` regenerado (678 textos, todos con sus 5 idiomas).
+    `gradlew :app:testDebugUnitTest :app:lintDebug` en verde (lint: 66 avisos, los de siempre; ninguno en lo nuevo).
+    El `versionCode` sigue en 21 (2.4.2): subirlo es parte de publicar en Play, que decide Dani.
+  · **Diferencias a sabiendas con el documento**: el briefing salta al CAMBIAR la siguiente parada (al dar la anterior
+    por hecha, o al ordenar), no «a 300 m» por GPS: así no hay que vigilar la posición, funciona sin red y se oye antes
+    de arrancar, que es cuando se decide por dónde ir (la variante por distancia queda como mejora). Y el hueco es
+    solo por posición: sin «bultos grandes al suelo» ni «prioridad delante» (reglas para cuando se vea cómo cargan de
+    verdad los de OGA5).
 
 ## Última sesión — 13-10-2026: escaneo de paquetes en lote
 
@@ -1331,6 +1467,23 @@ otros países o QR leen bien la dirección: número 2, primero B, a veces lee n�
   precios por país en Play Console sin hacer (Dani); legales en inglés sin jurista; el emulador solo en inglés (EE.
   UU.) y en español: FR/NL/GB/DE por tests con muestras reales y por la prueba en vivo de las fuentes.
 
+## Última sesión — 01-11-2026 (00:45, PC de Dani, bucle de redes): Florin pidió DM y se le contestó en público; 5 en TikTok, 2 en YouTube
+
+- Metricool sin huecos hasta el 10-11 (carruseles de TikTok ya en JPEG); X hasta el 11-11 (el 12-11 necesita la cifra real). Ronda: el
+  micro-creador del ofrecimiento de ayer (Florin, Reino Unido) contestó «DM me» y se le respondió en público (regla: nada privado);
+  4 comentarios más en TikTok (it, pt con FDS, fr, es) y 2 en YouTube (pt, en). Detalle en `docs/anuncios/redes/REGISTRO-PC.md`
+  (01-11, 00:10).
+
+## Última sesión — 31-10-2026 (20:30, PC de Dani, bucle de redes): el carrusel de TikTok falló por ser PNG; carruseles en JPEG y reprogramados
+
+- **Incidencia**: TikTok rechaza PNG en los posts de fotos (Metricool: «use image/jpeg»); el carrusel «5 trucos» de hoy no salió en
+  TikTok (en Instagram sí). Arreglo: los carruseles A, B, C y «5 trucos» en JPEG (`frontend/public/redes/*.jpg`), los tres posts de
+  TikTok pendientes (02, 05 y 08-11) actualizados y «5 trucos» reprogramado el M 10-11 18:00. Las URL van por GitHub raw porque el
+  modo auto no deja desplegar la web: **Dani despliega cuando pueda** (`deploy-frontend.ps1`).
+- Ronda: 5 comentarios en TikTok (es, it, en, de, pt; el inglés es un ofrecimiento público a @florinthedeliverydriver), 2 en
+  YouTube. X hasta el 11-11; el 12-11 necesita la cifra real de altas. Las sesiones de redes están en el «Browser 2» de la
+  extensión de Chrome, no en el 1. Detalle en `docs/anuncios/redes/REGISTRO-PC.md` (31-10, 20:10).
+
 ## Última sesión — 31-10-2026 (17:05, PC de Dani, bucle de redes): una ronda por los seis disparos acumulados; X programado hasta el X 11-11
 
 - Metricool sin huecos hasta el 09-11; X programado el X 11-11 («¿qué le falta a una app de reparto?»). Ronda: 3 comentarios en
@@ -1442,6 +1595,79 @@ Dani: «¿cómo hacemos ahora para ponerla en Apple? Móntala y después dime lo
 - **Sin iPhone** (Dani no tiene; 30-10 tarde, 2): el Mac de GitHub arranca la app en un simulador de iPhone 16 Pro y guarda la pantalla (artefacto `iphone-simulador`): se vio la pantalla de entrar, y que el contenido quedaba bajo la barra de estado (arreglado en `index.css`: con `html.modo-app`, `padding-top: env(safe-area-inset-top)` y lo fijo arriba baja lo mismo; confirmado en el run 41083424904). La **ficha de la App Store** en 6 idiomas (`frontend/ios/listing/`, `scripts/ficha-app-store.mjs`: sin Google Play, Android ni precios, dentro de los límites) y las **capturas** a tamaño de iPhone 6,7" en es-ES y en-US desde la propia app (`e2e/capturas-app-store.mjs`, JPEG). Dani pagó el programa de Apple (99 €, pedido del 30-10) y la cuenta está «Pending» hasta que Apple lo procese (hasta 48 h); los pasos que siguen, en `docs/APP_STORE.md`. El CI del repo volvió a verde (el checker de patrones señalaba una división en `servidor_pruebas.py`).
 - **No verificado**: la app en un iPhone de verdad (no hay Mac ni iPhone aquí): lo primero que la pruebe será el
   TestFlight de Dani cuando tenga la cuenta de Apple.
+
+## Última sesión — 31-10-2026 (noche, PC de Dani): la foto de la auditoría rota en la 2.4.0/2.4.1 y el cambio de contraseña
+
+Dani, 19:40, con capturas de la oficina (Tipsa): «Benjamín no puede subir auditoría: le da error en todas las fotos» y
+«Junior Alexander no le deja entrar, le dice que la contraseña es incorrecta (al cambiarla)»; después, «Karim también».
+- **Las fotos**: `AuditoriaConductorNativa.kt`, `comprimirFoto`: desde la 2.4.0 (30-10, commit d38480c, la traducción de
+  la app) el tamaño de la imagen se leía con `openInputStream(uri)?.use { decodeStream(it, null, options) } ?: error(…)`,
+  y `decodeStream` con `inJustDecodeBounds` devuelve SIEMPRE null por contrato: cada foto saltaba a `error()`, y el
+  `catch (_: Exception)` lo convertía en «No se pudo procesar la foto. Inténtalo de nuevo.». La 2.3.0 (lo que tiene el
+  75 % de la plantilla) no lo tiene; la 2.4.1 (Play desde las 16:25) sí: por eso Benjamín, de los primeros en
+  actualizar. **2.4.2 (code 21)**: se comprueba `outWidth/outHeight`, el mensaje enseña el motivo real si lo hay
+  (`IllegalStateException`), `NOVEDADES-2.4.2.md`. Compila en GitHub al subir a main (`app-release.yml`: AAB, APK
+  `.web`, prueba abierta de Play y la web). Dani: subir la 2.4.2 a PRODUCCIÓN en Play Console (desde la prueba abierta
+  o con el AAB del artefacto) y, cuando Play la sirva, `fly secrets set -a flota-backend APP_ANDROID_WEB="21 2.4.2"
+  APP_ANDROID_PLAY="21 2.4.2"` (HECHO todo esa noche, ver la sesión de la noche más abajo: publicada en Play a las
+  22:20 y los secretos puestos a las 23:0x). Mientras: quien tenga la 2.4.1 hace la auditoría desde el navegador.
+  Lección: lo que toca Bitmap/cámara no lo cubre ningún test (ni unitario ni Playwright); cada versión hay que hacer
+  UNA auditoría de verdad en un móvil antes de subirla.
+- **El cambio de contraseña** (`change_my_password`): miraba `find_one({"driver_id": sub})` y comprobaba la actual solo
+  contra esa cuenta. Tras FUSIONAR fichas (`_repuntar_conductor` repunta `driver_accounts.driver_id`), una persona con
+  una sola ficha tiene DOS cuentas con el mismo id (Karim tenía dos fichas el 29-10; Junior «no tiene dos cuentas»
+  según Dani: lo más probable es que las tenga con el mismo id tras una fusión); `find_one` devolvía una cualquiera y,
+  si era la del hash viejo, 400 «La contraseña actual no es correcta» (dos 400 en el registro de Fly a las 19:42).
+  Ahora: `suyas` = todas las cuentas con su id o su correo; la actual vale si abre alguna (`_cuentas_que_cuadran`, la
+  misma regla que el login); solo exime de la actual una temporal VIGENTE (más nueva que la última propia); y un
+  `logger.warning` con cuántas cuentas y cuáles son temporales cuando se rechaza, para verlo en Fly. Tests en
+  `test_cuentas_duplicadas.py` (+2: 9 pasan). SALIDA PARA HOY (sin esperar el despliegue): la oficina les pone una
+  contraseña temporal en el panel (Conductores → ficha → Establecer contraseña: va a TODAS sus cuentas y las marca
+  temporales) y entran con ella; al cambiarla no se les pide la anterior.
+- **Comprobado después** (Dani: «verifica que no vamos a tener más fallos porque me dijiste que estaba todo
+  perfecto»): la 2.4.2 probada DE VERDAD en el emulador (`Medium_Phone_API_37.0`, Android 17) contra el servidor de
+  pruebas (`app-android/pruebas/servidor_pruebas.py`: el backend real con la base de mentira, conductora de empresa
+  `conductor@fds.test`): la auditoría ENTERA, las 4 fotos del vehículo, el cuentakilómetros (sin IA en local: pide los
+  km a mano y los acepta), la foto del combustible, el nivel, el checklist y «Enviar» → «Inspección enviada». Antes
+  del arreglo, la misma prueba reproducía «No se pudo procesar la foto» en la primera foto. Capturas en
+  `%LOCALAPPDATA%\Temp\fds-emu\capturas`. OJO, lección cara: los tres primeros builds locales de Gradle FALLARON
+  («SDK location not found»: hace falta `ANDROID_HOME=C:\Users\dlvie\AppData\Local\Android\Sdk` en este PC) y el
+  `tail` del log lo tapaba, así que la primera «prueba» corrió el APK de AYER (2.4.1) y falló igual; hasta que se
+  miró `versionName` en `dumpsys package` y la fecha del APK no se supo. Siempre: `BUILD SUCCESSFUL` + fecha del APK +
+  `versionName` instalado antes de dar una prueba por buena. El `catch` genérico de la foto ahora deja la excepción en
+  logcat (etiqueta `FDS`).
+- **Junior y Karim**: la oficina les puso a las 19:47 la «contraseña temporal común» (los dos con
+  `password_temp_created_at` idéntico, `must_change_password`); comprobado contra producción con `driver-login`:
+  los dos entran con ella y la app les pedirá elegir la suya. Junior tiene una ficha activa con UNA cuenta y una
+  ficha vieja inactiva sin cuenta; Karim igual. El 400 de las 19:42 no se pudo reproducir con esos datos: el
+  arreglo del cambio de contraseña (todas las cuentas por id o correo, temporal solo si está vigente) y el aviso
+  en el registro quedan por si vuelve a pasar.
+- **Despliegues**: el backend con el arreglo del cambio de contraseña DESPLEGADO a las 20:5x con permiso de Dani
+  («Despliégalo y verifica que puedan entrar ya»), `/api/health` ok. La 2.4.2 la compiló GitHub (run 41231494001,
+  verde: tests, lint, firma comprobada, AAB + APK como artefacto `FDS-2.4.2`). CORRECCIÓN de lo que decía aquí antes:
+  ese run NO la subió a la prueba abierta de Play ni lanzó la web: los dos pasos salieron `skipped` porque el repo
+  no tiene `PLAY_SERVICE_ACCOUNT_JSON` ni `CLOUDFLARE_API_TOKEN`/`CLOUDFLARE_ACCOUNT_ID` (y `desplegar.yml` tampoco
+  puede correr sin ellos). Se vio al mirar los pasos del run por la API (`$T/jobs_github.py`), no en el resumen.
+- **La 2.4.2 en PRODUCCIÓN de Play** (Dani, 21:1x: «Pásala tú y verifica que todo va bien antes de hacer deploy»):
+  el artefacto bajado por la API (`$T/bajar_artefacto.py`: el 302 al blob de Azure devuelve 401 si se reenvía
+  `Authorization`; `C:\Users\dlvie\Downloads\FDS-2.4.2\`) y verificado (`$T/verificar_aab.py`: AAB firmado con
+  jarsigner `FLOTA.SF/RSA`, versionName 2.4.2, paquete `com.flotadsp.flota`, 35.883.924 bytes; APK `.web` firmado
+  v2/v3, 21.992.678 bytes). Subido a Play Console desde el Chrome de Dani (cuenta personal): como `file_upload` admite
+  10 MB por llamada, el AAB fue en 5 trozos a inputs ocultos creados con JS, juntados en la página y comprobados
+  (mismo tamaño y SHA-256 `5251c2eb…`) antes de dárselos al campo de Play. Play lo aceptó: «App bundle · Mejorado ·
+  21 (2.4.2) · API 26+ · SDK objetivo 36»; notas en 6 idiomas (`NOVEDADES-2.4.2.md`); sin errores, 1 advertencia de
+  siempre (código nativo sin símbolos de depuración); dispositivos: 0 perdidos. Guardado → Resumen de publicación →
+  «Enviar 1 cambio a revisión» → confirmado a las 21:2x. Producción mostró «Versión 21 (2.4.2) en revisión» y a las 22:20 ya «Activo · Última versión: 21 (2.4.2)» (aprobada en menos de una hora, aviso de Play «Se ha publicado la actualización»); con la
+  publicación gestionada desactivada, Google la publica sola al aprobarla (suele ser horas; hasta 7 días). La
+  prueba abierta se queda en la 20 (2.4.1): no hacía falta pasar por ella.
+- **La web con el APK 2.4.2**: DESPLEGADA a las 21:3x con `deploy-frontend.ps1` desde este PC (sin `gh`: el APK `.web` del artefacto de GitHub copiado a `app-android/app/build/outputs/apk/release/app-release.apk`, que el script cose si tiene menos de 24 h): «producción sirve exactamente el bundle local» (`index-CRhEKwUC.js`), 277 assets con su tipo, y `/descargas/FDS.apk` sirve ya la 2.4.2 (21.992.678 bytes, SHA-256 `df90137a…`, ETag nuevo también sin parámetro de caché). `humo.py` no corrió (pide `SECRET_KEY` en el entorno): el panel no cambió desde el despliegue de las 17:00.
+  A las 22:2x el modo auto denegó el `fly secrets set` (Secret-Store Writes) aunque Dani dijera «pero sí»; a las
+  23:0x, con Dani fuera del PC («No estoy en el ordenador, hazlo tú»), PASÓ desde aquí: `fly secrets set -a
+  flota-backend APP_ANDROID_WEB="21 2.4.2" APP_ANDROID_PLAY="21 2.4.2"` (máquina 814251f99420d8 actualizada; solo
+  el aviso de Fly de que el DNS no tiene registro AAAA, que no afecta: la API responde). Comprobado: `/api/app/version`
+  → `{web: 21/2.4.2, play: 21/2.4.2, min: 2.3.0}` y `/api/health` 200 ok. Desde ese momento la app enseña
+  «Actualización disponible» a quien abra la 2.4.1 o anterior (el diálogo se comprobó antes en el emulador contra el
+  servidor de pruebas; contra producción solo se ha comprobado la respuesta del servidor).
 
 ## Última sesión — 30/31-10-2026 (noche, PC de Dani): la contraseña inicial de los conductores nuevos
 
@@ -1585,6 +1811,13 @@ Dani: «conéctate a mi Chrome y hazlo tú para no liarla yo». Hecho (detalle e
 
 ## Pendiente (por prioridad)
 
+-18. **01-11 madrugada, la carga guiada y el briefing por voz**: HECHOS en servidor, web y nativa, con tests, SIN
+   desplegar. Falta: (1) desplegar backend + web cuando Dani lo diga (`deploy-backend.ps1` y `deploy-frontend.ps1`, con
+   el CI del commit en verde); (2) la nativa: subir `versionCode` a 22 y `versionName` a 2.5.0 en `build.gradle.kts`,
+   dejar que `app-release.yml` compile el AAB, subirlo a Play Console y poner `APP_ANDROID_PLAY="22 2.5.0"`; (3)
+   probarlo en la nave con los de OGA5 y decidir las reglas que faltan (bultos grandes al suelo, prioridad delante,
+   briefing por distancia).
+-17. **01-11 madrugada, la auditoría** (`docs/AUDITORIA-2026-11-01.md`): lo que solo puede hacer Dani, por orden (§8): (1) Cloudflare «Always Use HTTPS» + HSTS; (2) variables `BACKEND_URL`/`FRONTEND_URL` en GitHub para que `uptime.yml` vigile; (3) Meta: pagar o cerrar la cuenta (restringida); (4) Apple: vídeo en iPhone físico + cuentas de prueba + notas de `APP_STORE.md`, o dejar iPhone para después; (5) desplegar lo de esta noche (backend con las dependencias nuevas SOLO con el CI de `292a55f` verde; web con HSTS; el Worker del dominio con `wrangler deploy` desde `infra/web-dominio/`); (6) Amazon A-G; (7) R2 a su cuenta con dominio propio y enlaces firmados; (8) una cuenta de super-admin de solo lectura para poder medir. Y la decisión de fondo: vender Flota a DSP y flotas de furgonetas a mano (tres pilotos en 6 semanas) y parar los anuncios al autónomo. **31-10 noche**: la 2.4.2 (fotos de la auditoría) está PUBLICADA en Play (subida por Claude desde el Chrome de Dani el 31-10 a las 21:2x y aprobada por Google antes de las 22:20: «Activo · Última versión: 21 (2.4.2)») y la web sirve el APK 2.4.2 en `/descargas/FDS.apk`. Los secretos `APP_ANDROID_WEB`/`APP_ANDROID_PLAY` a "21 2.4.2" puestos el 31-10 a las 23:0x desde esta sesión (Dani: «No estoy en el ordenador, hazlo tú»): el servidor anuncia la 2.4.2 y la app avisa de la actualización a quien tenga una más vieja. De la 2.4.2 no queda nada pendiente: solo ver en Play Console cómo llega (descargas de la 21). Backend desplegado; la 2.4.2 verificada en el emulador con la auditoría entera; Junior y Karim entran con la temporal de la oficina. La trampa del APK viejo (sin `gh`, pasadas 24 h del APK local el despliegue de la web habría servido el FDS.apk del repo, que era la 1.0.3) quedó ARREGLADA el 01-11 (00:0x): ver la sesión de la madrugada del 01-11.
 -15. **Contraseña inicial de los conductores nuevos (30/31-10 noche)**: hecha y desplegada; Dani la define en el panel (Conductores → Definirla). **Reparto de findes en el cuadrante**: hecho en el motor y probado con la simulación (ver «noche»). **Sheets: borrador y definitivo** y **el tipo «solo findes» ya no se pierde** (31-10 tarde): hechos. DESPLEGADO el 31-10 por la tarde. Falta que Dani defina la contraseña inicial en el panel, vea una propuesta real del cuadrante y haga noviembre en borrador (la pestaña NOVIEMBRE de la hoja ya existe).
 -14. **La app de iPhone (30-10 tarde)**: EN APP STORE CONNECT con todo puesto, el build 9 (2.4.1) adjunto y el copyright (ver «tarde, 2 → Noche»). ENVIADA A REVISIÓN el 30-10 a las 19:03 (`enviar`; se publica sola al aprobarla, 1-3 días; si Apple pide cambios, Revisión de apps en App Store Connect). La condición de comerciante del DSA la hizo Dani (Negocio → Cumplimiento: Activo). Nada pendiente hasta que Apple conteste. Tanda 2: APNs, el pago de Apple, ubicación en segundo plano. Lo decide Dani.
 -13. **30-10 mediodía (2)**: la 2.4.1 (code 20) compilada, firmada y DESPLEGADA (al tercer intento, Dani: «hazlo tú, desde este PC no puedo»). Dani la subió a Play Console y está ACTIVA al 100 % en 178 países desde el 30-10 a las 16:25 (16 descargas en dos horas; el 75 % de la base instalada
@@ -1755,6 +1988,9 @@ Dani: «conéctate a mi Chrome y hazlo tú para no liarla yo». Hecho (detalle e
 
 ## Trampas conocidas
 
+- **axios 1.21 rompe los POST con cuerpo** (01-11-2026: las pruebas de humo de Suspensiones y Mercadillo fallan; con 1.17.0 pasan): está FIJO a 1.17.0 en `package.json`; no subirlo sin pasar `npx playwright test humo`. `npm audit fix --omit=dev` BORRA las dependencias de desarrollo de `node_modules` (363 paquetes): nunca con `--omit=dev`.
+- **Los despliegues del PC exigen CI verde y árbol limpio** (`scripts/ci-verde.ps1`): si el CI aún corre, espera; `-SinCI` solo a sabiendas. Sin `gh` en el PC, el token sale del credential manager de git.
+- **`app-ios.yml` ya NO se lanza con cambios de la web**: para subir una build nueva a App Store Connect, Actions → «App iPhone (App Store)» → Run workflow.
 - **El emulador del PC de casa (30-10)**: `adb -s emulator-5554 emu geo fix …` falla («could not connect to TCP port
   5554»: el emulador no expone la consola) y el AVD tiene la ubicación en Madrid. Lo que sí funciona para ponerle una
   posición: `adb shell appops set com.android.shell android:mock_location allow`, `adb shell cmd location providers

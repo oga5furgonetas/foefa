@@ -93,13 +93,15 @@ import java.util.concurrent.Executors
 
 @Composable
 fun EscanerPantalla(
-    pais: String, vuelta: VueltaDeRevisar?, alCerrar: (cambios: Boolean) -> Unit, alRevisar: (Lectura) -> Unit, vm: EscanerVM = viewModel(),
+    pais: String, vuelta: VueltaDeRevisar?, alCerrar: (cambios: Boolean) -> Unit, alRevisar: (Lectura) -> Unit,
+    /** «carga» (01-11-2026): desde «Cargar la furgoneta», cada paquete se marca como metido y se dice su hueco. */
+    modo: String = "", vm: EscanerVM = viewModel(),
 ) {
     val ctx = LocalContext.current
     val actividad = remember(ctx) { ctx.actividad() }
     vm.pais = pais
     // Abierto desde «Hoy»: contadores a cero. De vuelta de revisar una etiqueta: sigue el mismo escaneo.
-    LaunchedEffect(Unit) { if (vuelta == null) vm.empezar() else vm.reanudar(vuelta.guardada) }
+    LaunchedEffect(Unit) { if (vuelta == null) vm.empezar(modo) else vm.reanudar(vuelta.guardada) }
     val e by vm.estado.collectAsState()
     val tienePermiso = { ContextCompat.checkSelfPermission(ctx, Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED }
     var permiso by remember { mutableStateOf(tienePermiso()) }
@@ -113,7 +115,7 @@ fun EscanerPantalla(
     LaunchedEffect(Unit) { if (!permiso) pedir.launch(Manifest.permission.CAMERA) }
     // Al volver de los ajustes con el permiso dado, la cámara se enciende sola.
     LifecycleResumeEffect(Unit) { if (!permiso && tienePermiso()) permiso = true; onPauseOrDispose { } }
-    val cerrar = { alCerrar(e.anadidas > 0 || e.yaEstaban > 0) }
+    val cerrar = { alCerrar(e.anadidas > 0 || e.yaEstaban > 0 || (e.cargados ?: 0) > 0) }
     BackHandler(onBack = cerrar)
 
     // Sobre la cámara (negro), los iconos de la barra de estado van claros aunque la app esté en tema claro.
@@ -132,7 +134,7 @@ fun EscanerPantalla(
     LaunchedEffect(e.ultimo) {
         val u = e.ultimo ?: return@LaunchedEffect
         when (u.tipo) {
-            "nueva" -> { tono?.startTone(ToneGenerator.TONE_PROP_ACK, 150); Acciones.vibrar(ctx, 60) }
+            "nueva", "carga" -> { tono?.startTone(ToneGenerator.TONE_PROP_ACK, 150); Acciones.vibrar(ctx, 60) }
             "ya" -> { tono?.startTone(ToneGenerator.TONE_PROP_BEEP, 120); Acciones.vibrar(ctx, 30) }
             else -> { tono?.startTone(ToneGenerator.TONE_PROP_NACK, 250); Acciones.vibrar(ctx, 200) }
         }
@@ -163,7 +165,7 @@ fun EscanerPantalla(
             }
         }
         Arriba(alCerrar = cerrar, linterna = permiso)
-        Abajo(e, alTerminar = cerrar, modifier = Modifier.align(Alignment.BottomCenter))
+        Abajo(e, modo = modo, alTerminar = cerrar, modifier = Modifier.align(Alignment.BottomCenter))
     }
 }
 
@@ -198,23 +200,35 @@ private fun Linterna() {
 }
 
 @Composable
-private fun Abajo(e: EstadoEscaner, alTerminar: () -> Unit, modifier: Modifier) {
+private fun Abajo(e: EstadoEscaner, modo: String, alTerminar: () -> Unit, modifier: Modifier) {
     Surface(color = Color(0xEE111114), contentColor = Color.White, shape = MaterialTheme.shapes.extraLarge,
         modifier = modifier.fillMaxWidth().navigationBarsPadding().padding(12.dp)) {
         Column(Modifier.padding(18.dp)) {
+            val u = e.ultimo
             Row(verticalAlignment = Alignment.CenterVertically) {
                 if (e.trabajando) { CircularProgressIndicator(Modifier.height(18.dp).width(18.dp), strokeWidth = 2.dp, color = Color.White); Spacer(Modifier.width(10.dp)) }
-                val u = e.ultimo
                 Text(
-                    when { e.trabajando -> tx("Leyendo la etiqueta…"); u != null -> u.texto; else -> tx("Pasa las etiquetas una tras otra: cada paquete entra en tu ruta.") },
+                    when {
+                        e.trabajando -> tx("Leyendo la etiqueta…")
+                        u != null -> u.texto
+                        modo == "carga" -> tx("Pasa cada paquete por la cámara: te digo en qué hueco va.")
+                        else -> tx("Pasa las etiquetas una tras otra: cada paquete entra en tu ruta.")
+                    },
                     style = MaterialTheme.typography.bodyLarge, fontWeight = if (u != null) FontWeight.SemiBold else FontWeight.Normal,
                     color = when (u?.tipo) { "nueva" -> Color(0xFF6EE7B7); "error" -> Color(0xFFFCA5A5); else -> Color.White },
                     modifier = Modifier.weight(1f),
                 )
             }
+            // LA CARGA GUIADA (01-11-2026): el hueco del último paquete, en grande (por voz lo dice el ViewModel).
+            if (modo == "carga" && u?.tipo == "carga" && !e.trabajando) {
+                Text("→ " + (e.hueco?.takeIf { it.isNotBlank() }?.let { tx(it) } ?: tx("Sin hueco")),
+                    style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold, color = Color(0xFF6EE7B7))
+            }
             Spacer(Modifier.height(12.dp))
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Text("${e.anadidas} ${if (e.anadidas == 1) tx("añadida") else tx("añadidas")} · ${e.yaEstaban} ${if (e.yaEstaban == 1) tx("ya estaba") else tx("ya estaban")}",
+                Text(
+                    if (modo == "carga") tx("{a} de {b} cargados", "a" to (e.cargados ?: 0), "b" to (e.total ?: 0))
+                    else "${e.anadidas} ${if (e.anadidas == 1) tx("añadida") else tx("añadidas")} · ${e.yaEstaban} ${if (e.yaEstaban == 1) tx("ya estaba") else tx("ya estaban")}",
                     style = MaterialTheme.typography.bodyMedium,
                     color = Color.White.copy(alpha = .8f), modifier = Modifier.weight(1f))
                 Button(onClick = alTerminar) { Text(tx("Listo")) }

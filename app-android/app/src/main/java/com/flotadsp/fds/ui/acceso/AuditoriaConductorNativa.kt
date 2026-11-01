@@ -181,7 +181,17 @@ fun AuditoriaConductorNativa(alVolver: () -> Unit, alCompletar: () -> Unit) {
                     else -> fotos[item.clave] = jpg
                 }
             } catch (e: ErrorApi) { error = e.message }
-            catch (_: Exception) { error = tx("No se pudo procesar la foto. Inténtalo de nuevo.") }
+            // Lo que dice comprimirFoto («No se pudo leer la imagen»…) se enseña; cualquier otra cosa, el genérico.
+            catch (e: IllegalStateException) {
+                android.util.Log.w("FDS", "Foto de auditoría (${item.clave})", e)
+                error = e.message?.takeIf { it.isNotBlank() } ?: tx("No se pudo procesar la foto. Inténtalo de nuevo.")
+            }
+            catch (e: Exception) {
+                // En el registro (adb logcat, etiqueta FDS) queda la excepción de verdad: sin esto, el 31-10-2026 no
+                // había forma de saber por qué fallaba la foto en el móvil de un conductor.
+                android.util.Log.w("FDS", "Foto de auditoría (${item.clave})", e)
+                error = tx("No se pudo procesar la foto. Inténtalo de nuevo.")
+            }
             finally { item.archivo.delete(); procesando = null }
         }
     }
@@ -353,9 +363,13 @@ private fun CapturaCard(titulo: String, lista: Boolean, procesando: Boolean, alH
 }
 
 private suspend fun comprimirFoto(context: Context, uri: Uri): ByteArray = withContext(Dispatchers.IO) {
+    // Solo el tamaño: con inJustDecodeBounds, decodeStream devuelve SIEMPRE null (es el contrato) y deja el ancho
+    // y el alto en `options`. Desde la 2.4.0 (30-10-2026) había aquí un `?: error(...)` sobre ese null y TODAS las
+    // fotos de la auditoría fallaban con «No se pudo procesar la foto» (Benjamín, 31-10, con la 2.4.1). Lo que
+    // dice si la imagen se pudo leer es el tamaño.
     val options = BitmapFactory.Options().apply { inJustDecodeBounds = true }
     context.contentResolver.openInputStream(uri)?.use { BitmapFactory.decodeStream(it, null, options) }
-        ?: error(tx("No se pudo leer la imagen"))
+    if (options.outWidth <= 0 || options.outHeight <= 0) error(tx("No se pudo leer la imagen"))
     var sample = 1
     while (options.outWidth / sample > 1280 || options.outHeight / sample > 1280) sample *= 2
     val bitmap = context.contentResolver.openInputStream(uri)?.use {

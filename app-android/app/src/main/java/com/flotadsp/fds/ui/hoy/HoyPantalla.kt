@@ -43,6 +43,8 @@ import androidx.compose.material.icons.filled.QrCodeScanner
 import androidx.compose.material.icons.filled.Route
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.LocalShipping
+import androidx.compose.material.icons.automirrored.filled.VolumeUp
+import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
@@ -90,6 +92,7 @@ import com.flotadsp.fds.data.Bono
 import com.flotadsp.fds.data.Furgo
 import com.flotadsp.fds.data.Parada
 import com.flotadsp.fds.ui.Acciones
+import com.flotadsp.fds.ui.Voz
 import com.flotadsp.fds.ui.LocalExtra
 import com.flotadsp.fds.ui.Region
 import com.flotadsp.fds.ui.TextoNumero
@@ -108,6 +111,8 @@ fun HoyPantalla(
     alEscanear: () -> Unit,
     alAnadir: () -> Unit,
     alEditar: (Parada) -> Unit,
+    /** LA CARGA GUIADA (01-11-2026): la furgoneta por huecos. */
+    alCargar: () -> Unit = {},
 ) {
     val e by vm.estado.collectAsState()
     val pendientesEnvio by vm.pendientesDeEnvio.collectAsState()
@@ -222,6 +227,10 @@ fun HoyPantalla(
                             alQuitarFurgo = { ambito.launch { app.cuenta.quitarFurgo() } },
                             alIrAPie = { furgo?.let { Acciones.irAPie(ctx, it.lat, it.lng) } })
                     }
+                    // LA CARGA GUIADA (01-11-2026): con la ruta ordenada y paquetes aún fuera de la furgoneta.
+                    if (e.ruta?.ruta?.fin != null && e.pendientes.any { !it.cargada }) item(key = "carga") {
+                        CargarCard(cargados = Carga.cargadas(e.pendientes), total = e.pendientes.size, alPulsar = alCargar)
+                    }
                     if (e.guardadaEn != null || pendientesEnvio.isNotEmpty()) {
                         item { SinCobertura(e.guardadaEn, pendientesEnvio.size) }
                     }
@@ -243,6 +252,7 @@ fun HoyPantalla(
                                 alEntregar = { entregarRapido(sig) },
                                 alFallar = { fallando = sig },
                                 alAbrir = { abierta = sig },
+                                alEscuchar = { Voz.decir(ctx, Briefing.texto(sig)) },
                             )
                         }
                     }
@@ -553,6 +563,7 @@ private fun Chip(t: String, fondo: androidx.compose.ui.graphics.Color, tinta: an
 private fun Siguiente(
     p: Parada, numero: Int, enZbe: String = "",
     alNavegar: () -> Unit, alLlamar: () -> Unit, alWhatsapp: () -> Unit, alEntregar: () -> Unit, alFallar: () -> Unit, alAbrir: () -> Unit,
+    alEscuchar: () -> Unit = {},
 ) {
     val x = LocalExtra.current
     Card(
@@ -561,8 +572,15 @@ private fun Siguiente(
         border = androidx.compose.foundation.BorderStroke(2.dp, MaterialTheme.colorScheme.primary),
     ) {
         Column(Modifier.padding(16.dp)) {
-            Text(tx("Siguiente parada").uppercase(LOCALE_APP), style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.secondary)
-            Spacer(Modifier.height(8.dp))
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(tx("Siguiente parada").uppercase(LOCALE_APP), style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.secondary,
+                    modifier = Modifier.weight(1f))
+                // EL BRIEFING POR VOZ (01-11-2026): lo que hay que saber de esta parada, en una frase, cuando se quiera.
+                IconButton(onClick = alEscuchar, modifier = Modifier.size(32.dp)) {
+                    Icon(Icons.AutoMirrored.Filled.VolumeUp, contentDescription = tx("Escuchar la siguiente parada"), modifier = Modifier.size(20.dp))
+                }
+            }
+            Spacer(Modifier.height(4.dp))
             Row(Modifier.clickable(onClick = alAbrir), verticalAlignment = Alignment.Top) {
                 Numero(numero, grande = true)
                 Spacer(Modifier.width(12.dp))
@@ -655,5 +673,23 @@ private fun SinRuta(error: String, alReintentar: () -> Unit) {
         Text(error, style = MaterialTheme.typography.bodyLarge)
         Spacer(Modifier.height(16.dp))
         Button(onClick = alReintentar) { Text(tx("Reintentar")) }
+    }
+}
+
+/** LA CARGA GUIADA (01-11-2026): el acceso desde «Hoy», con cuántos paquetes van ya en la furgoneta. */
+@Composable
+private fun CargarCard(cargados: Int, total: Int, alPulsar: () -> Unit) {
+    val x = LocalExtra.current
+    Card(onClick = alPulsar, colors = CardDefaults.cardColors(containerColor = x.entregado.copy(alpha = 0.12f)), shape = MaterialTheme.shapes.large) {
+        Row(Modifier.padding(14.dp), verticalAlignment = Alignment.CenterVertically) {
+            Icon(Icons.Default.LocalShipping, contentDescription = null, tint = x.entregado)
+            Spacer(Modifier.width(12.dp))
+            Column(Modifier.weight(1f)) {
+                Text(tx("Cargar la furgoneta"), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                Text(tx("Escanea y te digo dónde va") + " · " + tx("{a} de {b} cargados", "a" to cargados, "b" to total),
+                    style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+            Icon(Icons.Default.ChevronRight, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
     }
 }

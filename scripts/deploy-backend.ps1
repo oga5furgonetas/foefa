@@ -7,10 +7,18 @@
 #
 # Aqui se despliega y ACTO SEGUIDO se llama a las pantallas principales. Si
 # alguna no contesta, se dice en rojo y el script sale con error.
+#
+# Y ANTES DE SUBIR NADA SE MIRA EL CI (01-11-2026, ci-verde.ps1): el commit de
+# HEAD tiene que estar en GitHub con el CI en verde y el arbol limpio. Si no,
+# para. `-SinCI` lo salta a sabiendas.
+param([switch]$SinCI)
 $ErrorActionPreference = 'Stop'
 $raiz = Split-Path $PSScriptRoot -Parent
 . (Join-Path $PSScriptRoot "destino.ps1")
+. (Join-Path $PSScriptRoot "ci-verde.ps1")
 $d = Get-Destino -Requiere backend
+Write-Host "==> Mirando el CI de GitHub..."
+Assert-CiVerde -Raiz $raiz -SinCI:$SinCI
 # `fly deploy` sube a la app que diga fly.toml, sin preguntar: se mira antes.
 $toml = Get-Content (Join-Path $raiz "backend\fly.toml") -Raw
 if ($toml -match '(?m)^app\s*=\s*"[^"]*flotadsp') { throw "backend/fly.toml apunta a una app de FlotaDSP. Cambia `app =` por la tuya." }

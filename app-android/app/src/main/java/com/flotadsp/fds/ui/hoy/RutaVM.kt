@@ -11,6 +11,7 @@ import com.flotadsp.fds.data.MiRuta
 import com.flotadsp.fds.data.Parada
 import com.flotadsp.fds.data.Zbe
 import com.flotadsp.fds.ui.Acciones
+import com.flotadsp.fds.ui.Voz
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -51,12 +52,32 @@ class RutaVM(app: Application) : AndroidViewModel(app) {
     private val _avisos = Channel<Aviso>(Channel.BUFFERED)
     val avisos = _avisos.receiveAsFlow()
     val pendientesDeEnvio = repo.pendientes
+    private val cuenta = (app as FdsApp).cuenta
 
     init {
         // Al momento, la ruta guardada en el móvil; después, la del servidor.
         repo.rutaGuardada()?.let { (r, en) -> _e.value = EstadoRuta(ruta = r, guardadaEn = en, cargando = false) }
         cargar()
         viewModelScope.launch { repo.renovarSiToca() }
+        viewModelScope.launch { _e.collect { briefing(it) } }
+    }
+
+    /* EL BRIEFING POR VOZ (01-11-2026), como la web: cada vez que cambia la siguiente parada (se hizo la anterior, o se
+       acaba de ordenar) se dice en una frase lo que hay que saber (Briefing.texto). Nunca al abrir la app: la ruta ya
+       se ve. Solo con la ruta ordenada y el ajuste «Briefing por voz» encendido. */
+    private var briefingDe: String? = null
+    private var briefingVisto = false
+    private var briefingTrasOrdenar = false
+    private fun briefing(e: EstadoRuta) {
+        val r = e.ruta ?: return
+        val sig = e.pendientes.firstOrNull()
+        val antes = briefingDe
+        val primera = !briefingVisto
+        val trasOrdenar = briefingTrasOrdenar
+        briefingDe = sig?.id; briefingVisto = true; briefingTrasOrdenar = false
+        if (sig == null || r.ruta?.fin == null) return
+        if (!trasOrdenar && (primera || antes == sig.id)) return
+        if (cuenta.voz.value) Voz.decir(getApplication(), Briefing.texto(sig), cola = true)
     }
 
     fun avisar(t: String) { _avisos.trySend(Aviso(t)) }
@@ -163,6 +184,7 @@ class RutaVM(app: Application) : AndroidViewModel(app) {
                 val r = repo.ordenar(lat, lng)
                 val fin = r.ruta?.fin
                 avisar(if (fin != null) tx("Ruta ordenada: {n} paradas, acabas ≈ {fin}.", "n" to r.ordenados, "fin" to fin) else tx("Ruta ordenada: {n} paradas.", "n" to r.ordenados))
+                briefingTrasOrdenar = true
                 _e.value = _e.value.copy(ruta = repo.miRuta(), guardadaEn = null)
             } catch (e: ErrorApi) {
                 avisar(if (e.sinRed) tx("Sin conexión: para ordenar la ruta hace falta red.") else e.message ?: tx("No se ha podido ordenar"))

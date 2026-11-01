@@ -233,6 +233,26 @@ def _dia_negocio():
     except Exception:
         return datetime.now(timezone.utc).strftime("%Y-%m-%d")
 
+
+def _rango_dia_negocio(dia: str = None) -> dict:
+    """Filtro de Mongo para «created_at de ESE día de negocio» sobre marcas ISO guardadas en UTC: desde las 00:00
+    locales de ese día hasta las 00:00 locales del siguiente, las dos pasadas a UTC.
+
+    Sustituye al `{"$regex": f"^{today}"}` de toda la vida, que comparaba la FECHA UTC de la marca con el día LOCAL:
+    entre las 00:00 y la 01:00 de Madrid (02:00 en verano) la marca aún dice «ayer» y la inspección de hoy no era de
+    hoy (la app dejaba repetirla y `already_inspected` salía False). Lo delató la prueba de contrato del CI, que
+    fallaba cada noche a esa hora (01-11-2026). Las marcas van como `datetime.now(timezone.utc).isoformat()` y se
+    comparan como texto: el mismo formato hasta el segundo, así que `$gte`/`$lt` ordenan bien.
+    """
+    try:
+        from zoneinfo import ZoneInfo
+        tz = ZoneInfo(_region_actual.get()[1])
+    except Exception:                                            # noqa: BLE001
+        tz = timezone.utc
+    inicio = datetime.fromisoformat(dia or _dia_negocio()).replace(tzinfo=tz)
+    fin = inicio + timedelta(days=1)
+    return {"$gte": inicio.astimezone(timezone.utc).isoformat(), "$lt": fin.astimezone(timezone.utc).isoformat()}
+
 # =========================
 # DATABASE
 # =========================
@@ -7390,8 +7410,9 @@ async def reset_password(data: dict, request: Request):
     _rl_public_action(f"rp:{_rl_key_ip(request)}", max_count=10, window_s=900)
     token = _texto_cuerpo(data.get("token"))
     new = data.get("new_password") or ""
-    if len(new) < 6:
-        raise HTTPException(status_code=400, detail="La contraseña debe tener al menos 6 caracteres")
+    # Los mismos 8 que pide el alta (01-11-2026): la recuperación era la puerta floja (6).
+    if len(new) < 8:
+        raise HTTPException(status_code=400, detail="La contraseña debe tener al menos 8 caracteres")
     if not token:
         raise HTTPException(status_code=400, detail="Enlace inválido")
 
@@ -7782,8 +7803,18 @@ async def conductor_list_public(center: Optional[str] = None, slug: Optional[str
     esos ids se podia pedir un JWT de cualquier conductor sin contrasena.
     El portal del conductor ya no la usa: /auth/driver-lookup solo solicita
     un código temporal y no expone la plantilla.
+
+    LA EMPRESA ES LA DEL TOKEN (01-11-2026). `slug` quedó de cuando esto era público, y con sesión
+    de admin cambiaba de base sin mirar de quién era: cualquier cuenta (las de prueba se crean
+    solas) podía listar la plantilla —nombre y correo— de OTRA empresa con solo saber su slug, que
+    es público (/empleo/<slug>, /auth/org/<slug>). Solo el super-admin puede mirar otra empresa.
     """
-    await _set_tenant_by_slug(slug)
+    if slug and not _admin.get("sa"):
+        propia = await get_org(_admin.get("org_id"))
+        if (propia or {}).get("slug") != slug:
+            raise HTTPException(status_code=403, detail="Esa empresa no es la tuya")
+    if slug:
+        await _set_tenant_by_slug(slug)
     query = {}
     if center and center != "Todos":
         if not re.match(r'^[A-Za-z0-9_\-]{1,30}$', center):
@@ -8101,7 +8132,7 @@ async def get_my_assigned_vehicle(user: dict = Depends(get_current_user)):
                     insp = await db.inspections.find_one(
                         {"deleted": {"$ne": True}, "vehicle_id": slot["vehicle_id"],
                          "driver_id": {"$in": list(mis_ids)},
-                         "created_at": {"$regex": f"^{today}"}},
+                         "created_at": _rango_dia_negocio(today)},
                         {"_id": 0, "id": 1}
                     )
                     return {
@@ -8493,8 +8524,31 @@ async def change_my_password(data: dict, user: dict = Depends(get_current_user))
         if not cuenta and por_correo:
             cuenta = await db.driver_accounts.find_one(por_correo)
         if cuenta:
-            temporal = bool(cuenta.get("must_change_password") or cuenta.get("creada_en_bloque"))
-            if not temporal and not verify_password(current, cuenta["hashed_password"]):
+            # La actual se comprueba contra TODAS las cuentas del correo (31-10-2026, Junior Alexander: «la contraseña es
+            # incorrecta al cambiarla»): entró con la contraseña que vive en la cuenta de su ficha VIEJA (de antes del
+            # arreglo del 29-10 las dos cuentas iban por separado), la sesión va con la ficha activa, y aquí se miraba
+            # solo la cuenta de la activa, que tenía otra. Vale la que abra cualquiera de las suyas, o que alguna sea
+            # temporal (la temporal no pide la anterior).
+            # Todas las suyas: las del mismo id de conductor (al fusionar dos fichas, las dos cuentas quedan con el
+            # id de la que se conserva: `find_one` devolvía una cualquiera) y las del mismo correo.
+            mismas = {"$or": [{"driver_id": user["sub"]}] + ([por_correo] if por_correo else [])}
+            suyas = [cuenta] + [c for c in await db.driver_accounts.find(mismas).to_list(20) if c.get("id") != cuenta.get("id")]
+            # Temporal VIGENTE: más nueva que la última contraseña propia (la misma regla que el login); una temporal
+            # vieja que se quedó en la otra cuenta no exime de saber la actual.
+            ultima_propia = max((str(c.get("password_changed_at") or "") for c in suyas), default="")
+
+            def _temporal_vigente(c: dict) -> bool:
+                if not (c.get("must_change_password") or c.get("creada_en_bloque")):
+                    return False
+                puesta = str(c.get("password_temp_created_at") or c.get("created_at") or "")
+                return not ultima_propia or puesta > ultima_propia
+            temporal = any(_temporal_vigente(c) for c in suyas)
+            abre = bool(current) and bool(_cuentas_que_cuadran(suyas, current))
+            if not temporal and not abre:
+                logger.warning("Cambio de contraseña rechazado: conductor %s, %d cuenta(s) [%s], actual %s",
+                               user["sub"][:8], len(suyas),
+                               ", ".join("%s%s" % (c.get("driver_id", "?")[:8], " temporal" if (c.get("must_change_password") or c.get("creada_en_bloque")) else "") for c in suyas),
+                               "vacía" if not current else "no abre ninguna")
                 await asyncio.sleep(0.8)
                 # 400 y no 401: la app de Android cierra la sesión ante cualquier 401 con token (como hizo la web
                 # hasta que se le puso la excepción), y un conductor que se equivocaba al teclear su
@@ -12435,7 +12489,7 @@ async def upload_inspection_photos(
         dup = await db.inspections.find_one({
             "deleted": {"$ne": True}, "vehicle_id": vehicle_id,
             "driver_id": driver_id or user.get("sub"),
-            "created_at": {"$regex": f"^{today}"}
+            "created_at": _rango_dia_negocio(today)
         }, {"_id": 0, "id": 1})
         if dup:
             raise HTTPException(
@@ -14172,15 +14226,18 @@ async def sign_inspection(inspection_id: str, data: SignInspectionRequest, reque
 
 
 @api_router.get("/inspections/{inspection_id}/forensic")
-async def get_forensic_status(inspection_id: str, _=Depends(require_any_auth)):
-    """Estado de firma de una inspección. Sin secretos: NO devuelve payload completo."""
+async def get_forensic_status(inspection_id: str, user: dict = Depends(require_any_auth)):
+    """Estado de firma de una inspección. Sin secretos: NO devuelve payload completo.
+
+    La oficina ve cualquiera de su empresa; un conductor, solo las SUYAS (01-11-2026: antes cualquier conductor
+    podía preguntar por cualquier inspección de la empresa con solo conocer su id)."""
     # FIX (bug S1.A): incluir 'id' en projection para que find_one no devuelva {} en docs
     # sin campos forensic_*. Sin esto, /forensic devolvía 404 para inspecciones no firmadas.
     insp = await db.inspections.find_one(
-        {"id": inspection_id}, {"_id": 0, "id": 1, "forensic_signed": 1, "forensic_hash": 1,
+        {"id": inspection_id}, {"_id": 0, "id": 1, "driver_id": 1, "forensic_signed": 1, "forensic_hash": 1,
                                 "forensic_signed_at": 1, "forensic_signed_by": 1}
     )
-    if not insp:
+    if not insp or (user.get("role") != "admin" and insp.get("driver_id") != user.get("sub")):
         raise HTTPException(status_code=404, detail="Inspección no encontrada")
     if not insp.get("forensic_signed"):
         return {"signed": False}
@@ -16195,7 +16252,8 @@ async def push_subscribe(data: dict, user: dict = Depends(require_any_auth)):
 async def push_unsubscribe(data: dict, user: dict = Depends(require_any_auth)):
     ep = _texto_cuerpo(data.get("endpoint"))
     if ep:
-        await global_db.push_subscriptions.delete_one({"endpoint": ep})
+        # Solo la propia (01-11-2026): con el endpoint de otra persona se le quitaban sus avisos.
+        await global_db.push_subscriptions.delete_one({"endpoint": ep, "user_id": user.get("sub")})
     return {"ok": True}
 
 
@@ -51867,6 +51925,7 @@ async def _rep_ajustes() -> dict:
     a.setdefault("hora_salida", "09:00")
     a.setdefault("volver", False)
     a.setdefault("trafico", True)
+    a.setdefault("carga_por", "traseras")      # la carga guiada (01-11-2026): puertas traseras o puerta lateral
     # «Mi dinero hoy» (11-10-2026), en céntimos: 0 = sin poner.
     a.setdefault("pago_parada", 0)
     a.setdefault("pago_dia", 0)
@@ -52367,7 +52426,7 @@ async def _rep_ordenar(fecha: str, conductor_id: str, origen, salida_min: Option
     pend = await db.reparto_pedidos.find(
         {"fecha": fecha, "conductor_id": conductor_id, "estado": {"$in": ["pendiente", "en_ruta"]}},
         {"_id": 0, "id": 1, "lat": 1, "lng": 1, "bultos": 1, "ventana_desde": 1,
-         "ventana_hasta": 1, "prioridad": 1}).to_list(1000)
+         "ventana_hasta": 1, "prioridad": 1, "hueco_manual": 1}).to_list(1000)
     hechos = await db.reparto_pedidos.count_documents(
         {"fecha": fecha, "conductor_id": conductor_id, "estado": {"$in": ["entregado", "fallido"]}})
     ubicadas = [p for p in pend if reparto._punto(p)]
@@ -52429,15 +52488,32 @@ async def _rep_ordenar(fecha: str, conductor_id: str, origen, salida_min: Option
     if orden_fijo:
         pos = {pid: k for k, pid in enumerate(orden_fijo)}
         sin = sorted(sin, key=lambda p: pos.get(p["id"], 10 ** 6))
+    # LA CARGA GUIADA (01-11-2026): con el orden decidido, cada parada ubicada recibe su hueco de la furgoneta
+    # (reparto.hueco_sugerido), salvo que el repartidor lo haya puesto a mano. Las sin ubicar no van en la cuenta.
+    por_id = {p["id"]: p for p in pend}
+    carga_por = a.get("carga_por") if a.get("carga_por") in reparto.CARGA_POR else "traseras"
+    resumen["carga_por"] = carga_por
     for n, pid in enumerate(orden_ids + [p["id"] for p in sin]):
         l = llegadas.get(pid)
-        await db.reparto_pedidos.update_one({"id": pid}, {"$set": {
-            "orden": hechos + n + 1,
-            "eta": reparto.hm(l["eta"]) if l else None,
-            "tarde_min": l["tarde"] if l else 0,
-            "espera_min": l["espera"] if l else 0}})
+        cambios = {"orden": hechos + n + 1,
+                   "eta": reparto.hm(l["eta"]) if l else None,
+                   "tarde_min": l["tarde"] if l else 0,
+                   "espera_min": l["espera"] if l else 0}
+        if n < len(orden_ids) and not (por_id.get(pid) or {}).get("hueco_manual"):
+            cambios["hueco"] = reparto.hueco_sugerido(n, len(orden_ids), carga_por)
+            cambios["hueco_auto"] = True
+        await db.reparto_pedidos.update_one({"id": pid}, {"$set": cambios})
     await db.reparto_rutas.replace_one({"id": resumen["id"]}, dict(resumen), upsert=True)
     return resumen
+
+
+async def _rep_cargados(conductor_id: str, fecha: str):
+    """Cuántas paradas pendientes de hoy están ya en la furgoneta, y cuántas son (la carga guiada)."""
+    filtro = {"fecha": fecha, "conductor_id": conductor_id, "estado": {"$in": ["pendiente", "en_ruta"]}}
+    total = await db.reparto_pedidos.count_documents(filtro)
+    # Con $exists además de $nin: un campo que no está no cuenta como cargado (en Mongo y en la base de mentira).
+    cargados = await db.reparto_pedidos.count_documents({**filtro, "cargado_en": {"$exists": True, "$nin": [None, ""]}})
+    return cargados, total
 
 
 # ── OFICINA ───────────────────────────────────────────────────────────────────
@@ -52502,6 +52578,8 @@ async def reparto_ajustes_put(data: dict = Body(...), user: dict = Depends(requi
     nuevo["hora_salida"] = reparto.hm(hs) if hs is not None else "09:00"
     nuevo["volver"] = bool(data.get("volver"))
     nuevo["trafico"] = data.get("trafico") is not False
+    # Por dónde se carga la furgoneta (01-11-2026): decide qué fila es la de la puerta en la carga guiada.
+    nuevo["carga_por"] = data["carga_por"] if data.get("carga_por") in reparto.CARGA_POR else (a.get("carga_por") or "traseras")
     # La placa (30-10-2026): para decir si HOY le toca restricción (rodízio, Hoy No Circula…). Opcional.
     nuevo["placa"] = re.sub(r"[^A-Z0-9]", "", _texto_cuerpo(data.get("placa"), 16).upper())[:12]
     # La tarifa se cambia en su propia pantalla (PUT /reparto/ganancias): guardar los ajustes no la borra.
@@ -53114,6 +53192,15 @@ async def reparto_escanear(data: dict = Body(...), user: dict = Depends(require_
     cambios = {"conductor_id": d["id"], "conductor_nombre": d.get("name") or ""}
     if not p.get("conductor_id"):
         cambios["orden"] = None
+    # EN MODO CARGA (01-11-2026): el segundo escaneo, ya con la ruta ordenada y el paquete en la mano para meterlo
+    # en la furgoneta. No cuenta como bulto: marca la parada como cargada y dice cuántas van.
+    carga = bool(data.get("carga"))
+    if carga:
+        cambios["cargado_en"] = datetime.now(timezone.utc).isoformat()
+        await db.reparto_pedidos.update_one({"id": p["id"]}, {"$set": cambios})
+        p.update(cambios)
+        cargados, total = await _rep_cargados(d["id"], f)
+        return {"encontrado": True, "pedido": p, "cargados": cargados, "total": total}
     await db.reparto_pedidos.update_one({"id": p["id"]}, {"$set": cambios, "$inc": {"escaneos": 1}})
     p.update(cambios)
     p["escaneos"] = int(p.get("escaneos") or 0) + 1
@@ -53437,6 +53524,22 @@ async def reparto_mi_ordenar(data: dict = Body(...), user: dict = Depends(requir
     salida, programada = _rep_salida_ahora(a)
     ruta = await _rep_ordenar(_dia_negocio(), d["id"], origen, salida_min=salida, programada=programada)
     return {"ordenados": ruta["paradas"], "ruta": ruta}
+
+
+@api_router.post("/reparto/mi-ruta/cargado")
+async def reparto_mi_cargado(data: dict = Body(...), user: dict = Depends(require_any_auth)):
+    """La carga guiada (01-11-2026): marcar una parada como ya metida en la furgoneta, o quitarle la marca, desde la
+    lista por huecos. Escaneando no hace falta: /reparto/escanear con `carga: true` lo hace solo."""
+    d = await _rep_conductor(user)
+    data = _dict_cuerpo(data)
+    p = await db.reparto_pedidos.find_one({"id": _texto_cuerpo(data.get("id"), 60), "fecha": _dia_negocio()},
+                                          {"_id": 0, "id": 1, "conductor_id": 1})
+    if not p or p.get("conductor_id") != d["id"]:
+        raise HTTPException(404, "Esa parada no es de tu ruta de hoy")
+    marca = datetime.now(timezone.utc).isoformat() if data.get("cargado") is not False else None
+    await db.reparto_pedidos.update_one({"id": p["id"]}, {"$set": {"cargado_en": marca}})
+    cargados, total = await _rep_cargados(d["id"], _dia_negocio())
+    return {"ok": True, "cargados": cargados, "total": total}
 
 
 @api_router.post("/reparto/mi-ruta/trazado")
@@ -53939,6 +54042,9 @@ async def reparto_mi_editar(pid: str, data: dict = Body(...), user: dict = Depen
     cambios = {}
     if "hueco" in data:
         cambios["hueco"] = _texto_cuerpo(data.get("hueco"), 40)
+        # A mano manda sobre lo automático (01-11-2026): al reordenar no se le cambia; vaciarlo lo libera.
+        cambios["hueco_manual"] = bool(cambios["hueco"])
+        cambios["hueco_auto"] = False
     if "notas" in data:
         cambios["notas"] = _texto_cuerpo(data.get("notas"), 200)
     abierto = p.get("estado") in ("pendiente", "en_ruta")

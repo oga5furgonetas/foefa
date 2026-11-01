@@ -173,6 +173,35 @@ async def test_aislamiento_entre_organizaciones(client):
     assert v is not None and v.get("mileage") != 999999
 
 
+async def test_conductor_list_no_cambia_de_empresa_por_slug(client):
+    """FUGA CERRADA EL 01-11-2026: /auth/conductor-list exigía admin pero aceptaba `slug` y con él cambiaba de base,
+    así que cualquier cuenta (las de prueba se crean solas) podía listar nombre y correo de la plantilla de OTRA
+    empresa sabiendo su slug, que es público. El slug solo vale para la propia empresa (o para el super-admin)."""
+    sufijo = uuid.uuid4().hex[:6]
+    slug_b = f"iso-b-{sufijo}"
+    await server.global_db.organizations.insert_one({
+        "id": f"org_iso_c{sufijo}", "name": "Org B", "account_type": "dsp", "slug": slug_b,
+        "db_name": f"test_dsp_iso_c{sufijo}", "status": "active"})
+    ha = {"Authorization": f"Bearer {await _admin_de_org('a')}"}
+    hb = {"Authorization": f"Bearer {await _admin_de_org(f'c{sufijo}')}"}
+    correo = f"fuga_{sufijo}@test.com"
+    r = await client.post("/api/drivers", headers=hb, json={"name": "Conductora B", "center": "ISOB", "email": correo})
+    assert r.status_code == 200, r.text
+
+    # La org A con el slug de B: ni la lista ni una pista de que existe.
+    r = await client.get("/api/auth/conductor-list", headers=ha, params={"slug": slug_b})
+    assert r.status_code == 403, r.text
+    assert correo not in r.text, "FUGA: la org A ha visto a una conductora de la org B"
+    # La org A sin slug: su propia plantilla, donde la conductora de B no está.
+    r = await client.get("/api/auth/conductor-list", headers=ha)
+    assert r.status_code == 200, r.text
+    assert all(d.get("email") != correo for d in r.json())
+    # La org B con su propio slug sigue funcionando.
+    r = await client.get("/api/auth/conductor-list", headers=hb, params={"slug": slug_b})
+    assert r.status_code == 200, r.text
+    assert any(d.get("email") == correo for d in r.json())
+
+
 async def test_webhook_ls_sin_secreto_se_rechaza(client, monkeypatch):
     """FAIL-CLOSED: sin LS_WEBHOOK_SECRET configurada no se acepta NADA.
     Es el endpoint que activa/suspende organizaciones (dinero)."""

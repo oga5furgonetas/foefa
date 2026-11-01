@@ -425,3 +425,124 @@ Sin huecos hasta el L 09-11 (hoy: Instagram del carrusel «5 trucos» publicado 
 
 Totales: X 0 respuestas, 0 seguidas; TikTok 3 (1 con app: el ofrecimiento); YouTube 2 (0 con app). Con app: 1 de 5. Sin pieza
 nueva. Reddit no se intentó.
+
+## 31-10-2026 (20:10 – 20:30) — ronda del bucle de 4 h (Chrome del PC 1, «Browser 2»)
+
+Ojo: hay DOS Chrome conectados a la extensión; el «Browser 1» (en uso por defecto) no tiene sesión de X. Las sesiones
+(X, TikTok, YouTube, Facebook) están en el «Browser 2»: `list_connected_browsers` + `select_browser`. Instagram sigue sin sesión.
+
+### Metricool (marca 7741371) — INCIDENCIA y arreglo
+- **El carrusel «5 trucos» de TikTok de hoy (18:00) NO salió**: error de Metricool «The 'image/png' type is not allowed, use
+  'image/jpeg', 'image/jpg' or 'image/webp'». TikTok no admite PNG en los posts de fotos (Instagram sí: el mismo carrusel salió a las
+  12:00). Los carruseles de TikTok del 02-11 (A), 05-11 (B) y 08-11 (C) iban a fallar igual.
+- Arreglo: los 29 PNG de los carruseles pasados a JPEG con ffmpeg (`frontend/public/redes/*.jpg`, commit 96992bb). Desplegar la web
+  (`deploy-frontend.ps1`) lo **denegó el modo auto** (producción), así que las URL públicas son las de GitHub
+  (`https://raw.githubusercontent.com/oga5furgonetas/foefa/main/frontend/public/redes/<fichero>.jpg`; el repo es público). Metricool
+  copia la imagen a su CDN, así que da igual de dónde venga.
+- Actualizados con JPEG (mismo texto, misma hora): TikTok 02-11 (id nuevo 412403634), 05-11 (412403643), 08-11 (412403669). El de
+  «5 trucos» **reprogramado el M 10-11 18:00** en TikTok (412403690; era el único hueco). Resto sin cambios; sin huecos hasta el 10-11.
+- Cuando Dani despliegue la web, `flotadsp.com/redes/*.jpg` también servirá; hasta entonces devuelve el index (SPA).
+
+### X (@FlotaDSP)
+- D 01-11 → X 11-11 programados (verificado en Scheduled, once posts a las 7:30). El siguiente del calendario (J 12-11, «Resumen
+  honesto», pide N real de `tools/metricas/usuarios_total.py`): sin cifra no se programa; mejor hacerlo el 11-11 con el dato fresco.
+- Notificaciones: nada nuevo que contestar (solo «Recent post from» de una cuenta seguida). Sin respuestas ni seguidas nuevas.
+
+### Ronda de conversación (lo nuestro primero)
+| Hora | Red | Hilo | Qué se dijo | App |
+|---|---|---|---|---|
+| 20:13 | TikTok | Actividad | respuestas de ayer a comentarios nuestros: laryrepartidor («Así es jjjj», «Gracias bro»), Fitnessbote («Danke🤣👍🏻»), AnthonyS («Gracias, lo tomo muy en cuenta»); me gusta de lebiglivreur y de Mónica (reparte logística) al ofrecimiento. Aviso del sistema: «la promoción que creaste el 30/10/2026 ha finalizado» (una promoción de TikTok; no es de esta sesión, no verificado quién) | — |
+| 20:15 | TikTok | **AnthonyS** (@anthsuriel04, empieza a repartir) en el vídeo de @soylastefa | respuesta a su «gracias»: apuntar al acabar qué portales costaron; a los cinco días ya sabes dónde se va el tiempo | no (verificado) |
+| 20:18 | TikTok | @alvarocancino_ «Primera vez trabajando en reparto» (Chile) | ya tenía comentario nuestro de hace 1 día; se pasa | — |
+| 20:19 | TikTok | **@mccrew.pov** (Italia) «Com'è andata a voi durante i primi giorni di lavoro?» (10-23, 292 comentarios) | en italiano: las primeras salidas al 40 % sirven para aprender a cargar en orden de paradas; cuando pasan al 100 % y los pueblos cambian, es lo único que queda igual | no (verificado) |
+| 20:21 | TikTok | **@florinthedeliverydriver** «170 stops. 251 parcels. Farms, highways and heat. Full day with me» (7-19, 1 comentario; serie de días completos) | **ofrecimiento público a micro-creador**, en inglés: «we're FDS, a small team from Spain that built a free delivery app…»; que lo pruebe un día real y diga qué falta; sin pagos | sí (verificado) |
+| 20:23 | TikTok | **@norainzustellung** Nora (Alemania) «Arbeitstag als Postbotin» (hace 1 d, 1.356 ❤, sátira del horario) | en alemán: la hora de «Sie waren leider nicht anzutreffen» es la más cara del día, porque mañana hay que volver | no (verificado) |
+| 20:25 | YouTube | **GEO PARRA** «Repartidor de SHEIN y TEMU por un día: $7.50 por paquete» (hace 10 min, 156 vistas; LatAm) | la cuenta del final: por pieza suena bien hasta dividir por horas reales y gasolina; con 90 paquetes, cargar en orden y agrupar por colonia es una hora menos | no (verificado) |
+| 20:26 | YouTube | Agustin Alvarez «Un día trabajando… y por qué lo dejo» (169K) | ya tenía comentario nuestro; se pasa | — |
+| 20:27 | YouTube | **Kevin Plata** «Cómo repartir paquetes… por primera vez» (7,8K vistas, tutorial en español desde EE. UU.) | consejos de primera semana: mirar el bloque entero y cargar en orden de entrega; en edificios, estacionar una vez y bajar 3-4 paquetes | no (verificado) |
+| 20:28 | TikTok | **@casal.queentrega** Casal que Entrega (Brasil) «Bora de Rotinha no Sábado?!» (8-2; 80 paradas en 2 h; alguien pregunta «como se organiza?») | en portugués: no hay código mágico, numerar los paquetes en el orden de la ruta antes de salir y cargar con los últimos al fondo | no (verificado) |
+| 20:29 | Facebook | notificaciones y grupo «Repartidores Paquetería Madrid» | nada nuevo (mismos avisos de ayer: pago de Meta pendiente, reel de la página). En el grupo solo ofertas de trabajo, una asesoría y un alquiler de cuenta de otra plataforma: nada que contestar | — |
+| — | Instagram | — | sin sesión en ninguno de los dos Chrome | — |
+
+Totales: X 0 respuestas, 0 seguidas; TikTok 5 (1 con app: el ofrecimiento a Florin); YouTube 2 (0 con app). Con app: 1 de 7.
+Sin pieza nueva. Reddit no se intentó. Búsquedas de TikTok en español: casi todo anuncios de flotas buscando autónomos; lo real
+sale mejor en italiano, alemán, inglés y portugués (Brasil).
+
+**Para Dani**: (1) desplegar la web cuando pueda (`.\scripts\deploy-frontend.ps1`) para que `flotadsp.com/redes/*.jpg` exista;
+(2) de ahora en adelante los carruseles de TikTok van en JPEG (si se regeneran con `redes-fotos.mjs`, convertir con ffmpeg);
+(3) lo de siempre: Publicar en Meta (seis cambios) y el pago, TikTok Ads (saldo y teléfono), Spotify (Enviar), el «7 días gratis»
+del grupo de Facebook, Instagram sin sesión.
+
+## 01-11-2026 (00:10 – 00:45) — ronda del bucle de 4 h (Chrome del PC 1, «Browser 2»)
+
+### Metricool (marca 7741371)
+Sin huecos hasta el M 10-11 (TikTok 18:00 e Instagram 12:00 cada día, YouTube 02/05/09-11 19:00, LinkedIn 04 y 11-11 11:00). Los
+carruseles de TikTok ya van en JPEG (verificado en la lista: `.jpeg` de static.metricool.com). Nada añadido. Nota: el calendario de
+REDES.md tiene los días de la semana corridos un día (el 01-11-2026 es domingo, no sábado); los Shorts siguen la pauta de las
+rondas anteriores (02, 05 y 09-11), y no hay vídeo nuevo que no repita uno ya subido al canal.
+
+### X (@FlotaDSP)
+- El post del 31-10 salió a las 7:30 (aviso «Your scheduled post was published»). D 01-11 → X 11-11 programados; el J 12-11 sigue
+  pendiente de la cifra real de altas (sin Python en este PC para `usuarios_total.py`; mejor el 11-11).
+- Notificaciones: nada nuevo (todo visto). Dos búsquedas en español (-links, en directo): noticias, política, un accidente en Mérida
+  (no se entra) y un hilo de inmigración (no se entra). 0 respuestas, 0 seguidas.
+
+### Ronda de conversación (lo nuestro primero)
+| Hora | Red | Hilo | Qué se dijo | App |
+|---|---|---|---|---|
+| 00:14 | TikTok | Actividad | **Florin the Delivery Driver respondió al ofrecimiento de ayer: «Sound interesting, DM me»** y dio me gusta; AnthonyS, lebiglivreur y Mónica dieron me gusta a comentarios nuestros; 352 me gusta al vídeo del 30-10. Sigue el aviso de la promoción del 30/10 (no es de esta sesión) | — |
+| 00:19 | TikTok | **Florin** (@florinthedeliverydriver), respuesta bajo su «DM me» | en público, sin mensaje privado (regla): «we keep everything public, no DMs: the app is called FDS, the link is in our profile… free with no limit until 31 December, no card. Try it on one real day, farms included, and post here what it got wrong or what's missing» | sí (verificado) |
+| 00:24 | X | notificaciones y búsquedas | nada que contestar | — |
+| 00:28 | YouTube | Studio → comentarios sin responder | ninguno | — |
+| 00:30 | YouTube | Jeremias Savedra «Trabajando repartiendo paquetes en España ¿Merece la pena?» (107 vistas) | ya tenía comentario nuestro de hace 1 día (otra sesión); se pasa | — |
+| 00:32 | YouTube | **FelixPress** «¡Soy conductor asociado…! ¿Cómo funciona el trabajo con la Fiorino?» (523 vistas en 9 h, Ribeirão Preto, doblado al español) | en portugués: la Fiorino tiene el espacio justo, cargar en el orden de la ruta (últimas paradas al fondo, primera hora a mano); ¿cuántas paradas da un día normal? | no (verificado) |
+| 00:36 | YouTube | **Renan** «#242 Every Parcel Has Its Place… Until It Doesn't» (129 vistas, Reino Unido, serie diaria) | en inglés: el paquete que «tenía su sitio» y acaba bajo la balda cuesta diez minutos en una carretera así; últimas paradas atrás, primera hora junto a la puerta, lo frágil en el suelo | no (verificado) |
+| 00:40 | TikTok | **@.nikkolorenzo** «POV primo giorno da corriere notturno di Milano» (hace 4 d, 2.307 ❤) | en italiano: turno nocturno solo locker = sin porteros, sin «pasa mañana», sin doble fila; la única ruta donde el orden lo decides tú y no el tráfico | no (verificado) |
+| 00:44 | TikTok | **@eddyentregas** (Brasil) «vem separar a rota comigo» (10-21, 158 ❤) | en portugués: separar la ruta antes de salir es donde se gana el día; «a gente é da FDS… app grátis (foto na etiqueta e a rota sai ordenada, funciona no Brasil); se testar numa rota real, conta aqui o que faltou» | sí (verificado) |
+| 00:46 | TikTok | **@soyginaa** (Francia) «La purge annuelle des livreurs» (10-20, 2.377 ❤, humor sobre el pico de Navidad) | en francés: el camión hasta el techo se gana al cargar; los que solo hacen «pro» tienen la planque, pero el pico llega para todos | no (verificado) |
+| 00:48 | TikTok | **@javi030426** (España) «¿Qué no puede faltar en una jornada de trabajo?» (9-11, 211 ❤) | en español: el bocadillo aplastado es patrimonio del oficio; añado cargador de mechero y boli; ¿cargas por orden de parada o según sale de nave? | no (verificado) |
+| 00:50 | Facebook | notificaciones y feed de grupos | 64 me gusta nuevos en una publicación de la página (no es de esta sesión), el aviso de pago de Meta sigue; en los grupos solo respuestas a ofertas de empleo. Nada que contestar | — |
+| — | Instagram | — | sin sesión | — |
+
+Totales: X 0 respuestas, 0 seguidas; TikTok 5 (2 con app: la respuesta a Florin y el de Eddy); YouTube 2 (0 con app). Con app: 2 de 7.
+Sin pieza nueva. Reddit no se intentó. Truco de TikTok: tras pulsar el cuadro de comentario por referencia, el PRIMER `type` se
+pierde y el segundo entra; comprobar siempre con `.public-DraftEditor-content` antes de enviar (la flecha de la respuesta a un
+comentario baja al crecer el cuadro: 1273,517 con 284 caracteres).
+
+## 01-11-2026 (04:10 – 04:45) — ronda del bucle de 4 h (Chrome del PC 1)
+
+Ahora solo hay UN Chrome conectado a la extensión («Browser 1», el mismo deviceId que antes era el «Browser 2»), con las sesiones
+de X, TikTok, YouTube y Facebook. Instagram sigue sin sesión.
+
+### Metricool (marca 7741371)
+Sin huecos del 01 al 08-11 (TikTok 18:00 e Instagram 12:00 cada día, YouTube 02/05/09-11 19:00, LinkedIn 04 y 11-11 11:00); TikTok
+también el 09 y el 10-11. Nada añadido. Hueco que vendrá: Instagram del M 10-11 (fuera de los 7 días todavía). Los dos de LinkedIn
+siguen con el texto viejo «Flota … 7 días de prueba» (no se tocan sin que Dani diga).
+
+### X (@FlotaDSP)
+- El post del 31-10 salió («Your scheduled post was published», hace 20 h). D 01-11 → X 11-11 programados (verificado ayer; hoy la
+  página de Scheduled devolvió el inicio y no se re-verificó). El J 12-11 sigue sin cifra real de altas.
+- Notificaciones: nada nuevo (me gusta ya vistos). Dos búsquedas en español en directo: clientes quejándose de robos y entregas,
+  hilos con empresas nombradas y lo de hace días ya contestado. 0 respuestas, 0 seguidas.
+
+### Ronda de conversación (lo nuestro primero)
+| Hora | Red | Hilo | Qué se dijo | App |
+|---|---|---|---|---|
+| 04:14 | TikTok | Actividad | **javi030426 respondió a nuestro comentario** («Normalmente cargo como venga, luego no sigo el orden de ruta que sino no termino nunca jaja», hace 3 h) y dio me gusta; me gusta de «s» al comentario de la Merche. El resto, visto | — |
+| 04:18 | TikTok | **@javi030426**, respuesta bajo la suya | normal: si el orden lo da una lista hecha desde una oficina, seguirlo es no acabar nunca; apuntar al cargar dónde cae cada bulto; «si algún día quieres probar un orden por tiempo real y no por lista, en nuestra app es gratis y el orden lo cambias tú a mano; pero vamos, que lo tuyo ya funciona» | sí (verificado) |
+| 04:20 | X | notificaciones y búsquedas | nada que contestar | — |
+| 04:22 | TikTok | **@yamilethrivas94** «¡Primer día de ruta! ¿Creen que lo logré en 2 horas y media?» (10-14) | primer día con la ruta en marcha a las 7:18; no mirar el reloj de los demás, apuntar qué paradas costaron y por qué; a los cinco días se sabe dónde se va el tiempo | no (verificado) |
+| 04:25 | TikTok | **@livraisons.story** Livraisons Story (Francia) «Malgré que l'on peut être chargé, on essaie d'être de bonne humeur» (8-14; vlogs de jornadas completas) | **ofrecimiento público a micro-creador**, en francés: los relais de 20 colis se cargan los últimos, junto a la puerta; «on est FDS, une petite équipe d'Espagne, appli gratuite pour les livreurs… si tu la testes sur une vraie journée et que tu racontes ici ce qui manque»; nada a cambio | sí (verificado) |
+| 04:29 | TikTok | **@postmaus7** Postmaus (Alemania) «3 Dinge, die ich gerne gewusst hätte, bevor ich bei der Post angefangen hab» (8-26, muchos comentarios de carteros) | en alemán, sobre el comentario de «llegar una hora antes al depósito»: el punto 4 es que no cansa entregar, cansa buscar; últimas paradas al fondo, primera hora a mano | no (verificado) |
+| 04:33 | TikTok | **@obarbogu** Gutierry Barbosa (brasileño en España) «Um dia como entregador na Espanha: 140 encomendas» (9-20) | en portugués, sobre el comentario de Galicia: lo que mata al de coche en España es aparcar; parar una vez y llevar 3-4 portales a pie; carga en orden de paradas para no hacer doble fila buscando caja | no (verificado) |
+| 04:36 | TikTok | **@nicholas.petrunga** ErcorriereGLS (Italia) «Vita da corriere» (9-25) | en italiano, al que pregunta cómo entrar: el primer mes te juzgan por cuántos paquetes encuentras a la primera; carga en orden de entrega | no (verificado) |
+| 04:38 | YouTube | Studio → comentarios sin responder | ninguno | — |
+| 04:39 | YouTube | Migue el turista «¿Vale la pena trabajar como repartidor en 2026?» (354 vistas, Bogotá) y ElbonyNC «A Day in the Life of a Courier» (13 vistas) | comida en moto el primero, canal que vende listas de apps el segundo: no se comenta | — |
+| 04:41 | YouTube | **Braunschweiger-Zeitung.de** «Pakete, Zeitdruck und Hitze: Unterwegs mit einem Postboten» (1,3K vistas en 2 d, reportaje) | en alemán: enseña la hora antes de la primera parada, que el cliente no ve; cargar en orden de ruta ahorra una hora de pie en un día de calor; «Gruß aus Spanien von Leuten, die selbst gefahren sind» | no (verificado) |
+| 04:43 | YouTube | **Renan** «#245 Someone Is Always Watching the Delivery Van» (6 vistas, hace 1 d; ya comentamos el #242) | en inglés: el vecino de la cortina es universal y en ruta rural juega a favor («she's round the back»); que siga la serie | no (verificado) |
+| 04:44 | Facebook | notificaciones y feed de grupos | lo mismo: 64 me gusta a una publicación de la página, el aviso de pago de Meta, me gusta al reel. En los grupos, ventas de coches. Nada que contestar | — |
+| — | Instagram | — | sin sesión | — |
+
+Totales: X 0 respuestas, 0 seguidas; TikTok 6 (2 con app: la respuesta a Javi y el ofrecimiento a Livraisons Story); YouTube 2
+(0 con app). Con app: 2 de 8. Sin pieza nueva. Reddit no se intentó. En TikTok el primer `type` tras pulsar el cuadro se sigue
+perdiendo (salvo en la respuesta a Javi, que entró a la primera): comprobar siempre con `.public-DraftEditor-content`.

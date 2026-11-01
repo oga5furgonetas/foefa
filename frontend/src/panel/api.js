@@ -673,6 +673,9 @@ export const changeMyPassword = (current_password, new_password) =>
 // `extra`: { tambien_usuario, password } cuando se entra con el correo y el usuario cambia con él.
 export const setMyEmail = (email, extra = {}) => api.post('/auth/my-email', { email, ...extra })
 export const pedirEnlaceClave = (email) => api.post('/auth/forgot-password', { email })
+// Borrar la propia cuenta (solo quien reparte por su cuenta; con la contraseña). La desactiva al momento y la oficina
+// borra los datos en 30 días como mucho: lo exigen Google Play y Apple a toda app en la que se crea una cuenta.
+export const borrarMiCuenta = (password) => api.post('/auth/borrar-cuenta', { password })
 // Pase de un solo uso (10 min) para abrir la cuenta en Chrome o en otro móvil sin volver a entrar.
 export const crearPaseMovil = () => api.post('/auth/pase-movil')
 // Retiradas de la cartera de los repartidores (solo la plataforma): ver, marcar pagada, rechazar.
