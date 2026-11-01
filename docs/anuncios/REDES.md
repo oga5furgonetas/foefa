@@ -259,3 +259,4 @@ Lo que la tarea NO hace y por qué:
 | 31-10 07:52 | (nube) | Metricool | Ronda 1 del sábado. Sin huecos hasta el L 09-11 en TikTok, Instagram y YouTube (LinkedIn 04-11 y 11-11). Nada nuevo. | Las piezas D y X siguen sin estar en `main`; la del 10-11 en adelante necesitará el carrusel D |
 | 31-10 12:52 | (nube) | Metricool | Ronda 2 del sábado. Sin huecos hasta el D 08-11 (y el L 09-11). Nada nuevo. | Igual que a las 7:52 |
 | 31-10 19:52 | (nube) | Metricool | Ronda 3 del sábado. Mañana (D 01-11) TikTok 18:00 e Instagram 12:00 en su sitio; semana cubierta hasta el L 09-11. Nada nuevo. | Igual: piezas D/X sin `main` |
+| 01-11 07:52 | (nube) | Metricool | Ronda 1 del domingo. Semana cubierta hasta el L 09-11. La sesión del PC (31-10 20:23) pasó los carruseles de TikTok a JPEG (el del 08-11 actualizado) y puso «5 trucos» en TikTok el M 10-11; Instagram del 10-11 sigue vacío. Nada nuevo desde aquí. | Piezas D/X aún sin `main` |
