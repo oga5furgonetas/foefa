@@ -791,6 +791,26 @@ contentarme [...] No quiero falsos positivos ni soluciones por decir». El infor
   · **Lo que NO hay**: iPhone (la app de iPhone es la web, sin extensión de compartir) y un recordatorio en Hoy de
     que existe «Compartir» (cabría en «Más formas de añadir»). Y no está probado con una hoja REAL de una agencia:
     solo con las de los tests.
+- **LA MEMORIA DE LA CALLE (el punto 3 de `docs/SIGUIENTE-NIVEL-01-11.md`), hecha en servidor, web y nativa (01-11,
+  10:5x → 11:4x)**. Lo que hay:
+  · **Servidor**: la colección `calle_memoria` por empresa (una puerta, un apunte: índice único por `clave`, la
+    dirección normalizada de `reparto.clave_direccion`): el código del portal, dónde dejar (una de DONDE_ENTREGA) y
+    cómo se entra (`reparto.memoria_sanea`), quién lo apuntó y cuándo. `POST /reparto/mis-pedidos/{id}/memoria`
+    («Guardar para la próxima» desde la parada; todo vacío la borra; la parada tiene que ser tuya, o ser la oficina).
+    `mi-ruta` trae `memoria` en cada parada abierta de ESA dirección, la haya apuntado quien la haya apuntado (el
+    conductor nuevo hereda lo que sabía el anterior). El portal que da el cliente en su enlace (`seguimiento_respuesta`)
+    entra solo si nadie había apuntado otro (`por: cliente`). Caduca al año de la última vez que se tocó
+    (`DIAS_MEMORIA`, en `_rep_limpiar`): son instrucciones del cliente final. 4 tests en `test_memoria_calle.py`.
+  · **Web**: `pages/driver/MemoriaPuerta.jsx`: en la tarjeta de la parada, «Guardar para la próxima» o la línea
+    «Memoria de la puerta: portal 1234B, dejar en portería, entrada por el garaje» (un toque la abre para corregir); la
+    hoja (el código, con el portal del cliente ya puesto si lo dio; dónde dejar; cómo se entra; «Borrar lo guardado»).
+    El briefing por voz la dice (`lib/briefing.js`). 12 textos en 5 idiomas. Prueba de humo `e2e/memoria-calle.spec.js`
+    (guardar, la tarjeta, el briefing, corregir y borrar).
+  · **Nativa**: `Parada.memoria` (`Memoria`), `Repositorio.memoria`, `textoMemoria` y `MemoriaHoja` en `Hojas.kt`,
+    la ficha de la parada con la línea y el botón, `RutaVM.guardarMemoria`, el briefing (`Briefing.kt`).
+    `MemoriaTest` (2 casos). `Traducciones.kt` regenerado (711 textos).
+  · **Lo que difiere del documento**: sin foto del portal (pesa y es un dato más que guardar; la puerta aprendida por
+    posición ya existe) y sin contadores por franja (eso es el punto 5, la hora buena).
 
 ## Última sesión — 13-10-2026: escaneo de paquetes en lote
 
@@ -1878,6 +1898,8 @@ Dani: «conéctate a mi Chrome y hazlo tú para no liarla yo». Hecho (detalle e
 
 ## Pendiente (por prioridad)
 
+-21. **01-11 mañana, la memoria de la calle**: HECHA en servidor, web y nativa, con tests. Falta: el servidor y la web
+   desplegados con el CI en verde (van con lo de la mañana); la nativa en Play (versión 22).
 -20. **01-11 mañana, «Compartir con FDS»**: HECHO en nativa y servidor, con tests. Falta: (1) el servidor desplegado
    con el CI en verde (el `hoja: true` de `/reparto/pegar`); (2) la nativa en Play (misma versión 22 que la carga
    guiada y la entrega verificada); (3) probarlo con una hoja real (el PDF del correo de la agencia, la captura del

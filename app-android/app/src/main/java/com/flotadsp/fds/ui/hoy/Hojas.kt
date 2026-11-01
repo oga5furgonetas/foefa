@@ -29,6 +29,7 @@ import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.filled.Key
 import androidx.compose.material.icons.filled.Navigation
 import androidx.compose.material.icons.filled.PhotoCamera
 import androidx.compose.material.icons.automirrored.filled.Undo
@@ -66,6 +67,7 @@ import com.flotadsp.fds.BuildConfig
 import com.flotadsp.fds.data.Antes
 import com.flotadsp.fds.data.ClienteDice
 import com.flotadsp.fds.data.EntregaIa
+import com.flotadsp.fds.data.Memoria
 import com.flotadsp.fds.data.Parada
 import com.flotadsp.fds.ui.Acciones
 import com.flotadsp.fds.ui.LocalExtra
@@ -121,6 +123,49 @@ fun textoAntes(a: Antes): String {
     return tx("La última vez ({f}): {que}", "f" to f, "que" to que)
 }
 
+/** LA MEMORIA DE LA CALLE (01-11-2026): «portal 1234, dejar en portería, entrada por el garaje», lo que se pinta y lo
+ *  que se dice (la web tiene la misma en pages/driver/MemoriaPuerta.jsx). */
+fun textoMemoria(m: Memoria): String {
+    val partes = mutableListOf<String>()
+    if (m.portal.isNotBlank()) partes += tx("portal {c}", "c" to m.portal)
+    DONDE.firstOrNull { it.first == m.dejar }?.let { partes += tx("dejar {d}", "d" to it.second.lowercase()) }
+    if (m.acceso.isNotBlank()) partes += m.acceso
+    return partes.joinToString(", ")
+}
+
+/** LA MEMORIA DE LA CALLE (01-11-2026): la hoja para apuntar el portal, dónde dejar y cómo se entra. Si el cliente dio el
+ *  portal en su enlace, ya viene puesto. Todo vacío (o «Borrar lo guardado») lo borra. */
+@Composable
+fun MemoriaHoja(p: Parada, alCerrar: () -> Unit, alGuardar: (portal: String, dejar: String, acceso: String) -> Unit) {
+    var portal by remember { mutableStateOf(p.memoria?.portal?.ifBlank { null } ?: p.clienteDice?.portal ?: "") }
+    var dejar by remember { mutableStateOf(p.memoria?.dejar ?: "") }
+    var acceso by remember { mutableStateOf(p.memoria?.acceso ?: "") }
+    ModalBottomSheet(onDismissRequest = alCerrar, sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)) {
+        Column(Modifier.padding(horizontal = 20.dp).padding(bottom = 20.dp).navigationBarsPadding().verticalScroll(rememberScrollState())) {
+            Text(tx("Para la próxima vez en esta puerta"), style = MaterialTheme.typography.headlineSmall)
+            Text(p.direccion, style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Text(tx("Lo verá quien venga a esta dirección, también un compañero. Se borra al año."), style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Spacer(Modifier.height(12.dp))
+            OutlinedTextField(portal, { portal = it.take(40) }, label = { Text(tx("Código del portal")) }, singleLine = true, modifier = Modifier.fillMaxWidth())
+            Spacer(Modifier.height(12.dp))
+            Text(tx("¿Dónde lo has dejado? (opcional)"), style = MaterialTheme.typography.titleMedium)
+            FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                DONDE.forEach { (k, t) -> FilterChip(selected = dejar == k, onClick = { dejar = if (dejar == k) "" else k }, label = { Text(t) }) }
+            }
+            Spacer(Modifier.height(8.dp))
+            OutlinedTextField(acceso, { acceso = it.take(200) }, label = { Text(tx("Cómo se entra")) },
+                placeholder = { Text(tx("«Entrada por el garaje», «timbre 2», «sin ascensor»…")) }, modifier = Modifier.fillMaxWidth())
+            Spacer(Modifier.height(18.dp))
+            Button(onClick = { alGuardar(portal.trim(), dejar, acceso.trim()) }, enabled = portal.isNotBlank() || dejar.isNotBlank() || acceso.isNotBlank(),
+                modifier = Modifier.fillMaxWidth().height(54.dp)) {
+                Icon(Icons.Default.Key, contentDescription = null); Spacer(Modifier.width(6.dp)); Text(tx("Guardar para la próxima"))
+            }
+            if (p.memoria != null) TextButton(onClick = { alGuardar("", "", "") }, modifier = Modifier.fillMaxWidth()) { Text(tx("Borrar lo guardado")) }
+        }
+    }
+}
+
 /** LA ENTREGA VERIFICADA (01-11-2026): lo que la IA dijo de la foto de entrega, en una frase (la web tiene la misma en
  *  lib/entregaIa.js). El servidor manda el código y los datos; la frase se hace aquí, en su idioma. */
 fun textoAvisoIa(ia: EntregaIa): String = when (ia.aviso) {
@@ -168,6 +213,8 @@ fun ParadaHoja(
     alApuntar: (String) -> Unit = {},
     /** LA ENTREGA VERIFICADA (01-11-2026): repetir la foto de una entrega que la IA pide revisar. */
     alRepetirFoto: () -> Unit = {},
+    /** LA MEMORIA DE LA CALLE (01-11-2026): «Guardar para la próxima» en esta puerta. */
+    alMemoria: () -> Unit = {},
 ) {
     val ctx = LocalContext.current
     var quitar by remember { mutableStateOf(false) }
@@ -192,6 +239,7 @@ fun ParadaHoja(
                 p.entregaIa?.takeIf { p.estado == "entregado" }?.let { if (it.nivel == "verificada") tx("Entrega verificada por IA") else textoAvisoIa(it).takeIf { t -> t.isNotBlank() } },
                 p.antes?.takeIf { p.pendiente }?.let { textoAntes(it) },
                 p.clienteDice?.let { textoClienteDice(it) }?.takeIf { it.isNotBlank() }?.let { tx("El cliente dice: {t}", "t" to it) },
+                p.memoria?.let { textoMemoria(it) }?.takeIf { it.isNotBlank() }?.let { tx("Memoria de la puerta: {t}", "t" to it) },
             )
             if (datos.isNotEmpty()) {
                 Spacer(Modifier.height(12.dp))
@@ -199,6 +247,10 @@ fun ParadaHoja(
             }
             if (p.estado == "entregado" && p.entregaIa?.nivel == "revisar") {
                 TextButton(onClick = alRepetirFoto) { Icon(Icons.Default.PhotoCamera, contentDescription = null); Spacer(Modifier.width(6.dp)); Text(tx("Repetir la foto")) }
+            }
+            TextButton(onClick = alMemoria) {
+                Icon(Icons.Default.Key, contentDescription = null); Spacer(Modifier.width(6.dp))
+                Text(if (p.memoria == null) tx("Guardar para la próxima") else tx("Para la próxima vez en esta puerta"))
             }
             Spacer(Modifier.height(16.dp))
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {

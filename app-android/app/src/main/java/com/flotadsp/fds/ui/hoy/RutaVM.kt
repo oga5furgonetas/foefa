@@ -193,6 +193,19 @@ class RutaVM(app: Application) : AndroidViewModel(app) {
 
     fun deshacer(p: Parada) = marcar(p, "pendiente", JsonObject(emptyMap()), tx("Vuelve a estar por entregar."), conDeshacer = false)
 
+    /** LA MEMORIA DE LA CALLE (01-11-2026): lo apuntado para la próxima vez en esa puerta; todo vacío la borra. */
+    fun guardarMemoria(p: Parada, portal: String, dejar: String, acceso: String) {
+        viewModelScope.launch {
+            try {
+                repo.memoria(p.id, portal, dejar, acceso)
+                avisar(if (portal.isBlank() && dejar.isBlank() && acceso.isBlank()) tx("Borrado.") else tx("Guardado para la próxima vez en esta puerta."))
+                refrescarSinRuido()
+            } catch (e: ErrorApi) {
+                avisar(e.message ?: tx("No se ha podido guardar"))
+            }
+        }
+    }
+
     /** Lo que dice la DGT (30-10-2026): sin red o sin DGT, nada (no se avisa: es un extra del mapa). */
     fun cargarZbe() { viewModelScope.launch { runCatching { repo.zbe() }.onSuccess { _e.value = _e.value.copy(zbe = it) } } }
     fun cargarIncidencias() { viewModelScope.launch { runCatching { repo.incidencias() }.onSuccess { _e.value = _e.value.copy(incidencias = it) } } }

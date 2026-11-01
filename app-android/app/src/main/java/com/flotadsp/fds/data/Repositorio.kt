@@ -353,6 +353,9 @@ class Repositorio(private val ctx: Context, val cuenta: Cuenta, val api: Api) {
      *  que dice qué paradas ve (sin confirmar) o las crea. */
     suspend fun pegar(texto: String, hoja: Boolean, pais: String, confirmar: Boolean): Pegado =
         leer(api.post("reparto/pegar", buildJsonObject { put("texto", texto); put("hoja", hoja); put("pais", pais); put("confirmar", confirmar) }))
+    /** LA MEMORIA DE LA CALLE (01-11-2026): «Guardar para la próxima» en la puerta de esa parada; todo vacío la borra. */
+    suspend fun memoria(id: String, portal: String, dejar: String, acceso: String): JsonObject =
+        api.post("reparto/mis-pedidos/$id/memoria", buildJsonObject { put("portal", portal); put("dejar", dejar); put("acceso", acceso) }).jsonObject
     suspend fun editarParada(id: String, datos: JsonObject) { api.post("reparto/mis-pedidos/$id/editar", datos) }
     suspend fun quitarParada(id: String) { api.post("reparto/mis-pedidos/$id/quitar") }
 

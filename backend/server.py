@@ -1824,6 +1824,9 @@ async def _ensure_tenant_indexes(db_name: str):
     await _idx(tdb.reparto_jornadas, "fecha")
     await _idx(tdb.reparto_rutas, "id")
     await _idx(tdb.reparto_rutas, "fecha")
+    # LA MEMORIA DE LA CALLE (01-11-2026): una puerta, un apunte.
+    await _idx(tdb.calle_memoria, "clave", unique=True)
+    await _idx(tdb.calle_memoria, "actualizado")
     await _idx(tdb.reparto_avisos, "driver_id")
     await _idx(tdb.plantillas_compartidas, "id", unique=True)
     await _idx(tdb.furgo_fijas, "driver_id", unique=True)
@@ -51997,6 +52000,9 @@ async def _rep_limpiar(user: dict):
                       "entrega_ia": None, "vista": None, "anonimizado": True}})
         lim_rastro = (hoy - timedelta(days=reparto.DIAS_RASTRO)).strftime("%Y-%m-%d")
         await db.reparto_jornadas.delete_many({"fecha": {"$lt": lim_rastro}})
+        # LA MEMORIA DE LA CALLE (01-11-2026) caduca al año de la última vez que se tocó.
+        lim_memoria = (datetime.now(timezone.utc) - timedelta(days=reparto.DIAS_MEMORIA)).isoformat()
+        await db.calle_memoria.delete_many({"actualizado": {"$lt": lim_memoria}})
         # Los recorridos que se guardaron hasta el 29-10-2026 (ya no se guardan, ver
         # /reparto/posicion) se quitan de las jornadas que quedan.
         await db.reparto_jornadas.update_many({"rastro": {"$exists": True}}, {"$unset": {"rastro": ""}})
@@ -52864,6 +52870,18 @@ async def seguimiento_respuesta(token: str, request: Request, data: dict = Body(
     if r.get("franja"):
         cambios["ventana_desde"], cambios["ventana_hasta"] = r["franja"]
     await tdb.reparto_pedidos.update_one({"id": p["id"]}, {"$set": cambios})
+    # LA MEMORIA DE LA CALLE (01-11-2026): el portal que da el cliente se queda para la próxima vez en esa puerta, si
+    # nadie de la empresa había apuntado otro.
+    try:
+        clave = reparto.clave_direccion(p.get("direccion")) if r.get("portal") else ""
+        if clave and not await tdb.calle_memoria.find_one({"clave": clave, "portal": {"$exists": True, "$nin": [None, ""]}},
+                                                          {"_id": 0, "clave": 1}):
+            await tdb.calle_memoria.update_one({"clave": clave}, {
+                "$set": {"clave": clave, "direccion": _texto_cuerpo(p.get("direccion"), 200), "portal": _texto_cuerpo(r.get("portal"), 40),
+                         "actualizado": datetime.now(timezone.utc).isoformat(), "por": "cliente"},
+                "$setOnInsert": {"dejar": "", "acceso": ""}}, upsert=True)
+    except Exception as ex:                                  # noqa: BLE001
+        logger.warning(f"memoria de la calle (cliente): {type(ex).__name__}")
     # Al repartidor, por todos los caminos (la bandeja de la app, web push y FCM).
     if p.get("conductor_id"):
         org = await global_db.organizations.find_one({"db_name": e["db_name"]}, {"_id": 0, "sector": 1, "idioma": 1, "pais": 1, "zona_horaria": 1}) or {}
@@ -53058,6 +53076,20 @@ async def reparto_mi_ruta(user: dict = Depends(require_any_auth)):
                     p["antes"] = antes[p["id"]]
     except Exception as e:                                   # noqa: BLE001
         logger.warning(f"la última vez: {type(e).__name__}")
+    # LA MEMORIA DE LA CALLE (01-11-2026): lo que la EMPRESA sabe de ese portal (el código, dónde dejar, cómo se entra),
+    # lo haya apuntado quien lo haya apuntado; el conductor nuevo hereda lo que sabía el anterior.
+    try:
+        abiertas = [p for p in ps if p.get("estado") in ("pendiente", "en_ruta") and not p.get("ejemplo")]
+        claves = list({reparto.clave_direccion(p.get("direccion")) for p in abiertas} - {""})
+        if claves:
+            memorias = {m["clave"]: m async for m in db.calle_memoria.find({"clave": {"$in": claves}}, {"_id": 0})}
+            for p in abiertas:
+                m = memorias.get(reparto.clave_direccion(p.get("direccion")))
+                if m:
+                    p["memoria"] = {"portal": m.get("portal") or "", "dejar": m.get("dejar") or "", "acceso": m.get("acceso") or "",
+                                    "por": m.get("por") or "", "actualizado": m.get("actualizado")}
+    except Exception as e:                                   # noqa: BLE001
+        logger.warning(f"memoria de la calle: {type(e).__name__}")
     # PARADAS DE DÍAS ANTERIORES SIN CERRAR (25-10-2026): la ruta es la del día, y lo que se quedó sin entregar (o se
     # cargó por la noche) desaparecía de «Hoy» a las 00:00. Se cuentan las de la última semana para ofrecer traerlas.
     previas = 0
@@ -54090,6 +54122,33 @@ async def reparto_mi_orden(data: dict = Body(...), user: dict = Depends(require_
     salida, programada = _rep_salida_ahora(a)
     ruta = await _rep_ordenar(f, d["id"], origen, salida_min=salida, orden_fijo=ids, programada=programada)
     return {"ordenados": len(ids), "ruta": ruta}
+
+
+@api_router.post("/reparto/mis-pedidos/{pid}/memoria")
+async def reparto_mi_memoria(pid: str, data: dict = Body(...), user: dict = Depends(require_any_auth)):
+    """LA MEMORIA DE LA CALLE (01-11-2026): «Guardar para la próxima» desde la parada: el código del portal, dónde
+    dejarlo y cómo se entra, para ESA dirección y para toda la empresa. Todo vacío lo borra. Lo trae mi-ruta en
+    `memoria` y lo dice el briefing."""
+    p = await db.reparto_pedidos.find_one({"id": pid}, {"_id": 0, "conductor_id": 1, "direccion": 1, "lat": 1, "lng": 1})
+    if not p:
+        raise HTTPException(404, "Esa parada ya no existe")
+    if user.get("role") == "driver":
+        if p.get("conductor_id") != user.get("sub"):
+            raise HTTPException(403, "Esa parada no es tuya")
+    elif user.get("role") != "admin":
+        raise HTTPException(403, "No puedes cambiar paradas")
+    clave = reparto.clave_direccion(p.get("direccion"))
+    if not clave:
+        raise HTTPException(400, "Esa parada no tiene dirección")
+    m = reparto.memoria_sanea(_dict_cuerpo(data))
+    if not m:
+        await db.calle_memoria.delete_one({"clave": clave})
+        return {"ok": True, "memoria": None}
+    doc = {**m, "clave": clave, "direccion": _texto_cuerpo(p.get("direccion"), 200), "lat": p.get("lat"), "lng": p.get("lng"),
+           "actualizado": datetime.now(timezone.utc).isoformat(), "por": _texto_cuerpo(user.get("name"), 80),
+           "conductor_id": user.get("sub")}
+    await db.calle_memoria.update_one({"clave": clave}, {"$set": doc}, upsert=True)
+    return {"ok": True, "memoria": {k: doc[k] for k in ("portal", "dejar", "acceso", "por", "actualizado")}}
 
 
 @api_router.post("/reparto/mis-pedidos/{pid}/editar")

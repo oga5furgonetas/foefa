@@ -5,6 +5,7 @@
 import { tx } from './idioma'
 import { importe } from './region'
 import { textoClienteDice } from '../pages/driver/ClienteDice'
+import { textoMemoria } from '../pages/driver/MemoriaPuerta'
 
 /* «Detrás · izq» → «detrás, a la izquierda» (lo que se dice, no lo que se pinta). */
 export function huecoHablado(hueco) {
@@ -25,6 +26,9 @@ export function textoBriefing(p) {
   else if (p.horario) partes.push(p.horario)
   const dice = p.cliente_dice ? textoClienteDice(p.cliente_dice) : ''
   if (dice) partes.push(tx('el cliente dice: {t}', { t: dice }))
+  // La memoria de la calle (01-11-2026): el portal, dónde dejar y cómo se entra, como lo apuntó quien estuvo antes.
+  const memoria = textoMemoria(p.memoria)
+  if (memoria) partes.push(memoria)
   if (p.hueco) partes.push(tx('en la furgoneta, {s}', { s: huecoHablado(p.hueco) }))
   if (p.bultos > 1) partes.push(tx('{n} bultos', { n: p.bultos }))
   if (Number(p.cobrar) > 0) partes.push(tx('cobro a la entrega: {i}', { i: importe(p.cobrar) }))

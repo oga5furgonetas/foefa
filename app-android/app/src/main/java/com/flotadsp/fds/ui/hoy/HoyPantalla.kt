@@ -127,6 +127,7 @@ fun HoyPantalla(
     var abierta by remember { mutableStateOf<Parada?>(null) }
     var entregando by remember { mutableStateOf<Parada?>(null) }
     var fallando by remember { mutableStateOf<Parada?>(null) }
+    var memoriaDe by remember { mutableStateOf<Parada?>(null) }     // la memoria de la calle (01-11-2026)
     val prefijo = e.ruta?.prefijo ?: "34"
     val empresa = e.ruta?.takeIf { !it.autonomo }?.empresa.orEmpty()
 
@@ -295,6 +296,7 @@ fun HoyPantalla(
             alQuitar = { abierta = null; vm.quitar(p) },
             alApuntar = { vm.apuntar(p, it) },
             alRepetirFoto = { abierta = null; vm.pedirRevisar(p) },
+            alMemoria = { abierta = null; memoriaDe = p },
         )
     }
     entregando?.let { p ->
@@ -302,6 +304,9 @@ fun HoyPantalla(
     }
     fallando?.let { p ->
         NoEntregadoHoja(alCerrar = { fallando = null }, alConfirmar = { motivo, nota -> fallando = null; vm.noEntregado(p, motivo, nota) })
+    }
+    memoriaDe?.let { p ->
+        MemoriaHoja(p, alCerrar = { memoriaDe = null }, alGuardar = { portal, dejar, acceso -> memoriaDe = null; vm.guardarMemoria(p, portal, dejar, acceso) })
     }
     // LA ENTREGA VERIFICADA (01-11-2026): la IA pide mirar la foto que se acaba de hacer (o la de una entregada, desde su ficha).
     revisar?.let { r -> RevisarFotoDialogo(r, alRepetir = { vm.repetirFoto(r, it) }, alCerrar = { vm.revisado() }) }

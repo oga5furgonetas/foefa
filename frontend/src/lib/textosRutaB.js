@@ -1069,4 +1069,17 @@ export const B = {
   "Está bien así": ["It’s fine as it is", "Está bem assim", "C’est bon comme ça", "Va bene così", "So ist es gut"],
   "Entrega verificada por IA": ["Delivery verified by AI", "Entrega verificada por IA", "Livraison vérifiée par l’IA", "Consegna verificata dall’IA", "Zustellung per KI bestätigt"],
   "Entrega verificada: la foto enseña el paquete en tu dirección.": ["Verified delivery: the photo shows the parcel at your address.", "Entrega verificada: a foto mostra a encomenda na tua morada.", "Livraison vérifiée : la photo montre le colis à ton adresse.", "Consegna verificata: la foto mostra il pacco al tuo indirizzo.", "Zustellung bestätigt: Das Foto zeigt das Paket an deiner Adresse."],
+  // LA MEMORIA DE LA CALLE (01-11-2026): el portal, dónde dejar y cómo se entra, para la próxima vez.
+  "Guardar para la próxima": ["Save for next time", "Guardar para a próxima", "Garder pour la prochaine fois", "Salva per la prossima volta", "Fürs nächste Mal merken"],
+  "Memoria de la puerta: {t}": ["Door memory: {t}", "Memória da porta: {t}", "Mémoire de la porte : {t}", "Memoria della porta: {t}", "Gemerkt zur Tür: {t}"],
+  "portal {c}": ["door code {c}", "portão {c}", "code {c}", "portone {c}", "Code {c}"],
+  "dejar {d}": ["leave {d}", "deixar {d}", "laisser {d}", "lasciare {d}", "ablegen: {d}"],
+  "Para la próxima vez en esta puerta": ["For next time at this door", "Para a próxima vez nesta porta", "Pour la prochaine fois à cette porte", "Per la prossima volta a questa porta", "Fürs nächste Mal an dieser Tür"],
+  "Lo verá quien venga a esta dirección, también un compañero. Se borra al año.": ["Whoever comes to this address will see it, a colleague too. It’s deleted after a year.", "Quem vier a esta morada vai vê-lo, também um colega. Apaga-se ao fim de um ano.", "Qui viendra à cette adresse le verra, un collègue aussi. Effacé au bout d’un an.", "Lo vedrà chi verrà a questo indirizzo, anche un collega. Si cancella dopo un anno.", "Wer an diese Adresse kommt, sieht es, auch ein Kollege. Nach einem Jahr wird es gelöscht."],
+  "Código del portal": ["Door code", "Código do portão", "Code de l’immeuble", "Codice del portone", "Türcode"],
+  "Cómo se entra": ["How to get in", "Como se entra", "Comment entrer", "Come si entra", "Wie man reinkommt"],
+  "«Entrada por el garaje», «timbre 2», «sin ascensor»…": ["“Entrance through the garage”, “bell 2”, “no lift”…", "«Entrada pela garagem», «campainha 2», «sem elevador»…", "« Entrée par le garage », « sonnette 2 », « sans ascenseur »…", "«Ingresso dal garage», «campanello 2», «senza ascensore»…", "„Eingang über die Garage“, „Klingel 2“, „kein Aufzug“ …"],
+  "Borrar lo guardado": ["Delete what’s saved", "Apagar o guardado", "Effacer ce qui est enregistré", "Cancella quanto salvato", "Gemerktes löschen"],
+  "Guardado para la próxima vez en esta puerta.": ["Saved for next time at this door.", "Guardado para a próxima vez nesta porta.", "Enregistré pour la prochaine fois à cette porte.", "Salvato per la prossima volta a questa porta.", "Fürs nächste Mal an dieser Tür gemerkt."],
+  "Borrado.": ["Deleted.", "Apagado.", "Effacé.", "Cancellato.", "Gelöscht."],
 }

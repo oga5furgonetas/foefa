@@ -77,6 +77,10 @@ en los últimos 50 metros (el portal, el cliente), después (el dinero y la prue
 - **Quién lo tiene.** DispatchTrack (enterprise). Ningún planificador de autónomos.
 
 ### 3. Memoria de la calle compartida (3 días)
+> **HECHA el 01-11-2026 (mañana), en servidor, web y nativa** (ver `ESTADO.md`): el código del portal, dónde dejar y
+> cómo se entra, por dirección y para toda la empresa; el portal que da el cliente entra solo; caduca al año. Sin foto
+> del portal ni contadores por franja (lo segundo es el punto 5).
+
 - **Qué es.** Cada portal acumula lo que se aprende: código, «deja en el buzón», «perro», «entrada por el garaje»,
   «no hay ascensor», la foto del portal, y a qué hora suelen estar. Para el autónomo es suya; para una empresa es DE
   LA EMPRESA: el conductor nuevo en una ruta hereda lo que sabía el anterior. Es exactamente lo que Amazon y HERE

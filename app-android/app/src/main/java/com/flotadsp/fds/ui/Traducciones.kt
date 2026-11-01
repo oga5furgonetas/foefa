@@ -1,6 +1,6 @@
 package com.flotadsp.fds.ui
 
-/* GENERADO por scripts/nativa-idioma.mjs (30-10-2026): no editar a mano. 699 textos de la app nativa con sus
+/* GENERADO por scripts/nativa-idioma.mjs (30-10-2026): no editar a mano. 711 textos de la app nativa con sus
    traducciones (en, pt, fr, it, de), sacadas de la web (frontend/src/lib/textosRuta*.js) y de
    app-android/traducciones-nativa.json. Una fila por línea, columnas con TAB; ⏎ es un salto de línea. En bloques
    porque una constante de Kotlin no puede pasar de 64 KB. */
@@ -63,6 +63,8 @@ Añadir {n} paradas	Add {n} stops	Adicionar {n} paragens	Ajouter {n} arrêts	Agg
 Aún no hay días con paradas.	No days with stops yet.	Ainda não há dias com paragens.	Pas encore de journées avec des arrêts.	Ancora nessun giorno con fermate.	Noch keine Tage mit Stopps.
 Bono de bienvenida conseguido: {euros} en tu cartera.	Welcome bonus earned: {euros} in your wallet.	Bónus de boas-vindas conseguido: {euros} na tua carteira.	Bonus de bienvenue obtenu : {euros} dans votre portefeuille.	Bonus di benvenuto ottenuto: {euros} nel tuo portafoglio.	Willkommensbonus erhalten: {euros} in deinem Guthaben.
 Bono de bienvenida: {euros} por tu primera ruta de verdad.	Welcome bonus: {euros} for your first real route.	Bónus de boas-vindas: {euros} pela tua primeira rota a sério.	Bonus de bienvenue : {euros} pour votre première vraie tournée.	Bonus di benvenuto: {euros} per il tuo primo giro vero.	Willkommensbonus: {euros} für deine erste echte Route.
+Borrado.	Deleted.	Apagado.	Effacé.	Cancellato.	Gelöscht.
+Borrar lo guardado	Delete what’s saved	Apagar o guardado	Effacer ce qui est enregistré	Cancella quanto salvato	Gemerktes löschen
 Borrar mi cuenta	Delete my account	Eliminar a minha conta	Supprimer mon compte	Elimina il mio account	Mein Konto löschen
 Borrar tu cuenta	Delete your account	Eliminar a tua conta	Supprimer votre compte	Elimina il tuo account	Dein Konto löschen
 Briefing por voz	Voice briefing	Briefing por voz	Briefing vocal	Briefing vocale	Sprach-Briefing
@@ -112,7 +114,9 @@ Crear mi cuenta	Create my account	Criar a minha conta	Créer mon compte	Crea il 
 Crear mi cuenta gratis	Create my free account	Criar a minha conta grátis	Créer mon compte gratuit	Crea il mio account gratis	Mein kostenloses Konto erstellen
 Cuenta	Account	Conta	Compte	Account	Konto
 Código de 6 cifras	6-digit code	Código de 6 dígitos	Code à 6 chiffres	Codice a 6 cifre	6-stelliger Code
+Código del portal	Door code	Código do portão	Code de l’immeuble	Codice del portone	Türcode
 Código: {x}	Code: {x}	Código: {x}	Code : {x}	Codice: {x}	Code: {x}
+Cómo se entra	How to get in	Como se entra	Comment entrer	Come si entra	Wie man reinkommt
 Daño	Damage	Dano	Dommage	Danno	Schaden
 Dejar de seguirme	Stop following me	Deixar de me seguir	Arrêter de me suivre	Smetti di seguirmi	Nicht mehr folgen
 Delante · der	Front · right	Frente · dir	Avant · droite	Davanti · dx	Vorne · rechts
@@ -244,6 +248,7 @@ Google Play no responde ahora mismo. Inténtalo en un momento.	Google Play isn�
 Gratis y sin límite durante la promoción.	Free and unlimited during the promotion.	Grátis e sem limite durante a promoção.	Gratuit et illimité pendant la promotion.	Gratis e senza limiti durante la promozione.	Kostenlos und unbegrenzt während der Aktion.
 Gratis y sin límite hasta el {fecha} · sin tarjeta	Free and unlimited until {fecha} · no card	Grátis e sem limite até {fecha} · sem cartão	Gratuit et sans limite jusqu’au {fecha} · sans carte	Gratis e senza limiti fino al {fecha} · senza carta	Kostenlos und ohne Limit bis zum {fecha} · ohne Karte
 Gratis y sin límite hasta el {f}.	Free and unlimited until {f}.	Grátis e sem limite até {f}.	Gratuit et illimité jusqu’au {f}.	Gratis e senza limiti fino al {f}.	Kostenlos und unbegrenzt bis {f}.
+Guardado para la próxima vez en esta puerta.	Saved for next time at this door.	Guardado para a próxima vez nesta porta.	Enregistré pour la prochaine fois à cette porte.	Salvato per la prossima volta a questa porta.	Fürs nächste Mal an dieser Tür gemerkt.
 Guardado.	Saved.	Guardado.	Enregistré.	Salvato.	Gespeichert.
 Guardado: lo verás en «Hoy».	Saved: you will see it in “Today”.	Guardado: vais vê-lo em «Hoje».	Enregistré : vous le verrez dans « Aujourd’hui ».	Salvato: lo vedrai in «Oggi».	Gespeichert: Du siehst es unter „Heute“.
 Guardando…	Saving…	A guardar…	Enregistrement…	Salvataggio…	Wird gespeichert…
@@ -251,6 +256,7 @@ Guardar	Save	Guardar	Enregistrer	Salva	Speichern
 Guardar cambios	Save changes	Guardar alterações	Enregistrer les modifications	Salva le modifiche	Änderungen speichern
 Guardar contraseña	Save password	Guardar palavra-passe	Enregistrer le mot de passe	Salva password	Passwort speichern
 Guardar la tarifa	Save the rate	Guardar a tarifa	Enregistrer le tarif	Salva la tariffa	Tarif speichern
+Guardar para la próxima	Save for next time	Guardar para a próxima	Garder pour la prochaine fois	Salva per la prossima volta	Fürs nächste Mal merken
 Guardar teléfono	Save phone	Guardar telefone	Enregistrer le téléphone	Salva telefono	Telefon speichern
 Guardar y continuar	Save and continue	Guardar e continuar	Enregistrer et continuer	Salva e continua	Speichern und weiter
 HECHAS HOY	DONE TODAY	FEITAS HOJE	FAITES AUJOURD’HUI	FATTE OGGI	HEUTE ERLEDIGT
@@ -321,6 +327,7 @@ Lo de detrás se entrega primero.	What’s at the back is delivered first.	O de 
 Lo estamos revisando: te avisamos en cuanto esté.	We are checking it: we will let you know as soon as it is ready.	Estamos a rever: avisamos-te assim que estiver.	Nous vérifions : nous vous prévenons dès que c’est prêt.	Lo stiamo controllando: ti avvisiamo appena è pronto.	Wir prüfen es: Wir melden uns, sobald es so weit ist.
 Lo haré más tarde	I’ll do it later	Faço-o mais tarde	Je le ferai plus tard	Lo farò più tardi	Mache ich später
 Lo que has compartido	What you shared	O que partilhaste	Ce que tu as partagé	Quello che hai condiviso	Was du geteilt hast
+Lo verá quien venga a esta dirección, también un compañero. Se borra al año.	Whoever comes to this address will see it, a colleague too. It’s deleted after a year.	Quem vier a esta morada vai vê-lo, também um colega. Apaga-se ao fim de um ano.	Qui viendra à cette adresse le verra, un collègue aussi. Effacé au bout d’un an.	Lo vedrà chi verrà a questo indirizzo, anche un collega. Si cancella dopo un anno.	Wer an diese Adresse kommt, sieht es, auch ein Kollege. Nach einem Jahr wird es gelöscht.
 Los regalos los compra la propia cuenta	Gifts are bought by the account itself	As ofertas são compradas pela própria conta	Les cadeaux sont achetés par le compte lui-même	I regali li compra l’account stesso	Geschenke kauft das Konto selbst
 Luces	Lights	Luzes	Feux	Luci	Beleuchtung
 Malo	Bad	Mau	Mauvais	Male	Schlecht
@@ -332,6 +339,7 @@ Mañana (9-14)	Morning (9-14)	Manhã (9-14)	Matin (9-14)	Mattina (9-14)	Vormitta
 Medio · der	Middle · right	Meio · dir	Milieu · droite	Centro · dx	Mitte · rechts
 Medio · izq	Middle · left	Meio · esq	Milieu · gauche	Centro · sx	Mitte · links
 Mejor de {a} a {b}	Better between {a} and {b}	Melhor das {a} às {b}	Plutôt entre {a} et {b}	Meglio dalle {a} alle {b}	Besser zwischen {a} und {b}
+Memoria de la puerta: {t}	Door memory: {t}	Memória da porta: {t}	Mémoire de la porte : {t}	Memoria della porta: {t}	Gemerkt zur Tür: {t}
 Mes anterior	Previous month	Mês anterior	Mois précédent	Mese precedente	Vormonat
 Mes siguiente	Next month	Mês seguinte	Mois suivant	Mese successivo	Nächster Monat
 Mi cuenta	My account	A minha conta	Mon compte	Il mio account	Mein Konto
@@ -382,12 +390,12 @@ No se pudo abrir la cámara. Comprueba que tienes una aplicación de cámara ins
 No se pudo codificar la imagen	The image could not be encoded	Não foi possível codificar a imagem	L’image n’a pas pu être encodée	Non è stato possibile codificare l’immagine	Das Bild konnte nicht kodiert werden
 No se pudo enviar la inspección. Las fotos siguen guardadas en esta pantalla; vuelve a intentarlo con conexión.	The inspection could not be sent. The photos are still saved on this screen; try again when you have a connection.	Não foi possível enviar a inspeção. As fotos continuam guardadas neste ecrã; tenta outra vez com ligação.	L’inspection n’a pas pu être envoyée. Les photos restent enregistrées sur cet écran ; réessayez avec une connexion.	Non è stato possibile inviare l’ispezione. Le foto restano salvate in questa schermata; riprova con la connessione.	Die Inspektion konnte nicht gesendet werden. Die Fotos bleiben auf diesem Bildschirm gespeichert; versuche es mit Verbindung erneut.
 No se pudo guardar la foto	Couldn’t save the photo	Não foi possível guardar a foto	Impossible d’enregistrer la photo	Impossibile salvare la foto	Foto konnte nicht gespeichert werden
-No se pudo leer la imagen	The image could not be read	Não foi possível ler a imagem	L’image n’a pas pu être lue	Non è stato possibile leggere l’immagine	Das Bild konnte nicht gelesen werden
+""",
+        """No se pudo leer la imagen	The image could not be read	Não foi possível ler a imagem	L’image n’a pas pu être lue	Non è stato possibile leggere l’immagine	Das Bild konnte nicht gelesen werden
 No se pudo preparar la foto. Inténtalo de nuevo.	The photo could not be prepared. Try again.	Não foi possível preparar a foto. Tenta outra vez.	La photo n’a pas pu être préparée. Réessayez.	Non è stato possibile preparare la foto. Riprova.	Das Foto konnte nicht vorbereitet werden. Versuche es noch einmal.
 No se pudo procesar la foto. Inténtalo de nuevo.	The photo could not be processed. Try again.	Não foi possível processar a foto. Tenta outra vez.	La photo n’a pas pu être traitée. Réessayez.	Non è stato possibile elaborare la foto. Riprova.	Das Foto konnte nicht verarbeitet werden. Versuche es noch einmal.
 No se pudo procesar la imagen	The image could not be processed	Não foi possível processar a imagem	L’image n’a pas pu être traitée	Non è stato possibile elaborare l’immagine	Das Bild konnte nicht verarbeitet werden
-""",
-        """No se puede solicitar este día desde aquí.	This day can’t be requested from here.	Não é possível pedir este dia a partir daqui.	Ce jour ne peut pas être demandé d’ici.	Questo giorno non si può richiedere da qui.	Dieser Tag kann hier nicht beantragt werden.
+No se puede solicitar este día desde aquí.	This day can’t be requested from here.	Não é possível pedir este dia a partir daqui.	Ce jour ne peut pas être demandé d’ici.	Questo giorno non si può richiedere da qui.	Dieser Tag kann hier nicht beantragt werden.
 No se ve el número del portal: la próxima vez, con el número o la puerta en la foto.	The door number isn’t visible: next time, get the number or the door in the photo.	Não se vê o número da porta: da próxima vez, com o número ou a porta na foto.	On ne voit pas le numéro de l’immeuble : la prochaine fois, avec le numéro ou la porte sur la photo.	Non si vede il numero civico: la prossima volta, con il numero o la porta nella foto.	Die Hausnummer ist nicht zu sehen: beim nächsten Mal mit der Nummer oder der Tür auf dem Foto.
 No se ve el paquete en la foto: repítela con el paquete donde lo dejas.	The parcel isn’t visible in the photo: take it again with the parcel where you leave it.	Não se vê a encomenda na foto: repete-a com a encomenda onde a deixas.	On ne voit pas le colis sur la photo : refais-la avec le colis là où tu le laisses.	Nella foto non si vede il pacco: rifalla con il pacco dove lo lasci.	Das Paket ist auf dem Foto nicht zu sehen: mach es noch einmal mit dem Paket dort, wo du es ablegst.
 No tienes entregas pendientes.	You have no deliveries pending.	Não tens entregas pendentes.	Vous n’avez aucune livraison en attente.	Non hai consegne in sospeso.	Du hast keine offenen Lieferungen.
@@ -411,6 +419,7 @@ Otro	Other	Outro	Autre	Altro	Sonstiges
 Para avisarte de las restricciones por placa (rodízio, Hoy No Circula, pico y placa).	To warn you about plate restrictions (rodízio, Hoy No Circula, pico y placa).	Para te avisar das restrições por matrícula (rodízio, Hoy No Circula, pico y placa).	Pour vous prévenir des restrictions par plaque (rodízio, Hoy No Circula, pico y placa).	Per avvisarti delle restrizioni per targa (rodízio, Hoy No Circula, pico y placa).	Um dich vor Kennzeichen-Beschränkungen zu warnen (Rodízio, Hoy No Circula, Pico y placa).
 Para continuar, acepta los Términos y la Política de Privacidad.	To continue, accept the Terms and the Privacy Policy.	Para continuar, aceita os Termos e a Política de Privacidade.	Pour continuer, acceptez les Conditions et la Politique de confidentialité.	Per continuare, accetta i Termini e l’Informativa sulla privacy.	Um fortzufahren, akzeptiere die Nutzungsbedingungen und die Datenschutzerklärung.
 Para escanear hace falta la cámara	The camera is needed to scan	Para ler é precisa a câmara	L’appareil photo est nécessaire pour scanner	Per scansionare serve la fotocamera	Zum Scannen wird die Kamera gebraucht
+Para la próxima vez en esta puerta	For next time at this door	Para a próxima vez nesta porta	Pour la prochaine fois à cette porte	Per la prossima volta a questa porta	Fürs nächste Mal an dieser Tür
 Para usar la app desde China hace falta tu consentimiento para tratar tus datos fuera de China.	To use the app from China, your consent to process your data outside China is required.	Para usar a app a partir da China é preciso o seu consentimento para tratar os seus dados fora da China.	Pour utiliser l’app depuis la Chine, votre consentement au traitement de vos données hors de Chine est nécessaire.	Per usare l’app dalla Cina serve il tuo consenso al trattamento dei dati fuori dalla Cina.	Um die App aus China zu nutzen, brauchen wir deine Zustimmung zur Verarbeitung deiner Daten außerhalb Chinas.
 Para volver a ella a pie sin dar vueltas. Se queda solo en este móvil.	So you can walk back to it without wandering. It stays only on this phone.	Para voltar a pé sem dar voltas. Fica só neste telemóvel.	Pour y revenir à pied sans tourner en rond. Ça reste uniquement sur ce téléphone.	Per tornarci a piedi senza girare a vuoto. Resta solo su questo telefono.	Damit du ohne Umwege zu Fuß zurückfindest. Bleibt nur auf diesem Handy.
 Para volver a entrar necesitarás tu correo y tu contraseña.	To sign in again you will need your email and password.	Para voltar a entrar vais precisar do teu e-mail e da tua palavra-passe.	Pour vous reconnecter, il vous faudra votre e-mail et votre mot de passe.	Per accedere di nuovo ti serviranno email e password.	Zum erneuten Anmelden brauchst du E-Mail und Passwort.
@@ -565,15 +574,15 @@ Términos	Terms	Termos	Conditions	Termini	AGB
 Uno menos	One less	Menos um	Un de moins	Uno in meno	Eins weniger
 Uno más	One more	Mais um	Un de plus	Uno in più	Eins mehr
 Urgente	Urgent	Urgente	Urgent	Urgente	Dringend
-Usa el correo personal que vinculaste en tu cuenta. El código se enviará a ese correo, no al buzón de empresa.	Use the personal email you linked to your account. The code will be sent to that email, not to the company mailbox.	Usa o e-mail pessoal que ligaste à tua conta. O código vai para esse e-mail, não para a caixa da empresa.	Utilisez l’e-mail personnel lié à votre compte. Le code sera envoyé à cet e-mail, pas à la boîte de l’entreprise.	Usa l’email personale che hai collegato al tuo account. Il codice sarà inviato a quell’email, non alla casella aziendale.	Nutze die private E-Mail, die du mit deinem Konto verknüpft hast. Der Code geht an diese E-Mail, nicht an das Firmenpostfach.
+""",
+        """Usa el correo personal que vinculaste en tu cuenta. El código se enviará a ese correo, no al buzón de empresa.	Use the personal email you linked to your account. The code will be sent to that email, not to the company mailbox.	Usa o e-mail pessoal que ligaste à tua conta. O código vai para esse e-mail, não para a caixa da empresa.	Utilisez l’e-mail personnel lié à votre compte. Le code sera envoyé à cet e-mail, pas à la boîte de l’entreprise.	Usa l’email personale che hai collegato al tuo account. Il codice sarà inviato a quell’email, non alla casella aziendale.	Nutze die private E-Mail, die du mit deinem Konto verknüpft hast. Der Code geht an diese E-Mail, nicht an das Firmenpostfach.
 Uso FDS para ordenar mi ruta de reparto y navegar parada a parada. Pruébala: {enlace}	I use FDS to sort my delivery route and navigate stop by stop. Try it: {enlace}	Uso o FDS para ordenar a minha rota de entregas e navegar paragem a paragem. Experimenta: {enlace}	J’utilise FDS pour trier ma tournée et naviguer d’arrêt en arrêt. Essayez-la : {enlace}	Uso FDS per ordinare il mio giro di consegne e navigare fermata per fermata. Provala: {enlace}	Ich nutze FDS, um meine Lieferroute zu sortieren und Stopp für Stopp zu navigieren. Probier es aus: {enlace}
 Vacantes	Open shifts	Vagas	Créneaux libres	Turni liberi	Freie Schichten
 Vacantes y turnos extra confirmados	Openings and confirmed extra shifts	Vagas e turnos extra confirmados	Créneaux disponibles et services supplémentaires confirmés	Posti disponibili e turni extra confermati	Freie Schichten und bestätigte Zusatzschichten
 Vehículo	Vehicle	Veículo	Véhicule	Veicolo	Fahrzeug
 Ver el mapa	Show the map	Ver o mapa	Voir la carte	Vedi la mappa	Karte anzeigen
 Ver en Google Maps	See in Google Maps	Ver no Google Maps	Voir dans Google Maps	Vedi su Google Maps	In Google Maps ansehen
-""",
-        """Ver la contraseña	Show the password	Ver a palavra-passe	Afficher le mot de passe	Mostra la password	Passwort anzeigen
+Ver la contraseña	Show the password	Ver a palavra-passe	Afficher le mot de passe	Mostra la password	Passwort anzeigen
 Ver la lista	Show the list	Ver a lista	Voir la liste	Vedi la lista	Liste anzeigen
 Viaje	Travel	Viagem	Voyage	Viaggio	Reise
 Volver	Back	Voltar	Retour	Indietro	Zurück
@@ -624,6 +633,7 @@ conductor	driver	condutor	chauffeur	autista	Fahrer
 contraflujo	contraflow	contrafluxo	contresens aménagé	contromano	Gegenverkehr auf einer Fahrbahn
 cortes intermitentes	intermittent closures	cortes intermitentes	fermetures intermittentes	chiusure intermittenti	zeitweise Sperrungen
 daños en la vía	road damage	danos na via	chaussée endommagée	danni alla strada	Straßenschäden
+dejar {d}	leave {d}	deixar {d}	laisser {d}	lasciare {d}	ablegen: {d}
 delante	at the front	à frente	devant	davanti	vorne
 desprendimiento, inundación…	landslide, flooding…	desprendimento, inundação…	éboulement, inondation…	frana, allagamento…	Erdrutsch, Überschwemmung…
 desvío	detour	desvio	déviation	deviazione	Umleitung
@@ -661,6 +671,7 @@ parada	stop	paragem	arrêt	fermata	Stopp
 paso alternativo	alternating one-way traffic	trânsito alternado	circulation alternée	senso unico alternato	wechselseitiger Verkehr
 pk	km	km	PK	km	km
 por distancia	by distance	por distância	à la distance	per distanza	nach Entfernung
+portal {c}	door code {c}	portão {c}	code {c}	portone {c}	Code {c}
 queda 1 día	1 day left	falta 1 dia	1 jour restant	manca 1 giorno	noch 1 Tag
 quedan {n} días	{n} days left	faltam {n} dias	{n} jours restants	mancano {n} giorni	noch {n} Tage
 restricción	restriction	restrição	restriction	restrizione	Einschränkung
@@ -697,6 +708,7 @@ ya estaban	were already there	já estavam	étaient déjà là	c’erano già	war
 {n} sin entregar = {euros} sin cobrar	{n} not delivered = {euros} unpaid	{n} não entregues = {euros} por cobrar	{n} non livrés = {euros} non payés	{n} non consegnati = {euros} non incassati	{n} nicht zugestellt = {euros} unbezahlt
 {n} sin ubicar: edítalas para corregir la dirección	{n} not located: edit them to fix the address	{n} sem localização: edita-as para corrigir a morada	{n} non localisés : modifiez-les pour corriger l’adresse	{n} non localizzate: modificale per correggere l’indirizzo	{n} nicht verortet: bearbeite sie, um die Adresse zu korrigieren
 © OpenStreetMap	© OpenStreetMap	© OpenStreetMap	© OpenStreetMap	© OpenStreetMap	© OpenStreetMap
+«Entrada por el garaje», «timbre 2», «sin ascensor»…	“Entrance through the garage”, “bell 2”, “no lift”…	«Entrada pela garagem», «campainha 2», «sem elevador»…	« Entrée par le garage », « sonnette 2 », « sans ascenseur »…	«Ingresso dal garage», «campanello 2», «senza ascensore»…	„Eingang über die Garage“, „Klingel 2“, „kein Aufzug“ …
 ¿Cerrar sesión?	Sign out?	Terminar sessão?	Se déconnecter ?	Uscire?	Abmelden?
 ¿Cuánto combustible queda?	How much fuel is left?	Quanto combustível resta?	Combien de carburant reste-t-il ?	Quanto carburante resta?	Wie viel Kraftstoff ist noch da?
 ¿Dejar aquí la furgoneta?	Leave the van here?	Deixar a carrinha aqui?	Laisser la camionnette ici ?	Lasciare qui il furgone?	Den Transporter hier abstellen?
@@ -713,7 +725,7 @@ ya estaban	were already there	já estavam	étaient déjà là	c’erano già	war
 
     /** { español -> [en, pt, fr, it, de] } */
     val MAPA: Map<String, Array<String>> by lazy {
-        val m = HashMap<String, Array<String>>(1398)
+        val m = HashMap<String, Array<String>>(1422)
         for (b in BLOQUES) for (l in b.lineSequence()) {
             if (l.isBlank()) continue
             val c = l.split('\t')

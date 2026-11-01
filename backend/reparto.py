@@ -57,6 +57,27 @@ CAMPOS_PERSONALES = ("cliente", "telefono", "direccion", "lat", "lng", "notas", 
 DONDE_ENTREGA = {"mano": "En mano", "vecino": "Al vecino", "buzon": "En el buzón",
                  "porteria": "En portería o recepción", "seguro": "En un lugar seguro"}
 
+# LA MEMORIA DE LA CALLE (01-11-2026): lo que se aprende de cada portal y vale para la próxima vez, para quien sea de
+# la empresa: el código del portal, dónde dejarlo y cómo se entra. Por dirección normalizada (clave_direccion); caduca
+# al año de la última vez que se tocó (son instrucciones de entrega del cliente final: no se guardan sin fin). Lo
+# escribe el repartidor desde la parada («Guardar para la próxima») y lo rellena solo el portal que da el cliente en su
+# enlace, si no había. Lo enseña la parada y lo dice el briefing.
+DIAS_MEMORIA = 365
+
+
+def memoria_sanea(data) -> dict:
+    """Lo que se guarda de un portal: el código (hasta 40), dónde dejar (una de DONDE_ENTREGA o nada) y el acceso
+    (hasta 200, en una línea). Todo vacío → {} (se borra)."""
+    d = data if isinstance(data, dict) else {}
+    portal = _corto(d.get("portal"), 40)
+    dejar = str(d.get("dejar") or "").strip()
+    if dejar not in DONDE_ENTREGA:
+        dejar = ""
+    acceso = _corto(re.sub(r"[\r\n\t]+", " ", str(d.get("acceso") or "")), 200)
+    if not (portal or dejar or acceso):
+        return {}
+    return {"portal": portal, "dejar": dejar, "acceso": acceso}
+
 
 def sin_acentos(s) -> str:
     return "".join(c for c in unicodedata.normalize("NFKD", str(s or ""))

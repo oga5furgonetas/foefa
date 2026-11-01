@@ -28,6 +28,7 @@ import { salirDeLaDemoDeReparto, decodeToken } from '../../panel/auth'
 import { eurosRef, fechaRefPromo } from '../../lib/precios'
 import AntesPuerta from './AntesPuerta'
 import ClienteDice, { textoClienteDice } from './ClienteDice'
+import MemoriaPuerta, { MemoriaHoja } from './MemoriaPuerta'
 import { queIncidencia } from '../../panel/components/MapaReparto'
 import { useAtras } from '../../lib/atras'
 import { PedirAviso, mensajeAviso } from '../AvisoManana'
@@ -270,6 +271,8 @@ export default function MiRuta({ onBack, embebido = false, alTerminar = null }) 
   const [entrega, setEntrega] = useState({ donde: '', recibe: '', firma: '', firmando: false })
   // LA ENTREGA VERIFICADA (01-11-2026): {p, ia} cuando la IA pide mirar la foto de entrega (repetirla o dejarla).
   const [revisar, setRevisar] = useState(null)
+  // LA MEMORIA DE LA CALLE (01-11-2026): la parada cuya puerta se está apuntando («Guardar para la próxima»).
+  const [memoriaDe, setMemoriaDe] = useState(null)
   const [encontrado, setEncontrado] = useState(null)
   const [anadida, setAnadida] = useState(null)   // la parada que acaba de entrar sola al escanear su etiqueta
   const [vista, setVista] = useState(() => lee('ruta_vista', 'lista'))
@@ -1663,6 +1666,7 @@ export default function MiRuta({ onBack, embebido = false, alTerminar = null }) 
                 </p>
                 <AntesPuerta a={p.antes} className="mt-1.5" />
                 <ClienteDice d={p.cliente_dice} className="mt-1.5" />
+                <MemoriaPuerta m={p.memoria} onEditar={() => setMemoriaDe(p)} className="mt-1.5" />
                 <div className="mt-1.5 flex flex-wrap gap-1.5">
                   <button onClick={() => setHuecoDe(p)}
                     className={`inline-flex items-center gap-1 rounded-lg px-2 py-1 text-[12px] font-semibold ${p.hueco ? 'bg-sky-500/15 text-sky-200' : 'border border-dashed border-dark-700 text-dark-400'}`}>
@@ -2136,6 +2140,17 @@ export default function MiRuta({ onBack, embebido = false, alTerminar = null }) 
             {tx('Entregar sin foto')}
           </button>
         </Hoja>
+      )}
+
+      {/* LA MEMORIA DE LA CALLE (01-11-2026): el código del portal, dónde dejar y cómo se entra, para la próxima vez. */}
+      {memoriaDe && (
+        <MemoriaHoja p={memoriaDe} onClose={() => setMemoriaDe(null)} onGuardado={(memoria) => {
+          const id = memoriaDe.id
+          setMemoriaDe(null)
+          setRuta((r) => (r ? { ...r, pedidos: lista(r.pedidos).map((x) => (x.id === id ? { ...x, memoria: memoria || undefined } : x)) } : r))
+          setAviso(memoria ? tx('Guardado para la próxima vez en esta puerta.') : tx('Borrado.'))
+          cargar()
+        }} />
       )}
 
       {/* LA ENTREGA VERIFICADA (01-11-2026): la IA ha mirado la foto y pide revisarla. Repetirla manda la nueva con la

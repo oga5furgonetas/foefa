@@ -71,6 +71,8 @@ data class Parada(
     val antes: Antes? = null,
     /** Lo que contestó el cliente en su enlace (30-10-2026): si estará, dónde dejarlo, el portal, una franja. */
     @SerialName("cliente_dice") val clienteDice: ClienteDice? = null,
+    /** LA MEMORIA DE LA CALLE (01-11-2026): lo que la empresa sabe de ese portal (el código, dónde dejar, cómo se entra). */
+    val memoria: Memoria? = null,
     /** Minutos que se llega tarde a su horario, según la ruta ordenada. */
     @SerialName("tarde_min") val tardeMin: Int? = null,
 ) {
@@ -111,6 +113,10 @@ data class EntregaIa(val nivel: String = "", val aviso: String? = null, val nume
 /** EL CLIENTE TE AYUDA ANTES DE LLEGAR (30-10-2026): lo que contestó en su enlace. Mismas claves que el servidor. */
 @Serializable
 data class ClienteDice(val estare: String = "", val dejar: String = "", val franja: List<String>? = null, val portal: String = "", val nota: String = "")
+
+/** LA MEMORIA DE LA CALLE (01-11-2026): el código del portal, dónde dejar (una de DONDE) y cómo se entra; quién lo apuntó. */
+@Serializable
+data class Memoria(val portal: String = "", val dejar: String = "", val acceso: String = "", val por: String = "", val actualizado: String? = null)
 
 /* LO QUE DICE LA DGT CERCA DE LA RUTA (30-10-2026): cortes, obras, accidentes y retenciones (GET /reparto/mi-ruta/incidencias)
    y las zonas de bajas emisiones con sus polígonos y qué paradas caen dentro (GET /reparto/mi-ruta/zbe). */

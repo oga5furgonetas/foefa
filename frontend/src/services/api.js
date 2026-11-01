@@ -251,6 +251,8 @@ export const repEscanearLote = (paquetes) => api.post('/reparto/escanear/lote', 
 // La carga guiada (01-11-2026): el escaneo con la ruta ya ordenada, para meter el paquete en su hueco; y marcar a mano.
 export const repEscanearCarga = (codigos) => api.post('/reparto/escanear', { codigos, carga: true })
 export const repMiCargado = (id, cargado) => api.post('/reparto/mi-ruta/cargado', { id, cargado })
+// La memoria de la calle (01-11-2026): «Guardar para la próxima» en esa puerta (todo vacío la borra).
+export const repMiMemoria = (id, body) => api.post(`/reparto/mis-pedidos/${id}/memoria`, body)
 export const repFormasCodigo = (formas, pais) => api.post('/reparto/formas-codigo', { formas, pais })
 export const repLeerTicket = (file) => {
   const fd = new FormData()
