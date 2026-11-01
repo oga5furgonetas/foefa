@@ -1,0 +1,3097 @@
+{
+ "version": 8,
+ "name": "FDS guía (noche)",
+ "metadata": {
+  "fds:tema": "noche",
+  "fds:generado": "scripts/mapa-guia-estilo.mjs (01-11-2026)"
+ },
+ "glyphs": "https://tiles.openfreemap.org/fonts/{fontstack}/{range}.pbf",
+ "light": {
+  "anchor": "viewport",
+  "color": "#ffffff",
+  "intensity": 0.25,
+  "position": [
+   1.15,
+   210,
+   30
+  ]
+ },
+ "sources": {
+  "openmaptiles": {
+   "type": "vector",
+   "url": "https://tiles.openfreemap.org/planet",
+   "attribution": "© OpenStreetMap contributors"
+  }
+ },
+ "layers": [
+  {
+   "id": "fondo",
+   "type": "background",
+   "paint": {
+    "background-color": "#0E1726"
+   }
+  },
+  {
+   "id": "residencial",
+   "type": "fill",
+   "source": "openmaptiles",
+   "source-layer": "landuse",
+   "minzoom": 8,
+   "filter": [
+    "all",
+    [
+     "match",
+     [
+      "geometry-type"
+     ],
+     [
+      "Polygon",
+      "MultiPolygon"
+     ],
+     true,
+     false
+    ],
+    [
+     "match",
+     [
+      "get",
+      "class"
+     ],
+     [
+      "residential"
+     ],
+     true,
+     false
+    ]
+   ],
+   "paint": {
+    "fill-color": "#111B2C",
+    "fill-opacity": [
+     "interpolate",
+     [
+      "linear"
+     ],
+     [
+      "zoom"
+     ],
+     8,
+     0.6,
+     12,
+     1
+    ]
+   },
+   "maxzoom": 22
+  },
+  {
+   "id": "tintes",
+   "type": "fill",
+   "source": "openmaptiles",
+   "source-layer": "landuse",
+   "minzoom": 11,
+   "filter": [
+    "all",
+    [
+     "match",
+     [
+      "geometry-type"
+     ],
+     [
+      "Polygon",
+      "MultiPolygon"
+     ],
+     true,
+     false
+    ],
+    [
+     "match",
+     [
+      "get",
+      "class"
+     ],
+     [
+      "hospital",
+      "school",
+      "university",
+      "college",
+      "kindergarten",
+      "cemetery",
+      "stadium",
+      "pitch",
+      "playground"
+     ],
+     true,
+     false
+    ]
+   ],
+   "paint": {
+    "fill-color": "#121D30"
+   }
+  },
+  {
+   "id": "reservas",
+   "type": "fill",
+   "source": "openmaptiles",
+   "source-layer": "park",
+   "minzoom": 6,
+   "filter": [
+    "match",
+    [
+     "geometry-type"
+    ],
+    [
+     "Polygon",
+     "MultiPolygon"
+    ],
+    true,
+    false
+   ],
+   "paint": {
+    "fill-color": "#0F1C29",
+    "fill-opacity": [
+     "interpolate",
+     [
+      "linear"
+     ],
+     [
+      "zoom"
+     ],
+     6,
+     0.4,
+     12,
+     0.8
+    ]
+   }
+  },
+  {
+   "id": "bosques",
+   "type": "fill",
+   "source": "openmaptiles",
+   "source-layer": "landcover",
+   "minzoom": 9,
+   "filter": [
+    "all",
+    [
+     "match",
+     [
+      "geometry-type"
+     ],
+     [
+      "Polygon",
+      "MultiPolygon"
+     ],
+     true,
+     false
+    ],
+    [
+     "match",
+     [
+      "get",
+      "class"
+     ],
+     [
+      "wood"
+     ],
+     true,
+     false
+    ]
+   ],
+   "paint": {
+    "fill-color": "#0F1E28",
+    "fill-opacity": [
+     "interpolate",
+     [
+      "linear"
+     ],
+     [
+      "zoom"
+     ],
+     9,
+     0.4,
+     13,
+     1
+    ],
+    "fill-antialias": false
+   }
+  },
+  {
+   "id": "verde",
+   "type": "fill",
+   "source": "openmaptiles",
+   "source-layer": "landcover",
+   "minzoom": 10,
+   "filter": [
+    "all",
+    [
+     "match",
+     [
+      "geometry-type"
+     ],
+     [
+      "Polygon",
+      "MultiPolygon"
+     ],
+     true,
+     false
+    ],
+    [
+     "match",
+     [
+      "get",
+      "class"
+     ],
+     [
+      "grass"
+     ],
+     true,
+     false
+    ]
+   ],
+   "paint": {
+    "fill-color": "#10212B",
+    "fill-opacity": [
+     "interpolate",
+     [
+      "linear"
+     ],
+     [
+      "zoom"
+     ],
+     10,
+     0.5,
+     13,
+     1
+    ],
+    "fill-antialias": false
+   }
+  },
+  {
+   "id": "agua",
+   "type": "fill",
+   "source": "openmaptiles",
+   "source-layer": "water",
+   "filter": [
+    "all",
+    [
+     "match",
+     [
+      "geometry-type"
+     ],
+     [
+      "Polygon",
+      "MultiPolygon"
+     ],
+     true,
+     false
+    ],
+    [
+     "!=",
+     [
+      "get",
+      "brunnel"
+     ],
+     "tunnel"
+    ]
+   ],
+   "paint": {
+    "fill-color": "#15263B"
+   }
+  },
+  {
+   "id": "rios",
+   "type": "line",
+   "source": "openmaptiles",
+   "source-layer": "waterway",
+   "minzoom": 11,
+   "filter": [
+    "all",
+    [
+     "match",
+     [
+      "geometry-type"
+     ],
+     [
+      "LineString",
+      "MultiLineString"
+     ],
+     true,
+     false
+    ],
+    [
+     "!=",
+     [
+      "get",
+      "brunnel"
+     ],
+     "tunnel"
+    ]
+   ],
+   "layout": {
+    "line-cap": "round",
+    "line-join": "round"
+   },
+   "paint": {
+    "line-color": "#15263B",
+    "line-width": [
+     "interpolate",
+     [
+      "exponential",
+      1.5
+     ],
+     [
+      "zoom"
+     ],
+     11,
+     0.8,
+     14,
+     1.5,
+     18,
+     4
+    ]
+   }
+  },
+  {
+   "id": "aeropuertos",
+   "type": "line",
+   "source": "openmaptiles",
+   "source-layer": "aeroway",
+   "minzoom": 11,
+   "filter": [
+    "all",
+    [
+     "match",
+     [
+      "geometry-type"
+     ],
+     [
+      "LineString",
+      "MultiLineString"
+     ],
+     true,
+     false
+    ],
+    [
+     "match",
+     [
+      "get",
+      "class"
+     ],
+     [
+      "runway",
+      "taxiway"
+     ],
+     true,
+     false
+    ]
+   ],
+   "layout": {
+    "line-cap": "round",
+    "line-join": "round"
+   },
+   "paint": {
+    "line-color": "#16213A",
+    "line-width": [
+     "interpolate",
+     [
+      "exponential",
+      1.5
+     ],
+     [
+      "zoom"
+     ],
+     11,
+     2,
+     14,
+     [
+      "match",
+      [
+       "get",
+       "class"
+      ],
+      [
+       "runway"
+      ],
+      10,
+      3
+     ],
+     18,
+     [
+      "match",
+      [
+       "get",
+       "class"
+      ],
+      [
+       "runway"
+      ],
+      50,
+      14
+     ]
+    ]
+   }
+  },
+  {
+   "id": "edificios",
+   "type": "fill",
+   "source": "openmaptiles",
+   "source-layer": "building",
+   "minzoom": 14,
+   "paint": {
+    "fill-color": "#162238",
+    "fill-outline-color": "#1C2B45",
+    "fill-opacity": [
+     "interpolate",
+     [
+      "linear"
+     ],
+     [
+      "zoom"
+     ],
+     14,
+     0,
+     15,
+     1
+    ]
+   }
+  },
+  {
+   "id": "caminos",
+   "type": "line",
+   "source": "openmaptiles",
+   "source-layer": "transportation",
+   "minzoom": 16,
+   "filter": [
+    "all",
+    [
+     "match",
+     [
+      "geometry-type"
+     ],
+     [
+      "LineString",
+      "MultiLineString"
+     ],
+     true,
+     false
+    ],
+    [
+     "match",
+     [
+      "get",
+      "class"
+     ],
+     [
+      "path"
+     ],
+     true,
+     false
+    ],
+    [
+     "!=",
+     [
+      "get",
+      "subclass"
+     ],
+     "platform"
+    ]
+   ],
+   "layout": {
+    "line-cap": "butt",
+    "line-join": "round"
+   },
+   "paint": {
+    "line-color": "#2B3650",
+    "line-width": [
+     "interpolate",
+     [
+      "exponential",
+      1.5
+     ],
+     [
+      "zoom"
+     ],
+     16,
+     1,
+     18,
+     1.8,
+     20,
+     3
+    ],
+    "line-dasharray": [
+     2,
+     1.5
+    ],
+    "line-opacity": 0.9
+   }
+  },
+  {
+   "id": "menores_borde",
+   "type": "line",
+   "source": "openmaptiles",
+   "source-layer": "transportation",
+   "minzoom": 14,
+   "filter": [
+    "all",
+    [
+     "match",
+     [
+      "geometry-type"
+     ],
+     [
+      "LineString",
+      "MultiLineString"
+     ],
+     true,
+     false
+    ],
+    [
+     "match",
+     [
+      "get",
+      "class"
+     ],
+     [
+      "minor",
+      "service",
+      "track"
+     ],
+     true,
+     false
+    ]
+   ],
+   "layout": {
+    "line-cap": "butt",
+    "line-join": "round"
+   },
+   "paint": {
+    "line-color": "#0A111E",
+    "line-width": [
+     "interpolate",
+     [
+      "exponential",
+      1.5
+     ],
+     [
+      "zoom"
+     ],
+     13,
+     [
+      "*",
+      1.5,
+      [
+       "match",
+       [
+        "get",
+        "class"
+       ],
+       [
+        "service",
+        "track"
+       ],
+       0.6,
+       1
+      ]
+     ],
+     14,
+     [
+      "*",
+      2.4,
+      [
+       "match",
+       [
+        "get",
+        "class"
+       ],
+       [
+        "service",
+        "track"
+       ],
+       0.6,
+       1
+      ]
+     ],
+     16,
+     [
+      "*",
+      5.5,
+      [
+       "match",
+       [
+        "get",
+        "class"
+       ],
+       [
+        "service",
+        "track"
+       ],
+       0.6,
+       1
+      ]
+     ],
+     18,
+     [
+      "*",
+      12,
+      [
+       "match",
+       [
+        "get",
+        "class"
+       ],
+       [
+        "service",
+        "track"
+       ],
+       0.6,
+       1
+      ]
+     ],
+     20,
+     [
+      "*",
+      24,
+      [
+       "match",
+       [
+        "get",
+        "class"
+       ],
+       [
+        "service",
+        "track"
+       ],
+       0.6,
+       1
+      ]
+     ]
+    ],
+    "line-opacity": [
+     "case",
+     [
+      "==",
+      [
+       "get",
+       "brunnel"
+      ],
+      "tunnel"
+     ],
+     0.45,
+     1
+    ]
+   }
+  },
+  {
+   "id": "terciarias_borde",
+   "type": "line",
+   "source": "openmaptiles",
+   "source-layer": "transportation",
+   "minzoom": 12,
+   "filter": [
+    "all",
+    [
+     "match",
+     [
+      "geometry-type"
+     ],
+     [
+      "LineString",
+      "MultiLineString"
+     ],
+     true,
+     false
+    ],
+    [
+     "match",
+     [
+      "get",
+      "class"
+     ],
+     [
+      "tertiary"
+     ],
+     true,
+     false
+    ]
+   ],
+   "layout": {
+    "line-cap": "butt",
+    "line-join": "round"
+   },
+   "paint": {
+    "line-color": "#0A111E",
+    "line-width": [
+     "interpolate",
+     [
+      "exponential",
+      1.5
+     ],
+     [
+      "zoom"
+     ],
+     11,
+     1.2,
+     12,
+     1.6,
+     14,
+     3.4,
+     16,
+     7.2,
+     18,
+     15,
+     20,
+     29
+    ],
+    "line-opacity": [
+     "case",
+     [
+      "==",
+      [
+       "get",
+       "brunnel"
+      ],
+      "tunnel"
+     ],
+     0.45,
+     1
+    ]
+   }
+  },
+  {
+   "id": "primarias_borde",
+   "type": "line",
+   "source": "openmaptiles",
+   "source-layer": "transportation",
+   "minzoom": 9,
+   "filter": [
+    "all",
+    [
+     "match",
+     [
+      "geometry-type"
+     ],
+     [
+      "LineString",
+      "MultiLineString"
+     ],
+     true,
+     false
+    ],
+    [
+     "match",
+     [
+      "get",
+      "class"
+     ],
+     [
+      "primary",
+      "secondary"
+     ],
+     true,
+     false
+    ]
+   ],
+   "layout": {
+    "line-cap": "butt",
+    "line-join": "round"
+   },
+   "paint": {
+    "line-color": "#0A111E",
+    "line-width": [
+     "interpolate",
+     [
+      "exponential",
+      1.5
+     ],
+     [
+      "zoom"
+     ],
+     8,
+     [
+      "*",
+      1.4,
+      [
+       "case",
+       [
+        "==",
+        [
+         "get",
+         "ramp"
+        ],
+        1
+       ],
+       0.6,
+       1
+      ]
+     ],
+     10,
+     [
+      "*",
+      1.8,
+      [
+       "case",
+       [
+        "==",
+        [
+         "get",
+         "ramp"
+        ],
+        1
+       ],
+       0.6,
+       1
+      ]
+     ],
+     12,
+     [
+      "*",
+      3,
+      [
+       "case",
+       [
+        "==",
+        [
+         "get",
+         "ramp"
+        ],
+        1
+       ],
+       0.6,
+       1
+      ]
+     ],
+     14,
+     [
+      "*",
+      5,
+      [
+       "case",
+       [
+        "==",
+        [
+         "get",
+         "ramp"
+        ],
+        1
+       ],
+       0.6,
+       1
+      ]
+     ],
+     16,
+     [
+      "*",
+      9,
+      [
+       "case",
+       [
+        "==",
+        [
+         "get",
+         "ramp"
+        ],
+        1
+       ],
+       0.6,
+       1
+      ]
+     ],
+     18,
+     [
+      "*",
+      17.5,
+      [
+       "case",
+       [
+        "==",
+        [
+         "get",
+         "ramp"
+        ],
+        1
+       ],
+       0.6,
+       1
+      ]
+     ],
+     20,
+     [
+      "*",
+      33,
+      [
+       "case",
+       [
+        "==",
+        [
+         "get",
+         "ramp"
+        ],
+        1
+       ],
+       0.6,
+       1
+      ]
+     ]
+    ],
+    "line-opacity": [
+     "case",
+     [
+      "==",
+      [
+       "get",
+       "brunnel"
+      ],
+      "tunnel"
+     ],
+     0.45,
+     1
+    ]
+   }
+  },
+  {
+   "id": "autopistas_borde",
+   "type": "line",
+   "source": "openmaptiles",
+   "source-layer": "transportation",
+   "minzoom": 6,
+   "filter": [
+    "all",
+    [
+     "match",
+     [
+      "geometry-type"
+     ],
+     [
+      "LineString",
+      "MultiLineString"
+     ],
+     true,
+     false
+    ],
+    [
+     "match",
+     [
+      "get",
+      "class"
+     ],
+     [
+      "motorway",
+      "trunk"
+     ],
+     true,
+     false
+    ]
+   ],
+   "layout": {
+    "line-cap": "butt",
+    "line-join": "round"
+   },
+   "paint": {
+    "line-color": "#0A111E",
+    "line-width": [
+     "interpolate",
+     [
+      "exponential",
+      1.5
+     ],
+     [
+      "zoom"
+     ],
+     5,
+     [
+      "*",
+      1.4,
+      [
+       "case",
+       [
+        "==",
+        [
+         "get",
+         "ramp"
+        ],
+        1
+       ],
+       0.6,
+       1
+      ]
+     ],
+     8,
+     [
+      "*",
+      2.6,
+      [
+       "case",
+       [
+        "==",
+        [
+         "get",
+         "ramp"
+        ],
+        1
+       ],
+       0.6,
+       1
+      ]
+     ],
+     10,
+     [
+      "*",
+      3.6,
+      [
+       "case",
+       [
+        "==",
+        [
+         "get",
+         "ramp"
+        ],
+        1
+       ],
+       0.6,
+       1
+      ]
+     ],
+     12,
+     [
+      "*",
+      4.8,
+      [
+       "case",
+       [
+        "==",
+        [
+         "get",
+         "ramp"
+        ],
+        1
+       ],
+       0.6,
+       1
+      ]
+     ],
+     14,
+     [
+      "*",
+      7,
+      [
+       "case",
+       [
+        "==",
+        [
+         "get",
+         "ramp"
+        ],
+        1
+       ],
+       0.6,
+       1
+      ]
+     ],
+     16,
+     [
+      "*",
+      11.5,
+      [
+       "case",
+       [
+        "==",
+        [
+         "get",
+         "ramp"
+        ],
+        1
+       ],
+       0.6,
+       1
+      ]
+     ],
+     18,
+     [
+      "*",
+      21,
+      [
+       "case",
+       [
+        "==",
+        [
+         "get",
+         "ramp"
+        ],
+        1
+       ],
+       0.6,
+       1
+      ]
+     ],
+     20,
+     [
+      "*",
+      38,
+      [
+       "case",
+       [
+        "==",
+        [
+         "get",
+         "ramp"
+        ],
+        1
+       ],
+       0.6,
+       1
+      ]
+     ]
+    ],
+    "line-opacity": [
+     "case",
+     [
+      "==",
+      [
+       "get",
+       "brunnel"
+      ],
+      "tunnel"
+     ],
+     0.45,
+     1
+    ]
+   }
+  },
+  {
+   "id": "menores",
+   "type": "line",
+   "source": "openmaptiles",
+   "source-layer": "transportation",
+   "minzoom": 13,
+   "filter": [
+    "all",
+    [
+     "match",
+     [
+      "geometry-type"
+     ],
+     [
+      "LineString",
+      "MultiLineString"
+     ],
+     true,
+     false
+    ],
+    [
+     "match",
+     [
+      "get",
+      "class"
+     ],
+     [
+      "minor",
+      "service",
+      "track"
+     ],
+     true,
+     false
+    ]
+   ],
+   "layout": {
+    "line-cap": "round",
+    "line-join": "round"
+   },
+   "paint": {
+    "line-color": "#424E69",
+    "line-width": [
+     "interpolate",
+     [
+      "exponential",
+      1.5
+     ],
+     [
+      "zoom"
+     ],
+     13,
+     [
+      "*",
+      0.7,
+      [
+       "match",
+       [
+        "get",
+        "class"
+       ],
+       [
+        "service",
+        "track"
+       ],
+       0.6,
+       1
+      ]
+     ],
+     14,
+     [
+      "*",
+      1.2,
+      [
+       "match",
+       [
+        "get",
+        "class"
+       ],
+       [
+        "service",
+        "track"
+       ],
+       0.6,
+       1
+      ]
+     ],
+     16,
+     [
+      "*",
+      3.5,
+      [
+       "match",
+       [
+        "get",
+        "class"
+       ],
+       [
+        "service",
+        "track"
+       ],
+       0.6,
+       1
+      ]
+     ],
+     18,
+     [
+      "*",
+      9,
+      [
+       "match",
+       [
+        "get",
+        "class"
+       ],
+       [
+        "service",
+        "track"
+       ],
+       0.6,
+       1
+      ]
+     ],
+     20,
+     [
+      "*",
+      20,
+      [
+       "match",
+       [
+        "get",
+        "class"
+       ],
+       [
+        "service",
+        "track"
+       ],
+       0.6,
+       1
+      ]
+     ]
+    ],
+    "line-opacity": [
+     "case",
+     [
+      "==",
+      [
+       "get",
+       "brunnel"
+      ],
+      "tunnel"
+     ],
+     0.45,
+     1
+    ]
+   }
+  },
+  {
+   "id": "terciarias",
+   "type": "line",
+   "source": "openmaptiles",
+   "source-layer": "transportation",
+   "minzoom": 11,
+   "filter": [
+    "all",
+    [
+     "match",
+     [
+      "geometry-type"
+     ],
+     [
+      "LineString",
+      "MultiLineString"
+     ],
+     true,
+     false
+    ],
+    [
+     "match",
+     [
+      "get",
+      "class"
+     ],
+     [
+      "tertiary"
+     ],
+     true,
+     false
+    ]
+   ],
+   "layout": {
+    "line-cap": "round",
+    "line-join": "round"
+   },
+   "paint": {
+    "line-color": "#4E5C78",
+    "line-width": [
+     "interpolate",
+     [
+      "exponential",
+      1.5
+     ],
+     [
+      "zoom"
+     ],
+     11,
+     0.6,
+     12,
+     0.8,
+     14,
+     2,
+     16,
+     5,
+     18,
+     11.5,
+     20,
+     24
+    ],
+    "line-opacity": [
+     "case",
+     [
+      "==",
+      [
+       "get",
+       "brunnel"
+      ],
+      "tunnel"
+     ],
+     0.45,
+     1
+    ]
+   }
+  },
+  {
+   "id": "primarias",
+   "type": "line",
+   "source": "openmaptiles",
+   "source-layer": "transportation",
+   "minzoom": 8,
+   "filter": [
+    "all",
+    [
+     "match",
+     [
+      "geometry-type"
+     ],
+     [
+      "LineString",
+      "MultiLineString"
+     ],
+     true,
+     false
+    ],
+    [
+     "match",
+     [
+      "get",
+      "class"
+     ],
+     [
+      "primary",
+      "secondary"
+     ],
+     true,
+     false
+    ]
+   ],
+   "layout": {
+    "line-cap": "round",
+    "line-join": "round"
+   },
+   "paint": {
+    "line-color": "#5A5445",
+    "line-width": [
+     "interpolate",
+     [
+      "exponential",
+      1.5
+     ],
+     [
+      "zoom"
+     ],
+     8,
+     [
+      "*",
+      0.8,
+      [
+       "case",
+       [
+        "==",
+        [
+         "get",
+         "ramp"
+        ],
+        1
+       ],
+       0.6,
+       1
+      ]
+     ],
+     10,
+     [
+      "*",
+      1,
+      [
+       "case",
+       [
+        "==",
+        [
+         "get",
+         "ramp"
+        ],
+        1
+       ],
+       0.6,
+       1
+      ]
+     ],
+     12,
+     [
+      "*",
+      1.8,
+      [
+       "case",
+       [
+        "==",
+        [
+         "get",
+         "ramp"
+        ],
+        1
+       ],
+       0.6,
+       1
+      ]
+     ],
+     14,
+     [
+      "*",
+      3.2,
+      [
+       "case",
+       [
+        "==",
+        [
+         "get",
+         "ramp"
+        ],
+        1
+       ],
+       0.6,
+       1
+      ]
+     ],
+     16,
+     [
+      "*",
+      6.5,
+      [
+       "case",
+       [
+        "==",
+        [
+         "get",
+         "ramp"
+        ],
+        1
+       ],
+       0.6,
+       1
+      ]
+     ],
+     18,
+     [
+      "*",
+      14,
+      [
+       "case",
+       [
+        "==",
+        [
+         "get",
+         "ramp"
+        ],
+        1
+       ],
+       0.6,
+       1
+      ]
+     ],
+     20,
+     [
+      "*",
+      28,
+      [
+       "case",
+       [
+        "==",
+        [
+         "get",
+         "ramp"
+        ],
+        1
+       ],
+       0.6,
+       1
+      ]
+     ]
+    ],
+    "line-opacity": [
+     "case",
+     [
+      "==",
+      [
+       "get",
+       "brunnel"
+      ],
+      "tunnel"
+     ],
+     0.45,
+     1
+    ]
+   }
+  },
+  {
+   "id": "autopistas",
+   "type": "line",
+   "source": "openmaptiles",
+   "source-layer": "transportation",
+   "minzoom": 5,
+   "filter": [
+    "all",
+    [
+     "match",
+     [
+      "geometry-type"
+     ],
+     [
+      "LineString",
+      "MultiLineString"
+     ],
+     true,
+     false
+    ],
+    [
+     "match",
+     [
+      "get",
+      "class"
+     ],
+     [
+      "motorway",
+      "trunk"
+     ],
+     true,
+     false
+    ]
+   ],
+   "layout": {
+    "line-cap": "round",
+    "line-join": "round"
+   },
+   "paint": {
+    "line-color": "#6F6448",
+    "line-width": [
+     "interpolate",
+     [
+      "exponential",
+      1.5
+     ],
+     [
+      "zoom"
+     ],
+     5,
+     [
+      "*",
+      0.8,
+      [
+       "case",
+       [
+        "==",
+        [
+         "get",
+         "ramp"
+        ],
+        1
+       ],
+       0.6,
+       1
+      ]
+     ],
+     8,
+     [
+      "*",
+      1.6,
+      [
+       "case",
+       [
+        "==",
+        [
+         "get",
+         "ramp"
+        ],
+        1
+       ],
+       0.6,
+       1
+      ]
+     ],
+     10,
+     [
+      "*",
+      2.2,
+      [
+       "case",
+       [
+        "==",
+        [
+         "get",
+         "ramp"
+        ],
+        1
+       ],
+       0.6,
+       1
+      ]
+     ],
+     12,
+     [
+      "*",
+      3,
+      [
+       "case",
+       [
+        "==",
+        [
+         "get",
+         "ramp"
+        ],
+        1
+       ],
+       0.6,
+       1
+      ]
+     ],
+     14,
+     [
+      "*",
+      4.5,
+      [
+       "case",
+       [
+        "==",
+        [
+         "get",
+         "ramp"
+        ],
+        1
+       ],
+       0.6,
+       1
+      ]
+     ],
+     16,
+     [
+      "*",
+      8,
+      [
+       "case",
+       [
+        "==",
+        [
+         "get",
+         "ramp"
+        ],
+        1
+       ],
+       0.6,
+       1
+      ]
+     ],
+     18,
+     [
+      "*",
+      16,
+      [
+       "case",
+       [
+        "==",
+        [
+         "get",
+         "ramp"
+        ],
+        1
+       ],
+       0.6,
+       1
+      ]
+     ],
+     20,
+     [
+      "*",
+      32,
+      [
+       "case",
+       [
+        "==",
+        [
+         "get",
+         "ramp"
+        ],
+        1
+       ],
+       0.6,
+       1
+      ]
+     ]
+    ],
+    "line-opacity": [
+     "case",
+     [
+      "==",
+      [
+       "get",
+       "brunnel"
+      ],
+      "tunnel"
+     ],
+     0.45,
+     1
+    ]
+   }
+  },
+  {
+   "id": "tren",
+   "type": "line",
+   "source": "openmaptiles",
+   "source-layer": "transportation",
+   "minzoom": 13,
+   "filter": [
+    "all",
+    [
+     "match",
+     [
+      "geometry-type"
+     ],
+     [
+      "LineString",
+      "MultiLineString"
+     ],
+     true,
+     false
+    ],
+    [
+     "==",
+     [
+      "get",
+      "class"
+     ],
+     "rail"
+    ],
+    [
+     "!",
+     [
+      "has",
+      "service"
+     ]
+    ]
+   ],
+   "layout": {
+    "line-join": "round"
+   },
+   "paint": {
+    "line-color": "#2A3448",
+    "line-width": [
+     "interpolate",
+     [
+      "exponential",
+      1.5
+     ],
+     [
+      "zoom"
+     ],
+     13,
+     0.8,
+     16,
+     1.5,
+     20,
+     4
+    ],
+    "line-opacity": [
+     "case",
+     [
+      "==",
+      [
+       "get",
+       "brunnel"
+      ],
+      "tunnel"
+     ],
+     0.45,
+     1
+    ]
+   }
+  },
+  {
+   "id": "puentes_borde",
+   "type": "line",
+   "source": "openmaptiles",
+   "source-layer": "transportation",
+   "minzoom": 13,
+   "filter": [
+    "all",
+    [
+     "match",
+     [
+      "geometry-type"
+     ],
+     [
+      "LineString",
+      "MultiLineString"
+     ],
+     true,
+     false
+    ],
+    [
+     "==",
+     [
+      "get",
+      "brunnel"
+     ],
+     "bridge"
+    ],
+    [
+     "match",
+     [
+      "get",
+      "class"
+     ],
+     [
+      "motorway",
+      "trunk",
+      "primary",
+      "secondary",
+      "tertiary",
+      "minor",
+      "service"
+     ],
+     true,
+     false
+    ]
+   ],
+   "layout": {
+    "line-cap": "butt",
+    "line-join": "round"
+   },
+   "paint": {
+    "line-color": [
+     "match",
+     [
+      "get",
+      "class"
+     ],
+     [
+      "motorway",
+      "trunk"
+     ],
+     "#0A111E",
+     [
+      "primary",
+      "secondary"
+     ],
+     "#0A111E",
+     [
+      "tertiary"
+     ],
+     "#0A111E",
+     "#0A111E"
+    ],
+    "line-width": [
+     "interpolate",
+     [
+      "exponential",
+      1.5
+     ],
+     [
+      "zoom"
+     ],
+     13,
+     [
+      "*",
+      [
+       "match",
+       [
+        "get",
+        "class"
+       ],
+       [
+        "motorway",
+        "trunk"
+       ],
+       5.9,
+       [
+        "primary",
+        "secondary"
+       ],
+       4,
+       [
+        "tertiary"
+       ],
+       2.5,
+       1.5
+      ],
+      [
+       "case",
+       [
+        "==",
+        [
+         "get",
+         "ramp"
+        ],
+        1
+       ],
+       0.6,
+       1
+      ]
+     ],
+     14,
+     [
+      "*",
+      [
+       "match",
+       [
+        "get",
+        "class"
+       ],
+       [
+        "motorway",
+        "trunk"
+       ],
+       7,
+       [
+        "primary",
+        "secondary"
+       ],
+       5,
+       [
+        "tertiary"
+       ],
+       3.4,
+       2.4
+      ],
+      [
+       "case",
+       [
+        "==",
+        [
+         "get",
+         "ramp"
+        ],
+        1
+       ],
+       0.6,
+       1
+      ]
+     ],
+     16,
+     [
+      "*",
+      [
+       "match",
+       [
+        "get",
+        "class"
+       ],
+       [
+        "motorway",
+        "trunk"
+       ],
+       11.5,
+       [
+        "primary",
+        "secondary"
+       ],
+       9,
+       [
+        "tertiary"
+       ],
+       7.2,
+       5.5
+      ],
+      [
+       "case",
+       [
+        "==",
+        [
+         "get",
+         "ramp"
+        ],
+        1
+       ],
+       0.6,
+       1
+      ]
+     ],
+     18,
+     [
+      "*",
+      [
+       "match",
+       [
+        "get",
+        "class"
+       ],
+       [
+        "motorway",
+        "trunk"
+       ],
+       21,
+       [
+        "primary",
+        "secondary"
+       ],
+       17.5,
+       [
+        "tertiary"
+       ],
+       15,
+       12
+      ],
+      [
+       "case",
+       [
+        "==",
+        [
+         "get",
+         "ramp"
+        ],
+        1
+       ],
+       0.6,
+       1
+      ]
+     ],
+     20,
+     [
+      "*",
+      [
+       "match",
+       [
+        "get",
+        "class"
+       ],
+       [
+        "motorway",
+        "trunk"
+       ],
+       38,
+       [
+        "primary",
+        "secondary"
+       ],
+       33,
+       [
+        "tertiary"
+       ],
+       29,
+       24
+      ],
+      [
+       "case",
+       [
+        "==",
+        [
+         "get",
+         "ramp"
+        ],
+        1
+       ],
+       0.6,
+       1
+      ]
+     ]
+    ]
+   }
+  },
+  {
+   "id": "puentes",
+   "type": "line",
+   "source": "openmaptiles",
+   "source-layer": "transportation",
+   "minzoom": 13,
+   "filter": [
+    "all",
+    [
+     "match",
+     [
+      "geometry-type"
+     ],
+     [
+      "LineString",
+      "MultiLineString"
+     ],
+     true,
+     false
+    ],
+    [
+     "==",
+     [
+      "get",
+      "brunnel"
+     ],
+     "bridge"
+    ],
+    [
+     "match",
+     [
+      "get",
+      "class"
+     ],
+     [
+      "motorway",
+      "trunk",
+      "primary",
+      "secondary",
+      "tertiary",
+      "minor",
+      "service"
+     ],
+     true,
+     false
+    ]
+   ],
+   "layout": {
+    "line-cap": "round",
+    "line-join": "round"
+   },
+   "paint": {
+    "line-color": [
+     "match",
+     [
+      "get",
+      "class"
+     ],
+     [
+      "motorway",
+      "trunk"
+     ],
+     "#6F6448",
+     [
+      "primary",
+      "secondary"
+     ],
+     "#5A5445",
+     [
+      "tertiary"
+     ],
+     "#4E5C78",
+     "#424E69"
+    ],
+    "line-width": [
+     "interpolate",
+     [
+      "exponential",
+      1.5
+     ],
+     [
+      "zoom"
+     ],
+     13,
+     [
+      "*",
+      [
+       "match",
+       [
+        "get",
+        "class"
+       ],
+       [
+        "motorway",
+        "trunk"
+       ],
+       3.75,
+       [
+        "primary",
+        "secondary"
+       ],
+       2.5,
+       [
+        "tertiary"
+       ],
+       1.4,
+       0.7
+      ],
+      [
+       "case",
+       [
+        "==",
+        [
+         "get",
+         "ramp"
+        ],
+        1
+       ],
+       0.6,
+       1
+      ]
+     ],
+     14,
+     [
+      "*",
+      [
+       "match",
+       [
+        "get",
+        "class"
+       ],
+       [
+        "motorway",
+        "trunk"
+       ],
+       4.5,
+       [
+        "primary",
+        "secondary"
+       ],
+       3.2,
+       [
+        "tertiary"
+       ],
+       2,
+       1.2
+      ],
+      [
+       "case",
+       [
+        "==",
+        [
+         "get",
+         "ramp"
+        ],
+        1
+       ],
+       0.6,
+       1
+      ]
+     ],
+     16,
+     [
+      "*",
+      [
+       "match",
+       [
+        "get",
+        "class"
+       ],
+       [
+        "motorway",
+        "trunk"
+       ],
+       8,
+       [
+        "primary",
+        "secondary"
+       ],
+       6.5,
+       [
+        "tertiary"
+       ],
+       5,
+       3.5
+      ],
+      [
+       "case",
+       [
+        "==",
+        [
+         "get",
+         "ramp"
+        ],
+        1
+       ],
+       0.6,
+       1
+      ]
+     ],
+     18,
+     [
+      "*",
+      [
+       "match",
+       [
+        "get",
+        "class"
+       ],
+       [
+        "motorway",
+        "trunk"
+       ],
+       16,
+       [
+        "primary",
+        "secondary"
+       ],
+       14,
+       [
+        "tertiary"
+       ],
+       11.5,
+       9
+      ],
+      [
+       "case",
+       [
+        "==",
+        [
+         "get",
+         "ramp"
+        ],
+        1
+       ],
+       0.6,
+       1
+      ]
+     ],
+     20,
+     [
+      "*",
+      [
+       "match",
+       [
+        "get",
+        "class"
+       ],
+       [
+        "motorway",
+        "trunk"
+       ],
+       32,
+       [
+        "primary",
+        "secondary"
+       ],
+       28,
+       [
+        "tertiary"
+       ],
+       24,
+       20
+      ],
+      [
+       "case",
+       [
+        "==",
+        [
+         "get",
+         "ramp"
+        ],
+        1
+       ],
+       0.6,
+       1
+      ]
+     ]
+    ]
+   }
+  },
+  {
+   "id": "fronteras",
+   "type": "line",
+   "source": "openmaptiles",
+   "source-layer": "boundary",
+   "minzoom": 2,
+   "filter": [
+    "all",
+    [
+     "==",
+     [
+      "get",
+      "admin_level"
+     ],
+     2
+    ],
+    [
+     "!=",
+     [
+      "get",
+      "maritime"
+     ],
+     1
+    ],
+    [
+     "!=",
+     [
+      "get",
+      "disputed"
+     ],
+     1
+    ]
+   ],
+   "layout": {
+    "line-cap": "butt",
+    "line-join": "round"
+   },
+   "paint": {
+    "line-color": "#334058",
+    "line-width": [
+     "interpolate",
+     [
+      "exponential",
+      1.5
+     ],
+     [
+      "zoom"
+     ],
+     2,
+     0.6,
+     8,
+     1.2
+    ],
+    "line-dasharray": [
+     3,
+     2
+    ],
+    "line-opacity": 0.7
+   }
+  },
+  {
+   "id": "edificios_3d",
+   "type": "fill-extrusion",
+   "source": "openmaptiles",
+   "source-layer": "building",
+   "minzoom": 16,
+   "filter": [
+    "!",
+    [
+     "has",
+     "hide_3d"
+    ]
+   ],
+   "paint": {
+    "fill-extrusion-color": "#1C2A45",
+    "fill-extrusion-opacity": 0.45,
+    "fill-extrusion-height": [
+     "interpolate",
+     [
+      "linear"
+     ],
+     [
+      "zoom"
+     ],
+     16,
+     0,
+     16.6,
+     [
+      "min",
+      18,
+      [
+       "coalesce",
+       [
+        "get",
+        "render_height"
+       ],
+       6
+      ]
+     ]
+    ],
+    "fill-extrusion-base": [
+     "interpolate",
+     [
+      "linear"
+     ],
+     [
+      "zoom"
+     ],
+     16,
+     0,
+     16.6,
+     [
+      "min",
+      15,
+      [
+       "coalesce",
+       [
+        "get",
+        "render_min_height"
+       ],
+       0
+      ]
+     ]
+    ]
+   }
+  },
+  {
+   "id": "nombres_calles_menores",
+   "type": "symbol",
+   "source": "openmaptiles",
+   "source-layer": "transportation_name",
+   "minzoom": 15.5,
+   "filter": [
+    "all",
+    [
+     "match",
+     [
+      "geometry-type"
+     ],
+     [
+      "LineString",
+      "MultiLineString"
+     ],
+     true,
+     false
+    ],
+    [
+     "match",
+     [
+      "get",
+      "class"
+     ],
+     [
+      "minor",
+      "service",
+      "track"
+     ],
+     true,
+     false
+    ]
+   ],
+   "layout": {
+    "symbol-placement": "line",
+    "symbol-spacing": 300,
+    "text-field": [
+     "coalesce",
+     [
+      "get",
+      "name"
+     ],
+     [
+      "get",
+      "name:latin"
+     ]
+    ],
+    "text-font": [
+     "Noto Sans Regular"
+    ],
+    "text-size": [
+     "interpolate",
+     [
+      "linear"
+     ],
+     [
+      "zoom"
+     ],
+     15.5,
+     11.5,
+     18,
+     14
+    ],
+    "text-rotation-alignment": "map",
+    "text-padding": 4,
+    "text-letter-spacing": 0.02
+   },
+   "paint": {
+    "text-color": "#C5CBD8",
+    "text-halo-color": "#0E1726",
+    "text-halo-width": 1.2,
+    "text-halo-blur": 0.3
+   }
+  },
+  {
+   "id": "nombres_calles",
+   "type": "symbol",
+   "source": "openmaptiles",
+   "source-layer": "transportation_name",
+   "minzoom": 13,
+   "filter": [
+    "all",
+    [
+     "match",
+     [
+      "geometry-type"
+     ],
+     [
+      "LineString",
+      "MultiLineString"
+     ],
+     true,
+     false
+    ],
+    [
+     "match",
+     [
+      "get",
+      "class"
+     ],
+     [
+      "primary",
+      "secondary",
+      "tertiary",
+      "trunk"
+     ],
+     true,
+     false
+    ]
+   ],
+   "layout": {
+    "symbol-placement": "line",
+    "symbol-spacing": 320,
+    "text-field": [
+     "coalesce",
+     [
+      "get",
+      "name"
+     ],
+     [
+      "get",
+      "name:latin"
+     ]
+    ],
+    "text-font": [
+     "Noto Sans Regular"
+    ],
+    "text-size": [
+     "interpolate",
+     [
+      "linear"
+     ],
+     [
+      "zoom"
+     ],
+     13,
+     11.5,
+     16,
+     13,
+     18,
+     15
+    ],
+    "text-rotation-alignment": "map",
+    "text-padding": 4,
+    "text-letter-spacing": 0.02
+   },
+   "paint": {
+    "text-color": "#C5CBD8",
+    "text-halo-color": "#0E1726",
+    "text-halo-width": 1.3,
+    "text-halo-blur": 0.3
+   }
+  },
+  {
+   "id": "refs_autopista",
+   "type": "symbol",
+   "source": "openmaptiles",
+   "source-layer": "transportation_name",
+   "minzoom": 8,
+   "filter": [
+    "all",
+    [
+     "match",
+     [
+      "geometry-type"
+     ],
+     [
+      "LineString",
+      "MultiLineString"
+     ],
+     true,
+     false
+    ],
+    [
+     "match",
+     [
+      "get",
+      "class"
+     ],
+     [
+      "motorway",
+      "trunk"
+     ],
+     true,
+     false
+    ],
+    [
+     "has",
+     "ref"
+    ]
+   ],
+   "layout": {
+    "symbol-placement": "line",
+    "symbol-spacing": 350,
+    "text-field": [
+     "get",
+     "ref"
+    ],
+    "text-font": [
+     "Noto Sans Bold"
+    ],
+    "text-size": 11,
+    "text-rotation-alignment": "viewport",
+    "text-pitch-alignment": "viewport",
+    "text-padding": 6,
+    "text-letter-spacing": 0.05
+   },
+   "paint": {
+    "text-color": "#F0E0A8",
+    "text-halo-color": "#0E1726",
+    "text-halo-width": 2
+   }
+  },
+  {
+   "id": "portales",
+   "type": "symbol",
+   "source": "openmaptiles",
+   "source-layer": "housenumber",
+   "minzoom": 17.5,
+   "layout": {
+    "text-field": [
+     "get",
+     "housenumber"
+    ],
+    "text-font": [
+     "Noto Sans Regular"
+    ],
+    "text-size": [
+     "interpolate",
+     [
+      "linear"
+     ],
+     [
+      "zoom"
+     ],
+     17.5,
+     10,
+     20,
+     12
+    ],
+    "text-padding": 12
+   },
+   "paint": {
+    "text-color": "#7E879A",
+    "text-halo-color": "#0E1726",
+    "text-halo-width": 1
+   }
+  },
+  {
+   "id": "barrios",
+   "type": "symbol",
+   "source": "openmaptiles",
+   "source-layer": "place",
+   "minzoom": 12,
+   "filter": [
+    "match",
+    [
+     "get",
+     "class"
+    ],
+    [
+     "suburb",
+     "neighbourhood",
+     "quarter"
+    ],
+    true,
+    false
+   ],
+   "layout": {
+    "text-field": [
+     "coalesce",
+     [
+      "get",
+      "name"
+     ],
+     [
+      "get",
+      "name:latin"
+     ]
+    ],
+    "text-font": [
+     "Noto Sans Regular"
+    ],
+    "text-size": [
+     "interpolate",
+     [
+      "linear"
+     ],
+     [
+      "zoom"
+     ],
+     12,
+     10,
+     15,
+     12
+    ],
+    "text-transform": "uppercase",
+    "text-letter-spacing": 0.12,
+    "text-max-width": 8,
+    "text-padding": 8
+   },
+   "paint": {
+    "text-color": "#8C95A8",
+    "text-halo-color": "#0E1726",
+    "text-halo-width": 1.2,
+    "text-halo-blur": 0.5
+   },
+   "maxzoom": 19
+  },
+  {
+   "id": "pueblos",
+   "type": "symbol",
+   "source": "openmaptiles",
+   "source-layer": "place",
+   "minzoom": 10,
+   "filter": [
+    "match",
+    [
+     "get",
+     "class"
+    ],
+    [
+     "village",
+     "hamlet"
+    ],
+    true,
+    false
+   ],
+   "layout": {
+    "text-field": [
+     "coalesce",
+     [
+      "get",
+      "name"
+     ],
+     [
+      "get",
+      "name:latin"
+     ]
+    ],
+    "text-font": [
+     "Noto Sans Regular"
+    ],
+    "text-size": [
+     "interpolate",
+     [
+      "linear"
+     ],
+     [
+      "zoom"
+     ],
+     10,
+     10.5,
+     14,
+     13
+    ],
+    "text-max-width": 8,
+    "text-padding": 6
+   },
+   "paint": {
+    "text-color": "#E2E6EE",
+    "text-halo-color": "#0E1726",
+    "text-halo-width": 1.4,
+    "text-halo-blur": 0.5
+   },
+   "maxzoom": 16
+  },
+  {
+   "id": "villas",
+   "type": "symbol",
+   "source": "openmaptiles",
+   "source-layer": "place",
+   "minzoom": 7,
+   "filter": [
+    "match",
+    [
+     "get",
+     "class"
+    ],
+    [
+     "town"
+    ],
+    true,
+    false
+   ],
+   "layout": {
+    "text-field": [
+     "coalesce",
+     [
+      "get",
+      "name"
+     ],
+     [
+      "get",
+      "name:latin"
+     ]
+    ],
+    "text-font": [
+     "Noto Sans Regular"
+    ],
+    "text-size": [
+     "interpolate",
+     [
+      "linear"
+     ],
+     [
+      "zoom"
+     ],
+     7,
+     11,
+     12,
+     14,
+     14,
+     15
+    ],
+    "text-max-width": 8,
+    "text-padding": 6
+   },
+   "paint": {
+    "text-color": "#E2E6EE",
+    "text-halo-color": "#0E1726",
+    "text-halo-width": 1.4,
+    "text-halo-blur": 0.5
+   },
+   "maxzoom": 16
+  },
+  {
+   "id": "ciudades",
+   "type": "symbol",
+   "source": "openmaptiles",
+   "source-layer": "place",
+   "minzoom": 4,
+   "filter": [
+    "match",
+    [
+     "get",
+     "class"
+    ],
+    [
+     "city"
+    ],
+    true,
+    false
+   ],
+   "layout": {
+    "text-field": [
+     "coalesce",
+     [
+      "get",
+      "name"
+     ],
+     [
+      "get",
+      "name:latin"
+     ]
+    ],
+    "text-font": [
+     "Noto Sans Bold"
+    ],
+    "text-size": [
+     "interpolate",
+     [
+      "linear"
+     ],
+     [
+      "zoom"
+     ],
+     4,
+     11,
+     8,
+     14,
+     12,
+     18
+    ],
+    "text-max-width": 8,
+    "text-padding": 6
+   },
+   "paint": {
+    "text-color": "#E2E6EE",
+    "text-halo-color": "#0E1726",
+    "text-halo-width": 1.5,
+    "text-halo-blur": 0.5
+   },
+   "maxzoom": 15
+  },
+  {
+   "id": "paises",
+   "type": "symbol",
+   "source": "openmaptiles",
+   "source-layer": "place",
+   "minzoom": 1,
+   "filter": [
+    "match",
+    [
+     "get",
+     "class"
+    ],
+    [
+     "country"
+    ],
+    true,
+    false
+   ],
+   "layout": {
+    "text-field": [
+     "coalesce",
+     [
+      "get",
+      "name"
+     ],
+     [
+      "get",
+      "name:latin"
+     ]
+    ],
+    "text-font": [
+     "Noto Sans Bold"
+    ],
+    "text-size": [
+     "interpolate",
+     [
+      "linear"
+     ],
+     [
+      "zoom"
+     ],
+     1,
+     10,
+     4,
+     14,
+     7,
+     17
+    ],
+    "text-max-width": 6,
+    "text-transform": "uppercase",
+    "text-letter-spacing": 0.1
+   },
+   "paint": {
+    "text-color": "#8C95A8",
+    "text-halo-color": "#0E1726",
+    "text-halo-width": 1.2
+   },
+   "maxzoom": 8
+  }
+ ]
+}

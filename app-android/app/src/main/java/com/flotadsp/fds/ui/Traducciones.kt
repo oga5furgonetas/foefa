@@ -1,6 +1,6 @@
 package com.flotadsp.fds.ui
 
-/* GENERADO por scripts/nativa-idioma.mjs (30-10-2026): no editar a mano. 782 textos de la app nativa con sus
+/* GENERADO por scripts/nativa-idioma.mjs (30-10-2026): no editar a mano. 784 textos de la app nativa con sus
    traducciones (en, pt, fr, it, de), sacadas de la web (frontend/src/lib/textosRuta*.js) y de
    app-android/traducciones-nativa.json. Una fila por línea, columnas con TAB; ⏎ es un salto de línea. En bloques
    porque una constante de Kotlin no puede pasar de 64 KB. */
@@ -403,12 +403,13 @@ No puedes solicitar este día: {m}	You cannot request this day: {m}	Não podes p
 No se ha podido	It could not be done	Não foi possível	Impossible pour le moment	Non è stato possibile	Nicht möglich
 No se ha podido abrir el pago. Inténtalo en un minuto.	Couldn’t open the payment. Try again in a minute.	Não foi possível abrir o pagamento. Tente daqui a um minuto.	Impossible d’ouvrir le paiement. Réessayez dans une minute.	Impossibile aprire il pagamento. Riprova tra un minuto.	Zahlung konnte nicht geöffnet werden. Versuche es in einer Minute.
 No se ha podido cargar	Could not load	Não foi possível carregar	Chargement impossible	Impossibile caricare	Laden nicht möglich
+No se ha podido cargar el mapa.	The map could not be loaded.	Não foi possível carregar o mapa.	Impossible de charger la carte.	Impossibile caricare la mappa.	Die Karte konnte nicht geladen werden.
 No se ha podido cargar tu ruta.	Your route could not be loaded.	Não foi possível carregar a tua rota.	Votre tournée n’a pas pu être chargée.	Non è stato possibile caricare il tuo giro.	Deine Route konnte nicht geladen werden.
 No se ha podido completar: {e}	Could not be completed: {e}	Não foi possível concluir: {e}	Impossible de terminer : {e}	Impossibile completare: {e}	Konnte nicht abgeschlossen werden: {e}
 No se ha podido guardar	Could not save	Não foi possível guardar	Enregistrement impossible	Impossibile salvare	Speichern nicht möglich
-No se ha podido guardar {n}: {e}	Could not save {n}: {e}	Não foi possível guardar {n}: {e}	Impossible d’enregistrer {n} : {e}	Impossibile salvare {n}: {e}	{n} konnte nicht gespeichert werden: {e}
 """,
-        """No se ha podido hacer ({n}).	It could not be done ({n}).	Não foi possível ({n}).	Impossible pour le moment ({n}).	Non è stato possibile ({n}).	Nicht möglich ({n}).
+        """No se ha podido guardar {n}: {e}	Could not save {n}: {e}	Não foi possível guardar {n}: {e}	Impossible d’enregistrer {n} : {e}	Impossibile salvare {n}: {e}	{n} konnte nicht gespeichert werden: {e}
+No se ha podido hacer ({n}).	It could not be done ({n}).	Não foi possível ({n}).	Impossible pour le moment ({n}).	Non è stato possibile ({n}).	Nicht möglich ({n}).
 No se ha podido leer el cuentakilómetros ahora mismo. Escribe los kilómetros que marca el cuadro.	The odometer could not be read right now. Type the kilometres shown on the dashboard.	Não foi possível ler o conta-quilómetros agora. Escreve os quilómetros do painel.	Le compteur n’a pas pu être lu pour l’instant. Saisissez les kilomètres affichés au tableau de bord.	Non è stato possibile leggere il contachilometri ora. Scrivi i chilometri del cruscotto.	Der Kilometerzähler konnte gerade nicht gelesen werden. Gib den Kilometerstand vom Tacho ein.
 No se ha podido leer la etiqueta. Prueba con más luz y la etiqueta recta, o escríbelo.	The label could not be read. Try with more light and the label straight, or type it.	Não foi possível ler a etiqueta. Tenta com mais luz e a etiqueta direita, ou escreve-a.	L’étiquette n’a pas pu être lue. Essayez avec plus de lumière et l’étiquette bien droite, ou saisissez-la.	Non è stato possibile leggere l’etichetta. Prova con più luce e l’etichetta dritta, o scrivila.	Das Etikett konnte nicht gelesen werden. Versuche es mit mehr Licht und geradem Etikett, oder tippe es ein.
 No se ha podido leer lo compartido.	Couldn’t read what you shared.	Não foi possível ler o partilhado.	Impossible de lire le partage.	Non è stato possibile leggere quanto condiviso.	Das Geteilte konnte nicht gelesen werden.
@@ -590,10 +591,10 @@ Todo cargado	All loaded	Tudo carregado	Tout est chargé	Tutto caricato	Alles gel
 Todo entregado	All delivered	Tudo entregue	Tout livré	Tutto consegnato	Alles zugestellt
 Todos avisados	Everyone notified	Todos avisados	Tout le monde est prévenu	Tutti avvisati	Alle benachrichtigt
 Toma la entrada	Take the ramp	Tome o acesso	Prenez la bretelle	Prendi l’ingresso	Auffahrt nehmen
-Toma la salida	Take the exit	Tome a saída	Prenez la sortie	Prendi l’uscita	Ausfahrt nehmen
-Trabajar más	Work more	Trabalhar mais	Travailler plus	Lavorare di più	Mehr arbeiten
 """,
-        """Traer a hoy	Bring to today	Trazer para hoje	Ramener à aujourd’hui	Porta a oggi	Auf heute holen
+        """Toma la salida	Take the exit	Tome a saída	Prenez la sortie	Prendi l’uscita	Ausfahrt nehmen
+Trabajar más	Work more	Trabalhar mais	Travailler plus	Lavorare di più	Mehr arbeiten
+Traer a hoy	Bring to today	Trazer para hoje	Ramener à aujourd’hui	Porta a oggi	Auf heute holen
 Trasera	Rear	Traseira	Arrière	Retro	Hinten
 Tu cartera personal	Your personal wallet	A tua carteira pessoal	Votre portefeuille personnel	Il tuo portafoglio personale	Dein persönliches Guthaben
 Tu contraseña	Your password	A tua palavra-passe	Votre mot de passe	La tua password	Dein Passwort
@@ -779,6 +780,7 @@ ya estaban	were already there	já estavam	étaient déjà là	c’erano già	war
 {n} sin entregar = {euros} sin cobrar	{n} not delivered = {euros} unpaid	{n} não entregues = {euros} por cobrar	{n} non livrés = {euros} non payés	{n} non consegnati = {euros} non incassati	{n} nicht zugestellt = {euros} unbezahlt
 {n} sin ubicar: edítalas para corregir la dirección	{n} not located: edit them to fix the address	{n} sem localização: edita-as para corrigir a morada	{n} non localisés : modifiez-les pour corriger l’adresse	{n} non localizzate: modificale per correggere l’indirizzo	{n} nicht verortet: bearbeite sie, um die Adresse zu korrigieren
 © OpenStreetMap	© OpenStreetMap	© OpenStreetMap	© OpenStreetMap	© OpenStreetMap	© OpenStreetMap
+© OpenStreetMap · OpenMapTiles	© OpenStreetMap · OpenMapTiles	© OpenStreetMap · OpenMapTiles	© OpenStreetMap · OpenMapTiles	© OpenStreetMap · OpenMapTiles	© OpenStreetMap · OpenMapTiles
 «Entrada por el garaje», «timbre 2», «sin ascensor»…	“Entrance through the garage”, “bell 2”, “no lift”…	«Entrada pela garagem», «campainha 2», «sem elevador»…	« Entrée par le garage », « sonnette 2 », « sans ascenseur »…	«Ingresso dal garage», «campanello 2», «senza ascensore»…	„Eingang über die Garage“, „Klingel 2“, „kein Aufzug“ …
 ¿Cerrar sesión?	Sign out?	Terminar sessão?	Se déconnecter ?	Uscire?	Abmelden?
 ¿Cuánto combustible queda?	How much fuel is left?	Quanto combustível resta?	Combien de carburant reste-t-il ?	Quanto carburante resta?	Wie viel Kraftstoff ist noch da?
@@ -796,7 +798,7 @@ ya estaban	were already there	já estavam	étaient déjà là	c’erano già	war
 
     /** { español -> [en, pt, fr, it, de] } */
     val MAPA: Map<String, Array<String>> by lazy {
-        val m = HashMap<String, Array<String>>(1564)
+        val m = HashMap<String, Array<String>>(1568)
         for (b in BLOQUES) for (l in b.lineSequence()) {
             if (l.isBlank()) continue
             val c = l.split('\t')

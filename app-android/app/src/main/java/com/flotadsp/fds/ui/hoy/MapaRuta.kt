@@ -539,8 +539,8 @@ private class ProveedorFused(ctx: Context) : IMyLocationProvider {
     override fun destroy() { stopLocationProvider() }
 }
 
-/* LOS DIBUJOS. Las mismas formas y colores que la web; medidas en dp. La guía (GuiaPantalla) usa los mismos: la línea
-   de la ruta, la chincheta de la parada y el punto azul (lo `internal`). */
+/* LOS DIBUJOS. Las mismas formas y colores que la web; medidas en dp. La guía (GuiaPantalla, con MapLibre) reutiliza
+   la chincheta de la parada y el punto azul (lo `internal`); su ruta son capas de MapLibre. */
 
 private const val BLANCO = -1
 private val NOCHE = 0xFF0F172A.toInt()
@@ -716,7 +716,7 @@ private fun nave(ctx: Context): Bitmap {
     return bmp
 }
 
-/** El móvil: punto azul con halo; con `flecha`, además la cuña hacia donde mira (osmdroid la gira con la brújula). */
+/** El móvil: punto azul con halo; con `flecha`, además la cuña hacia donde mira (la guía la gira con el rumbo). */
 internal fun puntoAzul(ctx: Context, flecha: Boolean): Bitmap {
     val d = ctx.dp()
     val (bmp, c) = lienzo(ctx, 44f, 44f)

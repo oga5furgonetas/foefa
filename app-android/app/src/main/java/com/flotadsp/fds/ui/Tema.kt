@@ -85,9 +85,14 @@ private val Formas = Shapes(
     extraLarge = RoundedCornerShape(28.dp),
 )
 
+/** Si toca la noche: el tema elegido en Ajustes («oscuro», «claro») o, con «sistema», el del móvil. Lo usan el tema
+ *  de la app y el mapa de la guía (01-11-2026), que tiene su estilo de día y de noche. */
+@Composable
+fun esNoche(tema: String): Boolean = when (tema) { "oscuro" -> true; "claro" -> false; else -> isSystemInDarkTheme() }
+
 @Composable
 fun TemaFds(tema: String, contenido: @Composable () -> Unit) {
-    val noche = when (tema) { "oscuro" -> true; "claro" -> false; else -> isSystemInDarkTheme() }
+    val noche = esNoche(tema)
     val colores: ColorScheme = if (noche) Oscuro else Claro
     val extra = if (noche) Extra(Color(0xFF22A55A), Color.White, Color(0xFF3A2C10), Color(0xFFFFD58A), Color(0xFF0C2A3A), Color(0xFFBAE6FD))
     else Extra(Color(0xFF15803D), Color.White, Color(0xFFFFF1D6), Color(0xFF7A4A00), Color(0xFFE0F2FE), Color(0xFF075985))

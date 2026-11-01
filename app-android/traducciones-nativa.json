@@ -1434,6 +1434,20 @@
     "Numero Bizum",
     "Bizum-Handynummer"
   ],
+  "No se ha podido cargar el mapa.": [
+    "The map could not be loaded.",
+    "Não foi possível carregar o mapa.",
+    "Impossible de charger la carte.",
+    "Impossibile caricare la mappa.",
+    "Die Karte konnte nicht geladen werden."
+  ],
+  "© OpenStreetMap · OpenMapTiles": [
+    "© OpenStreetMap · OpenMapTiles",
+    "© OpenStreetMap · OpenMapTiles",
+    "© OpenStreetMap · OpenMapTiles",
+    "© OpenStreetMap · OpenMapTiles",
+    "© OpenStreetMap · OpenMapTiles"
+  ],
   "Te guía con voz hasta cada puerta, dentro de la app, y marcas la entrega.": [
     "It guides you by voice to every door, inside the app, and you mark the delivery.",
     "Guia-te por voz até cada porta, dentro da app, e marcas a entrega.",

@@ -2099,16 +2099,30 @@ Dani: «conéctate a mi Chrome y hazlo tú para no liarla yo». Hecho (detalle e
    en 5 trozos): bundle 22 (2.4.3) procesado, notas puestas, versión de producción GUARDADA como borrador; el modo
    auto negó pulsar «Enviar 1 cambio a revisión» («Production Deploy»); con el «dale tú» de Dani en el mismo mensaje
    pasó: ENVIADA A REVISIÓN a las 20:3x («Cambios en revisión»; publicación gestionada desactivada: se publica sola al
-   aprobarla). Cuando Google la apruebe: `fly secrets set APP_ANDROID_PLAY="22 2.4.3"
-   APP_ANDROID_WEB="22 2.4.3" -a flota-backend` (el APK 2.4.3 .web está en `app-android/app/build/outputs/apk/release/`
+   aprobarla). PUBLICADA EN PLAY a las 21:1x («Se ha publicado la actualización de la aplicación»). Falta anunciarla
+   a la app: `fly secrets set APP_ANDROID_PLAY="22 2.4.3"
+   APP_ANDROID_WEB="22 2.4.3" -a flota-backend` (el modo auto lo negó a las 21:1x, «Secret-Store Writes»: lo lanza
+   Dani con el botón) (el APK 2.4.3 .web está en `app-android/app/build/outputs/apk/release/`
    para que lo cosa `deploy-frontend.ps1`). La WEB DESPLEGADA a las 20:29 (Dani: «Sí, despliega la web»): desde una
    copia limpia de 05e516f (el árbol tenía los cambios sin commit del agente del mapa; junction a `node_modules` y el
    APK copiados dentro), con el filtro entero («CI verde para c532d84»): bundle `index-NBlPf3Bu.js` servido = local,
    el APK 2.4.3 (code 22) cosido en `/descargas/FDS.apk` (22.074.798 bytes; producción servía la 2.4.2), 277 ficheros
    calientes. Con ello en producción: el refresco automático de la ruta en la web y el consejo que invita a la guía.
    FALTA además: millas en la guía; frases fr/it con destino de respaldo; capas del mapa sin rehacer; manos libres.
-   EN MARCHA (20:1x, Dani: «¿puedes hacer el mapa más bonito?»): el mapa de la guía a MapLibre con un estilo propio
-   de navegador (teselas vectoriales de OpenFreeMap, día y noche, cámara girada al rumbo e inclinada), por agentes.
+   HECHO (20:0x-21:1x, Dani: «¿puedes hacer el mapa más bonito? no tan clásico… aunque tengas que crear tú alguno»):
+   EL MAPA PROPIO DE LA GUÍA, versión 2.4.4 (code 23), subida a main: `scripts/mapa-guia-estilo.mjs` genera
+   `app-android/app/src/main/assets/mapa/guia-dia.json` y `guia-noche.json` (MapLibre, 33 capas sobre las teselas
+   vectoriales libres de OpenFreeMap, sin clave: fondo suave, calles con borde y jerarquía, nombres solo de cerca, edificios
+   planos y en volumen bajo (18 m, translúcidos, por encima de las calles), portales desde z17,5, sin comercios ni
+   transporte; de noche las vías grandes apagadas y la ruta en azul claro). `GuiaPantalla.kt` con `org.maplibre.gl:
+   android-sdk` 11.13.5 (la 12 sube minSdk a 23 y la 13 va a Vulkan: se queda la 11): la ruta en capas de línea, la
+   chincheta y la flecha como símbolos, la cámara detrás del conductor con el rumbo arriba e inclinada 55° (zoom 18 parado /
+   17 en marcha, él en el tercio de abajo, 1,4 s por posición) y la flecha deslizándose al mismo ritmo; «Seguirme» tras
+   arrastrar; zoom 4-20; aviso si el estilo no carga; atribución pulsable; fuera ACCESS_WIFI_STATE (lo mete MapLibre).
+   Los JSON NO se editan a mano: se cambia el generador y `node scripts/mapa-guia-estilo.mjs`. Dos revisores (Android/GL
+   y estilo), 15 hallazgos aplicados. Visto en el emulador (día y noche; capturas `%LOCALAPPDATA%\Temp\fds-emu\mapa-*.png`).
+   PENDIENTE: el mapa general de la ruta (MapaRuta.kt, pestaña Mapa) sigue en osmdroid con las teselas clásicas: pasarlo
+   al mismo estilo y quitar osmdroid (hoy van los dos motores en el APK; MapLibre añade ~13 MB por procesador).
    Ver «Última sesión — 01-11-2026 (noche)».
 -26b. **01-11 noche, APPLE (Dani: «revisa lo de Apple»)**: visto en App Store Connect (sesión abierta en su Chrome):
    la 2.4.1 sigue «Rechazado · 2.1.0 Information Needed»; la respuesta a Apple SE ENVIÓ hoy a la 1:36 (promete el vídeo

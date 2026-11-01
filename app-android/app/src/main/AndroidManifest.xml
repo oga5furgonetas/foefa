@@ -17,6 +17,9 @@
     <!-- WorkManager (la cola de entregas sin red) trae un servicio en primer plano que la app no usa nunca: fuera,
          para no declarar en Play un permiso que no se usa. Se queda lo que sí hace falta (reintentar tras reiniciar). -->
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" tools:node="remove" />
+    <!-- MapLibre (el mapa de la guía, 01-11-2026) declara el estado del wifi y la app no lo usa: fuera, por lo mismo. -->
+    <uses-permission android:name="android.permission.ACCESS_WIFI_STATE" tools:node="remove" />
+    <uses-feature android:name="android.hardware.wifi" tools:node="remove" />
 
     <uses-feature android:name="android.hardware.camera" android:required="false" />
     <uses-feature android:name="android.hardware.location.gps" android:required="false" />
