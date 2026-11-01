@@ -589,6 +589,13 @@ Nada se había borrado (org `owner` sin `modulos`, usuario `dani` sin
     (piden empresa china); Web Push no llega en China (va por FCM); revisión
     por un abogado del texto PIPL.
 
+## Última sesión — 01-11-2026 (08:50, PC de Dani, bucle de redes): ofrecimiento en portugués a Wanderson (Reino Unido); 6 en TikTok, 2 en YouTube
+
+- Metricool sin huecos hasta el 08-11 (TikTok hasta el 10-11); el post de X del día salió a las 7:30, programados hasta el 11-11 (el
+  12-11 necesita la cifra real). Ronda: ofrecimiento público en portugués a @wandersonbala; 5 comentarios más en TikTok (en, de, it,
+  fr, es) y 2 en YouTube (en, en). X, Facebook: nada. Instagram sin sesión. En el perfil de X hay dos posts del 31-10 (17:30 y 21:00)
+  que no son de este bucle. Detalle en `docs/anuncios/redes/REGISTRO-PC.md` (01-11, 08:10).
+
 ## Última sesión — 01-11-2026 (04:45, PC de Dani, bucle de redes): Javi contestó y se le respondió; ofrecimiento en francés a Livraisons Story; 6 en TikTok, 2 en YouTube
 
 - Metricool sin huecos hasta el 08-11 (TikTok hasta el 10-11); X hasta el 11-11 (el 12-11 necesita la cifra real). Ronda: javi030426
