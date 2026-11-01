@@ -2052,9 +2052,14 @@ Dani: «conéctate a mi Chrome y hazlo tú para no liarla yo». Hecho (detalle e
    definitivo» la hoja lo recibe entero; la primera vuelta tras el despliegue puede pedir «Aceptar estos cambios».
    Y de 13:5x: Dani marcó definitivo a las 13:53 (2.086 celdas, a 300 por vuelta con el script viejo) y vio que la
    app escribía con otra letra. Hechos con tests la letra, el volcado por tramos (un mes de una vez) y «Pintar la hoja
-   como aquí». FALTA: desplegar backend + web (con permiso), VOLVER A PEGAR el script en su hoja (llave nueva →
-   Apps Script → guardar → modo activo), «Flota → Sincronizar ahora» (vuelca lo que queda de una vez) y «Pintar la
-   hoja como aquí» del 01/11 al 30/11 para arreglar lo escrito en Arial 11 y los N/T APROB sin fondo.
+   como aquí». DESPLEGADOS: la web a las 14:5x (bundle `index-DV1-NTsF.js`, con el bloque «Pintar la hoja como
+   aquí») y el backend a las 19:10 (Dani: «haz lo que tengas que hacer»; el árbol tenía 3 PNG sin commit de la sesión
+   de redes y el filtro paró, y el modo auto negó `-SinCI`: se desplegó desde una copia limpia de 7f0efcc con el
+   filtro entero; `/api/health` ok, `/cuadrante/sync/repintar` contesta 401 sin sesión). FALTA, y hace falta que
+   Dani ENTRE en el panel del PC (la sesión caducó a las 18:4x y no se entra contraseñas por él): VOLVER A PEGAR el
+   script en su hoja (llave nueva → Apps Script → guardar → modo activo), «Flota → Sincronizar ahora» (vuelca lo que
+   queda de una vez) y «Pintar la hoja como aquí» del 01/11 al 30/11 para arreglar lo escrito en Arial 11 y los N/T
+   APROB sin fondo. Mientras, la hoja está en modo prueba con la llave nueva y el script viejo: no escribe nada.
 -24. **01-11 mediodía, los colores de su hoja en el cuadrante**: HECHO (rejilla, sincronización, Excel), con tests.
    Falta: desplegar backend + web (con permiso de Dani) y, en su hoja, «Flota → Sincronizar ahora» para ver los
    colores en NOVIEMBRE. Si quiere también la letra roja de BAJA / N/D / N/P desde la app, hay que ampliar el script
