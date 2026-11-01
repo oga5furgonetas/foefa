@@ -35,6 +35,8 @@ import unicodedata
 from collections import Counter
 from typing import Any, Dict, List, Optional
 
+from cuadrante_motor import alias_cod
+
 ROSAS = {"FF66CC", "FF99CC", "FFC0CB"}
 POR_DEFECTO = {"00B0F0": "empresa", "FABF8F": "finde", "92D050": "finde", "FFFF00": "sale", "FFD966": "sale"}
 _PARADA = ("RUTAS", "MAXIMA", "DIFERENCIA", "TOTAL", "LEYENDA")
@@ -71,7 +73,7 @@ def _codigo(v):
         if re.fullmatch(r"\d{1,2}[:.]\d{2}", dentro):
             hora = dentro.replace(".", ":")
         txt = re.sub(r"\s*\(.*?\)", "", txt)
-    return re.sub(r"\s+", " ", txt).strip().upper(), hora
+    return alias_cod(re.sub(r"\s+", " ", txt).strip().upper()), hora
 
 
 def _fecha(v) -> Optional[dt.date]:

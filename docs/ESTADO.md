@@ -873,13 +873,46 @@ contentarme [...] No quiero falsos positivos ni soluciones por decir». El infor
   después, en su hoja, «Flota → Sincronizar ahora» (o esperar 10 min) y lo que escriba la app irá ya con sus colores.
   · **Dani (12:5x): se refería a la pestaña NOVIEMBRE de Google Sheets, y dice que añadió 3 personas con N/T aprobados
     en noviembre que no estaban en la página; quiere que vayan a la par.** Mirado en vivo (la hoja en su Chrome de
-    empresa; el panel en su Chrome personal): la sincronización está ACTIVA, última vez 12:48, «Todo igual»; lee
-    «12 A 26» (01/10 → 02/11) y «NOVIEMBRE» (01/11 → 30/11), 82 de 82 nombres en las dos; sin borrador; «BACKUP (1)»
-    y «1 EXTRA (1)» son códigos que no toca. Los N/T APROB que él puso a mano en NOVIEMBRE (sin nota de Flota) SÍ
-    están en el panel (comprobados Christian Gallego 03/11, Daniel André 07-08/11, Doramas 03-04/11). En NOVIEMBRE no
-    hay filas nuevas: 82 nombres, igual que el panel. Queda por saber a qué 3 personas se refiere y dónde las añadió
-    (preguntado). De paso: `_sync_mensaje` decía «Todo igual» aunque hubiera un borrador que se tragara las celdas;
-    ahora lo dice.
+    empresa, leída entera con el CSV de `gviz/tq?tqx=out:csv&gid=…`, que sí deja `fetch` desde docs.google.com; el
+    panel en su Chrome personal, API de solo lectura). Lo que pasó: a las 12:48 NOVIEMBRE tenía 82 nombres (igual que
+    el panel) y de 12:5x a 13:0x Dani fue metiendo filas nuevas sin número: ALBA LUEIRO ANTELO (RIDE 01/11, 1 el
+    02/11), CESAR MIGUEL CONTRERAS SANCHEZ (RIDE 03/11), DAVID FERNANDEZ DE HARO (RIDE 01/11, 1 el 02/11) y DENIAN
+    SUAREZ VALENTIN; y quitó la fila de AFILAL TAOUFIK AFILAL. La hoja manda sola (el script tiene disparador al
+    editar, como mucho cada 2 min, y el reloj cada 10): a las 12:57 la app hizo la ficha de Alba con sus dos celdas, a
+    las 13:04 las de César y Denian, y a Afilal lo saca desde el 02/11 («salen 1», como está pensado: si vuelve a
+    ponerlo, vuelve). DAVID FERNANDEZ DE HARO se quedó RETENIDO: se parece a una ficha de baja («DAVID VICENTE
+    HERNANDEZ SAN LUIS») y la app pide que una persona lo decida, en FDS → Cuadrante → Google Sheets → «Es otra
+    persona: ficha nueva» (el modo auto me denegó hacerlo por API, «Modify Shared Resources»: pedido a Dani). O sea,
+    «la página no estaba» = miró antes de que pasara el disparador (o miró a David, retenido). De paso:
+    `_sync_mensaje` decía «Todo igual» aunque hubiera un borrador que se tragara las celdas; ahora lo dice.
+  · **Lo que la app NO entendía de su hoja (13:0x → 13:1x)**: `codigos_desconocidos` traía «BACKUP (1)» y
+    «1 EXTRA (1)»; buscado celda a celda en el CSV: «BACKUP» (Afilal 27/10), «1 EXTRA» (Gerardo Porto 30/10),
+    «1 extra» (César García 01/11), «1.EXTRA» (Juan Carlos López 11/10) y «B/V» (Iago Barreiro 01/11). Un código
+    desconocido hacía que la sincronización SALTARA esa celda (nunca llegaba a la app) y el importador, igual. Ahora
+    `cuadrante_motor.alias_cod` («BACKUP» / «BACK UP» → BKP; «1 EXTRA» en cualquier grafía → EXTRA; «Ride along» →
+    RIDE; «N/T APROBADO» → N/T APROB; «SUSPENDIDO» → SUSP) lo aplican los tres lectores: `_cod` (lo que guarda la
+    app), `cuadrante_excel._codigo` (la hoja del script y el Excel) y `_despieza_codigo` (el importador). «B/V» sigue
+    siendo desconocido: no se sabe qué es (preguntado). Tests: las grafías en el lector, en el canon y en el
+    importador; una hoja con BACKUP / 1 extra / 1.EXTRA / Ride along entra en la app con su código y sin
+    «desconocidos»; el test del código raro usa ahora «B/V». Tanda entera del backend y los 8 `check_*.py` en verde.
+    Sin desplegar: hasta el despliegue del backend esas celdas siguen sin entrar.
+  · **Dani (13:2x): «estoy haciendo pruebas de cuadrante, ¿hay manera de que se pasen ya a los Sheets de noviembre,
+    y que luego vaya y venga hasta que marque definitivo?» y, con una captura de NOVIEMBRE casi vacía, «PERO yo en
+    el sheets no veo q se escriba nada».** Mirado en el panel (API de solo lectura): FDS tiene noviembre hecho (930
+    celdas: 340 unos, 279 N/T, 101 N/T APROB, 139 BAJA, 23 SUSP, 27 V…) y a las 13:22 él empezó un BORRADOR del
+    03/11 al 30/11 («por: Dani»); mientras está en borrador esas fechas no van ni vienen, a propósito: con «Marcar
+    definitivo» la siguiente vuelta lo escribe entero en NOVIEMBRE. Pero ANTES del borrador tampoco se escribía
+    (13:17, «0 de la app a la hoja»), y eso sí era una regla de la sincronización (`_sync_decide`: hoja en blanco,
+    app con valor, sin base → «nada», pensada para que la primera conexión no regara la hoja): una celda que la hoja
+    nunca tuvo y la app rellena se quedaba solo en la app hasta el definitivo, y después del definitivo igual (un
+    día nuevo puesto en FDS sobre una celda en blanco no llegaba nunca). Cambiado en `_sync_procesar`, en la llamada
+    a `_sync_decide` (no en la función pura): si la hoja está en blanco, la app tiene valor, no hay base y la fecha es
+    de hoy en adelante, va a la hoja (`a_hoja`, «cambiado en la app»); el pasado en blanco de la hoja se deja en paz
+    (`desde` ya recorta a `_SYNC_ANTES` días). El freno de los 80 cambios de golpe sigue: la primera vuelta tras
+    desplegar puede quedar «retenida» hasta «Aceptar estos cambios» (o pasa sola con el «Marcar definitivo», que
+    fuerza una vez). Test `test_lo_que_la_app_rellena_donde_la_hoja_esta_en_blanco_va_a_la_hoja_de_hoy_en_adelante`
+    (la semana futura hecha en la app llega a la hoja; el 15, pasado y en blanco, no; la vuelta siguiente «todo
+    igual»); el caso puro `("", "1", None) → nada` se queda como está. Sin desplegar.
 - **EL DÍA EN UNA TARJETA (la mitad del punto 10), web (01-11, 11:1x → 11:2x; worktree `tarjeta-dia`)**: la imagen de
   «Comparte tu día» (`lib/compartirDia.js`) lleva ahora, además de paradas, tiempo y km, lo que un repartidor enseña a
   otro: «{p} % a la primera» (entregadas entre entregadas más fallidas), «{c}/hora limpio» (solo con tarifa puesta:
@@ -1976,6 +2009,14 @@ Dani: «conéctate a mi Chrome y hazlo tú para no liarla yo». Hecho (detalle e
 
 ## Pendiente (por prioridad)
 
+-25. **01-11, 13:0x, NOVIEMBRE «a la par»**: la hoja ya manda sola (al editar y cada 10 min); las filas nuevas de Dani
+   están en FDS salvo DAVID FERNANDEZ DE HARO, retenido por parecerse a una ficha de baja: falta que Dani pulse «Es
+   otra persona: ficha nueva» en FDS → Cuadrante → Google Sheets (o me dé permiso para hacerlo por API). Los alias
+   de su hoja (BACKUP, 1 EXTRA, Ride along) hechos con tests: falta DESPLEGAR el backend (con su permiso) para que
+   esas celdas entren. «B/V» (Iago Barreiro 01/11) sigue sin saberse qué es (preguntado). Y, de 13:2x: Dani tiene
+   noviembre hecho en FDS y un BORRADOR del 03/11 al 30/11 desde las 13:22: cuando pulse «Marcar definitivo» la hoja
+   lo recibe entero (eso ya funciona sin desplegar). Lo que la app rellena en celdas en blanco de la hoja (de hoy en
+   adelante) irá a la hoja en cuanto se despliegue el backend; la primera vuelta puede pedir «Aceptar estos cambios».
 -24. **01-11 mediodía, los colores de su hoja en el cuadrante**: HECHO (rejilla, sincronización, Excel), con tests.
    Falta: desplegar backend + web (con permiso de Dani) y, en su hoja, «Flota → Sincronizar ahora» para ver los
    colores en NOVIEMBRE. Si quiere también la letra roja de BAJA / N/D / N/P desde la app, hay que ampliar el script

@@ -34443,7 +34443,7 @@ def _despieza_codigo(crudo) -> tuple:
         if re.fullmatch(r"\d{1,2}[:.]\d{2}", dentro):
             hora = dentro.replace(".", ":")
         txt = re.sub(r"\s*\(.*?\)", "", txt)
-    return re.sub(r"\s+", " ", txt).strip().upper(), hora
+    return _cm.alias_cod(re.sub(r"\s+", " ", txt).strip().upper()), hora
 
 
 def _sin_tildes(s: str) -> str:
@@ -50102,6 +50102,12 @@ async def _sync_procesar(conf: dict, cuerpo: dict) -> dict:
                 if (ap == "libre" and tipo_s in ("trabaja", "extra")) or (ap == "extra" and tipo_s == "libre"):
                     prot = "aprobado"
             accion, por_que = _sync_decide(S, A, B, prot)
+            if accion == "nada" and A and not S and B is None and f >= hoy.isoformat():
+                # (01-11-2026, Dani: «si cambio todo el cuadrante en FDS, que se cambie otra vez todo en Sheets») Una
+                # celda que la hoja nunca tuvo y la app rellenó se quedaba solo en la app hasta «definitivo»: él hizo
+                # noviembre en la app y en la hoja no veía nada. De hoy en adelante va a la hoja (el pasado en blanco
+                # de la hoja se deja en paz), con el freno de siempre de los 80 cambios de golpe.
+                accion, por_que = "a_hoja", "app"
             if d_desde and d_desde <= f <= d_hasta:
                 # El borrador se marcó definitivo: en esas fechas manda la app. Donde las dos cambiaron, o donde nunca
                 # coincidieron (la pestaña del mes nuevo, recién hecha copiando la de antes con sus códigos viejos), la
