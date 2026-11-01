@@ -266,7 +266,25 @@ async def test_el_extra_aprobado_va_en_rosa_y_si_se_quita_se_vacia(nave):
     poner(t, "d1", DIAS[12], "N/T")
     r = await sync(llave, p2, nave=nave)
     w = r["escribir"][0]
-    assert (w["valor"], w["fondo"]) == ("N/T", "")
+    assert (w["valor"], w["fondo"]) == ("N/T", "#fff2cc")      # y en crema, como escribe Dani los N/T (01-11-2026)
+
+
+def test_lo_que_la_app_escribe_va_con_los_colores_de_su_hoja():
+    """LOS COLORES DE SU HOJA (01-11-2026): el fondo de cada celda que la app escribe, por código y día."""
+    rosa = "#ff66cc"
+    assert server._sync_fondo_hoja("N/T", "2026-10-27", rosa) == "#fff2cc"
+    assert server._sync_fondo_hoja("1", "2026-10-27", rosa) == ""                 # blanco: sin fondo
+    assert server._sync_fondo_hoja("1", "2026-10-25", rosa) == "#f8cbad"          # domingo, en naranja
+    assert server._sync_fondo_hoja("N/T", "2026-10-25", rosa) == "#f8cbad"
+    assert server._sync_fondo_hoja("", "2026-10-25", rosa) == "#f8cbad"           # vaciada en domingo: el naranja sigue
+    assert server._sync_fondo_hoja("EXTRA", "2026-10-25", rosa) == rosa           # el rosa del extra manda
+    assert server._sync_fondo_hoja("SUSP", "2026-10-25", rosa) == "#ff0000"       # y el rojo del suspendido
+    assert server._sync_fondo_hoja("N/T APROB@09:00", "2026-10-27", rosa) == "#e2efda"
+    assert server._sync_fondo_hoja("BKP", "2026-10-27", rosa) == "#ff00ff"
+    assert server._sync_fondo_hoja("RIDE", "2026-10-27", rosa) == "#d9e1f2"
+    assert server._sync_fondo_hoja("BAJA", "2026-10-27", rosa) == "#fff2cc"
+    assert server._sync_fondo_hoja("V", "2026-10-27", rosa) == ""
+    assert server._sync_fondo_hoja("RARO", "no-es-fecha", rosa) == ""
 
 
 @pytest.mark.asyncio(loop_scope="session")

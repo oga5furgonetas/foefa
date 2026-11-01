@@ -844,6 +844,42 @@ contentarme [...] No quiero falsos positivos ni soluciones por decir». El infor
     (2 casos × escritorio y móvil: las estrellas y el Bizum con el portapapeles; «Avisar a todos» uno a uno, el
     enlace de WhatsApp con la hora y el seguimiento, y que se recuerda al recargar), nativa compilada con tests y
     lint. 17 textos en 5 idiomas; `Traducciones.kt` regenerado (719).
+- **LOS COLORES DE SU HOJA DE GOOGLE EN EL CUADRANTE (01-11, 12:3x → 12:5x; Dani: «vuelve a conectarte al cuadrante de
+  sheets y fíjate en los colores y todo, ponlo igual»)**. Mirada la pestaña «12 A 26» en su Chrome de empresa, celda a
+  celda con el menú de color de Sheets (los exactos): el 1 en blanco, el N/T en crema FFF2CC (paleta «amarillo claro
+  3»), el domingo entero en naranja F8CBAD (personalizado), SUSP en rojo FF0000, BAJA / N/D / N/P en crema con la
+  letra roja, N/T APROB en verde claro E2EFDA, BACKUP en magenta FF00FF, RIDE en azul claro D9E1F2, V en blanco con
+  letra gris, S en blanco con letra roja, el extra en rosa (FF66CC, el que escribe la sincronización); los nombres en
+  azul 00B0F0 (empresa), verde 92D050 (findes/días fijos) y dorado FFD966 («baja», deja el cuadrante); la fila de
+  los días en rojo C0504D. Su leyenda: 1, N/T, sexto día consecutivo, DOMINGOS/FESTIVOS, empresa, fines de semana/días
+  fijos, baja, SUSPENDIDO. Los 1 en verde, cian o amarillo de algunas celdas no están en la leyenda: son marcas suyas
+  y la app no las pinta ni las lee (ya era así). Hecho en los TRES sitios:
+  · **La rejilla del panel** (`cuadranteComun.js`: `claseCodigo`, `claseNombre`, `CABECERA_DIA`…; `Cuadrante.jsx`,
+    `HojaMensual.jsx` y `HojaDiario.jsx` lo heredan): colores fijos (no del tema, `bg-[#fff2cc] text-black`…), así
+    la celda se ve igual en claro y en oscuro, como la hoja; los nombres con su fondo; la cabecera de días en rojo con
+    la letra del domingo en naranja; la leyenda con todo (SUSP, BACKUP, RIDE, Oficina y los tres colores de nombre).
+  · **Lo que la app escribe en la hoja** (`_sync_fondo_hoja`, `_SYNC_COLOR`, `_SYNC_DOMINGO` en `server.py`): hasta
+    ahora el script solo pintaba el rosa del extra (o lo quitaba) y lo demás iba sin fondo (en NOVIEMBRE se veían los
+    N/T APROB y las BAJA en blanco). Ahora cada celda que la app escribe va con su color (y el domingo en naranja); el
+    script de la hoja ya sabía pintar fondos (`setBackground`), así que NO hay que volver a pegarlo. La letra roja de
+    BAJA / N/D / N/P y la gris de V no se pueden poner desde la app (el script solo pinta fondos): esas las pone él.
+    Los festivos no los sabe la app: una celda que la app cambie en un festivo pierde el naranja de Dani. Test puro
+    `test_lo_que_la_app_escribe_va_con_los_colores_de_su_hoja` (+ el caso del extra que deja de serlo espera crema).
+  · **El Excel que se exporta** (`cuadrante_exportar`): SUSP rojo, BACKUP magenta, BAJA / N/D / N/P en crema con letra
+    roja, V gris, el dorado FFD966 de los que se van, la fila de días en rojo, la leyenda con todo; el 7º día seguido
+    pasa a un rojo claro (FF7C80) para no confundirse con SUSP. Y el lector de hojas (`cuadrante_excel.POR_DEFECTO`)
+    conoce el verde 92D050 y el dorado FFD966 aunque la hoja no traiga leyenda.
+  Sin desplegar: el servidor (la sincronización con colores y el Excel) y la web (la rejilla) necesitan el despliegue;
+  después, en su hoja, «Flota → Sincronizar ahora» (o esperar 10 min) y lo que escriba la app irá ya con sus colores.
+  · **Dani (12:5x): se refería a la pestaña NOVIEMBRE de Google Sheets, y dice que añadió 3 personas con N/T aprobados
+    en noviembre que no estaban en la página; quiere que vayan a la par.** Mirado en vivo (la hoja en su Chrome de
+    empresa; el panel en su Chrome personal): la sincronización está ACTIVA, última vez 12:48, «Todo igual»; lee
+    «12 A 26» (01/10 → 02/11) y «NOVIEMBRE» (01/11 → 30/11), 82 de 82 nombres en las dos; sin borrador; «BACKUP (1)»
+    y «1 EXTRA (1)» son códigos que no toca. Los N/T APROB que él puso a mano en NOVIEMBRE (sin nota de Flota) SÍ
+    están en el panel (comprobados Christian Gallego 03/11, Daniel André 07-08/11, Doramas 03-04/11). En NOVIEMBRE no
+    hay filas nuevas: 82 nombres, igual que el panel. Queda por saber a qué 3 personas se refiere y dónde las añadió
+    (preguntado). De paso: `_sync_mensaje` decía «Todo igual» aunque hubiera un borrador que se tragara las celdas;
+    ahora lo dice.
 - **EL DÍA EN UNA TARJETA (la mitad del punto 10), web (01-11, 11:1x → 11:2x; worktree `tarjeta-dia`)**: la imagen de
   «Comparte tu día» (`lib/compartirDia.js`) lleva ahora, además de paradas, tiempo y km, lo que un repartidor enseña a
   otro: «{p} % a la primera» (entregadas entre entregadas más fallidas), «{c}/hora limpio» (solo con tarifa puesta:
@@ -1940,6 +1976,10 @@ Dani: «conéctate a mi Chrome y hazlo tú para no liarla yo». Hecho (detalle e
 
 ## Pendiente (por prioridad)
 
+-24. **01-11 mediodía, los colores de su hoja en el cuadrante**: HECHO (rejilla, sincronización, Excel), con tests.
+   Falta: desplegar backend + web (con permiso de Dani) y, en su hoja, «Flota → Sincronizar ahora» para ver los
+   colores en NOVIEMBRE. Si quiere también la letra roja de BAJA / N/D / N/P desde la app, hay que ampliar el script
+   de la hoja (`setFontColor`) y volver a pegarlo.
 -23. **01-11 mañana, el día en una tarjeta**: HECHO (web) y DESPLEGADO a las 12:2x. Falta la otra mitad del punto 10: el trimestre para la
    gestoría (gastos con foto del ticket, kilómetros, IVA e IRPF; existe el Excel, faltan gastos y el formato).
 -22. **01-11 mañana, el cliente avisado, la propina y la valoración**: HECHOS en servidor, web y nativa, con tests.

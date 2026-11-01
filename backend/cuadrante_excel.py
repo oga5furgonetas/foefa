@@ -36,7 +36,7 @@ from collections import Counter
 from typing import Any, Dict, List, Optional
 
 ROSAS = {"FF66CC", "FF99CC", "FFC0CB"}
-POR_DEFECTO = {"00B0F0": "empresa", "FABF8F": "finde", "FFFF00": "sale"}
+POR_DEFECTO = {"00B0F0": "empresa", "FABF8F": "finde", "92D050": "finde", "FFFF00": "sale", "FFD966": "sale"}
 _PARADA = ("RUTAS", "MAXIMA", "DIFERENCIA", "TOTAL", "LEYENDA")
 
 
