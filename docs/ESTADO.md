@@ -662,6 +662,17 @@ contentarme [...] No quiero falsos positivos ni soluciones por decir». El infor
   (~15 min) sale la build 10 en App Store Connect con el «Borrar mi cuenta». Para reenviar a Apple faltan: entrar
   Dani en App Store Connect, el vídeo en un iPhone físico (guion en APP_STORE.md), cuentas de prueba, y pegar las
   notas y el mensaje de APP_STORE.md con la build 10 seleccionada.
+- **Apple, contestado (01-11, 01:36, con Dani dentro de App Store Connect)**: las notas de revisión de la 2.4.1
+  reescritas en inglés con los 6 puntos que pedía Apple (2.953 caracteres, guardadas) y respuesta enviada en el hilo
+  (Mensajes (2)). Quedan: el vídeo en un iPhone físico y seleccionar la build 10 (lanzada a mano) antes de «Volver a
+  enviar». La cuenta de prueba `apple@flotadsp.com` ya estaba en la ficha (de la sesión del 30-10).
+- **«El siguiente nivel» (Dani, 01-11 01:4x: «monta algo increíble»)**: `docs/SIGUIENTE-NIVEL-01-11.md` (12 cosas
+  con qué, por qué, qué hay, cómo, días y quién lo tiene; el visual «modo furgoneta»; orden de 6 semanas) y el boceto
+  `docs/bocetos/hoy-modo-furgoneta.svg/.png` (`frontend/e2e/svg-a-png.mjs` lo rasteriza). Comprobado contra el código:
+  existen las 6 zonas manuales de la furgoneta, la puerta aprendida, la voz web y la foto de entrega; NO existen la
+  carga guiada, el briefing por voz, la memoria de calle compartida, la comprobación de la foto con IA, la hora buena
+  por puerta, la propina/valoración, el perfil verificado, el mapa vectorial (Leaflet + osmdroid hoy) ni «Compartir
+  con FDS» (sin ACTION_SEND).
 - Dani (01-11): los ~25 móviles con la app de Play son los conductores de OGA5. Y su idea sobre la estrategia: «ir
   escogiendo gente por ahí y de ahí hacer nombre, y con nombre es más fácil exponerse a empresas».
 
