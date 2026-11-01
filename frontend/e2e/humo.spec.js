@@ -3488,6 +3488,7 @@ test('Ruta · Comparte tu día: al acabar, imagen con el enlace de invitación',
   expect(c.tipo).toBe('image/png')
   expect(c.tam).toBeGreaterThan(10000)
   expect(c.texto).toContain('Hoy he hecho 5 paradas')
+  expect(c.texto).toContain('100 % a la primera')   // el día en una tarjeta (01-11-2026): sin fallidas, a la primera
   expect(c.texto).toMatch(/\/invita\?ref=ANA123&utm_source=referido&utm_medium=dia/)
   expect(fallos).toEqual([])
 })

@@ -691,7 +691,7 @@ contentarme [...] No quiero falsos positivos ni soluciones por decir». El infor
   escogiendo gente por ahí y de ahí hacer nombre, y con nombre es más fácil exponerse a empresas».
 - **CARGA GUIADA Y BRIEFING POR VOZ, hechos en web y nativa (01-11, 02:0x → 02:5x; Dani: «Carga y briefing», los dos
   primeros de `docs/SIGUIENTE-NIVEL-01-11.md`)**. Commit `ac83b7c` (36 ficheros), CI de GitHub VERDE a las 03:07
-  (run 41263190470). DESPLEGADOS backend (Fly) y web (Pages) el 01-11 a las 08:5x (Dani: «Despliega y sigue mejorando»),
+  (run 41263190470). DESPLEGADOS backend (Fly) y web (Pages) el 01-11 a las 10:0x (Dani: «Despliega y sigue mejorando»),
   con la puerta del CI (`ac83b7c` en verde y por encima solo documentos): `/api/health` OK, la web sirve el bundle nuevo
   y `/reparto/mi-ruta/cargado` contesta (401 sin sesión). La nativa espera una versión nueva en Play. Lo que hay:
   · **Servidor** (`reparto.py`, `server.py`): al ordenar la ruta, cada parada ubicada recibe su hueco de la furgoneta por su
@@ -733,7 +733,7 @@ contentarme [...] No quiero falsos positivos ni soluciones por decir». El infor
     de arrancar, que es cuando se decide por dónde ir (la variante por distancia queda como mejora). Y el hueco es
     solo por posición: sin «bultos grandes al suelo» ni «prioridad delante» (reglas para cuando se vea cómo cargan de
     verdad los de OGA5).
-- **LA ENTREGA VERIFICADA (la comprobación de puerta con IA), hecha en servidor, web y nativa (01-11, 09:0x → 09:4x;
+- **LA ENTREGA VERIFICADA (la comprobación de puerta con IA), hecha en servidor, web y nativa (01-11, 10:0x → 10:18;
   Dani: «Despliega y sigue mejorando»; el punto 4 de `docs/SIGUIENTE-NIVEL-01-11.md`)**. Lo que hay:
   · **Servidor** (`reparto.py`, `server.py`): al dar por entregado CON FOTO, Gemini (la misma llave y el mismo modelo que
     la IA de daños; `_gemini_json_call`, con sus respaldos) mira la foto con la dirección y el cliente y contesta en JSON
@@ -767,8 +767,8 @@ contentarme [...] No quiero falsos positivos ni soluciones por decir». El infor
     «parcial» con una nota. Y la respuesta no es siempre síncrona: 8 s de espera y el resto en segundo plano, para no
     tener al repartidor mirando una rueda. Queda por ver con fotos REALES de la nave cómo lee Gemini los números (si
     lee mal, se afina el prompt o se sube el modelo; el veredicto está en un sitio).
-- **«COMPARTIR CON FDS» (el punto 9 de `docs/SIGUIENTE-NIVEL-01-11.md`), hecho en nativa y servidor (01-11, 09:5x →
-  10:4x)**. Lo que hay:
+- **«COMPARTIR CON FDS» (el punto 9 de `docs/SIGUIENTE-NIVEL-01-11.md`), hecho en nativa y servidor (01-11, 10:2x →
+  10:37)**. Lo que hay:
   · **Nativa**: la app sale en «Compartir» de cualquier otra para texto, fotos o capturas (una o varias) y PDF
     (`AndroidManifest`: SEND y SEND_MULTIPLE). `MainActivity.leerCompartido` recoge lo compartido y, con la sesión
     abierta, `Principal` abre `CompartidoPantalla` (`ui/compartir/`): las fotos y capturas se leen EN EL MÓVIL con ML
@@ -792,7 +792,7 @@ contentarme [...] No quiero falsos positivos ni soluciones por decir». El infor
     que existe «Compartir» (cabría en «Más formas de añadir»). Y no está probado con una hoja REAL de una agencia:
     solo con las de los tests.
 - **LA MEMORIA DE LA CALLE (el punto 3 de `docs/SIGUIENTE-NIVEL-01-11.md`), hecha en servidor, web y nativa (01-11,
-  10:5x → 11:4x)**. Lo que hay:
+  10:4x → 10:52)**. Lo que hay:
   · **Servidor**: la colección `calle_memoria` por empresa (una puerta, un apunte: índice único por `clave`, la
     dirección normalizada de `reparto.clave_direccion`): el código del portal, dónde dejar (una de DONDE_ENTREGA) y
     cómo se entra (`reparto.memoria_sanea`), quién lo apuntó y cuándo. `POST /reparto/mis-pedidos/{id}/memoria`
@@ -812,7 +812,7 @@ contentarme [...] No quiero falsos positivos ni soluciones por decir». El infor
   · **Lo que difiere del documento**: sin foto del portal (pesa y es un dato más que guardar; la puerta aprendida por
     posición ya existe) y sin contadores por franja (eso es el punto 5, la hora buena).
 - **EL CLIENTE AVISADO, LA PROPINA Y LA VALORACIÓN (el punto 6 de `docs/SIGUIENTE-NIVEL-01-11.md`), hechos en servidor,
-  web y nativa (01-11, 12:1x → 13:xx; en el worktree `.claude/worktrees/cliente-avisado`, rama `cliente-avisado`, para
+  web y nativa (01-11, 10:5x → 11:15; en el worktree `.claude/worktrees/cliente-avisado`, rama `cliente-avisado`, para
   dejar el checkout principal limpio y poder desplegar lo anterior)**. Lo que hay:
   · **Avisar a todos por WhatsApp** (web y nativa): con la ruta ordenada, un botón en Hoy abre la lista de las paradas
     pendientes con móvil, en orden, con su hora; cada una tiene su WhatsApp (el mensaje de siempre: «voy de camino»,
@@ -837,6 +837,15 @@ contentarme [...] No quiero falsos positivos ni soluciones por decir». El infor
     (2 casos × escritorio y móvil: las estrellas y el Bizum con el portapapeles; «Avisar a todos» uno a uno, el
     enlace de WhatsApp con la hora y el seguimiento, y que se recuerda al recargar), nativa compilada con tests y
     lint. 17 textos en 5 idiomas; `Traducciones.kt` regenerado (719).
+- **EL DÍA EN UNA TARJETA (la mitad del punto 10), web (01-11, 11:1x → 11:2x; worktree `tarjeta-dia`)**: la imagen de
+  «Comparte tu día» (`lib/compartirDia.js`) lleva ahora, además de paradas, tiempo y km, lo que un repartidor enseña a
+  otro: «{p} % a la primera» (entregadas entre entregadas más fallidas), «{c}/hora limpio» (solo con tarifa puesta:
+  el neto por hora de «Mi dinero hoy») y «acabé a las {h}» (la última parada cerrada); lo de abajo (la frase, el QR)
+  baja según las líneas que haya. El texto que va con la imagen dice también el «% a la primera». La captura real en
+  `docs/bocetos/tarjeta-dia-01-11/` (`e2e/capturas-tarjeta-01-11.mjs` guarda el PNG que iría al estado). El caso de
+  humo «Comparte tu día» comprueba el texto; `lib/compartirDia.js` entra en `check-textos-ruta`. La otra mitad del
+  punto (el fichero del trimestre para la gestoría con gastos) NO está. Y en la nativa, el recordatorio de
+  «Compartir» en la pantalla de añadir paradas (lo que faltaba del punto 9).
 
 ## Última sesión — 13-10-2026: escaneo de paquetes en lote
 
@@ -1924,10 +1933,16 @@ Dani: «conéctate a mi Chrome y hazlo tú para no liarla yo». Hecho (detalle e
 
 ## Pendiente (por prioridad)
 
--22. **01-11 mediodía, el cliente avisado, la propina y la valoración**: HECHOS en servidor, web y nativa, con tests.
-   Falta: desplegar backend + web con el CI en verde (el modo auto DENEGÓ el despliegue a las 13:0x: hace falta el
-   permiso de Dani en el chat o que lo lance él: `scripts/deploy-backend.ps1` y `scripts/deploy-frontend.ps1`); la
-   nativa en Play (versión 22); los avisos a clientes por la API de WhatsApp para empresas (sin Meta no hay).
+-23. **01-11 mañana, el día en una tarjeta**: HECHO (web). Falta la otra mitad del punto 10: el trimestre para la
+   gestoría (gastos con foto del ticket, kilómetros, IVA e IRPF; existe el Excel, faltan gastos y el formato).
+-22. **01-11 mañana, el cliente avisado, la propina y la valoración**: HECHOS en servidor, web y nativa, con tests.
+   Falta: DESPLEGAR backend + web: el CI de `ed5093b` está en verde (run 41296661081) y el modo auto DENEGÓ el
+   despliegue dos veces (11:0x y 11:3x, «Production Deploy»), aunque a las 10:0x lo había dejado pasar con la misma
+   orden de Dani: hace falta su permiso en el chat o que lo lance él (`scripts/deploy-backend.ps1` y
+   `scripts/deploy-frontend.ps1`, por este orden; el servidor lleva lo de la entrega verificada, el `hoja: true` de
+   `/reparto/pegar`, la memoria de la calle, la valoración y el Bizum, y la web todo lo suyo). En producción sigue lo
+   de las 10:0x (la carga guiada y el briefing). La nativa en Play (versión 22); los avisos a clientes por la API de
+   WhatsApp para empresas (sin Meta no hay).
 -21. **01-11 mañana, la memoria de la calle**: HECHA en servidor, web y nativa, con tests. Falta: el servidor y la web
    desplegados con el CI en verde (van con lo de la mañana); la nativa en Play (versión 22).
 -20. **01-11 mañana, «Compartir con FDS»**: HECHO en nativa y servidor, con tests. Falta: (1) el servidor desplegado
@@ -1940,7 +1955,7 @@ Dani: «conéctate a mi Chrome y hazlo tú para no liarla yo». Hecho (detalle e
    pregunta de más o lee mal los números, afinar el prompt (`_rep_ia_entrega_llamada`) o las reglas
    (`reparto.veredicto_entrega`); (3) la nativa va en la misma versión 22 de Play que la carga guiada.
 -18. **01-11 madrugada, la carga guiada y el briefing por voz**: HECHOS en servidor, web y nativa, con tests; backend y
-   web DESPLEGADOS el 01-11 a las 08:5x. Falta: (1) la nativa: subir `versionCode` a 22 y `versionName` a 2.5.0 en
+   web DESPLEGADOS el 01-11 a las 10:0x. Falta: (1) la nativa: subir `versionCode` a 22 y `versionName` a 2.5.0 en
    `build.gradle.kts`, dejar que `app-release.yml` compile el AAB, subirlo a Play Console y poner
    `APP_ANDROID_PLAY="22 2.5.0"`; (2)
    probarlo en la nave con los de OGA5 y decidir las reglas que faltan (bultos grandes al suelo, prioridad delante,

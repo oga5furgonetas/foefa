@@ -1,5 +1,6 @@
 import QRCode from 'qrcode'
 import { tx } from './idioma'
+import { importe } from './region'
 import { medirAccion } from './analitica'
 import { getReferidos } from '../services/api'
 import { enlaceInvitar } from './compartir'
@@ -18,7 +19,10 @@ function texto(ctx, t, x, y, { tam = 60, peso = 800, color = '#f4fbfb', alinear 
   ctx.fillText(t, x, y)
 }
 
-export async function imagenDelDia({ paradas, minutos, km, enlace }) {
+/* EL DÍA EN UNA TARJETA (01-11-2026, docs/SIGUIENTE-NIVEL-01-11.md §10): lo que un repartidor enseña a otro es cuánto
+   hizo, a la primera, cuánto le quedó por hora y a qué hora acabó. Cada dato sale solo si se tiene (sin tarifa no hay
+   €/hora; sin fallidas, «100 % a la primera»). */
+export async function imagenDelDia({ paradas, minutos, km, enlace, aLaPrimera = null, porHora = null, horaFin = '' }) {
   // El QR primero (es lo único que espera): luego se dibuja todo de un tirón.
   const qr = document.createElement('canvas')
   await QRCode.toCanvas(qr, enlace, { margin: 1, width: 360 })
@@ -41,30 +45,38 @@ export async function imagenDelDia({ paradas, minutos, km, enlace }) {
   const lineas = []
   if (minutos > 0) lineas.push(tx('en {h} h {m} min', { h, m }))
   if (km > 0) lineas.push(`${String(Math.round(km * 10) / 10).replace('.', ',')} km`)
-  lineas.forEach((l, i) => texto(ctx, l, 90, 790 + i * 80, { tam: 58, peso: 700, color: '#a9c2c6' }))
+  if (aLaPrimera != null) lineas.push(tx('{p} % a la primera', { p: aLaPrimera }))
+  if (porHora != null && porHora > 0) lineas.push(tx('{c}/hora limpio', { c: importe(porHora) }))
+  if (horaFin) lineas.push(tx('acabé a las {h}', { h: horaFin }))
+  // Hasta cinco líneas caben entre el número y la frase de abajo (que baja si hace falta).
+  lineas.slice(0, 5).forEach((l, i) => texto(ctx, l, 90, 770 + i * 66, { tam: 50, peso: 700, color: i >= 2 ? '#ffd43b' : '#a9c2c6' }))
 
-  texto(ctx, tx('Con FDS la ruta se ordena sola'), 90, 1080, { tam: 52, color: '#ffffff' })
-  texto(ctx, tx('Foto a la etiqueta · guía con voz'), 90, 1150, { tam: 40, peso: 600, color: '#a9c2c6' })
+  // Lo de abajo baja con las líneas que haya (de dos a cinco): nada se pisa.
+  const yFrase = 770 + Math.min(lineas.length, 5) * 66 + 44
+  texto(ctx, tx('Con FDS la ruta se ordena sola'), 90, yFrase, { tam: 52, color: '#ffffff' })
+  texto(ctx, tx('Foto a la etiqueta · guía con voz'), 90, yFrase + 70, { tam: 40, peso: 600, color: '#a9c2c6' })
 
   // El QR de su invitación, en una tarjeta blanca.
+  const yQr = yFrase + 180
   ctx.fillStyle = '#ffffff'
   ctx.beginPath()
-  ctx.roundRect ? ctx.roundRect(90, 1260, 420, 420, 32) : ctx.rect(90, 1260, 420, 420)
+  ctx.roundRect ? ctx.roundRect(90, yQr, 420, 420, 32) : ctx.rect(90, yQr, 420, 420)
   ctx.fill()
-  ctx.drawImage(qr, 120, 1290, 360, 360)
-  texto(ctx, tx('Escanéalo y'), 560, 1400, { tam: 46, color: '#ffffff' })
-  texto(ctx, tx('pruébala gratis'), 560, 1460, { tam: 46, color: '#ffd43b' })
-  texto(ctx, new URL(enlace).host, 560, 1540, { tam: 40, peso: 700, color: '#a9c2c6' })
+  ctx.drawImage(qr, 120, yQr + 30, 360, 360)
+  texto(ctx, tx('Escanéalo y'), 560, yQr + 140, { tam: 46, color: '#ffffff' })
+  texto(ctx, tx('pruébala gratis'), 560, yQr + 200, { tam: 46, color: '#ffd43b' })
+  texto(ctx, new URL(enlace).host, 560, yQr + 280, { tam: 40, peso: 700, color: '#a9c2c6' })
   return new Promise((ok) => c.toBlob((b) => ok(b), 'image/png'))
 }
 
-export async function compartirDia({ paradas, minutos, km }) {
+export async function compartirDia({ paradas, minutos, km, aLaPrimera = null, porHora = null, horaFin = '' }) {
   medirAccion('compartir_dia')
   let codigo = ''
   try { codigo = (await getReferidos()).data?.codigo || '' } catch { /* sin código: enlace normal */ }
   const enlace = enlaceInvitar(codigo).replace('utm_medium=compartir', 'utm_medium=dia')
-  const blob = await imagenDelDia({ paradas, minutos, km, enlace })
-  const texto = `${tx('Hoy he hecho {n} paradas con FDS: la ruta se ordena sola. Pruébala gratis:', { n: paradas })} ${enlace}`
+  const blob = await imagenDelDia({ paradas, minutos, km, enlace, aLaPrimera, porHora, horaFin })
+  const extra = aLaPrimera != null ? `${tx('{p} % a la primera', { p: aLaPrimera })}. ` : ''
+  const texto = `${tx('Hoy he hecho {n} paradas con FDS: la ruta se ordena sola. Pruébala gratis:', { n: paradas })} ${extra}${enlace}`
   const fichero = new File([blob], 'mi-dia-fds.png', { type: 'image/png' })
   try {
     if (navigator.canShare?.({ files: [fichero] })) { await navigator.share({ files: [fichero], text: texto }); return 'compartido' }

@@ -1099,4 +1099,8 @@ export const B = {
   "Es un regalo para el repartidor, no parte del pedido.": ["It’s a gift for the courier, not part of the order.", "É um presente para o estafeta, não faz parte da encomenda.", "C’est un cadeau pour le livreur, pas une partie de la commande.", "È un regalo per il corriere, non fa parte dell’ordine.", "Es ist ein Geschenk für den Zusteller, kein Teil der Bestellung."],
   "el cliente": ["the customer", "o cliente", "le client", "il cliente", "der Kunde"],
   "Valoración del cliente: {e}": ["Customer rating: {e}", "Avaliação do cliente: {e}", "Note du client : {e}", "Valutazione del cliente: {e}", "Kundenbewertung: {e}"],
+  // EL DÍA EN UNA TARJETA (01-11-2026): la imagen de «Comparte tu día».
+  "{p} % a la primera": ["{p}% first-time delivery", "{p} % à primeira", "{p} % du premier coup", "{p} % al primo tentativo", "{p} % beim ersten Mal"],
+  "{c}/hora limpio": ["{c}/hour net", "{c}/hora líquidos", "{c}/heure net", "{c}/ora netti", "{c}/Stunde netto"],
+  "acabé a las {h}": ["finished at {h}", "acabei às {h}", "fini à {h}", "finito alle {h}", "fertig um {h}"],
 }

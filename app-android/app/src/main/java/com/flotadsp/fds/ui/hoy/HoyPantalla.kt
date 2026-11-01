@@ -518,6 +518,8 @@ private fun Vacia(alEscanear: () -> Unit, alAnadir: () -> Unit) {
             Spacer(Modifier.height(12.dp))
             Text(tx("Carga tus paradas de hoy"), style = MaterialTheme.typography.titleLarge)
             Spacer(Modifier.height(6.dp))
+            Text(tx("Comparte con esta app la hoja de la agencia (foto, captura, PDF o la lista) y las paradas entran solas."),
+                style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(bottom = 6.dp))
             Text(tx("Escanea la etiqueta de cada paquete: si su código trae la dirección, la parada entra sola. Si no, la lee de la foto."),
                 style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
             Spacer(Modifier.height(18.dp))

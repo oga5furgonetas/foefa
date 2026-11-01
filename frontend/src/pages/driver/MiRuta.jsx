@@ -1256,7 +1256,12 @@ export default function MiRuta({ onBack, embebido = false, alTerminar = null }) 
           onCompartir={entregados.length >= 5 && pendientes.length === 0 ? () => {
             const ini = ruta.jornada?.empezada ? new Date(ruta.jornada.empezada).getTime() : 0
             const fin = ruta.jornada?.terminada ? new Date(ruta.jornada.terminada).getTime() : Date.now()
-            compartirDia({ paradas: entregados.length, minutos: ini ? (fin - ini) / 60000 : 0, km: Number(ruta?.ruta?.km) || 0 })
+            // EL DÍA EN UNA TARJETA (01-11-2026): a la primera, lo limpio por hora (si hay tarifa) y a qué hora acabó.
+            const fallidas = hechos.filter((p) => p.estado === 'fallido').length
+            const cierres = hechos.map((p) => p.cerrado_en).filter(Boolean).sort()
+            compartirDia({ paradas: entregados.length, minutos: ini ? (fin - ini) / 60000 : 0, km: Number(ruta?.ruta?.km) || 0,
+              aLaPrimera: Math.round((entregados.length / (entregados.length + fallidas)) * 100), porHora: dinero?.porHora ?? null,
+              horaFin: cierres.length ? new Date(cierres[cierres.length - 1]).toLocaleTimeString(locale(), { hour: '2-digit', minute: '2-digit' }) : '' })
               .then((r) => { if (r === 'descargado') setAviso(tx('Imagen descargada y texto copiado: pégalo donde quieras.')) })
               .catch(() => setAviso(tx('No se pudo preparar la imagen')))
           } : null}

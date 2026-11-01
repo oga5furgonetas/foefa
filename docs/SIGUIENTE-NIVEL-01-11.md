@@ -41,7 +41,7 @@ en los últimos 50 metros (el portal, el cliente), después (el dinero y la prue
 ## 2. Las doce cosas, por orden de impacto partido por esfuerzo
 
 ### 1. Carga guiada: la furgoneta se organiza sola mientras escaneas (3-4 días)
-> **HECHA el 01-11-2026 (madrugada), en web y nativa; servidor y web desplegados a las 08:5x, la nativa espera versión en Play** (ver `ESTADO.md`). Lo que difiere de lo de abajo: el
+> **HECHA el 01-11-2026 (madrugada), en web y nativa; servidor y web desplegados a las 10:0x, la nativa espera versión en Play** (ver `ESTADO.md`). Lo que difiere de lo de abajo: el
 > hueco es solo por posición (sin «bultos grandes al suelo» ni «prioridad delante»), y el aviso de «qué mover» al
 > reordenar no existe (las zonas son gruesas: lo normal es que nada cambie de fila).
 
@@ -60,7 +60,7 @@ en los últimos 50 metros (el portal, el cliente), después (el dinero y la prue
 - **Quién lo tiene.** Spoke, a medias (Package Finder: te dice dónde dejaste cada paquete, no te dice dónde ponerlo).
 
 ### 2. El briefing de la parada, por voz, 300 metros antes (2-3 días)
-> **HECHO el 01-11-2026 (madrugada), en web y nativa; servidor y web desplegados a las 08:5x, la nativa espera versión en Play** (ver `ESTADO.md`). Salta al cambiar la siguiente
+> **HECHO el 01-11-2026 (madrugada), en web y nativa; servidor y web desplegados a las 10:0x, la nativa espera versión en Play** (ver `ESTADO.md`). Salta al cambiar la siguiente
 > parada (al dar la anterior por hecha, o al ordenar), no a 300 m por GPS: se oye antes de arrancar y funciona sin red.
 > La variante por distancia queda como mejora.
 
@@ -190,6 +190,9 @@ en los últimos 50 metros (el portal, el cliente), después (el dinero y la prue
 - **Quién lo tiene.** Routal, por foto; por «compartir» desde cualquier app, no lo he visto en ninguna.
 
 ### 10. El día en una tarjeta y el trimestre para la gestoría (2-3 días)
+> **La tarjeta, HECHA el 01-11-2026 (tarde), en la web** (ver `ESTADO.md`): a la primera, lo limpio por hora y a qué
+> hora acabó, con el QR de invitación. El trimestre para la gestoría, NO.
+
 - **Qué es.** Al cerrar el día, una tarjeta para el estado de WhatsApp: entregas, a la primera, €/hora, km, hora de
   fin, con tu enlace de invitación (existe `compartirDia.js`: hay que convertirla en la joya). Y al mes y al
   trimestre, el fichero para la gestoría con gastos (foto del ticket) y kilómetros, IVA e IRPF (existe el Excel;

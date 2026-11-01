@@ -26,6 +26,8 @@ const FICHEROS = [
   'lib/entregaIa.js',
   // La memoria de la calle (01-11-2026): el portal, dónde dejar y cómo se entra.
   'pages/driver/MemoriaPuerta.jsx',
+  // El día en una tarjeta (01-11-2026): la imagen de «Comparte tu día».
+  'lib/compartirDia.js',
 ]
 // Nombres que llegan de datos (el plan del autónomo en Registro: tt(planInfo.name)).
 // y los métodos de cobro de lib/region.js (metodosCobro), que se pintan con tx(t).
