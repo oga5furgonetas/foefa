@@ -231,7 +231,8 @@ medido sale de las consolas de Dani (leídas en su Chrome, solo lectura) y de la
 
 - **Google Play** (consola, 4-30 oct): móviles con la app instalada **de 1 a ~25** en el mes (España la mayoría;
   Lituania ~3, Francia y Turquía testimoniales); **0 fallos y 0 ANR** en 28 días; **0 valoraciones**; la 2.4.2
-  publicada ayer con 18 descargas en sus primeras horas.
+  publicada ayer con 18 descargas en sus primeras horas. **Dani (01-11): esos ~25 son los conductores de OGA5**, su
+  propia flota: fuera de ella, la app de Play no la tiene instalada nadie que se sepa.
 - **Google (Search Console, 90 días)**: 117 clics, 1.040 impresiones, posición media 7,9, CTR 11 %. De los 117
   clics, 41 son la marca («flotadsp», «flota dsp») y casi todo lo demás son ofertas de empleo locales («repartidor
   vigo», «empleo ourense»). «ruta de reparto»: 6 impresiones, 0 clics. Las guías SEO (`/guia-*`) no aparecen.
@@ -327,7 +328,7 @@ dueño de DSP, ni el argumento «lo uso yo» escrito en ningún sitio. En el rep
 calle solo ha visto el más débil. Y el único módulo con un retorno en euros que un cliente puede calcular en una
 servilleta (la prueba fotográfica que evita la franquicia del renting) está dentro, sin nombre y sin precio propio.
 
-### Lo arreglado esta noche (todo subido a `main`, nada desplegado en producción salvo los secretos de la 2.4.2)
+### Lo arreglado esta noche (todo subido a `main` y, desde la 01:1x del 01-11 con el «Despliega todo» de Dani, EN PRODUCCIÓN: backend, web y Worker, verificados)
 
 | Qué | Dónde | Commit |
 |---|---|---|

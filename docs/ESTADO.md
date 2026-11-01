@@ -642,6 +642,25 @@ contentarme [...] No quiero falsos positivos ni soluciones por decir». El infor
   de uno en uno, empezando por «los golpes del renting», con tres pilotos en 6 semanas y sin anuncios hasta tener 3
   de pago.
 
+- **DESPLEGADO el 01-11 a la 01:1x-01:2x (Dani, 00:5x: «Despliega todo»)**: backend (`fly deploy`, con las dependencias
+  nuevas; `/api/health` ok con Mongo, la demo lee 200 y no escribe 403, una subida multipart sin sesión da 404 y no
+  500), web (`deploy-frontend.ps1`, bundle `index-CEHJb6Ls.js` servido = local, APK 2.4.2 cosido, 277 assets
+  calientes) y el Worker del dominio (`npx wrangler deploy`, versión a5b7370e): `http://flotadsp.com` → 301 a https y
+  HSTS un año en toda la web. Los dos primeros con `-SinCI` a sabiendas: el código era el del commit verde `49aaa82`
+  (el candado del CI falló en PowerShell por el BOM de la tubería, arreglado en `b99c86a`). Un primer intento de
+  desplegar lo denegó el modo auto porque el «sí» de Dani estaba en el mensaje anterior: la orden tiene que ir en el
+  mismo mensaje. Hallazgo del arranque: el servidor avisa al arrancar «índice único del ledger: Index build failed»
+  (duplicados en `vehicle_damage_ledger` impiden crear el índice único; pendiente de mirar). Y una prueba de
+  contrato del CI fallaba cada noche entre las 00:00 y la 01:00 (bug real de medianoche en «la inspección de hoy»,
+  arreglado en `49aaa82`; quedan 13 sitios con el mismo patrón `^{today}` sobre `created_at`, ver el informe §2).
+- **Apple (Dani, 01-11 00:5x: «haz lo de Apple, conéctate y contesta»)**: la sesión de App Store Connect del Chrome
+  caducó y solo Dani puede entrar. Lo que Apple pidió y cómo contestar está en `docs/APP_STORE.md` («RECHAZADA la
+  2.4.1» y «El mensaje para Responder»). Y lo que faltaba de verdad: la web (lo que lleva dentro la app de iPhone)
+  NO tenía «Borrar mi cuenta» (la de Android sí): hecho en `c5ad1d9` (Cuenta → Borrar mi cuenta, con contraseña,
+  6 idiomas); desplegar la web con ello y lanzar a mano «App iPhone (App Store)» para la build 10 antes de reenviar.
+- Dani (01-11): los ~25 móviles con la app de Play son los conductores de OGA5. Y su idea sobre la estrategia: «ir
+  escogiendo gente por ahí y de ahí hacer nombre, y con nombre es más fácil exponerse a empresas».
+
 ## Última sesión — 13-10-2026: escaneo de paquetes en lote
 
 - `POST /reparto/escanear/lote` admite hasta 100 paquetes, busca códigos

@@ -213,6 +213,35 @@ The attached video was recorded on <MODELO DE IPHONE>, iOS <VERSIÓN>, and shows
 delivery with photo, registration, login and account deletion.
 ```
 
+### El mensaje para «Responder al equipo de revisión de apps» (01-11-2026)
+
+Lo que falta para poder contestar: iniciar sesión en App Store Connect (la sesión del Chrome caducó; solo Dani), el
+vídeo en un iPhone físico, y **que la build que se reenvíe lleve el «Borrar mi cuenta»** (la web lo tiene desde el
+01-11, commit `c5ad1d9`; hay que lanzar «App iPhone (App Store)» a mano para que salga la build 10 con esa web). El
+texto, para pegar tal cual y rellenar los huecos:
+
+```
+Thank you for the review. Here is the requested information (also added to the App Review notes):
+
+1. Screen recording: <ENLACE O ADJUNTO del vídeo grabado en un iPhone físico con iOS 26.x>. It shows launch, the
+   no-login demo route, scanning a label, ordering the route, a delivery with photo, registration, login and
+   account deletion (Cuenta → "Borrar mi cuenta").
+2. Purpose and audience: FDS is a delivery-route app for self-employed parcel couriers and for the drivers of
+   small delivery companies (Spain, Portugal, Latin America). The courier scans parcel labels or photographs the
+   paper delivery sheet; the app orders the stops by time windows and distance, guides stop by stop (voice,
+   hands-free), records proof of delivery (photo, signature, cash on delivery) and shows the day's earnings.
+3. Access: tap "Probarla ahora, sin registrarme" on the first screen (no account needed: a demo route with 8
+   stops in the reviewer's city is created). Registration: "Crear cuenta" (name, e-mail, password; free plan, no
+   card). Test accounts: courier <USUARIO> / <CLAVE>; company driver <CORREO> / <CLAVE>. Account deletion:
+   Cuenta → "Borrar mi cuenta" (asks for the password).
+4. External services: our own API (flota-backend.fly.dev); OpenStreetMap, Photon, Nominatim and CartoCiudad
+   (geocoding/maps); OSRM (route times); Google ML Kit on device (barcode/text); Firebase Cloud Messaging
+   (Android only); Stripe (web only; nothing is sold inside the iOS app); Google Gemini (reads a photographed
+   delivery sheet; no personal data retained by the provider).
+5. Regional differences: none. Currency and road-works feeds follow the country of the route (Spain: DGT).
+6. No regulated industry, no third-party protected material, no public user-generated content.
+```
+
 ## Tanda 2 (cuando esté en la tienda)
 
 - Avisos al móvil con APNs (`@capacitor/push-notifications` + certificado/clave APNs en el servidor).
