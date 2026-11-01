@@ -589,6 +589,13 @@ Nada se había borrado (org `owner` sin `modulos`, usuario `dani` sin
     (piden empresa china); Web Push no llega en China (va por FCM); revisión
     por un abogado del texto PIPL.
 
+## Última sesión — 01-11-2026 (16:55, PC de Dani, bucle de redes): ofrecimiento en inglés a Crooksys Couriers; 7 en TikTok, 2 en YouTube
+
+- Metricool sin huecos hasta el 08-11 (TikTok hasta el 10-11); X del día salió a las 7:30, programados hasta el 11-11. Ronda:
+  ofrecimiento público en inglés a @crooksys_couriers (mensajería pequeña del Reino Unido); 6 comentarios más en TikTok (es, es, pt,
+  en, de, it) y 2 en YouTube (pt, en). X, Facebook: nada. Instagram sin sesión. Ojo: la extensión de Chrome volvió a coger por
+  defecto un «Browser 2» sin sesiones; las sesiones están en el «Browser 1». Detalle en `docs/anuncios/redes/REGISTRO-PC.md` (01-11, 16:10).
+
 ## Última sesión — 01-11-2026 (12:50, PC de Dani, bucle de redes): Livraisons Story contestó al ofrecimiento; ofrecimiento en alemán a stahljunge01; 6 en TikTok, 2 en YouTube
 
 - Metricool sin huecos hasta el 08-11 (el reel de Instagram de hoy salió a las 12:00); el post de X del día salió a las 7:30, programados
