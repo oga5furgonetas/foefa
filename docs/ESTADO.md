@@ -676,8 +676,8 @@ contentarme [...] No quiero falsos positivos ni soluciones por decir». El infor
 - Dani (01-11): los ~25 móviles con la app de Play son los conductores de OGA5. Y su idea sobre la estrategia: «ir
   escogiendo gente por ahí y de ahí hacer nombre, y con nombre es más fácil exponerse a empresas».
 - **CARGA GUIADA Y BRIEFING POR VOZ, hechos en web y nativa (01-11, 02:0x → 02:5x; Dani: «Carga y briefing», los dos
-  primeros de `docs/SIGUIENTE-NIVEL-01-11.md`)**. SIN desplegar (la web espera la orden de Dani; la nativa, una versión
-  nueva en Play). Lo que hay:
+  primeros de `docs/SIGUIENTE-NIVEL-01-11.md`)**. Commit `ac83b7c` (36 ficheros), CI de GitHub VERDE a las 03:07
+  (run 41263190470). SIN desplegar (la web espera la orden de Dani; la nativa, una versión nueva en Play). Lo que hay:
   · **Servidor** (`reparto.py`, `server.py`): al ordenar la ruta, cada parada ubicada recibe su hueco de la furgoneta por su
     POSICIÓN (`reparto.hueco_sugerido`: los tercios de la ruta son las filas y las mitades de cada tercio, izquierda y
     derecha; la fila de la puerta primero: detrás con las puertas traseras, delante con la lateral, según el ajuste
