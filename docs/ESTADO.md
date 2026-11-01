@@ -589,6 +589,13 @@ Nada se había borrado (org `owner` sin `modulos`, usuario `dani` sin
     (piden empresa china); Web Push no llega en China (va por FCM); revisión
     por un abogado del texto PIPL.
 
+## Última sesión — 01-11-2026 (04:45, PC de Dani, bucle de redes): Javi contestó y se le respondió; ofrecimiento en francés a Livraisons Story; 6 en TikTok, 2 en YouTube
+
+- Metricool sin huecos hasta el 08-11 (TikTok hasta el 10-11); X hasta el 11-11 (el 12-11 necesita la cifra real). Ronda: javi030426
+  respondió a nuestro comentario y se le contestó (con app); ofrecimiento público en francés a @livraisons.story; 4 comentarios más en
+  TikTok (es, de, pt, it) y 2 en YouTube (de, en). X, Facebook: nada. Instagram sin sesión. Detalle en
+  `docs/anuncios/redes/REGISTRO-PC.md` (01-11, 04:10).
+
 ## Última sesión — 01-11-2026 (madrugada, PC de Dani): el APK de la web ya no puede retroceder; la auditoría completa; la carga guiada y el briefing por voz
 
 Dani (31-10, 23:1x, desde el móvil): «Haz todo lo que consideres para que vaya todo lo mejor posible. De hecho, cuando

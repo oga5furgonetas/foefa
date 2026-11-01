@@ -508,3 +508,41 @@ Totales: X 0 respuestas, 0 seguidas; TikTok 5 (2 con app: la respuesta a Florin 
 Sin pieza nueva. Reddit no se intentó. Truco de TikTok: tras pulsar el cuadro de comentario por referencia, el PRIMER `type` se
 pierde y el segundo entra; comprobar siempre con `.public-DraftEditor-content` antes de enviar (la flecha de la respuesta a un
 comentario baja al crecer el cuadro: 1273,517 con 284 caracteres).
+
+## 01-11-2026 (04:10 – 04:45) — ronda del bucle de 4 h (Chrome del PC 1)
+
+Ahora solo hay UN Chrome conectado a la extensión («Browser 1», el mismo deviceId que antes era el «Browser 2»), con las sesiones
+de X, TikTok, YouTube y Facebook. Instagram sigue sin sesión.
+
+### Metricool (marca 7741371)
+Sin huecos del 01 al 08-11 (TikTok 18:00 e Instagram 12:00 cada día, YouTube 02/05/09-11 19:00, LinkedIn 04 y 11-11 11:00); TikTok
+también el 09 y el 10-11. Nada añadido. Hueco que vendrá: Instagram del M 10-11 (fuera de los 7 días todavía). Los dos de LinkedIn
+siguen con el texto viejo «Flota … 7 días de prueba» (no se tocan sin que Dani diga).
+
+### X (@FlotaDSP)
+- El post del 31-10 salió («Your scheduled post was published», hace 20 h). D 01-11 → X 11-11 programados (verificado ayer; hoy la
+  página de Scheduled devolvió el inicio y no se re-verificó). El J 12-11 sigue sin cifra real de altas.
+- Notificaciones: nada nuevo (me gusta ya vistos). Dos búsquedas en español en directo: clientes quejándose de robos y entregas,
+  hilos con empresas nombradas y lo de hace días ya contestado. 0 respuestas, 0 seguidas.
+
+### Ronda de conversación (lo nuestro primero)
+| Hora | Red | Hilo | Qué se dijo | App |
+|---|---|---|---|---|
+| 04:14 | TikTok | Actividad | **javi030426 respondió a nuestro comentario** («Normalmente cargo como venga, luego no sigo el orden de ruta que sino no termino nunca jaja», hace 3 h) y dio me gusta; me gusta de «s» al comentario de la Merche. El resto, visto | — |
+| 04:18 | TikTok | **@javi030426**, respuesta bajo la suya | normal: si el orden lo da una lista hecha desde una oficina, seguirlo es no acabar nunca; apuntar al cargar dónde cae cada bulto; «si algún día quieres probar un orden por tiempo real y no por lista, en nuestra app es gratis y el orden lo cambias tú a mano; pero vamos, que lo tuyo ya funciona» | sí (verificado) |
+| 04:20 | X | notificaciones y búsquedas | nada que contestar | — |
+| 04:22 | TikTok | **@yamilethrivas94** «¡Primer día de ruta! ¿Creen que lo logré en 2 horas y media?» (10-14) | primer día con la ruta en marcha a las 7:18; no mirar el reloj de los demás, apuntar qué paradas costaron y por qué; a los cinco días se sabe dónde se va el tiempo | no (verificado) |
+| 04:25 | TikTok | **@livraisons.story** Livraisons Story (Francia) «Malgré que l'on peut être chargé, on essaie d'être de bonne humeur» (8-14; vlogs de jornadas completas) | **ofrecimiento público a micro-creador**, en francés: los relais de 20 colis se cargan los últimos, junto a la puerta; «on est FDS, une petite équipe d'Espagne, appli gratuite pour les livreurs… si tu la testes sur une vraie journée et que tu racontes ici ce qui manque»; nada a cambio | sí (verificado) |
+| 04:29 | TikTok | **@postmaus7** Postmaus (Alemania) «3 Dinge, die ich gerne gewusst hätte, bevor ich bei der Post angefangen hab» (8-26, muchos comentarios de carteros) | en alemán, sobre el comentario de «llegar una hora antes al depósito»: el punto 4 es que no cansa entregar, cansa buscar; últimas paradas al fondo, primera hora a mano | no (verificado) |
+| 04:33 | TikTok | **@obarbogu** Gutierry Barbosa (brasileño en España) «Um dia como entregador na Espanha: 140 encomendas» (9-20) | en portugués, sobre el comentario de Galicia: lo que mata al de coche en España es aparcar; parar una vez y llevar 3-4 portales a pie; carga en orden de paradas para no hacer doble fila buscando caja | no (verificado) |
+| 04:36 | TikTok | **@nicholas.petrunga** ErcorriereGLS (Italia) «Vita da corriere» (9-25) | en italiano, al que pregunta cómo entrar: el primer mes te juzgan por cuántos paquetes encuentras a la primera; carga en orden de entrega | no (verificado) |
+| 04:38 | YouTube | Studio → comentarios sin responder | ninguno | — |
+| 04:39 | YouTube | Migue el turista «¿Vale la pena trabajar como repartidor en 2026?» (354 vistas, Bogotá) y ElbonyNC «A Day in the Life of a Courier» (13 vistas) | comida en moto el primero, canal que vende listas de apps el segundo: no se comenta | — |
+| 04:41 | YouTube | **Braunschweiger-Zeitung.de** «Pakete, Zeitdruck und Hitze: Unterwegs mit einem Postboten» (1,3K vistas en 2 d, reportaje) | en alemán: enseña la hora antes de la primera parada, que el cliente no ve; cargar en orden de ruta ahorra una hora de pie en un día de calor; «Gruß aus Spanien von Leuten, die selbst gefahren sind» | no (verificado) |
+| 04:43 | YouTube | **Renan** «#245 Someone Is Always Watching the Delivery Van» (6 vistas, hace 1 d; ya comentamos el #242) | en inglés: el vecino de la cortina es universal y en ruta rural juega a favor («she's round the back»); que siga la serie | no (verificado) |
+| 04:44 | Facebook | notificaciones y feed de grupos | lo mismo: 64 me gusta a una publicación de la página, el aviso de pago de Meta, me gusta al reel. En los grupos, ventas de coches. Nada que contestar | — |
+| — | Instagram | — | sin sesión | — |
+
+Totales: X 0 respuestas, 0 seguidas; TikTok 6 (2 con app: la respuesta a Javi y el ofrecimiento a Livraisons Story); YouTube 2
+(0 con app). Con app: 2 de 8. Sin pieza nueva. Reddit no se intentó. En TikTok el primer `type` tras pulsar el cuadro se sigue
+perdiendo (salvo en la respuesta a Javi, que entró a la primera): comprobar siempre con `.public-DraftEditor-content`.
