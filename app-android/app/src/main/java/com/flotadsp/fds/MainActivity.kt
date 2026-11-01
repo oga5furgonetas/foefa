@@ -4,6 +4,7 @@ import com.flotadsp.fds.ui.tx
 
 import android.Manifest
 import android.content.Intent
+import android.net.Uri
 import android.graphics.Color
 import android.os.Build
 import android.os.Bundle
@@ -45,6 +46,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.core.content.IntentCompat
 import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
 import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.viewmodel.compose.viewModel
@@ -54,6 +56,8 @@ import com.flotadsp.fds.etiqueta.Lectura
 import com.flotadsp.fds.ui.Region
 import com.flotadsp.fds.ui.TemaFds
 import com.flotadsp.fds.ui.acceso.Acceso
+import com.flotadsp.fds.ui.compartir.Compartido
+import com.flotadsp.fds.ui.compartir.CompartidoPantalla
 import com.flotadsp.fds.ui.cuenta.AjustesPantalla
 import com.flotadsp.fds.ui.cuenta.CuentaPantalla
 import com.flotadsp.fds.ui.cuenta.HistorialPantalla
@@ -71,6 +75,8 @@ class MainActivity : ComponentActivity() {
     private var sesionPortal by mutableStateOf<Sesion?>(null)
     // El aviso tocado en la barra de notificaciones (29-10-2026): su enlace, hasta que la pantalla lo atiende.
     private var abrirAviso by mutableStateOf<String?>(null)
+    // «COMPARTIR CON FDS» (01-11-2026): lo que llegó por «Compartir» (texto o ficheros), hasta que la pantalla lo lee.
+    private var compartido by mutableStateOf<Compartido?>(null)
     private lateinit var actualizacion: Actualizacion
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -81,6 +87,7 @@ class MainActivity : ComponentActivity() {
         arranque.setKeepOnScreenCondition { !app.cuenta.cargada.value }
         lifecycleScope.launch { app.cuenta.cargar() }
         leerEnlace(intent)
+        leerCompartido(intent)
         // Antes de que la actividad arranque del todo (el lanzador de Play se registra en onCreate).
         actualizacion = Actualizacion(this)
         lifecycleScope.launch { actualizacion.comprobarEnElServidor(app.repo) }
@@ -98,6 +105,7 @@ class MainActivity : ComponentActivity() {
                 Surface(color = MaterialTheme.colorScheme.background, modifier = Modifier.fillMaxSize()) {
                     Box(Modifier.fillMaxSize()) {
                         Raiz(app, ref, empresaSlug, sesionPortal, abrirAviso, alAvisoAbierto = { abrirAviso = null },
+                            compartido = compartido, alCompartidoVisto = { compartido = null },
                             alAbrirPortal = { if (it.app_destino == "empresa") sesionPortal = it },
                             alCerrarEmpresa = { empresaSlug = null; sesionPortal = null })
                         AvisoActualizacion(actualizacion, Modifier.align(Alignment.BottomCenter))
@@ -121,6 +129,20 @@ class MainActivity : ComponentActivity() {
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
         leerEnlace(intent)
+        leerCompartido(intent)
+    }
+
+    /** «COMPARTIR CON FDS» (01-11-2026): la hoja de la agencia (una foto, una captura, un PDF o el texto) compartida desde
+     *  cualquier app entra como paradas. Aquí solo se recoge; la lee CompartidoPantalla, ya con la sesión abierta. */
+    private fun leerCompartido(i: Intent?) {
+        val accion = i?.action ?: return
+        if (accion != Intent.ACTION_SEND && accion != Intent.ACTION_SEND_MULTIPLE) return
+        val uris: List<Uri> = if (accion == Intent.ACTION_SEND) listOfNotNull(IntentCompat.getParcelableExtra(i, Intent.EXTRA_STREAM, Uri::class.java))
+        else IntentCompat.getParcelableArrayListExtra(i, Intent.EXTRA_STREAM, Uri::class.java).orEmpty()
+        val texto = i.getStringExtra(Intent.EXTRA_TEXT)?.takeIf { it.isNotBlank() }
+        if (uris.isEmpty() && texto == null) return
+        compartido = Compartido(texto = texto, uris = uris, tipo = i.type ?: "")
+        i.action = null      // que al girar la pantalla no vuelva a entrar
     }
 
     /** El enlace de invitación (…?ref=CODIGO) se guarda para el alta. */
@@ -138,7 +160,8 @@ class MainActivity : ComponentActivity() {
 
 @Composable
 private fun Raiz(app: FdsApp, ref: String?, empresaSlug: String?, sesionPortal: Sesion?, abrirAviso: String?,
-                 alAvisoAbierto: () -> Unit, alAbrirPortal: (Sesion) -> Unit, alCerrarEmpresa: () -> Unit) {
+                 alAvisoAbierto: () -> Unit, compartido: Compartido?, alCompartidoVisto: () -> Unit,
+                 alAbrirPortal: (Sesion) -> Unit, alCerrarEmpresa: () -> Unit) {
     if (empresaSlug != null) {
         key(empresaSlug) {
             com.flotadsp.fds.ui.acceso.PortalEmpresa(empresaSlug.ifBlank { null }, alCerrarEmpresa)
@@ -166,7 +189,7 @@ private fun Raiz(app: FdsApp, ref: String?, empresaSlug: String?, sesionPortal: 
                 alCerrar = { app.ambito.launch { app.repo.salir() } },
                 abrir = abrirAviso, alAbierto = alAvisoAbierto,
             )
-        } else if (dentro) Principal(abrirAviso, alAvisoAbierto) else Acceso(ref, alAbrirPortal, aviso = if (caducada) tx("Tu sesión ha caducado: entra otra vez.") else null)
+        } else if (dentro) Principal(abrirAviso, alAvisoAbierto, compartido, alCompartidoVisto) else Acceso(ref, alAbrirPortal, aviso = if (caducada) tx("Tu sesión ha caducado: entra otra vez.") else null)
     }
 }
 
@@ -177,10 +200,12 @@ private sealed interface Capa {
     data class Ficha(val inicial: Lectura? = null, val editar: Parada? = null, val desdeEscaner: Boolean = false) : Capa
     /** LA CARGA GUIADA (01-11-2026): la furgoneta por huecos; desde ella, el escáner en modo carga. */
     data object Carga : Capa
+    /** «COMPARTIR CON FDS» (01-11-2026): lo compartido desde otra app, leído y a punto de entrar como paradas. */
+    data class LoCompartido(val datos: Compartido) : Capa
 }
 
 @Composable
-private fun Principal(abrir: String?, alAbierto: () -> Unit) {
+private fun Principal(abrir: String?, alAbierto: () -> Unit, compartido: Compartido?, alCompartidoVisto: () -> Unit) {
     val ctx = androidx.compose.ui.platform.LocalContext.current
     val app = ctx.applicationContext as FdsApp
     val ruta: RutaVM = viewModel()
@@ -198,6 +223,8 @@ private fun Principal(abrir: String?, alAbierto: () -> Unit) {
     var capa by remember { mutableStateOf<Capa?>(null) }
     // Un aviso tocado en la barra de notificaciones: a «Hoy», con la ruta al día.
     LaunchedEffect(abrir) { if (abrir != null) { pestana = "hoy"; capa = null; ruta.refrescarSinRuido(); alAbierto() } }
+    // Lo compartido desde otra app: a «Hoy» y a la pantalla que lo lee (aquí ya hay sesión).
+    LaunchedEffect(compartido) { if (compartido != null) { pestana = "hoy"; capa = Capa.LoCompartido(compartido) } }
     val paisMovil = remember { app.repo.paisDelMovil() ?: "es" }
     val pais = estado.ruta?.pais?.takeIf { it.isNotBlank() } ?: paisMovil
     LaunchedEffect(pais) { Region.pais = pais }      // la moneda de los cobros, la del país de la ruta
@@ -226,6 +253,16 @@ private fun Principal(abrir: String?, alAbierto: () -> Unit) {
         }
         is Capa.Carga -> {
             CargaPantalla(vm = ruta, alEscanear = { capa = Capa.Escaner(modo = "carga") }, alCerrar = { capa = null })
+            return
+        }
+        is Capa.LoCompartido -> {
+            CompartidoPantalla(datos = c.datos, pais = pais, alCerrar = { creados ->
+                capa = null; alCompartidoVisto()
+                if (creados != null) {
+                    ruta.refrescarSinRuido()
+                    ruta.avisar(when (creados) { 0 -> tx("Ya estaban en tu ruta."); 1 -> tx("Añadida a tu ruta."); else -> tx("Añadidas {n} paradas a tu ruta.", "n" to creados) })
+                }
+            })
             return
         }
         null -> Unit

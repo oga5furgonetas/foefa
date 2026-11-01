@@ -52642,9 +52642,16 @@ async def reparto_crear(data: dict = Body(...), user: dict = Depends(require_adm
 async def reparto_pegar(data: dict = Body(...), user: dict = Depends(require_admin)):
     if not _rep_ve_datos(user):
         raise HTTPException(403, "Los pedidos los mete la empresa")
-    filas = reparto.lee_pegado(_texto_cuerpo(data.get("texto"), 400000))
+    texto = _texto_cuerpo(data.get("texto"), 400000)
+    # «COMPARTIR CON FDS» (01-11-2026): lo leído en el móvil de una foto, captura o PDF de la hoja de la agencia llega
+    # como texto con `hoja: true`: solo las líneas que son paradas (reparto.paradas_de_hoja, la misma regla que la web
+    # en hojaReparto.js), no cada línea como en una lista pegada.
+    if data.get("hoja"):
+        filas = reparto.paradas_de_hoja(texto, _texto_cuerpo(data.get("pais"), 2).lower() or _region_actual.get()[0])
+    else:
+        filas = reparto.lee_pegado(texto)
     if not filas:
-        raise HTTPException(400, "No veo ningún pedido con dirección en lo pegado")
+        raise HTTPException(400, "No veo ninguna parada en lo compartido" if data.get("hoja") else "No veo ningún pedido con dirección en lo pegado")
     if not data.get("confirmar"):
         return {"filas": filas, "n": len(filas)}
     f = _rep_fecha(data.get("fecha"))

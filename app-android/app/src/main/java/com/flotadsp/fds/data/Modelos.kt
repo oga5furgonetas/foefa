@@ -217,6 +217,14 @@ data class Escaneo(val encontrado: Boolean = false, val codigo: String = "", val
 @Serializable
 data class Cargados(val ok: Boolean = true, val cargados: Int = 0, val total: Int = 0)
 
+/** «COMPARTIR CON FDS» (01-11-2026): lo que contesta /reparto/pegar: las filas que ve (sin confirmar) o lo creado. */
+@Serializable
+data class FilaPegada(val codigo: String = "", val cliente: String = "", val direccion: String = "", val telefono: String = "")
+
+@Serializable
+data class Pegado(val filas: List<FilaPegada> = emptyList(), val n: Int = 0, val creados: Int = 0, val repetidos: Int = 0,
+                  @SerialName("sin_hueco") val sinHueco: Int = 0)
+
 @Serializable
 data class Ordenado(val ordenados: Int = 0, val ruta: ResumenRuta? = null)
 

@@ -77,6 +77,20 @@
                 <data android:scheme="https" android:host="flotadsp.com" android:pathPrefix="/ruta" />
                 <data android:scheme="https" android:host="flotadsp.com" android:pathPrefix="/app" />
             </intent-filter>
+            <!-- «COMPARTIR CON FDS» (01-11-2026): la hoja de la agencia (una foto, una captura, un PDF o la lista en texto)
+                 compartida desde cualquier app entra como paradas (MainActivity.leerCompartido → CompartidoPantalla). -->
+            <intent-filter>
+                <action android:name="android.intent.action.SEND" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <data android:mimeType="text/plain" />
+                <data android:mimeType="image/*" />
+                <data android:mimeType="application/pdf" />
+            </intent-filter>
+            <intent-filter>
+                <action android:name="android.intent.action.SEND_MULTIPLE" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <data android:mimeType="image/*" />
+            </intent-filter>
             <!-- Los enlaces de empresa se abren en el portal integrado de FDS. -->
             <intent-filter android:autoVerify="true">
                 <action android:name="android.intent.action.VIEW" />

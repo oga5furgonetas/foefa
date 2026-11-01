@@ -48,6 +48,13 @@
     "1 fermata di un altro giorno è ancora aperta.",
     "1 Stopp von einem anderen Tag ist noch offen."
   ],
+  "1 parada en lo compartido": [
+    "1 stop in what you shared",
+    "1 paragem no partilhado",
+    "1 arrêt dans le partage",
+    "1 fermata in quanto condiviso",
+    "1 Stopp im Geteilten"
+  ],
   "1 parada traída a hoy. Pulsa «Ordenar ruta».": [
     "1 stop moved to today. Tap “Sort route”.",
     "1 paragem trazida para hoje. Toque em «Ordenar rota».",
@@ -258,12 +265,33 @@
     "Aggiunta: {d}",
     "Hinzugefügt: {d}"
   ],
+  "Añadidas {n} paradas a tu ruta.": [
+    "{n} stops added to your route.",
+    "{n} paragens adicionadas à tua rota.",
+    "{n} arrêts ajoutés à ta tournée.",
+    "{n} fermate aggiunte al tuo giro.",
+    "{n} Stopps zu deiner Tour hinzugefügt."
+  ],
+  "Añadir 1 parada": [
+    "Add 1 stop",
+    "Adicionar 1 paragem",
+    "Ajouter 1 arrêt",
+    "Aggiungi 1 fermata",
+    "1 Stopp hinzufügen"
+  ],
   "Añadir una parada": [
     "Add a stop",
     "Adicionar uma paragem",
     "Ajouter un arrêt",
     "Aggiungi una fermata",
     "Stopp hinzufügen"
+  ],
+  "Añadir {n} paradas": [
+    "Add {n} stops",
+    "Adicionar {n} paragens",
+    "Ajouter {n} arrêts",
+    "Aggiungi {n} fermate",
+    "{n} Stopps hinzufügen"
   ],
   "Aún no hay días con paradas.": [
     "No days with stops yet.",
@@ -377,6 +405,13 @@
     "Condividi FDS con altri corrieri",
     "Teile FDS mit anderen Zustellern"
   ],
+  "Comparte con esta app la hoja de la agencia (foto, captura, PDF o la lista) y las paradas entran solas.": [
+    "Share the agency’s sheet with this app (photo, screenshot, PDF or the list) and the stops come in by themselves.",
+    "Partilha com esta app a folha da agência (foto, captura, PDF ou a lista) e as paragens entram sozinhas.",
+    "Partage avec cette appli la feuille de l’agence (photo, capture, PDF ou la liste) et les arrêts entrent tout seuls.",
+    "Condividi con questa app il foglio dell’agenzia (foto, screenshot, PDF o l’elenco) e le fermate entrano da sole.",
+    "Teile das Blatt der Agentur mit dieser App (Foto, Screenshot, PDF oder die Liste), und die Stopps kommen von selbst rein."
+  ],
   "Comparte tu enlace y consulta tu cartera": [
     "Share your link and check your wallet",
     "Partilha o teu link e consulta a tua carteira",
@@ -390,6 +425,13 @@
     "Partager mon lien",
     "Condividi il mio link",
     "Meinen Link teilen"
+  ],
+  "Comprueba lo que ha leído antes de añadirlo; lo que falte lo puedes meter después a mano.": [
+    "Check what it read before adding it; anything missing can be added by hand later.",
+    "Confirma o que leu antes de adicionar; o que faltar podes meter depois à mão.",
+    "Vérifie ce qui a été lu avant d’ajouter ; ce qui manque pourra être saisi à la main après.",
+    "Controlla quello che ha letto prima di aggiungerlo; quello che manca lo puoi inserire a mano dopo.",
+    "Prüf das Gelesene, bevor du es hinzufügst; was fehlt, kannst du später von Hand eintragen."
   ],
   "Confirmar": [
     "Confirm",
@@ -1231,6 +1273,13 @@
     "Lettura dell’etichetta…",
     "Etikett wird gelesen …"
   ],
+  "Leyendo lo compartido…": [
+    "Reading what you shared…",
+    "A ler o partilhado…",
+    "Lecture du partage…",
+    "Lettura di quanto condiviso…",
+    "Geteiltes wird gelesen…"
+  ],
   "Limpieza": [
     "Cleanliness",
     "Limpeza",
@@ -1272,6 +1321,13 @@
     "Je le ferai plus tard",
     "Lo farò più tardi",
     "Mache ich später"
+  ],
+  "Lo que has compartido": [
+    "What you shared",
+    "O que partilhaste",
+    "Ce que tu as partagé",
+    "Quello che hai condiviso",
+    "Was du geteilt hast"
   ],
   "Luces": [
     "Lights",
@@ -1504,6 +1560,13 @@
     "Non è stato possibile leggere l’etichetta. Prova con più luce e l’etichetta dritta, o scrivila.",
     "Das Etikett konnte nicht gelesen werden. Versuche es mit mehr Licht und geradem Etikett, oder tippe es ein."
   ],
+  "No se ha podido leer lo compartido.": [
+    "Couldn’t read what you shared.",
+    "Não foi possível ler o partilhado.",
+    "Impossible de lire le partage.",
+    "Non è stato possibile leggere quanto condiviso.",
+    "Das Geteilte konnte nicht gelesen werden."
+  ],
   "No se ha podido ordenar": [
     "Could not sort",
     "Não foi possível ordenar",
@@ -1608,6 +1671,13 @@
     "Vous n’avez pas l’autorisation pour cela.",
     "Non hai il permesso per questo.",
     "Dafür hast du keine Berechtigung."
+  ],
+  "No veo ninguna parada en lo compartido.": [
+    "I can’t see any stop in what you shared.",
+    "Não vejo nenhuma paragem no partilhado.",
+    "Je ne vois aucun arrêt dans le partage.",
+    "Non vedo nessuna fermata in quanto condiviso.",
+    "Ich sehe keinen Stopp im Geteilten."
   ],
   "Nota (opcional)": [
     "Note (optional)",
@@ -2561,6 +2631,13 @@
     "Già presente",
     "War schon da"
   ],
+  "Ya estaban en tu ruta.": [
+    "They were already on your route.",
+    "Já estavam na tua rota.",
+    "Ils étaient déjà dans ta tournée.",
+    "Erano già nel tuo giro.",
+    "Sie waren schon in deiner Tour."
+  ],
   "Ya no existe.": [
     "It no longer exists.",
     "Já não existe.",
@@ -2834,6 +2911,13 @@
     "{n} arrêts d’autres jours sont toujours ouverts.",
     "{n} fermate di altri giorni sono ancora aperte.",
     "{n} Stopps von anderen Tagen sind noch offen."
+  ],
+  "{n} paradas en lo compartido": [
+    "{n} stops in what you shared",
+    "{n} paragens no partilhado",
+    "{n} arrêts dans le partage",
+    "{n} fermate in quanto condiviso",
+    "{n} Stopps im Geteilten"
   ],
   "{n} paradas traídas a hoy. Pulsa «Ordenar ruta».": [
     "{n} stops moved to today. Tap “Sort route”.",

@@ -767,6 +767,30 @@ contentarme [...] No quiero falsos positivos ni soluciones por decir». El infor
     «parcial» con una nota. Y la respuesta no es siempre síncrona: 8 s de espera y el resto en segundo plano, para no
     tener al repartidor mirando una rueda. Queda por ver con fotos REALES de la nave cómo lee Gemini los números (si
     lee mal, se afina el prompt o se sube el modelo; el veredicto está en un sitio).
+- **«COMPARTIR CON FDS» (el punto 9 de `docs/SIGUIENTE-NIVEL-01-11.md`), hecho en nativa y servidor (01-11, 09:5x →
+  10:4x)**. Lo que hay:
+  · **Nativa**: la app sale en «Compartir» de cualquier otra para texto, fotos o capturas (una o varias) y PDF
+    (`AndroidManifest`: SEND y SEND_MULTIPLE). `MainActivity.leerCompartido` recoge lo compartido y, con la sesión
+    abierta, `Principal` abre `CompartidoPantalla` (`ui/compartir/`): las fotos y capturas se leen EN EL MÓVIL con ML
+    Kit (el mismo lector de texto que las etiquetas), el PDF se pinta página a página con `PdfRenderer` (hasta 10) y
+    se lee igual; el texto va a `/reparto/pegar` (con `hoja: true` si venía de ficheros) y el servidor contesta las
+    paradas que ve; se enseñan (nombre, dirección, teléfono, código) y «Añadir N paradas» las crea (`confirmar`).
+    Al volver a Hoy: «Añadidas N paradas a tu ruta» / «Ya estaban en tu ruta». Sin red, se dice. `Compartir` (las
+    reglas sin Android) y `CompartidoTest` (3 casos); `Pegado` y `FilaPegada` en Modelos; `Repositorio.pegar`. 12
+    textos solo de la nativa; `Traducciones.kt` regenerado (699 textos).
+  · **Servidor**: `reparto.paradas_de_hoja(texto, pais)` es la MISMA regla que la web (`hojaReparto.js`: las líneas
+    con una calle, o con CP y número; cabeceras, totales y firmas fuera; el nombre de arriba y el CP de abajo se
+    juntan), con `reparto.telefono_de` por país (la tabla de la web). `/reparto/pegar` acepta `hoja: true` (y `pais`)
+    y usa eso en vez de `lee_pegado`. 3 tests en `test_compartir_hoja.py` (la hoja de España y la de México, iguales
+    que en el checker de la web; Francia y Alemania; el teléfono por país; enseñar → añadir → repetidos → nada).
+  · **De paso, el parser de hojas mejor en los dos sitios** (`hojaReparto.js` y `reparto.py`, con sus casos en
+    `check-leer-etiqueta.mjs`): el número delante de la calle en fr/gb/ie/us/ca/au/nz («12 rue de la Paix») ya no
+    se toma por el número de fila; la calle pegada al nombre («Hauptstraße 12», «Keizersgracht 123») con un número es
+    una dirección; y «Tel.»/«Tél :» delante del teléfono se quita (antes esa línea pasaba por CABECERA y el teléfono
+    se perdía).
+  · **Lo que NO hay**: iPhone (la app de iPhone es la web, sin extensión de compartir) y un recordatorio en Hoy de
+    que existe «Compartir» (cabría en «Más formas de añadir»). Y no está probado con una hoja REAL de una agencia:
+    solo con las de los tests.
 
 ## Última sesión — 13-10-2026: escaneo de paquetes en lote
 
@@ -1854,6 +1878,11 @@ Dani: «conéctate a mi Chrome y hazlo tú para no liarla yo». Hecho (detalle e
 
 ## Pendiente (por prioridad)
 
+-20. **01-11 mañana, «Compartir con FDS»**: HECHO en nativa y servidor, con tests. Falta: (1) el servidor desplegado
+   con el CI en verde (el `hoja: true` de `/reparto/pegar`); (2) la nativa en Play (misma versión 22 que la carga
+   guiada y la entrega verificada); (3) probarlo con una hoja real (el PDF del correo de la agencia, la captura del
+   WhatsApp del jefe): si lee mal, afinar `paradas_de_hoja` en los dos sitios (web y servidor) con ese caso en
+   `check-leer-etiqueta.mjs` y en `test_compartir_hoja.py`.
 -19. **01-11 mañana, la entrega verificada (IA sobre la foto de entrega)**: HECHA en servidor, web y nativa, con tests.
    Falta: (1) desplegar backend + web con el CI en verde; (2) mirar con fotos reales (OGA5) qué contesta Gemini y, si
    pregunta de más o lee mal los números, afinar el prompt (`_rep_ia_entrega_llamada`) o las reglas

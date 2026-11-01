@@ -170,6 +170,10 @@ en los últimos 50 metros (el portal, el cliente), después (el dinero y la prue
   lo visual y por delante en coste y en modo sin conexión.
 
 ### 9. «Compartir con FDS»: la hoja de la agencia entra sola (1-2 días)
+> **HECHO el 01-11-2026 (mañana), en nativa y servidor** (ver `ESTADO.md`): texto, fotos o capturas y PDF, leídos en
+> el móvil (ML Kit; el PDF con PdfRenderer) y filtrados por el servidor con la misma regla que la web. Sin iPhone (es
+> la web). Falta verlo con una hoja real de la agencia.
+
 - **Qué es.** En Android (y en el iPhone con la hoja de compartir), cualquier PDF, foto, captura o texto compartido
   con FDS se convierte en paradas: el manifiesto en PDF de la agencia, la captura del WhatsApp del jefe, la lista del
   Excel. Gemini ya lee la foto de la hoja; falta que FDS aparezca en «Compartir».

@@ -349,6 +349,10 @@ class Repositorio(private val ctx: Context, val cuenta: Cuenta, val api: Api) {
         leer(api.post("reparto/mi-ruta/cargado", buildJsonObject { put("id", id); put("cargado", cargado) }))
 
     suspend fun nuevaParada(datos: JsonObject): Parada = leer(api.post("reparto/mis-pedidos", datos))
+    /** «COMPARTIR CON FDS» (01-11-2026): el texto de una lista (o lo leído de una foto, captura o PDF: `hoja`) al servidor,
+     *  que dice qué paradas ve (sin confirmar) o las crea. */
+    suspend fun pegar(texto: String, hoja: Boolean, pais: String, confirmar: Boolean): Pegado =
+        leer(api.post("reparto/pegar", buildJsonObject { put("texto", texto); put("hoja", hoja); put("pais", pais); put("confirmar", confirmar) }))
     suspend fun editarParada(id: String, datos: JsonObject) { api.post("reparto/mis-pedidos/$id/editar", datos) }
     suspend fun quitarParada(id: String) { api.post("reparto/mis-pedidos/$id/quitar") }
 
