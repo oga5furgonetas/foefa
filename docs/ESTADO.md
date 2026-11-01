@@ -691,7 +691,9 @@ contentarme [...] No quiero falsos positivos ni soluciones por decir». El infor
   escogiendo gente por ahí y de ahí hacer nombre, y con nombre es más fácil exponerse a empresas».
 - **CARGA GUIADA Y BRIEFING POR VOZ, hechos en web y nativa (01-11, 02:0x → 02:5x; Dani: «Carga y briefing», los dos
   primeros de `docs/SIGUIENTE-NIVEL-01-11.md`)**. Commit `ac83b7c` (36 ficheros), CI de GitHub VERDE a las 03:07
-  (run 41263190470). SIN desplegar (la web espera la orden de Dani; la nativa, una versión nueva en Play). Lo que hay:
+  (run 41263190470). DESPLEGADOS backend (Fly) y web (Pages) el 01-11 a las 08:5x (Dani: «Despliega y sigue mejorando»),
+  con la puerta del CI (`ac83b7c` en verde y por encima solo documentos): `/api/health` OK, la web sirve el bundle nuevo
+  y `/reparto/mi-ruta/cargado` contesta (401 sin sesión). La nativa espera una versión nueva en Play. Lo que hay:
   · **Servidor** (`reparto.py`, `server.py`): al ordenar la ruta, cada parada ubicada recibe su hueco de la furgoneta por su
     POSICIÓN (`reparto.hueco_sugerido`: los tercios de la ruta son las filas y las mitades de cada tercio, izquierda y
     derecha; la fila de la puerta primero: detrás con las puertas traseras, delante con la lateral, según el ajuste
@@ -1818,10 +1820,10 @@ Dani: «conéctate a mi Chrome y hazlo tú para no liarla yo». Hecho (detalle e
 
 ## Pendiente (por prioridad)
 
--18. **01-11 madrugada, la carga guiada y el briefing por voz**: HECHOS en servidor, web y nativa, con tests, SIN
-   desplegar. Falta: (1) desplegar backend + web cuando Dani lo diga (`deploy-backend.ps1` y `deploy-frontend.ps1`, con
-   el CI del commit en verde); (2) la nativa: subir `versionCode` a 22 y `versionName` a 2.5.0 en `build.gradle.kts`,
-   dejar que `app-release.yml` compile el AAB, subirlo a Play Console y poner `APP_ANDROID_PLAY="22 2.5.0"`; (3)
+-18. **01-11 madrugada, la carga guiada y el briefing por voz**: HECHOS en servidor, web y nativa, con tests; backend y
+   web DESPLEGADOS el 01-11 a las 08:5x. Falta: (1) la nativa: subir `versionCode` a 22 y `versionName` a 2.5.0 en
+   `build.gradle.kts`, dejar que `app-release.yml` compile el AAB, subirlo a Play Console y poner
+   `APP_ANDROID_PLAY="22 2.5.0"`; (2)
    probarlo en la nave con los de OGA5 y decidir las reglas que faltan (bultos grandes al suelo, prioridad delante,
    briefing por distancia).
 -17. **01-11 madrugada, la auditoría** (`docs/AUDITORIA-2026-11-01.md`): lo que solo puede hacer Dani, por orden (§8): (1) Cloudflare «Always Use HTTPS» + HSTS; (2) variables `BACKEND_URL`/`FRONTEND_URL` en GitHub para que `uptime.yml` vigile; (3) Meta: pagar o cerrar la cuenta (restringida); (4) Apple: vídeo en iPhone físico + cuentas de prueba + notas de `APP_STORE.md`, o dejar iPhone para después; (5) desplegar lo de esta noche (backend con las dependencias nuevas SOLO con el CI de `292a55f` verde; web con HSTS; el Worker del dominio con `wrangler deploy` desde `infra/web-dominio/`); (6) Amazon A-G; (7) R2 a su cuenta con dominio propio y enlaces firmados; (8) una cuenta de super-admin de solo lectura para poder medir. Y la decisión de fondo: vender Flota a DSP y flotas de furgonetas a mano (tres pilotos en 6 semanas) y parar los anuncios al autónomo. **31-10 noche**: la 2.4.2 (fotos de la auditoría) está PUBLICADA en Play (subida por Claude desde el Chrome de Dani el 31-10 a las 21:2x y aprobada por Google antes de las 22:20: «Activo · Última versión: 21 (2.4.2)») y la web sirve el APK 2.4.2 en `/descargas/FDS.apk`. Los secretos `APP_ANDROID_WEB`/`APP_ANDROID_PLAY` a "21 2.4.2" puestos el 31-10 a las 23:0x desde esta sesión (Dani: «No estoy en el ordenador, hazlo tú»): el servidor anuncia la 2.4.2 y la app avisa de la actualización a quien tenga una más vieja. De la 2.4.2 no queda nada pendiente: solo ver en Play Console cómo llega (descargas de la 21). Backend desplegado; la 2.4.2 verificada en el emulador con la auditoría entera; Junior y Karim entran con la temporal de la oficina. La trampa del APK viejo (sin `gh`, pasadas 24 h del APK local el despliegue de la web habría servido el FDS.apk del repo, que era la 1.0.3) quedó ARREGLADA el 01-11 (00:0x): ver la sesión de la madrugada del 01-11.
