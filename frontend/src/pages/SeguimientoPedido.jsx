@@ -47,6 +47,9 @@ export default function SeguimientoPedido() {
   const [portal, setPortal] = useState('')
   const [enviando, setEnviando] = useState(false)
   const [fallo, setFallo] = useState('')
+  // LA VALORACIÓN Y LA PROPINA (01-11-2026).
+  const [valorando, setValorando] = useState(false)
+  const [copiado, setCopiado] = useState(false)
 
   useEffect(() => {
     let vivo = true
@@ -77,6 +80,16 @@ export default function SeguimientoPedido() {
       setEditando(false)
     } catch { setFallo(tx('No se pudo enviar. Inténtalo de nuevo.')) } finally { setEnviando(false) }
   }
+  async function valorar(n) {
+    setValorando(true)
+    try {
+      const r = await fetch(`${API_BASE}/seguimiento/${encodeURIComponent(token)}/valoracion`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ estrellas: n }) })
+      const j = await r.json().catch(() => ({}))
+      if (r.ok) setD((x) => ({ ...x, valoracion: j.valoracion }))
+    } catch { /* sin red: se queda como estaba */ } finally { setValorando(false) }
+  }
+  const bizumBonito = (n) => String(n || '').replace(/(\d{3})(\d{3})(\d{3})/, '$1 $2 $3')
   function cambiar() {
     const r = d?.respuesta || {}
     setEstare(r.estare || ''); setDejar(r.dejar || ''); setPortal(r.portal || '')
@@ -117,6 +130,27 @@ export default function SeguimientoPedido() {
               <p data-testid="verificada" className="mt-2 flex items-center justify-center gap-1.5 text-[13px] text-emerald-300">
                 <ShieldCheck size={14} className="shrink-0" /> {tx('Entrega verificada: la foto enseña el paquete en tu dirección.')}
               </p>
+            )}
+            {/* LA VALORACIÓN Y LA PROPINA (01-11-2026): ya con el paquete, «¿Cómo ha ido?» de un toque, y el Bizum del repartidor. */}
+            {d.estado === 'entregado' && d.puede_valorar && (
+              <div data-testid="valoracion" className="mt-5 rounded-2xl border border-amber-400/30 bg-amber-500/[.06] p-4">
+                <p className="text-[15px] font-bold text-dark-50">{d.valoracion ? tx('Gracias por valorar la entrega') : tx('¿Cómo ha ido la entrega?')}</p>
+                <div className="mt-2 flex justify-center gap-1" role="radiogroup" aria-label={tx('¿Cómo ha ido la entrega?')}>
+                  {[1, 2, 3, 4, 5].map((n) => (
+                    <button key={n} type="button" role="radio" aria-checked={(d.valoracion?.estrellas || 0) === n} disabled={valorando}
+                      aria-label={n === 1 ? tx('1 estrella') : tx('{n} estrellas', { n })} onClick={() => valorar(n)}
+                      className={`text-[30px] leading-none ${n <= (d.valoracion?.estrellas || 0) ? 'text-amber-300' : 'text-dark-600'}`}>★</button>
+                  ))}
+                </div>
+                {d.bizum && (
+                  <div className="mt-3 border-t border-dark-700/60 pt-3">
+                    <p className="text-[14px] text-dark-200">{tx('¿Le invitas a un café? Bizum al')} <b className="text-dark-50">{bizumBonito(d.bizum)}</b></p>
+                    <button type="button" onClick={async () => { try { await navigator.clipboard?.writeText(d.bizum); setCopiado(true) } catch { /* sin portapapeles */ } }}
+                      className="mt-2 rounded-xl border border-dark-600 px-3 py-2 text-[13px] font-semibold text-dark-100">{copiado ? tx('Copiado') : tx('Copiar el número')}</button>
+                    <p className="mt-1.5 text-[11.5px] text-dark-500">{tx('Es un regalo para el repartidor, no parte del pedido.')}</p>
+                  </div>
+                )}
+              </div>
             )}
             {d.estado === 'fallido' && <p className="mt-3 text-[14px] text-dark-300">{tx('La tienda se pondrá en contacto contigo para volver a intentarlo.')}</p>}
             {/* El registro del intento: que se vea que se llamó y se esperó. */}

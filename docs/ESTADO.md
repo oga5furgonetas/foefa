@@ -811,6 +811,32 @@ contentarme [...] No quiero falsos positivos ni soluciones por decir». El infor
     `MemoriaTest` (2 casos). `Traducciones.kt` regenerado (711 textos).
   · **Lo que difiere del documento**: sin foto del portal (pesa y es un dato más que guardar; la puerta aprendida por
     posición ya existe) y sin contadores por franja (eso es el punto 5, la hora buena).
+- **EL CLIENTE AVISADO, LA PROPINA Y LA VALORACIÓN (el punto 6 de `docs/SIGUIENTE-NIVEL-01-11.md`), hechos en servidor,
+  web y nativa (01-11, 12:1x → 13:xx; en el worktree `.claude/worktrees/cliente-avisado`, rama `cliente-avisado`, para
+  dejar el checkout principal limpio y poder desplegar lo anterior)**. Lo que hay:
+  · **Avisar a todos por WhatsApp** (web y nativa): con la ruta ordenada, un botón en Hoy abre la lista de las paradas
+    pendientes con móvil, en orden, con su hora; cada una tiene su WhatsApp (el mensaje de siempre: «voy de camino»,
+    la hora aproximada y el enlace de seguimiento) y al tocarlo queda «Avisado» (la web lo recuerda en el móvil por
+    día, `avisados_<fecha>`; la nativa, mientras la app viva); el botón dice «{a} de {b} avisados». Se abre uno a uno:
+    envía y vuelve. Para empresas con la API de WhatsApp (plantilla de utilidad aprobada, envío en lote al ordenar)
+    NO está: `WHATSAPP_*` sigue sin configurar y Meta tiene la cuenta restringida (auditoría §8).
+  · **La valoración** (`POST /seguimiento/{token}/valoracion`, público): en el enlace del cliente, ya entregado,
+    «¿Cómo ha ido la entrega?» de un toque (1 a 5 estrellas y NADA más: ni texto libre, para no guardar datos de
+    nadie); se puede cambiar mientras el enlace viva; 409 si aún no está entregado. Se guarda en el pedido
+    (`valoracion: {estrellas, cuando}`); el repartidor lo ve en lo hecho de hoy (★★★★☆ «el cliente»), la oficina en
+    la lista y la nativa en la ficha. Es el número que alimentará el perfil verificado (el punto 7).
+  · **La propina por Bizum**: el repartidor que va por su cuenta pone su móvil de Bizum en «Mi dinero hoy» (web y
+    nativa, solo con el país España; `PUT /reparto/ganancias` con `bizum`, validado como móvil español; vacío lo
+    quita; `mi-ruta` lo trae en `ganancias`). El enlace del cliente lo enseña SOLO cuando el pedido está entregado y
+    la cuenta es de autónomo («¿Le invitas a un café? Bizum al 612 345 678», con «Copiar el número» y «Es un
+    regalo para el repartidor, no parte del pedido»). Bizum no tiene enlace universal: se copia el número. La
+    pantalla le dice al repartidor que lo que le manden es un ingreso suyo (desde 2026 los bancos informan).
+  · Tests: backend `test_cliente_avisado.py` (3: la valoración pura, el Bizum con la tarifa y el enlace solo entregado,
+    la valoración solo entregado y lo que ven repartidor y oficina; los dos casos de «Mi dinero hoy» de
+    `test_reparto_api` y de `humo.spec.js` esperan ahora `bizum: ""` en la tarifa), humo `e2e/cliente-avisado.spec.js`
+    (2 casos × escritorio y móvil: las estrellas y el Bizum con el portapapeles; «Avisar a todos» uno a uno, el
+    enlace de WhatsApp con la hora y el seguimiento, y que se recuerda al recargar), nativa compilada con tests y
+    lint. 17 textos en 5 idiomas; `Traducciones.kt` regenerado (719).
 
 ## Última sesión — 13-10-2026: escaneo de paquetes en lote
 
@@ -1898,6 +1924,10 @@ Dani: «conéctate a mi Chrome y hazlo tú para no liarla yo». Hecho (detalle e
 
 ## Pendiente (por prioridad)
 
+-22. **01-11 mediodía, el cliente avisado, la propina y la valoración**: HECHOS en servidor, web y nativa, con tests.
+   Falta: desplegar backend + web con el CI en verde (el modo auto DENEGÓ el despliegue a las 13:0x: hace falta el
+   permiso de Dani en el chat o que lo lance él: `scripts/deploy-backend.ps1` y `scripts/deploy-frontend.ps1`); la
+   nativa en Play (versión 22); los avisos a clientes por la API de WhatsApp para empresas (sin Meta no hay).
 -21. **01-11 mañana, la memoria de la calle**: HECHA en servidor, web y nativa, con tests. Falta: el servidor y la web
    desplegados con el CI en verde (van con lo de la mañana); la nativa en Play (versión 22).
 -20. **01-11 mañana, «Compartir con FDS»**: HECHO en nativa y servidor, con tests. Falta: (1) el servidor desplegado

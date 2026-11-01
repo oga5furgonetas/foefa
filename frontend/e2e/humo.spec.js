@@ -3383,7 +3383,7 @@ test('Ruta · Mi dinero hoy: poner la tarifa y ver lo ganado', async ({ page }) 
   await hoja.getByPlaceholder('1,10').fill('1,10')
   await hoja.getByRole('button', { name: 'Guardar' }).click()
   await expect.poll(() => guardado.length).toBe(1)
-  expect(guardado[0]).toEqual({ pago_parada: 110, pago_dia: 0, coste_km: 12 })
+  expect(guardado[0]).toEqual({ pago_parada: 110, pago_dia: 0, coste_km: 12, bizum: '' })   // el Bizum de la propina (01-11-2026), vacío
   // 2 entregas × 1,10 € = 2,20 €; gasolina de lo hecho: 20 km × 2/2 × 0,12 € = 2,40 €.
   const tarjeta = page.getByRole('button', { name: 'Mi dinero hoy' })
   await expect(tarjeta).toContainText('2,20')
@@ -3410,7 +3410,7 @@ test('Ruta · Mi dinero hoy en Colombia: en pesos y con punto de miles', async (
   await hoja.getByText(/Gasolina por km/).locator('..').getByRole('textbox').fill('450')
   await hoja.getByRole('button', { name: 'Guardar' }).click()
   await expect.poll(() => guardado.length).toBe(1)
-  expect(guardado[0]).toEqual({ pago_parada: 250000, pago_dia: 0, coste_km: 45000 })
+  expect(guardado[0]).toEqual({ pago_parada: 250000, pago_dia: 0, coste_km: 45000, bizum: '' })
   expect(fallos).toEqual([])
 })
 

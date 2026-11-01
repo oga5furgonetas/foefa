@@ -52591,6 +52591,7 @@ async def reparto_ajustes_put(data: dict = Body(...), user: dict = Depends(requi
     # La tarifa se cambia en su propia pantalla (PUT /reparto/ganancias): guardar los ajustes no la borra.
     for k in ("pago_parada", "pago_dia", "coste_km"):
         nuevo[k] = int(a.get(k) or 0)
+    nuevo["bizum"] = a.get("bizum") or ""
     nuevo["actualizado_por"] = user.get("name") or ""
     nuevo["actualizado_en"] = datetime.now(timezone.utc).isoformat()
     await db.reparto_ajustes.replace_one({"id": "ajustes"}, nuevo, upsert=True)
@@ -52609,6 +52610,13 @@ async def reparto_ganancias_put(data: dict = Body(...), user: dict = Depends(req
     campos = {"pago_parada": _entero(data.get("pago_parada"), "pago_parada", defecto=0, minimo=0, maximo=10_000_000),
               "pago_dia": _entero(data.get("pago_dia"), "pago_dia", defecto=0, minimo=0, maximo=100_000_000),
               "coste_km": _entero(data.get("coste_km"), "coste_km", defecto=0, minimo=0, maximo=1_000_000)}
+    # LA PROPINA (01-11-2026): el móvil de Bizum del repartidor, que el cliente ve en su enlace SOLO cuando ya tiene el
+    # paquete («¿Le invitas a un café?»). Vacío lo quita. Es un ingreso suyo: la pantalla se lo dice.
+    if "bizum" in data:
+        bizum = _texto_cuerpo(data.get("bizum"), 20)
+        if bizum and not _bizum_valido(bizum):
+            raise HTTPException(400, "El Bizum es un móvil español de 9 cifras")
+        campos["bizum"] = _bizum_valido(bizum)
     await db.reparto_ajustes.update_one({"id": "ajustes"}, {"$set": campos}, upsert=True)
     return campos
 
@@ -52829,8 +52837,16 @@ async def seguimiento_publico(token: str, request: Request):
         antes = await tdb.reparto_pedidos.count_documents({
             "fecha": p.get("fecha"), "conductor_id": p.get("conductor_id"),
             "estado": {"$in": ["pendiente", "en_ruta"]}, "orden": {"$lt": p["orden"]}})
-    org = await global_db.organizations.find_one({"db_name": e["db_name"]}, {"_id": 0, "name": 1}) or {}
+    org = await global_db.organizations.find_one({"db_name": e["db_name"]}, {"_id": 0, "name": 1, "sector": 1}) or {}
+    # LA PROPINA (01-11-2026): el Bizum de quien reparte por su cuenta, solo cuando el cliente ya tiene el paquete.
+    bizum = ""
+    if p.get("estado") == "entregado" and org.get("sector") == "autonomo":
+        aj = await tdb.reparto_ajustes.find_one({"id": "ajustes"}, {"_id": 0, "bizum": 1}) or {}
+        bizum = aj.get("bizum") or ""
     return {"empresa": org.get("name") or "", "estado": p.get("estado"), "fecha": p.get("fecha"),
+            # LA VALORACIÓN (01-11-2026): la suya, para enseñársela; y si puede valorar (ya entregado).
+            "valoracion": (p.get("valoracion") or None) if p.get("estado") == "entregado" else None,
+            "puede_valorar": p.get("estado") == "entregado", "bizum": bizum,
             "eta": p.get("eta"), "franja": [p.get("ventana_desde"), p.get("ventana_hasta")]
             if p.get("ventana_desde") else None, "paradas_antes": antes, "tipo": p.get("tipo") or "entrega",
             # Dónde quedó (sin nombres ni fotos): «Entregado: en el buzón».
@@ -52894,6 +52910,30 @@ async def seguimiento_respuesta(token: str, request: Request, data: dict = Body(
         except Exception as ex:                                  # noqa: BLE001
             logger.warning(f"respuesta del cliente: aviso no enviado: {type(ex).__name__}")
     return {"ok": True, "cliente_dice": r}
+
+
+@api_router.post("/seguimiento/{token}/valoracion")
+async def seguimiento_valoracion(token: str, request: Request, data: dict = Body(...)):
+    """LA VALORACIÓN DEL CLIENTE (01-11-2026): en su enlace, con el paquete ya entregado, de 1 a 5 estrellas (y nada
+    más). Se puede cambiar mientras el enlace viva. El repartidor la ve en lo hecho de hoy; la oficina, en la lista."""
+    _rl_public_action(f"segv:{_rl_key_ip(request)}", max_count=40, window_s=3600)
+    if not re.fullmatch(r"[A-Za-z0-9_-]{16,40}", token or ""):
+        raise HTTPException(404, "Enlace no válido")
+    e = await global_db.reparto_enlaces.find_one({"token": token}, {"_id": 0})
+    if not e or (e.get("caduca") or "") < _dia_negocio():
+        raise HTTPException(404, "Este enlace ha caducado")
+    tdb = client[e["db_name"]]
+    p = await tdb.reparto_pedidos.find_one({"id": e["pedido_id"]}, {"_id": 0, "id": 1, "estado": 1})
+    if not p:
+        raise HTTPException(404, "Este enlace ha caducado")
+    if p.get("estado") != "entregado":
+        raise HTTPException(409, "Se valora cuando el pedido ya está entregado")
+    v, error = reparto.valoracion_sanea(_dict_cuerpo(data))
+    if error:
+        raise HTTPException(400, error)
+    v["cuando"] = datetime.now(timezone.utc).isoformat()
+    await tdb.reparto_pedidos.update_one({"id": p["id"]}, {"$set": {"valoracion": v}})
+    return {"ok": True, "valoracion": v}
 
 
 @api_router.get("/reparto/estadisticas")
@@ -53122,7 +53162,7 @@ async def reparto_mi_ruta(user: dict = Depends(require_any_auth)):
             "ia_tickets": await _rep_ia_activa(a, user),
             "jornada": {"empezada": j.get("empezada"), "terminada": j.get("terminada")},
             # «Mi dinero hoy»: solo para quien reparte por su cuenta (a un conductor le paga su empresa).
-            "ganancias": ({k: int(a.get(k) or 0) for k in ("pago_parada", "pago_dia", "coste_km")} if autonomo else None),
+            "ganancias": ({**{k: int(a.get(k) or 0) for k in ("pago_parada", "pago_dia", "coste_km")}, "bizum": a.get("bizum") or ""} if autonomo else None),
             "aviso_aceptado": bool(aviso),
             "previas": previas,
             # La prueba sin cuenta: la app invita a crear la cuenta de verdad.

@@ -394,11 +394,11 @@ async def test_mi_dinero_hoy_tarifa_del_autonomo(base, monkeypatch):
                 "modulos": ["dashboard", "reparto", "configuracion"]}
     monkeypatch.setattr(server, "get_org", org_autonomo)
     yo = {"sub": "a9", "role": "admin", "name": "Pepe", "org_id": "o1", "db_name": "dsp_x"}
-    assert (await server.reparto_mi_ruta(yo))["ganancias"] == {"pago_parada": 0, "pago_dia": 0, "coste_km": 0}
+    assert (await server.reparto_mi_ruta(yo))["ganancias"] == {"pago_parada": 0, "pago_dia": 0, "coste_km": 0, "bizum": ""}
     r = await server.reparto_ganancias_put({"pago_parada": "110", "pago_dia": 0, "coste_km": 12}, yo)
     assert r == {"pago_parada": 110, "pago_dia": 0, "coste_km": 12}
     await server.reparto_ajustes_put({"hora_salida": "08:30"}, yo)
-    assert (await server.reparto_mi_ruta(yo))["ganancias"] == {"pago_parada": 110, "pago_dia": 0, "coste_km": 12}
+    assert (await server.reparto_mi_ruta(yo))["ganancias"] == {"pago_parada": 110, "pago_dia": 0, "coste_km": 12, "bizum": ""}
     # En su moneda: en Colombia 2.500 pesos por entrega son 250.000 «céntimos» y valen.
     r = await server.reparto_ganancias_put({"pago_parada": 250000, "pago_dia": 0, "coste_km": 45000}, yo)
     assert r["pago_parada"] == 250000 and r["coste_km"] == 45000

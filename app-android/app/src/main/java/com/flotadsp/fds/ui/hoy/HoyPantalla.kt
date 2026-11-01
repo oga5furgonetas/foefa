@@ -128,6 +128,8 @@ fun HoyPantalla(
     var entregando by remember { mutableStateOf<Parada?>(null) }
     var fallando by remember { mutableStateOf<Parada?>(null) }
     var memoriaDe by remember { mutableStateOf<Parada?>(null) }     // la memoria de la calle (01-11-2026)
+    var avisando by remember { mutableStateOf(false) }               // «Avisar a todos por WhatsApp» (01-11-2026)
+    val avisados by vm.avisados.collectAsState()
     val prefijo = e.ruta?.prefijo ?: "34"
     val empresa = e.ruta?.takeIf { !it.autonomo }?.empresa.orEmpty()
 
@@ -233,6 +235,11 @@ fun HoyPantalla(
                     if (e.ruta?.ruta?.fin != null && e.pendientes.any { !it.cargada }) item(key = "carga") {
                         CargarCard(cargados = Carga.cargadas(e.pendientes), total = e.pendientes.size, alPulsar = alCargar)
                     }
+                    // EL CLIENTE AVISADO (01-11-2026): con la ruta ordenada, el WhatsApp a cada cliente con móvil.
+                    val conTelefono = e.pendientes.filter { it.telefono.isNotBlank() }
+                    if (e.ruta?.ruta?.fin != null && conTelefono.isNotEmpty()) item(key = "avisar") {
+                        AvisarCard(avisados = conTelefono.count { it.id in avisados }, total = conTelefono.size, alPulsar = { avisando = true })
+                    }
                     if (e.guardadaEn != null || pendientesEnvio.isNotEmpty()) {
                         item { SinCobertura(e.guardadaEn, pendientesEnvio.size) }
                     }
@@ -304,6 +311,10 @@ fun HoyPantalla(
     }
     fallando?.let { p ->
         NoEntregadoHoja(alCerrar = { fallando = null }, alConfirmar = { motivo, nota -> fallando = null; vm.noEntregado(p, motivo, nota) })
+    }
+    if (avisando) {
+        AvisarHoja(paradas = e.pendientes.filter { it.telefono.isNotBlank() }, avisados = avisados,
+            alAvisar = { p -> Acciones.whatsapp(ctx, p.telefono, prefijo, textoWhatsapp(p, empresa)); vm.avisado(p) }, alCerrar = { avisando = false })
     }
     memoriaDe?.let { p ->
         MemoriaHoja(p, alCerrar = { memoriaDe = null }, alGuardar = { portal, dejar, acceso -> memoriaDe = null; vm.guardarMemoria(p, portal, dejar, acceso) })
@@ -682,6 +693,24 @@ private fun SinRuta(error: String, alReintentar: () -> Unit) {
         Text(error, style = MaterialTheme.typography.bodyLarge)
         Spacer(Modifier.height(16.dp))
         Button(onClick = alReintentar) { Text(tx("Reintentar")) }
+    }
+}
+
+/** EL CLIENTE AVISADO (01-11-2026): la tarjeta que abre la lista de WhatsApps, con cuántos van. */
+@Composable
+private fun AvisarCard(avisados: Int, total: Int, alPulsar: () -> Unit) {
+    val x = LocalExtra.current
+    Card(onClick = alPulsar, colors = CardDefaults.cardColors(containerColor = x.entregado.copy(alpha = 0.12f)), shape = MaterialTheme.shapes.large) {
+        Row(Modifier.padding(14.dp), verticalAlignment = Alignment.CenterVertically) {
+            Icon(Icons.AutoMirrored.Filled.Chat, contentDescription = null, tint = x.entregado)
+            Spacer(Modifier.width(12.dp))
+            Column(Modifier.weight(1f)) {
+                Text(tx("Avisar a todos por WhatsApp"), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                Text(if (avisados == total) tx("Todos avisados") else tx("{a} de {b} avisados · su hora y su enlace", "a" to avisados, "b" to total),
+                    style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+            Icon(Icons.Default.ChevronRight, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
     }
 }
 

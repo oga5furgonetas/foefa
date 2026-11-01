@@ -374,8 +374,8 @@ class Repositorio(private val ctx: Context, val cuenta: Cuenta, val api: Api) {
     suspend fun zbe(): Zbe = leer(api.get("reparto/mi-ruta/zbe"))
 
     /** La tarifa de «Mi dinero hoy», en céntimos de su moneda (PUT /reparto/ganancias, como la web). */
-    suspend fun guardarGanancias(pagoParada: Int, pagoDia: Int, costeKm: Int) {
-        api.put("reparto/ganancias", buildJsonObject { put("pago_parada", pagoParada); put("pago_dia", pagoDia); put("coste_km", costeKm) })
+    suspend fun guardarGanancias(pagoParada: Int, pagoDia: Int, costeKm: Int, bizum: String = "") {
+        api.put("reparto/ganancias", buildJsonObject { put("pago_parada", pagoParada); put("pago_dia", pagoDia); put("coste_km", costeKm); put("bizum", bizum) })
     }
 
     suspend fun ordenAMano(ids: List<String>) {

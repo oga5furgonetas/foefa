@@ -319,6 +319,8 @@ export default function Reparto() {
                             {p.entrega_nota && <div className="mt-1 text-[11px] text-dark-400">«{p.entrega_nota}»</div>}
                             {p.estado === 'entregado' && p.entrega_ia?.nivel === 'verificada' && <div className="mt-1 text-[11px] text-emerald-300">Entrega verificada por IA</div>}
                             {p.estado === 'entregado' && p.entrega_ia?.nivel === 'revisar' && <div className="mt-1 text-[11px] text-amber-300">Foto por revisar: {AVISOS_IA[p.entrega_ia.aviso] || ''}{p.entrega_ia.aviso === 'otro_numero' ? ` (${p.entrega_ia.numero} ≠ ${p.entrega_ia.portal})` : ''}</div>}
+                            {/* LA VALORACIÓN DEL CLIENTE (01-11-2026): las estrellas que puso en su enlace. */}
+                            {p.estado === 'entregado' && p.valoracion?.estrellas > 0 && <div className="mt-1 text-[11px] text-amber-300" title="Valoración del cliente">{'★'.repeat(p.valoracion.estrellas)}{'☆'.repeat(5 - p.valoracion.estrellas)} el cliente</div>}
                             {p.tiene_foto && !tapado && (
                               <button className="mt-1 block text-[11.5px] font-semibold text-brand-300"
                                 onClick={async () => {

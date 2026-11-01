@@ -273,6 +273,14 @@ export default function MiRuta({ onBack, embebido = false, alTerminar = null }) 
   const [revisar, setRevisar] = useState(null)
   // LA MEMORIA DE LA CALLE (01-11-2026): la parada cuya puerta se está apuntando («Guardar para la próxima»).
   const [memoriaDe, setMemoriaDe] = useState(null)
+  // EL CLIENTE AVISADO (01-11-2026): la hoja «Avisar a todos por WhatsApp» y a quién se avisó hoy (se recuerda en el móvil).
+  const [avisarTodos, setAvisarTodos] = useState(false)
+  const [avisados, setAvisados] = useState(() => { try { return JSON.parse(localStorage.getItem(`avisados_${hoyLocal()}`) || '[]') } catch { return [] } })
+  function marcarAvisado(id) {
+    const c = [...new Set([...avisados, id])]
+    setAvisados(c)
+    try { localStorage.setItem(`avisados_${hoyLocal()}`, JSON.stringify(c)) } catch { /* sin sitio: se olvida al recargar */ }
+  }
   const [encontrado, setEncontrado] = useState(null)
   const [anadida, setAnadida] = useState(null)   // la parada que acaba de entrar sola al escanear su etiqueta
   const [vista, setVista] = useState(() => lee('ruta_vista', 'lista'))
@@ -1135,6 +1143,9 @@ export default function MiRuta({ onBack, embebido = false, alTerminar = null }) 
   const hechos = lista(ruta.pedidos).filter((p) => ['entregado', 'fallido'].includes(p.estado))
   const total = pendientes.length + hechos.length
   const entregados = hechos.filter((p) => p.estado === 'entregado')
+  // EL CLIENTE AVISADO (01-11-2026): las pendientes con móvil, y cuántas se avisaron hoy.
+  const conTelefono = pendientes.filter((p) => movilWhatsApp(p.telefono, ruta.pais, ruta.prefijo))
+  const avisadosHoy = conTelefono.filter((p) => avisados.includes(p.id)).length
   /* LA RUTA EN MARCHA, EN LA APP DE QUIEN REPARTE SOLO (17-10-2026): lo que se usa cien veces al día es la siguiente
      parada y su «Entregado», y quedaba a media pantalla debajo del bloque de añadir. Con paradas, añadir va en el
      botón «+» y el bono en una línea. El portal del conductor de empresa sigue como estaba. */
@@ -1178,7 +1189,7 @@ export default function MiRuta({ onBack, embebido = false, alTerminar = null }) 
     setOcupado('tarifa')
     try {
       // En millas se escribe por milla y se guarda por km (30-10-2026).
-      await repGanancias({ pago_parada: aCent(tarifa.parada), pago_dia: aCent(tarifa.dia), coste_km: unidades() === 'mi' ? Math.round(aCent(tarifa.km) / KM_POR_MILLA) : aCent(tarifa.km) })
+      await repGanancias({ pago_parada: aCent(tarifa.parada), pago_dia: aCent(tarifa.dia), coste_km: unidades() === 'mi' ? Math.round(aCent(tarifa.km) / KM_POR_MILLA) : aCent(tarifa.km), bizum: (tarifa.bizum || '').trim() })
       medirAccion('ruta_tarifa')
       setTarifa(null); cargar()
     } catch (e) { setAviso(txError(e, 'No se pudo guardar')) } finally { setOcupado('') }
@@ -1241,7 +1252,7 @@ export default function MiRuta({ onBack, embebido = false, alTerminar = null }) 
       {total > 0 && (
         <Cabecera fecha={ruta.fecha} hechos={hechos.length} total={total} entregados={entregados.length}
           pendientes={pendientes.length} rr={ruta.ruta} retraso={retraso} cobrado={cobradoHoy} mejor={marcas?.mejor || 0}
-          dinero={dinero} onTarifa={ruta.autonomo && gan ? () => setTarifa({ parada: aEuros(gan.pago_parada), dia: aEuros(gan.pago_dia), km: aEuros(unidades() === 'mi' ? Math.round(gan.coste_km * KM_POR_MILLA) : gan.coste_km) || (simboloMoneda() === '€' ? '0,12' : '') }) : null}
+          dinero={dinero} onTarifa={ruta.autonomo && gan ? () => setTarifa({ bizum: gan.bizum || '', parada: aEuros(gan.pago_parada), dia: aEuros(gan.pago_dia), km: aEuros(unidades() === 'mi' ? Math.round(gan.coste_km * KM_POR_MILLA) : gan.coste_km) || (simboloMoneda() === '€' ? '0,12' : '') }) : null}
           onCompartir={entregados.length >= 5 && pendientes.length === 0 ? () => {
             const ini = ruta.jornada?.empezada ? new Date(ruta.jornada.empezada).getTime() : 0
             const fin = ruta.jornada?.terminada ? new Date(ruta.jornada.terminada).getTime() : Date.now()
@@ -1412,6 +1423,17 @@ export default function MiRuta({ onBack, embebido = false, alTerminar = null }) 
           <span className="min-w-0 flex-1">
             <span className="block text-[14px] font-bold text-emerald-100">{tx('Cargar la furgoneta')}</span>
             <span className="block text-[12.5px] text-dark-300">{tx('Escanea y te digo dónde va')} · {tx('{a} de {b} cargados', { a: pendientes.filter((p) => p.cargado_en).length, b: pendientes.length })}</span>
+          </span>
+        </button>
+      )}
+      {/* EL CLIENTE AVISADO (01-11-2026): con la ruta ordenada, un WhatsApp a cada cliente con móvil, uno tras otro, con su
+          hora y su enlace. Es lo que más fallidas evita, según la calle (docs/NECESIDADES-REPARTIDOR-30-10.md). */}
+      {!reordenar && !!ruta.ruta?.fin && conTelefono.length > 0 && (
+        <button onClick={() => setAvisarTodos(true)} className="mb-2 flex w-full items-center gap-3 rounded-2xl border border-emerald-500/30 bg-emerald-500/[.07] px-3.5 py-3 text-left">
+          <MessageCircle size={22} className="shrink-0 text-emerald-300" />
+          <span className="min-w-0">
+            <span className="block text-[14px] font-bold text-emerald-100">{tx('Avisar a todos por WhatsApp')}</span>
+            <span className="block text-[12px] text-emerald-200/80">{avisadosHoy === conTelefono.length ? tx('Todos avisados') : tx('{a} de {b} avisados · su hora y su enlace', { a: avisadosHoy, b: conTelefono.length })}</span>
           </span>
         </button>
       )}
@@ -1745,6 +1767,12 @@ export default function MiRuta({ onBack, embebido = false, alTerminar = null }) 
                 {p.estado === 'entregado' && p.entrega_ia?.nivel === 'parcial' && p.entrega_ia.aviso && (
                   <p className="mt-1 text-[11px] text-dark-500">{textoAvisoIa(p.entrega_ia)}</p>
                 )}
+                {/* LA VALORACIÓN DEL CLIENTE (01-11-2026): lo que puso en su enlace. */}
+                {p.estado === 'entregado' && p.valoracion?.estrellas > 0 && (
+                  <p className="mt-1 text-[12px] text-amber-300" aria-label={p.valoracion.estrellas === 1 ? tx('1 estrella') : tx('{n} estrellas', { n: p.valoracion.estrellas })}>
+                    {'★'.repeat(p.valoracion.estrellas)}{'☆'.repeat(5 - p.valoracion.estrellas)} <span className="text-[11px] text-dark-400">{tx('el cliente')}</span>
+                  </p>
+                )}
                 {p.estado === 'fallido' ? (
                   <div className="mt-2 grid grid-cols-2 gap-1.5">
                     <button onClick={() => marcar(p, 'pendiente', '')} disabled={ocupado === p.id}
@@ -1845,6 +1873,15 @@ export default function MiRuta({ onBack, embebido = false, alTerminar = null }) 
             </label>
           ))}
           <p className="mb-3 text-[12px] text-dark-500">{simboloMoneda() === '€' ? tx('Una furgoneta diésel gasta unos 0,10–0,15 € por km. Solo lo ves tú.') : tx(unidades() === 'mi' ? 'Pon lo que gasta tu vehículo por milla. Solo lo ves tú.' : 'Pon lo que gasta tu vehículo por km. Solo lo ves tú.')}</p>
+          {/* LA PROPINA (01-11-2026): el Bizum del repartidor, que el cliente ve en su enlace cuando ya tiene el paquete. */}
+          {paisActual() === 'es' && (
+            <label className="mb-3 block">
+              <span className="mb-1 block text-[13px] font-semibold text-dark-200">{tx('Tu móvil de Bizum, para la propina (opcional)')}</span>
+              <input className={inp} inputMode="tel" value={tarifa.bizum || ''} placeholder="612 345 678" autoComplete="off"
+                onChange={(e) => setTarifa({ ...tarifa, bizum: e.target.value.replace(/[^0-9+ ]/g, '') })} />
+              <span className="mt-1 block text-[12px] text-dark-500">{tx('Cuando el cliente ya tiene el paquete, su enlace le dice «¿Le invitas a un café?» con tu Bizum. Lo que te manden es un ingreso tuyo.')}</span>
+            </label>
+          )}
           <button onClick={guardarTarifa} disabled={ocupado === 'tarifa' || (!aCent(tarifa.parada) && !aCent(tarifa.dia))}
             className="w-full rounded-xl bg-brand-500 py-3 text-[15px] font-bold text-brand-tinta disabled:opacity-40">
             {ocupado === 'tarifa' ? tx('Guardando…') : tx('Guardar')}
@@ -2139,6 +2176,30 @@ export default function MiRuta({ onBack, embebido = false, alTerminar = null }) 
             className="mt-3 w-full rounded-xl border border-dark-600 py-3 text-[14px] font-semibold text-dark-100">
             {tx('Entregar sin foto')}
           </button>
+        </Hoja>
+      )}
+
+      {avisarTodos && (
+        <Hoja titulo={tx('Avisar a todos por WhatsApp')} onClose={() => setAvisarTodos(false)}>
+          <p className="mb-3 text-[13px] text-dark-400">{tx('Un WhatsApp a cada cliente con su hora aproximada y su enlace para seguirte. Se abre uno a uno: envía y vuelve.')}</p>
+          <div className="flex flex-col gap-2">
+            {conTelefono.map((p) => {
+              const hecho = avisados.includes(p.id)
+              return (
+                <div key={p.id} className={`flex items-center gap-2 rounded-xl border px-3 py-2 ${hecho ? 'border-emerald-500/30 bg-emerald-500/[.06]' : 'border-dark-700'}`}>
+                  <span className="min-w-0 flex-1">
+                    <span className="block truncate text-[13.5px] font-semibold text-dark-100">{p.orden ? `${p.orden}. ` : ''}{p.cliente || p.direccion}</span>
+                    <span className="block text-[12px] text-dark-400">{p.eta ? `≈ ${p.eta} · ` : ''}{p.telefono}</span>
+                  </span>
+                  {hecho
+                    ? <span className="flex items-center gap-1 text-[12.5px] font-semibold text-emerald-300"><Check size={14} /> {tx('Avisado')}</span>
+                    : <a href={`https://wa.me/${movilWhatsApp(p.telefono, ruta.pais, ruta.prefijo)}?text=${encodeURIComponent(mensaje(p, ruta.empresa))}`} target="_blank" rel="noreferrer"
+                        onClick={() => { marcarAvisado(p.id); apuntar(p, 'whatsapp') }}
+                        className="flex items-center gap-1 rounded-lg border border-emerald-600/50 px-2.5 py-1.5 text-[12.5px] font-semibold text-emerald-300"><MessageCircle size={14} /> WhatsApp</a>}
+                </div>
+              )
+            })}
+          </div>
         </Hoja>
       )}
 

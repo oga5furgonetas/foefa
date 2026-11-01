@@ -73,6 +73,8 @@ data class Parada(
     @SerialName("cliente_dice") val clienteDice: ClienteDice? = null,
     /** LA MEMORIA DE LA CALLE (01-11-2026): lo que la empresa sabe de ese portal (el código, dónde dejar, cómo se entra). */
     val memoria: Memoria? = null,
+    /** LA VALORACIÓN DEL CLIENTE (01-11-2026): las estrellas que puso en su enlace, ya entregado. */
+    val valoracion: Valoracion? = null,
     /** Minutos que se llega tarde a su horario, según la ruta ordenada. */
     @SerialName("tarde_min") val tardeMin: Int? = null,
 ) {
@@ -117,6 +119,9 @@ data class ClienteDice(val estare: String = "", val dejar: String = "", val fran
 /** LA MEMORIA DE LA CALLE (01-11-2026): el código del portal, dónde dejar (una de DONDE) y cómo se entra; quién lo apuntó. */
 @Serializable
 data class Memoria(val portal: String = "", val dejar: String = "", val acceso: String = "", val por: String = "", val actualizado: String? = null)
+
+@Serializable
+data class Valoracion(val estrellas: Int = 0, val cuando: String? = null)
 
 /* LO QUE DICE LA DGT CERCA DE LA RUTA (30-10-2026): cortes, obras, accidentes y retenciones (GET /reparto/mi-ruta/incidencias)
    y las zonas de bajas emisiones con sus polígonos y qué paradas caen dentro (GET /reparto/mi-ruta/zbe). */
@@ -183,6 +188,8 @@ data class Ganancias(
     @SerialName("pago_parada") val pagoParada: Int = 0,
     @SerialName("pago_dia") val pagoDia: Int = 0,
     @SerialName("coste_km") val costeKm: Int = 0,
+    /** LA PROPINA (01-11-2026): el móvil de Bizum, que el cliente ve en su enlace cuando ya tiene el paquete. */
+    val bizum: String = "",
 )
 
 /** La versión de la app que hay para descargar de la web (GET /app/version → `web`), para la instalada fuera de Play. */

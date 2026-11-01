@@ -193,6 +193,11 @@ class RutaVM(app: Application) : AndroidViewModel(app) {
 
     fun deshacer(p: Parada) = marcar(p, "pendiente", JsonObject(emptyMap()), tx("Vuelve a estar por entregar."), conDeshacer = false)
 
+    /** EL CLIENTE AVISADO (01-11-2026): a quién se mandó ya el WhatsApp de «voy de camino» (mientras la app viva). */
+    private val _avisados = MutableStateFlow<Set<String>>(emptySet())
+    val avisados: StateFlow<Set<String>> = _avisados
+    fun avisado(p: Parada) { _avisados.value = _avisados.value + p.id; apuntar(p, "whatsapp") }
+
     /** LA MEMORIA DE LA CALLE (01-11-2026): lo apuntado para la próxima vez en esa puerta; todo vacío la borra. */
     fun guardarMemoria(p: Parada, portal: String, dejar: String, acceso: String) {
         viewModelScope.launch {

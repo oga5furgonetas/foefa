@@ -1169,6 +1169,21 @@ def texto_respuesta(r: dict, quien: str = "", idioma: str = "es") -> str:
     return f"{quien}: {texto}" if quien else texto
 
 
+# LA VALORACIÓN DEL CLIENTE (01-11-2026): en su enlace, ya entregado, «¿Cómo ha ido?» de 1 a 5 estrellas y nada más (ni
+# texto libre: no hay datos de nadie que guardar). La primera recompensa del día que no depende de la agencia; y el
+# número que alimenta el perfil verificado del repartidor (el punto 7).
+def valoracion_sanea(data) -> tuple:
+    """(lo que se guarda, error): las estrellas, de 1 a 5."""
+    d = data if isinstance(data, dict) else {}
+    try:
+        n = int(float(d.get("estrellas")))
+    except (TypeError, ValueError):
+        return None, "Di de 1 a 5 estrellas"
+    if not 1 <= n <= 5:
+        return None, "Di de 1 a 5 estrellas"
+    return {"estrellas": n}, ""
+
+
 def sanea_intento(d) -> "dict | None":
     """El registro del intento que manda la app: cuándo llegó, si llamó y escribió, cuánto esperó. Solo
     fechas con forma de fecha y números con tope; sin nada de eso, nada."""

@@ -127,6 +127,10 @@ en los últimos 50 metros (el portal, el cliente), después (el dinero y la prue
 - **Quién lo tiene.** Las grandes plataformas por dentro. Ninguna app de ruta.
 
 ### 6. El cliente avisado solo, la propina y la valoración (2-3 días + configurar Meta)
+> **HECHO el 01-11-2026 (mediodía), en servidor, web y nativa** (ver `ESTADO.md`): «Avisar a todos por WhatsApp» uno
+> a uno (el botón de abajo, sin la API de Meta: la cuenta sigue restringida), las estrellas de un toque en el enlace
+> y el Bizum del repartidor cuando el cliente ya tiene el paquete (se copia el número: Bizum no tiene enlace).
+
 - **Qué es.** (a) Al empezar la ruta, cada cliente con teléfono recibe «Tu paquete llega entre las 11 y las 12;
   si no vas a estar, dinos dónde dejarlo» con el enlace que ya existe; a 2 paradas, «llego en 10 min». Para una
   empresa va por la API de WhatsApp (≈0,02-0,05 € por mensaje de utilidad, a confirmar en la tabla de Meta, se

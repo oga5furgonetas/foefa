@@ -30,6 +30,7 @@ import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Key
+import androidx.compose.material.icons.automirrored.filled.Chat
 import androidx.compose.material.icons.filled.Navigation
 import androidx.compose.material.icons.filled.PhotoCamera
 import androidx.compose.material.icons.automirrored.filled.Undo
@@ -60,6 +61,7 @@ import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.core.content.FileProvider
 import androidx.exifinterface.media.ExifInterface
@@ -121,6 +123,32 @@ fun textoAntes(a: Antes): String {
         else -> a.nota
     }
     return tx("La última vez ({f}): {que}", "f" to f, "que" to que)
+}
+
+/** EL CLIENTE AVISADO (01-11-2026): con la ruta ordenada, un WhatsApp a cada cliente con móvil, uno tras otro, con su
+ *  hora y su enlace (textoWhatsapp). Lo que más fallidas evita, según la calle. */
+@Composable
+fun AvisarHoja(paradas: List<Parada>, avisados: Set<String>, alAvisar: (Parada) -> Unit, alCerrar: () -> Unit) {
+    ModalBottomSheet(onDismissRequest = alCerrar, sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)) {
+        Column(Modifier.padding(horizontal = 20.dp).padding(bottom = 20.dp).navigationBarsPadding().verticalScroll(rememberScrollState())) {
+            Text(tx("Avisar a todos por WhatsApp"), style = MaterialTheme.typography.headlineSmall)
+            Text(tx("Un WhatsApp a cada cliente con su hora aproximada y su enlace para seguirte. Se abre uno a uno: envía y vuelve."),
+                style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Spacer(Modifier.height(12.dp))
+            paradas.forEach { p ->
+                val hecho = p.id in avisados
+                Row(Modifier.fillMaxWidth().padding(vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Column(Modifier.weight(1f)) {
+                        Text((p.orden?.let { "$it. " } ?: "") + p.cliente.ifBlank { p.direccion }, style = MaterialTheme.typography.bodyLarge, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                        Text(listOfNotNull(p.eta?.let { "≈ $it" }, p.telefono).joinToString(" · "), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
+                    if (hecho) Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(Icons.Default.Check, contentDescription = null, tint = LocalExtra.current.entregado); Spacer(Modifier.width(4.dp)); Text(tx("Avisado"), color = LocalExtra.current.entregado)
+                    } else OutlinedButton(onClick = { alAvisar(p) }) { Icon(Icons.AutoMirrored.Filled.Chat, contentDescription = null); Spacer(Modifier.width(6.dp)); Text("WhatsApp") }
+                }
+            }
+        }
+    }
 }
 
 /** LA MEMORIA DE LA CALLE (01-11-2026): «portal 1234, dejar en portería, entrada por el garaje», lo que se pinta y lo
@@ -240,6 +268,7 @@ fun ParadaHoja(
                 p.antes?.takeIf { p.pendiente }?.let { textoAntes(it) },
                 p.clienteDice?.let { textoClienteDice(it) }?.takeIf { it.isNotBlank() }?.let { tx("El cliente dice: {t}", "t" to it) },
                 p.memoria?.let { textoMemoria(it) }?.takeIf { it.isNotBlank() }?.let { tx("Memoria de la puerta: {t}", "t" to it) },
+                p.valoracion?.takeIf { it.estrellas in 1..5 }?.let { tx("Valoración del cliente: {e}", "e" to "★".repeat(it.estrellas) + "☆".repeat(5 - it.estrellas)) },
             )
             if (datos.isNotEmpty()) {
                 Spacer(Modifier.height(12.dp))
