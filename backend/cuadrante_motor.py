@@ -173,10 +173,27 @@ def _d(x) -> dt.date:
     return dt.date.fromisoformat(str(x)[:10])
 
 
+# Lo que la gente escribe a mano en su hoja y es el mismo código con otra grafía (01-11-2026, visto en la hoja de
+# Dani, pestaña «12 A 26»: «BACKUP», «1 EXTRA», «1 extra», «1.EXTRA»). Antes eran «código desconocido»: la
+# sincronización con Google Sheets saltaba esa celda (nunca llegaba a la app) y el importador, igual. Solo grafías
+# seguras: «B/V», que también está en su hoja, sigue siendo desconocido porque no se sabe qué es.
+ALIAS_COD = {"BACKUP": "BKP", "BACK UP": "BKP", "BACK-UP": "BKP", "RIDE ALONG": "RIDE", "RIDEALONG": "RIDE",
+             "RIDE-ALONG": "RIDE", "N/T APROBADO": "N/T APROB", "SUSPENDIDO": "SUSP"}
+_UN_EXTRA = re.compile(r"^(1[\s.\-_]*EXTRA|EXTRA[\s.\-_]*1)$")
+
+
+def alias_cod(s: str) -> str:
+    """El código canónico de una grafía distinta (ya en mayúsculas y sin espacios de más): «BACKUP» es BKP y
+    «1 EXTRA» es EXTRA. Lo que no se conoce vuelve tal cual."""
+    if _UN_EXTRA.match(s):
+        return "EXTRA"
+    return ALIAS_COD.get(s, s)
+
+
 def _cod(v) -> str:
     """El código tal cual se guarda: en mayúsculas, sin espacios de más y sin la
     hora entre paréntesis ('V (05:43)' -> 'V'). Un 1 que llega como número de
-    Excel (1.0) es un '1'."""
+    Excel (1.0) es un '1'. Y «BACKUP» es BKP (alias_cod)."""
     if v is None:
         return ""
     if isinstance(v, (int, float)) and not isinstance(v, bool):
@@ -184,7 +201,7 @@ def _cod(v) -> str:
     s = " ".join(str(v).split()).upper()
     if "(" in s:
         s = s.split("(")[0].strip()
-    return "1" if s in ("1.0", "1,0") else s
+    return "1" if s in ("1.0", "1,0") else alias_cod(s)
 
 
 class _Programa:

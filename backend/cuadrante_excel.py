@@ -35,8 +35,10 @@ import unicodedata
 from collections import Counter
 from typing import Any, Dict, List, Optional
 
+from cuadrante_motor import alias_cod
+
 ROSAS = {"FF66CC", "FF99CC", "FFC0CB"}
-POR_DEFECTO = {"00B0F0": "empresa", "FABF8F": "finde", "FFFF00": "sale"}
+POR_DEFECTO = {"00B0F0": "empresa", "FABF8F": "finde", "92D050": "finde", "FFFF00": "sale", "FFD966": "sale"}
 _PARADA = ("RUTAS", "MAXIMA", "DIFERENCIA", "TOTAL", "LEYENDA")
 
 
@@ -71,7 +73,7 @@ def _codigo(v):
         if re.fullmatch(r"\d{1,2}[:.]\d{2}", dentro):
             hora = dentro.replace(".", ":")
         txt = re.sub(r"\s*\(.*?\)", "", txt)
-    return re.sub(r"\s+", " ", txt).strip().upper(), hora
+    return alias_cod(re.sub(r"\s+", " ", txt).strip().upper()), hora
 
 
 def _fecha(v) -> Optional[dt.date]:
@@ -303,11 +305,14 @@ def _leer_ws(nombre_hoja, ws, ws_f, fila_cab, col_nombre, col_orden, fechas_col,
         color = _rgb(ws_f.cell(r, col_nombre))
         celdas: Dict[str, Dict[str, Any]] = {}
         for c in orden_cols:
-            cod, hora = _codigo(ws.cell(r, c).value)
+            v = ws.cell(r, c).value
+            cod, hora = _codigo(v)
             if not cod:
                 continue
             extra = cod == "1" and _rgb(ws_f.cell(r, c)) in rosas
-            celdas[fechas_col[c].isoformat()] = {"cod": cod, "hora": hora, "extra": extra}
+            # `crudo`: lo que pone en la celda tal cual (01-11-2026): para repintar solo lo que la app escribiría igual.
+            crudo = v if isinstance(v, (int, float)) and not isinstance(v, bool) else " ".join(str(v).split())
+            celdas[fechas_col[c].isoformat()] = {"cod": cod, "hora": hora, "extra": extra, "crudo": crudo}
             codigos[cod] += 1
         orden = ws.cell(r, col_orden).value if col_orden else None
         filas.append({"fila": r, "nombre": nom,
@@ -356,7 +361,7 @@ def _leer_ws(nombre_hoja, ws, ws_f, fila_cab, col_nombre, col_orden, fechas_col,
     return {"hoja": nombre_hoja, "fechas": [d.isoformat() for d in fechas], "filas": filas,
             "maximas": maximas, "codigos": dict(codigos.most_common()), "avisos": avisos,
             "leyenda": leyenda, "columnas": {fechas_col[c].isoformat(): c for c in orden_cols},
-            "fila_maximas": fila_maximas, "fechas_seguras": seguras}
+            "fila_maximas": fila_maximas, "fechas_seguras": seguras, "col_nombre": col_nombre}
 
 
 def leer_mensual(contenido: bytes, hoja: str = "", ref: Optional[dt.date] = None) -> Dict[str, Any]:

@@ -88,9 +88,20 @@ def test_sin_valores_guardados_calcula_las_formulas_de_la_cabecera():
     assert "2026-10-01" in d["fechas"]           # el 30 -> 1 del mes siguiente
 
 
+def test_las_grafias_de_la_hoja_son_el_mismo_codigo():
+    """Lo que Dani escribe a mano (01-11-2026): «BACKUP», «1 EXTRA», «1 extra», «1.EXTRA», «Ride along». Y lo que no
+    se sabe qué es («B/V») sigue siendo desconocido."""
+    assert cx._codigo("BACKUP") == ("BKP", "")
+    assert cx._codigo("1 extra") == ("EXTRA", "")
+    assert cx._codigo("1.EXTRA (05:43)") == ("EXTRA", "05:43")
+    assert cx._codigo("Ride along") == ("RIDE", "")
+    assert cx._codigo("B/V") == ("B/V", "")
+    assert cx._codigo(1.0) == ("1", "")
+
+
 def test_codigos_hora_y_extra():
     ana = por_nombre(cx.leer_mensual(hoja()))["ANA PEREZ"]["celdas"]
-    assert ana["2026-09-28"] == {"cod": "V", "hora": "05:43", "extra": False}
+    assert ana["2026-09-28"] == {"cod": "V", "hora": "05:43", "extra": False, "crudo": "V (05:43)"}
     assert ana["2026-09-29"]["cod"] == "1" and ana["2026-09-29"]["extra"] is True
     assert ana["2026-10-12"]["extra"] is False    # un 1 de otro color no es extra
 

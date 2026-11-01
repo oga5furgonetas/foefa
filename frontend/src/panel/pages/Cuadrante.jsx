@@ -18,7 +18,7 @@ import CuadranteChat from '../components/CuadranteChat'
 import SincronizarSheets from '../components/SincronizarSheets'
 import HojaCuadrante from '../hoja/HojaCuadrante'
 import {
-  TRABAJO, LETRA, DIA, MES, PALETA, ABREV, DOMINGO_TRABAJA, COLUMNA_DOMINGO, claseCodigo, wd,
+  TRABAJO, LETRA, DIA, MES, PALETA, ABREV, DOMINGO_TRABAJA, COLUMNA_DOMINGO, CABECERA_DIA, NOMBRE_EMPRESA, NOMBRE_FINDE, NOMBRE_SE_VA, claseCodigo, claseNombre, wd,
   sumaDias, rangoDias, fmt, lunesDe, signo, claseDif, resumenDias, septimosDe,
 } from '../cuadranteComun'
 
@@ -1179,12 +1179,11 @@ export default function Cuadrante() {
                           Conductor
                         </th>
                         {dias.map((f) => (
-                          <th key={f} className={`px-0.5 pb-1 pt-1 text-center font-semibold ${
-                            wd(f) === 6 ? 'bg-orange-500/15 text-orange-300' : f === hoy ? 'text-amber-300' : 'text-dark-400'} ${
+                          <th key={f} className={`px-0.5 pb-0.5 pt-1 text-center font-semibold ${f === hoy ? 'text-amber-300' : 'text-dark-400'} ${
                             wd(f) === 0 ? 'border-l border-dark-600' : ''}`}>
                             {f.slice(8) === '01' && <span className="block text-[8.5px] font-bold text-red-300">{MES[Number(f.slice(5, 7)) - 1]}</span>}
-                            <span className="block text-[9px]">{LETRA[wd(f)]}</span>
-                            <span className="block text-[11px]">{Number(f.slice(8))}</span>
+                            <span className={`block rounded-t-[3px] text-[9px] ${wd(f) === 6 ? DOMINGO_TRABAJA : ''}`}>{LETRA[wd(f)]}</span>
+                            <span className={`block rounded-b-[3px] text-[11px] font-bold ${CABECERA_DIA} ${f === hoy ? 'ring-2 ring-amber-300' : ''}`}>{Number(f.slice(8))}</span>
                           </th>
                         ))}
                         <th className="px-1.5 text-[10px] font-semibold text-dark-500" title="Días trabajados en lo que ves">Días</th>
@@ -1197,7 +1196,7 @@ export default function Cuadrante() {
                           <td className="sticky left-0 z-10 bg-dark-900 px-2 py-0.5">
                             <button onClick={() => setPersona(p)} className="flex w-full items-center gap-1.5 text-left"
                               title={[p.nombre, ...lista(p.entendido), p.nota].filter(Boolean).join(' · ')}>
-                              <span className={`max-w-[11rem] truncate text-[12px] ${p.ficha_activa ? 'text-dark-100' : 'text-dark-400 italic'}`}>{p.nombre}</span>
+                              <span className={`max-w-[11rem] truncate rounded-[3px] px-1 text-[12px] ${claseNombre(p, rango.hasta) || (p.ficha_activa ? 'text-dark-100' : 'text-dark-400 italic')}`}>{p.nombre}</span>
                               {p.tipo === 'empresa' && (
                                 <span className="shrink-0 rounded bg-sky-500/20 px-1 text-[9px] font-bold text-sky-300">
                                   {p.patron ? p.patron.map((d) => LETRA[d]).join('') : 'L-V'}
@@ -1308,11 +1307,14 @@ export default function Cuadrante() {
 
               <div className="flex flex-wrap gap-x-4 gap-y-1.5 text-[11px] text-dark-400">
                 {[['1', 'Trabaja'], ['N/T', 'Libra'], ['V', 'Vacaciones'], ['BAJA', 'Baja'], ['N/D', 'No disponible'],
-                  ['APROBADO', 'Aprobado (no se toca)'], ['BKP', 'Reserva'], ['RA', 'Acompañante']].map(([c, t]) => (
+                  ['APROBADO', 'Aprobado (no se toca)'], ['SUSP', 'Suspendido'], ['BKP', 'Backup'], ['RA', 'Ride along'], ['S', 'Oficina']].map(([c, t]) => (
                   <span key={c} className="flex items-center gap-1.5"><i className={`inline-block h-3 w-5 rounded-sm ${claseCodigo(c)}`} /> {t}</span>
                 ))}
-                <span className="flex items-center gap-1.5"><i className={`inline-block h-3 w-5 rounded-sm ${claseCodigo('1', true)}`} /> Día extra (se puede quitar)</span>
+                <span className="flex items-center gap-1.5"><i className={`inline-block h-3 w-5 rounded-sm ${claseCodigo('1', true)}`} /> Día extra (6º día, se puede quitar)</span>
                 <span className="flex items-center gap-1.5"><i className={`inline-block h-3 w-5 rounded-sm ${DOMINGO_TRABAJA}`} /> Domingo</span>
+                <span className="flex items-center gap-1.5"><i className={`inline-block h-3 w-5 rounded-sm ${NOMBRE_EMPRESA}`} /> Nombre: horario fijo</span>
+                <span className="flex items-center gap-1.5"><i className={`inline-block h-3 w-5 rounded-sm ${NOMBRE_FINDE}`} /> Nombre: solo findes o días fijos</span>
+                <span className="flex items-center gap-1.5"><i className={`inline-block h-3 w-5 rounded-sm ${NOMBRE_SE_VA}`} /> Nombre: deja el cuadrante</span>
                 <span className="flex items-center gap-1.5"><Lock size={11} /> Fijada a mano</span>
                 <span className="flex items-center gap-1.5"><i className="inline-block h-3 w-5 rounded-sm outline outline-2 outline-violet-400" /> Cambio propuesto</span>
                 <span className="flex items-center gap-1.5"><i className="inline-block h-3 w-5 rounded-sm outline outline-2 outline-red-500" /> 7º día seguido</span>

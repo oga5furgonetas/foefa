@@ -2,7 +2,7 @@ import { memo, useMemo } from 'react'
 import { Lock } from 'lucide-react'
 import { useRejilla } from './useRejilla'
 import {
-  ABREV, TRABAJO, LETRA, MES, claseCodigo, claseDif, signo, wd, COLUMNA_DOMINGO, leerCodigo, septimosDe,
+  ABREV, TRABAJO, LETRA, MES, claseCodigo, claseNombre, claseDif, signo, wd, COLUMNA_DOMINGO, leerCodigo, septimosDe,
 } from '../cuadranteComun'
 
 /* MENSUAL — la rejilla del cuadrante como su hoja MENSUAL, pero sin copiar y
@@ -33,10 +33,7 @@ export function textoCelda(c) {
 }
 
 export function colorNombre(p, desde, hasta) {
-  if (p.inactivo_desde && p.inactivo_desde <= hasta) return 'bg-yellow-400/30'
-  if (p.tipo === 'empresa') return 'bg-sky-500/25'
-  if (p.tipo === 'finde') return 'bg-orange-300/35'
-  return ''
+  return claseNombre(p, hasta)          // los colores de su hoja (01-11-2026)
 }
 
 /* Una fila de persona. Memorizada: al moverse por la hoja solo se vuelven a

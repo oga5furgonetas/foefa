@@ -34443,7 +34443,7 @@ def _despieza_codigo(crudo) -> tuple:
         if re.fullmatch(r"\d{1,2}[:.]\d{2}", dentro):
             hora = dentro.replace(".", ":")
         txt = re.sub(r"\s*\(.*?\)", "", txt)
-    return re.sub(r"\s+", " ", txt).strip().upper(), hora
+    return _cm.alias_cod(re.sub(r"\s+", " ", txt).strip().upper()), hora
 
 
 def _sin_tildes(s: str) -> str:
@@ -49112,9 +49112,12 @@ async def cuadrante_exportar(center: str, desde: str, hasta: str, user: dict = D
     refuerzo_dia = {a["fecha"]: a["refuerzo"] for a in datos["ajustes"] if a.get("tipo") == "refuerzo_dia"}
 
     rel = lambda c: PatternFill("solid", fgColor=c)  # noqa: E731
-    F_BLANCO, F_CREMA, F_NARANJA, F_ROSA = rel("FFFFFF"), rel("FFF2CC"), rel("F8CBAD"), rel("FF99CC")
-    F_AZUL, F_VERDE, F_AMARILLO, F_ROJO = rel("00B0F0"), rel("92D050"), rel("FFFF00"), rel("FF0000")
-    F_GRIS, F_CUENTA = rel("D9D9D9"), rel("BDD7EE")
+    # Los colores de SU hoja de Google (01-11-2026, leídos de la pestaña «12 A 26»): el rosa del extra es el que
+    # escribe la sincronización (_SYNC_ROSA), el dorado de «deja el cuadrante» el de su leyenda, y SUSP, BACKUP y
+    # RIDE con su color propio. Lo mismo pinta la rejilla del panel (cuadranteComun.js).
+    F_BLANCO, F_CREMA, F_NARANJA, F_ROSA = rel("FFFFFF"), rel("FFF2CC"), rel("F8CBAD"), rel(_SYNC_ROSA.lstrip("#").upper())
+    F_AZUL, F_VERDE, F_AMARILLO, F_ROJO = rel("00B0F0"), rel("92D050"), rel("FFD966"), rel("FF0000")
+    F_GRIS, F_CUENTA, F_MAGENTA, F_CABECERA, F_SEPTIMO = rel("D9D9D9"), rel("BDD7EE"), rel("FF00FF"), rel("C0504D"), rel("FF7C80")
     FAM = {"previsto": rel("DDEBF7"), "aprobado": rel("E2EFDA"), "aviso": rel("F4B084"), "apoyo": rel("D9E1F2")}
     fino = Side(style="thin", color="A6A6A6")
     borde = Border(left=fino, right=fino, top=fino, bottom=fino)
@@ -49140,11 +49143,11 @@ async def cuadrante_exportar(center: str, desde: str, hasta: str, user: dict = D
         c.number_format = "d"
         c.alignment = centro
         c.font = Font(bold=True, size=9)
+        c.fill = F_CABECERA                       # la fila de los días, en rojo, como en su hoja
         s = ws.cell(F0 - 1, col, f'=MID("LMXJVSD",WEEKDAY({get_column_letter(col)}{F0},2),1)')
         s.alignment = centro
         s.font = Font(size=8, color="595959")
         if d.weekday() == 6:
-            c.fill = F_NARANJA
             s.fill = F_NARANJA
         if d.day == 1 and j > 0:
             ws.cell(F0 - 2, col, f"◄ {MESES_ES[d.month].upper()}").font = Font(bold=True, size=8, color="C00000")
@@ -49177,13 +49180,22 @@ async def cuadrante_exportar(center: str, desde: str, hasta: str, user: dict = D
             c.font = Font(size=9, bold=cod == "1")
             if info.get("extra"):
                 c.fill = F_ROSA
-            elif cod == "1":
+            elif cod in ("1", "V", "COMP", "S", ""):
                 c.fill = F_BLANCO
-            elif cod in ("N/T", "L"):
+            elif cod in ("N/T", "L", "BAJA", "N/D", "N/P"):
                 c.fill = F_CREMA
-            elif cod:
+            elif cod == "SUSP":
+                c.fill = F_ROJO
+            elif cod == "BKP":
+                c.fill = F_MAGENTA
+            else:
                 fam = (CODIGOS_CUADRANTE_INFO.get(cod) or (None, None, "libre"))[2]
                 c.fill = FAM.get(fam, F_GRIS)
+            # La letra, como en su hoja: roja en BAJA, N/D, N/P y S; gris en las vacaciones.
+            if cod in ("BAJA", "N/D", "N/P", "S"):
+                c.font = Font(size=9, bold=True, color="FF0000")
+            elif cod in ("V", "COMP"):
+                c.font = Font(size=9, color="7F7F7F")
             # El domingo, en naranja como en su hoja (el 1 y el N/T también);
             # el rosa del extra y los códigos con color propio mandan.
             if d.weekday() == 6 and not info.get("extra") and cod in ("", "1", "N/T", "L"):
@@ -49234,9 +49246,11 @@ async def cuadrante_exportar(center: str, desde: str, hasta: str, user: dict = D
     fl = fd + 2
     leyenda = [(F_BLANCO, "1", "Trabaja (sale a ruta)"), (F_CREMA, "N/T", "Libra"),
                (F_ROSA, "1", "Día EXTRA (6º día): se puede quitar si sobra gente"),
-               (F_NARANJA, "", "Domingo"), (F_AZUL, "Nombre", "Horario fijo (lunes a viernes o su patrón)"),
+               (F_NARANJA, "", "Domingo"), (F_ROJO, "SUSP", "Suspendido"), (FAM["aprobado"], "APROB", "Día concedido (no se toca)"),
+               (F_CREMA, "BAJA", "Baja, N/D, N/P (en rojo)"), (F_MAGENTA, "BKP", "Backup"), (FAM["apoyo"], "RIDE", "Ride along"),
+               (F_AZUL, "Nombre", "Horario fijo (lunes a viernes o su patrón)"),
                (F_VERDE, "Nombre", "Solo fines de semana"), (F_AMARILLO, "Nombre", "Deja el cuadrante"),
-               (F_ROJO, "", "7º día seguido: no se puede (máximo 6)")]
+               (F_SEPTIMO, "", "7º día seguido: no se puede (máximo 6)")]
     ws.cell(fl, 2, "LEYENDA").font = Font(bold=True, size=9)
     for k, (fill, cod, txt) in enumerate(leyenda):
         c = ws.cell(fl + 1 + k, 2, cod or " ")
@@ -49600,8 +49614,19 @@ _SYNC_COL = "cuadrante_sync_hoja"        # base global: una por empresa y centro
 _SYNC_BASE = "cuadrante_sync_base"       # base de la empresa: la última versión en que coincidieron
 _SYNC_ANTES, _SYNC_DESPUES = 7, 62
 _SYNC_TOPE = 80
+_SYNC_ESCRIBE_TOPE = 3000     # celdas que se le mandan al script en una vuelta: un mes entero de 90 personas cabe
 _SYNC_MAX_BYTES = 6 * 1024 * 1024
 _SYNC_ROSA = "#ff66cc"
+# LOS COLORES DE SU HOJA (01-11-2026; Dani: «fíjate en los colores y todo, ponlo igual»), leídos de su pestaña «12 A 26»
+# con la paleta de Google Sheets: lo que la app escribe en la hoja va con el fondo que él pone a mano. El 1 en blanco
+# (sin fondo), el N/T en crema, el domingo entero en naranja (el 1 y el N/T), SUSP en rojo, el día aprobado en verde
+# claro, BACKUP en magenta, RIDE en azul claro, BAJA / N/D / N/P en crema (la letra roja la pone él: el script solo
+# pinta fondos) y el extra en rosa. Los otros colores de sus celdas (un 1 en verde o en cian) son marcas suyas: solo se
+# pierden si la app cambia esa celda. Los festivos no los sabe la app: ese día va como un día normal.
+_SYNC_COLOR = {"N/T": "#fff2cc", "L": "#fff2cc", "BAJA": "#fff2cc", "N/D": "#fff2cc", "N/P": "#fff2cc",
+               "SUSP": "#ff0000", "N/T APROB": "#e2efda", "APROBADO": "#e2efda",
+               "BKP": "#ff00ff", "RA": "#d9e1f2", "RIDE": "#d9e1f2"}
+_SYNC_DOMINGO = "#f8cbad"
 _SYNC_APROB = {"N/T APROB", "APROBADO"}
 _SYNC_POR_QUE = {
     "suspension": "suspendido en la app: se cambia levantando la suspensión",
@@ -49611,6 +49636,7 @@ _SYNC_POR_QUE = {
     "quitado": "quitado en la app",
     "maxima": "máxima cambiada en la app",
     "definitivo": "cuadrante marcado definitivo en la app",
+    "repintar": "pintado como en la app",
 }
 
 
@@ -49640,6 +49666,47 @@ def _sync_valor_hoja(canon: str) -> tuple:
     if c in ("EXTRA", "1"):
         return (f"1 ({h})" if h else 1), c == "EXTRA"
     return (f"{c} ({h})" if h else c), False
+
+
+def _sync_fondo_hoja(canon: str, fecha, rosa: str) -> str:
+    """El fondo con el que la app escribe una celda en la hoja: el rosa del extra, el naranja del domingo (para el 1 y
+    el N/T, como hace Dani), o el color del código; '' (sin fondo, blanco) para lo que no tiene color."""
+    c = (canon or "").partition("@")[0]
+    if c == "EXTRA":
+        return rosa
+    try:
+        domingo = date_cls.fromisoformat(str(fecha or "")).weekday() == 6
+    except (TypeError, ValueError):
+        domingo = False
+    if domingo and c in ("", "1", "T", "X", "N/T", "L"):
+        return _SYNC_DOMINGO
+    return _SYNC_COLOR.get(c, "")
+
+
+# La letra, como la escribe Dani a mano (01-11-2026, medido en su NOVIEMBRE con el menú de Sheets: Calibri 10 como
+# los nombres; el 1, SUSP, BAJA, N/D, N/P, S y el extra en negrita; BAJA / N/D / N/P / S en rojo; V en gris). La familia
+# y el tamaño los copia el script de la celda del nombre de esa fila (así vale para la hoja de cualquier empresa); de
+# aquí salen el peso y el color. Hasta hoy el script solo ponía valor, fondo y nota, y una celda en blanco salía con
+# la letra por defecto de la hoja (Arial 11, el 1 a la derecha): «no está utilizando la misma caligrafía».
+_SYNC_NEGRITA = {"1", "EXTRA", "SUSP", "BAJA", "N/D", "N/P", "S", "BKP"}
+_SYNC_LETRA_COLOR = {"BAJA": "#ff0000", "N/D": "#ff0000", "N/P": "#ff0000", "S": "#ff0000", "V": "#808080"}
+
+
+def _sync_letra_hoja(canon: str) -> dict:
+    c = (canon or "").partition("@")[0]
+    return {"negrita": c in _SYNC_NEGRITA, "color": _SYNC_LETRA_COLOR.get(c, "")}
+
+
+def _sync_mismo_texto(cel: dict, canon: str) -> bool:
+    """Si lo que la app escribiría es exactamente lo que ya pone en la celda: para repintar sin cambiar lo que tecleó
+    una persona («1 extra» o «BACKUP» se quedan como están)."""
+    valor = _sync_valor_hoja(canon)[0]
+    crudo = (cel or {}).get("crudo")
+    if crudo is None:
+        return False
+    if isinstance(crudo, (int, float)) and not isinstance(crudo, bool):
+        return valor == 1 and float(crudo) == 1.0
+    return str(valor).strip().upper() == str(crudo).strip().upper()
 
 
 def _sync_decide(S: str, A: str, B: Optional[str], prot: str) -> Tuple[str, str]:
@@ -49720,6 +49787,19 @@ function sincronizarAhora() {
   SpreadsheetApp.getActive().toast(sincronizarFlota(), 'Flota', 10);
 }
 
+// Una celda suelta (cuando en su tramo hay una fórmula): valor, fondo, letra y nota.
+function escribeUna(h, w) {
+  var c = h.getRange(w.fila, w.col);
+  c.setValue(w.valor);
+  if (w.fondo !== null && w.fondo !== undefined) c.setBackground(w.fondo || null);
+  if (w.letra) {
+    var ref = h.getRange(w.fila, w.col_nombre || 2);
+    c.setFontFamily(ref.getFontFamily()).setFontSize(ref.getFontSize()).setHorizontalAlignment('left')
+     .setFontWeight(w.letra.negrita ? 'bold' : 'normal').setFontColor(w.letra.color || '#000000');
+  }
+  if (w.nota) { var antes = c.getNote(); c.setNote(((antes ? antes + '\n' : '') + w.nota).split('\n').slice(-5).join('\n')); }
+}
+
 function sincronizarFlota() {
   var lock = LockService.getScriptLock();
   if (!lock.tryLock(1000)) return 'Ya se estaba sincronizando.';
@@ -49750,21 +49830,56 @@ function sincronizarFlota() {
     try { r = JSON.parse(resp.getContentText()); } catch (e) { r = {}; }
     if (resp.getResponseCode() !== 200) return 'Flota no ha aceptado la hoja: ' + (r.detail || resp.getResponseCode());
     var escritas = 0, saltadas = [];
+    // Por pestaña y fila, en tramos de columnas seguidas: una escritura por tramo (valores, fondos y letra de golpe).
+    // Es lo que permite volcar un mes entero (2.000 celdas) en una sola vuelta sin agotar el tiempo del script
+    // (01-11-2026). La letra: familia y tamaño de la celda del nombre de esa fila; negrita y color según el código;
+    // a la izquierda, como se escribe a mano.
+    var porFila = {};
     (r.escribir || []).forEach(function (w) {
-      try {
-        var h = ss.getSheetByName(w.hoja);
-        if (!h) { saltadas.push(w.hoja + ' (no existe)'); return; }
-        var c = h.getRange(w.fila, w.col);
-        if (c.getFormula()) { saltadas.push(w.hoja + '!' + c.getA1Notation() + ' (tiene una fórmula)'); return; }
-        c.setValue(w.valor);
-        if (w.fondo !== null && w.fondo !== undefined) c.setBackground(w.fondo || null);
-        if (w.nota) {
-          var antes = c.getNote();
-          c.setNote(((antes ? antes + '\n' : '') + w.nota).split('\n').slice(-5).join('\n'));
+      var k = w.hoja + '\u0001' + w.fila;
+      (porFila[k] = porFila[k] || []).push(w);
+    });
+    Object.keys(porFila).forEach(function (k) {
+      var fila = porFila[k].sort(function (a, b) { return a.col - b.col; });
+      var h = ss.getSheetByName(fila[0].hoja);
+      if (!h) { saltadas.push(fila[0].hoja + ' (no existe)'); return; }
+      var familia = null, tamano = null, i = 0;
+      while (i < fila.length) {
+        var j = i;
+        while (j + 1 < fila.length && fila[j + 1].col === fila[j].col + 1) j++;
+        var tramo = fila.slice(i, j + 1);
+        i = j + 1;
+        try {
+          var rango = h.getRange(tramo[0].fila, tramo[0].col, 1, tramo.length);
+          var formulas = rango.getFormulas()[0];
+          if (formulas.some(function (f) { return !!f; })) {
+            tramo.forEach(function (w, n) {
+              if (formulas[n]) { saltadas.push(w.hoja + '!' + h.getRange(w.fila, w.col).getA1Notation() + ' (tiene una fórmula)'); return; }
+              escribeUna(h, w); escritas++;
+            });
+            continue;
+          }
+          rango.setValues([tramo.map(function (w) { return w.valor; })]);
+          if (tramo.every(function (w) { return w.fondo !== null && w.fondo !== undefined; })) {
+            rango.setBackgrounds([tramo.map(function (w) { return w.fondo || null; })]);
+          } else {
+            tramo.forEach(function (w, n) { if (w.fondo !== null && w.fondo !== undefined) rango.getCell(1, n + 1).setBackground(w.fondo || null); });
+          }
+          if (tramo.every(function (w) { return !!w.letra; })) {
+            if (familia === null) { var ref = h.getRange(tramo[0].fila, tramo[0].col_nombre || 2); familia = ref.getFontFamily(); tamano = ref.getFontSize(); }
+            rango.setFontFamily(familia).setFontSize(tamano).setHorizontalAlignment('left')
+                 .setFontWeights([tramo.map(function (w) { return w.letra.negrita ? 'bold' : 'normal'; })])
+                 .setFontColors([tramo.map(function (w) { return w.letra.color || '#000000'; })]);
+          }
+          tramo.forEach(function (w, n) {
+            if (!w.nota) return;
+            var c = rango.getCell(1, n + 1), antes = c.getNote();
+            c.setNote(((antes ? antes + '\n' : '') + w.nota).split('\n').slice(-5).join('\n'));
+          });
+          escritas += tramo.length;
+        } catch (e) {
+          saltadas.push(tramo[0].hoja + ' fila ' + tramo[0].fila + ' (' + e.message + ')');
         }
-        escritas++;
-      } catch (e) {
-        saltadas.push(w.hoja + ' fila ' + w.fila + ' (' + e.message + ')');
       }
     });
     if (escritas || saltadas.length) {
@@ -49873,8 +49988,12 @@ def _sync_mensaje(r: dict) -> str:
     if r["modo"] == "prueba":
         return ("Modo prueba, no se ha tocado nada: cambiaría %d celdas en Flota y %d en esta hoja.%s Actívalo en "
                 "Flota → Cuadrante → Google Sheets." % (n_app, n_hoja, cola))
+    if r.get("repintadas"):
+        cola += " Y %d celdas pintadas con la letra y los colores de la app%s." % (
+            r["repintadas"], " (quedan más para la próxima vuelta)" if r.get("repintar_pendiente") else "")
     if not n_app and not n_hoja and not extra:
-        return "Todo igual en Flota y en la hoja."
+        # Con un borrador en marcha, «todo igual» engañaba (01-11-2026): las celdas de esas fechas no se miran.
+        return "Todo igual en Flota y en la hoja." + cola
     return "Flota: %d cambios de la hoja a la app y %d de la app a la hoja.%s" % (n_app, n_hoja, cola)
 
 
@@ -49903,6 +50022,10 @@ async def _sync_procesar(conf: dict, cuerpo: dict) -> dict:
     b_desde, b_hasta = str(borrador.get("desde") or ""), str(borrador.get("hasta") or "")
     definitivo = conf.get("definitivo") or {}
     d_desde, d_hasta = str(definitivo.get("desde") or ""), str(definitivo.get("hasta") or "")
+    # PINTAR LA HOJA COMO EN LA APP (01-11-2026): en estas fechas, lo que ya coincide se vuelve a escribir con su letra.
+    repintar = conf.get("repintar") or {}
+    p_desde, p_hasta = str(repintar.get("desde") or ""), str(repintar.get("hasta") or "")
+    repintar_celdas: list = []
     hoy = _cua_hoy()
     desde = (hoy - timedelta(days=_SYNC_ANTES)).isoformat()
     hasta = (hoy + timedelta(days=_SYNC_DESPUES)).isoformat()
@@ -49914,6 +50037,7 @@ async def _sync_procesar(conf: dict, cuerpo: dict) -> dict:
          "desde": desde, "hasta": hasta, "pestanas": [], "saltadas": [], "sin_ficha": [], "ambiguos": [],
          "a_app": 0, "a_app_cambia": 0, "a_hoja": 0, "a_hoja_cambia": 0, "conflictos": 0, "maximas_app": 0,
          "maximas_hoja": 0, "protegidas": 0, "codigos_desconocidos": {}, "cambios": [], "retenido": False,
+         "repintadas": 0, "repintar_pendiente": False,
          "aplicado": False, "error": None, "escribir": [], "en_borrador": 0,
          "borrador": {"desde": b_desde, "hasta": b_hasta} if b_desde else None,
          "personas": {"entran": [], "fichas_nuevas": [], "salen": [], "vuelven": [], "en_app_no_en_hoja": [],
@@ -50062,6 +50186,12 @@ async def _sync_procesar(conf: dict, cuerpo: dict) -> dict:
                 if (ap == "libre" and tipo_s in ("trabaja", "extra")) or (ap == "extra" and tipo_s == "libre"):
                     prot = "aprobado"
             accion, por_que = _sync_decide(S, A, B, prot)
+            if accion == "nada" and A and not S and B is None and f >= hoy.isoformat():
+                # (01-11-2026, Dani: «si cambio todo el cuadrante en FDS, que se cambie otra vez todo en Sheets») Una
+                # celda que la hoja nunca tuvo y la app rellenó se quedaba solo en la app hasta «definitivo»: él hizo
+                # noviembre en la app y en la hoja no veía nada. De hoy en adelante va a la hoja (el pasado en blanco
+                # de la hoja se deja en paz), con el freno de siempre de los 80 cambios de golpe.
+                accion, por_que = "a_hoja", "app"
             if d_desde and d_desde <= f <= d_hasta:
                 # El borrador se marcó definitivo: en esas fechas manda la app. Donde las dos cambiaron, o donde nunca
                 # coincidieron (la pestaña del mes nuevo, recién hecha copiando la de antes con sus códigos viejos), la
@@ -50073,13 +50203,15 @@ async def _sync_procesar(conf: dict, cuerpo: dict) -> dict:
                     accion, por_que = "a_hoja", "definitivo"
             if accion == "igual":
                 base[clave] = S
+                if p_desde and p_desde <= f <= p_hasta and A and cel and _sync_mismo_texto(cel, A):
+                    repintar_celdas.append((h, A, f))
             elif accion == "nada":
                 if not S and not A:
                     base.pop(clave, None)
             elif accion == "a_app":
                 a_app.append((h, doc, cel, S, A, por_que))
             else:
-                a_hoja.append((h, A, S, por_que))
+                a_hoja.append((h, A, S, por_que, f))
             if prot and accion == "a_hoja":
                 r["protegidas"] += 1
         return a_app, a_hoja
@@ -50186,7 +50318,7 @@ async def _sync_procesar(conf: dict, cuerpo: dict) -> dict:
         for h, doc, cel, S, A, por_que in a_app[:40]:
             r["cambios"].append({"hacia": "app", "nombre": h["drv"].get("name") or h["nombre"], "fecha": h["fecha"],
                                  "antes": A.replace("@", " ") or "—", "ahora": S.replace("@", " "), "por_que": por_que})
-        for h, A, S, por_que in a_hoja[:40]:
+        for h, A, S, por_que, _f in a_hoja[:40]:
             r["cambios"].append({"hacia": "hoja", "nombre": h["drv"].get("name") or h["nombre"], "fecha": h["fecha"],
                                  "antes": S.replace("@", " ") or "—", "ahora": A.replace("@", " ") or "(vacía)",
                                  "por_que": _SYNC_POR_QUE.get(por_que, por_que)})
@@ -50292,30 +50424,35 @@ async def _sync_procesar(conf: dict, cuerpo: dict) -> dict:
     await cambio.guardar()
 
     # ── Lo que el script escribe en la hoja ──
-    for h, A, S, por_que in a_hoja[:300]:
+    for h, A, S, por_que, f in a_hoja[:_SYNC_ESCRIBE_TOPE]:
         p = h["p"]
         rosas = {"#" + k.lower() for k, v in (p.get("leyenda") or {}).items() if v == "extra"} or {_SYNC_ROSA}
         rosa = sorted(rosas)[0]
-        fondo_actual = ""
-        try:
-            fondo_actual = str(fondos_de.get(h["pestana"])[h["fila"] - 1][h["col"] - 1] or "").lower()
-        except (IndexError, TypeError):
-            pass
-        if A:
-            valor, en_rosa = _sync_valor_hoja(A)
-        else:
-            valor, en_rosa = "", False
-        if en_rosa:
-            fondo = rosa
-        elif fondo_actual in rosas | {"#" + c.lower() for c in _cx.ROSAS}:
-            fondo = ""                                   # deja de ser un día extra: fuera el rosa
-        else:
-            fondo = None
+        valor = _sync_valor_hoja(A)[0] if A else ""
+        # Siempre con su color (01-11-2026): el que Dani le pondría a mano a ese código ese día. Y la nota solo cuando
+        # la app pisa algo que la hoja tenía: rellenar un blanco (noviembre entero, 2.000 celdas) no necesita nota.
+        fondo = _sync_fondo_hoja(A, f, rosa)
+        nota = "" if (not S and por_que in ("app", "definitivo")) else \
+            "Flota %s: %s" % (sello, _SYNC_POR_QUE.get(por_que, por_que))
         r["escribir"].append({"hoja": h["pestana"], "fila": h["fila"], "col": h["col"], "valor": valor,
-                              "fondo": fondo, "nota": "Flota %s: %s" % (sello, _SYNC_POR_QUE.get(por_que, por_que))})
+                              "fondo": fondo, "nota": nota, "letra": _sync_letra_hoja(A),
+                              "col_nombre": p.get("col_nombre") or 2})
     for f, A, p in max_hoja:
         r["escribir"].append({"hoja": p["hoja"], "fila": p["fila_maximas"], "col": p["columnas"][f], "valor": A,
                               "fondo": None, "nota": "Flota %s: %s" % (sello, _SYNC_POR_QUE["maxima"])})
+    # Pintar como en la app (01-11-2026): lo que ya coincide se vuelve a escribir con su letra y su fondo, sin cambiar
+    # el valor y sin nota; solo donde la celda pone exactamente lo que la app escribiría. Si no cabe en esta vuelta
+    # (tope de escritura), queda pendiente para la siguiente.
+    if repintar_celdas:
+        hueco = max(_SYNC_ESCRIBE_TOPE - len(r["escribir"]), 0)
+        for h, A, f in repintar_celdas[:hueco]:
+            p = h["p"]
+            rosas = {"#" + k.lower() for k, v in (p.get("leyenda") or {}).items() if v == "extra"} or {_SYNC_ROSA}
+            r["escribir"].append({"hoja": h["pestana"], "fila": h["fila"], "col": h["col"],
+                                  "valor": _sync_valor_hoja(A)[0], "fondo": _sync_fondo_hoja(A, f, sorted(rosas)[0]),
+                                  "nota": "", "letra": _sync_letra_hoja(A), "col_nombre": p.get("col_nombre") or 2})
+        r["repintadas"] = min(len(repintar_celdas), hueco)
+        r["repintar_pendiente"] = len(repintar_celdas) > hueco
 
     # La base, sin lo que ya no se sincroniza; y quién estaba en la hoja (para saber quién sale la próxima vez).
     # Una salida retenida sigue contando como «estaba»: si no, al día siguiente ya no se vería que se fue.
@@ -50373,6 +50510,8 @@ async def cuadrante_sync_hoja(request: Request):
         cambio["$set"]["forzar_una_vez"] = False
         if conf.get("definitivo"):
             cambio["$unset"] = {"definitivo": ""}        # ya pasó a la hoja: la próxima vuelta decide como siempre
+        if conf.get("repintar") and not r.get("repintar_pendiente"):
+            cambio.setdefault("$unset", {})["repintar"] = ""      # pintado: hecho (o no había nada que pintar)
     if r.get("error") or r.get("retenido") or r.get("a_app") or r.get("a_hoja") or r.get("maximas_app") \
             or r.get("maximas_hoja"):
         cambio["$push"] = {"historial": {"$each": [{k: guardar.get(k) for k in (
@@ -50408,7 +50547,7 @@ def _sync_salida(conf: Optional[dict]) -> dict:
         return {"conectado": False}
     out = {k: conf.get(k) for k in ("modo", "creado_en", "creado_por", "hoja_nombre", "hoja_id", "ultimo_contacto",
                                     "ultima", "ultima_escritura", "forzar_una_vez", "llave_vieja_en", "borrador",
-                                    "definitivo")}
+                                    "definitivo", "repintar")}
     out["historial"] = list(reversed(conf.get("historial") or []))[:15]
     out["conectado"] = True
     out["hoja_url"] = ("https://docs.google.com/spreadsheets/d/%s/edit" % conf["hoja_id"]
@@ -50499,6 +50638,34 @@ async def cuadrante_sync_borrador(data: dict = Body(...), user: dict = Depends(r
     await global_db[_SYNC_COL].update_one(filtro, {"$set": {"borrador": borrador}})
     await _audit(user, "cuadrante_sync_borrador", {"center": center, "desde": desde, "hasta": hasta})
     return {"ok": True, "borrador": borrador}
+
+
+@api_router.post("/cuadrante/sync/repintar")
+async def cuadrante_sync_repintar(data: dict = Body(...), user: dict = Depends(require_admin)):
+    """Pintar la hoja como en la app (01-11-2026, Dani: «no está utilizando la misma caligrafía ni colores ni
+    escrituras para todo»): en la próxima sincronización, las celdas de esas fechas que ya coinciden se vuelven a
+    escribir con la letra y el fondo de su código, sin cambiar ningún valor (lo que la app escribió antes de saber
+    pintar, o lo tecleado a mano con el mismo texto). `quitar`: se anula."""
+    center = _sync_puede(user, data.get("center"))
+    filtro = {"db_name": _current_db_name.get(), "center": center, "revocado": False}
+    if not await global_db[_SYNC_COL].find_one(filtro, {"_id": 0, "id": 1}):
+        raise HTTPException(404, "Esta hoja no está conectada")
+    if data.get("quitar"):
+        await global_db[_SYNC_COL].update_one(filtro, {"$unset": {"repintar": ""}})
+        await _audit(user, "cuadrante_sync_repintar_quitar", {"center": center})
+        return {"ok": True, "repintar": None}
+    desde, hasta = _cua_fecha(data.get("desde"), "Desde"), _cua_fecha(data.get("hasta"), "Hasta")
+    if hasta < desde:
+        raise HTTPException(400, "El final es anterior al principio")
+    if (date_cls.fromisoformat(hasta) - date_cls.fromisoformat(desde)).days > 92:
+        raise HTTPException(400, "Como mucho tres meses de golpe")
+    repintar = {"desde": desde, "hasta": hasta, "en": datetime.now(timezone.utc).isoformat(),
+                "por": user.get("name") or user.get("username") or ""}
+    await global_db[_SYNC_COL].update_one(filtro, {"$set": {"repintar": repintar}})
+    await _audit(user, "cuadrante_sync_repintar", {"center": center, "desde": desde, "hasta": hasta})
+    return {"ok": True, "repintar": repintar,
+            "aviso": "Se pinta en la próxima sincronización: en 10 minutos como mucho, o ahora mismo desde el menú "
+                     "«Flota → Sincronizar ahora» de la hoja."}
 
 
 @api_router.post("/cuadrante/sync/definitivo")

@@ -130,6 +130,10 @@ def test_el_1_rosa_de_la_hoja_es_el_extra_de_la_app():
     assert server._sync_valor_hoja("EXTRA") == (1, True)          # un NÚMERO: su fila de RUTAS es una suma
     assert server._sync_valor_hoja("1") == (1, False)
     assert server._sync_valor_hoja("V@05:43") == ("V (05:43)", False)
+    # Las grafías de su hoja (01-11-2026): el mismo código en los tres lectores.
+    assert server._sync_canon("backup") == "BKP" and server._sync_canon("1 extra") == "EXTRA"
+    assert server._despieza_codigo("1.EXTRA (05:43)") == ("EXTRA", "05:43")
+    assert server._despieza_codigo("B/V") == ("B/V", "")
 
 
 @pytest.mark.parametrize("S,A,B,prot,esperado", [
@@ -257,6 +261,8 @@ async def test_el_extra_aprobado_va_en_rosa_y_si_se_quita_se_vacia(nave):
     r = await sync(llave, p, nave=nave)
     w = r["escribir"][0]
     assert (w["valor"], w["fondo"]) == (1, "#ff66cc")
+    assert w["letra"] == {"negrita": True, "color": ""} and w["col_nombre"] == 2   # el 1 en negrita; los nombres en B
+    assert "día concedido en la app" in w["nota"]                 # pisa un N/T de la hoja: con nota
     # El script lo pone en rosa; leído de vuelta, es lo mismo y no se mueve.
     p2 = pestana({"ANA PEREZ LOPEZ": ["1" if i == 12 else c for i, c in enumerate(SEMANA_ANA)]},
                  rosas=[("ANA PEREZ LOPEZ", DIAS[12])])
@@ -266,7 +272,52 @@ async def test_el_extra_aprobado_va_en_rosa_y_si_se_quita_se_vacia(nave):
     poner(t, "d1", DIAS[12], "N/T")
     r = await sync(llave, p2, nave=nave)
     w = r["escribir"][0]
-    assert (w["valor"], w["fondo"]) == ("N/T", "")
+    assert (w["valor"], w["fondo"]) == ("N/T", "#fff2cc")      # y en crema, como escribe Dani los N/T (01-11-2026)
+
+
+@pytest.mark.asyncio(loop_scope="session")
+async def test_lo_que_dani_escribe_a_mano_backup_y_1_extra_entra_con_su_codigo(nave):
+    """En su hoja un backup es «BACKUP», un día extra «1 EXTRA», «1 extra» o «1.EXTRA» y el acompañante «Ride along»
+    (visto el 01-11-2026 en «12 A 26»): antes eran «código desconocido» y esas celdas no llegaban nunca a la app."""
+    t = nave.t
+    llave = await conectar()
+    ana = list(SEMANA_ANA)
+    ana[2], ana[5], ana[6] = "BACKUP", "1 extra", "1.EXTRA"
+    luis = list(SEMANA_LUIS)
+    luis[0] = "Ride along"
+    await sync(llave, pestana({"ANA PEREZ LOPEZ": ana, "LUIS GOMEZ RIAL": luis}), nave=nave)
+    assert turno(t, "d1", DIAS[2])["cod"] == "BKP"
+    assert server._sync_canon_turno(turno(t, "d1", DIAS[5])) == "EXTRA"
+    assert server._sync_canon_turno(turno(t, "d1", DIAS[6])) == "EXTRA"
+    assert turno(t, "d2", DIAS[0])["cod"] == "RIDE"
+    assert nave.g[server._SYNC_COL].docs[0]["ultima"]["codigos_desconocidos"] == {}
+
+
+def test_lo_que_la_app_escribe_va_con_los_colores_de_su_hoja():
+    """LOS COLORES DE SU HOJA (01-11-2026): el fondo de cada celda que la app escribe, por código y día."""
+    rosa = "#ff66cc"
+    assert server._sync_fondo_hoja("N/T", "2026-10-27", rosa) == "#fff2cc"
+    assert server._sync_fondo_hoja("1", "2026-10-27", rosa) == ""                 # blanco: sin fondo
+    assert server._sync_fondo_hoja("1", "2026-10-25", rosa) == "#f8cbad"          # domingo, en naranja
+    assert server._sync_fondo_hoja("N/T", "2026-10-25", rosa) == "#f8cbad"
+    assert server._sync_fondo_hoja("", "2026-10-25", rosa) == "#f8cbad"           # vaciada en domingo: el naranja sigue
+    assert server._sync_fondo_hoja("EXTRA", "2026-10-25", rosa) == rosa           # el rosa del extra manda
+    assert server._sync_fondo_hoja("SUSP", "2026-10-25", rosa) == "#ff0000"       # y el rojo del suspendido
+    assert server._sync_fondo_hoja("N/T APROB@09:00", "2026-10-27", rosa) == "#e2efda"
+    assert server._sync_fondo_hoja("BKP", "2026-10-27", rosa) == "#ff00ff"
+    assert server._sync_fondo_hoja("RIDE", "2026-10-27", rosa) == "#d9e1f2"
+    assert server._sync_fondo_hoja("BAJA", "2026-10-27", rosa) == "#fff2cc"
+    assert server._sync_fondo_hoja("V", "2026-10-27", rosa) == ""
+    assert server._sync_fondo_hoja("RARO", "no-es-fecha", rosa) == ""
+    # Y la letra (01-11-2026, «no está utilizando la misma caligrafía»): el 1 y BAJA en negrita, BAJA en rojo, V en
+    # gris, N/T normal y negra; la familia y el tamaño los copia el script de la celda del nombre.
+    assert server._sync_letra_hoja("1") == {"negrita": True, "color": ""}
+    assert server._sync_letra_hoja("EXTRA")["negrita"] and server._sync_letra_hoja("SUSP")["negrita"]
+    assert server._sync_letra_hoja("BAJA") == {"negrita": True, "color": "#ff0000"}
+    assert server._sync_letra_hoja("S")["color"] == "#ff0000"
+    assert server._sync_letra_hoja("V") == {"negrita": False, "color": "#808080"}
+    assert server._sync_letra_hoja("N/T") == {"negrita": False, "color": ""}
+    assert server._sync_letra_hoja("V@05:43")["color"] == "#808080"
 
 
 @pytest.mark.asyncio(loop_scope="session")
@@ -275,13 +326,71 @@ async def test_una_celda_vacia_en_la_hoja_no_borra_y_un_codigo_raro_no_se_mete(n
     poner(t, "d1", DIAS[3], "V")
     llave = await conectar()
     cods = list(SEMANA_ANA)
-    cods[3], cods[4] = None, "1.EXTRA"
+    cods[3], cods[4] = None, "B/V"
     r = await sync(llave, pestana({"ANA PEREZ LOPEZ": cods}), nave=nave)
     assert turno(t, "d1", DIAS[3])["cod"] == "V"                    # vacía en la hoja: se queda lo de la app
-    assert turno(t, "d1", DIAS[4]) is None                          # «1.EXTRA» no se sabe qué es: no entra
+    assert turno(t, "d1", DIAS[4]) is None                          # «B/V» no se sabe qué es: no entra
     conf = nave.g[server._SYNC_COL].docs[0]
-    assert conf["ultima"]["codigos_desconocidos"] == {"1.EXTRA": 1}
+    assert conf["ultima"]["codigos_desconocidos"] == {"B/V": 1}
     assert not any(x["col"] == col_de(DIAS[3]) for x in r["escribir"])
+
+
+@pytest.mark.asyncio(loop_scope="session")
+async def test_lo_que_la_app_rellena_donde_la_hoja_esta_en_blanco_va_a_la_hoja_de_hoy_en_adelante(nave):
+    """Dani (01-11-2026): «si cambio todo el cuadrante en FDS, que se cambie otra vez todo el cuadrante en Sheets».
+    Una celda en blanco en la hoja que la app rellena (sin base: nunca coincidieron) va a la hoja si es de hoy en
+    adelante; el pasado en blanco de la hoja se deja como está."""
+    t = nave.t
+    llave = await conectar()
+    p = pestana({"ANA PEREZ LOPEZ": [None if (i == 3 or i >= 7) else c for i, c in enumerate(SEMANA_ANA)]})
+    await sync(llave, p, nave=nave)                              # el 15 y la segunda semana, en blanco en la hoja
+    poner(t, "d1", DIAS[3], "V")                                 # el 15: pasado (hoy es el 18): se queda en la app
+    for i in range(7, 14):                                       # del 19 al 25, hecho en la app
+        poner(t, "d1", DIAS[i], "1" if i < 12 else "N/T")
+    r = await sync(llave, p, nave=nave)
+    escritas = {x["col"]: x["valor"] for x in r["escribir"]}
+    assert escritas == {col_de(DIAS[i]): (1 if i < 12 else "N/T") for i in range(7, 14)}
+    assert col_de(DIAS[3]) not in escritas and turno(t, "d1", DIAS[3])["cod"] == "V"
+    assert all(x["nota"] == "" for x in r["escribir"])           # rellenar un blanco no lleva nota
+    assert r["escribir"][0]["letra"] == {"negrita": True, "color": ""}
+    # La hoja ya las tiene: la vuelta siguiente, todo igual.
+    p2 = pestana({"ANA PEREZ LOPEZ": [None if i == 3 else (c if i < 7 else ("1" if i < 12 else "N/T"))
+                                      for i, c in enumerate(SEMANA_ANA)]})
+    assert (await sync(llave, p2, nave=nave))["escribir"] == []
+
+
+@pytest.mark.asyncio(loop_scope="session")
+async def test_pintar_la_hoja_como_en_la_app_vuelve_a_escribir_lo_igual_con_su_letra(nave):
+    """Dani (01-11-2026): «no está utilizando la misma caligrafía ni colores ni escrituras para todo». Lo que la app
+    escribió antes de saber pintar (o lo tecleado a mano con el mismo texto) se vuelve a escribir con su letra y su
+    fondo, sin cambiar el valor ni poner nota; lo tecleado con otro texto («BACKUP», «1 extra») se queda como está."""
+    t = nave.t
+    llave = await conectar()
+    ana = list(SEMANA_ANA)
+    ana[2], ana[3] = "BACKUP", "BAJA"
+    p = pestana({"ANA PEREZ LOPEZ": ana})
+    assert (await sync(llave, p, nave=nave))["escribir"] == []           # todo coincide: nada que escribir
+    with pytest.raises(HTTPException) as e:
+        await server.cuadrante_sync_repintar({"center": "OGA5", "desde": DIAS[6], "hasta": DIAS[0]}, OFI)
+    assert e.value.status_code == 400
+    r = await server.cuadrante_sync_repintar({"center": "OGA5", "desde": DIAS[0], "hasta": DIAS[6]}, OFI)
+    assert r["repintar"]["desde"] == DIAS[0] and (await server.cuadrante_sync_estado("OGA5", OFI))["repintar"]
+    r = await sync(llave, p, nave=nave)
+    w = {x["col"]: x for x in r["escribir"]}
+    assert sorted(w) == [col_de(DIAS[i]) for i in (0, 1, 3, 4, 5, 6)]     # el BACKUP (día 3) se queda como lo tecleó
+    assert (w[col_de(DIAS[0])]["valor"], w[col_de(DIAS[0])]["letra"]) == (1, {"negrita": True, "color": ""})
+    assert (w[col_de(DIAS[3])]["valor"], w[col_de(DIAS[3])]["fondo"], w[col_de(DIAS[3])]["letra"]["color"]) == \
+        ("BAJA", "#fff2cc", "#ff0000")
+    assert (w[col_de(DIAS[5])]["valor"], w[col_de(DIAS[5])]["fondo"]) == ("N/T", "#fff2cc")
+    assert all(x["nota"] == "" for x in r["escribir"]) and all(x["col_nombre"] == 2 for x in r["escribir"])
+    assert "6 celdas pintadas" in r["mensaje"]
+    assert turno(t, "d1", DIAS[0])["cod"] == "1" and turno(t, "d1", DIAS[3])["cod"] == "BAJA"   # la app, intacta
+    assert not (await server.cuadrante_sync_estado("OGA5", OFI)).get("repintar")   # hecho: se quita solo
+    assert (await sync(llave, p, nave=nave))["escribir"] == []
+    # Se puede anular antes de que pase.
+    await server.cuadrante_sync_repintar({"center": "OGA5", "desde": DIAS[0], "hasta": DIAS[6]}, OFI)
+    await server.cuadrante_sync_repintar({"center": "OGA5", "quitar": True}, OFI)
+    assert not (await server.cuadrante_sync_estado("OGA5", OFI)).get("repintar")
 
 
 @pytest.mark.asyncio(loop_scope="session")

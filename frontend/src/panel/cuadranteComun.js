@@ -16,33 +16,48 @@ export const PALETA = [
 ]
 export const ABREV = { 'N/T APROB': 'APR', APROBADO: 'APR', EXTRA: 'EX', RIDE: 'RA', COMP: 'COMP' }
 
-/* Colores: los de la hoja donde los hay, y pares texto/fondo que se leen en
-   los tres temas (el rosa no tiene compensación en el tema claro: por eso el
-   texto del día extra es el de la rampa, que sí se invierte). */
-/* El domingo, la columna entera en naranja como en su hoja (Dani, 30-09-2026:
-   «márcame los domingos con un color distinto toda la columna»): el 1 y el
-   N/T cambian de color; el rosa del extra y los códigos con color propio
-   mandan, igual que en el Excel que se exporta. */
-export const DOMINGO_TRABAJA = 'bg-orange-500/35 text-dark-50'
-export const DOMINGO_LIBRA = 'bg-orange-500/[0.18] text-orange-300'
-export const COLUMNA_DOMINGO = 'bg-orange-500/[0.12]'
+/* LOS COLORES DE SU HOJA DE GOOGLE (01-11-2026; Dani: «fíjate en los colores y todo, ponlo igual»), leídos de la
+   pestaña «12 A 26» con la paleta de Sheets: el 1 en blanco, el N/T en crema (FFF2CC), el domingo entero en naranja
+   (F8CBAD), SUSP en rojo, BAJA / N/D / N/P en crema con la letra roja, el día aprobado en verde claro (E2EFDA), BACKUP
+   en magenta, RIDE en azul claro (D9E1F2), V en blanco con la letra gris, S en blanco con la letra roja y el día extra
+   en rosa (FF66CC). Son colores fijos, no del tema: la celda se ve igual en claro y en oscuro, como en la hoja; por eso
+   la letra va en negro (`text-black`, sin compensación de tema) o en rojo. Lo mismo pinta el Excel que se exporta
+   (`cuadrante_exportar`) y lo que la app escribe en la hoja (`_sync_fondo_hoja`). Los otros colores de sus celdas (un
+   1 en verde, en cian, en amarillo) son marcas suyas sin significado para la app, y no se pintan. */
+export const DOMINGO_TRABAJA = 'bg-[#f8cbad] text-black'
+export const DOMINGO_LIBRA = 'bg-[#f8cbad] text-black'
+export const COLUMNA_DOMINGO = 'bg-[#f8cbad]/30'
+export const NOMBRE_EMPRESA = 'bg-[#00b0f0] text-black'
+export const NOMBRE_FINDE = 'bg-[#92d050] text-black'
+export const NOMBRE_SE_VA = 'bg-[#ffd966] text-black'
+export const CABECERA_DIA = 'bg-[#c0504d] text-white'
 
 export function claseCodigo(cod, extra, domingo = false) {
-  if (extra) return 'bg-pink-500/35 text-dark-50 ring-1 ring-pink-400/60'
-  if (domingo && ['1', 'T', 'X'].includes(cod)) return DOMINGO_TRABAJA
-  if (domingo && ['N/T', 'L'].includes(cod)) return DOMINGO_LIBRA
+  if (extra) return 'bg-[#ff66cc] text-black ring-1 ring-pink-400/60'
+  if (domingo && ['1', 'T', 'X', 'N/T', 'L'].includes(cod)) return DOMINGO_TRABAJA
   switch (cod) {
-    case '1': case 'T': case 'X': return 'bg-dark-800 text-dark-50'
-    case 'N/T': case 'L': return 'bg-amber-200/15 text-amber-200'
-    case 'V': return 'bg-sky-500/20 text-sky-300'
-    case 'BAJA': return 'bg-red-500/20 text-red-300'
-    case 'N/D': case 'N/P': case 'SUSP': return 'bg-orange-500/15 text-orange-300'
-    case 'APROBADO': case 'N/T APROB': return 'bg-emerald-500/20 text-emerald-300'
-    case 'BKP': return 'bg-amber-500/20 text-amber-300'
-    case 'RA': case 'RIDE': return 'bg-violet-500/20 text-violet-300'
-    case 'EXTRA': return 'bg-pink-500/35 text-dark-50'
-    default: return 'bg-dark-800 text-dark-300'
+    case '1': case 'T': case 'X': return 'bg-white text-black'
+    case 'N/T': case 'L': return 'bg-[#fff2cc] text-black'
+    case 'BAJA': case 'N/D': case 'N/P': return 'bg-[#fff2cc] text-red-600'
+    case 'SUSP': return 'bg-[#ff0000] text-black'
+    case 'V': case 'COMP': return 'bg-white text-dark-500'
+    case 'S': return 'bg-white text-red-600'
+    case 'APROBADO': case 'N/T APROB': return 'bg-[#e2efda] text-black'
+    case 'BKP': return 'bg-[#ff00ff] text-black'
+    case 'RA': case 'RIDE': return 'bg-[#d9e1f2] text-black'
+    case 'EXTRA': return 'bg-[#ff66cc] text-black'
+    default: return 'bg-white text-dark-500'
   }
+}
+
+/* El color del nombre, como en su hoja: azul «empresa» (horario fijo), verde «fines de semana/días fijos», dorado «baja»
+   (deja el cuadrante). */
+export function claseNombre(p, hasta = '') {
+  if (p?.inactivo_desde && (!hasta || p.inactivo_desde <= hasta)) return NOMBRE_SE_VA
+  if (p?.tipo === 'inactivo') return NOMBRE_SE_VA
+  if (p?.tipo === 'empresa') return NOMBRE_EMPRESA
+  if (p?.tipo === 'finde') return NOMBRE_FINDE
+  return ''
 }
 
 export const wd = (iso) => (new Date(`${iso}T12:00:00`).getDay() + 6) % 7

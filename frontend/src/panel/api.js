@@ -405,6 +405,9 @@ export const emparejarSyncHoja = (center, nombre, eleccion) => api.post('/cuadra
 export const borradorSyncHoja = (center, desde, hasta) => api.post('/cuadrante/sync/borrador', { center, desde, hasta })
 export const quitarBorradorSyncHoja = (center) => api.post('/cuadrante/sync/borrador', { center, quitar: true })
 export const definitivoSyncHoja = (center) => api.post('/cuadrante/sync/definitivo', { center })
+/* Pintar la hoja como en la app (01-11-2026): la letra y los colores de FDS en lo que ya coincide, sin cambiar valores. */
+export const repintarSyncHoja = (center, desde, hasta) => api.post('/cuadrante/sync/repintar', { center, desde, hasta })
+export const quitarRepintarSyncHoja = (center) => api.post('/cuadrante/sync/repintar', { center, quitar: true })
 export const cuadranteExportar = (center, desde, hasta) =>
   api.get('/cuadrante/exportar', { params: { center, desde, hasta }, responseType: 'blob', timeout: 120000 })
 export function cuadranteImportar(file, center, confirmar, crearFichas, emparejar, forzarCentro) {

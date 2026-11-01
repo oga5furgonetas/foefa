@@ -620,3 +620,44 @@ Totales: X 0 respuestas, 0 seguidas; TikTok 6 (2 con app: la respuesta a Livrais
 preguntas), @ndouble.1 (doble ruta), @im.selee, @its.ryang_, @botelho_entregador, @01dasentrega, @530_da, @dominikamiszuda_,
 @nichtmeinbezirk, @postbotin_wikiii; YouTube «196 Stops, 338 Packages» (Compree's Life in Motion, 518), Jessen Giles «Things I Wish
 I Knew» (10K, 1 mes), Juli Rose tiene más vídeos de la serie.
+
+## 01-11-2026 (16:10 – 16:23) — ronda del bucle de 4 h (Chrome del PC 1)
+
+Ojo: vuelven a estar DOS Chrome conectados a la extensión y por defecto cogió el «Browser 2» (sin ninguna sesión: X y TikTok pedían
+iniciar sesión). Las sesiones siguen en el «Browser 1» (deviceId 3e5c1ef3…): `list_connected_browsers` + `select_browser` antes de nada.
+No se inició sesión en ningún sitio.
+
+### Metricool (marca 7741371)
+Sin huecos del 01 al 08-11 (TikTok 18:00 e Instagram 12:00 cada día, YouTube 02/05/09-11 19:00, LinkedIn 04 y 11-11 11:00); TikTok
+también 09 y 10-11. El TikTok de hoy (18:00) seguía pendiente a las 16:11 (normal, aún no era la hora). Nada añadido. Siguiente hueco:
+Instagram del M 10-11 (entra en la ventana el 03-11). Los dos de LinkedIn siguen con el texto viejo «Flota … 7 días de prueba».
+
+### X (@FlotaDSP)
+- El post del D 01-11 salió a las 7:30 (sigue sin respuestas). Los siguientes hasta el 11-11 programados (no re-verificado hoy).
+- Notificaciones: solo «Recent post from El Transportista Inversor». Búsqueda en directo (repartidor paquetes ruta, sin enlaces): hilos
+  de 2023-2025, quejas a empresas nombradas y noticias de drones. 0 respuestas, 0 seguidas.
+
+### Ronda de conversación (lo nuestro primero)
+| Hora | Red | Hilo | Qué se dijo | App |
+|---|---|---|---|---|
+| 16:15 | TikTok | Actividad | solo me gusta nuevos: L_98 (al comentario italiano de mccrew), Alfonso Tartaglione (al suyo) y mxnobody002 (al alemán de Nora). Nada que contestar. Hay 4 mensajes privados sin abrir: no se abren ni se contestan (regla: nada privado) | — |
+| 16:16 | TikTok | **@saamiirbh** (Zaragoza) «Otro día mas ✅» (hace 20 h, 65 ❤, 12 comentarios; cargando jaulas en la nave) | en español: las jaulas antes de cargar, ahí se decide el día; si al meter cada caja sabes en qué parada cae, a las 11 vas sobrado; ¿cuántas paradas hoy por Zaragoza? | no (verificado) |
+| 16:17 | TikTok | **@emilyyrincon** Emilyy (Huesca) «Primer video de la cuenta: un día trabajando en España como repartidora» (hace 6 d, 496 ❤, 60 comentarios; varias preguntan cómo entrar) | en español, a las que preguntan: casi nadie pide experiencia, piden carnet y no asustarse de 100 paradas; la primera semana la marca cargar en orden de entrega y apuntar por la noche qué portales comieron tiempo | no (verificado) |
+| 16:18 | TikTok | **@crooksys_couriers** Crooksys Couriers (Reino Unido, mensajería pequeña; «Another day, another van full of deliveries», hace 4 d, 210 ❤, 5 comentarios; serie nueva) | **ofrecimiento público a micro-creador**, en inglés: «Open offer, no strings: we're FDS, a small team in Spain that built a free app for delivery drivers (photo of the label, stops ordered by time, voice to the door; works in the UK). Try it on one real day, and tell everyone here what it got wrong or what's missing. No money, no conditions» | sí (verificado) |
+| 16:19 | TikTok | **@01dasentrega** (Brasil) «358 ENTREGAS» (10-18, 1.143 ❤, 53 comentarios; una pregunta cómo «roterizar» más rápido, otros preguntan qué app usa) | en portugués, sin nombrar apps: el tiempo no va en el app, va en teclear direcciones; parada que entra sola con foto a la etiqueta y el coche en orden (últimas al fondo, primera hora a mano); ¿cuántas paradas fueron las 358? | no (verificado) |
+| 16:19 | TikTok | **@its.ryang_** (EE. UU.) «get ready with me… as a delivery driver» (10-21, 66 ❤; comentario «75 % antes de comer») | en inglés: la regla del 75 % solo funciona si la furgoneta salió cargada en orden de parada; entrar a las 11 es repartir de noche, cada minuto que no escarbas bajo la balda es luz que recuperas | no (verificado) |
+| 16:20 | TikTok | **@whatthefacthamburg** (reportaje del NDR, Hamburgo, 240 paquetes de Torsten; 10-16, 1.491 ❤, 135 comentarios) | en alemán: 240 suena a mucho pero no decide la cifra sino cómo va cargado el coche a las 7; a quien dice que «no te puedes organizar el tiempo»: al cargar ya lo organizaste; respeto a Torsten y gracias por enseñar la hora antes de la primera parada | no (verificado) |
+| 16:20 | TikTok | **@lost.emerson** Lost Emerson (Génova) «Giornata da corriere a Genova» (2-2, 12,9K ❤, 1.122 comentarios; muchos preguntan cómo entrar y si piden diploma) | en italiano: casi nadie pide diploma, piden carnet y no asustarse de 120 paradas; cuánto se tarda depende menos de Génova y más de cómo cargas a las 7; los aparcamientos en S se aprenden después | no (verificado) |
+| 16:21 | YouTube | Studio → comentarios sin responder | ninguno | — |
+| 16:21 | YouTube | Un Ecuatoriano en España «Un día entero trabajando como repartidor» (127 vistas, 6 d) | ya tenía comentario nuestro (otra sesión); se pasa | — |
+| 16:21 | YouTube | **GabrielSiri** «Ruta en van» (Curitiba, Brasil; 189 vistas en 2 d, doblado al español) | en portugués: de Campina Grande do Sul al CIC es carretera antes de empezar y cada parada perdida pesa el doble; separar por barrio y cargar la última zona al fondo; enseñar la carga entera vale más que un tutorial; abrazo desde España | no (verificado) |
+| 16:22 | YouTube | **Starboy300** «POV: This Was NOT An Easy Day Of Deliveries!» (Italia; 616 vistas en 4 h, 1,48K suscriptores; pregunta cuántas entregas hizo) | en inglés: en calles estrechas importa menos cuántos paquetes que dónde va cada uno en la furgoneta (aparcar una vez y andar tres puertas); apuesta: acabó, pero las últimas diez tardaron como las primeras cuarenta | no (verificado) |
+| 16:22 | Facebook | notificaciones y grupos | lo mismo (64 me gusta, aviso de pago de Meta, reel). Feed de grupos: anuncios de transportes; en Repartidores Paquetería Madrid, alguien busca alquilar una cuenta de otra plataforma. Nada que contestar | — |
+| — | Instagram | — | sin sesión | — |
+
+Totales: X 0 respuestas, 0 seguidas; TikTok 7 (1 con app: el ofrecimiento a Crooksys Couriers); YouTube 2 (0 con app). Con app: 1 de 9.
+Sin pieza nueva. Reddit no se intentó. En TikTok el primer `type` se perdió en los siete (comprobado con `.public-DraftEditor-content`
+y repetido). Candidatos vistos y no usados: TikTok @tianne242, @ndouble.1, @nichtmeinbezirk, @postbotin_wikiii, @z.wessel (neerlandés),
+@jst_mate.o, @botelho_entregador, @isisdhara, @cristallitoral26; YouTube yourfavoritedanny («Spend a Day With Me Delivering Packages»,
+12 vistas), Compree's Life in Motion (531), Life Of Darren (3,4K), Bomb City Dashing (comida); se evitan Caxcus (afiliado) y los
+vídeos de apps de la competencia que salen en francés y alemán.

@@ -589,6 +589,13 @@ Nada se había borrado (org `owner` sin `modulos`, usuario `dani` sin
     (piden empresa china); Web Push no llega en China (va por FCM); revisión
     por un abogado del texto PIPL.
 
+## Última sesión — 01-11-2026 (16:23, PC de Dani, bucle de redes): ofrecimiento en inglés a Crooksys Couriers; 7 en TikTok, 2 en YouTube
+
+- Metricool sin huecos hasta el 08-11 (TikTok hasta el 10-11); X del día salió a las 7:30, programados hasta el 11-11. Ronda:
+  ofrecimiento público en inglés a @crooksys_couriers (mensajería pequeña del Reino Unido); 6 comentarios más en TikTok (es, es, pt,
+  en, de, it) y 2 en YouTube (pt, en). X, Facebook: nada. Instagram sin sesión. Ojo: la extensión de Chrome volvió a coger por
+  defecto un «Browser 2» sin sesiones; las sesiones están en el «Browser 1». Detalle en `docs/anuncios/redes/REGISTRO-PC.md` (01-11, 16:10).
+
 ## Última sesión — 01-11-2026 (12:50, PC de Dani, bucle de redes): Livraisons Story contestó al ofrecimiento; ofrecimiento en alemán a stahljunge01; 6 en TikTok, 2 en YouTube
 
 - Metricool sin huecos hasta el 08-11 (el reel de Instagram de hoy salió a las 12:00); el post de X del día salió a las 7:30, programados
@@ -844,6 +851,102 @@ contentarme [...] No quiero falsos positivos ni soluciones por decir». El infor
     (2 casos × escritorio y móvil: las estrellas y el Bizum con el portapapeles; «Avisar a todos» uno a uno, el
     enlace de WhatsApp con la hora y el seguimiento, y que se recuerda al recargar), nativa compilada con tests y
     lint. 17 textos en 5 idiomas; `Traducciones.kt` regenerado (719).
+- **LOS COLORES DE SU HOJA DE GOOGLE EN EL CUADRANTE (01-11, 12:3x → 12:5x; Dani: «vuelve a conectarte al cuadrante de
+  sheets y fíjate en los colores y todo, ponlo igual»)**. Mirada la pestaña «12 A 26» en su Chrome de empresa, celda a
+  celda con el menú de color de Sheets (los exactos): el 1 en blanco, el N/T en crema FFF2CC (paleta «amarillo claro
+  3»), el domingo entero en naranja F8CBAD (personalizado), SUSP en rojo FF0000, BAJA / N/D / N/P en crema con la
+  letra roja, N/T APROB en verde claro E2EFDA, BACKUP en magenta FF00FF, RIDE en azul claro D9E1F2, V en blanco con
+  letra gris, S en blanco con letra roja, el extra en rosa (FF66CC, el que escribe la sincronización); los nombres en
+  azul 00B0F0 (empresa), verde 92D050 (findes/días fijos) y dorado FFD966 («baja», deja el cuadrante); la fila de
+  los días en rojo C0504D. Su leyenda: 1, N/T, sexto día consecutivo, DOMINGOS/FESTIVOS, empresa, fines de semana/días
+  fijos, baja, SUSPENDIDO. Los 1 en verde, cian o amarillo de algunas celdas no están en la leyenda: son marcas suyas
+  y la app no las pinta ni las lee (ya era así). Hecho en los TRES sitios:
+  · **La rejilla del panel** (`cuadranteComun.js`: `claseCodigo`, `claseNombre`, `CABECERA_DIA`…; `Cuadrante.jsx`,
+    `HojaMensual.jsx` y `HojaDiario.jsx` lo heredan): colores fijos (no del tema, `bg-[#fff2cc] text-black`…), así
+    la celda se ve igual en claro y en oscuro, como la hoja; los nombres con su fondo; la cabecera de días en rojo con
+    la letra del domingo en naranja; la leyenda con todo (SUSP, BACKUP, RIDE, Oficina y los tres colores de nombre).
+  · **Lo que la app escribe en la hoja** (`_sync_fondo_hoja`, `_SYNC_COLOR`, `_SYNC_DOMINGO` en `server.py`): hasta
+    ahora el script solo pintaba el rosa del extra (o lo quitaba) y lo demás iba sin fondo (en NOVIEMBRE se veían los
+    N/T APROB y las BAJA en blanco). Ahora cada celda que la app escribe va con su color (y el domingo en naranja); el
+    script de la hoja ya sabía pintar fondos (`setBackground`), así que NO hay que volver a pegarlo. La letra roja de
+    BAJA / N/D / N/P y la gris de V no se pueden poner desde la app (el script solo pinta fondos): esas las pone él.
+    Los festivos no los sabe la app: una celda que la app cambie en un festivo pierde el naranja de Dani. Test puro
+    `test_lo_que_la_app_escribe_va_con_los_colores_de_su_hoja` (+ el caso del extra que deja de serlo espera crema).
+  · **El Excel que se exporta** (`cuadrante_exportar`): SUSP rojo, BACKUP magenta, BAJA / N/D / N/P en crema con letra
+    roja, V gris, el dorado FFD966 de los que se van, la fila de días en rojo, la leyenda con todo; el 7º día seguido
+    pasa a un rojo claro (FF7C80) para no confundirse con SUSP. Y el lector de hojas (`cuadrante_excel.POR_DEFECTO`)
+    conoce el verde 92D050 y el dorado FFD966 aunque la hoja no traiga leyenda.
+  DESPLEGADO a las 13:46 (backend y web a la vez, con el CI de e1491a2 en verde a las 13:41 y Dani: «Sí, despliega»;
+  bundle `index-BtOu6zch.js`, `/api/health` ok): en su hoja, «Flota → Sincronizar ahora» (o esperar 10 min) y lo que
+  escriba la app va ya con sus colores.
+  · **Dani (12:5x): se refería a la pestaña NOVIEMBRE de Google Sheets, y dice que añadió 3 personas con N/T aprobados
+    en noviembre que no estaban en la página; quiere que vayan a la par.** Mirado en vivo (la hoja en su Chrome de
+    empresa, leída entera con el CSV de `gviz/tq?tqx=out:csv&gid=…`, que sí deja `fetch` desde docs.google.com; el
+    panel en su Chrome personal, API de solo lectura). Lo que pasó: a las 12:48 NOVIEMBRE tenía 82 nombres (igual que
+    el panel) y de 12:5x a 13:0x Dani fue metiendo filas nuevas sin número: ALBA LUEIRO ANTELO (RIDE 01/11, 1 el
+    02/11), CESAR MIGUEL CONTRERAS SANCHEZ (RIDE 03/11), DAVID FERNANDEZ DE HARO (RIDE 01/11, 1 el 02/11) y DENIAN
+    SUAREZ VALENTIN; y quitó la fila de AFILAL TAOUFIK AFILAL. La hoja manda sola (el script tiene disparador al
+    editar, como mucho cada 2 min, y el reloj cada 10): a las 12:57 la app hizo la ficha de Alba con sus dos celdas, a
+    las 13:04 las de César y Denian, y a Afilal lo saca desde el 02/11 («salen 1», como está pensado: si vuelve a
+    ponerlo, vuelve). DAVID FERNANDEZ DE HARO se quedó RETENIDO: se parece a una ficha de baja («DAVID VICENTE
+    HERNANDEZ SAN LUIS») y la app pide que una persona lo decida, en FDS → Cuadrante → Google Sheets → «Es otra
+    persona: ficha nueva» (el modo auto me denegó hacerlo por API, «Modify Shared Resources»: pedido a Dani). O sea,
+    «la página no estaba» = miró antes de que pasara el disparador (o miró a David, retenido). De paso:
+    `_sync_mensaje` decía «Todo igual» aunque hubiera un borrador que se tragara las celdas; ahora lo dice.
+  · **Lo que la app NO entendía de su hoja (13:0x → 13:1x)**: `codigos_desconocidos` traía «BACKUP (1)» y
+    «1 EXTRA (1)»; buscado celda a celda en el CSV: «BACKUP» (Afilal 27/10), «1 EXTRA» (Gerardo Porto 30/10),
+    «1 extra» (César García 01/11), «1.EXTRA» (Juan Carlos López 11/10) y «B/V» (Iago Barreiro 01/11). Un código
+    desconocido hacía que la sincronización SALTARA esa celda (nunca llegaba a la app) y el importador, igual. Ahora
+    `cuadrante_motor.alias_cod` («BACKUP» / «BACK UP» → BKP; «1 EXTRA» en cualquier grafía → EXTRA; «Ride along» →
+    RIDE; «N/T APROBADO» → N/T APROB; «SUSPENDIDO» → SUSP) lo aplican los tres lectores: `_cod` (lo que guarda la
+    app), `cuadrante_excel._codigo` (la hoja del script y el Excel) y `_despieza_codigo` (el importador). «B/V» sigue
+    siendo desconocido: no se sabe qué es (preguntado). Tests: las grafías en el lector, en el canon y en el
+    importador; una hoja con BACKUP / 1 extra / 1.EXTRA / Ride along entra en la app con su código y sin
+    «desconocidos»; el test del código raro usa ahora «B/V». Tanda entera del backend y los 8 `check_*.py` en verde.
+    DESPLEGADO a las 13:46.
+  · **Dani (13:2x): «estoy haciendo pruebas de cuadrante, ¿hay manera de que se pasen ya a los Sheets de noviembre,
+    y que luego vaya y venga hasta que marque definitivo?» y, con una captura de NOVIEMBRE casi vacía, «PERO yo en
+    el sheets no veo q se escriba nada».** Mirado en el panel (API de solo lectura): FDS tiene noviembre hecho (930
+    celdas: 340 unos, 279 N/T, 101 N/T APROB, 139 BAJA, 23 SUSP, 27 V…) y a las 13:22 él empezó un BORRADOR del
+    03/11 al 30/11 («por: Dani»); mientras está en borrador esas fechas no van ni vienen, a propósito: con «Marcar
+    definitivo» la siguiente vuelta lo escribe entero en NOVIEMBRE. Pero ANTES del borrador tampoco se escribía
+    (13:17, «0 de la app a la hoja»), y eso sí era una regla de la sincronización (`_sync_decide`: hoja en blanco,
+    app con valor, sin base → «nada», pensada para que la primera conexión no regara la hoja): una celda que la hoja
+    nunca tuvo y la app rellena se quedaba solo en la app hasta el definitivo, y después del definitivo igual (un
+    día nuevo puesto en FDS sobre una celda en blanco no llegaba nunca). Cambiado en `_sync_procesar`, en la llamada
+    a `_sync_decide` (no en la función pura): si la hoja está en blanco, la app tiene valor, no hay base y la fecha es
+    de hoy en adelante, va a la hoja (`a_hoja`, «cambiado en la app»); el pasado en blanco de la hoja se deja en paz
+    (`desde` ya recorta a `_SYNC_ANTES` días). El freno de los 80 cambios de golpe sigue: la primera vuelta tras
+    desplegar puede quedar «retenida» hasta «Aceptar estos cambios» (o pasa sola con el «Marcar definitivo», que
+    fuerza una vez). Test `test_lo_que_la_app_rellena_donde_la_hoja_esta_en_blanco_va_a_la_hoja_de_hoy_en_adelante`
+    (la semana futura hecha en la app llega a la hoja; el 15, pasado y en blanco, no; la vuelta siguiente «todo
+    igual»); el caso puro `("", "1", None) → nada` se queda como está. DESPLEGADO a las 13:46.
+  · **Dani (13:5x), con NOVIEMBRE ya recibiendo celdas: «fíjate cómo es el cuadrante del domingo y cómo se está
+    escribiendo: no está utilizando la misma caligrafía ni colores ni escrituras para todo, ¿por qué?» y «cuando
+    termines con lo de los colores, termina de volcar el mensual».** Medido en su hoja con el menú de Sheets: sus
+    celdas son Calibri 10 (el 1 en negrita, N/T normal) y las que escribía la app salían Arial 11 normal con el 1 a
+    la derecha: el script solo ponía valor, fondo y nota, y una celda en blanco toma la letra por defecto de la hoja.
+    Y la app le mandaba 300 celdas por vuelta (el script escribía celda a celda, 9 llamadas por celda): las 2.086 del
+    definitivo de noviembre eran siete vueltas de 10 minutos. Hecho:
+    · cada celda escrita lleva `letra` (`_sync_letra_hoja`: negrita para 1 / EXTRA / SUSP / BAJA / N/D / N/P / S /
+      BKP, letra roja para BAJA / N/D / N/P / S, gris para V) y `col_nombre`; el script copia familia y tamaño de la
+      celda del NOMBRE de esa fila (vale para la hoja de cualquier empresa), pone negrita y color y alinea a la
+      izquierda. La nota solo cuando la app pisa algo que la hoja tenía (rellenar un blanco, 2.000 celdas, no la lleva).
+    · el script escribe por tramos de columnas seguidas de cada fila (`setValues`, `setBackgrounds`,
+      `setFontWeights`, `setFontColors`…; `escribeUna` celda a celda solo si en el tramo hay una fórmula) y el servidor
+      manda hasta `_SYNC_ESCRIBE_TOPE` = 3.000 por vuelta: un mes entero de una vez.
+    · **«Pintar la hoja como aquí»** (cuadro de Google Sheets del panel, `POST /cuadrante/sync/repintar` con desde /
+      hasta o `quitar`; `conf.repintar`): en la próxima vuelta, las celdas de esas fechas que ya coinciden se vuelven a
+      escribir con su letra y su fondo, sin cambiar valores ni notas, SOLO donde la celda pone exactamente lo que la
+      app escribiría (`_sync_mismo_texto` con el `crudo` que ahora guarda el lector: «1 extra» o «BACKUP» tecleados se
+      quedan). Si no cabe en la vuelta, queda pendiente; hecho, se quita solo. Para lo que la app escribió antes de
+      saber pintar (los N/T APROB en blanco, las 300 celdas Arial 11 de las 13:53).
+    Tests: la letra por código; el extra aprobado lleva letra y `col_nombre`; rellenar un blanco va sin nota; el
+    repintado (6 de 7 celdas: el BACKUP a mano se queda), con su mensaje, la validación y el anular; el lector guarda
+    `crudo`. El script sigue parseando (`new Function`); eslint y build de la web. OJO: el script de la hoja hay que
+    VOLVER A PEGARLO (lleva la escritura nueva): «Volver a sacar el script» en el panel (llave nueva, empieza en
+    prueba), pegar en Extensiones → Apps Script, guardar (los disparadores ya existen: no hace falta «instalar») y
+    poner el modo activo; hasta entonces el script viejo sigue escribiendo celda a celda en Arial 11.
 - **EL DÍA EN UNA TARJETA (la mitad del punto 10), web (01-11, 11:1x → 11:2x; worktree `tarjeta-dia`)**: la imagen de
   «Comparte tu día» (`lib/compartirDia.js`) lleva ahora, además de paradas, tiempo y km, lo que un repartidor enseña a
   otro: «{p} % a la primera» (entregadas entre entregadas más fallidas), «{c}/hora limpio» (solo con tarifa puesta:
@@ -1940,6 +2043,32 @@ Dani: «conéctate a mi Chrome y hazlo tú para no liarla yo». Hecho (detalle e
 
 ## Pendiente (por prioridad)
 
+-25. **01-11, 13:0x, NOVIEMBRE «a la par»**: la hoja ya manda sola (al editar y cada 10 min); las filas nuevas de Dani
+   están en FDS salvo DAVID FERNANDEZ DE HARO, retenido por parecerse a una ficha de baja: falta que Dani pulse «Es
+   otra persona: ficha nueva» en FDS → Cuadrante → Google Sheets (o me dé permiso para hacerlo por API). Los alias
+   de su hoja (BACKUP, 1 EXTRA, Ride along) y lo que la app rellena en celdas en blanco (de hoy en adelante):
+   DESPLEGADOS a las 13:46 con los colores. «B/V» (Iago Barreiro 01/11) sigue sin saberse qué es (preguntado). Y, de
+   13:2x: Dani tiene noviembre hecho en FDS y un BORRADOR del 03/11 al 30/11 desde las 13:22: cuando pulse «Marcar
+   definitivo» la hoja lo recibe entero; la primera vuelta tras el despliegue puede pedir «Aceptar estos cambios».
+   Y de 13:5x: Dani marcó definitivo a las 13:53 (2.086 celdas, a 300 por vuelta con el script viejo) y vio que la
+   app escribía con otra letra. Hechos con tests la letra, el volcado por tramos (un mes de una vez) y «Pintar la hoja
+   como aquí». DESPLEGADOS: la web a las 14:5x (bundle `index-DV1-NTsF.js`, con el bloque «Pintar la hoja como
+   aquí») y el backend a las 19:10 (Dani: «haz lo que tengas que hacer»; el árbol tenía 3 PNG sin commit de la sesión
+   de redes y el filtro paró, y el modo auto negó `-SinCI`: se desplegó desde una copia limpia de 7f0efcc con el
+   filtro entero; `/api/health` ok, `/cuadrante/sync/repintar` contesta 401 sin sesión). Y HECHO en su hoja
+   (19:18-19:24, Dani entró en el panel del PC a las 19:1x, que la sesión había caducado y no se entra contraseñas
+   por él): «Volver a sacar el script» → «Copiar el código» → pegado y guardado en Apps Script (comprobado que lleva
+   `porFila` / `escribeUna`), «Flota → Sincronizar ahora» en prueba («cambiaría 1 celda en Flota y 1186 en esta
+   hoja»; la de Flota: César García Grana 01/11, EXTRA, cambiado en la hoja), «Activar», «Pintar la hoja como aquí»
+   del 01/11 al 30/11 y otra vez «Sincronizar ahora»: UNA vuelta, «1 cambio de la hoja a la app y 1186 de la app a
+   la hoja. Y 1239 celdas pintadas con la letra…», «La hoja escribió 2425 celdas (19:24)», el repintado se quitó solo.
+   Visto en la hoja: el 1 en negrita a la izquierda, N/T en crema, N/T APROB en verde claro, BAJA en rojo, V (05:43)
+   en gris, Calibri como su columna. Quedan los triángulos de NOTA en las celdas que el script viejo escribió a las
+   13:53 (el repintado no toca notas, a propósito); si molestan, una vuelta que las quite donde la nota sea de Flota.
+-24. **01-11 mediodía, los colores de su hoja en el cuadrante**: HECHO (rejilla, sincronización, Excel), con tests.
+   Falta: desplegar backend + web (con permiso de Dani) y, en su hoja, «Flota → Sincronizar ahora» para ver los
+   colores en NOVIEMBRE. Si quiere también la letra roja de BAJA / N/D / N/P desde la app, hay que ampliar el script
+   de la hoja (`setFontColor`) y volver a pegarlo.
 -23. **01-11 mañana, el día en una tarjeta**: HECHO (web) y DESPLEGADO a las 12:2x. Falta la otra mitad del punto 10: el trimestre para la
    gestoría (gastos con foto del ticket, kilómetros, IVA e IRPF; existe el Excel, faltan gastos y el formato).
 -22. **01-11 mañana, el cliente avisado, la propina y la valoración**: HECHOS en servidor, web y nativa, con tests.
