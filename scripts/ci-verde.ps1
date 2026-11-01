@@ -18,8 +18,15 @@
 #   . (Join-Path $PSScriptRoot "ci-verde.ps1"); Assert-CiVerde -Raiz $raiz -SinCI:$SinCI
 # -----------------------------------------------------------------
 function Get-TokenGitHub {
-    $salida = "protocol=https`nhost=github.com`n`n" | git credential fill 2>$null
-    foreach ($linea in $salida) { if ($linea -like "password=*") { return $linea.Substring(9) } }
+    # SIN TUBERIA: en PowerShell 5.1, `"..." | git credential fill` le mete un BOM al texto y git contesta «refusing
+    # to work with credential missing protocol field» (la misma trampa que `fly secrets import`, ESTADO.md). Se le
+    # pasa por un fichero temporal en UTF-8 sin BOM y se lee la salida a traves de cmd, que no convierte nada.
+    $tmp = [IO.Path]::GetTempFileName()
+    try {
+        [IO.File]::WriteAllText($tmp, "protocol=https`nhost=github.com`n`n", (New-Object System.Text.UTF8Encoding $false))
+        $salida = & cmd /c "git credential fill < `"$tmp`" 2>nul"
+    } finally { Remove-Item $tmp -Force -ErrorAction SilentlyContinue }
+    foreach ($linea in @($salida)) { if ("$linea" -like "password=*") { return "$linea".Substring(9) } }
     return $null
 }
 
