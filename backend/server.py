@@ -51994,7 +51994,7 @@ async def _rep_limpiar(user: dict):
             {"$set": {"cliente": None, "telefono": None, "direccion": None, "lat": None,
                       "lng": None, "notas": None, "contenido": None, "entrega_foto": None,
                       "entrega_nota": None, "entrega_firma": None, "entrega_recibe": None,
-                      "vista": None, "anonimizado": True}})
+                      "entrega_ia": None, "vista": None, "anonimizado": True}})
         lim_rastro = (hoy - timedelta(days=reparto.DIAS_RASTRO)).strftime("%Y-%m-%d")
         await db.reparto_jornadas.delete_many({"fecha": {"$lt": lim_rastro}})
         # Los recorridos que se guardaron hasta el 29-10-2026 (ya no se guardan, ver
@@ -52822,6 +52822,8 @@ async def seguimiento_publico(token: str, request: Request):
             if p.get("ventana_desde") else None, "paradas_antes": antes, "tipo": p.get("tipo") or "entrega",
             # Dónde quedó (sin nombres ni fotos): «Entregado: en el buzón».
             "dejado": reparto.DONDE_ENTREGA.get(p.get("entrega_donde") or "") if p.get("estado") == "entregado" else None,
+            # LA ENTREGA VERIFICADA (01-11-2026): la IA vio el paquete en esta dirección. Solo el sí; nada de lo leído.
+            "verificada": p.get("estado") == "entregado" and (p.get("entrega_ia") or {}).get("nivel") == "verificada",
             # EL CLIENTE TE AYUDA ANTES DE LLEGAR (30-10-2026): lo que contestó, y si aún puede contestar.
             "respuesta": p.get("cliente_dice"), "puede_contestar": p.get("estado") in ("pendiente", "en_ruta"),
             # El registro del intento cuando no se pudo entregar: que vea que se llamó y se esperó.
@@ -53383,6 +53385,55 @@ def _rep_hora_hecho(valor) -> str:
     return ahora.isoformat()
 
 
+# LA ENTREGA VERIFICADA (01-11-2026, docs/SIGUIENTE-NIVEL-01-11.md §4): al dar por entregado con foto, la IA la mira
+# (el paquete, el número que se lee, un rótulo, personas) y la app avisa ANTES de que el repartidor se vaya si no cuadra;
+# nunca bloquea. El cliente ve «entrega verificada» en su enlace solo con el veredicto bueno. La petición espera hasta
+# _REP_IA_ESPERA segundos; si Gemini tarda más, el veredicto llega en segundo plano y la app lo ve al refrescar.
+# Sin GEMINI_API_KEY no pasa nada (como la IA de daños). Cuesta ≈0,001 € por foto.
+_REP_IA_ESPERA = 8.0
+
+
+def _rep_ia_entrega_activa() -> bool:
+    return bool(os.environ.get("GEMINI_API_KEY")) or os.environ.get("USE_VERTEX_AI", "").lower() in ("1", "true", "yes")
+
+
+async def _rep_ia_entrega_llamada(foto: str, direccion: str, cliente: str) -> dict:
+    """Una llamada a Gemini con la foto (data URL JPEG) y la parada. Devuelve el JSON tal cual, o levanta."""
+    import base64 as _b64
+    from google.genai import types as genai_types
+    datos = _b64.b64decode(foto.split(",", 1)[1])
+    prompt = (
+        "Esta es la foto de prueba de entrega de un paquete, hecha por el repartidor en el sitio donde lo deja. "
+        f"La parada es «{direccion}»" + (f" (cliente: «{cliente}»)" if cliente else "") + ". "
+        "Mira la foto y contesta SOLO con un JSON con estas claves: "
+        '"paquete_visible" (true si se ve un paquete, sobre o bulto; false si no), '
+        '"numero_visible" (el número de portal, casa o piso que se lea en la foto, tal cual, o null), '
+        '"rotulo" (el nombre de negocio o rótulo legible, o null), '
+        '"lugar" (uno de: puerta, portal, buzon, conserjeria, suelo, mano, interior, otro), '
+        '"personas" (true si se ve alguna persona o cara), '
+        '"coincide" (true si lo que se ve encaja con la dirección y el cliente, false si no, null si no hay con qué comparar). '
+        "No inventes: lo que no se lea, null.")
+    contents = [prompt, genai_types.Part.from_bytes(data=datos, mime_type="image/jpeg")]
+    return await _gemini_json_call(_gemini_client_plantilla(), _modelo_ia(), contents)
+
+
+async def _rep_ia_entrega(pid: str, direccion: str, cliente: str, foto: str) -> Optional[dict]:
+    """El veredicto de la IA sobre la foto de entrega, guardado en el pedido. None si la IA no contestó (y entonces
+    el «pendiente» que dejó la petición se quita, para que la app no espere nada)."""
+    try:
+        j = await _rep_ia_entrega_llamada(foto, direccion, cliente)
+    except Exception as e:                                       # noqa: BLE001
+        logger.warning(f"reparto: la IA no pudo mirar la foto de entrega de {pid}: {type(e).__name__}")
+        q = await db.reparto_pedidos.find_one({"id": pid}, {"_id": 0, "entrega_ia": 1})
+        if ((q or {}).get("entrega_ia") or {}).get("nivel") == "pendiente":
+            await db.reparto_pedidos.update_one({"id": pid}, {"$set": {"entrega_ia": None}})
+        return None
+    v = reparto.veredicto_entrega(j, direccion, cliente)
+    v["cuando"] = datetime.now(timezone.utc).isoformat()
+    await db.reparto_pedidos.update_one({"id": pid}, {"$set": {"entrega_ia": v}})
+    return v
+
+
 @api_router.post("/reparto/pedidos/{pid}/estado")
 async def reparto_estado(pid: str, data: dict = Body(...), user: dict = Depends(require_any_auth)):
     p = await db.reparto_pedidos.find_one({"id": pid}, {"_id": 0})
@@ -53448,8 +53499,17 @@ async def reparto_estado(pid: str, data: dict = Body(...), user: dict = Depends(
         cambios.update({"puerta_lat": puerta[0], "puerta_lng": puerta[1], "puerta_precision": puerta[2]})
     if e != "entregado":
         cambios.update({"entrega_foto": None, "entrega_nota": cambios.get("entrega_nota"), "entrega_firma": None,
-                        "entrega_donde": None, "entrega_recibe": None})
+                        "entrega_donde": None, "entrega_recibe": None, "entrega_ia": None})
+    # LA ENTREGA VERIFICADA (01-11-2026): con foto nueva, la IA la mira. Se deja «pendiente» ANTES de lanzarla (si
+    # acaba en segundo plano, su veredicto pisa el pendiente y no al revés) y se espera un poco por la respuesta.
+    elif foto and _rep_ia_entrega_activa():
+        cambios["entrega_ia"] = {"nivel": "pendiente", "aviso": None}
     await db.reparto_pedidos.update_one({"id": pid}, {"$set": cambios})
+    if (cambios.get("entrega_ia") or {}).get("nivel") == "pendiente":
+        tarea = asyncio.create_task(_rep_ia_entrega(pid, p.get("direccion") or "", p.get("cliente") or "", foto))
+        hecho, _ = await asyncio.wait({tarea}, timeout=_REP_IA_ESPERA)
+        if hecho:
+            cambios["entrega_ia"] = tarea.result()
     return {k: v for k, v in {**p, **cambios}.items() if k not in ("entrega_foto", "entrega_firma")}
 
 

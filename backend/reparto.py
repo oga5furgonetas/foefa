@@ -1046,6 +1046,68 @@ def puerta_valida(pos, lat, lng, precision_max: float = 50.0, metros_max: float 
     return (round(p[0], 6), round(p[1], 6), round(prec, 1))
 
 
+# LA ENTREGA VERIFICADA (01-11-2026): la IA mira la foto de entrega y dice si se ve el paquete, qué número se lee, si
+# hay un rótulo y si salen personas. De ahí sale un veredicto que la app enseña («verificada», o un aviso para repetir
+# la foto ahí mismo) y que el cliente ve en su enlace solo cuando es «verificada». Nunca bloquea: la IA se equivoca.
+# `aviso` es un código; cada app lo convierte en su frase (y lo traduce): personas, sin_paquete, otro_numero, sin_numero.
+NIVELES_IA = ("verificada", "parcial", "revisar", "pendiente")
+
+
+def numero_portal(direccion) -> str:
+    """El número de portal de una dirección: en el primer trozo (entre comas) que tenga alguno, el último número corto
+    que no sea un piso («2º», «3ªB») ni un código postal. «Rúa Nova 3, 2º» → 3; «Calle Real, 5, 2º» → 5;
+    «Calle 8 de Marzo 12» → 12; «Praza de Lugo s/n» → ''."""
+    for trozo in str(direccion or "").split(","):
+        nums = [m.group(1) for m in re.finditer(r"(?<![\d])(\d{1,4})(?![\d]|\s*[ºª°])", trozo)]
+        if nums:
+            return nums[-1]
+    return ""
+
+
+def _rotulo_cuadra(rotulo: str, cliente: str) -> bool:
+    """¿El rótulo que leyó la IA es el del cliente? Una palabra de 4+ letras en común basta («Farmacia Sol» y
+    «FARMACIA SOL, S.L.»)."""
+    a = set(re.findall(r"[a-z0-9]{4,}", norm(rotulo)))
+    b = set(re.findall(r"[a-z0-9]{4,}", norm(cliente)))
+    return bool(a & b)
+
+
+def veredicto_entrega(ia, direccion: str = "", cliente: str = "") -> dict:
+    """Lo que dijo la IA de la foto, convertido en veredicto:
+    · «verificada»: se ve el paquete y el número que se lee es el de la dirección (o el rótulo es el del cliente;
+      o, sin número en la dirección, la IA dice que cuadra);
+    · «revisar» (con aviso): se ven personas, no se ve el paquete, o el número de la foto no es el de la parada;
+    · «parcial»: se ve el paquete pero nada que diga que es ESA puerta (dentro del edificio, un buzón sin número):
+      con el aviso suave «sin_numero», que no pregunta nada.
+    Siempre vuelve lo leído (número, rótulo, lugar) para que la oficina lo vea."""
+    ia = ia if isinstance(ia, dict) else {}
+
+    def _si(v):
+        return v if isinstance(v, bool) else None
+
+    paquete, personas = _si(ia.get("paquete_visible")), _si(ia.get("personas"))
+    numero = _corto(ia.get("numero_visible"), 20) if ia.get("numero_visible") is not None else ""
+    rotulo = _corto(ia.get("rotulo"), 60) if ia.get("rotulo") is not None else ""
+    lugar = _corto(ia.get("lugar"), 20) if ia.get("lugar") is not None else ""
+    mio = numero_portal(direccion)
+    out = {"paquete": paquete, "personas": personas, "numero": numero or None, "portal": mio or None,
+           "rotulo": rotulo or None, "lugar": lugar or None}
+    if personas:
+        return {**out, "nivel": "revisar", "aviso": "personas"}
+    if paquete is False:
+        return {**out, "nivel": "revisar", "aviso": "sin_paquete"}
+    leidos = re.findall(r"\d{1,4}", numero)
+    if mio and leidos and mio not in leidos:
+        return {**out, "nivel": "revisar", "aviso": "otro_numero"}
+    if mio and leidos and mio in leidos:
+        return {**out, "nivel": "verificada", "aviso": None}
+    if rotulo and cliente and _rotulo_cuadra(rotulo, cliente):
+        return {**out, "nivel": "verificada", "aviso": None}
+    if not mio and paquete and _si(ia.get("coincide")) is True:
+        return {**out, "nivel": "verificada", "aviso": None}
+    return {**out, "nivel": "parcial", "aviso": "sin_numero" if paquete else None}
+
+
 def caja_de(puntos, margen: float = 0.0):
     """La caja (s, w, n, e) que envuelve unos puntos {lat, lng}, con un margen en grados. None sin puntos."""
     ps = [q for q in (_punto(p) for p in puntos) if q]

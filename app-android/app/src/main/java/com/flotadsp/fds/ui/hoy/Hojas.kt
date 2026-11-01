@@ -65,6 +65,7 @@ import androidx.exifinterface.media.ExifInterface
 import com.flotadsp.fds.BuildConfig
 import com.flotadsp.fds.data.Antes
 import com.flotadsp.fds.data.ClienteDice
+import com.flotadsp.fds.data.EntregaIa
 import com.flotadsp.fds.data.Parada
 import com.flotadsp.fds.ui.Acciones
 import com.flotadsp.fds.ui.LocalExtra
@@ -120,12 +121,53 @@ fun textoAntes(a: Antes): String {
     return tx("La última vez ({f}): {que}", "f" to f, "que" to que)
 }
 
+/** LA ENTREGA VERIFICADA (01-11-2026): lo que la IA dijo de la foto de entrega, en una frase (la web tiene la misma en
+ *  lib/entregaIa.js). El servidor manda el código y los datos; la frase se hace aquí, en su idioma. */
+fun textoAvisoIa(ia: EntregaIa): String = when (ia.aviso) {
+    "personas" -> tx("Se ven personas en la foto: repítela sin ellas.")
+    "sin_paquete" -> tx("No se ve el paquete en la foto: repítela con el paquete donde lo dejas.")
+    "otro_numero" -> tx("En la foto se lee el número {a} y la parada es el {b}: comprueba que es la puerta buena.", "a" to (ia.numero ?: ""), "b" to (ia.portal ?: ""))
+    "sin_numero" -> tx("No se ve el número del portal: la próxima vez, con el número o la puerta en la foto.")
+    else -> ""
+}
+
+/** LA ENTREGA VERIFICADA (01-11-2026): la IA pide mirar la foto de entrega. «Repetir la foto» abre la cámara y manda la
+ *  nueva (la parada sigue entregada; el servidor la vuelve a mirar); «Está bien así» la deja. Nunca bloquea. */
+@Composable
+fun RevisarFotoDialogo(r: Revisar, alRepetir: (String) -> Unit, alCerrar: () -> Unit) {
+    val ctx = LocalContext.current
+    val ambito = rememberCoroutineScope()
+    val uri = remember { fotoNueva(ctx) }
+    var preparando by remember { mutableStateOf(false) }
+    var avisoFoto by remember { mutableStateOf<String?>(null) }
+    val hacerFoto = rememberHacerFoto(uri, alAvisar = { avisoFoto = it }) { ok ->
+        if (ok) {
+            preparando = true
+            ambito.launch {
+                val f = withContext(Dispatchers.IO) { comprimir(ctx, uri) }?.first
+                preparando = false
+                if (f != null) alRepetir(f) else avisoFoto = tx("No se pudo guardar la foto")
+            }
+        }
+    }
+    AlertDialog(
+        onDismissRequest = alCerrar,
+        title = { Text(tx("Mira la foto de entrega")) },
+        text = { Text(listOfNotNull(textoAvisoIa(r.ia).takeIf { it.isNotBlank() },
+            tx("La foto es tu prueba si alguien dice que no le ha llegado. Puedes repetirla ahora o dejarla así."), avisoFoto).joinToString("\n\n")) },
+        confirmButton = { TextButton(onClick = hacerFoto, enabled = !preparando) { Text(if (preparando) tx("Guardando…") else tx("Repetir la foto")) } },
+        dismissButton = { TextButton(onClick = alCerrar) { Text(tx("Está bien así")) } },
+    )
+}
+
 @Composable
 fun ParadaHoja(
     p: Parada, prefijo: String, navegarCon: String, empresa: String = "",
     alCerrar: () -> Unit, alEntregar: () -> Unit, alFallar: () -> Unit, alDeshacer: () -> Unit, alEditar: () -> Unit, alQuitar: () -> Unit,
     /** El registro del intento (30-10-2026): «llamada» o «whatsapp» al pulsarlos. */
     alApuntar: (String) -> Unit = {},
+    /** LA ENTREGA VERIFICADA (01-11-2026): repetir la foto de una entrega que la IA pide revisar. */
+    alRepetirFoto: () -> Unit = {},
 ) {
     val ctx = LocalContext.current
     var quitar by remember { mutableStateOf(false) }
@@ -147,12 +189,16 @@ fun ParadaHoja(
                 p.hueco.takeIf { it.isNotBlank() }?.let { tx("En la furgoneta: {x}", "x" to it) },
                 if (p.ventanaDesde != null) tx("Horario: de {a} a {b}", "a" to p.ventanaDesde, "b" to p.ventanaHasta) else null,
                 p.motivo?.takeIf { it.isNotBlank() && p.estado == "fallido" }?.let { tx("Motivo: {x}", "x" to it) },
+                p.entregaIa?.takeIf { p.estado == "entregado" }?.let { if (it.nivel == "verificada") tx("Entrega verificada por IA") else textoAvisoIa(it).takeIf { t -> t.isNotBlank() } },
                 p.antes?.takeIf { p.pendiente }?.let { textoAntes(it) },
                 p.clienteDice?.let { textoClienteDice(it) }?.takeIf { it.isNotBlank() }?.let { tx("El cliente dice: {t}", "t" to it) },
             )
             if (datos.isNotEmpty()) {
                 Spacer(Modifier.height(12.dp))
                 datos.forEach { Text(it, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.padding(vertical = 2.dp)) }
+            }
+            if (p.estado == "entregado" && p.entregaIa?.nivel == "revisar") {
+                TextButton(onClick = alRepetirFoto) { Icon(Icons.Default.PhotoCamera, contentDescription = null); Spacer(Modifier.width(6.dp)); Text(tx("Repetir la foto")) }
             }
             Spacer(Modifier.height(16.dp))
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -323,7 +369,7 @@ fun NoEntregadoHoja(alCerrar: () -> Unit, alConfirmar: (String, String) -> Unit)
     }
 }
 
-private fun fotoNueva(ctx: Context): Uri {
+internal fun fotoNueva(ctx: Context): Uri {
     val f = File(ctx.cacheDir, "fotos").apply { mkdirs() }.resolve("entrega-${System.currentTimeMillis()}.jpg")
     return FileProvider.getUriForFile(ctx, "${ctx.packageName}.fotos", f)
 }
@@ -331,7 +377,7 @@ private fun fotoNueva(ctx: Context): Uri {
 /** La foto de la entrega en un JPEG pequeño (el servidor admite hasta 300 KB en base64) y su miniatura. Derecha:
  *  la cámara guarda muchas fotos giradas y lo dice en el EXIF, que al recomprimir se pierde; sin girarla aquí, la
  *  oficina y el cliente la veían tumbada (29-10-2026; la auditoría ya lo hacía). */
-private fun comprimir(ctx: Context, uri: Uri): Pair<String, Bitmap>? = runCatching {
+internal fun comprimir(ctx: Context, uri: Uri): Pair<String, Bitmap>? = runCatching {
     val opc = BitmapFactory.Options().apply { inJustDecodeBounds = true }
     ctx.contentResolver.openInputStream(uri)?.use { BitmapFactory.decodeStream(it, null, opc) }
     var muestra = 1

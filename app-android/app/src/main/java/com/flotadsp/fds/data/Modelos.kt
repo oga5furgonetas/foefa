@@ -61,6 +61,8 @@ data class Parada(
     @SerialName("entrega_donde") val entregaDonde: String? = null,
     @SerialName("entrega_recibe") val entregaRecibe: String? = null,
     @SerialName("entrega_nota") val entregaNota: String? = null,
+    /** LA ENTREGA VERIFICADA (01-11-2026): lo que dijo la IA de la foto de entrega (null = sin IA o sin foto). */
+    @SerialName("entrega_ia") val entregaIa: EntregaIa? = null,
     val ejemplo: Boolean = false,
     val escaneos: Int = 0,
     /** El enlace de seguimiento del cliente (token de /s/…), para el WhatsApp. */
@@ -100,6 +102,11 @@ data class Base(val direccion: String? = null, val lat: Double? = null, val lng:
 
 @Serializable
 data class Antes(val fecha: String = "", val estado: String = "", val nota: String = "", val donde: String = "", val motivo: String = "")
+
+/** LA ENTREGA VERIFICADA (01-11-2026): lo que dijo la IA de la foto de entrega. `nivel`: verificada, parcial, revisar o
+ *  pendiente; `aviso`, un código (personas, sin_paquete, otro_numero, sin_numero) que la app convierte en frase. */
+@Serializable
+data class EntregaIa(val nivel: String = "", val aviso: String? = null, val numero: String? = null, val portal: String? = null, val lugar: String? = null)
 
 /** EL CLIENTE TE AYUDA ANTES DE LLEGAR (30-10-2026): lo que contestó en su enlace. Mismas claves que el servidor. */
 @Serializable

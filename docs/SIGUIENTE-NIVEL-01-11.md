@@ -91,6 +91,10 @@ en los últimos 50 metros (el portal, el cliente), después (el dinero y la prue
 - **Quién lo tiene.** Amazon (dentro), HERE (beta). Spoke/Routal, no.
 
 ### 4. Comprobación de puerta con IA: la entrega que nadie puede discutir (2 días)
+> **HECHA el 01-11-2026 (mañana), en servidor, web y nativa** (ver `ESTADO.md`). Lo que difiere de lo de abajo: se
+> pregunta solo cuando algo está mal (personas, sin paquete, otro número); una foto sin número visible queda «parcial»
+> con una nota y no pregunta; y la petición espera 8 s por la IA y el resto llega en segundo plano.
+
 - **Qué es.** Al hacer la foto de entrega, Gemini Flash mira si sale el número o el portal de ESA dirección, si se ve
   el paquete y si el sitio es razonable (buzón, puerta, conserje). Si no cuadra, avisa ANTES de marcar entregado
   («no se ve el número; haz la foto con la puerta»). La parada queda «entrega verificada» y el enlace del cliente lo

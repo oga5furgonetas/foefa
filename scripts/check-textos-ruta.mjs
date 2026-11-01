@@ -22,6 +22,8 @@ const FICHEROS = [
   'panel/pages/Reparto.jsx',
   // La carga guiada y el briefing por voz (01-11-2026).
   'pages/driver/CargaGuiada.jsx', 'lib/briefing.js',
+  // La entrega verificada (01-11-2026): lo que la IA dijo de la foto, en una frase.
+  'lib/entregaIa.js',
 ]
 // Nombres que llegan de datos (el plan del autónomo en Registro: tt(planInfo.name)).
 // y los métodos de cobro de lib/region.js (metodosCobro), que se pintan con tx(t).

@@ -5,8 +5,10 @@ import android.app.Application
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.flotadsp.fds.FdsApp
+import com.flotadsp.fds.data.EntregaIa
 import com.flotadsp.fds.data.ErrorApi
 import com.flotadsp.fds.data.Incidencias
+import com.flotadsp.fds.data.JSON
 import com.flotadsp.fds.data.MiRuta
 import com.flotadsp.fds.data.Parada
 import com.flotadsp.fds.data.Zbe
@@ -20,6 +22,9 @@ import kotlinx.coroutines.launch
 import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.contentOrNull
+import kotlinx.serialization.json.decodeFromJsonElement
+import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.put
 
 data class EstadoRuta(
@@ -45,6 +50,10 @@ data class EstadoRuta(
 /** Un aviso para la persona (abajo, como en cualquier app), con una acción opcional («Deshacer»). */
 data class Aviso(val texto: String, val accion: String? = null, val alPulsar: (() -> Unit)? = null)
 
+/** LA ENTREGA VERIFICADA (01-11-2026): la IA pide mirar la foto de entrega de esta parada; `metodo`, cómo cobró, para
+ *  volver a mandar «entregado» con la foto nueva. */
+data class Revisar(val parada: Parada, val ia: EntregaIa, val metodo: String?)
+
 class RutaVM(app: Application) : AndroidViewModel(app) {
     private val repo = (app as FdsApp).repo
     private val _e = MutableStateFlow(EstadoRuta())
@@ -52,6 +61,17 @@ class RutaVM(app: Application) : AndroidViewModel(app) {
     private val _avisos = Channel<Aviso>(Channel.BUFFERED)
     val avisos = _avisos.receiveAsFlow()
     val pendientesDeEnvio = repo.pendientes
+    private val _revisar = MutableStateFlow<Revisar?>(null)
+    /** LA ENTREGA VERIFICADA (01-11-2026): la parada cuya foto pide mirar la IA (un diálogo en Hoy), o null. */
+    val revisar: StateFlow<Revisar?> = _revisar
+    fun revisado() { _revisar.value = null }
+    /** Desde la ficha de una parada entregada con aviso: volver a preguntar. */
+    fun pedirRevisar(p: Parada) { p.entregaIa?.let { _revisar.value = Revisar(p, it, p.cobradoMetodo) } }
+    /** La foto nueva: la parada sigue entregada; el servidor la vuelve a mirar. */
+    fun repetirFoto(r: Revisar, foto: String) {
+        _revisar.value = null
+        entregar(r.parada, buildJsonObject { put("foto", foto); if (r.parada.porCobrar) put("metodo", r.metodo ?: "pagado") })
+    }
     private val cuenta = (app as FdsApp).cuenta
 
     init {
@@ -145,7 +165,14 @@ class RutaVM(app: Application) : AndroidViewModel(app) {
                         put("posicion", buildJsonObject { put("lat", la); put("lng", lo); put("precision", prec) })
                     }
                 }
-                val enviado = repo.cambiarEstado(p.id, estado, JsonObject(cuerpo + extras), p.cliente.ifBlank { p.direccion })
+                val respuesta = repo.cambiarEstado(p.id, estado, JsonObject(cuerpo + extras), p.cliente.ifBlank { p.direccion })
+                val enviado = respuesta != null
+                // LA ENTREGA VERIFICADA (01-11-2026): si la IA pide mirar la foto, se pregunta ahí mismo (nunca bloquea).
+                if (estado == "entregado" && cuerpo.containsKey("foto")) respuesta?.get("entrega_ia")?.let { ia ->
+                    runCatching { JSON.decodeFromJsonElement<EntregaIa>(ia) }.getOrNull()?.takeIf { it.nivel == "revisar" }?.let {
+                        _revisar.value = Revisar(p, it, respuesta["cobrado_metodo"]?.jsonPrimitive?.contentOrNull)
+                    }
+                }
                 if (estado != "pendiente") intentos.remove(p.id)
                 val t = if (enviado) texto else "$texto " + tx("Sin cobertura: se envía solo al volver la red.")
                 _avisos.send(if (conDeshacer) Aviso(t, "Deshacer") { deshacer(p) } else Aviso(t))

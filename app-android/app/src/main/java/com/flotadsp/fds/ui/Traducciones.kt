@@ -1,6 +1,6 @@
 package com.flotadsp.fds.ui
 
-/* GENERADO por scripts/nativa-idioma.mjs (30-10-2026): no editar a mano. 678 textos de la app nativa con sus
+/* GENERADO por scripts/nativa-idioma.mjs (30-10-2026): no editar a mano. 688 textos de la app nativa con sus
    traducciones (en, pt, fr, it, de), sacadas de la web (frontend/src/lib/textosRuta*.js) y de
    app-android/traducciones-nativa.json. Una fila por línea, columnas con TAB; ⏎ es un salto de línea. En bloques
    porque una constante de Kotlin no puede pasar de 64 KB. */
@@ -140,6 +140,7 @@ Elige cómo ha pagado	Choose how they paid	Escolhe como pagou	Choisissez comment
 Elige la furgoneta de hoy	Choose today’s van	Escolhe a carrinha de hoje	Choisissez la camionnette du jour	Scegli il furgone di oggi	Wähle den Transporter für heute
 Elige tu contraseña	Choose your password	Escolhe a tua palavra-passe	Choisissez votre mot de passe	Scegli la tua password	Wähle dein Passwort
 En el buzón	In the mailbox	Na caixa do correio	Dans la boîte aux lettres	Nella cassetta postale	Im Briefkasten
+En la foto se lee el número {a} y la parada es el {b}: comprueba que es la puerta buena.	The photo shows number {a} and the stop is number {b}: check it’s the right door.	Na foto lê-se o número {a} e a paragem é o {b}: confirma que é a porta certa.	Sur la photo on lit le numéro {a} et l’arrêt est au {b} : vérifie que c’est la bonne porte.	Nella foto si legge il numero {a} e la fermata è il {b}: controlla che sia la porta giusta.	Auf dem Foto steht die Nummer {a}, der Stopp ist Nummer {b}: prüf, ob es die richtige Tür ist.
 En la furgoneta: {x}	In the van: {x}	Na carrinha: {x}	Dans la camionnette : {x}	Nel furgone: {x}	Im Transporter: {x}
 En mano	In person	Em mão	En main propre	A mano	Persönlich
 En portería	At reception	Na portaria	À la loge	In portineria	Beim Pförtner
@@ -152,6 +153,7 @@ Entrar	Log in	Entrar	Se connecter	Accedi	Anmelden
 Entrar con código	Sign in with a code	Entrar com código	Se connecter avec un code	Entra con un codice	Mit Code anmelden
 Entrar con un código en mi correo personal	Sign in with a code sent to my personal email	Entrar com um código no meu e-mail pessoal	Me connecter avec un code envoyé à mon e-mail personnel	Accedi con un codice sulla mia email personale	Mit einem Code an meine private E-Mail anmelden
 Entrega	Delivery	Entrega	Livraison	Consegna	Zustellung
+Entrega verificada por IA	Delivery verified by AI	Entrega verificada por IA	Livraison vérifiée par l’IA	Consegna verificata dall’IA	Zustellung per KI bestätigt
 Entregado	Delivered	Entregue	Livré	Consegnato	Zugestellt
 Entregado: {n}.	Delivered: {n}.	Entregue: {n}.	Livré : {n}.	Consegnato: {n}.	Zugestellt: {n}.
 Entregar	Deliver	Entregar	Livrer	Consegna	Zustellen
@@ -204,16 +206,17 @@ Este móvil no tiene una app de cámara para hacer la foto.	This phone has no ca
 Este regalo es para el plan Repartidor	This gift is for the Driver plan	Esta oferta é para o plano Estafeta	Ce cadeau est pour l’offre Livreur	Questo regalo è per il piano Corriere	Dieses Geschenk ist für den Fahrer-Tarif
 Esto es para el móvil del conductor	This is for the driver’s phone	Isto é para o telemóvel do motorista	Ceci est pour le téléphone du chauffeur	Questo è per il telefono dell’autista	Das ist für das Handy des Fahrers
 Estoy usando FDS para organizar repartos. Pruébala: {enlace}⏎⏎Si te registras con mi enlace y completas {e} entregas reales en varios días, puedo ganar {x}. Es una invitación personal, no vinculada a mi empresa.	I’m using FDS to organise deliveries. Try it: {enlace}⏎⏎If you sign up with my link and complete {e} real deliveries over several days, I can earn {x}. This is a personal invitation, not linked to my company.	Estou a usar o FDS para organizar entregas. Experimenta: {enlace}⏎⏎Se te registares com o meu link e completares {e} entregas reais em vários dias, posso ganhar {x}. É um convite pessoal, não ligado à minha empresa.	J’utilise FDS pour organiser mes livraisons. Essayez-la : {enlace}⏎⏎Si vous vous inscrivez avec mon lien et réalisez {e} livraisons réelles sur plusieurs jours, je peux gagner {x}. C’est une invitation personnelle, sans lien avec mon entreprise.	Uso FDS per organizzare le consegne. Provala: {enlace}⏎⏎Se ti registri con il mio link e completi {e} consegne reali in più giorni, posso guadagnare {x}. È un invito personale, non legato alla mia azienda.	Ich nutze FDS, um Lieferungen zu organisieren. Probier es aus: {enlace}⏎⏎Wenn du dich über meinen Link registrierst und {e} echte Lieferungen an mehreren Tagen machst, kann ich {x} verdienen. Das ist eine persönliche Einladung, unabhängig von meiner Firma.
+Está bien así	It’s fine as it is	Está bem assim	C’est bon comme ça	Va bene così	So ist es gut
 Etiquetas	Stickers	Etiquetas	Vignettes	Etichette	Plaketten
 Explica brevemente el motivo (obligatorio)	Briefly explain the reason (required)	Explica brevemente o motivo (obrigatório)	Expliquez brièvement le motif (obligatoire)	Spiega brevemente il motivo (obbligatorio)	Erkläre kurz den Grund (Pflicht)
 FDS {v} ya está lista.	FDS {v} is ready.	O FDS {v} já está pronto.	FDS {v} est prête.	FDS {v} è pronta.	FDS {v} ist da.
 Falta el orden	The order is missing	Falta a ordem	L’ordre manque	Manca l’ordine	Die Reihenfolge fehlt
-Falta la compra	The purchase is missing	Falta a compra	L’achat manque	Manca l’acquisto	Der Kauf fehlt
+""",
+        """Falta la compra	The purchase is missing	Falta a compra	L’achat manque	Manca l’acquisto	Der Kauf fehlt
 Falta la dirección de entrega	The delivery address is missing	Falta a morada de entrega	L’adresse de livraison manque	Manca l’indirizzo di consegna	Die Lieferadresse fehlt
 Faltan {n}: la contraseña tiene que tener 6 caracteres o más.	{n} more needed: the password must be 6 characters or more.	Faltam {n}: a palavra-passe tem de ter 6 caracteres ou mais.	Il en manque {n} : le mot de passe doit faire 6 caractères ou plus.	Ne mancano {n}: la password deve avere 6 caratteri o più.	Es fehlen {n}: Das Passwort braucht mindestens 6 Zeichen.
 Familia	Family	Família	Famille	Famiglia	Familie
-""",
-        """Fijo por día, si te pagan así ({moneda})	Fixed per day, if that’s how you’re paid ({moneda})	Fixo por dia, se te pagam assim ({moneda})	Fixe par jour, si vous êtes payé ainsi ({moneda})	Fisso al giorno, se ti pagano così ({moneda})	Tagespauschale, falls du so bezahlt wirst ({moneda})
+Fijo por día, si te pagan así ({moneda})	Fixed per day, if that’s how you’re paid ({moneda})	Fixo por dia, se te pagam assim ({moneda})	Fixe par jour, si vous êtes payé ainsi ({moneda})	Fisso al giorno, se ti pagano così ({moneda})	Tagespauschale, falls du so bezahlt wirst ({moneda})
 Foto de la entrega	Delivery photo	Foto da entrega	Photo de la livraison	Foto della consegna	Zustellfoto
 Foto de la rueda (opcional)	Photo of the wheel (optional)	Foto da roda (opcional)	Photo de la roue (facultatif)	Foto della ruota (facoltativa)	Foto des Rads (optional)
 Foto del combustible	Photo of the fuel gauge	Foto do combustível	Photo du niveau de carburant	Foto del carburante	Foto der Tankanzeige
@@ -238,6 +241,7 @@ Gratis y sin límite hasta el {fecha} · sin tarjeta	Free and unlimited until {f
 Gratis y sin límite hasta el {f}.	Free and unlimited until {f}.	Grátis e sem limite até {f}.	Gratuit et illimité jusqu’au {f}.	Gratis e senza limiti fino al {f}.	Kostenlos und unbegrenzt bis {f}.
 Guardado.	Saved.	Guardado.	Enregistré.	Salvato.	Gespeichert.
 Guardado: lo verás en «Hoy».	Saved: you will see it in “Today”.	Guardado: vais vê-lo em «Hoje».	Enregistré : vous le verrez dans « Aujourd’hui ».	Salvato: lo vedrai in «Oggi».	Gespeichert: Du siehst es unter „Heute“.
+Guardando…	Saving…	A guardar…	Enregistrement…	Salvataggio…	Wird gespeichert…
 Guardar	Save	Guardar	Enregistrer	Salva	Speichern
 Guardar cambios	Save changes	Guardar alterações	Enregistrer les modifications	Salva le modifiche	Änderungen speichern
 Guardar contraseña	Save password	Guardar palavra-passe	Enregistrer le mot de passe	Salva password	Passwort speichern
@@ -278,6 +282,7 @@ La contraseña debe tener al menos 8 caracteres	The password must be at least 8 
 La contraseña debe tener al menos 8 caracteres.	The password must be at least 8 characters.	A palavra-passe deve ter pelo menos 8 caracteres.	Le mot de passe doit contenir au moins 8 caractères.	La password deve avere almeno 8 caratteri.	Das Passwort muss mindestens 8 Zeichen haben.
 La contraseña nueva debe tener al menos 6 caracteres.	The new password must have at least 6 characters.	A palavra-passe nova tem de ter pelo menos 6 caracteres.	Le nouveau mot de passe doit faire au moins 6 caractères.	La nuova password deve avere almeno 6 caratteri.	Das neue Passwort braucht mindestens 6 Zeichen.
 La foto de entrega tiene que ser un JPEG pequeño	The delivery photo must be a small JPEG	A foto de entrega tem de ser um JPEG pequeno	La photo de livraison doit être un petit JPEG	La foto di consegna deve essere un JPEG piccolo	Das Zustellfoto muss ein kleines JPEG sein
+La foto es tu prueba si alguien dice que no le ha llegado. Puedes repetirla ahora o dejarla así.	The photo is your proof if someone says it never arrived. You can take it again now or leave it as it is.	A foto é a tua prova se alguém disser que não recebeu. Podes repeti-la agora ou deixá-la assim.	La photo est ta preuve si quelqu’un dit ne rien avoir reçu. Tu peux la refaire maintenant ou la laisser telle quelle.	La foto è la tua prova se qualcuno dice che non gli è arrivato. Puoi rifarla ora o lasciarla così.	Das Foto ist dein Nachweis, falls jemand sagt, es sei nie angekommen. Du kannst es jetzt wiederholen oder so lassen.
 La foto no dio una lectura fiable. Indica los kilómetros reales (entre {min} y {max}; último registro {km}, hace {dias} días).	The photo did not give a reliable reading. Enter the real kilometres (between {min} and {max}; last record {km}, {dias} days ago).	A foto não deu uma leitura fiável. Indica os quilómetros reais (entre {min} e {max}; último registo {km}, há {dias} dias).	La photo n’a pas donné une lecture fiable. Indiquez les kilomètres réels (entre {min} et {max} ; dernier relevé {km}, il y a {dias} jours).	La foto non ha dato una lettura affidabile. Indica i chilometri reali (tra {min} e {max}; ultima registrazione {km}, {dias} giorni fa).	Das Foto ergab keinen verlässlichen Wert. Gib den echten Kilometerstand ein (zwischen {min} und {max}; letzter Eintrag {km}, vor {dias} Tagen).
 La foto se guardó; no se pudo verificar ahora.	The photo was saved; it could not be checked right now.	A foto foi guardada; não foi possível verificá-la agora.	La photo a été enregistrée ; elle n’a pas pu être vérifiée pour l’instant.	La foto è stata salvata; non è stato possibile verificarla ora.	Das Foto wurde gespeichert, konnte aber gerade nicht geprüft werden.
 La foto, del paquete en la puerta: sin personas.	The photo, of the parcel at the door: no people.	A foto, da encomenda à porta: sem pessoas.	La photo, du colis devant la porte : sans personnes.	La foto, del pacco alla porta: senza persone.	Das Foto zeigt das Paket an der Tür: keine Personen.
@@ -325,6 +330,7 @@ Mes siguiente	Next month	Mês seguinte	Mois suivant	Mese successivo	Nächster Mo
 Mi cuenta	My account	A minha conta	Mon compte	Il mio account	Mein Konto
 Mi dinero hoy	My money today	O meu dinheiro hoje	Mon argent aujourd’hui	I miei soldi oggi	Mein Geld heute
 Mi ruta	My route	A minha rota	Ma tournée	Il mio percorso	Meine Route
+Mira la foto de entrega	Check the delivery photo	Vê a foto da entrega	Regarde la photo de livraison	Guarda la foto di consegna	Sieh dir das Zustellfoto an
 Mis turnos	My shifts	Os meus turnos	Mes créneaux	I miei turni	Meine Schichten
 Mis turnos y días libres	My shifts and days off	Os meus turnos e dias livres	Mes services et jours de repos	I miei turni e giorni liberi	Meine Schichten und freien Tage
 Motivo: {x}	Reason: {x}	Motivo: {x}	Motif : {x}	Motivo: {x}	Grund: {x}
@@ -367,11 +373,14 @@ No se pudieron leer los kilómetros. Revisa la foto y escribe el valor dentro de
 No se pudo abrir la cámara. Comprueba que tienes una aplicación de cámara instalada.	The camera could not be opened. Check that you have a camera app installed.	Não foi possível abrir a câmara. Confirma que tens uma app de câmara instalada.	L’appareil photo n’a pas pu s’ouvrir. Vérifiez qu’une application appareil photo est installée.	Non è stato possibile aprire la fotocamera. Controlla di avere un’app fotocamera installata.	Die Kamera konnte nicht geöffnet werden. Prüfe, ob eine Kamera-App installiert ist.
 No se pudo codificar la imagen	The image could not be encoded	Não foi possível codificar a imagem	L’image n’a pas pu être encodée	Non è stato possibile codificare l’immagine	Das Bild konnte nicht kodiert werden
 No se pudo enviar la inspección. Las fotos siguen guardadas en esta pantalla; vuelve a intentarlo con conexión.	The inspection could not be sent. The photos are still saved on this screen; try again when you have a connection.	Não foi possível enviar a inspeção. As fotos continuam guardadas neste ecrã; tenta outra vez com ligação.	L’inspection n’a pas pu être envoyée. Les photos restent enregistrées sur cet écran ; réessayez avec une connexion.	Non è stato possibile inviare l’ispezione. Le foto restano salvate in questa schermata; riprova con la connessione.	Die Inspektion konnte nicht gesendet werden. Die Fotos bleiben auf diesem Bildschirm gespeichert; versuche es mit Verbindung erneut.
+No se pudo guardar la foto	Couldn’t save the photo	Não foi possível guardar a foto	Impossible d’enregistrer la photo	Impossibile salvare la foto	Foto konnte nicht gespeichert werden
 No se pudo leer la imagen	The image could not be read	Não foi possível ler a imagem	L’image n’a pas pu être lue	Non è stato possibile leggere l’immagine	Das Bild konnte nicht gelesen werden
 No se pudo preparar la foto. Inténtalo de nuevo.	The photo could not be prepared. Try again.	Não foi possível preparar a foto. Tenta outra vez.	La photo n’a pas pu être préparée. Réessayez.	Non è stato possibile preparare la foto. Riprova.	Das Foto konnte nicht vorbereitet werden. Versuche es noch einmal.
 No se pudo procesar la foto. Inténtalo de nuevo.	The photo could not be processed. Try again.	Não foi possível processar a foto. Tenta outra vez.	La photo n’a pas pu être traitée. Réessayez.	Non è stato possibile elaborare la foto. Riprova.	Das Foto konnte nicht verarbeitet werden. Versuche es noch einmal.
 No se pudo procesar la imagen	The image could not be processed	Não foi possível processar a imagem	L’image n’a pas pu être traitée	Non è stato possibile elaborare l’immagine	Das Bild konnte nicht verarbeitet werden
 No se puede solicitar este día desde aquí.	This day can’t be requested from here.	Não é possível pedir este dia a partir daqui.	Ce jour ne peut pas être demandé d’ici.	Questo giorno non si può richiedere da qui.	Dieser Tag kann hier nicht beantragt werden.
+No se ve el número del portal: la próxima vez, con el número o la puerta en la foto.	The door number isn’t visible: next time, get the number or the door in the photo.	Não se vê o número da porta: da próxima vez, com o número ou a porta na foto.	On ne voit pas le numéro de l’immeuble : la prochaine fois, avec le numéro ou la porte sur la photo.	Non si vede il numero civico: la prossima volta, con il numero o la porta nella foto.	Die Hausnummer ist nicht zu sehen: beim nächsten Mal mit der Nummer oder der Tür auf dem Foto.
+No se ve el paquete en la foto: repítela con el paquete donde lo dejas.	The parcel isn’t visible in the photo: take it again with the parcel where you leave it.	Não se vê a encomenda na foto: repete-a com a encomenda onde a deixas.	On ne voit pas le colis sur la photo : refais-la avec le colis là où tu le laisses.	Nella foto non si vede il pacco: rifalla con il pacco dove lo lasci.	Das Paket ist auf dem Foto nicht zu sehen: mach es noch einmal mit dem Paket dort, wo du es ablegst.
 No tienes entregas pendientes.	You have no deliveries pending.	Não tens entregas pendentes.	Vous n’avez aucune livraison en attente.	Non hai consegne in sospeso.	Du hast keine offenen Lieferungen.
 No tienes permiso para esto.	You do not have permission for this.	Não tens permissão para isto.	Vous n’avez pas l’autorisation pour cela.	Non hai il permesso per questo.	Dafür hast du keine Berechtigung.
 No tienes una suscripción con tarjeta	You don’t have a card subscription	Não tem uma subscrição com cartão	Vous n’avez pas d’abonnement par carte	Non hai un abbonamento con carta	Du hast kein Abo mit Karte
@@ -379,7 +388,8 @@ Nombre y apellidos del titular	Account holder’s full name	Nome completo do tit
 Nota (opcional)	Note (optional)	Nota (opcional)	Note (facultatif)	Nota (facoltativa)	Notiz (optional)
 Nota de oficina: {n}	Office note: {n}	Nota do escritório: {n}	Note du bureau : {n}	Nota dell’ufficio: {n}	Hinweis vom Büro: {n}
 Nota para la oficina (opcional)	Note for the office (optional)	Nota para o escritório (opcional)	Note pour le bureau (facultatif)	Nota per l’ufficio (facoltativa)	Notiz für das Büro (optional)
-Notas (opcional)	Notes (optional)	Notas (opcional)	Notes (facultatif)	Note (facoltative)	Notizen (optional)
+""",
+        """Notas (opcional)	Notes (optional)	Notas (opcional)	Notes (facultatif)	Note (facoltative)	Notizen (optional)
 Notas (portal, piso…)	Notes (door code, floor…)	Notas (portão, andar…)	Notes (interphone, étage…)	Note (portone, piano…)	Notizen (Eingang, Etage …)
 Notas: {x}	Notes: {x}	Notas: {x}	Notes : {x}	Note: {x}	Hinweise: {x}
 Nueva contraseña	New password	Nova palavra-passe	Nouveau mot de passe	Nuova password	Neues Passwort
@@ -393,8 +403,7 @@ Para avisarte de las restricciones por placa (rodízio, Hoy No Circula, pico y p
 Para continuar, acepta los Términos y la Política de Privacidad.	To continue, accept the Terms and the Privacy Policy.	Para continuar, aceita os Termos e a Política de Privacidade.	Pour continuer, acceptez les Conditions et la Politique de confidentialité.	Per continuare, accetta i Termini e l’Informativa sulla privacy.	Um fortzufahren, akzeptiere die Nutzungsbedingungen und die Datenschutzerklärung.
 Para escanear hace falta la cámara	The camera is needed to scan	Para ler é precisa a câmara	L’appareil photo est nécessaire pour scanner	Per scansionare serve la fotocamera	Zum Scannen wird die Kamera gebraucht
 Para usar la app desde China hace falta tu consentimiento para tratar tus datos fuera de China.	To use the app from China, your consent to process your data outside China is required.	Para usar a app a partir da China é preciso o seu consentimento para tratar os seus dados fora da China.	Pour utiliser l’app depuis la Chine, votre consentement au traitement de vos données hors de Chine est nécessaire.	Per usare l’app dalla Cina serve il tuo consenso al trattamento dei dati fuori dalla Cina.	Um die App aus China zu nutzen, brauchen wir deine Zustimmung zur Verarbeitung deiner Daten außerhalb Chinas.
-""",
-        """Para volver a ella a pie sin dar vueltas. Se queda solo en este móvil.	So you can walk back to it without wandering. It stays only on this phone.	Para voltar a pé sem dar voltas. Fica só neste telemóvel.	Pour y revenir à pied sans tourner en rond. Ça reste uniquement sur ce téléphone.	Per tornarci a piedi senza girare a vuoto. Resta solo su questo telefono.	Damit du ohne Umwege zu Fuß zurückfindest. Bleibt nur auf diesem Handy.
+Para volver a ella a pie sin dar vueltas. Se queda solo en este móvil.	So you can walk back to it without wandering. It stays only on this phone.	Para voltar a pé sem dar voltas. Fica só neste telemóvel.	Pour y revenir à pied sans tourner en rond. Ça reste uniquement sur ce téléphone.	Per tornarci a piedi senza girare a vuoto. Resta solo su questo telefono.	Damit du ohne Umwege zu Fuß zurückfindest. Bleibt nur auf diesem Handy.
 Para volver a entrar necesitarás tu correo y tu contraseña.	To sign in again you will need your email and password.	Para voltar a entrar vais precisar do teu e-mail e da tua palavra-passe.	Pour vous reconnecter, il vous faudra votre e-mail et votre mot de passe.	Per accedere di nuovo ti serviranno email e password.	Zum erneuten Anmelden brauchst du E-Mail und Passwort.
 Parada quitada de tu ruta.	Stop removed from your route.	Paragem retirada da tua rota.	Arrêt retiré de votre tournée.	Fermata tolta dal tuo giro.	Stopp aus deiner Route entfernt.
 Parada {n}	Stop {n}	Paragem {n}	Arrêt {n}	Fermata {n}	Stopp {n}
@@ -456,6 +465,7 @@ Se avisará a la oficina de que no puedes ir al turno extra.	The office will be 
 Se borra la prueba de entrega de {n}: la foto, dónde se dejó, quién lo recogió y la hora.	The proof of delivery for {n} is deleted: the photo, where it was left, who received it and the time.	Apaga-se a prova de entrega de {n}: a foto, onde ficou, quem a recebeu e a hora.	La preuve de livraison de {n} est supprimée : la photo, où il a été laissé, qui l’a reçu et l’heure.	Si cancella la prova di consegna di {n}: la foto, dove è stato lasciato, chi l’ha ritirato e l’ora.	Der Zustellnachweis für {n} wird gelöscht: Foto, Ablageort, Empfänger und Uhrzeit.
 Se pone al día sola al volver la red.	It catches up by itself when the network is back.	Atualiza-se sozinha quando voltar a rede.	Elle se met à jour toute seule au retour du réseau.	Si aggiorna da sola quando torna la rete.	Sie aktualisiert sich von selbst, sobald das Netz zurück ist.
 Se puede regalar 1 mes o 1 año	You can give 1 month or 1 year	Pode oferecer 1 mês ou 1 ano	Vous pouvez offrir 1 mois ou 1 an	Si può regalare 1 mese o 1 anno	Du kannst 1 Monat oder 1 Jahr verschenken
+Se ven personas en la foto: repítela sin ellas.	There are people in the photo: take it again without them.	Veem-se pessoas na foto: repete-a sem elas.	On voit des personnes sur la photo : refais-la sans elles.	Si vedono persone nella foto: rifalla senza di loro.	Auf dem Foto sind Personen zu sehen: mach es noch einmal ohne sie.
 Seguir dentro	Stay	Continuar dentro	Rester	Resta	Bleiben
 Seguir revisando	Keep checking	Continuar a rever	Continuer la vérification	Continua a controllare	Weiter prüfen
 Seguirme	Follow me	Seguir-me	Me suivre	Seguimi	Mir folgen
@@ -578,7 +588,8 @@ a hacer la recogida	to pick up	para fazer a recolha	pour l’enlèvement	per il 
 a la derecha	right	à direita	à droite	a destra	rechts
 a la izquierda	left	à esquerda	à gauche	a sinistra	links
 a {km} km de la parada {n}	{km} km from stop {n}	a {km} km da paragem {n}	à {km} km de l’arrêt {n}	a {km} km dalla fermata {n}	{km} km von Stopp {n}
-a {km} km de tu ruta	{km} km from your route	a {km} km da sua rota	à {km} km de votre tournée	a {km} km dal tuo giro	{km} km von deiner Route
+""",
+        """a {km} km de tu ruta	{km} km from your route	a {km} km da sua rota	à {km} km de votre tournée	a {km} km dal tuo giro	{km} km von deiner Route
 acceso cerrado	entry/exit closed	acesso fechado	accès fermé	accesso chiuso	Auf-/Abfahrt gesperrt
 accidente	accident	acidente	accident	incidente	Unfall
 animales en la vía	animals on the road	animais na via	animaux sur la chaussée	animali sulla strada	Tiere auf der Fahrbahn
@@ -612,8 +623,7 @@ día	day	dia	jour	giorno	Tag
 días	days	dias	jours	giorni	Tagen
 el cliente dice: {t}	the customer says: {t}	o cliente diz: {t}	le client dit : {t}	il cliente dice: {t}	der Kunde sagt: {t}
 el repartidor	your driver	o estafeta	le livreur	il corriere	der Fahrer
-""",
-        """el repartidor de {empresa}	the {empresa} driver	o estafeta da {empresa}	le livreur de {empresa}	il corriere di {empresa}	der Fahrer von {empresa}
+el repartidor de {empresa}	the {empresa} driver	o estafeta da {empresa}	le livreur de {empresa}	il corriere di {empresa}	der Fahrer von {empresa}
 en la furgoneta, {s}	in the van, {s}	na carrinha, {s}	dans la camionnette, {s}	nel furgone, {s}	im Transporter {s}
 en medio	in the middle	no meio	au milieu	in mezzo	in der Mitte
 entrega	delivery	entrega	livraison	consegna	Zustellung
@@ -692,7 +702,7 @@ ya estaban	were already there	já estavam	étaient déjà là	c’erano già	war
 
     /** { español -> [en, pt, fr, it, de] } */
     val MAPA: Map<String, Array<String>> by lazy {
-        val m = HashMap<String, Array<String>>(1356)
+        val m = HashMap<String, Array<String>>(1376)
         for (b in BLOQUES) for (l in b.lineSequence()) {
             if (l.isBlank()) continue
             val c = l.split('\t')

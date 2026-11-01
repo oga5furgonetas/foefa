@@ -733,6 +733,40 @@ contentarme [...] No quiero falsos positivos ni soluciones por decir». El infor
     de arrancar, que es cuando se decide por dónde ir (la variante por distancia queda como mejora). Y el hueco es
     solo por posición: sin «bultos grandes al suelo» ni «prioridad delante» (reglas para cuando se vea cómo cargan de
     verdad los de OGA5).
+- **LA ENTREGA VERIFICADA (la comprobación de puerta con IA), hecha en servidor, web y nativa (01-11, 09:0x → 09:4x;
+  Dani: «Despliega y sigue mejorando»; el punto 4 de `docs/SIGUIENTE-NIVEL-01-11.md`)**. Lo que hay:
+  · **Servidor** (`reparto.py`, `server.py`): al dar por entregado CON FOTO, Gemini (la misma llave y el mismo modelo que
+    la IA de daños; `_gemini_json_call`, con sus respaldos) mira la foto con la dirección y el cliente y contesta en JSON
+    si se ve el paquete, qué número se lee, un rótulo, el lugar y si salen personas. `reparto.veredicto_entrega` (puro)
+    lo convierte en un veredicto: «verificada» (se ve el paquete y el número leído es el de la dirección, según
+    `reparto.numero_portal` («Rúa Nova 3, 2º» → 3, «Calle Real, 5» → 5, sin pisos ni CP); o el rótulo es el del
+    cliente; o, sin número en la dirección, la IA dice que cuadra), «revisar» con un código de aviso (personas,
+    sin_paquete, otro_numero) o «parcial» (se ve el paquete pero nada que diga que es ESA puerta; el aviso suave
+    sin_numero, que no pregunta). Se guarda en el pedido (`entrega_ia`: nivel, aviso, numero, portal, rotulo, lugar,
+    cuando). La petición espera hasta 8 s (`_REP_IA_ESPERA`); si Gemini tarda más, queda «pendiente» y el veredicto
+    llega en segundo plano (la app lo ve al refrescar); si la IA falla, nada (ni pendiente). Sin GEMINI_API_KEY no se
+    intenta. NUNCA bloquea la entrega. El enlace del cliente dice `verificada: true` solo con el veredicto bueno (nunca
+    el aviso ni lo leído); la oficina ve el veredicto en la lista; se borra con los datos personales; volver a «por
+    entregar» lo quita. 5 tests en `backend/tests/test_entrega_verificada.py` (el número de portal, el veredicto, la
+    petición con la IA de mentira, sin IA y con la IA caída, la IA lenta en segundo plano).
+  · **Web**: al entregar con foto, si el veredicto es «revisar», la hoja «Mira la foto de entrega» con la frase
+    (`lib/entregaIa.js`; los códigos en 5 idiomas) y dos salidas: «Repetir la foto» (abre la cámara y manda la nueva con
+    la parada ya entregada; el servidor la vuelve a mirar) o «Está bien así». En lo hecho hoy, cada entregada enseña
+    «Entrega verificada por IA», o el aviso con «Repetir la foto», o la nota suave. El enlace del cliente
+    (`SeguimientoPedido.jsx`): «Entrega verificada: la foto enseña el paquete en tu dirección.» Y el panel de la
+    oficina (`Reparto.jsx`): «Entrega verificada por IA» o «Foto por revisar: …». 10 textos nuevos en 5 idiomas.
+    Prueba de humo `e2e/entrega-verificada.spec.js` (2 casos × escritorio y móvil: entregar con una foto de verdad
+    pintada en un canvas, la hoja, dejarla, repetirla desde lo hecho y quedar verificada; y el enlace del cliente).
+  · **Nativa**: `Parada.entregaIa` (`EntregaIa`), `Repositorio.cambiarEstado` devuelve la respuesta del servidor (null
+    si quedó en cola), `RutaVM.revisar` (el diálogo «Mira la foto de entrega» en Hoy, `RevisarFotoDialogo`: repetir
+    la foto con la cámara y mandarla con «entregado» y el método de cobro de antes, o «Está bien así»), la ficha de una
+    entregada con el veredicto y «Repetir la foto» (`pedirRevisar`). `textoAvisoIa` en `Hojas.kt` es la misma frase
+    que la web. `EntregaIaTest` (2 casos); `Traducciones.kt` regenerado (688 textos).
+  · **Diferencias a sabiendas con el documento**: no se pregunta por cada foto sin número (dentro de un edificio o en un
+    buzón no se ve el portal): solo cuando algo está mal (personas, sin paquete, otro número); lo demás queda como
+    «parcial» con una nota. Y la respuesta no es siempre síncrona: 8 s de espera y el resto en segundo plano, para no
+    tener al repartidor mirando una rueda. Queda por ver con fotos REALES de la nave cómo lee Gemini los números (si
+    lee mal, se afina el prompt o se sube el modelo; el veredicto está en un sitio).
 
 ## Última sesión — 13-10-2026: escaneo de paquetes en lote
 
@@ -1820,6 +1854,10 @@ Dani: «conéctate a mi Chrome y hazlo tú para no liarla yo». Hecho (detalle e
 
 ## Pendiente (por prioridad)
 
+-19. **01-11 mañana, la entrega verificada (IA sobre la foto de entrega)**: HECHA en servidor, web y nativa, con tests.
+   Falta: (1) desplegar backend + web con el CI en verde; (2) mirar con fotos reales (OGA5) qué contesta Gemini y, si
+   pregunta de más o lee mal los números, afinar el prompt (`_rep_ia_entrega_llamada`) o las reglas
+   (`reparto.veredicto_entrega`); (3) la nativa va en la misma versión 22 de Play que la carga guiada.
 -18. **01-11 madrugada, la carga guiada y el briefing por voz**: HECHOS en servidor, web y nativa, con tests; backend y
    web DESPLEGADOS el 01-11 a las 08:5x. Falta: (1) la nativa: subir `versionCode` a 22 y `versionName` a 2.5.0 en
    `build.gradle.kts`, dejar que `app-release.yml` compile el AAB, subirlo a Play Console y poner

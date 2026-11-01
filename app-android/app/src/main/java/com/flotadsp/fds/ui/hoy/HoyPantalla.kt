@@ -116,6 +116,7 @@ fun HoyPantalla(
 ) {
     val e by vm.estado.collectAsState()
     val pendientesEnvio by vm.pendientesDeEnvio.collectAsState()
+    val revisar by vm.revisar.collectAsState()
     val ctx = LocalContext.current
     val app = ctx.applicationContext as FdsApp
     val furgo by app.cuenta.furgo.collectAsState()
@@ -293,6 +294,7 @@ fun HoyPantalla(
             alEditar = { abierta = null; alEditar(p) },
             alQuitar = { abierta = null; vm.quitar(p) },
             alApuntar = { vm.apuntar(p, it) },
+            alRepetirFoto = { abierta = null; vm.pedirRevisar(p) },
         )
     }
     entregando?.let { p ->
@@ -301,6 +303,8 @@ fun HoyPantalla(
     fallando?.let { p ->
         NoEntregadoHoja(alCerrar = { fallando = null }, alConfirmar = { motivo, nota -> fallando = null; vm.noEntregado(p, motivo, nota) })
     }
+    // LA ENTREGA VERIFICADA (01-11-2026): la IA pide mirar la foto que se acaba de hacer (o la de una entregada, desde su ficha).
+    revisar?.let { r -> RevisarFotoDialogo(r, alRepetir = { vm.repetirFoto(r, it) }, alCerrar = { vm.revisado() }) }
 }
 
 /** El día de la RUTA (el del servidor, en la zona de la cuenta), no el del reloj del móvil: pasada la medianoche o

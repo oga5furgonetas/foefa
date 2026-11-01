@@ -1,7 +1,7 @@
 import { useTitulo } from '../lib/titulo'
 import { useEffect, useState } from 'react'
 import { useParams } from 'react-router-dom'
-import { Loader2, Package, CheckCircle2, Clock, XCircle, Truck, Phone, Check } from 'lucide-react'
+import { Loader2, Package, CheckCircle2, Clock, XCircle, Truck, Phone, Check, ShieldCheck } from 'lucide-react'
 import { API_BASE } from '../services/api'
 import { tx, txError, useIdioma, locale } from '../lib/idioma'
 import { textoClienteDice } from './driver/ClienteDice'
@@ -112,6 +112,12 @@ export default function SeguimientoPedido() {
             )}
             {/* Dónde quedó, sin nombres ni fotos (10-10-2026). */}
             {d.estado === 'entregado' && d.dejado && <p className="mt-3 text-[15px] text-dark-200">{tx(d.dejado)}</p>}
+            {/* LA ENTREGA VERIFICADA (01-11-2026): la IA vio el paquete en esta dirección. Solo el sí. */}
+            {d.estado === 'entregado' && d.verificada && (
+              <p data-testid="verificada" className="mt-2 flex items-center justify-center gap-1.5 text-[13px] text-emerald-300">
+                <ShieldCheck size={14} className="shrink-0" /> {tx('Entrega verificada: la foto enseña el paquete en tu dirección.')}
+              </p>
+            )}
             {d.estado === 'fallido' && <p className="mt-3 text-[14px] text-dark-300">{tx('La tienda se pondrá en contacto contigo para volver a intentarlo.')}</p>}
             {/* El registro del intento: que se vea que se llamó y se esperó. */}
             {d.estado === 'fallido' && d.intento && (d.intento.llegada || d.intento.llamada) && (

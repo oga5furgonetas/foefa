@@ -3,7 +3,7 @@ import {
   ArrowLeft, ScanLine, Camera, Loader2, Navigation, Phone, Check, X, Route, MapPin, Play, Square, Package,
   MessageCircle, Clock, Search, List, Pencil, ChevronDown, GripVertical, Map as MapaIcono, ArrowUp, ArrowDown, ArrowUpDown, Mic, ClipboardPaste, Trophy,
   Eye, PenLine, RotateCcw, HelpCircle, Share2, FileUp, Gift, WifiOff, Plus, FileText, Mail, CalendarClock, Lightbulb, History,
-  AlertTriangle, CarFront, Truck, Volume2,
+  AlertTriangle, CarFront, Truck, Volume2, ShieldCheck,
 } from 'lucide-react'
 import {
   repMiRuta, repZonasCarga, repEscanear, repEscanearLote, repLeerTicket, repNuevoPedido, repEstado, repOrdenar, repJornada, repPosicion,
@@ -34,6 +34,7 @@ import { PedirAviso, mensajeAviso } from '../AvisoManana'
 import CargaGuiada from './CargaGuiada'
 import { decir, vozActiva } from '../../lib/voz'
 import { textoBriefing } from '../../lib/briefing'
+import { textoAvisoIa } from '../../lib/entregaIa'
 
 /* ── MI RUTA ────────────────────────────────────────────────────────────────
    Lo que hace el repartidor al cargar: escanea el código de la caja. Si el
@@ -267,6 +268,8 @@ export default function MiRuta({ onBack, embebido = false, alTerminar = null }) 
   const [prueba, setPrueba] = useState(null)
   const [notaEntrega, setNotaEntrega] = useState('')
   const [entrega, setEntrega] = useState({ donde: '', recibe: '', firma: '', firmando: false })
+  // LA ENTREGA VERIFICADA (01-11-2026): {p, ia} cuando la IA pide mirar la foto de entrega (repetirla o dejarla).
+  const [revisar, setRevisar] = useState(null)
   const [encontrado, setEncontrado] = useState(null)
   const [anadida, setAnadida] = useState(null)   // la parada que acaba de entrar sola al escanear su etiqueta
   const [vista, setVista] = useState(() => lee('ruta_vista', 'lista'))
@@ -814,6 +817,8 @@ export default function MiRuta({ onBack, embebido = false, alTerminar = null }) 
       horario: p.ventana_desde ? `de ${p.ventana_desde} a ${p.ventana_hasta}` : '' })
   }
 
+  const dataUrlDe = (blob) => new Promise((ok, ko) => { const r = new FileReader(); r.onload = () => ok(r.result); r.onerror = ko; r.readAsDataURL(blob) })
+
   // Lo que acompaña a «Entregado»: la nota, dónde quedó, quién lo recogió y su firma.
   function datosEntrega() {
     const d = { nota: notaEntrega }
@@ -844,7 +849,9 @@ export default function MiRuta({ onBack, embebido = false, alTerminar = null }) 
       return 'guardado'
     }
     try {
-      await repEstado(p.id, estado, motivo, { ...datos, hecho_en })
+      const { data: r } = await repEstado(p.id, estado, motivo, { ...datos, hecho_en })
+      // LA ENTREGA VERIFICADA (01-11-2026): si la IA pide mirar la foto, se pregunta ahí mismo (nunca bloquea).
+      if (estado === 'entregado' && datos.foto && r?.entrega_ia?.nivel === 'revisar') setRevisar({ p: r, ia: r.entrega_ia })
       if (enCola) {
         const c = leerCola().filter((x) => !(x.id === p.id && deMi(x)))
         guardarCola(c)
@@ -1722,6 +1729,18 @@ export default function MiRuta({ onBack, embebido = false, alTerminar = null }) 
                     {p.estado === 'entregado' ? `${tx('Entregado')}${p.cobrado_importe ? ` · ${euros(p.cobrado_importe)}` : ''}` : `${tx('No')} · ${p.motivo ? tx(p.motivo) : ''}`}
                   </span>
                 </div>
+                {/* LA ENTREGA VERIFICADA (01-11-2026): lo que dijo la IA de la foto; con aviso, se puede repetir. */}
+                {p.estado === 'entregado' && p.entrega_ia?.nivel === 'verificada' && (
+                  <p className="mt-1 flex items-center gap-1 text-[11.5px] text-emerald-300"><ShieldCheck size={12} /> {tx('Entrega verificada por IA')}</p>
+                )}
+                {p.estado === 'entregado' && p.entrega_ia?.nivel === 'revisar' && (
+                  <button onClick={() => setRevisar({ p, ia: p.entrega_ia })} className="mt-1 flex items-start gap-1 text-left text-[11.5px] font-semibold text-amber-300">
+                    <AlertTriangle size={12} className="mt-0.5 shrink-0" /> <span>{textoAvisoIa(p.entrega_ia)} <u>{tx('Repetir la foto')}</u></span>
+                  </button>
+                )}
+                {p.estado === 'entregado' && p.entrega_ia?.nivel === 'parcial' && p.entrega_ia.aviso && (
+                  <p className="mt-1 text-[11px] text-dark-500">{textoAvisoIa(p.entrega_ia)}</p>
+                )}
                 {p.estado === 'fallido' ? (
                   <div className="mt-2 grid grid-cols-2 gap-1.5">
                     <button onClick={() => marcar(p, 'pendiente', '')} disabled={ocupado === p.id}
@@ -2104,7 +2123,7 @@ export default function MiRuta({ onBack, embebido = false, alTerminar = null }) 
                   // Pequeña a propósito: 640 px y calidad 0,6 son ~40-70 KB, de sobra
                   // para ver dónde quedó, y cabe en el pedido sin fotos sueltas por ahí.
                   const blob = await compressImage(f, 640, 0.6)
-                  const foto = await new Promise((ok, ko) => { const r = new FileReader(); r.onload = () => ok(r.result); r.onerror = ko; r.readAsDataURL(blob) })
+                  const foto = await dataUrlDe(blob)
                   await marcar(prueba.p, 'entregado', '', prueba.pago || { sin_cobro: true }, { foto, ...datosEntrega() })
                 } catch { setAviso(tx('No se pudo guardar la foto')); setOcupado('') }
               }} />
@@ -2115,6 +2134,34 @@ export default function MiRuta({ onBack, embebido = false, alTerminar = null }) 
             disabled={!!ocupado}
             className="mt-3 w-full rounded-xl border border-dark-600 py-3 text-[14px] font-semibold text-dark-100">
             {tx('Entregar sin foto')}
+          </button>
+        </Hoja>
+      )}
+
+      {/* LA ENTREGA VERIFICADA (01-11-2026): la IA ha mirado la foto y pide revisarla. Repetirla manda la nueva con la
+          parada ya entregada (el servidor la vuelve a mirar); «Está bien así» la deja. Nunca bloquea. */}
+      {revisar && (
+        <Hoja titulo={tx('Mira la foto de entrega')} onClose={() => setRevisar(null)}>
+          <p className="flex items-start gap-2 text-[14px] leading-snug text-amber-200"><AlertTriangle size={16} className="mt-0.5 shrink-0" /> <span>{textoAvisoIa(revisar.ia)}</span></p>
+          <p className="mt-2 text-[12.5px] text-dark-400">{tx('La foto es tu prueba si alguien dice que no le ha llegado. Puedes repetirla ahora o dejarla así.')}</p>
+          <label className="mt-3 flex w-full cursor-pointer items-center justify-center gap-2 rounded-xl bg-brand-500 py-3.5 text-[15px] font-bold text-brand-tinta">
+            {ocupado === 'foto' ? <Loader2 size={18} className="animate-spin" /> : <Camera size={18} />}
+            {ocupado === 'foto' ? tx('Guardando…') : tx('Repetir la foto')}
+            <input type="file" accept="image/*" capture="environment" className="hidden" disabled={!!ocupado}
+              onChange={async (e) => {
+                const f = e.target.files?.[0]; e.target.value = ''
+                if (!f) return
+                const p = revisar.p
+                setOcupado('foto')
+                try {
+                  const foto = await dataUrlDe(await compressImage(f, 640, 0.6))
+                  setRevisar(null)
+                  await marcar(p, 'entregado', '', p.cobrar > 0 ? { metodo: p.cobrado_metodo || 'pagado' } : { sin_cobro: true }, { foto })
+                } catch { setAviso(tx('No se pudo guardar la foto')); setOcupado('') }
+              }} />
+          </label>
+          <button onClick={() => setRevisar(null)} className="mt-3 w-full rounded-xl border border-dark-600 py-3 text-[14px] font-semibold text-dark-100">
+            {tx('Está bien así')}
           </button>
         </Hoja>
       )}

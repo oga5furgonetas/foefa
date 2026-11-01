@@ -280,18 +280,18 @@ class Repositorio(private val ctx: Context, val cuenta: Cuenta, val api: Api) {
         return r.copy(pedidos = r.pedidos.map { p -> ult[p.id]?.let { p.copy(estado = it.estado, cerradoEn = it.hechoEn) } ?: p })
     }
 
-    /** Entregado / no entregado. Sin red (o con el servidor caído) se guarda y se manda solo después: devuelve
-     *  false en ese caso. Si ya hay algo de esa parada esperando a salir, esto va DETRÁS, en orden: mandarlo ahora
-     *  adelantaría al cambio anterior y el servidor acabaría con el estado viejo (29-10-2026). */
-    suspend fun cambiarEstado(id: String, estado: String, cuerpo: JsonObject, nombre: String = ""): Boolean {
+    /** Entregado / no entregado. Devuelve la respuesta del servidor (la parada, con lo que dijo la IA de la foto si la
+     *  hubo). Sin red (o con el servidor caído) se guarda y se manda solo después: devuelve null en ese caso. Si ya hay
+     *  algo de esa parada esperando a salir, esto va DETRÁS, en orden: mandarlo ahora adelantaría al cambio anterior y
+     *  el servidor acabaría con el estado viejo (29-10-2026). */
+    suspend fun cambiarEstado(id: String, estado: String, cuerpo: JsonObject, nombre: String = ""): JsonObject? {
         val hechoEn = Instant.now().toString()
         val todo = JsonObject(cuerpo + ("estado" to kotlinx.serialization.json.JsonPrimitive(estado)) +
             ("hecho_en" to kotlinx.serialization.json.JsonPrimitive(hechoEn)))
         val yaEspera = _pendientes.value.any { it.quien == cuenta.quien() && it.id == id }
         if (!yaEspera) {
             try {
-                api.post("reparto/pedidos/$id/estado", todo)
-                return true
+                return api.post("reparto/pedidos/$id/estado", todo).jsonObject
             } catch (e: ErrorApi) {
                 if (!e.reintentable) throw e
             }
@@ -300,7 +300,7 @@ class Repositorio(private val ctx: Context, val cuenta: Cuenta, val api: Api) {
             guardarCola(_pendientes.value + Pendiente(cuenta.quien(), id, estado, todo, hechoEn, nombre))
         }
         EnvioWorker.programar(ctx)
-        return false
+        return null
     }
 
     /** Manda lo guardado sin red, en orden. Devuelve (enviados, rechazados por el servidor); los rechazos quedan
