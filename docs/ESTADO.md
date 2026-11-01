@@ -1,4 +1,4 @@
-# Estado de Flota y relevo entre sesiones
+﻿# Estado de Flota y relevo entre sesiones
 
 > **Si eres una sesión nueva: lee esto entero antes de tocar nada.**
 > Al acabar tu trabajo, actualiza la sección «Última sesión» y «Pendiente»,
@@ -2097,8 +2097,9 @@ Dani: «conéctate a mi Chrome y hazlo tú para no liarla yo». Hecho (detalle e
    «Esta app» por defecto, la ruta se refresca sola (nativa y web), probada en el emulador. El AAB 2.4.3 (artefacto
    FDS-2.4.3 del run 41339628956, firma FLOTA, sha256 comprobado) está SUBIDO A PLAY (20:1x, desde el Chrome de Dani
    en 5 trozos): bundle 22 (2.4.3) procesado, notas puestas, versión de producción GUARDADA como borrador; el modo
-   auto negó pulsar «Enviar 1 cambio a revisión» («Production Deploy»): lo pulsa Dani en Play Console → FDS →
-   Resumen de publicación. Cuando Google la apruebe: `fly secrets set APP_ANDROID_PLAY="22 2.4.3"
+   auto negó pulsar «Enviar 1 cambio a revisión» («Production Deploy»); con el «dale tú» de Dani en el mismo mensaje
+   pasó: ENVIADA A REVISIÓN a las 20:3x («Cambios en revisión»; publicación gestionada desactivada: se publica sola al
+   aprobarla). Cuando Google la apruebe: `fly secrets set APP_ANDROID_PLAY="22 2.4.3"
    APP_ANDROID_WEB="22 2.4.3" -a flota-backend` (el APK 2.4.3 .web está en `app-android/app/build/outputs/apk/release/`
    para que lo cosa `deploy-frontend.ps1`). La WEB DESPLEGADA a las 20:29 (Dani: «Sí, despliega la web»): desde una
    copia limpia de 05e516f (el árbol tenía los cambios sin commit del agente del mapa; junction a `node_modules` y el
