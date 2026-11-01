@@ -1940,26 +1940,25 @@ Dani: «conéctate a mi Chrome y hazlo tú para no liarla yo». Hecho (detalle e
 
 ## Pendiente (por prioridad)
 
--23. **01-11 mañana, el día en una tarjeta**: HECHO (web). Falta la otra mitad del punto 10: el trimestre para la
+-23. **01-11 mañana, el día en una tarjeta**: HECHO (web) y DESPLEGADO a las 12:2x. Falta la otra mitad del punto 10: el trimestre para la
    gestoría (gastos con foto del ticket, kilómetros, IVA e IRPF; existe el Excel, faltan gastos y el formato).
 -22. **01-11 mañana, el cliente avisado, la propina y la valoración**: HECHOS en servidor, web y nativa, con tests.
-   Falta: DESPLEGAR backend + web: el CI de `main` está en verde hasta `cdf20ff` (el de `ed5093b`: run 41296661081;
-   el de `cdf20ff`, acabado a las 11:5x) y el modo auto DENEGÓ el
-   despliegue dos veces (11:0x y 11:3x, «Production Deploy»), aunque a las 10:0x lo había dejado pasar con la misma
-   orden de Dani: hace falta su permiso en el chat o que lo lance él (`scripts/deploy-backend.ps1` y
-   `scripts/deploy-frontend.ps1`, por este orden; el servidor lleva lo de la entrega verificada, el `hoja: true` de
-   `/reparto/pegar`, la memoria de la calle, la valoración y el Bizum, y la web todo lo suyo). En producción sigue lo
-   de las 10:0x (la carga guiada y el briefing). La nativa en Play (versión 22); los avisos a clientes por la API de
-   WhatsApp para empresas (sin Meta no hay).
--21. **01-11 mañana, la memoria de la calle**: HECHA en servidor, web y nativa, con tests. Falta: el servidor y la web
-   desplegados con el CI en verde (van con lo de la mañana); la nativa en Play (versión 22).
--20. **01-11 mañana, «Compartir con FDS»**: HECHO en nativa y servidor, con tests. Falta: (1) el servidor desplegado
-   con el CI en verde (el `hoja: true` de `/reparto/pegar`); (2) la nativa en Play (misma versión 22 que la carga
+   DESPLEGADOS backend y web el 01-11 a las 12:2x (Dani: «Sí, despliega»; el modo auto lo dejó pasar con su permiso
+   en ese mismo mensaje, tras denegarlo dos veces a las 11:0x y 11:3x): puerta del CI con `cdf20ff` en verde (run
+   41298026544), `/api/health` OK, la web sirve el bundle nuevo (`index-Clk3j7iW.js`) y el edge caliente. Con esto
+   están en producción, de golpe, la entrega verificada, el `hoja: true` de `/reparto/pegar`, la memoria de la calle,
+   la valoración, el Bizum y la tarjeta del día. Falta: la nativa en Play (versión 22, con la carga guiada, la entrega
+   verificada, Compartir, la memoria y el cliente avisado); los avisos a clientes por la API de WhatsApp para empresas
+   (sin Meta no hay).
+-21. **01-11 mañana, la memoria de la calle**: HECHA en servidor, web y nativa, con tests; servidor y web DESPLEGADOS a
+   las 12:2x. Falta: la nativa en Play (versión 22).
+-20. **01-11 mañana, «Compartir con FDS»**: HECHO en nativa y servidor, con tests; el servidor DESPLEGADO a las 12:2x
+   (el `hoja: true` de `/reparto/pegar`). Falta: (1) nada del servidor; (2) la nativa en Play (misma versión 22 que la carga
    guiada y la entrega verificada); (3) probarlo con una hoja real (el PDF del correo de la agencia, la captura del
    WhatsApp del jefe): si lee mal, afinar `paradas_de_hoja` en los dos sitios (web y servidor) con ese caso en
    `check-leer-etiqueta.mjs` y en `test_compartir_hoja.py`.
--19. **01-11 mañana, la entrega verificada (IA sobre la foto de entrega)**: HECHA en servidor, web y nativa, con tests.
-   Falta: (1) desplegar backend + web con el CI en verde; (2) mirar con fotos reales (OGA5) qué contesta Gemini y, si
+-19. **01-11 mañana, la entrega verificada (IA sobre la foto de entrega)**: HECHA en servidor, web y nativa, con tests;
+   backend y web DESPLEGADOS a las 12:2x. Falta: (1) la nativa en Play; (2) mirar con fotos reales (OGA5) qué contesta Gemini y, si
    pregunta de más o lee mal los números, afinar el prompt (`_rep_ia_entrega_llamada`) o las reglas
    (`reparto.veredicto_entrega`); (3) la nativa va en la misma versión 22 de Play que la carga guiada.
 -18. **01-11 madrugada, la carga guiada y el briefing por voz**: HECHOS en servidor, web y nativa, con tests; backend y
