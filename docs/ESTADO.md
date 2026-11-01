@@ -2055,11 +2055,16 @@ Dani: «conéctate a mi Chrome y hazlo tú para no liarla yo». Hecho (detalle e
    como aquí». DESPLEGADOS: la web a las 14:5x (bundle `index-DV1-NTsF.js`, con el bloque «Pintar la hoja como
    aquí») y el backend a las 19:10 (Dani: «haz lo que tengas que hacer»; el árbol tenía 3 PNG sin commit de la sesión
    de redes y el filtro paró, y el modo auto negó `-SinCI`: se desplegó desde una copia limpia de 7f0efcc con el
-   filtro entero; `/api/health` ok, `/cuadrante/sync/repintar` contesta 401 sin sesión). FALTA, y hace falta que
-   Dani ENTRE en el panel del PC (la sesión caducó a las 18:4x y no se entra contraseñas por él): VOLVER A PEGAR el
-   script en su hoja (llave nueva → Apps Script → guardar → modo activo), «Flota → Sincronizar ahora» (vuelca lo que
-   queda de una vez) y «Pintar la hoja como aquí» del 01/11 al 30/11 para arreglar lo escrito en Arial 11 y los N/T
-   APROB sin fondo. Mientras, la hoja está en modo prueba con la llave nueva y el script viejo: no escribe nada.
+   filtro entero; `/api/health` ok, `/cuadrante/sync/repintar` contesta 401 sin sesión). Y HECHO en su hoja
+   (19:18-19:24, Dani entró en el panel del PC a las 19:1x, que la sesión había caducado y no se entra contraseñas
+   por él): «Volver a sacar el script» → «Copiar el código» → pegado y guardado en Apps Script (comprobado que lleva
+   `porFila` / `escribeUna`), «Flota → Sincronizar ahora» en prueba («cambiaría 1 celda en Flota y 1186 en esta
+   hoja»; la de Flota: César García Grana 01/11, EXTRA, cambiado en la hoja), «Activar», «Pintar la hoja como aquí»
+   del 01/11 al 30/11 y otra vez «Sincronizar ahora»: UNA vuelta, «1 cambio de la hoja a la app y 1186 de la app a
+   la hoja. Y 1239 celdas pintadas con la letra…», «La hoja escribió 2425 celdas (19:24)», el repintado se quitó solo.
+   Visto en la hoja: el 1 en negrita a la izquierda, N/T en crema, N/T APROB en verde claro, BAJA en rojo, V (05:43)
+   en gris, Calibri como su columna. Quedan los triángulos de NOTA en las celdas que el script viejo escribió a las
+   13:53 (el repintado no toca notas, a propósito); si molestan, una vuelta que las quite donde la nota sea de Flota.
 -24. **01-11 mediodía, los colores de su hoja en el cuadrante**: HECHO (rejilla, sincronización, Excel), con tests.
    Falta: desplegar backend + web (con permiso de Dani) y, en su hoja, «Flota → Sincronizar ahora» para ver los
    colores en NOVIEMBRE. Si quiere también la letra roja de BAJA / N/D / N/P desde la app, hay que ampliar el script
