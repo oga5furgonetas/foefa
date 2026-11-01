@@ -589,6 +589,20 @@ Nada se había borrado (org `owner` sin `modulos`, usuario `dani` sin
     (piden empresa china); Web Push no llega en China (va por FCM); revisión
     por un abogado del texto PIPL.
 
+## Última sesión — 01-11-2026 (12:50, PC de Dani, bucle de redes): Livraisons Story contestó al ofrecimiento; ofrecimiento en alemán a stahljunge01; 6 en TikTok, 2 en YouTube
+
+- Metricool sin huecos hasta el 08-11 (el reel de Instagram de hoy salió a las 12:00); el post de X del día salió a las 7:30, programados
+  hasta el 11-11. Ronda: Livraisons Story (micro-creador del ofrecimiento de las 04:25) contestó «Force à vous» y se le dejó la puerta
+  abierta; ofrecimiento público en alemán a @stahljunge01 (día 6 repartiendo, un vídeo al día); 4 comentarios más en TikTok (es, en, pt,
+  it) y 2 en YouTube (en, en). X, Facebook: nada. Instagram sin sesión. Detalle en `docs/anuncios/redes/REGISTRO-PC.md` (01-11, 12:10).
+
+## Última sesión — 01-11-2026 (08:50, PC de Dani, bucle de redes): ofrecimiento en portugués a Wanderson (Reino Unido); 6 en TikTok, 2 en YouTube
+
+- Metricool sin huecos hasta el 08-11 (TikTok hasta el 10-11); el post de X del día salió a las 7:30, programados hasta el 11-11 (el
+  12-11 necesita la cifra real). Ronda: ofrecimiento público en portugués a @wandersonbala; 5 comentarios más en TikTok (en, de, it,
+  fr, es) y 2 en YouTube (en, en). X, Facebook: nada. Instagram sin sesión. En el perfil de X hay dos posts del 31-10 (17:30 y 21:00)
+  que no son de este bucle. Detalle en `docs/anuncios/redes/REGISTRO-PC.md` (01-11, 08:10).
+
 ## Última sesión — 01-11-2026 (04:45, PC de Dani, bucle de redes): Javi contestó y se le respondió; ofrecimiento en francés a Livraisons Story; 6 en TikTok, 2 en YouTube
 
 - Metricool sin huecos hasta el 08-11 (TikTok hasta el 10-11); X hasta el 11-11 (el 12-11 necesita la cifra real). Ronda: javi030426
@@ -684,7 +698,9 @@ contentarme [...] No quiero falsos positivos ni soluciones por decir». El infor
   escogiendo gente por ahí y de ahí hacer nombre, y con nombre es más fácil exponerse a empresas».
 - **CARGA GUIADA Y BRIEFING POR VOZ, hechos en web y nativa (01-11, 02:0x → 02:5x; Dani: «Carga y briefing», los dos
   primeros de `docs/SIGUIENTE-NIVEL-01-11.md`)**. Commit `ac83b7c` (36 ficheros), CI de GitHub VERDE a las 03:07
-  (run 41263190470). SIN desplegar (la web espera la orden de Dani; la nativa, una versión nueva en Play). Lo que hay:
+  (run 41263190470). DESPLEGADOS backend (Fly) y web (Pages) el 01-11 a las 10:0x (Dani: «Despliega y sigue mejorando»),
+  con la puerta del CI (`ac83b7c` en verde y por encima solo documentos): `/api/health` OK, la web sirve el bundle nuevo
+  y `/reparto/mi-ruta/cargado` contesta (401 sin sesión). La nativa espera una versión nueva en Play. Lo que hay:
   · **Servidor** (`reparto.py`, `server.py`): al ordenar la ruta, cada parada ubicada recibe su hueco de la furgoneta por su
     POSICIÓN (`reparto.hueco_sugerido`: los tercios de la ruta son las filas y las mitades de cada tercio, izquierda y
     derecha; la fila de la puerta primero: detrás con las puertas traseras, delante con la lateral, según el ajuste
@@ -724,6 +740,119 @@ contentarme [...] No quiero falsos positivos ni soluciones por decir». El infor
     de arrancar, que es cuando se decide por dónde ir (la variante por distancia queda como mejora). Y el hueco es
     solo por posición: sin «bultos grandes al suelo» ni «prioridad delante» (reglas para cuando se vea cómo cargan de
     verdad los de OGA5).
+- **LA ENTREGA VERIFICADA (la comprobación de puerta con IA), hecha en servidor, web y nativa (01-11, 10:0x → 10:18;
+  Dani: «Despliega y sigue mejorando»; el punto 4 de `docs/SIGUIENTE-NIVEL-01-11.md`)**. Lo que hay:
+  · **Servidor** (`reparto.py`, `server.py`): al dar por entregado CON FOTO, Gemini (la misma llave y el mismo modelo que
+    la IA de daños; `_gemini_json_call`, con sus respaldos) mira la foto con la dirección y el cliente y contesta en JSON
+    si se ve el paquete, qué número se lee, un rótulo, el lugar y si salen personas. `reparto.veredicto_entrega` (puro)
+    lo convierte en un veredicto: «verificada» (se ve el paquete y el número leído es el de la dirección, según
+    `reparto.numero_portal` («Rúa Nova 3, 2º» → 3, «Calle Real, 5» → 5, sin pisos ni CP); o el rótulo es el del
+    cliente; o, sin número en la dirección, la IA dice que cuadra), «revisar» con un código de aviso (personas,
+    sin_paquete, otro_numero) o «parcial» (se ve el paquete pero nada que diga que es ESA puerta; el aviso suave
+    sin_numero, que no pregunta). Se guarda en el pedido (`entrega_ia`: nivel, aviso, numero, portal, rotulo, lugar,
+    cuando). La petición espera hasta 8 s (`_REP_IA_ESPERA`); si Gemini tarda más, queda «pendiente» y el veredicto
+    llega en segundo plano (la app lo ve al refrescar); si la IA falla, nada (ni pendiente). Sin GEMINI_API_KEY no se
+    intenta. NUNCA bloquea la entrega. El enlace del cliente dice `verificada: true` solo con el veredicto bueno (nunca
+    el aviso ni lo leído); la oficina ve el veredicto en la lista; se borra con los datos personales; volver a «por
+    entregar» lo quita. 5 tests en `backend/tests/test_entrega_verificada.py` (el número de portal, el veredicto, la
+    petición con la IA de mentira, sin IA y con la IA caída, la IA lenta en segundo plano).
+  · **Web**: al entregar con foto, si el veredicto es «revisar», la hoja «Mira la foto de entrega» con la frase
+    (`lib/entregaIa.js`; los códigos en 5 idiomas) y dos salidas: «Repetir la foto» (abre la cámara y manda la nueva con
+    la parada ya entregada; el servidor la vuelve a mirar) o «Está bien así». En lo hecho hoy, cada entregada enseña
+    «Entrega verificada por IA», o el aviso con «Repetir la foto», o la nota suave. El enlace del cliente
+    (`SeguimientoPedido.jsx`): «Entrega verificada: la foto enseña el paquete en tu dirección.» Y el panel de la
+    oficina (`Reparto.jsx`): «Entrega verificada por IA» o «Foto por revisar: …». 10 textos nuevos en 5 idiomas.
+    Prueba de humo `e2e/entrega-verificada.spec.js` (2 casos × escritorio y móvil: entregar con una foto de verdad
+    pintada en un canvas, la hoja, dejarla, repetirla desde lo hecho y quedar verificada; y el enlace del cliente).
+  · **Nativa**: `Parada.entregaIa` (`EntregaIa`), `Repositorio.cambiarEstado` devuelve la respuesta del servidor (null
+    si quedó en cola), `RutaVM.revisar` (el diálogo «Mira la foto de entrega» en Hoy, `RevisarFotoDialogo`: repetir
+    la foto con la cámara y mandarla con «entregado» y el método de cobro de antes, o «Está bien así»), la ficha de una
+    entregada con el veredicto y «Repetir la foto» (`pedirRevisar`). `textoAvisoIa` en `Hojas.kt` es la misma frase
+    que la web. `EntregaIaTest` (2 casos); `Traducciones.kt` regenerado (688 textos).
+  · **Diferencias a sabiendas con el documento**: no se pregunta por cada foto sin número (dentro de un edificio o en un
+    buzón no se ve el portal): solo cuando algo está mal (personas, sin paquete, otro número); lo demás queda como
+    «parcial» con una nota. Y la respuesta no es siempre síncrona: 8 s de espera y el resto en segundo plano, para no
+    tener al repartidor mirando una rueda. Queda por ver con fotos REALES de la nave cómo lee Gemini los números (si
+    lee mal, se afina el prompt o se sube el modelo; el veredicto está en un sitio).
+- **«COMPARTIR CON FDS» (el punto 9 de `docs/SIGUIENTE-NIVEL-01-11.md`), hecho en nativa y servidor (01-11, 10:2x →
+  10:37)**. Lo que hay:
+  · **Nativa**: la app sale en «Compartir» de cualquier otra para texto, fotos o capturas (una o varias) y PDF
+    (`AndroidManifest`: SEND y SEND_MULTIPLE). `MainActivity.leerCompartido` recoge lo compartido y, con la sesión
+    abierta, `Principal` abre `CompartidoPantalla` (`ui/compartir/`): las fotos y capturas se leen EN EL MÓVIL con ML
+    Kit (el mismo lector de texto que las etiquetas), el PDF se pinta página a página con `PdfRenderer` (hasta 10) y
+    se lee igual; el texto va a `/reparto/pegar` (con `hoja: true` si venía de ficheros) y el servidor contesta las
+    paradas que ve; se enseñan (nombre, dirección, teléfono, código) y «Añadir N paradas» las crea (`confirmar`).
+    Al volver a Hoy: «Añadidas N paradas a tu ruta» / «Ya estaban en tu ruta». Sin red, se dice. `Compartir` (las
+    reglas sin Android) y `CompartidoTest` (3 casos); `Pegado` y `FilaPegada` en Modelos; `Repositorio.pegar`. 12
+    textos solo de la nativa; `Traducciones.kt` regenerado (699 textos).
+  · **Servidor**: `reparto.paradas_de_hoja(texto, pais)` es la MISMA regla que la web (`hojaReparto.js`: las líneas
+    con una calle, o con CP y número; cabeceras, totales y firmas fuera; el nombre de arriba y el CP de abajo se
+    juntan), con `reparto.telefono_de` por país (la tabla de la web). `/reparto/pegar` acepta `hoja: true` (y `pais`)
+    y usa eso en vez de `lee_pegado`. 3 tests en `test_compartir_hoja.py` (la hoja de España y la de México, iguales
+    que en el checker de la web; Francia y Alemania; el teléfono por país; enseñar → añadir → repetidos → nada).
+  · **De paso, el parser de hojas mejor en los dos sitios** (`hojaReparto.js` y `reparto.py`, con sus casos en
+    `check-leer-etiqueta.mjs`): el número delante de la calle en fr/gb/ie/us/ca/au/nz («12 rue de la Paix») ya no
+    se toma por el número de fila; la calle pegada al nombre («Hauptstraße 12», «Keizersgracht 123») con un número es
+    una dirección; y «Tel.»/«Tél :» delante del teléfono se quita (antes esa línea pasaba por CABECERA y el teléfono
+    se perdía).
+  · **Lo que NO hay**: iPhone (la app de iPhone es la web, sin extensión de compartir) y un recordatorio en Hoy de
+    que existe «Compartir» (cabría en «Más formas de añadir»). Y no está probado con una hoja REAL de una agencia:
+    solo con las de los tests.
+- **LA MEMORIA DE LA CALLE (el punto 3 de `docs/SIGUIENTE-NIVEL-01-11.md`), hecha en servidor, web y nativa (01-11,
+  10:4x → 10:52)**. Lo que hay:
+  · **Servidor**: la colección `calle_memoria` por empresa (una puerta, un apunte: índice único por `clave`, la
+    dirección normalizada de `reparto.clave_direccion`): el código del portal, dónde dejar (una de DONDE_ENTREGA) y
+    cómo se entra (`reparto.memoria_sanea`), quién lo apuntó y cuándo. `POST /reparto/mis-pedidos/{id}/memoria`
+    («Guardar para la próxima» desde la parada; todo vacío la borra; la parada tiene que ser tuya, o ser la oficina).
+    `mi-ruta` trae `memoria` en cada parada abierta de ESA dirección, la haya apuntado quien la haya apuntado (el
+    conductor nuevo hereda lo que sabía el anterior). El portal que da el cliente en su enlace (`seguimiento_respuesta`)
+    entra solo si nadie había apuntado otro (`por: cliente`). Caduca al año de la última vez que se tocó
+    (`DIAS_MEMORIA`, en `_rep_limpiar`): son instrucciones del cliente final. 4 tests en `test_memoria_calle.py`.
+  · **Web**: `pages/driver/MemoriaPuerta.jsx`: en la tarjeta de la parada, «Guardar para la próxima» o la línea
+    «Memoria de la puerta: portal 1234B, dejar en portería, entrada por el garaje» (un toque la abre para corregir); la
+    hoja (el código, con el portal del cliente ya puesto si lo dio; dónde dejar; cómo se entra; «Borrar lo guardado»).
+    El briefing por voz la dice (`lib/briefing.js`). 12 textos en 5 idiomas. Prueba de humo `e2e/memoria-calle.spec.js`
+    (guardar, la tarjeta, el briefing, corregir y borrar).
+  · **Nativa**: `Parada.memoria` (`Memoria`), `Repositorio.memoria`, `textoMemoria` y `MemoriaHoja` en `Hojas.kt`,
+    la ficha de la parada con la línea y el botón, `RutaVM.guardarMemoria`, el briefing (`Briefing.kt`).
+    `MemoriaTest` (2 casos). `Traducciones.kt` regenerado (711 textos).
+  · **Lo que difiere del documento**: sin foto del portal (pesa y es un dato más que guardar; la puerta aprendida por
+    posición ya existe) y sin contadores por franja (eso es el punto 5, la hora buena).
+- **EL CLIENTE AVISADO, LA PROPINA Y LA VALORACIÓN (el punto 6 de `docs/SIGUIENTE-NIVEL-01-11.md`), hechos en servidor,
+  web y nativa (01-11, 10:5x → 11:15; en el worktree `.claude/worktrees/cliente-avisado`, rama `cliente-avisado`, para
+  dejar el checkout principal limpio y poder desplegar lo anterior)**. Lo que hay:
+  · **Avisar a todos por WhatsApp** (web y nativa): con la ruta ordenada, un botón en Hoy abre la lista de las paradas
+    pendientes con móvil, en orden, con su hora; cada una tiene su WhatsApp (el mensaje de siempre: «voy de camino»,
+    la hora aproximada y el enlace de seguimiento) y al tocarlo queda «Avisado» (la web lo recuerda en el móvil por
+    día, `avisados_<fecha>`; la nativa, mientras la app viva); el botón dice «{a} de {b} avisados». Se abre uno a uno:
+    envía y vuelve. Para empresas con la API de WhatsApp (plantilla de utilidad aprobada, envío en lote al ordenar)
+    NO está: `WHATSAPP_*` sigue sin configurar y Meta tiene la cuenta restringida (auditoría §8).
+  · **La valoración** (`POST /seguimiento/{token}/valoracion`, público): en el enlace del cliente, ya entregado,
+    «¿Cómo ha ido la entrega?» de un toque (1 a 5 estrellas y NADA más: ni texto libre, para no guardar datos de
+    nadie); se puede cambiar mientras el enlace viva; 409 si aún no está entregado. Se guarda en el pedido
+    (`valoracion: {estrellas, cuando}`); el repartidor lo ve en lo hecho de hoy (★★★★☆ «el cliente»), la oficina en
+    la lista y la nativa en la ficha. Es el número que alimentará el perfil verificado (el punto 7).
+  · **La propina por Bizum**: el repartidor que va por su cuenta pone su móvil de Bizum en «Mi dinero hoy» (web y
+    nativa, solo con el país España; `PUT /reparto/ganancias` con `bizum`, validado como móvil español; vacío lo
+    quita; `mi-ruta` lo trae en `ganancias`). El enlace del cliente lo enseña SOLO cuando el pedido está entregado y
+    la cuenta es de autónomo («¿Le invitas a un café? Bizum al 612 345 678», con «Copiar el número» y «Es un
+    regalo para el repartidor, no parte del pedido»). Bizum no tiene enlace universal: se copia el número. La
+    pantalla le dice al repartidor que lo que le manden es un ingreso suyo (desde 2026 los bancos informan).
+  · Tests: backend `test_cliente_avisado.py` (3: la valoración pura, el Bizum con la tarifa y el enlace solo entregado,
+    la valoración solo entregado y lo que ven repartidor y oficina; los dos casos de «Mi dinero hoy» de
+    `test_reparto_api` y de `humo.spec.js` esperan ahora `bizum: ""` en la tarifa), humo `e2e/cliente-avisado.spec.js`
+    (2 casos × escritorio y móvil: las estrellas y el Bizum con el portapapeles; «Avisar a todos» uno a uno, el
+    enlace de WhatsApp con la hora y el seguimiento, y que se recuerda al recargar), nativa compilada con tests y
+    lint. 17 textos en 5 idiomas; `Traducciones.kt` regenerado (719).
+- **EL DÍA EN UNA TARJETA (la mitad del punto 10), web (01-11, 11:1x → 11:2x; worktree `tarjeta-dia`)**: la imagen de
+  «Comparte tu día» (`lib/compartirDia.js`) lleva ahora, además de paradas, tiempo y km, lo que un repartidor enseña a
+  otro: «{p} % a la primera» (entregadas entre entregadas más fallidas), «{c}/hora limpio» (solo con tarifa puesta:
+  el neto por hora de «Mi dinero hoy») y «acabé a las {h}» (la última parada cerrada); lo de abajo (la frase, el QR)
+  baja según las líneas que haya. El texto que va con la imagen dice también el «% a la primera». La captura real en
+  `docs/bocetos/tarjeta-dia-01-11/` (`e2e/capturas-tarjeta-01-11.mjs` guarda el PNG que iría al estado). El caso de
+  humo «Comparte tu día» comprueba el texto; `lib/compartirDia.js` entra en `check-textos-ruta`. La otra mitad del
+  punto (el fichero del trimestre para la gestoría con gastos) NO está. Y en la nativa, el recordatorio de
+  «Compartir» en la pantalla de añadir paradas (lo que faltaba del punto 9).
 
 ## Última sesión — 13-10-2026: escaneo de paquetes en lote
 
@@ -1811,10 +1940,31 @@ Dani: «conéctate a mi Chrome y hazlo tú para no liarla yo». Hecho (detalle e
 
 ## Pendiente (por prioridad)
 
--18. **01-11 madrugada, la carga guiada y el briefing por voz**: HECHOS en servidor, web y nativa, con tests, SIN
-   desplegar. Falta: (1) desplegar backend + web cuando Dani lo diga (`deploy-backend.ps1` y `deploy-frontend.ps1`, con
-   el CI del commit en verde); (2) la nativa: subir `versionCode` a 22 y `versionName` a 2.5.0 en `build.gradle.kts`,
-   dejar que `app-release.yml` compile el AAB, subirlo a Play Console y poner `APP_ANDROID_PLAY="22 2.5.0"`; (3)
+-23. **01-11 mañana, el día en una tarjeta**: HECHO (web) y DESPLEGADO a las 12:2x. Falta la otra mitad del punto 10: el trimestre para la
+   gestoría (gastos con foto del ticket, kilómetros, IVA e IRPF; existe el Excel, faltan gastos y el formato).
+-22. **01-11 mañana, el cliente avisado, la propina y la valoración**: HECHOS en servidor, web y nativa, con tests.
+   DESPLEGADOS backend y web el 01-11 a las 12:2x (Dani: «Sí, despliega»; el modo auto lo dejó pasar con su permiso
+   en ese mismo mensaje, tras denegarlo dos veces a las 11:0x y 11:3x): puerta del CI con `cdf20ff` en verde (run
+   41298026544), `/api/health` OK, la web sirve el bundle nuevo (`index-Clk3j7iW.js`) y el edge caliente. Con esto
+   están en producción, de golpe, la entrega verificada, el `hoja: true` de `/reparto/pegar`, la memoria de la calle,
+   la valoración, el Bizum y la tarjeta del día. Falta: la nativa en Play (versión 22, con la carga guiada, la entrega
+   verificada, Compartir, la memoria y el cliente avisado); los avisos a clientes por la API de WhatsApp para empresas
+   (sin Meta no hay).
+-21. **01-11 mañana, la memoria de la calle**: HECHA en servidor, web y nativa, con tests; servidor y web DESPLEGADOS a
+   las 12:2x. Falta: la nativa en Play (versión 22).
+-20. **01-11 mañana, «Compartir con FDS»**: HECHO en nativa y servidor, con tests; el servidor DESPLEGADO a las 12:2x
+   (el `hoja: true` de `/reparto/pegar`). Falta: (1) nada del servidor; (2) la nativa en Play (misma versión 22 que la carga
+   guiada y la entrega verificada); (3) probarlo con una hoja real (el PDF del correo de la agencia, la captura del
+   WhatsApp del jefe): si lee mal, afinar `paradas_de_hoja` en los dos sitios (web y servidor) con ese caso en
+   `check-leer-etiqueta.mjs` y en `test_compartir_hoja.py`.
+-19. **01-11 mañana, la entrega verificada (IA sobre la foto de entrega)**: HECHA en servidor, web y nativa, con tests;
+   backend y web DESPLEGADOS a las 12:2x. Falta: (1) la nativa en Play; (2) mirar con fotos reales (OGA5) qué contesta Gemini y, si
+   pregunta de más o lee mal los números, afinar el prompt (`_rep_ia_entrega_llamada`) o las reglas
+   (`reparto.veredicto_entrega`); (3) la nativa va en la misma versión 22 de Play que la carga guiada.
+-18. **01-11 madrugada, la carga guiada y el briefing por voz**: HECHOS en servidor, web y nativa, con tests; backend y
+   web DESPLEGADOS el 01-11 a las 10:0x. Falta: (1) la nativa: subir `versionCode` a 22 y `versionName` a 2.5.0 en
+   `build.gradle.kts`, dejar que `app-release.yml` compile el AAB, subirlo a Play Console y poner
+   `APP_ANDROID_PLAY="22 2.5.0"`; (2)
    probarlo en la nave con los de OGA5 y decidir las reglas que faltan (bultos grandes al suelo, prioridad delante,
    briefing por distancia).
 -17. **01-11 madrugada, la auditoría** (`docs/AUDITORIA-2026-11-01.md`): lo que solo puede hacer Dani, por orden (§8): (1) Cloudflare «Always Use HTTPS» + HSTS; (2) variables `BACKEND_URL`/`FRONTEND_URL` en GitHub para que `uptime.yml` vigile; (3) Meta: pagar o cerrar la cuenta (restringida); (4) Apple: vídeo en iPhone físico + cuentas de prueba + notas de `APP_STORE.md`, o dejar iPhone para después; (5) desplegar lo de esta noche (backend con las dependencias nuevas SOLO con el CI de `292a55f` verde; web con HSTS; el Worker del dominio con `wrangler deploy` desde `infra/web-dominio/`); (6) Amazon A-G; (7) R2 a su cuenta con dominio propio y enlaces firmados; (8) una cuenta de super-admin de solo lectura para poder medir. Y la decisión de fondo: vender Flota a DSP y flotas de furgonetas a mano (tres pilotos en 6 semanas) y parar los anuncios al autónomo. **31-10 noche**: la 2.4.2 (fotos de la auditoría) está PUBLICADA en Play (subida por Claude desde el Chrome de Dani el 31-10 a las 21:2x y aprobada por Google antes de las 22:20: «Activo · Última versión: 21 (2.4.2)») y la web sirve el APK 2.4.2 en `/descargas/FDS.apk`. Los secretos `APP_ANDROID_WEB`/`APP_ANDROID_PLAY` a "21 2.4.2" puestos el 31-10 a las 23:0x desde esta sesión (Dani: «No estoy en el ordenador, hazlo tú»): el servidor anuncia la 2.4.2 y la app avisa de la actualización a quien tenga una más vieja. De la 2.4.2 no queda nada pendiente: solo ver en Play Console cómo llega (descargas de la 21). Backend desplegado; la 2.4.2 verificada en el emulador con la auditoría entera; Junior y Karim entran con la temporal de la oficina. La trampa del APK viejo (sin `gh`, pasadas 24 h del APK local el despliegue de la web habría servido el FDS.apk del repo, que era la 1.0.3) quedó ARREGLADA el 01-11 (00:0x): ver la sesión de la madrugada del 01-11.

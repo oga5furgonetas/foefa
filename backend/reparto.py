@@ -57,6 +57,27 @@ CAMPOS_PERSONALES = ("cliente", "telefono", "direccion", "lat", "lng", "notas", 
 DONDE_ENTREGA = {"mano": "En mano", "vecino": "Al vecino", "buzon": "En el buzón",
                  "porteria": "En portería o recepción", "seguro": "En un lugar seguro"}
 
+# LA MEMORIA DE LA CALLE (01-11-2026): lo que se aprende de cada portal y vale para la próxima vez, para quien sea de
+# la empresa: el código del portal, dónde dejarlo y cómo se entra. Por dirección normalizada (clave_direccion); caduca
+# al año de la última vez que se tocó (son instrucciones de entrega del cliente final: no se guardan sin fin). Lo
+# escribe el repartidor desde la parada («Guardar para la próxima») y lo rellena solo el portal que da el cliente en su
+# enlace, si no había. Lo enseña la parada y lo dice el briefing.
+DIAS_MEMORIA = 365
+
+
+def memoria_sanea(data) -> dict:
+    """Lo que se guarda de un portal: el código (hasta 40), dónde dejar (una de DONDE_ENTREGA o nada) y el acceso
+    (hasta 200, en una línea). Todo vacío → {} (se borra)."""
+    d = data if isinstance(data, dict) else {}
+    portal = _corto(d.get("portal"), 40)
+    dejar = str(d.get("dejar") or "").strip()
+    if dejar not in DONDE_ENTREGA:
+        dejar = ""
+    acceso = _corto(re.sub(r"[\r\n\t]+", " ", str(d.get("acceso") or "")), 200)
+    if not (portal or dejar or acceso):
+        return {}
+    return {"portal": portal, "dejar": dejar, "acceso": acceso}
+
 
 def sin_acentos(s) -> str:
     return "".join(c for c in unicodedata.normalize("NFKD", str(s or ""))
@@ -606,6 +627,149 @@ def lee_pegado(texto) -> list:
     return salida
 
 
+# LA HOJA DE REPARTO LEÍDA (01-11-2026, «Compartir con FDS»): la app nativa lee en el móvil una foto, una captura o un
+# PDF de la hoja de la agencia (el mismo lector de texto que las etiquetas) y manda el texto. Aquí se decide qué líneas
+# son paradas, con la MISMA regla que la web en frontend/src/lib/hojaReparto.js (paradasDeHoja): las que tienen una
+# calle («Calle», «Rúa», «Avda», «Rue», «Straße»…) o un código postal del país con texto y un número. Cabeceras,
+# totales y firmas se quedan fuera. Si el nombre va en la línea de arriba o el CP y la población en la de abajo, se
+# juntan. Lo que sale va a _rep_nuevo como una fila pegada (código, cliente, dirección, teléfono).
+_VIA_HOJA = re.compile(
+    r"(^|\s)(?:c/|cl\.?|calle|r[uú]a|r/|avda\.?|av\.?|avenida|plaza|praza|pza\.?|paseo|p[ºo]\.?|traves[ií]a|trav\.?|camino|"
+    r"carretera|ctra\.?|lugar|lg\.?|urb\.?|urbanizaci[oó]n|ronda|glorieta|pol[ií]gono|pol\.?|estrada|camiño|rueiro|bloque|"
+    r"carrera|cra\.?|kr\.?|diagonal|dg\.?|transversal|tv\.|autopista|jir[oó]n|jr\.?|pasaje|psje\.?|calzada|calz\.?|privada|"
+    r"priv\.?|cerrada|andador|boulevard|bulevar|blvd\.?|prolongaci[oó]n|prol\.?|rodovia|rod\.?|alameda|al\.|travessa|largo|"
+    r"pra[cç]a|street|st\.|avenue|ave\.?|road|rd\.|drive|dr\.|lane|ln\.|rue|chemin|via|viale|piazza|corso|stra(?:ss|ß)e|str\.|"
+    r"weg|platz|allee|ladeira|impasse|all[ée]e|place|cours|quai|route|r[ée]sidence|lotissement|gasse|damm|ufer|steig|straat|"
+    r"gracht|laan|plein|kade|dijk|singel|court|ct\.|terrace|circle|cir\.|parkway|pkwy|highway|hwy|close|crescent|gardens|"
+    r"grove|square|sq\.|mews|vicolo|piazzale|lungomare|praceta)[\s,]+", re.I)
+_CABECERA_HOJA = re.compile(r"^(n[ºo°]?|num|c[oó]d(igo)?|ref|cliente|destinatari[oa]|nombre|direcci[oó]n|domicilio|"
+                            r"tel[eé]?f?(ono)?|cp|poblaci[oó]n|localidad|bultos|observaciones|firma|total)\b", re.I)
+_SOLO_LETRAS = re.compile(r"^(?:[^\W\d_]|[ .'-]){4,60}$")
+_CODIGO_HOJA = re.compile(r"^[A-Z0-9][A-Z0-9-]{5,}$")
+# «12 rue de la Paix», «12 High Street»: donde el número va delante de la calle, no es el número de la fila.
+_NUMERO_DELANTE = {"fr", "gb", "ie", "us", "ca", "au", "nz"}
+# La calle pegada al nombre («Hauptstraße 12», «Keizersgracht 123»): con un número, es una dirección.
+_CALLE_PEGADA = re.compile(r"\b[^\W\d_]{3,}(?:straße|strasse|str\.|weg|gasse|platz|allee|damm|ufer|steig|straat|laan|gracht|kade)\b", re.I)
+# El rótulo delante del teléfono («Tel.», «Tél :», «Phone»), que sin el número no es nada.
+_ROTULO_TEL = re.compile(r"^(?:t[1il]f|t[eé]l(?:[eé]fono)?|telefone|phone|mobile|m[oó]vil|cel|whatsapp)\s*[:.]?\s*", re.I)
+_CP_ROTULO = re.compile(r"\b(?:c\.?\s?p\.?|cep|c[oó]digo postal|zip|postal)\s*[:.-]?\s*([A-Z]?\d{4,7}(?:-\d{3,4})?[A-Z]{0,3})\b", re.I)
+_CP_PAIS = {
+    "es": re.compile(r"\b((?:0[1-9]|[1-4]\d|5[0-2])\d{3})\b"), "pt": re.compile(r"\b(\d{4}-\d{3})\b"),
+    "br": re.compile(r"\b(\d{5}-\d{3}|\d{8})\b"), "mx": re.compile(r"\b(\d{5})\b"), "us": re.compile(r"\b(\d{5})(?:-\d{4})?\b"),
+    "pe": re.compile(r"\b(\d{5})\b"), "fr": re.compile(r"\b(\d{5})\b"), "it": re.compile(r"\b(\d{5})\b"), "de": re.compile(r"\b(\d{5})\b"),
+    "ar": re.compile(r"\b([A-Z]\d{4}[A-Z]{3})\b"), "gb": re.compile(r"\b([A-Z]{1,2}\d[A-Z\d]?\s?\d[A-Z]{2})\b", re.I),
+    "nl": re.compile(r"\b(\d{4}\s?[A-Z]{2})\b"), "ie": re.compile(r"\b([A-Z]\d{2}\s?[A-Z0-9]{4})\b"),
+    "be": re.compile(r"\b(\d{4})\b"), "ch": re.compile(r"\b(\d{4})\b"), "at": re.compile(r"\b(\d{4})\b"), "ad": re.compile(r"\b(AD\d{3})\b"),
+    "cl": re.compile(r"\b(\d{7})\b"), "co": re.compile(r"\b(\d{6})\b"), "uy": re.compile(r"\b(\d{5})\b"), "py": re.compile(r"\b(\d{4})\b"),
+    "cr": re.compile(r"\b(\d{5})\b"), "pa": re.compile(r"\b(\d{4})\b"), "gt": re.compile(r"\b(\d{5})\b"), "do": re.compile(r"\b(\d{5})\b"),
+    "ve": re.compile(r"\b(\d{4})\b"), "ec": re.compile(r"\b(\d{6})\b"), "hn": re.compile(r"\b(\d{5})\b"), "ni": re.compile(r"\b(\d{5})\b"),
+    "sv": re.compile(r"\b(\d{4})\b"), "cu": re.compile(r"\b(\d{5})\b"), "cn": re.compile(r"\b(\d{6})\b"),
+}
+# Teléfono: [prefijo del país, largos válidos sin prefijo, primera cifra válida (o None)].
+_TEL_PAIS = {
+    "es": ("34", (9,), re.compile(r"^[6789]")), "pt": ("351", (9,), re.compile(r"^[29]")), "mx": ("52", (10,), None),
+    "br": ("55", (10, 11), None), "ar": ("54", (10,), None), "co": ("57", (10,), re.compile(r"^(3|60)")), "cl": ("56", (9,), None),
+    "pe": ("51", (9,), re.compile(r"^9")), "us": ("1", (10,), re.compile(r"^[2-9]")), "ec": ("593", (9, 10), None),
+    "ve": ("58", (10,), None), "uy": ("598", (8, 9), None), "py": ("595", (9, 10), None), "bo": ("591", (8,), None),
+    "gt": ("502", (8,), None), "cr": ("506", (8,), None), "pa": ("507", (7, 8), None), "do": ("1", (10,), None),
+    "fr": ("33", (9, 10), None), "it": ("39", (9, 10), None), "de": ("49", (10, 11), None), "gb": ("44", (10, 11), None),
+    "nl": ("31", (9,), None), "be": ("32", (8, 9), None), "ch": ("41", (9,), None), "at": ("43", (9, 10, 11, 12, 13), None),
+    "ie": ("353", (9,), None), "ad": ("376", (6, 9), None),
+}
+_TIRA_TEL = re.compile(r"(^|[^A-Za-z0-9])(\+?\(?\d[\d \t().-]{6,18}\d)(?![A-Za-z0-9])", re.M)
+
+
+def telefono_de(texto, pais: str = "es") -> str:
+    """El teléfono de una línea, como lo hace la web (interpretaEtiqueta.telefonoDe): cada tira de cifras con
+    separadores, sin el prefijo del país, con un largo y una primera cifra de las que usa ese país."""
+    pref, largos, inicio = _TEL_PAIS.get(pais, ("", (9, 10, 11), None))
+    for m in _TIRA_TEL.finditer(str(texto or "")):
+        d = re.sub(r"\D", "", m.group(2))
+        if pref and d.startswith(pref) and len(d) not in largos:
+            sin = d[len(pref):]
+            con_movil = len(sin) == 11 and ((pais == "mx" and sin[0] == "1") or (pais == "ar" and sin[0] == "9"))
+            if len(sin) in largos or con_movil:
+                d = sin
+        if pais == "mx" and len(d) == 11 and d.startswith("1"):
+            d = d[1:]
+        if pais == "ar" and len(d) == 11 and d.startswith("9"):
+            d = d[1:]
+        if pais == "ar" and re.match(r"^0?\d{2,4}15\d{6,8}$", d) and len(d) > 10:
+            d = re.sub(r"^(\d{2,4})15", r"\1", re.sub(r"^0", "", d))
+        if d.startswith("0") and len(d) not in largos and (len(d) - 1) in largos:
+            d = d[1:]
+        if len(d) in largos and (inicio is None or inicio.match(d)):
+            return d
+    return ""
+
+
+def _sin_telefono(linea: str, tel: str) -> str:
+    if not tel:
+        return linea
+    for m in re.finditer(r"\+?\(?\d[\d \t().-]{6,18}\d", linea):
+        if re.sub(r"\D", "", m.group(0)).endswith(tel):
+            return re.sub(r"\s+", " ", linea[:m.start()] + " " + linea[m.end():]).strip()
+    return linea
+
+
+def _antes_de_la_calle(texto: str) -> tuple:
+    """Lo de antes de la calle: «12 ZX812345 María López» → código y cliente."""
+    trozos = re.sub(r"^\s*\d{1,3}[.)-]?\s+", "", texto).split()
+    codigo = ""
+    if trozos and _CODIGO_HOJA.match(trozos[0]) and re.search(r"\d", trozos[0]):
+        codigo = trozos.pop(0)
+    cliente = re.sub(r"[,;:-]+$", "", " ".join(trozos)).strip()
+    return codigo, (cliente if re.search(r"[^\W\d_]{3,}", cliente) else "")
+
+
+def _cp_de(linea: str, pais: str) -> str:
+    m = _CP_ROTULO.search(linea) or _CP_PAIS.get(pais, _CP_PAIS["es"]).search(linea)
+    return m.group(1) if m else ""
+
+
+def paradas_de_hoja(texto, pais: str = "es") -> list:
+    """Las paradas que hay en el texto leído de una hoja de reparto (ver arriba). Nunca lanza."""
+    pais = (pais or "es").lower()
+    lineas = [l for l in (re.sub(r"\s+", " ", l.replace("|", " ")).strip() for l in str(texto or "").replace("\r", "").split("\n")) if l]
+    paradas = []
+    previa = ""          # la última línea que no fue parada (puede ser el nombre de la siguiente)
+    for linea in lineas[:MAX_PEGADO * 4]:
+        telefono = telefono_de(linea, pais)
+        limpia = _ROTULO_TEL.sub("", _sin_telefono(linea, telefono)).strip() if telefono else linea
+        # La cabecera, sin el teléfono: «Tel. 030 1234567» no es una cabecera, es el teléfono de la parada de arriba.
+        if _CABECERA_HOJA.match(limpia) and not _VIA_HOJA.search(f" {limpia} "):
+            previa = ""
+            continue
+        m = _VIA_HOJA.search(f" {limpia} ")
+        cp = _cp_de(limpia, pais)
+        if m:
+            i = max(0, m.start() + len(m.group(1)) - 1)
+            antes = limpia[:i]
+            numero_delante = pais in _NUMERO_DELANTE and re.fullmatch(r"\s*\d{1,4}[A-Za-z]?\s*", antes) is not None
+            codigo, cliente = ("", "") if numero_delante else _antes_de_la_calle(antes)
+            paradas.append({"codigo": codigo, "cliente": cliente or (previa if _SOLO_LETRAS.match(previa) and " " in previa else ""),
+                            "direccion": (limpia if numero_delante else limpia[i:]).strip(), "telefono": telefono, "cp": cp})
+            previa = ""
+            continue
+        ultima = paradas[-1] if paradas else None
+        # «15001 A Coruña» o solo el teléfono, debajo de la calle: es de la parada de arriba.
+        if ultima and not previa and ((cp and not ultima["cp"] and len(limpia) < 50) or (telefono and len(limpia) < 4)):
+            if cp and not ultima["cp"]:
+                ultima["direccion"] += f", {limpia}"
+                ultima["cp"] = cp
+            if telefono and not ultima["telefono"]:
+                ultima["telefono"] = telefono
+            continue
+        # Sin palabra de calle pero con CP y un número de portal: también es una dirección («Mayor 12 28013 Madrid»).
+        if (cp and re.search(r"[^\W\d_]{3,}", limpia) and re.search(r"\d", limpia.replace(cp, ""))) or (_CALLE_PEGADA.search(limpia) and re.search(r"\d", limpia)):
+            paradas.append({"codigo": "", "cliente": previa if _SOLO_LETRAS.match(previa) and " " in previa else "",
+                            "direccion": limpia, "telefono": telefono, "cp": cp})
+            previa = ""
+            continue
+        previa = limpia
+    return [{k: v for k, v in p.items() if k != "cp"} for p in paradas[:MAX_PEGADO]]
+
+
 def importe(v) -> float:
     """«23,50 €», «23.5», «1.234,50» -> 23.5 / 1234.5. Lo raro, 0."""
     t = re.sub(r"[^\d,.-]", "", str(v or ""))
@@ -1005,6 +1169,21 @@ def texto_respuesta(r: dict, quien: str = "", idioma: str = "es") -> str:
     return f"{quien}: {texto}" if quien else texto
 
 
+# LA VALORACIÓN DEL CLIENTE (01-11-2026): en su enlace, ya entregado, «¿Cómo ha ido?» de 1 a 5 estrellas y nada más (ni
+# texto libre: no hay datos de nadie que guardar). La primera recompensa del día que no depende de la agencia; y el
+# número que alimenta el perfil verificado del repartidor (el punto 7).
+def valoracion_sanea(data) -> tuple:
+    """(lo que se guarda, error): las estrellas, de 1 a 5."""
+    d = data if isinstance(data, dict) else {}
+    try:
+        n = int(float(d.get("estrellas")))
+    except (TypeError, ValueError):
+        return None, "Di de 1 a 5 estrellas"
+    if not 1 <= n <= 5:
+        return None, "Di de 1 a 5 estrellas"
+    return {"estrellas": n}, ""
+
+
 def sanea_intento(d) -> "dict | None":
     """El registro del intento que manda la app: cuándo llegó, si llamó y escribió, cuánto esperó. Solo
     fechas con forma de fecha y números con tope; sin nada de eso, nada."""
@@ -1044,6 +1223,68 @@ def puerta_valida(pos, lat, lng, precision_max: float = 50.0, metros_max: float 
     if lat is not None and lng is not None and distancia_km((lat, lng), p) * 1000 > metros_max:
         return None
     return (round(p[0], 6), round(p[1], 6), round(prec, 1))
+
+
+# LA ENTREGA VERIFICADA (01-11-2026): la IA mira la foto de entrega y dice si se ve el paquete, qué número se lee, si
+# hay un rótulo y si salen personas. De ahí sale un veredicto que la app enseña («verificada», o un aviso para repetir
+# la foto ahí mismo) y que el cliente ve en su enlace solo cuando es «verificada». Nunca bloquea: la IA se equivoca.
+# `aviso` es un código; cada app lo convierte en su frase (y lo traduce): personas, sin_paquete, otro_numero, sin_numero.
+NIVELES_IA = ("verificada", "parcial", "revisar", "pendiente")
+
+
+def numero_portal(direccion) -> str:
+    """El número de portal de una dirección: en el primer trozo (entre comas) que tenga alguno, el último número corto
+    que no sea un piso («2º», «3ªB») ni un código postal. «Rúa Nova 3, 2º» → 3; «Calle Real, 5, 2º» → 5;
+    «Calle 8 de Marzo 12» → 12; «Praza de Lugo s/n» → ''."""
+    for trozo in str(direccion or "").split(","):
+        nums = [m.group(1) for m in re.finditer(r"(?<![\d])(\d{1,4})(?![\d]|\s*[ºª°])", trozo)]
+        if nums:
+            return nums[-1]
+    return ""
+
+
+def _rotulo_cuadra(rotulo: str, cliente: str) -> bool:
+    """¿El rótulo que leyó la IA es el del cliente? Una palabra de 4+ letras en común basta («Farmacia Sol» y
+    «FARMACIA SOL, S.L.»)."""
+    a = set(re.findall(r"[a-z0-9]{4,}", norm(rotulo)))
+    b = set(re.findall(r"[a-z0-9]{4,}", norm(cliente)))
+    return bool(a & b)
+
+
+def veredicto_entrega(ia, direccion: str = "", cliente: str = "") -> dict:
+    """Lo que dijo la IA de la foto, convertido en veredicto:
+    · «verificada»: se ve el paquete y el número que se lee es el de la dirección (o el rótulo es el del cliente;
+      o, sin número en la dirección, la IA dice que cuadra);
+    · «revisar» (con aviso): se ven personas, no se ve el paquete, o el número de la foto no es el de la parada;
+    · «parcial»: se ve el paquete pero nada que diga que es ESA puerta (dentro del edificio, un buzón sin número):
+      con el aviso suave «sin_numero», que no pregunta nada.
+    Siempre vuelve lo leído (número, rótulo, lugar) para que la oficina lo vea."""
+    ia = ia if isinstance(ia, dict) else {}
+
+    def _si(v):
+        return v if isinstance(v, bool) else None
+
+    paquete, personas = _si(ia.get("paquete_visible")), _si(ia.get("personas"))
+    numero = _corto(ia.get("numero_visible"), 20) if ia.get("numero_visible") is not None else ""
+    rotulo = _corto(ia.get("rotulo"), 60) if ia.get("rotulo") is not None else ""
+    lugar = _corto(ia.get("lugar"), 20) if ia.get("lugar") is not None else ""
+    mio = numero_portal(direccion)
+    out = {"paquete": paquete, "personas": personas, "numero": numero or None, "portal": mio or None,
+           "rotulo": rotulo or None, "lugar": lugar or None}
+    if personas:
+        return {**out, "nivel": "revisar", "aviso": "personas"}
+    if paquete is False:
+        return {**out, "nivel": "revisar", "aviso": "sin_paquete"}
+    leidos = re.findall(r"\d{1,4}", numero)
+    if mio and leidos and mio not in leidos:
+        return {**out, "nivel": "revisar", "aviso": "otro_numero"}
+    if mio and leidos and mio in leidos:
+        return {**out, "nivel": "verificada", "aviso": None}
+    if rotulo and cliente and _rotulo_cuadra(rotulo, cliente):
+        return {**out, "nivel": "verificada", "aviso": None}
+    if not mio and paquete and _si(ia.get("coincide")) is True:
+        return {**out, "nivel": "verificada", "aviso": None}
+    return {**out, "nivel": "parcial", "aviso": "sin_numero" if paquete else None}
 
 
 def caja_de(puntos, margen: float = 0.0):

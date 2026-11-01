@@ -92,6 +92,8 @@ function Llegada({ p }) {
 
 // Dónde dejó el repartidor el paquete (mismas claves que el servidor, reparto.DONDE_ENTREGA).
 const DONDE_ENTREGA = { mano: 'En mano', vecino: 'Al vecino', buzon: 'En el buzón', porteria: 'En portería o recepción', seguro: 'En un lugar seguro' }
+// LA ENTREGA VERIFICADA (01-11-2026): lo que la IA dijo de la foto de entrega, para la oficina.
+const AVISOS_IA = { personas: 'se ven personas', sin_paquete: 'no se ve el paquete', otro_numero: 'el número de la foto no es el de la parada', sin_numero: 'no se ve el número del portal' }
 
 export default function Reparto() {
   const { center } = useOutletContext() || {}
@@ -315,6 +317,10 @@ export default function Reparto() {
                             {p.reintento > 0 && <div className="mt-1 text-[11px] text-dark-500">{p.reintento}º intento</div>}
                             {p.entrega_donde && <div className="mt-1 text-[11px] text-dark-300">{DONDE_ENTREGA[p.entrega_donde] || ''}</div>}
                             {p.entrega_nota && <div className="mt-1 text-[11px] text-dark-400">«{p.entrega_nota}»</div>}
+                            {p.estado === 'entregado' && p.entrega_ia?.nivel === 'verificada' && <div className="mt-1 text-[11px] text-emerald-300">Entrega verificada por IA</div>}
+                            {p.estado === 'entregado' && p.entrega_ia?.nivel === 'revisar' && <div className="mt-1 text-[11px] text-amber-300">Foto por revisar: {AVISOS_IA[p.entrega_ia.aviso] || ''}{p.entrega_ia.aviso === 'otro_numero' ? ` (${p.entrega_ia.numero} ≠ ${p.entrega_ia.portal})` : ''}</div>}
+                            {/* LA VALORACIÓN DEL CLIENTE (01-11-2026): las estrellas que puso en su enlace. */}
+                            {p.estado === 'entregado' && p.valoracion?.estrellas > 0 && <div className="mt-1 text-[11px] text-amber-300" title="Valoración del cliente">{'★'.repeat(p.valoracion.estrellas)}{'☆'.repeat(5 - p.valoracion.estrellas)} el cliente</div>}
                             {p.tiene_foto && !tapado && (
                               <button className="mt-1 block text-[11.5px] font-semibold text-brand-300"
                                 onClick={async () => {

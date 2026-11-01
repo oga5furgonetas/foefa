@@ -196,6 +196,13 @@ const esperadaMx = [
   { codigo: '', cliente: 'Josefina Ruiz', direccion: 'Av. Insurgentes Sur 1602, 03940 Ciudad de Mexico', telefono: '' },
 ]
 if (JSON.stringify(hojaMx) !== JSON.stringify(esperadaMx)) fallos.push(`hoja · México: salió ${JSON.stringify(hojaMx)}`)
+// El número delante de la calle (Francia) y la calle pegada al nombre (Alemania), con el teléfono rotulado debajo (01-11-2026).
+const hojaFr = paradasDeHoja(`Marie Dupont\n12 rue de la Paix\n75002 Paris\nTél : 06 12 34 56 78`, 'fr')
+const esperadaFr = [{ codigo: '', cliente: 'Marie Dupont', direccion: '12 rue de la Paix, 75002 Paris', telefono: '0612345678' }]
+if (JSON.stringify(hojaFr) !== JSON.stringify(esperadaFr)) fallos.push(`hoja · Francia: salió ${JSON.stringify(hojaFr)}`)
+const hojaDe = paradasDeHoja(`Hans Müller\nHauptstraße 12\n10115 Berlin\nTel. 030 1234567`, 'de')
+const esperadaDe = [{ codigo: '', cliente: 'Hans Müller', direccion: 'Hauptstraße 12, 10115 Berlin', telefono: '0301234567' }]
+if (JSON.stringify(hojaDe) !== JSON.stringify(esperadaDe)) fallos.push(`hoja · Alemania: salió ${JSON.stringify(hojaDe)}`)
 if (!textoParaPegar(hoja).startsWith('codigo; cliente; direccion; telefono\nZX812345; María López;')) fallos.push('hoja: el texto para pegar no lleva la cabecera')
 // Un CSV con comas y comillas pasa a «;» sin romper «López, María».
 const csv = csvAPegar('codigo,cliente,direccion\nZX1,"López, María","Calle Mayor 12, 15001 A Coruña"\n')

@@ -15,6 +15,12 @@ import { VIA, interpretaTicket, telefonoDe } from './interpretaEtiqueta.js'
 const SOLO_LETRAS = /^[\p{L} .'-]{4,60}$/u
 const CABECERA = /^(n[ºo°]?|num|c[oó]d(igo)?|ref|cliente|destinatari[oa]|nombre|direcci[oó]n|domicilio|tel[eé]?f?(ono)?|cp|poblaci[oó]n|localidad|bultos|observaciones|firma|total)\b/i
 const CODIGO = /^[A-Z0-9][A-Z0-9-]{5,}$/
+// «12 rue de la Paix», «12 High Street»: donde el número va delante de la calle, no es el número de la fila (01-11-2026).
+const NUMERO_DELANTE = new Set(['fr', 'gb', 'ie', 'us', 'ca', 'au', 'nz'])
+// La calle pegada al nombre («Hauptstraße 12», «Keizersgracht 123»): con un número, es una dirección.
+const CALLE_PEGADA = /\b\p{L}{3,}(?:straße|strasse|str\.|weg|gasse|platz|allee|damm|ufer|steig|straat|laan|gracht|kade)\b/iu
+// El rótulo delante del teléfono («Tel.», «Tél :», «Phone»), que sin el número no es nada.
+const ROTULO_TEL = /^(?:t[1il]f|t[eé]l(?:[eé]fono)?|telefone|phone|mobile|m[oó]vil|cel|whatsapp)\s*[:.]?\s*/i
 
 const cpDe = (linea, pais) => interpretaTicket(`Calle x\n${linea}`, pais).cp
 
@@ -41,16 +47,19 @@ export function paradasDeHoja(texto, pais = 'es') {
   const paradas = []
   let previa = ''          // la última línea que no fue parada (puede ser el nombre de la siguiente)
   for (const linea of lineas) {
-    if (CABECERA.test(linea) && !VIA.test(` ${linea} `)) { previa = ''; continue }
     const telefono = telefonoDe(linea, pais)
-    const limpia = sinTelefono(linea, telefono)
+    const limpia = telefono ? sinTelefono(linea, telefono).replace(ROTULO_TEL, '').trim() : linea
+    // La cabecera, sin el teléfono: «Tel. 030 1234567» no es una cabecera, es el teléfono de la parada de arriba.
+    if (CABECERA.test(limpia) && !VIA.test(` ${limpia} `)) { previa = ''; continue }
     const m = ` ${limpia} `.match(VIA)
     const cp = cpDe(limpia, pais)
     if (m) {
       const i = Math.max(0, m.index + m[1].length - 1)
-      const { codigo, cliente } = antesDeLaCalle(limpia.slice(0, i))
+      const antes = limpia.slice(0, i)
+      const numeroDelante = NUMERO_DELANTE.has(pais) && /^\s*\d{1,4}[A-Za-z]?\s*$/.test(antes)
+      const { codigo, cliente } = numeroDelante ? { codigo: '', cliente: '' } : antesDeLaCalle(antes)
       paradas.push({ codigo, cliente: cliente || (SOLO_LETRAS.test(previa) && previa.includes(' ') ? previa : ''),
-        direccion: limpia.slice(i).trim(), telefono, cp })
+        direccion: (numeroDelante ? limpia : limpia.slice(i)).trim(), telefono, cp })
       previa = ''
       continue
     }
@@ -62,7 +71,7 @@ export function paradasDeHoja(texto, pais = 'es') {
       continue
     }
     // Sin palabra de calle pero con CP y un número de portal: también es una dirección («Mayor 12 28013 Madrid»).
-    if (cp && /\p{L}{3,}/u.test(limpia) && /\d/.test(limpia.replace(cp, ''))) {
+    if ((cp && /\p{L}{3,}/u.test(limpia) && /\d/.test(limpia.replace(cp, ''))) || (CALLE_PEGADA.test(limpia) && /\d/.test(limpia))) {
       paradas.push({ codigo: '', cliente: SOLO_LETRAS.test(previa) && previa.includes(' ') ? previa : '', direccion: limpia, telefono, cp })
       previa = ''
       continue

@@ -202,6 +202,7 @@ fun AjustesPantalla(alGuardar: () -> Unit = {}) {
     var pagoParada by remember { mutableStateOf("") }
     var pagoDia by remember { mutableStateOf("") }
     var costeKm by remember { mutableStateOf("") }
+    var bizum by remember { mutableStateOf("") }      // la propina (01-11-2026)
     var guardandoTarifa by remember { mutableStateOf(false) }
     var mensajeTarifa by remember { mutableStateOf<String?>(null) }
     var eligiendoHora by remember { mutableStateOf(false) }
@@ -219,6 +220,7 @@ fun AjustesPantalla(alGuardar: () -> Unit = {}) {
             pagoParada = deCent(a["pago_parada"]?.jsonPrimitive?.intOrNull)
             pagoDia = deCent(a["pago_dia"]?.jsonPrimitive?.intOrNull)
             costeKm = deCent(a["coste_km"]?.jsonPrimitive?.intOrNull?.let { if (Region.unidades == "mi") Math.round(it * Region.KM_POR_MILLA).toInt() else it })   // en millas se enseña por milla
+            bizum = a["bizum"]?.jsonPrimitive?.contentOrNull.orEmpty()
         }.onFailure { mensaje = tx("Sin conexión: los ajustes de la ruta se cargan con red.") }
     }
     // Los países donde funciona, con sus husos, como los da el servidor (ordenados por nombre).
@@ -336,12 +338,20 @@ fun AjustesPantalla(alGuardar: () -> Unit = {}) {
                 Spacer(Modifier.height(6.dp))
                 OutlinedTextField(costeKm, { costeKm = it }, label = { Text(if (Region.unidades == "mi") tx("Gasolina por milla ({moneda})", "moneda" to Region.simbolo) else tx("Gasolina por km ({moneda})", "moneda" to Region.simbolo)) }, singleLine = true,
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal), modifier = Modifier.fillMaxWidth())
+                if (Region.pais == "es") {
+                    // LA PROPINA (01-11-2026): el Bizum, que el cliente ve en su enlace cuando ya tiene el paquete.
+                    Spacer(Modifier.height(6.dp))
+                    OutlinedTextField(bizum, { bizum = it.filter { c -> c.isDigit() || c == '+' || c == ' ' }.take(20) }, label = { Text(tx("Tu móvil de Bizum, para la propina (opcional)")) },
+                        singleLine = true, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Phone), modifier = Modifier.fillMaxWidth())
+                    Text(tx("Cuando el cliente ya tiene el paquete, su enlace le dice «¿Le invitas a un café?» con tu Bizum. Lo que te manden es un ingreso tuyo."),
+                        style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
                 Spacer(Modifier.height(8.dp))
                 Button(onClick = {
                     guardandoTarifa = true; mensajeTarifa = null
                     ambito.launch {
                         try {
-                            app.repo.guardarGanancias(aCent(pagoParada), aCent(pagoDia), if (Region.unidades == "mi") Math.round(aCent(costeKm) / Region.KM_POR_MILLA).toInt() else aCent(costeKm))
+                            app.repo.guardarGanancias(aCent(pagoParada), aCent(pagoDia), if (Region.unidades == "mi") Math.round(aCent(costeKm) / Region.KM_POR_MILLA).toInt() else aCent(costeKm), bizum.trim())
                             mensajeTarifa = tx("Guardado: lo verás en «Hoy».")
                             alGuardar()
                         } catch (e: ErrorApi) { mensajeTarifa = e.message } finally { guardandoTarifa = false }

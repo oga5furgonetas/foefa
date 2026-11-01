@@ -27,6 +27,8 @@ object Briefing {
         if (hasta != null) partes += tx("hasta las {h}", "h" to hasta)
         else if (p.horario.isNotBlank()) partes += p.horario
         p.clienteDice?.let { textoClienteDice(it) }?.takeIf { it.isNotBlank() }?.let { partes += tx("el cliente dice: {t}", "t" to it) }
+        // La memoria de la calle (01-11-2026): el portal, dónde dejar y cómo se entra, como lo apuntó quien estuvo antes.
+        p.memoria?.let { textoMemoria(it) }?.takeIf { it.isNotBlank() }?.let { partes += it }
         if (p.hueco.isNotBlank()) partes += tx("en la furgoneta, {s}", "s" to huecoHablado(p.hueco))
         if (p.bultos > 1) partes += tx("{n} bultos", "n" to p.bultos)
         if (p.porCobrar) partes += tx("cobro a la entrega: {i}", "i" to Region.importe(p.cobrar ?: 0.0))

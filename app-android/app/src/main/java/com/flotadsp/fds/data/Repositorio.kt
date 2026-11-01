@@ -280,18 +280,18 @@ class Repositorio(private val ctx: Context, val cuenta: Cuenta, val api: Api) {
         return r.copy(pedidos = r.pedidos.map { p -> ult[p.id]?.let { p.copy(estado = it.estado, cerradoEn = it.hechoEn) } ?: p })
     }
 
-    /** Entregado / no entregado. Sin red (o con el servidor caído) se guarda y se manda solo después: devuelve
-     *  false en ese caso. Si ya hay algo de esa parada esperando a salir, esto va DETRÁS, en orden: mandarlo ahora
-     *  adelantaría al cambio anterior y el servidor acabaría con el estado viejo (29-10-2026). */
-    suspend fun cambiarEstado(id: String, estado: String, cuerpo: JsonObject, nombre: String = ""): Boolean {
+    /** Entregado / no entregado. Devuelve la respuesta del servidor (la parada, con lo que dijo la IA de la foto si la
+     *  hubo). Sin red (o con el servidor caído) se guarda y se manda solo después: devuelve null en ese caso. Si ya hay
+     *  algo de esa parada esperando a salir, esto va DETRÁS, en orden: mandarlo ahora adelantaría al cambio anterior y
+     *  el servidor acabaría con el estado viejo (29-10-2026). */
+    suspend fun cambiarEstado(id: String, estado: String, cuerpo: JsonObject, nombre: String = ""): JsonObject? {
         val hechoEn = Instant.now().toString()
         val todo = JsonObject(cuerpo + ("estado" to kotlinx.serialization.json.JsonPrimitive(estado)) +
             ("hecho_en" to kotlinx.serialization.json.JsonPrimitive(hechoEn)))
         val yaEspera = _pendientes.value.any { it.quien == cuenta.quien() && it.id == id }
         if (!yaEspera) {
             try {
-                api.post("reparto/pedidos/$id/estado", todo)
-                return true
+                return api.post("reparto/pedidos/$id/estado", todo).jsonObject
             } catch (e: ErrorApi) {
                 if (!e.reintentable) throw e
             }
@@ -300,7 +300,7 @@ class Repositorio(private val ctx: Context, val cuenta: Cuenta, val api: Api) {
             guardarCola(_pendientes.value + Pendiente(cuenta.quien(), id, estado, todo, hechoEn, nombre))
         }
         EnvioWorker.programar(ctx)
-        return false
+        return null
     }
 
     /** Manda lo guardado sin red, en orden. Devuelve (enviados, rechazados por el servidor); los rechazos quedan
@@ -349,6 +349,13 @@ class Repositorio(private val ctx: Context, val cuenta: Cuenta, val api: Api) {
         leer(api.post("reparto/mi-ruta/cargado", buildJsonObject { put("id", id); put("cargado", cargado) }))
 
     suspend fun nuevaParada(datos: JsonObject): Parada = leer(api.post("reparto/mis-pedidos", datos))
+    /** «COMPARTIR CON FDS» (01-11-2026): el texto de una lista (o lo leído de una foto, captura o PDF: `hoja`) al servidor,
+     *  que dice qué paradas ve (sin confirmar) o las crea. */
+    suspend fun pegar(texto: String, hoja: Boolean, pais: String, confirmar: Boolean): Pegado =
+        leer(api.post("reparto/pegar", buildJsonObject { put("texto", texto); put("hoja", hoja); put("pais", pais); put("confirmar", confirmar) }))
+    /** LA MEMORIA DE LA CALLE (01-11-2026): «Guardar para la próxima» en la puerta de esa parada; todo vacío la borra. */
+    suspend fun memoria(id: String, portal: String, dejar: String, acceso: String): JsonObject =
+        api.post("reparto/mis-pedidos/$id/memoria", buildJsonObject { put("portal", portal); put("dejar", dejar); put("acceso", acceso) }).jsonObject
     suspend fun editarParada(id: String, datos: JsonObject) { api.post("reparto/mis-pedidos/$id/editar", datos) }
     suspend fun quitarParada(id: String) { api.post("reparto/mis-pedidos/$id/quitar") }
 
@@ -367,8 +374,8 @@ class Repositorio(private val ctx: Context, val cuenta: Cuenta, val api: Api) {
     suspend fun zbe(): Zbe = leer(api.get("reparto/mi-ruta/zbe"))
 
     /** La tarifa de «Mi dinero hoy», en céntimos de su moneda (PUT /reparto/ganancias, como la web). */
-    suspend fun guardarGanancias(pagoParada: Int, pagoDia: Int, costeKm: Int) {
-        api.put("reparto/ganancias", buildJsonObject { put("pago_parada", pagoParada); put("pago_dia", pagoDia); put("coste_km", costeKm) })
+    suspend fun guardarGanancias(pagoParada: Int, pagoDia: Int, costeKm: Int, bizum: String = "") {
+        api.put("reparto/ganancias", buildJsonObject { put("pago_parada", pagoParada); put("pago_dia", pagoDia); put("coste_km", costeKm); put("bizum", bizum) })
     }
 
     suspend fun ordenAMano(ids: List<String>) {

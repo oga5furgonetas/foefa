@@ -41,7 +41,7 @@ en los últimos 50 metros (el portal, el cliente), después (el dinero y la prue
 ## 2. Las doce cosas, por orden de impacto partido por esfuerzo
 
 ### 1. Carga guiada: la furgoneta se organiza sola mientras escaneas (3-4 días)
-> **HECHA el 01-11-2026 (madrugada), en web y nativa, sin desplegar** (ver `ESTADO.md`). Lo que difiere de lo de abajo: el
+> **HECHA el 01-11-2026 (madrugada), en web y nativa; servidor y web desplegados a las 10:0x, la nativa espera versión en Play** (ver `ESTADO.md`). Lo que difiere de lo de abajo: el
 > hueco es solo por posición (sin «bultos grandes al suelo» ni «prioridad delante»), y el aviso de «qué mover» al
 > reordenar no existe (las zonas son gruesas: lo normal es que nada cambie de fila).
 
@@ -60,7 +60,7 @@ en los últimos 50 metros (el portal, el cliente), después (el dinero y la prue
 - **Quién lo tiene.** Spoke, a medias (Package Finder: te dice dónde dejaste cada paquete, no te dice dónde ponerlo).
 
 ### 2. El briefing de la parada, por voz, 300 metros antes (2-3 días)
-> **HECHO el 01-11-2026 (madrugada), en web y nativa, sin desplegar** (ver `ESTADO.md`). Salta al cambiar la siguiente
+> **HECHO el 01-11-2026 (madrugada), en web y nativa; servidor y web desplegados a las 10:0x, la nativa espera versión en Play** (ver `ESTADO.md`). Salta al cambiar la siguiente
 > parada (al dar la anterior por hecha, o al ordenar), no a 300 m por GPS: se oye antes de arrancar y funciona sin red.
 > La variante por distancia queda como mejora.
 
@@ -77,6 +77,10 @@ en los últimos 50 metros (el portal, el cliente), después (el dinero y la prue
 - **Quién lo tiene.** DispatchTrack (enterprise). Ningún planificador de autónomos.
 
 ### 3. Memoria de la calle compartida (3 días)
+> **HECHA el 01-11-2026 (mañana), en servidor, web y nativa** (ver `ESTADO.md`): el código del portal, dónde dejar y
+> cómo se entra, por dirección y para toda la empresa; el portal que da el cliente entra solo; caduca al año. Sin foto
+> del portal ni contadores por franja (lo segundo es el punto 5).
+
 - **Qué es.** Cada portal acumula lo que se aprende: código, «deja en el buzón», «perro», «entrada por el garaje»,
   «no hay ascensor», la foto del portal, y a qué hora suelen estar. Para el autónomo es suya; para una empresa es DE
   LA EMPRESA: el conductor nuevo en una ruta hereda lo que sabía el anterior. Es exactamente lo que Amazon y HERE
@@ -91,6 +95,10 @@ en los últimos 50 metros (el portal, el cliente), después (el dinero y la prue
 - **Quién lo tiene.** Amazon (dentro), HERE (beta). Spoke/Routal, no.
 
 ### 4. Comprobación de puerta con IA: la entrega que nadie puede discutir (2 días)
+> **HECHA el 01-11-2026 (mañana), en servidor, web y nativa** (ver `ESTADO.md`). Lo que difiere de lo de abajo: se
+> pregunta solo cuando algo está mal (personas, sin paquete, otro número); una foto sin número visible queda «parcial»
+> con una nota y no pregunta; y la petición espera 8 s por la IA y el resto llega en segundo plano.
+
 - **Qué es.** Al hacer la foto de entrega, Gemini Flash mira si sale el número o el portal de ESA dirección, si se ve
   el paquete y si el sitio es razonable (buzón, puerta, conserje). Si no cuadra, avisa ANTES de marcar entregado
   («no se ve el número; haz la foto con la puerta»). La parada queda «entrega verificada» y el enlace del cliente lo
@@ -119,6 +127,10 @@ en los últimos 50 metros (el portal, el cliente), después (el dinero y la prue
 - **Quién lo tiene.** Las grandes plataformas por dentro. Ninguna app de ruta.
 
 ### 6. El cliente avisado solo, la propina y la valoración (2-3 días + configurar Meta)
+> **HECHO el 01-11-2026 (mediodía), en servidor, web y nativa** (ver `ESTADO.md`): «Avisar a todos por WhatsApp» uno
+> a uno (el botón de abajo, sin la API de Meta: la cuenta sigue restringida), las estrellas de un toque en el enlace
+> y el Bizum del repartidor cuando el cliente ya tiene el paquete (se copia el número: Bizum no tiene enlace).
+
 - **Qué es.** (a) Al empezar la ruta, cada cliente con teléfono recibe «Tu paquete llega entre las 11 y las 12;
   si no vas a estar, dinos dónde dejarlo» con el enlace que ya existe; a 2 paradas, «llego en 10 min». Para una
   empresa va por la API de WhatsApp (≈0,02-0,05 € por mensaje de utilidad, a confirmar en la tabla de Meta, se
@@ -166,6 +178,10 @@ en los últimos 50 metros (el portal, el cliente), después (el dinero y la prue
   lo visual y por delante en coste y en modo sin conexión.
 
 ### 9. «Compartir con FDS»: la hoja de la agencia entra sola (1-2 días)
+> **HECHO el 01-11-2026 (mañana), en nativa y servidor** (ver `ESTADO.md`): texto, fotos o capturas y PDF, leídos en
+> el móvil (ML Kit; el PDF con PdfRenderer) y filtrados por el servidor con la misma regla que la web. Sin iPhone (es
+> la web). Falta verlo con una hoja real de la agencia.
+
 - **Qué es.** En Android (y en el iPhone con la hoja de compartir), cualquier PDF, foto, captura o texto compartido
   con FDS se convierte en paradas: el manifiesto en PDF de la agencia, la captura del WhatsApp del jefe, la lista del
   Excel. Gemini ya lee la foto de la hoja; falta que FDS aparezca en «Compartir».
@@ -174,6 +190,9 @@ en los últimos 50 metros (el portal, el cliente), después (el dinero y la prue
 - **Quién lo tiene.** Routal, por foto; por «compartir» desde cualquier app, no lo he visto en ninguna.
 
 ### 10. El día en una tarjeta y el trimestre para la gestoría (2-3 días)
+> **La tarjeta, HECHA el 01-11-2026 (tarde), en la web** (ver `ESTADO.md`): a la primera, lo limpio por hora y a qué
+> hora acabó, con el QR de invitación. El trimestre para la gestoría, NO.
+
 - **Qué es.** Al cerrar el día, una tarjeta para el estado de WhatsApp: entregas, a la primera, €/hora, km, hora de
   fin, con tu enlace de invitación (existe `compartirDia.js`: hay que convertirla en la joya). Y al mes y al
   trimestre, el fichero para la gestoría con gastos (foto del ticket) y kilómetros, IVA e IRPF (existe el Excel;

@@ -1,6 +1,6 @@
 package com.flotadsp.fds.ui
 
-/* GENERADO por scripts/nativa-idioma.mjs (30-10-2026): no editar a mano. 678 textos de la app nativa con sus
+/* GENERADO por scripts/nativa-idioma.mjs (30-10-2026): no editar a mano. 719 textos de la app nativa con sus
    traducciones (en, pt, fr, it, de), sacadas de la web (frontend/src/lib/textosRuta*.js) y de
    app-android/traducciones-nativa.json. Una fila por línea, columnas con TAB; ⏎ es un salto de línea. En bloques
    porque una constante de Kotlin no puede pasar de 64 KB. */
@@ -14,6 +14,7 @@ internal object Traducciones {
 1 cambio guardado en el móvil: se envía solo al volver la red.	1 change saved on the phone: it is sent by itself when the network is back.	1 alteração guardada no telemóvel: envia-se sozinha quando voltar a rede.	1 changement enregistré sur le téléphone : il s’envoie tout seul au retour du réseau.	1 modifica salvata sul telefono: si invia da sola quando torna la rete.	1 Änderung auf dem Handy gespeichert: wird von selbst gesendet, sobald das Netz zurück ist.
 1 entrega pendiente	1 delivery pending	1 entrega pendente	1 livraison en attente	1 consegna in sospeso	1 Lieferung offen
 1 parada de otro día sigue sin cerrar.	1 stop from another day is still open.	1 paragem de outro dia continua por fechar.	1 arrêt d’un autre jour est toujours ouvert.	1 fermata di un altro giorno è ancora aperta.	1 Stopp von einem anderen Tag ist noch offen.
+1 parada en lo compartido	1 stop in what you shared	1 paragem no partilhado	1 arrêt dans le partage	1 fermata in quanto condiviso	1 Stopp im Geteilten
 1 parada traída a hoy. Pulsa «Ordenar ruta».	1 stop moved to today. Tap “Sort route”.	1 paragem trazida para hoje. Toque em «Ordenar rota».	1 arrêt ramené à aujourd’hui. Appuyez sur « Trier la tournée ».	1 fermata portata a oggi. Tocca «Ordina giro».	1 Stopp auf heute geholt. Tippe auf „Route sortieren“.
 1 sin entregar = {euros} sin cobrar	1 not delivered = {euros} unpaid	1 não entregue = {euros} por cobrar	1 non livré = {euros} non payé	1 non consegnato = {euros} non incassati	1 nicht zugestellt = {euros} unbezahlt
 A cobrar ({moneda}, opcional)	To collect ({moneda}, optional)	A cobrar ({moneda}, opcional)	À encaisser ({moneda}, facultatif)	Da incassare ({moneda}, facoltativo)	Zu kassieren ({moneda}, optional)
@@ -46,6 +47,8 @@ Auditoría del vehículo	Vehicle audit	Auditoria do veículo	Contrôle du véhic
 Auditoría enviada correctamente.	Inspection sent.	Inspeção enviada.	Inspection envoyée.	Ispezione inviata.	Inspektion gesendet.
 Auditoría · {n} de 3	Inspection · {n} of 3	Inspeção · {n} de 3	Inspection · {n} sur 3	Ispezione · {n} di 3	Inspektion · {n} von 3
 Automático	Automatic	Automático	Automatique	Automatico	Automatisch
+Avisado	Notified	Avisado	Prévenu	Avvisato	Benachrichtigt
+Avisar a todos por WhatsApp	Notify everyone on WhatsApp	Avisar todos por WhatsApp	Prévenir tout le monde par WhatsApp	Avvisa tutti su WhatsApp	Alle per WhatsApp benachrichtigen
 Avisar que no puedo ir	Report that I can’t make it	Avisar que não posso ir	Prévenir que je ne peux pas venir	Avvisare che non posso venire	Melden, dass ich nicht kommen kann
 Aviso enviado a la oficina.	The office has been notified.	Aviso enviado ao escritório.	Le bureau a été prévenu.	Avviso inviato all’ufficio.	Das Büro wurde benachrichtigt.
 Avisos	Notifications	Avisos	Notifications	Avvisi	Mitteilungen
@@ -54,11 +57,16 @@ Añade tu correo personal. El acceso seguirá usando el correo de empresa; este 
 Añade tu tarjeta para empezar los 7 días gratis (hoy no se cobra nada).	Add your card to start the 7 free days (nothing is charged today).	Adicione o seu cartão para começar os 7 dias grátis (hoje não se cobra nada).	Ajoutez votre carte pour démarrer les 7 jours gratuits (rien n’est débité aujourd’hui).	Aggiungi la carta per iniziare i 7 giorni gratis (oggi non si paga nulla).	Füge deine Karte hinzu, um die 7 Gratistage zu starten (heute wird nichts abgebucht).
 Añadida a tu ruta.	Added to your route.	Adicionada à tua rota.	Ajouté à votre tournée.	Aggiunta al tuo giro.	Zu deiner Route hinzugefügt.
 Añadida: {d}	Added: {d}	Adicionada: {d}	Ajouté : {d}	Aggiunta: {d}	Hinzugefügt: {d}
+Añadidas {n} paradas a tu ruta.	{n} stops added to your route.	{n} paragens adicionadas à tua rota.	{n} arrêts ajoutés à ta tournée.	{n} fermate aggiunte al tuo giro.	{n} Stopps zu deiner Tour hinzugefügt.
+Añadir 1 parada	Add 1 stop	Adicionar 1 paragem	Ajouter 1 arrêt	Aggiungi 1 fermata	1 Stopp hinzufügen
 Añadir a mi ruta	Add to my route	Adicionar à minha rota	Ajouter à ma tournée	Aggiungi al percorso	Zur Route hinzufügen
 Añadir una parada	Add a stop	Adicionar uma paragem	Ajouter un arrêt	Aggiungi una fermata	Stopp hinzufügen
+Añadir {n} paradas	Add {n} stops	Adicionar {n} paragens	Ajouter {n} arrêts	Aggiungi {n} fermate	{n} Stopps hinzufügen
 Aún no hay días con paradas.	No days with stops yet.	Ainda não há dias com paragens.	Pas encore de journées avec des arrêts.	Ancora nessun giorno con fermate.	Noch keine Tage mit Stopps.
 Bono de bienvenida conseguido: {euros} en tu cartera.	Welcome bonus earned: {euros} in your wallet.	Bónus de boas-vindas conseguido: {euros} na tua carteira.	Bonus de bienvenue obtenu : {euros} dans votre portefeuille.	Bonus di benvenuto ottenuto: {euros} nel tuo portafoglio.	Willkommensbonus erhalten: {euros} in deinem Guthaben.
 Bono de bienvenida: {euros} por tu primera ruta de verdad.	Welcome bonus: {euros} for your first real route.	Bónus de boas-vindas: {euros} pela tua primeira rota a sério.	Bonus de bienvenue : {euros} pour votre première vraie tournée.	Bonus di benvenuto: {euros} per il tuo primo giro vero.	Willkommensbonus: {euros} für deine erste echte Route.
+Borrado.	Deleted.	Apagado.	Effacé.	Cancellato.	Gelöscht.
+Borrar lo guardado	Delete what’s saved	Apagar o guardado	Effacer ce qui est enregistré	Cancella quanto salvato	Gemerktes löschen
 Borrar mi cuenta	Delete my account	Eliminar a minha conta	Supprimer mon compte	Elimina il mio account	Mein Konto löschen
 Borrar tu cuenta	Delete your account	Eliminar a tua conta	Supprimer votre compte	Elimina il tuo account	Dein Konto löschen
 Briefing por voz	Voice briefing	Briefing por voz	Briefing vocal	Briefing vocale	Sprach-Briefing
@@ -90,6 +98,7 @@ Combustible	Fuel	Combustível	Carburant	Carburante	Kraftstoff
 Comparte FDS con otros repartidores	Share FDS with other couriers	Partilha o FDS com outros estafetas	Partagez FDS avec d’autres livreurs	Condividi FDS con altri corrieri	Teile FDS mit anderen Zustellern
 Comparte tu enlace y consulta tu cartera	Share your link and check your wallet	Partilha o teu link e consulta a tua carteira	Partagez votre lien et consultez votre portefeuille	Condividi il tuo link e controlla il tuo portafoglio	Teile deinen Link und sieh dein Guthaben
 Compartir mi enlace	Share my link	Partilhar o meu link	Partager mon lien	Condividi il mio link	Meinen Link teilen
+Comprueba lo que ha leído antes de añadirlo; lo que falte lo puedes meter después a mano.	Check what it read before adding it; anything missing can be added by hand later.	Confirma o que leu antes de adicionar; o que faltar podes meter depois à mão.	Vérifie ce qui a été lu avant d’ajouter ; ce qui manque pourra être saisi à la main après.	Controlla quello che ha letto prima di aggiungerlo; quello che manca lo puoi inserire a mano dopo.	Prüf das Gelesene, bevor du es hinzufügst; was fehlt, kannst du später von Hand eintragen.
 Confirmar	Confirm	Confirmar	Confirmer	Conferma	Bestätigen
 Confirmar la entrega	Confirm delivery	Confirmar a entrega	Confirmer la livraison	Conferma la consegna	Zustellung bestätigen
 Consulta el calendario y solicita un cambio	Check the calendar and request a change	Consulta o calendário e pede uma alteração	Consultez le calendrier et demandez un changement	Guarda il calendario e chiedi un cambio	Kalender ansehen und Änderung beantragen
@@ -105,9 +114,12 @@ Correo personal de recuperación	Personal recovery email	E-mail pessoal de recup
 Crea tu cuenta gratis	Create your free account	Cria a tua conta grátis	Créez votre compte gratuit	Crea il tuo account gratis	Kostenloses Konto erstellen
 Crear mi cuenta	Create my account	Criar a minha conta	Créer mon compte	Crea il mio account	Konto erstellen
 Crear mi cuenta gratis	Create my free account	Criar a minha conta grátis	Créer mon compte gratuit	Crea il mio account gratis	Mein kostenloses Konto erstellen
+Cuando el cliente ya tiene el paquete, su enlace le dice «¿Le invitas a un café?» con tu Bizum. Lo que te manden es un ingreso tuyo.	Once the customer has the parcel, their link says “Buy the courier a coffee?” with your Bizum. Whatever they send is income of yours.	Quando o cliente já tem a encomenda, o seu link diz «Pagas-lhe um café?» com o teu Bizum. O que te enviarem é um rendimento teu.	Quand le client a son colis, son lien lui dit « Tu lui offres un café ? » avec ton Bizum. Ce qu’on t’envoie est un revenu à toi.	Quando il cliente ha già il pacco, il suo link gli dice «Gli offri un caffè?» con il tuo Bizum. Quello che ti mandano è un tuo reddito.	Wenn der Kunde das Paket hat, sagt ihm sein Link „Lädst du auf einen Kaffee ein?“ mit deinem Bizum. Was man dir schickt, ist dein Einkommen.
 Cuenta	Account	Conta	Compte	Account	Konto
 Código de 6 cifras	6-digit code	Código de 6 dígitos	Code à 6 chiffres	Codice a 6 cifre	6-stelliger Code
+Código del portal	Door code	Código do portão	Code de l’immeuble	Codice del portone	Türcode
 Código: {x}	Code: {x}	Código: {x}	Code : {x}	Codice: {x}	Code: {x}
+Cómo se entra	How to get in	Como se entra	Comment entrer	Come si entra	Wie man reinkommt
 Daño	Damage	Dano	Dommage	Danno	Schaden
 Dejar de seguirme	Stop following me	Deixar de me seguir	Arrêter de me suivre	Smetti di seguirmi	Nicht mehr folgen
 Delante · der	Front · right	Frente · dir	Avant · droite	Davanti · dx	Vorne · rechts
@@ -140,6 +152,7 @@ Elige cómo ha pagado	Choose how they paid	Escolhe como pagou	Choisissez comment
 Elige la furgoneta de hoy	Choose today’s van	Escolhe a carrinha de hoje	Choisissez la camionnette du jour	Scegli il furgone di oggi	Wähle den Transporter für heute
 Elige tu contraseña	Choose your password	Escolhe a tua palavra-passe	Choisissez votre mot de passe	Scegli la tua password	Wähle dein Passwort
 En el buzón	In the mailbox	Na caixa do correio	Dans la boîte aux lettres	Nella cassetta postale	Im Briefkasten
+En la foto se lee el número {a} y la parada es el {b}: comprueba que es la puerta buena.	The photo shows number {a} and the stop is number {b}: check it’s the right door.	Na foto lê-se o número {a} e a paragem é o {b}: confirma que é a porta certa.	Sur la photo on lit le numéro {a} et l’arrêt est au {b} : vérifie que c’est la bonne porte.	Nella foto si legge il numero {a} e la fermata è il {b}: controlla che sia la porta giusta.	Auf dem Foto steht die Nummer {a}, der Stopp ist Nummer {b}: prüf, ob es die richtige Tür ist.
 En la furgoneta: {x}	In the van: {x}	Na carrinha: {x}	Dans la camionnette : {x}	Nel furgone: {x}	Im Transporter: {x}
 En mano	In person	Em mão	En main propre	A mano	Persönlich
 En portería	At reception	Na portaria	À la loge	In portineria	Beim Pförtner
@@ -152,6 +165,7 @@ Entrar	Log in	Entrar	Se connecter	Accedi	Anmelden
 Entrar con código	Sign in with a code	Entrar com código	Se connecter avec un code	Entra con un codice	Mit Code anmelden
 Entrar con un código en mi correo personal	Sign in with a code sent to my personal email	Entrar com um código no meu e-mail pessoal	Me connecter avec un code envoyé à mon e-mail personnel	Accedi con un codice sulla mia email personale	Mit einem Code an meine private E-Mail anmelden
 Entrega	Delivery	Entrega	Livraison	Consegna	Zustellung
+Entrega verificada por IA	Delivery verified by AI	Entrega verificada por IA	Livraison vérifiée par l’IA	Consegna verificata dall’IA	Zustellung per KI bestätigt
 Entregado	Delivered	Entregue	Livré	Consegnato	Zugestellt
 Entregado: {n}.	Delivered: {n}.	Entregue: {n}.	Livré : {n}.	Consegnato: {n}.	Zugestellt: {n}.
 Entregar	Deliver	Entregar	Livrer	Consegna	Zustellen
@@ -200,10 +214,12 @@ Estado no válido	Invalid status	Estado inválido	Statut non valide	Stato non va
 Estará en casa	Will be home	Vai estar em casa	Sera chez lui	Sarà a casa	Ist zu Hause
 Este día está dentro de una suspensión.	This day falls within a suspension.	Este dia está dentro de uma suspensão.	Ce jour est dans une période de suspension.	Questo giorno rientra in una sospensione.	Dieser Tag liegt in einer Sperrzeit.
 Este móvil no puede llamar.	This phone can’t make calls.	Este telemóvel não pode fazer chamadas.	Ce téléphone ne peut pas appeler.	Questo telefono non può chiamare.	Dieses Handy kann nicht telefonieren.
-Este móvil no tiene una app de cámara para hacer la foto.	This phone has no camera app to take the photo.	Este telemóvel não tem uma app de câmara para tirar a foto.	Ce téléphone n’a pas d’application appareil photo pour prendre la photo.	Questo telefono non ha un’app fotocamera per scattare la foto.	Dieses Handy hat keine Kamera-App für das Foto.
+""",
+        """Este móvil no tiene una app de cámara para hacer la foto.	This phone has no camera app to take the photo.	Este telemóvel não tem uma app de câmara para tirar a foto.	Ce téléphone n’a pas d’application appareil photo pour prendre la photo.	Questo telefono non ha un’app fotocamera per scattare la foto.	Dieses Handy hat keine Kamera-App für das Foto.
 Este regalo es para el plan Repartidor	This gift is for the Driver plan	Esta oferta é para o plano Estafeta	Ce cadeau est pour l’offre Livreur	Questo regalo è per il piano Corriere	Dieses Geschenk ist für den Fahrer-Tarif
 Esto es para el móvil del conductor	This is for the driver’s phone	Isto é para o telemóvel do motorista	Ceci est pour le téléphone du chauffeur	Questo è per il telefono dell’autista	Das ist für das Handy des Fahrers
 Estoy usando FDS para organizar repartos. Pruébala: {enlace}⏎⏎Si te registras con mi enlace y completas {e} entregas reales en varios días, puedo ganar {x}. Es una invitación personal, no vinculada a mi empresa.	I’m using FDS to organise deliveries. Try it: {enlace}⏎⏎If you sign up with my link and complete {e} real deliveries over several days, I can earn {x}. This is a personal invitation, not linked to my company.	Estou a usar o FDS para organizar entregas. Experimenta: {enlace}⏎⏎Se te registares com o meu link e completares {e} entregas reais em vários dias, posso ganhar {x}. É um convite pessoal, não ligado à minha empresa.	J’utilise FDS pour organiser mes livraisons. Essayez-la : {enlace}⏎⏎Si vous vous inscrivez avec mon lien et réalisez {e} livraisons réelles sur plusieurs jours, je peux gagner {x}. C’est une invitation personnelle, sans lien avec mon entreprise.	Uso FDS per organizzare le consegne. Provala: {enlace}⏎⏎Se ti registri con il mio link e completi {e} consegne reali in più giorni, posso guadagnare {x}. È un invito personale, non legato alla mia azienda.	Ich nutze FDS, um Lieferungen zu organisieren. Probier es aus: {enlace}⏎⏎Wenn du dich über meinen Link registrierst und {e} echte Lieferungen an mehreren Tagen machst, kann ich {x} verdienen. Das ist eine persönliche Einladung, unabhängig von meiner Firma.
+Está bien así	It’s fine as it is	Está bem assim	C’est bon comme ça	Va bene così	So ist es gut
 Etiquetas	Stickers	Etiquetas	Vignettes	Etichette	Plaketten
 Explica brevemente el motivo (obligatorio)	Briefly explain the reason (required)	Explica brevemente o motivo (obrigatório)	Expliquez brièvement le motif (obligatoire)	Spiega brevemente il motivo (obbligatorio)	Erkläre kurz den Grund (Pflicht)
 FDS {v} ya está lista.	FDS {v} is ready.	O FDS {v} já está pronto.	FDS {v} est prête.	FDS {v} è pronta.	FDS {v} ist da.
@@ -212,8 +228,7 @@ Falta la compra	The purchase is missing	Falta a compra	L’achat manque	Manca l�
 Falta la dirección de entrega	The delivery address is missing	Falta a morada de entrega	L’adresse de livraison manque	Manca l’indirizzo di consegna	Die Lieferadresse fehlt
 Faltan {n}: la contraseña tiene que tener 6 caracteres o más.	{n} more needed: the password must be 6 characters or more.	Faltam {n}: a palavra-passe tem de ter 6 caracteres ou mais.	Il en manque {n} : le mot de passe doit faire 6 caractères ou plus.	Ne mancano {n}: la password deve avere 6 caratteri o più.	Es fehlen {n}: Das Passwort braucht mindestens 6 Zeichen.
 Familia	Family	Família	Famille	Famiglia	Familie
-""",
-        """Fijo por día, si te pagan así ({moneda})	Fixed per day, if that’s how you’re paid ({moneda})	Fixo por dia, se te pagam assim ({moneda})	Fixe par jour, si vous êtes payé ainsi ({moneda})	Fisso al giorno, se ti pagano così ({moneda})	Tagespauschale, falls du so bezahlt wirst ({moneda})
+Fijo por día, si te pagan así ({moneda})	Fixed per day, if that’s how you’re paid ({moneda})	Fixo por dia, se te pagam assim ({moneda})	Fixe par jour, si vous êtes payé ainsi ({moneda})	Fisso al giorno, se ti pagano così ({moneda})	Tagespauschale, falls du so bezahlt wirst ({moneda})
 Foto de la entrega	Delivery photo	Foto da entrega	Photo de la livraison	Foto della consegna	Zustellfoto
 Foto de la rueda (opcional)	Photo of the wheel (optional)	Foto da roda (opcional)	Photo de la roue (facultatif)	Foto della ruota (facoltativa)	Foto des Rads (optional)
 Foto del combustible	Photo of the fuel gauge	Foto do combustível	Photo du niveau de carburant	Foto del carburante	Foto der Tankanzeige
@@ -236,12 +251,15 @@ Google Play no responde ahora mismo. Inténtalo en un momento.	Google Play isn�
 Gratis y sin límite durante la promoción.	Free and unlimited during the promotion.	Grátis e sem limite durante a promoção.	Gratuit et illimité pendant la promotion.	Gratis e senza limiti durante la promozione.	Kostenlos und unbegrenzt während der Aktion.
 Gratis y sin límite hasta el {fecha} · sin tarjeta	Free and unlimited until {fecha} · no card	Grátis e sem limite até {fecha} · sem cartão	Gratuit et sans limite jusqu’au {fecha} · sans carte	Gratis e senza limiti fino al {fecha} · senza carta	Kostenlos und ohne Limit bis zum {fecha} · ohne Karte
 Gratis y sin límite hasta el {f}.	Free and unlimited until {f}.	Grátis e sem limite até {f}.	Gratuit et illimité jusqu’au {f}.	Gratis e senza limiti fino al {f}.	Kostenlos und unbegrenzt bis {f}.
+Guardado para la próxima vez en esta puerta.	Saved for next time at this door.	Guardado para a próxima vez nesta porta.	Enregistré pour la prochaine fois à cette porte.	Salvato per la prossima volta a questa porta.	Fürs nächste Mal an dieser Tür gemerkt.
 Guardado.	Saved.	Guardado.	Enregistré.	Salvato.	Gespeichert.
 Guardado: lo verás en «Hoy».	Saved: you will see it in “Today”.	Guardado: vais vê-lo em «Hoje».	Enregistré : vous le verrez dans « Aujourd’hui ».	Salvato: lo vedrai in «Oggi».	Gespeichert: Du siehst es unter „Heute“.
+Guardando…	Saving…	A guardar…	Enregistrement…	Salvataggio…	Wird gespeichert…
 Guardar	Save	Guardar	Enregistrer	Salva	Speichern
 Guardar cambios	Save changes	Guardar alterações	Enregistrer les modifications	Salva le modifiche	Änderungen speichern
 Guardar contraseña	Save password	Guardar palavra-passe	Enregistrer le mot de passe	Salva password	Passwort speichern
 Guardar la tarifa	Save the rate	Guardar a tarifa	Enregistrer le tarif	Salva la tariffa	Tarif speichern
+Guardar para la próxima	Save for next time	Guardar para a próxima	Garder pour la prochaine fois	Salva per la prossima volta	Fürs nächste Mal merken
 Guardar teléfono	Save phone	Guardar telefone	Enregistrer le téléphone	Salva telefono	Telefon speichern
 Guardar y continuar	Save and continue	Guardar e continuar	Enregistrer et continuer	Salva e continua	Speichern und weiter
 HECHAS HOY	DONE TODAY	FEITAS HOJE	FAITES AUJOURD’HUI	FATTE OGGI	HEUTE ERLEDIGT
@@ -278,6 +296,7 @@ La contraseña debe tener al menos 8 caracteres	The password must be at least 8 
 La contraseña debe tener al menos 8 caracteres.	The password must be at least 8 characters.	A palavra-passe deve ter pelo menos 8 caracteres.	Le mot de passe doit contenir au moins 8 caractères.	La password deve avere almeno 8 caratteri.	Das Passwort muss mindestens 8 Zeichen haben.
 La contraseña nueva debe tener al menos 6 caracteres.	The new password must have at least 6 characters.	A palavra-passe nova tem de ter pelo menos 6 caracteres.	Le nouveau mot de passe doit faire au moins 6 caractères.	La nuova password deve avere almeno 6 caratteri.	Das neue Passwort braucht mindestens 6 Zeichen.
 La foto de entrega tiene que ser un JPEG pequeño	The delivery photo must be a small JPEG	A foto de entrega tem de ser um JPEG pequeno	La photo de livraison doit être un petit JPEG	La foto di consegna deve essere un JPEG piccolo	Das Zustellfoto muss ein kleines JPEG sein
+La foto es tu prueba si alguien dice que no le ha llegado. Puedes repetirla ahora o dejarla así.	The photo is your proof if someone says it never arrived. You can take it again now or leave it as it is.	A foto é a tua prova se alguém disser que não recebeu. Podes repeti-la agora ou deixá-la assim.	La photo est ta preuve si quelqu’un dit ne rien avoir reçu. Tu peux la refaire maintenant ou la laisser telle quelle.	La foto è la tua prova se qualcuno dice che non gli è arrivato. Puoi rifarla ora o lasciarla così.	Das Foto ist dein Nachweis, falls jemand sagt, es sei nie angekommen. Du kannst es jetzt wiederholen oder so lassen.
 La foto no dio una lectura fiable. Indica los kilómetros reales (entre {min} y {max}; último registro {km}, hace {dias} días).	The photo did not give a reliable reading. Enter the real kilometres (between {min} and {max}; last record {km}, {dias} days ago).	A foto não deu uma leitura fiável. Indica os quilómetros reais (entre {min} e {max}; último registo {km}, há {dias} dias).	La photo n’a pas donné une lecture fiable. Indiquez les kilomètres réels (entre {min} et {max} ; dernier relevé {km}, il y a {dias} jours).	La foto non ha dato una lettura affidabile. Indica i chilometri reali (tra {min} e {max}; ultima registrazione {km}, {dias} giorni fa).	Das Foto ergab keinen verlässlichen Wert. Gib den echten Kilometerstand ein (zwischen {min} und {max}; letzter Eintrag {km}, vor {dias} Tagen).
 La foto se guardó; no se pudo verificar ahora.	The photo was saved; it could not be checked right now.	A foto foi guardada; não foi possível verificá-la agora.	La photo a été enregistrée ; elle n’a pas pu être vérifiée pour l’instant.	La foto è stata salvata; non è stato possibile verificarla ora.	Das Foto wurde gespeichert, konnte aber gerade nicht geprüft werden.
 La foto, del paquete en la puerta: sin personas.	The photo, of the parcel at the door: no people.	A foto, da encomenda à porta: sem pessoas.	La photo, du colis devant la porte : sans personnes.	La foto, del pacco alla porta: senza persone.	Das Foto zeigt das Paket an der Tür: keine Personen.
@@ -298,6 +317,7 @@ Lateral derecho	Right side	Lateral direita	Côté droit	Lato destro	Rechte Seite
 Lateral izquierdo	Left side	Lateral esquerda	Côté gauche	Lato sinistro	Linke Seite
 Leer la etiqueta con una foto	Read the label from a photo	Ler a etiqueta com uma foto	Lire l’étiquette avec une photo	Leggi l’etichetta da una foto	Etikett per Foto lesen
 Leyendo la etiqueta…	Reading the label…	A ler a etiqueta…	Lecture de l’étiquette…	Lettura dell’etichetta…	Etikett wird gelesen …
+Leyendo lo compartido…	Reading what you shared…	A ler o partilhado…	Lecture du partage…	Lettura di quanto condiviso…	Geteiltes wird gelesen…
 Limpieza	Cleanliness	Limpeza	Propreté	Pulizia	Sauberkeit
 Lista por hueco	List by slot	Lista por lugar	Liste par emplacement	Elenco per posto	Liste nach Platz
 Listo	Done	Pronto	Terminé	Fatto	Fertig
@@ -309,6 +329,8 @@ Lo de delante se entrega primero.	What’s at the front is delivered first.	O da
 Lo de detrás se entrega primero.	What’s at the back is delivered first.	O de trás entrega-se primeiro.	Ce qui est derrière se livre en premier.	Quello dietro si consegna prima.	Was hinten liegt, wird zuerst geliefert.
 Lo estamos revisando: te avisamos en cuanto esté.	We are checking it: we will let you know as soon as it is ready.	Estamos a rever: avisamos-te assim que estiver.	Nous vérifions : nous vous prévenons dès que c’est prêt.	Lo stiamo controllando: ti avvisiamo appena è pronto.	Wir prüfen es: Wir melden uns, sobald es so weit ist.
 Lo haré más tarde	I’ll do it later	Faço-o mais tarde	Je le ferai plus tard	Lo farò più tardi	Mache ich später
+Lo que has compartido	What you shared	O que partilhaste	Ce que tu as partagé	Quello che hai condiviso	Was du geteilt hast
+Lo verá quien venga a esta dirección, también un compañero. Se borra al año.	Whoever comes to this address will see it, a colleague too. It’s deleted after a year.	Quem vier a esta morada vai vê-lo, também um colega. Apaga-se ao fim de um ano.	Qui viendra à cette adresse le verra, un collègue aussi. Effacé au bout d’un an.	Lo vedrà chi verrà a questo indirizzo, anche un collega. Si cancella dopo un anno.	Wer an diese Adresse kommt, sieht es, auch ein Kollege. Nach einem Jahr wird es gelöscht.
 Los regalos los compra la propia cuenta	Gifts are bought by the account itself	As ofertas são compradas pela própria conta	Les cadeaux sont achetés par le compte lui-même	I regali li compra l’account stesso	Geschenke kauft das Konto selbst
 Luces	Lights	Luzes	Feux	Luci	Beleuchtung
 Malo	Bad	Mau	Mauvais	Male	Schlecht
@@ -320,11 +342,13 @@ Mañana (9-14)	Morning (9-14)	Manhã (9-14)	Matin (9-14)	Mattina (9-14)	Vormitta
 Medio · der	Middle · right	Meio · dir	Milieu · droite	Centro · dx	Mitte · rechts
 Medio · izq	Middle · left	Meio · esq	Milieu · gauche	Centro · sx	Mitte · links
 Mejor de {a} a {b}	Better between {a} and {b}	Melhor das {a} às {b}	Plutôt entre {a} et {b}	Meglio dalle {a} alle {b}	Besser zwischen {a} und {b}
+Memoria de la puerta: {t}	Door memory: {t}	Memória da porta: {t}	Mémoire de la porte : {t}	Memoria della porta: {t}	Gemerkt zur Tür: {t}
 Mes anterior	Previous month	Mês anterior	Mois précédent	Mese precedente	Vormonat
 Mes siguiente	Next month	Mês seguinte	Mois suivant	Mese successivo	Nächster Monat
 Mi cuenta	My account	A minha conta	Mon compte	Il mio account	Mein Konto
 Mi dinero hoy	My money today	O meu dinheiro hoje	Mon argent aujourd’hui	I miei soldi oggi	Mein Geld heute
 Mi ruta	My route	A minha rota	Ma tournée	Il mio percorso	Meine Route
+Mira la foto de entrega	Check the delivery photo	Vê a foto da entrega	Regarde la photo de livraison	Guarda la foto di consegna	Sieh dir das Zustellfoto an
 Mis turnos	My shifts	Os meus turnos	Mes créneaux	I miei turni	Meine Schichten
 Mis turnos y días libres	My shifts and days off	Os meus turnos e dias livres	Mes services et jours de repos	I miei turni e giorni liberi	Meine Schichten und freien Tage
 Motivo: {x}	Reason: {x}	Motivo: {x}	Motif : {x}	Motivo: {x}	Grund: {x}
@@ -359,6 +383,7 @@ No se ha podido guardar {n}: {e}	Could not save {n}: {e}	Não foi possível guar
 No se ha podido hacer ({n}).	It could not be done ({n}).	Não foi possível ({n}).	Impossible pour le moment ({n}).	Non è stato possibile ({n}).	Nicht möglich ({n}).
 No se ha podido leer el cuentakilómetros ahora mismo. Escribe los kilómetros que marca el cuadro.	The odometer could not be read right now. Type the kilometres shown on the dashboard.	Não foi possível ler o conta-quilómetros agora. Escreve os quilómetros do painel.	Le compteur n’a pas pu être lu pour l’instant. Saisissez les kilomètres affichés au tableau de bord.	Non è stato possibile leggere il contachilometri ora. Scrivi i chilometri del cruscotto.	Der Kilometerzähler konnte gerade nicht gelesen werden. Gib den Kilometerstand vom Tacho ein.
 No se ha podido leer la etiqueta. Prueba con más luz y la etiqueta recta, o escríbelo.	The label could not be read. Try with more light and the label straight, or type it.	Não foi possível ler a etiqueta. Tenta com mais luz e a etiqueta direita, ou escreve-a.	L’étiquette n’a pas pu être lue. Essayez avec plus de lumière et l’étiquette bien droite, ou saisissez-la.	Non è stato possibile leggere l’etichetta. Prova con più luce e l’etichetta dritta, o scrivila.	Das Etikett konnte nicht gelesen werden. Versuche es mit mehr Licht und geradem Etikett, oder tippe es ein.
+No se ha podido leer lo compartido.	Couldn’t read what you shared.	Não foi possível ler o partilhado.	Impossible de lire le partage.	Non è stato possibile leggere quanto condiviso.	Das Geteilte konnte nicht gelesen werden.
 No se ha podido ordenar	Could not sort	Não foi possível ordenar	Tri impossible	Impossibile ordinare	Sortieren nicht möglich
 No se ha podido quitar	Could not remove	Não foi possível remover	Suppression impossible	Impossibile rimuovere	Entfernen nicht möglich
 No se han podido cargar los avisos.	The notifications could not be loaded.	Não foi possível carregar os avisos.	Les notifications n’ont pas pu être chargées.	Non è stato possibile caricare gli avvisi.	Die Benachrichtigungen konnten nicht geladen werden.
@@ -366,15 +391,20 @@ No se hizo la foto. Puedes intentarlo de nuevo.	The photo was not taken. You can
 No se pudieron leer los kilómetros. Revisa la foto y escribe el valor dentro del rango indicado.	The kilometres could not be read. Check the photo and type a value within the indicated range.	Não foi possível ler os quilómetros. Revê a foto e escreve o valor dentro do intervalo indicado.	Les kilomètres n’ont pas pu être lus. Vérifiez la photo et saisissez une valeur dans la plage indiquée.	Non è stato possibile leggere i chilometri. Controlla la foto e scrivi il valore nell’intervallo indicato.	Der Kilometerstand konnte nicht gelesen werden. Prüfe das Foto und gib einen Wert im angegebenen Bereich ein.
 No se pudo abrir la cámara. Comprueba que tienes una aplicación de cámara instalada.	The camera could not be opened. Check that you have a camera app installed.	Não foi possível abrir a câmara. Confirma que tens uma app de câmara instalada.	L’appareil photo n’a pas pu s’ouvrir. Vérifiez qu’une application appareil photo est installée.	Non è stato possibile aprire la fotocamera. Controlla di avere un’app fotocamera installata.	Die Kamera konnte nicht geöffnet werden. Prüfe, ob eine Kamera-App installiert ist.
 No se pudo codificar la imagen	The image could not be encoded	Não foi possível codificar a imagem	L’image n’a pas pu être encodée	Non è stato possibile codificare l’immagine	Das Bild konnte nicht kodiert werden
-No se pudo enviar la inspección. Las fotos siguen guardadas en esta pantalla; vuelve a intentarlo con conexión.	The inspection could not be sent. The photos are still saved on this screen; try again when you have a connection.	Não foi possível enviar a inspeção. As fotos continuam guardadas neste ecrã; tenta outra vez com ligação.	L’inspection n’a pas pu être envoyée. Les photos restent enregistrées sur cet écran ; réessayez avec une connexion.	Non è stato possibile inviare l’ispezione. Le foto restano salvate in questa schermata; riprova con la connessione.	Die Inspektion konnte nicht gesendet werden. Die Fotos bleiben auf diesem Bildschirm gespeichert; versuche es mit Verbindung erneut.
+""",
+        """No se pudo enviar la inspección. Las fotos siguen guardadas en esta pantalla; vuelve a intentarlo con conexión.	The inspection could not be sent. The photos are still saved on this screen; try again when you have a connection.	Não foi possível enviar a inspeção. As fotos continuam guardadas neste ecrã; tenta outra vez com ligação.	L’inspection n’a pas pu être envoyée. Les photos restent enregistrées sur cet écran ; réessayez avec une connexion.	Non è stato possibile inviare l’ispezione. Le foto restano salvate in questa schermata; riprova con la connessione.	Die Inspektion konnte nicht gesendet werden. Die Fotos bleiben auf diesem Bildschirm gespeichert; versuche es mit Verbindung erneut.
+No se pudo guardar la foto	Couldn’t save the photo	Não foi possível guardar a foto	Impossible d’enregistrer la photo	Impossibile salvare la foto	Foto konnte nicht gespeichert werden
 No se pudo leer la imagen	The image could not be read	Não foi possível ler a imagem	L’image n’a pas pu être lue	Non è stato possibile leggere l’immagine	Das Bild konnte nicht gelesen werden
 No se pudo preparar la foto. Inténtalo de nuevo.	The photo could not be prepared. Try again.	Não foi possível preparar a foto. Tenta outra vez.	La photo n’a pas pu être préparée. Réessayez.	Non è stato possibile preparare la foto. Riprova.	Das Foto konnte nicht vorbereitet werden. Versuche es noch einmal.
 No se pudo procesar la foto. Inténtalo de nuevo.	The photo could not be processed. Try again.	Não foi possível processar a foto. Tenta outra vez.	La photo n’a pas pu être traitée. Réessayez.	Non è stato possibile elaborare la foto. Riprova.	Das Foto konnte nicht verarbeitet werden. Versuche es noch einmal.
 No se pudo procesar la imagen	The image could not be processed	Não foi possível processar a imagem	L’image n’a pas pu être traitée	Non è stato possibile elaborare l’immagine	Das Bild konnte nicht verarbeitet werden
 No se puede solicitar este día desde aquí.	This day can’t be requested from here.	Não é possível pedir este dia a partir daqui.	Ce jour ne peut pas être demandé d’ici.	Questo giorno non si può richiedere da qui.	Dieser Tag kann hier nicht beantragt werden.
+No se ve el número del portal: la próxima vez, con el número o la puerta en la foto.	The door number isn’t visible: next time, get the number or the door in the photo.	Não se vê o número da porta: da próxima vez, com o número ou a porta na foto.	On ne voit pas le numéro de l’immeuble : la prochaine fois, avec le numéro ou la porte sur la photo.	Non si vede il numero civico: la prossima volta, con il numero o la porta nella foto.	Die Hausnummer ist nicht zu sehen: beim nächsten Mal mit der Nummer oder der Tür auf dem Foto.
+No se ve el paquete en la foto: repítela con el paquete donde lo dejas.	The parcel isn’t visible in the photo: take it again with the parcel where you leave it.	Não se vê a encomenda na foto: repete-a com a encomenda onde a deixas.	On ne voit pas le colis sur la photo : refais-la avec le colis là où tu le laisses.	Nella foto non si vede il pacco: rifalla con il pacco dove lo lasci.	Das Paket ist auf dem Foto nicht zu sehen: mach es noch einmal mit dem Paket dort, wo du es ablegst.
 No tienes entregas pendientes.	You have no deliveries pending.	Não tens entregas pendentes.	Vous n’avez aucune livraison en attente.	Non hai consegne in sospeso.	Du hast keine offenen Lieferungen.
 No tienes permiso para esto.	You do not have permission for this.	Não tens permissão para isto.	Vous n’avez pas l’autorisation pour cela.	Non hai il permesso per questo.	Dafür hast du keine Berechtigung.
 No tienes una suscripción con tarjeta	You don’t have a card subscription	Não tem uma subscrição com cartão	Vous n’avez pas d’abonnement par carte	Non hai un abbonamento con carta	Du hast kein Abo mit Karte
+No veo ninguna parada en lo compartido.	I can’t see any stop in what you shared.	Não vejo nenhuma paragem no partilhado.	Je ne vois aucun arrêt dans le partage.	Non vedo nessuna fermata in quanto condiviso.	Ich sehe keinen Stopp im Geteilten.
 Nombre y apellidos del titular	Account holder’s full name	Nome completo do titular	Nom et prénom du titulaire	Nome e cognome del titolare	Vor- und Nachname des Kontoinhabers
 Nota (opcional)	Note (optional)	Nota (opcional)	Note (facultatif)	Nota (facoltativa)	Notiz (optional)
 Nota de oficina: {n}	Office note: {n}	Nota do escritório: {n}	Note du bureau : {n}	Nota dell’ufficio: {n}	Hinweis vom Büro: {n}
@@ -392,9 +422,9 @@ Otro	Other	Outro	Autre	Altro	Sonstiges
 Para avisarte de las restricciones por placa (rodízio, Hoy No Circula, pico y placa).	To warn you about plate restrictions (rodízio, Hoy No Circula, pico y placa).	Para te avisar das restrições por matrícula (rodízio, Hoy No Circula, pico y placa).	Pour vous prévenir des restrictions par plaque (rodízio, Hoy No Circula, pico y placa).	Per avvisarti delle restrizioni per targa (rodízio, Hoy No Circula, pico y placa).	Um dich vor Kennzeichen-Beschränkungen zu warnen (Rodízio, Hoy No Circula, Pico y placa).
 Para continuar, acepta los Términos y la Política de Privacidad.	To continue, accept the Terms and the Privacy Policy.	Para continuar, aceita os Termos e a Política de Privacidade.	Pour continuer, acceptez les Conditions et la Politique de confidentialité.	Per continuare, accetta i Termini e l’Informativa sulla privacy.	Um fortzufahren, akzeptiere die Nutzungsbedingungen und die Datenschutzerklärung.
 Para escanear hace falta la cámara	The camera is needed to scan	Para ler é precisa a câmara	L’appareil photo est nécessaire pour scanner	Per scansionare serve la fotocamera	Zum Scannen wird die Kamera gebraucht
+Para la próxima vez en esta puerta	For next time at this door	Para a próxima vez nesta porta	Pour la prochaine fois à cette porte	Per la prossima volta a questa porta	Fürs nächste Mal an dieser Tür
 Para usar la app desde China hace falta tu consentimiento para tratar tus datos fuera de China.	To use the app from China, your consent to process your data outside China is required.	Para usar a app a partir da China é preciso o seu consentimento para tratar os seus dados fora da China.	Pour utiliser l’app depuis la Chine, votre consentement au traitement de vos données hors de Chine est nécessaire.	Per usare l’app dalla Cina serve il tuo consenso al trattamento dei dati fuori dalla Cina.	Um die App aus China zu nutzen, brauchen wir deine Zustimmung zur Verarbeitung deiner Daten außerhalb Chinas.
-""",
-        """Para volver a ella a pie sin dar vueltas. Se queda solo en este móvil.	So you can walk back to it without wandering. It stays only on this phone.	Para voltar a pé sem dar voltas. Fica só neste telemóvel.	Pour y revenir à pied sans tourner en rond. Ça reste uniquement sur ce téléphone.	Per tornarci a piedi senza girare a vuoto. Resta solo su questo telefono.	Damit du ohne Umwege zu Fuß zurückfindest. Bleibt nur auf diesem Handy.
+Para volver a ella a pie sin dar vueltas. Se queda solo en este móvil.	So you can walk back to it without wandering. It stays only on this phone.	Para voltar a pé sem dar voltas. Fica só neste telemóvel.	Pour y revenir à pied sans tourner en rond. Ça reste uniquement sur ce téléphone.	Per tornarci a piedi senza girare a vuoto. Resta solo su questo telefono.	Damit du ohne Umwege zu Fuß zurückfindest. Bleibt nur auf diesem Handy.
 Para volver a entrar necesitarás tu correo y tu contraseña.	To sign in again you will need your email and password.	Para voltar a entrar vais precisar do teu e-mail e da tua palavra-passe.	Pour vous reconnecter, il vous faudra votre e-mail et votre mot de passe.	Per accedere di nuovo ti serviranno email e password.	Zum erneuten Anmelden brauchst du E-Mail und Passwort.
 Parada quitada de tu ruta.	Stop removed from your route.	Paragem retirada da tua rota.	Arrêt retiré de votre tournée.	Fermata tolta dal tuo giro.	Stopp aus deiner Route entfernt.
 Parada {n}	Stop {n}	Paragem {n}	Arrêt {n}	Fermata {n}	Stopp {n}
@@ -456,6 +486,7 @@ Se avisará a la oficina de que no puedes ir al turno extra.	The office will be 
 Se borra la prueba de entrega de {n}: la foto, dónde se dejó, quién lo recogió y la hora.	The proof of delivery for {n} is deleted: the photo, where it was left, who received it and the time.	Apaga-se a prova de entrega de {n}: a foto, onde ficou, quem a recebeu e a hora.	La preuve de livraison de {n} est supprimée : la photo, où il a été laissé, qui l’a reçu et l’heure.	Si cancella la prova di consegna di {n}: la foto, dove è stato lasciato, chi l’ha ritirato e l’ora.	Der Zustellnachweis für {n} wird gelöscht: Foto, Ablageort, Empfänger und Uhrzeit.
 Se pone al día sola al volver la red.	It catches up by itself when the network is back.	Atualiza-se sozinha quando voltar a rede.	Elle se met à jour toute seule au retour du réseau.	Si aggiorna da sola quando torna la rete.	Sie aktualisiert sich von selbst, sobald das Netz zurück ist.
 Se puede regalar 1 mes o 1 año	You can give 1 month or 1 year	Pode oferecer 1 mês ou 1 ano	Vous pouvez offrir 1 mois ou 1 an	Si può regalare 1 mese o 1 anno	Du kannst 1 Monat oder 1 Jahr verschenken
+Se ven personas en la foto: repítela sin ellas.	There are people in the photo: take it again without them.	Veem-se pessoas na foto: repete-a sem elas.	On voit des personnes sur la photo : refais-la sans elles.	Si vedono persone nella foto: rifalla senza di loro.	Auf dem Foto sind Personen zu sehen: mach es noch einmal ohne sie.
 Seguir dentro	Stay	Continuar dentro	Rester	Resta	Bleiben
 Seguir revisando	Keep checking	Continuar a rever	Continuer la vérification	Continua a controllare	Weiter prüfen
 Seguirme	Follow me	Seguir-me	Me suivre	Seguimi	Mir folgen
@@ -518,6 +549,7 @@ Tienes un turno extra confirmado.	You have a confirmed extra shift.	Tens um turn
 Tienes {n} avisos nuevos	You have {n} new notifications	Tens {n} avisos novos	Vous avez {n} nouvelles notifications	Hai {n} nuovi avvisi	Du hast {n} neue Benachrichtigungen
 Todo cargado	All loaded	Tudo carregado	Tout est chargé	Tutto caricato	Alles geladen
 Todo entregado	All delivered	Tudo entregue	Tout livré	Tutto consegnato	Alles zugestellt
+Todos avisados	Everyone notified	Todos avisados	Tout le monde est prévenu	Tutti avvisati	Alle benachrichtigt
 Trabajar más	Work more	Trabalhar mais	Travailler plus	Lavorare di più	Mehr arbeiten
 Traer a hoy	Bring to today	Trazer para hoje	Ramener à aujourd’hui	Porta a oggi	Auf heute holen
 Trasera	Rear	Traseira	Arrière	Retro	Hinten
@@ -529,6 +561,7 @@ Tu correo {c} está verificado.	Your email {c} is verified.	O teu e-mail {c} est
 Tu cuenta	Your account	A sua conta	Votre compte	Il tuo account	Dein Konto
 Tu cuenta se desactiva ahora mismo y borramos tus datos (tus rutas y las de tus clientes) en un plazo máximo de 30 días. No se puede deshacer.	Your account is deactivated right now and we delete your data (your routes and your customers’) within 30 days at most. This cannot be undone.	A tua conta é desativada já e apagamos os teus dados (as tuas rotas e as dos teus clientes) no prazo máximo de 30 dias. Não se pode desfazer.	Votre compte est désactivé immédiatement et nous supprimons vos données (vos tournées et celles de vos clients) sous 30 jours maximum. C’est irréversible.	Il tuo account viene disattivato subito e cancelliamo i tuoi dati (i tuoi giri e quelli dei tuoi clienti) entro 30 giorni al massimo. Non si può annullare.	Dein Konto wird sofort deaktiviert und wir löschen deine Daten (deine Routen und die deiner Kunden) innerhalb von höchstens 30 Tagen. Das lässt sich nicht rückgängig machen.
 Tu furgoneta	Your van	A sua carrinha	Votre camionnette	Il tuo furgone	Dein Lieferwagen
+Tu móvil de Bizum, para la propina (opcional)	Your Bizum mobile number, for tips (optional)	O teu telemóvel de Bizum, para a gorjeta (opcional)	Ton numéro Bizum, pour le pourboire (facultatif)	Il tuo cellulare Bizum, per la mancia (facoltativo)	Deine Bizum-Handynummer, fürs Trinkgeld (optional)
 Tu nombre	Your name	O seu nome	Votre nom	Il tuo nome	Dein Name
 Tu placa sí puede circular hoy.	Your plate can drive today.	A tua matrícula pode circular hoje.	Votre plaque peut circuler aujourd’hui.	La tua targa può circolare oggi.	Dein Kennzeichen darf heute fahren.
 Tu prueba gratis ha terminado. Suscríbete en «Cuenta» para seguir repartiendo.	Your free trial has ended. Subscribe in «Account» to keep delivering.	O seu teste grátis terminou. Subscreva em «Conta» para continuar a entregar.	Votre essai gratuit est terminé. Abonnez-vous dans «Compte» pour continuer à livrer.	La tua prova gratuita è finita. Abbonati in «Account» per continuare a consegnare.	Dein Gratistest ist abgelaufen. Abonniere unter «Konto», um weiter zuzustellen.
@@ -540,9 +573,11 @@ Tu suscripción de Google Play ha terminado. Renuévala en «Cuenta» para segui
 Tu suscripción está pausada: hay un pago pendiente. Revísalo en «Cuenta».	Your subscription is paused: a payment is pending. Check it in «Account».	A sua subscrição está em pausa: há um pagamento pendente. Verifique em «Conta».	Votre abonnement est en pause : un paiement est en attente. Vérifiez dans «Compte».	Il tuo abbonamento è in pausa: c’è un pagamento in sospeso. Controlla in «Account».	Dein Abo ist pausiert: Eine Zahlung ist offen. Prüfe sie unter «Konto».
 Turno extra confirmado.	Extra shift confirmed.	Turno extra confirmado.	Service supplémentaire confirmé.	Turno extra confermato.	Zusatzschicht bestätigt.
 Turnos aprobados, vacantes para trabajar más y lo que te pida la oficina	Approved shifts, open shifts to work more and whatever the office asks of you	Turnos aprovados, vagas para trabalhar mais e o que o escritório te pedir	Créneaux approuvés, créneaux libres pour travailler plus et ce que le bureau vous demande	Turni approvati, turni liberi per lavorare di più e ciò che ti chiede l’ufficio	Genehmigte Schichten, freie Schichten für mehr Arbeit und was das Büro von dir braucht
-Turnos aprobados, vacantes para trabajar más, inspección pendiente y la ruta del día	Approved shifts, openings to work more, pending inspection and the day’s route	Turnos aprovados, vagas para trabalhar mais, inspeção pendente e a rota do dia	Services approuvés, créneaux pour travailler plus, inspection en attente et tournée du jour	Turni approvati, posti per lavorare di più, ispezione in sospeso e giro del giorno	Genehmigte Schichten, freie Zusatzschichten, ausstehende Inspektion und die Tagesroute
+""",
+        """Turnos aprobados, vacantes para trabajar más, inspección pendiente y la ruta del día	Approved shifts, openings to work more, pending inspection and the day’s route	Turnos aprovados, vagas para trabalhar mais, inspeção pendente e a rota do dia	Services approuvés, créneaux pour travailler plus, inspection en attente et tournée du jour	Turni approvati, posti per lavorare di più, ispezione in sospeso e giro del giorno	Genehmigte Schichten, freie Zusatzschichten, ausstehende Inspektion und die Tagesroute
 Turnos extra confirmados	Confirmed extra shifts	Turnos extra confirmados	Créneaux supplémentaires confirmés	Turni extra confermati	Bestätigte Zusatzschichten
 Términos	Terms	Termos	Conditions	Termini	AGB
+Un WhatsApp a cada cliente con su hora aproximada y su enlace para seguirte. Se abre uno a uno: envía y vuelve.	A WhatsApp to each customer with their approximate time and their link to follow you. They open one by one: send and come back.	Um WhatsApp a cada cliente com a hora aproximada e o link para te seguir. Abre-se um a um: envia e volta.	Un WhatsApp à chaque client avec son heure approximative et son lien pour te suivre. Ils s’ouvrent un par un : envoie et reviens.	Un WhatsApp a ogni cliente con l’ora approssimativa e il link per seguirti. Si aprono uno alla volta: invia e torna.	Eine WhatsApp an jeden Kunden mit seiner ungefähren Zeit und seinem Link, um dir zu folgen. Sie öffnen sich nacheinander: senden und zurück.
 Uno menos	One less	Menos um	Un de moins	Uno in meno	Eins weniger
 Uno más	One more	Mais um	Un de plus	Uno in più	Eins mehr
 Urgente	Urgent	Urgente	Urgent	Urgente	Dringend
@@ -550,6 +585,7 @@ Usa el correo personal que vinculaste en tu cuenta. El código se enviará a ese
 Uso FDS para ordenar mi ruta de reparto y navegar parada a parada. Pruébala: {enlace}	I use FDS to sort my delivery route and navigate stop by stop. Try it: {enlace}	Uso o FDS para ordenar a minha rota de entregas e navegar paragem a paragem. Experimenta: {enlace}	J’utilise FDS pour trier ma tournée et naviguer d’arrêt en arrêt. Essayez-la : {enlace}	Uso FDS per ordinare il mio giro di consegne e navigare fermata per fermata. Provala: {enlace}	Ich nutze FDS, um meine Lieferroute zu sortieren und Stopp für Stopp zu navigieren. Probier es aus: {enlace}
 Vacantes	Open shifts	Vagas	Créneaux libres	Turni liberi	Freie Schichten
 Vacantes y turnos extra confirmados	Openings and confirmed extra shifts	Vagas e turnos extra confirmados	Créneaux disponibles et services supplémentaires confirmés	Posti disponibili e turni extra confermati	Freie Schichten und bestätigte Zusatzschichten
+Valoración del cliente: {e}	Customer rating: {e}	Avaliação do cliente: {e}	Note du client : {e}	Valutazione del cliente: {e}	Kundenbewertung: {e}
 Vehículo	Vehicle	Veículo	Véhicule	Veicolo	Fahrzeug
 Ver el mapa	Show the map	Ver o mapa	Voir la carte	Vedi la mappa	Karte anzeigen
 Ver en Google Maps	See in Google Maps	Ver no Google Maps	Voir dans Google Maps	Vedi su Google Maps	In Google Maps ansehen
@@ -569,6 +605,7 @@ Vuelve a estar por entregar.	Back to pending delivery.	Volta a estar por entrega
 WhatsApp	WhatsApp	WhatsApp	WhatsApp	WhatsApp	WhatsApp
 WhatsApp no está instalado.	WhatsApp is not installed.	O WhatsApp não está instalado.	WhatsApp n’est pas installé.	WhatsApp non è installato.	WhatsApp ist nicht installiert.
 Ya estaba	Already there	Já estava	Déjà présent	Già presente	War schon da
+Ya estaban en tu ruta.	They were already on your route.	Já estavam na tua rota.	Ils étaient déjà dans ta tournée.	Erano già nel tuo giro.	Sie waren schon in deiner Tour.
 Ya estuviste aquí	You’ve been here before	Já estiveste aqui	Tu es déjà venu ici	Ci sei già stato	Hier warst du schon
 Ya estás en ese plan	You’re already on that plan	Já está nesse plano	Vous êtes déjà sur cette offre	Sei già in quel piano	Du hast diesen Tarif bereits
 Ya hay otra cuenta con ese correo	There’s already another account with that email	Já existe outra conta com esse e-mail	Il existe déjà un autre compte avec cet e-mail	Esiste già un altro account con questa email	Es gibt bereits ein anderes Konto mit dieser E-Mail
@@ -603,6 +640,7 @@ conductor	driver	condutor	chauffeur	autista	Fahrer
 contraflujo	contraflow	contrafluxo	contresens aménagé	contromano	Gegenverkehr auf einer Fahrbahn
 cortes intermitentes	intermittent closures	cortes intermitentes	fermetures intermittentes	chiusure intermittenti	zeitweise Sperrungen
 daños en la vía	road damage	danos na via	chaussée endommagée	danni alla strada	Straßenschäden
+dejar {d}	leave {d}	deixar {d}	laisser {d}	lasciare {d}	ablegen: {d}
 delante	at the front	à frente	devant	davanti	vorne
 desprendimiento, inundación…	landslide, flooding…	desprendimento, inundação…	éboulement, inondation…	frana, allagamento…	Erdrutsch, Überschwemmung…
 desvío	detour	desvio	déviation	deviazione	Umleitung
@@ -612,8 +650,7 @@ día	day	dia	jour	giorno	Tag
 días	days	dias	jours	giorni	Tagen
 el cliente dice: {t}	the customer says: {t}	o cliente diz: {t}	le client dit : {t}	il cliente dice: {t}	der Kunde sagt: {t}
 el repartidor	your driver	o estafeta	le livreur	il corriere	der Fahrer
-""",
-        """el repartidor de {empresa}	the {empresa} driver	o estafeta da {empresa}	le livreur de {empresa}	il corriere di {empresa}	der Fahrer von {empresa}
+el repartidor de {empresa}	the {empresa} driver	o estafeta da {empresa}	le livreur de {empresa}	il corriere di {empresa}	der Fahrer von {empresa}
 en la furgoneta, {s}	in the van, {s}	na carrinha, {s}	dans la camionnette, {s}	nel furgone, {s}	im Transporter {s}
 en medio	in the middle	no meio	au milieu	in mezzo	in der Mitte
 entrega	delivery	entrega	livraison	consegna	Zustellung
@@ -641,6 +678,7 @@ parada	stop	paragem	arrêt	fermata	Stopp
 paso alternativo	alternating one-way traffic	trânsito alternado	circulation alternée	senso unico alternato	wechselseitiger Verkehr
 pk	km	km	PK	km	km
 por distancia	by distance	por distância	à la distance	per distanza	nach Entfernung
+portal {c}	door code {c}	portão {c}	code {c}	portone {c}	Code {c}
 queda 1 día	1 day left	falta 1 dia	1 jour restant	manca 1 giorno	noch 1 Tag
 quedan {n} días	{n} days left	faltam {n} dias	{n} jours restants	mancano {n} giorni	noch {n} Tage
 restricción	restriction	restrição	restriction	restrizione	Einschränkung
@@ -657,6 +695,7 @@ vez	time	vez	fois	volta	Mal
 ya estaba	already there	já estava	déjà là	già presente	schon da
 ya estaban	were already there	já estavam	étaient déjà là	c’erano già	waren schon da
 {a} cargados	{a} loaded	{a} carregados	{a} chargés	{a} caricati	{a} geladen
+{a} de {b} avisados · su hora y su enlace	{a} of {b} notified · their time and their link	{a} de {b} avisados · a sua hora e o seu link	{a} sur {b} prévenus · leur heure et leur lien	{a} di {b} avvisati · la loro ora e il loro link	{a} von {b} benachrichtigt · ihre Zeit und ihr Link
 {a} de {b} cargados	{a} of {b} loaded	{a} de {b} carregados	{a} sur {b} chargés	{a} di {b} caricati	{a} von {b} geladen
 {a} de {b} entregadas	{a} of {b} delivered	{a} de {b} entregues	{a} sur {b} livrés	{a} di {b} consegnate	{a} von {b} zugestellt
 {a} de {b} entregadas hoy.	{a} of {b} delivered today.	{a} de {b} entregues hoje.	{a} sur {b} livrés aujourd’hui.	{a} di {b} consegnate oggi.	{a} von {b} heute zugestellt.
@@ -668,6 +707,7 @@ ya estaban	were already there	já estavam	étaient déjà là	c’erano già	war
 {n} entregas en {d} días distintos	{n} deliveries on {d} different days	{n} entregas em {d} dias diferentes	{n} livraisons sur {d} jours différents	{n} consegne in {d} giorni diversi	{n} Zustellungen an {d} verschiedenen Tagen
 {n} entregas pendientes	{n} deliveries pending	{n} entregas pendentes	{n} livraisons en attente	{n} consegne in sospeso	{n} Lieferungen offen
 {n} paradas de otros días siguen sin cerrar.	{n} stops from other days are still open.	{n} paragens de outros dias continuam por fechar.	{n} arrêts d’autres jours sont toujours ouverts.	{n} fermate di altri giorni sono ancora aperte.	{n} Stopps von anderen Tagen sind noch offen.
+{n} paradas en lo compartido	{n} stops in what you shared	{n} paragens no partilhado	{n} arrêts dans le partage	{n} fermate in quanto condiviso	{n} Stopps im Geteilten
 {n} paradas sin hueco (sin ubicar o sin ordenar): salen en «Lista por hueco».	{n} stops without a slot (not located or not sorted): they show under “List by slot”.	{n} paragens sem lugar (sem localizar ou sem ordenar): aparecem em «Lista por lugar».	{n} arrêts sans emplacement (non localisés ou non triés) : ils apparaissent dans « Liste par emplacement ».	{n} fermate senza posto (non localizzate o non ordinate): compaiono in «Elenco per posto».	{n} Stopps ohne Platz (nicht verortet oder nicht sortiert): stehen unter „Liste nach Platz“.
 {n} paradas traídas a hoy. Pulsa «Ordenar ruta».	{n} stops moved to today. Tap “Sort route”.	{n} paragens trazidas para hoje. Toque em «Ordenar rota».	{n} arrêts ramenés à aujourd’hui. Appuyez sur « Trier la tournée ».	{n} fermate portate a oggi. Tocca «Ordina giro».	{n} Stopps auf heute geholt. Tippe auf „Route sortieren“.
 {n} plaza(s) disponible(s)	{n} place(s) available	{n} vaga(s) disponível(eis)	{n} place(s) disponible(s)	{n} posto/i disponibile/i	{n} Platz/Plätze frei
@@ -676,6 +716,7 @@ ya estaban	were already there	já estavam	étaient déjà là	c’erano già	war
 {n} sin entregar = {euros} sin cobrar	{n} not delivered = {euros} unpaid	{n} não entregues = {euros} por cobrar	{n} non livrés = {euros} non payés	{n} non consegnati = {euros} non incassati	{n} nicht zugestellt = {euros} unbezahlt
 {n} sin ubicar: edítalas para corregir la dirección	{n} not located: edit them to fix the address	{n} sem localização: edita-as para corrigir a morada	{n} non localisés : modifiez-les pour corriger l’adresse	{n} non localizzate: modificale per correggere l’indirizzo	{n} nicht verortet: bearbeite sie, um die Adresse zu korrigieren
 © OpenStreetMap	© OpenStreetMap	© OpenStreetMap	© OpenStreetMap	© OpenStreetMap	© OpenStreetMap
+«Entrada por el garaje», «timbre 2», «sin ascensor»…	“Entrance through the garage”, “bell 2”, “no lift”…	«Entrada pela garagem», «campainha 2», «sem elevador»…	« Entrée par le garage », « sonnette 2 », « sans ascenseur »…	«Ingresso dal garage», «campanello 2», «senza ascensore»…	„Eingang über die Garage“, „Klingel 2“, „kein Aufzug“ …
 ¿Cerrar sesión?	Sign out?	Terminar sessão?	Se déconnecter ?	Uscire?	Abmelden?
 ¿Cuánto combustible queda?	How much fuel is left?	Quanto combustível resta?	Combien de carburant reste-t-il ?	Quanto carburante resta?	Wie viel Kraftstoff ist noch da?
 ¿Dejar aquí la furgoneta?	Leave the van here?	Deixar a carrinha aqui?	Laisser la camionnette ici ?	Lasciare qui il furgone?	Den Transporter hier abstellen?
@@ -692,7 +733,7 @@ ya estaban	were already there	já estavam	étaient déjà là	c’erano già	war
 
     /** { español -> [en, pt, fr, it, de] } */
     val MAPA: Map<String, Array<String>> by lazy {
-        val m = HashMap<String, Array<String>>(1356)
+        val m = HashMap<String, Array<String>>(1438)
         for (b in BLOQUES) for (l in b.lineSequence()) {
             if (l.isBlank()) continue
             val c = l.split('\t')

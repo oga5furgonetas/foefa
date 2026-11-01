@@ -29,6 +29,8 @@ import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.filled.Key
+import androidx.compose.material.icons.automirrored.filled.Chat
 import androidx.compose.material.icons.filled.Navigation
 import androidx.compose.material.icons.filled.PhotoCamera
 import androidx.compose.material.icons.automirrored.filled.Undo
@@ -59,12 +61,15 @@ import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.core.content.FileProvider
 import androidx.exifinterface.media.ExifInterface
 import com.flotadsp.fds.BuildConfig
 import com.flotadsp.fds.data.Antes
 import com.flotadsp.fds.data.ClienteDice
+import com.flotadsp.fds.data.EntregaIa
+import com.flotadsp.fds.data.Memoria
 import com.flotadsp.fds.data.Parada
 import com.flotadsp.fds.ui.Acciones
 import com.flotadsp.fds.ui.LocalExtra
@@ -120,12 +125,124 @@ fun textoAntes(a: Antes): String {
     return tx("La última vez ({f}): {que}", "f" to f, "que" to que)
 }
 
+/** EL CLIENTE AVISADO (01-11-2026): con la ruta ordenada, un WhatsApp a cada cliente con móvil, uno tras otro, con su
+ *  hora y su enlace (textoWhatsapp). Lo que más fallidas evita, según la calle. */
+@Composable
+fun AvisarHoja(paradas: List<Parada>, avisados: Set<String>, alAvisar: (Parada) -> Unit, alCerrar: () -> Unit) {
+    ModalBottomSheet(onDismissRequest = alCerrar, sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)) {
+        Column(Modifier.padding(horizontal = 20.dp).padding(bottom = 20.dp).navigationBarsPadding().verticalScroll(rememberScrollState())) {
+            Text(tx("Avisar a todos por WhatsApp"), style = MaterialTheme.typography.headlineSmall)
+            Text(tx("Un WhatsApp a cada cliente con su hora aproximada y su enlace para seguirte. Se abre uno a uno: envía y vuelve."),
+                style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Spacer(Modifier.height(12.dp))
+            paradas.forEach { p ->
+                val hecho = p.id in avisados
+                Row(Modifier.fillMaxWidth().padding(vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Column(Modifier.weight(1f)) {
+                        Text((p.orden?.let { "$it. " } ?: "") + p.cliente.ifBlank { p.direccion }, style = MaterialTheme.typography.bodyLarge, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                        Text(listOfNotNull(p.eta?.let { "≈ $it" }, p.telefono).joinToString(" · "), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
+                    if (hecho) Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(Icons.Default.Check, contentDescription = null, tint = LocalExtra.current.entregado); Spacer(Modifier.width(4.dp)); Text(tx("Avisado"), color = LocalExtra.current.entregado)
+                    } else OutlinedButton(onClick = { alAvisar(p) }) { Icon(Icons.AutoMirrored.Filled.Chat, contentDescription = null); Spacer(Modifier.width(6.dp)); Text("WhatsApp") }
+                }
+            }
+        }
+    }
+}
+
+/** LA MEMORIA DE LA CALLE (01-11-2026): «portal 1234, dejar en portería, entrada por el garaje», lo que se pinta y lo
+ *  que se dice (la web tiene la misma en pages/driver/MemoriaPuerta.jsx). */
+fun textoMemoria(m: Memoria): String {
+    val partes = mutableListOf<String>()
+    if (m.portal.isNotBlank()) partes += tx("portal {c}", "c" to m.portal)
+    DONDE.firstOrNull { it.first == m.dejar }?.let { partes += tx("dejar {d}", "d" to it.second.lowercase()) }
+    if (m.acceso.isNotBlank()) partes += m.acceso
+    return partes.joinToString(", ")
+}
+
+/** LA MEMORIA DE LA CALLE (01-11-2026): la hoja para apuntar el portal, dónde dejar y cómo se entra. Si el cliente dio el
+ *  portal en su enlace, ya viene puesto. Todo vacío (o «Borrar lo guardado») lo borra. */
+@Composable
+fun MemoriaHoja(p: Parada, alCerrar: () -> Unit, alGuardar: (portal: String, dejar: String, acceso: String) -> Unit) {
+    var portal by remember { mutableStateOf(p.memoria?.portal?.ifBlank { null } ?: p.clienteDice?.portal ?: "") }
+    var dejar by remember { mutableStateOf(p.memoria?.dejar ?: "") }
+    var acceso by remember { mutableStateOf(p.memoria?.acceso ?: "") }
+    ModalBottomSheet(onDismissRequest = alCerrar, sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)) {
+        Column(Modifier.padding(horizontal = 20.dp).padding(bottom = 20.dp).navigationBarsPadding().verticalScroll(rememberScrollState())) {
+            Text(tx("Para la próxima vez en esta puerta"), style = MaterialTheme.typography.headlineSmall)
+            Text(p.direccion, style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Text(tx("Lo verá quien venga a esta dirección, también un compañero. Se borra al año."), style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Spacer(Modifier.height(12.dp))
+            OutlinedTextField(portal, { portal = it.take(40) }, label = { Text(tx("Código del portal")) }, singleLine = true, modifier = Modifier.fillMaxWidth())
+            Spacer(Modifier.height(12.dp))
+            Text(tx("¿Dónde lo has dejado? (opcional)"), style = MaterialTheme.typography.titleMedium)
+            FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                DONDE.forEach { (k, t) -> FilterChip(selected = dejar == k, onClick = { dejar = if (dejar == k) "" else k }, label = { Text(t) }) }
+            }
+            Spacer(Modifier.height(8.dp))
+            OutlinedTextField(acceso, { acceso = it.take(200) }, label = { Text(tx("Cómo se entra")) },
+                placeholder = { Text(tx("«Entrada por el garaje», «timbre 2», «sin ascensor»…")) }, modifier = Modifier.fillMaxWidth())
+            Spacer(Modifier.height(18.dp))
+            Button(onClick = { alGuardar(portal.trim(), dejar, acceso.trim()) }, enabled = portal.isNotBlank() || dejar.isNotBlank() || acceso.isNotBlank(),
+                modifier = Modifier.fillMaxWidth().height(54.dp)) {
+                Icon(Icons.Default.Key, contentDescription = null); Spacer(Modifier.width(6.dp)); Text(tx("Guardar para la próxima"))
+            }
+            if (p.memoria != null) TextButton(onClick = { alGuardar("", "", "") }, modifier = Modifier.fillMaxWidth()) { Text(tx("Borrar lo guardado")) }
+        }
+    }
+}
+
+/** LA ENTREGA VERIFICADA (01-11-2026): lo que la IA dijo de la foto de entrega, en una frase (la web tiene la misma en
+ *  lib/entregaIa.js). El servidor manda el código y los datos; la frase se hace aquí, en su idioma. */
+fun textoAvisoIa(ia: EntregaIa): String = when (ia.aviso) {
+    "personas" -> tx("Se ven personas en la foto: repítela sin ellas.")
+    "sin_paquete" -> tx("No se ve el paquete en la foto: repítela con el paquete donde lo dejas.")
+    "otro_numero" -> tx("En la foto se lee el número {a} y la parada es el {b}: comprueba que es la puerta buena.", "a" to (ia.numero ?: ""), "b" to (ia.portal ?: ""))
+    "sin_numero" -> tx("No se ve el número del portal: la próxima vez, con el número o la puerta en la foto.")
+    else -> ""
+}
+
+/** LA ENTREGA VERIFICADA (01-11-2026): la IA pide mirar la foto de entrega. «Repetir la foto» abre la cámara y manda la
+ *  nueva (la parada sigue entregada; el servidor la vuelve a mirar); «Está bien así» la deja. Nunca bloquea. */
+@Composable
+fun RevisarFotoDialogo(r: Revisar, alRepetir: (String) -> Unit, alCerrar: () -> Unit) {
+    val ctx = LocalContext.current
+    val ambito = rememberCoroutineScope()
+    val uri = remember { fotoNueva(ctx) }
+    var preparando by remember { mutableStateOf(false) }
+    var avisoFoto by remember { mutableStateOf<String?>(null) }
+    val hacerFoto = rememberHacerFoto(uri, alAvisar = { avisoFoto = it }) { ok ->
+        if (ok) {
+            preparando = true
+            ambito.launch {
+                val f = withContext(Dispatchers.IO) { comprimir(ctx, uri) }?.first
+                preparando = false
+                if (f != null) alRepetir(f) else avisoFoto = tx("No se pudo guardar la foto")
+            }
+        }
+    }
+    AlertDialog(
+        onDismissRequest = alCerrar,
+        title = { Text(tx("Mira la foto de entrega")) },
+        text = { Text(listOfNotNull(textoAvisoIa(r.ia).takeIf { it.isNotBlank() },
+            tx("La foto es tu prueba si alguien dice que no le ha llegado. Puedes repetirla ahora o dejarla así."), avisoFoto).joinToString("\n\n")) },
+        confirmButton = { TextButton(onClick = hacerFoto, enabled = !preparando) { Text(if (preparando) tx("Guardando…") else tx("Repetir la foto")) } },
+        dismissButton = { TextButton(onClick = alCerrar) { Text(tx("Está bien así")) } },
+    )
+}
+
 @Composable
 fun ParadaHoja(
     p: Parada, prefijo: String, navegarCon: String, empresa: String = "",
     alCerrar: () -> Unit, alEntregar: () -> Unit, alFallar: () -> Unit, alDeshacer: () -> Unit, alEditar: () -> Unit, alQuitar: () -> Unit,
     /** El registro del intento (30-10-2026): «llamada» o «whatsapp» al pulsarlos. */
     alApuntar: (String) -> Unit = {},
+    /** LA ENTREGA VERIFICADA (01-11-2026): repetir la foto de una entrega que la IA pide revisar. */
+    alRepetirFoto: () -> Unit = {},
+    /** LA MEMORIA DE LA CALLE (01-11-2026): «Guardar para la próxima» en esta puerta. */
+    alMemoria: () -> Unit = {},
 ) {
     val ctx = LocalContext.current
     var quitar by remember { mutableStateOf(false) }
@@ -147,12 +264,22 @@ fun ParadaHoja(
                 p.hueco.takeIf { it.isNotBlank() }?.let { tx("En la furgoneta: {x}", "x" to it) },
                 if (p.ventanaDesde != null) tx("Horario: de {a} a {b}", "a" to p.ventanaDesde, "b" to p.ventanaHasta) else null,
                 p.motivo?.takeIf { it.isNotBlank() && p.estado == "fallido" }?.let { tx("Motivo: {x}", "x" to it) },
+                p.entregaIa?.takeIf { p.estado == "entregado" }?.let { if (it.nivel == "verificada") tx("Entrega verificada por IA") else textoAvisoIa(it).takeIf { t -> t.isNotBlank() } },
                 p.antes?.takeIf { p.pendiente }?.let { textoAntes(it) },
                 p.clienteDice?.let { textoClienteDice(it) }?.takeIf { it.isNotBlank() }?.let { tx("El cliente dice: {t}", "t" to it) },
+                p.memoria?.let { textoMemoria(it) }?.takeIf { it.isNotBlank() }?.let { tx("Memoria de la puerta: {t}", "t" to it) },
+                p.valoracion?.takeIf { it.estrellas in 1..5 }?.let { tx("Valoración del cliente: {e}", "e" to "★".repeat(it.estrellas) + "☆".repeat(5 - it.estrellas)) },
             )
             if (datos.isNotEmpty()) {
                 Spacer(Modifier.height(12.dp))
                 datos.forEach { Text(it, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.padding(vertical = 2.dp)) }
+            }
+            if (p.estado == "entregado" && p.entregaIa?.nivel == "revisar") {
+                TextButton(onClick = alRepetirFoto) { Icon(Icons.Default.PhotoCamera, contentDescription = null); Spacer(Modifier.width(6.dp)); Text(tx("Repetir la foto")) }
+            }
+            TextButton(onClick = alMemoria) {
+                Icon(Icons.Default.Key, contentDescription = null); Spacer(Modifier.width(6.dp))
+                Text(if (p.memoria == null) tx("Guardar para la próxima") else tx("Para la próxima vez en esta puerta"))
             }
             Spacer(Modifier.height(16.dp))
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -323,7 +450,7 @@ fun NoEntregadoHoja(alCerrar: () -> Unit, alConfirmar: (String, String) -> Unit)
     }
 }
 
-private fun fotoNueva(ctx: Context): Uri {
+internal fun fotoNueva(ctx: Context): Uri {
     val f = File(ctx.cacheDir, "fotos").apply { mkdirs() }.resolve("entrega-${System.currentTimeMillis()}.jpg")
     return FileProvider.getUriForFile(ctx, "${ctx.packageName}.fotos", f)
 }
@@ -331,7 +458,7 @@ private fun fotoNueva(ctx: Context): Uri {
 /** La foto de la entrega en un JPEG pequeño (el servidor admite hasta 300 KB en base64) y su miniatura. Derecha:
  *  la cámara guarda muchas fotos giradas y lo dice en el EXIF, que al recomprimir se pierde; sin girarla aquí, la
  *  oficina y el cliente la veían tumbada (29-10-2026; la auditoría ya lo hacía). */
-private fun comprimir(ctx: Context, uri: Uri): Pair<String, Bitmap>? = runCatching {
+internal fun comprimir(ctx: Context, uri: Uri): Pair<String, Bitmap>? = runCatching {
     val opc = BitmapFactory.Options().apply { inJustDecodeBounds = true }
     ctx.contentResolver.openInputStream(uri)?.use { BitmapFactory.decodeStream(it, null, opc) }
     var muestra = 1

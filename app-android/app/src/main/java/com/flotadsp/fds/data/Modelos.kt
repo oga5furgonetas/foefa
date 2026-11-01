@@ -61,6 +61,8 @@ data class Parada(
     @SerialName("entrega_donde") val entregaDonde: String? = null,
     @SerialName("entrega_recibe") val entregaRecibe: String? = null,
     @SerialName("entrega_nota") val entregaNota: String? = null,
+    /** LA ENTREGA VERIFICADA (01-11-2026): lo que dijo la IA de la foto de entrega (null = sin IA o sin foto). */
+    @SerialName("entrega_ia") val entregaIa: EntregaIa? = null,
     val ejemplo: Boolean = false,
     val escaneos: Int = 0,
     /** El enlace de seguimiento del cliente (token de /s/…), para el WhatsApp. */
@@ -69,6 +71,10 @@ data class Parada(
     val antes: Antes? = null,
     /** Lo que contestó el cliente en su enlace (30-10-2026): si estará, dónde dejarlo, el portal, una franja. */
     @SerialName("cliente_dice") val clienteDice: ClienteDice? = null,
+    /** LA MEMORIA DE LA CALLE (01-11-2026): lo que la empresa sabe de ese portal (el código, dónde dejar, cómo se entra). */
+    val memoria: Memoria? = null,
+    /** LA VALORACIÓN DEL CLIENTE (01-11-2026): las estrellas que puso en su enlace, ya entregado. */
+    val valoracion: Valoracion? = null,
     /** Minutos que se llega tarde a su horario, según la ruta ordenada. */
     @SerialName("tarde_min") val tardeMin: Int? = null,
 ) {
@@ -101,9 +107,21 @@ data class Base(val direccion: String? = null, val lat: Double? = null, val lng:
 @Serializable
 data class Antes(val fecha: String = "", val estado: String = "", val nota: String = "", val donde: String = "", val motivo: String = "")
 
+/** LA ENTREGA VERIFICADA (01-11-2026): lo que dijo la IA de la foto de entrega. `nivel`: verificada, parcial, revisar o
+ *  pendiente; `aviso`, un código (personas, sin_paquete, otro_numero, sin_numero) que la app convierte en frase. */
+@Serializable
+data class EntregaIa(val nivel: String = "", val aviso: String? = null, val numero: String? = null, val portal: String? = null, val lugar: String? = null)
+
 /** EL CLIENTE TE AYUDA ANTES DE LLEGAR (30-10-2026): lo que contestó en su enlace. Mismas claves que el servidor. */
 @Serializable
 data class ClienteDice(val estare: String = "", val dejar: String = "", val franja: List<String>? = null, val portal: String = "", val nota: String = "")
+
+/** LA MEMORIA DE LA CALLE (01-11-2026): el código del portal, dónde dejar (una de DONDE) y cómo se entra; quién lo apuntó. */
+@Serializable
+data class Memoria(val portal: String = "", val dejar: String = "", val acceso: String = "", val por: String = "", val actualizado: String? = null)
+
+@Serializable
+data class Valoracion(val estrellas: Int = 0, val cuando: String? = null)
 
 /* LO QUE DICE LA DGT CERCA DE LA RUTA (30-10-2026): cortes, obras, accidentes y retenciones (GET /reparto/mi-ruta/incidencias)
    y las zonas de bajas emisiones con sus polígonos y qué paradas caen dentro (GET /reparto/mi-ruta/zbe). */
@@ -170,6 +188,8 @@ data class Ganancias(
     @SerialName("pago_parada") val pagoParada: Int = 0,
     @SerialName("pago_dia") val pagoDia: Int = 0,
     @SerialName("coste_km") val costeKm: Int = 0,
+    /** LA PROPINA (01-11-2026): el móvil de Bizum, que el cliente ve en su enlace cuando ya tiene el paquete. */
+    val bizum: String = "",
 )
 
 /** La versión de la app que hay para descargar de la web (GET /app/version → `web`), para la instalada fuera de Play. */
@@ -209,6 +229,14 @@ data class Escaneo(val encontrado: Boolean = false, val codigo: String = "", val
 /** POST /reparto/mi-ruta/cargado (01-11-2026): marcar a mano una parada como cargada, o quitarle la marca. */
 @Serializable
 data class Cargados(val ok: Boolean = true, val cargados: Int = 0, val total: Int = 0)
+
+/** «COMPARTIR CON FDS» (01-11-2026): lo que contesta /reparto/pegar: las filas que ve (sin confirmar) o lo creado. */
+@Serializable
+data class FilaPegada(val codigo: String = "", val cliente: String = "", val direccion: String = "", val telefono: String = "")
+
+@Serializable
+data class Pegado(val filas: List<FilaPegada> = emptyList(), val n: Int = 0, val creados: Int = 0, val repetidos: Int = 0,
+                  @SerialName("sin_hueco") val sinHueco: Int = 0)
 
 @Serializable
 data class Ordenado(val ordenados: Int = 0, val ruta: ResumenRuta? = null)

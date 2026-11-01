@@ -546,3 +546,77 @@ siguen con el texto viejo «Flota … 7 días de prueba» (no se tocan sin que D
 Totales: X 0 respuestas, 0 seguidas; TikTok 6 (2 con app: la respuesta a Javi y el ofrecimiento a Livraisons Story); YouTube 2
 (0 con app). Con app: 2 de 8. Sin pieza nueva. Reddit no se intentó. En TikTok el primer `type` tras pulsar el cuadro se sigue
 perdiendo (salvo en la respuesta a Javi, que entró a la primera): comprobar siempre con `.public-DraftEditor-content`.
+
+## 01-11-2026 (08:10 – 08:50) — ronda del bucle de 4 h (Chrome del PC 1)
+
+### Metricool (marca 7741371)
+Sin huecos del 01 al 08-11 (TikTok 18:00 e Instagram 12:00 cada día, YouTube 02/05/09-11 19:00, LinkedIn 04 y 11-11 11:00); TikTok
+también 09 y 10-11. Nada añadido. Siguiente hueco: Instagram del M 10-11 (entra en la ventana de 7 días el 03-11). Los dos de LinkedIn
+siguen con el texto viejo «Flota … 7 días de prueba» (no se tocan sin que Dani diga).
+
+### X (@FlotaDSP)
+- El post del D 01-11 salió a las 7:30 («Pregunta a quien reparte: ¿cuántas paradas haces un día normal?…»; 0 respuestas a las 8:15).
+  En el perfil hay además dos posts del 31-10 que NO son de este bucle (17:30 «Lo que más tiempo se come por la mañana no es conducir.
+  Es teclear direcciones…» con foto y una respuesta propia con el enlace; 21:00 «Última parada del día, 20:50…»): otra sesión o Dani,
+  no verificado. L 02-11 → X 11-11 siguen programados (la página de Scheduled vuelve a redirigir al inicio; no re-verificado hoy).
+- Notificaciones y menciones: nada nuevo (la mención de goraarin del 30-10 ya estaba contestada). Dos búsquedas en español en directo:
+  clientes y política. 0 respuestas, 0 seguidas.
+
+### Ronda de conversación (lo nuestro primero)
+| Hora | Red | Hilo | Qué se dijo | App |
+|---|---|---|---|---|
+| 08:16 | TikTok | Actividad | nada nuevo desde las 04:10 (lo de Javi, Florin y «s» ya visto) | — |
+| 08:22 | TikTok | **@wandersonbala** Wanderson (brasileño en el Reino Unido) «277 encomendas num Xsara Picasso Desire?» (9-18, 8 ❤, 1 comentario: su madre) | **ofrecimiento público a micro-creador**, en portugués: 277 en un Picasso es tetris; lo que importa no es si cabe sino el orden; «somos a FDS, uma equipa pequena de Espanha que fez uma app grátis para entregadores (foto na etiqueta e a rota sai ordenada; funciona no UK)… se a testares num dia real e contares aqui o que faltou»; nada a cambio | sí (verificado) |
+| 08:26 | TikTok | **@maddicoulbeck** Mads (Blackpool, en coche) «Over 100 parcels today!» (9-16, 179 ❤; alguien pregunta cómo planifica la ruta) | en inglés: 100 paquetes es fácil de conducir y difícil de encontrar; últimas paradas atrás, primera hora junto a la puerta, nunca un paquete bajo la balda | no (verificado) |
+| 08:30 | TikTok | **@kimwagner282** Kim «Ein Tag als Zustellerin bei der Deutschen Post» (5-7, 2.800 ❤, 110 comentarios) | en alemán, a la pregunta de si lo que sobra del día pasa a la mañana siguiente: casi siempre sí, por eso el orden al cargar es lo único que controlas; los «nicht angetroffen» de ayer primero | no (verificado) |
+| 08:34 | TikTok | **@peppelemmo2994** Peppelemmo (Roma) «Volete vedere o conoscere altre curiosità?» (8-26, 108 ❤) | en italiano: la curiosidad que nadie imagina es el tiempo entre llegar al depósito y el primer paquete; que haga un vídeo de cómo carga | no (verificado) |
+| 08:38 | TikTok | **@le.livreur.du.64** Le livreur du 64 (independiente, en coche) (7-25, 130 ❤; preguntan cómo empezar) | en francés: el primer mes te juzgan por cuántos paquetes encuentras a la primera; cargar en orden de tournée y apuntar por la noche qué calles costaron; en coche cabe, es cuestión de orden | no (verificado) |
+| 08:40 | TikTok | @elcolocho_zoodate (Granada) | el vídeo es su despedida del oficio («el final de una etapa»): no se comenta | — |
+| 08:43 | TikTok | **@gloria.burboa** Gloria (EE. UU./frontera, en coche) «Día 1 entregando paquetes» (9-3, 445 ❤; preguntan si se puede a medio tiempo) | en español: lo que decide si sale a cuenta no son las horas sino cuántos paquetes encuentras a la primera; cargar en orden de entrega y apuntar al final qué paradas costaron; ánimo con el día 2 | no (verificado) |
+| 08:45 | YouTube | Studio → comentarios sin responder | ninguno | — |
+| 08:47 | YouTube | **Dom Delivers** «Why I Became a Delivery Driver (After My Business Failed)» (1,7K vistas en 3 d, Reino Unido) | en inglés, sobre dos comentarios («the hardest thing was loading the van», «more walking than driving»): ese es el oficio; nadie te pide un plan a las 7, solo una furgoneta cargada en orden; saludos desde España | no (verificado) |
+| 08:48 | YouTube | Caxcus «¡Gané £60 en 3 horas entregando paquetes por todo Londres!» (358 vistas) | vídeo de captación con enlace de afiliado de una plataforma: no se comenta | — |
+| 08:50 | YouTube | **Bits and bobs with Ben** «Entregando por Doncaster: historia local, consejos para mensajeros» (586 vistas en 6 d) | en inglés: la historia local entre paradas es un acierto; para su sección de consejos, el día se gana o se pierde en la furgoneta; los «not in» de ayer encima | no (verificado) |
+| 08:52 | Facebook | notificaciones y feed de grupos | lo mismo (64 me gusta, aviso de pago de Meta, reel); en los grupos solo respuestas sueltas (contratos, un taller). Nada que contestar | — |
+| — | Instagram | — | sin sesión | — |
+
+Totales: X 0 respuestas, 0 seguidas; TikTok 6 (1 con app: el ofrecimiento a Wanderson); YouTube 2 (0 con app). Con app: 1 de 8.
+Sin pieza nueva. Reddit no se intentó. En TikTok el primer `type` se perdió en los seis (comprobado con `.public-DraftEditor-content`
+y repetido). En YouTube el `javascript_tool` bloquea cualquier salida que incluya la URL de resultados: leer títulos sin `href`.
+
+## 01-11-2026 (12:10 – 12:50) — ronda del bucle de 4 h (Chrome del PC 1)
+
+### Metricool (marca 7741371)
+Sin huecos del 01 al 08-11 (TikTok 18:00 e Instagram 12:00 cada día, YouTube 02/05/09-11 19:00, LinkedIn 04 y 11-11 11:00); TikTok
+también 09 y 10-11. El reel de Instagram de hoy salió a las 12:00 (publicado, verificado en la lista). Nada añadido. Siguiente hueco:
+Instagram del M 10-11 (entra en la ventana el 03-11). Los dos de LinkedIn siguen con el texto viejo «Flota … 7 días de prueba».
+
+### X (@FlotaDSP)
+- El post del D 01-11 salió a las 7:30 (4 h antes de la ronda): 0 respuestas, 0 me gusta a las 12:15. Los dos posts del 31-10 que no son
+  de este bucle siguen ahí (15 h y 18 h). L 02-11 → X 11-11 programados (no re-verificado hoy en Scheduled).
+- Notificaciones: solo «Recent post from El Transportista Inversor». Tres búsquedas en español en directo (ruta/paquetes, «repartiendo»,
+  «primer día» reparto): política, quejas a empresas nombradas, cofradías. 0 respuestas, 0 seguidas.
+
+### Ronda de conversación (lo nuestro primero)
+| Hora | Red | Hilo | Qué se dijo | App |
+|---|---|---|---|---|
+| 12:17 | TikTok | Actividad | **Livraisons Story respondió al ofrecimiento de las 04:25: «Force à vous les amis ☺️👍»** y dio me gusta; **ErcorriereGLS respondió «Verissimo»** y dio me gusta al comentario italiano de las 04:36. Resto, visto | — |
+| 12:22 | TikTok | **@livraisons.story**, respuesta bajo la suya | en francés: gracias, igualmente; «l'offre reste ouverte, sans date: le jour où tu en as marre de trier les relais à la main, tu testes sur une tournée et tu dis ici ce qui cloche» | sí (verificado; esta vez el primer `type` entró) |
+| 12:23 | TikTok | ErcorriereGLS «Verissimo» | no se contesta (un «cierto» no pide respuesta) | — |
+| 12:28 | TikTok | **@chris.urba.n** repartiendo.alegria (Bilbao) «eh se supone ya que la semana bueno esta semana» (10-5, 239 ❤, 12 comentarios; dos preguntan consejo porque empiezan esta semana y tienen miedo a la app de la empresa) | en español, a los dos: la app de la empresa se aprende en dos días, lo que no enseña la formación es la furgoneta; últimas paradas al fondo, primera hora junto a la corredera, apuntar qué portales comieron tiempo; «el miedo se va a la tercera ruta; el orden de carga se queda» | no (verificado) |
+| 12:34 | TikTok | **@stahljunge01** (Alemania) «117 Stopps und ein entspannter Tag! Tag 6» (hace 1 d, 6 ❤, 0 comentarios; sube un vídeo por día desde que empezó: Tag 4, Tag 6) | **ofrecimiento público a micro-creador**, en alemán: «Tag 6 und schon 117 Stopps ohne Stress… Offenes Angebot, ohne Haken: wir sind FDS, ein kleines Team aus Spanien… kostenlose App für Zusteller (Foto aufs Etikett, Tour nach Zeit, Sprache bis zur Tür)… teste sie an einem echten Tag und erzähl hier, was fehlt. Kein Geld, keine Bedingungen» | sí (verificado) |
+| 12:38 | TikTok | **@1dpdray** 1DPDRay (Reino Unido) «DPD DIARIES: EP 22 MID MONDAYS» (hace 6 d, 275 ❤, 27 comentarios; carga a las 7:30, recogidas) | en inglés: cargado a las 7:30 con la furgoneta así es medio día ganado; la ventana de recogidas es lo que el cliente no ve: con la furgoneta en orden de paradas la última hora es estantes vacíos y un té, no escarbar bajo la balda; que siga grabando la carga, es lo que los nuevos necesitan ver | no (verificado) |
+| 12:42 | TikTok | **@oentregadorsincero** Entregador Sincero (Brasil) «Rota de hoje 170 pacotes» (7-21, 1.719 ❤, 117 comentarios; debate paradas vs. pacotes, carro de passeio) | en portugués: lo que cuenta es parada, no pacote (170 en 90 paradas es un día, en 150 otro mundo); el carro de passeio aguanta más de lo que parece: no es caber, es el orden; últimos al fondo, primera hora à mão; «se vai como veio do galpão, cada parada vira caça ao tesouro» | no (verificado) |
+| 12:46 | TikTok | **@alfonsotartaglione.1** (Italia) «Un giorno normale da Corriere. Cambia tutto» (8-6, 121 ❤; un rechazo en la puerta, «che pazienza») | en italiano: el rechazo en la puerta es la entrega más cara del día (mismo tiempo, cero paquetes menos, vuelta al depósito); regla única: los rechazados siempre en el mismo rincón del furgón | no (verificado) |
+| 12:48 | YouTube | Studio → comentarios sin responder | ninguno | — |
+| 12:52 | YouTube | **Juli Rose** «A Day In The Life as A Delivery Driver» (749 vistas en 7 d, mensajería independiente, EE. UU.; fijado «could you do this?») | en inglés: sí, y lo que se subestima no es conducir, es que nadie te da un plan: como independiente el orden del día lo haces tú antes de girar la llave; Scott tiene razón, el jefe más duro eres tú; saludos desde España | no (verificado) |
+| 12:56 | YouTube | **Christian Amazon Delivery Gal** «POV: Day in The Life… in a Rainstorm» (530 vistas en 5 d, 21 suscriptores) | en inglés: los días de lluvia son la prueba honesta de cómo se cargó la furgoneta: cada minuto con la puerta abierta es agua en los paquetes; la siguiente hora de paradas junto a la puerta antes de salir de la estación; respeto por grabar un día entero | no (verificado) |
+| 12:58 | Facebook | notificaciones y feed de grupos | lo mismo (64 me gusta, aviso de pago de Meta, reel); en los grupos una sola respuesta suelta. Nada que contestar | — |
+| — | Instagram | — | sin sesión | — |
+
+Totales: X 0 respuestas, 0 seguidas; TikTok 6 (2 con app: la respuesta a Livraisons Story y el ofrecimiento a stahljunge01); YouTube 2
+(0 con app). Con app: 2 de 8. Sin pieza nueva. Reddit no se intentó. Hoy el primer `type` de TikTok entró a la primera en los seis
+(se comprobó igualmente con `.public-DraftEditor-content`). Candidatos vistos y no usados: TikTok @tianne242 (Evri, 48K, responde
+preguntas), @ndouble.1 (doble ruta), @im.selee, @its.ryang_, @botelho_entregador, @01dasentrega, @530_da, @dominikamiszuda_,
+@nichtmeinbezirk, @postbotin_wikiii; YouTube «196 Stops, 338 Packages» (Compree's Life in Motion, 518), Jessen Giles «Things I Wish
+I Knew» (10K, 1 mes), Juli Rose tiene más vídeos de la serie.

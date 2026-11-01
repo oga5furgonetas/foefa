@@ -1824,6 +1824,9 @@ async def _ensure_tenant_indexes(db_name: str):
     await _idx(tdb.reparto_jornadas, "fecha")
     await _idx(tdb.reparto_rutas, "id")
     await _idx(tdb.reparto_rutas, "fecha")
+    # LA MEMORIA DE LA CALLE (01-11-2026): una puerta, un apunte.
+    await _idx(tdb.calle_memoria, "clave", unique=True)
+    await _idx(tdb.calle_memoria, "actualizado")
     await _idx(tdb.reparto_avisos, "driver_id")
     await _idx(tdb.plantillas_compartidas, "id", unique=True)
     await _idx(tdb.furgo_fijas, "driver_id", unique=True)
@@ -51994,9 +51997,12 @@ async def _rep_limpiar(user: dict):
             {"$set": {"cliente": None, "telefono": None, "direccion": None, "lat": None,
                       "lng": None, "notas": None, "contenido": None, "entrega_foto": None,
                       "entrega_nota": None, "entrega_firma": None, "entrega_recibe": None,
-                      "vista": None, "anonimizado": True}})
+                      "entrega_ia": None, "vista": None, "anonimizado": True}})
         lim_rastro = (hoy - timedelta(days=reparto.DIAS_RASTRO)).strftime("%Y-%m-%d")
         await db.reparto_jornadas.delete_many({"fecha": {"$lt": lim_rastro}})
+        # LA MEMORIA DE LA CALLE (01-11-2026) caduca al año de la última vez que se tocó.
+        lim_memoria = (datetime.now(timezone.utc) - timedelta(days=reparto.DIAS_MEMORIA)).isoformat()
+        await db.calle_memoria.delete_many({"actualizado": {"$lt": lim_memoria}})
         # Los recorridos que se guardaron hasta el 29-10-2026 (ya no se guardan, ver
         # /reparto/posicion) se quitan de las jornadas que quedan.
         await db.reparto_jornadas.update_many({"rastro": {"$exists": True}}, {"$unset": {"rastro": ""}})
@@ -52585,6 +52591,7 @@ async def reparto_ajustes_put(data: dict = Body(...), user: dict = Depends(requi
     # La tarifa se cambia en su propia pantalla (PUT /reparto/ganancias): guardar los ajustes no la borra.
     for k in ("pago_parada", "pago_dia", "coste_km"):
         nuevo[k] = int(a.get(k) or 0)
+    nuevo["bizum"] = a.get("bizum") or ""
     nuevo["actualizado_por"] = user.get("name") or ""
     nuevo["actualizado_en"] = datetime.now(timezone.utc).isoformat()
     await db.reparto_ajustes.replace_one({"id": "ajustes"}, nuevo, upsert=True)
@@ -52603,6 +52610,13 @@ async def reparto_ganancias_put(data: dict = Body(...), user: dict = Depends(req
     campos = {"pago_parada": _entero(data.get("pago_parada"), "pago_parada", defecto=0, minimo=0, maximo=10_000_000),
               "pago_dia": _entero(data.get("pago_dia"), "pago_dia", defecto=0, minimo=0, maximo=100_000_000),
               "coste_km": _entero(data.get("coste_km"), "coste_km", defecto=0, minimo=0, maximo=1_000_000)}
+    # LA PROPINA (01-11-2026): el móvil de Bizum del repartidor, que el cliente ve en su enlace SOLO cuando ya tiene el
+    # paquete («¿Le invitas a un café?»). Vacío lo quita. Es un ingreso suyo: la pantalla se lo dice.
+    if "bizum" in data:
+        bizum = _texto_cuerpo(data.get("bizum"), 20)
+        if bizum and not _bizum_valido(bizum):
+            raise HTTPException(400, "El Bizum es un móvil español de 9 cifras")
+        campos["bizum"] = _bizum_valido(bizum)
     await db.reparto_ajustes.update_one({"id": "ajustes"}, {"$set": campos}, upsert=True)
     return campos
 
@@ -52642,9 +52656,16 @@ async def reparto_crear(data: dict = Body(...), user: dict = Depends(require_adm
 async def reparto_pegar(data: dict = Body(...), user: dict = Depends(require_admin)):
     if not _rep_ve_datos(user):
         raise HTTPException(403, "Los pedidos los mete la empresa")
-    filas = reparto.lee_pegado(_texto_cuerpo(data.get("texto"), 400000))
+    texto = _texto_cuerpo(data.get("texto"), 400000)
+    # «COMPARTIR CON FDS» (01-11-2026): lo leído en el móvil de una foto, captura o PDF de la hoja de la agencia llega
+    # como texto con `hoja: true`: solo las líneas que son paradas (reparto.paradas_de_hoja, la misma regla que la web
+    # en hojaReparto.js), no cada línea como en una lista pegada.
+    if data.get("hoja"):
+        filas = reparto.paradas_de_hoja(texto, _texto_cuerpo(data.get("pais"), 2).lower() or _region_actual.get()[0])
+    else:
+        filas = reparto.lee_pegado(texto)
     if not filas:
-        raise HTTPException(400, "No veo ningún pedido con dirección en lo pegado")
+        raise HTTPException(400, "No veo ninguna parada en lo compartido" if data.get("hoja") else "No veo ningún pedido con dirección en lo pegado")
     if not data.get("confirmar"):
         return {"filas": filas, "n": len(filas)}
     f = _rep_fecha(data.get("fecha"))
@@ -52816,12 +52837,22 @@ async def seguimiento_publico(token: str, request: Request):
         antes = await tdb.reparto_pedidos.count_documents({
             "fecha": p.get("fecha"), "conductor_id": p.get("conductor_id"),
             "estado": {"$in": ["pendiente", "en_ruta"]}, "orden": {"$lt": p["orden"]}})
-    org = await global_db.organizations.find_one({"db_name": e["db_name"]}, {"_id": 0, "name": 1}) or {}
+    org = await global_db.organizations.find_one({"db_name": e["db_name"]}, {"_id": 0, "name": 1, "sector": 1}) or {}
+    # LA PROPINA (01-11-2026): el Bizum de quien reparte por su cuenta, solo cuando el cliente ya tiene el paquete.
+    bizum = ""
+    if p.get("estado") == "entregado" and org.get("sector") == "autonomo":
+        aj = await tdb.reparto_ajustes.find_one({"id": "ajustes"}, {"_id": 0, "bizum": 1}) or {}
+        bizum = aj.get("bizum") or ""
     return {"empresa": org.get("name") or "", "estado": p.get("estado"), "fecha": p.get("fecha"),
+            # LA VALORACIÓN (01-11-2026): la suya, para enseñársela; y si puede valorar (ya entregado).
+            "valoracion": (p.get("valoracion") or None) if p.get("estado") == "entregado" else None,
+            "puede_valorar": p.get("estado") == "entregado", "bizum": bizum,
             "eta": p.get("eta"), "franja": [p.get("ventana_desde"), p.get("ventana_hasta")]
             if p.get("ventana_desde") else None, "paradas_antes": antes, "tipo": p.get("tipo") or "entrega",
             # Dónde quedó (sin nombres ni fotos): «Entregado: en el buzón».
             "dejado": reparto.DONDE_ENTREGA.get(p.get("entrega_donde") or "") if p.get("estado") == "entregado" else None,
+            # LA ENTREGA VERIFICADA (01-11-2026): la IA vio el paquete en esta dirección. Solo el sí; nada de lo leído.
+            "verificada": p.get("estado") == "entregado" and (p.get("entrega_ia") or {}).get("nivel") == "verificada",
             # EL CLIENTE TE AYUDA ANTES DE LLEGAR (30-10-2026): lo que contestó, y si aún puede contestar.
             "respuesta": p.get("cliente_dice"), "puede_contestar": p.get("estado") in ("pendiente", "en_ruta"),
             # El registro del intento cuando no se pudo entregar: que vea que se llamó y se esperó.
@@ -52855,6 +52886,18 @@ async def seguimiento_respuesta(token: str, request: Request, data: dict = Body(
     if r.get("franja"):
         cambios["ventana_desde"], cambios["ventana_hasta"] = r["franja"]
     await tdb.reparto_pedidos.update_one({"id": p["id"]}, {"$set": cambios})
+    # LA MEMORIA DE LA CALLE (01-11-2026): el portal que da el cliente se queda para la próxima vez en esa puerta, si
+    # nadie de la empresa había apuntado otro.
+    try:
+        clave = reparto.clave_direccion(p.get("direccion")) if r.get("portal") else ""
+        if clave and not await tdb.calle_memoria.find_one({"clave": clave, "portal": {"$exists": True, "$nin": [None, ""]}},
+                                                          {"_id": 0, "clave": 1}):
+            await tdb.calle_memoria.update_one({"clave": clave}, {
+                "$set": {"clave": clave, "direccion": _texto_cuerpo(p.get("direccion"), 200), "portal": _texto_cuerpo(r.get("portal"), 40),
+                         "actualizado": datetime.now(timezone.utc).isoformat(), "por": "cliente"},
+                "$setOnInsert": {"dejar": "", "acceso": ""}}, upsert=True)
+    except Exception as ex:                                  # noqa: BLE001
+        logger.warning(f"memoria de la calle (cliente): {type(ex).__name__}")
     # Al repartidor, por todos los caminos (la bandeja de la app, web push y FCM).
     if p.get("conductor_id"):
         org = await global_db.organizations.find_one({"db_name": e["db_name"]}, {"_id": 0, "sector": 1, "idioma": 1, "pais": 1, "zona_horaria": 1}) or {}
@@ -52867,6 +52910,30 @@ async def seguimiento_respuesta(token: str, request: Request, data: dict = Body(
         except Exception as ex:                                  # noqa: BLE001
             logger.warning(f"respuesta del cliente: aviso no enviado: {type(ex).__name__}")
     return {"ok": True, "cliente_dice": r}
+
+
+@api_router.post("/seguimiento/{token}/valoracion")
+async def seguimiento_valoracion(token: str, request: Request, data: dict = Body(...)):
+    """LA VALORACIÓN DEL CLIENTE (01-11-2026): en su enlace, con el paquete ya entregado, de 1 a 5 estrellas (y nada
+    más). Se puede cambiar mientras el enlace viva. El repartidor la ve en lo hecho de hoy; la oficina, en la lista."""
+    _rl_public_action(f"segv:{_rl_key_ip(request)}", max_count=40, window_s=3600)
+    if not re.fullmatch(r"[A-Za-z0-9_-]{16,40}", token or ""):
+        raise HTTPException(404, "Enlace no válido")
+    e = await global_db.reparto_enlaces.find_one({"token": token}, {"_id": 0})
+    if not e or (e.get("caduca") or "") < _dia_negocio():
+        raise HTTPException(404, "Este enlace ha caducado")
+    tdb = client[e["db_name"]]
+    p = await tdb.reparto_pedidos.find_one({"id": e["pedido_id"]}, {"_id": 0, "id": 1, "estado": 1})
+    if not p:
+        raise HTTPException(404, "Este enlace ha caducado")
+    if p.get("estado") != "entregado":
+        raise HTTPException(409, "Se valora cuando el pedido ya está entregado")
+    v, error = reparto.valoracion_sanea(_dict_cuerpo(data))
+    if error:
+        raise HTTPException(400, error)
+    v["cuando"] = datetime.now(timezone.utc).isoformat()
+    await tdb.reparto_pedidos.update_one({"id": p["id"]}, {"$set": {"valoracion": v}})
+    return {"ok": True, "valoracion": v}
 
 
 @api_router.get("/reparto/estadisticas")
@@ -53049,6 +53116,20 @@ async def reparto_mi_ruta(user: dict = Depends(require_any_auth)):
                     p["antes"] = antes[p["id"]]
     except Exception as e:                                   # noqa: BLE001
         logger.warning(f"la última vez: {type(e).__name__}")
+    # LA MEMORIA DE LA CALLE (01-11-2026): lo que la EMPRESA sabe de ese portal (el código, dónde dejar, cómo se entra),
+    # lo haya apuntado quien lo haya apuntado; el conductor nuevo hereda lo que sabía el anterior.
+    try:
+        abiertas = [p for p in ps if p.get("estado") in ("pendiente", "en_ruta") and not p.get("ejemplo")]
+        claves = list({reparto.clave_direccion(p.get("direccion")) for p in abiertas} - {""})
+        if claves:
+            memorias = {m["clave"]: m async for m in db.calle_memoria.find({"clave": {"$in": claves}}, {"_id": 0})}
+            for p in abiertas:
+                m = memorias.get(reparto.clave_direccion(p.get("direccion")))
+                if m:
+                    p["memoria"] = {"portal": m.get("portal") or "", "dejar": m.get("dejar") or "", "acceso": m.get("acceso") or "",
+                                    "por": m.get("por") or "", "actualizado": m.get("actualizado")}
+    except Exception as e:                                   # noqa: BLE001
+        logger.warning(f"memoria de la calle: {type(e).__name__}")
     # PARADAS DE DÍAS ANTERIORES SIN CERRAR (25-10-2026): la ruta es la del día, y lo que se quedó sin entregar (o se
     # cargó por la noche) desaparecía de «Hoy» a las 00:00. Se cuentan las de la última semana para ofrecer traerlas.
     previas = 0
@@ -53081,7 +53162,7 @@ async def reparto_mi_ruta(user: dict = Depends(require_any_auth)):
             "ia_tickets": await _rep_ia_activa(a, user),
             "jornada": {"empezada": j.get("empezada"), "terminada": j.get("terminada")},
             # «Mi dinero hoy»: solo para quien reparte por su cuenta (a un conductor le paga su empresa).
-            "ganancias": ({k: int(a.get(k) or 0) for k in ("pago_parada", "pago_dia", "coste_km")} if autonomo else None),
+            "ganancias": ({**{k: int(a.get(k) or 0) for k in ("pago_parada", "pago_dia", "coste_km")}, "bizum": a.get("bizum") or ""} if autonomo else None),
             "aviso_aceptado": bool(aviso),
             "previas": previas,
             # La prueba sin cuenta: la app invita a crear la cuenta de verdad.
@@ -53383,6 +53464,55 @@ def _rep_hora_hecho(valor) -> str:
     return ahora.isoformat()
 
 
+# LA ENTREGA VERIFICADA (01-11-2026, docs/SIGUIENTE-NIVEL-01-11.md §4): al dar por entregado con foto, la IA la mira
+# (el paquete, el número que se lee, un rótulo, personas) y la app avisa ANTES de que el repartidor se vaya si no cuadra;
+# nunca bloquea. El cliente ve «entrega verificada» en su enlace solo con el veredicto bueno. La petición espera hasta
+# _REP_IA_ESPERA segundos; si Gemini tarda más, el veredicto llega en segundo plano y la app lo ve al refrescar.
+# Sin GEMINI_API_KEY no pasa nada (como la IA de daños). Cuesta ≈0,001 € por foto.
+_REP_IA_ESPERA = 8.0
+
+
+def _rep_ia_entrega_activa() -> bool:
+    return bool(os.environ.get("GEMINI_API_KEY")) or os.environ.get("USE_VERTEX_AI", "").lower() in ("1", "true", "yes")
+
+
+async def _rep_ia_entrega_llamada(foto: str, direccion: str, cliente: str) -> dict:
+    """Una llamada a Gemini con la foto (data URL JPEG) y la parada. Devuelve el JSON tal cual, o levanta."""
+    import base64 as _b64
+    from google.genai import types as genai_types
+    datos = _b64.b64decode(foto.split(",", 1)[1])
+    prompt = (
+        "Esta es la foto de prueba de entrega de un paquete, hecha por el repartidor en el sitio donde lo deja. "
+        f"La parada es «{direccion}»" + (f" (cliente: «{cliente}»)" if cliente else "") + ". "
+        "Mira la foto y contesta SOLO con un JSON con estas claves: "
+        '"paquete_visible" (true si se ve un paquete, sobre o bulto; false si no), '
+        '"numero_visible" (el número de portal, casa o piso que se lea en la foto, tal cual, o null), '
+        '"rotulo" (el nombre de negocio o rótulo legible, o null), '
+        '"lugar" (uno de: puerta, portal, buzon, conserjeria, suelo, mano, interior, otro), '
+        '"personas" (true si se ve alguna persona o cara), '
+        '"coincide" (true si lo que se ve encaja con la dirección y el cliente, false si no, null si no hay con qué comparar). '
+        "No inventes: lo que no se lea, null.")
+    contents = [prompt, genai_types.Part.from_bytes(data=datos, mime_type="image/jpeg")]
+    return await _gemini_json_call(_gemini_client_plantilla(), _modelo_ia(), contents)
+
+
+async def _rep_ia_entrega(pid: str, direccion: str, cliente: str, foto: str) -> Optional[dict]:
+    """El veredicto de la IA sobre la foto de entrega, guardado en el pedido. None si la IA no contestó (y entonces
+    el «pendiente» que dejó la petición se quita, para que la app no espere nada)."""
+    try:
+        j = await _rep_ia_entrega_llamada(foto, direccion, cliente)
+    except Exception as e:                                       # noqa: BLE001
+        logger.warning(f"reparto: la IA no pudo mirar la foto de entrega de {pid}: {type(e).__name__}")
+        q = await db.reparto_pedidos.find_one({"id": pid}, {"_id": 0, "entrega_ia": 1})
+        if ((q or {}).get("entrega_ia") or {}).get("nivel") == "pendiente":
+            await db.reparto_pedidos.update_one({"id": pid}, {"$set": {"entrega_ia": None}})
+        return None
+    v = reparto.veredicto_entrega(j, direccion, cliente)
+    v["cuando"] = datetime.now(timezone.utc).isoformat()
+    await db.reparto_pedidos.update_one({"id": pid}, {"$set": {"entrega_ia": v}})
+    return v
+
+
 @api_router.post("/reparto/pedidos/{pid}/estado")
 async def reparto_estado(pid: str, data: dict = Body(...), user: dict = Depends(require_any_auth)):
     p = await db.reparto_pedidos.find_one({"id": pid}, {"_id": 0})
@@ -53448,8 +53578,17 @@ async def reparto_estado(pid: str, data: dict = Body(...), user: dict = Depends(
         cambios.update({"puerta_lat": puerta[0], "puerta_lng": puerta[1], "puerta_precision": puerta[2]})
     if e != "entregado":
         cambios.update({"entrega_foto": None, "entrega_nota": cambios.get("entrega_nota"), "entrega_firma": None,
-                        "entrega_donde": None, "entrega_recibe": None})
+                        "entrega_donde": None, "entrega_recibe": None, "entrega_ia": None})
+    # LA ENTREGA VERIFICADA (01-11-2026): con foto nueva, la IA la mira. Se deja «pendiente» ANTES de lanzarla (si
+    # acaba en segundo plano, su veredicto pisa el pendiente y no al revés) y se espera un poco por la respuesta.
+    elif foto and _rep_ia_entrega_activa():
+        cambios["entrega_ia"] = {"nivel": "pendiente", "aviso": None}
     await db.reparto_pedidos.update_one({"id": pid}, {"$set": cambios})
+    if (cambios.get("entrega_ia") or {}).get("nivel") == "pendiente":
+        tarea = asyncio.create_task(_rep_ia_entrega(pid, p.get("direccion") or "", p.get("cliente") or "", foto))
+        hecho, _ = await asyncio.wait({tarea}, timeout=_REP_IA_ESPERA)
+        if hecho:
+            cambios["entrega_ia"] = tarea.result()
     return {k: v for k, v in {**p, **cambios}.items() if k not in ("entrega_foto", "entrega_firma")}
 
 
@@ -54023,6 +54162,33 @@ async def reparto_mi_orden(data: dict = Body(...), user: dict = Depends(require_
     salida, programada = _rep_salida_ahora(a)
     ruta = await _rep_ordenar(f, d["id"], origen, salida_min=salida, orden_fijo=ids, programada=programada)
     return {"ordenados": len(ids), "ruta": ruta}
+
+
+@api_router.post("/reparto/mis-pedidos/{pid}/memoria")
+async def reparto_mi_memoria(pid: str, data: dict = Body(...), user: dict = Depends(require_any_auth)):
+    """LA MEMORIA DE LA CALLE (01-11-2026): «Guardar para la próxima» desde la parada: el código del portal, dónde
+    dejarlo y cómo se entra, para ESA dirección y para toda la empresa. Todo vacío lo borra. Lo trae mi-ruta en
+    `memoria` y lo dice el briefing."""
+    p = await db.reparto_pedidos.find_one({"id": pid}, {"_id": 0, "conductor_id": 1, "direccion": 1, "lat": 1, "lng": 1})
+    if not p:
+        raise HTTPException(404, "Esa parada ya no existe")
+    if user.get("role") == "driver":
+        if p.get("conductor_id") != user.get("sub"):
+            raise HTTPException(403, "Esa parada no es tuya")
+    elif user.get("role") != "admin":
+        raise HTTPException(403, "No puedes cambiar paradas")
+    clave = reparto.clave_direccion(p.get("direccion"))
+    if not clave:
+        raise HTTPException(400, "Esa parada no tiene dirección")
+    m = reparto.memoria_sanea(_dict_cuerpo(data))
+    if not m:
+        await db.calle_memoria.delete_one({"clave": clave})
+        return {"ok": True, "memoria": None}
+    doc = {**m, "clave": clave, "direccion": _texto_cuerpo(p.get("direccion"), 200), "lat": p.get("lat"), "lng": p.get("lng"),
+           "actualizado": datetime.now(timezone.utc).isoformat(), "por": _texto_cuerpo(user.get("name"), 80),
+           "conductor_id": user.get("sub")}
+    await db.calle_memoria.update_one({"clave": clave}, {"$set": doc}, upsert=True)
+    return {"ok": True, "memoria": {k: doc[k] for k in ("portal", "dejar", "acceso", "por", "actualizado")}}
 
 
 @api_router.post("/reparto/mis-pedidos/{pid}/editar")
