@@ -589,7 +589,7 @@ Nada se había borrado (org `owner` sin `modulos`, usuario `dani` sin
     (piden empresa china); Web Push no llega en China (va por FCM); revisión
     por un abogado del texto PIPL.
 
-## Última sesión — 01-11-2026 (16:55, PC de Dani, bucle de redes): ofrecimiento en inglés a Crooksys Couriers; 7 en TikTok, 2 en YouTube
+## Última sesión — 01-11-2026 (16:23, PC de Dani, bucle de redes): ofrecimiento en inglés a Crooksys Couriers; 7 en TikTok, 2 en YouTube
 
 - Metricool sin huecos hasta el 08-11 (TikTok hasta el 10-11); X del día salió a las 7:30, programados hasta el 11-11. Ronda:
   ofrecimiento público en inglés a @crooksys_couriers (mensajería pequeña del Reino Unido); 6 comentarios más en TikTok (es, es, pt,
