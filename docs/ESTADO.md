@@ -589,6 +589,13 @@ Nada se había borrado (org `owner` sin `modulos`, usuario `dani` sin
     (piden empresa china); Web Push no llega en China (va por FCM); revisión
     por un abogado del texto PIPL.
 
+## Última sesión — 01-11-2026 (12:50, PC de Dani, bucle de redes): Livraisons Story contestó al ofrecimiento; ofrecimiento en alemán a stahljunge01; 6 en TikTok, 2 en YouTube
+
+- Metricool sin huecos hasta el 08-11 (el reel de Instagram de hoy salió a las 12:00); el post de X del día salió a las 7:30, programados
+  hasta el 11-11. Ronda: Livraisons Story (micro-creador del ofrecimiento de las 04:25) contestó «Force à vous» y se le dejó la puerta
+  abierta; ofrecimiento público en alemán a @stahljunge01 (día 6 repartiendo, un vídeo al día); 4 comentarios más en TikTok (es, en, pt,
+  it) y 2 en YouTube (en, en). X, Facebook: nada. Instagram sin sesión. Detalle en `docs/anuncios/redes/REGISTRO-PC.md` (01-11, 12:10).
+
 ## Última sesión — 01-11-2026 (08:50, PC de Dani, bucle de redes): ofrecimiento en portugués a Wanderson (Reino Unido); 6 en TikTok, 2 en YouTube
 
 - Metricool sin huecos hasta el 08-11 (TikTok hasta el 10-11); el post de X del día salió a las 7:30, programados hasta el 11-11 (el
