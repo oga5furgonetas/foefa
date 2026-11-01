@@ -1010,4 +1010,18 @@ export const B = {
   "Borrar los datos de los clientes a los": ["Delete customer data after", "Apagar os dados dos clientes ao fim de", "Supprimer les données des clients au bout de", "Cancellare i dati dei clienti dopo", "Kundendaten löschen nach"],
   "días": ["days", "dias", "jours", "giorni", "Tagen"],
   "Pasado ese plazo se borran nombre, teléfono, dirección y contenido; quedan los números para las estadísticas.": ["After that, name, phone, address and contents are deleted; only the numbers stay for the statistics.", "Passado esse prazo apagam-se nome, telefone, morada e conteúdo; ficam os números para as estatísticas.", "Passé ce délai, le nom, le téléphone, l’adresse et le contenu sont supprimés ; seuls les chiffres restent pour les statistiques.", "Dopo quel periodo si cancellano nome, telefono, indirizzo e contenuto; restano i numeri per le statistiche.", "Danach werden Name, Telefon, Adresse und Inhalt gelöscht; nur die Zahlen bleiben für die Statistik."],
+  // Borrar mi cuenta desde la app (01-11-2026): lo exigen Google Play y Apple.
+  "Borrar mi cuenta": ["Delete my account", "Apagar a minha conta", "Supprimer mon compte", "Elimina il mio account", "Mein Konto löschen"],
+  "¿Borrar tu cuenta?": ["Delete your account?", "Apagar a tua conta?", "Supprimer ton compte ?", "Eliminare il tuo account?", "Dein Konto löschen?"],
+  "Dejarás de poder entrar al momento y tus datos (paradas, clientes, historial) se eliminan en 30 días como mucho. No se puede deshacer.": [
+    "You will be logged out immediately and your data (stops, customers, history) is deleted within 30 days at most. This cannot be undone.",
+    "Deixas de poder entrar de imediato e os teus dados (paragens, clientes, histórico) são apagados no máximo em 30 dias. Não se pode desfazer.",
+    "Tu ne pourras plus te connecter immédiatement et tes données (arrêts, clients, historique) seront supprimées sous 30 jours au plus. Irréversible.",
+    "Non potrai più accedere da subito e i tuoi dati (fermate, clienti, storico) verranno eliminati entro 30 giorni al massimo. Non si può annullare.",
+    "Du kannst dich sofort nicht mehr anmelden und deine Daten (Stopps, Kunden, Verlauf) werden spätestens in 30 Tagen gelöscht. Das lässt sich nicht rückgängig machen.",
+  ],
+  "Tu contraseña actual": ["Your current password", "A tua palavra-passe atual", "Ton mot de passe actuel", "La tua password attuale", "Dein aktuelles Passwort"],
+  "Sí, borrar mi cuenta": ["Yes, delete my account", "Sim, apagar a minha conta", "Oui, supprimer mon compte", "Sì, elimina il mio account", "Ja, mein Konto löschen"],
+  "Cuenta borrada. Tus datos se eliminan en 30 días como mucho.": ["Account deleted. Your data is removed within 30 days at most.", "Conta apagada. Os teus dados são eliminados no máximo em 30 dias.", "Compte supprimé. Tes données seront effacées sous 30 jours au plus.", "Account eliminato. I tuoi dati verranno rimossi entro 30 giorni al massimo.", "Konto gelöscht. Deine Daten werden spätestens in 30 Tagen entfernt."],
+  "No se ha podido borrar la cuenta. Inténtalo otra vez.": ["The account could not be deleted. Try again.", "Não foi possível apagar a conta. Tenta outra vez.", "Impossible de supprimer le compte. Réessaie.", "Non è stato possibile eliminare l'account. Riprova.", "Das Konto konnte nicht gelöscht werden. Versuch es noch einmal."],
 }
