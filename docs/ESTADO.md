@@ -1936,7 +1936,8 @@ Dani: «conéctate a mi Chrome y hazlo tú para no liarla yo». Hecho (detalle e
 -23. **01-11 mañana, el día en una tarjeta**: HECHO (web). Falta la otra mitad del punto 10: el trimestre para la
    gestoría (gastos con foto del ticket, kilómetros, IVA e IRPF; existe el Excel, faltan gastos y el formato).
 -22. **01-11 mañana, el cliente avisado, la propina y la valoración**: HECHOS en servidor, web y nativa, con tests.
-   Falta: DESPLEGAR backend + web: el CI de `ed5093b` está en verde (run 41296661081) y el modo auto DENEGÓ el
+   Falta: DESPLEGAR backend + web: el CI de `main` está en verde hasta `cdf20ff` (el de `ed5093b`: run 41296661081;
+   el de `cdf20ff`, acabado a las 11:5x) y el modo auto DENEGÓ el
    despliegue dos veces (11:0x y 11:3x, «Production Deploy»), aunque a las 10:0x lo había dejado pasar con la misma
    orden de Dani: hace falta su permiso en el chat o que lo lance él (`scripts/deploy-backend.ps1` y
    `scripts/deploy-frontend.ps1`, por este orden; el servidor lleva lo de la entrega verificada, el `hoja: true` de
