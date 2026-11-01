@@ -2100,7 +2100,11 @@ Dani: «conéctate a mi Chrome y hazlo tú para no liarla yo». Hecho (detalle e
    auto negó pulsar «Enviar 1 cambio a revisión» («Production Deploy»): lo pulsa Dani en Play Console → FDS →
    Resumen de publicación. Cuando Google la apruebe: `fly secrets set APP_ANDROID_PLAY="22 2.4.3"
    APP_ANDROID_WEB="22 2.4.3" -a flota-backend` (el APK 2.4.3 .web está en `app-android/app/build/outputs/apk/release/`
-   para que lo cosa `deploy-frontend.ps1`; la web con el refresco de la ruta aún SIN desplegar, CI de c532d84 verde).
+   para que lo cosa `deploy-frontend.ps1`). La WEB DESPLEGADA a las 20:29 (Dani: «Sí, despliega la web»): desde una
+   copia limpia de 05e516f (el árbol tenía los cambios sin commit del agente del mapa; junction a `node_modules` y el
+   APK copiados dentro), con el filtro entero («CI verde para c532d84»): bundle `index-NBlPf3Bu.js` servido = local,
+   el APK 2.4.3 (code 22) cosido en `/descargas/FDS.apk` (22.074.798 bytes; producción servía la 2.4.2), 277 ficheros
+   calientes. Con ello en producción: el refresco automático de la ruta en la web y el consejo que invita a la guía.
    FALTA además: millas en la guía; frases fr/it con destino de respaldo; capas del mapa sin rehacer; manos libres.
    EN MARCHA (20:1x, Dani: «¿puedes hacer el mapa más bonito?»): el mapa de la guía a MapLibre con un estilo propio
    de navegador (teselas vectoriales de OpenFreeMap, día y noche, cámara girada al rumbo e inclinada), por agentes.
