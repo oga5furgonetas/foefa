@@ -57,6 +57,9 @@ class FdsMessaging : FirebaseMessagingService() {
             creado_en = d["creado_en"].orEmpty(),
         )
         Notificaciones.mostrar(this, aviso)
+        // LA RUTA SE REFRESCA SOLA (01-11-2026): si el aviso es de la ruta (lo que contesta el cliente en su enlace),
+        // la pantalla de Hoy la vuelve a leer al momento.
+        if (aviso.url.startsWith("/ruta") || aviso.url.contains("vista=ruta")) app.repo.rutaCambiada()
         // Que la comprobación de cada 15 min no lo vuelva a enseñar.
         if (aviso.creado_en.isNotBlank()) app.ambito.launch {
             app.cuenta.cargar()

@@ -362,9 +362,9 @@ private fun CuentaConductorNativa(alVolver: () -> Unit, alCambiarClave: () -> Un
             Spacer(Modifier.height(8.dp))
             Text(tx("Navegar con"), style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
             SingleChoiceSegmentedButtonRow(Modifier.fillMaxWidth()) {
-                listOf("google" to "Google Maps", "waze" to "Waze").forEachIndexed { i, (k, t) ->
+                listOf("app" to tx("Esta app"), "google" to "Google Maps", "waze" to "Waze").forEachIndexed { i, (k, t) ->
                     SegmentedButton(selected = navegar == k, onClick = { ambito.launch { app.cuenta.elegirNavegador(k) } },
-                        shape = SegmentedButtonDefaults.itemShape(i, 2)) { Text(t) }
+                        shape = SegmentedButtonDefaults.itemShape(i, 3)) { Text(t, maxLines = 1) }
                 }
             }
             Text(tx("Aspecto"), style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)

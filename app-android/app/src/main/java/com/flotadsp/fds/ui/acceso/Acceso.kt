@@ -124,7 +124,7 @@ private fun Inicio(oferta: Oferta?, aviso: String?, alEntrar: () -> Unit, alCrea
         listOf(
             tx("Escanea los paquetes: la dirección entra sola."),
             tx("La ruta se ordena por tiempo, con el tráfico."),
-            tx("Navega con Google Maps o Waze y marca cada entrega."),
+            tx("Te guía con voz hasta cada puerta, dentro de la app, y marcas la entrega."),
             tx("Funciona sin cobertura: lo hecho se envía al volver la red."),
         ).forEach {
             Row(Modifier.padding(vertical = 4.dp), verticalAlignment = Alignment.Top) {

@@ -5,7 +5,9 @@ import com.flotadsp.fds.ui.tx
 import android.content.Context
 import android.telephony.TelephonyManager
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
@@ -253,6 +255,13 @@ class Repositorio(private val ctx: Context, val cuenta: Cuenta, val api: Api) {
         }
     }
 
+    /** LA RUTA SE REFRESCA SOLA (01-11-2026): un aviso al móvil que habla de la ruta (lo que contesta el cliente en su
+     *  enlace) se anuncia aquí, y la pantalla de Hoy, si está abierta, la vuelve a leer al momento. Sin nadie
+     *  escuchando se pierde: al abrir Hoy la ruta se carga igualmente. */
+    private val _rutaCambio = MutableSharedFlow<Unit>(extraBufferCapacity = 1)
+    val rutaCambio: SharedFlow<Unit> = _rutaCambio
+    fun rutaCambiada() { _rutaCambio.tryEmit(Unit) }
+
     // ── La ruta ─────────────────────────────────────────────────────────────────────────────────────────────
 
     /** La ruta guardada en el móvil, si es de esta cuenta y de hoy. */
@@ -368,6 +377,11 @@ class Repositorio(private val ctx: Context, val cuenta: Cuenta, val api: Api) {
     /** El camino por las calles de lo que queda, para el mapa: [[lat, lng], …] (recto si no hay servidor de rutas). */
     suspend fun trazado(lat: Double?, lng: Double?): Trazado = leer(
         api.post("reparto/mi-ruta/trazado", buildJsonObject { if (lat != null && lng != null) put("desde", buildJsonObject { put("lat", lat); put("lng", lng) }) }))
+
+    /** LA GUÍA DENTRO DE LA APP (01-11-2026): el camino y las maniobras hasta UNA parada desde donde está el móvil. La
+     *  posición se manda para calcular y el servidor no la guarda. */
+    suspend fun navegar(id: String, lat: Double, lng: Double): Guia = leer(
+        api.post("reparto/mi-ruta/navegar", buildJsonObject { put("id", id); put("desde", buildJsonObject { put("lat", lat); put("lng", lng) }) }))
 
     /** Lo que dice la DGT cerca de la ruta de hoy (30-10-2026): cortes y obras, y zonas de bajas emisiones. */
     suspend fun incidencias(): Incidencias = leer(api.get("reparto/mi-ruta/incidencias"))

@@ -244,11 +244,12 @@ fun AjustesPantalla(alGuardar: () -> Unit = {}) {
     }
     Scaffold(topBar = { TopAppBar(title = { Text(tx("Ajustes")) }) }, containerColor = MaterialTheme.colorScheme.background) { pad ->
         Column(Modifier.padding(pad).verticalScroll(rememberScrollState()).padding(16.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
+            // LA GUÍA DENTRO DE LA APP (01-11-2026): «Esta app» guía giro a giro sin salir; Google Maps y Waze siguen ahí.
             Seccion(tx("Navegar con")) {
                 SingleChoiceSegmentedButtonRow(Modifier.fillMaxWidth()) {
-                    listOf("google" to "Google Maps", "waze" to "Waze").forEachIndexed { i, (k, t) ->
+                    listOf("app" to tx("Esta app"), "google" to "Google Maps", "waze" to "Waze").forEachIndexed { i, (k, t) ->
                         SegmentedButton(selected = navegar == k, onClick = { ambito.launch { app.cuenta.elegirNavegador(k) } },
-                            shape = SegmentedButtonDefaults.itemShape(i, 2)) { Text(t) }
+                            shape = SegmentedButtonDefaults.itemShape(i, 3)) { Text(t, maxLines = 1) }
                     }
                 }
             }

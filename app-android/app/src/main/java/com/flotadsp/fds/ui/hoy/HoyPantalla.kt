@@ -2,6 +2,7 @@ package com.flotadsp.fds.ui.hoy
 
 import com.flotadsp.fds.ui.tx
 import android.Manifest
+import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedVisibility
@@ -87,6 +88,9 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.compose.LocalLifecycleOwner
+import androidx.lifecycle.repeatOnLifecycle
 import com.flotadsp.fds.FdsApp
 import com.flotadsp.fds.data.Bono
 import com.flotadsp.fds.data.Furgo
@@ -98,6 +102,7 @@ import com.flotadsp.fds.ui.Region
 import com.flotadsp.fds.ui.TextoNumero
 import com.flotadsp.fds.ui.LOCALE_APP
 import com.flotadsp.fds.ui.patronFecha
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import java.time.LocalDate
 import java.time.LocalTime
@@ -134,6 +139,14 @@ fun HoyPantalla(
     val empresa = e.ruta?.takeIf { !it.autonomo }?.empresa.orEmpty()
 
     LaunchedEffect(Unit) { vm.vista("/ruta") }
+    // LA RUTA SE REFRESCA SOLA (01-11-2026): al volver a primer plano y cada minuto mientras esta pantalla se ve
+    // (RutaVM pone las condiciones); en segundo plano se para y al volver arranca de nuevo.
+    val ciclo = LocalLifecycleOwner.current.lifecycle
+    LaunchedEffect(ciclo) {
+        ciclo.repeatOnLifecycle(Lifecycle.State.RESUMED) {
+            while (true) { vm.refrescarSiToca(); delay(60_000) }
+        }
+    }
     // El camino por las calles, al abrir el mapa y cuando cambia lo que queda.
     val clavePendientes = e.pendientes.joinToString(",") { "${it.id}:${it.orden}" }
     LaunchedEffect(verMapa, clavePendientes) {
@@ -164,6 +177,28 @@ fun HoyPantalla(
     val entregarRapido: (Parada) -> Unit = { p ->
         Acciones.vibrar(ctx)
         if (p.porCobrar) entregando = p else vm.entregar(p)
+    }
+
+    // LA GUÍA DENTRO DE LA APP (01-11-2026): «Navegar» con «Esta app» abre la guía (GuiaPantalla) a esa parada; una
+    // parada sin situar en el mapa no se puede guiar y va a Google Maps, avisando. Con Google Maps o Waze elegidos,
+    // como siempre. La guía va a la parada elegida y, al entregarla, sigue sola con la primera pendiente situada.
+    var guiando by remember { mutableStateOf<String?>(null) }
+    val objetivo = guiando?.let { id -> e.pendientes.firstOrNull { it.id == id } ?: e.pendientes.firstOrNull { it.ubicada } }
+    // Se cierra sola cuando no queda nada que guiar. La parada elegida NO se re-apunta a la siguiente: si la entrega se
+    // deshace o el servidor la rechaza, vuelve a estar pendiente y la guía vuelve a ella (01-11-2026, revisión).
+    LaunchedEffect(objetivo == null) { if (objetivo == null) guiando = null }
+    val navegarA: (Parada) -> Unit = { p ->
+        when {
+            navegarCon != "app" -> Acciones.navegar(ctx, p, navegarCon)
+            // Una parada ya cerrada (reintentar una fallida al final del día) no se puede guiar: el servidor la
+            // rechaza y la guía se iría a otra. Fuera, como siempre.
+            !p.pendiente -> Acciones.navegar(ctx, p, "google")
+            p.ubicada -> guiando = p.id
+            else -> {
+                Toast.makeText(ctx, tx("Esta parada no está situada en el mapa: se abre en Google Maps."), Toast.LENGTH_LONG).show()
+                Acciones.navegar(ctx, p, "google")
+            }
+        }
     }
 
     val barra = TopAppBarDefaults.enterAlwaysScrollBehavior()
@@ -214,7 +249,7 @@ fun HoyPantalla(
                 verMapa -> MapaRuta(e.pendientes, e.ruta?.base, trazado = e.trazado, hechas = e.paradas.filter { !it.pendiente },
                     incidencias = e.incidencias?.incidencias.orEmpty(), zbe = e.zbe?.zonas.orEmpty(), enZbe = e.zbe?.paradas?.keys.orEmpty(),
                     fuente = e.incidencias?.fuente.orEmpty(), tipoZona = e.zbe?.tipo ?: "ZBE",
-                    furgo = furgo, navegarCon = navegarCon, alTocar = { abierta = it },
+                    furgo = furgo, alNavegar = navegarA, alTocar = { abierta = it },
                     alAparcarEn = { lat, lng -> ambito.launch { app.cuenta.aparcar(lat, lng) } },
                     alQuitarFurgo = { ambito.launch { app.cuenta.quitarFurgo() } }, modifier = Modifier.fillMaxSize())
                 else -> LazyColumn(
@@ -255,7 +290,7 @@ fun HoyPantalla(
                         item(key = "sig-${sig.id}") {
                             Siguiente(
                                 p = sig, numero = sig.orden ?: 1, enZbe = e.zbe?.paradas?.get(sig.id)?.tipo.orEmpty(),
-                                alNavegar = { Acciones.navegar(ctx, sig, navegarCon) },
+                                alNavegar = { navegarA(sig) },
                                 alLlamar = { vm.apuntar(sig, "llamada"); Acciones.llamar(ctx, sig.telefono) },
                                 alWhatsapp = { vm.apuntar(sig, "whatsapp"); Acciones.whatsapp(ctx, sig.telefono, prefijo, textoWhatsapp(sig, empresa)) },
                                 alEntregar = { entregarRapido(sig) },
@@ -294,8 +329,9 @@ fun HoyPantalla(
 
     abierta?.let { p ->
         ParadaHoja(
-            p = p, prefijo = prefijo, navegarCon = navegarCon, empresa = empresa,
+            p = p, prefijo = prefijo, empresa = empresa,
             alCerrar = { abierta = null },
+            alNavegar = { abierta = null; navegarA(p) },
             alEntregar = { abierta = null; entregando = p },
             alFallar = { abierta = null; fallando = p },
             alDeshacer = { abierta = null; vm.deshacer(p) },
@@ -321,6 +357,17 @@ fun HoyPantalla(
     }
     // LA ENTREGA VERIFICADA (01-11-2026): la IA pide mirar la foto que se acaba de hacer (o la de una entregada, desde su ficha).
     revisar?.let { r -> RevisarFotoDialogo(r, alRepetir = { vm.repetirFoto(r, it) }, alCerrar = { vm.revisado() }) }
+    // La guía, encima de todo (una ventana propia); las hojas de entregar y de no entregado se abren encima de ella.
+    objetivo?.let { p ->
+        GuiaPantalla(
+            parada = p, numero = p.orden ?: 1, quedan = e.pendientes.size, navegarFuera = "google", avisos = avisos,
+            onSalir = { guiando = null },
+            onEntregar = entregarRapido,
+            onNoEntregar = { fallando = it },
+            onLlamar = { vm.apuntar(it, "llamada"); Acciones.llamar(ctx, it.telefono) },
+            onLlegar = { vm.apuntar(it, "llegada") },
+        )
+    }
 }
 
 /** El día de la RUTA (el del servidor, en la zona de la cuenta), no el del reloj del móvil: pasada la medianoche o
@@ -547,7 +594,7 @@ private fun Terminada(entregadas: Int, total: Int) {
 }
 
 @Composable
-private fun Numero(n: Int?, grande: Boolean = false, hecho: Boolean = false) {
+internal fun Numero(n: Int?, grande: Boolean = false, hecho: Boolean = false) {
     val tam = if (grande) 40.dp else 32.dp
     Box(contentAlignment = Alignment.Center, modifier = Modifier.size(tam).background(
         if (hecho) MaterialTheme.colorScheme.surfaceVariant else MaterialTheme.colorScheme.primary, CircleShape)) {
