@@ -869,8 +869,9 @@ contentarme [...] No quiero falsos positivos ni soluciones por decir». El infor
     roja, V gris, el dorado FFD966 de los que se van, la fila de días en rojo, la leyenda con todo; el 7º día seguido
     pasa a un rojo claro (FF7C80) para no confundirse con SUSP. Y el lector de hojas (`cuadrante_excel.POR_DEFECTO`)
     conoce el verde 92D050 y el dorado FFD966 aunque la hoja no traiga leyenda.
-  Sin desplegar: el servidor (la sincronización con colores y el Excel) y la web (la rejilla) necesitan el despliegue;
-  después, en su hoja, «Flota → Sincronizar ahora» (o esperar 10 min) y lo que escriba la app irá ya con sus colores.
+  DESPLEGADO a las 13:46 (backend y web a la vez, con el CI de e1491a2 en verde a las 13:41 y Dani: «Sí, despliega»;
+  bundle `index-BtOu6zch.js`, `/api/health` ok): en su hoja, «Flota → Sincronizar ahora» (o esperar 10 min) y lo que
+  escriba la app va ya con sus colores.
   · **Dani (12:5x): se refería a la pestaña NOVIEMBRE de Google Sheets, y dice que añadió 3 personas con N/T aprobados
     en noviembre que no estaban en la página; quiere que vayan a la par.** Mirado en vivo (la hoja en su Chrome de
     empresa, leída entera con el CSV de `gviz/tq?tqx=out:csv&gid=…`, que sí deja `fetch` desde docs.google.com; el
@@ -895,7 +896,7 @@ contentarme [...] No quiero falsos positivos ni soluciones por decir». El infor
     siendo desconocido: no se sabe qué es (preguntado). Tests: las grafías en el lector, en el canon y en el
     importador; una hoja con BACKUP / 1 extra / 1.EXTRA / Ride along entra en la app con su código y sin
     «desconocidos»; el test del código raro usa ahora «B/V». Tanda entera del backend y los 8 `check_*.py` en verde.
-    Sin desplegar: hasta el despliegue del backend esas celdas siguen sin entrar.
+    DESPLEGADO a las 13:46.
   · **Dani (13:2x): «estoy haciendo pruebas de cuadrante, ¿hay manera de que se pasen ya a los Sheets de noviembre,
     y que luego vaya y venga hasta que marque definitivo?» y, con una captura de NOVIEMBRE casi vacía, «PERO yo en
     el sheets no veo q se escriba nada».** Mirado en el panel (API de solo lectura): FDS tiene noviembre hecho (930
@@ -912,7 +913,7 @@ contentarme [...] No quiero falsos positivos ni soluciones por decir». El infor
     desplegar puede quedar «retenida» hasta «Aceptar estos cambios» (o pasa sola con el «Marcar definitivo», que
     fuerza una vez). Test `test_lo_que_la_app_rellena_donde_la_hoja_esta_en_blanco_va_a_la_hoja_de_hoy_en_adelante`
     (la semana futura hecha en la app llega a la hoja; el 15, pasado y en blanco, no; la vuelta siguiente «todo
-    igual»); el caso puro `("", "1", None) → nada` se queda como está. Sin desplegar.
+    igual»); el caso puro `("", "1", None) → nada` se queda como está. DESPLEGADO a las 13:46.
 - **EL DÍA EN UNA TARJETA (la mitad del punto 10), web (01-11, 11:1x → 11:2x; worktree `tarjeta-dia`)**: la imagen de
   «Comparte tu día» (`lib/compartirDia.js`) lleva ahora, además de paradas, tiempo y km, lo que un repartidor enseña a
   otro: «{p} % a la primera» (entregadas entre entregadas más fallidas), «{c}/hora limpio» (solo con tarifa puesta:
@@ -2012,11 +2013,10 @@ Dani: «conéctate a mi Chrome y hazlo tú para no liarla yo». Hecho (detalle e
 -25. **01-11, 13:0x, NOVIEMBRE «a la par»**: la hoja ya manda sola (al editar y cada 10 min); las filas nuevas de Dani
    están en FDS salvo DAVID FERNANDEZ DE HARO, retenido por parecerse a una ficha de baja: falta que Dani pulse «Es
    otra persona: ficha nueva» en FDS → Cuadrante → Google Sheets (o me dé permiso para hacerlo por API). Los alias
-   de su hoja (BACKUP, 1 EXTRA, Ride along) hechos con tests: falta DESPLEGAR el backend (con su permiso) para que
-   esas celdas entren. «B/V» (Iago Barreiro 01/11) sigue sin saberse qué es (preguntado). Y, de 13:2x: Dani tiene
-   noviembre hecho en FDS y un BORRADOR del 03/11 al 30/11 desde las 13:22: cuando pulse «Marcar definitivo» la hoja
-   lo recibe entero (eso ya funciona sin desplegar). Lo que la app rellena en celdas en blanco de la hoja (de hoy en
-   adelante) irá a la hoja en cuanto se despliegue el backend; la primera vuelta puede pedir «Aceptar estos cambios».
+   de su hoja (BACKUP, 1 EXTRA, Ride along) y lo que la app rellena en celdas en blanco (de hoy en adelante):
+   DESPLEGADOS a las 13:46 con los colores. «B/V» (Iago Barreiro 01/11) sigue sin saberse qué es (preguntado). Y, de
+   13:2x: Dani tiene noviembre hecho en FDS y un BORRADOR del 03/11 al 30/11 desde las 13:22: cuando pulse «Marcar
+   definitivo» la hoja lo recibe entero; la primera vuelta tras el despliegue puede pedir «Aceptar estos cambios».
 -24. **01-11 mediodía, los colores de su hoja en el cuadrante**: HECHO (rejilla, sincronización, Excel), con tests.
    Falta: desplegar backend + web (con permiso de Dani) y, en su hoja, «Flota → Sincronizar ahora» para ver los
    colores en NOVIEMBRE. Si quiere también la letra roja de BAJA / N/D / N/P desde la app, hay que ampliar el script
