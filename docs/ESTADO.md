@@ -2094,9 +2094,26 @@ Dani: «conéctate a mi Chrome y hazlo tú para no liarla yo». Hecho (detalle e
 ## Pendiente (por prioridad)
 
 -26. **01-11 noche, LA GUÍA PROPIA EN LA APP NATIVA**: HECHA y subida a main (2.4.3 / 22): `Guia.kt` + `GuiaPantalla.kt`,
-   «Esta app» por defecto, la ruta se refresca sola (nativa y web), probada en el emulador. FALTA: que Dani suba el AAB
-   2.4.3 a Play (artefacto del CI) y `APP_ANDROID_*` a "22 2.4.3"; millas en la guía; frases fr/it con destino de
-   respaldo; capas del mapa sin rehacer; manos libres. Ver «Última sesión — 01-11-2026 (noche)».
+   «Esta app» por defecto, la ruta se refresca sola (nativa y web), probada en el emulador. El AAB 2.4.3 (artefacto
+   FDS-2.4.3 del run 41339628956, firma FLOTA, sha256 comprobado) está SUBIDO A PLAY (20:1x, desde el Chrome de Dani
+   en 5 trozos): bundle 22 (2.4.3) procesado, notas puestas, versión de producción GUARDADA como borrador; el modo
+   auto negó pulsar «Enviar 1 cambio a revisión» («Production Deploy»): lo pulsa Dani en Play Console → FDS →
+   Resumen de publicación. Cuando Google la apruebe: `fly secrets set APP_ANDROID_PLAY="22 2.4.3"
+   APP_ANDROID_WEB="22 2.4.3" -a flota-backend` (el APK 2.4.3 .web está en `app-android/app/build/outputs/apk/release/`
+   para que lo cosa `deploy-frontend.ps1`; la web con el refresco de la ruta aún SIN desplegar, CI de c532d84 verde).
+   FALTA además: millas en la guía; frases fr/it con destino de respaldo; capas del mapa sin rehacer; manos libres.
+   EN MARCHA (20:1x, Dani: «¿puedes hacer el mapa más bonito?»): el mapa de la guía a MapLibre con un estilo propio
+   de navegador (teselas vectoriales de OpenFreeMap, día y noche, cámara girada al rumbo e inclinada), por agentes.
+   Ver «Última sesión — 01-11-2026 (noche)».
+-26b. **01-11 noche, APPLE (Dani: «revisa lo de Apple»)**: visto en App Store Connect (sesión abierta en su Chrome):
+   la 2.4.1 sigue «Rechazado · 2.1.0 Information Needed»; la respuesta a Apple SE ENVIÓ hoy a la 1:36 (promete el vídeo
+   y una build con «Borrar mi cuenta»); en la versión 2.4.1 están rellenos las notas (1.047 car.), la cuenta de prueba
+   («es necesario iniciar sesión» marcado, usuario y contraseña puestos) y el contacto; la build adjunta sigue siendo
+   la 9 (sin «Borrar mi cuenta»); en TestFlight hay builds 9-16 «Lista para enviar»: la 16 es la del run manual de la
+   01:28 con la web del «Borrar mi cuenta». Lo que FALTA, en orden: (1) el vídeo grabado en un iPhone físico (alguien
+   con iPhone instala la build 16 por TestFlight: hay que añadir su correo como tester) enseñando abrir, la demo sin
+   cuenta, escanear, una entrega con foto, registro, entrar y Borrar mi cuenta; (2) en la versión 2.4.1 cambiar la
+   build 9 por la 16 y adjuntar el vídeo; (3) «Volver a enviar a revisión de apps». Sin el vídeo no la revisan.
 -25. **01-11, 13:0x, NOVIEMBRE «a la par»**: la hoja ya manda sola (al editar y cada 10 min); las filas nuevas de Dani
    están en FDS salvo DAVID FERNANDEZ DE HARO, retenido por parecerse a una ficha de baja: falta que Dani pulse «Es
    otra persona: ficha nueva» en FDS → Cuadrante → Google Sheets (o me dé permiso para hacerlo por API). Los alias
