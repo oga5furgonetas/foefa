@@ -2136,8 +2136,12 @@ Dani: «conéctate a mi Chrome y hazlo tú para no liarla yo». Hecho (detalle e
    — Gratis 15 paradas — ES (10-10-2026)», ya está ENCENDIDA (20 €/día; 69 registros a 1,34 €, 92,32 € gastados, 14.794
    impresiones = CPM 6,24 €): no arranca por el pago, no por el interruptor. OJO: hay otras seis campañas encendidas que
    arrancarían a la vez al pagar (New Tráfico ×2 a 30 y 35 €/día, Instalaciones ×2, Promoción del sitio web 35 €/día,
-   Lead ES+PT 70 €/día): el modo auto no me dejó apagarlas («Unrequested Commit»); Dani las apaga antes de pagar o me lo
-   dice en el mismo mensaje. Los 16 borradores (ES (España) «Ruta hecha» y los cinco idiomas con enlace web) siguen sin
+   Lead ES+PT 70 €/día). Dani (10:2x): «pausa las otras y consigue que cada registro me salga a 30 céntimos»: con la
+   cuenta restringida el Administrador de anuncios tiene TODOS los interruptores y el botón Editar deshabilitados (los
+   clics no hacen nada): no se puede pausar ni poner un tope de coste hasta que el pago esté arreglado. En cuanto Dani
+   pague y avise: pausar las seis y poner en la de España la puja «objetivo de coste por resultado» (tope) que decida
+   (0,30 € es lo que pide; con 1,34 € de histórico Meta entregará poco: hay que decírselo). Plan de canales con cifras
+   en marcha por agentes → `docs/anuncios/CANALES-02-11.md`. Los 16 borradores (ES (España) «Ruta hecha» y los cinco idiomas con enlace web) siguen sin
    publicar. Consejo dado: el problema no es el CPM sino el embudo (registros 1,34 € → 0 rutas reales): optimizar por
    «primera ruta real» con el píxel/CAPI, creatividad con la guía nueva, y probar TikTok Ads y búsqueda de Google por
    intención antes de subir presupuesto en Meta.
