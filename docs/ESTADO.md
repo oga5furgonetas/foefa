@@ -2130,6 +2130,17 @@ Dani: «conéctate a mi Chrome y hazlo tú para no liarla yo». Hecho (detalle e
    tú» de Dani (10:1x) pasó: ENVIADA A REVISIÓN («Cambios en revisión»; se publica sola al aprobarla). Al publicarse, `APP_ANDROID_*` a "23 2.4.4" (el APK 2.4.4
    .web ya está en `app-android/app/build/outputs/apk/release/` para el próximo despliegue de la web).
    Ver «Última sesión — 01-11-2026 (noche)».
+-26c. **02-11 10:1x, META (Dani: «actívame el anuncio de Facebook, solo el de España»)**: visto en el Administrador de
+   anuncios (cuenta 934137992742194, Chrome de Dani): la cuenta sigue RESTRINGIDA («no hemos podido procesar tu último
+   pago»: lo arregla Dani en Facturación y pagos; yo no toco medios de pago). La de España que funcionó, «FDS Registros
+   — Gratis 15 paradas — ES (10-10-2026)», ya está ENCENDIDA (20 €/día; 69 registros a 1,34 €, 92,32 € gastados, 14.794
+   impresiones = CPM 6,24 €): no arranca por el pago, no por el interruptor. OJO: hay otras seis campañas encendidas que
+   arrancarían a la vez al pagar (New Tráfico ×2 a 30 y 35 €/día, Instalaciones ×2, Promoción del sitio web 35 €/día,
+   Lead ES+PT 70 €/día): el modo auto no me dejó apagarlas («Unrequested Commit»); Dani las apaga antes de pagar o me lo
+   dice en el mismo mensaje. Los 16 borradores (ES (España) «Ruta hecha» y los cinco idiomas con enlace web) siguen sin
+   publicar. Consejo dado: el problema no es el CPM sino el embudo (registros 1,34 € → 0 rutas reales): optimizar por
+   «primera ruta real» con el píxel/CAPI, creatividad con la guía nueva, y probar TikTok Ads y búsqueda de Google por
+   intención antes de subir presupuesto en Meta.
 -26b. **01-11 noche, APPLE (Dani: «revisa lo de Apple»)**: visto en App Store Connect (sesión abierta en su Chrome):
    la 2.4.1 sigue «Rechazado · 2.1.0 Information Needed»; la respuesta a Apple SE ENVIÓ hoy a la 1:36 (promete el vídeo
    y una build con «Borrar mi cuenta»); en la versión 2.4.1 están rellenos las notas (1.047 car.), la cuenta de prueba
