@@ -2166,6 +2166,21 @@ próxima versión de la app (no compilado aquí: no hay SDK de Android en la nub
    lat/lng para que la 2.4.4 no guíe al centro del código postal); y en la app (2.4.5) y la web la pantalla «Situar la
    parada»: primero el geocodificador del móvil y, si no, el mapa con la chincheta y sugerencias; después NUESTRA guía.
    Google Maps, solo si la persona lo pulsa. Luego: verificador, prueba en el emulador y dos revisores. Nada desplegado.
+   21:4x, RESULTADO de esa tanda (10 agentes, sin commit en el árbol principal): el laboratorio, 182 direcciones de
+   etiqueta (el 40 % de Galicia): la cadena de antes 118 portal bien, 2 calle, 52 SIN PUNTO y 10 MAL SITUADAS; la nueva
+   (backend/geocodificador.py: leer la etiqueta, CartoCiudad con el nombre sin tipo ni artículo, validación de nombre,
+   número, pueblo y CP, Nominatim/Photon tolerantes, la zona como último recurso) 164 portal, 18 calle, 0 sin punto,
+   0 mal; 0,69 s de media. Verificador en verde (pytest 1467, humo 206, gradle 61 tests). El emulador encontró un fallo
+   GRAVE: el geocodificador del móvil, en segundo plano, situaba una calle inexistente en otra calle de otro concello
+   (a 8 km) y la daba por buena; más dos menores. Los revisores, 13 hallazgos, entre ellos: los textos legales de Meta
+   (Cookies.jsx dice «sin tu correo») no dirían la verdad en cuanto se ponga META_CAPI_TOKEN y retirar el permiso no
+   llegaba al servidor; y CartoCiudad recibe direcciones y no está en la lista de subencargados (el Encargo promete
+   15 días de aviso a las empresas). DECIDIDO (Claude, 21:5x): CartoCiudad ya para los autónomos y para las empresas
+   desde el 17-11-2026 (variable CARTOCIUDAD_EMPRESAS_DESDE), y añadido a la lista pública; el aviso por correo a las
+   empresas lo decide Dani. Los textos de Meta, a la verdad, y un POST /api/cuenta/anuncios para retirar el permiso.
+   EN MARCHA (21:5x): la tanda de arreglos (servidor, nativa y web a la vez), luego verificador, emulador y revisor.
+   Antes, a las 21:4x, el árbol principal se puso al día con main (stash, avance a c31a42a y vuelta del stash, sin un
+   conflicto; copia de seguridad en %LOCALAPPDATA%\Temp\fds-emu\copia-arbol-2144).
 -27b. **02-11, PRIMER DÍA Y VIRALIDAD** (Dani: «consigue que todo el mundo utilice la app y complete su primer día…
    necesito viralización»): hecho por agentes y SIN commit: eventos a Meta por la API de conversiones
    (`backend/meta_capi.py`, solo funciona con `META_PIXEL_ID` y `META_CAPI_TOKEN`), los avisos del primer día (push a
