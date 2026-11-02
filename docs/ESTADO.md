@@ -2183,6 +2183,14 @@ Dani: «conéctate a mi Chrome y hazlo tú para no liarla yo». Hecho (detalle e
    Manager» del móvil (Campañas y el interruptor de cada una). Su «límite de 14»: puede ser el límite diario que Meta
    pone a las cuentas nuevas (sube solo con el historial de pagos) o el límite de gasto que se pone uno en Facturación
    y pagos; sin entrar no se ve cuál.
+   HECHO 17:4x (Dani pasó la verificación en el PC: «ahora puedes mirar lo de los anuncios»): PAUSADAS las seis que
+   estaban encendidas (New Tráfico, New Tráfico - Copia, las dos New Instalaciones, Promoción del sitio web continua y
+   Lead ES+PT); la de España («Gratis 15 paradas») ya estaba apagada. Comprobado tras recargar: las 12 campañas
+   apagadas, «Desactivado». Los 16 borradores siguen sin publicar. Facturación: saldo pendiente 22,81 € + IVA (lo
+   gastado tras el pago de las 10:2x), que Meta cobra al llegar a 26,00 € o el 4-11 (con todo pausado, el 4-11); límite
+   diario puesto por Meta 383,76 €; sin «límite de gasto de la cuenta». El «14» de Dani era el umbral de pago de
+   entonces (hoy 26 €): no limita lo que se gasta, solo cuándo se cobra. Recomendado: no encender nada hasta tener
+   desplegado lo del escaneo (punto -27) y el primer día (-27b), para no pagar registros que se topan con ese fallo.
 -26b. **01-11 noche, APPLE (Dani: «revisa lo de Apple»)**: visto en App Store Connect (sesión abierta en su Chrome):
    la 2.4.1 sigue «Rechazado · 2.1.0 Information Needed»; la respuesta a Apple SE ENVIÓ hoy a la 1:36 (promete el vídeo
    y una build con «Borrar mi cuenta»); en la versión 2.4.1 están rellenos las notas (1.047 car.), la cuenta de prueba
