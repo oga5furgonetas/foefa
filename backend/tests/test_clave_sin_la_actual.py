@@ -120,6 +120,15 @@ async def test_pasados_15_minutos_vuelve_a_pedir_la_actual(base):
 
 
 @pytest.mark.asyncio(loop_scope="session")
+async def test_nada_mas_entrar_una_actual_mal_escrita_se_rechaza_como_siempre(base):
+    # Recién entrado no hace falta escribirla; si se escribe y está mal, 400 (el contrato de la app: api_conductor.py).
+    with pytest.raises(HTTPException) as e:
+        await server.change_my_password({"current_password": "mal", "new_password": "la-nueva-1"}, _yo(at=int(time.time())))
+    assert e.value.status_code == 400 and "actual no es correcta" in e.value.detail
+    assert server.verify_password(PROPIA, base["driver_accounts"].docs[0]["hashed_password"])
+
+
+@pytest.mark.asyncio(loop_scope="session")
 async def test_renovar_la_sesion_copia_la_hora_de_entrada_no_la_rejuvenece(base, monkeypatch):
     monkeypatch.setattr(server, "_exigir_app_al_dia", lambda _r: None)
     hace_un_dia = int(time.time()) - 86400

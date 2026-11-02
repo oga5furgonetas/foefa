@@ -8712,7 +8712,9 @@ async def change_my_password(data: dict, user: dict = Depends(get_current_user))
             temporal = any(_temporal_vigente(c) for c in suyas)
             abre = bool(current) and bool(_cuentas_que_cuadran(suyas, current))
             # Sin la actual, con el código que se le mandó al correo (02-11-2026): solo se mira (y se gasta) si hace falta.
-            if not temporal and not abre and _recien_entrado(user):
+            # Solo si NO escribió la actual: si la escribe y está mal, se rechaza como siempre (lo pide el contrato de la
+            # app, app-android/pruebas/api_conductor.py, y es lo que espera quien la teclea).
+            if not temporal and not abre and not current and _recien_entrado(user):
                 abre = True
                 logger.info("Conductor %s cambia la contraseña nada más entrar, sin la actual", user["sub"][:8])
             if not temporal and not abre and codigo:
