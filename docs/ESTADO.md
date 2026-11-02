@@ -2093,6 +2093,27 @@ Dani: «conéctate a mi Chrome y hazlo tú para no liarla yo». Hecho (detalle e
 
 ## Pendiente (por prioridad)
 
+-28. **02-11 tarde, LAS CONTRASEÑAS DE LOS CONDUCTORES** (María, oficina de OGA5, 18:30-19:02: «no les deja cambiar la
+   contraseña en la app… creo que inician desde Google… me intenté meter yo desde una y tampoco… y la cambian y no les
+   deja tampoco»; Dani: «quiero que todos tengan la [contraseña inicial]; si la bloquean, que les salga que deben
+   esperar; que la puedan cambiar y, una vez la cambien, cada uno tenga la suya; no quiero estar cada día con esto»; su
+   ejemplo: el portal web del conductor, un correo de @winiw.es y la inicial → «Email o contraseña incorrectos»).
+   CAUSA: la contraseña inicial se definió en el panel el 02-11 («definida desde el 02/11/2026») y el servidor solo
+   la ponía al dar de alta a un conductor DESPUÉS de definirla; los 68 que ya estaban tenían otra temporal, su
+   contraseña o ninguna cuenta. Lo del 31-10 (cuentas duplicadas) estaba desplegado y no era esto. ARREGLO (commit
+   aparte, desde una copia limpia de main porque el árbol tenía a medias lo del escaneo, -27):
+   · `driver_login` (web y app, también por `/auth/app-login`): si la contraseña no abre ninguna cuenta y es la inicial
+     de su empresa, entra quien tenga ficha activa con ese correo y NO haya elegido aún la suya (sin cuenta o solo
+     temporales): se le pone la cuenta con la inicial, temporal, y web y app le obligan a elegir la suya. Quien ya
+     eligió la suya no entra con la de todos y se le dice por qué. Acceso quitado o ficha de baja: no se reabren.
+   · Bloqueo: por IP de 15 a 50 fallos en 5 min (la nave comparte wifi); el mensaje «Espera 5 minutos» sigue; la
+     oficina al poner una contraseña (una o todas) y el conductor al cambiarla quitan el bloqueo de ese correo.
+   · Cambiar sin la actual: nada más entrar (15 min desde la entrada de verdad: claim `at`, que renovar copia) o con un
+     código al correo (`POST /auth/codigo-clave`, `driver_clave_codes` con TTL). Dani: «si no tienen el correo asociado
+     no les va a llegar» → por eso la vía principal es la de nada más entrar; el código es para quien sí lo lee.
+   · Web: MiClave con esas salidas. La app nativa lo lleva en la 2.4.5 (con el aviso «Contraseña cambiada», que antes
+     no salía: volvía a «Mi cuenta» sin decir nada; probado en el emulador: recién entrada no pide la actual).
+   Tests: 36 del servidor + e2e cambiar-clave (3). Ver el commit de las contraseñas en main.
 -27. **02-11 tarde, EL ESCANEO QUE NO ENCONTRABA LA DIRECCIÓN** (Dani, probando con una cuenta nueva de autónomo: «el
    primer paquete que escaneo no encuentra la dirección y tiene que ir por Maps; eso es un pedazo de mierda, hazlo
    bien»). Causa, leída en el código (la base de producción no se pudo mirar: el modo auto lo niega, «Production

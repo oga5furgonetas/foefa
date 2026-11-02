@@ -908,7 +908,8 @@ def create_token(user_id: str, role: str, name: str,
                  super_admin: bool = False, permissions: Optional[list] = None,
                  demo: bool = False, allowed_centers: Optional[list] = None,
                  suplantado: bool = False, region: Optional[list] = None,
-                 horas: Optional[int] = None, app_destino: Optional[str] = None) -> str:
+                 horas: Optional[int] = None, app_destino: Optional[str] = None,
+                 entrada: Optional[float] = None) -> str:
     # El conductor entra en su portal una vez cada muchos dias: pedir dias libres
     # o mirar sus turnos no es algo diario. Con las 72 h del panel, el token le
     # caducaba entre visita y visita y la pantalla le soltaba
@@ -955,6 +956,10 @@ def create_token(user_id: str, role: str, name: str,
         payload["centers"] = centers
     if allowed_centers:
         payload["allowed_centers"] = allowed_centers
+    if entrada:
+        # Cuándo se ENTRÓ de verdad, con contraseña o con código (02-11-2026): renovar la sesión lo copia, no lo
+        # rejuvenece. Sirve para cambiar la contraseña sin la actual nada más entrar (_recien_entrado).
+        payload["at"] = int(entrada)
     return jwt.encode(payload, SECRET_KEY, algorithm=JWT_ALGORITHM)
 
 
@@ -1780,6 +1785,7 @@ async def _ensure_tenant_indexes(db_name: str):
     # Los OTP se eliminan automáticamente al caducar; pueden quedar varios
     # activos durante el reenvío para que el primer correo recibido siga valiendo.
     await _idx(tdb.driver_login_codes, "expires_at", expireAfterSeconds=0)
+    await _idx(tdb.driver_clave_codes, "expires_at", expireAfterSeconds=0)   # cambiar la contraseña con código (02-11-2026)
     # `generar_accesos_conductores` capturaba DuplicateKeyError "por si dos
     # pestañas a la vez"... sobre una coleccion SIN indice unico, asi que nunca
     # saltaba: cinco pulsaciones a la vez dejaron 21 cuentas para un mismo
@@ -4895,7 +4901,8 @@ from collections import defaultdict as _dd
 
 _login_fails: dict = _dd(list)   # clave (tipo:identificador) → [timestamps de fallos]
 _LOGIN_MAX_FAILS = 5             # intentos fallidos por USUARIO...
-_LOGIN_MAX_FAILS_IP = 15         # ...y por IP (más alto: oficinas comparten IP)
+_LOGIN_MAX_FAILS_IP = 50         # ...y por IP (más alto: oficinas comparten IP; 15 dejaba fuera a toda la nave
+                                 # el primer día con la contraseña inicial, 02-11-2026)
 _LOGIN_WINDOW_S = 300            # ventana de 5 minutos
 _login_alerted: dict = {}        # para no spamear Telegram con la misma clave
 
@@ -7099,7 +7106,7 @@ async def app_login(data: AppLoginRequest, request: Request):
             DriverLoginRequest(email=identifier, password=data.password), request
         )
     except HTTPException as exc:
-        if exc.status_code in (429, 403):
+        if exc.status_code in (429, 403) or exc.detail == _MSG_INICIAL_YA_CAMBIADA:
             raise
         raise HTTPException(status_code=401, detail="Correo/usuario o contraseña incorrectos") from exc
     salida = sesion.model_dump()
@@ -7168,7 +7175,8 @@ async def renovar_sesion(user: dict = Depends(get_current_user), request: Reques
             raise HTTPException(401, "Tu sesión ha caducado: entra otra vez")
         org = await get_org(user.get("org_id")) if user.get("org_id") else None
         token = create_token(d["id"], "driver", d.get("name") or "", org_id=(org or {}).get("id"),
-                             db_name=_tenant_db_name(org), account_type=(org or {}).get("account_type"))
+                             db_name=_tenant_db_name(org), account_type=(org or {}).get("account_type"),
+                             entrada=user.get("at"))
         return TokenResponse(access_token=token, role="driver", name=d.get("name") or "", id=d["id"], center=d.get("center"),
                              configurar_cuenta=bool(cuenta.get("must_change_password") or cuenta.get("creada_en_bloque")))
     if not _sesion_propia_de_admin(user):
@@ -7984,7 +7992,7 @@ async def driver_code_verify(data: dict, request: Request):
         raise HTTPException(status_code=401, detail="El código no es válido o ha caducado. Solicita uno nuevo.")
     token = create_token(driver["id"], "driver", driver.get("name", ""),
                          org_id=(org or {}).get("id"), db_name=_tenant_db_name(org),
-                         account_type=(org or {}).get("account_type"))
+                         account_type=(org or {}).get("account_type"), entrada=time.time())
     return {"access_token": token, "token_type": "bearer", "role": "driver",
             "name": driver.get("name", ""), "id": driver["id"], "center": driver.get("center"),
             "configurar_cuenta": (not account or bool(account.get("must_change_password")
@@ -7994,6 +8002,73 @@ async def driver_code_verify(data: dict, request: Request):
 @auth_router.post("/driver-token")
 async def driver_token_by_id(data: dict, request: Request):
     raise HTTPException(status_code=410, detail="Este acceso ya no está disponible. Solicita un código por correo.")
+
+
+# LA INICIAL VALE PARA TODOS LOS QUE AÚN NO TIENEN LA SUYA (02-11-2026). Dani: «quiero que todos tengan la contraseña
+# inicial; si la bloquean, que les salga que deben esperar; que la puedan cambiar y, una vez la cambien, que cada uno
+# tenga la suya; no quiero estar cada día con este problema». María (oficina de OGA5): «no les deja… me intenté meter yo
+# desde una y tampoco». La inicial solo se ponía al dar de alta a un conductor DESPUÉS de definirla (se definió el 02-11):
+# los 68 de antes tenían otra temporal, otra contraseña o ninguna cuenta, y con la inicial: «contraseña incorrecta».
+# Ahora, si la contraseña no abre ninguna cuenta y es la inicial de su empresa, entra quien tenga una ficha activa con
+# ese correo y NO haya elegido todavía la suya (sin cuenta, o solo temporales): se le pone la cuenta con la inicial,
+# temporal, y la app le obliga a elegir la suya. Quien ya eligió la suya entra con la suya: la inicial, que conoce toda
+# la empresa, ya no le abre (y se le dice por qué, en vez de «incorrecta»).
+_MSG_INICIAL_YA_CAMBIADA = "Ya elegiste tu propia contraseña: la inicial de la empresa ya no vale para ti. Si no la recuerdas, entra con un código en tu correo o pide a la oficina que te ponga una temporal."
+
+
+async def _hash_inicial_de(org: Optional[dict]) -> str:
+    """El hash de la contraseña inicial de la empresa de este candidato del login (vacío si no tiene)."""
+    if not org:
+        return ""
+    o = await global_db.organizations.find_one({"id": org.get("id")}, {"_id": 0, "contrasena_inicial_hash": 1}) if org.get("id") else None
+    if not (o or {}).get("contrasena_inicial_hash") and org.get("account_type") == "owner":
+        # La base por defecto (el dueño): _org_de_admin la busca así cuando el admin no tiene org_id.
+        o = await global_db.organizations.find_one({"account_type": "owner"}, {"_id": 0, "contrasena_inicial_hash": 1})
+    return (o or {}).get("contrasena_inicial_hash") or ""
+
+
+async def _entrar_con_la_inicial(correo: str, password: str, candidates: list) -> tuple:
+    """([(org, tdb, cuenta)] si entra con la inicial de su empresa; si no, []), y si es porque ya tiene la suya."""
+    re_correo = {"$regex": f"^{re.escape(correo)}$", "$options": "i"}
+    hallados, ya_la_suya = [], False
+    for org, tdb in candidates:
+        fichas = [f for f in await tdb.drivers.find(
+            {"email": re_correo, "active": {"$ne": False}},
+            {"_id": 0, "id": 1, "active": 1, "created_at": 1, "status": 1}).to_list(20) if f.get("status") != "deleted"]
+        ficha = _elegir_ficha(fichas)
+        if not ficha:
+            continue
+        h = await _hash_inicial_de(org)
+        if not h or not verify_password(password, h):
+            continue
+        cuentas = await tdb.driver_accounts.find({"$or": [{"driver_id": ficha["id"]}, {"email": re_correo}]},
+                                                 {"_id": 0}).to_list(20)
+        if any(not c.get("active", True) for c in cuentas if c.get("driver_id") == ficha["id"]):
+            continue                                  # la oficina le quitó el acceso: la inicial no lo reabre
+        if any(c.get("password_changed_at") and not (c.get("must_change_password") or c.get("creada_en_bloque"))
+               for c in cuentas):
+            ya_la_suya = True                         # ya eligió la suya: con esa, no con la de todos
+            continue
+        hallados.append((org, tdb, ficha, cuentas, h))
+    if len(hallados) != 1:
+        # Dos empresas con el mismo correo y la inicial de las dos: no se adivina en cuál entrar.
+        return [], ya_la_suya and not hallados
+    org, tdb, ficha, cuentas, h = hallados[0]
+    ahora = datetime.now(timezone.utc).isoformat()
+    cambios = {"hashed_password": h, "active": True, "must_change_password": True,
+               "password_temp_created_at": ahora, "contrasena_inicial": True}
+    if cuentas:
+        await tdb.driver_accounts.update_many({"$or": [{"driver_id": ficha["id"]}, {"email": re_correo}]}, {"$set": cambios})
+        cuenta = {**next((c for c in cuentas if c.get("driver_id") == ficha["id"]), cuentas[0]), **cambios}
+    else:
+        cuenta = _cuenta_inicial(ficha["id"], correo, h, ahora)
+        try:
+            await tdb.driver_accounts.insert_one(dict(cuenta))
+        except DuplicateKeyError:
+            return [], False                          # dos entradas a la vez: la otra ya la ha creado
+    logger.info("Conductor %s entra con la contraseña inicial de la empresa (%s)", ficha["id"][:8],
+                "cuenta puesta con la inicial" if cuentas else "cuenta nueva")
+    return [(org, tdb, cuenta)], False
 
 
 def _cuentas_que_cuadran(cuentas: list, password: str) -> list:
@@ -8074,10 +8149,15 @@ async def driver_login(data: DriverLoginRequest, request: Request):
                 candidate_account = next((c for c in validas if c.get("driver_id") == mejor["id"]), candidate_account)
         if candidate_account:
             valid_accounts.append((candidate_org, candidate_db, candidate_account))
+    ya_tiene_la_suya = False
+    if not valid_accounts:
+        valid_accounts, ya_tiene_la_suya = await _entrar_con_la_inicial(correo, data.password, candidates)
     if len(valid_accounts) != 1:
         await _rl_fail(rl_key, f"conductor '{data.email}' (IP {_rl_key_ip(request)})")
         await _rl_fail(rl_ip, f"conductor '{data.email}' (IP {_rl_key_ip(request)})")
         await asyncio.sleep(0.8)
+        if ya_tiene_la_suya:
+            raise HTTPException(status_code=401, detail=_MSG_INICIAL_YA_CAMBIADA)
         raise HTTPException(status_code=401, detail="Email o contraseña incorrectos")
     org, candidate_db, account = valid_accounts[0]
     _rl_ok(rl_key)
@@ -8098,7 +8178,7 @@ async def driver_login(data: DriverLoginRequest, request: Request):
     # aplicacion esta vacia. Es lo mismo que hace `_driver_token_impl`.
     token = create_token(account["driver_id"], "driver", driver_name,
                          org_id=(org or {}).get("id"), db_name=_tenant_db_name(org),
-                         account_type=(org or {}).get("account_type"))
+                         account_type=(org or {}).get("account_type"), entrada=time.time())
     logger.info(f"Driver login: {data.email}")
     return TokenResponse(
         access_token=token,
@@ -8501,6 +8581,89 @@ async def subir_foto_admin(admin_id: str, file: UploadFile = File(...), _admin: 
     return {"success": True, "photo_url": photo_url}
 
 
+# ── CAMBIAR LA CONTRASEÑA CON UN CÓDIGO EN EL CORREO (02-11-2026) ──────────────────────────────────────────────────
+# María (oficina de OGA5): «No les deja cambiar la contraseña en la app… creo que inician desde Google». Quien entra con
+# el código que le llega al correo (su Gmail) no sabe su contraseña actual, y «Cambiar contraseña» se la pedía sin otra
+# salida: solo la oficina podía ponerle una temporal. Ahora, con la sesión abierta, pide un código de 6 cifras a su
+# correo (el personal verificado si lo vinculó; si no, el de su ficha) y ese código vale por la contraseña actual.
+# Colección aparte de los códigos de entrada: este no abre sesiones, solo cambia la contraseña de quien ya está dentro.
+_CLAVE_CODIGO_MIN = 10
+# NADA MÁS ENTRAR (02-11-2026, Dani: «si no tienen el correo asociado no le va a dejar recibir código»): quien acaba de
+# entrar con su contraseña (aunque se la rellenara Google) o con el código del correo ya ha demostrado quién es; durante
+# estos minutos puede cambiarla sin escribir la actual. Renovar la sesión no cuenta: copia la hora de entrada.
+_CLAVE_RECIEN_MIN = 15
+
+
+def _recien_entrado(user: dict, minutos: int = _CLAVE_RECIEN_MIN) -> bool:
+    try:
+        pasado = time.time() - float(user.get("at") or 0)
+    except (TypeError, ValueError):
+        return False
+    return bool(user.get("at")) and -60 <= pasado <= minutos * 60
+
+
+async def _destino_codigo_clave(driver_id: str) -> str:
+    """Adónde va el código: el correo personal verificado si lo vinculó; si no, el de su ficha. Vacío si no hay."""
+    d = await db.drivers.find_one({"id": driver_id}, {"_id": 0, "email": 1})
+    rec = await db.driver_recovery_emails.find_one({"driver_id": driver_id, "verified_at": {"$exists": True}},
+                                                   {"_id": 0, "email": 1, "email_norm": 1})
+    destino = str((rec or {}).get("email") or (rec or {}).get("email_norm") or (d or {}).get("email") or "").strip().lower()
+    return destino if re.fullmatch(r"[^\s@]+@[^\s@]+\.[^\s@]+", destino) else ""
+
+
+def _hash_codigo_clave(driver_id: str, codigo: str) -> str:
+    return hashlib.sha256(f"{SECRET_KEY}:clave:{driver_id}:{codigo}".encode()).hexdigest()
+
+
+@auth_router.post("/codigo-clave")
+async def codigo_para_clave(user: dict = Depends(get_current_user)):
+    """Manda al conductor (con su sesión abierta) un código para cambiar la contraseña sin saber la actual."""
+    if user.get("role") != "driver":
+        raise HTTPException(status_code=403, detail="Solo para conductores")
+    if user.get("imp") or user.get("demo"):
+        raise HTTPException(status_code=403, detail=_SOLO_EL_CLIENTE)
+    _rl_public_action(f"clave-codigo:{user['sub']}", 3, 900,
+                      detail="Ya te hemos mandado varios códigos: espera unos minutos y mira también el spam.")
+    destino = await _destino_codigo_clave(user["sub"])
+    if not destino:
+        raise HTTPException(status_code=400, detail="Tu ficha no tiene un correo donde mandarte el código: pide a la oficina una contraseña temporal")
+    codigo = f"{secrets.randbelow(1_000_000):06d}"
+    ahora = datetime.now(timezone.utc)
+    # Uno vivo por persona: pedir otro anula el anterior (como «Reenviar» en cualquier app).
+    await db.driver_clave_codes.delete_many({"driver_id": user["sub"]})
+    await db.driver_clave_codes.insert_one({
+        "driver_id": user["sub"], "code_hash": _hash_codigo_clave(user["sub"], codigo), "attempts": 0,
+        "created_at": ahora, "expires_at": ahora + timedelta(minutes=_CLAVE_CODIGO_MIN)})
+    enviado = await _enviar_email(
+        destino, f"Tu código para cambiar la contraseña de {MARCA}",
+        f"<p>Tu código para cambiar la contraseña es <strong style='font-size:24px;letter-spacing:4px'>{codigo}</strong>.</p>"
+        f"<p>Caduca en {_CLAVE_CODIGO_MIN} minutos. Si no lo has pedido tú, ignora este correo: tu contraseña no cambia.</p>",
+        texto=f"Tu código para cambiar la contraseña es {codigo}. Caduca en {_CLAVE_CODIGO_MIN} minutos.")
+    if not enviado:
+        await db.driver_clave_codes.delete_many({"driver_id": user["sub"]})
+        raise HTTPException(status_code=503, detail="No se ha podido mandar el correo ahora mismo. Inténtalo en unos minutos.")
+    logger.info("Conductor %s pidió un código para cambiar la contraseña", user["sub"][:8])
+    return {"ok": True, "enviado_a": _tapar_destino(destino), "minutos": _CLAVE_CODIGO_MIN}
+
+
+async def _codigo_clave_valido(driver_id: str, codigo: str) -> bool:
+    """¿Vale este código para cambiar la contraseña de este conductor? Se gasta al acertar; 5 fallos lo anulan."""
+    if not re.fullmatch(r"\d{6}", codigo or ""):
+        return False
+    ahora = datetime.now(timezone.utc)
+    reg = await db.driver_clave_codes.find_one({"driver_id": driver_id, "expires_at": {"$gt": ahora}, "attempts": {"$lt": 5}})
+    if not reg:
+        return False
+    esperado = _hash_codigo_clave(driver_id, codigo)
+    if not secrets.compare_digest(str(reg.get("code_hash") or ""), esperado):
+        await db.driver_clave_codes.update_one({"driver_id": driver_id, "code_hash": reg.get("code_hash")},
+                                               {"$inc": {"attempts": 1}})
+        return False
+    # Se gasta ANTES de cambiar nada: el mismo código no sirve dos veces aunque lleguen dos peticiones a la vez.
+    gastado = await db.driver_clave_codes.delete_one({"driver_id": driver_id, "code_hash": esperado})
+    return bool(getattr(gastado, "deleted_count", 0))
+
+
 @auth_router.post("/change-my-password")
 async def change_my_password(data: dict, user: dict = Depends(get_current_user)):
     """Cambiar TU PROPIA contraseña, verificando la actual.
@@ -8513,6 +8676,7 @@ async def change_my_password(data: dict, user: dict = Depends(get_current_user))
         raise HTTPException(status_code=403, detail=_SOLO_EL_CLIENTE)
     current = _texto_cuerpo(data.get("current_password"))
     new = _texto_cuerpo(data.get("new_password"))
+    codigo = re.sub(r"\D", "", str(data.get("codigo") or ""))[:6]   # el de /auth/codigo-clave (02-11-2026)
     if len(new) < 6:
         raise HTTPException(status_code=400, detail="La nueva contraseña debe tener al menos 6 caracteres")
 
@@ -8547,12 +8711,30 @@ async def change_my_password(data: dict, user: dict = Depends(get_current_user))
                 return not ultima_propia or puesta > ultima_propia
             temporal = any(_temporal_vigente(c) for c in suyas)
             abre = bool(current) and bool(_cuentas_que_cuadran(suyas, current))
+            # Sin la actual, con el código que se le mandó al correo (02-11-2026): solo se mira (y se gasta) si hace falta.
+            if not temporal and not abre and _recien_entrado(user):
+                abre = True
+                logger.info("Conductor %s cambia la contraseña nada más entrar, sin la actual", user["sub"][:8])
+            if not temporal and not abre and codigo:
+                if await _codigo_clave_valido(user["sub"], codigo):
+                    abre = True
+                else:
+                    await asyncio.sleep(0.8)
+                    raise HTTPException(status_code=400, detail="El código no es correcto o ha caducado. Pide otro.")
             if not temporal and not abre:
                 logger.warning("Cambio de contraseña rechazado: conductor %s, %d cuenta(s) [%s], actual %s",
                                user["sub"][:8], len(suyas),
                                ", ".join("%s%s" % (c.get("driver_id", "?")[:8], " temporal" if (c.get("must_change_password") or c.get("creada_en_bloque")) else "") for c in suyas),
                                "vacía" if not current else "no abre ninguna")
                 await asyncio.sleep(0.8)
+                # La que muchos creen que es «la actual» (02-11-2026, María): la inicial de la empresa, que dejó de
+                # valer cuando eligieron la suya al entrar la primera vez.
+                if current:
+                    org_c = await get_org(user["org_id"]) if user.get("org_id") else None
+                    h_ini = (org_c or {}).get("contrasena_inicial_hash")
+                    if h_ini and verify_password(current, h_ini):
+                        # En UN literal: las traducciones (textosRutaC.js) se buscan en server.py con el texto entero.
+                        raise HTTPException(status_code=400, detail="Esa es la contraseña inicial de la empresa, pero ya la cambiaste por una tuya la primera vez que entraste. Escribe la tuya o, si no la recuerdas, pide un código a tu correo, vuelve a entrar y cámbiala nada más entrar, o pide a la oficina una contraseña temporal.")
                 # 400 y no 401: la app de Android cierra la sesión ante cualquier 401 con token (como hizo la web
                 # hasta que se le puso la excepción), y un conductor que se equivocaba al teclear su
                 # contraseña actual se veía fuera de la app. Lo mismo que ya se hizo en borrar-cuenta.
@@ -8565,6 +8747,8 @@ async def change_my_password(data: dict, user: dict = Depends(get_current_user))
                           "password_changed_at": datetime.now(timezone.utc).isoformat()},
                  "$unset": {"must_change_password": "", "creada_en_bloque": ""}})
             logger.info("Conductor %s cambió su contraseña", user["sub"][:8])
+            if correo:
+                _login_fails.pop(f"drv:{correo}", None)
             return {"success": True}
 
         # NO TIENE NINGUNA: la esta CREANDO, y pedirle la anterior es pedirle
@@ -8648,6 +8832,7 @@ async def set_driver_password(
     correo = str(driver.get("email") or "").strip().lower()
     mias = {"$or": [{"driver_id": data.driver_id},
                     {"email": {"$regex": f"^{re.escape(correo)}$", "$options": "i"}}]}
+    _login_fails.pop(f"drv:{correo}", None)      # si se bloqueó probando, que entre ya con la nueva (02-11-2026)
 
     if existing:
         await db.driver_accounts.update_many(
@@ -8784,6 +8969,8 @@ async def generar_accesos_conductores(data: DriverBulkPasswordRequest,
     hash_temporal = hash_password(data.password)
     for c in conductores:
         email = (c.get("email") or "").strip().lower()
+        if email:
+            _login_fails.pop(f"drv:{email}", None)   # que nadie siga bloqueado por lo que probó antes (02-11-2026)
         if not email:
             # Sin correo no hay con que entrar. Se cuentan y se dicen: si no,
             # el numero de altas no cuadra con la plantilla y no se sabe por que.
@@ -10571,8 +10758,12 @@ async def portal_mi_ficha(user: dict = Depends(require_any_auth)):
                                                 {"_id": 0, "must_change_password": 1,
                                                  "creada_en_bloque": 1})
     tiene = bool(cuenta)
+    destino_codigo = await _destino_codigo_clave(user.get("sub")) if user.get("role") == "driver" else ""
     return {"falta_telefono": not tel, "nombre": d.get("name"),
             "tiene_clave": tiene,
+            # Cambiar la contraseña (02-11-2026): sin la actual si acaba de entrar; si no, con un código a este correo.
+            "clave_sin_actual": user.get("role") == "driver" and _recien_entrado(user),
+            "codigo_a": _tapar_destino(destino_codigo) if destino_codigo else None,
             "configurar_cuenta": bool(cuenta and (cuenta.get("must_change_password")
                                                     or cuenta.get("creada_en_bloque")))}
 

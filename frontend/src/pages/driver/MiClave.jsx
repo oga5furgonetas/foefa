@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { ArrowLeft, Check, Loader2, Lock } from 'lucide-react'
-import { changeMyPassword, getMiFicha } from '../../services/api'
+import { changeMyPassword, getMiFicha, pedirCodigoClave } from '../../services/api'
 
 /* Cambiar la contraseña uno mismo.
 
@@ -12,10 +12,24 @@ export default function MiClave({ onBack, obligatoria = false }) {
      no tener aún una contraseña propia; el servidor devuelve si tiene cuenta
      (`tiene_clave`) y esta pantalla le pide solo lo que necesita. */
   const [tieneClave, setTieneClave] = useState(null)
+  /* SIN SABER LA ACTUAL (02-11-2026, María: «no les deja cambiar la contraseña… creo que inician desde Google»): quien
+     entró con la contraseña que le rellena Google, o con el código del correo, no sabe la actual. Nada más entrar
+     (15 min) el servidor la cambia sin ella (`clave_sin_actual`); si no, con un código a su correo (`codigo_a`). */
+  const [sinActual, setSinActual] = useState(false)
+  const [codigoA, setCodigoA] = useState(null)
   useEffect(() => {
-    getMiFicha().then((r) => setTieneClave(!!r.data?.tiene_clave)).catch(() => setTieneClave(true))
+    getMiFicha().then((r) => {
+      setTieneClave(!!r.data?.tiene_clave)
+      setSinActual(!!r.data?.clave_sin_actual)
+      setCodigoA(r.data?.codigo_a || null)
+    }).catch(() => setTieneClave(true))
   }, [])
   const creando = tieneClave === false || obligatoria
+  const sinLaActual = creando || sinActual
+  const [conCodigo, setConCodigo] = useState(false)
+  const [codigo, setCodigo] = useState('')
+  const [enviadoA, setEnviadoA] = useState('')
+  const [pidiendo, setPidiendo] = useState(false)
 
   const [actual, setActual] = useState('')
   const [nueva, setNueva] = useState('')
@@ -26,13 +40,24 @@ export default function MiClave({ onBack, obligatoria = false }) {
 
   const corta = nueva.length > 0 && nueva.length < 6
   const distintas = repetir.length > 0 && nueva !== repetir
-  const puede = (creando || actual) && nueva.length >= 6 && nueva === repetir && !ocupado
-    && tieneClave !== null
+  const puede = (sinLaActual || (conCodigo ? codigo.length === 6 : actual)) && nueva.length >= 6 && nueva === repetir
+    && !ocupado && tieneClave !== null
+
+  async function pedirCodigo() {
+    setPidiendo(true); setErr('')
+    try {
+      const r = await pedirCodigoClave()
+      setEnviadoA(r.data?.enviado_a || codigoA || '')
+      setConCodigo(true); setCodigo('')
+    } catch (e) {
+      setErr(e?.response?.data?.detail || 'No se pudo mandar el código. Inténtalo otra vez.')
+    } finally { setPidiendo(false) }
+  }
 
   async function guardar() {
     setOcupado(true); setErr('')
     try {
-      await changeMyPassword(actual, nueva)
+      await changeMyPassword(conCodigo ? '' : actual, nueva, conCodigo && !sinLaActual ? codigo : '')
       setHecho(true)
     } catch (e) {
       setErr(e?.response?.status === 401
@@ -81,7 +106,28 @@ export default function MiClave({ onBack, obligatoria = false }) {
           <div className="mt-6 flex flex-col gap-3">
             {/* Solo si YA tiene una. Pedirle la anterior a quien nunca la tuvo
                 es lo que hacia que esta pantalla no funcionara para nadie. */}
-            {!creando && (
+            {!creando && sinActual && (
+              <p className="rounded-lg bg-emerald-500/10 px-3 py-2 text-[13px] text-emerald-300" data-testid="clave-sin-actual">
+                Acabas de entrar: no hace falta tu contraseña actual.
+              </p>
+            )}
+            {!sinLaActual && conCodigo && (
+              <div>
+                <p className="mb-2 text-[13px] leading-relaxed text-dark-400">
+                  Te hemos mandado un código a {enviadoA || codigoA}. Mira también el spam.
+                </p>
+                <label className="mb-1.5 block text-[11px] font-semibold uppercase tracking-wider text-dark-500">
+                  Código de 6 cifras
+                </label>
+                <input value={codigo} onChange={(e) => setCodigo(e.target.value.replace(/\D/g, '').slice(0, 6))}
+                  inputMode="numeric" autoComplete="one-time-code" data-testid="clave-codigo"
+                  className="w-full rounded-xl border border-dark-700 bg-dark-900 px-3.5 py-3 text-[15px] tracking-[.3em] text-dark-50 outline-none focus:border-brand-500/60" />
+                <button onClick={pedirCodigo} disabled={pidiendo} className="mt-2 text-[13px] font-semibold text-brand-400 disabled:opacity-40">
+                  Reenviar código
+                </button>
+              </div>
+            )}
+            {!sinLaActual && !conCodigo && (
               <div>
                 <label className="mb-1.5 block text-[11px] font-semibold uppercase tracking-wider text-dark-500">
                   Tu contraseña de ahora
@@ -89,6 +135,12 @@ export default function MiClave({ onBack, obligatoria = false }) {
                 <input type="password" value={actual} onChange={(e) => setActual(e.target.value)}
                   autoComplete="current-password"
                   className="w-full rounded-xl border border-dark-700 bg-dark-900 px-3.5 py-3 text-[15px] text-dark-50 outline-none focus:border-brand-500/60" />
+                {codigoA && (
+                  <button onClick={pedirCodigo} disabled={pidiendo} data-testid="clave-pedir-codigo"
+                    className="mt-2 text-[13px] font-semibold text-brand-400 disabled:opacity-40">
+                    ¿No la sabes? Te mando un código a {codigoA}
+                  </button>
+                )}
               </div>
             )}
             <div>
@@ -117,6 +169,12 @@ export default function MiClave({ onBack, obligatoria = false }) {
               {ocupado ? <Loader2 size={16} className="animate-spin" /> : <Lock size={16} />}
               {creando ? 'Crear mi contraseña' : 'Guardar'}
             </button>
+            {!sinLaActual && (
+              <p className="text-[12px] leading-relaxed text-dark-500">
+                ¿Sin acceso a tu correo? Sal de la cuenta y vuelve a entrar: nada más entrar podrás cambiarla sin la
+                actual. O pide a la oficina una contraseña temporal.
+              </p>
+            )}
           </div>
         )}
       </div>

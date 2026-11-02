@@ -201,8 +201,10 @@ export const solicitarTrabajarMas = (fecha, nota) => api.post(`/trabajar-mas/${f
 export const desapuntarmeRefuerzo = (id) => api.post(`/refuerzos/${id}/desapuntarme`)
 // El conductor se cambia su propia contraseña. Antes tenía que decirle a la
 // oficina cuál quería, o sea contársela a otra persona.
-export const changeMyPassword = (current_password, new_password) =>
-  api.post('/auth/change-my-password', { current_password, new_password })
+export const changeMyPassword = (current_password, new_password, codigo = '') =>
+  api.post('/auth/change-my-password', { current_password, new_password, ...(codigo ? { codigo } : {}) })
+// Un código de 6 cifras a su correo para cambiar la contraseña sin saber la actual (02-11-2026).
+export const pedirCodigoClave = () => api.post('/auth/codigo-clave')
 
 export const validatePhoto = (vehicleId, expectedZone, file) => {
   const fd = new FormData()
