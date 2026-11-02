@@ -2114,6 +2114,22 @@ Dani: «conéctate a mi Chrome y hazlo tú para no liarla yo». Hecho (detalle e
    · Web: MiClave con esas salidas. La app nativa lo lleva en la 2.4.5 (con el aviso «Contraseña cambiada», que antes
      no salía: volvía a «Mi cuenta» sin decir nada; probado en el emulador: recién entrada no pide la actual).
    Tests: 36 del servidor + e2e cambiar-clave (3). Ver el commit de las contraseñas en main.
+   DESPLEGADO 19:4x-19:5x (Dani: «quiero que esto quede listo de una vez… te dije que lo dejes todo perfecto»), desde
+   la copia limpia `%LOCALAPPDATA%\Temp\fds-emu\wt-clave` (main + solo esto; el árbol principal tiene a medias lo
+   del escaneo): el CI de c197879 se puso en ROJO (api_conductor.py: «cambiar con la actual mal → 400»: recién
+   entrado se aceptaba una actual mal escrita); arreglado en e6d8ad6 (recién entrado vale solo SIN escribir la actual),
+   CI verde, backend con `deploy-backend.ps1` (/api/health ok, Mongo conectado; /api/auth/codigo-clave contesta 401 y
+   una ruta inventada 404) y web con `deploy-frontend.ps1` (bundle index-CZfad7Pi.js servido = local, 277 ficheros).
+   VISTO EN PRODUCCIÓN (registro de Fly en directo): «Conductor d358d2fe entra con la contraseña inicial de la
+   empresa (cuenta puesta con la inicial)» → driver-login 200 → «cambió su contraseña» 200; y otro conductor más
+   cambió la suya (200). OJO, dos cosas que quedan: (1) la web NO pudo coser el APK 2.4.4: pesa 33,9 MiB y Cloudflare
+   Pages no admite ficheros de más de 25 MiB (MapLibre lo engordó); sigue sirviendo la 2.4.3: hay que servir el APK
+   desde R2 (con redirección en /descargas/FDS.apk) o sacar APKs por procesador. (2) `/api/app/version` sigue diciendo
+   21/2.4.2: Dani lanza `fly secrets set APP_ANDROID_PLAY="23 2.4.4" APP_ANDROID_WEB="22 2.4.3" -a flota-backend`.
+   Y suelto en el registro: «resend rechazó el envío a juanperez@example.com (422)» (algo manda correos a una
+   dirección de ejemplo; no es de esto, sin mirar todavía). El árbol principal hay que ponerlo al día con main
+   (c197879, e6d8ad6 y los de ESTADO) cuando acaben los agentes del escaneo: los cambios de las contraseñas están en
+   los dos sitios, iguales.
 -27. **02-11 tarde, EL ESCANEO QUE NO ENCONTRABA LA DIRECCIÓN** (Dani, probando con una cuenta nueva de autónomo: «el
    primer paquete que escaneo no encuentra la dirección y tiene que ir por Maps; eso es un pedazo de mierda, hazlo
    bien»). Causa, leída en el código (la base de producción no se pudo mirar: el modo auto lo niega, «Production
