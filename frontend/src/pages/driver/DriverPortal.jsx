@@ -323,7 +323,7 @@ export default function DriverPortal() {
         const actualizado = { ...driver, configurar_cuenta: false }
         localStorage.setItem(DRIVER_KEY, JSON.stringify(actualizado))
         setDriver(actualizado)
-        setVista('correo')
+        setVista('inicio')   // 02-11-2026: directo dentro; el correo de recuperación queda como casilla del inicio
       } else setVista('inicio')
     }} />
   if (vista === 'correo') return <MiCorreoPersonal onBack={() => setVista('inicio')} />

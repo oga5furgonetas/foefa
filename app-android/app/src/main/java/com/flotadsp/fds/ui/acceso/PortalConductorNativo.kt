@@ -113,7 +113,7 @@ fun PortalConductorNativo(alCerrar: () -> Unit, abrir: String? = null, alAbierto
 
     if (obligatoria) {
         CambiarClaveConductor(obligatoria = true, alVolver = {}, alGuardada = {
-            pantalla = "correo"
+            pantalla = "inicio"  // 02-11-2026 (Dani): directo dentro; el correo de recuperación sigue en Cuenta
         })
         return
     }

@@ -99,3 +99,46 @@ test('sin correo donde mandar el código: pide la actual y dice qué hacer si no
   expect(enviado.cambio).toEqual([{ current_password: 'la-de-ahora-1', new_password: 'la-nueva-2' }])
   expect(fallos, fallos.join(' | ')).toHaveLength(0)
 })
+
+/* LA PRIMERA VEZ, CON LA TEMPORAL (02-11-2026, Dani: «cuando la cambien, que les lleve para dentro»). Quien entra con la
+   contraseña temporal de la oficina tiene que elegir la suya; al crearla entra directo al portal. Antes el botón llevaba
+   a «Correo de recuperación», los conductores creían que tenían que volver a entrar, probaban con la temporal y no podían. */
+test('al crear la contraseña obligatoria entra directo al inicio', async ({ page }) => {
+  const fallos = vigilar(page)
+  const exp = Math.floor(Date.now() / 1000) + 3600
+  const b64 = (o) => Buffer.from(JSON.stringify(o)).toString('base64').replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '')
+  const token = `${b64({ alg: 'HS256', typ: 'JWT' })}.${b64({ sub: 'd1', role: 'driver', name: 'ANA PÉREZ', exp })}.firma`
+  await page.addInitScript((tk) => {
+    localStorage.setItem('flota_driver_token', tk)
+    localStorage.setItem('flota_driver', JSON.stringify({ id: 'd1', name: 'ANA PÉREZ', center: 'NORTE', configurar_cuenta: true }))
+    localStorage.setItem('cookie_consent', '1')
+  }, token)
+  await simularApi(page, 'vacio')
+  let cambiada = false
+  const enviado = []
+  // Como el servidor: mientras no la cambia, `configurar_cuenta`; después ya no.
+  await page.route(/\/api\/portal\/mi-ficha/, (route) => json({ falta_telefono: false, nombre: 'ANA PÉREZ',
+    tiene_clave: true, configurar_cuenta: !cambiada })(route))
+  await page.route(/\/api\/auth\/change-my-password/, (route) => {
+    enviado.push(route.request().postDataJSON())
+    cambiada = true
+    return json({ success: true })(route)
+  })
+  await page.goto('/conductor', { waitUntil: 'domcontentloaded' })
+  await expect(page.getByRole('heading', { name: 'Elige tu contraseña personal' })).toBeVisible({ timeout: 15000 })
+  const claves = page.locator('input[type="password"]')
+  await expect(claves).toHaveCount(2)                                      // no pide la temporal
+  await claves.nth(0).fill('mi-clave-1')
+  await claves.nth(1).fill('mi-clave-1')
+  await page.getByRole('button', { name: 'Crear mi contraseña' }).click()
+  await expect(page.getByText('Contraseña creada')).toBeVisible()
+  await expect(page.getByText(/Ya estás dentro/)).toBeVisible()
+  await expect(page.getByText('Continuar con correo de recuperación')).toHaveCount(0)
+  await page.getByTestId('clave-entrar').click()
+  // Dentro: el inicio del portal (la casilla del correo de recuperación), no la pantalla que pide el correo.
+  await expect(page.getByText('Añade un correo personal para recibir códigos')).toBeVisible({ timeout: 15000 })
+  await expect(page.getByRole('heading', { name: 'Correo de recuperación' })).toHaveCount(0)
+  await expect(page.getByRole('heading', { name: 'Elige tu contraseña personal' })).toHaveCount(0)
+  expect(enviado).toEqual([{ current_password: '', new_password: 'mi-clave-1' }])
+  expect(fallos, fallos.join(' | ')).toHaveLength(0)
+})

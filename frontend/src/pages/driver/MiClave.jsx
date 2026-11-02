@@ -93,13 +93,20 @@ export default function MiClave({ onBack, obligatoria = false }) {
             </p>
             <p className="mt-1.5 text-[13px] leading-relaxed text-emerald-200/80">
               {obligatoria
-                ? 'La próxima vez entra con tu correo de empresa y la contraseña que acabas de crear.'
+                ? 'Ya estás dentro. La próxima vez entra con tu correo de empresa y esta contraseña (la temporal ya no vale).'
                 : creando
                 ? 'La próxima vez entra con tu correo y esta contraseña. El correo no cambia.'
                 : 'La próxima vez entra con la nueva. Tu email no cambia.'}
             </p>
-            <button onClick={onBack} className="mt-4 w-full rounded-xl bg-dark-800 py-2.5 text-[14px] font-semibold text-dark-100">
-              {obligatoria ? 'Continuar con correo de recuperación' : 'Volver al inicio'}
+            {/* ENTRA DIRECTO (02-11-2026, Dani: «cuando la cambien, que les lleve para dentro»). Antes el botón decía
+                «Continuar con correo de recuperación» y llevaba a pedir un correo personal: los conductores creían que
+                tenían que volver a entrar, probaban con la temporal y no les dejaba. El correo de recuperación sigue
+                en el inicio, como casilla, para quien lo quiera añadir. */}
+            <button onClick={onBack} data-testid="clave-entrar"
+              className={obligatoria
+                ? 'mt-4 w-full rounded-xl bg-brand-500 py-3 text-[15px] font-bold text-brand-tinta'
+                : 'mt-4 w-full rounded-xl bg-dark-800 py-2.5 text-[14px] font-semibold text-dark-100'}>
+              {obligatoria ? 'Entrar' : 'Volver al inicio'}
             </button>
           </div>
         ) : (

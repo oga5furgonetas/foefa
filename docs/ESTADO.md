@@ -2091,6 +2091,18 @@ Dani: «conéctate a mi Chrome y hazlo tú para no liarla yo». Hecho (detalle e
   «Pendiente de revisión»; no queda nada por hacer en Apple hasta que conteste (1-3 días; si pide cambios, Revisión de apps).
 - **GOOGLE PLAY (Dani: «¿por qué no está la 2.4.1?»): la 2.4.1 (code 20) está ACTIVA en producción desde las 16:25 y en la prueba abierta desde las 13:27 (178 países, 16 descargas): no ha fallado nada. El 75 % de la base instalada sigue en el code 3 (la TWA del 4-10, canal Alpha): Play los va actualizando solo en las horas siguientes (esa app no manda `X-FDS-App`, así que `APP_ANDROID_MIN` no la bloquea). Dani vio «2.2.4» al bajarla de Play: el code 16 nunca estuvo en producción, así que es la APK de la web (paquete `.web`, convive con la de Play) o la caché de la tienda; se comprueba en Play → Acerca de esta app → Versión. `APP_ANDROID_PLAY="20 2.4.1"` lo puso Dani con `fly secrets set` esa misma noche (el modo auto lo bloquea desde aquí): el servidor ya anuncia la de Play.**
 
+## 02-11-2026 (noche, sesión en la nube): al crear la contraseña obligatoria, el conductor entra directo
+
+Dani (WhatsApp con la oficina de OGA5: «marcan correo, contraseña y no les deja meterse»): quien entra con la temporal de
+la oficina elige su contraseña y el botón decía «Continuar con correo de recuperación» y llevaba a pedir un correo personal;
+creían que tenían que volver a entrar, probaban con la temporal (que ya no vale) y no podían. Ahora, en la web
+(`pages/driver/MiClave.jsx` + `DriverPortal.jsx`) el aviso dice «Ya estás dentro… la temporal ya no vale» y el botón
+«Entrar» lleva al inicio del portal; en la app nativa (`PortalConductorNativo.kt`) «Guardar y continuar» lleva al inicio.
+El correo de recuperación sigue como casilla del inicio (web) y en Cuenta (nativa). Prueba nueva en
+`e2e/cambiar-clave.spec.js` (4/4) y humo del portal (17/17) en verde; eslint de los ficheros tocados limpio; build OK.
+**Sin desplegar** (rama `claude/trusting-feynman-0tfz62`): falta mezclar en `main` y desplegar la web; lo nativo va en la
+próxima versión de la app (no compilado aquí: no hay SDK de Android en la nube).
+
 ## Pendiente (por prioridad)
 
 -28. **02-11 tarde, LAS CONTRASEÑAS DE LOS CONDUCTORES** (María, oficina de OGA5, 18:30-19:02: «no les deja cambiar la
