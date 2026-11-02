@@ -2123,6 +2123,12 @@ Dani: «conéctate a mi Chrome y hazlo tú para no liarla yo». Hecho (detalle e
    y estilo), 15 hallazgos aplicados. Visto en el emulador (día y noche; capturas `%LOCALAPPDATA%\Temp\fds-emu\mapa-*.png`).
    PENDIENTE: el mapa general de la ruta (MapaRuta.kt, pestaña Mapa) sigue en osmdroid con las teselas clásicas: pasarlo
    al mismo estilo y quitar osmdroid (hoy van los dos motores en el APK; MapLibre añade ~13 MB por procesador).
+   02-11 09:5x-10:1x (Dani: «Sí, súbela»): el AAB 2.4.4 (artefacto FDS-2.4.4 del run 41345638288, 54.104.090 bytes,
+   firma FLOTA, sha256 comprobado en el navegador) SUBIDO A PLAY desde el Chrome de Dani en 7 trozos: bundle 23
+   (2.4.4) procesado (avisos: tamaño de descarga 16 MB por MapLibre, y sin símbolos nativos; 0 dispositivos perdidos),
+   notas puestas, versión GUARDADA como borrador; el modo auto negó otra vez «Enviar 1 cambio a revisión»: lo pulsa
+   Dani en Play Console → FDS → Resumen de publicación. Al publicarse, `APP_ANDROID_*` a "23 2.4.4" (el APK 2.4.4
+   .web ya está en `app-android/app/build/outputs/apk/release/` para el próximo despliegue de la web).
    Ver «Última sesión — 01-11-2026 (noche)».
 -26b. **01-11 noche, APPLE (Dani: «revisa lo de Apple»)**: visto en App Store Connect (sesión abierta en su Chrome):
    la 2.4.1 sigue «Rechazado · 2.1.0 Information Needed»; la respuesta a Apple SE ENVIÓ hoy a la 1:36 (promete el vídeo
