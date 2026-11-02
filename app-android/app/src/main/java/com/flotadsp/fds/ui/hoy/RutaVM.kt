@@ -17,6 +17,9 @@ import com.flotadsp.fds.ui.Voz
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.drop
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.launch
 import kotlinx.serialization.json.JsonElement
@@ -73,6 +76,10 @@ class RutaVM(app: Application) : AndroidViewModel(app) {
         entregar(r.parada, buildJsonObject { put("foto", foto); if (r.parada.porCobrar) put("metodo", r.metodo ?: "pagado") })
     }
     private val cuenta = (app as FdsApp).cuenta
+    /** Cuándo se pidió la ruta por última vez y cuántos cambios de estado van de camino (para refrescarSiToca). */
+    private var cargadaEn = 0L
+    private var mandando = 0
+    private var refrescoPendiente = false      // un aviso llegó con algo en vuelo: se refresca al acabar
 
     init {
         // Al momento, la ruta guardada en el móvil; después, la del servidor.
@@ -80,6 +87,20 @@ class RutaVM(app: Application) : AndroidViewModel(app) {
         cargar()
         viewModelScope.launch { repo.renovarSiToca() }
         viewModelScope.launch { _e.collect { briefing(it) } }
+        // Un aviso al móvil que habla de la ruta (lo que contesta el cliente en su enlace): se vuelve a leer al momento,
+        // salvo con un cambio de estado en vuelo o la ruta ordenándose (la del servidor pisaría lo optimista y el
+        // briefing repetiría la parada): entonces queda pendiente y sale al acabar, en marcar().
+        viewModelScope.launch {
+            repo.rutaCambio.collect { if (mandando == 0 && _e.value.ocupado.isEmpty()) refrescarSinRuido() else refrescoPendiente = true }
+        }
+        // OTRA CUENTA EN EL MISMO MÓVIL (01-11-2026, visto en el emulador): este ViewModel vive con la Activity y
+        // sobrevive a cerrar sesión, así que quien entraba después veía la ruta de la cuenta anterior (o «Sin paradas»
+        // si venía del portal) hasta tirar para refrescar. Al cerrar sesión se vacía; al entrar, se carga.
+        viewModelScope.launch {
+            cuenta.token.map { it != null }.distinctUntilChanged().drop(1).collect { dentro ->
+                if (dentro) { _e.value = EstadoRuta(); cargar() } else _e.value = EstadoRuta()
+            }
+        }
     }
 
     /* EL BRIEFING POR VOZ (01-11-2026), como la web: cada vez que cambia la siguiente parada (se hizo la anterior, o se
@@ -106,6 +127,7 @@ class RutaVM(app: Application) : AndroidViewModel(app) {
     fun vista(ruta: String) { viewModelScope.launch { repo.vista(ruta) } }
 
     fun cargar(tirando: Boolean = false) {
+        cargadaEn = System.currentTimeMillis()
         viewModelScope.launch {
             if (tirando) _e.value = _e.value.copy(refrescando = true)
             try {
@@ -156,6 +178,7 @@ class RutaVM(app: Application) : AndroidViewModel(app) {
             if (it.id == p.id) it.copy(estado = estado, cerradoEn = java.time.Instant.now().toString()) else it
         }))
         viewModelScope.launch {
+            mandando += 1
             try {
                 val extras = buildMap<String, JsonElement> {
                     if (estado != "pendiente") intentoDe(p)?.let { put("intento", it) }
@@ -180,6 +203,9 @@ class RutaVM(app: Application) : AndroidViewModel(app) {
             } catch (e: ErrorApi) {
                 _e.value = _e.value.copy(ruta = antes)
                 _avisos.send(Aviso(e.message ?: tx("No se ha podido guardar")))
+            } finally {
+                mandando -= 1
+                if (mandando == 0 && refrescoPendiente) { refrescoPendiente = false; refrescarSinRuido() }
             }
         }
     }
@@ -250,9 +276,23 @@ class RutaVM(app: Application) : AndroidViewModel(app) {
     }
 
     fun refrescarSinRuido() {
+        cargadaEn = System.currentTimeMillis()
         viewModelScope.launch {
             runCatching { repo.miRuta() }.onSuccess { _e.value = _e.value.copy(ruta = it, guardadaEn = null, error = null) }
         }
+    }
+
+    /* LA RUTA SE REFRESCA SOLA (01-11-2026): lo que contesta el cliente en su enlace («El cliente dice») tiene que
+       verse en «Siguiente parada» sin tirar hacia abajo. Hoy llama a esto al volver a primer plano y cada minuto: se
+       vuelve a leer en silencio (sin indicador ni avisos) si hace ≥20 s de la última carga y queda algo por entregar.
+       Nunca con un cambio de camino ni mientras se ordena: la ruta del servidor volvería a pintar lo de antes (y el
+       briefing por voz lo repetiría). */
+    fun refrescarSiToca() {
+        val e = _e.value
+        // Con el día terminado (hay paradas y ninguna pendiente) no hace falta; con la ruta vacía o sin cargar, sí.
+        if (mandando > 0 || e.ocupado.isNotEmpty() || (e.paradas.isNotEmpty() && e.pendientes.isEmpty())) return
+        if (System.currentTimeMillis() - cargadaEn < 20_000) return
+        refrescarSinRuido()
     }
 
     /** Las paradas de días anteriores sin cerrar, a hoy (quedan sin orden: después, «Ordenar ruta»). */

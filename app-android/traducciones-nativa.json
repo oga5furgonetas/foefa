@@ -818,6 +818,13 @@
     "Specchietti",
     "Spiegel"
   ],
+  "Esta parada no está situada en el mapa: se abre en Google Maps.": [
+    "This stop is not placed on the map: it opens in Google Maps.",
+    "Esta paragem não está situada no mapa: abre-se no Google Maps.",
+    "Cet arrêt n’est pas situé sur la carte : il s’ouvre dans Google Maps.",
+    "Questa fermata non è situata sulla mappa: si apre in Google Maps.",
+    "Diese Haltestelle ist nicht auf der Karte verortet: sie wird in Google Maps geöffnet."
+  ],
   "Esta red no deja llegar al servidor (¿una wifi que pide registrarse?).": [
     "This network does not reach the server (a Wi-Fi that asks you to sign in?).",
     "Esta rede não deixa chegar ao servidor (um wi-fi que pede registo?).",
@@ -1427,12 +1434,26 @@
     "Numero Bizum",
     "Bizum-Handynummer"
   ],
-  "Navega con Google Maps o Waze y marca cada entrega.": [
-    "Navigate with Google Maps or Waze and mark each delivery.",
-    "Navega com o Google Maps ou o Waze e marca cada entrega.",
-    "Naviguez avec Google Maps ou Waze et validez chaque livraison.",
-    "Naviga con Google Maps o Waze e segna ogni consegna.",
-    "Navigiere mit Google Maps oder Waze und hake jede Lieferung ab."
+  "No se ha podido cargar el mapa.": [
+    "The map could not be loaded.",
+    "Não foi possível carregar o mapa.",
+    "Impossible de charger la carte.",
+    "Impossibile caricare la mappa.",
+    "Die Karte konnte nicht geladen werden."
+  ],
+  "© OpenStreetMap · OpenMapTiles": [
+    "© OpenStreetMap · OpenMapTiles",
+    "© OpenStreetMap · OpenMapTiles",
+    "© OpenStreetMap · OpenMapTiles",
+    "© OpenStreetMap · OpenMapTiles",
+    "© OpenStreetMap · OpenMapTiles"
+  ],
+  "Te guía con voz hasta cada puerta, dentro de la app, y marcas la entrega.": [
+    "It guides you by voice to every door, inside the app, and you mark the delivery.",
+    "Guia-te por voz até cada porta, dentro da app, e marcas a entrega.",
+    "Il vous guide à la voix jusqu’à chaque porte, dans l’app, et vous validez la livraison.",
+    "Ti guida con la voce fino a ogni porta, nell’app, e segni la consegna.",
+    "Führt dich per Sprache bis zu jeder Tür, in der App, und du hakst die Lieferung ab."
   ],
   "Navegar": [
     "Navigate",
@@ -1993,6 +2014,13 @@
     "Solde minimum pour retirer : {x}. Chaque demande est vérifiée avant le paiement.",
     "Saldo minimo per prelevare: {x}. Ogni richiesta viene controllata prima del pagamento.",
     "Mindestguthaben für eine Auszahlung: {x}. Jede Anfrage wird vor der Zahlung geprüft."
+  ],
+  "Salir": [
+    "Exit",
+    "Sair",
+    "Quitter",
+    "Esci",
+    "Beenden"
   ],
   "Salir de la auditoría": [
     "Leave the audit",

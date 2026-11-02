@@ -128,7 +128,9 @@ fun MapaRuta(
     incidencias: List<Incidencia> = emptyList(), zbe: List<ZonaZbe> = emptyList(), enZbe: Set<String> = emptySet(),
     /** La fuente de los cortes de ese país (DGT, Bison Futé, NDW, WZDx…) y el tipo de zona (ZBE, ZFE, ULEZ…), del servidor. */
     fuente: String = "", tipoZona: String = "ZBE",
-    furgo: Furgo? = null, navegarCon: String = "google",
+    furgo: Furgo? = null,
+    /** «Ir» en la tarjeta de una parada: la guía de la app o el navegador elegido, lo decide «Hoy» (01-11-2026). */
+    alNavegar: (Parada) -> Unit = {},
     alTocar: (Parada) -> Unit, alAparcarEn: (Double, Double) -> Unit = { _, _ -> }, alQuitarFurgo: () -> Unit = {},
     modifier: Modifier = Modifier,
 ) {
@@ -374,7 +376,7 @@ fun MapaRuta(
                         IconButton(onClick = { tocado = null }) { Icon(Icons.Default.Close, contentDescription = tx("Cerrar")) }
                     }
                     when (t) {
-                        is Tocado.Una -> TarjetaParada(t.p, enZbe = if (t.p.id in enZbe) tipoZona else "", navegarCon = navegarCon, alAbrir = { alTocar(t.p); tocado = null })
+                        is Tocado.Una -> TarjetaParada(t.p, enZbe = if (t.p.id in enZbe) tipoZona else "", alNavegar = { alNavegar(t.p) }, alAbrir = { alTocar(t.p); tocado = null })
                         is Tocado.Inc -> TarjetaIncidencia(t.i, fuente)
                         is Tocado.Zona -> TarjetaZbe(t.z, tipoZona)
                         Tocado.LaFurgo -> furgo?.let { f -> TarjetaFurgo(f, ubicacion.myLocation, alQuitar = { alQuitarFurgo(); tocado = null }) }
@@ -420,7 +422,7 @@ private fun Etiqueta(texto: String, fondo: Color, tinta: Color, alPulsar: () -> 
 }
 
 @Composable
-private fun TarjetaParada(p: Parada, enZbe: String, navegarCon: String, alAbrir: () -> Unit) {
+private fun TarjetaParada(p: Parada, enZbe: String, alNavegar: () -> Unit, alAbrir: () -> Unit) {
     val ctx = LocalContext.current
     // La hora prevista va en los chips de Etiquetas cuando está pendiente; aquí solo si ya está hecha.
     val detalle = listOfNotNull(
@@ -444,7 +446,7 @@ private fun TarjetaParada(p: Parada, enZbe: String, navegarCon: String, alAbrir:
     }
     Row(Modifier.padding(top = 8.dp, end = 8.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
         if (p.pendiente) {
-            Button(onClick = { Acciones.navegar(ctx, p, navegarCon) }, modifier = Modifier.weight(1f)) {
+            Button(onClick = alNavegar, modifier = Modifier.weight(1f)) {
                 Icon(Icons.Default.Navigation, contentDescription = null, modifier = Modifier.size(18.dp)); Spacer(Modifier.width(6.dp)); Text(tx("Ir"))
             }
             if (p.telefono.isNotBlank()) {
@@ -537,15 +539,16 @@ private class ProveedorFused(ctx: Context) : IMyLocationProvider {
     override fun destroy() { stopLocationProvider() }
 }
 
-/* LOS DIBUJOS. Las mismas formas y colores que la web; medidas en dp. */
+/* LOS DIBUJOS. Las mismas formas y colores que la web; medidas en dp. La guía (GuiaPantalla, con MapLibre) reutiliza
+   la chincheta de la parada y el punto azul (lo `internal`); su ruta son capas de MapLibre. */
 
 private const val BLANCO = -1
 private val NOCHE = 0xFF0F172A.toInt()
-private val AZUL_RUTA = 0xFF3B82F6.toInt()
-private val AZUL_OSCURO = 0xFF1E3A8A.toInt()
+internal val AZUL_RUTA = 0xFF3B82F6.toInt()
+internal val AZUL_OSCURO = 0xFF1E3A8A.toInt()
 
 /** El trazo de la línea de la ruta: suave, con las puntas y las esquinas redondas. */
-private fun trazo(color: Int, grosor: Float) = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+internal fun trazo(color: Int, grosor: Float) = Paint(Paint.ANTI_ALIAS_FLAG).apply {
     this.color = color; style = Paint.Style.STROKE; strokeWidth = grosor; strokeJoin = Paint.Join.ROUND; strokeCap = Paint.Cap.ROUND
 }
 private val MORADO = 0xFF7C3AED.toInt()
@@ -554,7 +557,7 @@ private val VERDE_HECHA = 0xFF16A34A.toInt()
 private val ROJO = 0xFFDC2626.toInt()
 private val AZUL = 0xFF2563EB.toInt()
 
-private fun Context.dp() = resources.displayMetrics.density
+internal fun Context.dp() = resources.displayMetrics.density
 
 private fun pintura(color: Int, estilo: Paint.Style = Paint.Style.FILL, grosor: Float = 0f) = Paint(Paint.ANTI_ALIAS_FLAG).apply {
     this.color = color; style = estilo; strokeWidth = grosor; strokeJoin = Paint.Join.ROUND; strokeCap = Paint.Cap.ROUND
@@ -589,7 +592,7 @@ internal fun puntaChincheta(grande: Boolean): Float = medidas(grande).let { it[4
 
 /** La chincheta con el número: la siguiente más grande y con halo; borde morado si la parada cae en una ZBE; un globo
  *  verde si el cliente contestó. */
-private fun chincheta(ctx: Context, n: Int, fondo: Int, tinta: Int, grande: Boolean, zbe: Boolean, dice: Boolean): Bitmap {
+internal fun chincheta(ctx: Context, n: Int, fondo: Int, tinta: Int, grande: Boolean, zbe: Boolean, dice: Boolean): Bitmap {
     val m = medidas(grande)
     val r = m[0]; val halo = m[1]; val w = m[2]; val cy = m[3]; val punta = m[4]; val h = m[5]
     val d = ctx.dp()
@@ -713,8 +716,8 @@ private fun nave(ctx: Context): Bitmap {
     return bmp
 }
 
-/** El móvil: punto azul con halo; con `flecha`, además la cuña hacia donde mira (osmdroid la gira con la brújula). */
-private fun puntoAzul(ctx: Context, flecha: Boolean): Bitmap {
+/** El móvil: punto azul con halo; con `flecha`, además la cuña hacia donde mira (la guía la gira con el rumbo). */
+internal fun puntoAzul(ctx: Context, flecha: Boolean): Bitmap {
     val d = ctx.dp()
     val (bmp, c) = lienzo(ctx, 44f, 44f)
     val x = 22f * d

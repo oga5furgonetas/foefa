@@ -235,8 +235,10 @@ fun RevisarFotoDialogo(r: Revisar, alRepetir: (String) -> Unit, alCerrar: () -> 
 
 @Composable
 fun ParadaHoja(
-    p: Parada, prefijo: String, navegarCon: String, empresa: String = "",
+    p: Parada, prefijo: String, empresa: String = "",
     alCerrar: () -> Unit, alEntregar: () -> Unit, alFallar: () -> Unit, alDeshacer: () -> Unit, alEditar: () -> Unit, alQuitar: () -> Unit,
+    /** «Navegar»: la guía de la app o el navegador elegido, lo decide «Hoy» (01-11-2026). */
+    alNavegar: () -> Unit = {},
     /** El registro del intento (30-10-2026): «llamada» o «whatsapp» al pulsarlos. */
     alApuntar: (String) -> Unit = {},
     /** LA ENTREGA VERIFICADA (01-11-2026): repetir la foto de una entrega que la IA pide revisar. */
@@ -261,7 +263,7 @@ fun ParadaHoja(
                 p.codigo.takeIf { it.isNotBlank() }?.let { tx("Código: {x}", "x" to it) },
                 p.contenido.takeIf { it.isNotBlank() }?.let { tx("Lleva: {x}", "x" to it) },
                 p.notas.takeIf { it.isNotBlank() }?.let { tx("Notas: {x}", "x" to it) },
-                p.hueco.takeIf { it.isNotBlank() }?.let { tx("En la furgoneta: {x}", "x" to it) },
+                p.hueco.takeIf { it.isNotBlank() }?.let { tx("En la furgoneta: {x}", "x" to tx(it)) },
                 if (p.ventanaDesde != null) tx("Horario: de {a} a {b}", "a" to p.ventanaDesde, "b" to p.ventanaHasta) else null,
                 p.motivo?.takeIf { it.isNotBlank() && p.estado == "fallido" }?.let { tx("Motivo: {x}", "x" to it) },
                 p.entregaIa?.takeIf { p.estado == "entregado" }?.let { if (it.nivel == "verificada") tx("Entrega verificada por IA") else textoAvisoIa(it).takeIf { t -> t.isNotBlank() } },
@@ -283,7 +285,7 @@ fun ParadaHoja(
             }
             Spacer(Modifier.height(16.dp))
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                Button(onClick = { Acciones.navegar(ctx, p, navegarCon) }, modifier = Modifier.weight(1f).height(50.dp)) {
+                Button(onClick = alNavegar, modifier = Modifier.weight(1f).height(50.dp)) {
                     Icon(Icons.Default.Navigation, contentDescription = null); Spacer(Modifier.width(6.dp)); Text(tx("Navegar"))
                 }
                 FilledTonalButton(onClick = { alApuntar("llamada"); Acciones.llamar(ctx, p.telefono) }, enabled = p.telefono.isNotBlank(), modifier = Modifier.height(50.dp)) {

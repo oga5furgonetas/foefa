@@ -230,9 +230,11 @@ const CONSEJOS = [
   { id: 'hueco', cuando: (e) => e.pendientes >= 5 && e.entregados === 0 && !e.conHueco,
     titulo: 'Apunta dónde va cada paquete',
     texto: 'Al cargar, toca «¿Dónde va en la furgoneta?» en cada parada (delante, medio, detrás). Al llegar sabrás en qué hueco buscarlo sin revolver la carga.' },
-  { id: 'ir_con', cuando: (e) => e.entregados >= 3 && e.pendientes > 0 && e.nav === 'app',
-    titulo: '¿Prefieres Google Maps o Waze?',
-    texto: 'Elígelo en «Ir con», encima de la lista: cada parada se abrirá allí con la dirección puesta.' },
+  // 01-11-2026 (Dani: «una app de reparto con Google Maps no la va a pagar nadie»): el consejo ya no manda fuera; invita
+  // a la guía de la app a quien eligió Google Maps o Waze.
+  { id: 'guia_app', cuando: (e) => e.entregados >= 3 && e.pendientes > 0 && e.nav !== 'app',
+    titulo: 'Prueba la guía de la app',
+    texto: 'Pulsa «Ir con» → «Esta app»: te lleva hasta la puerta con voz, recalcula si te sales y al llegar marcas la entrega sin salir de la app.' },
 ]
 // El consejo de hoy: el mismo todo el día (no salta de uno a otro) y ninguno más tras «Entendido».
 function consejoDeHoy(fecha, estado) {
@@ -418,13 +420,17 @@ export default function MiRuta({ onBack, embebido = false, alTerminar = null }) 
   }, [furgo, vista])
 
   const [cola, setCola] = useState(() => leerCola().filter(deMi))
-  const cargar = useCallback(() => {
+  const cargadaEn = useRef(0)                            // cuándo se pidió la ruta por última vez
+  // `silencioso` (01-11-2026, revisión): el refresco automático no puede dejar la pantalla en «No se pudo cargar tu
+  // ruta» por un 500 pasajero sin que nadie haya tocado nada; se calla y la siguiente vuelta lo arregla.
+  const cargar = useCallback((silencioso = false) => {
+    cargadaEn.current = Date.now()
     // Lo guardado sin cobertura y aún sin enviar se pinta encima de lo que dice el servidor.
-    repMiRuta().then(({ data }) => { fijarPais(data?.pais); guardarCopia(data); setCopiaSinRed(0); setRuta(aplicarCola(data, leerCola().filter(deMi))) })
+    repMiRuta().then(({ data }) => { fijarPais(data?.pais); guardarCopia(data); setCopiaSinRed(0); setErr(''); setRuta(aplicarCola(data, leerCola().filter(deMi))) })
       .catch((e) => {
         const c = sinRed(e) ? copiaDeHoy() : null
         if (c) setCopiaSinRed(c.en)
-        else setErr(txError(e, 'No se pudo cargar tu ruta'))
+        else if (silencioso !== true) setErr(txError(e, 'No se pudo cargar tu ruta'))
       })
   }, [])
   const conMarcas = !!ruta?.autonomo && !ruta?.prueba
@@ -485,6 +491,21 @@ export default function MiRuta({ onBack, embebido = false, alTerminar = null }) 
     window.addEventListener('fds-recargar-ruta', cargar)
     return () => window.removeEventListener('fds-recargar-ruta', cargar)
   }, [cargar])
+  /* LA RUTA SE REFRESCA SOLA (01-11-2026): lo que contesta el cliente en su enlace («El cliente dice») tiene que
+     verse en la siguiente parada sin tirar hacia abajo: al volver la pestaña a la vista y cada 90 s mientras se ve,
+     si queda algo por entregar y hace ≥20 s de la última carga. Nunca con algo de camino (ocupado): la ruta del
+     servidor volvería a pintar lo de antes. */
+  const quedan = !!firmaRuta
+  const refrescarSiToca = useCallback(() => {
+    if (document.hidden || ocupado || Date.now() - cargadaEn.current < 20000) return
+    cargar(true)
+  }, [cargar, ocupado])
+  useEffect(() => {
+    if (!quedan) return undefined
+    const t = setInterval(refrescarSiToca, 90000)
+    document.addEventListener('visibilitychange', refrescarSiToca)
+    return () => { clearInterval(t); document.removeEventListener('visibilitychange', refrescarSiToca) }
+  }, [quedan, refrescarSiToca])
 
   const jornadaAbierta = !!(ruta?.jornada?.empezada && !ruta?.jornada?.terminada)
 

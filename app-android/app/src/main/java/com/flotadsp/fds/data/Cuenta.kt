@@ -29,6 +29,7 @@ class Cuenta(private val ctx: Context) {
     private val kUltimoAviso = stringPreferencesKey("ultimo_aviso")
     private val kFurgo = stringPreferencesKey("furgo")
     private val kVoz = androidx.datastore.preferences.core.booleanPreferencesKey("voz")
+    private val kGuiaVoz = androidx.datastore.preferences.core.booleanPreferencesKey("guia_voz")
 
     private val _token = MutableStateFlow<String?>(null)
     val token: StateFlow<String?> = _token
@@ -42,7 +43,8 @@ class Cuenta(private val ctx: Context) {
     val destino: StateFlow<String?> = _destino
     private val _configurarCuenta = MutableStateFlow(false)
     val configurarCuenta: StateFlow<Boolean> = _configurarCuenta
-    private val _navegar = MutableStateFlow("google")
+    /** Con qué se navega: «app» (la guía dentro de la app, lo de serie desde el 01-11-2026), «google» o «waze». */
+    private val _navegar = MutableStateFlow("app")
     val navegar: StateFlow<String> = _navegar
     private val _tema = MutableStateFlow("sistema")
     val tema: StateFlow<String> = _tema
@@ -54,6 +56,10 @@ class Cuenta(private val ctx: Context) {
     /** EL BRIEFING POR VOZ (01-11-2026): si la app habla (la siguiente parada, el hueco al cargar). Encendido de serie. */
     private val _voz = MutableStateFlow(true)
     val voz: StateFlow<Boolean> = _voz
+    /** LA GUÍA DENTRO DE LA APP (01-11-2026): si la guía habla (las maniobras, la llegada). Aparte del briefing: se
+     *  apaga con el icono de la propia guía. Encendida de serie. */
+    private val _guiaVoz = MutableStateFlow(true)
+    val guiaVoz: StateFlow<Boolean> = _guiaVoz
 
     suspend fun cargar() {
         val p = ctx.almacen.data.first()
@@ -78,9 +84,11 @@ class Cuenta(private val ctx: Context) {
         _nombre.value = p[kNombre].orEmpty()
         _correo.value = p[kCorreo].orEmpty()
         _centro.value = p[kCentro].orEmpty()
-        _navegar.value = p[kNavegar] ?: "google"
+        // Quien ya eligió Google Maps o Waze lo conserva; sin elección, la guía de la app.
+        _navegar.value = p[kNavegar] ?: "app"
         _tema.value = p[kTema] ?: "sistema"
         _voz.value = p[kVoz] ?: true
+        _guiaVoz.value = p[kGuiaVoz] ?: true
         _furgo.value = p[kFurgo]?.let { runCatching { JSON.decodeFromString(Furgo.serializer(), it) }.getOrNull() }
             ?.takeIf { System.currentTimeMillis() - it.en < 12 * 3600_000L }
         _cargada.value = true
@@ -127,6 +135,7 @@ class Cuenta(private val ctx: Context) {
     suspend fun elegirNavegador(v: String) { ctx.almacen.edit { it[kNavegar] = v }; _navegar.value = v }
     suspend fun elegirTema(v: String) { ctx.almacen.edit { it[kTema] = v }; _tema.value = v }
     suspend fun elegirVoz(v: Boolean) { ctx.almacen.edit { it[kVoz] = v }; _voz.value = v }
+    suspend fun elegirGuiaVoz(v: Boolean) { ctx.almacen.edit { it[kGuiaVoz] = v }; _guiaVoz.value = v }
 
     /** Hasta qué aviso (su `creado_en`) se ha enseñado ya como notificación (AvisosWorker, Fcm). */
     suspend fun ultimoAviso(): String? = ctx.almacen.data.first()[kUltimoAviso]

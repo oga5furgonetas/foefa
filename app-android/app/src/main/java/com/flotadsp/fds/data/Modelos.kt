@@ -203,6 +203,21 @@ data class VersionesApp(val web: VersionApp? = null, val play: VersionApp? = nul
 @Serializable
 data class Trazado(val linea: List<List<Double>> = emptyList(), val fuente: String? = null, val km: Double? = null, val minutos: Int? = null)
 
+/* LA GUÍA DENTRO DE LA APP (01-11-2026): lo que contesta POST /reparto/mi-ruta/navegar para UNA parada: el camino por
+   las calles ([[lat, lng], …]), los metros y minutos, y cada maniobra con su punto sobre la línea y la maniobra en
+   bruto de OSRM (tipo, modificador, salida), que la app escribe en su idioma (Navegador.textoPaso). `fuente`
+   «carreteras» o «linea_recta» (sin servidor de rutas: un solo paso, «Ve hacia la parada»). */
+@Serializable
+data class Guia(val fuente: String = "", val linea: List<List<Double>> = emptyList(), val metros: Int = 0, val minutos: Double? = null,
+                val pasos: List<PasoGuia> = emptyList())
+
+@Serializable
+data class PasoGuia(val texto: String = "", val icono: String = "", val punto: List<Double> = emptyList(), val calle: String = "",
+                    val metros: Int = 0, val maniobra: ManiobraGuia? = null)
+
+@Serializable
+data class ManiobraGuia(val tipo: String = "", val mod: String? = null, val salida: Int? = null)
+
 @Serializable
 data class MiRuta(
     val activo: Boolean = false,

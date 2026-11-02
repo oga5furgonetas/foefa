@@ -36,8 +36,8 @@ android {
         minSdk = 26
         targetSdk = 36
         // La TWA llegó a code 4 (1.0.3): la nativa empieza en 10.
-        versionCode = 21
-        versionName = "2.4.2"
+        versionCode = 23
+        versionName = "2.4.4"
         buildConfigField("String", "API_URL", "\"$apiUrl\"")
         buildConfigField("String", "WEB_URL", "\"https://flotadsp.com\"")
         buildConfigField("String", "FCM_APP_ID", "\"$fcmAppId\"")
@@ -50,6 +50,7 @@ android {
         // procesador: con las cuatro, 67 MB; con estas dos, menos de la mitad). El AAB de Play va completo: Play
         // ya le da a cada móvil solo las suyas.   ./gradlew :app:assembleRelease -PsoloMoviles
         // Con -PsoloMoviles=arm64, solo los de 64 bits (casi todos los móviles de hoy): ~21 MB, se puede mandar al móvil.
+        // Desde el 01-11-2026 MapLibre (el mapa de la guía) añade ~13 MB por procesador (libmaplibre.so).
         (project.findProperty("soloMoviles") as String?)?.let { v ->
             ndk { abiFilters += if (v == "arm64") listOf("arm64-v8a") else listOf("arm64-v8a", "armeabi-v7a") }
         }
@@ -166,6 +167,7 @@ dependencies {
     implementation(libs.mlkit.barcode)
     implementation(libs.mlkit.texto)
     implementation(libs.osmdroid)
+    implementation(libs.maplibre)
     implementation(libs.play.location)
     implementation(libs.play.app.update)
     implementation(libs.firebase.messaging)

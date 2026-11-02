@@ -180,7 +180,7 @@ private fun Arriba(alCerrar: () -> Unit, linterna: Boolean) {
     }
 }
 
-private tailrec fun Context.actividad(): Activity? = when (this) {
+internal tailrec fun Context.actividad(): Activity? = when (this) {
     is Activity -> this
     is ContextWrapper -> baseContext.actividad()
     else -> null
