@@ -2274,6 +2274,15 @@ próxima versión de la app (no compilado aquí: no hay SDK de Android en la nub
    REJECTED y el envío del 30-10 en UNRESOLVED_ISSUES (Apple espera a que reenviemos); la build 16 está VALID desde el
    01-11 a las 01:38. Si Apple contestó a nuestro mensaje no se ve por la API (el centro de resoluciones no está en
    ella): le llegaría a Dani un correo de App Store Connect. Lo que falta no ha cambiado: el vídeo en un iPhone físico.
+   20:4x (Dani, conectado en App Store Connect en su Chrome: «tester externo», y el nombre y correo de José Antonio
+   Porto, que tiene iPhone): hecho por la API (`%LOCALAPPDATA%\Temp\fds-emu\testflight_externo.py`): información de
+   la revisión beta con el contacto de la revisión de la App Store (sin cuenta de prueba: la demo no pide registro) y
+   notas en inglés; descripción de la beta en es-ES (comentarios a contacto@flotadsp.com, privacidad flotadsp.com/
+   privacidad); grupo EXTERNO «Vídeo para Apple» con la compilación 16; la 16 ENVIADA A LA REVISIÓN DE TESTFLIGHT
+   (WAITING_FOR_BETA_REVIEW); José Antonio en el grupo (NOT_INVITED: Apple le invita al aprobar la 16; si no le llega,
+   `POST /v1/betaTesterInvitations`). Después: él graba en su iPhone (abrir, demo sin registro, escanear, ordenar,
+   entrega con foto, crear cuenta, entrar, «Borrar mi cuenta»), nos manda el vídeo, y en la versión 2.4.1: compilación
+   9 → 16, el vídeo en la información para la revisión y «Volver a enviar a revisión de apps».
    18:2x (Dani: «ahora estás conectado en Google, mira si nos contestaron»): en su Gmail (la única cuenta abierta en el
    Chrome) no hay NADA de App Store Connect ni de App Review en 7 días, ni siquiera el aviso del rechazo del 31-10:
    los correos de Apple van a OTRA dirección (la de la cuenta de desarrollador). Para leer la respuesta, Dani entra en
