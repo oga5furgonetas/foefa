@@ -2142,6 +2142,17 @@ próxima versión de la app (no compilado aquí: no hay SDK de Android en la nub
    dirección de ejemplo; no es de esto, sin mirar todavía). El árbol principal hay que ponerlo al día con main
    (c197879, e6d8ad6 y los de ESTADO) cuando acaben los agentes del escaneo: los cambios de las contraseñas están en
    los dos sitios, iguales.
+   20:1x-20:3x (Dani: «mezcla en main la rama claude/trusting-feynman-0tfz62… pasa los chequeos y despliega la web; el
+   cambio de PortalConductorNativo.kt va en la próxima versión»): la rama YA estaba en main cuando se fue a mezclar
+   (la sesión de redes la subió, ffd23d1, y devolvió DriverPortal.jsx a CRLF en ef6e5c0: mismo contenido, comprobado
+   sin los CR). Lleva «al crear la contraseña obligatoria, el conductor entra directo al portal» (web: «Ya estás
+   dentro» y «Entrar»; nativa: a «inicio» en vez de «correo», sale con la 2.4.5) y las piezas de redes (carrusel D y
+   tarjetas X en frontend/public/redes/). Chequeos de CLAUDE.md sobre ef6e5c0 en la copia limpia: los 7 check-*.mjs,
+   eslint 0 errores, vite build, Playwright humo + cambiar-clave 210 pasan, pytest entero 1415 passed y 1 skipped
+   (15 min); CI de ef6e5c0 verde (app-release también; desplegar.yml sale en rojo como siempre, sin sus claves).
+   WEB DESPLEGADA a las 20:3x (`deploy-frontend.ps1` desde la copia limpia): index-M5kur-0I.js servido = local, 277
+   ficheros; comprobado en producción que el trozo del portal (assets/v2/DriverPortal-BYLuiUrg.js) lleva «Ya estás
+   dentro», «Entrar» y el código al correo. El APK que se descarga sigue siendo la 2.4.3 (la 2.4.4 no cabe en Pages).
 -27. **02-11 tarde, EL ESCANEO QUE NO ENCONTRABA LA DIRECCIÓN** (Dani, probando con una cuenta nueva de autónomo: «el
    primer paquete que escaneo no encuentra la dirección y tiene que ir por Maps; eso es un pedazo de mierda, hazlo
    bien»). Causa, leída en el código (la base de producción no se pudo mirar: el modo auto lo niega, «Production
