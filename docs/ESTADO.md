@@ -2181,6 +2181,19 @@ próxima versión de la app (no compilado aquí: no hay SDK de Android en la nub
    EN MARCHA (21:5x): la tanda de arreglos (servidor, nativa y web a la vez), luego verificador, emulador y revisor.
    Antes, a las 21:4x, el árbol principal se puso al día con main (stash, avance a c31a42a y vuelta del stash, sin un
    conflicto; copia de seguridad en %LOCALAPPDATA%\Temp\fds-emu\copia-arbol-2144).
+   00:2x (03-11), RESULTADO de la tanda de arreglos (6 agentes, sin commit): el GRAVE arreglado y comprobado en el
+   emulador («Rúa Brétema Mariñeira 23, 15011 A Coruña» ya no se sitúa sola en Oleiros: queda sin punto y «Navegar»
+   abre «Situar la parada», nunca Google Maps). En el servidor: un pueblo vecino nunca da portal ni calle; el contraste
+   con el trazado oficial de la calle; «travesa» y el piso pegado («2ºIzq»); una búsqueda cortada por tiempo no se
+   guarda en la caché y se repite al ordenar; y POST /api/cuenta/anuncios para retirar el permiso de Meta. pytest 1483;
+   el corpus igual (164/18/0/0/0) y, sin CartoCiudad, de 6 mal situadas a 4 (ninguna dando portal). Quedaban cuatro
+   cosas: la calle elegida «Sin el portal» se guardaba como la puerta (geo «manual»); la nativa enseñaba calles
+   cualquiera con el mismo número para una calle que no existe; el filtro de Photon de la web quitaba los sitios con
+   nombre y dejaba pasar «Rúa Brétema, 15179 Oleiros»; y el geocodificador de Android (el de Google) no estaba en la
+   lista de encargados. DECIDIDO (Dani, 02-11 22:3x, a si hay empresas que no sean suyas: «Solo las mías»):
+   CartoCiudad para TODAS las cuentas ya (_CC_EMPRESAS_DESDE = 2026-11-02; la variable queda para una empresa de fuera)
+   y sin fecha en la lista pública. EN MARCHA (00:2x): la tanda de remate (servidor y legal, nativa y web; luego
+   verificador, emulador y revisor). Copia del árbol antes de ella: %LOCALAPPDATA%\Temp\fds-emu\copia-arbol-0045.
 -27b. **02-11, PRIMER DÍA Y VIRALIDAD** (Dani: «consigue que todo el mundo utilice la app y complete su primer día…
    necesito viralización»): hecho por agentes y SIN commit: eventos a Meta por la API de conversiones
    (`backend/meta_capi.py`, solo funciona con `META_PIXEL_ID` y `META_CAPI_TOKEN`), los avisos del primer día (push a
