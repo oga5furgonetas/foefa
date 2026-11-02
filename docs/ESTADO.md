@@ -2198,6 +2198,9 @@ Dani: «conéctate a mi Chrome y hazlo tú para no liarla yo». Hecho (detalle e
    y «Campaña desactivada». La campaña SIGUE APAGADA: se enciende cuando esté desplegado lo del escaneo. Después,
    una vez por semana: si gasta todo y el coste real queda por encima, bajar el objetivo un 5-10 %; si deja de gastar,
    subirlo un 5-10 % (docs/anuncios/CANALES-02-11.md, 2.6).
+   18:2x (Dani: «activa esa campaña de Facebook», sin esperar al despliegue): ENCENDIDA «FDS Registros — Gratis 15
+   paradas — ES (10-10-2026)» (20 €/día, objetivo de coste 1,20 €); comprobado al recargar: «Activa» y las otras 11
+   apagadas. Ojo: hasta desplegar lo del escaneo (punto -27), quien se registre puede toparse con el mismo fallo.
 -26b. **01-11 noche, APPLE (Dani: «revisa lo de Apple»)**: visto en App Store Connect (sesión abierta en su Chrome):
    la 2.4.1 sigue «Rechazado · 2.1.0 Information Needed»; la respuesta a Apple SE ENVIÓ hoy a la 1:36 (promete el vídeo
    y una build con «Borrar mi cuenta»); en la versión 2.4.1 están rellenos las notas (1.047 car.), la cuenta de prueba
@@ -2211,6 +2214,10 @@ Dani: «conéctate a mi Chrome y hazlo tú para no liarla yo». Hecho (detalle e
    REJECTED y el envío del 30-10 en UNRESOLVED_ISSUES (Apple espera a que reenviemos); la build 16 está VALID desde el
    01-11 a las 01:38. Si Apple contestó a nuestro mensaje no se ve por la API (el centro de resoluciones no está en
    ella): le llegaría a Dani un correo de App Store Connect. Lo que falta no ha cambiado: el vídeo en un iPhone físico.
+   18:2x (Dani: «ahora estás conectado en Google, mira si nos contestaron»): en su Gmail (la única cuenta abierta en el
+   Chrome) no hay NADA de App Store Connect ni de App Review en 7 días, ni siquiera el aviso del rechazo del 31-10:
+   los correos de Apple van a OTRA dirección (la de la cuenta de desarrollador). Para leer la respuesta, Dani entra en
+   App Store Connect en el Chrome (la sesión caducó; Claude no escribe contraseñas) o mira el correo de esa cuenta.
 -25. **01-11, 13:0x, NOVIEMBRE «a la par»**: la hoja ya manda sola (al editar y cada 10 min); las filas nuevas de Dani
    están en FDS salvo DAVID FERNANDEZ DE HARO, retenido por parecerse a una ficha de baja: falta que Dani pulse «Es
    otra persona: ficha nueva» en FDS → Cuadrante → Google Sheets (o me dé permiso para hacerlo por API). Los alias
