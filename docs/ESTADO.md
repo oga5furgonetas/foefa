@@ -2191,6 +2191,13 @@ Dani: «conéctate a mi Chrome y hazlo tú para no liarla yo». Hecho (detalle e
    diario puesto por Meta 383,76 €; sin «límite de gasto de la cuenta». El «14» de Dani era el umbral de pago de
    entonces (hoy 26 €): no limita lo que se gasta, solo cuándo se cobra. Recomendado: no encender nada hasta tener
    desplegado lo del escaneo (punto -27) y el primer día (-27b), para no pagar registros que se topan con ese fallo.
+   18:1x-18:2x (Dani: «Sí, con tope de coste», a «¿enciendo la de España cuando esté desplegado lo del escaneo?»): en
+   la campaña de España la puja pasa de «Volumen más alto» a «Objetivo de coste por resultado» de 1,20 € por registro
+   (un 10 % por debajo de los 1,34 € de media; 0,30 € no entrega); el primer intento guardó los 5,00 € que Meta pone
+   por defecto y se corrigió en el conjunto «España · 20-55 · reparto · registro»; comprobado al recargar: «1,20 € EUR»
+   y «Campaña desactivada». La campaña SIGUE APAGADA: se enciende cuando esté desplegado lo del escaneo. Después,
+   una vez por semana: si gasta todo y el coste real queda por encima, bajar el objetivo un 5-10 %; si deja de gastar,
+   subirlo un 5-10 % (docs/anuncios/CANALES-02-11.md, 2.6).
 -26b. **01-11 noche, APPLE (Dani: «revisa lo de Apple»)**: visto en App Store Connect (sesión abierta en su Chrome):
    la 2.4.1 sigue «Rechazado · 2.1.0 Information Needed»; la respuesta a Apple SE ENVIÓ hoy a la 1:36 (promete el vídeo
    y una build con «Borrar mi cuenta»); en la versión 2.4.1 están rellenos las notas (1.047 car.), la cuenta de prueba
@@ -2200,6 +2207,10 @@ Dani: «conéctate a mi Chrome y hazlo tú para no liarla yo». Hecho (detalle e
    con iPhone instala la build 16 por TestFlight: hay que añadir su correo como tester) enseñando abrir, la demo sin
    cuenta, escanear, una entrega con foto, registro, entrar y Borrar mi cuenta; (2) en la versión 2.4.1 cambiar la
    build 9 por la 16 y adjuntar el vídeo; (3) «Volver a enviar a revisión de apps». Sin el vídeo no la revisan.
+   02-11 18:2x (Dani: «¿lo de Apple en qué quedó?»), por la API (la sesión del Chrome caducó): la 2.4.1 sigue
+   REJECTED y el envío del 30-10 en UNRESOLVED_ISSUES (Apple espera a que reenviemos); la build 16 está VALID desde el
+   01-11 a las 01:38. Si Apple contestó a nuestro mensaje no se ve por la API (el centro de resoluciones no está en
+   ella): le llegaría a Dani un correo de App Store Connect. Lo que falta no ha cambiado: el vídeo en un iPhone físico.
 -25. **01-11, 13:0x, NOVIEMBRE «a la par»**: la hoja ya manda sola (al editar y cada 10 min); las filas nuevas de Dani
    están en FDS salvo DAVID FERNANDEZ DE HARO, retenido por parecerse a una ficha de baja: falta que Dani pulse «Es
    otra persona: ficha nueva» en FDS → Cuadrante → Google Sheets (o me dé permiso para hacerlo por API). Los alias
