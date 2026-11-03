@@ -2194,6 +2194,23 @@ próxima versión de la app (no compilado aquí: no hay SDK de Android en la nub
    CartoCiudad para TODAS las cuentas ya (_CC_EMPRESAS_DESDE = 2026-11-02; la variable queda para una empresa de fuera)
    y sin fecha en la lista pública. EN MARCHA (00:2x): la tanda de remate (servidor y legal, nativa y web; luego
    verificador, emulador y revisor). Copia del árbol antes de ella: %LOCALAPPDATA%\Temp\fds-emu\copia-arbol-0045.
+   02:3x, RESULTADO de la tanda de remate (6 agentes, sin commit): hecho la calle elegida «Sin el portal» se guarda
+   como calle (el servidor guarda geo «aprox» si llega "precision":"calle"; la 2.4.4 no la manda y sigue igual), fuera
+   las calles cualquiera con el mismo número, el filtro de la web, CartoCiudad para todas las cuentas
+   (_CC_EMPRESAS_DESDE = 2026-11-02) y en los textos legales el geocodificador de Android y Fly como sitio de la base.
+   La verificación, en verde (pytest 1489; Playwright entero 631 en los dos proyectos; gradle 76 tests) y con dos
+   arreglos suyos: el aviso de referidos de RutaApp ya no pregunta sin sesión (hacía fallar a veces la prueba
+   «Correo»: 6 de 80) y «Suspensiones» espera con expect.poll; `eslint e2e` de 39 errores a 0. El EMULADOR y el
+   REVISOR encontraron caminos en los que aún se guardaba la dirección escrita con el punto de OTRA calle: «Situar la
+   parada» abierta desde Hoy (la parada de A Coruña con el punto de Oleiros y la guía llevando allí), la búsqueda
+   corregida dentro de «Situar» en la web y en la nativa, y un candidato del servidor de otra calle; además, la regla
+   laxa distinta en las dos (títulos como «Almirante»), la misma calle con otro número guardada como la puerta, las
+   «suyas» sin precisión y contando paradas sin cerrar, la población con la provincia (GeoMovil) y textos legales que
+   no eran del todo ciertos (Google y komoot reciben también lo que se escribe y, con «Mi ubicación», la posición;
+   Seguridad decía que la base está en Atlas). EN MARCHA (02:4x): la segunda tanda de remate con UNA regla para la
+   app y la web en todos los caminos (al elegir otra calle, la dirección pasa a ser la de la sugerencia; la misma
+   calle sin el portal o con otro número se queda la escrita como calle), la lista de encargados completa, y luego
+   verificador, emulador y revisor. Copia del árbol antes de ella: %LOCALAPPDATA%\Temp\fds-emu\copia-arbol-0250.
 -27b. **02-11, PRIMER DÍA Y VIRALIDAD** (Dani: «consigue que todo el mundo utilice la app y complete su primer día…
    necesito viralización»): hecho por agentes y SIN commit: eventos a Meta por la API de conversiones
    (`backend/meta_capi.py`, solo funciona con `META_PIXEL_ID` y `META_CAPI_TOKEN`), los avisos del primer día (push a
