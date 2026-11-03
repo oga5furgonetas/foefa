@@ -2250,7 +2250,7 @@ próxima versión de la app (no compilado aquí: no hay SDK de Android en la nub
    sin situar salió «No se pudo ordenar»). Montados en uno (Dani: «Monta tú los dos»): 2 min 37 s, sin audio, 768x1664,
    con un rótulo en inglés por parte; fuera los intentos de borrar la cuenta con la contraseña mal, todas las
    notificaciones (WhatsApp, María, Amazon Flex, Slack), las fotos de niños de los widgets y el salto a Google Maps
-   (repasado cada medio segundo). Por la API (scripts en %LOCALAPPDATA%\Tempds-emusc\): build 16 adjuntado a la
+   (repasado cada medio segundo). Por la API (scripts en %LOCALAPPDATA%\Temp\fds-emu\asc\): build 16 adjuntado a la
    2.4.1, el vídeo como adjunto de la revisión (appStoreReviewAttachments, COMPLETE), las notas al día (lo que sale
    de verdad en el vídeo; fuera «Probarla ahora, sin registrarme», que no existe en la app de iPhone). El envío viejo
    (UNRESOLVED_ISSUES) no se dejaba reenviar («Version is not ready to be submitted yet» al cambiar el build; «resolved»
