@@ -11,6 +11,9 @@
   Instagram `flotadsp`, LinkedIn (página FlotaDSP) y YouTube. **X no** (en Metricool es de pago); **Facebook** aún no.
 - Mejores horas según Metricool (29-10): TikTok 10:00, 12:00 y 18:00 (el pico de la tarde es a las 18:00, no a las
   20:00); por eso TikTok se programa a las **18:00**. Instagram a las **12:00**. LinkedIn los martes por la mañana.
+- **Desde el 03-11 no hace falta desplegar:** el repo es público y Metricool acepta los enlaces de GitHub
+  `https://raw.githubusercontent.com/oga5furgonetas/foefa/<commit>/frontend/public/redes/<fichero>` (con el commit,
+  no con la rama). TikTok solo admite JPEG en fotos: los carruseles llevan `.jpg` para TikTok y `.png` para Instagram.
 - Las imágenes se sirven en `https://flotadsp.com/redes/<fichero>.png` solo cuando la web se despliega con
   `frontend/public/redes/` (rama mezclada en `main` y `wrangler pages deploy`). Hasta entonces Metricool las rechaza
   («Failed to normalize media») y solo se puede programar LinkedIn (texto + enlace). Los vídeos de `docs/videos/` no
