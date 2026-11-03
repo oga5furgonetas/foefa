@@ -30,6 +30,7 @@ class Cuenta(private val ctx: Context) {
     private val kFurgo = stringPreferencesKey("furgo")
     private val kVoz = androidx.datastore.preferences.core.booleanPreferencesKey("voz")
     private val kGuiaVoz = androidx.datastore.preferences.core.booleanPreferencesKey("guia_voz")
+    private val kInvitarOculto = stringPreferencesKey("invitar_oculto")
 
     private val _token = MutableStateFlow<String?>(null)
     val token: StateFlow<String?> = _token
@@ -60,6 +61,10 @@ class Cuenta(private val ctx: Context) {
      *  apaga con el icono de la propia guía. Encendida de serie. */
     private val _guiaVoz = MutableStateFlow(true)
     val guiaVoz: StateFlow<Boolean> = _guiaVoz
+    /** LA INVITACIÓN TRAS LA PRIMERA ENTREGA (02-11-2026): el día de la ruta (AAAA-MM-DD) en que se pulsó «Ahora no»;
+     *  ese día la tarjeta de Hoy no vuelve a salir, al siguiente sí. Se guarda el día, no una clave por día. */
+    private val _invitarOculto = MutableStateFlow<String?>(null)
+    val invitarOculto: StateFlow<String?> = _invitarOculto
 
     suspend fun cargar() {
         val p = ctx.almacen.data.first()
@@ -89,6 +94,7 @@ class Cuenta(private val ctx: Context) {
         _tema.value = p[kTema] ?: "sistema"
         _voz.value = p[kVoz] ?: true
         _guiaVoz.value = p[kGuiaVoz] ?: true
+        _invitarOculto.value = p[kInvitarOculto]
         _furgo.value = p[kFurgo]?.let { runCatching { JSON.decodeFromString(Furgo.serializer(), it) }.getOrNull() }
             ?.takeIf { System.currentTimeMillis() - it.en < 12 * 3600_000L }
         _cargada.value = true
@@ -120,11 +126,12 @@ class Cuenta(private val ctx: Context) {
     }
 
     suspend fun cerrar() {
-        ctx.almacen.edit { it.remove(kToken); it.remove(kDestino); it.remove(kConfigurarCuenta); it.remove(kCentro); it.remove(kUltimoAviso) }
+        ctx.almacen.edit { it.remove(kToken); it.remove(kDestino); it.remove(kConfigurarCuenta); it.remove(kCentro); it.remove(kUltimoAviso); it.remove(kInvitarOculto) }
         _token.value = null
         _destino.value = null
         _configurarCuenta.value = false
         _centro.value = ""
+        _invitarOculto.value = null      // el «Ahora no» era de quien se va, no de quien entre después
     }
 
     suspend fun marcarCuentaConfigurada() {
@@ -136,6 +143,8 @@ class Cuenta(private val ctx: Context) {
     suspend fun elegirTema(v: String) { ctx.almacen.edit { it[kTema] = v }; _tema.value = v }
     suspend fun elegirVoz(v: Boolean) { ctx.almacen.edit { it[kVoz] = v }; _voz.value = v }
     suspend fun elegirGuiaVoz(v: Boolean) { ctx.almacen.edit { it[kGuiaVoz] = v }; _guiaVoz.value = v }
+    /** «Ahora no» en la tarjeta de invitar (02-11-2026): `dia` es el de la ruta, AAAA-MM-DD. */
+    suspend fun ocultarInvitar(dia: String) { ctx.almacen.edit { it[kInvitarOculto] = dia }; _invitarOculto.value = dia }
 
     /** Hasta qué aviso (su `creado_en`) se ha enseñado ya como notificación (AvisosWorker, Fcm). */
     suspend fun ultimoAviso(): String? = ctx.almacen.data.first()[kUltimoAviso]

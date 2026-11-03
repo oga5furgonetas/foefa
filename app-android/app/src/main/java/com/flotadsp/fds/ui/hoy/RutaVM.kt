@@ -8,12 +8,19 @@ import com.flotadsp.fds.FdsApp
 import com.flotadsp.fds.data.EntregaIa
 import com.flotadsp.fds.data.ErrorApi
 import com.flotadsp.fds.data.Incidencias
+import com.flotadsp.fds.data.Invitacion
 import com.flotadsp.fds.data.JSON
 import com.flotadsp.fds.data.MiRuta
 import com.flotadsp.fds.data.Parada
+import com.flotadsp.fds.data.Repositorio
 import com.flotadsp.fds.data.Zbe
 import com.flotadsp.fds.ui.Acciones
 import com.flotadsp.fds.ui.Voz
+import com.flotadsp.fds.ui.parada.Sugerencia
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.CoroutineStart
+import kotlinx.coroutines.Deferred
+import kotlinx.coroutines.async
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -43,11 +50,16 @@ data class EstadoRuta(
     /** Lo que dice la DGT cerca de la ruta (30-10-2026): las ZBE con la ruta (los chips), las incidencias al abrir el mapa. */
     val incidencias: Incidencias? = null,
     val zbe: Zbe? = null,
+    /** LA INVITACIÓN TRAS LA PRIMERA ENTREGA (02-11-2026): el código de «Invita y gana» y la promoción, cargados una
+     *  vez (Repositorio.invitacion); null hasta tenerlos (sin red, la tarjeta no sale). */
+    val invitacion: Invitacion? = null,
 ) {
     val paradas get() = ruta?.pedidos.orEmpty()
     val pendientes get() = paradas.filter { it.pendiente }.sortedWith(compareBy<Parada>({ it.orden ?: Int.MAX_VALUE }, { it.cliente }))
     val hechas get() = paradas.filter { !it.pendiente }.sortedByDescending { it.cerradoEn ?: "" }
     val entregadas get() = paradas.count { it.estado == "entregado" }
+    /** Las entregas de verdad: sin las paradas de ejemplo («Verlo en acción»), que no cuentan para invitar ni para el bono. */
+    val entregadasReales get() = paradas.count { it.estado == "entregado" && !it.ejemplo }
 }
 
 /** Un aviso para la persona (abajo, como en cualquier app), con una acción opcional («Deshacer»). */
@@ -80,6 +92,13 @@ class RutaVM(app: Application) : AndroidViewModel(app) {
     private var cargadaEn = 0L
     private var mandando = 0
     private var refrescoPendiente = false      // un aviso llegó con algo en vuelo: se refresca al acabar
+    // EL PRIMER PAQUETE BIEN SITUADO (02-11-2026): lo probado con el móvil en esta sesión (Situar.clave), lo que se está
+    // buscando ahora (una búsqueda por parada: quien llega con una en marcha la espera, EnVuelo), lo añadido sin punto
+    // que quizá aún no está en la ruta cargada, y si la pasada de fondo va ya.
+    private val probadas = HashSet<String>()
+    private val enVuelo = EnVuelo<String, DelMovil>(viewModelScope)
+    private val recienSinSituar = ArrayDeque<Parada>()
+    private var fondoEnMarcha = false
 
     init {
         // Al momento, la ruta guardada en el móvil; después, la del servidor.
@@ -101,6 +120,9 @@ class RutaVM(app: Application) : AndroidViewModel(app) {
                 if (dentro) { _e.value = EstadoRuta(); cargar() } else _e.value = EstadoRuta()
             }
         }
+        // EL PRIMER PAQUETE BIEN SITUADO (02-11-2026): lo que se acaba de añadir (escáner, ficha) y el servidor no ha
+        // sabido situar se prueba con el móvil al momento, aunque aún no esté en la ruta que se ve.
+        viewModelScope.launch { repo.sinSituar.collect { p -> recienSinSituar.removeAll { it.id == p.id }; recienSinSituar.addLast(p); situarEnFondo() } }
     }
 
     /* EL BRIEFING POR VOZ (01-11-2026), como la web: cada vez que cambia la siguiente parada (se hizo la anterior, o se
@@ -136,6 +158,8 @@ class RutaVM(app: Application) : AndroidViewModel(app) {
                 val r = repo.miRuta()
                 _e.value = _e.value.copy(ruta = r, guardadaEn = null, cargando = false, refrescando = false, error = null)
                 if (!r.prueba && r.pedidos.any { it.pendiente }) { cargarZbe(); cargarIncidencias() }
+                pedirInvitacion()
+                situarEnFondo()
             } catch (e: ErrorApi) {
                 _e.value = if (_e.value.ruta != null && e.sinRed) {
                     _e.value.copy(cargando = false, refrescando = false, guardadaEn = _e.value.guardadaEn ?: System.currentTimeMillis())
@@ -200,6 +224,8 @@ class RutaVM(app: Application) : AndroidViewModel(app) {
                 val t = if (enviado) texto else "$texto " + tx("Sin cobertura: se envía solo al volver la red.")
                 _avisos.send(if (conDeshacer) Aviso(t, "Deshacer") { deshacer(p) } else Aviso(t))
                 if (enviado) refrescarSinRuido()
+                // La tarjeta de invitar sale con la primera entrega: si al abrir no había red para el enlace, ahora sí.
+                if (enviado && estado == "entregado") pedirInvitacion()
             } catch (e: ErrorApi) {
                 _e.value = _e.value.copy(ruta = antes)
                 _avisos.send(Aviso(e.message ?: tx("No se ha podido guardar")))
@@ -234,6 +260,17 @@ class RutaVM(app: Application) : AndroidViewModel(app) {
             } catch (e: ErrorApi) {
                 avisar(e.message ?: tx("No se ha podido guardar"))
             }
+        }
+    }
+
+    /** LA INVITACIÓN TRAS LA PRIMERA ENTREGA (02-11-2026): el enlace de «Invita y gana», solo para la cuenta de quien
+     *  reparte por su cuenta (la de empresa no tiene /referidos) y una sola vez: el Repositorio lo guarda en memoria.
+     *  Sin red, nada y sin aviso: la tarjeta no sale y se vuelve a pedir al cargar o al entregar. */
+    private fun pedirInvitacion() {
+        val r = _e.value.ruta ?: return
+        if (!r.autonomo || r.prueba || _e.value.invitacion != null) return
+        viewModelScope.launch {
+            repo.invitacion()?.let { i -> if (_e.value.invitacion == null) _e.value = _e.value.copy(invitacion = i) }
         }
     }
 
@@ -278,7 +315,111 @@ class RutaVM(app: Application) : AndroidViewModel(app) {
     fun refrescarSinRuido() {
         cargadaEn = System.currentTimeMillis()
         viewModelScope.launch {
-            runCatching { repo.miRuta() }.onSuccess { _e.value = _e.value.copy(ruta = it, guardadaEn = null, error = null) }
+            runCatching { repo.miRuta() }.onSuccess { _e.value = _e.value.copy(ruta = it, guardadaEn = null, error = null); situarEnFondo() }
+        }
+    }
+
+    /* EL PRIMER PAQUETE BIEN SITUADO (02-11-2026). Dani: «el primer paquete que escaneo no encuentra la dirección y
+       tiene que ir por Maps». Lo que el servidor no sitúa se prueba con el geocodificador del móvil (GeoMovil, el de
+       Google en casi todos): en segundo plano al cargar la ruta y al añadir una parada (de una en una, como mucho
+       Situar.TOPE_FONDO cada vez, cada parada una sola vez por sesión con esa dirección, y nunca con un cambio de
+       estado en vuelo, la ruta ordenándose o algo de esa parada esperando a salir), y al pulsar «Navegar». El PORTAL
+       que el móvil acierta se guarda en el servidor (geo_origen «movil»); la calle sola no (revisión del 02-11-2026:
+       el servidor la dejaría «manual», como la puerta), y lo que no encuentra se sitúa a mano (SituarPantalla). Lo
+       que guardan está arriba, antes del init. */
+    private fun paisRuta(): String = _e.value.ruta?.pais?.takeIf { it.isNotBlank() } ?: repo.paisDelMovil() ?: "es"
+
+    /** La parada con su punto nuevo en la ruta que se ve, sin volver a pedirla (no pisa lo que va de camino); si aún no
+     *  estaba (recién añadida), la ruta se vuelve a leer cuando no haya nada en vuelo. Con la dirección que «Es aquí»
+     *  haya cambiado (03-11-2026: Situar.conPuntoDe). */
+    private fun poner(p: Parada) {
+        val r = _e.value.ruta ?: return
+        if (r.pedidos.none { it.id == p.id }) { if (mandando == 0) refrescarSinRuido() else refrescoPendiente = true; return }
+        _e.value = _e.value.copy(ruta = r.copy(pedidos = r.pedidos.map { if (it.id == p.id) Situar.conPuntoDe(it, p) else it }))
+    }
+
+    /** Lo que saca el móvil de una parada sin situar (02-11-2026). */
+    sealed interface DelMovil {
+        /** El portal (el número de la etiqueta, en esa calle y en ese sitio: Situar.aceptar), guardado y en la ruta. */
+        data class Portal(val parada: Parada) : DelMovil
+        /** Solo la calle: NO se guarda (revisión A2: el servidor la dejaría «manual», como la puerta, y la guía
+         *  llevaría al medio de la calle sin avisar); al navegar se ofrece la primera en «Situar la parada». */
+        data class SoloCalle(val sugerencia: Sugerencia) : DelMovil
+        /** No la encuentra, lo que contesta no es esa calle o ese sitio, o no se ha podido guardar. */
+        data object Nada : DelMovil
+        /** Sin respuesta (sin red o sin geocodificador): no cuenta como probada y se vuelve a probar más tarde. */
+        data object SinRespuesta : DelMovil
+    }
+
+    /** Prueba el geocodificador del móvil con una parada sin situar (Situar.aceptar). El portal se guarda con
+     *  geo_origen «movil» y se pone en la ruta; la calle sola se devuelve sin guardar. Si esa parada ya se está
+     *  buscando (la pasada de fondo), se espera a esa búsqueda (revisión A7: «Navegar» abría «Situar» y, un segundo
+     *  después, el móvil la situaba debajo). */
+    suspend fun situarConMovil(p: Parada): DelMovil =
+        if (!GeoMovil.hay()) DelMovil.SinRespuesta else enVuelo.una(p.id) { buscarConMovil(p) }
+
+    private suspend fun buscarConMovil(p: Parada): DelMovil {
+        try {
+            val antes = repo.cambiosDe(p.id)
+            val ruta = _e.value.ruta
+            val pais = paisRuta()
+            val dice = GeoMovil.paraParada(getApplication(), p, pais, Situar.cerca(p, ruta?.base),
+                Situar.dondeReparte(p, ruta?.base, _e.value.paradas))
+            // Sin respuesta (sin red) no cuenta como probada: se vuelve a probar en la próxima carga.
+            if (dice is GeoMovil.Respuesta.SinRespuesta) return DelMovil.SinRespuesta
+            probadas += Situar.clave(p)
+            val (r, precision) = (dice as? GeoMovil.Respuesta.Situada)?.let { it.r to it.precision } ?: return DelMovil.Nada
+            if (precision != "portal") return Situar.deMovil(r, pais, p.direccion, p.cp, p.localidad)?.let { DelMovil.SoloCalle(it) } ?: DelMovil.Nada
+            return when (val s = repo.situar(p.id, r.lat, r.lng, "movil", p.cliente.ifBlank { p.direccion }, siNoCambia = antes)) {
+                is Repositorio.Situado.Hecha -> { poner(s.parada); DelMovil.Portal(s.parada) }
+                Repositorio.Situado.EnElMovil -> Repositorio.conPunto(p, r.lat, r.lng, "movil").let { poner(it); DelMovil.Portal(it) }
+                Repositorio.Situado.NoGuardado -> DelMovil.Nada
+            }
+        } catch (_: ErrorApi) {
+            return DelMovil.Nada
+        }
+    }
+
+    /** «Es aquí» en «Situar la parada»: el punto se guarda en el servidor y se pone en la ruta; sin red se queda en el
+     *  móvil (sale solo al volver la red) y la ruta ya la ve situada. `cambio` (Situar.esAqui, 03-11-2026): la precisión
+     *  «calle» (la calle sin el portal, «aprox» y no «manual») y, si la sugerencia elegida la cambia, la dirección nueva
+     *  con su CP y su población, que van con el punto (también en la cola) y se ven ya en la ruta. Lo que el servidor
+     *  rechace, como ErrorApi. */
+    suspend fun guardarPunto(p: Parada, lat: Double, lng: Double, origen: String, cambio: Situar.Cambio = Situar.Cambio()): Repositorio.Situado {
+        probadas += Situar.clave(p)
+        val s = repo.situar(p.id, lat, lng, origen, p.cliente.ifBlank { p.direccion }, precision = cambio.precision,
+            direccion = cambio.direccion, cp = cambio.cp, localidad = cambio.localidad)
+        when (s) {
+            is Repositorio.Situado.Hecha -> poner(s.parada)
+            Repositorio.Situado.EnElMovil -> poner(Situar.situada(p, lat, lng, origen, cambio))
+            Repositorio.Situado.NoGuardado -> Unit
+        }
+        return s
+    }
+
+    /** En segundo plano y sin molestar: las recién añadidas sin punto y las pendientes sin punto de la ruta (sin las de
+     *  geo «pendiente», que aún está ubicando el servidor: Situar.porSituar). Solo se guarda el portal. */
+    private fun situarEnFondo() {
+        if (fondoEnMarcha || !GeoMovil.hay()) return
+        fondoEnMarcha = true
+        viewModelScope.launch {
+            try {
+                var hechas = 0
+                while (hechas < Situar.TOPE_FONDO) {
+                    if (mandando > 0 || _e.value.ocupado.isNotEmpty()) break
+                    val actuales = _e.value.paradas.associateBy { it.id }
+                    val candidatas = recienSinSituar.map { actuales[it.id] ?: it } + _e.value.paradas
+                    val ocupadas = repo.pendientes.value.map { it.id }.toSet() + enVuelo.claves
+                    val p = Situar.porSituar(candidatas, probadas, ocupadas, tope = 1).firstOrNull() ?: break
+                    recienSinSituar.removeAll { it.id == p.id }
+                    hechas += 1
+                    if (situarConMovil(p) == DelMovil.SinRespuesta) break   // sin red: las demás, en la próxima carga
+                    probadas += Situar.clave(p)               // aunque fallara al guardar: una vez por sesión
+                }
+                recienSinSituar.removeAll { r -> _e.value.paradas.any { it.id == r.id && !Situar.sinSituar(it) } || Situar.clave(r) in probadas }
+            } finally {
+                fondoEnMarcha = false
+            }
         }
     }
 
@@ -312,5 +453,24 @@ class RutaVM(app: Application) : AndroidViewModel(app) {
             val t = runCatching { repo.trazado(lat, lng) }.getOrNull() ?: return@launch
             _e.value = _e.value.copy(trazado = t.linea.mapNotNull { if (it.size >= 2) it[0] to it[1] else null })
         }
+    }
+}
+
+/** UNA BÚSQUEDA POR PARADA (02-11-2026, revisión A7): quien llega con una en marcha (pulsar «Navegar» mientras la
+ *  pasada de fondo busca esa misma parada) espera esa, en vez de darla por no encontrada o de empezar otra. Todo en el
+ *  hilo principal (el de viewModelScope y el de la pantalla): sin candados. La búsqueda va en `ambito`, no en quien
+ *  la pide: si este se va (se cierra la pantalla), la búsqueda acaba igual y guarda lo que encuentre. */
+internal class EnVuelo<K, V>(private val ambito: CoroutineScope) {
+    private val enMarcha = HashMap<K, Deferred<V>>()
+
+    /** Lo que se está buscando ahora mismo. */
+    val claves: Set<K> get() = enMarcha.keys.toSet()
+
+    suspend fun una(clave: K, buscar: suspend () -> V): V {
+        // LAZY: se apunta antes de empezar, y así lo de quitarla al acabar no puede ir antes que lo de apuntarla.
+        val d = enMarcha[clave] ?: ambito.async(start = CoroutineStart.LAZY) {
+            try { buscar() } finally { enMarcha.remove(clave) }
+        }.also { enMarcha[clave] = it }
+        return d.await()
     }
 }

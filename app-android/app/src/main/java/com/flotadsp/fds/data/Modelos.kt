@@ -77,9 +77,17 @@ data class Parada(
     val valoracion: Valoracion? = null,
     /** Minutos que se llega tarde a su horario, según la ruta ordenada. */
     @SerialName("tarde_min") val tardeMin: Int? = null,
+    /** EL PRIMER PAQUETE BIEN SITUADO (02-11-2026): de dónde salió el punto puesto desde la app («mapa», «movil» o
+     *  «sugerencia»), y el centro de la zona (el CP o el pueblo) cuando el servidor solo encontró eso: geo «zona» va SIN
+     *  lat/lng (la 2.4.4 y anteriores guiarían al centro del código postal como si fuera la puerta) y sirve para ordenar
+     *  la ruta y para centrar el mapa de «Situar la parada». */
+    @SerialName("geo_origen") val geoOrigen: String? = null,
+    @SerialName("zona_lat") val zonaLat: Double? = null,
+    @SerialName("zona_lng") val zonaLng: Double? = null,
 ) {
     val pendiente get() = estado == "pendiente" || estado == "en_ruta"
-    val ubicada get() = lat != null && lng != null
+    /** Con punto para navegar. Una en «zona» nunca, aunque un servidor le pusiera lat/lng: sería el centro del CP. */
+    val ubicada get() = lat != null && lng != null && geo != "zona"
     val porCobrar get() = (cobrar ?: 0.0) > 0.0
     val cargada get() = !cargadoEn.isNullOrBlank()
 }
@@ -280,6 +288,9 @@ data class DireccionConocida(
     val cliente: String = "",
     val telefono: String = "",
     val veces: Int = 0,
+    /** LAS SUYAS CON SU PRECISIÓN (03-11-2026): «calle» si la última vez quedó en la calle sin el portal (geo «aprox»),
+     *  «portal» si en la puerta. Un servidor de antes no lo manda (""): «portal», como hasta ahora (Situar.alElegir). */
+    val precision: String = "",
 )
 
 @Serializable
@@ -312,6 +323,29 @@ data class Referidos(
     val premiados: Int = 0,
     val saldo: Int = 0,
     @SerialName("por_invitado") val porInvitado: Int = 0,
+    /** La vara del premio (02-11-2026): entregas reales en días distintos; el servidor las manda con /referidos. */
+    @SerialName("entregas_cartera") val entregasCartera: Int = 20,
+    @SerialName("dias_distintos") val diasDistintos: Int = 2,
+    /** Solo mientras dura la promoción (el servidor no lo manda después): el invitado también gana su bono. */
+    @SerialName("promo_hasta") val promoHasta: String? = null,
+    val bono: Bono? = null,
+)
+
+/** LA INVITACIÓN TRAS LA PRIMERA ENTREGA (02-11-2026): lo que hace falta para el mensaje de «Invita y gana» desde
+ *  Hoy: el código del enlace (y la vara del premio) y hasta cuándo es gratis el plan (/billing/planes). */
+data class Invitacion(val referidos: Referidos, val gratisHasta: String? = null)
+
+/** EL PRIMER PAQUETE BIEN SITUADO (02-11-2026): un sitio que propone POST /reparto/ubicar para una dirección.
+ *  `precision`: «portal», «calle» o «zona» (solo el CP o el pueblo). */
+@Serializable
+data class CandidatoUbicar(val lat: Double? = null, val lng: Double? = null, val precision: String? = null, val direccion: String? = null)
+
+/** Lo que contesta POST /reparto/ubicar (no guarda nada): dónde cae la dirección, con qué precisión, los candidatos
+ *  (el mejor primero, como mucho 6) y de dónde salen los datos, que hay que enseñar (CartoCiudad es CC BY 4.0). */
+@Serializable
+data class Ubicado(
+    val encontrada: Boolean = false, val lat: Double? = null, val lng: Double? = null, val precision: String? = null,
+    val direccion: String? = null, val candidatos: List<CandidatoUbicar> = emptyList(), val atribucion: String? = null,
 )
 
 /* Los ajustes se guardan ENTEROS (PUT /reparto/ajustes sustituye todo): se guarda el objeto tal cual vino. */

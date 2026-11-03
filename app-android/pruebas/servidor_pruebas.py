@@ -8,9 +8,12 @@ autónomo y una ruta de hoy en A Coruña. El emulador de Android llega al PC por
     cd app-android && ./gradlew installDebug -PapiUrl=http://10.0.2.2:8787/api/
 
 Cuenta de prueba: la de PRUEBA_CORREO / PRUEBA_CLAVE de abajo (solo existe en este servidor, en memoria).
-No manda correos ni avisos (sin claves de correo) y no arranca las tareas de fondo (lifespan="off")."""
+No manda correos ni avisos (sin claves de correo) y no arranca las tareas de fondo (lifespan="off"). Las direcciones
+sembradas salen de PUNTOS, sin red; las demás, de la cadena de verdad (geocodificador.py: CartoCiudad, Photon y
+Nominatim, por Internet), como en producción."""
 import asyncio
 import os
+import re
 import sys
 import uuid
 from datetime import datetime, timedelta, timezone
@@ -55,7 +58,7 @@ async def _enviado(*a, **k):
 
 server._enviar_email = lambda *a, **k: _enviado()      # «enviado» sin mandar nada: el vínculo del correo personal lo exige
 
-# Las direcciones de la ruta de prueba, con su punto (el buscador de verdad no hace falta para probar la app).
+# Las direcciones de la ruta de prueba, con su punto (para sembrarlas no hace falta el buscador de verdad).
 PUNTOS = {
     "sinfónica de galicia 8": (43.363889, -8.409899), "emilia pardo bazán 14": (43.363999, -8.407109),
     "marcial del adalid 5": (43.36219, -8.407002), "san andrés 30": (43.3713, -8.4007), "real 5": (43.3712, -8.3990),
@@ -66,14 +69,31 @@ PUNTOS = {
 }
 
 
-async def ubicar(direccion, cp="", localidad="", base=None):
+async def ubicar(direccion, cp="", localidad="", base=None, cerca=None):
+    """El punto de una dirección sembrada (PUNTOS), o None. Por palabras enteras (02-11-2026): «Rúa Real 50» no es la
+    sembrada «real 5»."""
     d = (direccion or "").lower()
     for k, v in PUNTOS.items():
-        if k in d:
+        if re.search(r"(?<!\w)" + re.escape(k) + r"(?!\w)", d):
             return v
     return None
 
-server._rep_ubicar = ubicar
+
+# LO QUE NO ESTÁ SEMBRADO, CON LA CADENA DE VERDAD (02-11-2026, la prueba del emulador). Antes _rep_ubicar era solo
+# `ubicar` y una dirección nueva nunca quedaba situada por el servidor, aunque POST /reparto/ubicar (que va por la
+# cadena de verdad) la diera por buena: la ficha decía «En el mapa» y, al guardar, la parada quedaba «Sin ubicar», una
+# incoherencia que en producción no existe. Ahora lo sembrado sale de PUNTOS y lo demás de geocodificador.py, con
+# nuestro User-Agent y CartoCiudad de una en una y a 2 por segundo como mucho (Photon ya va a 2/s y Nominatim a 1/s).
+_ubicar_de_verdad = server._rep_ubicar
+_red = server.geocodificador.RedHttp("FDS/1.0 (pruebas)", registro=server.logger)
+_red.SERVICIOS = {**_red.SERVICIOS, "cartociudad": {**_red.SERVICIOS["cartociudad"], "a_la_vez": 1, "intervalo": 0.5}}
+server._REP_GEO_RED = _red
+
+
+async def ubicar_o_buscar(direccion, cp="", localidad="", base=None, cerca=None):
+    return await ubicar(direccion) or await _ubicar_de_verdad(direccion, cp, localidad, base, cerca)
+
+server._rep_ubicar = ubicar_o_buscar
 
 
 async def matriz(puntos):

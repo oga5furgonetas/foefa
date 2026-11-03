@@ -245,6 +245,8 @@ fun ParadaHoja(
     alRepetirFoto: () -> Unit = {},
     /** LA MEMORIA DE LA CALLE (01-11-2026): «Guardar para la próxima» en esta puerta. */
     alMemoria: () -> Unit = {},
+    /** EL PRIMER PAQUETE BIEN SITUADO (02-11-2026): sin punto en el mapa, «Situar» la pone a mano. */
+    alSituar: () -> Unit = {},
 ) {
     val ctx = LocalContext.current
     var quitar by remember { mutableStateOf(false) }
@@ -257,7 +259,8 @@ fun ParadaHoja(
                 .filter { it.isNotBlank() }.joinToString(", "),
                 style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
             Spacer(Modifier.height(8.dp))
-            Etiquetas(p)
+            Etiquetas(p, avisoAparte = true)
+            if (Situar.sinSituar(p)) { Spacer(Modifier.height(8.dp)); AvisoSinSituar(alSituar) }
             val datos = listOfNotNull(
                 p.telefono.takeIf { it.isNotBlank() }?.let { tx("Teléfono: {x}", "x" to it) },
                 p.codigo.takeIf { it.isNotBlank() }?.let { tx("Código: {x}", "x" to it) },

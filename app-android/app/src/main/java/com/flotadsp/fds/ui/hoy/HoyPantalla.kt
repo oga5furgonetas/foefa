@@ -2,7 +2,6 @@ package com.flotadsp.fds.ui.hoy
 
 import com.flotadsp.fds.ui.tx
 import android.Manifest
-import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedVisibility
@@ -38,11 +37,13 @@ import androidx.compose.material.icons.filled.CloudOff
 import androidx.compose.material.icons.filled.ExpandLess
 import androidx.compose.material.icons.filled.ExpandMore
 import androidx.compose.material.icons.filled.Inventory2
+import androidx.compose.material.icons.filled.LocationOff
 import androidx.compose.material.icons.filled.Map
 import androidx.compose.material.icons.filled.Navigation
 import androidx.compose.material.icons.filled.QrCodeScanner
 import androidx.compose.material.icons.filled.Route
 import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.filled.Share
 import androidx.compose.material.icons.filled.LocalShipping
 import androidx.compose.material.icons.automirrored.filled.VolumeUp
 import androidx.compose.material.icons.filled.ChevronRight
@@ -91,10 +92,15 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.repeatOnLifecycle
+import com.flotadsp.fds.BuildConfig
 import com.flotadsp.fds.FdsApp
 import com.flotadsp.fds.data.Bono
+import com.flotadsp.fds.data.ErrorApi
 import com.flotadsp.fds.data.Furgo
+import com.flotadsp.fds.data.Invitacion
 import com.flotadsp.fds.data.Parada
+import com.flotadsp.fds.data.Referidos
+import com.flotadsp.fds.data.Repositorio
 import com.flotadsp.fds.ui.Acciones
 import com.flotadsp.fds.ui.Voz
 import com.flotadsp.fds.ui.LocalExtra
@@ -102,6 +108,7 @@ import com.flotadsp.fds.ui.Region
 import com.flotadsp.fds.ui.TextoNumero
 import com.flotadsp.fds.ui.LOCALE_APP
 import com.flotadsp.fds.ui.patronFecha
+import com.flotadsp.fds.ui.parada.Sugerencia
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import java.time.LocalDate
@@ -136,7 +143,19 @@ fun HoyPantalla(
     var avisando by remember { mutableStateOf(false) }               // «Avisar a todos por WhatsApp» (01-11-2026)
     val avisados by vm.avisados.collectAsState()
     val prefijo = e.ruta?.prefijo ?: "34"
+    val paisMovil = remember { app.repo.paisDelMovil() ?: "es" }
+    val pais = e.ruta?.pais?.takeIf { it.isNotBlank() } ?: paisMovil
     val empresa = e.ruta?.takeIf { !it.autonomo }?.empresa.orEmpty()
+    // LA INVITACIÓN TRAS LA PRIMERA ENTREGA (02-11-2026): con la cuenta de quien reparte por su cuenta y ≥1 entrega hoy,
+    // la tarjeta de «Invita y gana» debajo de la siguiente parada (o de «Ruta terminada»); «Ahora no» la quita ese día.
+    val invitarOculto by app.cuenta.invitarOculto.collectAsState()
+    val diaRuta = e.ruta?.fecha?.takeIf { it.isNotBlank() } ?: LocalDate.now().toString()
+    val invitacion = e.invitacion?.takeIf { Invitar.seEnsena(e.ruta, e.entregadasReales, it.referidos.codigo, invitarOculto, diaRuta) }
+    val textoInvitar: (Invitacion) -> String = { i ->
+        // Lo que gana el invitado con su primera ruta, solo mientras dura la promoción (promo_hasta viene solo entonces).
+        val bono = if (i.referidos.promoHasta != null) (e.ruta?.bono?.cent ?: i.referidos.bono?.cent ?: Invitar.BONO_CENT) else 0
+        Invitar.texto(Invitar.enlace(BuildConfig.WEB_URL, i.referidos.codigo), fechaGratis(i.gratisHasta), bono, i.referidos.porInvitado)
+    }
 
     LaunchedEffect(Unit) { vm.vista("/ruta") }
     // LA RUTA SE REFRESCA SOLA (01-11-2026): al volver a primer plano y cada minuto mientras esta pantalla se ve
@@ -179,26 +198,63 @@ fun HoyPantalla(
         if (p.porCobrar) entregando = p else vm.entregar(p)
     }
 
-    // LA GUÍA DENTRO DE LA APP (01-11-2026): «Navegar» con «Esta app» abre la guía (GuiaPantalla) a esa parada; una
-    // parada sin situar en el mapa no se puede guiar y va a Google Maps, avisando. Con Google Maps o Waze elegidos,
-    // como siempre. La guía va a la parada elegida y, al entregarla, sigue sola con la primera pendiente situada.
+    // LA GUÍA DENTRO DE LA APP (01-11-2026): «Navegar» con «Esta app» abre la guía (GuiaPantalla) a esa parada; con
+    // Google Maps o Waze elegidos, como siempre.
+    // EL PRIMER PAQUETE BIEN SITUADO (02-11-2026): una parada sin situar ya NO se manda a Google Maps (Dani: «eso es un
+    // pedazo de mierda, hazlo bien»). Primero el geocodificador del móvil, con «Buscando la dirección…» y sin bloquear
+    // la pantalla: si acierta, se guarda (geo_origen «movil») y se va. Si no, «Situar la parada» (SituarPantalla), con
+    // Google Maps solo en su botón pequeño. Igual desde la ficha, el mapa y la guía al pasar sola a la siguiente.
+    // Revisión del 02-11-2026: solo el PORTAL del móvil se guarda y se va; la calle sola abre «Situar» con ella la
+    // primera (A2), y si la pasada de fondo ya está buscando esa parada, se espera a esa búsqueda (A7).
     var guiando by remember { mutableStateOf<String?>(null) }
-    val objetivo = guiando?.let { id -> e.pendientes.firstOrNull { it.id == id } ?: e.pendientes.firstOrNull { it.ubicada } }
-    // Se cierra sola cuando no queda nada que guiar. La parada elegida NO se re-apunta a la siguiente: si la entrega se
-    // deshace o el servidor la rechaza, vuelve a estar pendiente y la guía vuelve a ella (01-11-2026, revisión).
-    LaunchedEffect(objetivo == null) { if (objetivo == null) guiando = null }
+    var buscandoDe by remember { mutableStateOf<String?>(null) }    // «Buscando la dirección…» de esta parada
+    var situando by remember { mutableStateOf<Parada?>(null) }       // la pantalla «Situar la parada»
+    var primeraSituar by remember { mutableStateOf<Sugerencia?>(null) }   // lo que encontró el móvil (solo la calle)
+    var guardandoPunto by remember { mutableStateOf(false) }
+    var errorPunto by remember { mutableStateOf<String?>(null) }
+    // La parada recién situada, hasta que la ruta que se ve (estado del VM) la traiga ya con su punto: sin esto, en el
+    // fotograma entre medias la guía la vería aún sin situar y volvería a buscarla.
+    var recien by remember { mutableStateOf<Parada?>(null) }
+    val fuera = if (navegarCon == "waze") "waze" else "google"
+    val nombreFuera = if (fuera == "waze") "Waze" else "Google Maps"
+    val situar: (Parada) -> Unit = { p -> errorPunto = null; primeraSituar = null; situando = p }
+    /** Con la parada ya situada: nuestra guía, o el navegador elegido. */
+    val ir: (Parada) -> Unit = { p -> if (navegarCon == "app") { recien = p; guiando = p.id } else Acciones.navegar(ctx, p, navegarCon) }
     val navegarA: (Parada) -> Unit = { p ->
         when {
-            navegarCon != "app" -> Acciones.navegar(ctx, p, navegarCon)
-            // Una parada ya cerrada (reintentar una fallida al final del día) no se puede guiar: el servidor la
-            // rechaza y la guía se iría a otra. Fuera, como siempre.
-            !p.pendiente -> Acciones.navegar(ctx, p, "google")
-            p.ubicada -> guiando = p.id
+            // Una parada ya cerrada (reintentar una fallida al final del día) no se guía ni se sitúa: el servidor no lo
+            // deja. Fuera, como siempre.
+            !p.pendiente -> Acciones.navegar(ctx, p, fuera)
+            p.ubicada -> ir(p)
+            buscandoDe != null -> Unit
             else -> {
-                Toast.makeText(ctx, tx("Esta parada no está situada en el mapa: se abre en Google Maps."), Toast.LENGTH_LONG).show()
-                Acciones.navegar(ctx, p, "google")
+                buscandoDe = p.id
+                ambito.launch {
+                    val r = vm.situarConMovil(p)
+                    buscandoDe = null
+                    when (r) {
+                        is RutaVM.DelMovil.Portal -> ir(r.parada)
+                        is RutaVM.DelMovil.SoloCalle -> { situar(p); primeraSituar = r.sugerencia }
+                        else -> situar(p)
+                    }
+                }
             }
         }
+    }
+    // La guía va a la parada elegida y, al entregarla, a la siguiente por entregar (en orden); si esa no está situada,
+    // se cierra y se busca como al pulsar «Navegar». Se cierra sola cuando no queda nada. La elegida NO se re-apunta a
+    // la siguiente: si la entrega se deshace o el servidor la rechaza, vuelve a estar pendiente y la guía vuelve a ella
+    // (01-11-2026, revisión).
+    val siguienteGuia = guiando?.let { id ->
+        e.pendientes.firstOrNull { it.id == id }?.let { p -> recien?.takeIf { r -> r.id == p.id && r.ubicada && !p.ubicada } ?: p }
+            ?: e.pendientes.firstOrNull()
+    }
+    val objetivo = siguienteGuia?.takeIf { it.ubicada }
+    LaunchedEffect(siguienteGuia?.id, objetivo == null) {
+        val s = siguienteGuia
+        if (guiando == null) return@LaunchedEffect
+        if (s == null) guiando = null
+        else if (objetivo == null) { guiando = null; navegarA(s) }
     }
 
     val barra = TopAppBarDefaults.enterAlwaysScrollBehavior()
@@ -249,7 +305,7 @@ fun HoyPantalla(
                 verMapa -> MapaRuta(e.pendientes, e.ruta?.base, trazado = e.trazado, hechas = e.paradas.filter { !it.pendiente },
                     incidencias = e.incidencias?.incidencias.orEmpty(), zbe = e.zbe?.zonas.orEmpty(), enZbe = e.zbe?.paradas?.keys.orEmpty(),
                     fuente = e.incidencias?.fuente.orEmpty(), tipoZona = e.zbe?.tipo ?: "ZBE",
-                    furgo = furgo, alNavegar = navegarA, alTocar = { abierta = it },
+                    furgo = furgo, alNavegar = navegarA, alTocar = { abierta = it }, alSituar = situar,
                     alAparcarEn = { lat, lng -> ambito.launch { app.cuenta.aparcar(lat, lng) } },
                     alQuitarFurgo = { ambito.launch { app.cuenta.quitarFurgo() } }, modifier = Modifier.fillMaxSize())
                 else -> LazyColumn(
@@ -281,16 +337,27 @@ fun HoyPantalla(
                     val previas = e.ruta?.previas ?: 0
                     if (previas > 0) item(key = "previas") { Previas(previas, alTraer = { vm.traerPrevias() }) }
                     e.ruta?.bono?.takeIf { !it.pagado || it.nuevo }?.let { b -> item(key = "bono") { BonoCard(b) } }
+                    // LA INVITACIÓN TRAS LA PRIMERA ENTREGA (02-11-2026): debajo de «Ruta terminada» o de la siguiente
+                    // parada, nunca encima de ellas: lo primero sigue siendo repartir.
+                    fun tarjetaInvitar() = invitacion?.let { i ->
+                        item(key = "invitar") {
+                            InvitarCard(i.referidos,
+                                alWhatsapp = { Acciones.whatsappLibre(ctx, textoInvitar(i)) },
+                                alCompartir = { Acciones.compartir(ctx, textoInvitar(i)) },
+                                alAhoraNo = { ambito.launch { app.cuenta.ocultarInvitar(diaRuta) } })
+                        }
+                    }
                     if (e.paradas.isEmpty()) {
                         item { Vacia(alEscanear, alAnadir) }
                     } else if (e.pendientes.isEmpty()) {
                         item { Terminada(e.entregadas, e.paradas.size) }
+                        tarjetaInvitar()
                     }
                     e.pendientes.firstOrNull()?.let { sig ->
                         item(key = "sig-${sig.id}") {
                             Siguiente(
                                 p = sig, numero = sig.orden ?: 1, enZbe = e.zbe?.paradas?.get(sig.id)?.tipo.orEmpty(),
-                                alNavegar = { navegarA(sig) },
+                                alNavegar = { navegarA(sig) }, buscando = buscandoDe == sig.id, alSituar = { situar(sig) },
                                 alLlamar = { vm.apuntar(sig, "llamada"); Acciones.llamar(ctx, sig.telefono) },
                                 alWhatsapp = { vm.apuntar(sig, "whatsapp"); Acciones.whatsapp(ctx, sig.telefono, prefijo, textoWhatsapp(sig, empresa)) },
                                 alEntregar = { entregarRapido(sig) },
@@ -299,6 +366,7 @@ fun HoyPantalla(
                                 alEscuchar = { Voz.decir(ctx, Briefing.texto(sig)) },
                             )
                         }
+                        tarjetaInvitar()
                     }
                     val resto = e.pendientes.drop(1)
                     if (resto.isNotEmpty()) {
@@ -316,7 +384,8 @@ fun HoyPantalla(
                         if (visibles.isEmpty()) item { Text(tx("Nada con «{q}» en las paradas pendientes.", "q" to buscar), style = MaterialTheme.typography.bodyMedium, modifier = Modifier.padding(8.dp)) }
                         items(visibles, key = { it.value.id }) { iv ->
                             val p = iv.value
-                            Fila(p, numero = p.orden ?: (if (hayOrden) null else iv.index + 2), enZbe = e.zbe?.paradas?.get(p.id)?.tipo.orEmpty(), alTocar = { abierta = p })
+                            Fila(p, numero = p.orden ?: (if (hayOrden) null else iv.index + 2), enZbe = e.zbe?.paradas?.get(p.id)?.tipo.orEmpty(), alTocar = { abierta = p },
+                                alSituar = { situar(p) })
                         }
                     }
                     if (e.hechas.isNotEmpty()) {
@@ -324,6 +393,7 @@ fun HoyPantalla(
                     }
                 }
             }
+            if (buscandoDe != null) Buscando(Modifier.align(Alignment.TopCenter).padding(top = 8.dp))
         }
     }
 
@@ -340,6 +410,7 @@ fun HoyPantalla(
             alApuntar = { vm.apuntar(p, it) },
             alRepetirFoto = { abierta = null; vm.pedirRevisar(p) },
             alMemoria = { abierta = null; memoriaDe = p },
+            alSituar = { abierta = null; situar(p) },
         )
     }
     entregando?.let { p ->
@@ -357,6 +428,54 @@ fun HoyPantalla(
     }
     // LA ENTREGA VERIFICADA (01-11-2026): la IA pide mirar la foto que se acaba de hacer (o la de una entregada, desde su ficha).
     revisar?.let { r -> RevisarFotoDialogo(r, alRepetir = { vm.repetirFoto(r, it) }, alCerrar = { vm.revisado() }) }
+    // «Situar la parada» (02-11-2026): «Es aquí» guarda el punto (sin red, en el móvil) y abre la guía.
+    situando?.let { p0 ->
+        val p = e.paradas.firstOrNull { it.id == p0.id } ?: p0
+        val base = e.ruta?.base
+        SituarPantalla(
+            direccion = p.direccion, cp = p.cp, localidad = p.localidad, cliente = p.cliente,
+            inicio = Situar.centro(p, base, e.paradas), pais = pais,
+            cerca = Situar.dondeReparte(p, base, e.paradas).firstOrNull(),
+            primera = primeraSituar,
+            textoFuera = tx("Abrir en {app}", "app" to nombreFuera),
+            onFuera = { situando = null; Acciones.navegar(ctx, p, fuera) },
+            ocupado = guardandoPunto, error = errorPunto,
+            onCerrar = { situando = null; errorPunto = null; primeraSituar = null },
+            onElegir = { punto, origen, sugerida ->
+                guardandoPunto = true; errorPunto = null
+                // UN SOLO SITIO QUE DECIDE (03-11-2026, visto en el emulador: «Rúa Brétema, 15179 Oleiros · Otra calle» +
+                // «Es aquí» dejaba la parada en «Rúa Brétema Mariñeira 23, 15011 A Coruña» con el punto de Oleiros, y la
+                // guía llevaba a Oleiros). Con la chincheta donde la puso una sugerencia, la regla de Situar.alElegir con la
+                // dirección GUARDADA de la parada (no lo escrito en el buscador de «Situar»): «calle» si sale la calle (el
+                // servidor la deja «aprox») y, si cambia, la dirección nueva con su CP y su población, que se guardan con
+                // el punto (sin red, también: van en la cola). Movida a mano, la puerta y la dirección de siempre. Con el CP
+                // y la población guardados de la parada (03-11-2026): la misma calle en otro sitio es otra calle.
+                val cambio = Situar.esAqui(p.direccion, origen, sugerida, p.cp, p.localidad)
+                ambito.launch {
+                    try {
+                        when (val s = vm.guardarPunto(p, punto.lat, punto.lng, origen, cambio)) {
+                            is Repositorio.Situado.Hecha -> { situando = null; ir(s.parada) }
+                            Repositorio.Situado.EnElMovil -> {
+                                situando = null
+                                vm.avisar(tx("Sin conexión: el punto queda guardado en el móvil y se envía al volver la red."))
+                                ir(Situar.situada(p, punto.lat, punto.lng, origen, cambio))
+                            }
+                            // Un servidor anterior a esto no guarda el punto: al menos se va a ese punto, no a la dirección.
+                            Repositorio.Situado.NoGuardado -> {
+                                situando = null
+                                vm.avisar(tx("No se ha podido guardar el punto en el servidor: se abre en {app}.", "app" to nombreFuera))
+                                Acciones.navegar(ctx, Situar.situada(p, punto.lat, punto.lng, origen, cambio), fuera)
+                            }
+                        }
+                    } catch (er: ErrorApi) {
+                        errorPunto = er.message ?: tx("No se ha podido guardar")
+                    } finally {
+                        guardandoPunto = false
+                    }
+                }
+            },
+        )
+    }
     // La guía, encima de todo (una ventana propia); las hojas de entregar y de no entregado se abren encima de ella.
     objetivo?.let { p ->
         GuiaPantalla(
@@ -374,6 +493,11 @@ fun HoyPantalla(
  *  con el móvil en otro huso, la cabecera decía un día y la lista era de otro (visto en el emulador). */
 private fun fechaLarga(fecha: String?): String =
     (fecha?.let { runCatching { LocalDate.parse(it) }.getOrNull() } ?: LocalDate.now()).format(DateTimeFormatter.ofPattern(patronFecha("EEEE, d 'de' MMMM"), LOCALE_APP)).replaceFirstChar { it.uppercase() }
+
+/** «31 de diciembre» en el idioma de la app, para el mensaje de invitar (02-11-2026): hasta cuándo es gratis y sin
+ *  límite el plan (/billing/planes). Null si no hay promoción o ya pasó: el mensaje dice entonces «pruébala gratis». */
+private fun fechaGratis(iso: String?): String? = iso?.let { runCatching { LocalDate.parse(it) }.getOrNull() }
+    ?.takeIf { !LocalDate.now().isAfter(it) }?.format(DateTimeFormatter.ofPattern(patronFecha("d 'de' MMMM"), LOCALE_APP))
 
 @Composable
 private fun Titulo(t: String) {
@@ -498,6 +622,36 @@ private fun Resumen(
     }
 }
 
+/** «Buscando la dirección…» (02-11-2026): el geocodificador del móvil trabajando tras pulsar «Navegar»; no bloquea. */
+@Composable
+private fun Buscando(modifier: Modifier) {
+    Surface(color = MaterialTheme.colorScheme.inverseSurface, contentColor = MaterialTheme.colorScheme.inverseOnSurface, shape = CircleShape,
+        shadowElevation = 4.dp, modifier = modifier) {
+        Row(Modifier.padding(horizontal = 14.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+            CircularProgressIndicator(Modifier.size(16.dp), strokeWidth = 2.dp, color = MaterialTheme.colorScheme.inverseOnSurface)
+            Spacer(Modifier.width(8.dp))
+            Text(tx("Buscando la dirección…"), style = MaterialTheme.typography.labelLarge)
+        }
+    }
+}
+
+/** EL PRIMER PAQUETE BIEN SITUADO (02-11-2026): una parada sin punto en el mapa lo dice claro, con «Situar» (la
+ *  tarjeta de la siguiente parada y su ficha). */
+@Composable
+internal fun AvisoSinSituar(alSituar: () -> Unit) {
+    val x = LocalExtra.current
+    Surface(color = x.aviso, contentColor = x.enAviso, shape = MaterialTheme.shapes.medium, modifier = Modifier.fillMaxWidth()) {
+        Row(Modifier.padding(start = 12.dp, end = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+            Icon(Icons.Default.LocationOff, contentDescription = null, modifier = Modifier.size(20.dp))
+            Spacer(Modifier.width(10.dp))
+            Text(tx("Sin situar en el mapa"), style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
+            TextButton(onClick = alSituar, colors = ButtonDefaults.textButtonColors(contentColor = x.enAviso)) {
+                Text(tx("Situar"), fontWeight = FontWeight.Bold)
+            }
+        }
+    }
+}
+
 @Composable
 private fun SinCobertura(guardadaEn: Long?, pendientes: Int) {
     val x = LocalExtra.current
@@ -557,6 +711,36 @@ private fun BonoCard(b: Bono) {
     }
 }
 
+/** LA INVITACIÓN TRAS LA PRIMERA ENTREGA (02-11-2026): «Invita y gana» justo cuando mejor se cuenta, con la primera
+ *  entrega del día hecha. WhatsApp con el mensaje puesto, el compartir del móvil, y «Ahora no» hasta mañana. */
+@Composable
+private fun InvitarCard(r: Referidos, alWhatsapp: () -> Unit, alCompartir: () -> Unit, alAhoraNo: () -> Unit) {
+    Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer), shape = MaterialTheme.shapes.large) {
+        Column(Modifier.fillMaxWidth().padding(16.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Icon(Icons.Default.CardGiftcard, contentDescription = null, tint = MaterialTheme.colorScheme.onPrimaryContainer)
+                Spacer(Modifier.width(12.dp))
+                Text(if (r.porInvitado > 0) tx("Gana {x} por cada compañero que reparta con FDS", "x" to Invitar.importe(r.porInvitado)) else tx("Invita a un compañero a repartir con FDS"),
+                    style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onPrimaryContainer, modifier = Modifier.weight(1f))
+            }
+            Spacer(Modifier.height(6.dp))
+            Text(tx("Lo cobras en tu cartera cuando haga {n} entregas en {d} días distintos. Mándale tu enlace: se registra y empieza hoy.", "n" to r.entregasCartera, "d" to r.diasDistintos),
+                style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onPrimaryContainer)
+            Spacer(Modifier.height(12.dp))
+            Button(onClick = alWhatsapp, modifier = Modifier.fillMaxWidth().height(48.dp)) {
+                Icon(Icons.AutoMirrored.Filled.Chat, contentDescription = null); Spacer(Modifier.width(8.dp)); Text(tx("Invitar por WhatsApp"))
+            }
+            Spacer(Modifier.height(6.dp))
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                FilledTonalButton(onClick = alCompartir, modifier = Modifier.weight(1f).height(44.dp)) {
+                    Icon(Icons.Default.Share, contentDescription = null, modifier = Modifier.size(18.dp)); Spacer(Modifier.width(6.dp)); Text(tx("Compartir"))
+                }
+                TextButton(onClick = alAhoraNo, modifier = Modifier.weight(1f).height(44.dp)) { Text(tx("Ahora no")) }
+            }
+        }
+    }
+}
+
 @Composable
 private fun Vacia(alEscanear: () -> Unit, alAnadir: () -> Unit) {
     Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLowest), shape = MaterialTheme.shapes.large) {
@@ -606,14 +790,23 @@ internal fun Numero(n: Int?, grande: Boolean = false, hecho: Boolean = false) {
 }
 
 @Composable
-fun Etiquetas(p: Parada, enZbe: String = "") {
+fun Etiquetas(
+    p: Parada, enZbe: String = "",
+    /** Sin situar (02-11-2026): con esto, el chip es «Sin ubicar · Situar» y abre «Situar la parada». */
+    alSituar: (() -> Unit)? = null,
+    /** El aviso de sin situar ya va aparte (AvisoSinSituar): sin chip. */
+    avisoAparte: Boolean = false,
+) {
     val x = LocalExtra.current
     FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
         p.eta?.let { Chip("≈ $it", MaterialTheme.colorScheme.secondaryContainer, MaterialTheme.colorScheme.onSecondaryContainer) }
         if (p.porCobrar) Chip(tx("Cobrar") + " ${Region.importe(p.cobrar ?: 0.0)}", x.cobrar, x.enCobrar)
         if (p.prioridad) Chip(tx("Urgente"), MaterialTheme.colorScheme.errorContainer, MaterialTheme.colorScheme.onErrorContainer)
         if (p.bultos > 1) Chip("${p.bultos} " + tx("bultos"), MaterialTheme.colorScheme.surfaceVariant, MaterialTheme.colorScheme.onSurfaceVariant)
-        if (!p.ubicada && p.pendiente) Chip(tx("Sin ubicar"), MaterialTheme.colorScheme.surfaceVariant, MaterialTheme.colorScheme.onSurfaceVariant)
+        if (!p.ubicada && p.pendiente && !avisoAparte) {
+            if (alSituar != null) ChipSituar(alSituar)
+            else Chip(tx("Sin ubicar"), MaterialTheme.colorScheme.surfaceVariant, MaterialTheme.colorScheme.onSurfaceVariant)
+        }
         // LA PUERTA APRENDIDA, el retraso y la ZBE (30-10-2026).
         if (p.geo == "puerta" && p.pendiente) Chip(tx("Puerta conocida"), x.entregado.copy(alpha = 0.15f), MaterialTheme.colorScheme.onSurface)
         if ((p.tardeMin ?: 0) > 0 && p.pendiente) Chip(tx("llega {n} min tarde", "n" to p.tardeMin), MaterialTheme.colorScheme.errorContainer, MaterialTheme.colorScheme.onErrorContainer)
@@ -628,11 +821,26 @@ private fun Chip(t: String, fondo: androidx.compose.ui.graphics.Color, tinta: an
     }
 }
 
+/** «Sin ubicar · Situar» (02-11-2026): un toque abre «Situar la parada». */
+@Composable
+private fun ChipSituar(alSituar: () -> Unit) {
+    val x = LocalExtra.current
+    Surface(onClick = alSituar, color = x.aviso, contentColor = x.enAviso, shape = RoundedCornerShape(8.dp)) {
+        Row(Modifier.padding(horizontal = 8.dp, vertical = 3.dp), verticalAlignment = Alignment.CenterVertically) {
+            Icon(Icons.Default.LocationOff, contentDescription = null, modifier = Modifier.size(14.dp))
+            Spacer(Modifier.width(4.dp))
+            Text(tx("Sin ubicar") + " · " + tx("Situar"), style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold)
+        }
+    }
+}
+
 @Composable
 private fun Siguiente(
     p: Parada, numero: Int, enZbe: String = "",
     alNavegar: () -> Unit, alLlamar: () -> Unit, alWhatsapp: () -> Unit, alEntregar: () -> Unit, alFallar: () -> Unit, alAbrir: () -> Unit,
     alEscuchar: () -> Unit = {},
+    /** El móvil está buscando la dirección (02-11-2026), y «Situar» para ponerla a mano. */
+    buscando: Boolean = false, alSituar: () -> Unit = {},
 ) {
     val x = LocalExtra.current
     Card(
@@ -663,13 +871,16 @@ private fun Siguiente(
                         Text(tx("El cliente dice: {t}", "t" to it), style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.tertiary)
                     }
                     Spacer(Modifier.height(6.dp))
-                    Etiquetas(p, enZbe)
+                    Etiquetas(p, enZbe, avisoAparte = true)
                 }
             }
+            if (Situar.sinSituar(p)) { Spacer(Modifier.height(10.dp)); AvisoSinSituar(alSituar) }
             Spacer(Modifier.height(14.dp))
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                Button(onClick = alNavegar, modifier = Modifier.weight(1f).height(52.dp)) {
-                    Icon(Icons.Default.Navigation, contentDescription = null); Spacer(Modifier.width(6.dp)); Text(tx("Navegar"))
+                Button(onClick = alNavegar, enabled = !buscando, modifier = Modifier.weight(1f).height(52.dp)) {
+                    if (buscando) CircularProgressIndicator(Modifier.size(20.dp), strokeWidth = 2.dp)
+                    else Icon(Icons.Default.Navigation, contentDescription = null)
+                    Spacer(Modifier.width(6.dp)); Text(tx("Navegar"))
                 }
                 FilledTonalButton(onClick = alLlamar, enabled = p.telefono.isNotBlank(), modifier = Modifier.height(52.dp)) {
                     Icon(Icons.Default.Call, contentDescription = tx("Llamar"))
@@ -695,7 +906,7 @@ private fun Siguiente(
 }
 
 @Composable
-fun Fila(p: Parada, numero: Int?, enZbe: String = "", alTocar: () -> Unit) {
+fun Fila(p: Parada, numero: Int?, enZbe: String = "", alTocar: () -> Unit, alSituar: (() -> Unit)? = null) {
     Surface(onClick = alTocar, color = MaterialTheme.colorScheme.surfaceContainerLowest, shape = MaterialTheme.shapes.medium) {
         Row(Modifier.fillMaxWidth().padding(14.dp), verticalAlignment = Alignment.CenterVertically) {
             Numero(numero, hecho = !p.pendiente)
@@ -706,7 +917,7 @@ fun Fila(p: Parada, numero: Int?, enZbe: String = "", alTocar: () -> Unit) {
                     Text(p.direccion, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant,
                         maxLines = 1, overflow = TextOverflow.Ellipsis)
                 }
-                if (p.pendiente && (p.eta != null || p.porCobrar || p.prioridad || !p.ubicada || p.geo == "puerta" || enZbe.isNotBlank() || (p.tardeMin ?: 0) > 0)) { Spacer(Modifier.height(4.dp)); Etiquetas(p, enZbe) }
+                if (p.pendiente && (p.eta != null || p.porCobrar || p.prioridad || !p.ubicada || p.geo == "puerta" || enZbe.isNotBlank() || (p.tardeMin ?: 0) > 0)) { Spacer(Modifier.height(4.dp)); Etiquetas(p, enZbe, alSituar) }
                 if (!p.pendiente) {
                     // Con la hora (30-10-2026): «Entregado · 11:02», como en la web.
                     val hora = Calle.hora(p.cerradoEn).takeIf { it.isNotBlank() }?.let { " · $it" } ?: ""

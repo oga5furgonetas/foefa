@@ -55,6 +55,16 @@ object Acciones {
         }
     }
 
+    /** WhatsApp sin destinatario (la invitación a un compañero desde Hoy, 02-11-2026): se abre con el texto puesto y
+     *  la persona elige a quién mandárselo. Sin WhatsApp, wa.me se abre en el navegador y lo dice él. */
+    fun whatsappLibre(ctx: Context, texto: String) {
+        try {
+            ctx.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse("https://wa.me/?text=${Uri.encode(texto)}")).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+        } catch (_: ActivityNotFoundException) {
+            Toast.makeText(ctx, tx("WhatsApp no está instalado."), Toast.LENGTH_LONG).show()
+        }
+    }
+
     fun compartir(ctx: Context, texto: String) {
         val i = Intent(Intent.ACTION_SEND).setType("text/plain").putExtra(Intent.EXTRA_TEXT, texto)
         ctx.startActivity(Intent.createChooser(i, null).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))

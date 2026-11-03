@@ -101,7 +101,7 @@ fun EscanerPantalla(
     val actividad = remember(ctx) { ctx.actividad() }
     vm.pais = pais
     // Abierto desde «Hoy»: contadores a cero. De vuelta de revisar una etiqueta: sigue el mismo escaneo.
-    LaunchedEffect(Unit) { if (vuelta == null) vm.empezar(modo) else vm.reanudar(vuelta.guardada) }
+    LaunchedEffect(Unit) { if (vuelta == null) vm.empezar(modo) else vm.reanudar(vuelta.guardada, vuelta.sinSituar) }
     val e by vm.estado.collectAsState()
     val tienePermiso = { ContextCompat.checkSelfPermission(ctx, Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED }
     var permiso by remember { mutableStateOf(tienePermiso()) }
@@ -215,7 +215,7 @@ private fun Abajo(e: EstadoEscaner, modo: String, alTerminar: () -> Unit, modifi
                         else -> tx("Pasa las etiquetas una tras otra: cada paquete entra en tu ruta.")
                     },
                     style = MaterialTheme.typography.bodyLarge, fontWeight = if (u != null) FontWeight.SemiBold else FontWeight.Normal,
-                    color = when (u?.tipo) { "nueva" -> Color(0xFF6EE7B7); "error" -> Color(0xFFFCA5A5); else -> Color.White },
+                    color = when { u?.aviso == true -> Color(0xFFFCD34D); u?.tipo == "nueva" -> Color(0xFF6EE7B7); u?.tipo == "error" -> Color(0xFFFCA5A5); else -> Color.White },
                     modifier = Modifier.weight(1f),
                 )
             }
