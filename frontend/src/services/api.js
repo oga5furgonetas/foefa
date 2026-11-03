@@ -268,6 +268,13 @@ export const repJornada = (accion, aceptoAviso) => api.post('/reparto/jornada', 
 export const repPosicion = (lat, lng) => api.post('/reparto/posicion', { lat, lng })
 export const repMiOrden = (ids, desde) => api.post('/reparto/mi-ruta/orden', { ids, ...(desde ? { desde } : {}) })
 export const repMiEditar = (id, body) => api.post(`/reparto/mis-pedidos/${id}/editar`, body)
+/* SITUAR UNA PARADA (02-11-2026). `repUbicar`: ¿encuentra el servidor esta dirección? No guarda nada; contesta
+   {encontrada, lat, lng, precision: portal | calle | zona, direccion, candidatos, atribucion} (la ficha dice el estado y
+   «Situar la parada» enseña los candidatos). El punto que la persona pone en el mapa o elige va con repMiEditar (lat,
+   lng, geo_origen, "precision" y, si cambia, la dirección: MiRuta ponerPunto); el `repSituar` de antes, que ya no
+   usaba nadie, se quitó el 03-11-2026. */
+export const repUbicar = (direccion, { cp = '', localidad = '', signal } = {}) =>
+  api.post('/reparto/ubicar', { direccion, ...(cp ? { cp } : {}), ...(localidad ? { localidad } : {}) }, { signal, timeout: 15000 })
 export const repMiQuitar = (id) => api.post(`/reparto/mis-pedidos/${id}/quitar`)
 export const repEjemplo = (desde) => api.post('/reparto/mis-pedidos/ejemplo', desde || {})
 // «Mi dinero hoy» (11-10-2026): la tarifa del autónomo, en céntimos.

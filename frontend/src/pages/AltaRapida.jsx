@@ -4,7 +4,7 @@ import { API_BASE } from '../services/api'
 import { saveSession } from '../panel/auth'
 import { tx, useIdioma, txError, locale } from '../lib/idioma'
 import { medirAccion } from '../lib/analitica'
-import { evento, eventoUnaVez } from '../lib/metaPixel'
+import { evento, eventoUnaVez, anunciosAceptados, cookiesMeta } from '../lib/metaPixel'
 import { leerRef } from '../lib/referido'
 import { regionDelMovil, paisDelMovil, precioRepartidor, importeEn } from '../lib/region'
 import { enAppPlay } from '../lib/enApp'
@@ -68,6 +68,9 @@ export default function AltaRapida({ dias = 7, enfocar = false }) {
           center: '', email: correo, plan: 'autonomo', sector: 'autonomo',
           ...(leerRef() ? { ref: leerRef() } : {}),
           desde_app: enAppPlay(), ...regionDelMovil(),
+          // Medición de anuncios desde el servidor (02-11-2026): lo que contestó al aviso de cookies y, solo si aceptó,
+          // las cookies del píxel (lib/metaPixel.js).
+          anuncios: anunciosAceptados(), ...cookiesMeta(),
         }),
       })
       const j = await r.json().catch(() => ({}))
@@ -78,7 +81,7 @@ export default function AltaRapida({ dias = 7, enfocar = false }) {
       saveSession(j)
       try { localStorage.setItem('flota_plan', 'autonomo'); localStorage.setItem('flota_billing', 'monthly') } catch { /* nada */ }
       medirAccion('registro_ok')
-      evento('CompleteRegistration', { content_name: 'autonomo', status: true })
+      evento('CompleteRegistration', { content_name: 'autonomo', status: true }, j.meta_event_id)   // el id del servidor: un alta, una conversión
       marcarRecienAlta()   // la app le pide instalarla antes de nada
       window.location.href = '/ruta'
     } catch {

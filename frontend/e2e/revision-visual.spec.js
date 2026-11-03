@@ -1,3 +1,4 @@
+/* global process */
 import { test } from '@playwright/test'
 import path from 'node:path'
 import { simularApi, entrarComoAdmin } from './api-simulada.js'

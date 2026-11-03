@@ -1,3 +1,4 @@
+/* global Buffer */
 import { test, expect } from '@playwright/test'
 import { simularApi, entrarComoAdmin } from './api-simulada.js'
 

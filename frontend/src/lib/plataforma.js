@@ -11,11 +11,31 @@ export const esAppIOS = () => {
   try { return esAppNativa() && window.Capacitor.getPlatform() === 'ios' } catch { return false }
 }
 
-/** Al arrancar dentro de la app: directo a la app del repartidor, no a la portada de la web. */
+/* LA ÚLTIMA ZONA (03-11-2026, Dani: «cuando sales de la app y vuelves a entrar te enviaba a la de reparto… Porto entraba
+   en la suya de oficina, salía e iba a la de reparto»). Al volver a abrirla, el iPhone carga la portada («/») y de ahí
+   se iba siempre a /ruta; ahora vuelve a la zona donde estaba: el panel, el portal del conductor (con su empresa) o la
+   ruta. Lo demás (el login de la web, las páginas legales…) no cambia la zona. */
+const ZONA = 'fds_app_zona'
+function zonaDe(pathname) {
+  const m = /^\/(panel|ruta)(?:\/|$)|^\/conductor(?:\/([^/]+))?\/?$/.exec(pathname || '')
+  if (!m) return null
+  return m[1] ? '/' + m[1] : '/conductor' + (m[2] ? '/' + m[2] : '')
+}
+
+/** Dentro de la app, apunta la zona de cada pantalla por la que pasa (lo llama el Medidor de main.jsx). */
+export function recordarZona(pathname) {
+  if (!esAppNativa()) return
+  const zona = zonaDe(pathname)
+  if (!zona) return
+  try { localStorage.setItem(ZONA, zona) } catch { /* sin almacenamiento: arrancará en /ruta */ }
+}
+
+/** Al arrancar dentro de la app: a la zona donde estaba (recordarZona) o, la primera vez, a la app del repartidor;
+ *  nunca a la portada de la web. */
 export function arrancarEnLaApp() {
   if (!esAppNativa()) return
   try {
-    if (window.location.pathname === '/') window.history.replaceState(null, '', '/ruta')
+    if (window.location.pathname === '/') window.history.replaceState(null, '', zonaDe(localStorage.getItem(ZONA)) || '/ruta')
   } catch { /* nada */ }
 }
 

@@ -1,7 +1,7 @@
 import LegalLayout, { legalEnIngles } from './LegalLayout'
 import ProcessingEn from './en/ProcessingEn'
 import { useIdioma } from '../lib/idioma'
-import { COMPANY, PROCESSORS } from './config'
+import { COMPANY, PROCESSORS, MAP_SERVICES, LEGAL_NOTES } from './config'
 
 /* CONTRATO DE ENCARGO DEL TRATAMIENTO (art. 28.3 RGPD), como anexo de los
    términos. Lo exige la ley en cuanto una empresa mete en la plataforma datos
@@ -13,8 +13,15 @@ export default function Encargo() {
   useIdioma()
   // Fuera de España (30-10-2026): la traducción de cortesía al inglés; el español es la versión que vale.
   if (legalEnIngles()) return <ProcessingEn />
+  // 02-11-2026: un subencargado nuevo en el §6 (CartoCiudad, legal/config.js). 03-11-2026: para todas las cuentas ya,
+  // sin fecha aparte para las de empresa (todas son de Dani, «Solo las mías»: no hay a quién dar los 15 días de aviso del
+  // §4); y Google, por el geocodificador de la app de Android. 03-11-2026 (el revisor: el §6 decía que todos tenían
+  // contrato y transferencias por DPF, adecuación o cláusulas tipo): los subencargados con contrato, aparte los servicios
+  // de mapas a los que se pregunta sin contrato, Telegram fuera (lo conecta cada empresa con su bot) y los avisos del
+  // navegador; las frases, LEGAL_NOTES de legal/config.js. Los 15 días de aviso valen para las dos listas, como antes
+  // para la única.
   return (
-    <LegalLayout title="Acuerdo de Encargo del Tratamiento" lastUpdate="2026-10-03">
+    <LegalLayout title="Acuerdo de Encargo del Tratamiento" lastUpdate="2026-11-03">
       <p>Este acuerdo forma parte de los <a href="/terminos">Términos y Condiciones</a> y se acepta con ellos al crear la cuenta. Regula el tratamiento de datos personales que {COMPANY.brand} realiza <strong>por cuenta del cliente</strong>, conforme al artículo 28 del Reglamento (UE) 2016/679 (RGPD) y a la Ley Orgánica 3/2018 (LOPDGDD).</p>
 
       <h2>1. Partes y papeles</h2>
@@ -39,7 +46,7 @@ export default function Encargo() {
         <li><strong>No acceder</strong> a los datos de los clientes finales ni a la ubicación de los conductores. Cuando el soporte entra en una cuenta para ayudar, esos datos se muestran ocultos.</li>
         <li>Garantizar que quien trabaja con los datos se ha comprometido a la confidencialidad.</li>
         <li>Aplicar las medidas de seguridad del artículo 32 RGPD: cifrado en tránsito, control de acceso por roles y por empresa (bases de datos separadas), contraseñas con hash, copias de seguridad cifradas y registros de auditoría.</li>
-        <li>Recurrir solo a los <strong>subencargados</strong> listados abajo, con contrato que les imponga las mismas obligaciones. Cualquier cambio se avisará con 15 días de antelación para que el cliente pueda oponerse.</li>
+        <li>Recurrir solo a los <strong>subencargados</strong> listados abajo, con contrato que les imponga las mismas obligaciones, y, para situar las direcciones, calcular los trayectos y dibujar el mapa, solo a los servicios de la segunda lista (sin contrato, bajo sus condiciones de uso). Cualquier cambio en una u otra lista se avisará con 15 días de antelación para que el cliente pueda oponerse.</li>
         <li>Ayudar al cliente a atender los derechos de los interesados (acceso, rectificación, supresión, oposición, limitación y portabilidad) y en las evaluaciones de impacto si las necesita.</li>
         <li>Notificar al cliente <strong>sin dilación, y como máximo en 48 horas</strong>, cualquier violación de la seguridad de los datos de la que tenga conocimiento.</li>
         <li>Al terminar el servicio, <strong>devolver</strong> los datos (exportación) o <strong>suprimirlos</strong>, a elección del cliente, salvo obligación legal de conservarlos.</li>
@@ -50,16 +57,25 @@ export default function Encargo() {
       <ul>
         <li>Tener base jurídica para los datos que introduce e <strong>informar</strong> a los interesados: a sus clientes, de que gestiona el reparto con esta herramienta; a sus conductores, de las inspecciones con foto y de la ubicación en jornada (art. 90 LOPDGDD).</li>
         <li>Elegir plazos de conservación adecuados. En el reparto, los datos personales de los pedidos se borran solos a los días que el cliente configure (por defecto 30) y los recorridos a los 30 días.</li>
-        <li>Decidir si activa funciones que comunican datos a terceros (por ejemplo, la lectura de tickets con IA).</li>
+        <li>Decidir si activa funciones que comunican datos a terceros (por ejemplo, la lectura de tickets con IA o los avisos por Telegram con su propio bot).</li>
       </ul>
 
       <h2>6. Subencargados autorizados</h2>
+      <p>Los que tratan los datos por encargo nuestro, con contrato:</p>
       <ul>
         {PROCESSORS.map((p) => (
           <li key={p.name}><strong>{p.name}</strong> — {p.purpose} <span className="text-dark-500">({p.country})</span></li>
         ))}
       </ul>
-      <p>Las transferencias fuera del Espacio Económico Europeo se amparan en el EU-US Data Privacy Framework, decisiones de adecuación o Cláusulas Contractuales Tipo.</p>
+      <p><strong>Servicios de mapas y de búsqueda de direcciones.</strong> {LEGAL_NOTES.es.mapServices}</p>
+      <ul>
+        {MAP_SERVICES.map((p) => (
+          <li key={p.name}><strong>{p.name}</strong> — {p.purpose} <span className="text-dark-500">({p.country})</span></li>
+        ))}
+      </ul>
+      <p><strong>Avisos por Telegram.</strong> {LEGAL_NOTES.es.telegram}</p>
+      <p><strong>Avisos en el navegador.</strong> {LEGAL_NOTES.es.browserPush}</p>
+      <p>{LEGAL_NOTES.es.transfers}</p>
 
       <h2>7. Contacto</h2>
       <p>Para cualquier cuestión sobre este acuerdo: {COMPANY.privacyEmail

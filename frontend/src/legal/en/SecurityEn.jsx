@@ -1,11 +1,12 @@
 import LegalLayout from '../LegalLayout'
-import { COMPANY, PROCESSORS } from '../config'
+import { COMPANY, PROCESSORS, MAP_SERVICES, LEGAL_NOTES } from '../config'
 
 /* The Security page in English (30-10-2026): the same content as legal/Seguridad.jsx. Only what is true today and
-   can be shown (code, infrastructure or CI) goes here: every line is a commercial promise. */
+   can be shown (code, infrastructure or CI) goes here: every line is a commercial promise. 03-11-2026: el §6 como en
+   Seguridad.jsx (sin «all with GDPR safeguards»; cada grupo con su frase de LEGAL_NOTES.en). */
 export default function SecurityEn() {
   return (
-    <LegalLayout title="Security">
+    <LegalLayout title="Security" lastUpdate="2026-11-03">
       <p>
         At {COMPANY.brand} we manage operational fleet data: vehicles, drivers, inspection photographs and documents.
         This page explains, without hype, how we protect it. If you are evaluating {COMPANY.brand} for your company and
@@ -28,7 +29,7 @@ export default function SecurityEn() {
 
       <h2>3. Infrastructure</h2>
       <ul>
-        <li>Backend hosted in the European Union (Paris region). Database on MongoDB Atlas (EU).</li>
+        <li>The server (API) and the database are hosted on Fly.io, in the European Union (Paris region).</li>
         <li>Frontend served by Cloudflare’s global network, with security headers (CSP) and an origin allow-list (CORS).</li>
         <li>Rate limiting on public endpoints to curb abuse.</li>
         <li>Payments are processed by Stripe (and Google Play inside the Play app): <strong>we never see or store cards</strong>. Their notifications are verified with a cryptographic signature and rejected if unsigned.</li>
@@ -48,12 +49,21 @@ export default function SecurityEn() {
       </ul>
 
       <h2>6. Processors</h2>
-      <p>Providers that process data on our behalf, all with GDPR safeguards:</p>
+      <p>Providers that process data on our behalf, under contract:</p>
       <ul>
         {PROCESSORS.map((p) => (
-          <li key={p.name}><strong>{p.name}</strong> — {p.purposeEn || p.purpose} ({p.countryEn || p.country}).</li>
+          <li key={p.name}><strong>{p.nameEn || p.name}</strong> — {p.purposeEn || p.purpose} ({p.countryEn || p.country}).</li>
         ))}
       </ul>
+      <p><strong>Map and address-search services.</strong> {LEGAL_NOTES.en.mapServices}</p>
+      <ul>
+        {MAP_SERVICES.map((p) => (
+          <li key={p.name}><strong>{p.nameEn || p.name}</strong> — {p.purposeEn || p.purpose} ({p.countryEn || p.country}).</li>
+        ))}
+      </ul>
+      <p><strong>Telegram notices.</strong> {LEGAL_NOTES.en.telegram}</p>
+      <p><strong>Browser notifications.</strong> {LEGAL_NOTES.en.browserPush}</p>
+      <p>{LEGAL_NOTES.en.transfers}</p>
       <p>Full details are in the <a href="/privacidad">Privacy Policy</a>.</p>
 
       <h2>7. Reporting vulnerabilities</h2>

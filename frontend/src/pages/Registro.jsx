@@ -1,7 +1,7 @@
 import { useTitulo } from '../lib/titulo'
 import { useState } from 'react'
 import { enAppPlay } from '../lib/enApp'
-import { evento } from '../lib/metaPixel'
+import { evento, anunciosAceptados, cookiesMeta } from '../lib/metaPixel'
 import { leerRef, useInvitacion } from '../lib/referido'
 import { regionDelMovil } from '../lib/region'
 
@@ -383,6 +383,9 @@ export default function Registro() {
           // Desde la app de Play no se pide tarjeta con Stripe (Google cobra con lo suyo).
           desde_app: enAppPlay(),
           ...regionDelMovil(),
+          // Medición de anuncios desde el servidor (02-11-2026): lo que contestó al aviso de cookies y, solo si aceptó,
+          // las cookies del píxel (lib/metaPixel.js).
+          anuncios: anunciosAceptados(), ...cookiesMeta(),
         }),
       })
       const j = await r.json()
@@ -394,7 +397,7 @@ export default function Registro() {
       localStorage.setItem('flota_plan', selectedPlan)
       localStorage.setItem('flota_billing', billingMode)
       medirAccion('registro_ok')
-      evento('CompleteRegistration', { content_name: sector || 'alta', status: true })
+      evento('CompleteRegistration', { content_name: sector || 'alta', status: true }, j.meta_event_id)   // el id del servidor: un alta, una conversión
       if (soloYo) marcarRecienAlta()   // la app de ruta le pide instalarla antes de nada
       setDone(true)
     } catch { setErr(tt('Sin conexión con el servidor. Revisa tu red e inténtalo de nuevo.')); setBusy(false) }
@@ -408,7 +411,13 @@ export default function Registro() {
           <div style={{ fontSize: 48, marginBottom: 12 }}>📧</div>
           <h2 style={{ margin: '0 0 8px', fontSize: 20 }}>{tt('¡Cuenta creada!')}</h2>
           <div style={{ display: 'inline-flex', alignItems: 'center', gap: 6, background: `${planInfo.color}18`, border: `1px solid ${planInfo.color}40`, borderRadius: 20, padding: '4px 14px', fontSize: 12, fontWeight: 700, color: planInfo.color, margin: '0 0 16px' }}>
-            {tt('Plan {plan} · {n} días gratis', { plan: tt(planInfo.name), n: diasPrueba })}
+            {/* Quien reparte solo no tiene «7 días»: lo que dice su plan (03-11-2026, el vídeo para Apple: aquí «7 días
+                gratis» y en la cuenta «Gratis sin límite hasta el 31 de diciembre»). */}
+            {soloYo && promoGratis()
+              ? tt('Plan {plan} · gratis hasta el {fecha}', { plan: tt(planInfo.name), fecha: fechaPromo(locale()) })
+              : soloYo
+              ? tt('Plan {plan} · gratis hasta {p} paradas al día', { plan: tt(planInfo.name), p: PARADAS_GRATIS })
+              : tt('Plan {plan} · {n} días gratis', { plan: tt(planInfo.name), n: diasPrueba })}
           </div>
           <p style={{ color: '#8b94a3', fontSize: 14, lineHeight: 1.6, margin: '0 0 8px' }}>
             {tt('Hemos enviado un email de bienvenida a')} <b style={{ color: '#0ea5e9' }}>{email}</b>.

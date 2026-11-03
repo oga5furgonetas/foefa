@@ -81,19 +81,27 @@ export default function RutaApp() {
   const [bonoPendiente, setBonoPendiente] = useState(false)
   // REGALO DE SALDO (17-10-2026, Dani: «para que vea que es real»): un aviso en «Hoy», una vez por regalo.
   const [saldoRegalo, setSaldoRegalo] = useState(null)
+  // LA INVITACIÓN TRAS LA PRIMERA ENTREGA (02-11-2026): la respuesta de /referidos entera, para la tarjeta de «Hoy»
+  // (MiRuta no vuelve a pedirla): null mientras no contesta, false si esta cuenta no tiene código. Si la llamada falla
+  // (sin cobertura en la nave, un error), undefined: así MiRuta la pide ella cuando haya una entrega real, que es cuando
+  // hace falta, en vez de quedarse sin tarjeta toda la sesión.
+  const [referido, setReferido] = useState(null)
   const vistoRegalo = (clave) => { try { return !!localStorage.getItem(`fds_regalo_${clave}`) } catch { return false } }
   const verRegalo = () => {
     try { localStorage.setItem(`fds_regalo_${saldoRegalo?.clave}`, '1') } catch { /* incógnito */ }
     setSaldoRegalo(null)
   }
   useEffect(() => {
-    if (esSuplantacion()) return
+    // Sin sesión no se pregunta (03-11-2026): la pantalla ya se va a «Entra en FDS», y la respuesta (un error) la hacía
+    // repintar y repetir esa redirección, que cortaba la primera (net::ERR_ABORTED en la prueba «Correo · sin sesión»).
+    if (esSuplantacion() || !isAuthed()) return
     getReferidos().then(({ data }) => {
+      setReferido(data?.codigo ? data : false)
       if (data?.por_invitado) setPorInvitado(data.por_invitado)
       if (data && 'por_invitado' in data) setPromoHasta(data.promo_hasta || '')
       setBonoPendiente(!!(data?.bono && !data.bono.pagado))
       if (data?.regalo > 0 && data.regalo_clave && !vistoRegalo(data.regalo_clave)) setSaldoRegalo({ cent: data.regalo, clave: data.regalo_clave })
-    }).catch(() => {})
+    }).catch(() => setReferido(undefined))
   }, [])
   // EL MERCADILLO (17-10-2026): se abre a pantalla completa desde Cuenta (o con ?mercadillo=1). La entrada solo
   // sale si está abierto, con los mensajes sin leer.
@@ -317,7 +325,7 @@ export default function RutaApp() {
           ? <Suspense fallback={<Cargando />}><Muro billing={billing} toast={toast} recargar={recargar} irACuenta={() => setTab('cuenta')} /></Suspense>
           : <>
             {/* La opinión, al TERMINAR la ruta (25-10-2026): arriba de «Hoy» salía al ir a cargar la furgoneta. */}
-            {tab === 'hoy' && <MiRuta embebido onBack={() => {}} alTerminar={<OpinionRuta />} />}
+            {tab === 'hoy' && <MiRuta embebido onBack={() => {}} alTerminar={<OpinionRuta />} referido={referido} />}
             {tab === 'ajustes' && <div className="mx-auto max-w-md"><Suspense fallback={<Cargando />}><Ajustes conductores={[]} toast={toast} autonomo /></Suspense></div>}
           </>}
         {/* «Invita y gana», DEBAJO de la ruta (23-10-2026): encima del escáner distraía a quien aún no ha metido

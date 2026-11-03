@@ -1128,7 +1128,8 @@ test.describe('Suspensiones', () => {
     await page.getByLabel('Hasta (incluido)').fill(dia(5))
     await page.getByLabel('Motivo (lo ve solo la oficina)').fill('Sanción por carta del 15-10')
     await page.getByRole('button', { name: 'Suspender esos días' }).click()
-    expect(creadas).toEqual([{ driver_id: 'd1', desde: dia(1), hasta: dia(5), motivo: 'Sanción por carta del 15-10' }])
+    // El POST puede llegar después de que vuelva el clic (03-11-2026: fallaba 1 de cada 40 veces): se espera, no se mira una vez.
+    await expect.poll(() => creadas).toEqual([{ driver_id: 'd1', desde: dia(1), hasta: dia(5), motivo: 'Sanción por carta del 15-10' }])
     await expect(page.getByText(/PEPE GÓMEZ suspendido: 3 días de trabajo pasan a SUSP \(y 1 día que ya libraba\)/)).toBeVisible()
     await expect(page.getByText(/No se han tocado: .*\(Vacaciones\)/)).toBeVisible()
     const fila = page.getByTestId('suspension')
@@ -1359,6 +1360,25 @@ test.describe('Reparto', () => {
     await expect(page.getByText('1/1 entregados').or(page.getByText('0/1 entregados'))).toBeVisible()
     await page.getByRole('button', { name: /Zonas y ajustes/ }).click()
     await expect(page.getByText('Cómo se protegen los datos')).toBeVisible()
+    expect(fallos).toEqual([])
+  })
+
+  /* 02-11-2026 (revisión del servidor): el geocodificador nuevo deja en geo «zona» (sin lat/lng) lo que no encuentra, y
+     la oficina solo avisaba con «no». */
+  test('la oficina ve que una parada solo en la zona (o sin punto) no está en el mapa', async ({ page }) => {
+    const fallos = vigilar(page)
+    await entrarComoAdmin(page)
+    await simularApi(page, 'vacio')
+    const sinPunto = (id, cliente, geo) => ({ ...PEDIDOS.pedidos[0], id, cliente, codigo: '', telefono: '', lat: null, lng: null, geo, orden: null })
+    await page.route(/\/api\/reparto\/pedidos/, (r) => r.fulfill({ json: { ...PEDIDOS, pedidos: [...PEDIDOS.pedidos,
+      sinPunto('p2', 'Bar Zona', 'zona'), sinPunto('p3', 'Bar Nada', 'no'), sinPunto('p4', 'Bar Pegado', 'pendiente')] } }))
+    await page.goto('/panel/reparto', { waitUntil: 'domcontentloaded' })
+    const fila = (cliente) => page.locator('tr', { hasText: cliente })
+    await expect(fila('Bar Zona')).toContainText('sin ubicar en el mapa: solo la zona (CP)')
+    await expect(fila('Bar Nada')).toContainText('sin ubicar en el mapa')
+    await expect(fila('Bar Nada')).not.toContainText('solo la zona')
+    await expect(fila('Bar Pegado')).toContainText('ubicando…')
+    await expect(fila('Marta Ríos')).not.toContainText('sin ubicar')
     expect(fallos).toEqual([])
   })
 
@@ -2801,6 +2821,7 @@ test('Bono · la tarjeta de la primera ruta: progreso, ejemplos que no cuentan y
   await expect(tarjeta.getByText('1 de 2 días')).toBeVisible()
   await expect(tarjeta.getByRole('progressbar')).toHaveAttribute('aria-valuenow', '12')
   // Ganado: se celebra y lleva a la cartera, que lo dice.
+  // eslint-disable-next-line require-atomic-updates -- no es una carrera: el bono nuevo no sale del de antes
   bono = { cent: 1000, pagado: true, pagado_en: new Date().toISOString(), nuevo: true }
   await page.reload({ waitUntil: 'domcontentloaded' })
   await expect(page.getByTestId('bono')).toHaveCount(0)

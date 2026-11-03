@@ -28,6 +28,10 @@ const FICHEROS = [
   'pages/driver/MemoriaPuerta.jsx',
   // El día en una tarjeta (01-11-2026): la imagen de «Comparte tu día».
   'lib/compartirDia.js',
+  // La página a la que lleva el enlace de la invitación (02-11-2026): la ve el invitado, en su idioma.
+  'pages/Invita.jsx',
+  // «Situar la parada» (02-11-2026): la parada que no está en el mapa se pone en el nuestro, no en Google Maps.
+  'pages/driver/SituarParada.jsx',
 ]
 // Nombres que llegan de datos (el plan del autónomo en Registro: tt(planInfo.name)).
 // y los métodos de cobro de lib/region.js (metodosCobro), que se pintan con tx(t).

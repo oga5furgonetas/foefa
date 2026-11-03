@@ -247,6 +247,16 @@ export default function DriverPortal() {
         setDriver(actualizado)
         setVista('clave')
       }
+      // Y AL REVÉS (03-11-2026, José Arturo, OGA5: «no pueden pedir para trabajar mañana… les da problemas con la
+      // contraseña»): la marca que guardó este móvil el día que entró con la temporal se quita en cuanto la ficha dice
+      // que ya no hace falta. Si no, se quedaba en «Elige tu contraseña personal» sin la actual y el servidor se la
+      // rechazaba una y otra vez.
+      if (r.data?.configurar_cuenta === false && driver.configurar_cuenta) {
+        const actualizado = { ...driver, configurar_cuenta: false }
+        localStorage.setItem(DRIVER_KEY, JSON.stringify(actualizado))
+        setDriver(actualizado)
+        setVista((v) => (v === 'clave' ? 'inicio' : v))
+      }
     }).catch(() => {})
   }, [driver])
 
@@ -317,7 +327,7 @@ export default function DriverPortal() {
   if (vista === 'dias') return <PedirDias onBack={() => setVista('inicio')} />
   if (vista === 'extra') return <TrabajarMas onBack={() => setVista('inicio')} />
   if (vista === 'turnos') return <MisTurnos onBack={() => setVista('inicio')} />
-  if (vista === 'clave') return <MiClave obligatoria={!!driver.configurar_cuenta}
+  if (vista === 'clave') return <MiClave obligatoria={!!driver.configurar_cuenta} onSalir={logout}
     onBack={() => {
       if (driver.configurar_cuenta) {
         const actualizado = { ...driver, configurar_cuenta: false }

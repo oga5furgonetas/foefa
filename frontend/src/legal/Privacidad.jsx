@@ -1,14 +1,22 @@
 import LegalLayout, { legalEnIngles } from './LegalLayout'
 import PrivacyEn from './en/PrivacyEn'
 import { useIdioma } from '../lib/idioma'
-import { COMPANY, PROCESSORS } from './config'
+import { COMPANY, PROCESSORS, MAP_SERVICES, LEGAL_NOTES } from './config'
+import { hayPixel } from '../lib/metaPixel'
 
+/* 02-11-2026 (revisiones del servidor y de la app): con el permiso del aviso de cookies nuestro servidor también avisa a
+   Meta (API de conversiones, backend/meta_capi.py), y esta política no lo decía. Meta va como destinatario, con su
+   finalidad, su base (el consentimiento) y cómo retirarlo; y entre los encargados, CartoCiudad (legal/config.js).
+   03-11-2026 (el revisor: «encargados del tratamiento bajo contrato» y «al amparo del DPF o Cláusulas Contractuales Tipo»
+   no eran ciertas para todos): el §5 separa los encargados con contrato, los servicios de mapas a los que se pregunta sin
+   contrato, Telegram (la integración de cada empresa, ya no un encargado nuestro) y los avisos del navegador, cada uno
+   con su frase (LEGAL_NOTES en legal/config.js, las mismas en Encargo y Seguridad). */
 export default function Privacidad() {
   useIdioma()
   // Fuera de España (30-10-2026): la traducción de cortesía al inglés; el español es la versión que vale.
   if (legalEnIngles()) return <PrivacyEn />
   return (
-    <LegalLayout title="Política de Privacidad">
+    <LegalLayout title="Política de Privacidad" lastUpdate="2026-11-03">
       <p>En {COMPANY.brand} tratamos los datos personales conforme al Reglamento (UE) 2016/679 (RGPD) y la legislación nacional aplicable. Esta política explica qué datos recogemos, para qué los usamos, con quién los compartimos y cómo puedes ejercer tus derechos.</p>
 
       <h2>1. Responsable del tratamiento</h2>
@@ -43,6 +51,7 @@ export default function Privacidad() {
         <li><strong>Mercadillo:</strong> publicar tus anuncios, hacerte llegar los mensajes y avisarte, en ejecución de sus condiciones (art. 6.1.b); revisar los anuncios y atender denuncias, por interés legítimo y por obligación legal (Reglamento (UE) 2022/2065 de Servicios Digitales, art. 6.1.c y f). Los mensajes solo se revisan si alguien los denuncia.</li>
         <li><strong>Novedades de FDS para candidatos:</strong> consentimiento opcional, separado de la candidatura y revocable en cualquier momento. No marcarlo no afecta a la candidatura.</li>
         <li><strong>Mejora del modelo de IA (anonimizado / agregado):</strong> interés legítimo; nunca se publican imágenes ni se identifican personas.</li>
+        {hayPixel() && <li><strong>Medir los anuncios</strong> (qué anuncios nos traen visitas, altas y repartidores), solo si lo aceptas en el aviso de cookies: tu consentimiento (art. 6.1.a RGPD), que puedes retirar cuando quieras con «Cambiar mis cookies» en la <a href="/cookies">Política de Cookies</a>, sin que afecte a lo anterior. Qué se comunica y a quién, en el apartado 5.</li>}
       </ul>
 
       <h2>4. Conservación</h2>
@@ -55,14 +64,23 @@ export default function Privacidad() {
         <li>Datos de candidaturas: hasta 12 meses. La elección sobre novedades se conserva junto con la candidatura durante ese plazo o hasta que se retire el consentimiento y se solicite la supresión cuando proceda.</li>
       </ul>
 
-      <h2>5. Encargados del tratamiento (a quién comunicamos datos)</h2>
-      <p>Para prestar el servicio nos apoyamos en proveedores que actúan como encargados del tratamiento bajo contrato:</p>
+      <h2>5. A quién comunicamos datos</h2>
+      <p><strong>Encargados del tratamiento.</strong> Para prestar el servicio nos apoyamos en estos proveedores, que tratan los datos por encargo nuestro y con contrato:</p>
       <ul>
         {PROCESSORS.map((p) => (
           <li key={p.name}><strong>{p.name}</strong> — {p.purpose} <span className="text-dark-500">({p.country})</span></li>
         ))}
       </ul>
-      <p>Cuando hay transferencias internacionales, se realizan al amparo del EU-US Data Privacy Framework o Cláusulas Contractuales Tipo.</p>
+      <p><strong>Servicios de mapas y de búsqueda de direcciones.</strong> {LEGAL_NOTES.es.mapServices}</p>
+      <ul>
+        {MAP_SERVICES.map((p) => (
+          <li key={p.name}><strong>{p.name}</strong> — {p.purpose} <span className="text-dark-500">({p.country})</span></li>
+        ))}
+      </ul>
+      <p><strong>Avisos por Telegram.</strong> {LEGAL_NOTES.es.telegram}</p>
+      <p><strong>Avisos en el navegador.</strong> {LEGAL_NOTES.es.browserPush}</p>
+      {hayPixel() && <p><strong>Meta, también como destinatario.</strong> Solo si aceptas la medición de anuncios en el aviso de cookies, <strong>Meta Platforms Ireland Ltd.</strong> (Irlanda; con transferencias a EEUU al amparo del EU-US Data Privacy Framework) recibe: desde tu navegador, a través de su píxel, la página visitada y los eventos (alta, prueba, suscripción, regalo); y desde nuestro servidor, si te das de alta para repartir por tu cuenta, tu alta, la primera vez que entras en la app y tu primera ruta, durante los 30 días siguientes al alta, con tu correo cifrado (SHA-256), tu dirección IP, tu navegador, un identificador cifrado de tu cuenta y las cookies del píxel. Nunca tu nombre ni tu teléfono, ni las direcciones o los clientes de tus entregas. <strong>Finalidad:</strong> medir qué anuncios nos traen altas y repartidores. <strong>Base jurídica:</strong> tu consentimiento en el aviso de cookies (art. 6.1.a RGPD). <strong>Puedes retirarlo</strong> cuando quieras con «Cambiar mis cookies» en la <a href="/cookies">Política de Cookies</a>: desde entonces no se le comunica nada más. Meta trata esos datos también según su propia <a href="https://www.facebook.com/privacy/policy" target="_blank" rel="noreferrer">política de privacidad</a>.</p>}
+      <p>{LEGAL_NOTES.es.transfers}</p>
 
       <h2>6. Tus derechos</h2>
       <p>Puedes ejercer en cualquier momento los derechos de <strong>acceso, rectificación, supresión, oposición, limitación y portabilidad</strong>, así como retirar tu consentimiento, escribiéndonos a <a href={`mailto:${COMPANY.privacyEmail}`}>{COMPANY.privacyEmail}</a>. Si consideras que no atendemos correctamente tu solicitud, puedes presentar una reclamación ante la <a href="https://www.aepd.es" target="_blank" rel="noreferrer">Agencia Española de Protección de Datos (AEPD)</a>.</p>

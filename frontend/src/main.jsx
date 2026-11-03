@@ -1,7 +1,7 @@
 import React, { Suspense, lazy, useEffect } from 'react'
 import ReactDOM from 'react-dom/client'
 import { escucharInstalacion, prepararModoApp } from './lib/instalar'
-import { arrancarEnLaApp } from './lib/plataforma'
+import { arrancarEnLaApp, recordarZona } from './lib/plataforma'
 import { BrowserRouter, Route, Routes, useLocation, Navigate } from 'react-router-dom'
 /* Tipografía self-hosted (la CSP bloquea Google Fonts). Vite las sirve desde
    el propio dominio.
@@ -386,7 +386,7 @@ function RouteLoader() {
    sola pantalla. */
 function Medidor() {
   const { pathname } = useLocation()
-  useEffect(() => { medirVista(pathname) }, [pathname])
+  useEffect(() => { medirVista(pathname); recordarZona(pathname) }, [pathname])
   return null
 }
 

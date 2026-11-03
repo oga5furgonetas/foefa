@@ -1,5 +1,6 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useOutletContext } from 'react-router-dom'
+import QRCode from 'qrcode'
 import { useT } from '../../i18n'
 import { Shield, Copy, Check, ExternalLink, Info, Link2, QrCode } from 'lucide-react'
 import { getAdmin } from '../auth'
@@ -45,7 +46,10 @@ export default function PortalConductor() {
   const centers = useMemo(() => (Array.isArray(ctxCenters) && ctxCenters.length ? ctxCenters : (admin?.centers || [])), [ctxCenters, admin])
 
   const empresa = `${PORTAL_BASE}/conductor/#${slug}`
-  const qr = `https://api.qrserver.com/v1/create-qr-code/?size=220x220&data=${encodeURIComponent(empresa)}`
+  // El QR, hecho en el navegador (03-11-2026): antes se pedía a api.qrserver.com con el enlace de la empresa (y la IP
+  // de quien lo mira), un servicio de fuera que no estaba en los textos legales.
+  const [qr, setQr] = useState('')
+  useEffect(() => { QRCode.toDataURL(empresa, { margin: 1, width: 220 }).then(setQr).catch(() => setQr('')) }, [empresa])
 
   return (
     <div className="mx-auto max-w-3xl">
@@ -61,7 +65,9 @@ export default function PortalConductor() {
         <div className="grid gap-5 md:grid-cols-[1fr_auto] md:items-center">
           <Link big label={t('portal.company.link')} url={empresa} />
           <div className="flex flex-col items-center gap-1">
-            <div className="rounded-lg bg-white p-2"><img src={qr} alt="QR del portal conductor" width="160" height="160" /></div>
+            <div className="rounded-lg bg-white p-2">
+              {qr ? <img src={qr} alt="QR del portal conductor" width="160" height="160" /> : <div className="h-[160px] w-[160px]" />}
+            </div>
             <div className="flex items-center gap-1 text-[11px] text-dark-500"><QrCode size={11} /> {t('portal.scan.mobile')}</div>
           </div>
         </div>

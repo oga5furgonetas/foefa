@@ -292,7 +292,12 @@ export default function Reparto() {
                             {p.direccion}
                             <div className="text-[11px] text-dark-500">
                               {p.zona && `${p.zona} · `}
-                              {p.geo === 'no' ? <span className="text-amber-300">sin ubicar en el mapa</span>
+                              {/* SIN PUNTO NO ESTÁ EN EL MAPA (02-11-2026, revisión del servidor): el geocodificador nuevo deja
+                                  en geo «zona» (sin lat/lng, solo el centro del CP o del pueblo) lo que no encuentra, y aquí
+                                  solo se avisaba con «no»; el mapa (MapaReparto) se las salta igual. Con los datos tapados
+                                  (soporte) lat/lng no llegan: ahí manda el geo. */}
+                              {p.geo === 'no' || p.geo === 'zona' || (p.lat == null && !tapado && p.geo !== 'pendiente')
+                                ? <span className="text-amber-300">{p.geo === 'zona' ? 'sin ubicar en el mapa: solo la zona (CP)' : 'sin ubicar en el mapa'}</span>
                                 : p.geo === 'pendiente' ? 'ubicando…' : null}
                             </div>
                           </td>
