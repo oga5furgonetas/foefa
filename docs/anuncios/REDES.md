@@ -187,10 +187,49 @@ vídeos (29-10): el material lo hace la sesión, una pieza nueva por ronda cuand
 | M 11-11 | ¿Qué le falta a una app de reparto para que la uses de verdad? Contestad aquí: lo que más se repita, lo hacemos. Las dos últimas cosas que pidieron los repartidores ya están: paradas de días anteriores y direcciones que ya conoces. | `tiktok-es.mp4` (el original) · «¿Todavía ordenas la ruta a mano? 🚚 Gratis hasta el 31-12, enlace en el perfil» | — |
 | X 12-11 | Resumen honesto de las dos semanas: N altas nuevas, lo que arreglamos, lo que pedisteis. Construimos en público. (N sale de `tools/metricas/usuarios_total.py`; sin cifra real, no se publica) | La pieza nueva de la semana (ideas al final de `redes/TEXTO.md`) o la que mejor haya ido, con otro gancho | Resumen honesto + `portada/app-iphone.png` |
 
-LinkedIn (página FlotaDSP, martes 04-11 y 11-11), para empresas con flota: «Inspección diaria con foto y daños
+LinkedIn (página FlotaDSP, miércoles 04-11 y 11-11, 11:00), para empresas con flota: «Inspección diaria con foto y daños
 detectados por IA, ITV/seguro/renting avisados, cuadrante con motor, portal del conductor. Sin instalar nada en
 la furgoneta. Desde 5 € por vehículo al mes, usuarios ilimitados. [planes, utm_content=inspecciones]» y la
 segunda semana sobre «quién causa los golpes» (revisión rápida de daños, plan Pro). Sin cifras de clientes.
+
+## 8 bis. Semanas 3 y 4 (11-11 → 24-11), escritas el 03-11
+
+Días de la semana reales (el 11-11 es miércoles). TikTok 18:00 (carruseles en `.jpg`), Instagram 12:00 (`.png`),
+LinkedIn los miércoles 11:00, YouTube jueves y domingo 19:00 **solo si hay vídeo nuevo** (los cinco en español ya
+salieron; no se repiten en YouTube). X lo lleva la sesión del PC. Imágenes: `https://flotadsp.com/redes/<fichero>` si la
+web ya las sirve; si no, `https://raw.githubusercontent.com/oga5furgonetas/foefa/<commit>/frontend/public/redes/<fichero>`
+(el repo es público; así no hace falta esperar a desplegar).
+
+| Día | TikTok (18:00) | Instagram (12:00) | Otros |
+|---|---|---|---|
+| X 11-11 | Carrusel D «Cómo cargar la furgoneta» | Carrusel E «Mensajes para el cliente» | LinkedIn «¿Quién le dio el golpe?» (ya programado) |
+| J 12-11 | Carrusel E | Carrusel F «Antes de firmar con una agencia» | YouTube: solo con vídeo nuevo |
+| V 13-11 | Carrusel F | Reel `tiktok-es-cobro.mp4` (en Instagram salió el 04-11: texto nuevo sobre el cierre del día) | — |
+| S 14-11 | Pieza nueva «Black Friday y Navidad: el pico» | La misma | — |
+| D 15-11 | Carrusel B «7 frases» (en TikTok salió el 05-11: «la 8 la pusisteis vosotros» si hay comentario bueno; si no, otra pieza) | Pieza nueva «Lo que no puede faltar en la furgoneta» | YouTube: solo con vídeo nuevo |
+| L 16-11 | «Lo que no puede faltar en la furgoneta» | Carrusel C «¿Cuánto gana de verdad?» (repetido a 8 días: solo si no hay pieza nueva) | — |
+| M 17-11 | Pieza nueva «Errores del primer mes» | La misma | — |
+| X 18-11 | Invita y gana (`invita-9x16.jpg`, texto nuevo) | «Errores del primer mes» | LinkedIn: «ITV, seguro y renting sin sustos» (abajo) |
+| J 19-11 – D 24-11 | Lo que mejor haya ido de las semanas 1-3, con gancho nuevo, y las piezas que se creen | | LinkedIn X 25-11: «El cuadrante sin Excel» (abajo) |
+
+**LinkedIn X 18-11 (empresas):**
+> ¿Cuándo le toca la ITV a la furgoneta 7? Si la respuesta está en un Excel o en la cabeza de alguien, un día se pasa.
+> FDS avisa antes de cada vencimiento (ITV, seguro, renting) y guarda cada documento en la ficha del vehículo. Con la
+> inspección diaria con fotos y los daños marcados por la IA, sabes en qué estado está cada furgoneta sin ir a verla.
+> Desde 5 € por vehículo al mes, usuarios ilimitados. 7 días de prueba gratis, sin tarjeta.
+> https://flotadsp.com/planes?utm_source=linkedin&utm_medium=organico&utm_campaign=empresas&utm_content=vencimientos
+> #gestiondeflotas #flotas #logistica #transporte
+
+**LinkedIn X 25-11 (empresas):**
+> El cuadrante de la semana que viene, otra vez a mano: quién libra, quién dobla, quién pidió el viernes.
+> El cuadrante de FDS reparte turnos y días libres con reglas (findes justos, descansos), y cada conductor ve los suyos
+> en el móvil y pide días o turnos extra desde ahí. Plan Pro, desde 9 € por vehículo al mes, usuarios ilimitados.
+> 7 días de prueba gratis, sin tarjeta.
+> https://flotadsp.com/planes?utm_source=linkedin&utm_medium=organico&utm_campaign=empresas&utm_content=cuadrante
+> #gestiondeflotas #recursoshumanos #logistica #transporte
+
+**Lo que falta para estas semanas:** vídeos nuevos (YouTube no recibe nada nuevo desde el 09-11) y las tres piezas nuevas
+de la lista de `redes/TEXTO.md`. Una pieza por ronda como mucho.
 
 ## 9. Medición (semanal, lunes)
 

@@ -211,8 +211,41 @@ const X2 = [
   ['X-invita', tarjeta('Invita y gana', '10 € por cada compañero que la use de verdad', [['1', 'Le pasas tu enlace desde la app.'], ['2', 'Hace su primera ruta real: 20 entregas en 2 días.'], ['3', 'Tú, 10 € a tu cartera (Bizum o PayPal). Él, 25 € de bienvenida.']], 'Promoción hasta el 31 de diciembre · condiciones en flotadsp.com/invita')],
 ]
 
-const PIEZAS = [...A, ...B, ...C, ...D, ...X.map(([n, h]) => [n, h, 1600, 900]), ...X2.map(([n, h]) => [n, h, 1600, 900])]
-const nav = await chromium.launch()
+/* ── E. Mensajes que puedes mandar al cliente antes de llegar (03-11) ───────────────────── */
+const MENSAJES = [
+  ['🕘', 'Antes de llegar', '«Hola, soy el repartidor de tu paquete. Llego en unos 10 minutos. ¿Estás en casa?»'],
+  ['🚪', 'En el portal', '«Estoy en tu portal. ¿Me abres, o lo dejo con el conserje o con un vecino?»'],
+  ['💶', 'Si hay que cobrar', '«Son 23,40 € al entregar. ¿Efectivo, tarjeta o Bizum?» Dicho antes, nadie va a buscar la cartera con la puerta abierta.'],
+  ['📍', 'Si no está', '«No te he encontrado. Lo he dejado en conserjería, te mando la foto.» Te ahorras la llamada de «¿dónde está mi paquete?».'],
+  ['✅', 'Al entregar', '«Entregado en tu buzón. ¡Buen día!» Corto. Si lo dejas en un sitio, dilo siempre.'],
+]
+const E = [
+  ['E-1-portada', portada(fondoFurgoneta, 'Cópialos', 'Mensajes para el cliente <span class="resalta">antes de llegar</span>', 'Cinco que te ahorran subir para nada')],
+  ...MENSAJES.map((p, i) => [`E-${i + 2}`, punto(p, i, 'Cópialos y guárdalos')]),
+  ['E-7-cierre', cierre('¿Y escribirlos cada vez? <span style="color:var(--marca)">Un toque</span>', 'En FDS cada parada tiene su botón de WhatsApp con el mensaje ya escrito.')],
+]
+
+/* ── F. Antes de firmar con una agencia de reparto (03-11) ───────────────────────────────── */
+const AGENCIA = [
+  ['💶', 'Cómo te pagan', 'Por parada, por paquete o por día. Y qué pasa con los ausentes y las devoluciones: ¿se cobran o no?'],
+  ['🚐', 'Quién pone qué', 'Furgoneta, seguro, gasóleo, móvil. Cada cosa que pones tú se resta de lo que ganas.'],
+  ['📦', 'Paradas de verdad', 'Cuántas salen un día normal en tu zona, no las del anuncio. Y cuántos kilómetros hay entre ellas.'],
+  ['📅', 'Cuándo pagan', 'A 30, 60 o 90 días cambia mucho tu mes. Y si hay penalizaciones, por qué y cuánto.'],
+  ['🧮', 'Haz la cuenta antes', 'Lo que facturas menos gasóleo, cuota y gastos fijos, dividido por tus horas. Ese es tu sueldo.'],
+]
+const F = [
+  ['F-1-portada', portada(fondoLibreta, 'Autónomos del reparto', 'Antes de firmar con <span class="resalta">una agencia</span> de reparto', 'Cinco preguntas que conviene hacer')],
+  ...AGENCIA.map((p, i) => [`F-${i + 2}`, punto(p, i, 'Guárdalo antes de firmar')]),
+  ['F-7-cierre', cierre('Haz la cuenta con <span style="color:var(--marca)">tus números</span>', 'Calculadora gratis y sin registro: lo que te queda de verdad por hora.', 'flotadsp.com/calculadora-repartidor', 'Calculadora gratis · sin registro')],
+]
+
+// SOLO=E,F genera solo las piezas que empiezan así (las ya publicadas no se tocan). Cada carrusel sale también en
+// JPEG (TikTok no admite PNG en los posts de fotos: «use image/jpeg», 31-10-2026).
+const SOLO = (process.env.SOLO || '').split(',').map((x) => x.trim()).filter(Boolean)
+const PIEZAS = [...A, ...B, ...C, ...D, ...E, ...F, ...X.map(([n, h]) => [n, h, 1600, 900]), ...X2.map(([n, h]) => [n, h, 1600, 900])]
+  .filter(([n]) => !SOLO.length || SOLO.some((p) => n.startsWith(p)))
+// PW_CHROMIUM: ruta a un Chromium ya instalado si la versión de Playwright no trae el suyo (p. ej. /opt/pw-browsers/chromium).
+const nav = await chromium.launch(process.env.PW_CHROMIUM ? { executablePath: process.env.PW_CHROMIUM } : {})
 const pag = await nav.newPage({ viewport: { width: 1080, height: 1920 }, deviceScaleFactor: 1 })
 for (const [nombre, html, ancho = 1080, alto = 1920] of PIEZAS) {
   await pag.setViewportSize({ width: ancho, height: alto })
@@ -220,6 +253,7 @@ for (const [nombre, html, ancho = 1080, alto = 1920] of PIEZAS) {
   await pag.evaluate(() => document.fonts.ready)
   const destino = path.join(SALIDA, `${nombre}.png`)
   await pag.screenshot({ path: destino })
+  if (ancho === 1080) await pag.screenshot({ path: destino.replace(/\.png$/, '.jpg'), type: 'jpeg', quality: 90 })
   console.log('→', path.relative(RAIZ, destino))
 }
 await nav.close()
