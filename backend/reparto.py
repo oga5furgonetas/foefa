@@ -49,8 +49,10 @@ def hueco_sugerido(posicion: int, total: int, carga_por: str = "traseras") -> st
 MAX_PEGADO = 500             # líneas por pegada
 
 # Lo que se tapa a quien no es la empresa (el dueño del producto entrando
-# como ella). La zona, el estado y los bultos no son datos de nadie.
-CAMPOS_PERSONALES = ("cliente", "telefono", "direccion", "lat", "lng", "notas", "entrega_recibe")
+# como ella). La zona, el estado y los bultos no son datos de nadie. El punto de
+# la zona (02-11-2026: el centro del CP o del pueblo de una parada sin situar), sí:
+# sale de su dirección, como lat/lng.
+CAMPOS_PERSONALES = ("cliente", "telefono", "direccion", "lat", "lng", "zona_lat", "zona_lng", "notas", "entrega_recibe")
 
 # DÓNDE SE DEJA (10-10-2026, como Circuit/Spoke): un toque en vez de escribir la
 # nota. Lo ve el cliente en su enlace de seguimiento («Entregado: en el buzón»).
@@ -99,7 +101,15 @@ _CP_RE = re.compile(r"\b(0[1-9]|[1-4]\d|5[0-2])\d{3}\b")
 _TEL_RE = re.compile(r"(?:\+?34[\s.-]?)?[6789](?:[\s.-]?\d){8}\b")
 
 
-def extrae_cp(texto) -> str:
+def extrae_cp(texto, pais="es") -> str:
+    """El CP escrito en el texto: en España, el primero, como siempre; en otro país, con su regla (03-11-2026,
+    geocodificador.cp_escrito). Con la de España, en EE. UU. «12345 Lake City Way NE, Seattle, WA 98125» quedaba con el
+    12345 (el número de la casa; ese CP es de Schenectady, Nueva York), en Brasil «01310-100» con «01310» y en Portugal,
+    Francia o Reino Unido, sin CP."""
+    pais = str(pais or "es").lower()
+    if pais != "es":
+        import geocodificador                                # solo fuera de España
+        return geocodificador.cp_escrito(texto, pais)
     m = _CP_RE.search(str(texto or ""))
     return m.group(0) if m else ""
 
@@ -118,9 +128,9 @@ def extrae_telefono(texto) -> str:
 # el barrio, el pueblo). El código postal manda: es exacto, y una palabra
 # como «Real» está en media ciudad.
 
-def zona_de(direccion, cp, zonas) -> dict:
-    """La zona que le toca a una dirección, o {} si ninguna."""
-    cp = (cp or extrae_cp(direccion) or "").strip()
+def zona_de(direccion, cp, zonas, pais="es") -> dict:
+    """La zona que le toca a una dirección, o {} si ninguna. Sin CP, el escrito con la regla del país (03-11-2026)."""
+    cp = (cp or extrae_cp(direccion, pais) or "").strip()
     if cp:
         for z in zonas or []:
             if cp in [str(x).strip() for x in (z.get("cps") or [])]:
@@ -158,25 +168,34 @@ def distancia_km(a, b) -> float:
 # consulta. Vale para los formatos de cada país: «Apt 4B» (EE. UU.), «Apto 45» (Brasil), «Int. 3» (México), «2e
 # étage» (Francia), «2. OG» (Alemania), «Flat 3» (Reino Unido); y «Carrera 7 # 32-16» (Colombia) se queda entero,
 # porque ahí el «#» es el número.
+# 02-11-2026 (como Situar.kt y situar.js): «der», «of» e «int» solo con su punto, que sin él son de la calle («An der
+# Alster 12» se quedaba en «An» y «1211 Avenue of the Americas» en «1211 Avenue»); y el ordinal vale pegado a la puerta
+# («1ºB», «3ºA», «2ºIzq», lo normal en las etiquetas), que antes no se reconocía y se mandaba a buscar.
 _PISO_RE = re.compile(
-    r"(?:^|[\s,])(?:\d{1,3}\s*[ºª°]|\d+(?:er|e|ème|st|nd|rd|th)\b|\d+\.\s*(?:og|stock|etage)|piso|planta|pta\.?|puerta|esc\.?|escalera|bajo|bj\.?|entlo\.?|"
-    r"entresuelo|[áa]tico|s[óo]tano|izq\.?|izda\.?|dcha\.?|der\.?|dcho\.?|ctro\.?|apto\.?|apt\.?|apartamento|apartment|appt\.?|depto\.?|dpto\.?|"
-    r"departamento|int\.?|interior|bloque|blq\.?|torre|unit|suite|ste\.?|floor|fl\.?|flat|local|oficina|of\.?|room|rm\.?|[ée]tage|[ée]tg\.?|"
-    r"b[âa]t\.?|b[âa]timent|stock|og|wohnung|whg\.?|andar|sala|edif\.?|edificio|portal)(?=[\s,.:]|$)", re.I)
+    r"(?:^|[\s,])(?:\d{1,3}\s*[ºª°]|(?:\d+(?:er|e|ème|st|nd|rd|th)\b|\d+\.\s*(?:og|stock|etage)|piso|planta|pta\.?|puerta|esc\.?|escalera|bajo|bj\.?|entlo\.?|"
+    r"entresuelo|[áa]tico|s[óo]tano|izq\.?|izda\.?|dcha\.?|der\.|dcho\.?|ctro\.?|apto\.?|apt\.?|apartamento|apartment|appt\.?|depto\.?|dpto\.?|"
+    r"departamento|int\.|interior|bloque|blq\.?|torre|unit|suite|ste\.?|floor|fl\.?|flat|local|oficina|of\.|room|rm\.?|[ée]tage|[ée]tg\.?|"
+    r"b[âa]t\.?|b[âa]timent|stock|og|wohnung|whg\.?|andar|sala|edif\.?|edificio|portal)(?=[\s,.:]|$))", re.I)
+_CP_EN_TROZO = re.compile(r"\d{4,5}")
 
 
 def direccion_para_buscar(direccion) -> str:
     """«Rúa Real 2, 1º B» → «Rúa Real 2»; «123 Main St Apt 4B, Springfield» → «123 Main St, Springfield»;
     «Rua das Flores, 123 - Apto 45, Bairro X» → «Rua das Flores, 123, Bairro X». Cada trozo (por comas) se corta
-    donde empieza el piso; un trozo que solo era piso desaparece."""
+    donde empieza el piso; un trozo que solo era piso desaparece. En el primero (la calle) solo cuenta lo que va
+    DETRÁS de un número (02-11-2026, como Situar.kt): «Puerta del Sol 1», «Calle de la Torre 5» y «Portal de Belén 3»
+    son calles, y antes se quedaban en nada o en «Calle de la». En los demás, no detrás de un CP: «29740 Torre del Mar»
+    es un pueblo."""
     partes = []
-    for trozo in re.split(r"\s*[,;]\s*|\s+-\s+", str(direccion or "")):
+    for i, trozo in enumerate(re.split(r"\s*[,;]\s*|\s+-\s+", str(direccion or ""))):
         s = trozo.strip()
         if not s:
             continue
-        m = _PISO_RE.search(s)
-        if m:
-            s = s[:m.start()].strip(" ,.-")
+        for m in _PISO_RE.finditer(s):
+            antes = s[:m.start()]
+            if re.search(r"\d", antes) if i == 0 else not _CP_EN_TROZO.search(antes):
+                s = antes.strip(" ,.-")
+                break
         # «2 1 B» (el OCR se comió el «º»): número, piso y puerta → solo el número.
         s = re.sub(r"\b(\d{1,4})\s+\d{1,2}\s*[A-Ha-h]$", r"\1", s).strip()
         # Una letra suelta tras el número («2 B») es la puerta, no parte del número; «2B» pegado se queda.
@@ -585,8 +604,9 @@ def _campo_de_cabecera(c: str) -> str:
     return ""
 
 
-def lee_pegado(texto) -> list:
-    """Lista de pedidos a partir del texto pegado. Nunca lanza."""
+def lee_pegado(texto, pais="es") -> list:
+    """Lista de pedidos a partir del texto pegado. Nunca lanza. Sin columna de CP, el escrito en la dirección con la
+    regla del país de la cuenta (03-11-2026)."""
     lineas = [l for l in str(texto or "").replace("\r", "").split("\n") if l.strip()][:MAX_PEGADO + 1]
     if not lineas:
         return []
@@ -616,7 +636,7 @@ def lee_pegado(texto) -> list:
             if t:
                 p["telefono"] = t
         if not p.get("cp"):
-            p["cp"] = extrae_cp(p["direccion"])
+            p["cp"] = extrae_cp(p["direccion"], pais)
         try:
             p["bultos"] = max(1, min(99, int(float(str(p.get("bultos") or 1).replace(",", ".")))))
         except ValueError:
@@ -798,7 +818,7 @@ def tapar(pedido: dict) -> dict:
     p = dict(pedido)
     for c in CAMPOS_PERSONALES:
         if p.get(c) not in (None, ""):
-            p[c] = None if c in ("lat", "lng") else "•••"
+            p[c] = None if c in ("lat", "lng", "zona_lat", "zona_lng") else "•••"
     p["tapado"] = True
     return p
 
@@ -851,8 +871,9 @@ def prompt_ticket(pais: str = "es") -> str:
     return PROMPT_TICKET.format(pais=NOMBRES_PAIS_PROMPT.get((pais or "es").lower(), "el país del repartidor"))
 
 
-def limpia_ticket(d) -> dict:
-    """Lo que devuelve la IA, recortado y con los tipos bien."""
+def limpia_ticket(d, pais="es") -> dict:
+    """Lo que devuelve la IA, recortado y con los tipos bien. Sin CP, el escrito en la dirección con la regla del país
+    (03-11-2026)."""
     d = d if isinstance(d, dict) else {}
 
     def t(k, n):
@@ -864,7 +885,7 @@ def limpia_ticket(d) -> dict:
     if out["telefono"]:
         out["telefono"] = extrae_telefono(out["telefono"]) or out["telefono"]
     if not out["cp"]:
-        out["cp"] = extrae_cp(out["direccion"])
+        out["cp"] = extrae_cp(out["direccion"], pais)
     try:
         out["bultos"] = max(1, min(99, int(float(str(d.get("bultos") or 1)))))
     except (TypeError, ValueError):

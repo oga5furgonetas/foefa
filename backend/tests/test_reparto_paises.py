@@ -45,31 +45,53 @@ def test_hoy_y_la_hora_en_la_zona_de_la_cuenta():
     assert server._dia_negocio() == datetime.now(ZoneInfo("Europe/Madrid")).strftime("%Y-%m-%d")
 
 
+class _RedFalsa:
+    """La red del geocodificador de mentira (02-11-2026, geocodificador.RedHttp): Nominatim contesta `nominatim`,
+    Photon `photon` y CartoCiudad nada (204). Apunta lo que se le pide."""
+
+    def __init__(self, nominatim=None, photon=None):
+        self.nominatim, self.photon, self.pedidas = nominatim or [], photon or {"features": []}, []
+
+    async def get(self, srv, url, params, tope, idioma=None):
+        self.pedidas.append((srv, dict(params)))
+        if srv == "nominatim":
+            return {"status": 200, "json": self.nominatim}
+        if srv == "photon":
+            return {"status": 200, "json": self.photon}
+        return {"status": 204, "json": None}
+
+
 @pytest.mark.asyncio(loop_scope="session")
 async def test_las_direcciones_se_buscan_en_el_pais_de_la_cuenta(monkeypatch):
-    pedidas = []
-
-    async def geo(c, url, params=None, intentos=2):
-        pedidas.append(params)
-        return SimpleNamespace(status_code=200, json=lambda: respuesta[0])
-    monkeypatch.setattr(server, "_geo_pide", geo)
-    server._REP_GEO_ULTIMA[0] = 0
-    respuesta = [[{"lat": "19.4326", "lon": "-99.1332", "address": {"country_code": "mx"}}]]
+    """02-11-2026, con la cadena nueva (geocodificador.py): Nominatim con countrycodes del país, un resultado de otro
+    país no vale y en España, la caja de siempre. Y el portal solo si es ESE número en ESA calle."""
+    # En España, con CartoCiudad (para una cuenta de empresa, desde CARTOCIUDAD_EMPRESAS_DESDE: test_geocodificador).
+    monkeypatch.setenv("CARTOCIUDAD_EMPRESAS_DESDE", "2000-01-01")
+    red = _RedFalsa(nominatim=[{"lat": "19.4326", "lon": "-99.1332", "class": "building",
+                                "address": {"country_code": "mx", "house_number": "222", "road": "Avenida Reforma",
+                                            "city": "Ciudad de México"}}])
+    monkeypatch.setattr(server, "_REP_GEO_RED", red)
+    server._REP_GEO_HECHOS.clear()
     t = server._region_actual.set(("mx", "America/Mexico_City"))
     try:
         assert await server._rep_ubicar("Av. Reforma 222, Ciudad de México") == (19.4326, -99.1332)
-        assert pedidas[-1]["countrycodes"] == "mx"
-        # Un resultado de otro país no vale.
-        respuesta[0] = [{"lat": "40.4", "lon": "-3.7", "address": {"country_code": "es"}}]
-        server._REP_GEO_ULTIMA[0] = 0
-        assert await server._rep_ubicar("Calle Mayor 1") is None
+        nominatim = [p for s, p in red.pedidas if s == "nominatim"]
+        assert nominatim[-1]["countrycodes"] == "mx" and nominatim[-1]["street"] == "222 Avenida Reforma"
+        assert not [s for s, _ in red.pedidas if s == "cartociudad"]          # el callejero oficial es solo de España
+        # Un resultado de otro país no vale (ni como portal ni como zona).
+        red.nominatim = [{"lat": "40.4", "lon": "-3.7", "class": "building",
+                          "address": {"country_code": "es", "house_number": "1", "road": "Calle Mayor",
+                                      "city": "Ciudad de México"}}]
+        assert await server._rep_ubicar("Calle Mayor 1, Ciudad de México") is None
     finally:
         server._region_actual.reset(t)
-    # En España, con la caja de siempre.
-    respuesta[0] = [{"lat": "19.4", "lon": "-99.1", "address": {"country_code": "es"}}]
-    server._REP_GEO_ULTIMA[0] = 0
+    # En España, con la caja de siempre: un punto en México no vale aunque diga «es».
+    red.nominatim = [{"lat": "19.4", "lon": "-99.1", "class": "building",
+                      "address": {"country_code": "es", "house_number": "3", "road": "Calle Rara", "city": "Madrid"}}]
+    red.pedidas.clear()
     assert await server._rep_ubicar("Calle rara 3, Madrid") is None
-    assert pedidas[-1]["countrycodes"] == "es"
+    assert [p for s, p in red.pedidas if s == "nominatim"][-1]["countrycodes"] == "es"
+    assert [s for s, _ in red.pedidas][0] == "cartociudad"                # en España, primero el callejero oficial
 
 
 @pytest.fixture
@@ -137,6 +159,34 @@ async def test_cambiar_pais_desde_ajustes(cuentas, monkeypatch):
     with pytest.raises(HTTPException) as e:
         await server.reparto_ajustes_put({"pais": "zz"}, yo)
     assert e.value.status_code == 400
+
+
+def test_el_piso_fuera_del_buscador_sin_comerse_la_calle():
+    """02-11-2026: «der», «of» e «int» solo con su punto (sin él son de la calle); el piso pegado al número («1ºB»,
+    «3ºA», «2ºIzq»); y en la calle solo cuenta lo que va detrás del número («Puerta del Sol 1», «Calle de la Torre 5»)."""
+    casos = {
+        "Rúa Real 2, 1ºB, 15003 A Coruña": "Rúa Real 2, 15003 A Coruña",
+        "Calle Mayor 5 3ºA, Madrid": "Calle Mayor 5, Madrid",
+        "Calle Mayor 5 2ºIzq": "Calle Mayor 5",
+        "An der Alster 12": "An der Alster 12",
+        "Hotel Atlantic, An der Alster 72, 20099 Hamburg": "Hotel Atlantic, An der Alster 72, 20099 Hamburg",
+        "1211 Avenue of the Americas, New York, NY 10036": "1211 Avenue of the Americas, New York, NY 10036",
+        "Platz der Republik 1, 11011 Berlin": "Platz der Republik 1, 11011 Berlin",
+        "Av. Insurgentes Sur 1602 Int. 4, CDMX": "Av. Insurgentes Sur 1602, CDMX",
+        "Calle Real 1 der., Madrid": "Calle Real 1, Madrid",
+        "Puerta del Sol 1, Madrid": "Puerta del Sol 1, Madrid",
+        "Calle de la Torre 5 bajo, Madrid": "Calle de la Torre 5, Madrid",
+        "Portal de Belén 3 1ºA": "Portal de Belén 3",
+        "Calle X 3, 29740 Torre del Mar": "Calle X 3, 29740 Torre del Mar",
+        # Lo de siempre.
+        "Rúa Real 2, 1º B": "Rúa Real 2",
+        "123 Main St Apt 4B, Springfield": "123 Main St, Springfield",
+        "Rua das Flores, 123 - Apto 45, Bairro X": "Rua das Flores, 123, Bairro X",
+        "Calle Mayor 5 2 B, Madrid": "Calle Mayor 5, Madrid",
+        "2 rue de la Paix, 3e étage, Paris": "2 rue de la Paix, Paris",
+    }
+    for escrita, buscada in casos.items():
+        assert reparto.direccion_para_buscar(escrita) == buscada, escrita
 
 
 def test_coordenadas_chinas_gcj02_ida_y_vuelta():
@@ -212,34 +262,15 @@ async def test_alta_no_crea_colecciones_vacias(monkeypatch):
 
 @pytest.mark.asyncio(loop_scope="session")
 async def test_si_nominatim_no_encuentra_photon_da_la_calle_aproximada(monkeypatch):
-    """«Avenida de mahia 2 1b, 15220 bertamirans»: Nominatim no la encuentra;
-    Photon da un punto de la Avenida da Mahía (15220) -> aproximada. Una calle
-    con el mismo nombre en otro código postal no vale."""
-    monkeypatch.setattr(server, "_REP_GEO_ULTIMA", [0.0])
-
-    class R:
-        def __init__(self, j): self.status_code, self._j = 200, j
-        def json(self): return self._j
-
+    """«Avenida de mahia 2 1b, 15220,bertamirans, ames, A coruña»: ni el callejero oficial ni Nominatim la encuentran;
+    Photon da una casa de la Avenida da Mahía (15220) con otro número -> la calle, aproximada (nunca como el portal).
+    Una calle con el mismo nombre en otro código postal no vale."""
     otra = {"type": "Feature", "geometry": {"coordinates": [-8.40, 43.37]},
             "properties": {"countrycode": "ES", "type": "street", "name": "Avenida da Mahía", "postcode": "15001"}}
     buena = {"type": "Feature", "geometry": {"coordinates": [-8.6434, 42.8627]},
              "properties": {"countrycode": "ES", "type": "house", "name": "O Lar de Pepe", "street": "Avenida da Mahía",
                             "housenumber": "95", "postcode": "15220"}}
-
-    class C:
-        def __init__(self, *a, **k): pass
-        async def __aenter__(self): return self
-        async def __aexit__(self, *a): return False
-        async def get(self, url, params=None, **k):
-            if "nominatim" in url:
-                return R([])
-            return R({"features": [otra, buena]})
-
-    import httpx
-    monkeypatch.setattr(httpx, "AsyncClient", C)
-    async def sin_espera(*a, **k): return None
-    monkeypatch.setattr(server, "_geo_pide", lambda c, url, params=None, intentos=1: c.get(url, params=params))
-    monkeypatch.setattr(server.asyncio, "sleep", sin_espera)
+    monkeypatch.setattr(server, "_REP_GEO_RED", _RedFalsa(photon={"features": [otra, buena]}))
+    server._REP_GEO_HECHOS.clear()
     pt = await server._rep_ubicar("Avenida de mahia 2 1b, 15220,bertamirans, ames, A coruña")
     assert pt == (42.8627, -8.6434, "aprox")

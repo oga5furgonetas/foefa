@@ -182,12 +182,20 @@ async def test_la_proxima_parada_en_esa_direccion_nace_en_la_puerta(base):
     assert (otra["lat"], otra["geo"]) == (43.3712, "ok")
     de_luis = await _parada(LUIS, direccion="Avda Montero Ríos 12, 15003")
     assert (de_luis["lat"], de_luis["geo"]) == (43.3690, "ok")
-    # Las direcciones conocidas salen con la puerta.
+    # Las direcciones conocidas salen con la puerta. Desde el 03-11-2026 solo cuentan las entregadas, y una dirección
+    # sale solo si alguna aprendió la puerta: la de hoy en la misma dirección (q, pendiente) no suma, y la otra forma
+    # de escribirla (q2, solo pendiente) no sale.
     d = await server.reparto_mis_direcciones("montero", ANA)
-    assert d["direcciones"][0]["lat"] == 43.36905 and d["direcciones"][0]["puerta"] is True and d["direcciones"][0]["veces"] == 2
-    # Una posición imprecisa no se aprende.
+    assert d["direcciones"][0]["lat"] == 43.36905 and d["direcciones"][0]["puerta"] is True and d["direcciones"][0]["veces"] == 1
+    assert d["direcciones"][0]["precision"] == "portal" and len(d["direcciones"]) == 1
+    # Una posición imprecisa no se aprende, y entregada sin puerta, esa dirección no sale como suya (03-11-2026).
     await server.reparto_estado(otra["id"], {"estado": "entregado", "posicion": {"lat": 43.3712, "lng": -8.3990, "precision": 90}}, ANA)
     assert "puerta_lat" not in base.db["reparto_pedidos"].docs[3]
+    assert (await server.reparto_mis_direcciones("real 5", ANA))["direcciones"] == []
+    # Ni una fallida, aunque se diera por entregada antes con la puerta (03-11-2026): sin entrega no queda puerta.
+    await server.reparto_estado(p["id"], {"estado": "fallido", "motivo": "Dirección incorrecta"}, ANA)
+    assert base.db["reparto_pedidos"].docs[0]["puerta_lat"] is None
+    assert (await server.reparto_mis_direcciones("montero", ANA))["direcciones"] == []
 
 
 # ── Lo que publica la DGT ────────────────────────────────────────────────────
