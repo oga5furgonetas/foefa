@@ -2244,6 +2244,20 @@ próxima versión de la app (no compilado aquí: no hay SDK de Android en la nub
    revisión beta. José Antonio Porto está INVITADO: la invitación la mandó Apple al aprobarla (la del vigilante dio 409
    porque ya estaba). Falta que la instale con TestFlight y grabe el vídeo; con él, en la versión 2.4.1, cambiar el
    build 9 por el 16, adjuntar el vídeo y pulsar «Volver a enviar a revisión de apps».
+   14:06 del 03-11: REENVIADA A APPLE (Dani: «Sí, súbelo y reenvía»). Dani mandó dos vídeos grabados con TestFlight
+   (13:34 y 13:47, por WhatsApp, 384x832): entre los dos salían entrar, escanear dos etiquetas reales (TIPSA y MRW),
+   la foto de la etiqueta, entregar con firma y foto, borrar la cuenta y crear otra; NO «Ordenar ruta» (con una parada
+   sin situar salió «No se pudo ordenar»). Montados en uno (Dani: «Monta tú los dos»): 2 min 37 s, sin audio, 768x1664,
+   con un rótulo en inglés por parte; fuera los intentos de borrar la cuenta con la contraseña mal, todas las
+   notificaciones (WhatsApp, María, Amazon Flex, Slack), las fotos de niños de los widgets y el salto a Google Maps
+   (repasado cada medio segundo). Por la API (scripts en %LOCALAPPDATA%\Tempds-emusc\): build 16 adjuntado a la
+   2.4.1, el vídeo como adjunto de la revisión (appStoreReviewAttachments, COMPLETE), las notas al día (lo que sale
+   de verdad en el vídeo; fuera «Probarla ahora, sin registrarme», que no existe en la app de iPhone). El envío viejo
+   (UNRESOLVED_ISSUES) no se dejaba reenviar («Version is not ready to be submitted yet» al cambiar el build; «resolved»
+   daba 500): se quitó su elemento rechazado, quedó COMPLETE y se creó uno nuevo (22b9c401): WAITING_FOR_REVIEW.
+   OJO: la app de iPhone lleva la web EMPAQUETADA (capacitor.config.json sin server.url): la build 16 es la web del
+   31-10/01-11, sin «Situar la parada» ni la guía propia («Ir» abre Google Maps). Con la versión definitiva, una build
+   nueva de iOS con la misma web que Android (Dani: «eso después lo arreglarás y montarás la app bien para Apple»).
    11:0x, RESULTADO de la cuarta tanda (dos partes, 3 h 35 min, sin commit): TODO en verde (pytest 1546, Playwright
    entero 671 en los dos proyectos, gradle 102 tests, contrato app-API 100 OK, la nativa y la web dan lo mismo en todos
    los juegos con el JDK 17 y el JBR 25, laboratorio 504 de 546 sin ninguna regresión). El portal ya es el primer
