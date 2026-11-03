@@ -113,7 +113,7 @@ async def test_pasados_15_minutos_vuelve_a_pedir_la_actual(base):
     with pytest.raises(HTTPException) as e:
         await server.change_my_password({"current_password": "", "new_password": "la-nueva-1"},
                                         _yo(at=int(time.time()) - 16 * 60))
-    assert e.value.status_code == 400 and "actual no es correcta" in e.value.detail
+    assert e.value.status_code == 400 and "escribe la actual" in e.value.detail and "código a tu correo" in e.value.detail
     with pytest.raises(HTTPException):
         await server.change_my_password({"current_password": "", "new_password": "la-nueva-1"}, _yo())
     assert server.verify_password(PROPIA, base["driver_accounts"].docs[0]["hashed_password"])
@@ -145,6 +145,51 @@ async def test_la_ficha_dice_si_puede_cambiarla_sin_la_actual_y_adonde_iria_el_c
     r = await server.portal_mi_ficha(_yo())
     assert r["clave_sin_actual"] is False
     assert (await server.portal_mi_ficha(_yo("f3")))["codigo_a"] is None
+
+
+# ── Una sola regla para pedirla y para aceptarla (03-11-2026) ────────────────────────────────────────────────────────
+# José Arturo (OGA5): «no pueden pedir para trabajar mañana… les da problemas con la contraseña». Tres conductores se
+# quedaron en «Elige tu contraseña personal» (sin la actual) y el servidor se la rechazaba una y otra vez: el login, la
+# renovación y la ficha decían «configurar la cuenta» con solo mirar la marca, y el cambio miraba además las fechas.
+
+@pytest.mark.asyncio(loop_scope="session")
+async def test_con_una_temporal_vieja_ni_la_ficha_ni_la_renovacion_piden_elegirla(base, monkeypatch):
+    monkeypatch.setattr(server, "_exigir_app_al_dia", lambda _r: None)
+    c1 = base["driver_accounts"].docs[0]
+    c1.update({"must_change_password": True, "password_temp_created_at": "2026-10-01T10:00:00+00:00"})
+    assert (await server.portal_mi_ficha(_yo()))["configurar_cuenta"] is False
+    s = await server.renovar_sesion(_yo(), _peticion())
+    assert s.configurar_cuenta is False
+    with pytest.raises(HTTPException) as e:                       # y el cambio sin la actual dice qué hacer
+        await server.change_my_password({"current_password": "", "new_password": "la-nueva-1"}, _yo())
+    assert "escribe la actual" in e.value.detail
+
+
+@pytest.mark.asyncio(loop_scope="session")
+async def test_con_una_temporal_nueva_la_piden_y_se_crea_sin_la_actual(base, monkeypatch):
+    monkeypatch.setattr(server, "_exigir_app_al_dia", lambda _r: None)
+    c1 = base["driver_accounts"].docs[0]
+    c1.update({"must_change_password": True, "password_temp_created_at": "2026-11-03T08:00:00+00:00"})
+    assert (await server.portal_mi_ficha(_yo()))["configurar_cuenta"] is True
+    assert (await server.renovar_sesion(_yo(), _peticion())).configurar_cuenta is True
+    assert await server.change_my_password({"current_password": "", "new_password": "la-mia-nueva-1"}, _yo()) == {"success": True}
+    assert (await server.portal_mi_ficha(_yo()))["configurar_cuenta"] is False
+
+
+@pytest.mark.asyncio(loop_scope="session")
+async def test_la_temporal_de_otra_cuenta_suya_vieja_no_pide_elegirla(base):
+    # Dos cuentas de la misma persona (fichas fusionadas): la temporal vieja de una no vale frente a la propia de la otra.
+    base["driver_accounts"].docs.append({"id": "c9", "driver_id": "f1", "email": CORREO, "active": True,
+                                         "hashed_password": server.hash_password("vieja-1"), "creada_en_bloque": True,
+                                         "password_temp_created_at": "2026-10-01T10:00:00+00:00", "created_at": "2026-10-01"})
+    assert (await server.portal_mi_ficha(_yo()))["configurar_cuenta"] is False
+    assert await server._configurar_cuenta_de(base, "f1", CORREO) is False
+
+
+@pytest.mark.asyncio(loop_scope="session")
+async def test_sin_ninguna_cuenta_el_login_por_codigo_pide_crearla(base):
+    assert await server._configurar_cuenta_de(base, "f3") is True
+    assert await server._configurar_cuenta_de(base, "") is False
 
 
 # ── La inicial de la empresa, ya cambiada ────────────────────────────────────────────────────────────────────────────
@@ -186,7 +231,7 @@ async def test_el_codigo_va_al_correo_personal_verificado_si_lo_vinculo(base):
 async def test_sin_codigo_ni_actual_rechaza_y_la_actual_buena_sigue_valiendo(base):
     with pytest.raises(HTTPException) as e:
         await server.change_my_password({"current_password": "", "new_password": "otra-nueva-1"}, _yo())
-    assert e.value.status_code == 400 and "actual no es correcta" in e.value.detail
+    assert e.value.status_code == 400 and "escribe la actual" in e.value.detail
     assert await server.change_my_password({"current_password": PROPIA, "new_password": "otra-nueva-1"}, _yo()) == {"success": True}
 
 

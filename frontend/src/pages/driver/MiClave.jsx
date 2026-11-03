@@ -60,6 +60,12 @@ export default function MiClave({ onBack, obligatoria = false }) {
       await changeMyPassword(conCodigo ? '' : actual, nueva, conCodigo && !sinLaActual ? codigo : '')
       setHecho(true)
     } catch (e) {
+      // LA MARCA VIEJA (03-11-2026): si el servidor ya no le pide elegirla (la eligió en otro móvil, o la temporal era
+      // de antes de la suya), se entra en vez de repetir el error en «Elige tu contraseña personal».
+      if (obligatoria && e?.response?.status === 400) {
+        const f = await getMiFicha().catch(() => null)
+        if (f?.data?.configurar_cuenta === false) { onBack(); return }
+      }
       setErr(e?.response?.status === 401
         ? 'La contraseña actual no es correcta.'
         : (e?.response?.data?.detail || 'No se pudo cambiar. Inténtalo otra vez.'))
