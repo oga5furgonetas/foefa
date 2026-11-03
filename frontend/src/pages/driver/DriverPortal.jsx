@@ -327,7 +327,7 @@ export default function DriverPortal() {
   if (vista === 'dias') return <PedirDias onBack={() => setVista('inicio')} />
   if (vista === 'extra') return <TrabajarMas onBack={() => setVista('inicio')} />
   if (vista === 'turnos') return <MisTurnos onBack={() => setVista('inicio')} />
-  if (vista === 'clave') return <MiClave obligatoria={!!driver.configurar_cuenta}
+  if (vista === 'clave') return <MiClave obligatoria={!!driver.configurar_cuenta} onSalir={logout}
     onBack={() => {
       if (driver.configurar_cuenta) {
         const actualizado = { ...driver, configurar_cuenta: false }

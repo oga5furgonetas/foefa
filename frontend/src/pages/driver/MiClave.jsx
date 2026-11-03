@@ -7,7 +7,7 @@ import { changeMyPassword, getMiFicha, pedirCodigoClave } from '../../services/a
    Antes esto solo lo podía hacer un admin, así que un conductor que quisiera
    cambiarla tenía que pedírselo a la oficina y decirle cuál quería — es decir,
    contarle su contraseña a otra persona. Ahora se la pone él y nadie más la ve. */
-export default function MiClave({ onBack, obligatoria = false }) {
+export default function MiClave({ onBack, obligatoria = false, onSalir }) {
   /* CREAR NO ES CAMBIAR. Quien entra con código o con una clave temporal puede
      no tener aún una contraseña propia; el servidor devuelve si tiene cuenta
      (`tiene_clave`) y esta pantalla le pide solo lo que necesita. */
@@ -37,6 +37,7 @@ export default function MiClave({ onBack, obligatoria = false }) {
   const [ocupado, setOcupado] = useState(false)
   const [err, setErr] = useState('')
   const [hecho, setHecho] = useState(false)
+  const [yaLaTenia, setYaLaTenia] = useState(false)
 
   const corta = nueva.length > 0 && nueva.length < 6
   const distintas = repetir.length > 0 && nueva !== repetir
@@ -61,10 +62,11 @@ export default function MiClave({ onBack, obligatoria = false }) {
       setHecho(true)
     } catch (e) {
       // LA MARCA VIEJA (03-11-2026): si el servidor ya no le pide elegirla (la eligió en otro móvil, o la temporal era
-      // de antes de la suya), se entra en vez de repetir el error en «Elige tu contraseña personal».
+      // de antes de la suya), se entra en vez de repetir el error en «Elige tu contraseña personal»; y se le dice que la
+      // que acaba de escribir no se ha guardado, para que no la use la próxima vez.
       if (obligatoria && e?.response?.status === 400) {
         const f = await getMiFicha().catch(() => null)
-        if (f?.data?.configurar_cuenta === false) { onBack(); return }
+        if (f?.data?.configurar_cuenta === false) { setYaLaTenia(true); return }
       }
       setErr(e?.response?.status === 401
         ? 'La contraseña actual no es correcta.'
@@ -82,17 +84,30 @@ export default function MiClave({ onBack, obligatoria = false }) {
         )}
 
         <h1 className="font-display text-[22px] font-bold tracking-[-.02em] text-dark-50">
-          {obligatoria ? 'Elige tu contraseña personal' : creando ? 'Crear mi contraseña' : 'Cambiar mi contraseña'}
+          {yaLaTenia ? 'Ya tenías tu contraseña' : obligatoria ? 'Elige tu contraseña personal' : creando ? 'Crear mi contraseña' : 'Cambiar mi contraseña'}
         </h1>
         <p className="mt-1 text-[13px] leading-relaxed text-dark-500">
-          {obligatoria
+          {yaLaTenia
+            ? 'La que acabas de escribir no se ha guardado: sigue entrando con la tuya de siempre.'
+            : obligatoria
             ? 'Has entrado con un acceso temporal. Elige ahora una contraseña propia, que solo tú conozcas.'
             : creando
             ? 'Ahora entras solo con tu correo. Ponte una contraseña y a partir de la próxima vez te la pedirá también a ti — y solo a ti: nadie de la oficina la ve.'
             : 'Ponte la que quieras, mínimo 6 caracteres. Nadie de la oficina la va a ver.'}
         </p>
 
-        {hecho ? (
+        {yaLaTenia ? (
+          <div className="mt-6 rounded-xl border border-dark-700 bg-dark-900 p-4" data-testid="clave-ya-la-tenia">
+            <p className="text-[13px] leading-relaxed text-dark-300">
+              Si no la recuerdas, entra y cámbiala en «Cambiar mi contraseña» con un código a tu correo, o pide a la oficina
+              una contraseña temporal.
+            </p>
+            <button onClick={onBack} data-testid="clave-entrar"
+              className="mt-4 w-full rounded-xl bg-brand-500 py-3 text-[15px] font-bold text-brand-tinta">
+              Entrar
+            </button>
+          </div>
+        ) : hecho ? (
           <div className="mt-6 rounded-xl border border-emerald-500/30 bg-emerald-500/[0.07] p-4">
             <p className="flex items-center gap-2 text-[14px] font-semibold text-emerald-300">
               <Check size={16} /> {creando ? 'Contraseña creada' : 'Contraseña cambiada'}
@@ -187,6 +202,14 @@ export default function MiClave({ onBack, obligatoria = false }) {
                 ¿Sin acceso a tu correo? Sal de la cuenta y vuelve a entrar: nada más entrar podrás cambiarla sin la
                 actual. O pide a la oficina una contraseña temporal.
               </p>
+            )}
+            {/* SIEMPRE CON SALIDA (03-11-2026, José Arturo, OGA5: «no pueden pedir para trabajar mañana… les da
+                problemas con la contraseña»): esta pantalla no tenía ni «Volver» ni «Cerrar sesión», y si guardar
+                fallaba por lo que fuera, el conductor no salía de aquí. */}
+            {obligatoria && onSalir && (
+              <button onClick={onSalir} data-testid="clave-salir" className="mt-1 text-[13px] font-semibold text-dark-400">
+                Cerrar sesión
+              </button>
             )}
           </div>
         )}

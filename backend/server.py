@@ -5807,16 +5807,21 @@ def _version_tupla(v: str) -> tuple:
     return tuple(int(x) for x in re.findall(r"\d+", v or "")[:4])
 
 
+def _app_android_antes_de(headers, version: str) -> bool:
+    """True si la app que llama es la de Android y más vieja que `version` (la web, el iPhone o sin versión: False)."""
+    cabecera = (headers.get("x-fds-app") or headers.get("X-FDS-App") or "").strip()
+    if not cabecera.startswith("android-"):
+        return False
+    actual = _version_tupla(cabecera[len("android-"):])
+    return bool(actual) and actual < _version_tupla(version)
+
+
 def _app_android_vieja(headers) -> bool:
     """True si la app que llama es Android y más vieja que APP_ANDROID_MIN (o si no es Android, o no hay mínimo: False)."""
     minimo = (os.environ.get("APP_ANDROID_MIN") or "").strip()
     if not re.fullmatch(r"[0-9][0-9.]{0,15}", minimo):
         return False
-    cabecera = (headers.get("x-fds-app") or headers.get("X-FDS-App") or "").strip()
-    if not cabecera.startswith("android-"):
-        return False
-    actual = _version_tupla(cabecera[len("android-"):])
-    return bool(actual) and actual < _version_tupla(minimo)
+    return _app_android_antes_de(headers, minimo)
 
 
 def _exigir_app_al_dia(request: Optional[Request]) -> None:
@@ -8088,18 +8093,27 @@ def _temporal_vigente_de(cuentas: list) -> bool:
     return False
 
 
-async def _configurar_cuenta_de(tdb, driver_id: str, correo: str = "") -> bool:
-    """¿Tiene que crear o elegir su contraseña nada más entrar? Sin ninguna cuenta, sí (la crea); con cuentas (las de su
-    ficha y las de su correo, como el cambio), solo si hay una temporal vigente (_temporal_vigente_de)."""
-    if not driver_id:
-        return False
+async def _cuentas_de(tdb, driver_id: str, correo: str = "") -> list:
+    """Todas las cuentas de la persona: las de su ficha y las de su correo, como las mira change-my-password (con dos
+    fichas suyas, la cuenta puede ir con el id de la otra)."""
     correo = (correo or "").strip().lower()
     filtro = {"$or": [{"driver_id": driver_id}] + (
         [{"email": {"$regex": f"^{re.escape(correo)}$", "$options": "i"}}] if correo else [])}
-    cuentas = await tdb.driver_accounts.find(filtro, {"_id": 0}).to_list(20)
-    if not any(c.get("driver_id") == driver_id for c in cuentas):
-        return not cuentas
-    return _temporal_vigente_de(cuentas)
+    return await tdb.driver_accounts.find(filtro, {"_id": 0}).to_list(20)
+
+
+async def _configurar_cuenta_de(tdb, driver_id: str, correo: str = "") -> bool:
+    """¿Tiene que crear o elegir su contraseña nada más entrar? Con cuentas (_cuentas_de), solo si hay una temporal
+    vigente (_temporal_vigente_de), también si solo las hay por el correo: el cambio la acepta igual sin la actual.
+    Sin ninguna, que la cree, si puede: el cambio la crea con el correo de su ficha, y sin él se quedaba en esa pantalla
+    sin poder guardarla («Tu ficha no tiene correo»)."""
+    if not driver_id:
+        return False
+    cuentas = await _cuentas_de(tdb, driver_id, correo)
+    if cuentas:
+        return _temporal_vigente_de(cuentas)
+    d = await tdb.drivers.find_one({"id": driver_id}, {"_id": 0, "email": 1})
+    return bool(((d or {}).get("email") or "").strip())
 
 
 def _cuentas_que_cuadran(cuentas: list, password: str) -> list:
@@ -8198,8 +8212,19 @@ async def driver_login(data: DriverLoginRequest, request: Request):
         raise HTTPException(status_code=403, detail="Cuenta desactivada")
 
     driver = await candidate_db.drivers.find_one({"id": account["driver_id"]}, {"_id": 0})
+    if driver and driver.get("active") is False and (driver.get("email") or "").strip():
+        # LA SUYA EN LA CUENTA DE LA FICHA DE BAJA (03-11-2026, la revisión del arreglo de contraseñas): con dos fichas
+        # de la misma persona (mismo correo), su contraseña podía haberse quedado solo en la cuenta de la de baja (de
+        # antes del 29-10, cuando el cambio no escribía en todas), y estando de alta se le decía «Ficha de conductor
+        # desactivada». Entra con la activa, como las sesiones (_ficha_activa_de).
+        gemelas = await candidate_db.drivers.find(
+            {"email": {"$regex": f"^{re.escape(driver['email'].strip())}$", "$options": "i"}}, {"_id": 0}).to_list(20)
+        activa = _elegir_ficha(gemelas)
+        if activa and activa.get("active") is not False:
+            driver = activa
     if not driver or driver.get("active") is False:
         raise HTTPException(status_code=403, detail="Ficha de conductor desactivada")
+    driver_id = driver["id"]
     driver_name = driver["name"] if driver else account["email"]
     driver_center = driver.get("center") if driver else None
 
@@ -8207,7 +8232,7 @@ async def driver_login(data: DriverLoginRequest, request: Request):
     # portal vuelve a caer en la BD por defecto y el conductor entra pero no
     # ve nada suyo — que es peor que no dejarle entrar, porque parece que la
     # aplicacion esta vacia. Es lo mismo que hace `_driver_token_impl`.
-    token = create_token(account["driver_id"], "driver", driver_name,
+    token = create_token(driver_id, "driver", driver_name,
                          org_id=(org or {}).get("id"), db_name=_tenant_db_name(org),
                          account_type=(org or {}).get("account_type"), entrada=time.time())
     logger.info(f"Driver login: {data.email}")
@@ -8215,9 +8240,9 @@ async def driver_login(data: DriverLoginRequest, request: Request):
         access_token=token,
         role="driver",
         name=driver_name,
-        id=account["driver_id"],
+        id=driver_id,
         center=driver_center,
-        configurar_cuenta=await _configurar_cuenta_de(candidate_db, account["driver_id"], account.get("email") or correo),
+        configurar_cuenta=await _configurar_cuenta_de(candidate_db, driver_id, account.get("email") or correo),
     )
 
 
@@ -8696,7 +8721,7 @@ async def _codigo_clave_valido(driver_id: str, codigo: str) -> bool:
 
 
 @auth_router.post("/change-my-password")
-async def change_my_password(data: dict, user: dict = Depends(get_current_user)):
+async def change_my_password(data: dict, user: dict = Depends(get_current_user), request: Request = None):
     """Cambiar TU PROPIA contraseña, verificando la actual.
 
     Vale para admins y para conductores. Antes solo para admins, así que un
@@ -8733,8 +8758,6 @@ async def change_my_password(data: dict, user: dict = Depends(get_current_user))
             suyas = [cuenta] + [c for c in await db.driver_accounts.find(mismas).to_list(20) if c.get("id") != cuenta.get("id")]
             # Temporal VIGENTE: más nueva que la última contraseña propia (la misma regla que el login); una temporal
             # vieja que se quedó en la otra cuenta no exime de saber la actual.
-            ultima_propia = max((str(c.get("password_changed_at") or "") for c in suyas), default="")
-
             temporal = _temporal_vigente_de(suyas)
             abre = bool(current) and bool(_cuentas_que_cuadran(suyas, current))
             # Sin la actual, con el código que se le mandó al correo (02-11-2026): solo se mira (y se gasta) si hace falta.
@@ -8769,7 +8792,12 @@ async def change_my_password(data: dict, user: dict = Depends(get_current_user))
                 # SIN ESCRIBIR LA ACTUAL (03-11-2026): «La contraseña actual no es correcta» a quien no ha escrito
                 # ninguna no le decía qué hacer, y tres conductores lo repitieron una y otra vez. Ahora, la salida.
                 if not current:
-                    raise HTTPException(status_code=400, detail="Ya tienes tu contraseña puesta. Para cambiarla, escribe la actual; si no la recuerdas, pide un código a tu correo o sal y entra con «Entrar con un código», y la cambias nada más entrar. Si no tienes correo, pide a la oficina una contraseña temporal.")
+                    # LA APP DE ANDROID DE ANTES DE LA 2.4.5: su «Elige tu contraseña» no tiene ni la actual ni «Cerrar
+                    # sesión», y con la marca vieja se quedaba ahí para siempre. Un 401 la hace cerrar la sesión (Api.kt)
+                    # y volver a la de entrar; al entrar, el login ya no le pide elegirla. Solo sin la actual: quien
+                    # la teclea mal sigue con el 400 de abajo, dentro de la app.
+                    status = 401 if request is not None and _app_android_antes_de(request.headers, "2.4.5") else 400
+                    raise HTTPException(status_code=status, detail="Ya tienes tu contraseña puesta. Para cambiarla, escribe la actual. Si no la recuerdas, pide un código a tu correo, o sal y vuelve a entrar con un código: nada más entrar la cambias sin la actual. Si no tienes correo, pide a la oficina una contraseña temporal.")
                 raise HTTPException(status_code=400,
                                     detail="La contraseña actual no es correcta")
             mias = {"$or": [{"driver_id": user["sub"]}] + ([por_correo] if por_correo else [])}
@@ -10777,7 +10805,7 @@ async def portal_mi_ficha(user: dict = Depends(require_any_auth)):
     pregunta (gotcha 26).
     """
     d = await db.drivers.find_one({"id": user.get("sub")},
-                                  {"_id": 0, "phone": 1, "telefono": 1, "name": 1})
+                                  {"_id": 0, "phone": 1, "telefono": 1, "name": 1, "email": 1})
     if not d:
         return {"falta_telefono": False}
     tel = (d.get("phone") or d.get("telefono") or "").strip()
@@ -10786,17 +10814,20 @@ async def portal_mi_ficha(user: dict = Depends(require_any_auth)):
     # contrasena" les pedia por tanto la ACTUAL, que no existe, asi que
     # devolvia siempre "la contrasena actual no es correcta". Con esto la
     # pantalla sabe si tiene que decir "crear" o "cambiar".
-    cuenta = await db.driver_accounts.find_one({"driver_id": user.get("sub")},
-                                                {"_id": 0, "must_change_password": 1,
-                                                 "creada_en_bloque": 1})
-    tiene = bool(cuenta)
+    # Las de su ficha y las de su correo (03-11-2026), como el cambio: con dos fichas suyas, la cuenta puede ir con el
+    # id de la otra, y aquí decía que no tenía, o que tenía que elegirla cuando el cambio no la dejaba sin la actual.
+    cuentas = await _cuentas_de(db, user.get("sub"), d.get("email") or "")
+    tiene = bool(cuentas)
     destino_codigo = await _destino_codigo_clave(user.get("sub")) if user.get("role") == "driver" else ""
     return {"falta_telefono": not tel, "nombre": d.get("name"),
             "tiene_clave": tiene,
             # Cambiar la contraseña (02-11-2026): sin la actual si acaba de entrar; si no, con un código a este correo.
             "clave_sin_actual": user.get("role") == "driver" and _recien_entrado(user),
             "codigo_a": _tapar_destino(destino_codigo) if destino_codigo else None,
-            "configurar_cuenta": bool(cuenta) and await _configurar_cuenta_de(db, user.get("sub"))}
+            # Si tiene que elegirla ya, con la regla del login y del cambio (_temporal_vigente_de). Sin ninguna cuenta,
+            # null: lo decide el login (con el código, que la cree) y no se obliga a quien ya estaba dentro; y la oficina
+            # que entra como él o la demo, que no pueden cambiarla (403), nunca.
+            "configurar_cuenta": (_temporal_vigente_de(cuentas) and not (user.get("imp") or user.get("demo"))) if cuentas else None}
 
 
 def _telefono_limpio(valor) -> str:

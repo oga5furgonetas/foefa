@@ -187,9 +187,81 @@ async def test_la_temporal_de_otra_cuenta_suya_vieja_no_pide_elegirla(base):
 
 
 @pytest.mark.asyncio(loop_scope="session")
-async def test_sin_ninguna_cuenta_el_login_por_codigo_pide_crearla(base):
-    assert await server._configurar_cuenta_de(base, "f3") is True
+async def test_sin_ninguna_cuenta_el_login_por_codigo_pide_crearla_si_puede(base):
+    base["drivers"].docs.append({"id": "f4", "name": "NUEVA", "email": "nueva@empresa.es", "active": True})
+    assert await server._configurar_cuenta_de(base, "f4") is True
+    # Sin correo en la ficha no se puede crear («Tu ficha no tiene correo»): no se la deja en esa pantalla.
+    assert await server._configurar_cuenta_de(base, "f3") is False
     assert await server._configurar_cuenta_de(base, "") is False
+    # Y la ficha no opina (null): ni obliga a quien ya estaba dentro sin cuenta, ni le quita la pantalla al que entra.
+    f = await server.portal_mi_ficha(_yo("f4"))
+    assert f["configurar_cuenta"] is None and f["tiene_clave"] is False
+
+
+@pytest.mark.asyncio(loop_scope="session")
+async def test_con_dos_fichas_la_ficha_mira_tambien_las_cuentas_de_su_correo(base):
+    # La revisión del 03-11-2026 (Karim, Junior): la temporal en bloque vieja en la cuenta de la ficha activa y la
+    # propia, más nueva, en la de la otra ficha. La ficha decía «elígela» y el cambio no la dejaba sin la actual.
+    base["drivers"].docs.append({"id": "f1b", "name": "LUCÍA", "email": CORREO, "active": True, "created_at": "2026-10-25"})
+    base["driver_accounts"].docs.append({"id": "c1b", "driver_id": "f1b", "email": CORREO, "active": True,
+                                         "hashed_password": server.hash_password("de-bloque-1"), "creada_en_bloque": True,
+                                         "password_temp_created_at": "2026-10-01T10:00:00+00:00", "created_at": "2026-10-01"})
+    f = await server.portal_mi_ficha(_yo("f1b"))
+    assert f["configurar_cuenta"] is False and f["tiene_clave"] is True
+    # Solo por el correo y con una temporal vigente: la ficha la pide, y el cambio la acepta sin la actual.
+    base["driver_accounts"].docs[:] = [c for c in base["driver_accounts"].docs if c["id"] != "c1b"]
+    base["driver_accounts"].docs[0].update({"must_change_password": True, "password_temp_created_at": "2026-11-03T08:00:00+00:00"})
+    assert await server._configurar_cuenta_de(base, "f1b", CORREO) is True
+    assert (await server.portal_mi_ficha(_yo("f1b")))["configurar_cuenta"] is True
+    assert await server.change_my_password({"current_password": "", "new_password": "la-mia-nueva-1"}, _yo("f1b")) == {"success": True}
+    assert (await server.portal_mi_ficha(_yo("f1b")))["configurar_cuenta"] is False
+
+
+@pytest.mark.asyncio(loop_scope="session")
+async def test_con_la_suya_en_la_cuenta_de_la_ficha_de_baja_entra_con_la_activa(base):
+    # Dos fichas suyas (mismo correo): la suya, solo en la cuenta de la de baja (de antes del 29-10), y una temporal vieja
+    # en la de la activa. Se le decía «Ficha de conductor desactivada» estando de alta.
+    base["drivers"].docs.append({"id": "f1-vieja", "name": "LUCÍA", "email": CORREO, "active": False, "created_at": "2026-08-01"})
+    base["driver_accounts"].docs[0]["driver_id"] = "f1-vieja"
+    base["driver_accounts"].docs.append({"id": "c1-act", "driver_id": "f1", "email": CORREO, "active": True,
+                                         "hashed_password": server.hash_password("de-bloque-1"), "creada_en_bloque": True,
+                                         "password_temp_created_at": "2026-10-01T10:00:00+00:00", "created_at": "2026-10-01"})
+    s = await server.driver_login(server.DriverLoginRequest(email=CORREO, password=PROPIA), _peticion())
+    assert s.id == "f1" and server.decode_token(s.access_token)["sub"] == "f1" and s.configurar_cuenta is False
+    # Sin otra ficha activa, la de baja sigue sin entrar.
+    base["drivers"].docs[0]["active"] = False
+    with pytest.raises(HTTPException) as e:
+        await server.driver_login(server.DriverLoginRequest(email=CORREO, password=PROPIA), _peticion())
+    assert e.value.status_code == 403
+
+
+@pytest.mark.asyncio(loop_scope="session")
+async def test_la_oficina_que_entra_como_el_no_queda_atrapada_en_elegirla(base):
+    base["driver_accounts"].docs[0].update({"must_change_password": True, "password_temp_created_at": "2026-11-03T08:00:00+00:00"})
+    assert (await server.portal_mi_ficha(_yo(imp=True)))["configurar_cuenta"] is False
+    assert (await server.portal_mi_ficha(_yo()))["configurar_cuenta"] is True
+
+
+@pytest.mark.asyncio(loop_scope="session")
+async def test_la_app_de_android_vieja_sin_la_actual_cierra_la_sesion_para_volver_a_entrar(base):
+    # La 2.4.4 no tiene ni la actual ni «Cerrar sesión» en «Elige tu contraseña»: el 401 la lleva a la de entrar.
+    def con(cabeceras):
+        return SimpleNamespace(headers=cabeceras)
+    vacia = {"current_password": "", "new_password": "la-nueva-1"}
+    with pytest.raises(HTTPException) as e:
+        await server.change_my_password(vacia, _yo(), con({"x-fds-app": "android-2.4.4"}))
+    assert e.value.status_code == 401
+    for cabeceras in ({"x-fds-app": "android-2.4.5"}, {"x-fds-app": "android-2.5.0"}, {}):   # la 2.4.5 y la web salen solas
+        with pytest.raises(HTTPException) as e:
+            await server.change_my_password(vacia, _yo(), con(cabeceras))
+        assert e.value.status_code == 400 and "escribe la actual" in e.value.detail
+    with pytest.raises(HTTPException) as e:                      # teclear mal la actual no echa a nadie de la app
+        await server.change_my_password({"current_password": "no-es-1", "new_password": "la-nueva-1"}, _yo(),
+                                        con({"x-fds-app": "android-2.4.4"}))
+    assert e.value.status_code == 400
+    # Con una temporal de verdad, la vieja la crea sin la actual, como siempre.
+    base["driver_accounts"].docs[0].update({"must_change_password": True, "password_temp_created_at": "2026-11-03T08:00:00+00:00"})
+    assert await server.change_my_password(vacia, _yo(), con({"x-fds-app": "android-2.4.4"})) == {"success": True}
 
 
 # ── La inicial de la empresa, ya cambiada ────────────────────────────────────────────────────────────────────────────

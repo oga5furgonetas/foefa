@@ -145,9 +145,24 @@ test('si al crearla el servidor dice que ya la tiene, entra en vez de repetir el
   await claves.nth(0).fill('mi-clave-1')
   await claves.nth(1).fill('mi-clave-1')
   await page.getByRole('button', { name: 'Crear mi contraseña' }).click()
+  // Se le dice que la que ha escrito no se ha guardado, y entra.
+  await expect(page.getByRole('heading', { name: 'Ya tenías tu contraseña' })).toBeVisible({ timeout: 15000 })
+  await expect(page.getByText('La que acabas de escribir no se ha guardado')).toBeVisible()
+  await page.getByTestId('clave-entrar').click()
   await expect(page.getByText('Añade un correo personal para recibir códigos')).toBeVisible({ timeout: 15000 })
   await expect(page.getByRole('heading', { name: 'Elige tu contraseña personal' })).toHaveCount(0)
   expect(estado.cambios).toBe(1)
+  expect(fallos, fallos.join(' | ')).toHaveLength(0)
+})
+
+test('«Elige tu contraseña personal» tiene «Cerrar sesión», y lleva a la de entrar', async ({ page }) => {
+  const fallos = vigilar(page)
+  await portalConMarcaVieja(page, true)
+  await page.goto('/conductor', { waitUntil: 'domcontentloaded' })
+  await expect(page.getByRole('heading', { name: 'Elige tu contraseña personal' })).toBeVisible({ timeout: 15000 })
+  await page.getByTestId('clave-salir').click()
+  await expect(page.getByRole('heading', { name: 'Elige tu contraseña personal' })).toHaveCount(0, { timeout: 15000 })
+  expect(await page.evaluate(() => localStorage.getItem('flota_driver_token'))).toBeNull()
   expect(fallos, fallos.join(' | ')).toHaveLength(0)
 })
 
