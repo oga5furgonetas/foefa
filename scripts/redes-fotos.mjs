@@ -239,10 +239,24 @@ const F = [
   ['F-7-cierre', cierre('Haz la cuenta con <span style="color:var(--marca)">tus números</span>', 'Calculadora gratis y sin registro: lo que te queda de verdad por hora.', 'flotadsp.com/calculadora-repartidor', 'Calculadora gratis · sin registro')],
 ]
 
+/* ── G. Black Friday y Navidad: cómo sobrevivir al pico de paquetes (03-11) ────────────────── */
+const PICO = [
+  ['📈', 'Cuenta con el doble', 'De Black Friday a Reyes salen muchas más paradas. Planifica la semana como si fueran el doble.'],
+  ['🌙', 'Ordena la noche antes', 'Si te pasan la lista la víspera, deja la ruta hecha. Por la mañana solo cargas y sales.'],
+  ['📦', 'Carga por tramos', 'Un hueco por cada diez paradas. Con el doble de bultos, el orden de carga lo es todo.'],
+  ['🔋', 'Batería y cobertura', 'Más horas de móvil y menos de luz: cargador en la furgoneta y la ruta guardada por si te quedas sin red.'],
+  ['🥪', 'Para cinco minutos', 'Comer algo y beber agua no es perder tiempo: es lo que te deja acabar la semana entero.'],
+]
+const G = [
+  ['G-1-portada', portada(fondoInterior, 'Se acerca el pico', 'Black Friday y Navidad: <span class="resalta">cómo sobrevivir</span>', 'Cinco reglas para no acabar reventado')],
+  ...PICO.map((p, i) => [`G-${i + 2}`, punto(p, i, 'Guárdalo para el pico')]),
+  ['G-7-cierre', cierre('¿El doble? <span style="color:var(--marca)">Que ordene la app</span>', 'Con el pico de paquetes, foto a la etiqueta y la ruta se ordena sola, también la noche antes.')],
+]
+
 // SOLO=E,F genera solo las piezas que empiezan así (las ya publicadas no se tocan). Cada carrusel sale también en
 // JPEG (TikTok no admite PNG en los posts de fotos: «use image/jpeg», 31-10-2026).
 const SOLO = (process.env.SOLO || '').split(',').map((x) => x.trim()).filter(Boolean)
-const PIEZAS = [...A, ...B, ...C, ...D, ...E, ...F, ...X.map(([n, h]) => [n, h, 1600, 900]), ...X2.map(([n, h]) => [n, h, 1600, 900])]
+const PIEZAS = [...A, ...B, ...C, ...D, ...E, ...F, ...G, ...X.map(([n, h]) => [n, h, 1600, 900]), ...X2.map(([n, h]) => [n, h, 1600, 900])]
   .filter(([n]) => !SOLO.length || SOLO.some((p) => n.startsWith(p)))
 // PW_CHROMIUM: ruta a un Chromium ya instalado si la versión de Playwright no trae el suyo (p. ej. /opt/pw-browsers/chromium).
 const nav = await chromium.launch(process.env.PW_CHROMIUM ? { executablePath: process.env.PW_CHROMIUM } : {})

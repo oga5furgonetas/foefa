@@ -78,6 +78,17 @@ Sin nombres de empresas ni cifras de nadie: son preguntas.
 Hashtags: #repartidorautonomo #autonomos #repartidor #paqueteria #mensajeria #reparto #consejos
 Comentario fijado: «¿Qué preguntarías tú que no está aquí? Sin nombres de empresas, que esto va de ayudar al que empieza.»
 
+## Carrusel G · Black Friday y Navidad: cómo sobrevivir al pico (`G-1-portada` … `G-7-cierre`, 03-11)
+Modo foto (7) · Instagram · página de Facebook. TikTok con los `.jpg`. `utm_content=carrusel_pico`. Antes del 27-11 y otra
+vez a mediados de diciembre.
+
+> Black Friday y Navidad: cómo sobrevivir al pico 📦📦📦 Cinco reglas para no acabar reventado. Guárdalo para cuando llegue.
+> ¿El doble de paradas? Que ordene la app: foto a la etiqueta y la ruta se ordena sola, también la noche antes. Gratis
+> hasta el 31 de diciembre, enlace en el perfil.
+
+Hashtags: #repartidor #repartidores #blackfriday #navidad #paqueteria #mensajeria #reparto #furgoneta
+Comentario fijado: «¿Cuántas paradas hiciste el día más bestia del año pasado? Sin mentir 😅»
+
 ## Tarjetas 16:9 para X (van con el post del calendario de `REDES.md`)
 | Fichero | Post | Enlace |
 |---|---|---|
@@ -92,7 +103,6 @@ Comentario fijado: «¿Qué preguntarías tú que no está aquí? Sin nombres de
 ## Ideas para las piezas siguientes (misma plantilla, una por ronda)
 - «Lo que cuesta de verdad una furgoneta de reparto al mes» (ejemplo orientativo; cierre: calculadora).
 - «La ruta de 40 paradas: a mano vs. ordenada» (dos capturas; cierre: gratis hasta el 31-12).
-- «Black Friday y Navidad: cómo sobrevivir al pico de paquetes» (5 reglas; publicar antes del 27-11).
 - «Lo que no puede faltar en la furgoneta» (cargador, cinta, rotulador, chaleco, agua, bolsas; cierre: la app sin cobertura).
 - «Errores del primer mes repartiendo» (cinco; cierre: la ruta ordenada).
 - Los `.jpg` de cada carrusel son para TikTok (no admite PNG en fotos); Instagram, con los `.png`.
