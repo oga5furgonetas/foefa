@@ -2211,6 +2211,22 @@ próxima versión de la app (no compilado aquí: no hay SDK de Android en la nub
    app y la web en todos los caminos (al elegir otra calle, la dirección pasa a ser la de la sugerencia; la misma
    calle sin el portal o con otro número se queda la escrita como calle), la lista de encargados completa, y luego
    verificador, emulador y revisor. Copia del árbol antes de ella: %LOCALAPPDATA%\Temp\fds-emu\copia-arbol-0250.
+   04:2x, RESULTADO de la segunda tanda (6 agentes, 1 h 43 min, sin commit): verificación en verde (pytest 1498,
+   Playwright entero 649 en los dos proyectos, gradle 85 tests, contrato app-API 100 OK) y el EMULADOR, todo bien
+   (Brétema Mariñeira desde Hoy pasa a la dirección de Oleiros, también sin conexión; «Rúa Real 999» se queda como
+   calle; las «suyas» ya no cuentan paradas sin cerrar). El REVISOR, 9 hallazgos más, casi todos el mismo caso grave
+   por otros caminos: en la ficha nativa, volver a escribir la dirección tras «Situar» con una sugerencia conservaba
+   su punto; «Ya estuviste aquí» ofrecía paradas FALLIDAS o entregadas lejos del punto (sin comprobar); la regla no
+   miraba ni el CP ni el pueblo (una «Rúa Brétema» de Oleiros pasaba por la misma calle que la de A Coruña); el portal
+   se leía mal en calles con números («Calle 2 de Mayo 14» → 2; «Estrada AC-173 12» → 173) y sin la letra («5B» → 5);
+   el zoom con dos dedos o el doble toque en la nativa olvidaba la sugerencia; la posición del GPS que llega tarde
+   también; y en la web, reescribir tras elegir mandaba el CP y el pueblo de la sugerencia abandonada. Y en lo legal:
+   Telegram (que recibe el formulario de contacto con nombre y correo) no tiene contrato de encargo ni DPF, y la
+   lista decía «todos con garantías RGPD». DECIDIDO (Claude, 04:2x): el aviso del formulario por Telegram, sin datos
+   personales (se lee en la Bandeja del panel), y lo mismo en los avisos que manda FDS por su cuenta; Telegram sale de
+   la lista de encargados y queda como integración que activa cada empresa con su bot; las frases generales, ciertas
+   para cada proveedor. EN MARCHA (04:3x): la tercera tanda (servidor y legal, nativa y web a la vez; luego verificador
+   y revisor a la vez, y el emulador). Copia del árbol antes de ella: %LOCALAPPDATA%\Temp\fds-emu\copia-arbol-0445.
 -27b. **02-11, PRIMER DÍA Y VIRALIDAD** (Dani: «consigue que todo el mundo utilice la app y complete su primer día…
    necesito viralización»): hecho por agentes y SIN commit: eventos a Meta por la API de conversiones
    (`backend/meta_capi.py`, solo funciona con `META_PIXEL_ID` y `META_CAPI_TOKEN`), los avisos del primer día (push a
