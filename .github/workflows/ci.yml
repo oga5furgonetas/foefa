@@ -4,6 +4,10 @@ on:
   push:
     branches: [main]
   pull_request:
+  # A mano (06-11-2026): un push cuyo ÚLTIMO commit lleva «[skip ci]» (un ESTADO encima de un arreglo) no corre el CI
+  # para ninguno de sus commits, y los scripts de despliegue no despliegan sin un run en verde. Con esto se lanza
+  # desde Actions → CI → Run workflow (o por la API, `workflows/ci.yml/dispatches`) sobre la rama.
+  workflow_dispatch:
 
 jobs:
   frontend:
