@@ -46,7 +46,43 @@ export default {
           900: 'rgb(var(--dk-900) / <alpha-value>)',
           950: 'rgb(var(--dk-950) / <alpha-value>)',
         },
+        /* COLORES CON SIGNIFICADO DE LA APP DE REPARTO (diseño compacto, 06-11-2026, §3.6 de la especificación).
+           Salen de las variables `--r-*` de index.css: noche por defecto y, en los temas día e híbrido, los medidos
+           para papel. `marca` es el acento de TEXTO (el cian del logo da 2,2:1 sobre blanco; el relleno de marca
+           sigue siendo `bg-brand-500 text-brand-tinta`); `ok` y `peligro` son rellenos (con blanco encima) y
+           `*-texto`, su versión para leer; `aviso` es un tinte con su texto; `marca-tinte`, el tinte de marca de las
+           píldoras y los chips; `borde`, el borde de control (3,4:1; el `dk-700` da 1,5:1 de día). */
+        ruta: {
+          marca: 'rgb(var(--r-marca) / <alpha-value>)',
+          'marca-tinte': 'rgb(var(--r-marca-tinte) / <alpha-value>)',
+          'marca-tinte-texto': 'rgb(var(--r-marca-tinte-texto) / <alpha-value>)',
+          ok: 'rgb(var(--r-ok) / <alpha-value>)',
+          'ok-texto': 'rgb(var(--r-ok-texto) / <alpha-value>)',
+          peligro: 'rgb(var(--r-peligro) / <alpha-value>)',
+          'peligro-texto': 'rgb(var(--r-peligro-texto) / <alpha-value>)',
+          aviso: 'rgb(var(--r-aviso) / <alpha-value>)',
+          'aviso-texto': 'rgb(var(--r-aviso-texto) / <alpha-value>)',
+          borde: 'rgb(var(--r-borde) / <alpha-value>)',
+        },
       },
+      /* LA LETRA DE LA APP DE REPARTO (diseño compacto, 06-11-2026, §3.1): once tamaños y ninguno más. Cada uno con
+         su interlínea y su peso; todos (menos los tres grandes) crecen con `--letra` («Letra más grande», index.css).
+         En las pantallas de reparto no va ningún `text-[Npx]`: lo vigila `scripts/check-tokens-ruta.mjs`. */
+      fontSize: {
+        pie: ['calc(11px * var(--letra, 1))', { lineHeight: '1.28', fontWeight: '500' }],
+        sec: ['calc(12px * var(--letra, 1))', { lineHeight: '1.34' }],
+        etiqueta: ['calc(12px * var(--letra, 1))', { lineHeight: '1.34', fontWeight: '600' }],
+        texto: ['calc(14px * var(--letra, 1))', { lineHeight: '1.43' }],
+        boton: ['calc(14px * var(--letra, 1))', { lineHeight: '1.43', fontWeight: '600' }],
+        nombre: ['calc(16px * var(--letra, 1))', { lineHeight: '1.375', fontWeight: '600' }],
+        campo: ['calc(16px * var(--letra, 1))', { lineHeight: '1.375' }],
+        titulo: ['calc(18px * var(--letra, 1))', { lineHeight: '1.34', fontWeight: '700' }],
+        cifra: ['calc(24px * var(--letra, 1))', { lineHeight: '1.25', fontWeight: '700' }],
+        guia: ['30px', { lineHeight: '34px', fontWeight: '700' }],
+        paquete: ['40px', { lineHeight: '44px', fontWeight: '800' }],
+      },
+      // `min-h-13`: los 52 del botón principal («Entregado», «Es aquí», «Añadir a mi ruta»).
+      spacing: { 13: '52px' },
       /* Una sola familia de texto y una de cifras. `display` apunta a la misma
          que `sans` a propósito: el titular se distingue por tamaño y peso, no
          por cambiar de fuente. Dos familias distintas para lo mismo era medio

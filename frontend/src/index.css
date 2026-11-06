@@ -54,6 +54,23 @@ html[data-panel-theme='light'] {
   color-scheme: light;
 }
 
+/* ── Colores con significado de la app de reparto (diseño compacto, 06-11-2026, §3.6) ──────────────────────────────
+   Noche por defecto, como la rampa; los temas día e híbrido (este solo sobre <main>, como la rampa) ponen los medidos
+   para papel. Tailwind los sirve como `ruta-*` (tailwind.config.js). Medidos con la fórmula de la WCAG: marca 5,0:1 de
+   día y 11,7:1 de noche; ok (relleno) 5,5:1 con blanco; peligro 6,5:1 con blanco y su texto 10,7:1 de noche; aviso
+   6,7:1 / 9,8:1; el tinte de marca 9,9:1 / 7,5:1; el borde de control 3,4:1 / 3,6:1. El selector del híbrido va
+   DELANTE de la coma para que `check-contraste.mjs` no lo tome por la rampa. */
+:root {
+  --r-marca: 95 227 216;  --r-ok: 4 120 87;  --r-ok-texto: 74 222 128;  --r-peligro: 179 38 30;
+  --r-peligro-texto: 242 184 181;  --r-aviso: 58 44 16;  --r-aviso-texto: 255 213 138;  --r-borde: 100 112 127;
+  --r-marca-tinte: 0 80 76;  --r-marca-tinte-texto: 179 243 238;
+}
+html[data-panel-theme='hibrido'] main, html[data-panel-theme='light'] {
+  --r-marca: 14 124 119;  --r-ok-texto: 4 120 87;  --r-peligro-texto: 179 38 30;
+  --r-aviso: 255 241 214;  --r-aviso-texto: 122 74 0;  --r-borde: 140 139 134;
+  --r-marca-tinte: 211 245 242;  --r-marca-tinte-texto: 0 65 62;
+}
+
 /* Modo día: el mismo lenguaje plano, con la rampa invertida. Aquí también
    se fueron los degradados y las sombras largas: lo que sobra en el modo
    noche sobra igual de día. */
@@ -319,6 +336,14 @@ html[data-panel-theme='light'] [class*='hover:text-white']:hover { color: rgb(va
            hover:border-dark-600 hover:bg-dark-700
            disabled:opacity-45;
   }
+  /* EL CAMPO DE LA APP DE REPARTO (diseño compacto, 06-11-2026, §4): 48 de alto, radio 12, borde de control y dos de
+     marca al escribir (el borde más un anillo por dentro, para que nada se mueva), letra «campo» (16: por debajo el
+     iPhone amplía), el ejemplo dentro y sin etiqueta flotante. Lo usa piezas/Campo.jsx. */
+  .campo {
+    @apply min-h-12 w-full rounded-xl border border-ruta-borde bg-dark-900 px-3 text-campo text-dark-50
+           placeholder:text-dark-400 focus:border-ruta-marca focus:outline-none focus:ring-1 focus:ring-inset
+           focus:ring-ruta-marca;
+  }
   /* ── LO QUE SE PUEDE PULSAR CON UN DEDO ────────────────────────────────
      Medido el 20-09-2026 barriendo las 28 pantallas del panel a 375 px: no hay
      ni un desborde horizontal ni un texto cortado, pero SI decenas de
@@ -336,11 +361,16 @@ html[data-panel-theme='light'] [class*='hover:text-white']:hover { color: rgb(va
 
      Se comprueba con `elementFromPoint` a 2 px del borde, no mirandolo: a ojo
      el boton se ve exactamente igual antes y despues (gotcha 48). */
+  /* `:where` y no `:is` (diseño compacto, 06-11-2026, §3.3): `:is(a[href], …)` daba a la regla la especificidad de
+     `a[href]` y ganaba a `.absolute`, `.fixed` y `.sticky` de Tailwind, así que en los móviles «Mi ubicación» de
+     «Situar» y lo que flota sobre el mapa salían descolocados. Con `:where` la regla no pesa nada y solo cambia lo que
+     no trae posición. En la app de reparto (`main.app-ruta`) la zona que responde es de 48 (nada pulsable con menos:
+     §3.3); en el panel se queda en 24. */
   @media (pointer: coarse) {
-    main :is(button, a[href], summary, [role='button']) {
+    main :where(button, a[href], summary, [role='button']) {
       position: relative;
     }
-    main :is(button, a[href], summary, [role='button'])::after {
+    main :where(button, a[href], summary, [role='button'])::after {
       content: '';
       position: absolute;
       left: 50%;
@@ -350,6 +380,10 @@ html[data-panel-theme='light'] [class*='hover:text-white']:hover { color: rgb(va
       height: 100%;
       min-width: 24px;
       min-height: 24px;
+    }
+    main.app-ruta :where(button, a[href], summary, [role='button'])::after {
+      min-width: 48px;
+      min-height: 48px;
     }
   }
 
@@ -751,6 +785,11 @@ html[data-panel-theme='light'] .app-ruta .ruta-pestanas { box-shadow: 0 -10px 28
    en píxeles (text-[13px]…), así que no vale cambiar la letra base: se suben un 15 % uno a uno. No se amplía la
    pantalla entera (zoom) porque descuadraría las hojas que suben desde abajo. Los títulos grandes (24 px o más)
    se quedan como están: ya se leen y crecer los partiría. */
+/* Con los tokens del diseño compacto (06-11-2026, §3.1) la letra sale de `text-pie`…`text-cifra` × `--letra`: el mismo
+   15 % de siempre, sin una regla por tamaño. Las 21 reglas de abajo se quedan mientras alguna pantalla de .app-ruta use
+   `text-[Npx]` (Historial, Cuenta, el mercadillo); la parte F las quita si ya no las usa nadie. */
+:root { --letra: 1; }
+html[data-letra='grande'] { --letra: 1.15; }
 html[data-letra='grande'] .app-ruta .text-\[9px\] { font-size: 10.5px; }
 html[data-letra='grande'] .app-ruta .text-\[9\.5px\] { font-size: 11px; }
 html[data-letra='grande'] .app-ruta .text-\[10px\] { font-size: 11.5px; }
