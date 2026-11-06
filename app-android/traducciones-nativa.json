@@ -3317,5 +3317,19 @@
     "Vous aviez déjà votre mot de passe : continuez à vous connecter avec. Celui que vous venez de saisir n'a pas été enregistré.",
     "Avevi già la tua password: continua a entrare con quella. Quella che hai scritto non è stata salvata.",
     "Du hattest dein Passwort schon: Melde dich weiter damit an. Das eben eingegebene wurde nicht gespeichert."
+  ],
+  "Ayuda": [
+    "Help",
+    "Ajuda",
+    "Aide",
+    "Aiuto",
+    "Hilfe"
+  ],
+  "Más opciones": [
+    "More options",
+    "Mais opções",
+    "Plus d’options",
+    "Altre opzioni",
+    "Weitere Optionen"
   ]
 }
