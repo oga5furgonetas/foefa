@@ -16293,7 +16293,10 @@ async def enviar_resumen_diario(dia: Optional[str] = None, solo_id: Optional[str
                 if rw.get("ok"):
                     wasap.append(d.get("nombre") or tel)
 
-        salida.append({**{k: r[k] for k in ("center", "fecha", "entrega", "checklist", "golpes")},
+        # «inspecciones» y no «entrega» (06-11-2026): la entrega era de Amazon y se quitó el 25-09, pero esto la
+        # seguía pidiendo: el bucle de las 21:00 moría cada noche con KeyError después del primer centro («Bucle de
+        # aviso resumen_diario: 'entrega'» en el registro del 03-11) y los demás centros se quedaban sin resumen.
+        salida.append({**{k: r[k] for k in ("center", "fecha", "inspecciones", "checklist", "golpes")},
                        "incidencias": r["incidencias"], "danos": r["danos"],
                        "turnos": [{k: t[k] for k in ("turno", "hechas", "total")} for t in r["turnos"]],
                        "destinatarios": [d["nombre"] for d in quienes],

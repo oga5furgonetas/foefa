@@ -432,7 +432,7 @@ function Destinatarios({ centers }) {
       alert(e.length
         ? e.map((x) => [
             `${x.center} — ${x.fecha}`,
-            `Entrega: ${x.entrega}`,
+            `Revisados: ${x.inspecciones}`,
             (x.incidencias?.sin_direccion || x.incidencias?.missing || x.incidencias?.lost)
               ? `  ${x.incidencias.sin_direccion} sin dirección · ${x.incidencias.missing} no en furgoneta · ${x.incidencias.lost} extraviados`
               : '  Sin incidencias de paquetes',
