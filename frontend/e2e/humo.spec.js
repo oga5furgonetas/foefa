@@ -1918,7 +1918,7 @@ test('Cuenta del repartidor · ve con qué entra, cambia correo y contraseña; �
 
 /* SUSCRIBIRSE CON STRIPE desde el aviso de prueba: el servidor crea la sesión
    y el navegador va a su URL; al volver con ?pago=ok se espera al webhook. */
-test('Suscripción · el botón de pagar va a Stripe y la vuelta espera la activación', async ({ page }) => {
+test('Suscripción · el botón de pagar va a Stripe y la vuelta espera la activación', async ({ page, baseURL }) => {
   await entrarComoAdmin(page)
   await simularApi(page, 'vacio')
   await page.route(/\/api\/org\/billing/, (r) => r.fulfill({ json: { status: 'trial', required: false, days_left: 5, plan: 'autonomo', sector: 'autonomo', modulos: ['dashboard', 'reparto', 'configuracion'] } }))
@@ -1926,7 +1926,8 @@ test('Suscripción · el botón de pagar va a Stripe y la vuelta espera la activ
   const pedidos = []
   await page.route(/\/api\/billing\/stripe\/suscripcion/, async (r) => {
     pedidos.push(r.request().postDataJSON())
-    await r.fulfill({ json: { url: 'http://localhost:4173/ruta?pago=ok', id: 'cs_test' } })
+    // La vuelta, sobre baseURL (06-11-2026): la prueba corre en otros puertos además del 4173 y a mano fallaba.
+    await r.fulfill({ json: { url: `${baseURL}/ruta?pago=ok`, id: 'cs_test' } })
   })
   // Quien reparte solo entra al panel y se le lleva a su app; se suscribe desde «Cuenta».
   await page.goto('/panel/reparto', { waitUntil: 'domcontentloaded' })
