@@ -1,6 +1,6 @@
 package com.flotadsp.fds.ui
 
-/* GENERADO por scripts/nativa-idioma.mjs (30-10-2026): no editar a mano. 835 textos de la app nativa con sus
+/* GENERADO por scripts/nativa-idioma.mjs (30-10-2026): no editar a mano. 840 textos de la app nativa con sus
    traducciones (en, pt, fr, it, de), sacadas de la web (frontend/src/lib/textosRuta*.js) y de
    app-android/traducciones-nativa.json. Una fila por línea, columnas con TAB; ⏎ es un salto de línea. En bloques
    porque una constante de Kotlin no puede pasar de 64 KB. */
@@ -60,6 +60,7 @@ Avisar a todos por WhatsApp	Notify everyone on WhatsApp	Avisar todos por WhatsAp
 Avisar que no puedo ir	Report that I can’t make it	Avisar que não posso ir	Prévenir que je ne peux pas venir	Avvisare che non posso venire	Melden, dass ich nicht kommen kann
 Aviso enviado a la oficina.	The office has been notified.	Aviso enviado ao escritório.	Le bureau a été prévenu.	Avviso inviato all’ufficio.	Das Büro wurde benachrichtigt.
 Avisos	Notifications	Avisos	Notifications	Avvisi	Mitteilungen
+Ayuda	Help	Ajuda	Aide	Aiuto	Hilfe
 Añade o actualiza el número para que la oficina pueda llamarte si hay una incidencia. Solo se guarda en tu ficha.	Add or update your number so the office can call you if something comes up. It is only kept in your profile.	Adiciona ou atualiza o número para que o escritório te possa ligar se houver um problema. Só fica na tua ficha.	Ajoutez ou mettez à jour votre numéro pour que le bureau puisse vous appeler en cas d’incident. Il n’est conservé que dans votre fiche.	Aggiungi o aggiorna il numero perché l’ufficio possa chiamarti in caso di problemi. Resta solo nella tua scheda.	Trag deine Nummer ein oder aktualisiere sie, damit das Büro dich bei einem Vorfall anrufen kann. Sie bleibt nur in deinem Profil.
 Añade tu correo personal. El acceso seguirá usando el correo de empresa; este correo sirve para recuperar la cuenta.	Add your personal email. You will keep signing in with the company email; this one is for recovering the account.	Adiciona o teu e-mail pessoal. O acesso continua com o e-mail da empresa; este serve para recuperar a conta.	Ajoutez votre e-mail personnel. La connexion continue avec l’e-mail de l’entreprise ; celui-ci sert à récupérer le compte.	Aggiungi la tua email personale. L’accesso resta con l’email aziendale; questa serve per recuperare l’account.	Füge deine private E-Mail hinzu. Angemeldet wird weiter mit der Firmen-E-Mail; diese dient zur Kontowiederherstellung.
 Añade tu tarjeta para empezar los 7 días gratis (hoy no se cobra nada).	Add your card to start the 7 free days (nothing is charged today).	Adicione o seu cartão para começar os 7 dias grátis (hoje não se cobra nada).	Ajoutez votre carte pour démarrer les 7 jours gratuits (rien n’est débité aujourd’hui).	Aggiungi la carta per iniziare i 7 giorni gratis (oggi non si paga nulla).	Füge deine Karte hinzu, um die 7 Gratistage zu starten (heute wird nichts abgebucht).
@@ -189,6 +190,7 @@ En un lugar seguro	In a safe place	Num local seguro	Dans un endroit sûr	In un l
 En un punto de recogida	At a pickup point	Num ponto de recolha	En point relais	In un punto di ritiro	An einer Abholstation
 En {distancia}, {accion}.	In {distancia}, {accion}.	Daqui a {distancia}, {accion}.	Dans {distancia}, {accion}.	Tra {distancia}, {accion}.	In {distancia} {accion}.
 Encender la linterna	Turn on the torch	Acender a lanterna	Allumer la lampe	Accendi la torcia	Taschenlampe einschalten
+Entendido	Got it	Entendido	Compris	Ho capito	Verstanden
 Entra con el correo y la contraseña de tu cuenta. FDS abrirá el portal de empresa, conductor o reparto que te corresponde.	Sign in with your account email and password. FDS will open the company, driver or delivery portal that belongs to you.	Entra com o e-mail e a palavra-passe da tua conta. O FDS abre o portal de empresa, condutor ou entregas que te corresponde.	Connectez-vous avec l’e-mail et le mot de passe de votre compte. FDS ouvrira le portail entreprise, conducteur ou livraison qui vous correspond.	Accedi con l’email e la password del tuo account. FDS aprirà il portale azienda, autista o consegne che ti corrisponde.	Melde dich mit E-Mail und Passwort deines Kontos an. FDS öffnet das passende Portal: Firma, Fahrer oder Zustellung.
 Entra en la rotonda	Enter the roundabout	Entre na rotunda	Entrez dans le rond-point	Entra nella rotonda	In den Kreisverkehr einfahren
 Entrar	Log in	Entrar	Se connecter	Accedi	Anmelden
@@ -406,6 +408,7 @@ Mis turnos y días libres	My shifts and days off	Os meus turnos e dias livres	Me
 Motivo: {x}	Reason: {x}	Motivo: {x}	Motif : {x}	Motivo: {x}	Grund: {x}
 Mueve el mapa hasta la puerta	Move the map to the door	Move o mapa até à porta	Déplacez la carte jusqu’à la porte	Sposta la mappa fino alla porta	Schieb die Karte bis zur Tür
 Más información	More information	Mais informação	En savoir plus	Maggiori informazioni	Mehr erfahren
+Más opciones	More options	Mais opções	Plus d’options	Altre opzioni	Weitere Optionen
 Médico	Medical	Médico	Médical	Medico	Arzt
 Móvil de Bizum	Bizum phone number	Telemóvel do Bizum	Numéro Bizum	Numero Bizum	Bizum-Handynummer
 Nada con «{q}» en las paradas pendientes.	Nothing matching «{q}» in pending stops.	Nada com «{q}» nas paragens pendentes.	Rien avec «{q}» dans les arrêts restants.	Niente con «{q}» nelle fermate da fare.	Nichts mit «{q}» in den offenen Stopps.
@@ -428,6 +431,7 @@ No llega la ubicación del móvil.	No location from the phone yet.	A localizaç�
 No llega la ubicación del móvil: dale permiso a la app.	The phone’s location is not coming through: give the app permission.	A localização do telemóvel não chega: dá permissão à app.	La position du téléphone n’arrive pas : donnez l’autorisation à l’app.	La posizione del telefono non arriva: dai il permesso all’app.	Der Standort des Handys kommt nicht an: Gib der App die Berechtigung.
 No puedes cambiar pedidos	You can’t change orders	Não pode alterar encomendas	Vous ne pouvez pas modifier les commandes	Non puoi modificare gli ordini	Du kannst keine Aufträge ändern
 No puedes solicitar este día: {m}	You cannot request this day: {m}	Não podes pedir este dia: {m}	Vous ne pouvez pas demander ce jour : {m}	Non puoi chiedere questo giorno: {m}	Du kannst diesen Tag nicht beantragen: {m}
+No recogido	Not picked up	Não recolhido	Non enlevé	Non ritirato	Nicht abgeholt
 No se ha podido	It could not be done	Não foi possível	Impossible pour le moment	Non è stato possibile	Nicht möglich
 No se ha podido abrir el pago. Inténtalo en un minuto.	Couldn’t open the payment. Try again in a minute.	Não foi possível abrir o pagamento. Tente daqui a um minuto.	Impossible d’ouvrir le paiement. Réessayez dans une minute.	Impossibile aprire il pagamento. Riprova tra un minuto.	Zahlung konnte nicht geöffnet werden. Versuche es in einer Minute.
 No se ha podido cargar	Could not load	Não foi possível carregar	Chargement impossible	Impossibile caricare	Laden nicht möglich
@@ -573,9 +577,9 @@ Sin conexión. Se intentará otra vez solo.	No connection. It will retry by itse
 Sin conexión: el punto queda guardado en el móvil y se envía al volver la red.	No connection: the point is saved on the phone and will be sent when the network is back.	Sem ligação: o ponto fica guardado no telemóvel e envia-se quando voltar a rede.	Pas de connexion : le point est enregistré sur le téléphone et sera envoyé au retour du réseau.	Nessuna connessione: il punto resta salvato sul telefono e si invia quando torna la rete.	Keine Verbindung: Der Punkt bleibt auf dem Handy gespeichert und wird gesendet, sobald das Netz zurück ist.
 Sin conexión: es tu ruta de las {h}.	No connection: this is your route from {h}.	Sem ligação: é a tua rota das {h}.	Pas de connexion : c’est votre tournée de {h}.	Senza connessione: è il tuo giro delle {h}.	Keine Verbindung: Das ist deine Route von {h}.
 Sin conexión: los ajustes de la ruta se cargan con red.	No connection: route settings load when there is network.	Sem ligação: as definições da rota carregam com rede.	Pas de connexion : les réglages de la tournée se chargent avec le réseau.	Senza connessione: le impostazioni del giro si caricano con la rete.	Keine Verbindung: Die Routeneinstellungen laden mit Netz.
-Sin conexión: no puedo buscar la dirección. Si estás en la puerta, pulsa «Mi ubicación» y «Es aquí».	No connection: I can’t look up the address. If you’re at the door, tap “My location” and “It’s here”.	Sem ligação: não consigo procurar a morada. Se estás à porta, toca em «A minha localização» e «É aqui».	Pas de connexion : impossible de chercher l’adresse. Si vous êtes devant la porte, appuyez sur « Ma position » puis « C’est ici ».	Nessuna connessione: non posso cercare l’indirizzo. Se sei alla porta, tocca «La mia posizione» e «È qui».	Keine Verbindung: Ich kann die Adresse nicht suchen. Wenn du an der Tür bist, tippe auf „Mein Standort“ und „Hier ist es“.
 """,
-        """Sin conexión: no puedo comprobarla ahora.	No connection: I can’t check it right now.	Sem ligação: não consigo verificá-la agora.	Pas de connexion : impossible de la vérifier pour l’instant.	Nessuna connessione: non posso controllarlo ora.	Keine Verbindung: Ich kann sie gerade nicht prüfen.
+        """Sin conexión: no puedo buscar la dirección. Si estás en la puerta, pulsa «Mi ubicación» y «Es aquí».	No connection: I can’t look up the address. If you’re at the door, tap “My location” and “It’s here”.	Sem ligação: não consigo procurar a morada. Se estás à porta, toca em «A minha localização» e «É aqui».	Pas de connexion : impossible de chercher l’adresse. Si vous êtes devant la porte, appuyez sur « Ma position » puis « C’est ici ».	Nessuna connessione: non posso cercare l’indirizzo. Se sei alla porta, tocca «La mia posizione» e «È qui».	Keine Verbindung: Ich kann die Adresse nicht suchen. Wenn du an der Tür bist, tippe auf „Mein Standort“ und „Hier ist es“.
+Sin conexión: no puedo comprobarla ahora.	No connection: I can’t check it right now.	Sem ligação: não consigo verificá-la agora.	Pas de connexion : impossible de la vérifier pour l’instant.	Nessuna connessione: non posso controllarlo ora.	Keine Verbindung: Ich kann sie gerade nicht prüfen.
 Sin conexión: para cargar hace falta red.	No connection: loading needs a network.	Sem ligação: para carregar é precisa rede.	Pas de connexion : pour charger, il faut du réseau.	Nessuna connessione: per caricare serve la rete.	Keine Verbindung: Zum Beladen braucht es Netz.
 Sin conexión: para guardar una parada nueva hace falta red.	No connection: saving a new stop needs network.	Sem ligação: para guardar uma paragem nova é precisa rede.	Pas de connexion : enregistrer un nouvel arrêt nécessite le réseau.	Nessuna connessione: per salvare una nuova fermata serve la rete.	Keine Verbindung: Zum Speichern eines neuen Stopps braucht es Netz.
 Sin conexión: para meter paradas nuevas hace falta red.	No connection: adding new stops needs network.	Sem ligação: para meter paragens novas é precisa rede.	Pas de connexion : ajouter des arrêts nécessite le réseau.	Nessuna connessione: per aggiungere fermate serve la rete.	Keine Verbindung: Zum Hinzufügen neuer Stopps braucht es Netz.
@@ -587,6 +591,7 @@ Sin hueco	No slot	Sem lugar	Sans emplacement	Senza posto	Kein Platz
 Sin indicaciones ahora: sigue la flecha hasta la parada	No directions right now: follow the arrow to the stop	Sem indicações agora: siga a seta até à paragem	Pas d’indications pour l’instant : suivez la flèche jusqu’à l’arrêt	Nessuna indicazione ora: segui la freccia fino alla fermata	Gerade keine Ansagen: folge dem Pfeil zum Stopp
 Sin paradas todavía	No stops yet	Ainda sem paragens	Pas encore d’arrêts	Ancora nessuna fermata	Noch keine Stopps
 Sin permiso de cámara no se puede hacer la foto. Actívalo en Ajustes › Aplicaciones › FDS › Permisos.	Without camera permission the photo cannot be taken. Turn it on in Settings › Apps › FDS › Permissions.	Sem permissão de câmara não é possível tirar a foto. Ativa-a em Definições › Aplicações › FDS › Permissões.	Sans l’autorisation appareil photo, impossible de prendre la photo. Activez-la dans Paramètres › Applications › FDS › Autorisations.	Senza il permesso della fotocamera non si può scattare la foto. Attivalo in Impostazioni › App › FDS › Autorizzazioni.	Ohne Kameraberechtigung kann kein Foto gemacht werden. Aktiviere sie unter Einstellungen › Apps › FDS › Berechtigungen.
+Sin situar	Not on the map	Sem localização	Non localisé	Non localizzata	Nicht auf der Karte
 Sin situar en el mapa	Not on the map	Sem localização no mapa	Pas sur la carte	Non sulla mappa	Nicht auf der Karte
 Sin tarjeta. Gratis hasta {p} paradas al día; sin tope, el plan Repartidor.	No card. Free up to {p} stops a day; unlimited with the Courier plan.	Sem cartão. Grátis até {p} paragens por dia; sem limite, o plano Estafeta.	Sans carte. Gratuit jusqu’à {p} arrêts par jour ; illimité avec le plan Livreur.	Senza carta. Gratis fino a {p} fermate al giorno; senza limiti con il piano Corriere.	Ohne Karte. Kostenlos bis {p} Stopps am Tag; unbegrenzt mit dem Fahrer-Plan.
 Sin tarjeta. Gratis y sin límite hasta el {fecha}; después, gratis hasta {p} paradas al día.	No card. Free and unlimited until {fecha}; after that, free up to {p} stops a day.	Sem cartão. Grátis e sem limite até {fecha}; depois, grátis até {p} paragens por dia.	Sans carte. Gratuit et illimité jusqu’au {fecha} ; ensuite, gratuit jusqu’à {p} arrêts par jour.	Senza carta. Gratis e senza limiti fino al {fecha}; poi gratis fino a {p} fermate al giorno.	Ohne Karte. Kostenlos und unbegrenzt bis {fecha}; danach kostenlos bis {p} Stopps am Tag.
@@ -803,13 +808,13 @@ vehículo parado	stopped vehicle	veículo parado	véhicule arrêté	veicolo ferm
 vez	time	vez	fois	volta	Mal
 ya estaba	already there	já estava	déjà là	già presente	schon da
 ya estaban	were already there	já estavam	étaient déjà là	c’erano già	waren schon da
-{accion} por {calle}	{accion} onto {calle}	{accion} pela {calle}	{accion} sur {calle}	{accion} su {calle}	{accion} auf {calle}
+""",
+        """{accion} por {calle}	{accion} onto {calle}	{accion} pela {calle}	{accion} sur {calle}	{accion} su {calle}	{accion} auf {calle}
 {a} cargados	{a} loaded	{a} carregados	{a} chargés	{a} caricati	{a} geladen
 {a} de {b} avisados · su hora y su enlace	{a} of {b} notified · their time and their link	{a} de {b} avisados · a sua hora e o seu link	{a} sur {b} prévenus · leur heure et leur lien	{a} di {b} avvisati · la loro ora e il loro link	{a} von {b} benachrichtigt · ihre Zeit und ihr Link
 {a} de {b} cargados	{a} of {b} loaded	{a} de {b} carregados	{a} sur {b} chargés	{a} di {b} caricati	{a} von {b} geladen
 {a} de {b} entregadas	{a} of {b} delivered	{a} de {b} entregues	{a} sur {b} livrés	{a} di {b} consegnate	{a} von {b} zugestellt
-""",
-        """{a} de {b} entregadas hoy.	{a} of {b} delivered today.	{a} de {b} entregues hoje.	{a} sur {b} livrés aujourd’hui.	{a} di {b} consegnate oggi.	{a} von {b} heute zugestellt.
+{a} de {b} entregadas hoy.	{a} of {b} delivered today.	{a} de {b} entregues hoje.	{a} sur {b} livrés aujourd’hui.	{a} di {b} consegnate oggi.	{a} von {b} heute zugestellt.
 {a} de {b} hechas	{a} of {b} done	{a} de {b} feitas	{a} sur {b} faits	{a} di {b} fatte	{a} von {b} erledigt
 {a} invitados · {b} válidos	{a} invited · {b} valid	{a} convidados · {b} válidos	{a} invités · {b} valides	{a} invitati · {b} validi	{a} eingeladen · {b} gültig
 {f}: cortes y obras declarados, no el tráfico en tiempo real.	{f}: declared closures and roadworks, not real-time traffic.	{f}: cortes e obras declarados, não o trânsito em tempo real.	{f} : fermetures et travaux déclarés, pas le trafic en temps réel.	{f}: chiusure e lavori dichiarati, non il traffico in tempo reale.	{f}: gemeldete Sperrungen und Baustellen, kein Echtzeitverkehr.
@@ -850,7 +855,7 @@ ya estaban	were already there	já estavam	étaient déjà là	c’erano già	war
 
     /** { español -> [en, pt, fr, it, de] } */
     val MAPA: Map<String, Array<String>> by lazy {
-        val m = HashMap<String, Array<String>>(1670)
+        val m = HashMap<String, Array<String>>(1680)
         for (b in BLOQUES) for (l in b.lineSequence()) {
             if (l.isBlank()) continue
             val c = l.split('\t')
