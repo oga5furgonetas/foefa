@@ -5,7 +5,7 @@
 // - no sobran entradas que ya no usa nadie.
 // Los textos que llegan a tx() desde una lista (motivos, huecos, pestañas…)
 // se sacan de esas listas por su nombre.
-import { readFileSync } from 'node:fs'
+import { readFileSync, readdirSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
@@ -32,12 +32,17 @@ const FICHEROS = [
   'pages/Invita.jsx',
   // «Situar la parada» (02-11-2026): la parada que no está en el mapa se pone en el nuestro, no en Google Maps.
   'pages/driver/SituarParada.jsx',
+  // «¿Dónde?» corto (06-11-2026, diseño compacto): la etiqueta corta de los chips de «Prueba de entrega» y de la memoria.
+  'lib/dejar.js',
 ]
+// Las piezas de la app de reparto (06-11-2026, diseño compacto): todo pages/driver/piezas/, sin nombrarlas una a una; si
+// no, sus textos no se comprueban y las claves que se mudan a ellas se dan por muertas.
+for (const f of readdirSync(join(raiz, 'pages/driver/piezas')).sort()) if (/\.jsx?$/.test(f)) FICHEROS.push(`pages/driver/piezas/${f}`)
 // Nombres que llegan de datos (el plan del autónomo en Registro: tt(planInfo.name)).
 // y los métodos de cobro de lib/region.js (metodosCobro), que se pintan con tx(t).
 const DE_DATOS = ['Repartidor', 'Bizum', 'Transferencia']
 // Listas cuyos textos se traducen al pintarlos.
-const LISTAS = ['MOTIVOS', 'DONDE', 'NAVEGADORES', 'HUECOS', 'PESTANAS', 'GIROS', 'ORDINALES', 'OPCIONES', 'ESTADO', 'VENTAJAS', 'FORMAS', 'DEJAR', 'ATAJOS_HORARIO',
+const LISTAS = ['MOTIVOS', 'DONDE', 'DONDE_CORTO', 'NAVEGADORES', 'HUECOS', 'PESTANAS', 'GIROS', 'ORDINALES', 'OPCIONES', 'ESTADO', 'VENTAJAS', 'FORMAS', 'DEJAR', 'ATAJOS_HORARIO',
   // La portada (/): lo que hace la app, la IA y lo de la empresa.
   'PASOS_PORTADA', 'FUNCIONES_RUTA', 'PREGUNTAS_PORTADA', 'IA_PORTADA', 'MODULOS_EMPRESA',
   // La guía de iPhone (/iphone).
