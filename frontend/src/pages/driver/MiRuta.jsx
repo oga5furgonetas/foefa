@@ -37,6 +37,7 @@ import CargaGuiada from './CargaGuiada'
 import { decir, vozActiva } from '../../lib/voz'
 import { textoBriefing } from '../../lib/briefing'
 import { textoAvisoIa } from '../../lib/entregaIa'
+import { Hoja as HojaPieza } from './piezas'
 
 /* ── MI RUTA ────────────────────────────────────────────────────────────────
    Lo que hace el repartidor al cargar: escanea el código de la caja. Si el
@@ -3111,19 +3112,10 @@ function Resumen({ hechos, ruta, marcas = null, invitacion = null }) {
   )
 }
 
-function Hoja({ titulo, onClose, children }) {
-  useAtras(true, onClose)   // el «atrás» del móvil cierra la hoja, no la app
-  return (
-    <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/60" role="dialog" aria-modal="true" aria-label={titulo}>
-      <div className="max-h-[92vh] w-full max-w-md overflow-y-auto rounded-t-3xl border border-dark-700 bg-dark-950 p-4 pb-8">
-        <div className="mb-3 flex items-start justify-between gap-3">
-          <h2 className="text-[16px] font-bold text-dark-50">{titulo}</h2>
-          <button onClick={onClose} className="rounded p-1 text-dark-400" aria-label={tx('Cerrar')}><X size={18} /></button>
-        </div>
-        {children}
-      </div>
-    </div>
-  )
+/* La hoja común (diseño compacto, 06-11-2026): la pinta piezas/Hoja (cabecera de 48, cuerpo desplazable, pie fijo si se
+   le pasa `pie`, «?» con `ayuda` y ⋮ con `menu`). Sigue aquí para que las hojas de este fichero no cambien de nombre. */
+function Hoja(props) {
+  return <HojaPieza {...props} />
 }
 
 /* EL ESCÁNER: la cámara trasera y el lector de códigos del propio navegador
