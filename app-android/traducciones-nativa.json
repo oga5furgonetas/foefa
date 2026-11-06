@@ -3317,5 +3317,47 @@
     "Vous aviez déjà votre mot de passe : continuez à vous connecter avec. Celui que vous venez de saisir n'a pas été enregistré.",
     "Avevi già la tua password: continua a entrare con quella. Quella che hai scritto non è stata salvata.",
     "Du hattest dein Passwort schon: Melde dich weiter damit an. Das eben eingegebene wurde nicht gespeichert."
+  ],
+  "Ocultar": [
+    "Hide",
+    "Ocultar",
+    "Masquer",
+    "Nascondi",
+    "Ausblenden"
+  ],
+  "Escanea los paquetes o comparte la hoja de la agencia": [
+    "Scan the parcels or share the agency’s sheet",
+    "Lê as encomendas ou partilha a folha da agência",
+    "Scannez les colis ou partagez la feuille de l’agence",
+    "Scansiona i pacchi o condividi il foglio dell’agenzia",
+    "Scanne die Pakete oder teile das Blatt der Agentur"
+  ],
+  "Revisa antes de añadir": [
+    "Check before adding",
+    "Revê antes de adicionar",
+    "Vérifiez avant d’ajouter",
+    "Controlla prima di aggiungere",
+    "Vor dem Hinzufügen prüfen"
+  ],
+  "Añadida, sin situar": [
+    "Added, not on the map",
+    "Adicionada, sem localização",
+    "Ajouté, pas sur la carte",
+    "Aggiunta, non sulla mappa",
+    "Hinzugefügt, nicht auf der Karte"
+  ],
+  "Sin conexión: hace falta red": [
+    "No connection: network needed",
+    "Sem ligação: é precisa rede",
+    "Pas de connexion : il faut du réseau",
+    "Nessuna connessione: serve la rete",
+    "Keine Verbindung: Netz nötig"
+  ],
+  "No es de hoy": [
+    "Not from today",
+    "Não é de hoje",
+    "Pas d’aujourd’hui",
+    "Non è di oggi",
+    "Nicht von heute"
   ]
 }
