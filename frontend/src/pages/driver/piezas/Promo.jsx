@@ -21,7 +21,8 @@ export default function Promo({
   const pct = progreso == null ? null : Math.max(0, Math.min(100, Math.round(progreso * 100)))
   return (
     <div data-testid={testid} className={`rounded-xl ${TONOS[t]} ${className}`}>
-      <div className="flex min-h-12 items-center gap-1 pr-1">
+      {/* Con un botón a la derecha (✕, acción) el de 48 ya trae su aire; solo con la cifra («3/20»), 12 como a la izquierda (08-11-2026). */}
+      <div className={`flex min-h-12 items-center gap-1 ${accion || onCerrar ? 'pr-1' : 'pr-3'}`}>
         <Fila type={onTocar ? 'button' : undefined} onClick={onTocar} aria-label={onTocar ? nombre : undefined}
           className="flex min-h-12 min-w-0 flex-1 items-center gap-2 py-2 pl-3 text-left">
           {icono(Icono, 20, `shrink-0 ${ICONO[t]}`)}
