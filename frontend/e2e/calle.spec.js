@@ -110,7 +110,8 @@ test.describe('lo que pide la calle', () => {
     // Los atajos del horario, al editar una parada.
     await sig.getByRole('button', { name: 'Más opciones' }).click()
     await page.getByRole('menuitem', { name: /Editar parada: Farmacia Sol/ }).click()
-    await page.getByRole('button', { name: 'Cierra a las 14:00' }).click()
+    await page.getByRole('button', { name: 'Más datos' }).click()          // el horario y sus atajos van dentro de «Más datos» (07-11-2026, diseño compacto)
+    await page.getByRole('button', { name: 'Hasta 14:00' }).click()        // «Cierra a las 14:00» es «Hasta 14:00»: lo que guarda, igual ('8-14')
     await expect(page.getByPlaceholder('Horario del cliente (ej. de 10 a 12)')).toHaveValue('8-14')
     await page.getByRole('button', { name: 'Cerrar' }).click()
     // El mapa: lo que dice la DGT, con su fuente.

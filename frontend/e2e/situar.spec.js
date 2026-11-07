@@ -340,7 +340,7 @@ test.describe('situar la parada', () => {
     })
     await page.goto('/ruta', { waitUntil: 'domcontentloaded' })
     await page.getByRole('button', { name: 'A mano', exact: true }).click()
-    const hoja = page.getByRole('dialog', { name: 'Pedido nuevo' })
+    const hoja = page.getByRole('dialog', { name: 'Nueva parada' })
     const dir = hoja.getByPlaceholder('Dirección completa')
     const estado = hoja.getByTestId('estado-direccion')
 
@@ -382,7 +382,7 @@ test.describe('situar la parada', () => {
     // ya en la ruta, añadir va en el «+».
     await page.getByRole('button', { name: 'Añadir paradas' }).click()
     await page.getByRole('dialog', { name: 'Añadir paradas' }).getByRole('button', { name: 'A mano', exact: true }).click()
-    const hoja2 = page.getByRole('dialog', { name: 'Pedido nuevo' })
+    const hoja2 = page.getByRole('dialog', { name: 'Nueva parada' })
     await hoja2.getByPlaceholder('Dirección completa').fill('Praza de María Pita 1, 2º B, A Coruña')
     await expect(hoja2.getByTestId('estado-direccion')).toHaveAttribute('data-estado', 'portal')
     await expect(hoja2.getByTestId('estado-direccion')).toHaveText(/En el mapa/)
@@ -477,7 +477,7 @@ test.describe('situar la parada', () => {
       casa('Rúa San Pedro de Visma', '41', '15011', -8.4122, 43.3589), casa('Rúa Real', '', '15003', -8.4015, 43.3697)] } }))
     await page.goto('/ruta', { waitUntil: 'domcontentloaded' })
     await page.getByRole('button', { name: 'A mano', exact: true }).click()
-    const hoja = page.getByRole('dialog', { name: 'Pedido nuevo' })
+    const hoja = page.getByRole('dialog', { name: 'Nueva parada' })
     const dir = hoja.getByPlaceholder('Dirección completa')
     const estado = hoja.getByTestId('estado-direccion')
     const sugeridas = hoja.getByRole('list', { name: 'Direcciones sugeridas' })
@@ -531,7 +531,7 @@ test.describe('situar la parada', () => {
     const s = await preparar(page, [], { ubicar: zona15011, photon: bretema() })
     await page.goto('/ruta', { waitUntil: 'domcontentloaded' })
     await page.getByRole('button', { name: 'A mano', exact: true }).click()
-    const hoja = page.getByRole('dialog', { name: 'Pedido nuevo' })
+    const hoja = page.getByRole('dialog', { name: 'Nueva parada' })
     const dir = hoja.getByPlaceholder('Dirección completa')
     const estado = hoja.getByTestId('estado-direccion')
     await dir.fill('Rúa Brétema Mariñeira 23, 2º B, 15011 A Coruña')
@@ -542,7 +542,7 @@ test.describe('situar la parada', () => {
     await expect(opciones.nth(0)).toContainText('Rúa Brétema Mariñeira, 15011 A Coruña')
     await expect(opciones.nth(0)).toContainText('Sin el portal')
     await expect(opciones.nth(1)).toContainText('Rúa Brétema, 15179 Oleiros')
-    await expect(opciones.nth(1).getByText('Otra calle', { exact: true })).toHaveClass(/text-red-300/)
+    await expect(opciones.nth(1).getByText('Otra calle', { exact: true })).toHaveClass(/text-ruta-peligro-texto/)
     await expect(opciones.nth(1)).not.toContainText('Sin el portal')
     await expect(hoja.getByText(/Almirante Mourelle/)).toHaveCount(0)
     await opciones.nth(1).click()
@@ -570,7 +570,7 @@ test.describe('situar la parada', () => {
     await expect(opciones).toHaveCount(2)
     await expect(opciones.nth(0)).toContainText('Sin el portal')
     await expect(opciones.nth(1)).toContainText('Rúa Brétema, 15179 Oleiros')
-    await expect(opciones.nth(1).getByText('Otra calle', { exact: true })).toHaveClass(/text-red-300/)
+    await expect(opciones.nth(1).getByText('Otra calle', { exact: true })).toHaveClass(/text-ruta-peligro-texto/)
     // Hay una de la calle escrita: no se dice que no la encuentra.
     await expect(situar.getByText('No encuentro esa dirección: mueve el mapa hasta la puerta.')).toHaveCount(0)
     await opciones.nth(1).click()
@@ -634,7 +634,7 @@ test.describe('situar la parada', () => {
     })
     await page.goto('/ruta', { waitUntil: 'domcontentloaded' })
     await page.getByRole('button', { name: 'A mano', exact: true }).click()
-    const hoja = page.getByRole('dialog', { name: 'Pedido nuevo' })
+    const hoja = page.getByRole('dialog', { name: 'Nueva parada' })
     const dir = hoja.getByPlaceholder('Dirección completa')
     await dir.fill('Hospital Universitario A Coruña')
     const opciones = hoja.getByRole('list', { name: 'Direcciones sugeridas' }).getByRole('button')
@@ -664,7 +664,7 @@ test.describe('situar la parada', () => {
       ? [dePhoton('Rúa Brétema', '', '15179', 'Oleiros', OLEIROS.lng, OLEIROS.lat)] : [] } }))
     await page.goto('/ruta', { waitUntil: 'domcontentloaded' })
     await page.getByRole('button', { name: 'A mano', exact: true }).click()
-    const hoja = page.getByRole('dialog', { name: 'Pedido nuevo' })
+    const hoja = page.getByRole('dialog', { name: 'Nueva parada' })
     const dir = hoja.getByPlaceholder('Dirección completa')
     const estado = hoja.getByTestId('estado-direccion')
     await dir.fill('Rúa Brétema Mariñeira 23, 15011 A Coruña')
@@ -675,7 +675,7 @@ test.describe('situar la parada', () => {
     const opciones = situar.getByRole('list', { name: 'Direcciones sugeridas' }).getByRole('button')
     await expect(opciones).toHaveCount(1)
     await expect(opciones.first()).toContainText('Rúa Brétema, 15179 Oleiros')
-    await expect(opciones.first().getByText('Otra calle', { exact: true })).toHaveClass(/text-red-300/)
+    await expect(opciones.first().getByText('Otra calle', { exact: true })).toHaveClass(/text-ruta-peligro-texto/)
     await opciones.first().click()
     await expect(situar.getByText(/^Otra calle · Rúa Brétema Mariñeira 23, 15011 A Coruña$/)).toBeVisible()
     await situar.getByRole('button', { name: 'Es aquí' }).click()
@@ -704,7 +704,7 @@ test.describe('situar la parada', () => {
     await situar.getByRole('textbox', { name: 'Dirección' }).fill('Rúa Brétema, Oleiros')
     const opciones = situar.getByRole('list', { name: 'Direcciones sugeridas' }).getByRole('button')
     await expect(opciones).toHaveCount(1)
-    await expect(opciones.first().getByText('Otra calle', { exact: true })).toHaveClass(/text-red-300/)
+    await expect(opciones.first().getByText('Otra calle', { exact: true })).toHaveClass(/text-ruta-peligro-texto/)
     // Lo corregido se pregunta tal cual, sin el CP ni el pueblo de la parada.
     expect(s.ubicar[s.ubicar.length - 1]).toEqual({ direccion: 'Rúa Brétema, Oleiros' })
     await opciones.first().click()
@@ -747,7 +747,7 @@ test.describe('situar la parada', () => {
     // En la ficha, lo mismo: elegirla no cambia el 999 (ni el piso) y queda «Calle encontrada, sin el portal».
     await page.getByRole('button', { name: 'Añadir paradas' }).click()
     await page.getByRole('dialog', { name: 'Añadir paradas' }).getByRole('button', { name: 'A mano', exact: true }).click()
-    const hoja = page.getByRole('dialog', { name: 'Pedido nuevo' })
+    const hoja = page.getByRole('dialog', { name: 'Nueva parada' })
     const dir = hoja.getByPlaceholder('Dirección completa')
     await dir.fill('Rúa Real 999, 2º B, 15003 A Coruña')
     const sugeridas = hoja.getByRole('list', { name: 'Direcciones sugeridas' }).getByRole('button')
@@ -787,7 +787,7 @@ test.describe('situar la parada', () => {
     // En la ficha: tal cual (su dirección, el cliente y el teléfono) y «Calle encontrada, sin el portal».
     await page.getByRole('button', { name: 'Añadir paradas' }).click()
     await page.getByRole('dialog', { name: 'Añadir paradas' }).getByRole('button', { name: 'A mano', exact: true }).click()
-    const hoja = page.getByRole('dialog', { name: 'Pedido nuevo' })
+    const hoja = page.getByRole('dialog', { name: 'Nueva parada' })
     await hoja.getByPlaceholder('Dirección completa').fill('real coruña')
     await hoja.getByRole('list', { name: 'Direcciones sugeridas' }).getByRole('button', { name: /Ya estuviste aquí/ }).click()
     await expect(hoja.getByPlaceholder('Dirección completa')).toHaveValue(SUYA.direccion)
@@ -807,7 +807,7 @@ test.describe('situar la parada', () => {
       dePhoton('Rúa Almirante Cervera', '41', '15011', 'A Coruña', -8.4111, 43.3601), dePhoton('Rúa Almirante Mourelle', '', '15011', 'A Coruña', -8.4101, 43.3611)] })
     await page.goto('/ruta', { waitUntil: 'domcontentloaded' })
     await page.getByRole('button', { name: 'A mano', exact: true }).click()
-    const hoja = page.getByRole('dialog', { name: 'Pedido nuevo' })
+    const hoja = page.getByRole('dialog', { name: 'Nueva parada' })
     await hoja.getByPlaceholder('Dirección completa').fill('Rúa Almirante Mourelle 41, 15011 A Coruña')
     const opciones = hoja.getByRole('list', { name: 'Direcciones sugeridas' }).getByRole('button')
     await expect(opciones).toHaveCount(1)
@@ -874,7 +874,7 @@ test.describe('situar la parada', () => {
         await page.getByRole('button', { name: 'Añadir paradas' }).click()
         await page.getByRole('dialog', { name: 'Añadir paradas' }).getByRole('button', { name: 'A mano', exact: true }).click()
       }
-      const hoja = page.getByRole('dialog', { name: 'Pedido nuevo' })
+      const hoja = page.getByRole('dialog', { name: 'Nueva parada' })
       return { hoja, dir: hoja.getByPlaceholder('Dirección completa'), estado: hoja.getByTestId('estado-direccion'),
         sugeridas: hoja.getByRole('list', { name: 'Direcciones sugeridas' }).getByRole('button') }
     }
@@ -972,7 +972,7 @@ test.describe('situar la parada', () => {
     // Desde la ficha, lo mismo: a Photon sin el «1 dcha»; al servidor, tal cual.
     await page.getByRole('button', { name: 'Añadir paradas' }).click()
     await page.getByRole('dialog', { name: 'Añadir paradas' }).getByRole('button', { name: 'A mano', exact: true }).click()
-    const hoja = page.getByRole('dialog', { name: 'Pedido nuevo' })
+    const hoja = page.getByRole('dialog', { name: 'Nueva parada' })
     await hoja.getByPlaceholder('Dirección completa').fill('Rúa Real 5 1 dcha, 15003 A Coruña')
     const sugeridas = hoja.getByRole('list', { name: 'Direcciones sugeridas' }).getByRole('button')
     await expect(sugeridas).toHaveCount(1)
@@ -980,6 +980,81 @@ test.describe('situar la parada', () => {
     expect(pedidas[pedidas.length - 1]).toBe('Rúa Real 5, 15003 A Coruña')
     expect(pedidas.some((q) => /dcha/.test(q))).toBe(false)
     await expect.poll(() => s.ubicar.map((b) => b.direccion)).toContain('Rúa Real 5 1 dcha, 15003 A Coruña')
+    expect(s.fuera).toEqual([])
+    expect(fallos).toEqual([])
+  })
+
+  /* LA FICHA COMPACTA (07-11-2026, diseño compacto, §5.9). A 360 se ve sin desplazar lo principal (la dirección, el cliente, el
+     teléfono y el botón de abajo, que va fijo); lo demás está tras «Más datos», cerrado al crear. Y lo que se guarda es lo de siempre
+     aunque los controles sean otros: «Bultos − 1 +» da un número, «Urgente» es un interruptor y «Entrega | Recogida» un segmentado. */
+  test('la ficha compacta: lo principal y el botón a la vista a 360, «Más datos» cerrado, y lo de dentro se guarda como siempre', async ({ page }) => {
+    const fallos = vigilar(page)
+    const s = await preparar(page, [], { ubicar: conPortal })
+    await page.setViewportSize({ width: 360, height: 780 })
+    await page.goto('/ruta', { waitUntil: 'domcontentloaded' })
+    await page.getByRole('button', { name: 'A mano', exact: true }).click()
+    const ficha = page.getByRole('dialog', { name: 'Nueva parada' })
+    for (const loPrincipal of [ficha.getByPlaceholder('Dirección completa'), ficha.getByPlaceholder('Cliente', { exact: true }),
+      ficha.getByPlaceholder('Teléfono', { exact: true }), ficha.getByRole('button', { name: 'Añadir a mi ruta' })]) {
+      await expect(loPrincipal).toBeInViewport({ ratio: 1 })
+    }
+    await expect(ficha.getByRole('button', { name: 'Añadir a mi ruta' })).toBeDisabled()          // sin dirección, no se añade
+    const mas = ficha.getByRole('button', { name: 'Más datos' })
+    await expect(mas).toHaveAttribute('aria-expanded', 'false')
+    await expect(ficha.getByPlaceholder('Qué lleva')).toHaveCount(0)
+    await expect(ficha.getByRole('switch', { name: 'Urgente' })).toHaveCount(0)
+
+    await ficha.getByPlaceholder('Dirección completa').fill('Praza de María Pita 1, A Coruña')
+    await ficha.getByPlaceholder('Cliente', { exact: true }).fill('Concello')
+    await ficha.getByPlaceholder('Teléfono', { exact: true }).fill('600111222')
+    await mas.click()
+    await expect(mas).toHaveAttribute('aria-expanded', 'true')
+    await ficha.getByPlaceholder('Qué lleva').fill('Medicinas')
+    // Los atajos del horario: «9–14», «16–20» y «Hasta 14:00» (lo que guardan es lo de siempre: «16-20»).
+    const atajos = ficha.getByTestId('atajos-horario')
+    await expect(atajos.getByRole('button')).toHaveText(['9–14', '16–20', 'Hasta 14:00'])
+    await atajos.getByRole('button', { name: '16–20' }).click()
+    await expect(ficha.getByPlaceholder('Horario del cliente (ej. de 10 a 12)')).toHaveValue('16-20')
+    await expect(atajos.getByRole('button', { name: '16–20' })).toHaveAttribute('aria-pressed', 'true')
+    await ficha.getByRole('button', { name: 'Detrás · izq' }).click()
+    const bultos = ficha.getByRole('group', { name: 'Bultos' })
+    await expect(ficha.getByRole('button', { name: 'Uno menos' })).toBeDisabled()                 // con 1 no baja más
+    await ficha.getByRole('button', { name: 'Uno más' }).click()
+    await ficha.getByRole('button', { name: 'Uno más' }).click()
+    await expect(bultos).toContainText('3')
+    await ficha.getByRole('switch', { name: 'Urgente' }).check()
+    await ficha.getByRole('button', { name: 'Recogida' }).click()
+    await ficha.getByPlaceholder('A cobrar (€)').fill('12,50')
+    await ficha.getByRole('button', { name: 'Añadir a mi ruta' }).click()
+    await expect.poll(() => s.creados.length).toBe(1)
+    expect(s.creados[0]).toMatchObject({ direccion: 'Praza de María Pita 1, A Coruña', cliente: 'Concello', telefono: '600111222', contenido: 'Medicinas',
+      horario: '16-20', hueco: 'Detrás · izq', bultos: 3, prioridad: true, tipo: 'recogida', cobrar: '12,50' })
+    expect(s.fuera).toEqual([])
+    expect(fallos).toEqual([])
+  })
+
+  test('editar una parada con datos: «Más datos» sale abierto con lo guardado y vuelve tal cual', async ({ page }) => {
+    const fallos = vigilar(page)
+    const s = await preparar(page, [concello({ geo: 'ok', lat: PORTAL.lat, lng: PORTAL.lng, telefono: '600111222', contenido: 'Medicinas', bultos: 2, prioridad: true,
+      cobrar: 5, tipo: 'recogida', ventana_desde: '10:00', ventana_hasta: '12:00', hueco: 'Detrás · izq' }), hospital()], { ubicar: conPortal })
+    await page.goto('/ruta', { waitUntil: 'domcontentloaded' })
+    await page.locator('#parada-p1').getByRole('button', { name: 'Más opciones' }).click()
+    await page.getByRole('menuitem', { name: 'Editar parada: Concello' }).click()
+    const ficha = page.getByRole('dialog', { name: 'Editar parada' })
+    await expect(ficha.getByRole('button', { name: 'Más datos' })).toHaveAttribute('aria-expanded', 'true')
+    await expect(ficha.getByText('Foto etiqueta')).toHaveCount(0)                                 // al editar no hay foto de la etiqueta
+    await expect(ficha.getByPlaceholder('Qué lleva')).toHaveValue('Medicinas')
+    await expect(ficha.getByPlaceholder('Horario del cliente (ej. de 10 a 12)')).toHaveValue('de 10:00 a 12:00')
+    await expect(ficha.getByRole('button', { name: 'Detrás · izq' })).toHaveAttribute('aria-pressed', 'true')
+    await expect(ficha.getByRole('group', { name: 'Bultos' })).toContainText('2')
+    await expect(ficha.getByRole('switch', { name: 'Urgente' })).toBeChecked()
+    await expect(ficha.getByRole('button', { name: 'Recogida' })).toHaveAttribute('aria-pressed', 'true')
+    await expect(ficha.getByPlaceholder('A cobrar (€)')).toHaveValue('5')
+    await ficha.getByRole('button', { name: 'Guardar cambios' }).click()
+    await expect.poll(() => s.editados.length).toBe(1)
+    expect(s.editados[0].id).toBe('p1')
+    expect(s.editados[0].cuerpo).toMatchObject({ cliente: 'Concello', telefono: '600111222', contenido: 'Medicinas', bultos: 2, prioridad: true, tipo: 'recogida',
+      cobrar: '5', hueco: 'Detrás · izq', horario: 'de 10:00 a 12:00' })
     expect(s.fuera).toEqual([])
     expect(fallos).toEqual([])
   })
