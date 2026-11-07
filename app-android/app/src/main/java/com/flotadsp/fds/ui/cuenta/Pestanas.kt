@@ -2,6 +2,8 @@
 package com.flotadsp.fds.ui.cuenta
 
 import com.flotadsp.fds.ui.tx
+import com.flotadsp.fds.ui.coloresCampo
+import com.flotadsp.fds.ui.coloresBotonTexto
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -248,8 +250,8 @@ fun AjustesPantalla(alGuardar: () -> Unit = {}) {
             onDismissRequest = { eligiendoHora = false },
             title = { Text(tx("Hora de salida")) },
             text = { TimePicker(reloj) },
-            confirmButton = { TextButton(onClick = { salida = "%02d:%02d".format(reloj.hour, reloj.minute); eligiendoHora = false }) { Text(tx("Aceptar")) } },
-            dismissButton = { TextButton(onClick = { eligiendoHora = false }) { Text(tx("Cancelar")) } },
+            confirmButton = { TextButton(onClick = { salida = "%02d:%02d".format(reloj.hour, reloj.minute); eligiendoHora = false }, colors = coloresBotonTexto()) { Text(tx("Aceptar")) } },
+            dismissButton = { TextButton(onClick = { eligiendoHora = false }, colors = coloresBotonTexto()) { Text(tx("Cancelar")) } },
         )
     }
     Scaffold(topBar = { Cabecera(tx("Ajustes")) }, containerColor = MaterialTheme.colorScheme.background) { pad ->
@@ -270,7 +272,7 @@ fun AjustesPantalla(alGuardar: () -> Unit = {}) {
                 }
             }
             Seccion(tx("Tu ruta")) {
-                OutlinedTextField(base, { base = it }, label = { Text(tx("Desde dónde sales (nave, almacén o casa)")) }, shape = MaterialTheme.shapes.medium, modifier = Modifier.fillMaxWidth())
+                OutlinedTextField(base, { base = it }, label = { Text(tx("Desde dónde sales (nave, almacén o casa)")) }, shape = MaterialTheme.shapes.medium, modifier = Modifier.fillMaxWidth(), colors = coloresCampo())
                 // Con el reloj de Android: en el teclado de números de muchos móviles no hay «:» para escribir «09:00».
                 CampoElegir(tx("Hora de salida"), salida, alPulsar = { eligiendoHora = true })
                 if (paises.isNotEmpty()) ElegirPais(pais, paises) { pais = it }
@@ -278,7 +280,7 @@ fun AjustesPantalla(alGuardar: () -> Unit = {}) {
                 // si le toca. Opcional; solo la matrícula.
                 OutlinedTextField(placa, { placa = it.uppercase(Locale.ROOT).take(12) }, label = { Text(tx("Matrícula / placa (opcional)")) }, singleLine = true,
                     supportingText = { Text(tx("Para avisarte de las restricciones por placa (rodízio, Hoy No Circula, pico y placa).")) },
-                    shape = MaterialTheme.shapes.medium, modifier = Modifier.fillMaxWidth())
+                    shape = MaterialTheme.shapes.medium, modifier = Modifier.fillMaxWidth(), colors = coloresCampo())
                 FilaInterruptor(tx("Volver a la base al acabar"), volver) { volver = it }
                 // LA CARGA GUIADA (01-11-2026): por dónde se carga decide qué fila de la furgoneta es la de la puerta.
                 Text(tx("Cargo la furgoneta por"), style = MaterialTheme.typography.titleMedium)
@@ -312,15 +314,15 @@ fun AjustesPantalla(alGuardar: () -> Unit = {}) {
                 Text(tx("Pon cómo te pagan y en «Hoy» verás cuánto llevas ganado y lo que pierdes con cada entrega que no sale."),
                     style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 OutlinedTextField(pagoParada, { pagoParada = it }, label = { Text(tx("Te pagan por cada entrega ({moneda})", "moneda" to Region.simbolo)) }, singleLine = true,
-                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal), shape = MaterialTheme.shapes.medium, modifier = Modifier.fillMaxWidth())
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal), shape = MaterialTheme.shapes.medium, modifier = Modifier.fillMaxWidth(), colors = coloresCampo())
                 OutlinedTextField(pagoDia, { pagoDia = it }, label = { Text(tx("Fijo por día, si te pagan así ({moneda})", "moneda" to Region.simbolo)) }, singleLine = true,
-                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal), shape = MaterialTheme.shapes.medium, modifier = Modifier.fillMaxWidth())
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal), shape = MaterialTheme.shapes.medium, modifier = Modifier.fillMaxWidth(), colors = coloresCampo())
                 OutlinedTextField(costeKm, { costeKm = it }, label = { Text(if (Region.unidades == "mi") tx("Gasolina por milla ({moneda})", "moneda" to Region.simbolo) else tx("Gasolina por km ({moneda})", "moneda" to Region.simbolo)) }, singleLine = true,
-                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal), shape = MaterialTheme.shapes.medium, modifier = Modifier.fillMaxWidth())
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal), shape = MaterialTheme.shapes.medium, modifier = Modifier.fillMaxWidth(), colors = coloresCampo())
                 if (Region.pais == "es") {
                     // LA PROPINA (01-11-2026): el Bizum, que el cliente ve en su enlace cuando ya tiene el paquete.
                     OutlinedTextField(bizum, { bizum = it.filter { c -> c.isDigit() || c == '+' || c == ' ' }.take(20) }, label = { Text(tx("Tu móvil de Bizum, para la propina (opcional)")) },
-                        singleLine = true, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Phone), shape = MaterialTheme.shapes.medium, modifier = Modifier.fillMaxWidth())
+                        singleLine = true, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Phone), shape = MaterialTheme.shapes.medium, modifier = Modifier.fillMaxWidth(), colors = coloresCampo())
                     Text(tx("Cuando el cliente ya tiene el paquete, su enlace le dice «¿Le invitas a un café?» con tu Bizum. Lo que te manden es un ingreso tuyo."),
                         style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
@@ -364,7 +366,7 @@ private fun CampoElegir(etiqueta: String, valor: String, alPulsar: () -> Unit) {
     Box {
         OutlinedTextField(valor, {}, readOnly = true, label = { Text(etiqueta) }, singleLine = true,
             trailingIcon = { Icon(Icons.Default.ArrowDropDown, contentDescription = null) }, shape = MaterialTheme.shapes.medium,
-            modifier = Modifier.fillMaxWidth().clearAndSetSemantics { })
+            modifier = Modifier.fillMaxWidth().clearAndSetSemantics { }, colors = coloresCampo())
         Box(Modifier.matchParentSize().semantics { contentDescription = "$etiqueta: $valor" }
             .clickable(role = Role.Button, onClickLabel = tx("Cambiar"), onClick = alPulsar))
     }
@@ -400,7 +402,7 @@ private fun ElegirPais(pais: String, paisesServidor: List<Triple<String, String,
                     }
                 }
             },
-            confirmButton = { TextButton(onClick = { abierto = false }) { Text(tx("Cerrar")) } },
+            confirmButton = { TextButton(onClick = { abierto = false }, colors = coloresBotonTexto()) { Text(tx("Cerrar")) } },
         )
     }
 }
@@ -476,8 +478,8 @@ fun CuentaPantalla() {
     if (salir) {
         AlertDialog(onDismissRequest = { salir = false }, title = { Text(tx("¿Cerrar sesión?")) },
             text = { Text(tx("Para volver a entrar necesitarás tu correo y tu contraseña.")) },
-            confirmButton = { TextButton(onClick = { salir = false; ambito.launch { app.repo.salir() } }) { Text(tx("Cerrar sesión")) } },
-            dismissButton = { TextButton(onClick = { salir = false }) { Text(tx("Cancelar")) } })
+            confirmButton = { TextButton(onClick = { salir = false; ambito.launch { app.repo.salir() } }, colors = coloresBotonTexto()) { Text(tx("Cerrar sesión")) } },
+            dismissButton = { TextButton(onClick = { salir = false }, colors = coloresBotonTexto()) { Text(tx("Cancelar")) } })
     }
     if (borrar) BorrarCuenta(alCerrar = { borrar = false })
 }
@@ -539,7 +541,7 @@ private fun BorrarCuenta(alCerrar: () -> Unit) {
                 Text(tx("Tu cuenta se desactiva ahora mismo y borramos tus datos (tus rutas y las de tus clientes) en un plazo máximo de 30 días. No se puede deshacer."))
                 Spacer(Modifier.height(Esp.m))
                 OutlinedTextField(clave, { clave = it }, label = { Text(tx("Tu contraseña")) }, singleLine = true, shape = MaterialTheme.shapes.medium,
-                    visualTransformation = PasswordVisualTransformation(), keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password))
+                    visualTransformation = PasswordVisualTransformation(), keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password), colors = coloresCampo())
                 error?.let { Text(it, color = MaterialTheme.colorScheme.error, modifier = Modifier.padding(top = Esp.s)) }
             }
         },
@@ -551,6 +553,6 @@ private fun BorrarCuenta(alCerrar: () -> Unit) {
                 }
             }, enabled = clave.isNotBlank() && !trabajando) { Text(tx("Borrar mi cuenta"), color = MaterialTheme.colorScheme.error) }
         },
-        dismissButton = { TextButton(onClick = alCerrar) { Text(tx("Cancelar")) } },
+        dismissButton = { TextButton(onClick = alCerrar, colors = coloresBotonTexto()) { Text(tx("Cancelar")) } },
     )
 }

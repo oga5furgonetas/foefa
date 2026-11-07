@@ -65,7 +65,7 @@ internal object Paleta {
     val chip = Color(0xFFECEBE7)                 // con secundario, 6,2:1
     val superficie = blanco                      // tarjetas, lista y hojas (surfaceContainerLow)
     val superficieMedia = Color(0xFFF1F0EC)
-    val superficieAlta = Color(0xFFEBEAE6)
+    val superficieAlta = blanco                  // surfaceContainerHigh: los diálogos de Material y la lista de sugerencias, en blanco como las hojas; en #EBEAE6 el texto de marca daba 4,2:1 (07-11-2026)
     val superficieMasAlta = Color(0xFFE4E3DF)
     val separador = Color(0xFFDFDED9)
     val borde = Color(0xFF8C8B86)                // borde de control, 3,4:1 (antes #C9C8C3, 1,7:1)
@@ -79,7 +79,7 @@ internal object Paleta {
     val enMarcaTinteNoche = Color(0xFFB3F3EE)    // 7,5:1
     val marcaSuaveNoche = Color(0xFF1C3533)
     val enMarcaSuaveNoche = Color(0xFFCCE8E5)
-    val inversoPrimarioNoche = Color(0xFF00807A)   // 3,9:1 sobre la superficie inversa: no vale para texto (el snackbar usa inverseOnSurface, 07-11-2026)
+    val inversoPrimarioNoche = Color(0xFF00726C)   // 4,7:1 sobre la superficie inversa de noche (#E6E8EC); antes #00807A, 3,9:1 (07-11-2026)
     // De noche: ok, peligro, aviso y zona.
     val okTextoNoche = Color(0xFF4ADE80)         // 10,5:1
     val okSuaveNoche = Color(0xFF6FD69B)         // tertiary

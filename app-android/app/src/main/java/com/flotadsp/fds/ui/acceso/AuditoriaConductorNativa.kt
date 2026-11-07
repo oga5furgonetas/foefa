@@ -1,6 +1,8 @@
 package com.flotadsp.fds.ui.acceso
 
 import com.flotadsp.fds.ui.tx
+import com.flotadsp.fds.ui.coloresCampo
+import com.flotadsp.fds.ui.coloresBotonTexto
 import android.Manifest
 import android.content.Context
 import android.content.pm.PackageManager
@@ -244,7 +246,7 @@ fun AuditoriaConductorNativa(alVolver: () -> Unit, alCompletar: () -> Unit) {
                             Row(Modifier.fillMaxWidth().padding(16.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(14.dp)) {
                                 Icon(Icons.Default.DirectionsCar, contentDescription = null)
                                 Column(Modifier.weight(1f)) { Text(placa, fontWeight = FontWeight.Bold); Text(marca, style = MaterialTheme.typography.bodySmall) }
-                                if (id == asignado && yaInspeccionada) Text(tx("Enviada hoy"), color = MaterialTheme.colorScheme.primary, style = MaterialTheme.typography.labelSmall)
+                                if (id == asignado && yaInspeccionada) Text(tx("Enviada hoy"), color = MaterialTheme.colorScheme.onPrimaryContainer, style = MaterialTheme.typography.labelSmall)
                             }
                         }
                     }
@@ -259,8 +261,8 @@ fun AuditoriaConductorNativa(alVolver: () -> Unit, alCompletar: () -> Unit) {
                     if (km == null && fotos["odometro"] != null) {
                         Text(if (kmMin != null && kmMax != null) tx("La foto no dio una lectura fiable. Indica los kilómetros reales (entre {min} y {max}; último registro {km}, hace {dias} días).", "min" to kmMin, "max" to kmMax, "km" to (kmActual ?: 0), "dias" to kmDias)
                             else tx("El lector no ha contestado: escribe los kilómetros que marca el cuadro. La oficina los revisa."), style = MaterialTheme.typography.bodySmall)
-                        OutlinedTextField(kmManual, { kmManual = it.filter(Char::isDigit).take(7) }, label = { Text(tx("Kilómetros")) }, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number), modifier = Modifier.fillMaxWidth())
-                    } else if (km != null) Text(tx("Kilometraje leído: {km} km", "km" to km), color = MaterialTheme.colorScheme.primary)
+                        OutlinedTextField(kmManual, { kmManual = it.filter(Char::isDigit).take(7) }, label = { Text(tx("Kilómetros")) }, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number), modifier = Modifier.fillMaxWidth(), colors = coloresCampo())
+                    } else if (km != null) Text(tx("Kilometraje leído: {km} km", "km" to km), color = MaterialTheme.colorScheme.secondary)
                     CapturaCard(tx("Foto del combustible"), fotos["combustible"] != null, procesando == "combustible") { hacerFoto("combustible") }
                     Text(tx("¿Cuánto combustible queda?"))
                     Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) { listOf(10, 25, 50, 75, 100).forEach { v -> FilterChip(selected = combustible == v, onClick = { combustible = v }, label = { Text(if (v == 10) tx("Reserva") else if (v == 100) tx("Lleno") else "$v%") }) } }
@@ -291,7 +293,7 @@ fun AuditoriaConductorNativa(alVolver: () -> Unit, alCompletar: () -> Unit) {
                             CapturaCard(tx("Foto de la rueda (opcional)"), fotos["check_rueda_repuesto"] != null, procesando == "check_rueda_repuesto") { hacerFoto("check_rueda_repuesto") }
                         }
                     }
-                    OutlinedTextField(notas, { notas = it }, label = { Text(tx("Notas (opcional)")) }, minLines = 2, modifier = Modifier.fillMaxWidth())
+                    OutlinedTextField(notas, { notas = it }, label = { Text(tx("Notas (opcional)")) }, minLines = 2, modifier = Modifier.fillMaxWidth(), colors = coloresCampo())
                     val faltaFotoDanio = checklist.any { (id, v) -> v in listOf("malo", "danado") && fotos["check_$id"] == null }
                     Button(onClick = {
                         val fotosEnviar = buildList {
@@ -337,7 +339,7 @@ fun AuditoriaConductorNativa(alVolver: () -> Unit, alCompletar: () -> Unit) {
                     }
                 }
             }
-            TextButton(onClick = { confirmarSalida = true }, modifier = Modifier.fillMaxWidth()) { Text(tx("Salir de la auditoría")) }
+            TextButton(onClick = { confirmarSalida = true }, modifier = Modifier.fillMaxWidth(), colors = coloresBotonTexto()) { Text(tx("Salir de la auditoría")) }
             Spacer(Modifier.height(20.dp))
         }
     }
@@ -345,8 +347,8 @@ fun AuditoriaConductorNativa(alVolver: () -> Unit, alCompletar: () -> Unit) {
         onDismissRequest = { confirmarSalida = false },
         title = { Text(tx("¿Salir de la auditoría?")) },
         text = { Text(tx("Las fotos aún no se han enviado. Si sales, se descartarán y tendrás que empezar de nuevo.")) },
-        confirmButton = { TextButton(onClick = { confirmarSalida = false; alVolver() }) { Text(tx("Salir y descartar")) } },
-        dismissButton = { TextButton(onClick = { confirmarSalida = false }) { Text(tx("Seguir revisando")) } },
+        confirmButton = { TextButton(onClick = { confirmarSalida = false; alVolver() }, colors = coloresBotonTexto()) { Text(tx("Salir y descartar")) } },
+        dismissButton = { TextButton(onClick = { confirmarSalida = false }, colors = coloresBotonTexto()) { Text(tx("Seguir revisando")) } },
     )
 }
 

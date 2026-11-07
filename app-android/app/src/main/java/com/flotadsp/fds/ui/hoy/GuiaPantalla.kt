@@ -469,9 +469,12 @@ private fun Guiando(
         // y lo que dice el cliente, cada uno con su icono y su frase entera de nombre); antes de llegar, «Ya he llegado» a
         // lo ancho; y, como hasta hoy, siempre No entregado / Entregado. La frase de la ubicación se queda, en una línea:
         // ni la ficha de Play ni docs/REVISION_LEGAL.md dicen aún que la guía usa la ubicación (riesgo 16).
+        // Con ella eran 242 dp sin notas y 266 con ellas (§7.4 pide 165-225); sin quitarla, 222 y 246 (07-11-2026): 8 de relleno
+        // arriba (la fila de 48 ya deja 4 sobre el número de 40), nada entre el nombre y «Llegas», 8 entre texto y botones y
+        // entre los dos botones (§3.2) y 4 sobre la frase.
         Surface(color = MaterialTheme.colorScheme.surfaceContainerLow, shape = RoundedCornerShape(topStart = 16.dp, topEnd = 16.dp), shadowElevation = 10.dp,
             modifier = Modifier.align(Alignment.BottomCenter).fillMaxWidth().onSizeChanged { panelAlto = it.height }) {
-            Column(Modifier.padding(Esp.m).navigationBarsPadding()) {
+            Column(Modifier.padding(start = Esp.m, top = Esp.s, end = Esp.m, bottom = Esp.m).navigationBarsPadding()) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     NumeroParada(numero, TamNumero.GRANDE, EstadoNumero.SIGUIENTE)
                     Spacer(Modifier.width(Esp.m))
@@ -497,7 +500,7 @@ private fun Guiando(
                         append(Navegador.textoDistancia(v.restante))
                         if (minutos != null) append(" · $minutos min")
                     }, style = MaterialTheme.typography.bodyMedium.merge(TextoNumero), color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(top = Esp.xs))
+                        maxLines = 1, overflow = TextOverflow.Ellipsis)
                 }
                 val dice = parada.clienteDice?.let { textoClienteDice(it) }?.takeIf { it.isNotBlank() }
                 if (parada.hueco.isNotBlank() || dice != null) {
@@ -525,14 +528,14 @@ private fun Guiando(
                 // «YA HE LLEGADO» (01-11-2026, como la web): la puerta de verdad puede estar a 60-80 m del pin (la calle, el
                 // portal), y entonces el GPS nunca daría la llegada; el conductor manda y la guía deja de contar esa parada.
                 if (!haLlegado) {
-                    Spacer(Modifier.height(Esp.m))
+                    Spacer(Modifier.height(Esp.s))
                     BotonNormal(tx("Ya he llegado"), { llegado = parada.id; motor.llegadoAMano(parada.id); onLlegar(parada); Acciones.vibrar(ctx, 60) },
                         icono = Icons.Default.Flag, modifier = Modifier.fillMaxWidth())
                 }
-                Spacer(Modifier.height(Esp.m))
+                Spacer(Modifier.height(Esp.s))
                 FilaCierre(recogida = parada.tipo == "recogida", alFallar = { onNoEntregar(parada) }, alEntregar = { onEntregar(parada) })
                 Text(tx("Tu ubicación se usa para guiarte y no se guarda."), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    textAlign = TextAlign.Center, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.fillMaxWidth().padding(top = Esp.s))
+                    textAlign = TextAlign.Center, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.fillMaxWidth().padding(top = Esp.xs))
             }
         }
     }

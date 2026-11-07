@@ -42,9 +42,21 @@ class TemaTest {
         Pareja("neutro, secundario sobre blanco", p.blanco, p.secundario),
         Pareja("neutro, secundario sobre papel", p.papel, p.secundario),
         Pareja("neutro, chip", p.chip, p.secundario),
+        // Los diálogos de Material (surfaceContainerHigh) y la lista de sugerencias de la ficha van en blanco, como las hojas:
+        // con el #EBEAE6 de antes, el texto de marca (los botones de los diálogos) daba 4,2:1 (07-11-2026).
+        Pareja("diálogo, texto de marca", p.superficieAlta, p.marcaTexto),
+        Pareja("diálogo, texto neutro", p.superficieAlta, p.tinta),
+        Pareja("diálogo, secundario", p.superficieAlta, p.secundario),
+        Pareja("diálogo, peligro", p.superficieAlta, p.peligro),
+        // El punto y el texto de «aprobada» del cuadrante de turnos, sobre el tinte de un día de trabajo.
+        Pareja("ok, texto sobre el tinte de marca", p.marcaTinte, p.ok),
         Pareja("inverso (el aviso flotante)", p.inverso, p.enInverso),
-        // La acción del aviso flotante («Deshacer») va en la letra del aviso, no en inversePrimary (07-11-2026).
+        // La acción del aviso flotante («Deshacer») y la del aviso de actualización («Reiniciar», «Descargar») van en la letra
+        // del aviso (inverseOnSurface), en negrita y subrayadas: esta es su pareja (07-11-2026).
         Pareja("superficie inversa / acción", p.inverso, p.enInverso),
+        // El inversePrimary ya no lo pinta ninguna pantalla, pero Material lo usa por defecto en la acción de un Snackbar: que
+        // nunca dé menos de 4,5:1 si alguien monta uno sin SnackbarFds (hallazgo 10 de la revisión, 07-11-2026).
+        Pareja("superficie inversa / inversePrimary", p.inverso, p.cianClaro),
         Pareja("borde de control sobre blanco", p.blanco, p.borde, 3.0),
         Pareja("borde de control sobre papel", p.papel, p.borde, 3.0),
         Pareja("borde de énfasis sobre blanco", p.blanco, p.marcaTexto, 3.0),
@@ -71,9 +83,16 @@ class TemaTest {
         Pareja("neutro, secundario sobre el fondo", p.fondoNoche, p.secundarioNoche),
         Pareja("neutro, secundario sobre la superficie", p.superficieNoche, p.secundarioNoche),
         Pareja("neutro, chip", p.chipNoche, p.secundarioNoche),
+        Pareja("diálogo, texto de marca", p.superficieAltaNoche, p.marcaTextoNoche),
+        Pareja("diálogo, texto neutro", p.superficieAltaNoche, p.textoNoche),
+        Pareja("diálogo, secundario", p.superficieAltaNoche, p.secundarioNoche),
+        Pareja("diálogo, peligro", p.superficieAltaNoche, p.peligroTextoNoche),
+        Pareja("ok, texto sobre el tinte de marca", p.marcaTinteNoche, p.okTextoNoche),
         Pareja("inverso (el aviso flotante)", p.textoNoche, p.superficieMediaNoche),
-        // De noche el inversePrimary (#00807A) daba 3,9:1 sobre la superficie inversa: la acción va en inverseOnSurface.
+        // De noche la superficie inversa es clara (#E6E8EC): la acción de los avisos va en inverseOnSurface, subrayada.
         Pareja("superficie inversa / acción", p.textoNoche, p.superficieMediaNoche),
+        // Y el inversePrimary de noche era #00807A, 3,9:1 sobre ella: ahora #00726C, 4,7:1 (hallazgo 10 de la revisión).
+        Pareja("superficie inversa / inversePrimary", p.textoNoche, p.inversoPrimarioNoche),
         Pareja("borde de control sobre el fondo", p.fondoNoche, p.bordeNoche, 3.0),
         Pareja("borde de control sobre la superficie", p.superficieNoche, p.bordeNoche, 3.0),
         Pareja("borde de énfasis sobre la superficie", p.superficieNoche, p.cianClaro, 3.0),

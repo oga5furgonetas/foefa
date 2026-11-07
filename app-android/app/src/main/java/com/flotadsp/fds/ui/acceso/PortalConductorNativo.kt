@@ -3,6 +3,8 @@ package com.flotadsp.fds.ui.acceso
 
 import android.widget.Toast
 import com.flotadsp.fds.ui.tx
+import com.flotadsp.fds.ui.coloresCampo
+import com.flotadsp.fds.ui.coloresBotonTexto
 import android.Manifest
 import android.os.Build
 import androidx.activity.compose.BackHandler
@@ -119,8 +121,8 @@ fun PortalConductorNativo(alCerrar: () -> Unit, abrir: String? = null, alAbierto
         onDismissRequest = { confirmarSalir = false },
         title = { Text(tx("¿Cerrar sesión?")) },
         text = { Text(tx("Para volver a entrar necesitarás tu correo y tu contraseña.")) },
-        confirmButton = { TextButton(onClick = { confirmarSalir = false; alCerrar() }) { Text(tx("Cerrar sesión")) } },
-        dismissButton = { TextButton(onClick = { confirmarSalir = false }) { Text(tx("Seguir dentro")) } },
+        confirmButton = { TextButton(onClick = { confirmarSalir = false; alCerrar() }, colors = coloresBotonTexto()) { Text(tx("Cerrar sesión")) } },
+        dismissButton = { TextButton(onClick = { confirmarSalir = false }, colors = coloresBotonTexto()) { Text(tx("Seguir dentro")) } },
     )
 
     if (obligatoria) {
@@ -354,7 +356,7 @@ private fun TelefonoConductorNativo(alVolver: () -> Unit, alGuardado: () -> Unit
         Column(Modifier.fillMaxSize().padding(inset).padding(Esp.l), verticalArrangement = Arrangement.spacedBy(Esp.m)) {
             Text(tx("Añade o actualiza el número para que la oficina pueda llamarte si hay una incidencia. Solo se guarda en tu ficha."))
             OutlinedTextField(telefono, { telefono = it.filter { c -> c.isDigit() || c == '+' || c == ' ' }.take(18); error = null }, label = { Text(tx("Teléfono")) }, singleLine = true,
-                shape = MaterialTheme.shapes.medium, modifier = Modifier.fillMaxWidth())
+                shape = MaterialTheme.shapes.medium, modifier = Modifier.fillMaxWidth(), colors = coloresCampo())
             error?.let { Text(it, color = MaterialTheme.colorScheme.error) }
             BotonPrincipal(tx("Guardar teléfono"), onClick = {
                 guardando = true; error = null
@@ -429,13 +431,13 @@ private fun CambiarClaveConductor(obligatoria: Boolean, alVolver: () -> Unit, al
                     Text(tx("Te hemos mandado un código a {c}. Mira también el spam.", "c" to (enviadoA ?: codigoA ?: "")),
                         style = MaterialTheme.typography.bodyMedium)
                     OutlinedTextField(codigo, { codigo = it.filter(Char::isDigit).take(6); error = null }, label = { Text(tx("Código de 6 cifras")) },
-                        singleLine = true, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number), shape = MaterialTheme.shapes.medium, modifier = Modifier.fillMaxWidth())
-                    TextButton(onClick = pedirCodigo, enabled = !pidiendo) { Text(tx("Reenviar código")) }
+                        singleLine = true, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number), shape = MaterialTheme.shapes.medium, modifier = Modifier.fillMaxWidth(), colors = coloresCampo())
+                    TextButton(onClick = pedirCodigo, enabled = !pidiendo, colors = coloresBotonTexto()) { Text(tx("Reenviar código")) }
                 }
                 else -> {
                     CampoClave(actual, { actual = it; error = null }, tx("Contraseña actual")) {}
                     codigoA?.let { c ->
-                        TextButton(onClick = pedirCodigo, enabled = !pidiendo) { Text(tx("¿No la sabes? Te mando un código a {c}", "c" to c)) }
+                        TextButton(onClick = pedirCodigo, enabled = !pidiendo, colors = coloresBotonTexto()) { Text(tx("¿No la sabes? Te mando un código a {c}", "c" to c)) }
                     }
                 }
             }
@@ -489,7 +491,7 @@ private fun CambiarClaveConductor(obligatoria: Boolean, alVolver: () -> Unit, al
                 style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             // SIEMPRE CON SALIDA (03-11-2026): la de elegirla no tenía ni «Volver» ni «Cerrar sesión», y si guardar
             // fallaba por lo que fuera, el conductor no salía de aquí.
-            if (obligatoria && alSalir != null) TextButton(onClick = alSalir, modifier = Modifier.fillMaxWidth()) { Text(tx("Cerrar sesión")) }
+            if (obligatoria && alSalir != null) TextButton(onClick = alSalir, modifier = Modifier.fillMaxWidth(), colors = coloresBotonTexto()) { Text(tx("Cerrar sesión")) }
         }
     }
 }
@@ -529,7 +531,7 @@ private fun CorreoRecuperacionConductor(alVolver: () -> Unit) {
             if (cargando) CircularProgressIndicator()
             else {
                 OutlinedTextField(correo, { correo = it; error = null }, label = { Text(tx("Tu correo personal")) }, singleLine = true,
-                    shape = MaterialTheme.shapes.medium, modifier = Modifier.fillMaxWidth())
+                    shape = MaterialTheme.shapes.medium, modifier = Modifier.fillMaxWidth(), colors = coloresCampo())
                 // En el color de texto de la marca (07-11-2026): el cian sobre el papel no se leía.
                 mensaje?.let { Text(it, color = MaterialTheme.colorScheme.secondary) }
                 error?.let { Text(it, color = MaterialTheme.colorScheme.error) }
@@ -551,7 +553,7 @@ private fun CorreoRecuperacionConductor(alVolver: () -> Unit) {
                         finally { enviando = false }
                     }
                 }, enabled = correo.contains('@'), cargando = enviando, modifier = Modifier.fillMaxWidth())
-                TextButton(onClick = alVolver, modifier = Modifier.fillMaxWidth()) { Text(tx("Lo haré más tarde")) }
+                TextButton(onClick = alVolver, modifier = Modifier.fillMaxWidth(), colors = coloresBotonTexto()) { Text(tx("Lo haré más tarde")) }
             }
         }
     }

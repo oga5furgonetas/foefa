@@ -2,6 +2,8 @@ package com.flotadsp.fds.ui.acceso
 
 import com.flotadsp.fds.ui.patronFecha
 import com.flotadsp.fds.ui.tx
+import com.flotadsp.fds.ui.coloresCampo
+import com.flotadsp.fds.ui.coloresBotonTexto
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -85,7 +87,7 @@ fun ExtrasConductorNativos(alVolver: () -> Unit) {
     ) }) { inset ->
         Column(Modifier.fillMaxSize().padding(inset).verticalScroll(rememberScrollState()).padding(18.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
             Text(tx("Solicita un turno extra en los días que la empresa necesita refuerzo. La oficina confirma cada solicitud."), style = MaterialTheme.typography.bodyMedium)
-            aviso?.let { Text(it, color = MaterialTheme.colorScheme.primary) }
+            aviso?.let { Text(it, color = MaterialTheme.colorScheme.secondary) }
             error?.let { Text(it, color = MaterialTheme.colorScheme.error) }
             if (datos == null) CircularProgressIndicator()
             else if (vacantes.isEmpty()) {
@@ -111,9 +113,9 @@ fun ExtrasConductorNativos(alVolver: () -> Unit) {
                             if (estado == "pendiente") {
                                 Text(tx("La oficina te confirmará si queda aprobado."), color = MaterialTheme.colorScheme.tertiary)
                                 val refuerzo = campoSeguro(v, "refuerzo_id")
-                                if (refuerzo.isNotBlank()) TextButton(onClick = { confirmar = refuerzo to "retirar" }, enabled = ocupado == null) { Text(tx("Retirar solicitud")) }
+                                if (refuerzo.isNotBlank()) TextButton(onClick = { confirmar = refuerzo to "retirar" }, enabled = ocupado == null, colors = coloresBotonTexto(MaterialTheme.colorScheme.onSurfaceVariant)) { Text(tx("Retirar solicitud")) }
                             } else if (estado.isBlank()) {
-                                OutlinedTextField(notas[fecha].orEmpty(), { value -> if (value.length <= 200) notas = notas + (fecha to value) }, label = { Text(tx("Nota para la oficina (opcional)")) }, modifier = Modifier.fillMaxWidth())
+                                OutlinedTextField(notas[fecha].orEmpty(), { value -> if (value.length <= 200) notas = notas + (fecha to value) }, label = { Text(tx("Nota para la oficina (opcional)")) }, modifier = Modifier.fillMaxWidth(), colors = coloresCampo())
                                 Button(onClick = { confirmar = fecha to "pedir" }, enabled = ocupado == null, modifier = Modifier.fillMaxWidth().height(48.dp)) { Text(tx("Solicitar turno extra")) }
                             }
                         }
@@ -129,7 +131,7 @@ fun ExtrasConductorNativos(alVolver: () -> Unit) {
                             Text("${fechaBonita(campoSeguro(x, "date"))} · EXTRA", fontWeight = FontWeight.Bold)
                             Text(if (campoSeguro(x, "en_cuadrante") == "false") tx("La oficina ha cambiado el cuadrante después de confirmarlo. Consúltalo antes de desplazarte.") else tx("Turno extra confirmado."), style = MaterialTheme.typography.bodySmall)
                             val id = campoSeguro(x, "id")
-                            if (campoSeguro(x, "puede_soltar") == "true" && id.isNotBlank()) TextButton(onClick = { confirmar = id to "cancelar" }, enabled = ocupado == null) { Text(tx("Avisar que no puedo ir")) }
+                            if (campoSeguro(x, "puede_soltar") == "true" && id.isNotBlank()) TextButton(onClick = { confirmar = id to "cancelar" }, enabled = ocupado == null, colors = coloresBotonTexto(MaterialTheme.colorScheme.onTertiaryContainer)) { Text(tx("Avisar que no puedo ir")) }
                         }
                     }
                 }
@@ -158,8 +160,8 @@ fun ExtrasConductorNativos(alVolver: () -> Unit) {
                 } catch (e: ErrorApi) { error = e.message }
                 finally { ocupado = null }
             }
-        }) { Text(tx("Confirmar")) } },
-        dismissButton = { TextButton(onClick = { confirmar = null }) { Text(tx("Volver")) } },
+        }, colors = coloresBotonTexto()) { Text(tx("Confirmar")) } },
+        dismissButton = { TextButton(onClick = { confirmar = null }, colors = coloresBotonTexto()) { Text(tx("Volver")) } },
     ) }
 }
 
