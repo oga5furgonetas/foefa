@@ -91,7 +91,12 @@ test('Ruta · cargar la furgoneta por huecos y oír la siguiente parada', async 
   await expect(abrir).toContainText('0/3')
   await abrir.click()
   const carga = page.getByRole('dialog', { name: 'Cargar la furgoneta' })
+  // Diseño compacto (07-11-2026, §5.6): la explicación va detrás del «?» y en la pantalla queda «↓ Puertas traseras».
+  await expect(carga.getByText('↓ Puertas traseras')).toBeVisible()
+  await carga.getByRole('button', { name: 'Ayuda' }).click()
   await expect(carga.getByText('Cargas por las puertas traseras.')).toBeVisible()
+  await expect(carga.getByText('Lo de detrás se entrega primero.')).toBeVisible()
+  await carga.getByRole('dialog').getByRole('button', { name: 'Cerrar' }).click()
   await expect(carga.locator('[data-hueco="Detrás · izq"]')).toContainText('1')
   await expect(carga.locator('[data-hueco="Detrás · der"]')).toContainText('1')
   await expect(carga.locator('[data-hueco="Medio · izq"]')).toContainText('1')
@@ -101,16 +106,16 @@ test('Ruta · cargar la furgoneta por huecos y oír la siguiente parada', async 
   await carga.getByPlaceholder('Escribe o pega un código').fill('COD1')
   await carga.getByPlaceholder('Escribe o pega un código').press('Enter')
   await expect(carga.getByText('→ Detrás · izq')).toBeVisible()
-  await expect(carga.getByText('1 de 3 cargados').first()).toBeVisible()
+  await expect(carga.getByRole('status', { name: '1 de 3 cargados' })).toBeVisible()
   expect(escaneos.at(-1)).toEqual({ codigos: ['COD1'], carga: true })
   expect(await page.evaluate(() => window.__dicho.at(-1))).toBe('detrás, a la izquierda')
-  await expect(carga.locator('[data-hueco="Detrás · izq"]')).toContainText('1 cargados')
+  await expect(carga.locator('[data-hueco="Detrás · izq"]')).toContainText('1/1')
 
   // Uno que no es de la ruta: se dice y no cuenta.
   await carga.getByPlaceholder('Escribe o pega un código').fill('NADA')
   await carga.getByPlaceholder('Escribe o pega un código').press('Enter')
   await expect(carga.getByRole('alert')).toContainText('No es de tu ruta de hoy.')
-  await expect(carga.getByText('1 de 3 cargados').first()).toBeVisible()
+  await expect(carga.getByRole('status', { name: '1 de 3 cargados' })).toBeVisible()
 
   // Sin escanear: la lista por hueco, con una casilla por paquete.
   await carga.getByRole('button', { name: 'Lista por hueco' }).click()
@@ -119,7 +124,7 @@ test('Ruta · cargar la furgoneta por huecos y oír la siguiente parada', async 
   await casillaPepe.click()
   await expect(casillaPepe).toHaveAttribute('aria-checked', 'true')
   expect(marcas).toEqual([{ id: 'p2', cargado: true }])
-  await expect(carga.getByText('2 de 3 cargados').first()).toBeVisible()
+  await expect(carga.getByRole('status', { name: '2 de 3 cargados' })).toBeVisible()
   await expect(carga.getByRole('checkbox', { name: /Farmacia Sol/ })).toHaveAttribute('aria-checked', 'true')
 
   // Salir: la ruta sigue diciendo cuántos van.
@@ -181,8 +186,12 @@ test('Ruta · con la guía por voz apagada no se habla, y con la puerta lateral 
   await expect(sig.getByText('Farmacia Sol')).toBeVisible()
   await page.getByRole('button', { name: /Cargar la furgoneta/ }).click()
   const carga = page.getByRole('dialog', { name: 'Cargar la furgoneta' })
+  // Diseño compacto (07-11-2026, §5.6): «← Puerta lateral» arriba; lo demás, detrás del «?».
+  await expect(carga.getByText('← Puerta lateral')).toBeVisible()
+  await carga.getByRole('button', { name: 'Ayuda' }).click()
   await expect(carga.getByText('Cargas por la puerta lateral.')).toBeVisible()
   await expect(carga.getByText('Lo de delante se entrega primero.')).toBeVisible()
+  await carga.getByRole('dialog').getByRole('button', { name: 'Cerrar' }).click()
   // En la lista, la fila de la puerta (delante) sale antes que la de detrás.
   await carga.getByRole('button', { name: 'Lista por hueco' }).click()
   const titulos = await carga.locator('section p').allTextContents()
@@ -198,4 +207,84 @@ test('Ruta · con la guía por voz apagada no se habla, y con la puerta lateral 
   await page.getByRole('button', { name: 'Entregar sin foto' }).click()
   await expect(sig.getByText('Bar Pepe')).toBeVisible()
   expect(await page.evaluate(() => window.__dicho)).toEqual([])
+})
+
+/* ESCANEAR DESDE LA CARGA (diseño compacto, 07-11-2026, §5.5 y §5.6): el escáner se abre sin cerrarse tras cada paquete y su barra
+   de abajo dice el paquete, su hueco en grande y cuántos van; un código que no es de la ruta sale como error (sustituye a lo
+   anterior, con su icono) sin cerrar el escáner. Se simulan la cámara (un lienzo) y el lector de códigos del navegador. */
+test('Ruta · escanear desde la carga: el hueco en grande en la barra y el error sin cerrar el escáner', async ({ page }) => {
+  await page.addInitScript(() => {
+    localStorage.setItem('cookie_consent', JSON.stringify({ v: 1, at: new Date().toISOString() }))
+    localStorage.setItem('fds_instalar_cerrado', '1')
+    localStorage.setItem('guia_voz', '0')
+    window.__ahora = []
+    window.BarcodeDetector = class {
+      static async getSupportedFormats() { return ['code_128', 'qr_code'] }
+      async detect() { return (window.__ahora || []).map((rawValue) => ({ rawValue })) }
+    }
+    navigator.mediaDevices.getUserMedia = async () => {
+      const c = document.createElement('canvas'); c.width = 320; c.height = 240
+      const ctx = c.getContext('2d'); ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, 320, 240)
+      return c.captureStream(5)
+    }
+  })
+  await entrarComoAdmin(page)
+  await simularApi(page, 'vacio')
+  const fin = new Date(Date.now() + 30 * 86400000).toISOString()
+  await page.route(/\/api\/org\/billing/, (r) => r.fulfill({ json: {
+    plan: 'autonomo', sector: 'autonomo', modulos: ['dashboard', 'reparto', 'configuracion'],
+    precios: { mensual: 9.99, anual: 99 }, regalos: { 1: 9.99, 12: 99 },
+    status: 'active', suscrita: true, ciclo: 'mensual', proximo_cobro: fin } }))
+  const pedidos = [
+    { id: 'p1', codigo: 'COD1', cliente: 'Farmacia Sol', direccion: 'Rúa Sinfónica de Galicia 8', estado: 'pendiente', bultos: 1, orden: 1, eta: '09:30', hueco: 'Delante · izq', lat: 43.36, lng: -8.41 },
+    { id: 'p2', codigo: 'COD2', cliente: 'Bar Pepe', direccion: 'Rúa Real 5', estado: 'pendiente', bultos: 1, orden: 2, eta: '09:40', hueco: 'Detrás · der', lat: 43.37, lng: -8.40 },
+    { id: 'p3', codigo: 'COD3', cliente: 'Marta Ríos', direccion: 'Avda. Montero Ríos 12', estado: 'pendiente', bultos: 1, orden: 3, eta: '09:50', lat: 43.371, lng: -8.402 },
+  ]
+  await page.route(/\/api\/reparto\/mi-ruta\/trazado/, (r) => r.fulfill({ json: { linea: [], fuente: 'linea_recta' } }))
+  await page.route(/\/api\/reparto\/escanear$/, (r) => {
+    const b = r.request().postDataJSON()
+    const p = pedidos.find((x) => (b.codigos || [b.codigo]).includes(x.codigo))
+    if (!p) return r.fulfill({ json: { encontrado: false } })
+    p.cargado_en = '2026-10-04T07:00:00Z'
+    r.fulfill({ json: { encontrado: true, pedido: p, cargados: pedidos.filter((x) => x.cargado_en).length, total: pedidos.length } })
+  })
+  await page.route(/\/api\/reparto\/mi-ruta$/, (r) => r.fulfill({ json: {
+    activo: true, autonomo: true, empresa: '', fecha: '2026-10-04', ia_tickets: false, jornada: {}, aviso_aceptado: true,
+    base: null, ruta: { fin: '10:30', minutos: 30, km: 2, trafico: true, carga_por: 'traseras' }, pedidos } }))
+
+  await page.goto('/ruta', { waitUntil: 'domcontentloaded' })
+  await page.getByRole('button', { name: /Cargar la furgoneta/ }).click()
+  const carga = page.getByRole('dialog', { name: 'Cargar la furgoneta' })
+  // Una parada sin hueco: el chip «1 sin hueco ›» la cuenta y lleva a la lista; lo que explicaba va detrás del «?».
+  await expect(carga.getByRole('button', { name: '1 sin hueco' })).toBeVisible()
+  await carga.getByRole('button', { name: 'Ayuda' }).click()
+  await expect(carga.getByText('1 paradas sin hueco (sin ubicar o sin ordenar)', { exact: false })).toBeVisible()
+  await carga.getByRole('dialog').getByRole('button', { name: 'Cerrar' }).click()
+  await carga.getByRole('button', { name: '1 sin hueco' }).click()
+  await expect(carga.getByText('Sin hueco · 1')).toBeVisible()
+  await carga.getByRole('button', { name: 'Furgoneta', exact: true }).click()
+  // «Escanear» se ve corto y se llama «Escanear para cargar».
+  await carga.getByRole('button', { name: 'Escanear para cargar' }).click()
+  const escaner = page.getByRole('dialog', { name: 'Escanear' })
+  const barra = escaner.getByRole('status')
+  await expect(escaner.getByText('Apunta al código')).toBeVisible()
+  await expect(barra).toHaveText('0 de 3 cargados')
+
+  // Un paquete de la ruta: su parada, el hueco en grande y la cuenta.
+  await page.evaluate(() => { window.__ahora = ['COD1'] })
+  await expect(barra).toContainText('Parada 1 · Farmacia Sol')
+  await expect(barra).toContainText('→ Delante · izq')
+  await expect(barra).toContainText('1 de 3 cargados')
+
+  // Uno que no es de la ruta: el error en la barra, sin lo anterior y sin cerrar el escáner.
+  await page.evaluate(() => { window.__ahora = ['NADA'] })
+  await expect(barra).toContainText('No es de tu ruta de hoy.')
+  await expect(barra).not.toContainText('Parada 1')
+  await expect(escaner).toBeVisible()
+
+  // «Listo» vuelve a la carga, que sigue diciendo lo último que entró.
+  await escaner.getByRole('button', { name: 'Listo' }).click()
+  await expect(escaner).toHaveCount(0)
+  await expect(carga.getByText('Parada 1 · Farmacia Sol')).toBeVisible()
+  await expect(carga.locator('[data-hueco="Delante · izq"]')).toContainText('1/1')
 })
