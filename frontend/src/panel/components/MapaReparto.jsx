@@ -25,7 +25,8 @@ import Pastilla from '../../pages/driver/piezas/Pastilla'
    mide 48 en la app de reparto (`.app-ruta`; en el panel sigue a 30) y las ventanas no se salen del mapa ni quedan bajo el
    zoom o las capas (260 de ancho como mucho y lo que quepa, `keepInView`, la letra del tema y botones de 40). Los dibujos
    (chinchetas, iconos, líneas) no cambian: por eso
-   este fichero lleva colores hex en sus SVG y en el CSS de las ventanas, y no la marca de `check-tokens-ruta.mjs`. */
+   este fichero lleva colores hex en sus SVG y en el CSS de las ventanas, y `check-tokens-ruta.mjs` le salta esa regla
+   (DIBUJOS_DEL_MAPA). */
 
 const COLORES = ['#0ea5e9', '#f97316', '#22c55e', '#a855f7', '#ef4444', '#eab308', '#14b8a6', '#ec4899']
 export const colorConductor = (i) => COLORES[((i % COLORES.length) + COLORES.length) % COLORES.length]
