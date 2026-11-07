@@ -207,9 +207,9 @@ web ya las sirve; si no, `https://raw.githubusercontent.com/oga5furgonetas/foefa
 | V 13-11 | Carrusel F | Reel `tiktok-es-cobro.mp4` (en Instagram salió el 04-11: texto nuevo sobre el cierre del día) | — |
 | S 14-11 | Pieza nueva «Black Friday y Navidad: el pico» | La misma | — |
 | D 15-11 | Carrusel H «Lo que no puede faltar en la furgoneta» (programado el 07-11) | El mismo (programado) | YouTube: solo con vídeo nuevo |
-| L 16-11 | Carrusel B «7 frases» (salió el 05-11: solo con gancho nuevo) o pieza nueva | Carrusel C «¿Cuánto gana de verdad?» (repetido a 8 días: solo si no hay pieza nueva) | — |
-| M 17-11 | Pieza nueva «Errores del primer mes» | La misma | — |
-| X 18-11 | Invita y gana (`invita-9x16.jpg`, texto nuevo) | «Errores del primer mes» | LinkedIn: «ITV, seguro y renting sin sustos» (abajo; programado el 07-11) |
+| L 16-11 | Carrusel I «Errores del primer mes» (programado el 07-11) | El mismo (programado) | — |
+| M 17-11 | Pieza nueva (de la lista de `redes/TEXTO.md`) | La misma | — |
+| X 18-11 | Invita y gana (`invita-9x16.jpg`, texto nuevo) | Carrusel C «¿Cuánto gana de verdad?» (salió el 08-11) o pieza nueva | LinkedIn: «ITV, seguro y renting sin sustos» (abajo; programado el 07-11) |
 | J 19-11 – D 24-11 | Lo que mejor haya ido de las semanas 1-3, con gancho nuevo, y las piezas que se creen | | LinkedIn X 25-11: «El cuadrante sin Excel» (abajo) |
 
 **LinkedIn X 18-11 (empresas):**
@@ -308,3 +308,4 @@ Lo que la tarea NO hace y por qué:
 | 03-11 12:55 | (nube) | Metricool | Ronda 2 del martes. Piezas nuevas: carruseles E «Mensajes para el cliente antes de llegar» y F «Antes de firmar con una agencia» (PNG para Instagram y JPEG para TikTok; también D en JPEG). Calendario de las semanas 3-4 escrito (apartado 8 bis). Programado con enlaces de GitHub (raw, commit 3fd0610; no hace falta desplegar): X 11-11 TikTok D (415165789) e Instagram E (415166021); J 12-11 TikTok E (415166164) e Instagram F (415166287). Semana cubierta hasta el J 12-11. | Faltan vídeos nuevos para YouTube (nada nuevo desde el 09-11) |
 | 03-11 19:56 | (nube) | Metricool | Ronda 3 del martes. Pieza nueva: carrusel G «Black Friday y Navidad: cómo sobrevivir al pico». Programado: V 13-11 TikTok F (415663112) e Instagram reel «cobros al acabar la ruta» con texto nuevo (415663165); S 14-11 TikTok G (415663306) e Instagram G (415663456). Semana cubierta hasta el S 14-11. | Faltan vídeos nuevos para YouTube |
 | 07-11 07:5x | (nube) | Metricool | Ronda única por las diez que no se hicieron (avisos del 04-11 al 07-11 en cola: el trabajador de la sesión se reinició). Calendario revisado: TikTok e Instagram cubiertos todos los días hasta el S 14-11, LinkedIn 11-11, YouTube 09-11. Pieza nueva: carrusel H «Lo que no puede faltar en la furgoneta» (commit f345a3e). Programado con enlaces raw: D 15-11 Instagram H 12:00 (419726229) y TikTok H 18:00 (419726278); LinkedIn X 18-11 «ITV, seguro y renting» 11:00 (419726295). Semana cubierta hasta el D 15-11. | Faltan vídeos nuevos para YouTube; siguiente pieza «Errores del primer mes» |
+| 07-11 12:5x | (nube) | Metricool | Ronda 2 del sábado. Sin duplicados (nada nuevo de la sesión del PC). Pieza nueva: carrusel I «Errores del primer mes repartiendo» (commit 4cea3dc; la prueba de entrega con foto está en la app de ruta). Programado: L 16-11 Instagram I 12:00 (419879358) y TikTok I 18:00 (419879415). Semana cubierta hasta el L 16-11. | Faltan vídeos nuevos para YouTube; quedan dos ideas en TEXTO.md |
