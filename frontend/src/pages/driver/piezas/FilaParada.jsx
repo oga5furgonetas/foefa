@@ -3,11 +3,12 @@
    12/8, el número de 32, el nombre («nombre», una línea) con la hora a la derecha («etiqueta», tabular, gris; «10:05 +8»
    en peligro si llega tarde) y, debajo, la dirección («texto» gris, una línea) con UNA etiqueta como mucho (gana: sin
    situar > cobrar > urgente > recogida > horario > «N en esta puerta» > puerta conocida > ZBE > hueco > ejemplo). Hecha:
-   el número de hecha y «11:02 · Entregado · 24,50 €» (ok) o «11:02 · {motivo}» (peligro), con la etiqueta de la IA si la
-   hay («Verificada por IA» / «Revisar la foto»); `extra` deja debajo lo que la web conserva en la fila («Volver a
-   intentarlo» / «Entregado» en las fallidas). Toda la fila es un botón («Ver la parada {n}: …») que abre la hoja de la
-   parada; a la derecha, solo en la web, el botón de icono de siempre («Ir a {cliente}» / «Situar: {cliente}»), si se le
-   pasa `onIr`, `hrefIr` u `onSituar`. Sin estado propio: vale para rutas de 300 paradas. */
+   el número de hecha y «11:02 · Entregado · 24,50 €» (ok) o «11:02 · {motivo}» (peligro) en «etiqueta» tabular, como la
+   nativa (07-11-2026), con la etiqueta de la IA si la hay («Verificada por IA» / «Revisar la foto»); `extra` deja
+   debajo lo que la web conserva en la fila («Volver a intentarlo» / «Entregado» en las fallidas). Toda la fila es un
+   botón («Ver la parada {n}: …») que abre la hoja de la parada; a la derecha, solo en la web, el botón de icono de
+   siempre («Ir a {cliente}» / «Situar: {cliente}»), si se le pasa `onIr`, `hrefIr` u `onSituar`. Sin estado propio:
+   vale para rutas de 300 paradas. */
 import { AlertTriangle, Banknote, Check, Clock, MapPin, MapPinOff, Navigation, Package, ShieldCheck } from 'lucide-react'
 import { tx, locale } from '../../../lib/idioma'
 import { importe } from '../../../lib/region'
@@ -24,7 +25,8 @@ const horaDe = (iso) => {
 /* La etiqueta que gana en una fila pendiente, o ninguna. */
 function etiquetaDe(p, juntas, zbe) {
   if (p.lat == null) return { texto: p.geo === 'pendiente' ? tx('Buscando en el mapa…') : tx('Sin situar'), tono: 'aviso', icono: MapPinOff }
-  if (p.cobrar > 0) return { texto: tx('Cobrar {euros}', { euros: importe(p.cobrar) }), tono: 'aviso', icono: Banknote }
+  // «Cobrar» + el importe, como MiRuta.jsx y la nativa (07-11-2026): «Cobrar {euros}» es la clave de retirar dinero de la cartera.
+  if (p.cobrar > 0) return { texto: `${tx('Cobrar')} ${importe(p.cobrar)}`, tono: 'aviso', icono: Banknote }
   if (p.prioridad) return { texto: tx('Urgente'), tono: 'aviso', icono: AlertTriangle }
   if (p.tipo === 'recogida') return { texto: tx('Recogida'), tono: 'neutro', icono: Package }
   if (p.ventana_desde) return { texto: `${p.ventana_desde}–${p.ventana_hasta || ''}`, tono: 'neutro', icono: Clock }
@@ -88,7 +90,7 @@ export default function FilaParada({ p, numero, juntas = 1, zbe = '', onTocar, o
             </span>
             <span className="flex items-center justify-between gap-2">
               {hecha
-                ? <span className={`truncate text-texto ${estado.ok ? 'text-ruta-ok-texto' : 'text-ruta-peligro-texto'}`}>{estado.texto}</span>
+                ? <span className={`truncate text-etiqueta tabular-nums ${estado.ok ? 'text-ruta-ok-texto' : 'text-ruta-peligro-texto'}`}>{estado.texto}</span>
                 : <span className="truncate text-texto text-dark-400">{p.cliente ? p.direccion : ''}</span>}
               {etiqueta && <Etiqueta texto={etiqueta.texto} tono={etiqueta.tono} icono={etiqueta.icono} />}
             </span>

@@ -258,7 +258,7 @@ export const A = {
   "Acerca el mapa hasta ver la puerta": ["Zoom in until you can see the door", "Aproxime o mapa até ver a porta", "Zoomez jusqu’à voir la porte", "Ingrandisci la mappa fino a vedere la porta", "Zoom hinein, bis du die Tür siehst"],
   // Diseño compacto (06-11-2026, parte T): los textos cortos de las dos apps (§6.2 de la especificación).
   // Los «N→W» vienen tal cual de app-android/traducciones-nativa.json: ahora también los dice la web.
-  "Escanear paquetes": ["Scan parcels", "Ler encomendas", "Scanner des colis", "Scansiona pacchi", "Pakete scannen"],
+  "Escanear paquetes": ["Scan parcels", "Digitalizar volumes", "Scanner des colis", "Scansiona pacchi", "Pakete scannen"],
   "Ver el mapa": ["Show the map", "Ver o mapa", "Voir la carte", "Vedi la mappa", "Karte anzeigen"],
   "Ver la lista": ["Show the list", "Ver a lista", "Voir la liste", "Vedi la lista", "Liste anzeigen"],
   "Traer a hoy": ["Bring to today", "Trazer para hoje", "Ramener à aujourd’hui", "Porta a oggi", "Auf heute holen"],
@@ -312,7 +312,7 @@ export const A = {
   "Lista u hoja": ["List or sheet", "Lista ou folha", "Liste ou feuille", "Elenco o foglio", "Liste oder Blatt"],
   "Código": ["Code", "Código", "Code", "Codice", "Code"],
   "Ver un ejemplo": ["See an example", "Ver um exemplo", "Voir un exemple", "Vedi un esempio", "Beispiel ansehen"],
-  "¡Tu mejor día!": ["Your best day!", "O teu melhor dia!", "Ta meilleure journée !", "Il tuo giorno migliore!", "Dein bester Tag!"],
+  "¡Tu mejor día!": ["Your best day!", "O teu melhor dia!", "Votre meilleure journée !", "Il tuo giorno migliore!", "Dein bester Tag!"],
   // La hoja de la parada
   "Más opciones": ["More options", "Mais opções", "Plus d’options", "Altre opzioni", "Weitere Optionen"],
   "Ayuda": ["Help", "Ajuda", "Aide", "Aiuto", "Hilfe"],
@@ -331,7 +331,7 @@ export const A = {
   "Su hora y su enlace, uno a uno": ["Their time and link, one by one", "A hora e o link de cada um, um a um", "Leur heure et leur lien, un par un", "Ora e link di ognuno, uno alla volta", "Zeit und Link für jeden, einer nach dem anderen"],
   "La ven tus compañeros · se borra al año": ["Your colleagues can see it · deleted after a year", "Os teus colegas veem-na · apaga-se ao fim de um ano", "Vos collègues la voient · effacée au bout d’un an", "La vedono i tuoi colleghi · si cancella dopo un anno", "Deine Kollegen sehen sie · nach einem Jahr gelöscht"],
   "Garaje, timbre 2, sin ascensor…": ["Garage, bell 2, no lift…", "Garagem, campainha 2, sem elevador…", "Garage, sonnette 2, sans ascenseur…", "Garage, campanello 2, senza ascensore…", "Garage, Klingel 2, kein Aufzug …"],
-  "Es tu prueba de entrega. ¿La repites?": ["It’s your proof of delivery. Take it again?", "É a tua prova de entrega. Repetes?", "C’est ta preuve de livraison. La refaire ?", "È la tua prova di consegna. La rifai?", "Das ist dein Zustellnachweis. Wiederholen?"],
+  "Es tu prueba de entrega. ¿La repites?": ["It’s your proof of delivery. Take it again?", "É a tua prova de entrega. Repetes?", "C’est votre preuve de livraison. La refaire ?", "È la tua prova di consegna. La rifai?", "Das ist dein Zustellnachweis. Wiederholen?"],
   // Escanear
   "Apunta al código": ["Point at the code", "Aponta para o código", "Visez le code", "Inquadra il codice", "Auf den Code zielen"],
   "Este móvil no lee códigos: escribe el código": ["This phone can’t read codes: type the code", "Este telemóvel não lê códigos: escreve o código", "Ce téléphone ne lit pas les codes : saisissez le code", "Questo telefono non legge i codici: scrivi il codice", "Dieses Handy liest keine Codes: Code eintippen"],
