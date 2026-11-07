@@ -237,6 +237,7 @@ test('Ruta · escanear desde la carga: el hueco en grande en la barra y el error
   const pedidos = [
     { id: 'p1', codigo: 'COD1', cliente: 'Farmacia Sol', direccion: 'Rúa Sinfónica de Galicia 8', estado: 'pendiente', bultos: 1, orden: 1, eta: '09:30', hueco: 'Delante · izq', lat: 43.36, lng: -8.41 },
     { id: 'p2', codigo: 'COD2', cliente: 'Bar Pepe', direccion: 'Rúa Real 5', estado: 'pendiente', bultos: 1, orden: 2, eta: '09:40', hueco: 'Detrás · der', lat: 43.37, lng: -8.40 },
+    { id: 'p3', codigo: 'COD3', cliente: 'Marta Ríos', direccion: 'Avda. Montero Ríos 12', estado: 'pendiente', bultos: 1, orden: 3, eta: '09:50', lat: 43.371, lng: -8.402 },
   ]
   await page.route(/\/api\/reparto\/mi-ruta\/trazado/, (r) => r.fulfill({ json: { linea: [], fuente: 'linea_recta' } }))
   await page.route(/\/api\/reparto\/escanear$/, (r) => {
@@ -253,18 +254,26 @@ test('Ruta · escanear desde la carga: el hueco en grande en la barra y el error
   await page.goto('/ruta', { waitUntil: 'domcontentloaded' })
   await page.getByRole('button', { name: /Cargar la furgoneta/ }).click()
   const carga = page.getByRole('dialog', { name: 'Cargar la furgoneta' })
+  // Una parada sin hueco: el chip «1 sin hueco ›» la cuenta y lleva a la lista; lo que explicaba va detrás del «?».
+  await expect(carga.getByRole('button', { name: '1 sin hueco' })).toBeVisible()
+  await carga.getByRole('button', { name: 'Ayuda' }).click()
+  await expect(carga.getByText('1 paradas sin hueco (sin ubicar o sin ordenar)', { exact: false })).toBeVisible()
+  await carga.getByRole('dialog').getByRole('button', { name: 'Cerrar' }).click()
+  await carga.getByRole('button', { name: '1 sin hueco' }).click()
+  await expect(carga.getByText('Sin hueco · 1')).toBeVisible()
+  await carga.getByRole('button', { name: 'Furgoneta', exact: true }).click()
   // «Escanear» se ve corto y se llama «Escanear para cargar».
   await carga.getByRole('button', { name: 'Escanear para cargar' }).click()
   const escaner = page.getByRole('dialog', { name: 'Escanear' })
   const barra = escaner.getByRole('status')
   await expect(escaner.getByText('Apunta al código')).toBeVisible()
-  await expect(barra).toHaveText('0 de 2 cargados')
+  await expect(barra).toHaveText('0 de 3 cargados')
 
   // Un paquete de la ruta: su parada, el hueco en grande y la cuenta.
   await page.evaluate(() => { window.__ahora = ['COD1'] })
   await expect(barra).toContainText('Parada 1 · Farmacia Sol')
   await expect(barra).toContainText('→ Delante · izq')
-  await expect(barra).toContainText('1 de 2 cargados')
+  await expect(barra).toContainText('1 de 3 cargados')
 
   // Uno que no es de la ruta: el error en la barra, sin lo anterior y sin cerrar el escáner.
   await page.evaluate(() => { window.__ahora = ['NADA'] })

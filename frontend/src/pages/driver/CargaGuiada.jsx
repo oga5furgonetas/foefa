@@ -105,6 +105,10 @@ export default function CargaGuiada({ pedidos, cargaPor = 'traseras', Escaner, o
             <Ayuda titulo={tx('Cargar la furgoneta')}>
               <p>{tx('La ruta ya está ordenada: lo primero que se entrega va junto a la puerta y lo último, al fondo.')} {lateral ? tx('Cargas por la puerta lateral.') : tx('Cargas por las puertas traseras.')}</p>
               <p className="mt-2">{lateral ? tx('Lo de delante se entrega primero.') : tx('Lo de detrás se entrega primero.')}</p>
+              {/* Nada se borra (riesgo 17): lo que explicaba el aviso de «sin hueco», con su clave, se queda aquí; en pantalla, el chip. */}
+              {sinHueco.length > 0 && (
+                <p className="mt-2">{tx('{n} paradas sin hueco (sin ubicar o sin ordenar): salen en «Lista por hueco».', { n: sinHueco.length })}</p>
+              )}
             </Ayuda>
           </>
         )} />
