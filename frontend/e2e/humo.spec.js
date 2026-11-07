@@ -2549,8 +2549,8 @@ test('Reparto · navegar dentro de la app: maniobras, llegada, entregar y a la s
 
 /* LA ZONA SEGURA DE ABAJO, UNA SOLA VEZ (07-11-2026, revisor, hallazgo 11). El panel de la guía ya lleva la zona segura en su relleno
    (`pb-[max(12px,env(safe-area-inset-bottom))]`) y `Navegacion` pasa a «Deshacer» lo que mide; el aviso sumaba la zona otra vez: en
-   un iPhone (34 px) quedaba a unos 42 del panel en vez de 8 (§5.8). Chromium la simula por el protocolo (`Emulation.setSafe
-   AreaInsetsOverride`): sin el arreglo, el hueco medía 42. */
+   un iPhone (34 px) quedaba a unos 42 del panel en vez de 8 (§5.8). Chromium simula la zona segura por el protocolo
+   (`Emulation.setSafeAreaInsetsOverride`): sin el arreglo, el hueco medía 42. */
 test('Reparto · con la zona segura de un iPhone, «Deshacer» queda a 8 del panel de la guía (la zona no se cuenta dos veces)', async ({ page, context, browserName }) => {
   test.skip(browserName !== 'chromium', 'la zona segura se simula por el protocolo de Chromium')
   const fallos = vigilar(page)
