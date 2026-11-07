@@ -45,6 +45,8 @@ const fecha = (iso) => {
   return Number.isNaN(d.getTime()) ? '' : d.toLocaleDateString(locale(), { day: 'numeric', month: 'long', year: 'numeric' })
 }
 const bonito = (c) => (c ? `${c.slice(0, 4)}-${c.slice(4)}` : '')
+// «AHORRA» → «Ahorra»: sin mayúsculas sostenidas (§1.3, regla 9); la clave y sus traducciones no cambian.
+const enFrase = (t) => (t ? t.charAt(0) + t.slice(1).toLowerCase() : t)
 
 export function Cuenta({ billing, recargar, toast, resaltarRegalo, merc }) {
   const lang = useIdioma()
@@ -109,7 +111,13 @@ export function Cuenta({ billing, recargar, toast, resaltarRegalo, merc }) {
       <div className="mt-3 rounded-xl bg-dark-900 p-3 text-sec text-dark-400">
         <p className="flex gap-2"><ShieldCheck size={18} className="shrink-0 text-ruta-marca" aria-hidden="true" />
           {tx('Tus datos y los de tus clientes son tuyos: la foto de la etiqueta se lee en tu móvil y los datos de los clientes se borran solos a los días que fijes en Ajustes. Los pagos los procesa Stripe: tu tarjeta no pasa por nosotros.')}</p>
-        <p className="mt-2"><a href="/privacidad" className="text-ruta-marca">{tx('Privacidad')}</a> · <a href="/terminos" className="text-ruta-marca">{tx('Términos')}</a> · <a href={`mailto:${MARCA.correo}`} className="text-ruta-marca">{MARCA.correo}</a></p>
+        {/* Los tres enlaces, cada uno con su zona de toque de 48 (regla 7): una frase con enlaces dentro, al saltar de línea,
+            deja zonas de 14 de alto. */}
+        <p className="mt-1 flex flex-wrap items-center gap-x-4">
+          <a href="/privacidad" className="inline-flex min-h-12 items-center text-ruta-marca">{tx('Privacidad')}</a>
+          <a href="/terminos" className="inline-flex min-h-12 items-center text-ruta-marca">{tx('Términos')}</a>
+          <a href={`mailto:${MARCA.correo}`} className="inline-flex min-h-12 min-w-0 items-center break-all text-ruta-marca">{MARCA.correo}</a>
+        </p>
       </div>
       {salir ? (
         <div role="group" aria-label={tx('Cerrar sesión')} className="mt-4 rounded-xl bg-dark-900 p-3">
@@ -349,8 +357,9 @@ function Estado({ b, precios }) {
   }
   return (
     <section className="rounded-xl border-2 border-ruta-marca bg-dark-900 p-3">
-      <div className="flex items-center justify-between gap-2">
-        <span className="flex min-w-0 items-center gap-2 text-nombre text-dark-50"><Crown size={20} className="shrink-0 text-ruta-marca" aria-hidden="true" /> <span className="truncate">{tx('Plan Repartidor')}</span></span>
+      {/* El estado baja a otra línea antes de cortar el nombre del plan (a 280 px salía «Plan Repa…»). */}
+      <div className="flex flex-wrap items-center justify-between gap-x-2 gap-y-1">
+        <span className="flex items-center gap-2 text-nombre text-dark-50"><Crown size={20} className="shrink-0 text-ruta-marca" aria-hidden="true" /> {tx('Plan Repartidor')}</span>
         <Etiqueta texto={chip[0]} tono={chip[1]} />
       </div>
       {linea && <p className="mt-2 text-texto text-dark-50">{linea}</p>}
@@ -391,7 +400,7 @@ export function Suscribirse({ b, precios, toast, titulo }) {
         {[[false, tx('Mensual'), `${enMoneda(precios.mensual)}`, tx('/mes'), ''], [true, tx('Anual'), `${enMoneda(precios.anual)}`, tx('/año'), `${enMoneda(precios.anual / 12)}${tx('/mes')} · ${tx('2 meses gratis')}`]].map(([v, t, p, per, extra]) => (
           <button key={t} role="radio" aria-checked={anual === v} onClick={() => setAnual(v)}
             className={`relative rounded-xl border-2 p-3 text-left ${anual === v ? 'border-ruta-marca bg-ruta-marca-tinte' : 'border-ruta-borde bg-dark-950'}`}>
-            {v && <Etiqueta texto={tx('AHORRA')} tono="aviso" className="absolute -top-3 right-2" />}
+            {v && <Etiqueta texto={enFrase(tx('AHORRA'))} tono="aviso" className="absolute -top-3 right-2" />}
             <span className="block text-etiqueta text-dark-400">{t}</span>
             <span className="block text-cifra text-dark-50 tabular-nums">{p}<span className="text-sec font-semibold text-dark-400">{per}</span></span>
             {extra && <span className="block text-sec text-ruta-ok-texto">{extra}</span>}
@@ -527,7 +536,7 @@ export function PagarConPlay({ b, toast, recargar, titulo }) {
           return (
             <button key={p.id} role="radio" aria-checked={elegido === p.id} onClick={() => setElegido(p.id)}
               className={`relative rounded-xl border-2 p-3 text-left ${elegido === p.id ? 'border-ruta-marca bg-ruta-marca-tinte' : 'border-ruta-borde bg-dark-950'}`}>
-              {anual && <Etiqueta texto={tx('AHORRA')} tono="aviso" className="absolute -top-3 right-2" />}
+              {anual && <Etiqueta texto={enFrase(tx('AHORRA'))} tono="aviso" className="absolute -top-3 right-2" />}
               <span className="block text-etiqueta text-dark-400">{anual ? tx('Anual') : tx('Mensual')}</span>
               <span className="block text-cifra text-dark-50 tabular-nums">{p.precio}<span className="text-sec font-semibold text-dark-400">{anual ? tx('/año') : tx('/mes')}</span></span>
               {p.diasPrueba > 0 && <span className="block text-sec text-ruta-ok-texto">{tx('{n} días gratis', { n: p.diasPrueba })}</span>}
@@ -860,7 +869,8 @@ function Invitar({ toast }) {
           ))}
         </ul>
       )}
-      <p className="mt-2 text-sec text-dark-400"><a href="/terminos#invita" className="underline">{tx('Condiciones del programa')}</a></p>
+      {/* Con su propia zona de 48: un enlace dentro de una frase cuela la suya (la del index.css) por encima del botón de arriba. */}
+      <p className="mt-1"><a href="/terminos#invita" className="inline-flex min-h-12 items-center text-sec text-dark-400 underline">{tx('Condiciones del programa')}</a></p>
     </section>
   )
 }

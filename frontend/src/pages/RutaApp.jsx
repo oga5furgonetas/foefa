@@ -34,7 +34,7 @@ import { vestirDeApp } from '../lib/tema'
 /* LO QUE NO HACE FALTA PARA ABRIR LA APP, SE CARGA CUANDO SE USA (25-10-2026). «Ajustes» viene de la pantalla
    de Reparto del panel, que arrastra el mapa entero (Leaflet); la cuenta trae el QR y el cobro, y el mercadillo
    lo suyo: ~74 KB comprimidos (el 28 %) que se bajaban y se ejecutaban al abrir, aunque se fuera a «Hoy». */
-const Ajustes = lazy(() => import('../panel/pages/Reparto').then((m) => ({ default: m.Ajustes })))
+const Ajustes = lazy(() => import('../panel/pages/Reparto').then((m) => ({ default: m.AjustesApp })))   // con su Cabecera (§5.11)
 const Cuenta = lazy(() => import('./RutaCuenta').then((m) => ({ default: m.Cuenta })))
 const Muro = lazy(() => import('./RutaCuenta').then((m) => ({ default: m.Muro })))
 const Mercadillo = lazy(() => import('./mercadillo/Mercadillo'))
@@ -593,7 +593,7 @@ function DiaHistorial({ fecha, onVolver, toast }) {
                           : <Package size={18} className="shrink-0 text-dark-400" aria-hidden="true" />}
                       <span className="min-w-0 flex-1">
                         <span className="block truncate text-nombre text-dark-50">{p.cliente || p.direccion || tx('Pedido')}</span>
-                        <span className={`block truncate text-sec ${p.estado === 'fallido' ? 'text-ruta-peligro-texto' : 'text-dark-400'}`}>
+                        <span className={`block text-sec ${p.estado === 'fallido' ? 'text-ruta-peligro-texto' : 'text-dark-400'}`}>
                           {p.estado === 'entregado' ? `${tx('Entregado')} ${horaDe(p.cerrado_en)}` : p.estado === 'fallido' ? `${tx('No entregado')}${p.motivo ? ` · ${tx(p.motivo)}` : ''}` : tx('Sin hacer')}
                           {p.entrega_donde ? ` · ${tx(DONDE_TXT[p.entrega_donde] || '')}` : ''}
                         </span>
@@ -603,7 +603,7 @@ function DiaHistorial({ fecha, onVolver, toast }) {
                     {abierto && (
                       <div className="space-y-1 pb-3 pl-11 pr-3 text-texto text-dark-50">
                         {p.direccion && p.cliente && <p className="flex items-start gap-2"><MapPin size={18} className="mt-0.5 shrink-0 text-dark-400" aria-hidden="true" /> {p.direccion}</p>}
-                        {p.telefono && <p className="flex items-center gap-2"><Phone size={18} className="shrink-0 text-dark-400" aria-hidden="true" /> <a href={`tel:${p.telefono}`} className="text-ruta-marca">{p.telefono}</a></p>}
+                        {p.telefono && <p className="flex items-center gap-2"><Phone size={18} className="shrink-0 text-dark-400" aria-hidden="true" /> <a href={`tel:${p.telefono}`} className="inline-flex min-h-12 items-center text-ruta-marca">{p.telefono}</a></p>}
                         {p.contenido && <p className="flex items-start gap-2"><Package size={18} className="mt-0.5 shrink-0 text-dark-400" aria-hidden="true" /> {p.contenido}</p>}
                         {p.entrega_recibe && <p>{tx('Lo recoge: {nombre}', { nombre: p.entrega_recibe })}</p>}
                         {p.entrega_nota && <p>«{p.entrega_nota}»</p>}

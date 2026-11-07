@@ -53,7 +53,7 @@ function Opcion({ icono: Icono, titulo, sub, onClick, principal, bloqueado, pron
       <Icono size={24} className="shrink-0" aria-hidden="true" />
       <span className="min-w-0 flex-1">
         <span className="block truncate text-nombre">{titulo}</span>
-        {sub && <span className={`block truncate text-sec ${principal && !off ? 'text-brand-tinta/80' : 'text-dark-400'}`}>{sub}</span>}
+        {sub && <span className={`block text-sec ${principal && !off ? 'text-brand-tinta/80' : 'text-dark-400'}`}>{sub}</span>}
       </span>
       {/* Una etiqueta corta para lo que hay que mirar hoy. No es un adorno permanente: se quita en cuanto deja de ser
           noticia, o se convierte en el aviso de siempre que nadie lee. `!(aviso > 0)` y no `aviso <= 0`: `aviso` llega
@@ -445,7 +445,10 @@ export default function DriverPortal() {
             </button>
           )}
 
-          {!esDemo && <div className="mt-1 grid grid-cols-3 gap-2">
+          {/* Las de Dani (17-10-2026), de tres en tres mientras quepan: cada casilla mide 100 como mínimo, × «Letra más
+              grande», así que con esa letra, o en 277 px (el zoom del 130 % de un móvil de 360), pasan a dos en dos en vez
+              de cortar los títulos a media palabra. */}
+          {!esDemo && <div className="mt-1 grid gap-2 [grid-template-columns:repeat(auto-fill,minmax(calc(100px*var(--letra,1)),1fr))]">
           <Casilla
             icono={CalendarDays}
             titulo="Pedir días libres"

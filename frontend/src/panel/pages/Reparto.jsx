@@ -499,10 +499,6 @@ export function Ajustes({ conductores, toast, autonomo }) {
   }
 
   return (
-    <>
-      {/* En la app de reparto (autónomo), la pestaña lleva su Cabecera (diseño compacto, 07-11-2026, §5.11); en el panel
-          la cabecera ya la pone Reparto. */}
-      {autonomo && <Cabecera titulo={tx('Ajustes')} fija className="-mx-4 mb-3" />}
     <div className="grid gap-4 lg:grid-cols-[1fr_340px]">
       <div className="space-y-4">
         {a.paises && (
@@ -653,6 +649,17 @@ export function Ajustes({ conductores, toast, autonomo }) {
       </aside>}
       </div>
     </div>
+  )
+}
+
+/* «Ajustes» DENTRO DE LA APP DE REPARTO (diseño compacto, 07-11-2026, §5.11): la misma pantalla que ve el panel, con su
+   Cabecera (56, fija, sin logo) como las demás pestañas. Aparte de `Ajustes` para que el panel no la lleve: ahí la
+   cabecera ya la pone `Reparto`, aunque la cuenta sea de quien reparte solo (`autonomo`). La usa RutaApp. */
+export function AjustesApp(props) {
+  return (
+    <>
+      <Cabecera titulo={tx('Ajustes')} fija className="-mx-4 mb-3" />
+      <Ajustes {...props} />
     </>
   )
 }
