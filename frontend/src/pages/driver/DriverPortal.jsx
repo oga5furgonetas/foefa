@@ -1,5 +1,6 @@
+/* diseño compacto */
 import { useEffect, useState } from 'react'
-import { ClipboardCheck, CalendarDays, CalendarClock, CalendarPlus, LogOut, Lock, Mail, Ban, ShoppingBag, RefreshCw, Route, Gift, ArrowLeft, Store, ChevronRight } from 'lucide-react'
+import { ClipboardCheck, CalendarDays, CalendarClock, CalendarPlus, LogOut, Lock, Mail, Ban, ShoppingBag, RefreshCw, Route, Gift, ArrowLeft, Store, ChevronRight, Check } from 'lucide-react'
 import { getPortalVehicles, getMyShifts, getMiFicha, guardarMiTelefono, tiendaEscaparate, repMiRuta, mercEstado, getTrabajarMas, DRIVER_TOKEN_KEY } from '../../services/api'
 import { lista } from '../../lib/lista'
 import { medirSeccion } from '../../lib/analitica'
@@ -14,6 +15,7 @@ import PedirDias from './PedirDias'
 import TrabajarMas from './TrabajarMas'
 import Tienda from './Tienda'
 import MiRuta from './MiRuta'
+import { Boton, Aviso, Etiqueta } from './piezas'
 import DriverReferralWallet from './DriverReferralWallet'
 import Mercadillo from '../mercadillo/Mercadillo'
 import { refCentActual } from '../../lib/precios'
@@ -38,88 +40,62 @@ const DRIVER_KEY = 'flota_driver'
    hace todos los días antes de salir. Lo demás está debajo, a un toque.
    ──────────────────────────────────────────────────────────────────────────── */
 
+/* Las opciones grandes del inicio («Mi ruta», «Hacer la auditoría»), como filas de 64 (diseño compacto, 07-11-2026,
+   §5.11): icono de 24, el título en «nombre» y una línea en «sec»; la principal, con relleno de marca; sin degradado
+   ni sombra. Lo que avisa (respuestas sin leer, la insignia, «Pronto») va a la derecha, no encima del texto. Apagada
+   (bloqueada o «Pronto»), en gris y sin bajar la opacidad: el texto se sigue leyendo al sol. */
 function Opcion({ icono: Icono, titulo, sub, onClick, principal, bloqueado, pronto, aviso, insignia }) {
   const off = bloqueado || pronto
+  const fondo = off ? 'cursor-not-allowed bg-dark-900 text-dark-400' : principal ? 'bg-brand-500 text-brand-tinta active:opacity-80' : 'bg-dark-900 text-dark-50 active:opacity-80'
   return (
-    <button
-      onClick={off ? undefined : onClick}
-      disabled={off}
-      className={`relative w-full rounded-2xl border p-4 text-left transition-all ${
-        off
-          ? 'cursor-not-allowed border-dark-800 bg-dark-900/40 opacity-60'
-          : principal
-            ? 'border-brand-400/60 bg-gradient-to-br from-brand-500 to-brand-600 shadow-lg shadow-brand-600/30 active:scale-[.99]'
-            : insignia
-              ? 'border-amber-400/50 bg-amber-500/[.07] active:scale-[.99]'
-              : 'border-dark-700 bg-dark-900 active:scale-[.99]'
-      }`}
-    >
-      {/* Una etiqueta corta arriba a la derecha para lo que hay que mirar hoy.
-          No es un adorno permanente: se quita en cuanto deja de ser noticia, o
-          se convierte en el aviso de siempre que nadie lee. */}
-      {/* `!(aviso > 0)` y no `aviso <= 0`: `aviso` llega sin definir en casi
-          todas las entradas, y `undefined <= 0` es false — la insignia no se
-          habria pintado nunca y no habria fallado nada. */}
-      {insignia && !off && !(aviso > 0) && (
-        <span className="absolute right-3 top-3 rounded-full bg-amber-400/15 px-2 py-0.5 text-[9.5px] font-bold uppercase tracking-wider text-amber-300">
-          {insignia}
-        </span>
-      )}
-      {/* "Pronto" en vez de esconderlo: si la opción no está, la gente pregunta
-          si existe; si está y dice cuándo, no pregunta nadie. */}
-      {pronto && (
-        <span className="absolute right-3 top-3 rounded-full border border-dark-600 px-2 py-0.5 text-[9.5px] font-semibold uppercase tracking-wider text-dark-400">
-          Pronto
-        </span>
-      )}
-      {/* Respuestas sin leer. El aviso al móvil puede no llegar nunca —avisos
-          desactivados, iOS, el móvil apagado—, así que la señal que de verdad
-          se ve es esta, dentro de la app. */}
+    <button type="button" onClick={off ? undefined : onClick} disabled={off}
+      className={`flex min-h-16 w-full items-center gap-3 rounded-xl px-3 py-2 text-left ${fondo}`}>
+      <Icono size={24} className="shrink-0" aria-hidden="true" />
+      <span className="min-w-0 flex-1">
+        <span className="block truncate text-nombre">{titulo}</span>
+        {sub && <span className={`block text-sec ${principal && !off ? 'text-brand-tinta/80' : 'text-dark-400'}`}>{sub}</span>}
+      </span>
+      {/* Una etiqueta corta para lo que hay que mirar hoy. No es un adorno permanente: se quita en cuanto deja de ser
+          noticia, o se convierte en el aviso de siempre que nadie lee. `!(aviso > 0)` y no `aviso <= 0`: `aviso` llega
+          sin definir en casi todas las entradas, y `undefined <= 0` es false. */}
+      {insignia && !off && !(aviso > 0) && <Etiqueta texto={insignia} tono="aviso" />}
+      {/* «Pronto» en vez de esconderlo: si la opción no está, la gente pregunta si existe; si está y dice cuándo, no
+          pregunta nadie. */}
+      {pronto && <span className="shrink-0 text-pie text-dark-400">Pronto</span>}
+      {/* Respuestas sin leer. El aviso al móvil puede no llegar nunca (avisos desactivados, iOS, el móvil apagado), así
+          que la señal que de verdad se ve es esta, dentro de la app. */}
       {aviso > 0 && (
-        <span className="absolute right-3 top-3 flex h-5 min-w-5 items-center justify-center rounded-full bg-red-500 px-1.5 text-[11px] font-bold text-white">
-          {aviso}
-        </span>
+        <span className="flex h-5 min-w-5 shrink-0 items-center justify-center rounded-full bg-ruta-peligro px-1 text-etiqueta text-white">{aviso}</span>
       )}
-      <Icono size={22} className={principal && !off ? 'text-white' : 'text-dark-300'} />
-      <span className={`mt-2 block text-[16px] font-bold tracking-[-.01em] ${
-        principal && !off ? 'text-white' : 'text-dark-100'}`}>
-        {titulo}
-      </span>
-      <span className={`mt-0.5 block text-[12.5px] leading-snug ${
-        principal && !off ? 'text-white/80' : 'text-dark-500'}`}>
-        {sub}
-      </span>
     </button>
   )
 }
 
 /* LO DEMÁS, EN CASILLAS DE TRES (17-10-2026). Dani: «más que recuadros hacia abajo, en la primera fila 3
    cuadros y en la segunda otros 3, para que se vea más moderno». La auditoría (y «Mi ruta») siguen a lo
-   ancho y arriba: es lo de todos los días. El resto es secundario y cabe en una pantalla sin bajar. */
+   ancho y arriba: es lo de todos los días. El resto es secundario y cabe en una pantalla sin bajar.
+   Desde el diseño compacto (07-11-2026, §5.11): 96 de alto mínimo, icono de 20 sin caja, el título en «boton» (dos
+   líneas; tres si una palabra larga, «recuperación», se parte antes que salirse: a 360 px no cabe entera en dos, y
+   cortarla con «…» dejaba «recupera-…») y sin el detalle a la vista: sigue ahí como texto solo para el lector de
+   pantalla («Título . Detalle»: lo que lee el lector y lo que buscan por texto las pruebas de cambiar-clave y del
+   mercadillo). «Pronto», en «pie» bajo el título; las respuestas sin leer, en su número arriba a la derecha (el
+   detalle ya las dice, así que el número no se lee dos veces). Sin degradado ni sombra; el tono (verde, ámbar) queda en
+   el icono. */
 function Casilla({ icono: Icono, titulo, detalle, onClick, pronto, aviso, tono }) {
-  const acento = {
-    verde: 'border-emerald-400/45 bg-emerald-500/[.10]',
-    ambar: 'border-amber-400/45 bg-amber-500/[.07]',
-  }[tono] || 'border-dark-700 bg-dark-900'
-  const icono = { verde: 'bg-emerald-400/15 text-emerald-200', ambar: 'bg-amber-400/15 text-amber-200' }[tono] || 'bg-dark-800 text-dark-300'
+  const color = pronto ? 'text-dark-400' : { verde: 'text-ruta-ok-texto', ambar: 'text-ruta-aviso-texto' }[tono] || 'text-dark-400'
   return (
-    <button onClick={pronto ? undefined : onClick} disabled={pronto} aria-label={detalle ? `${titulo}. ${detalle}` : titulo}
-      className={`relative flex min-h-[112px] flex-col justify-between rounded-2xl border p-3 text-left transition-all ${
-        pronto ? 'cursor-not-allowed border-dark-800 bg-dark-900/40 opacity-60' : `${acento} active:scale-[.97]`}`}>
+    <button type="button" onClick={pronto ? undefined : onClick} disabled={pronto}
+      className={`relative flex min-h-24 flex-col justify-between rounded-xl bg-dark-900 p-3 text-left ${pronto ? 'cursor-not-allowed' : 'active:opacity-80'}`}>
       {aviso > 0 && (
-        <span className="absolute right-2 top-2 flex h-5 min-w-5 items-center justify-center rounded-full bg-red-500 px-1.5 text-[11px] font-bold text-white">
+        <span aria-hidden="true" className="absolute right-2 top-2 flex h-5 min-w-5 items-center justify-center rounded-full bg-ruta-peligro px-1 text-etiqueta text-white">
           {aviso}
         </span>
       )}
-      {pronto && (
-        <span className="absolute right-2 top-2 rounded-full border border-dark-600 px-1.5 py-0.5 text-[8.5px] font-semibold uppercase tracking-wider text-dark-400">
-          Pronto
-        </span>
-      )}
-      <span className={`flex h-9 w-9 items-center justify-center rounded-xl ${icono}`}><Icono size={18} /></span>
+      <Icono size={20} className={`shrink-0 ${color}`} aria-hidden="true" />
       <span className="mt-2 block">
-        <span className="block text-[13px] font-bold leading-tight text-dark-100">{titulo}</span>
-        {detalle && <span className="mt-0.5 block text-[11px] leading-tight text-dark-400">{detalle}</span>}
+        <span className={`line-clamp-3 break-words text-boton hyphens-auto ${pronto ? 'text-dark-400' : 'text-dark-50'}`}>{titulo}</span>
+        {pronto && <span className="block text-pie text-dark-400">Pronto</span>}
+        {detalle && <span className="sr-only">. {detalle}</span>}
       </span>
     </button>
   )
@@ -132,9 +108,7 @@ function PantallaCartera({ onBack }) {
     <div className="min-h-[100dvh] bg-dark-950 px-4 py-6"
       style={{ paddingTop: 'max(1.5rem, env(safe-area-inset-top))', paddingBottom: 'max(1.5rem, env(safe-area-inset-bottom))' }}>
       <div className="mx-auto max-w-md">
-        <button onClick={onBack} className="mb-5 flex items-center gap-1.5 text-[13px] text-dark-400">
-          <ArrowLeft size={15} /> Volver
-        </button>
+        <Boton variante="texto" tono="marca" icono={ArrowLeft} texto="Volver" onClick={onBack} className="-ml-2 mb-4" />
         <DriverReferralWallet />
       </div>
     </div>
@@ -373,26 +347,23 @@ export default function DriverPortal() {
     <div className="min-h-[100dvh] bg-dark-950 px-4 py-6"
       style={{ paddingTop: 'max(1.5rem, env(safe-area-inset-top))', paddingBottom: 'max(1.5rem, env(safe-area-inset-bottom))' }}>
       <div className="mx-auto max-w-md">
-        <header className="mb-6 flex items-start justify-between gap-3">
+        {/* La cabecera del inicio con los tokens (diseño compacto, 07-11-2026, §5.11): el saludo en «titulo», la fecha
+            en «sec» y «Salir» como botón de icono de 48. */}
+        <header className="mb-4 flex items-center justify-between gap-3">
           <div className="min-w-0">
-            <h1 className="font-display text-[24px] font-bold leading-tight tracking-[-.02em] text-dark-50">
+            <h1 className="truncate text-titulo text-dark-50">
               Hola, {String(driver?.name || '').split(' ')[0] || 'buenas'}
             </h1>
-            <p className="mt-0.5 text-[12.5px] text-dark-500">{hoy}</p>
+            <p className="text-sec text-dark-400">{hoy}</p>
           </div>
-          <button onClick={logout} className="shrink-0 rounded-lg border border-dark-700 p-2 text-dark-500"
-            aria-label="Salir">
-            <LogOut size={15} />
-          </button>
+          <Boton variante="icono" icono={LogOut} tono="neutro" nombre="Salir" onClick={logout} />
         </header>
 
         {hayVersionNueva && (
-          <button onClick={() => window.location.reload()}
-            className="mb-4 flex w-full items-center gap-2 rounded-xl border border-brand-500/40 bg-brand-500/10 px-3.5 py-2.5 text-left">
-            <RefreshCw size={15} className="shrink-0 text-brand-300" />
-            <span className="text-[12.5px] leading-snug text-brand-200">
-              Hay una versión nueva. Toca aquí para actualizar.
-            </span>
+          <button type="button" onClick={() => window.location.reload()}
+            className="mb-3 flex min-h-12 w-full items-center gap-2 rounded-xl bg-ruta-marca-tinte px-3 py-2 text-left text-texto text-ruta-marca-tinte-texto">
+            <RefreshCw size={18} className="shrink-0" aria-hidden="true" />
+            <span>Hay una versión nueva. Toca aquí para actualizar.</span>
           </button>
         )}
 
@@ -403,31 +374,24 @@ export default function DriverPortal() {
             pide quien entra todos los días, una sola vez y en diez segundos.
             No bloquea nada: se puede seguir sin darlo. */}
         {faltaTel && !telOk && !esDemo && (
-          <div className="mb-4 rounded-2xl border border-brand-500/30 bg-brand-500/[0.07] p-4">
-            <p className="text-[14px] font-semibold text-dark-50">¿Cuál es tu teléfono?</p>
-            <p className="mt-0.5 text-[12.5px] leading-snug text-dark-400">
+          <div className="mb-3 rounded-xl bg-dark-900 p-3">
+            <p className="text-nombre text-dark-50">¿Cuál es tu teléfono?</p>
+            <p className="mt-1 text-sec text-dark-400">
               Es para poder llamarte si te quedas tirado en ruta. Solo lo ve la oficina.
             </p>
-            <div className="mt-2.5 flex gap-2">
+            <div className="mt-2 flex gap-2">
               <input
                 type="tel" inputMode="tel" value={tel} onChange={(e) => setTel(e.target.value)}
-                placeholder="600 000 000"
-                className="min-w-0 flex-1 rounded-xl border border-dark-700 bg-dark-900 px-3 py-2.5 text-[15px] text-dark-50 placeholder:text-dark-500 focus:border-brand-500 focus:outline-none" />
-              <button onClick={guardarTel} disabled={guardandoTel || tel.trim().length < 9}
-                className="shrink-0 rounded-xl bg-brand-500 px-4 py-2.5 text-[14px] font-semibold text-brand-tinta disabled:opacity-40">
-                {guardandoTel ? '…' : 'Guardar'}
-              </button>
+                placeholder="600 000 000" aria-label="Teléfono"
+                className="campo min-w-0 flex-1" />
+              <Boton variante="normal" tono="marca" texto="Guardar" disabled={tel.trim().length < 9} cargando={guardandoTel} onClick={guardarTel} className="shrink-0" />
             </div>
-            {errTel && <p className="mt-1.5 text-[12.5px] text-red-300">{errTel}</p>}
+            {errTel && <p className="mt-1 text-sec text-ruta-peligro-texto">{errTel}</p>}
           </div>
         )}
-        {telOk && (
-          <p className="mb-4 rounded-2xl border border-emerald-500/30 bg-emerald-500/[0.07] px-4 py-3 text-[13.5px] text-emerald-300">
-            Guardado, gracias.
-          </p>
-        )}
+        {telOk && <Aviso tono="ok" icono={Check} texto="Guardado, gracias." className="mb-3" />}
 
-        <div className="flex flex-col gap-2.5">
+        <div className="flex flex-col gap-2">
           {reparto !== null && (
             <Opcion
               icono={Route}
@@ -446,7 +410,7 @@ export default function DriverPortal() {
             onClick={() => setVista('auditoria')}
           />
           {esDemo && (
-            <p className="-mt-1 px-1 text-[12px] text-dark-500">
+            <p className="px-1 text-sec text-dark-400">
               En la prueba solo funciona el reparto. La auditoría (fotos del vehículo antes de salir) va en la cuenta real.
             </p>
           )}
@@ -454,47 +418,41 @@ export default function DriverPortal() {
           {/* Decirle POR QUÉ no puede. Un botón gris sin explicación acaba en
               una llamada a la oficina, que es lo que se quiere evitar. */}
           {susp && (
-            <div className="flex items-start gap-2.5 rounded-xl border border-red-500/30 bg-red-500/[0.07] px-3.5 py-3" role="status">
-              <Ban size={15} className="mt-0.5 shrink-0 text-red-400" />
-              <p className="text-[12.5px] leading-relaxed text-red-200/90">
-                {susp.desde === susp.hasta ? `El ${fechaCorta(susp.desde)} no trabajas` : `Del ${fechaCorta(susp.desde)} al ${fechaCorta(susp.hasta)} no trabajas`}:
-                estás suspendido. Lo verás en «Mis turnos». Si tienes dudas, habla con la oficina.
-              </p>
-            </div>
+            <Aviso tono="peligro" icono={Ban} texto={<>
+              {susp.desde === susp.hasta ? `El ${fechaCorta(susp.desde)} no trabajas` : `Del ${fechaCorta(susp.desde)} al ${fechaCorta(susp.hasta)} no trabajas`}:
+              estás suspendido. Lo verás en «Mis turnos». Si tienes dudas, habla con la oficina.
+            </>} />
           )}
           {noLeToca && portal?.motivo !== 'suspendido' && (
-            <div className="flex items-start gap-2.5 rounded-xl border border-amber-500/25 bg-amber-500/[0.06] px-3.5 py-3">
-              <Ban size={15} className="mt-0.5 shrink-0 text-amber-400" />
-              <p className="text-[12.5px] leading-relaxed text-amber-200/90">
-                En el cuadrante de hoy no tienes furgoneta asignada, así que no puedes hacer la
-                auditoría. Si crees que es un error, habla con tu coordinador antes de salir.
-              </p>
-            </div>
+            <Aviso tono="aviso" icono={Ban} texto={'En el cuadrante de hoy no tienes furgoneta asignada, así que no puedes hacer la auditoría. Si crees que es un error, habla con tu coordinador antes de salir.'} />
           )}
 
           {/* TRABAJAR MÁS, A LA VISTA (24-10-2026). Dani: «que le aparezca "hay 3 vacantes en varios días para
               trabajar más, ¿la quieres? solicítala"». Solo sale con vacantes que puede pedir: días que libra y que
               la ley le deja trabajar (lo decide el servidor). */}
           {!esDemo && extra?.plazas > 0 && (
-            <button onClick={() => setVista('extra')} data-testid="trabajar-mas"
-              className="relative w-full rounded-2xl border border-emerald-400/50 bg-gradient-to-br from-emerald-500/[.16] to-emerald-500/[.05] p-4 text-left shadow-lg shadow-emerald-900/20 transition-all active:scale-[.99]">
-              <span className="absolute right-3 top-3 rounded-full bg-emerald-400/20 px-2 py-0.5 text-[10.5px] font-bold uppercase tracking-wider text-emerald-200">
-                {extra.plazas === 1 ? '1 vacante' : `${extra.plazas} vacantes`}
+            <button type="button" onClick={() => setVista('extra')} data-testid="trabajar-mas"
+              className="w-full rounded-xl bg-ruta-ok/10 p-3 text-left active:opacity-80">
+              <span className="flex items-center gap-2">
+                <CalendarPlus size={24} className="shrink-0 text-ruta-ok-texto" aria-hidden="true" />
+                <span className="min-w-0 flex-1 text-nombre text-dark-50">¿Quieres trabajar más?</span>
+                <Etiqueta tono="ok" texto={extra.plazas === 1 ? '1 vacante' : `${extra.plazas} vacantes`} />
               </span>
-              <CalendarPlus size={22} className="text-emerald-300" />
-              <span className="mt-2 block text-[16px] font-bold tracking-[-.01em] text-dark-50">¿Quieres trabajar más?</span>
-              <span className="mt-0.5 block pr-6 text-[12.5px] leading-snug text-dark-300">
+              <span className="mt-2 block text-texto text-dark-50">
                 {extra.dias === 1
                   ? `Nos falta gente el ${lista(extra.vacantes).find((v) => !v.mi_estado)?.dia || 'día que libras'}, y ese día libras.`
                   : `Nos falta gente en ${extra.dias} días que libras.`} Solicítalo y la oficina te confirma.
               </span>
-              <span className="mt-2.5 inline-flex items-center gap-1 rounded-lg bg-emerald-500 px-3 py-1.5 text-[13px] font-bold text-dark-950">
-                Ver y solicitar <ChevronRight size={15} />
+              <span className="mt-2 inline-flex min-h-10 items-center gap-1 rounded-lg bg-ruta-ok px-3 text-boton text-white">
+                Ver y solicitar <ChevronRight size={16} aria-hidden="true" />
               </span>
             </button>
           )}
 
-          {!esDemo && <div className="mt-1 grid grid-cols-3 gap-2.5">
+          {/* Las de Dani (17-10-2026), de tres en tres mientras quepan (07-11-2026): cada casilla mide 100 como mínimo, ×
+              «Letra más grande», así que con esa letra, o en 277 px (el zoom del 130 % de un móvil de 360), pasan a dos en
+              dos en vez de cortar los títulos a media palabra. */}
+          {!esDemo && <div className="mt-1 grid gap-2 [grid-template-columns:repeat(auto-fill,minmax(calc(100px*var(--letra,1)),1fr))]">
           <Casilla
             icono={CalendarDays}
             titulo="Pedir días libres"

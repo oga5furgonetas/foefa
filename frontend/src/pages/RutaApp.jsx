@@ -5,6 +5,7 @@ import {
   MapPin, Phone, Camera, Clock, RotateCcw, FileSpreadsheet, X,
 } from 'lucide-react'
 import MiRuta from './driver/MiRuta'
+import { Cabecera, Hoja, ContenedorLista, Boton } from './driver/piezas'
 import {
   getRepartoPedidos, getRepartoEstadisticas, getOrgBilling, canjearRegalo, misRegalos, playVerificar, editarRepartoPedido, fotoEntrega,
   getRepartoAjustes, getRepartoEntregasMes,
@@ -37,11 +38,11 @@ import { vestirDeApp } from '../lib/tema'
 /* LO QUE NO HACE FALTA PARA ABRIR LA APP, SE CARGA CUANDO SE USA (25-10-2026). «Ajustes» viene de la pantalla
    de Reparto del panel, que arrastra el mapa entero (Leaflet); la cuenta trae el QR y el cobro, y el mercadillo
    lo suyo: ~74 KB comprimidos (el 28 %) que se bajaban y se ejecutaban al abrir, aunque se fuera a «Hoy». */
-const Ajustes = lazy(() => import('../panel/pages/Reparto').then((m) => ({ default: m.Ajustes })))
+const Ajustes = lazy(() => import('../panel/pages/Reparto').then((m) => ({ default: m.AjustesApp })))   // con su Cabecera (07-11-2026, §5.11)
 const Cuenta = lazy(() => import('./RutaCuenta').then((m) => ({ default: m.Cuenta })))
 const Muro = lazy(() => import('./RutaCuenta').then((m) => ({ default: m.Muro })))
 const Mercadillo = lazy(() => import('./mercadillo/Mercadillo'))
-const Cargando = () => <div className="flex justify-center py-16"><Loader2 className="animate-spin text-dark-500" /></div>
+const Cargando = () => <div className="flex justify-center py-16"><Loader2 className="animate-spin text-dark-400" /></div>
 
 /* ── LA APP DE QUIEN REPARTE SOLO (04-10-2026) ───────────────────────────────
    No es el panel de una empresa pequeña: es otro producto, como Circuit o
@@ -305,7 +306,7 @@ export default function RutaApp() {
       {(tiron > 0 || recargando) && (
         <div aria-hidden="true" data-testid="tiron" className="pointer-events-none fixed inset-x-0 top-0 z-50 flex justify-center"
           style={{ transform: `translateY(${recargando ? 22 : tiron - 18}px)`, transition: tiron ? 'none' : 'transform .2s ease-out' }}>
-          <span className="flex h-9 w-9 items-center justify-center rounded-full border border-dark-700 bg-dark-900 shadow-lg">
+          <span className="flex h-9 w-9 items-center justify-center rounded-full border border-dark-700 bg-dark-900 shadow-md">
             {recargando
               ? <Loader2 size={18} className="animate-spin text-brand-500" />
               : <RotateCcw size={18} className="text-brand-500" style={{ transform: `rotate(${tiron * 4}deg)`, opacity: Math.min(1, tiron / 64) }} />}
@@ -356,7 +357,9 @@ export default function RutaApp() {
    otros días, pero verlo realmente». Antes era un desplegable con una línea por
    parada. Ahora cada día se abre en su pantalla: cuánto se hizo y en qué horas,
    cada parada con su hora de entrega, dónde se dejó y su prueba (foto, firma),
-   y lo que no se entregó se puede pasar a hoy. También cualquier otro día. */
+   y lo que no se entregó se puede pasar a hoy. También cualquier otro día.
+   Desde el diseño compacto (07-11-2026, §5.11): con su Cabecera, los días como filas de 56 en una sola superficie,
+   las cifras en «cifra» y la prueba de entrega sobre la Hoja común. Lo que hace cada botón, igual. */
 function Historial() {
   const toast = useToast()
   const [est, setEst] = useState(null)
@@ -372,47 +375,48 @@ function Historial() {
   useEffect(() => { cargarEst() }, [cargarEst])
   useAtras(!!dia, () => setDia(null))   // «atrás» desde un día vuelve a la lista
   if (dia) return <DiaHistorial fecha={dia} onVolver={() => setDia(null)} toast={toast} />
-  if (!est) return <div className="flex justify-center py-16"><Loader2 className="animate-spin text-dark-500" /></div>
+  if (!est) return <div className="flex justify-center py-16"><Loader2 className="animate-spin text-dark-400" /></div>
   const dias = lista(est.por_dia).filter((d) => d.total > 0).reverse()
   const hoy = hoyLocal()
   return (
     <div className="mx-auto max-w-md">
-      <h1 className="font-display text-[22px] font-bold text-dark-50">{tx('Historial')}</h1>
+      <Cabecera titulo={tx('Historial')} fija className="-mx-4" />
       {est.error ? (
-        <div className="mb-4 mt-2 rounded-xl border border-dashed border-dark-700 px-4 py-6 text-center">
-          <p className="text-[13px] text-dark-400">{tx('No se pudo cargar el historial.')}</p>
-          <button type="button" onClick={cargarEst} className="mt-3 rounded-xl border border-dark-600 px-4 py-2 text-[13.5px] font-semibold text-dark-100">{tx('Reintentar')}</button>
+        <div className="mt-3 rounded-xl bg-dark-900 px-4 py-6 text-center">
+          <p className="text-texto text-dark-400">{tx('No se pudo cargar el historial.')}</p>
+          <Boton variante="normal" tono="neutro" contorno texto={tx('Reintentar')} onClick={cargarEst} className="mt-3" />
         </div>
       ) : (<>
-        <p className="mb-4 text-[12.5px] text-dark-400">
+        <p className="mt-3 text-sec text-dark-400">
           {tx('Últimos 30 días: {total} paradas, {ok} entregadas', { total: est.total || 0, ok: est.entregados || 0 })}
           {est.tasa_entrega != null ? ` ${tx('({p} % a la primera)', { p: est.tasa_entrega })}` : ''}.
         </p>
-        {dias.length === 0 && <p className="rounded-xl border border-dashed border-dark-700 px-4 py-8 text-center text-[13px] text-dark-400">{tx('Aún no hay repartos. Hoy empieza en «Hoy».')}</p>}
+        {dias.length === 0 && <p className="mt-3 rounded-xl bg-dark-900 px-4 py-8 text-center text-texto text-dark-400">{tx('Aún no hay repartos. Hoy empieza en «Hoy».')}</p>}
         {dias.length > 0 && <ResumenSemana porDia={lista(est.por_dia)} ajustes={ajustes} />}
       </>)}
-      <div className="flex flex-col gap-2">
-        {dias.map((d) => (
-          <button key={d.fecha} onClick={() => setDia(d.fecha)}
-            className="flex items-center gap-3 rounded-2xl border border-dark-700 bg-dark-900 p-3.5 text-left active:bg-dark-800">
-            <span className="min-w-0 flex-1">
-              <span className="block text-[14px] font-semibold text-dark-50">{d.fecha === hoy ? tx('Hoy') : fechaLarga(d.fecha)}</span>
-              <span className="mt-0.5 block text-[12.5px] text-dark-400">
-                {tx('{ok}/{total} entregados', { ok: d.entregados, total: d.total })}
-                {d.fallidos ? <span className="text-red-300"> · {tx('{n} no', { n: d.fallidos })}</span> : null}
-              </span>
-            </span>
-            <ChevronRight size={18} className="shrink-0 text-dark-500" />
-          </button>
-        ))}
-      </div>
-      <label className="mt-5 block text-[12.5px] text-dark-400">
+      {dias.length > 0 && (
+        <ContenedorLista className="mt-3">
+          {dias.map((d) => (
+            <li key={d.fecha}>
+              <button type="button" onClick={() => setDia(d.fecha)} className="flex min-h-14 w-full items-center gap-3 px-3 py-2 text-left active:bg-dark-800">
+                <span className="min-w-0 flex-1">
+                  <span className="block truncate text-nombre text-dark-50">{d.fecha === hoy ? tx('Hoy') : fechaLarga(d.fecha)}</span>
+                  <span className="block text-sec text-dark-400 tabular-nums">
+                    {tx('{ok}/{total} entregados', { ok: d.entregados, total: d.total })}
+                    {d.fallidos ? <span className="text-ruta-peligro-texto"> · {tx('{n} no', { n: d.fallidos })}</span> : null}
+                  </span>
+                </span>
+                <ChevronRight size={18} className="shrink-0 text-dark-400" aria-hidden="true" />
+              </button>
+            </li>
+          ))}
+        </ContenedorLista>
+      )}
+      <label className="mt-6 block text-sec text-dark-400">
         {tx('Ver otro día')}
         <span className="mt-1 flex gap-2">
-          <input type="date" max={hoy} value={otro} onChange={(e) => setOtro(e.target.value)}
-            className="min-w-0 flex-1 rounded-xl border border-dark-700 bg-dark-900 px-3 py-2.5 text-[15px] text-dark-50" />
-          <button type="button" disabled={!otro} onClick={() => setDia(otro)}
-            className="shrink-0 rounded-xl border border-dark-600 px-4 text-[14px] font-semibold text-dark-100 disabled:opacity-40">{tx('Ver')}</button>
+          <input type="date" max={hoy} value={otro} onChange={(e) => setOtro(e.target.value)} className="campo min-w-0 flex-1" />
+          <Boton variante="normal" tono="neutro" contorno texto={tx('Ver')} disabled={!otro} onClick={() => setDia(otro)} className="shrink-0" />
         </span>
       </label>
       <ParaGestoria diasConservar={ajustes?.dias_conservar} toast={toast} />
@@ -435,20 +439,21 @@ function ResumenSemana({ porDia, ajustes }) {
   const ganado = (semana * pagoParada + ultimos.filter((d) => d.entregados > 0).length * pagoDia) / 100
   const dia = (f) => { try { return new Date(`${f}T12:00:00`).toLocaleDateString(locale(), { weekday: 'narrow' }) } catch { return '' } }
   return (
-    <section data-testid="resumen-semana" aria-label={tx('Esta semana')} className="mb-4 rounded-2xl border border-dark-700 bg-dark-900 p-4">
+    <section data-testid="resumen-semana" aria-label={tx('Esta semana')} className="mt-3 rounded-xl bg-dark-900 p-3">
       <div className="flex items-baseline justify-between gap-3">
-        <p className="text-[13px] font-semibold uppercase tracking-wide text-dark-400">{tx('Esta semana')}</p>
-        <p className="text-[12.5px] text-dark-400">{tx('la anterior: {n}', { n: anterior })}</p>
+        <p className="text-etiqueta text-dark-400">{tx('Esta semana')}</p>
+        <p className="text-sec text-dark-400 tabular-nums">{tx('la anterior: {n}', { n: anterior })}</p>
       </div>
-      <p className="mt-1 text-[24px] font-extrabold leading-none text-dark-50 tabular-nums">{tx('{n} entregas', { n: semana })}</p>
-      {conTarifa && <p className="mt-1 text-[13px] font-semibold text-emerald-300">{tx('Ganado ≈ {euros}', { euros: importe(ganado) })}</p>}
-      <div className="mt-3 grid grid-cols-7 items-end gap-1.5" style={{ height: 96 }} role="img"
+      <p className="mt-1 text-cifra text-dark-50 tabular-nums">{tx('{n} entregas', { n: semana })}</p>
+      {conTarifa && <p className="text-boton text-ruta-ok-texto tabular-nums">{tx('Ganado ≈ {euros}', { euros: importe(ganado) })}</p>}
+      {/* Alto mínimo, no fijo (07-11-2026, §1.3 regla 12): con «Letra más grande» las cifras y la inicial del día ocupan más. */}
+      <div className="mt-3 grid grid-cols-7 items-end gap-1" style={{ minHeight: 96 }} role="img"
         aria-label={ultimos.map((d) => `${dia(d.fecha)} ${d.entregados || 0}`).join(', ')}>
         {ultimos.map((d) => (
-          <div key={d.fecha} className="flex h-full flex-col items-center justify-end gap-1">
-            <span className="text-[10.5px] font-semibold tabular-nums text-dark-400">{d.entregados || ''}</span>
-            <span className="w-full rounded-t-md bg-brand-500" style={{ height: `${Math.round(((d.entregados || 0) / tope) * 64)}px`, minHeight: d.entregados ? 4 : 2, opacity: d.entregados ? 1 : 0.25 }} />
-            <span className="text-[11px] font-semibold uppercase text-dark-400">{dia(d.fecha)}</span>
+          <div key={d.fecha} className="flex flex-col items-center justify-end gap-1">
+            <span className="text-sec text-dark-400 tabular-nums">{d.entregados || ''}</span>
+            <span className="w-full rounded-t bg-brand-500" style={{ height: `${Math.round(((d.entregados || 0) / tope) * 64)}px`, minHeight: d.entregados ? 4 : 2, opacity: d.entregados ? 1 : 0.25 }} />
+            <span className="text-sec font-semibold text-dark-400">{dia(d.fecha)}</span>
           </div>
         ))}
       </div>
@@ -489,21 +494,17 @@ function ParaGestoria({ diasConservar, toast }) {
     } catch { toast?.error?.(tx('No se pudo preparar el archivo')) } finally { setOcupado(false) }
   }
   return (
-    <section aria-label={tx('Para tu gestoría')} className="mt-5 rounded-2xl border border-dark-700 bg-dark-900 p-4">
-      <p className="flex items-center gap-2 text-[15px] font-bold text-dark-50"><FileSpreadsheet size={17} className="text-brand-300" /> {tx('Para tu gestoría')}</p>
-      <p className="mt-1 text-[12.5px] leading-snug text-dark-400">{tx('Todas las entregas del mes en un Excel: fecha, hora, cliente, dirección y lo cobrado, con los totales y lo ganado.')}</p>
+    <section aria-label={tx('Para tu gestoría')} className="mt-6 rounded-xl bg-dark-900 p-3">
+      <p className="flex items-center gap-2 text-nombre text-dark-50"><FileSpreadsheet size={18} className="shrink-0 text-ruta-marca" aria-hidden="true" /> {tx('Para tu gestoría')}</p>
+      <p className="mt-1 text-sec text-dark-400">{tx('Todas las entregas del mes en un Excel: fecha, hora, cliente, dirección y lo cobrado, con los totales y lo ganado.')}</p>
       <div className="mt-3 flex gap-2">
-        <select value={mes} onChange={(e) => setMes(e.target.value)} aria-label={tx('Mes')}
-          className="min-w-0 flex-1 rounded-xl border border-dark-700 bg-dark-950 px-3 py-2.5 text-[15px] text-dark-50">
+        <select value={mes} onChange={(e) => setMes(e.target.value)} aria-label={tx('Mes')} className="campo min-w-0 flex-1">
           {meses.map((m) => <option key={m} value={m}>{nombreMes(m)}</option>)}
         </select>
-        <button type="button" onClick={descargar} disabled={ocupado}
-          className="flex shrink-0 items-center gap-1.5 rounded-xl bg-brand-500 px-4 text-[14px] font-bold text-brand-tinta disabled:opacity-60">
-          {ocupado ? <Loader2 size={16} className="animate-spin" /> : <FileSpreadsheet size={16} />} {tx('Descargar')}
-        </button>
+        <Boton variante="normal" tono="marca" icono={FileSpreadsheet} texto={tx('Descargar')} cargando={ocupado} onClick={descargar} className="shrink-0" />
       </div>
       {diasConservar ? (
-        <p className="mt-2 text-[11.5px] leading-snug text-dark-500">
+        <p className="mt-2 text-sec text-dark-400">
           {tx('Los datos de los clientes se borran a los {n} días (lo cambias en Ajustes): de lo más antiguo salen la fecha, la hora, el estado y lo cobrado.', { n: diasConservar })}
         </p>
       ) : null}
@@ -520,13 +521,14 @@ const fechaLarga = (f) => {
   const d = new Date(`${f}T12:00:00`)
   return Number.isNaN(d.getTime()) ? fechaEs(f) : d.toLocaleDateString(locale(), { weekday: 'long', day: 'numeric', month: 'long' })
 }
+// «Jueves, 8 de octubre»: solo la primera en mayúscula (con `capitalize` salía «8 De Octubre»).
+const conMayuscula = (t) => (t ? t.charAt(0).toUpperCase() + t.slice(1) : t)
 const DONDE_TXT = { mano: 'En mano', vecino: 'Al vecino', buzon: 'En el buzón', porteria: 'En portería o recepción', seguro: 'En un lugar seguro' }
 
 function DiaHistorial({ fecha, onVolver, toast }) {
   const [datos, setDatos] = useState(null)
   const [abierta, setAbierta] = useState(null)
-  const [prueba, setPrueba] = useState(null)
-  useAtras(!!prueba, () => setPrueba(null))
+  const [prueba, setPrueba] = useState(null)   // la Hoja ya cierra con «atrás»
   const [moviendo, setMoviendo] = useState('')
   const cargar = useCallback(() => getRepartoPedidos(fecha).then(({ data }) => setDatos(data)).catch(() => setDatos({ pedidos: [] })), [fecha])
   useEffect(() => { cargar() }, [cargar])
@@ -554,85 +556,74 @@ function DiaHistorial({ fecha, onVolver, toast }) {
 
   return (
     <div className="mx-auto max-w-md">
-      <button onClick={onVolver} className="mb-3 inline-flex items-center gap-1.5 text-[13.5px] font-semibold text-brand-300"><ArrowLeft size={16} /> {tx('Historial')}</button>
-      <h1 className="font-display text-[22px] font-bold capitalize text-dark-50">{fecha === hoy ? tx('Hoy') : fechaLarga(fecha)}</h1>
-      {!datos ? <div className="flex justify-center py-16"><Loader2 className="animate-spin text-dark-500" /></div> : (
+      <Cabecera titulo={fecha === hoy ? tx('Hoy') : conMayuscula(fechaLarga(fecha))} onVolver={onVolver} fija className="-mx-4" />
+      {!datos ? <div className="flex justify-center py-16"><Loader2 className="animate-spin text-dark-400" /></div> : (
         <>
           <div className="mt-3 grid grid-cols-3 gap-2 text-center">
-            <div className="rounded-2xl border border-dark-800 bg-dark-900 py-2.5"><p className="text-[20px] font-bold text-emerald-300">{ok.length}</p><p className="text-[11px] text-dark-400">{tx('Entregados')}</p></div>
-            <div className="rounded-2xl border border-dark-800 bg-dark-900 py-2.5"><p className={`text-[20px] font-bold ${no.length ? 'text-red-300' : 'text-dark-300'}`}>{no.length}</p><p className="text-[11px] text-dark-400">{tx('No entregados')}</p></div>
-            <div className="rounded-2xl border border-dark-800 bg-dark-900 py-2.5"><p className="text-[20px] font-bold text-dark-50">{ps.length}</p><p className="text-[11px] text-dark-400">{tx('Paradas')}</p></div>
+            <div className="rounded-xl bg-dark-900 py-2"><p className="text-cifra text-ruta-ok-texto">{ok.length}</p><p className="text-sec text-dark-400">{tx('Entregados')}</p></div>
+            <div className="rounded-xl bg-dark-900 py-2"><p className={`text-cifra ${no.length ? 'text-ruta-peligro-texto' : 'text-dark-50'}`}>{no.length}</p><p className="text-sec text-dark-400">{tx('No entregados')}</p></div>
+            <div className="rounded-xl bg-dark-900 py-2"><p className="text-cifra text-dark-50">{ps.length}</p><p className="text-sec text-dark-400">{tx('Paradas')}</p></div>
           </div>
-          <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-[12.5px] text-dark-300">
-            {horas.length > 0 && <span className="flex items-center gap-1"><Clock size={13} /> {tx('De {a} a {b}', { a: horaDe(horas[0]), b: horaDe(horas[horas.length - 1]) })}</span>}
+          <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-sec text-dark-400 tabular-nums">
+            {horas.length > 0 && <span className="flex items-center gap-1"><Clock size={14} aria-hidden="true" /> {tx('De {a} a {b}', { a: horaDe(horas[0]), b: horaDe(horas[horas.length - 1]) })}</span>}
             {ruta?.km ? <span>{ruta.km} km</span> : null}
-            {cobrado > 0 && <span className="flex items-center gap-1 text-emerald-300"><Euro size={13} /> {tx('{importe} cobrados', { importe: euros(cobrado) })}</span>}
+            {cobrado > 0 && <span className="flex items-center gap-1 text-ruta-ok-texto"><Euro size={14} aria-hidden="true" /> {tx('{importe} cobrados', { importe: euros(cobrado) })}</span>}
           </div>
-          {borrados && <p className="mt-3 rounded-xl bg-dark-900 px-3 py-2 text-[12px] text-dark-400">{tx('Los datos de los clientes de este día ya se borraron (privacidad): quedan los números.')}</p>}
-          {ps.length === 0 && <p className="mt-4 rounded-xl border border-dashed border-dark-700 px-4 py-8 text-center text-[13px] text-dark-400">{tx('Ese día no hay paradas.')}</p>}
-          <ul className="mt-4 flex flex-col gap-1.5">
-            {[...no, ...sinHacer, ...ok].map((p) => {
-              const abierto = abierta === p.id
-              const pendiente = p.estado !== 'entregado' && fecha < hoy
-              return (
-                <li key={p.id} className={`rounded-xl border ${p.estado === 'fallido' ? 'border-red-500/30 bg-red-500/[.05]' : 'border-dark-800 bg-dark-900'}`}>
-                  <button onClick={() => setAbierta(abierto ? null : p.id)} aria-expanded={abierto} className="flex w-full items-start gap-2 px-3 py-2.5 text-left">
-                    {p.estado === 'entregado' ? <CheckCircle2 size={15} className="mt-0.5 shrink-0 text-emerald-400" />
-                      : p.estado === 'fallido' ? <XCircle size={15} className="mt-0.5 shrink-0 text-red-400" />
-                        : <Package size={15} className="mt-0.5 shrink-0 text-dark-500" />}
-                    <span className="min-w-0 flex-1">
-                      <span className="block truncate text-[13.5px] font-semibold text-dark-100">{p.cliente || p.direccion || tx('Pedido')}</span>
-                      <span className="block truncate text-[12px] text-dark-400">
-                        {p.estado === 'entregado' ? `${tx('Entregado')} ${horaDe(p.cerrado_en)}` : p.estado === 'fallido' ? `${tx('No entregado')}${p.motivo ? ` · ${tx(p.motivo)}` : ''}` : tx('Sin hacer')}
-                        {p.entrega_donde ? ` · ${tx(DONDE_TXT[p.entrega_donde] || '')}` : ''}
+          {borrados && <p className="mt-3 rounded-xl bg-dark-900 px-3 py-2 text-sec text-dark-400">{tx('Los datos de los clientes de este día ya se borraron (privacidad): quedan los números.')}</p>}
+          {ps.length === 0 && <p className="mt-3 rounded-xl bg-dark-900 px-4 py-8 text-center text-texto text-dark-400">{tx('Ese día no hay paradas.')}</p>}
+          {ps.length > 0 && (
+            <ContenedorLista className="mt-3">
+              {[...no, ...sinHacer, ...ok].map((p) => {
+                const abierto = abierta === p.id
+                const pendiente = p.estado !== 'entregado' && fecha < hoy
+                return (
+                  <li key={p.id}>
+                    <button type="button" onClick={() => setAbierta(abierto ? null : p.id)} aria-expanded={abierto} className="flex min-h-14 w-full items-center gap-3 px-3 py-2 text-left">
+                      {p.estado === 'entregado' ? <CheckCircle2 size={18} className="shrink-0 text-ruta-ok-texto" aria-hidden="true" />
+                        : p.estado === 'fallido' ? <XCircle size={18} className="shrink-0 text-ruta-peligro-texto" aria-hidden="true" />
+                          : <Package size={18} className="shrink-0 text-dark-400" aria-hidden="true" />}
+                      <span className="min-w-0 flex-1">
+                        <span className="block truncate text-nombre text-dark-50">{p.cliente || p.direccion || tx('Pedido')}</span>
+                        <span className={`block text-sec ${p.estado === 'fallido' ? 'text-ruta-peligro-texto' : 'text-dark-400'}`}>
+                          {p.estado === 'entregado' ? `${tx('Entregado')} ${horaDe(p.cerrado_en)}` : p.estado === 'fallido' ? `${tx('No entregado')}${p.motivo ? ` · ${tx(p.motivo)}` : ''}` : tx('Sin hacer')}
+                          {p.entrega_donde ? ` · ${tx(DONDE_TXT[p.entrega_donde] || '')}` : ''}
+                        </span>
                       </span>
-                    </span>
-                    <ChevronDown size={16} className={`mt-0.5 shrink-0 text-dark-500 ${abierto ? 'rotate-180' : ''}`} />
-                  </button>
-                  {abierto && (
-                    <div className="space-y-1.5 border-t border-dark-800 px-3 py-2.5 text-[12.5px] text-dark-300">
-                      {p.direccion && p.cliente && <p className="flex items-start gap-1.5"><MapPin size={13} className="mt-0.5 shrink-0" /> {p.direccion}</p>}
-                      {p.telefono && <p className="flex items-center gap-1.5"><Phone size={13} /> <a href={`tel:${p.telefono}`} className="text-brand-300">{p.telefono}</a></p>}
-                      {p.contenido && <p className="flex items-start gap-1.5"><Package size={13} className="mt-0.5 shrink-0" /> {p.contenido}</p>}
-                      {p.entrega_recibe && <p>{tx('Lo recoge: {nombre}', { nombre: p.entrega_recibe })}</p>}
-                      {p.entrega_nota && <p>«{p.entrega_nota}»</p>}
-                      {p.cobrado_importe ? <p className="text-emerald-300">{euros(p.cobrado_importe)} · {p.cobrado_metodo || ''}</p> : null}
-                      {p.reintento > 0 && <p>{tx('{n}º intento', { n: p.reintento + 1 })}</p>}
-                      <div className="flex flex-wrap gap-2 pt-1">
-                        {p.tiene_foto && (
-                          <button onClick={() => verPrueba(p)} className="inline-flex items-center gap-1 rounded-lg border border-dark-700 px-2.5 py-1.5 font-semibold text-dark-100">
-                            <Camera size={13} /> {tx('Ver prueba de entrega')}
-                          </button>
-                        )}
-                        {pendiente && !p.anonimizado && (
-                          <button onClick={() => aHoy(p)} disabled={moviendo === p.id}
-                            className="inline-flex items-center gap-1 rounded-lg bg-brand-500 px-2.5 py-1.5 font-bold text-brand-tinta disabled:opacity-50">
-                            {moviendo === p.id ? <Loader2 size={13} className="animate-spin" /> : <RotateCcw size={13} />} {tx('Pasar a hoy')}
-                          </button>
-                        )}
+                      <ChevronDown size={18} className={`shrink-0 text-dark-400 ${abierto ? 'rotate-180' : ''}`} aria-hidden="true" />
+                    </button>
+                    {abierto && (
+                      <div className="space-y-1 pb-3 pl-11 pr-3 text-texto text-dark-50">
+                        {p.direccion && p.cliente && <p className="flex items-start gap-2"><MapPin size={18} className="mt-0.5 shrink-0 text-dark-400" aria-hidden="true" /> {p.direccion}</p>}
+                        {p.telefono && <p className="flex items-center gap-2"><Phone size={18} className="shrink-0 text-dark-400" aria-hidden="true" /> <a href={`tel:${p.telefono}`} className="inline-flex min-h-12 items-center text-ruta-marca">{p.telefono}</a></p>}
+                        {p.contenido && <p className="flex items-start gap-2"><Package size={18} className="mt-0.5 shrink-0 text-dark-400" aria-hidden="true" /> {p.contenido}</p>}
+                        {p.entrega_recibe && <p>{tx('Lo recoge: {nombre}', { nombre: p.entrega_recibe })}</p>}
+                        {p.entrega_nota && <p>«{p.entrega_nota}»</p>}
+                        {p.cobrado_importe ? <p className="text-ruta-ok-texto">{euros(p.cobrado_importe)} · {p.cobrado_metodo || ''}</p> : null}
+                        {p.reintento > 0 && <p>{tx('{n}º intento', { n: p.reintento + 1 })}</p>}
+                        <div className="flex flex-wrap gap-2 pt-1">
+                          {p.tiene_foto && <Boton variante="normal" tono="neutro" contorno icono={Camera} texto={tx('Ver prueba de entrega')} onClick={() => verPrueba(p)} />}
+                          {pendiente && !p.anonimizado && (
+                            <Boton variante="normal" tono="marca" icono={RotateCcw} texto={tx('Pasar a hoy')} cargando={moviendo === p.id} onClick={() => aHoy(p)} />
+                          )}
+                        </div>
                       </div>
-                    </div>
-                  )}
-                </li>
-              )
-            })}
-          </ul>
+                    )}
+                  </li>
+                )
+              })}
+            </ContenedorLista>
+          )}
         </>
       )}
       {prueba && (
-        <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/70" role="dialog" aria-modal="true" aria-label={tx('Prueba de entrega')}>
-          <div className="max-h-[92vh] w-full max-w-md overflow-y-auto rounded-t-3xl border border-dark-700 bg-dark-950 p-4 pb-8">
-            <div className="mb-3 flex items-start justify-between gap-3">
-              <h2 className="text-[16px] font-bold text-dark-50">{tx('Prueba de entrega')}</h2>
-              <button onClick={() => setPrueba(null)} className="rounded p-1 text-dark-400" aria-label={tx('Cerrar')}><XCircle size={18} /></button>
-            </div>
-            <p className="mb-2 text-[13px] text-dark-300">{prueba.cliente}{prueba.cuando ? ` · ${horaDe(prueba.cuando)}` : ''}</p>
+        <Hoja titulo={tx('Prueba de entrega')} subtitulo={`${prueba.cliente || ''}${prueba.cuando ? ` · ${horaDe(prueba.cuando)}` : ''}`} onClose={() => setPrueba(null)}>
+          <div className="pt-2">
             {prueba.foto && <img src={prueba.foto} alt={tx('Foto de la entrega')} className="w-full rounded-xl" />}
-            {(prueba.donde || prueba.recibe) && <p className="mt-2 text-[13px] text-dark-200">{[prueba.donde && tx(prueba.donde), prueba.recibe && tx('Lo recoge: {nombre}', { nombre: prueba.recibe })].filter(Boolean).join(' · ')}</p>}
+            {(prueba.donde || prueba.recibe) && <p className="mt-2 text-texto text-dark-50">{[prueba.donde && tx(prueba.donde), prueba.recibe && tx('Lo recoge: {nombre}', { nombre: prueba.recibe })].filter(Boolean).join(' · ')}</p>}
             {prueba.firma && <img src={prueba.firma} alt={tx('Firma')} className="mt-2 w-full max-w-xs rounded-lg bg-white" />}
-            {prueba.nota && <p className="mt-2 text-[13px] text-dark-200">«{prueba.nota}»</p>}
+            {prueba.nota && <p className="mt-2 text-texto text-dark-50">«{prueba.nota}»</p>}
           </div>
-        </div>
+        </Hoja>
       )}
     </div>
   )
